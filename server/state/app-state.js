@@ -93,8 +93,6 @@ function createAppState(io) {
     if (typeof saved.metronomeEnabled === 'boolean') playState.metronomeEnabled = saved.metronomeEnabled;
     if (saved.lyricSettings && typeof saved.lyricSettings === 'object') {
       playState.lyricSettings = sanitizeJsonObject(saved.lyricSettings) || {};
-      // v5 遷移：monet（海報捲軸）模板已移除，殘留在舊 state 的值退回 classic
-      if (playState.lyricSettings.template === 'monet') playState.lyricSettings.template = 'classic';
     }
 
     if (saved.trackOffsets && typeof saved.trackOffsets === 'object') {
@@ -138,11 +136,12 @@ function createAppState(io) {
   })();
 
   /**
-   * 把目前狀態排程寫入磁碟（延遲 3 秒 debounce，呼叫成本趨近於零）
+   * 把目前狀態排程寫入磁碟（延遲 800ms debounce，呼叫成本趨近於零）
    * 在歌單、設定、offset、手動歌詞變更的地方呼叫
    */
   function persistState() {
     stateStore.scheduleSave(() => ({
+      schemaVersion: stateStore.CURRENT_STATE_SCHEMA_VERSION,
       savedAt: Date.now(),
       playlist: playState.playlist,
       style: playState.style,

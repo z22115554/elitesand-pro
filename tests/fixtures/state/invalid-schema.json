@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "one",
+  "savedAt": 1720000000000,
+  "playlist": [
+    {
+      "id": "invalid-schema-track",
+      "title": "格式錯誤但仍是合法 JSON"
+    }
+  ]
+}

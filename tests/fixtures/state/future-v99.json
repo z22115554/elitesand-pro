@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 99,
+  "savedAt": 1999999999999,
+  "playlist": [
+    {
+      "id": "future-track",
+      "title": "較新版本歌曲",
+      "artist": "未來版本"
+    }
+  ],
+  "futureOnlyField": {
+    "mustNotBeOverwritten": true
+  }
+}
