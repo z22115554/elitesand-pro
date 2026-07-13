@@ -1125,9 +1125,25 @@ console.log('\n📦 10. 歌詞清洗 (lyrics-cleaner.js)');
 // ═══════════════════════════════════════════
 const { cleanLyrics, normalizeText } = require('../server/services/lyrics-cleaner');
 const AudioProcessor = require('../server/services/audio-processor');
+const { classifyImportError } = require('../server/utils/import-error');
 
 test('normalizeText：全形空白→半形、壓縮空白、去頭尾', () => {
   eq(normalizeText('　你好　　世界  '), '你好 世界');
+});
+
+test('匯入錯誤分類：登入、地區、下架、逾時與磁碟滿都有可行下一步', () => {
+  const cases = [
+    [new Error('Sign in to confirm your age; cookies required'), 'YOUTUBE_AUTH_REQUIRED'],
+    [new Error('This video is not available in your country'), 'REGION_RESTRICTED'],
+    [new Error('Private video'), 'VIDEO_UNAVAILABLE'],
+    [Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' }), 'IMPORT_TIMEOUT'],
+    [Object.assign(new Error('no space left'), { code: 'ENOSPC' }), 'DISK_FULL'],
+  ];
+  for (const [error, expected] of cases) {
+    const result = classifyImportError(error);
+    eq(result.code, expected);
+    ok(result.message && result.recovery, `${expected} 應有人話與恢復方式: `);
+  }
 });
 
 test('首尾製作資訊行被移除', () => {
@@ -1548,6 +1564,37 @@ testAsync('播放清單兩首可並行下載且最多為 2', async () => {
   const job = () => AudioProcessor._runQueuedForTest(async () => { active++; peak = Math.max(peak, active); await new Promise(r => setTimeout(r, 40)); active--; });
   await Promise.all([job(), job(), job()]);
   eq(peak, 2);
+});
+testAsync('匯入取消：尚未開始的工作會從後端佇列移除', async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let entered = 0;
+  const blocker = () => AudioProcessor._runQueuedForTest(async () => { entered++; await gate; });
+  const first = blocker(); const second = blocker();
+  while (entered < 2) await new Promise((resolve) => setTimeout(resolve, 5));
+  const controller = new AbortController();
+  let ran = false;
+  const queued = AudioProcessor._runQueuedForTest(async () => { ran = true; }, 'batch', controller.signal);
+  controller.abort();
+  let error;
+  try { await queued; } catch (caught) { error = caught; }
+  eq(error?.code, 'IMPORT_CANCELLED');
+  ok(!ran, '取消後不得開始工作: ');
+  release();
+  await Promise.all([first, second]);
+});
+testAsync('匯入取消：進行中工作會收到 abort 並以取消錯誤結束', async () => {
+  const requestId = `cancel-active-${Date.now()}`;
+  const registration = AudioProcessor._registerCancellationForTest(requestId);
+  try {
+    let aborted = false;
+    registration.signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+    ok(AudioProcessor.cancelImport(requestId).ok, '進行中工作應可找到: ');
+    ok(aborted, '進行中工作應收到 abort: ');
+  } finally {
+    registration.cleanup();
+    ok(!AudioProcessor.cancelImport(requestId).ok, '完成清理後不可殘留 request controller: ');
+  }
 });
 
 (async () => {

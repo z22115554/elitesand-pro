@@ -132,7 +132,7 @@
     busy.add(requestId);
     renderRequests();
     try {
-      const track = await AppShared.queueYouTubeImport(req.url);
+      const track = await AppShared.queueYouTubeImport(req.url, { source: `Twitch · ${req.requester || req.userName || '觀眾點歌'}` });
       const report = await new Promise((resolve) => SocketClient.sendWithCallback('twitch:song-request:result', {
         requestId, success: true, title: track && (track.title || track.name),
       }, resolve));

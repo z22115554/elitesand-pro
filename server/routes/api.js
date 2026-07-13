@@ -39,6 +39,7 @@ const { autoParseLyrics, parseOffset } = require('../services/lrc-parser');
 // 見 server/middleware/require-pin.js 開頭說明。
 const requirePin = require('../middleware/require-pin');
 const { isYouTubeUrl } = require('../utils/youtube-url');
+const { classifyImportError } = require('../utils/import-error');
 
 // ─── Multer 設定（本地檔案上傳）───
 const storage = multer.diskStorage({
@@ -378,8 +379,20 @@ router.post('/youtube', requirePin, async (req, res) => {
   } catch (err) {
     const duration = Date.now() - start;
     log.error(`YouTube 處理失敗 (${duration}ms)`, err);
-    res.status(500).json({ error: 'YouTube 處理失敗', details: err.message });
+    const classified = classifyImportError(err);
+    res.status(classified.status).json({
+      error: classified.message,
+      code: classified.code,
+      recovery: classified.recovery,
+      retryable: classified.retryable,
+      details: classified.technical,
+    });
   }
+});
+
+router.post('/youtube/cancel', requirePin, (req, res) => {
+  const result = AudioProcessor.cancelImport(req.body?.requestId);
+  res.status(result.ok ? 202 : 404).json(result);
 });
 
 // ─── YouTube 播放清單匯入（分批，每批預設 20 首）───

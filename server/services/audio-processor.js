@@ -35,27 +35,76 @@ const YTDLP_METADATA_PRINT = 'before_dl:__ES_META__%()j';
 const YTDLP_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
 const YTDLP_BASE_OPTS = { encoding: 'utf8', env: YTDLP_ENV, windowsHide: true };
 const activeImports = new Map();
+const requestControllers = new Map();
 const importQueue = [];
 let activeDownloads = 0;
 let ffmpegTail = Promise.resolve();
 
-function runQueued(job, priority) {
+class ImportCancelledError extends Error {
+  constructor() {
+    super('匯入已取消');
+    this.name = 'ImportCancelledError';
+    this.code = 'IMPORT_CANCELLED';
+  }
+}
+
+function throwIfCancelled(signal) {
+  if (signal?.aborted) throw new ImportCancelledError();
+}
+
+function registerRequestController(requestId) {
+  if (!requestId) return null;
+  requestControllers.get(requestId)?.abort();
+  const controller = new AbortController();
+  requestControllers.set(requestId, controller);
+  return controller;
+}
+
+function clearRequestController(requestId, controller) {
+  if (requestId && requestControllers.get(requestId) === controller) requestControllers.delete(requestId);
+}
+
+function runQueued(job, priority, signal) {
   return new Promise((resolve, reject) => {
-    importQueue.push({ job, priority: priority === 'batch' ? 0 : 1, resolve, reject });
+    if (signal?.aborted) return reject(new ImportCancelledError());
+    const item = { job, priority: priority === 'batch' ? 0 : 1, resolve, reject, signal, started: false };
+    item.onAbort = () => {
+      if (item.started) return;
+      const index = importQueue.indexOf(item);
+      if (index >= 0) importQueue.splice(index, 1);
+      reject(new ImportCancelledError());
+    };
+    signal?.addEventListener('abort', item.onAbort, { once: true });
+    importQueue.push(item);
     importQueue.sort((a, b) => b.priority - a.priority);
     drainQueue();
   });
 }
 function drainQueue() {
   while (activeDownloads < 2 && importQueue.length) {
-    const item = importQueue.shift(); activeDownloads++;
-    Promise.resolve().then(item.job).then(item.resolve, item.reject).finally(() => { activeDownloads--; drainQueue(); });
+    const item = importQueue.shift();
+    if (item.signal?.aborted) { item.reject(new ImportCancelledError()); continue; }
+    item.started = true;
+    item.signal?.removeEventListener('abort', item.onAbort);
+    activeDownloads++;
+    Promise.resolve().then(() => item.job(item.signal)).then(item.resolve, item.reject).finally(() => { activeDownloads--; drainQueue(); });
   }
 }
 function withFfmpegLock(job) {
   const result = ffmpegTail.then(job, job);
   ffmpegTail = result.catch(() => {});
   return result;
+}
+
+function cleanupCancelledDownload(url, outputDir) {
+  const videoId = extractVideoId(url);
+  if (!videoId || !/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) return;
+  try {
+    for (const name of fs.readdirSync(outputDir)) {
+      if (!name.startsWith(`${videoId}.`) || !/\.(?:part|webm|m4a|opus|temp)$/i.test(name)) continue;
+      try { fs.unlinkSync(path.join(outputDir, name)); } catch (_) { /* best effort */ }
+    }
+  } catch (_) { /* outputDir may not exist yet */ }
 }
 
 // ─── 檔名清理：讓下載檔案在硬碟裡一眼看出是哪首歌（歌手 - 歌名.ext）───
@@ -226,8 +275,18 @@ function looksLikeArtist(value) {
 
 class AudioProcessor {
   static setProgressEmitter(emitter) { this._progressEmitter = emitter; }
-  static _runQueuedForTest(job, priority = 'batch') { return runQueued(job, priority); }
+  static _runQueuedForTest(job, priority = 'batch', signal = null) { return runQueued(job, priority, signal); }
   static _metadataPrintTemplateForTest() { return YTDLP_METADATA_PRINT; }
+  static _registerCancellationForTest(requestId) {
+    const controller = registerRequestController(requestId);
+    return { signal: controller.signal, cleanup: () => clearRequestController(requestId, controller) };
+  }
+  static cancelImport(requestId) {
+    const controller = requestControllers.get(String(requestId || ''));
+    if (!controller) return { ok: false, code: 'NOT_FOUND', message: '找不到可取消的匯入工作，可能已經完成。' };
+    if (!controller.signal.aborted) controller.abort();
+    return { ok: true, code: 'CANCEL_REQUESTED', message: '已要求取消匯入。' };
+  }
   static shouldResolveAppleMetadata(info, identity, cover) {
     return !cover && Number(info?.duration) >= 60 && Number(identity?.confidence) < 0.8;
   }
@@ -236,27 +295,36 @@ class AudioProcessor {
    */
   static async processYouTube(url, options = {}) {
     if (!isYouTubeUrl(url)) throw new Error('無效的 YouTube URL 格式，請提供有效的 YouTube 連結');
+    const requestId = options.requestId ? String(options.requestId) : '';
+    const controller = registerRequestController(requestId);
+    options = { ...options, signal: controller?.signal || options.signal };
     const videoId = extractVideoId(url);
     const libraryStore = require('./library-store');
     const cached = videoId && libraryStore.getEntry(videoId);
     if (cached?.filename && libraryStore.audioExists(cached.filename)) {
       log.info(`本機快取命中: ${videoId}`);
       log.perf('youtube-cache', 0, { videoId, hit: true });
+      clearRequestController(requestId, controller);
       return { ...cached, id: videoId, cacheHit: true };
     }
     if (videoId && activeImports.has(videoId)) {
       log.info(`合併同影片進行中請求: ${videoId}`);
+      clearRequestController(requestId, controller);
       return activeImports.get(videoId);
     }
-    const promise = runQueued(() => this._processYouTube(url, options), options.priority);
+    const promise = runQueued(() => this._processYouTube(url, options), options.priority, options.signal);
     if (videoId) activeImports.set(videoId, promise);
     try { return await promise; } catch (err) {
       if (typeof this._progressEmitter === 'function') this._progressEmitter({ requestId: options.requestId, stage: '失敗', error: err.message });
       throw err;
-    } finally { if (videoId && activeImports.get(videoId) === promise) activeImports.delete(videoId); }
+    } finally {
+      if (videoId && activeImports.get(videoId) === promise) activeImports.delete(videoId);
+      clearRequestController(requestId, controller);
+    }
   }
 
   static async _processYouTube(url, options = {}) {
+    throwIfCancelled(options.signal);
     const processStart = Date.now();
     log.info(`開始處理: ${url}`);
     const progress = (stage, percent) => {
@@ -266,7 +334,7 @@ class AudioProcessor {
     };
     progress('正在取得影片資訊');
     const infoStart = Date.now();
-    let downloadTask = this.downloadWithMetadata(url, progress);
+    let downloadTask = this.downloadWithMetadata(url, progress, null, options.signal);
     // completed 是即時建立、稍後才被 Promise.all await 的 promise；在 metadata → 歌詞校正
     // 之間若下載/轉碼先失敗，會在「還沒有 handler」的空窗觸發 unhandledRejection，前端也就
     // 收不到失敗通知而卡在「正在轉換音訊」。掛個 no-op 守衛，真正的錯誤仍由後面的 await 消費。
@@ -274,6 +342,7 @@ class AudioProcessor {
     let info;
     try { info = await downloadTask.metadata; }
     catch (primaryError) {
+      throwIfCancelled(options.signal);
       log.warn(`單次流程在 metadata 前失敗，啟用 client/oEmbed 降級: ${primaryError.message}`);
       info = await this.getVideoInfo(url);
       if (!info) throw primaryError;
@@ -282,11 +351,12 @@ class AudioProcessor {
       if (primaryError.code === 'YTDLP_METADATA') {
         downloadTask = { metadata: Promise.resolve(info), completed: downloadTask.completed };
       } else {
-        downloadTask = this.downloadWithMetadata(url, progress, info);
+        downloadTask = this.downloadWithMetadata(url, progress, info, options.signal);
         downloadTask.completed.catch(() => {});
       }
     }
     const infoDuration = Date.now() - infoStart;
+    throwIfCancelled(options.signal);
     log.perf('youtube-info', infoDuration, { url });
 
     if (!info) throw new Error('無法取得影片資訊。可能需要 cookies 認證，請參考 yt-dlp 文件設定 cookies。');
@@ -324,6 +394,7 @@ class AudioProcessor {
     const lyricsPromise = LyricsEngine.search(artist, title, info.duration || 0)
       .catch(e => { log.warn('歌詞搜尋失敗: ' + e.message); return null; });
     const [lyricsResult, downloaded, originalArtist] = await Promise.all([lyricsPromise, downloadTask.completed, artistLookup]);
+    throwIfCancelled(options.signal);
     log.perf('lyrics-search', Date.now() - lyricsStart, { title });
     if (originalArtist?.artist) artist = originalArtist.artist;
     const filename = this.renameToReadableFilename(downloaded.filePath, downloaded.outputDir, artist, title);
@@ -566,7 +637,8 @@ class AudioProcessor {
 
   static extractVideoId(url) { return extractVideoId(url); }
 
-  static downloadWithMetadata(url, onProgress, fallbackInfo = null) {
+  static downloadWithMetadata(url, onProgress, fallbackInfo = null, signal = null) {
+    throwIfCancelled(signal);
     const outputDir = path.join(__dirname, '..', '..', 'downloads');
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
     const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
@@ -580,6 +652,8 @@ class AudioProcessor {
       const started = Date.now();
       const child = spawn('yt-dlp', args, { env: YTDLP_ENV, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
       let stderr = '', rawPath = '', metaDone = !!fallbackInfo, timedOut = false;
+      const onAbort = () => child.kill();
+      signal?.addEventListener('abort', onAbort, { once: true });
       const rejectMetadata = (message) => {
         if (metaDone) return;
         metaDone = true;
@@ -620,10 +694,18 @@ class AudioProcessor {
       };
       child.stdout.on('data', c => consume(c, false)); child.stderr.on('data', c => consume(c, true));
       const timer = setTimeout(() => { timedOut = true; child.kill(); }, YTDLP_DOWNLOAD_TIMEOUT);
-      child.on('error', err => { clearTimeout(timer); if (metadataTimer) clearTimeout(metadataTimer); if (!metaDone) rejectMeta(err); reject(err); });
+      child.on('error', err => { clearTimeout(timer); if (metadataTimer) clearTimeout(metadataTimer); signal?.removeEventListener('abort', onAbort); if (!metaDone) rejectMeta(signal?.aborted ? new ImportCancelledError() : err); reject(signal?.aborted ? new ImportCancelledError() : err); });
       child.on('close', async code => {
         clearTimeout(timer);
         if (metadataTimer) clearTimeout(metadataTimer);
+        signal?.removeEventListener('abort', onAbort);
+        if (signal?.aborted) {
+          cleanupCancelledDownload(url, outputDir);
+          const err = new ImportCancelledError();
+          if (!metaDone) rejectMeta(err);
+          reject(err);
+          return;
+        }
         if (code !== 0 || !rawPath) {
           const err = new Error(timedOut ? 'yt-dlp 下載逾時' : (stderr.trim().split('\n').pop() || `yt-dlp exit ${code}`));
           if (!metaDone) rejectMeta(err); reject(err); return;
@@ -638,7 +720,7 @@ class AudioProcessor {
         log.perf('youtube-download', downloadMs, { path: cleanPath });
         try {
           onProgress('正在轉換音訊');
-          const filePath = await withFfmpegLock(() => this.convertToMp3(cleanPath));
+          const filePath = await withFfmpegLock(() => this.convertToMp3(cleanPath, signal));
           resolve({ filePath, outputDir, downloadMs });
         } catch (err) { reject(err); }
       });
@@ -652,18 +734,23 @@ class AudioProcessor {
       albumArtist: data.album_artist || '', channel: data.channel || '', uploader: data.uploader || '', description: data.description || '' };
   }
 
-  static convertToMp3(inputPath) {
+  static convertToMp3(inputPath, signal = null) {
+    throwIfCancelled(signal);
     const started = Date.now();
     const outputPath = path.join(path.dirname(inputPath), `${path.basename(inputPath, path.extname(inputPath))}.mp3`);
     if (path.resolve(inputPath) === path.resolve(outputPath)) return Promise.resolve(outputPath);
     return new Promise((resolve, reject) => {
       const child = spawn('ffmpeg', ['-y', '-i', inputPath, '-vn', '-codec:a', 'libmp3lame', '-b:a', '192k', outputPath],
         { env: process.env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+      const onAbort = () => child.kill();
+      signal?.addEventListener('abort', onAbort, { once: true });
       let stderr = ''; const timer = setTimeout(() => child.kill(), YTDLP_DOWNLOAD_TIMEOUT);
       child.stderr.on('data', c => { stderr = (stderr + c.toString()).slice(-YTDLP_MAX_BUFFER); });
-      child.on('error', reject);
+      child.on('error', (error) => { signal?.removeEventListener('abort', onAbort); reject(signal?.aborted ? new ImportCancelledError() : error); });
       child.on('close', code => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        if (signal?.aborted) return reject(new ImportCancelledError());
         if (code !== 0 || !fs.existsSync(outputPath)) return reject(new Error(`FFmpeg 轉碼失敗: ${stderr.trim().split('\n').pop() || code}`));
         try { fs.unlinkSync(inputPath); } catch (_) { /* 轉碼已成功，不因清理失敗中斷 */ }
         log.perf('ffmpeg-convert', Date.now() - started, { outputPath }); resolve(outputPath);
