@@ -101,7 +101,9 @@ function cleanupCancelledDownload(url, outputDir) {
   if (!videoId || !/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) return;
   try {
     for (const name of fs.readdirSync(outputDir)) {
-      if (!name.startsWith(`${videoId}.`) || !/\.(?:part|webm|m4a|opus|temp)$/i.test(name)) continue;
+      // mp3 也要清：取消若發生在 ffmpeg 轉碼中，會留下寫到一半的 videoId.mp3。
+      // 只清「videoId.副檔名」形式的檔案；成功匯入後已改名為「歌手 - 歌名.mp3」，不受影響。
+      if (!name.startsWith(`${videoId}.`) || !/\.(?:part|webm|m4a|opus|temp|mp3)$/i.test(name)) continue;
       try { fs.unlinkSync(path.join(outputDir, name)); } catch (_) { /* best effort */ }
     }
   } catch (_) { /* outputDir may not exist yet */ }
@@ -722,7 +724,12 @@ class AudioProcessor {
           onProgress('正在轉換音訊');
           const filePath = await withFfmpegLock(() => this.convertToMp3(cleanPath, signal));
           resolve({ filePath, outputDir, downloadMs });
-        } catch (err) { reject(err); }
+        } catch (err) {
+          // 取消發生在轉碼中：yt-dlp 已正常結束（上面的 aborted 分支沒走到），
+          // 這裡才是唯一能清掉 videoId.webm 原檔＋寫到一半 videoId.mp3 的地方。
+          if (signal?.aborted) cleanupCancelledDownload(url, outputDir);
+          reject(err);
+        }
       });
     });
     return { metadata, completed };
