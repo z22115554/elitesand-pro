@@ -829,7 +829,7 @@ test('共用 JSON store：遷移無法安全落盤時保留原檔並停止寫入
   }
 });
 
-test('六類資料檔：舊資料可載入且落盤後都有 schemaVersion', () => {
+test('七類資料檔：舊資料可載入且落盤後都有 schemaVersion', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-store-fixtures-'));
   const fixtures = path.join(__dirname, 'fixtures', 'stores');
   try {
@@ -838,6 +838,7 @@ test('六類資料檔：舊資料可載入且落盤後都有 schemaVersion', () 
       ['lyrics-cache-v0.json', 'lyrics-cache.json'],
       ['auth-v0.json', 'auth.json'],
       ['twitch-auth-v0.json', 'twitch-auth.json'],
+      ['twitch-requests-v0.json', 'twitch-requests.json'],
       ['announcement-state-v0.json', 'announcement-state.json'],
       ['announcement-cache-v1.json', 'announcement-cache.json'],
     ]) fs.copyFileSync(path.join(fixtures, fixture), path.join(dataDir, target));
@@ -847,10 +848,11 @@ test('六類資料檔：舊資料可載入且落盤後都有 schemaVersion', () 
       "const library=require(path.join(root,'server/services/library-store'));",
       "const auth=require(path.join(root,'server/services/auth-store'));",
       "const twitch=require(path.join(root,'server/services/twitch-store'));",
+      "const twitchRequests=require(path.join(root,'server/services/twitch-request-store'));",
       "require(path.join(root,'server/services/lyrics-engine')); require(path.join(root,'server/services/announcement-service'));",
       "const read=(name)=>JSON.parse(fs.readFileSync(path.join(dir,name),'utf8'));",
-      "const result={libraryApi:library.getLibrary(),hasPin:auth.hasPin(),twitchApi:twitch.load(),files:{}};",
-      "for(const name of ['library.json','lyrics-cache.json','auth.json','twitch-auth.json','announcement-state.json','announcement-cache.json']) result.files[name]=read(name);",
+      "const result={libraryApi:library.getLibrary(),hasPin:auth.hasPin(),twitchApi:twitch.load(),twitchRequests:twitchRequests.load(),files:{}};",
+      "for(const name of ['library.json','lyrics-cache.json','auth.json','twitch-auth.json','twitch-requests.json','announcement-state.json','announcement-cache.json']) result.files[name]=read(name);",
       "process.stdout.write('__STORE_RESULT__'+JSON.stringify(result)+'\\n');",
     ].join('\n');
     const child = spawnStateStore(process.execPath, ['-e', script, path.join(__dirname, '..'), dataDir], {
@@ -863,11 +865,12 @@ test('六類資料檔：舊資料可載入且落盤後都有 schemaVersion', () 
     eq(result.libraryApi[0].title, '舊版媒體庫歌曲');
     ok(result.hasPin, '舊 PIN 雜湊應仍可辨識: ');
     eq(result.twitchApi.refreshToken, 'fixture-refresh-token');
+    eq(result.twitchRequests[0].requestId, 'fixture-request');
     for (const [name, document] of Object.entries(result.files)) eq(document.schemaVersion, 1, `${name}: `);
     eq(result.files['library.json'].entries['legacy-track'].playCount, 2);
     ok(Array.isArray(result.files['lyrics-cache.json'].entries), '歌詞快取 entries 應保留: ');
     eq(result.files['announcement-state.json'].dismissed[0], 'fixture-announcement');
-    for (const target of ['library.json', 'lyrics-cache.json', 'auth.json', 'twitch-auth.json', 'announcement-state.json']) {
+    for (const target of ['library.json', 'lyrics-cache.json', 'auth.json', 'twitch-auth.json', 'twitch-requests.json', 'announcement-state.json']) {
       ok(fs.readdirSync(dataDir).some((name) => name.startsWith(`${target}.pre-migration-v0-`)), `${target} 應保留遷移前原檔: `);
     }
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
@@ -1089,6 +1092,42 @@ test('啟動恢復提示延遲到第一個桌面控制面板連線', () => {
   ok(source.includes("type === 'controller'"));
   ok(source.includes('stateStore.consumeStartupAlert()'));
   ok(source.includes("socket.emit('server:alert', startupAlert)"));
+});
+
+test('狀態保存 callback 只在實際落盤後回報成功', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-save-ack-'));
+  const storePath = path.join(__dirname, '..', 'server', 'services', 'state-store.js');
+  const script = `
+    const store=require(process.argv[1]); let report=null;
+    store.scheduleSave(()=>({savedAt:Date.now(),playlist:[],lyricSettings:{fontSize:64}}),(result)=>{report=result;});
+    store.saveNow(); process.stdout.write('__RESULT__'+JSON.stringify(report));
+  `;
+  try {
+    const result = require('child_process').spawnSync(process.execPath, ['-e', script, storePath], {
+      encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: dataDir }, timeout: 10000,
+    });
+    eq(result.status, 0, result.stderr || 'state save ack 子程序失敗: ');
+    const report = JSON.parse(result.stdout.split('__RESULT__')[1]);
+    ok(report.ok);
+    ok(Number.isFinite(report.savedAt));
+    eq(JSON.parse(fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8')).lyricSettings.fontSize, 64);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('首次使用 checklist 可稍後繼續，Twitch 不列入三項必要條件', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const nav = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'nav.js'), 'utf8');
+  ok(html.includes('guide-later'));
+  ok(html.includes('Twitch 連線（選配）'));
+  ok(nav.includes("['environment', 'song', 'obs']"));
+  ok(!nav.includes("['environment', 'song', 'obs', 'twitch']"));
+});
+
+test('錯誤歷史使用文字節點並會遮蔽敏感 token', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'error-handler.js'), 'utf8');
+  ok(source.includes("message.textContent = entry.message"));
+  ok(source.includes("'$1 [redacted]'"));
+  ok(source.includes('MAX_HISTORY = 30'));
 });
 
 // ═══════════════════════════════════════════

@@ -129,9 +129,12 @@ function registerLyricsHandlers(io, socket, ctx) {
 
   // ─── 歌詞外觀/位置設定 ───
 
-  socket.on('lyric-settings:update', (settings) => {
+  socket.on('lyric-settings:update', (settings, ack) => {
     settings = sanitizeJsonObject(settings);
-    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      if (typeof ack === 'function') ack({ ok: false, error: '歌詞設定格式無效' });
+      return;
+    }
     // 排版模板白名單防呆：未知值不落地，避免顯示端收到無法辨識的模板 id
     if (settings.template && !LYRIC_TEMPLATES.includes(settings.template)) {
       delete settings.template;
@@ -156,7 +159,9 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 不再 broadcastState()：整包 state:sync 會讓顯示端跑到 setRomanizationMode/狀態恢復等流程、
     // 重渲染當前行 → 每次拖滑桿 OBS 都重跑入場動畫+粒子（卡頓感來源）。設定本來就不需要整包同步。
     io.emit('lyric-settings:update', playState.lyricSettings);
-    persistState();
+    persistState((result) => {
+      if (typeof ack === 'function') ack(result);
+    });
   });
 
   // ─── 手動歌詞覆蓋 ───

@@ -17,6 +17,10 @@ const ErrorHandler = (() => {
   let toastQueue = [];
   const MAX_TOASTS = 5;
   const TOAST_DURATION = 4000;
+  const HISTORY_KEY = 'elite-error-history-v1';
+  const MAX_HISTORY = 30;
+  let initialized = false;
+  let errorHistory = loadHistory();
 
   // 錯誤計數器（防止錯誤訊息洗版）
   let errorCounts = {};
@@ -27,6 +31,8 @@ const ErrorHandler = (() => {
    * 初始化錯誤處理系統
    */
   function init() {
+    if (initialized) return;
+    initialized = true;
     // 建立 Toast 容器
     toastContainer = document.getElementById('toast-container');
     if (!toastContainer) {
@@ -52,6 +58,9 @@ const ErrorHandler = (() => {
         stack: reason?.stack,
       });
     });
+
+    bindHistoryUI();
+    renderHistory();
 
     console.log('[ErrorHandler] 已初始化');
   }
@@ -112,6 +121,7 @@ const ErrorHandler = (() => {
     // 同時記錄到 console
     const consoleFn = type === 'error' ? console.error : type === 'warning' ? console.warn : console.log;
     consoleFn(`[${type.toUpperCase()}] ${message}`);
+    if (type === 'error' || type === 'warning') recordError(type === 'error' ? '操作錯誤' : '警告', message);
   }
 
   function removeToast(toast) {
@@ -132,6 +142,90 @@ const ErrorHandler = (() => {
     const timestamp = new Date().toISOString();
     const logEntry = { timestamp, source, message, ...extra };
     console.error(`[ErrorHandler][${source}] ${message}`, logEntry);
+    recordError(source, message);
+  }
+
+  function redact(value) {
+    return String(value || '')
+      .replace(/\b(Bearer|OAuth)\s+[A-Za-z0-9._~-]+/gi, '$1 [redacted]')
+      .replace(/("(?:access|refresh)_?token"\s*:\s*")[^"]+/gi, '$1[redacted]')
+      .replace(/\bPIN\s*[:=]\s*\d+/gi, 'PIN: [redacted]')
+      .slice(0, 1000);
+  }
+
+  function loadHistory() {
+    try {
+      const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      return Array.isArray(value) ? value.slice(0, MAX_HISTORY) : [];
+    } catch (_) { return []; }
+  }
+
+  function saveHistory() {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(errorHistory)); } catch (_) { /* 儲存額滿不影響主流程 */ }
+  }
+
+  function recordError(source, message) {
+    const entry = { timestamp: new Date().toISOString(), source: redact(source), message: redact(message) };
+    const latest = errorHistory[0];
+    if (latest && latest.source === entry.source && latest.message === entry.message
+      && Date.now() - Date.parse(latest.timestamp) < 1000) return;
+    errorHistory.unshift(entry);
+    errorHistory = errorHistory.slice(0, MAX_HISTORY);
+    saveHistory();
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const list = document.getElementById('error-history-list');
+    const count = document.getElementById('error-history-count');
+    if (count) count.textContent = String(errorHistory.length);
+    if (!list) return;
+    list.textContent = '';
+    if (!errorHistory.length) {
+      const empty = document.createElement('div');
+      empty.className = 'error-history-empty';
+      empty.textContent = '目前沒有錯誤記錄';
+      list.appendChild(empty);
+      return;
+    }
+    for (const entry of errorHistory) {
+      const item = document.createElement('div');
+      item.className = 'error-history-item';
+      const head = document.createElement('div');
+      head.className = 'error-history-item-head';
+      const source = document.createElement('span');
+      source.textContent = entry.source;
+      const time = document.createElement('time');
+      time.textContent = new Date(entry.timestamp).toLocaleString('zh-TW', { hour12: false });
+      const message = document.createElement('div');
+      message.className = 'error-history-item-message';
+      message.textContent = entry.message;
+      head.append(source, time);
+      item.append(head, message);
+      list.appendChild(item);
+    }
+  }
+
+  function historyText() {
+    return errorHistory.map(entry => `[${entry.timestamp}] [${entry.source}] ${entry.message}`).join('\n');
+  }
+
+  function bindHistoryUI() {
+    const copy = document.getElementById('error-history-copy');
+    const clear = document.getElementById('error-history-clear');
+    if (copy) copy.addEventListener('click', async () => {
+      if (!errorHistory.length) return showToast('目前沒有錯誤記錄', 'info');
+      try {
+        await navigator.clipboard.writeText(historyText());
+        showToast('錯誤記錄已複製', 'success');
+      } catch (_) { showToast('無法存取剪貼簿，請檢查瀏覽器權限', 'error'); }
+    });
+    if (clear) clear.addEventListener('click', () => {
+      errorHistory = [];
+      saveHistory();
+      renderHistory();
+      showToast('錯誤記錄已清除', 'info');
+    });
   }
 
   // ═══════════════════════════════════════════
@@ -295,5 +389,7 @@ const ErrorHandler = (() => {
     debounce,
     safeJsonParse,
     safeFetch,
+    getHistory: () => errorHistory.map(entry => ({ ...entry })),
+    clearHistory: () => { errorHistory = []; saveHistory(); renderHistory(); },
   };
 })();

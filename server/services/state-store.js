@@ -40,6 +40,7 @@ const MAX_MANUAL_LYRICS_ENTRIES = 200;
 
 let _saveTimer = null;
 let _lastSnapshotFn = null;
+let _saveCallbacks = [];
 
 function parseState(raw, filename) {
   const state = JSON.parse(raw);
@@ -252,8 +253,9 @@ function loadState() {
 // 縮到 800ms：仍能合併同一次拖曳滑桿/選色器的高頻事件，但把資料遺失的風險窗口縮到最小。
 const SAVE_DEBOUNCE_MS = 800;
 
-function scheduleSave(snapshotFn) {
+function scheduleSave(snapshotFn, callback) {
   _lastSnapshotFn = snapshotFn;
+  if (typeof callback === 'function') _saveCallbacks.push(callback);
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(saveNow, SAVE_DEBOUNCE_MS);
 }
@@ -261,11 +263,19 @@ function scheduleSave(snapshotFn) {
 function saveNow() {
   _saveTimer = null;
   if (!_lastSnapshotFn) return;
+  const callbacks = _saveCallbacks;
+  _saveCallbacks = [];
+
+  function report(result) {
+    for (const callback of callbacks) {
+      try { callback(result); } catch (_) { /* 回報失敗不可影響保存 */ }
+    }
+  }
 
   try {
     if (_writeBlockReason) throw new Error(`${_writeBlockReason}，已拒絕寫入`);
     const rawSnapshot = _lastSnapshotFn();
-    if (!rawSnapshot) return;
+    if (!rawSnapshot) throw new Error('無法取得要保存的狀態快照');
     const snapshot = { ...rawSnapshot, schemaVersion: CURRENT_STATE_SCHEMA_VERSION };
     if (fs.existsSync(STATE_FILE)) {
       try {
@@ -315,9 +325,11 @@ function saveNow() {
       log.warn(`狀態已保存，但安全備份更新失敗: ${backupError.message}`);
       if (_errorReporter) _errorReporter({ area: '狀態備份', message: '狀態已保存，但安全備份更新失敗；請檢查磁碟空間或資料夾權限。' });
     }
+    report({ ok: true, savedAt: _lastKnownSavedAt });
   } catch (err) {
     log.warn(`狀態寫入失敗: ${err.message}`);
     if (_errorReporter) _errorReporter({ area: '狀態保存', message: err.message });
+    report({ ok: false, error: err.message });
   }
 }
 
