@@ -16,7 +16,9 @@ const { romanize, addRomanization, needsRomanization } = require('./romanizer');
 const { createLogger } = require('../utils/logger');
 const { createJsonStore } = require('./json-store');
 const { dataDir } = require('../utils/data-dir');
+const appPackage = require('../../package.json');
 const log = createLogger('Lyrics');
+const APP_USER_AGENT = `ElitesandPro/${appPackage.version}`;
 
 // ─── 時長驗證閾值（±5 秒）───
 const DURATION_TOLERANCE = 5;
@@ -341,7 +343,7 @@ class LyricsEngine {
       async () => {
         const p = new URLSearchParams({ track_name: clean });
         if (duration > 0) p.set('duration', String(Math.round(duration)));
-        const r = await fetchWithTimeout(`https://lrclib.net/api/search?${p}`, { headers: { 'User-Agent': 'ElitesandPro/0.7.2' } }, 2400);
+        const r = await fetchWithTimeout(`https://lrclib.net/api/search?${p}`, { headers: { 'User-Agent': APP_USER_AGENT } }, 2400);
         const rows = r.ok ? await r.json() : [];
         const hit = Array.isArray(rows) ? rows.find(x => !duration || !x.duration || Math.abs(x.duration - duration) <= 12) : null;
         return hit?.artistName || '';
@@ -546,7 +548,7 @@ class LyricsEngine {
 
       const lyricsUrl = `https://lyrics.paxsenix.org/apple-music/lyrics?id=${matchedSong.id}`;
       const lyricsRes = await fetchWithTimeout(lyricsUrl, {
-        headers: { 'User-Agent': 'ElitesandPro/0.6.0' },
+        headers: { 'User-Agent': APP_USER_AGENT },
       }, 12000);
 
       if (!lyricsRes.ok) return null;
@@ -601,7 +603,7 @@ class LyricsEngine {
     for (const url of strategies) {
       try {
         const response = await fetchWithTimeout(url, {
-          headers: { 'User-Agent': 'ElitesandPro/0.6.0' },
+          headers: { 'User-Agent': APP_USER_AGENT },
         }, 12000);
         if (!response.ok) continue;
 

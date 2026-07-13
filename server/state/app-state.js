@@ -14,6 +14,7 @@ const stateStore = require('../services/state-store');
 const setlistStyleSchema = require('../../public/js/setlist-style-schema');
 const { createLogger } = require('../utils/logger');
 const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
+const libraryStore = require('../services/library-store');
 
 const log = createLogger('State');
 
@@ -246,6 +247,7 @@ function createAppState(io) {
       pitchShift: trackPitch.has(track.id) ? trackPitch.get(track.id) : 0,
       playbackRate: trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0,
       manualLyrics: !!manualLyricsCache.has(track.id),
+      ...libraryStore.audioStatus(track),
     }));
 
     return {
@@ -253,6 +255,7 @@ function createAppState(io) {
         ...playState.currentTrack,
         offset: playState.currentOffset,
         pitchShift: trackPitch.has(playState.currentTrack.id) ? trackPitch.get(playState.currentTrack.id) : 0,
+        ...libraryStore.audioStatus(playState.currentTrack),
         playbackRate: trackSpeed.has(playState.currentTrack.id) ? trackSpeed.get(playState.currentTrack.id) : 1.0,
         manualLyrics: !!manualLyricsCache.has(playState.currentTrack.id),
       } : null,

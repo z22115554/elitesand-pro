@@ -353,6 +353,8 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .playlist-item.active .pi-title { font-weight: 700; color: var(--accent); }
 .playlist-item.active .pi-artist { color: var(--text); }
 .playlist-item .pi-badge { font-size: 10px; padding: 2px 6px; border-radius: 5px; background: var(--bg-raised); color: var(--text-faint); border: 1px solid var(--border); }
+.playlist-item.audio-missing { border-left-color: var(--danger); }
+.playlist-item .pi-badge--danger { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
 /* 歌詞準備度：逐字/逐句/純文字/無歌詞文字徽章，點擊直接開歌詞選擇器修復（不限目前播放中的那首）*/
 .pi-extras { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .playlist-item .pi-lyrics-status { border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-faint); padding: 2px 6px; font-size: 10px; line-height: 1.4; border-radius: 5px; cursor: pointer; flex-shrink: 0; white-space: nowrap; transition: background 0.12s, color 0.12s, border-color 0.12s; }

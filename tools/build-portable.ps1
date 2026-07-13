@@ -320,6 +320,12 @@ $Manifest = [ordered]@{
 }
 $Manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $Stage "portable-manifest.json") -Encoding UTF8
 
+Write-Host "Running packaged-app smoke test..."
+& $NodeCommand.Source (Join-Path $Root "tools\smoke-portable.js") $Stage
+if ($LASTEXITCODE -ne 0) {
+  throw "Packaged-app smoke test failed. ZIP creation was stopped."
+}
+
 if (-not $NoZip) {
   Write-Host "Creating zip..."
   Compress-Archive -LiteralPath $Stage -DestinationPath $ZipPath -Force

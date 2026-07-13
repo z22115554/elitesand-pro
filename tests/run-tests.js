@@ -6,6 +6,9 @@
  * （romanizer 已支援安全降級），方便快速驗證改動是否破壞功能。
  */
 
+const fs = require('fs');
+const path = require('path');
+
 let passed = 0;
 let failed = 0;
 const failures = [];
@@ -82,6 +85,35 @@ test('Windows PowerShell 建置腳本使用 UTF-8 BOM', () => {
     const bytes = fsForEncoding.readFileSync(require('path').join(__dirname, '..', 'tools', filename));
     ok(bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf, `${filename} 必須讓 Windows PowerShell 5.1 正確辨識 UTF-8: `);
   }
+});
+
+const staticContracts = require('./static-contracts');
+
+test('靜態守衛：server 發出的 socket 事件都有前端白名單轉接', () => {
+  const root = path.join(__dirname, '..');
+  const report = staticContracts.socketContractReport(
+    staticContracts.loadRepositorySources(root),
+    fs.readFileSync(path.join(root, 'public', 'js', 'socket-client.js'), 'utf8')
+  );
+  eq(report.missing.join(','), '', `漏接事件 ${report.missing.join(', ')}: `);
+});
+
+test('靜態守衛：故意移除 socket 白名單時會偵測失敗', () => {
+  const serverSources = [{ file: 'server/example.js', source: "io.emit('fixture:event', {});" }];
+  const report = staticContracts.socketContractReport(serverSources, "socket.on('other:event', () => {});");
+  eq(report.missing.join(','), 'fixture:event');
+});
+
+test('靜態守衛：所有寫入型 HTTP 路由都有 requirePin 或具理由的例外', () => {
+  const report = staticContracts.routeContractReport(staticContracts.loadRepositorySources(path.join(__dirname, '..')));
+  eq(report.unprotected.map((item) => item.key).join(','), '', `未保護路由 ${report.unprotected.map((item) => item.key).join(', ')}: `);
+  eq(report.staleAllowlist.join(','), '', `過期例外 ${report.staleAllowlist.join(', ')}: `);
+});
+
+test('靜態守衛：故意漏掛 requirePin 時會偵測失敗', () => {
+  const sources = [{ file: 'server/routes/fixture.js', source: "router.post('/danger', async (req, res) => {});" }];
+  const report = staticContracts.routeContractReport(sources, new Map());
+  eq(report.unprotected[0].key, 'server/routes/fixture.js:POST:/danger');
 });
 
 // ═══════════════════════════════════════════
@@ -316,9 +348,6 @@ test('無效顯示模式被 socket 端拒絕（不污染狀態）', () => {
 // ═══════════════════════════════════════════
 console.log('\n📦 5. 歌詞快取持久化（磁碟 round-trip）');
 // ═══════════════════════════════════════════
-const fs = require('fs');
-const path = require('path');
-
 test('快取檔寫入與重新載入', () => {
   const dataDir = path.join(__dirname, '..', 'data');
   const cacheFile = path.join(dataDir, 'lyrics-cache.json');
@@ -1345,6 +1374,33 @@ test('PIN rate limit：連續失敗後鎖定，成功/重設可清除', () => {
   ok(!authLimiter.status('test-client', 1001).allowed);
   authLimiter.reset('test-client');
   ok(authLimiter.status('test-client', 1001).allowed);
+});
+
+test('音檔巡檢：缺少檔名或檔案時標記遺失，存在時標記可播放', () => {
+  const libraryStore = require('../server/services/library-store');
+  ok(libraryStore.audioStatus({ id: 'none' }, () => true).audioMissing);
+  ok(libraryStore.audioStatus({ filename: 'missing.mp3' }, () => false).audioMissing);
+  ok(libraryStore.audioStatus({ filename: 'ready.mp3' }, (name) => name === 'ready.mp3').audioAvailable);
+});
+
+test('播放前預檢：音檔遺失時不改播放狀態並回傳可恢復錯誤', () => {
+  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
+  const events = new Map();
+  const emitted = [];
+  const socket = {
+    id: 'fixture-controller', clientType: 'controller',
+    on(event, handler) { events.set(event, handler); },
+    emit(event, data) { emitted.push({ event, data }); },
+  };
+  registerPlaybackHandlers({ emit() { throw new Error('遺失音檔不可廣播播放事件'); } }, socket, {});
+  events.get('play:track')({
+    id: 'missing-track', title: '遺失測試歌曲', filename: `definitely-missing-${Date.now()}.mp3`,
+    url: 'https://www.youtube.com/watch?v=fixture', autoplay: true,
+  });
+  const error = emitted.find((item) => item.event === 'audio:error')?.data;
+  eq(error.code, 'AUDIO_FILE_MISSING');
+  ok(error.retryable, '有來源網址時應告知可重新下載: ');
+  ok(/重新下載/.test(error.message), '錯誤應提供下一步: ');
 });
 
 test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件', () => {

@@ -165,8 +165,16 @@
     const playlist = state.playlist;
     if (index < 0 || index >= playlist.length) return;
 
-    state.currentTrackIndex = index;
     const track = playlist[index];
+    if (track.audioMissing) {
+      AppShared.showToast(track.url
+        ? `找不到「${track.title}」的音檔，請重新下載後再播放。`
+        : `找不到「${track.title}」的音檔，且沒有可重新下載的來源。`, 'error');
+      AppShared.renderPlaylist();
+      return false;
+    }
+
+    state.currentTrackIndex = index;
 
     AppShared.setMarqueeText(dom.trackTitle, track.title);
     AppShared.setMarqueeText(dom.trackArtist, track.artist || '');
