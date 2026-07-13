@@ -715,6 +715,7 @@ test('設定載入器：所有預設鍵存在且型別正確', () => {
 });
 
 const stateStoreModulePath = path.join(__dirname, '..', 'server', 'services', 'state-store.js');
+const stateFixtureDir = path.join(__dirname, 'fixtures', 'state');
 const { spawnSync: spawnStateStore } = require('child_process');
 
 function runStateStoreChild(dataDir, script) {
@@ -742,6 +743,7 @@ test('狀態持久化：隔離資料夾 round-trip 並建立 last-good', () => {
     eq(result.loaded.style, 'rock');
     eq(result.loaded.trackOffsets.t1, 300);
     eq(result.loaded.manualLyrics.t1.lyrics, '手動歌詞');
+    eq(result.loaded.schemaVersion, 1);
     ok(result.backup, '成功保存後應建立 last-good: ');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
@@ -758,6 +760,109 @@ test('狀態持久化：狀態檔不存在時回傳 null 不報錯', () => {
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
+test('state.json 遺失時從 last-good 恢復', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-missing-primary-'));
+  try {
+    fs.writeFileSync(path.join(dataDir, 'state.json.last-good'), JSON.stringify({ schemaVersion: 1, savedAt: 8, playlist: [{ id: 'backup-only' }] }), 'utf8');
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const loaded=store.loadState(); const alert=store.consumeStartupAlert();",
+      "const disk=JSON.parse(fs.readFileSync(store.STATE_FILE,'utf8')); process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,alert,disk}));",
+    ].join('\n'));
+    eq(result.loaded.playlist[0].id, 'backup-only');
+    eq(result.disk.playlist[0].id, 'backup-only');
+    ok(/找不到 state\.json/.test(result.alert.message), '應說明主檔遺失與恢復結果: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('主檔遺失但 last-good 為未來 schema 時持續阻止降版覆寫', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-future-backup-'));
+  const fixture = path.join(stateFixtureDir, 'future-v99.json');
+  try {
+    fs.copyFileSync(fixture, path.join(dataDir, 'state.json.last-good'));
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const alerts=[]; store.setErrorReporter((a)=>alerts.push(a)); const before=fs.readFileSync(store.STATE_BACKUP_FILE,'utf8');",
+      "const loaded=store.loadState(); store.scheduleSave(()=>({savedAt:Date.now(),playlist:[{id:'downgrade'}]})); store.saveNow();",
+      "const after=fs.readFileSync(store.STATE_BACKUP_FILE,'utf8'); process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,alerts,unchanged:before===after,primaryExists:fs.existsSync(store.STATE_FILE)}));",
+    ].join('\n'));
+    eq(result.loaded, null);
+    ok(result.unchanged, '未來格式 last-good 必須保持不變: ');
+    ok(!result.primaryExists, '不可用舊程式從未來格式建立降版主檔: ');
+    ok(result.alerts.some((item) => /停止狀態寫入/.test(item.message)), '應持續阻止降版覆寫: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('無版本 state fixture 可逐步遷移並保留原檔', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-migrate-v0-'));
+  const fixture = path.join(stateFixtureDir, 'v0-versionless.json');
+  try {
+    const original = fs.readFileSync(fixture, 'utf8');
+    fs.copyFileSync(fixture, path.join(dataDir, 'state.json'));
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const path=require('path'); const store=require(process.argv[1]); const dir=process.argv[2];",
+      "const loaded=store.loadState(); const files=fs.readdirSync(dir); const disk=JSON.parse(fs.readFileSync(store.STATE_FILE,'utf8'));",
+      "const preserved=files.find((name)=>/^state\\.json\\.pre-migration-v0-/.test(name));",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,disk,files,preservedRaw:preserved?fs.readFileSync(path.join(dir,preserved),'utf8'):null}));",
+    ].join('\n'));
+    eq(result.loaded.schemaVersion, 1);
+    eq(result.disk.schemaVersion, 1);
+    eq(result.loaded.playlist[0].title, '舊版測試歌曲');
+    eq(result.loaded.trackOffsets['legacy-track'], 350);
+    eq(result.loaded.manualLyrics['legacy-track'].lyrics, '[00:01.00]舊版歌詞');
+    eq(result.loaded.lyricSettings.template, 'classic');
+    eq(result.preservedRaw, original);
+    ok(result.files.includes('state.json.last-good'), '遷移後應建立目前格式的 last-good: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('目前 schema 載入不重複建立 migration 備份', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-current-schema-'));
+  try {
+    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({ schemaVersion: 1, savedAt: 7, playlist: [] }), 'utf8');
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const dir=process.argv[2];",
+      "const loaded=store.loadState(); process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,files:fs.readdirSync(dir)}));",
+    ].join('\n'));
+    eq(result.loaded.schemaVersion, 1);
+    ok(!result.files.some((name) => name.includes('.pre-migration-')), '目前 schema 不應產生多餘遷移備份: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('未來 schema 保持原檔且阻止舊程式降版覆寫', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-future-schema-'));
+  const fixture = path.join(stateFixtureDir, 'future-v99.json');
+  try {
+    fs.copyFileSync(fixture, path.join(dataDir, 'state.json'));
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const dir=process.argv[2]; const alerts=[]; store.setErrorReporter((a)=>alerts.push(a));",
+      "const before=fs.readFileSync(store.STATE_FILE,'utf8'); const loaded=store.loadState();",
+      "store.scheduleSave(()=>({savedAt:Date.now(),playlist:[{id:'downgrade'}]})); store.saveNow();",
+      "const after=fs.readFileSync(store.STATE_FILE,'utf8'); process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,alerts,unchanged:before===after,files:fs.readdirSync(dir)}));",
+    ].join('\n'));
+    eq(result.loaded, null);
+    ok(result.unchanged, '未來版本資料必須逐 byte 保持不變: ');
+    ok(!result.files.some((name) => /corrupt|pre-migration/.test(name)), '未來 schema 不應被誤判成損壞或舊格式: ');
+    ok(result.alerts.some((item) => /停止狀態寫入/.test(item.message)), '應說明已阻止降版覆寫: ');
+    ok(result.alerts.some((item) => /已拒絕寫入/.test(item.message)), '實際保存也必須被拒絕: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('非法 schema fixture 視為損壞並保留證據', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-invalid-schema-'));
+  const fixture = path.join(stateFixtureDir, 'invalid-schema.json');
+  try {
+    const original = fs.readFileSync(fixture, 'utf8');
+    fs.copyFileSync(fixture, path.join(dataDir, 'state.json'));
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const path=require('path'); const store=require(process.argv[1]); const dir=process.argv[2];",
+      "const loaded=store.loadState(); const alert=store.consumeStartupAlert(); const files=fs.readdirSync(dir); const preserved=files.find((name)=>/^state\\.json\\.corrupt-/.test(name));",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,alert,files,preservedRaw:preserved?fs.readFileSync(path.join(dir,preserved),'utf8'):null}));",
+    ].join('\n'));
+    eq(result.loaded, null);
+    eq(result.preservedRaw, original);
+    ok(/沒有可用備份/.test(result.alert.message), '非法 schema 應走可理解的安全降級: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
 test('state.json 損壞時保留原檔並從 last-good 自動恢復', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-recover-'));
   try {
@@ -770,6 +875,7 @@ test('state.json 損壞時保留原檔並從 last-good 自動恢復', () => {
     ].join('\n'));
     eq(result.loaded.playlist[0].id, 'safe');
     eq(result.disk.playlist[0].id, 'safe');
+    eq(result.disk.schemaVersion, 1);
     ok(result.files.some((name) => /^state\.json\.corrupt-/.test(name)), '應保留損壞原檔: ');
     ok(/最近可用備份恢復/.test(result.alert.message), `提示應說明恢復結果：${result.alert?.message}`);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }

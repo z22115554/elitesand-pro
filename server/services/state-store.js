@@ -19,6 +19,11 @@
 const fs = require('fs');
 const path = require('path');
 const { createLogger } = require('../utils/logger');
+const {
+  CURRENT_STATE_SCHEMA_VERSION,
+  UnsupportedStateSchemaError,
+  migrateState,
+} = require('./state-migrations');
 
 const log = createLogger('StateStore');
 
@@ -28,6 +33,7 @@ const STATE_BACKUP_FILE = path.join(DATA_DIR, 'state.json.last-good');
 let _lastKnownSavedAt = 0;
 let _errorReporter = null;
 let _startupAlert = null;
+let _writeBlockReason = null;
 
 // 手動歌詞單筆與總量保護（避免 state.json 無限膨脹）
 const MAX_MANUAL_LYRICS_ENTRIES = 200;
@@ -45,6 +51,10 @@ function parseState(raw, filename) {
 
 function readStateFile(filename) {
   return parseState(fs.readFileSync(filename, 'utf8'), filename);
+}
+
+function readMigratedStateFile(filename) {
+  return migrateState(readStateFile(filename));
 }
 
 function atomicWrite(filename, raw) {
@@ -74,6 +84,21 @@ function preserveCorruptFile(filename) {
   return preserved;
 }
 
+function migrationBackupPathFor(filename, fromVersion, now = new Date()) {
+  const stamp = now.toISOString().replace(/[:.]/g, '-');
+  const base = `${filename}.pre-migration-v${fromVersion}-${stamp}`;
+  let candidate = base;
+  let suffix = 1;
+  while (fs.existsSync(candidate)) candidate = `${base}-${suffix++}`;
+  return candidate;
+}
+
+function preservePreMigrationFile(filename, fromVersion) {
+  const preserved = migrationBackupPathFor(filename, fromVersion);
+  fs.copyFileSync(filename, preserved, fs.constants.COPYFILE_EXCL);
+  return preserved;
+}
+
 function setStartupAlert(message, type = 'warning') {
   _startupAlert = { type, area: '狀態恢復', message };
   if (_errorReporter) _errorReporter(_startupAlert);
@@ -83,15 +108,77 @@ function refreshLastGood(state) {
   atomicWrite(STATE_BACKUP_FILE, JSON.stringify(state));
 }
 
+function blockWritesForFutureSchema(error, filename = STATE_FILE) {
+  _writeBlockReason = `${path.basename(filename)} 由較新版本的 Elitesand Pro 建立（schemaVersion ${error.version}），目前版本只支援到 ${CURRENT_STATE_SCHEMA_VERSION}`;
+  setStartupAlert(`${_writeBlockReason}。為避免降版覆蓋，檔案保持原樣且已停止狀態寫入；請改用較新版本啟動。`, 'error');
+  log.warn(_writeBlockReason);
+}
+
+function migrationPersistenceError(filename, error) {
+  const wrapped = new Error(`${path.basename(filename)} 遷移前無法安全保留原檔或寫入新格式：${error.message}`);
+  wrapped.code = 'STATE_MIGRATION_PERSIST_FAILED';
+  return wrapped;
+}
+
+function persistMigration(filename, result) {
+  if (!result.migrated) return null;
+  try {
+    const preserved = preservePreMigrationFile(filename, result.fromVersion);
+    atomicWrite(filename, JSON.stringify(result.state));
+    log.info(`${path.basename(filename)} 已由 schema v${result.fromVersion} 遷移至 v${result.toVersion}；原檔保留為 ${path.basename(preserved)}`);
+    return preserved;
+  } catch (error) {
+    throw migrationPersistenceError(filename, error);
+  }
+}
+
+function blockWritesForMigrationFailure(error) {
+  _writeBlockReason = error.message;
+  setStartupAlert(`${error.message}。為避免資料遺失，原檔保持不變且已停止狀態寫入；請檢查磁碟空間或資料夾權限後重新啟動。`, 'error');
+  log.warn(_writeBlockReason);
+}
+
+function recoverMissingPrimaryFromBackup() {
+  if (!fs.existsSync(STATE_BACKUP_FILE)) return null;
+  try {
+    const backupResult = readMigratedStateFile(STATE_BACKUP_FILE);
+    persistMigration(STATE_BACKUP_FILE, backupResult);
+    const recovered = backupResult.state;
+    atomicWrite(STATE_FILE, JSON.stringify(recovered));
+    _lastKnownSavedAt = Number(recovered.savedAt) || 0;
+    setStartupAlert('找不到 state.json，已從最近可用備份恢復。請確認歌單與設定。');
+    log.info('state.json 不存在，已從 state.json.last-good 恢復狀態');
+    return recovered;
+  } catch (error) {
+    if (error instanceof UnsupportedStateSchemaError) {
+      blockWritesForFutureSchema(error, STATE_BACKUP_FILE);
+      return null;
+    }
+    if (error.code === 'STATE_MIGRATION_PERSIST_FAILED') {
+      blockWritesForMigrationFailure(error);
+      return null;
+    }
+    let preserved = null;
+    try { preserved = preserveCorruptFile(STATE_BACKUP_FILE); } catch (_) { /* 保留原位 */ }
+    const note = preserved ? `，損壞備份已保留為 ${path.basename(preserved)}` : '且無法安全移動損壞備份';
+    setStartupAlert(`找不到 state.json，最近可用備份也無法載入${note}。已用預設狀態啟動，請重新確認歌單與設定。`, 'error');
+    log.warn(`state.json 不存在且 last-good 無法載入: ${error.message}`);
+    return null;
+  }
+}
+
 /**
  * 啟動時載入狀態
  * @returns {object|null} { playlist, style, romanizationMode, showRomanization,
  *                          metronomeEnabled, trackOffsets, manualLyrics } 或 null
  */
 function loadState() {
-  if (!fs.existsSync(STATE_FILE)) return null;
+  _writeBlockReason = null;
+  if (!fs.existsSync(STATE_FILE)) return recoverMissingPrimaryFromBackup();
   try {
-    const state = readStateFile(STATE_FILE);
+    const result = readMigratedStateFile(STATE_FILE);
+    persistMigration(STATE_FILE, result);
+    const state = result.state;
     log.info(`已還原上次狀態: 歌單 ${Array.isArray(state.playlist) ? state.playlist.length : 0} 首、` +
              `offset ${state.trackOffsets ? Object.keys(state.trackOffsets).length : 0} 筆、` +
              `手動歌詞 ${state.manualLyrics ? Object.keys(state.manualLyrics).length : 0} 筆`);
@@ -104,6 +191,14 @@ function loadState() {
     }
     return state;
   } catch (err) {
+    if (err instanceof UnsupportedStateSchemaError) {
+      blockWritesForFutureSchema(err);
+      return null;
+    }
+    if (err.code === 'STATE_MIGRATION_PERSIST_FAILED') {
+      blockWritesForMigrationFailure(err);
+      return null;
+    }
     let preserved = null;
     try {
       preserved = preserveCorruptFile(STATE_FILE);
@@ -116,13 +211,23 @@ function loadState() {
 
     if (fs.existsSync(STATE_BACKUP_FILE)) {
       try {
-        const recovered = readStateFile(STATE_BACKUP_FILE);
+        const backupResult = readMigratedStateFile(STATE_BACKUP_FILE);
+        persistMigration(STATE_BACKUP_FILE, backupResult);
+        const recovered = backupResult.state;
         atomicWrite(STATE_FILE, JSON.stringify(recovered));
         _lastKnownSavedAt = Number(recovered.savedAt) || 0;
         setStartupAlert(`偵測到 state.json 損壞，原檔已保留為 ${path.basename(preserved)}，並已從最近可用備份恢復。請確認歌單與設定。`);
         log.info('已從 state.json.last-good 恢復狀態');
         return recovered;
       } catch (backupError) {
+        if (backupError instanceof UnsupportedStateSchemaError) {
+          blockWritesForFutureSchema(backupError, STATE_BACKUP_FILE);
+          return null;
+        }
+        if (backupError.code === 'STATE_MIGRATION_PERSIST_FAILED') {
+          blockWritesForMigrationFailure(backupError);
+          return null;
+        }
         let backupPreserved = null;
         try { backupPreserved = preserveCorruptFile(STATE_BACKUP_FILE); } catch (_) { /* 保留原位 */ }
         log.warn(`最近可用備份也無法載入: ${backupError.message}`);
@@ -158,14 +263,32 @@ function saveNow() {
   if (!_lastSnapshotFn) return;
 
   try {
-    const snapshot = _lastSnapshotFn();
-    if (!snapshot) return;
+    if (_writeBlockReason) throw new Error(`${_writeBlockReason}，已拒絕寫入`);
+    const rawSnapshot = _lastSnapshotFn();
+    if (!rawSnapshot) return;
+    const snapshot = { ...rawSnapshot, schemaVersion: CURRENT_STATE_SCHEMA_VERSION };
     if (fs.existsSync(STATE_FILE)) {
       try {
-        const disk = readStateFile(STATE_FILE);
+        const diskResult = readMigratedStateFile(STATE_FILE);
+        if (diskResult.migrated) {
+          try {
+            preservePreMigrationFile(STATE_FILE, diskResult.fromVersion);
+          } catch (migrationError) {
+            throw migrationPersistenceError(STATE_FILE, migrationError);
+          }
+        }
+        const disk = diskResult.state;
         const diskSavedAt = Number(disk.savedAt) || 0;
         if (diskSavedAt > _lastKnownSavedAt) throw new Error('偵測到另一個伺服器已更新 state.json，已拒絕用舊狀態覆寫');
       } catch (diskError) {
+        if (diskError instanceof UnsupportedStateSchemaError) {
+          blockWritesForFutureSchema(diskError);
+          throw new Error(`${_writeBlockReason}，已拒絕寫入`);
+        }
+        if (diskError.code === 'STATE_MIGRATION_PERSIST_FAILED') {
+          blockWritesForMigrationFailure(diskError);
+          throw new Error(`${_writeBlockReason}，已拒絕寫入`);
+        }
         if (/另一個伺服器/.test(diskError.message)) throw diskError;
         const preserved = preserveCorruptFile(STATE_FILE);
         const message = `寫入前發現 state.json 已損壞，原檔已保留為 ${path.basename(preserved)}；目前狀態將重新保存。`;
@@ -219,6 +342,8 @@ module.exports = {
   setErrorReporter,
   consumeStartupAlert,
   preserveCorruptFile,
+  preservePreMigrationFile,
   STATE_FILE,
   STATE_BACKUP_FILE,
+  CURRENT_STATE_SCHEMA_VERSION,
 };

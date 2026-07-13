@@ -1,0 +1,43 @@
+{
+  "savedAt": 1720000000000,
+  "playlist": [
+    {
+      "id": "legacy-track",
+      "title": "舊版測試歌曲",
+      "artist": "舊版歌手",
+      "filename": "legacy-track.mp3"
+    }
+  ],
+  "style": "rock",
+  "romanizationMode": "full",
+  "showRomanization": true,
+  "metronomeEnabled": false,
+  "lyricSettings": {
+    "template": "monet",
+    "fontSize": 56,
+    "color": "#ffcc00"
+  },
+  "trackOffsets": {
+    "legacy-track": 350
+  },
+  "trackPitch": {
+    "legacy-track": -2
+  },
+  "trackSpeed": {
+    "legacy-track": 0.95
+  },
+  "manualLyrics": {
+    "legacy-track": {
+      "lyrics": "[00:01.00]舊版歌詞",
+      "lyricsType": "lrc",
+      "timestamp": 1720000000000
+    }
+  },
+  "session": {
+    "active": false,
+    "startedAt": null,
+    "songs": []
+  },
+  "setlistTheme": "glass",
+  "setlistLayout": "classic"
+}
