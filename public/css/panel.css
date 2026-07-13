@@ -550,6 +550,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .candidate-preview .cp-line { display: flex; gap: 8px; }
 .candidate-preview .cp-time { color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; font-family: ui-monospace, monospace; font-size: 11px; }
 .picker-loading, .picker-empty { text-align: center; padding: 36px; color: var(--text-faint); }
+.picker-health-notice { margin: 0 0 10px; padding: 9px 11px; border: 1px solid rgba(245, 158, 11, .4); border-radius: var(--r-sm); background: rgba(245, 158, 11, .08); color: #f59e0b; font-size: 11px; line-height: 1.5; }
 
 /* 逐行歌詞時間軸編輯器 */
 .lt-rows { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }

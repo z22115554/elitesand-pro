@@ -15,6 +15,7 @@ const { fetchWithTimeout } = require('../utils/helpers');
 const { romanize, addRomanization, needsRomanization } = require('./romanizer');
 const { createLogger } = require('../utils/logger');
 const { createJsonStore } = require('./json-store');
+const { ProviderHealthRegistry } = require('./provider-health');
 const { dataDir } = require('../utils/data-dir');
 const appPackage = require('../../package.json');
 const log = createLogger('Lyrics');
@@ -26,7 +27,7 @@ const DURATION_TOLERANCE = 5;
 const LYRICS_SOURCE_PRIORITY = Object.freeze([
   'betterlyrics', 'paxsenix', 'kugou', 'qqmusic', 'lrclib', 'netease',
 ]);
-const LYRICS_CACHE_VERSION = 'v3-source-priority-credit-cleaning';
+const LYRICS_CACHE_VERSION = 'v4-negative-cache-provider-health';
 
 // ─── 歌詞快取（記憶體 + 磁碟持久化）───
 const path = require('path');
@@ -34,6 +35,7 @@ const path = require('path');
 const lyricsCache = new Map();
 const _config = require('../utils/load-config');
 const CACHE_TTL = (_config.cacheDays || 7) * 24 * 60 * 60 * 1000;
+const NEGATIVE_CACHE_TTL = 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = _config.maxCacheEntries || 500; // 防止快取檔無限膨脹
 const CACHE_FILE = path.join(dataDir, 'lyrics-cache.json');
 
@@ -49,6 +51,13 @@ const lyricsCacheDiskStore = createJsonStore({
 });
 
 let _cacheSaveTimer = null;
+const providerHealth = new ProviderHealthRegistry();
+
+function cacheEntryIsFresh(value, now = Date.now()) {
+  if (!value || !value.timestamp) return false;
+  const ttl = value.negative ? NEGATIVE_CACHE_TTL : CACHE_TTL;
+  return now - value.timestamp < ttl;
+}
 
 /**
  * 啟動時從磁碟載入歌詞快取
@@ -60,7 +69,7 @@ function loadCacheFromDisk() {
     const now = Date.now();
     let loaded = 0;
     for (const [key, value] of entries) {
-      if (value && value.timestamp && now - value.timestamp < CACHE_TTL) {
+      if (cacheEntryIsFresh(value, now)) {
         lyricsCache.set(key, value);
         loaded++;
       }
@@ -167,7 +176,7 @@ class LyricsEngine {
     const cacheKey = `${LYRICS_CACHE_VERSION}:${query}:${duration}:${autoRomanize}`;
 
     const cached = lyricsCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    if (cacheEntryIsFresh(cached)) {
       log.info(`✓ 使用快取: "${query}"`);
       return cached.result;
     }
@@ -186,13 +195,15 @@ class LyricsEngine {
     };
     const sources = LYRICS_SOURCE_PRIORITY.map((name) => ({ name, fn: sourceFns[name] }));
 
+    const outcomes = [];
     for (const source of sources) {
-      const sourceStart = Date.now();
+      log.info(`嘗試來源: ${source.name}`);
+      const outcome = await providerHealth.execute(source.name, source.fn);
+      outcomes.push(outcome.status);
       try {
-        log.info(`嘗試來源: ${source.name}`);
-        const result = await source.fn();
-        const sourceDuration = Date.now() - sourceStart;
-        if (result && result.lyrics) {
+        const result = outcome.result;
+        const sourceDuration = outcome.durationMs;
+        if (outcome.status === 'success' && result && result.lyrics) {
           const totalDuration = Date.now() - searchStart;
           log.info(`✓ 找到歌詞 (來源: ${source.name}, 類型: ${result.type})`);
           log.perf(`lyrics-${source.name}`, sourceDuration, { query });
@@ -220,18 +231,26 @@ class LyricsEngine {
           lyricsCache.set(cacheKey, { result, timestamp: Date.now() });
           scheduleCacheSave();
           return result;
-        } else {
+        } else if (outcome.status === 'miss') {
           log.info(`來源 ${source.name} 未找到結果 (${sourceDuration}ms)`);
+        } else if (outcome.status === 'skipped') {
+          log.warn(`來源 ${source.name} 暫停中，略過本次搜尋`);
+        } else {
+          log.warn(`來源 ${source.name} 失敗 (${sourceDuration}ms): ${outcome.error?.message || outcome.status}`);
         }
       } catch (err) {
-        const sourceDuration = Date.now() - sourceStart;
-        log.warn(`來源 ${source.name} 失敗 (${sourceDuration}ms): ${err.message}`);
+        log.warn(`處理來源 ${source.name} 結果失敗: ${err.message}`);
       }
     }
 
     const totalDuration = Date.now() - searchStart;
     log.info(`✗ 所有來源均未找到歌詞 (${totalDuration}ms)`);
-    log.perf('lyrics-total', totalDuration, { query, result: 'not_found' });    return null;
+    log.perf('lyrics-total', totalDuration, { query, result: 'not_found' });
+    if (outcomes.length > 0 && outcomes.every(status => status === 'miss')) {
+      lyricsCache.set(cacheKey, { result: null, timestamp: Date.now(), negative: true });
+      scheduleCacheSave();
+    }
+    return null;
   }
 
   /**
@@ -269,14 +288,18 @@ class LyricsEngine {
     const sources = LYRICS_SOURCE_PRIORITY.map((name) => ({ name, fn: sourceFns[name] }));
 
     // 並行查詢所有來源（互不阻擋，全部跑完才回傳）
-    const settled = await Promise.allSettled(
-      sources.map(s => s.fn().then(r => ({ name: s.name, result: r })))
+    const settled = await Promise.all(
+      sources.map(async (source) => ({
+        name: source.name,
+        outcome: await providerHealth.execute(source.name, source.fn),
+      }))
     );
 
     const candidates = [];
-    for (const outcome of settled) {
-      if (outcome.status !== 'fulfilled' || !outcome.value.result || !outcome.value.result.lyrics) continue;
-      const { name, result } = outcome.value;
+    for (const settledSource of settled) {
+      const { name, outcome } = settledSource;
+      if (outcome.status !== 'success' || !outcome.result || !outcome.result.lyrics) continue;
+      const result = outcome.result;
 
       try {
         const parsed = result.type === 'krc' ? this.parseKrc(result.lyrics) : this.parseLrc(result.lyrics);
@@ -1110,6 +1133,14 @@ class LyricsEngine {
   static clearCache() {
     lyricsCache.clear();
   }
+
+  static getProviderHealth() {
+    return providerHealth.snapshot(LYRICS_SOURCE_PRIORITY);
+  }
+
+  static resetProviderHealth() {
+    providerHealth.reset();
+  }
 }
 
-module.exports = { LyricsEngine, setIo, LYRICS_SOURCE_PRIORITY };
+module.exports = { LyricsEngine, setIo, LYRICS_SOURCE_PRIORITY, cacheEntryIsFresh };
