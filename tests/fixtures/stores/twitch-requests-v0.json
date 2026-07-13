@@ -1,0 +1,11 @@
+[
+  {
+    "requestId": "fixture-request",
+    "url": "https://youtu.be/dQw4w9WgXcQ",
+    "requester": "fixture-viewer",
+    "videoId": "dQw4w9WgXcQ",
+    "createdAt": 4102444800000,
+    "expiresAt": 4102448400000,
+    "event": { "chatter_user_name": "fixture-viewer" }
+  }
+]

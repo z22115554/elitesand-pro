@@ -128,6 +128,30 @@
   // 是否已採用「伺服器端持久化設定」。每次（重）連線後採用一次，避免拖滑桿時被回推迴圈。
 
   let serverSettingsApplied = false;
+  let saveConfirmTimer = null;
+
+  function setSaveStatus(state, message) {
+    const el = document.getElementById('lyrics-save-status');
+    if (!el) return;
+    el.classList.remove('saving', 'saved', 'error');
+    el.classList.add(state);
+    el.textContent = message;
+  }
+
+  function confirmSettingsSaved(payload) {
+    clearTimeout(saveConfirmTimer);
+    setSaveStatus('saving', '設定保存中…');
+    saveConfirmTimer = setTimeout(() => {
+      SocketClient.sendWithCallback('lyric-settings:update', payload, (result, transportError) => {
+        if (result?.ok) {
+          const time = new Date(result.savedAt || Date.now()).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          setSaveStatus('saved', `已保存 ${time}`);
+        } else {
+          setSaveStatus('error', `保存失敗：${result?.error || transportError?.code || '伺服器沒有回應'}`);
+        }
+      });
+    }, 450);
+  }
 
   function loadSettings() {
     try {
@@ -269,7 +293,11 @@
     serverSettingsApplied = true;
     const srv = state.lyricSettings;
     if (!applyServerSettings(srv)) {
-      SocketClient.send('lyric-settings:update', buildSettingsPayload());
+      const payload = buildSettingsPayload();
+      SocketClient.send('lyric-settings:update', payload);
+      confirmSettingsSaved(payload);
+    } else {
+      setSaveStatus('saved', '設定已保存');
     }
   }
 
@@ -306,6 +334,7 @@
     saveSettings();
     previewToIframe(settings);
     SocketClient.send('lyric-settings:update', payload);
+    confirmSettingsSaved(payload);
   }
 
   const sampleLyricsBtn = document.getElementById('btn-preview-sample-lyrics');
@@ -795,7 +824,9 @@
         if (existing) existing.settings = item.settings;
         else lyricPresets.push(item);
         saveSettings();
-        SocketClient.send('lyric-settings:update', buildSettingsPayload());
+        const payload = buildSettingsPayload();
+        SocketClient.send('lyric-settings:update', payload);
+        confirmSettingsSaved(payload);
         renderLyricPresetUI();
         if (sel) sel.value = item.id;
         showToast('已保存歌詞外觀預設');
@@ -820,7 +851,9 @@
         if (!item || !confirm('確定刪除預設「' + item.name + '」？')) return;
         lyricPresets = lyricPresets.filter((p) => p.id !== item.id);
         saveSettings();
-        SocketClient.send('lyric-settings:update', buildSettingsPayload());
+        const payload = buildSettingsPayload();
+        SocketClient.send('lyric-settings:update', payload);
+        confirmSettingsSaved(payload);
         renderLyricPresetUI();
         showToast('已刪除歌詞外觀預設');
       });
@@ -919,7 +952,9 @@
         saveSettings();
         refreshControls();
         previewToIframe(settings);
-        SocketClient.send('lyric-settings:update', buildSettingsPayload());
+        const payload = buildSettingsPayload();
+        SocketClient.send('lyric-settings:update', payload);
+        confirmSettingsSaved(payload);
       });
     }
 

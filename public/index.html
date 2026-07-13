@@ -331,6 +331,7 @@
           <!-- 即時預覽（鏡像 OBS 輸出，調整下方設定時所見即所得；示範歌詞由歌詞頁按鈕手動載入）
                sticky 固定在設定頁頂部，往下捲設定時預覽不跟著走（見 .settings-preview-bar CSS） -->
           <div class="settings-preview-bar">
+            <div id="lyrics-save-status" class="save-status saved" role="status" aria-live="polite">設定已保存</div>
             <div class="obs-preview-wrap">
               <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
               <div class="obs-preview-tag">即時預覽 · 調整下方設定即時更新</div>
@@ -860,6 +861,18 @@
                 </div>
               </div>
             </div>
+            </div>
+          </details>
+
+          <details class="card card-collapse" id="error-history-card">
+            <summary class="eyebrow">最近錯誤與警告 <span id="error-history-count" class="val">0</span></summary>
+            <div class="card-collapse-body">
+              <p class="sub" style="margin:-4px 0 10px;color:var(--text-faint);font-size:12px;line-height:1.6">Toast 消失後仍可在這裡找到最近 30 筆訊息；複製後可直接貼給開發者，不包含 PIN 或 Twitch Token。</p>
+              <div id="error-history-list" class="error-history-list"><div class="error-history-empty">目前沒有錯誤記錄</div></div>
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button id="error-history-copy" class="btn btn-sm" type="button">複製記錄</button>
+                <button id="error-history-clear" class="btn btn-sm btn-ghost" type="button">清除</button>
+              </div>
             </div>
           </details>
           </div>
@@ -1511,6 +1524,19 @@
           <button id="guide-check-refresh" class="btn btn-sm btn-ghost" type="button">重新檢查</button>
         </section>
 
+        <section class="onboard-checklist" aria-labelledby="guide-checklist-title">
+          <div class="onboard-checklist-head">
+            <div><strong id="guide-checklist-title">第一次直播準備</strong><p>完成狀態會自動更新；Twitch 是選配，不會擋住教學。現在不方便接 OBS，也可以先進控制台，之後從左側「教學」繼續。</p></div>
+            <span id="guide-checklist-progress" class="readiness-pill pending">0 / 3</span>
+          </div>
+          <div class="onboard-task-list">
+            <div id="guide-task-environment" class="onboard-task pending"><span class="onboard-task-mark">1</span><div><strong>環境可用</strong><span>控制連線、yt-dlp 與 FFmpeg 就緒</span></div></div>
+            <div id="guide-task-song" class="onboard-task pending"><span class="onboard-task-mark">2</span><div><strong>加入第一首歌</strong><span>上傳本機音檔，或貼 YouTube 連結完成匯入</span></div></div>
+            <div id="guide-task-obs" class="onboard-task pending"><span class="onboard-task-mark">3</span><div><strong>OBS 看見歌詞來源</strong><span>新增 <code>/display</code> 瀏覽器來源後，右上角會顯示「歌詞已連線」</span></div></div>
+            <div id="guide-task-twitch" class="onboard-task optional"><span class="onboard-task-mark">選</span><div><strong>Twitch 連線（選配）</strong><span>需要聊天室點歌或自動開台紀錄時再設定</span></div></div>
+          </div>
+        </section>
+
         <details class="card card-collapse" open>
           <summary>① 先看懂這個程式在做什麼</summary>
           <div class="card-collapse-body">
@@ -1659,7 +1685,8 @@
         </details>
 
         <div class="modal-actions">
-          <button id="guide-complete" class="btn btn-primary" type="button">我已看完，開始使用</button>
+          <button id="guide-later" class="btn btn-ghost" type="button">先進控制台，稍後繼續</button>
+          <button id="guide-complete" class="btn btn-primary" type="button" disabled>完成第一次直播準備</button>
         </div>
       </div>
     </div>

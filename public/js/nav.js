@@ -99,16 +99,27 @@
   // ─── 新手教學 modal：側欄「教學」按鈕、Onboarding 提示裡的連結都能開 ───
   const helpModal = document.getElementById('help-modal');
   if (helpModal) {
-    const GUIDE_KEY = 'elite-guide-completed-v1';
+    const GUIDE_KEY = 'elite-guide-completed-v2';
+    const LEGACY_GUIDE_KEY = 'elite-guide-completed-v1';
+    const GUIDE_POSTPONED_KEY = 'elite-guide-postponed-v2';
     let firstRunRequired = false;
-    const openHelp = () => { helpModal.hidden = false; };
-    const closeHelp = (completed = false) => {
-      if (firstRunRequired && !completed) return;
+    const checklist = { environment: false, song: false, obs: false, twitch: false };
+    const readiness = { websocket: SocketClient.connected(), ytdlp: false, ffmpeg: false };
+    const completeBtn = document.getElementById('guide-complete');
+    const laterBtn = document.getElementById('guide-later');
+    const openHelp = () => { helpModal.hidden = false; refreshReadiness(); };
+    const closeHelp = (completed = false, postponed = false) => {
+      if (firstRunRequired && !completed && !postponed) return;
       helpModal.hidden = true;
       if (completed) {
         firstRunRequired = false;
         if (closeBtn) closeBtn.hidden = false;
         try { localStorage.setItem(GUIDE_KEY, '1'); } catch (e) { /* 靜默 */ }
+      } else if (postponed) {
+        firstRunRequired = false;
+        if (closeBtn) closeBtn.hidden = false;
+        if (hint) hint.hidden = false;
+        try { localStorage.setItem(GUIDE_POSTPONED_KEY, '1'); } catch (e) { /* 靜默 */ }
       }
     };
     const openBtn = document.getElementById('btn-open-help');
@@ -116,10 +127,38 @@
     const closeBtn = document.getElementById('help-close');
     if (openBtn) openBtn.addEventListener('click', openHelp);
     if (onboardOpenBtn) onboardOpenBtn.addEventListener('click', openHelp);
-    const completeBtn = document.getElementById('guide-complete');
     if (closeBtn) closeBtn.addEventListener('click', () => closeHelp(false));
-    if (completeBtn) completeBtn.addEventListener('click', () => closeHelp(true));
+    if (completeBtn) completeBtn.addEventListener('click', () => {
+      if (checklist.environment && checklist.song && checklist.obs) closeHelp(true);
+    });
+    if (laterBtn) laterBtn.addEventListener('click', () => closeHelp(false, true));
     helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelp(false); });
+
+    function updateChecklist() {
+      checklist.environment = readiness.websocket && readiness.ytdlp && readiness.ffmpeg;
+      const tasks = {
+        environment: ['guide-task-environment', '環境可用'],
+        song: ['guide-task-song', '已加入第一首歌'],
+        obs: ['guide-task-obs', 'OBS 歌詞來源已連線'],
+        twitch: ['guide-task-twitch', 'Twitch 已連線（選配）'],
+      };
+      Object.entries(tasks).forEach(([key, [id, doneText]]) => {
+        const task = document.getElementById(id);
+        if (!task) return;
+        task.classList.toggle('done', checklist[key]);
+        const mark = task.querySelector('.onboard-task-mark');
+        if (mark) mark.textContent = checklist[key] ? '✓' : (key === 'twitch' ? '選' : String(['environment', 'song', 'obs'].indexOf(key) + 1));
+        if (checklist[key]) task.setAttribute('aria-label', doneText);
+      });
+      const completed = ['environment', 'song', 'obs'].filter(key => checklist[key]).length;
+      const progress = document.getElementById('guide-checklist-progress');
+      if (progress) {
+        progress.textContent = `${completed} / 3`;
+        progress.classList.toggle('ok', completed === 3);
+        progress.classList.toggle('pending', completed !== 3);
+      }
+      if (completeBtn) completeBtn.disabled = completed !== 3;
+    }
 
     function setReadiness(id, ok, text) {
       const el = document.getElementById(id);
@@ -130,31 +169,70 @@
     }
 
     function refreshReadiness() {
-      setReadiness('guide-check-websocket', SocketClient.connected(), SocketClient.connected() ? 'WebSocket 已連線' : 'WebSocket 未連線');
+      readiness.websocket = SocketClient.connected();
+      setReadiness('guide-check-websocket', readiness.websocket, readiness.websocket ? 'WebSocket 已連線' : 'WebSocket 未連線');
       fetch('/api/system-check').then((res) => res.json()).then((data) => {
-        setReadiness('guide-check-ytdlp', !!data.ytdlp?.available, data.ytdlp?.available ? `yt-dlp ${data.ytdlp.version}` : '找不到 yt-dlp');
-        setReadiness('guide-check-ffmpeg', !!data.ffmpeg?.available, data.ffmpeg?.available ? 'FFmpeg 已就緒' : '找不到 FFmpeg');
+        readiness.ytdlp = !!data.ytdlp?.available;
+        readiness.ffmpeg = !!data.ffmpeg?.available;
+        setReadiness('guide-check-ytdlp', readiness.ytdlp, readiness.ytdlp ? `yt-dlp ${data.ytdlp.version}` : '找不到 yt-dlp');
+        setReadiness('guide-check-ffmpeg', readiness.ffmpeg, readiness.ffmpeg ? 'FFmpeg 已就緒' : '找不到 FFmpeg');
+        updateChecklist();
         return fetch('/api/update-check').then((res) => res.json()).then((update) => {
           const newer = update && update.hasUpdate && update.latestVersion;
           setReadiness('guide-check-version', true, newer ? `可更新 v${update.latestVersion}` : `目前 v${data.appVersion}`);
         });
       }).catch(() => {
+        readiness.ytdlp = false;
+        readiness.ffmpeg = false;
         setReadiness('guide-check-ytdlp', false, 'yt-dlp 檢查失敗');
         setReadiness('guide-check-ffmpeg', false, 'FFmpeg 檢查失敗');
         setReadiness('guide-check-version', false, '版本檢查失敗');
+        updateChecklist();
       });
+      PinAuth.fetchWithPin('/api/twitch/status').then(res => res.json()).then((data) => {
+        checklist.twitch = !!data.connected;
+        updateChecklist();
+      }).catch(() => { checklist.twitch = false; updateChecklist(); });
     }
 
     SocketClient.on('connection-change', (connected) => {
+      readiness.websocket = connected;
       setReadiness('guide-check-websocket', connected, connected ? 'WebSocket 已連線' : 'WebSocket 未連線');
+      updateChecklist();
+    });
+    SocketClient.on('state:sync', (state) => {
+      checklist.song = Array.isArray(state?.playlist) && state.playlist.length > 0;
+      updateChecklist();
+    });
+    SocketClient.on('state:recovery', (state) => {
+      checklist.song = Array.isArray(state?.playlist) && state.playlist.length > 0;
+      updateChecklist();
+    });
+    SocketClient.on('playlist:update', (playlist) => {
+      checklist.song = Array.isArray(playlist) && playlist.length > 0;
+      updateChecklist();
+    });
+    SocketClient.on('client:counts', (counts) => {
+      checklist.obs = Number(counts?.displays) > 0;
+      updateChecklist();
     });
     const refreshBtn = document.getElementById('guide-check-refresh');
     if (refreshBtn) refreshBtn.addEventListener('click', refreshReadiness);
     refreshReadiness();
 
     let guideCompleted = false;
-    try { guideCompleted = localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) { /* 靜默 */ }
-    if (!guideCompleted) {
+    let guidePostponed = false;
+    try {
+      guideCompleted = localStorage.getItem(GUIDE_KEY) === '1' || localStorage.getItem(LEGACY_GUIDE_KEY) === '1';
+      guidePostponed = localStorage.getItem(GUIDE_POSTPONED_KEY) === '1';
+      if (guideCompleted) localStorage.setItem(GUIDE_KEY, '1');
+    } catch (e) { /* 靜默 */ }
+    updateChecklist();
+    if (SocketClient.connected()) {
+      SocketClient.send('client:type', 'controller');
+      SocketClient.send('state:request');
+    }
+    if (!guideCompleted && !guidePostponed) {
       firstRunRequired = true;
       if (closeBtn) closeBtn.hidden = true;
       if (hint) hint.hidden = true;

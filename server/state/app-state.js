@@ -140,7 +140,7 @@ function createAppState(io) {
    * 把目前狀態排程寫入磁碟（延遲 800ms debounce，呼叫成本趨近於零）
    * 在歌單、設定、offset、手動歌詞變更的地方呼叫
    */
-  function persistState() {
+  function persistState(callback) {
     stateStore.scheduleSave(() => ({
       schemaVersion: stateStore.CURRENT_STATE_SCHEMA_VERSION,
       savedAt: Date.now(),
@@ -160,7 +160,7 @@ function createAppState(io) {
       setlistLayout: playState.setlistLayout,
       setlistStyle: playState.setlistStyle,
       setlistSceneStyles: playState.setlistSceneStyles,
-    }));
+    }), callback);
   }
 
   // ═══════════════════════════════════════════
