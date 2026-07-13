@@ -26,6 +26,7 @@ const registerLibraryHandlers = require('./handlers/library');
 const registerSetlistHandlers = require('./handlers/setlist');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
+const stateStore = require('../services/state-store');
 
 const log = createLogger('Socket');
 
@@ -179,6 +180,12 @@ module.exports = function socketHandler(io) {
         socket.emit('state:sync', ctx.getPublicState());
       } else {
         socket.emit('state:sync', ctx.getPublicState());
+      }
+      // 啟動時的 state.json 恢復發生在任何瀏覽器連線之前；延遲到第一個桌面面板完成
+      // client:type 註冊後再提示，避免 io.emit 太早而靜默遺失。OBS 疊加層不顯示管理警告。
+      if (type === 'controller') {
+        const startupAlert = stateStore.consumeStartupAlert();
+        if (startupAlert) socket.emit('server:alert', startupAlert);
       }
       syncTwitchRequests(socket);
       const c = getClientCounts();
