@@ -35,7 +35,17 @@
       if (!data.authorized) {
         if (el) el.textContent = '尚未連接 Twitch。按「連接 Twitch」後登入並授權聊天室讀寫。';
       } else if (data.connected) {
-        if (el) el.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}：正在監聽開台、下播與 ${data.command}。`;
+        if (data.subscriptionState === 'error') {
+          if (el) el.textContent = `Twitch 已連線，但事件訂閱失敗：${data.lastConnectionError || '稍後會重新確認連線'}`;
+        } else if (data.subscriptionState === 'subscribing') {
+          if (el) el.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}，正在訂閱開台、下播與聊天室事件…`;
+        } else if (el) {
+          const pendingText = data.pendingRequestCount ? `；${data.pendingRequestCount} 筆點歌待確認` : '';
+          el.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}：正在監聽開台、下播與 ${data.command}${pendingText}。`;
+        }
+      } else if (data.connectionState === 'reconnecting' && el) {
+        const seconds = data.nextRetryAt ? Math.max(1, Math.ceil((data.nextRetryAt - Date.now()) / 1000)) : null;
+        el.textContent = `Twitch 連線中斷，${seconds ? `${seconds} 秒後` : '稍後'}自動重連（第 ${data.reconnectAttempt || 1} 次）${data.lastConnectionError ? `：${data.lastConnectionError}` : ''}`;
       } else if (el) {
         el.textContent = `已授權 ${data.broadcasterLogin || 'Twitch'}，正在連接 EventSub…`;
       }

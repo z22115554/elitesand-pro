@@ -1167,6 +1167,67 @@ test('lyric-settings 可被 state-store 持久化', () => {
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
+const { TwitchService, reconnectDelay } = require('../server/services/twitch-service');
+
+test('Twitch EventSub 重連採指數退避並有上限', () => {
+  eq(reconnectDelay(1, () => 0.5), 3000);
+  eq(reconnectDelay(2, () => 0.5), 6000);
+  eq(reconnectDelay(10, () => 0.5), 60000);
+});
+
+test('Twitch 待確認點歌可跨 service 重啟還原', () => {
+  let saved = [];
+  const pendingStore = {
+    load: () => JSON.parse(JSON.stringify(saved)),
+    save: (value) => { saved = JSON.parse(JSON.stringify(value)); return true; },
+  };
+  const options = {
+    config: { twitchClientId: '', twitchRequestCommand: '!點歌' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore,
+  };
+  const first = new TwitchService(options);
+  const createdAt = Date.now();
+  first.pendingRequests.set('persist-1', {
+    requestId: 'persist-1', url: 'https://youtu.be/dQw4w9WgXcQ', requester: 'viewer',
+    title: 'fixture', author: 'channel', thumbnail: '', metadataAvailable: true,
+    videoId: 'dQw4w9WgXcQ', duration: 212, durationWarning: false,
+    event: { chatter_user_name: 'viewer', ignored: '不應保存' },
+    createdAt, expiresAt: createdAt + 60000,
+  });
+  first.persistPendingRequests();
+  first.stop();
+  eq(saved.length, 1);
+  eq(saved[0].event.chatter_user_name, 'viewer');
+  ok(!Object.prototype.hasOwnProperty.call(saved[0].event, 'ignored'));
+
+  const second = new TwitchService(options);
+  eq(second.getPendingRequests().length, 1);
+  eq(second.status().pendingRequestCount, 1);
+  second.stop();
+});
+
+testAsync('Twitch 聊天回覆遇到 5xx 會退避重試', async () => {
+  const pendingStore = { load: () => [], save: () => true };
+  const service = new TwitchService({
+    config: { twitchClientId: 'fixture', twitchRequestCommand: '!點歌' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore,
+  });
+  service.auth = { accessToken: 'fixture', refreshToken: 'fixture', expiresAt: Date.now() + 600000, userId: '1' };
+  service.ensureToken = async () => true;
+  let attempts = 0;
+  service.helix = async () => {
+    attempts += 1;
+    return attempts < 3
+      ? { ok: false, status: 503, headers: { get: () => null }, json: async () => ({ message: 'busy' }) }
+      : { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}) };
+  };
+  await service.sendChatReply({ chatter_user_name: 'viewer' }, 'ok');
+  eq(attempts, 3);
+  service.stop();
+});
+
 
 // ═══════════════════════════════════════════
 console.log('\n📦 10. 歌詞清洗 (lyrics-cleaner.js)');
