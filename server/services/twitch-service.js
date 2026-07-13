@@ -13,6 +13,7 @@ const MAX_PENDING_REQUESTS = 20;
 const LONG_VIDEO_SECONDS = 15 * 60;
 const fetch = require('node-fetch');
 const store = require('./twitch-store');
+const requestStore = require('./twitch-request-store');
 const { createLogger } = require('../utils/logger');
 
 const log = createLogger('Twitch');
@@ -22,6 +23,15 @@ const OAUTH_VALIDATE = 'https://id.twitch.tv/oauth2/validate';
 const HELIX = 'https://api.twitch.tv/helix';
 const EVENTSUB_WS = 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
+const RECONNECT_BASE_MS = 3000;
+const RECONNECT_MAX_MS = 60000;
+
+function reconnectDelay(attempt, random = Math.random) {
+  const base = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** Math.max(0, attempt - 1)));
+  return Math.round(base * (0.8 + random() * 0.4));
+}
+
+function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 function toTimestamp(value) {
   const timestamp = Date.parse(value || '');
@@ -37,7 +47,7 @@ function websocketCtor() {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, pendingStore = requestStore }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
@@ -47,10 +57,19 @@ class TwitchService {
     this.auth = store.load();
     this.ws = null;
     this.wsSessionId = null;
+    this.pendingStore = pendingStore;
     this.pendingRequests = new Map();
     this.requestExpiryTimers = new Map();
     this.reconnectTimer = null;
+    this.reconnectAttempt = 0;
+    this.nextRetryAt = 0;
+    this.connectionState = 'idle';
+    this.subscriptionState = 'idle';
+    this.lastConnectionError = '';
+    this.lastConnectedAt = 0;
+    this.lastDisconnectedAt = 0;
     this.closed = false;
+    this.restorePendingRequests();
   }
 
   configured() {
@@ -68,7 +87,60 @@ class TwitchService {
         userCode: this.deviceAuthorization.userCode,
         verificationUri: this.deviceAuthorization.verificationUri,
       } : null,
+      connectionState: this.connectionState,
+      subscriptionState: this.subscriptionState,
+      reconnectAttempt: this.reconnectAttempt,
+      nextRetryAt: this.nextRetryAt,
+      lastConnectionError: this.lastConnectionError,
+      lastConnectedAt: this.lastConnectedAt,
+      lastDisconnectedAt: this.lastDisconnectedAt,
+      pendingRequestCount: this.getPendingRequests().length,
     };
+  }
+
+  serializePendingRequest(request) {
+    return {
+      requestId: String(request.requestId || ''),
+      url: String(request.url || ''),
+      requester: String(request.requester || '觀眾'),
+      title: String(request.title || ''),
+      author: String(request.author || ''),
+      thumbnail: String(request.thumbnail || ''),
+      metadataAvailable: !!request.metadataAvailable,
+      videoId: String(request.videoId || ''),
+      duration: Number(request.duration) || 0,
+      durationWarning: !!request.durationWarning,
+      createdAt: Number(request.createdAt) || Date.now(),
+      expiresAt: Number(request.expiresAt) || Date.now() + REQUEST_TTL_MS,
+      event: {
+        chatter_user_name: String(request.event?.chatter_user_name || ''),
+        chatter_user_login: String(request.event?.chatter_user_login || ''),
+      },
+    };
+  }
+
+  persistPendingRequests() {
+    try {
+      this.pendingStore.save([...this.pendingRequests.values()].map(request => this.serializePendingRequest(request)));
+    } catch (err) {
+      log.warn(`Twitch 待確認點歌保存失敗：${err.message}`);
+    }
+  }
+
+  restorePendingRequests() {
+    let restored = [];
+    try { restored = this.pendingStore.load() || []; } catch (err) {
+      log.warn(`Twitch 待確認點歌還原失敗：${err.message}`);
+    }
+    const now = Date.now();
+    for (const raw of restored) {
+      const request = this.serializePendingRequest(raw || {});
+      if (!request.requestId || !request.videoId || request.expiresAt <= now) continue;
+      this.pendingRequests.set(request.requestId, request);
+      this.scheduleRequestExpiry(request.requestId);
+    }
+    this.persistPendingRequests();
+    if (this.pendingRequests.size) log.info(`已還原 ${this.pendingRequests.size} 筆 Twitch 待確認點歌`);
   }
 
   async beginAuthorization() {
@@ -185,12 +257,21 @@ class TwitchService {
   }
 
   start() {
-    if (!this.configured() || !this.auth) return;
-    this.ensureToken().then((ready) => { if (ready) this.connectEventSub(); });
+    if (!this.configured() || !this.auth) {
+      this.connectionState = this.configured() ? 'authorization_required' : 'disabled';
+      return;
+    }
+    this.connectionState = 'connecting';
+    this.ensureToken().then((ready) => {
+      if (ready) this.connectEventSub();
+      else this.scheduleReconnect('Twitch 授權暫時無法更新');
+    }).catch((err) => this.scheduleReconnect(err.message));
   }
 
   connectEventSub(url = EVENTSUB_WS) {
     if (this.closed || !this.auth || this.ws) return;
+    this.connectionState = this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting';
+    this.nextRetryAt = 0;
     const WebSocket = websocketCtor();
     const ws = new WebSocket(url);
     this.ws = ws;
@@ -201,9 +282,14 @@ class TwitchService {
       if (this.ws !== ws) return;
       this.ws = null;
       this.wsSessionId = null;
-      if (!this.closed) this.scheduleReconnect();
+      this.subscriptionState = 'idle';
+      this.lastDisconnectedAt = Date.now();
+      if (!this.closed) this.scheduleReconnect('EventSub 連線中斷');
     };
-    const onError = (err) => log.warn(`Twitch EventSub WebSocket 錯誤：${err && err.message ? err.message : '連線失敗'}`);
+    const onError = (err) => {
+      this.lastConnectionError = err && err.message ? err.message : '連線失敗';
+      log.warn(`Twitch EventSub WebSocket 錯誤：${this.lastConnectionError}`);
+    };
     if (typeof ws.addEventListener === 'function') {
       ws.addEventListener('open', onOpen); ws.addEventListener('message', onMessage);
       ws.addEventListener('close', onClose); ws.addEventListener('error', onError);
@@ -212,12 +298,21 @@ class TwitchService {
     }
   }
 
-  scheduleReconnect() {
+  scheduleReconnect(reason = '等待重新連線') {
     if (this.reconnectTimer || this.closed) return;
+    this.reconnectAttempt += 1;
+    const delay = reconnectDelay(this.reconnectAttempt);
+    this.connectionState = 'reconnecting';
+    this.lastConnectionError = String(reason || '').slice(0, 240);
+    this.nextRetryAt = Date.now() + delay;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.ensureToken().then((ready) => { if (ready) this.connectEventSub(); });
-    }, 3000);
+      this.nextRetryAt = 0;
+      this.ensureToken().then((ready) => {
+        if (ready) this.connectEventSub();
+        else this.scheduleReconnect('Twitch 授權暫時無法更新');
+      }).catch((err) => this.scheduleReconnect(err.message));
+    }, delay);
   }
 
   async handleWebSocketMessage(raw) {
@@ -226,6 +321,12 @@ class TwitchService {
     const type = message && message.metadata && message.metadata.message_type;
     if (type === 'session_welcome') {
       this.wsSessionId = message.payload.session.id;
+      this.connectionState = 'connected';
+      this.subscriptionState = 'subscribing';
+      this.lastConnectedAt = Date.now();
+      this.lastConnectionError = '';
+      this.reconnectAttempt = 0;
+      this.nextRetryAt = 0;
       log.info('Twitch EventSub 已連線，正在建立訂閱');
       try {
         await Promise.all([
@@ -233,8 +334,14 @@ class TwitchService {
           this.createSubscription('stream.offline', { broadcaster_user_id: this.auth.userId }),
           this.createSubscription('channel.chat.message', { broadcaster_user_id: this.auth.userId, user_id: this.auth.userId }),
         ]);
+        this.subscriptionState = 'ready';
         log.info('Twitch EventSub 訂閱完成：開台、下播、聊天室訊息');
-      } catch (err) { log.error(`Twitch EventSub 訂閱失敗：${err.message}`); }
+      } catch (err) {
+        this.subscriptionState = 'error';
+        this.lastConnectionError = err.message;
+        log.error(`Twitch EventSub 訂閱失敗：${err.message}`);
+        if (this.ws && typeof this.ws.close === 'function') this.ws.close();
+      }
       return;
     }
     if (type === 'session_reconnect') {
@@ -337,6 +444,7 @@ class TwitchService {
     const createdAt = Date.now();
     this.pendingRequests.set(requestId, { ...request, event, createdAt, expiresAt: createdAt + REQUEST_TTL_MS });
     this.scheduleRequestExpiry(requestId);
+    this.persistPendingRequests();
     // 確認制：不自動下載，先送到主播面板等待確認。
     await this.sendChatReply(event, '收到你的點歌，已送給主播確認，通過後才會加入歌單。');
     this.pruneRequests();
@@ -359,17 +467,27 @@ class TwitchService {
     }
     this.pendingRequests.delete(requestId);
     this.clearRequestExpiry(requestId);
+    this.persistPendingRequests();
   }
 
   async sendChatReply(event, text) {
     if (!await this.ensureToken()) throw new Error('Twitch 授權已失效');
-    const response = await this.helix('/chat/messages', {
+    const options = {
       method: 'POST',
       body: { broadcaster_id: this.auth.userId, sender_id: this.auth.userId, message: `@${event.chatter_user_name || event.chatter_user_login || '觀眾'} ${text}`.slice(0, 500) },
-    });
-    if (!response.ok) {
+    };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await this.helix('/chat/messages', options);
+      if (response.ok) return;
+      if (response.status === 401 && attempt === 0) {
+        await this.refreshToken();
+        continue;
+      }
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.message || `Twitch API ${response.status}`);
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === 2) throw new Error(data.message || `Twitch API ${response.status}`);
+      const retryAfter = Number(response.headers?.get?.('retry-after'));
+      await wait(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 500 * (2 ** attempt));
     }
   }
 
@@ -378,6 +496,7 @@ class TwitchService {
     for (const [id, request] of this.pendingRequests) {
       if (request.createdAt < cutoff) this.expireRequest(id, request);
     }
+    this.persistPendingRequests();
   }
 
   getPendingRequests() {
@@ -389,8 +508,10 @@ class TwitchService {
 
   scheduleRequestExpiry(requestId) {
     this.clearRequestExpiry(requestId);
+    const request = this.pendingRequests.get(requestId);
+    const delay = Math.max(0, Number(request?.expiresAt || Date.now() + REQUEST_TTL_MS) - Date.now());
     const timer = setTimeout(() => this.expireRequest(requestId)
-      .catch((err) => log.warn(`Twitch 點歌逾時回覆失敗：${err.message}`)), REQUEST_TTL_MS);
+      .catch((err) => log.warn(`Twitch 點歌逾時回覆失敗：${err.message}`)), delay);
     this.requestExpiryTimers.set(requestId, timer);
   }
 
@@ -403,6 +524,7 @@ class TwitchService {
   async expireRequest(requestId, request = this.pendingRequests.get(requestId)) {
     if (!request || !this.pendingRequests.delete(requestId)) return;
     this.clearRequestExpiry(requestId);
+    this.persistPendingRequests();
     if (typeof this.onSongRequestExpired === 'function') this.onSongRequestExpired(requestId);
     await this.sendChatReply(request.event, '這筆點歌等待確認逾時，已自動取消；歡迎重新點歌。');
   }
@@ -415,7 +537,11 @@ class TwitchService {
     if (this.ws && typeof this.ws.close === 'function') this.ws.close();
     this.ws = null;
     this.wsSessionId = null;
+    this.connectionState = 'stopped';
+    this.subscriptionState = 'idle';
+    this.nextRetryAt = 0;
+    this.persistPendingRequests();
   }
 }
 
-module.exports = { TwitchService };
+module.exports = { TwitchService, reconnectDelay };
