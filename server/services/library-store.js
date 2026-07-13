@@ -128,6 +128,13 @@ function audioExists(filename) {
   try { return fs.existsSync(path.join(DOWNLOADS_DIR, filename)); } catch (e) { return false; }
 }
 
+/** 衍生播放可用性，不寫回持久化資料；exists 參數讓故障測試不必碰真 downloads/。 */
+function audioStatus(track, exists = audioExists) {
+  const filename = track && typeof track.filename === 'string' ? track.filename : '';
+  const available = !!filename && exists(filename);
+  return { audioAvailable: available, audioMissing: !available };
+}
+
 /** 取得媒體庫清單（依播放次數→最近排序） */
 function getLibrary() {
   return Object.values(library).sort(
@@ -170,4 +177,4 @@ function cleanupAudio(keepFilenames = new Set()) {
 process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
 function setErrorReporter(fn) { _errorReporter = typeof fn === 'function' ? fn : null; }
-module.exports = { recordPlay, rememberImport, updateMeta, getEntry, audioExists, getLibrary, remove, clear, cleanupAudio, setErrorReporter, saveNow };
+module.exports = { recordPlay, rememberImport, updateMeta, getEntry, audioExists, audioStatus, getLibrary, remove, clear, cleanupAudio, setErrorReporter, saveNow };

@@ -48,6 +48,23 @@ function registerPlaybackHandlers(io, socket, ctx) {
     // 待命時只載入歌曲（讓顯示端載歌詞），不算開始唱、也不記入已唱歌單。
     const autoplay = track.autoplay !== false;
 
+    // 在改動目前歌曲／播放狀態前先確認檔案仍存在。這可攔住清理、搬移 Portable
+    // 或匯入舊清單後留下的失效路徑，避免 UI/OBS 先切歌才在 <audio> 端報 404。
+    if (!track.filename || !libraryStore.audioExists(track.filename)) {
+      const canDownloadAgain = !!track.url;
+      socket.emit('audio:error', {
+        code: 'AUDIO_FILE_MISSING',
+        trackId,
+        title: track.title,
+        retryable: canDownloadAgain,
+        url: canDownloadAgain ? track.url : null,
+        message: canDownloadAgain
+          ? `找不到「${track.title}」的音檔，請重新下載後再播放。`
+          : `找不到「${track.title}」的音檔，且沒有可重新下載的來源。`,
+      });
+      return;
+    }
+
     // 載入手動歌詞（如果有）
     const manualLyrics = getEffectiveLyrics(trackId);
     if (manualLyrics) {

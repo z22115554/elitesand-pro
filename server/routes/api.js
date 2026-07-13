@@ -125,7 +125,7 @@ const bgUpload = multer({
 
 // ─── 健康檢查 ───
 router.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
+  res.json({ status: 'ok', version: appPackage.version, timestamp: Date.now() });
 });
 
 async function toolStatus(command, args) {

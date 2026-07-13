@@ -194,7 +194,10 @@
     const offsetBadge = offsetMs !== 0
       ? `<span class="pi-badge">${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toFixed(1)}s</span>`
       : '';
-    return `<button class="pi-lyrics-status pi-lyrics-status--${readiness.level}" data-lyrics-fix="${i}" title="${escapeHtml(readiness.label)}" aria-label="${escapeHtml(readiness.label)}">${readiness.text}</button>${manualBadge}${offsetBadge}`;
+    const audioBadge = track.audioMissing
+      ? '<span class="pi-badge pi-badge--danger" title="音檔遺失，播放前需要重新下載">音檔遺失</span>'
+      : '';
+    return `${audioBadge}<button class="pi-lyrics-status pi-lyrics-status--${readiness.level}" data-lyrics-fix="${i}" title="${escapeHtml(readiness.label)}" aria-label="${escapeHtml(readiness.label)}">${readiness.text}</button>${manualBadge}${offsetBadge}`;
   }
 
   function playlistItemMarkup(track, i) {
@@ -272,7 +275,7 @@
       const key = track.id != null ? String(track.id) : `${track.title}|${track.artist}|${i}`;
       const node = existing[i];
       if (node && node.dataset.trackKey === key) {
-        node.className = `playlist-item ${isActive ? 'active' : ''} ${isPlayed ? 'played' : ''}`;
+        node.className = `playlist-item ${isActive ? 'active' : ''} ${isPlayed ? 'played' : ''} ${track.audioMissing ? 'audio-missing' : ''}`;
         node.dataset.index = String(i);
         const removeBtn = node.querySelector('.pi-remove');
         if (removeBtn) removeBtn.dataset.remove = String(i);
@@ -292,7 +295,7 @@
         if (extras && extras.innerHTML !== extrasMarkup) extras.innerHTML = extrasMarkup;
       } else {
         const fresh = document.createElement('div');
-        fresh.className = `playlist-item ${isActive ? 'active' : ''} ${isPlayed ? 'played' : ''}`;
+        fresh.className = `playlist-item ${isActive ? 'active' : ''} ${isPlayed ? 'played' : ''} ${track.audioMissing ? 'audio-missing' : ''}`;
         fresh.dataset.index = String(i);
         fresh.dataset.trackKey = key;
         fresh.draggable = true;
