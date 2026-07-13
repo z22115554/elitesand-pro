@@ -14,6 +14,8 @@ const { cleanLyrics } = require('./lyrics-cleaner');
 const { fetchWithTimeout } = require('../utils/helpers');
 const { romanize, addRomanization, needsRomanization } = require('./romanizer');
 const { createLogger } = require('../utils/logger');
+const { createJsonStore } = require('./json-store');
+const { dataDir } = require('../utils/data-dir');
 const log = createLogger('Lyrics');
 
 // ─── 時長驗證閾值（±5 秒）───
@@ -25,15 +27,24 @@ const LYRICS_SOURCE_PRIORITY = Object.freeze([
 const LYRICS_CACHE_VERSION = 'v3-source-priority-credit-cleaning';
 
 // ─── 歌詞快取（記憶體 + 磁碟持久化）───
-const fs = require('fs');
 const path = require('path');
 
 const lyricsCache = new Map();
 const _config = require('../utils/load-config');
 const CACHE_TTL = (_config.cacheDays || 7) * 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = _config.maxCacheEntries || 500; // 防止快取檔無限膨脹
-const CACHE_DIR = path.join(__dirname, '..', '..', 'data');
-const CACHE_FILE = path.join(CACHE_DIR, 'lyrics-cache.json');
+const CACHE_FILE = path.join(dataDir, 'lyrics-cache.json');
+
+const lyricsCacheDiskStore = createJsonStore({
+  file: CACHE_FILE,
+  label: '歌詞快取',
+  defaultValue: () => [],
+  migrations: new Map([[0, (legacy) => ({ schemaVersion: 1, cacheVersion: LYRICS_CACHE_VERSION, entries: legacy })]]),
+  serialize: (entries) => ({ cacheVersion: LYRICS_CACHE_VERSION, entries }),
+  deserialize: (document) => document.cacheVersion === LYRICS_CACHE_VERSION ? document.entries : [],
+  validate: (document) => typeof document.cacheVersion === 'string' && Array.isArray(document.entries),
+  logger: log,
+});
 
 let _cacheSaveTimer = null;
 
@@ -43,10 +54,7 @@ let _cacheSaveTimer = null;
  */
 function loadCacheFromDisk() {
   try {
-    if (!fs.existsSync(CACHE_FILE)) return;
-    const raw = fs.readFileSync(CACHE_FILE, 'utf-8');
-    const entries = JSON.parse(raw);
-    if (!Array.isArray(entries)) return;
+    const entries = lyricsCacheDiskStore.load();
     const now = Date.now();
     let loaded = 0;
     for (const [key, value] of entries) {
@@ -73,8 +81,6 @@ function scheduleCacheSave() {
 function saveCacheToDisk() {
   _cacheSaveTimer = null;
   try {
-    if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-
     // 超量時依時間淘汰最舊的項目
     let entries = [...lyricsCache.entries()];
     if (entries.length > MAX_CACHE_ENTRIES) {
@@ -84,10 +90,7 @@ function saveCacheToDisk() {
       for (const [k, v] of entries) lyricsCache.set(k, v);
     }
 
-    // 先寫暫存檔再改名，避免寫入中途斷電造成快取檔損毀
-    const tmpFile = CACHE_FILE + '.tmp';
-    fs.writeFileSync(tmpFile, JSON.stringify(entries), 'utf-8');
-    fs.renameSync(tmpFile, CACHE_FILE);
+    lyricsCacheDiskStore.save(entries);
   } catch (err) {
     log.warn(`歌詞快取寫入失敗: ${err.message}`);
   }

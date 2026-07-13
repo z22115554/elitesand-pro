@@ -11,10 +11,10 @@
  * 用 Node 內建 crypto 就夠，不需要 bcrypt 之類的外部依賴。
  */
 
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { createLogger } = require('../utils/logger');
+const { createJsonStore } = require('./json-store');
 
 const log = createLogger('Auth');
 
@@ -24,20 +24,27 @@ const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
 const SALT_BYTES = 16;
 const KEY_LEN = 32;
 
+const authDiskStore = createJsonStore({
+  file: AUTH_FILE,
+  label: 'PIN 授權資料',
+  defaultValue: null,
+  mode: 0o600,
+  migrations: new Map([[0, (legacy) => ({ schemaVersion: 1, credentials: legacy })]]),
+  serialize: (credentials) => ({ credentials }),
+  deserialize: (document) => document.credentials,
+  validate: (document) => {
+    const value = document.credentials;
+    return value && typeof value === 'object'
+      && typeof value.hash === 'string' && typeof value.salt === 'string';
+  },
+  logger: log,
+});
+
 let cached = null; // { hash: hex, salt: hex } | null（null＝尚未設定 PIN，也代表「載入過但沒有」）
 let loaded = false;
 
 function loadFromDisk() {
-  try {
-    if (!fs.existsSync(AUTH_FILE)) return null;
-    const raw = fs.readFileSync(AUTH_FILE, 'utf-8');
-    const data = JSON.parse(raw);
-    if (data && typeof data.hash === 'string' && typeof data.salt === 'string') return data;
-    return null;
-  } catch (err) {
-    log.warn(`auth.json 讀取失敗（視為未設定 PIN）: ${err.message}`);
-    return null;
-  }
+  return authDiskStore.load();
 }
 
 function ensureLoaded() {
@@ -86,15 +93,7 @@ function setPin(newPin, currentPin) {
   const salt = crypto.randomBytes(SALT_BYTES).toString('hex');
   const hash = hashPin(newPin, salt);
   cached = { hash, salt };
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = AUTH_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(cached), 'utf-8');
-    fs.renameSync(tmp, AUTH_FILE);
-  } catch (err) {
-    log.error('auth.json 寫入失敗', err);
-    return { ok: false, message: '寫入失敗：' + err.message };
-  }
+  if (!authDiskStore.save(cached)) return { ok: false, message: 'PIN 資料寫入失敗，請檢查資料夾權限或版本。' };
   log.info('PIN 已設定/更新');
   return { ok: true };
 }
@@ -108,12 +107,7 @@ function clearPin(currentPin) {
   if (!verifyPin(currentPin)) {
     return { ok: false, message: '目前的 PIN 不正確' };
   }
-  try {
-    if (fs.existsSync(AUTH_FILE)) fs.unlinkSync(AUTH_FILE);
-  } catch (err) {
-    log.warn(`auth.json 刪除失敗: ${err.message}`);
-    return { ok: false, message: 'PIN 檔案刪除失敗：' + err.message };
-  }
+  if (!authDiskStore.remove()) return { ok: false, message: 'PIN 檔案刪除失敗，請檢查資料夾權限或版本。' };
   cached = null;
   log.info('PIN 保護已關閉');
   return { ok: true };

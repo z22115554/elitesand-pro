@@ -1,0 +1,9 @@
+{
+  "legacy-track": {
+    "id": "legacy-track",
+    "title": "舊版媒體庫歌曲",
+    "artist": "測試歌手",
+    "playCount": 2,
+    "lastPlayed": 100
+  }
+}

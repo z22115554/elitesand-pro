@@ -1,0 +1,12 @@
+[
+  [
+    "fixture-key",
+    {
+      "timestamp": 100,
+      "result": {
+        "lyrics": "[00:01.00]舊版歌詞",
+        "source": "fixture"
+      }
+    }
+  ]
+]

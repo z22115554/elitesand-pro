@@ -717,6 +717,132 @@ test('設定載入器：所有預設鍵存在且型別正確', () => {
 const stateStoreModulePath = path.join(__dirname, '..', 'server', 'services', 'state-store.js');
 const stateFixtureDir = path.join(__dirname, 'fixtures', 'state');
 const { spawnSync: spawnStateStore } = require('child_process');
+const { createJsonStore } = require('../server/services/json-store');
+
+function makeTestJsonStore(file, reports = []) {
+  return createJsonStore({
+    file,
+    label: '測試資料',
+    defaultValue: () => [],
+    migrations: new Map([[0, (legacy) => ({ schemaVersion: 1, entries: legacy })]]),
+    serialize: (entries) => ({ entries }),
+    deserialize: (document) => document.entries,
+    validate: (document) => Array.isArray(document.entries),
+    onError: (report) => reports.push(report),
+  });
+}
+
+test('共用 JSON store：舊格式遷移、原檔與 last-good 都會保留', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-json-store-migrate-'));
+  try {
+    const file = path.join(dataDir, 'sample.json');
+    const original = JSON.stringify([{ id: 'legacy' }]);
+    fs.writeFileSync(file, original, 'utf8');
+    const store = makeTestJsonStore(file);
+    const loaded = store.load();
+    const disk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const preserved = fs.readdirSync(dataDir).find((name) => /^sample\.json\.pre-migration-v0-/.test(name));
+    eq(loaded[0].id, 'legacy');
+    eq(disk.schemaVersion, 1);
+    eq(disk.entries[0].id, 'legacy');
+    eq(fs.readFileSync(path.join(dataDir, preserved), 'utf8'), original);
+    ok(fs.existsSync(`${file}.last-good`), '應建立 last-good: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('共用 JSON store：損壞主檔會保留證據並由 last-good 恢復', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-json-store-recover-'));
+  try {
+    const file = path.join(dataDir, 'sample.json');
+    fs.writeFileSync(file, '{broken', 'utf8');
+    fs.writeFileSync(`${file}.last-good`, JSON.stringify({ schemaVersion: 1, entries: [{ id: 'safe' }] }), 'utf8');
+    const reports = [];
+    const loaded = makeTestJsonStore(file, reports).load();
+    eq(loaded[0].id, 'safe');
+    ok(fs.readdirSync(dataDir).some((name) => /^sample\.json\.corrupt-/.test(name)), '應保留損壞主檔: ');
+    ok(reports.some((item) => /恢復/.test(item.message)), '應回報恢復結果: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('共用 JSON store：未來 schema 保持不變且拒絕寫入與刪除', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-json-store-future-'));
+  try {
+    const file = path.join(dataDir, 'sample.json');
+    const original = JSON.stringify({ schemaVersion: 99, entries: [{ id: 'future' }] });
+    fs.writeFileSync(file, original, 'utf8');
+    const store = makeTestJsonStore(file);
+    eq(store.load().length, 0);
+    ok(store.getStatus().writeBlocked, '未來格式應停止寫入: ');
+    eq(store.save([{ id: 'downgrade' }]), false);
+    eq(store.remove(), false);
+    eq(fs.readFileSync(file, 'utf8'), original);
+    ok(!fs.readdirSync(dataDir).some((name) => /corrupt|pre-migration/.test(name)), '不可誤判未來格式: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('共用 JSON store：遷移無法安全落盤時保留原檔並停止寫入', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-json-store-persist-fail-'));
+  const originalCopy = fs.copyFileSync;
+  try {
+    const file = path.join(dataDir, 'sample.json');
+    const original = JSON.stringify([{ id: 'legacy' }]);
+    fs.writeFileSync(file, original, 'utf8');
+    const store = makeTestJsonStore(file);
+    fs.copyFileSync = () => { throw new Error('simulated backup failure'); };
+    eq(store.load().length, 0);
+    ok(store.getStatus().writeBlocked, '遷移失敗應停止寫入: ');
+    eq(store.save([{ id: 'overwrite' }]), false);
+    eq(fs.readFileSync(file, 'utf8'), original);
+    ok(!fs.readdirSync(dataDir).some((name) => /corrupt/.test(name)), '原檔不是損壞，不應改名: ');
+  } finally {
+    fs.copyFileSync = originalCopy;
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('六類資料檔：舊資料可載入且落盤後都有 schemaVersion', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-store-fixtures-'));
+  const fixtures = path.join(__dirname, 'fixtures', 'stores');
+  try {
+    for (const [fixture, target] of [
+      ['library-v0.json', 'library.json'],
+      ['lyrics-cache-v0.json', 'lyrics-cache.json'],
+      ['auth-v0.json', 'auth.json'],
+      ['twitch-auth-v0.json', 'twitch-auth.json'],
+      ['announcement-state-v0.json', 'announcement-state.json'],
+      ['announcement-cache-v1.json', 'announcement-cache.json'],
+    ]) fs.copyFileSync(path.join(fixtures, fixture), path.join(dataDir, target));
+
+    const script = [
+      "const fs=require('fs'),path=require('path'); const root=process.argv[1],dir=process.argv[2];",
+      "const library=require(path.join(root,'server/services/library-store'));",
+      "const auth=require(path.join(root,'server/services/auth-store'));",
+      "const twitch=require(path.join(root,'server/services/twitch-store'));",
+      "require(path.join(root,'server/services/lyrics-engine')); require(path.join(root,'server/services/announcement-service'));",
+      "const read=(name)=>JSON.parse(fs.readFileSync(path.join(dir,name),'utf8'));",
+      "const result={libraryApi:library.getLibrary(),hasPin:auth.hasPin(),twitchApi:twitch.load(),files:{}};",
+      "for(const name of ['library.json','lyrics-cache.json','auth.json','twitch-auth.json','announcement-state.json','announcement-cache.json']) result.files[name]=read(name);",
+      "process.stdout.write('__STORE_RESULT__'+JSON.stringify(result)+'\\n');",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, path.join(__dirname, '..'), dataDir], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir }, encoding: 'utf8', timeout: 15000, windowsHide: true,
+    });
+    eq(child.status, 0, `store fixture child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__STORE_RESULT__');
+    ok(markerAt >= 0, `store fixture child 缺少結果：${child.stdout}`);
+    const result = JSON.parse(child.stdout.slice(markerAt + '__STORE_RESULT__'.length).trim().split(/\r?\n/, 1)[0]);
+    eq(result.libraryApi[0].title, '舊版媒體庫歌曲');
+    ok(result.hasPin, '舊 PIN 雜湊應仍可辨識: ');
+    eq(result.twitchApi.refreshToken, 'fixture-refresh-token');
+    for (const [name, document] of Object.entries(result.files)) eq(document.schemaVersion, 1, `${name}: `);
+    eq(result.files['library.json'].entries['legacy-track'].playCount, 2);
+    ok(Array.isArray(result.files['lyrics-cache.json'].entries), '歌詞快取 entries 應保留: ');
+    eq(result.files['announcement-state.json'].dismissed[0], 'fixture-announcement');
+    for (const target of ['library.json', 'lyrics-cache.json', 'auth.json', 'twitch-auth.json', 'announcement-state.json']) {
+      ok(fs.readdirSync(dataDir).some((name) => name.startsWith(`${target}.pre-migration-v0-`)), `${target} 應保留遷移前原檔: `);
+    }
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
 
 function runStateStoreChild(dataDir, script) {
   const result = spawnStateStore(process.execPath, ['-e', script, stateStoreModulePath, dataDir], {

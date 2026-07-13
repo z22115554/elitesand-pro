@@ -1,6 +1,5 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 const { dataDir } = require('../utils/data-dir');
@@ -8,6 +7,7 @@ const { compareVersions } = require('../utils/version-compare');
 const { createLogger } = require('../utils/logger');
 const config = require('../utils/load-config');
 const pkg = require('../../package.json');
+const { createJsonStore } = require('./json-store');
 
 const log = createLogger('Announcements');
 const CACHE_FILE = path.join(dataDir, 'announcement-cache.json');
@@ -22,32 +22,38 @@ let state = { dismissed: [], shownOnce: [], read: [] };
 let inFlight = null;
 let lastAttemptAt = 0;
 
-function readLocalJson(file, fallback) {
-  try {
-    if (!fs.existsSync(file)) return fallback;
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed : fallback;
-  } catch (err) {
-    log.warn(`本機公告資料讀取失敗（安全忽略）：${path.basename(file)}: ${err.message}`);
-    return fallback;
-  }
-}
+const cacheDiskStore = createJsonStore({
+  file: CACHE_FILE,
+  label: '公告快取',
+  defaultValue: () => ({ schemaVersion: 1, fetchedAt: null, announcements: [] }),
+  migrations: new Map([[0, (legacy) => ({ ...legacy, schemaVersion: 1 })]]),
+  serialize: (value) => value,
+  deserialize: (document) => document,
+  validate: (document) => Array.isArray(document.announcements),
+  pretty: true,
+  logger: log,
+});
 
-function atomicWrite(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = `${file}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(value, null, 2), 'utf8');
-  fs.renameSync(temporary, file);
-}
+const stateDiskStore = createJsonStore({
+  file: STATE_FILE,
+  label: '公告閱讀狀態',
+  defaultValue: () => ({ dismissed: [], shownOnce: [], read: [] }),
+  migrations: new Map([[0, (legacy) => ({ ...legacy, schemaVersion: 1 })]]),
+  serialize: (value) => value,
+  deserialize: ({ dismissed, shownOnce, read }) => ({ dismissed, shownOnce, read }),
+  validate: (document) => Array.isArray(document.dismissed) && Array.isArray(document.shownOnce) && Array.isArray(document.read),
+  pretty: true,
+  logger: log,
+});
 
 function uniqueStrings(value) {
   return [...new Set((Array.isArray(value) ? value : []).filter((item) => typeof item === 'string').slice(-500))];
 }
 
 function loadLocalData() {
-  const loadedCache = readLocalJson(CACHE_FILE, cache);
+  const loadedCache = cacheDiskStore.load();
   if (loadedCache.schemaVersion === 1 && Array.isArray(loadedCache.announcements)) cache = loadedCache;
-  const loadedState = readLocalJson(STATE_FILE, state);
+  const loadedState = stateDiskStore.load();
   state = {
     dismissed: uniqueStrings(loadedState.dismissed),
     shownOnce: uniqueStrings(loadedState.shownOnce),
@@ -194,7 +200,7 @@ async function refresh({ force = false } = {}) {
     try {
       const document = await fetchJsonDocument(url);
       cache = { ...document, fetchedAt: new Date().toISOString() };
-      atomicWrite(CACHE_FILE, cache);
+      cacheDiskStore.save(cache);
       log.info(`遠端公告更新完成：${cache.announcements.length} 則`);
       return { ok: true, fromCache: false };
     } catch (err) {
@@ -242,7 +248,7 @@ function persistState() {
     shownOnce: uniqueStrings(state.shownOnce),
     read: uniqueStrings(state.read),
   };
-  atomicWrite(STATE_FILE, state);
+  stateDiskStore.save(state);
 }
 
 function markSeen(id) {
