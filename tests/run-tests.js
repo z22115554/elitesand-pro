@@ -1273,6 +1273,38 @@ console.log('\n📦 10. 歌詞清洗 (lyrics-cleaner.js)');
 // ═══════════════════════════════════════════
 const { cleanLyrics, normalizeText } = require('../server/services/lyrics-cleaner');
 const AudioProcessor = require('../server/services/audio-processor');
+const { assessYouTubeImport } = require('../server/utils/youtube-import-risk');
+
+test('YouTube 匯入風險：過短、過長與疑似非音樂會分別警告', () => {
+  const tooShort = assessYouTubeImport({ title: 'Song teaser', duration: 35, categories: ['Music'] });
+  ok(tooShort.warningTypes.includes('too-short'));
+  ok(!tooShort.warningTypes.includes('non-music'));
+
+  const tooLong = assessYouTubeImport({ title: 'Long medley', duration: 1201, categories: ['Music'] });
+  ok(tooLong.warningTypes.includes('too-long'));
+
+  const nonMusic = assessYouTubeImport({ title: '公共設施規定說明', duration: 301, categories: ['News & Politics'] });
+  ok(nonMusic.warningTypes.includes('non-music'));
+});
+
+test('YouTube 匯入風險：正常長度音樂不誤報，未知時長不當成過短', () => {
+  const music = assessYouTubeImport({ title: 'Aimer - 残響散歌', duration: 203, categories: ['Music'] });
+  eq(music.warning, false);
+  const unknown = assessYouTubeImport({ title: 'Song', duration: 0, categories: [] });
+  ok(!unknown.warningTypes.includes('too-short'));
+});
+
+test('播放清單只掃描條目，逐首下載仍由前端共用佇列執行', () => {
+  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const block = api.slice(api.indexOf("router.post('/youtube/playlist'"), api.indexOf("router.post('/lyrics/search'"));
+  ok(block.includes('getPlaylistEntries'));
+  ok(!block.includes('processYouTube('));
+  const frontend = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+  ok(frontend.includes("'/api/youtube/inspect'"));
+  ok(frontend.includes('requestId: job.requestId'));
+  ok(frontend.includes('RISK_WARNING_DISABLED_KEY'));
+  ok(frontend.includes('queueYouTubeImport(entry.url'));
+});
 const { classifyImportError } = require('../server/utils/import-error');
 
 test('normalizeText：全形空白→半形、壓縮空白、去頭尾', () => {
@@ -1814,6 +1846,51 @@ test('狀態保存：另一伺服器停止寫入後會自動接管並備份對�
     eq(result.marker, 'after-quiet');
     eq(result.conflict.length, 1, '應留下一份對方狀態的 conflict 備份: ');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+console.log('\n15. P2 播放邊界與 state:sync 量測');
+test('單曲模式播完只預載下一首，不會從最後一首繞回第一首', () => {
+  const sequence = require('../public/js/playback-sequence');
+  const next = sequence.nextAfterEnded(0, 2, false);
+  eq(next.index, 1);
+  eq(next.autoplay, false);
+  eq(sequence.nextAfterEnded(1, 2, false), null);
+});
+
+test('連續模式會自動播放下一首，但最後一首仍自然停止', () => {
+  const sequence = require('../public/js/playback-sequence');
+  const next = sequence.nextAfterEnded(0, 2, true);
+  eq(next.index, 1);
+  eq(next.autoplay, true);
+  eq(sequence.nextAfterEnded(1, 2, true), null);
+});
+
+test('state:sync 每次廣播只序列化同一份 payload 並留下大小量測', () => {
+  const { createAppState } = require('../server/state/app-state');
+  const emitted = [];
+  const appState = createAppState({ emit: (event, payload) => emitted.push({ event, payload }) });
+  appState.broadcastState();
+  const metrics = appState.getStateSyncMetrics();
+  eq(emitted.length, 1);
+  eq(emitted[0].event, 'state:sync');
+  eq(metrics.samples, 1);
+  ok(metrics.lastBytes > 0);
+  eq(metrics.lastBytes, Buffer.byteLength(JSON.stringify(emitted[0].payload), 'utf8'));
+  eq(metrics.lastPlaylistLength, emitted[0].payload.playlist.length);
+});
+
+testAsync('下載前 metadata 檢查可由工作中心立即取消', async () => {
+  const http = require('http');
+  const { fetchWithTimeout } = require('../server/utils/helpers');
+  const server = http.createServer(() => {});
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const controller = new AbortController();
+  const pending = fetchWithTimeout(`http://127.0.0.1:${server.address().port}/pending`, { signal: controller.signal }, 5000);
+  controller.abort();
+  let error;
+  try { await pending; } catch (caught) { error = caught; }
+  await new Promise((resolve) => server.close(resolve));
+  eq(error?.name, 'AbortError');
 });
 
 (async () => {

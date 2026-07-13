@@ -104,7 +104,7 @@
     const GUIDE_POSTPONED_KEY = 'elite-guide-postponed-v2';
     let firstRunRequired = false;
     const checklist = { environment: false, song: false, obs: false, twitch: false };
-    const readiness = { websocket: SocketClient.connected(), ytdlp: false, ffmpeg: false };
+    const readiness = { control: SocketClient.connected(), obsWebSocket: typeof ObsWs !== 'undefined' && ObsWs.isConnected(), ytdlp: false, ffmpeg: false };
     const completeBtn = document.getElementById('guide-complete');
     const laterBtn = document.getElementById('guide-later');
     const openHelp = () => { helpModal.hidden = false; refreshReadiness(); };
@@ -135,7 +135,7 @@
     helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelp(false); });
 
     function updateChecklist() {
-      checklist.environment = readiness.websocket && readiness.ytdlp && readiness.ffmpeg;
+      checklist.environment = readiness.control && readiness.ytdlp && readiness.ffmpeg;
       const tasks = {
         environment: ['guide-task-environment', '環境可用'],
         song: ['guide-task-song', '已加入第一首歌'],
@@ -160,17 +160,19 @@
       if (completeBtn) completeBtn.disabled = completed !== 3;
     }
 
-    function setReadiness(id, ok, text) {
+    function setReadiness(id, state, text) {
       const el = document.getElementById(id);
       if (!el) return;
       el.classList.remove('pending', 'ok', 'error');
-      el.classList.add(ok ? 'ok' : 'error');
+      el.classList.add(state === true ? 'ok' : state === 'pending' ? 'pending' : 'error');
       el.textContent = text;
     }
 
     function refreshReadiness() {
-      readiness.websocket = SocketClient.connected();
-      setReadiness('guide-check-websocket', readiness.websocket, readiness.websocket ? 'WebSocket 已連線' : 'WebSocket 未連線');
+      readiness.control = SocketClient.connected();
+      setReadiness('guide-check-control', readiness.control, readiness.control ? '控制台已連線' : '控制台未連線');
+      readiness.obsWebSocket = typeof ObsWs !== 'undefined' && ObsWs.isConnected();
+      setReadiness('guide-check-websocket', readiness.obsWebSocket, readiness.obsWebSocket ? 'OBS WebSocket 已連線' : 'OBS WebSocket 未連線');
       fetch('/api/system-check').then((res) => res.json()).then((data) => {
         readiness.ytdlp = !!data.ytdlp?.available;
         readiness.ffmpeg = !!data.ffmpeg?.available;
@@ -196,10 +198,17 @@
     }
 
     SocketClient.on('connection-change', (connected) => {
-      readiness.websocket = connected;
-      setReadiness('guide-check-websocket', connected, connected ? 'WebSocket 已連線' : 'WebSocket 未連線');
+      readiness.control = connected;
+      setReadiness('guide-check-control', connected, connected ? '控制台已連線' : '控制台未連線');
       updateChecklist();
     });
+    if (typeof ObsWs !== 'undefined') {
+      ObsWs.on('status', (status) => {
+        readiness.obsWebSocket = !!status?.connected;
+        setReadiness('guide-check-websocket', status?.connecting ? 'pending' : readiness.obsWebSocket,
+          status?.connecting ? 'OBS WebSocket 連線中' : readiness.obsWebSocket ? 'OBS WebSocket 已連線' : 'OBS WebSocket 未連線');
+      });
+    }
     SocketClient.on('state:sync', (state) => {
       checklist.song = Array.isArray(state?.playlist) && state.playlist.length > 0;
       updateChecklist();

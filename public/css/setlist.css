@@ -496,7 +496,8 @@ html, body {
 .now-singing { padding: var(--sl-pv) var(--sl-ph); }
 .setlist-past, .setlist-upcoming { gap: var(--sl-gap-new); }
 .setlist-upcoming-row { opacity: var(--sl-op-w); }
-[data-layout="classic"] #setlist-root { max-width: var(--sl-w); }
+/* 經典版寬度必須是實際寬度；只用 max-width 會讓內容停在其自然寬度。 */
+[data-layout="classic"] #setlist-root { min-width: 0; width: var(--sl-w); max-width: var(--sl-w); }
 
 /* ── 卡片型版型（simple / variants）：寬度 / 圓角 / 邊框 / 底色 / 模糊 / 外框陰影 ── */
 .sm-card { width: min(var(--sl-w), 86%); border-radius: var(--sl-r-new); border: var(--sl-bw) solid var(--sl-bc); background: var(--sl-bg-card); box-shadow: var(--sl-box-shd, none); }

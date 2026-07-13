@@ -17,6 +17,7 @@ const { LyricsEngine } = require('./lyrics-engine');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Audio');
 const { isYouTubeUrl, isPlaylistUrl, extractVideoId } = require('../utils/youtube-url');
+const { assessYouTubeImport } = require('../utils/youtube-import-risk');
 
 const execFileAsync = promisify(execFile);
 
@@ -35,10 +36,30 @@ const YTDLP_METADATA_PRINT = 'before_dl:__ES_META__%()j';
 const YTDLP_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
 const YTDLP_BASE_OPTS = { encoding: 'utf8', env: YTDLP_ENV, windowsHide: true };
 const activeImports = new Map();
+const prefetchedInfo = new Map();
 const requestControllers = new Map();
 const importQueue = [];
 let activeDownloads = 0;
 let ffmpegTail = Promise.resolve();
+const PREFETCH_TTL_MS = 10 * 60 * 1000;
+
+function rememberPrefetchedInfo(url, info) {
+  const videoId = extractVideoId(url) || info?.id;
+  if (!videoId || !info) return;
+  for (const [key, value] of prefetchedInfo) {
+    if (value.expiresAt <= Date.now()) prefetchedInfo.delete(key);
+  }
+  if (prefetchedInfo.size >= 200) prefetchedInfo.delete(prefetchedInfo.keys().next().value);
+  prefetchedInfo.set(videoId, { info, expiresAt: Date.now() + PREFETCH_TTL_MS });
+}
+
+function takePrefetchedInfo(url) {
+  const videoId = extractVideoId(url);
+  const cached = videoId && prefetchedInfo.get(videoId);
+  if (!cached) return null;
+  prefetchedInfo.delete(videoId);
+  return cached.expiresAt > Date.now() ? cached.info : null;
+}
 
 class ImportCancelledError extends Error {
   constructor() {
@@ -336,7 +357,8 @@ class AudioProcessor {
     };
     progress('正在取得影片資訊');
     const infoStart = Date.now();
-    let downloadTask = this.downloadWithMetadata(url, progress, null, options.signal);
+    const prefetched = takePrefetchedInfo(url);
+    let downloadTask = this.downloadWithMetadata(url, progress, prefetched, options.signal);
     // completed 是即時建立、稍後才被 Promise.all await 的 promise；在 metadata → 歌詞校正
     // 之間若下載/轉碼先失敗，會在「還沒有 handler」的空窗觸發 unhandledRejection，前端也就
     // 收不到失敗通知而卡在「正在轉換音訊」。掛個 no-op 守衛，真正的錯誤仍由後面的 await 消費。
@@ -551,7 +573,7 @@ class AudioProcessor {
     return entries;
   }
 
-  static async getVideoInfo(url) {
+  static async getVideoInfo(url, signal = null) {
     const strategies = [
       ['--js-runtimes', 'node', '--dump-json', '--no-download', '--no-playlist'],
       ['--js-runtimes', 'node', '--extractor-args', 'youtube:player_client=android', '--dump-json', '--no-download', '--no-playlist'],
@@ -568,6 +590,7 @@ class AudioProcessor {
           ...YTDLP_BASE_OPTS,
           timeout: YTDLP_INFO_TIMEOUT,
           maxBuffer: YTDLP_MAX_BUFFER,
+          signal,
         });
 
         const data = JSON.parse(stdout);
@@ -588,8 +611,10 @@ class AudioProcessor {
           channel: data.channel || '',
           uploader: data.uploader || '',
           description: data.description || '',
+          categories: Array.isArray(data.categories) ? data.categories : [],
         };
       } catch (err) {
+        if (signal?.aborted) throw new ImportCancelledError();
         const errMsg = err.message || '';
         const strategyDuration = Date.now() - strategyStart;
         if (errMsg.includes('Sign in to confirm')) {
@@ -602,14 +627,14 @@ class AudioProcessor {
     }
 
     log.info('yt-dlp 全部策略失敗，嘗試 oEmbed API 降級...');
-    return await this.getVideoInfoOembed(url);
+    return await this.getVideoInfoOembed(url, signal);
   }
 
-  static async getVideoInfoOembed(url) {
+  static async getVideoInfoOembed(url, signal = null) {
     const oembedStart = Date.now();
     try {
       const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-      const res = await fetchWithTimeout(oembedUrl, {}, 10000);
+      const res = await fetchWithTimeout(oembedUrl, { signal }, 10000);
       if (!res.ok) return null;
 
       const data = await res.json();
@@ -631,6 +656,7 @@ class AudioProcessor {
         uploader: data.author_name || '',
       };
     } catch (e) {
+      if (signal?.aborted) throw new ImportCancelledError();
       const oembedDuration = Date.now() - oembedStart;
       log.error('oEmbed API 也失敗 (' + oembedDuration + 'ms): ' + e.message);
       return null;
@@ -638,6 +664,20 @@ class AudioProcessor {
   }
 
   static extractVideoId(url) { return extractVideoId(url); }
+
+  static async inspectYouTube(url, options = {}) {
+    if (!isYouTubeUrl(url)) throw new Error('無效的 YouTube URL 格式');
+    const requestId = options.requestId ? String(options.requestId) : '';
+    const controller = registerRequestController(requestId);
+    try {
+      const info = await this.getVideoInfo(url, controller?.signal || options.signal);
+      if (!info) throw new Error('無法取得影片資訊');
+      rememberPrefetchedInfo(url, info);
+      return assessYouTubeImport(info);
+    } finally {
+      clearRequestController(requestId, controller);
+    }
+  }
 
   static downloadWithMetadata(url, onProgress, fallbackInfo = null, signal = null) {
     throwIfCancelled(signal);
@@ -738,7 +778,8 @@ class AudioProcessor {
   static normalizeInfo(data = {}) {
     return { id: data.id, title: data.title || '', duration: data.duration || 0, thumbnail: data.thumbnail || null,
       album: data.album || '', track: data.track || '', artist: data.artist || '', artists: Array.isArray(data.artists) ? data.artists : [],
-      albumArtist: data.album_artist || '', channel: data.channel || '', uploader: data.uploader || '', description: data.description || '' };
+      albumArtist: data.album_artist || '', channel: data.channel || '', uploader: data.uploader || '', description: data.description || '',
+      categories: Array.isArray(data.categories) ? data.categories : [] };
   }
 
   static convertToMp3(inputPath, signal = null) {

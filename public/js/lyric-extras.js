@@ -26,12 +26,12 @@
 
   // 預設值（與 display.css 的 :root 對齊）
   const DEFAULT_SETTINGS = {
-    fontSize: 42,
+    fontSize: 56,
     fontFamily: "'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif",
     fontFamilyLatin: '', // 英文（拉丁字母/數字）專用字體；空＝跟主字體。display 端會組成「英文字體, 主字體」
     fontWeight: 900,
-    color: '#ffffff',
-    activeColor: '#ffd6a5',
+    color: '#8f8f8f',
+    activeColor: '#febc6c',
     strokeWidth: 0,
     strokeColor: '#000000',
     shadow: '0 2px 3px rgba(0,0,0,1), 0 4px 14px rgba(0,0,0,0.85)',
@@ -80,10 +80,23 @@
   };
 
   const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv'];
+  // 新使用者的五個可選模板採用目前已確認的預設外觀；Tilt 僅為舊資料相容保留。
+  const TEMPLATE_DEFAULTS = {
+    classic: { ...DEFAULT_SETTINGS, template: 'classic' },
+    luminous: { ...DEFAULT_SETTINGS, template: 'luminous', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
+    partita: { ...DEFAULT_SETTINGS, template: 'partita', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
+    tilt: { ...DEFAULT_SETTINGS, template: 'tilt', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
+    mindscape: { ...DEFAULT_SETTINGS, template: 'mindscape', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
+    ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
+  };
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
   let templateSettings = {};
   let lyricPresets = [];
+
+  function templateDefaults(template) {
+    return { ...(TEMPLATE_DEFAULTS[template] || TEMPLATE_DEFAULTS.classic) };
+  }
 
   function cleanSettingSnapshot(src) {
     const out = {};
@@ -97,12 +110,12 @@
     const out = {};
     if (src && typeof src === 'object') {
       TEMPLATE_IDS.forEach((id) => {
-        if (src[id] && typeof src[id] === 'object') out[id] = { ...DEFAULT_SETTINGS, ...cleanSettingSnapshot(src[id]), template: id };
+        if (src[id] && typeof src[id] === 'object') out[id] = { ...templateDefaults(id), ...cleanSettingSnapshot(src[id]), template: id };
       });
     }
     const base = cleanSettingSnapshot(fallback || {});
     const tpl = TEMPLATE_IDS.includes(base.template) ? base.template : 'classic';
-    if (!out[tpl]) out[tpl] = { ...DEFAULT_SETTINGS, ...base, template: tpl };
+    if (!out[tpl]) out[tpl] = { ...templateDefaults(tpl), ...base, template: tpl };
     return out;
   }
 
@@ -116,7 +129,7 @@
 
   function saveCurrentTemplateSnapshot() {
     const tpl = TEMPLATE_IDS.includes(settings.template) ? settings.template : 'classic';
-    templateSettings[tpl] = { ...DEFAULT_SETTINGS, ...cleanSettingSnapshot(settings), template: tpl };
+    templateSettings[tpl] = { ...templateDefaults(tpl), ...cleanSettingSnapshot(settings), template: tpl };
   }
 
   function buildSettingsPayload() {
@@ -160,11 +173,11 @@
         const parsed = JSON.parse(raw);
         templateSettings = normalizeTemplateSettings(parsed[TEMPLATE_SETTING_KEY], parsed);
         lyricPresets = normalizePresets(parsed[PRESET_KEY]);
-        return { ...DEFAULT_SETTINGS, ...cleanSettingSnapshot(parsed) };
+        return { ...templateDefaults('classic'), ...cleanSettingSnapshot(parsed) };
       }
     } catch (e) { /* 忽略 */ }
     templateSettings = normalizeTemplateSettings(null, DEFAULT_SETTINGS);
-    return { ...DEFAULT_SETTINGS };
+    return templateDefaults('classic');
   }
 
   function saveSettings() {
@@ -278,7 +291,7 @@
     templateSettings = normalizeTemplateSettings(srv[TEMPLATE_SETTING_KEY], clean);
     lyricPresets = normalizePresets(srv[PRESET_KEY]);
     const tpl = TEMPLATE_IDS.includes(clean.template) ? clean.template : 'classic';
-    settings = { ...DEFAULT_SETTINGS, ...(templateSettings[tpl] || {}), ...clean, template: tpl };
+    settings = { ...templateDefaults(tpl), ...(templateSettings[tpl] || {}), ...clean, template: tpl };
     saveSettings();
     refreshControls();
     renderLyricPresetUI();
@@ -626,8 +639,8 @@
         const nextTemplate = btn.dataset.template;
         if (!TEMPLATE_IDS.includes(nextTemplate) || nextTemplate === settings.template) return;
         saveCurrentTemplateSnapshot();
-        const nextSettings = templateSettings[nextTemplate] || { ...cleanSettingSnapshot(settings), template: nextTemplate };
-        settings = { ...DEFAULT_SETTINGS, ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
+        const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
+        settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
         if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') {
           settings.lyricPosition = 'center';
         }
@@ -837,7 +850,7 @@
         const item = lyricPresets.find((p) => p.id === (sel && sel.value));
         if (!item) return;
         saveCurrentTemplateSnapshot();
-        settings = { ...DEFAULT_SETTINGS, ...cleanSettingSnapshot(item.settings) };
+        settings = { ...templateDefaults(item.settings.template), ...cleanSettingSnapshot(item.settings) };
         if (!TEMPLATE_IDS.includes(settings.template)) settings.template = 'classic';
         if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
         refreshControls();
@@ -947,7 +960,7 @@
     if (resetBtn) {
       resetBtn.addEventListener('click', () => {
         const tpl = TEMPLATE_IDS.includes(settings.template) ? settings.template : 'classic';
-        settings = { ...DEFAULT_SETTINGS, template: tpl };
+        settings = templateDefaults(tpl);
         templateSettings[tpl] = { ...settings };
         saveSettings();
         refreshControls();
@@ -974,6 +987,11 @@
   // ═══════════════════════════════════════════
 
   let pickerCurrentTrack = null;
+  const pickerSearchCache = new Map();
+
+  function pickerSearchKey(track, artist, title) {
+    return `${track?.id || ''}\u0000${artist.trim()}\u0000${title.trim()}`;
+  }
 
   function openPicker(track) {
     if (!track) {
@@ -991,7 +1009,14 @@
     if (artistEl) artistEl.value = track.artist || '';
     if (titleEl) titleEl.value = track.title || track.name || '';
 
-    runPickerSearch();
+    const cacheKey = pickerSearchKey(track, artistEl?.value || '', titleEl?.value || '');
+    const cached = pickerSearchCache.get(cacheKey);
+    if (cached) {
+      const body = document.getElementById('lyrics-picker-body');
+      if (body) renderCandidates(body, cached.candidates, cached.providerHealth);
+    } else {
+      runPickerSearch();
+    }
   }
 
   // 依搜尋欄目前的歌手/歌名查詢候選歌詞（自動開啟時與手動「搜尋」共用）
@@ -1011,6 +1036,12 @@
       title: title.trim(),
       duration: Math.round((pickerCurrentTrack && pickerCurrentTrack.duration) || 0),
     };
+    const cacheKey = pickerSearchKey(pickerCurrentTrack, payload.artist, payload.title);
+    const cached = pickerSearchCache.get(cacheKey);
+    if (cached) {
+      renderCandidates(body, cached.candidates, cached.providerHealth);
+      return;
+    }
 
     PinAuth.fetchWithPin('/api/lyrics/candidates', {
       method: 'POST',
@@ -1024,6 +1055,7 @@
           renderProviderHealth(body, data.providerHealth);
           return;
         }
+        pickerSearchCache.set(cacheKey, { candidates: data.candidates, providerHealth: data.providerHealth });
         renderCandidates(body, data.candidates, data.providerHealth);
       })
       .catch(err => {

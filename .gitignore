@@ -47,3 +47,6 @@ AGENTS.md
 
 # 本機 preview 伺服器的隔離資料（正式資料仍在 data/）
 data-preview-*/
+
+# Codex 遠端 session 的本機附件暫存
+.codex-remote-attachments/

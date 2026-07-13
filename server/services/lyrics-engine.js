@@ -7,6 +7,7 @@
  * - 羅馬化不阻擋播放：先回傳原文，算好後透過 Socket 即時更新
  */
 const he = require('he');
+const OpenCC = require('opencc-js');
 const { krcDecode } = require('./krc-decoder');
 const { parseTTML, cleanQuery } = require('./ttml-parser');
 const { parseLrc, parseTimestampToMs, msToLrcTime } = require('./lrc-parser');
@@ -20,6 +21,13 @@ const { dataDir } = require('../utils/data-dir');
 const appPackage = require('../../package.json');
 const log = createLogger('Lyrics');
 const APP_USER_AGENT = `ElitesandPro/${appPackage.version}`;
+const simplifiedToTraditional = OpenCC.Converter({ from: 'cn', to: 'tw' });
+
+function lyricTitleVariants(title) {
+  const original = String(title || '').trim();
+  const traditional = simplifiedToTraditional(original);
+  return traditional && traditional !== original ? [original, traditional] : [original];
+}
 
 // ─── 時長驗證閾值（±5 秒）───
 const DURATION_TOLERANCE = 5;
@@ -185,15 +193,20 @@ class LyricsEngine {
     log.info(`開始搜尋: "${query}" (時長: ${duration}s)`);
 
     // 使用者指定品質優先：BetterLyrics → Apple Music → 酷狗 → QQ → LRCLIB；網易最後備援。
+    const titleVariants = lyricTitleVariants(title);
     const sourceFns = {
-      betterlyrics: () => this.searchBetterLyrics(artist, title, duration),
-      paxsenix: () => this.searchPaxsenix(artist, title, duration),
-      kugou: () => this.searchKugou(artist, title, duration),
-      qqmusic: () => this.searchQQMusic(artist, title, duration),
-      lrclib: () => this.searchLrclib(artist, title, duration),
-      netease: () => this.searchNetease(artist, title, duration),
+      betterlyrics: (queryTitle) => this.searchBetterLyrics(artist, queryTitle, duration),
+      paxsenix: (queryTitle) => this.searchPaxsenix(artist, queryTitle, duration),
+      kugou: (queryTitle) => this.searchKugou(artist, queryTitle, duration),
+      qqmusic: (queryTitle) => this.searchQQMusic(artist, queryTitle, duration),
+      lrclib: (queryTitle) => this.searchLrclib(artist, queryTitle, duration),
+      netease: (queryTitle) => this.searchNetease(artist, queryTitle, duration),
     };
-    const sources = LYRICS_SOURCE_PRIORITY.map((name) => ({ name, fn: sourceFns[name] }));
+    const sources = titleVariants.flatMap((queryTitle) => LYRICS_SOURCE_PRIORITY.map((name) => ({
+      name,
+      queryTitle,
+      fn: () => sourceFns[name](queryTitle),
+    })));
 
     const outcomes = [];
     for (const source of sources) {
@@ -277,27 +290,33 @@ class LyricsEngine {
     };
 
     // 仍並行查詢全部來源，但顯示順序與自動抓取順位一致。
+    const titleVariants = lyricTitleVariants(title);
     const sourceFns = {
-      betterlyrics: () => this.searchBetterLyrics(artist, title, duration),
-      paxsenix: () => this.searchPaxsenix(artist, title, duration),
-      kugou: () => this.searchKugou(artist, title, duration),
-      qqmusic: () => this.searchQQMusic(artist, title, duration),
-      lrclib: () => this.searchLrclib(artist, title, duration),
-      netease: () => this.searchNetease(artist, title, duration),
+      betterlyrics: (queryTitle) => this.searchBetterLyrics(artist, queryTitle, duration),
+      paxsenix: (queryTitle) => this.searchPaxsenix(artist, queryTitle, duration),
+      kugou: (queryTitle) => this.searchKugou(artist, queryTitle, duration),
+      qqmusic: (queryTitle) => this.searchQQMusic(artist, queryTitle, duration),
+      lrclib: (queryTitle) => this.searchLrclib(artist, queryTitle, duration),
+      netease: (queryTitle) => this.searchNetease(artist, queryTitle, duration),
     };
-    const sources = LYRICS_SOURCE_PRIORITY.map((name) => ({ name, fn: sourceFns[name] }));
+    const sources = titleVariants.flatMap((queryTitle) => LYRICS_SOURCE_PRIORITY.map((name) => ({
+      name,
+      queryTitle,
+      fn: () => sourceFns[name](queryTitle),
+    })));
 
     // 並行查詢所有來源（互不阻擋，全部跑完才回傳）
     const settled = await Promise.all(
       sources.map(async (source) => ({
         name: source.name,
+        queryTitle: source.queryTitle,
         outcome: await providerHealth.execute(source.name, source.fn),
       }))
     );
 
     const candidates = [];
     for (const settledSource of settled) {
-      const { name, outcome } = settledSource;
+      const { name, queryTitle, outcome } = settledSource;
       if (outcome.status !== 'success' || !outcome.result || !outcome.result.lyrics) continue;
       const result = outcome.result;
 
@@ -322,10 +341,12 @@ class LyricsEngine {
           && lyricDuration <= duration + 8
           && (duration - lyricDuration) <= 45;
 
+        if (candidates.some((candidate) => candidate.source === name && candidate.type === result.type && candidate.lyrics === result.lyrics)) continue;
         candidates.push({
           id: `${name}-${candidates.length}`,
           source: name,
           sourceLabel: sourceLabels[name] || name,
+          queryTitle,
           type: result.type,                       // 'lrc' | 'krc'
           isWordByWord: result.type === 'krc',      // 逐字
           lineCount: lines.length,
