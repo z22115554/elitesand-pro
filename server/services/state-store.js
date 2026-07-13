@@ -14,6 +14,11 @@
  * - 延遲寫入（800ms debounce），播放中高頻事件不會造成磁碟壓力
  * - 先寫暫存檔再改名（原子寫入），中途斷電不會損毀狀態檔
  * - 任何讀寫錯誤都不打斷直播，但會通知控制台，避免使用者誤以為已保存
+ *
+ * 為什麼不用 services/json-store.js 基座：state.json 多了三件其他 store 沒有的事——
+ * debounce 快照、多伺服器 savedAt 衝突偵測（含靜默期接管）、啟動警示延遲投遞。
+ * 硬塞進基座會讓兩邊都變複雜，所以原子寫入/corrupt/pre-migration 邏輯刻意在此獨立一份；
+ * 若改動備份/保全策略，記得 json-store.js 與本檔要一起看。
  */
 
 const fs = require('fs');
@@ -41,6 +46,24 @@ const MAX_MANUAL_LYRICS_ENTRIES = 200;
 let _saveTimer = null;
 let _lastSnapshotFn = null;
 let _saveCallbacks = [];
+
+// 多伺服器衝突的「靜默期接管」：偵測到磁碟上有更新的 savedAt（另一個伺服器在寫）時
+// 先拒寫保護對方；但若同一個較新值連續 TAKEOVER_QUIET_MS 沒再前進（對方已關閉/停寫），
+// 就備份對方最後狀態後接管，恢復本程序的保存能力。沒有這段的話，本程序會永久拒寫
+// 直到重啟（audit G-13），使用者之後的所有設定變更都靜默不落地。
+const TAKEOVER_QUIET_MS = Number(process.env.ELITESAND_TAKEOVER_QUIET_MS) > 0
+  ? Number(process.env.ELITESAND_TAKEOVER_QUIET_MS)
+  : 15 * 1000;
+let _conflict = null; // { savedAt, firstSeenAt }
+
+function conflictBackupPathFor(filename, now = new Date()) {
+  const stamp = now.toISOString().replace(/[:.]/g, '-');
+  const base = `${filename}.conflict-${stamp}`;
+  let candidate = base;
+  let suffix = 1;
+  while (fs.existsSync(candidate)) candidate = `${base}-${suffix++}`;
+  return candidate;
+}
 
 function parseState(raw, filename) {
   const state = JSON.parse(raw);
@@ -78,10 +101,24 @@ function corruptPathFor(filename, now = new Date()) {
   return candidate;
 }
 
+// 每類保全檔只留最新幾份（與 json-store 同策略），避免反覆事故時無限累積。
+const MAX_PRESERVED_PER_KIND = 5;
+function prunePreserved(filename, kind) {
+  try {
+    const dir = path.dirname(filename);
+    const prefix = `${path.basename(filename)}.${kind}`;
+    const siblings = fs.readdirSync(dir).filter((name) => name.startsWith(prefix)).sort();
+    for (const name of siblings.slice(0, Math.max(0, siblings.length - MAX_PRESERVED_PER_KIND))) {
+      try { fs.unlinkSync(path.join(dir, name)); } catch (_) { /* best effort */ }
+    }
+  } catch (_) { /* best effort */ }
+}
+
 function preserveCorruptFile(filename) {
   if (!fs.existsSync(filename)) return null;
   const preserved = corruptPathFor(filename);
   fs.renameSync(filename, preserved);
+  prunePreserved(filename, 'corrupt');
   return preserved;
 }
 
@@ -97,6 +134,7 @@ function migrationBackupPathFor(filename, fromVersion, now = new Date()) {
 function preservePreMigrationFile(filename, fromVersion) {
   const preserved = migrationBackupPathFor(filename, fromVersion);
   fs.copyFileSync(filename, preserved, fs.constants.COPYFILE_EXCL);
+  prunePreserved(filename, 'pre-migration');
   return preserved;
 }
 
@@ -289,7 +327,25 @@ function saveNow() {
         }
         const disk = diskResult.state;
         const diskSavedAt = Number(disk.savedAt) || 0;
-        if (diskSavedAt > _lastKnownSavedAt) throw new Error('偵測到另一個伺服器已更新 state.json，已拒絕用舊狀態覆寫');
+        if (diskSavedAt > _lastKnownSavedAt) {
+          const now = Date.now();
+          if (_conflict && _conflict.savedAt === diskSavedAt && now - _conflict.firstSeenAt >= TAKEOVER_QUIET_MS) {
+            // 對方已停止寫入：把對方最後狀態備份成 .conflict-* 再接管，不讓任何一邊的資料消失。
+            const preserved = conflictBackupPathFor(STATE_FILE);
+            fs.copyFileSync(STATE_FILE, preserved);
+            prunePreserved(STATE_FILE, 'conflict');
+            _lastKnownSavedAt = diskSavedAt;
+            _conflict = null;
+            const message = `另一個伺服器已停止更新 state.json，本程序已接管保存；對方最後狀態備份為 ${path.basename(preserved)}。`;
+            log.warn(message);
+            if (_errorReporter) _errorReporter({ type: 'warning', area: '狀態保存', message });
+          } else {
+            if (!_conflict || _conflict.savedAt !== diskSavedAt) _conflict = { savedAt: diskSavedAt, firstSeenAt: now };
+            throw new Error('偵測到另一個伺服器已更新 state.json，已拒絕用舊狀態覆寫（若對方已關閉，稍後會自動接管恢復保存）');
+          }
+        } else {
+          _conflict = null;
+        }
       } catch (diskError) {
         if (diskError instanceof UnsupportedStateSchemaError) {
           blockWritesForFutureSchema(diskError);

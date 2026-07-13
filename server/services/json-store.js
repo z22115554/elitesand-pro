@@ -122,12 +122,26 @@ function createJsonStore(options) {
     return { document: current, fromVersion, migrated: fromVersion !== version };
   }
 
+  // 每類保全檔（corrupt/pre-migration）只保留最新幾份，避免反覆損毀/多次跨版遷移時無限累積。
+  const MAX_PRESERVED_PER_KIND = 5;
+  function prunePreserved(fileToPreserve, kind) {
+    try {
+      const dir = path.dirname(fileToPreserve);
+      const prefix = `${path.basename(fileToPreserve)}.${kind}`;
+      const siblings = fs.readdirSync(dir).filter((name) => name.startsWith(prefix)).sort();
+      for (const name of siblings.slice(0, Math.max(0, siblings.length - MAX_PRESERVED_PER_KIND))) {
+        try { fs.unlinkSync(path.join(dir, name)); } catch (_) { /* best effort */ }
+      }
+    } catch (_) { /* best effort */ }
+  }
+
   function preserve(fileToPreserve, kind, fromVersion = null) {
     if (!fs.existsSync(fileToPreserve)) return null;
     const versionPart = fromVersion === null ? '' : `-v${fromVersion}`;
     const destination = uniquePath(`${fileToPreserve}.${kind}${versionPart}-${timestamp()}`);
     if (kind === 'pre-migration') fs.copyFileSync(fileToPreserve, destination, fs.constants.COPYFILE_EXCL);
     else fs.renameSync(fileToPreserve, destination);
+    prunePreserved(fileToPreserve, kind);
     return destination;
   }
 
