@@ -714,37 +714,120 @@ test('設定載入器：所有預設鍵存在且型別正確', () => {
   ok(typeof loadedConfig.updateCheckIntervalMs === 'number');
 });
 
-const stateStore = require('../server/services/state-store');
+const stateStoreModulePath = path.join(__dirname, '..', 'server', 'services', 'state-store.js');
+const { spawnSync: spawnStateStore } = require('child_process');
 
-testAsync('狀態持久化：寫入 → 重新載入 round-trip', async () => {
-  const snapshot = {
-    savedAt: Date.now(),
-    playlist: [{ id: 't1', title: '測試歌曲', artist: '測試歌手' }],
-    style: 'rock',
-    romanizationMode: 'full',
-    showRomanization: true,
-    metronomeEnabled: false,
-    trackOffsets: { t1: 300 },
-    manualLyrics: { t1: { lyrics: '[00:01.00]手動歌詞', lyricsType: 'lrc', timestamp: Date.now() } },
-  };
-  stateStore.scheduleSave(() => snapshot);
-  stateStore.saveNow(); // 立即落地，不等 debounce
+function runStateStoreChild(dataDir, script) {
+  const result = spawnStateStore(process.execPath, ['-e', script, stateStoreModulePath, dataDir], {
+    env: { ...process.env, ELITESAND_DATA_DIR: dataDir },
+    encoding: 'utf8', timeout: 10000, windowsHide: true,
+  });
+  eq(result.status, 0, `state-store child stderr=${result.stderr} stdout=${result.stdout}: `);
+  const marker = '__STATE_RESULT__';
+  const markerAt = result.stdout.lastIndexOf(marker);
+  ok(markerAt >= 0, `state-store child 缺少結果：${result.stdout}`);
+  return JSON.parse(result.stdout.slice(markerAt + marker.length).trim().split(/\r?\n/, 1)[0]);
+}
 
-  const loaded = stateStore.loadState();
-  ok(loaded, '載入結果不應為 null: ');
-  eq(loaded.playlist.length, 1);
-  eq(loaded.playlist[0].title, '測試歌曲');
-  eq(loaded.style, 'rock');
-  eq(loaded.romanizationMode, 'full');
-  eq(loaded.trackOffsets.t1, 300);
-  eq(loaded.manualLyrics.t1.lyrics, '[00:01.00]手動歌詞');
-
-  // 清理
-  fs.unlinkSync(stateStore.STATE_FILE);
+test('狀態持久化：隔離資料夾 round-trip 並建立 last-good', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-roundtrip-'));
+  try {
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]);",
+      "const snapshot={savedAt:Date.now(),playlist:[{id:'t1',title:'測試歌曲',artist:'測試歌手'}],style:'rock',romanizationMode:'full',trackOffsets:{t1:300},manualLyrics:{t1:{lyrics:'手動歌詞',timestamp:1}}};",
+      "store.scheduleSave(()=>snapshot); store.saveNow(); const loaded=store.loadState();",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,backup:fs.existsSync(store.STATE_BACKUP_FILE)}));",
+    ].join('\n'));
+    eq(result.loaded.playlist[0].title, '測試歌曲');
+    eq(result.loaded.style, 'rock');
+    eq(result.loaded.trackOffsets.t1, 300);
+    eq(result.loaded.manualLyrics.t1.lyrics, '手動歌詞');
+    ok(result.backup, '成功保存後應建立 last-good: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
 test('狀態持久化：狀態檔不存在時回傳 null 不報錯', () => {
-  ok(stateStore.loadState() === null);
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-empty-'));
+  try {
+    const result = runStateStoreChild(dataDir, [
+      "const store=require(process.argv[1]);",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded:store.loadState(),alert:store.consumeStartupAlert()}));",
+    ].join('\n'));
+    eq(result.loaded, null);
+    eq(result.alert, null);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('state.json 損壞時保留原檔並從 last-good 自動恢復', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-recover-'));
+  try {
+    fs.writeFileSync(path.join(dataDir, 'state.json'), '{broken', 'utf8');
+    fs.writeFileSync(path.join(dataDir, 'state.json.last-good'), JSON.stringify({ savedAt: 42, playlist: [{ id: 'safe' }], style: 'rock' }), 'utf8');
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const path=require('path'); const store=require(process.argv[1]); const dir=process.argv[2];",
+      "const loaded=store.loadState(); const alert=store.consumeStartupAlert(); const disk=JSON.parse(fs.readFileSync(store.STATE_FILE,'utf8'));",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,alert,disk,files:fs.readdirSync(dir)}));",
+    ].join('\n'));
+    eq(result.loaded.playlist[0].id, 'safe');
+    eq(result.disk.playlist[0].id, 'safe');
+    ok(result.files.some((name) => /^state\.json\.corrupt-/.test(name)), '應保留損壞原檔: ');
+    ok(/最近可用備份恢復/.test(result.alert.message), `提示應說明恢復結果：${result.alert?.message}`);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('state.json 損壞且無備份時保留原檔並以預設狀態啟動', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-no-backup-'));
+  try {
+    fs.writeFileSync(path.join(dataDir, 'state.json'), '[]', 'utf8');
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const dir=process.argv[2];",
+      "const loaded=store.loadState(); const alert=store.consumeStartupAlert();",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,alert,files:fs.readdirSync(dir)}));",
+    ].join('\n'));
+    eq(result.loaded, null);
+    ok(result.files.some((name) => /^state\.json\.corrupt-/.test(name)), '應保留無效狀態物件: ');
+    ok(/沒有可用備份/.test(result.alert.message), `提示應說明降級結果：${result.alert?.message}`);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('state.json 與 last-good 都損壞時保留兩份證據並安全啟動', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-both-corrupt-'));
+  try {
+    fs.writeFileSync(path.join(dataDir, 'state.json'), '{broken-primary', 'utf8');
+    fs.writeFileSync(path.join(dataDir, 'state.json.last-good'), '{broken-backup', 'utf8');
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const dir=process.argv[2];",
+      "const loaded=store.loadState(); const alert=store.consumeStartupAlert();",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,alert,files:fs.readdirSync(dir)}));",
+    ].join('\n'));
+    eq(result.loaded, null);
+    ok(result.files.some((name) => /^state\.json\.corrupt-/.test(name)), '主檔損壞證據應保留: ');
+    ok(result.files.some((name) => /^state\.json\.last-good\.corrupt-/.test(name)), '備份損壞證據應保留: ');
+    ok(/損壞備份另存/.test(result.alert.message), `提示應說明備份也損壞：${result.alert?.message}`);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('運行中 state.json 損壞不會造成拒寫死鎖', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-runtime-corrupt-'));
+  try {
+    fs.writeFileSync(path.join(dataDir, 'state.json'), '{broken', 'utf8');
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const dir=process.argv[2]; const alerts=[]; store.setErrorReporter((a)=>alerts.push(a));",
+      "const snapshot={savedAt:Date.now(),playlist:[{id:'new'}]}; store.scheduleSave(()=>snapshot); store.saveNow();",
+      "const disk=JSON.parse(fs.readFileSync(store.STATE_FILE,'utf8'));",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({disk,alerts,files:fs.readdirSync(dir)}));",
+    ].join('\n'));
+    eq(result.disk.playlist[0].id, 'new');
+    ok(result.files.some((name) => /^state\.json\.corrupt-/.test(name)), '運行中壞檔應另存: ');
+    ok(result.alerts.some((item) => /目前狀態將重新保存/.test(item.message)), '應通知控制面板已解除拒寫: ');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('啟動恢復提示延遲到第一個桌面控制面板連線', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'socket-handler.js'), 'utf8');
+  ok(source.includes("type === 'controller'"));
+  ok(source.includes('stateStore.consumeStartupAlert()'));
+  ok(source.includes("socket.emit('server:alert', startupAlert)"));
 });
 
 // ═══════════════════════════════════════════
@@ -762,18 +845,17 @@ testAsync('searchAllSources 離線時回傳空陣列不崩潰', async () => {
 });
 
 test('lyric-settings 可被 state-store 持久化', () => {
-  const snapshot = {
-    savedAt: Date.now(),
-    playlist: [],
-    lyricSettings: { fontSize: 56, color: '#ff0000', verticalPosition: 'center' },
-  };
-  stateStore.scheduleSave(() => snapshot);
-  stateStore.saveNow();
-  const loaded = stateStore.loadState();
-  ok(loaded && loaded.lyricSettings, 'lyricSettings 應被保存: ');
-  eq(loaded.lyricSettings.fontSize, 56);
-  eq(loaded.lyricSettings.color, '#ff0000');
-  fs.unlinkSync(stateStore.STATE_FILE);
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-lyrics-'));
+  try {
+    const result = runStateStoreChild(dataDir, [
+      "const store=require(process.argv[1]); const snapshot={savedAt:Date.now(),playlist:[],lyricSettings:{fontSize:56,color:'#ff0000',verticalPosition:'center'}};",
+      "store.scheduleSave(()=>snapshot); store.saveNow();",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify(store.loadState()));",
+    ].join('\n'));
+    ok(result && result.lyricSettings, 'lyricSettings 應被保存: ');
+    eq(result.lyricSettings.fontSize, 56);
+    eq(result.lyricSettings.color, '#ff0000');
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
 
