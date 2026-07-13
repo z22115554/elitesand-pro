@@ -184,21 +184,133 @@
   // 貼連結驗證通過即清空輸入欄，使用者可連續快速加歌，佇列在背景逐首處理。
   // 媒體庫「加入清單」的重新下載也走同一佇列。
   // ═══════════════════════════════════════════
-  const ytImportQueue = [];   // { url, resolve, reject }
+  const ytImportQueue = [];   // work job objects waiting to start
+  const ytImportJobs = [];    // recent queue/active/completed/failed history
   let ytImportActive = false;
+  let activeImportJob = null;
   let ytImportDoneCount = 0;  // 本批已完成數（佇列清空時歸零）
   const activeRequestIds = new Set();
+  const workCenter = document.getElementById('work-center');
+  const workCenterList = document.getElementById('work-center-list');
+  const workCenterClear = document.getElementById('work-center-clear');
+
+  function jobLabel(url, source) {
+    try {
+      const id = new URL(url).searchParams.get('v') || url.split('/').filter(Boolean).pop();
+      return `${source || 'YouTube'} · ${id || '待解析連結'}`;
+    } catch (_) { return source || 'YouTube 匯入'; }
+  }
+
+  function renderWorkCenter() {
+    if (!workCenter || !workCenterList) return;
+    workCenter.hidden = ytImportJobs.length === 0;
+    workCenterList.textContent = '';
+    const pending = ytImportQueue.filter((job) => job.status === 'queued');
+    for (const job of ytImportJobs.slice(0, 20)) {
+      const row = document.createElement('div');
+      row.className = 'work-item';
+      row.dataset.jobId = job.id;
+      const title = document.createElement('div');
+      title.className = 'work-item-title';
+      title.textContent = job.label;
+      title.title = job.url;
+      const stateEl = document.createElement('div');
+      stateEl.className = 'work-item-state';
+      stateEl.dataset.state = job.status;
+      const queueIndex = pending.indexOf(job);
+      stateEl.textContent = job.status === 'queued'
+        ? `等待中 · 佇列第 ${queueIndex + 1} 位`
+        : (job.message || job.stage || job.status);
+      const actions = document.createElement('div');
+      actions.className = 'work-item-actions';
+      if (job.status === 'queued' || job.status === 'active' || job.status === 'cancelling') {
+        const cancel = document.createElement('button');
+        cancel.type = 'button'; cancel.className = 'btn btn-sm btn-ghost'; cancel.dataset.workAction = 'cancel';
+        cancel.textContent = job.status === 'cancelling' ? '取消中…' : '取消';
+        cancel.disabled = job.status === 'cancelling';
+        actions.appendChild(cancel);
+      } else if (job.status === 'failed' || job.status === 'cancelled') {
+        const retry = document.createElement('button');
+        retry.type = 'button'; retry.className = 'btn btn-sm btn-ghost'; retry.dataset.workAction = 'retry'; retry.textContent = '重試';
+        actions.appendChild(retry);
+      }
+      row.append(title, stateEl, actions);
+      if (job.status === 'active' && Number.isFinite(job.percent)) {
+        const progress = document.createElement('div');
+        progress.className = 'work-item-progress';
+        const fill = document.createElement('span');
+        fill.style.setProperty('--work-progress', `${Math.max(0, Math.min(100, job.percent))}%`);
+        progress.appendChild(fill); row.appendChild(progress);
+      }
+      workCenterList.appendChild(row);
+    }
+  }
+
+  function updateJob(job, partial) {
+    Object.assign(job, partial, { updatedAt: Date.now() });
+    renderWorkCenter();
+  }
+
+  function cancelQueuedJob(job) {
+    const index = ytImportQueue.indexOf(job);
+    if (index < 0) return false;
+    ytImportQueue.splice(index, 1);
+    const error = new Error('匯入已取消'); error.code = 'IMPORT_CANCELLED';
+    updateJob(job, { status: 'cancelled', message: '已取消，未開始下載' });
+    job.reject(error);
+    return true;
+  }
+
+  async function cancelImportJob(job) {
+    if (job.status === 'queued') { cancelQueuedJob(job); return; }
+    if (job !== activeImportJob || !job.requestId) return;
+    updateJob(job, { status: 'cancelling', message: '正在停止下載…' });
+    try {
+      const response = await PinAuth.fetchWithPin('/api/youtube/cancel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: job.requestId }),
+      });
+      const result = await response.json();
+      if (!response.ok) updateJob(job, { status: 'active', message: result.message || '工作已完成，無法取消' });
+    } catch (error) {
+      updateJob(job, { status: 'active', message: `取消要求失敗：${error.message}` });
+    }
+  }
+
+  workCenterList?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-work-action]');
+    const row = button?.closest('[data-job-id]');
+    const job = row && ytImportJobs.find((item) => item.id === row.dataset.jobId);
+    if (!button || !job) return;
+    if (button.dataset.workAction === 'cancel') cancelImportJob(job);
+    if (button.dataset.workAction === 'retry') queueYouTubeImport(job.url, { source: job.source }).catch(() => {});
+  });
+  workCenterClear?.addEventListener('click', () => {
+    for (let i = ytImportJobs.length - 1; i >= 0; i--) {
+      if (['completed', 'cancelled'].includes(ytImportJobs[i].status)) ytImportJobs.splice(i, 1);
+    }
+    renderWorkCenter();
+  });
 
   SocketClient.on('youtube:progress', (data) => {
     if (!data || !activeRequestIds.has(data.requestId)) return;
     const pct = Number.isFinite(data.percent) ? ` ${Math.round(data.percent)}%` : '';
     const detail = data.stage === '失敗' && data.error ? `：${data.error}` : '';
     setYtProgress(`${data.stage || '處理中'}${pct}${detail}`, data.stage === '已完成', data.stage !== '已完成' && data.stage !== '失敗');
+    if (activeImportJob?.requestId === data.requestId) {
+      updateJob(activeImportJob, { stage: data.stage || '處理中', percent: data.percent, message: detail ? `${data.stage}${detail}` : data.stage });
+    }
   });
 
-  function queueYouTubeImport(url) {
+  function queueYouTubeImport(url, options = {}) {
     return new Promise((resolve, reject) => {
-      ytImportQueue.push({ url, resolve, reject });
+      const job = {
+        id: `work-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        url, source: options.source || 'YouTube', label: jobLabel(url, options.source),
+        status: 'queued', stage: '等待中', percent: 0, resolve, reject, createdAt: Date.now(),
+      };
+      ytImportQueue.push(job);
+      ytImportJobs.unshift(job);
+      renderWorkCenter();
       if (ytImportActive) updateYtQueueProgress();
       if (!ytImportActive) drainYtImportQueue();
     });
@@ -218,6 +330,8 @@
     while (ytImportQueue.length) {
       const job = ytImportQueue.shift();
       const requestId = `yt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      activeImportJob = job;
+      updateJob(job, { status: 'active', requestId, stage: '準備匯入', message: '準備匯入', percent: 0 });
       updateYtQueueProgress();
       try {
         activeRequestIds.add(requestId);
@@ -227,7 +341,7 @@
           body: JSON.stringify({ url: job.url, requestId }),
         });
         const data = await res.json();
-        if (data.success && data.track) {
+        if (res.ok && data.success && data.track) {
           state.playlist.push(data.track);
           AppShared.renderPlaylist();
           SocketClient.send('playlist:add', [data.track]);
@@ -235,22 +349,33 @@
             AppShared.playTrack(state.playlist.length - 1, false); // 匯入後載入待命，不自動播放
           }
           ok++;
+          updateJob(job, { status: 'completed', stage: '已完成', message: `已加入播放清單：${data.track.title}`, percent: 100 });
           job.resolve(data.track);
         } else {
           const errorMsg = data.error || '未知錯誤';
-          const detailMsg = data.details ? `\n詳情: ${data.details}` : '';
-          AppShared.showToast('處理失敗: ' + errorMsg + detailMsg, 'error');
+          const recovery = data.recovery ? ` ${data.recovery}` : '';
+          const error = new Error(`${errorMsg}${recovery}`);
+          error.code = data.code || 'IMPORT_FAILED';
+          error.retryable = data.retryable !== false;
+          AppShared.showToast(error.message, error.code === 'IMPORT_CANCELLED' ? 'info' : 'error');
           fail++;
-          job.reject(new Error(errorMsg));
+          updateJob(job, {
+            status: error.code === 'IMPORT_CANCELLED' ? 'cancelled' : 'failed',
+            stage: error.code === 'IMPORT_CANCELLED' ? '已取消' : '失敗', message: error.message, errorCode: error.code,
+          });
+          job.reject(error);
         }
       } catch (err) {
-        AppShared.showToast('YouTube 處理失敗: ' + err.message, 'error');
+        AppShared.showToast('YouTube 匯入失敗：' + err.message, 'error');
         fail++;
+        updateJob(job, { status: err.code === 'IMPORT_CANCELLED' ? 'cancelled' : 'failed', stage: '失敗', message: err.message, errorCode: err.code || 'NETWORK_ERROR' });
         job.reject(err);
       } finally {
         activeRequestIds.delete(requestId);
+        if (activeImportJob === job) activeImportJob = null;
       }
       ytImportDoneCount++;
+      renderWorkCenter();
     }
     ytImportActive = false;
     ytImportDoneCount = 0;
