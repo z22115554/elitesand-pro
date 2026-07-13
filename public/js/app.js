@@ -40,6 +40,11 @@
     // 供媒體庫（media-library.js）以 YouTube 網址重新匯入並加入播放清單。
     // 走同一個匯入佇列：快速連點多首也只會一次下載一首，不會併發把記憶體吃爆（OOM 實機回報）。
     importYouTubeUrl: (url) => AppShared.queueYouTubeImport(url),
+    redownloadMissingTrack: (trackId) => {
+      const track = playlist.find((item) => item.id === trackId);
+      if (!track?.url) return Promise.reject(new Error('找不到可重新下載的 YouTube 來源'));
+      return AppShared.queueYouTubeImport(track.url, { source: '重新下載', replaceTrackId: track.id });
+    },
     // 媒體庫即時還原：直接把伺服器組好的 track（含本機檔名/歌詞/變調）加入清單，零下載。
     // 一律附加到清單末端（允許重複，由呼叫端先確認）；重複曲沿用同一 id＝共享該首的變調/歌詞記憶。
     addLibraryTrack: (track) => {
@@ -293,7 +298,16 @@
 
   // Phase 5: 音訊錯誤通知
   SocketClient.on('audio:error', (data) => {
-    AppShared.showToast(data.message || '音訊播放錯誤', 'error');
+    if (data?.code === 'AUDIO_FILE_MISSING' && data.retryable && data.trackId) {
+      const accepted = window.confirm(`「${data.title || '這首歌'}」的音檔遺失。要現在重新下載嗎？`);
+      if (accepted) {
+        window.VKState.redownloadMissingTrack(data.trackId)
+          .then(() => AppShared.showToast(`已重新下載「${data.title || '這首歌'}」`, 'success'))
+          .catch((error) => AppShared.showToast(`重新下載失敗：${error.message}`, 'error'));
+      }
+      return;
+    }
+    AppShared.showToast(data?.message || '音訊播放錯誤', 'error');
   });
 
   SocketClient.on('audio:skip', (data) => {

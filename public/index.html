@@ -229,6 +229,10 @@
               </div>
               <button id="yt-fetch-btn" class="btn btn-primary" type="button" style="width:100%">匯入音訊</button>
               <div id="yt-progress" class="val" style="margin-top:8px"></div>
+              <div id="youtube-risk-preference" class="risk-preference" hidden>
+                <span>匯入警告已關閉，遇到可疑影片會自動繼續。</span>
+                <button id="youtube-risk-reset" class="btn btn-sm btn-ghost" type="button">重新啟用</button>
+              </div>
               <div id="work-center" class="work-center" hidden>
                 <div class="work-center-head">
                   <span>工作中心</span>
@@ -385,7 +389,7 @@
                 <button class="style-thumb" data-template="partita" type="button" title="折光階梯：虛線光尺與切角節點分段進場">
                   <span class="style-thumb-preview"><span class="style-thumb-char">階</span></span><span class="style-thumb-label">折光階梯</span>
                 </button>
-                <button class="style-thumb" data-template="tilt" type="button" title="斜拍告白：斜體字與節拍底線同步浮現">
+                <button class="style-thumb" data-template="tilt" type="button" title="斜拍告白：斜體字與節拍底線同步浮現" hidden>
                   <span class="style-thumb-preview"><span class="style-thumb-char">斜</span></span><span class="style-thumb-label">斜拍告白</span>
                 </button>
                 <button class="style-thumb" data-template="mindscape" type="button" title="潮汐心景：呼吸光環中的空間文字">
@@ -1459,6 +1463,29 @@
     </div>
   </div>
 
+  <!-- ═══ Modal：YouTube 匯入風險確認 ═══ -->
+  <div id="youtube-risk-modal" class="modal" hidden>
+    <div class="modal-card youtube-risk-card" role="dialog" aria-modal="true" aria-labelledby="youtube-risk-heading">
+      <div class="modal-head"><h3 id="youtube-risk-heading">請確認這支影片</h3></div>
+      <div class="modal-body">
+        <div class="youtube-risk-video">
+          <img id="youtube-risk-thumbnail" alt="影片縮圖">
+          <div>
+            <strong id="youtube-risk-title"></strong>
+            <span id="youtube-risk-author"></span>
+            <span id="youtube-risk-duration"></span>
+          </div>
+        </div>
+        <ul id="youtube-risk-reasons" class="youtube-risk-reasons"></ul>
+        <label class="youtube-risk-disable"><input id="youtube-risk-disable" type="checkbox">不要再顯示這類警告（之後自動繼續匯入）</label>
+        <div class="youtube-risk-actions">
+          <button id="youtube-risk-skip" class="btn btn-ghost" type="button">略過這支影片</button>
+          <button id="youtube-risk-proceed" class="btn btn-primary" type="button">仍然匯入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Modal：修改歌名／歌手（#track-edit-modal）═══ -->
   <div id="track-edit-modal" class="modal" hidden>
     <div class="modal-card">
@@ -1516,7 +1543,8 @@
             <p>第一次使用先確認控制連線與下載工具；全部就緒再開始匯入歌曲。</p>
           </div>
           <div class="readiness-items">
-            <span id="guide-check-websocket" class="readiness-pill pending">WebSocket 檢查中</span>
+            <span id="guide-check-control" class="readiness-pill pending">控制台連線檢查中</span>
+            <span id="guide-check-websocket" class="readiness-pill pending">OBS WebSocket 檢查中</span>
             <span id="guide-check-ytdlp" class="readiness-pill pending">yt-dlp 檢查中</span>
             <span id="guide-check-ffmpeg" class="readiness-pill pending">FFmpeg 檢查中</span>
             <span id="guide-check-version" class="readiness-pill pending">版本檢查中</span>
@@ -1820,6 +1848,7 @@
   <script src="/js/app-announcements.js"></script>
   <script src="/js/app-twitch.js"></script>
   <script src="/js/app-playlist.js"></script>
+  <script src="/js/playback-sequence.js"></script>
   <script src="/js/app-playback.js"></script>
   <script src="/js/app-lyrics-timeline.js"></script>
   <script src="/js/app-setlist-panel.js"></script>

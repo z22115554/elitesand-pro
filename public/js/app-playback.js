@@ -68,12 +68,12 @@
       // 否則只載入待命（先前這裡忽略了 continuousPlay，導致開啟 SoundTouch 高品質變調時
       // 「連續播放」開關完全失效，一律表現成單曲播完就停）。
       SoundTouchEngine.onEnded(() => {
-        if (state.playlist.length === 0) return;
-        if (continuousPlay) {
-          if (state.currentTrackIndex < state.playlist.length - 1) playTrack(state.currentTrackIndex + 1, true);
-        } else {
-          playTrack((state.currentTrackIndex + 1) % state.playlist.length, false);
-        }
+        const next = PlaybackSequence.nextAfterEnded(
+          state.currentTrackIndex,
+          state.playlist.length,
+          continuousPlay,
+        );
+        if (next) playTrack(next.index, next.autoplay);
       });
       return true;
     } catch (e) { console.warn('[SoundTouch] 初始化失敗，降級:', e.message); return false; }
@@ -425,15 +425,12 @@
 
   audioPlayer.addEventListener('ended', () => {
     const playlist = state.playlist;
-    if (playlist.length === 0) return;
-    if (continuousPlay) {
-      // 連續播放（player 模式）：自動播下一首；播到最後一首自然停止
-      if (state.currentTrackIndex < playlist.length - 1) playTrack(state.currentTrackIndex + 1, true);
-    } else {
-      // 單曲（預設）：載入下一首待命、不自動播（由主播決定何時開始）
-      const nextIndex = (state.currentTrackIndex + 1) % playlist.length;
-      playTrack(nextIndex, false);
-    }
+    const next = PlaybackSequence.nextAfterEnded(
+      state.currentTrackIndex,
+      playlist.length,
+      continuousPlay,
+    );
+    if (next) playTrack(next.index, next.autoplay);
   });
 
   // Phase 5: 音訊錯誤處理

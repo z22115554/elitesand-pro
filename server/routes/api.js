@@ -395,14 +395,29 @@ router.post('/youtube/cancel', requirePin, (req, res) => {
   res.status(result.ok ? 202 : 404).json(result);
 });
 
-// ─── YouTube 播放清單匯入（分批，每批預設 20 首）───
+// ─── YouTube 影片下載前檢查：只讀 metadata，不開始下載 ───
+router.post('/youtube/inspect', requirePin, async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    if (!url || !isYouTubeUrl(url)) return res.status(400).json({ error: '請提供有效的 YouTube 連結' });
+    const assessment = await AudioProcessor.inspectYouTube(url, { requestId: req.body.requestId });
+    res.json({ success: true, assessment });
+  } catch (err) {
+    const classified = classifyImportError(err);
+    res.status(classified.status).json({
+      error: classified.message,
+      code: classified.code,
+      recovery: classified.recovery,
+      retryable: classified.retryable,
+    });
+  }
+});
+
+// ─── YouTube 播放清單掃描：只回條目，下載仍由前端單工佇列逐首執行 ───
 router.post('/youtube/playlist', requirePin, async (req, res) => {
   const start = Date.now();
   try {
-    const { url, offset = 0, confirmAll = false } = req.body || {};
-    // 每批 5 首：讓已處理的歌「邊匯入邊出現、邊可播」，而非等 20 首才一次冒出來（避免像卡住）。
-    // 確認門檻另用 CONFIRM_THRESHOLD，與批次大小脫鉤。
-    const BATCH = 5;
+    const { url } = req.body || {};
     const CONFIRM_THRESHOLD = 20;
     if (!url || !AudioProcessor.isPlaylistUrl(url)) {
       return res.status(400).json({ error: '請提供有效的 YouTube 播放清單連結（含 list= 參數）' });
@@ -412,32 +427,8 @@ router.post('/youtube/playlist', requirePin, async (req, res) => {
     const total = entries.length;
     if (total === 0) return res.status(404).json({ error: '播放清單是空的或無法讀取' });
 
-    // 第一次呼叫且超過門檻 → 先讓使用者確認是否全部匯入
-    if (offset === 0 && total > CONFIRM_THRESHOLD && !confirmAll) {
-      return res.json({ success: true, needsConfirm: true, total, batchSize: CONFIRM_THRESHOLD });
-    }
-
-    const startIdx = Math.max(0, Math.floor(offset));
-    const slice = entries.slice(startIdx, startIdx + BATCH);
-    const tracks = [];
-    const failures = [];
-    const settled = await Promise.all(slice.map(async (entry) => {
-      try {
-        const track = await AudioProcessor.processYouTube(entry.url, { priority: 'batch' });
-        const safeTrack = sanitizeTrack(track);
-        return safeTrack;
-      } catch (e) {
-        log.warn(`播放清單項目處理失敗（略過）: ${entry.title} - ${e.message}`);
-        failures.push({ id: entry.id, title: entry.title, error: e.message });
-        return null;
-      }
-    }));
-    tracks.push(...settled.filter(Boolean));
-
-    const nextOffset = startIdx + BATCH;
-    const done = nextOffset >= total;
-    log.info(`播放清單批次匯入: ${startIdx}~${startIdx + slice.length}/${total}，成功 ${tracks.length} (${Date.now() - start}ms)`);
-    res.json({ success: true, tracks, failures, total, processedTo: startIdx + slice.length, nextOffset, done });
+    log.info(`播放清單掃描完成: ${total} 首 (${Date.now() - start}ms)`);
+    res.json({ success: true, entries, total, needsConfirm: total > CONFIRM_THRESHOLD, confirmThreshold: CONFIRM_THRESHOLD });
   } catch (err) {
     log.error(`播放清單匯入失敗 (${Date.now() - start}ms)`, err);
     res.status(500).json({ error: '播放清單匯入失敗', details: err.message });

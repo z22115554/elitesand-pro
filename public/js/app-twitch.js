@@ -122,7 +122,9 @@
             <div class="twitch-req-title" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
             <div class="twitch-req-author" style="margin-top:4px;color:var(--text-muted);font-size:12px">${escapeHtml(author)}</div>
             <div class="twitch-req-user" style="margin-top:4px;font-size:12px">點歌者：${escapeHtml(req.requester || '觀眾')}</div>
-            ${req.durationWarning ? '<div class="pi-badge" style="margin-top:4px;color:var(--danger)">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}
+            ${Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length
+              ? `<div class="pi-badge" style="margin-top:4px;color:var(--danger)">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>`
+              : req.durationWarning ? '<div class="pi-badge" style="margin-top:4px;color:var(--danger)">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}
             <a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:4px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(req.url)}</a>
           </div>
         </div>
@@ -142,7 +144,10 @@
     busy.add(requestId);
     renderRequests();
     try {
-      const track = await AppShared.queueYouTubeImport(req.url, { source: `Twitch · ${req.requester || req.userName || '觀眾點歌'}` });
+      const track = await AppShared.queueYouTubeImport(req.url, {
+        source: `Twitch · ${req.requester || req.userName || '觀眾點歌'}`,
+        assessment: req.assessment || null,
+      });
       const report = await new Promise((resolve) => SocketClient.sendWithCallback('twitch:song-request:result', {
         requestId, success: true, title: track && (track.title || track.name),
       }, resolve));

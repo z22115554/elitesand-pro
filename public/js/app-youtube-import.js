@@ -119,10 +119,10 @@
     if (e.key === 'Enter') fetchYouTube();
   });
 
-  function postPlaylist(url, offset, confirmAll) {
+  function postPlaylist(url) {
     return PinAuth.fetchWithPin('/api/youtube/playlist', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, offset, confirmAll }),
+      body: JSON.stringify({ url }),
     }).then(r => r.json());
   }
 
@@ -130,51 +130,36 @@
     setYtProgress('讀取播放清單中', false, true);
     dom.ytFetchBtn.disabled = true;
     dom.ytFetchBtn.textContent = '處理中...';
-    // 讀到清單資訊後就會開始分批匯入，先清空欄位讓使用者能接著貼別的連結
+    // 先掃出條目，再全部送進既有單工佇列；每首輪到時才做風險檢查與下載。
     dom.ytUrl.value = '';
     try {
-      let data = await postPlaylist(url, 0, false);
+      const data = await postPlaylist(url);
       if (!data.success) throw new Error(data.error || '播放清單讀取失敗');
-      const LIMIT_FIRST = data.batchSize || 20; // 「只匯入前 N 首」的 N（= 確認門檻）
-      let onlyFirst = false;
       if (data.needsConfirm) {
         const all = window.confirm(`此播放清單共 ${data.total} 首。\n確定要全部匯入嗎？（會邊匯入邊出現、邊可播）\n按「取消」將不匯入。`);
         if (!all) { setYtProgress('已取消播放清單匯入', true); return; }
-        onlyFirst = false;
-        data = await postPlaylist(url, 0, true); // 取得第一批
-        if (!data.success) throw new Error(data.error || '播放清單匯入失敗');
       }
-      let imported = 0;
-      const failures = [];
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const tracks = data.tracks || [];
-        if (Array.isArray(data.failures)) failures.push(...data.failures);
-        if (tracks.length) {
-          state.playlist.push(...tracks);
-          AppShared.renderPlaylist();
-          SocketClient.send('playlist:add', tracks);
-          // 第一首處理好就載入待命，使用者可立刻播放，不必等整個清單
-          if (state.currentTrackIndex === -1 && state.playlist.length > 0) AppShared.playTrack(0, false);
-          imported += tracks.length;
-        }
-        const processed = data.processedTo || 0;
-        const totalShown = onlyFirst ? Math.min(LIMIT_FIRST, data.total || LIMIT_FIRST) : (data.total || '?');
-        setYtProgress(`播放清單匯入中 ${Math.min(processed, totalShown)}/${totalShown} 首（可直接播放已匯入的歌）`, false, true);
-        // 只匯入前 N：處理到門檻就停
-        if (data.done || (onlyFirst && processed >= LIMIT_FIRST)) break;
-        data = await postPlaylist(url, data.nextOffset, true);
-        if (!data.success) break;
-      }
-      const failText = failures.length ? `，${failures.length} 首失敗：${failures.slice(0, 3).map(f => `${f.title}（${f.error}）`).join('；')}` : '';
-      AppShared.showToast(`播放清單匯入完成：${imported} 首${failText}`, failures.length ? 'warning' : (imported > 0 ? 'success' : 'warning'));
-      setYtProgress(`✓ 播放清單匯入完成：${imported} 首${failures.length ? `，失敗 ${failures.length} 首` : ''}`, true);
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      const imports = entries.map((entry, index) => queueYouTubeImport(entry.url, {
+        source: `播放清單 ${index + 1}/${entries.length}`,
+        label: entry.title || `播放清單第 ${index + 1} 首`,
+      }));
+      dom.ytFetchBtn.disabled = false;
+      dom.ytFetchBtn.textContent = '匯入音訊';
+      setYtProgress(`已排入 ${imports.length} 首，將逐首檢查後匯入`, false, true);
+      const results = await Promise.allSettled(imports);
+      const imported = results.filter(result => result.status === 'fulfilled').length;
+      const skipped = results.filter(result => result.status === 'rejected' && result.reason?.code === 'IMPORT_SKIPPED').length;
+      const failed = results.length - imported - skipped;
+      const suffix = `${skipped ? `，略過 ${skipped} 首` : ''}${failed ? `，失敗 ${failed} 首` : ''}`;
+      AppShared.showToast(`播放清單匯入完成：${imported} 首${suffix}`, skipped || failed ? 'warning' : 'success');
+      setYtProgress(`✓ 播放清單匯入完成：${imported} 首${suffix}`, true);
     } catch (err) {
       AppShared.showToast('播放清單匯入失敗: ' + err.message, 'error');
       setYtProgress('');
     } finally {
       dom.ytFetchBtn.disabled = false;
-      dom.ytFetchBtn.textContent = '取得';
+      dom.ytFetchBtn.textContent = '匯入音訊';
     }
   }
 
@@ -193,6 +178,96 @@
   const workCenter = document.getElementById('work-center');
   const workCenterList = document.getElementById('work-center-list');
   const workCenterClear = document.getElementById('work-center-clear');
+  const RISK_WARNING_DISABLED_KEY = 'elite-youtube-risk-warning-disabled-v1';
+  const riskPreference = document.getElementById('youtube-risk-preference');
+  const riskPreferenceReset = document.getElementById('youtube-risk-reset');
+
+  function riskWarningsDisabled() {
+    try { return localStorage.getItem(RISK_WARNING_DISABLED_KEY) === '1'; } catch (_) { return false; }
+  }
+
+  function setRiskWarningsDisabled(disabled) {
+    try {
+      if (disabled) localStorage.setItem(RISK_WARNING_DISABLED_KEY, '1');
+      else localStorage.removeItem(RISK_WARNING_DISABLED_KEY);
+    } catch (_) { /* 無痕模式可能拒絕 localStorage */ }
+    if (riskPreference) riskPreference.hidden = !disabled;
+  }
+
+  setRiskWarningsDisabled(riskWarningsDisabled());
+  riskPreferenceReset?.addEventListener('click', () => {
+    setRiskWarningsDisabled(false);
+    AppShared.showToast('已重新啟用 YouTube 匯入警告', 'success');
+  });
+
+  function formatDuration(seconds) {
+    const value = Math.max(0, Math.round(Number(seconds) || 0));
+    return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
+  }
+
+  function confirmRiskAssessment(assessment) {
+    if (!assessment?.warning || riskWarningsDisabled()) return Promise.resolve(true);
+    const modal = document.getElementById('youtube-risk-modal');
+    if (!modal) return Promise.resolve(window.confirm((assessment.warnings || []).join('\n')));
+    const title = document.getElementById('youtube-risk-title');
+    const author = document.getElementById('youtube-risk-author');
+    const duration = document.getElementById('youtube-risk-duration');
+    const warnings = document.getElementById('youtube-risk-reasons');
+    const thumbnail = document.getElementById('youtube-risk-thumbnail');
+    const remember = document.getElementById('youtube-risk-disable');
+    const skip = document.getElementById('youtube-risk-skip');
+    const proceed = document.getElementById('youtube-risk-proceed');
+    title.textContent = assessment.title || '無法取得影片標題';
+    author.textContent = assessment.author || '未知頻道';
+    duration.textContent = assessment.duration > 0 ? formatDuration(assessment.duration) : '時長未知';
+    warnings.textContent = '';
+    for (const reason of assessment.warnings || ['無法確認影片是否適合匯入']) {
+      const item = document.createElement('li'); item.textContent = reason; warnings.appendChild(item);
+    }
+    thumbnail.hidden = !assessment.thumbnail;
+    if (assessment.thumbnail) thumbnail.src = assessment.thumbnail;
+    remember.checked = false;
+    modal.hidden = false;
+    return new Promise((resolve) => {
+      const finish = (allowed) => {
+        if (remember.checked) setRiskWarningsDisabled(true);
+        modal.hidden = true;
+        skip.removeEventListener('click', onSkip);
+        proceed.removeEventListener('click', onProceed);
+        modal.removeEventListener('click', onBackdrop);
+        resolve(allowed);
+      };
+      const onSkip = () => finish(false);
+      const onProceed = () => finish(true);
+      const onBackdrop = (event) => { if (event.target === modal) finish(false); };
+      skip.addEventListener('click', onSkip);
+      proceed.addEventListener('click', onProceed);
+      modal.addEventListener('click', onBackdrop);
+      proceed.focus();
+    });
+  }
+
+  async function inspectImport(job) {
+    if (job.assessment) return job.assessment;
+    updateJob(job, { stage: '正在檢查影片', message: '正在檢查時長與內容類型' });
+    const response = await PinAuth.fetchWithPin('/api/youtube/inspect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: job.url, requestId: job.requestId }),
+    });
+    const data = await response.json();
+    if (response.ok && data.success && data.assessment) return data.assessment;
+    if (data.code === 'IMPORT_CANCELLED') {
+      const cancelled = new Error(data.error || '匯入已取消');
+      cancelled.code = 'IMPORT_CANCELLED';
+      throw cancelled;
+    }
+    return {
+      warning: true,
+      warningTypes: ['metadata-unavailable'],
+      warnings: [`無法在下載前確認影片資訊：${data.error || '未知原因'}`],
+      title: job.label,
+      author: '', duration: 0, thumbnail: '',
+    };
+  }
 
   function jobLabel(url, source) {
     try {
@@ -264,7 +339,13 @@
   async function cancelImportJob(job) {
     if (job.status === 'queued') { cancelQueuedJob(job); return; }
     if (job !== activeImportJob || !job.requestId) return;
-    updateJob(job, { status: 'cancelling', message: '正在停止下載…' });
+    job.cancelRequested = true;
+    if (job.stage === '等待使用者確認') {
+      updateJob(job, { status: 'cancelling', message: '將略過這項匯入' });
+      document.getElementById('youtube-risk-skip')?.click();
+      return;
+    }
+    updateJob(job, { status: 'cancelling', message: '正在停止匯入…' });
     try {
       const response = await PinAuth.fetchWithPin('/api/youtube/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: job.requestId }),
@@ -305,7 +386,9 @@
     return new Promise((resolve, reject) => {
       const job = {
         id: `work-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        url, source: options.source || 'YouTube', label: jobLabel(url, options.source),
+        url, source: options.source || 'YouTube', label: options.label || jobLabel(url, options.source),
+        replaceTrackId: options.replaceTrackId || null,
+        assessment: options.assessment || null,
         status: 'queued', stage: '等待中', percent: 0, resolve, reject, createdAt: Date.now(),
       };
       ytImportQueue.push(job);
@@ -334,6 +417,14 @@
       updateJob(job, { status: 'active', requestId, stage: '準備匯入', message: '準備匯入', percent: 0 });
       updateYtQueueProgress();
       try {
+        const assessment = await inspectImport(job);
+        if (job.cancelRequested) { const cancelled = new Error('匯入已取消'); cancelled.code = 'IMPORT_CANCELLED'; throw cancelled; }
+        if (assessment?.warning && !riskWarningsDisabled()) updateJob(job, { stage: '等待使用者確認', message: '需要確認影片資訊' });
+        const allowed = await confirmRiskAssessment(assessment);
+        if (!allowed) {
+          const skipped = new Error('已略過有警告的影片'); skipped.code = 'IMPORT_SKIPPED'; throw skipped;
+        }
+        updateJob(job, { status: 'active', stage: '準備下載', message: '已通過匯入檢查' });
         activeRequestIds.add(requestId);
         const res = await PinAuth.fetchWithPin('/api/youtube', {
           method: 'POST',
@@ -342,9 +433,30 @@
         });
         const data = await res.json();
         if (res.ok && data.success && data.track) {
-          state.playlist.push(data.track);
+          if (job.replaceTrackId) {
+            const index = state.playlist.findIndex((track) => track.id === job.replaceTrackId);
+            if (index >= 0) {
+              const previous = state.playlist[index];
+              data.track = {
+                ...data.track,
+                ...previous,
+                filename: data.track.filename,
+                duration: data.track.duration || previous.duration,
+                cover: data.track.cover || previous.cover,
+              };
+              state.playlist.splice(index, 1, data.track);
+              SocketClient.sendWithCallback('playlist:update', state.playlist, (result) => {
+                if (!result?.ok) AppShared.showToast(`重新下載後更新清單失敗：${result?.error || '伺服器沒有確認'}`, 'error');
+              });
+            } else {
+              state.playlist.push(data.track);
+              SocketClient.send('playlist:add', [data.track]);
+            }
+          } else {
+            state.playlist.push(data.track);
+            SocketClient.send('playlist:add', [data.track]);
+          }
           AppShared.renderPlaylist();
-          SocketClient.send('playlist:add', [data.track]);
           if (state.currentTrackIndex === -1) {
             AppShared.playTrack(state.playlist.length - 1, false); // 匯入後載入待命，不自動播放
           }
@@ -366,9 +478,14 @@
           job.reject(error);
         }
       } catch (err) {
-        AppShared.showToast('YouTube 匯入失敗：' + err.message, 'error');
-        fail++;
-        updateJob(job, { status: err.code === 'IMPORT_CANCELLED' ? 'cancelled' : 'failed', stage: '失敗', message: err.message, errorCode: err.code || 'NETWORK_ERROR' });
+        const intentionallyStopped = err.code === 'IMPORT_CANCELLED' || err.code === 'IMPORT_SKIPPED';
+        if (!intentionallyStopped) AppShared.showToast('YouTube 匯入失敗：' + err.message, 'error');
+        if (!intentionallyStopped) fail++;
+        updateJob(job, {
+          status: intentionallyStopped ? 'cancelled' : 'failed',
+          stage: err.code === 'IMPORT_SKIPPED' ? '已略過' : err.code === 'IMPORT_CANCELLED' ? '已取消' : '失敗',
+          message: err.message, errorCode: err.code || 'NETWORK_ERROR',
+        });
         job.reject(err);
       } finally {
         activeRequestIds.delete(requestId);

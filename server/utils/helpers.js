@@ -21,11 +21,15 @@ function delay(ms) {
  */
 async function fetchWithTimeout(url, options = {}, timeout = 10000) {
   const controller = new AbortController();
+  const externalSignal = options.signal;
+  const forwardAbort = () => controller.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) forwardAbort();
+  else externalSignal?.addEventListener('abort', forwardAbort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
     // 移除 node-fetch v2 不支援的 timeout 選項，改用 AbortController
-    const { timeout: _ignored, ...fetchOptions } = options;
+    const { timeout: _ignored, signal: _externalSignal, ...fetchOptions } = options;
     const response = await fetch(url, {
       ...fetchOptions,
       signal: controller.signal,
@@ -33,11 +37,13 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
     return response;
   } catch (err) {
     if (err.name === 'AbortError') {
+      if (externalSignal?.aborted) throw err;
       throw new Error(`network timeout at: ${url}`);
     }
     throw err;
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', forwardAbort);
   }
 }
 

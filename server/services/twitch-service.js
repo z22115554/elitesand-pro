@@ -10,7 +10,6 @@ const crypto = require('crypto');
 const { parseYouTubeUrl } = require('../utils/youtube-url');
 const AudioProcessor = require('./audio-processor');
 const MAX_PENDING_REQUESTS = 20;
-const LONG_VIDEO_SECONDS = 15 * 60;
 const fetch = require('node-fetch');
 const store = require('./twitch-store');
 const requestStore = require('./twitch-request-store');
@@ -110,6 +109,16 @@ class TwitchService {
       videoId: String(request.videoId || ''),
       duration: Number(request.duration) || 0,
       durationWarning: !!request.durationWarning,
+      assessment: request.assessment && typeof request.assessment === 'object' ? {
+        warning: !!request.assessment.warning,
+        warningTypes: Array.isArray(request.assessment.warningTypes) ? request.assessment.warningTypes.map(String).slice(0, 3) : [],
+        warnings: Array.isArray(request.assessment.warnings) ? request.assessment.warnings.map(value => String(value).slice(0, 300)).slice(0, 3) : [],
+        duration: Number(request.assessment.duration) || 0,
+        title: String(request.assessment.title || '').slice(0, 300),
+        author: String(request.assessment.author || '').slice(0, 200),
+        thumbnail: String(request.assessment.thumbnail || '').slice(0, 500),
+        categories: Array.isArray(request.assessment.categories) ? request.assessment.categories.map(value => String(value).slice(0, 100)).slice(0, 5) : [],
+      } : null,
       createdAt: Number(request.createdAt) || Date.now(),
       expiresAt: Number(request.expiresAt) || Date.now() + REQUEST_TTL_MS,
       event: {
@@ -393,14 +402,14 @@ class TwitchService {
       metadataAvailable: false,
     };
     try {
-      const data = await AudioProcessor.getVideoInfo(url);
-      if (!data) return fallback;
+      const assessment = await AudioProcessor.inspectYouTube(url);
       return {
-        title: String(data.title || fallback.title).slice(0, 300),
-        author: String(data.channel || data.uploader || '').slice(0, 200),
-        thumbnail: /^https:\/\//i.test(String(data.thumbnail || '')) ? String(data.thumbnail) : '',
-        duration: Number(data.duration) || 0,
-        metadataAvailable: !!data.title,
+        title: String(assessment.title || fallback.title).slice(0, 300),
+        author: String(assessment.author || '').slice(0, 200),
+        thumbnail: assessment.thumbnail || '',
+        duration: Number(assessment.duration) || 0,
+        metadataAvailable: !!assessment.title,
+        assessment,
       };
     } catch (err) {
       log.warn(`YouTube 點歌資訊讀取失敗：${err.message}`);
@@ -434,7 +443,8 @@ class TwitchService {
       metadataAvailable: metadata.metadataAvailable,
       videoId: parsedUrl.videoId,
       duration: metadata.duration || 0,
-      durationWarning: metadata.duration > LONG_VIDEO_SECONDS,
+      durationWarning: !!metadata.assessment?.warningTypes?.includes('too-long'),
+      assessment: metadata.assessment || null,
     };
     const accepted = this.onSongRequest(request);
     if (!accepted) {

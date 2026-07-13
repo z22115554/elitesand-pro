@@ -17,6 +17,22 @@ const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema'
 const libraryStore = require('../services/library-store');
 
 const log = createLogger('State');
+const STATE_SYNC_WARN_BYTES = 512 * 1024;
+const STATE_SYNC_LOG_EVERY = 100;
+const STATE_SYNC_WARN_INTERVAL_MS = 60 * 1000;
+
+function getDefaultLyricSettings() {
+  return {
+    template: 'classic',
+    lyricTemplateSettings: {
+      classic: { template: 'classic', fontSize: 56, color: '#8f8f8f', activeColor: '#febc6c', verticalPosition: 'flex-end' },
+      luminous: { template: 'luminous', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
+      partita: { template: 'partita', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
+      mindscape: { template: 'mindscape', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
+      ktv: { template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
+    },
+  };
+}
 
 // 場景版 setlist 版型（各自持有一份獨立外觀設定；其餘版型共用 shared 份）
 const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
@@ -26,6 +42,14 @@ const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
  * @param {import('socket.io').Server} io - 廣播用
  */
 function createAppState(io) {
+  const stateSyncMetrics = {
+    samples: 0,
+    lastBytes: 0,
+    maxBytes: 0,
+    lastPlaylistLength: 0,
+    lastMeasuredAt: null,
+    lastWarnedAt: 0,
+  };
   // ─── 全局播放狀態 ───
   const playState = {
     currentTrack: null,
@@ -44,7 +68,7 @@ function createAppState(io) {
     pitchShift: 0,      // 半音偏移，-12 ~ +12
     playbackRate: 1.0,   // 播放速率，0.5 ~ 1.5
     metronomeEnabled: true, // 前奏倒數提示開關
-    lyricSettings: {},      // 歌詞外觀/位置設定（由控制面板推送）
+    lyricSettings: getDefaultLyricSettings(), // 歌詞外觀/位置設定（由控制面板推送）
     styleOverrides: {},     // 動畫風格微調（速度/放大/光暈等，覆蓋當前 preset）
     setlistTheme: 'glass',  // 直播歌單 OBS 外觀主題（glass/neon/minimal）
     setlistLayout: 'classic', // 直播歌單版型
@@ -235,7 +259,28 @@ function createAppState(io) {
   /** 廣播完整播放狀態給所有客戶端 */
   function broadcastState() {
     playState.lastStateUpdateTimestamp = Date.now();
-    io.emit('state:sync', getPublicState());
+    const payload = getPublicState();
+    const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    const measuredAt = Date.now();
+    stateSyncMetrics.samples += 1;
+    stateSyncMetrics.lastBytes = bytes;
+    stateSyncMetrics.maxBytes = Math.max(stateSyncMetrics.maxBytes, bytes);
+    stateSyncMetrics.lastPlaylistLength = payload.playlist.length;
+    stateSyncMetrics.lastMeasuredAt = measuredAt;
+
+    if (stateSyncMetrics.samples === 1 || stateSyncMetrics.samples % STATE_SYNC_LOG_EVERY === 0) {
+      log.info(`state:sync payload ${bytes} bytes（playlist=${payload.playlist.length}, sample=${stateSyncMetrics.samples}）`);
+    }
+    if (bytes >= STATE_SYNC_WARN_BYTES && measuredAt - stateSyncMetrics.lastWarnedAt >= STATE_SYNC_WARN_INTERVAL_MS) {
+      stateSyncMetrics.lastWarnedAt = measuredAt;
+      log.warn(`state:sync payload 已達 ${bytes} bytes（playlist=${payload.playlist.length}），P2 應評估拆分同步事件`);
+    }
+
+    io.emit('state:sync', payload);
+  }
+
+  function getStateSyncMetrics() {
+    return { ...stateSyncMetrics };
   }
 
   /** 取得可公開的播放狀態（含 offset 和手動歌詞標記） */
@@ -325,6 +370,7 @@ function createAppState(io) {
     emitSetlist,
     recordSessionSong,
     broadcastState,
+    getStateSyncMetrics,
     getPublicState,
     getFullRecoveryState,
     getEffectiveLyrics,
