@@ -1094,10 +1094,58 @@ test('啟動恢復提示延遲到第一個桌面控制面板連線', () => {
 // ═══════════════════════════════════════════
 console.log('\n📦 9. 歌詞選擇器與歌詞設定');
 // ═══════════════════════════════════════════
-const { LyricsEngine, LYRICS_SOURCE_PRIORITY } = require('../server/services/lyrics-engine');
+const { LyricsEngine, LYRICS_SOURCE_PRIORITY, cacheEntryIsFresh } = require('../server/services/lyrics-engine');
+const { ProviderHealthRegistry } = require('../server/services/provider-health');
 
 test('自動歌詞來源優先序符合設定', () => {
   eq(LYRICS_SOURCE_PRIORITY.join('>'), 'betterlyrics>paxsenix>kugou>qqmusic>lrclib>netease');
+});
+
+test('歌詞 negative cache 使用 24 小時、正常結果沿用一般 TTL', () => {
+  const now = Date.now();
+  ok(cacheEntryIsFresh({ result: null, negative: true, timestamp: now - 23 * 60 * 60 * 1000 }, now));
+  ok(!cacheEntryIsFresh({ result: null, negative: true, timestamp: now - 25 * 60 * 60 * 1000 }, now));
+  ok(cacheEntryIsFresh({ result: { lyrics: 'ok' }, timestamp: now - 25 * 60 * 60 * 1000 }, now));
+});
+
+test('找不到歌詞會命中 negative cache，不重打六個來源', () => {
+  const tempData = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-lyrics-negative-'));
+  const enginePath = path.join(__dirname, '..', 'server', 'services', 'lyrics-engine.js');
+  const script = `
+    const { LyricsEngine, LYRICS_SOURCE_PRIORITY } = require(process.argv[1]);
+    const method = { betterlyrics:'searchBetterLyrics', paxsenix:'searchPaxsenix', kugou:'searchKugou', qqmusic:'searchQQMusic', lrclib:'searchLrclib', netease:'searchNetease' };
+    let calls = 0;
+    for (const name of LYRICS_SOURCE_PRIORITY) LyricsEngine[method[name]] = async () => { calls += 1; return null; };
+    (async () => { await LyricsEngine.search('cache-test', 'missing', 123, false); await LyricsEngine.search('cache-test', 'missing', 123, false); process.stdout.write('__RESULT__' + calls); process.exit(0); })();
+  `;
+  try {
+    const result = require('child_process').spawnSync(process.execPath, ['-e', script, enginePath], {
+      encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: tempData }, timeout: 10000,
+    });
+    eq(result.status, 0, result.stderr || 'negative cache 子程序失敗: ');
+    eq(Number((result.stdout.split('__RESULT__')[1] || '').trim()), 6);
+  } finally { fs.rmSync(tempData, { recursive: true, force: true }); }
+});
+
+testAsync('歌詞來源連續失敗會暫停，冷卻後自動恢復', async () => {
+  let now = 1000;
+  const health = new ProviderHealthRegistry({ failureThreshold: 2, cooldownMs: 100, timeoutMs: 50, now: () => now });
+  await health.execute('fixture', async () => { throw new Error('offline'); });
+  await health.execute('fixture', async () => { throw new Error('offline'); });
+  eq(health.snapshot(['fixture'])[0].state, 'paused');
+  const skipped = await health.execute('fixture', async () => ({ lyrics: '不應執行' }));
+  eq(skipped.status, 'skipped');
+  now += 101;
+  const recovered = await health.execute('fixture', async () => ({ lyrics: '[00:00.00]ok' }));
+  eq(recovered.status, 'success');
+  eq(health.snapshot(['fixture'])[0].state, 'available');
+});
+
+testAsync('歌詞來源逾時會被統計為 timeout', async () => {
+  const health = new ProviderHealthRegistry({ timeoutMs: 5 });
+  const result = await health.execute('slow', () => new Promise(() => {}));
+  eq(result.status, 'timeout');
+  eq(health.snapshot(['slow'])[0].timeouts, 1);
 });
 
 testAsync('searchAllSources 離線時回傳空陣列不崩潰', async () => {

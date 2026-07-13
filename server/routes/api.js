@@ -475,10 +475,10 @@ router.post('/lyrics/search', requirePin, async (req, res) => {
     if (result) {
       log.info(`歌詞搜尋成功: ${title} (來源: ${result.source}, 耗時: ${searchDuration}ms)`);
       log.perf('lyrics-search', searchDuration, { title, source: result.source });
-      res.json({ success: true, ...result });
+      res.json({ success: true, ...result, providerHealth: LyricsEngine.getProviderHealth() });
     } else {
       log.info(`歌詞搜尋未找到結果: ${title} (耗時: ${searchDuration}ms)`);
-      res.json({ success: false, message: '找不到歌詞' });
+      res.json({ success: false, message: '找不到歌詞', providerHealth: LyricsEngine.getProviderHealth() });
     }
   } catch (err) {
     const duration = Date.now() - start;
@@ -510,7 +510,7 @@ router.post('/lyrics/candidates', requirePin, async (req, res) => {
     const candidates = await LyricsEngine.searchAllSources(artist || '', title, duration || 0);
     log.info(`歌詞選擇器：回傳 ${candidates.length} 個候選 (耗時: ${Date.now() - start}ms)`);
 
-    res.json({ success: true, candidates });
+    res.json({ success: true, candidates, providerHealth: LyricsEngine.getProviderHealth() });
   } catch (err) {
     log.error(`歌詞選擇器查詢失敗 (${Date.now() - start}ms)`, err);
     res.status(500).json({ error: '歌詞選擇器查詢失敗' });

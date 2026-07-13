@@ -986,16 +986,31 @@
       .then(data => {
         if (!data.success || !Array.isArray(data.candidates) || data.candidates.length === 0) {
           body.innerHTML = '<div class="picker-empty">沒有找到任何來源的歌詞<br>試試只填歌名、或改用「貼上歌詞」手動輸入</div>';
+          renderProviderHealth(body, data.providerHealth);
           return;
         }
-        renderCandidates(body, data.candidates);
+        renderCandidates(body, data.candidates, data.providerHealth);
       })
       .catch(err => {
         body.innerHTML = `<div class="picker-empty">查詢失敗：${escapeHtml(err.message)}</div>`;
       });
   }
 
-  function renderCandidates(body, candidates) {
+  function renderProviderHealth(body, health) {
+    if (!Array.isArray(health)) return;
+    const paused = health.filter(item => item.state === 'paused');
+    const timeouts = health.reduce((sum, item) => sum + (Number(item.timeouts) || 0), 0);
+    if (paused.length === 0 && timeouts === 0) return;
+    const notice = document.createElement('div');
+    notice.className = 'picker-health-notice';
+    const parts = [];
+    if (paused.length) parts.push(`${paused.length} 個來源暫時休息，稍後會自動重試`);
+    if (timeouts) parts.push(`本次執行已記錄 ${timeouts} 次逾時`);
+    notice.textContent = parts.join('；');
+    body.prepend(notice);
+  }
+
+  function renderCandidates(body, candidates, health) {
     body.innerHTML = '';
     candidates.forEach((c) => {
       const el = document.createElement('div');
@@ -1026,6 +1041,7 @@
 
       body.appendChild(el);
     });
+    renderProviderHealth(body, health);
   }
 
   function applyCandidate(candidate) {
