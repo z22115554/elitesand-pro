@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createLogger } = require('../utils/logger');
+const { createJsonStore } = require('./json-store');
 const log = createLogger('Library');
 const { sanitizeTrack } = require('../utils/track-schema');
 
@@ -19,18 +20,21 @@ let library = {}; // { [id]: { id, url, title, artist, cover, duration, source, 
 let _saveTimer = null;
 let _errorReporter = null;
 
+const libraryDiskStore = createJsonStore({
+  file: LIBRARY_FILE,
+  label: '媒體庫',
+  defaultValue: () => ({}),
+  migrations: new Map([[0, (legacy) => ({ schemaVersion: 1, entries: legacy })]]),
+  serialize: (entries) => ({ entries }),
+  deserialize: (document) => document.entries,
+  validate: (document) => document.entries && typeof document.entries === 'object' && !Array.isArray(document.entries),
+  logger: log,
+  onError: (error) => _errorReporter?.({ area: '媒體庫保存', message: error.message }),
+});
+
 (function load() {
-  try {
-    if (!fs.existsSync(LIBRARY_FILE)) return;
-    const raw = JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf-8'));
-    if (raw && typeof raw === 'object') {
-      library = raw;
-      log.info(`媒體庫已載入: ${Object.keys(library).length} 首`);
-    }
-  } catch (err) {
-    log.warn(`媒體庫載入失敗（將重建）: ${err.message}`);
-    library = {};
-  }
+  library = libraryDiskStore.load() || {};
+  log.info(`媒體庫已載入: ${Object.keys(library).length} 首`);
 })();
 
 function scheduleSave() {
@@ -41,7 +45,6 @@ function scheduleSave() {
 function saveNow() {
   _saveTimer = null;
   try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     // 超量時淘汰最少播放 + 最舊的
     let ids = Object.keys(library);
     if (ids.length > MAX_ENTRIES) {
@@ -50,9 +53,7 @@ function saveNow() {
       for (const id of ids.slice(0, MAX_ENTRIES)) keep[id] = library[id];
       library = keep;
     }
-    const tmp = LIBRARY_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(library), 'utf-8');
-    fs.renameSync(tmp, LIBRARY_FILE);
+    libraryDiskStore.save(library);
   } catch (err) {
     log.warn(`媒體庫寫入失敗: ${err.message}`);
     if (_errorReporter) _errorReporter({ area: '媒體庫保存', message: err.message });
