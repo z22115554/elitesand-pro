@@ -9,6 +9,7 @@
     "dev": "node --watch server/index.js",
     "test": "node tests/run-tests.js",
     "smoke:portable": "node tools/smoke-portable.js",
+    "smoke:reliability": "node tools/reliability-smoke.js",
     "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-portable.ps1",
     "package:update": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-update.ps1"
   },
