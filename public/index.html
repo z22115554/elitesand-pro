@@ -1,0 +1,1803 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1B141F">
+  <title>Elitesand Pro 控制面板</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/panel.css">
+</head>
+<body>
+  <div id="connection-banner" class="connection-banner">與伺服器連線中斷，重新連線中…</div>
+  <div id="announcement-banner" class="announcement-banner" hidden>
+    <div>
+      <strong id="announcement-banner-title"></strong>
+      <span id="announcement-banner-message"></span>
+    </div>
+    <div class="announcement-actions">
+      <a id="announcement-banner-link" class="btn btn-sm" target="_blank" rel="noopener noreferrer" hidden></a>
+      <button id="announcement-banner-close" class="btn btn-sm btn-ghost" type="button" hidden>關閉</button>
+    </div>
+  </div>
+
+  <div class="app">
+    <!-- ═══ 左側導覽欄（Discord 式）═══ -->
+    <nav class="sidebar">
+      <div class="sidebar-logo" title="Elitesand Pro"></div>
+      <div class="nav-group">
+        <button class="nav-item active" data-nav="karaoke" type="button" title="首頁">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+          <span class="nav-label">首頁</span>
+        </button>
+        <button class="nav-item" data-nav="library" type="button" title="媒體庫">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+          <span class="nav-label">媒體庫</span>
+        </button>
+        <button class="nav-item" data-nav="settings" type="button" title="歌詞設定">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          <span class="nav-label">歌詞設定</span>
+        </button>
+        <button class="nav-item" data-nav="setlist" type="button" title="直播歌單">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          <span class="nav-label">歌單</span>
+        </button>
+        <button class="nav-item" data-nav="twitch" type="button" title="Twitch 點歌">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14v11a4 4 0 0 1-4 4h-3l-3 2v-2H9a4 4 0 0 1-4-4z"/><path d="M9 8v4M15 8v4"/></svg>
+          <span class="nav-label">點歌</span>
+          <span id="twitch-nav-badge" class="pi-badge" hidden>0</span>
+        </button>
+
+        <!-- ═══ 預留導覽項（之後上線商城/會員時，移除 hidden 即啟用）═══ -->
+        <button class="nav-item" data-nav="templates" type="button" title="模板" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span class="nav-label">模板</span>
+        </button>
+        <button class="nav-item" data-nav="marketplace" type="button" title="商城" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          <span class="nav-label">商城</span>
+        </button>
+      </div>
+
+      <div class="nav-spacer"></div>
+
+      <div class="nav-group">
+        <button class="nav-item" data-nav="general" type="button" title="一般設定">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span class="nav-label">一般設定</span>
+        </button>
+        <!-- 預留：使用者個人檔案（之後啟用）-->
+        <button class="nav-item" data-nav="account" type="button" title="帳號" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span class="nav-label">帳號</span>
+        </button>
+        <button id="btn-open-help" class="nav-item" type="button" title="新手教學">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span class="nav-label">教學</span>
+        </button>
+        <button class="theme-toggle nav-item" type="button" title="切換主題" aria-label="切換主題" style="width:52px;height:52px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- ═══ 主內容區 ═══ -->
+    <div class="main">
+      <header class="topbar">
+        <div class="page-title">首頁</div>
+        <div class="right">
+          <div class="topbar-obs-links" aria-label="OBS 來源網址">
+            <button id="copy-obs-url-top" class="topbar-link-btn" type="button">歌詞網址</button>
+            <button id="copy-setlist-url-top" class="topbar-link-btn" type="button">歌單網址</button>
+          </div>
+          <div class="obs-source-status" aria-label="OBS 來源連線狀態">
+            <span id="display-source-status" class="source-pill disconnected">歌詞未連線</span>
+            <span id="setlist-source-status" class="source-pill disconnected">歌單未連線</span>
+          </div>
+          <span class="conn">
+            <span id="connection-status" class="status-dot disconnected"></span>
+            <span id="connection-text">連線中</span>
+          </span>
+        </div>
+      </header>
+
+      <!-- 迷你播放器：切到媒體庫/設定/歌單頁時仍可切歌/播放/暫停＋拖曳進度（見 nav.js 的 view:change 監聽） -->
+      <div id="mini-player" class="mini-player" hidden>
+        <div class="mini-player-main">
+          <div id="mini-player-art" class="mini-player-art empty"></div>
+          <div class="mini-player-info">
+            <div id="mini-player-title" class="mini-player-title">尚未播放</div>
+            <div id="mini-player-artist" class="mini-player-artist"></div>
+          </div>
+          <div class="mini-player-controls">
+            <button id="mini-btn-prev" class="btn-step" type="button" aria-label="上一首">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6v12l-9-6z"/></svg>
+            </button>
+            <button id="mini-btn-play" class="btn-play" type="button" aria-label="播放或暫停">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button id="mini-btn-next" class="btn-step" type="button" aria-label="下一首">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6l9 6-9 6z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="mini-player-progress">
+          <span id="mini-time-current" class="mini-time">0:00</span>
+          <div id="mini-progress-track" class="mini-progress-track">
+            <div class="progress-fill"></div>
+            <div id="mini-progress-thumb" class="progress-thumb"></div>
+          </div>
+          <span id="mini-time-total" class="mini-time">0:00</span>
+        </div>
+      </div>
+
+      <div id="update-banner" class="banner" hidden>
+        <span>新版本 <strong id="update-banner-version"></strong> 已發布</span>
+        <a id="update-banner-link" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer">下載更新</a>
+        <button id="update-banner-dismiss" class="btn btn-sm btn-ghost" type="button">關閉</button>
+      </div>
+
+      <div class="content">
+        <!-- ═══ 視圖：歌詞控制 ═══ -->
+        <div class="view is-active content-col" data-view="karaoke">
+          <!-- Onboarding 提示（首次使用，可關閉，記憶於 localStorage）-->
+          <div id="onboard-hint" class="onboard-hint" hidden>
+            <span class="oh-dot"></span>
+            <span class="oh-text">歡迎使用 Elitesand Pro！先從下方「音樂來源」上傳檔案或貼上 YouTube 連結，再把右側的 OBS 來源網址加進 OBS 即可開始。<button id="onboard-open-help" class="oh-link" type="button">查看完整新手教學 →</button></span>
+            <button id="onboard-close" class="oh-close" type="button" aria-label="關閉提示">×</button>
+          </div>
+
+          <!-- Spotify 式 Now Playing -->
+          <section class="now-playing-hero">
+            <div class="np-top">
+              <div id="album-art" class="np-art empty"></div>
+              <div class="np-info">
+                <div class="np-eyebrow">正在播放</div>
+                <div id="track-title" class="np-title">尚未播放</div>
+                <div id="track-artist" class="np-artist"></div>
+              </div>
+            </div>
+
+            <div class="progress">
+              <div id="progress-track" class="progress-track">
+                <div class="progress-fill"></div>
+                <div id="progress-thumb" class="progress-thumb"></div>
+              </div>
+              <div class="progress-times">
+                <span id="time-current">0:00</span>
+                <span id="time-total">0:00</span>
+              </div>
+            </div>
+
+            <div class="np-controls">
+              <div class="transport">
+                <button id="btn-prev" class="btn-step" type="button" aria-label="上一首">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6v12l-9-6z"/></svg>
+                </button>
+                <button id="btn-play" class="btn-play" type="button" aria-label="播放或暫停">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </button>
+                <button id="btn-next" class="btn-step" type="button" aria-label="下一首">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6l9 6-9 6z"/></svg>
+                </button>
+              </div>
+              <div class="np-volume">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
+                <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量">
+                <span id="volume-val" class="val">70%</span>
+              </div>
+              <button id="btn-emergency" class="np-emergency" type="button">緊急隱藏</button>
+            </div>
+          </section>
+
+          <!-- 歌詞頁分三區：①播放清單（會變長，獨立一欄）②音樂來源＋時間微調（高度固定）③獨立預覽（置頂跟隨）-->
+          <div class="kara-split">
+          <div class="kara-col kara-col-list">
+          <!-- 播放清單（整合在歌詞頁，直播時不用切換頁面；獨立一欄、可容約 10 首） -->
+          <section class="card playlist-card">
+            <div class="playlist-head">
+              <p class="eyebrow" style="margin:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>播放清單 <span class="val" id="playlist-count" style="margin-left:6px">0 首</span></p>
+              <div style="display:flex;gap:6px">
+                <button id="btn-playlist-import" class="btn btn-sm btn-ghost" type="button">匯入</button>
+                <button id="btn-playlist-export" class="btn btn-sm btn-ghost" type="button">匯出</button>
+                <button id="btn-playlist-clear" class="btn btn-sm btn-ghost btn-danger" type="button">清除全部</button>
+              </div>
+            </div>
+            <div id="playlist" class="playlist">
+              <div class="playlist-empty">尚無歌曲，請上傳檔案或貼上 YouTube 連結</div>
+            </div>
+            <div class="switch-row" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+              <div><div class="label">連續播放</div><div class="sub">一首播完自動播下一首（當純歌詞播放器用）；關閉＝單曲播完即停</div></div>
+              <label class="switch"><input id="continuous-toggle" type="checkbox"><span class="track"></span></label>
+            </div>
+          </section>
+          </div><!-- /.kara-col-list -->
+
+          <div class="kara-col kara-col-ctrl">
+          <!-- 音樂來源 -->
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15V6l-9 2v9"/><circle cx="9" cy="17" r="3"/><circle cx="21" cy="15" r="3"/></svg>音樂來源</p>
+            <div class="segmented source-tabs">
+              <button class="tab-btn active" data-tab="youtube">YouTube</button>
+              <button class="tab-btn" data-tab="local">本機檔案</button>
+            </div>
+            <div id="tab-youtube" class="tab-content active">
+              <div class="field">
+                <label for="yt-url">YouTube 連結</label>
+                <input id="yt-url" class="input" type="text" placeholder="貼上 YouTube 連結">
+              </div>
+              <button id="yt-fetch-btn" class="btn btn-primary" type="button" style="width:100%">匯入音訊</button>
+              <div id="yt-progress" class="val" style="margin-top:8px"></div>
+            </div>
+            <div id="tab-local" class="tab-content">
+              <div id="drop-zone" class="dropzone">
+                <div class="hint">拖放音訊檔案到這裡</div>
+                <div class="sub">支援 MP3 / FLAC / WAV / M4A / OGG</div>
+                <button id="browse-btn" class="btn btn-sm" type="button">選擇檔案</button>
+                <input id="file-input" type="file" accept="audio/*" multiple hidden>
+              </div>
+            </div>
+          </section>
+
+          <!-- 時間與音訊微調（預設展開）-->
+          <details class="card card-collapse" open>
+            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>時間與音訊微調</summary>
+            <div class="card-collapse-body">
+            <div class="field">
+              <label>歌詞時間偏移</label>
+              <button id="offset-align" class="btn btn-primary" type="button" style="width:100%;margin-bottom:8px">🎯 對齊第一句</button>
+              <p class="sub" style="margin:0 0 10px;color:var(--text-faint);font-size:11px;line-height:1.6">播放後，<strong>聽到第一句該唱的瞬間按這顆</strong>，整首歌詞就自動對齊（不必來回微調）。之後仍可用下方按鈕細調。</p>
+              <div class="offset-row">
+                <button id="offset-minus05" class="btn btn-sm" type="button">−0.5s</button>
+                <button id="offset-minus01" class="btn btn-sm" type="button">−0.1s</button>
+                <span id="offset-display" class="offset-display">0.0s</span>
+                <button id="offset-plus01" class="btn btn-sm" type="button">+0.1s</button>
+                <button id="offset-plus05" class="btn btn-sm" type="button">+0.5s</button>
+                <button id="offset-reset" class="btn btn-sm btn-ghost" type="button">歸零</button>
+              </div>
+              <button id="btn-lyrics-timeline" class="btn btn-sm" type="button" style="width:100%;margin-top:8px">逐行時間軸編輯…</button>
+              <p class="field-hint" style="margin-top:6px">「對齊第一句」只能整首一起挪動；如果中段某幾句慢慢跑掉，用這個逐行微調每一行的時間點。</p>
+            </div>
+            <div class="field">
+              <label>變調 / 變速</label>
+              <div class="stepper-row">
+                <span class="sl-label">變調</span>
+                <div class="stepper">
+                  <button id="pitch-down" class="stepper-btn" type="button" aria-label="降一個半音">−</button>
+                  <span id="pitch-value" class="stepper-val">0</span>
+                  <button id="pitch-up" class="stepper-btn" type="button" aria-label="升一個半音">+</button>
+                </div>
+                <button id="pitch-reset" class="btn btn-sm btn-ghost" type="button">重置</button>
+                <input id="pitch-slider" type="range" min="-12" max="12" step="1" value="0" hidden>
+              </div>
+              <div class="stepper-row">
+                <span class="sl-label">變速</span>
+                <div class="stepper">
+                  <button id="speed-down" class="stepper-btn" type="button" aria-label="減速">−</button>
+                  <span id="speed-value" class="stepper-val">1.00x</span>
+                  <button id="speed-up" class="stepper-btn" type="button" aria-label="加速">+</button>
+                </div>
+                <button id="speed-reset" class="btn btn-sm btn-ghost" type="button">重置</button>
+                <input id="speed-slider" type="range" min="0.5" max="1.5" step="0.05" value="1" hidden>
+              </div>
+            </div>
+            </div>
+          </details>
+          </div><!-- /.kara-col-ctrl -->
+
+          <!-- 右區：獨立預覽（高、sticky 跟隨捲動）-->
+          <div class="kara-right">
+          <section class="card kara-preview-card">
+            <div class="playlist-head">
+              <p class="eyebrow" style="margin:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>歌詞即時預覽</p>
+              <div style="display:flex;gap:8px">
+                <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost" type="button">示範歌詞</button>
+                <button id="btn-lyrics-picker" class="btn btn-sm" type="button">選擇來源</button>
+                <button id="btn-paste-lyrics" class="btn btn-sm btn-ghost" type="button">貼上歌詞</button>
+              </div>
+            </div>
+            <!-- 內嵌 OBS 顯示端（preview 模式：緊急隱藏時面板仍看得到）-->
+            <div class="obs-preview-wrap">
+              <iframe id="obs-preview" class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
+              <div class="obs-preview-tag">這就是 OBS 輸出的畫面</div>
+            </div>
+            <details class="collapse" style="margin-top:10px">
+              <summary>歌詞純文字 / 上傳覆蓋</summary>
+              <div class="collapse-body">
+                <div id="lyrics-preview" class="lyric-preview-box">
+                  <div class="lyric-preview-empty">尚無歌詞</div>
+                </div>
+                <div id="lyrics-drop-zone" class="dropzone" style="margin-top:12px;padding:16px">
+                  <div class="sub" style="margin:0">拖放 .lrc / .srt 覆蓋目前歌詞</div>
+                  <input id="lyrics-file-input" type="file" accept=".lrc,.srt,.txt" hidden>
+                </div>
+              </div>
+            </details>
+          </section>
+          </div><!-- /.kara-right -->
+          </div><!-- /.kara-split -->
+        </div>
+
+        <!-- ═══ 視圖：顯示設定 ═══ -->
+        <div class="view" data-view="settings">
+          <!-- 即時預覽（鏡像 OBS 輸出，調整下方設定時所見即所得；示範歌詞由歌詞頁按鈕手動載入）
+               sticky 固定在設定頁頂部，往下捲設定時預覽不跟著走（見 .settings-preview-bar CSS） -->
+          <div class="settings-preview-bar">
+            <div class="obs-preview-wrap">
+              <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
+              <div class="obs-preview-tag">即時預覽 · 調整下方設定即時更新</div>
+            </div>
+          </div>
+
+          <!-- 設定卡片區（內層 grid，讓預覽 bar 能 sticky 在其上方）-->
+          <div class="settings-body">
+          <!-- ─── 基礎設定（常用，永遠展開）─── -->
+          <div class="section-divider">基礎設定 <span class="sd-sub">常用：顯示行為、字體、動畫</span></div>
+
+          <!-- 基礎 · 左欄：顯示行為 + 動畫 -->
+          <div class="settings-col">
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>歌詞顯示模式</p>
+            <div id="classic-only-display-mode">
+            <div class="field">
+              <label for="romanization-mode">語言顯示</label>
+              <select id="romanization-mode" class="input">
+                <option value="original">原文</option>
+                <option value="both" selected>原文 + 拼音</option>
+                <option value="xieyin">原文 + 諧音</option>
+                <option value="full">全部（原文＋拼音＋諧音）</option>
+              </select>
+              <p class="field-hint" style="margin-top:6px">諧音（中文近似音）只對日文／韓文有效；中文歌一律只顯示拼音（羅馬字）。</p>
+            </div>
+            <button id="btn-romanization" hidden></button>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">前奏倒數提示</div><div class="sub">第一句歌詞前顯示脈動</div></div>
+              <label class="switch"><input id="metronome-toggle" type="checkbox" checked><span class="track"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">簡轉繁</div><div class="sub">把簡體歌詞顯示成繁體（只轉原文，拼音/諧音不變）。網易雲/QQ 多為簡體時好用</div></div>
+              <label class="switch"><input id="ls-traditional" data-ls-control="convertTraditional" type="checkbox" checked><span class="track"></span></label>
+            </div>
+          </section>
+
+          <!-- ═══ 卡片：動畫風格 ═══ -->
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>動畫風格</p>
+            <div class="field">
+              <label>排版模板</label>
+              <div class="style-thumb-row" id="template-buttons">
+                <button class="style-thumb active" data-template="classic" type="button" title="疊層顯示：歷史行淡出在上方，正在唱的一行在下方">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">層</span></span><span class="style-thumb-label">經典疊層</span>
+                </button>
+                <button class="style-thumb" data-template="luminous" type="button" title="星砂流光：以星砂軌跡串起漂浮文字">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">光</span></span><span class="style-thumb-label">星砂流光</span>
+                </button>
+                <button class="style-thumb" data-template="partita" type="button" title="折光階梯：虛線光尺與切角節點分段進場">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">階</span></span><span class="style-thumb-label">折光階梯</span>
+                </button>
+                <button class="style-thumb" data-template="tilt" type="button" title="斜拍告白：斜體字與節拍底線同步浮現">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">斜</span></span><span class="style-thumb-label">斜拍告白</span>
+                </button>
+                <button class="style-thumb" data-template="mindscape" type="button" title="潮汐心景：呼吸光環中的空間文字">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">象</span></span><span class="style-thumb-label">潮汐心景</span>
+                </button>
+                <button class="style-thumb" data-template="ktv" type="button" title="霓彩伴唱：雙行錯開、逐字掃色與原地倒數">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">唱</span></span><span class="style-thumb-label">霓彩伴唱</span>
+                </button>
+              </div>
+              <p class="field-hint" id="template-desc">「動畫風格」的顏色與發光在各模板通用；波浪／粒子／故障等逐字效果僅適用經典疊層。</p>
+              <div class="lyric-preset-tools" aria-label="歌詞外觀預設">
+                <select id="lyric-preset-select" class="input"><option value="">尚未保存預設</option></select>
+                <button id="lyric-preset-save" class="btn btn-sm" type="button">保存預設</button>
+                <button id="lyric-preset-load" class="btn btn-sm btn-ghost" type="button">套用</button>
+                <button id="lyric-preset-delete" class="btn btn-sm btn-ghost" type="button">刪除</button>
+              </div>
+              <div class="field" id="lyric-pos-field">
+                <label>歌詞位置</label>
+                <!-- 經典疊層：九宮格全畫面定位＋X/Y 細調（從「詳細設定」移過來，同一份 DOM／同一套事件，不是複本）-->
+                <div id="lyric-pos-grid-wrap" hidden>
+                  <div class="pos-head">
+                    <span id="lyric-pos-fine-hint" class="sub" style="color:var(--text-faint);font-size:11px">拖曳選格子，或用下面細調微調</span>
+                    <button id="ls-pos-reset" class="btn btn-sm btn-ghost" type="button">重置位置</button>
+                  </div>
+                  <div class="pos-row">
+                    <div class="pos-grid" id="ls-pos-grid">
+                      <button type="button" data-v="flex-start" data-h="flex-start" aria-label="上 左"></button>
+                      <button type="button" data-v="flex-start" data-h="center" aria-label="上 中"></button>
+                      <button type="button" data-v="flex-start" data-h="flex-end" aria-label="上 右"></button>
+                      <button type="button" data-v="center" data-h="flex-start" aria-label="中 左"></button>
+                      <button type="button" data-v="center" data-h="center" aria-label="正中"></button>
+                      <button type="button" data-v="center" data-h="flex-end" aria-label="中 右"></button>
+                      <button type="button" data-v="flex-end" data-h="flex-start" aria-label="下 左"></button>
+                      <button type="button" data-v="flex-end" data-h="center" aria-label="下 中"></button>
+                      <button type="button" data-v="flex-end" data-h="flex-end" aria-label="下 右"></button>
+                    </div>
+                    <div class="pos-fine">
+                      <div id="ls-offset-x-row" class="slider-row"><span class="sl-label">水平 X</span><input id="ls-offset-x" data-ls-control="offsetX" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-x-val" class="val">0px</span></div>
+                      <div id="ls-offset-y-row" class="slider-row"><span class="sl-label">垂直 Y</span><input id="ls-offset-y" data-ls-control="offsetY" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-y-val" class="val">0px</span></div>
+                    </div>
+                  </div>
+                </div>
+                <!-- 動畫模板：置中/偏左/偏右/左右分散 -->
+                <div class="style-thumb-row" id="lyric-pos-buttons">
+                  <button class="style-thumb active" data-lyric-pos="center" type="button" title="置中：歌詞在畫面正中央（預設）"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label">置中</span></button>
+                  <button class="style-thumb" data-lyric-pos="left" type="button" title="偏左：歌詞集中在畫面左半，右邊留給人物"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label">偏左</span></button>
+                  <button class="style-thumb" data-lyric-pos="right" type="button" title="偏右：歌詞集中在畫面右半，左邊留給人物"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label">偏右</span></button>
+                  <button class="style-thumb" data-lyric-pos="split" type="button" title="左右分散：一句左、一句右交替出現，中間留給人物（經典疊層不支援）"><span class="style-thumb-preview"><span class="style-thumb-char">分</span></span><span class="style-thumb-label">左右分散</span></button>
+                </div>
+                <p class="field-hint" id="lyric-pos-hint">方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。</p>
+              </div>
+              <div class="field" id="intensity-field" hidden>
+                <label>動畫強度</label>
+                <div class="style-thumb-row" id="intensity-buttons">
+                  <button class="style-thumb" data-intensity="calm" type="button" title="沉穩：置中排列、無散射旋轉"><span class="style-thumb-preview"><span class="style-thumb-char">靜</span></span><span class="style-thumb-label">沉穩</span></button>
+                  <button class="style-thumb active" data-intensity="normal" type="button" title="標準：適度散射與旋轉"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label">標準</span></button>
+                  <button class="style-thumb" data-intensity="chaotic" type="button" title="狂放：大幅散射、隨機對齊"><span class="style-thumb-preview"><span class="style-thumb-char">狂</span></span><span class="style-thumb-label">狂放</span></button>
+                </div>
+              </div>
+            </div>
+            <div class="field" id="style-preset-field">
+              <div class="style-thumb-row" id="style-buttons">
+                <button class="style-thumb active" data-style="cute" type="button" title="Q 彈：字像果凍一樣跳進來，粉紅光暈＋粒子"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">可愛</span></button>
+                <button class="style-thumb" data-style="rock" type="button" title="砸落：整行猛力砸進畫面，紅色烈焰光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">搖滾</span></button>
+                <button class="style-thumb" data-style="ballad" type="button" title="漂浮：緩慢淡入、逐字如水波浮現，藍色月光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">抒情</span></button>
+                <button class="style-thumb" data-style="sparkle" type="button" title="綻放：字由小點綻放開來，金粉光暈＋粒子"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">夢幻</span></button>
+                <button class="style-thumb" data-style="dreamy" type="button" title="聚焦：從模糊鬼影慢慢聚焦成形，紫色柔光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">空靈</span></button>
+                <button class="style-thumb" data-style="minimal" type="button" title="字幕感：純淡入、零位移零光效，最安靜"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">簡約</span></button>
+              </div>
+              <button id="btn-style" hidden></button>
+              <p class="field-hint" id="style-desc">每張縮圖的「字」會用該風格的高亮動態跑一次；滑鼠停在上面可看文字說明。</p>
+            </div>
+            <details class="collapse" id="style-tune-field">
+              <summary>風格微調</summary>
+              <div class="collapse-body">
+                <div class="field"><label title="整體動畫快慢：小於 1 變慢、大於 1 變快">動畫速度 <span id="st-speed-val" class="val">1.0x</span></label><input id="st-speed" type="range" min="0.5" max="2" step="0.1" value="1"></div>
+                <div class="field"><label title="唱到的字被放大的倍率">高亮放大（唱到的字）<span id="st-scale-val" class="val">—</span></label><input id="st-scale" type="range" min="1" max="1.4" step="0.01" value="1.15"></div>
+                <div class="field"><label title="新的一行從多遠的下方進場，0＝原地淡入">入場位移（進場距離）<span id="st-yfrom-val" class="val">—</span></label><input id="st-yfrom" type="range" min="0" max="60" step="2" value="30"></div>
+                <div class="field"><label title="進場瞬間的模糊量，越大越夢幻">入場模糊 <span id="st-blur-val" class="val">—</span></label><input id="st-blur" type="range" min="0" max="12" step="1" value="4"></div>
+                <div class="field"><label title="一行裡每個字進場的時間差，0＝整行同時出現">字間錯落（逐字時間差）<span id="st-stagger-val" class="val">—</span></label><input id="st-stagger" type="range" min="0" max="0.12" step="0.005" value="0.03"></div>
+                <div class="switch-row" style="margin-top:2px">
+                  <div><div class="label">粒子效果</div><div class="sub">關閉可減輕負載／更乾淨</div></div>
+                  <label class="switch"><input id="st-particles" type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <button id="st-reset" class="btn btn-sm btn-ghost" type="button">重置微調</button>
+                <p class="sub" style="margin-top:8px;color:var(--text-faint);font-size:11px;line-height:1.6">微調會即時套用到 OBS 並隨風格切換重置。</p>
+              </div>
+            </details>
+          </section>
+
+          </div><!-- /settings-col basic-left -->
+
+          <!-- 基礎 · 右欄：字體 + 羅馬字與諧音 -->
+          <div class="settings-col">
+
+          <!-- ═══ 卡片：字體與顏色 ═══ -->
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>字體與顏色</p>
+            <div class="field">
+              <label>字級 <span id="ls-fontsize-val" class="val">42px</span></label>
+              <input id="ls-fontsize" data-ls-control="fontSize" type="range" min="20" max="96" step="1" value="42">
+            </div>
+            <div class="field" style="display:flex;gap:14px">
+              <div style="flex:1"><label>歌詞文字顏色</label><input id="ls-color" data-ls-control="color" type="color" value="#ffffff"></div>
+              <div style="flex:1"><label>「正在唱那一行」的顏色</label><input id="ls-active-color" data-ls-control="activeColor" type="color" value="#ffd6a5"></div>
+            </div>
+            <p class="field-hint">逐字 KTV 模式下「唱到的字」也是用右邊「正在唱那一行的顏色」；發光效果則在下面「進階效果」裡的「額外發光」統一設定，兩種模式共用。</p>
+            <div class="field">
+              <label for="ls-fontfamily">字體</label>
+              <select id="ls-fontfamily" data-ls-control="fontFamily" class="input">
+                <option value="'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif">Noto Sans（黑體）</option>
+                <option value="'Noto Serif SC', 'Noto Serif JP', serif">Noto Serif（明體）</option>
+                <option value="system-ui, sans-serif">系統字體</option>
+                <option value="ui-monospace, monospace">等寬字體</option>
+                <option value="__custom__">自訂／系統字體…</option>
+              </select>
+              <div id="ls-font-custom-wrap" hidden style="margin-top:8px">
+                <div style="display:flex;gap:8px">
+                  <select id="ls-font-system" class="input" style="flex:1"><option value="">點右側「瀏覽系統字體」載入清單…</option></select>
+                  <button id="ls-font-load" class="btn btn-sm" type="button">瀏覽系統字體</button>
+                </div>
+                <input id="ls-fontfamily-custom" class="input" type="text" placeholder="或手動輸入字體名稱，例如：微軟正黑體" style="margin-top:8px">
+                <div id="ls-fontfamily-hint" class="sub" style="margin-top:6px;color:var(--text-faint);font-size:11px;line-height:1.6">清單由本機字體目錄完整掃描（含只安裝給目前使用者的字體），每個字體以實際樣式顯示。OBS 與此控制台須在同一台電腦才生效；找不到時自動退回 Noto／系統字體。</div>
+              </div>
+            </div>
+            <div class="field">
+              <label for="ls-font-latin">英文／數字字體（選填）</label>
+              <div style="display:flex;gap:8px">
+                <select id="ls-font-latin" class="input" style="flex:1"><option value="">（不指定：英文跟主字體）</option></select>
+                <button id="ls-font-latin-load" class="btn btn-sm" type="button">瀏覽系統字體</button>
+              </div>
+              <input id="ls-font-latin-custom" class="input" type="text" placeholder="或手動輸入英文字體名稱，例如：Montserrat" style="margin-top:8px">
+              <p class="field-hint">讓英文字母和數字永遠用另一套字體（例如中文用圓體、英文用 Montserrat）。中日韓文字不受影響，仍用上面的主字體。</p>
+            </div>
+            <div class="field">
+              <label for="ls-fontweight">字重</label>
+              <select id="ls-fontweight" data-ls-control="fontWeight" class="input">
+                <option value="400">一般</option>
+                <option value="700">粗體</option>
+                <option value="900" selected>極粗</option>
+              </select>
+            </div>
+          </section>
+
+          <!-- ═══ 卡片：羅馬字與諧音（經典疊層專用——其他模板不支援拼音/諧音顯示）═══
+               只有開啟拼音/諧音顯示模式時才相關，預設收合降低資訊量 -->
+          <details class="card card-collapse" id="romaji-xieyin-card">
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5h16v2M9 5v14M15 19h-6"/></svg>羅馬字與諧音</summary>
+            <div class="card-collapse-body">
+            <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">調整拼音（羅馬字）與中文諧音行的顏色與大小。字級為相對主字級的比例。</p>
+            <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+              <div style="flex:1">
+                <label>羅馬字大小 <span id="ls-romaji-size-val" class="val">50%</span></label>
+                <input id="ls-romaji-size" data-ls-control="romajiSize" type="range" min="0.3" max="1" step="0.02" value="0.5">
+              </div>
+              <div><label>羅馬字顏色</label><input id="ls-romaji-color" data-ls-control="romajiColor" type="color" value="#ffffff"></div>
+            </div>
+            <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+              <div style="flex:1">
+                <label>諧音大小 <span id="ls-xieyin-size-val" class="val">92%</span></label>
+                <input id="ls-xieyin-size" data-ls-control="xieyinSize" type="range" min="0.4" max="1.2" step="0.02" value="0.92">
+              </div>
+              <div><label>諧音顏色</label><input id="ls-xieyin-color" data-ls-control="xieyinColor" type="color" value="#ffd6a5"></div>
+            </div>
+            </div>
+          </details>
+
+          </div><!-- /settings-col basic-right -->
+
+          <!-- ─── 進階外觀（獨立視窗）─── -->
+          <div class="section-divider">進階外觀 <span class="sd-sub">位置 · 排版 · 進階效果</span></div>
+
+          <div class="settings-col">
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>詳細外觀設定</p>
+            <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">歌詞位置、排版、當前行放大、歷史行、描邊／陰影／發光／背景框等較少動的設定，集中在獨立視窗（左側即時預覽、右側多欄）。</p>
+            <button id="btn-display-advanced" class="btn" type="button" style="width:100%">詳細設定…（位置 · 排版 · 進階效果）</button>
+            <p class="val" style="margin-top:12px">OBS 網址、手機遙控、yt-dlp、PIN 等已移到側欄「一般設定」。</p>
+          </section>
+          </div>
+
+          <!-- ═══ Modal：歌詞詳細設定（#display-advanced-modal，加寬彈窗：左預覽、右多欄）═══ -->
+          <div id="display-advanced-modal" class="modal modal-wide" hidden>
+            <div class="modal-card">
+              <div class="modal-head"><h3>歌詞詳細設定</h3><button id="display-advanced-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
+              <div class="modal-split">
+                <div class="mw-preview">
+                  <div class="obs-preview-wrap">
+                    <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
+                    <div class="obs-preview-tag">即時預覽</div>
+                  </div>
+                </div>
+                <div class="mw-settings">
+          <!-- ═══ 位置與排版 ═══ -->
+          <details class="card card-collapse">
+            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="3"/></svg>位置與排版</summary>
+            <div class="card-collapse-body">
+            <p class="field-hint" id="lyric-pos-grid-moved-hint" style="margin-top:0">歌詞在畫面上的九宮格定位已搬到「顯示設定」首頁「動畫風格」卡片裡的「歌詞位置」，選經典疊層時會出現。</p>
+            <div id="classic-only-typography">
+            <div class="field">
+              <label for="ls-text-align">文字對齊</label>
+              <select id="ls-text-align" data-ls-control="textAlign" class="input">
+                <option value="left">靠左</option><option value="center" selected>置中</option><option value="right">靠右</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>行高 <span id="ls-line-height-val" class="val">1.30</span></label>
+              <input id="ls-line-height" data-ls-control="lineHeight" type="range" min="1" max="2.4" step="0.05" value="1.3">
+            </div>
+            <div class="field">
+              <label>字距 <span id="ls-letter-spacing-val" class="val">0px</span></label>
+              <input id="ls-letter-spacing" data-ls-control="letterSpacing" type="range" min="-2" max="12" step="0.5" value="0">
+            </div>
+            </div>
+            <details class="collapse">
+              <summary>邊距 · 最大寬度</summary>
+              <div class="collapse-body">
+                <div class="field"><label>左右邊距 <span id="ls-padding-x-val" class="val">60px</span></label><input id="ls-padding-x" data-ls-control="paddingX" type="range" min="0" max="300" step="10" value="60"></div>
+                <div class="field"><label>上下邊距 <span id="ls-padding-y-val" class="val">48px</span></label><input id="ls-padding-y" data-ls-control="paddingY" type="range" min="0" max="300" step="10" value="48"></div>
+                <div class="field"><label>歌詞區最大寬度 <span id="ls-max-width-val" class="val">90%</span></label><input id="ls-max-width" data-ls-control="maxWidth" type="range" min="40" max="100" step="5" value="90"></div>
+              </div>
+            </details>
+            </div>
+          </details>
+
+          <!-- ═══ 進階效果 ═══ -->
+          <details class="card card-collapse">
+            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>進階效果</summary>
+            <div class="card-collapse-body">
+            <div id="classic-only-advanced-effects">
+            <div class="field">
+              <label>當前行放大 <span id="ls-active-scale-val" class="val">1.00×</span></label>
+              <input id="ls-active-scale" data-ls-control="activeScale" type="range" min="1" max="1.8" step="0.05" value="1">
+            </div>
+            <div class="field">
+              <label>保留上一句行數 <span id="ls-history-lines-val" class="val">2</span></label>
+              <input id="ls-history-lines" data-ls-control="historyLines" type="range" min="0" max="6" step="1" value="2">
+            </div>
+            <div class="field">
+              <label>歷史歌詞字級 <span id="ls-history-fontsize-val" class="val">自動</span></label>
+              <input id="ls-history-fontsize" data-ls-control="historyFontSize" type="range" min="0" max="72" step="1" value="0">
+              <p class="val" style="margin-top:4px;color:var(--text-faint);font-size:11px">拉到最左＝自動（主字級的 58%）；往右可獨立指定大小</p>
+            </div>
+            <div class="field">
+              <label>歷史歌詞透明度 <span id="ls-history-opacity-val" class="val">30%</span></label>
+              <input id="ls-history-opacity" data-ls-control="historyOpacity" type="range" min="0" max="1" step="0.05" value="0.3">
+            </div>
+            <details class="collapse">
+              <summary>描邊 · 陰影 · 發光 · 背景</summary>
+              <div class="collapse-body">
+                <p class="field-hint" style="margin-top:0">這四種效果是獨立的四層，由上到下：描邊＝字的外框線、陰影＝字後面的影子、發光＝「正在唱那行」的光暈、背景框＝歌詞後面的色塊。另外「動畫風格」本身也自帶一層高亮光暈（那是風格的一部分，換風格會變）。</p>
+                <div class="field">
+                  <label>文字描邊寬度（所有歌詞行）<span id="ls-stroke-width-val" class="val">0px</span></label>
+                  <input id="ls-stroke-width" data-ls-control="strokeWidth" type="range" min="0" max="6" step="0.5" value="0">
+                </div>
+                <div class="field"><label>描邊顏色</label><input id="ls-stroke-color" data-ls-control="strokeColor" type="color" value="#000000"></div>
+                <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+                  <div style="flex:1">
+                    <label for="ls-shadow">文字陰影（所有歌詞行）</label>
+                    <select id="ls-shadow" class="input">
+                      <option value="none">無</option>
+                      <option value="soft" selected>柔和</option>
+                      <option value="hard">硬陰影</option>
+                      <option value="glow">發光</option>
+                      <option value="outline">外框</option>
+                    </select>
+                  </div>
+                  <div><label>陰影顏色</label><input id="ls-shadow-color" type="color" value="#000000"></div>
+                </div>
+                <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+                  <div style="flex:1">
+                    <label>「正在唱那一行」的額外發光 <span id="ls-glow-strength-val" class="val">關</span></label>
+                    <input id="ls-glow-strength" type="range" min="0" max="40" step="1" value="0">
+                  </div>
+                  <div><label>發光顏色</label><input id="ls-glow-color" type="color" value="#ffd6a5"></div>
+                </div>
+                <p class="field-hint">逐句與逐字 KTV 模式都吃這個設定；強度拉到 0（關）時，逐字模式才會改用「動畫風格」自帶的光暈色。</p>
+                <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+                  <div style="flex:1">
+                    <label>歌詞背景框（半透明色塊）<span id="ls-bg-opacity-val" class="val">關</span></label>
+                    <input id="ls-bg-opacity" type="range" min="0" max="1" step="0.05" value="0">
+                  </div>
+                  <div><label>背景顏色</label><input id="ls-bg-color" type="color" value="#000000"></div>
+                </div>
+              </div>
+            </details>
+            </div>
+            <button id="ls-reset" class="btn btn-sm btn-ghost" type="button" style="margin-top:12px">全部重置為預設</button>
+            </div>
+          </details>
+
+          <!-- ═══ 背景（Phase 4）═══ -->
+          <details class="card card-collapse">
+            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>背景</summary>
+            <div class="card-collapse-body">
+              <p class="field-hint" style="margin-top:0">背景會鋪滿整個 OBS 來源。維持無背景＝透明疊加（預設）。</p>
+              <div class="field" id="display-bg-preview-wrap" hidden>
+                <img id="display-bg-preview" alt="目前背景預覽" style="max-width:100%;max-height:120px;border-radius:8px;display:block;margin-bottom:8px">
+              </div>
+              <div class="field" style="display:flex;gap:8px;flex-wrap:wrap">
+                <label class="btn btn-sm" style="cursor:pointer">
+                  上傳背景圖
+                  <input id="display-bg-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                </label>
+                <button id="display-bg-remove" class="btn btn-sm btn-ghost" type="button">移除背景</button>
+              </div>
+              <div class="field">
+                <label>背景透明度 <span id="display-bg-opacity-val" class="val">100%</span></label>
+                <input id="display-bg-opacity" type="range" min="0" max="1" step="0.05" value="1">
+              </div>
+              <div class="field">
+                <label for="display-bg-fit">顯示方式</label>
+                <select id="display-bg-fit" class="input">
+                  <option value="cover" selected>填滿裁切</option>
+                  <option value="contain">完整顯示</option>
+                  <option value="fill">拉伸鋪滿</option>
+                </select>
+              </div>
+            </div>
+          </details>
+                </div><!-- /.mw-settings -->
+              </div><!-- /.modal-split -->
+            </div><!-- /.modal-card -->
+          </div><!-- /#display-advanced-modal -->
+          </div><!-- /.settings-body -->
+        </div><!-- /view settings -->
+
+        <!-- ═══ 視圖：Twitch 點歌確認（獨立頁，不讓大量 request 撐開首頁）═══ -->
+        <div class="view content-col" data-view="twitch">
+          <section id="twitch-requests" class="card twitch-requests-card">
+            <div class="playlist-head">
+              <div>
+                <p class="eyebrow" style="margin:0">Twitch 點歌確認</p>
+                <p class="sub" style="margin:6px 0 0;color:var(--text-faint);font-size:12px">觀眾的點歌會先排在這裡；確認後才開始下載，拒絕才會通知聊天室。</p>
+              </div>
+              <div><button id="twitch-reject-all" class="btn btn-sm btn-ghost btn-danger" type="button" hidden>拒絕全部</button> <span id="twitch-requests-count" class="val">0</span></div>
+            </div>
+            <div id="twitch-requests-list" class="twitch-requests-list"></div>
+          </section>
+        </div><!-- /view twitch -->
+
+        <!-- ═══ 視圖：一般設定（OBS 網址/連動、手機遙控、yt-dlp、PIN）═══ -->
+        <div class="view content-col" data-view="general">
+          <div class="general-settings-columns">
+          <div class="general-settings-col">
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>OBS 來源網址</p>
+            <div class="obs-url-list">
+              <div><div class="label">歌詞畫面</div><div class="url-field"><code id="obs-url">http://localhost:3000/display</code><button id="copy-obs-url" class="btn btn-sm" type="button">複製</button></div></div>
+              <div><div class="label">歌單畫面</div><div class="url-field"><code id="setlist-url-general">http://localhost:3000/setlist</code><button id="copy-setlist-url-general" class="btn btn-sm" type="button">複製</button></div></div>
+            </div>
+            <p class="val" style="margin-top:10px">在 OBS 新增「瀏覽器」來源後貼上對應網址；或用下方 OBS 連動一次建立兩個來源。</p>
+          </section>
+
+          <!-- ═══ 卡片：OBS 連動（WebSocket）═══
+               連上 OBS 內建 WebSocket 後可「一鍵建立歌詞＋歌單瀏覽器來源」，不用手動複製網址。
+               面板直接連 OBS（預設 127.0.0.1:4455），密碼只留本機、不經伺服器。 -->
+          <details class="card card-collapse" id="obs-ws-card" open>
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>OBS 連動（一鍵建立來源）</summary>
+            <div class="card-collapse-body">
+              <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">在 OBS「工具 → WebSocket 伺服器設定」勾選啟用後，這裡連上就能一鍵把歌詞、歌單來源加進目前場景，尺寸自動吃畫布大小。密碼只留在本機。</p>
+              <div class="field"><label>OBS 位址</label><input id="obs-ws-host" class="input" type="text" value="127.0.0.1" autocomplete="off"></div>
+              <div style="display:flex;gap:10px">
+                <div class="field" style="width:110px"><label>埠號</label><input id="obs-ws-port" class="input" type="number" value="4455" autocomplete="off"></div>
+                <div class="field" style="flex:1"><label>密碼（沒設就留空）</label><input id="obs-ws-password" class="input" type="password" autocomplete="off"></div>
+              </div>
+              <div class="switch-row" style="margin-top:4px">
+                <div><div class="label">連線狀態</div><div class="sub" id="obs-ws-status">未連線</div></div>
+                <button id="obs-ws-connect" class="btn btn-sm" type="button">連線</button>
+              </div>
+              <button id="obs-ws-create" class="btn btn-primary" type="button" style="width:100%;margin-top:10px" disabled>一鍵建立歌詞＋歌單來源</button>
+              <p id="obs-ws-msg" class="val" hidden style="margin-top:10px;white-space:pre-line"></p>
+            </div>
+          </details>
+          </div>
+
+          <!-- ═══ 卡片：手機遙控器 ═══
+               手機瀏覽器打 localhost 連到的是手機自己，要用電腦的區網 IP。
+               這裡把 IP 網址跟 QR code 秀出來，手機同 Wi-Fi 掃碼即可直接開遙控器頁。 -->
+          <div class="general-settings-col">
+          <section class="card" id="lan-info-card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>手機遙控器</p>
+            <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">手機和這台電腦連同一個 Wi-Fi，掃下面的 QR code 或輸入網址，就能用手機遙控播放。<strong>不需要、也不要</strong>開放到外網。</p>
+            <div id="lan-info-loading" class="val">偵測區網位址中…</div>
+            <div id="lan-info-body" hidden style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+              <img id="lan-info-qr" alt="手機遙控器 QR code" width="120" height="120" style="border-radius:8px;background:#fff;padding:6px">
+              <div style="flex:1;min-width:180px">
+                <div class="url-field">
+                  <code id="lan-info-url">—</code>
+                  <button id="copy-lan-url" class="btn btn-sm" type="button">複製</button>
+                </div>
+                <p class="val" style="margin-top:8px">手機瀏覽器打開這個網址（不是 localhost），會自動轉到遙控器頁面。</p>
+              </div>
+            </div>
+            <p id="lan-info-error" class="val" hidden style="color:var(--danger)">找不到區網 IP（可能沒接網路，或只有虛擬網卡）。可在電腦命令提示字元打 <code>ipconfig</code> 手動查詢 IPv4 位址。</p>
+          </section>
+
+          <details class="card card-collapse" id="twitch-card" open>
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3h16v12a4 4 0 0 1-4 4h-3l-4 3v-3H8a4 4 0 0 1-4-4V3z"/><path d="M9 7v4M15 7v4"/></svg>Twitch 開台／聊天室點歌</summary>
+            <div class="card-collapse-body">
+              <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">連接後會以 Twitch 的實際 <code>stream.online</code> 時間自動開始直播歌單；聊天室輸入 <code>!點歌 YouTube連結</code> 會走既有單一下載佇列，完成後才在聊天室回覆成功。</p>
+              <p id="twitch-status" class="val" style="margin:0 0 10px">讀取 Twitch 狀態中…</p>
+              <button id="twitch-connect" class="btn btn-primary" type="button">連接 Twitch</button>
+              <a id="twitch-device-link" class="btn btn-sm" href="#" target="_blank" rel="noopener" hidden style="margin-left:8px">前往 Twitch 輸入代碼</a>
+
+            </div>
+          </details>
+          </div>
+
+          <!-- ═══ 卡片：yt-dlp（YouTube 下載工具）維護 ═══
+               YouTube 會定期改版打斷 yt-dlp，這裡讓使用者一鍵檢查/更新，不必開命令列 -->
+          <div class="general-settings-col">
+          <details class="card card-collapse" id="ytdlp-card" open>
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>YouTube 下載工具（yt-dlp）</summary>
+            <div class="card-collapse-body">
+              <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">YouTube 常改版導致下載失敗，多半是 yt-dlp 該更新了。這裡可直接檢查與更新，不用開命令列。</p>
+              <div class="switch-row">
+                <div><div class="label">目前版本</div><div class="sub" id="ytdlp-version">尚未檢查</div></div>
+                <button id="ytdlp-check-btn" class="btn btn-sm" type="button">檢查更新</button>
+              </div>
+              <div id="ytdlp-update-row" class="switch-row" hidden style="margin-top:8px">
+                <div><div class="label" style="color:var(--accent,#7c9cff)">有新版本可更新</div><div class="sub" id="ytdlp-latest">—</div></div>
+                <button id="ytdlp-update-btn" class="btn btn-sm btn-primary" type="button">立即更新</button>
+              </div>
+              <p id="ytdlp-msg" class="val" hidden style="margin-top:10px;white-space:pre-line"></p>
+            </div>
+          </details>
+
+          <section class="card" id="app-update-card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg>程式更新</p>
+            <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">有新版本時只通知；可選擇「線上更新」只換程式碼（保留你的設定與歌曲、不用下載整包），或下載完整可攜版。絕不自動執行或中斷直播。</p>
+            <div class="switch-row">
+              <div><div class="label">目前版本</div><div class="sub" id="app-version-current">讀取中…</div></div>
+              <button id="app-update-check-btn" class="btn btn-sm" type="button">檢查更新</button>
+            </div>
+            <p id="app-update-status" class="val" style="margin:10px 0 0;white-space:pre-line">尚未檢查。</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+              <button id="app-update-online-btn" class="btn btn-sm btn-primary" type="button" hidden>線上更新（只更新程式碼）</button>
+              <a id="app-update-link" class="btn btn-sm btn-ghost" href="#" target="_blank" rel="noopener noreferrer" hidden>下載完整版</a>
+            </div>
+          </section>
+
+          <details class="card card-collapse" id="announcement-card" open>
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>公告</summary>
+            <div class="card-collapse-body">
+              <div class="switch-row">
+                <div><div class="label">最近公告</div><div class="sub" id="announcement-status">背景讀取中…</div></div>
+                <button id="announcement-refresh" class="btn btn-sm" type="button">重新整理</button>
+              </div>
+              <div id="announcement-list" class="announcement-list" style="margin-top:10px"></div>
+            </div>
+          </details>
+
+          <!-- ═══ 卡片：存取控制（PIN）═══
+               設一次很少再動，預設收合；若 PIN 目前已啟用，pin-auth.js 的 refreshStatus()
+               會把這裡強制展開，避免使用中的安全設定被藏起來 -->
+          <details class="card card-collapse" id="pin-settings-card" open>
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>存取控制（PIN）</summary>
+            <div class="card-collapse-body">
+            <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">伺服器對區域網路開放，同 Wi-Fi 的其他裝置預設也能連進來操作。設定 PIN 後，控制面板與手機遙控器需要輸入正確 PIN 才能使用；<strong>OBS 來源永遠不受影響</strong>。</p>
+            <div id="pin-status-off">
+              <div class="switch-row">
+                <div><div class="label">PIN 保護</div><div class="sub">目前：未啟用</div></div>
+                <button id="pin-enable-btn" class="btn btn-sm btn-primary" type="button">設定 PIN</button>
+              </div>
+            </div>
+            <div id="pin-status-on" hidden>
+              <div class="switch-row">
+                <div><div class="label">PIN 保護</div><div class="sub">目前：已啟用</div></div>
+                <div style="display:flex;gap:8px">
+                  <button id="pin-change-btn" class="btn btn-sm" type="button">更改</button>
+                  <button id="pin-disable-btn" class="btn btn-sm btn-danger" type="button">停用</button>
+                </div>
+              </div>
+            </div>
+            </div>
+          </details>
+          </div>
+          </div>
+        </div><!-- /view general -->
+
+        <!-- ═══ 視圖：媒體庫 ═══ -->
+        <div class="view content-col" data-view="library">
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>媒體庫 · 唱過的歌</p>
+            <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">記錄唱過的歌與播放次數。點任一首可用原 YouTube 網址重新匯入並加入播放清單。音檔可清理省空間，庫保留網址隨時重抓。</p>
+            <div class="library-toolbar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+              <input id="lib-search" class="input" type="text" placeholder="搜尋歌名 / 歌手…" style="flex:1;min-width:140px;width:auto">
+              <select id="lib-sort" class="input" style="width:auto;flex:0 0 auto">
+                <option value="plays">最常播放</option>
+                <option value="recent">最近播放</option>
+                <option value="title">歌名 A→Z</option>
+                <option value="artist">歌手 A→Z</option>
+              </select>
+              <button id="lib-refresh" class="btn btn-sm" type="button">重新整理</button>
+              <button id="lib-cleanup" class="btn btn-sm btn-ghost" type="button">清理音檔</button>
+              <button id="lib-clear" class="btn btn-sm btn-ghost" type="button">清空媒體庫</button>
+            </div>
+            <div id="library-list" class="library-list"></div>
+            <p id="library-empty" class="val" style="text-align:center;padding:24px 0;color:var(--text-faint)">尚無記錄，播放任一首歌後會自動加入。</p>
+          </section>
+        </div>
+
+        <!-- ═══ 視圖：直播歌單 ═══ -->
+        <div class="view content-col" data-view="setlist">
+          <!-- 兩欄：左＝Session＋已唱歌單，右＝歌單外觀設定（加寬）-->
+          <div class="setlist-split">
+          <div class="setlist-left">
+          <!-- Session 控制 -->
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>直播 Session</p>
+            <p class="sub" style="margin:-4px 0 12px;color:var(--text-faint);font-size:12px;line-height:1.6">開台與收台會由 OBS WebSocket 自動同步；播放的每首歌會自動記入歌單，可匯出為 YouTube 章節格式。</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="session-reset" class="btn btn-ghost" type="button" disabled>清除歌單</button>
+            </div>
+            <div id="session-status" class="val" style="margin-top:10px;font-size:12px;color:var(--text-faint)">等待 OBS 開始推流</div>
+          </section>
+
+          <!-- 已唱歌單 -->
+          <section class="card">
+            <div class="playlist-head">
+              <p class="eyebrow" style="margin:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>已唱歌單 <span id="setlist-count" class="val" style="margin-left:6px">0 首</span></p>
+              <button id="btn-copy-chapters" class="btn btn-sm" type="button" disabled>複製 YouTube 章節</button>
+            </div>
+            <div id="setlist-panel" class="playlist" style="min-height:60px">
+              <div class="playlist-empty">開台後播放歌曲，歌單會自動在此顯示。</div>
+            </div>
+          </section>
+          </div><!-- /.setlist-left -->
+
+          <div class="setlist-right">
+          <!-- OBS 連結 + 外觀設定 -->
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>OBS 來源 · 歌單畫面</p>
+            <div class="field">
+              <label for="setlist-layout">版型</label>
+              <select id="setlist-layout" class="input">
+                <optgroup label="經典（可調主題/細項）">
+                  <option value="classic">經典 · 毛玻璃三段</option>
+                </optgroup>
+                <optgroup label="場景版（全幅 16:9，各自獨立設定）">
+                  <option value="timeline">Timeline · 居中輪播</option>
+                  <option value="diagonal">Diagonal · 斜線分割</option>
+                  <option value="constellation">Constellation · 星座</option>
+                </optgroup>
+                <optgroup label="清單版（小元件）">
+                  <option value="simple">Simple · 兩排居中</option>
+                  <option value="terminal">Terminal · 終端機</option>
+                  <option value="billboard">Billboard · 排行榜</option>
+                  <option value="cards">Cards · 玻璃名片</option>
+                </optgroup>
+              </select>
+              <p class="sub" id="setlist-layout-hint" style="margin:6px 0 0;color:var(--text-faint);font-size:11px;line-height:1.6">場景版（Timeline/Diagonal/Constellation）為全幅 16:9 設計、背景透明可疊角色，且各自有獨立外觀設定；清單版（Simple/Terminal/Billboard/Cards）與經典為小元件、共用一份設定。</p>
+            </div>
+            <details class="collapse" id="setlist-appearance">
+              <summary>外觀設定 — 常用項目在這裡，場景版/字體/特效等收在「詳細設定」</summary>
+              <div class="collapse-body">
+                <!-- 主題下拉已由「風格預設」取代（經典顏色改吃統一設定），保留 plumbing 但隱藏 -->
+                <div class="field" id="setlist-theme-field" hidden>
+                  <label for="setlist-theme">主題</label>
+                  <select id="setlist-theme" class="input">
+                    <option value="glass">毛玻璃（預設）</option>
+                    <option value="neon">霓虹發光</option>
+                    <option value="minimal">極簡</option>
+                  </select>
+                </div>
+
+                <!-- 經典版面配置：只有經典版型會用到，且是「這首歌要顯示什麼區塊」的關鍵決定，放最上面 -->
+                <div class="field" id="setlist-classic-sections-field" data-sl-scope="classic" style="margin-bottom:14px">
+                  <label for="sls-classic-sections">要顯示哪些區塊（經典版型專用）</label>
+                  <select id="sls-classic-sections" class="input">
+                    <option value="both">左邊未唱歌曲 ＋ 右邊已唱歌曲</option>
+                    <option value="up">只顯示未唱歌曲</option>
+                    <option value="done">只顯示已唱歌曲</option>
+                  </select>
+                  <p class="field-hint">畫面最上方永遠顯示「正在播放」，這裡只決定下面要保留哪一側清單。</p>
+                </div>
+
+                <div id="setlist-style-collapse">
+
+                <!-- ══ 快速套用風格：一鍵配色，之後仍可個別微調 ══ -->
+                <div class="field-group-title" style="margin-top:0">快速套用風格</div>
+                <p class="field-group-desc">先選一個接近想要的風格，下面的細項都會跟著換，之後可再單獨調整任何一項。</p>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 8px">
+                  <p class="sub" style="margin:0;font-size:11px;color:var(--text-faint)">套用到目前選擇的版型</p>
+                  <button id="sls-reset" class="btn btn-sm btn-ghost" type="button" title="把目前版型的所有外觀設定還原成出廠預設值">重置此版型的設定</button>
+                </div>
+                <div class="preset-thumb-row" id="sls-presets">
+                  <button class="preset-thumb active" data-preset="sand" type="button" title="Sand（沙金）"><span class="preset-swatch"></span><span class="preset-label">沙金</span></button>
+                  <button class="preset-thumb" data-preset="glass" type="button" title="Glass（毛玻璃）"><span class="preset-swatch"></span><span class="preset-label">毛玻璃</span></button>
+                  <button class="preset-thumb" data-preset="neon" type="button" title="Neon（霓虹）"><span class="preset-swatch"></span><span class="preset-label">霓虹</span></button>
+                  <button class="preset-thumb" data-preset="minimal" type="button" title="Minimal（極簡）"><span class="preset-swatch"></span><span class="preset-label">極簡</span></button>
+                  <button class="preset-thumb" data-preset="dark" type="button" title="Dark（深色）"><span class="preset-swatch"></span><span class="preset-label">深色</span></button>
+                  <button class="preset-thumb" data-preset="light" type="button" title="Light（淺色）"><span class="preset-swatch"></span><span class="preset-label">淺色</span></button>
+                </div>
+
+                <!-- ══ 自訂風格：存目前設定 / 載入 / 刪除（localStorage）══ -->
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+                  <input id="sls-save-name" type="text" class="input" placeholder="幫這組風格取個名字…" style="flex:1;min-width:0">
+                  <button id="sls-save-btn" class="btn btn-sm" type="button">＋ 儲存目前設定為新風格</button>
+                </div>
+                <p class="field-hint">存在這台電腦的瀏覽器裡（不會同步到別台裝置），可存多組，方便切換不同直播企劃的風格。</p>
+                <div id="sls-custom-list" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px"></div>
+
+                <!-- ══ 常用外觀：出現頻率最高、影響最直觀的幾項 ══ -->
+                <div class="field-group-title">常用外觀</div>
+                <div class="field" style="display:flex;gap:14px;align-items:flex-start">
+                  <div style="flex:1">
+                    <label>主色（邊框／重點裝飾／「正在播放」標示）</label>
+                    <input id="sls-accent" type="color" value="#d9a25c">
+                    <p class="field-hint">影響：卡片邊框、強調線條、「正在播放」的外框發光色。</p>
+                  </div>
+                  <div style="flex:1">
+                    <label>亮色（「正在播放」歌名文字）</label>
+                    <input id="sls-accent-b" type="color" value="#f0c587">
+                    <p class="field-hint">影響：只有「正在播放」那一行的歌名文字顏色，其餘歌名用下面的「主要文字色」。</p>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>「正在播放」的文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
+                  <input id="sls-size-now" type="range" min="12" max="48" value="16">
+                  <p class="field-hint">只影響目前播放中那一行的字級，清單其他行用下面詳細設定裡的「列表字級」。</p>
+                </div>
+                <div class="field" style="display:flex;gap:14px;align-items:flex-start">
+                  <div style="flex:1">
+                    <label>整體背板不透明度 <span id="sls-bg-opacity-val" class="val">透明</span></label>
+                    <input id="sls-bg-opacity" type="range" min="0" max="100" value="0">
+                    <p class="field-hint">0＝完全透明，OBS 可直接看到角色/背景；畫面太亂看不清字時再拉高。與下面「每列卡片底色」是不同的兩層。</p>
+                  </div>
+                  <div>
+                    <label>整體背板顏色</label>
+                    <input id="sls-bg-color" type="color" value="#000000">
+                    <p class="field-hint">影響：整片背板的顏色（不透明度是 0 時看不出來）。</p>
+                  </div>
+                </div>
+                <div class="field" style="display:flex;gap:14px;align-items:flex-start">
+                  <div style="flex:1">
+                    <label>已唱歌曲的淡化程度 <span id="sls-done-opacity-val" class="val">35%</span></label>
+                    <input id="sls-done-opacity" type="range" min="0" max="100" value="35">
+                  </div>
+                  <div style="flex:1">
+                    <label>未唱歌曲的淡化程度 <span id="sls-wait-opacity-val" class="val">55%</span></label>
+                    <input id="sls-wait-opacity" type="range" min="0" max="100" value="55">
+                  </div>
+                </div>
+                <p class="field-hint">數字越大越清楚（越不淡化）。所有版型都適用；場景版是以預設值為基準做相對調整（離「正在播放」越遠仍會越淡）。</p>
+                <div class="switch-row">
+                  <div><div class="label">顯示歌手名字</div><div class="sub">關閉後歌單只顯示歌名，不顯示演唱者</div></div>
+                  <label class="switch"><input id="sls-show-artist" type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="switch-row">
+                  <div><div class="label">已唱歌曲加上刪除線</div><div class="sub">用刪除線標示「這首已經唱過了」</div></div>
+                  <label class="switch"><input id="sls-strikethrough" type="checkbox"><span class="track"></span></label>
+                </div>
+
+                <!-- ══ 詳細設定：色彩細項 / 字體 / 場景版專屬 / 特效 / 文字標籤，移到獨立視窗避免面板過長 ══ -->
+                <button id="btn-setlist-advanced" class="btn btn-sm" type="button" style="margin-top:14px;width:100%">詳細設定…（色彩細項 · 字體 · 場景版 · 特效 · 文字標籤）</button>
+                <!-- ═══ Modal：歌單詳細設定（#setlist-advanced-modal，執行期會搬到 body 底下逃脫 backdrop-filter 容器）═══ -->
+                <div id="setlist-advanced-modal" class="modal modal-wide" hidden>
+                  <div class="modal-card">
+                    <div class="modal-head"><h3>歌單詳細設定</h3><button id="setlist-advanced-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
+                    <div class="modal-split">
+                    <div class="mw-preview">
+                      <div style="display:flex;gap:6px;margin-bottom:8px">
+                        <button class="btn btn-sm btn-setlist-demo" type="button" style="flex:1">載入示範資料</button>
+                        <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button" style="flex:1">清除示範資料</button>
+                      </div>
+                      <div class="setlist-preview-wrap">
+                        <iframe id="setlist-preview-modal" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" scrolling="no"></iframe>
+                        <div class="setlist-preview-tag">即時預覽</div>
+                      </div>
+                    </div>
+                    <div class="mw-settings">
+
+                    <details class="card card-collapse" open>
+                      <summary>文字顏色（所有版型）</summary>
+                      <div class="card-collapse-body">
+                      <p class="field-group-desc">上面「常用外觀」已經有主色/亮色/背板，這裡是更細部的文字深淺。</p>
+                      <div class="field">
+                        <label>歌名／主要文字色</label>
+                        <input id="sls-text-primary" type="color" value="#f0ead8">
+                        <p class="field-hint">影響：所有版型的歌名、標題等主要文字（不包含「正在播放」的亮色歌名，那個在常用外觀單獨設定）。</p>
+                      </div>
+                      <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                        <div style="flex:1"><label>歌手名的透明度 <span id="sls-text-sec-val" class="val">45%</span></label><input id="sls-text-sec" type="range" min="0" max="100" value="45"></div>
+                        <div style="flex:1"><label>已唱歌名的透明度 <span id="sls-text-done-val" class="val">22%</span></label><input id="sls-text-done" type="range" min="0" max="100" value="22"></div>
+                      </div>
+                      <p class="field-hint">這兩個都是以「主要文字色」為基礎調整深淺，數字越小越淡（場景版的已唱/未唱歌名也吃這兩項）。</p>
+                      <div class="field">
+                        <label>編號／時間文字的透明度 <span id="sls-text-meta-val" class="val">35%</span></label>
+                        <input id="sls-text-meta" type="range" min="0" max="100" value="35">
+                        <p class="field-hint">影響：清單前面的數字編號、已唱歌曲旁邊的時間戳記、區塊小標籤。</p>
+                      </div>
+                      </div>
+                    </details>
+
+                    <details class="card card-collapse" data-sl-scope="classic list">
+                      <summary>已唱／未唱歌曲列 — 底色與邊框（經典／清單版）</summary>
+                      <div class="card-collapse-body">
+                      <p class="field-group-desc">這裡調的是「已唱／未唱」每一行的外觀；「正在播放」那張大卡的內距與寬度在下面「版面尺寸」區。</p>
+                      <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                        <div style="flex:1">
+                          <label>歌曲列底色</label>
+                          <input id="sls-card-color" type="color" value="#0b0907">
+                          <p class="field-hint">影響：已唱／未唱清單「每一行」的背景色（跟常用外觀那片「整體背板」是不同的兩層）。</p>
+                        </div>
+                        <div style="flex:1"><label>歌曲列不透明度 <span id="sls-card-opacity-val" class="val">93%</span></label><input id="sls-card-opacity" type="range" min="0" max="100" value="93"></div>
+                      </div>
+                      <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                        <div>
+                          <label>邊框顏色</label>
+                          <input id="sls-border-color" type="color" value="#f0ead8">
+                        </div>
+                        <div style="flex:1"><label>邊框透明度 <span id="sls-border-opacity-val" class="val">9%</span></label><input id="sls-border-opacity" type="range" min="0" max="100" value="9"></div>
+                        <div style="flex:1"><label>邊框粗細 <span id="sls-border-width-val" class="val">1px</span></label><input id="sls-border-width" type="range" min="0" max="5" step="0.5" value="1"></div>
+                      </div>
+                      <p class="field-hint">影響：已唱／未唱每一行外圍的細框線（經典版型的「正在播放」外框也用這組顏色與粗細）。</p>
+                      </div>
+                    </details>
+
+                    <details class="card card-collapse">
+                      <summary>字體與字級</summary>
+                      <div class="card-collapse-body">
+                      <p class="field-group-desc">字體分三種用途：場景版的大標題、一般內文、還有編號/標籤這種等寬數字。</p>
+                      <div class="field">
+                        <label>標題字體（場景版的大標題）</label>
+                        <select id="sls-font-display" class="input">
+                          <option value="Fraunces">Fraunces（預設，襯線體）</option>
+                          <option value="DM Serif Display">DM Serif Display（襯線體）</option>
+                          <option value="Noto Serif TC">思源宋體（中文襯線）</option>
+                          <option value="Georgia">Georgia（襯線體）</option>
+                        </select>
+                        <p class="field-hint">用在 Timeline／Diagonal／Constellation 的大標題，以及經典版的「正在播放」歌名。</p>
+                      </div>
+                      <div class="field">
+                        <label>內文字體（歌名、歌手名等一般文字）</label>
+                        <select id="sls-font-body" class="input">
+                          <option value="Manrope">Manrope（預設，無襯線）</option>
+                          <option value="Inter">Inter（無襯線）</option>
+                          <option value="Noto Sans TC">思源黑體（中文無襯線）</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label>等寬字體（編號、時間戳記）</label>
+                        <select id="sls-font-mono" class="input">
+                          <option value="JetBrains Mono">JetBrains Mono（預設）</option>
+                          <option value="Space Mono">Space Mono</option>
+                          <option value="Courier New">Courier New</option>
+                        </select>
+                        <p class="field-hint">影響：清單編號（01、02…）與已唱歌曲的時間戳記，等寬字體數字比較整齊好讀。</p>
+                      </div>
+                      <div data-sl-scope="classic list">
+                        <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                          <div style="flex:1"><label>清單列表字級 <span id="sls-size-list-val" class="val">13px</span></label><input id="sls-size-list" type="range" min="8" max="24" value="13"></div>
+                          <div style="flex:1"><label>歌手名字級 <span id="sls-size-artist-val" class="val">11px</span></label><input id="sls-size-artist" type="range" min="7" max="18" value="11"></div>
+                        </div>
+                        <div class="field">
+                          <label>編號／標籤字級 <span id="sls-size-meta-val" class="val">10px</span></label>
+                          <input id="sls-size-meta" type="range" min="7" max="14" value="10">
+                        </div>
+                        <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                          <div style="flex:1"><label>「正在播放」文字粗細</label><select id="sls-fw-active" class="input"><option value="300">細（300）</option><option value="400">正常（400）</option><option value="500">中等（500）</option><option value="600">半粗（600）</option><option value="700" selected>粗體（700，預設）</option></select></div>
+                          <div style="flex:1"><label>清單列表文字粗細</label><select id="sls-fw-list" class="input"><option value="300">細（300）</option><option value="400" selected>正常（400，預設）</option><option value="500">中等（500）</option><option value="600">半粗（600）</option></select></div>
+                        </div>
+                      </div>
+                      <p class="field-hint" data-sl-scope="scene">場景版的字級：大標題跟著常用外觀的「正在播放文字大小」縮放，整體大小用場景版設定裡的「整體縮放」。</p>
+                      </div>
+                    </details>
+
+                    <details class="card card-collapse" data-sl-scope="classic list">
+                      <summary>版面尺寸 — 寬度／圓角／內距（經典／清單版）</summary>
+                      <div class="card-collapse-body">
+                      <div class="field">
+                        <label>整體寬度 <span id="sls-card-width-val" class="val">340px</span></label>
+                        <input id="sls-card-width" type="range" min="160" max="560" value="340">
+                        <p class="field-hint">「正在播放」大卡與底下清單一起變寬／變窄。</p>
+                      </div>
+                      <div class="field">
+                        <label>卡片圓角 <span id="sls-radius-val" class="val">14px</span></label>
+                        <input id="sls-radius" type="range" min="0" max="32" value="14">
+                        <p class="field-hint">「正在播放」大卡用這個值；已唱／未唱每列自動略小一點（−6px）比較協調。</p>
+                      </div>
+                      <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                        <div style="flex:1"><label>「正在播放」上下內距 <span id="sls-padding-v-val" class="val">10px</span></label><input id="sls-padding-v" type="range" min="2" max="24" value="10"></div>
+                        <div style="flex:1"><label>「正在播放」左右內距 <span id="sls-padding-h-val" class="val">14px</span></label><input id="sls-padding-h" type="range" min="6" max="36" value="14"></div>
+                      </div>
+                      <div class="field">
+                        <label>歌曲項目之間的間距 <span id="sls-item-gap-val" class="val">2px</span></label>
+                        <input id="sls-item-gap" type="range" min="0" max="16" value="2">
+                      </div>
+                      </div>
+                    </details>
+
+                    <details class="card card-collapse" data-sl-scope="classic list">
+                      <summary>排版與動畫</summary>
+                      <div class="card-collapse-body">
+                      <div class="field">
+                        <label>文字行高 <span id="sls-line-height-val" class="val">1.40</span></label>
+                        <input id="sls-line-height" type="range" min="1" max="2.4" step="0.05" value="1.4">
+                        <p class="field-hint">數字越大，多行文字之間的垂直間距越寬鬆。</p>
+                      </div>
+                      <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                        <div style="flex:1"><label>整體外邊距（上下）<span id="sls-margin-v-val" class="val">0px</span></label><input id="sls-margin-v" type="range" min="0" max="80" value="0"></div>
+                        <div style="flex:1"><label>整體外邊距（左右）<span id="sls-margin-h-val" class="val">0px</span></label><input id="sls-margin-h" type="range" min="0" max="80" value="0"></div>
+                      </div>
+                      <p class="field-hint">讓整組歌單離畫面邊緣遠一點，避免被 OBS 場景的其他元素擋住。</p>
+                      <div data-sl-scope="classic">
+                        <div class="field">
+                          <label>新歌曲進場動畫</label>
+                          <select id="sls-row-anim" class="input">
+                            <option value="fade">淡入（預設）</option>
+                            <option value="none">無動畫</option>
+                            <option value="slide-up">由下往上滑入</option>
+                            <option value="slide-side">由側邊滑入</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label>已唱時間的顯示格式</label>
+                          <select id="sls-time-format" class="input">
+                            <option value="mmss">分:秒（例如 03:45，預設）</option>
+                            <option value="hmmss">時:分:秒（例如 1:03:45）</option>
+                            <option value="none">不顯示時間</option>
+                          </select>
+                          <p class="field-hint">直播超過一小時建議選「時:分:秒」，比較好對照真實時間。</p>
+                        </div>
+                      </div>
+                      </div>
+                    </details>
+
+                    <details class="card card-collapse" data-sl-scope="classic list">
+                      <summary>特效（毛玻璃／外框發光）</summary>
+                      <div class="card-collapse-body">
+                      <div class="field">
+                        <label>毛玻璃模糊程度 <span id="sls-blur-val" class="val">12px</span></label>
+                        <input id="sls-blur" type="range" min="0" max="48" value="12">
+                        <p class="field-hint">注意：在 OBS 裡只能模糊「歌單疊加層自己內部」的內容——疊加層背後的遊戲／鏡頭畫面模糊不到，這是 OBS 瀏覽器來源的限制（左邊預覽窗有底圖所以看得到效果）。想在 OBS 看出毛玻璃感，請搭配「半透明的歌曲列底色」使用。</p>
+                      </div>
+                      <div class="switch-row">
+                        <div><div class="label">啟用卡片外框發光</div><div class="sub">用「主色」讓卡片外圍發出柔光，不是文字陰影</div></div>
+                        <label class="switch"><input id="sls-shadow-enabled" type="checkbox"><span class="track"></span></label>
+                      </div>
+                      <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                        <div style="flex:1"><label>外框發光模糊範圍 <span id="sls-shadow-blur-val" class="val">20px</span></label><input id="sls-shadow-blur" type="range" min="0" max="60" value="20"></div>
+                        <div style="flex:1"><label>外框發光強度 <span id="sls-shadow-opacity-val" class="val">0%</span></label><input id="sls-shadow-opacity" type="range" min="0" max="100" value="0"></div>
+                      </div>
+                      <p class="field-hint">這兩項只有上面「啟用卡片外框發光」打開時才看得出效果。（已唱／未唱的淡化程度移到上面「常用外觀」區，與已唱成對。）</p>
+                      </div>
+                    </details>
+
+                    <details class="card card-collapse" data-sl-scope="scene list">
+                      <summary>顯示項目</summary>
+                      <div class="card-collapse-body">
+                      <div class="switch-row">
+                        <div><div class="label">顯示歌曲編號</div><div class="sub">在每首歌前面加上 01、02… 的編號（經典版本來就沒有編號，故不適用）</div></div>
+                        <label class="switch"><input id="sls-show-number" type="checkbox" checked><span class="track"></span></label>
+                      </div>
+                      </div>
+                    </details>
+                    <!-- Reserve 功能尚未實作：控制項先隱藏（設定值仍保留於伺服器，之後功能上線直接解除 hidden）-->
+                    <div hidden>
+                      <input id="sls-show-reserve" type="checkbox" checked>
+                      <input id="sls-label-reserve" type="text" value="Reserve">
+                    </div>
+
+                    <details class="card card-collapse">
+                      <summary>自訂文字標籤</summary>
+                      <div class="card-collapse-body">
+                      <p class="field-group-desc">畫面上固定顯示的文字，可以換成中文或你喜歡的用語。</p>
+                      <div class="field">
+                        <label>「正在播放」的顯示文字</label>
+                        <input id="sls-label-now" type="text" class="input" value="▶ Now Playing">
+                      </div>
+                      <div class="field" style="display:flex;gap:10px" data-sl-scope="classic list">
+                        <div style="flex:1"><label>「已唱」區塊標題</label><input id="sls-label-done" type="text" class="input" value="已唱"></div>
+                        <div style="flex:1"><label>「未唱」區塊標題</label><input id="sls-label-wait" type="text" class="input" value="未唱"></div>
+                      </div>
+                      </div>
+                    </details>
+
+                    <!-- ══ 場景版設定：只在 Timeline/Diagonal/Constellation 顯示，各版型互相獨立 ══ -->
+                    <details class="card card-collapse" data-sl-scope="scene" open>
+                      <summary>場景版設定（目前版型專屬）</summary>
+                      <div class="card-collapse-body">
+                      <p class="field-group-desc">場景版是全螢幕 16:9 舞台設計，背景透明可疊在角色身上；以下設定每個場景版型各自獨立，互不影響。</p>
+                      <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+                        <div style="flex:1"><label>內容水平位置 <span id="sls-scene-x-val" class="val">0%</span></label><input id="sls-scene-x" type="range" min="-50" max="50" value="0"></div>
+                        <div style="flex:1"><label>內容垂直位置 <span id="sls-scene-y-val" class="val">0%</span></label><input id="sls-scene-y" type="range" min="-50" max="50" value="0"></div>
+                      </div>
+                      <div class="field">
+                        <label>整體縮放 <span id="sls-scene-scale-val" class="val">100%</span></label>
+                        <input id="sls-scene-scale" type="range" min="0.5" max="2" step="0.05" value="1">
+                        <p class="field-hint">把歌單內容整體平移、縮放，避免擋住角色站位；位置/縮放對目前選擇的場景版型各自獨立生效。</p>
+                      </div>
+                      <div class="field">
+                        <label>「正在播放」歌手名字級 <span id="sls-scene-artist-size-val" class="val">11px</span></label>
+                        <input id="sls-scene-artist-size" type="range" min="7" max="80" value="11">
+                        <p class="field-hint">場景版大標題下方那行歌手名的字級（Timeline／Diagonal／Constellation 通用）。</p>
+                      </div>
+
+                      <div data-sl-layout="timeline">
+                        <p class="field-group-title">Timeline 時間軸</p>
+                        <div class="field"><label>中央時間軸的垂直位置 <span id="sls-tl-axis-val" class="val">38%</span></label><input id="sls-tl-axis" type="range" min="20" max="70" value="38"></div>
+                        <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                          <div style="flex:1"><label>軸線粗細 <span id="sls-tl-axis-width-val" class="val">1px</span></label><input id="sls-tl-axis-width" type="range" min="1" max="6" step="1" value="1"></div>
+                          <div><label>軸線顏色</label><input id="sls-tl-axis-color" type="color" value="#d9a25c"></div>
+                        </div>
+                        <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                          <div style="flex:1"><label>「正在播放」節點大小 <span id="sls-tl-dot-size-val" class="val">14px</span></label><input id="sls-tl-dot-size" type="range" min="8" max="28" value="14"></div>
+                          <div><label>節點顏色</label><input id="sls-tl-dot-color" type="color" value="#d9a25c"></div>
+                        </div>
+                        <p class="field-hint">節點＝軸線上的圓點；「正在播放」的節點會放大並發光（發光跟著節點顏色走）。</p>
+                        <div class="field"><label>節點之間的間距 <span id="sls-tl-item-gap-val" class="val">128px</span></label><input id="sls-tl-item-gap" type="range" min="70" max="260" step="2" value="128"></div>
+                        <p class="field-group-title">Timeline 歌名與文字</p>
+                        <div class="field">
+                          <label>歌名相對軸線的位置</label>
+                          <select id="sls-tl-name-pos" class="input">
+                            <option value="below">軸線下方（預設）</option>
+                            <option value="on">貼齊軸線</option>
+                            <option value="above">軸線上方</option>
+                          </select>
+                        </div>
+                        <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                          <div style="flex:1"><label>軸線與歌名的間距 <span id="sls-tl-name-gap-val" class="val">22px</span></label><input id="sls-tl-name-gap" type="range" min="6" max="60" value="22"></div>
+                          <div style="flex:1"><label>歌名字級 <span id="sls-tl-name-size-val" class="val">11px</span></label><input id="sls-tl-name-size" type="range" min="8" max="80" value="11"></div>
+                        </div>
+                        <div class="field">
+                          <label>「正在播放」大標題的垂直位置 <span id="sls-tl-now-pos-val" class="val">52%</span></label>
+                          <input id="sls-tl-now-pos" type="range" min="30" max="85" value="52">
+                          <p class="field-hint">畫面中央那組大字（Now Playing＋歌名＋歌手）離畫面頂端的距離。</p>
+                        </div>
+                      </div>
+
+                      <div data-sl-layout="diagonal">
+                        <p class="field-group-title">Diagonal 斜線</p>
+                        <div class="field">
+                          <label>分隔線傾斜角度 <span id="sls-dg-angle-val" class="val">32°</span></label>
+                          <input id="sls-dg-angle" type="range" min="0" max="60" value="32">
+                          <p class="field-hint">畫面中央那條把歌單與角色分開的斜線角度。</p>
+                        </div>
+                        <div class="field">
+                          <label>分隔線水平位置 <span id="sls-dg-line-pos-val" class="val">33%</span></label>
+                          <input id="sls-dg-line-pos" type="range" min="15" max="70" value="33">
+                        </div>
+                        <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                          <div style="flex:1"><label>分隔線粗細 <span id="sls-dg-line-width-val" class="val">1px</span></label><input id="sls-dg-line-width" type="range" min="1" max="6" step="1" value="1"></div>
+                          <div><label>分隔線顏色</label><input id="sls-dg-line-color" type="color" value="#f0ead8"></div>
+                        </div>
+                        <div class="field">
+                          <label>未唱／已唱歌曲字級 <span id="sls-dg-wait-size-val" class="val">11px</span></label>
+                          <input id="sls-dg-wait-size" type="range" min="7" max="80" value="11">
+                          <p class="field-hint">畫面兩側那排小字歌名（已唱斜體較淡、未唱附編號）的字級。</p>
+                        </div>
+                        <div class="field">
+                          <label>「正在播放」與未唱歌曲的距離 <span id="sls-dg-wait-top-val" class="val">68%</span></label>
+                          <input id="sls-dg-wait-top" type="range" min="40" max="90" value="68">
+                          <p class="field-hint">數字越大，未唱清單離「正在播放」的大標題越遠（往畫面下方移動）。</p>
+                        </div>
+                      </div>
+
+                      <div data-sl-layout="constellation">
+                        <p class="field-group-title">Constellation 星座</p>
+                        <div class="field">
+                          <label>星座節點的疏密程度 <span id="sls-cn-spread-val" class="val">100%</span></label>
+                          <input id="sls-cn-spread" type="range" min="0.6" max="1.5" step="0.05" value="1">
+                          <p class="field-hint">數字越大，代表每首歌的星星節點之間拉得越開（越疏）。</p>
+                        </div>
+                        <div class="field" style="display:flex;gap:10px;align-items:flex-end">
+                          <div style="flex:1"><label>星點顏色</label><input id="sls-cn-dot-color" type="color" value="#ffffff"></div>
+                          <div style="flex:1"><label>「正在播放」星點的光暈色</label><input id="sls-cn-glow-color" type="color" value="#d9a25c"></div>
+                        </div>
+                        <div class="switch-row">
+                          <div><div class="label">顯示背景星塵</div><div class="sub">散落在畫面上的細小星點裝飾，關閉＝更乾淨</div></div>
+                          <label class="switch"><input id="sls-cn-dust" type="checkbox" checked><span class="track"></span></label>
+                        </div>
+                        <div class="field">
+                          <label>未唱／已唱歌曲字級 <span id="sls-cn-wait-size-val" class="val">11px</span></label>
+                          <input id="sls-cn-wait-size" type="range" min="7" max="80" value="11">
+                          <p class="field-hint">星座節點旁邊的小字歌名字級（「正在播放」的大標題不受影響）。</p>
+                        </div>
+                      </div>
+                      </div>
+                    </details>
+
+                    <!-- ══ 經典版型專屬效果：注意「文字陰影/發光」跟「卡片外框發光」是不同的兩種效果 ══ -->
+                    <details class="card card-collapse" data-sl-scope="classic">
+                      <summary>經典版專屬效果（縮放／文字陰影／發光／描邊）</summary>
+                      <div class="card-collapse-body">
+                      <div class="field">
+                        <label>整體縮放大小 <span id="sls-scale-val" class="val">100%</span></label>
+                        <input id="sls-scale" type="range" min="0.6" max="1.8" step="0.05" value="1">
+                      </div>
+                      <div class="field" style="display:flex;gap:14px;align-items:center">
+                        <div style="flex:1"><label style="margin:0">文字顏色覆蓋</label><p class="field-hint">勾選「用主題色」＝沿用「文字顏色」區的主要文字色；取消勾選才能自訂一個獨立的文字顏色。</p></div>
+                        <label class="val" style="display:flex;align-items:center;gap:6px;font-size:12px"><input id="sls-text-theme" type="checkbox" checked>用主題色</label>
+                        <input id="sls-text-color" type="color" value="#ffffff" disabled>
+                      </div>
+                      <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+                        <div style="flex:1"><label>文字陰影深度 <span id="sls-shadow-val" class="val">關</span></label><input id="sls-shadow" type="range" min="0" max="20" step="1" value="0"></div>
+                        <div><label>陰影顏色</label><input id="sls-shadow-color" type="color" value="#000000"></div>
+                      </div>
+                      <p class="field-hint">這是加在「文字」後面的陰影，讓字有立體感，跟「特效」區的卡片外框發光是不同東西。</p>
+                      <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+                        <div style="flex:1"><label>文字發光強度 <span id="sls-glow-strength-val" class="val">關</span></label><input id="sls-glow-strength" type="range" min="0" max="30" step="1" value="0"></div>
+                        <div><label>發光顏色</label><input id="sls-glow-color" type="color" value="#ffd6a5"></div>
+                      </div>
+                      <p class="field-hint">讓文字周圍暈開柔光，適合霓虹／夜店風格；跟卡片外框發光是分開的兩層效果。</p>
+                      <div class="field" style="display:flex;gap:14px;align-items:flex-end">
+                        <div style="flex:1"><label>文字描邊寬度 <span id="sls-stroke-val" class="val">關</span></label><input id="sls-stroke" type="range" min="0" max="4" step="0.5" value="0"></div>
+                        <div><label>描邊顏色</label><input id="sls-stroke-color" type="color" value="#000000"></div>
+                      </div>
+                      <p class="field-hint">在文字外圍加一層實色邊框，在複雜背景上能提高文字可讀性。</p>
+                      </div>
+                    </details>
+
+                    </div><!-- /.mw-settings -->
+                    </div><!-- /.modal-split -->
+                  </div><!-- /.modal-card -->
+                </div><!-- /#setlist-advanced-modal -->
+                </div><!-- /#setlist-style-collapse inner wrapper -->
+              </div>
+            </details>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+              <p class="field-hint" style="margin:0">還沒開台、預覽是空的？先載入示範資料再調整外觀設定（面板預覽＋真實 OBS 來源都會顯示）。</p>
+              <div style="display:flex;gap:6px;flex-shrink:0">
+                <button class="btn btn-sm btn-setlist-demo" type="button">載入示範資料</button>
+                <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button">清除示範資料</button>
+              </div>
+            </div>
+            <div class="setlist-preview-wrap">
+              <iframe id="setlist-preview" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" scrolling="no"></iframe>
+              <div class="setlist-preview-tag">預覽（選主題即時更新）</div>
+            </div>
+            <div class="url-field">
+              <code id="setlist-obs-url">http://localhost:3000/setlist</code>
+              <button id="copy-setlist-url" class="btn btn-sm" type="button">複製</button>
+            </div>
+            <p class="val" style="margin-top:10px">OBS 新增「瀏覽器來源」後貼上 http://localhost:3000/setlist 即可；換歌單版型會自動同步，不需要更新網址。使用場景版歌單時，請依畫面調整 OBS 瀏覽器來源解析度。</p>
+          </section>
+          </div><!-- /.setlist-right -->
+          </div><!-- /.setlist-split -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       Modals（以下都是隱藏的彈窗，靠 JS 開關 hidden 屬性顯示；
+       每個前面都標了用途方便摺疊/尋找，不代表要拆成獨立檔案）
+       ═══════════════════════════════════════════ -->
+
+  <!-- ═══ Modal：貼上歌詞（#lyrics-paste-modal）═══ -->
+  <div id="lyrics-paste-modal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h3>貼上歌詞</h3><button id="lyrics-paste-cancel" class="btn btn-sm btn-ghost" type="button">取消</button></div>
+      <div class="modal-body">
+        <textarea id="lyrics-paste-textarea" class="input" placeholder="貼上 LRC 或純文字歌詞…" style="min-height:200px"></textarea>
+        <button id="lyrics-paste-confirm" class="btn btn-primary" type="button" style="width:100%;margin-top:12px">套用歌詞</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：修改歌名／歌手（#track-edit-modal）═══ -->
+  <div id="track-edit-modal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h3>修改歌名／歌手</h3><button id="track-edit-cancel" class="btn btn-sm btn-ghost" type="button">取消</button></div>
+      <div class="modal-body">
+        <p class="sub" style="margin:0 0 14px;color:var(--text-faint);font-size:12px;line-height:1.6">自動抓到的歌名/歌手偶爾會抓錯，這裡可以直接手動修正。</p>
+        <div class="field"><label for="track-edit-title">歌名</label><input id="track-edit-title" class="input" type="text"></div>
+        <div class="field"><label for="track-edit-artist">原唱歌手（翻唱影片可留空）</label><input id="track-edit-artist" class="input" type="text" placeholder="原唱待確認" list="track-edit-artist-candidates"><datalist id="track-edit-artist-candidates"></datalist></div>
+        <button id="track-edit-save" class="btn btn-primary" type="button" style="width:100%;margin-top:4px">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：選擇歌詞來源（#lyrics-picker-modal，lyric-extras.js 的 window.LyricPicker）═══ -->
+  <div id="lyrics-picker-modal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h3>選擇歌詞來源</h3><button id="lyrics-picker-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
+      <div class="picker-search">
+        <input id="picker-artist" class="input" type="text" placeholder="歌手（可留空，例如：周杰倫）">
+        <input id="picker-title" class="input" type="text" placeholder="歌名（例如：聽媽媽的話）">
+        <button id="picker-search-btn" class="btn btn-primary" type="button">搜尋</button>
+      </div>
+      <div id="lyrics-picker-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：逐行歌詞時間軸編輯（#lyrics-timeline-modal，對「對齊第一句」解決不了的中段跑掉問題做逐行微調）═══ -->
+  <div id="lyrics-timeline-modal" class="modal modal-wide" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>逐行時間軸編輯 <span id="lt-track-title" class="val"></span></h3>
+        <button id="lt-close" class="btn btn-sm btn-ghost" type="button">關閉</button>
+      </div>
+      <div class="modal-body">
+        <p class="field-hint" style="margin-top:0">播放歌曲，唱到某一行的當下按「設為目前時間」最快；也可以直接用 −/+ 微調或手動輸入時間。改完按「套用」才會生效。</p>
+        <div id="lt-empty" class="picker-empty" hidden>這首歌沒有可編輯的逐行時間軸（純文字歌詞或尚未載入歌詞）。</div>
+        <div id="lt-rows" class="lt-rows"></div>
+        <div class="lt-actions">
+          <button id="lt-cancel" class="btn btn-ghost" type="button">取消</button>
+          <button id="lt-apply" class="btn btn-primary" type="button">套用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：新手教學（#help-modal，nav.js 開關）═══ -->
+  <div id="help-modal" class="modal modal-wide" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h3>新手教學</h3><button id="help-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
+      <div class="modal-body help-body">
+
+        <section class="onboard-readiness" aria-label="啟動環境檢查">
+          <div>
+            <strong>啟動環境檢查</strong>
+            <p>第一次使用先確認控制連線與下載工具；全部就緒再開始匯入歌曲。</p>
+          </div>
+          <div class="readiness-items">
+            <span id="guide-check-websocket" class="readiness-pill pending">WebSocket 檢查中</span>
+            <span id="guide-check-ytdlp" class="readiness-pill pending">yt-dlp 檢查中</span>
+            <span id="guide-check-ffmpeg" class="readiness-pill pending">FFmpeg 檢查中</span>
+            <span id="guide-check-version" class="readiness-pill pending">版本檢查中</span>
+          </div>
+          <button id="guide-check-refresh" class="btn btn-sm btn-ghost" type="button">重新檢查</button>
+        </section>
+
+        <details class="card card-collapse" open>
+          <summary>① 先看懂這個程式在做什麼</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>Elitesand Pro 是直播用的歌詞工具</strong>：你在這裡匯入歌曲、整理播放清單、調整歌詞畫面；OBS 只負責把歌詞網址當瀏覽器來源放到直播畫面上。</li>
+              <li><strong>控制台不是 OBS 畫面</strong>：控制台是你操作用的後台；右側「歌詞即時預覽」才接近觀眾會在 OBS 看到的畫面。</li>
+              <li><strong>首頁</strong>：加歌、播放、暫停、切歌、調 Key、選歌詞來源、貼歌詞、看目前播放清單。</li>
+              <li><strong>設定頁</strong>：調字體、顏色、描邊、位置、動畫模板、OBS 歌詞網址。</li>
+              <li><strong>歌單頁</strong>：給 OBS 顯示今天唱過什麼、正在唱什麼、接下來唱什麼。</li>
+              <li><strong>媒體庫</strong>：以前匯入過的歌會留在這裡，下次不用重新下載。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse" open>
+          <summary>② 第一次使用，照這個順序做</summary>
+          <div class="card-collapse-body help-steps">
+            <div class="help-step"><span class="help-step-num">1</span><div><strong>先不要急著接 OBS</strong> — 先在控制台確認歌曲能播放、歌詞能顯示。這樣出問題時比較知道是歌詞問題，還是 OBS 來源問題。</div></div>
+            <div class="help-step"><span class="help-step-num">2</span><div><strong>加一首歌</strong> — 在「歌詞」頁的「音樂來源」貼 YouTube 網址，或切到「本機檔案」拖曳音檔。匯入完成後，歌曲會出現在左側播放清單。</div></div>
+            <div class="help-step"><span class="help-step-num">3</span><div><strong>點播放清單裡的歌曲</strong> — 看到上方播放器變成那首歌，再按播放。不要只看媒體庫，媒體庫是倉庫；播放清單才是本次要播放的隊列。</div></div>
+            <div class="help-step"><span class="help-step-num">4</span><div><strong>確認右側預覽</strong> — 歌詞出現在「歌詞即時預覽」就代表歌詞畫面基本正常；如果沒有歌詞，先看播放清單的歌詞狀態或按「選擇來源」。</div></div>
+            <div class="help-step"><span class="help-step-num">5</span><div><strong>再接 OBS</strong> — 控制台預覽正常後，到設定頁複製歌詞網址，OBS 新增「瀏覽器」來源貼上。</div></div>
+          </div>
+        </details>
+
+        <details class="card card-collapse" open>
+          <summary>③ 沒有歌曲時，怎麼先測字體和畫面？</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li>在「歌詞」頁右側「歌詞即時預覽」上方按 <strong>示範歌詞</strong>。</li>
+              <li>預覽會顯示 <strong>這是一句示範用的歌詞 This is an example lyric.</strong>，可以同時檢查中文字體、英文字體、顏色、描邊、陰影和動畫感覺。</li>
+              <li>示範歌詞只給控制台預覽用，不會加入播放清單、不會改歌曲資料、不會存進媒體庫。</li>
+              <li>一旦真的播放有歌詞的歌曲，示範歌詞會被真實歌詞取代。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse">
+          <summary>④ 加歌時最常卡住的地方</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>YouTube 單曲</strong>：貼一般影片、短網址、Shorts、YouTube Music 都可以。私人影片、會員限定、需要登入才能看的影片通常無法匯入。</li>
+              <li><strong>YouTube 播放清單</strong>：網址裡有 <code>list=</code> 會批次匯入。清單很長時會等比較久，先用少量歌曲測比較穩。</li>
+              <li><strong>本機音檔</strong>：適合你已經有 mp3/wav 的情況。若檔名或內建標籤不完整，可能需要手動補歌名和歌手。</li>
+              <li><strong>匯入後找不到</strong>：先看「播放清單」有沒有出現；如果沒有，再看「媒體庫」是否已有同一首歌。</li>
+              <li><strong>下載後檔名</strong>：系統會盡量用「歌手 - 歌名」命名，方便之後整理硬碟。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse" open>
+          <summary>⑤ 歌詞怎麼來？找不到歌詞怎麼辦？</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>自動搜尋</strong>：匯入歌曲後，系統會用歌名與歌手去找歌詞。歌名越乾淨，越容易找到正確版本。</li>
+              <li><strong>播放清單狀態</strong>：歌曲旁會顯示「逐字」「逐句」或「無歌詞」。看到「無歌詞」不是壞掉，只是目前沒有可用歌詞。</li>
+              <li><strong>想換版本</strong>：按「選擇來源」，會列出候選歌詞。選時間比較準、語言正確、版本接近的那個。</li>
+              <li><strong>完全找不到</strong>：按「貼上歌詞」手動貼 LRC、SRT 或純文字。LRC/SRT 有時間軸；純文字只能顯示文字，不會精準跟拍。</li>
+              <li><strong>歌名歌手錯了</strong>：播放清單每首歌有編輯按鈕，先修正歌名/歌手，再重新選歌詞來源。這是新手最容易忽略的原因。</li>
+              <li><strong>整首都快或慢</strong>：用「對齊第一句」。先播到第一句歌詞剛唱出來的位置，再按它，整首會一起校正。</li>
+              <li><strong>只有中間幾句不準</strong>：用「逐行時間軸編輯」，不要一直重按「對齊第一句」。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse" open>
+          <summary>⑥ 逐句、逐字、無歌詞是什麼？</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>逐句</strong>：一整句有一個時間點。它最穩、最容易找到，也最適合一般顯示或經典疊層。</li>
+              <li><strong>逐字</strong>：每個字或每個詞都有自己的時間點，所以能做「唱到哪裡亮到哪裡」的效果。</li>
+              <li><strong>特殊歌詞動畫更適合逐字</strong>：除了「經典疊層」以外都算特殊歌詞動畫，例如星砂流光、折光階梯、斜拍告白、潮汐心景、霓彩伴唱。這些模板有逐字資訊時，流光、掃色、節奏感會更自然。</li>
+              <li><strong>無歌詞</strong>：歌曲可以播放，但畫面沒有可同步的歌詞。可以按「選擇來源」再找，或按「貼上歌詞」手動補。</li>
+              <li><strong>怎麼換逐句/逐字</strong>：按「選擇來源」，候選旁會標「逐句」或「逐字」。點你要的版本套用；如果列表沒有逐字，代表目前來源沒有提供逐字版本。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse">
+          <summary>⑦ 歌詞畫面怎麼調？先調哪些就好？</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>先選模板</strong>：不知道選什麼，先用霓彩伴唱或經典疊層。霓彩伴唱適合唱歌台；經典疊層最穩、最不容易擋畫面。</li>
+              <li><strong>再調字體和顏色</strong>：先讓字看得清楚，再追求漂亮。深色描邊或陰影通常比單純放大字更有效。</li>
+              <li><strong>看右側預覽</strong>：設定頁和首頁都有 OBS 預覽；看到的比例接近 OBS，但最後仍以 OBS 實際畫面為準。</li>
+              <li><strong>不同模板可以分開調</strong>：例如霓彩伴唱用藍色、星砂流光用紫色；切模板時會記住各自設定。</li>
+              <li><strong>怕調壞</strong>：先保存一個預設。調歪了就套回原本預設，不用重做。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse">
+          <summary>⑧ 歌詞畫面怎麼加進 OBS？</summary>
+          <div class="card-collapse-body">
+            <ol class="help-list help-list-num">
+              <li>到設定頁或右上角按「歌詞網址」複製網址。</li>
+              <li>在 OBS 來源列表按「＋」→「瀏覽器」。</li>
+              <li>URL 貼上歌詞網址，寬高建議先設成直播畫布大小，例如 1920×1080。</li>
+              <li>歌詞背景預設透明，可以直接疊在遊戲、聊天畫面、角色模型上。</li>
+              <li>回到控制台改字體、顏色、位置，OBS 會跟著更新。右上角看到「歌詞已連線」代表 OBS 歌詞來源有連上。</li>
+              <li>如果控制台有變、OBS 沒變，先在 OBS 的瀏覽器來源右鍵「重新整理」。OBS 有時會快取舊畫面。</li>
+            </ol>
+          </div>
+        </details>
+
+        <details class="card card-collapse">
+          <summary>⑨ 歌單畫面怎麼用？</summary>
+          <div class="card-collapse-body">
+            <ol class="help-list help-list-num">
+              <li>到「歌單」頁按「開台」，開始記錄本次直播唱過的歌。</li>
+              <li>選歌單版型。經典/清單版適合放角落；場景版適合做成整個畫面的一部分。</li>
+              <li>OBS 歌單網址固定是 <code>http://localhost:3000/setlist</code>，換版型會自動同步，不需要每次換網址。</li>
+              <li>場景版歌單請在 OBS 把瀏覽器來源解析度設大一點，例如 1920×1080；角落清單版才適合較窄尺寸。</li>
+              <li>還沒開台但想調外觀，按「載入示範資料」。調完按「清除示範資料」，不會動到真實歌單。</li>
+              <li>直播結束後按「複製 YouTube 章節」，可以貼到影片說明欄當時間戳。</li>
+            </ol>
+          </div>
+        </details>
+
+        <details class="card card-collapse">
+          <summary>⑩ 直播中最常用的操作</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>切歌</strong>：用上方播放器或迷你播放器的上一首/下一首，不用每次回到首頁。</li>
+              <li><strong>暫停測試</strong>：暫停音樂時歌詞會停在目前位置，適合調字體、顏色、位置。</li>
+              <li><strong>調 Key</strong>：用「變調」的 - / +，適合臨時升降半音；不確定就按「重置」。</li>
+              <li><strong>調速度</strong>：用「變速」，練歌或測時間軸時有用；正式直播前記得確認是否回到 1.00x。</li>
+              <li><strong>拖曳排序</strong>：播放清單左側把手可拖曳，臨時改歌單順序不用重新匯入。</li>
+              <li><strong>緊急隱藏</strong>：直播中歌詞錯得太誇張或不想顯示時按它，只隱藏歌詞來源，不會蓋住整個直播畫面。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse">
+          <summary>⑪ 看起來怪怪的時候，先檢查這些</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>OBS 沒畫面</strong>：確認網址是 localhost:3000/display，控制台右上角是否顯示「歌詞已連線」，OBS 來源寬高是否太小。</li>
+              <li><strong>控制台有變，OBS 沒變</strong>：在 OBS 瀏覽器來源右鍵重新整理；再不行，關掉來源重開。</li>
+              <li><strong>歌詞不跟音樂</strong>：先用「對齊第一句」；中段才歪再用逐行時間軸。</li>
+              <li><strong>字太小或被切掉</strong>：先調字級和最大寬度；霓彩伴唱的位置用「詳細設定 → 邊距 · 最大寬度 → 上下邊距」。</li>
+              <li><strong>拼音或諧音不對</strong>：中文歌不提供諧音，只顯示羅馬字；日文/韓文才會有中文近似音。</li>
+              <li><strong>匯入失敗</strong>：確認影片不是私人/會員限定，網路正常，且不要一次丟太大的播放清單。</li>
+            </ul>
+          </div>
+        </details>
+
+        <div class="modal-actions">
+          <button id="guide-complete" class="btn btn-primary" type="button">我已看完，開始使用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：匯出播放清單（#playlist-export-modal，只跳 App 內取名視窗，不跳系統「另存新檔」）═══ -->
+  <div id="playlist-export-modal" class="modal" hidden>
+    <div class="modal-card" style="max-width:360px">
+      <div class="modal-head">
+        <h3>匯出播放清單</h3>
+        <button id="playlist-export-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>名稱</label>
+          <input id="playlist-export-name" class="input" type="text" maxlength="60" placeholder="例如：週五直播歌單">
+        </div>
+        <div id="playlist-export-error" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none"></div>
+        <button id="playlist-export-confirm" class="btn btn-primary" type="button" style="width:100%">確認匯出</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：匯入播放清單（#playlist-import-modal，只跳 App 內選擇清單，不跳系統「開啟檔案」）═══ -->
+  <div id="playlist-import-modal" class="modal" hidden>
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-head">
+        <h3>匯入播放清單</h3>
+        <button id="playlist-import-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
+      </div>
+      <div class="modal-body">
+        <div id="playlist-import-list"></div>
+        <p id="playlist-import-empty" class="field-hint" style="margin:0" hidden>目前沒有已匯出的播放清單，先按「匯出」存一份看看。</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="audio-error-toast" class="toast" hidden>
+    <span id="audio-error-msg"></span>
+    <button id="audio-error-close" class="btn btn-sm btn-ghost" type="button">×</button>
+  </div>
+
+  <div id="app-toast" class="toast"></div>
+
+  <audio id="audio-player"></audio>
+
+  <!-- ═══ Modal：保存歌詞外觀預設（#lyric-preset-name-modal，避免使用部分 WebView 不支援的 prompt）═══ -->
+  <div id="lyric-preset-name-modal" class="modal" hidden>
+    <div class="modal-card" style="max-width:360px">
+      <div class="modal-head">
+        <h3>保存歌詞預設</h3>
+        <button id="lyric-preset-name-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="lyric-preset-name-input">預設名稱</label>
+          <input id="lyric-preset-name-input" class="input" type="text" maxlength="40" placeholder="例如：KTV 藍字">
+        </div>
+        <div id="lyric-preset-name-error" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none"></div>
+        <button id="lyric-preset-name-confirm" class="btn btn-primary" type="button" style="width:100%">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：要求輸入 PIN（#pin-required-modal，連線被拒時跳出，見 pin-auth.js）═══ -->
+  <div id="pin-required-modal" class="modal" hidden>
+    <div class="modal-card" style="max-width:340px">
+      <div class="modal-head"><h3>需要 PIN</h3></div>
+      <div class="modal-body">
+        <p class="field-hint" style="margin-top:0">這台裝置需要輸入 PIN 才能操作 Elitesand Pro（防止同網路其他人誤觸）。</p>
+        <input id="pin-required-input" class="input" type="password" inputmode="numeric" autocomplete="off" placeholder="輸入 PIN" style="margin-bottom:10px">
+        <div id="pin-required-error" style="color:var(--danger);font-size:12px;margin-bottom:10px;display:none"></div>
+        <button id="pin-required-submit" class="btn btn-primary" type="button" style="width:100%">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：PIN 管理（#pin-manage-modal，設定／更改／停用，見 pin-auth.js）═══ -->
+  <div id="pin-manage-modal" class="modal" hidden>
+    <div class="modal-card" style="max-width:360px">
+      <div class="modal-head">
+        <h3 id="pin-manage-title">設定 PIN</h3>
+        <button id="pin-manage-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
+      </div>
+      <div class="modal-body">
+        <div id="pin-manage-current-wrap" class="field" hidden>
+          <label>目前的 PIN</label>
+          <input id="pin-manage-current" class="input" type="password" inputmode="numeric" autocomplete="off">
+        </div>
+        <div id="pin-manage-new-wrap" class="field">
+          <label>新的 PIN（4~32 字元）</label>
+          <input id="pin-manage-new" class="input" type="password" inputmode="numeric" autocomplete="off">
+        </div>
+        <div id="pin-manage-confirm-wrap" class="field">
+          <label>再輸入一次確認</label>
+          <input id="pin-manage-confirm" class="input" type="password" inputmode="numeric" autocomplete="off">
+        </div>
+        <div id="pin-manage-error" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none"></div>
+        <button id="pin-manage-submit" class="btn btn-primary" type="button" style="width:100%">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="announcement-critical-modal" class="modal announcement-critical-modal" role="dialog" aria-modal="false" aria-labelledby="announcement-critical-title" hidden>
+    <div class="modal-card">
+      <div class="modal-head announcement-critical-head">
+        <h3 id="announcement-critical-title"></h3>
+        <button id="announcement-critical-close" class="btn btn-sm btn-ghost" type="button" hidden>關閉</button>
+      </div>
+      <div class="modal-body">
+        <p id="announcement-critical-message" class="announcement-critical-message"></p>
+        <a id="announcement-critical-link" class="btn btn-primary" target="_blank" rel="noopener noreferrer" hidden></a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/shared-utils.js"></script>
+  <script src="/vendor/Tone.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/pin-auth.js"></script>
+  <script src="/js/socket-client.js"></script>
+  <script src="/js/setlist-style-schema.js"></script>
+  <script src="/js/styles.js"></script>
+  <script src="/js/audio-processor.js"></script>
+  <script src="/js/soundtouch-engine.js"></script>
+  <script src="/js/error-handler.js"></script>
+  <script src="/js/app-shared.js"></script>
+  <script src="/js/app-youtube-import.js"></script>
+  <script src="/js/app-update-check.js"></script>
+  <script src="/js/app-announcements.js"></script>
+  <script src="/js/app-twitch.js"></script>
+  <script src="/js/app-playlist.js"></script>
+  <script src="/js/app-playback.js"></script>
+  <script src="/js/app-lyrics-timeline.js"></script>
+  <script src="/js/app-setlist-panel.js"></script>
+  <script src="/js/app-toast-utils.js"></script>
+  <script src="/js/app-style-sync.js"></script>
+  <script src="/js/playlist-state.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/lyric-extras.js"></script>
+  <script src="/js/media-library.js"></script>
+  <script src="/js/style-tuner.js"></script>
+  <script src="/js/preview-scale.js"></script>
+  <script src="/js/obs-websocket.js"></script>
+  <script src="/js/nav.js"></script>
+</body>
+</html>

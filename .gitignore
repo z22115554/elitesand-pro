@@ -1,0 +1,49 @@
+# 相依套件（npm install 會重新產生）
+node_modules/
+
+# 執行期資料（自動產生）
+data/
+downloads/
+logs/
+
+# 環境設定（每人各自設定，不上傳到 git）
+server/config.js
+
+# 系統檔案
+.DS_Store
+Thumbs.db
+dist/
+dist-release/
+
+# 打包產物與編輯暫存檔（不進版控）
+*.zip
+*.tmp.*
+*.tmp
+
+# 開發用工作文件（給 Claude/開發者自己看的交接紀錄，不對外公開）
+# 規則：repo 上除 README.md 外不得有任何 .md 或制度檔（見 .claude/MAINTENANCE.md）
+HANDOFF.md
+STATUS.md
+PACKAGING.md
+CLAUDE.md
+
+# 原始素材與備份檔（非程式必要）
+elitesand logo.png
+*.bak
+
+# 本機開發工具設定（launch.json 等，跟他人無關）
+.claude/
+
+# 內部技術參考筆記（含指向第三方 repo 的重抓/對齊說明，不對外公開）
+docs/
+
+# Codex 本機制度檔（同 CLAUDE.md 性質，只留本機不上 GitHub）
+AGENTS.md
+.codex/
+
+# 線上增量更新的暫存/備份（app-updater.js 就地更新時產生）
+.update-backup/
+.update-tmp/
+
+# 本機 preview 伺服器的隔離資料（正式資料仍在 data/）
+data-preview-*/

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "announcements": [
+    {
+      "id": "installer-only-update-v100",
+      "level": "critical",
+      "title": "重要：請更新到 v1.0.0",
+      "message": "程式內增量更新不支援此次升級。請從 GitHub Releases 下載 v1.0.0 Windows Installer，完整關閉 Elitesand Pro 後執行安裝程式。本次升級會保留您的歌曲庫與設定；安裝前仍建議先備份重要資料。",
+      "minVersion": "0.7.0",
+      "maxVersion": "1.0.0-zzz",
+      "publishedAt": "2026-09-08T00:00:00+08:00",
+      "expiresAt": "2027-12-31T23:59:59+08:00",
+      "dismissible": false,
+      "showOnce": false,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.0.0",
+      "buttonText": "下載 v1.0.0 Installer",
+      "actions": {
+        "disableIncrementalUpdate": true,
+        "showFullDownloadOnly": true
+      },
+      "enabled": true
+    }
+  ]
+}

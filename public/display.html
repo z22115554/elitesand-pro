@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elitesand Pro 歌詞顯示</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/display.css">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- OBS 顯示頁面：透明背景 + 歌詞動畫 -->
+  <div id="karaoke-display">
+    <!-- 自訂背景（Phase 4）：預設無 background-image = 完全透明，行為不變。
+         未來若加幾何/流體動態背景層，掛在此層之上、歌詞容器之下。 -->
+    <div id="display-background"></div>
+
+    <!-- 連線狀態橫幅 -->
+    <div id="connection-banner" class="connection-banner">⚠️ 與伺服器連線中斷...</div>
+
+    <!-- 當前歌詞行容器 -->
+    <div id="lyrics-container">
+      <!-- 歷史歌詞（舊行） -->
+      <div id="lyrics-history"></div>
+      <!-- 當前活躍歌詞行 -->
+      <div id="lyrics-active"></div>
+    </div>
+
+    <!-- Phase 7: 前奏倒數視覺節拍器 -->
+    <div id="intro-metronome" class="metronome-hidden">
+      <div id="metronome-dot"></div>
+      <div id="metronome-countdown"></div>
+    </div>
+
+    <!-- Phase 7: 極細進度條（OBS 專屬） -->
+    <div id="obs-progress-bar">
+      <div id="obs-progress-fill"></div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/shared-utils.js"></script>
+  <!-- 簡轉繁（opencc-js cn→tw，自包含字典、離線可用）。載入失敗時轉換功能自動停用、不影響顯示。 -->
+  <script src="/vendor/opencc-cn2t.js"></script>
+  <script src="/vendor/gsap.min.js"></script>
+  <!-- Phase 7: Tone.js 用於變調功能（自架，離線可用） -->
+  <script src="/vendor/Tone.js"></script>
+  <script src="/js/socket-client.js"></script>
+  <script src="/js/styles.js"></script>
+  <script src="/js/lyric-motion-kernel.js"></script>
+  <script src="/js/lyric-template-registry.js"></script>
+  <script src="/js/karaoke.js"></script>
+  <script src="/js/lyric-word-engine.js"></script>
+  <script src="/js/lyric-template-luminous.js"></script>
+  <script src="/js/lyric-template-partita.js"></script>
+  <script src="/js/lyric-template-tilt.js"></script>
+  <script src="/js/lyric-template-mindscape.js"></script>
+  <script src="/js/lyric-template-ktv.js"></script>
+  <script src="/js/audio-processor.js"></script>
+  <script src="/js/error-handler.js"></script>
+  <script src="/js/display.js"></script>
+</body>
+</html>

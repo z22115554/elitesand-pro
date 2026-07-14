@@ -1,0 +1,62 @@
+Elitesand Pro - Third-Party Notices
+===================================
+
+This file is a practical distribution notice, not legal advice. Individual
+license files shipped inside app/node_modules remain authoritative.
+
+Node.js runtime
+---------------
+Copyright Node.js contributors. Node.js is distributed under the MIT license
+and includes separately licensed third-party components.
+License: https://github.com/nodejs/node/blob/main/LICENSE
+
+yt-dlp
+------
+The main yt-dlp project is dedicated under The Unlicense. Official standalone
+executables also contain separately licensed components; see the release's
+THIRD_PARTY_LICENSES information.
+Source and license: https://github.com/yt-dlp/yt-dlp
+
+FFmpeg (bundled in the current portable public-beta build)
+----------------------------------------------------------
+The current portable build includes separate ffmpeg.exe and ffprobe.exe tools
+from a Gyan static GPLv3 essentials build. They are not linked into Elitesand
+Pro. The package's licenses/ffmpeg directory contains the GPLv3 text, exact
+FFmpeg source snapshot, detected build/configuration details, and source links.
+Future builds may return to requiring a separate FFmpeg installation.
+License guidance: https://ffmpeg.org/legal.html
+Gyan build information: https://www.gyan.dev/ffmpeg/builds/
+
+GSAP 3.12.5
+-----------
+Copyright GreenSock / Webflow. Used under the GSAP Standard No Charge License.
+License: https://gsap.com/community/standard-license/
+
+Tone.js 14.7.77
+---------------
+Copyright Yotam Mann and contributors. MIT License.
+Source: https://github.com/Tonejs/Tone.js
+
+SoundTouch JS 0.3.0
+-------------------
+Copyright Olli Parviainen, Ryan Berdeen, Jakub Fiala, Steve Blades and
+contributors. GNU Lesser General Public License v2.1 or later. The license
+header is retained in public/vendor/soundtouch.js.
+Source: https://github.com/cutterbl/SoundTouchJS
+
+OpenCC JS / OpenCC data
+-----------------------
+OpenCC JS is MIT licensed. OpenCC conversion data has its own notices.
+Source: https://github.com/nk2028/opencc-js
+
+npm dependencies
+----------------
+The package contains npm dependencies under MIT, Apache-2.0, BSD, ISC and
+other open-source licenses. Their package-level LICENSE/COPYING files remain
+inside app/node_modules. The portable builder also writes
+licenses/npm-license-inventory.json with package names, versions and declared
+license identifiers.
+
+No third-party license grants rights to song recordings, lyrics, cover art,
+or other media processed by the application. Testers are responsible for
+using media they are authorized to access and use.

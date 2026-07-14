@@ -1,0 +1,104 @@
+Elitesand Pro License (Free-Use, No-Redistribution)
+Copyright (c) 2026 Elitesand Pro. All rights reserved.
+
+================================================================
+中文（具約束力的正體中文版；與下方英文版意義衝突時以本中文版為準）
+================================================================
+
+一、授權範圍
+本軟體（Elitesand Pro，包含其原始碼、可執行檔、原創視覺與動畫設計、
+說明文件，合稱「本軟體」）免費授權任何人「使用」，包含個人、
+商業直播與商業演出用途，且不收取任何費用。
+
+二、允許的行為
+1. 下載、安裝、執行未經修改的本軟體正式發佈版本。
+2. 在你自己的直播、錄影、演出中使用本軟體產生的畫面（成品畫面歸你，
+   本授權不對你的直播內容主張任何權利）。
+3. 為了自用而修改設定檔（server/config.js 等）與匯入你自己的素材。
+
+三、禁止的行為（未經著作權人書面同意一律不得為之）
+1. 重新散布：不得將本軟體（原始碼或可執行檔，全部或一部）以任何形式
+   再散布、上架、轉售、出租、隨附於其他產品或服務一併提供。
+2. 改作：不得修改、改編、翻譯本軟體之原始碼或原創資產後散布，
+   亦不得基於本軟體製作衍生作品對外提供。
+3. 還原工程：不得為取得原始碼而反編譯、反組譯本軟體之可執行部分
+   （為與其他軟體互通所必要且法律強制允許者除外）。
+4. 移除標示：不得移除或變更本軟體中的著作權標示、名稱或本授權條款。
+
+四、第三方元件
+本軟體使用或隨附之第三方軟體（如 Node.js、yt-dlp、FFmpeg、GSAP、
+Tone.js、SoundTouch、OpenCC 及各 npm 相依套件）各自受其原授權條款拘束，
+不受本授權之「禁止散布／改作」限制；詳見 THIRD-PARTY-NOTICES.txt。
+本授權僅適用於 Elitesand Pro 之原創程式碼、原創視覺與動畫設計及文件。
+
+五、內容責任
+本軟體不對任何歌曲錄音、歌詞、封面或其他經其處理之媒體授予任何權利。
+使用者須自行確保對所使用媒體擁有合法權利。
+
+六、商標
+「Elitesand Pro」名稱與標誌不因本授權而授予商標權。
+
+七、無擔保與責任限制
+本軟體係「按現狀」提供，不附任何明示或默示之擔保，包含但不限於
+適售性、特定用途適用性與不侵權之擔保。於法律允許之最大範圍內，
+著作權人對因使用或無法使用本軟體所生之任何損害不負任何責任。
+
+八、終止
+違反本授權任一條款者，其依本授權取得之權利即自動終止。
+
+================================================================
+English (courtesy translation; the Chinese version above governs)
+================================================================
+
+1. GRANT
+Elitesand Pro (its source code, executables, original visual and animation
+design, and documentation, together the "Software") is licensed to anyone,
+free of charge, to USE — including personal use and commercial live-streaming
+or performance use.
+
+2. PERMITTED
+   a. Download, install, and run unmodified official releases of the Software.
+   b. Use the visuals the Software produces in your own streams, recordings,
+      and performances (your stream output is yours; this license claims no
+      rights over it).
+   c. Edit your own configuration files and import your own media for personal
+      use.
+
+3. PROHIBITED without the copyright holder's prior written permission
+   a. Redistribution — you may not redistribute, publish, resell, rent, or
+      bundle the Software (source or binary, in whole or in part) in any form.
+   b. Derivative works — you may not modify, adapt, or translate the
+      Software's source code or original assets and distribute the result, nor
+      build derivative works from the Software for distribution.
+   c. Reverse engineering — you may not decompile or disassemble the compiled
+      portions to obtain source code, except to the extent required for
+      interoperability and permitted by mandatory law.
+   d. Notices — you may not remove or alter copyright notices, names, or this
+      license.
+
+4. THIRD-PARTY COMPONENTS
+Third-party software used or bundled with the Software (Node.js, yt-dlp,
+FFmpeg, GSAP, Tone.js, SoundTouch, OpenCC, and npm dependencies) remains under
+its own license terms and is NOT subject to the no-redistribution / no-
+derivatives restrictions above. See THIRD-PARTY-NOTICES.txt. This license
+covers only Elitesand Pro's original code, original visual/animation design,
+and documentation.
+
+5. CONTENT
+The Software grants no rights to any song recording, lyrics, cover art, or
+other media it processes. Users are responsible for holding lawful rights to
+the media they use.
+
+6. TRADEMARKS
+The "Elitesand Pro" name and logo are not granted as trademarks by this
+license.
+
+7. NO WARRANTY / LIABILITY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, AND NONINFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY
+LAW, THE COPYRIGHT HOLDER IS NOT LIABLE FOR ANY DAMAGES ARISING FROM USE OR
+INABILITY TO USE THE SOFTWARE.
+
+8. TERMINATION
+Any breach of these terms automatically terminates the rights granted here.
