@@ -52,13 +52,28 @@ function parseTTML(ttmlText) {
       let pEnd = endAttr ? parseTTMLTime(endAttr) : -1;
 
       // 先解析逐字 <span>（連同各自的 begin/end）
+      // 注意：英文逐字 TTML（Apple/BetterLyrics）真正的詞間空白是 <span> 標籤「之間」的
+      // 純文字節點（如 <span>WELL,</span> <span>I</span>），不在 span 內容裡；CJK 逐字通常
+      // 相鄰 span 間沒有這個空白節點。過去只擷取 span 內容，詞間空白被整段丟掉，導致英文歌詞
+      // 全部黏在一起（如 IWANTYOUTOSTAY）。這裡補抓 span 之間的文字，含空白才補回一個空格——
+      // 空格必須黏在「前一個詞的結尾」（trailing），不能黏下一個詞的開頭（leading）：
+      // lyric-motion-kernel.js 的 tokenizeLineText／buildSemanticGroups 全專案統一約定
+      // 「空白黏前一詞尾」，Intl.Segmenter 才能對齊詞邊界；黏反方向會讓 buildSemanticGroups
+      // 誤判詞跨在兩個語義段之間、連環合併，整句被併成一個 displayWord（v5 模板變成整句
+      // 一起彈出，逐字動畫完全失效——實測用 ilomilo「remember not to get too close to
+      // stars」重現：黏反方向時 8 個詞被併成 1 個，改黏前一詞尾後正確保留 8 個獨立詞）。
       const spans = [];
       const spanRegex = /<span\s+([^>]*)>([\s\S]*?)<\/span>/g;
       let spanMatch;
+      let prevSpanEnd = 0;
       while ((spanMatch = spanRegex.exec(content)) !== null) {
+        const between = content.slice(prevSpanEnd, spanMatch.index);
+        prevSpanEnd = spanRegex.lastIndex;
         const spanAttrs = spanMatch[1];
         const spanContent = stripTags(spanMatch[2]);
         if (!spanContent.trim()) continue;
+        const needsSpace = spans.length > 0 && /\s/.test(stripTags(between));
+        if (needsSpace) spans[spans.length - 1].text += ' ';
         const sb = getAttr(spanAttrs, 'begin');
         const se = getAttr(spanAttrs, 'end');
         spans.push({

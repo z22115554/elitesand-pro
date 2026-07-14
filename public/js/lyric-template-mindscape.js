@@ -111,30 +111,56 @@
     return /^[\s.…·。]+$/.test((text || '').trim()) && (text || '').trim().length > 0;
   }
 
+  // ─── 菱形折行輪廓 ───
+  // 兩行以下不構成可辨識的菱形（見下方特判）；三行以上，中央行滿寬、越靠上下越窄，
+  // 邊緣行至少保留 DIAMOND_MIN_WIDTH_FACTOR 倍寬度（避免收成一個點、擠爆單行）。
+  const DIAMOND_MIN_WIDTH_FACTOR = 0.5;
+
+  /** 每一折行相對「基準最大寬度」的縮放係數：中央 1.0，往上下線性收窄到 DIAMOND_MIN_WIDTH_FACTOR。 */
+  function diamondRowWidthFactors(totalRows) {
+    if (totalRows <= 2) return new Array(Math.max(totalRows, 1)).fill(1);
+    const mid = (totalRows - 1) / 2;
+    const raw = [];
+    for (let r = 0; r < totalRows; r += 1) {
+      const distance = Math.min(Math.abs(r - mid) / mid, 1);
+      raw.push(1 - distance * (1 - DIAMOND_MIN_WIDTH_FACTOR));
+    }
+    const peak = Math.max(...raw);
+    return raw.map((v) => v / peak);
+  }
+
+  const DIAMOND_AVG_FACTOR = 0.75; // diamondRowWidthFactors 陣列的近似平均值（min=0.5、中央=1 的線性錐度）
+  const DIAMOND_MAX_ROWS = 10;
+
   /**
-   * 佈局主體：折行 → 選 hero → 閱讀序徑向推離。
-   * 全部確定性（seed=行起始毫秒），同一行的幾何永遠相同。
+   * 依「這句話總內容寬度」抓大概要折成幾行，只是用來決定菱形錐度陣列的長度——
+   * 實際每行實際吃多少內容由 packDiamondRows 依權重份額精算，這裡不用管準不準。
    */
-  function buildLayout(line, displayWords, vw) {
-    const seed = line.time | 0;
-    const fontPx = fontPxFor(line, vw);
-    const fontSpec = `700 ${fontPx}px ${getCssVar('--display-font-family', 'sans-serif')}`;
-    const isCjkLine = CJK_TEST.test(line.text || '');
-    const lineHeight = Math.round(fontPx * (isCjkLine ? 1.28 : 1.16));
-    const interlude = isInterludeText(line.text);
+  function chooseDiamondRowCount(totalContentWidth, baseMaxWidth) {
+    const rows = Math.ceil(totalContentWidth / Math.max(baseMaxWidth * DIAMOND_AVG_FACTOR, 1));
+    return clamp(rows, 1, DIAMOND_MAX_ROWS);
+  }
 
-    // 折行寬度：以視口的 62% 為目標（心象要「一團」而非長條）
-    const availableWidth = Math.max(vw - 48, 120);
-    const maxWidth = clamp(vw * 0.62, Math.min(200, availableWidth), availableWidth);
+  /**
+   * 把詞依「每行的菱形權重份額」分配進去，而非各行各自對一個獨立寬度上限貪婪塞滿——
+   * 後者在折完的實際行數跟預估不一致時，會反覆重折甚至來回震盪（試過：3→5→4→3
+   * 週期循環），而且就算收斂了，先填滿的行永遠是前面幾行，內容不夠長時尾端的窄行
+   * 會被跳過，變成「頭窄尾寬」而非對稱菱形。改成先把總內容寬度按每行權重
+   * （factors[r] / Σfactors）算出目標份額，再依序把詞裝進去，裝滿目標份額就換下一行；
+   * 超過預估行數時，多出的行沿用最後一行的份額（同一個安全網），不會無限增生。
+   */
+  function packDiamondRows(displayWords, fontSpec, baseMaxWidth, rowWidthFactors, totalContentWidth) {
+    const weightSum = rowWidthFactors.reduce((a, b) => a + b, 0) || 1;
+    const targets = rowWidthFactors.map((f) => Math.max((f / weightSum) * totalContentWidth, 1));
 
-    // 貪婪折行（標準排版技術；量測用去尾空白的文字，前進距離含空白）
     const rows = [];
     let row = { items: [], width: 0 };
     for (let i = 0; i < displayWords.length; i += 1) {
       const dw = displayWords[i];
       const advance = measureWidth(dw.text, fontSpec);
       const visible = measureWidth(dw.text.replace(/\s+$/, ''), fontSpec);
-      if (row.items.length > 0 && row.width + visible > maxWidth) {
+      const target = Math.max(targets[Math.min(rows.length, targets.length - 1)], visible);
+      if (row.items.length > 0 && row.width + visible > target) {
         rows.push(row);
         row = { items: [], width: 0 };
       }
@@ -146,6 +172,30 @@
       const lastItem = r.items[r.items.length - 1];
       r.width = lastItem.x + lastItem.width;
     }
+    return rows;
+  }
+
+  /**
+   * 佈局主體：折行（菱形輪廓）→ 選 hero → 閱讀序徑向推離。
+   * 全部確定性（seed=行起始毫秒），同一行的幾何永遠相同。
+   */
+  function buildLayout(line, displayWords, vw) {
+    const seed = line.time | 0;
+    const fontPx = fontPxFor(line, vw);
+    const fontSpec = `700 ${fontPx}px ${getCssVar('--display-font-family', 'sans-serif')}`;
+    const isCjkLine = CJK_TEST.test(line.text || '');
+    const lineHeight = Math.round(fontPx * (isCjkLine ? 1.28 : 1.16));
+    const interlude = isInterludeText(line.text);
+
+    // 折行寬度：以視口的 62% 為「中央行」目標（心象要「一團」而非長條）。
+    // 每行可用寬度依「越靠上下越窄」的菱形輪廓分配——讓歌詞落定後的整體外緣呈現
+    // 菱形（中央最寬、上下漸窄），不是事後把既有橫向版面整體拉高或縮放。
+    const availableWidth = Math.max(vw - 48, 120);
+    const baseMaxWidth = clamp(vw * 0.62, Math.min(200, availableWidth), availableWidth);
+    const totalContentWidth = displayWords.reduce((sum, dw) => sum + measureWidth(dw.text, fontSpec), 0);
+    const rowCount = chooseDiamondRowCount(totalContentWidth, baseMaxWidth);
+    const rowWidthFactors = diamondRowWidthFactors(rowCount);
+    const rows = packDiamondRows(displayWords, fontSpec, baseMaxWidth, rowWidthFactors, totalContentWidth);
 
     const totalHeight = Math.max(rows.length, 1) * lineHeight;
 
