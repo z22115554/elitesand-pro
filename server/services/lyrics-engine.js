@@ -35,7 +35,10 @@ const DURATION_TOLERANCE = 5;
 const LYRICS_SOURCE_PRIORITY = Object.freeze([
   'betterlyrics', 'paxsenix', 'kugou', 'qqmusic', 'lrclib', 'netease',
 ]);
-const LYRICS_CACHE_VERSION = 'v4-negative-cache-provider-health';
+// v6：v5 版把詞間空白黏在「下一個詞開頭」，跟 lyric-motion-kernel.js 的既有慣例（空白黏
+// 前一詞尾）方向相反，導致 v5 動畫模板的 buildSemanticGroups 把整句英文詞誤併成一個
+// displayWord（逐字動畫完全失效、整句一起彈出）。改黏前一詞尾後升版強制重新查詢。
+const LYRICS_CACHE_VERSION = 'v6-ttml-trailing-space';
 
 // ─── 歌詞快取（記憶體 + 磁碟持久化）───
 const path = require('path');
