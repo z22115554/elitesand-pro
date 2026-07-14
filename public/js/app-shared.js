@@ -1,0 +1,159 @@
+/**
+ * 控制面板（index.html）共用的 DOM 查詢物件。
+ *
+ * 這裡的 dom 只在載入時查一次、之後不重新賦值整個物件，只會改它底下元素的屬性
+ * （例如 dom.trackTitle.textContent = ...），所以其他模組拿到同一個參照就能安全共用，
+ * 不需要額外的同步機制。之後從 app.js 拆出去的模組（app-playback.js/app-playlist.js/...）
+ * 都透過 window.AppShared.dom 存取，不要各自重新查一次 DOM。
+ *
+ * 必須在 app.js 與其他 app-*.js 模組「之前」載入。
+ */
+window.AppShared = (function () {
+  const dom = {
+    connectionStatus: document.getElementById('connection-status'),
+    updateBanner: document.getElementById('update-banner'),
+    updateBannerVersion: document.getElementById('update-banner-version'),
+    updateBannerLink: document.getElementById('update-banner-link'),
+    updateBannerDismiss: document.getElementById('update-banner-dismiss'),
+    connectionText: document.getElementById('connection-text'),
+    dropZone: document.getElementById('drop-zone'),
+    fileInput: document.getElementById('file-input'),
+    browseBtn: document.getElementById('browse-btn'),
+    ytUrl: document.getElementById('yt-url'),
+    ytFetchBtn: document.getElementById('yt-fetch-btn'),
+    ytProgress: document.getElementById('yt-progress'),
+    playlist: document.getElementById('playlist'),
+    playlistCount: document.getElementById('playlist-count'),
+    albumArt: document.getElementById('album-art'),
+    trackTitle: document.getElementById('track-title'),
+    trackArtist: document.getElementById('track-artist'),
+    timeCurrent: document.getElementById('time-current'),
+    timeTotal: document.getElementById('time-total'),
+    progressTrack: document.getElementById('progress-track'),
+    progressFill: document.querySelector('#progress-track .progress-fill'),
+    progressThumb: document.getElementById('progress-thumb'),
+    btnPrev: document.getElementById('btn-prev'),
+    btnPlay: document.getElementById('btn-play'),
+    btnNext: document.getElementById('btn-next'),
+    // 迷你播放器（切到媒體庫/設定/歌單頁時仍可切歌/播放/暫停，見下方「迷你播放器」區塊）
+    miniPlayer: document.getElementById('mini-player'),
+    miniPlayerArt: document.getElementById('mini-player-art'),
+    miniPlayerTitle: document.getElementById('mini-player-title'),
+    miniPlayerArtist: document.getElementById('mini-player-artist'),
+    miniBtnPrev: document.getElementById('mini-btn-prev'),
+    miniBtnPlay: document.getElementById('mini-btn-play'),
+    miniBtnNext: document.getElementById('mini-btn-next'),
+    miniProgressTrack: document.getElementById('mini-progress-track'),
+    miniProgressFill: document.querySelector('#mini-progress-track .progress-fill'),
+    miniProgressThumb: document.getElementById('mini-progress-thumb'),
+    miniTimeCurrent: document.getElementById('mini-time-current'),
+    miniTimeTotal: document.getElementById('mini-time-total'),
+    btnStyle: document.getElementById('btn-style'),
+    btnRomanization: document.getElementById('btn-romanization'),
+    btnEmergency: document.getElementById('btn-emergency'),
+    lyricsPreview: document.getElementById('lyrics-preview'),
+    romanizationMode: document.getElementById('romanization-mode'),
+    animSpeed: document.getElementById('anim-speed'),
+    animSpeedVal: document.getElementById('anim-speed-val'),
+    animBlur: document.getElementById('anim-blur'),
+    animBlurVal: document.getElementById('anim-blur-val'),
+    animLines: document.getElementById('anim-lines'),
+    animLinesVal: document.getElementById('anim-lines-val'),
+    animFontsize: document.getElementById('anim-fontsize'),
+    animFontsizeVal: document.getElementById('anim-fontsize-val'),
+    copyObsUrl: document.getElementById('copy-obs-url'),
+    copyObsUrlTop: document.getElementById('copy-obs-url-top'),
+    obsUrl: document.getElementById('obs-url'),
+    lanInfoLoading: document.getElementById('lan-info-loading'),
+    lanInfoBody: document.getElementById('lan-info-body'),
+    lanInfoError: document.getElementById('lan-info-error'),
+    lanInfoQr: document.getElementById('lan-info-qr'),
+    lanInfoUrl: document.getElementById('lan-info-url'),
+    copyLanUrl: document.getElementById('copy-lan-url'),
+    ytdlpVersion: document.getElementById('ytdlp-version'),
+    ytdlpCheckBtn: document.getElementById('ytdlp-check-btn'),
+    ytdlpUpdateRow: document.getElementById('ytdlp-update-row'),
+    ytdlpLatest: document.getElementById('ytdlp-latest'),
+    ytdlpUpdateBtn: document.getElementById('ytdlp-update-btn'),
+    ytdlpMsg: document.getElementById('ytdlp-msg'),
+    displaySourceStatus: document.getElementById('display-source-status'),
+    setlistSourceStatus: document.getElementById('setlist-source-status'),
+    // Phase 5: 時間偏移
+    offsetDisplay: document.getElementById('offset-display'),
+    offsetPlus05: document.getElementById('offset-plus05'),
+    offsetMinus05: document.getElementById('offset-minus05'),
+    offsetPlus01: document.getElementById('offset-plus01'),
+    offsetMinus01: document.getElementById('offset-minus01'),
+    offsetReset: document.getElementById('offset-reset'),
+    offsetAlign: document.getElementById('offset-align'),
+    // 逐行時間軸編輯器
+    btnLyricsTimeline: document.getElementById('btn-lyrics-timeline'),
+    ltModal: document.getElementById('lyrics-timeline-modal'),
+    ltTrackTitle: document.getElementById('lt-track-title'),
+    ltRows: document.getElementById('lt-rows'),
+    ltEmpty: document.getElementById('lt-empty'),
+    ltCancel: document.getElementById('lt-cancel'),
+    ltApply: document.getElementById('lt-apply'),
+    ltClose: document.getElementById('lt-close'),
+    // Phase 5: 手動歌詞
+    lyricsDropZone: document.getElementById('lyrics-drop-zone'),
+    lyricsFileInput: document.getElementById('lyrics-file-input'),
+    btnPasteLyrics: document.getElementById('btn-paste-lyrics'),
+    lyricsPasteModal: document.getElementById('lyrics-paste-modal'),
+    lyricsPasteTextarea: document.getElementById('lyrics-paste-textarea'),
+    lyricsPasteConfirm: document.getElementById('lyrics-paste-confirm'),
+    lyricsPasteCancel: document.getElementById('lyrics-paste-cancel'),
+    // 播放清單匯出匯入（App 內取名/選清單，不跳系統檔案總管）
+    btnPlaylistExport: document.getElementById('btn-playlist-export'),
+    btnPlaylistImport: document.getElementById('btn-playlist-import'),
+    btnPlaylistClear: document.getElementById('btn-playlist-clear'),
+    playlistExportModal: document.getElementById('playlist-export-modal'),
+    playlistExportName: document.getElementById('playlist-export-name'),
+    playlistExportError: document.getElementById('playlist-export-error'),
+    playlistExportConfirm: document.getElementById('playlist-export-confirm'),
+    playlistExportCancel: document.getElementById('playlist-export-cancel'),
+    playlistImportModal: document.getElementById('playlist-import-modal'),
+    playlistImportList: document.getElementById('playlist-import-list'),
+    playlistImportEmpty: document.getElementById('playlist-import-empty'),
+    playlistImportCancel: document.getElementById('playlist-import-cancel'),
+    // Phase 5: 音訊錯誤
+    audioErrorToast: document.getElementById('audio-error-toast'),
+    audioErrorMsg: document.getElementById('audio-error-msg'),
+    audioErrorClose: document.getElementById('audio-error-close'),
+    // Phase 7: 變調與變速
+    pitchSlider: document.getElementById('pitch-slider'),
+    pitchValue: document.getElementById('pitch-value'),
+    pitchReset: document.getElementById('pitch-reset'),
+    pitchUp: document.getElementById('pitch-up'),
+    pitchDown: document.getElementById('pitch-down'),
+    speedSlider: document.getElementById('speed-slider'),
+    speedValue: document.getElementById('speed-value'),
+    speedReset: document.getElementById('speed-reset'),
+    speedUp: document.getElementById('speed-up'),
+    speedDown: document.getElementById('speed-down'),
+    volumeSlider: document.getElementById('volume-slider'),
+    volumeVal: document.getElementById('volume-val'),
+    metronomeToggle: document.getElementById('metronome-toggle'),
+    // Setlist / Session
+    sessionStart: document.getElementById('session-start'),
+    sessionStop: document.getElementById('session-stop'),
+    sessionReset: document.getElementById('session-reset'),
+    sessionStatus: document.getElementById('session-status'),
+    setlistCount: document.getElementById('setlist-count'),
+    setlistPanel: document.getElementById('setlist-panel'),
+    btnCopyChapters: document.getElementById('btn-copy-chapters'),
+    setlistObsUrl: document.getElementById('setlist-obs-url'),
+    copySetlistUrl: document.getElementById('copy-setlist-url'),
+    copySetlistUrlTop: document.getElementById('copy-setlist-url-top'),
+    setlistTheme: document.getElementById('setlist-theme'),
+  };
+
+  // 跨模組共用的核心可變狀態（播放清單/目前曲目索引/offset/最新播放位置）。
+  // 這裡只是一個空殼物件，實際的 getter/setter 由 app.js 在載入時用
+  // Object.defineProperty 掛上去，代理到 app.js 內部原本就有的區域變數——
+  // 這樣 app.js 現有的 150+ 個呼叫點完全不用改，其他之後拆出去的模組
+  // 讀寫 AppShared.state.playlist 時，實際上讀寫的就是 app.js 那個變數本體。
+  const state = {};
+
+  return { dom, state };
+})();

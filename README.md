@@ -1,0 +1,178 @@
+# Elitesand Pro
+
+目前公開版：`v0.7.5`
+
+> [!WARNING]
+> **v0.7.1～v0.7.3 內建的更新器無法安全完成這次升級，請勿使用「立即線上更新」。**
+>
+> 請下載 `v0.7.5` 完整可攜版，關閉 Elitesand Pro 後解壓縮使用。建議先保留原資料夾副本。
+> 已安裝 `v0.7.3-p0-hotfix.1` 或 `v0.7.4-p0-test.2` 者可直接使用安全線上更新。
+
+VTuber／唱歌直播主用的動態歌詞演出工具。把歌詞動畫和直播歌單以**透明疊加層**放進 OBS，
+用桌面控制面板或手機遙控器即時操作：播放、切歌、對時間軸、變調變速、換模板、緊急隱藏。
+
+純 Node.js + 原生 HTML/CSS/JS，無框架、無打包工具——OBS 瀏覽器來源直接吃網頁，改完即時生效。
+
+## 主要功能
+
+### 歌詞
+- **多來源自動抓歌詞**：依歌名／歌手並行搜尋六個來源（LRCLIB、網易雲、酷狗、QQ、Apple Music 系），
+  自動挑最合適的版本；也可手動開「選擇來源」比較候選，或直接貼上 LRC／SRT／純文字
+- **逐句（LRC）與逐字（KRC）**：播放清單會標示每首歌目前是「逐字」「逐句」「純文字」或「無歌詞」
+- **六種歌詞動畫模板**：經典疊層、星砂流光、折光階梯、斜拍告白、潮汐心景、霓彩伴唱，
+  每個模板**獨立記憶**自己的字體／顏色／位置設定，並可保存具名預設一鍵切換
+- **拼音／諧音**：日文、韓文歌詞可顯示羅馬拼音與中文諧音；中文歌顯示漢語拼音（不做諧音）
+- **簡轉繁**：簡體歌詞可自動顯示為繁體（只轉原文，拼音／諧音不動）
+- **時間軸校正**：整首平移用「對齊第一句」一鍵校正；個別句子拖拍用「逐行時間軸編輯器」微調
+- **緊急隱藏**：直播中一鍵隱藏歌詞畫面（只隱藏自家元素，不會蓋到你的直播場景）
+
+### 播放
+- **YouTube 匯入**：貼網址自動下載音訊＋抓歌詞＋抓封面；支援單曲與整份播放清單批次匯入；
+  下載檔自動命名為「歌手 - 歌名.mp3」方便整理
+- **本機音檔**：拖曳 MP3／FLAC／WAV／M4A／OGG 直接匯入
+- **變調變速**：±12 半音、0.5x–1.5x，每首歌獨立記憶；內建高品質變調引擎（SoundTouch／WSOLA）
+- **播放清單**：拖曳排序、編輯歌名／歌手、匯出／匯入具名清單、一鍵清除（含確認）
+- **媒體庫**：唱過的歌自動記錄，含播放次數與歌詞／變調記憶，一鍵重新加入清單
+- **迷你播放器**：切到其他分頁時頂部仍有播放控制與可拖曳進度條
+- **歌詞來源**：預設依 BetterLyrics → Apple Music → 酷狗 → QQ → LRCLIB 搜尋，網易作最後備援；
+  酷狗／QQ 的標題、製作人員、工作室與發行資訊會在顯示前統一清洗
+
+### 直播歌單（Setlist）
+- 獨立的 OBS 疊加層，顯示「已唱／正在唱／接下來」；開台／收台記錄本場曲目與時間點
+- **Twitch 自動開台／點歌**：以 Twitch 的實際開台時間自動開始 session；觀眾輸入
+  `!點歌 <YouTube 連結>` 不會自動下載，而是列在側欄的「點歌」獨立確認頁。主播按「確認下載」才加入
+  播放清單（可拒絕），避免首頁被請求塞滿；結果才回覆聊天室。匯入失敗可重試，30 分鐘未處理會自動取消。
+  音檔未下載成功時絕不會加入不可播放的空項目；會保留請求供重試。
+- 多種版型（角落清單型與全畫面場景型）× 多主題，外觀 40+ 項可調，場景版每個版型獨立設定
+- OBS 網址固定不變，換版型／主題自動同步，不用重貼網址
+- 收播後一鍵複製 YouTube 章節時間戳
+
+### 控制與安全
+- **手機遙控器**：播放／切歌／調 Key／選歌詞，並可同步切換六種模板、位置、動態強度與已保存預設
+- **OBS 連線狀態**：面板右上角即時顯示歌詞／歌單來源是否已連上
+- **PIN 保護（選用）**：伺服器對區網開放，可設 PIN 防止同 Wi-Fi 裝置誤觸；
+  OBS 顯示來源永遠豁免，不會因 PIN 斷線
+- **Stream Deck**：HTTP 指令端點（`/api/deck/:action`）可綁定播放／切歌／緊急隱藏等動作
+
+## 安裝與執行
+
+需求：Node.js 18+；要用 YouTube 匯入功能需另裝 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 與
+[ffmpeg](https://ffmpeg.org/)（放進 PATH）。
+
+```bash
+npm install
+npm start
+```
+
+打開 `http://localhost:3000` 就是控制面板。第一次使用會主動開啟新手引導，並檢查
+WebSocket、yt-dlp、FFmpeg 與目前版本；之後仍可從側欄「教學」再次開啟。
+
+## 常用網址
+
+| 網址 | 用途 |
+|---|---|
+| `/` | 桌面控制面板（手機打開會自動轉到遙控器） |
+| `/controller` | 手機遙控器 |
+| `/display` | 貼進 OBS 的歌詞來源（透明背景） |
+| `/setlist` | 貼進 OBS 的直播歌單來源（透明背景） |
+
+## 接進 OBS
+
+1. 面板右上角按「歌詞網址」複製（或到設定頁複製）
+2. OBS 來源列表 →「＋」→「瀏覽器」→ 貼上網址，寬高建議設成直播畫布大小（如 1920×1080）
+3. 歌單同理（右上角「歌單網址」）；角落清單版可用較窄尺寸，全畫面場景版建議 16:9 滿版
+4. 之後在面板改任何設定都會即時反映到 OBS；若覺得「改了沒變」，對來源右鍵「重新整理快取」
+
+## 設定檔
+
+`server/config.js`（不進版控，每台機器各自設定；沒有此檔也能啟動）：
+
+- `port`：伺服器埠號（預設 3000）
+- `cacheDays`／`maxCacheEntries`：歌詞快取保留天數與筆數
+- `updateCheckRepo`：預設追蹤 `z22115554/elitesand-pro`（含公開測試 prerelease），有新版時顯示直接下載提示；可改成自己的 fork 或設空字串停用
+- `twitchClientId`：Elitesand Pro 已內建公開 Client ID，一般使用者不需設定。只要在「一般設定 → Twitch 開台／聊天室點歌」按「連接 Twitch」，就會直接開啟 Twitch 登入／授權頁；進階使用者才可用自己的 Client ID 覆蓋。
+  Console 可保留 Redirect URL `http://localhost:3000/auth/twitch/callback`，但公開用戶端實際採 Device Code Flow；**不需要 Client Secret，也不要把 token 貼給任何人**。
+- `twitchRequestCommand`：聊天室點歌命令，預設 `!點歌`；目前命令後必須附 YouTube 連結，才能安全使用既有單一匯入佇列。
+
+## 安全線上更新
+
+從 `v0.7.3-p0-hotfix.1` 起，增量更新改由獨立 updater 完成：主程式只下載、驗證與建立 staging，
+回應前端後優雅關閉；外部 updater 等待原程序結束，再備份、原子替換、失敗回滾並重新啟動。
+
+更新只接受 GitHub Release 中名稱完全相符的兩個資產：
+
+- `update.zip`
+- `update.zip.sha256`
+
+更新流程會驗證 SHA-256、ZIP 路徑與大小、檔案白名單、manifest，以及相依套件與 lockfile
+結構。`data/`、`downloads/`、`logs/`、設定、授權資料、Twitch token、PIN/auth 狀態與
+使用者媒體都不會被增量更新覆蓋。
+
+由於 `v0.7.1`～`v0.7.3` 內建的 updater 無法安全完成升級，且無法靠遠端資產補救。以下升級必須下載
+完整 Portable 版本：
+
+## 可攜版
+
+- `v0.7.1 → v0.7.2`
+- `v0.7.2 → v0.7.3`
+- `v0.7.3 → v0.7.5`
+
+安裝 `v0.7.5` 後，後續相容版本才可使用新的安全增量更新。若相依套件或 lockfile 結構改變，介面也會要求改用完整 Portable 版本。
+
+### 建立增量更新包
+
+應以「上一個已發布 Portable 的 `app` 目錄」作為基準：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-update.ps1 -BaselineRoot "C:\path\to\previous-portable\app"
+```
+
+輸出為 `dist/update.zip` 與只含 64 個十六進位字元的 `dist/update.zip.sha256`。`-SkipBaselineCheck` 僅供本機檢查，不應用於正式 Release。
+
+## 遠端公告
+
+程式會從固定 HTTPS 網址讀取 `announcement.json`，並支援：
+
+- `info`：右下角提示與設定頁紀錄
+- `warning`：頂部固定警告列
+- `critical`：不可忽略的中央警告卡
+- 生效時間、到期時間、版本範圍、只顯示一次與可否關閉
+- `disableIncrementalUpdate`、`showFullDownloadOnly` 安全動作
+
+公告內容經伺服器端 schema 驗證後才會顯示，前端一律以文字節點渲染；連線失敗時使用本機快取，過期公告即使離線也不會再次出現。根目錄的 `announcement.json` 是發布範例，預設停用，啟用前應確認版本範圍與到期日。
+
+## 打包
+
+```powershell
+npm run package:portable
+npm run package:update -- -BaselineRoot "C:\path\to\previous-portable\app"
+```
+
+會在 `dist/` 產生 `Elitesand-Pro-v<版本>-portable.zip`——內含 Node 執行檔與所有依賴。
+目前 `v0.7.5` 公開包預設隨附 yt-dlp、FFmpeg／ffprobe，並在 `licenses/ffmpeg/`
+附精確 FFmpeg source snapshot、GPLv3 與 build 資訊；若要建立不含 FFmpeg 的分離版，執行
+`tools/build-portable.ps1 -WithoutFfmpeg`。解壓後雙擊 `Start Elitesand Pro.cmd`
+即可使用，對方不用裝任何東西。建置同時產生同名 `.sha256`；啟動器必須維持純 CMD、
+ASCII、無 BOM。未簽章，Windows SmartScreen 警告屬正常（更多資訊 → 仍要執行）。
+
+## 授權
+
+Elitesand Pro 採 [Elitesand Pro 授權條款](LICENSE)：**免費使用**（含個人與商業直播／演出），
+但**未經書面同意不得重新散布或改作**。第三方元件維持各自授權，詳見
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)；歌曲、歌詞、封面與其他媒體權利不包含在本專案授權內。
+
+## 開發
+
+```bash
+npm run dev    # node --watch 自動重啟
+npm test       # 單元測試（歌詞解析／羅馬化／持久化等）
+```
+
+## 常見問題
+
+- **OBS 裡改了設定卻沒變**：對瀏覽器來源按右鍵「重新整理快取」，OBS 會頑固快取舊版頁面
+- **YouTube 匯入的中文標題亂碼**：程式已強制 UTF-8 處理；若仍發生，多半是 yt-dlp 版本過舊，更新後重開伺服器
+- **匯入後找不到歌**：先看「播放清單」，沒有的話看「媒體庫」是否已有同一首
+- **歌詞完全找不到**：先確認歌名／歌手正確（清單上的 ✎ 可修正），再重新「選擇來源」；還是沒有就「貼上歌詞」手動補
+- **3000 埠被占用**：改 `server/config.js` 的 `port`
+- **變調後音質**：內建 SoundTouch 高品質變調引擎，大幅變調仍可能有些許人工感屬正常；調整變調後建議重新播放該首

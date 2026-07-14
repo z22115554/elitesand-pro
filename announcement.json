@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "announcements": [
+    {
+      "id": "example-update-warning",
+      "level": "critical",
+      "title": "請勿使用舊版線上更新",
+      "message": "v0.7.1 與 v0.7.2 的舊版線上更新無法安全修復，請下載完整 Portable 版本。",
+      "minVersion": "0.7.1",
+      "maxVersion": "0.7.2",
+      "publishedAt": "2026-07-13T00:00:00+08:00",
+      "expiresAt": "2026-08-31T23:59:59+08:00",
+      "dismissible": false,
+      "showOnce": false,
+      "url": "https://github.com/z22115554/elitesand-pro/releases",
+      "buttonText": "前往下載",
+      "enabled": false,
+      "actions": {
+        "disableIncrementalUpdate": true,
+        "showFullDownloadOnly": true
+      }
+    }
+  ]
+}
