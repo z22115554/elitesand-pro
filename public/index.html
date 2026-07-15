@@ -1565,149 +1565,170 @@
           </div>
         </section>
 
+        <!--
+          統一格式規則（改這份教學的人請照這兩種寫，不要混用）：
+          A. 步驟型（有先後順序、照做就對了）→ .help-steps／.help-step，數字圈圈＋粗體動作＋一句白話說明。
+          B. 知識型（不分先後、隨時查）→ <ul class="help-list">，每一條都是「粗體短標題」＋一句白話說明，
+             沒有例外——不可以有「只有一句話、沒有粗體標題」的條目。
+        -->
+
         <details class="card card-collapse" open>
-          <summary>① 先看懂這個程式在做什麼</summary>
+          <summary>① 這個程式在做什麼？（30 秒看懂）</summary>
           <div class="card-collapse-body">
             <ul class="help-list">
-              <li><strong>Elitesand Pro 是直播用的歌詞工具</strong>：你在這裡匯入歌曲、整理播放清單、調整歌詞畫面；OBS 只負責把歌詞網址當瀏覽器來源放到直播畫面上。</li>
-              <li><strong>控制台不是 OBS 畫面</strong>：控制台是你操作用的後台；右側「歌詞即時預覽」才接近觀眾會在 OBS 看到的畫面。</li>
-              <li><strong>首頁</strong>：加歌、播放、暫停、切歌、調 Key、選歌詞來源、貼歌詞、看目前播放清單。</li>
-              <li><strong>設定頁</strong>：調字體、顏色、描邊、位置、動畫模板、OBS 歌詞網址。</li>
-              <li><strong>歌單頁</strong>：給 OBS 顯示今天唱過什麼、正在唱什麼、接下來唱什麼。</li>
-              <li><strong>媒體庫</strong>：以前匯入過的歌會留在這裡，下次不用重新下載。</li>
+              <li><strong>它負責「歌詞畫面」，不負責「錄影/直播」</strong>：你在這裡選歌、調歌詞樣式；真正的直播畫面由 OBS 負責，OBS 只是把這裡的一個網址當成一塊「透明畫面」放進去。</li>
+              <li><strong>你現在看到的畫面 ≠ 觀眾看到的畫面</strong>：你眼前這個是「控制台」，是你操作用的後台，觀眾看不到；觀眾看到的其實是右側那塊「歌詞即時預覽」的內容。</li>
+              <li><strong>首頁</strong>：加歌、按播放/暫停/切歌、調音高、選歌詞、手動貼歌詞、看目前的播放清單，都在這裡。</li>
+              <li><strong>歌詞設定頁</strong>：字體、顏色、描邊、位置、動畫模板長什麼樣子，在這裡調。</li>
+              <li><strong>歌單頁</strong>：如果你想在畫面上顯示「今天唱過哪些歌」，這裡負責。</li>
+              <li><strong>媒體庫</strong>：以前匯入過的歌都會留底，之後要再唱同一首，不用重新下載。</li>
             </ul>
           </div>
         </details>
 
         <details class="card card-collapse" open>
-          <summary>② 第一次使用，照這個順序做</summary>
+          <summary>② 第一次使用？照這 5 步做，不要跳步</summary>
           <div class="card-collapse-body help-steps">
-            <div class="help-step"><span class="help-step-num">1</span><div><strong>先不要急著接 OBS</strong> — 先在控制台確認歌曲能播放、歌詞能顯示。這樣出問題時比較知道是歌詞問題，還是 OBS 來源問題。</div></div>
-            <div class="help-step"><span class="help-step-num">2</span><div><strong>加一首歌</strong> — 在「歌詞」頁的「音樂來源」貼 YouTube 網址，或切到「本機檔案」拖曳音檔。匯入完成後，歌曲會出現在左側播放清單。</div></div>
-            <div class="help-step"><span class="help-step-num">3</span><div><strong>點播放清單裡的歌曲</strong> — 看到上方播放器變成那首歌，再按播放。不要只看媒體庫，媒體庫是倉庫；播放清單才是本次要播放的隊列。</div></div>
-            <div class="help-step"><span class="help-step-num">4</span><div><strong>確認右側預覽</strong> — 歌詞出現在「歌詞即時預覽」就代表歌詞畫面基本正常；如果沒有歌詞，先看播放清單的歌詞狀態或按「選擇來源」。</div></div>
-            <div class="help-step"><span class="help-step-num">5</span><div><strong>再接 OBS</strong> — 控制台預覽正常後，到設定頁複製歌詞網址，OBS 新增「瀏覽器」來源貼上。</div></div>
+            <div class="help-step"><span class="help-step-num">1</span><div><strong>先不要碰 OBS</strong>：這一步的目的只是「確認歌曲能播、歌詞能出現」。之後如果有問題，才能一眼看出是歌詞的問題，還是 OBS 的問題。</div></div>
+            <div class="help-step"><span class="help-step-num">2</span><div><strong>加一首歌</strong>：在「歌詞」頁的「音樂來源」貼上一個 YouTube 網址，或切到「本機檔案」把 mp3 拖進去。匯入完成後，這首歌會出現在左邊的播放清單裡。</div></div>
+            <div class="help-step"><span class="help-step-num">3</span><div><strong>點這首歌，再按播放</strong>：點播放清單裡剛剛那首歌，確認上方播放器變成它，再按播放鍵。（提醒：媒體庫只是倉庫，不是現在要播的清單；真正要播的永遠是「播放清單」。）</div></div>
+            <div class="help-step"><span class="help-step-num">4</span><div><strong>看右邊有沒有出現歌詞</strong>：右側「歌詞即時預覽」跑出字，就代表一切正常。如果沒有字，先看播放清單那首歌旁邊寫「無歌詞」還是別的，或按「選擇來源」自己挑一個。</div></div>
+            <div class="help-step"><span class="help-step-num">5</span><div><strong>最後才接 OBS</strong>：確認控制台這邊都正常之後，去歌詞設定頁複製「歌詞網址」，貼進 OBS 的「瀏覽器」來源。</div></div>
           </div>
         </details>
 
         <details class="card card-collapse" open>
-          <summary>③ 沒有歌曲時，怎麼先測字體和畫面？</summary>
+          <summary>③ 手邊還沒有歌？先用「示範歌詞」測畫面</summary>
           <div class="card-collapse-body">
             <ul class="help-list">
-              <li>在「歌詞」頁右側「歌詞即時預覽」上方按 <strong>示範歌詞</strong>。</li>
-              <li>預覽會顯示 <strong>這是一句示範用的歌詞 This is an example lyric.</strong>，可以同時檢查中文字體、英文字體、顏色、描邊、陰影和動畫感覺。</li>
-              <li>示範歌詞只給控制台預覽用，不會加入播放清單、不會改歌曲資料、不會存進媒體庫。</li>
-              <li>一旦真的播放有歌詞的歌曲，示範歌詞會被真實歌詞取代。</li>
+              <li><strong>在哪裡按</strong>：「歌詞」頁右側「歌詞即時預覽」的上方，有一個「示範歌詞」按鈕。</li>
+              <li><strong>按下去會發生什麼</strong>：畫面會出現一句固定的假歌詞（中英文各一句），讓你先看字體、顏色、描邊、陰影、動畫合不合適。</li>
+              <li><strong>不會弄壞任何東西</strong>：這只是預覽用的假資料，不會被加進播放清單、不會被存進媒體庫、也不會動到任何一首真的歌。</li>
+              <li><strong>什麼時候會消失</strong>：等你真的播放一首有歌詞的歌，畫面就會自動換成真正的歌詞，假歌詞不用手動關掉。</li>
             </ul>
           </div>
         </details>
 
         <details class="card card-collapse">
-          <summary>④ 加歌時最常卡住的地方</summary>
+          <summary>④ 加歌最常卡住的地方</summary>
           <div class="card-collapse-body">
             <ul class="help-list">
-              <li><strong>YouTube 單曲</strong>：貼一般影片、短網址、Shorts、YouTube Music 都可以。私人影片、會員限定、需要登入才能看的影片通常無法匯入。</li>
-              <li><strong>YouTube 播放清單</strong>：網址裡有 <code>list=</code> 會批次匯入。清單很長時會等比較久，先用少量歌曲測比較穩。</li>
-              <li><strong>本機音檔</strong>：適合你已經有 mp3/wav 的情況。若檔名或內建標籤不完整，可能需要手動補歌名和歌手。</li>
-              <li><strong>匯入後找不到</strong>：先看「播放清單」有沒有出現；如果沒有，再看「媒體庫」是否已有同一首歌。</li>
-              <li><strong>下載後檔名</strong>：系統會盡量用「歌手 - 歌名」命名，方便之後整理硬碟。</li>
-            </ul>
-          </div>
-        </details>
-
-        <details class="card card-collapse" open>
-          <summary>⑤ 歌詞怎麼來？找不到歌詞怎麼辦？</summary>
-          <div class="card-collapse-body">
-            <ul class="help-list">
-              <li><strong>自動搜尋</strong>：匯入歌曲後，系統會用歌名與歌手去找歌詞。歌名越乾淨，越容易找到正確版本。</li>
-              <li><strong>播放清單狀態</strong>：歌曲旁會顯示「逐字」「逐句」或「無歌詞」。看到「無歌詞」不是壞掉，只是目前沒有可用歌詞。</li>
-              <li><strong>想換版本</strong>：按「選擇來源」，會列出候選歌詞。選時間比較準、語言正確、版本接近的那個。</li>
-              <li><strong>完全找不到</strong>：按「貼上歌詞」手動貼 LRC、SRT 或純文字。LRC/SRT 有時間軸；純文字只能顯示文字，不會精準跟拍。</li>
-              <li><strong>歌名歌手錯了</strong>：播放清單每首歌有編輯按鈕，先修正歌名/歌手，再重新選歌詞來源。這是新手最容易忽略的原因。</li>
-              <li><strong>整首都快或慢</strong>：用「對齊第一句」。先播到第一句歌詞剛唱出來的位置，再按它，整首會一起校正。</li>
-              <li><strong>只有中間幾句不準</strong>：用「逐行時間軸編輯」，不要一直重按「對齊第一句」。</li>
+              <li><strong>YouTube 單曲網址都能貼</strong>：一般影片、短網址、Shorts、YouTube Music 都可以直接貼。私人影片、會員限定、要登入才能看的影片，通常匯不進來。</li>
+              <li><strong>YouTube 播放清單也可以</strong>：只要網址裡有 <code>list=</code> 就會整批匯入。清單很長時會花比較久，第一次建議先貼幾首少量的測試。</li>
+              <li><strong>本機音檔也可以</strong>：你電腦裡本來就有的 mp3/wav 可以直接拖曳上傳。如果檔名或內建標籤是空的，匯入後可能要自己補歌名和歌手。</li>
+              <li><strong>匯進去了但找不到人</strong>：先確認「播放清單」裡有沒有它；沒有的話，再去「媒體庫」找同一首歌，可能是之前就匯過了。</li>
+              <li><strong>下載下來的檔名長什麼樣</strong>：程式會盡量把檔案存成「歌手 - 歌名.mp3」，方便你之後自己整理硬碟。</li>
             </ul>
           </div>
         </details>
 
         <details class="card card-collapse" open>
-          <summary>⑥ 逐句、逐字、無歌詞是什麼？</summary>
+          <summary>⑤ 歌詞是怎麼來的？完全找不到怎麼辦？</summary>
           <div class="card-collapse-body">
             <ul class="help-list">
-              <li><strong>逐句</strong>：一整句有一個時間點。它最穩、最容易找到，也最適合一般顯示或經典疊層。</li>
-              <li><strong>逐字</strong>：每個字或每個詞都有自己的時間點，所以能做「唱到哪裡亮到哪裡」的效果。</li>
-              <li><strong>特殊歌詞動畫更適合逐字</strong>：除了「經典疊層」以外都算特殊歌詞動畫，例如星砂流光、折光階梯、斜拍告白、潮汐心景、霓彩伴唱。這些模板有逐字資訊時，流光、掃色、節奏感會更自然。</li>
-              <li><strong>無歌詞</strong>：歌曲可以播放，但畫面沒有可同步的歌詞。可以按「選擇來源」再找，或按「貼上歌詞」手動補。</li>
-              <li><strong>怎麼換逐句/逐字</strong>：按「選擇來源」，候選旁會標「逐句」或「逐字」。點你要的版本套用；如果列表沒有逐字，代表目前來源沒有提供逐字版本。</li>
+              <li><strong>匯入時會自動找</strong>：程式會拿歌名和歌手去網路上找歌詞。歌名越乾淨（沒有多餘符號），越容易找到對的版本。</li>
+              <li><strong>播放清單上的小字代表什麼</strong>：每首歌旁邊會寫「逐字」「逐句」或「無歌詞」。看到「無歌詞」不是壞掉，只是這次自動搜尋沒找到而已。</li>
+              <li><strong>想換一個歌詞版本</strong>：按「選擇來源」，會列出好幾個候選版本，挑時間軸最準、語言對、版本最接近的那一個。</li>
+              <li><strong>網路上真的找不到</strong>：按「貼上歌詞」，手動貼 LRC、SRT 或純文字都可以。LRC/SRT 有時間軸，會跟拍；純文字沒有時間軸，只會顯示文字、不會跟拍。</li>
+              <li><strong>歌詞怎麼搜都搜不到，多半是歌名或歌手打錯了</strong>：在播放清單裡按這首歌的編輯按鈕，先把歌名/歌手改乾淨，再重新按一次「選擇來源」。這是新手最容易漏掉的一步。</li>
+              <li><strong>整首歌詞都提早或都delay</strong>：用「對齊第一句」——播到第一句歌詞真正該出現的那一瞬間，按下去，整首歌詞會一起往前或往後移動。</li>
+              <li><strong>只有中間幾句歪掉，其他都正常</strong>：不要重按「對齊第一句」（那樣會動到全部）。改用「逐行時間軸編輯」，只調那幾句。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse" open>
+          <summary>⑥ 「逐句」「逐字」「無歌詞」是什麼意思？</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>逐句</strong>：整句話只有一個時間點，一次全部出現。這種最普遍、最容易找到，經典疊層模板配它最穩。</li>
+              <li><strong>逐字</strong>：每一個字或每一個詞都有自己的時間點，所以畫面可以做出「唱到哪裡、亮到哪裡」的效果。</li>
+              <li><strong>逐字適合哪些模板</strong>：除了「經典疊層」以外的模板（星砂流光、折光階梯、潮汐心景、霓彩伴唱）都算特殊動畫模板，有逐字資料時效果會明顯更好看、更順。</li>
+              <li><strong>無歌詞</strong>：歌能正常播放，只是畫面上沒有可以顯示的歌詞。去按「選擇來源」再找一次，或按「貼上歌詞」自己補。</li>
+              <li><strong>要怎麼切換逐句或逐字</strong>：按「選擇來源」，每個候選旁邊都會標「逐句」或「逐字」，點你要的那個套用。如果清單裡完全沒有逐字選項，代表目前找到的來源都沒有提供逐字版本。</li>
             </ul>
           </div>
         </details>
 
         <details class="card card-collapse">
-          <summary>⑦ 歌詞畫面怎麼調？先調哪些就好？</summary>
+          <summary>⑦ 歌詞畫面要怎麼調？先調哪幾個就好</summary>
           <div class="card-collapse-body">
             <ul class="help-list">
-              <li><strong>先選模板</strong>：不知道選什麼，先用霓彩伴唱或經典疊層。霓彩伴唱適合唱歌台；經典疊層最穩、最不容易擋畫面。</li>
-              <li><strong>再調字體和顏色</strong>：先讓字看得清楚，再追求漂亮。深色描邊或陰影通常比單純放大字更有效。</li>
-              <li><strong>看右側預覽</strong>：設定頁和首頁都有 OBS 預覽；看到的比例接近 OBS，但最後仍以 OBS 實際畫面為準。</li>
-              <li><strong>不同模板可以分開調</strong>：例如霓彩伴唱用藍色、星砂流光用紫色；切模板時會記住各自設定。</li>
-              <li><strong>怕調壞</strong>：先保存一個預設。調歪了就套回原本預設，不用重做。</li>
+              <li><strong>不知道選哪個模板</strong>：先選「霓彩伴唱」或「經典疊層」就對了。霓彩伴唱適合唱歌台氣氛；經典疊層最穩定、最不容易擋住畫面。</li>
+              <li><strong>先調字體顏色，不要先追求特效</strong>：第一優先是「字看得清楚」，不是「好看」。深色描邊或陰影，通常比單純把字放大更有效。</li>
+              <li><strong>右側預覽可以先看，但不是 100% 準</strong>：設定頁和首頁的預覽跟 OBS 畫面比例很接近，但最終還是要以 OBS 裡實際看到的為準。</li>
+              <li><strong>不同模板可以各調各的</strong>：例如霓彩伴唱用藍色、星砂流光用紫色，兩個互不影響，切換模板時會自動套用各自記住的設定。</li>
+              <li><strong>怕越調越亂</strong>：調之前先按「保存預設」，取個名字存起來。之後不管怎麼亂調，回來按「套用」選那個預設就能整組還原，不用重新調一次。</li>
             </ul>
           </div>
         </details>
 
         <details class="card card-collapse">
-          <summary>⑧ 歌詞畫面怎麼加進 OBS？</summary>
-          <div class="card-collapse-body">
-            <ol class="help-list help-list-num">
-              <li>到設定頁或右上角按「歌詞網址」複製網址。</li>
-              <li>在 OBS 來源列表按「＋」→「瀏覽器」。</li>
-              <li>URL 貼上歌詞網址，寬高建議先設成直播畫布大小，例如 1920×1080。</li>
-              <li>歌詞背景預設透明，可以直接疊在遊戲、聊天畫面、角色模型上。</li>
-              <li>回到控制台改字體、顏色、位置，OBS 會跟著更新。右上角看到「歌詞已連線」代表 OBS 歌詞來源有連上。</li>
-              <li>如果控制台有變、OBS 沒變，先在 OBS 的瀏覽器來源右鍵「重新整理」。OBS 有時會快取舊畫面。</li>
-            </ol>
+          <summary>⑧ 怎麼把歌詞畫面放進 OBS？</summary>
+          <div class="card-collapse-body help-steps">
+            <div class="help-step"><span class="help-step-num">1</span><div>去「歌詞設定」頁，或直接在畫面右上角按「歌詞網址」，把網址複製起來。</div></div>
+            <div class="help-step"><span class="help-step-num">2</span><div>打開 OBS，在「來源」列表按「＋」，選「瀏覽器」。</div></div>
+            <div class="help-step"><span class="help-step-num">3</span><div>把剛剛複製的網址貼進去；寬高先設成跟你直播畫面一樣大，例如 1920×1080。</div></div>
+            <div class="help-step"><span class="help-step-num">4</span><div>底色本來就是透明的，可以直接疊在遊戲畫面、聊天室、角色模型上面，不用另外去背。</div></div>
+            <div class="help-step"><span class="help-step-num">5</span><div>回到控制台改字體、顏色、位置，OBS 畫面會自動跟著變。右上角出現「歌詞已連線」就代表這個 OBS 來源真的連上了。</div></div>
+            <div class="help-step"><span class="help-step-num">6</span><div>如果控制台這邊改了、OBS 畫面卻沒變：先在 OBS 那個瀏覽器來源上按右鍵、選「重新整理」。OBS 常常會卡住舊畫面，這是最常見的解法。</div></div>
           </div>
         </details>
 
         <details class="card card-collapse">
-          <summary>⑨ 歌單畫面怎麼用？</summary>
-          <div class="card-collapse-body">
-            <ol class="help-list help-list-num">
-              <li>到「歌單」頁按「開台」，開始記錄本次直播唱過的歌。</li>
-              <li>選歌單版型。經典/清單版適合放角落；場景版適合做成整個畫面的一部分。</li>
-              <li>OBS 歌單網址固定是 <code>http://localhost:3000/setlist</code>，換版型會自動同步，不需要每次換網址。</li>
-              <li>場景版歌單請在 OBS 把瀏覽器來源解析度設大一點，例如 1920×1080；角落清單版才適合較窄尺寸。</li>
-              <li>還沒開台但想調外觀，按「載入示範資料」。調完按「清除示範資料」，不會動到真實歌單。</li>
-              <li>直播結束後按「複製 YouTube 章節」，可以貼到影片說明欄當時間戳。</li>
-            </ol>
+          <summary>⑨ 「歌單畫面」怎麼用？（顯示今天唱過什麼歌）</summary>
+          <div class="card-collapse-body help-steps">
+            <div class="help-step"><span class="help-step-num">1</span><div>切到「歌單」頁。這裡不用手動按「開台」——你只要播放歌曲，就會自動被記進歌單清單。「精準的時間戳記」（幾分幾秒唱了哪首歌）則要等程式真的偵測到你開始直播（透過 OBS WebSocket 或 Twitch 開台事件）才會開始計算，下播後自動停止。</div></div>
+            <div class="help-step"><span class="help-step-num">2</span><div>挑一個版型：經典版／清單版適合放畫面角落；場景版是設計來佔滿整個畫面用的。</div></div>
+            <div class="help-step"><span class="help-step-num">3</span><div>OBS 這邊的歌單網址固定是 <code>http://localhost:3000/setlist</code>，換版型不用換網址，會自動同步。</div></div>
+            <div class="help-step"><span class="help-step-num">4</span><div>如果用場景版，記得在 OBS 把這個瀏覽器來源的解析度設大一點（例如 1920×1080）；角落用的清單版才適合設小尺寸。</div></div>
+            <div class="help-step"><span class="help-step-num">5</span><div>還沒真的開台、只是想先調外觀好不好看？按「載入示範資料」看效果，調完按「清除示範資料」，不會動到真正的歌單紀錄。</div></div>
+            <div class="help-step"><span class="help-step-num">6</span><div>直播結束後按「複製 YouTube 章節」，可以直接貼到影片說明欄當時間戳使用。</div></div>
           </div>
         </details>
 
         <details class="card card-collapse">
-          <summary>⑩ 直播中最常用的操作</summary>
+          <summary>⑩ 直播中最常用到的幾個按鈕</summary>
           <div class="card-collapse-body">
             <ul class="help-list">
-              <li><strong>切歌</strong>：用上方播放器或迷你播放器的上一首/下一首，不用每次回到首頁。</li>
-              <li><strong>暫停測試</strong>：暫停音樂時歌詞會停在目前位置，適合調字體、顏色、位置。</li>
-              <li><strong>調 Key</strong>：用「變調」的 - / +，適合臨時升降半音；不確定就按「重置」。</li>
-              <li><strong>調速度</strong>：用「變速」，練歌或測時間軸時有用；正式直播前記得確認是否回到 1.00x。</li>
-              <li><strong>拖曳排序</strong>：播放清單左側把手可拖曳，臨時改歌單順序不用重新匯入。</li>
-              <li><strong>緊急隱藏</strong>：直播中歌詞錯得太誇張或不想顯示時按它，只隱藏歌詞來源，不會蓋住整個直播畫面。</li>
+              <li><strong>切歌</strong>：用上方播放器或迷你播放器的上一首/下一首就好，不用每次都跑回首頁點清單。</li>
+              <li><strong>想暫停下來慢慢調畫面</strong>：暫停播放時，歌詞會停在目前這一句不動，趁這時候調字體、顏色、位置最方便。</li>
+              <li><strong>臨時想升降 Key</strong>：用「變調」的 −／＋按鈕。調到自己都不知道調到哪了，直接按「重置」回到原調。</li>
+              <li><strong>臨時想加快或放慢</strong>：用「變速」。這個功能練歌、對時間軸時很好用；正式唱之前記得檢查有沒有忘記調回 1.00x。</li>
+              <li><strong>臨時想改播放順序</strong>：直接在播放清單左側拖曳把手排序，不需要重新匯入整份清單。</li>
+              <li><strong>歌詞顯示錯得很離譜、想先藏起來</strong>：按「緊急隱藏」。它只會把歌詞這個來源藏起來，不會蓋住你整個直播畫面，可以放心按。</li>
             </ul>
           </div>
         </details>
 
         <details class="card card-collapse">
-          <summary>⑪ 看起來怪怪的時候，先檢查這些</summary>
+          <summary>⑪ 畫面怪怪的？先照這個順序檢查</summary>
           <div class="card-collapse-body">
             <ul class="help-list">
-              <li><strong>OBS 沒畫面</strong>：確認網址是 localhost:3000/display，控制台右上角是否顯示「歌詞已連線」，OBS 來源寬高是否太小。</li>
-              <li><strong>控制台有變，OBS 沒變</strong>：在 OBS 瀏覽器來源右鍵重新整理；再不行，關掉來源重開。</li>
-              <li><strong>歌詞不跟音樂</strong>：先用「對齊第一句」；中段才歪再用逐行時間軸。</li>
-              <li><strong>字太小或被切掉</strong>：先調字級和最大寬度；霓彩伴唱的位置用「詳細設定 → 邊距 · 最大寬度 → 上下邊距」。</li>
-              <li><strong>拼音或諧音不對</strong>：中文歌不提供諧音，只顯示羅馬字；日文/韓文才會有中文近似音。</li>
-              <li><strong>匯入失敗</strong>：確認影片不是私人/會員限定，網路正常，且不要一次丟太大的播放清單。</li>
+              <li><strong>OBS 完全沒有歌詞畫面</strong>：先確認網址真的是 <code>localhost:3000/display</code>；再看控制台右上角有沒有寫「歌詞已連線」；最後檢查 OBS 來源的寬高是不是設得太小。</li>
+              <li><strong>控制台這邊改了，OBS 畫面沒反應</strong>：先在 OBS 那個瀏覽器來源上按右鍵、選「重新整理」；還是不行，就直接把這個來源關掉再重新加一次。</li>
+              <li><strong>歌詞跟不上歌聲</strong>：整首都對不上，先用「對齊第一句」；只有中間幾句歪掉，改用「逐行時間軸編輯」。</li>
+              <li><strong>字太小或被切掉一部分</strong>：先調字級和「最大寬度」；霓彩伴唱模板的上下位置要在「詳細設定 → 邊距．最大寬度 → 上下邊距」裡調，不是用一般的位置九宮格。</li>
+              <li><strong>拼音或諧音看起來怪怪的</strong>：這是正常的——中文歌只會顯示羅馬拼音、不會有諧音；只有日文/韓文歌才會出現中文近似音（諧音）。</li>
+              <li><strong>怎麼匯都匯入失敗</strong>：先確認影片不是私人影片或會員限定內容，再確認網路是不是正常，也不要一次貼一個超長的播放清單進去。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card card-collapse">
+          <summary>⑫ 常見問題 Q&amp;A</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>Q：這個程式要收費嗎？</strong> 不用，完全免費，也不需要註冊帳號。</li>
+              <li><strong>Q：關掉程式，之前設定的東西會不見嗎？</strong> 不會。播放清單、歌詞樣式、媒體庫都會自動存檔，下次打開會自動還原。</li>
+              <li><strong>Q：這個視窗／伺服器一定要一直開著嗎？</strong> 要。OBS 是即時去讀這個網址的畫面，如果把程式關掉，OBS 那邊的歌詞畫面也會跟著消失。</li>
+              <li><strong>Q：手機可以控制嗎？</strong> 可以，用手機瀏覽器連到同一台電腦的網址，會自動變成手機版的「遙控器」畫面，切歌、緊急隱藏都能用。</li>
+              <li><strong>Q：需要設定 PIN 密碼嗎？</strong> 不是必要的。如果擔心同一個 Wi-Fi 的其他人也連得進來亂動，可以在一般設定裡開啟 PIN；OBS 的歌詞/歌單畫面不受 PIN 影響，一定看得到。</li>
+              <li><strong>Q：Twitch 一定要接嗎？</strong> 不用，Twitch 只是選配功能，用來接收聊天室的「!點歌」指令；不接 Twitch，其他所有功能都能正常使用。</li>
+              <li><strong>Q：同一首歌會不會重複下載、佔用很多硬碟空間？</strong> 不會。同一首歌只要下載過一次，之後不管什麼時候要唱，都會直接沿用媒體庫裡的檔案，不會重新下載。</li>
+              <li><strong>Q：一次可以匯入很多首歌嗎？</strong> 可以，但建議一次不要貼太長的播放清單，尤其是第一次用的時候，先貼幾首測試比較穩，長清單匯入本來就會花比較久時間。</li>
+              <li><strong>Q：我不小心把播放清單清空了，歌會不見嗎？</strong> 歌曲本身不會不見，之前下載過的檔案都還留在媒體庫，可以從媒體庫直接加回播放清單，不用重新下載。</li>
+              <li><strong>Q：可以離線（沒有網路）使用嗎？</strong> 播放已經下載好的本機歌曲可以離線；但匯入新歌、自動搜尋歌詞、Twitch 點歌都需要網路連線。</li>
             </ul>
           </div>
         </details>
