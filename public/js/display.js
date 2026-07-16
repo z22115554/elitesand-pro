@@ -584,8 +584,10 @@
     // 直書句流的兩種外觀共用同一個時間線；先寫入 dataset，讓首次 mount 就取得正確外觀。
     if (s.template === 'columnflow') {
       document.body.dataset.columnflowVariant = s.columnflowVariant === 'fuda' ? 'fuda' : 'sen';
+      document.body.dataset.columnflowPlacement = ['left', 'right', 'split'].includes(s.columnflowPlacement) ? s.columnflowPlacement : 'split';
     } else {
       delete document.body.dataset.columnflowVariant;
+      delete document.body.dataset.columnflowPlacement;
     }
     // 歌詞水平位置：CSS 靠 body class 縮排容器；split 的逐行交替由各模板讀 dataset 處理。
     // 經典疊層完全不支援這個機制（面板已改用九宮格當它的位置控制、對應的四鍵整批隱藏），

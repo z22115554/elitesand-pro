@@ -5,7 +5,7 @@
  * - 每句歌詞是一個直排（vertical-rl）直行，唱到哪個字哪個字浮現（逐字素時間）
  * - 直行以固定種子的隨機欄位錯落散佈，像把字寫滿一頁紙
  * - 唱過的直行留在原地，依「距今幾句」逐級模糊＋減淡（殘影保留軌跡又不干擾當前行）
- * - 每 PAGE_SIZE 句為一「頁」，換頁時整頁淡出翻新；每頁的落點由亂數種子重抽
+ * - 固定保留最近四句；新句補上時，最舊的一句才淡出，落點由亂數種子決定
  * - 超長句子依可用高度切成多個延續直行，往左自然續接（傳統直書換行方向）
  *
  * 兩種外觀（同一模板、同一機制）：
@@ -24,7 +24,7 @@
 
   const { hashNoise } = LyricMotion;
 
-  const PAGE_SIZE = 4;        // 每頁直行數（同時最多可見：1 活躍 + 3 殘影）
+  const PAGE_SIZE = 4;        // 同時最多可見：1 活躍 + 3 殘影
   const GHOST_BLUR = [0, 1.2, 2.4, 3.8];   // 依 age 的模糊 px
   const GHOST_OPACITY = [1, 0.6, 0.38, 0.2];
   const GHOST_RISE_PX = 6;    // sen 外觀殘影每級上飄量（fuda 不飄）
@@ -62,6 +62,11 @@
     return ['sen', 'fuda'].includes(value) ? value : 'sen';
   }
 
+  function currentPlacement() {
+    const value = document.body.dataset.columnflowPlacement;
+    return ['left', 'right', 'split'].includes(value) ? value : 'split';
+  }
+
   // ─── 佈局計畫：整首歌攤平成「直行計畫」陣列（只含有文字的行）───
 
   function buildPlans(lines, fontPx) {
@@ -82,11 +87,16 @@
       const ord = out.length;
       const page = Math.floor(ord / PAGE_SIZE);
       const slot = ord % PAGE_SIZE;
-      // 換頁時整批落點重抽：seed 帶 page，同一 slot 每頁位置不同
+      // seed 讓相鄰句的左右落點穩定但不固定。
       const seed = li * 131 + page * 977;
-      // 每頁用同一組亂數種子洗牌：維持四欄不撞在一起，但不會有固定右到左的閱讀順序。
-      const lane = (slot + Math.floor(hashNoise(page, 5) * PAGE_SIZE)) % PAGE_SIZE;
-      const leftPct = 24 + lane * 13 + (hashNoise(seed, 1) - 0.5) * 7;
+      // 直書只落在左右保留區；split 交錯側別，避免所有句子擠在同一側。
+      const placement = currentPlacement();
+      const side = placement === 'split'
+        ? ((slot + Math.floor(hashNoise(page, 5) * 2)) % 2 === 0 ? 'left' : 'right')
+        : placement;
+      const sideLanes = side === 'left' ? [12, 22, 32] : [68, 78, 88];
+      const lane = (Math.floor(hashNoise(seed, 1) * sideLanes.length) + Math.floor(ord / 2)) % sideLanes.length;
+      const leftPct = sideLanes[lane] + (hashNoise(seed, 6) - 0.5) * 4;
       const topPct = TOP_BASE_PCT + hashNoise(seed, 2) * (JITTER_Y_PCT + 10);
 
       // 超長句：依可用高度切段，段與段在直書流裡自然往左續接
@@ -110,7 +120,7 @@
 
   function ensurePlans(lines) {
     const fontPx = fontPxFromSettings();
-    const key = `${currentVariant()}|${fontPx.toFixed(1)}|${Math.round(availableColumnHeight())}`;
+    const key = `${currentVariant()}|${currentPlacement()}|${fontPx.toFixed(1)}|${Math.round(availableColumnHeight())}`;
     if (plansForLines === lines && plansKey === key) return plans;
     plans = buildPlans(lines, fontPx);
     plansForLines = lines;
@@ -147,8 +157,13 @@
         span.textContent = g.char;
         // 字札外觀的傾角（素筆外觀不讀這兩個變數，共存無害）
         const gSeed = plan.lineIndex * 97 + gi * 31;
-        span.style.setProperty('--r0', `${((hashNoise(gSeed, 3) - 0.5) * 30).toFixed(1)}deg`);
-        span.style.setProperty('--rr', `${((hashNoise(gSeed, 4) - 0.5) * 5).toFixed(1)}deg`);
+        const direction = hashNoise(gSeed, 3) > 0.5 ? 1 : -1;
+        const startRotation = direction * (18 + hashNoise(gSeed, 4) * 18);
+        const restRotation = direction * hashNoise(gSeed, 5) * 2.6;
+        span.style.setProperty('--cf-rotate-start', `${startRotation.toFixed(1)}deg`);
+        span.style.setProperty('--cf-rotate-rest', `${restRotation.toFixed(1)}deg`);
+        span.style.setProperty('--cf-entry-x', `${(0.12 + hashNoise(gSeed, 6) * 0.16).toFixed(2)}em`);
+        span.style.setProperty('--cf-entry-y', `${(0.05 + hashNoise(gSeed, 7) * 0.14).toFixed(2)}em`);
         sub.appendChild(span);
         glyphEls.push({ el: span, startMs: g.startMs });
       });
@@ -189,7 +204,7 @@
   /** 活躍行逐字顯影；殘影行全亮。倒帶時同一迴圈自然把未來的字關回去。 */
   function applyGlyphStates(item, timeMs, isActive) {
     if (!isActive) {
-      if (item.onCount === item.glyphs.length) return;
+      if (item.onCount === item.glyphs.length && !item.el.querySelector('.cf-cur')) return;
       item.glyphs.forEach((g) => { g.el.classList.add('cf-on'); g.el.classList.remove('cf-cur'); });
       item.onCount = item.glyphs.length;
       return;
@@ -231,20 +246,20 @@
       return;
     }
 
-    const page = plans[idx].page;
+    const firstVisibleOrd = Math.max(0, idx - (PAGE_SIZE - 1));
     const fontPx = fontPxFromSettings();
 
-    // 移除：不屬於本頁、或在目前時間之後（倒帶）的直行
+    // 移除：超出最近四句視窗，或在目前時間之後（倒帶）。
     cols.forEach((item, ord) => {
       const plan = plans[ord];
-      if (!plan || plan.page !== page || ord > idx) {
+      if (!plan || ord < firstVisibleOrd || ord > idx) {
         fadeRemoveColumn(item);
         cols.delete(ord);
       }
     });
 
-    // 補齊並套用本頁可見直行
-    for (let ord = page * PAGE_SIZE; ord <= idx; ord += 1) {
+    // 補齊並套用滾動視窗內的直行。
+    for (let ord = firstVisibleOrd; ord <= idx; ord += 1) {
       const plan = plans[ord];
       if (!plan) break;
       let item = cols.get(ord);

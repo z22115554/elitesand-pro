@@ -24,6 +24,9 @@ function sanitizeLyricTemplateSettings(value) {
       if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda'].includes(out[id].columnflowVariant)) {
         delete out[id].columnflowVariant;
       }
+      if (id === 'columnflow' && out[id].columnflowPlacement && !['left', 'right', 'split'].includes(out[id].columnflowPlacement)) {
+        delete out[id].columnflowPlacement;
+      }
     }
   });
   return out;
@@ -158,6 +161,9 @@ function registerLyricsHandlers(io, socket, ctx) {
     }
     if (settings.columnflowVariant && !['sen', 'fuda'].includes(settings.columnflowVariant)) {
       delete settings.columnflowVariant;
+    }
+    if (settings.columnflowPlacement && !['left', 'right', 'split'].includes(settings.columnflowPlacement)) {
+      delete settings.columnflowPlacement;
     }
     // 合併（容許部分更新）
     playState.lyricSettings = { ...playState.lyricSettings, ...settings };

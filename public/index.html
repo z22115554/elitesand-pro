@@ -415,6 +415,21 @@
                 </div>
                 <p class="field-hint">素筆是乾淨的文字殘影；字札則讓每個字帶有小紙片的手感。</p>
               </div>
+              <div class="field" id="columnflow-placement-field" hidden>
+                <label>直書位置</label>
+                <div class="style-thumb-row" id="columnflow-placement-buttons">
+                  <button class="style-thumb" data-columnflow-placement="left" type="button" title="偏左：所有直行留在畫面左側，避開正中">
+                    <span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label">偏左</span>
+                  </button>
+                  <button class="style-thumb" data-columnflow-placement="right" type="button" title="偏右：所有直行留在畫面右側，避開正中">
+                    <span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label">偏右</span>
+                  </button>
+                  <button class="style-thumb active" data-columnflow-placement="split" type="button" title="左右分散：新句交錯補到左右兩側，畫面正中保持留白">
+                    <span class="style-thumb-preview"><span class="style-thumb-char">散</span></span><span class="style-thumb-label">左右分散</span>
+                  </button>
+                </div>
+                <p class="field-hint">預設左右分散；四句會以滾動方式保留，最舊的一句才會淡出。</p>
+              </div>
               <div class="lyric-preset-tools" aria-label="歌詞外觀預設">
                 <select id="lyric-preset-select" class="input"><option value="">尚未保存預設</option></select>
                 <button id="lyric-preset-save" class="btn btn-sm" type="button">保存預設</button>
