@@ -73,13 +73,14 @@
     template: 'classic',  // 'classic' | 'luminous' | 'partita' | 'tilt' | 'mindscape'
     animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
     lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
+    columnflowVariant: 'sen', // 直書句流：'sen' | 'fuda'
     // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
     displayBgImage: '',   // 檔名（'' = 無背景，維持透明）
     displayBgOpacity: 1,
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv'];
+  const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
   // 新使用者的五個可選模板採用目前已確認的預設外觀；Tilt 僅為舊資料相容保留。
   const TEMPLATE_DEFAULTS = {
     classic: { ...DEFAULT_SETTINGS, template: 'classic' },
@@ -88,6 +89,7 @@
     tilt: { ...DEFAULT_SETTINGS, template: 'tilt', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
     mindscape: { ...DEFAULT_SETTINGS, template: 'mindscape', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
     ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
+    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen' },
   };
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
@@ -572,6 +574,7 @@
 
   // folia 系模板（有散射/強度概念的）才顯示「動畫強度」控制
   const INTENSITY_TEMPLATES = ['luminous', 'partita', 'tilt', 'mindscape'];
+  const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
 
   // 只有「經典疊層」用得到的設定區塊——這些全部是「經典疊層自己的 renderLine 才會讀」的
   // CSS 變數/JS 邏輯（動畫風格 style-buttons、風格微調、九宮格位置定位、行高/字距/文字對齊、
@@ -589,6 +592,7 @@
       b.classList.toggle('active', b.dataset.template === settings.template);
     });
     const isClassic = settings.template === 'classic';
+    const isColumnflow = settings.template === 'columnflow';
 
     const intensityField = document.getElementById('intensity-field');
     if (intensityField) intensityField.hidden = !INTENSITY_TEMPLATES.includes(settings.template);
@@ -608,13 +612,20 @@
     if (posGrid) posGrid.hidden = !isClassic;
     if (offsetXRow) offsetXRow.hidden = !isClassic;
     if (offsetYRow) offsetYRow.hidden = !isClassic;
-    if (quadRow) quadRow.hidden = isClassic;
+    if (quadRow) quadRow.hidden = isClassic || isColumnflow;
+    const columnflowVariantField = document.getElementById('columnflow-variant-field');
+    if (columnflowVariantField) columnflowVariantField.hidden = !isColumnflow;
+    document.querySelectorAll('#columnflow-variant-buttons .style-thumb').forEach((b) => {
+      b.classList.toggle('active', b.dataset.columnflowVariant === (settings.columnflowVariant || 'sen'));
+    });
     if (posHint) {
       posHint.textContent = isClassic
         ? '九宮格是整個歌詞區塊在畫面上的位置；細調 X/Y 可再微調偏移。'
-        : (settings.template === 'ktv'
+        : (isColumnflow
+          ? '直書句流會讓每頁的直行自然錯落；請用「素筆直書／字札直書」切換表現方式。'
+          : (settings.template === 'ktv'
           ? 'KTV 伴唱固定雙行構圖；上下位置請到「詳細設定 → 邊距 · 最大寬度 → 上下邊距」調整。'
-          : '方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。');
+          : '方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。'));
     }
     if (fineHint) {
       fineHint.textContent = '拖曳選格子，或用下面細調微調';
@@ -624,7 +635,7 @@
     });
     // 「左右分散」是逐行交替左右——經典疊層（歷史行堆疊）與 KTV（自帶雙行位構圖）不支援
     const splitBtn = document.querySelector('#lyric-pos-buttons .style-thumb[data-lyric-pos="split"]');
-    if (splitBtn) splitBtn.disabled = settings.template === 'classic' || settings.template === 'ktv';
+    if (splitBtn) splitBtn.disabled = settings.template === 'classic' || settings.template === 'ktv' || isColumnflow;
 
     // 經典疊層專用設定區塊：整批顯示/隱藏
     CLASSIC_ONLY_FIELD_IDS.forEach((id) => {
@@ -641,7 +652,7 @@
         saveCurrentTemplateSnapshot();
         const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
         settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
-        if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') {
+        if ((settings.template === 'classic' || settings.template === 'ktv' || settings.template === 'columnflow') && settings.lyricPosition === 'split') {
           settings.lyricPosition = 'center';
         }
         refreshControls();
@@ -651,6 +662,15 @@
     document.querySelectorAll('#intensity-buttons .style-thumb').forEach((btn) => {
       btn.addEventListener('click', () => {
         settings.animationIntensity = btn.dataset.intensity;
+        syncTemplateButtons();
+        pushSettings();
+      });
+    });
+    document.querySelectorAll('#columnflow-variant-buttons .style-thumb').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const variant = btn.dataset.columnflowVariant;
+        if (settings.template !== 'columnflow' || !COLUMNFLOW_VARIANTS.includes(variant)) return;
+        settings.columnflowVariant = variant;
         syncTemplateButtons();
         pushSettings();
       });
@@ -852,7 +872,7 @@
         saveCurrentTemplateSnapshot();
         settings = { ...templateDefaults(item.settings.template), ...cleanSettingSnapshot(item.settings) };
         if (!TEMPLATE_IDS.includes(settings.template)) settings.template = 'classic';
-        if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
+        if ((settings.template === 'classic' || settings.template === 'ktv' || settings.template === 'columnflow') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
         refreshControls();
         pushSettings();
         showToast('已套用歌詞外觀預設');

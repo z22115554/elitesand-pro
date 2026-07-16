@@ -87,13 +87,23 @@
       <button class="ctrl-template-btn" data-template="tilt" type="button">斜拍告白</button>
       <button class="ctrl-template-btn" data-template="mindscape" type="button">潮汐心景</button>
       <button class="ctrl-template-btn" data-template="ktv" type="button">霓彩伴唱</button>
+      <button class="ctrl-template-btn" data-template="columnflow" type="button">直書句流</button>
     </div>
-    <p class="ctrl-sub-label">位置</p>
-    <div class="ctrl-chips">
-      <button class="ctrl-position-btn active" data-position="center" type="button">置中</button>
-      <button class="ctrl-position-btn" data-position="left" type="button">偏左</button>
-      <button class="ctrl-position-btn" data-position="right" type="button">偏右</button>
-      <button class="ctrl-position-btn" data-position="split" type="button">左右分散</button>
+    <div id="ctrl-lyric-position-group">
+      <p class="ctrl-sub-label">位置</p>
+      <div class="ctrl-chips">
+        <button class="ctrl-position-btn active" data-position="center" type="button">置中</button>
+        <button class="ctrl-position-btn" data-position="left" type="button">偏左</button>
+        <button class="ctrl-position-btn" data-position="right" type="button">偏右</button>
+        <button class="ctrl-position-btn" data-position="split" type="button">左右分散</button>
+      </div>
+    </div>
+    <div id="ctrl-columnflow-variant-group" hidden>
+      <p class="ctrl-sub-label">直書句流樣式</p>
+      <div class="ctrl-chips">
+        <button class="ctrl-columnflow-variant-btn active" data-columnflow-variant="sen" type="button">素筆直書</button>
+        <button class="ctrl-columnflow-variant-btn" data-columnflow-variant="fuda" type="button">字札直書</button>
+      </div>
     </div>
     <p class="ctrl-sub-label">動態強度</p>
     <div class="ctrl-chips">

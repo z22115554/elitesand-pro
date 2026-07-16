@@ -283,6 +283,10 @@ input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(-
 #template-buttons .style-thumb[data-template="tilt"] .style-thumb-char { animation: tpl-tilt 1.4s ease-in-out infinite; transform-origin: 50% 80%; }
 #template-buttons .style-thumb[data-template="mindscape"] .style-thumb-char { animation: tpl-mindscape 2s ease-in-out infinite; }
 #template-buttons .style-thumb[data-template="ktv"] .style-thumb-char { color: transparent; background: linear-gradient(90deg, #ffd54f 0 48%, #fff 50% 100%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; animation: tpl-ktv 1.3s linear infinite; }
+#template-buttons .style-thumb[data-template="columnflow"] .style-thumb-char,
+#columnflow-variant-buttons .style-thumb-char { writing-mode: vertical-rl; text-orientation: upright; font-family: Georgia, 'Noto Serif TC', serif; line-height: .9; letter-spacing: .04em; }
+#columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-preview { background: #eee5d4; border-color: #bcae96; }
+#columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-char { color: #2a2118; }
 @media (prefers-reduced-motion: reduce) {
   .style-thumb-char { animation: none !important; }
 }
