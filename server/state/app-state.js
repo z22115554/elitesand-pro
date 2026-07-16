@@ -26,9 +26,10 @@ function getDefaultLyricSettings() {
     template: 'classic',
     lyricTemplateSettings: {
       classic: { template: 'classic', fontSize: 56, color: '#8f8f8f', activeColor: '#febc6c', verticalPosition: 'flex-end' },
-      luminous: { template: 'luminous', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
-      partita: { template: 'partita', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
-      mindscape: { template: 'mindscape', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
+      pulse: { template: 'pulse', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
+      facet: { template: 'facet', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
+      drift: { template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
+      aura: { template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
       ktv: { template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
       columnflow: { template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4 },
     },

@@ -70,7 +70,7 @@
     xieyinColor: '#ffd6a5',
     xieyinSize: 0.92,     // 相對主字級的倍率（em）
     // ── 排版模板（v4/v5）──
-    template: 'classic',  // 'classic' | 'luminous' | 'partita' | 'tilt' | 'mindscape'
+    template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura'
     animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
     lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
     columnflowVariant: 'sen', // 直書句流：'sen' | 'fuda'
@@ -82,15 +82,15 @@
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
     classic: { label: '經典疊層', description: '完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。', scope: '可調：九宮格位置、字型、歷史行、拼音與諧音、描邊與陰影。', positionMode: 'grid', supportsIntensity: false, supportsClassicControls: true },
-    luminous: { label: 'Luminous', description: '明亮聚焦的單句演出，適合主唱與節奏感明確的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
-    partita: { label: 'Partita', description: '段落感清楚、節奏分明的歌詞動畫。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
-    tilt: { label: 'Tilt', description: '保留給舊版設定的相容模板。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
-    mindscape: { label: 'Mindscape', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    pulse: { label: 'Pulse', description: '明亮聚焦的單句演出，適合主唱與節奏感明確的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    facet: { label: 'Facet', description: '段落感清楚、節奏分明的歌詞動畫。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    drift: { label: 'Drift', description: '斜向節拍與逐字律動，適合節奏鮮明的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    aura: { label: 'Aura', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     ktv: { label: 'KTV', description: '固定雙行演唱畫面，適合逐字或跟唱情境。', scope: '可調：字型、配色、背景與詳細的邊距設定；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，逐字浮現，唱過的句子留下淡淡殘影。', scope: '可調：直書樣式、左右配置、保留句數、字型、配色與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
   };
@@ -98,13 +98,13 @@
   function getTemplateUI(template) {
     return TEMPLATE_UI[template] || TEMPLATE_UI.classic;
   }
-  // 新使用者的五個可選模板採用目前已確認的預設外觀；Tilt 僅為舊資料相容保留。
+  // 每個模板都有自己的預設外觀與獨立的設定快照。
   const TEMPLATE_DEFAULTS = {
     classic: { ...DEFAULT_SETTINGS, template: 'classic' },
-    luminous: { ...DEFAULT_SETTINGS, template: 'luminous', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
-    partita: { ...DEFAULT_SETTINGS, template: 'partita', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
-    tilt: { ...DEFAULT_SETTINGS, template: 'tilt', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
-    mindscape: { ...DEFAULT_SETTINGS, template: 'mindscape', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
+    pulse: { ...DEFAULT_SETTINGS, template: 'pulse', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
+    facet: { ...DEFAULT_SETTINGS, template: 'facet', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
+    drift: { ...DEFAULT_SETTINGS, template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
+    aura: { ...DEFAULT_SETTINGS, template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
     ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
     columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4 },
   };
@@ -622,7 +622,7 @@
   // 只有「經典疊層」用得到的設定區塊——這些全部是「經典疊層自己的 renderLine 才會讀」的
   // CSS 變數/JS 邏輯（動畫風格 style-buttons、風格微調、九宮格位置定位、行高/字距/文字對齊、
   // 保留行數/歷史字級透明度/描邊陰影發光背景框、羅馬字拼音/諧音顯示、逐字 KTV 模式），
-  // v5 模板（Luminous/Partita/Tilt/Mindscape/KTV）都是透過 ctx.getLyrics() 自己組字、
+  // 非經典模板都是透過 ctx.getLyrics() 自己組字、
   // 完全不讀這些——顯示出來也是「按了沒反應」，所以切模板時整批隱藏/還原。
   const CLASSIC_ONLY_FIELD_IDS = [
     'style-preset-field', 'style-tune-field',

@@ -1337,7 +1337,7 @@ test('狀態持久化：隔離資料夾 round-trip 並建立 last-good', () => {
     eq(result.loaded.style, 'rock');
     eq(result.loaded.trackOffsets.t1, 300);
     eq(result.loaded.manualLyrics.t1.lyrics, '手動歌詞');
-    eq(result.loaded.schemaVersion, 1);
+    eq(result.loaded.schemaVersion, 2);
     ok(result.backup, '成功保存後應建立 last-good: ');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
@@ -1397,8 +1397,8 @@ test('無版本 state fixture 可逐步遷移並保留原檔', () => {
       "const preserved=files.find((name)=>/^state\\.json\\.pre-migration-v0-/.test(name));",
       "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,disk,files,preservedRaw:preserved?fs.readFileSync(path.join(dir,preserved),'utf8'):null}));",
     ].join('\n'));
-    eq(result.loaded.schemaVersion, 1);
-    eq(result.disk.schemaVersion, 1);
+    eq(result.loaded.schemaVersion, 2);
+    eq(result.disk.schemaVersion, 2);
     eq(result.loaded.playlist[0].title, '舊版測試歌曲');
     eq(result.loaded.trackOffsets['legacy-track'], 350);
     eq(result.loaded.manualLyrics['legacy-track'].lyrics, '[00:01.00]舊版歌詞');
@@ -1411,12 +1411,12 @@ test('無版本 state fixture 可逐步遷移並保留原檔', () => {
 test('目前 schema 載入不重複建立 migration 備份', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-current-schema-'));
   try {
-    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({ schemaVersion: 1, savedAt: 7, playlist: [] }), 'utf8');
+    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({ schemaVersion: 2, savedAt: 7, playlist: [] }), 'utf8');
     const result = runStateStoreChild(dataDir, [
       "const fs=require('fs'); const store=require(process.argv[1]); const dir=process.argv[2];",
       "const loaded=store.loadState(); process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,files:fs.readdirSync(dir)}));",
     ].join('\n'));
-    eq(result.loaded.schemaVersion, 1);
+    eq(result.loaded.schemaVersion, 2);
     ok(!result.files.some((name) => name.includes('.pre-migration-')), '目前 schema 不應產生多餘遷移備份: ');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
@@ -1469,7 +1469,7 @@ test('state.json 損壞時保留原檔並從 last-good 自動恢復', () => {
     ].join('\n'));
     eq(result.loaded.playlist[0].id, 'safe');
     eq(result.disk.playlist[0].id, 'safe');
-    eq(result.disk.schemaVersion, 1);
+    eq(result.disk.schemaVersion, 2);
     ok(result.files.some((name) => /^state\.json\.corrupt-/.test(name)), '應保留損壞原檔: ');
     ok(/最近可用備份恢復/.test(result.alert.message), `提示應說明恢復結果：${result.alert?.message}`);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
@@ -3036,9 +3036,9 @@ test('狀態保存：另一伺服器停止寫入後會自動接管並備份對�
     const script = [
       "const fs=require('fs'); const path=require('path'); const store=require(process.argv[1]);",
       "const dataDir=process.argv[2]; const file=path.join(dataDir,'state.json');",
-      "fs.writeFileSync(file, JSON.stringify({schemaVersion:1, savedAt:100, playlist:[]}), 'utf8');",
+      "fs.writeFileSync(file, JSON.stringify({schemaVersion:2, savedAt:100, playlist:[]}), 'utf8');",
       "store.loadState();",
-      "fs.writeFileSync(file, JSON.stringify({schemaVersion:1, savedAt:200, playlist:[{id:'other-server'}]}), 'utf8');",
+      "fs.writeFileSync(file, JSON.stringify({schemaVersion:2, savedAt:200, playlist:[{id:'other-server'}]}), 'utf8');",
       "const results=[];",
       "store.scheduleSave(()=>({savedAt:300, marker:'first-attempt'}), (r)=>results.push(r));",
       "store.saveNow();",
@@ -3295,7 +3295,7 @@ test('R6-2 follow-up OBS 來源服務重啟恢復提示只針對曾連線卻未�
 test('R6-3 非經典模板會在可見範圍說明中交代拼音與諧音限制', () => {
   const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
   const unsupportedCopy = '此模板不支援拼音／諧音；需要雙語請選「經典疊層」。';
-  const expectedTemplates = ['luminous', 'partita', 'tilt', 'mindscape', 'ktv'];
+  const expectedTemplates = ['pulse', 'facet', 'drift', 'aura', 'ktv'];
   expectedTemplates.forEach((template) => {
     const entry = new RegExp(`${template}: \\{[^\\n]*${unsupportedCopy.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`).exec(lyricExtras)?.[0] || '';
     ok(entry.includes(unsupportedCopy), `${template} 必須在模板範圍說明中交代雙語限制: `);
@@ -3303,14 +3303,93 @@ test('R6-3 非經典模板會在可見範圍說明中交代拼音與諧音限制
   ok(lyricExtras.includes("classic: { label: '經典疊層'") && lyricExtras.includes('拼音與諧音'), '經典疊層必須持續明示為雙語可用模板: ');
 });
 
-test('P3 手機遙控器不再把舊版 Tilt 當作新模板，仍能辨識既有設定', () => {
+test('歌詞模板使用 Elitesand Pro 自有名稱與新 ID', () => {
+  const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  const expectedLabels = {
+    pulse: 'Pulse',
+    facet: 'Facet',
+    drift: 'Drift',
+    aura: 'Aura',
+  };
+  Object.entries(expectedLabels).forEach(([template, label]) => {
+    ok(lyricExtras.includes(`${template}: { label: '${label}'`), `${template} 必須保留技術 ID 並更新顯示名稱: `);
+  });
+  ['Stardust Flow', 'Prism Steps', 'Diagonal Confession', 'Tidal Mindscape', 'Neon Duet'].forEach((retiredName) => {
+    ok(!readme.includes(retiredName), `README 不可保留已退休的模板名稱 ${retiredName}: `);
+  });
+  ok(readme.includes('Classic Overlay, Pulse, Facet, Drift, Aura, KTV, Vertical Flow'));
+});
+
+test('桌面與手機遙控器都可選用新模板 ID', () => {
   const controllerHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'controller.html'), 'utf8');
   const controllerJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');
-  ok(!controllerHtml.includes('class="ctrl-template-btn" data-template="tilt"'), 'Tilt 不可再出現在手機的新模板選項: ');
-  ok(controllerHtml.includes('id="ctrl-template-legacy-notice"'), '既有 Tilt 設定必須有相容性說明: ');
-  ok(controllerJs.includes("const SELECTABLE_TEMPLATE_IDS = TEMPLATE_IDS.filter((template) => template !== 'tilt');"), '遙控器必須明確區分可讀取與可新選取的模板: ');
-  ok(controllerJs.includes("dom.lyricTemplateLegacyNotice.hidden = template !== 'tilt'"), '既有 Tilt 設定必須顯示相容性說明: ');
-  ok(controllerJs.includes('if (!SELECTABLE_TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換不可重新啟用 Tilt: ');
+  ['pulse', 'facet', 'drift', 'aura'].forEach((template) => {
+    ok(controllerHtml.includes(`class="ctrl-template-btn" data-template="${template}"`), `${template} 必須出現在手機模板選項: `);
+  });
+  ok(!controllerHtml.includes('ctrl-template-legacy-notice'), '手機不應保留舊模板的相容性介面: ');
+  ok(controllerJs.includes("const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow'];"), '遙控器必須使用新的模板 ID: ');
+  ok(controllerJs.includes('if (!TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換必須接受所有現行模板: ');
+});
+
+test('v2 將既有模板設定與預設快照遷移到新 ID', () => {
+  const { migrateState, CURRENT_STATE_SCHEMA_VERSION } = require('../server/services/state-migrations');
+  const result = migrateState({
+    schemaVersion: 1,
+    lyricSettings: {
+      template: 'mindscape',
+      lyricTemplateSettings: {
+        luminous: { template: 'luminous', fontSize: 50 },
+        partita: { template: 'partita', fontSize: 45 },
+        tilt: { template: 'tilt', fontSize: 45 },
+        mindscape: { template: 'mindscape', fontSize: 72 },
+      },
+      lyricPresets: [{ id: 'legacy', name: '舊模板', settings: { template: 'tilt' } }],
+    },
+  });
+  eq(CURRENT_STATE_SCHEMA_VERSION, 2);
+  eq(result.state.schemaVersion, 2);
+  eq(result.state.lyricSettings.template, 'aura');
+  eq(result.state.lyricSettings.lyricTemplateSettings.pulse.template, 'pulse');
+  eq(result.state.lyricSettings.lyricTemplateSettings.facet.template, 'facet');
+  eq(result.state.lyricSettings.lyricTemplateSettings.drift.template, 'drift');
+  eq(result.state.lyricSettings.lyricTemplateSettings.aura.template, 'aura');
+  eq(result.state.lyricSettings.lyricPresets[0].settings.template, 'drift');
+});
+
+test('使用者更新時會把 v1 state.json 轉成新的模板 ID 並落盤', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-template-id-migrate-'));
+  const original = {
+    schemaVersion: 1,
+    savedAt: 100,
+    playlist: [],
+    lyricSettings: {
+      template: 'mindscape',
+      lyricTemplateSettings: {
+        luminous: { template: 'luminous', fontSize: 50 },
+        partita: { template: 'partita', fontSize: 45 },
+        tilt: { template: 'tilt', fontSize: 45 },
+        mindscape: { template: 'mindscape', fontSize: 72 },
+      },
+    },
+  };
+  try {
+    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify(original), 'utf8');
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const path=require('path'); const store=require(process.argv[1]); const dir=process.argv[2];",
+      "const loaded=store.loadState(); const disk=JSON.parse(fs.readFileSync(store.STATE_FILE,'utf8')); const files=fs.readdirSync(dir);",
+      "const backup=files.find((name)=>/^state\\.json\\.pre-migration-v1-/.test(name));",
+      "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,disk,backupRaw:backup?fs.readFileSync(path.join(dir,backup),'utf8'):null}));",
+    ].join('\n'));
+    eq(result.loaded.schemaVersion, 2);
+    eq(result.disk.schemaVersion, 2);
+    eq(result.loaded.lyricSettings.template, 'aura');
+    eq(result.disk.lyricSettings.lyricTemplateSettings.pulse.template, 'pulse');
+    eq(result.disk.lyricSettings.lyricTemplateSettings.facet.template, 'facet');
+    eq(result.disk.lyricSettings.lyricTemplateSettings.drift.template, 'drift');
+    eq(result.disk.lyricSettings.lyricTemplateSettings.aura.template, 'aura');
+    eq(result.backupRaw, JSON.stringify(original));
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
 function finishTests(exitCode) {

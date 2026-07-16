@@ -134,19 +134,19 @@ body.lyric-pos-right #lyrics-container {
 /* split：行容器本來是 absolute inset 0 滿版，交替收窄到左/右 48%。
    width:auto + max-width:none 必須帶上——行容器多半自帶 width:100%/max-width，
    absolute 定位下 width 有明示值時 right/left 收窄會被直接忽略（over-constrained 規則）。 */
-.luminous-line.pos-left,
-.partita-line.pos-left,
-.tilt-line-stack.pos-left,
-.mindscape-line.pos-left {
+.pulse-line.pos-left,
+.facet-line.pos-left,
+.drift-line-stack.pos-left,
+.aura-line.pos-left {
   right: 52%;
   width: auto;
   max-width: none;
 }
 
-.luminous-line.pos-right,
-.partita-line.pos-right,
-.tilt-line-stack.pos-right,
-.mindscape-line.pos-right {
+.pulse-line.pos-right,
+.facet-line.pos-right,
+.drift-line-stack.pos-right,
+.aura-line.pos-right {
   left: 52%;
   width: auto;
   max-width: none;
@@ -610,14 +610,14 @@ body {
 }
 
 /* ═══════════════════════════════════════════
-   v5 folia 系模板：共用三層字引擎（.fw-*）＋ Luminous
+   自訂模板：共用三層字引擎（.fw-*）＋ Pulse
    ═══════════════════════════════════════════ */
 
 /* folia 系模板需要較高可視區（詞在畫面中央散射/堆疊） */
-body.template-luminous #lyrics-container,
-body.template-partita #lyrics-container,
-body.template-tilt #lyrics-container,
-body.template-mindscape #lyrics-container,
+body.template-pulse #lyrics-container,
+body.template-facet #lyrics-container,
+body.template-drift #lyrics-container,
+body.template-aura #lyrics-container,
 body.template-columnflow #lyrics-container {
   min-height: 70vh;
   justify-content: center;
@@ -625,10 +625,10 @@ body.template-columnflow #lyrics-container {
 
 /* 經典九宮格的位移與對齊是「經典疊層專屬」控制項；
    v5 模板不吃 offset，避免經典九宮格/細調把 KTV 等模板推歪。 */
-body.template-luminous #lyrics-container,
-body.template-partita #lyrics-container,
-body.template-tilt #lyrics-container,
-body.template-mindscape #lyrics-container,
+body.template-pulse #lyrics-container,
+body.template-facet #lyrics-container,
+body.template-drift #lyrics-container,
+body.template-aura #lyrics-container,
 body.template-ktv #lyrics-container,
 body.template-columnflow #lyrics-container {
   transform: none;
@@ -711,16 +711,16 @@ body.template-columnflow #lyrics-container {
   .cf-col, .cf-g { transition-duration: .01ms !important; }
 }
 
-/* ─── Mindscape 心象（cadenza 重現）─── */
-#mindscape-root {
+/* ─── Aura 心象 ─── */
+#aura-root {
   position: absolute;
   inset: 0;
   overflow: visible;
   font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
 }
 
-.mindscape-line {
-  /* 同 luminous：舊行退場與新行進場同時存在時，各自 absolute 滿版、互不干擾排版 */
+.aura-line {
+  /* 同 Pulse：舊行退場與新行進場同時存在時，各自 absolute 滿版、互不干擾排版 */
   position: absolute;
   inset: 0;
   transform-origin: 50% 42%;
@@ -777,9 +777,9 @@ body.template-columnflow #lyrics-container {
   white-space: pre;
   line-height: 1;
   transform-origin: 0 0;
-  /* 關鍵：與 .gw-word（Luminous，實機驗證流暢）同樣提升為獨立合成層。
+  /* 關鍵：與 .gw-word（Pulse，實機驗證流暢）同樣提升為獨立合成層。
      沒有這行，每個詞的漂移/縮放都要逐幀重畫發光字本體（CPU 點陣化），
-     有這行則只是搬移已畫好的貼圖——這就是 Mindscape 卡、Luminous 順的結構差異。 */
+     有這行則只是搬移已畫好的貼圖，避免行動畫造成重繪壓力。 */
   will-change: transform, opacity;
 }
 
@@ -870,8 +870,8 @@ body.template-ktv #lyrics-container {
   display: inline;
 }
 
-/* ─── Luminous 佈局 ─── */
-#luminous-root {
+/* ─── Pulse 佈局 ─── */
+#pulse-root {
   position: absolute;
   inset: 0;
   display: flex;
@@ -881,10 +881,10 @@ body.template-ktv #lyrics-container {
   font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
 }
 
-.luminous-line {
+.pulse-line {
   /* 舊行退場與新行進場會短暫同時存在於 root 底下：position:absolute 讓每一行
      各自獨佔滿版空間、互不參與彼此的 flex 排版，換行時才不會互搶置中位置
-     （沒有這行，兩個 .luminous-line 會被 root 的 flex 當成一對擠在一起置中，
+     （沒有這行，兩個 .pulse-line 會被 root 的 flex 當成一對擠在一起置中，
      舊行淡出瞬間新行就會「跳」進真正的正中央）。 */
   position: absolute;
   inset: 0;
@@ -905,12 +905,12 @@ body.template-ktv #lyrics-container {
 }
 
 /* 偏左/偏右時容器已收窄到 ~48%，max-width 不能再吃掉一半，改回較寬讓它填滿分配到的側邊 */
-.luminous-line.pos-left,
-.luminous-line.pos-right {
+.pulse-line.pos-left,
+.pulse-line.pos-right {
   max-width: none;
 }
 
-.luminous-sand-rail {
+.pulse-sand-rail {
   position: absolute;
   z-index: 0;
   left: 9%;
@@ -926,7 +926,7 @@ body.template-ktv #lyrics-container {
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--lyric-color-active, #fff) 44%, transparent));
 }
 
-.luminous-sand-rail::after {
+.pulse-sand-rail::after {
   content: '';
   position: absolute;
   left: 68%;
@@ -939,10 +939,10 @@ body.template-ktv #lyrics-container {
   box-shadow: 0 0 14px var(--lyric-color-active, #fff);
 }
 
-.luminous-line .gw-word { z-index: 1; }
+.pulse-line .gw-word { z-index: 1; }
 
-/* ─── Partita 佈局 ─── */
-#partita-root {
+/* ─── Facet 佈局 ─── */
+#facet-root {
   position: absolute;
   inset: 0;
   display: flex;
@@ -952,8 +952,8 @@ body.template-ktv #lyrics-container {
   font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
 }
 
-.partita-line {
-  /* 同 .luminous-line：換行時新舊兩行短暫並存，position:absolute 讓各自獨佔滿版、
+.facet-line {
+  /* 同 .pulse-line：換行時新舊兩行短暫並存，position:absolute 讓各自獨佔滿版、
      不參與彼此的 flex 排版，避免舊行淡出瞬間新行「跳」到正中央。 */
   position: absolute;
   inset: 0;
@@ -967,7 +967,7 @@ body.template-ktv #lyrics-container {
   text-shadow: var(--lyric-shadow, none);
 }
 
-.partita-chunk {
+.facet-chunk {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
@@ -980,7 +980,7 @@ body.template-ktv #lyrics-container {
   will-change: transform, opacity;
 }
 
-.partita-chunk::before {
+.facet-chunk::before {
   content: '';
   position: absolute;
   z-index: -1;
@@ -991,26 +991,26 @@ body.template-ktv #lyrics-container {
 }
 
 /* 導軌顏色由 JS 依使用者亮色的透明度階寫入 --guide-color（不寫死任何常數色） */
-.partita-guide-v,
-.partita-guide-h {
+.facet-guide-v,
+.facet-guide-h {
   position: absolute;
   pointer-events: none;
   --guide-color: color-mix(in srgb, var(--lyric-color-active, #fff) 12%, transparent);
   background-color: transparent;
 }
-.partita-guide-v {
+.facet-guide-v {
   width: 2px;
   height: 26px;
   bottom: -13px;
   background-image: repeating-linear-gradient(to bottom, var(--guide-color) 0 5px, transparent 5px 9px);
 }
-.partita-guide-h {
+.facet-guide-h {
   height: 2px;
   width: calc(100% + 30px);
   bottom: -7px;
   background-image: repeating-linear-gradient(to right, var(--guide-color) 0 12px, transparent 12px 17px);
 }
-.partita-guide-h::after {
+.facet-guide-h::after {
   content: '';
   position: absolute;
   top: -3px;
@@ -1019,15 +1019,15 @@ body.template-ktv #lyrics-container {
   background: var(--guide-color);
   transform: rotate(45deg);
 }
-.partita-guide-h.left::after { right: -3px; }
-.partita-guide-h.right::after { left: -3px; }
-.partita-guide-v.left { left: -7px; }
-.partita-guide-h.left { left: -14px; }
-.partita-guide-v.right { right: -7px; }
-.partita-guide-h.right { right: -14px; }
+.facet-guide-h.left::after { right: -3px; }
+.facet-guide-h.right::after { left: -3px; }
+.facet-guide-v.left { left: -7px; }
+.facet-guide-h.left { left: -14px; }
+.facet-guide-v.right { right: -7px; }
+.facet-guide-h.right { right: -14px; }
 
-/* ─── Tilt 佈局 ─── */
-#tilt-root {
+/* ─── Drift 佈局 ─── */
+#drift-root {
   position: absolute;
   inset: 0;
   display: flex;
@@ -1036,8 +1036,8 @@ body.template-ktv #lyrics-container {
   font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
 }
 
-.tilt-line-stack {
-  /* 同 .luminous-line：換行時新舊兩行短暫並存，position:absolute 讓各自獨佔滿版、
+.drift-line-stack {
+  /* 同 .pulse-line：換行時新舊兩行短暫並存，position:absolute 讓各自獨佔滿版、
      不參與彼此的 flex 排版，避免舊行淡出瞬間新行「跳」到正中央。 */
   position: absolute;
   inset: 0;
@@ -1049,7 +1049,7 @@ body.template-ktv #lyrics-container {
   text-shadow: var(--lyric-shadow, none);
 }
 
-.tilt-seg {
+.drift-seg {
   white-space: nowrap;
   font-weight: 400;
   line-height: 1.35;
@@ -1057,7 +1057,7 @@ body.template-ktv #lyrics-container {
   will-change: transform, opacity;
 }
 
-.tilt-seg-italic {
+.drift-seg-italic {
   position: relative;
   font-style: italic;
   font-weight: 300;
@@ -1066,7 +1066,7 @@ body.template-ktv #lyrics-container {
   padding: 0 0.15em 0.22em;
 }
 
-.tilt-seg-italic::before {
+.drift-seg-italic::before {
   content: '//';
   position: absolute;
   left: -1.15em;
@@ -1077,7 +1077,7 @@ body.template-ktv #lyrics-container {
   letter-spacing: -0.12em;
 }
 
-.tilt-beat-line {
+.drift-beat-line {
   position: absolute;
   left: -0.05em;
   right: 0.05em;
@@ -1093,7 +1093,7 @@ body.template-ktv #lyrics-container {
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--lyric-color-active, #fff) 46%, transparent));
 }
 
-.tilt-char {
+.drift-char {
   display: inline-block;
   will-change: transform;
 }

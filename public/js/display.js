@@ -61,7 +61,7 @@
   if (isPreview) document.body.classList.add('preview-mode');
 
   // 預覽範例：只在控制台按「示範歌詞」時載入，避免一開程式就卡一行假歌詞。
-  // 這走真正的 lyrics pipeline，讓經典疊層與 v5 模板（KTV/Luminous/Mindscape...）都能測字體效果。
+  // 這走真正的 lyrics pipeline，讓經典疊層與自訂模板（KTV/Pulse/Aura...）都能測字體效果。
   function renderPreviewSample() {
     if (!isPreview) return;
     if (!document.body.className.match(/style-/)) document.body.classList.add('style-cute');
@@ -107,7 +107,7 @@
   }
 
   /**
-   * v5.2 平滑顯示時鐘：直接吃時間值的模板（KTV 掃色、Mindscape 平滑）對時間顆粒極敏感。
+   * 平滑顯示時鐘：直接吃時間值的模板（KTV 掃色、Aura 平滑）對時間顆粒極敏感。
    * 面板每 200ms 才同步一次，每次同步 syncTimeMs 硬重設會帶進網路抖動（±幾十 ms 的前後跳）。
    * 這裡維護一個「自走＋軟校正」的時鐘：每幀用 performance.now 自行推進，
    * 再以 6%/幀 的速度貼向同步目標；偏差超過 300ms（seek/切歌）直接跳過去。
@@ -468,7 +468,7 @@
       // seekDriving 200ms → 播放期間旗標幾乎恆為 true → rAF 的 60fps 內插迴圈整個被跳過，
       // 畫面實際由 70ms 節流＋未內插的原始同步值驅動＝時間每 200ms 跳一格。
       // GSAP 系模板靠自己的 timeline 時鐘看不出來；直接吃時間值的模板（KTV 掃色、
-      // Mindscape 平滑、先前的海報捲軸彈簧）就整個階梯狀——這才是「卡」的真因。
+      // Aura 平滑、先前的海報捲軸彈簧）就整個階梯狀——這才是「卡」的真因。
       // 現在只有「連續快速同步」（拖曳進度條，間隔 <160ms）才走快速路徑；
       // 常規播放同步只更新時鐘基準，渲染完全交給 rAF 內插（60fps 平滑）。
       const isScrubbing = now - lastSyncWall < 160;

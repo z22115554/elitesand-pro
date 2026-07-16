@@ -93,7 +93,7 @@ const KaraokeEngine = (() => {
 
   // ─── 排版模板（v4）───
   // 'classic' 走既有的疊層渲染管線（renderLine/pushToHistory/updateWords/runFrameEffects），
-  // 其他模板（例如 luminous 流光）由 LyricTemplates registry 提供、透過生命週期方法接管渲染。
+  // 其他模板（例如 Pulse 流光）由 LyricTemplates registry 提供、透過生命週期方法接管渲染。
   let templateId = 'classic';
   let activeTemplateObj = null;
   let lastAdjustedTimeMs = 0;
@@ -1121,7 +1121,7 @@ const KaraokeEngine = (() => {
 
   // ─── 排版模板用的簡轉繁歌詞快取 ───
   // 「經典疊層」自己在 renderLine 內逐字呼叫 s2t()，不受影響。但 v5 起的排版模板
-  // （Luminous/Partita/Tilt/Mindscape/KTV）都是透過 ctx.getLyrics() 拿原始資料自己組字，
+  // （Pulse/Facet/Drift/Aura/KTV）都是透過 ctx.getLyrics() 拿原始資料自己組字，
   // 從未呼叫過 s2t()——簡轉繁對它們形同虛設。這裡在唯一的取用點做一次性轉換：
   // 用 (parsedLyrics 參照, s2tEnabled 旗標) 做記憶化，兩者都沒變就直接回傳快取，
   // 不會每幀重新跑 OpenCC；任一個變了就重建（新物件參照），下游各模板既有的

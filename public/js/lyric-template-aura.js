@@ -19,7 +19,7 @@
  */
 (function () {
   if (typeof LyricTemplates === 'undefined' || typeof LyricMotion === 'undefined') {
-    console.warn('[Mindscape] 依賴未載入，模板停用');
+    console.warn('[Aura] 依賴未載入，模板停用');
     return;
   }
 
@@ -375,9 +375,9 @@
     const layout = buildLayout(line, displayWords, vp.width);
 
     const lineEl = document.createElement('div');
-    lineEl.className = 'mindscape-line';
+    lineEl.className = 'aura-line';
     if (vp.sideClass) lineEl.classList.add(vp.sideClass);
-    // 只設字重/字級，字體名稱刻意不寫進 inline style——讓它繼承 #mindscape-root 的
+    // 只設字重/字級，字體名稱刻意不寫進 inline style——讓它繼承 #aura-root 的
     // `font-family: var(--display-font-family)`，CSS 變數改變時立刻生效（換字體即時反映）。
     lineEl.style.fontWeight = '700';
     lineEl.style.fontSize = `${layout.fontPx}px`;
@@ -469,7 +469,7 @@
     const timeSec = timeMs / 1000;
     const swayAmp = intensity === 'chaotic' ? 6 : intensity === 'calm' ? 2 : 4;
 
-    // 行包絡＋潮汐浮動。浮動做在「行容器」單一元素上（Luminous 順的同一原則）。
+    // 行包絡＋潮汐浮動。浮動做在「行容器」單一元素上，避免重繪壓力。
     const env = lineEnvelope(timeMs, line, tempo);
     const ec = current.envCache;
     if (Math.abs(env.opacity - ec.opacity) > 0.004) {
@@ -584,12 +584,12 @@
   // ─── 模板註冊 ───
 
   LyricTemplates.register({
-    id: 'mindscape',
+    id: 'aura',
     label: '潮汐心景',
 
     mount(container, ctx) {
       rootEl = document.createElement('div');
-      rootEl.id = 'mindscape-root';
+      rootEl.id = 'aura-root';
       container.appendChild(rootEl);
       refreshColors();
       current = null;
