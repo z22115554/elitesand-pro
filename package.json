@@ -1,6 +1,6 @@
 {
   "name": "elitesand-pro",
-  "version": "0.7.7-rc.1",
+  "version": "0.7.8",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "server/index.js",
