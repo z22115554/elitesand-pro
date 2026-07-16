@@ -398,8 +398,23 @@
                 <button class="style-thumb" data-template="ktv" type="button" title="霓彩伴唱：雙行錯開、逐字掃色與原地倒數">
                   <span class="style-thumb-preview"><span class="style-thumb-char">唱</span></span><span class="style-thumb-label">霓彩伴唱</span>
                 </button>
+                <button class="style-thumb" data-template="columnflow" type="button" title="直書句流：直行在畫面中自然錯落，逐字浮現，唱過的句子留成淡淡殘影">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">句流</span></span><span class="style-thumb-label">直書句流</span>
+                </button>
               </div>
               <p class="field-hint" id="template-desc">「動畫風格」的顏色與發光在各模板通用；波浪／粒子／故障等逐字效果僅適用經典疊層。</p>
+              <div class="field" id="columnflow-variant-field" hidden>
+                <label>直書句流樣式</label>
+                <div class="style-thumb-row" id="columnflow-variant-buttons">
+                  <button class="style-thumb active" data-columnflow-variant="sen" type="button" title="素筆直書：細緻文字在畫面中錯落填入，保留主播主視覺">
+                    <span class="style-thumb-preview"><span class="style-thumb-char">素筆</span></span><span class="style-thumb-label">素筆直書</span>
+                  </button>
+                  <button class="style-thumb" data-columnflow-variant="fuda" type="button" title="字札直書：每個字像一張小紙札，保有不規則手感">
+                    <span class="style-thumb-preview"><span class="style-thumb-char">字札</span></span><span class="style-thumb-label">字札直書</span>
+                  </button>
+                </div>
+                <p class="field-hint">素筆是乾淨的文字殘影；字札則讓每個字帶有小紙片的手感。</p>
+              </div>
               <div class="lyric-preset-tools" aria-label="歌詞外觀預設">
                 <select id="lyric-preset-select" class="input"><option value="">尚未保存預設</option></select>
                 <button id="lyric-preset-save" class="btn btn-sm" type="button">保存預設</button>
