@@ -6,7 +6,7 @@
 
 ## English
 
-Latest stable release: `v0.7.6` (pre-release build `v0.7.7-rc.1` also available for testing)
+Latest stable release: `v0.7.8`
 
 > [!WARNING]
 > **The built-in updater in v0.7.1–v0.7.3 cannot safely complete this upgrade — do not use "Update Now" from inside those versions.**
@@ -168,7 +168,7 @@ npm test       # unit tests (lyrics parsing, romanization, persistence, etc.)
 
 ## 繁體中文
 
-最新穩定版：`v0.7.6`（另有測試中的 Pre-release：`v0.7.7-rc.1`）
+最新穩定版：`v0.7.8`
 
 > [!WARNING]
 > **v0.7.1～v0.7.3 內建的更新器無法安全完成這次升級，請勿使用「立即線上更新」。**

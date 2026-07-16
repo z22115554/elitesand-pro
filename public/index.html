@@ -424,10 +424,35 @@
                 <button class="lyric-template-card" data-template="ktv" type="button" role="radio" aria-checked="false" title="霓彩伴唱：雙行錯開、逐字掃色與原地倒數">
                   <span class="style-thumb-preview"><span class="style-thumb-char">唱</span></span><strong>霓彩伴唱</strong><span>逐字伴唱、固定雙行</span>
                 </button>
+                <button class="lyric-template-card" data-template="columnflow" type="button" role="radio" aria-checked="false" title="直書句流：直行在畫面兩側錯落，逐字浮現，唱過的句子留下淡淡殘影">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">句流</span></span><strong>直書句流</strong><span>直書殘影、中央留白</span>
+                </button>
                 <!-- Tilt 僅保留給舊資料相容；未在新介面提供選擇。 -->
               </div>
               <p class="field-hint" id="template-desc">完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。</p>
               <p class="lyric-template-scope" id="lyric-template-scope" role="status">可調：九宮格位置、歷史行、拼音／諧音、經典動畫風格與進階文字效果。</p>
+              <div class="field" id="columnflow-variant-field" hidden>
+                <label>直書句流樣式</label>
+                <div class="style-thumb-row" id="columnflow-variant-buttons">
+                  <button class="style-thumb active" data-columnflow-variant="sen" type="button" title="素筆直書：細緻文字在畫面中錯落填入，保留主播主視覺"><span class="style-thumb-preview"><span class="style-thumb-char">素筆</span></span><span class="style-thumb-label">素筆直書</span></button>
+                  <button class="style-thumb" data-columnflow-variant="fuda" type="button" title="字札直書：每個字像一張小紙札，保有不規則手感"><span class="style-thumb-preview"><span class="style-thumb-char">字札</span></span><span class="style-thumb-label">字札直書</span></button>
+                </div>
+                <p class="field-hint">素筆是乾淨的文字殘影；字札則讓每個字帶有小紙片的手感。</p>
+              </div>
+              <div class="field" id="columnflow-placement-field" hidden>
+                <label>直書位置</label>
+                <div class="style-thumb-row" id="columnflow-placement-buttons">
+                  <button class="style-thumb" data-columnflow-placement="left" type="button" title="偏左：所有直行留在畫面左側，避開正中"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label">偏左</span></button>
+                  <button class="style-thumb" data-columnflow-placement="right" type="button" title="偏右：所有直行留在畫面右側，避開正中"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label">偏右</span></button>
+                  <button class="style-thumb active" data-columnflow-placement="split" type="button" title="左右分散：新句交錯補到左右兩側，畫面正中保持留白"><span class="style-thumb-preview"><span class="style-thumb-char">散</span></span><span class="style-thumb-label">左右分散</span></button>
+                </div>
+                <p class="field-hint">預設左右分散；新句補上時，最舊的一句才會淡出。</p>
+              </div>
+              <div class="field" id="columnflow-max-lines-field" hidden>
+                <label>同時保留句數 <span id="ls-columnflow-max-lines-val" class="val">4 句</span></label>
+                <input id="ls-columnflow-max-lines" data-ls-control="columnflowMaxLines" type="range" min="1" max="6" step="1" value="4">
+                <p class="field-hint">偏左或偏右畫面較擠時，可把句數調低。</p>
+              </div>
               <div class="field" id="lyric-pos-field">
                 <label>歌詞位置</label>
                 <!-- 經典疊層：九宮格全畫面定位＋X/Y 細調（從「詳細設定」移過來，同一份 DOM／同一套事件，不是複本）-->

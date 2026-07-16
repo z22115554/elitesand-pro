@@ -73,13 +73,16 @@
     template: 'classic',  // 'classic' | 'luminous' | 'partita' | 'tilt' | 'mindscape'
     animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
     lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
+    columnflowVariant: 'sen', // 直書句流：'sen' | 'fuda'
+    columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
+    columnflowMaxLines: 4, // 直書句流：同時保留 1–6 句
     // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
     displayBgImage: '',   // 檔名（'' = 無背景，維持透明）
     displayBgOpacity: 1,
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv'];
+  const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -89,6 +92,7 @@
     tilt: { label: 'Tilt', description: '保留給舊版設定的相容模板。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     mindscape: { label: 'Mindscape', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     ktv: { label: 'KTV', description: '固定雙行演唱畫面，適合逐字或跟唱情境。', scope: '可調：字型、配色、背景與詳細的邊距設定；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
+    columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，逐字浮現，唱過的句子留下淡淡殘影。', scope: '可調：直書樣式、左右配置、保留句數、字型、配色與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
   };
 
   function getTemplateUI(template) {
@@ -102,7 +106,12 @@
     tilt: { ...DEFAULT_SETTINGS, template: 'tilt', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
     mindscape: { ...DEFAULT_SETTINGS, template: 'mindscape', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
     ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
+    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4 },
   };
+  const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
+  const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
+  const COLUMNFLOW_MIN_LINES = 1;
+  const COLUMNFLOW_MAX_LINES = 6;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
   let templateSettings = {};
@@ -110,6 +119,12 @@
 
   function templateDefaults(template) {
     return { ...(TEMPLATE_DEFAULTS[template] || TEMPLATE_DEFAULTS.classic) };
+  }
+
+  function normalizeColumnflowMaxLines(value) {
+    const parsed = Math.round(Number(value));
+    if (!Number.isFinite(parsed)) return DEFAULT_SETTINGS.columnflowMaxLines;
+    return Math.max(COLUMNFLOW_MIN_LINES, Math.min(COLUMNFLOW_MAX_LINES, parsed));
   }
 
   function cleanSettingSnapshot(src) {
@@ -124,7 +139,14 @@
     const out = {};
     if (src && typeof src === 'object') {
       TEMPLATE_IDS.forEach((id) => {
-        if (src[id] && typeof src[id] === 'object') out[id] = { ...templateDefaults(id), ...cleanSettingSnapshot(src[id]), template: id };
+        if (src[id] && typeof src[id] === 'object') {
+          out[id] = { ...templateDefaults(id), ...cleanSettingSnapshot(src[id]), template: id };
+          if (id === 'columnflow') {
+            if (!COLUMNFLOW_VARIANTS.includes(out[id].columnflowVariant)) out[id].columnflowVariant = 'sen';
+            if (!COLUMNFLOW_PLACEMENTS.includes(out[id].columnflowPlacement)) out[id].columnflowPlacement = 'split';
+            out[id].columnflowMaxLines = normalizeColumnflowMaxLines(out[id].columnflowMaxLines);
+          }
+        }
       });
     }
     const base = cleanSettingSnapshot(fallback || {});
@@ -617,6 +639,7 @@
       b.tabIndex = active ? 0 : -1;
     });
     const isClassic = ui.supportsClassicControls;
+    const isColumnflow = settings.template === 'columnflow';
 
     const templateLabel = document.getElementById('lyric-template-label');
     const templateStatus = document.getElementById('lyric-template-status');
@@ -639,13 +662,32 @@
     const offsetXRow = document.getElementById('ls-offset-x-row');
     const offsetYRow = document.getElementById('ls-offset-y-row');
     const quadRow = document.getElementById('lyric-pos-buttons');
+    const lyricPosField = document.getElementById('lyric-pos-field');
     const posHint = document.getElementById('lyric-pos-hint');
     const fineHint = document.getElementById('lyric-pos-fine-hint');
     if (gridWrap) gridWrap.hidden = !isClassic;
     if (posGrid) posGrid.hidden = !isClassic;
     if (offsetXRow) offsetXRow.hidden = !isClassic;
     if (offsetYRow) offsetYRow.hidden = !isClassic;
-    if (quadRow) quadRow.hidden = isClassic || ui.positionMode === 'fixed';
+    if (quadRow) quadRow.hidden = isClassic || ui.positionMode === 'fixed' || isColumnflow;
+    if (lyricPosField) lyricPosField.hidden = isColumnflow;
+    const columnflowVariantField = document.getElementById('columnflow-variant-field');
+    const columnflowPlacementField = document.getElementById('columnflow-placement-field');
+    const columnflowMaxLinesField = document.getElementById('columnflow-max-lines-field');
+    if (columnflowVariantField) columnflowVariantField.hidden = !isColumnflow;
+    if (columnflowPlacementField) columnflowPlacementField.hidden = !isColumnflow;
+    if (columnflowMaxLinesField) columnflowMaxLinesField.hidden = !isColumnflow;
+    document.querySelectorAll('#columnflow-variant-buttons .style-thumb').forEach((b) => {
+      b.classList.toggle('active', b.dataset.columnflowVariant === (settings.columnflowVariant || 'sen'));
+    });
+    document.querySelectorAll('#columnflow-placement-buttons .style-thumb').forEach((b) => {
+      b.classList.toggle('active', b.dataset.columnflowPlacement === (settings.columnflowPlacement || 'split'));
+    });
+    const maxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
+    const maxLinesInput = document.getElementById('ls-columnflow-max-lines');
+    const maxLinesValue = document.getElementById('ls-columnflow-max-lines-val');
+    if (maxLinesInput) maxLinesInput.value = String(maxLines);
+    if (maxLinesValue) maxLinesValue.textContent = `${maxLines} 句`;
     if (posHint) {
       posHint.textContent = isClassic
         ? '九宮格是整個歌詞區塊在畫面上的位置；細調 X/Y 可再微調偏移。'
@@ -656,12 +698,15 @@
     if (fineHint) {
       fineHint.textContent = '拖曳選格子，或用下面細調微調';
     }
+    if (posHint && isColumnflow) {
+      posHint.textContent = '直書句流會保留最近幾句，並避開彼此重疊；可用上方直書選項調整構圖。';
+    }
     document.querySelectorAll('#lyric-pos-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.lyricPos === (settings.lyricPosition || 'center'));
     });
     // 「左右分散」是逐行交替左右——經典疊層（歷史行堆疊）與 KTV（自帶雙行位構圖）不支援
     const splitBtn = document.querySelector('#lyric-pos-buttons .style-thumb[data-lyric-pos="split"]');
-    if (splitBtn) splitBtn.disabled = isClassic || ui.positionMode === 'fixed';
+    if (splitBtn) splitBtn.disabled = isClassic || ui.positionMode === 'fixed' || isColumnflow;
 
     // 經典疊層專用設定區塊：整批顯示/隱藏
     CLASSIC_ONLY_FIELD_IDS.forEach((id) => {
@@ -678,6 +723,11 @@
       const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
       settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
       if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
+      if (settings.template === 'columnflow') {
+        if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
+        if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
+        settings.columnflowMaxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
+      }
       refreshControls();
       pushSettings();
     };
@@ -703,6 +753,33 @@
         pushSettings();
       });
     });
+    document.querySelectorAll('#columnflow-variant-buttons .style-thumb').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const variant = btn.dataset.columnflowVariant;
+        if (settings.template !== 'columnflow' || !COLUMNFLOW_VARIANTS.includes(variant)) return;
+        settings.columnflowVariant = variant;
+        syncTemplateButtons();
+        pushSettings();
+      });
+    });
+    document.querySelectorAll('#columnflow-placement-buttons .style-thumb').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const placement = btn.dataset.columnflowPlacement;
+        if (settings.template !== 'columnflow' || !COLUMNFLOW_PLACEMENTS.includes(placement)) return;
+        settings.columnflowPlacement = placement;
+        syncTemplateButtons();
+        pushSettings();
+      });
+    });
+    const maxLinesInput = document.getElementById('ls-columnflow-max-lines');
+    if (maxLinesInput) {
+      maxLinesInput.addEventListener('input', () => {
+        if (settings.template !== 'columnflow') return;
+        settings.columnflowMaxLines = normalizeColumnflowMaxLines(maxLinesInput.value);
+        syncTemplateButtons();
+        pushSettings();
+      });
+    }
     document.querySelectorAll('#lyric-pos-buttons .style-thumb').forEach((btn) => {
       btn.addEventListener('click', () => {
         settings.lyricPosition = btn.dataset.lyricPos;
@@ -901,6 +978,11 @@
         settings = { ...templateDefaults(item.settings.template), ...cleanSettingSnapshot(item.settings) };
         if (!TEMPLATE_IDS.includes(settings.template)) settings.template = 'classic';
         if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
+        if (settings.template === 'columnflow') {
+          if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
+          if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
+          settings.columnflowMaxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
+        }
         refreshControls();
         pushSettings();
         showToast('已套用歌詞外觀預設');
