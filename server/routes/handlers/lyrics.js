@@ -27,6 +27,11 @@ function sanitizeLyricTemplateSettings(value) {
       if (id === 'columnflow' && out[id].columnflowPlacement && !['left', 'right', 'split'].includes(out[id].columnflowPlacement)) {
         delete out[id].columnflowPlacement;
       }
+      if (id === 'columnflow' && out[id].columnflowMaxLines !== undefined) {
+        if (!Number.isInteger(out[id].columnflowMaxLines) || out[id].columnflowMaxLines < 1 || out[id].columnflowMaxLines > 6) {
+          delete out[id].columnflowMaxLines;
+        }
+      }
     }
   });
   return out;
@@ -164,6 +169,10 @@ function registerLyricsHandlers(io, socket, ctx) {
     }
     if (settings.columnflowPlacement && !['left', 'right', 'split'].includes(settings.columnflowPlacement)) {
       delete settings.columnflowPlacement;
+    }
+    if (settings.columnflowMaxLines !== undefined
+      && (!Number.isInteger(settings.columnflowMaxLines) || settings.columnflowMaxLines < 1 || settings.columnflowMaxLines > 6)) {
+      delete settings.columnflowMaxLines;
     }
     // 合併（容許部分更新）
     playState.lyricSettings = { ...playState.lyricSettings, ...settings };

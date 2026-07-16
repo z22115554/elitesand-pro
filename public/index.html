@@ -430,6 +430,11 @@
                 </div>
                 <p class="field-hint">預設左右分散；四句會以滾動方式保留，最舊的一句才會淡出。</p>
               </div>
+              <div class="field" id="columnflow-max-lines-field" hidden>
+                <label>同時保留句數 <span id="ls-columnflow-max-lines-val" class="val">4 句</span></label>
+                <input id="ls-columnflow-max-lines" data-ls-control="columnflowMaxLines" type="range" min="1" max="6" step="1" value="4">
+                <p class="field-hint">新句補上時，最舊的一句才淡出。偏左或偏右畫面較擠時，可把句數調低。</p>
+              </div>
               <div class="lyric-preset-tools" aria-label="歌詞外觀預設">
                 <select id="lyric-preset-select" class="input"><option value="">尚未保存預設</option></select>
                 <button id="lyric-preset-save" class="btn btn-sm" type="button">保存預設</button>

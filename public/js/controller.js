@@ -88,8 +88,16 @@
   const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
+  const COLUMNFLOW_MIN_LINES = 1;
+  const COLUMNFLOW_MAX_LINES = 6;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
+
+  function normalizeColumnflowMaxLines(value) {
+    const parsed = Math.round(Number(value));
+    if (!Number.isFinite(parsed)) return 4;
+    return Math.max(COLUMNFLOW_MIN_LINES, Math.min(COLUMNFLOW_MAX_LINES, parsed));
+  }
 
   function settingSnapshot(value) {
     const out = { ...(value || {}) };
@@ -106,14 +114,18 @@
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
     document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowVariant === (lyricSettings.columnflowVariant || 'sen')));
     document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowPlacement === (lyricSettings.columnflowPlacement || 'split')));
+    const columnflowMaxLines = normalizeColumnflowMaxLines(lyricSettings.columnflowMaxLines);
+    document.querySelectorAll('.ctrl-columnflow-max-lines-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.columnflowMaxLines) === columnflowMaxLines));
     document.querySelectorAll('.ctrl-position-btn').forEach((b) => b.classList.toggle('active', b.dataset.position === (lyricSettings.lyricPosition || 'center')));
     document.querySelectorAll('.ctrl-intensity-btn').forEach((b) => b.classList.toggle('active', b.dataset.intensity === (lyricSettings.animationIntensity || 'normal')));
     const positionGroup = document.getElementById('ctrl-lyric-position-group');
     const columnflowGroup = document.getElementById('ctrl-columnflow-variant-group');
     const columnflowPlacementGroup = document.getElementById('ctrl-columnflow-placement-group');
+    const columnflowMaxLinesGroup = document.getElementById('ctrl-columnflow-max-lines-group');
     if (positionGroup) positionGroup.hidden = isColumnflow;
     if (columnflowGroup) columnflowGroup.hidden = !isColumnflow;
     if (columnflowPlacementGroup) columnflowPlacementGroup.hidden = !isColumnflow;
+    if (columnflowMaxLinesGroup) columnflowMaxLinesGroup.hidden = !isColumnflow;
 
     if (dom.lyricPreset) {
       const selected = dom.lyricPreset.value;
@@ -155,6 +167,7 @@
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
+      if (nextTemplate === 'columnflow') next.columnflowMaxLines = normalizeColumnflowMaxLines(next.columnflowMaxLines);
       stores[nextTemplate] = { ...next };
       const payload = { ...next, [TEMPLATE_SETTING_KEY]: stores, [PRESET_KEY]: lyricSettings[PRESET_KEY] || [] };
       applyLyricSettings(payload);
@@ -194,6 +207,14 @@
     });
   });
 
+  document.querySelectorAll('.ctrl-columnflow-max-lines-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const maxLines = normalizeColumnflowMaxLines(btn.dataset.columnflowMaxLines);
+      if (lyricSettings.template !== 'columnflow') return;
+      pushLyricPatch({ columnflowMaxLines: maxLines });
+    });
+  });
+
   if (dom.lyricPresetApply) {
     dom.lyricPresetApply.addEventListener('click', () => {
       const presets = Array.isArray(lyricSettings[PRESET_KEY]) ? lyricSettings[PRESET_KEY] : [];
@@ -203,6 +224,7 @@
       if (!TEMPLATE_IDS.includes(next.template)) next.template = 'classic';
       if (next.template === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
       if (next.template === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
+      if (next.template === 'columnflow') next.columnflowMaxLines = normalizeColumnflowMaxLines(next.columnflowMaxLines);
       if ((next.template === 'classic' || next.template === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       const stores = { ...(lyricSettings[TEMPLATE_SETTING_KEY] || {}), [next.template]: { ...next } };
       const payload = { ...next, [TEMPLATE_SETTING_KEY]: stores, [PRESET_KEY]: presets };

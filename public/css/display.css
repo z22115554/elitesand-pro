@@ -631,7 +631,11 @@ body.template-columnflow #lyrics-container {
 
 /* ─── 直書句流：每頁四句亂數錯落、逐字填入、殘影淡出 ─── */
 body.template-columnflow #lyrics-container {
-  min-height: 100vh;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  align-self: stretch;
   overflow: hidden;
 }
 
