@@ -14,7 +14,7 @@
 (function () {
   if (typeof LyricTemplates === 'undefined' || typeof LyricMotion === 'undefined'
     || typeof LyricWordEngine === 'undefined') {
-    console.warn('[Luminous] 依賴未載入，模板停用');
+    console.warn('[Pulse] 依賴未載入，模板停用');
     return;
   }
 
@@ -148,13 +148,13 @@
     const wordCfgs = buildLayout(line, displayWords, fontPx);
 
     const lineEl = document.createElement('div');
-    lineEl.className = 'luminous-line';
+    lineEl.className = 'pulse-line';
     if (vp.sideClass) lineEl.classList.add(vp.sideClass);
     lineEl.style.fontSize = `${fontPx}px`;
 
     // Elitesand 簽名裝飾：星砂軌跡（純裝飾，不進時間模型）
     const sandRail = document.createElement('div');
-    sandRail.className = 'luminous-sand-rail';
+    sandRail.className = 'pulse-sand-rail';
     sandRail.setAttribute('aria-hidden', 'true');
     lineEl.appendChild(sandRail);
 
@@ -210,12 +210,12 @@
   // ─── 模板註冊 ───
 
   LyricTemplates.register({
-    id: 'luminous',
+    id: 'pulse',
     label: '星砂流光',
 
     mount(container, ctx) {
       rootEl = document.createElement('div');
-      rootEl.id = 'luminous-root';
+      rootEl.id = 'pulse-root';
       container.appendChild(rootEl);
       refreshColors();
       breathTl = LyricWordEngine.startBreathing(rootEl, intensity);

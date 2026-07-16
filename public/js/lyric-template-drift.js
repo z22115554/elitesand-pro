@@ -12,7 +12,7 @@
  */
 (function () {
   if (typeof LyricTemplates === 'undefined' || typeof LyricMotion === 'undefined') {
-    console.warn('[Tilt] 依賴未載入，模板停用');
+    console.warn('[Drift] 依賴未載入，模板停用');
     return;
   }
 
@@ -172,7 +172,7 @@
     });
 
     const lineEl = document.createElement('div');
-    lineEl.className = 'tilt-line-stack';
+    lineEl.className = 'drift-line-stack';
     if (vp.sideClass) lineEl.classList.add(vp.sideClass);
     gsap.set(lineEl, { opacity: 0 });
     gsap.to(lineEl, { opacity: 1, duration: 0.25 });
@@ -182,7 +182,7 @@
     segments.forEach((seg, si) => {
       const isAccent = si === accentIndex;
       const segEl = document.createElement('div');
-      segEl.className = isAccent ? 'tilt-seg tilt-seg-italic' : 'tilt-seg';
+      segEl.className = isAccent ? 'drift-seg drift-seg-italic' : 'drift-seg';
       segEl.style.fontSize = `${fontPx.toFixed(1)}px`;
       segEl.style.color = isAccent ? colorsCache.active : colorsCache.base;
 
@@ -194,7 +194,7 @@
       let visualIdx = 0;
       segChars.forEach((ch) => {
         const span = document.createElement('span');
-        span.className = 'tilt-char';
+        span.className = 'drift-char';
         const isSpace = /\s/.test(ch);
         span.textContent = isSpace ? ' ' : ch;
         if (isSpace) span.style.minWidth = isAccent ? '0.35em' : '0.25em';
@@ -221,7 +221,7 @@
       let beatLine = null;
       if (isAccent) {
         beatLine = document.createElement('span');
-        beatLine.className = 'tilt-beat-line';
+        beatLine.className = 'drift-beat-line';
         beatLine.setAttribute('aria-hidden', 'true');
         segEl.appendChild(beatLine);
         gsap.set(beatLine, { opacity: 0, scaleX: 0, transformOrigin: lineIndex % 2 ? 'right' : 'left' });
@@ -235,7 +235,7 @@
         el: segEl, charEls, isAccent, beatLine,
         startMs: segTimings[si].startMs,
         visible: false,
-        allSpans: Array.from(segEl.querySelectorAll('.tilt-char')),
+        allSpans: Array.from(segEl.querySelectorAll('.drift-char')),
       });
     });
 
@@ -323,12 +323,12 @@
   }
 
   LyricTemplates.register({
-    id: 'tilt',
+    id: 'drift',
     label: '斜拍告白',
 
     mount(container, ctx) {
       rootEl = document.createElement('div');
-      rootEl.id = 'tilt-root';
+      rootEl.id = 'drift-root';
       container.appendChild(rootEl);
       refreshColors();
       currentLineIndex = -1;

@@ -58,7 +58,7 @@ function buildFixtureState() {
     parsedLyrics: lines,
   }));
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     savedAt: Date.now(),
     playlist,
     style: 'cute',

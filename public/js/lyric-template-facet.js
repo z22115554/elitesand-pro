@@ -14,7 +14,7 @@
 (function () {
   if (typeof LyricTemplates === 'undefined' || typeof LyricMotion === 'undefined'
     || typeof LyricWordEngine === 'undefined') {
-    console.warn('[Partita] 依賴未載入，模板停用');
+    console.warn('[Facet] 依賴未載入，模板停用');
     return;
   }
 
@@ -131,9 +131,9 @@
 
   function createGuides(stepEl, isLeft) {
     const v = document.createElement('span');
-    v.className = `partita-guide-v ${isLeft ? 'left' : 'right'}`;
+    v.className = `facet-guide-v ${isLeft ? 'left' : 'right'}`;
     const h = document.createElement('span');
-    h.className = `partita-guide-h ${isLeft ? 'left' : 'right'}`;
+    h.className = `facet-guide-h ${isLeft ? 'left' : 'right'}`;
     stepEl.appendChild(v);
     stepEl.appendChild(h);
     gsap.set(v, { scaleY: 0, opacity: 0, transformOrigin: 'bottom' });
@@ -186,7 +186,7 @@
     const fontPx = fontPxFor(layout.totalGraphemes, vp.width);
 
     const lineEl = document.createElement('div');
-    lineEl.className = 'partita-line';
+    lineEl.className = 'facet-line';
     if (vp.sideClass) lineEl.classList.add(vp.sideClass);
     lineEl.style.fontSize = `${fontPx}px`;
 
@@ -199,7 +199,7 @@
 
     layout.rows.forEach((row) => {
       const stepEl = document.createElement('div');
-      stepEl.className = 'partita-chunk';
+      stepEl.className = 'facet-chunk';
       // pending 起始態：隱形、微縮、往交錯同方向縮回 28px（進場時像從側邊滑上臺階）
       gsap.set(stepEl, {
         opacity: 0, scale: 0.9,
@@ -306,12 +306,12 @@
   }
 
   LyricTemplates.register({
-    id: 'partita',
+    id: 'facet',
     label: '折光階梯',
 
     mount(container, ctx) {
       rootEl = document.createElement('div');
-      rootEl.id = 'partita-root';
+      rootEl.id = 'facet-root';
       container.appendChild(rootEl);
       refreshColors();
       breathTl = LyricWordEngine.startBreathing(rootEl, intensity);

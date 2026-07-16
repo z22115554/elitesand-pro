@@ -69,7 +69,6 @@
     metronomeToggle: document.getElementById('ctrl-metronome-toggle'),
     lyricPreset: document.getElementById('ctrl-lyric-preset'),
     lyricPresetApply: document.getElementById('ctrl-lyric-preset-apply'),
-    lyricTemplateLegacyNotice: document.getElementById('ctrl-template-legacy-notice'),
   };
 
   // ─── 狀態 ───
@@ -86,10 +85,7 @@
   let lastDuration = 0; // 由 lyrics:sync 取得，供進度條與拖曳跳轉換算
   let lyricSettings = {};
 
-  const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
-  // Tilt is retained to render and adjust existing saved settings, but it is not
-  // offered as a new choice in either the desktop panel or the mobile remote.
-  const SELECTABLE_TEMPLATE_IDS = TEMPLATE_IDS.filter((template) => template !== 'tilt');
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
@@ -116,7 +112,6 @@
     const template = TEMPLATE_IDS.includes(lyricSettings.template) ? lyricSettings.template : 'classic';
     const isColumnflow = template === 'columnflow';
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
-    if (dom.lyricTemplateLegacyNotice) dom.lyricTemplateLegacyNotice.hidden = template !== 'tilt';
     document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowVariant === (lyricSettings.columnflowVariant || 'sen')));
     document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowPlacement === (lyricSettings.columnflowPlacement || 'split')));
     const columnflowMaxLines = normalizeColumnflowMaxLines(lyricSettings.columnflowMaxLines);
@@ -162,7 +157,7 @@
   document.querySelectorAll('.ctrl-template-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const nextTemplate = btn.dataset.template;
-      if (!SELECTABLE_TEMPLATE_IDS.includes(nextTemplate)) return;
+      if (!TEMPLATE_IDS.includes(nextTemplate)) return;
       const currentTemplate = TEMPLATE_IDS.includes(lyricSettings.template) ? lyricSettings.template : 'classic';
       const stores = { ...(lyricSettings[TEMPLATE_SETTING_KEY] || {}) };
       stores[currentTemplate] = { ...settingSnapshot(lyricSettings), template: currentTemplate };

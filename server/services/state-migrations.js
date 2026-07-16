@@ -5,7 +5,53 @@
  * 讓跨多版升級可以逐步執行，也讓每一版都能用 fixture 獨立驗證。
  */
 
-const CURRENT_STATE_SCHEMA_VERSION = 1;
+const CURRENT_STATE_SCHEMA_VERSION = 2;
+
+// v2 gives the four custom lyric templates clean, project-owned IDs. Keep this
+// map in the migration only: every runtime, CSS, file, Socket and saved-state
+// identifier after migration uses the new ID exclusively.
+const TEMPLATE_ID_RENAMES = Object.freeze({
+  luminous: 'pulse',
+  partita: 'facet',
+  tilt: 'drift',
+  mindscape: 'aura',
+});
+
+function renameTemplateId(value) {
+  return typeof value === 'string' ? (TEMPLATE_ID_RENAMES[value] || value) : value;
+}
+
+function migrateTemplateSnapshot(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const next = { ...value };
+  next.template = renameTemplateId(next.template);
+
+  if (next.lyricTemplateSettings && typeof next.lyricTemplateSettings === 'object'
+    && !Array.isArray(next.lyricTemplateSettings)) {
+    const settings = {};
+    for (const [id, snapshot] of Object.entries(next.lyricTemplateSettings)) {
+      const renamedId = renameTemplateId(id);
+      settings[renamedId] = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+        ? { ...snapshot, template: renamedId }
+        : snapshot;
+    }
+    next.lyricTemplateSettings = settings;
+  }
+  return next;
+}
+
+function migrateLyricSettings(value) {
+  const next = migrateTemplateSnapshot(value);
+  if (!next || typeof next !== 'object' || Array.isArray(next)) return next;
+  if (Array.isArray(next.lyricPresets)) {
+    next.lyricPresets = next.lyricPresets.map((preset) => (
+      preset && typeof preset === 'object' && !Array.isArray(preset)
+        ? { ...preset, settings: migrateTemplateSnapshot(preset.settings) }
+        : preset
+    ));
+  }
+  return next;
+}
 
 class StateSchemaError extends Error {
   constructor(message, code = 'INVALID_STATE_SCHEMA') {
@@ -45,6 +91,11 @@ const MIGRATIONS = new Map([
     }
     return next;
   }],
+  [1, (state) => ({
+    ...state,
+    schemaVersion: 2,
+    lyricSettings: migrateLyricSettings(state.lyricSettings),
+  })],
 ]);
 
 function migrateState(input) {

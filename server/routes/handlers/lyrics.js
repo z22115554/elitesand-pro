@@ -11,7 +11,7 @@ const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH } = require(
 
 const log = createLogger('Socket');
 
-const LYRIC_TEMPLATES = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;
