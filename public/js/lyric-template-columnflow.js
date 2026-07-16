@@ -24,13 +24,18 @@
 
   const { hashNoise } = LyricMotion;
 
-  const PAGE_SIZE = 4;        // 同時最多可見：1 活躍 + 3 殘影
+  const DEFAULT_MAX_LINES = 4;
+  const MIN_MAX_LINES = 1;
+  const MAX_MAX_LINES = 6;
   const GHOST_BLUR = [0, 1.2, 2.4, 3.8];   // 依 age 的模糊 px
   const GHOST_OPACITY = [1, 0.6, 0.38, 0.2];
   const GHOST_RISE_PX = 6;    // sen 外觀殘影每級上飄量（fuda 不飄）
-  const TOP_BASE_PCT = 6;
-  const JITTER_Y_PCT = 8;
   const DEAD_REMOVE_MS = 750; // 淡出後移除 DOM 的延遲（略大於 CSS transition）
+  const EDGE_GAP_PX = 8;
+  const COLLISION_GAP_PX = 16;
+  const LEFT_LANES = [9, 19, 29, 39];
+  const RIGHT_LANES = [91, 81, 71, 61];
+  const TOP_RATIOS = [0.04, 0.23, 0.42, 0.61];
 
   let rootEl = null;
   let cols = new Map();       // planOrdinal -> { el, glyphs: [{el, startMs}], age, onCount }
@@ -51,10 +56,10 @@
     return Number.isFinite(px) && px > 0 ? Math.min(px, 96) : 34;
   }
 
-  /** 直行可用高度（root 高度的 84%，上下各留邊）。 */
+  /** 直行可用高度跟著顯示區縮放，所以上下邊距設定也會重算斷行。 */
   function availableColumnHeight() {
     const vh = (rootEl && rootEl.clientHeight) || window.innerHeight || 720;
-    return vh * 0.84;
+    return Math.max(1, vh * 0.86);
   }
 
   function currentVariant() {
@@ -67,11 +72,17 @@
     return ['left', 'right', 'split'].includes(value) ? value : 'split';
   }
 
+  function currentMaxLines() {
+    const parsed = Math.round(Number(document.body.dataset.columnflowMaxLines));
+    if (!Number.isFinite(parsed)) return DEFAULT_MAX_LINES;
+    return Math.max(MIN_MAX_LINES, Math.min(MAX_MAX_LINES, parsed));
+  }
+
   // ─── 佈局計畫：整首歌攤平成「直行計畫」陣列（只含有文字的行）───
 
-  function buildPlans(lines, fontPx) {
+  function buildPlans(lines, fontPx, maxLines) {
     const out = [];
-    const perCol = Math.max(4, Math.floor(availableColumnHeight() / (fontPx * 1.34)));
+    const perCol = Math.max(1, Math.floor(availableColumnHeight() / (fontPx * 1.34)));
     for (let li = 0; li < lines.length; li += 1) {
       const line = lines[li];
       if (!line || !line.text) continue;
@@ -85,19 +96,18 @@
       if (glyphs.length === 0) continue;
 
       const ord = out.length;
-      const page = Math.floor(ord / PAGE_SIZE);
-      const slot = ord % PAGE_SIZE;
+      const page = Math.floor(ord / maxLines);
+      const slot = ord % maxLines;
       // seed 讓相鄰句的左右落點穩定但不固定。
       const seed = li * 131 + page * 977;
+      const layoutSlot = (slot + Math.floor(hashNoise(page, 5) * maxLines)) % maxLines;
       // 直書只落在左右保留區；split 交錯側別，避免所有句子擠在同一側。
       const placement = currentPlacement();
       const side = placement === 'split'
-        ? ((slot + Math.floor(hashNoise(page, 5) * 2)) % 2 === 0 ? 'left' : 'right')
+        ? (layoutSlot % 2 === 0 ? 'left' : 'right')
         : placement;
-      const sideLanes = side === 'left' ? [12, 22, 32] : [68, 78, 88];
-      const lane = (Math.floor(hashNoise(seed, 1) * sideLanes.length) + Math.floor(ord / 2)) % sideLanes.length;
-      const leftPct = sideLanes[lane] + (hashNoise(seed, 6) - 0.5) * 4;
-      const topPct = TOP_BASE_PCT + hashNoise(seed, 2) * (JITTER_Y_PCT + 10);
+      const lane = placement === 'split' ? Math.floor(layoutSlot / 2) : layoutSlot;
+      const row = (Math.floor(hashNoise(seed, 2) * TOP_RATIOS.length) + Math.floor(layoutSlot / 2)) % TOP_RATIOS.length;
 
       // 超長句：依可用高度切段，段與段在直書流裡自然往左續接
       const segments = [];
@@ -109,8 +119,9 @@
         ord,
         lineIndex: li,
         page,
-        leftPct,
-        topPct,
+        side,
+        lane,
+        row,
         segments,
         startMs: glyphs[0].startMs,
       });
@@ -120,9 +131,10 @@
 
   function ensurePlans(lines) {
     const fontPx = fontPxFromSettings();
-    const key = `${currentVariant()}|${currentPlacement()}|${fontPx.toFixed(1)}|${Math.round(availableColumnHeight())}`;
+    const maxLines = currentMaxLines();
+    const key = `${currentVariant()}|${currentPlacement()}|${maxLines}|${fontPx.toFixed(1)}|${Math.round(availableColumnHeight())}`;
     if (plansForLines === lines && plansKey === key) return plans;
-    plans = buildPlans(lines, fontPx);
+    plans = buildPlans(lines, fontPx, maxLines);
     plansForLines = lines;
     plansKey = key;
     clearAllColumns(true);
@@ -140,11 +152,63 @@
 
   // ─── DOM ───
 
+  function overlapArea(a, b) {
+    const left = Math.max(a.left - COLLISION_GAP_PX, b.left - COLLISION_GAP_PX);
+    const right = Math.min(a.right + COLLISION_GAP_PX, b.right + COLLISION_GAP_PX);
+    const top = Math.max(a.top - COLLISION_GAP_PX, b.top - COLLISION_GAP_PX);
+    const bottom = Math.min(a.bottom + COLLISION_GAP_PX, b.bottom + COLLISION_GAP_PX);
+    return Math.max(0, right - left) * Math.max(0, bottom - top);
+  }
+
+  function overflowAmount(rect, rootRect) {
+    return Math.max(0, rootRect.left + EDGE_GAP_PX - rect.left)
+      + Math.max(0, rect.right - (rootRect.right - EDGE_GAP_PX))
+      + Math.max(0, rootRect.top + EDGE_GAP_PX - rect.top)
+      + Math.max(0, rect.bottom - (rootRect.bottom - EDGE_GAP_PX));
+  }
+
+  function placeColumn(el, plan) {
+    if (!rootEl || rootEl.clientWidth <= 0 || rootEl.clientHeight <= 0) return;
+    const rootRect = rootEl.getBoundingClientRect();
+    const otherColumns = Array.from(rootEl.querySelectorAll('.cf-col')).filter((node) => node !== el);
+    const lanes = plan.side === 'left' ? LEFT_LANES : RIGHT_LANES;
+    const maxTop = Math.max(0, rootEl.clientHeight - el.offsetHeight - EDGE_GAP_PX);
+    const laneLeft = (lane) => {
+      const laneX = rootEl.clientWidth * lane / 100;
+      // 左側欄位用左緣定位，右側欄位用右緣定位：同一個百分比不會因句子變長而推出畫面。
+      const rawLeft = plan.side === 'right' ? laneX - el.offsetWidth : laneX;
+      const maxLeft = Math.max(EDGE_GAP_PX, rootEl.clientWidth - el.offsetWidth - EDGE_GAP_PX);
+      return `${Math.round(Math.max(EDGE_GAP_PX, Math.min(maxLeft, rawLeft)))}px`;
+    };
+    let best = null;
+
+    for (let laneOffset = 0; laneOffset < lanes.length; laneOffset += 1) {
+      const lane = lanes[(plan.lane + laneOffset) % lanes.length];
+      for (let rowOffset = 0; rowOffset < TOP_RATIOS.length; rowOffset += 1) {
+        const ratio = TOP_RATIOS[(plan.row + rowOffset) % TOP_RATIOS.length];
+        const left = laneLeft(lane);
+        el.style.left = left;
+        el.style.top = `${Math.min(maxTop, Math.round(rootEl.clientHeight * ratio))}px`;
+        const rect = el.getBoundingClientRect();
+        const overlap = otherColumns.reduce((total, other) => total + overlapArea(rect, other.getBoundingClientRect()), 0);
+        const overflow = overflowAmount(rect, rootRect);
+        const score = overlap * 100 + overflow;
+        if (!best || score < best.score) best = { left, top: el.style.top, score };
+        if (score === 0) return;
+      }
+    }
+
+    if (best) {
+      el.style.left = best.left;
+      el.style.top = best.top;
+    }
+  }
+
   function createColumn(plan, fontPx) {
     const el = document.createElement('div');
     el.className = 'cf-col';
-    el.style.left = `${plan.leftPct}%`;
-    el.style.top = `${plan.topPct}%`;
+    el.style.left = '0px';
+    el.style.top = '0px';
     el.style.fontSize = `${fontPx}px`;
 
     const glyphEls = [];
@@ -171,6 +235,7 @@
     });
 
     rootEl.appendChild(el);
+    placeColumn(el, plan);
     return { el, glyphs: glyphEls, age: -1, onCount: -1 };
   }
 
@@ -246,10 +311,11 @@
       return;
     }
 
-    const firstVisibleOrd = Math.max(0, idx - (PAGE_SIZE - 1));
+    const maxLines = currentMaxLines();
+    const firstVisibleOrd = Math.max(0, idx - (maxLines - 1));
     const fontPx = fontPxFromSettings();
 
-    // 移除：超出最近四句視窗，或在目前時間之後（倒帶）。
+    // 移除：超出目前保留句數視窗，或在目前時間之後（倒帶）。
     cols.forEach((item, ord) => {
       const plan = plans[ord];
       if (!plan || ord < firstVisibleOrd || ord > idx) {
