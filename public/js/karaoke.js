@@ -649,9 +649,7 @@ const KaraokeEngine = (() => {
     }
 
     // ─── 根據顯示模式調整可見性 ───
-    if (romanizationMode === 'romanized') {
-      textLine.style.display = 'none';
-    }
+    textLine.hidden = romanizationMode === 'romanized';
 
     activeEl.appendChild(lineEl);
 
@@ -1188,13 +1186,13 @@ const KaraokeEngine = (() => {
 
     if (nextId === 'classic') {
       // 切回經典：還原疊層容器顯示，依目前行重繪
-      if (historyEl) historyEl.style.display = '';
-      if (activeEl) activeEl.style.display = '';
+      if (historyEl) historyEl.hidden = false;
+      if (activeEl) activeEl.hidden = false;
       previousLineEl = (currentLineIndex >= 0) ? renderLine(currentLineIndex) : null;
     } else {
       // 切到自訂模板：隱藏經典疊層容器，清空殘留內容，掛載新模板
-      if (historyEl) { historyEl.style.display = 'none'; historyEl.innerHTML = ''; }
-      if (activeEl) { activeEl.style.display = 'none'; activeEl.innerHTML = ''; }
+      if (historyEl) { historyEl.hidden = true; historyEl.innerHTML = ''; }
+      if (activeEl) { activeEl.hidden = true; activeEl.innerHTML = ''; }
       document.body.classList.add(`template-${nextId}`);
       previousLineEl = null;
       if (activeTemplateObj && activeTemplateObj.mount) {

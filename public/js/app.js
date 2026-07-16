@@ -27,8 +27,18 @@
   let playlist = [];
   let currentTrackIndex = -1;
 
-  function applySyncedPlaylist(nextPlaylist, currentTrackId) {
-    const reconciled = PlaylistState.reconcilePlaylist(nextPlaylist, currentTrackId);
+  function applySyncedPlaylist(nextPlaylist, currentTrackId, currentTrack) {
+    // playlist:update 只帶摘要時，保留本機目前歌曲的完整歌詞；state:sync 則以
+    // 伺服器附帶的 currentTrack 為準，其他歌曲不常駐解析歌詞。
+    const localCurrentTrack = PlaylistState.getTrackIdAtIndex(playlist, currentTrackIndex) === currentTrackId
+      ? playlist[currentTrackIndex]
+      : null;
+    const hydratedPlaylist = PlaylistState.mergeCurrentTrackDetails(
+      nextPlaylist,
+      currentTrack,
+      localCurrentTrack,
+    );
+    const reconciled = PlaylistState.reconcilePlaylist(hydratedPlaylist, currentTrackId);
     playlist = reconciled.playlist;
     currentTrackIndex = reconciled.currentTrackIndex;
     AppShared.renderPlaylist();
@@ -47,14 +57,29 @@
     },
     // 媒體庫即時還原：直接把伺服器組好的 track（含本機檔名/歌詞/變調）加入清單，零下載。
     // 一律附加到清單末端（允許重複，由呼叫端先確認）；重複曲沿用同一 id＝共享該首的變調/歌詞記憶。
-    addLibraryTrack: (track) => {
-      if (!track || !track.id) return null;
+    addLibraryTrack: (track) => new Promise((resolve) => {
+      if (!track || !track.id) { resolve({ ok: false, error: '歌曲資料無效' }); return; }
+      const previousPlaylist = playlist.slice();
+      const previousIndex = currentTrackIndex;
+      const shouldLoadFirstTrack = currentTrackIndex === -1;
       playlist.push(track);
       AppShared.renderPlaylist();
-      SocketClient.send('playlist:add', [track]);
-      if (currentTrackIndex === -1) AppShared.playTrack(playlist.length - 1, false);
-      return track;
-    },
+      // 先送加入、再載入第一首，維持伺服器收到 playlist:add → play:track 的順序。
+      // 媒體庫端會逐首等到這個 ack，避免多個完整歌詞物件同時堆在 Socket / state:sync。
+      SocketClient.sendWithCallback('playlist:add', [track], (result) => {
+        if (result?.ok) {
+          // 只有伺服器真的接受第一首後才載入。若清單剛好滿了或連線逾時，
+          // 前端會回滾而不會留下「目前歌曲不在播放清單中」的跨端殘影。
+          if (shouldLoadFirstTrack) AppShared.playTrack(playlist.length - 1, false);
+          resolve(result);
+          return;
+        }
+        playlist = previousPlaylist;
+        currentTrackIndex = previousIndex;
+        AppShared.renderPlaylist();
+        resolve({ ok: false, error: result?.error || '伺服器沒有確認加入播放清單' });
+      });
+    }),
     // 媒體庫用來判斷是否要跳「重複加入」確認
     isInPlaylist: (id) => playlist.some((t) => t.id === id),
     // 目前播放清單正在使用的本機檔名（給音檔清理參考；伺服器端亦自行計算）
@@ -103,11 +128,79 @@
     const btn = document.getElementById('btn-display-advanced');
     const modal = document.getElementById('display-advanced-modal');
     const close = document.getElementById('display-advanced-close');
+    const search = document.getElementById('lyrics-settings-search');
+    const searchStatus = document.getElementById('lyrics-settings-search-status');
     if (!btn || !modal) return;
     if (modal.parentElement !== document.body) document.body.appendChild(modal);
-    btn.addEventListener('click', () => { modal.hidden = false; });
-    if (close) close.addEventListener('click', () => { modal.hidden = true; });
-    modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
+
+    const sections = Array.from(modal.querySelectorAll('.mw-settings > details.card-collapse'));
+    let focusBeforeOpen = null;
+    let openState = null;
+    const isUnavailableForTemplate = (element, section) => {
+      let node = element;
+      while (node && node !== section) {
+        if (node.hidden || node.classList.contains('is-search-hidden')) return true;
+        node = node.parentElement;
+      }
+      return section.hidden || section.classList.contains('is-search-hidden');
+    };
+    const sectionSearchText = (section) => {
+      const terms = [section.dataset.lyricsSearch || ''];
+      section.querySelectorAll('summary, label, .field-hint, .sub').forEach((element) => {
+        if (!isUnavailableForTemplate(element, section)) terms.push(element.textContent || '');
+      });
+      return terms.join(' ').replace(/\s+/g, ' ').toLocaleLowerCase();
+    };
+    const clearSearch = () => {
+      if (search) search.value = '';
+      sections.forEach((section, index) => {
+        section.classList.remove('is-search-hidden');
+        if (openState) section.open = openState[index];
+      });
+      openState = null;
+      if (searchStatus) searchStatus.textContent = '只會顯示目前模板可用的設定。';
+    };
+    const applySearch = () => {
+      const query = (search ? search.value : '').trim().toLocaleLowerCase();
+      if (!query) { clearSearch(); return; }
+      if (!openState) openState = sections.map((section) => section.open);
+      let matches = 0;
+      sections.forEach((section) => {
+        section.classList.remove('is-search-hidden');
+        const matched = !section.hidden && sectionSearchText(section).includes(query);
+        section.classList.toggle('is-search-hidden', !matched);
+        if (matched) { section.open = true; matches += 1; }
+      });
+      if (searchStatus) searchStatus.textContent = matches
+        ? `找到 ${matches} 個目前模板可用的設定分類。`
+        : '目前模板沒有相符設定；可改用另一個關鍵字或切換模板。';
+    };
+    const closeModal = () => {
+      clearSearch();
+      modal.hidden = true;
+      (focusBeforeOpen || btn).focus();
+    };
+    const openModal = () => {
+      focusBeforeOpen = document.activeElement;
+      modal.hidden = false;
+      window.setTimeout(() => (search || close || btn).focus(), 0);
+    };
+
+    btn.addEventListener('click', openModal);
+    if (close) close.addEventListener('click', closeModal);
+    if (search) search.addEventListener('input', applySearch);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    modal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeModal(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        .filter((element) => !element.hidden && !element.closest('[hidden], .is-search-hidden'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
   })();
 
   // 預覽底色黑/白切換：在每個預覽 wrap 注入小鈕，全部一起切換並記憶
@@ -248,7 +341,7 @@
       dom.btnEmergency.classList.toggle('active', isEmergencyHidden);
     }
     if (Array.isArray(state.playlist)) {
-      applySyncedPlaylist(state.playlist, state.currentTrack && state.currentTrack.id);
+      applySyncedPlaylist(state.playlist, state.currentTrack && state.currentTrack.id, state.currentTrack);
     }
     // Phase 5: offset 恢復
     if (typeof state.currentOffset === 'number') {

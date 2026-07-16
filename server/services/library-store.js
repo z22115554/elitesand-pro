@@ -11,9 +11,8 @@ const { createJsonStore } = require('./json-store');
 const log = createLogger('Library');
 const { sanitizeTrack } = require('../utils/track-schema');
 
-const { dataDir: DATA_DIR } = require('../utils/data-dir');
+const { dataDir: DATA_DIR, downloadsDir: DOWNLOADS_DIR } = require('../utils/app-paths');
 const LIBRARY_FILE = path.join(DATA_DIR, 'library.json');
-const DOWNLOADS_DIR = path.join(__dirname, '..', '..', 'downloads');
 const MAX_ENTRIES = 1000; // 上限保護
 
 let library = {}; // { [id]: { id, url, title, artist, cover, duration, source, playCount, lastPlayed } }

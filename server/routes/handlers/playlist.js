@@ -26,6 +26,28 @@ function syncNamesToLibrary(tracks) {
   }
 }
 
+// 清單 UI／跨端排序只需要摘要；若把摘要直接寫回，原先已下載／解析的歌詞會被 null 覆蓋。
+// 目前沒有「透過 playlist:update 刪除歌詞」的產品流程，歌詞改動一律走 lyrics:manual，
+// 因此摘要回寫時保留同 id 的伺服器端歌詞是正確的資料契約。
+function preserveLyricsFromExisting(cleanPlaylist, previousPlaylist) {
+  const previousById = new Map();
+  for (const track of previousPlaylist) {
+    if (track && track.id && !previousById.has(track.id)) previousById.set(track.id, track);
+  }
+  return cleanPlaylist.map((track) => {
+    const previous = previousById.get(track.id);
+    const incomingHasLyrics = typeof track.lyrics === 'string' && track.lyrics.length > 0;
+    const incomingHasParsedLyrics = Array.isArray(track.parsedLyrics) && track.parsedLyrics.length > 0;
+    if (!previous || incomingHasLyrics || incomingHasParsedLyrics || (!previous.lyrics && !previous.parsedLyrics)) return track;
+    return {
+      ...track,
+      lyrics: previous.lyrics,
+      lyricsType: track.lyricsType || previous.lyricsType,
+      parsedLyrics: previous.parsedLyrics,
+    };
+  });
+}
+
 /**
  * @param {import('socket.io').Server} io
  * @param {import('socket.io').Socket} socket
@@ -34,37 +56,80 @@ function syncNamesToLibrary(tracks) {
 function registerPlaylistHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, manualLyricsCache,
-    persistState, emitSetlist, broadcastState,
+    persistState, emitSetlist, broadcastState, getPublicPlaylist,
   } = ctx;
+
+  function emitPlaylistUpdate() {
+    io.emit('playlist:update', getPublicPlaylist());
+  }
 
   socket.on('playlist:update', (playlist, ack) => {
     const clean = sanitizePlaylist(playlist);
     if (!clean) { log.warn('playlist:update 收到非陣列資料'); if (typeof ack === 'function') ack({ ok: false, error: '播放清單格式無效' }); return; }
-    playState.playlist = clean;
-    syncNamesToLibrary(clean);
-    io.emit('playlist:update', clean);
+    const preserved = preserveLyricsFromExisting(clean, playState.playlist);
+    playState.playlist = preserved;
+    syncNamesToLibrary(preserved);
+    emitPlaylistUpdate();
     emitSetlist(); // 未唱清單跟著清單變動更新
     broadcastState();
     persistState();
-    if (typeof ack === 'function') ack({ ok: true, playlist: clean });
+    if (typeof ack === 'function') ack({ ok: true, playlist: preserved });
   });
 
-  socket.on('playlist:add', (tracks) => {
+  socket.on('playlist:add', (tracks, ack) => {
     const clean = sanitizePlaylist(tracks);
-    if (!clean) return log.warn('playlist:add 收到非陣列資料');
-    playState.playlist.push(...clean.slice(0, Math.max(0, MAX_PLAYLIST_SIZE - playState.playlist.length)));
-    io.emit('playlist:update', playState.playlist);
+    if (!clean) {
+      log.warn('playlist:add 收到非陣列資料');
+      if (typeof ack === 'function') ack({ ok: false, error: '播放清單格式無效' });
+      return;
+    }
+    const added = clean.slice(0, Math.max(0, MAX_PLAYLIST_SIZE - playState.playlist.length));
+    if (added.length === 0) {
+      if (typeof ack === 'function') ack({ ok: false, error: `播放清單已達 ${MAX_PLAYLIST_SIZE} 首上限` });
+      return;
+    }
+    playState.playlist.push(...added);
+    emitPlaylistUpdate();
     emitSetlist();
     broadcastState();
     persistState();
+    if (typeof ack === 'function') ack({ ok: true, added: added.length });
+  });
+
+  // 直播中的 Twitch 點歌需要以伺服器的正式播放狀態判定「下一首」，不能相信
+  // 任一控制端可能已落後的本機索引。沒有目前歌曲時，安全地退回清單尾端。
+  socket.on('playlist:insert-next', (track, ack) => {
+    const clean = sanitizePlaylist([track]);
+    if (!clean?.length) {
+      if (typeof ack === 'function') ack({ ok: false, error: '歌曲資料無效，無法插播' });
+      return;
+    }
+    if (playState.playlist.length >= MAX_PLAYLIST_SIZE) {
+      if (typeof ack === 'function') ack({ ok: false, error: `播放清單已達 ${MAX_PLAYLIST_SIZE} 首上限` });
+      return;
+    }
+
+    let currentIndex = playState.playlist.indexOf(playState.currentTrack);
+    if (currentIndex < 0 && playState.currentTrack?.id) {
+      currentIndex = playState.playlist.findIndex((item) => item.id === playState.currentTrack.id);
+    }
+    const insertAt = currentIndex >= 0 ? currentIndex + 1 : playState.playlist.length;
+    playState.playlist.splice(insertAt, 0, clean[0]);
+    emitPlaylistUpdate();
+    emitSetlist();
+    broadcastState();
+    persistState();
+    if (typeof ack === 'function') {
+      ack({ ok: true, insertAt, placement: currentIndex >= 0 ? 'next' : 'end' });
+    }
   });
 
   socket.on('playlist:remove', (trackId) => {
     playState.playlist = playState.playlist.filter((t) => t.id !== trackId);
-    // 同時清除對應的 offset 和手動歌詞
-    trackOffsets.delete(trackId);
-    manualLyricsCache.delete(trackId);
-    io.emit('playlist:update', playState.playlist);
+    // 從播放清單移除不等於刪除歌曲記憶。offset / 手動歌詞仍以 track.id
+    // 保留在 state.json，日後從媒體庫或重新匯入同一首歌時自動恢復。
+    // 只有使用者明確執行歌詞／同步重設時才應清除對應資料。
+    emitPlaylistUpdate();
     emitSetlist();
     broadcastState();
     persistState();
@@ -73,8 +138,8 @@ function registerPlaylistHandlers(io, socket, ctx) {
   socket.on('playlist:reorder', (playlist) => {
     const clean = sanitizePlaylist(playlist);
     if (!clean) return log.warn('playlist:reorder 收到非陣列資料');
-    playState.playlist = clean;
-    io.emit('playlist:update', clean);
+    playState.playlist = preserveLyricsFromExisting(clean, playState.playlist);
+    emitPlaylistUpdate();
     emitSetlist();
     broadcastState();
     persistState();
@@ -172,7 +237,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
     if (data.style) playState.style = data.style;
     if (data.romanizationMode) playState.romanizationMode = data.romanizationMode;
 
-    io.emit('playlist:update', playState.playlist);
+    emitPlaylistUpdate();
     broadcastState();
     persistState();
     log.info(`播放清單匯入完成: ${playState.playlist.length} 首`);

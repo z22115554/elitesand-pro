@@ -20,7 +20,13 @@ function Assert-Inside {
 }
 
 $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-if ([string]::IsNullOrWhiteSpace($OutputRoot)) { $OutputRoot = Join-Path $Root "dist" }
+$Package = Get-Content -LiteralPath (Join-Path $Root "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+$Version = $Package.version
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+  # `update.zip` must retain its exact filename for the in-app updater, but
+  # each release gets its own parent directory so versions cannot overwrite it.
+  $OutputRoot = Join-Path $Root "dist\releases\v$Version\update"
+}
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 $Stage = Join-Path $OutputRoot ".update-stage"
 $ZipPath = Join-Path $OutputRoot "update.zip"
@@ -70,7 +76,6 @@ foreach ($file in @("package.json", "package-lock.json")) {
 $LocalConfig = Join-Path $Stage "server\config.js"
 if (Test-Path -LiteralPath $LocalConfig) { Remove-Item -LiteralPath $LocalConfig -Force }
 
-$Package = Get-Content -LiteralPath (Join-Path $Root "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 $Files = Get-ChildItem -LiteralPath $Stage -File -Recurse | ForEach-Object {
   $_.FullName.Substring($Stage.Length + 1).Replace('\', '/')
 } | Sort-Object

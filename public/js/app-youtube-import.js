@@ -388,6 +388,7 @@
         id: `work-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         url, source: options.source || 'YouTube', label: options.label || jobLabel(url, options.source),
         replaceTrackId: options.replaceTrackId || null,
+        placement: options.placement === 'next' ? 'next' : 'end',
         assessment: options.assessment || null,
         status: 'queued', stage: '等待中', percent: 0, resolve, reject, createdAt: Date.now(),
       };
@@ -433,6 +434,7 @@
         });
         const data = await res.json();
         if (res.ok && data.success && data.track) {
+          let placement = null;
           if (job.replaceTrackId) {
             const index = state.playlist.findIndex((track) => track.id === job.replaceTrackId);
             if (index >= 0) {
@@ -452,16 +454,32 @@
               state.playlist.push(data.track);
               SocketClient.send('playlist:add', [data.track]);
             }
+          } else if (job.placement === 'next') {
+            placement = await new Promise((resolve) => {
+              SocketClient.sendWithCallback('playlist:insert-next', data.track, resolve);
+            });
+            if (!placement?.ok) {
+              const error = new Error(placement?.error || '無法把歌曲插到下一首');
+              error.code = placement?.code || 'PLAYLIST_INSERT_FAILED';
+              throw error;
+            }
           } else {
             state.playlist.push(data.track);
             SocketClient.send('playlist:add', [data.track]);
           }
           AppShared.renderPlaylist();
-          if (state.currentTrackIndex === -1) {
+          if (state.currentTrackIndex === -1 && job.placement !== 'next') {
             AppShared.playTrack(state.playlist.length - 1, false); // 匯入後載入待命，不自動播放
+          } else if (state.currentTrackIndex === -1 && placement?.placement === 'end') {
+            // playlist:update is emitted before the server acknowledgement, so by
+            // this point the authoritative appended track is already in state.
+            AppShared.playTrack(placement.insertAt, false);
           }
           ok++;
-          updateJob(job, { status: 'completed', stage: '已完成', message: `已加入播放清單：${data.track.title}`, percent: 100 });
+          const placementText = job.placement === 'next'
+            ? (placement?.placement === 'next' ? '已插到下一首' : '目前沒有播放歌曲，已加入清單尾端')
+            : '已加入播放清單';
+          updateJob(job, { status: 'completed', stage: '已完成', message: `${placementText}：${data.track.title}`, percent: 100 });
           job.resolve(data.track);
         } else {
           const errorMsg = data.error || '未知錯誤';

@@ -184,6 +184,46 @@
       dom.ytdlpMsg.hidden = !text;
     };
 
+    let compatibilityRefreshTimer = null;
+    const renderCompatibility = (data) => {
+      if (!dom.ytdlpCompatibilityStatus || !data) return;
+      dom.ytdlpCompatibilityStatus.textContent = data.message || '尚未驗證 YouTube 相容性';
+      if (compatibilityRefreshTimer) clearTimeout(compatibilityRefreshTimer);
+      compatibilityRefreshTimer = null;
+      if (data.state === 'running') {
+        compatibilityRefreshTimer = setTimeout(() => refreshCompatibility(), 1200);
+      }
+    };
+    const refreshCompatibility = async () => {
+      try {
+        const response = await fetch('/api/ytdlp/compatibility', { cache: 'no-store' });
+        if (!response.ok) throw new Error('狀態讀取失敗');
+        renderCompatibility(await response.json());
+      } catch (_) {
+        if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = '無法讀取 YouTube 相容性狀態';
+      }
+    };
+    if (dom.ytdlpCompatibilityBtn) {
+      dom.ytdlpCompatibilityBtn.addEventListener('click', async () => {
+        dom.ytdlpCompatibilityBtn.disabled = true;
+        if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = '正在驗證 YouTube 相容性（不會下載音檔）';
+        try {
+          const request = typeof PinAuth !== 'undefined'
+            ? PinAuth.fetchWithPin('/api/ytdlp/compatibility', { method: 'POST' })
+            : fetch('/api/ytdlp/compatibility', { method: 'POST' });
+          const response = await request;
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || '驗證失敗');
+          renderCompatibility(data);
+        } catch (err) {
+          if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = `YouTube 相容性驗證失敗：${err.message}`;
+        } finally {
+          dom.ytdlpCompatibilityBtn.disabled = false;
+        }
+      });
+      refreshCompatibility();
+    }
+
     const applyCheck = (data) => {
       if (!data || !data.available) {
         dom.ytdlpVersion.textContent = '找不到 yt-dlp（YouTube 匯入需要它）';
@@ -223,6 +263,7 @@
             if (data.currentVersion) dom.ytdlpVersion.textContent = data.currentVersion;
             dom.ytdlpUpdateRow.hidden = true;
             AppShared.showToast('yt-dlp 已更新', 'success');
+            setTimeout(() => refreshCompatibility(), 300);
           } else {
             AppShared.showToast('yt-dlp 更新未成功', 'warning');
           }

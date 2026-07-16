@@ -46,6 +46,9 @@ function createAppState(io) {
     samples: 0,
     lastBytes: 0,
     maxBytes: 0,
+    lastEstimatedLegacyBytes: 0,
+    lastSavingsBytes: 0,
+    maxSavingsBytes: 0,
     lastPlaylistLength: 0,
     lastMeasuredAt: null,
     lastWarnedAt: 0,
@@ -261,15 +264,31 @@ function createAppState(io) {
     playState.lastStateUpdateTimestamp = Date.now();
     const payload = getPublicState();
     const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    const nextSample = stateSyncMetrics.samples + 1;
+    // 「舊結構」估算只在記錄點序列化，避免為了量測又在每次廣播重建一份大型 payload。
+    const shouldEstimateLegacy = nextSample === 1 || nextSample % STATE_SYNC_LOG_EVERY === 0;
+    let estimatedLegacyBytes = stateSyncMetrics.lastEstimatedLegacyBytes;
+    let savingsBytes = stateSyncMetrics.lastSavingsBytes;
+    if (shouldEstimateLegacy) {
+      const publicPlaylistBytes = Buffer.byteLength(JSON.stringify(payload.playlist), 'utf8');
+      const legacyPlaylistBytes = Buffer.byteLength(JSON.stringify(getLegacyPlaylist()), 'utf8');
+      estimatedLegacyBytes = bytes - publicPlaylistBytes + legacyPlaylistBytes;
+      savingsBytes = Math.max(0, estimatedLegacyBytes - bytes);
+    }
     const measuredAt = Date.now();
     stateSyncMetrics.samples += 1;
     stateSyncMetrics.lastBytes = bytes;
     stateSyncMetrics.maxBytes = Math.max(stateSyncMetrics.maxBytes, bytes);
+    if (shouldEstimateLegacy) {
+      stateSyncMetrics.lastEstimatedLegacyBytes = estimatedLegacyBytes;
+      stateSyncMetrics.lastSavingsBytes = savingsBytes;
+      stateSyncMetrics.maxSavingsBytes = Math.max(stateSyncMetrics.maxSavingsBytes, savingsBytes);
+    }
     stateSyncMetrics.lastPlaylistLength = payload.playlist.length;
     stateSyncMetrics.lastMeasuredAt = measuredAt;
 
     if (stateSyncMetrics.samples === 1 || stateSyncMetrics.samples % STATE_SYNC_LOG_EVERY === 0) {
-      log.info(`state:sync payload ${bytes} bytes（playlist=${payload.playlist.length}, sample=${stateSyncMetrics.samples}）`);
+      log.info(`state:sync payload ${bytes} bytes（舊結構估計 ${estimatedLegacyBytes}、節省 ${savingsBytes}；playlist=${payload.playlist.length}, sample=${stateSyncMetrics.samples}）`);
     }
     if (bytes >= STATE_SYNC_WARN_BYTES && measuredAt - stateSyncMetrics.lastWarnedAt >= STATE_SYNC_WARN_INTERVAL_MS) {
       stateSyncMetrics.lastWarnedAt = measuredAt;
@@ -283,27 +302,48 @@ function createAppState(io) {
     return { ...stateSyncMetrics };
   }
 
-  /** 取得可公開的播放狀態（含 offset 和手動歌詞標記） */
-  function getPublicState() {
-    // 為播放列表中的每首歌附加 offset 和手動歌詞標記
-    const enrichedPlaylist = playState.playlist.map(track => ({
-      ...track,
-      offset: trackOffsets.get(track.id) || 0,
+  function getTrackPayload(track, { includeLyrics = false, offset } = {}) {
+    if (!track) return null;
+    const manual = manualLyricsCache.get(track.id);
+    const { lyrics, parsedLyrics, manualLyrics: _storedManualLyrics, ...summary } = track;
+    const effectiveLyrics = manual ? manual.lyrics : lyrics;
+    const effectiveLyricsType = manual ? manual.lyricsType : track.lyricsType;
+    const effectiveParsedLyrics = manual ? manual.parsedLyrics : parsedLyrics;
+    const payload = {
+      ...summary,
+      lyricsType: effectiveLyricsType || null,
+      hasLyrics: !!effectiveLyrics || (Array.isArray(effectiveParsedLyrics) && effectiveParsedLyrics.length > 0),
+      offset: typeof offset === 'number' ? offset : (trackOffsets.get(track.id) || 0),
       pitchShift: trackPitch.has(track.id) ? trackPitch.get(track.id) : 0,
       playbackRate: trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0,
-      manualLyrics: !!manualLyricsCache.has(track.id),
+      manualLyrics: !!manual,
       ...libraryStore.audioStatus(track),
-    }));
+    };
+    if (includeLyrics) {
+      payload.lyrics = effectiveLyrics == null ? null : effectiveLyrics;
+      payload.parsedLyrics = effectiveParsedLyrics == null ? null : effectiveParsedLyrics;
+    }
+    return payload;
+  }
+
+  /** 可傳給所有端點的清單摘要；歌詞內容只隨目前歌曲發送。 */
+  function getPublicPlaylist() {
+    return playState.playlist.map(track => getTrackPayload(track));
+  }
+
+  // 僅供 P2 量測舊 payload 用，絕不可拿去 io.emit。
+  function getLegacyPlaylist() {
+    return playState.playlist.map(track => getTrackPayload(track, { includeLyrics: true }));
+  }
+
+  /** 取得可公開的播放狀態：清單是摘要，currentTrack 保留完整歌詞供播放／編輯／OBS 恢復。 */
+  function getPublicState() {
+    const enrichedPlaylist = getPublicPlaylist();
 
     return {
-      currentTrack: playState.currentTrack ? {
-        ...playState.currentTrack,
-        offset: playState.currentOffset,
-        pitchShift: trackPitch.has(playState.currentTrack.id) ? trackPitch.get(playState.currentTrack.id) : 0,
-        ...libraryStore.audioStatus(playState.currentTrack),
-        playbackRate: trackSpeed.has(playState.currentTrack.id) ? trackSpeed.get(playState.currentTrack.id) : 1.0,
-        manualLyrics: !!manualLyricsCache.has(playState.currentTrack.id),
-      } : null,
+      currentTrack: playState.currentTrack
+        ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset })
+        : null,
       isPlaying: playState.isPlaying,
       currentTime: playState.currentTime,
       playlist: enrichedPlaylist,
@@ -328,24 +368,7 @@ function createAppState(io) {
    * 取得用於 OBS 重連恢復的完整狀態（含歌詞內容，確保重載後能無縫接軌）
    */
   function getFullRecoveryState() {
-    const state = getPublicState();
-
-    if (playState.currentTrack) {
-      const trackId = playState.currentTrack.id;
-      // 優先使用手動歌詞
-      if (manualLyricsCache.has(trackId)) {
-        const manual = manualLyricsCache.get(trackId);
-        state.currentTrack.lyrics = manual.lyrics;
-        state.currentTrack.lyricsType = manual.lyricsType;
-        state.currentTrack.parsedLyrics = manual.parsedLyrics;
-      } else {
-        state.currentTrack.lyrics = playState.currentTrack.lyrics;
-        state.currentTrack.lyricsType = playState.currentTrack.lyricsType;
-        state.currentTrack.parsedLyrics = playState.currentTrack.parsedLyrics;
-      }
-    }
-
-    return state;
+    return getPublicState();
   }
 
   /** 取得 track 的有效歌詞（考慮手動覆蓋），無手動覆蓋時回 null */
@@ -371,6 +394,7 @@ function createAppState(io) {
     recordSessionSong,
     broadcastState,
     getStateSyncMetrics,
+    getPublicPlaylist,
     getPublicState,
     getFullRecoveryState,
     getEffectiveLyrics,

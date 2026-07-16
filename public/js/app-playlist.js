@@ -11,9 +11,135 @@
 (function () {
   'use strict';
 
-  const { formatTime, escapeHtml } = SharedUtils;
+  const { formatTime, escapeHtml, safeHttpUrl } = SharedUtils;
   const { dom } = AppShared;
   const state = AppShared.state;
+
+  // 搜尋／篩選與批次選取只存在目前控制台，絕不寫進 state.json 或廣播給 OBS。
+  // 選取 key 綁在目前記憶體中的歌曲物件，伺服器同步換掉清單物件時會自動清空，
+  // 不會把舊選取誤套到同 id 的另一筆重複歌曲。
+  let playlistFilterQuery = '';
+  let playlistFilterMode = 'all';
+  let selectionMode = false;
+  let selectionKeySerial = 0;
+  const selectionKeyByTrack = new WeakMap();
+  const selectedTrackKeys = new Set();
+
+  function getSelectionKey(track) {
+    if (!track || typeof track !== 'object') return '';
+    let key = selectionKeyByTrack.get(track);
+    if (!key) {
+      selectionKeySerial += 1;
+      key = `playlist-track-${selectionKeySerial}`;
+      selectionKeyByTrack.set(track, key);
+    }
+    return key;
+  }
+
+  function normalizeFilterText(value) {
+    return String(value || '').normalize('NFKC').toLocaleLowerCase('zh-TW');
+  }
+
+  function trackMatchesFilter(track, index, currentTrackIndex) {
+    const query = normalizeFilterText(playlistFilterQuery).trim();
+    if (query) {
+      const haystack = normalizeFilterText([
+        track.title,
+        track.artist,
+        track.performer,
+        track.originalArtist,
+      ].filter(Boolean).join(' '));
+      if (!haystack.includes(query)) return false;
+    }
+
+    switch (playlistFilterMode) {
+      case 'upcoming': return currentTrackIndex < 0 || index >= currentTrackIndex;
+      case 'played': return currentTrackIndex >= 0 && index < currentTrackIndex;
+      case 'no-lyrics': return !(track.hasLyrics || track.lyrics);
+      case 'missing-audio': return !!track.audioMissing;
+      default: return true;
+    }
+  }
+
+  function isFilterActive() {
+    return !!playlistFilterQuery.trim() || playlistFilterMode !== 'all';
+  }
+
+  function reconcileSelectedTracks() {
+    const currentTrackIndex = state.currentTrackIndex;
+    const validKeys = new Set(state.playlist.map((track, index) => (
+      index === currentTrackIndex ? null : getSelectionKey(track)
+    )).filter(Boolean));
+    selectedTrackKeys.forEach((key) => {
+      if (!validKeys.has(key)) selectedTrackKeys.delete(key);
+    });
+  }
+
+  function selectedTracks() {
+    const currentTrackIndex = state.currentTrackIndex;
+    return state.playlist.map((track, index) => ({ track, index, key: getSelectionKey(track) }))
+      .filter(({ index, key }) => index !== currentTrackIndex && selectedTrackKeys.has(key));
+  }
+
+  function visibleSelectableTracks() {
+    const currentTrackIndex = state.currentTrackIndex;
+    return state.playlist.map((track, index) => ({ track, index, key: getSelectionKey(track) }))
+      .filter(({ track, index }) => index !== currentTrackIndex && trackMatchesFilter(track, index, currentTrackIndex));
+  }
+
+  function syncPlaylistTools(visibleCount) {
+    const playlist = state.playlist;
+    const selectedCount = selectedTracks().length;
+    const activeFilter = isFilterActive();
+    const visibleSelectable = visibleSelectableTracks();
+    const selectableVisibleCount = visibleSelectable.length;
+    const allVisibleSelected = selectableVisibleCount > 0
+      && visibleSelectable.every(({ key }) => selectedTrackKeys.has(key));
+
+    if (dom.playlist) {
+      dom.playlist.classList.toggle('is-selecting', selectionMode);
+      dom.playlist.classList.toggle('is-filtered', activeFilter);
+    }
+    if (dom.playlistFilterResult) {
+      dom.playlistFilterResult.textContent = playlist.length
+        ? (activeFilter ? `顯示 ${visibleCount} / ${playlist.length} 首` : `共 ${playlist.length} 首歌曲`)
+        : '';
+    }
+    if (dom.playlistFilterEmpty) {
+      dom.playlistFilterEmpty.hidden = playlist.length === 0 || visibleCount > 0;
+    }
+    if (dom.btnPlaylistFilterClear) dom.btnPlaylistFilterClear.disabled = !activeFilter;
+    if (dom.btnPlaylistSelect) {
+      dom.btnPlaylistSelect.textContent = selectionMode ? '完成選取' : '選取';
+      dom.btnPlaylistSelect.setAttribute('aria-pressed', String(selectionMode));
+      dom.btnPlaylistSelect.disabled = playlist.length === 0;
+    }
+    if (dom.playlistSelectionToolbar) dom.playlistSelectionToolbar.hidden = !selectionMode;
+    if (dom.playlistSelectionCount) dom.playlistSelectionCount.textContent = `已選 ${selectedCount} 首`;
+    if (dom.btnPlaylistSelectVisible) {
+      dom.btnPlaylistSelectVisible.disabled = selectableVisibleCount === 0;
+      dom.btnPlaylistSelectVisible.textContent = allVisibleSelected
+        ? '取消顯示結果'
+        : '全選顯示結果';
+    }
+    if (dom.btnPlaylistSelectionRemove) {
+      dom.btnPlaylistSelectionRemove.disabled = selectedCount === 0;
+      dom.btnPlaylistSelectionRemove.textContent = selectedCount ? `移除已選 (${selectedCount})` : '移除已選';
+    }
+  }
+
+  function setSelectionMode(nextSelectionMode) {
+    selectionMode = !!nextSelectionMode;
+    if (!selectionMode) selectedTrackKeys.clear();
+    renderPlaylist();
+  }
+
+  function toggleTrackSelection(selectionKey) {
+    if (!selectionMode || !selectionKey) return;
+    if (selectedTrackKeys.has(selectionKey)) selectedTrackKeys.delete(selectionKey);
+    else selectedTrackKeys.add(selectionKey);
+    renderPlaylist();
+  }
 
   // ═══════════════════════════════════════════
   // 播放列表渲染
@@ -22,6 +148,14 @@
   // 點擊委派給外層容器一次綁定（取代過去每次 render 都重新對每一列 addEventListener），
   // 短時間內大量加歌（例如連續從媒體庫「加入清單」）不會讓監聽器數量隨歌曲數疊加。
   dom.playlist.addEventListener('click', (e) => {
+    if (e.target.closest('.pi-select')) return;
+    const item = e.target.closest('.playlist-item');
+    // 選取模式的清單列只負責「選／不選」：不能在批次操作途中誤觸播放、刪除、
+    // 編輯或改歌詞，避免直播中的目前歌曲與待處理選取集合互相干擾。
+    if (selectionMode && item) {
+      if (!item.classList.contains('active')) toggleTrackSelection(item.dataset.selectionKey);
+      return;
+    }
     const removeBtn = e.target.closest('.pi-remove');
     if (removeBtn) {
       e.stopPropagation();
@@ -43,18 +177,25 @@
       return;
     }
     if (e.target.closest('.pi-handle')) return; // 點到拖曳把手不算選歌
-    const item = e.target.closest('.playlist-item');
-    if (item) AppShared.playTrack(parseInt(item.dataset.index, 10), false); // 點清單只載入待命，不自動播放
+    if (item) {
+      AppShared.playTrack(parseInt(item.dataset.index, 10), false); // 點清單只載入待命，不自動播放
+    }
+  });
+
+  dom.playlist.addEventListener('change', (e) => {
+    const checkbox = e.target.closest('.pi-select');
+    if (!checkbox || checkbox.disabled) return;
+    toggleTrackSelection(checkbox.dataset.selectionKey);
   });
 
   // ── 拖曳排序（HTML5 Drag & Drop）──
   // 只有從左側把手（.pi-handle）按下去才允許拖曳，避免與「點整列載入歌曲」互相干擾。
   let dragFromIndex = -1;
   let dragArmed = false;
-  dom.playlist.addEventListener('pointerdown', (e) => { dragArmed = !!e.target.closest('.pi-handle'); });
+  dom.playlist.addEventListener('pointerdown', (e) => { dragArmed = !selectionMode && !!e.target.closest('.pi-handle'); });
   dom.playlist.addEventListener('dragstart', (e) => {
     const item = e.target.closest('.playlist-item');
-    if (!item || !dragArmed) { e.preventDefault(); return; }
+    if (!item || selectionMode || !dragArmed) { e.preventDefault(); return; }
     dragFromIndex = parseInt(item.dataset.index, 10);
     item.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
@@ -173,13 +314,15 @@
   // 'krc'＝逐字同步、'lrc'＝逐句同步、'txt'＝純文字（無時間戳）、無 lyrics＝無歌詞。
   // 文字標籤（非顏色）呈現，避免不識別顏色意涵時看不懂三種狀態差異。
   function lyricsReadiness(track) {
-    if (track.lyrics && track.lyricsType === 'krc') {
+    // 同步清單只保留 hasLyrics／lyricsType；目前歌曲才保留原始 lyrics，兩者都能正確顯示準備度。
+    const hasLyrics = !!(track.hasLyrics || track.lyrics);
+    if (hasLyrics && track.lyricsType === 'krc') {
       return { level: 'word', text: '逐字', label: '已有逐字同步歌詞，點擊可更換來源' };
     }
-    if (track.lyrics && track.lyricsType === 'lrc') {
+    if (hasLyrics && track.lyricsType === 'lrc') {
       return { level: 'line', text: '逐句', label: '已有逐句同步歌詞，點擊可更換來源' };
     }
-    if (track.lyrics) {
+    if (hasLyrics) {
       return { level: 'plain', text: '純文字', label: '只有純文字歌詞（沒有時間軸，跑動畫時只能整段顯示）。點擊挑選有時間軸的版本' };
     }
     return { level: 'none', text: '無歌詞', label: '尚無歌詞。點擊搜尋或選擇歌詞' };
@@ -200,11 +343,17 @@
     return `${audioBadge}<button class="pi-lyrics-status pi-lyrics-status--${readiness.level}" data-lyrics-fix="${i}" title="${escapeHtml(readiness.label)}" aria-label="${escapeHtml(readiness.label)}">${readiness.text}</button>${manualBadge}${offsetBadge}`;
   }
 
-  function playlistItemMarkup(track, i) {
-    const coverImg = track.cover
-      ? `<img class="pi-cover" src="${escapeHtml(track.cover)}" alt="">`
+  function playlistItemMarkup(track, i, selectionKey, isActive, isSelected) {
+    const coverUrl = safeHttpUrl(track.cover);
+    const coverImg = coverUrl
+      ? `<img class="pi-cover" src="${escapeHtml(coverUrl)}" alt="">`
       : '<div class="pi-cover"></div>';
+    const trackTitle = track.title || '這首歌';
+    const selectionLabel = isActive
+      ? `目前播放中，不能批次移除：${trackTitle}`
+      : `選取：${trackTitle}`;
     return `
+        <input class="pi-select" type="checkbox" data-selection-key="${escapeHtml(selectionKey)}" aria-label="${escapeHtml(selectionLabel)}"${isActive ? ' disabled' : ''}${isSelected ? ' checked' : ''}>
         <span class="pi-handle" title="按住拖曳調整順序" aria-hidden="true"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></svg></span>
         ${coverImg}
         <div class="pi-meta">
@@ -249,6 +398,7 @@
   function renderPlaylist() {
     const playlist = state.playlist;
     const currentTrackIndex = state.currentTrackIndex;
+    reconcileSelectedTracks();
     // 剩餘時間：從「目前播放（含）」往後加總；尚未開始播放則加總全部
     const fromIdx = currentTrackIndex >= 0 ? currentTrackIndex : 0;
     let remainingSec = 0;
@@ -258,8 +408,11 @@
       dom.playlistCount.textContent = `${playlist.length} 首${remTxt}`;
     }
     if (playlist.length === 0) {
+      selectedTrackKeys.clear();
+      selectionMode = false;
       dom.playlist.innerHTML = `
         <div class="playlist-empty">尚無歌曲，請上傳檔案或貼上 YouTube 連結</div>`;
+      syncPlaylistTools(0);
       return;
     }
     if (dom.playlist.querySelector('.playlist-empty')) dom.playlist.innerHTML = '';
@@ -269,18 +422,35 @@
     // 順序改變的位置才重建該列。短時間連續加很多首歌時，這讓每次 render 只需要處理「新
     // 增的那幾列」，不會把已經在清單裡的歌全部重新蓋一次，避免 O(歌曲數²) 的重複解圖成本。
     const existing = Array.from(dom.playlist.children);
+    let visibleCount = 0;
     playlist.forEach((track, i) => {
       const isActive = i === currentTrackIndex;
       const isPlayed = currentTrackIndex >= 0 && i < currentTrackIndex;
+      const selectionKey = getSelectionKey(track);
+      const isSelected = selectedTrackKeys.has(selectionKey);
+      const isVisible = trackMatchesFilter(track, i, currentTrackIndex);
+      if (isVisible) visibleCount += 1;
       const key = track.id != null ? String(track.id) : `${track.title}|${track.artist}|${i}`;
       const node = existing[i];
       if (node && node.dataset.trackKey === key) {
-        node.className = `playlist-item ${isActive ? 'active' : ''} ${isPlayed ? 'played' : ''} ${track.audioMissing ? 'audio-missing' : ''}`;
+        node.className = `playlist-item ${isActive ? 'active' : ''} ${isPlayed ? 'played' : ''} ${isSelected ? 'is-selected' : ''} ${track.audioMissing ? 'audio-missing' : ''}`;
         node.dataset.index = String(i);
+        node.dataset.selectionKey = selectionKey;
+        node.draggable = !selectionMode;
+        node.hidden = !isVisible;
         const removeBtn = node.querySelector('.pi-remove');
         if (removeBtn) removeBtn.dataset.remove = String(i);
         const editBtn = node.querySelector('.pi-edit');
         if (editBtn) editBtn.dataset.edit = String(i);
+        const selectInput = node.querySelector('.pi-select');
+        if (selectInput) {
+          selectInput.dataset.selectionKey = selectionKey;
+          selectInput.checked = isSelected;
+          selectInput.disabled = isActive;
+          selectInput.setAttribute('aria-label', isActive
+            ? `目前播放中，不能批次移除：${track.title || '這首歌'}`
+            : `選取：${track.title || '這首歌'}`);
+        }
         // 同 id 但文字可能變了（例如使用者手動修正歌名/歌手）：只更新文字節點，
         // 刻意不動 <img class="pi-cover">，避免每次 render 都重新解碼封面圖。
         const titleSpan = node.querySelector('.pi-title span');
@@ -295,11 +465,13 @@
         if (extras && extras.innerHTML !== extrasMarkup) extras.innerHTML = extrasMarkup;
       } else {
         const fresh = document.createElement('div');
-        fresh.className = `playlist-item ${isActive ? 'active' : ''} ${isPlayed ? 'played' : ''} ${track.audioMissing ? 'audio-missing' : ''}`;
+        fresh.className = `playlist-item ${isActive ? 'active' : ''} ${isPlayed ? 'played' : ''} ${isSelected ? 'is-selected' : ''} ${track.audioMissing ? 'audio-missing' : ''}`;
         fresh.dataset.index = String(i);
         fresh.dataset.trackKey = key;
-        fresh.draggable = true;
-        fresh.innerHTML = playlistItemMarkup(track, i);
+        fresh.dataset.selectionKey = selectionKey;
+        fresh.draggable = !selectionMode;
+        fresh.hidden = !isVisible;
+        fresh.innerHTML = playlistItemMarkup(track, i, selectionKey, isActive, isSelected);
         if (node) dom.playlist.replaceChild(fresh, node); else dom.playlist.appendChild(fresh);
       }
     });
@@ -307,6 +479,7 @@
     while (dom.playlist.children.length > playlist.length) {
       dom.playlist.removeChild(dom.playlist.lastChild);
     }
+    syncPlaylistTools(visibleCount);
     requestAnimationFrame(() => updateMarquee(dom.playlist));
   }
 
@@ -315,7 +488,10 @@
     const track = playlist[index];
     if (!track) return;
     // 刪除前先確認（避免直播中誤觸把歌刪掉）
-    if (!window.confirm(`確定從播放清單移除「${track.title || '這首歌'}」？`)) return;
+    if (!window.confirm(
+      `確定從播放清單移除「${track.title || '這首歌'}」？\n\n` +
+      '手動歌詞修正與歌詞同步微調會保留，日後重新加入同一首歌時會自動恢復。'
+    )) return;
     const previousPlaylist = playlist.slice();
     const previousIndex = state.currentTrackIndex;
     playlist.splice(index, 1);
@@ -344,11 +520,89 @@
     });
   }
 
+  // ── 清單搜尋、篩選與批次移除 ──
+  // 這一組狀態只屬於當前桌面控制台；同步到其他端的仍是既有 playlist:update。
+  // 批次操作刻意不允許選到目前播放曲，因此不用停止/跳歌，也不會讓 OBS 歌詞中斷。
+  function clearPlaylistFilter() {
+    playlistFilterQuery = '';
+    playlistFilterMode = 'all';
+    if (dom.playlistFilter) dom.playlistFilter.value = '';
+    if (dom.playlistFilterMode) dom.playlistFilterMode.value = 'all';
+    renderPlaylist();
+    if (dom.playlistFilter) dom.playlistFilter.focus();
+  }
+
+  function toggleVisibleTrackSelection() {
+    const visible = visibleSelectableTracks();
+    if (visible.length === 0) return;
+    const allVisibleSelected = visible.every(({ key }) => selectedTrackKeys.has(key));
+    visible.forEach(({ key }) => {
+      if (allVisibleSelected) selectedTrackKeys.delete(key);
+      else selectedTrackKeys.add(key);
+    });
+    renderPlaylist();
+  }
+
+  async function removeSelectedTracks() {
+    const selected = selectedTracks();
+    if (selected.length === 0) return;
+    const confirmed = await window.DangerConfirm?.request({
+      title: `確認移除 ${selected.length} 首歌曲`,
+      summary: `即將從播放清單移除 ${selected.length} 首已選歌曲。`,
+      impact: '正在播放的歌曲不能批次選取，因此不會停止、跳歌或影響 OBS。這只會移出播放清單；音檔、媒體庫、手動歌詞與同步微調都會保留。',
+      phrase: `移除 ${selected.length} 首歌曲`,
+      confirmLabel: '移除已選歌曲',
+    });
+    if (!confirmed) return;
+
+    const previousPlaylist = state.playlist.slice();
+    const previousIndex = state.currentTrackIndex;
+    const keysToRemove = new Set(selected.map(({ key }) => key));
+    const removedBeforeCurrent = selected.filter(({ index }) => index < previousIndex).length;
+    state.playlist = state.playlist.filter((track) => !keysToRemove.has(getSelectionKey(track)));
+    if (previousIndex >= 0) state.currentTrackIndex = previousIndex - removedBeforeCurrent;
+    selectedTrackKeys.clear();
+    selectionMode = false;
+    renderPlaylist();
+
+    // playlist:update 能保留同 id 的手動歌詞與 offset，也能正確處理清單內的重複曲目。
+    SocketClient.sendWithCallback('playlist:update', state.playlist, (result) => {
+      if (result?.ok) {
+        state.playlist = result.playlist || state.playlist;
+        renderPlaylist();
+        AppShared.showToast(`已從播放清單移除 ${selected.length} 首歌曲`, 'success');
+        return;
+      }
+      state.playlist = previousPlaylist;
+      state.currentTrackIndex = previousIndex;
+      renderPlaylist();
+      AppShared.showToast(`歌曲未刪除：${result?.error || '伺服器沒有回應'}`, 'error');
+    });
+  }
+
+  if (dom.playlistFilter) {
+    dom.playlistFilter.addEventListener('input', (e) => {
+      playlistFilterQuery = e.target.value || '';
+      renderPlaylist();
+    });
+  }
+  if (dom.playlistFilterMode) {
+    dom.playlistFilterMode.addEventListener('change', (e) => {
+      playlistFilterMode = e.target.value || 'all';
+      renderPlaylist();
+    });
+  }
+  if (dom.btnPlaylistFilterClear) dom.btnPlaylistFilterClear.addEventListener('click', clearPlaylistFilter);
+  if (dom.btnPlaylistSelect) dom.btnPlaylistSelect.addEventListener('click', () => setSelectionMode(!selectionMode));
+  if (dom.btnPlaylistSelectVisible) dom.btnPlaylistSelectVisible.addEventListener('click', toggleVisibleTrackSelection);
+  if (dom.btnPlaylistSelectionCancel) dom.btnPlaylistSelectionCancel.addEventListener('click', () => setSelectionMode(false));
+  if (dom.btnPlaylistSelectionRemove) dom.btnPlaylistSelectionRemove.addEventListener('click', removeSelectedTracks);
+
   // 一鍵清除整個播放清單（含確認警告）
-  function clearAllTracks() {
+  async function clearAllTracks() {
     const playlist = state.playlist;
     if (playlist.length === 0) { AppShared.showToast('播放清單已經是空的'); return; }
-    if (!window.confirm(`確定清除整個播放清單？（共 ${playlist.length} 首，此動作無法復原）`)) return;
+    if (!window.confirm(`確定要清空本次播放清單的 ${playlist.length} 首歌嗎？\n歌曲音檔、媒體庫紀錄、手動歌詞與同步微調都會保留。`)) return;
     SocketClient.sendWithCallback('playlist:update', [], (result) => {
       if (result?.ok) {
         AppShared.stopPlayback();
@@ -367,7 +621,7 @@
 
   if (dom.btnPlaylistExport && dom.playlistExportModal) {
     dom.btnPlaylistExport.addEventListener('click', () => {
-      if (dom.playlistExportError) dom.playlistExportError.style.display = 'none';
+      if (dom.playlistExportError) dom.playlistExportError.classList.remove('is-visible');
       if (dom.playlistExportName) {
         dom.playlistExportName.value = `播放清單-${new Date().toISOString().slice(0, 10)}`;
       }
@@ -391,7 +645,7 @@
         AppShared.showToast(`播放清單已匯出：${result.filename}`, 'success');
       } else if (dom.playlistExportError) {
         dom.playlistExportError.textContent = (result && result.error) || '匯出失敗，請重試';
-        dom.playlistExportError.style.display = 'block';
+        dom.playlistExportError.classList.add('is-visible');
       }
     });
   }
@@ -428,8 +682,8 @@
     if (dom.playlistImportEmpty) dom.playlistImportEmpty.hidden = true;
     dom.playlistImportList.innerHTML = files.map((f, i) => {
       const date = new Date(f.savedAt).toLocaleString('zh-TW', { hour12: false });
-      return `<button class="btn btn-ghost playlist-import-item" type="button" data-import-filename="${escapeHtml(f.filename)}" style="width:100%;justify-content:space-between;margin-bottom:6px">
-        <span>${escapeHtml(f.name)}</span><span class="pi-artist" style="font-size:11px">${escapeHtml(date)}</span>
+      return `<button class="btn btn-ghost playlist-import-item" type="button" data-import-filename="${escapeHtml(f.filename)}">
+        <span>${escapeHtml(f.name)}</span><span class="pi-artist playlist-import-item__date">${escapeHtml(date)}</span>
       </button>`;
     }).join('');
     dom.playlistImportList.querySelectorAll('[data-import-filename]').forEach((btn) => {

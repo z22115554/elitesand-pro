@@ -18,6 +18,9 @@
 
 const { createLogger } = require('../utils/logger');
 const { createAppState } = require('../state/app-state');
+const path = require('path');
+const { projectRoot } = require('../utils/app-paths');
+const { getDisplayRuntimeBuild } = require('../services/display-runtime-build');
 const { createDeckCommands } = require('./deck-commands');
 const registerPlaybackHandlers = require('./handlers/playback');
 const registerLyricsHandlers = require('./handlers/lyrics');
@@ -27,6 +30,7 @@ const registerSetlistHandlers = require('./handlers/setlist');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
 const stateStore = require('../services/state-store');
+const defaultRuntimeEvidence = require('../services/runtime-evidence');
 
 const log = createLogger('Socket');
 
@@ -36,9 +40,12 @@ const log = createLogger('Socket');
 // 資料照餵、豁免 PIN（iframe 拿不到面板的 PIN），但不計入「OBS 已連線」數。
 const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'setlist', 'display-preview', 'setlist-preview']);
 const CLIENT_TYPES = new Set(['controller', 'remote', ...PIN_EXEMPT_CLIENT_TYPES]);
-const READ_ONLY_EVENTS = new Set(['client:type', 'state:request', 'setlist:get']);
+const READ_ONLY_EVENTS = new Set(['client:type', 'client:build', 'state:request', 'setlist:get']);
+const DISPLAY_BUILD_REPORT_GRACE_MS = 3500;
 
-module.exports = function socketHandler(io) {
+module.exports = function socketHandler(io, { runtimeEvidence = defaultRuntimeEvidence } = {}) {
+  // 此程序啟動後的顯示端資產指紋。更新安裝會重啟 server，因此每次更新都會重新計算。
+  const expectedDisplayBuild = getDisplayRuntimeBuild(path.join(projectRoot, 'public')).build;
   // ─── 全域狀態（單一事實來源，含 state.json 還原）───
   const ctx = createAppState(io);
 
@@ -74,23 +81,65 @@ module.exports = function socketHandler(io) {
     remotes: new Set(),
     setlists: new Set(),
   };
+  const displayBuildReports = new Map();
+  const displayConnectedAt = new Map();
+  const displayReportTimers = new Map();
   // Twitch 整合在 index.js 建立（需要這裡的 session/控制面板 bridge），建立後再注入。
   // 保持 Twitch service 不依賴 Socket.io 的細節，方便離線時完全不啟動它。
   let twitchService = null;
   let lastTwitchStreamEventId = null;
 
   function getClientCounts() {
+    const now = Date.now();
+    let current = 0;
+    let stale = 0;
+    let pending = 0;
+    let unreported = 0;
+    for (const id of clients.displays) {
+      const report = displayBuildReports.get(id);
+      if (report) {
+        if (report === expectedDisplayBuild) current++;
+        else stale++;
+      } else if (now - (displayConnectedAt.get(id) || now) < DISPLAY_BUILD_REPORT_GRACE_MS) {
+        pending++;
+      } else {
+        // 舊版 display.js 尚不會回報 client:build；超過短暫連線等待後才視為需要刷新。
+        unreported++;
+      }
+    }
     return {
       controllers: clients.controllers.size,
       displays: clients.displays.size,
       remotes: clients.remotes.size,
       setlists: clients.setlists.size,
       total: clients.controllers.size + clients.displays.size + clients.remotes.size + clients.setlists.size,
+      displayRuntime: { expectedBuild: expectedDisplayBuild, current, stale, pending, unreported },
+      runtimeEvidence: runtimeEvidence.getSnapshot(),
     };
   }
 
   function emitClientCounts() {
     io.emit('client:counts', getClientCounts());
+  }
+
+  function rememberDisplayConnection(socketId) {
+    if (displayConnectedAt.has(socketId)) return;
+    displayConnectedAt.set(socketId, Date.now());
+    const timer = setTimeout(() => {
+      displayReportTimers.delete(socketId);
+      if (clients.displays.has(socketId) && !displayBuildReports.has(socketId)) emitClientCounts();
+    }, DISPLAY_BUILD_REPORT_GRACE_MS);
+    // 不讓單純的診斷等待計時器延後程式正常結束或自動更新重啟。
+    if (typeof timer.unref === 'function') timer.unref();
+    displayReportTimers.set(socketId, timer);
+  }
+
+  function forgetDisplayConnection(socketId) {
+    displayBuildReports.delete(socketId);
+    displayConnectedAt.delete(socketId);
+    const timer = displayReportTimers.get(socketId);
+    if (timer) clearTimeout(timer);
+    displayReportTimers.delete(socketId);
   }
 
   function startTwitchSession({ startedAt, eventId } = {}) {
@@ -166,9 +215,13 @@ module.exports = function socketHandler(io) {
       // 預覽 iframe（display-preview / setlist-preview）刻意不加進任何計數集合：
       // 面板一開就內嵌 3 個歌詞預覽＋2 個歌單預覽，計進去的話連線燈永遠亮、數字永遠不準。
       if (type === 'controller') clients.controllers.add(socket.id);
-      else if (type === 'display') clients.displays.add(socket.id);
+      else if (type === 'display') {
+        clients.displays.add(socket.id);
+        rememberDisplayConnection(socket.id);
+      }
       else if (type === 'remote') clients.remotes.add(socket.id);
       else if (type === 'setlist') clients.setlists.add(socket.id);
+      runtimeEvidence.recordSocketConnected({ socketId: socket.id, clientType: type });
 
       // 顯示端發送完整恢復狀態（含歌詞），而非基本狀態；預覽 iframe 吃跟正式來源一樣的資料
       if (type === 'display' || type === 'display-preview') {
@@ -191,6 +244,18 @@ module.exports = function socketHandler(io) {
       const c = getClientCounts();
       emitClientCounts();
       log.info(`${socket.id} 註冊為 ${type} (controllers: ${c.controllers}, displays: ${c.displays}, remotes: ${c.remotes}, setlists: ${c.setlists})`);
+    });
+
+    // 只有正式 OBS 歌詞來源納入診斷；面板內的 display-preview 不應讓連線燈或警告變化。
+    socket.on('client:build', (data) => {
+      if (socket.clientType !== 'display') return;
+      const build = typeof data?.displayBuild === 'string' ? data.displayBuild.toLowerCase() : '';
+      if (!/^[a-f0-9]{12,64}$/.test(build)) return;
+      displayBuildReports.set(socket.id, build);
+      const timer = displayReportTimers.get(socket.id);
+      if (timer) clearTimeout(timer);
+      displayReportTimers.delete(socket.id);
+      emitClientCounts();
     });
 
     // ─── OBS 顯示頁面狀態恢復請求 ───
@@ -230,10 +295,12 @@ module.exports = function socketHandler(io) {
 
     // ─── 斷線處理 ───
     socket.on('disconnect', (reason) => {
+      runtimeEvidence.recordSocketDisconnected({ socketId: socket.id });
       clients.controllers.delete(socket.id);
       clients.displays.delete(socket.id);
       clients.remotes.delete(socket.id);
       clients.setlists.delete(socket.id);
+      forgetDisplayConnection(socket.id);
       const c = getClientCounts();
       emitClientCounts();
       log.info(`斷線: ${socket.id} (${socket.clientType || 'unknown'}, 原因: ${reason}) (剩餘連線: ${c.total})`);
@@ -247,6 +314,13 @@ module.exports = function socketHandler(io) {
     stopTwitchSession,
     dispatchTwitchSongRequest,
     expireTwitchSongRequest,
-    setTwitchService(service) { twitchService = service; },
+    setTwitchService(service) {
+      twitchService = service;
+      if (service && typeof service.status === 'function') runtimeEvidence.recordTwitchStatus(service.status());
+    },
+    recordTwitchStatus(status) {
+      runtimeEvidence.recordTwitchStatus(status);
+      emitClientCounts();
+    },
   };
 };

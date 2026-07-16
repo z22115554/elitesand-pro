@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  const { formatTime, escapeHtml } = SharedUtils;
+  const { formatTime, escapeHtml, safeHttpUrl } = SharedUtils;
 
   // ─── 初始化 Socket ───
   SocketClient.init('remote');
@@ -69,6 +69,7 @@
     metronomeToggle: document.getElementById('ctrl-metronome-toggle'),
     lyricPreset: document.getElementById('ctrl-lyric-preset'),
     lyricPresetApply: document.getElementById('ctrl-lyric-preset-apply'),
+    lyricTemplateLegacyNotice: document.getElementById('ctrl-template-legacy-notice'),
   };
 
   // ─── 狀態 ───
@@ -86,6 +87,9 @@
   let lyricSettings = {};
 
   const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv'];
+  // Tilt is retained to render and adjust existing saved settings, but it is not
+  // offered as a new choice in either the desktop panel or the mobile remote.
+  const SELECTABLE_TEMPLATE_IDS = TEMPLATE_IDS.filter((template) => template !== 'tilt');
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
 
@@ -101,6 +105,7 @@
     lyricSettings = { ...value };
     const template = TEMPLATE_IDS.includes(lyricSettings.template) ? lyricSettings.template : 'classic';
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
+    if (dom.lyricTemplateLegacyNotice) dom.lyricTemplateLegacyNotice.hidden = template !== 'tilt';
     document.querySelectorAll('.ctrl-position-btn').forEach((b) => b.classList.toggle('active', b.dataset.position === (lyricSettings.lyricPosition || 'center')));
     document.querySelectorAll('.ctrl-intensity-btn').forEach((b) => b.classList.toggle('active', b.dataset.intensity === (lyricSettings.animationIntensity || 'normal')));
 
@@ -134,7 +139,7 @@
   document.querySelectorAll('.ctrl-template-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const nextTemplate = btn.dataset.template;
-      if (!TEMPLATE_IDS.includes(nextTemplate)) return;
+      if (!SELECTABLE_TEMPLATE_IDS.includes(nextTemplate)) return;
       const currentTemplate = TEMPLATE_IDS.includes(lyricSettings.template) ? lyricSettings.template : 'classic';
       const stores = { ...(lyricSettings[TEMPLATE_SETTING_KEY] || {}) };
       stores[currentTemplate] = { ...settingSnapshot(lyricSettings), template: currentTemplate };
@@ -536,7 +541,7 @@
 
   dom.playlistToggle.addEventListener('click', () => {
     playlistVisible = !playlistVisible;
-    dom.playlist.style.display = playlistVisible ? 'flex' : 'none';
+    dom.playlist.classList.toggle('visible', playlistVisible);
     dom.playlistToggle.classList.toggle('open', playlistVisible);
   });
 
@@ -549,8 +554,9 @@
     dom.trackTitle.textContent = track.title || '未知歌曲';
     dom.trackArtist.textContent = track.artist || '';
 
-    if (track.cover) {
-      dom.albumArt.style.backgroundImage = `url(${JSON.stringify(track.cover)})`;
+    const coverUrl = safeHttpUrl(track.cover);
+    if (coverUrl) {
+      dom.albumArt.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
     } else {
       dom.albumArt.style.backgroundImage = 'none';
     }
@@ -648,8 +654,9 @@
       const track = state.currentTrack;
       dom.trackTitle.textContent = track.title || '未知歌曲';
       dom.trackArtist.textContent = track.artist || '';
-      if (track.cover) {
-        dom.albumArt.style.backgroundImage = `url(${JSON.stringify(track.cover)})`;
+      const coverUrl = safeHttpUrl(track.cover);
+      if (coverUrl) {
+        dom.albumArt.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
       } else {
         dom.albumArt.style.backgroundImage = 'none';
       }
@@ -773,13 +780,10 @@
     // 封面網址用 CSSOM 寫入，不把外部資料拼進 style HTML 屬性。
     playlist.forEach((track, i) => {
       if (!track || !track.cover) return;
-      let url;
-      try {
-        url = new URL(String(track.cover), location.origin);
-        if (!['http:', 'https:'].includes(url.protocol)) return;
-      } catch (_) { return; }
+      const coverUrl = safeHttpUrl(track.cover);
+      if (!coverUrl) return;
       const cover = dom.playlist.querySelector(`[data-index="${i}"] .ctrl-playlist-item-cover`);
-      if (cover) cover.style.backgroundImage = `url("${url.href.replace(/"/g, '%22')}")`;
+      if (cover) cover.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
     });
 
     // 點擊播放

@@ -7,7 +7,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { dataDir } = require('../utils/data-dir');
+const { dataDir } = require('../utils/app-paths');
 const { createLogger } = require('../utils/logger');
 
 const log = createLogger('PlaylistExport');

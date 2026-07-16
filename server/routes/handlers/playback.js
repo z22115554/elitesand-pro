@@ -38,11 +38,15 @@ function registerPlaybackHandlers(io, socket, ctx) {
       return;
     }
 
-    track = sanitizeTrack(track);
-    if (!track) {
+    const requestedTrack = sanitizeTrack(track);
+    if (!requestedTrack) {
       log.warn(`play:track schema 驗證失敗: ${socket.id}`);
       return;
     }
+    // 控制端只持有非目前歌曲的清單摘要。以伺服器的清單原件作為播放來源，
+    // 才不會在選歌時把 lyrics／parsedLyrics 從 OBS 播放流程中遺失。
+    const storedTrack = playState?.playlist?.find((item) => item && item.id === requestedTrack.id);
+    track = storedTrack ? { ...storedTrack, autoplay: requestedTrack.autoplay } : requestedTrack;
     const trackId = track.id;
     // autoplay：面板「真的要播」=true；「載入待命/自動切歌待命」=false。
     // 待命時只載入歌曲（讓顯示端載歌詞），不算開始唱、也不記入已唱歌單。

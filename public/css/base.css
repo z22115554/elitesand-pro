@@ -120,6 +120,11 @@
 
 * { box-sizing: border-box; }
 
+/* `hidden` is a semantic UI state throughout the panel and controller. Classes
+   such as flex/grid containers must never override the browser's default
+   display:none rule when JavaScript sets element.hidden = true. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -242,6 +247,30 @@ select.input option:checked {
 
 .field { margin-bottom: 14px; }
 .field:last-child { margin-bottom: 0; }
+.field-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.field-row--spacious { gap: 14px; }
+.field-row--top { align-items: flex-start; }
+.flex-grow { flex: 1; }
+.inline-row { display: flex; gap: 8px; }
+.inline-row--wrap { flex-wrap: wrap; }
+.m-0 { margin: 0; }
+.mt-0 { margin-top: 0; }
+.mt-8 { margin-top: 8px; }
+/* These component-qualified helpers retain the original inline-style priority. */
+.eyebrow.m-0 { margin: 0; }
+.dropzone .sub.m-0 { margin: 0; }
+.field label.m-0 { margin: 0; }
+div.field-group-title.mt-0 { margin-top: 0; }
+.section-intro {
+  margin: -4px 0 12px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .field label {
   display: block;
   font-size: 12px;
@@ -410,12 +439,101 @@ details.collapse > .collapse-body { padding: 12px 0 4px; }
   display: flex; flex-direction: column;
   box-shadow: var(--shadow);
 }
+/* Two class selectors deliberately outrank panel.css's later .modal-card default. */
+.modal-card.modal-card--compact { max-width: 320px; }
+.modal-card.modal-card--narrow { max-width: 340px; }
+.modal-card.modal-card--small { max-width: 360px; }
+.modal-card.modal-card--medium { max-width: 420px; }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 20px; border-bottom: 1px solid var(--border);
 }
 .modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
 .modal-body { padding: 16px 20px; overflow-y: auto; }
+/* Override textarea.input's base minimum without returning to inline style. */
+.input.modal-lyrics-textarea { min-height: 200px; }
+.modal-form-hint { margin-top: 0; }
+.modal-form-input { margin-bottom: 10px; }
+.modal-empty-hint { margin: 0; }
+.modal-error {
+  display: none;
+  color: var(--danger);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.modal-error--spaced { margin-bottom: 10px; }
+.modal-error.is-visible { display: block; }
+.modal-submit { width: 100%; }
+.modal-submit--spaced { margin-top: 12px; }
+
+/* Static layout helpers for the CSP migration. Dynamic geometry stays in JS. */
+.w-full { width: 100%; }
+.ml-6 { margin-left: 6px; }
+.ml-8 { margin-left: 8px; }
+.mt-6 { margin-top: 6px; }
+.mt-10 { margin-top: 10px; }
+.pre-line { white-space: pre-line; }
+.row-gap-10 { display: flex; gap: 10px; }
+/* panel.css is loaded later, so retain the original inline-style priority. */
+.field-hint.mt-6 { margin-top: 6px; }
+details.collapse.mt-10 { margin-top: 10px; }
+.theme-toggle.nav-item { width: 52px; height: 52px; }
+.playlist-head-actions { display: flex; gap: 6px; }
+.switch-row.switch-row--separated { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.switch-row.switch-row--tight { margin-top: 2px; }
+.btn.btn--wide { width: 100%; }
+.btn.btn--mb-8 { margin-bottom: 8px; }
+.offset-align-hint { margin: 0 0 10px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
+.dropzone.dropzone--compact { margin-top: 12px; padding: 16px; }
+.sub.sub--fine-hint { color: var(--text-faint); font-size: 11px; }
+.sub.sub--fine-explainer { margin-top: 8px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
+.field.field--inline-spacious { display: flex; gap: 14px; }
+.font-family-hint { margin-top: 6px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
+.mt-12 { margin-top: 12px; }
+.val.val--fine-detail { margin-top: 4px; color: var(--text-faint); font-size: 11px; }
+.btn.btn--vertical-spaced { margin: 12px 0; }
+img.display-bg-preview { max-width: 100%; max-height: 120px; border-radius: 8px; display: block; margin-bottom: 8px; }
+label.btn.btn--label { cursor: pointer; }
+.twitch-request-hint { margin: 6px 0 0; color: var(--text-faint); font-size: 12px; }
+.field.field--obs-port { width: 110px; }
+.switch-row.switch-row--spaced-4 { margin-top: 4px; }
+.lan-info-layout { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.lan-info-qr { border-radius: 8px; background: #fff; padding: 6px; }
+.lan-info-copy { flex: 1; min-width: 180px; }
+.val.val--danger { color: var(--danger); }
+.twitch-status { margin: 0 0 10px; }
+.update-available-label { color: var(--accent, #7c9cff); }
+.val.val--status-message { margin: 10px 0 0; white-space: pre-line; }
+.diagnostic-description { margin: -4px 0 10px; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
+.diagnostic-reliability { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.diagnostic-reliability .field-hint { margin: 0 0 8px; }
+.diagnostic-privacy-hint { margin: 10px 0 0; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
+.library-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+#lib-search.input { flex: 1; min-width: 140px; width: auto; }
+#lib-sort.input { width: auto; flex: 0 0 auto; }
+.library-empty { text-align: center; padding: 24px 0; color: var(--text-faint); }
+.session-status { margin-top: 10px; font-size: 12px; color: var(--text-faint); }
+.session-status.is-active { color: var(--ok); }
+#obs-ws-status.is-connected { color: var(--success, #38b36a); }
+.playlist.playlist--min-height { min-height: 60px; }
+.field.field--setlist-sections { margin-bottom: 14px; }
+.setlist-template-status-row { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
+.setlist-template-status-note { margin: 0; font-size: 11px; color: var(--text-faint); }
+.setlist-preset-save-row { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+#sls-save-name.input { flex: 1; min-width: 0; }
+.sls-custom-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+.sls-custom-empty { color: var(--text-faint); font-size: 11px; }
+.sls-custom-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2, rgba(127, 127, 127, .12)); border-radius: 8px; padding: 2px 4px 2px 8px; }
+.btn.btn-sm.btn-ghost.sls-custom-chip__apply { padding: 2px 4px; }
+.btn.btn-sm.btn-ghost.sls-custom-chip__delete { padding: 2px 6px; color: var(--danger, #e06); }
+.btn.btn--setlist-advanced { margin-top: 14px; width: 100%; }
+.setlist-template-controls { display: flex; gap: 6px; margin-bottom: 8px; }
+.field.field--inline-spacious-center { display: flex; gap: 14px; align-items: center; }
+.val.val--inline-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.setlist-layout-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.setlist-layout-actions__buttons { display: flex; gap: 6px; flex-shrink: 0; }
+.track-edit-hint { margin: 0 0 14px; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
+.btn.btn--track-edit-save { width: 100%; margin-top: 4px; }
 
 /* 主題切換 */
 .theme-toggle {

@@ -20,6 +20,15 @@
   const isPreviewClient = new URLSearchParams(location.search).get('preview') === '1';
   SocketClient.init(isPreviewClient ? 'display-preview' : 'display');
 
+  // /display 由 server 注入整組本機 JS/CSS 的內容指紋。正式 OBS 來源回報它，讓面板可以
+  // 直接告知「已連線但仍跑舊快取」；預覽 iframe 不納入正式 OBS 狀態，刻意不回報。
+  const displayRuntimeBuild = document.documentElement.dataset.elitesandDisplayBuild || '';
+  SocketClient.on('connection-change', (connected) => {
+    if (connected && !isPreviewClient && displayRuntimeBuild) {
+      SocketClient.send('client:build', { displayBuild: displayRuntimeBuild });
+    }
+  });
+
   // 初始化錯誤處理系統
   if (typeof ErrorHandler !== 'undefined') {
     ErrorHandler.init();

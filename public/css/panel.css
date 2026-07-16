@@ -109,6 +109,25 @@ body { overflow: hidden; }
 .setlist-split { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.5fr); gap: var(--gap); align-items: start; }
 .setlist-left { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 .setlist-right { min-width: 0; }
+.setlist-layout-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.setlist-layout-heading label { margin-bottom:0; }
+.setlist-layout-status, .setlist-layout-badge { display:inline-flex; align-items:center; width:max-content; border-radius:999px; font-size:10px; font-weight:650; line-height:1; }
+.setlist-layout-status { flex-shrink:0; padding:5px 8px; border:1px solid var(--border); color:var(--text-dim); background:var(--bg-raised); }
+.setlist-layout-picker { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.setlist-layout-card { min-height:102px; padding:12px; border:1px solid var(--border-strong); border-radius:var(--r-md); background:var(--bg-raised); color:var(--text); text-align:left; cursor:pointer; transition:border-color .12s,background .12s,box-shadow .12s,transform .12s; }
+.setlist-layout-card:hover { background:var(--bg-hover); transform:translateY(-1px); }
+.setlist-layout-card[aria-checked="true"] { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); background:color-mix(in srgb,var(--accent) 8%,var(--bg-raised)); }
+.setlist-layout-card strong, .setlist-layout-card span:not(.setlist-layout-badge) { display:block; }
+.setlist-layout-card strong { margin-top:7px; font-size:13px; font-weight:650; }
+.setlist-layout-card span:not(.setlist-layout-badge) { margin-top:5px; color:var(--text-faint); font-size:11px; line-height:1.45; }
+.setlist-layout-badge { padding:3px 6px; background:var(--accent-soft); color:var(--accent); }
+.setlist-more-layouts { margin-top:8px; }
+.setlist-layout-picker-more { margin-top:8px; }
+.setlist-layout-picker-more[hidden] { display:none; }
+.setlist-layout-picker-more .setlist-layout-card { min-height:76px; }
+.setlist-layout-hint { margin:9px 0 0; color:var(--text-faint); font-size:11px; line-height:1.55; }
+.setlist-style-scope { margin:0 0 12px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-raised); color:var(--text-dim); font-size:11px; line-height:1.45; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 @media (max-width: 1024px) {
   .setlist-split { grid-template-columns: 1fr; }
 }
@@ -259,6 +278,28 @@ input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(-
 .style-thumb-label { font-size: 11px; color: var(--text-dim); line-height: 1; }
 .style-thumb.active .style-thumb-label { color: var(--accent); font-weight: 600; }
 
+/* 歌詞模板：模板是第一個決策，使用用途卡取代難掃讀的小縮圖；新增模板只需補一張 data-template 卡與 JS 中繼資料。 */
+.lyric-template-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.lyric-template-heading label { margin-bottom: 0; }
+.lyric-template-heading .field-hint { max-width: 560px; }
+.lyric-template-status { display: inline-flex; flex-shrink: 0; align-items: center; width: max-content; padding: 5px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-raised); color: var(--text-dim); font-size: 10px; font-weight: 650; line-height: 1; }
+.lyric-template-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.lyric-template-card { min-height: 112px; padding: 11px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--bg-raised); color: var(--text); text-align: left; cursor: pointer; transition: border-color .12s, background .12s, box-shadow .12s, transform .12s; }
+.lyric-template-card:hover { background: var(--bg-hover); transform: translateY(-1px); }
+.lyric-template-card[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: color-mix(in srgb, var(--accent) 8%, var(--bg-raised)); }
+.lyric-template-card .style-thumb-preview { width: 100%; height: 38px; margin-bottom: 7px; }
+.lyric-template-card strong, .lyric-template-card > span:last-child { display: block; }
+.lyric-template-card strong { font-size: 12px; font-weight: 650; }
+.lyric-template-card > span:last-child { margin-top: 4px; color: var(--text-faint); font-size: 10px; line-height: 1.4; }
+.lyric-template-scope { margin: 9px 0 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-raised); color: var(--text-dim); font-size: 11px; line-height: 1.5; }
+.lyric-preset-section { margin-top: 4px; }
+@media (max-width: 640px) {
+  .lyric-template-heading { display: block; }
+  .lyric-template-status { margin-top: 8px; }
+  .lyric-template-picker { grid-template-columns: 1fr; }
+  .lyric-template-card { min-height: auto; }
+}
+
 @keyframes stp-cute { 0%,100% { transform: translateY(0) scale(1); } 40% { transform: translateY(-6px) scale(1.15); } 60% { transform: translateY(1px) scale(0.95); } }
 @keyframes stp-rock { 0%,20%,100% { transform: scale(1) translateX(0); } 5% { transform: scale(1.35) translateX(-2px); } 10% { transform: scale(1.1) translateX(2px); } }
 @keyframes stp-ballad { 0%,100% { opacity: 0.45; transform: translateY(3px); } 50% { opacity: 1; transform: translateY(0); } }
@@ -277,12 +318,12 @@ input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(-
 @keyframes tpl-tilt { 0%,100% { transform: rotate(-10deg) translateY(2px); } 50% { transform: rotate(9deg) translateY(-4px) scale(1.12); } }
 @keyframes tpl-mindscape { 0%,100% { transform: scale(.82); letter-spacing: 0; opacity: .65; } 50% { transform: scale(1.16); letter-spacing: .12em; opacity: 1; text-shadow: -12px -6px 0 rgba(255,255,255,.18), 13px 7px 0 rgba(255,214,165,.2); } }
 @keyframes tpl-ktv { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
-#template-buttons .style-thumb[data-template="classic"] .style-thumb-char { animation: tpl-classic 1.8s ease-in-out infinite; }
-#template-buttons .style-thumb[data-template="luminous"] .style-thumb-char { animation: tpl-luminous 1.4s ease-in-out infinite; }
-#template-buttons .style-thumb[data-template="partita"] .style-thumb-char { animation: tpl-partita 1.5s steps(2,end) infinite; }
-#template-buttons .style-thumb[data-template="tilt"] .style-thumb-char { animation: tpl-tilt 1.4s ease-in-out infinite; transform-origin: 50% 80%; }
-#template-buttons .style-thumb[data-template="mindscape"] .style-thumb-char { animation: tpl-mindscape 2s ease-in-out infinite; }
-#template-buttons .style-thumb[data-template="ktv"] .style-thumb-char { color: transparent; background: linear-gradient(90deg, #ffd54f 0 48%, #fff 50% 100%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; animation: tpl-ktv 1.3s linear infinite; }
+#template-buttons [data-template="classic"] .style-thumb-char { animation: tpl-classic 1.8s ease-in-out infinite; }
+#template-buttons [data-template="luminous"] .style-thumb-char { animation: tpl-luminous 1.4s ease-in-out infinite; }
+#template-buttons [data-template="partita"] .style-thumb-char { animation: tpl-partita 1.5s steps(2,end) infinite; }
+#template-buttons [data-template="tilt"] .style-thumb-char { animation: tpl-tilt 1.4s ease-in-out infinite; transform-origin: 50% 80%; }
+#template-buttons [data-template="mindscape"] .style-thumb-char { animation: tpl-mindscape 2s ease-in-out infinite; }
+#template-buttons [data-template="ktv"] .style-thumb-char { color: transparent; background: linear-gradient(90deg, #ffd54f 0 48%, #fff 50% 100%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; animation: tpl-ktv 1.3s linear infinite; }
 @media (prefers-reduced-motion: reduce) {
   .style-thumb-char { animation: none !important; }
 }
@@ -326,6 +367,17 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 
 /* 播放清單 */
 .playlist-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.playlist-head-actions { flex-wrap: wrap; justify-content: flex-end; }
+.playlist-tools { display: grid; gap: 8px; margin: -4px 0 10px; }
+.playlist-filter-row { display: grid; grid-template-columns: minmax(0, 1fr) 126px auto; gap: 6px; }
+.playlist-filter-row .input { min-width: 0; }
+.playlist-filter-result,
+.playlist-filter-empty { margin: 0; color: var(--text-faint); font-size: 11px; line-height: 1.45; }
+.playlist-filter-empty { padding: 12px; border: 1px dashed var(--border); border-radius: var(--r-sm); text-align: center; }
+.playlist-selection-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--border)); border-radius: var(--r-sm); background: var(--accent-soft); font-size: 12px; }
+.playlist-selection-toolbar > span:first-child { color: var(--accent-text, var(--accent)); font-weight: 700; }
+.playlist-selection-hint { color: var(--text-faint); }
+.playlist-selection-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 /* 播放清單獨立成一欄：在響應式 grid 中往下跨 2 列，形成自己的高欄位 */
 .playlist-card { grid-row: span 2; display: flex; flex-direction: column; }
 .playlist-card .playlist { flex: 1; }
@@ -338,6 +390,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .playlist-item.active { background: var(--accent-soft); border-left-color: var(--accent); }
 .playlist-item.played { opacity: 0.45; } /* 已唱過：淡灰 */
 .playlist-item.played.active { opacity: 1; }
+.playlist-item.is-selected { background: color-mix(in srgb, var(--accent) 18%, var(--bg-hover)); border-left-color: var(--accent); }
 
 /* OBS 歌詞即時預覽（內嵌 /display?preview=1）*/
 .obs-preview-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-md); overflow: hidden; background: #0a0a12; border: 1px solid var(--border-strong); }
@@ -349,11 +402,10 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .bg-light .preview-bg-toggle:hover { background: rgba(255,255,255,0.95); }
 /* 預覽＝OBS 的等比縮小：iframe 以真實 OBS 解析度(1920×1080)渲染，再整體 scale 縮到容器寬，
    字級/位置/邊距的「相對比例」才會和 OBS 輸出一模一樣（不再是小框裡的大字）。 */
-.obs-preview { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; display: block; transform: scale(var(--preview-scale, 0.2)); transform-origin: top left; }
+.obs-preview, .setlist-preview { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; display: block; background: transparent; transform: scale(var(--preview-scale, 0.2)); transform-origin: top left; }
 .obs-preview-tag { position: absolute; left: 8px; bottom: 8px; font-size: 10px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,0.55); color: #fff; pointer-events: none; }
 /* 歌單預覽：深色底（模擬 OBS 疊在畫面上），透明背景的 /setlist 在其上渲染，主題配色即時可見 */
-.setlist-preview-wrap { position: relative; width: 100%; height: 340px; border-radius: var(--r-md); overflow: hidden; background: #0a0a12; border: 1px solid var(--border-strong); margin-bottom: 12px; }
-.setlist-preview { width: 100%; height: 100%; border: 0; display: block; background: transparent; }
+.setlist-preview-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-md); overflow: hidden; background: #0a0a12; border: 1px solid var(--border-strong); margin-bottom: 12px; }
 .setlist-preview-tag { position: absolute; right: 8px; bottom: 8px; font-size: 10px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,0.55); color: #fff; pointer-events: none; }
 
 /* 設定頁頂部即時預覽：跨兩欄、置頂吸附，調整下方設定時始終看得到 */
@@ -377,6 +429,15 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .playlist-item .pi-handle { display: flex; align-items: center; justify-content: center; width: 16px; align-self: stretch; color: var(--text-faint); opacity: 0.45; cursor: grab; flex-shrink: 0; touch-action: none; }
 .playlist-item:hover .pi-handle { opacity: 0.9; }
 .playlist-item .pi-handle:active { cursor: grabbing; }
+.playlist-item .pi-select { display: none; width: 16px; height: 16px; margin: 0; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+.playlist.is-selecting .pi-select { display: block; }
+.playlist.is-selecting .pi-handle { display: none; }
+.playlist.is-selecting .playlist-item { cursor: pointer; }
+.playlist.is-selecting .playlist-item.active .pi-select { cursor: not-allowed; opacity: .45; }
+/* 選取模式時所有列內動作都先收起；整列只有選取一個目的，避免誤觸直播控制。 */
+.playlist.is-selecting .pi-extras,
+.playlist.is-selecting .pi-edit,
+.playlist.is-selecting .pi-remove { visibility: hidden; pointer-events: none; }
 .playlist-item.dragging { opacity: 0.4; }
 .playlist-item.drop-above { box-shadow: 0 -2px 0 0 var(--accent); }
 .playlist-item.drop-below { box-shadow: 0 2px 0 0 var(--accent); }
@@ -402,6 +463,13 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .playlist-item:hover .pi-remove, .playlist-item:hover .pi-edit { opacity: 1; }
 .playlist-item .pi-remove:hover { color: var(--danger); background: rgba(239,68,68,0.12); }
 .playlist-item .pi-edit:hover { color: var(--accent); background: var(--accent-soft); }
+
+@media (max-width: 720px) {
+  .playlist-filter-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .playlist-filter-row #playlist-filter-mode { grid-column: 1; }
+  .playlist-filter-row #btn-playlist-filter-clear { grid-column: 2; grid-row: 2; }
+  .playlist-selection-actions { width: 100%; margin-left: 0; }
+}
 
 /* 微調 */
 .offset-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -429,10 +497,18 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-requests-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .twitch-request-empty { padding: 32px 16px; color: var(--text-faint); text-align: center; border: 1px dashed var(--border); border-radius: var(--r-md); }
 .twitch-req { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-md); }
-.twitch-req-info { min-width: 0; flex: 1; }
-.twitch-req-user { font-size: 13px; font-weight: 600; color: var(--text); }
-.twitch-req-url { font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.twitch-req-info { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.twitch-req-thumbnail { width: 128px; height: 72px; object-fit: cover; border-radius: 8px; flex: none; background: var(--surface-2); }
+.twitch-req-thumbnail--empty { display: grid; place-items: center; color: var(--text-faint); font-size: 12px; }
+.twitch-req-copy { min-width: 0; flex: 1; }
+.twitch-req-title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.twitch-req-author { margin-top: 4px; color: var(--text-muted); font-size: 12px; }
+.twitch-req-user { margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--text); }
+.twitch-req-warning { margin-top: 4px; color: var(--danger); }
+.twitch-req-url { display: block; margin-top: 4px; font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .twitch-req-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.playlist-import-item { width: 100%; justify-content: space-between; margin-bottom: 6px; }
+.playlist-import-item__date { font-size: 11px; }
 @media (max-width: 560px) {
   .twitch-req { align-items: flex-start; flex-direction: column; }
   .twitch-req-actions { width: 100%; }
@@ -455,6 +531,17 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .help-body { display: flex; flex-direction: column; gap: 10px; }
 .onboard-readiness { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 12px 18px; align-items: center; padding: 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-raised); }
 .onboard-readiness p { margin: 4px 0 0; color: var(--text-faint); font-size: 12px; }
+.guide-route { margin: 12px 0; padding: 16px; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border)); border-radius: var(--r-md); background: color-mix(in srgb, var(--accent) 7%, var(--bg-raised)); }
+.guide-route-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+.guide-route-eyebrow { display:block; margin-bottom:4px; color:var(--accent); font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.guide-route-head strong { display:block; color:var(--text); font-size:15px; }
+.guide-route-head p { margin:4px 0 0; color:var(--text-faint); font-size:12px; line-height:1.55; }
+.guide-route-status { flex:none; padding:5px 9px; border:1px solid var(--accent-glow); border-radius:999px; color:var(--accent-hover); font-size:11px; white-space:nowrap; }
+.guide-route-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.guide-route-success { margin-top:10px; padding:12px; border:1px solid color-mix(in srgb,var(--ok) 48%,var(--border)); border-radius:var(--r-sm); background:color-mix(in srgb,var(--ok) 8%,transparent); }
+.guide-route-success strong, .guide-route-success span { display:block; }
+.guide-route-success strong { color:var(--ok); font-size:13px; }
+.guide-route-success span { margin-top:2px; color:var(--text-dim); font-size:11px; }
 .readiness-items { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
 .readiness-pill { padding: 5px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-faint); font-size: 11px; white-space: nowrap; }
 .readiness-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 44%, var(--border)); background: color-mix(in srgb, var(--ok) 9%, transparent); }
@@ -492,6 +579,16 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .modal-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
 .modal-body { padding: 18px 22px; overflow-y: auto; }
 
+/* 只用於清空大量資料：要求輸入動作名稱，避免直播中習慣性按確認造成誤刪。 */
+.danger-confirm-modal .modal-card { max-width: 460px; border-color: color-mix(in srgb, var(--danger) 58%, var(--border)); }
+.danger-confirm-head h3 { color: var(--danger); }
+.danger-confirm-summary { margin: 0 0 8px; color: var(--text); font-weight: 600; line-height: 1.6; }
+.danger-confirm-impact { margin: 0 0 16px; color: var(--text-dim); font-size: 12px; line-height: 1.65; }
+.danger-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.danger-confirm-submit { background: var(--danger); border-color: var(--danger); color: #fff; }
+.danger-confirm-submit:hover:not(:disabled) { filter: brightness(1.08); }
+.danger-confirm-submit:disabled { cursor: not-allowed; opacity: .45; }
+
 /* 加寬彈窗（詳細設定）：近全螢幕、左預覽右多欄 */
 .modal-wide .modal-card { max-width: 1180px; width: 96vw; max-height: 90vh; }
 .modal-split { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 24px; padding: 18px 22px; overflow-y: auto; }
@@ -501,11 +598,26 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .modal-split .mw-settings { columns: 2; column-gap: 30px; min-width: 0; }
 .modal-split .mw-settings > * { break-inside: avoid; }
 .modal-split .mw-settings .eyebrow:first-child { margin-top: 0; }
+.lyric-advanced-modal .modal-split { grid-template-columns: minmax(0, 390px) minmax(0, 1fr); }
+.lyric-advanced-modal .mw-settings { columns: 1; max-width: 680px; }
+.lyrics-settings-search { position: sticky; top: -18px; z-index: 2; margin: -18px 0 14px; padding: 18px 0 12px; background: var(--bg-surface); border-bottom: 1px solid var(--border); }
+.lyrics-settings-search label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.lyric-advanced-modal .card-collapse.is-search-hidden { display: none !important; }
+.setlist-advanced-modal .modal-split { grid-template-columns:minmax(0,390px) minmax(0,1fr); }
+.setlist-advanced-modal .mw-settings { columns:1; max-width:680px; }
+.setlist-settings-search { position:sticky; top:-18px; z-index:2; margin:-18px 0 14px; padding:18px 0 12px; background:var(--bg-surface); border-bottom:1px solid var(--border); }
+.setlist-settings-search label { display:block; margin-bottom:7px; font-size:12px; font-weight:600; color:var(--text-dim); }
+.setlist-advanced-modal .card-collapse.is-search-hidden { display:none !important; }
 @media (max-width: 860px) {
   .modal-split { grid-template-columns: 1fr; }
   .modal-split .mw-preview { position: static; }
   .modal-split .mw-settings { columns: 1; }
+  .lyric-advanced-modal .modal-split { grid-template-columns: 1fr; }
+  .lyrics-settings-search { top: 0; margin-top: 0; }
+  .setlist-advanced-modal .modal-split { grid-template-columns:1fr; }
+  .setlist-settings-search { top:0; margin-top:0; }
 }
+@media (max-width:640px) { .setlist-layout-heading { display:block; } .setlist-layout-status { margin-top:8px; } .setlist-layout-picker { grid-template-columns:1fr; } .setlist-layout-card, .setlist-layout-picker-more .setlist-layout-card { min-height:auto; } }
 
 /* 主題切換 */
 .theme-toggle { width: 36px; height: 36px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--bg-raised); color: var(--text-dim); display: inline-flex; align-items: center; justify-content: center; transition: all 0.12s; }
@@ -574,6 +686,10 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .source-pill.connected { color: #22c55e; border-color: rgba(34, 197, 94, 0.62); background: rgba(34, 197, 94, 0.13); }
 .source-pill.connected::before { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2), 0 0 12px rgba(34, 197, 94, 0.55); }
 .source-pill.disconnected::before { background: var(--text-faint); }
+.source-pill.pending { color: #60a5fa; border-color: rgba(96, 165, 250, 0.55); background: rgba(96, 165, 250, 0.12); }
+.source-pill.pending::before { background: #60a5fa; box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.16); }
+.source-pill.stale { color: #f59e0b; border-color: rgba(245, 158, 11, 0.62); background: rgba(245, 158, 11, 0.13); }
+.source-pill.stale::before { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18), 0 0 12px rgba(245, 158, 11, 0.45); }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-raised); border: 1px solid var(--border-strong); color: var(--text); padding: 11px 20px; border-radius: var(--r-md); font-size: 13px; box-shadow: var(--shadow-lg); opacity: 0; pointer-events: none; transition: all 0.2s; z-index: 600; }
 .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 

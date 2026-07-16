@@ -9,7 +9,7 @@ const { createLogger } = require('../utils/logger');
 const { createJsonStore } = require('./json-store');
 
 const log = createLogger('TwitchStore');
-const { dataDir: DATA_DIR } = require('../utils/data-dir');
+const { dataDir: DATA_DIR } = require('../utils/app-paths');
 const STORE_FILE = path.join(DATA_DIR, 'twitch-auth.json');
 
 const twitchDiskStore = createJsonStore({

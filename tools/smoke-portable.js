@@ -70,13 +70,23 @@ async function main() {
   const packageJson = JSON.parse(fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8'));
   assert(manifest.version === packageJson.version, 'Portable manifest and app package versions differ');
 
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-portable-smoke-'));
+  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-portable-smoke-'));
+  const dataDir = path.join(runtimeRoot, 'data');
+  const downloadsDir = path.join(runtimeRoot, 'downloads');
+  const logsDir = path.join(runtimeRoot, 'logs');
   const port = 36000 + Math.floor(Math.random() * 2000);
   let output = '';
   const child = spawn(runtime, ['server/index.js'], {
     cwd: appRoot,
     windowsHide: true,
-    env: { ...process.env, PORT: String(port), OPEN_BROWSER: '0', ELITESAND_DATA_DIR: dataDir },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      OPEN_BROWSER: '0',
+      ELITESAND_DATA_DIR: dataDir,
+      ELITESAND_DOWNLOADS_DIR: downloadsDir,
+      ELITESAND_LOGS_DIR: logsDir,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (chunk) => { output = (output + chunk.toString()).slice(-12000); });
@@ -97,7 +107,7 @@ async function main() {
     throw new Error(`${error.message}\nPackaged server output:\n${output}`);
   } finally {
     await stopChild(child);
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(runtimeRoot, { recursive: true, force: true });
   }
 }
 

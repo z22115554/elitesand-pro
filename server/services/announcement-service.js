@@ -2,11 +2,11 @@
 
 const path = require('path');
 const fetch = require('node-fetch');
-const { dataDir } = require('../utils/data-dir');
+const { dataDir } = require('../utils/app-paths');
 const { compareVersions } = require('../utils/version-compare');
 const { createLogger } = require('../utils/logger');
 const config = require('../utils/load-config');
-const pkg = require('../../package.json');
+const { APP_VERSION, appUserAgent } = require('../utils/app-version');
 const { createJsonStore } = require('./json-store');
 
 const log = createLogger('Announcements');
@@ -147,13 +147,13 @@ function validateDocument(input) {
   return { schemaVersion: 1, announcements };
 }
 
-function versionMatches(announcement, currentVersion = pkg.version) {
+function versionMatches(announcement, currentVersion = APP_VERSION) {
   if (announcement.minVersion && compareVersions(currentVersion, announcement.minVersion) < 0) return false;
   if (announcement.maxVersion && compareVersions(currentVersion, announcement.maxVersion) > 0) return false;
   return true;
 }
 
-function isCurrentlyActive(announcement, now = Date.now(), currentVersion = pkg.version) {
+function isCurrentlyActive(announcement, now = Date.now(), currentVersion = APP_VERSION) {
   if (!announcement.enabled || !versionMatches(announcement, currentVersion)) return false;
   if (announcement.publishedAt && Date.parse(announcement.publishedAt) > now) return false;
   if (announcement.expiresAt && Date.parse(announcement.expiresAt) <= now) return false;
@@ -165,7 +165,7 @@ async function fetchJsonDocument(url, timeoutMs = 5000) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Elitesand-Pro-Announcements' },
+      headers: { Accept: 'application/json', 'User-Agent': appUserAgent('announcements') },
       signal: controller.signal,
       redirect: 'follow',
     });
@@ -211,7 +211,7 @@ async function refresh({ force = false } = {}) {
   return inFlight;
 }
 
-function getSnapshot({ now = Date.now(), currentVersion = pkg.version } = {}) {
+function getSnapshot({ now = Date.now(), currentVersion = APP_VERSION } = {}) {
   const dismissed = new Set(state.dismissed);
   const shownOnce = new Set(state.shownOnce);
   const read = new Set(state.read);

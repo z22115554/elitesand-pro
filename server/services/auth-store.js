@@ -18,7 +18,7 @@ const { createJsonStore } = require('./json-store');
 
 const log = createLogger('Auth');
 
-const { dataDir: DATA_DIR } = require('../utils/data-dir');
+const { dataDir: DATA_DIR } = require('../utils/app-paths');
 const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
 
 const SALT_BYTES = 16;

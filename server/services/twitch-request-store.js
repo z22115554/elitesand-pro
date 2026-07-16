@@ -3,7 +3,7 @@
 const path = require('path');
 const { createLogger } = require('../utils/logger');
 const { createJsonStore } = require('./json-store');
-const { dataDir } = require('../utils/data-dir');
+const { dataDir } = require('../utils/app-paths');
 
 const log = createLogger('TwitchRequests');
 const STORE_FILE = path.join(dataDir, 'twitch-requests.json');

@@ -84,10 +84,10 @@
       <button class="ctrl-template-btn active" data-template="classic" type="button">經典疊層</button>
       <button class="ctrl-template-btn" data-template="luminous" type="button">星砂流光</button>
       <button class="ctrl-template-btn" data-template="partita" type="button">折光階梯</button>
-      <button class="ctrl-template-btn" data-template="tilt" type="button">斜拍告白</button>
       <button class="ctrl-template-btn" data-template="mindscape" type="button">潮汐心景</button>
       <button class="ctrl-template-btn" data-template="ktv" type="button">霓彩伴唱</button>
     </div>
+    <p id="ctrl-template-legacy-notice" class="ctrl-sub-label" hidden>目前使用舊版「斜拍告白」設定；切換其他模板後，無法從新介面選回。</p>
     <p class="ctrl-sub-label">位置</p>
     <div class="ctrl-chips">
       <button class="ctrl-position-btn active" data-position="center" type="button">置中</button>
@@ -170,8 +170,8 @@
         <button id="lyrics-paste-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
       </div>
       <div class="modal-body">
-        <textarea id="lyrics-paste-textarea" class="input" placeholder="貼上 LRC 或純文字歌詞…" style="min-height:200px"></textarea>
-        <button id="lyrics-paste-confirm" class="btn btn-primary" type="button" style="width:100%;margin-top:12px">套用歌詞</button>
+        <textarea id="lyrics-paste-textarea" class="input modal-lyrics-textarea" placeholder="貼上 LRC 或純文字歌詞…"></textarea>
+        <button id="lyrics-paste-confirm" class="btn btn-primary modal-submit modal-submit--spaced" type="button">套用歌詞</button>
       </div>
     </div>
   </div>
@@ -180,13 +180,13 @@
 
   <!-- PIN 保護：伺服器設定 PIN 後，連線被拒會跳出這個要求輸入的視窗（見 public/js/pin-auth.js） -->
   <div id="pin-required-modal" class="modal" hidden>
-    <div class="modal-card" style="max-width:320px">
+    <div class="modal-card modal-card--compact">
       <div class="modal-head"><h3>需要 PIN</h3></div>
       <div class="modal-body">
-        <p class="field-hint" style="margin-top:0">這台裝置需要輸入 PIN 才能操作 Elitesand Pro。</p>
-        <input id="pin-required-input" class="input" type="password" inputmode="numeric" autocomplete="off" placeholder="輸入 PIN" style="margin-bottom:10px">
-        <div id="pin-required-error" style="color:var(--danger);font-size:12px;margin-bottom:10px;display:none"></div>
-        <button id="pin-required-submit" class="btn btn-primary" type="button" style="width:100%">確認</button>
+        <p class="field-hint modal-form-hint">這台裝置需要輸入 PIN 才能操作 Elitesand Pro。</p>
+        <input id="pin-required-input" class="input modal-form-input" type="password" inputmode="numeric" autocomplete="off" placeholder="輸入 PIN">
+        <div id="pin-required-error" class="modal-error modal-error--spaced"></div>
+        <button id="pin-required-submit" class="btn btn-primary modal-submit" type="button">確認</button>
       </div>
     </div>
   </div>

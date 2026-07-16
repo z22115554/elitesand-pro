@@ -80,6 +80,20 @@
   };
 
   const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv'];
+  // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
+  // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
+  const TEMPLATE_UI = {
+    classic: { label: '經典疊層', description: '完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。', scope: '可調：九宮格位置、字型、歷史行、拼音與諧音、描邊與陰影。', positionMode: 'grid', supportsIntensity: false, supportsClassicControls: true },
+    luminous: { label: 'Luminous', description: '明亮聚焦的單句演出，適合主唱與節奏感明確的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    partita: { label: 'Partita', description: '段落感清楚、節奏分明的歌詞動畫。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    tilt: { label: 'Tilt', description: '保留給舊版設定的相容模板。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    mindscape: { label: 'Mindscape', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    ktv: { label: 'KTV', description: '固定雙行演唱畫面，適合逐字或跟唱情境。', scope: '可調：字型、配色、背景與詳細的邊距設定；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
+  };
+
+  function getTemplateUI(template) {
+    return TEMPLATE_UI[template] || TEMPLATE_UI.classic;
+  }
   // 新使用者的五個可選模板採用目前已確認的預設外觀；Tilt 僅為舊資料相容保留。
   const TEMPLATE_DEFAULTS = {
     classic: { ...DEFAULT_SETTINGS, template: 'classic' },
@@ -439,13 +453,26 @@
     cachedFontList = [...names].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     return cachedFontList;
   }
-  function fontOptionsHtml(fams, placeholder) {
-    return `<option value="">${placeholder}</option>` +
-      fams.map((f) => {
-        const safe = escapeHtml(f);
-        const fam = f.replace(/'/g, '');
-        return `<option value="${safe}" style="font-family:'${fam}'">${safe}</option>`;
-      }).join('');
+  // 字體名稱可來自作業系統與 Font Access API；即使通常可信，也不把它拼進
+  // option 的 HTML/style 字串。textContent 保護文字與 value，CSSOM 僅設定單一
+  // font-family 屬性，特殊字元不可能跳出成為新的 attribute 或 HTML。
+  function setFontOptions(select, fams, placeholder) {
+    if (!select) return;
+    const fragment = document.createDocumentFragment();
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = placeholder;
+    fragment.appendChild(emptyOption);
+    fams.forEach((family) => {
+      if (typeof family !== 'string' || !family) return;
+      const option = document.createElement('option');
+      option.value = family;
+      option.textContent = family;
+      option.style.fontFamily = family;
+      fragment.appendChild(option);
+    });
+    select.textContent = '';
+    select.appendChild(fragment);
   }
   async function loadSystemFonts() {
     const sysSel = document.getElementById('ls-font-system');
@@ -456,12 +483,12 @@
       if (btn) { btn.disabled = true; btn.textContent = '載入中…'; }
       const fams = await fetchAllFonts();
       if (!fams.length) { showToast('讀取系統字體失敗，請改用手動輸入'); return; }
-      sysSel.innerHTML = fontOptionsHtml(fams, '（選擇系統字體）');
+      setFontOptions(sysSel, fams, '（選擇系統字體）');
       const current = extractPrimaryFont(settings.fontFamily);
       if (fams.includes(current)) sysSel.value = current;
       // 英文（拉丁字母）字體下拉也用同一份清單
       if (latinSel) {
-        latinSel.innerHTML = fontOptionsHtml(fams, '（不指定：英文跟主字體）');
+        setFontOptions(latinSel, fams, '（不指定：英文跟主字體）');
         if (settings.fontFamilyLatin && fams.includes(settings.fontFamilyLatin)) latinSel.value = settings.fontFamilyLatin;
       }
       showToast(`已載入 ${fams.length} 個系統字體`);
@@ -570,9 +597,6 @@
   // 排版模板（v4）
   // ═══════════════════════════════════════════
 
-  // folia 系模板（有散射/強度概念的）才顯示「動畫強度」控制
-  const INTENSITY_TEMPLATES = ['luminous', 'partita', 'tilt', 'mindscape'];
-
   // 只有「經典疊層」用得到的設定區塊——這些全部是「經典疊層自己的 renderLine 才會讀」的
   // CSS 變數/JS 邏輯（動畫風格 style-buttons、風格微調、九宮格位置定位、行高/字距/文字對齊、
   // 保留行數/歷史字級透明度/描邊陰影發光背景框、羅馬字拼音/諧音顯示、逐字 KTV 模式），
@@ -580,18 +604,31 @@
   // 完全不讀這些——顯示出來也是「按了沒反應」，所以切模板時整批隱藏/還原。
   const CLASSIC_ONLY_FIELD_IDS = [
     'style-preset-field', 'style-tune-field',
-    'classic-only-typography', 'classic-only-advanced-effects',
+    'classic-only-typography', 'classic-only-advanced-effects', 'classic-only-advanced-effect-card',
     'romaji-xieyin-card', 'classic-only-display-mode',
   ];
 
   function syncTemplateButtons() {
-    document.querySelectorAll('#template-buttons .style-thumb').forEach((b) => {
-      b.classList.toggle('active', b.dataset.template === settings.template);
+    const ui = getTemplateUI(settings.template);
+    document.querySelectorAll('#template-buttons [data-template]').forEach((b) => {
+      const active = b.dataset.template === settings.template;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-checked', String(active));
+      b.tabIndex = active ? 0 : -1;
     });
-    const isClassic = settings.template === 'classic';
+    const isClassic = ui.supportsClassicControls;
+
+    const templateLabel = document.getElementById('lyric-template-label');
+    const templateStatus = document.getElementById('lyric-template-status');
+    const templateDesc = document.getElementById('template-desc');
+    const templateScope = document.getElementById('lyric-template-scope');
+    if (templateLabel) templateLabel.textContent = ui.label;
+    if (templateStatus) templateStatus.textContent = `目前模板：${ui.label}`;
+    if (templateDesc) templateDesc.textContent = ui.description;
+    if (templateScope) templateScope.textContent = ui.scope;
 
     const intensityField = document.getElementById('intensity-field');
-    if (intensityField) intensityField.hidden = !INTENSITY_TEMPLATES.includes(settings.template);
+    if (intensityField) intensityField.hidden = !ui.supportsIntensity;
     document.querySelectorAll('#intensity-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.intensity === (settings.animationIntensity || 'normal'));
     });
@@ -608,11 +645,11 @@
     if (posGrid) posGrid.hidden = !isClassic;
     if (offsetXRow) offsetXRow.hidden = !isClassic;
     if (offsetYRow) offsetYRow.hidden = !isClassic;
-    if (quadRow) quadRow.hidden = isClassic;
+    if (quadRow) quadRow.hidden = isClassic || ui.positionMode === 'fixed';
     if (posHint) {
       posHint.textContent = isClassic
         ? '九宮格是整個歌詞區塊在畫面上的位置；細調 X/Y 可再微調偏移。'
-        : (settings.template === 'ktv'
+        : (ui.positionMode === 'fixed'
           ? 'KTV 伴唱固定雙行構圖；上下位置請到「詳細設定 → 邊距 · 最大寬度 → 上下邊距」調整。'
           : '方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。');
     }
@@ -624,7 +661,7 @@
     });
     // 「左右分散」是逐行交替左右——經典疊層（歷史行堆疊）與 KTV（自帶雙行位構圖）不支援
     const splitBtn = document.querySelector('#lyric-pos-buttons .style-thumb[data-lyric-pos="split"]');
-    if (splitBtn) splitBtn.disabled = settings.template === 'classic' || settings.template === 'ktv';
+    if (splitBtn) splitBtn.disabled = isClassic || ui.positionMode === 'fixed';
 
     // 經典疊層專用設定區塊：整批顯示/隱藏
     CLASSIC_ONLY_FIELD_IDS.forEach((id) => {
@@ -634,18 +671,29 @@
   }
 
   function initTemplatePicker() {
-    document.querySelectorAll('#template-buttons .style-thumb').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const nextTemplate = btn.dataset.template;
-        if (!TEMPLATE_IDS.includes(nextTemplate) || nextTemplate === settings.template) return;
-        saveCurrentTemplateSnapshot();
-        const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
-        settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
-        if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') {
-          settings.lyricPosition = 'center';
-        }
-        refreshControls();
-        pushSettings();
+    const templateButtons = Array.from(document.querySelectorAll('#template-buttons [data-template]'));
+    const selectTemplate = (nextTemplate) => {
+      if (!TEMPLATE_IDS.includes(nextTemplate) || nextTemplate === settings.template) return;
+      saveCurrentTemplateSnapshot();
+      const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
+      settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
+      if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
+      refreshControls();
+      pushSettings();
+    };
+    templateButtons.forEach((btn, index) => {
+      btn.addEventListener('click', () => selectTemplate(btn.dataset.template));
+      btn.addEventListener('keydown', (event) => {
+        let nextIndex = null;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % templateButtons.length;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + templateButtons.length) % templateButtons.length;
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = templateButtons.length - 1;
+        if (nextIndex === null) return;
+        event.preventDefault();
+        const next = templateButtons[nextIndex];
+        selectTemplate(next.dataset.template);
+        next.focus();
       });
     });
     document.querySelectorAll('#intensity-buttons .style-thumb').forEach((btn) => {
@@ -791,7 +839,7 @@
       const showError = (msg) => {
         if (!error) return;
         error.textContent = msg;
-        error.style.display = msg ? 'block' : 'none';
+        error.classList.toggle('is-visible', !!msg);
       };
       const onConfirm = () => {
         const name = input.value.trim();

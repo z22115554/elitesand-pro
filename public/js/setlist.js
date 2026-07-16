@@ -274,17 +274,22 @@
       upEl.innerHTML = '';
       up.forEach((s) => upEl.appendChild(el('div', 'setlist-row setlist-upcoming-row',
         `<span class="setlist-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="setlist-artist"> — ${escapeHtml(s.artist)}</span>` : ''}`)));
-      root.querySelector('.cl-lbl-up').style.display = up.length ? '' : 'none';
+      const upLabel = root.querySelector('.cl-lbl-up');
+      upLabel.hidden = up.length === 0;
       // 已唱（右）
       const pastEl = root.querySelector('#cl-past');
       const past = model.past.slice(-PAST_LIMIT);
       pastEl.innerHTML = '';
       past.forEach((s) => pastEl.appendChild(el('div', 'setlist-row',
         `${model.showTime ? `<span class="setlist-time">${escapeHtml(fmtOffset(s.offset))}</span>` : ''}<span class="setlist-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="setlist-artist"> — ${escapeHtml(s.artist)}</span>` : ''}`)));
-      root.querySelector('.cl-lbl-done').style.display = past.length ? '' : 'none';
+      const doneLabel = root.querySelector('.cl-lbl-done');
+      doneLabel.hidden = past.length === 0;
       // 全空時的提示
       const empty = !model.current && past.length === 0 && up.length === 0;
-      if (empty && model.active) { pastEl.innerHTML = '<div class="setlist-empty">直播中…等待第一首歌</div>'; root.querySelector('.cl-lbl-done').style.display = 'none'; }
+      if (empty && model.active) {
+        pastEl.innerHTML = '<div class="setlist-empty">直播中…等待第一首歌</div>';
+        doneLabel.hidden = true;
+      }
     },
   };
 
@@ -323,7 +328,7 @@
   const timeline = {
     mount(root) {
       root.innerHTML =
-        '<div class="lay-stage tl-bg"><div class="tl-axis"></div><div id="tl-wrap" style="position:absolute;inset:0;pointer-events:none;"></div>' +
+        '<div class="lay-stage tl-bg"><div class="tl-axis"></div><div id="tl-wrap" class="tl-wrap"></div>' +
         '<div class="tl-now"><div class="tl-now-eye" id="tl-eye">▶ Now Playing</div><div class="tl-now-t" id="tl-t"></div><div class="tl-now-a" id="tl-a"></div></div></div>';
     },
     render(root) {
@@ -408,8 +413,8 @@
   const constellation = {
     mount(root) {
       root.innerHTML =
-        '<div class="lay-stage cn-bg"><div class="cn-dust"><i style="left:62%;top:8%"></i><i style="left:78%;top:15%;opacity:.6"></i><i style="left:88%;top:32%;opacity:.5"></i><i style="left:70%;top:55%;opacity:.6"></i><i style="left:83%;top:70%;opacity:.4"></i></div>' +
-        '<div id="cn-wrap" style="position:absolute;inset:0;"></div></div>';
+        '<div class="lay-stage cn-bg"><div class="cn-dust"><i class="cn-dust-dot--1"></i><i class="cn-dust-dot--2"></i><i class="cn-dust-dot--3"></i><i class="cn-dust-dot--4"></i><i class="cn-dust-dot--5"></i></div>' +
+        '<div id="cn-wrap" class="cn-wrap"></div></div>';
     },
     render(root) {
       const { arr, cur, center } = flat();

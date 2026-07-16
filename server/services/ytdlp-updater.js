@@ -13,6 +13,7 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const { fetchWithTimeout } = require('../utils/helpers');
 const { createLogger } = require('../utils/logger');
+const { githubJsonHeaders } = require('../utils/app-version');
 
 const log = createLogger('YtdlpUpdater');
 
@@ -69,7 +70,7 @@ async function checkUpdate(force = false) {
   if (currentVersion) {
     try {
       const res = await fetchWithTimeout(LATEST_API, {
-        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Elitesand-Pro' },
+        headers: githubJsonHeaders('yt-dlp-updater'),
       }, 8000);
       if (res.ok) {
         const data = await res.json();

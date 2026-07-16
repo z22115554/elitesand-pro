@@ -110,6 +110,7 @@ function registerLyricsHandlers(io, socket, ctx) {
 
     io.emit('offset:update', { trackId, offset: clampedOffset });
     broadcastState();
+    persistState();
   });
 
   socket.on('offset:reset', (trackId) => {
@@ -213,9 +214,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     log.info(`手動歌詞已暫存: ${trackId} (類型: ${lyricsType || 'lrc'}, ${lyrics.length} 字元)`);
 
     // 同步更新 playState.playlist 裡對應的項目（不限目前播放中的那首）。
-    // 沒有這步的話：getPublicState() 組 enrichedPlaylist 時是 `...playState.playlist 裡的舊物件`，
-    // 只補 offset/pitch/manualLyrics 布林值，不含歌詞內容——下一次任何 broadcastState()（幾乎每個
-    // socket 事件都會觸發）都會用這份「沒有歌詞」的舊快照覆蓋掉面板剛套用好的歌詞準備度顯示。
+    // P2 的清單摘要雖不再送 lyrics／parsedLyrics，仍從這份原始資料推導 hasLyrics／lyricsType；
+    // 若不回寫，下一次 broadcastState() 仍會把面板剛套用好的歌詞準備度覆蓋掉。
     const plTrack = playState.playlist.find((t) => t && t.id === trackId);
     if (plTrack) {
       plTrack.lyrics = lyrics;

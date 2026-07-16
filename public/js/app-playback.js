@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const { formatTime } = SharedUtils;
+  const { formatTime, safeHttpUrl } = SharedUtils;
   const { dom } = AppShared;
   const state = AppShared.state;
 
@@ -181,8 +181,9 @@
     updateMiniPlayerInfo(track.title, track.artist || '', track.cover);
 
     // 封面：np-art 是 div，用 background-image（先前誤設 .src 無效）
-    if (track.cover) {
-      dom.albumArt.style.backgroundImage = `url("${track.cover}")`;
+    const coverUrl = safeHttpUrl(track.cover);
+    if (coverUrl) {
+      dom.albumArt.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
       dom.albumArt.style.backgroundSize = 'cover';
       dom.albumArt.style.backgroundPosition = 'center';
       dom.albumArt.classList.remove('empty');
@@ -291,8 +292,9 @@
     if (dom.miniPlayerTitle) AppShared.setMarqueeText(dom.miniPlayerTitle, title);
     if (dom.miniPlayerArtist) AppShared.setMarqueeText(dom.miniPlayerArtist, artist || '');
     if (dom.miniPlayerArt) {
-      if (coverUrl) {
-        dom.miniPlayerArt.style.backgroundImage = `url("${coverUrl}")`;
+      const safeCoverUrl = safeHttpUrl(coverUrl);
+      if (safeCoverUrl) {
+        dom.miniPlayerArt.style.backgroundImage = `url(${JSON.stringify(safeCoverUrl)})`;
         dom.miniPlayerArt.classList.remove('empty');
       } else {
         dom.miniPlayerArt.style.backgroundImage = '';

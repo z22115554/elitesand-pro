@@ -11,6 +11,12 @@
   box-sizing: border-box;
 }
 
+/* display.html 不載入面板共用樣式；以較高優先權保證模板切換和
+   羅馬字模式的語意 hidden 不會被既有 flex/block 規則蓋回來。 */
+[hidden] {
+  display: none !important;
+}
+
 :root {
   /* 歌詞位置（由控制面板設定） */
   --lyric-align: center;          /* 水平對齊：flex-start / center / flex-end */
