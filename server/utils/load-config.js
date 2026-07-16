@@ -10,6 +10,9 @@
  * 這個載入器確保他們不需要任何設定就能直接啟動。
  */
 
+const path = require('path');
+const { configPath } = require('./app-paths');
+
 const DEFAULTS = {
   // 伺服器埠號（也可用環境變數 PORT 覆蓋）
   port: 3000,
@@ -42,7 +45,9 @@ function tryRequire(modulePath) {
   }
 }
 
-const userConfig = tryRequire('../config') || tryRequire('../config.example') || {};
+const userConfig = tryRequire(configPath)
+  || tryRequire(path.join(path.dirname(configPath), 'config.example.js'))
+  || {};
 
 // 合併：使用者設定 > 預設值；只接受預設值中存在的鍵，避免 typo 靜默生效
 const config = { ...DEFAULTS };

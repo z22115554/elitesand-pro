@@ -17,12 +17,9 @@ const appUpdater = require('../services/app-updater');
 const announcements = require('../services/announcement-service');
 const QRCode = require('qrcode');
 const path = require('path');
-const { dataDir } = require('../utils/data-dir');
+const { dataDir, downloadsDir } = require('../utils/app-paths');
 const fs = require('fs');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
-const execFileAsync = promisify(execFile);
-const appPackage = require('../../package.json');
+const { APP_VERSION } = require('../utils/app-version');
 let musicMetadataPromise = null;
 function parseMusicFile(filePath) {
   if (!musicMetadataPromise) musicMetadataPromise = import('music-metadata');
@@ -40,11 +37,15 @@ const { autoParseLyrics, parseOffset } = require('../services/lrc-parser');
 const requirePin = require('../middleware/require-pin');
 const { isYouTubeUrl } = require('../utils/youtube-url');
 const { classifyImportError } = require('../utils/import-error');
+const ytdlpCompatibility = require('../services/ytdlp-compatibility');
+const { getSystemCheck } = require('../services/system-check');
+const { createDiagnosticBundle } = require('../services/diagnostic-bundle');
+const runtimeEvidence = require('../services/runtime-evidence');
 
 // ─── Multer 設定（本地檔案上傳）───
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '..', '..', 'downloads');
+    const dir = downloadsDir;
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -72,7 +73,7 @@ const upload = multer({
 // ─── Multer 設定（歌詞檔案上傳）───
 const lyricsStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '..', '..', 'downloads', 'lyrics');
+    const dir = path.join(downloadsDir, 'lyrics');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -126,42 +127,37 @@ const bgUpload = multer({
 
 // ─── 健康檢查 ───
 router.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: appPackage.version, timestamp: Date.now() });
+  res.json({ status: 'ok', version: APP_VERSION, timestamp: Date.now() });
 });
 
-async function toolStatus(command, args) {
-  try {
-    const { stdout, stderr } = await execFileAsync(command, args, {
-      timeout: 2500,
-      windowsHide: true,
-      maxBuffer: 256 * 1024,
-      env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
-    });
-    const firstLine = String(stdout || stderr || '').split(/\r?\n/).find(Boolean) || '';
-    return { available: true, version: firstLine.slice(0, 160) };
-  } catch (_) {
-    return { available: false, version: null };
-  }
-}
-
-// 首次導覽使用的唯讀環境檢查：只回傳布林與公開版本，不洩漏本機路徑。
-let systemCheckCache = null;
 router.get('/system-check', async (req, res) => {
-  if (systemCheckCache && Date.now() - systemCheckCache.checkedAt < 60 * 1000) {
-    return res.json(systemCheckCache.payload);
+  res.json(await getSystemCheck());
+});
+
+// Support export is deliberately opt-in and PIN-protected when a PIN exists.
+// It is built in memory; no diagnostic copy is written alongside user data.
+router.get('/diagnostics/export', requirePin, async (req, res) => {
+  try {
+    const bundle = createDiagnosticBundle({
+      systemCheck: await getSystemCheck(),
+      runtimeEvidence: runtimeEvidence.getSnapshot(),
+    });
+    res.type('application/zip');
+    res.attachment(bundle.filename);
+    res.send(bundle.buffer);
+    log.info(`Diagnostic bundle generated (${bundle.manifest.includedLogs.length} redacted log tail(s))`);
+  } catch (error) {
+    log.error('Diagnostic bundle generation failed', error);
+    res.status(500).json({ error: '無法建立診斷包，請稍後再試。' });
   }
-  const [ytdlp, ffmpeg] = await Promise.all([
-    toolStatus('yt-dlp', ['--version']),
-    toolStatus('ffmpeg', ['-version']),
-  ]);
-  const payload = {
-    appVersion: appPackage.version,
-    updateRepo: 'z22115554/elitesand-pro',
-    ytdlp,
-    ffmpeg,
-  };
-  systemCheckCache = { checkedAt: Date.now(), payload };
-  res.json(payload);
+});
+
+// A broadcast can start a fresh, memory-only evidence window without clearing
+// playlist data, lyrics, settings, Twitch pending requests, or any user file.
+// It is protected because the resulting timing information can reveal whether a
+// stream is currently in progress on this LAN device.
+router.post('/diagnostics/reliability/reset', requirePin, (req, res) => {
+  res.json({ ok: true, evidence: runtimeEvidence.reset() });
 });
 
 // ─── yt-dlp 版本檢查與更新 ───
@@ -180,11 +176,20 @@ router.get('/ytdlp/check', async (req, res) => {
 router.post('/ytdlp/update', requirePin, async (req, res) => {
   try {
     const result = await ytdlpUpdater.runUpdate();
+    if (result.ok) ytdlpCompatibility.scheduleProbe(50);
     res.status(result.ok ? 200 : 422).json(result);
   } catch (err) {
     log.error('yt-dlp 更新失敗', err);
     res.status(500).json({ ok: false, message: 'yt-dlp 更新失敗' });
   }
+});
+
+router.get('/ytdlp/compatibility', (req, res) => {
+  res.json(ytdlpCompatibility.getStatus());
+});
+
+router.post('/ytdlp/compatibility', requirePin, async (req, res) => {
+  res.json(await ytdlpCompatibility.probe());
 });
 
 // ─── 安全程式更新 ───
@@ -308,7 +313,7 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
         const coverExtByMime = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
         const coverExt = coverExtByMime[String(pic.format || '').toLowerCase()] || 'jpg';
         const coverFilename = `${track.id}-cover.${coverExt}`;
-        const coverPath = path.join(__dirname, '..', '..', 'downloads', coverFilename);
+        const coverPath = path.join(downloadsDir, coverFilename);
         fs.writeFileSync(coverPath, pic.data);
         track.cover = `/api/cover/${coverFilename}`;
       }
@@ -639,9 +644,9 @@ router.post('/lyrics/paste', requirePin, (req, res) => {
 router.get('/cover/:filename', (req, res) => {
   // 安全修正：防止路徑穿越（例如 ..%2F..%2F 讀取 downloads 以外的檔案），同 /audio/:filename 的作法
   const safeName = path.basename(req.params.filename);
-  const downloadsDir = path.resolve(__dirname, '..', '..', 'downloads');
-  const coverPath = path.resolve(downloadsDir, safeName);
-  if (!coverPath.startsWith(downloadsDir + path.sep)) {
+  const resolvedDownloadsDir = path.resolve(downloadsDir);
+  const coverPath = path.resolve(resolvedDownloadsDir, safeName);
+  if (!coverPath.startsWith(resolvedDownloadsDir + path.sep)) {
     return res.status(400).json({ error: '無效的檔案名稱' });
   }
   if (fs.existsSync(coverPath)) {

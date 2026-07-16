@@ -26,13 +26,13 @@
       const dur = sessionState.startedAt ? Math.floor((Date.now() - sessionState.startedAt) / 1000) : 0;
       const m = Math.floor(dur / 60), s = dur % 60;
       dom.sessionStatus.textContent = `直播中 · ${m}:${String(s).padStart(2, '0')} · ${songs.length} 首`;
-      dom.sessionStatus.style.color = 'var(--ok)';
+      dom.sessionStatus.classList.add('is-active');
     } else if (songs.length > 0) {
       dom.sessionStatus.textContent = `已收台 · ${songs.length} 首已記錄`;
-      dom.sessionStatus.style.color = 'var(--text-faint)';
+      dom.sessionStatus.classList.remove('is-active');
     } else {
       dom.sessionStatus.textContent = '尚未開台';
-      dom.sessionStatus.style.color = 'var(--text-faint)';
+      dom.sessionStatus.classList.remove('is-active');
     }
   }
 
@@ -153,6 +153,68 @@
 
   // 版型類別：scene（場景版各自獨立）/ classic / list（清單版，與經典共用一份）
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
+  const SETLIST_LAYOUT_UI = {
+    classic: { name: '經典資訊', hint: '完整資訊小元件，適合放在畫面左下或右下常駐。', scope: '設定範圍：經典資訊與清單版共用一組外觀設定。' },
+    cards: { name: '卡片清單', hint: '緊湊的側欄卡片，適合保留角色與遊戲畫面。', scope: '設定範圍：卡片清單與經典資訊共用一組外觀設定。' },
+    diagonal: { name: '斜線舞台', hint: '全幅 16:9 場景；資訊在左、右側留給角色或遊戲。', scope: '設定範圍：斜線舞台有自己獨立的一組外觀設定。' },
+    timeline: { name: '時間軸', hint: '全幅 16:9 場景；適合想讓歌單成為畫面主角的直播段落。', scope: '設定範圍：時間軸有自己獨立的一組外觀設定。' },
+    simple: { name: '極簡兩排', hint: '只保留現在與下一首，畫面最輕量。', scope: '設定範圍：極簡兩排與經典資訊共用一組外觀設定。' },
+    billboard: { name: '排行榜', hint: '固定排行榜配色的活動型畫面，適合特別企劃。', scope: '設定範圍：排行榜與經典資訊共用一組外觀設定；部分配色為版型固定風格。' },
+    constellation: { name: '星座', hint: '裝飾性較強的全幅場景；建議搭配簡潔背景。', scope: '設定範圍：星座有自己獨立的一組外觀設定。' },
+    terminal: { name: '終端機', hint: '復古資訊風的小元件，適合科技或遊戲主題。', scope: '設定範圍：終端機與經典資訊共用一組外觀設定；部分配色為版型固定風格。' },
+  };
+  const SETLIST_RECOMMENDED_LAYOUTS = ['classic', 'cards', 'diagonal'];
+  const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
+  function syncSetlistLayoutPicker() {
+    if (!setlistLayoutSel) return;
+    const layout = setlistLayoutSel.value || 'classic';
+    const info = SETLIST_LAYOUT_UI[layout] || SETLIST_LAYOUT_UI.classic;
+    setlistLayoutButtons.forEach((button) => {
+      const selected = button.dataset.setlistLayout === layout;
+      button.setAttribute('aria-checked', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      button.classList.toggle('is-selected', selected);
+    });
+    const hint = document.getElementById('setlist-layout-hint');
+    const status = document.getElementById('setlist-layout-status');
+    const scope = document.getElementById('setlist-style-scope');
+    if (hint) hint.textContent = info.hint;
+    if (status) status.textContent = `目前：${info.name}`;
+    if (scope) scope.textContent = info.scope;
+    const more = document.getElementById('setlist-more-layouts');
+    const moreButton = document.getElementById('btn-setlist-more-layouts');
+    if (more && !SETLIST_RECOMMENDED_LAYOUTS.includes(layout)) more.hidden = false;
+    if (moreButton && more) moreButton.setAttribute('aria-expanded', String(!more.hidden));
+  }
+  function chooseSetlistLayout(layout) {
+    if (!setlistLayoutSel || !layout) return;
+    setlistLayoutSel.value = layout;
+    setlistLayoutSel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  setlistLayoutButtons.forEach((button, index) => {
+    button.addEventListener('click', () => chooseSetlistLayout(button.dataset.setlistLayout));
+    button.addEventListener('keydown', (event) => {
+      const lastIndex = setlistLayoutButtons.length - 1;
+      let nextIndex = null;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = index === lastIndex ? 0 : index + 1;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = index === 0 ? lastIndex : index - 1;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = lastIndex;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      const next = setlistLayoutButtons[nextIndex];
+      chooseSetlistLayout(next.dataset.setlistLayout);
+      next.focus();
+    });
+  });
+  const moreLayoutsButton = document.getElementById('btn-setlist-more-layouts');
+  const moreLayouts = document.getElementById('setlist-more-layouts');
+  if (moreLayoutsButton && moreLayouts) {
+    moreLayoutsButton.addEventListener('click', () => {
+      moreLayouts.hidden = !moreLayouts.hidden;
+      moreLayoutsButton.setAttribute('aria-expanded', String(!moreLayouts.hidden));
+    });
+  }
   function setlistCategory() {
     const l = setlistLayoutSel ? setlistLayoutSel.value : 'classic';
     if (SETLIST_SCENE.includes(l)) return 'scene';
@@ -169,12 +231,12 @@
     const layout = setlistLayoutSel ? setlistLayoutSel.value : 'classic';
     document.querySelectorAll('[data-sl-scope]').forEach((el) => {
       const scopes = el.getAttribute('data-sl-scope').split(/\s+/);
-      el.style.display = scopes.includes(cat) ? '' : 'none';
+      el.hidden = !scopes.includes(cat);
     });
     // 場景版專屬：只在對應 layout 顯示（timeline/diagonal/constellation 各自的版面設定）
     document.querySelectorAll('[data-sl-layout]').forEach((el) => {
       const layouts = el.getAttribute('data-sl-layout').split(/\s+/);
-      el.style.display = layouts.includes(layout) ? '' : 'none';
+      el.hidden = !layouts.includes(layout);
     });
   }
 
@@ -234,11 +296,13 @@
     setlistLayoutSel.addEventListener('change', () => {
       refreshSetlistUrl();
       syncSetlistControlsForLayout();
+      syncSetlistLayoutPicker();
       SocketClient.send('setlist:layout', { layout: setlistLayoutSel.value || 'classic' });
     });
   }
   refreshSetlistUrl();
   syncSetlistControlsForLayout();
+  syncSetlistLayoutPicker();
 
   // 歌單外觀細項：縮放 / 背板底色+不透明度 / 文字顏色覆蓋。
   // 改動只送 socket → 伺服器廣播 setlist:style，預覽 iframe 與真實 OBS 同步即時更新（與主題同機制）。
@@ -353,15 +417,15 @@
       const obj = loadCustom();
       const names = Object.keys(obj);
       list.innerHTML = '';
-      if (!names.length) { list.innerHTML = '<span class="sub" style="color:var(--text-faint);font-size:11px">尚無自訂風格</span>'; return; }
+      if (!names.length) { list.innerHTML = '<span class="sub sls-custom-empty">尚無自訂風格</span>'; return; }
       names.forEach((name) => {
         const chip = document.createElement('span');
-        chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:var(--surface-2,rgba(127,127,127,.12));border-radius:8px;padding:2px 4px 2px 8px';
+        chip.className = 'sls-custom-chip';
         const b = document.createElement('button');
-        b.type = 'button'; b.className = 'btn btn-sm btn-ghost'; b.textContent = name; b.style.cssText = 'padding:2px 4px';
+        b.type = 'button'; b.className = 'btn btn-sm btn-ghost sls-custom-chip__apply'; b.textContent = name;
         b.addEventListener('click', () => { const o = loadCustom(); if (o[name]) { adoptStyleUI(o[name]); sendStyle(); } });
         const del = document.createElement('button');
-        del.type = 'button'; del.className = 'btn btn-sm btn-ghost'; del.textContent = '×'; del.title = '刪除'; del.style.cssText = 'padding:2px 6px;color:var(--danger,#e06)';
+        del.type = 'button'; del.className = 'btn btn-sm btn-ghost sls-custom-chip__delete'; del.textContent = '×'; del.title = '刪除';
         del.addEventListener('click', () => { const o = loadCustom(); delete o[name]; saveCustom(o); renderCustomList(); });
         chip.appendChild(b); chip.appendChild(del); list.appendChild(chip);
       });
@@ -384,9 +448,44 @@
     const advBtn = g('btn-setlist-advanced'), advModal = g('setlist-advanced-modal'), advClose = g('setlist-advanced-close');
     // .card 有 backdrop-filter 會成為 fixed 的容器區塊 → 把彈窗搬到 body 才能真正全螢幕
     if (advModal && advModal.parentElement !== document.body) document.body.appendChild(advModal);
-    if (advBtn && advModal) advBtn.addEventListener('click', () => { advModal.hidden = false; });
-    if (advClose && advModal) advClose.addEventListener('click', () => { advModal.hidden = true; });
-    if (advModal) advModal.addEventListener('click', (e) => { if (e.target === advModal) advModal.hidden = true; });
+    const search = g('setlist-settings-search');
+    const searchStatus = g('setlist-settings-search-status');
+    const searchSections = advModal ? Array.from(advModal.querySelectorAll('.mw-settings > details.card-collapse')) : [];
+    let searchOpenState = null;
+    let advancedFocusBeforeOpen = null;
+    const SEARCH_ALIASES = { 字體: '字型 字級', 寬度: '尺寸 間距', 已唱: '完成 刪除線 淡化', 未唱: '等待 下一首 淡化', 背景: '背板 顏色 透明度', 特效: '陰影 發光 描邊 動畫', 場景: '時間軸 斜線 星座 位置' };
+    function filterSetlistSettings() {
+      if (!search) return;
+      const raw = search.value.trim();
+      const query = raw ? `${raw} ${SEARCH_ALIASES[raw] || ''}`.toLocaleLowerCase() : '';
+      if (!query) {
+        searchSections.forEach((section, index) => { section.classList.remove('is-search-hidden'); if (searchOpenState) section.open = searchOpenState[index]; });
+        searchOpenState = null;
+        if (searchStatus) searchStatus.textContent = '可直接搜尋設定名稱或用途。';
+        return;
+      }
+      if (!searchOpenState) searchOpenState = searchSections.map((section) => section.open);
+      const terms = query.split(/\s+/).filter(Boolean);
+      let matches = 0;
+      searchSections.forEach((section) => {
+        const availableForLayout = section.style.display !== 'none' && !section.hidden;
+        const visible = availableForLayout && terms.some((term) => section.textContent.toLocaleLowerCase().includes(term));
+        section.classList.toggle('is-search-hidden', !visible);
+        if (visible) { section.open = true; matches += 1; }
+      });
+      if (searchStatus) searchStatus.textContent = matches ? `找到 ${matches} 個設定區塊。` : '找不到相符設定；可試試「字體」、「寬度」、「已唱」或「特效」。';
+    }
+    if (search) search.addEventListener('input', filterSetlistSettings);
+    const closeAdvanced = () => {
+      if (!advModal) return;
+      if (search) { search.value = ''; filterSetlistSettings(); }
+      advModal.hidden = true;
+      (advancedFocusBeforeOpen && advancedFocusBeforeOpen.isConnected ? advancedFocusBeforeOpen : advBtn)?.focus();
+      advancedFocusBeforeOpen = null;
+    };
+    if (advBtn && advModal) advBtn.addEventListener('click', () => { advancedFocusBeforeOpen = document.activeElement; advModal.hidden = false; window.setTimeout(() => search?.focus(), 0); });
+    if (advClose && advModal) advClose.addEventListener('click', closeAdvanced);
+    if (advModal) advModal.addEventListener('click', (e) => { if (e.target === advModal) closeAdvanced(); });
 
     // 切版型時：還原該版型（場景版）或共用份的設定到 UI
     if (setlistLayoutSel) {
@@ -409,7 +508,7 @@
       if (sess.style) slStores.shared = sess.style;
       if (sess.sceneStyles) { ['timeline', 'diagonal', 'constellation'].forEach((k) => { if (sess.sceneStyles[k]) slStores[k] = sess.sceneStyles[k]; }); }
       if (sess.theme && dom.setlistTheme) { dom.setlistTheme.value = sess.theme; refreshSetlistUrl(); }
-      if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; refreshSetlistUrl(); syncSetlistControlsForLayout(); }
+      if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; refreshSetlistUrl(); syncSetlistControlsForLayout(); syncSetlistLayoutPicker(); }
       const cur = slStores[setlistTarget()];
       if (cur) adoptStyleUI(cur);
     });

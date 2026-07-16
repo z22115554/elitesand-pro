@@ -16,6 +16,7 @@
     const el = document.getElementById('twitch-status');
     const button = document.getElementById('twitch-connect');
     const deviceLink = document.getElementById('twitch-device-link');
+    const deauthorize = document.getElementById('twitch-deauthorize');
     try {
       const response = await PinAuth.fetchWithPin('/api/twitch/status');
       const data = await response.json();
@@ -23,9 +24,14 @@
       if (!data.configured) {
         if (el) el.textContent = 'Twitch 尚未啟用，請聯絡 Elitesand Pro 開發者。';
         if (button) button.disabled = true;
+        if (deauthorize) deauthorize.hidden = true;
         return;
       }
       if (button) button.disabled = false;
+      if (deauthorize) {
+        deauthorize.hidden = !data.authorized && !data.deviceAuthorization;
+        deauthorize.textContent = data.authorized ? '解除 Twitch 授權' : '取消 Twitch 連接流程';
+      }
       if (data.deviceAuthorization) {
         if (el) el.textContent = `請到 Twitch 輸入代碼：${data.deviceAuthorization.userCode}`;
         if (deviceLink) { deviceLink.href = data.deviceAuthorization.verificationUri; deviceLink.hidden = false; }
@@ -83,9 +89,39 @@
   // ─── 聊天室點歌：確認制（不自動下載）───
   // 觀眾送來的點歌只進「待確認」清單，由主播在首頁按「確認下載」才真的走匯入佇列，
   // 避免觀眾亂點就自動下載洗版。拒絕則回覆聊天室、不下載。
+  const deauthorize = document.getElementById('twitch-deauthorize');
+  if (deauthorize) {
+    deauthorize.addEventListener('click', async () => {
+      const isAuthorized = deauthorize.textContent.includes('解除');
+      const confirmed = await window.DangerConfirm?.request({
+        title: isAuthorized ? '確認解除 Twitch 授權' : '確認取消 Twitch 連接流程',
+        summary: isAuthorized ? '這會停止 Twitch EventSub 與聊天室點歌，並移除本機保存的 Twitch 權杖。' : '這會取消目前等待中的 Twitch Device Code 授權流程。',
+        impact: '已收到、尚待你確認的 Twitch 點歌會保留在點歌確認頁；歌曲、歌單與其他設定都不會刪除。之後可隨時重新連接 Twitch。',
+        phrase: isAuthorized ? '解除 Twitch 授權' : '取消 Twitch 連接',
+        confirmLabel: isAuthorized ? '解除授權' : '取消流程',
+      });
+      if (!confirmed) return;
+      try {
+        deauthorize.disabled = true;
+        const response = await PinAuth.fetchWithPin('/api/twitch/deauthorize', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '解除 Twitch 授權失敗');
+        if (data.remoteRevoked) showStatus('Twitch 授權已解除，本機權杖與遠端授權都已移除。', 'success');
+        else if (data.remoteAlreadyInvalid) showStatus('本機 Twitch 授權已移除；Twitch 回報此權杖原本已失效。', 'success');
+        else if (data.remoteError) showStatus(`本機 Twitch 授權已移除，但暫時無法通知 Twitch：${data.remoteError}`, 'warning');
+        else showStatus('Twitch 連接流程已取消。', 'success');
+        await refreshStatus();
+      } catch (err) {
+        showStatus(`解除 Twitch 授權失敗：${err.message}`, 'error');
+      } finally {
+        deauthorize.disabled = false;
+      }
+    });
+  }
+
   const { escapeHtml } = SharedUtils;
   const pending = new Map();  // requestId -> request
-  const busy = new Set();     // 正在下載中的 requestId（避免重複點）
+  const busy = new Map();     // requestId -> placement（避免重複點，並顯示下載目的）
 
   const el = (id) => document.getElementById(id);
 
@@ -108,51 +144,55 @@
     list.innerHTML = '';
     for (const req of pending.values()) {
       const isBusy = busy.has(req.requestId);
+      const placement = busy.get(req.requestId);
       const row = document.createElement('div');
       row.className = 'twitch-req';
       const title = req.title || '無法取得影片標題';
       const author = req.author || '未知頻道';
       const thumbnail = req.thumbnail && /^https:\/\//i.test(req.thumbnail) ? req.thumbnail : '';
       row.innerHTML =
-        `<div class="twitch-req-info" style="display:flex;gap:12px;align-items:center;min-width:0">
+        `<div class="twitch-req-info">
           ${thumbnail
-            ? `<img src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:128px;height:72px;object-fit:cover;border-radius:8px;flex:none;background:var(--surface-2)">`
-            : `<div style="width:128px;height:72px;border-radius:8px;flex:none;background:var(--surface-2);display:grid;place-items:center;color:var(--text-faint);font-size:12px">無縮圖</div>`}
-          <div style="min-width:0;flex:1">
-            <div class="twitch-req-title" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
-            <div class="twitch-req-author" style="margin-top:4px;color:var(--text-muted);font-size:12px">${escapeHtml(author)}</div>
-            <div class="twitch-req-user" style="margin-top:4px;font-size:12px">點歌者：${escapeHtml(req.requester || '觀眾')}</div>
+            ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+            : `<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">無縮圖</div>`}
+          <div class="twitch-req-copy">
+            <div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+            <div class="twitch-req-author">${escapeHtml(author)}</div>
+            <div class="twitch-req-user">點歌者：${escapeHtml(req.requester || '觀眾')}</div>
             ${Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length
-              ? `<div class="pi-badge" style="margin-top:4px;color:var(--danger)">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>`
-              : req.durationWarning ? '<div class="pi-badge" style="margin-top:4px;color:var(--danger)">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}
-            <a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:4px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(req.url)}</a>
+              ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>`
+              : req.durationWarning ? '<div class="pi-badge twitch-req-warning">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}
+            <a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a>
           </div>
         </div>
         <div class="twitch-req-actions">
-          <button class="btn btn-sm btn-primary" data-act="confirm"${isBusy ? ' disabled' : ''}>${isBusy ? '下載中…' : '確認下載'}</button>
+          <button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${isBusy ? (placement === 'next' ? '插播下載中…' : '下載中…') : '插到下一首'}</button>
+          <button class="btn btn-sm btn-ghost" data-act="end"${isBusy ? ' disabled' : ''}>加入尾端</button>
           <button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>拒絕</button>
         </div>`;
-      row.querySelector('[data-act="confirm"]').addEventListener('click', () => confirmRequest(req.requestId));
+      row.querySelector('[data-act="next"]').addEventListener('click', () => confirmRequest(req.requestId, 'next'));
+      row.querySelector('[data-act="end"]').addEventListener('click', () => confirmRequest(req.requestId, 'end'));
       row.querySelector('[data-act="reject"]').addEventListener('click', () => rejectRequest(req.requestId));
       list.appendChild(row);
     }
   }
 
-  async function confirmRequest(requestId) {
+  async function confirmRequest(requestId, placement = 'end') {
     const req = pending.get(requestId);
     if (!req || busy.has(requestId) || typeof AppShared.queueYouTubeImport !== 'function') return;
-    busy.add(requestId);
+    busy.set(requestId, placement);
     renderRequests();
     try {
       const track = await AppShared.queueYouTubeImport(req.url, {
         source: `Twitch · ${req.requester || req.userName || '觀眾點歌'}`,
         assessment: req.assessment || null,
+        placement,
       });
       const report = await new Promise((resolve) => SocketClient.sendWithCallback('twitch:song-request:result', {
         requestId, success: true, title: track && (track.title || track.name),
       }, resolve));
       if (!report?.ok) throw new Error(report?.error || '無法回覆 Twitch 聊天室');
-      AppShared.showToast(`已加入點歌：${track && track.title ? track.title : '歌曲'}`, 'success');
+      AppShared.showToast(`${placement === 'next' ? '已插到下一首' : '已加入清單尾端'}：${track && track.title ? track.title : '歌曲'}`, 'success');
       pending.delete(requestId);
     } catch (err) {
       // 仍保留 server 端 pending request：主播可重試，成功後聊天室仍會收到最終成功回覆。
@@ -170,7 +210,7 @@
   function rejectRequest(requestId) {
     const req = pending.get(requestId);
     if (!req || busy.has(requestId)) return;
-    busy.add(requestId);
+    busy.set(requestId, 'reject');
     renderRequests();
     SocketClient.sendWithCallback('twitch:song-request:result', { requestId, success: false, rejected: true }, (result) => {
       busy.delete(requestId);

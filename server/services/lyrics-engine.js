@@ -17,10 +17,10 @@ const { romanize, addRomanization, needsRomanization } = require('./romanizer');
 const { createLogger } = require('../utils/logger');
 const { createJsonStore } = require('./json-store');
 const { ProviderHealthRegistry } = require('./provider-health');
-const { dataDir } = require('../utils/data-dir');
-const appPackage = require('../../package.json');
+const { dataDir } = require('../utils/app-paths');
+const { appUserAgent } = require('../utils/app-version');
 const log = createLogger('Lyrics');
-const APP_USER_AGENT = `ElitesandPro/${appPackage.version}`;
+const APP_USER_AGENT = appUserAgent('lyrics');
 const simplifiedToTraditional = OpenCC.Converter({ from: 'cn', to: 'tw' });
 
 function lyricTitleVariants(title) {

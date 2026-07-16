@@ -10,23 +10,14 @@
 const { fetchWithTimeout } = require('../utils/helpers');
 const { isNewerVersion } = require('../utils/version-compare');
 const { createLogger } = require('../utils/logger');
-const pkg = require('../../package.json');
+const { selectLatestRelease, findPortableAsset } = require('./release-client');
+const { APP_VERSION, githubJsonHeaders } = require('../utils/app-version');
 const config = require('../utils/load-config');
 
 const log = createLogger('UpdateChecker');
 
 let _cache = null;       // { result, timestamp }
 let _inFlight = null;    // 避免同時觸發多個請求
-
-function selectLatestRelease(releases) {
-  if (!Array.isArray(releases)) return null;
-  return releases
-    .filter((release) => release && !release.draft && release.tag_name)
-    .reduce((latest, release) => {
-      if (!latest || isNewerVersion(String(release.tag_name), String(latest.tag_name))) return release;
-      return latest;
-    }, null);
-}
 
 /**
  * 取得目前版本可更新狀態
@@ -43,7 +34,7 @@ function selectLatestRelease(releases) {
  * }
  */
 async function checkForUpdate({ force = false } = {}) {
-  const currentVersion = pkg.version || '0.0.0';
+  const currentVersion = APP_VERSION;
 
   // 未設定 repo：直接回傳停用狀態，零網路請求
   if (!config.updateCheckRepo || typeof config.updateCheckRepo !== 'string' || !config.updateCheckRepo.includes('/')) {
@@ -89,10 +80,7 @@ async function checkForUpdate({ force = false } = {}) {
       // 讀 releases 清單而非 /latest：公開測試版通常標成 prerelease，/latest 會刻意忽略。
       const url = `https://api.github.com/repos/${config.updateCheckRepo}/releases?per_page=20`;
       const res = await fetchWithTimeout(url, {
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'User-Agent': 'ElitesandPro-UpdateChecker',
-        },
+        headers: githubJsonHeaders('update-checker'),
       }, 8000);
 
       if (!res.ok) {
@@ -119,9 +107,7 @@ async function checkForUpdate({ force = false } = {}) {
       base.releaseUrl = data.html_url || null;
       // release notes 截斷，避免面板顯示過長內容
       base.releaseNotes = typeof data.body === 'string' ? data.body.slice(0, 500) : null;
-      const portable = Array.isArray(data.assets)
-        ? data.assets.find((asset) => /Elitesand-Pro.*portable.*\.zip$/i.test(asset.name || ''))
-        : null;
+      const portable = findPortableAsset(data);
       base.downloadUrl = portable ? portable.browser_download_url : null;
       base.hasUpdate = latestVersion ? isNewerVersion(latestVersion, currentVersion) : false;
 

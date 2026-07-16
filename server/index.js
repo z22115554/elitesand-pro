@@ -13,10 +13,14 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const { projectRoot, dataDir, downloadsDir } = require('./utils/app-paths');
 const { createLogger, shutdown: shutdownLogger } = require('./utils/logger');
+const { attachParentShutdown } = require('./utils/parent-shutdown');
 const log = createLogger('Server');
 const config = require('./utils/load-config');
 const { isAllowedSocketRequest, isAllowedCorsOrigin } = require('./utils/socket-origin');
+const { renderDisplayRuntimePage } = require('./services/display-runtime-build');
+const ytdlpCompatibility = require('./services/ytdlp-compatibility');
 const PORT = process.env.PORT || config.port || 3000;
 
 // ─── Process 級安全網 ───
@@ -48,6 +52,15 @@ const io = new Server(server, {
   pingInterval: 10000,
 });
 require('./services/audio-processor').setProgressEmitter((data) => io.emit('youtube:progress', data));
+// Only files recorded by an interrupted Elitesand Pro import are eligible here.
+// An untracked .webm in downloads/ may be a user file and is left untouched.
+const staleImportCleanup = require('./services/import-temp-registry').cleanupOrphans(downloadsDir);
+if (staleImportCleanup.removedFiles.length) {
+  log.info(`已清除 ${staleImportCleanup.removedFiles.length} 個上次未完成下載的暫存檔`);
+}
+if (staleImportCleanup.skippedActive) {
+  log.info(`保留 ${staleImportCleanup.skippedActive} 個其他執行中匯入的暫存檔`);
+}
 const reportStorageError = (data) => io.emit('server:alert', { type: 'error', ...data });
 require('./services/state-store').setErrorReporter(reportStorageError);
 require('./services/library-store').setErrorReporter(reportStorageError);
@@ -62,7 +75,7 @@ app.use((req, res, next) => {
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     // style/font 放行 Google Fonts：display.html / setlist.html 從 fonts.googleapis.com 載入
     // Noto Sans / Fraunces 等網頁字體，不放行的話 OBS 歌詞/歌單畫面會掉回系統字體。
-    'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss:; worker-src 'self' blob:; frame-src 'self'",
+    'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss:; worker-src 'self' blob:; frame-src 'self'",
   });
   next();
 });
@@ -117,7 +130,7 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
+app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
 
 // ─── Routes ───
 // PIN 登入/管理端點：刻意在這裡掛（而非套用保護 middleware），因為這本身就是
@@ -134,7 +147,7 @@ function sendNoCache(res, file) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
-  res.sendFile(path.join(__dirname, '..', 'public', file));
+  res.sendFile(path.join(projectRoot, 'public', file));
 }
 
 // 預設路由：桌面瀏覽器直接進控制面板；手機導向遙控器。
@@ -160,7 +173,13 @@ app.get('/panel', (req, res) => {
 
 // OBS 顯示頁面（透明背景 + 歌詞動畫）
 app.get('/display', (req, res) => {
-  sendNoCache(res, 'display.html');
+  // 除了 no-cache 標頭，也把本機 display 資產加上內容指紋。這對容易固執快取的 OBS CEF
+  // 是實際強制刷新，而非只要求它「請不要快取」。指紋同時由 display.js 回報給面板診斷。
+  const page = renderDisplayRuntimePage(path.join(projectRoot, 'public'));
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.type('html').send(page.html);
 });
 
 // Setlist 疊加頁（透明背景 + 直播歌單）
@@ -172,9 +191,9 @@ app.get('/setlist', (req, res) => {
 app.get('/audio/:filename', (req, res) => {
   // 安全修正：防止路徑穿越（例如 ..%2F..%2F 讀取 downloads 以外的檔案）
   const safeName = path.basename(req.params.filename);
-  const downloadsDir = path.resolve(__dirname, '..', 'downloads');
-  const audioPath = path.resolve(downloadsDir, safeName);
-  if (!audioPath.startsWith(downloadsDir + path.sep)) {
+  const resolvedDownloadsDir = path.resolve(downloadsDir);
+  const audioPath = path.resolve(resolvedDownloadsDir, safeName);
+  if (!audioPath.startsWith(resolvedDownloadsDir + path.sep)) {
     return res.status(400).json({ error: '無效的檔案名稱' });
   }
   res.sendFile(audioPath, (err) => {
@@ -189,7 +208,6 @@ app.get('/audio/:filename', (req, res) => {
 // 與 /audio、/api/cover 同一先例）───
 app.get('/background/:filename', (req, res) => {
   const safeName = path.basename(req.params.filename);
-  const { dataDir } = require('./utils/data-dir');
   const backgroundsDir = path.join(dataDir, 'backgrounds');
   const bgPath = path.resolve(backgroundsDir, safeName);
   if (!bgPath.startsWith(backgroundsDir + path.sep)) {
@@ -215,6 +233,7 @@ const twitch = new TwitchService({
   onStreamOffline: (event) => socketApi.stopTwitchSession(event),
   onSongRequest: (request) => socketApi.dispatchTwitchSongRequest(request),
   onSongRequestExpired: (requestId) => socketApi.expireTwitchSongRequest(requestId),
+  onStatusChange: (status) => socketApi.recordTwitchStatus(status),
 });
 socketApi.setTwitchService(twitch);
 app.use(require('./routes/twitch-auth')(twitch));
@@ -258,6 +277,10 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
 app.set('gracefulShutdown', gracefulShutdown);
 process.on('SIGINT', () => { gracefulShutdown({ reason: 'SIGINT', exitCode: 0 }); });
 process.on('SIGTERM', () => { gracefulShutdown({ reason: 'SIGTERM', exitCode: 0 }); });
+attachParentShutdown({
+  onShutdown: () => gracefulShutdown({ reason: 'parent-message', exitCode: 0 }),
+  onError: (err) => log.error(`Parent shutdown failed: ${err.message}`, err),
+});
 
 // ─── Stream Deck / 全域快捷鍵 HTTP API ───
 // 支援 GET 與 POST，方便 Stream Deck「開啟網址」動作與 curl 腳本直接呼叫
@@ -326,6 +349,7 @@ server.listen(PORT, '0.0.0.0', () => {
   log.info(`║  手機遙控: http://localhost:${PORT}/controller ║`);
   log.info(`║  OBS 歌詞: http://localhost:${PORT}/display    ║`);
   log.info(`║  OBS 歌單: http://localhost:${PORT}/setlist    ║`);
+  ytdlpCompatibility.scheduleProbe();
   log.info('╚══════════════════════════════════════════╝');
 
   // 可攜版啟動器會設 OPEN_BROWSER=1：伺服器就緒後自動以預設瀏覽器開啟控制面板。

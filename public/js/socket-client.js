@@ -54,78 +54,42 @@ const SocketClient = (() => {
       if (err.message === 'PIN_REQUIRED') emit('auth:required');
     });
 
+    // 角色、PIN 與唯讀權限都由伺服器端執行；前端不是安全邊界。
+    // 泛用轉接是唯一的 server→client relay；新增廣播不必再修改此檔案。
+    socket.onAny((event, ...args) => emit(event, ...args));
+
     // ─── 接收事件註冊 ───
 
     // 基礎播放控制
-    socket.on('state:sync', (state) => emit('state:sync', state));
-    socket.on('play:track', (track) => emit('play:track', track));
-    socket.on('play:toggle', (isPlaying) => emit('play:toggle', isPlaying));
-    socket.on('play:seek', (time) => emit('play:seek', time));
-    socket.on('play:prev', () => emit('play:prev'));
-    socket.on('play:next', () => emit('play:next'));
 
     // 歌詞同步
-    socket.on('lyrics:line', (data) => emit('lyrics:line', data));
-    socket.on('lyrics:word', (data) => emit('lyrics:word', data));
-    socket.on('lyrics:sync', (data) => emit('lyrics:sync', data));
-    socket.on('lyrics:romanized', (data) => emit('lyrics:romanized', data));
 
     // Phase 5: 歌詞更新（手動覆蓋後）
-    socket.on('lyrics:updated', (data) => emit('lyrics:updated', data));
 
     // 風格 / 羅馬拼音
-    socket.on('style:change', (style) => emit('style:change', style));
-    socket.on('style:override', (o) => emit('style:override', o));
-    socket.on('romanization:toggle', (enabled) => emit('romanization:toggle', enabled));
-    socket.on('romanization:mode', (mode) => emit('romanization:mode', mode));
 
     // 緊急隱藏
-    socket.on('emergency:hide', () => emit('emergency:hide'));
-    socket.on('emergency:show', () => emit('emergency:show'));
 
     // 播放列表
-    socket.on('playlist:update', (playlist) => emit('playlist:update', playlist));
-    socket.on('youtube:progress', (data) => emit('youtube:progress', data));
-    socket.on('server:alert', (data) => emit('server:alert', data));
 
     // Phase 5: 播放列表匯出結果
-    socket.on('playlist:exported', (data) => emit('playlist:exported', data));
 
     // Phase 5: 時間偏移
-    socket.on('offset:update', (data) => emit('offset:update', data));
 
     // Phase 5: OBS 狀態恢復
-    socket.on('state:recovery', (state) => emit('state:recovery', state));
 
     // Phase 5: 音訊錯誤
-    socket.on('audio:error', (data) => emit('audio:error', data));
-    socket.on('audio:skip', (data) => emit('audio:skip', data));
 
     // 媒體庫
-    socket.on('library:list', (list) => emit('library:list', list));
 
     // Setlist
-    socket.on('setlist:update', (data) => emit('setlist:update', data));
-    socket.on('setlist:theme', (data) => emit('setlist:theme', data));
-    socket.on('setlist:style', (data) => emit('setlist:style', data));
-    socket.on('setlist:layout', (data) => emit('setlist:layout', data));
     // 示範資料：純轉播、不落地存檔，讓面板預覽與真實 OBS 來源都能看到同一份假資料
-    socket.on('setlist:demo', (data) => emit('setlist:demo', data));
-    socket.on('setlist:demo-clear', () => emit('setlist:demo-clear'));
-    socket.on('client:counts', (data) => emit('client:counts', data));
     // Twitch 點歌：只由桌面控制面板消費，處理完成後回傳結果讓 server 回覆聊天室。
-    socket.on('twitch:song-request', (data) => emit('twitch:song-request', data));
-    socket.on('twitch:requests', (data) => emit('twitch:requests', data));
-    socket.on('twitch:song-request:expired', (data) => emit('twitch:song-request:expired', data));
 
     // 歌詞外觀設定：顯示端據此直接套 CSS 變數（不重渲染、不重跑動畫）。
     // 先前漏接此行 → OBS 只能靠 state:sync 拿設定，連帶每次都重渲染當前行＝拖滑桿卡頓。
-    socket.on('lyric-settings:update', (data) => emit('lyric-settings:update', data));
 
     // Phase 7: 變調與變速
-    socket.on('pitch:update', (semitones) => emit('pitch:update', semitones));
-    socket.on('speed:update', (rate) => emit('speed:update', rate));
-    socket.on('metronome:update', (enabled) => emit('metronome:update', enabled));
   }
 
   /**
@@ -187,11 +151,11 @@ const SocketClient = (() => {
   /**
    * 觸發本地事件
    */
-  function emit(event, data) {
+  function emit(event, ...args) {
     if (listeners[event]) {
       listeners[event].forEach((cb) => {
         try {
-          cb(data);
+          cb(...args);
         } catch (err) {
           console.error(`[Socket] 事件處理錯誤 (${event}):`, err);
         }

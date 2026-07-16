@@ -343,6 +343,7 @@ html, body {
 
 /* ══════════ timeline ══════════ */
 .tl-bg { background: var(--sl-stage-bg, transparent); container-type: inline-size; font-family: var(--es-sans); }
+.tl-wrap { position: absolute; inset: 0; pointer-events: none; }
 /* 軸線：粗細 --tl-axis-h、顏色 --tl-ax-*（由 applyStyle 從 tlAxisColor 算出透明度層次） */
 .tl-axis { position: absolute; left: 0; right: 0; top: var(--tl-axis-top, 38%); height: var(--tl-axis-h, 1px); background: linear-gradient(90deg, transparent 0%, var(--tl-ax-soft, rgba(217,162,92,.25)) 10%, var(--tl-ax-mid, rgba(217,162,92,.55)) 46%, var(--tl-ax-hi, rgba(217,162,92,.7)) 50%, rgba(240,234,216,.12) 54%, rgba(240,234,216,.07) 90%, transparent 100%); }
 .tl-dot-item { position: absolute; top: var(--tl-axis-top, 38%); transform: translateX(-50%) translateY(-50%); display: flex; flex-direction: column; align-items: center; transition: left .62s cubic-bezier(.4,0,.15,1), opacity .45s ease; }
@@ -387,6 +388,12 @@ html, body {
 /* 透明底；保留極淡冷色霧氣（疊任何背景皆安全），星塵點點仍在。需要深色星空感時用 --sl-stage-bg 加深。 */
 .cn-bg { background: var(--sl-stage-bg, transparent); container-type: inline-size; font-family: var(--es-sans); }
 .cn-dust i { position: absolute; border-radius: 50%; background: rgba(255,255,255,.35); width: 2px; height: 2px; }
+.cn-dust-dot--1 { left: 62%; top: 8%; }
+.cn-dust-dot--2 { left: 78%; top: 15%; opacity: .6; }
+.cn-dust-dot--3 { left: 88%; top: 32%; opacity: .5; }
+.cn-dust-dot--4 { left: 70%; top: 55%; opacity: .6; }
+.cn-dust-dot--5 { left: 83%; top: 70%; opacity: .4; }
+.cn-wrap { position: absolute; inset: 0; }
 :root[data-cn-hide-dust] .cn-dust { display: none; }
 /* 註：左側「示範人物剪影」已移除——那塊空間留給 OBS 裡的角色。 */
 .cn-item { position: absolute; display: flex; align-items: center; gap: 9px; white-space: nowrap; transition: left .55s cubic-bezier(.4,0,.15,1), top .55s cubic-bezier(.4,0,.15,1), opacity .45s ease, font-size .35s ease; }
@@ -484,9 +491,9 @@ html, body {
 .cl-col .setlist-section-label { padding: 0 4px 4px; }
 :root[data-cl-hide-up] .cl-col-up { display: none; }
 :root[data-cl-hide-done] .cl-col-done { display: none; }
-/* 只剩一側時，classic 容器不必那麼寬 */
+/* 只剩一側時仍保留使用者指定寬度；先前 0.62 倍上限會讓「整體寬度」滑桿失真。 */
 :root[data-cl-hide-up] [data-layout="classic"] #setlist-root,
-:root[data-cl-hide-done] [data-layout="classic"] #setlist-root { max-width: calc(var(--sl-w) * 0.62); }
+:root[data-cl-hide-done] [data-layout="classic"] #setlist-root { max-width: var(--sl-w); }
 
 /* ── classic：字級 / 字重 / 字體 ── */
 .ns-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); font-family: var(--sl-fd); }
@@ -615,3 +622,6 @@ html[data-layout="simple"] .sm-bg {
 html[data-layout="simple"] .sm-card {
   width: 100%;
 }
+/* Keep the OBS setlist independent from base.css while preserving the same
+   semantic hidden-state contract as the panel and controller. */
+[hidden] { display: none !important; }

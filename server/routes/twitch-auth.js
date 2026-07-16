@@ -20,6 +20,16 @@ module.exports = function createTwitchAuthRouter(twitch) {
     });
   });
 
+  router.post('/api/twitch/deauthorize', requirePin, async (_req, res) => {
+    try {
+      const result = await twitch.deauthorize();
+      res.json(result);
+    } catch (err) {
+      log.warn(`解除 Twitch 授權失敗：${err.message}`);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Console 仍可保留這個 redirect URL；公開用戶端真正走的是 Device Code Flow，不會呼叫它。
   router.get('/auth/twitch/callback', (_req, res) => {
     log.info('收到未使用的 Twitch redirect callback，導回控制面板');

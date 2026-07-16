@@ -32,7 +32,7 @@ const {
 
 const log = createLogger('StateStore');
 
-const { dataDir: DATA_DIR } = require('../utils/data-dir');
+const { dataDir: DATA_DIR } = require('../utils/app-paths');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const STATE_BACKUP_FILE = path.join(DATA_DIR, 'state.json.last-good');
 let _lastKnownSavedAt = 0;

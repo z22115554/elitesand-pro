@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   const OBS_W = 1920;
-  const wraps = Array.from(document.querySelectorAll('.obs-preview-wrap'));
+  const wraps = Array.from(document.querySelectorAll('.obs-preview-wrap, .setlist-preview-wrap'));
   if (!wraps.length) return;
 
   function applyTo(wrap) {

@@ -30,7 +30,7 @@
       if (updateUrl) linkEl.href = updateUrl;
       onlineBtn.hidden = !canIncremental;
       statusEl.textContent = canIncremental
-        ? `有新版本 v${data.latestVersion}。Release 已提供固定名稱的更新包與 SHA-256；安裝會在主程式完全退出後由獨立 updater 執行。`
+        ? `有新版本 v${data.latestVersion}。目前只確認 Release 資產存在；你確認更新後才會下載、驗證 SHA-256 與檢查相依結構，再由獨立 updater 安裝。`
         : `有新版本 v${data.latestVersion}，但無法安全增量更新：${forcedFull ? '安全公告要求下載完整版' : (data.reason || '缺少完整增量資產')}。`;
       return;
     }

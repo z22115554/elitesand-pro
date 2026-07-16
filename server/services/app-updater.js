@@ -16,14 +16,20 @@ const fetch = require('node-fetch');
 const AdmZip = require('adm-zip');
 const { isNewerVersion } = require('../utils/version-compare');
 const { createLogger } = require('../utils/logger');
+const {
+  UPDATE_ZIP_NAME,
+  UPDATE_HASH_NAME,
+  selectLatestRelease,
+  findPortableAsset,
+  findVerifiedUpdateAssets,
+} = require('./release-client');
 const config = require('../utils/load-config');
-const pkg = require('../../package.json');
+const { APP_PACKAGE, APP_VERSION, appUserAgent, githubJsonHeaders } = require('../utils/app-version');
+const { projectRoot, logsDir } = require('../utils/app-paths');
 const currentLock = require('../../package-lock.json');
 
 const log = createLogger('AppUpdater');
-const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const UPDATE_ZIP_NAME = 'update.zip';
-const UPDATE_HASH_NAME = 'update.zip.sha256';
+const PROJECT_ROOT = projectRoot;
 const MIN_SAFE_UPDATER_VERSION = '0.7.3';
 const MAX_ZIP_BYTES = 64 * 1024 * 1024;
 const MAX_UNPACKED_BYTES = 128 * 1024 * 1024;
@@ -40,7 +46,6 @@ let currentProgress = {
   startedAt: null,
   updatedAt: Date.now(),
 };
-let verifiedDownloadCache = null;
 
 function setProgress(phase, message, extra = {}) {
   currentProgress = {
@@ -58,23 +63,7 @@ function getProgress() {
 }
 
 function ghHeaders() {
-  return { Accept: 'application/vnd.github+json', 'User-Agent': 'Elitesand-Pro' };
-}
-
-function selectLatestRelease(releases) {
-  if (!Array.isArray(releases)) return null;
-  return releases
-    .filter((release) => release && !release.draft && release.tag_name)
-    .reduce((latest, release) => (
-      !latest || isNewerVersion(String(release.tag_name), String(latest.tag_name)) ? release : latest
-    ), null);
-}
-
-function findVerifiedUpdateAssets(release) {
-  const assets = Array.isArray(release?.assets) ? release.assets : [];
-  const zip = assets.find((asset) => asset?.name === UPDATE_ZIP_NAME);
-  const checksum = assets.find((asset) => asset?.name === UPDATE_HASH_NAME);
-  return zip && checksum ? { zip, checksum } : null;
+  return githubJsonHeaders('updater');
 }
 
 function stableObject(value) {
@@ -190,7 +179,7 @@ function inspectUpdateZip(buffer, options = {}) {
   const declaredFiles = [...new Set(manifest.files.map(String))].sort();
   if (JSON.stringify(payloadFiles) !== JSON.stringify(declaredFiles)) throw new Error('更新 manifest 檔案清單與 ZIP 內容不一致');
 
-  const currentPackage = options.currentPackage || pkg;
+  const currentPackage = options.currentPackage || APP_PACKAGE;
   const currentLockJson = options.currentLock || currentLock;
   const dependencyChanged = depsSignature(nextPackage) !== depsSignature(currentPackage)
     || lockStructureSignature(nextLock) !== lockStructureSignature(currentLockJson);
@@ -248,17 +237,13 @@ async function fetchLatestRelease(repo) {
   return release;
 }
 
-function findPortableAsset(release) {
-  const assets = Array.isArray(release?.assets) ? release.assets : [];
-  return assets.find((asset) => /^Elitesand-Pro-v?[0-9][^/]*-portable\.zip$/i.test(asset?.name || '')) || null;
-}
-
-async function getPlan() {
-  const repo = config.updateCheckRepo;
+async function getPlan(options = {}) {
+  const repo = options.repo || config.updateCheckRepo;
+  const fetchLatestReleaseImpl = options.fetchLatestRelease || fetchLatestRelease;
   const base = {
     enabled: !!repo,
     repo: repo || null,
-    currentVersion: pkg.version,
+    currentVersion: APP_VERSION,
     latestVersion: null,
     hasUpdate: false,
     canIncremental: false,
@@ -269,37 +254,18 @@ async function getPlan() {
   };
   if (!repo) { base.reason = '未設定更新來源'; return base; }
   try {
-    const release = await fetchLatestRelease(repo);
+    const release = await fetchLatestReleaseImpl(repo);
     base.latestVersion = String(release.tag_name).replace(/^[vV]/, '');
     base.releaseUrl = typeof release.html_url === 'string' ? release.html_url : null;
     const portable = findPortableAsset(release);
     base.downloadUrl = portable?.browser_download_url || base.releaseUrl;
-    base.hasUpdate = isNewerVersion(base.latestVersion, pkg.version);
-    const updaterSupported = !isNewerVersion(MIN_SAFE_UPDATER_VERSION, pkg.version);
+    base.hasUpdate = isNewerVersion(base.latestVersion, APP_VERSION);
+    const updaterSupported = !isNewerVersion(MIN_SAFE_UPDATER_VERSION, APP_VERSION);
     base.canIncremental = base.hasUpdate && updaterSupported && !!findVerifiedUpdateAssets(release);
     base.needsFull = base.hasUpdate && !base.canIncremental;
     if (!base.hasUpdate) base.reason = '已是最新版本';
     else if (!updaterSupported) base.reason = '此版本尚未具備安全 updater，只能下載完整 Portable 版本';
     else if (!base.canIncremental) base.reason = '新版未同時提供固定名稱 update.zip 與 update.zip.sha256，請使用完整下載';
-    else {
-      // 更新按鈕出現前就完成 SHA、ZIP 與 dependency/lock 結構檢查；不能等使用者按下後
-      // 才發現需要完整版。驗證過的幾 MB 更新包會短暫留在記憶體，正式套用時不重抓。
-      try {
-        const downloaded = await downloadReleaseUpdate(release, { reportProgress: false });
-        const inspection = inspectUpdateZip(downloaded.buffer, { expectedVersion: base.latestVersion });
-        if (!inspection.ok) {
-          base.canIncremental = false;
-          base.needsFull = true;
-          base.reason = inspection.reason;
-        } else {
-          verifiedDownloadCache = { version: base.latestVersion, buffer: downloaded.buffer, timestamp: Date.now() };
-        }
-      } catch (err) {
-        base.canIncremental = false;
-        base.needsFull = true;
-        base.reason = `增量更新包驗證失敗：${err.message}`;
-      }
-    }
     return base;
   } catch (err) {
     base.reason = err.status === 404 ? '更新來源尚未公開或尚未發布 Release' : `檢查失敗：${err.message}`;
@@ -375,14 +341,14 @@ async function downloadReleaseUpdate(release, { reportProgress = true } = {}) {
 
   if (reportProgress) setProgress('downloading-hash', '正在下載驗證檔');
   const hashBody = await fetchBuffer(assets.checksum.browser_download_url, {
-    headers: { 'User-Agent': 'Elitesand-Pro' }, timeoutMs: 10000, maxBytes: 1024,
+    headers: { 'User-Agent': appUserAgent('updater') }, timeoutMs: 10000, maxBytes: 1024,
   });
   const expectedHash = parseStrictHash(hashBody.toString('utf8'));
   if (!expectedHash) throw new Error('SHA-256 驗證檔必須只包含 64 字元十六進位雜湊');
 
   if (reportProgress) setProgress('downloading-zip', '正在下載更新包');
   const buffer = await fetchBuffer(assets.zip.browser_download_url, {
-    headers: { 'User-Agent': 'Elitesand-Pro' }, timeoutMs: 60000, maxBytes: MAX_ZIP_BYTES,
+    headers: { 'User-Agent': appUserAgent('updater') }, timeoutMs: 60000, maxBytes: MAX_ZIP_BYTES,
   });
   if (reportProgress) setProgress('verifying-hash', '正在驗證 SHA-256');
   const actualHash = crypto.createHash('sha256').update(buffer).digest('hex');
@@ -390,15 +356,11 @@ async function downloadReleaseUpdate(release, { reportProgress = true } = {}) {
   return { buffer, latestVersion };
 }
 
-async function downloadLatestUpdate(repo) {
-  const release = await fetchLatestRelease(repo);
+async function downloadLatestUpdate(repo, options = {}) {
+  const fetchLatestReleaseImpl = options.fetchLatestRelease || fetchLatestRelease;
+  const release = await fetchLatestReleaseImpl(repo);
   const latestVersion = String(release.tag_name).replace(/^[vV]/, '');
-  if (!isNewerVersion(latestVersion, pkg.version)) throw new Error('已是最新版本');
-  if (verifiedDownloadCache && verifiedDownloadCache.version === latestVersion
-      && Date.now() - verifiedDownloadCache.timestamp < 10 * 60 * 1000) {
-    setProgress('verifying-hash', '正在使用已驗證的更新包');
-    return { buffer: verifiedDownloadCache.buffer, latestVersion };
-  }
+  if (!isNewerVersion(latestVersion, APP_VERSION)) throw new Error('已是最新版本');
   return downloadReleaseUpdate(release);
 }
 
@@ -413,7 +375,9 @@ async function prepareUpdate(options = {}) {
     let latestVersion = options.latestVersion || null;
     if (!buffer) {
       if (!config.updateCheckRepo) throw new Error('未設定更新來源');
-      ({ buffer, latestVersion } = await downloadLatestUpdate(config.updateCheckRepo));
+      ({ buffer, latestVersion } = await downloadLatestUpdate(config.updateCheckRepo, {
+        fetchLatestRelease: options.fetchLatestRelease,
+      }));
     } else if (options.expectedHash) {
       setProgress('verifying-hash', '正在驗證 SHA-256');
       const actual = crypto.createHash('sha256').update(buffer).digest('hex');
@@ -423,7 +387,7 @@ async function prepareUpdate(options = {}) {
     setProgress('inspecting-zip', '正在檢查更新包');
     const inspection = inspectUpdateZip(buffer, {
       expectedVersion: latestVersion,
-      currentPackage: options.currentPackage || pkg,
+      currentPackage: options.currentPackage || APP_PACKAGE,
       currentLock: options.currentLock || currentLock,
     });
     if (!inspection.ok) {
@@ -448,7 +412,7 @@ async function prepareUpdate(options = {}) {
     const restart = fs.existsSync(portableLauncher)
       ? { type: 'launcher', launcher: portableLauncher }
       : { type: 'node', command: process.execPath, args: [path.join(targetRoot, 'server', 'index.js')], cwd: targetRoot };
-    const logDir = path.join(targetRoot, 'logs');
+    const logDir = targetRoot === PROJECT_ROOT ? logsDir : path.join(targetRoot, 'logs');
     fs.mkdirSync(logDir, { recursive: true });
     const plan = {
       schemaVersion: 1,
@@ -461,7 +425,7 @@ async function prepareUpdate(options = {}) {
       logFile: path.join(logDir, `update-${new Date().toISOString().replace(/[:.]/g, '-')}.log`),
       rollbackErrorLog: path.join(logDir, `update-rollback-error-${Date.now()}.log`),
       files: inspection.files,
-      fromVersion: pkg.version,
+      fromVersion: APP_VERSION,
       toVersion: inspection.version,
       restart,
       waitTimeoutMs: options.waitTimeoutMs || 10 * 60 * 1000,
@@ -549,6 +513,5 @@ module.exports = {
   findVerifiedUpdateAssets,
   _resetForTests() {
     currentProgress = { active: false, phase: 'idle', message: '尚未開始更新', startedAt: null, updatedAt: Date.now() };
-    verifiedDownloadCache = null;
   },
 };

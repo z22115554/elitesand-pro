@@ -19,6 +19,7 @@ const log = createLogger('Twitch');
 const OAUTH_TOKEN = 'https://id.twitch.tv/oauth2/token';
 const OAUTH_DEVICE = 'https://id.twitch.tv/oauth2/device';
 const OAUTH_VALIDATE = 'https://id.twitch.tv/oauth2/validate';
+const OAUTH_REVOKE = 'https://id.twitch.tv/oauth2/revoke';
 const HELIX = 'https://api.twitch.tv/helix';
 const EVENTSUB_WS = 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
@@ -46,14 +47,16 @@ function websocketCtor() {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, pendingStore = requestStore }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onStatusChange, pendingStore = requestStore, authStore = store }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
     this.onSongRequest = onSongRequest;
     this.onSongRequestExpired = onSongRequestExpired;
+    this.onStatusChange = typeof onStatusChange === 'function' ? onStatusChange : null;
     this.deviceAuthorization = null;
-    this.auth = store.load();
+    this.authStore = authStore;
+    this.auth = this.authStore.load();
     this.ws = null;
     this.wsSessionId = null;
     this.pendingStore = pendingStore;
@@ -249,7 +252,7 @@ class TwitchService {
       userId: user.user_id,
       userLogin: user.login || '',
     };
-    store.save(this.auth);
+    this.authStore.save(this.auth);
     log.info(`Twitch 已授權頻道：${this.auth.userLogin || this.auth.userId}`);
   }
 
@@ -265,12 +268,76 @@ class TwitchService {
     return true;
   }
 
+  disconnectEventSub() {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    const ws = this.ws;
+    this.ws = null;
+    this.wsSessionId = null;
+    this.reconnectAttempt = 0;
+    this.nextRetryAt = 0;
+    this.subscriptionState = 'idle';
+    this.lastConnectionError = '';
+    this.connectionState = this.configured() ? 'authorization_required' : 'disabled';
+    this.notifyStatusChange();
+    if (ws && typeof ws.close === 'function') ws.close();
+  }
+
+  notifyStatusChange() {
+    if (!this.onStatusChange) return;
+    try { this.onStatusChange(this.status()); } catch (err) { log.warn(`Twitch 狀態觀測回報失敗：${err.message}`); }
+  }
+
+  async revokeAccessToken(auth) {
+    if (!auth?.accessToken || !this.configured()) return { attempted: false, revoked: false, alreadyInvalid: false };
+    const body = new URLSearchParams({ client_id: this.config.twitchClientId, token: auth.accessToken });
+    const response = await fetch(OAUTH_REVOKE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      timeout: 5000,
+    });
+    if (response.ok) return { attempted: true, revoked: true, alreadyInvalid: false };
+    if (response.status === 400) return { attempted: true, revoked: false, alreadyInvalid: true };
+    throw new Error(`Twitch 解除遠端授權失敗（${response.status}）`);
+  }
+
+  async deauthorize({ revoke = (auth) => this.revokeAccessToken(auth) } = {}) {
+    const previousAuth = this.auth;
+    if (!this.authStore.clear()) {
+      throw new Error('無法清除本機 Twitch 授權資料；請確認資料夾權限後再試一次。');
+    }
+    this.deviceAuthorization = null;
+    this.disconnectEventSub();
+    this.auth = null;
+    this.notifyStatusChange();
+
+    let remote = { attempted: false, revoked: false, alreadyInvalid: false };
+    let remoteError = '';
+    try {
+      remote = await revoke(previousAuth);
+    } catch (err) {
+      remoteError = String(err?.message || '無法連線 Twitch 取消遠端授權');
+      log.warn(`本機 Twitch 授權已清除，但遠端撤銷失敗：${remoteError}`);
+    }
+
+    return {
+      localCleared: true,
+      remoteRevoked: !!remote?.revoked,
+      remoteAlreadyInvalid: !!remote?.alreadyInvalid,
+      remoteError,
+      pendingRequestsPreserved: this.pendingRequests.size,
+    };
+  }
+
   start() {
     if (!this.configured() || !this.auth) {
       this.connectionState = this.configured() ? 'authorization_required' : 'disabled';
+      this.notifyStatusChange();
       return;
     }
     this.connectionState = 'connecting';
+    this.notifyStatusChange();
     this.ensureToken().then((ready) => {
       if (ready) this.connectEventSub();
       else this.scheduleReconnect('Twitch 授權暫時無法更新');
@@ -281,6 +348,7 @@ class TwitchService {
     if (this.closed || !this.auth || this.ws) return;
     this.connectionState = this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting';
     this.nextRetryAt = 0;
+    this.notifyStatusChange();
     const WebSocket = websocketCtor();
     const ws = new WebSocket(url);
     this.ws = ws;
@@ -293,11 +361,13 @@ class TwitchService {
       this.wsSessionId = null;
       this.subscriptionState = 'idle';
       this.lastDisconnectedAt = Date.now();
+      this.notifyStatusChange();
       if (!this.closed) this.scheduleReconnect('EventSub 連線中斷');
     };
     const onError = (err) => {
       this.lastConnectionError = err && err.message ? err.message : '連線失敗';
       log.warn(`Twitch EventSub WebSocket 錯誤：${this.lastConnectionError}`);
+      this.notifyStatusChange();
     };
     if (typeof ws.addEventListener === 'function') {
       ws.addEventListener('open', onOpen); ws.addEventListener('message', onMessage);
@@ -314,6 +384,7 @@ class TwitchService {
     this.connectionState = 'reconnecting';
     this.lastConnectionError = String(reason || '').slice(0, 240);
     this.nextRetryAt = Date.now() + delay;
+    this.notifyStatusChange();
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.nextRetryAt = 0;
@@ -336,6 +407,7 @@ class TwitchService {
       this.lastConnectionError = '';
       this.reconnectAttempt = 0;
       this.nextRetryAt = 0;
+      this.notifyStatusChange();
       log.info('Twitch EventSub 已連線，正在建立訂閱');
       try {
         await Promise.all([
@@ -345,10 +417,12 @@ class TwitchService {
         ]);
         this.subscriptionState = 'ready';
         log.info('Twitch EventSub 訂閱完成：開台、下播、聊天室訊息');
+        this.notifyStatusChange();
       } catch (err) {
         this.subscriptionState = 'error';
         this.lastConnectionError = err.message;
         log.error(`Twitch EventSub 訂閱失敗：${err.message}`);
+        this.notifyStatusChange();
         if (this.ws && typeof this.ws.close === 'function') this.ws.close();
       }
       return;
@@ -356,6 +430,10 @@ class TwitchService {
     if (type === 'session_reconnect') {
       const reconnectUrl = message.payload && message.payload.session && message.payload.session.reconnect_url;
       const old = this.ws; this.ws = null; this.wsSessionId = null;
+      this.subscriptionState = 'idle';
+      this.connectionState = 'reconnecting';
+      this.lastDisconnectedAt = Date.now();
+      this.notifyStatusChange();
       if (old && typeof old.close === 'function') old.close();
       if (reconnectUrl) this.connectEventSub(reconnectUrl);
       return;
@@ -550,6 +628,7 @@ class TwitchService {
     this.connectionState = 'stopped';
     this.subscriptionState = 'idle';
     this.nextRetryAt = 0;
+    this.notifyStatusChange();
     this.persistPendingRequests();
   }
 }

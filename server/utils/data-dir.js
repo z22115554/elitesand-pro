@@ -1,7 +1,7 @@
 'use strict';
-const path = require('path');
-const projectRoot = path.join(__dirname, '..', '..');
-const dataDir = process.env.ELITESAND_DATA_DIR
-  ? path.resolve(process.env.ELITESAND_DATA_DIR)
-  : path.join(projectRoot, 'data');
+
+// Compatibility export for modules added before app-paths.js. New code should
+// import from app-paths directly so every writable location has one authority.
+const { dataDir, projectRoot } = require('./app-paths');
+
 module.exports = { dataDir, projectRoot };

@@ -24,7 +24,9 @@ $Package = Get-Content (Join-Path $Root "package.json") -Raw | ConvertFrom-Json
 $Version = $Package.version
 
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
-  $OutputRoot = Join-Path $Root "dist"
+  # Keep every release isolated.  The GitHub asset name can remain stable,
+  # while local artifacts from a newer version never replace an older one.
+  $OutputRoot = Join-Path $Root "dist\releases\v$Version\portable"
 }
 
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
@@ -59,7 +61,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Stage "tools") | Out-Null
 
 $AppRoot = Join-Path $Stage "app"
 
-$DirsToCopy = @("server", "public", "node_modules")
+$DirsToCopy = @("server", "public")
 foreach ($dir in $DirsToCopy) {
   $src = Join-Path $Root $dir
   if (-not (Test-Path $src)) {
@@ -85,6 +87,22 @@ foreach ($file in $FilesToCopy) {
 }
 foreach ($legalFile in @("LICENSE", "THIRD-PARTY-NOTICES.txt")) {
   Copy-Item -LiteralPath (Join-Path $Root $legalFile) -Destination $Stage -Force
+}
+
+# Build the staged dependency tree from the lockfile instead of copying the
+# developer's node_modules. This is important before Electron becomes a
+# development dependency: a portable Node package must contain only runtime
+# dependencies, never the desktop build toolchain or its cached artefacts.
+$NpmCommand = Get-Command npm -ErrorAction Stop
+Write-Host "Installing production dependencies in staging..."
+Push-Location $AppRoot
+try {
+  & $NpmCommand.Source ci --omit=dev --ignore-scripts --no-audit --no-fund
+  if ($LASTEXITCODE -ne 0) {
+    throw "npm ci --omit=dev failed while preparing portable dependencies."
+  }
+} finally {
+  Pop-Location
 }
 
 foreach ($dir in @("data", "downloads", "logs")) {

@@ -18,6 +18,9 @@ const { createLogger } = require('../utils/logger');
 const log = createLogger('Audio');
 const { isYouTubeUrl, isPlaylistUrl, extractVideoId } = require('../utils/youtube-url');
 const { assessYouTubeImport } = require('../utils/youtube-import-risk');
+const importTempRegistry = require('./import-temp-registry');
+const { inspectDiskSpace, appendDiskSpaceWarning } = require('./disk-space');
+const { downloadsDir } = require('../utils/app-paths');
 
 const execFileAsync = promisify(execFile);
 
@@ -38,8 +41,11 @@ const YTDLP_BASE_OPTS = { encoding: 'utf8', env: YTDLP_ENV, windowsHide: true };
 const activeImports = new Map();
 const prefetchedInfo = new Map();
 const requestControllers = new Map();
+// 所有會呼叫 yt-dlp 的工作共用這個佇列：不只實際下載，也包含 Twitch／面板
+// 在下載前做的 metadata 檢查。否則直播中多人同時 !點歌，會各自啟動多個
+// --dump-json 子程序，和下載競爭 CPU／記憶體而讓整台機器看似卡住。
 const importQueue = [];
-let activeDownloads = 0;
+let activeYtDlpJobs = 0;
 let ffmpegTail = Promise.resolve();
 const PREFETCH_TTL_MS = 10 * 60 * 1000;
 
@@ -102,13 +108,13 @@ function runQueued(job, priority, signal) {
   });
 }
 function drainQueue() {
-  while (activeDownloads < 2 && importQueue.length) {
+  while (activeYtDlpJobs < 2 && importQueue.length) {
     const item = importQueue.shift();
     if (item.signal?.aborted) { item.reject(new ImportCancelledError()); continue; }
     item.started = true;
     item.signal?.removeEventListener('abort', item.onAbort);
-    activeDownloads++;
-    Promise.resolve().then(() => item.job(item.signal)).then(item.resolve, item.reject).finally(() => { activeDownloads--; drainQueue(); });
+    activeYtDlpJobs++;
+    Promise.resolve().then(() => item.job(item.signal)).then(item.resolve, item.reject).finally(() => { activeYtDlpJobs--; drainQueue(); });
   }
 }
 function withFfmpegLock(job) {
@@ -117,9 +123,8 @@ function withFfmpegLock(job) {
   return result;
 }
 
-function cleanupCancelledDownload(url, outputDir) {
-  const videoId = extractVideoId(url);
-  if (!videoId || !/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) return;
+function cleanupOwnedTemporaryDownload(videoId, outputDir) {
+  if (!importTempRegistry.isValidVideoId(videoId)) return;
   try {
     for (const name of fs.readdirSync(outputDir)) {
       // mp3 也要清：取消若發生在 ffmpeg 轉碼中，會留下寫到一半的 videoId.mp3。
@@ -373,7 +378,11 @@ class AudioProcessor {
       // metadata 輸出格式不相容／解析失敗時，原本的 yt-dlp 下載仍在正常進行；沿用它可避免
       // 為同一支影片再跑一次 extractor。只有 yt-dlp 子程序本身失敗才重啟下載。
       if (primaryError.code === 'YTDLP_METADATA') {
-        downloadTask = { metadata: Promise.resolve(info), completed: downloadTask.completed };
+        downloadTask = {
+          metadata: Promise.resolve(info),
+          completed: downloadTask.completed,
+          completeTempImport: downloadTask.completeTempImport,
+        };
       } else {
         downloadTask = this.downloadWithMetadata(url, progress, info, options.signal);
         downloadTask.completed.catch(() => {});
@@ -424,6 +433,9 @@ class AudioProcessor {
     const filename = this.renameToReadableFilename(downloaded.filePath, downloaded.outputDir, artist, title);
 
     this.requireDownloadedAudio(filename);
+    // Once the file has a readable library filename it is no longer temporary.
+    // Until then, a crash leaves a registry entry for the next startup to recover.
+    downloadTask.completeTempImport?.();
 
     const totalDuration = Date.now() - processStart;
     log.info(`YouTube 處理完成: ${title} (${totalDuration}ms)`);
@@ -670,10 +682,16 @@ class AudioProcessor {
     const requestId = options.requestId ? String(options.requestId) : '';
     const controller = registerRequestController(requestId);
     try {
-      const info = await this.getVideoInfo(url, controller?.signal || options.signal);
+      const signal = controller?.signal || options.signal;
+      // 必須與 processYouTube 共用 runQueued：Twitch 點歌不經過瀏覽器的
+      // queueYouTubeImport()，若直接查 metadata 便會繞過全域 yt-dlp 併發上限。
+      // runQueued 也會在尚未開始時正確移除已取消的 /youtube/inspect 工作。
+      const info = await runQueued(() => this.getVideoInfo(url, signal), options.priority, signal);
       if (!info) throw new Error('無法取得影片資訊');
       rememberPrefetchedInfo(url, info);
-      return assessYouTubeImport(info);
+      const assessment = assessYouTubeImport(info);
+      const outputDir = downloadsDir;
+      return appendDiskSpaceWarning(assessment, inspectDiskSpace(outputDir));
     } finally {
       clearRequestController(requestId, controller);
     }
@@ -681,8 +699,13 @@ class AudioProcessor {
 
   static downloadWithMetadata(url, onProgress, fallbackInfo = null, signal = null) {
     throwIfCancelled(signal);
-    const outputDir = path.join(__dirname, '..', '..', 'downloads');
+    const outputDir = downloadsDir;
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+    const tempImport = importTempRegistry.begin(extractVideoId(url));
+    const cleanupTempImport = () => {
+      cleanupOwnedTemporaryDownload(tempImport?.videoId, outputDir);
+      importTempRegistry.finish(tempImport);
+    };
     const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
     let resolveMeta, rejectMeta;
     const metadata = new Promise((resolve, reject) => { resolveMeta = resolve; rejectMeta = reject; });
@@ -736,13 +759,13 @@ class AudioProcessor {
       };
       child.stdout.on('data', c => consume(c, false)); child.stderr.on('data', c => consume(c, true));
       const timer = setTimeout(() => { timedOut = true; child.kill(); }, YTDLP_DOWNLOAD_TIMEOUT);
-      child.on('error', err => { clearTimeout(timer); if (metadataTimer) clearTimeout(metadataTimer); signal?.removeEventListener('abort', onAbort); if (!metaDone) rejectMeta(signal?.aborted ? new ImportCancelledError() : err); reject(signal?.aborted ? new ImportCancelledError() : err); });
+      child.on('error', err => { clearTimeout(timer); if (metadataTimer) clearTimeout(metadataTimer); signal?.removeEventListener('abort', onAbort); cleanupTempImport(); if (!metaDone) rejectMeta(signal?.aborted ? new ImportCancelledError() : err); reject(signal?.aborted ? new ImportCancelledError() : err); });
       child.on('close', async code => {
         clearTimeout(timer);
         if (metadataTimer) clearTimeout(metadataTimer);
         signal?.removeEventListener('abort', onAbort);
         if (signal?.aborted) {
-          cleanupCancelledDownload(url, outputDir);
+          cleanupTempImport();
           const err = new ImportCancelledError();
           if (!metaDone) rejectMeta(err);
           reject(err);
@@ -750,6 +773,7 @@ class AudioProcessor {
         }
         if (code !== 0 || !rawPath) {
           const err = new Error(timedOut ? 'yt-dlp 下載逾時' : (stderr.trim().split('\n').pop() || `yt-dlp exit ${code}`));
+          cleanupTempImport();
           if (!metaDone) rejectMeta(err); reject(err); return;
         }
         if (!metaDone) rejectMetadata('yt-dlp 下載完成但未提供影片 metadata');
@@ -767,12 +791,12 @@ class AudioProcessor {
         } catch (err) {
           // 取消發生在轉碼中：yt-dlp 已正常結束（上面的 aborted 分支沒走到），
           // 這裡才是唯一能清掉 videoId.webm 原檔＋寫到一半 videoId.mp3 的地方。
-          if (signal?.aborted) cleanupCancelledDownload(url, outputDir);
+          cleanupTempImport();
           reject(err);
         }
       });
     });
-    return { metadata, completed };
+    return { metadata, completed, completeTempImport: () => importTempRegistry.finish(tempImport) };
   }
 
   static normalizeInfo(data = {}) {

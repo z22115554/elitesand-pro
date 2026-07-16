@@ -8,13 +8,17 @@
 (function () {
   'use strict';
 
-  const { escapeHtml } = SharedUtils;
+  const { escapeHtml, safeHttpUrl } = SharedUtils;
 
   const listEl = document.getElementById('library-list');
   const emptyEl = document.getElementById('library-empty');
   if (!listEl) return;
 
   let cache = [];
+  // 媒體庫還原會帶完整歌詞與 parsedLyrics。逐首等待伺服器 ack，避免快速點選
+  // 多首歌曲時，把多份大型資料同時塞進 Socket、state:sync 與 DOM 更新流程。
+  const restoreQueue = [];
+  let restoreQueueRunning = false;
 
   function toast(msg, type) {
     if (typeof ErrorHandler !== 'undefined' && ErrorHandler.showToast) {
@@ -81,10 +85,10 @@
       row.className = 'lib-row';
       row.dataset.id = item.id;
 
-      const coverStyle = item.cover ? `background-image:url('${item.cover.replace(/'/g, '')}')` : '';
+      const coverUrl = safeHttpUrl(item.cover);
 
       row.innerHTML = `
-        <div class="lib-cover" style="${coverStyle}">${item.cover ? '' : '♪'}</div>
+        <div class="lib-cover">${coverUrl ? '' : '♪'}</div>
         <div class="lib-meta">
           <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
           <div class="lib-sub">${escapeHtml(item.artist || '未知歌手')}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
@@ -95,9 +99,62 @@
           <button class="btn btn-sm btn-ghost lib-remove" type="button" title="從媒體庫移除">✕</button>
         </div>`;
 
+      // Do not interpolate external metadata into a style attribute. The URL
+      // has already passed the shared HTTP(S) allow-list before CSSOM receives it.
+      if (coverUrl) {
+        const cover = row.querySelector('.lib-cover');
+        if (cover) cover.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
+      }
+
       row.querySelector('.lib-reimport').addEventListener('click', () => reimport(item, row));
       row.querySelector('.lib-remove').addEventListener('click', () => removeItem(item.id));
       listEl.appendChild(row);
+    }
+  }
+
+  function requestSocket(event, data) {
+    return new Promise((resolve) => {
+      SocketClient.sendWithCallback(event, data, (response) => resolve(response || null));
+    });
+  }
+
+  async function runRestoreQueue() {
+    if (restoreQueueRunning) return;
+    restoreQueueRunning = true;
+    try {
+      while (restoreQueue.length) {
+      const job = restoreQueue.shift();
+      const { item, btn, originalLabel } = job;
+      if (btn) { btn.disabled = true; btn.textContent = '加入中…'; }
+      const fail = (message) => {
+        toast(message, 'error');
+        if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
+      };
+
+      const resp = await requestSocket('library:reimport', item.id);
+      if (resp?.track) {
+        const result = await window.VKState.addLibraryTrack(resp.track);
+        if (result?.ok) {
+          toast(`已加入清單：${item.title}`, 'success');
+          if (btn) btn.textContent = '已加入';
+        } else {
+          fail(`加入播放清單失敗：${result?.error || '伺服器沒有確認'}`);
+        }
+      } else if (resp?.needsDownload && resp.url && window.VKState.importYouTubeUrl) {
+        if (btn) btn.textContent = '排隊下載中…';
+        try {
+          await window.VKState.importYouTubeUrl(resp.url);
+          toast(`已加入清單：${item.title}`, 'success');
+          if (btn) btn.textContent = '已加入';
+        } catch (err) {
+          fail(`重新匯入失敗：${err.message}`);
+        }
+      } else {
+        fail('無法重新匯入：無本機音檔也無 YouTube 網址');
+      }
+      }
+    } finally {
+      restoreQueueRunning = false;
     }
   }
 
@@ -108,29 +165,12 @@
       if (!window.confirm(`「${item.title}」已在播放清單中。\n要再加入一首到清單末端嗎？`)) return;
     }
     const btn = row.querySelector('.lib-reimport');
-    const orig = btn.textContent;
-    btn.disabled = true; btn.textContent = '匯入中…';
-    const fail = (msg) => { toast(msg, 'error'); btn.textContent = orig; btn.disabled = false; };
-
-    // 先問伺服器：本機音檔還在嗎？在＝即時還原（含歌詞/變調，零下載）；不在＝走 YouTube 重抓。
-    SocketClient.sendWithCallback('library:reimport', item.id, async (resp) => {
-      if (resp && resp.track) {
-        if (window.VKState.addLibraryTrack) window.VKState.addLibraryTrack(resp.track);
-        toast(`已加入清單：${item.title}`, 'success');
-        btn.textContent = '已加入';
-      } else if (resp && resp.needsDownload && resp.url && window.VKState.importYouTubeUrl) {
-        btn.textContent = '排隊下載中…'; // 走匯入佇列，多首連點會依序處理不併發
-        try {
-          await window.VKState.importYouTubeUrl(resp.url);
-          toast(`已加入清單：${item.title}`, 'success');
-          btn.textContent = '已加入';
-        } catch (err) {
-          fail('重新匯入失敗：' + err.message);
-        }
-      } else {
-        fail('無法重新匯入：無本機音檔也無 YouTube 網址');
-      }
-    });
+    if (!btn || btn.disabled) return;
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = restoreQueueRunning ? '加入佇列中…' : '加入中…';
+    restoreQueue.push({ item, btn, originalLabel });
+    runRestoreQueue();
   }
 
   function removeItem(id) {
@@ -161,8 +201,15 @@
 
   if (btnRefresh) btnRefresh.addEventListener('click', refresh);
 
-  if (btnCleanup) btnCleanup.addEventListener('click', () => {
-    if (!window.confirm('清理不在目前播放清單中的已下載音檔？\n媒體庫記錄會保留，需要時可用 YouTube 網址重新匯入。')) return;
+  if (btnCleanup) btnCleanup.addEventListener('click', async () => {
+    const confirmed = await window.DangerConfirm?.request({
+      title: '確認清理音檔',
+      summary: '即將刪除不在目前播放清單中的已下載音檔。',
+      impact: '媒體庫紀錄與目前播放清單會保留，但已刪除的音檔必須重新下載才能播放，且無法復原。',
+      phrase: '清理音檔',
+      confirmLabel: '清理音檔',
+    });
+    if (!confirmed) return;
     SocketClient.sendWithCallback('library:cleanupAudio', null, (res) => {
       if (res?.ok && typeof res.deleted === 'number') {
         toast(`已清理 ${res.deleted} 個音檔，釋放 ${(res.freedBytes / 1048576).toFixed(1)}MB`, 'success');
@@ -170,8 +217,15 @@
     });
   });
 
-  if (btnClear) btnClear.addEventListener('click', () => {
-    if (!window.confirm('確定清空整個媒體庫？此動作無法復原（不會刪除播放清單與音檔）。')) return;
+  if (btnClear) btnClear.addEventListener('click', async () => {
+    const confirmed = await window.DangerConfirm?.request({
+      title: '確認清空媒體庫',
+      summary: `即將清除媒體庫中的 ${cache.length} 筆歌曲紀錄。`,
+      impact: '這會刪除播放紀錄、重新匯入資訊及媒體庫保存的歌詞／設定；不會刪除目前播放清單或已下載音檔，且無法復原。',
+      phrase: '清空媒體庫',
+      confirmLabel: '清空媒體庫',
+    });
+    if (!confirmed) return;
     SocketClient.sendWithCallback('library:clear', null, (res) => {
       if (res?.ok) { cache = []; render([]); toast('媒體庫已清空', 'success'); }
       else toast('清空失敗：伺服器沒有確認', 'error');

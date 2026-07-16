@@ -260,25 +260,22 @@ const ObsWs = (() => {
 
   const showMsg = (t) => { msgEl.textContent = t || ''; msgEl.hidden = !t; };
   function setConnectedUI(state = {}) {
+    statusEl.classList.toggle('is-connected', !!state.connected);
     if (state.connected) {
       statusEl.textContent = '已連線 · 持續監測';
-      statusEl.style.color = 'var(--success, #38b36a)';
       connectBtn.textContent = '中斷';
       createBtn.disabled = false;
     } else if (state.reconnecting) {
       const seconds = Math.ceil((state.retryInMs || 0) / 1000);
       statusEl.textContent = `連線中斷 · ${seconds} 秒後重試`;
-      statusEl.style.color = 'var(--text-faint)';
       connectBtn.textContent = '停止重連';
       createBtn.disabled = true;
     } else if (state.connecting) {
       statusEl.textContent = '連線中…';
-      statusEl.style.color = 'var(--text-faint)';
       connectBtn.textContent = '取消';
       createBtn.disabled = true;
     } else {
       statusEl.textContent = '未連線';
-      statusEl.style.color = '';
       connectBtn.textContent = '連線';
       createBtn.disabled = true;
     }

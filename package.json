@@ -8,6 +8,7 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "test": "node tests/run-tests.js",
+    "audit:release": "npm audit --omit=dev --audit-level=low",
     "smoke:portable": "node tools/smoke-portable.js",
     "smoke:reliability": "node tools/reliability-smoke.js",
     "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-portable.ps1",

@@ -30,14 +30,17 @@ function socketContractReport(serverSources, clientSource) {
     const clean = stripComments(source);
     for (const match of clean.matchAll(/\b(?:io|socket|target|_io)\.emit\(\s*['"]([^'"]+)['"]/g)) emitted.add(match[1]);
   }
+  const cleanClient = stripComments(clientSource);
+  const forwardsAllServerEvents = /\bsocket\.onAny\s*\(/.test(cleanClient);
   const forwarded = new Set();
-  for (const match of stripComments(clientSource).matchAll(/\bsocket\.on\(\s*['"]([^'"]+)['"]/g)) {
+  for (const match of cleanClient.matchAll(/\bsocket\.on\(\s*['"]([^'"]+)['"]/g)) {
     if (!SOCKET_LIFECYCLE_EVENTS.has(match[1])) forwarded.add(match[1]);
   }
   return {
     emitted: [...emitted].sort(),
     forwarded: [...forwarded].sort(),
-    missing: [...emitted].filter((event) => !forwarded.has(event)).sort(),
+    forwardsAllServerEvents,
+    missing: forwardsAllServerEvents ? [] : [...emitted].filter((event) => !forwarded.has(event)).sort(),
   };
 }
 

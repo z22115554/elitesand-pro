@@ -1,5 +1,6 @@
 ﻿const fs = require('fs');
 const path = require('path');
+const { logsDir: LOG_DIR } = require('./app-paths');
 
 const LOG_LEVELS = {
   DEBUG: 0,
@@ -8,7 +9,6 @@ const LOG_LEVELS = {
   ERROR: 3,
 };
 
-const LOG_DIR = path.join(__dirname, '..', '..', 'logs');
 const MAX_LOG_SIZE = 50 * 1024 * 1024;
 const MAX_LOG_FILES = 30;
 
@@ -205,4 +205,5 @@ module.exports = {
   setLogLevel,
   shutdown,
   LOG_LEVELS,
+  LOG_DIR,
 };

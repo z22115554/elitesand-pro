@@ -11,7 +11,7 @@ const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH } = require(
 
 const log = createLogger('Socket');
 
-const LYRIC_TEMPLATES = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
+const LYRIC_TEMPLATES = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;
@@ -21,17 +21,6 @@ function sanitizeLyricTemplateSettings(value) {
       out[id] = { ...value[id], template: id };
       delete out[id].lyricTemplateSettings;
       delete out[id].lyricPresets;
-      if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda'].includes(out[id].columnflowVariant)) {
-        delete out[id].columnflowVariant;
-      }
-      if (id === 'columnflow' && out[id].columnflowPlacement && !['left', 'right', 'split'].includes(out[id].columnflowPlacement)) {
-        delete out[id].columnflowPlacement;
-      }
-      if (id === 'columnflow' && out[id].columnflowMaxLines !== undefined) {
-        if (!Number.isInteger(out[id].columnflowMaxLines) || out[id].columnflowMaxLines < 1 || out[id].columnflowMaxLines > 6) {
-          delete out[id].columnflowMaxLines;
-        }
-      }
     }
   });
   return out;
@@ -121,6 +110,7 @@ function registerLyricsHandlers(io, socket, ctx) {
 
     io.emit('offset:update', { trackId, offset: clampedOffset });
     broadcastState();
+    persistState();
   });
 
   socket.on('offset:reset', (trackId) => {
@@ -163,16 +153,6 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 歌詞水平位置白名單
     if (settings.lyricPosition && !['center', 'left', 'right', 'split'].includes(settings.lyricPosition)) {
       delete settings.lyricPosition;
-    }
-    if (settings.columnflowVariant && !['sen', 'fuda'].includes(settings.columnflowVariant)) {
-      delete settings.columnflowVariant;
-    }
-    if (settings.columnflowPlacement && !['left', 'right', 'split'].includes(settings.columnflowPlacement)) {
-      delete settings.columnflowPlacement;
-    }
-    if (settings.columnflowMaxLines !== undefined
-      && (!Number.isInteger(settings.columnflowMaxLines) || settings.columnflowMaxLines < 1 || settings.columnflowMaxLines > 6)) {
-      delete settings.columnflowMaxLines;
     }
     // 合併（容許部分更新）
     playState.lyricSettings = { ...playState.lyricSettings, ...settings };
@@ -234,9 +214,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     log.info(`手動歌詞已暫存: ${trackId} (類型: ${lyricsType || 'lrc'}, ${lyrics.length} 字元)`);
 
     // 同步更新 playState.playlist 裡對應的項目（不限目前播放中的那首）。
-    // 沒有這步的話：getPublicState() 組 enrichedPlaylist 時是 `...playState.playlist 裡的舊物件`，
-    // 只補 offset/pitch/manualLyrics 布林值，不含歌詞內容——下一次任何 broadcastState()（幾乎每個
-    // socket 事件都會觸發）都會用這份「沒有歌詞」的舊快照覆蓋掉面板剛套用好的歌詞準備度顯示。
+    // P2 的清單摘要雖不再送 lyrics／parsedLyrics，仍從這份原始資料推導 hasLyrics／lyricsType；
+    // 若不回寫，下一次 broadcastState() 仍會把面板剛套用好的歌詞準備度覆蓋掉。
     const plTrack = playState.playlist.find((t) => t && t.id === trackId);
     if (plTrack) {
       plTrack.lyrics = lyrics;

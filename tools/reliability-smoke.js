@@ -68,12 +68,22 @@ async function stop(child) {
 
 async function main() {
   const root = path.join(__dirname, '..');
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-reliability-'));
+  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-reliability-'));
+  const dataDir = path.join(runtimeRoot, 'data');
+  const downloadsDir = path.join(runtimeRoot, 'downloads');
+  const logsDir = path.join(runtimeRoot, 'logs');
   const port = 38000 + Math.floor(Math.random() * 1000);
   const child = spawn(process.execPath, ['server/index.js'], {
     cwd: root,
     windowsHide: true,
-    env: { ...process.env, PORT: String(port), OPEN_BROWSER: '0', ELITESAND_DATA_DIR: dataDir },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      OPEN_BROWSER: '0',
+      ELITESAND_DATA_DIR: dataDir,
+      ELITESAND_DOWNLOADS_DIR: downloadsDir,
+      ELITESAND_LOGS_DIR: logsDir,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
@@ -115,7 +125,7 @@ async function main() {
   } finally {
     for (const socket of sockets) { try { socket.close(); } catch (_) { /* best effort */ } }
     await stop(child);
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(runtimeRoot, { recursive: true, force: true });
   }
 }
 

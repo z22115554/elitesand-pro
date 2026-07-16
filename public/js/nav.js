@@ -25,6 +25,7 @@
   const TITLES = {
     karaoke: '首頁',
     playlist: '播放清單',
+    setlist: '歌單',
     library: '媒體庫',
     settings: '歌詞設定',
     general: '一般設定',
@@ -133,6 +134,41 @@
     });
     if (laterBtn) laterBtn.addEventListener('click', () => closeHelp(false, true));
     helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelp(false); });
+
+    // 新手路徑：先讓使用者看見一次歌詞，再慢慢處理下載工具與 OBS。
+    let guideStartPath = null;
+    let guideFirstSuccess = false;
+    const jumpToGuideTarget = (nav, targetId) => {
+      helpModal.hidden = true;
+      document.querySelector(`.nav-item[data-nav="${nav}"]`)?.click();
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    };
+    const updateGuideRoute = () => {
+      const status = document.getElementById('guide-route-status');
+      const confirm = document.getElementById('guide-confirm-preview');
+      const success = document.getElementById('guide-route-success');
+      if (confirm) confirm.disabled = !guideStartPath || guideFirstSuccess;
+      if (success) success.hidden = !guideFirstSuccess;
+      if (status) status.textContent = guideFirstSuccess ? '第一次成功完成' : (guideStartPath === 'sample' ? '確認右側出現示範文字' : guideStartPath === 'song' ? '匯入完成後回來確認' : '選一種開始方式');
+    };
+    document.getElementById('guide-start-sample')?.addEventListener('click', () => {
+      guideStartPath = 'sample';
+      updateGuideRoute();
+      jumpToGuideTarget('karaoke', 'lyrics-preview-card');
+      document.getElementById('btn-preview-sample-lyrics')?.click();
+    });
+    document.getElementById('guide-start-song')?.addEventListener('click', () => {
+      guideStartPath = 'song';
+      updateGuideRoute();
+      jumpToGuideTarget('karaoke', 'music-source-card');
+    });
+    document.getElementById('guide-confirm-preview')?.addEventListener('click', () => {
+      if (!guideStartPath) return;
+      guideFirstSuccess = true;
+      updateGuideRoute();
+    });
 
     function updateChecklist() {
       checklist.environment = readiness.control && readiness.ytdlp && readiness.ffmpeg;

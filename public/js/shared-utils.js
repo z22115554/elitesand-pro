@@ -23,6 +23,21 @@ window.SharedUtils = (function () {
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // External cover metadata is displayed in several independent surfaces.
+  // Keep URL policy in one place: browser-relative cover paths are allowed,
+  // but data:, file:, javascript:, and malformed values never reach an img
+  // attribute or CSS background-image declaration.
+  function safeHttpUrl(value) {
+    if (!value) return '';
+    try {
+      const base = typeof location !== 'undefined' ? location.origin : 'http://localhost';
+      const url = new URL(String(value), base);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   // 統一採用依 MediaError.code 判斷的版本（原 app.js 版）。display.js 原本的版本是用
   // error.message 關鍵字比對，但 MediaError.message 不是標準規範保證有內容的欄位，
   // 兩邊呼叫點傳進來的都是同一種 audioPlayer.error（原生 MediaError），code 判斷才可靠。
@@ -36,5 +51,5 @@ window.SharedUtils = (function () {
     return '音訊播放失敗: ' + (error.message || '未知錯誤');
   }
 
-  return { formatTime, escapeHtml, getAudioErrorMessage };
+  return { formatTime, escapeHtml, safeHttpUrl, getAudioErrorMessage };
 })();

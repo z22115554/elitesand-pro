@@ -45,10 +45,10 @@ const PinAuth = (() => {
 
     function showError(msg) {
       err.textContent = msg;
-      err.style.display = 'block';
+      err.classList.add('is-visible');
     }
     function hideError() {
-      err.style.display = 'none';
+      err.classList.remove('is-visible');
     }
 
     async function trySubmit() {
@@ -125,8 +125,8 @@ const PinAuth = (() => {
       }).catch(() => { /* 讀不到就維持現狀，不阻擋介面 */ });
     }
 
-    function showError(msg) { errEl.textContent = msg; errEl.style.display = 'block'; }
-    function hideError() { errEl.style.display = 'none'; }
+    function showError(msg) { errEl.textContent = msg; errEl.classList.add('is-visible'); }
+    function hideError() { errEl.classList.remove('is-visible'); }
 
     function openModal(m) {
       mode = m;
