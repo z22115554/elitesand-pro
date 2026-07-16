@@ -617,7 +617,8 @@ body {
 body.template-luminous #lyrics-container,
 body.template-partita #lyrics-container,
 body.template-tilt #lyrics-container,
-body.template-mindscape #lyrics-container {
+body.template-mindscape #lyrics-container,
+body.template-columnflow #lyrics-container {
   min-height: 70vh;
   justify-content: center;
 }
@@ -628,9 +629,86 @@ body.template-luminous #lyrics-container,
 body.template-partita #lyrics-container,
 body.template-tilt #lyrics-container,
 body.template-mindscape #lyrics-container,
-body.template-ktv #lyrics-container {
+body.template-ktv #lyrics-container,
+body.template-columnflow #lyrics-container {
   transform: none;
   align-items: center;
+}
+
+/* ─── 直書句流：每頁四句亂數錯落、逐字填入、殘影淡出 ─── */
+body.template-columnflow #lyrics-container {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+#columnflow-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--display-font-family, Georgia, 'Noto Serif TC', 'PMingLiU', serif);
+  font-weight: var(--display-font-weight, 600);
+}
+
+.cf-col {
+  position: absolute;
+  width: max-content;
+  color: var(--lyric-color, #f4efe5);
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  white-space: nowrap;
+  line-height: 1.16;
+  letter-spacing: .06em;
+  text-shadow: var(--lyric-shadow, none);
+  transform-origin: top center;
+  transition: opacity 180ms ease-out, filter 180ms ease-out, transform 240ms cubic-bezier(.2, .78, .22, 1);
+  will-change: transform, opacity, filter;
+}
+
+.cf-sub {
+  display: block;
+  margin-block-start: .44em;
+}
+
+.cf-g {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 1.16em;
+  color: var(--lyric-color, #f4efe5);
+  opacity: 0;
+  transform: translate3d(var(--cf-entry-x, .18em), var(--cf-entry-y, .1em), 0) rotate(var(--cf-rotate-start, 24deg)) scale(.94);
+  transition: opacity 130ms ease-out, transform 540ms cubic-bezier(.08, .82, .18, 1), color 150ms ease-out, text-shadow 150ms ease-out;
+  will-change: transform, opacity;
+}
+
+.cf-g.cf-on { opacity: 1; transform: translate3d(0, 0, 0) rotate(var(--cf-rotate-rest, 0deg)) scale(1); }
+.cf-g.cf-cur { color: var(--lyric-color-active, #f0c978); text-shadow: 0 0 .42em color-mix(in srgb, var(--lyric-color-active, #f0c978) 72%, transparent); }
+.cf-col.cf-dead { opacity: 0 !important; filter: blur(6px) !important; transform: translateY(-10px) !important; }
+
+/* 字札：沿用相同時間線，只把每個字變成略有傾斜的紙札。 */
+.cf-fuda .cf-g {
+  min-inline-size: 1.22em;
+  margin-inline: .035em;
+  padding-inline: .08em;
+  color: rgba(34, 27, 20, .8);
+  background: rgba(248, 241, 225, .96);
+  border: 1px solid rgba(117, 92, 64, .48);
+  border-radius: 1px;
+  box-shadow: .08em .11em .24em rgba(0, 0, 0, .28);
+  text-shadow: none;
+  --cf-entry-x: .24em;
+  --cf-entry-y: .14em;
+}
+
+.cf-fuda .cf-g.cf-on { color: #211a13; }
+.cf-fuda .cf-g.cf-cur { color: #3d240d; box-shadow: .08em .11em .24em rgba(0, 0, 0, .28), 0 0 .48em color-mix(in srgb, var(--lyric-color-active, #f0c978) 65%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cf-col, .cf-g { transition-duration: .01ms !important; }
 }
 
 /* ─── Mindscape 心象（cadenza 重現）─── */

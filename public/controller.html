@@ -86,14 +86,43 @@
       <button class="ctrl-template-btn" data-template="partita" type="button">折光階梯</button>
       <button class="ctrl-template-btn" data-template="mindscape" type="button">潮汐心景</button>
       <button class="ctrl-template-btn" data-template="ktv" type="button">霓彩伴唱</button>
+      <button class="ctrl-template-btn" data-template="columnflow" type="button">直書句流</button>
     </div>
     <p id="ctrl-template-legacy-notice" class="ctrl-sub-label" hidden>目前使用舊版「斜拍告白」設定；切換其他模板後，無法從新介面選回。</p>
-    <p class="ctrl-sub-label">位置</p>
-    <div class="ctrl-chips">
-      <button class="ctrl-position-btn active" data-position="center" type="button">置中</button>
-      <button class="ctrl-position-btn" data-position="left" type="button">偏左</button>
-      <button class="ctrl-position-btn" data-position="right" type="button">偏右</button>
-      <button class="ctrl-position-btn" data-position="split" type="button">左右分散</button>
+    <div id="ctrl-lyric-position-group">
+      <p class="ctrl-sub-label">位置</p>
+      <div class="ctrl-chips">
+        <button class="ctrl-position-btn active" data-position="center" type="button">置中</button>
+        <button class="ctrl-position-btn" data-position="left" type="button">偏左</button>
+        <button class="ctrl-position-btn" data-position="right" type="button">偏右</button>
+        <button class="ctrl-position-btn" data-position="split" type="button">左右分散</button>
+      </div>
+    </div>
+    <div id="ctrl-columnflow-variant-group" hidden>
+      <p class="ctrl-sub-label">直書句流樣式</p>
+      <div class="ctrl-chips">
+        <button class="ctrl-columnflow-variant-btn active" data-columnflow-variant="sen" type="button">素筆直書</button>
+        <button class="ctrl-columnflow-variant-btn" data-columnflow-variant="fuda" type="button">字札直書</button>
+      </div>
+    </div>
+    <div id="ctrl-columnflow-placement-group" hidden>
+      <p class="ctrl-sub-label">直書位置</p>
+      <div class="ctrl-chips">
+        <button class="ctrl-columnflow-placement-btn" data-columnflow-placement="left" type="button">偏左</button>
+        <button class="ctrl-columnflow-placement-btn" data-columnflow-placement="right" type="button">偏右</button>
+        <button class="ctrl-columnflow-placement-btn active" data-columnflow-placement="split" type="button">左右分散</button>
+      </div>
+    </div>
+    <div id="ctrl-columnflow-max-lines-group" hidden>
+      <p class="ctrl-sub-label">同時保留句數</p>
+      <div class="ctrl-chips">
+        <button class="ctrl-columnflow-max-lines-btn" data-columnflow-max-lines="1" type="button">1 句</button>
+        <button class="ctrl-columnflow-max-lines-btn" data-columnflow-max-lines="2" type="button">2 句</button>
+        <button class="ctrl-columnflow-max-lines-btn" data-columnflow-max-lines="3" type="button">3 句</button>
+        <button class="ctrl-columnflow-max-lines-btn active" data-columnflow-max-lines="4" type="button">4 句</button>
+        <button class="ctrl-columnflow-max-lines-btn" data-columnflow-max-lines="5" type="button">5 句</button>
+        <button class="ctrl-columnflow-max-lines-btn" data-columnflow-max-lines="6" type="button">6 句</button>
+      </div>
     </div>
     <p class="ctrl-sub-label">動態強度</p>
     <div class="ctrl-chips">

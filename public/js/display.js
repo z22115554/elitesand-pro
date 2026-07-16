@@ -590,6 +590,19 @@
     if (typeof s.animationIntensity === 'string') {
       document.body.dataset.lyricIntensity = s.animationIntensity;
     }
+    // 直書句流的兩種外觀共用同一個時間線；先寫入 dataset，讓首次 mount 就取得正確外觀。
+    if (s.template === 'columnflow') {
+      document.body.dataset.columnflowVariant = s.columnflowVariant === 'fuda' ? 'fuda' : 'sen';
+      document.body.dataset.columnflowPlacement = ['left', 'right', 'split'].includes(s.columnflowPlacement) ? s.columnflowPlacement : 'split';
+      const columnflowMaxLines = Math.round(Number(s.columnflowMaxLines));
+      document.body.dataset.columnflowMaxLines = String(Number.isFinite(columnflowMaxLines)
+        ? Math.max(1, Math.min(6, columnflowMaxLines))
+        : 4);
+    } else {
+      delete document.body.dataset.columnflowVariant;
+      delete document.body.dataset.columnflowPlacement;
+      delete document.body.dataset.columnflowMaxLines;
+    }
     // 歌詞水平位置：CSS 靠 body class 縮排容器；split 的逐行交替由各模板讀 dataset 處理。
     // 經典疊層完全不支援這個機制（面板已改用九宮格當它的位置控制、對應的四鍵整批隱藏），
     // 但 settings.lyricPosition 的值本身仍會保留使用者在動畫模板下的偏好（不強制清空），
@@ -599,7 +612,7 @@
     if (typeof s.lyricPosition === 'string') {
       document.body.dataset.lyricPos = s.lyricPosition;
       document.body.classList.remove('lyric-pos-left', 'lyric-pos-right', 'lyric-pos-split');
-      const isClassic = s.template === 'classic';
+      const isClassic = s.template === 'classic' || s.template === 'columnflow';
       if (!isClassic && s.lyricPosition !== 'center') document.body.classList.add(`lyric-pos-${s.lyricPosition}`);
     }
     // 排版模板（v4）：setTemplate 內部已對同值早退，高頻重送設定不會反覆重建畫面

@@ -11,7 +11,7 @@ const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH } = require(
 
 const log = createLogger('Socket');
 
-const LYRIC_TEMPLATES = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv'];
+const LYRIC_TEMPLATES = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;
@@ -21,6 +21,17 @@ function sanitizeLyricTemplateSettings(value) {
       out[id] = { ...value[id], template: id };
       delete out[id].lyricTemplateSettings;
       delete out[id].lyricPresets;
+      if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda'].includes(out[id].columnflowVariant)) {
+        delete out[id].columnflowVariant;
+      }
+      if (id === 'columnflow' && out[id].columnflowPlacement && !['left', 'right', 'split'].includes(out[id].columnflowPlacement)) {
+        delete out[id].columnflowPlacement;
+      }
+      if (id === 'columnflow' && out[id].columnflowMaxLines !== undefined) {
+        if (!Number.isInteger(out[id].columnflowMaxLines) || out[id].columnflowMaxLines < 1 || out[id].columnflowMaxLines > 6) {
+          delete out[id].columnflowMaxLines;
+        }
+      }
     }
   });
   return out;
@@ -153,6 +164,16 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 歌詞水平位置白名單
     if (settings.lyricPosition && !['center', 'left', 'right', 'split'].includes(settings.lyricPosition)) {
       delete settings.lyricPosition;
+    }
+    if (settings.columnflowVariant && !['sen', 'fuda'].includes(settings.columnflowVariant)) {
+      delete settings.columnflowVariant;
+    }
+    if (settings.columnflowPlacement && !['left', 'right', 'split'].includes(settings.columnflowPlacement)) {
+      delete settings.columnflowPlacement;
+    }
+    if (settings.columnflowMaxLines !== undefined
+      && (!Number.isInteger(settings.columnflowMaxLines) || settings.columnflowMaxLines < 1 || settings.columnflowMaxLines > 6)) {
+      delete settings.columnflowMaxLines;
     }
     // 合併（容許部分更新）
     playState.lyricSettings = { ...playState.lyricSettings, ...settings };
