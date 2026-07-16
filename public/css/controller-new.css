@@ -91,16 +91,16 @@ body.controller {
 .ctrl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .ctrl-template-chips button { flex: 1 1 calc(33.333% - 8px); }
 .ctrl-sub-label { margin: 14px 0 7px; color: var(--text-faint); font-size: 12px; }
-#ctrl-lyric-position-group[hidden], #ctrl-columnflow-variant-group[hidden] { display: none; }
+#ctrl-lyric-position-group[hidden], #ctrl-columnflow-variant-group[hidden], #ctrl-columnflow-placement-group[hidden] { display: none; }
 .ctrl-preset-row { display: flex; gap: 8px; margin-top: 14px; }
 .ctrl-preset-row .input { min-width: 0; flex: 1; }
-.ctrl-chip, .ctrl-style-btn, .ctrl-mode-btn, .ctrl-template-btn, .ctrl-position-btn, .ctrl-intensity-btn, .ctrl-columnflow-variant-btn {
+.ctrl-chip, .ctrl-style-btn, .ctrl-mode-btn, .ctrl-template-btn, .ctrl-position-btn, .ctrl-intensity-btn, .ctrl-columnflow-variant-btn, .ctrl-columnflow-placement-btn {
   min-height: 44px; padding: 0 16px;
   border: 1px solid var(--border-strong); background: var(--bg-raised); color: var(--text-dim);
   border-radius: var(--r-md); font-size: 13px; font-weight: 500; cursor: pointer; touch-action: manipulation;
 }
 .ctrl-style-btn.active, .ctrl-mode-btn.active, .ctrl-template-btn.active, .ctrl-position-btn.active,
-.ctrl-intensity-btn.active, .ctrl-columnflow-variant-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.ctrl-intensity-btn.active, .ctrl-columnflow-variant-btn.active, .ctrl-columnflow-placement-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 
 /* 變調變速 */
 .ctrl-slider-row { display: grid; grid-template-columns: 48px 1fr 44px 36px; align-items: center; gap: 10px; margin-bottom: 12px; }

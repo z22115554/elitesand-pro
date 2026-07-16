@@ -87,6 +87,7 @@
 
   const TEMPLATE_IDS = ['classic', 'luminous', 'partita', 'tilt', 'mindscape', 'ktv', 'columnflow'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
+  const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
 
@@ -104,12 +105,15 @@
     const isColumnflow = template === 'columnflow';
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
     document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowVariant === (lyricSettings.columnflowVariant || 'sen')));
+    document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowPlacement === (lyricSettings.columnflowPlacement || 'split')));
     document.querySelectorAll('.ctrl-position-btn').forEach((b) => b.classList.toggle('active', b.dataset.position === (lyricSettings.lyricPosition || 'center')));
     document.querySelectorAll('.ctrl-intensity-btn').forEach((b) => b.classList.toggle('active', b.dataset.intensity === (lyricSettings.animationIntensity || 'normal')));
     const positionGroup = document.getElementById('ctrl-lyric-position-group');
     const columnflowGroup = document.getElementById('ctrl-columnflow-variant-group');
+    const columnflowPlacementGroup = document.getElementById('ctrl-columnflow-placement-group');
     if (positionGroup) positionGroup.hidden = isColumnflow;
     if (columnflowGroup) columnflowGroup.hidden = !isColumnflow;
+    if (columnflowPlacementGroup) columnflowPlacementGroup.hidden = !isColumnflow;
 
     if (dom.lyricPreset) {
       const selected = dom.lyricPreset.value;
@@ -148,8 +152,9 @@
       const next = stores[nextTemplate]
         ? { ...settingSnapshot(stores[nextTemplate]), template: nextTemplate }
         : { ...settingSnapshot(lyricSettings), template: nextTemplate };
-      if ((nextTemplate === 'classic' || nextTemplate === 'ktv' || nextTemplate === 'columnflow') && next.lyricPosition === 'split') next.lyricPosition = 'center';
+      if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
+      if (nextTemplate === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
       stores[nextTemplate] = { ...next };
       const payload = { ...next, [TEMPLATE_SETTING_KEY]: stores, [PRESET_KEY]: lyricSettings[PRESET_KEY] || [] };
       applyLyricSettings(payload);
@@ -161,7 +166,7 @@
     btn.addEventListener('click', () => {
       const position = btn.dataset.position;
       if (!['center', 'left', 'right', 'split'].includes(position)) return;
-      if (position === 'split' && (lyricSettings.template === 'classic' || lyricSettings.template === 'ktv' || lyricSettings.template === 'columnflow')) {
+      if (position === 'split' && (lyricSettings.template === 'classic' || lyricSettings.template === 'ktv')) {
         showToast('這個模板不支援左右分散', 'info');
         return;
       }
@@ -181,6 +186,14 @@
     });
   });
 
+  document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const placement = btn.dataset.columnflowPlacement;
+      if (lyricSettings.template !== 'columnflow' || !COLUMNFLOW_PLACEMENTS.includes(placement)) return;
+      pushLyricPatch({ columnflowPlacement: placement });
+    });
+  });
+
   if (dom.lyricPresetApply) {
     dom.lyricPresetApply.addEventListener('click', () => {
       const presets = Array.isArray(lyricSettings[PRESET_KEY]) ? lyricSettings[PRESET_KEY] : [];
@@ -189,7 +202,8 @@
       const next = { ...settingSnapshot(preset.settings) };
       if (!TEMPLATE_IDS.includes(next.template)) next.template = 'classic';
       if (next.template === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
-      if ((next.template === 'classic' || next.template === 'ktv' || next.template === 'columnflow') && next.lyricPosition === 'split') next.lyricPosition = 'center';
+      if (next.template === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
+      if ((next.template === 'classic' || next.template === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       const stores = { ...(lyricSettings[TEMPLATE_SETTING_KEY] || {}), [next.template]: { ...next } };
       const payload = { ...next, [TEMPLATE_SETTING_KEY]: stores, [PRESET_KEY]: presets };
       applyLyricSettings(payload);
