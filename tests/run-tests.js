@@ -1566,6 +1566,83 @@ test('錯誤歷史使用文字節點並會遮蔽敏感 token', () => {
   ok(source.includes('MAX_HISTORY = 30'));
 });
 
+function createErrorHandlerToastHarness() {
+  const timers = new Map();
+  let nextTimerId = 0;
+
+  function makeNode() {
+    const classes = new Set();
+    return {
+      parentNode: null,
+      children: [],
+      className: '',
+      innerHTML: '',
+      classList: {
+        add(...values) { values.forEach((value) => classes.add(value)); },
+        remove(...values) { values.forEach((value) => classes.delete(value)); },
+        contains(value) { return classes.has(value); },
+      },
+      appendChild(child) {
+        this.children.push(child);
+        child.parentNode = this;
+        return child;
+      },
+      removeChild(child) {
+        const index = this.children.indexOf(child);
+        if (index !== -1) this.children.splice(index, 1);
+        child.parentNode = null;
+        return child;
+      },
+      querySelector(selector) {
+        return selector === '.toast-close' ? { addEventListener() {} } : null;
+      },
+    };
+  }
+
+  const toastContainer = makeNode();
+  const context = {
+    SharedUtils: { escapeHtml: (value) => String(value) },
+    document: {
+      getElementById: (id) => id === 'toast-container' ? toastContainer : null,
+      createElement: () => makeNode(),
+      body: makeNode(),
+    },
+    window: { addEventListener() {} },
+    localStorage: { getItem: () => null, setItem() {} },
+    console: { log() {}, warn() {}, error() {} },
+    requestAnimationFrame: (handler) => handler(),
+    setTimeout: (handler) => {
+      const id = ++nextTimerId;
+      timers.set(id, handler);
+      return id;
+    },
+    clearTimeout: (id) => timers.delete(id),
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'error-handler.js'), 'utf8'), context);
+  const handler = vm.runInContext('ErrorHandler', context);
+
+  return {
+    show(message) { handler.showToast(message, 'success', 0); },
+    toastContainer,
+  };
+}
+
+test('toast overflow keeps five visible unique notifications without blocking', () => {
+  const harness = createErrorHandlerToastHarness();
+  for (let index = 1; index <= 6; index++) harness.show(`track-${index}`);
+
+  eq(harness.toastContainer.children.length, 5, 'overflow must remove the oldest toast immediately: ');
+  eq(
+    harness.toastContainer.children.filter((toast) => !toast.classList.contains('toast-exit')).length,
+    5,
+    'all remaining toasts must stay active after a rapid burst: '
+  );
+
+  harness.show('track-7');
+  eq(harness.toastContainer.children.length, 5, 'subsequent overflow must remain bounded: ');
+});
+
 // ═══════════════════════════════════════════
 console.log('\n📦 9. 歌詞選擇器與歌詞設定');
 // ═══════════════════════════════════════════

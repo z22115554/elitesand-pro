@@ -103,7 +103,8 @@ const ErrorHandler = (() => {
 
     // 限制同時顯示數量
     while (toastQueue.length > MAX_TOASTS) {
-      removeToast(toastQueue[0]);
+      // Remove overflow synchronously so the queue shrinks during this loop.
+      removeToast(toastQueue[0], { immediate: true });
     }
 
     // 入場動畫
@@ -124,14 +125,24 @@ const ErrorHandler = (() => {
     if (type === 'error' || type === 'warning') recordError(type === 'error' ? '操作錯誤' : '警告', message);
   }
 
-  function removeToast(toast) {
-    if (!toast || !toast.parentNode) return;
+  function removeToast(toast, { immediate = false } = {}) {
+    if (!toast || toast._toastClosing) return;
+    toast._toastClosing = true;
     clearTimeout(toast._timeout);
+
+    // The queue must change before an exit animation starts.
+    toastQueue = toastQueue.filter(t => t !== toast);
+    if (!toast.parentNode) return;
+
+    if (immediate) {
+      toast.parentNode.removeChild(toast);
+      return;
+    }
+
     toast.classList.remove('toast-visible');
     toast.classList.add('toast-exit');
     setTimeout(() => {
       if (toast.parentNode) toast.parentNode.removeChild(toast);
-      toastQueue = toastQueue.filter(t => t !== toast);
     }, 300);
   }
 
