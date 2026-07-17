@@ -428,7 +428,7 @@
                   <span class="style-thumb-preview"><span class="style-thumb-char">唱</span></span><strong>霓彩伴唱</strong><span>逐字伴唱、固定雙行</span>
                 </button>
                 <button class="lyric-template-card" data-template="columnflow" type="button" role="radio" aria-checked="false" title="直書句流：直行在畫面兩側錯落，逐字浮現，唱過的句子留下淡淡殘影">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">句流</span></span><strong>直書句流</strong><span>直書殘影、中央留白</span>
+                  <span class="style-thumb-preview style-thumb-columnflow" aria-hidden="true"><span class="style-thumb-column">句流</span><span class="style-thumb-column">歌詞</span><span class="style-thumb-column">餘韻</span></span><strong>直書句流</strong><span>直書殘影、中央留白</span>
                 </button>
               </div>
               <p class="field-hint" id="template-desc">完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。</p>
@@ -992,6 +992,7 @@
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>直播 Session</p>
             <p class="sub section-intro">開台與收台會由 OBS WebSocket 自動同步；播放的每首歌會自動記入歌單，可匯出為 YouTube 章節格式。</p>
             <div class="inline-row inline-row--wrap">
+              <button id="session-refresh" class="btn btn-sm" type="button">重新整理狀態</button>
               <button id="session-reset" class="btn btn-ghost" type="button" disabled>清除歌單</button>
             </div>
             <div id="session-status" class="val session-status">等待 OBS 開始推流</div>
@@ -1495,24 +1496,24 @@
                 </div><!-- /#setlist-style-collapse inner wrapper -->
               </div>
             </details>
-            <div class="setlist-layout-actions">
-              <p class="field-hint m-0">還沒開台、預覽是空的？先載入示範資料再調整外觀設定（面板預覽＋真實 OBS 來源都會顯示）。</p>
-              <div class="setlist-layout-actions__buttons">
-                <button class="btn btn-sm btn-setlist-demo" type="button">載入示範資料</button>
-                <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button">清除示範資料</button>
-              </div>
+          </section>
+          </div><!-- /.setlist-right -->
+          <aside class="setlist-preview-bar" aria-label="歌單即時預覽">
+            <div class="setlist-preview-head"><div><p class="eyebrow m-0">歌單即時預覽</p><p class="field-hint m-0">調整設定時，這裡會即時顯示 OBS 輸出。</p></div><span class="save-status saved">已即時同步</span></div>
+            <div class="setlist-template-controls">
+              <button class="btn btn-sm btn-setlist-demo" type="button">載入示範資料</button>
+              <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button">清除示範資料</button>
             </div>
             <div class="setlist-preview-wrap">
               <iframe id="setlist-preview" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" scrolling="no"></iframe>
-              <div class="setlist-preview-tag">預覽（選主題即時更新）</div>
+              <div class="setlist-preview-tag">OBS 預覽</div>
             </div>
             <div class="url-field">
               <code id="setlist-obs-url">http://localhost:3000/setlist</code>
               <button id="copy-setlist-url" class="btn btn-sm" type="button">複製</button>
             </div>
-            <p class="val mt-10">OBS 新增「瀏覽器來源」後貼上 http://localhost:3000/setlist 即可；換歌單版型會自動同步，不需要更新網址。使用場景版歌單時，請依畫面調整 OBS 瀏覽器來源解析度。</p>
-          </section>
-          </div><!-- /.setlist-right -->
+            <p class="val m-0">OBS 新增「瀏覽器來源」後貼上此網址；換歌單版型會自動同步，不需要更新網址。</p>
+          </aside>
           </div><!-- /.setlist-split -->
         </div>
       </div>
