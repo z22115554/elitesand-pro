@@ -2598,6 +2598,54 @@ test('playlist:insert-next uses canonical playback state and appends only when i
   eq(playState.playlist[4].id, 'idle-append');
 });
 
+test('OBS 未推流只結束 OBS 或待確認的直播 Session，不會中斷 Twitch Session', () => {
+  const registerSetlistHandlers = require('../server/routes/handlers/setlist');
+  const events = new Map();
+  const session = { active: true, startedAt: Date.now() - 1000, source: null, songs: [] };
+  const ctx = {
+    playState: {
+      isPlaying: false, currentTrack: null, setlistTheme: 'glass', setlistLayout: 'classic',
+      setlistStyle: {}, setlistSceneStyles: {},
+    },
+    session, SETLIST_SCENE: [],
+    effSetlistStore() { return {}; },
+    persistState() {}, setlistPayload() { return { ...session }; }, emitSetlist() {},
+    recordSessionSong() {}, broadcastState() {},
+  };
+  registerSetlistHandlers(
+    { emit() {} },
+    { on(event, handler) { events.set(event, handler); }, emit() {} },
+    ctx,
+  );
+
+  events.get('session:stop')({ source: 'obs' });
+  eq(session.active, false);
+  eq(session.source, null);
+
+  session.active = true;
+  session.source = 'twitch';
+  events.get('session:stop')({ source: 'obs' });
+  eq(session.active, true);
+  eq(session.source, 'twitch');
+
+  events.get('session:stop')({ source: 'twitch' });
+  eq(session.active, false);
+  eq(session.source, null);
+});
+
+test('歌單固定預覽、直書句流縮圖與直播狀態重新整理入口都存在', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const obsWebsocket = fs.readFileSync(path.join(__dirname, '../public/js/obs-websocket.js'), 'utf8');
+  ok(indexHtml.includes('id="session-refresh"'));
+  ok(indexHtml.includes('class="setlist-preview-bar"'));
+  ok(indexHtml.includes('style-thumb-columnflow'));
+  ok(panelCss.includes('@keyframes tpl-columnflow'));
+  ok(setlistPanel.includes('等待確認直播狀態'));
+  ok(obsWebsocket.includes('refreshStreamStatus: publishStreamStatus'));
+});
+
 const socketOrigin = require('../server/utils/socket-origin');
 const trackSchema = require('../server/utils/track-schema');
 const authLimiter = require('../server/services/auth-rate-limiter');

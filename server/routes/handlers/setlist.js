@@ -22,8 +22,13 @@ function registerSetlistHandlers(io, socket, ctx) {
     persistState, setlistPayload, emitSetlist, recordSessionSong, broadcastState,
   } = ctx;
 
+  function normalizeSessionSource(source) {
+    return ['obs', 'twitch', 'manual'].includes(source) ? source : 'manual';
+  }
+
   socket.on('session:start', ({ source, startedAt } = {}) => {
-    const fromObs = source === 'obs';
+    const sessionSource = normalizeSessionSource(source);
+    const fromObs = sessionSource === 'obs';
     const obsStartedAt = Number(startedAt);
     const validObsTime = Number.isFinite(obsStartedAt)
       && obsStartedAt > 0
@@ -32,12 +37,13 @@ function registerSetlistHandlers(io, socket, ctx) {
 
     // OBS 健康檢查／斷線重連時會再次回報目前正在推流；同一場直播只能初始化一次，
     // 否則重連會把已唱歌單清空。保留既有歌曲與已取得的精確起點。
-    if (fromObs && session.active && session.startedAt
+    if (fromObs && session.active && session.source === 'obs' && session.startedAt
       && Math.abs(session.startedAt - effectiveStartedAt) < 15000) {
       return;
     }
     session.active = true;
     session.startedAt = effectiveStartedAt;
+    session.source = sessionSource;
     session.songs = [];
     log.info(fromObs ? 'OBS 推流：直播 session 自動開始' : '直播 session 開始');
     // 開台前若已在播放某首，立刻把它記為第一首（offset≈0）→ 不必重點一次歌。
@@ -47,8 +53,13 @@ function registerSetlistHandlers(io, socket, ctx) {
     persistState();
   });
 
-  socket.on('session:stop', () => {
+  socket.on('session:stop', ({ source } = {}) => {
+    const sessionSource = ['obs', 'twitch', 'manual'].includes(source) ? source : null;
+    // OBS 與 Twitch 都可能回報「未直播」。只能停止自己建立的 Session；
+    // 來源未知的舊版資料則可由第一個權威回報安全收掉。
+    if (sessionSource && session.source && session.source !== sessionSource) return;
     session.active = false;
+    session.source = null;
     log.info('直播 session 結束');
     emitSetlist();
     broadcastState();
@@ -58,6 +69,7 @@ function registerSetlistHandlers(io, socket, ctx) {
   socket.on('session:reset', () => {
     session.active = false;
     session.startedAt = null;
+    session.source = null;
     session.songs = [];
     log.info('直播 session 重設');
     emitSetlist();

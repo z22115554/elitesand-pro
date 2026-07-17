@@ -16,10 +16,17 @@
   function apply() { wraps.forEach(applyTo); }
 
   apply();
+  let observing = false;
   if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver((entries) => entries.forEach((e) => applyTo(e.target)));
-    wraps.forEach((w) => { if (w && w.nodeType === 1) ro.observe(w); });
-  } else {
+    try {
+      const ro = new ResizeObserver((entries) => entries.forEach((e) => applyTo(e.target)));
+      wraps.forEach((w) => { if (w && w.nodeType === 1) ro.observe(w); });
+      observing = true;
+    } catch (_) {
+      // 少數嵌入式 WebView 的 observer 實作不完整；預覽不能因此中斷整個控制台。
+    }
+  }
+  if (!observing) {
     window.addEventListener('resize', apply);
   }
   // 視圖切換 / 字體載入後再校正一次

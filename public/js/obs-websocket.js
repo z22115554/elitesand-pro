@@ -233,7 +233,7 @@ const ObsWs = (() => {
   }
 
   return {
-    connect, disconnect, request, createBrowserSources, getStreamStatus,
+    connect, disconnect, request, createBrowserSources, getStreamStatus, refreshStreamStatus: publishStreamStatus,
     on, isConnected: () => connected, isReconnecting: () => !!reconnectTimer || !!connecting,
     DISPLAY_SOURCE, SETLIST_SOURCE,
   };
@@ -299,10 +299,11 @@ const ObsWs = (() => {
       });
       observedStreamActive = true;
       showMsg(`OBS 正在推流；直播 Session 已自動同步${stream.timecode ? `（已開台 ${stream.timecode}）` : ''}。`);
-    } else if (observedStreamActive) {
+    } else {
       SocketClient.send('session:stop', { source: 'obs' });
+      const hadObservedStream = observedStreamActive;
       observedStreamActive = false;
-      showMsg('OBS 已停止推流，直播 Session 已自動收台。');
+      showMsg(hadObservedStream ? 'OBS 已停止推流，直播 Session 已自動收台。' : 'OBS 目前未推流，已重新確認直播 Session 狀態。');
     }
   }
 

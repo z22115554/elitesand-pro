@@ -9,7 +9,7 @@
 
   const { dom } = AppShared;
 
-  let sessionState = { active: false, startedAt: null, songs: [] };
+  let sessionState = { active: false, startedAt: null, source: null, songs: [] };
 
   function fmtSessionOffset(ms) {
     const totalSec = Math.floor((ms || 0) / 1000);
@@ -22,10 +22,14 @@
   function updateSessionStatus() {
     if (!dom.sessionStatus) return;
     const songs = sessionState.songs || [];
-    if (sessionState.active) {
+    if (sessionState.active && !sessionState.source) {
+      dom.sessionStatus.textContent = `等待確認直播狀態 · ${songs.length} 首已記錄`;
+      dom.sessionStatus.classList.remove('is-active');
+    } else if (sessionState.active) {
       const dur = sessionState.startedAt ? Math.floor((Date.now() - sessionState.startedAt) / 1000) : 0;
       const m = Math.floor(dur / 60), s = dur % 60;
-      dom.sessionStatus.textContent = `直播中 · ${m}:${String(s).padStart(2, '0')} · ${songs.length} 首`;
+      const source = sessionState.source === 'obs' ? 'OBS 推流中' : sessionState.source === 'twitch' ? 'Twitch 開台中' : '直播中';
+      dom.sessionStatus.textContent = `${source} · ${m}:${String(s).padStart(2, '0')} · ${songs.length} 首`;
       dom.sessionStatus.classList.add('is-active');
     } else if (songs.length > 0) {
       dom.sessionStatus.textContent = `已收台 · ${songs.length} 首已記錄`;
@@ -37,7 +41,7 @@
   }
 
   function renderSetlistPanel(data) {
-    sessionState = data || { active: false, startedAt: null, songs: [] };
+    sessionState = data || { active: false, startedAt: null, source: null, songs: [] };
     const songs = sessionState.songs || [];
     const active = sessionState.active;
 
@@ -121,6 +125,37 @@
   }
   if (dom.sessionStop) {
     dom.sessionStop.addEventListener('click', () => SocketClient.send('session:stop'));
+  }
+  const sessionRefresh = document.getElementById('session-refresh');
+  if (sessionRefresh) {
+    sessionRefresh.addEventListener('click', () => {
+      const label = sessionRefresh.textContent;
+      sessionRefresh.disabled = true;
+      sessionRefresh.textContent = '重新整理中…';
+      SocketClient.send('setlist:get');
+      const finish = () => {
+        window.setTimeout(() => {
+          sessionRefresh.disabled = false;
+          sessionRefresh.textContent = label;
+        }, 500);
+      };
+      if (typeof ObsWs !== 'undefined' && ObsWs.isConnected() && ObsWs.refreshStreamStatus) {
+        ObsWs.refreshStreamStatus().then((stream) => {
+          const twitchSessionContinues = !stream.active && sessionState.active && sessionState.source === 'twitch';
+          const message = stream.active
+            ? 'OBS 正在推流，直播 Session 已重新確認'
+            : twitchSessionContinues
+              ? 'OBS 目前未推流；Twitch 開台中的 Session 維持不變'
+              : 'OBS 目前未推流，直播 Session 已重新確認';
+          AppShared.showToast(message, stream.active ? 'success' : 'info');
+        }).catch(() => {
+          AppShared.showToast('無法讀取 OBS 推流狀態，已重新讀取歌單資料', 'warning');
+        }).finally(finish);
+      } else {
+        AppShared.showToast('已重新讀取歌單資料；OBS WebSocket 未連線，無法確認推流狀態', 'warning');
+        finish();
+      }
+    });
   }
   if (dom.sessionReset) {
     dom.sessionReset.addEventListener('click', () => {

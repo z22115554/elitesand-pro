@@ -148,6 +148,7 @@ module.exports = function socketHandler(io, { runtimeEvidence = defaultRuntimeEv
     lastTwitchStreamEventId = eventId || null;
     ctx.session.active = true;
     ctx.session.startedAt = Number.isFinite(startedAt) ? startedAt : Date.now();
+    ctx.session.source = 'twitch';
     ctx.session.songs = [];
     if (ctx.playState.isPlaying && ctx.playState.currentTrack) ctx.recordSessionSong();
     ctx.emitSetlist();
@@ -160,8 +161,9 @@ module.exports = function socketHandler(io, { runtimeEvidence = defaultRuntimeEv
     if (eventId && eventId === lastTwitchStreamEventId) return;
     lastTwitchStreamEventId = eventId || null;
     // 使用者手動停止 session 後又收到延遲的 offline，維持原本狀態即可。
-    if (!ctx.session.active) return;
+    if (!ctx.session.active || (ctx.session.source && ctx.session.source !== 'twitch')) return;
     ctx.session.active = false;
+    ctx.session.source = null;
     ctx.emitSetlist();
     ctx.broadcastState();
     ctx.persistState();

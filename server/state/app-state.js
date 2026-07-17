@@ -101,6 +101,9 @@ function createAppState(io) {
   const session = {
     active: false,
     startedAt: null,
+    // 來源是直播狀態的權威；舊版 state 沒有此欄位時保留 null，交由首次 OBS／Twitch
+    // 回報確認，不可假裝仍在直播。
+    source: null,
     songs: [],
   };
 
@@ -148,6 +151,7 @@ function createAppState(io) {
     if (saved.session && typeof saved.session === 'object') {
       if (typeof saved.session.active === 'boolean') session.active = saved.session.active;
       if (typeof saved.session.startedAt === 'number') session.startedAt = saved.session.startedAt;
+      if (['obs', 'twitch', 'manual'].includes(saved.session.source)) session.source = saved.session.source;
       if (Array.isArray(saved.session.songs)) session.songs = saved.session.songs;
     }
     if (typeof saved.setlistTheme === 'string') playState.setlistTheme = saved.setlistTheme;
@@ -184,7 +188,7 @@ function createAppState(io) {
       manualLyrics: Object.fromEntries(manualLyricsCache),
       trackPitch: Object.fromEntries(trackPitch),
       trackSpeed: Object.fromEntries(trackSpeed),
-      session: { active: session.active, startedAt: session.startedAt, songs: session.songs },
+      session: { active: session.active, startedAt: session.startedAt, source: session.source, songs: session.songs },
       setlistTheme: playState.setlistTheme,
       setlistLayout: playState.setlistLayout,
       setlistStyle: playState.setlistStyle,
@@ -219,6 +223,7 @@ function createAppState(io) {
     return {
       active: session.active,
       startedAt: session.startedAt,
+      source: session.source,
       songs: [...session.songs],
       current: cur ? { id: cur.id, title: cur.title || '', artist: cur.artist || '', playing: !!playState.isPlaying } : null,
       upcoming,
