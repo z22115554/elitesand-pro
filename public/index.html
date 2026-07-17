@@ -1627,7 +1627,7 @@
         <section id="guide-route" class="guide-route" aria-labelledby="guide-route-title">
           <div class="guide-route-head"><div><span class="guide-route-eyebrow">最短路徑 · 約 1 分鐘</span><strong id="guide-route-title">先讓右側預覽出現一行歌詞</strong><p>做到這一步，就代表核心流程正常。先別打開 OBS，也不用讀完下面的說明。</p></div><span id="guide-route-status" class="guide-route-status" aria-live="polite">選一種開始方式</span></div>
           <div class="guide-route-actions"><button id="guide-start-sample" class="btn guide-route-action" type="button">我先看示範歌詞</button><button id="guide-start-song" class="btn btn-ghost guide-route-action" type="button">我有歌，要匯入</button><button id="guide-confirm-preview" class="btn btn-ghost guide-route-action" type="button" disabled>我看到了</button></div>
-          <div id="guide-route-success" class="guide-route-success" hidden aria-live="polite"><div><strong>第一個成功完成</strong><span>你已確認核心歌詞流程正常；接下來可慢慢加入歌曲或再接 OBS。</span></div></div>
+            <div id="guide-route-success" class="guide-route-success" hidden aria-live="polite"><div><strong>第一個成功完成</strong><span>你已確認核心歌詞流程正常；這段最短路徑會自動收起，接下來可慢慢加入歌曲或再接 OBS。</span></div></div>
         </section>
 
         <section class="onboard-checklist" aria-labelledby="guide-checklist-title">
@@ -1636,10 +1636,11 @@
             <span id="guide-checklist-progress" class="readiness-pill pending">0 / 3</span>
           </div>
           <div class="onboard-task-list">
-            <div id="guide-task-environment" class="onboard-task pending"><span class="onboard-task-mark">1</span><div><strong>環境可用</strong><span>控制連線、yt-dlp 與 FFmpeg 就緒</span></div></div>
-            <div id="guide-task-song" class="onboard-task pending"><span class="onboard-task-mark">2</span><div><strong>加入第一首歌</strong><span>上傳本機音檔，或貼 YouTube 連結完成匯入</span></div></div>
-            <div id="guide-task-obs" class="onboard-task pending"><span class="onboard-task-mark">3</span><div><strong>OBS 看見歌詞來源</strong><span>新增 <code>/display</code> 瀏覽器來源後，右上角會顯示「歌詞已連線」</span></div></div>
-            <div id="guide-task-twitch" class="onboard-task optional"><span class="onboard-task-mark">選</span><div><strong>Twitch 連線（選配）</strong><span>需要聊天室點歌或自動開台紀錄時再設定</span></div></div>
+            <button id="guide-task-environment" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="ytdlp-card"><span class="onboard-task-mark">1</span><span><strong>環境可用</strong><span>控制連線、yt-dlp 與 FFmpeg 就緒</span></span></button>
+            <button id="guide-task-song" class="onboard-task pending" type="button" data-guide-nav="karaoke" data-guide-target="music-source-card"><span class="onboard-task-mark">2</span><span><strong>加入第一首歌</strong><span>上傳本機音檔，或貼 YouTube 連結完成匯入</span></span></button>
+            <button id="guide-task-obs" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="obs-url-card"><span class="onboard-task-mark">3</span><span><strong>OBS 看見歌詞來源</strong><span>複製 <code>/display</code> 網址加入瀏覽器來源</span></span></button>
+            <button id="guide-task-websocket" class="onboard-task optional" type="button" data-guide-nav="general" data-guide-target="obs-ws-card"><span class="onboard-task-mark">選</span><span><strong>設定 OBS WebSocket（選配）</strong><span>連上後可一鍵建立歌詞與歌單來源</span></span></button>
+            <button id="guide-task-twitch" class="onboard-task optional" type="button" data-guide-nav="general" data-guide-target="twitch-card"><span class="onboard-task-mark">選</span><span><strong>Twitch 連線（選配）</strong><span>需要聊天室點歌或自動開台紀錄時再設定</span></span></button>
           </div>
         </section>
 

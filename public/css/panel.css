@@ -555,13 +555,18 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .onboard-checklist-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .onboard-checklist-head p { margin: 4px 0 0; color: var(--text-faint); font-size: 12px; line-height: 1.55; }
 .onboard-task-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-.onboard-task { display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text-dim); }
+.onboard-task { width: 100%; display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: transparent; color: var(--text-dim); font: inherit; text-align: left; cursor: pointer; transition: border-color .14s ease, background-color .14s ease, transform .14s ease; }
+.onboard-task:hover { border-color: color-mix(in srgb, var(--accent) 58%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--bg-raised)); transform: translateY(-1px); }
+.onboard-task:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .onboard-task-mark { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-faint); font-size: 10px; }
 .onboard-task strong, .onboard-task span:not(.onboard-task-mark) { display: block; }
-.onboard-task div > span { margin-top: 2px; color: var(--text-faint); font-size: 11px; line-height: 1.4; }
+.onboard-task > span:not(.onboard-task-mark) > span { margin-top: 2px; color: var(--text-faint); font-size: 11px; line-height: 1.4; }
 .onboard-task.done { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); background: color-mix(in srgb, var(--ok) 7%, transparent); }
 .onboard-task.done .onboard-task-mark { border-color: var(--ok); background: var(--ok); color: #08130c; }
 .onboard-task.optional { opacity: .78; }
+.guide-target-highlight { animation: guide-target-highlight 2.4s ease-out both; }
+@keyframes guide-target-highlight { 0%, 42% { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), 0 0 30px var(--accent-glow); } 100% { border-color: var(--border); box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .onboard-task { transition: none; } .onboard-task:hover { transform: none; } .guide-target-highlight { animation: none; outline: 2px solid var(--accent); outline-offset: 3px; } }
 @media (max-width: 720px) { .onboard-readiness { grid-template-columns: 1fr; } .readiness-items { justify-content: flex-start; } .onboard-readiness > button { grid-column: 1; justify-self: start; } }
 @media (max-width: 720px) { .onboard-checklist-head { flex-direction: column; } .onboard-task-list { grid-template-columns: 1fr; } }
 .help-body .card-collapse { margin: 0; }
