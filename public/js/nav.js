@@ -104,11 +104,11 @@
     const LEGACY_GUIDE_KEY = 'elite-guide-completed-v1';
     const GUIDE_POSTPONED_KEY = 'elite-guide-postponed-v2';
     let firstRunRequired = false;
-    const checklist = { environment: false, song: false, obs: false, twitch: false };
+    const checklist = { environment: false, song: false, obs: false, websocket: false, twitch: false };
     const readiness = { control: SocketClient.connected(), obsWebSocket: typeof ObsWs !== 'undefined' && ObsWs.isConnected(), ytdlp: false, ffmpeg: false };
     const completeBtn = document.getElementById('guide-complete');
     const laterBtn = document.getElementById('guide-later');
-    const openHelp = () => { helpModal.hidden = false; refreshReadiness(); };
+    const openHelp = () => { helpModal.hidden = false; updateGuideRoute(); refreshReadiness(); };
     const closeHelp = (completed = false, postponed = false) => {
       if (firstRunRequired && !completed && !postponed) return;
       helpModal.hidden = true;
@@ -137,18 +137,32 @@
 
     // 新手路徑：先讓使用者看見一次歌詞，再慢慢處理下載工具與 OBS。
     let guideStartPath = null;
+    const GUIDE_PREVIEW_COMPLETE_KEY = 'elite-guide-preview-complete-v1';
     let guideFirstSuccess = false;
+    try { guideFirstSuccess = localStorage.getItem(GUIDE_PREVIEW_COMPLETE_KEY) === '1'; } catch (e) { /* 靜默 */ }
     const jumpToGuideTarget = (nav, targetId) => {
       helpModal.hidden = true;
       document.querySelector(`.nav-item[data-nav="${nav}"]`)?.click();
-      const target = document.getElementById(targetId);
-      if (!target) return;
-      requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+      requestAnimationFrame(() => {
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        if (target.tagName === 'DETAILS') target.open = true;
+        target.classList.remove('guide-target-highlight');
+        void target.offsetWidth;
+        target.classList.add('guide-target-highlight');
+        target.setAttribute('tabindex', '-1');
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.focus({ preventScroll: true });
+        window.clearTimeout(target._guideHighlightTimer);
+        target._guideHighlightTimer = window.setTimeout(() => target.classList.remove('guide-target-highlight'), 2400);
+      });
     };
     const updateGuideRoute = () => {
+      const route = document.getElementById('guide-route');
       const status = document.getElementById('guide-route-status');
       const confirm = document.getElementById('guide-confirm-preview');
       const success = document.getElementById('guide-route-success');
+      if (route) route.hidden = guideFirstSuccess;
       if (confirm) confirm.disabled = !guideStartPath || guideFirstSuccess;
       if (success) success.hidden = !guideFirstSuccess;
       if (status) status.textContent = guideFirstSuccess ? '第一次成功完成' : (guideStartPath === 'sample' ? '確認右側出現示範文字' : guideStartPath === 'song' ? '匯入完成後回來確認' : '選一種開始方式');
@@ -167,15 +181,22 @@
     document.getElementById('guide-confirm-preview')?.addEventListener('click', () => {
       if (!guideStartPath) return;
       guideFirstSuccess = true;
+      try { localStorage.setItem(GUIDE_PREVIEW_COMPLETE_KEY, '1'); } catch (e) { /* 靜默 */ }
       updateGuideRoute();
+    });
+
+    document.querySelectorAll('.onboard-task[data-guide-nav][data-guide-target]').forEach((task) => {
+      task.addEventListener('click', () => jumpToGuideTarget(task.dataset.guideNav, task.dataset.guideTarget));
     });
 
     function updateChecklist() {
       checklist.environment = readiness.control && readiness.ytdlp && readiness.ffmpeg;
+      checklist.websocket = readiness.obsWebSocket;
       const tasks = {
         environment: ['guide-task-environment', '環境可用'],
         song: ['guide-task-song', '已加入第一首歌'],
         obs: ['guide-task-obs', 'OBS 歌詞來源已連線'],
+        websocket: ['guide-task-websocket', 'OBS WebSocket 已連線（選配）'],
         twitch: ['guide-task-twitch', 'Twitch 已連線（選配）'],
       };
       Object.entries(tasks).forEach(([key, [id, doneText]]) => {
@@ -183,7 +204,7 @@
         if (!task) return;
         task.classList.toggle('done', checklist[key]);
         const mark = task.querySelector('.onboard-task-mark');
-        if (mark) mark.textContent = checklist[key] ? '✓' : (key === 'twitch' ? '選' : String(['environment', 'song', 'obs'].indexOf(key) + 1));
+        if (mark) mark.textContent = checklist[key] ? '✓' : ((key === 'twitch' || key === 'websocket') ? '選' : String(['environment', 'song', 'obs'].indexOf(key) + 1));
         if (checklist[key]) task.setAttribute('aria-label', doneText);
       });
       const completed = ['environment', 'song', 'obs'].filter(key => checklist[key]).length;
@@ -243,6 +264,7 @@
         readiness.obsWebSocket = !!status?.connected;
         setReadiness('guide-check-websocket', status?.connecting ? 'pending' : readiness.obsWebSocket,
           status?.connecting ? 'OBS WebSocket 連線中' : readiness.obsWebSocket ? 'OBS WebSocket 已連線' : 'OBS WebSocket 未連線');
+        updateChecklist();
       });
     }
     SocketClient.on('state:sync', (state) => {
