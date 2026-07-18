@@ -404,10 +404,12 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-/* 播放清單 */
-.playlist-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.playlist-head-actions { flex-wrap: wrap; justify-content: flex-end; }
-.playlist-tools { display: grid; gap: 8px; margin: -4px 0 10px; }
+/* 播放清單：標題、管理操作與搜尋各自成列；窄欄不讓清除按鈕孤立換行。 */
+.playlist-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.playlist-head > .eyebrow { flex: 1 1 100%; margin: 0; }
+.playlist-head-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1 1 100%; gap: 6px; }
+.playlist-head-actions .btn { width: 100%; min-width: 0; justify-content: center; padding-inline: 8px; white-space: nowrap; }
+.playlist-tools { display: grid; gap: 8px; margin: 0 0 10px; }
 .playlist-filter-row { display: grid; grid-template-columns: minmax(0, 1fr) 126px auto; gap: 6px; }
 .playlist-filter-row .input { min-width: 0; }
 .playlist-filter-result,
@@ -418,7 +420,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .playlist-selection-hint { color: var(--text-faint); }
 .playlist-selection-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 /* 播放清單獨立成一欄：在響應式 grid 中往下跨 2 列，形成自己的高欄位 */
-.playlist-card { grid-row: span 2; display: flex; flex-direction: column; }
+.playlist-card { grid-row: span 2; display: flex; flex-direction: column; container-type: inline-size; }
 .playlist-card .playlist { flex: 1; }
 /* 高度容納約 10 首(每列 ~44px)不用捲動；超過才出現捲軸 */
 .playlist { display: flex; flex-direction: column; gap: 4px; max-height: 620px; overflow-y: auto; }
@@ -508,9 +510,11 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .playlist-item .pi-remove:hover { color: var(--danger); background: rgba(239,68,68,0.12); }
 .playlist-item .pi-edit:hover { color: var(--accent); background: var(--accent-soft); }
 
-@media (max-width: 720px) {
+/* 依播放清單實際欄寬調整，而非只看瀏覽器總寬；桌面分欄也會安全套用。 */
+@container (max-width: 460px) {
   .playlist-filter-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .playlist-filter-row #playlist-filter-mode { grid-column: 1; }
+  .playlist-filter-row #playlist-filter { grid-column: 1 / -1; }
+  .playlist-filter-row #playlist-filter-mode { grid-column: 1; grid-row: 2; width: 100%; }
   .playlist-filter-row #btn-playlist-filter-clear { grid-column: 2; grid-row: 2; }
   .playlist-selection-actions { width: 100%; margin-left: 0; }
 }
