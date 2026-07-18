@@ -2394,6 +2394,8 @@ test('R4-2 播放清單可搜尋篩選並安全批次選取，不會選到目前
   ok(playlist.includes('正在播放的歌曲不能批次選取') && playlist.includes("SocketClient.sendWithCallback('playlist:update'"), '批次移除必須保護目前歌曲並沿用可回滾的完整清單同步: ');
   ok(playlist.includes('DangerConfirm?.request') && playlist.includes('移除已選歌曲'), '批次移除必須先取得明確確認: ');
   ok(css.includes('.playlist.is-selecting .pi-select') && css.includes('.playlist.is-selecting .pi-extras'), '選取模式必須顯示核取框並收起列內其他動作: ');
+  ok(css.includes('.playlist-head-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));') && css.includes('.playlist-head > .eyebrow { flex: 1 1 100%;'), '播放清單標題與四個管理操作必須分列，避免窄欄孤立換行: ');
+  ok(css.includes('@container (max-width: 460px)') && css.includes('.playlist-filter-row #playlist-filter { grid-column: 1 / -1; }'), '窄播放清單欄的搜尋列必須先顯示完整搜尋框，再顯示篩選與清除: ');
 });
 
 test('R6-2 display runtime 指紋會涵蓋本機資產並強制更新網址', () => {
