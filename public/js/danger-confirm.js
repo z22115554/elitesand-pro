@@ -1,9 +1,8 @@
 /**
  * 直播中的破壞性操作確認。
  *
- * 瀏覽器的 confirm 容易因習慣性按 Enter 而誤觸；此模組要求使用者輸入動作名稱，
- * 並把每次操作的實際影響明確列出。只用於會一次影響大量資料的動作，單首移除
- * 仍維持較輕量的確認，避免日常操作變得笨重。
+ * 不使用瀏覽器原生 confirm，讓確認留在面板內，並把每次操作的實際影響明確列出。
+ * 高風險動作要求輸入動作名稱；一般確認用 PanelConfirm，維持相同的鍵盤與焦點行為。
  */
 (function () {
   'use strict';
@@ -14,11 +13,13 @@
   const impact = document.getElementById('danger-confirm-impact');
   const phraseText = document.getElementById('danger-confirm-phrase');
   const input = document.getElementById('danger-confirm-input');
+  const inputField = document.getElementById('danger-confirm-input-field');
   const cancel = document.getElementById('danger-confirm-cancel');
   const submit = document.getElementById('danger-confirm-submit');
 
   let pending = null;
   let expectedPhrase = '';
+  let requiresPhrase = true;
   let previousFocus = null;
 
   function close(accepted) {
@@ -29,6 +30,9 @@
     input.value = '';
     submit.disabled = true;
     expectedPhrase = '';
+    requiresPhrase = true;
+    inputField.hidden = false;
+    modal.classList.remove('is-neutral');
     const focusTarget = previousFocus;
     previousFocus = null;
     if (focusTarget && document.contains(focusTarget)) focusTarget.focus();
@@ -36,7 +40,7 @@
   }
 
   function inputMatches() {
-    return input.value.trim() === expectedPhrase;
+    return !requiresPhrase || input.value.trim() === expectedPhrase;
   }
 
   function updateSubmitState() {
@@ -44,29 +48,37 @@
   }
 
   function request(options) {
-    if (!modal || !title || !summary || !impact || !phraseText || !input || !cancel || !submit) {
-      // 寧可不執行，也不要在彈窗資源意外缺失時退回只有一鍵的確認。
+    if (!modal || !title || !summary || !impact || !phraseText || !input || !inputField || !cancel || !submit) {
+      // 寧可不執行，也不要在彈窗資源意外缺失時退回瀏覽器原生確認。
       return Promise.resolve(false);
     }
     if (pending) return Promise.resolve(false);
 
     const config = options && typeof options === 'object' ? options : {};
-    expectedPhrase = String(config.phrase || '確認').trim();
-    if (!expectedPhrase) return Promise.resolve(false);
+    requiresPhrase = config.requirePhrase !== false;
+    expectedPhrase = requiresPhrase ? String(config.phrase || '確認').trim() : '';
+    if (requiresPhrase && !expectedPhrase) return Promise.resolve(false);
 
     title.textContent = String(config.title || '確認此操作');
     summary.textContent = String(config.summary || '這個動作會變更資料。');
     impact.textContent = String(config.impact || '請確認這正是你要做的動作。');
-    phraseText.textContent = expectedPhrase;
     input.value = '';
-    input.placeholder = `輸入「${expectedPhrase}」`;
-    submit.textContent = String(config.confirmLabel || expectedPhrase);
-    submit.disabled = true;
+    inputField.hidden = !requiresPhrase;
+    modal.classList.toggle('is-neutral', config.tone === 'neutral');
+    phraseText.textContent = expectedPhrase;
+    input.placeholder = requiresPhrase ? `輸入「${expectedPhrase}」` : '';
+    submit.textContent = String(config.confirmLabel || (requiresPhrase ? expectedPhrase : '確認'));
+    submit.disabled = requiresPhrase;
     previousFocus = document.activeElement;
     modal.hidden = false;
-    requestAnimationFrame(() => input.focus());
+    requestAnimationFrame(() => (requiresPhrase ? input : submit).focus());
 
     return new Promise((resolve) => { pending = resolve; });
+  }
+
+  function requestSimple(options) {
+    const config = options && typeof options === 'object' ? options : {};
+    return request({ ...config, requirePhrase: false, tone: config.tone || 'neutral' });
   }
 
   cancel.addEventListener('click', () => close(false));
@@ -90,4 +102,5 @@
   });
 
   window.DangerConfirm = { request };
+  window.PanelConfirm = { request: requestSimple };
 })();

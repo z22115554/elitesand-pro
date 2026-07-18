@@ -61,6 +61,23 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Stage "tools") | Out-Null
 
 $AppRoot = Join-Path $Stage "app"
 
+# Runtime folders belong to the receiving user, never to the developer who
+# created the archive. Reset them both before packaging and after the smoke
+# test so a future smoke implementation cannot leave local data behind.
+function Reset-PackagedRuntimeData {
+  foreach ($dir in @("data", "downloads", "logs")) {
+    $target = Join-Path $AppRoot $dir
+    Assert-Inside -Path $target -Parent $Stage
+    if (Test-Path $target) {
+      Remove-Item -LiteralPath $target -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $target | Out-Null
+    if ($null -ne (Get-ChildItem -LiteralPath $target -Force | Select-Object -First 1)) {
+      throw "Runtime folder was not empty after reset: $target"
+    }
+  }
+}
+
 $DirsToCopy = @("server", "public")
 foreach ($dir in $DirsToCopy) {
   $src = Join-Path $Root $dir
@@ -105,9 +122,7 @@ try {
   Pop-Location
 }
 
-foreach ($dir in @("data", "downloads", "logs")) {
-  New-Item -ItemType Directory -Force -Path (Join-Path $AppRoot $dir) | Out-Null
-}
+Reset-PackagedRuntimeData
 
 $LicensesDir = Join-Path $Stage "licenses"
 New-Item -ItemType Directory -Force -Path $LicensesDir | Out-Null
@@ -343,6 +358,10 @@ Write-Host "Running packaged-app smoke test..."
 if ($LASTEXITCODE -ne 0) {
   throw "Packaged-app smoke test failed. ZIP creation was stopped."
 }
+
+# The smoke test must not make a release archive carry developer-local state,
+# media, or logs. The empty folders are recreated for first launch.
+Reset-PackagedRuntimeData
 
 if (-not $NoZip) {
   Write-Host "Creating zip..."

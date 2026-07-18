@@ -226,8 +226,16 @@
   }
 
   const rejectAllButton = el('twitch-reject-all');
-  if (rejectAllButton) rejectAllButton.addEventListener('click', () => {
-    if (!pending.size || !window.confirm(`確定拒絕全部 ${pending.size} 筆點歌？`)) return;
+  if (rejectAllButton) rejectAllButton.addEventListener('click', async () => {
+    if (!pending.size) return;
+    const confirmed = await window.PanelConfirm?.request({
+      title: `拒絕全部 ${pending.size} 筆點歌？`,
+      summary: '這些待確認點歌會全部標記為略過。',
+      impact: '已加入播放清單的歌曲與其他設定不受影響。',
+      tone: 'danger',
+      confirmLabel: '全部拒絕',
+    });
+    if (!confirmed) return;
     for (const requestId of [...pending.keys()]) rejectRequest(requestId);
   });
 

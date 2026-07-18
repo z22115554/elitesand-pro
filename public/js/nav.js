@@ -25,10 +25,10 @@
   const TITLES = {
     karaoke: '首頁',
     playlist: '播放清單',
-    setlist: '歌單',
+    setlist: '直播歌單',
     library: '媒體庫',
     settings: '歌詞設定',
-    general: '一般設定',
+    general: '連線與系統',
     twitch: 'Twitch 點歌',
     templates: '模板',
     marketplace: '商城',

@@ -195,6 +195,12 @@
   }
 
   // 貼上歌詞按鈕
+  function closeLyricsPasteModal() {
+    if (!dom.lyricsPasteModal) return;
+    dom.lyricsPasteModal.classList.remove('active');
+    dom.lyricsPasteModal.hidden = true;
+  }
+
   if (dom.btnPasteLyrics) {
     dom.btnPasteLyrics.addEventListener('click', () => {
       const trackId = state.playlist[state.currentTrackIndex] ? state.playlist[state.currentTrackIndex].id : null;
@@ -203,6 +209,7 @@
         return;
       }
       if (dom.lyricsPasteModal) {
+        dom.lyricsPasteModal.hidden = false;
         dom.lyricsPasteModal.classList.add('active');
         dom.lyricsPasteTextarea.value = '';
         dom.lyricsPasteTextarea.focus();
@@ -238,14 +245,13 @@
       } catch (err) {
         AppShared.showToast('歌詞解析失敗: ' + err.message, 'error');
       }
-
-      dom.lyricsPasteModal.classList.remove('active');
+      closeLyricsPasteModal();
     });
   }
 
   if (dom.lyricsPasteCancel) {
     dom.lyricsPasteCancel.addEventListener('click', () => {
-      dom.lyricsPasteModal.classList.remove('active');
+      closeLyricsPasteModal();
     });
   }
 

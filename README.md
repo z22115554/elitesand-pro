@@ -6,12 +6,12 @@
 
 ## English
 
-Latest stable release: `v0.7.8`
+Latest stable release: `v0.8.0`
 
 > [!WARNING]
 > **The built-in updater in v0.7.1–v0.7.3 cannot safely complete this upgrade — do not use "Update Now" from inside those versions.**
 >
-> Download the full `v0.7.8` Portable build instead, close Elitesand Pro, and unzip it fresh (keep a copy of your old folder first). Anyone already on `v0.7.3-p0-hotfix.1` or later can use the safe online updater directly.
+> Download the full `v0.8.0` Portable build instead, close Elitesand Pro, and unzip it fresh (keep a copy of your old folder first). Anyone already on `v0.7.3-p0-hotfix.1` or later can use the safe online updater directly.
 
 A dynamic lyrics tool for VTubers / singing streamers. It drops lyric animations and a live setlist into OBS as **transparent overlays**, driven live from a desktop control panel or a phone remote: play, skip, resync timing, transpose/tempo, switch templates, emergency-hide.
 
@@ -168,12 +168,12 @@ npm test       # unit tests (lyrics parsing, romanization, persistence, etc.)
 
 ## 繁體中文
 
-最新穩定版：`v0.7.8`
+最新穩定版：`v0.8.0`
 
 > [!WARNING]
 > **v0.7.1～v0.7.3 內建的更新器無法安全完成這次升級，請勿使用「立即線上更新」。**
 >
-> 請下載 `v0.7.8` 完整可攜版，關閉 Elitesand Pro 後解壓縮使用。建議先保留原資料夾副本。
+> 請下載 `v0.8.0` 完整可攜版，關閉 Elitesand Pro 後解壓縮使用。建議先保留原資料夾副本。
 > 已安裝 `v0.7.3-p0-hotfix.1` 或之後版本者可直接使用安全線上更新。
 
 VTuber／唱歌直播主用的動態歌詞演出工具。把歌詞動畫和直播歌單以**透明疊加層**放進 OBS，

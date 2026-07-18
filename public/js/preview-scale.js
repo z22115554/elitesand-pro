@@ -16,19 +16,10 @@
   function apply() { wraps.forEach(applyTo); }
 
   apply();
-  let observing = false;
-  if (typeof ResizeObserver !== 'undefined') {
-    try {
-      const ro = new ResizeObserver((entries) => entries.forEach((e) => applyTo(e.target)));
-      wraps.forEach((w) => { if (w && w.nodeType === 1) ro.observe(w); });
-      observing = true;
-    } catch (_) {
-      // 少數嵌入式 WebView 的 observer 實作不完整；預覽不能因此中斷整個控制台。
-    }
-  }
-  if (!observing) {
-    window.addEventListener('resize', apply);
-  }
+  // 這些預覽的寬度只會跟著視窗／視圖切換變化。部分嵌入式 WebView 的
+  // ResizeObserver 會在 observe() 當下報「參數不是 Node」並留下控制台錯誤；
+  // resize 事件足以覆蓋實際情境，也能保證預覽功能不受 observer 實作差異影響。
+  window.addEventListener('resize', apply);
   // 視圖切換 / 字體載入後再校正一次
   document.addEventListener('view:change', () => setTimeout(apply, 50));
   window.addEventListener('load', apply);

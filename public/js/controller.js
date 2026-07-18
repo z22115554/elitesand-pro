@@ -78,12 +78,21 @@
   let currentMode = 'original';
   let playlist = [];
   let currentTrackIndex = -1;
+  let currentTrackId = null;
   let playlistVisible = false;
   let currentOffsetMs = 0;
   let currentPitchShift = 0;
   let currentPlaybackRate = 1.0;
   let lastDuration = 0; // 由 lyrics:sync 取得，供進度條與拖曳跳轉換算
   let lyricSettings = {};
+
+  // controller 重開時只會拿到目前歌曲物件和清單摘要；索引不能沿用舊分頁的值。
+  // 集中走與桌面面板相同的純函式，讓貼歌詞、上傳歌詞與 offset 都指向正確歌曲。
+  function reconcileCurrentTrackIndex(track) {
+    currentTrackId = track && track.id != null ? track.id : null;
+    currentTrackIndex = PlaylistState.reconcilePlaylist(playlist, currentTrackId).currentTrackIndex;
+    return currentTrackIndex;
+  }
 
   const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
@@ -600,6 +609,7 @@
 
   // 播放歌曲
   SocketClient.on('play:track', (track) => {
+    reconcileCurrentTrackIndex(track);
     dom.trackTitle.textContent = track.title || '未知歌曲';
     dom.trackArtist.textContent = track.artist || '';
 
@@ -618,6 +628,7 @@
       currentOffsetMs = track.offset;
       updateOffsetDisplay();
     }
+    renderPlaylist();
   });
 
   // 播放/暫停
@@ -669,12 +680,19 @@
 
   // 播放列表更新
   SocketClient.on('playlist:update', (newPlaylist) => {
-    playlist = newPlaylist;
+    playlist = Array.isArray(newPlaylist) ? newPlaylist : [];
+    reconcileCurrentTrackIndex(currentTrackId ? { id: currentTrackId } : null);
     renderPlaylist();
   });
 
   // 完整狀態同步
   SocketClient.on('state:sync', (state) => {
+    const hasCurrentTrack = Object.prototype.hasOwnProperty.call(state || {}, 'currentTrack');
+    const hasPlaylist = Array.isArray(state?.playlist);
+
+    // 清單必須先更新，才能用 currentTrack.id 找到正確列。
+    if (hasPlaylist) playlist = state.playlist;
+
     // 風格
     if (state.style) {
       currentStyle = state.style;
@@ -701,6 +719,7 @@
     // 當前歌曲
     if (state.currentTrack) {
       const track = state.currentTrack;
+      reconcileCurrentTrackIndex(track);
       dom.trackTitle.textContent = track.title || '未知歌曲';
       dom.trackArtist.textContent = track.artist || '';
       const coverUrl = safeHttpUrl(track.cover);
@@ -714,6 +733,11 @@
         currentOffsetMs = track.offset;
         updateOffsetDisplay();
       }
+    } else if (hasCurrentTrack) {
+      reconcileCurrentTrackIndex(null);
+      dom.trackTitle.textContent = '尚未播放';
+      dom.trackArtist.textContent = '';
+      dom.albumArt.style.backgroundImage = 'none';
     }
 
     // 緊急隱藏
@@ -723,8 +747,8 @@
     }
 
     // 播放列表
-    if (state.playlist && state.playlist.length > 0) {
-      playlist = state.playlist;
+    if (hasPlaylist || hasCurrentTrack) {
+      if (!hasCurrentTrack) reconcileCurrentTrackIndex(currentTrackId ? { id: currentTrackId } : null);
       renderPlaylist();
     }
 

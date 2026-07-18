@@ -158,11 +158,17 @@
     }
   }
 
-  function reimport(item, row) {
+  async function reimport(item, row) {
     if (!window.VKState) { toast('匯入功能未就緒', 'error'); return; }
     // 重複加入警告：已在播放清單中就先問，確認後仍會再加一首到清單末端
     if (window.VKState.isInPlaylist && window.VKState.isInPlaylist(item.id)) {
-      if (!window.confirm(`「${item.title}」已在播放清單中。\n要再加入一首到清單末端嗎？`)) return;
+      const confirmed = await window.PanelConfirm?.request({
+        title: `再次加入「${item.title}」？`,
+        summary: '這首歌已在播放清單中。',
+        impact: '確認後會在清單末端再加入一首，不會移除原本的歌曲。',
+        confirmLabel: '再加入一首',
+      });
+      if (!confirmed) return;
     }
     const btn = row.querySelector('.lib-reimport');
     if (!btn || btn.disabled) return;
@@ -173,11 +179,18 @@
     runRestoreQueue();
   }
 
-  function removeItem(id) {
+  async function removeItem(id) {
     // 刪除前先確認（媒體庫紀錄含播放次數/歌詞記憶，誤刪要重新匯入）
     const item = cache.find((x) => x.id === id);
     const title = item ? (item.title || '這首歌') : '這首歌';
-    if (!window.confirm(`確定從媒體庫移除「${title}」？（播放紀錄與記憶會一併清除）`)) return;
+    const confirmed = await window.PanelConfirm?.request({
+      title: `從媒體庫移除「${title}」？`,
+      summary: '這首歌的媒體庫紀錄會被移除。',
+      impact: '播放紀錄與媒體庫記憶會一併清除；目前播放清單與已下載音檔不受影響。',
+      tone: 'danger',
+      confirmLabel: '移除紀錄',
+    });
+    if (!confirmed) return;
     SocketClient.sendWithCallback('library:remove', id, (res) => {
       if (!res?.ok) return toast(`刪除失敗：${res?.error || '伺服器沒有確認'}`, 'error');
       cache = cache.filter((x) => x.id !== id); render(cache); toast('已從媒體庫移除', 'success');

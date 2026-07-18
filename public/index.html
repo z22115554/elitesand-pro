@@ -39,13 +39,13 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
           <span class="nav-label">歌詞設定</span>
         </button>
-        <button class="nav-item" data-nav="setlist" type="button" title="直播歌單">
+        <button class="nav-item" data-nav="setlist" type="button" title="直播歌單與 OBS 輸出">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          <span class="nav-label">歌單</span>
+          <span class="nav-label">直播歌單</span>
         </button>
         <button class="nav-item" data-nav="twitch" type="button" title="Twitch 點歌">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14v11a4 4 0 0 1-4 4h-3l-3 2v-2H9a4 4 0 0 1-4-4z"/><path d="M9 8v4M15 8v4"/></svg>
-          <span class="nav-label">點歌</span>
+          <span class="nav-label">Twitch</span>
           <span id="twitch-nav-badge" class="pi-badge" hidden>0</span>
         </button>
 
@@ -63,9 +63,9 @@
       <div class="nav-spacer"></div>
 
       <div class="nav-group">
-        <button class="nav-item" data-nav="general" type="button" title="一般設定">
+        <button class="nav-item" data-nav="general" type="button" title="連線與系統">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <span class="nav-label">一般設定</span>
+          <span class="nav-label">連線與系統</span>
         </button>
         <!-- 預留：使用者個人檔案（之後啟用）-->
         <button class="nav-item" data-nav="account" type="button" title="帳號" hidden>
@@ -1885,14 +1885,14 @@
     <button id="audio-error-close" class="btn btn-sm btn-ghost" type="button">×</button>
   </div>
 
-  <!-- ═══ Modal：直播中破壞性操作的輸入式二次確認（danger-confirm.js）═══ -->
+  <!-- ═══ Modal：直播中的程式內確認（danger-confirm.js；可要求輸入或一般確認）═══ -->
   <div id="danger-confirm-modal" class="modal danger-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="danger-confirm-title" aria-describedby="danger-confirm-summary danger-confirm-impact" hidden>
     <div class="modal-card" role="document">
       <div class="modal-head danger-confirm-head"><h3 id="danger-confirm-title">確認此操作</h3></div>
       <div class="modal-body">
         <p id="danger-confirm-summary" class="danger-confirm-summary"></p>
         <p id="danger-confirm-impact" class="danger-confirm-impact"></p>
-        <div class="field">
+        <div id="danger-confirm-input-field" class="field">
           <label for="danger-confirm-input">請輸入「<span id="danger-confirm-phrase"></span>」才能繼續</label>
           <input id="danger-confirm-input" class="input" type="text" autocomplete="off" spellcheck="false">
         </div>

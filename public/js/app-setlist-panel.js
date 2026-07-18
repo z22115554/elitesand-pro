@@ -158,8 +158,15 @@
     });
   }
   if (dom.sessionReset) {
-    dom.sessionReset.addEventListener('click', () => {
-      if (!window.confirm('確定清除整個直播歌單？')) return;
+    dom.sessionReset.addEventListener('click', async () => {
+      const confirmed = await window.PanelConfirm?.request({
+        title: '清除整個直播歌單？',
+        summary: '本次直播已唱歌曲與 YouTube 章節將被清除。',
+        impact: '播放清單、音檔、媒體庫與 OBS 版型設定都會保留。',
+        tone: 'danger',
+        confirmLabel: '清除直播歌單',
+      });
+      if (!confirmed) return;
       SocketClient.send('session:reset');
     });
   }
