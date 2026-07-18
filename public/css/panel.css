@@ -453,8 +453,13 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .view[data-view="settings"].is-active { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 460px); gap: var(--gap); align-items: start; max-width: 1480px; margin: 0 auto; }
 .settings-body { grid-column: 1; grid-row: 1; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); align-items: start; }
 /* 預覽 bar：sticky 固定在設定頁頂部，往下捲設定時不跟著走。背景用不透明底色，避免卡片捲到底下透出來。 */
-.settings-preview-bar { grid-column: 2; grid-row: 1; position: sticky; top: 12px; z-index: 20; display: flex; flex-direction: column; gap: 8px; justify-content: stretch; padding: 0; margin: 0; background: transparent; box-shadow: none; }
+.settings-preview-bar { grid-column: 2; grid-row: 1; position: sticky; top: 12px; z-index: 20; display: flex; flex-direction: column; gap: 10px; justify-content: stretch; padding: 0; margin: 0; background: transparent; box-shadow: none; }
+.settings-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.settings-preview-head .save-status { flex: 0 0 auto; }
+.settings-preview-controls { display: flex; flex-wrap: wrap; gap: 8px; }
 .settings-preview-bar .obs-preview-wrap { width: 100%; max-width: none; }
+.settings-preview-bar .url-field { min-width: 0; }
+.settings-preview-bar .url-field code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .save-status { align-self: flex-end; display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-raised); color: var(--text-faint); font-size: 11px; }
 .save-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .save-status.saving { color: var(--text-dim); }
