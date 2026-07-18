@@ -483,15 +483,19 @@
     requestAnimationFrame(() => updateMarquee(dom.playlist));
   }
 
-  function removeTrack(index) {
+  async function removeTrack(index) {
     const playlist = state.playlist;
     const track = playlist[index];
     if (!track) return;
     // 刪除前先確認（避免直播中誤觸把歌刪掉）
-    if (!window.confirm(
-      `確定從播放清單移除「${track.title || '這首歌'}」？\n\n` +
-      '手動歌詞修正與歌詞同步微調會保留，日後重新加入同一首歌時會自動恢復。'
-    )) return;
+    const confirmed = await window.PanelConfirm?.request({
+      title: `從播放清單移除「${track.title || '這首歌'}」？`,
+      summary: '這首歌會從本次播放清單移除。',
+      impact: '手動歌詞修正與歌詞同步微調會保留；日後重新加入同一首歌時會自動恢復。',
+      tone: 'danger',
+      confirmLabel: '移除歌曲',
+    });
+    if (!confirmed) return;
     const previousPlaylist = playlist.slice();
     const previousIndex = state.currentTrackIndex;
     playlist.splice(index, 1);
@@ -602,7 +606,14 @@
   async function clearAllTracks() {
     const playlist = state.playlist;
     if (playlist.length === 0) { AppShared.showToast('播放清單已經是空的'); return; }
-    if (!window.confirm(`確定要清空本次播放清單的 ${playlist.length} 首歌嗎？\n歌曲音檔、媒體庫紀錄、手動歌詞與同步微調都會保留。`)) return;
+    const confirmed = await window.PanelConfirm?.request({
+      title: '清空本次播放清單？',
+      summary: `即將清除這次播放清單的 ${playlist.length} 首歌。`,
+      impact: '歌曲音檔、媒體庫紀錄、手動歌詞與同步微調都會保留；之後可從媒體庫重新加入。',
+      tone: 'danger',
+      confirmLabel: '清除全部',
+    });
+    if (!confirmed) return;
     SocketClient.sendWithCallback('playlist:update', [], (result) => {
       if (result?.ok) {
         AppShared.stopPlayback();

@@ -37,7 +37,7 @@ body { overflow: hidden; }
   gap: 3px; cursor: pointer; transition: background 0.14s, color 0.14s;
 }
 .nav-item svg { width: 22px; height: 22px; }
-.nav-item .nav-label { font-size: 9px; font-weight: 600; letter-spacing: 0.02em; }
+.nav-item .nav-label { font-size: 8px; font-weight: 600; letter-spacing: 0; white-space: nowrap; }
 .nav-item:hover { background: var(--bg-hover); color: var(--text); }
 .nav-item.active { background: var(--accent-soft); color: var(--accent); }
 .nav-item.active::before {
@@ -641,6 +641,9 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .danger-confirm-submit { background: var(--danger); border-color: var(--danger); color: #fff; }
 .danger-confirm-submit:hover:not(:disabled) { filter: brightness(1.08); }
 .danger-confirm-submit:disabled { cursor: not-allowed; opacity: .45; }
+.danger-confirm-modal.is-neutral .modal-card { border-color: var(--border); }
+.danger-confirm-modal.is-neutral .danger-confirm-head h3 { color: var(--text); }
+.danger-confirm-modal.is-neutral .danger-confirm-submit { background: var(--accent); border-color: var(--accent); }
 
 /* 加寬彈窗（詳細設定）：近全螢幕、左預覽右多欄 */
 .modal-wide .modal-card { max-width: 1180px; width: 96vw; max-height: 90vh; }

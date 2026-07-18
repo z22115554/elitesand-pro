@@ -136,7 +136,12 @@
       const data = await postPlaylist(url);
       if (!data.success) throw new Error(data.error || '播放清單讀取失敗');
       if (data.needsConfirm) {
-        const all = window.confirm(`此播放清單共 ${data.total} 首。\n確定要全部匯入嗎？（會邊匯入邊出現、邊可播）\n按「取消」將不匯入。`);
+        const all = await window.PanelConfirm?.request({
+          title: `匯入這份 ${data.total} 首的播放清單？`,
+          summary: '歌曲會逐首檢查、依序加入，完成前即可開始播放。',
+          impact: '可隨時在工作中心取消尚未開始的匯入；已完成的歌曲會保留在播放清單。',
+          confirmLabel: '開始匯入',
+        });
         if (!all) { setYtProgress('已取消播放清單匯入', true); return; }
       }
       const entries = Array.isArray(data.entries) ? data.entries : [];
@@ -208,7 +213,7 @@
   function confirmRiskAssessment(assessment) {
     if (!assessment?.warning || riskWarningsDisabled()) return Promise.resolve(true);
     const modal = document.getElementById('youtube-risk-modal');
-    if (!modal) return Promise.resolve(window.confirm((assessment.warnings || []).join('\n')));
+    if (!modal) return Promise.resolve(false);
     const title = document.getElementById('youtube-risk-title');
     const author = document.getElementById('youtube-risk-author');
     const duration = document.getElementById('youtube-risk-duration');

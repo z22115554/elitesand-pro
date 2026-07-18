@@ -227,13 +227,24 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* 歌名是歌單辨識的第一優先。長歌手名只能使用剩餘空間，
+     不能把歌名壓到只剩幾個像素再逼它跑馬燈。 */
+  flex: 1 1 0;
+  /* 已唱列還有時間戳時也至少保留半列給歌名；歌手可縮成 0，
+     但不能反過來讓歌名只剩一兩個字。 */
+  min-width: 50%;
 }
 
 .setlist-artist {
   font-size: 11px;
   color: var(--sl-artist-color);
   white-space: nowrap;
-  flex-shrink: 0;
+  /* 歌手是輔助資訊：過長時在自己的配額內省略，而非擠壓歌名。 */
+  flex: 0 1 38%;
+  min-width: 0;
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .setlist-empty {

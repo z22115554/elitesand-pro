@@ -59,7 +59,13 @@
 
   onlineBtn.addEventListener('click', async () => {
     if (!latestPlan?.canIncremental || remoteActions.disableIncrementalUpdate || remoteActions.showFullDownloadOnly) return;
-    if (!window.confirm('安全線上更新會先下載、驗證並準備 staging；確認完成後程式會自動重新啟動。更新期間請勿關閉啟動視窗。要繼續嗎？')) return;
+    const confirmed = await window.PanelConfirm?.request({
+      title: '開始安全線上更新？',
+      summary: '程式會先下載、驗證 SHA-256 與準備 staging。',
+      impact: '確認完成後程式會自動重新啟動；更新期間請勿關閉啟動視窗。',
+      confirmLabel: '下載並更新',
+    });
+    if (!confirmed) return;
     onlineBtn.disabled = true;
     checkBtn.disabled = true;
     const original = onlineBtn.textContent;

@@ -956,7 +956,15 @@
         if (!name) return;
         saveCurrentTemplateSnapshot();
         const existing = lyricPresets.find((p) => p.name === name);
-        if (existing && !confirm('已有同名預設，要覆蓋嗎？')) return;
+        if (existing) {
+          const confirmed = await window.PanelConfirm?.request({
+            title: '覆蓋同名歌詞預設？',
+            summary: `「${name}」已存在。`,
+            impact: '原本的這組歌詞外觀設定會被目前設定取代。',
+            confirmLabel: '覆蓋預設',
+          });
+          if (!confirmed) return;
+        }
         const item = { id: existing ? existing.id : String(Date.now()), name, settings: cleanSettingSnapshot(settings) };
         if (existing) existing.settings = item.settings;
         else lyricPresets.push(item);
@@ -988,9 +996,17 @@
       });
     }
     if (delBtn) {
-      delBtn.addEventListener('click', () => {
+      delBtn.addEventListener('click', async () => {
         const item = lyricPresets.find((p) => p.id === (sel && sel.value));
-        if (!item || !confirm('確定刪除預設「' + item.name + '」？')) return;
+        if (!item) return;
+        const confirmed = await window.PanelConfirm?.request({
+          title: `刪除預設「${item.name}」？`,
+          summary: '這組已儲存的歌詞外觀預設會被刪除。',
+          impact: '目前套用中的歌詞外觀不會改變，但這組預設無法復原。',
+          tone: 'danger',
+          confirmLabel: '刪除預設',
+        });
+        if (!confirmed) return;
         lyricPresets = lyricPresets.filter((p) => p.id !== item.id);
         saveSettings();
         const payload = buildSettingsPayload();

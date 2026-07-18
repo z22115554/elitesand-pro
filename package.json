@@ -1,6 +1,6 @@
 {
   "name": "elitesand-pro",
-  "version": "0.7.8",
+  "version": "0.8.0",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "server/index.js",
@@ -15,7 +15,7 @@
     "package:update": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-update.ps1"
   },
   "dependencies": {
-    "adm-zip": "^0.5.18",
+    "adm-zip": "^0.6.0",
     "express": "^4.21.0",
     "he": "^1.2.0",
     "iconv-lite": "^0.6.3",

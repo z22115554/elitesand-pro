@@ -390,9 +390,14 @@
   });
 
   // Phase 5: 音訊錯誤通知
-  SocketClient.on('audio:error', (data) => {
+  SocketClient.on('audio:error', async (data) => {
     if (data?.code === 'AUDIO_FILE_MISSING' && data.retryable && data.trackId) {
-      const accepted = window.confirm(`「${data.title || '這首歌'}」的音檔遺失。要現在重新下載嗎？`);
+      const accepted = await window.PanelConfirm?.request({
+        title: `重新下載「${data.title || '這首歌'}」？`,
+        summary: '此歌曲的本機音檔遺失，現在可重新下載。',
+        impact: '會加入下載佇列，不會清除現有播放清單或歌詞設定。',
+        confirmLabel: '重新下載',
+      });
       if (accepted) {
         window.VKState.redownloadMissingTrack(data.trackId)
           .then(() => AppShared.showToast(`已重新下載「${data.title || '這首歌'}」`, 'success'))
