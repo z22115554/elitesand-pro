@@ -119,8 +119,18 @@
     setTimeout(() => { button.textContent = original; }, 2000);
   }
 
+  function buildObsUrl() {
+    return window.location.origin + '/display';
+  }
+
+  function refreshObsUrls() {
+    const url = buildObsUrl();
+    if (dom.obsUrl) dom.obsUrl.textContent = url;
+    if (dom.lyricsPreviewObsUrl) dom.lyricsPreviewObsUrl.textContent = url;
+  }
+
   function copyObsUrl(button) {
-    const url = dom.obsUrl.textContent;
+    const url = buildObsUrl();
     navigator.clipboard.writeText(url).then(() => {
       markObsCopied(button);
     }).catch(() => {
@@ -134,8 +144,10 @@
     });
   }
 
+  refreshObsUrls();
   if (dom.copyObsUrlTop) dom.copyObsUrlTop.addEventListener('click', () => copyObsUrl(dom.copyObsUrlTop));
-  dom.copyObsUrl.addEventListener('click', () => copyObsUrl(dom.copyObsUrl));
+  if (dom.copyObsUrl) dom.copyObsUrl.addEventListener('click', () => copyObsUrl(dom.copyObsUrl));
+  if (dom.copyObsUrlPreview) dom.copyObsUrlPreview.addEventListener('click', () => copyObsUrl(dom.copyObsUrlPreview));
 
   // ═══════════════════════════════════════════
   // 手機遙控器：區網 IP + QR code
