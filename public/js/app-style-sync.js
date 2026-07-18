@@ -127,6 +127,7 @@
     const url = buildObsUrl();
     if (dom.obsUrl) dom.obsUrl.textContent = url;
     if (dom.lyricsPreviewObsUrl) dom.lyricsPreviewObsUrl.textContent = url;
+    if (dom.settingsPreviewObsUrl) dom.settingsPreviewObsUrl.textContent = url;
   }
 
   function copyObsUrl(button) {
@@ -148,6 +149,7 @@
   if (dom.copyObsUrlTop) dom.copyObsUrlTop.addEventListener('click', () => copyObsUrl(dom.copyObsUrlTop));
   if (dom.copyObsUrl) dom.copyObsUrl.addEventListener('click', () => copyObsUrl(dom.copyObsUrl));
   if (dom.copyObsUrlPreview) dom.copyObsUrlPreview.addEventListener('click', () => copyObsUrl(dom.copyObsUrlPreview));
+  if (dom.copyObsUrlSettingsPreview) dom.copyObsUrlSettingsPreview.addEventListener('click', () => copyObsUrl(dom.copyObsUrlSettingsPreview));
 
   // ═══════════════════════════════════════════
   // 手機遙控器：區網 IP + QR code

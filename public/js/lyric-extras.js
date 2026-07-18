@@ -386,10 +386,9 @@
     confirmSettingsSaved(payload);
   }
 
-  const sampleLyricsBtn = document.getElementById('btn-preview-sample-lyrics');
-  if (sampleLyricsBtn) {
-    sampleLyricsBtn.addEventListener('click', showSampleLyricsInPreview);
-  }
+  document.querySelectorAll('.btn-preview-sample-lyrics').forEach((button) => {
+    button.addEventListener('click', showSampleLyricsInPreview);
+  });
 
   // 把單一設定值套到對應的 UI 控制項顯示
   function bindControl(id, key, opts = {}) {

@@ -334,7 +334,7 @@
               <span class="save-status saved">已即時同步</span>
             </div>
             <div class="lyrics-preview-controls">
-              <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost" type="button">示範歌詞</button>
+              <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost btn-preview-sample-lyrics" type="button">示範歌詞</button>
               <button id="btn-lyrics-picker" class="btn btn-sm" type="button">選擇來源</button>
               <button id="btn-paste-lyrics" class="btn btn-sm btn-ghost" type="button">貼上歌詞</button>
             </div>
@@ -369,13 +369,27 @@
         <div class="view" data-view="settings">
           <!-- 即時預覽（鏡像 OBS 輸出，調整下方設定時所見即所得；示範歌詞由歌詞頁按鈕手動載入）
                sticky 固定在設定頁頂部，往下捲設定時預覽不跟著走（見 .settings-preview-bar CSS） -->
-          <div class="settings-preview-bar">
-            <div id="lyrics-save-status" class="save-status saved" role="status" aria-live="polite">設定已保存</div>
+          <aside class="settings-preview-bar" aria-label="歌詞即時預覽">
+            <div class="settings-preview-head">
+              <div>
+                <p class="eyebrow m-0">歌詞即時預覽</p>
+                <p class="field-hint m-0">調整設定時，這裡會即時顯示 OBS 輸出。</p>
+              </div>
+              <div id="lyrics-save-status" class="save-status saved" role="status" aria-live="polite">設定已保存</div>
+            </div>
+            <div class="settings-preview-controls">
+              <button id="btn-settings-preview-sample-lyrics" class="btn btn-sm btn-preview-sample-lyrics" type="button">示範歌詞</button>
+            </div>
             <div class="obs-preview-wrap">
               <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
-              <div class="obs-preview-tag">即時預覽 · 調整下方設定即時更新</div>
+              <div class="obs-preview-tag">OBS 預覽</div>
             </div>
-          </div>
+            <div class="url-field">
+              <code id="settings-preview-obs-url">http://localhost:3000/display</code>
+              <button id="copy-obs-url-settings-preview" class="btn btn-sm" type="button">複製</button>
+            </div>
+            <p class="val m-0">OBS 新增「瀏覽器來源」後貼上此網址；調整下方設定會立即同步，不需要更新網址。</p>
+          </aside>
 
           <!-- 設定卡片區（內層 grid，讓預覽 bar 能 sticky 在其上方）-->
           <div class="settings-body">
