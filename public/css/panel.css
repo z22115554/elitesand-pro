@@ -93,7 +93,13 @@ body { overflow: hidden; }
 .kara-col, .kara-left { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 /* 右區＝獨立預覽，置頂跟隨捲動，盡量大 */
 .kara-right { position: sticky; top: 0; min-width: 0; }
-.kara-preview-card .obs-preview-wrap { background: #000; }
+.kara-preview-card { display: flex; flex-direction: column; gap: 10px; }
+.lyrics-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.lyrics-preview-head .save-status { flex: 0 0 auto; }
+.lyrics-preview-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.kara-preview-card .obs-preview-wrap { margin: 0; background: #000; }
+.kara-preview-card .url-field { min-width: 0; }
+.kara-preview-card .url-field code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1280px) {
   .kara-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
   .kara-col-list { grid-column: 1 / -1; }  /* 窄一點時清單橫跨上方 */
@@ -102,6 +108,7 @@ body { overflow: hidden; }
   .kara-split { grid-template-columns: 1fr; }
   .kara-col-list { grid-column: auto; }
   .kara-right { position: static; }
+  .lyrics-preview-head { align-items: flex-start; }
 }
 
 /* 歌單頁：控制、設定、OBS 預覽三欄；預覽如歌詞設定頁般固定在畫面內。 */

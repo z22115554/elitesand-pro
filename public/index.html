@@ -326,19 +326,28 @@
           <!-- 右區：獨立預覽（高、sticky 跟隨捲動）-->
           <div class="kara-right">
           <section class="card kara-preview-card" id="lyrics-preview-card">
-            <div class="playlist-head">
-              <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>歌詞即時預覽</p>
-              <div class="inline-row">
-                <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost" type="button">示範歌詞</button>
-                <button id="btn-lyrics-picker" class="btn btn-sm" type="button">選擇來源</button>
-                <button id="btn-paste-lyrics" class="btn btn-sm btn-ghost" type="button">貼上歌詞</button>
+            <div class="lyrics-preview-head">
+              <div>
+                <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>歌詞即時預覽</p>
+                <p class="field-hint m-0">選歌或調整設定時，這裡會即時顯示 OBS 輸出。</p>
               </div>
+              <span class="save-status saved">已即時同步</span>
+            </div>
+            <div class="lyrics-preview-controls">
+              <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost" type="button">示範歌詞</button>
+              <button id="btn-lyrics-picker" class="btn btn-sm" type="button">選擇來源</button>
+              <button id="btn-paste-lyrics" class="btn btn-sm btn-ghost" type="button">貼上歌詞</button>
             </div>
             <!-- 內嵌 OBS 顯示端（preview 模式：緊急隱藏時面板仍看得到）-->
             <div class="obs-preview-wrap">
               <iframe id="obs-preview" class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
-              <div class="obs-preview-tag">這就是 OBS 輸出的畫面</div>
+              <div class="obs-preview-tag">OBS 預覽</div>
             </div>
+            <div class="url-field">
+              <code id="lyrics-preview-obs-url">http://localhost:3000/display</code>
+              <button id="copy-obs-url-preview" class="btn btn-sm" type="button">複製</button>
+            </div>
+            <p class="val m-0">OBS 新增「瀏覽器來源」後貼上此網址；歌詞設定會自動同步，不需要更新網址。</p>
             <details class="collapse mt-10">
               <summary>歌詞純文字 / 上傳覆蓋</summary>
               <div class="collapse-body">
