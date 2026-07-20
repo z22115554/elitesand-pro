@@ -285,15 +285,9 @@ function createElectronShell({
       show: false,
       backgroundColor: '#20222a',
       title: 'Elitesand Pro',
-      // Keep the window controls reliable while letting the web panel own the
-      // visual chrome. The overlay reserves the right-side caption buttons;
-      // the renderer supplies the matching draggable app bar underneath.
+      // The panel owns the entire title strip, including controls, so the
+      // chrome stays visually consistent across Windows versions.
       frame: false,
-      titleBarOverlay: {
-        color: '#20222a',
-        symbolColor: '#f2f3f5',
-        height: 38,
-      },
       webPreferences: {
         preload,
         contextIsolation: true,
@@ -317,11 +311,26 @@ function createElectronShell({
           moveWindowToTray(window);
         }
       });
+      ipcMain.on('elitesand:window-control', (event, action) => {
+        if (event?.sender !== window.webContents) return;
+        if (action === 'minimize') {
+          window.minimize?.();
+          return;
+        }
+        if (action === 'toggle-maximize') {
+          if (window.isMaximized?.()) window.unmaximize?.();
+          else window.maximize?.();
+          return;
+        }
+        if (action === 'close') window.close?.();
+      });
     }
     window.once('ready-to-show', () => {
       if (!headless) window.show();
     });
     window.on('close', (event) => hideWindowToTray(event, window));
+    window.on('maximize', () => window.webContents.send?.('elitesand:window-maximized', true));
+    window.on('unmaximize', () => window.webContents.send?.('elitesand:window-maximized', false));
     window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (isProjectReleaseUrl(url)) shell.openExternal(url);

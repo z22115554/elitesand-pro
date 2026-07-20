@@ -27,6 +27,15 @@ html.electron-shell .desktop-windowbar {
 .desktop-windowbar-brand { color: var(--text); font-size: 12px; font-weight: 700; letter-spacing: 0.01em; }
 .desktop-windowbar-divider { width: 1px; height: 14px; background: var(--border-strong); }
 .desktop-windowbar-context { font-size: 12px; color: var(--text-faint); }
+.desktop-windowbar-controls { position: absolute; top: 0; right: 0; display: flex; height: 100%; -webkit-app-region: no-drag; }
+.desktop-windowbar-control { display: grid; place-items: center; width: 46px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text-dim); cursor: pointer; transition: background 0.12s ease, color 0.12s ease; }
+.desktop-windowbar-control:hover { background: var(--bg-hover); color: var(--text); }
+.desktop-windowbar-control:focus-visible { position: relative; z-index: 1; outline: 1px solid var(--accent); outline-offset: -3px; }
+.desktop-windowbar-control svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: square; }
+.desktop-windowbar-control--close:hover { background: var(--danger); color: #fff; }
+.window-control-restore-icon { display: none; }
+.desktop-windowbar-control.is-maximized .window-control-maximize-icon { display: none; }
+.desktop-windowbar-control.is-maximized .window-control-restore-icon { display: block; }
 html.electron-shell .app {
   height: calc(100vh - var(--desktop-windowbar-height));
   margin-top: var(--desktop-windowbar-height);
@@ -141,6 +150,7 @@ html.electron-shell .announcement-banner { top: calc(var(--desktop-windowbar-hei
 /* 歌單頁：控制、設定、OBS 預覽三欄；預覽如歌詞設定頁般固定在畫面內。 */
 [data-view="setlist"].is-active { display: block; }
 .setlist-split { display: grid; grid-template-columns: minmax(250px, 0.72fr) minmax(420px, 1.22fr) minmax(300px, 0.82fr); gap: var(--gap); align-items: start; }
+.setlist-main { display: contents; min-width: 0; }
 .setlist-left { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 .setlist-right { min-width: 0; grid-column: 2; grid-row: 1; }
 .setlist-preview-bar { grid-column: 3; grid-row: 1; position: sticky; top: 12px; z-index: 20; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -151,13 +161,17 @@ html.electron-shell .announcement-banner { top: calc(var(--desktop-windowbar-hei
 .setlist-preview-bar .url-field code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1520px) {
   .setlist-split { grid-template-columns: minmax(0, 0.9fr) minmax(300px, 0.92fr); }
-  .setlist-left { grid-column: 1; grid-row: 1; }
+  /* Keep the compact-width setting flow in the left column.  A regular
+     second grid row would wait for the tall, sticky OBS preview and leave a
+     misleading empty area underneath the session cards. */
+  .setlist-main { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; grid-column: 1; grid-row: 1; }
   .setlist-preview-bar { grid-column: 2; grid-row: 1; }
-  .setlist-right { grid-column: 1 / -1; grid-row: 2; }
+  .setlist-right { grid-column: auto; grid-row: auto; }
 }
 @media (max-width: 920px) {
   .setlist-split { grid-template-columns: minmax(0, 1fr); }
-  .setlist-left { grid-column: 1; grid-row: 1; }
+  .setlist-main { grid-column: 1; grid-row: 1; }
+  .setlist-left { display: flex; flex-direction: column; gap: var(--gap); }
   .setlist-preview-bar { grid-column: 1; grid-row: 2; position: static; }
   .setlist-right { grid-column: 1; grid-row: 3; }
 }
@@ -182,7 +196,8 @@ html.electron-shell .announcement-banner { top: calc(var(--desktop-windowbar-hei
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 @media (max-width: 1024px) {
   .setlist-split { grid-template-columns: 1fr; }
-  .setlist-left { grid-column: 1; grid-row: 1; }
+  .setlist-main { grid-column: 1; grid-row: 1; }
+  .setlist-left { display: flex; flex-direction: column; gap: var(--gap); }
   .setlist-preview-bar { grid-column: 1; grid-row: 2; position: static; }
   .setlist-right { grid-column: 1; grid-row: 3; }
 }
