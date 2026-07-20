@@ -2,23 +2,19 @@
   "schemaVersion": 1,
   "announcements": [
     {
-      "id": "example-update-warning",
-      "level": "critical",
-      "title": "請勿使用舊版線上更新",
-      "message": "v0.7.1 與 v0.7.2 的舊版線上更新無法安全修復，請下載完整 Portable 版本。",
-      "minVersion": "0.7.1",
-      "maxVersion": "0.7.2",
-      "publishedAt": "2026-07-13T00:00:00+08:00",
-      "expiresAt": "2026-08-31T23:59:59+08:00",
+      "id": "v0.8.1-pre.1-github-update",
+      "level": "warning",
+      "title": "請更新至最新 Pre-release",
+      "message": "請前往官方 GitHub Releases 下載並更新至最新 Pre-release 版本（v0.8.1-pre.1）。本程式目前尚未取得 Windows 程式碼簽章。首次執行若出現 Windows SmartScreen，請確認下載來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
+      "minVersion": "0.7.0",
+      "maxVersion": "0.8.0",
+      "publishedAt": "2026-07-21T00:00:00+08:00",
+      "expiresAt": "2026-09-30T23:59:59+08:00",
       "dismissible": false,
       "showOnce": false,
-      "url": "https://github.com/z22115554/elitesand-pro/releases",
-      "buttonText": "前往下載",
-      "enabled": false,
-      "actions": {
-        "disableIncrementalUpdate": true,
-        "showFullDownloadOnly": true
-      }
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.8.1-pre.1",
+      "buttonText": "前往 GitHub Releases 更新",
+      "enabled": true
     }
   ]
 }
