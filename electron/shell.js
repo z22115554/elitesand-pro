@@ -135,6 +135,7 @@ function createElectronShell({
   let hasShownTrayBalloon = false;
   let powerSaveBlockerId = null;
   let serverRestartAttempted = false;
+  let shouldShowPortableDataMigrationNotice = false;
 
   function focusWindow() {
     if (!mainWindow) return;
@@ -224,15 +225,21 @@ function createElectronShell({
     };
   }
 
-  function showPortableDataMigrationNotice() {
-    if (!app.isPackaged) return;
+  function needsPortableDataMigrationNotice() {
+    if (!app.isPackaged) return false;
     const runtimePaths = getRuntimePaths(app.getPath('userData'));
     const marker = path.join(runtimePaths.root, '.portable-data-migration-notice-v1');
     const isEmpty = [runtimePaths.dataDir, runtimePaths.downloadsDir]
       .every((directory) => {
         try { return fsImpl.readdirSync(directory).length === 0; } catch (_) { return true; }
       });
-    if (!isEmpty || fsImpl.existsSync?.(marker)) return;
+    return isEmpty && !fsImpl.existsSync?.(marker);
+  }
+
+  function showPortableDataMigrationNotice() {
+    if (!shouldShowPortableDataMigrationNotice) return;
+    const runtimePaths = getRuntimePaths(app.getPath('userData'));
+    const marker = path.join(runtimePaths.root, '.portable-data-migration-notice-v1');
     try { fsImpl.writeFileSync?.(marker, 'shown\n', 'utf8'); } catch (_) { /* A notice must never block startup. */ }
     dialog.showMessageBoxSync({
       type: 'info',
@@ -242,6 +249,7 @@ function createElectronShell({
       defaultId: 0,
       noLink: true,
     });
+    shouldShowPortableDataMigrationNotice = false;
   }
 
   async function createWindow() {
@@ -420,6 +428,10 @@ function createElectronShell({
       shutdownOwnedServer().finally(() => app.exit(0));
     });
     await app.whenReady();
+    // Snapshot before the server creates its state files. Checking after the
+    // fork makes a genuinely first-run data directory look non-empty, so the
+    // portable-data handoff notice would never be shown.
+    shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice();
     startPowerSaveBlocker();
     try {
       const server = await startServerOrReuseExisting();
