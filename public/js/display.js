@@ -439,7 +439,6 @@
   });
 
   // 歌詞時間同步
-  let lastSyncWall = 0;
   let seekExitTimer = null;
   let seekDriving = false;
   let lastRafWall = 0; // animationLoop 每幀更新；用於偵測 OBS 節流 rAF
@@ -469,10 +468,11 @@
       // 畫面實際由 70ms 節流＋未內插的原始同步值驅動＝時間每 200ms 跳一格。
       // GSAP 系模板靠自己的 timeline 時鐘看不出來；直接吃時間值的模板（KTV 掃色、
       // Aura 平滑、先前的海報捲軸彈簧）就整個階梯狀——這才是「卡」的真因。
-      // 現在只有「連續快速同步」（拖曳進度條，間隔 <160ms）才走快速路徑；
-      // 常規播放同步只更新時鐘基準，渲染完全交給 rAF 內插（60fps 平滑）。
-      const isScrubbing = now - lastSyncWall < 160;
-      lastSyncWall = now;
+      // 只有面板明確標記的拖曳才走快速路徑；常規播放同步只更新時鐘基準，
+      // 渲染完全交給 rAF 內插（60fps 平滑）。
+      // 不要用封包間隔猜測拖曳：正常同步被誤判為 seek 時，rAF 會被停掉，
+      // KTV 的掃色就退化成離散更新。面板拖曳時明確帶 seeking。
+      const isScrubbing = data.seeking === true;
       syncTimeMs = data.currentTime * 1000;
       lastSyncTimestamp = now;
       // 純視覺顯示端沒有本地音訊 → 用面板同步來的 duration 驅動 OBS 進度條
@@ -486,6 +486,9 @@
       }
 
       if (isScrubbing) {
+        // 明確 seek 立刻同步平滑時鐘，避免小幅跳轉被 6% 校正拖慢。
+        smoothClockMs = syncTimeMs;
+        smoothClockWall = now;
         // 拖曳/連續跳轉：跳過粒子/入場動畫避免卡死；停止拖曳 280ms 後退出並完整重繪
         if (KaraokeEngine.setFastMode) {
           KaraokeEngine.setFastMode(true);
@@ -500,10 +503,18 @@
         seekDriveTimer = setTimeout(() => { seekDriving = false; }, 200);
         // 直接（節流）重繪：OBS 非作用場景會節流 rAF，拖曳時不能只靠 rAF
         throttledRender();
-      } else if (performance.now() - lastRafWall > 400) {
+      } else {
+        // 拖曳結束後立即還給 rAF，不能留下上一個 seek 的暫停尾巴。
+        if (seekDriving) {
+          seekDriving = false;
+          clearTimeout(seekDriveTimer);
+          if (KaraokeEngine.setFastMode) KaraokeEngine.setFastMode(false);
+        }
+        if (performance.now() - lastRafWall > 400) {
         // 安全網：OBS 非作用中場景會節流/凍結 rAF——此時常規同步順手補一幀，
         // 切回場景瞬間畫面才不會從很舊的位置跳過來
-        KaraokeEngine.update(getCurrentTimeMs());
+          KaraokeEngine.update(getCurrentTimeMs());
+        }
       }
     }
   });

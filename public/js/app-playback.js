@@ -549,7 +549,7 @@
       lastSeekBroadcast = now;
       SocketClient.send('play:seek', t);
       // 同步推播位置：讓 OBS 顯示端即時跟著移動（暫停時也是）
-      SocketClient.send('lyrics:sync', { currentTime: t, duration: dur || 0 });
+      SocketClient.send('lyrics:sync', { currentTime: t, duration: dur || 0, seeking: !finalize });
     }
   }
   // 把一條 track 綁上拖曳跳轉（主/迷你共用；isSeeking 是共享旗標，同時只會有一條在拖）
