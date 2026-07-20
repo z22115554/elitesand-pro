@@ -3962,6 +3962,16 @@ testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項�
   eq(windowInstance.hideCalls, 1, '選確認關閉不可誤藏到系統匣：');
 });
 
+test('播放音量在 SoundTouch 先啟動時仍會寫入記憶，KTV 掃色維持整句等速', () => {
+  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8');
+  const ktv = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-ktv.js'), 'utf8');
+  ok(playback.includes("if (typeof AudioProcessor !== 'undefined' && AudioProcessor.setVolume) {"), '音量改動必須一律交給 AudioProcessor 持久化：');
+  ok(playback.includes('if (!audioProcessorReady) {\n        audioPlayer.volume = vol;'), 'AudioProcessor 未接管前仍要即時套到原生 audio：');
+  ok(ktv.includes('(timeMs - unit.startMs) / Math.max(unit.endMs - unit.startMs, 1)'), 'KTV 掃色必須用單位完整時長算等速進度：');
+  ok(ktv.includes('return unit.width * progress;'), 'KTV 掃色必須依等速進度填滿整句：');
+  ok(!ktv.includes('if (timeMs < c.startMs) return offsets[i];'), 'KTV 掃色不可在逐字間隔停住：');
+});
+
 testAsync('Electron P1：系統匣結束會先 graceful shutdown，並釋放防休眠鎖', async () => {
   const { EventEmitter } = require('events');
   const { createElectronShell } = require('../electron/shell');
