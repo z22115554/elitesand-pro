@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, powerSaveBlocker, ipcMain } = require('electron');
 const { createElectronShell } = require('./shell');
 
 const isPackaged = app.isPackaged;
@@ -23,6 +23,7 @@ const desktop = createElectronShell({
   nativeImage,
   clipboard,
   powerSaveBlocker,
+  ipcMain,
   projectRoot,
   shellRoot,
 });
