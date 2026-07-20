@@ -87,6 +87,10 @@ function recordPlay(track) {
     lyricsType: pick(track.lyricsType, prev && prev.lyricsType) || 'lrc',
     parsedLyrics: (Array.isArray(track.parsedLyrics) && track.parsedLyrics.length)
       ? track.parsedLyrics : (prev && prev.parsedLyrics) || null,
+    // 統一音量：整曲響度（LUFS）跟著記錄走，重新從媒體庫拉回時不必重量測。
+    // 不能用 pick()：LUFS 是負數但 0 判定要走 typeof，避免 falsy 陷阱。
+    loudnessLufs: (typeof track.loudnessLufs === 'number') ? track.loudnessLufs
+      : (prev && typeof prev.loudnessLufs === 'number') ? prev.loudnessLufs : null,
     // 每首記憶的變調/變速
     pitchShift: typeof track.pitchShift === 'number' ? track.pitchShift : (prev && prev.pitchShift) || 0,
     playbackRate: typeof track.playbackRate === 'number' ? track.playbackRate : (prev && prev.playbackRate) || 1.0,

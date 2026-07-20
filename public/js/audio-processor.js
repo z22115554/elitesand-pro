@@ -17,6 +17,7 @@ const AudioProcessor = (() => {
   let mediaSource = null;
   let pitchShift = null;
   let gainNode = null;
+  let trackGainNode = null;   // 統一音量：每首歌的響度校正增益（-14 LUFS 對齊）
   let compressorNode = null;  // 響度標準化壓縮器
   let makeupGain = null;      // 壓縮後補償增益
   let dryGain = null;         // 乾訊號（原調）增益：變調時設 0，杜絕原調洩漏
@@ -37,6 +38,8 @@ const AudioProcessor = (() => {
       if (isFinite(v) && v >= 0 && v <= 1) volume = v;
     }
   } catch (e) { /* localStorage 不可用時維持預設 */ }
+  // 統一音量：當前歌曲的實測響度（LUFS）；null＝未量測 → 不調整
+  let currentTrackLufs = null;
   // 響度標準化開關（預設開啟，可由 localStorage 記憶）
   let normalizationEnabled = true;
   try {
@@ -87,7 +90,7 @@ const AudioProcessor = (() => {
 
   /**
    * 初始化音訊處理管線
-   * 訊號鏈：source → gain（音量）→ compressor（響度標準化）→ makeupGain → [PitchShift] → destination
+   * 訊號鏈：source → trackGain（統一音量）→ gain（音量）→ compressor（響度標準化）→ makeupGain → [PitchShift] → destination
    * @param {HTMLAudioElement} audioElement - 要處理的 audio 元素
    * @returns {boolean} 是否成功初始化 Tone.js 管線
    */
@@ -144,8 +147,13 @@ const AudioProcessor = (() => {
       makeupGain = audioContext.createGain();
       applyNormalizationParams();
 
-      // 基礎鏈：source → gain → compressor → makeup
-      mediaSource.connect(gainNode);
+      // 統一音量：每首歌的響度校正（先於使用者音量，讓音量滑桿語義不變）
+      trackGainNode = audioContext.createGain();
+      applyTrackGain();
+
+      // 基礎鏈：source → trackGain（統一音量）→ gain → compressor → makeup
+      mediaSource.connect(trackGainNode);
+      trackGainNode.connect(gainNode);
       gainNode.connect(compressorNode);
       compressorNode.connect(makeupGain);
 
@@ -277,6 +285,27 @@ const AudioProcessor = (() => {
     try { localStorage.setItem('vk-volume', String(volume)); } catch (e) { /* 靜默 */ }
   }
 
+  /** 統一音量：目前這首歌要套用的增益（dB）。關閉標準化或沒有量測值＝0。 */
+  function getTrackGainDb() {
+    if (!normalizationEnabled || typeof LoudnessGain === 'undefined') return 0;
+    return LoudnessGain.computeTrackGainDb(currentTrackLufs);
+  }
+
+  function applyTrackGain() {
+    if (!trackGainNode) return;
+    const db = getTrackGainDb();
+    trackGainNode.gain.value = (typeof LoudnessGain !== 'undefined') ? LoudnessGain.dbToLinear(db) : 1;
+  }
+
+  /**
+   * 統一音量：設定當前歌曲的實測響度（LUFS，由伺服器量測、track.loudnessLufs 帶來）。
+   * @param {number|null} lufs - null＝未量測，維持原音量
+   */
+  function setTrackLoudness(lufs) {
+    currentTrackLufs = (typeof lufs === 'number' && isFinite(lufs)) ? lufs : null;
+    applyTrackGain();
+  }
+
   /**
    * 開關響度標準化（自動音量平衡）
    * @param {boolean} enabled
@@ -285,6 +314,7 @@ const AudioProcessor = (() => {
     normalizationEnabled = !!enabled;
     try { localStorage.setItem('vk-normalization', String(normalizationEnabled)); } catch (e) { /* 靜默 */ }
     applyNormalizationParams();
+    applyTrackGain();
     console.log(`[AudioProcessor] 響度標準化: ${normalizationEnabled ? '開' : '關'}`);
   }
 
@@ -318,6 +348,8 @@ const AudioProcessor = (() => {
       pitchEngaged,
       dry: dryGain ? Number(dryGain.gain.value.toFixed(3)) : null,
       wet: wetGain ? Number(wetGain.gain.value.toFixed(3)) : null,
+      trackGainDb: Number(getTrackGainDb().toFixed(2)),
+      trackLufs: currentTrackLufs,
       userPitch,
     };
   }
@@ -328,6 +360,8 @@ const AudioProcessor = (() => {
     setRate,
     setVolume,
     getVolume,
+    setTrackLoudness,
+    getTrackGainDb,
     setNormalization,
     isNormalizationEnabled,
     reset,

@@ -437,6 +437,10 @@ class AudioProcessor {
     // Until then, a crash leaves a registry entry for the next startup to recover.
     downloadTask.completeTempImport?.();
 
+    // 統一音量：量出整曲響度讓播放端拉齊到 -14 LUFS。失敗回 null（僅取消會拋出）。
+    const loudnessLufs = await this.measureLoudnessQueued(path.join(downloaded.outputDir, filename), options.signal);
+    throwIfCancelled(options.signal);
+
     const totalDuration = Date.now() - processStart;
     log.info(`YouTube 處理完成: ${title} (${totalDuration}ms)`);
     log.perf('youtube-process', totalDuration, { title, hasAudio: !!filename, hasLyrics: !!lyricsResult, cacheHit: false });
@@ -463,6 +467,7 @@ class AudioProcessor {
       // 否則顯示端只拿到原始歌詞字串、自己重解析→沒有拼音/諧音；逐字(KRC)尤其明顯。
       // play:track 也會用這份在播放當下補做羅馬化並廣播。
       parsedLyrics: lyricsResult ? (lyricsResult.parsedLyrics || null) : null,
+      loudnessLufs,
       source: 'youtube',
       url,
     };
@@ -804,6 +809,50 @@ class AudioProcessor {
       album: data.album || '', track: data.track || '', artist: data.artist || '', artists: Array.isArray(data.artists) ? data.artists : [],
       albumArtist: data.album_artist || '', channel: data.channel || '', uploader: data.uploader || '', description: data.description || '',
       categories: Array.isArray(data.categories) ? data.categories : [] };
+  }
+
+  /**
+   * 從 ffmpeg ebur128 的 stderr 摘要取出 integrated loudness（LUFS）。
+   * Summary 區塊在輸出最後，取「最後一個」I: 值即為整曲結果；範圍外視為量測異常回 null。
+   */
+  static parseEbur128Loudness(stderrText) {
+    const matches = String(stderrText || '').match(/I:\s*(-?\d+(?:\.\d+)?)\s*LUFS/g);
+    if (!matches || !matches.length) return null;
+    const last = matches[matches.length - 1].match(/(-?\d+(?:\.\d+)?)/);
+    const lufs = last ? Number.parseFloat(last[1]) : NaN;
+    return (Number.isFinite(lufs) && lufs >= -70 && lufs < 0) ? lufs : null;
+  }
+
+  /**
+   * 量測整曲響度（EBU R128 integrated LUFS）。純分析、不改動音檔。
+   * 量測是「統一音量」的加值功能：除了取消之外任何失敗都回 null，絕不讓匯入因此中斷。
+   */
+  static measureLoudness(filePath, signal = null) {
+    throwIfCancelled(signal);
+    const started = Date.now();
+    return new Promise((resolve, reject) => {
+      const child = spawn('ffmpeg', ['-hide_banner', '-nostats', '-i', filePath, '-vn', '-af', 'ebur128', '-f', 'null', '-'],
+        { env: process.env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+      const onAbort = () => child.kill();
+      signal?.addEventListener('abort', onAbort, { once: true });
+      let stderr = ''; const timer = setTimeout(() => child.kill(), YTDLP_DOWNLOAD_TIMEOUT);
+      child.stderr.on('data', c => { stderr = (stderr + c.toString()).slice(-YTDLP_MAX_BUFFER); });
+      child.on('error', () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); signal?.aborted ? reject(new ImportCancelledError()) : resolve(null); });
+      child.on('close', code => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        if (signal?.aborted) return reject(new ImportCancelledError());
+        const lufs = code === 0 ? this.parseEbur128Loudness(stderr) : null;
+        if (lufs === null) log.warn(`響度量測失敗（不影響匯入）: ${path.basename(filePath)}`);
+        else log.perf('loudness-measure', Date.now() - started, { lufs });
+        resolve(lufs);
+      });
+    });
+  }
+
+  /** 排進共用 ffmpeg 佇列的響度量測（鐵則 12：絕不與轉碼併發跑 ffmpeg）。 */
+  static measureLoudnessQueued(filePath, signal = null) {
+    return withFfmpegLock(() => this.measureLoudness(filePath, signal));
   }
 
   static convertToMp3(inputPath, signal = null) {

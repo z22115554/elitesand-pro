@@ -100,6 +100,11 @@ function sanitizeTrack(value) {
     lyrics: typeof value.lyrics === 'string' ? text(value.lyrics, MAX_LYRICS_LENGTH) : null,
     lyricsType,
     parsedLyrics: sanitizeParsedLyrics(value.parsedLyrics),
+    // 匯入/回填時由 ffmpeg ebur128 量出的整曲響度（LUFS），null＝尚未量測。
+    // 只接受合理範圍內的數字；null 不可落進 finite()（Number(null)=0 會被誤當有效值）。
+    loudnessLufs: (typeof value.loudnessLufs === 'number' && Number.isFinite(value.loudnessLufs))
+      ? Math.max(-70, Math.min(0, value.loudnessLufs))
+      : null,
     pitchShift: finite(value.pitchShift, 0, -12, 12),
     playbackRate: finite(value.playbackRate, 1, 0.5, 1.5),
     offset: finite(value.offset, 0, -10000, 10000),

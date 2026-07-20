@@ -19,7 +19,8 @@
 const { createLogger } = require('../utils/logger');
 const { createAppState } = require('../state/app-state');
 const path = require('path');
-const { projectRoot } = require('../utils/app-paths');
+const { projectRoot, downloadsDir } = require('../utils/app-paths');
+const { createLoudnessBackfill } = require('../services/loudness-backfill');
 const { getDisplayRuntimeBuild } = require('../services/display-runtime-build');
 const { createDeckCommands } = require('./deck-commands');
 const registerPlaybackHandlers = require('./handlers/playback');
@@ -48,6 +49,18 @@ module.exports = function socketHandler(io, { runtimeEvidence = defaultRuntimeEv
   const expectedDisplayBuild = getDisplayRuntimeBuild(path.join(projectRoot, 'public')).build;
   // ─── 全域狀態（單一事實來源，含 state.json 還原）───
   const ctx = createAppState(io);
+
+  // ─── 統一音量：啟動後回填既有歌曲的響度（測試的隔離 downloads 為空 → 自動 no-op）───
+  const libraryStore = require('../services/library-store');
+  const AudioProcessorService = require('../services/audio-processor');
+  createLoudnessBackfill({
+    playState: ctx.playState,
+    persistState: ctx.persistState,
+    broadcastState: ctx.broadcastState,
+    measure: (filename) => AudioProcessorService.measureLoudnessQueued(path.join(downloadsDir, filename)),
+    audioExists: libraryStore.audioExists,
+    updateLibraryMeta: libraryStore.updateMeta,
+  }).start();
 
   // ─── 讓 LyricsEngine 能主動推播（羅馬化完成等後台事件）───
   const { setIo } = require('../services/lyrics-engine');
