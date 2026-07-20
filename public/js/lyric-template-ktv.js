@@ -448,8 +448,10 @@
         const fillerSweepEnd = countdownStart - FILLER_FULL_HOLD_MS;
         if (fillerSweepEnd > 0 && timeMs < countdownStart) {
           showFiller(curSlot, 'intro', timeMs, 0, fillerSweepEnd, seeking);
-        }
-        else clearSlot(curSlot);
+        } else if (timeMs < nextUnit.startMs) {
+          const frac = (timeMs - countdownStart) / PREVIEW_WINDOW_MS;
+          showCountdown(curSlot, nextUnit, frac, seeking);
+        } else clearSlot(curSlot);
       } else {
         clearSlot(curSlot);
       }
@@ -468,7 +470,10 @@
       const countdownStart = nextUnit.startMs - PREVIEW_WINDOW_MS;
       const fillerStart = curUnit.endMs + SWAP_MIN_HOLD_MS;
       const fillerSweepEnd = countdownStart - FILLER_FULL_HOLD_MS;
-      if (timeMs >= countdownStart) clearSlot(curSlot);
+      if (timeMs >= countdownStart) {
+        const frac = (timeMs - countdownStart) / PREVIEW_WINDOW_MS;
+        showCountdown(curSlot, nextUnit, frac, seeking);
+      }
       else if (timeMs < fillerStart || fillerSweepEnd <= fillerStart) showHeldFull(curSlot, curUnit);
       else {
         showFiller(curSlot, curUnit.globalIndex, timeMs, fillerStart, fillerSweepEnd, seeking);
@@ -488,16 +493,9 @@
       if (untilStart > PREVIEW_WINDOW_MS) {
         clearSlot(nextSlot);
       } else {
-        const gapStart = curUnit ? curUnit.endMs : 0;
-        const gapDur = nextUnit.startMs - gapStart;
-        if (gapDur >= GAP_LONG_MS) {
-          // 星星/圓形倒數就佔用這一句本來的位置與字級，跟歌詞同一套掃色手法
-          const windowStart = nextUnit.startMs - PREVIEW_WINDOW_MS;
-          const frac = (timeMs - windowStart) / PREVIEW_WINDOW_MS;
-          showCountdown(nextSlot, nextUnit, frac, seeking);
-        } else {
-          showPreview(nextSlot, nextUnit);
-        }
+        // 音圓式交棒：間奏那排切成五格倒數，下一句則在自己的行位先亮相。
+        // 起唱時下一句留在原位直接開始掃色，不會延遲到第一個字才突然出現。
+        showPreview(nextSlot, nextUnit);
       }
     }
   }
