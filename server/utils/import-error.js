@@ -10,6 +10,9 @@ function classifyImportError(error) {
   if (code === 'ENOSPC' || /no space left|disk.*full|磁碟.*空間/.test(text)) {
     return { code: 'DISK_FULL', status: 507, message: '磁碟空間不足，無法完成下載。', recovery: '清出至少 500 MB 空間後再試一次。', retryable: true, technical };
   }
+  if (code === 'YOUTUBE_MUSIC_PREMIUM' || /only available to music premium members|music premium members/.test(text)) {
+    return { code: 'YOUTUBE_MUSIC_PREMIUM', status: 422, message: '這首 YouTube Music 音樂僅限 Music Premium 播放，無法下載匯入。', recovery: '請改貼可公開播放的 YouTube 影片連結，或匯入本機音檔。', retryable: false, technical };
+  }
   if (/cookies?|sign in|login|required to view|confirm your age|authentication|認證|登入/.test(text)) {
     return { code: 'YOUTUBE_AUTH_REQUIRED', status: 422, message: 'YouTube 要求登入或 cookies，這支影片目前無法直接下載。', recovery: '更新 yt-dlp；若仍失敗，改用可公開播放的影片或本機音檔。', retryable: false, technical };
   }
