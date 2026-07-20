@@ -3797,6 +3797,20 @@ test('統一音量：兩條播放鏈與匯入/上傳/媒體庫都接上響度資
     '啟動回填未接上');
 });
 
+test('統一音量開關會即時重套兩條播放鏈', () => {
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  ok(panel.includes('id="normalization-toggle"'), '設定頁缺少統一音量開關');
+  ok(panel.includes('統一音量（響度標準化）'), '統一音量開關缺少可見標籤');
+  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8');
+  [
+    'function reapplyTrackLoudness()',
+    'return stTrackGain ? stTrackGain.gain.value : null',
+    'AudioProcessor.setNormalization(dom.normalizationToggle.checked)',
+    'reapplyTrackLoudness();',
+    'AppShared.reapplyTrackLoudness = reapplyTrackLoudness',
+  ].forEach((required) => ok(playback.includes(required), `統一音量開關缺少 ${required}`));
+});
+
 test('Electron P1 shell keeps runtime data isolated and locks down the renderer', () => {
   const electronShell = require('../electron/shell');
   const runtimeRoot = path.join(os.tmpdir(), 'elitesand-electron-shell-unit');
