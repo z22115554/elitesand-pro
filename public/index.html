@@ -6,10 +6,31 @@
   <meta name="theme-color" content="#1B141F">
   <title>Elitesand Pro 控制面板</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
+  <script src="/js/electron-shell-chrome.js"></script>
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/panel.css">
 </head>
 <body>
+  <header class="desktop-windowbar" aria-label="Elitesand Pro 控制面板">
+    <img class="desktop-windowbar-logo" src="/img/logo-icon.png" alt="">
+    <span class="desktop-windowbar-brand">Elitesand Pro</span>
+    <span class="desktop-windowbar-divider" aria-hidden="true"></span>
+    <span class="desktop-windowbar-context">控制面板</span>
+  </header>
+  <div id="electron-close-modal" class="modal electron-close-modal" role="dialog" aria-modal="true" aria-labelledby="electron-close-title" aria-describedby="electron-close-description" hidden>
+    <div class="modal-card modal-card--small" role="document">
+      <div class="modal-head electron-close-modal-head">
+        <h3 id="electron-close-title">確認關閉程式？</h3>
+      </div>
+      <div class="modal-body">
+        <p id="electron-close-description" class="electron-close-modal-copy">確認關閉會停止本機服務、音訊與 OBS 連線。若只是暫時收起面板，收到系統匣後所有直播功能會繼續運作。</p>
+        <div class="electron-close-modal-actions">
+          <button id="electron-close-to-tray" class="btn btn-ghost" type="button">收到系統匣</button>
+          <button id="electron-close-quit" class="btn danger-confirm-submit" type="button">確認關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="connection-banner" class="connection-banner">與伺服器連線中斷，重新連線中…</div>
   <div id="announcement-banner" class="announcement-banner" hidden>
     <div>

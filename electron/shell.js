@@ -102,6 +102,7 @@ function createElectronShell({
   nativeImage,
   clipboard,
   powerSaveBlocker,
+  ipcMain = null,
   processObject = process,
   fsImpl = fs,
   probeHealthImpl = probeHealth,
@@ -133,6 +134,7 @@ function createElectronShell({
   let serverReady = false;
   let startupExitCode = null;
   let hasShownTrayBalloon = false;
+  let isCloseDecisionPending = false;
   let powerSaveBlockerId = null;
   let serverRestartAttempted = false;
   let shouldShowPortableDataMigrationNotice = false;
@@ -168,6 +170,19 @@ function createElectronShell({
     }
   }
 
+  function moveWindowToTray(window) {
+    window.hide();
+    if (!hasShownTrayBalloon && processObject.platform === 'win32') {
+      hasShownTrayBalloon = true;
+      try {
+        tray.displayBalloon({
+          title: 'Elitesand Pro 仍在執行',
+          content: '程式已收到系統匣；音訊與 OBS 會繼續運作。',
+        });
+      } catch (_) { /* Tray balloons are optional shell feedback. */ }
+    }
+  }
+
   function hideWindowToTray(event, window) {
     if (isQuitting) return;
     if (!tray) {
@@ -175,6 +190,11 @@ function createElectronShell({
       return;
     }
     event.preventDefault();
+    if (ipcMain?.on && typeof window.webContents?.send === 'function') {
+      isCloseDecisionPending = true;
+      window.webContents.send('elitesand:close-requested');
+      return;
+    }
     const choice = dialog.showMessageBoxSync({
       type: 'question',
       title: '要結束 Elitesand Pro 嗎？',
@@ -188,16 +208,7 @@ function createElectronShell({
       app.quit();
       return;
     }
-    window.hide();
-    if (!hasShownTrayBalloon && processObject.platform === 'win32') {
-      hasShownTrayBalloon = true;
-      try {
-        tray.displayBalloon({
-          title: 'Elitesand Pro 仍在執行',
-          content: '程式仍在執行，音訊不中斷；從系統匣結束。',
-        });
-      } catch (_) { /* Tray balloons are optional shell feedback. */ }
-    }
+    moveWindowToTray(window);
   }
 
   function startPowerSaveBlocker() {
@@ -272,11 +283,17 @@ function createElectronShell({
       minWidth: 960,
       minHeight: 650,
       show: false,
-      backgroundColor: '#101114',
+      backgroundColor: '#20222a',
       title: 'Elitesand Pro',
-      // Keep the Windows caption buttons truly native. The default Electron
-      // File/Edit/View menu is removed below, leaving only the OS title bar.
-      frame: true,
+      // Keep the window controls reliable while letting the web panel own the
+      // visual chrome. The overlay reserves the right-side caption buttons;
+      // the renderer supplies the matching draggable app bar underneath.
+      frame: false,
+      titleBarOverlay: {
+        color: '#20222a',
+        symbolColor: '#f2f3f5',
+        height: 38,
+      },
       webPreferences: {
         preload,
         contextIsolation: true,
@@ -287,6 +304,20 @@ function createElectronShell({
     });
     mainWindow = window;
     window.removeMenu?.();
+    if (ipcMain?.on) {
+      ipcMain.on('elitesand:close-decision', (event, action) => {
+        if (event?.sender !== window.webContents || !isCloseDecisionPending) return;
+        if (action === 'quit') {
+          isCloseDecisionPending = false;
+          app.quit();
+          return;
+        }
+        if (action === 'tray') {
+          isCloseDecisionPending = false;
+          moveWindowToTray(window);
+        }
+      });
+    }
     window.once('ready-to-show', () => {
       if (!headless) window.show();
     });
@@ -299,7 +330,7 @@ function createElectronShell({
     window.webContents.on('will-navigate', (event, url) => {
       if (!isTrustedLocalUrl(url, port)) event.preventDefault();
     });
-    await window.loadURL(`http://127.0.0.1:${port}/panel`);
+    await window.loadURL(`http://127.0.0.1:${port}/panel?electronShell=1`);
     return window;
   }
 

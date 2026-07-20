@@ -7,6 +7,33 @@
 
 body { overflow: hidden; }
 
+/* Electron uses a frameless window with the native caption controls overlaid
+   on this app-owned bar. Keeping it out of normal browser sessions avoids a
+   duplicate title strip when the panel is opened in Chrome. */
+:root { --desktop-windowbar-height: 38px; }
+.desktop-windowbar { display: none; }
+html.electron-shell .desktop-windowbar {
+  position: fixed; inset: 0 0 auto; z-index: 700;
+  display: flex; align-items: center; gap: 8px;
+  height: var(--desktop-windowbar-height); padding: 0 142px 0 14px;
+  color: var(--text-dim); background:
+    linear-gradient(90deg, rgba(124,108,255,0.12), transparent 28%),
+    #20222a;
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 -1px 0 rgba(124,108,255,0.16);
+  -webkit-app-region: drag; user-select: none;
+}
+.desktop-windowbar-logo { width: 18px; height: 18px; border-radius: 5px; background: #fff; object-fit: contain; }
+.desktop-windowbar-brand { color: var(--text); font-size: 12px; font-weight: 700; letter-spacing: 0.01em; }
+.desktop-windowbar-divider { width: 1px; height: 14px; background: var(--border-strong); }
+.desktop-windowbar-context { font-size: 12px; color: var(--text-faint); }
+html.electron-shell .app {
+  height: calc(100vh - var(--desktop-windowbar-height));
+  margin-top: var(--desktop-windowbar-height);
+}
+html.electron-shell .connection-banner { top: var(--desktop-windowbar-height); }
+html.electron-shell .announcement-banner { top: calc(var(--desktop-windowbar-height) + 12px); }
+
 .app { display: grid; grid-template-columns: auto 1fr; height: 100vh; }
 
 /* ═══ 左側 Discord 式導覽欄 ═══ */
@@ -630,6 +657,10 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .modal-card { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: var(--r-lg); width: 100%; max-width: 660px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 22px; border-bottom: 1px solid var(--border); }
 .modal-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
+.electron-close-modal .modal-card { max-width: 450px; }
+.electron-close-modal-head { border-bottom-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.electron-close-modal-copy { margin: 0; color: var(--text-dim); font-size: 13px; line-height: 1.7; }
+.electron-close-modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
 .modal-body { padding: 18px 22px; overflow-y: auto; }
 
 /* 只用於清空大量資料：要求輸入動作名稱，避免直播中習慣性按確認造成誤刪。 */
