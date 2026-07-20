@@ -7,7 +7,7 @@
  * - 上排永遠靠左錨定、下排永遠靠右錨定（CSS `left`/`right` 錨點各自 auto-width，
  *   不能用 text-align+固定寬度，否則掃色的像素會對錯座標——見程式內註解）
  * - 星星/圓形倒數：不是固定位置的獨立列，而是佔用「即將唱的那一行」原本的位置與字級，
- *   隨機挑星星或圓形（每次出現的組合固定，不逐幀重擲），並用跟歌詞完全相同的
+ *   依行序輪替五個星星或五個圓形（不逐幀重擲），並用跟歌詞完全相同的
  *   transform 掃色手法呈現倒數（同一條管線，肉眼看起來就是「唱到哪個圖案哪個圖案就亮」）
  * - 間奏判斷：唱完一段後，若離下一段開始的間隔夠長（判定為間奏），停留一小段時間後，
  *   把已唱完那一行換成宣傳/提示文字（隨機挑一句），取代原本的「天韻製作」；
@@ -22,25 +22,20 @@
     return;
   }
 
-  const { clamp, hashNoise } = LyricMotion;
+  const { clamp } = LyricMotion;
 
   const GAP_LONG_MS = 6000;        // 唱完到下一段開始的間隔達此值才判定為「間奏」
   const PREVIEW_WINDOW_MS = 5000;  // 下一段開始前這麼久，才在「即將唱」的行位顯示東西
   const SWAP_MIN_HOLD_MS = 1200;   // 剛唱完的行至少全填色停留這麼久，才可能被間奏文字取代
+  const FILLER_SWEEP_MS = 1100;    // 間奏文案自己的掃色時間；完成後停留，絕不與倒數共用
   const ENDING_DELAY_MS = 1500;    // 全曲最後一段唱完、停留多久後才換成「來賓請掌聲鼓勵」
   const FILLER_MESSAGES = [
     '《Elitesand Pro伴唱歡樂無限》',
     '《間奏請稍後》',
     '《下一段即將開始》',
   ];
-  // 每一組都同時保留星星與圓點；避免剛好隨機成一整排同圖案，
-  // 也讓不同間奏的倒數有可辨識的變化。
-  const COUNTDOWN_PATTERNS = [
-    ['★', '●', '★', '●', '★'],
-    ['●', '★', '●', '★', '●'],
-    ['★', '★', '●', '●', '★'],
-    ['●', '●', '★', '★', '●'],
-  ];
+  const COUNTDOWN_GLYPHS = ['★', '●'];
+  const COUNTDOWN_ICON_COUNT = 5;
   const ENDING_MESSAGE = '《來賓請掌聲鼓勵》';
 
   let rootEl = null;
@@ -56,11 +51,6 @@
   // 強制重繪，而不是被 globalIndex 相同誤判成沒變而跳過（曾經踩過：切換簡轉繁後 KTV 畫面
   // 完全沒反應，直到換到下一句才「碰巧」用新文字重建）。
   let unitsGeneration = 0;
-  // Normal playback can receive tiny backward time corrections; keep the KTV fill monotonic.
-  // Explicit seek still passes seeking=true so the scan can jump back to the requested time.
-  let scanFillPx = 0;
-  let scanFillKey = null;
-
   function getCssVar(name, fallback) {
     try {
       const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -314,7 +304,7 @@
     fillWindow.appendChild(fill);
     el.appendChild(fillWindow);
     rootEl.appendChild(el);
-    return { el, base, fillWindow, fill, key: '', prep: null, lastFill: '' };
+    return { el, base, fillWindow, fill, key: '', prep: null, lastFill: '', maxFillPx: 0 };
   }
 
   /**
@@ -335,6 +325,7 @@
     slot.fill.style.color = colorsCache.fill;
     slot.base.style.color = colorsCache.base;
     slot.lastFill = '';
+    slot.maxFillPx = 0;
   }
 
   function clearSlot(slot) {
@@ -346,11 +337,17 @@
     slot.fillWindow.style.transform = 'scaleX(0)';
     slot.fill.style.transform = 'scaleX(1)';
     slot.lastFill = '';
+    slot.maxFillPx = 0;
   }
 
-  function applyFill(slot, px) {
+  function applyFill(slot, px, seeking = false) {
     if (!slot.prep) return;
-    const ratio = clamp(px / Math.max(slot.prep.width, 1), 0, 1);
+    const requestedPx = clamp(px, 0, slot.prep.width);
+    // 播放時音訊時鐘偶爾有很小的逆向校正；所有 KTV 掃色（含間奏與倒數）都不應回彈。
+    // 明確 seek 才允許回跳，讓拖曳進度仍精準。
+    const stablePx = seeking ? requestedPx : Math.max(requestedPx, slot.maxFillPx || 0);
+    slot.maxFillPx = stablePx;
+    const ratio = clamp(stablePx / Math.max(slot.prep.width, 1), 0, 1);
     // 外層縮小可視窗口、內層用倒數縮放抵銷字形變形；兩者皆可由合成器處理。
     // 最小以一個實體像素為準，避免起唱第一幀出現無意義的超大倒數縮放。
     const visibleRatio = ratio <= 0 ? 0 : Math.max(ratio, 1 / Math.max(slot.prep.width, 1));
@@ -375,8 +372,8 @@
     const key = `${unit.globalIndex}|${fontPx.toFixed(1)}`;
     if (cachedCountdown && cachedCountdown.key === key) return cachedCountdown.prep;
     const family = getCssVar('--display-font-family', 'sans-serif');
-    const patternIndex = Math.floor(hashNoise(unit.startMs, unit.globalIndex) * COUNTDOWN_PATTERNS.length);
-    const text = COUNTDOWN_PATTERNS[patternIndex].join(' ');
+    const glyph = COUNTDOWN_GLYPHS[Math.abs(unit.globalIndex) % COUNTDOWN_GLYPHS.length];
+    const text = Array.from({ length: COUNTDOWN_ICON_COUNT }, () => glyph).join(' ');
     const offsets = LyricMotion.measureCharOffsets(text, `900 ${fontPx}px ${family}`);
     const prep = { text, offsets, width: offsets[offsets.length - 1] || 0, fontPx };
     cachedCountdown = { key, prep };
@@ -387,12 +384,7 @@
 
   function showActiveScan(slot, unit, timeMs, seeking) {
     setSlotContent(slot, `u${unit.globalIndex}`, unit);
-    let px = fillPixels(unit, timeMs);
-    const key = unit.globalIndex;
-    if (!seeking && key === scanFillKey) px = Math.max(px, scanFillPx);
-    scanFillKey = key;
-    scanFillPx = px;
-    applyFill(slot, px);
+    applyFill(slot, fillPixels(unit, timeMs), seeking);
   }
 
   function showHeldFull(slot, unit) {
@@ -405,13 +397,13 @@
     applyFill(slot, 0);
   }
 
-  function showCountdown(slot, unit, frac) {
+  function showCountdown(slot, unit, frac, seeking) {
     const prep = getCountdownPrep(unit);
     setSlotContent(slot, `c${unit.globalIndex}`, prep);
-    applyFill(slot, prep.width * clamp(frac, 0, 1));
+    applyFill(slot, prep.width * clamp(frac, 0, 1), seeking);
   }
 
-  function showFiller(slot, occurrenceKey) {
+  function showFiller(slot, occurrenceKey, timeMs, phaseStartMs, phaseEndMs, seeking) {
     // 依歌詞中的出現順序輪替，長歌不會剛好一直抽到同一則文案。
     const messageIndex = occurrenceKey === 'intro'
       ? 0
@@ -419,8 +411,11 @@
     const text = FILLER_MESSAGES[messageIndex];
     const prep = buildStaticPrep(text);
     setSlotContent(slot, `f${occurrenceKey}`, prep);
-    // 間奏文字是閱讀訊息，不與下一句的倒數共用掃色時間。
-    applyFill(slot, prep.width);
+    // 間奏文字有自己的穩定掃色，掃完後停留完整內容；倒數另起一個階段。
+    const availableMs = Math.max(phaseEndMs - phaseStartMs, 1);
+    const sweepMs = Math.min(FILLER_SWEEP_MS, availableMs);
+    const frac = clamp((timeMs - phaseStartMs) / Math.max(sweepMs, 1), 0, 1);
+    applyFill(slot, prep.width * frac, seeking);
   }
 
   function showEnding(slot) {
@@ -451,7 +446,7 @@
       // 前奏：離第一段還很久才判定為間奏，顯示提示文字
       if (nextUnit && nextUnit.startMs >= GAP_LONG_MS) {
         const countdownStart = nextUnit.startMs - PREVIEW_WINDOW_MS;
-        if (timeMs < countdownStart) showFiller(curSlot, 'intro');
+        if (timeMs < countdownStart) showFiller(curSlot, 'intro', timeMs, 0, countdownStart, seeking);
         else clearSlot(curSlot);
       } else {
         clearSlot(curSlot);
@@ -465,13 +460,20 @@
       } else {
         showEnding(curSlot);
       }
+    } else if (nextUnit.startMs - curUnit.endMs >= GAP_LONG_MS) {
+      // 先讓已唱行短暫停留，再掃完並停住間奏文案；最後五秒才切入下一句倒數。
+      const countdownStart = nextUnit.startMs - PREVIEW_WINDOW_MS;
+      const fillerStart = Math.max(
+        curUnit.endMs,
+        Math.min(curUnit.endMs + SWAP_MIN_HOLD_MS, countdownStart - FILLER_SWEEP_MS),
+      );
+      if (timeMs < fillerStart) showHeldFull(curSlot, curUnit);
+      else if (timeMs < countdownStart) {
+        showFiller(curSlot, curUnit.globalIndex, timeMs, fillerStart, countdownStart, seeking);
+      }
+      else clearSlot(curSlot);
     } else if (timeMs <= curUnit.endMs + SWAP_MIN_HOLD_MS) {
       showHeldFull(curSlot, curUnit);
-    } else if (nextUnit.startMs - curUnit.endMs >= GAP_LONG_MS) {
-      // 間奏文字在倒數開始前完整顯示；最後五秒只留下一句的星星／圓點倒數。
-      const countdownStart = nextUnit.startMs - PREVIEW_WINDOW_MS;
-      if (timeMs < countdownStart) showFiller(curSlot, curUnit.globalIndex);
-      else clearSlot(curSlot);
     } else {
       showHeldFull(curSlot, curUnit);
     }
@@ -491,7 +493,7 @@
           // 星星/圓形倒數就佔用這一句本來的位置與字級，跟歌詞同一套掃色手法
           const windowStart = nextUnit.startMs - PREVIEW_WINDOW_MS;
           const frac = (timeMs - windowStart) / PREVIEW_WINDOW_MS;
-          showCountdown(nextSlot, nextUnit, frac);
+          showCountdown(nextSlot, nextUnit, frac, seeking);
         } else {
           showPreview(nextSlot, nextUnit);
         }
