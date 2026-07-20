@@ -42,6 +42,7 @@ html.electron-shell .app {
 }
 html.electron-shell .connection-banner { top: var(--desktop-windowbar-height); }
 html.electron-shell .announcement-banner { top: calc(var(--desktop-windowbar-height) + 12px); }
+html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height) + 16px); }
 
 .app { display: grid; grid-template-columns: auto 1fr; height: 100vh; }
 

@@ -44,9 +44,10 @@ const CLIENT_TYPES = new Set(['controller', 'remote', ...PIN_EXEMPT_CLIENT_TYPES
 const READ_ONLY_EVENTS = new Set(['client:type', 'client:build', 'state:request', 'setlist:get']);
 const DISPLAY_BUILD_REPORT_GRACE_MS = 3500;
 
-module.exports = function socketHandler(io, { runtimeEvidence = defaultRuntimeEvidence } = {}) {
-  // 此程序啟動後的顯示端資產指紋。更新安裝會重啟 server，因此每次更新都會重新計算。
-  const expectedDisplayBuild = getDisplayRuntimeBuild(path.join(projectRoot, 'public')).build;
+module.exports = function socketHandler(io, {
+  runtimeEvidence = defaultRuntimeEvidence,
+  getDisplayBuild = () => getDisplayRuntimeBuild(path.join(projectRoot, 'public')).build,
+} = {}) {
   // ─── 全域狀態（單一事實來源，含 state.json 還原）───
   const ctx = createAppState(io);
 
@@ -103,6 +104,9 @@ module.exports = function socketHandler(io, { runtimeEvidence = defaultRuntimeEv
   let lastTwitchStreamEventId = null;
 
   function getClientCounts() {
+    // /display 的指紋必須隨目前 public/ 內容重算；固定 server 啟動當下的值會讓
+    // 已重整到新資產的 OBS 被誤判成舊快取。
+    const expectedDisplayBuild = getDisplayBuild();
     const now = Date.now();
     let current = 0;
     let stale = 0;
