@@ -3917,9 +3917,10 @@ testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項�
   const closeDialogs = [];
   let closeChoice = 1;
   class FakeWindow extends EventEmitter {
-    constructor() {
+    constructor(options) {
       super();
       windowInstance = this;
+      this.options = options;
       this.webContents = { setWindowOpenHandler: () => {}, on: () => {} };
       this.hideCalls = 0;
       this.showCalls = 0;
@@ -3927,6 +3928,7 @@ testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項�
     async loadURL() { this.emit('ready-to-show'); }
     show() { this.showCalls++; }
     hide() { this.hideCalls++; }
+    removeMenu() { this.menuRemoved = true; }
     focus() {}
     isMinimized() { return false; }
   }
@@ -3953,6 +3955,8 @@ testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項�
   });
 
   await shell.start();
+  eq(windowInstance.options.frame, true, '桌面殼必須保留 Windows 原生標題列按鈕：');
+  eq(windowInstance.menuRemoved, true, '桌面殼不可保留 Electron 的 File/Edit/View 額外選單列：');
   const closeEvent = { prevented: false, preventDefault() { this.prevented = true; } };
   windowInstance.emit('close', closeEvent);
   eq(closeEvent.prevented, true, '有系統匣時 close 必須被攔截：');
