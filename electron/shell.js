@@ -175,6 +175,19 @@ function createElectronShell({
       return;
     }
     event.preventDefault();
+    const choice = dialog.showMessageBoxSync({
+      type: 'question',
+      title: '要結束 Elitesand Pro 嗎？',
+      message: '確認關閉會停止本機服務與音訊。收到系統匣會讓程式繼續執行，OBS 與音訊不中斷。',
+      buttons: ['確認關閉', '收到系統匣'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (choice === 0) {
+      app.quit();
+      return;
+    }
     window.hide();
     if (!hasShownTrayBalloon && processObject.platform === 'win32') {
       hasShownTrayBalloon = true;
