@@ -153,6 +153,7 @@ window.AppShared = (function () {
     speedDown: document.getElementById('speed-down'),
     volumeSlider: document.getElementById('volume-slider'),
     volumeVal: document.getElementById('volume-val'),
+    normalizationToggle: document.getElementById('normalization-toggle'),
     metronomeToggle: document.getElementById('metronome-toggle'),
     // Setlist / Session
     sessionStart: document.getElementById('session-start'),

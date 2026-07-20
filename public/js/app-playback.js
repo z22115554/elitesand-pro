@@ -195,6 +195,14 @@
     applyStLoudnessGain();
   }
 
+  // 統一音量開關即時重套目前歌曲，不能只更新 <audio>+Tone 降級鏈。
+  function reapplyTrackLoudness() {
+    const track = state.playlist[state.currentTrackIndex] || null;
+    applyTrackLoudness(track);
+    // 對外入口同時回傳 SoundTouch 實際節點值，供開關切換後的診斷確認。
+    return stTrackGain ? stTrackGain.gain.value : null;
+  }
+
   // ═══════════════════════════════════════════
   // 播放控制
   // ═══════════════════════════════════════════
@@ -785,6 +793,18 @@
     });
   }
 
+  if (dom.normalizationToggle) {
+    if (typeof AudioProcessor !== 'undefined' && AudioProcessor.isNormalizationEnabled) {
+      dom.normalizationToggle.checked = AudioProcessor.isNormalizationEnabled();
+    }
+    dom.normalizationToggle.addEventListener('change', () => {
+      if (typeof AudioProcessor !== 'undefined' && AudioProcessor.setNormalization) {
+        AudioProcessor.setNormalization(dom.normalizationToggle.checked);
+      }
+      reapplyTrackLoudness();
+    });
+  }
+
   // 連續播放開關（player 模式）
   const continuousToggle = document.getElementById('continuous-toggle');
   if (continuousToggle) {
@@ -836,4 +856,5 @@
   AppShared.updateMiniPlayerInfo = updateMiniPlayerInfo;
   AppShared.updateOffsetDisplay = updateOffsetDisplay;
   AppShared.applyPitchAndSpeed = applyPitchAndSpeed;
+  AppShared.reapplyTrackLoudness = reapplyTrackLoudness;
 })();
