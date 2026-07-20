@@ -3821,6 +3821,9 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'nodeIntegration: false',
     'sandbox: true',
     'backgroundThrottling: false',
+    'Tray',
+    'displayBalloon',
+    'preventDefault',
     'setWindowOpenHandler',
     'ELITESAND_SHELL_USER_DATA_DIR',
     'SHUTDOWN_MESSAGE',
@@ -3836,6 +3839,71 @@ test('Electron P1 smoke starts with a disposable Electron user-data directory', 
   ok(smoke.includes('ELITESAND_SHELL_USER_DATA_DIR'));
   ok(smoke.includes('ELITESAND_SHELL_HEADLESS'));
   ok(!smoke.includes("ELITESAND_DATA_DIR: path.join(runtimeRoot"));
+});
+
+testAsync('Electron P1：關窗會藏到系統匣，四項選單可叫回面板且不會提前結束', async () => {
+  const { EventEmitter } = require('events');
+  const { createElectronShell } = require('../electron/shell');
+  let windowInstance;
+  let trayInstance;
+  const clipboardWrites = [];
+  const app = new EventEmitter();
+  app.setName = () => {};
+  app.setAppUserModelId = () => {};
+  app.requestSingleInstanceLock = () => true;
+  app.whenReady = async () => {};
+  app.getPath = () => path.join(TEST_RUNTIME_ROOT, 'electron-tray-unit');
+  app.quitCalls = 0;
+  app.quit = () => { app.quitCalls++; };
+  class FakeWindow extends EventEmitter {
+    constructor() {
+      super();
+      windowInstance = this;
+      this.webContents = { setWindowOpenHandler: () => {}, on: () => {} };
+      this.hideCalls = 0;
+      this.showCalls = 0;
+    }
+    async loadURL() { this.emit('ready-to-show'); }
+    show() { this.showCalls++; }
+    hide() { this.hideCalls++; }
+    focus() {}
+    isMinimized() { return false; }
+  }
+  class FakeTray extends EventEmitter {
+    constructor(icon) { super(); trayInstance = this; this.icon = icon; }
+    setToolTip() {}
+    setContextMenu(menu) { this.menu = menu; }
+    displayBalloon(balloon) { this.balloon = balloon; }
+  }
+  const shell = createElectronShell({
+    app,
+    BrowserWindow: FakeWindow,
+    utilityProcess: { fork: () => { throw new Error('reused server must not fork'); } },
+    dialog: { showErrorBox: () => {} },
+    shell: { openExternal: () => {} },
+    Tray: FakeTray,
+    Menu: { buildFromTemplate: (template) => ({ template }) },
+    nativeImage: { createFromPath: (iconPath) => ({ iconPath }) },
+    clipboard: { writeText: (value) => clipboardWrites.push(value) },
+    processObject: { env: {}, platform: 'win32' },
+    fsImpl: { mkdirSync: () => {} },
+    probeHealthImpl: async () => ({ state: 'healthy', payload: { status: 'ok' } }),
+  });
+
+  await shell.start();
+  const closeEvent = { prevented: false, preventDefault() { this.prevented = true; } };
+  windowInstance.emit('close', closeEvent);
+  eq(closeEvent.prevented, true, '有系統匣時 close 必須被攔截：');
+  eq(windowInstance.hideCalls, 1, '關窗應隱藏面板：');
+  eq(app.quitCalls, 0, '關窗不可結束程式：');
+  eq(trayInstance.balloon.content, '程式仍在執行，音訊不中斷；從系統匣結束。');
+  eq(trayInstance.menu.template.map((item) => item.label).join('|'), '顯示面板|複製 OBS 歌詞網址|複製 OBS 歌單網址|結束');
+  const visibleBeforeTrayFocus = windowInstance.showCalls;
+  trayInstance.menu.template[0].click();
+  eq(windowInstance.showCalls, visibleBeforeTrayFocus + 1, '系統匣必須可叫回視窗：');
+  trayInstance.menu.template[1].click();
+  trayInstance.menu.template[2].click();
+  eq(clipboardWrites.join('|'), 'http://localhost:3000/display|http://localhost:3000/setlist');
 });
 
 function finishTests(exitCode) {

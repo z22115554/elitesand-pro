@@ -98,6 +98,10 @@ function createElectronShell({
   utilityProcess,
   dialog,
   shell,
+  Tray,
+  Menu,
+  nativeImage,
+  clipboard,
   processObject = process,
   fsImpl = fs,
   probeHealthImpl = probeHealth,
@@ -111,24 +115,71 @@ function createElectronShell({
   autoQuitAfterReadyMs = Number.parseInt(processObject.env.ELITESAND_SHELL_QUIT_AFTER_READY_MS || '0', 10) || 0,
   userDataPath = processObject.env.ELITESAND_SHELL_USER_DATA_DIR || '',
 } = {}) {
-  if (!app || !BrowserWindow || !utilityProcess || !dialog || !shell) {
-    throw new TypeError('createElectronShell requires Electron app, BrowserWindow, utilityProcess, dialog, and shell');
+  if (!app || !BrowserWindow || !utilityProcess || !dialog || !shell || !Tray || !Menu || !nativeImage || !clipboard) {
+    throw new TypeError('createElectronShell requires Electron app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, and clipboard');
   }
 
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
   const preload = path.join(projectRoot, 'electron', 'preload.js');
   let mainWindow = null;
+  // Keep the Tray instance in this closure. Electron will garbage-collect an
+  // unreferenced tray icon, which would make a hidden window unrecoverable.
+  let tray = null;
   let serverProcess = null;
   let ownsServer = false;
   let isQuitting = false;
   let serverReady = false;
   let startupExitCode = null;
+  let hasShownTrayBalloon = false;
 
   function focusWindow() {
     if (!mainWindow) return;
     if (mainWindow.isMinimized?.()) mainWindow.restore();
     mainWindow.show?.();
     mainWindow.focus?.();
+  }
+
+  function createTray() {
+    if (headless) return null;
+    try {
+      const icon = nativeImage.createFromPath(path.join(projectRoot, 'public', 'img', 'logo-icon.png'));
+      tray = new Tray(icon);
+      tray.setToolTip?.('Elitesand Pro');
+      tray.setContextMenu(Menu.buildFromTemplate([
+        { label: '顯示面板', click: focusWindow },
+        { label: '複製 OBS 歌詞網址', click: () => clipboard.writeText(`http://localhost:${port}/display`) },
+        { label: '複製 OBS 歌單網址', click: () => clipboard.writeText(`http://localhost:${port}/setlist`) },
+        { label: '結束', click: () => app.quit() },
+      ]));
+      tray.on('double-click', focusWindow);
+      return tray;
+    } catch (error) {
+      // A tray is occasionally unavailable in constrained desktop sessions.
+      // In that case a close must remain a real exit, never a hidden window
+      // the user has no way to bring back.
+      tray = null;
+      console.warn('[Elitesand Pro Electron] System tray unavailable:', error?.message || error);
+      return null;
+    }
+  }
+
+  function hideWindowToTray(event, window) {
+    if (isQuitting) return;
+    if (!tray) {
+      app.quit();
+      return;
+    }
+    event.preventDefault();
+    window.hide();
+    if (!hasShownTrayBalloon && processObject.platform === 'win32') {
+      hasShownTrayBalloon = true;
+      try {
+        tray.displayBalloon({
+          title: 'Elitesand Pro 仍在執行',
+          content: '程式仍在執行，音訊不中斷；從系統匣結束。',
+        });
+      } catch (_) { /* Tray balloons are optional shell feedback. */ }
+    }
   }
 
   function runtimeEnvironment() {
@@ -166,6 +217,7 @@ function createElectronShell({
     window.once('ready-to-show', () => {
       if (!headless) window.show();
     });
+    window.on('close', (event) => hideWindowToTray(event, window));
     window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (isProjectReleaseUrl(url)) shell.openExternal(url);
@@ -252,6 +304,7 @@ function createElectronShell({
     try {
       const server = await startServerOrReuseExisting();
       serverReady = true;
+      createTray();
       await createWindow();
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
       return { started: true, ...server };
