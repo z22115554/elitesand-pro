@@ -10,7 +10,7 @@
  *   依行序輪替五個星星或五個圓形（不逐幀重擲），並用跟歌詞完全相同的
  *   transform 掃色手法呈現倒數（同一條管線，肉眼看起來就是「唱到哪個圖案哪個圖案就亮」）
  * - 間奏判斷：唱完一段後，若離下一段開始的間隔夠長（判定為間奏），停留一小段時間後，
- *   把已唱完那一行換成宣傳/提示文字（隨機挑一句），取代原本的「天韻製作」；
+ *   把已唱完那一行換成宣傳/提示文字（依序輪替），取代原本的「天韻製作」；
  *   全曲最後一段唱完後改顯示「來賓請掌聲鼓勵」
  *
  * 效能：純時間驅動 + 二分搜尋 + diff-write transform，逐幀不觸發文字重繪。
@@ -27,7 +27,7 @@
   const GAP_LONG_MS = 6000;        // 唱完到下一段開始的間隔達此值才判定為「間奏」
   const PREVIEW_WINDOW_MS = 5000;  // 下一段開始前這麼久，才在「即將唱」的行位顯示東西
   const SWAP_MIN_HOLD_MS = 1200;   // 剛唱完的行至少全填色停留這麼久，才可能被間奏文字取代
-  const FILLER_SWEEP_MS = 1100;    // 間奏文案自己的掃色時間；完成後停留，絕不與倒數共用
+  const FILLER_FULL_HOLD_MS = 2000; // 間奏文案在倒數前兩秒掃完，完整停留後才讓位
   const ENDING_DELAY_MS = 1500;    // 全曲最後一段唱完、停留多久後才換成「來賓請掌聲鼓勵」
   const FILLER_MESSAGES = [
     '《Elitesand Pro伴唱歡樂無限》',
@@ -403,7 +403,7 @@
     applyFill(slot, prep.width * clamp(frac, 0, 1), seeking);
   }
 
-  function showFiller(slot, occurrenceKey, timeMs, phaseStartMs, phaseEndMs, seeking) {
+  function showFiller(slot, occurrenceKey, timeMs, sweepStartMs, sweepEndMs, seeking) {
     // 依歌詞中的出現順序輪替，長歌不會剛好一直抽到同一則文案。
     const messageIndex = occurrenceKey === 'intro'
       ? 0
@@ -412,9 +412,8 @@
     const prep = buildStaticPrep(text);
     setSlotContent(slot, `f${occurrenceKey}`, prep);
     // 間奏文字有自己的穩定掃色，掃完後停留完整內容；倒數另起一個階段。
-    const availableMs = Math.max(phaseEndMs - phaseStartMs, 1);
-    const sweepMs = Math.min(FILLER_SWEEP_MS, availableMs);
-    const frac = clamp((timeMs - phaseStartMs) / Math.max(sweepMs, 1), 0, 1);
+    const sweepMs = Math.max(sweepEndMs - sweepStartMs, 1);
+    const frac = clamp((timeMs - sweepStartMs) / sweepMs, 0, 1);
     applyFill(slot, prep.width * frac, seeking);
   }
 
@@ -446,7 +445,10 @@
       // 前奏：離第一段還很久才判定為間奏，顯示提示文字
       if (nextUnit && nextUnit.startMs >= GAP_LONG_MS) {
         const countdownStart = nextUnit.startMs - PREVIEW_WINDOW_MS;
-        if (timeMs < countdownStart) showFiller(curSlot, 'intro', timeMs, 0, countdownStart, seeking);
+        const fillerSweepEnd = countdownStart - FILLER_FULL_HOLD_MS;
+        if (fillerSweepEnd > 0 && timeMs < countdownStart) {
+          showFiller(curSlot, 'intro', timeMs, 0, fillerSweepEnd, seeking);
+        }
         else clearSlot(curSlot);
       } else {
         clearSlot(curSlot);
@@ -461,17 +463,16 @@
         showEnding(curSlot);
       }
     } else if (nextUnit.startMs - curUnit.endMs >= GAP_LONG_MS) {
-      // 先讓已唱行短暫停留，再掃完並停住間奏文案；最後五秒才切入下一句倒數。
+      // 先讓已唱行短暫停留；間奏文案沿可用時間慢掃，倒數前兩秒掃完並完整停留。
+      // 若空檔放不下這三段，不硬塞間奏文字，只保留已唱行直到倒數接手。
       const countdownStart = nextUnit.startMs - PREVIEW_WINDOW_MS;
-      const fillerStart = Math.max(
-        curUnit.endMs,
-        Math.min(curUnit.endMs + SWAP_MIN_HOLD_MS, countdownStart - FILLER_SWEEP_MS),
-      );
-      if (timeMs < fillerStart) showHeldFull(curSlot, curUnit);
-      else if (timeMs < countdownStart) {
-        showFiller(curSlot, curUnit.globalIndex, timeMs, fillerStart, countdownStart, seeking);
+      const fillerStart = curUnit.endMs + SWAP_MIN_HOLD_MS;
+      const fillerSweepEnd = countdownStart - FILLER_FULL_HOLD_MS;
+      if (timeMs >= countdownStart) clearSlot(curSlot);
+      else if (timeMs < fillerStart || fillerSweepEnd <= fillerStart) showHeldFull(curSlot, curUnit);
+      else {
+        showFiller(curSlot, curUnit.globalIndex, timeMs, fillerStart, fillerSweepEnd, seeking);
       }
-      else clearSlot(curSlot);
     } else if (timeMs <= curUnit.endMs + SWAP_MIN_HOLD_MS) {
       showHeldFull(curSlot, curUnit);
     } else {
