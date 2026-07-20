@@ -844,11 +844,24 @@ body.template-ktv #lyrics-container {
     4px 5px 4px rgba(0, 0, 0, 0.68);
 }
 
+.ktv-fill-window {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.15em;
+  bottom: -0.15em;
+  overflow: hidden;
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
 .ktv-fill {
   position: absolute;
-  inset: 0;
-  /* 掃色本體：藍色複本疊在白字上，clip-path 依演唱進度逐像素放行 */
-  clip-path: inset(0 100% 0 0);
+  left: 0;
+  top: 0.15em;
+  transform-origin: left center;
+  will-change: transform;
 }
 
 /* ─── 墨字（LyricWordEngine v6）：兩層結構，字素即光帶最小單位 ─── */

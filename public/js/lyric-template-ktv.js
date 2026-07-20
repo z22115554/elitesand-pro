@@ -5,15 +5,15 @@
  * - 邊界限制：每個「顯示單位」在目前字級下量測寬度，超過可用寬就依寬度貪婪切成多個延續單位
  *   （不是縮字，是像自然折行一樣續接到另一行——上一段唱完立刻接續下一段，同一句話跨兩行顯示）
  * - 上排永遠靠左錨定、下排永遠靠右錨定（CSS `left`/`right` 錨點各自 auto-width，
- *   不能用 text-align+固定寬度，否則 clip-path 的掃色像素會對錯座標——見程式內註解）
+ *   不能用 text-align+固定寬度，否則掃色的像素會對錯座標——見程式內註解）
  * - 星星/圓形倒數：不是固定位置的獨立列，而是佔用「即將唱的那一行」原本的位置與字級，
  *   隨機挑星星或圓形（每次出現的組合固定，不逐幀重擲），並用跟歌詞完全相同的
- *   clip-path 掃色手法呈現倒數（同一條管線，肉眼看起來就是「唱到哪個圖案哪個圖案就亮」）
+ *   transform 掃色手法呈現倒數（同一條管線，肉眼看起來就是「唱到哪個圖案哪個圖案就亮」）
  * - 間奏判斷：唱完一段後，若離下一段開始的間隔夠長（判定為間奏），停留一小段時間後，
  *   把已唱完那一行換成宣傳/提示文字（隨機挑一句），取代原本的「天韻製作」；
  *   全曲最後一段唱完後改顯示「來賓請掌聲鼓勵」
  *
- * 效能：純時間驅動 + 二分搜尋 + diff-write clip-path，逐幀成本可忽略。
+ * 效能：純時間驅動 + 二分搜尋 + diff-write transform，逐幀不觸發文字重繪。
  * 依賴：LyricMotion（kernel）、LyricTemplates。不用 GSAP（換行瞬間替換，原機行為）。
  */
 (function () {
@@ -201,6 +201,7 @@
           text: seg.chars.map((c) => c.char).join(''),
           chars: seg.chars,
           offsets: seg.offsets,
+          scanTimes: buildScanTimes(seg.chars),
           width: seg.width,
           fontPx,
           startMs: seg.chars[0].startMs,
@@ -210,6 +211,23 @@
     }
     units.forEach((u, i) => { u.globalIndex = i; });
     return units;
+  }
+
+  /**
+   * Facet 逐字換色以每個字的來源起點為準。KTV 的掃色也以同一組節點前進：
+   * 若來源在兩個字之間有空拍，延長前一字的掃色至下一字開始，而不是停在字縫後
+   * 突然追趕。這讓下一字仍準時開始，同時保留一條連續、單調的掃色路徑。
+   */
+  function buildScanTimes(chars) {
+    if (!chars || chars.length === 0) return [];
+    const times = [chars[0].startMs];
+    for (let i = 1; i < chars.length; i += 1) {
+      const previous = chars[i - 1];
+      const current = chars[i];
+      times.push(Math.max(previous.endMs, current.startMs, times[times.length - 1]));
+    }
+    times.push(Math.max(chars[chars.length - 1].endMs, times[times.length - 1]));
+    return times;
   }
 
   function ensureUnits(lines) {
@@ -241,17 +259,34 @@
   /**
    * 目前時間對應的掃色像素位置。
    *
-   * 台灣 KTV 的掃色是整句等速前進；不能逐字照原始時間戳停住再急追，否則字距／
-   * KRC 的不均勻時間會被放大成明顯的停頓與忽快忽慢。逐字時間仍用來定義單位的
-   * 開始／結束與長句切段，但掃色本身固定在線性時間軸上前進。
+   * 在來源逐字節點間做線性掃色。每個字都在與 Facet 相同的來源起點開始，字間
+   * 空拍則被吸收到前一字的掃色窗，避免舊版「停住再追趕」的感覺。
    */
   function fillPixels(unit, timeMs) {
-    const progress = clamp(
-      (timeMs - unit.startMs) / Math.max(unit.endMs - unit.startMs, 1),
-      0,
-      1,
-    );
-    return unit.width * progress;
+    const times = unit.scanTimes;
+    if (!times || times.length < 2 || timeMs <= times[0]) return 0;
+    const lastIndex = times.length - 1;
+    if (timeMs >= times[lastIndex]) return unit.width;
+
+    let lo = 0;
+    let hi = lastIndex - 1;
+    let charIndex = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (times[mid] <= timeMs) {
+        charIndex = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    const startMs = times[charIndex];
+    const endMs = times[charIndex + 1];
+    const progress = clamp((timeMs - startMs) / Math.max(endMs - startMs, 1), 0, 1);
+    const fromPx = unit.offsets[charIndex] || 0;
+    const toPx = unit.offsets[charIndex + 1] || unit.width;
+    return fromPx + (toPx - fromPx) * progress;
   }
 
   // ─── DOM ───
@@ -261,12 +296,15 @@
     el.className = `ktv-slot ktv-slot-${pos}`;
     const base = document.createElement('div');
     base.className = 'ktv-base';
+    const fillWindow = document.createElement('div');
+    fillWindow.className = 'ktv-fill-window';
     const fill = document.createElement('div');
     fill.className = 'ktv-fill';
     el.appendChild(base);
-    el.appendChild(fill);
+    fillWindow.appendChild(fill);
+    el.appendChild(fillWindow);
     rootEl.appendChild(el);
-    return { el, base, fill, key: '', prep: null, lastClip: '' };
+    return { el, base, fillWindow, fill, key: '', prep: null, lastFill: '' };
   }
 
   /**
@@ -286,7 +324,7 @@
     slot.fill.textContent = prep.text;
     slot.fill.style.color = colorsCache.fill;
     slot.base.style.color = colorsCache.base;
-    slot.lastClip = '';
+    slot.lastFill = '';
   }
 
   function clearSlot(slot) {
@@ -295,19 +333,22 @@
     slot.prep = null;
     slot.base.textContent = '';
     slot.fill.textContent = '';
-    slot.lastClip = '';
+    slot.fillWindow.style.transform = 'scaleX(0)';
+    slot.fill.style.transform = 'scaleX(1)';
+    slot.lastFill = '';
   }
 
   function applyFill(slot, px) {
     if (!slot.prep) return;
-    // 量化 1px：掃色肉眼平滑，DOM 寫入次數砍到最低。
-    // 完全未填時用 100% 全遮（避免負邊距讓第一個字的左側描邊露出一絲色）。
-    const clip = px <= 0.5
-      ? 'inset(0 100% 0 0)'
-      : `inset(-0.15em ${Math.round(Math.max(slot.prep.width - px, 0))}px -0.15em -0.15em)`;
-    if (clip !== slot.lastClip) {
-      slot.fill.style.clipPath = clip;
-      slot.lastClip = clip;
+    const ratio = clamp(px / Math.max(slot.prep.width, 1), 0, 1);
+    // 外層縮小可視窗口、內層用倒數縮放抵銷字形變形；兩者皆可由合成器處理。
+    // 最小以一個實體像素為準，避免起唱第一幀出現無意義的超大倒數縮放。
+    const visibleRatio = ratio <= 0 ? 0 : Math.max(ratio, 1 / Math.max(slot.prep.width, 1));
+    const fillKey = `${visibleRatio.toFixed(6)}`;
+    if (fillKey !== slot.lastFill) {
+      slot.fillWindow.style.transform = `scaleX(${visibleRatio})`;
+      slot.fill.style.transform = `scaleX(${visibleRatio > 0 ? 1 / visibleRatio : 1})`;
+      slot.lastFill = fillKey;
     }
   }
 
