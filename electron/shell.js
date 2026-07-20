@@ -5,7 +5,6 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { SHUTDOWN_MESSAGE } = require('../server/utils/parent-shutdown');
 
 const DEFAULT_PORT = 3000;
 const START_TIMEOUT_MS = 15000;
@@ -108,6 +107,7 @@ function createElectronShell({
   probeHealthImpl = probeHealth,
   delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   projectRoot = path.resolve(__dirname, '..'),
+  shellRoot = path.resolve(__dirname, '..'),
   port = resolveShellPort(processObject.env.ELITESAND_SHELL_PORT),
   startTimeoutMs = START_TIMEOUT_MS,
   healthIntervalMs = HEALTH_INTERVAL_MS,
@@ -120,8 +120,9 @@ function createElectronShell({
     throw new TypeError('createElectronShell requires Electron app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, and powerSaveBlocker');
   }
 
+  const { SHUTDOWN_MESSAGE } = require(path.join(projectRoot, 'server', 'utils', 'parent-shutdown'));
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
-  const preload = path.join(projectRoot, 'electron', 'preload.js');
+  const preload = path.join(shellRoot, 'electron', 'preload.js');
   let mainWindow = null;
   // Keep the Tray instance in this closure. Electron will garbage-collect an
   // unreferenced tray icon, which would make a hidden window unrecoverable.
@@ -203,8 +204,17 @@ function createElectronShell({
   function runtimeEnvironment() {
     const runtimePaths = getRuntimePaths(app.getPath('userData'));
     ensureRuntimePaths(runtimePaths, fsImpl);
+    const packagedTools = app.isPackaged
+      ? path.join(processObject.resourcesPath || process.resourcesPath, 'tools')
+      : '';
+    // Windows 的環境變數鍵通常是 "Path"：必須覆寫「既有的那個鍵」。若另外新增一個
+    // "PATH" 鍵，環境區塊裡出現大小寫不同的重複鍵，子程序採用哪個是未定義行為，
+    // 前置的 tools 目錄可能整個失效（＝打包版 yt-dlp/ffmpeg 找不到、匯入直接壞）。
+    const pathKey = Object.keys(processObject.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
+    const inheritedPath = processObject.env[pathKey] || '';
     return {
       ...processObject.env,
+      ...(packagedTools ? { [pathKey]: `${packagedTools}${path.delimiter}${inheritedPath}` } : {}),
       PORT: String(port),
       OPEN_BROWSER: '0',
       ELITESAND_SHELL: '1',
@@ -212,6 +222,26 @@ function createElectronShell({
       ELITESAND_DOWNLOADS_DIR: runtimePaths.downloadsDir,
       ELITESAND_LOGS_DIR: runtimePaths.logsDir,
     };
+  }
+
+  function showPortableDataMigrationNotice() {
+    if (!app.isPackaged) return;
+    const runtimePaths = getRuntimePaths(app.getPath('userData'));
+    const marker = path.join(runtimePaths.root, '.portable-data-migration-notice-v1');
+    const isEmpty = [runtimePaths.dataDir, runtimePaths.downloadsDir]
+      .every((directory) => {
+        try { return fsImpl.readdirSync(directory).length === 0; } catch (_) { return true; }
+      });
+    if (!isEmpty || fsImpl.existsSync?.(marker)) return;
+    try { fsImpl.writeFileSync?.(marker, 'shown\n', 'utf8'); } catch (_) { /* A notice must never block startup. */ }
+    dialog.showMessageBoxSync({
+      type: 'info',
+      title: 'Elitesand Pro 資料位置',
+      message: `這是新的安裝版資料目錄：\n${runtimePaths.root}\n\n若要沿用可攜版資料，請手動把舊版的 data/ 與 downloads/ 複製到這裡。程式不會自動搬移資料。`,
+      buttons: ['知道了'],
+      defaultId: 0,
+      noLink: true,
+    });
   }
 
   async function createWindow() {
@@ -298,6 +328,9 @@ function createElectronShell({
       startServer();
       await waitForHealthyServer();
       serverReady = true;
+      // 恢復健康後歸零：語義是「每次事故重試一次」，不是「整個程式生命週期只有一次」。
+      // 每次崩潰都有對話框把關，不會形成無人值守的重啟迴圈。
+      serverRestartAttempted = false;
       focusWindow();
     } catch (error) {
       dialog.showMessageBoxSync({
@@ -391,6 +424,7 @@ function createElectronShell({
     try {
       const server = await startServerOrReuseExisting();
       serverReady = true;
+      showPortableDataMigrationNotice();
       createTray();
       await createWindow();
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
