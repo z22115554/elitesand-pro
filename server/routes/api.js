@@ -293,6 +293,8 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
     for (const file of req.files) {
       const filePath = file.path;
       const metadata = await parseMusicFile(filePath);
+      // 統一音量：本地上傳同樣量整曲響度（失敗回 null，不中斷上傳）
+      const loudnessLufs = await AudioProcessor.measureLoudnessQueued(filePath).catch(() => null);
 
       const track = {
         id: path.basename(filePath, path.extname(filePath)),
@@ -305,6 +307,7 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
         cover: null,
         lyrics: null,
         lyricsType: null,
+        loudnessLufs,
       };
 
       // 提取封面

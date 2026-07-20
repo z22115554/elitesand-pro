@@ -36,6 +36,8 @@
   try { continuousPlay = localStorage.getItem('vk-continuous') === '1'; } catch (e) { /* 靜默 */ }
   let stReady = false;            // 當前歌的 buffer 是否已 decode 完成
   let stCtx = null, stGain = null;
+  let stTrackGain = null;         // 統一音量：每首歌的響度校正增益（-14 LUFS 對齊）
+  let stLimiter = null;           // 統一音量提升小聲歌時的防爆音保險（高門檻，平常完全透明）
   let isPlaying = false;
   let currentOffsetMs = 0; // Phase 5: 當前歌曲 offset
   let lastPlayTimeMs = 0;  // 最新播放位置（ms）；timeupdate 與 SoundTouch 回呼都更新，給「對齊第一句」用
@@ -61,8 +63,19 @@
       stCtx = new (window.AudioContext || window.webkitAudioContext)();
       stGain = stCtx.createGain();
       stGain.gain.value = (typeof AudioProcessor !== 'undefined' && AudioProcessor.getVolume) ? AudioProcessor.getVolume() : 0.7;
+      // 統一音量鏈：worklet → stTrackGain（每首響度校正）→ stLimiter（防爆音保險）→ stGain（音量）→ 輸出。
+      // limiter 門檻 -1.5dB、硬拐點：只有增益提升後的峰值才會觸發，平常完全透明。
+      stTrackGain = stCtx.createGain();
+      stLimiter = stCtx.createDynamicsCompressor();
+      stLimiter.threshold.value = -1.5;
+      stLimiter.knee.value = 0;
+      stLimiter.ratio.value = 20;
+      stLimiter.attack.value = 0.001;
+      stLimiter.release.value = 0.1;
+      stTrackGain.connect(stLimiter);
+      stLimiter.connect(stGain);
       stGain.connect(stCtx.destination);
-      SoundTouchEngine.attach(stCtx, stGain);
+      SoundTouchEngine.attach(stCtx, stTrackGain);
       SoundTouchEngine.onTime((t) => stOnTime(t));
       // 與下方 <audio> 的 'ended' 處理邏輯一致：連續播放才自動播下一首，
       // 否則只載入待命（先前這裡忽略了 continuousPlay，導致開啟 SoundTouch 高品質變調時
@@ -84,6 +97,7 @@
     stReady = false;
     if (!useSoundTouch || !filename) return;
     if (!stInitChain()) return;
+    applyStLoudnessGain(); // 首次載歌才建鏈：建好後補套當前歌曲的響度校正
     const myToken = ++stLoadToken;
     try { if (stCtx.state === 'suspended') await stCtx.resume(); } catch (e) { /* 靜默 */ }
     const ok = await SoundTouchEngine.load('/audio/' + encodeURIComponent(filename));
@@ -155,6 +169,32 @@
     applyPitchAndSpeed();
   }
 
+  // 統一音量：當前歌曲的實測響度（LUFS）。存在模組層，因為 SoundTouch 鏈是
+  // 首次載歌才建立的——建鏈完成後要能補套（見 stLoadCurrent）。
+  let currentTrackLufs = null;
+
+  /** 把當前歌曲的響度校正套到 SoundTouch 主鏈（鏈還沒建立時安全跳過，建鏈後補套）。 */
+  function applyStLoudnessGain() {
+    if (!stTrackGain || typeof LoudnessGain === 'undefined') return;
+    const enabled = (typeof AudioProcessor === 'undefined' || !AudioProcessor.isNormalizationEnabled)
+      ? true : AudioProcessor.isNormalizationEnabled();
+    const db = enabled ? LoudnessGain.computeTrackGainDb(currentTrackLufs) : 0;
+    stTrackGain.gain.value = LoudnessGain.dbToLinear(db);
+  }
+
+  /**
+   * 統一音量：套用這首歌的響度校正（track.loudnessLufs 由伺服器量測）。
+   * SoundTouch 與 <audio>+Tone 兩條播放鏈都要套；沒量測值或標準化關閉＝增益 1（原音量）。
+   */
+  function applyTrackLoudness(track) {
+    currentTrackLufs = (track && typeof track.loudnessLufs === 'number') ? track.loudnessLufs : null;
+    // <audio>+Tone 降級鏈：AudioProcessor 內部自行處理開關與換算
+    if (typeof AudioProcessor !== 'undefined' && AudioProcessor.setTrackLoudness) {
+      AudioProcessor.setTrackLoudness(currentTrackLufs);
+    }
+    applyStLoudnessGain();
+  }
+
   // ═══════════════════════════════════════════
   // 播放控制
   // ═══════════════════════════════════════════
@@ -199,6 +239,8 @@
     // 每首記憶的變調/變速：載入此歌時還原（沒記錄＝回預設 0 / 1.0，每首獨立）。
     // 必須在下方啟動 SoundTouch 播放「之前」設好，否則會用到上一首的 key。
     applyTrackPitchSpeed(track);
+    // 統一音量：同樣要在啟動播放前套好這首的響度校正
+    applyTrackLoudness(track);
 
     if (track.filename) {
       audioErrorCount = 0;

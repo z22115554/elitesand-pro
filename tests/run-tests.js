@@ -3697,6 +3697,106 @@ test('使用者更新時會把 v1 state.json 轉成新的模板 ID 並落盤', (
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
+test('統一音量：增益計算對齊 -14 LUFS 並夾在 ±12 dB', () => {
+  const LoudnessGain = require('../public/js/loudness-gain');
+  eq(LoudnessGain.TARGET_LUFS, -14);
+  eq(LoudnessGain.computeTrackGainDb(-14), 0, '目標響度不調整：');
+  eq(LoudnessGain.computeTrackGainDb(-9), -5, '大聲歌壓低：');
+  eq(LoudnessGain.computeTrackGainDb(-24), 10, '小聲歌提升：');
+  eq(LoudnessGain.computeTrackGainDb(-40), 12, '提升上限 +12dB：');
+  eq(LoudnessGain.computeTrackGainDb(-0.5), -12, '壓低下限 -12dB：');
+  eq(LoudnessGain.computeTrackGainDb(null), 0, '未量測維持原音量：');
+  eq(LoudnessGain.computeTrackGainDb(NaN), 0, 'NaN 維持原音量：');
+  eq(LoudnessGain.computeTrackGainDb(5), 0, '範圍外視為量測異常：');
+  eq(LoudnessGain.computeTrackGainDb(-80), 0, '近無聲素材不套 +12dB：');
+  ok(Math.abs(LoudnessGain.dbToLinear(-6) - 0.5012) < 0.001, 'dB 轉線性增益：');
+  ok(Math.abs(LoudnessGain.dbToLinear(0) - 1) < 1e-9, '0dB＝1：');
+});
+
+test('統一音量：ffmpeg ebur128 摘要解析取整曲值，異常回 null', () => {
+  const AudioProcessorService = require('../server/services/audio-processor');
+  const sample = [
+    '[Parsed_ebur128_0 @ 0000019] t: 12.5     TARGET:-23 LUFS    M: -10.2 S: -11.0     I: -11.5 LUFS       LRA:   3.2 LU',
+    '[Parsed_ebur128_0 @ 0000019] Summary:',
+    '',
+    '  Integrated loudness:',
+    '    I:         -9.3 LUFS',
+    '    Threshold: -19.6 LUFS',
+    '',
+    '  Loudness range:',
+    '    LRA:         5.2 LU',
+  ].join('\n');
+  eq(AudioProcessorService.parseEbur128Loudness(sample), -9.3, '取最後（Summary）的 I 值：');
+  eq(AudioProcessorService.parseEbur128Loudness('沒有摘要'), null);
+  eq(AudioProcessorService.parseEbur128Loudness(''), null);
+  eq(AudioProcessorService.parseEbur128Loudness('I: 5.0 LUFS'), null, '正值視為異常：');
+});
+
+test('統一音量：track schema 保留 loudnessLufs，非法值歸 null 不會變 0', () => {
+  const { sanitizeTrack } = require('../server/utils/track-schema');
+  const base = { id: 't1', title: '歌' };
+  eq(sanitizeTrack({ ...base, loudnessLufs: -9.3 }).loudnessLufs, -9.3);
+  eq(sanitizeTrack({ ...base }).loudnessLufs, null, '未量測預設 null：');
+  eq(sanitizeTrack({ ...base, loudnessLufs: null }).loudnessLufs, null, 'null 不可被 Number(null)=0 誤收：');
+  eq(sanitizeTrack({ ...base, loudnessLufs: 'loud' }).loudnessLufs, null);
+  eq(sanitizeTrack({ ...base, loudnessLufs: -999 }).loudnessLufs, -70, '超界收斂：');
+});
+
+testAsync('統一音量：回填只量有音檔且未量測的歌，完成後回寫並只廣播一次', async () => {
+  const { createLoudnessBackfill } = require('../server/services/loudness-backfill');
+  const playState = {
+    currentTrack: { id: 'b', title: 'B', filename: 'b.mp3' },
+    playlist: [
+      { id: 'a', title: 'A', filename: 'a.mp3', loudnessLufs: -10 }, // 已量測 → 跳過
+      { id: 'b', title: 'B', filename: 'b.mp3' },                    // 要量測
+      { id: 'c', title: 'C', filename: 'missing.mp3' },              // 檔案不存在 → 跳過
+      { id: 'd', title: 'D', filename: 'd.mp3' },                    // 量測失敗 → 跳過但不中斷
+    ],
+  };
+  const measured = [];
+  let broadcasts = 0; let persists = 0; const metaUpdates = [];
+  const backfill = createLoudnessBackfill({
+    playState,
+    persistState: () => { persists++; },
+    broadcastState: () => { broadcasts++; },
+    measure: async (filename) => { measured.push(filename); return filename === 'b.mp3' ? -20.5 : null; },
+    audioExists: (filename) => filename !== 'missing.mp3',
+    updateLibraryMeta: (id, partial) => metaUpdates.push({ id, ...partial }),
+    logger: { info: () => {}, warn: () => {} },
+  });
+  const result = await backfill.runOnce();
+  eq(result.measured, 1); eq(result.skipped, 1);
+  eq(measured.join(','), 'b.mp3,d.mp3', '只量未量測且檔案存在的歌：');
+  eq(playState.playlist[1].loudnessLufs, -20.5, '回寫 playState.playlist（鐵則 17 的事實來源）：');
+  eq(playState.currentTrack.loudnessLufs, -20.5, '同 id 的 currentTrack 快照一併補上：');
+  eq(playState.playlist[3].loudnessLufs, undefined, '量測失敗不寫入：');
+  eq(broadcasts, 1, '全部完成才廣播一次：'); eq(persists, 1);
+  eq(metaUpdates.length, 1); eq(metaUpdates[0].id, 'b'); eq(metaUpdates[0].loudnessLufs, -20.5);
+  // 沒有待量測項目時完全靜默（不廣播）
+  const idle = await backfill.runOnce();
+  eq(idle.measured, 0); eq(broadcasts, 1, '無事可做不再廣播：');
+});
+
+test('統一音量：兩條播放鏈與匯入/上傳/媒體庫都接上響度資料', () => {
+  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8');
+  ['applyTrackLoudness(track)', 'stTrackGain', 'stLimiter', 'applyStLoudnessGain()'].forEach((required) =>
+    ok(playback.includes(required), `app-playback.js 缺少 ${required}`));
+  const clientAudio = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'audio-processor.js'), 'utf8');
+  ['setTrackLoudness', 'trackGainNode', 'applyTrackGain()'].forEach((required) =>
+    ok(clientAudio.includes(required), `audio-processor.js 缺少 ${required}`));
+  ok(fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8').includes('/js/loudness-gain.js'),
+    'index.html 未載入 loudness-gain.js');
+  const serverAudio = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'audio-processor.js'), 'utf8');
+  ok(serverAudio.includes('measureLoudnessQueued'), '匯入未量測響度');
+  ok(serverAudio.includes('loudnessLufs,'), '匯入 track 未帶響度');
+  ok(fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8').includes('measureLoudnessQueued'),
+    '本地上傳未量測響度');
+  ok(fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'library-store.js'), 'utf8').includes('loudnessLufs'),
+    '媒體庫未保留響度');
+  ok(fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'socket-handler.js'), 'utf8').includes('createLoudnessBackfill'),
+    '啟動回填未接上');
+});
+
 test('Electron P1 shell keeps runtime data isolated and locks down the renderer', () => {
   const electronShell = require('../electron/shell');
   const runtimeRoot = path.join(os.tmpdir(), 'elitesand-electron-shell-unit');
