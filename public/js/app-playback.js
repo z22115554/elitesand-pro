@@ -782,10 +782,13 @@
     dom.volumeSlider.addEventListener('input', () => {
       const vol = parseInt(dom.volumeSlider.value, 10) / 100;
       if (dom.volumeVal) dom.volumeVal.textContent = dom.volumeSlider.value + '%';
-      // AudioProcessor 已初始化 → 用 GainNode；否則退回 audio.volume
-      if (audioProcessorReady && typeof AudioProcessor !== 'undefined') {
+      // 不論降級鏈是否已初始化，都交給 AudioProcessor 記住音量；SoundTouch 常在
+      // 它之前就可播放，若只在 ready 後呼叫會造成「這次聽得到、重開又回 70%」。
+      if (typeof AudioProcessor !== 'undefined' && AudioProcessor.setVolume) {
         AudioProcessor.setVolume(vol);
-      } else {
+      }
+      // AudioProcessor 尚未接管 audio 元素時，保留原生音量作為立即可用的後備。
+      if (!audioProcessorReady) {
         audioPlayer.volume = vol;
       }
       // 高品質變調的獨立輸出鏈也要跟著調音量

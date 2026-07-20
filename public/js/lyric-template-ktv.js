@@ -238,21 +238,20 @@
     return globalIndex % 2 === 0 ? 'top' : 'bottom';
   }
 
-  /** 目前時間對應的掃色像素位置（逐字內線性插值，半個字的填充就是這裡來的）。 */
+  /**
+   * 目前時間對應的掃色像素位置。
+   *
+   * 台灣 KTV 的掃色是整句等速前進；不能逐字照原始時間戳停住再急追，否則字距／
+   * KRC 的不均勻時間會被放大成明顯的停頓與忽快忽慢。逐字時間仍用來定義單位的
+   * 開始／結束與長句切段，但掃色本身固定在線性時間軸上前進。
+   */
   function fillPixels(unit, timeMs) {
-    const { chars, offsets } = unit;
-    if (chars.length === 0) return 0;
-    if (timeMs <= chars[0].startMs) return 0;
-    if (timeMs >= chars[chars.length - 1].endMs) return unit.width;
-    for (let i = 0; i < chars.length; i += 1) {
-      const c = chars[i];
-      if (timeMs < c.startMs) return offsets[i];
-      if (timeMs <= c.endMs) {
-        const frac = (timeMs - c.startMs) / Math.max(c.endMs - c.startMs, 1);
-        return offsets[i] + (offsets[i + 1] - offsets[i]) * frac;
-      }
-    }
-    return unit.width;
+    const progress = clamp(
+      (timeMs - unit.startMs) / Math.max(unit.endMs - unit.startMs, 1),
+      0,
+      1,
+    );
+    return unit.width * progress;
   }
 
   // ─── DOM ───
