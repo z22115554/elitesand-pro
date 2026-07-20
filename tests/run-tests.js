@@ -3697,6 +3697,47 @@ test('使用者更新時會把 v1 state.json 轉成新的模板 ID 並落盤', (
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
+test('Electron P1 shell keeps runtime data isolated and locks down the renderer', () => {
+  const electronShell = require('../electron/shell');
+  const runtimeRoot = path.join(os.tmpdir(), 'elitesand-electron-shell-unit');
+  const runtimePaths = electronShell.getRuntimePaths(runtimeRoot);
+  eq(runtimePaths.root, path.resolve(runtimeRoot));
+  eq(runtimePaths.dataDir, path.join(path.resolve(runtimeRoot), 'data'));
+  eq(runtimePaths.downloadsDir, path.join(path.resolve(runtimeRoot), 'downloads'));
+  eq(runtimePaths.logsDir, path.join(path.resolve(runtimeRoot), 'logs'));
+  eq(electronShell.resolveShellPort('3100'), 3100);
+  eq(electronShell.resolveShellPort('not-a-port'), 3000);
+  ok(electronShell.isTrustedLocalUrl('http://127.0.0.1:3000/panel', 3000));
+  ok(!electronShell.isTrustedLocalUrl('https://127.0.0.1:3000/panel', 3000));
+  ok(!electronShell.isTrustedLocalUrl('http://example.com:3000/panel', 3000));
+  ok(electronShell.isProjectReleaseUrl('https://github.com/z22115554/elitesand-pro/releases'));
+  ok(!electronShell.isProjectReleaseUrl('https://github.com/other/project/releases'));
+
+  const source = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
+  [
+    'utilityProcess.fork',
+    "OPEN_BROWSER: '0'",
+    'contextIsolation: true',
+    'nodeIntegration: false',
+    'sandbox: true',
+    'backgroundThrottling: false',
+    'setWindowOpenHandler',
+    'ELITESAND_SHELL_USER_DATA_DIR',
+    'SHUTDOWN_MESSAGE',
+  ].forEach((required) => ok(source.includes(required), `Electron shell is missing ${required}`));
+});
+
+test('Electron P1 smoke starts with a disposable Electron user-data directory', () => {
+  const packageJson = require('../package.json');
+  const smoke = fs.readFileSync(path.join(__dirname, '..', 'tools', 'smoke-electron-shell.js'), 'utf8');
+  eq(packageJson.scripts.shell, 'electron electron/main.js');
+  eq(packageJson.scripts['smoke:electron'], 'node tools/smoke-electron-shell.js');
+  eq(packageJson.devDependencies.electron, '^43.1.1');
+  ok(smoke.includes('ELITESAND_SHELL_USER_DATA_DIR'));
+  ok(smoke.includes('ELITESAND_SHELL_HEADLESS'));
+  ok(!smoke.includes("ELITESAND_DATA_DIR: path.join(runtimeRoot"));
+});
+
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }
   process.exit(exitCode);
