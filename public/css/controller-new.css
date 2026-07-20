@@ -91,7 +91,7 @@ body.controller {
 .ctrl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .ctrl-template-chips button { flex: 1 1 calc(33.333% - 8px); }
 .ctrl-sub-label { margin: 14px 0 7px; color: var(--text-faint); font-size: 12px; }
-#ctrl-lyric-position-group[hidden], #ctrl-columnflow-variant-group[hidden], #ctrl-columnflow-placement-group[hidden], #ctrl-columnflow-max-lines-group[hidden] { display: none; }
+#ctrl-lyric-position-group[hidden], #ctrl-columnflow-variant-group[hidden], #ctrl-columnflow-placement-group[hidden], #ctrl-columnflow-max-lines-group[hidden], #ctrl-intensity-group[hidden], #ctrl-classic-style-group[hidden] { display: none; }
 .ctrl-preset-row { display: flex; gap: 8px; margin-top: 14px; }
 .ctrl-preset-row .input { min-width: 0; flex: 1; }
 .ctrl-chip, .ctrl-style-btn, .ctrl-mode-btn, .ctrl-template-btn, .ctrl-position-btn, .ctrl-intensity-btn, .ctrl-columnflow-variant-btn, .ctrl-columnflow-placement-btn, .ctrl-columnflow-max-lines-btn {
