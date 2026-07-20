@@ -3861,6 +3861,7 @@ test('Electron P2 installer stays per-user with a loose updateable app root', ()
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'tools'), 'installer must contain bundled tools');
   const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'showPortableDataMigrationNotice',
+    'function needsPortableDataMigrationNotice', 'shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice()',
     "Object.keys(processObject.env).find((key) => key.toUpperCase() === 'PATH')"].forEach((required) =>
     ok(shellSource.includes(required), `Electron packed runtime is missing ${required}`));
   const mainSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.js'), 'utf8');
