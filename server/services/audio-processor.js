@@ -49,6 +49,16 @@ let activeYtDlpJobs = 0;
 let ffmpegTail = Promise.resolve();
 const PREFETCH_TTL_MS = 10 * 60 * 1000;
 
+function isYouTubeMusicPremiumError(error) {
+  return /only available to music premium members/i.test(String(error?.message || error || ''));
+}
+
+function createYouTubeMusicPremiumError() {
+  const error = new Error('這首 YouTube Music 音樂僅限 Music Premium 播放。');
+  error.code = 'YOUTUBE_MUSIC_PREMIUM';
+  return error;
+}
+
 function rememberPrefetchedInfo(url, info) {
   const videoId = extractVideoId(url) || info?.id;
   if (!videoId || !info) return;
@@ -632,6 +642,7 @@ class AudioProcessor {
         };
       } catch (err) {
         if (signal?.aborted) throw new ImportCancelledError();
+        if (isYouTubeMusicPremiumError(err)) throw createYouTubeMusicPremiumError();
         const errMsg = err.message || '';
         const strategyDuration = Date.now() - strategyStart;
         if (errMsg.includes('Sign in to confirm')) {
