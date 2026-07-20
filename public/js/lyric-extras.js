@@ -715,7 +715,8 @@
   }
 
   function initTemplatePicker() {
-    const templateButtons = Array.from(document.querySelectorAll('#template-buttons [data-template]'));
+    const templateButtons = Array.from(document.querySelectorAll('#template-buttons [data-template]'))
+      .filter((button) => !button.hidden);
     const selectTemplate = (nextTemplate) => {
       if (!TEMPLATE_IDS.includes(nextTemplate) || nextTemplate === settings.template) return;
       saveCurrentTemplateSnapshot();

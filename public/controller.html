@@ -84,7 +84,7 @@
       <button class="ctrl-template-btn active" data-template="classic" type="button">經典疊層</button>
       <button class="ctrl-template-btn" data-template="pulse" type="button">星砂流光</button>
       <button class="ctrl-template-btn" data-template="facet" type="button">折光階梯</button>
-      <button class="ctrl-template-btn" data-template="drift" type="button">斜拍告白</button>
+      <button class="ctrl-template-btn" data-template="drift" type="button" hidden aria-hidden="true">斜拍告白</button>
       <button class="ctrl-template-btn" data-template="aura" type="button">潮汐心景</button>
       <button class="ctrl-template-btn" data-template="ktv" type="button">霓彩伴唱</button>
       <button class="ctrl-template-btn" data-template="columnflow" type="button">直書句流</button>
@@ -124,11 +124,13 @@
         <button class="ctrl-columnflow-max-lines-btn" data-columnflow-max-lines="6" type="button">6 句</button>
       </div>
     </div>
-    <p class="ctrl-sub-label">動態強度</p>
-    <div class="ctrl-chips">
-      <button class="ctrl-intensity-btn" data-intensity="calm" type="button">靜</button>
-      <button class="ctrl-intensity-btn active" data-intensity="normal" type="button">中</button>
-      <button class="ctrl-intensity-btn" data-intensity="chaotic" type="button">強</button>
+    <div id="ctrl-intensity-group">
+      <p class="ctrl-sub-label">動態強度</p>
+      <div class="ctrl-chips">
+        <button class="ctrl-intensity-btn" data-intensity="calm" type="button">靜</button>
+        <button class="ctrl-intensity-btn active" data-intensity="normal" type="button">中</button>
+        <button class="ctrl-intensity-btn" data-intensity="chaotic" type="button">強</button>
+      </div>
     </div>
     <div class="ctrl-preset-row">
       <select id="ctrl-lyric-preset" class="input" aria-label="歌詞外觀預設"><option value="">尚未保存預設</option></select>
@@ -136,7 +138,7 @@
     </div>
   </div>
 
-  <div class="ctrl-card">
+  <div class="ctrl-card" id="ctrl-classic-style-group">
     <p class="eyebrow">配色風格（經典疊層）</p>
     <div class="ctrl-chips">
       <button class="ctrl-style-btn active" data-style="cute" type="button">可愛</button>

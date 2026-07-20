@@ -102,6 +102,10 @@
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
 
+  function templateSupportsIntensity(template) {
+    return ['pulse', 'facet', 'drift', 'aura'].includes(template);
+  }
+
   function normalizeColumnflowMaxLines(value) {
     const parsed = Math.round(Number(value));
     if (!Number.isFinite(parsed)) return 4;
@@ -120,6 +124,8 @@
     lyricSettings = { ...value };
     const template = TEMPLATE_IDS.includes(lyricSettings.template) ? lyricSettings.template : 'classic';
     const isColumnflow = template === 'columnflow';
+    const isClassic = template === 'classic';
+    const isFixedPosition = template === 'ktv' || isColumnflow;
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
     document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowVariant === (lyricSettings.columnflowVariant || 'sen')));
     document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowPlacement === (lyricSettings.columnflowPlacement || 'split')));
@@ -131,10 +137,14 @@
     const columnflowGroup = document.getElementById('ctrl-columnflow-variant-group');
     const columnflowPlacementGroup = document.getElementById('ctrl-columnflow-placement-group');
     const columnflowMaxLinesGroup = document.getElementById('ctrl-columnflow-max-lines-group');
-    if (positionGroup) positionGroup.hidden = isColumnflow;
+    const intensityGroup = document.getElementById('ctrl-intensity-group');
+    const classicStyleGroup = document.getElementById('ctrl-classic-style-group');
+    if (positionGroup) positionGroup.hidden = isFixedPosition;
     if (columnflowGroup) columnflowGroup.hidden = !isColumnflow;
     if (columnflowPlacementGroup) columnflowPlacementGroup.hidden = !isColumnflow;
     if (columnflowMaxLinesGroup) columnflowMaxLinesGroup.hidden = !isColumnflow;
+    if (intensityGroup) intensityGroup.hidden = !templateSupportsIntensity(template);
+    if (classicStyleGroup) classicStyleGroup.hidden = !isClassic;
 
     if (dom.lyricPreset) {
       const selected = dom.lyricPreset.value;
@@ -197,7 +207,10 @@
   });
 
   document.querySelectorAll('.ctrl-intensity-btn').forEach((btn) => {
-    btn.addEventListener('click', () => pushLyricPatch({ animationIntensity: btn.dataset.intensity }));
+    btn.addEventListener('click', () => {
+      if (!templateSupportsIntensity(lyricSettings.template)) return;
+      pushLyricPatch({ animationIntensity: btn.dataset.intensity });
+    });
   });
 
   document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((btn) => {
@@ -552,6 +565,7 @@
 
   document.querySelectorAll('.ctrl-style-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (lyricSettings.template !== 'classic') return;
       const style = btn.dataset.style;
       currentStyle = style;
 
