@@ -274,6 +274,9 @@ function createElectronShell({
       show: false,
       backgroundColor: '#101114',
       title: 'Elitesand Pro',
+      // Keep the Windows caption buttons truly native. The default Electron
+      // File/Edit/View menu is removed below, leaving only the OS title bar.
+      frame: true,
       webPreferences: {
         preload,
         contextIsolation: true,
@@ -283,6 +286,7 @@ function createElectronShell({
       },
     });
     mainWindow = window;
+    window.removeMenu?.();
     window.once('ready-to-show', () => {
       if (!headless) window.show();
     });
