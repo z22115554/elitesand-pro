@@ -3824,6 +3824,8 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'Tray',
     'displayBalloon',
     'preventDefault',
+    'powerSaveBlocker',
+    'showMessageBoxSync',
     'setWindowOpenHandler',
     'ELITESAND_SHELL_USER_DATA_DIR',
     'SHUTDOWN_MESSAGE',
@@ -3885,6 +3887,7 @@ testAsync('Electron P1：關窗會藏到系統匣，四項選單可叫回面板�
     Menu: { buildFromTemplate: (template) => ({ template }) },
     nativeImage: { createFromPath: (iconPath) => ({ iconPath }) },
     clipboard: { writeText: (value) => clipboardWrites.push(value) },
+    powerSaveBlocker: { start: () => 1, stop: () => {} },
     processObject: { env: {}, platform: 'win32' },
     fsImpl: { mkdirSync: () => {} },
     probeHealthImpl: async () => ({ state: 'healthy', payload: { status: 'ok' } }),
@@ -3904,6 +3907,140 @@ testAsync('Electron P1：關窗會藏到系統匣，四項選單可叫回面板�
   trayInstance.menu.template[1].click();
   trayInstance.menu.template[2].click();
   eq(clipboardWrites.join('|'), 'http://localhost:3000/display|http://localhost:3000/setlist');
+});
+
+testAsync('Electron P1：系統匣結束會先 graceful shutdown，並釋放防休眠鎖', async () => {
+  const { EventEmitter } = require('events');
+  const { createElectronShell } = require('../electron/shell');
+  let trayInstance;
+  const shutdownMessages = [];
+  const powerStops = [];
+  const child = new EventEmitter();
+  child.pid = 4321;
+  child.postMessage = (message) => shutdownMessages.push(message);
+  child.kill = () => { child.killed = true; };
+  const app = new EventEmitter();
+  app.setName = () => {};
+  app.setAppUserModelId = () => {};
+  app.requestSingleInstanceLock = () => true;
+  app.whenReady = async () => {};
+  app.getPath = () => path.join(TEST_RUNTIME_ROOT, 'electron-quit-unit');
+  app.exitCodes = [];
+  app.exit = (code) => app.exitCodes.push(code);
+  app.quitCalls = 0;
+  app.quit = () => {
+    app.quitCalls++;
+    app.emit('before-quit', { preventDefault() { this.prevented = true; } });
+  };
+  class FakeWindow extends EventEmitter {
+    constructor() {
+      super();
+      this.webContents = { setWindowOpenHandler: () => {}, on: () => {} };
+    }
+    async loadURL() { this.emit('ready-to-show'); }
+    show() {}
+    hide() {}
+    focus() {}
+    isMinimized() { return false; }
+  }
+  class FakeTray extends EventEmitter {
+    constructor() { super(); trayInstance = this; }
+    setToolTip() {}
+    setContextMenu(menu) { this.menu = menu; }
+  }
+  let probes = 0;
+  const desktop = createElectronShell({
+    app,
+    BrowserWindow: FakeWindow,
+    utilityProcess: { fork: () => child },
+    dialog: { showErrorBox: () => {}, showMessageBoxSync: () => 1 },
+    shell: { openExternal: () => {} },
+    Tray: FakeTray,
+    Menu: { buildFromTemplate: (template) => ({ template }) },
+    nativeImage: { createFromPath: () => ({}) },
+    clipboard: { writeText: () => {} },
+    powerSaveBlocker: { start: () => 77, stop: (id) => powerStops.push(id) },
+    processObject: { env: {}, platform: 'win32' },
+    fsImpl: { mkdirSync: () => {} },
+    probeHealthImpl: async () => (++probes === 1 ? { state: 'free' } : { state: 'healthy', payload: { status: 'ok' } }),
+    delay: async () => {},
+  });
+
+  await desktop.start();
+  trayInstance.menu.template.find((item) => item.label === '結束').click();
+  await new Promise((resolve) => setImmediate(resolve));
+  eq(app.quitCalls, 1);
+  eq(shutdownMessages[0].type, 'elitesand:shutdown', '結束必須走既有 graceful shutdown 訊息：');
+  ok(child.killed, '受控 server 未在期限內結束時才 fallback kill：');
+  eq(powerStops.join(','), '77', '結束必須釋放 prevent-app-suspension：');
+  eq(app.exitCodes.join(','), '0', '關閉完成才退出 Electron：');
+});
+
+testAsync('Electron P1：受控 server 意外退出只允許重新啟動一次', async () => {
+  const { EventEmitter } = require('events');
+  const { createElectronShell } = require('../electron/shell');
+  const children = [];
+  const dialogs = [];
+  const app = new EventEmitter();
+  app.setName = () => {};
+  app.setAppUserModelId = () => {};
+  app.requestSingleInstanceLock = () => true;
+  app.whenReady = async () => {};
+  app.getPath = () => path.join(TEST_RUNTIME_ROOT, 'electron-restart-unit');
+  app.exit = () => {};
+  app.quitCalls = 0;
+  app.quit = () => { app.quitCalls++; app.emit('before-quit', { preventDefault: () => {} }); };
+  class FakeWindow extends EventEmitter {
+    constructor() { super(); this.webContents = { setWindowOpenHandler: () => {}, on: () => {} }; }
+    async loadURL() { this.emit('ready-to-show'); }
+    show() {}
+    hide() {}
+    focus() {}
+    isMinimized() { return false; }
+  }
+  class FakeTray extends EventEmitter {
+    setToolTip() {}
+    setContextMenu() {}
+  }
+  let probes = 0;
+  const desktop = createElectronShell({
+    app,
+    BrowserWindow: FakeWindow,
+    utilityProcess: {
+      fork: () => {
+        const child = new EventEmitter();
+        child.pid = 5000 + children.length;
+        child.postMessage = () => {};
+        child.kill = () => {};
+        children.push(child);
+        return child;
+      },
+    },
+    dialog: {
+      showErrorBox: () => {},
+      showMessageBoxSync: (options) => { dialogs.push(options); return 0; },
+    },
+    shell: { openExternal: () => {} },
+    Tray: FakeTray,
+    Menu: { buildFromTemplate: () => ({}) },
+    nativeImage: { createFromPath: () => ({}) },
+    clipboard: { writeText: () => {} },
+    powerSaveBlocker: { start: () => 1, stop: () => {} },
+    processObject: { env: {}, platform: 'win32' },
+    fsImpl: { mkdirSync: () => {} },
+    probeHealthImpl: async () => (++probes === 1 ? { state: 'free' } : { state: 'healthy', payload: { status: 'ok' } }),
+    delay: async () => {},
+  });
+
+  await desktop.start();
+  children[0].emit('exit', 9);
+  await new Promise((resolve) => setImmediate(resolve));
+  eq(children.length, 2, '第一次意外退出允許重 fork 一次：');
+  eq(dialogs[0].buttons.join('|'), '重新啟動伺服器|結束');
+  children[1].emit('exit', 10);
+  await new Promise((resolve) => setImmediate(resolve));
+  eq(dialogs[1].buttons.join('|'), '結束', '重新啟動後再次退出只能結束：');
+  eq(app.quitCalls, 1);
 });
 
 function finishTests(exitCode) {

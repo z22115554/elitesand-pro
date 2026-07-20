@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard } = require('electron');
+const { app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, powerSaveBlocker } = require('electron');
 const { createElectronShell } = require('./shell');
 
 const desktop = createElectronShell({
@@ -13,6 +13,7 @@ const desktop = createElectronShell({
   Menu,
   nativeImage,
   clipboard,
+  powerSaveBlocker,
 });
 
 desktop.start().catch((error) => {

@@ -102,6 +102,7 @@ function createElectronShell({
   Menu,
   nativeImage,
   clipboard,
+  powerSaveBlocker,
   processObject = process,
   fsImpl = fs,
   probeHealthImpl = probeHealth,
@@ -115,8 +116,8 @@ function createElectronShell({
   autoQuitAfterReadyMs = Number.parseInt(processObject.env.ELITESAND_SHELL_QUIT_AFTER_READY_MS || '0', 10) || 0,
   userDataPath = processObject.env.ELITESAND_SHELL_USER_DATA_DIR || '',
 } = {}) {
-  if (!app || !BrowserWindow || !utilityProcess || !dialog || !shell || !Tray || !Menu || !nativeImage || !clipboard) {
-    throw new TypeError('createElectronShell requires Electron app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, and clipboard');
+  if (!app || !BrowserWindow || !utilityProcess || !dialog || !shell || !Tray || !Menu || !nativeImage || !clipboard || !powerSaveBlocker) {
+    throw new TypeError('createElectronShell requires Electron app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, and powerSaveBlocker');
   }
 
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
@@ -131,6 +132,8 @@ function createElectronShell({
   let serverReady = false;
   let startupExitCode = null;
   let hasShownTrayBalloon = false;
+  let powerSaveBlockerId = null;
+  let serverRestartAttempted = false;
 
   function focusWindow() {
     if (!mainWindow) return;
@@ -180,6 +183,21 @@ function createElectronShell({
         });
       } catch (_) { /* Tray balloons are optional shell feedback. */ }
     }
+  }
+
+  function startPowerSaveBlocker() {
+    if (powerSaveBlockerId !== null) return;
+    try {
+      powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+    } catch (error) {
+      console.warn('[Elitesand Pro Electron] Could not prevent system suspension:', error?.message || error);
+    }
+  }
+
+  function stopPowerSaveBlocker() {
+    if (powerSaveBlockerId === null) return;
+    try { powerSaveBlocker.stop(powerSaveBlockerId); } catch (_) { /* Electron is already closing. */ }
+    powerSaveBlockerId = null;
   }
 
   function runtimeEnvironment() {
@@ -244,21 +262,70 @@ function createElectronShell({
     throw new Error(`Elitesand Pro server did not become ready on port ${port} (${lastState})`);
   }
 
+  async function handleUnexpectedServerExit(code) {
+    if (!serverReady || isQuitting) return;
+    serverReady = false;
+    if (serverRestartAttempted) {
+      dialog.showMessageBoxSync({
+        type: 'error',
+        title: 'Elitesand Pro 已停止',
+        message: `本機服務再次意外結束（代碼 ${code}）。請查看記錄後重新開啟程式。`,
+        buttons: ['結束'],
+        defaultId: 0,
+        noLink: true,
+      });
+      app.quit();
+      return;
+    }
+
+    const choice = dialog.showMessageBoxSync({
+      type: 'error',
+      title: 'Elitesand Pro 伺服器意外停止',
+      message: `本機服務意外結束（代碼 ${code}）。是否重新啟動伺服器？`,
+      buttons: ['重新啟動伺服器', '結束'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (choice !== 0 || isQuitting) {
+      app.quit();
+      return;
+    }
+
+    serverRestartAttempted = true;
+    startupExitCode = null;
+    try {
+      startServer();
+      await waitForHealthyServer();
+      serverReady = true;
+      focusWindow();
+    } catch (error) {
+      dialog.showMessageBoxSync({
+        type: 'error',
+        title: 'Elitesand Pro 無法重新啟動',
+        message: `${error.message}\n\n請查看記錄後重新開啟程式。`,
+        buttons: ['結束'],
+        defaultId: 0,
+        noLink: true,
+      });
+      app.quit();
+    }
+  }
+
   function startServer() {
-    serverProcess = utilityProcess.fork(serverEntry, [], {
+    const child = utilityProcess.fork(serverEntry, [], {
       cwd: projectRoot,
       env: runtimeEnvironment(),
       stdio: 'pipe',
       serviceName: 'Elitesand Pro Server',
     });
-    serverProcess.on('exit', (code) => {
+    serverProcess = child;
+    child.on('exit', (code) => {
       startupExitCode = code;
-      if (serverReady && !isQuitting) {
-        dialog.showErrorBox('Elitesand Pro 已停止', `本機服務意外結束（代碼 ${code}）。請查看記錄後重新開啟程式。`);
-        app.exit(1);
-      }
+      if (serverProcess === child) serverProcess = null;
+      void handleUnexpectedServerExit(code);
     });
-    return serverProcess;
+    return child;
   }
 
   async function startServerOrReuseExisting() {
@@ -271,12 +338,31 @@ function createElectronShell({
   }
 
   async function shutdownOwnedServer() {
-    if (!ownsServer || !serverProcess?.pid) return;
-    try { serverProcess.postMessage({ type: SHUTDOWN_MESSAGE }); } catch (_) { /* Best effort before the force timeout. */ }
-    await waitForExit(serverProcess, shutdownTimeoutMs, delay);
-    if (serverProcess?.pid) {
-      try { serverProcess.kill(); } catch (_) { /* Already gone or unavailable. */ }
+    const child = serverProcess;
+    if (!ownsServer || !child?.pid) return;
+    try { child.postMessage({ type: SHUTDOWN_MESSAGE }); } catch (_) { /* Best effort before the force timeout. */ }
+    await waitForExit(child, shutdownTimeoutMs, delay);
+    if (child.pid) {
+      try { child.kill(); } catch (_) { /* Already gone or unavailable. */ }
     }
+    if (serverProcess === child) serverProcess = null;
+  }
+
+  function showStartupError(error) {
+    if (/already occupied by another application/.test(error?.message || '')) {
+      const choice = dialog.showMessageBoxSync({
+        type: 'warning',
+        title: 'port 已被占用',
+        message: `port ${port} 已被占用——可能已有一份 Elitesand Pro 在執行（含 npm start 的開發實例）。`,
+        buttons: ['開啟既有面板', '結束'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      });
+      if (choice === 0) shell.openExternal(`http://127.0.0.1:${port}/panel`);
+      return;
+    }
+    dialog.showErrorBox('Elitesand Pro 無法啟動', `${error.message}\n\n請確認 port ${port} 沒有被其他程式占用後再試。`);
   }
 
   async function start() {
@@ -294,13 +380,14 @@ function createElectronShell({
     }
     app.on('second-instance', focusWindow);
     app.on('before-quit', (event) => {
+      stopPowerSaveBlocker();
       if (isQuitting || !ownsServer || !serverProcess?.pid) return;
       event.preventDefault();
       isQuitting = true;
       shutdownOwnedServer().finally(() => app.exit(0));
     });
-    app.on('window-all-closed', () => app.quit());
     await app.whenReady();
+    startPowerSaveBlocker();
     try {
       const server = await startServerOrReuseExisting();
       serverReady = true;
@@ -309,8 +396,9 @@ function createElectronShell({
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
       return { started: true, ...server };
     } catch (error) {
-      dialog.showErrorBox('Elitesand Pro 無法啟動', `${error.message}\n\n請確認 port ${port} 沒有被其他程式占用後再試。`);
+      showStartupError(error);
       await shutdownOwnedServer();
+      stopPowerSaveBlocker();
       app.exit(1);
       throw error;
     }
