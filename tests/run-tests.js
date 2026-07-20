@@ -3829,6 +3829,15 @@ test('統一音量開關會即時重套兩條播放鏈', () => {
   ].forEach((required) => ok(playback.includes(required), `統一音量開關缺少 ${required}`));
 });
 
+test('Setlist compact layout keeps settings flowing beside the preview', () => {
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const panelCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8');
+  ok(panel.includes('class="setlist-main"'));
+  ok(panelCss.includes('.setlist-main { display: contents;'));
+  ok(panelCss.includes('.setlist-main { display: flex; flex-direction: column;'));
+  ok(panelCss.includes('.setlist-right { grid-column: auto; grid-row: auto; }'));
+});
+
 test('Electron P1 shell keeps runtime data isolated and locks down the renderer', () => {
   const electronShell = require('../electron/shell');
   const runtimeRoot = path.join(os.tmpdir(), 'elitesand-electron-shell-unit');
@@ -3906,15 +3915,21 @@ test('Electron shell chrome stays inside the Elitesand Pro design system', () =>
   const chrome = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'electron-shell-chrome.js'), 'utf8');
   const preload = fs.readFileSync(path.join(__dirname, '..', 'electron', 'preload.js'), 'utf8');
   ok(panel.includes('class="desktop-windowbar"'));
+  ok(panel.includes('id="electron-window-minimize"'));
+  ok(panel.includes('id="electron-window-maximize"'));
+  ok(panel.includes('id="electron-window-close"'));
   ok(panel.includes('id="electron-close-modal"'));
   ok(panel.includes('>收到系統匣</button>'));
   ok(panel.includes('>確認關閉</button>'));
   ok(panelCss.includes('-webkit-app-region: drag'));
+  ok(panelCss.includes('-webkit-app-region: no-drag'));
   ok(panelCss.includes('html.electron-shell .app'));
   ok(chrome.includes("get('electronShell') === '1'"));
   ok(chrome.includes("shell.decideClose('tray')"));
   ok(chrome.includes("shell.decideClose('quit')"));
+  ok(chrome.includes("shell.windowControl('toggle-maximize')"));
   ok(preload.includes("ipcRenderer.send('elitesand:close-decision', action)"));
+  ok(preload.includes("ipcRenderer.send('elitesand:window-control', action)"));
 });
 
 testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項選單可叫回面板', async () => {
@@ -3933,7 +3948,13 @@ testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項�
   app.quit = () => { app.quitCalls++; };
   const closeDialogs = [];
   let closeDecisionHandler;
-  const ipcMain = { on: (channel, handler) => { if (channel === 'elitesand:close-decision') closeDecisionHandler = handler; } };
+  let windowControlHandler;
+  const ipcMain = {
+    on: (channel, handler) => {
+      if (channel === 'elitesand:close-decision') closeDecisionHandler = handler;
+      if (channel === 'elitesand:window-control') windowControlHandler = handler;
+    },
+  };
   class FakeWindow extends EventEmitter {
     constructor(options) {
       super();
@@ -3946,6 +3967,10 @@ testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項�
       };
       this.hideCalls = 0;
       this.showCalls = 0;
+      this.minimizeCalls = 0;
+      this.maximizeCalls = 0;
+      this.unmaximizeCalls = 0;
+      this.maximized = false;
     }
     async loadURL(url) { this.loadedUrl = url; this.emit('ready-to-show'); }
     show() { this.showCalls++; }
@@ -3953,6 +3978,10 @@ testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項�
     removeMenu() { this.menuRemoved = true; }
     focus() {}
     isMinimized() { return false; }
+    minimize() { this.minimizeCalls++; }
+    isMaximized() { return this.maximized; }
+    maximize() { this.maximizeCalls++; this.maximized = true; this.emit('maximize'); }
+    unmaximize() { this.unmaximizeCalls++; this.maximized = false; this.emit('unmaximize'); }
   }
   class FakeTray extends EventEmitter {
     constructor(icon) { super(); trayInstance = this; this.icon = icon; }
@@ -3979,10 +4008,17 @@ testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項�
 
   await shell.start();
   eq(windowInstance.options.frame, false, '桌面殼必須由 Elitesand Pro 面板繪製視窗頂欄：');
-  eq(windowInstance.options.titleBarOverlay.height, 38, '桌面殼必須保留與自訂頂欄同高的原生視窗控制區：');
-  eq(windowInstance.options.titleBarOverlay.color, '#20222a', '原生視窗控制區必須融入面板深色玻璃底：');
+  ok(!('titleBarOverlay' in windowInstance.options), 'Elitesand 自有的視窗按鈕不可再被 Windows caption overlay 蓋住：');
   ok(windowInstance.loadedUrl.endsWith('/panel?electronShell=1'), '僅 Electron 面板可啟用自訂視窗頂欄：');
   eq(windowInstance.menuRemoved, true, '桌面殼不可保留 Electron 的 File/Edit/View 額外選單列：');
+  ok(typeof windowControlHandler === 'function', '桌面殼必須接住自有視窗按鈕：');
+  windowControlHandler({ sender: windowInstance.webContents }, 'minimize');
+  eq(windowInstance.minimizeCalls, 1, '最小化按鈕必須最小化視窗：');
+  windowControlHandler({ sender: windowInstance.webContents }, 'toggle-maximize');
+  eq(windowInstance.maximizeCalls, 1, '最大化按鈕必須放大視窗：');
+  eq(windowInstance.lastSentChannel, 'elitesand:window-maximized', '最大化狀態必須回傳給面板按鈕：');
+  windowControlHandler({ sender: windowInstance.webContents }, 'toggle-maximize');
+  eq(windowInstance.unmaximizeCalls, 1, '再次點最大化按鈕必須還原視窗：');
   const closeEvent = { prevented: false, preventDefault() { this.prevented = true; } };
   windowInstance.emit('close', closeEvent);
   eq(closeEvent.prevented, true, '有系統匣時 close 必須被攔截：');

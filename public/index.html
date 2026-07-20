@@ -16,6 +16,18 @@
     <span class="desktop-windowbar-brand">Elitesand Pro</span>
     <span class="desktop-windowbar-divider" aria-hidden="true"></span>
     <span class="desktop-windowbar-context">控制面板</span>
+    <div class="desktop-windowbar-controls" aria-label="視窗控制">
+      <button id="electron-window-minimize" class="desktop-windowbar-control" type="button" aria-label="最小化" data-window-action="minimize">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5h10"/></svg>
+      </button>
+      <button id="electron-window-maximize" class="desktop-windowbar-control" type="button" aria-label="最大化" data-window-action="toggle-maximize">
+        <svg class="window-control-maximize-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9"/></svg>
+        <svg class="window-control-restore-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="3.5" width="7" height="7"/><path d="M3.5 5.5v7h7"/></svg>
+      </button>
+      <button id="electron-window-close" class="desktop-windowbar-control desktop-windowbar-control--close" type="button" aria-label="關閉" data-window-action="close">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 4.5 7 7m0-7-7 7"/></svg>
+      </button>
+    </div>
   </header>
   <div id="electron-close-modal" class="modal electron-close-modal" role="dialog" aria-modal="true" aria-labelledby="electron-close-title" aria-describedby="electron-close-description" hidden>
     <div class="modal-card modal-card--small" role="document">
@@ -1034,6 +1046,7 @@
         <div class="view content-col" data-view="setlist">
           <!-- 兩欄：左＝Session＋已唱歌單，右＝歌單外觀設定（加寬）-->
           <div class="setlist-split">
+          <div class="setlist-main">
           <div class="setlist-left">
           <!-- Session 控制 -->
           <section class="card">
@@ -1546,6 +1559,7 @@
             </details>
           </section>
           </div><!-- /.setlist-right -->
+          </div><!-- /.setlist-main -->
           <aside class="setlist-preview-bar" aria-label="歌單即時預覽">
             <div class="setlist-preview-head"><div><p class="eyebrow m-0">歌單即時預覽</p><p class="field-hint m-0">調整設定時，這裡會即時顯示 OBS 輸出。</p></div><span class="save-status saved">已即時同步</span></div>
             <div class="setlist-template-controls">
