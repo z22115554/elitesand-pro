@@ -3,7 +3,7 @@
   "version": "0.8.0",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
-  "main": "server/index.js",
+  "main": "electron/main.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
@@ -14,7 +14,8 @@
     "smoke:electron": "node tools/smoke-electron-shell.js",
     "shell": "electron electron/main.js",
     "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-portable.ps1",
-    "package:update": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-update.ps1"
+    "package:update": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-update.ps1",
+    "package:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
@@ -32,9 +33,53 @@
     "soundtouchjs": "^0.3.0"
   },
   "devDependencies": {
-    "electron": "^43.1.1"
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "build": {
+    "appId": "com.elitesand.pro",
+    "productName": "Elitesand Pro",
+    "asar": false,
+    "directories": {
+      "output": "dist/releases/v${version}/installer"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/.electron-builder-resources/app-root",
+        "to": "app-root",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "dist/.electron-builder-resources/app-root/node_modules",
+        "to": "app-root/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "dist/.electron-builder-resources/tools",
+        "to": "tools"
+      },
+      {
+        "from": "dist/.electron-builder-resources/licenses",
+        "to": "licenses"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
   }
 }
