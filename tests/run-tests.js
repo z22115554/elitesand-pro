@@ -215,8 +215,11 @@ test('清單摘要只把完整歌詞合回目前歌曲', () => {
 
 test('Windows PowerShell 建置腳本使用 UTF-8 BOM', () => {
   const fsForEncoding = require('fs');
-  for (const filename of ['build-portable.ps1', 'build-update.ps1']) {
-    const bytes = fsForEncoding.readFileSync(require('path').join(__dirname, '..', 'tools', filename));
+  const toolsDir = require('path').join(__dirname, '..', 'tools');
+  const scripts = fsForEncoding.readdirSync(toolsDir).filter((name) => name.endsWith('.ps1'));
+  ok(scripts.length >= 3, `tools/ 應至少有三支 ps1（portable/update/installer），實際 ${scripts.length}: `);
+  for (const filename of scripts) {
+    const bytes = fsForEncoding.readFileSync(require('path').join(toolsDir, filename));
     ok(bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf, `${filename} 必須讓 Windows PowerShell 5.1 正確辨識 UTF-8: `);
   }
 });
@@ -3844,6 +3847,30 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'ELITESAND_SHELL_USER_DATA_DIR',
     'SHUTDOWN_MESSAGE',
   ].forEach((required) => ok(source.includes(required), `Electron shell is missing ${required}`));
+});
+
+test('Electron P2 installer stays per-user with a loose updateable app root', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  eq(packageJson.main, 'electron/main.js');
+  eq(packageJson.build.asar, false);
+  eq(packageJson.build.directories.output, 'dist/releases/v${version}/installer');
+  eq(packageJson.build.nsis.oneClick, true);
+  eq(packageJson.build.nsis.perMachine, false, 'NSIS must not install per-machine');
+  ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root'), 'installer must contain resources/app-root');
+  ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root/node_modules'), 'installer must explicitly ship app-root/node_modules (electron-builder drops it from extraResources)');
+  ok(packageJson.build.extraResources.some((entry) => entry.to === 'tools'), 'installer must contain bundled tools');
+  const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
+  ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'showPortableDataMigrationNotice',
+    "Object.keys(processObject.env).find((key) => key.toUpperCase() === 'PATH')"].forEach((required) =>
+    ok(shellSource.includes(required), `Electron packed runtime is missing ${required}`));
+  const mainSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.js'), 'utf8');
+  ok(mainSource.includes("path.join(process.resourcesPath, 'app-root')"), 'Electron main must resolve the packed app root');
+  const installerBuild = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
+  ['build-portable.ps1', 'app-root', 'Remove-Item -LiteralPath $runtimeDir -Recurse -Force', 'electron-builder.cmd',
+    'node_modules\\express\\package.json', 'Test-InstallerBootOutsideRepo', 'win-unpacked\\resources'].forEach((required) =>
+    ok(installerBuild.includes(required), `Installer build is missing ${required}`));
+  const updater = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater-runner.js'), 'utf8');
+  ok(!updater.includes("'electron'"), 'incremental updater must never allow Electron shell files');
 });
 
 test('Electron P1 smoke starts with a disposable Electron user-data directory', () => {
