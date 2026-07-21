@@ -854,6 +854,36 @@
             </div>
             <div id="twitch-requests-list" class="twitch-requests-list"></div>
           </section>
+          <details class="card card-collapse twitch-reply-settings" id="twitch-reply-settings" open>
+            <summary class="eyebrow">聊天室自動回覆</summary>
+            <div class="card-collapse-body twitch-reply-settings-body">
+              <p class="sub section-intro">可分別決定收到點歌、匯入成功、拒絕或失敗等情境要不要回覆，並自訂聊天室文案。</p>
+              <div class="switch-row">
+                <div><div class="label">自動回覆總開關</div><div class="sub">關閉後仍會接收點歌，但不會向聊天室傳送任何自動回覆。</div></div>
+                <label class="switch"><input id="twitch-reply-enabled" type="checkbox" checked><span class="track"></span></label>
+              </div>
+              <div class="field twitch-reply-mode-field">
+                <label for="twitch-reply-mode">回覆方式</label>
+                <select id="twitch-reply-mode" class="input">
+                  <option value="reply">Twitch 原生串接回覆（建議）</option>
+                  <option value="mention">以 @使用者 回覆</option>
+                  <option value="plain">一般聊天室訊息</option>
+                </select>
+              </div>
+              <div class="twitch-reply-variables">
+                <div class="label">插入變數</div>
+                <div id="twitch-reply-variable-buttons" class="twitch-reply-variable-buttons"></div>
+                <p class="sub">先點選一個文案輸入框，再按變數按鈕。拼錯或大括號不完整時無法儲存。</p>
+              </div>
+              <div id="twitch-reply-items" class="twitch-reply-items"></div>
+              <div id="twitch-reply-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
+              <div class="twitch-reply-actions">
+                <span id="twitch-reply-save-status" class="val" aria-live="polite"></span>
+                <button id="twitch-reply-reset" class="btn btn-sm btn-ghost" type="button">還原預設值</button>
+                <button id="twitch-reply-save" class="btn btn-sm btn-primary" type="button">儲存回覆設定</button>
+              </div>
+            </div>
+          </details>
         </div><!-- /view twitch -->
 
         <!-- ═══ 視圖：一般設定（OBS 網址/連動、手機遙控、yt-dlp、PIN）═══ -->
@@ -920,35 +950,6 @@
               <button id="twitch-connect" class="btn btn-primary" type="button">連接 Twitch</button>
               <a id="twitch-device-link" class="btn btn-sm ml-8" href="#" target="_blank" rel="noopener" hidden>前往 Twitch 輸入代碼</a>
               <button id="twitch-deauthorize" class="btn btn-sm btn-ghost btn-danger ml-8" type="button" hidden>解除 Twitch 授權</button>
-              <details class="twitch-reply-settings" id="twitch-reply-settings">
-                <summary>聊天室自動回覆</summary>
-                <div class="twitch-reply-settings-body">
-                  <div class="switch-row">
-                    <div><div class="label">自動回覆總開關</div><div class="sub">關閉後仍會接收點歌，但不會向聊天室傳送任何自動回覆。</div></div>
-                    <label class="switch"><input id="twitch-reply-enabled" type="checkbox" checked><span class="track"></span></label>
-                  </div>
-                  <div class="field twitch-reply-mode-field">
-                    <label for="twitch-reply-mode">回覆方式</label>
-                    <select id="twitch-reply-mode" class="input">
-                      <option value="reply">Twitch 原生串接回覆（建議）</option>
-                      <option value="mention">以 @使用者 回覆</option>
-                      <option value="plain">一般聊天室訊息</option>
-                    </select>
-                  </div>
-                  <div class="twitch-reply-variables">
-                    <div class="label">插入變數</div>
-                    <div id="twitch-reply-variable-buttons" class="twitch-reply-variable-buttons"></div>
-                    <p class="sub">先點選一個文案輸入框，再按變數按鈕。拼錯或大括號不完整時無法儲存。</p>
-                  </div>
-                  <div id="twitch-reply-items" class="twitch-reply-items"></div>
-                  <div id="twitch-reply-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
-                  <div class="twitch-reply-actions">
-                    <span id="twitch-reply-save-status" class="val" aria-live="polite"></span>
-                    <button id="twitch-reply-reset" class="btn btn-sm btn-ghost" type="button">還原預設值</button>
-                    <button id="twitch-reply-save" class="btn btn-sm btn-primary" type="button">儲存回覆設定</button>
-                  </div>
-                </div>
-              </details>
             </div>
           </details>
           </div>

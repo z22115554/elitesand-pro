@@ -587,9 +587,8 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-requests-card { border-color: var(--accent); }
 .twitch-requests-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .twitch-request-empty { padding: 32px 16px; color: var(--text-faint); text-align: center; border: 1px dashed var(--border); border-radius: var(--r-md); }
-.twitch-reply-settings { margin-top: 14px; border-top: 1px solid var(--border); }
-.twitch-reply-settings > summary { padding: 12px 0 4px; color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
-.twitch-reply-settings-body { padding-top: 4px; }
+.twitch-reply-settings { border-color: var(--border); }
+.twitch-reply-settings > summary { color: var(--text); cursor: pointer; }
 .twitch-reply-mode-field { margin-top: 8px; }
 .twitch-reply-variables { margin-top: 14px; }
 .twitch-reply-variable-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
