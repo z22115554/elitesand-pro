@@ -875,6 +875,16 @@
                 <div id="twitch-reply-variable-buttons" class="twitch-reply-variable-buttons"></div>
                 <p class="sub">先點選一個文案輸入框，再按變數按鈕。拼錯或大括號不完整時無法儲存。</p>
               </div>
+              <div class="twitch-reply-test">
+                <div class="label">送出一則測試回覆</div>
+                <div class="twitch-reply-test-controls">
+                  <select id="twitch-reply-test-event" class="input" aria-label="選擇要測試的回覆"></select>
+                  <button id="twitch-reply-test-send" class="btn btn-sm" type="button">送到 Twitch 聊天室</button>
+                </div>
+                <p id="twitch-reply-test-preview" class="sub"></p>
+                <p id="twitch-reply-test-status" class="val" aria-live="polite"></p>
+                <p class="sub">使用目前畫面上的文案與範例變數，不會建立點歌，也不會自動儲存設定。送出前會再次確認。</p>
+              </div>
               <div id="twitch-reply-items" class="twitch-reply-items"></div>
               <div id="twitch-reply-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
               <div class="twitch-reply-actions">

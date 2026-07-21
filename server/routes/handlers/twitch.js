@@ -39,6 +39,31 @@ function registerTwitchHandlers(io, socket, ctx, { getTwitchService }) {
       if (typeof ack === 'function') ack(result?.ok === false ? result : { ok: true, settings: validation.settings });
     });
   });
+
+  socket.on('twitch:reply-settings:test', async (payload, ack) => {
+    const validation = TwitchReplySettings.validateSettings(payload?.settings);
+    const replyKey = typeof payload?.replyKey === 'string' ? payload.replyKey : '';
+    const knownReply = TwitchReplySettings.REPLY_DEFINITIONS.some((definition) => definition.key === replyKey);
+    if (!validation.ok || !knownReply) {
+      if (typeof ack === 'function') ack({
+        ok: false,
+        error: validation.errors[0]?.message || '找不到要測試的 Twitch 回覆項目',
+      });
+      return;
+    }
+    const twitchService = getTwitchService();
+    if (!twitchService) {
+      if (typeof ack === 'function') ack({ ok: false, error: 'Twitch 服務尚未啟用' });
+      return;
+    }
+    try {
+      const result = await twitchService.sendReplyTest(validation.settings, replyKey);
+      if (typeof ack === 'function') ack({ ok: true, ...result });
+    } catch (err) {
+      log.warn(`Twitch 回覆測試未送出: ${err.message}`);
+      if (typeof ack === 'function') ack({ ok: false, error: err.message || 'Twitch 測試訊息未送出' });
+    }
+  });
 }
 
 module.exports = registerTwitchHandlers;
