@@ -13,6 +13,7 @@
 const stateStore = require('../services/state-store');
 const setlistStyleSchema = require('../../public/js/setlist-style-schema');
 const twitchReplySettings = require('../../public/js/twitch-reply-settings');
+const twitchRequestSettings = require('../../public/js/twitch-request-settings');
 const { createLogger } = require('../utils/logger');
 const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
@@ -84,6 +85,7 @@ function createAppState(io) {
     setlistSceneStyles: {},
     // Twitch 聊天室回覆設定；面板與 server 共用 public/js/twitch-reply-settings.js 契約。
     twitchReplySettings: twitchReplySettings.getDefaults(),
+    twitchRequestSettings: twitchRequestSettings.getDefaults(),
   };
 
   // 場景版各一份完整設定（預設＝共用份的複製）
@@ -172,6 +174,9 @@ function createAppState(io) {
     if (saved.twitchReplySettings && typeof saved.twitchReplySettings === 'object') {
       playState.twitchReplySettings = twitchReplySettings.normalizeSettings(saved.twitchReplySettings);
     }
+    if (saved.twitchRequestSettings && typeof saved.twitchRequestSettings === 'object') {
+      playState.twitchRequestSettings = twitchRequestSettings.normalizeSettings(saved.twitchRequestSettings);
+    }
     log.info('狀態已從 state.json 還原');
   })();
 
@@ -200,6 +205,7 @@ function createAppState(io) {
       setlistStyle: playState.setlistStyle,
       setlistSceneStyles: playState.setlistSceneStyles,
       twitchReplySettings: playState.twitchReplySettings,
+      twitchRequestSettings: playState.twitchRequestSettings,
     }), callback);
   }
 

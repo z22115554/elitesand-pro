@@ -9,11 +9,11 @@
 const crypto = require('crypto');
 const { parseYouTubeUrl } = require('../utils/youtube-url');
 const AudioProcessor = require('./audio-processor');
-const MAX_PENDING_REQUESTS = 20;
 const fetch = require('node-fetch');
 const store = require('./twitch-store');
 const requestStore = require('./twitch-request-store');
 const TwitchReplySettings = require('../../public/js/twitch-reply-settings');
+const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const { createLogger } = require('../utils/logger');
 
 const log = createLogger('Twitch');
@@ -37,6 +37,15 @@ function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function toTimestamp(value) {
   const timestamp = Date.parse(value || '');
   return Number.isFinite(timestamp) ? timestamp : Date.now();
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function requesterKey(event) {
+  return String(event?.chatter_user_id || event?.chatter_user_login || event?.chatter_user_name || '').trim().toLocaleLowerCase();
 }
 
 function websocketCtor() {
@@ -73,12 +82,20 @@ class TwitchService {
     this.lastDisconnectedAt = 0;
     this.closed = false;
     this.replySettings = TwitchReplySettings.getDefaults();
+    this.requestSettings = TwitchRequestSettings.getDefaults();
+    this.requestCooldowns = new Map();
     this.restorePendingRequests();
   }
 
   setReplySettings(settings) {
     this.replySettings = TwitchReplySettings.normalizeSettings(settings);
     return this.replySettings;
+  }
+
+  setRequestSettings(settings) {
+    this.requestSettings = TwitchRequestSettings.normalizeSettings(settings);
+    if (this.requestSettings.cooldownSeconds === 0) this.requestCooldowns.clear();
+    return this.requestSettings;
   }
 
   configured() {
@@ -91,7 +108,7 @@ class TwitchService {
       connected: !!this.wsSessionId,
       authorized: !!(this.auth && this.auth.accessToken && this.auth.userId),
       broadcasterLogin: this.auth && this.auth.userLogin ? this.auth.userLogin : null,
-      command: this.config.twitchRequestCommand || '!點歌',
+      command: this.requestSettings?.command || this.config.twitchRequestCommand || '!點歌',
       deviceAuthorization: this.deviceAuthorization ? {
         userCode: this.deviceAuthorization.userCode,
         verificationUri: this.deviceAuthorization.verificationUri,
@@ -112,6 +129,7 @@ class TwitchService {
       requestId: String(request.requestId || ''),
       url: String(request.url || ''),
       requester: String(request.requester || '觀眾'),
+      requesterId: String(request.requesterId || ''),
       title: String(request.title || ''),
       author: String(request.author || ''),
       thumbnail: String(request.thumbnail || ''),
@@ -506,24 +524,67 @@ class TwitchService {
 
   async handleChatMessage(event, fallbackId) {
     const text = String(event.message && event.message.text || '').trim();
-    const command = String(this.config.twitchRequestCommand || '!點歌').trim();
-    const match = new RegExp(`^${command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s+(.+))?$`, 'i').exec(text);
+    const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
+    const match = TwitchRequestSettings.matchCommand(text, rules);
     if (!match) return;
-    const url = String(match[1] || '').trim();
+    const command = match.command;
+    const url = String(match.argument || '').trim();
+
+    if (!rules.enabled) {
+      await this.sendConfiguredReply(event, 'requestDisabled', { command });
+      return;
+    }
+    if (!TwitchRequestSettings.permissionAllows(event, rules.permissionLevel)) {
+      await this.sendConfiguredReply(event, 'permissionDenied', { command });
+      return;
+    }
+    const userKey = requesterKey(event);
+    const now = Date.now();
+    const lastAcceptedAt = this.requestCooldowns.get(userKey) || 0;
+    const remainingSeconds = Math.ceil(((rules.cooldownSeconds * 1000) - (now - lastAcceptedAt)) / 1000);
+    if (userKey && rules.cooldownSeconds > 0 && remainingSeconds > 0) {
+      await this.sendConfiguredReply(event, 'cooldownActive', { command, seconds: remainingSeconds });
+      return;
+    }
+
     const requestId = event.message_id || fallbackId || crypto.randomUUID();
     const parsedUrl = parseYouTubeUrl(url);
     if (!parsedUrl?.videoId) {
-      await this.sendConfiguredReply(event, 'invalidLink');
+      await this.sendConfiguredReply(event, 'invalidLink', { command });
       return;
     }
     if (parsedUrl.playlistId) { await this.sendConfiguredReply(event, 'playlistNotAllowed', { url }); return; }
-    if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) { await this.sendConfiguredReply(event, 'queueFull', { url }); return; }
-    if ([...this.pendingRequests.values()].some(r => r.videoId === parsedUrl.videoId)) { await this.sendConfiguredReply(event, 'duplicatePending', { url }); return; }
+    if (this.pendingRequests.size >= rules.maxPending) {
+      await this.sendConfiguredReply(event, 'queueFull', { url, limit: rules.maxPending });
+      return;
+    }
+    if (userKey && rules.perUserPending > 0) {
+      const userPending = [...this.pendingRequests.values()].filter((request) => request.requesterId === userKey).length;
+      if (userPending >= rules.perUserPending) {
+        await this.sendConfiguredReply(event, 'userLimitReached', { url, limit: rules.perUserPending });
+        return;
+      }
+    }
+    if (rules.rejectDuplicates && [...this.pendingRequests.values()].some((request) => request.videoId === parsedUrl.videoId)) {
+      await this.sendConfiguredReply(event, 'duplicatePending', { url });
+      return;
+    }
     const metadata = await this.fetchYouTubeMetadata(url);
+    if (rules.maxDurationMinutes > 0 && metadata.duration > rules.maxDurationMinutes * 60) {
+      await this.sendConfiguredReply(event, 'durationExceeded', {
+        title: metadata.title,
+        artist: metadata.author,
+        url,
+        duration: formatDuration(metadata.duration),
+        limit: rules.maxDurationMinutes,
+      });
+      return;
+    }
     const request = {
       requestId,
       url,
       requester: event.chatter_user_name || event.chatter_user_login || '觀眾',
+      requesterId: userKey,
       title: metadata.title,
       author: metadata.author,
       thumbnail: metadata.thumbnail,
@@ -540,6 +601,7 @@ class TwitchService {
     }
     const createdAt = Date.now();
     this.pendingRequests.set(requestId, { ...request, event, createdAt, expiresAt: createdAt + REQUEST_TTL_MS });
+    if (userKey && rules.cooldownSeconds > 0) this.requestCooldowns.set(userKey, createdAt);
     this.scheduleRequestExpiry(requestId);
     this.persistPendingRequests();
     // 確認制：不自動下載，先送到主播面板等待確認。
@@ -596,8 +658,9 @@ class TwitchService {
     if (!settings.enabled || !reply || !reply.enabled) return { sent: false, skipped: true };
     const text = TwitchReplySettings.renderTemplate(reply.template, {
       user: event?.chatter_user_name || event?.chatter_user_login || '觀眾',
-      command: this.config.twitchRequestCommand || '!點歌',
+      command: this.requestSettings?.command || this.config.twitchRequestCommand || '!點歌',
       title: '', artist: '', reason: '', position: '', queue: '', url: '',
+      seconds: '', limit: '', duration: '',
       ...values,
     });
     if (!text) return { sent: false, skipped: true };
@@ -613,7 +676,7 @@ class TwitchService {
     const reply = validation.settings.replies[replyKey];
     const text = TwitchReplySettings.renderTemplate(reply.template, {
       ...TwitchReplySettings.sampleValues(),
-      command: this.config.twitchRequestCommand || '!點歌',
+      command: this.requestSettings?.command || this.config.twitchRequestCommand || '!點歌',
     });
     const message = `【回覆測試】${text}`;
     await this.sendChatReply({}, message, { mode: 'plain' });
@@ -655,9 +718,17 @@ class TwitchService {
   }
 
   pruneRequests() {
-    const cutoff = Date.now() - REQUEST_TTL_MS;
+    const now = Date.now();
+    const cutoff = now - REQUEST_TTL_MS;
     for (const [id, request] of this.pendingRequests) {
       if (request.createdAt < cutoff) this.expireRequest(id, request);
+    }
+    const cooldownMs = (this.requestSettings?.cooldownSeconds || 0) * 1000;
+    if (cooldownMs === 0) this.requestCooldowns.clear();
+    else {
+      for (const [userKey, acceptedAt] of this.requestCooldowns) {
+        if (acceptedAt <= now - cooldownMs) this.requestCooldowns.delete(userKey);
+      }
     }
     this.persistPendingRequests();
   }

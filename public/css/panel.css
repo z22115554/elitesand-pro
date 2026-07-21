@@ -587,6 +587,13 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-requests-card { border-color: var(--accent); }
 .twitch-requests-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .twitch-request-empty { padding: 32px 16px; color: var(--text-faint); text-align: center; border: 1px dashed var(--border); border-radius: var(--r-md); }
+.twitch-settings-stack { display: grid; gap: var(--gap); align-content: start; min-width: 0; }
+.twitch-request-settings { border-color: var(--border); }
+.twitch-request-settings > summary { color: var(--text); cursor: pointer; }
+.twitch-rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; margin-top: 8px; }
+.twitch-rule-switch { margin-top: 10px; }
+.twitch-rule-preview { margin-top: 14px; padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-raised); }
+.twitch-rule-preview .sub { margin: 5px 0 0; line-height: 1.55; }
 .twitch-reply-settings { border-color: var(--border); }
 .twitch-reply-settings > summary { color: var(--text); cursor: pointer; }
 .twitch-reply-mode-field { margin-top: 8px; }
@@ -610,6 +617,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-reply-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .twitch-reply-actions > .val { margin-right: auto; }
 @media (max-width: 620px) {
+  .twitch-rule-grid { grid-template-columns: 1fr; }
   .twitch-reply-test-controls { grid-template-columns: 1fr; }
   .twitch-reply-actions { align-items: stretch; flex-direction: column; }
   .twitch-reply-actions > .val { margin-right: 0; }

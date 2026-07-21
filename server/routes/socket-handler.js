@@ -204,6 +204,7 @@ module.exports = function socketHandler(io, {
     if (socket && socket.clientType === 'controller' && twitchService) {
       socket.emit('twitch:requests', twitchService.getPendingRequests());
       socket.emit('twitch:reply-settings:update', ctx.playState.twitchReplySettings);
+      socket.emit('twitch:request-settings:update', ctx.playState.twitchRequestSettings);
     }
   }
 
@@ -325,6 +326,7 @@ module.exports = function socketHandler(io, {
     setTwitchService(service) {
       twitchService = service;
       if (service && typeof service.setReplySettings === 'function') service.setReplySettings(ctx.playState.twitchReplySettings);
+      if (service && typeof service.setRequestSettings === 'function') service.setRequestSettings(ctx.playState.twitchRequestSettings);
       if (service && typeof service.status === 'function') runtimeEvidence.recordTwitchStatus(service.status());
     },
     recordTwitchStatus(status) {

@@ -18,10 +18,18 @@ const TwitchReplySettings = (() => {
     { key: 'position', label: '加入位置', sample: '歌單尾端' },
     { key: 'queue', label: '歌單順位', sample: '5' },
     { key: 'url', label: 'YouTube 連結', sample: 'https://youtu.be/example' },
+    { key: 'seconds', label: '剩餘秒數', sample: '12' },
+    { key: 'limit', label: '規則上限', sample: '3' },
+    { key: 'duration', label: '歌曲長度', sample: '18:30' },
   ]);
   const ALLOWED_VARIABLES = new Set(VARIABLE_DEFINITIONS.map((item) => item.key));
 
   const REPLY_DEFINITIONS = Object.freeze([
+    { key: 'requestDisabled', label: '點歌功能暫停', defaultEnabled: true, defaultTemplate: '目前暫停接受聊天室點歌，請稍後再試。' },
+    { key: 'permissionDenied', label: '使用者資格不符', defaultEnabled: true, defaultTemplate: '目前的點歌資格有限制，這次無法接受你的點歌。' },
+    { key: 'cooldownActive', label: '點歌冷卻中', defaultEnabled: true, defaultTemplate: '點歌速度太快了，請再等 {seconds} 秒。' },
+    { key: 'userLimitReached', label: '每人待確認已達上限', defaultEnabled: true, defaultTemplate: '你已有 {limit} 首歌等待確認，請等主播處理後再點。' },
+    { key: 'durationExceeded', label: '歌曲超過長度限制', defaultEnabled: true, defaultTemplate: '這首歌長度 {duration}，超過目前 {limit} 分鐘的限制。' },
     { key: 'received', label: '收到點歌、等待確認', defaultEnabled: true, defaultTemplate: '已收到你的點歌，等待主播確認：{title}' },
     { key: 'importSuccess', label: '成功匯入', defaultEnabled: true, defaultTemplate: '點歌成功：{title}（{position}）' },
     { key: 'hostRejected', label: '主播拒絕歌曲', defaultEnabled: true, defaultTemplate: '主播暫時略過了這首點歌，可以換一首再試～' },

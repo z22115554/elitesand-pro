@@ -125,6 +125,114 @@
 
   const el = (id) => document.getElementById(id);
 
+  // ─── 點歌指令與規則設定 ───
+  const requestNumber = (id) => Number(el(id)?.value);
+
+  function collectRequestSettings() {
+    return {
+      enabled: !!el('twitch-request-enabled')?.checked,
+      command: el('twitch-request-command')?.value || '',
+      aliases: TwitchRequestSettings.parseAliases(el('twitch-request-aliases')?.value || ''),
+      permissionLevel: el('twitch-request-permission')?.value || 'everyone',
+      cooldownSeconds: requestNumber('twitch-request-cooldown'),
+      maxPending: requestNumber('twitch-request-max-pending'),
+      perUserPending: requestNumber('twitch-request-per-user'),
+      rejectDuplicates: !!el('twitch-request-reject-duplicates')?.checked,
+      maxDurationMinutes: requestNumber('twitch-request-max-duration'),
+    };
+  }
+
+  function replySampleValues() {
+    const values = TwitchReplySettings.sampleValues();
+    values.command = el('twitch-request-command')?.value.trim() || TwitchRequestSettings.getDefaults().command;
+    return values;
+  }
+
+  function updateRequestRulePreview(settings = collectRequestSettings()) {
+    const preview = el('twitch-request-rule-preview');
+    if (!preview) return;
+    const permission = TwitchRequestSettings.PERMISSION_LEVELS.find((item) => item.key === settings.permissionLevel)?.label || '所有觀眾';
+    const commands = [settings.command || '—', ...TwitchRequestSettings.parseAliases(settings.aliases)].join('、');
+    const rules = [
+      settings.enabled ? '接受點歌' : '暫停點歌',
+      permission,
+      settings.cooldownSeconds > 0 ? `每人 ${settings.cooldownSeconds} 秒冷卻` : '無冷卻',
+      `總共最多 ${settings.maxPending || '—'} 首待確認`,
+      settings.perUserPending > 0 ? `每人最多 ${settings.perUserPending} 首待確認` : '每人不限首數',
+      settings.maxDurationMinutes > 0 ? `最長 ${settings.maxDurationMinutes} 分鐘` : '不限制歌曲長度',
+      settings.rejectDuplicates ? '拒絕重複影片' : '允許重複影片',
+    ];
+    preview.textContent = `${commands}｜${rules.join('；')}`;
+  }
+
+  function validateRequestForm() {
+    const validation = TwitchRequestSettings.validateSettings(collectRequestSettings());
+    const error = validation.errors[0]?.message || '';
+    const formError = el('twitch-request-form-error');
+    const save = el('twitch-request-save');
+    if (formError) { formError.textContent = error; formError.hidden = !error; }
+    if (save) save.disabled = !!error;
+    updateRequestRulePreview(validation.ok ? validation.settings : collectRequestSettings());
+    return validation;
+  }
+
+  function markRequestSettingsChanged() {
+    const status = el('twitch-request-save-status');
+    if (status) status.textContent = '尚未儲存';
+    validateRequestForm();
+    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
+      const item = document.querySelector(`[data-twitch-reply-key="${definition.key}"]`);
+      if (item) updateReplyItem(item, definition);
+    });
+    updateReplyTestPreview();
+  }
+
+  function applyRequestSettings(settings, { savedMessage = '' } = {}) {
+    const normalized = TwitchRequestSettings.normalizeSettings(settings);
+    el('twitch-request-enabled').checked = normalized.enabled;
+    el('twitch-request-command').value = normalized.command;
+    el('twitch-request-aliases').value = normalized.aliases.join(', ');
+    el('twitch-request-permission').value = normalized.permissionLevel;
+    el('twitch-request-cooldown').value = String(normalized.cooldownSeconds);
+    el('twitch-request-max-pending').value = String(normalized.maxPending);
+    el('twitch-request-per-user').value = String(normalized.perUserPending);
+    el('twitch-request-reject-duplicates').checked = normalized.rejectDuplicates;
+    el('twitch-request-max-duration').value = String(normalized.maxDurationMinutes);
+    const status = el('twitch-request-save-status');
+    if (status) status.textContent = savedMessage;
+    validateRequestForm();
+    updateReplyTestPreview();
+  }
+
+  function buildRequestSettingsForm() {
+    const permission = el('twitch-request-permission');
+    if (!permission) return;
+    permission.innerHTML = '';
+    TwitchRequestSettings.PERMISSION_LEVELS.forEach((level) => {
+      const option = document.createElement('option');
+      option.value = level.key;
+      option.textContent = level.label;
+      permission.appendChild(option);
+    });
+    applyRequestSettings(TwitchRequestSettings.getDefaults());
+  }
+
+  function saveRequestSettings(settings, successMessage) {
+    const validation = TwitchRequestSettings.validateSettings(settings);
+    if (!validation.ok) { validateRequestForm(); return; }
+    const save = el('twitch-request-save');
+    if (save) save.disabled = true;
+    SocketClient.sendWithCallback('twitch:request-settings:update', validation.settings, (result) => {
+      if (!result?.ok) {
+        if (save) save.disabled = false;
+        showStatus(`點歌規則儲存失敗：${result?.error || '伺服器沒有回應'}`, 'error');
+        return;
+      }
+      applyRequestSettings(result.settings || validation.settings, { savedMessage: successMessage });
+      AppShared.showToast(successMessage, 'success');
+    });
+  }
+
   // ─── 聊天室自動回覆設定 ───
   let activeReplyTemplate = null;
 
@@ -136,7 +244,7 @@
     const template = item?.querySelector('[data-role="template"]')?.value || '';
     const validation = TwitchReplySettings.validateTemplate(template);
     preview.textContent = validation.valid
-      ? `將送出：【回覆測試】${TwitchReplySettings.renderTemplate(template, TwitchReplySettings.sampleValues())}`
+      ? `將送出：【回覆測試】${TwitchReplySettings.renderTemplate(template, replySampleValues())}`
       : '請先修正文案中的錯誤。';
   }
 
@@ -167,7 +275,7 @@
     error.textContent = validation.errors[0] || '';
     count.textContent = `${Array.from(input.value).length}/${TwitchReplySettings.MAX_MESSAGE_LENGTH}`;
     if (validation.valid) {
-      preview.textContent = `預覽：${TwitchReplySettings.renderTemplate(input.value, TwitchReplySettings.sampleValues())}`;
+      preview.textContent = `預覽：${TwitchReplySettings.renderTemplate(input.value, replySampleValues())}`;
     } else {
       preview.textContent = `預覽：${definition.defaultTemplate}`;
     }
@@ -328,8 +436,37 @@
     });
   }
 
+  buildRequestSettingsForm();
   buildReplySettingsForm();
   applyReplySettings(TwitchReplySettings.getDefaults());
+  [
+    'twitch-request-enabled',
+    'twitch-request-command',
+    'twitch-request-aliases',
+    'twitch-request-permission',
+    'twitch-request-cooldown',
+    'twitch-request-max-pending',
+    'twitch-request-per-user',
+    'twitch-request-reject-duplicates',
+    'twitch-request-max-duration',
+  ].forEach((id) => {
+    const control = el(id);
+    const eventName = control?.matches('input[type="text"], input[type="number"]') ? 'input' : 'change';
+    control?.addEventListener(eventName, markRequestSettingsChanged);
+  });
+  el('twitch-request-save')?.addEventListener('click', () => saveRequestSettings(collectRequestSettings(), '點歌規則已儲存'));
+  el('twitch-request-reset')?.addEventListener('click', async () => {
+    const confirmed = await window.PanelConfirm?.request({
+      title: '還原 Twitch 點歌規則？',
+      summary: '指令、使用者資格、冷卻與佇列限制會回到預設值。',
+      impact: '聊天室自動回覆文案不會受影響。',
+      confirmLabel: '還原預設值',
+    });
+    if (!confirmed) return;
+    const defaults = TwitchRequestSettings.getDefaults();
+    applyRequestSettings(defaults);
+    saveRequestSettings(defaults, '點歌規則已還原');
+  });
   el('twitch-reply-enabled')?.addEventListener('change', markReplySettingsChanged);
   el('twitch-reply-mode')?.addEventListener('change', markReplySettingsChanged);
   el('twitch-reply-test-event')?.addEventListener('change', updateReplyTestPreview);
@@ -348,6 +485,7 @@
     saveReplySettings(defaults, '聊天室回覆設定已還原');
   });
 
+  SocketClient.on('twitch:request-settings:update', (settings) => applyRequestSettings(settings, { savedMessage: '設定已同步' }));
   SocketClient.on('twitch:reply-settings:update', (settings) => applyReplySettings(settings, { savedMessage: '設定已同步' }));
 
   function renderRequests() {
