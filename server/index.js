@@ -350,6 +350,11 @@ app.use((err, req, res, next) => {
   if (err && (err.type === 'entity.too.large' || err.code === 'LIMIT_FILE_SIZE' || err.code === 'LIMIT_FILE_COUNT')) {
     return res.status(413).json({ error: '請求內容超過允許大小' });
   }
+  // multer fileFilter 拒絕不支援的副檔名時會標 err.status = 400；訊息只回顯副檔名
+  // 字串（無 HTML/腳本注入面），可安全直接回傳給前端顯示。
+  if (err && err.status === 400) {
+    return res.status(400).json({ error: err.message });
+  }
   res.status(500).json({ error: '伺服器內部錯誤' });
 });
 

@@ -64,7 +64,9 @@ const upload = multer({
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`不支援的音訊格式: ${ext}，僅支援 ${allowed.join(', ')}`));
+      const err = new Error(`不支援的音訊格式: ${ext}，僅支援 ${allowed.join(', ')}`);
+      err.status = 400;
+      cb(err);
     }
   },
   limits: { fileSize: 200 * 1024 * 1024, files: 20 }, // 單檔 200MB、單次最多 20 檔
@@ -92,7 +94,9 @@ const lyricsUpload = multer({
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`不支援的歌詞格式: ${ext}，僅支援 .lrc / .srt / .txt`));
+      const err = new Error(`不支援的歌詞格式: ${ext}，僅支援 .lrc / .srt / .txt`);
+      err.status = 400;
+      cb(err);
     }
   },
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 上限
@@ -119,7 +123,9 @@ const bgUpload = multer({
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`不支援的圖片格式: ${ext}，僅支援 ${allowed.join(', ')}`));
+      const err = new Error(`不支援的圖片格式: ${ext}，僅支援 ${allowed.join(', ')}`);
+      err.status = 400;
+      cb(err);
     }
   },
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB 上限
