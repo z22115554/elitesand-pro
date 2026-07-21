@@ -2029,6 +2029,10 @@ test('Twitch 回覆設定 UI 有總開關、分項容器、變數驗證與還原
   const state = fs.readFileSync(path.join(__dirname, '../server/state/app-state.js'), 'utf8');
   ok(html.includes('id="twitch-reply-enabled"') && html.includes('id="twitch-reply-items"'));
   ok(html.includes('id="twitch-reply-reset"') && html.includes('還原預設值'));
+  const twitchView = html.match(/data-view="twitch"[\s\S]*?<\/div><!-- \/view twitch -->/)?.[0] || '';
+  ok(twitchView.includes('id="twitch-reply-settings"'), '自訂回覆設定必須放在 Twitch 點歌頁: ');
+  const generalView = html.match(/data-view="general"[\s\S]*?<\/div><!-- \/view general -->/)?.[0] || '';
+  ok(!generalView.includes('id="twitch-reply-settings"'), '連線與系統頁不可再重複自訂回覆設定: ');
   ok(html.indexOf('/js/twitch-reply-settings.js') < html.indexOf('/js/app-twitch.js'));
   ok(client.includes('TwitchReplySettings.validateTemplate') && client.includes("'twitch:reply-settings:update'"));
   ok(state.includes('twitchReplySettings: playState.twitchReplySettings'), 'Twitch 回覆設定必須寫入 state.json: ');
