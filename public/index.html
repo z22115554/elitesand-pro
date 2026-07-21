@@ -854,6 +854,66 @@
             </div>
             <div id="twitch-requests-list" class="twitch-requests-list"></div>
           </section>
+          <div class="twitch-settings-stack">
+          <details class="card card-collapse twitch-request-settings" id="twitch-request-settings" open>
+            <summary class="eyebrow">點歌指令與規則</summary>
+            <div class="card-collapse-body twitch-request-settings-body">
+              <p class="sub section-intro">設定聊天室指令、哪些觀眾可以點歌，以及送進主播確認區前要套用的限制。</p>
+              <div class="switch-row">
+                <div><div class="label">聊天室點歌總開關</div><div class="sub">關閉後仍保持 Twitch 連線；觀眾輸入有效指令時會收到暫停提示。</div></div>
+                <label class="switch"><input id="twitch-request-enabled" type="checkbox" checked><span class="track"></span></label>
+              </div>
+              <div class="twitch-rule-grid">
+                <div class="field">
+                  <label for="twitch-request-command">主要指令</label>
+                  <input id="twitch-request-command" class="input" type="text" maxlength="20" value="!點歌" autocomplete="off" spellcheck="false">
+                  <p class="field-hint">必須以 ! 開頭，不可包含空白。</p>
+                </div>
+                <div class="field">
+                  <label for="twitch-request-aliases">指令別名</label>
+                  <input id="twitch-request-aliases" class="input" type="text" placeholder="!唱歌, !song" autocomplete="off" spellcheck="false">
+                  <p class="field-hint">用逗號分隔，最多 5 個。</p>
+                </div>
+                <div class="field">
+                  <label for="twitch-request-permission">允許點歌的使用者</label>
+                  <select id="twitch-request-permission" class="input"></select>
+                </div>
+                <div class="field">
+                  <label for="twitch-request-cooldown">每人冷卻秒數</label>
+                  <input id="twitch-request-cooldown" class="input" type="number" min="0" max="600" step="1" value="0" inputmode="numeric">
+                  <p class="field-hint">0 表示不限制；只在成功送入確認區後開始計時。</p>
+                </div>
+                <div class="field">
+                  <label for="twitch-request-max-pending">待確認總上限</label>
+                  <input id="twitch-request-max-pending" class="input" type="number" min="1" max="50" step="1" value="20" inputmode="numeric">
+                </div>
+                <div class="field">
+                  <label for="twitch-request-per-user">每人待確認上限</label>
+                  <input id="twitch-request-per-user" class="input" type="number" min="0" max="10" step="1" value="0" inputmode="numeric">
+                  <p class="field-hint">0 表示不限制。</p>
+                </div>
+                <div class="field">
+                  <label for="twitch-request-max-duration">歌曲長度上限（分鐘）</label>
+                  <input id="twitch-request-max-duration" class="input" type="number" min="0" max="180" step="1" value="0" inputmode="numeric">
+                  <p class="field-hint">0 表示不限制；播放清單連結仍固定拒絕。</p>
+                </div>
+              </div>
+              <div class="switch-row twitch-rule-switch">
+                <div><div class="label">拒絕重複待確認歌曲</div><div class="sub">同一部 YouTube 影片已在確認區時，不再建立第二筆。</div></div>
+                <label class="switch"><input id="twitch-request-reject-duplicates" type="checkbox" checked><span class="track"></span></label>
+              </div>
+              <div class="twitch-rule-preview" aria-live="polite">
+                <div class="label">目前規則預覽</div>
+                <p id="twitch-request-rule-preview" class="sub"></p>
+              </div>
+              <div id="twitch-request-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
+              <div class="twitch-reply-actions">
+                <span id="twitch-request-save-status" class="val" aria-live="polite"></span>
+                <button id="twitch-request-reset" class="btn btn-sm btn-ghost" type="button">還原預設值</button>
+                <button id="twitch-request-save" class="btn btn-sm btn-primary" type="button">儲存點歌規則</button>
+              </div>
+            </div>
+          </details>
           <details class="card card-collapse twitch-reply-settings" id="twitch-reply-settings" open>
             <summary class="eyebrow">聊天室自動回覆</summary>
             <div class="card-collapse-body twitch-reply-settings-body">
@@ -894,6 +954,7 @@
               </div>
             </div>
           </details>
+          </div>
         </div><!-- /view twitch -->
 
         <!-- ═══ 視圖：一般設定（OBS 網址/連動、手機遙控、yt-dlp、PIN）═══ -->
@@ -2073,6 +2134,7 @@
   <script src="/js/app-youtube-import.js"></script>
   <script src="/js/app-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>
+  <script src="/js/twitch-request-settings.js"></script>
   <script src="/js/twitch-reply-settings.js"></script>
   <script src="/js/app-twitch.js"></script>
   <script src="/js/app-playlist.js"></script>

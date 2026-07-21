@@ -1,4 +1,5 @@
 const TwitchReplySettings = require('../../../public/js/twitch-reply-settings');
+const TwitchRequestSettings = require('../../../public/js/twitch-request-settings');
 const { createLogger } = require('../../utils/logger');
 
 const log = createLogger('TwitchSocket');
@@ -35,6 +36,21 @@ function registerTwitchHandlers(io, socket, ctx, { getTwitchService }) {
     const twitchService = getTwitchService();
     if (twitchService) twitchService.setReplySettings(validation.settings);
     io.emit('twitch:reply-settings:update', validation.settings);
+    ctx.persistState((result) => {
+      if (typeof ack === 'function') ack(result?.ok === false ? result : { ok: true, settings: validation.settings });
+    });
+  });
+
+  socket.on('twitch:request-settings:update', (incoming, ack) => {
+    const validation = TwitchRequestSettings.validateSettings(incoming);
+    if (!validation.ok) {
+      if (typeof ack === 'function') ack({ ok: false, error: validation.errors[0]?.message || 'Twitch 點歌設定格式無效' });
+      return;
+    }
+    ctx.playState.twitchRequestSettings = validation.settings;
+    const twitchService = getTwitchService();
+    if (twitchService) twitchService.setRequestSettings(validation.settings);
+    io.emit('twitch:request-settings:update', validation.settings);
     ctx.persistState((result) => {
       if (typeof ack === 'function') ack(result?.ok === false ? result : { ok: true, settings: validation.settings });
     });
