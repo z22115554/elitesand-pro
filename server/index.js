@@ -254,10 +254,23 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
     try { twitch.stop(); } catch (err) { log.warn(`Twitch 關閉失敗：${err.message}`); }
 
     const forceTimer = setTimeout(() => {
-      log.warn('優雅關閉逾時，強制關閉剩餘 HTTP 連線');
+      log.warn('優雅關閉逾時，強制關閉剩餘連線');
+      // io.close() 的 callback 在殘留 socket 卡住時可能永不回呼；先強制中斷所有
+      // socket，再關 HTTP 連線，讓下面兩個 await 都能解開。
+      try { io.disconnectSockets?.(true); } catch (_) { /* best effort */ }
       try { server.closeAllConnections?.(); } catch (_) { /* best effort */ }
     }, 5000);
     forceTimer.unref?.();
+
+    // 絕對保底：即使 io.close/server.close 的 callback 永遠不回呼，也必須讓行程退出。
+    // 否則桌面殼 kill 子行程失敗時會留下仍在 listening 的孤兒 server——下次啟動被
+    // 當成健康實例重用（ownsServer=false），使用者就再也關不掉程式。狀態在上面已同步
+    // flush，這裡硬退不會遺失資料。
+    const hardExitTimer = setTimeout(() => {
+      try { log.warn('優雅關閉未於時限內完成，強制結束行程'); } catch (_) { /* logger 可能已關 */ }
+      process.exit(exitCode);
+    }, 8000);
+    hardExitTimer.unref?.();
 
     await new Promise((resolve) => {
       try { io.close(() => resolve()); } catch (_) { resolve(); }
@@ -268,6 +281,7 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
       });
     }
     clearTimeout(forceTimer);
+    clearTimeout(hardExitTimer);
     await shutdownLogger();
     process.exit(exitCode);
   })();
