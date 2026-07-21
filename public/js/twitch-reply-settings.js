@@ -21,10 +21,14 @@ const TwitchReplySettings = (() => {
     { key: 'seconds', label: '剩餘秒數', sample: '12' },
     { key: 'limit', label: '規則上限', sample: '3' },
     { key: 'duration', label: '歌曲長度', sample: '18:30' },
+    { key: 'cost', label: '兌換點數', sample: '1000' },
   ]);
   const ALLOWED_VARIABLES = new Set(VARIABLE_DEFINITIONS.map((item) => item.key));
 
   const REPLY_DEFINITIONS = Object.freeze([
+    { key: 'rewardReceived', label: '忠誠點數點歌已收到', defaultEnabled: true, defaultTemplate: '已收到 {user} 的忠誠點數點歌，等待主播確認：{title}' },
+    { key: 'rewardFulfilled', label: '忠誠點數兌換完成', defaultEnabled: true, defaultTemplate: '忠誠點數點歌成功：{title}（{position}）' },
+    { key: 'rewardRefunded', label: '忠誠點數兌換退款', defaultEnabled: true, defaultTemplate: '這次忠誠點數點歌未完成，已退還 {cost} 點：{reason}' },
     { key: 'requestDisabled', label: '點歌功能暫停', defaultEnabled: true, defaultTemplate: '目前暫停接受聊天室點歌，請稍後再試。' },
     { key: 'permissionDenied', label: '使用者資格不符', defaultEnabled: true, defaultTemplate: '目前的點歌資格有限制，這次無法接受你的點歌。' },
     { key: 'cooldownActive', label: '點歌冷卻中', defaultEnabled: true, defaultTemplate: '點歌速度太快了，請再等 {seconds} 秒。' },

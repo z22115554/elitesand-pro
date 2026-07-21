@@ -1855,9 +1855,10 @@ test('lyric-settings 可被 state-store 持久化', () => {
 const { TwitchService, reconnectDelay } = require('../server/services/twitch-service');
 const TwitchReplySettings = require('../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../public/js/twitch-request-settings');
+const TwitchRewardSettings = require('../public/js/twitch-reward-settings');
 
-test('Twitch 自訂回覆契約提供 16 個分項、預設值與變數拼字檢查', () => {
-  eq(TwitchReplySettings.REPLY_DEFINITIONS.length, 16);
+test('Twitch 自訂回覆契約提供 19 個分項、預設值與變數拼字檢查', () => {
+  eq(TwitchReplySettings.REPLY_DEFINITIONS.length, 19);
   const defaults = TwitchReplySettings.getDefaults();
   eq(defaults.enabled, true);
   eq(defaults.replies.retryableFailure.enabled, false);
@@ -1869,6 +1870,19 @@ test('Twitch 自訂回覆契約提供 16 個分項、預設值與變數拼字檢
   eq(TwitchReplySettings.validateTemplate('完成：{title').valid, false);
   eq(TwitchReplySettings.validateTemplate('完成：｛title｝').valid, false);
   eq(TwitchReplySettings.validateTemplate('還要 {seconds} 秒，上限 {limit}，長度 {duration}').valid, true);
+  eq(TwitchReplySettings.validateTemplate('已退款 {cost} 點').valid, true);
+});
+
+test('Twitch 忠誠點數獎勵契約限制名稱、說明、價格與可管理 reward id', () => {
+  const defaults = TwitchRewardSettings.getDefaults();
+  eq(defaults.enabled, false);
+  eq(defaults.cost, 1000);
+  eq(TwitchRewardSettings.validateSettings(defaults).ok, true);
+  eq(TwitchRewardSettings.validateSettings({ ...defaults, title: '' }).ok, false);
+  eq(TwitchRewardSettings.validateSettings({ ...defaults, title: '獎'.repeat(46) }).ok, false);
+  eq(TwitchRewardSettings.validateSettings({ ...defaults, prompt: '說'.repeat(201) }).ok, false);
+  eq(TwitchRewardSettings.validateSettings({ ...defaults, cost: 0 }).ok, false);
+  eq(TwitchRewardSettings.validateSettings({ ...defaults, rewardId: '../bad' }).ok, false);
 });
 
 test('Twitch 點歌規則契約驗證自訂指令、別名與聊天室徽章權限', () => {
@@ -2024,6 +2038,139 @@ testAsync('Twitch 點歌會執行冷卻、每人上限、重複與歌曲長度�
   service.stop();
 });
 
+testAsync('Twitch 忠誠點數設定會建立並更新由 Elitesand Pro 管理的專用獎勵', async () => {
+  const service = new TwitchService({
+    config: { twitchClientId: 'fixture-client' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  service.auth = {
+    accessToken: 'fixture', refreshToken: 'fixture', expiresAt: Date.now() + 600000,
+    userId: 'broadcaster-1', scopes: ['user:read:chat', 'user:write:chat', 'channel:manage:redemptions'],
+  };
+  service.ensureToken = async () => true;
+  const calls = [];
+  service.helix = async (requestPath, options) => {
+    calls.push({ requestPath, options });
+    return { ok: true, status: 200, json: async () => ({ data: [{ id: 'reward-managed-1' }] }) };
+  };
+  const created = await service.syncManagedReward({
+    ...TwitchRewardSettings.getDefaults(), enabled: true, title: '點一首歌', cost: 2500,
+  });
+  eq(created.rewardId, 'reward-managed-1');
+  eq(calls[0].options.method, 'POST');
+  eq(calls[0].options.body.is_user_input_required, true);
+  eq(calls[0].options.body.should_redemptions_skip_request_queue, false);
+
+  const disabled = await service.syncManagedReward({ ...created, enabled: false });
+  eq(disabled.rewardId, 'reward-managed-1');
+  eq(calls[1].options.method, 'PATCH');
+  eq(calls[1].options.body.is_enabled, false);
+  service.stop();
+});
+
+testAsync('Twitch 忠誠點數兌換進入同一待確認流程，成功完成、規則拒絕退款且事件去重', async () => {
+  const accepted = [];
+  const replies = [];
+  const statuses = [];
+  const service = new TwitchService({
+    config: { twitchClientId: 'fixture-client' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: (request) => { accepted.push(request); return true; },
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  service.setRewardSettings({ ...TwitchRewardSettings.getDefaults(), enabled: true, rewardId: 'reward-managed-1', cost: 2500 });
+  service.fetchYouTubeMetadata = async () => ({
+    title: '測試歌曲', author: '測試頻道', thumbnail: '', metadataAvailable: true, duration: 180, assessment: { warningTypes: [] },
+  });
+  service.sendConfiguredReply = async (_event, key, values) => { replies.push({ key, values }); return { sent: true }; };
+  service.updateRewardRedemptionStatus = async (redemption, status) => { statuses.push({ redemption, status }); };
+
+  const redemption = {
+    id: 'redeem-1', status: 'unfulfilled', user_id: 'viewer-1', user_name: 'viewer', user_login: 'viewer',
+    user_input: 'https://youtu.be/dQw4w9WgXcQ', reward: { id: 'reward-managed-1', cost: 2500 },
+  };
+  await service.handleRewardRedemption(redemption, 'event-1');
+  eq(accepted.length, 1);
+  eq(accepted[0].source, 'channel-points');
+  eq(accepted[0].rewardRedemption.id, 'redeem-1');
+  eq(replies.at(-1).key, 'rewardReceived');
+  ok(service.pendingRequests.has('reward:redeem-1'));
+  await service.completeSongRequest({ requestId: 'reward:redeem-1', success: true, title: '測試歌曲', position: '歌單尾端' });
+  eq(statuses.at(-1).status, 'FULFILLED');
+  eq(replies.at(-1).key, 'rewardFulfilled');
+  ok(!service.pendingRequests.has('reward:redeem-1'));
+
+  const invalid = {
+    id: 'redeem-2', status: 'unfulfilled', user_id: 'viewer-2', user_name: 'viewer2', user_login: 'viewer2',
+    user_input: '不是連結', reward: { id: 'reward-managed-1', cost: 2500 },
+  };
+  await service.handleRewardRedemption(invalid, 'event-2');
+  eq(statuses.at(-1).status, 'CANCELED');
+  eq(replies.at(-1).key, 'rewardRefunded');
+  eq(replies.at(-1).values.cost, 2500);
+  const statusCount = statuses.length;
+  await service.handleRewardRedemption(invalid, 'event-2-duplicate');
+  eq(statuses.length, statusCount);
+  service.stop();
+});
+
+testAsync('Twitch EventSub 在新版授權下會訂閱忠誠點數兌換事件', async () => {
+  const service = new TwitchService({
+    config: { twitchClientId: 'fixture-client' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  service.auth = {
+    accessToken: 'fixture', refreshToken: 'fixture', expiresAt: Date.now() + 600000,
+    userId: 'broadcaster-1', scopes: ['user:read:chat', 'user:write:chat', 'channel:manage:redemptions'],
+  };
+  const subscriptions = [];
+  service.createSubscription = async (type, condition) => subscriptions.push({ type, condition });
+  await service.handleWebSocketMessage(JSON.stringify({
+    metadata: { message_type: 'session_welcome' },
+    payload: { session: { id: 'session-1' } },
+  }));
+  eq(subscriptions.length, 4);
+  ok(subscriptions.some((item) => item.type === 'channel.channel_points_custom_reward_redemption.add'));
+  eq(service.status().rewardSubscriptionReady, true);
+  service.stop();
+});
+
+testAsync('Twitch 忠誠點數逾時退款失敗會保留待確認，成功後才移除', async () => {
+  const expired = [];
+  const service = new TwitchService({
+    config: { twitchClientId: 'fixture-client' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: (requestId) => expired.push(requestId),
+    pendingStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  const requestId = 'reward:redeem-expired';
+  const request = {
+    requestId, createdAt: Date.now() - 31 * 60 * 1000, expiresAt: Date.now() - 1000,
+    title: '逾時歌曲', author: '測試頻道', url: 'https://youtu.be/dQw4w9WgXcQ', event: {},
+    rewardRedemption: { id: 'redeem-expired', rewardId: 'reward-managed-1', cost: 1000 },
+  };
+  service.pendingRequests.set(requestId, request);
+  service.updateRewardRedemptionStatus = async () => { throw new Error('temporary Twitch failure'); };
+  let failed = false;
+  try { await service.expireRequest(requestId, request); } catch (_) { failed = true; }
+  ok(failed);
+  ok(service.pendingRequests.has(requestId));
+  ok(request.expiresAt > Date.now());
+  service.clearRequestExpiry(requestId);
+
+  service.updateRewardRedemptionStatus = async (_redemption, status) => eq(status, 'CANCELED');
+  service.sendConfiguredReply = async (_event, key) => { eq(key, 'rewardRefunded'); return { sent: true }; };
+  await service.expireRequest(requestId, request);
+  ok(!service.pendingRequests.has(requestId));
+  eq(expired[0], requestId);
+  service.stop();
+});
+
 testAsync('Twitch 回覆總開關、分項開關與自訂變數會套到實際訊息', async () => {
   const service = new TwitchService({
     config: { twitchClientId: '', twitchRequestCommand: '!唱歌' },
@@ -2159,6 +2306,40 @@ test('Twitch 回覆與點歌規則 socket 只接受 controller，並由 server �
   registerTwitchHandlers({ emit: () => {} }, { clientType: 'remote', on: (event, handler) => { remoteHandlers[event] = handler; } }, ctx, { getTwitchService: () => service });
   ok(!remoteHandlers['twitch:reply-settings:update']);
   ok(!remoteHandlers['twitch:request-settings:update']);
+  ok(!remoteHandlers['twitch:reward-settings:update']);
+});
+
+testAsync('Twitch 忠誠點數設定 socket 只接受 controller，server 同步獎勵後才持久化', async () => {
+  const registerTwitchHandlers = require('../server/routes/handlers/twitch');
+  const handlers = {};
+  const emitted = [];
+  const service = {
+    syncManagedReward: async (settings) => ({ ...settings, rewardId: 'reward-managed-1' }),
+    setRewardSettings: (settings) => { service.settings = settings; },
+    status: () => ({ rewardAuthorized: true, rewardSubscriptionReady: true }),
+  };
+  const ctx = {
+    playState: { twitchRewardSettings: TwitchRewardSettings.getDefaults() },
+    persistState: (callback) => callback({ ok: true }),
+  };
+  registerTwitchHandlers(
+    { emit: (event, payload) => emitted.push({ event, payload }) },
+    { clientType: 'controller', on: (event, handler) => { handlers[event] = handler; } },
+    ctx,
+    { getTwitchService: () => service },
+  );
+  const invalid = await new Promise((resolve) => handlers['twitch:reward-settings:update']({
+    ...TwitchRewardSettings.getDefaults(), cost: 0,
+  }, resolve));
+  eq(invalid.ok, false);
+  const valid = await new Promise((resolve) => handlers['twitch:reward-settings:update']({
+    ...TwitchRewardSettings.getDefaults(), enabled: true,
+  }, resolve));
+  eq(valid.ok, true);
+  eq(valid.settings.rewardId, 'reward-managed-1');
+  eq(ctx.playState.twitchRewardSettings.rewardId, 'reward-managed-1');
+  eq(service.settings.enabled, true);
+  eq(emitted.at(-1).event, 'twitch:reward-settings:update');
 });
 
 testAsync('Twitch 測試回覆 socket 只接受已知項目並回傳實際送出文字', async () => {
@@ -2192,6 +2373,7 @@ testAsync('Twitch 測試回覆 socket 只接受已知項目並回傳實際送出
 test('Twitch 點歌頁有指令規則、回覆測試、變數驗證與各自還原入口', () => {
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const client = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
+  const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
   const state = fs.readFileSync(path.join(__dirname, '../server/state/app-state.js'), 'utf8');
   ok(html.includes('id="twitch-reply-enabled"') && html.includes('id="twitch-reply-items"'));
   ok(html.includes('id="twitch-reply-reset"') && html.includes('還原預設值'));
@@ -2201,17 +2383,26 @@ test('Twitch 點歌頁有指令規則、回覆測試、變數驗證與各自還�
   ok(html.includes('id="twitch-request-max-pending"') && html.includes('id="twitch-request-per-user"'));
   ok(html.includes('id="twitch-request-max-duration"') && html.includes('id="twitch-request-reject-duplicates"'));
   ok(html.includes('id="twitch-request-rule-preview"') && html.includes('id="twitch-request-reset"'));
+  ok(html.includes('id="twitch-reward-enabled"') && html.includes('id="twitch-reward-cost"'));
+  ok(html.includes('id="twitch-reward-title"') && html.includes('id="twitch-reward-prompt"'));
+  ok(html.includes('id="twitch-reward-preview"') && html.includes('id="twitch-reward-reauthorize"'));
+  ok(html.includes('id="twitch-reward-save"') && html.includes('停用並還原'));
   ok(client.includes("'twitch:reply-settings:test'") && client.includes('送出 Twitch 測試訊息？'));
   const twitchView = html.match(/data-view="twitch"[\s\S]*?<\/div><!-- \/view twitch -->/)?.[0] || '';
   ok(twitchView.includes('id="twitch-reply-settings"'), '自訂回覆設定必須放在 Twitch 點歌頁: ');
   const generalView = html.match(/data-view="general"[\s\S]*?<\/div><!-- \/view general -->/)?.[0] || '';
   ok(!generalView.includes('id="twitch-reply-settings"'), '連線與系統頁不可再重複自訂回覆設定: ');
   ok(html.indexOf('/js/twitch-request-settings.js') < html.indexOf('/js/twitch-reply-settings.js'));
+  ok(html.indexOf('/js/twitch-reward-settings.js') < html.indexOf('/js/twitch-reply-settings.js'));
   ok(html.indexOf('/js/twitch-reply-settings.js') < html.indexOf('/js/app-twitch.js'));
   ok(client.includes('TwitchReplySettings.validateTemplate') && client.includes("'twitch:reply-settings:update'"));
   ok(client.includes('TwitchRequestSettings.validateSettings') && client.includes("'twitch:request-settings:update'"));
+  ok(client.includes('TwitchRewardSettings.validateSettings') && client.includes("'twitch:reward-settings:update'"));
+  ok(panelCss.includes('.twitch-settings-stack > * { min-width: 0; }'), 'Twitch 設定卡在窄視窗不可用內容最小寬度撐出水平捲軸: ');
+  ok(panelCss.includes('.twitch-reply-item { min-width: 0;'), '自訂回覆項目在窄視窗不可撐破設定卡: ');
   ok(state.includes('twitchReplySettings: playState.twitchReplySettings'), 'Twitch 回覆設定必須寫入 state.json: ');
   ok(state.includes('twitchRequestSettings: playState.twitchRequestSettings'), 'Twitch 點歌規則必須寫入 state.json: ');
+  ok(state.includes('twitchRewardSettings: playState.twitchRewardSettings'), 'Twitch 忠誠點數設定必須寫入 state.json: ');
 });
 
 testAsync('Twitch 聊天回覆遇到 5xx 會退避重試', async () => {

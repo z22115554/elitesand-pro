@@ -14,6 +14,7 @@ const store = require('./twitch-store');
 const requestStore = require('./twitch-request-store');
 const TwitchReplySettings = require('../../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
+const TwitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const { createLogger } = require('../utils/logger');
 
 const log = createLogger('Twitch');
@@ -23,6 +24,8 @@ const OAUTH_VALIDATE = 'https://id.twitch.tv/oauth2/validate';
 const OAUTH_REVOKE = 'https://id.twitch.tv/oauth2/revoke';
 const HELIX = 'https://api.twitch.tv/helix';
 const EVENTSUB_WS = 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30';
+const REQUIRED_SCOPES = Object.freeze(['user:read:chat', 'user:write:chat', 'channel:manage:redemptions']);
+const REDEMPTION_SCOPE = 'channel:manage:redemptions';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
 const RECONNECT_BASE_MS = 3000;
 const RECONNECT_MAX_MS = 60000;
@@ -83,7 +86,10 @@ class TwitchService {
     this.closed = false;
     this.replySettings = TwitchReplySettings.getDefaults();
     this.requestSettings = TwitchRequestSettings.getDefaults();
+    this.rewardSettings = TwitchRewardSettings.getDefaults();
     this.requestCooldowns = new Map();
+    this.rewardSubscriptionReady = false;
+    this.seenRedemptions = new Map();
     this.restorePendingRequests();
   }
 
@@ -98,6 +104,15 @@ class TwitchService {
     return this.requestSettings;
   }
 
+  setRewardSettings(settings) {
+    this.rewardSettings = TwitchRewardSettings.normalizeSettings(settings);
+    return this.rewardSettings;
+  }
+
+  hasScope(scope) {
+    return Array.isArray(this.auth?.scopes) && this.auth.scopes.includes(scope);
+  }
+
   configured() {
     return !!this.config.twitchClientId;
   }
@@ -109,6 +124,15 @@ class TwitchService {
       authorized: !!(this.auth && this.auth.accessToken && this.auth.userId),
       broadcasterLogin: this.auth && this.auth.userLogin ? this.auth.userLogin : null,
       command: this.requestSettings?.command || this.config.twitchRequestCommand || '!點歌',
+      missingScopes: REQUIRED_SCOPES.filter((scope) => !this.hasScope(scope)),
+      rewardAuthorized: this.hasScope(REDEMPTION_SCOPE),
+      rewardSubscriptionReady: this.rewardSubscriptionReady,
+      reward: {
+        enabled: this.rewardSettings.enabled,
+        rewardId: this.rewardSettings.rewardId,
+        title: this.rewardSettings.title,
+        cost: this.rewardSettings.cost,
+      },
       deviceAuthorization: this.deviceAuthorization ? {
         userCode: this.deviceAuthorization.userCode,
         verificationUri: this.deviceAuthorization.verificationUri,
@@ -130,6 +154,12 @@ class TwitchService {
       url: String(request.url || ''),
       requester: String(request.requester || '觀眾'),
       requesterId: String(request.requesterId || ''),
+      source: request.source === 'channel-points' ? 'channel-points' : 'chat',
+      rewardRedemption: request.rewardRedemption && typeof request.rewardRedemption === 'object' ? {
+        id: String(request.rewardRedemption.id || ''),
+        rewardId: String(request.rewardRedemption.rewardId || ''),
+        cost: Number(request.rewardRedemption.cost) || 0,
+      } : null,
       title: String(request.title || ''),
       author: String(request.author || ''),
       thumbnail: String(request.thumbnail || ''),
@@ -171,11 +201,11 @@ class TwitchService {
     try { restored = this.pendingStore.load() || []; } catch (err) {
       log.warn(`Twitch 待確認點歌還原失敗：${err.message}`);
     }
-    const now = Date.now();
     for (const raw of restored) {
       const request = this.serializePendingRequest(raw || {});
-      if (!request.requestId || !request.videoId || request.expiresAt <= now) continue;
+      if (!request.requestId || !request.videoId) continue;
       this.pendingRequests.set(request.requestId, request);
+      if (request.rewardRedemption?.id) this.seenRedemptions.set(request.rewardRedemption.id, request.createdAt);
       this.scheduleRequestExpiry(request.requestId);
     }
     this.persistPendingRequests();
@@ -187,7 +217,7 @@ class TwitchService {
     if (this.deviceAuthorization) return this.publicDeviceAuthorization();
     const body = new URLSearchParams({
       client_id: this.config.twitchClientId,
-      scopes: 'user:read:chat user:write:chat',
+      scopes: REQUIRED_SCOPES.join(' '),
     });
     const response = await fetch(OAUTH_DEVICE, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
@@ -225,7 +255,7 @@ class TwitchService {
     }
     const body = new URLSearchParams({
       client_id: this.config.twitchClientId,
-      scope: 'user:read:chat user:write:chat',
+      scope: REQUIRED_SCOPES.join(' '),
       device_code: pending.deviceCode,
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
     });
@@ -237,6 +267,7 @@ class TwitchService {
       if (response.ok && data.access_token) {
         this.deviceAuthorization = null;
         await this.saveValidatedToken(data);
+        this.disconnectEventSub();
         this.connectEventSub();
         return;
       }
@@ -275,7 +306,9 @@ class TwitchService {
       accessToken: token.access_token,
       refreshToken: token.refresh_token,
       expiresAt: Date.now() + Number(token.expires_in || 0) * 1000,
-      scopes: Array.isArray(token.scope) ? token.scope : [],
+      scopes: Array.isArray(token.scope) ? token.scope
+        : Array.isArray(user.scopes) ? user.scopes
+          : Array.isArray(this.auth?.scopes) ? this.auth.scopes : [],
       userId: user.user_id,
       userLogin: user.login || '',
     };
@@ -301,6 +334,7 @@ class TwitchService {
     const ws = this.ws;
     this.ws = null;
     this.wsSessionId = null;
+    this.rewardSubscriptionReady = false;
     this.reconnectAttempt = 0;
     this.nextRetryAt = 0;
     this.subscriptionState = 'idle';
@@ -386,6 +420,7 @@ class TwitchService {
       if (this.ws !== ws) return;
       this.ws = null;
       this.wsSessionId = null;
+      this.rewardSubscriptionReady = false;
       this.subscriptionState = 'idle';
       this.lastDisconnectedAt = Date.now();
       this.notifyStatusChange();
@@ -442,8 +477,17 @@ class TwitchService {
           this.createSubscription('stream.offline', { broadcaster_user_id: this.auth.userId }),
           this.createSubscription('channel.chat.message', { broadcaster_user_id: this.auth.userId, user_id: this.auth.userId }),
         ]);
+        if (this.hasScope(REDEMPTION_SCOPE)) {
+          try {
+            await this.createSubscription('channel.channel_points_custom_reward_redemption.add', { broadcaster_user_id: this.auth.userId });
+            this.rewardSubscriptionReady = true;
+          } catch (err) {
+            this.rewardSubscriptionReady = false;
+            log.warn(`Twitch 忠誠點數兌換訂閱未啟用：${err.message}`);
+          }
+        }
         this.subscriptionState = 'ready';
-        log.info('Twitch EventSub 訂閱完成：開台、下播、聊天室訊息');
+        log.info(`Twitch EventSub 訂閱完成：開台、下播、聊天室訊息${this.rewardSubscriptionReady ? '、忠誠點數兌換' : ''}`);
         this.notifyStatusChange();
       } catch (err) {
         this.subscriptionState = 'error';
@@ -457,6 +501,7 @@ class TwitchService {
     if (type === 'session_reconnect') {
       const reconnectUrl = message.payload && message.payload.session && message.payload.session.reconnect_url;
       const old = this.ws; this.ws = null; this.wsSessionId = null;
+      this.rewardSubscriptionReady = false;
       this.subscriptionState = 'idle';
       this.connectionState = 'reconnecting';
       this.lastDisconnectedAt = Date.now();
@@ -475,6 +520,8 @@ class TwitchService {
       this.onStreamOffline({ eventId: message.metadata.message_id });
     } else if (subscription.type === 'channel.chat.message') {
       await this.handleChatMessage(event, message.metadata.message_id);
+    } else if (subscription.type === 'channel.channel_points_custom_reward_redemption.add') {
+      await this.handleRewardRedemption(event, message.metadata.message_id);
     }
   }
 
@@ -497,6 +544,65 @@ class TwitchService {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     };
     return fetch(`${HELIX}${path}`, { ...options, headers, body: options.body ? JSON.stringify(options.body) : undefined });
+  }
+
+  async requireRedemptionAuthorization() {
+    if (!await this.ensureToken()) throw new Error('Twitch 授權已失效，請重新連接 Twitch');
+    if (!this.hasScope(REDEMPTION_SCOPE)) throw new Error('需要重新連接 Twitch，授權忠誠點數管理權限');
+  }
+
+  async syncManagedReward(settings) {
+    const validation = TwitchRewardSettings.validateSettings(settings);
+    if (!validation.ok) throw new Error(validation.errors[0]?.message || 'Twitch 忠誠點數設定格式無效');
+    let normalized = validation.settings;
+    if (!normalized.enabled && !normalized.rewardId) return normalized;
+    await this.requireRedemptionAuthorization();
+    const query = `broadcaster_id=${encodeURIComponent(this.auth.userId)}`;
+    const body = {
+      title: normalized.title,
+      prompt: normalized.prompt,
+      cost: normalized.cost,
+      is_enabled: normalized.enabled,
+      is_user_input_required: true,
+      should_redemptions_skip_request_queue: false,
+    };
+
+    let response = null;
+    if (normalized.rewardId) {
+      response = await this.helix(`/channel_points/custom_rewards?${query}&id=${encodeURIComponent(normalized.rewardId)}`, { method: 'PATCH', body });
+      if (response.status === 404) normalized = { ...normalized, rewardId: '' };
+    }
+    if (!normalized.rewardId) {
+      response = await this.helix(`/channel_points/custom_rewards?${query}`, { method: 'POST', body });
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Twitch 忠誠點數權限不足，請重新連接 Twitch');
+      if (response.status === 403) throw new Error('此頻道尚未開放忠誠點數，或這個獎勵不是由 Elitesand Pro 建立');
+      throw new Error(data.message || `Twitch 獎勵同步失敗（${response.status}）`);
+    }
+    const reward = Array.isArray(data.data) ? data.data[0] : null;
+    if (!reward?.id) throw new Error('Twitch 沒有回傳可管理的獎勵識別碼');
+    normalized = { ...normalized, rewardId: String(reward.id) };
+    this.setRewardSettings(normalized);
+    return normalized;
+  }
+
+  async updateRewardRedemptionStatus(redemption, status) {
+    if (!redemption?.id || !redemption?.rewardId) throw new Error('忠誠點數兌換資料不完整');
+    await this.requireRedemptionAuthorization();
+    const query = new URLSearchParams({
+      broadcaster_id: this.auth.userId,
+      reward_id: redemption.rewardId,
+      id: redemption.id,
+    });
+    const response = await this.helix(`/channel_points/custom_rewards/redemptions?${query}`, {
+      method: 'PATCH', body: { status },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || `Twitch 兌換狀態更新失敗（${response.status}）`);
+    }
   }
 
   async fetchYouTubeMetadata(url) {
@@ -548,35 +654,93 @@ class TwitchService {
     }
 
     const requestId = event.message_id || fallbackId || crypto.randomUUID();
+    await this.handleSongRequestInput({ event, requestId, url, command, source: 'chat' });
+  }
+
+  async handleRewardRedemption(redemptionEvent, fallbackId) {
+    const settings = this.rewardSettings || TwitchRewardSettings.getDefaults();
+    const reward = redemptionEvent?.reward || {};
+    if (!settings.enabled || !settings.rewardId || String(reward.id || '') !== settings.rewardId) return;
+    if (redemptionEvent.status && redemptionEvent.status !== 'unfulfilled' && redemptionEvent.status !== 'UNFULFILLED') return;
+    const redemptionId = String(redemptionEvent.id || fallbackId || '');
+    if (!redemptionId || this.seenRedemptions.has(redemptionId)) return;
+    if ([...this.pendingRequests.values()].some((request) => request.rewardRedemption?.id === redemptionId)) return;
+
+    this.seenRedemptions.set(redemptionId, Date.now());
+    const event = {
+      chatter_user_id: String(redemptionEvent.user_id || ''),
+      chatter_user_login: String(redemptionEvent.user_login || ''),
+      chatter_user_name: String(redemptionEvent.user_name || '觀眾'),
+      message_id: '',
+    };
+    const redemption = { id: redemptionId, rewardId: settings.rewardId, cost: Number(reward.cost) || settings.cost };
+    try {
+      if (!this.requestSettings?.enabled) {
+        await this.rejectSongRequest({ event, key: 'requestDisabled', redemption, reason: '目前暫停接受點歌' });
+        return;
+      }
+      await this.handleSongRequestInput({
+        event,
+        requestId: `reward:${redemptionId}`,
+        url: String(redemptionEvent.user_input || '').trim(),
+        command: settings.title,
+        source: 'channel-points',
+        redemption,
+      });
+    } catch (err) {
+      const pending = [...this.pendingRequests.values()].some((request) => request.rewardRedemption?.id === redemptionId);
+      if (!pending) this.seenRedemptions.delete(redemptionId);
+      throw err;
+    }
+  }
+
+  async rejectSongRequest({ event, key, values = {}, redemption = null, reason = '不符合目前點歌規則' }) {
+    if (!redemption) return this.sendConfiguredReply(event, key, values);
+    await this.updateRewardRedemptionStatus(redemption, 'CANCELED');
+    try {
+      return await this.sendConfiguredReply(event, 'rewardRefunded', {
+        ...values,
+        reason,
+        cost: redemption.cost,
+      });
+    } catch (err) {
+      log.warn(`忠誠點數已退款，但聊天室通知失敗：${err.message}`);
+      return { sent: false, skipped: false };
+    }
+  }
+
+  async handleSongRequestInput({ event, requestId, url, command, source, redemption = null }) {
+    const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
     const parsedUrl = parseYouTubeUrl(url);
     if (!parsedUrl?.videoId) {
-      await this.sendConfiguredReply(event, 'invalidLink', { command });
+      await this.rejectSongRequest({ event, key: 'invalidLink', values: { command }, redemption, reason: '沒有提供有效的 YouTube 單曲連結' });
       return;
     }
-    if (parsedUrl.playlistId) { await this.sendConfiguredReply(event, 'playlistNotAllowed', { url }); return; }
+    if (parsedUrl.playlistId) {
+      await this.rejectSongRequest({ event, key: 'playlistNotAllowed', values: { url }, redemption, reason: '播放清單連結不屬於單曲點歌' });
+      return;
+    }
     if (this.pendingRequests.size >= rules.maxPending) {
-      await this.sendConfiguredReply(event, 'queueFull', { url, limit: rules.maxPending });
+      await this.rejectSongRequest({ event, key: 'queueFull', values: { url, limit: rules.maxPending }, redemption, reason: '待確認點歌已達總上限' });
       return;
     }
+    const userKey = requesterKey(event);
     if (userKey && rules.perUserPending > 0) {
       const userPending = [...this.pendingRequests.values()].filter((request) => request.requesterId === userKey).length;
       if (userPending >= rules.perUserPending) {
-        await this.sendConfiguredReply(event, 'userLimitReached', { url, limit: rules.perUserPending });
+        await this.rejectSongRequest({ event, key: 'userLimitReached', values: { url, limit: rules.perUserPending }, redemption, reason: '你目前的待確認點歌已達上限' });
         return;
       }
     }
     if (rules.rejectDuplicates && [...this.pendingRequests.values()].some((request) => request.videoId === parsedUrl.videoId)) {
-      await this.sendConfiguredReply(event, 'duplicatePending', { url });
+      await this.rejectSongRequest({ event, key: 'duplicatePending', values: { url }, redemption, reason: '同一首歌已在待確認清單中' });
       return;
     }
     const metadata = await this.fetchYouTubeMetadata(url);
     if (rules.maxDurationMinutes > 0 && metadata.duration > rules.maxDurationMinutes * 60) {
-      await this.sendConfiguredReply(event, 'durationExceeded', {
-        title: metadata.title,
-        artist: metadata.author,
-        url,
-        duration: formatDuration(metadata.duration),
-        limit: rules.maxDurationMinutes,
+      await this.rejectSongRequest({
+        event, key: 'durationExceeded', redemption, reason: `歌曲超過 ${rules.maxDurationMinutes} 分鐘限制`,
+        values: { title: metadata.title, artist: metadata.author, url, duration: formatDuration(metadata.duration), limit: rules.maxDurationMinutes },
       });
       return;
     }
@@ -585,6 +749,8 @@ class TwitchService {
       url,
       requester: event.chatter_user_name || event.chatter_user_login || '觀眾',
       requesterId: userKey,
+      source,
+      rewardRedemption: redemption,
       title: metadata.title,
       author: metadata.author,
       thumbnail: metadata.thumbnail,
@@ -596,16 +762,21 @@ class TwitchService {
     };
     const accepted = this.onSongRequest(request);
     if (!accepted) {
-      await this.sendConfiguredReply(event, 'panelUnavailable', { title: request.title, artist: request.author, url });
+      await this.rejectSongRequest({
+        event, key: 'panelUnavailable', redemption, reason: '控制面板目前無法接收點歌',
+        values: { title: request.title, artist: request.author, url },
+      });
       return;
     }
     const createdAt = Date.now();
     this.pendingRequests.set(requestId, { ...request, event, createdAt, expiresAt: createdAt + REQUEST_TTL_MS });
-    if (userKey && rules.cooldownSeconds > 0) this.requestCooldowns.set(userKey, createdAt);
+    if (source === 'chat' && userKey && rules.cooldownSeconds > 0) this.requestCooldowns.set(userKey, createdAt);
     this.scheduleRequestExpiry(requestId);
     this.persistPendingRequests();
     // 確認制：不自動下載，先送到主播面板等待確認。
-    await this.sendConfiguredReply(event, 'received', { title: request.title, artist: request.author, url });
+    await this.sendConfiguredReply(event, source === 'channel-points' ? 'rewardReceived' : 'received', {
+      title: request.title, artist: request.author, url, cost: redemption?.cost || '',
+    });
     this.pruneRequests();
   }
 
@@ -625,6 +796,28 @@ class TwitchService {
       }
       this.persistPendingRequests();
       log.info(`Twitch 點歌匯入失敗，保留供重試：${requestId}`);
+      return;
+    }
+    if (request.rewardRedemption) {
+      const fulfilled = !!success && !rejected;
+      const reason = rejected ? '主播略過了這首歌' : '目前無法完成歌曲匯入';
+      await this.updateRewardRedemptionStatus(request.rewardRedemption, fulfilled ? 'FULFILLED' : 'CANCELED');
+      try {
+        await this.sendConfiguredReply(request.event, fulfilled ? 'rewardFulfilled' : 'rewardRefunded', {
+          title: title || request.title || '已加入播放清單',
+          artist: artist || request.author,
+          url: request.url,
+          position: position || '播放清單',
+          queue: queue || '',
+          cost: request.rewardRedemption.cost,
+          reason,
+        });
+      } catch (err) {
+        log.warn(`忠誠點數兌換已${fulfilled ? '完成' : '退款'}，但聊天室通知失敗：${err.message}`);
+      }
+      this.pendingRequests.delete(requestId);
+      this.clearRequestExpiry(requestId);
+      this.persistPendingRequests();
       return;
     }
     if (rejected) {
@@ -660,7 +853,7 @@ class TwitchService {
       user: event?.chatter_user_name || event?.chatter_user_login || '觀眾',
       command: this.requestSettings?.command || this.config.twitchRequestCommand || '!點歌',
       title: '', artist: '', reason: '', position: '', queue: '', url: '',
-      seconds: '', limit: '', duration: '',
+      seconds: '', limit: '', duration: '', cost: '',
       ...values,
     });
     if (!text) return { sent: false, skipped: true };
@@ -721,7 +914,10 @@ class TwitchService {
     const now = Date.now();
     const cutoff = now - REQUEST_TTL_MS;
     for (const [id, request] of this.pendingRequests) {
-      if (request.createdAt < cutoff) this.expireRequest(id, request);
+      if (request.createdAt < cutoff) {
+        this.expireRequest(id, request)
+          .catch((err) => log.warn(`Twitch 點歌逾時處理失敗：${err.message}`));
+      }
     }
     const cooldownMs = (this.requestSettings?.cooldownSeconds || 0) * 1000;
     if (cooldownMs === 0) this.requestCooldowns.clear();
@@ -729,6 +925,9 @@ class TwitchService {
       for (const [userKey, acceptedAt] of this.requestCooldowns) {
         if (acceptedAt <= now - cooldownMs) this.requestCooldowns.delete(userKey);
       }
+    }
+    for (const [redemptionId, seenAt] of this.seenRedemptions) {
+      if (seenAt <= now - 24 * 60 * 60 * 1000) this.seenRedemptions.delete(redemptionId);
     }
     this.persistPendingRequests();
   }
@@ -756,13 +955,32 @@ class TwitchService {
   }
 
   async expireRequest(requestId, request = this.pendingRequests.get(requestId)) {
-    if (!request || !this.pendingRequests.delete(requestId)) return;
+    if (!request) return;
+    if (request.rewardRedemption) {
+      try {
+        await this.updateRewardRedemptionStatus(request.rewardRedemption, 'CANCELED');
+      } catch (err) {
+        request.expiresAt = Date.now() + 60000;
+        this.persistPendingRequests();
+        this.scheduleRequestExpiry(requestId);
+        throw new Error(`忠誠點數逾時退款失敗，60 秒後重試：${err.message}`);
+      }
+    }
+    if (!this.pendingRequests.delete(requestId)) return;
     this.clearRequestExpiry(requestId);
     this.persistPendingRequests();
     if (typeof this.onSongRequestExpired === 'function') this.onSongRequestExpired(requestId);
-    await this.sendConfiguredReply(request.event, 'requestExpired', {
-      title: request.title, artist: request.author, url: request.url,
-    });
+    try {
+      await this.sendConfiguredReply(request.event, request.rewardRedemption ? 'rewardRefunded' : 'requestExpired', {
+        title: request.title,
+        artist: request.author,
+        url: request.url,
+        cost: request.rewardRedemption?.cost || '',
+        reason: request.rewardRedemption ? '等待主播確認超過 30 分鐘' : '',
+      });
+    } catch (err) {
+      log.warn(`Twitch 點歌已逾時結案，但聊天室通知失敗：${err.message}`);
+    }
   }
 
   stop() {
@@ -773,6 +991,7 @@ class TwitchService {
     if (this.ws && typeof this.ws.close === 'function') this.ws.close();
     this.ws = null;
     this.wsSessionId = null;
+    this.rewardSubscriptionReady = false;
     this.connectionState = 'stopped';
     this.subscriptionState = 'idle';
     this.nextRetryAt = 0;

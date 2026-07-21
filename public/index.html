@@ -860,7 +860,7 @@
             <div class="card-collapse-body twitch-request-settings-body">
               <p class="sub section-intro">設定聊天室指令、哪些觀眾可以點歌，以及送進主播確認區前要套用的限制。</p>
               <div class="switch-row">
-                <div><div class="label">聊天室點歌總開關</div><div class="sub">關閉後仍保持 Twitch 連線；觀眾輸入有效指令時會收到暫停提示。</div></div>
+                <div><div class="label">Twitch 點歌總開關</div><div class="sub">關閉後仍保持 Twitch 連線；聊天室指令會收到暫停提示，忠誠點數兌換會立即退款。</div></div>
                 <label class="switch"><input id="twitch-request-enabled" type="checkbox" checked><span class="track"></span></label>
               </div>
               <div class="twitch-rule-grid">
@@ -912,6 +912,46 @@
                 <button id="twitch-request-reset" class="btn btn-sm btn-ghost" type="button">還原預設值</button>
                 <button id="twitch-request-save" class="btn btn-sm btn-primary" type="button">儲存點歌規則</button>
               </div>
+            </div>
+          </details>
+          <details class="card card-collapse twitch-reward-settings" id="twitch-reward-settings" open>
+            <summary class="eyebrow">忠誠點數點歌</summary>
+            <div class="card-collapse-body twitch-reward-settings-body">
+              <p class="sub section-intro">由 Elitesand Pro 建立並管理專用 Twitch 獎勵。成功匯入會完成兌換；主播拒絕、永久失敗或逾時會自動退款。</p>
+              <div class="switch-row">
+                <div><div class="label">忠誠點數點歌開關</div><div class="sub">關閉並儲存後，Twitch 上的專用獎勵也會停用。</div></div>
+                <label class="switch"><input id="twitch-reward-enabled" type="checkbox"><span class="track"></span></label>
+              </div>
+              <div class="twitch-rule-grid">
+                <div class="field">
+                  <label for="twitch-reward-title">獎勵名稱</label>
+                  <input id="twitch-reward-title" class="input" type="text" maxlength="45" value="用忠誠點數點歌" autocomplete="off">
+                </div>
+                <div class="field">
+                  <label for="twitch-reward-cost">兌換點數</label>
+                  <input id="twitch-reward-cost" class="input" type="number" min="1" step="1" value="1000" inputmode="numeric">
+                </div>
+              </div>
+              <div class="field">
+                <label for="twitch-reward-prompt">兌換說明</label>
+                <textarea id="twitch-reward-prompt" class="input twitch-reward-prompt" maxlength="200">請貼上單一 YouTube 歌曲連結。主播確認匯入後才會完成兌換；拒絕或失敗會退還點數。</textarea>
+                <p class="field-hint">觀眾兌換時必須輸入內容；Elitesand Pro 只接受單一 YouTube 歌曲連結。</p>
+              </div>
+              <div class="twitch-rule-preview">
+                <div class="label">Twitch 獎勵預覽</div>
+                <p id="twitch-reward-preview" class="sub"></p>
+              </div>
+              <div class="twitch-reward-state">
+                <div><div class="label">連線與獎勵狀態</div><p id="twitch-reward-auth-status" class="sub">正在讀取 Twitch 狀態…</p></div>
+                <button id="twitch-reward-reauthorize" class="btn btn-sm btn-ghost" type="button" hidden>重新連接 Twitch</button>
+              </div>
+              <div id="twitch-reward-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
+              <div class="twitch-reply-actions">
+                <span id="twitch-reward-save-status" class="val" aria-live="polite"></span>
+                <button id="twitch-reward-reset" class="btn btn-sm btn-ghost" type="button">停用並還原</button>
+                <button id="twitch-reward-save" class="btn btn-sm btn-primary" type="button">儲存並同步 Twitch</button>
+              </div>
+              <p class="field-hint">還原不會刪除 Twitch 獎勵，而是停用並保留識別碼，避免留下無法退款的孤兒兌換。</p>
             </div>
           </details>
           <details class="card card-collapse twitch-reply-settings" id="twitch-reply-settings" open>
@@ -2135,6 +2175,7 @@
   <script src="/js/app-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>
   <script src="/js/twitch-request-settings.js"></script>
+  <script src="/js/twitch-reward-settings.js"></script>
   <script src="/js/twitch-reply-settings.js"></script>
   <script src="/js/app-twitch.js"></script>
   <script src="/js/app-playlist.js"></script>
