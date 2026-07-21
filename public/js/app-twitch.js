@@ -21,6 +21,7 @@
       const response = await PinAuth.fetchWithPin('/api/twitch/status');
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '無法讀取 Twitch 狀態');
+      applyRewardRuntimeStatus(data);
       if (!data.configured) {
         if (el) el.textContent = 'Twitch 尚未啟用，請聯絡 Elitesand Pro 開發者。';
         if (button) button.disabled = true;
@@ -233,6 +234,88 @@
     });
   }
 
+  // ─── 忠誠點數專用獎勵 ───
+  let currentRewardSettings = TwitchRewardSettings.getDefaults();
+
+  function collectRewardSettings() {
+    return {
+      enabled: !!el('twitch-reward-enabled')?.checked,
+      rewardId: currentRewardSettings.rewardId || '',
+      title: el('twitch-reward-title')?.value || '',
+      prompt: el('twitch-reward-prompt')?.value || '',
+      cost: Number(el('twitch-reward-cost')?.value),
+    };
+  }
+
+  function updateRewardPreview(settings = collectRewardSettings()) {
+    const preview = el('twitch-reward-preview');
+    if (!preview) return;
+    preview.textContent = `${settings.enabled ? '啟用' : '停用'}｜${settings.title || '—'}｜${Number.isSafeInteger(settings.cost) ? settings.cost.toLocaleString() : '—'} 點｜${settings.prompt || '—'}`;
+  }
+
+  function validateRewardForm() {
+    const validation = TwitchRewardSettings.validateSettings(collectRewardSettings());
+    const message = validation.errors[0]?.message || '';
+    const error = el('twitch-reward-form-error');
+    const save = el('twitch-reward-save');
+    if (error) { error.textContent = message; error.hidden = !message; }
+    if (save) save.disabled = !!message;
+    updateRewardPreview(validation.ok ? validation.settings : collectRewardSettings());
+    return validation;
+  }
+
+  function markRewardSettingsChanged() {
+    const status = el('twitch-reward-save-status');
+    if (status) status.textContent = '尚未同步';
+    validateRewardForm();
+  }
+
+  function applyRewardSettings(settings, { savedMessage = '' } = {}) {
+    currentRewardSettings = TwitchRewardSettings.normalizeSettings(settings);
+    el('twitch-reward-enabled').checked = currentRewardSettings.enabled;
+    el('twitch-reward-title').value = currentRewardSettings.title;
+    el('twitch-reward-prompt').value = currentRewardSettings.prompt;
+    el('twitch-reward-cost').value = String(currentRewardSettings.cost);
+    const status = el('twitch-reward-save-status');
+    if (status) status.textContent = savedMessage;
+    validateRewardForm();
+  }
+
+  function applyRewardRuntimeStatus(status) {
+    const label = el('twitch-reward-auth-status');
+    const reauthorize = el('twitch-reward-reauthorize');
+    if (!label || !reauthorize) return;
+    const missingRewardScope = Array.isArray(status?.missingScopes) && status.missingScopes.includes('channel:manage:redemptions');
+    reauthorize.hidden = !status?.configured || (!!status?.authorized && !missingRewardScope);
+    if (!status?.configured) label.textContent = '尚未設定 Twitch Client ID。';
+    else if (!status?.authorized) label.textContent = '尚未連接 Twitch；啟用獎勵前需要先授權。';
+    else if (missingRewardScope) label.textContent = '目前授權缺少忠誠點數管理權限，請重新連接 Twitch 一次。';
+    else if (status.reward?.enabled && status.reward?.rewardId && status.rewardSubscriptionReady) label.textContent = `獎勵已啟用並監聽兌換：${status.reward.title}（${Number(status.reward.cost).toLocaleString()} 點）`;
+    else if (status.reward?.enabled && status.reward?.rewardId) label.textContent = '獎勵已建立；EventSub 正在等待忠誠點數兌換訂閱。';
+    else if (status.reward?.rewardId) label.textContent = '專用獎勵已停用；再次開啟並儲存即可恢復。';
+    else label.textContent = '尚未建立專用獎勵；開啟後按「儲存並同步 Twitch」。';
+  }
+
+  function saveRewardSettings(settings, successMessage) {
+    const validation = TwitchRewardSettings.validateSettings(settings);
+    if (!validation.ok) { validateRewardForm(); return; }
+    const save = el('twitch-reward-save');
+    if (save) { save.disabled = true; save.textContent = '正在同步…'; }
+    SocketClient.sendWithCallback('twitch:reward-settings:update', validation.settings, (result) => {
+      if (save) save.textContent = '儲存並同步 Twitch';
+      if (!result?.ok) {
+        if (save) save.disabled = false;
+        const error = el('twitch-reward-form-error');
+        if (error) { error.textContent = result?.error || 'Twitch 沒有回應'; error.hidden = false; }
+        AppShared.showToast(`忠誠點數獎勵同步失敗：${result?.error || 'Twitch 沒有回應'}`, 'error');
+        return;
+      }
+      applyRewardSettings(result.settings || validation.settings, { savedMessage: successMessage });
+      applyRewardRuntimeStatus(result.status || {});
+      AppShared.showToast(successMessage, 'success');
+    });
+  }
+
   // ─── 聊天室自動回覆設定 ───
   let activeReplyTemplate = null;
 
@@ -437,6 +520,7 @@
   }
 
   buildRequestSettingsForm();
+  applyRewardSettings(TwitchRewardSettings.getDefaults());
   buildReplySettingsForm();
   applyReplySettings(TwitchReplySettings.getDefaults());
   [
@@ -467,6 +551,22 @@
     applyRequestSettings(defaults);
     saveRequestSettings(defaults, '點歌規則已還原');
   });
+  ['twitch-reward-enabled', 'twitch-reward-title', 'twitch-reward-prompt', 'twitch-reward-cost'].forEach((id) => {
+    const control = el(id);
+    control?.addEventListener(control?.matches('input[type="checkbox"]') ? 'change' : 'input', markRewardSettingsChanged);
+  });
+  el('twitch-reward-save')?.addEventListener('click', () => saveRewardSettings(collectRewardSettings(), '忠誠點數獎勵已同步'));
+  el('twitch-reward-reauthorize')?.addEventListener('click', () => el('twitch-connect')?.click());
+  el('twitch-reward-reset')?.addEventListener('click', async () => {
+    const confirmed = await window.PanelConfirm?.request({
+      title: '停用並還原忠誠點數獎勵？',
+      summary: 'Twitch 上的 Elitesand Pro 專用獎勵會停用，名稱、說明與價格回到預設值。',
+      impact: '不會刪除獎勵或清除 Twitch 授權；已在待確認區的兌換仍會正常完成或退款。',
+      confirmLabel: '停用並還原',
+    });
+    if (!confirmed) return;
+    saveRewardSettings({ ...TwitchRewardSettings.getDefaults(), rewardId: currentRewardSettings.rewardId }, '忠誠點數獎勵已停用並還原');
+  });
   el('twitch-reply-enabled')?.addEventListener('change', markReplySettingsChanged);
   el('twitch-reply-mode')?.addEventListener('change', markReplySettingsChanged);
   el('twitch-reply-test-event')?.addEventListener('change', updateReplyTestPreview);
@@ -486,6 +586,7 @@
   });
 
   SocketClient.on('twitch:request-settings:update', (settings) => applyRequestSettings(settings, { savedMessage: '設定已同步' }));
+  SocketClient.on('twitch:reward-settings:update', (settings) => applyRewardSettings(settings, { savedMessage: '設定已同步' }));
   SocketClient.on('twitch:reply-settings:update', (settings) => applyReplySettings(settings, { savedMessage: '設定已同步' }));
 
   function renderRequests() {
@@ -522,6 +623,7 @@
             <div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
             <div class="twitch-req-author">${escapeHtml(author)}</div>
             <div class="twitch-req-user">點歌者：${escapeHtml(req.requester || '觀眾')}</div>
+            ${req.source === 'channel-points' ? `<div class="pi-badge twitch-req-reward">忠誠點數兌換 · ${Number(req.rewardRedemption?.cost || 0).toLocaleString()} 點</div>` : ''}
             ${Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length
               ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>`
               : req.durationWarning ? '<div class="pi-badge twitch-req-warning">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}
@@ -531,7 +633,7 @@
         <div class="twitch-req-actions">
           <button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${isBusy ? (placement === 'next' ? '插播下載中…' : '下載中…') : '插到下一首'}</button>
           <button class="btn btn-sm btn-ghost" data-act="end"${isBusy ? ' disabled' : ''}>加入尾端</button>
-          <button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>拒絕</button>
+          <button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>${req.source === 'channel-points' ? '拒絕並退款' : '拒絕'}</button>
         </div>`;
       row.querySelector('[data-act="next"]').addEventListener('click', () => confirmRequest(req.requestId, 'next'));
       row.querySelector('[data-act="end"]').addEventListener('click', () => confirmRequest(req.requestId, 'end'));
@@ -589,7 +691,7 @@
       }
       pending.delete(requestId);
       renderRequests();
-      AppShared.showToast('已略過這首點歌', 'info');
+      AppShared.showToast(req.source === 'channel-points' ? '已拒絕並退還忠誠點數' : '已略過這首點歌', 'info');
     });
   }
 

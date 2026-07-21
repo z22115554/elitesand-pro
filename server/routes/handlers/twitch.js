@@ -1,5 +1,6 @@
 const TwitchReplySettings = require('../../../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../../../public/js/twitch-request-settings');
+const TwitchRewardSettings = require('../../../public/js/twitch-reward-settings');
 const { createLogger } = require('../../utils/logger');
 
 const log = createLogger('TwitchSocket');
@@ -54,6 +55,31 @@ function registerTwitchHandlers(io, socket, ctx, { getTwitchService }) {
     ctx.persistState((result) => {
       if (typeof ack === 'function') ack(result?.ok === false ? result : { ok: true, settings: validation.settings });
     });
+  });
+
+  socket.on('twitch:reward-settings:update', async (incoming, ack) => {
+    const validation = TwitchRewardSettings.validateSettings(incoming);
+    if (!validation.ok) {
+      if (typeof ack === 'function') ack({ ok: false, error: validation.errors[0]?.message || 'Twitch 忠誠點數設定格式無效' });
+      return;
+    }
+    const twitchService = getTwitchService();
+    if (!twitchService) {
+      if (typeof ack === 'function') ack({ ok: false, error: 'Twitch 服務尚未啟用' });
+      return;
+    }
+    try {
+      const settings = await twitchService.syncManagedReward(validation.settings);
+      ctx.playState.twitchRewardSettings = settings;
+      twitchService.setRewardSettings(settings);
+      io.emit('twitch:reward-settings:update', settings);
+      ctx.persistState((result) => {
+        if (typeof ack === 'function') ack(result?.ok === false ? result : { ok: true, settings, status: twitchService.status() });
+      });
+    } catch (err) {
+      log.warn(`Twitch 忠誠點數獎勵同步失敗: ${err.message}`);
+      if (typeof ack === 'function') ack({ ok: false, error: err.message || '無法同步 Twitch 忠誠點數獎勵' });
+    }
   });
 
   socket.on('twitch:reply-settings:test', async (payload, ack) => {
