@@ -1853,6 +1853,21 @@ test('lyric-settings 可被 state-store 持久化', () => {
 });
 
 const { TwitchService, reconnectDelay } = require('../server/services/twitch-service');
+const TwitchReplySettings = require('../public/js/twitch-reply-settings');
+
+test('Twitch 自訂回覆契約提供 11 個分項、預設值與變數拼字檢查', () => {
+  eq(TwitchReplySettings.REPLY_DEFINITIONS.length, 11);
+  const defaults = TwitchReplySettings.getDefaults();
+  eq(defaults.enabled, true);
+  eq(defaults.replies.retryableFailure.enabled, false);
+  eq(TwitchReplySettings.validateTemplate('完成：{title}').valid, true);
+  eq(TwitchReplySettings.renderTemplate('完成：{title}', { title: '測試歌曲' }), '完成：測試歌曲');
+  const typo = TwitchReplySettings.validateTemplate('完成：{titel}');
+  eq(typo.valid, false);
+  ok(typo.errors[0].includes('{titel}'));
+  eq(TwitchReplySettings.validateTemplate('完成：{title').valid, false);
+  eq(TwitchReplySettings.validateTemplate('完成：｛title｝').valid, false);
+});
 
 test('Twitch EventSub 重連採指數退避並有上限', () => {
   eq(reconnectDelay(1, () => 0.5), 3000);
@@ -1895,19 +1910,128 @@ test('Twitch 待確認點歌可跨 service 重啟還原', () => {
     requestId: 'persist-1', url: 'https://youtu.be/dQw4w9WgXcQ', requester: 'viewer',
     title: 'fixture', author: 'channel', thumbnail: '', metadataAvailable: true,
     videoId: 'dQw4w9WgXcQ', duration: 212, durationWarning: false,
-    event: { chatter_user_name: 'viewer', ignored: '不應保存' },
+    event: { chatter_user_name: 'viewer', message_id: 'chat-parent-1', ignored: '不應保存' },
+    retryableReplySent: true,
     createdAt, expiresAt: createdAt + 60000,
   });
   first.persistPendingRequests();
   first.stop();
   eq(saved.length, 1);
   eq(saved[0].event.chatter_user_name, 'viewer');
+  eq(saved[0].event.message_id, 'chat-parent-1');
+  eq(saved[0].retryableReplySent, true);
   ok(!Object.prototype.hasOwnProperty.call(saved[0].event, 'ignored'));
 
   const second = new TwitchService(options);
   eq(second.getPendingRequests().length, 1);
   eq(second.status().pendingRequestCount, 1);
   second.stop();
+});
+
+testAsync('Twitch 回覆總開關、分項開關與自訂變數會套到實際訊息', async () => {
+  const service = new TwitchService({
+    config: { twitchClientId: '', twitchRequestCommand: '!唱歌' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  const settings = TwitchReplySettings.getDefaults();
+  settings.replyMode = 'plain';
+  settings.replies.importSuccess.template = '{user} 的 {title} 已放到{position}，順位 {queue}';
+  service.setReplySettings(settings);
+  const sent = [];
+  service.sendChatReply = async (event, text, options) => { sent.push({ event, text, options }); };
+  await service.sendConfiguredReply({ chatter_user_name: 'viewer' }, 'importSuccess', {
+    title: '測試歌曲', position: '歌單尾端', queue: 3,
+  });
+  eq(sent[0].text, 'viewer 的 測試歌曲 已放到歌單尾端，順位 3');
+  eq(sent[0].options.mode, 'plain');
+
+  settings.replies.importSuccess.enabled = false;
+  service.setReplySettings(settings);
+  await service.sendConfiguredReply({ chatter_user_name: 'viewer' }, 'importSuccess', { title: '不應送出' });
+  eq(sent.length, 1);
+  settings.replies.importSuccess.enabled = true;
+  settings.enabled = false;
+  service.setReplySettings(settings);
+  await service.sendConfiguredReply({ chatter_user_name: 'viewer' }, 'importSuccess', { title: '仍不應送出' });
+  eq(sent.length, 1);
+  service.stop();
+});
+
+testAsync('Twitch 原生串接回覆帶 parent message id，並識別 HTTP 200 但未送出的訊息', async () => {
+  const service = new TwitchService({
+    config: { twitchClientId: 'fixture', twitchRequestCommand: '!點歌' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+  });
+  service.auth = { accessToken: 'fixture', refreshToken: 'fixture', expiresAt: Date.now() + 600000, userId: '1' };
+  service.ensureToken = async () => true;
+  let sentBody = null;
+  service.helix = async (_path, options) => {
+    sentBody = options.body;
+    return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: [{ is_sent: true }] }) };
+  };
+  await service.sendChatReply({ chatter_user_name: 'viewer', message_id: 'parent-123' }, '完成', { mode: 'reply' });
+  eq(sentBody.reply_parent_message_id, 'parent-123');
+  eq(sentBody.message, '完成');
+
+  service.helix = async () => ({
+    ok: true, status: 200, headers: { get: () => null },
+    json: async () => ({ data: [{ is_sent: false, drop_reason: { message: 'Automod held' } }] }),
+  });
+  let threw = false;
+  try { await service.sendChatReply({ chatter_user_name: 'viewer' }, '會被擋下', { mode: 'plain' }); } catch (err) {
+    threw = true;
+    ok(err.message.includes('Automod held'));
+  }
+  eq(threw, true);
+  service.stop();
+});
+
+test('Twitch 回覆設定 socket 只接受 controller，並由 server 再驗證變數', () => {
+  const registerTwitchHandlers = require('../server/routes/handlers/twitch');
+  const handlers = {};
+  const emitted = [];
+  const socket = { clientType: 'controller', on: (event, handler) => { handlers[event] = handler; } };
+  const service = { setReplySettings: (settings) => { service.settings = settings; } };
+  const ctx = {
+    playState: { twitchReplySettings: TwitchReplySettings.getDefaults() },
+    persistState: (callback) => callback({ ok: true }),
+  };
+  registerTwitchHandlers({ emit: (event, payload) => emitted.push({ event, payload }) }, socket, ctx, { getTwitchService: () => service });
+  ok(typeof handlers['twitch:reply-settings:update'] === 'function');
+
+  const invalid = TwitchReplySettings.getDefaults();
+  invalid.replies.received.template = '收到 {titel}';
+  let invalidAck = null;
+  handlers['twitch:reply-settings:update'](invalid, (result) => { invalidAck = result; });
+  eq(invalidAck.ok, false);
+  ok(invalidAck.error.includes('{titel}'));
+
+  const valid = TwitchReplySettings.getDefaults();
+  valid.replies.received.template = '收到 {title}';
+  let validAck = null;
+  handlers['twitch:reply-settings:update'](valid, (result) => { validAck = result; });
+  eq(validAck.ok, true);
+  eq(ctx.playState.twitchReplySettings.replies.received.template, '收到 {title}');
+  eq(service.settings.replies.received.template, '收到 {title}');
+  eq(emitted.at(-1).event, 'twitch:reply-settings:update');
+
+  const remoteHandlers = {};
+  registerTwitchHandlers({ emit: () => {} }, { clientType: 'remote', on: (event, handler) => { remoteHandlers[event] = handler; } }, ctx, { getTwitchService: () => service });
+  ok(!remoteHandlers['twitch:reply-settings:update']);
+});
+
+test('Twitch 回覆設定 UI 有總開關、分項容器、變數驗證與還原入口', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const client = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
+  const state = fs.readFileSync(path.join(__dirname, '../server/state/app-state.js'), 'utf8');
+  ok(html.includes('id="twitch-reply-enabled"') && html.includes('id="twitch-reply-items"'));
+  ok(html.includes('id="twitch-reply-reset"') && html.includes('還原預設值'));
+  ok(html.indexOf('/js/twitch-reply-settings.js') < html.indexOf('/js/app-twitch.js'));
+  ok(client.includes('TwitchReplySettings.validateTemplate') && client.includes("'twitch:reply-settings:update'"));
+  ok(state.includes('twitchReplySettings: playState.twitchReplySettings'), 'Twitch 回覆設定必須寫入 state.json: ');
 });
 
 testAsync('Twitch 聊天回覆遇到 5xx 會退避重試', async () => {

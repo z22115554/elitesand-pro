@@ -125,6 +125,175 @@
 
   const el = (id) => document.getElementById(id);
 
+  // ─── 聊天室自動回覆設定 ───
+  let activeReplyTemplate = null;
+
+  function collectReplySettings() {
+    const settings = {
+      enabled: !!el('twitch-reply-enabled')?.checked,
+      replyMode: el('twitch-reply-mode')?.value || 'reply',
+      replies: {},
+    };
+    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
+      const item = document.querySelector(`[data-twitch-reply-key="${definition.key}"]`);
+      settings.replies[definition.key] = {
+        enabled: !!item?.querySelector('[data-role="enabled"]')?.checked,
+        template: item?.querySelector('[data-role="template"]')?.value || '',
+      };
+    });
+    return settings;
+  }
+
+  function updateReplyItem(item, definition) {
+    const input = item.querySelector('[data-role="template"]');
+    const error = item.querySelector('[data-role="error"]');
+    const count = item.querySelector('[data-role="count"]');
+    const preview = item.querySelector('[data-role="preview"]');
+    const validation = TwitchReplySettings.validateTemplate(input.value);
+    item.classList.toggle('is-invalid', !validation.valid);
+    error.hidden = validation.valid;
+    error.textContent = validation.errors[0] || '';
+    count.textContent = `${Array.from(input.value).length}/${TwitchReplySettings.MAX_MESSAGE_LENGTH}`;
+    if (validation.valid) {
+      preview.textContent = `預覽：${TwitchReplySettings.renderTemplate(input.value, TwitchReplySettings.sampleValues())}`;
+    } else {
+      preview.textContent = `預覽：${definition.defaultTemplate}`;
+    }
+    return validation.valid;
+  }
+
+  function validateReplyForm() {
+    let firstError = '';
+    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
+      const item = document.querySelector(`[data-twitch-reply-key="${definition.key}"]`);
+      if (!item || updateReplyItem(item, definition)) return;
+      if (!firstError) firstError = `${definition.label}：${item.querySelector('[data-role="error"]').textContent}`;
+    });
+    const validation = TwitchReplySettings.validateSettings(collectReplySettings());
+    if (!firstError && !validation.ok) firstError = validation.errors[0]?.message || '回覆設定格式無效。';
+    const formError = el('twitch-reply-form-error');
+    const save = el('twitch-reply-save');
+    if (formError) { formError.textContent = firstError; formError.hidden = !firstError; }
+    if (save) save.disabled = !!firstError;
+    return !firstError;
+  }
+
+  function markReplySettingsChanged() {
+    const status = el('twitch-reply-save-status');
+    if (status) status.textContent = '有尚未儲存的變更';
+    validateReplyForm();
+  }
+
+  function buildReplySettingsForm() {
+    const container = el('twitch-reply-items');
+    const variableButtons = el('twitch-reply-variable-buttons');
+    if (!container || !variableButtons) return;
+
+    variableButtons.innerHTML = '';
+    TwitchReplySettings.VARIABLE_DEFINITIONS.forEach((variable) => {
+      const button = document.createElement('button');
+      button.className = 'btn btn-sm btn-ghost twitch-reply-variable-button';
+      button.type = 'button';
+      button.dataset.variable = variable.key;
+      button.textContent = `{${variable.key}}`;
+      button.title = variable.label;
+      button.addEventListener('click', () => {
+        const input = activeReplyTemplate || container.querySelector('[data-role="template"]');
+        if (!input) return;
+        const token = `{${variable.key}}`;
+        const start = Number.isInteger(input.selectionStart) ? input.selectionStart : input.value.length;
+        const end = Number.isInteger(input.selectionEnd) ? input.selectionEnd : start;
+        input.setRangeText(token, start, end, 'end');
+        input.focus();
+        activeReplyTemplate = input;
+        markReplySettingsChanged();
+      });
+      variableButtons.appendChild(button);
+    });
+
+    container.innerHTML = '';
+    const defaults = TwitchReplySettings.getDefaults();
+    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
+      const item = document.createElement('div');
+      item.className = 'twitch-reply-item';
+      item.dataset.twitchReplyKey = definition.key;
+      item.innerHTML = `
+        <div class="twitch-reply-item-head">
+          <div class="twitch-reply-item-label">${escapeHtml(definition.label)}</div>
+          <label class="switch"><input data-role="enabled" type="checkbox"><span class="track"></span></label>
+        </div>
+        <textarea class="input twitch-reply-template" data-role="template" maxlength="${TwitchReplySettings.MAX_MESSAGE_LENGTH}" aria-label="${escapeHtml(definition.label)}回覆文字"></textarea>
+        <div class="twitch-reply-item-meta"><span class="twitch-reply-preview" data-role="preview"></span><span data-role="count"></span></div>
+        <div class="twitch-reply-item-error" data-role="error" hidden></div>`;
+      const input = item.querySelector('[data-role="template"]');
+      const enabled = item.querySelector('[data-role="enabled"]');
+      input.value = defaults.replies[definition.key].template;
+      enabled.checked = defaults.replies[definition.key].enabled;
+      input.addEventListener('focus', () => { activeReplyTemplate = input; });
+      input.addEventListener('input', markReplySettingsChanged);
+      enabled.addEventListener('change', markReplySettingsChanged);
+      container.appendChild(item);
+      updateReplyItem(item, definition);
+    });
+  }
+
+  function applyReplySettings(settings, { savedMessage = '' } = {}) {
+    const normalized = TwitchReplySettings.normalizeSettings(settings);
+    const master = el('twitch-reply-enabled');
+    const mode = el('twitch-reply-mode');
+    if (master) master.checked = normalized.enabled;
+    if (mode) mode.value = normalized.replyMode;
+    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
+      const item = document.querySelector(`[data-twitch-reply-key="${definition.key}"]`);
+      if (!item) return;
+      item.querySelector('[data-role="enabled"]').checked = normalized.replies[definition.key].enabled;
+      item.querySelector('[data-role="template"]').value = normalized.replies[definition.key].template;
+      updateReplyItem(item, definition);
+    });
+    const status = el('twitch-reply-save-status');
+    if (status) status.textContent = savedMessage;
+    validateReplyForm();
+  }
+
+  function saveReplySettings(settings, successMessage) {
+    const validation = TwitchReplySettings.validateSettings(settings);
+    if (!validation.ok) {
+      validateReplyForm();
+      return;
+    }
+    const save = el('twitch-reply-save');
+    if (save) save.disabled = true;
+    SocketClient.sendWithCallback('twitch:reply-settings:update', validation.settings, (result) => {
+      if (!result?.ok) {
+        if (save) save.disabled = false;
+        showStatus(`回覆設定儲存失敗：${result?.error || '伺服器沒有回應'}`, 'error');
+        return;
+      }
+      applyReplySettings(result.settings || validation.settings, { savedMessage: successMessage });
+      AppShared.showToast(successMessage, 'success');
+    });
+  }
+
+  buildReplySettingsForm();
+  applyReplySettings(TwitchReplySettings.getDefaults());
+  el('twitch-reply-enabled')?.addEventListener('change', markReplySettingsChanged);
+  el('twitch-reply-mode')?.addEventListener('change', markReplySettingsChanged);
+  el('twitch-reply-save')?.addEventListener('click', () => saveReplySettings(collectReplySettings(), '聊天室回覆設定已儲存'));
+  el('twitch-reply-reset')?.addEventListener('click', async () => {
+    const confirmed = await window.PanelConfirm?.request({
+      title: '還原 Twitch 回覆預設值？',
+      summary: '總開關、所有分項開關、回覆方式與自訂文案都會回到預設值。',
+      impact: 'Twitch 授權、待確認點歌與其他設定不受影響。',
+      confirmLabel: '還原預設值',
+    });
+    if (!confirmed) return;
+    const defaults = TwitchReplySettings.getDefaults();
+    applyReplySettings(defaults);
+    saveReplySettings(defaults, '聊天室回覆設定已還原');
+  });
+
+  SocketClient.on('twitch:reply-settings:update', (settings) => applyReplySettings(settings, { savedMessage: '設定已同步' }));
+
   function renderRequests() {
     const card = el('twitch-requests');
     const list = el('twitch-requests-list');
@@ -189,7 +358,12 @@
         placement,
       });
       const report = await new Promise((resolve) => SocketClient.sendWithCallback('twitch:song-request:result', {
-        requestId, success: true, title: track && (track.title || track.name),
+        requestId,
+        success: true,
+        title: track && (track.title || track.name),
+        artist: track && track.artist,
+        position: placement === 'next' ? '下一首' : '歌單尾端',
+        queue: Math.max(1, (AppShared.state.playlist || []).findIndex((item) => item && track && item.id === track.id) + 1),
       }, resolve));
       if (!report?.ok) throw new Error(report?.error || '無法回覆 Twitch 聊天室');
       AppShared.showToast(`${placement === 'next' ? '已插到下一首' : '已加入清單尾端'}：${track && track.title ? track.title : '歌曲'}`, 'success');
