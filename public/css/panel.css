@@ -587,6 +587,29 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-requests-card { border-color: var(--accent); }
 .twitch-requests-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .twitch-request-empty { padding: 32px 16px; color: var(--text-faint); text-align: center; border: 1px dashed var(--border); border-radius: var(--r-md); }
+.twitch-reply-settings { margin-top: 14px; border-top: 1px solid var(--border); }
+.twitch-reply-settings > summary { padding: 12px 0 4px; color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
+.twitch-reply-settings-body { padding-top: 4px; }
+.twitch-reply-mode-field { margin-top: 8px; }
+.twitch-reply-variables { margin-top: 14px; }
+.twitch-reply-variable-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.twitch-reply-variable-button { font-family: var(--font-mono, monospace); }
+.twitch-reply-items { display: grid; gap: 10px; margin-top: 14px; }
+.twitch-reply-item { padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-raised); }
+.twitch-reply-item-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.twitch-reply-item-label { color: var(--text); font-size: 12px; font-weight: 700; }
+.twitch-reply-template { min-height: 66px !important; margin-top: 9px; }
+.twitch-reply-item-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 5px; color: var(--text-faint); font-size: 11px; }
+.twitch-reply-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.twitch-reply-item-error { margin-top: 5px; color: var(--danger); font-size: 11px; }
+.twitch-reply-item.is-invalid { border-color: color-mix(in srgb, var(--danger) 72%, var(--border)); }
+.twitch-reply-form-error { margin-top: 10px; }
+.twitch-reply-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.twitch-reply-actions > .val { margin-right: auto; }
+@media (max-width: 620px) {
+  .twitch-reply-actions { align-items: stretch; flex-direction: column; }
+  .twitch-reply-actions > .val { margin-right: 0; }
+}
 .twitch-req { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-md); }
 .twitch-req-info { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
 .twitch-req-thumbnail { width: 128px; height: 72px; object-fit: cover; border-radius: 8px; flex: none; background: var(--surface-2); }

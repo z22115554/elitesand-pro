@@ -13,6 +13,7 @@ const MAX_PENDING_REQUESTS = 20;
 const fetch = require('node-fetch');
 const store = require('./twitch-store');
 const requestStore = require('./twitch-request-store');
+const TwitchReplySettings = require('../../public/js/twitch-reply-settings');
 const { createLogger } = require('../utils/logger');
 
 const log = createLogger('Twitch');
@@ -71,7 +72,13 @@ class TwitchService {
     this.lastConnectedAt = 0;
     this.lastDisconnectedAt = 0;
     this.closed = false;
+    this.replySettings = TwitchReplySettings.getDefaults();
     this.restorePendingRequests();
+  }
+
+  setReplySettings(settings) {
+    this.replySettings = TwitchReplySettings.normalizeSettings(settings);
+    return this.replySettings;
   }
 
   configured() {
@@ -127,7 +134,9 @@ class TwitchService {
       event: {
         chatter_user_name: String(request.event?.chatter_user_name || ''),
         chatter_user_login: String(request.event?.chatter_user_login || ''),
+        message_id: String(request.event?.message_id || ''),
       },
+      retryableReplySent: !!request.retryableReplySent,
     };
   }
 
@@ -504,12 +513,12 @@ class TwitchService {
     const requestId = event.message_id || fallbackId || crypto.randomUUID();
     const parsedUrl = parseYouTubeUrl(url);
     if (!parsedUrl?.videoId) {
-      await this.sendChatReply(event, '請在 !點歌 後附上 YouTube 連結，例如：!點歌 https://youtu.be/…');
+      await this.sendConfiguredReply(event, 'invalidLink');
       return;
     }
-    if (parsedUrl.playlistId) { await this.sendChatReply(event, '點歌只接受單曲連結，不接受播放清單。'); return; }
-    if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) { await this.sendChatReply(event, '待確認點歌已滿，請稍後再試。'); return; }
-    if ([...this.pendingRequests.values()].some(r => r.videoId === parsedUrl.videoId)) { await this.sendChatReply(event, '這首歌已在待確認清單中，不需重複點歌。'); return; }
+    if (parsedUrl.playlistId) { await this.sendConfiguredReply(event, 'playlistNotAllowed', { url }); return; }
+    if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) { await this.sendConfiguredReply(event, 'queueFull', { url }); return; }
+    if ([...this.pendingRequests.values()].some(r => r.videoId === parsedUrl.videoId)) { await this.sendConfiguredReply(event, 'duplicatePending', { url }); return; }
     const metadata = await this.fetchYouTubeMetadata(url);
     const request = {
       requestId,
@@ -526,7 +535,7 @@ class TwitchService {
     };
     const accepted = this.onSongRequest(request);
     if (!accepted) {
-      await this.sendChatReply(event, '目前控制面板未開啟，暫時無法接收點歌。');
+      await this.sendConfiguredReply(event, 'panelUnavailable', { title: request.title, artist: request.author, url });
       return;
     }
     const createdAt = Date.now();
@@ -534,44 +543,95 @@ class TwitchService {
     this.scheduleRequestExpiry(requestId);
     this.persistPendingRequests();
     // 確認制：不自動下載，先送到主播面板等待確認。
-    await this.sendChatReply(event, '收到你的點歌，已送給主播確認，通過後才會加入歌單。');
+    await this.sendConfiguredReply(event, 'received', { title: request.title, artist: request.author, url });
     this.pruneRequests();
   }
 
-  async completeSongRequest({ requestId, success, title, error, rejected, retryable } = {}) {
+  async completeSongRequest({ requestId, success, title, artist, rejected, retryable, position, queue } = {}) {
     const request = this.pendingRequests.get(requestId);
     if (!request) throw new Error('這筆 Twitch 點歌已不存在或已逾時');
     // 匯入短暫失敗時讓面板保留「再試一次」；不可在此刪除 pending，否則重試成功無法回覆聊天室。
     if (retryable) {
+      if (!request.retryableReplySent) {
+        const reply = await this.sendConfiguredReply(request.event, 'retryableFailure', {
+          title: request.title,
+          artist: request.author,
+          url: request.url,
+          reason: '下載或匯入暫時失敗',
+        });
+        if (reply.sent) request.retryableReplySent = true;
+      }
+      this.persistPendingRequests();
       log.info(`Twitch 點歌匯入失敗，保留供重試：${requestId}`);
       return;
     }
     if (rejected) {
-      await this.sendChatReply(request.event, '主播暫時略過了這首點歌，可以換一首再點點看～');
+      await this.sendConfiguredReply(request.event, 'hostRejected', {
+        title: request.title, artist: request.author, url: request.url, reason: '主播略過了這首歌',
+      });
     } else if (success) {
-      await this.sendChatReply(request.event, `點歌成功：${title || '已加入播放清單'}`);
+      await this.sendConfiguredReply(request.event, 'importSuccess', {
+        title: title || request.title || '已加入播放清單',
+        artist: artist || request.author,
+        url: request.url,
+        position: position || '播放清單',
+        queue: queue || '',
+      });
     } else {
-      await this.sendChatReply(request.event, `點歌失敗：${error || '無法處理這個連結'}`);
+      await this.sendConfiguredReply(request.event, 'importFailure', {
+        title: request.title,
+        artist: request.author,
+        url: request.url,
+        reason: '目前無法處理這個連結',
+      });
     }
     this.pendingRequests.delete(requestId);
     this.clearRequestExpiry(requestId);
     this.persistPendingRequests();
   }
 
-  async sendChatReply(event, text) {
+  async sendConfiguredReply(event, replyKey, values = {}) {
+    const settings = this.replySettings || TwitchReplySettings.getDefaults();
+    const reply = settings.replies && settings.replies[replyKey];
+    if (!settings.enabled || !reply || !reply.enabled) return { sent: false, skipped: true };
+    const text = TwitchReplySettings.renderTemplate(reply.template, {
+      user: event?.chatter_user_name || event?.chatter_user_login || '觀眾',
+      command: this.config.twitchRequestCommand || '!點歌',
+      title: '', artist: '', reason: '', position: '', queue: '', url: '',
+      ...values,
+    });
+    if (!text) return { sent: false, skipped: true };
+    await this.sendChatReply(event, text, { mode: settings.replyMode });
+    return { sent: true, skipped: false };
+  }
+
+  async sendChatReply(event, text, { mode = 'mention' } = {}) {
     if (!await this.ensureToken()) throw new Error('Twitch 授權已失效');
+    const userName = event.chatter_user_name || event.chatter_user_login || '觀眾';
+    const messageId = String(event.message_id || '');
+    const useThreadReply = mode === 'reply' && !!messageId;
+    const message = mode === 'plain' || useThreadReply ? text : `@${userName} ${text}`;
     const options = {
       method: 'POST',
-      body: { broadcaster_id: this.auth.userId, sender_id: this.auth.userId, message: `@${event.chatter_user_name || event.chatter_user_login || '觀眾'} ${text}`.slice(0, 500) },
+      body: {
+        broadcaster_id: this.auth.userId,
+        sender_id: this.auth.userId,
+        message: Array.from(message).slice(0, TwitchReplySettings.MAX_MESSAGE_LENGTH).join(''),
+        ...(useThreadReply ? { reply_parent_message_id: messageId } : {}),
+      },
     };
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const response = await this.helix('/chat/messages', options);
-      if (response.ok) return;
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        const result = Array.isArray(data.data) ? data.data[0] : null;
+        if (!result || result.is_sent === true) return;
+        throw new Error(result.drop_reason?.message || 'Twitch 未送出聊天室回覆');
+      }
       if (response.status === 401 && attempt === 0) {
         await this.refreshToken();
         continue;
       }
-      const data = await response.json().catch(() => ({}));
       const retryable = response.status === 429 || response.status >= 500;
       if (!retryable || attempt === 2) throw new Error(data.message || `Twitch API ${response.status}`);
       const retryAfter = Number(response.headers?.get?.('retry-after'));
@@ -614,7 +674,9 @@ class TwitchService {
     this.clearRequestExpiry(requestId);
     this.persistPendingRequests();
     if (typeof this.onSongRequestExpired === 'function') this.onSongRequestExpired(requestId);
-    await this.sendChatReply(request.event, '這筆點歌等待確認逾時，已自動取消；歡迎重新點歌。');
+    await this.sendConfiguredReply(request.event, 'requestExpired', {
+      title: request.title, artist: request.author, url: request.url,
+    });
   }
 
   stop() {

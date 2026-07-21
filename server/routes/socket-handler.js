@@ -28,6 +28,7 @@ const registerLyricsHandlers = require('./handlers/lyrics');
 const registerPlaylistHandlers = require('./handlers/playlist');
 const registerLibraryHandlers = require('./handlers/library');
 const registerSetlistHandlers = require('./handlers/setlist');
+const registerTwitchHandlers = require('./handlers/twitch');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
 const stateStore = require('../services/state-store');
@@ -202,6 +203,7 @@ module.exports = function socketHandler(io, {
   function syncTwitchRequests(socket) {
     if (socket && socket.clientType === 'controller' && twitchService) {
       socket.emit('twitch:requests', twitchService.getPendingRequests());
+      socket.emit('twitch:reply-settings:update', ctx.playState.twitchReplySettings);
     }
   }
 
@@ -290,20 +292,7 @@ module.exports = function socketHandler(io, {
       registerPlaylistHandlers(io, socket, ctx);
       registerLibraryHandlers(io, socket, ctx);
       registerSetlistHandlers(io, socket, ctx);
-      // 實際下載結果只能從桌面控制面板接受，避免手機遙控器或其他控制端重複回覆 Twitch。
-      socket.on('twitch:song-request:result', async (result, ack) => {
-        if (socket.clientType !== 'controller' || !twitchService) {
-          if (typeof ack === 'function') ack({ ok: false, error: '目前無法處理 Twitch 點歌結果' });
-          return;
-        }
-        try {
-          await twitchService.completeSongRequest(result);
-          if (typeof ack === 'function') ack({ ok: true });
-        } catch (err) {
-          log.error(`回報 Twitch 點歌結果失敗: ${err.message}`);
-          if (typeof ack === 'function') ack({ ok: false, error: '無法回覆 Twitch 聊天室，請稍後重試' });
-        }
-      });
+      registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });
     } else if (socket.clientType === 'setlist' || socket.clientType === 'setlist-preview') {
       socket.on('setlist:get', (_data, ack) => {
         const data = ctx.setlistPayload();
@@ -335,6 +324,7 @@ module.exports = function socketHandler(io, {
     expireTwitchSongRequest,
     setTwitchService(service) {
       twitchService = service;
+      if (service && typeof service.setReplySettings === 'function') service.setReplySettings(ctx.playState.twitchReplySettings);
       if (service && typeof service.status === 'function') runtimeEvidence.recordTwitchStatus(service.status());
     },
     recordTwitchStatus(status) {
