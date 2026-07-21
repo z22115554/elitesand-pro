@@ -479,9 +479,14 @@ function createElectronShell({
     app.on('second-instance', focusWindow);
     app.on('before-quit', (event) => {
       stopPowerSaveBlocker();
-      if (isQuitting || !ownsServer || !serverProcess?.pid) return;
-      event.preventDefault();
+      if (isQuitting) return;
+      // 一旦決定結束就立刻標記，讓稍後 Electron 關窗序列裡的 window 'close'
+      // 事件（hideWindowToTray）直接放行，而不是又 preventDefault 把整個 app.quit
+      // 卡住。這對「重用既有 server（ownsServer=false）」尤其關鍵：那條路徑本來不會
+      // 設 isQuitting，於是系統匣「結束」與確認關閉都會被關窗攔截而永遠關不掉。
       isQuitting = true;
+      if (!ownsServer || !serverProcess?.pid) return;
+      event.preventDefault();
       shutdownOwnedServer().finally(() => app.exit(0));
     });
     await app.whenReady();
