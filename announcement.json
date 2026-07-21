@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "announcements": [
     {
-      "id": "v0.8.1-pre.2-github-update",
+      "id": "v0.9.0-github-update",
       "level": "warning",
-      "title": "請更新至 v0.8.1-pre.2（重要修正）",
-      "message": "v0.8.1-pre.2 修正了桌面安裝版可能無法正常關閉程式（含按系統匣「結束」也關不掉、視窗控制按鈕消失）的問題，建議所有使用者更新。請前往官方 GitHub Releases 下載完整安裝檔並覆蓋安裝，資料與播放清單會保留。此版本更新範圍涵蓋桌面殼與相依套件，無法使用增量更新，請務必下載完整安裝檔。本程式尚未取得 Windows 程式碼簽章；首次執行若出現 SmartScreen，請確認下載來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
+      "title": "請更新至 v0.9.0（穩定版）",
+      "message": "v0.9.0 是新的穩定版本，整合了桌面版（系統匣、關窗不中斷音訊）、統一音量響度正規化，以及大幅擴充的 Twitch 點歌（自訂規則與資格、忠誠點數點歌與自動退款、逐項自訂回覆），並含多項安全與穩定性修復。請前往官方 GitHub Releases 下載完整安裝檔或可攜版覆蓋更新，資料與播放清單會保留。此版本含相依套件升級，無法使用增量更新，請務必下載完整版。本程式尚未取得 Windows 程式碼簽章；首次執行若出現 SmartScreen，請確認下載來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
       "minVersion": "0.7.0",
-      "maxVersion": "0.8.1-pre.1",
-      "publishedAt": "2026-07-21T00:00:00+08:00",
-      "expiresAt": "2026-09-30T23:59:59+08:00",
+      "maxVersion": "0.8.1-pre.2",
+      "publishedAt": "2026-07-22T00:00:00+08:00",
+      "expiresAt": "2026-10-31T23:59:59+08:00",
       "dismissible": false,
       "showOnce": false,
-      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.8.1-pre.2",
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.0",
       "buttonText": "前往 GitHub Releases 更新",
       "enabled": true
     }
