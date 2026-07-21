@@ -605,6 +605,21 @@ class TwitchService {
     return { sent: true, skipped: false };
   }
 
+  async sendReplyTest(settings, replyKey) {
+    const validation = TwitchReplySettings.validateSettings(settings);
+    if (!validation.ok) throw new Error(validation.errors[0]?.message || 'Twitch 回覆設定格式無效');
+    const definition = TwitchReplySettings.REPLY_DEFINITIONS.find((item) => item.key === replyKey);
+    if (!definition) throw new Error('找不到要測試的 Twitch 回覆項目');
+    const reply = validation.settings.replies[replyKey];
+    const text = TwitchReplySettings.renderTemplate(reply.template, {
+      ...TwitchReplySettings.sampleValues(),
+      command: this.config.twitchRequestCommand || '!點歌',
+    });
+    const message = `【回覆測試】${text}`;
+    await this.sendChatReply({}, message, { mode: 'plain' });
+    return { replyKey, text: message };
+  }
+
   async sendChatReply(event, text, { mode = 'mention' } = {}) {
     if (!await this.ensureToken()) throw new Error('Twitch 授權已失效');
     const userName = event.chatter_user_name || event.chatter_user_login || '觀眾';

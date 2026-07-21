@@ -128,6 +128,18 @@
   // ─── 聊天室自動回覆設定 ───
   let activeReplyTemplate = null;
 
+  function updateReplyTestPreview() {
+    const select = el('twitch-reply-test-event');
+    const preview = el('twitch-reply-test-preview');
+    if (!select || !preview) return;
+    const item = document.querySelector(`[data-twitch-reply-key="${select.value}"]`);
+    const template = item?.querySelector('[data-role="template"]')?.value || '';
+    const validation = TwitchReplySettings.validateTemplate(template);
+    preview.textContent = validation.valid
+      ? `將送出：【回覆測試】${TwitchReplySettings.renderTemplate(template, TwitchReplySettings.sampleValues())}`
+      : '請先修正文案中的錯誤。';
+  }
+
   function collectReplySettings() {
     const settings = {
       enabled: !!el('twitch-reply-enabled')?.checked,
@@ -182,12 +194,22 @@
     const status = el('twitch-reply-save-status');
     if (status) status.textContent = '有尚未儲存的變更';
     validateReplyForm();
+    updateReplyTestPreview();
   }
 
   function buildReplySettingsForm() {
     const container = el('twitch-reply-items');
     const variableButtons = el('twitch-reply-variable-buttons');
-    if (!container || !variableButtons) return;
+    const testEvent = el('twitch-reply-test-event');
+    if (!container || !variableButtons || !testEvent) return;
+
+    testEvent.innerHTML = '';
+    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
+      const option = document.createElement('option');
+      option.value = definition.key;
+      option.textContent = definition.label;
+      testEvent.appendChild(option);
+    });
 
     variableButtons.innerHTML = '';
     TwitchReplySettings.VARIABLE_DEFINITIONS.forEach((variable) => {
@@ -235,6 +257,7 @@
       container.appendChild(item);
       updateReplyItem(item, definition);
     });
+    updateReplyTestPreview();
   }
 
   function applyReplySettings(settings, { savedMessage = '' } = {}) {
@@ -253,6 +276,37 @@
     const status = el('twitch-reply-save-status');
     if (status) status.textContent = savedMessage;
     validateReplyForm();
+    updateReplyTestPreview();
+  }
+
+  async function sendReplyTest() {
+    if (!validateReplyForm()) return;
+    const replyKey = el('twitch-reply-test-event')?.value || '';
+    const definition = TwitchReplySettings.REPLY_DEFINITIONS.find((item) => item.key === replyKey);
+    if (!definition) return;
+    const confirmed = await window.PanelConfirm?.request({
+      title: '送出 Twitch 測試訊息？',
+      summary: `將把「${definition.label}」的範例回覆公開送到目前連接的 Twitch 聊天室。`,
+      impact: '不會建立點歌或儲存設定；聊天室中的觀眾會看得到這則測試訊息。',
+      confirmLabel: '送出測試訊息',
+    });
+    if (!confirmed) return;
+    const button = el('twitch-reply-test-send');
+    const status = el('twitch-reply-test-status');
+    if (button) button.disabled = true;
+    if (status) { status.textContent = '正在送出測試訊息…'; status.classList.remove('val--danger'); }
+    SocketClient.sendWithCallback('twitch:reply-settings:test', {
+      settings: collectReplySettings(),
+      replyKey,
+    }, (result) => {
+      if (button) button.disabled = false;
+      if (!result?.ok) {
+        if (status) { status.textContent = `測試未送出：${result?.error || '伺服器沒有回應'}`; status.classList.add('val--danger'); }
+        return;
+      }
+      if (status) { status.textContent = `已送出：${result.text}`; status.classList.remove('val--danger'); }
+      AppShared.showToast('Twitch 測試訊息已送出', 'success');
+    });
   }
 
   function saveReplySettings(settings, successMessage) {
@@ -278,6 +332,8 @@
   applyReplySettings(TwitchReplySettings.getDefaults());
   el('twitch-reply-enabled')?.addEventListener('change', markReplySettingsChanged);
   el('twitch-reply-mode')?.addEventListener('change', markReplySettingsChanged);
+  el('twitch-reply-test-event')?.addEventListener('change', updateReplyTestPreview);
+  el('twitch-reply-test-send')?.addEventListener('click', sendReplyTest);
   el('twitch-reply-save')?.addEventListener('click', () => saveReplySettings(collectReplySettings(), '聊天室回覆設定已儲存'));
   el('twitch-reply-reset')?.addEventListener('click', async () => {
     const confirmed = await window.PanelConfirm?.request({
