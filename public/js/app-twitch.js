@@ -1,284 +1,50 @@
 /**
  * Twitch 點歌控制面板 bridge。
- * Twitch service 只負責收聊天室事件；實際匯入永遠回到既有 queueYouTubeImport，
- * 因此一次只跑一個 yt-dlp/ffmpeg 工作。下載結果再回傳 server，由 server 回覆聊天室。
+ * Twitch service 只負責收聊天室事件；實際匯入永遠回到既有 queueYouTubeImport。
  */
 (function () {
   'use strict';
 
+  const { escapeHtml } = SharedUtils;
+  const el = (id) => document.getElementById(id);
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+  const pending = new Map();
+  const busy = new Map();
+  const dirty = { commands: false, rules: false, reward: false, replies: false };
+  let requestSaved = TwitchRequestSettings.getDefaults();
+  let requestDraft = clone(requestSaved);
+  let rewardSaved = TwitchRewardSettings.getDefaults();
+  let rewardDraft = clone(rewardSaved);
+  let replySaved = TwitchReplySettings.getDefaults();
+  let replyDraft = clone(replySaved);
+  let activeCommandKey = 'request';
+  let activeReplyKey = 'received';
+  let focusBeforeManagement = null;
+  let lastRuntimeStatus = null;
+
   function showStatus(message, type) {
-    const el = document.getElementById('twitch-status');
-    if (el) el.textContent = message;
+    const status = el('twitch-status');
+    if (status) status.textContent = message;
     if (typeof AppShared.showToast === 'function' && type) AppShared.showToast(message, type);
   }
 
-  async function refreshStatus() {
-    const el = document.getElementById('twitch-status');
-    const button = document.getElementById('twitch-connect');
-    const deviceLink = document.getElementById('twitch-device-link');
-    const deauthorize = document.getElementById('twitch-deauthorize');
-    try {
-      const response = await PinAuth.fetchWithPin('/api/twitch/status');
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || '無法讀取 Twitch 狀態');
-      applyRewardRuntimeStatus(data);
-      if (!data.configured) {
-        if (el) el.textContent = 'Twitch 尚未啟用，請聯絡 Elitesand Pro 開發者。';
-        if (button) button.disabled = true;
-        if (deauthorize) deauthorize.hidden = true;
-        return;
-      }
-      if (button) button.disabled = false;
-      if (deauthorize) {
-        deauthorize.hidden = !data.authorized && !data.deviceAuthorization;
-        deauthorize.textContent = data.authorized ? '解除 Twitch 授權' : '取消 Twitch 連接流程';
-      }
-      if (data.deviceAuthorization) {
-        if (el) el.textContent = `請到 Twitch 輸入代碼：${data.deviceAuthorization.userCode}`;
-        if (deviceLink) { deviceLink.href = data.deviceAuthorization.verificationUri; deviceLink.hidden = false; }
-        return;
-      }
-      if (deviceLink) deviceLink.hidden = true;
-      if (!data.authorized) {
-        if (el) el.textContent = '尚未連接 Twitch。按「連接 Twitch」後登入並授權聊天室讀寫。';
-      } else if (data.connected) {
-        if (data.subscriptionState === 'error') {
-          if (el) el.textContent = `Twitch 已連線，但事件訂閱失敗：${data.lastConnectionError || '稍後會重新確認連線'}`;
-        } else if (data.subscriptionState === 'subscribing') {
-          if (el) el.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}，正在訂閱開台、下播與聊天室事件…`;
-        } else if (el) {
-          const pendingText = data.pendingRequestCount ? `；${data.pendingRequestCount} 筆點歌待確認` : '';
-          el.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}：正在監聽開台、下播與 ${data.command}${pendingText}。`;
-        }
-      } else if (data.connectionState === 'reconnecting' && el) {
-        const seconds = data.nextRetryAt ? Math.max(1, Math.ceil((data.nextRetryAt - Date.now()) / 1000)) : null;
-        el.textContent = `Twitch 連線中斷，${seconds ? `${seconds} 秒後` : '稍後'}自動重連（第 ${data.reconnectAttempt || 1} 次）${data.lastConnectionError ? `：${data.lastConnectionError}` : ''}`;
-      } else if (el) {
-        el.textContent = `已授權 ${data.broadcasterLogin || 'Twitch'}，正在連接 EventSub…`;
-      }
-    } catch (err) {
-      if (el) el.textContent = `Twitch 狀態讀取失敗：${err.message}`;
-    }
+  function setStatusChip(id, text, state = 'muted') {
+    const chip = el(id);
+    if (!chip) return;
+    chip.textContent = text;
+    chip.dataset.state = state;
   }
 
-  const connect = document.getElementById('twitch-connect');
-  if (connect) {
-    connect.addEventListener('click', async () => {
-      // 必須在使用者點擊的同步時機開窗，才不會被瀏覽器當成 popup 擋掉。
-      const authWindow = window.open('', 'elitesand-twitch-login');
-      try {
-        connect.disabled = true;
-        const response = await PinAuth.fetchWithPin('/api/twitch/authorize');
-        const data = await response.json();
-        if (!response.ok || !data.verificationUri || !data.userCode) throw new Error(data.error || '無法開始 Twitch 授權');
-        const deviceLink = document.getElementById('twitch-device-link');
-        if (deviceLink) { deviceLink.href = data.verificationUri; deviceLink.hidden = false; }
-        if (authWindow) {
-          authWindow.location.replace(data.verificationUri);
-          showStatus('已開啟 Twitch 登入與授權頁，請依 Twitch 指示完成授權。', 'info');
-        } else {
-          showStatus(`請按「前往 Twitch 輸入代碼」，輸入：${data.userCode}`, 'info');
-        }
-      } catch (err) {
-        if (authWindow && !authWindow.closed) authWindow.close();
-        connect.disabled = false;
-        showStatus(`無法開始 Twitch 授權：${err.message}`, 'error');
-      }
-    });
-  }
-
-  // ─── 聊天室點歌：確認制（不自動下載）───
-  // 觀眾送來的點歌只進「待確認」清單，由主播在首頁按「確認下載」才真的走匯入佇列，
-  // 避免觀眾亂點就自動下載洗版。拒絕則回覆聊天室、不下載。
-  const deauthorize = document.getElementById('twitch-deauthorize');
-  if (deauthorize) {
-    deauthorize.addEventListener('click', async () => {
-      const isAuthorized = deauthorize.textContent.includes('解除');
-      const confirmed = await window.DangerConfirm?.request({
-        title: isAuthorized ? '確認解除 Twitch 授權' : '確認取消 Twitch 連接流程',
-        summary: isAuthorized ? '這會停止 Twitch EventSub 與聊天室點歌，並移除本機保存的 Twitch 權杖。' : '這會取消目前等待中的 Twitch Device Code 授權流程。',
-        impact: '已收到、尚待你確認的 Twitch 點歌會保留在點歌確認頁；歌曲、歌單與其他設定都不會刪除。之後可隨時重新連接 Twitch。',
-        phrase: isAuthorized ? '解除 Twitch 授權' : '取消 Twitch 連接',
-        confirmLabel: isAuthorized ? '解除授權' : '取消流程',
-      });
-      if (!confirmed) return;
-      try {
-        deauthorize.disabled = true;
-        const response = await PinAuth.fetchWithPin('/api/twitch/deauthorize', { method: 'POST' });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || '解除 Twitch 授權失敗');
-        if (data.remoteRevoked) showStatus('Twitch 授權已解除，本機權杖與遠端授權都已移除。', 'success');
-        else if (data.remoteAlreadyInvalid) showStatus('本機 Twitch 授權已移除；Twitch 回報此權杖原本已失效。', 'success');
-        else if (data.remoteError) showStatus(`本機 Twitch 授權已移除，但暫時無法通知 Twitch：${data.remoteError}`, 'warning');
-        else showStatus('Twitch 連接流程已取消。', 'success');
-        await refreshStatus();
-      } catch (err) {
-        showStatus(`解除 Twitch 授權失敗：${err.message}`, 'error');
-      } finally {
-        deauthorize.disabled = false;
-      }
-    });
-  }
-
-  const { escapeHtml } = SharedUtils;
-  const pending = new Map();  // requestId -> request
-  const busy = new Map();     // requestId -> placement（避免重複點，並顯示下載目的）
-
-  const el = (id) => document.getElementById(id);
-
-  // ─── 點歌指令與規則設定 ───
-  const requestNumber = (id) => Number(el(id)?.value);
-
-  function collectRequestSettings() {
-    return {
-      enabled: !!el('twitch-request-enabled')?.checked,
-      command: el('twitch-request-command')?.value || '',
-      aliases: TwitchRequestSettings.parseAliases(el('twitch-request-aliases')?.value || ''),
-      permissionLevel: el('twitch-request-permission')?.value || 'everyone',
-      cooldownSeconds: requestNumber('twitch-request-cooldown'),
-      maxPending: requestNumber('twitch-request-max-pending'),
-      perUserPending: requestNumber('twitch-request-per-user'),
-      rejectDuplicates: !!el('twitch-request-reject-duplicates')?.checked,
-      maxDurationMinutes: requestNumber('twitch-request-max-duration'),
-    };
-  }
-
-  function replySampleValues() {
-    const values = TwitchReplySettings.sampleValues();
-    values.command = el('twitch-request-command')?.value.trim() || TwitchRequestSettings.getDefaults().command;
-    return values;
-  }
-
-  function updateRequestRulePreview(settings = collectRequestSettings()) {
-    const preview = el('twitch-request-rule-preview');
-    if (!preview) return;
-    const permission = TwitchRequestSettings.PERMISSION_LEVELS.find((item) => item.key === settings.permissionLevel)?.label || '所有觀眾';
-    const commands = [settings.command || '—', ...TwitchRequestSettings.parseAliases(settings.aliases)].join('、');
-    const rules = [
-      settings.enabled ? '接受點歌' : '暫停點歌',
-      permission,
-      settings.cooldownSeconds > 0 ? `每人 ${settings.cooldownSeconds} 秒冷卻` : '無冷卻',
-      `總共最多 ${settings.maxPending || '—'} 首待確認`,
-      settings.perUserPending > 0 ? `每人最多 ${settings.perUserPending} 首待確認` : '每人不限首數',
-      settings.maxDurationMinutes > 0 ? `最長 ${settings.maxDurationMinutes} 分鐘` : '不限制歌曲長度',
-      settings.rejectDuplicates ? '拒絕重複影片' : '允許重複影片',
-    ];
-    preview.textContent = `${commands}｜${rules.join('；')}`;
-  }
-
-  function validateRequestForm() {
-    const validation = TwitchRequestSettings.validateSettings(collectRequestSettings());
-    const error = validation.errors[0]?.message || '';
-    const formError = el('twitch-request-form-error');
-    const save = el('twitch-request-save');
-    if (formError) { formError.textContent = error; formError.hidden = !error; }
-    if (save) save.disabled = !!error;
-    updateRequestRulePreview(validation.ok ? validation.settings : collectRequestSettings());
-    return validation;
-  }
-
-  function markRequestSettingsChanged() {
-    const status = el('twitch-request-save-status');
-    if (status) status.textContent = '尚未儲存';
-    validateRequestForm();
-    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
-      const item = document.querySelector(`[data-twitch-reply-key="${definition.key}"]`);
-      if (item) updateReplyItem(item, definition);
-    });
-    updateReplyTestPreview();
-  }
-
-  function applyRequestSettings(settings, { savedMessage = '' } = {}) {
-    const normalized = TwitchRequestSettings.normalizeSettings(settings);
-    el('twitch-request-enabled').checked = normalized.enabled;
-    el('twitch-request-command').value = normalized.command;
-    el('twitch-request-aliases').value = normalized.aliases.join(', ');
-    el('twitch-request-permission').value = normalized.permissionLevel;
-    el('twitch-request-cooldown').value = String(normalized.cooldownSeconds);
-    el('twitch-request-max-pending').value = String(normalized.maxPending);
-    el('twitch-request-per-user').value = String(normalized.perUserPending);
-    el('twitch-request-reject-duplicates').checked = normalized.rejectDuplicates;
-    el('twitch-request-max-duration').value = String(normalized.maxDurationMinutes);
-    const status = el('twitch-request-save-status');
-    if (status) status.textContent = savedMessage;
-    validateRequestForm();
-    updateReplyTestPreview();
-  }
-
-  function buildRequestSettingsForm() {
-    const permission = el('twitch-request-permission');
-    if (!permission) return;
-    permission.innerHTML = '';
-    TwitchRequestSettings.PERMISSION_LEVELS.forEach((level) => {
-      const option = document.createElement('option');
-      option.value = level.key;
-      option.textContent = level.label;
-      permission.appendChild(option);
-    });
-    applyRequestSettings(TwitchRequestSettings.getDefaults());
-  }
-
-  function saveRequestSettings(settings, successMessage) {
-    const validation = TwitchRequestSettings.validateSettings(settings);
-    if (!validation.ok) { validateRequestForm(); return; }
-    const save = el('twitch-request-save');
-    if (save) save.disabled = true;
-    SocketClient.sendWithCallback('twitch:request-settings:update', validation.settings, (result) => {
-      if (!result?.ok) {
-        if (save) save.disabled = false;
-        showStatus(`點歌規則儲存失敗：${result?.error || '伺服器沒有回應'}`, 'error');
-        return;
-      }
-      applyRequestSettings(result.settings || validation.settings, { savedMessage: successMessage });
-      AppShared.showToast(successMessage, 'success');
-    });
-  }
-
-  // ─── 忠誠點數專用獎勵 ───
-  let currentRewardSettings = TwitchRewardSettings.getDefaults();
-
-  function collectRewardSettings() {
-    return {
-      enabled: !!el('twitch-reward-enabled')?.checked,
-      rewardId: currentRewardSettings.rewardId || '',
-      title: el('twitch-reward-title')?.value || '',
-      prompt: el('twitch-reward-prompt')?.value || '',
-      cost: Number(el('twitch-reward-cost')?.value),
-    };
-  }
-
-  function updateRewardPreview(settings = collectRewardSettings()) {
-    const preview = el('twitch-reward-preview');
-    if (!preview) return;
-    preview.textContent = `${settings.enabled ? '啟用' : '停用'}｜${settings.title || '—'}｜${Number.isSafeInteger(settings.cost) ? settings.cost.toLocaleString() : '—'} 點｜${settings.prompt || '—'}`;
-  }
-
-  function validateRewardForm() {
-    const validation = TwitchRewardSettings.validateSettings(collectRewardSettings());
-    const message = validation.errors[0]?.message || '';
-    const error = el('twitch-reward-form-error');
-    const save = el('twitch-reward-save');
-    if (error) { error.textContent = message; error.hidden = !message; }
-    if (save) save.disabled = !!message;
-    updateRewardPreview(validation.ok ? validation.settings : collectRewardSettings());
-    return validation;
-  }
-
-  function markRewardSettingsChanged() {
-    const status = el('twitch-reward-save-status');
-    if (status) status.textContent = '尚未同步';
-    validateRewardForm();
-  }
-
-  function applyRewardSettings(settings, { savedMessage = '' } = {}) {
-    currentRewardSettings = TwitchRewardSettings.normalizeSettings(settings);
-    el('twitch-reward-enabled').checked = currentRewardSettings.enabled;
-    el('twitch-reward-title').value = currentRewardSettings.title;
-    el('twitch-reward-prompt').value = currentRewardSettings.prompt;
-    el('twitch-reward-cost').value = String(currentRewardSettings.cost);
-    const status = el('twitch-reward-save-status');
-    if (status) status.textContent = savedMessage;
-    validateRewardForm();
+  function updateMainStatus() {
+    const runtime = lastRuntimeStatus || {};
+    const connected = !!runtime.connected;
+    const authorized = !!runtime.authorized;
+    setStatusChip('twitch-status-connection', connected ? `已連接 ${runtime.broadcasterLogin || 'Twitch'}` : (authorized ? 'Twitch 連線中' : 'Twitch 未連接'), connected ? 'on' : (authorized ? 'warn' : 'off'));
+    setStatusChip('twitch-status-request', requestSaved.enabled ? '點歌已開放' : '點歌已暫停', requestSaved.enabled ? 'on' : 'off');
+    setStatusChip('twitch-status-reward', rewardSaved.enabled ? '忠誠點數已啟用' : '忠誠點數已停用', rewardSaved.enabled ? 'on' : 'muted');
+    setStatusChip('twitch-status-replies', replySaved.enabled ? '自動回覆已啟用' : '自動回覆已停用', replySaved.enabled ? 'on' : 'muted');
+    const quick = el('twitch-request-quick-toggle');
+    if (quick) quick.textContent = requestSaved.enabled ? '暫停點歌' : '開放點歌';
   }
 
   function applyRewardRuntimeStatus(status) {
@@ -296,6 +62,388 @@
     else label.textContent = '尚未建立專用獎勵；開啟後按「儲存並同步 Twitch」。';
   }
 
+  async function refreshStatus() {
+    const statusText = el('twitch-status');
+    const connect = el('twitch-connect');
+    const deviceLink = el('twitch-device-link');
+    const deauthorize = el('twitch-deauthorize');
+    try {
+      const response = await PinAuth.fetchWithPin('/api/twitch/status');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '無法讀取 Twitch 狀態');
+      lastRuntimeStatus = data;
+      applyRewardRuntimeStatus(data);
+      updateMainStatus();
+      if (!data.configured) {
+        if (statusText) statusText.textContent = 'Twitch 尚未啟用，請聯絡 Elitesand Pro 開發者。';
+        if (connect) connect.disabled = true;
+        if (deauthorize) deauthorize.hidden = true;
+        return;
+      }
+      if (connect) connect.disabled = false;
+      if (deauthorize) {
+        deauthorize.hidden = !data.authorized && !data.deviceAuthorization;
+        deauthorize.textContent = data.authorized ? '解除 Twitch 授權' : '取消 Twitch 連接流程';
+      }
+      if (data.deviceAuthorization) {
+        if (statusText) statusText.textContent = `請到 Twitch 輸入代碼：${data.deviceAuthorization.userCode}`;
+        if (deviceLink) { deviceLink.href = data.deviceAuthorization.verificationUri; deviceLink.hidden = false; }
+        return;
+      }
+      if (deviceLink) deviceLink.hidden = true;
+      if (!data.authorized) {
+        if (statusText) statusText.textContent = '尚未連接 Twitch。按「連接 Twitch」後登入並授權聊天室讀寫。';
+      } else if (data.connected) {
+        if (data.subscriptionState === 'error') {
+          if (statusText) statusText.textContent = `Twitch 已連線，但事件訂閱失敗：${data.lastConnectionError || '稍後會重新確認連線'}`;
+        } else if (data.subscriptionState === 'subscribing') {
+          if (statusText) statusText.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}，正在訂閱開台、下播與聊天室事件…`;
+        } else if (statusText) {
+          const pendingText = data.pendingRequestCount ? `；${data.pendingRequestCount} 筆點歌待確認` : '';
+          statusText.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}：正在監聽 ${data.command}${pendingText}。`;
+        }
+      } else if (data.connectionState === 'reconnecting' && statusText) {
+        const seconds = data.nextRetryAt ? Math.max(1, Math.ceil((data.nextRetryAt - Date.now()) / 1000)) : null;
+        statusText.textContent = `Twitch 連線中斷，${seconds ? `${seconds} 秒後` : '稍後'}自動重連（第 ${data.reconnectAttempt || 1} 次）${data.lastConnectionError ? `：${data.lastConnectionError}` : ''}`;
+      } else if (statusText) {
+        statusText.textContent = `已授權 ${data.broadcasterLogin || 'Twitch'}，正在連接 EventSub…`;
+      }
+    } catch (err) {
+      if (statusText) statusText.textContent = `Twitch 狀態讀取失敗：${err.message}`;
+      setStatusChip('twitch-status-connection', 'Twitch 狀態讀取失敗', 'off');
+    }
+  }
+
+  function setDirty(category, value) {
+    dirty[category] = !!value;
+    const nav = document.querySelector(`[data-twitch-pane="${category}"]`);
+    const dot = nav?.querySelector('.twitch-dirty-dot');
+    if (dot) dot.hidden = !dirty[category];
+    const count = Object.values(dirty).filter(Boolean).length;
+    const summary = el('twitch-management-dirty-summary');
+    if (summary) summary.textContent = count ? `${count} 個分類有尚未儲存的變更` : '所有設定都已儲存';
+  }
+
+  function switchManagementPane(pane) {
+    document.querySelectorAll('.twitch-management-nav-item').forEach((button) => {
+      const active = button.dataset.twitchPane === pane;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-twitch-pane-content]').forEach((section) => {
+      const active = section.dataset.twitchPaneContent === pane;
+      section.hidden = !active;
+      section.classList.toggle('is-active', active);
+    });
+  }
+
+  function resetDraftsToSaved() {
+    requestDraft = clone(requestSaved);
+    rewardDraft = clone(rewardSaved);
+    replyDraft = clone(replySaved);
+    Object.keys(dirty).forEach((category) => setDirty(category, false));
+    renderCommandList();
+    loadCommandEditor();
+    applyRuleFields();
+    applyRewardFields();
+    renderReplyEvents();
+    loadReplyEditor();
+  }
+
+  async function closeManagement({ force = false } = {}) {
+    const modal = el('twitch-management-modal');
+    if (!modal || modal.hidden) return;
+    if (!force && Object.values(dirty).some(Boolean)) {
+      const confirmed = await window.PanelConfirm?.request({
+        title: '放棄尚未儲存的 Twitch 設定？',
+        summary: '管理視窗中仍有變更尚未送到伺服器。',
+        impact: '選擇放棄後會還原成上次已儲存的設定；待確認點歌不受影響。',
+        confirmLabel: '放棄變更',
+      });
+      if (!confirmed) return;
+      resetDraftsToSaved();
+    }
+    modal.hidden = true;
+    const search = el('twitch-settings-search');
+    if (search) search.value = '';
+    hideSearchResults();
+    (focusBeforeManagement && focusBeforeManagement.isConnected ? focusBeforeManagement : el('twitch-management-open'))?.focus();
+  }
+
+  function openManagement(pane = 'commands') {
+    const modal = el('twitch-management-modal');
+    if (!modal) return;
+    focusBeforeManagement = document.activeElement;
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
+    switchManagementPane(pane);
+    modal.hidden = false;
+    window.setTimeout(() => (el('twitch-settings-search') || el('twitch-management-title'))?.focus(), 0);
+  }
+
+  function hideSearchResults() {
+    const results = el('twitch-settings-search-results');
+    if (results) { results.hidden = true; results.innerHTML = ''; }
+  }
+
+  const searchEntries = [
+    { label: '每人冷卻／全域冷卻', category: '指令', terms: '冷卻 cooldown 每人 全域', pane: 'commands', commandKey: 'request', focusId: 'twitch-command-user-cooldown' },
+    { label: '目前歌曲指令', category: '指令', terms: '目前歌曲 current song', pane: 'commands', commandKey: 'currentSong', focusId: 'twitch-command-name' },
+    { label: '取消點歌指令', category: '指令', terms: '取消 點歌 退款', pane: 'commands', commandKey: 'cancelRequest', focusId: 'twitch-command-name' },
+    { label: '待確認總上限', category: '接受規則', terms: '上限 數量 待確認', pane: 'rules', focusId: 'twitch-request-max-pending' },
+    { label: '黑名單', category: '黑名單 · T2', terms: '黑名單 封鎖 使用者 影片 頻道 關鍵字', pane: 'blacklist' },
+    { label: '忠誠點數退款', category: '忠誠點數', terms: '退款 忠誠點數 reward redemption', pane: 'reward', focusId: 'twitch-reward-enabled' },
+    { label: '忠誠點數退款回覆', category: '聊天室回覆', terms: '退款 回覆 文案 cost', pane: 'replies', replyKey: 'rewardRefunded', focusId: 'twitch-reply-template' },
+    { label: '自動回覆總開關', category: '聊天室回覆', terms: '回覆 開關 reply', pane: 'replies', focusId: 'twitch-reply-enabled' },
+    { label: '公開 Twitch 測試', category: '測試與預覽', terms: '測試 預覽 公開 twitch', pane: 'test', focusId: 'twitch-reply-test-event' },
+  ];
+
+  function focusSearchEntry(entry) {
+    if (entry.commandKey) { activeCommandKey = entry.commandKey; renderCommandList(); loadCommandEditor(); }
+    if (entry.replyKey) { activeReplyKey = entry.replyKey; renderReplyEvents(); loadReplyEditor(); }
+    switchManagementPane(entry.pane);
+    hideSearchResults();
+    el('twitch-settings-search-status').textContent = `已前往「${entry.category}」的「${entry.label}」。`;
+    window.setTimeout(() => el(entry.focusId)?.focus(), 0);
+  }
+
+  function updateSettingsSearch() {
+    const input = el('twitch-settings-search');
+    const results = el('twitch-settings-search-results');
+    const status = el('twitch-settings-search-status');
+    if (!input || !results || !status) return;
+    const query = input.value.trim().toLocaleLowerCase();
+    if (!query) {
+      hideSearchResults();
+      status.textContent = '輸入設定名稱後可直接跳到對應分類。';
+      return;
+    }
+    const matched = searchEntries.filter((entry) => `${entry.label} ${entry.category} ${entry.terms}`.toLocaleLowerCase().includes(query));
+    results.innerHTML = '';
+    matched.forEach((entry) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'twitch-search-result';
+      button.setAttribute('role', 'option');
+      button.innerHTML = `${escapeHtml(entry.label)}<span>${escapeHtml(entry.category)}</span>`;
+      button.addEventListener('click', () => focusSearchEntry(entry));
+      results.appendChild(button);
+    });
+    results.hidden = matched.length === 0;
+    status.textContent = matched.length ? `找到 ${matched.length} 個設定。` : '找不到相符設定；可試試「冷卻」、「退款」、「黑名單」或「目前歌曲」。';
+  }
+
+  function initManagementModal() {
+    const modal = el('twitch-management-modal');
+    if (!modal) return;
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
+    el('twitch-management-open')?.addEventListener('click', () => openManagement('commands'));
+    el('twitch-history-open')?.addEventListener('click', () => openManagement('history'));
+    el('twitch-management-close')?.addEventListener('click', () => closeManagement());
+    document.querySelectorAll('.twitch-management-nav-item').forEach((button) => button.addEventListener('click', () => switchManagementPane(button.dataset.twitchPane)));
+    el('twitch-settings-search')?.addEventListener('input', updateSettingsSearch);
+    modal.addEventListener('click', (event) => { if (event.target === modal) closeManagement(); });
+    modal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeManagement(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        .filter((node) => !node.hidden && !node.closest('[hidden]'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+  }
+
+  function commandDefinition(key = activeCommandKey) {
+    return TwitchRequestSettings.COMMAND_DEFINITIONS.find((definition) => definition.key === key);
+  }
+
+  function renderCommandList() {
+    const container = el('twitch-command-list');
+    if (!container) return;
+    container.innerHTML = '';
+    TwitchRequestSettings.COMMAND_DEFINITIONS.forEach((definition) => {
+      const settings = requestDraft.commands[definition.key];
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `twitch-command-item${definition.key === activeCommandKey ? ' is-active' : ''}`;
+      button.dataset.commandKey = definition.key;
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', definition.key === activeCommandKey ? 'true' : 'false');
+      button.innerHTML = `<span>${escapeHtml(definition.label)}</span><span class="twitch-command-item-state">${settings.enabled ? escapeHtml(settings.command) : '已停用'}</span>`;
+      button.addEventListener('click', () => { activeCommandKey = definition.key; renderCommandList(); loadCommandEditor(); });
+      container.appendChild(button);
+    });
+  }
+
+  function loadCommandEditor() {
+    const definition = commandDefinition();
+    const settings = requestDraft.commands[activeCommandKey];
+    if (!definition || !settings) return;
+    el('twitch-command-editor-label').textContent = definition.label;
+    el('twitch-command-editor-description').textContent = definition.description;
+    el('twitch-command-enabled').checked = settings.enabled;
+    el('twitch-command-name').value = settings.command;
+    el('twitch-command-aliases').value = settings.aliases.join(', ');
+    el('twitch-command-permission').value = settings.permissionLevel;
+    el('twitch-command-user-cooldown').value = String(settings.userCooldownSeconds);
+    el('twitch-command-global-cooldown').value = String(settings.globalCooldownSeconds);
+    validateCommandForm();
+  }
+
+  function syncActiveCommandFromFields() {
+    const settings = requestDraft.commands[activeCommandKey];
+    if (!settings) return;
+    settings.enabled = !!el('twitch-command-enabled')?.checked;
+    settings.command = el('twitch-command-name')?.value || '';
+    settings.aliases = TwitchRequestSettings.parseAliases(el('twitch-command-aliases')?.value || '');
+    settings.permissionLevel = el('twitch-command-permission')?.value || 'everyone';
+    settings.userCooldownSeconds = Number(el('twitch-command-user-cooldown')?.value);
+    settings.globalCooldownSeconds = Number(el('twitch-command-global-cooldown')?.value);
+    setDirty('commands', true);
+    renderCommandList();
+    validateCommandForm();
+  }
+
+  function validateCommandForm() {
+    const candidate = { ...requestSaved, commands: requestDraft.commands };
+    const validation = TwitchRequestSettings.validateSettings(candidate);
+    const commandPrefix = `commands.${activeCommandKey}`;
+    const error = validation.errors.find((item) => item.field.startsWith(commandPrefix)) || validation.errors.find((item) => item.field.startsWith('commands.'));
+    const box = el('twitch-command-form-error');
+    const save = el('twitch-command-save');
+    if (box) { box.textContent = error?.message || ''; box.hidden = !error; }
+    if (save) save.disabled = !validation.ok;
+    const definition = commandDefinition();
+    const settings = requestDraft.commands[activeCommandKey];
+    if (el('twitch-command-preview')) el('twitch-command-preview').textContent = `${settings.enabled ? '啟用' : '停用'}｜${settings.command || '—'}${activeCommandKey === 'request' ? ' <YouTube URL>' : ''}｜${definition.description}`;
+    return validation;
+  }
+
+  function applyRuleFields() {
+    el('twitch-request-enabled').checked = requestDraft.enabled;
+    el('twitch-request-max-pending').value = String(requestDraft.maxPending);
+    el('twitch-request-per-user').value = String(requestDraft.perUserPending);
+    el('twitch-request-max-duration').value = String(requestDraft.maxDurationMinutes);
+    el('twitch-request-reject-duplicates').checked = requestDraft.rejectDuplicates;
+    validateRuleForm();
+  }
+
+  function syncRulesFromFields() {
+    requestDraft.enabled = !!el('twitch-request-enabled')?.checked;
+    requestDraft.maxPending = Number(el('twitch-request-max-pending')?.value);
+    requestDraft.perUserPending = Number(el('twitch-request-per-user')?.value);
+    requestDraft.maxDurationMinutes = Number(el('twitch-request-max-duration')?.value);
+    requestDraft.rejectDuplicates = !!el('twitch-request-reject-duplicates')?.checked;
+    setDirty('rules', true);
+    validateRuleForm();
+  }
+
+  function validateRuleForm() {
+    const candidate = { ...requestDraft, commands: requestSaved.commands };
+    const validation = TwitchRequestSettings.validateSettings(candidate);
+    const error = validation.errors.find((item) => !item.field.startsWith('commands.'));
+    const box = el('twitch-request-form-error');
+    const save = el('twitch-request-save');
+    if (box) { box.textContent = error?.message || ''; box.hidden = !error; }
+    if (save) save.disabled = !!error;
+    const permission = TwitchRequestSettings.PERMISSION_LEVELS.find((item) => item.key === requestSaved.commands.request.permissionLevel)?.label || '所有觀眾';
+    const preview = [
+      requestDraft.enabled ? '接受點歌' : '暫停點歌', permission,
+      `最多 ${requestDraft.maxPending || '—'} 首待確認`,
+      requestDraft.perUserPending > 0 ? `每人最多 ${requestDraft.perUserPending} 首` : '每人不限首數',
+      requestDraft.maxDurationMinutes > 0 ? `最長 ${requestDraft.maxDurationMinutes} 分鐘` : '不限制歌曲長度',
+      requestDraft.rejectDuplicates ? '拒絕重複影片' : '允許重複影片',
+    ];
+    if (el('twitch-request-rule-preview')) el('twitch-request-rule-preview').textContent = preview.join('；');
+    return validation;
+  }
+
+  function mergeRequestSettingsFromServer(settings) {
+    const normalized = TwitchRequestSettings.normalizeSettings(settings);
+    requestSaved = normalized;
+    if (!dirty.commands) requestDraft.commands = clone(normalized.commands);
+    if (!dirty.rules) {
+      requestDraft.enabled = normalized.enabled;
+      requestDraft.maxPending = normalized.maxPending;
+      requestDraft.perUserPending = normalized.perUserPending;
+      requestDraft.rejectDuplicates = normalized.rejectDuplicates;
+      requestDraft.maxDurationMinutes = normalized.maxDurationMinutes;
+    }
+    renderCommandList();
+    loadCommandEditor();
+    applyRuleFields();
+    updateMainStatus();
+  }
+
+  function saveRequestCategory(category, successMessage) {
+    const candidate = category === 'commands'
+      ? { ...requestSaved, commands: requestDraft.commands }
+      : { ...requestDraft, commands: requestSaved.commands };
+    const validation = TwitchRequestSettings.validateSettings(candidate);
+    if (!validation.ok) { category === 'commands' ? validateCommandForm() : validateRuleForm(); return; }
+    const button = el(category === 'commands' ? 'twitch-command-save' : 'twitch-request-save');
+    if (button) button.disabled = true;
+    SocketClient.sendWithCallback('twitch:request-settings:update', validation.settings, (result) => {
+      if (!result?.ok) {
+        if (button) button.disabled = false;
+        const status = el(category === 'commands' ? 'twitch-command-save-status' : 'twitch-request-save-status');
+        if (status) status.textContent = `儲存失敗：${result?.error || '伺服器沒有回應'}`;
+        return;
+      }
+      const normalized = TwitchRequestSettings.normalizeSettings(result.settings || validation.settings);
+      requestSaved = normalized;
+      if (category === 'commands') requestDraft.commands = clone(normalized.commands);
+      else {
+        requestDraft.enabled = normalized.enabled;
+        requestDraft.maxPending = normalized.maxPending;
+        requestDraft.perUserPending = normalized.perUserPending;
+        requestDraft.rejectDuplicates = normalized.rejectDuplicates;
+        requestDraft.maxDurationMinutes = normalized.maxDurationMinutes;
+      }
+      setDirty(category, false);
+      const status = el(category === 'commands' ? 'twitch-command-save-status' : 'twitch-request-save-status');
+      if (status) status.textContent = successMessage;
+      renderCommandList(); loadCommandEditor(); applyRuleFields(); updateMainStatus();
+      AppShared.showToast(successMessage, 'success');
+    });
+  }
+
+  function collectRewardFields() {
+    rewardDraft.enabled = !!el('twitch-reward-enabled')?.checked;
+    rewardDraft.title = el('twitch-reward-title')?.value || '';
+    rewardDraft.prompt = el('twitch-reward-prompt')?.value || '';
+    rewardDraft.cost = Number(el('twitch-reward-cost')?.value);
+    setDirty('reward', true);
+    validateRewardForm();
+  }
+
+  function applyRewardFields() {
+    el('twitch-reward-enabled').checked = rewardDraft.enabled;
+    el('twitch-reward-title').value = rewardDraft.title;
+    el('twitch-reward-prompt').value = rewardDraft.prompt;
+    el('twitch-reward-cost').value = String(rewardDraft.cost);
+    validateRewardForm();
+  }
+
+  function validateRewardForm() {
+    const validation = TwitchRewardSettings.validateSettings(rewardDraft);
+    const message = validation.errors[0]?.message || '';
+    const error = el('twitch-reward-form-error');
+    if (error) { error.textContent = message; error.hidden = !message; }
+    if (el('twitch-reward-save')) el('twitch-reward-save').disabled = !!message;
+    if (el('twitch-reward-preview')) el('twitch-reward-preview').textContent = `${rewardDraft.enabled ? '啟用' : '停用'}｜${rewardDraft.title || '—'}｜${Number.isSafeInteger(rewardDraft.cost) ? rewardDraft.cost.toLocaleString() : '—'} 點｜${rewardDraft.prompt || '—'}`;
+    return validation;
+  }
+
+  function mergeRewardSettingsFromServer(settings) {
+    rewardSaved = TwitchRewardSettings.normalizeSettings(settings);
+    if (!dirty.reward) rewardDraft = clone(rewardSaved);
+    applyRewardFields();
+    updateMainStatus();
+  }
+
   function saveRewardSettings(settings, successMessage) {
     const validation = TwitchRewardSettings.validateSettings(settings);
     if (!validation.ok) { validateRewardForm(); return; }
@@ -307,176 +455,152 @@
         if (save) save.disabled = false;
         const error = el('twitch-reward-form-error');
         if (error) { error.textContent = result?.error || 'Twitch 沒有回應'; error.hidden = false; }
-        AppShared.showToast(`忠誠點數獎勵同步失敗：${result?.error || 'Twitch 沒有回應'}`, 'error');
         return;
       }
-      applyRewardSettings(result.settings || validation.settings, { savedMessage: successMessage });
+      rewardSaved = TwitchRewardSettings.normalizeSettings(result.settings || validation.settings);
+      rewardDraft = clone(rewardSaved);
+      setDirty('reward', false);
+      applyRewardFields();
       applyRewardRuntimeStatus(result.status || {});
+      el('twitch-reward-save-status').textContent = successMessage;
+      updateMainStatus();
       AppShared.showToast(successMessage, 'success');
     });
   }
 
-  // ─── 聊天室自動回覆設定 ───
-  let activeReplyTemplate = null;
+  function replyDefinition(key = activeReplyKey) {
+    return TwitchReplySettings.REPLY_DEFINITIONS.find((definition) => definition.key === key);
+  }
+
+  function renderReplyEvents() {
+    const container = el('twitch-reply-events');
+    const testEvent = el('twitch-reply-test-event');
+    if (!container || !testEvent) return;
+    container.innerHTML = '';
+    testEvent.innerHTML = '';
+    TwitchReplySettings.REPLY_GROUPS.forEach((group) => {
+      const label = document.createElement('div');
+      label.className = 'twitch-reply-group-label';
+      label.textContent = group.label;
+      container.appendChild(label);
+      TwitchReplySettings.REPLY_DEFINITIONS.filter((definition) => definition.group === group.key).forEach((definition) => {
+        const reply = replyDraft.replies[definition.key];
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `twitch-reply-event${definition.key === activeReplyKey ? ' is-active' : ''}`;
+        button.setAttribute('role', 'option');
+        button.setAttribute('aria-selected', definition.key === activeReplyKey ? 'true' : 'false');
+        button.innerHTML = `<span>${escapeHtml(definition.label)}</span><span class="twitch-reply-event-state">${reply.enabled ? '開' : '關'}</span>`;
+        button.addEventListener('click', () => { activeReplyKey = definition.key; renderReplyEvents(); loadReplyEditor(); });
+        container.appendChild(button);
+        const option = document.createElement('option');
+        option.value = definition.key;
+        option.textContent = `${group.label}｜${definition.label}`;
+        option.selected = definition.key === activeReplyKey;
+        testEvent.appendChild(option);
+      });
+    });
+    updateReplyTestPreview();
+  }
+
+  function replySampleValues() {
+    const values = TwitchReplySettings.sampleValues();
+    values.command = requestDraft.commands.request.command || '!點歌';
+    return values;
+  }
+
+  function loadReplyEditor() {
+    const definition = replyDefinition();
+    const reply = replyDraft.replies[activeReplyKey];
+    if (!definition || !reply) return;
+    const group = TwitchReplySettings.REPLY_GROUPS.find((item) => item.key === definition.group);
+    el('twitch-reply-editor').dataset.twitchReplyKey = activeReplyKey;
+    el('twitch-reply-editor-label').textContent = definition.label;
+    el('twitch-reply-editor-group').textContent = group?.label || '';
+    el('twitch-reply-item-enabled').checked = reply.enabled;
+    el('twitch-reply-template').value = reply.template;
+    validateReplyEditor();
+  }
+
+  function syncReplyEditorFromFields() {
+    const reply = replyDraft.replies[activeReplyKey];
+    if (!reply) return;
+    reply.enabled = !!el('twitch-reply-item-enabled')?.checked;
+    reply.template = el('twitch-reply-template')?.value || '';
+    setDirty('replies', true);
+    renderReplyEvents();
+    validateReplyEditor();
+  }
+
+  function validateReplyEditor() {
+    const definition = replyDefinition();
+    const reply = replyDraft.replies[activeReplyKey];
+    if (!definition || !reply) return null;
+    const validation = TwitchReplySettings.validateTemplate(reply.template);
+    const editor = el('twitch-reply-editor');
+    editor.classList.toggle('is-invalid', !validation.valid);
+    el('twitch-reply-item-error').hidden = validation.valid;
+    el('twitch-reply-item-error').textContent = validation.errors[0] || '';
+    el('twitch-reply-count').textContent = `${Array.from(reply.template).length}/${TwitchReplySettings.MAX_MESSAGE_LENGTH}`;
+    el('twitch-reply-preview').textContent = validation.valid ? `預覽：${TwitchReplySettings.renderTemplate(reply.template, replySampleValues())}` : `預覽：${definition.defaultTemplate}`;
+    const whole = TwitchReplySettings.validateSettings(replyDraft);
+    const formError = el('twitch-reply-form-error');
+    const message = whole.errors[0]?.message || '';
+    if (formError) { formError.textContent = message; formError.hidden = !message; }
+    if (el('twitch-reply-save')) el('twitch-reply-save').disabled = !whole.ok;
+    updateReplyTestPreview();
+    return whole;
+  }
+
+  function mergeReplySettingsFromServer(settings) {
+    replySaved = TwitchReplySettings.normalizeSettings(settings);
+    if (!dirty.replies) replyDraft = clone(replySaved);
+    el('twitch-reply-enabled').checked = replyDraft.enabled;
+    el('twitch-reply-mode').value = replyDraft.replyMode;
+    renderReplyEvents();
+    loadReplyEditor();
+    updateMainStatus();
+  }
+
+  function saveReplySettings(settings, successMessage) {
+    const validation = TwitchReplySettings.validateSettings(settings);
+    if (!validation.ok) { validateReplyEditor(); return; }
+    const save = el('twitch-reply-save');
+    if (save) save.disabled = true;
+    SocketClient.sendWithCallback('twitch:reply-settings:update', validation.settings, (result) => {
+      if (!result?.ok) {
+        if (save) save.disabled = false;
+        el('twitch-reply-save-status').textContent = `儲存失敗：${result?.error || '伺服器沒有回應'}`;
+        return;
+      }
+      replySaved = TwitchReplySettings.normalizeSettings(result.settings || validation.settings);
+      replyDraft = clone(replySaved);
+      setDirty('replies', false);
+      el('twitch-reply-enabled').checked = replyDraft.enabled;
+      el('twitch-reply-mode').value = replyDraft.replyMode;
+      renderReplyEvents(); loadReplyEditor(); updateMainStatus();
+      el('twitch-reply-save-status').textContent = successMessage;
+      AppShared.showToast(successMessage, 'success');
+    });
+  }
 
   function updateReplyTestPreview() {
     const select = el('twitch-reply-test-event');
     const preview = el('twitch-reply-test-preview');
     if (!select || !preview) return;
-    const item = document.querySelector(`[data-twitch-reply-key="${select.value}"]`);
-    const template = item?.querySelector('[data-role="template"]')?.value || '';
-    const validation = TwitchReplySettings.validateTemplate(template);
-    preview.textContent = validation.valid
-      ? `將送出：【回覆測試】${TwitchReplySettings.renderTemplate(template, replySampleValues())}`
-      : '請先修正文案中的錯誤。';
-  }
-
-  function collectReplySettings() {
-    const settings = {
-      enabled: !!el('twitch-reply-enabled')?.checked,
-      replyMode: el('twitch-reply-mode')?.value || 'reply',
-      replies: {},
-    };
-    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
-      const item = document.querySelector(`[data-twitch-reply-key="${definition.key}"]`);
-      settings.replies[definition.key] = {
-        enabled: !!item?.querySelector('[data-role="enabled"]')?.checked,
-        template: item?.querySelector('[data-role="template"]')?.value || '',
-      };
-    });
-    return settings;
-  }
-
-  function updateReplyItem(item, definition) {
-    const input = item.querySelector('[data-role="template"]');
-    const error = item.querySelector('[data-role="error"]');
-    const count = item.querySelector('[data-role="count"]');
-    const preview = item.querySelector('[data-role="preview"]');
-    const validation = TwitchReplySettings.validateTemplate(input.value);
-    item.classList.toggle('is-invalid', !validation.valid);
-    error.hidden = validation.valid;
-    error.textContent = validation.errors[0] || '';
-    count.textContent = `${Array.from(input.value).length}/${TwitchReplySettings.MAX_MESSAGE_LENGTH}`;
-    if (validation.valid) {
-      preview.textContent = `預覽：${TwitchReplySettings.renderTemplate(input.value, replySampleValues())}`;
-    } else {
-      preview.textContent = `預覽：${definition.defaultTemplate}`;
-    }
-    return validation.valid;
-  }
-
-  function validateReplyForm() {
-    let firstError = '';
-    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
-      const item = document.querySelector(`[data-twitch-reply-key="${definition.key}"]`);
-      if (!item || updateReplyItem(item, definition)) return;
-      if (!firstError) firstError = `${definition.label}：${item.querySelector('[data-role="error"]').textContent}`;
-    });
-    const validation = TwitchReplySettings.validateSettings(collectReplySettings());
-    if (!firstError && !validation.ok) firstError = validation.errors[0]?.message || '回覆設定格式無效。';
-    const formError = el('twitch-reply-form-error');
-    const save = el('twitch-reply-save');
-    if (formError) { formError.textContent = firstError; formError.hidden = !firstError; }
-    if (save) save.disabled = !!firstError;
-    return !firstError;
-  }
-
-  function markReplySettingsChanged() {
-    const status = el('twitch-reply-save-status');
-    if (status) status.textContent = '有尚未儲存的變更';
-    validateReplyForm();
-    updateReplyTestPreview();
-  }
-
-  function buildReplySettingsForm() {
-    const container = el('twitch-reply-items');
-    const variableButtons = el('twitch-reply-variable-buttons');
-    const testEvent = el('twitch-reply-test-event');
-    if (!container || !variableButtons || !testEvent) return;
-
-    testEvent.innerHTML = '';
-    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
-      const option = document.createElement('option');
-      option.value = definition.key;
-      option.textContent = definition.label;
-      testEvent.appendChild(option);
-    });
-
-    variableButtons.innerHTML = '';
-    TwitchReplySettings.VARIABLE_DEFINITIONS.forEach((variable) => {
-      const button = document.createElement('button');
-      button.className = 'btn btn-sm btn-ghost twitch-reply-variable-button';
-      button.type = 'button';
-      button.dataset.variable = variable.key;
-      button.textContent = `{${variable.key}}`;
-      button.title = variable.label;
-      button.addEventListener('click', () => {
-        const input = activeReplyTemplate || container.querySelector('[data-role="template"]');
-        if (!input) return;
-        const token = `{${variable.key}}`;
-        const start = Number.isInteger(input.selectionStart) ? input.selectionStart : input.value.length;
-        const end = Number.isInteger(input.selectionEnd) ? input.selectionEnd : start;
-        input.setRangeText(token, start, end, 'end');
-        input.focus();
-        activeReplyTemplate = input;
-        markReplySettingsChanged();
-      });
-      variableButtons.appendChild(button);
-    });
-
-    container.innerHTML = '';
-    const defaults = TwitchReplySettings.getDefaults();
-    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
-      const item = document.createElement('div');
-      item.className = 'twitch-reply-item';
-      item.dataset.twitchReplyKey = definition.key;
-      item.innerHTML = `
-        <div class="twitch-reply-item-head">
-          <div class="twitch-reply-item-label">${escapeHtml(definition.label)}</div>
-          <label class="switch"><input data-role="enabled" type="checkbox"><span class="track"></span></label>
-        </div>
-        <textarea class="input twitch-reply-template" data-role="template" maxlength="${TwitchReplySettings.MAX_MESSAGE_LENGTH}" aria-label="${escapeHtml(definition.label)}回覆文字"></textarea>
-        <div class="twitch-reply-item-meta"><span class="twitch-reply-preview" data-role="preview"></span><span data-role="count"></span></div>
-        <div class="twitch-reply-item-error" data-role="error" hidden></div>`;
-      const input = item.querySelector('[data-role="template"]');
-      const enabled = item.querySelector('[data-role="enabled"]');
-      input.value = defaults.replies[definition.key].template;
-      enabled.checked = defaults.replies[definition.key].enabled;
-      input.addEventListener('focus', () => { activeReplyTemplate = input; });
-      input.addEventListener('input', markReplySettingsChanged);
-      enabled.addEventListener('change', markReplySettingsChanged);
-      container.appendChild(item);
-      updateReplyItem(item, definition);
-    });
-    updateReplyTestPreview();
-  }
-
-  function applyReplySettings(settings, { savedMessage = '' } = {}) {
-    const normalized = TwitchReplySettings.normalizeSettings(settings);
-    const master = el('twitch-reply-enabled');
-    const mode = el('twitch-reply-mode');
-    if (master) master.checked = normalized.enabled;
-    if (mode) mode.value = normalized.replyMode;
-    TwitchReplySettings.REPLY_DEFINITIONS.forEach((definition) => {
-      const item = document.querySelector(`[data-twitch-reply-key="${definition.key}"]`);
-      if (!item) return;
-      item.querySelector('[data-role="enabled"]').checked = normalized.replies[definition.key].enabled;
-      item.querySelector('[data-role="template"]').value = normalized.replies[definition.key].template;
-      updateReplyItem(item, definition);
-    });
-    const status = el('twitch-reply-save-status');
-    if (status) status.textContent = savedMessage;
-    validateReplyForm();
-    updateReplyTestPreview();
+    const reply = replyDraft.replies[select.value];
+    const validation = TwitchReplySettings.validateTemplate(reply?.template || '');
+    preview.textContent = validation.valid ? `本機預覽：${TwitchReplySettings.renderTemplate(reply.template, replySampleValues())}` : '請先修正文案中的錯誤。';
   }
 
   async function sendReplyTest() {
-    if (!validateReplyForm()) return;
+    const validation = TwitchReplySettings.validateSettings(replyDraft);
+    if (!validation.ok) { validateReplyEditor(); return; }
     const replyKey = el('twitch-reply-test-event')?.value || '';
-    const definition = TwitchReplySettings.REPLY_DEFINITIONS.find((item) => item.key === replyKey);
+    const definition = replyDefinition(replyKey);
     if (!definition) return;
     const confirmed = await window.PanelConfirm?.request({
-      title: '送出 Twitch 測試訊息？',
+      title: '送出 Twitch 公開測試？',
       summary: `將把「${definition.label}」的範例回覆公開送到目前連接的 Twitch 聊天室。`,
       impact: '不會建立點歌或儲存設定；聊天室中的觀眾會看得到這則測試訊息。',
       confirmLabel: '送出測試訊息',
@@ -485,126 +609,145 @@
     const button = el('twitch-reply-test-send');
     const status = el('twitch-reply-test-status');
     if (button) button.disabled = true;
-    if (status) { status.textContent = '正在送出測試訊息…'; status.classList.remove('val--danger'); }
-    SocketClient.sendWithCallback('twitch:reply-settings:test', {
-      settings: collectReplySettings(),
-      replyKey,
-    }, (result) => {
+    if (status) status.textContent = '正在送出測試訊息…';
+    SocketClient.sendWithCallback('twitch:reply-settings:test', { settings: validation.settings, replyKey }, (result) => {
       if (button) button.disabled = false;
-      if (!result?.ok) {
-        if (status) { status.textContent = `測試未送出：${result?.error || '伺服器沒有回應'}`; status.classList.add('val--danger'); }
-        return;
-      }
-      if (status) { status.textContent = `已送出：${result.text}`; status.classList.remove('val--danger'); }
+      if (!result?.ok) { if (status) status.textContent = `測試未送出：${result?.error || '伺服器沒有回應'}`; return; }
+      if (status) status.textContent = `已送出：${result.text}`;
       AppShared.showToast('Twitch 測試訊息已送出', 'success');
     });
   }
 
-  function saveReplySettings(settings, successMessage) {
-    const validation = TwitchReplySettings.validateSettings(settings);
-    if (!validation.ok) {
-      validateReplyForm();
-      return;
-    }
-    const save = el('twitch-reply-save');
-    if (save) save.disabled = true;
-    SocketClient.sendWithCallback('twitch:reply-settings:update', validation.settings, (result) => {
-      if (!result?.ok) {
-        if (save) save.disabled = false;
-        showStatus(`回覆設定儲存失敗：${result?.error || '伺服器沒有回應'}`, 'error');
-        return;
-      }
-      applyReplySettings(result.settings || validation.settings, { savedMessage: successMessage });
-      AppShared.showToast(successMessage, 'success');
+  function initSettingsForms() {
+    const commandPermission = el('twitch-command-permission');
+    TwitchRequestSettings.PERMISSION_LEVELS.forEach((level) => {
+      const option = document.createElement('option');
+      option.value = level.key;
+      option.textContent = level.label;
+      commandPermission?.appendChild(option);
+    });
+    renderCommandList(); loadCommandEditor(); applyRuleFields(); applyRewardFields(); renderReplyEvents(); loadReplyEditor();
+
+    ['twitch-command-enabled', 'twitch-command-name', 'twitch-command-aliases', 'twitch-command-permission', 'twitch-command-user-cooldown', 'twitch-command-global-cooldown'].forEach((id) => {
+      const control = el(id);
+      control?.addEventListener(control.matches('input[type="text"], input[type="number"]') ? 'input' : 'change', syncActiveCommandFromFields);
+    });
+    ['twitch-request-enabled', 'twitch-request-max-pending', 'twitch-request-per-user', 'twitch-request-max-duration', 'twitch-request-reject-duplicates'].forEach((id) => {
+      const control = el(id);
+      control?.addEventListener(control.matches('input[type="number"]') ? 'input' : 'change', syncRulesFromFields);
+    });
+    ['twitch-reward-enabled', 'twitch-reward-title', 'twitch-reward-prompt', 'twitch-reward-cost'].forEach((id) => {
+      const control = el(id);
+      control?.addEventListener(control.matches('input[type="checkbox"]') ? 'change' : 'input', collectRewardFields);
+    });
+    el('twitch-reply-enabled')?.addEventListener('change', () => { replyDraft.enabled = !!el('twitch-reply-enabled').checked; setDirty('replies', true); validateReplyEditor(); });
+    el('twitch-reply-mode')?.addEventListener('change', () => { replyDraft.replyMode = el('twitch-reply-mode').value; setDirty('replies', true); validateReplyEditor(); });
+    el('twitch-reply-item-enabled')?.addEventListener('change', syncReplyEditorFromFields);
+    el('twitch-reply-template')?.addEventListener('input', syncReplyEditorFromFields);
+    el('twitch-reply-test-event')?.addEventListener('change', updateReplyTestPreview);
+    el('twitch-reply-test-send')?.addEventListener('click', sendReplyTest);
+
+    const variables = el('twitch-reply-variable-buttons');
+    TwitchReplySettings.VARIABLE_DEFINITIONS.forEach((variable) => {
+      const button = document.createElement('button');
+      button.className = 'btn btn-sm btn-ghost twitch-reply-variable-button';
+      button.type = 'button';
+      button.textContent = `{${variable.key}}`;
+      button.title = variable.label;
+      button.addEventListener('click', () => {
+        const input = el('twitch-reply-template');
+        const token = `{${variable.key}}`;
+        const start = Number.isInteger(input.selectionStart) ? input.selectionStart : input.value.length;
+        const end = Number.isInteger(input.selectionEnd) ? input.selectionEnd : start;
+        input.setRangeText(token, start, end, 'end');
+        input.focus();
+        syncReplyEditorFromFields();
+      });
+      variables?.appendChild(button);
+    });
+
+    el('twitch-command-save')?.addEventListener('click', () => saveRequestCategory('commands', 'Twitch 指令已儲存'));
+    el('twitch-request-save')?.addEventListener('click', () => saveRequestCategory('rules', '接受規則已儲存'));
+    el('twitch-reward-save')?.addEventListener('click', () => saveRewardSettings(rewardDraft, '忠誠點數獎勵已同步'));
+    el('twitch-reply-save')?.addEventListener('click', () => saveReplySettings(replyDraft, '聊天室回覆設定已儲存'));
+    el('twitch-command-edit-reply')?.addEventListener('click', () => {
+      const replyByCommand = { request: 'received', currentSong: 'currentSong', nextSong: 'nextSong', myRequests: 'myRequests', position: 'requestPosition', cancelRequest: 'requestCanceled', rules: 'requestRules', queueSummary: 'queueSummary' };
+      activeReplyKey = replyByCommand[activeCommandKey] || 'received';
+      renderReplyEvents(); loadReplyEditor(); switchManagementPane('replies');
+      window.setTimeout(() => el('twitch-reply-template')?.focus(), 0);
+    });
+
+    el('twitch-command-reset')?.addEventListener('click', async () => {
+      const confirmed = await window.PanelConfirm?.request({ title: '還原所有 Twitch 指令？', summary: '八個內建指令的名稱、別名、資格與冷卻會回到預設值。', impact: '接受規則、忠誠點數與回覆文案不受影響。', confirmLabel: '還原指令' });
+      if (!confirmed) return;
+      requestDraft.commands = clone(TwitchRequestSettings.getDefaults().commands);
+      setDirty('commands', true); renderCommandList(); loadCommandEditor(); saveRequestCategory('commands', 'Twitch 指令已還原');
+    });
+    el('twitch-request-reset')?.addEventListener('click', async () => {
+      const confirmed = await window.PanelConfirm?.request({ title: '還原 Twitch 接受規則？', summary: '總開關、待確認上限、重複與時長限制會回到預設值。', impact: '指令、回覆文案與既有待確認點歌不受影響。', confirmLabel: '還原規則' });
+      if (!confirmed) return;
+      const defaults = TwitchRequestSettings.getDefaults();
+      requestDraft = { ...requestDraft, enabled: defaults.enabled, maxPending: defaults.maxPending, perUserPending: defaults.perUserPending, rejectDuplicates: defaults.rejectDuplicates, maxDurationMinutes: defaults.maxDurationMinutes };
+      setDirty('rules', true); applyRuleFields(); saveRequestCategory('rules', '接受規則已還原');
+    });
+    el('twitch-reward-reset')?.addEventListener('click', async () => {
+      const confirmed = await window.PanelConfirm?.request({ title: '停用並還原忠誠點數獎勵？', summary: 'Twitch 上的專用獎勵會停用，名稱、說明與價格回到預設值。', impact: '不會刪除獎勵或清除 Twitch 授權；既有待確認兌換仍會正常完成或退款。', confirmLabel: '停用並還原' });
+      if (!confirmed) return;
+      rewardDraft = { ...TwitchRewardSettings.getDefaults(), rewardId: rewardSaved.rewardId };
+      setDirty('reward', true); applyRewardFields(); saveRewardSettings(rewardDraft, '忠誠點數獎勵已停用並還原');
+    });
+    el('twitch-reply-reset')?.addEventListener('click', async () => {
+      const confirmed = await window.PanelConfirm?.request({ title: '還原 Twitch 回覆預設值？', summary: '總開關、所有分項、回覆方式與自訂文案都會回到預設值。', impact: 'Twitch 授權、指令與待確認點歌不受影響。', confirmLabel: '還原回覆' });
+      if (!confirmed) return;
+      replyDraft = TwitchReplySettings.getDefaults();
+      setDirty('replies', true); renderReplyEvents(); loadReplyEditor(); saveReplySettings(replyDraft, '聊天室回覆設定已還原');
     });
   }
 
-  buildRequestSettingsForm();
-  applyRewardSettings(TwitchRewardSettings.getDefaults());
-  buildReplySettingsForm();
-  applyReplySettings(TwitchReplySettings.getDefaults());
-  [
-    'twitch-request-enabled',
-    'twitch-request-command',
-    'twitch-request-aliases',
-    'twitch-request-permission',
-    'twitch-request-cooldown',
-    'twitch-request-max-pending',
-    'twitch-request-per-user',
-    'twitch-request-reject-duplicates',
-    'twitch-request-max-duration',
-  ].forEach((id) => {
-    const control = el(id);
-    const eventName = control?.matches('input[type="text"], input[type="number"]') ? 'input' : 'change';
-    control?.addEventListener(eventName, markRequestSettingsChanged);
-  });
-  el('twitch-request-save')?.addEventListener('click', () => saveRequestSettings(collectRequestSettings(), '點歌規則已儲存'));
-  el('twitch-request-reset')?.addEventListener('click', async () => {
-    const confirmed = await window.PanelConfirm?.request({
-      title: '還原 Twitch 點歌規則？',
-      summary: '指令、使用者資格、冷卻與佇列限制會回到預設值。',
-      impact: '聊天室自動回覆文案不會受影響。',
-      confirmLabel: '還原預設值',
+  function initAuthActions() {
+    const connect = el('twitch-connect');
+    connect?.addEventListener('click', async () => {
+      const authWindow = window.open('', 'elitesand-twitch-login');
+      try {
+        connect.disabled = true;
+        const response = await PinAuth.fetchWithPin('/api/twitch/authorize');
+        const data = await response.json();
+        if (!response.ok || !data.verificationUri || !data.userCode) throw new Error(data.error || '無法開始 Twitch 授權');
+        if (el('twitch-device-link')) { el('twitch-device-link').href = data.verificationUri; el('twitch-device-link').hidden = false; }
+        if (authWindow) { authWindow.location.replace(data.verificationUri); showStatus('已開啟 Twitch 登入與授權頁，請依 Twitch 指示完成授權。', 'info'); }
+        else showStatus(`請按「前往 Twitch 輸入代碼」，輸入：${data.userCode}`, 'info');
+      } catch (err) {
+        if (authWindow && !authWindow.closed) authWindow.close();
+        connect.disabled = false;
+        showStatus(`無法開始 Twitch 授權：${err.message}`, 'error');
+      }
     });
-    if (!confirmed) return;
-    const defaults = TwitchRequestSettings.getDefaults();
-    applyRequestSettings(defaults);
-    saveRequestSettings(defaults, '點歌規則已還原');
-  });
-  ['twitch-reward-enabled', 'twitch-reward-title', 'twitch-reward-prompt', 'twitch-reward-cost'].forEach((id) => {
-    const control = el(id);
-    control?.addEventListener(control?.matches('input[type="checkbox"]') ? 'change' : 'input', markRewardSettingsChanged);
-  });
-  el('twitch-reward-save')?.addEventListener('click', () => saveRewardSettings(collectRewardSettings(), '忠誠點數獎勵已同步'));
-  el('twitch-reward-reauthorize')?.addEventListener('click', () => el('twitch-connect')?.click());
-  el('twitch-reward-reset')?.addEventListener('click', async () => {
-    const confirmed = await window.PanelConfirm?.request({
-      title: '停用並還原忠誠點數獎勵？',
-      summary: 'Twitch 上的 Elitesand Pro 專用獎勵會停用，名稱、說明與價格回到預設值。',
-      impact: '不會刪除獎勵或清除 Twitch 授權；已在待確認區的兌換仍會正常完成或退款。',
-      confirmLabel: '停用並還原',
+    el('twitch-deauthorize')?.addEventListener('click', async () => {
+      const button = el('twitch-deauthorize');
+      const isAuthorized = button.textContent.includes('解除');
+      const confirmed = await window.DangerConfirm?.request({ title: isAuthorized ? '確認解除 Twitch 授權' : '確認取消 Twitch 連接流程', summary: isAuthorized ? '這會停止 Twitch EventSub 與聊天室點歌，並移除本機保存的 Twitch 權杖。' : '這會取消目前等待中的 Twitch Device Code 授權流程。', impact: '已收到、尚待確認的 Twitch 點歌會保留；歌曲、歌單與其他設定不會刪除。', phrase: isAuthorized ? '解除 Twitch 授權' : '取消 Twitch 連接', confirmLabel: isAuthorized ? '解除授權' : '取消流程' });
+      if (!confirmed) return;
+      try {
+        button.disabled = true;
+        const response = await PinAuth.fetchWithPin('/api/twitch/deauthorize', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '解除 Twitch 授權失敗');
+        showStatus(data.remoteError ? `本機 Twitch 授權已移除，但暫時無法通知 Twitch：${data.remoteError}` : 'Twitch 授權已解除。', data.remoteError ? 'warning' : 'success');
+        await refreshStatus();
+      } catch (err) { showStatus(`解除 Twitch 授權失敗：${err.message}`, 'error'); }
+      finally { button.disabled = false; }
     });
-    if (!confirmed) return;
-    saveRewardSettings({ ...TwitchRewardSettings.getDefaults(), rewardId: currentRewardSettings.rewardId }, '忠誠點數獎勵已停用並還原');
-  });
-  el('twitch-reply-enabled')?.addEventListener('change', markReplySettingsChanged);
-  el('twitch-reply-mode')?.addEventListener('change', markReplySettingsChanged);
-  el('twitch-reply-test-event')?.addEventListener('change', updateReplyTestPreview);
-  el('twitch-reply-test-send')?.addEventListener('click', sendReplyTest);
-  el('twitch-reply-save')?.addEventListener('click', () => saveReplySettings(collectReplySettings(), '聊天室回覆設定已儲存'));
-  el('twitch-reply-reset')?.addEventListener('click', async () => {
-    const confirmed = await window.PanelConfirm?.request({
-      title: '還原 Twitch 回覆預設值？',
-      summary: '總開關、所有分項開關、回覆方式與自訂文案都會回到預設值。',
-      impact: 'Twitch 授權、待確認點歌與其他設定不受影響。',
-      confirmLabel: '還原預設值',
-    });
-    if (!confirmed) return;
-    const defaults = TwitchReplySettings.getDefaults();
-    applyReplySettings(defaults);
-    saveReplySettings(defaults, '聊天室回覆設定已還原');
-  });
-
-  SocketClient.on('twitch:request-settings:update', (settings) => applyRequestSettings(settings, { savedMessage: '設定已同步' }));
-  SocketClient.on('twitch:reward-settings:update', (settings) => applyRewardSettings(settings, { savedMessage: '設定已同步' }));
-  SocketClient.on('twitch:reply-settings:update', (settings) => applyReplySettings(settings, { savedMessage: '設定已同步' }));
+    el('twitch-reward-reauthorize')?.addEventListener('click', () => el('twitch-connect')?.click());
+  }
 
   function renderRequests() {
-    const card = el('twitch-requests');
     const list = el('twitch-requests-list');
-    const count = el('twitch-requests-count');
-    if (!card || !list) return;
-    if (count) count.textContent = String(pending.size);
+    if (!list) return;
+    el('twitch-requests-count').textContent = String(pending.size);
     const badge = el('twitch-nav-badge');
     if (badge) { badge.textContent = String(pending.size); badge.hidden = pending.size === 0; }
-    const rejectAll = el('twitch-reject-all');
-    if (rejectAll) rejectAll.hidden = pending.size === 0;
-
-    if (pending.size === 0) {
-      list.innerHTML = '<div class="twitch-request-empty">目前沒有待確認的點歌</div>';
-      return;
-    }
-
+    if (el('twitch-reject-all')) el('twitch-reject-all').hidden = pending.size === 0;
+    if (!pending.size) { list.innerHTML = '<div class="twitch-request-empty">目前沒有待確認的點歌</div>'; return; }
     list.innerHTML = '';
     for (const req of pending.values()) {
       const isBusy = busy.has(req.requestId);
@@ -614,27 +757,7 @@
       const title = req.title || '無法取得影片標題';
       const author = req.author || '未知頻道';
       const thumbnail = req.thumbnail && /^https:\/\//i.test(req.thumbnail) ? req.thumbnail : '';
-      row.innerHTML =
-        `<div class="twitch-req-info">
-          ${thumbnail
-            ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
-            : `<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">無縮圖</div>`}
-          <div class="twitch-req-copy">
-            <div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
-            <div class="twitch-req-author">${escapeHtml(author)}</div>
-            <div class="twitch-req-user">點歌者：${escapeHtml(req.requester || '觀眾')}</div>
-            ${req.source === 'channel-points' ? `<div class="pi-badge twitch-req-reward">忠誠點數兌換 · ${Number(req.rewardRedemption?.cost || 0).toLocaleString()} 點</div>` : ''}
-            ${Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length
-              ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>`
-              : req.durationWarning ? '<div class="pi-badge twitch-req-warning">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}
-            <a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a>
-          </div>
-        </div>
-        <div class="twitch-req-actions">
-          <button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${isBusy ? (placement === 'next' ? '插播下載中…' : '下載中…') : '插到下一首'}</button>
-          <button class="btn btn-sm btn-ghost" data-act="end"${isBusy ? ' disabled' : ''}>加入尾端</button>
-          <button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>${req.source === 'channel-points' ? '拒絕並退款' : '拒絕'}</button>
-        </div>`;
+      row.innerHTML = `<div class="twitch-req-info">${thumbnail ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">無縮圖</div>'}<div class="twitch-req-copy"><div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div><div class="twitch-req-author">${escapeHtml(author)}</div><div class="twitch-req-user">點歌者：${escapeHtml(req.requester || '觀眾')}</div>${req.source === 'channel-points' ? `<div class="pi-badge twitch-req-reward">忠誠點數兌換 · ${Number(req.rewardRedemption?.cost || 0).toLocaleString()} 點</div>` : ''}${Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>` : req.durationWarning ? '<div class="pi-badge twitch-req-warning">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}<a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a></div></div><div class="twitch-req-actions"><button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${isBusy ? (placement === 'next' ? '插播下載中…' : '下載中…') : '插到下一首'}</button><button class="btn btn-sm btn-ghost" data-act="end"${isBusy ? ' disabled' : ''}>加入尾端</button><button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>${req.source === 'channel-points' ? '拒絕並退款' : '拒絕'}</button></div>`;
       row.querySelector('[data-act="next"]').addEventListener('click', () => confirmRequest(req.requestId, 'next'));
       row.querySelector('[data-act="end"]').addEventListener('click', () => confirmRequest(req.requestId, 'end'));
       row.querySelector('[data-act="reject"]').addEventListener('click', () => rejectRequest(req.requestId));
@@ -645,93 +768,80 @@
   async function confirmRequest(requestId, placement = 'end') {
     const req = pending.get(requestId);
     if (!req || busy.has(requestId) || typeof AppShared.queueYouTubeImport !== 'function') return;
-    busy.set(requestId, placement);
-    renderRequests();
+    busy.set(requestId, placement); renderRequests();
     try {
-      const track = await AppShared.queueYouTubeImport(req.url, {
-        source: `Twitch · ${req.requester || req.userName || '觀眾點歌'}`,
-        assessment: req.assessment || null,
-        placement,
-      });
-      const report = await new Promise((resolve) => SocketClient.sendWithCallback('twitch:song-request:result', {
-        requestId,
-        success: true,
-        title: track && (track.title || track.name),
-        artist: track && track.artist,
-        position: placement === 'next' ? '下一首' : '歌單尾端',
-        queue: Math.max(1, (AppShared.state.playlist || []).findIndex((item) => item && track && item.id === track.id) + 1),
-      }, resolve));
+      const track = await AppShared.queueYouTubeImport(req.url, { source: `Twitch · ${req.requester || req.userName || '觀眾點歌'}`, assessment: req.assessment || null, placement });
+      const report = await new Promise((resolve) => SocketClient.sendWithCallback('twitch:song-request:result', { requestId, success: true, title: track && (track.title || track.name), artist: track && track.artist, position: placement === 'next' ? '下一首' : '歌單尾端', queue: Math.max(1, (AppShared.state.playlist || []).findIndex((item) => item && track && item.id === track.id) + 1) }, resolve));
       if (!report?.ok) throw new Error(report?.error || '無法回覆 Twitch 聊天室');
-      AppShared.showToast(`${placement === 'next' ? '已插到下一首' : '已加入清單尾端'}：${track && track.title ? track.title : '歌曲'}`, 'success');
+      AppShared.showToast(`${placement === 'next' ? '已插到下一首' : '已加入清單尾端'}：${track?.title || '歌曲'}`, 'success');
       pending.delete(requestId);
     } catch (err) {
-      // 仍保留 server 端 pending request：主播可重試，成功後聊天室仍會收到最終成功回覆。
-      SocketClient.sendWithCallback('twitch:song-request:result', {
-        requestId, success: false, retryable: true, error: err && err.message ? err.message : '下載或匯入失敗',
-      }, () => {});
+      SocketClient.sendWithCallback('twitch:song-request:result', { requestId, success: false, retryable: true, error: err?.message || '下載或匯入失敗' }, () => {});
       AppShared.showToast('聊天室點歌下載失敗', 'error');
-      // 失敗保留在清單，主播可再試一次
-    } finally {
-      busy.delete(requestId);
-      renderRequests();
-    }
+    } finally { busy.delete(requestId); renderRequests(); }
   }
 
   function rejectRequest(requestId) {
     const req = pending.get(requestId);
     if (!req || busy.has(requestId)) return;
-    busy.set(requestId, 'reject');
-    renderRequests();
+    busy.set(requestId, 'reject'); renderRequests();
     SocketClient.sendWithCallback('twitch:song-request:result', { requestId, success: false, rejected: true }, (result) => {
       busy.delete(requestId);
-      if (!result?.ok) {
-        renderRequests();
-        AppShared.showToast(`拒絕失敗：${result?.error || '伺服器沒有回應'}`, 'error');
-        return;
-      }
-      pending.delete(requestId);
-      renderRequests();
+      if (!result?.ok) { renderRequests(); AppShared.showToast(`拒絕失敗：${result?.error || '伺服器沒有回應'}`, 'error'); return; }
+      pending.delete(requestId); renderRequests();
       AppShared.showToast(req.source === 'channel-points' ? '已拒絕並退還忠誠點數' : '已略過這首點歌', 'info');
     });
   }
 
-  const rejectAllButton = el('twitch-reject-all');
-  if (rejectAllButton) rejectAllButton.addEventListener('click', async () => {
+  el('twitch-reject-all')?.addEventListener('click', async () => {
     if (!pending.size) return;
-    const confirmed = await window.PanelConfirm?.request({
-      title: `拒絕全部 ${pending.size} 筆點歌？`,
-      summary: '這些待確認點歌會全部標記為略過。',
-      impact: '已加入播放清單的歌曲與其他設定不受影響。',
-      tone: 'danger',
-      confirmLabel: '全部拒絕',
-    });
+    const confirmed = await window.PanelConfirm?.request({ title: `拒絕全部 ${pending.size} 筆點歌？`, summary: '這些待確認點歌會全部標記為略過。', impact: '已加入播放清單的歌曲與其他設定不受影響。', tone: 'danger', confirmLabel: '全部拒絕' });
     if (!confirmed) return;
     for (const requestId of [...pending.keys()]) rejectRequest(requestId);
   });
 
+  el('twitch-request-quick-toggle')?.addEventListener('click', () => {
+    const next = { ...requestSaved, enabled: !requestSaved.enabled };
+    const button = el('twitch-request-quick-toggle');
+    button.disabled = true;
+    SocketClient.sendWithCallback('twitch:request-settings:update', next, (result) => {
+      button.disabled = false;
+      if (!result?.ok) { AppShared.showToast(`切換點歌狀態失敗：${result?.error || '伺服器沒有回應'}`, 'error'); return; }
+      const normalized = TwitchRequestSettings.normalizeSettings(result.settings || next);
+      requestSaved = normalized;
+      if (!dirty.rules) requestDraft.enabled = normalized.enabled;
+      applyRuleFields(); updateMainStatus();
+      AppShared.showToast(normalized.enabled ? 'Twitch 點歌已開放' : 'Twitch 點歌已暫停', 'success');
+    });
+  });
+
+  SocketClient.on('twitch:request-settings:update', mergeRequestSettingsFromServer);
+  SocketClient.on('twitch:reward-settings:update', mergeRewardSettingsFromServer);
+  SocketClient.on('twitch:reply-settings:update', mergeReplySettingsFromServer);
   SocketClient.on('twitch:song-request', (request) => {
-    if (!request || !request.requestId || !request.url) return;
-    pending.set(request.requestId, request);
-    renderRequests();
+    if (!request?.requestId || !request.url) return;
+    pending.set(request.requestId, request); renderRequests();
     AppShared.showToast(`${request.requester || '觀眾'} 點了一首歌，請到「點歌」頁確認`, 'info');
   });
-
-  // 面板剛重整／重新連線時，從 server 還原尚未處理的 request，不讓主播因重新整理而看不到點歌。
   SocketClient.on('twitch:requests', (requests) => {
     pending.clear();
-    if (Array.isArray(requests)) requests.forEach((request) => {
-      if (request && request.requestId && request.url) pending.set(request.requestId, request);
-    });
+    if (Array.isArray(requests)) requests.forEach((request) => { if (request?.requestId && request.url) pending.set(request.requestId, request); });
     renderRequests();
   });
-
   SocketClient.on('twitch:song-request:expired', ({ requestId } = {}) => {
     if (!requestId || !pending.delete(requestId)) return;
-    busy.delete(requestId);
-    renderRequests();
-    AppShared.showToast('有一筆 Twitch 點歌等待過久，已自動取消', 'info');
+    busy.delete(requestId); renderRequests(); AppShared.showToast('有一筆 Twitch 點歌等待過久，已自動取消', 'info');
+  });
+  SocketClient.on('twitch:song-request:canceled', ({ requestId } = {}) => {
+    if (!requestId || !pending.delete(requestId)) return;
+    busy.delete(requestId); renderRequests(); AppShared.showToast('觀眾已從聊天室取消一筆待確認點歌', 'info');
   });
 
+  initManagementModal();
+  initSettingsForms();
+  initAuthActions();
+  renderRequests();
+  updateMainStatus();
   refreshStatus();
   setInterval(refreshStatus, 10000);
 })();

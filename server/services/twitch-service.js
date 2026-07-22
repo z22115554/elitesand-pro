@@ -60,13 +60,15 @@ function websocketCtor() {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onStatusChange, pendingStore = requestStore, authStore = store }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, getPlaybackSnapshot, pendingStore = requestStore, authStore = store }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
     this.onSongRequest = onSongRequest;
     this.onSongRequestExpired = onSongRequestExpired;
+    this.onSongRequestCanceled = onSongRequestCanceled;
     this.onStatusChange = typeof onStatusChange === 'function' ? onStatusChange : null;
+    this.getPlaybackSnapshot = typeof getPlaybackSnapshot === 'function' ? getPlaybackSnapshot : () => ({});
     this.deviceAuthorization = null;
     this.authStore = authStore;
     this.auth = this.authStore.load();
@@ -87,7 +89,8 @@ class TwitchService {
     this.replySettings = TwitchReplySettings.getDefaults();
     this.requestSettings = TwitchRequestSettings.getDefaults();
     this.rewardSettings = TwitchRewardSettings.getDefaults();
-    this.requestCooldowns = new Map();
+    this.commandUserCooldowns = new Map();
+    this.commandGlobalCooldowns = new Map();
     this.rewardSubscriptionReady = false;
     this.seenRedemptions = new Map();
     this.restorePendingRequests();
@@ -100,7 +103,8 @@ class TwitchService {
 
   setRequestSettings(settings) {
     this.requestSettings = TwitchRequestSettings.normalizeSettings(settings);
-    if (this.requestSettings.cooldownSeconds === 0) this.requestCooldowns.clear();
+    this.commandUserCooldowns.clear();
+    this.commandGlobalCooldowns.clear();
     return this.requestSettings;
   }
 
@@ -123,7 +127,7 @@ class TwitchService {
       connected: !!this.wsSessionId,
       authorized: !!(this.auth && this.auth.accessToken && this.auth.userId),
       broadcasterLogin: this.auth && this.auth.userLogin ? this.auth.userLogin : null,
-      command: this.requestSettings?.command || this.config.twitchRequestCommand || '!點歌',
+      command: TwitchRequestSettings.getCommand(this.requestSettings, 'request')?.command || this.config.twitchRequestCommand || '!點歌',
       missingScopes: REQUIRED_SCOPES.filter((scope) => !this.hasScope(scope)),
       rewardAuthorized: this.hasScope(REDEMPTION_SCOPE),
       rewardSubscriptionReady: this.rewardSubscriptionReady,
@@ -628,33 +632,156 @@ class TwitchService {
     }
   }
 
+  commandCooldown(commandKey, commandSettings, event) {
+    const now = Date.now();
+    const globalAcceptedAt = this.commandGlobalCooldowns.get(commandKey) || 0;
+    const globalRemaining = Math.ceil(((commandSettings.globalCooldownSeconds * 1000) - (now - globalAcceptedAt)) / 1000);
+    if (commandSettings.globalCooldownSeconds > 0 && globalRemaining > 0) return globalRemaining;
+    const userKey = requesterKey(event);
+    const userAcceptedAt = this.commandUserCooldowns.get(`${commandKey}:${userKey}`) || 0;
+    const userRemaining = Math.ceil(((commandSettings.userCooldownSeconds * 1000) - (now - userAcceptedAt)) / 1000);
+    if (userKey && commandSettings.userCooldownSeconds > 0 && userRemaining > 0) return userRemaining;
+    return 0;
+  }
+
+  recordCommandCooldown(commandKey, commandSettings, event) {
+    const now = Date.now();
+    if (commandSettings.globalCooldownSeconds > 0) this.commandGlobalCooldowns.set(commandKey, now);
+    const userKey = requesterKey(event);
+    if (userKey && commandSettings.userCooldownSeconds > 0) this.commandUserCooldowns.set(`${commandKey}:${userKey}`, now);
+  }
+
+  playbackSummary() {
+    const snapshot = this.getPlaybackSnapshot() || {};
+    const playlist = Array.isArray(snapshot.playlist) ? snapshot.playlist.filter(Boolean) : [];
+    const current = snapshot.currentTrack || null;
+    const currentIndex = current?.id ? playlist.findIndex((track) => track?.id === current.id) : -1;
+    const next = currentIndex >= 0 ? (playlist[currentIndex + 1] || null) : (playlist[0] || null);
+    const queuedCount = currentIndex >= 0 ? Math.max(0, playlist.length - currentIndex - 1) : playlist.length;
+    return { current, next, playlist, queuedCount };
+  }
+
+  pendingForUser(event) {
+    const userKey = requesterKey(event);
+    if (!userKey) return [];
+    return [...this.pendingRequests.values()]
+      .filter((request) => request.requesterId === userKey && request.expiresAt > Date.now())
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  requestRulesSummary() {
+    const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
+    const requestCommand = rules.commands.request;
+    const permission = TwitchRequestSettings.PERMISSION_LEVELS.find((level) => level.key === requestCommand.permissionLevel)?.label || '所有觀眾';
+    const details = [
+      rules.enabled ? '目前開放' : '目前暫停',
+      permission,
+      rules.perUserPending > 0 ? `每人最多 ${rules.perUserPending} 首待確認` : '每人待確認不限首數',
+      rules.maxDurationMinutes > 0 ? `最長 ${rules.maxDurationMinutes} 分鐘` : '歌曲長度不限',
+      rules.rejectDuplicates ? '待確認區不接受重複影片' : '待確認區允許重複影片',
+    ];
+    return details.join('；');
+  }
+
+  async cancelLatestPendingRequest(event) {
+    const requests = this.pendingForUser(event);
+    const request = requests.at(-1);
+    if (!request) {
+      await this.sendConfiguredReply(event, 'requestNotFound');
+      return;
+    }
+    try {
+      if (request.rewardRedemption) {
+        await this.updateRewardRedemptionStatus(request.rewardRedemption, 'CANCELED');
+      }
+    } catch (err) {
+      log.warn(`觀眾取消忠誠點數點歌退款失敗：${err.message}`);
+      await this.sendConfiguredReply(event, 'requestCancelFailed', { title: request.title });
+      return;
+    }
+    this.pendingRequests.delete(request.requestId);
+    this.clearRequestExpiry(request.requestId);
+    this.persistPendingRequests();
+    if (typeof this.onSongRequestCanceled === 'function') this.onSongRequestCanceled(request.requestId);
+    if (request.rewardRedemption) {
+      await this.sendConfiguredReply(event, 'rewardRefunded', {
+        title: request.title,
+        artist: request.author,
+        cost: request.rewardRedemption.cost,
+        reason: '觀眾自行取消待確認點歌',
+      });
+    } else {
+      await this.sendConfiguredReply(event, 'requestCanceled', { title: request.title, artist: request.author });
+    }
+  }
+
+  async handleSelfServiceCommand(commandKey, event) {
+    const { current, next, queuedCount } = this.playbackSummary();
+    if (commandKey === 'currentSong') {
+      await this.sendConfiguredReply(event, current ? 'currentSong' : 'noCurrentSong', {
+        currentTitle: current?.title || '', currentArtist: current?.artist || '',
+      });
+    } else if (commandKey === 'nextSong') {
+      await this.sendConfiguredReply(event, next ? 'nextSong' : 'noNextSong', {
+        nextTitle: next?.title || '', nextArtist: next?.artist || '',
+      });
+    } else if (commandKey === 'myRequests') {
+      const requests = this.pendingForUser(event);
+      await this.sendConfiguredReply(event, requests.length ? 'myRequests' : 'noMyRequests', {
+        requestCount: requests.length,
+        title: requests.slice(0, 3).map((request, index) => `${index + 1}. ${request.title || '未命名歌曲'}`).join('；'),
+      });
+    } else if (commandKey === 'position') {
+      const own = this.pendingForUser(event).at(-1);
+      const ordered = [...this.pendingRequests.values()].filter((request) => request.expiresAt > Date.now()).sort((a, b) => a.createdAt - b.createdAt);
+      await this.sendConfiguredReply(event, own ? 'requestPosition' : 'requestNotFound', {
+        title: own?.title || '', position: own ? ordered.findIndex((request) => request.requestId === own.requestId) + 1 : '',
+      });
+    } else if (commandKey === 'cancelRequest') {
+      await this.cancelLatestPendingRequest(event);
+    } else if (commandKey === 'rules') {
+      await this.sendConfiguredReply(event, 'requestRules', {
+        command: TwitchRequestSettings.getCommand(this.requestSettings, 'request')?.command || '!點歌',
+        reason: this.requestRulesSummary(),
+      });
+    } else if (commandKey === 'queueSummary') {
+      await this.sendConfiguredReply(event, 'queueSummary', {
+        currentTitle: current?.title || '無', currentArtist: current?.artist || '',
+        nextTitle: next?.title || '無', nextArtist: next?.artist || '',
+        queue: queuedCount,
+      });
+    }
+  }
+
   async handleChatMessage(event, fallbackId) {
     const text = String(event.message && event.message.text || '').trim();
     const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
     const match = TwitchRequestSettings.matchCommand(text, rules);
     if (!match) return;
     const command = match.command;
-    const url = String(match.argument || '').trim();
-
-    if (!rules.enabled) {
-      await this.sendConfiguredReply(event, 'requestDisabled', { command });
-      return;
-    }
-    if (!TwitchRequestSettings.permissionAllows(event, rules.permissionLevel)) {
+    const commandSettings = match.settings;
+    if (!TwitchRequestSettings.permissionAllows(event, commandSettings.permissionLevel)) {
       await this.sendConfiguredReply(event, 'permissionDenied', { command });
       return;
     }
-    const userKey = requesterKey(event);
-    const now = Date.now();
-    const lastAcceptedAt = this.requestCooldowns.get(userKey) || 0;
-    const remainingSeconds = Math.ceil(((rules.cooldownSeconds * 1000) - (now - lastAcceptedAt)) / 1000);
-    if (userKey && rules.cooldownSeconds > 0 && remainingSeconds > 0) {
+    const remainingSeconds = this.commandCooldown(match.key, commandSettings, event);
+    if (remainingSeconds > 0) {
       await this.sendConfiguredReply(event, 'cooldownActive', { command, seconds: remainingSeconds });
       return;
     }
 
+    if (match.key !== 'request') {
+      await this.handleSelfServiceCommand(match.key, event);
+      this.recordCommandCooldown(match.key, commandSettings, event);
+      return;
+    }
+    if (!rules.enabled) {
+      await this.sendConfiguredReply(event, 'requestDisabled', { command });
+      return;
+    }
     const requestId = event.message_id || fallbackId || crypto.randomUUID();
-    await this.handleSongRequestInput({ event, requestId, url, command, source: 'chat' });
+    const accepted = await this.handleSongRequestInput({ event, requestId, url: String(match.argument || '').trim(), command, source: 'chat' });
+    if (accepted) this.recordCommandCooldown(match.key, commandSettings, event);
   }
 
   async handleRewardRedemption(redemptionEvent, fallbackId) {
@@ -714,27 +841,27 @@ class TwitchService {
     const parsedUrl = parseYouTubeUrl(url);
     if (!parsedUrl?.videoId) {
       await this.rejectSongRequest({ event, key: 'invalidLink', values: { command }, redemption, reason: '沒有提供有效的 YouTube 單曲連結' });
-      return;
+      return false;
     }
     if (parsedUrl.playlistId) {
       await this.rejectSongRequest({ event, key: 'playlistNotAllowed', values: { url }, redemption, reason: '播放清單連結不屬於單曲點歌' });
-      return;
+      return false;
     }
     if (this.pendingRequests.size >= rules.maxPending) {
       await this.rejectSongRequest({ event, key: 'queueFull', values: { url, limit: rules.maxPending }, redemption, reason: '待確認點歌已達總上限' });
-      return;
+      return false;
     }
     const userKey = requesterKey(event);
     if (userKey && rules.perUserPending > 0) {
       const userPending = [...this.pendingRequests.values()].filter((request) => request.requesterId === userKey).length;
       if (userPending >= rules.perUserPending) {
         await this.rejectSongRequest({ event, key: 'userLimitReached', values: { url, limit: rules.perUserPending }, redemption, reason: '你目前的待確認點歌已達上限' });
-        return;
+        return false;
       }
     }
     if (rules.rejectDuplicates && [...this.pendingRequests.values()].some((request) => request.videoId === parsedUrl.videoId)) {
       await this.rejectSongRequest({ event, key: 'duplicatePending', values: { url }, redemption, reason: '同一首歌已在待確認清單中' });
-      return;
+      return false;
     }
     const metadata = await this.fetchYouTubeMetadata(url);
     if (rules.maxDurationMinutes > 0 && metadata.duration > rules.maxDurationMinutes * 60) {
@@ -742,7 +869,7 @@ class TwitchService {
         event, key: 'durationExceeded', redemption, reason: `歌曲超過 ${rules.maxDurationMinutes} 分鐘限制`,
         values: { title: metadata.title, artist: metadata.author, url, duration: formatDuration(metadata.duration), limit: rules.maxDurationMinutes },
       });
-      return;
+      return false;
     }
     const request = {
       requestId,
@@ -766,11 +893,10 @@ class TwitchService {
         event, key: 'panelUnavailable', redemption, reason: '控制面板目前無法接收點歌',
         values: { title: request.title, artist: request.author, url },
       });
-      return;
+      return false;
     }
     const createdAt = Date.now();
     this.pendingRequests.set(requestId, { ...request, event, createdAt, expiresAt: createdAt + REQUEST_TTL_MS });
-    if (source === 'chat' && userKey && rules.cooldownSeconds > 0) this.requestCooldowns.set(userKey, createdAt);
     this.scheduleRequestExpiry(requestId);
     this.persistPendingRequests();
     // 確認制：不自動下載，先送到主播面板等待確認。
@@ -778,6 +904,7 @@ class TwitchService {
       title: request.title, artist: request.author, url, cost: redemption?.cost || '',
     });
     this.pruneRequests();
+    return true;
   }
 
   async completeSongRequest({ requestId, success, title, artist, rejected, retryable, position, queue } = {}) {
@@ -851,9 +978,10 @@ class TwitchService {
     if (!settings.enabled || !reply || !reply.enabled) return { sent: false, skipped: true };
     const text = TwitchReplySettings.renderTemplate(reply.template, {
       user: event?.chatter_user_name || event?.chatter_user_login || '觀眾',
-      command: this.requestSettings?.command || this.config.twitchRequestCommand || '!點歌',
+      command: TwitchRequestSettings.getCommand(this.requestSettings, 'request')?.command || this.config.twitchRequestCommand || '!點歌',
       title: '', artist: '', reason: '', position: '', queue: '', url: '',
       seconds: '', limit: '', duration: '', cost: '',
+      currentTitle: '', currentArtist: '', nextTitle: '', nextArtist: '', requestCount: '',
       ...values,
     });
     if (!text) return { sent: false, skipped: true };
@@ -869,7 +997,7 @@ class TwitchService {
     const reply = validation.settings.replies[replyKey];
     const text = TwitchReplySettings.renderTemplate(reply.template, {
       ...TwitchReplySettings.sampleValues(),
-      command: this.requestSettings?.command || this.config.twitchRequestCommand || '!點歌',
+      command: TwitchRequestSettings.getCommand(this.requestSettings, 'request')?.command || this.config.twitchRequestCommand || '!點歌',
     });
     const message = `【回覆測試】${text}`;
     await this.sendChatReply({}, message, { mode: 'plain' });
@@ -919,12 +1047,12 @@ class TwitchService {
           .catch((err) => log.warn(`Twitch 點歌逾時處理失敗：${err.message}`));
       }
     }
-    const cooldownMs = (this.requestSettings?.cooldownSeconds || 0) * 1000;
-    if (cooldownMs === 0) this.requestCooldowns.clear();
-    else {
-      for (const [userKey, acceptedAt] of this.requestCooldowns) {
-        if (acceptedAt <= now - cooldownMs) this.requestCooldowns.delete(userKey);
-      }
+    const cooldownCutoff = now - TwitchRequestSettings.LIMITS.cooldownSeconds * 1000;
+    for (const [key, acceptedAt] of this.commandUserCooldowns) {
+      if (acceptedAt <= cooldownCutoff) this.commandUserCooldowns.delete(key);
+    }
+    for (const [key, acceptedAt] of this.commandGlobalCooldowns) {
+      if (acceptedAt <= cooldownCutoff) this.commandGlobalCooldowns.delete(key);
     }
     for (const [redemptionId, seenAt] of this.seenRedemptions) {
       if (seenAt <= now - 24 * 60 * 60 * 1000) this.seenRedemptions.delete(redemptionId);
