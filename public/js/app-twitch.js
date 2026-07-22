@@ -243,7 +243,12 @@
     el('twitch-settings-search')?.addEventListener('input', updateSettingsSearch);
     modal.addEventListener('click', (event) => { if (event.target === modal) closeManagement(); });
     modal.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') { event.preventDefault(); closeManagement(); return; }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeManagement();
+        return;
+      }
       if (event.key !== 'Tab') return;
       const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
         .filter((node) => !node.hidden && !node.closest('[hidden]'));
@@ -542,12 +547,15 @@
     el('twitch-reply-item-error').hidden = validation.valid;
     el('twitch-reply-item-error').textContent = validation.errors[0] || '';
     el('twitch-reply-count').textContent = `${Array.from(reply.template).length}/${TwitchReplySettings.MAX_MESSAGE_LENGTH}`;
-    el('twitch-reply-preview').textContent = validation.valid ? `預覽：${TwitchReplySettings.renderTemplate(reply.template, replySampleValues())}` : `預覽：${definition.defaultTemplate}`;
+    el('twitch-reply-preview').textContent = validation.valid
+      ? `預覽：${TwitchReplySettings.renderTemplate(reply.template, replySampleValues())}`
+      : '預覽暫停：請先修正文案中的變數。';
     const whole = TwitchReplySettings.validateSettings(replyDraft);
     const formError = el('twitch-reply-form-error');
     const message = whole.errors[0]?.message || '';
     if (formError) { formError.textContent = message; formError.hidden = !message; }
     if (el('twitch-reply-save')) el('twitch-reply-save').disabled = !whole.ok;
+    if (el('twitch-reply-test-send')) el('twitch-reply-test-send').disabled = !whole.ok;
     updateReplyTestPreview();
     return whole;
   }
