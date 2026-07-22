@@ -636,6 +636,7 @@ class AudioProcessor {
           artists: Array.isArray(data.artists) ? data.artists : [],
           albumArtist: data.album_artist || '',
           channel: data.channel || '',
+          channelId: data.channel_id || data.uploader_id || '',
           uploader: data.uploader || '',
           description: data.description || '',
           categories: Array.isArray(data.categories) ? data.categories : [],
@@ -681,6 +682,7 @@ class AudioProcessor {
         artists: [],
         track: '',
         channel: data.author_name || '',
+        channelId: '',
         uploader: data.author_name || '',
       };
     } catch (e) {

@@ -178,6 +178,7 @@ class TwitchService {
         duration: Number(request.assessment.duration) || 0,
         title: String(request.assessment.title || '').slice(0, 300),
         author: String(request.assessment.author || '').slice(0, 200),
+        channelId: String(request.assessment.channelId || '').slice(0, 120),
         thumbnail: String(request.assessment.thumbnail || '').slice(0, 500),
         categories: Array.isArray(request.assessment.categories) ? request.assessment.categories.map(value => String(value).slice(0, 100)).slice(0, 5) : [],
       } : null,
@@ -621,6 +622,7 @@ class TwitchService {
       return {
         title: String(assessment.title || fallback.title).slice(0, 300),
         author: String(assessment.author || '').slice(0, 200),
+        channelId: String(assessment.channelId || '').slice(0, 120),
         thumbnail: assessment.thumbnail || '',
         duration: Number(assessment.duration) || 0,
         metadataAvailable: !!assessment.title,
@@ -847,6 +849,14 @@ class TwitchService {
       await this.rejectSongRequest({ event, key: 'playlistNotAllowed', values: { url }, redemption, reason: '播放清單連結不屬於單曲點歌' });
       return false;
     }
+    const preMetadataBlock = TwitchRequestSettings.findBlacklistMatch(rules, {
+      event, videoId: parsedUrl.videoId, phase: 'pre',
+    });
+    if (preMetadataBlock) {
+      const reason = preMetadataBlock.reason || '這位使用者或影片已被點歌規則封鎖';
+      await this.rejectSongRequest({ event, key: 'blockedRequest', values: { url, reason }, redemption, reason });
+      return false;
+    }
     if (this.pendingRequests.size >= rules.maxPending) {
       await this.rejectSongRequest({ event, key: 'queueFull', values: { url, limit: rules.maxPending }, redemption, reason: '待確認點歌已達總上限' });
       return false;
@@ -864,6 +874,17 @@ class TwitchService {
       return false;
     }
     const metadata = await this.fetchYouTubeMetadata(url);
+    const postMetadataBlock = TwitchRequestSettings.findBlacklistMatch(rules, {
+      event, videoId: parsedUrl.videoId, metadata, phase: 'post',
+    });
+    if (postMetadataBlock) {
+      const reason = postMetadataBlock.reason || '這個 YouTube 頻道或影片標題已被點歌規則封鎖';
+      await this.rejectSongRequest({
+        event, key: 'blockedRequest', redemption, reason,
+        values: { title: metadata.title, artist: metadata.author, url, reason },
+      });
+      return false;
+    }
     if (rules.maxDurationMinutes > 0 && metadata.duration > rules.maxDurationMinutes * 60) {
       await this.rejectSongRequest({
         event, key: 'durationExceeded', redemption, reason: `歌曲超過 ${rules.maxDurationMinutes} 分鐘限制`,

@@ -58,6 +58,7 @@ const TwitchReplySettings = (() => {
     { key: 'invalidLink', group: 'restrictions', label: '沒有附有效的 YouTube 連結', defaultEnabled: true, defaultTemplate: '請在 {command} 後附上 YouTube 連結，例如：{command} https://youtu.be/…' },
     { key: 'playlistNotAllowed', group: 'restrictions', label: '貼了播放清單連結', defaultEnabled: true, defaultTemplate: '點歌只接受單曲連結，不接受播放清單。' },
     { key: 'duplicatePending', group: 'restrictions', label: '重複點同一首歌', defaultEnabled: true, defaultTemplate: '這首歌已在待確認清單中，不需重複點歌。' },
+    { key: 'blockedRequest', group: 'restrictions', label: '命中黑名單規則', defaultEnabled: true, defaultTemplate: '這次點歌不符合目前規則：{reason}' },
     { key: 'queueFull', group: 'restrictions', label: '待確認清單已滿', defaultEnabled: true, defaultTemplate: '待確認點歌已滿，請稍後再試。' },
     { key: 'panelUnavailable', group: 'restrictions', label: '控制面板沒有開啟', defaultEnabled: true, defaultTemplate: '目前控制面板未開啟，暫時無法接收點歌。' },
     { key: 'hostRejected', group: 'failures', label: '主播拒絕歌曲', defaultEnabled: true, defaultTemplate: '主播暫時略過了這首點歌，可以換一首再試～' },
