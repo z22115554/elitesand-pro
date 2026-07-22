@@ -2,18 +2,37 @@
   "schemaVersion": 1,
   "announcements": [
     {
-      "id": "v0.9.2-required-full-update",
+      "id": "v0.9.2-legacy-portable-migration",
       "level": "critical",
-      "title": "必須更新至 v0.9.2 完整版",
-      "message": "v0.9.2 修正桌面版 Twitch 授權連結無法開啟的問題，並收錄 Twitch 點歌管理中心、防濫用規則、場次公平性與忠誠點數原生限制。這次修正包含 Electron 桌面殼，不在程式內增量更新白名單中，舊版無法透過增量更新取得修正。請前往官方 GitHub Releases 下載 v0.9.2 完整安裝檔或可攜版，資料、下載音檔與播放清單會保留。本程式尚未取得 Windows 程式碼簽章；首次執行若出現 Windows SmartScreen，請確認下載來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
+      "title": "v0.8.0 以前版本：升級 v0.9.2 前請搬移舊資料",
+      "message": "你目前使用的是沒有 Electron 桌面殼的舊可攜版。安裝 v0.9.2 不會刪除舊版資料，但不會自動搬移；若直接開啟，v0.9.2 會像全新安裝。請先完全關閉新舊程式，再把舊版 app/data 內容複製到 %APPDATA%\\Elitesand Pro\\data，並把舊版 app/downloads 內容複製到 %APPDATA%\\Elitesand Pro\\downloads，才能沿用播放清單、設定與下載音檔。此版含桌面殼修正，無法增量更新，請下載完整版。本程式尚未取得 Windows 程式碼簽章；若出現 SmartScreen，請確認來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
       "minVersion": "0.7.0",
-      "maxVersion": "0.9.1",
+      "maxVersion": "0.8.0",
       "publishedAt": "2026-07-23T00:00:00+08:00",
       "expiresAt": "2027-01-31T23:59:59+08:00",
       "dismissible": false,
       "showOnce": false,
       "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.2",
       "buttonText": "下載 v0.9.2 完整版",
+      "actions": {
+        "disableIncrementalUpdate": true,
+        "showFullDownloadOnly": true
+      },
+      "enabled": true
+    },
+    {
+      "id": "v0.9.2-electron-full-update",
+      "level": "critical",
+      "title": "請完整安裝 v0.9.2（既有資料會保留）",
+      "message": "你目前使用的是 Electron 安裝版。使用 v0.9.2 installer 直接覆蓋安裝時，%APPDATA%\\Elitesand Pro 內的設定、媒體庫、播放清單與下載音檔會保留。v0.9.2 修正 Twitch 授權連結無法開啟的問題，這項修正屬於 Electron 桌面殼，不在增量更新白名單，因此必須下載完整 installer，不能使用程式內增量更新。本程式尚未取得 Windows 程式碼簽章；若出現 SmartScreen，請確認來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
+      "minVersion": "0.8.1-pre.1",
+      "maxVersion": "0.9.1",
+      "publishedAt": "2026-07-23T00:00:00+08:00",
+      "expiresAt": "2027-01-31T23:59:59+08:00",
+      "dismissible": false,
+      "showOnce": false,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.2",
+      "buttonText": "下載 v0.9.2 完整安裝檔",
       "actions": {
         "disableIncrementalUpdate": true,
         "showFullDownloadOnly": true
