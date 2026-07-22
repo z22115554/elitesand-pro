@@ -18,7 +18,17 @@ const TwitchRequestSettings = (() => {
     maxPending: 50,
     perUserPending: 10,
     maxDurationMinutes: 180,
+    blacklistRules: 200,
+    blacklistValue: 200,
+    blacklistReason: 200,
   });
+  const BLACKLIST_TYPES = Object.freeze([
+    { key: 'user', label: 'Twitch 使用者' },
+    { key: 'video', label: 'YouTube 影片' },
+    { key: 'channel', label: 'YouTube 頻道' },
+    { key: 'title', label: '標題關鍵字' },
+  ]);
+  const BLACKLIST_TYPE_KEYS = new Set(BLACKLIST_TYPES.map((item) => item.key));
   const COMMAND_DEFINITIONS = Object.freeze([
     { key: 'request', label: '點歌', description: '送出一個 YouTube 單曲連結，等待主播確認。', command: '!點歌', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
     { key: 'currentSong', label: '目前歌曲', description: '查詢現在載入或播放中的歌曲。', command: '!目前歌曲', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
@@ -52,7 +62,53 @@ const TwitchRequestSettings = (() => {
       perUserPending: 0,
       rejectDuplicates: true,
       maxDurationMinutes: 0,
+      blacklist: [],
     };
+  }
+
+  function normalizeBlacklistValue(type, value) {
+    const input = String(value || '').trim();
+    if (type === 'user') return input.replace(/^@/u, '').toLocaleLowerCase();
+    if (type === 'video') {
+      const match = input.match(/(?:youtu\.be\/|[?&]v=|shorts\/|music\.youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/i);
+      return (match?.[1] || input).trim();
+    }
+    return input.toLocaleLowerCase();
+  }
+
+  function normalizeBlacklistRule(rule) {
+    const type = String(rule?.type || 'user');
+    return {
+      id: String(rule?.id || '').trim(),
+      enabled: rule?.enabled !== false,
+      type,
+      value: normalizeBlacklistValue(type, rule?.value),
+      reason: String(rule?.reason || '').trim(),
+      expiresAt: rule?.expiresAt == null || rule.expiresAt === '' ? null : Number(rule.expiresAt),
+      moderatorExempt: rule?.moderatorExempt !== false,
+    };
+  }
+
+  function activeBlacklistRules(settings, now = Date.now()) {
+    return normalizeSettings(settings).blacklist.filter((rule) => rule.enabled && (rule.expiresAt == null || rule.expiresAt > now));
+  }
+
+  function findBlacklistMatch(settings, { event = {}, videoId = '', metadata = null, phase = 'all', now = Date.now() } = {}) {
+    const roles = rolesForEvent(event);
+    const userValues = [event.chatter_user_id, event.chatter_user_login, event.chatter_user_name]
+      .map((value) => normalizeBlacklistValue('user', value)).filter(Boolean);
+    const title = normalizeBlacklistValue('title', metadata?.title);
+    const channelValues = [metadata?.channelId, metadata?.assessment?.channelId, metadata?.author]
+      .map((value) => normalizeBlacklistValue('channel', value)).filter(Boolean);
+    for (const rule of activeBlacklistRules(settings, now)) {
+      if (rule.moderatorExempt && roles.moderator) continue;
+      if ((phase === 'pre' && !['user', 'video'].includes(rule.type)) || (phase === 'post' && !['channel', 'title'].includes(rule.type))) continue;
+      if (rule.type === 'user' && userValues.includes(rule.value)) return rule;
+      if (rule.type === 'video' && String(videoId || '') === rule.value) return rule;
+      if (rule.type === 'channel' && channelValues.includes(rule.value)) return rule;
+      if (rule.type === 'title' && rule.value && title.includes(rule.value)) return rule;
+    }
+    return null;
   }
 
   function validateCommand(value) {
@@ -100,6 +156,7 @@ const TwitchRequestSettings = (() => {
     delete candidate.aliases;
     delete candidate.permissionLevel;
     delete candidate.cooldownSeconds;
+    candidate.blacklist = Array.isArray(value.blacklist) ? value.blacklist.map(normalizeBlacklistRule) : [];
     return candidate;
   }
 
@@ -170,6 +227,28 @@ const TwitchRequestSettings = (() => {
     integerRule(value, 'perUserPending', '每人待確認上限', 0, LIMITS.perUserPending);
     integerRule(value, 'maxDurationMinutes', '歌曲長度上限', 0, LIMITS.maxDurationMinutes);
     if (typeof value.rejectDuplicates !== 'boolean') errors.push({ field: 'rejectDuplicates', message: '重複歌曲規則格式無效。' });
+    if (!Array.isArray(value.blacklist)) {
+      errors.push({ field: 'blacklist', message: '黑名單格式無效。' });
+    } else if (value.blacklist.length > LIMITS.blacklistRules) {
+      errors.push({ field: 'blacklist', message: `黑名單最多 ${LIMITS.blacklistRules} 筆。` });
+    }
+    const normalizedBlacklist = [];
+    const blacklistIds = new Set();
+    (Array.isArray(value.blacklist) ? value.blacklist : []).forEach((incoming, index) => {
+      const rule = normalizeBlacklistRule(incoming);
+      const fieldPrefix = `blacklist.${index}`;
+      if (!rule.id || !/^[A-Za-z0-9_-]{1,80}$/.test(rule.id)) errors.push({ field: `${fieldPrefix}.id`, message: `黑名單第 ${index + 1} 筆缺少有效識別碼。` });
+      else if (blacklistIds.has(rule.id)) errors.push({ field: `${fieldPrefix}.id`, message: `黑名單識別碼重複：${rule.id}` });
+      else blacklistIds.add(rule.id);
+      if (!BLACKLIST_TYPE_KEYS.has(rule.type)) errors.push({ field: `${fieldPrefix}.type`, message: `黑名單第 ${index + 1} 筆類型無效。` });
+      if (!rule.value || Array.from(rule.value).length > LIMITS.blacklistValue) errors.push({ field: `${fieldPrefix}.value`, message: `黑名單第 ${index + 1} 筆比對內容必須是 1–${LIMITS.blacklistValue} 字。` });
+      if (rule.type === 'video' && !/^[A-Za-z0-9_-]{11}$/.test(rule.value)) errors.push({ field: `${fieldPrefix}.value`, message: `黑名單第 ${index + 1} 筆請填有效的 YouTube 影片 ID 或網址。` });
+      if (Array.from(rule.reason).length > LIMITS.blacklistReason) errors.push({ field: `${fieldPrefix}.reason`, message: `黑名單第 ${index + 1} 筆理由最多 ${LIMITS.blacklistReason} 字。` });
+      if (rule.expiresAt != null && (!Number.isFinite(rule.expiresAt) || rule.expiresAt <= 0)) errors.push({ field: `${fieldPrefix}.expiresAt`, message: `黑名單第 ${index + 1} 筆到期時間無效。` });
+      if (typeof incoming?.enabled !== 'boolean') errors.push({ field: `${fieldPrefix}.enabled`, message: `黑名單第 ${index + 1} 筆啟用狀態無效。` });
+      if (typeof incoming?.moderatorExempt !== 'boolean') errors.push({ field: `${fieldPrefix}.moderatorExempt`, message: `黑名單第 ${index + 1} 筆管理員豁免格式無效。` });
+      normalizedBlacklist.push(rule);
+    });
 
     if (errors.length) return { ok: false, errors, settings: null };
     return {
@@ -182,6 +261,7 @@ const TwitchRequestSettings = (() => {
         perUserPending: value.perUserPending,
         rejectDuplicates: value.rejectDuplicates,
         maxDurationMinutes: value.maxDurationMinutes,
+        blacklist: normalizedBlacklist,
       },
     };
   }
@@ -239,6 +319,7 @@ const TwitchRequestSettings = (() => {
 
   return {
     PERMISSION_LEVELS,
+    BLACKLIST_TYPES,
     LIMITS,
     COMMAND_DEFINITIONS,
     getDefaults,
@@ -250,6 +331,9 @@ const TwitchRequestSettings = (() => {
     matchCommand,
     rolesForEvent,
     permissionAllows,
+    normalizeBlacklistValue,
+    activeBlacklistRules,
+    findBlacklistMatch,
     clone,
   };
 })();

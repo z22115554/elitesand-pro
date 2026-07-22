@@ -48,6 +48,7 @@ function assessYouTubeImport(info = {}) {
     duration,
     title,
     author: String(info.channel || info.uploader || '').trim(),
+    channelId: String(info.channelId || info.channel_id || info.uploader_id || '').trim(),
     thumbnail: /^https:\/\//i.test(String(info.thumbnail || '')) ? String(info.thumbnail) : '',
     categories,
   };

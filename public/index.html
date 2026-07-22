@@ -892,7 +892,7 @@
                 <nav class="twitch-management-nav" role="tablist" aria-label="Twitch 點歌管理分類">
                   <button class="twitch-management-nav-item is-active" type="button" role="tab" aria-selected="true" data-twitch-pane="commands">指令<span class="twitch-dirty-dot" hidden>未儲存</span></button>
                   <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="rules">接受規則<span class="twitch-dirty-dot" hidden>未儲存</span></button>
-                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="blacklist">黑名單<span class="twitch-phase-label">T2</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="blacklist">黑名單<span class="twitch-dirty-dot" hidden>未儲存</span></button>
                   <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="reward">忠誠點數<span class="twitch-dirty-dot" hidden>未儲存</span></button>
                   <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="replies">聊天室回覆<span class="twitch-dirty-dot" hidden>未儲存</span></button>
                   <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="custom">自訂指令<span class="twitch-phase-label">T6</span></button>
@@ -938,7 +938,24 @@
                     <div class="twitch-pane-actions"><span id="twitch-request-save-status" class="val" aria-live="polite"></span><button id="twitch-request-reset" class="btn btn-sm btn-ghost" type="button">還原規則預設值</button><button id="twitch-request-save" class="btn btn-sm btn-primary" type="button">儲存接受規則</button></div>
                   </section>
 
-                  <section class="twitch-management-pane twitch-future-pane" role="tabpanel" data-twitch-pane-content="blacklist" hidden><div class="twitch-pane-scroll"><p class="eyebrow">黑名單</p><h4>T2 防濫用階段</h4><p class="sub">之後會在這裡管理 Twitch 使用者、YouTube 影片／頻道與標題關鍵字。T1 不會建立無效的假開關。</p></div></section>
+                  <section class="twitch-management-pane" role="tabpanel" data-twitch-pane-content="blacklist" hidden>
+                    <div class="twitch-pane-scroll">
+                      <div class="twitch-pane-heading"><p class="eyebrow">黑名單</p><h4>在點歌進入待確認區前擋下</h4><p class="sub">使用者與影片會先擋；頻道、標題與時長共用同一次 YouTube 資訊檢查，不會重複讀取。</p></div>
+                      <div class="twitch-blacklist-layout">
+                        <div><div class="twitch-blacklist-list-head"><div><div class="label">目前規則</div><p id="twitch-blacklist-count" class="sub">0 筆</p></div><button id="twitch-blacklist-new" class="btn btn-sm btn-ghost" type="button">新增規則</button></div><div id="twitch-blacklist-list" class="twitch-blacklist-list" role="listbox" aria-label="Twitch 點歌黑名單"></div></div>
+                        <div class="twitch-blacklist-editor">
+                          <div class="twitch-rule-grid"><div class="field"><label for="twitch-blacklist-type">封鎖類型</label><select id="twitch-blacklist-type" class="input"></select></div><div class="field"><label for="twitch-blacklist-value">比對內容</label><input id="twitch-blacklist-value" class="input" type="text" maxlength="200" autocomplete="off" spellcheck="false"><p id="twitch-blacklist-value-hint" class="field-hint">輸入 Twitch 使用者 ID、登入名稱或顯示名稱。</p></div></div>
+                          <div class="field"><label for="twitch-blacklist-reason">拒絕原因</label><input id="twitch-blacklist-reason" class="input" type="text" maxlength="200" placeholder="例如：多次惡意點歌" autocomplete="off"><p class="field-hint">會套入聊天室回覆的 {reason}；留空會使用安全預設文字。</p></div>
+                          <div class="field"><label for="twitch-blacklist-expires">到期時間</label><input id="twitch-blacklist-expires" class="input" type="datetime-local"><p class="field-hint">留空表示永久；已到期規則保留在清單但不再攔截。</p></div>
+                          <div class="switch-row"><div><div class="label">啟用這筆規則</div><div class="sub">可暫停規則，不必刪除。</div></div><label class="switch"><input id="twitch-blacklist-enabled" type="checkbox" checked><span class="track"></span></label></div>
+                          <div class="switch-row"><div><div class="label">管理員與實況主豁免</div><div class="sub">開啟時，moderator／broadcaster 不受這筆規則限制。</div></div><label class="switch"><input id="twitch-blacklist-moderator-exempt" type="checkbox" checked><span class="track"></span></label></div>
+                          <div id="twitch-blacklist-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
+                          <div class="twitch-blacklist-editor-actions"><button id="twitch-blacklist-delete" class="btn btn-sm btn-ghost btn-danger" type="button" hidden>刪除規則</button><button id="twitch-blacklist-apply" class="btn btn-sm btn-primary" type="button">加入規則</button></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="twitch-pane-actions"><span id="twitch-blacklist-save-status" class="val" aria-live="polite"></span><button id="twitch-blacklist-reset" class="btn btn-sm btn-ghost" type="button">清除全部規則</button><button id="twitch-blacklist-save" class="btn btn-sm btn-primary" type="button">儲存黑名單</button></div>
+                  </section>
 
                   <section class="twitch-management-pane" role="tabpanel" data-twitch-pane-content="reward" hidden>
                     <div class="twitch-pane-scroll">

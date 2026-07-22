@@ -10,7 +10,7 @@
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const pending = new Map();
   const busy = new Map();
-  const dirty = { commands: false, rules: false, reward: false, replies: false };
+  const dirty = { commands: false, rules: false, blacklist: false, reward: false, replies: false };
   let requestSaved = TwitchRequestSettings.getDefaults();
   let requestDraft = clone(requestSaved);
   let rewardSaved = TwitchRewardSettings.getDefaults();
@@ -19,6 +19,7 @@
   let replyDraft = clone(replySaved);
   let activeCommandKey = 'request';
   let activeReplyKey = 'received';
+  let activeBlacklistId = '';
   let focusBeforeManagement = null;
   let lastRuntimeStatus = null;
 
@@ -145,6 +146,8 @@
     renderCommandList();
     loadCommandEditor();
     applyRuleFields();
+    renderBlacklistList();
+    loadBlacklistEditor();
     applyRewardFields();
     renderReplyEvents();
     loadReplyEditor();
@@ -190,7 +193,7 @@
     { label: '目前歌曲指令', category: '指令', terms: '目前歌曲 current song', pane: 'commands', commandKey: 'currentSong', focusId: 'twitch-command-name' },
     { label: '取消點歌指令', category: '指令', terms: '取消 點歌 退款', pane: 'commands', commandKey: 'cancelRequest', focusId: 'twitch-command-name' },
     { label: '待確認總上限', category: '接受規則', terms: '上限 數量 待確認', pane: 'rules', focusId: 'twitch-request-max-pending' },
-    { label: '黑名單', category: '黑名單 · T2', terms: '黑名單 封鎖 使用者 影片 頻道 關鍵字', pane: 'blacklist' },
+    { label: '黑名單', category: '黑名單', terms: '黑名單 封鎖 使用者 影片 頻道 關鍵字', pane: 'blacklist', focusId: 'twitch-blacklist-value' },
     { label: '忠誠點數退款', category: '忠誠點數', terms: '退款 忠誠點數 reward redemption', pane: 'reward', focusId: 'twitch-reward-enabled' },
     { label: '忠誠點數退款回覆', category: '聊天室回覆', terms: '退款 回覆 文案 cost', pane: 'replies', replyKey: 'rewardRefunded', focusId: 'twitch-reply-template' },
     { label: '自動回覆總開關', category: '聊天室回覆', terms: '回覆 開關 reply', pane: 'replies', focusId: 'twitch-reply-enabled' },
@@ -365,6 +368,108 @@
     return validation;
   }
 
+  function blacklistTypeDefinition(type) {
+    return TwitchRequestSettings.BLACKLIST_TYPES.find((item) => item.key === type) || TwitchRequestSettings.BLACKLIST_TYPES[0];
+  }
+
+  function blacklistExpiryToInput(value) {
+    if (!Number.isFinite(value) || value <= 0) return '';
+    const date = new Date(value - new Date(value).getTimezoneOffset() * 60000);
+    return date.toISOString().slice(0, 16);
+  }
+
+  function blacklistExpiryFromInput(value) {
+    if (!value) return null;
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : NaN;
+  }
+
+  function updateBlacklistHint() {
+    const type = el('twitch-blacklist-type')?.value || 'user';
+    const hints = {
+      user: '輸入 Twitch 使用者 ID、登入名稱或顯示名稱。',
+      video: '貼 YouTube 單曲網址或 11 碼影片 ID。',
+      channel: '輸入 YouTube 頻道 ID（UC…）或完整頻道名稱。',
+      title: '只要影片標題包含這段文字就會擋下，不分大小寫。',
+    };
+    if (el('twitch-blacklist-value-hint')) el('twitch-blacklist-value-hint').textContent = hints[type] || '';
+  }
+
+  function blacklistRuleFromFields() {
+    return {
+      id: activeBlacklistId || `rule_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      enabled: !!el('twitch-blacklist-enabled')?.checked,
+      type: el('twitch-blacklist-type')?.value || 'user',
+      value: el('twitch-blacklist-value')?.value || '',
+      reason: el('twitch-blacklist-reason')?.value || '',
+      expiresAt: blacklistExpiryFromInput(el('twitch-blacklist-expires')?.value || ''),
+      moderatorExempt: !!el('twitch-blacklist-moderator-exempt')?.checked,
+    };
+  }
+
+  function validateBlacklistEditor() {
+    const rule = blacklistRuleFromFields();
+    const blacklist = requestDraft.blacklist.filter((item) => item.id !== activeBlacklistId).concat(rule);
+    const validation = TwitchRequestSettings.validateSettings({ ...requestSaved, blacklist });
+    const error = validation.errors.find((item) => item.field.startsWith('blacklist.'));
+    const emptyNewRule = !activeBlacklistId && !String(rule.value || '').trim();
+    const box = el('twitch-blacklist-form-error');
+    if (box) { box.textContent = emptyNewRule ? '' : (error?.message || ''); box.hidden = emptyNewRule || !error; }
+    if (el('twitch-blacklist-apply')) el('twitch-blacklist-apply').disabled = emptyNewRule || !!error;
+    return { validation, rule };
+  }
+
+  function renderBlacklistList() {
+    const list = el('twitch-blacklist-list');
+    if (!list) return;
+    const rules = Array.isArray(requestDraft.blacklist) ? requestDraft.blacklist : [];
+    el('twitch-blacklist-count').textContent = `${rules.length} 筆`;
+    list.innerHTML = '';
+    if (!rules.length) {
+      list.innerHTML = '<div class="twitch-blacklist-empty">尚未建立規則。先選類型並填入比對內容。</div>';
+      return;
+    }
+    rules.forEach((rule) => {
+      const type = blacklistTypeDefinition(rule.type);
+      const expired = rule.expiresAt != null && rule.expiresAt <= Date.now();
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `twitch-blacklist-item${rule.id === activeBlacklistId ? ' is-active' : ''}`;
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', rule.id === activeBlacklistId ? 'true' : 'false');
+      button.innerHTML = `<span class="twitch-blacklist-item-value">${escapeHtml(rule.value)}</span><span class="twitch-blacklist-item-type">${escapeHtml(type.label)}</span><span class="twitch-blacklist-item-state">${expired ? '已到期' : (rule.enabled ? '啟用中' : '已暫停')} · ${rule.moderatorExempt ? '管理員豁免' : '管理員也套用'}${rule.reason ? ` · ${escapeHtml(rule.reason)}` : ''}</span>`;
+      button.addEventListener('click', () => { activeBlacklistId = rule.id; renderBlacklistList(); loadBlacklistEditor(); });
+      list.appendChild(button);
+    });
+  }
+
+  function loadBlacklistEditor() {
+    const rule = requestDraft.blacklist.find((item) => item.id === activeBlacklistId) || null;
+    el('twitch-blacklist-type').value = rule?.type || 'user';
+    el('twitch-blacklist-value').value = rule?.value || '';
+    el('twitch-blacklist-reason').value = rule?.reason || '';
+    el('twitch-blacklist-expires').value = blacklistExpiryToInput(rule?.expiresAt);
+    el('twitch-blacklist-enabled').checked = rule?.enabled !== false;
+    el('twitch-blacklist-moderator-exempt').checked = rule?.moderatorExempt !== false;
+    el('twitch-blacklist-delete').hidden = !rule;
+    el('twitch-blacklist-apply').textContent = rule ? '更新規則' : '加入規則';
+    updateBlacklistHint();
+    validateBlacklistEditor();
+  }
+
+  function applyBlacklistEditor() {
+    const { validation, rule } = validateBlacklistEditor();
+    if (!validation.ok) return;
+    const index = requestDraft.blacklist.findIndex((item) => item.id === activeBlacklistId);
+    const normalized = validation.settings.blacklist.find((item) => item.id === rule.id);
+    if (index >= 0) requestDraft.blacklist[index] = normalized;
+    else requestDraft.blacklist.push(normalized);
+    activeBlacklistId = normalized.id;
+    setDirty('blacklist', true);
+    renderBlacklistList();
+    loadBlacklistEditor();
+  }
+
   function mergeRequestSettingsFromServer(settings) {
     const normalized = TwitchRequestSettings.normalizeSettings(settings);
     requestSaved = normalized;
@@ -376,30 +481,36 @@
       requestDraft.rejectDuplicates = normalized.rejectDuplicates;
       requestDraft.maxDurationMinutes = normalized.maxDurationMinutes;
     }
+    if (!dirty.blacklist) requestDraft.blacklist = clone(normalized.blacklist);
     renderCommandList();
     loadCommandEditor();
     applyRuleFields();
+    renderBlacklistList();
+    loadBlacklistEditor();
     updateMainStatus();
   }
 
   function saveRequestCategory(category, successMessage) {
-    const candidate = category === 'commands'
-      ? { ...requestSaved, commands: requestDraft.commands }
-      : { ...requestDraft, commands: requestSaved.commands };
+    let candidate = { ...requestSaved };
+    if (category === 'commands') candidate.commands = requestDraft.commands;
+    else if (category === 'blacklist') candidate.blacklist = requestDraft.blacklist;
+    else candidate = { ...requestDraft, commands: requestSaved.commands, blacklist: requestSaved.blacklist };
     const validation = TwitchRequestSettings.validateSettings(candidate);
-    if (!validation.ok) { category === 'commands' ? validateCommandForm() : validateRuleForm(); return; }
-    const button = el(category === 'commands' ? 'twitch-command-save' : 'twitch-request-save');
+    if (!validation.ok) { category === 'commands' ? validateCommandForm() : (category === 'blacklist' ? validateBlacklistEditor() : validateRuleForm()); return; }
+    const idPrefix = category === 'commands' ? 'twitch-command' : (category === 'blacklist' ? 'twitch-blacklist' : 'twitch-request');
+    const button = el(`${idPrefix}-save`);
     if (button) button.disabled = true;
     SocketClient.sendWithCallback('twitch:request-settings:update', validation.settings, (result) => {
       if (!result?.ok) {
         if (button) button.disabled = false;
-        const status = el(category === 'commands' ? 'twitch-command-save-status' : 'twitch-request-save-status');
+        const status = el(`${idPrefix}-save-status`);
         if (status) status.textContent = `儲存失敗：${result?.error || '伺服器沒有回應'}`;
         return;
       }
       const normalized = TwitchRequestSettings.normalizeSettings(result.settings || validation.settings);
       requestSaved = normalized;
       if (category === 'commands') requestDraft.commands = clone(normalized.commands);
+      else if (category === 'blacklist') requestDraft.blacklist = clone(normalized.blacklist);
       else {
         requestDraft.enabled = normalized.enabled;
         requestDraft.maxPending = normalized.maxPending;
@@ -408,9 +519,9 @@
         requestDraft.maxDurationMinutes = normalized.maxDurationMinutes;
       }
       setDirty(category, false);
-      const status = el(category === 'commands' ? 'twitch-command-save-status' : 'twitch-request-save-status');
+      const status = el(`${idPrefix}-save-status`);
       if (status) status.textContent = successMessage;
-      renderCommandList(); loadCommandEditor(); applyRuleFields(); updateMainStatus();
+      renderCommandList(); loadCommandEditor(); applyRuleFields(); renderBlacklistList(); loadBlacklistEditor(); updateMainStatus();
       AppShared.showToast(successMessage, 'success');
     });
   }
@@ -634,7 +745,14 @@
       option.textContent = level.label;
       commandPermission?.appendChild(option);
     });
-    renderCommandList(); loadCommandEditor(); applyRuleFields(); applyRewardFields(); renderReplyEvents(); loadReplyEditor();
+    const blacklistType = el('twitch-blacklist-type');
+    TwitchRequestSettings.BLACKLIST_TYPES.forEach((type) => {
+      const option = document.createElement('option');
+      option.value = type.key;
+      option.textContent = type.label;
+      blacklistType?.appendChild(option);
+    });
+    renderCommandList(); loadCommandEditor(); applyRuleFields(); renderBlacklistList(); loadBlacklistEditor(); applyRewardFields(); renderReplyEvents(); loadReplyEditor();
 
     ['twitch-command-enabled', 'twitch-command-name', 'twitch-command-aliases', 'twitch-command-permission', 'twitch-command-user-cooldown', 'twitch-command-global-cooldown'].forEach((id) => {
       const control = el(id);
@@ -643,6 +761,20 @@
     ['twitch-request-enabled', 'twitch-request-max-pending', 'twitch-request-per-user', 'twitch-request-max-duration', 'twitch-request-reject-duplicates'].forEach((id) => {
       const control = el(id);
       control?.addEventListener(control.matches('input[type="number"]') ? 'input' : 'change', syncRulesFromFields);
+    });
+    el('twitch-blacklist-type')?.addEventListener('change', () => { updateBlacklistHint(); validateBlacklistEditor(); });
+    ['twitch-blacklist-value', 'twitch-blacklist-reason', 'twitch-blacklist-expires'].forEach((id) => el(id)?.addEventListener('input', validateBlacklistEditor));
+    ['twitch-blacklist-enabled', 'twitch-blacklist-moderator-exempt'].forEach((id) => el(id)?.addEventListener('change', validateBlacklistEditor));
+    el('twitch-blacklist-new')?.addEventListener('click', () => { activeBlacklistId = ''; renderBlacklistList(); loadBlacklistEditor(); el('twitch-blacklist-value')?.focus(); });
+    el('twitch-blacklist-apply')?.addEventListener('click', applyBlacklistEditor);
+    el('twitch-blacklist-delete')?.addEventListener('click', async () => {
+      const rule = requestDraft.blacklist.find((item) => item.id === activeBlacklistId);
+      if (!rule) return;
+      const confirmed = await window.PanelConfirm?.request({ title: '刪除這筆黑名單規則？', summary: `${blacklistTypeDefinition(rule.type).label}：${rule.value}`, impact: '儲存黑名單前仍可關閉管理視窗放棄變更。', tone: 'danger', confirmLabel: '刪除規則' });
+      if (!confirmed) return;
+      requestDraft.blacklist = requestDraft.blacklist.filter((item) => item.id !== activeBlacklistId);
+      activeBlacklistId = '';
+      setDirty('blacklist', true); renderBlacklistList(); loadBlacklistEditor();
     });
     ['twitch-reward-enabled', 'twitch-reward-title', 'twitch-reward-prompt', 'twitch-reward-cost'].forEach((id) => {
       const control = el(id);
@@ -676,6 +808,7 @@
 
     el('twitch-command-save')?.addEventListener('click', () => saveRequestCategory('commands', 'Twitch 指令已儲存'));
     el('twitch-request-save')?.addEventListener('click', () => saveRequestCategory('rules', '接受規則已儲存'));
+    el('twitch-blacklist-save')?.addEventListener('click', () => saveRequestCategory('blacklist', 'Twitch 黑名單已儲存'));
     el('twitch-reward-save')?.addEventListener('click', () => saveRewardSettings(rewardDraft, '忠誠點數獎勵已同步'));
     el('twitch-reply-save')?.addEventListener('click', () => saveReplySettings(replyDraft, '聊天室回覆設定已儲存'));
     el('twitch-command-edit-reply')?.addEventListener('click', () => {
@@ -697,6 +830,13 @@
       const defaults = TwitchRequestSettings.getDefaults();
       requestDraft = { ...requestDraft, enabled: defaults.enabled, maxPending: defaults.maxPending, perUserPending: defaults.perUserPending, rejectDuplicates: defaults.rejectDuplicates, maxDurationMinutes: defaults.maxDurationMinutes };
       setDirty('rules', true); applyRuleFields(); saveRequestCategory('rules', '接受規則已還原');
+    });
+    el('twitch-blacklist-reset')?.addEventListener('click', async () => {
+      const confirmed = await window.PanelConfirm?.request({ title: '清除全部 Twitch 黑名單？', summary: `目前 ${requestDraft.blacklist.length} 筆規則都會移除。`, impact: '不會改動指令、接受規則、忠誠點數或待確認點歌。', tone: 'danger', confirmLabel: '清除全部規則' });
+      if (!confirmed) return;
+      requestDraft.blacklist = [];
+      activeBlacklistId = '';
+      setDirty('blacklist', true); renderBlacklistList(); loadBlacklistEditor(); saveRequestCategory('blacklist', 'Twitch 黑名單已清除');
     });
     el('twitch-reward-reset')?.addEventListener('click', async () => {
       const confirmed = await window.PanelConfirm?.request({ title: '停用並還原忠誠點數獎勵？', summary: 'Twitch 上的專用獎勵會停用，名稱、說明與價格回到預設值。', impact: '不會刪除獎勵或清除 Twitch 授權；既有待確認兌換仍會正常完成或退款。', confirmLabel: '停用並還原' });
