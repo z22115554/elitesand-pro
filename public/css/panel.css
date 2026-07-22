@@ -659,7 +659,9 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-blacklist-editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .twitch-reward-prompt { min-height: 82px !important; }
 .twitch-reward-state { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-raised); }
+.twitch-reward-state-copy { min-width: 0; }
 .twitch-reward-state .sub { margin: 4px 0 0; }
+.twitch-reward-state .val { margin-top: 7px; }
 .twitch-reply-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, .65fr); gap: 14px; margin-bottom: 16px; }
 .twitch-reply-mode-field { margin: 0; }
 .twitch-reply-master-detail { display: grid; grid-template-columns: minmax(210px, 270px) minmax(0, 1fr); gap: 16px; }
