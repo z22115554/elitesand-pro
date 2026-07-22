@@ -12,6 +12,7 @@ const AudioProcessor = require('./audio-processor');
 const fetch = require('node-fetch');
 const store = require('./twitch-store');
 const requestStore = require('./twitch-request-store');
+const requestSessionStore = require('./twitch-session-store');
 const TwitchReplySettings = require('../../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const TwitchRewardSettings = require('../../public/js/twitch-reward-settings');
@@ -51,6 +52,30 @@ function requesterKey(event) {
   return String(event?.chatter_user_id || event?.chatter_user_login || event?.chatter_user_name || '').trim().toLocaleLowerCase();
 }
 
+function normalizeRequestSessionState(value) {
+  const empty = requestSessionStore.emptyState();
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : empty;
+  const session = source.session && typeof source.session === 'object' && !Array.isArray(source.session) ? source.session : empty.session;
+  const byUser = session.byUser && typeof session.byUser === 'object' && !Array.isArray(session.byUser) ? session.byUser : {};
+  return {
+    online: !!source.online,
+    session: {
+      startedAt: Number.isFinite(Number(session.startedAt)) && Number(session.startedAt) > 0 ? Number(session.startedAt) : null,
+      acceptedCount: Math.max(0, Number(session.acceptedCount) || 0),
+      byUser: Object.fromEntries(Object.entries(byUser).filter(([key, count]) => key && Number.isFinite(Number(count)) && Number(count) >= 0).map(([key, count]) => [key, Number(count)])),
+      lastRequesterId: String(session.lastRequesterId || ''),
+      lastRequesterName: String(session.lastRequesterName || ''),
+    },
+    recent: (Array.isArray(source.recent) ? source.recent : []).map((item) => ({
+      videoId: String(item?.videoId || ''),
+      requesterId: String(item?.requesterId || ''),
+      requesterName: String(item?.requesterName || ''),
+      acceptedAt: Number(item?.acceptedAt) || 0,
+      sessionStartedAt: Number(item?.sessionStartedAt) || null,
+    })).filter((item) => item.videoId && item.acceptedAt > 0).slice(-5000),
+  };
+}
+
 function websocketCtor() {
   // Node 22+ 原生支援 WebSocket；Node 18/20 則使用 Socket.io 已安裝的 ws 相依套件退路。
   // 這裡不需要把 ws 暴露給瀏覽器，也不會開放外部 socket 入口。
@@ -60,7 +85,7 @@ function websocketCtor() {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, getPlaybackSnapshot, pendingStore = requestStore, authStore = store }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, getPlaybackSnapshot, pendingStore = requestStore, sessionStore = requestSessionStore, authStore = store }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
@@ -75,6 +100,7 @@ class TwitchService {
     this.ws = null;
     this.wsSessionId = null;
     this.pendingStore = pendingStore;
+    this.sessionStore = sessionStore;
     this.pendingRequests = new Map();
     this.requestExpiryTimers = new Map();
     this.reconnectTimer = null;
@@ -93,6 +119,8 @@ class TwitchService {
     this.commandGlobalCooldowns = new Map();
     this.rewardSubscriptionReady = false;
     this.seenRedemptions = new Map();
+    this.requestSession = this.restoreRequestSession();
+    this.streamOnline = this.requestSession.online;
     this.restorePendingRequests();
   }
 
@@ -106,6 +134,90 @@ class TwitchService {
     this.commandUserCooldowns.clear();
     this.commandGlobalCooldowns.clear();
     return this.requestSettings;
+  }
+
+  restoreRequestSession() {
+    try { return normalizeRequestSessionState(this.sessionStore.load()); } catch (err) {
+      log.warn(`Twitch 點歌場次還原失敗：${err.message}`);
+      return normalizeRequestSessionState(null);
+    }
+  }
+
+  persistRequestSession() {
+    const cutoff = Date.now() - TwitchRequestSettings.LIMITS.recentDuplicateHours * 60 * 60 * 1000;
+    this.requestSession.recent = this.requestSession.recent.filter((item) => item.acceptedAt > cutoff).slice(-5000);
+    this.requestSession.online = this.streamOnline;
+    try { this.sessionStore.save(this.requestSession); } catch (err) { log.warn(`Twitch 點歌場次保存失敗：${err.message}`); }
+  }
+
+  startRequestSession(startedAt = Date.now()) {
+    const timestamp = Number(startedAt) || Date.now();
+    if (!this.requestSession.session.startedAt || Math.abs(this.requestSession.session.startedAt - timestamp) > 5000) {
+      this.requestSession.session = {
+        startedAt: timestamp, acceptedCount: 0, byUser: {}, lastRequesterId: '', lastRequesterName: '',
+      };
+    }
+    this.streamOnline = true;
+    this.persistRequestSession();
+  }
+
+  stopRequestSession() {
+    this.streamOnline = false;
+    this.persistRequestSession();
+  }
+
+  ensureRequestSession() {
+    if (!this.requestSession.session.startedAt) this.startRequestSession(Date.now());
+  }
+
+  requestFairnessExempt(event) {
+    return !!this.requestSettings?.fairnessModeratorExempt && TwitchRequestSettings.rolesForEvent(event).moderator;
+  }
+
+  duplicateScopeMatch(videoId) {
+    const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
+    if (rules.duplicateScope === 'allow') return null;
+    if ([...this.pendingRequests.values()].some((request) => request.videoId === videoId)) return '待確認區';
+    const snapshot = this.getPlaybackSnapshot() || {};
+    const playlist = Array.isArray(snapshot.playlist) ? snapshot.playlist : [];
+    if (['playlist', 'session', 'recent'].includes(rules.duplicateScope) && playlist.some((track) => track?.id === videoId)) return '正式播放清單';
+    const songs = Array.isArray(snapshot.session?.songs) ? snapshot.session.songs : [];
+    if (rules.duplicateScope === 'session' && songs.some((track) => track?.id === videoId)) return '本場已唱';
+    if (rules.duplicateScope === 'recent') {
+      const cutoff = Date.now() - rules.recentDuplicateHours * 60 * 60 * 1000;
+      if (this.requestSession.recent.some((item) => item.videoId === videoId && item.acceptedAt > cutoff)) return `最近 ${rules.recentDuplicateHours} 小時`;
+    }
+    return null;
+  }
+
+  recordAcceptedRequest(event, videoId) {
+    this.ensureRequestSession();
+    const userKey = requesterKey(event);
+    const consecutive = !!userKey && this.requestSession.session.lastRequesterId === userKey;
+    this.requestSession.session.acceptedCount += 1;
+    if (userKey) this.requestSession.session.byUser[userKey] = (this.requestSession.session.byUser[userKey] || 0) + 1;
+    this.requestSession.session.lastRequesterId = userKey;
+    this.requestSession.session.lastRequesterName = String(event?.chatter_user_name || event?.chatter_user_login || '觀眾');
+    this.requestSession.recent.push({
+      videoId,
+      requesterId: userKey,
+      requesterName: this.requestSession.session.lastRequesterName,
+      acceptedAt: Date.now(),
+      sessionStartedAt: this.requestSession.session.startedAt,
+    });
+    this.persistRequestSession();
+    return consecutive;
+  }
+
+  async refreshLiveState() {
+    if (!this.auth?.userId) return this.streamOnline;
+    const response = await this.helix(`/streams?user_id=${encodeURIComponent(this.auth.userId)}`);
+    if (!response.ok) throw new Error(`Twitch 開台狀態確認失敗（${response.status}）`);
+    const data = await response.json().catch(() => ({}));
+    const stream = Array.isArray(data.data) ? data.data[0] : null;
+    if (stream) this.startRequestSession(toTimestamp(stream.started_at));
+    else this.stopRequestSession();
+    return this.streamOnline;
   }
 
   setRewardSettings(settings) {
@@ -149,6 +261,11 @@ class TwitchService {
       lastConnectedAt: this.lastConnectedAt,
       lastDisconnectedAt: this.lastDisconnectedAt,
       pendingRequestCount: this.getPendingRequests().length,
+      streamOnline: this.streamOnline,
+      requestSession: {
+        startedAt: this.requestSession.session.startedAt,
+        acceptedCount: this.requestSession.session.acceptedCount,
+      },
     };
   }
 
@@ -492,6 +609,11 @@ class TwitchService {
           }
         }
         this.subscriptionState = 'ready';
+        try {
+          await this.refreshLiveState();
+        } catch (err) {
+          log.warn(`Twitch 開台狀態確認失敗，暫沿用上次狀態：${err.message}`);
+        }
         log.info(`Twitch EventSub 訂閱完成：開台、下播、聊天室訊息${this.rewardSubscriptionReady ? '、忠誠點數兌換' : ''}`);
         this.notifyStatusChange();
       } catch (err) {
@@ -520,8 +642,10 @@ class TwitchService {
     const event = message.payload && message.payload.event;
     if (!subscription || !event) return;
     if (subscription.type === 'stream.online') {
+      this.startRequestSession(toTimestamp(event.started_at));
       this.onStreamOnline({ startedAt: toTimestamp(event.started_at), eventId: message.metadata.message_id });
     } else if (subscription.type === 'stream.offline') {
+      this.stopRequestSession();
       this.onStreamOffline({ eventId: message.metadata.message_id });
     } else if (subscription.type === 'channel.chat.message') {
       await this.handleChatMessage(event, message.metadata.message_id);
@@ -680,7 +804,12 @@ class TwitchService {
       permission,
       rules.perUserPending > 0 ? `每人最多 ${rules.perUserPending} 首待確認` : '每人待確認不限首數',
       rules.maxDurationMinutes > 0 ? `最長 ${rules.maxDurationMinutes} 分鐘` : '歌曲長度不限',
-      rules.rejectDuplicates ? '待確認區不接受重複影片' : '待確認區允許重複影片',
+      rules.duplicateScope === 'allow'
+        ? '允許重複歌曲'
+        : `重複檢查：${TwitchRequestSettings.DUPLICATE_SCOPES.find((item) => item.key === rules.duplicateScope)?.label || '待確認區'}`,
+      rules.liveOnly ? '只在直播中接受' : '離線時也接受',
+      rules.perUserSessionLimit > 0 ? `每人每場最多 ${rules.perUserSessionLimit} 首` : '每人每場不限首數',
+      rules.sessionRequestLimit > 0 ? `全場最多 ${rules.sessionRequestLimit} 首` : '全場不限首數',
     ];
     return details.join('；');
   }
@@ -766,7 +895,8 @@ class TwitchService {
       await this.sendConfiguredReply(event, 'permissionDenied', { command });
       return;
     }
-    const remainingSeconds = this.commandCooldown(match.key, commandSettings, event);
+    const fairnessExempt = match.key === 'request' && this.requestFairnessExempt(event);
+    const remainingSeconds = fairnessExempt ? 0 : this.commandCooldown(match.key, commandSettings, event);
     if (remainingSeconds > 0) {
       await this.sendConfiguredReply(event, 'cooldownActive', { command, seconds: remainingSeconds });
       return;
@@ -783,7 +913,7 @@ class TwitchService {
     }
     const requestId = event.message_id || fallbackId || crypto.randomUUID();
     const accepted = await this.handleSongRequestInput({ event, requestId, url: String(match.argument || '').trim(), command, source: 'chat' });
-    if (accepted) this.recordCommandCooldown(match.key, commandSettings, event);
+    if (accepted && !fairnessExempt) this.recordCommandCooldown(match.key, commandSettings, event);
   }
 
   async handleRewardRedemption(redemptionEvent, fallbackId) {
@@ -800,6 +930,7 @@ class TwitchService {
       chatter_user_id: String(redemptionEvent.user_id || ''),
       chatter_user_login: String(redemptionEvent.user_login || ''),
       chatter_user_name: String(redemptionEvent.user_name || '觀眾'),
+      broadcaster_user_id: String(this.auth?.userId || ''),
       message_id: '',
     };
     const redemption = { id: redemptionId, rewardId: settings.rewardId, cost: Number(reward.cost) || settings.cost };
@@ -857,21 +988,37 @@ class TwitchService {
       await this.rejectSongRequest({ event, key: 'blockedRequest', values: { url, reason }, redemption, reason });
       return false;
     }
+    const fairnessExempt = this.requestFairnessExempt(event);
+    if (!fairnessExempt && rules.liveOnly && !this.streamOnline) {
+      await this.rejectSongRequest({ event, key: 'streamOffline', values: { url }, redemption, reason: '目前只在直播期間接受點歌' });
+      return false;
+    }
+    const userKey = requesterKey(event);
+    if (!fairnessExempt && rules.perUserSessionLimit > 0 && (this.requestSession.session.byUser[userKey] || 0) >= rules.perUserSessionLimit) {
+      await this.rejectSongRequest({ event, key: 'sessionUserLimit', values: { url, limit: rules.perUserSessionLimit }, redemption, reason: '本場個人點歌已達上限' });
+      return false;
+    }
+    if (!fairnessExempt && rules.sessionRequestLimit > 0 && this.requestSession.session.acceptedCount >= rules.sessionRequestLimit) {
+      await this.rejectSongRequest({ event, key: 'sessionLimit', values: { url, limit: rules.sessionRequestLimit }, redemption, reason: '本場點歌已達總上限' });
+      return false;
+    }
+    if (!fairnessExempt) {
+      const duplicateAt = this.duplicateScopeMatch(parsedUrl.videoId);
+      if (duplicateAt) {
+        await this.rejectSongRequest({ event, key: 'duplicatePending', values: { url, reason: duplicateAt }, redemption, reason: `同一首歌已在${duplicateAt}` });
+        return false;
+      }
+    }
     if (this.pendingRequests.size >= rules.maxPending) {
       await this.rejectSongRequest({ event, key: 'queueFull', values: { url, limit: rules.maxPending }, redemption, reason: '待確認點歌已達總上限' });
       return false;
     }
-    const userKey = requesterKey(event);
     if (userKey && rules.perUserPending > 0) {
       const userPending = [...this.pendingRequests.values()].filter((request) => request.requesterId === userKey).length;
       if (userPending >= rules.perUserPending) {
         await this.rejectSongRequest({ event, key: 'userLimitReached', values: { url, limit: rules.perUserPending }, redemption, reason: '你目前的待確認點歌已達上限' });
         return false;
       }
-    }
-    if (rules.rejectDuplicates && [...this.pendingRequests.values()].some((request) => request.videoId === parsedUrl.videoId)) {
-      await this.rejectSongRequest({ event, key: 'duplicatePending', values: { url }, redemption, reason: '同一首歌已在待確認清單中' });
-      return false;
     }
     const metadata = await this.fetchYouTubeMetadata(url);
     const postMetadataBlock = TwitchRequestSettings.findBlacklistMatch(rules, {
@@ -916,6 +1063,7 @@ class TwitchService {
       });
       return false;
     }
+    const consecutiveRequester = this.recordAcceptedRequest(event, parsedUrl.videoId);
     const createdAt = Date.now();
     this.pendingRequests.set(requestId, { ...request, event, createdAt, expiresAt: createdAt + REQUEST_TTL_MS });
     this.scheduleRequestExpiry(requestId);
@@ -924,6 +1072,11 @@ class TwitchService {
     await this.sendConfiguredReply(event, source === 'channel-points' ? 'rewardReceived' : 'received', {
       title: request.title, artist: request.author, url, cost: redemption?.cost || '',
     });
+    if (consecutiveRequester && rules.warnConsecutiveRequests) {
+      await this.sendConfiguredReply(event, 'consecutiveRequesterWarning', {
+        title: request.title, artist: request.author, url,
+      });
+    }
     this.pruneRequests();
     return true;
   }
@@ -1146,6 +1299,7 @@ class TwitchService {
     this.nextRetryAt = 0;
     this.notifyStatusChange();
     this.persistPendingRequests();
+    this.persistRequestSession();
   }
 }
 

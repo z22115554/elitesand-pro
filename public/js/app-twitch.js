@@ -193,6 +193,8 @@
     { label: '目前歌曲指令', category: '指令', terms: '目前歌曲 current song', pane: 'commands', commandKey: 'currentSong', focusId: 'twitch-command-name' },
     { label: '取消點歌指令', category: '指令', terms: '取消 點歌 退款', pane: 'commands', commandKey: 'cancelRequest', focusId: 'twitch-command-name' },
     { label: '待確認總上限', category: '接受規則', terms: '上限 數量 待確認', pane: 'rules', focusId: 'twitch-request-max-pending' },
+    { label: '重複歌曲檢查範圍', category: '接受規則', terms: '重複 待確認 播放清單 本場 最近', pane: 'rules', focusId: 'twitch-request-duplicate-scope' },
+    { label: '直播場次與公平性', category: '接受規則', terms: '直播 開台 每場 每人 管理員 豁免 連續點歌', pane: 'rules', focusId: 'twitch-request-live-only' },
     { label: '黑名單', category: '黑名單', terms: '黑名單 封鎖 使用者 影片 頻道 關鍵字', pane: 'blacklist', focusId: 'twitch-blacklist-value' },
     { label: '忠誠點數退款', category: '忠誠點數', terms: '退款 忠誠點數 reward redemption', pane: 'reward', focusId: 'twitch-reward-enabled' },
     { label: '忠誠點數退款回覆', category: '聊天室回覆', terms: '退款 回覆 文案 cost', pane: 'replies', replyKey: 'rewardRefunded', focusId: 'twitch-reply-template' },
@@ -334,7 +336,13 @@
     el('twitch-request-max-pending').value = String(requestDraft.maxPending);
     el('twitch-request-per-user').value = String(requestDraft.perUserPending);
     el('twitch-request-max-duration').value = String(requestDraft.maxDurationMinutes);
-    el('twitch-request-reject-duplicates').checked = requestDraft.rejectDuplicates;
+    el('twitch-request-duplicate-scope').value = requestDraft.duplicateScope;
+    el('twitch-request-recent-hours').value = String(requestDraft.recentDuplicateHours);
+    el('twitch-request-live-only').checked = requestDraft.liveOnly;
+    el('twitch-request-per-user-session').value = String(requestDraft.perUserSessionLimit);
+    el('twitch-request-session-limit').value = String(requestDraft.sessionRequestLimit);
+    el('twitch-request-moderator-exempt').checked = requestDraft.fairnessModeratorExempt;
+    el('twitch-request-consecutive-warning').checked = requestDraft.warnConsecutiveRequests;
     validateRuleForm();
   }
 
@@ -343,7 +351,13 @@
     requestDraft.maxPending = Number(el('twitch-request-max-pending')?.value);
     requestDraft.perUserPending = Number(el('twitch-request-per-user')?.value);
     requestDraft.maxDurationMinutes = Number(el('twitch-request-max-duration')?.value);
-    requestDraft.rejectDuplicates = !!el('twitch-request-reject-duplicates')?.checked;
+    requestDraft.duplicateScope = el('twitch-request-duplicate-scope')?.value || 'pending';
+    requestDraft.recentDuplicateHours = Number(el('twitch-request-recent-hours')?.value);
+    requestDraft.liveOnly = !!el('twitch-request-live-only')?.checked;
+    requestDraft.perUserSessionLimit = Number(el('twitch-request-per-user-session')?.value);
+    requestDraft.sessionRequestLimit = Number(el('twitch-request-session-limit')?.value);
+    requestDraft.fairnessModeratorExempt = !!el('twitch-request-moderator-exempt')?.checked;
+    requestDraft.warnConsecutiveRequests = !!el('twitch-request-consecutive-warning')?.checked;
     setDirty('rules', true);
     validateRuleForm();
   }
@@ -357,12 +371,21 @@
     if (box) { box.textContent = error?.message || ''; box.hidden = !error; }
     if (save) save.disabled = !!error;
     const permission = TwitchRequestSettings.PERMISSION_LEVELS.find((item) => item.key === requestSaved.commands.request.permissionLevel)?.label || '所有觀眾';
+    const duplicateLabel = TwitchRequestSettings.DUPLICATE_SCOPES.find((item) => item.key === requestDraft.duplicateScope)?.label || '待確認區';
+    const recentField = el('twitch-request-recent-hours-field');
+    if (recentField) recentField.hidden = requestDraft.duplicateScope !== 'recent';
+    const requestCooldown = requestSaved.commands.request.globalCooldownSeconds;
+    if (el('twitch-request-cooldown-summary')) el('twitch-request-cooldown-summary').textContent = requestCooldown > 0 ? `所有觀眾共用 ${requestCooldown} 秒；管理員豁免開啟時不受此限制。` : '目前不限制；可到「觀眾指令 → 點歌」設定秒數。';
     const preview = [
       requestDraft.enabled ? '接受點歌' : '暫停點歌', permission,
       `最多 ${requestDraft.maxPending || '—'} 首待確認`,
       requestDraft.perUserPending > 0 ? `每人最多 ${requestDraft.perUserPending} 首` : '每人不限首數',
       requestDraft.maxDurationMinutes > 0 ? `最長 ${requestDraft.maxDurationMinutes} 分鐘` : '不限制歌曲長度',
-      requestDraft.rejectDuplicates ? '拒絕重複影片' : '允許重複影片',
+      requestDraft.duplicateScope === 'recent' ? `檢查最近 ${requestDraft.recentDuplicateHours || '—'} 小時` : `重複範圍：${duplicateLabel}`,
+      requestDraft.liveOnly ? '只在直播中接受' : '離線也接受',
+      requestDraft.perUserSessionLimit > 0 ? `每人每場 ${requestDraft.perUserSessionLimit} 首` : '每人每場不限',
+      requestDraft.sessionRequestLimit > 0 ? `全場 ${requestDraft.sessionRequestLimit} 首` : '全場不限',
+      requestDraft.warnConsecutiveRequests ? '連續點歌會提醒' : '不提醒連續點歌',
     ];
     if (el('twitch-request-rule-preview')) el('twitch-request-rule-preview').textContent = preview.join('；');
     return validation;
@@ -478,8 +501,14 @@
       requestDraft.enabled = normalized.enabled;
       requestDraft.maxPending = normalized.maxPending;
       requestDraft.perUserPending = normalized.perUserPending;
-      requestDraft.rejectDuplicates = normalized.rejectDuplicates;
+      requestDraft.duplicateScope = normalized.duplicateScope;
+      requestDraft.recentDuplicateHours = normalized.recentDuplicateHours;
       requestDraft.maxDurationMinutes = normalized.maxDurationMinutes;
+      requestDraft.liveOnly = normalized.liveOnly;
+      requestDraft.perUserSessionLimit = normalized.perUserSessionLimit;
+      requestDraft.sessionRequestLimit = normalized.sessionRequestLimit;
+      requestDraft.fairnessModeratorExempt = normalized.fairnessModeratorExempt;
+      requestDraft.warnConsecutiveRequests = normalized.warnConsecutiveRequests;
     }
     if (!dirty.blacklist) requestDraft.blacklist = clone(normalized.blacklist);
     renderCommandList();
@@ -515,8 +544,14 @@
         requestDraft.enabled = normalized.enabled;
         requestDraft.maxPending = normalized.maxPending;
         requestDraft.perUserPending = normalized.perUserPending;
-        requestDraft.rejectDuplicates = normalized.rejectDuplicates;
+        requestDraft.duplicateScope = normalized.duplicateScope;
+        requestDraft.recentDuplicateHours = normalized.recentDuplicateHours;
         requestDraft.maxDurationMinutes = normalized.maxDurationMinutes;
+        requestDraft.liveOnly = normalized.liveOnly;
+        requestDraft.perUserSessionLimit = normalized.perUserSessionLimit;
+        requestDraft.sessionRequestLimit = normalized.sessionRequestLimit;
+        requestDraft.fairnessModeratorExempt = normalized.fairnessModeratorExempt;
+        requestDraft.warnConsecutiveRequests = normalized.warnConsecutiveRequests;
       }
       setDirty(category, false);
       const status = el(`${idPrefix}-save-status`);
@@ -758,9 +793,16 @@
       const control = el(id);
       control?.addEventListener(control.matches('input[type="text"], input[type="number"]') ? 'input' : 'change', syncActiveCommandFromFields);
     });
-    ['twitch-request-enabled', 'twitch-request-max-pending', 'twitch-request-per-user', 'twitch-request-max-duration', 'twitch-request-reject-duplicates'].forEach((id) => {
+    ['twitch-request-enabled', 'twitch-request-max-pending', 'twitch-request-per-user', 'twitch-request-max-duration', 'twitch-request-duplicate-scope', 'twitch-request-recent-hours', 'twitch-request-live-only', 'twitch-request-per-user-session', 'twitch-request-session-limit', 'twitch-request-moderator-exempt', 'twitch-request-consecutive-warning'].forEach((id) => {
       const control = el(id);
       control?.addEventListener(control.matches('input[type="number"]') ? 'input' : 'change', syncRulesFromFields);
+    });
+    el('twitch-request-edit-cooldown')?.addEventListener('click', () => {
+      activeCommandKey = 'request';
+      renderCommandList();
+      loadCommandEditor();
+      switchManagementPane('commands');
+      window.setTimeout(() => el('twitch-command-global-cooldown')?.focus(), 0);
     });
     el('twitch-blacklist-type')?.addEventListener('change', () => { updateBlacklistHint(); validateBlacklistEditor(); });
     ['twitch-blacklist-value', 'twitch-blacklist-reason', 'twitch-blacklist-expires'].forEach((id) => el(id)?.addEventListener('input', validateBlacklistEditor));
@@ -828,7 +870,20 @@
       const confirmed = await window.PanelConfirm?.request({ title: '還原 Twitch 接受規則？', summary: '總開關、待確認上限、重複與時長限制會回到預設值。', impact: '指令、回覆文案與既有待確認點歌不受影響。', confirmLabel: '還原規則' });
       if (!confirmed) return;
       const defaults = TwitchRequestSettings.getDefaults();
-      requestDraft = { ...requestDraft, enabled: defaults.enabled, maxPending: defaults.maxPending, perUserPending: defaults.perUserPending, rejectDuplicates: defaults.rejectDuplicates, maxDurationMinutes: defaults.maxDurationMinutes };
+      requestDraft = {
+        ...requestDraft,
+        enabled: defaults.enabled,
+        maxPending: defaults.maxPending,
+        perUserPending: defaults.perUserPending,
+        duplicateScope: defaults.duplicateScope,
+        recentDuplicateHours: defaults.recentDuplicateHours,
+        maxDurationMinutes: defaults.maxDurationMinutes,
+        liveOnly: defaults.liveOnly,
+        perUserSessionLimit: defaults.perUserSessionLimit,
+        sessionRequestLimit: defaults.sessionRequestLimit,
+        fairnessModeratorExempt: defaults.fairnessModeratorExempt,
+        warnConsecutiveRequests: defaults.warnConsecutiveRequests,
+      };
       setDirty('rules', true); applyRuleFields(); saveRequestCategory('rules', '接受規則已還原');
     });
     el('twitch-blacklist-reset')?.addEventListener('click', async () => {

@@ -21,6 +21,9 @@ const TwitchRequestSettings = (() => {
     blacklistRules: 200,
     blacklistValue: 200,
     blacklistReason: 200,
+    recentDuplicateHours: 168,
+    perUserSessionLimit: 50,
+    sessionRequestLimit: 500,
   });
   const BLACKLIST_TYPES = Object.freeze([
     { key: 'user', label: 'Twitch 使用者' },
@@ -29,6 +32,14 @@ const TwitchRequestSettings = (() => {
     { key: 'title', label: '標題關鍵字' },
   ]);
   const BLACKLIST_TYPE_KEYS = new Set(BLACKLIST_TYPES.map((item) => item.key));
+  const DUPLICATE_SCOPES = Object.freeze([
+    { key: 'pending', label: '待確認區' },
+    { key: 'playlist', label: '正式播放清單' },
+    { key: 'session', label: '本場已唱' },
+    { key: 'recent', label: '最近指定時數' },
+    { key: 'allow', label: '完全允許重複' },
+  ]);
+  const DUPLICATE_SCOPE_KEYS = new Set(DUPLICATE_SCOPES.map((item) => item.key));
   const COMMAND_DEFINITIONS = Object.freeze([
     { key: 'request', label: '點歌', description: '送出一個 YouTube 單曲連結，等待主播確認。', command: '!點歌', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
     { key: 'currentSong', label: '目前歌曲', description: '查詢現在載入或播放中的歌曲。', command: '!目前歌曲', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
@@ -60,9 +71,15 @@ const TwitchRequestSettings = (() => {
       commands: Object.fromEntries(COMMAND_DEFINITIONS.map((definition) => [definition.key, defaultCommand(definition)])),
       maxPending: 20,
       perUserPending: 0,
-      rejectDuplicates: true,
+      duplicateScope: 'pending',
+      recentDuplicateHours: 24,
       maxDurationMinutes: 0,
       blacklist: [],
+      liveOnly: false,
+      perUserSessionLimit: 0,
+      sessionRequestLimit: 0,
+      fairnessModeratorExempt: true,
+      warnConsecutiveRequests: true,
     };
   }
 
@@ -156,6 +173,8 @@ const TwitchRequestSettings = (() => {
     delete candidate.aliases;
     delete candidate.permissionLevel;
     delete candidate.cooldownSeconds;
+    if (!DUPLICATE_SCOPE_KEYS.has(value.duplicateScope)) candidate.duplicateScope = value.rejectDuplicates === false ? 'allow' : 'pending';
+    delete candidate.rejectDuplicates;
     candidate.blacklist = Array.isArray(value.blacklist) ? value.blacklist.map(normalizeBlacklistRule) : [];
     return candidate;
   }
@@ -226,7 +245,13 @@ const TwitchRequestSettings = (() => {
     integerRule(value, 'maxPending', '待確認總上限', 1, LIMITS.maxPending);
     integerRule(value, 'perUserPending', '每人待確認上限', 0, LIMITS.perUserPending);
     integerRule(value, 'maxDurationMinutes', '歌曲長度上限', 0, LIMITS.maxDurationMinutes);
-    if (typeof value.rejectDuplicates !== 'boolean') errors.push({ field: 'rejectDuplicates', message: '重複歌曲規則格式無效。' });
+    if (!DUPLICATE_SCOPE_KEYS.has(value.duplicateScope)) errors.push({ field: 'duplicateScope', message: '重複歌曲檢查範圍無效。' });
+    integerRule(value, 'recentDuplicateHours', '最近重複檢查時數', 1, LIMITS.recentDuplicateHours);
+    if (typeof value.liveOnly !== 'boolean') errors.push({ field: 'liveOnly', message: '僅直播中接受點歌格式無效。' });
+    integerRule(value, 'perUserSessionLimit', '每人每場上限', 0, LIMITS.perUserSessionLimit);
+    integerRule(value, 'sessionRequestLimit', '全場點歌上限', 0, LIMITS.sessionRequestLimit);
+    if (typeof value.fairnessModeratorExempt !== 'boolean') errors.push({ field: 'fairnessModeratorExempt', message: '管理員公平性豁免格式無效。' });
+    if (typeof value.warnConsecutiveRequests !== 'boolean') errors.push({ field: 'warnConsecutiveRequests', message: '連續點歌提醒格式無效。' });
     if (!Array.isArray(value.blacklist)) {
       errors.push({ field: 'blacklist', message: '黑名單格式無效。' });
     } else if (value.blacklist.length > LIMITS.blacklistRules) {
@@ -259,9 +284,15 @@ const TwitchRequestSettings = (() => {
         commands: normalizedCommands,
         maxPending: value.maxPending,
         perUserPending: value.perUserPending,
-        rejectDuplicates: value.rejectDuplicates,
+        duplicateScope: value.duplicateScope,
+        recentDuplicateHours: value.recentDuplicateHours,
         maxDurationMinutes: value.maxDurationMinutes,
         blacklist: normalizedBlacklist,
+        liveOnly: value.liveOnly,
+        perUserSessionLimit: value.perUserSessionLimit,
+        sessionRequestLimit: value.sessionRequestLimit,
+        fairnessModeratorExempt: value.fairnessModeratorExempt,
+        warnConsecutiveRequests: value.warnConsecutiveRequests,
       },
     };
   }
@@ -320,6 +351,7 @@ const TwitchRequestSettings = (() => {
   return {
     PERMISSION_LEVELS,
     BLACKLIST_TYPES,
+    DUPLICATE_SCOPES,
     LIMITS,
     COMMAND_DEFINITIONS,
     getDefaults,

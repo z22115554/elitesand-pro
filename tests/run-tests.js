@@ -26,6 +26,7 @@ process.env.ELITESAND_LOGS_DIR = TEST_RUNTIME_DIRS.logs;
 let passed = 0;
 let failed = 0;
 const failures = [];
+const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
 function test(name, fn) {
   try {
@@ -1858,7 +1859,7 @@ const TwitchRequestSettings = require('../public/js/twitch-request-settings');
 const TwitchRewardSettings = require('../public/js/twitch-reward-settings');
 
 test('Twitch 自訂回覆契約涵蓋點歌生命週期與觀眾自助指令，並檢查變數拼字', () => {
-  eq(TwitchReplySettings.REPLY_DEFINITIONS.length, 32);
+  eq(TwitchReplySettings.REPLY_DEFINITIONS.length, 36);
   const defaults = TwitchReplySettings.getDefaults();
   eq(defaults.enabled, true);
   eq(defaults.replies.retryableFailure.enabled, false);
@@ -1910,6 +1911,15 @@ test('Twitch 點歌規則契約驗證自訂指令、別名與聊天室徽章權�
   eq(legacy.commands.request.command, '!舊點歌');
   eq(legacy.commands.request.userCooldownSeconds, 12);
   eq(legacy.commands.currentSong.command, '!目前歌曲');
+  eq(legacy.duplicateScope, 'pending');
+  const fairness = TwitchRequestSettings.getDefaults();
+  fairness.duplicateScope = 'recent';
+  fairness.recentDuplicateHours = 48;
+  fairness.liveOnly = true;
+  fairness.perUserSessionLimit = 3;
+  fairness.sessionRequestLimit = 40;
+  eq(TwitchRequestSettings.validateSettings(fairness).ok, true);
+  eq(TwitchRequestSettings.validateSettings({ ...fairness, recentDuplicateHours: 0 }).ok, false);
 });
 
 test('Twitch 黑名單契約正規化四種規則、到期時間與管理員豁免', () => {
@@ -2091,7 +2101,7 @@ testAsync('Twitch 點歌會執行冷卻、每人上限、重複與歌曲長度�
   eq(replies.at(-1).key, 'userLimitReached');
   eq(replies.at(-1).values.limit, 1);
 
-  service.setRequestSettings({ ...TwitchRequestSettings.getDefaults(), rejectDuplicates: false });
+  service.setRequestSettings({ ...TwitchRequestSettings.getDefaults(), duplicateScope: 'allow' });
   await service.handleChatMessage({ message_id: 'duplicate-ok', chatter_user_id: 'other-user', message: { text: '!點歌 https://youtu.be/dQw4w9WgXcQ' } });
   eq(replies.at(-1).key, 'received');
   eq(accepted.length, 2);
@@ -2101,6 +2111,130 @@ testAsync('Twitch 點歌會執行冷卻、每人上限、重複與歌曲長度�
   eq(replies.at(-1).key, 'durationExceeded');
   eq(replies.at(-1).values.duration, '3:01');
   eq(accepted.length, 2);
+  service.stop();
+});
+
+test('Twitch 重複歌曲範圍涵蓋待確認、播放清單、本場、最近與完全允許', () => {
+  let savedSession = {
+    online: true,
+    session: { startedAt: Date.now(), acceptedCount: 1, byUser: {}, lastRequesterId: '', lastRequesterName: '' },
+    recent: [{ videoId: 'recent00001', requesterId: 'viewer', requesterName: 'viewer', acceptedAt: Date.now(), sessionStartedAt: Date.now() }],
+  };
+  const service = new TwitchService({
+    config: { twitchClientId: '' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    sessionStore: { load: () => cloneJson(savedSession), save: (value) => { savedSession = cloneJson(value); return true; } },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+    getPlaybackSnapshot: () => ({
+      playlist: [{ id: 'playlist001', title: '正式清單' }],
+      session: { songs: [{ id: 'session0001', title: '本場已唱' }] },
+    }),
+  });
+  service.pendingRequests.set('pending', { videoId: 'pending0001' });
+  const rules = TwitchRequestSettings.getDefaults();
+  service.setRequestSettings({ ...rules, duplicateScope: 'pending' });
+  eq(service.duplicateScopeMatch('pending0001'), '待確認區');
+  eq(service.duplicateScopeMatch('playlist001'), null);
+  service.setRequestSettings({ ...rules, duplicateScope: 'playlist' });
+  eq(service.duplicateScopeMatch('playlist001'), '正式播放清單');
+  service.setRequestSettings({ ...rules, duplicateScope: 'session' });
+  eq(service.duplicateScopeMatch('session0001'), '本場已唱');
+  service.setRequestSettings({ ...rules, duplicateScope: 'recent', recentDuplicateHours: 24 });
+  eq(service.duplicateScopeMatch('recent00001'), '最近 24 小時');
+  service.setRequestSettings({ ...rules, duplicateScope: 'allow' });
+  eq(service.duplicateScopeMatch('pending0001'), null);
+  service.stop();
+});
+
+testAsync('Twitch 直播場次上限會跨重啟保存，管理員可豁免公平性限制', async () => {
+  let savedSession = null;
+  const sessionStore = {
+    load: () => savedSession ? cloneJson(savedSession) : { online: false, session: { startedAt: null, acceptedCount: 0, byUser: {}, lastRequesterId: '', lastRequesterName: '' }, recent: [] },
+    save: (value) => { savedSession = cloneJson(value); return true; },
+  };
+  const accepted = [];
+  const replies = [];
+  const options = {
+    config: { twitchClientId: '' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: (request) => { accepted.push(request.videoId); return true; },
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true }, sessionStore,
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  };
+  const service = new TwitchService(options);
+  service.setRequestSettings({
+    ...TwitchRequestSettings.getDefaults(), duplicateScope: 'allow', liveOnly: true,
+    perUserSessionLimit: 1, sessionRequestLimit: 2, fairnessModeratorExempt: true,
+  });
+  service.fetchYouTubeMetadata = async () => ({ title: '測試歌曲', author: '頻道', thumbnail: '', metadataAvailable: true, duration: 180, assessment: { warningTypes: [] } });
+  service.sendConfiguredReply = async (_event, key, values = {}) => { replies.push({ key, values }); return { sent: true }; };
+  const request = (id, user, badges = []) => service.handleSongRequestInput({
+    event: { chatter_user_id: user, chatter_user_name: user, badges }, requestId: id,
+    url: `https://youtu.be/${id.padEnd(11, '0').slice(0, 11)}`, command: '!點歌', source: 'chat',
+  });
+  eq(await request('offline', 'viewer-a'), false);
+  eq(replies.at(-1).key, 'streamOffline');
+  eq(await request('mod-offline', 'moderator', [{ set_id: 'moderator' }]), true);
+  service.startRequestSession(1700000000000);
+  eq(await request('first', 'viewer-a'), true);
+  eq(await request('second', 'viewer-a'), false);
+  eq(replies.at(-1).key, 'sessionUserLimit');
+  eq(await request('third', 'viewer-b'), true);
+  eq(await request('fourth', 'viewer-c'), false);
+  eq(replies.at(-1).key, 'sessionLimit');
+  eq(await request('mod-limit', 'moderator', [{ set_id: 'moderator' }]), true);
+  eq(service.status().requestSession.acceptedCount, 3);
+  service.stop();
+
+  const restored = new TwitchService(options);
+  eq(restored.status().streamOnline, true);
+  eq(restored.status().requestSession.acceptedCount, 3);
+  eq(restored.requestSession.session.byUser['viewer-a'], 1);
+  restored.stop();
+});
+
+testAsync('Twitch 同一人連續點歌只提醒，不會改動收到順序', async () => {
+  const accepted = [];
+  const replies = [];
+  const service = new TwitchService({
+    config: { twitchClientId: '' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: (request) => { accepted.push(request.videoId); return true; },
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    sessionStore: { load: () => null, save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  service.setRequestSettings({ ...TwitchRequestSettings.getDefaults(), duplicateScope: 'allow', warnConsecutiveRequests: true });
+  service.fetchYouTubeMetadata = async () => ({ title: '測試歌曲', author: '頻道', thumbnail: '', metadataAvailable: true, duration: 180, assessment: { warningTypes: [] } });
+  service.sendConfiguredReply = async (_event, key) => { replies.push(key); return { sent: true }; };
+  const event = { chatter_user_id: 'same-viewer', chatter_user_name: '同一位觀眾' };
+  await service.handleSongRequestInput({ event, requestId: 'first', url: 'https://youtu.be/dQw4w9WgXcQ', command: '!點歌', source: 'chat' });
+  await service.handleSongRequestInput({ event, requestId: 'second', url: 'https://youtu.be/9bZkp7q19f0', command: '!點歌', source: 'chat' });
+  eq(accepted.join(','), 'dQw4w9WgXcQ,9bZkp7q19f0');
+  eq(replies.join(','), 'received,received,consecutiveRequesterWarning');
+  service.stop();
+});
+
+testAsync('Twitch 全域點歌冷卻會擋一般觀眾，但不擋已設定豁免的管理員', async () => {
+  const accepted = [];
+  const replies = [];
+  const service = new TwitchService({
+    config: { twitchClientId: '' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: (request) => { accepted.push(request.videoId); return true; },
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    sessionStore: { load: () => null, save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  const settings = TwitchRequestSettings.getDefaults();
+  settings.duplicateScope = 'allow';
+  settings.commands.request.globalCooldownSeconds = 60;
+  service.setRequestSettings(settings);
+  service.fetchYouTubeMetadata = async () => ({ title: '測試歌曲', author: '頻道', thumbnail: '', metadataAvailable: true, duration: 180, assessment: { warningTypes: [] } });
+  service.sendConfiguredReply = async (_event, key) => { replies.push(key); return { sent: true }; };
+  await service.handleChatMessage({ message_id: 'first', chatter_user_id: 'viewer-a', badges: [], message: { text: '!點歌 https://youtu.be/dQw4w9WgXcQ' } });
+  await service.handleChatMessage({ message_id: 'blocked', chatter_user_id: 'viewer-b', badges: [], message: { text: '!點歌 https://youtu.be/9bZkp7q19f0' } });
+  await service.handleChatMessage({ message_id: 'moderator', chatter_user_id: 'mod-1', badges: [{ set_id: 'moderator' }], message: { text: '!點歌 https://youtu.be/3JZ_D3ELwOQ' } });
+  eq(replies.join(','), 'received,cooldownActive,received');
+  eq(accepted.join(','), 'dQw4w9WgXcQ,3JZ_D3ELwOQ');
   service.stop();
 });
 
@@ -2321,6 +2455,7 @@ testAsync('Twitch EventSub 在新版授權下會訂閱忠誠點數兌換事件',
   };
   const subscriptions = [];
   service.createSubscription = async (type, condition) => subscriptions.push({ type, condition });
+  service.refreshLiveState = async () => false;
   await service.handleWebSocketMessage(JSON.stringify({
     metadata: { message_type: 'session_welcome' },
     payload: { session: { id: 'session-1' } },
@@ -2578,7 +2713,10 @@ test('Twitch 點歌頁有指令規則、回覆測試、變數驗證與各自還�
   ok(html.includes('id="twitch-reply-test-event"') && html.includes('id="twitch-reply-test-send"'));
   eq((html.match(/id="twitch-reply-template"/g) || []).length, 1);
   ok(html.includes('id="twitch-request-max-pending"') && html.includes('id="twitch-request-per-user"'));
-  ok(html.includes('id="twitch-request-max-duration"') && html.includes('id="twitch-request-reject-duplicates"'));
+  ok(html.includes('id="twitch-request-max-duration"') && html.includes('id="twitch-request-duplicate-scope"'));
+  ok(html.includes('id="twitch-request-live-only"') && html.includes('id="twitch-request-per-user-session"'));
+  ok(html.includes('id="twitch-request-session-limit"') && html.includes('id="twitch-request-moderator-exempt"'));
+  ok(html.includes('id="twitch-request-consecutive-warning"') && html.includes('id="twitch-request-edit-cooldown"'));
   ok(html.includes('id="twitch-request-rule-preview"') && html.includes('id="twitch-request-reset"'));
   ok(html.includes('id="twitch-blacklist-list"') && html.includes('id="twitch-blacklist-type"'));
   ok(html.includes('id="twitch-blacklist-value"') && html.includes('id="twitch-blacklist-save"'));
