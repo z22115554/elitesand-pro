@@ -4784,6 +4784,13 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
   ok(!electronShell.isTrustedLocalUrl('http://example.com:3000/panel', 3000));
   ok(electronShell.isProjectReleaseUrl('https://github.com/z22115554/elitesand-pro/releases'));
   ok(!electronShell.isProjectReleaseUrl('https://github.com/other/project/releases'));
+  // Twitch device-code 驗證頁必須可外開，否則「前往 Twitch 輸入代碼」在殼裡點了沒反應。
+  ok(electronShell.isTwitchVerificationUrl('https://www.twitch.tv/activate'), 'Twitch 驗證頁必須放行外開：');
+  ok(electronShell.isTwitchVerificationUrl('https://www.twitch.tv/activate?device-code=ABCD1234'));
+  ok(electronShell.isTwitchVerificationUrl('https://id.twitch.tv/oauth2/device'));
+  ok(!electronShell.isTwitchVerificationUrl('http://www.twitch.tv/activate'), '非 https 不放行：');
+  ok(!electronShell.isTwitchVerificationUrl('https://twitch.tv.evil.com/activate'), '仿冒網域不放行：');
+  ok(!electronShell.isTwitchVerificationUrl('https://example.com/activate'));
 
   const source = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   [

@@ -54,6 +54,21 @@ function isProjectReleaseUrl(rawUrl) {
   }
 }
 
+// Twitch device-code 授權會回一個官方驗證頁（verification_uri，通常是
+// https://www.twitch.tv/activate）。面板的「前往 Twitch 輸入代碼」是 target=_blank，
+// 在殼裡走 setWindowOpenHandler；不放行的話會被 deny → 按了沒反應，授權整條走不下去。
+// 值來自 Twitch 自己的 OAuth 回應，這裡只再收斂到 twitch.tv 網域做防禦深度。
+function isTwitchVerificationUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    return host === 'www.twitch.tv' || host === 'twitch.tv' || host === 'id.twitch.tv';
+  } catch (_) {
+    return false;
+  }
+}
+
 function probeHealth(port, { httpImpl = http, timeoutMs = 1000 } = {}) {
   return new Promise((resolve) => {
     const request = httpImpl.get({
@@ -333,7 +348,7 @@ function createElectronShell({
     window.on('unmaximize', () => window.webContents.send?.('elitesand:window-maximized', false));
     window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
     window.webContents.setWindowOpenHandler(({ url }) => {
-      if (isProjectReleaseUrl(url)) shell.openExternal(url);
+      if (isProjectReleaseUrl(url) || isTwitchVerificationUrl(url)) shell.openExternal(url);
       return { action: 'deny' };
     });
     window.webContents.on('will-navigate', (event, url) => {
@@ -530,6 +545,7 @@ module.exports = {
   ensureRuntimePaths,
   isTrustedLocalUrl,
   isProjectReleaseUrl,
+  isTwitchVerificationUrl,
   probeHealth,
   waitForExit,
   createElectronShell,
