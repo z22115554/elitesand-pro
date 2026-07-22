@@ -794,6 +794,11 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .modal-card { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: var(--r-lg); width: 100%; max-width: 660px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 22px; border-bottom: 1px solid var(--border); }
 .modal-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
+/* Confirmations can be opened while a near-fullscreen settings modal is still
+   visible. Keep both shared confirmations above app modals and Electron's
+   frameless title bar so their buttons never become visually unreachable. */
+.danger-confirm-modal,
+.electron-close-modal { z-index: 800; }
 .electron-close-modal .modal-card { max-width: 450px; }
 .electron-close-modal-head { border-bottom-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
 .electron-close-modal-copy { margin: 0; color: var(--text-dim); font-size: 13px; line-height: 1.7; }
