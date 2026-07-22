@@ -965,7 +965,11 @@
         if (!response.ok || !data.verificationUri || !data.userCode) throw new Error(data.error || '無法開始 Twitch 授權');
         if (el('twitch-device-link')) { el('twitch-device-link').href = data.verificationUri; el('twitch-device-link').hidden = false; }
         if (authWindow) { authWindow.location.replace(data.verificationUri); showStatus('已開啟 Twitch 登入與授權頁，請依 Twitch 指示完成授權。', 'info'); }
-        else showStatus(`請按「前往 Twitch 輸入代碼」，輸入：${data.userCode}`, 'info');
+        else {
+          // Electron 殼會拒絕空白彈窗（authWindow 為 null）；直接開驗證頁，殼會用系統瀏覽器外開。
+          window.open(data.verificationUri, '_blank', 'noopener');
+          showStatus(`已開啟 Twitch 授權頁（若未自動開啟，請按「前往 Twitch 輸入代碼」）。代碼：${data.userCode}`, 'info');
+        }
       } catch (err) {
         if (authWindow && !authWindow.closed) authWindow.close();
         connect.disabled = false;
