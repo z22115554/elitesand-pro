@@ -2,18 +2,22 @@
   "schemaVersion": 1,
   "announcements": [
     {
-      "id": "v0.9.0-github-update",
-      "level": "warning",
-      "title": "請更新至 v0.9.0（穩定版）",
-      "message": "v0.9.0 是新的穩定版本，整合了桌面版（系統匣、關窗不中斷音訊）、統一音量響度正規化，以及大幅擴充的 Twitch 點歌（自訂規則與資格、忠誠點數點歌與自動退款、逐項自訂回覆），並含多項安全與穩定性修復。請前往官方 GitHub Releases 下載完整安裝檔或可攜版覆蓋更新，資料與播放清單會保留。此版本含相依套件升級，無法使用增量更新，請務必下載完整版。本程式尚未取得 Windows 程式碼簽章；首次執行若出現 SmartScreen，請確認下載來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
+      "id": "v0.9.2-required-full-update",
+      "level": "critical",
+      "title": "必須更新至 v0.9.2 完整版",
+      "message": "v0.9.2 修正桌面版 Twitch 授權連結無法開啟的問題，並收錄 Twitch 點歌管理中心、防濫用規則、場次公平性與忠誠點數原生限制。這次修正包含 Electron 桌面殼，不在程式內增量更新白名單中，舊版無法透過增量更新取得修正。請前往官方 GitHub Releases 下載 v0.9.2 完整安裝檔或可攜版，資料、下載音檔與播放清單會保留。本程式尚未取得 Windows 程式碼簽章；首次執行若出現 Windows SmartScreen，請確認下載來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
       "minVersion": "0.7.0",
-      "maxVersion": "0.8.1-pre.2",
-      "publishedAt": "2026-07-22T00:00:00+08:00",
-      "expiresAt": "2026-10-31T23:59:59+08:00",
+      "maxVersion": "0.9.1",
+      "publishedAt": "2026-07-23T00:00:00+08:00",
+      "expiresAt": "2027-01-31T23:59:59+08:00",
       "dismissible": false,
       "showOnce": false,
-      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.0",
-      "buttonText": "前往 GitHub Releases 更新",
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.2",
+      "buttonText": "下載 v0.9.2 完整版",
+      "actions": {
+        "disableIncrementalUpdate": true,
+        "showFullDownloadOnly": true
+      },
       "enabled": true
     }
   ]
