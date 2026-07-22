@@ -16,7 +16,7 @@ html.electron-shell .desktop-windowbar {
   position: fixed; inset: 0 0 auto; z-index: 700;
   display: flex; align-items: center; gap: 8px;
   height: var(--desktop-windowbar-height); padding: 0 142px 0 14px;
-  color: var(--text-dim); background:
+  color: rgba(255,255,255,0.62); background:
     linear-gradient(90deg, rgba(124,108,255,0.12), transparent 28%),
     #20222a;
   border-bottom: 1px solid var(--border);
@@ -24,12 +24,12 @@ html.electron-shell .desktop-windowbar {
   -webkit-app-region: drag; user-select: none;
 }
 .desktop-windowbar-logo { width: 18px; height: 18px; border-radius: 5px; background: #fff; object-fit: contain; }
-.desktop-windowbar-brand { color: var(--text); font-size: 12px; font-weight: 700; letter-spacing: 0.01em; }
-.desktop-windowbar-divider { width: 1px; height: 14px; background: var(--border-strong); }
-.desktop-windowbar-context { font-size: 12px; color: var(--text-faint); }
+.desktop-windowbar-brand { color: #f2f3f5; font-size: 12px; font-weight: 700; letter-spacing: 0.01em; }
+.desktop-windowbar-divider { width: 1px; height: 14px; background: rgba(255,255,255,0.16); }
+.desktop-windowbar-context { font-size: 12px; color: rgba(255,255,255,0.5); }
 .desktop-windowbar-controls { position: absolute; top: 0; right: 0; display: flex; height: 100%; -webkit-app-region: no-drag; }
-.desktop-windowbar-control { display: grid; place-items: center; width: 46px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text-dim); cursor: pointer; transition: background 0.12s ease, color 0.12s ease; }
-.desktop-windowbar-control:hover { background: var(--bg-hover); color: var(--text); }
+.desktop-windowbar-control { display: grid; place-items: center; width: 46px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: rgba(255,255,255,0.66); cursor: pointer; transition: background 0.12s ease, color 0.12s ease; }
+.desktop-windowbar-control:hover { background: rgba(255,255,255,0.10); color: #fff; }
 .desktop-windowbar-control:focus-visible { position: relative; z-index: 1; outline: 1px solid var(--accent); outline-offset: -3px; }
 .desktop-windowbar-control svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: square; }
 .desktop-windowbar-control--close:hover { background: var(--danger); color: #fff; }
@@ -545,7 +545,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .playlist-item .pi-lyrics-status { border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-faint); padding: 2px 6px; font-size: 10px; line-height: 1.4; border-radius: 5px; cursor: pointer; flex-shrink: 0; white-space: nowrap; transition: background 0.12s, color 0.12s, border-color 0.12s; }
 .playlist-item .pi-lyrics-status:hover { background: var(--bg-hover); }
 .playlist-item .pi-lyrics-status--word,
-.playlist-item .pi-lyrics-status--line { color: var(--accent-text, var(--accent)); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.playlist-item .pi-lyrics-status--line { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .playlist-item .pi-lyrics-status--none { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .playlist-item .pi-time { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-faint); flex-shrink: 0; min-width: 38px; }
 .playlist-item .pi-remove, .playlist-item .pi-edit { opacity: 0; border: none; background: transparent; color: var(--text-faint); width: 26px; height: 26px; border-radius: 6px; transition: opacity 0.12s, color 0.12s, background 0.12s; flex-shrink: 0; }
