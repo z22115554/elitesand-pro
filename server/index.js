@@ -233,7 +233,9 @@ const twitch = new TwitchService({
   onStreamOffline: (event) => socketApi.stopTwitchSession(event),
   onSongRequest: (request) => socketApi.dispatchTwitchSongRequest(request),
   onSongRequestExpired: (requestId) => socketApi.expireTwitchSongRequest(requestId),
+  onSongRequestCanceled: (requestId) => socketApi.cancelTwitchSongRequest(requestId),
   onStatusChange: (status) => socketApi.recordTwitchStatus(status),
+  getPlaybackSnapshot: () => socketApi.getState(),
 });
 socketApi.setTwitchService(twitch);
 app.use(require('./routes/twitch-auth')(twitch));

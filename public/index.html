@@ -842,158 +842,146 @@
           </div><!-- /.settings-body -->
         </div><!-- /view settings -->
 
-        <!-- ═══ 視圖：Twitch 點歌確認（獨立頁，不讓大量 request 撐開首頁）═══ -->
+        <!-- ═══ 視圖：Twitch 點歌（直播中操作留主頁，低頻設定集中到管理視窗）═══ -->
         <div class="view content-col" data-view="twitch">
+          <section class="card twitch-live-status-card" aria-labelledby="twitch-live-status-title">
+            <div class="twitch-live-status-head">
+              <div><p id="twitch-live-status-title" class="eyebrow m-0">點歌狀態</p><p class="sub">直播中常用的狀態與操作集中在這裡。</p></div>
+              <div class="twitch-live-actions">
+                <button id="twitch-request-quick-toggle" class="btn btn-sm" type="button">暫停點歌</button>
+                <button id="twitch-management-open" class="btn btn-sm btn-primary" type="button">開啟點歌管理…</button>
+              </div>
+            </div>
+            <div class="twitch-status-chips" role="status" aria-live="polite">
+              <span id="twitch-status-connection" class="twitch-status-chip" data-state="muted">Twitch 讀取中</span>
+              <span id="twitch-status-request" class="twitch-status-chip" data-state="muted">點歌讀取中</span>
+              <span id="twitch-status-reward" class="twitch-status-chip" data-state="muted">忠誠點數讀取中</span>
+              <span id="twitch-status-replies" class="twitch-status-chip" data-state="muted">回覆讀取中</span>
+            </div>
+          </section>
+
           <section id="twitch-requests" class="card twitch-requests-card">
             <div class="playlist-head">
               <div>
-                <p class="eyebrow m-0">Twitch 點歌確認</p>
-                <p class="sub twitch-request-hint">觀眾的點歌會先排在這裡；可選擇插到下一首或加入尾端，確認後才開始下載，拒絕才會通知聊天室。</p>
+                <p class="eyebrow m-0">待確認點歌</p>
+                <p class="sub twitch-request-hint">觀眾的點歌會先排在這裡；確認後才開始下載。</p>
               </div>
-              <div><button id="twitch-reject-all" class="btn btn-sm btn-ghost btn-danger" type="button" hidden>拒絕全部</button> <span id="twitch-requests-count" class="val">0</span></div>
+              <div class="twitch-request-count-actions"><button id="twitch-reject-all" class="btn btn-sm btn-ghost btn-danger" type="button" hidden>拒絕全部</button><span id="twitch-requests-count" class="val">0</span></div>
             </div>
             <div id="twitch-requests-list" class="twitch-requests-list"></div>
           </section>
-          <div class="twitch-settings-stack">
-          <details class="card card-collapse twitch-request-settings" id="twitch-request-settings" open>
-            <summary class="eyebrow">點歌指令與規則</summary>
-            <div class="card-collapse-body twitch-request-settings-body">
-              <p class="sub section-intro">設定聊天室指令、哪些觀眾可以點歌，以及送進主播確認區前要套用的限制。</p>
-              <div class="switch-row">
-                <div><div class="label">Twitch 點歌總開關</div><div class="sub">關閉後仍保持 Twitch 連線；聊天室指令會收到暫停提示，忠誠點數兌換會立即退款。</div></div>
-                <label class="switch"><input id="twitch-request-enabled" type="checkbox" checked><span class="track"></span></label>
+
+          <section class="card twitch-activity-card">
+            <div class="playlist-head"><div><p class="eyebrow m-0">最近活動</p><p class="sub">完整點歌歷史會在後續階段加入。</p></div><button id="twitch-history-open" class="btn btn-sm btn-ghost" type="button">查看規劃</button></div>
+            <div class="twitch-activity-empty">目前沒有可顯示的活動紀錄；待確認操作仍完整保留在上方。</div>
+          </section>
+
+          <div id="twitch-management-modal" class="modal modal-wide twitch-management-modal" role="dialog" aria-modal="true" aria-labelledby="twitch-management-title" hidden>
+            <div class="modal-card">
+              <div class="modal-head twitch-management-head">
+                <div><h3 id="twitch-management-title" tabindex="-1">Twitch 點歌管理</h3><p id="twitch-management-dirty-summary" class="sub" aria-live="polite">所有設定都已儲存</p></div>
+                <div class="twitch-management-head-actions"><button id="twitch-management-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
               </div>
-              <div class="twitch-rule-grid">
-                <div class="field">
-                  <label for="twitch-request-command">主要指令</label>
-                  <input id="twitch-request-command" class="input" type="text" maxlength="20" value="!點歌" autocomplete="off" spellcheck="false">
-                  <p class="field-hint">必須以 ! 開頭，不可包含空白。</p>
-                </div>
-                <div class="field">
-                  <label for="twitch-request-aliases">指令別名</label>
-                  <input id="twitch-request-aliases" class="input" type="text" placeholder="!唱歌, !song" autocomplete="off" spellcheck="false">
-                  <p class="field-hint">用逗號分隔，最多 5 個。</p>
-                </div>
-                <div class="field">
-                  <label for="twitch-request-permission">允許點歌的使用者</label>
-                  <select id="twitch-request-permission" class="input"></select>
-                </div>
-                <div class="field">
-                  <label for="twitch-request-cooldown">每人冷卻秒數</label>
-                  <input id="twitch-request-cooldown" class="input" type="number" min="0" max="600" step="1" value="0" inputmode="numeric">
-                  <p class="field-hint">0 表示不限制；只在成功送入確認區後開始計時。</p>
-                </div>
-                <div class="field">
-                  <label for="twitch-request-max-pending">待確認總上限</label>
-                  <input id="twitch-request-max-pending" class="input" type="number" min="1" max="50" step="1" value="20" inputmode="numeric">
-                </div>
-                <div class="field">
-                  <label for="twitch-request-per-user">每人待確認上限</label>
-                  <input id="twitch-request-per-user" class="input" type="number" min="0" max="10" step="1" value="0" inputmode="numeric">
-                  <p class="field-hint">0 表示不限制。</p>
-                </div>
-                <div class="field">
-                  <label for="twitch-request-max-duration">歌曲長度上限（分鐘）</label>
-                  <input id="twitch-request-max-duration" class="input" type="number" min="0" max="180" step="1" value="0" inputmode="numeric">
-                  <p class="field-hint">0 表示不限制；播放清單連結仍固定拒絕。</p>
-                </div>
+              <div class="twitch-management-search">
+                <label class="sr-only" for="twitch-settings-search">找設定</label>
+                <input id="twitch-settings-search" class="input" type="search" placeholder="找設定，例如：冷卻、退款、黑名單、目前歌曲" autocomplete="off">
+                <div id="twitch-settings-search-results" class="twitch-settings-search-results" role="listbox" hidden></div>
+                <p id="twitch-settings-search-status" class="field-hint" aria-live="polite">輸入設定名稱後可直接跳到對應分類。</p>
               </div>
-              <div class="switch-row twitch-rule-switch">
-                <div><div class="label">拒絕重複待確認歌曲</div><div class="sub">同一部 YouTube 影片已在確認區時，不再建立第二筆。</div></div>
-                <label class="switch"><input id="twitch-request-reject-duplicates" type="checkbox" checked><span class="track"></span></label>
-              </div>
-              <div class="twitch-rule-preview" aria-live="polite">
-                <div class="label">目前規則預覽</div>
-                <p id="twitch-request-rule-preview" class="sub"></p>
-              </div>
-              <div id="twitch-request-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
-              <div class="twitch-reply-actions">
-                <span id="twitch-request-save-status" class="val" aria-live="polite"></span>
-                <button id="twitch-request-reset" class="btn btn-sm btn-ghost" type="button">還原預設值</button>
-                <button id="twitch-request-save" class="btn btn-sm btn-primary" type="button">儲存點歌規則</button>
+              <div class="twitch-management-layout">
+                <nav class="twitch-management-nav" role="tablist" aria-label="Twitch 點歌管理分類">
+                  <button class="twitch-management-nav-item is-active" type="button" role="tab" aria-selected="true" data-twitch-pane="commands">指令<span class="twitch-dirty-dot" hidden>未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="rules">接受規則<span class="twitch-dirty-dot" hidden>未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="blacklist">黑名單<span class="twitch-phase-label">T2</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="reward">忠誠點數<span class="twitch-dirty-dot" hidden>未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="replies">聊天室回覆<span class="twitch-dirty-dot" hidden>未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="custom">自訂指令<span class="twitch-phase-label">T6</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="test">測試與預覽</button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="history">歷史<span class="twitch-phase-label">T6</span></button>
+                </nav>
+                <div class="twitch-management-content">
+                  <section class="twitch-management-pane is-active" role="tabpanel" data-twitch-pane-content="commands">
+                    <div class="twitch-pane-scroll">
+                      <div class="twitch-pane-heading"><p class="eyebrow">觀眾指令</p><h4>每個指令都能獨立設定</h4><p class="sub">選擇指令後設定開關、名稱、別名、資格與冷卻。所有名稱會一起檢查衝突。</p></div>
+                      <div class="twitch-command-layout">
+                        <div id="twitch-command-list" class="twitch-command-list" role="listbox" aria-label="Twitch 指令"></div>
+                        <div class="twitch-command-editor">
+                          <div class="switch-row"><div><div id="twitch-command-editor-label" class="label">點歌</div><div id="twitch-command-editor-description" class="sub"></div></div><label class="switch"><input id="twitch-command-enabled" type="checkbox"><span class="track"></span></label></div>
+                          <div class="twitch-rule-grid">
+                            <div class="field"><label for="twitch-command-name">主要指令</label><input id="twitch-command-name" class="input" type="text" maxlength="20" autocomplete="off" spellcheck="false"><p class="field-hint">必須以 ! 開頭，不可包含空白。</p></div>
+                            <div class="field"><label for="twitch-command-aliases">指令別名</label><input id="twitch-command-aliases" class="input" type="text" placeholder="!song, !唱歌" autocomplete="off" spellcheck="false"><p class="field-hint">用逗號分隔，最多 5 個。</p></div>
+                            <div class="field"><label for="twitch-command-permission">允許使用者</label><select id="twitch-command-permission" class="input"></select></div>
+                            <div class="field"><label for="twitch-command-user-cooldown">每人冷卻（秒）</label><input id="twitch-command-user-cooldown" class="input" type="number" min="0" max="600" step="1" inputmode="numeric"></div>
+                            <div class="field"><label for="twitch-command-global-cooldown">全域冷卻（秒）</label><input id="twitch-command-global-cooldown" class="input" type="number" min="0" max="600" step="1" inputmode="numeric"><p class="field-hint">所有觀眾共用；0 表示不限制。</p></div>
+                          </div>
+                          <div class="twitch-rule-preview"><div class="label">聊天室用法預覽</div><p id="twitch-command-preview" class="sub"></p><button id="twitch-command-edit-reply" class="btn btn-sm btn-ghost" type="button">編輯相關回覆</button></div>
+                        </div>
+                      </div>
+                      <div id="twitch-command-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
+                    </div>
+                    <div class="twitch-pane-actions"><span id="twitch-command-save-status" class="val" aria-live="polite"></span><button id="twitch-command-reset" class="btn btn-sm btn-ghost" type="button">還原指令預設值</button><button id="twitch-command-save" class="btn btn-sm btn-primary" type="button">儲存指令</button></div>
+                  </section>
+
+                  <section class="twitch-management-pane" role="tabpanel" data-twitch-pane-content="rules" hidden>
+                    <div class="twitch-pane-scroll">
+                      <div class="twitch-pane-heading"><p class="eyebrow">接受規則</p><h4>先限制進入待確認區的請求</h4><p class="sub">播放清單連結固定拒絕；其他規則由 server 再次驗證。</p></div>
+                      <div class="switch-row"><div><div class="label">Twitch 點歌總開關</div><div class="sub">關閉後仍保持 Twitch 連線；查詢與取消指令仍可使用。</div></div><label class="switch"><input id="twitch-request-enabled" type="checkbox" checked><span class="track"></span></label></div>
+                      <div class="twitch-rule-grid">
+                        <div class="field"><label for="twitch-request-max-pending">待確認總上限</label><input id="twitch-request-max-pending" class="input" type="number" min="1" max="50" step="1" value="20" inputmode="numeric"></div>
+                        <div class="field"><label for="twitch-request-per-user">每人待確認上限</label><input id="twitch-request-per-user" class="input" type="number" min="0" max="10" step="1" value="0" inputmode="numeric"><p class="field-hint">0 表示不限制。</p></div>
+                        <div class="field"><label for="twitch-request-max-duration">歌曲長度上限（分鐘）</label><input id="twitch-request-max-duration" class="input" type="number" min="0" max="180" step="1" value="0" inputmode="numeric"><p class="field-hint">0 表示不限制。</p></div>
+                      </div>
+                      <div class="switch-row twitch-rule-switch"><div><div class="label">拒絕重複待確認歌曲</div><div class="sub">同一部 YouTube 影片已在確認區時，不再建立第二筆。</div></div><label class="switch"><input id="twitch-request-reject-duplicates" type="checkbox" checked><span class="track"></span></label></div>
+                      <div class="twitch-rule-preview" aria-live="polite"><div class="label">目前規則預覽</div><p id="twitch-request-rule-preview" class="sub"></p></div>
+                      <div id="twitch-request-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
+                    </div>
+                    <div class="twitch-pane-actions"><span id="twitch-request-save-status" class="val" aria-live="polite"></span><button id="twitch-request-reset" class="btn btn-sm btn-ghost" type="button">還原規則預設值</button><button id="twitch-request-save" class="btn btn-sm btn-primary" type="button">儲存接受規則</button></div>
+                  </section>
+
+                  <section class="twitch-management-pane twitch-future-pane" role="tabpanel" data-twitch-pane-content="blacklist" hidden><div class="twitch-pane-scroll"><p class="eyebrow">黑名單</p><h4>T2 防濫用階段</h4><p class="sub">之後會在這裡管理 Twitch 使用者、YouTube 影片／頻道與標題關鍵字。T1 不會建立無效的假開關。</p></div></section>
+
+                  <section class="twitch-management-pane" role="tabpanel" data-twitch-pane-content="reward" hidden>
+                    <div class="twitch-pane-scroll">
+                      <div class="twitch-pane-heading"><p class="eyebrow">忠誠點數</p><h4>管理 Elitesand Pro 專用獎勵</h4><p class="sub">成功匯入會完成兌換；拒絕、永久失敗、逾時或觀眾取消會退款。</p></div>
+                      <div class="switch-row"><div><div class="label">忠誠點數點歌開關</div><div class="sub">關閉並儲存後，Twitch 上的專用獎勵也會停用。</div></div><label class="switch"><input id="twitch-reward-enabled" type="checkbox"><span class="track"></span></label></div>
+                      <div class="twitch-rule-grid"><div class="field"><label for="twitch-reward-title">獎勵名稱</label><input id="twitch-reward-title" class="input" type="text" maxlength="45" value="用忠誠點數點歌" autocomplete="off"></div><div class="field"><label for="twitch-reward-cost">兌換點數</label><input id="twitch-reward-cost" class="input" type="number" min="1" step="1" value="1000" inputmode="numeric"></div></div>
+                      <div class="field"><label for="twitch-reward-prompt">兌換說明</label><textarea id="twitch-reward-prompt" class="input twitch-reward-prompt" maxlength="200">請貼上單一 YouTube 歌曲連結。主播確認匯入後才會完成兌換；拒絕或失敗會退還點數。</textarea><p class="field-hint">只接受單一 YouTube 歌曲連結。</p></div>
+                      <div class="twitch-rule-preview"><div class="label">Twitch 獎勵預覽</div><p id="twitch-reward-preview" class="sub"></p></div>
+                      <div class="twitch-reward-state"><div><div class="label">連線與獎勵狀態</div><p id="twitch-reward-auth-status" class="sub">正在讀取 Twitch 狀態…</p></div><button id="twitch-reward-reauthorize" class="btn btn-sm btn-ghost" type="button" hidden>重新連接 Twitch</button></div>
+                      <div id="twitch-reward-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
+                    </div>
+                    <div class="twitch-pane-actions"><span id="twitch-reward-save-status" class="val" aria-live="polite"></span><button id="twitch-reward-reset" class="btn btn-sm btn-ghost" type="button">停用並還原</button><button id="twitch-reward-save" class="btn btn-sm btn-primary" type="button">儲存並同步 Twitch</button></div>
+                  </section>
+
+                  <section class="twitch-management-pane" role="tabpanel" data-twitch-pane-content="replies" hidden>
+                    <div class="twitch-pane-scroll">
+                      <div class="twitch-pane-heading"><p class="eyebrow">聊天室回覆</p><h4>一次只編輯一個回覆事件</h4><p class="sub">事件依用途分組；切換事件不會丟失尚未儲存的文案。</p></div>
+                      <div class="twitch-reply-toolbar"><div class="switch-row"><div><div class="label">自動回覆總開關</div><div class="sub">關閉後仍會接收點歌與執行指令，但不傳送自動回覆。</div></div><label class="switch"><input id="twitch-reply-enabled" type="checkbox" checked><span class="track"></span></label></div><div class="field twitch-reply-mode-field"><label for="twitch-reply-mode">回覆方式</label><select id="twitch-reply-mode" class="input"><option value="reply">Twitch 原生串接回覆（建議）</option><option value="mention">以 @使用者 回覆</option><option value="plain">一般聊天室訊息</option></select></div></div>
+                      <div class="twitch-reply-master-detail">
+                        <div id="twitch-reply-events" class="twitch-reply-events" role="listbox" aria-label="回覆事件"></div>
+                        <div id="twitch-reply-editor" class="twitch-reply-item" data-twitch-reply-key="received">
+                          <div class="twitch-reply-item-head"><div><div id="twitch-reply-editor-label" class="twitch-reply-item-label">收到點歌、等待確認</div><p id="twitch-reply-editor-group" class="sub"></p></div><label class="switch"><input id="twitch-reply-item-enabled" data-role="enabled" type="checkbox"><span class="track"></span></label></div>
+                          <textarea id="twitch-reply-template" class="input twitch-reply-template" data-role="template" maxlength="500" aria-label="回覆文字"></textarea>
+                          <div class="twitch-reply-item-meta"><span id="twitch-reply-preview" class="twitch-reply-preview" data-role="preview"></span><span id="twitch-reply-count" data-role="count"></span></div>
+                          <div id="twitch-reply-item-error" class="twitch-reply-item-error" data-role="error" hidden></div>
+                          <div class="twitch-reply-variables"><div class="label">插入變數</div><div id="twitch-reply-variable-buttons" class="twitch-reply-variable-buttons"></div><p class="sub">拼錯、全形或不完整大括號時無法儲存。</p></div>
+                        </div>
+                      </div>
+                      <div id="twitch-reply-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
+                    </div>
+                    <div class="twitch-pane-actions"><span id="twitch-reply-save-status" class="val" aria-live="polite"></span><button id="twitch-reply-reset" class="btn btn-sm btn-ghost" type="button">還原回覆預設值</button><button id="twitch-reply-save" class="btn btn-sm btn-primary" type="button">儲存回覆設定</button></div>
+                  </section>
+
+                  <section class="twitch-management-pane twitch-future-pane" role="tabpanel" data-twitch-pane-content="custom" hidden><div class="twitch-pane-scroll"><p class="eyebrow">自訂指令</p><h4>T6 安全自訂指令階段</h4><p class="sub">第一版只會允許讀取狀態與回覆；不會執行腳本、Shell、HTTP webhook 或自訂 Socket 事件。</p></div></section>
+
+                  <section class="twitch-management-pane" role="tabpanel" data-twitch-pane-content="test" hidden>
+                    <div class="twitch-pane-scroll"><div class="twitch-pane-heading"><p class="eyebrow">測試與預覽</p><h4>本機預覽與公開 Twitch 測試分開</h4></div><div class="twitch-test-card"><div class="label">本機回覆預覽</div><p class="sub">只在這台電腦顯示，不會傳到聊天室。</p><select id="twitch-reply-test-event" class="input" aria-label="選擇要預覽的回覆"></select><p id="twitch-reply-test-preview" class="sub"></p></div><div class="twitch-test-card twitch-test-card--public"><div class="label">公開 Twitch 測試</div><p class="sub">會把目前表單的範例回覆公開送到已連接的 Twitch 聊天室；不建立點歌、不儲存設定。</p><button id="twitch-reply-test-send" class="btn btn-sm" type="button">送到 Twitch 聊天室</button><p id="twitch-reply-test-status" class="val" aria-live="polite"></p></div></div>
+                  </section>
+
+                  <section class="twitch-management-pane twitch-future-pane" role="tabpanel" data-twitch-pane-content="history" hidden><div class="twitch-pane-scroll"><p class="eyebrow">點歌歷史</p><h4>T6 歷史階段</h4><p class="sub">之後會在這裡查看成功、拒絕、退款與逾時紀錄；不會保存 token 或完整聊天室內容。</p></div></section>
+                </div>
               </div>
             </div>
-          </details>
-          <details class="card card-collapse twitch-reward-settings" id="twitch-reward-settings" open>
-            <summary class="eyebrow">忠誠點數點歌</summary>
-            <div class="card-collapse-body twitch-reward-settings-body">
-              <p class="sub section-intro">由 Elitesand Pro 建立並管理專用 Twitch 獎勵。成功匯入會完成兌換；主播拒絕、永久失敗或逾時會自動退款。</p>
-              <div class="switch-row">
-                <div><div class="label">忠誠點數點歌開關</div><div class="sub">關閉並儲存後，Twitch 上的專用獎勵也會停用。</div></div>
-                <label class="switch"><input id="twitch-reward-enabled" type="checkbox"><span class="track"></span></label>
-              </div>
-              <div class="twitch-rule-grid">
-                <div class="field">
-                  <label for="twitch-reward-title">獎勵名稱</label>
-                  <input id="twitch-reward-title" class="input" type="text" maxlength="45" value="用忠誠點數點歌" autocomplete="off">
-                </div>
-                <div class="field">
-                  <label for="twitch-reward-cost">兌換點數</label>
-                  <input id="twitch-reward-cost" class="input" type="number" min="1" step="1" value="1000" inputmode="numeric">
-                </div>
-              </div>
-              <div class="field">
-                <label for="twitch-reward-prompt">兌換說明</label>
-                <textarea id="twitch-reward-prompt" class="input twitch-reward-prompt" maxlength="200">請貼上單一 YouTube 歌曲連結。主播確認匯入後才會完成兌換；拒絕或失敗會退還點數。</textarea>
-                <p class="field-hint">觀眾兌換時必須輸入內容；Elitesand Pro 只接受單一 YouTube 歌曲連結。</p>
-              </div>
-              <div class="twitch-rule-preview">
-                <div class="label">Twitch 獎勵預覽</div>
-                <p id="twitch-reward-preview" class="sub"></p>
-              </div>
-              <div class="twitch-reward-state">
-                <div><div class="label">連線與獎勵狀態</div><p id="twitch-reward-auth-status" class="sub">正在讀取 Twitch 狀態…</p></div>
-                <button id="twitch-reward-reauthorize" class="btn btn-sm btn-ghost" type="button" hidden>重新連接 Twitch</button>
-              </div>
-              <div id="twitch-reward-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
-              <div class="twitch-reply-actions">
-                <span id="twitch-reward-save-status" class="val" aria-live="polite"></span>
-                <button id="twitch-reward-reset" class="btn btn-sm btn-ghost" type="button">停用並還原</button>
-                <button id="twitch-reward-save" class="btn btn-sm btn-primary" type="button">儲存並同步 Twitch</button>
-              </div>
-              <p class="field-hint">還原不會刪除 Twitch 獎勵，而是停用並保留識別碼，避免留下無法退款的孤兒兌換。</p>
-            </div>
-          </details>
-          <details class="card card-collapse twitch-reply-settings" id="twitch-reply-settings" open>
-            <summary class="eyebrow">聊天室自動回覆</summary>
-            <div class="card-collapse-body twitch-reply-settings-body">
-              <p class="sub section-intro">可分別決定收到點歌、匯入成功、拒絕或失敗等情境要不要回覆，並自訂聊天室文案。</p>
-              <div class="switch-row">
-                <div><div class="label">自動回覆總開關</div><div class="sub">關閉後仍會接收點歌，但不會向聊天室傳送任何自動回覆。</div></div>
-                <label class="switch"><input id="twitch-reply-enabled" type="checkbox" checked><span class="track"></span></label>
-              </div>
-              <div class="field twitch-reply-mode-field">
-                <label for="twitch-reply-mode">回覆方式</label>
-                <select id="twitch-reply-mode" class="input">
-                  <option value="reply">Twitch 原生串接回覆（建議）</option>
-                  <option value="mention">以 @使用者 回覆</option>
-                  <option value="plain">一般聊天室訊息</option>
-                </select>
-              </div>
-              <div class="twitch-reply-variables">
-                <div class="label">插入變數</div>
-                <div id="twitch-reply-variable-buttons" class="twitch-reply-variable-buttons"></div>
-                <p class="sub">先點選一個文案輸入框，再按變數按鈕。拼錯或大括號不完整時無法儲存。</p>
-              </div>
-              <div class="twitch-reply-test">
-                <div class="label">送出一則測試回覆</div>
-                <div class="twitch-reply-test-controls">
-                  <select id="twitch-reply-test-event" class="input" aria-label="選擇要測試的回覆"></select>
-                  <button id="twitch-reply-test-send" class="btn btn-sm" type="button">送到 Twitch 聊天室</button>
-                </div>
-                <p id="twitch-reply-test-preview" class="sub"></p>
-                <p id="twitch-reply-test-status" class="val" aria-live="polite"></p>
-                <p class="sub">使用目前畫面上的文案與範例變數，不會建立點歌，也不會自動儲存設定。送出前會再次確認。</p>
-              </div>
-              <div id="twitch-reply-items" class="twitch-reply-items"></div>
-              <div id="twitch-reply-form-error" class="val val--danger twitch-reply-form-error" role="alert" hidden></div>
-              <div class="twitch-reply-actions">
-                <span id="twitch-reply-save-status" class="val" aria-live="polite"></span>
-                <button id="twitch-reply-reset" class="btn btn-sm btn-ghost" type="button">還原預設值</button>
-                <button id="twitch-reply-save" class="btn btn-sm btn-primary" type="button">儲存回覆設定</button>
-              </div>
-            </div>
-          </details>
           </div>
         </div><!-- /view twitch -->
 

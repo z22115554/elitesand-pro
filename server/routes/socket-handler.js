@@ -216,6 +216,13 @@ module.exports = function socketHandler(io, {
     }
   }
 
+  function cancelTwitchSongRequest(requestId) {
+    for (const id of clients.controllers) {
+      const target = io.sockets.sockets.get(id);
+      if (target && target.connected) target.emit('twitch:song-request:canceled', { requestId });
+    }
+  }
+
   io.on('connection', (socket) => {
     const counts = getClientCounts();
     log.info(`新連線: ${socket.id} (當前連線: ${counts.total})`);
@@ -324,6 +331,7 @@ module.exports = function socketHandler(io, {
     stopTwitchSession,
     dispatchTwitchSongRequest,
     expireTwitchSongRequest,
+    cancelTwitchSongRequest,
     setTwitchService(service) {
       twitchService = service;
       if (service && typeof service.setReplySettings === 'function') service.setReplySettings(ctx.playState.twitchReplySettings);
