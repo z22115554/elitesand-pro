@@ -42,7 +42,8 @@
     const authorized = !!runtime.authorized;
     setStatusChip('twitch-status-connection', connected ? `已連接 ${runtime.broadcasterLogin || 'Twitch'}` : (authorized ? 'Twitch 連線中' : 'Twitch 未連接'), connected ? 'on' : (authorized ? 'warn' : 'off'));
     setStatusChip('twitch-status-request', requestSaved.enabled ? '點歌已開放' : '點歌已暫停', requestSaved.enabled ? 'on' : 'off');
-    setStatusChip('twitch-status-reward', rewardSaved.enabled ? '忠誠點數已啟用' : '忠誠點數已停用', rewardSaved.enabled ? 'on' : 'muted');
+    const rewardStatus = rewardSaved.enabled ? (rewardSaved.paused ? '忠誠點數已暫停' : '忠誠點數已啟用') : '忠誠點數已停用';
+    setStatusChip('twitch-status-reward', rewardStatus, rewardSaved.enabled && !rewardSaved.paused ? 'on' : 'muted');
     setStatusChip('twitch-status-replies', replySaved.enabled ? '自動回覆已啟用' : '自動回覆已停用', replySaved.enabled ? 'on' : 'muted');
     const quick = el('twitch-request-quick-toggle');
     if (quick) quick.textContent = requestSaved.enabled ? '暫停點歌' : '開放點歌';
@@ -51,16 +52,39 @@
   function applyRewardRuntimeStatus(status) {
     const label = el('twitch-reward-auth-status');
     const reauthorize = el('twitch-reward-reauthorize');
-    if (!label || !reauthorize) return;
+    const summary = el('twitch-reward-synced-summary');
+    const syncError = el('twitch-reward-sync-error');
+    if (!label || !reauthorize || !summary || !syncError) return;
     const missingRewardScope = Array.isArray(status?.missingScopes) && status.missingScopes.includes('channel:manage:redemptions');
     reauthorize.hidden = !status?.configured || (!!status?.authorized && !missingRewardScope);
     if (!status?.configured) label.textContent = '尚未設定 Twitch Client ID。';
     else if (!status?.authorized) label.textContent = '尚未連接 Twitch；啟用獎勵前需要先授權。';
     else if (missingRewardScope) label.textContent = '目前授權缺少忠誠點數管理權限，請重新連接 Twitch 一次。';
-    else if (status.reward?.enabled && status.reward?.rewardId && status.rewardSubscriptionReady) label.textContent = `獎勵已啟用並監聽兌換：${status.reward.title}（${Number(status.reward.cost).toLocaleString()} 點）`;
+    else if (status.rewardSync?.error) label.textContent = '同步失敗；下方保留 Twitch 上次已確認的狀態。';
+    else if (status.reward?.paused && status.reward?.rewardId) label.textContent = '專用獎勵目前暫停兌換。';
+    else if (status.reward?.enabled && status.reward?.rewardId && status.rewardSubscriptionReady) label.textContent = '專用獎勵已啟用並監聽兌換。';
     else if (status.reward?.enabled && status.reward?.rewardId) label.textContent = '獎勵已建立；EventSub 正在等待忠誠點數兌換訂閱。';
     else if (status.reward?.rewardId) label.textContent = '專用獎勵已停用；再次開啟並儲存即可恢復。';
     else label.textContent = '尚未建立專用獎勵；開啟後按「儲存並同步 Twitch」。';
+
+    const confirmed = TwitchRewardSettings.normalizeSettings(status?.reward);
+    if (confirmed.rewardId) {
+      const state = confirmed.enabled ? (confirmed.paused ? '已暫停' : '已啟用') : '已停用';
+      const limits = [
+        confirmed.maxPerStream > 0 ? `每場 ${confirmed.maxPerStream} 次` : '每場不限',
+        confirmed.maxPerUserPerStream > 0 ? `每人每場 ${confirmed.maxPerUserPerStream} 次` : '每人不限',
+        confirmed.globalCooldownSeconds > 0 ? `冷卻 ${confirmed.globalCooldownSeconds} 秒` : '無冷卻',
+      ].join('｜');
+      const runtime = status.rewardSync || {};
+      const extras = [];
+      if (Number.isSafeInteger(runtime.redemptionsRedeemedCurrentStream)) extras.push(`同步時本場已兌換 ${runtime.redemptionsRedeemedCurrentStream} 次`);
+      if (runtime.isInStock === false) extras.push('目前不可兌換');
+      summary.textContent = `${state}｜${confirmed.title}｜${Number(confirmed.cost).toLocaleString()} 點｜${limits}${extras.length ? `｜${extras.join('｜')}` : ''}`;
+    } else {
+      summary.textContent = '尚無 Twitch 已確認的專用獎勵。';
+    }
+    syncError.textContent = status.rewardSync?.error || '';
+    syncError.hidden = !syncError.textContent;
   }
 
   async function refreshStatus() {
@@ -563,18 +587,27 @@
 
   function collectRewardFields() {
     rewardDraft.enabled = !!el('twitch-reward-enabled')?.checked;
+    rewardDraft.paused = !!el('twitch-reward-paused')?.checked;
     rewardDraft.title = el('twitch-reward-title')?.value || '';
     rewardDraft.prompt = el('twitch-reward-prompt')?.value || '';
     rewardDraft.cost = Number(el('twitch-reward-cost')?.value);
+    rewardDraft.maxPerStream = Number(el('twitch-reward-max-per-stream')?.value);
+    rewardDraft.maxPerUserPerStream = Number(el('twitch-reward-max-per-user')?.value);
+    rewardDraft.globalCooldownSeconds = Number(el('twitch-reward-global-cooldown')?.value);
     setDirty('reward', true);
     validateRewardForm();
   }
 
   function applyRewardFields() {
     el('twitch-reward-enabled').checked = rewardDraft.enabled;
+    el('twitch-reward-paused').checked = rewardDraft.paused;
+    el('twitch-reward-paused').disabled = !rewardDraft.rewardId;
     el('twitch-reward-title').value = rewardDraft.title;
     el('twitch-reward-prompt').value = rewardDraft.prompt;
     el('twitch-reward-cost').value = String(rewardDraft.cost);
+    el('twitch-reward-max-per-stream').value = String(rewardDraft.maxPerStream);
+    el('twitch-reward-max-per-user').value = String(rewardDraft.maxPerUserPerStream);
+    el('twitch-reward-global-cooldown').value = String(rewardDraft.globalCooldownSeconds);
     validateRewardForm();
   }
 
@@ -584,7 +617,15 @@
     const error = el('twitch-reward-form-error');
     if (error) { error.textContent = message; error.hidden = !message; }
     if (el('twitch-reward-save')) el('twitch-reward-save').disabled = !!message;
-    if (el('twitch-reward-preview')) el('twitch-reward-preview').textContent = `${rewardDraft.enabled ? '啟用' : '停用'}｜${rewardDraft.title || '—'}｜${Number.isSafeInteger(rewardDraft.cost) ? rewardDraft.cost.toLocaleString() : '—'} 點｜${rewardDraft.prompt || '—'}`;
+    if (el('twitch-reward-preview')) {
+      const state = rewardDraft.enabled ? (rewardDraft.paused ? '暫停兌換' : '啟用') : '停用';
+      const limits = [
+        rewardDraft.maxPerStream > 0 ? `每場 ${rewardDraft.maxPerStream} 次` : '每場不限',
+        rewardDraft.maxPerUserPerStream > 0 ? `每人每場 ${rewardDraft.maxPerUserPerStream} 次` : '每人不限',
+        rewardDraft.globalCooldownSeconds > 0 ? `冷卻 ${rewardDraft.globalCooldownSeconds} 秒` : '無冷卻',
+      ].join('｜');
+      el('twitch-reward-preview').textContent = `${state}｜${rewardDraft.title || '—'}｜${Number.isSafeInteger(rewardDraft.cost) ? rewardDraft.cost.toLocaleString() : '—'} 點｜${limits}｜${rewardDraft.prompt || '—'}`;
+    }
     return validation;
   }
 
@@ -606,13 +647,19 @@
         if (save) save.disabled = false;
         const error = el('twitch-reward-form-error');
         if (error) { error.textContent = result?.error || 'Twitch 沒有回應'; error.hidden = false; }
+        if (result?.status) {
+          lastRuntimeStatus = result.status;
+          applyRewardRuntimeStatus(result.status);
+        }
+        if (el('twitch-reward-save-status')) el('twitch-reward-save-status').textContent = '同步失敗，已保留上次確認狀態';
         return;
       }
       rewardSaved = TwitchRewardSettings.normalizeSettings(result.settings || validation.settings);
       rewardDraft = clone(rewardSaved);
       setDirty('reward', false);
       applyRewardFields();
-      applyRewardRuntimeStatus(result.status || {});
+      lastRuntimeStatus = result.status || lastRuntimeStatus;
+      applyRewardRuntimeStatus(lastRuntimeStatus || {});
       el('twitch-reward-save-status').textContent = successMessage;
       updateMainStatus();
       AppShared.showToast(successMessage, 'success');
@@ -818,7 +865,7 @@
       activeBlacklistId = '';
       setDirty('blacklist', true); renderBlacklistList(); loadBlacklistEditor();
     });
-    ['twitch-reward-enabled', 'twitch-reward-title', 'twitch-reward-prompt', 'twitch-reward-cost'].forEach((id) => {
+    ['twitch-reward-enabled', 'twitch-reward-paused', 'twitch-reward-title', 'twitch-reward-prompt', 'twitch-reward-cost', 'twitch-reward-max-per-stream', 'twitch-reward-max-per-user', 'twitch-reward-global-cooldown'].forEach((id) => {
       const control = el(id);
       control?.addEventListener(control.matches('input[type="checkbox"]') ? 'change' : 'input', collectRewardFields);
     });

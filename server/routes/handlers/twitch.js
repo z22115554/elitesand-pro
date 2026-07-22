@@ -78,7 +78,11 @@ function registerTwitchHandlers(io, socket, ctx, { getTwitchService }) {
       });
     } catch (err) {
       log.warn(`Twitch 忠誠點數獎勵同步失敗: ${err.message}`);
-      if (typeof ack === 'function') ack({ ok: false, error: err.message || '無法同步 Twitch 忠誠點數獎勵' });
+      if (typeof ack === 'function') ack({
+        ok: false,
+        error: err.message || '無法同步 Twitch 忠誠點數獎勵',
+        status: twitchService.status(),
+      });
     }
   });
 

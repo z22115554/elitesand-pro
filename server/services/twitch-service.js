@@ -48,6 +48,25 @@ function formatDuration(seconds) {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
+function managedRewardBody(settings, includePaused) {
+  const body = {
+    title: settings.title,
+    prompt: settings.prompt,
+    cost: settings.cost,
+    is_enabled: settings.enabled,
+    is_user_input_required: true,
+    is_max_per_stream_enabled: settings.maxPerStream > 0,
+    is_max_per_user_per_stream_enabled: settings.maxPerUserPerStream > 0,
+    is_global_cooldown_enabled: settings.globalCooldownSeconds > 0,
+    should_redemptions_skip_request_queue: false,
+  };
+  if (settings.maxPerStream > 0) body.max_per_stream = settings.maxPerStream;
+  if (settings.maxPerUserPerStream > 0) body.max_per_user_per_stream = settings.maxPerUserPerStream;
+  if (settings.globalCooldownSeconds > 0) body.global_cooldown_seconds = settings.globalCooldownSeconds;
+  if (includePaused) body.is_paused = settings.paused;
+  return body;
+}
+
 function requesterKey(event) {
   return String(event?.chatter_user_id || event?.chatter_user_login || event?.chatter_user_name || '').trim().toLocaleLowerCase();
 }
@@ -115,6 +134,13 @@ class TwitchService {
     this.replySettings = TwitchReplySettings.getDefaults();
     this.requestSettings = TwitchRequestSettings.getDefaults();
     this.rewardSettings = TwitchRewardSettings.getDefaults();
+    this.rewardSyncError = '';
+    this.rewardConfirmedAt = 0;
+    this.rewardAvailability = {
+      isInStock: null,
+      redemptionsRedeemedCurrentStream: null,
+      cooldownExpiresAt: null,
+    };
     this.commandUserCooldowns = new Map();
     this.commandGlobalCooldowns = new Map();
     this.rewardSubscriptionReady = false;
@@ -243,11 +269,12 @@ class TwitchService {
       missingScopes: REQUIRED_SCOPES.filter((scope) => !this.hasScope(scope)),
       rewardAuthorized: this.hasScope(REDEMPTION_SCOPE),
       rewardSubscriptionReady: this.rewardSubscriptionReady,
-      reward: {
-        enabled: this.rewardSettings.enabled,
-        rewardId: this.rewardSettings.rewardId,
-        title: this.rewardSettings.title,
-        cost: this.rewardSettings.cost,
+      reward: { ...this.rewardSettings },
+      rewardSync: {
+        state: this.rewardSyncError ? 'error' : (this.rewardSettings.rewardId ? (this.rewardConfirmedAt ? 'confirmed' : 'saved') : 'not-created'),
+        error: this.rewardSyncError,
+        confirmedAt: this.rewardConfirmedAt,
+        ...this.rewardAvailability,
       },
       deviceAuthorization: this.deviceAuthorization ? {
         userCode: this.deviceAuthorization.userCode,
@@ -684,37 +711,50 @@ class TwitchService {
     const validation = TwitchRewardSettings.validateSettings(settings);
     if (!validation.ok) throw new Error(validation.errors[0]?.message || 'Twitch 忠誠點數設定格式無效');
     let normalized = validation.settings;
-    if (!normalized.enabled && !normalized.rewardId) return normalized;
-    await this.requireRedemptionAuthorization();
-    const query = `broadcaster_id=${encodeURIComponent(this.auth.userId)}`;
-    const body = {
-      title: normalized.title,
-      prompt: normalized.prompt,
-      cost: normalized.cost,
-      is_enabled: normalized.enabled,
-      is_user_input_required: true,
-      should_redemptions_skip_request_queue: false,
-    };
-
-    let response = null;
-    if (normalized.rewardId) {
-      response = await this.helix(`/channel_points/custom_rewards?${query}&id=${encodeURIComponent(normalized.rewardId)}`, { method: 'PATCH', body });
-      if (response.status === 404) normalized = { ...normalized, rewardId: '' };
+    if (!normalized.enabled && !normalized.rewardId) {
+      this.setRewardSettings(normalized);
+      this.rewardSyncError = '';
+      return normalized;
     }
-    if (!normalized.rewardId) {
-      response = await this.helix(`/channel_points/custom_rewards?${query}`, { method: 'POST', body });
+    try {
+      await this.requireRedemptionAuthorization();
+      const query = `broadcaster_id=${encodeURIComponent(this.auth.userId)}`;
+      let response = null;
+      if (normalized.rewardId) {
+        response = await this.helix(`/channel_points/custom_rewards?${query}&id=${encodeURIComponent(normalized.rewardId)}`, {
+          method: 'PATCH',
+          body: managedRewardBody(normalized, true),
+        });
+        if (response.status === 404) normalized = { ...normalized, rewardId: '' };
+      }
+      if (!normalized.rewardId) {
+        response = await this.helix(`/channel_points/custom_rewards?${query}`, {
+          method: 'POST',
+          body: managedRewardBody(normalized, false),
+        });
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 401) throw new Error('Twitch 忠誠點數權限不足，請重新連接 Twitch');
+        if (response.status === 403) throw new Error('此頻道尚未開放忠誠點數，或這個獎勵不是由 Elitesand Pro 建立');
+        throw new Error(data.message || `Twitch 獎勵同步失敗（${response.status}）`);
+      }
+      const reward = Array.isArray(data.data) ? data.data[0] : null;
+      if (!reward?.id) throw new Error('Twitch 沒有回傳可管理的獎勵識別碼');
+      const confirmed = TwitchRewardSettings.fromTwitchReward(reward, normalized);
+      this.setRewardSettings(confirmed);
+      this.rewardSyncError = '';
+      this.rewardConfirmedAt = Date.now();
+      this.rewardAvailability = {
+        isInStock: typeof reward.is_in_stock === 'boolean' ? reward.is_in_stock : null,
+        redemptionsRedeemedCurrentStream: Number.isSafeInteger(reward.redemptions_redeemed_current_stream) ? reward.redemptions_redeemed_current_stream : null,
+        cooldownExpiresAt: typeof reward.cooldown_expires_at === 'string' && reward.cooldown_expires_at ? reward.cooldown_expires_at : null,
+      };
+      return confirmed;
+    } catch (err) {
+      this.rewardSyncError = err.message || 'Twitch 獎勵同步失敗';
+      throw err;
     }
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (response.status === 401) throw new Error('Twitch 忠誠點數權限不足，請重新連接 Twitch');
-      if (response.status === 403) throw new Error('此頻道尚未開放忠誠點數，或這個獎勵不是由 Elitesand Pro 建立');
-      throw new Error(data.message || `Twitch 獎勵同步失敗（${response.status}）`);
-    }
-    const reward = Array.isArray(data.data) ? data.data[0] : null;
-    if (!reward?.id) throw new Error('Twitch 沒有回傳可管理的獎勵識別碼');
-    normalized = { ...normalized, rewardId: String(reward.id) };
-    this.setRewardSettings(normalized);
-    return normalized;
   }
 
   async updateRewardRedemptionStatus(redemption, status) {
@@ -919,7 +959,7 @@ class TwitchService {
   async handleRewardRedemption(redemptionEvent, fallbackId) {
     const settings = this.rewardSettings || TwitchRewardSettings.getDefaults();
     const reward = redemptionEvent?.reward || {};
-    if (!settings.enabled || !settings.rewardId || String(reward.id || '') !== settings.rewardId) return;
+    if (!settings.enabled || settings.paused || !settings.rewardId || String(reward.id || '') !== settings.rewardId) return;
     if (redemptionEvent.status && redemptionEvent.status !== 'unfulfilled' && redemptionEvent.status !== 'UNFULFILLED') return;
     const redemptionId = String(redemptionEvent.id || fallbackId || '');
     if (!redemptionId || this.seenRedemptions.has(redemptionId)) return;
