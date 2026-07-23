@@ -927,8 +927,9 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .announcement-level.critical { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); }
 .announcement-level.warning { color: #f59e0b; border-color: rgba(245,158,11,.45); }
 .announcement-level.info { color: var(--accent); border-color: var(--accent-glow); }
-.announcement-critical-modal { pointer-events: none; }
-.announcement-critical-modal .modal-card { pointer-events: auto; max-width: 540px; border-color: color-mix(in srgb, var(--danger) 62%, var(--border)); }
+/* 強制更新公告是阻斷式：遮罩層必須攔截點擊（原本 pointer-events:none 會讓後面面板仍可按）。
+   z-index 400 低於標題列(700)與關閉確認框(800)，所以 ✕ 與關閉框仍在公告之上、可操作。 */
+.announcement-critical-modal .modal-card { max-width: 540px; border-color: color-mix(in srgb, var(--danger) 62%, var(--border)); }
 .announcement-critical-head h3 { color: var(--danger); }
 .announcement-critical-message { margin: 0 0 16px; white-space: pre-wrap; color: var(--text-dim); font-size: 13px; line-height: 1.7; }
 @media (max-width: 640px) { .announcement-banner { align-items: flex-start; flex-direction: column; } }

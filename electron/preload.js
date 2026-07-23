@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
     return () => ipcRenderer.removeListener('elitesand:close-requested', listener);
   },
   decideClose(action) {
-    if (action === 'quit' || action === 'tray') ipcRenderer.send('elitesand:close-decision', action);
+    if (action === 'quit' || action === 'tray' || action === 'cancel') ipcRenderer.send('elitesand:close-decision', action);
   },
   windowControl(action) {
     if (action === 'minimize' || action === 'toggle-maximize' || action === 'close') {
