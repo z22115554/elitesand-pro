@@ -4071,8 +4071,8 @@ test('歌單亮色背景可讀性保護與模板有效設定守衛存在', () =>
   eq(schema.FIELD_BY_KEY.waitOpacity.default, 72, '新歌單預設不得把未唱文字淡到亮色背景看不見：');
   ok(indexHtml.includes('id="sls-readability-guard"'), '面板必須提供亮色背景可讀性保護開關');
   ok(indexHtml.includes('可讀性襯底色') && indexHtml.includes('可讀性襯底不透明度'), '主要文字與襯底色必須在快速調整可見');
-  ok(indexHtml.includes('data-sl-layout="classic simple timeline diagonal constellation"'), '快速設定必須能依模板隱藏無效控制項');
-  ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards"'), '歌曲編號設定不得在不支援的模板顯示');
+  ok(indexHtml.includes('data-sl-layout="classic simple timeline diagonal constellation signal index"'), '快速設定必須能依模板隱藏無效控制項');
+  ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards signal index"'), '歌曲編號設定不得在不支援的模板顯示');
   ok(setlistPanel.includes('只顯示這個模板真正會作用的細項'), '模板說明必須明示有效設定範圍');
   ok(setlistCss.includes(':root:not([data-sl-readable-off]) .now-singing') && setlistCss.includes(':root:not([data-sl-readable-off]) .tl-now'), '經典與場景模板都必須有非全螢幕的可讀性襯底');
   ok(setlistSource.includes('const sameSideContrast = guarded') && setlistSource.includes('const readableCardColor'), '可讀性保護必須在文字與襯底同明度時自動轉成安全對比');
@@ -4092,6 +4092,24 @@ test('暫停的歌單場景模板不再能新選，但既有 OBS 設定仍可安
   });
   ok(setlistPanel.includes("const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation']"), '面板必須集中管理暫停模板清單');
   ok(setlistPanel.includes('setlist-legacy-layout-notice') && setlistPanel.includes('appearance.hidden = isHiddenLayout'), '暫停模板必須顯示保留說明並收起無法再調整的設定');
+});
+
+test('歌單經典資訊重排與兩個原創模板都走共用樣式，既有場景模板不受影響', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  const setlistHandler = fs.readFileSync(path.join(__dirname, '../server/routes/handlers/setlist.js'), 'utf8');
+  ['signal', 'index'].forEach((layout) => {
+    ok(indexHtml.includes(`<option value="${layout}">`), `${layout} 必須可由歌單面板選取`);
+    ok(indexHtml.includes(`data-setlist-layout="${layout}"`), `${layout} 必須有可見模板卡片`);
+    ok(setlistPanel.includes(`${layout}: { name:`), `${layout} 必須有面板名稱與說明`);
+    ok(setlistSource.includes(`const ${layout} = {`), `${layout} 必須有獨立 renderer`);
+    ok(setlistHandler.includes(`'${layout}'`), `${layout} 必須被 server allowlist 接受`);
+  });
+  ok(setlistSource.includes('classic-shell') && setlistCss.includes('[data-layout="classic"] .classic-shell'), '經典資訊必須使用新的局部資訊容器，而非逐列厚底');
+  ok(setlistCss.includes('.signal-strip') && setlistCss.includes('.index-sheet'), '兩個新模板必須有隔離的原創樣式');
+  ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation'];"), '新模板必須共用既有樣式資料，不得改成獨立場景資料');
 });
 
 test('OBS 經典歌單以歌名為第一優先，長歌手名不可擠壓歌名', () => {

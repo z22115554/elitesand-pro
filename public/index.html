@@ -1255,14 +1255,14 @@
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>OBS 來源 · 歌單畫面</p>
             <div class="field setlist-layout-field">
               <div class="setlist-layout-heading"><div><label id="setlist-layout-label" for="setlist-layout">選擇歌單模板</label><p class="field-hint">先從經典資訊或卡片清單開始；選好後只顯示這個模板真正會作用的設定。</p></div><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
-              <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option></select>
+              <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option></select>
               <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
                 <button class="setlist-layout-card" type="button" data-setlist-layout="classic" role="radio" aria-checked="true"><span class="setlist-layout-badge">推薦</span><strong>經典資訊</strong><span>現在、未唱、已唱一次看懂</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="cards" role="radio" aria-checked="false"><span class="setlist-layout-badge">推薦</span><strong>卡片清單</strong><span>緊湊側欄，適合常駐</span></button>
               </div>
-              <button id="btn-setlist-more-layouts" class="btn btn-sm btn-ghost setlist-more-layouts" type="button" aria-expanded="false" aria-controls="setlist-more-layouts">其他模板（極簡、排行榜、終端機）</button>
+              <button id="btn-setlist-more-layouts" class="btn btn-sm btn-ghost setlist-more-layouts" type="button" aria-expanded="false" aria-controls="setlist-more-layouts">其他模板（含兩個新模板）</button>
               <div id="setlist-more-layouts" class="setlist-layout-picker setlist-layout-picker-more" hidden>
-                <button class="setlist-layout-card" type="button" data-setlist-layout="simple" role="radio" aria-checked="false"><strong>極簡兩排</strong><span>只留現在與下一首</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="billboard" role="radio" aria-checked="false"><strong>排行榜</strong><span>活動感強的節目視覺</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="terminal" role="radio" aria-checked="false"><strong>終端機</strong><span>復古資訊風</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="signal" role="radio" aria-checked="false"><span class="setlist-layout-badge">新</span><strong>舞台訊號</strong><span>正播主角，右側保留兩首待播</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="index" role="radio" aria-checked="false"><span class="setlist-layout-badge">新</span><strong>章節索引</strong><span>曲序、狀態與歌名一眼掃讀</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="simple" role="radio" aria-checked="false"><strong>極簡兩排</strong><span>只留現在與下一首</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="billboard" role="radio" aria-checked="false"><strong>排行榜</strong><span>活動感強的節目視覺</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="terminal" role="radio" aria-checked="false"><strong>終端機</strong><span>復古資訊風</span></button>
               </div>
               <p class="setlist-layout-hint" id="setlist-layout-hint">完整資訊小元件，適合放在畫面左下或右下常駐。</p>
               <p class="field-hint setlist-legacy-layout-notice" id="setlist-legacy-layout-notice" role="status" hidden>這個模板已暫停提供。你目前的 OBS 畫面與已保存設定不會自動改變；選擇其他模板後才會切換。</p>
@@ -1324,7 +1324,7 @@
                     <p class="field-hint">影響清單卡片，以及場景文字在亮色背景上的小襯底。</p>
                   </div>
                 </div>
-                <div class="field" data-sl-layout="classic simple timeline diagonal constellation">
+                <div class="field" data-sl-layout="classic simple timeline diagonal constellation signal index">
                   <label>「正在播放」的文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
                   <input id="sls-size-now" type="range" min="12" max="48" value="16">
                   <p class="field-hint">影響目前播放中的標題；卡片、排行榜與終端機的字級在詳細設定中調整。</p>
@@ -1357,11 +1357,11 @@
                   </div>
                 </div>
                 <p class="field-hint">數字越大越清楚（越不淡化）。開著可讀性保護時，已唱至少 52%、未唱至少 70%；想做極淡效果再關閉保護。場景版仍會依距離保留層次。</p>
-                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards">
+                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index">
                   <div><div class="label">顯示歌手名字</div><div class="sub">關閉後歌單只顯示歌名，不顯示演唱者</div></div>
                   <label class="switch"><input id="sls-show-artist" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards">
+                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards index">
                   <div><div class="label">已唱歌曲加上刪除線</div><div class="sub">用刪除線標示「這首已經唱過了」</div></div>
                   <label class="switch"><input id="sls-strikethrough" type="checkbox"><span class="track"></span></label>
                 </div>
@@ -1573,7 +1573,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards">
+                    <details class="card card-collapse" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards signal index">
                       <summary>顯示項目</summary>
                       <div class="card-collapse-body">
                       <div class="switch-row">
@@ -1588,7 +1588,7 @@
                       <input id="sls-label-reserve" type="text" value="Reserve">
                     </div>
 
-                    <details class="card card-collapse" data-sl-layout="classic simple timeline diagonal">
+                    <details class="card card-collapse" data-sl-layout="classic simple timeline diagonal index">
                       <summary>自訂文字標籤</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc">畫面上固定顯示的文字，可以換成中文或你喜歡的用語。</p>

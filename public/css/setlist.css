@@ -634,7 +634,7 @@ html, body {
 [data-layout="cards"] .card.active { transform: translateX(22px) scale(1.015); }
 
 /* ══ 亮色背景可讀性保護 ══
-   適用所有八種模板；它只增加歌單本身的襯底、邊界與文字陰影，
+   適用所有模板；它只增加歌單本身的襯底、邊界與文字陰影，
    不會建立全螢幕遮罩，也不會影響 OBS 內其他來源。 */
 :root:not([data-sl-readable-off]) .now-singing,
 :root:not([data-sl-readable-off]) .setlist-row,
@@ -701,6 +701,194 @@ html, body {
   background: var(--sl-readable-surface);
   border-color: var(--sl-acc-bd);
   box-shadow: 0 0 20px var(--sl-acc-dim), inset 0 1px 0 var(--sl-bc);
+}
+
+/* ══ classic refresh ══
+   保留既有資料與設定欄位，僅重排為「正播主角、未唱／已唱退後」；
+   可讀性保護只落在這個小型資訊容器，不建立全畫面底板。 */
+html[data-layout="classic"] #setlist-root {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+}
+[data-layout="classic"] .classic-shell {
+  width: min(var(--sl-w), calc(100vw - 24px));
+  padding: 13px 14px 12px;
+  border-left: max(2px, var(--sl-bw)) solid var(--sl-acc);
+  background: linear-gradient(104deg, var(--sl-bg-card) 0%, var(--sl-bg-card) 76%, transparent 100%);
+  box-shadow: var(--sl-box-shd, none);
+}
+[data-layout="classic"] .classic-now {
+  margin: 0;
+  padding: 0 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+[data-layout="classic"] .classic-now-meta,
+[data-layout="classic"] .classic-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+[data-layout="classic"] .classic-now-meta { margin-bottom: 5px; }
+[data-layout="classic"] .classic-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sl-acc);
+  box-shadow: 0 0 10px var(--sl-acc-g);
+  flex: 0 0 auto;
+}
+[data-layout="classic"] .classic-ordinal,
+[data-layout="classic"] .classic-section-count {
+  margin-left: auto;
+  color: var(--sl-readable-txt4, var(--sl-txt4));
+  font-family: var(--sl-fm);
+  font-size: calc(var(--sl-sz-m) * .92);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .08em;
+}
+[data-layout="classic"] .classic-now .ns-label { margin: 0; }
+[data-layout="classic"] .classic-now .ns-title {
+  font-size: calc(var(--sl-sz-n) * 1.25);
+  line-height: 1.18;
+}
+[data-layout="classic"] .cl-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sl-readable-border, var(--sl-bc));
+}
+[data-layout="classic"] .cl-col { gap: 7px; }
+[data-layout="classic"] .cl-col .setlist-section-label { padding: 0; }
+[data-layout="classic"] .cl-col .setlist-upcoming,
+[data-layout="classic"] .cl-col .setlist-past { gap: 4px; }
+[data-layout="classic"] .setlist-row,
+[data-layout="classic"] .setlist-upcoming-row {
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+[data-layout="classic"] .setlist-upcoming-row { opacity: var(--sl-op-w); }
+:root:not([data-sl-readable-off]) [data-layout="classic"] .classic-shell {
+  background: linear-gradient(104deg, var(--sl-readable-surface) 0%, var(--sl-readable-surface-soft) 76%, transparent 100%);
+  border-left-color: var(--sl-acc);
+}
+:root:not([data-sl-readable-off]) [data-layout="classic"] .classic-now,
+:root:not([data-sl-readable-off]) [data-layout="classic"] .setlist-row,
+:root:not([data-sl-readable-off]) [data-layout="classic"] .setlist-upcoming-row {
+  background: transparent;
+  border-color: transparent;
+}
+:root:not([data-sl-readable-off]) [data-layout="classic"] .setlist-past .setlist-row { opacity: var(--sl-readable-done-op); }
+:root:not([data-sl-readable-off]) [data-layout="classic"] .setlist-upcoming-row { opacity: var(--sl-readable-wait-op); }
+
+/* ══ 舞台訊號 ══
+   原創的 lower-third：目前播放放在中心，待播只保留兩列，讓直播畫面保有大面積留白。 */
+.signal-stage { display: inline-block; font-family: var(--es-sans); }
+.signal-strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(190px, 1fr) minmax(145px, .56fr);
+  align-items: center;
+  gap: 16px;
+  width: min(calc(var(--sl-w) * 1.95), calc(100vw - 28px));
+  min-height: 88px;
+  padding: 13px 18px 13px 20px;
+  border-bottom: max(1px, var(--sl-bw)) solid var(--sl-bc);
+  background: var(--sl-bg-card);
+  box-shadow: var(--sl-box-shd, none);
+}
+.signal-strip::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--sl-acc);
+}
+.signal-status { display: flex; flex-direction: column; gap: 4px; min-width: 56px; }
+.signal-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sl-acc); box-shadow: 0 0 10px var(--sl-acc-g); }
+.signal-eye,
+.signal-next-label {
+  color: var(--sl-readable-txt4, var(--sl-txt4));
+  font-family: var(--es-mono);
+  font-size: calc(var(--sl-sz-m) * .9);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.signal-ordinal { color: var(--sl-readable-txt3, var(--sl-txt3)); font-family: var(--es-mono); font-size: calc(var(--sl-sz-m) * .9); font-variant-numeric: tabular-nums; }
+.signal-now { min-width: 0; }
+.signal-title { min-width: 0; max-width: 100%; font-size: calc(var(--sl-sz-n) * 1.5); line-height: 1.12; }
+.signal-artist { display: block; min-width: 0; max-width: 100%; margin-top: 4px; }
+.signal-next { min-width: 0; padding-left: 14px; border-left: 1px solid var(--sl-readable-border, var(--sl-bc)); }
+.signal-next-list { display: flex; flex-direction: column; gap: 4px; margin-top: 5px; }
+.signal-next-row { display: flex; gap: 8px; min-width: 0; align-items: baseline; }
+.signal-next-no { flex: 0 0 19px; color: var(--sl-readable-txt4, var(--sl-txt4)); font-family: var(--es-mono); font-size: calc(var(--sl-sz-m) * .9); }
+.signal-next-title { min-width: 0; max-width: 100%; font-size: calc(var(--sl-sz-l) * .92); font-weight: 500; }
+.signal-next-empty { color: var(--sl-readable-txt3, var(--sl-txt3)); font-size: calc(var(--sl-sz-a) * .95); }
+:root:not([data-sl-readable-off]) .signal-strip { background: var(--sl-readable-surface); border-bottom-color: var(--sl-readable-border); }
+
+/* ══ 章節索引 ══
+   原創的側邊曲序表：以曲序與細狀態線導引閱讀，正播行唯一加重。 */
+.index-stage { display: inline-block; font-family: var(--es-sans); }
+.index-sheet {
+  width: min(calc(var(--sl-w) * 1.08), calc(100vw - 28px));
+  padding: 12px 0 7px;
+  border-top: max(2px, var(--sl-bw)) solid var(--sl-acc);
+  background: var(--sl-bg-card);
+  box-shadow: var(--sl-box-shd, none);
+}
+.index-head { display: flex; justify-content: space-between; gap: 12px; padding: 0 14px 9px; border-bottom: 1px solid var(--sl-readable-border, var(--sl-bc)); }
+.index-kicker { color: var(--sl-readable-txt4, var(--sl-txt4)); font-family: var(--es-mono); font-size: calc(var(--sl-sz-m) * .92); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.index-total { color: var(--sl-readable-txt3, var(--sl-txt3)); font-family: var(--es-mono); font-size: calc(var(--sl-sz-m) * .92); font-variant-numeric: tabular-nums; }
+.index-list { display: flex; flex-direction: column; padding: 5px 0; }
+.index-item {
+  display: grid;
+  grid-template-columns: 30px 2px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 9px;
+  min-height: 44px;
+  padding: 6px 14px;
+}
+.index-number { color: var(--sl-readable-txt4, var(--sl-txt4)); font-family: var(--es-mono); font-size: calc(var(--sl-sz-m) * .96); font-variant-numeric: tabular-nums; }
+.index-rail { align-self: stretch; background: var(--sl-readable-border, var(--sl-bc)); }
+.index-info { min-width: 0; }
+.index-title { min-width: 0; max-width: 100%; font-size: calc(var(--sl-sz-l) * 1.02); }
+.index-artist { display: block; min-width: 0; max-width: 100%; margin-top: 2px; }
+.index-item.done { opacity: var(--sl-op-d); }
+.index-item.wait { opacity: var(--sl-op-w); }
+.index-item.active { background: var(--sl-acc-dim); }
+.index-item.active .index-rail { background: var(--sl-acc); box-shadow: 0 0 10px var(--sl-acc-g); }
+.index-item.active .index-title { font-size: calc(var(--sl-sz-l) * 1.16); font-weight: 700; }
+.ix-state { color: var(--sl-acc); font-family: var(--es-mono); font-size: calc(var(--sl-sz-m) * .86); letter-spacing: .06em; white-space: nowrap; }
+.index-empty { padding: 10px 14px; color: var(--sl-readable-txt3, var(--sl-txt3)); font-size: calc(var(--sl-sz-a) * .95); }
+:root:not([data-sl-readable-off]) .index-sheet { background: var(--sl-readable-surface); }
+:root:not([data-sl-readable-off]) .index-item.done { opacity: var(--sl-readable-done-op); }
+:root:not([data-sl-readable-off]) .index-item.wait { opacity: var(--sl-readable-wait-op); }
+
+:root[data-hide-num] .signal-ordinal,
+:root[data-hide-num] .signal-next-no,
+:root[data-hide-num] .index-number,
+:root[data-hide-num] .index-total { display: none !important; }
+:root[data-strike] .index-item.done .index-title { text-decoration: line-through; text-decoration-color: var(--sl-readable-border, var(--sl-bc)); }
+
+@media (max-width: 560px) {
+  .signal-strip { grid-template-columns: 1fr; gap: 8px; width: min(calc(var(--sl-w) * 1.12), calc(100vw - 24px)); }
+  .signal-status { flex-direction: row; align-items: center; }
+  .signal-ordinal { margin-left: auto; }
+  .signal-next { padding: 8px 0 0; border-top: 1px solid var(--sl-readable-border, var(--sl-bc)); border-left: 0; }
 }
 
 html[data-layout="simple"] #setlist-root {
