@@ -579,6 +579,7 @@
     });
     const variables = el('twitch-custom-variable-buttons');
     variables?.querySelectorAll('button').forEach((button) => { button.disabled = disabled; });
+    if (el('twitch-custom-duplicate')) el('twitch-custom-duplicate').hidden = disabled;
     if (el('twitch-custom-delete')) el('twitch-custom-delete').hidden = disabled;
   }
 
@@ -702,6 +703,27 @@
     renderCustomCommandList();
     loadCustomCommandEditor();
     window.setTimeout(() => el('twitch-custom-name')?.focus(), 0);
+  }
+
+  function duplicateCustomCommand() {
+    const source = customCommandById();
+    if (!source) return;
+    if (requestDraft.customCommands.length >= TwitchRequestSettings.LIMITS.customCommands) {
+      AppShared.showToast('自訂指令最多 ' + TwitchRequestSettings.LIMITS.customCommands + ' 個', 'error');
+      return;
+    }
+    const duplicate = newCustomCommand();
+    duplicate.enabled = source.enabled !== false;
+    duplicate.permissionLevel = source.permissionLevel || 'everyone';
+    duplicate.userCooldownSeconds = Number.isFinite(Number(source.userCooldownSeconds)) ? Number(source.userCooldownSeconds) : 0;
+    duplicate.globalCooldownSeconds = Number.isFinite(Number(source.globalCooldownSeconds)) ? Number(source.globalCooldownSeconds) : 0;
+    duplicate.template = source.template || '';
+    requestDraft.customCommands.push(duplicate);
+    activeCustomCommandId = duplicate.id;
+    setDirty('custom', true);
+    renderCustomCommandList();
+    loadCustomCommandEditor();
+    AppShared.showToast('已複製為新的自訂指令；別名會留空避免衝突', 'success');
   }
 
   async function deleteCustomCommand() {
@@ -1298,6 +1320,7 @@
       control?.addEventListener(control.matches('input[type="text"], input[type="number"], textarea') ? 'input' : 'change', syncCustomCommandFromFields);
     });
     el('twitch-custom-new')?.addEventListener('click', createCustomCommand);
+    el('twitch-custom-duplicate')?.addEventListener('click', duplicateCustomCommand);
     el('twitch-custom-delete')?.addEventListener('click', deleteCustomCommand);
     el('twitch-custom-public-test')?.addEventListener('click', sendCustomCommandTest);
     el('twitch-sim-run')?.addEventListener('click', runSimulator);
