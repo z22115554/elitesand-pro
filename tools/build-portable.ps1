@@ -95,14 +95,14 @@ if (Test-Path $BundledConfig) {
 
 # 開發文件（README.md / STATUS.md / HANDOFF.md）刻意不打包：
 # 發給朋友的包只需要下方產生的簡易雙語 README-FIRST.txt。
-$FilesToCopy = @("package.json", "package-lock.json", "LICENSE", "THIRD-PARTY-NOTICES.txt")
+$FilesToCopy = @("package.json", "package-lock.json", "LICENSE", "EULA.txt", "THIRD-PARTY-NOTICES.txt")
 foreach ($file in $FilesToCopy) {
   $src = Join-Path $Root $file
   if (Test-Path $src) {
     Copy-Item -LiteralPath $src -Destination $AppRoot -Force
   }
 }
-foreach ($legalFile in @("LICENSE", "THIRD-PARTY-NOTICES.txt")) {
+foreach ($legalFile in @("LICENSE", "EULA.txt", "THIRD-PARTY-NOTICES.txt")) {
   Copy-Item -LiteralPath (Join-Path $Root $legalFile) -Destination $Stage -Force
 }
 
@@ -305,6 +305,11 @@ $Readme = @"
 【怎麼關閉】
    關掉黑色視窗即可。
 
+【授權條款】
+- 第一次啟動時，控制面板會顯示最終使用者授權（EULA）；
+  請閱讀到最底、勾選同意後即可開始使用（之後不會再出現）。
+- 完整條文請見本資料夾內的 EULA.txt 與 LICENSE。
+
 【注意事項】
 - 不需要安裝 Node.js、不需要打任何指令，所有東西都已內附。
 - 防毒軟體詢問時，請允許「Start Elitesand Pro.cmd」與 node.exe 執行。
@@ -333,6 +338,11 @@ $Readme = @"
 
 [To stop]
    Close the black window.
+
+[License]
+- On first launch, the control panel shows the End-User License Agreement.
+  Read to the bottom and tick "I agree" to start (it will not appear again).
+- Full terms: EULA.txt and LICENSE in this folder.
 
 [Notes]
 - You do NOT need to install Node.js or run any commands. Everything is included.

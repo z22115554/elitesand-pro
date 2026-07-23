@@ -140,7 +140,7 @@ Produces `Elitesand-Pro-v<version>-portable.zip` under `dist/releases/v<version>
 
 ### License
 
-Elitesand Pro is distributed under the [Elitesand Pro License](LICENSE): **free to use** (including personal and commercial streaming/performance), but **redistribution or modification requires written permission**. Third-party components keep their own licenses — see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Rights to songs, lyrics, cover art, and other media are not covered by this project's license.
+Elitesand Pro is distributed under the [Elitesand Pro License](LICENSE): **free to use** (including personal and commercial streaming/performance), and **private, non-distributed modification for your own use is allowed** — but **redistribution, or distributing modified versions, requires written permission**. Third-party components keep their own licenses — see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Rights to songs, lyrics, cover art, and other media are not covered by this project's license.
 
 ### Development
 
@@ -326,7 +326,7 @@ ASCII、無 BOM。未簽章，Windows SmartScreen 警告屬正常（更多資訊
 ### 授權
 
 Elitesand Pro 採 [Elitesand Pro 授權條款](LICENSE)：**免費使用**（含個人與商業直播／演出），
-但**未經書面同意不得重新散布或改作**。第三方元件維持各自授權，詳見
+**允許私人、不對外提供的自用修改**，但**未經書面同意不得重新散布或散布修改版本**。第三方元件維持各自授權，詳見
 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)；歌曲、歌詞、封面與其他媒體權利不包含在本專案授權內。
 
 ### 開發

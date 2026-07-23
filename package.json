@@ -78,8 +78,13 @@
       "target": "nsis"
     },
     "nsis": {
-      "oneClick": true,
-      "perMachine": false
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "include": "electron/installer.nsh",
+      "license": "EULA.txt"
     }
   }
 }

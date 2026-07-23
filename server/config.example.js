@@ -29,6 +29,13 @@ module.exports = {
   // 多久檢查一次（毫秒）。預設 6 小時，避免頻繁打 GitHub API
   updateCheckIntervalMs: 6 * 60 * 60 * 1000,
 
+  // 官方公告來源（HTTPS JSON）。預設讀取官方 repo 的 announcement.json，
+  // 約每 30 分鐘檢查一次重要公告（安全性、強制升級等）。
+  // 留空字串（''）則完全停用公告檢查，不會發出任何網路請求。
+  // 上面兩項自動連線的資料範圍與揭露見 EULA 第七條第 5 項。
+  announcementUrl: 'https://raw.githubusercontent.com/z22115554/elitesand-pro/main/announcement.json',
+  announcementCheckIntervalMs: 30 * 60 * 1000,
+
   // BetterLyrics(boidu) API key（選填）
   // boidu 的 lyrics-api 現在對「未快取」的歌會回 401 並要求 X-API-Key header；
   // 沒填 key 只抓得到「已被快取的熱門歌」（多為英文），冷門/日文/中文歌會搜不到。

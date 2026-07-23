@@ -1,104 +1,378 @@
 Elitesand Pro License (Free-Use, No-Redistribution)
-Copyright (c) 2026 Elitesand Pro. All rights reserved.
+Elitesand Pro 授權條款（免費使用、禁止重新散布）
+
+Version: 1.1.0
+Effective Date / 生效日期：2026-07-24
+
+Copyright (c) 2026 一粒沙. All rights reserved.
+
+Rights holder and licensor / 權利人暨授權人：
+一粒沙（以「Elitesand Pro」名稱發布）
+
+Contact / 聯絡方式：
+Elitesand.pro@gmail.com
+
+Official download channel / 官方下載管道：
+https://github.com/z22115554/elitesand-pro
+
+IMPORTANT:
+This is a custom source-available license, not an open-source license. It permits
+free use, including specified commercial use, but does not permit redistribution,
+modified distribution, sublicensing, or hosted provision except as expressly
+stated below. Third-party and open-source components remain governed by their own
+licenses.
+
+重要說明：
+這是一份自訂的原始碼可閱授權，不是開放原始碼授權。除下列明文允許者外，
+本授權允許免費使用及指定的商業使用，但不允許重新散布、散布修改版本、
+再授權或以代管方式提供。第三方及開放原始碼元件仍適用其各自的授權條款。
 
 ================================================================
-中文（具約束力的正體中文版；與下方英文版意義衝突時以本中文版為準）
+中文（具約束力；與下方英文翻譯衝突時，以本中文版為準）
 ================================================================
 
-一、授權範圍
-本軟體（Elitesand Pro，包含其原始碼、可執行檔、原創視覺與動畫設計、
-說明文件，合稱「本軟體」）免費授權任何人「使用」，包含個人、
-商業直播與商業演出用途，且不收取任何費用。
+一、定義、適用範圍與保留權利
 
-二、允許的行為
-1. 下載、安裝、執行未經修改的本軟體正式發佈版本。
-2. 在你自己的直播、錄影、演出中使用本軟體產生的畫面（成品畫面歸你，
-   本授權不對你的直播內容主張任何權利）。
-3. 為了自用而修改設定檔（server/config.js 等）與匯入你自己的素材。
+1. 「本軟體」指 Elitesand Pro 的官方原始碼、可執行檔、更新程式、原創視覺
+   與動畫設計及文件。
 
-三、禁止的行為（未經著作權人書面同意一律不得為之）
-1. 重新散布：不得將本軟體（原始碼或可執行檔，全部或一部）以任何形式
-   再散布、上架、轉售、出租、隨附於其他產品或服務一併提供。
-2. 改作：不得修改、改編、翻譯本軟體之原始碼或原創資產後散布，
-   亦不得基於本軟體製作衍生作品對外提供。
-3. 還原工程：不得為取得原始碼而反編譯、反組譯本軟體之可執行部分
-   （為與其他軟體互通所必要且法律強制允許者除外）。
-4. 移除標示：不得移除或變更本軟體中的著作權標示、名稱或本授權條款。
+2. 「權利人控制部分」指本軟體中由權利人自行創作、選擇、編排或修改，或
+   權利人已依法取得授權，且在適用法律下受著作權或其他權利保護的部分。
 
-四、第三方元件
-本軟體使用或隨附之第三方軟體（如 Node.js、yt-dlp、FFmpeg、GSAP、
-Tone.js、SoundTouch、OpenCC 及各 npm 相依套件）各自受其原授權條款拘束，
-不受本授權之「禁止散布／改作」限制；詳見 THIRD-PARTY-NOTICES.txt。
-本授權僅適用於 Elitesand Pro 之原創程式碼、原創視覺與動畫設計及文件。
+3. 第三方軟體、開放原始碼元件、第三方內容、使用者內容，以及依法不受
+   著作權保護的純人工智慧生成內容，不因被納入本軟體而成為權利人所有，
+   也不因本授權而成為權利人控制部分。
 
-五、內容責任
-本軟體不對任何歌曲錄音、歌詞、封面或其他經其處理之媒體授予任何權利。
-使用者須自行確保對所使用媒體擁有合法權利。
+4. 本授權僅適用於權利人控制部分。除本授權明確授予的權利外，權利人保留
+   其依法得保留的所有權利。本授權適用於目前免費提供的版本；日後的付費
+   版本、訂閱或代管服務，得適用另行公布的授權或交易條款。
 
-六、商標
-「Elitesand Pro」名稱與標誌不因本授權而授予商標權。
+二、人工智慧輔助開發與權利界線
 
-七、無擔保與責任限制
-本軟體係「按現狀」提供，不附任何明示或默示之擔保，包含但不限於
-適售性、特定用途適用性與不侵權之擔保。於法律允許之最大範圍內，
-著作權人對因使用或無法使用本軟體所生之任何損害不負任何責任。
+1. 本軟體部分程式碼、文件或其他內容，可能使用 OpenAI ChatGPT／Codex、
+   Anthropic Claude 或其他生成式人工智慧工具輔助產生、選擇、編排、
+   修改及測試。
 
-八、終止
-違反本授權任一條款者，其依本授權取得之權利即自動終止。
+2. 在相關人工智慧服務條款及適用法律允許的範圍內，相關服務提供者可能將
+   其對輸出享有的權利（如有）轉讓或歸屬於使用者。但服務條款所定的輸出
+   權利歸屬，不等於該輸出必然受著作權保護、具有獨特性或不涉及第三方權利。
+
+3. 權利人僅就權利人控制部分主張權利及提供本授權，不主張對依法不受保護的
+   純人工智慧生成內容享有不存在的專有著作權。
+
+4. 人工智慧輸出如包含第三方程式碼、資料或受開放原始碼授權拘束的內容，
+   該第三方權利及授權條款優先適用。人工智慧服務提供者對自身權利的轉讓，
+   不會消滅或取代第三方原有權利。
+
+三、授權授予與允許行為
+
+在你遵守本授權、隨附的 EULA 及適用法律的前提下，權利人授予你全球、
+非專屬、不可轉讓、不可再授權且免權利金的權利，得以：
+
+1. 下載、安裝並執行未經修改的本軟體官方發佈版本；
+
+2. 為自己使用而調整本軟體明確提供的設定、偏好、版面選項及設定檔；
+
+3. 將本軟體產生的歌詞動畫、歌單及控制畫面，用於你自己的直播、錄影及
+   演出，包含商業直播、錄影及演出；
+
+4. 匯入你有權使用的音訊、歌詞、封面、背景及其他素材；以及
+
+5. 為你自己使用而修改本軟體，但不得將修改後版本、衍生版本或其任何部分
+   以散布、提供下載、代管或其他方式對外提供。
+
+權利人不因你使用本軟體而取得你自行匯入的內容或你的直播、錄影及演出內容。
+但輸出中仍可獨立識別的本軟體內建資產、商標及第三方內容，仍分別歸原權利人
+所有。
+
+四、禁止行為
+
+除非第三方元件授權、權利人另行書面同意或適用法律明確允許，你不得就
+權利人控制部分：
+
+1. 重新散布、上架、轉售、出租、再授權、公開提供本軟體，或將本軟體全部
+   或一部隨附於其他產品或服務；
+
+2. 修改、改作或翻譯後對外散布，或將衍生版本對外提供；但依第三條為
+   自己使用所為、且未對外提供的調整或修改不在此限；
+
+3. 將本軟體本身以代管、軟體即服務或其他方式提供第三人操作或使用；
+
+4. 反編譯、反組譯、還原工程或嘗試取得未公開的原始碼，但法律為互通性、
+   資安研究或其他強制目的明確允許的範圍除外；
+
+5. 移除或變更本軟體的名稱、著作權、授權或第三方權利標示；或
+
+6. 迴避 PIN、存取控制、更新驗證、服務限制或其他安全機制。
+
+本條不意圖限制任何第三方開放原始碼授權或法律強制授予的權利。
+
+五、第三方及開放原始碼元件
+
+1. 本軟體使用或隨附的 Node.js、yt-dlp、FFmpeg、GSAP、Tone.js、
+   SoundTouch、OpenCC、npm 相依套件及其他第三方元件，各自受其原授權
+   條款拘束，不受本授權的禁止重新散布、改作或其他限制拘束。
+
+2. 第三方元件的授權條款與本授權衝突時，以該第三方元件的授權條款為準。
+   詳見 THIRD-PARTY-NOTICES.txt 及各元件隨附的授權檔。
+
+3. 如你認為本軟體包含未適當標示或未獲授權的第三方內容，請以本授權所列
+   信箱通知權利人。本授權不企圖授予權利人依法無權授予的權利。
+
+六、音訊、歌詞、輸出與使用者內容
+
+1. 本授權不授予任何歌曲錄音、歌詞、翻譯、封面、背景、影片或其他經本軟體
+   處理之媒體的權利。使用者應自行確保有權匯入、下載、轉換、播放、直播、
+   發布或保存相關內容。
+
+2. 歌詞搜尋、辨識、翻譯、羅馬化及同步結果可能不正確，只能作為輔助。
+   公開使用前，使用者應自行檢查內容、來源、授權及顯示結果。
+
+3. 本授權不對使用者自行匯入或創作的內容主張權利，也不保證本軟體輸出
+   不涉及第三方權利。
+
+七、名稱與商標
+
+「Elitesand Pro」名稱、標誌及可識別品牌元素不因本授權而授予商標權。
+除為如實識別本軟體外，未經權利人書面同意，不得使他人誤認你與權利人具有
+代理、贊助、認證或其他關係。
+
+八、無擔保與責任限制
+
+1. 在適用法律允許的最大範圍內，本軟體依「現狀」及「現有」提供，不附
+   準確性、可用性、不侵權、不中斷、無錯誤、資料保存、平台相容性或直播
+   不中斷的明示或默示擔保。
+
+2. 除法律另有強制規定外，權利人不對無法合理預見、並非由權利人違反義務
+   直接造成的間接、附帶、特殊或衍生損害負責。
+
+3. 本授權不排除或限制權利人因故意或重大過失所生的責任、對生命、身體或
+   健康依法應負的責任、消費者保護法所定不得排除的責任，或其他依法不得
+   預先免除或限制的責任。
+
+4. 更完整的使用風險、第三方服務、資料處理及責任條款，依本軟體隨附的
+   EULA 辦理。
+
+九、終止
+
+1. 如你重大違反本授權，權利人得通知你在合理期間內改正；你未於期限內
+   改正者，依本授權取得的相關權利得終止。
+
+2. 違反行為無法改正，或涉及蓄意侵權、規避安全機制或對系統及他人造成
+   重大風險者，權利人得立即終止授權。
+
+3. 終止後，你應停止使用並刪除或返還受終止授權拘束的本軟體副本。但第三方
+   元件授權及法律強制授予的權利，不因本授權終止而消滅。
+
+十、文件順位、準據法、管轄與聯絡
+
+1. 本授權規範本軟體的授權範圍、允許及禁止行為；EULA 主要規範使用風險、
+   第三方服務、資料處理、責任及爭議。本授權與 EULA 就授權範圍衝突時，
+   以本授權為準。第三方元件一律以其自身授權為準。
+
+2. 本授權的成立、效力、解釋及履行，以中華民國（臺灣）法律為準據法。
+   因本授權所生或與本授權有關的爭議，由依中華民國（臺灣）法律有管轄權
+   的法院處理。但消費者依法享有的強制管轄及其他權利不受影響。
+
+3. 本授權任一條款如被認定無效或不得執行，僅在該範圍內失效，其餘條款
+   繼續有效。
+
+4. 本授權的中文版為具約束力版本。英文版僅為便利翻譯；兩者不一致時，
+   以中文版為準。但法律要求採對使用者更有利的解釋者，從其規定。
+
+5. 授權、著作權、第三方權利或申訴事項，請聯絡：
+   Elitesand.pro@gmail.com
 
 ================================================================
-English (courtesy translation; the Chinese version above governs)
+English (courtesy translation; the Chinese text above controls)
 ================================================================
 
-1. GRANT
-Elitesand Pro (its source code, executables, original visual and animation
-design, and documentation, together the "Software") is licensed to anyone,
-free of charge, to USE — including personal use and commercial live-streaming
-or performance use.
+1. DEFINITIONS, SCOPE, AND RESERVED RIGHTS
 
-2. PERMITTED
-   a. Download, install, and run unmodified official releases of the Software.
-   b. Use the visuals the Software produces in your own streams, recordings,
-      and performances (your stream output is yours; this license claims no
-      rights over it).
-   c. Edit your own configuration files and import your own media for personal
-      use.
+1.1 "Software" means the official source code, executables, updater, original
+visual and animation designs, and documentation of Elitesand Pro.
 
-3. PROHIBITED without the copyright holder's prior written permission
-   a. Redistribution — you may not redistribute, publish, resell, rent, or
-      bundle the Software (source or binary, in whole or in part) in any form.
-   b. Derivative works — you may not modify, adapt, or translate the
-      Software's source code or original assets and distribute the result, nor
-      build derivative works from the Software for distribution.
-   c. Reverse engineering — you may not decompile or disassemble the compiled
-      portions to obtain source code, except to the extent required for
-      interoperability and permitted by mandatory law.
-   d. Notices — you may not remove or alter copyright notices, names, or this
-      license.
+1.2 "Rights-Controlled Portions" means portions of the Software that the rights
+holder created, selected, arranged, or modified, or is otherwise lawfully
+authorized to license, and that are protected by copyright or other rights
+under applicable law.
 
-4. THIRD-PARTY COMPONENTS
-Third-party software used or bundled with the Software (Node.js, yt-dlp,
-FFmpeg, GSAP, Tone.js, SoundTouch, OpenCC, and npm dependencies) remains under
-its own license terms and is NOT subject to the no-redistribution / no-
-derivatives restrictions above. See THIRD-PARTY-NOTICES.txt. This license
-covers only Elitesand Pro's original code, original visual/animation design,
-and documentation.
+1.3 Third-party software, open-source components, third-party content, user
+content, and purely AI-generated material that is not protected by copyright
+do not become the rights holder's property merely by being included in the
+Software and are not Rights-Controlled Portions on that basis.
 
-5. CONTENT
-The Software grants no rights to any song recording, lyrics, cover art, or
-other media it processes. Users are responsible for holding lawful rights to
-the media they use.
+1.4 This License applies only to Rights-Controlled Portions. Except for rights
+expressly granted here, the rights holder reserves all rights that may lawfully
+be reserved. This License governs the currently distributed free version.
+Future paid versions, subscriptions, or hosted services may be governed by
+separate license or transaction terms.
 
-6. TRADEMARKS
-The "Elitesand Pro" name and logo are not granted as trademarks by this
-license.
+2. AI-ASSISTED DEVELOPMENT AND RIGHTS BOUNDARY
 
-7. NO WARRANTY / LIABILITY
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE, AND NONINFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY
-LAW, THE COPYRIGHT HOLDER IS NOT LIABLE FOR ANY DAMAGES ARISING FROM USE OR
-INABILITY TO USE THE SOFTWARE.
+2.1 Portions of the Software, documentation, or other material may have been
+generated, selected, arranged, modified, or tested with assistance from OpenAI
+ChatGPT/Codex, Anthropic Claude, or other generative-AI tools.
 
-8. TERMINATION
-Any breach of these terms automatically terminates the rights granted here.
+2.2 To the extent permitted by applicable AI service terms and law, a service
+provider may assign or allocate to its user the provider's rights, if any, in
+outputs. That contractual allocation does not mean that an output is necessarily
+copyrightable, unique, or free of third-party rights.
+
+2.3 The rights holder asserts rights and grants this License only in
+Rights-Controlled Portions. This License does not claim nonexistent exclusive
+copyright in purely AI-generated material that is not protected by law.
+
+2.4 If AI output contains third-party code, data, or material governed by an
+open-source license, the relevant third-party rights and license terms control.
+An AI provider's transfer of its own rights does not extinguish or replace
+rights held by third parties.
+
+3. LICENSE GRANT AND PERMITTED USE
+
+Subject to compliance with this License, the accompanying EULA, and applicable
+law, the rights holder grants you a worldwide, non-exclusive, non-transferable,
+non-sublicensable, royalty-free right to:
+
+a. download, install, and run unmodified official releases of the Software;
+
+b. adjust settings, preferences, layout options, and configuration files that
+   the Software expressly makes available for your own use;
+
+c. use lyric animations, setlists, and control screens produced by the Software
+   in your own streams, recordings, and performances, including commercial
+   streams, recordings, and performances; and
+
+d. import audio, lyrics, artwork, backgrounds, and other material that you are
+   entitled to use; and
+
+e. modify the Software for your own use, provided that you do not distribute,
+   offer for download, host, or otherwise make available to others any
+   modified version, derivative version, or part thereof.
+
+The rights holder acquires no rights in content you import or in your streams,
+recordings, or performances merely because you use the Software. Separately
+identifiable built-in assets, trademarks, and third-party content in output
+remain owned by their respective rights holders.
+
+4. RESTRICTIONS
+
+Except where a third-party component license, separate written permission from
+the rights holder, or applicable law expressly allows it, you may not, with
+respect to Rights-Controlled Portions:
+
+a. redistribute, publish, resell, rent, sublicense, or make the Software
+   publicly available, or bundle all or part of it with another product or
+   service;
+
+b. distribute or otherwise provide a modified, adapted, translated, or
+   derivative version, except for adjustments or modifications made for your
+   own use under Section 3 that are not made available to others;
+
+c. provide the Software itself for third-party operation or use as a hosted,
+   software-as-a-service, or similar offering;
+
+d. decompile, disassemble, reverse engineer, or attempt to obtain non-public
+   source code, except where mandatory law expressly permits it for
+   interoperability, security research, or another compulsory purpose;
+
+e. remove or alter names, copyright, license, or third-party rights notices; or
+
+f. bypass PINs, access controls, update verification, service limits, or other
+   security mechanisms.
+
+This Section is not intended to restrict rights granted by an applicable
+third-party open-source license or mandatory law.
+
+5. THIRD-PARTY AND OPEN-SOURCE COMPONENTS
+
+5.1 Node.js, yt-dlp, FFmpeg, GSAP, Tone.js, SoundTouch, OpenCC, npm
+dependencies, and other third-party components used or bundled with the
+Software remain governed by their own licenses. They are not subject to this
+License's no-redistribution, no-derivatives, or other restrictions.
+
+5.2 If a third-party license conflicts with this License, that third-party
+license controls for its component. See THIRD-PARTY-NOTICES.txt and the license
+files shipped with individual components.
+
+5.3 If you believe the Software includes third-party material that is not
+properly identified or licensed, contact the rights holder at the address in
+this License. This License does not purport to grant rights that the rights
+holder is not legally entitled to grant.
+
+6. AUDIO, LYRICS, OUTPUT, AND USER CONTENT
+
+6.1 This License grants no rights in any song recording, lyrics, translation,
+artwork, background, video, or other media processed by the Software. Users
+must ensure that they are entitled to import, download, convert, play, stream,
+publish, or retain relevant content.
+
+6.2 Lyric search, identification, translation, romanization, and synchronization
+may be inaccurate and are assistive only. Before public use, users should
+review content, sources, permissions, and displayed results.
+
+6.3 This License claims no rights in content imported or created by users and
+does not warrant that Software output is free of third-party rights.
+
+7. NAME AND TRADEMARKS
+
+The "Elitesand Pro" name, logo, and identifiable brand elements are not granted
+as trademarks under this License. Except for truthful identification of the
+Software, you may not suggest an agency, sponsorship, certification, or other
+relationship with the rights holder without prior written permission.
+
+8. DISCLAIMER OF WARRANTIES AND LIMITATION OF LIABILITY
+
+8.1 To the maximum extent permitted by law, the Software is provided "as is"
+and "as available," without express or implied warranties of accuracy,
+availability, non-infringement, uninterrupted or error-free operation, data
+retention, platform compatibility, or stream continuity.
+
+8.2 Except where mandatory law provides otherwise, the rights holder is not
+liable for indirect, incidental, special, or consequential damage that was not
+reasonably foreseeable or directly caused by the rights holder's breach.
+
+8.3 This License does not exclude or limit liability for willful misconduct or
+gross negligence, legally imposed liability for death, bodily injury, or health
+damage, non-excludable liability under consumer law, or any other liability
+that cannot lawfully be waived or limited in advance.
+
+8.4 The accompanying EULA contains more complete terms about use-related risks,
+third-party services, data handling, and liability.
+
+9. TERMINATION
+
+9.1 If you materially breach this License, the rights holder may give notice
+and a reasonable period to cure. If you do not cure within that period, the
+applicable rights granted under this License may terminate.
+
+9.2 The rights holder may terminate immediately where a breach cannot be cured
+or involves intentional infringement, circumvention of security measures, or
+a serious risk to systems or other persons.
+
+9.3 After termination, stop using and delete or return copies subject to the
+terminated License. Third-party component licenses and rights granted by
+mandatory law do not terminate merely because this License terminates.
+
+10. DOCUMENT PRIORITY, GOVERNING LAW, JURISDICTION, AND CONTACT
+
+10.1 This License controls the scope of the license, permitted conduct, and
+restrictions. The EULA principally governs use-related risks, third-party
+services, data handling, liability, and disputes. If this License conflicts
+with the EULA about the scope of the license, this License controls. Each
+third-party component is always governed by its own license.
+
+10.2 This License is governed by the laws of the Republic of China (Taiwan).
+Disputes arising out of or relating to this License will be heard by a court
+having jurisdiction under those laws. Mandatory consumer jurisdiction and
+other consumer rights are not affected.
+
+10.3 If a provision is held invalid or unenforceable, it is ineffective only
+to that extent, and the remaining provisions continue in effect.
+
+10.4 The Chinese version is binding. The English version is a courtesy
+translation. If they conflict, the Chinese version controls, unless applicable
+law requires an interpretation more favorable to the user.
+
+10.5 For licensing, copyright, third-party rights, or complaints, contact:
+Elitesand.pro@gmail.com

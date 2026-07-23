@@ -1,0 +1,599 @@
+Elitesand Pro
+END-USER LICENSE AGREEMENT AND DISCLAIMER
+最終使用者授權暨免責聲明
+
+Version: 1.1.0
+Effective Date / 生效日期：2026-07-24
+
+IMPORTANT INFORMATION / 重要資訊
+--------------------------------
+Rights holder and licensor / 權利人暨授權人：
+一粒沙（以「Elitesand Pro」名稱發布）
+
+Contact / 聯絡方式：
+Elitesand.pro@gmail.com
+
+Governing law / 準據法：
+中華民國（臺灣）法律
+
+Jurisdiction / 管轄：
+依中華民國（臺灣）法律有管轄權之法院；消費者依法享有之強制管轄及其他
+權利不受影響。
+
+Official download channel / 官方下載管道：
+https://github.com/z22115554/elitesand-pro
+以上是本軟體目前唯一的官方下載管道；本 EULA 的最新版本亦在該頁面公布。
+自其他來源取得的副本可能遭他人修改，權利人不對其內容負責。
+The page above is currently the only official download channel for the
+Software, and the latest version of this EULA is also published there. Copies
+obtained elsewhere may have been altered by others, and the rights holder is
+not responsible for their contents.
+
+This EULA governs the currently distributed free version of Elitesand Pro.
+Any future paid product, subscription, hosted service, or other paid transaction
+must be accompanied by separate transaction terms and legally required business
+and consumer information.
+
+本 EULA 適用於目前免費提供的 Elitesand Pro。日後如提供付費版本、訂閱、
+代管服務或其他收費交易，應另行提供交易條款，以及法律要求的企業經營者與
+消費資訊；不得僅以本免費版本 EULA 取代。
+
+================================================================
+中文（具約束力；與下方英文翻譯衝突時，以本中文版為準）
+================================================================
+
+一、適用範圍、同意方式與文件順位
+
+1. 本 EULA 適用於 Elitesand Pro 的官方桌面版、可攜版、更新程式、文件，
+   以及權利人確實享有著作財產權或依法有權授權的其他部分，合稱「本軟體」。
+   第三方軟體、開放原始碼元件、第三方服務與使用者內容不因本定義而成為
+   權利人所有。
+
+2. 在安裝或首次使用前，你應有合理機會閱讀、儲存或列印本 EULA 與本專案
+   隨附的 LICENSE。你於有前述機會後點選同意，或安裝、複製、啟動或使用
+   本軟體，即表示你接受本 EULA。若你不同意，請勿安裝、啟動或使用本軟體。
+
+3. 本軟體原創部分的授權範圍、允許及禁止行為，以本專案隨附的 LICENSE
+   為準；本 EULA 主要規範使用風險、第三方服務、資料處理、責任及爭議處理。
+   本 EULA 與 LICENSE 就授權範圍發生衝突時，以 LICENSE 為準。第三方元件
+   則一律以該元件自己的授權條款為準。
+
+4. 本 EULA 不限制任何依法不得以契約排除或限制的權利。
+
+5. 你應具備依適用法律締結本 EULA 的行為能力。未成年人應經法定代理人
+   同意或由其代理後，方得安裝及使用本軟體。
+
+二、人工智慧輔助開發與權利範圍
+
+1. 本軟體部分程式碼、文件或其他內容，可能使用 OpenAI ChatGPT／Codex、
+   Anthropic Claude 或其他生成式人工智慧工具輔助產生、選擇、編排、修改
+   及測試。
+
+2. 依所使用的帳號、產品與當時有效的人工智慧服務條款，並在適用法律允許
+   的範圍內，相關服務提供者可能將其對輸出享有的權利（如有）轉讓或歸屬
+   於使用者。權利人僅就其自行創作、選擇、編排或修改，或依法取得授權，
+   且依法受保護的部分主張權利及提供授權。
+
+3. 本 EULA 不主張對依法不受著作權保護的純人工智慧生成內容享有不存在的
+   專有著作權，也不保證人工智慧輸出必然具有著作權、具有獨特性或不涉及
+   第三方權利。
+
+4. 人工智慧輸出如包含第三方程式碼或受開放原始碼授權拘束的內容，該第三方
+   或開放原始碼授權條款優先適用。人工智慧服務提供者對輸出權利的轉讓，
+   不會消滅或取代第三方原有的權利。
+
+三、授權授予與輸出使用
+
+在你遵守本 EULA、LICENSE 及適用法律的前提下，權利人授予你全球、非專屬、
+不可轉讓、不可再授權且免權利金的權利，得以：
+
+1. 下載、安裝並執行未經修改的本軟體官方發佈版本；
+2. 為自己使用而調整本軟體明確提供的設定、偏好、版面選項及設定檔；
+3. 將本軟體產生的歌詞動畫、歌單及控制畫面，用於你自己的直播、錄影與演出，
+   包含商業直播、錄影與演出；
+4. 匯入你有權使用的音訊、歌詞、封面、背景及其他素材；以及
+5. 為你自己使用而修改本軟體，但不得將修改後版本、衍生版本或其任何部分
+   以散布、提供下載、代管或其他方式對外提供。
+
+你自願就本軟體提出的意見、建議或錯誤回報（不含你的歌曲、歌詞或其他創作
+內容），權利人得為改進本軟體而無償使用、修改及納入本軟體，無需另行通知
+或補償；你不因此喪失自己使用相同意見或建議的權利。
+
+權利人不對你自行匯入的內容主張權利，也不因你使用本軟體而取得你的直播、
+錄影或演出內容。但本軟體內建且可獨立識別的原創資產、商標、第三方素材及
+第三方內容，仍分別歸原權利人所有。本授權不移轉本軟體、內建資產、商標或
+第三方內容的所有權。
+
+四、限制行為
+
+除非 LICENSE、第三方元件授權、權利人另行書面同意或適用法律明確允許，
+你不得：
+
+1. 重新散布、上架、轉售、出租、再授權、公開提供本軟體，或將本軟體全部
+   或一部隨附於其他產品或服務；
+2. 修改、改作或翻譯本軟體的原創程式碼或原創資產後對外散布，或將其衍生
+   版本對外提供；但依第三條為自己使用所為、且未對外提供的調整或修改
+   不在此限；
+3. 將本軟體本身以代管、軟體即服務或其他方式提供第三人操作或使用；
+4. 反編譯、反組譯、還原工程或嘗試取得未公開的原始碼，但法律為互通性、
+   資安研究或其他強制目的明確允許的範圍除外；
+5. 移除或變更本軟體的名稱、著作權、授權或第三方權利標示；
+6. 迴避 PIN、存取控制、更新驗證、服務限制或其他安全機制；或
+7. 使用本軟體侵害著作權、隱私權、商標權、肖像權或其他權利，或違反法律、
+   平台規則或第三方服務條款。
+
+本條所定限制僅拘束依本 EULA 取得本軟體的使用者，不意圖縮減任何第三方
+開放原始碼授權或法律強制授予的權利。
+
+五、音訊、歌詞與使用者內容
+
+1. 本軟體不出售、不授權，也不保證你對任何歌曲錄音、音訊檔、歌詞、翻譯、
+   封面、背景、影片、YouTube 內容或其他媒體擁有權利。你應在匯入、下載、
+   轉換、公開播放、直播或保存前，自行取得必要的授權與同意。
+
+2. 歌詞搜尋、歌手辨識、時長或非音樂判定、翻譯、羅馬化與同步結果可能錯誤，
+   只能作為輔助。公開使用前，你應自行檢查內容、來源、授權與顯示結果。
+
+3. 你對自己選擇、匯入、處理、播放或發布，且在你合理控制範圍內的內容負責。
+   本條不將權利人或第三方依法應負的責任轉嫁予你。
+
+六、YouTube、Twitch、OBS 與其他第三方服務
+
+1. 本軟體可能連接或協助操作 YouTube、Twitch、OBS、yt-dlp、FFmpeg、歌詞
+   來源、字體服務及其他第三方服務。該等服務並非由權利人提供，可能隨時
+   變更、停止、限制地區或拒絕請求。
+
+2. 你與第三方服務之間的關係，直接受該第三方當時有效的使用條款、開發者
+   條款、社群規範、著作權政策與 API 限制拘束。本 EULA 所列第三方連結僅供
+   參考，不將第三方條款併入成為權利人對你的承諾。
+
+3. 本軟體不保證第三方服務、下載或 API 請求持續可用，也不授權你規避平台
+   限制，或取得、保存、播放或發布你無權使用的內容。
+
+4. 第三方元件及其授權請見 THIRD-PARTY-NOTICES.txt 與各元件隨附的授權檔。
+   Elitesand Pro 不隸屬於、也不代表或受 Google、YouTube、Twitch、
+   OBS Project、yt-dlp、FFmpeg 或任何歌詞／內容提供者背書。
+
+七、帳號、安全、資料與隱私
+
+1. 若你連接 Twitch 或其他帳號，本軟體會在你啟用的功能範圍內提出請求。
+   你應妥善保護 PIN、OAuth 權杖、Client ID、設定檔及電腦存取權，且不得
+   將權杖或密鑰提供給無權使用的人。
+
+2. 本軟體可能為播放清單、設定、歌詞快取、匯入檔案、記錄、診斷資料及連線
+   狀態使用本機儲存空間。某些功能會將你主動提交的查詢、帳號授權或請求
+   傳送至相應的第三方服務。
+
+3. 你應在使用前確認電腦、Windows 使用者帳號、備份、雲端同步及第三方服務
+   的資料處理方式符合你的需求，並自行備份重要歌單、媒體、設定及憑證。
+
+4. 若本軟體日後另行蒐集、處理或利用依法應告知的個人資料，權利人應在蒐集
+   前另行提供符合法律要求的隱私權告知。你依法不得預先拋棄或以契約限制的
+   個人資料權利，不因本 EULA 而受影響。
+
+5. 為提供更新通知與重要公告，本軟體預設會定期連線 GitHub：約每 6 小時
+   檢查一次官方發佈版本，約每 30 分鐘讀取一次官方公告檔。該等連線僅傳送
+   一般網路請求技術上必要的資訊（如 IP 位址與軟體版本），不上傳你的歌單、
+   媒體、帳號或其他資料；連線失敗不影響本軟體運作。進階使用者可依設定檔
+   說明停用上述自動檢查。
+
+八、更新、測試版與服務變更
+
+1. 本軟體可能包含正式版、預發布版、測試功能或未簽章版本。測試或預發布
+   功能可能不穩定，不適合關鍵或無法容忍中斷的用途。
+
+2. 更新可能修正、移除或變更功能，並可能要求完整下載或重新設定。你應在
+   更新前備份資料，並確認下載來源及檔案完整性。
+
+3. 權利人得停止維護、停止更新或停止第三方整合，且不負永久提供支援或維持
+   第三方服務相容性的義務。但本條不影響已取得版本依其適用授權所享有的
+   權利，也不排除法律規定的責任。
+
+九、無擔保
+
+在適用法律允許的最大範圍內，本軟體依「現狀」及「現有」提供，不附準確性、
+可用性、不侵權、不中斷、無錯誤、資料保存、平台相容性或直播不中斷的明示
+或默示擔保。你應依使用目的自行測試、驗證並保留可回復的備份。
+
+本條不排除或限制法律不得排除或限制的擔保、瑕疵責任、消費者權利或其他
+強制責任。
+
+十、責任限制
+
+1. 除法律另有強制規定外，權利人不對訂約時無法合理預見、非使用本軟體通常
+   可能發生，或並非由權利人違反義務直接造成的間接、附帶、特殊或衍生損害
+   負責，包括所失利益、直播中斷、商業機會損失或第三方平台處分。
+
+2. 權利人不對因使用者未經授權的內容、使用者自行洩漏憑證、使用者違反平台
+   規則、第三方服務停止或第三方自行採取的措施負責；但損害亦因權利人的
+   行為所造成者，仍依法律判斷各自應負的責任。
+
+3. 本 EULA 不排除或限制權利人因故意或重大過失所生的責任、對生命、身體或
+   健康依法應負的責任、消費者保護法所定不得排除的責任，或其他依法不得
+   預先免除或限制的責任。
+
+十一、使用者責任與第三方請求
+
+1. 在適用法律允許的範圍內，如因你故意或過失違反本 EULA、LICENSE、法律
+   或第三方權利，直接造成權利人損害或第三方請求，你應就與該違反行為具有
+   相當因果關係的直接且合理損害負責。
+
+2. 權利人應在知悉第三方請求後合理期間內通知你，並給你合理參與抗辯與提供
+   資料的機會。除經你事前同意的和解或確定裁判另有認定外，本條不當然要求
+   你負擔權利人的全部律師費或其他未經合理證明的費用。
+
+3. 本條不要求你承擔因權利人、其他使用者或第三方服務自身行為所生的責任，
+   也不轉嫁法律不得轉嫁的責任。
+
+十二、終止
+
+1. 你可以隨時停止使用並刪除本軟體。
+
+2. 如你重大違反本 EULA 或 LICENSE，權利人得通知你在合理期間內改正；你
+   未於期限內改正者，相關授權得終止。違反行為無法改正，或涉及蓄意侵權、
+   規避安全機制或對系統及他人造成重大風險者，權利人得立即終止授權。
+
+3. 終止後，你應停止使用並刪除或返還受終止授權拘束的本軟體副本。但第三方
+   元件授權及法律強制授予的權利，不因本 EULA 終止而消滅。
+
+4. 依其性質應繼續有效的第三方授權、內容責任、無擔保、責任限制及爭議處理
+   條款，在終止後仍於必要範圍內有效。
+
+十三、條款變更與可分割性
+
+1. 權利人得為安全、法律遵循、聯絡資訊或產品變更更新本 EULA，並在新版本
+   標示版本及日期。
+
+2. 僅屬澄清、修正錯字、更新聯絡資訊，或不實質減損既有權利的變更，得於
+   合理通知後適用。對你有重大不利影響的變更，原則上僅於你明確同意，或在
+   收到通知後選擇下載、安裝或使用適用新條款的新版本時生效；法律要求另行
+   取得同意者，從其規定。
+
+3. 你不同意新版本條款時，可以停止更新並停止使用適用新條款的新版本。除
+   法律、安全或技術上確有必要外，重大變更不溯及既往。
+
+4. 本 EULA 任一條款如被認定無效或不得執行，僅在該範圍內失效，其餘條款
+   仍繼續有效。
+
+十四、準據法、管轄、消費者權利與聯絡
+
+1. 本 EULA 的成立、效力、解釋及履行，以中華民國（臺灣）法律為準據法。
+
+2. 因本 EULA 所生或與本 EULA 有關的爭議，由依中華民國（臺灣）法律有
+   管轄權的法院處理。
+
+3. 本條不排除或限制消費者依其居住地、消費關係發生地或其他強制法規所享有
+   的管轄、申訴、解除契約、瑕疵擔保、損害賠償或其他權利。
+
+4. 關於本 EULA、授權、著作權或申訴事項，請聯絡：
+   Elitesand.pro@gmail.com
+
+十五、語言與完整約定
+
+1. 本 EULA 的中文版為具約束力版本。英文版僅為便利翻譯；兩者不一致時，
+   以中文版為準。但法律要求採對使用者更有利的解釋者，從其規定。
+
+2. 本 EULA、LICENSE 及適用的第三方元件授權，構成與本軟體使用及授權相關
+   的約定。標題僅為閱讀便利，不影響條款解釋。
+
+================================================================
+English (courtesy translation; the Chinese text above controls)
+================================================================
+
+1. SCOPE, ACCEPTANCE, AND ORDER OF DOCUMENTS
+
+1.1 This EULA applies to official desktop and portable releases of Elitesand
+Pro, its updater and documentation, and only those other portions in which the
+rights holder actually owns copyright or is lawfully entitled to grant rights
+(collectively, the "Software"). Third-party software, open-source components,
+third-party services, and user content do not become the rights holder's
+property merely because they are included in this definition.
+
+1.2 Before installation or first use, you should have a reasonable opportunity
+to read, save, or print this EULA and the project LICENSE. After having that
+opportunity, clicking to accept, or installing, copying, launching, or using
+the Software, constitutes acceptance of this EULA. If you do not agree, do not
+install, launch, or use the Software.
+
+1.3 The project LICENSE controls the scope of the license, permitted conduct,
+and restrictions applicable to original portions of the Software. This EULA
+principally governs use-related risks, third-party services, data handling,
+liability, and disputes. If this EULA conflicts with the LICENSE about the
+scope of the license, the LICENSE controls. Each third-party component is
+always governed by its own license.
+
+1.4 This EULA does not limit any right that cannot lawfully be excluded or
+restricted by contract.
+
+1.5 You must have legal capacity under applicable law to enter into this EULA.
+Minors may install and use the Software only with the consent of, or through,
+their legal representative.
+
+2. AI-ASSISTED DEVELOPMENT AND SCOPE OF RIGHTS
+
+2.1 Portions of the Software, documentation, or other material may have been
+generated, selected, arranged, modified, or tested with assistance from
+OpenAI ChatGPT/Codex, Anthropic Claude, or other generative-AI tools.
+
+2.2 Depending on the account, product, and then-current AI service terms, and
+to the extent permitted by applicable law, a relevant service provider may
+assign or allocate to its user the provider's rights, if any, in outputs. The
+rights holder asserts rights and grants this license only in material the
+rights holder created, selected, arranged, or modified, or is otherwise
+lawfully authorized to license, and that is protected under applicable law.
+
+2.3 This EULA does not claim nonexistent exclusive copyright in purely
+AI-generated material that is not protected by copyright law, and it does not
+warrant that AI output is copyrightable, unique, or free of third-party rights.
+
+2.4 If AI output contains third-party code or material governed by an
+open-source license, the applicable third-party or open-source terms control.
+An AI provider's assignment of its own rights does not extinguish or replace
+rights held by third parties.
+
+3. LICENSE GRANT AND USE OF OUTPUT
+
+Subject to your compliance with this EULA, the LICENSE, and applicable law, the
+rights holder grants you a worldwide, non-exclusive, non-transferable,
+non-sublicensable, royalty-free right to:
+
+a. download, install, and run unmodified official releases of the Software;
+b. adjust settings, preferences, layout options, and configuration files that
+   the Software expressly makes available for your own use;
+c. use lyric animations, setlists, and control screens produced by the
+   Software in your own streams, recordings, and performances, including
+   commercial streams, recordings, and performances; and
+d. import audio, lyrics, artwork, backgrounds, and other material that you are
+   entitled to use; and
+
+e. modify the Software for your own use, provided that you do not distribute,
+   offer for download, host, or otherwise make available to others any
+   modified version, derivative version, or part thereof.
+
+If you voluntarily submit feedback, suggestions, or bug reports about the
+Software (excluding your songs, lyrics, or other creative content), the rights
+holder may use, modify, and incorporate them into the Software free of charge
+to improve it, without further notice or compensation. You do not thereby lose
+the right to use the same feedback or suggestions yourself.
+
+The rights holder claims no rights in content you import and acquires no rights
+in your streams, recordings, or performances merely because you use the
+Software. Separately identifiable built-in original assets, trademarks,
+third-party material, and third-party content remain owned by their respective
+rights holders. This license transfers no ownership of the Software, built-in
+assets, trademarks, or third-party content.
+
+4. RESTRICTIONS
+
+Except where the LICENSE, a third-party license, separate written permission
+from the rights holder, or applicable law expressly allows it, you may not:
+
+a. redistribute, publish, resell, rent, sublicense, or make the Software
+   publicly available, or bundle all or part of it with another product or
+   service;
+b. modify, adapt, or translate original code or original assets of the Software
+   and distribute or otherwise provide the resulting derivative version,
+   except for adjustments or modifications made for your own use under
+   Section 3 that are not made available to others;
+c. provide the Software itself for third-party operation or use as a hosted,
+   software-as-a-service, or similar offering;
+d. decompile, disassemble, reverse engineer, or attempt to obtain non-public
+   source code, except where mandatory law expressly permits it for
+   interoperability, security research, or another compulsory purpose;
+e. remove or alter names, copyright, license, or third-party notices;
+f. bypass PINs, access controls, update verification, service limits, or other
+   security mechanisms; or
+g. use the Software to infringe copyright, privacy, trademark, publicity, or
+   other rights, or to violate law, platform rules, or third-party terms.
+
+These restrictions bind users who receive the Software under this EULA. They
+are not intended to reduce rights granted by third-party open-source licenses
+or mandatory law.
+
+5. AUDIO, LYRICS, AND USER CONTENT
+
+5.1 The Software does not sell, license, or guarantee your rights in any song
+recording, audio file, lyrics, translation, artwork, background, video,
+YouTube content, or other media. Before importing, downloading, converting,
+publicly playing, streaming, or retaining media, you must obtain all required
+permissions.
+
+5.2 Lyric search, artist identification, duration or non-music checks,
+translation, romanization, and synchronization may be inaccurate and are
+assistive only. Before public use, you should review content, sources,
+permissions, and displayed results.
+
+5.3 You are responsible for content you select, import, process, play, or
+publish to the extent it is within your reasonable control. This provision
+does not shift to you liability that the rights holder or a third party must
+bear under law.
+
+6. YOUTUBE, TWITCH, OBS, AND OTHER THIRD-PARTY SERVICES
+
+6.1 The Software may connect to or assist with YouTube, Twitch, OBS, yt-dlp,
+FFmpeg, lyric sources, font services, and other third-party services. Those
+services are not provided by the rights holder and may change, stop, restrict
+regions, or reject requests at any time.
+
+6.2 Your relationship with each third-party service is directly governed by
+that service's then-current terms, developer terms, community rules, copyright
+policies, and API limits. Third-party links listed in this EULA are for
+reference only and do not incorporate third-party terms as promises by the
+rights holder.
+
+6.3 The Software does not guarantee continuing third-party availability,
+downloads, or API success, and does not authorize bypassing platform
+restrictions or obtaining, retaining, playing, or publishing content you are
+not entitled to use.
+
+6.4 See THIRD-PARTY-NOTICES.txt and the license files shipped with individual
+components. Elitesand Pro is not affiliated with, endorsed by, or acting for
+Google, YouTube, Twitch, OBS Project, yt-dlp, FFmpeg, or any lyric or content
+provider.
+
+7. ACCOUNTS, SECURITY, DATA, AND PRIVACY
+
+7.1 If you connect Twitch or another account, the Software makes requests
+within the features you enable. You should protect PINs, OAuth tokens, Client
+IDs, configuration files, and computer access, and must not disclose tokens or
+secrets to unauthorized persons.
+
+7.2 The Software may use local storage for playlists, settings, lyric caches,
+imports, logs, diagnostics, and connection state. Some features transmit
+queries, account authorization, or requests that you actively submit to the
+relevant third-party service.
+
+7.3 Before use, confirm that your computer, Windows account, backups, cloud
+synchronization, and third-party processing practices meet your needs, and
+back up important playlists, media, settings, and credentials.
+
+7.4 If a future version separately collects, processes, or uses personal data
+for which notice is legally required, the rights holder will provide the
+required privacy notice before collection. This EULA does not waive or limit
+personal-data rights that cannot lawfully be waived or limited in advance.
+
+7.5 To provide update notifications and important announcements, the Software
+by default periodically connects to GitHub: it checks official releases about
+every 6 hours and reads the official announcement file about every 30 minutes.
+These connections transmit only information technically necessary for an
+ordinary network request (such as your IP address and the Software version)
+and do not upload your playlists, media, accounts, or other data. Connection
+failures do not affect operation of the Software. Advanced users may disable
+these automatic checks as described in the configuration documentation.
+
+8. UPDATES, PRE-RELEASES, AND SERVICE CHANGES
+
+8.1 The Software may include stable releases, pre-releases, test features, or
+unsigned builds. Test or pre-release features may be unstable and are not
+suitable for critical or interruption-intolerant uses.
+
+8.2 Updates may fix, remove, or change features and may require a complete
+download or reconfiguration. Back up your data before updating and verify the
+download source and file integrity.
+
+8.3 The rights holder may stop maintenance, updates, or third-party
+integrations and does not promise perpetual support or compatibility. This
+does not affect rights in an already obtained version under its applicable
+license or exclude liability imposed by law.
+
+9. DISCLAIMER OF WARRANTIES
+
+To the maximum extent permitted by law, the Software is provided "as is" and
+"as available," without express or implied warranties of accuracy,
+availability, non-infringement, uninterrupted or error-free operation, data
+retention, platform compatibility, or stream continuity. You should test and
+verify the Software for your intended use and maintain recoverable backups.
+
+This section does not exclude or limit warranties, defect liability, consumer
+rights, or other mandatory obligations that cannot lawfully be excluded or
+limited.
+
+10. LIMITATION OF LIABILITY
+
+10.1 Except where mandatory law provides otherwise, the rights holder is not
+liable for indirect, incidental, special, or consequential damage that was not
+reasonably foreseeable when this EULA was formed, is not a usual consequence
+of using the Software, or was not directly caused by the rights holder's
+breach. This includes lost profits, stream interruption, lost business
+opportunities, or third-party platform action.
+
+10.2 The rights holder is not liable for unauthorized user content,
+user-disclosed credentials, a user's violation of platform rules, a
+third-party service stopping, or action independently taken by a third party.
+If the rights holder's conduct also caused the damage, each party's
+responsibility will be determined under applicable law.
+
+10.3 This EULA does not exclude or limit liability for willful misconduct or
+gross negligence, legally imposed liability for death, bodily injury, or
+health damage, non-excludable liability under consumer law, or any other
+liability that cannot lawfully be waived or limited in advance.
+
+11. USER RESPONSIBILITY AND THIRD-PARTY CLAIMS
+
+11.1 To the extent permitted by law, if your intentional or negligent breach
+of this EULA, the LICENSE, law, or third-party rights directly causes damage
+to the rights holder or a third-party claim, you are responsible for direct
+and reasonable damage having an adequate causal connection to that breach.
+
+11.2 The rights holder will notify you within a reasonable time after learning
+of a third-party claim and give you a reasonable opportunity to participate in
+the defense and provide information. Unless a settlement was approved by you
+in advance or a final judgment determines otherwise, this section does not
+automatically require you to pay all legal fees or other insufficiently proven
+costs of the rights holder.
+
+11.3 This section does not require you to bear liability caused by the rights
+holder, another user, or a third-party service, and does not transfer liability
+that cannot lawfully be transferred.
+
+12. TERMINATION
+
+12.1 You may stop using and delete the Software at any time.
+
+12.2 If you materially breach this EULA or the LICENSE, the rights holder may
+give notice and a reasonable period to cure. If you do not cure within that
+period, the applicable license may terminate. The rights holder may terminate
+immediately where a breach cannot be cured or involves intentional
+infringement, circumvention of security measures, or a serious risk to systems
+or other persons.
+
+12.3 After termination, stop using and delete or return copies subject to the
+terminated license. Third-party component licenses and rights granted by
+mandatory law do not terminate merely because this EULA terminates.
+
+12.4 Third-party licenses, content responsibility, warranty disclaimers,
+liability limits, and dispute provisions survive to the extent required by
+their nature.
+
+13. CHANGES AND SEVERABILITY
+
+13.1 The rights holder may update this EULA for security, legal compliance,
+contact information, or product changes. Each new version will identify its
+version and date.
+
+13.2 Clarifications, typo corrections, contact updates, or changes that do not
+materially reduce existing rights may apply after reasonable notice. A change
+that is materially adverse to you will generally apply only after you
+expressly accept it or, after notice, choose to download, install, or use a
+new version offered under the new terms. Where law requires separate consent,
+that requirement controls.
+
+13.3 If you do not agree to new terms, you may stop updating and stop using
+versions governed by them. Except where legally, technically, or
+security-critical, material changes do not apply retroactively.
+
+13.4 If any provision is held invalid or unenforceable, it is ineffective only
+to that extent, and the remaining provisions continue in effect.
+
+14. GOVERNING LAW, JURISDICTION, CONSUMER RIGHTS, AND CONTACT
+
+14.1 This EULA is governed by the laws of the Republic of China (Taiwan).
+
+14.2 Disputes arising out of or relating to this EULA will be heard by a court
+having jurisdiction under the laws of the Republic of China (Taiwan).
+
+14.3 This section does not exclude or limit jurisdiction, complaint,
+withdrawal, defect, damages, or other rights that consumers have under
+mandatory law based on residence, the place of the consumer relationship, or
+another protected connection.
+
+14.4 For questions or complaints about this EULA, licensing, or copyright,
+contact:
+Elitesand.pro@gmail.com
+
+15. LANGUAGE AND ENTIRE AGREEMENT
+
+15.1 The Chinese version of this EULA is binding. The English version is a
+courtesy translation. If they conflict, the Chinese version controls, unless
+applicable law requires an interpretation more favorable to the user.
+
+15.2 This EULA, the LICENSE, and applicable third-party component licenses
+constitute the terms relating to use and licensing of the Software. Headings
+are for convenience only and do not affect interpretation.
+
+External links for reference only:
+YouTube Terms: https://www.youtube.com/t/terms
+Twitch Developer documentation: https://dev.twitch.tv/docs/
+Twitch Terms of Service: https://www.twitch.tv/p/legal/terms-of-service/
+OBS legal/help information: https://obsproject.com/help?1=1
+FFmpeg legal information: https://ffmpeg.org/legal.html

@@ -17,8 +17,8 @@ executables also contain separately licensed components; see the release's
 THIRD_PARTY_LICENSES information.
 Source and license: https://github.com/yt-dlp/yt-dlp
 
-FFmpeg (bundled in the current portable public-beta build)
-----------------------------------------------------------
+FFmpeg (bundled in the current portable build)
+----------------------------------------------
 The current portable build includes separate ffmpeg.exe and ffprobe.exe tools
 from a Gyan static GPLv3 essentials build. They are not linked into Elitesand
 Pro. The package's licenses/ffmpeg directory contains the GPLv3 text, exact
@@ -58,5 +58,5 @@ licenses/npm-license-inventory.json with package names, versions and declared
 license identifiers.
 
 No third-party license grants rights to song recordings, lyrics, cover art,
-or other media processed by the application. Testers are responsible for
+or other media processed by the application. Users are responsible for
 using media they are authorized to access and use.

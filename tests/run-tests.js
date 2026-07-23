@@ -1288,6 +1288,25 @@ test('portable build creates a clean production-only dependency tree in staging'
   ok(source.includes('Installing production dependencies in staging'));
 });
 
+test('bilingual EULA is shipped with portable builds as a finalized agreement', () => {
+  const root = path.join(__dirname, '..');
+  const eulaPath = path.join(root, 'EULA.txt');
+  ok(fs.existsSync(eulaPath), 'EULA.txt must exist at the project root');
+  const eula = fs.readFileSync(eulaPath, 'utf8');
+  ok(eula.includes('END-USER LICENSE AGREEMENT AND DISCLAIMER'), 'EULA must include the English title');
+  ok(eula.includes('最終使用者授權暨免責聲明'), 'EULA must include the Chinese title');
+  ok(/^Version:\s*\d+\.\d+\.\d+$/m.test(eula), 'EULA must carry a x.y.z version line (the acceptance gate keys off it)');
+  ok(!eula.includes('Draft for legal review') && !eula.includes('[待填]'), 'EULA must stay finalized: no draft marker or placeholder fields');
+  ok(eula.includes('權利人暨授權人') && eula.includes('Elitesand.pro@gmail.com'), 'EULA must name the rights holder and a contact address');
+  ok(eula.includes('https://github.com/z22115554/elitesand-pro'), 'EULA must state the official download channel');
+  ok(eula.includes('YouTube') && eula.includes('Twitch') && eula.includes('OBS'), 'EULA must state third-party platform boundaries');
+  const portableBuild = fs.readFileSync(path.join(root, 'tools', 'build-portable.ps1'), 'utf8');
+  ok(portableBuild.includes('"EULA.txt"'), 'portable build must copy EULA.txt into the app');
+  ok(portableBuild.includes('foreach ($legalFile in @("LICENSE", "EULA.txt", "THIRD-PARTY-NOTICES.txt"))'), 'portable root must expose EULA.txt beside the other legal notices');
+  const portableSmoke = fs.readFileSync(path.join(root, 'tools', 'smoke-portable.js'), 'utf8');
+  ok(portableSmoke.includes("path.join(stage, 'EULA.txt')"), 'portable smoke must fail if EULA.txt is missing');
+});
+
 test('portable build clears runtime data again after packaged-app smoke', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-portable.ps1'), 'utf8');
   const smokeIndex = source.indexOf('Running packaged-app smoke test...');
@@ -5042,16 +5061,34 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
   ].forEach((required) => ok(source.includes(required), `Electron shell is missing ${required}`));
 });
 
-test('Electron P2 installer stays per-user with a loose updateable app root', () => {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+test('Electron assisted installer stays per-user with an updateable app root', () => {
+  const root = path.join(__dirname, '..');
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   eq(packageJson.main, 'electron/main.js');
   eq(packageJson.build.asar, false);
   eq(packageJson.build.directories.output, 'dist/releases/v${version}/installer');
-  eq(packageJson.build.nsis.oneClick, true);
+  eq(packageJson.build.nsis.oneClick, false);
   eq(packageJson.build.nsis.perMachine, false, 'NSIS must not install per-machine');
+  eq(packageJson.build.nsis.allowToChangeInstallationDirectory, true,
+    'assisted installer must let the user choose a per-user destination');
+  eq(packageJson.build.nsis.createDesktopShortcut, false,
+    'custom installer page must own the desktop shortcut choice');
+  eq(packageJson.build.nsis.createStartMenuShortcut, false,
+    'custom installer page must own the Start menu shortcut choice');
+  eq(packageJson.build.nsis.include, 'electron/installer.nsh');
+  eq(packageJson.build.nsis.license, 'EULA.txt', 'installer must show the approved EULA before install');
+  ok(packageJson.build.nsis.deleteAppDataOnUninstall !== true,
+    'uninstaller must never delete Electron userData');
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root'), 'installer must contain resources/app-root');
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root/node_modules'), 'installer must explicitly ship app-root/node_modules (electron-builder drops it from extraResources)');
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'tools'), 'installer must contain bundled tools');
+  const installerNsh = fs.readFileSync(path.join(root, 'electron', 'installer.nsh'), 'utf8');
+  ok(installerNsh.includes('!macro customInstallMode'), 'assisted installer must force the current-user mode');
+  ok(installerNsh.includes('StrCpy $isForceCurrentInstall "1"'), 'installer must not offer a per-machine branch');
+  ok(installerNsh.includes('!insertmacro setInstallModePerUser'), 'silent installs must remain per-user');
+  ok(installerNsh.includes('!macro customPageAfterChangeDir'), 'installer must provide shortcut options after choosing a directory');
+  ok(installerNsh.includes('EsCreateDesktopShortcut') && installerNsh.includes('EsCreateStartMenuShortcut'),
+    'desktop and Start menu shortcuts must remain independent choices');
   const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'showPortableDataMigrationNotice',
     'function needsPortableDataMigrationNotice', 'shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice()',
@@ -5579,6 +5616,45 @@ testAsync('Electron P1：server 意外退出每次事故可重啟一次，重啟
   eq(dialogs[dialogs.length - 1].buttons.join('|'), '結束', '重啟失敗後只能結束：');
   eq(app.quitCalls, 1);
 });
+
+console.log('\n📦 16. EULA 首次同意閘門 (eula-store)');
+{
+  const eulaStore = require('../server/services/eula-store');
+
+  test('EULA.txt 可讀、版本可解析，首次啟動 required=true', () => {
+    const status = eulaStore.getStatus();
+    ok(/^\d+\.\d+\.\d+$/.test(status.version || ''), `EULA 版本應為 x.y.z 格式，得到 ${status.version}: `);
+    eq(status.required, true, '尚未同意時必須 required=true: ');
+    eq(status.acceptedVersion, null);
+    const text = eulaStore.getText();
+    ok(text.includes('最終使用者授權暨免責聲明'), 'EULA 內文應包含中文標題: ');
+    ok(text.includes(`Version: ${status.version}`), '內文與解析出的版本要一致: ');
+  });
+
+  test('accept 版本不符會被拒絕（409）且不寫入同意紀錄', () => {
+    let error;
+    try { eulaStore.accept('0.0.1'); } catch (caught) { error = caught; }
+    eq(error?.status, 409);
+    ok(!fs.existsSync(eulaStore.ACCEPTANCE_FILE), '版本不符不得留下任何紀錄檔: ');
+  });
+
+  test('accept 正確版本後 required=false，紀錄落在隔離 data 目錄', () => {
+    const before = eulaStore.getStatus();
+    const after = eulaStore.accept(before.version);
+    eq(after.required, false);
+    eq(after.acceptedVersion, before.version);
+    ok(eulaStore.ACCEPTANCE_FILE.startsWith(TEST_RUNTIME_DIRS.data), '同意紀錄絕不可寫進正式 data 目錄: ');
+    const saved = JSON.parse(fs.readFileSync(eulaStore.ACCEPTANCE_FILE, 'utf8'));
+    eq(saved.version, before.version);
+    ok(typeof saved.acceptedAt === 'string' && saved.acceptedAt.length > 0);
+  });
+
+  test('條款版本變更後會重新要求同意', () => {
+    fs.writeFileSync(eulaStore.ACCEPTANCE_FILE, JSON.stringify({ version: '0.9.9', acceptedAt: new Date().toISOString() }));
+    eq(eulaStore.getStatus().required, true, '舊版同意不涵蓋新版條款: ');
+    fs.rmSync(eulaStore.ACCEPTANCE_FILE, { force: true });
+  });
+}
 
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }

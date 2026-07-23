@@ -8,6 +8,7 @@ const UNPROTECTED_ROUTE_ALLOWLIST = new Map([
   ['server/routes/auth.js:POST:/verify', 'PIN login must remain reachable before authentication'],
   ['server/routes/auth.js:POST:/set', 'initial PIN setup and current-PIN verification happen inside the handler'],
   ['server/routes/auth.js:POST:/clear', 'current-PIN verification happens inside the handler'],
+  ['server/routes/api.js:POST:/eula/accept', 'first-run EULA acceptance happens before PIN setup; the handler only records acceptance of the current EULA version'],
 ]);
 
 function walkJavaScriptFiles(root) {
