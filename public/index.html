@@ -1254,7 +1254,7 @@
           <section class="card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>OBS 來源 · 歌單畫面</p>
             <div class="field setlist-layout-field">
-              <div class="setlist-layout-heading"><div><label id="setlist-layout-label" for="setlist-layout">先選擇畫面用途</label><p class="field-hint">推薦從前三種開始；每一種都能再套用風格與微調。</p></div><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
+              <div class="setlist-layout-heading"><div><label id="setlist-layout-label" for="setlist-layout">先選擇歌單模板</label><p class="field-hint">推薦從前三種開始；選好後只顯示這個模板真正會作用的設定。</p></div><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
               <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal">斜線舞台</option><option value="timeline">時間軸</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation">星座</option><option value="terminal">終端機</option></select>
               <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
                 <button class="setlist-layout-card" type="button" data-setlist-layout="classic" role="radio" aria-checked="true"><span class="setlist-layout-badge">推薦</span><strong>經典資訊</strong><span>現在、未唱、已唱一次看懂</span></button>
@@ -1267,9 +1267,9 @@
               </div>
               <p class="setlist-layout-hint" id="setlist-layout-hint">完整資訊小元件，適合放在畫面左下或右下常駐。</p>
             </div>
-            <div id="setlist-style-scope" class="setlist-style-scope" role="status">設定範圍：經典資訊與清單版共用一組外觀設定。</div>
+            <div id="setlist-style-scope" class="setlist-style-scope" role="status">目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。</div>
             <details class="collapse" id="setlist-appearance" open>
-              <summary>快速調整 <span>最常用的顏色、大小、透明度與顯示內容</span></summary>
+              <summary>快速調整 <span>先確保亮色背景看得清楚，再做必要的顏色與顯示調整</span></summary>
               <div class="collapse-body">
                 <!-- 主題下拉已由「風格預設」取代（經典顏色改吃統一設定），保留 plumbing 但隱藏 -->
                 <div class="field" id="setlist-theme-field" hidden>
@@ -1294,32 +1294,12 @@
 
                 <div id="setlist-style-collapse">
 
-                <!-- ══ 快速套用風格：一鍵配色，之後仍可個別微調 ══ -->
-                <div class="field-group-title mt-0">快速套用風格</div>
-                <p class="field-group-desc">先選一個接近想要的風格，下面的細項都會跟著換，之後可再單獨調整任何一項。</p>
-                <div class="setlist-template-status-row">
-                  <p class="sub setlist-template-status-note">套用到目前選擇的版型</p>
-                  <button id="sls-reset" class="btn btn-sm btn-ghost" type="button" title="把目前版型的所有外觀設定還原成出廠預設值">重置此版型的設定</button>
+                <!-- ══ 常用外觀：每個模板都會立即反映的少數控制項 ══ -->
+                <div class="field-group-title mt-0">可讀性與常用外觀</div>
+                <div class="switch-row switch-row--separated">
+                  <div><div class="label">亮色背景可讀性保護</div><div class="sub">預設開啟。只替歌單自己的文字與卡片加深襯底，保留 OBS 背景與角色；關閉才是完全透明的演出效果。</div></div>
+                  <label class="switch"><input id="sls-readability-guard" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <div class="preset-thumb-row" id="sls-presets">
-                  <button class="preset-thumb active" data-preset="sand" type="button" title="Sand（沙金）"><span class="preset-swatch"></span><span class="preset-label">沙金</span></button>
-                  <button class="preset-thumb" data-preset="glass" type="button" title="Glass（毛玻璃）"><span class="preset-swatch"></span><span class="preset-label">毛玻璃</span></button>
-                  <button class="preset-thumb" data-preset="neon" type="button" title="Neon（霓虹）"><span class="preset-swatch"></span><span class="preset-label">霓虹</span></button>
-                  <button class="preset-thumb" data-preset="minimal" type="button" title="Minimal（極簡）"><span class="preset-swatch"></span><span class="preset-label">極簡</span></button>
-                  <button class="preset-thumb" data-preset="dark" type="button" title="Dark（深色）"><span class="preset-swatch"></span><span class="preset-label">深色</span></button>
-                  <button class="preset-thumb" data-preset="light" type="button" title="Light（淺色）"><span class="preset-swatch"></span><span class="preset-label">淺色</span></button>
-                </div>
-
-                <!-- ══ 自訂風格：存目前設定 / 載入 / 刪除（localStorage）══ -->
-                <div class="setlist-preset-save-row">
-                  <input id="sls-save-name" type="text" class="input" placeholder="幫這組風格取個名字…">
-                  <button id="sls-save-btn" class="btn btn-sm" type="button">＋ 儲存目前設定為新風格</button>
-                </div>
-                <p class="field-hint">存在這台電腦的瀏覽器裡（不會同步到別台裝置），可存多組，方便切換不同直播企劃的風格。</p>
-                <div id="sls-custom-list" class="sls-custom-list"></div>
-
-                <!-- ══ 常用外觀：出現頻率最高、影響最直觀的幾項 ══ -->
-                <div class="field-group-title">常用外觀</div>
                 <div class="field field-row field-row--spacious field-row--top">
                   <div class="flex-grow">
                     <label>主色（邊框／重點裝飾／「正在播放」標示）</label>
@@ -1332,45 +1312,88 @@
                     <p class="field-hint">影響：只有「正在播放」那一行的歌名文字顏色，其餘歌名用下面的「主要文字色」。</p>
                   </div>
                 </div>
-                <div class="field">
+                <div class="field field-row field-row--spacious field-row--top">
+                  <div class="flex-grow">
+                    <label>主要文字色</label>
+                    <input id="sls-text-primary" type="color" value="#f0ead8">
+                    <p class="field-hint">影響歌名、標題與正在播放文字；所有模板都會套用。</p>
+                  </div>
+                  <div class="flex-grow">
+                    <label>可讀性襯底色</label>
+                    <input id="sls-card-color" type="color" value="#0b0907">
+                    <p class="field-hint">影響清單卡片，以及場景文字在亮色背景上的小襯底。</p>
+                  </div>
+                </div>
+                <div class="field" data-sl-layout="classic simple timeline diagonal constellation">
                   <label>「正在播放」的文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
                   <input id="sls-size-now" type="range" min="12" max="48" value="16">
-                  <p class="field-hint">只影響目前播放中那一行的字級，清單其他行用下面詳細設定裡的「列表字級」。</p>
+                  <p class="field-hint">影響目前播放中的標題；卡片、排行榜與終端機的字級在詳細設定中調整。</p>
                 </div>
                 <div class="field field-row field-row--spacious field-row--top">
                   <div class="flex-grow">
-                    <label>整體背板不透明度 <span id="sls-bg-opacity-val" class="val">透明</span></label>
-                    <input id="sls-bg-opacity" type="range" min="0" max="100" value="0">
-                    <p class="field-hint">0＝完全透明，OBS 可直接看到角色/背景；畫面太亂看不清字時再拉高。與下面「每列卡片底色」是不同的兩層。</p>
+                    <label>可讀性襯底不透明度 <span id="sls-card-opacity-val" class="val">93%</span></label>
+                    <input id="sls-card-opacity" type="range" min="0" max="100" value="93">
+                    <p class="field-hint">用在清單卡片與場景文字襯底；開著可讀性保護時會維持安全下限。</p>
                   </div>
-                  <div>
+                  <div data-sl-scope="classic scene">
                     <label>整體背板顏色</label>
                     <input id="sls-bg-color" type="color" value="#000000">
-                    <p class="field-hint">影響：整片背板的顏色（不透明度是 0 時看不出來）。</p>
+                    <p class="field-hint">只在經典與場景版使用的整片背板。</p>
                   </div>
+                </div>
+                <div class="field" data-sl-scope="classic scene">
+                  <label>整體背板不透明度 <span id="sls-bg-opacity-val" class="val">透明</span></label>
+                  <input id="sls-bg-opacity" type="range" min="0" max="100" value="0">
+                  <p class="field-hint">0＝不鋪滿畫面；畫面太亂時才拉高。這和上面的「可讀性襯底」是不同層。</p>
                 </div>
                 <div class="field field-row field-row--spacious field-row--top">
                   <div class="flex-grow">
-                    <label>已唱歌曲的淡化程度 <span id="sls-done-opacity-val" class="val">35%</span></label>
-                    <input id="sls-done-opacity" type="range" min="0" max="100" value="35">
+                    <label>已唱歌曲的淡化程度 <span id="sls-done-opacity-val" class="val">54%</span></label>
+                    <input id="sls-done-opacity" type="range" min="0" max="100" value="54">
                   </div>
                   <div class="flex-grow">
-                    <label>未唱歌曲的淡化程度 <span id="sls-wait-opacity-val" class="val">55%</span></label>
-                    <input id="sls-wait-opacity" type="range" min="0" max="100" value="55">
+                    <label>未唱歌曲的淡化程度 <span id="sls-wait-opacity-val" class="val">72%</span></label>
+                    <input id="sls-wait-opacity" type="range" min="0" max="100" value="72">
                   </div>
                 </div>
-                <p class="field-hint">數字越大越清楚（越不淡化）。所有版型都適用；場景版是以預設值為基準做相對調整（離「正在播放」越遠仍會越淡）。</p>
-                <div class="switch-row">
+                <p class="field-hint">數字越大越清楚（越不淡化）。開著可讀性保護時，已唱至少 52%、未唱至少 70%；想做極淡效果再關閉保護。場景版仍會依距離保留層次。</p>
+                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards">
                   <div><div class="label">顯示歌手名字</div><div class="sub">關閉後歌單只顯示歌名，不顯示演唱者</div></div>
                   <label class="switch"><input id="sls-show-artist" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <div class="switch-row">
+                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards">
                   <div><div class="label">已唱歌曲加上刪除線</div><div class="sub">用刪除線標示「這首已經唱過了」</div></div>
                   <label class="switch"><input id="sls-strikethrough" type="checkbox"><span class="track"></span></label>
                 </div>
 
+                <!-- ══ 風格預設與儲存：保留功能，但不再擠在每次選模板的第一屏 ══ -->
+                <details class="setlist-quick-presets">
+                  <summary>風格預設與儲存（選用）</summary>
+                  <div class="setlist-quick-presets__body">
+                    <p class="field-group-desc">套用到目前選擇的設定範圍；每個預設都會保留亮色背景可讀性。</p>
+                    <div class="setlist-template-status-row">
+                      <p class="sub setlist-template-status-note">可隨時回到出廠設定</p>
+                      <button id="sls-reset" class="btn btn-sm btn-ghost" type="button" title="把目前版型的所有外觀設定還原成出廠預設值">重置此版型的設定</button>
+                    </div>
+                    <div class="preset-thumb-row" id="sls-presets">
+                      <button class="preset-thumb active" data-preset="sand" type="button" title="Sand（沙金）"><span class="preset-swatch"></span><span class="preset-label">沙金</span></button>
+                      <button class="preset-thumb" data-preset="glass" type="button" title="Glass（毛玻璃）"><span class="preset-swatch"></span><span class="preset-label">毛玻璃</span></button>
+                      <button class="preset-thumb" data-preset="neon" type="button" title="Neon（霓虹）"><span class="preset-swatch"></span><span class="preset-label">霓虹</span></button>
+                      <button class="preset-thumb" data-preset="minimal" type="button" title="Minimal（極簡）"><span class="preset-swatch"></span><span class="preset-label">極簡</span></button>
+                      <button class="preset-thumb" data-preset="dark" type="button" title="Dark（深色）"><span class="preset-swatch"></span><span class="preset-label">深色</span></button>
+                      <button class="preset-thumb" data-preset="light" type="button" title="Light（淺色）"><span class="preset-swatch"></span><span class="preset-label">淺色</span></button>
+                    </div>
+                    <div class="setlist-preset-save-row">
+                      <input id="sls-save-name" type="text" class="input" placeholder="幫這組風格取個名字…">
+                      <button id="sls-save-btn" class="btn btn-sm" type="button">＋ 儲存目前設定為新風格</button>
+                    </div>
+                    <p class="field-hint">存在這台電腦的瀏覽器裡（不會同步到別台裝置），可存多組，方便切換不同直播企劃的風格。</p>
+                    <div id="sls-custom-list" class="sls-custom-list"></div>
+                  </div>
+                </details>
+
                 <!-- ══ 詳細設定：色彩細項 / 字體 / 場景版專屬 / 特效 / 文字標籤，移到獨立視窗避免面板過長 ══ -->
-                <button id="btn-setlist-advanced" class="btn btn-sm btn--setlist-advanced" type="button">開啟詳細設定（可搜尋字體、寬度、場景、特效…）</button>
+                <button id="btn-setlist-advanced" class="btn btn-sm btn--setlist-advanced" type="button">開啟詳細設定（只顯示目前模板有效的項目）</button>
                 <!-- ═══ Modal：歌單詳細設定（#setlist-advanced-modal，執行期會搬到 body 底下逃脫 backdrop-filter 容器）═══ -->
                 <div id="setlist-advanced-modal" class="modal modal-wide setlist-advanced-modal" role="dialog" aria-modal="true" aria-labelledby="setlist-advanced-title" hidden>
                   <div class="modal-card">
@@ -1389,39 +1412,26 @@
                     <div class="mw-settings"><div class="setlist-settings-search"><label for="setlist-settings-search">找設定</label><input id="setlist-settings-search" class="input" type="search" placeholder="例如：字體、寬度、已唱、陰影、場景" autocomplete="off"><p id="setlist-settings-search-status" class="field-hint" aria-live="polite">可直接搜尋設定名稱或用途。</p></div>
 
                     <details class="card card-collapse" open>
-                      <summary>文字顏色（所有版型）</summary>
+                      <summary>文字細節（次要文字）</summary>
                       <div class="card-collapse-body">
-                      <p class="field-group-desc">上面「常用外觀」已經有主色/亮色/背板，這裡是更細部的文字深淺。</p>
-                      <div class="field">
-                        <label>歌名／主要文字色</label>
-                        <input id="sls-text-primary" type="color" value="#f0ead8">
-                        <p class="field-hint">影響：所有版型的歌名、標題等主要文字（不包含「正在播放」的亮色歌名，那個在常用外觀單獨設定）。</p>
-                      </div>
+                      <p class="field-group-desc">主要文字色已在快速調整；這裡只保留需要細調的次要文字層次。</p>
                       <div class="field field-row">
-                        <div class="flex-grow"><label>歌手名的透明度 <span id="sls-text-sec-val" class="val">45%</span></label><input id="sls-text-sec" type="range" min="0" max="100" value="45"></div>
-                        <div class="flex-grow"><label>已唱歌名的透明度 <span id="sls-text-done-val" class="val">22%</span></label><input id="sls-text-done" type="range" min="0" max="100" value="22"></div>
+                        <div class="flex-grow"><label>歌手名的透明度 <span id="sls-text-sec-val" class="val">70%</span></label><input id="sls-text-sec" type="range" min="0" max="100" value="70"></div>
+                        <div class="flex-grow"><label>已唱歌名的透明度 <span id="sls-text-done-val" class="val">52%</span></label><input id="sls-text-done" type="range" min="0" max="100" value="52"></div>
                       </div>
-                      <p class="field-hint">這兩個都是以「主要文字色」為基礎調整深淺，數字越小越淡（場景版的已唱/未唱歌名也吃這兩項）。</p>
+                      <p class="field-hint">這兩個都是以「主要文字色」為基礎調整深淺，數字越小越淡。開著可讀性保護時會保留安全下限；想做極淡效果再關閉保護。</p>
                       <div class="field">
-                        <label>編號／時間文字的透明度 <span id="sls-text-meta-val" class="val">35%</span></label>
-                        <input id="sls-text-meta" type="range" min="0" max="100" value="35">
+                        <label>編號／時間文字的透明度 <span id="sls-text-meta-val" class="val">62%</span></label>
+                        <input id="sls-text-meta" type="range" min="0" max="100" value="62">
                         <p class="field-hint">影響：清單前面的數字編號、已唱歌曲旁邊的時間戳記、區塊小標籤。</p>
                       </div>
                       </div>
                     </details>
 
                     <details class="card card-collapse" data-sl-scope="classic list">
-                      <summary>已唱／未唱歌曲列 — 底色與邊框（經典／清單版）</summary>
+                      <summary>卡片邊框（經典／清單版）</summary>
                       <div class="card-collapse-body">
-                      <p class="field-group-desc">這裡調的是「已唱／未唱」每一行的外觀；「正在播放」那張大卡的內距與寬度在下面「版面尺寸」區。</p>
-                      <div class="field field-row">
-                        <div class="flex-grow">
-                          <label>歌曲列底色</label>
-                          <input id="sls-card-color" type="color" value="#0b0907">
-                          <p class="field-hint">影響：已唱／未唱清單「每一行」的背景色（跟常用外觀那片「整體背板」是不同的兩層）。</p>
-                        </div>
-                        <div class="flex-grow"><label>歌曲列不透明度 <span id="sls-card-opacity-val" class="val">93%</span></label><input id="sls-card-opacity" type="range" min="0" max="100" value="93"></div>
-                      </div>
+                      <p class="field-group-desc">主要文字與可讀性襯底已移到快速調整；這裡只保留不常改的邊框細節。</p>
                       <div class="field field-row">
                         <div>
                           <label>邊框顏色</label>
@@ -1563,7 +1573,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-sl-scope="scene list">
+                    <details class="card card-collapse" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards">
                       <summary>顯示項目</summary>
                       <div class="card-collapse-body">
                       <div class="switch-row">
@@ -1578,7 +1588,7 @@
                       <input id="sls-label-reserve" type="text" value="Reserve">
                     </div>
 
-                    <details class="card card-collapse">
+                    <details class="card card-collapse" data-sl-layout="classic simple timeline diagonal">
                       <summary>自訂文字標籤</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc">畫面上固定顯示的文字，可以換成中文或你喜歡的用語。</p>
@@ -1586,7 +1596,7 @@
                         <label>「正在播放」的顯示文字</label>
                         <input id="sls-label-now" type="text" class="input" value="▶ Now Playing">
                       </div>
-                      <div class="field row-gap-10" data-sl-scope="classic list">
+                      <div class="field row-gap-10" data-sl-layout="classic simple">
                         <div class="flex-grow"><label>「已唱」區塊標題</label><input id="sls-label-done" type="text" class="input" value="已唱"></div>
                         <div class="flex-grow"><label>「未唱」區塊標題</label><input id="sls-label-wait" type="text" class="input" value="未唱"></div>
                       </div>

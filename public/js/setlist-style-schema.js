@@ -61,6 +61,9 @@
   const SETLIST_STYLE_FIELDS = [
     // ── 舊欄位（classic 效果，向後相容）──
     { key: 'scale', type: 'number', default: 1.0, min: 0.6, max: 1.8, domId: 'sls-scale', format: 'multiplierPercent', cssVar: '--sl-scale' },
+    // 預設保留文字與卡片的安全對比；關閉才回到完全透明的演出效果。
+    // invert=true：預設沒有 data-sl-readable-off 屬性就是保護開啟，舊版儲存設定也安全升級。
+    { key: 'readabilityGuard', type: 'boolean', default: true, domId: 'sls-readability-guard', dataAttr: 'data-sl-readable-off', invert: true },
     { key: 'bgColor', type: 'color', default: '#000000', domId: 'sls-bg-color', composite: 'bgScrim' },
     { key: 'bgOpacity', type: 'number', default: 0, min: 0, max: 100, domId: 'sls-bg-opacity', format: 'percent', composite: 'bgScrim' },
     { key: 'textColor', type: 'color', default: '', domId: null, composite: 'textColorOverride', special: 'textColor' },
@@ -75,9 +78,9 @@
     { key: 'accent', type: 'color', default: '#d9a25c', domId: 'sls-accent', composite: 'accent' },
     { key: 'accentBright', type: 'color', default: '#f0c587', domId: 'sls-accent-b', cssVar: '--sl-acc-b' },
     { key: 'textPrimary', type: 'color', default: '#f0ead8', domId: 'sls-text-primary', composite: 'textShades' },
-    { key: 'textSec', type: 'number', default: 45, min: 0, max: 100, domId: 'sls-text-sec', format: 'percent', composite: 'textShades' },
-    { key: 'textDone', type: 'number', default: 22, min: 0, max: 100, domId: 'sls-text-done', format: 'percent', composite: 'textShades' },
-    { key: 'textMeta', type: 'number', default: 35, min: 0, max: 100, domId: 'sls-text-meta', format: 'percent', composite: 'textShades' },
+    { key: 'textSec', type: 'number', default: 70, min: 0, max: 100, domId: 'sls-text-sec', format: 'percent', composite: 'textShades' },
+    { key: 'textDone', type: 'number', default: 52, min: 0, max: 100, domId: 'sls-text-done', format: 'percent', composite: 'textShades' },
+    { key: 'textMeta', type: 'number', default: 62, min: 0, max: 100, domId: 'sls-text-meta', format: 'percent', composite: 'textShades' },
     { key: 'cardColor', type: 'color', default: '#0b0907', domId: 'sls-card-color', composite: 'cardBg' },
     { key: 'cardOpacity', type: 'number', default: 93, min: 0, max: 100, domId: 'sls-card-opacity', format: 'percent', composite: 'cardBg' },
     { key: 'borderColor', type: 'color', default: '#f0ead8', domId: 'sls-border-color', composite: 'borderColor' },
@@ -116,8 +119,8 @@
     // needsRerender：場景版（timeline/diagonal/constellation）的淡化在 JS render 內計算
     // （以預設值為基準的相對係數，見 setlist.js sceneFadeFactors），改動需重繪；
     // 經典/清單版仍走 cssVar 即時生效。
-    { key: 'doneOpacity', type: 'number', default: 35, min: 0, max: 100, domId: 'sls-done-opacity', format: 'percent', cssVar: '--sl-op-d', cssFormat: 'opacityFraction', needsRerender: true },
-    { key: 'waitOpacity', type: 'number', default: 55, min: 0, max: 100, domId: 'sls-wait-opacity', format: 'percent', cssVar: '--sl-op-w', cssFormat: 'opacityFraction', needsRerender: true },
+    { key: 'doneOpacity', type: 'number', default: 54, min: 0, max: 100, domId: 'sls-done-opacity', format: 'percent', cssVar: '--sl-op-d', cssFormat: 'opacityFraction', needsRerender: true },
+    { key: 'waitOpacity', type: 'number', default: 72, min: 0, max: 100, domId: 'sls-wait-opacity', format: 'percent', cssVar: '--sl-op-w', cssFormat: 'opacityFraction', needsRerender: true },
 
     // ── 顯示開關（布林 → data-attr，invert：欄位 true 時「不加」data-attr）──
     { key: 'showArtist', type: 'boolean', default: true, domId: 'sls-show-artist', dataAttr: 'data-hide-artist', invert: true },
