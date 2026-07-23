@@ -4059,6 +4059,26 @@ test('歌單固定預覽、直書句流縮圖與直播狀態重新整理入口�
   ok(obsWebsocket.includes('refreshStreamStatus: publishStreamStatus'));
 });
 
+test('歌單亮色背景可讀性保護與模板有效設定守衛存在', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const schema = require('../public/js/setlist-style-schema');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const field = schema.FIELD_BY_KEY.readabilityGuard;
+  ok(field && field.default === true && field.dataAttr === 'data-sl-readable-off' && field.invert === true, '舊歌單設定必須預設升級為亮色背景可讀');
+  eq(schema.FIELD_BY_KEY.doneOpacity.default, 54, '新歌單預設不得把已唱文字淡到亮色背景看不見：');
+  eq(schema.FIELD_BY_KEY.waitOpacity.default, 72, '新歌單預設不得把未唱文字淡到亮色背景看不見：');
+  ok(indexHtml.includes('id="sls-readability-guard"'), '面板必須提供亮色背景可讀性保護開關');
+  ok(indexHtml.includes('可讀性襯底色') && indexHtml.includes('可讀性襯底不透明度'), '主要文字與襯底色必須在快速調整可見');
+  ok(indexHtml.includes('data-sl-layout="classic simple timeline diagonal constellation"'), '快速設定必須能依模板隱藏無效控制項');
+  ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards"'), '歌曲編號設定不得在不支援的模板顯示');
+  ok(setlistPanel.includes('只顯示這個模板真正會作用的細項'), '模板說明必須明示有效設定範圍');
+  ok(setlistCss.includes(':root:not([data-sl-readable-off]) .now-singing') && setlistCss.includes(':root:not([data-sl-readable-off]) .tl-now'), '經典與場景模板都必須有非全螢幕的可讀性襯底');
+  ok(setlistSource.includes('const sameSideContrast = guarded') && setlistSource.includes('const readableCardColor'), '可讀性保護必須在文字與襯底同明度時自動轉成安全對比');
+  ok(setlistCss.includes('.terminal { width: 300px; background: var(--sl-bg-card);') && setlistCss.includes('.billboard { width: 320px; background: var(--sl-bg-card);') && setlistCss.includes('.card { background: var(--sl-bg-card);'), '清單型模板不得繞過共用卡片底色設定');
+});
+
 test('OBS 經典歌單以歌名為第一優先，長歌手名不可擠壓歌名', () => {
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const titleRule = /\.setlist-title\s*\{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';

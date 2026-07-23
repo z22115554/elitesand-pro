@@ -35,6 +35,16 @@
     const n = parseInt(m[1], 16);
     return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
   }
+  function relativeLuminance(hex) {
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
+    if (!m) return 0;
+    const n = parseInt(m[1], 16);
+    const channel = (shift) => {
+      const c = ((n >> shift) & 255) / 255;
+      return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    return channel(16) * 0.2126 + channel(8) * 0.7152 + channel(0) * 0.0722;
+  }
   function keyOf(s) { return (s && (s.title || '')) + '|' + (s && (s.artist || '')); }
 
   // ─── 簡轉繁（opencc-js cn→tw）：與 karaoke.js 同一套轉換邏輯，套用在歌名/歌手名上。
@@ -97,8 +107,13 @@
   // 場景版的淡出是 JS 依距離排程的階梯值，這裡把使用者設定當「相對倍率」乘上去——
   // 預設值＝外觀完全不變；拉高更清楚、拉低更淡（最終值 clamp 到 0~1）。
   function sceneFadeFactors() {
-    const fDone = Math.max(0, (Number(curStyle.doneOpacity ?? 35)) / 35);
-    const fWait = Math.max(0, (Number(curStyle.waitOpacity ?? 55)) / 55);
+    // 亮色背景保護啟用時，場景版的遠端文字仍保留可辨識的最低強度；
+    // 關閉保護後則完全尊重使用者原本的淡化數值。
+    const guarded = curStyle.readabilityGuard !== false;
+    const done = guarded ? Math.max(Number(curStyle.doneOpacity ?? 35), 52) : Number(curStyle.doneOpacity ?? 35);
+    const wait = guarded ? Math.max(Number(curStyle.waitOpacity ?? 55), 70) : Number(curStyle.waitOpacity ?? 55);
+    const fDone = Math.max(0, done / 35);
+    const fWait = Math.max(0, wait / 55);
     return { fDone, fWait };
   }
   function sceneFade(base, state, f) {
@@ -181,13 +196,46 @@
       r.setProperty('--sl-acc-dim', hexToRgba(s.accent, 0.08));
       r.setProperty('--sl-acc-bd', hexToRgba(s.accent, 0.3));
     }
+    const primary = s.textPrimary || '#f0ead8';
+    const guarded = s.readabilityGuard !== false;
     if (s.textPrimary) {
-      r.setProperty('--sl-txt', s.textPrimary);
-      r.setProperty('--sl-txt2', hexToRgba(s.textPrimary, num('textSec', 45) / 100));
-      r.setProperty('--sl-txt3', hexToRgba(s.textPrimary, num('textDone', 22) / 100));
-      r.setProperty('--sl-txt4', hexToRgba(s.textPrimary, num('textMeta', 35) / 100));
+      r.setProperty('--sl-txt', primary);
+      r.setProperty('--sl-txt2', hexToRgba(primary, num('textSec', 70) / 100));
+      r.setProperty('--sl-txt3', hexToRgba(primary, num('textDone', 52) / 100));
+      r.setProperty('--sl-txt4', hexToRgba(primary, num('textMeta', 62) / 100));
     }
-    if (s.cardColor) r.setProperty('--sl-bg-card', hexToRgba(s.cardColor, num('cardOpacity', 93) / 100));
+    const cardColor = s.cardColor || '#0b0907';
+    const cardOpacity = num('cardOpacity', 93) / 100;
+    if (s.cardColor) r.setProperty('--sl-bg-card', hexToRgba(cardColor, cardOpacity));
+
+    // 可讀性保護不蓋整個 OBS 畫面，只替歌單本身建立足夠深（或淺）的襯底與文字層次。
+    // 以使用者選的卡片色為主；因此開啟保護仍能看出自己的配色，而非把設定硬改成單一黑色。
+    const primaryLuminance = relativeLuminance(primary);
+    const cardLuminance = relativeLuminance(cardColor);
+    // Guard 開啟時，若使用者剛好選到「亮字＋亮卡」或「暗字＋暗卡」，
+    // 讓襯底自動換成另一側的安全色；關閉 Guard 才完全照原始色彩演出。
+    const sameSideContrast = guarded && (
+      (primaryLuminance >= 0.52 && cardLuminance >= 0.52)
+      || (primaryLuminance <= 0.32 && cardLuminance <= 0.32)
+    );
+    const readableCardColor = sameSideContrast
+      ? (primaryLuminance >= 0.52 ? '#0b0907' : '#ffffff')
+      : cardColor;
+    const primaryIsDark = primaryLuminance < 0.42;
+    const safeOpacity = guarded ? Math.max(cardOpacity, 0.78) : cardOpacity;
+    const safeSoftOpacity = guarded ? Math.max(Math.min(cardOpacity, 0.88), 0.68) : cardOpacity;
+    const borderColor = s.borderColor || primary;
+    r.setProperty('--sl-readable-surface', hexToRgba(readableCardColor, safeOpacity));
+    r.setProperty('--sl-readable-surface-soft', hexToRgba(readableCardColor, safeSoftOpacity));
+    r.setProperty('--sl-readable-border', hexToRgba(borderColor, guarded ? Math.max(num('borderOpacity', 9) / 100, 0.28) : num('borderOpacity', 9) / 100));
+    r.setProperty('--sl-readable-shadow', primaryIsDark ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.62)');
+    r.setProperty('--sl-readable-text-shadow', primaryIsDark ? '0 1px 10px rgba(255,255,255,0.62)' : '0 2px 12px rgba(0,0,0,0.86)');
+    r.setProperty('--sl-readable-txt2', hexToRgba(primary, (guarded ? Math.max(num('textSec', 70), 68) : num('textSec', 70)) / 100));
+    r.setProperty('--sl-readable-txt3', hexToRgba(primary, (guarded ? Math.max(num('textDone', 52), 52) : num('textDone', 52)) / 100));
+    r.setProperty('--sl-readable-txt4', hexToRgba(primary, (guarded ? Math.max(num('textMeta', 62), 58) : num('textMeta', 62)) / 100));
+    r.setProperty('--sl-readable-done-op', String(guarded ? Math.max(num('doneOpacity', 35) / 100, 0.52) : num('doneOpacity', 35) / 100));
+    r.setProperty('--sl-readable-wait-op', String(guarded ? Math.max(num('waitOpacity', 55) / 100, 0.7) : num('waitOpacity', 55) / 100));
+    r.setProperty('--sl-accent-ink', relativeLuminance(s.accent || '#d9a25c') > 0.42 ? '#17110a' : '#ffffff');
     if (s.borderColor) r.setProperty('--sl-bc', hexToRgba(s.borderColor, num('borderOpacity', 9) / 100));
 
     // ── 場景版專屬 composite：軸線/節點/分隔線/星點顏色（透明度層次由 JS 先算成 rgba）──

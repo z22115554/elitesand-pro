@@ -196,14 +196,14 @@
   // 版型類別：scene（場景版各自獨立）/ classic / list（清單版，與經典共用一份）
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
   const SETLIST_LAYOUT_UI = {
-    classic: { name: '經典資訊', hint: '完整資訊小元件，適合放在畫面左下或右下常駐。', scope: '設定範圍：經典資訊與清單版共用一組外觀設定。' },
-    cards: { name: '卡片清單', hint: '緊湊的側欄卡片，適合保留角色與遊戲畫面。', scope: '設定範圍：卡片清單與經典資訊共用一組外觀設定。' },
-    diagonal: { name: '斜線舞台', hint: '全幅 16:9 場景；資訊在左、右側留給角色或遊戲。', scope: '設定範圍：斜線舞台有自己獨立的一組外觀設定。' },
-    timeline: { name: '時間軸', hint: '全幅 16:9 場景；適合想讓歌單成為畫面主角的直播段落。', scope: '設定範圍：時間軸有自己獨立的一組外觀設定。' },
-    simple: { name: '極簡兩排', hint: '只保留現在與下一首，畫面最輕量。', scope: '設定範圍：極簡兩排與經典資訊共用一組外觀設定。' },
-    billboard: { name: '排行榜', hint: '固定排行榜配色的活動型畫面，適合特別企劃。', scope: '設定範圍：排行榜與經典資訊共用一組外觀設定；部分配色為版型固定風格。' },
-    constellation: { name: '星座', hint: '裝飾性較強的全幅場景；建議搭配簡潔背景。', scope: '設定範圍：星座有自己獨立的一組外觀設定。' },
-    terminal: { name: '終端機', hint: '復古資訊風的小元件，適合科技或遊戲主題。', scope: '設定範圍：終端機與經典資訊共用一組外觀設定；部分配色為版型固定風格。' },
+    classic: { name: '經典資訊', hint: '完整資訊小元件，適合放在畫面左下或右下常駐。', scope: '目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。' },
+    cards: { name: '卡片清單', hint: '緊湊的側欄卡片，適合保留角色與遊戲畫面。', scope: '基礎配色與可讀性和其他清單型模板共用；卡片清單會立即反映每一個可見控制項。' },
+    diagonal: { name: '斜線舞台', hint: '全幅 16:9 場景；資訊在左、右側留給角色或遊戲。', scope: '斜線舞台保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
+    timeline: { name: '時間軸', hint: '全幅 16:9 場景；適合想讓歌單成為畫面主角的直播段落。', scope: '時間軸保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
+    simple: { name: '極簡兩排', hint: '只保留現在與下一首，畫面最輕量。', scope: '基礎配色與可讀性和其他清單型模板共用；極簡兩排只保留必要的控制項。' },
+    billboard: { name: '排行榜', hint: '固定排行榜配色的活動型畫面，適合特別企劃。', scope: '基礎配色與可讀性和其他清單型模板共用；排行榜會保留自己的排位視覺。' },
+    constellation: { name: '星座', hint: '裝飾性較強的全幅場景；建議搭配簡潔背景。', scope: '星座保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
+    terminal: { name: '終端機', hint: '復古資訊風的小元件，適合科技或遊戲主題。', scope: '基礎配色與可讀性和其他清單型模板共用；終端機只保留它會用到的清單控制。' },
   };
   const SETLIST_RECOMMENDED_LAYOUTS = ['classic', 'cards', 'diagonal'];
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
@@ -420,12 +420,12 @@
 
     // 風格預設（一鍵套一組值，再廣播）
     const PRESETS = {
-      sand: { accent: '#d9a25c', accentBright: '#f0c587', textPrimary: '#f0ead8', cardColor: '#0b0907', cardOpacity: 93, borderColor: '#f0ead8', borderOpacity: 9, bgColor: '#000000', bgOpacity: 0, blurAmount: 20, borderRadius: 14, doneOpacity: 35, waitOpacity: 55, shadowEnabled: false, fontDisplay: 'Fraunces', fontBody: 'Manrope' },
-      glass: { accent: '#7c6cff', accentBright: '#a395ff', textPrimary: '#ffffff', cardColor: '#000000', cardOpacity: 35, borderColor: '#7c6cff', borderOpacity: 35, bgColor: '#000000', bgOpacity: 0, blurAmount: 12, borderRadius: 12, doneOpacity: 40, waitOpacity: 65, shadowEnabled: false },
-      neon: { accent: '#00ff9f', accentBright: '#a0ffe0', textPrimary: '#e6fff5', cardColor: '#001610', cardOpacity: 82, borderColor: '#00ff9f', borderOpacity: 25, bgColor: '#000000', bgOpacity: 0, blurAmount: 4, borderRadius: 6, doneOpacity: 35, waitOpacity: 60, shadowEnabled: true, shadowOpacity: 40, shadowBlur: 24 },
-      minimal: { accent: '#ffffff', accentBright: '#ffffff', textPrimary: '#ffffff', cardColor: '#000000', cardOpacity: 0, borderColor: '#ffffff', borderOpacity: 0, borderWidth: 0, bgColor: '#000000', bgOpacity: 0, blurAmount: 0, borderRadius: 8, doneOpacity: 30, waitOpacity: 55, shadowEnabled: false },
-      dark: { accent: '#ffffff', accentBright: '#ffffff', textPrimary: '#e8e8ec', cardColor: '#050408', cardOpacity: 96, borderColor: '#ffffff', borderOpacity: 6, bgColor: '#000000', bgOpacity: 0, blurAmount: 0, borderRadius: 10, doneOpacity: 25, waitOpacity: 50, shadowEnabled: false },
-      light: { accent: '#1e1450', accentBright: '#3a2880', textPrimary: '#140a3c', cardColor: '#ffffff', cardOpacity: 92, borderColor: '#000000', borderOpacity: 10, bgColor: '#000000', bgOpacity: 0, blurAmount: 0, borderRadius: 10, doneOpacity: 30, waitOpacity: 55, shadowEnabled: false },
+      sand: { accent: '#d9a25c', accentBright: '#f0c587', textPrimary: '#f0ead8', textSec: 72, textDone: 54, textMeta: 62, cardColor: '#0b0907', cardOpacity: 93, borderColor: '#f0ead8', borderOpacity: 9, bgColor: '#000000', bgOpacity: 0, blurAmount: 20, borderRadius: 14, doneOpacity: 54, waitOpacity: 72, readabilityGuard: true, shadowEnabled: false, fontDisplay: 'Fraunces', fontBody: 'Manrope' },
+      glass: { accent: '#7c6cff', accentBright: '#a395ff', textPrimary: '#ffffff', textSec: 74, textDone: 56, textMeta: 64, cardColor: '#000000', cardOpacity: 72, borderColor: '#7c6cff', borderOpacity: 35, bgColor: '#000000', bgOpacity: 0, blurAmount: 12, borderRadius: 12, doneOpacity: 56, waitOpacity: 74, readabilityGuard: true, shadowEnabled: false },
+      neon: { accent: '#00ff9f', accentBright: '#a0ffe0', textPrimary: '#e6fff5', textSec: 76, textDone: 58, textMeta: 66, cardColor: '#001610', cardOpacity: 82, borderColor: '#00ff9f', borderOpacity: 25, bgColor: '#000000', bgOpacity: 0, blurAmount: 4, borderRadius: 6, doneOpacity: 58, waitOpacity: 76, readabilityGuard: true, shadowEnabled: true, shadowOpacity: 40, shadowBlur: 24 },
+      minimal: { accent: '#ffffff', accentBright: '#ffffff', textPrimary: '#ffffff', textSec: 72, textDone: 54, textMeta: 62, cardColor: '#000000', cardOpacity: 0, borderColor: '#ffffff', borderOpacity: 0, borderWidth: 0, bgColor: '#000000', bgOpacity: 0, blurAmount: 0, borderRadius: 8, doneOpacity: 54, waitOpacity: 72, readabilityGuard: true, shadowEnabled: false },
+      dark: { accent: '#ffffff', accentBright: '#ffffff', textPrimary: '#e8e8ec', textSec: 72, textDone: 54, textMeta: 62, cardColor: '#050408', cardOpacity: 96, borderColor: '#ffffff', borderOpacity: 6, bgColor: '#000000', bgOpacity: 0, blurAmount: 0, borderRadius: 10, doneOpacity: 54, waitOpacity: 72, readabilityGuard: true, shadowEnabled: false },
+      light: { accent: '#1e1450', accentBright: '#3a2880', textPrimary: '#140a3c', textSec: 76, textDone: 58, textMeta: 68, cardColor: '#ffffff', cardOpacity: 92, borderColor: '#000000', borderOpacity: 10, bgColor: '#000000', bgOpacity: 0, blurAmount: 0, borderRadius: 10, doneOpacity: 58, waitOpacity: 76, readabilityGuard: true, shadowEnabled: false },
     };
     // 完整預設（重置用）：所有欄位回出廠值，與 server 開機預設同一份定義（schema.getDefaultStyle）
     const DEFAULT_STYLE = schema.getDefaultStyle();
