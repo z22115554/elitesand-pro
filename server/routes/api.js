@@ -15,6 +15,7 @@ const { getLanIp } = require('../utils/lan-info');
 const ytdlpUpdater = require('../services/ytdlp-updater');
 const appUpdater = require('../services/app-updater');
 const announcements = require('../services/announcement-service');
+const eulaStore = require('../services/eula-store');
 const QRCode = require('qrcode');
 const path = require('path');
 const { dataDir, downloadsDir } = require('../utils/app-paths');
@@ -259,6 +260,23 @@ router.post('/announcements/:id/seen', requirePin, (req, res) => {
 router.post('/announcements/:id/dismiss', requirePin, (req, res) => {
   const result = announcements.dismiss(req.params.id);
   res.status(result.ok ? 200 : 422).json(result);
+});
+
+// ─── EULA 首次同意閘門 ───
+// 不套 requirePin：首次啟動同意條款發生在 PIN 設定之前；同意紀錄由
+// eula-store 寫入 data 目錄，條款版本變更時 required 會重新變 true。
+router.get('/eula', (req, res) => {
+  const status = eulaStore.getStatus();
+  res.json({ ...status, text: status.required ? eulaStore.getText() : null });
+});
+
+router.post('/eula/accept', (req, res) => {
+  try {
+    const status = eulaStore.accept(req.body && req.body.version);
+    res.json({ success: true, ...status });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 // ─── 區網資訊（手機遙控器連線用）───

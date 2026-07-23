@@ -55,10 +55,19 @@ async function main() {
   const launcher = path.join(stage, 'Start Elitesand Pro.cmd');
   for (const required of [
     appRoot, runtime, launcher, path.join(stage, 'README-FIRST.txt'), path.join(stage, 'LICENSE'),
+    path.join(stage, 'EULA.txt'),
     path.join(stage, 'THIRD-PARTY-NOTICES.txt'), path.join(stage, 'portable-manifest.json'),
     path.join(appRoot, 'server', 'index.js'), path.join(appRoot, 'public', 'index.html'),
     path.join(appRoot, 'node_modules'), path.join(stage, 'tools', 'yt-dlp.exe'),
   ]) assert(fs.existsSync(required), `Portable package is missing: ${path.relative(stage, required)}`);
+
+  // GPLv3 合規：包內有 ffmpeg.exe 就必須同時附 GPL 全文與對應 commit 的源碼快照
+  if (fs.existsSync(path.join(stage, 'tools', 'ffmpeg.exe'))) {
+    const ffmpegLicenseDir = path.join(stage, 'licenses', 'ffmpeg');
+    assert(fs.existsSync(path.join(ffmpegLicenseDir, 'COPYING.GPLv3')), 'Bundled FFmpeg requires licenses/ffmpeg/COPYING.GPLv3');
+    assert(fs.existsSync(ffmpegLicenseDir) && fs.readdirSync(ffmpegLicenseDir).some((name) => /^ffmpeg-source-.+\.zip$/.test(name)),
+      'Bundled FFmpeg requires the matching source snapshot zip in licenses/ffmpeg');
+  }
 
   assert(!fs.existsSync(path.join(appRoot, 'server', 'config.js')), 'Portable package must not contain server/config.js');
   const launcherBytes = fs.readFileSync(launcher);
@@ -102,7 +111,13 @@ async function main() {
     }
     const mobile = await request(port, '/', { 'user-agent': 'Mozilla/5.0 (iPhone) Mobile' });
     assert(mobile.status === 302 && mobile.headers.location === '/controller', `Mobile route expected 302 /controller, got ${mobile.status} ${mobile.headers.location || ''}`);
-    process.stdout.write(`Portable smoke passed: v${packageJson.version}, port ${port}, four routes and mobile redirect OK.\n`);
+    // 全新 data 目錄 = 首次啟動：EULA 同意閘門必須是待同意狀態且附上條款全文
+    const eula = await request(port, '/api/eula');
+    assert(eula.status === 200, `/api/eula returned HTTP ${eula.status}`);
+    const eulaJson = JSON.parse(eula.body);
+    assert(eulaJson.required === true && typeof eulaJson.version === 'string' && typeof eulaJson.text === 'string' && eulaJson.text.length > 1000,
+      `Fresh install must require EULA acceptance with full text, got ${JSON.stringify({ required: eulaJson.required, version: eulaJson.version, textLength: (eulaJson.text || '').length })}`);
+    process.stdout.write(`Portable smoke passed: v${packageJson.version}, port ${port}, four routes, mobile redirect and EULA gate OK.\n`);
   } catch (error) {
     throw new Error(`${error.message}\nPackaged server output:\n${output}`);
   } finally {
