@@ -24,7 +24,13 @@ const TwitchRequestSettings = (() => {
     recentDuplicateHours: 168,
     perUserSessionLimit: 50,
     sessionRequestLimit: 500,
+    customCommands: 20,
+    customCommandId: 80,
   });
+  const CUSTOM_COMMAND_VARIABLES = Object.freeze([
+    'user', 'currentTitle', 'currentArtist', 'nextTitle', 'queue', 'requestCount', 'command',
+  ]);
+  const CUSTOM_COMMAND_VARIABLE_KEYS = new Set(CUSTOM_COMMAND_VARIABLES);
   const BLACKLIST_TYPES = Object.freeze([
     { key: 'user', label: 'Twitch 使用者' },
     { key: 'video', label: 'YouTube 影片' },
@@ -60,6 +66,41 @@ const TwitchRequestSettings = (() => {
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
+  function getReplyContract() {
+    if (typeof TwitchReplySettings !== 'undefined') return TwitchReplySettings;
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') return require('./twitch-reply-settings');
+    return null;
+  }
+
+  function normalizeCustomCommand(value) {
+    return {
+      id: String(value?.id || '').trim(),
+      enabled: value?.enabled !== false,
+      command: typeof value?.command === 'string' ? value.command.trim() : '',
+      aliases: parseAliases(value?.aliases),
+      permissionLevel: typeof value?.permissionLevel === 'string' ? value.permissionLevel : 'everyone',
+      userCooldownSeconds: Number.isInteger(value?.userCooldownSeconds) ? value.userCooldownSeconds : 0,
+      globalCooldownSeconds: Number.isInteger(value?.globalCooldownSeconds) ? value.globalCooldownSeconds : 0,
+      template: typeof value?.template === 'string' ? value.template : '',
+    };
+  }
+
+  function customTemplateValidation(template) {
+    const contract = getReplyContract();
+    if (!contract) return { valid: false, errors: ['回覆驗證器尚未載入，無法儲存自訂指令。'], variables: [] };
+    const validation = contract.validateTemplate(template);
+    const disallowed = validation.variables.filter((key) => !CUSTOM_COMMAND_VARIABLE_KEYS.has(key));
+    return {
+      ...validation,
+      valid: validation.valid && disallowed.length === 0,
+      errors: [
+        ...validation.errors,
+        ...(disallowed.length ? ['自訂指令只能使用 {user}、{currentTitle}、{currentArtist}、{nextTitle}、{queue}、{requestCount}、{command}。'] : []),
+      ],
+      disallowed,
+    };
+  }
+
   function defaultCommand(definition) {
     return {
       enabled: definition.enabled !== false,
@@ -75,6 +116,7 @@ const TwitchRequestSettings = (() => {
     return {
       enabled: true,
       commands: Object.fromEntries(COMMAND_DEFINITIONS.map((definition) => [definition.key, defaultCommand(definition)])),
+      customCommands: [],
       maxPending: 20,
       perUserPending: 0,
       duplicateScope: 'pending',
@@ -182,6 +224,7 @@ const TwitchRequestSettings = (() => {
     if (!DUPLICATE_SCOPE_KEYS.has(value.duplicateScope)) candidate.duplicateScope = value.rejectDuplicates === false ? 'allow' : 'pending';
     delete candidate.rejectDuplicates;
     candidate.blacklist = Array.isArray(value.blacklist) ? value.blacklist.map(normalizeBlacklistRule) : [];
+    candidate.customCommands = Array.isArray(value.customCommands) ? value.customCommands.map(normalizeCustomCommand) : [];
     return candidate;
   }
 
@@ -190,7 +233,7 @@ const TwitchRequestSettings = (() => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return { ok: false, errors: [{ field: 'settings', message: 'Twitch 點歌設定格式無效。' }], settings: null };
     }
-    if (!value.commands || Object.prototype.hasOwnProperty.call(value, 'command') || Object.prototype.hasOwnProperty.call(value, 'aliases')
+    if (!value.commands || !Object.prototype.hasOwnProperty.call(value, 'customCommands') || Object.prototype.hasOwnProperty.call(value, 'command') || Object.prototype.hasOwnProperty.call(value, 'aliases')
       || Object.prototype.hasOwnProperty.call(value, 'permissionLevel') || Object.prototype.hasOwnProperty.call(value, 'cooldownSeconds')) {
       return validateSettings(migrateLegacySettings(value));
     }
@@ -251,6 +294,59 @@ const TwitchRequestSettings = (() => {
     Object.keys(value.commands || {}).forEach((key) => {
       if (!COMMAND_KEYS.has(key)) errors.push({ field: `commands.${key}`, message: `不認得的 Twitch 指令項目：${key}` });
     });
+    const normalizedCustomCommands = [];
+    const customIds = new Set();
+    if (!Array.isArray(value.customCommands)) {
+      errors.push({ field: 'customCommands', message: '自訂指令格式無效。' });
+    } else if (value.customCommands.length > LIMITS.customCommands) {
+      errors.push({ field: 'customCommands', message: `自訂指令最多 ${LIMITS.customCommands} 個。` });
+    } else {
+      value.customCommands.forEach((incoming, index) => {
+        const fieldPrefix = `customCommands.${index}`;
+        const label = `自訂指令第 ${index + 1} 個`;
+        const command = normalizeCustomCommand(incoming);
+        if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+          errors.push({ field: fieldPrefix, message: `${label}格式無效。` });
+          return;
+        }
+        if (!command.id || !/^[A-Za-z0-9_-]{1,80}$/.test(command.id)) {
+          errors.push({ field: `${fieldPrefix}.id`, message: `${label}缺少有效識別碼。` });
+        } else if (customIds.has(command.id)) {
+          errors.push({ field: `${fieldPrefix}.id`, message: `${label}識別碼重複。` });
+        } else customIds.add(command.id);
+        if (typeof incoming.enabled !== 'boolean') errors.push({ field: `${fieldPrefix}.enabled`, message: `${label}開關格式無效。` });
+        const commandResult = validateCommand(command.command);
+        if (!commandResult.valid) errors.push({ field: `${fieldPrefix}.command`, message: `${label}：${commandResult.error}` });
+        const aliases = parseAliases(command.aliases);
+        if (aliases.length > LIMITS.aliases) errors.push({ field: `${fieldPrefix}.aliases`, message: `${label}別名最多 ${LIMITS.aliases} 個。` });
+        aliases.forEach((alias) => {
+          const result = validateCommand(alias);
+          if (!result.valid) errors.push({ field: `${fieldPrefix}.aliases`, message: `別名「${alias}」：${result.error}` });
+        });
+        if (!PERMISSION_KEYS.has(command.permissionLevel)) errors.push({ field: `${fieldPrefix}.permissionLevel`, message: `${label}使用者資格格式無效。` });
+        integerRule(command, 'userCooldownSeconds', `${label}每人冷卻秒數`, 0, LIMITS.cooldownSeconds, `${fieldPrefix}.userCooldownSeconds`);
+        integerRule(command, 'globalCooldownSeconds', `${label}全域冷卻秒數`, 0, LIMITS.cooldownSeconds, `${fieldPrefix}.globalCooldownSeconds`);
+        const template = customTemplateValidation(command.template);
+        template.errors.forEach((message) => errors.push({ field: `${fieldPrefix}.template`, message }));
+        [commandResult.command, ...aliases].forEach((name) => {
+          const normalizedName = name.toLocaleLowerCase();
+          if (!name) return;
+          const previous = seenNames.get(normalizedName);
+          if (previous) errors.push({ field: `${fieldPrefix}.aliases`, message: `指令「${name}」已被「${previous}」使用。` });
+          else seenNames.set(normalizedName, label);
+        });
+        normalizedCustomCommands.push({
+          id: command.id,
+          enabled: command.enabled,
+          command: commandResult.command,
+          aliases,
+          permissionLevel: command.permissionLevel,
+          userCooldownSeconds: command.userCooldownSeconds,
+          globalCooldownSeconds: command.globalCooldownSeconds,
+          template: command.template,
+        });
+      });
+    }
     integerRule(value, 'maxPending', '待確認總上限', 1, LIMITS.maxPending);
     integerRule(value, 'perUserPending', '每人待確認上限', 0, LIMITS.perUserPending);
     integerRule(value, 'maxDurationMinutes', '歌曲長度上限', 0, LIMITS.maxDurationMinutes);
@@ -291,6 +387,7 @@ const TwitchRequestSettings = (() => {
       settings: {
         enabled: value.enabled,
         commands: normalizedCommands,
+        customCommands: normalizedCustomCommands,
         maxPending: value.maxPending,
         perUserPending: value.perUserPending,
         duplicateScope: value.duplicateScope,
@@ -325,6 +422,12 @@ const TwitchRequestSettings = (() => {
       if (!commandSettings?.enabled) return;
       [commandSettings.command, ...commandSettings.aliases].forEach((command) => {
         candidates.push({ key: definition.key, command, settings: commandSettings, definition });
+      });
+    });
+    normalized.customCommands.forEach((customCommand) => {
+      if (!customCommand.enabled) return;
+      [customCommand.command, ...customCommand.aliases].forEach((command) => {
+        candidates.push({ kind: 'custom', key: customCommand.id, command, settings: customCommand, customCommand });
       });
     });
     candidates.sort((a, b) => b.command.length - a.command.length);
@@ -363,10 +466,13 @@ const TwitchRequestSettings = (() => {
     DUPLICATE_SCOPES,
     LIMITS,
     COMMAND_DEFINITIONS,
+    CUSTOM_COMMAND_VARIABLES,
     getDefaults,
     getCommand,
     validateCommand,
     parseAliases,
+    normalizeCustomCommand,
+    customTemplateValidation,
     validateSettings,
     normalizeSettings,
     matchCommand,

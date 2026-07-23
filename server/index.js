@@ -237,6 +237,7 @@ const twitch = new TwitchService({
   onRequestSettingsChange: (settings) => socketApi.persistTwitchRequestSettingsFromService(settings),
   onPanelAction: (action) => socketApi.dispatchTwitchAdminAction(action),
   onPendingRequestsChanged: () => socketApi.broadcastTwitchRequests(),
+  onHistoryChanged: (entries) => socketApi.broadcastTwitchHistory(entries),
   onStatusChange: (status) => socketApi.recordTwitchStatus(status),
   getPlaybackSnapshot: () => socketApi.getState(),
 });

@@ -13,6 +13,7 @@ const fetch = require('node-fetch');
 const store = require('./twitch-store');
 const requestStore = require('./twitch-request-store');
 const requestSessionStore = require('./twitch-session-store');
+const requestHistoryStore = require('./twitch-history-store');
 const TwitchReplySettings = require('../../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const TwitchRewardSettings = require('../../public/js/twitch-reward-settings');
@@ -31,9 +32,20 @@ const REQUEST_TTL_MS = 30 * 60 * 1000;
 const RECONNECT_BASE_MS = 3000;
 const RECONNECT_MAX_MS = 60000;
 const ADMIN_ACTION_TIMEOUT_MS = 12000;
+const HISTORY_MAX_ENTRIES = 5000;
+const HISTORY_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
 function normalizeShortRequestId(value) {
   return String(value || '').trim().replace(/^#/u, '').toLocaleUpperCase();
+}
+
+function safeHistoryText(value, limit = 300) {
+  return String(value || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, limit);
+}
+
+function safeHistoryUrl(value) {
+  const parsed = parseYouTubeUrl(String(value || ''));
+  return parsed?.videoId ? `https://youtu.be/${parsed.videoId}` : '';
 }
 
 function reconnectDelay(attempt, random = Math.random) {
@@ -109,7 +121,7 @@ function websocketCtor() {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, getPlaybackSnapshot, pendingStore = requestStore, sessionStore = requestSessionStore, authStore = store }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
@@ -120,6 +132,7 @@ class TwitchService {
     this.onRequestSettingsChange = typeof onRequestSettingsChange === 'function' ? onRequestSettingsChange : null;
     this.onPanelAction = typeof onPanelAction === 'function' ? onPanelAction : null;
     this.onPendingRequestsChanged = typeof onPendingRequestsChanged === 'function' ? onPendingRequestsChanged : null;
+    this.onHistoryChanged = typeof onHistoryChanged === 'function' ? onHistoryChanged : null;
     this.getPlaybackSnapshot = typeof getPlaybackSnapshot === 'function' ? getPlaybackSnapshot : () => ({});
     this.deviceAuthorization = null;
     this.authStore = authStore;
@@ -128,6 +141,7 @@ class TwitchService {
     this.wsSessionId = null;
     this.pendingStore = pendingStore;
     this.sessionStore = sessionStore;
+    this.historyStore = historyStore;
     this.pendingRequests = new Map();
     this.requestExpiryTimers = new Map();
     this.adminPanelActions = new Map();
@@ -156,6 +170,7 @@ class TwitchService {
     this.seenRedemptions = new Map();
     this.requestSession = this.restoreRequestSession();
     this.streamOnline = this.requestSession.online;
+    this.requestHistory = this.restoreRequestHistory();
     this.restorePendingRequests();
   }
 
@@ -191,6 +206,11 @@ class TwitchService {
   notifyPendingRequestsChanged() {
     if (!this.onPendingRequestsChanged) return;
     try { this.onPendingRequestsChanged(this.getPendingRequests()); } catch (err) { log.warn(`Twitch 待確認同步失敗：${err.message}`); }
+  }
+
+  notifyHistoryChanged() {
+    if (!this.onHistoryChanged) return;
+    try { this.onHistoryChanged(this.getRequestHistory(80)); } catch (err) { log.warn(`Twitch 歷史同步失敗：${err.message}`); }
   }
 
   createShortRequestId() {
@@ -237,6 +257,140 @@ class TwitchService {
     this.requestSession.recent = this.requestSession.recent.filter((item) => item.acceptedAt > cutoff).slice(-5000);
     this.requestSession.online = this.streamOnline;
     try { this.sessionStore.save(this.requestSession); } catch (err) { log.warn(`Twitch 點歌場次保存失敗：${err.message}`); }
+  }
+
+  normalizeHistoryEntry(value) {
+    const now = Date.now();
+    const createdAt = Number.isFinite(Number(value?.createdAt)) ? Number(value.createdAt) : now;
+    const updatedAt = Number.isFinite(Number(value?.updatedAt)) ? Number(value.updatedAt) : createdAt;
+    const source = value?.source === 'channel-points' ? 'channel-points' : 'chat';
+    const result = ['pending', 'retrying', 'imported', 'rejected', 'failed', 'canceled', 'expired'].includes(value?.result)
+      ? value.result : 'failed';
+    const rewardStatus = ['not-applicable', 'pending', 'fulfilled', 'refunded', 'refund-failed', 'fulfillment-failed'].includes(value?.reward?.status)
+      ? value.reward.status : 'not-applicable';
+    return {
+      id: /^[A-Za-z0-9_-]{1,80}$/.test(String(value?.id || '')) ? String(value.id) : crypto.randomUUID(),
+      requestCode: normalizeShortRequestId(value?.requestCode).slice(0, 8),
+      source,
+      requester: {
+        id: safeHistoryText(value?.requester?.id, 120),
+        name: safeHistoryText(value?.requester?.name, 120) || '觀眾',
+      },
+      video: {
+        id: safeHistoryText(value?.video?.id, 120),
+        title: safeHistoryText(value?.video?.title, 300),
+        artist: safeHistoryText(value?.video?.artist, 200),
+        url: safeHistoryUrl(value?.video?.url),
+      },
+      createdAt,
+      updatedAt,
+      result,
+      reason: safeHistoryText(value?.reason, 300),
+      reward: {
+        status: rewardStatus,
+        cost: Math.max(0, Number(value?.reward?.cost) || 0),
+      },
+    };
+  }
+
+  restoreRequestHistory() {
+    try {
+      const cutoff = Date.now() - HISTORY_MAX_AGE_MS;
+      const loaded = this.historyStore?.load?.();
+      const restored = Array.isArray(loaded) ? loaded : [];
+      return restored.map((entry) => this.normalizeHistoryEntry(entry))
+        .filter((entry) => entry.createdAt >= cutoff)
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .slice(-HISTORY_MAX_ENTRIES);
+    } catch (err) {
+      log.warn(`Twitch 點歌歷史還原失敗：${err.message}`);
+      return [];
+    }
+  }
+
+  persistRequestHistory() {
+    const cutoff = Date.now() - HISTORY_MAX_AGE_MS;
+    this.requestHistory = this.requestHistory.filter((entry) => entry.createdAt >= cutoff).slice(-HISTORY_MAX_ENTRIES);
+    try {
+      if (this.historyStore?.save?.(this.requestHistory) === false) log.warn('Twitch 點歌歷史保存失敗：資料庫拒絕寫入');
+    } catch (err) {
+      log.warn(`Twitch 點歌歷史保存失敗：${err.message}`);
+    }
+  }
+
+  historyContext({ event, source, url, videoId = '', metadata = null, redemption = null, requestCode = '', createdAt = Date.now() } = {}) {
+    return {
+      id: crypto.randomUUID(), event, source, url, videoId, metadata, redemption, requestCode, createdAt,
+    };
+  }
+
+  historyEntryFromContext(context, patch = {}) {
+    const metadata = context?.metadata || {};
+    const redemption = context?.redemption || null;
+    return this.normalizeHistoryEntry({
+      id: context?.id,
+      requestCode: context?.requestCode || '',
+      source: context?.source,
+      requester: {
+        id: context?.event?.chatter_user_id || context?.event?.chatter_user_login || '',
+        name: context?.event?.chatter_user_name || context?.event?.chatter_user_login || '觀眾',
+      },
+      video: {
+        id: context?.videoId || '',
+        title: metadata.title || '',
+        artist: metadata.author || '',
+        url: context?.videoId ? `https://youtu.be/${context.videoId}` : '',
+      },
+      createdAt: context?.createdAt,
+      updatedAt: Date.now(),
+      result: patch.result || 'pending',
+      reason: patch.reason || '',
+      reward: { status: patch.rewardStatus || (redemption ? 'pending' : 'not-applicable'), cost: redemption?.cost || 0 },
+    });
+  }
+
+  historyEntryFromRequest(request, patch = {}) {
+    return this.historyEntryFromContext({
+      id: request?.historyId,
+      event: request?.event,
+      source: request?.source,
+      url: request?.url,
+      videoId: request?.videoId,
+      metadata: { title: request?.title, author: request?.author },
+      redemption: request?.rewardRedemption,
+      requestCode: request?.shortId,
+      createdAt: request?.createdAt,
+    }, patch);
+  }
+
+  recordHistory(entry) {
+    const normalized = this.normalizeHistoryEntry(entry);
+    const index = this.requestHistory.findIndex((item) => item.id === normalized.id);
+    if (index >= 0) this.requestHistory[index] = normalized;
+    else this.requestHistory.push(normalized);
+    this.persistRequestHistory();
+    this.notifyHistoryChanged();
+    return normalized;
+  }
+
+  updateRequestHistory(request, patch) {
+    if (!request?.historyId) return null;
+    const existing = this.requestHistory.find((entry) => entry.id === request.historyId);
+    const base = existing || this.historyEntryFromRequest(request);
+    return this.recordHistory({
+      ...base,
+      ...patch,
+      video: { ...base.video, ...(patch?.video || {}) },
+      requester: { ...base.requester, ...(patch?.requester || {}) },
+      reward: { ...base.reward, ...(patch?.reward || {}) },
+      updatedAt: Date.now(),
+    });
+  }
+
+  getRequestHistory(limit = 80) {
+    const max = Math.max(1, Math.min(200, Number.parseInt(limit, 10) || 80));
+    return this.requestHistory.slice().sort((a, b) => b.updatedAt - a.updatedAt).slice(0, max)
+      .map((entry) => this.normalizeHistoryEntry(entry));
   }
 
   startRequestSession(startedAt = Date.now()) {
@@ -363,6 +517,7 @@ class TwitchService {
     return {
       requestId: String(request.requestId || ''),
       shortId: normalizeShortRequestId(request.shortId),
+      historyId: /^[A-Za-z0-9_-]{1,80}$/.test(String(request.historyId || '')) ? String(request.historyId) : '',
       url: String(request.url || ''),
       requester: String(request.requester || '觀眾'),
       requesterId: String(request.requesterId || ''),
@@ -419,9 +574,20 @@ class TwitchService {
       const request = this.serializePendingRequest(raw || {});
       if (!request.requestId || !request.videoId) continue;
       if (!request.shortId) request.shortId = this.createShortRequestId();
+      if (!request.historyId) request.historyId = crypto.randomUUID();
       this.pendingRequests.set(request.requestId, request);
       if (request.rewardRedemption?.id) this.seenRedemptions.set(request.rewardRedemption.id, request.createdAt);
       this.scheduleRequestExpiry(request.requestId);
+    }
+    const missingHistory = [...this.pendingRequests.values()]
+      .filter((request) => !this.requestHistory.some((entry) => entry.id === request.historyId))
+      .map((request) => this.historyEntryFromRequest(request, {
+        result: 'pending',
+        rewardStatus: request.rewardRedemption ? 'pending' : 'not-applicable',
+      }));
+    if (missingHistory.length) {
+      this.requestHistory.push(...missingHistory);
+      this.persistRequestHistory();
     }
     this.persistPendingRequests();
     if (this.pendingRequests.size) log.info(`已還原 ${this.pendingRequests.size} 筆 Twitch 待確認點歌`);
@@ -932,6 +1098,10 @@ class TwitchService {
       }
     } catch (err) {
       log.warn(`觀眾取消忠誠點數點歌退款失敗：${err.message}`);
+      this.updateRequestHistory(request, {
+        result: 'pending', reason: `觀眾取消退款失敗：${err.message}`,
+        reward: { status: 'refund-failed' },
+      });
       await this.sendConfiguredReply(event, 'requestCancelFailed', { title: request.title });
       return;
     }
@@ -939,6 +1109,10 @@ class TwitchService {
     this.clearRequestExpiry(request.requestId);
     this.persistPendingRequests();
     this.notifyPendingRequestsChanged();
+    this.updateRequestHistory(request, {
+      result: 'canceled', reason: '觀眾自行取消待確認點歌',
+      reward: { status: request.rewardRedemption ? 'refunded' : 'not-applicable' },
+    });
     if (typeof this.onSongRequestCanceled === 'function') this.onSongRequestCanceled(request.requestId);
     if (request.rewardRedemption) {
       await this.sendConfiguredReply(event, 'rewardRefunded', {
@@ -1069,6 +1243,144 @@ class TwitchService {
     });
   }
 
+  customCommandValues(event, command) {
+    const playback = this.playbackSummary();
+    return {
+      user: event?.chatter_user_name || event?.chatter_user_login || '觀眾',
+      currentTitle: playback.current?.title || '目前沒有歌曲',
+      currentArtist: playback.current?.artist || '',
+      nextTitle: playback.next?.title || '目前沒有下一首',
+      queue: String(playback.queuedCount || 0),
+      requestCount: String(this.getPendingRequests().length),
+      command: command || '',
+    };
+  }
+
+  async handleCustomCommand(match, event) {
+    const replySettings = this.replySettings || TwitchReplySettings.getDefaults();
+    if (!replySettings.enabled) return { sent: false, skipped: true };
+    const text = TwitchReplySettings.renderTemplate(match.customCommand.template, this.customCommandValues(event, match.command));
+    if (!text) return { sent: false, skipped: true };
+    await this.sendChatReply(event, text, { mode: replySettings.replyMode });
+    return { sent: true, skipped: false, text };
+  }
+
+  async sendCustomCommandTest(requestSettings, customCommandId) {
+    const validation = TwitchRequestSettings.validateSettings(requestSettings);
+    if (!validation.ok) throw new Error(validation.errors[0]?.message || '自訂指令設定格式無效');
+    const command = validation.settings.customCommands.find((item) => item.id === String(customCommandId || ''));
+    if (!command) throw new Error('找不到要測試的自訂指令');
+    const text = TwitchReplySettings.renderTemplate(command.template, {
+      ...this.customCommandValues({}, command.command),
+      ...TwitchReplySettings.sampleValues(),
+      command: command.command,
+    });
+    const message = `【自訂指令測試】${text}`;
+    await this.sendChatReply({}, message, { mode: 'plain' });
+    return { commandId: command.id, text: message };
+  }
+
+  simulateSongRequest(input = {}) {
+    const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
+    const role = ['viewer', 'subscriber', 'vip', 'moderator', 'broadcaster'].includes(input.viewerRole) ? input.viewerRole : 'viewer';
+    const viewerName = safeHistoryText(input.user || '測試觀眾', 40) || '測試觀眾';
+    const badges = role === 'subscriber' ? [{ set_id: 'subscriber' }]
+      : role === 'vip' ? [{ set_id: 'vip' }]
+        : role === 'moderator' ? [{ set_id: 'moderator' }]
+          : role === 'broadcaster' ? [{ set_id: 'broadcaster' }] : [];
+    const event = {
+      chatter_user_id: role === 'broadcaster' ? 'sim-broadcaster' : `sim-${role}`,
+      chatter_user_login: viewerName.toLocaleLowerCase().replace(/\s+/g, '-'),
+      chatter_user_name: viewerName,
+      broadcaster_user_id: role === 'broadcaster' ? 'sim-broadcaster' : 'sim-broadcaster',
+      badges,
+    };
+    const checks = [];
+    const reject = (replyKey, reason) => ({
+      accepted: false,
+      replyKey,
+      reason,
+      checks,
+    });
+    const check = (label, passed, detail) => checks.push({ label, passed: !!passed, detail: safeHistoryText(detail, 180) });
+    const command = rules.commands.request;
+    const url = safeHistoryText(input.url, 600);
+    const parsedUrl = parseYouTubeUrl(url);
+    const metadata = {
+      title: safeHistoryText(input.title || '模擬歌曲', 300),
+      author: safeHistoryText(input.artist || '模擬歌手', 200),
+      channelId: safeHistoryText(input.channelId || '', 120),
+      duration: Math.max(0, Number(input.durationSeconds) || 0),
+    };
+    const baseValues = {
+      user: viewerName,
+      command: command.command,
+      title: metadata.title,
+      artist: metadata.author,
+      url,
+      limit: '',
+      duration: metadata.duration ? formatDuration(metadata.duration) : '',
+      reason: '',
+      currentTitle: this.playbackSummary().current?.title || '',
+      currentArtist: this.playbackSummary().current?.artist || '',
+      nextTitle: this.playbackSummary().next?.title || '',
+      queue: String(this.playbackSummary().queuedCount || 0),
+      requestCount: String(Number(input.pendingCount) || 0),
+    };
+    const withReply = (outcome) => {
+      const reply = (this.replySettings || TwitchReplySettings.getDefaults()).replies?.[outcome.replyKey];
+      const repliesEnabled = !!(this.replySettings || TwitchReplySettings.getDefaults()).enabled && !!reply?.enabled;
+      const text = repliesEnabled ? TwitchReplySettings.renderTemplate(reply.template, { ...baseValues, reason: outcome.reason, limit: outcome.limit || '' }) : '';
+      return {
+        ...outcome,
+        finalReply: text || '（自動回覆目前關閉）',
+        willReply: !!text,
+      };
+    };
+    const permission = TwitchRequestSettings.permissionAllows(event, command.permissionLevel);
+    check('使用者資格', permission, permission ? '符合點歌資格' : '不符合目前點歌資格');
+    if (!permission) return withReply(reject('permissionDenied', '使用者資格不符'));
+    check('點歌總開關', rules.enabled, rules.enabled ? '目前開放' : '目前暫停');
+    if (!rules.enabled) return withReply(reject('requestDisabled', '目前暫停接受點歌'));
+    check('YouTube 單曲網址', !!parsedUrl?.videoId && !parsedUrl?.playlistId, parsedUrl?.playlistId ? '偵測到播放清單網址' : (parsedUrl?.videoId ? '影片 ID 有效' : '網址無效'));
+    if (!parsedUrl?.videoId) return withReply(reject('invalidLink', '沒有提供有效的 YouTube 單曲連結'));
+    if (parsedUrl.playlistId) return withReply(reject('playlistNotAllowed', '播放清單連結不屬於單曲點歌'));
+    const preBlock = TwitchRequestSettings.findBlacklistMatch(rules, { event, videoId: parsedUrl.videoId, phase: 'pre' });
+    check('前置黑名單', !preBlock, preBlock?.reason || (preBlock ? '命中黑名單' : '未命中'));
+    if (preBlock) return withReply(reject('blockedRequest', preBlock.reason || '這位使用者或影片已被點歌規則封鎖'));
+    const simulatedOnline = typeof input.streamOnline === 'boolean' ? input.streamOnline : this.streamOnline;
+    check('直播狀態', !rules.liveOnly || simulatedOnline, rules.liveOnly ? (simulatedOnline ? '模擬直播中' : '模擬未開台') : '規則不限制直播狀態');
+    if (rules.liveOnly && !simulatedOnline) return withReply(reject('streamOffline', '目前只在直播期間接受點歌'));
+    const fairnessExempt = rules.fairnessModeratorExempt && TwitchRequestSettings.rolesForEvent(event).moderator;
+    const sessionUserCount = Math.max(0, Number(input.sessionUserCount) || 0);
+    const sessionCount = Math.max(0, Number(input.sessionCount) || 0);
+    check('每人每場上限', fairnessExempt || rules.perUserSessionLimit === 0 || sessionUserCount < rules.perUserSessionLimit, fairnessExempt ? '管理員豁免' : (rules.perUserSessionLimit ? `${sessionUserCount}/${rules.perUserSessionLimit}` : '不限'));
+    if (!fairnessExempt && rules.perUserSessionLimit > 0 && sessionUserCount >= rules.perUserSessionLimit) return withReply({ ...reject('sessionUserLimit', '本場個人點歌已達上限'), limit: String(rules.perUserSessionLimit) });
+    check('全場點歌上限', fairnessExempt || rules.sessionRequestLimit === 0 || sessionCount < rules.sessionRequestLimit, fairnessExempt ? '管理員豁免' : (rules.sessionRequestLimit ? `${sessionCount}/${rules.sessionRequestLimit}` : '不限'));
+    if (!fairnessExempt && rules.sessionRequestLimit > 0 && sessionCount >= rules.sessionRequestLimit) return withReply({ ...reject('sessionLimit', '本場點歌已達總上限'), limit: String(rules.sessionRequestLimit) });
+    const duplicateFlags = {
+      pending: !!input.pendingDuplicate,
+      playlist: !!input.playlistDuplicate,
+      session: !!input.sessionDuplicate,
+      recent: !!input.recentDuplicate,
+    };
+    const duplicate = rules.duplicateScope !== 'allow' && duplicateFlags[rules.duplicateScope];
+    check('重複歌曲範圍', !duplicate, rules.duplicateScope === 'allow' ? '規則允許重複' : (duplicate ? '模擬來源已有同一首歌' : '模擬來源沒有同一首歌'));
+    if (duplicate) return withReply(reject('duplicatePending', '同一首歌已在模擬的重複檢查範圍內'));
+    const pendingCount = Math.max(0, Number(input.pendingCount) || 0);
+    const userPendingCount = Math.max(0, Number(input.userPendingCount) || 0);
+    check('待確認總上限', pendingCount < rules.maxPending, `${pendingCount}/${rules.maxPending}`);
+    if (pendingCount >= rules.maxPending) return withReply({ ...reject('queueFull', '待確認點歌已達總上限'), limit: String(rules.maxPending) });
+    check('每人待確認上限', rules.perUserPending === 0 || userPendingCount < rules.perUserPending, rules.perUserPending ? `${userPendingCount}/${rules.perUserPending}` : '不限');
+    if (rules.perUserPending > 0 && userPendingCount >= rules.perUserPending) return withReply({ ...reject('userLimitReached', '你目前的待確認點歌已達上限'), limit: String(rules.perUserPending) });
+    const postBlock = TwitchRequestSettings.findBlacklistMatch(rules, { event, videoId: parsedUrl.videoId, metadata, phase: 'post' });
+    check('影片資料黑名單', !postBlock, postBlock?.reason || (postBlock ? '命中黑名單' : '未命中'));
+    if (postBlock) return withReply(reject('blockedRequest', postBlock.reason || '這個 YouTube 頻道或影片標題已被點歌規則封鎖'));
+    check('歌曲長度', rules.maxDurationMinutes === 0 || metadata.duration <= rules.maxDurationMinutes * 60, rules.maxDurationMinutes ? `${formatDuration(metadata.duration)}/${rules.maxDurationMinutes}:00` : '不限');
+    if (rules.maxDurationMinutes > 0 && metadata.duration > rules.maxDurationMinutes * 60) return withReply({ ...reject('durationExceeded', `歌曲超過 ${rules.maxDurationMinutes} 分鐘限制`), limit: String(rules.maxDurationMinutes) });
+    return withReply({ accepted: true, replyKey: 'received', reason: '', checks });
+  }
+
   async handleChatMessage(event, fallbackId) {
     const text = String(event.message && event.message.text || '').trim();
     const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
@@ -1093,6 +1405,20 @@ class TwitchService {
       } catch (err) {
         log.warn(`Twitch 管理員指令失敗（${match.key}）：${err.message}`);
         await this.sendConfiguredReply(event, 'adminActionFailed', { reason: String(err.message || '未知錯誤').slice(0, 240) });
+      }
+      return;
+    }
+    if (match.kind === 'custom') {
+      const remainingSeconds = this.commandCooldown(`custom:${match.key}`, commandSettings, event);
+      if (remainingSeconds > 0) {
+        await this.sendConfiguredReply(event, 'cooldownActive', { command, seconds: remainingSeconds });
+        return;
+      }
+      try {
+        await this.handleCustomCommand(match, event);
+        this.recordCommandCooldown(`custom:${match.key}`, commandSettings, event);
+      } catch (err) {
+        log.warn(`Twitch 自訂指令失敗（${match.key}）：${err.message}`);
       }
       return;
     }
@@ -1137,7 +1463,10 @@ class TwitchService {
     const redemption = { id: redemptionId, rewardId: settings.rewardId, cost: Number(reward.cost) || settings.cost };
     try {
       if (!this.requestSettings?.enabled) {
-        await this.rejectSongRequest({ event, key: 'requestDisabled', redemption, reason: '目前暫停接受點歌' });
+        await this.rejectSongRequest({
+          event, key: 'requestDisabled', redemption, reason: '目前暫停接受點歌',
+          history: this.historyContext({ event, source: 'channel-points', url: String(redemptionEvent.user_input || '').trim(), redemption }),
+        });
         return;
       }
       await this.handleSongRequestInput({
@@ -1155,9 +1484,22 @@ class TwitchService {
     }
   }
 
-  async rejectSongRequest({ event, key, values = {}, redemption = null, reason = '不符合目前點歌規則' }) {
+  async rejectSongRequest({ event, key, values = {}, redemption = null, reason = '不符合目前點歌規則', history = null, historyResult = 'rejected' }) {
+    if (history) this.recordHistory(this.historyEntryFromContext(history, {
+      result: historyResult, reason, rewardStatus: redemption ? 'pending' : 'not-applicable',
+    }));
     if (!redemption) return this.sendConfiguredReply(event, key, values);
-    await this.updateRewardRedemptionStatus(redemption, 'CANCELED');
+    try {
+      await this.updateRewardRedemptionStatus(redemption, 'CANCELED');
+      if (history) this.recordHistory(this.historyEntryFromContext(history, {
+        result: historyResult, reason, rewardStatus: 'refunded',
+      }));
+    } catch (err) {
+      if (history) this.recordHistory(this.historyEntryFromContext(history, {
+        result: historyResult, reason: `${reason}；退款失敗：${err.message}`, rewardStatus: 'refund-failed',
+      }));
+      throw err;
+    }
     try {
       return await this.sendConfiguredReply(event, 'rewardRefunded', {
         ...values,
@@ -1172,13 +1514,15 @@ class TwitchService {
 
   async handleSongRequestInput({ event, requestId, url, command, source, redemption = null }) {
     const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
+    const history = this.historyContext({ event, source, url, redemption });
     const parsedUrl = parseYouTubeUrl(url);
+    history.videoId = parsedUrl?.videoId || '';
     if (!parsedUrl?.videoId) {
-      await this.rejectSongRequest({ event, key: 'invalidLink', values: { command }, redemption, reason: '沒有提供有效的 YouTube 單曲連結' });
+      await this.rejectSongRequest({ event, key: 'invalidLink', values: { command }, redemption, reason: '沒有提供有效的 YouTube 單曲連結', history });
       return false;
     }
     if (parsedUrl.playlistId) {
-      await this.rejectSongRequest({ event, key: 'playlistNotAllowed', values: { url }, redemption, reason: '播放清單連結不屬於單曲點歌' });
+      await this.rejectSongRequest({ event, key: 'playlistNotAllowed', values: { url }, redemption, reason: '播放清單連結不屬於單曲點歌', history });
       return false;
     }
     const preMetadataBlock = TwitchRequestSettings.findBlacklistMatch(rules, {
@@ -1186,42 +1530,58 @@ class TwitchService {
     });
     if (preMetadataBlock) {
       const reason = preMetadataBlock.reason || '這位使用者或影片已被點歌規則封鎖';
-      await this.rejectSongRequest({ event, key: 'blockedRequest', values: { url, reason }, redemption, reason });
+      await this.rejectSongRequest({ event, key: 'blockedRequest', values: { url, reason }, redemption, reason, history });
       return false;
     }
     const fairnessExempt = this.requestFairnessExempt(event);
     if (!fairnessExempt && rules.liveOnly && !this.streamOnline) {
-      await this.rejectSongRequest({ event, key: 'streamOffline', values: { url }, redemption, reason: '目前只在直播期間接受點歌' });
+      await this.rejectSongRequest({ event, key: 'streamOffline', values: { url }, redemption, reason: '目前只在直播期間接受點歌', history });
       return false;
     }
     const userKey = requesterKey(event);
     if (!fairnessExempt && rules.perUserSessionLimit > 0 && (this.requestSession.session.byUser[userKey] || 0) >= rules.perUserSessionLimit) {
-      await this.rejectSongRequest({ event, key: 'sessionUserLimit', values: { url, limit: rules.perUserSessionLimit }, redemption, reason: '本場個人點歌已達上限' });
+      await this.rejectSongRequest({ event, key: 'sessionUserLimit', values: { url, limit: rules.perUserSessionLimit }, redemption, reason: '本場個人點歌已達上限', history });
       return false;
     }
     if (!fairnessExempt && rules.sessionRequestLimit > 0 && this.requestSession.session.acceptedCount >= rules.sessionRequestLimit) {
-      await this.rejectSongRequest({ event, key: 'sessionLimit', values: { url, limit: rules.sessionRequestLimit }, redemption, reason: '本場點歌已達總上限' });
+      await this.rejectSongRequest({ event, key: 'sessionLimit', values: { url, limit: rules.sessionRequestLimit }, redemption, reason: '本場點歌已達總上限', history });
       return false;
     }
     if (!fairnessExempt) {
       const duplicateAt = this.duplicateScopeMatch(parsedUrl.videoId);
       if (duplicateAt) {
-        await this.rejectSongRequest({ event, key: 'duplicatePending', values: { url, reason: duplicateAt }, redemption, reason: `同一首歌已在${duplicateAt}` });
+        await this.rejectSongRequest({ event, key: 'duplicatePending', values: { url, reason: duplicateAt }, redemption, reason: `同一首歌已在${duplicateAt}`, history });
         return false;
       }
     }
     if (this.pendingRequests.size >= rules.maxPending) {
-      await this.rejectSongRequest({ event, key: 'queueFull', values: { url, limit: rules.maxPending }, redemption, reason: '待確認點歌已達總上限' });
+      await this.rejectSongRequest({ event, key: 'queueFull', values: { url, limit: rules.maxPending }, redemption, reason: '待確認點歌已達總上限', history });
       return false;
     }
     if (userKey && rules.perUserPending > 0) {
       const userPending = [...this.pendingRequests.values()].filter((request) => request.requesterId === userKey).length;
       if (userPending >= rules.perUserPending) {
-        await this.rejectSongRequest({ event, key: 'userLimitReached', values: { url, limit: rules.perUserPending }, redemption, reason: '你目前的待確認點歌已達上限' });
+        await this.rejectSongRequest({ event, key: 'userLimitReached', values: { url, limit: rules.perUserPending }, redemption, reason: '你目前的待確認點歌已達上限', history });
         return false;
       }
     }
-    const metadata = await this.fetchYouTubeMetadata(url);
+    let metadata;
+    try {
+      metadata = await this.fetchYouTubeMetadata(url);
+    } catch (err) {
+      log.warn('Twitch 點歌影片資料讀取失敗：' + err.message);
+      await this.rejectSongRequest({
+        event,
+        key: 'importFailure',
+        redemption,
+        reason: '無法讀取這個 YouTube 連結的影片資料',
+        values: { url },
+        history,
+        historyResult: 'failed',
+      });
+      return false;
+    }
+    history.metadata = metadata;
     const postMetadataBlock = TwitchRequestSettings.findBlacklistMatch(rules, {
       event, videoId: parsedUrl.videoId, metadata, phase: 'post',
     });
@@ -1229,14 +1589,14 @@ class TwitchService {
       const reason = postMetadataBlock.reason || '這個 YouTube 頻道或影片標題已被點歌規則封鎖';
       await this.rejectSongRequest({
         event, key: 'blockedRequest', redemption, reason,
-        values: { title: metadata.title, artist: metadata.author, url, reason },
+        values: { title: metadata.title, artist: metadata.author, url, reason }, history,
       });
       return false;
     }
     if (rules.maxDurationMinutes > 0 && metadata.duration > rules.maxDurationMinutes * 60) {
       await this.rejectSongRequest({
         event, key: 'durationExceeded', redemption, reason: `歌曲超過 ${rules.maxDurationMinutes} 分鐘限制`,
-        values: { title: metadata.title, artist: metadata.author, url, duration: formatDuration(metadata.duration), limit: rules.maxDurationMinutes },
+        values: { title: metadata.title, artist: metadata.author, url, duration: formatDuration(metadata.duration), limit: rules.maxDurationMinutes }, history,
       });
       return false;
     }
@@ -1260,6 +1620,7 @@ class TwitchService {
     const pendingRequest = {
       ...request,
       shortId: this.createShortRequestId(),
+      historyId: history.id,
       event,
       createdAt,
       priority: createdAt,
@@ -1269,7 +1630,7 @@ class TwitchService {
     if (!accepted) {
       await this.rejectSongRequest({
         event, key: 'panelUnavailable', redemption, reason: '控制面板目前無法接收點歌',
-        values: { title: request.title, artist: request.author, url },
+        values: { title: request.title, artist: request.author, url }, history,
       });
       return false;
     }
@@ -1278,6 +1639,9 @@ class TwitchService {
     this.scheduleRequestExpiry(requestId);
     this.persistPendingRequests();
     this.notifyPendingRequestsChanged();
+    this.recordHistory(this.historyEntryFromRequest(pendingRequest, {
+      result: 'pending', rewardStatus: redemption ? 'pending' : 'not-applicable',
+    }));
     // 確認制：不自動下載，先送到主播面板等待確認。
     await this.sendConfiguredReply(event, source === 'channel-points' ? 'rewardReceived' : 'received', {
       title: request.title, artist: request.author, url, cost: redemption?.cost || '', requestId: pendingRequest.shortId,
@@ -1306,13 +1670,22 @@ class TwitchService {
         if (reply.sent) request.retryableReplySent = true;
       }
       this.persistPendingRequests();
+      this.updateRequestHistory(request, { result: 'retrying', reason: '下載或匯入暫時失敗，等待主播重試' });
       log.info(`Twitch 點歌匯入失敗，保留供重試：${requestId}`);
       return;
     }
     if (request.rewardRedemption) {
       const fulfilled = !!success && !rejected;
       const reason = rejected ? '主播略過了這首歌' : '目前無法完成歌曲匯入';
-      await this.updateRewardRedemptionStatus(request.rewardRedemption, fulfilled ? 'FULFILLED' : 'CANCELED');
+      try {
+        await this.updateRewardRedemptionStatus(request.rewardRedemption, fulfilled ? 'FULFILLED' : 'CANCELED');
+      } catch (err) {
+        this.updateRequestHistory(request, {
+          result: 'pending', reason: `忠誠點數狀態同步失敗：${err.message}`,
+          reward: { status: fulfilled ? 'fulfillment-failed' : 'refund-failed' },
+        });
+        throw err;
+      }
       try {
         await this.sendConfiguredReply(request.event, fulfilled ? 'rewardFulfilled' : 'rewardRefunded', {
           title: title || request.title || '已加入播放清單',
@@ -1326,6 +1699,12 @@ class TwitchService {
       } catch (err) {
         log.warn(`忠誠點數兌換已${fulfilled ? '完成' : '退款'}，但聊天室通知失敗：${err.message}`);
       }
+      this.updateRequestHistory(request, {
+        result: fulfilled ? 'imported' : (rejected ? 'rejected' : 'failed'),
+        reason: fulfilled ? '' : reason,
+        video: { title: title || request.title, artist: artist || request.author },
+        reward: { status: fulfilled ? 'fulfilled' : 'refunded' },
+      });
       this.pendingRequests.delete(requestId);
       this.clearRequestExpiry(requestId);
       this.persistPendingRequests();
@@ -1352,6 +1731,11 @@ class TwitchService {
         reason: '目前無法處理這個連結',
       });
     }
+    this.updateRequestHistory(request, {
+      result: success && !rejected ? 'imported' : (rejected ? 'rejected' : 'failed'),
+      reason: rejected ? '主播略過了這首歌' : (success ? '' : '目前無法處理這個連結'),
+      video: { title: title || request.title, artist: artist || request.author },
+    });
     this.pendingRequests.delete(requestId);
     this.clearRequestExpiry(requestId);
     this.persistPendingRequests();
@@ -1477,6 +1861,10 @@ class TwitchService {
         request.expiresAt = Date.now() + 60000;
         this.persistPendingRequests();
         this.scheduleRequestExpiry(requestId);
+        this.updateRequestHistory(request, {
+          result: 'pending', reason: `等待逾時退款失敗：${err.message}`,
+          reward: { status: 'refund-failed' },
+        });
         throw new Error(`忠誠點數逾時退款失敗，60 秒後重試：${err.message}`);
       }
     }
@@ -1484,6 +1872,10 @@ class TwitchService {
     this.clearRequestExpiry(requestId);
     this.persistPendingRequests();
     this.notifyPendingRequestsChanged();
+    this.updateRequestHistory(request, {
+      result: 'expired', reason: '等待主播確認超過 30 分鐘',
+      reward: { status: request.rewardRedemption ? 'refunded' : 'not-applicable' },
+    });
     if (typeof this.onSongRequestExpired === 'function') this.onSongRequestExpired(requestId);
     try {
       await this.sendConfiguredReply(request.event, request.rewardRedemption ? 'rewardRefunded' : 'requestExpired', {
@@ -1515,6 +1907,7 @@ class TwitchService {
     this.notifyStatusChange();
     this.persistPendingRequests();
     this.persistRequestSession();
+    this.persistRequestHistory();
   }
 }
 

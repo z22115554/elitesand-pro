@@ -1,0 +1,25 @@
+[
+  {
+    "id": "legacy-history",
+    "requestCode": "LEGACY1",
+    "source": "chat",
+    "requester": {
+      "id": "fixture-viewer",
+      "name": "fixture-viewer"
+    },
+    "video": {
+      "id": "dQw4w9WgXcQ",
+      "title": "Fixture Song",
+      "artist": "Fixture Artist",
+      "url": "https://youtu.be/dQw4w9WgXcQ"
+    },
+    "createdAt": 1774000000000,
+    "updatedAt": 1774000000000,
+    "result": "imported",
+    "reason": "",
+    "reward": {
+      "status": "not-applicable",
+      "cost": 0
+    }
+  }
+]

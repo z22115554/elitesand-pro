@@ -600,6 +600,15 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-request-empty { padding: 42px 16px; color: var(--text-faint); text-align: center; border: 1px dashed var(--border); border-radius: var(--r-md); }
 .twitch-activity-card { min-height: 122px; }
 .twitch-activity-empty { margin-top: 12px; padding: 16px; color: var(--text-faint); text-align: center; border: 1px dashed var(--border); border-radius: var(--r-md); }
+.twitch-activity-list, .twitch-history-list { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.twitch-activity-row, .twitch-history-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-raised); }
+.twitch-activity-row-main, .twitch-history-row-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; font-weight: 650; }
+.twitch-activity-row-meta, .twitch-history-row-meta { grid-column: 1 / -1; color: var(--text-faint); font-size: 11px; line-height: 1.45; }
+.twitch-activity-row-status, .twitch-history-row-status { align-self: start; color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+.twitch-activity-row-status[data-result="imported"], .twitch-history-row-status[data-result="imported"] { color: var(--success); }
+.twitch-activity-row-status[data-result="rejected"], .twitch-activity-row-status[data-result="failed"], .twitch-history-row-status[data-result="rejected"], .twitch-history-row-status[data-result="failed"] { color: var(--danger); }
+.twitch-activity-row-status[data-result="pending"], .twitch-activity-row-status[data-result="retrying"], .twitch-history-row-status[data-result="pending"], .twitch-history-row-status[data-result="retrying"] { color: var(--warning); }
+.twitch-history-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
 .twitch-management-modal .modal-card { width: 96vw; max-width: 1320px; height: 90vh; max-height: 90vh; }
 .twitch-management-head { flex: none; gap: 14px; }
@@ -686,6 +695,20 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-test-card { margin-bottom: 14px; padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-raised); }
 .twitch-test-card .input { margin-top: 10px; }
 .twitch-test-card--public { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
+.twitch-sim-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 12px 0; }
+.twitch-sim-switches .switch-row { margin: 0; padding: 8px 0; }
+.twitch-sim-switches .label { display: block; }
+.twitch-sim-switches .sub { display: block; margin-top: 3px; }
+.twitch-sim-result { margin-top: 12px; }
+.twitch-sim-result:empty { display: none; }
+.twitch-sim-summary { margin: 0 0 8px; color: var(--text); font-size: 12px; font-weight: 700; }
+.twitch-sim-summary[data-accepted="true"] { color: var(--success); }
+.twitch-sim-summary[data-accepted="false"] { color: var(--danger); }
+.twitch-sim-checks { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.twitch-sim-check { display: flex; justify-content: space-between; gap: 10px; color: var(--text-dim); font-size: 11px; }
+.twitch-sim-check::before { content: '✓'; color: var(--success); }
+.twitch-sim-check[data-passed="false"]::before { content: '×'; color: var(--danger); }
+.twitch-sim-reply { margin: 9px 0 0; overflow-wrap: anywhere; color: var(--text-faint); font-size: 11px; }
 .twitch-future-pane .twitch-pane-scroll { display: grid; place-content: center; text-align: center; }
 
 @media (max-width: 860px) {
@@ -698,6 +721,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
   .twitch-command-list, .twitch-reply-events { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(145px, 1fr); overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
   .twitch-command-group-label, .twitch-reply-group-label { display: none; }
   .twitch-reply-toolbar { grid-template-columns: 1fr; }
+  .twitch-sim-switches { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .twitch-live-status-head { align-items: stretch; flex-direction: column; }
