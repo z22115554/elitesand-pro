@@ -297,7 +297,15 @@
     const container = el('twitch-command-list');
     if (!container) return;
     container.innerHTML = '';
+    let currentGroup = '';
     TwitchRequestSettings.COMMAND_DEFINITIONS.forEach((definition) => {
+      if (definition.group !== currentGroup) {
+        const label = document.createElement('div');
+        label.className = 'twitch-command-group-label';
+        label.textContent = definition.group === 'admin' ? '管理員與實況主' : '觀眾自助';
+        container.appendChild(label);
+        currentGroup = definition.group;
+      }
       const settings = requestDraft.commands[definition.key];
       const button = document.createElement('button');
       button.type = 'button';
@@ -321,6 +329,7 @@
     el('twitch-command-name').value = settings.command;
     el('twitch-command-aliases').value = settings.aliases.join(', ');
     el('twitch-command-permission').value = settings.permissionLevel;
+    el('twitch-command-permission').disabled = !!definition.adminOnly;
     el('twitch-command-user-cooldown').value = String(settings.userCooldownSeconds);
     el('twitch-command-global-cooldown').value = String(settings.globalCooldownSeconds);
     validateCommandForm();
@@ -332,7 +341,7 @@
     settings.enabled = !!el('twitch-command-enabled')?.checked;
     settings.command = el('twitch-command-name')?.value || '';
     settings.aliases = TwitchRequestSettings.parseAliases(el('twitch-command-aliases')?.value || '');
-    settings.permissionLevel = el('twitch-command-permission')?.value || 'everyone';
+    settings.permissionLevel = commandDefinition()?.adminOnly ? 'moderator' : (el('twitch-command-permission')?.value || 'everyone');
     settings.userCooldownSeconds = Number(el('twitch-command-user-cooldown')?.value);
     settings.globalCooldownSeconds = Number(el('twitch-command-global-cooldown')?.value);
     setDirty('commands', true);
@@ -351,7 +360,7 @@
     if (save) save.disabled = !validation.ok;
     const definition = commandDefinition();
     const settings = requestDraft.commands[activeCommandKey];
-    if (el('twitch-command-preview')) el('twitch-command-preview').textContent = `${settings.enabled ? '啟用' : '停用'}｜${settings.command || '—'}${activeCommandKey === 'request' ? ' <YouTube URL>' : ''}｜${definition.description}`;
+    if (el('twitch-command-preview')) el('twitch-command-preview').textContent = `${settings.enabled ? '啟用' : '停用'}｜${settings.command || '—'}${definition.usage ? ` ${definition.usage}` : (activeCommandKey === 'request' ? ' <YouTube URL>' : '')}｜${definition.description}`;
     return validation;
   }
 
@@ -901,14 +910,14 @@
     el('twitch-reward-save')?.addEventListener('click', () => saveRewardSettings(rewardDraft, '忠誠點數獎勵已同步'));
     el('twitch-reply-save')?.addEventListener('click', () => saveReplySettings(replyDraft, '聊天室回覆設定已儲存'));
     el('twitch-command-edit-reply')?.addEventListener('click', () => {
-      const replyByCommand = { request: 'received', currentSong: 'currentSong', nextSong: 'nextSong', myRequests: 'myRequests', position: 'requestPosition', cancelRequest: 'requestCanceled', rules: 'requestRules', queueSummary: 'queueSummary' };
+      const replyByCommand = { request: 'received', currentSong: 'currentSong', nextSong: 'nextSong', myRequests: 'myRequests', position: 'requestPosition', cancelRequest: 'requestCanceled', rules: 'requestRules', queueSummary: 'queueSummary', adminOpen: 'adminRequestOpened', adminPause: 'adminRequestPaused', adminReject: 'adminRequestRejected', adminRemove: 'adminRequestRemoved', adminPromote: 'adminRequestPromoted', adminSkip: 'adminSkipped' };
       activeReplyKey = replyByCommand[activeCommandKey] || 'received';
       renderReplyEvents(); loadReplyEditor(); switchManagementPane('replies');
       window.setTimeout(() => el('twitch-reply-template')?.focus(), 0);
     });
 
     el('twitch-command-reset')?.addEventListener('click', async () => {
-      const confirmed = await window.PanelConfirm?.request({ title: '還原所有 Twitch 指令？', summary: '八個內建指令的名稱、別名、資格與冷卻會回到預設值。', impact: '接受規則、忠誠點數與回覆文案不受影響。', confirmLabel: '還原指令' });
+      const confirmed = await window.PanelConfirm?.request({ title: '還原所有 Twitch 指令？', summary: '所有內建指令的名稱、別名、資格與冷卻會回到預設值。', impact: '接受規則、忠誠點數與回覆文案不受影響。', confirmLabel: '還原指令' });
       if (!confirmed) return;
       requestDraft.commands = clone(TwitchRequestSettings.getDefaults().commands);
       setDirty('commands', true); renderCommandList(); loadCommandEditor(); saveRequestCategory('commands', 'Twitch 指令已還原');
@@ -1011,7 +1020,8 @@
       const title = req.title || '無法取得影片標題';
       const author = req.author || '未知頻道';
       const thumbnail = req.thumbnail && /^https:\/\//i.test(req.thumbnail) ? req.thumbnail : '';
-      row.innerHTML = `<div class="twitch-req-info">${thumbnail ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">無縮圖</div>'}<div class="twitch-req-copy"><div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div><div class="twitch-req-author">${escapeHtml(author)}</div><div class="twitch-req-user">點歌者：${escapeHtml(req.requester || '觀眾')}</div>${req.source === 'channel-points' ? `<div class="pi-badge twitch-req-reward">忠誠點數兌換 · ${Number(req.rewardRedemption?.cost || 0).toLocaleString()} 點</div>` : ''}${Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>` : req.durationWarning ? '<div class="pi-badge twitch-req-warning">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}<a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a></div></div><div class="twitch-req-actions"><button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${isBusy ? (placement === 'next' ? '插播下載中…' : '下載中…') : '插到下一首'}</button><button class="btn btn-sm btn-ghost" data-act="end"${isBusy ? ' disabled' : ''}>加入尾端</button><button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>${req.source === 'channel-points' ? '拒絕並退款' : '拒絕'}</button></div>`;
+      const requestCode = req.shortId ? ` · 編號 #${escapeHtml(req.shortId)}` : '';
+      row.innerHTML = `<div class="twitch-req-info">${thumbnail ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">無縮圖</div>'}<div class="twitch-req-copy"><div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div><div class="twitch-req-author">${escapeHtml(author)}</div><div class="twitch-req-user">點歌者：${escapeHtml(req.requester || '觀眾')}${requestCode}</div>${req.source === 'channel-points' ? `<div class="pi-badge twitch-req-reward">忠誠點數兌換 · ${Number(req.rewardRedemption?.cost || 0).toLocaleString()} 點</div>` : ''}${Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>` : req.durationWarning ? '<div class="pi-badge twitch-req-warning">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}<a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a></div></div><div class="twitch-req-actions"><button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${isBusy ? (placement === 'next' ? '插播下載中…' : '下載中…') : '插到下一首'}</button><button class="btn btn-sm btn-ghost" data-act="end"${isBusy ? ' disabled' : ''}>加入尾端</button><button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>${req.source === 'channel-points' ? '拒絕並退款' : '拒絕'}</button></div>`;
       row.querySelector('[data-act="next"]').addEventListener('click', () => confirmRequest(req.requestId, 'next'));
       row.querySelector('[data-act="end"]').addEventListener('click', () => confirmRequest(req.requestId, 'end'));
       row.querySelector('[data-act="reject"]').addEventListener('click', () => rejectRequest(req.requestId));
@@ -1072,6 +1082,16 @@
   SocketClient.on('twitch:request-settings:update', mergeRequestSettingsFromServer);
   SocketClient.on('twitch:reward-settings:update', mergeRewardSettingsFromServer);
   SocketClient.on('twitch:reply-settings:update', mergeReplySettingsFromServer);
+  SocketClient.on('twitch:admin-action', (action) => {
+    if (!action?.actionId || action.type !== 'skip') return;
+    let result = { ok: false, error: '目前沒有可略過的歌曲' };
+    try {
+      if (typeof AppShared.advanceTrack === 'function' && AppShared.advanceTrack(1)) result = { ok: true };
+    } catch (err) {
+      result = { ok: false, error: String(err?.message || '桌面面板無法略過歌曲').slice(0, 240) };
+    }
+    SocketClient.sendWithCallback('twitch:admin-action:result', { actionId: action.actionId, ...result }, () => {});
+  });
   SocketClient.on('twitch:song-request', (request) => {
     if (!request?.requestId || !request.url) return;
     pending.set(request.requestId, request); renderRequests();

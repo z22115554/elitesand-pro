@@ -30,6 +30,11 @@ const REDEMPTION_SCOPE = 'channel:manage:redemptions';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
 const RECONNECT_BASE_MS = 3000;
 const RECONNECT_MAX_MS = 60000;
+const ADMIN_ACTION_TIMEOUT_MS = 12000;
+
+function normalizeShortRequestId(value) {
+  return String(value || '').trim().replace(/^#/u, '').toLocaleUpperCase();
+}
 
 function reconnectDelay(attempt, random = Math.random) {
   const base = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** Math.max(0, attempt - 1)));
@@ -104,7 +109,7 @@ function websocketCtor() {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, getPlaybackSnapshot, pendingStore = requestStore, sessionStore = requestSessionStore, authStore = store }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, getPlaybackSnapshot, pendingStore = requestStore, sessionStore = requestSessionStore, authStore = store }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
@@ -112,6 +117,9 @@ class TwitchService {
     this.onSongRequestExpired = onSongRequestExpired;
     this.onSongRequestCanceled = onSongRequestCanceled;
     this.onStatusChange = typeof onStatusChange === 'function' ? onStatusChange : null;
+    this.onRequestSettingsChange = typeof onRequestSettingsChange === 'function' ? onRequestSettingsChange : null;
+    this.onPanelAction = typeof onPanelAction === 'function' ? onPanelAction : null;
+    this.onPendingRequestsChanged = typeof onPendingRequestsChanged === 'function' ? onPendingRequestsChanged : null;
     this.getPlaybackSnapshot = typeof getPlaybackSnapshot === 'function' ? getPlaybackSnapshot : () => ({});
     this.deviceAuthorization = null;
     this.authStore = authStore;
@@ -122,6 +130,7 @@ class TwitchService {
     this.sessionStore = sessionStore;
     this.pendingRequests = new Map();
     this.requestExpiryTimers = new Map();
+    this.adminPanelActions = new Map();
     this.reconnectTimer = null;
     this.reconnectAttempt = 0;
     this.nextRetryAt = 0;
@@ -160,6 +169,60 @@ class TwitchService {
     this.commandUserCooldowns.clear();
     this.commandGlobalCooldowns.clear();
     return this.requestSettings;
+  }
+
+  async persistAdminRequestSettings(settings) {
+    const validation = TwitchRequestSettings.validateSettings(settings);
+    if (!validation.ok) throw new Error(validation.errors[0]?.message || 'Twitch 點歌設定格式無效');
+    if (!this.onRequestSettingsChange) throw new Error('目前無法保存管理員變更');
+    const previous = this.requestSettings;
+    this.setRequestSettings(validation.settings);
+    try {
+      await this.onRequestSettingsChange(validation.settings);
+      this.notifyStatusChange();
+      return validation.settings;
+    } catch (err) {
+      this.setRequestSettings(previous);
+      try { await this.onRequestSettingsChange(previous); } catch (_) { /* 原設定已留在記憶體，寫回失敗只記錄原始錯誤 */ }
+      throw err;
+    }
+  }
+
+  notifyPendingRequestsChanged() {
+    if (!this.onPendingRequestsChanged) return;
+    try { this.onPendingRequestsChanged(this.getPendingRequests()); } catch (err) { log.warn(`Twitch 待確認同步失敗：${err.message}`); }
+  }
+
+  createShortRequestId() {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const candidate = crypto.randomBytes(4).toString('hex').slice(0, 6).toLocaleUpperCase();
+      if (![...this.pendingRequests.values()].some((request) => request.shortId === candidate)) return candidate;
+    }
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 8).toLocaleUpperCase();
+  }
+
+  orderedPendingRequests() {
+    return [...this.pendingRequests.values()].sort((a, b) => {
+      const aPriority = Number.isFinite(Number(a.priority)) ? Number(a.priority) : Number(a.createdAt) || 0;
+      const bPriority = Number.isFinite(Number(b.priority)) ? Number(b.priority) : Number(b.createdAt) || 0;
+      return aPriority - bPriority || (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0);
+    });
+  }
+
+  findPendingRequest(target) {
+    const query = String(target || '').trim();
+    if (!query) return null;
+    const shortId = normalizeShortRequestId(query);
+    const byId = this.pendingRequests.get(query) || this.orderedPendingRequests()
+      .find((request) => normalizeShortRequestId(request.shortId) === shortId);
+    if (byId) return byId;
+    const user = query.replace(/^@/u, '').toLocaleLowerCase();
+    return this.orderedPendingRequests().filter((request) => [
+      request.requesterId,
+      request.requester,
+      request.event?.chatter_user_login,
+      request.event?.chatter_user_name,
+    ].some((value) => String(value || '').toLocaleLowerCase() === user)).at(-1) || null;
   }
 
   restoreRequestSession() {
@@ -299,6 +362,7 @@ class TwitchService {
   serializePendingRequest(request) {
     return {
       requestId: String(request.requestId || ''),
+      shortId: normalizeShortRequestId(request.shortId),
       url: String(request.url || ''),
       requester: String(request.requester || '觀眾'),
       requesterId: String(request.requesterId || ''),
@@ -327,6 +391,7 @@ class TwitchService {
         categories: Array.isArray(request.assessment.categories) ? request.assessment.categories.map(value => String(value).slice(0, 100)).slice(0, 5) : [],
       } : null,
       createdAt: Number(request.createdAt) || Date.now(),
+      priority: Number.isFinite(Number(request.priority)) ? Number(request.priority) : (Number(request.createdAt) || Date.now()),
       expiresAt: Number(request.expiresAt) || Date.now() + REQUEST_TTL_MS,
       event: {
         chatter_user_name: String(request.event?.chatter_user_name || ''),
@@ -353,6 +418,7 @@ class TwitchService {
     for (const raw of restored) {
       const request = this.serializePendingRequest(raw || {});
       if (!request.requestId || !request.videoId) continue;
+      if (!request.shortId) request.shortId = this.createShortRequestId();
       this.pendingRequests.set(request.requestId, request);
       if (request.rewardRedemption?.id) this.seenRedemptions.set(request.rewardRedemption.id, request.createdAt);
       this.scheduleRequestExpiry(request.requestId);
@@ -830,9 +896,8 @@ class TwitchService {
   pendingForUser(event) {
     const userKey = requesterKey(event);
     if (!userKey) return [];
-    return [...this.pendingRequests.values()]
-      .filter((request) => request.requesterId === userKey && request.expiresAt > Date.now())
-      .sort((a, b) => a.createdAt - b.createdAt);
+    return this.orderedPendingRequests()
+      .filter((request) => request.requesterId === userKey && request.expiresAt > Date.now());
   }
 
   requestRulesSummary() {
@@ -873,6 +938,7 @@ class TwitchService {
     this.pendingRequests.delete(request.requestId);
     this.clearRequestExpiry(request.requestId);
     this.persistPendingRequests();
+    this.notifyPendingRequestsChanged();
     if (typeof this.onSongRequestCanceled === 'function') this.onSongRequestCanceled(request.requestId);
     if (request.rewardRedemption) {
       await this.sendConfiguredReply(event, 'rewardRefunded', {
@@ -904,7 +970,7 @@ class TwitchService {
       });
     } else if (commandKey === 'position') {
       const own = this.pendingForUser(event).at(-1);
-      const ordered = [...this.pendingRequests.values()].filter((request) => request.expiresAt > Date.now()).sort((a, b) => a.createdAt - b.createdAt);
+      const ordered = this.orderedPendingRequests().filter((request) => request.expiresAt > Date.now());
       await this.sendConfiguredReply(event, own ? 'requestPosition' : 'requestNotFound', {
         title: own?.title || '', position: own ? ordered.findIndex((request) => request.requestId === own.requestId) + 1 : '',
       });
@@ -924,6 +990,85 @@ class TwitchService {
     }
   }
 
+  async promotePendingRequest(request) {
+    const first = this.orderedPendingRequests()[0];
+    const firstPriority = Number.isFinite(Number(first?.priority)) ? Number(first.priority) : Number(first?.createdAt) || Date.now();
+    request.priority = first && first.requestId !== request.requestId ? firstPriority - 1 : firstPriority;
+    this.persistPendingRequests();
+    this.notifyPendingRequestsChanged();
+    return request;
+  }
+
+  async requestPanelSkip(event) {
+    if (!this.onPanelAction) {
+      await this.sendConfiguredReply(event, 'adminPanelUnavailable');
+      return;
+    }
+    const actionId = crypto.randomUUID();
+    const targetSocketId = this.onPanelAction({ actionId, type: 'skip' });
+    if (!targetSocketId) {
+      await this.sendConfiguredReply(event, 'adminPanelUnavailable');
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.completeAdminPanelAction({ actionId, ok: false, error: '桌面面板沒有回報操作結果' })
+        .catch((err) => log.warn(`Twitch 管理員略過歌曲逾時回覆失敗：${err.message}`));
+    }, ADMIN_ACTION_TIMEOUT_MS);
+    if (typeof timer.unref === 'function') timer.unref();
+    this.adminPanelActions.set(actionId, { event, timer, targetSocketId });
+  }
+
+  async completeAdminPanelAction({ actionId, ok, error, socketId } = {}) {
+    const action = this.adminPanelActions.get(String(actionId || ''));
+    if (!action) return false;
+    if (action.targetSocketId && action.targetSocketId !== socketId) return false;
+    this.adminPanelActions.delete(String(actionId || ''));
+    if (action.timer) clearTimeout(action.timer);
+    if (ok) {
+      await this.sendConfiguredReply(action.event, 'adminSkipped');
+    } else {
+      await this.sendConfiguredReply(action.event, 'adminActionFailed', {
+        reason: String(error || '桌面面板沒有完成操作').slice(0, 240),
+      });
+    }
+    return true;
+  }
+
+  async handleAdminCommand(commandKey, event, argument) {
+    const target = String(argument || '').trim();
+    if (commandKey === 'adminOpen') {
+      await this.persistAdminRequestSettings({ ...this.requestSettings, enabled: true });
+      await this.sendConfiguredReply(event, 'adminRequestOpened');
+      return;
+    }
+    if (commandKey === 'adminPause') {
+      await this.persistAdminRequestSettings({ ...this.requestSettings, enabled: false });
+      await this.sendConfiguredReply(event, 'adminRequestPaused');
+      return;
+    }
+    if (commandKey === 'adminSkip') {
+      await this.requestPanelSkip(event);
+      return;
+    }
+    const request = this.findPendingRequest(target);
+    if (!request) {
+      await this.sendConfiguredReply(event, 'adminTargetNotFound', { requestId: normalizeShortRequestId(target) || '—' });
+      return;
+    }
+    if (commandKey === 'adminPromote') {
+      await this.promotePendingRequest(request);
+      await this.sendConfiguredReply(event, 'adminRequestPromoted', {
+        requestId: request.shortId, title: request.title, artist: request.author,
+      });
+      return;
+    }
+    const replyKey = commandKey === 'adminReject' ? 'adminRequestRejected' : 'adminRequestRemoved';
+    await this.completeSongRequest({ requestId: request.requestId, success: false, rejected: true });
+    await this.sendConfiguredReply(event, replyKey, {
+      requestId: request.shortId, title: request.title, artist: request.author,
+    });
+  }
+
   async handleChatMessage(event, fallbackId) {
     const text = String(event.message && event.message.text || '').trim();
     const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
@@ -931,8 +1076,24 @@ class TwitchService {
     if (!match) return;
     const command = match.command;
     const commandSettings = match.settings;
-    if (!TwitchRequestSettings.permissionAllows(event, commandSettings.permissionLevel)) {
+    if (!TwitchRequestSettings.permissionAllows(event, commandSettings.permissionLevel)
+      || (match.definition?.adminOnly && !TwitchRequestSettings.rolesForEvent(event).moderator)) {
       await this.sendConfiguredReply(event, 'permissionDenied', { command });
+      return;
+    }
+    if (match.definition?.adminOnly) {
+      const remainingSeconds = this.commandCooldown(match.key, commandSettings, event);
+      if (remainingSeconds > 0) {
+        await this.sendConfiguredReply(event, 'cooldownActive', { command, seconds: remainingSeconds });
+        return;
+      }
+      try {
+        await this.handleAdminCommand(match.key, event, match.argument);
+        this.recordCommandCooldown(match.key, commandSettings, event);
+      } catch (err) {
+        log.warn(`Twitch 管理員指令失敗（${match.key}）：${err.message}`);
+        await this.sendConfiguredReply(event, 'adminActionFailed', { reason: String(err.message || '未知錯誤').slice(0, 240) });
+      }
       return;
     }
     const fairnessExempt = match.key === 'request' && this.requestFairnessExempt(event);
@@ -1095,7 +1256,16 @@ class TwitchService {
       durationWarning: !!metadata.assessment?.warningTypes?.includes('too-long'),
       assessment: metadata.assessment || null,
     };
-    const accepted = this.onSongRequest(request);
+    const createdAt = Date.now();
+    const pendingRequest = {
+      ...request,
+      shortId: this.createShortRequestId(),
+      event,
+      createdAt,
+      priority: createdAt,
+      expiresAt: createdAt + REQUEST_TTL_MS,
+    };
+    const accepted = typeof this.onSongRequest === 'function' && this.onSongRequest(this.serializePendingRequest(pendingRequest));
     if (!accepted) {
       await this.rejectSongRequest({
         event, key: 'panelUnavailable', redemption, reason: '控制面板目前無法接收點歌',
@@ -1104,13 +1274,13 @@ class TwitchService {
       return false;
     }
     const consecutiveRequester = this.recordAcceptedRequest(event, parsedUrl.videoId);
-    const createdAt = Date.now();
-    this.pendingRequests.set(requestId, { ...request, event, createdAt, expiresAt: createdAt + REQUEST_TTL_MS });
+    this.pendingRequests.set(requestId, pendingRequest);
     this.scheduleRequestExpiry(requestId);
     this.persistPendingRequests();
+    this.notifyPendingRequestsChanged();
     // 確認制：不自動下載，先送到主播面板等待確認。
     await this.sendConfiguredReply(event, source === 'channel-points' ? 'rewardReceived' : 'received', {
-      title: request.title, artist: request.author, url, cost: redemption?.cost || '',
+      title: request.title, artist: request.author, url, cost: redemption?.cost || '', requestId: pendingRequest.shortId,
     });
     if (consecutiveRequester && rules.warnConsecutiveRequests) {
       await this.sendConfiguredReply(event, 'consecutiveRequesterWarning', {
@@ -1159,6 +1329,7 @@ class TwitchService {
       this.pendingRequests.delete(requestId);
       this.clearRequestExpiry(requestId);
       this.persistPendingRequests();
+      this.notifyPendingRequestsChanged();
       return;
     }
     if (rejected) {
@@ -1184,6 +1355,7 @@ class TwitchService {
     this.pendingRequests.delete(requestId);
     this.clearRequestExpiry(requestId);
     this.persistPendingRequests();
+    this.notifyPendingRequestsChanged();
   }
 
   async sendConfiguredReply(event, replyKey, values = {}) {
@@ -1276,7 +1448,7 @@ class TwitchService {
 
   getPendingRequests() {
     const now = Date.now();
-    return [...this.pendingRequests.values()]
+    return this.orderedPendingRequests()
       .filter((request) => request.expiresAt > now)
       .map(({ event, ...request }) => request);
   }
@@ -1311,6 +1483,7 @@ class TwitchService {
     if (!this.pendingRequests.delete(requestId)) return;
     this.clearRequestExpiry(requestId);
     this.persistPendingRequests();
+    this.notifyPendingRequestsChanged();
     if (typeof this.onSongRequestExpired === 'function') this.onSongRequestExpired(requestId);
     try {
       await this.sendConfiguredReply(request.event, request.rewardRedemption ? 'rewardRefunded' : 'requestExpired', {
@@ -1330,6 +1503,8 @@ class TwitchService {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     for (const timer of this.requestExpiryTimers.values()) clearTimeout(timer);
     this.requestExpiryTimers.clear();
+    for (const action of this.adminPanelActions.values()) if (action.timer) clearTimeout(action.timer);
+    this.adminPanelActions.clear();
     if (this.ws && typeof this.ws.close === 'function') this.ws.close();
     this.ws = null;
     this.wsSessionId = null;

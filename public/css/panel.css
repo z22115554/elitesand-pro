@@ -634,6 +634,8 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-pane-actions > .val { margin-right: auto; }
 .twitch-command-layout { display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr); gap: 16px; }
 .twitch-command-list, .twitch-reply-events { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.twitch-command-group-label { margin: 10px 2px 3px; color: var(--text-faint); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.twitch-command-group-label:first-child { margin-top: 0; }
 .twitch-command-item, .twitch-reply-event { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-raised); color: var(--text-dim); text-align: left; }
 .twitch-command-item:hover, .twitch-reply-event:hover { border-color: var(--border-strong); color: var(--text); }
 .twitch-command-item.is-active, .twitch-reply-event.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
@@ -694,7 +696,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
   .twitch-management-nav-item { width: auto; flex: none; white-space: nowrap; }
   .twitch-command-layout, .twitch-reply-master-detail, .twitch-blacklist-layout { grid-template-columns: 1fr; }
   .twitch-command-list, .twitch-reply-events { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(145px, 1fr); overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
-  .twitch-reply-group-label { display: none; }
+  .twitch-command-group-label, .twitch-reply-group-label { display: none; }
   .twitch-reply-toolbar { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {

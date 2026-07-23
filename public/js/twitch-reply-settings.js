@@ -27,6 +27,7 @@ const TwitchReplySettings = (() => {
     { key: 'nextTitle', label: '下一首歌曲名稱', sample: '下一首歌曲' },
     { key: 'nextArtist', label: '下一首歌手', sample: '下一首歌手' },
     { key: 'requestCount', label: '待確認數量', sample: '2' },
+    { key: 'requestId', label: '待確認編號', sample: 'A7K2Q' },
   ]);
   const ALLOWED_VARIABLES = new Set(VARIABLE_DEFINITIONS.map((item) => item.key));
   const REPLY_GROUPS = Object.freeze([
@@ -34,10 +35,11 @@ const TwitchReplySettings = (() => {
     { key: 'restrictions', label: '限制與拒絕' },
     { key: 'failures', label: '失敗、取消與逾時' },
     { key: 'rewards', label: '忠誠點數' },
+    { key: 'admin', label: '管理員操作' },
   ]);
 
   const REPLY_DEFINITIONS = Object.freeze([
-    { key: 'received', group: 'received', label: '收到點歌、等待確認', defaultEnabled: true, defaultTemplate: '已收到你的點歌，等待主播確認：{title}' },
+    { key: 'received', group: 'received', label: '收到點歌、等待確認', defaultEnabled: true, defaultTemplate: '已收到你的點歌（編號 #{requestId}），等待主播確認：{title}' },
     { key: 'importSuccess', group: 'received', label: '成功匯入', defaultEnabled: true, defaultTemplate: '點歌成功：{title}（{position}）' },
     { key: 'currentSong', group: 'received', label: '目前歌曲', defaultEnabled: true, defaultTemplate: '目前播放：{currentTitle} — {currentArtist}' },
     { key: 'noCurrentSong', group: 'received', label: '目前沒有歌曲', defaultEnabled: true, defaultTemplate: '目前沒有載入或播放中的歌曲。' },
@@ -70,9 +72,18 @@ const TwitchReplySettings = (() => {
     { key: 'retryableFailure', group: 'failures', label: '暫時匯入失敗、等待重試', defaultEnabled: false, defaultTemplate: '這首歌暫時匯入失敗，主播可以重新嘗試。' },
     { key: 'requestExpired', group: 'failures', label: '等待確認超過 30 分鐘', defaultEnabled: true, defaultTemplate: '點歌等待確認逾時，已自動取消；歡迎重新點歌。' },
     { key: 'requestCancelFailed', group: 'failures', label: '觀眾取消暫時失敗', defaultEnabled: true, defaultTemplate: '這筆點歌目前無法取消，請稍後再試。' },
-    { key: 'rewardReceived', group: 'rewards', label: '忠誠點數點歌已收到', defaultEnabled: true, defaultTemplate: '已收到 {user} 的忠誠點數點歌，等待主播確認：{title}' },
+    { key: 'rewardReceived', group: 'rewards', label: '忠誠點數點歌已收到', defaultEnabled: true, defaultTemplate: '已收到 {user} 的忠誠點數點歌（編號 #{requestId}），等待主播確認：{title}' },
     { key: 'rewardFulfilled', group: 'rewards', label: '忠誠點數兌換完成', defaultEnabled: true, defaultTemplate: '忠誠點數點歌成功：{title}（{position}）' },
     { key: 'rewardRefunded', group: 'rewards', label: '忠誠點數兌換退款', defaultEnabled: true, defaultTemplate: '這次忠誠點數點歌未完成，已退還 {cost} 點：{reason}' },
+    { key: 'adminRequestOpened', group: 'admin', label: '管理員開放點歌', defaultEnabled: true, defaultTemplate: '已開放聊天室點歌。' },
+    { key: 'adminRequestPaused', group: 'admin', label: '管理員暫停點歌', defaultEnabled: true, defaultTemplate: '已暫停聊天室點歌。' },
+    { key: 'adminRequestRejected', group: 'admin', label: '管理員拒絕點歌', defaultEnabled: true, defaultTemplate: '已拒絕點歌 #{requestId}：{title}' },
+    { key: 'adminRequestRemoved', group: 'admin', label: '管理員移除點歌', defaultEnabled: true, defaultTemplate: '已移除點歌 #{requestId}：{title}' },
+    { key: 'adminRequestPromoted', group: 'admin', label: '管理員提升順位', defaultEnabled: true, defaultTemplate: '已提升點歌 #{requestId}：{title}' },
+    { key: 'adminSkipped', group: 'admin', label: '管理員略過目前歌曲', defaultEnabled: true, defaultTemplate: '已請面板略過目前歌曲。' },
+    { key: 'adminTargetNotFound', group: 'admin', label: '管理員找不到待確認點歌', defaultEnabled: true, defaultTemplate: '找不到待確認點歌 #{requestId}。' },
+    { key: 'adminPanelUnavailable', group: 'admin', label: '管理員操作沒有可用面板', defaultEnabled: true, defaultTemplate: '控制面板目前沒有可執行這項操作的桌面面板。' },
+    { key: 'adminActionFailed', group: 'admin', label: '管理員操作失敗', defaultEnabled: true, defaultTemplate: '目前無法完成這項管理員操作：{reason}' },
   ]);
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }

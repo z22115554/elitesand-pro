@@ -27,6 +27,27 @@ function registerTwitchHandlers(io, socket, ctx, { getTwitchService }) {
     }
   });
 
+  socket.on('twitch:admin-action:result', async (payload, ack) => {
+    const twitchService = getTwitchService();
+    const actionId = typeof payload?.actionId === 'string' ? payload.actionId : '';
+    if (!twitchService || !actionId || typeof payload?.ok !== 'boolean') {
+      if (typeof ack === 'function') ack({ ok: false, error: '管理員操作回報格式無效' });
+      return;
+    }
+    try {
+      const accepted = await twitchService.completeAdminPanelAction({
+        actionId,
+        ok: payload.ok,
+        error: typeof payload.error === 'string' ? payload.error.slice(0, 240) : '',
+        socketId: socket.id,
+      });
+      if (typeof ack === 'function') ack(accepted ? { ok: true } : { ok: false, error: '這項管理員操作已逾時或不存在' });
+    } catch (err) {
+      log.warn(`Twitch 管理員操作回報失敗: ${err.message}`);
+      if (typeof ack === 'function') ack({ ok: false, error: '無法回覆 Twitch 聊天室' });
+    }
+  });
+
   socket.on('twitch:reply-settings:update', (incoming, ack) => {
     const validation = TwitchReplySettings.validateSettings(incoming);
     if (!validation.ok) {
