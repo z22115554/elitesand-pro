@@ -4079,6 +4079,21 @@ test('歌單亮色背景可讀性保護與模板有效設定守衛存在', () =>
   ok(setlistCss.includes('.terminal { width: 300px; background: var(--sl-bg-card);') && setlistCss.includes('.billboard { width: 320px; background: var(--sl-bg-card);') && setlistCss.includes('.card { background: var(--sl-bg-card);'), '清單型模板不得繞過共用卡片底色設定');
 });
 
+test('暫停的歌單場景模板不再能新選，但既有 OBS 設定仍可安全保留', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const setlistHandler = fs.readFileSync(path.join(__dirname, '../server/routes/handlers/setlist.js'), 'utf8');
+  ['diagonal', 'timeline', 'constellation'].forEach((layout) => {
+    ok(indexHtml.includes(`<option value="${layout}" hidden>`), `${layout} 必須保留隱藏 option，讓舊設定可被讀回`);
+    ok(!indexHtml.includes(`data-setlist-layout="${layout}"`), `${layout} 不得再出現在新模板選擇入口`);
+    ok(setlistSource.includes(layout), `${layout} renderer 必須保留，避免已使用中的 OBS 畫面被改掉`);
+    ok(setlistHandler.includes(`'${layout}'`), `${layout} server 驗證必須保留，避免讀取舊設定時被回退`);
+  });
+  ok(setlistPanel.includes("const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation']"), '面板必須集中管理暫停模板清單');
+  ok(setlistPanel.includes('setlist-legacy-layout-notice') && setlistPanel.includes('appearance.hidden = isHiddenLayout'), '暫停模板必須顯示保留說明並收起無法再調整的設定');
+});
+
 test('OBS 經典歌單以歌名為第一優先，長歌手名不可擠壓歌名', () => {
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const titleRule = /\.setlist-title\s*\{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
