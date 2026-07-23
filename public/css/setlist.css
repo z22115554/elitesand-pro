@@ -891,6 +891,63 @@ html[data-layout="classic"] #setlist-root {
   .signal-next { padding: 8px 0 0; border-top: 1px solid var(--sl-readable-border, var(--sl-bc)); border-left: 0; }
 }
 
+/* ══ 全畫布輸出 ══
+   這是同一份歌單的第二種 Browser Source 尺寸契約：固定 1920×1080 座標，
+   JS 只做等比縮放與透明留白。沒有全螢幕背板，只有各模板原本自己的局部表面。 */
+html[data-setlist-output="canvas"],
+html[data-setlist-output="canvas"] body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+/* Must outrank the legacy non-classic layout reset above, which clears
+   transforms for standalone widget layouts. */
+html[data-setlist-output="canvas"][data-layout] #setlist-root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 1920px;
+  height: 1080px;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  border-radius: 0;
+  transform: translate3d(var(--sl-canvas-x, 0px), var(--sl-canvas-y, 0px), 0) scale(var(--sl-canvas-scale, 1));
+  transform-origin: top left;
+}
+html[data-setlist-output="canvas"][data-layout="classic"] .classic-shell {
+  position: absolute;
+  left: 64px;
+  bottom: 64px;
+  width: min(var(--sl-w), 720px);
+}
+html[data-setlist-output="canvas"][data-layout="cards"] .cards-stage {
+  position: absolute;
+  right: 64px;
+  bottom: 64px;
+}
+html[data-setlist-output="canvas"][data-layout="billboard"] .bb-stage {
+  position: absolute;
+  top: 64px;
+  left: 64px;
+}
+html[data-setlist-output="canvas"][data-layout="terminal"] .term-stage {
+  position: absolute;
+  top: 64px;
+  right: 64px;
+}
+html[data-setlist-output="canvas"][data-layout="index"] .index-stage {
+  position: absolute;
+  top: 50%;
+  right: 64px;
+  transform: translateY(-50%);
+}
+
 html[data-layout="simple"] #setlist-root {
   display: inline-block;
   width: min(calc(var(--sl-w) * 1.08), 92vw);

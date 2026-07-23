@@ -175,10 +175,26 @@
   }
 
   const setlistLayoutSel = document.getElementById('setlist-layout');
+  const SETLIST_CANVAS_LAYOUTS = ['classic', 'cards', 'billboard', 'terminal', 'index'];
+  let setlistOutputMode = 'canvas';
 
-  // Setlist OBS URL 固定；版型與主題由 socket state 同步，使用者不用更新 OBS URL。
-  function buildSetlistUrl() {
-    return window.location.origin + '/setlist';
+  function selectedSetlistLayout() {
+    return setlistLayoutSel?.value || 'classic';
+  }
+  function supportsCanvasOutput(layout = selectedSetlistLayout()) {
+    return SETLIST_CANVAS_LAYOUTS.includes(layout);
+  }
+  function activeSetlistOutputMode() {
+    return supportsCanvasOutput() ? setlistOutputMode : 'widget';
+  }
+
+  // 畫布輸出只寫進網址，不改 server state。舊 /setlist 保持原本的小元件來源，
+  // 因此已放進 OBS 的來源不會被新功能自動改版。
+  function buildSetlistUrl({ preview = false, relative = false } = {}) {
+    const url = new URL('/setlist', window.location.origin);
+    if (activeSetlistOutputMode() === 'canvas') url.searchParams.set('mode', 'canvas');
+    if (preview) url.searchParams.set('preview', '1');
+    return relative ? `${url.pathname}${url.search}` : url.toString();
   }
   function refreshSetlistUrl() {
     if (dom.setlistObsUrl) dom.setlistObsUrl.textContent = buildSetlistUrl();
@@ -186,11 +202,12 @@
     if (generalUrl) generalUrl.textContent = buildSetlistUrl();
     // 同步更新面板內的歌單預覽 iframe（選版型/主題即時看到變化）。
     // 預覽 iframe 必須保留 ?preview=1——沒帶的話會被伺服器當成真的 OBS 歌單來源計入連線數。
-    const prev = document.getElementById('setlist-preview');
-    if (prev) {
-      const want = buildSetlistUrl().replace(window.location.origin, '') + '?preview=1';
+    const want = buildSetlistUrl({ preview: true, relative: true });
+    document.querySelectorAll('.setlist-preview').forEach((prev) => {
       if (prev.getAttribute('src') !== want) prev.setAttribute('src', want);
-    }
+    });
+    const outputName = activeSetlistOutputMode() === 'canvas' ? '全畫布' : '小元件';
+    document.querySelectorAll('.setlist-preview-tag').forEach((tag) => { tag.textContent = `${outputName}預覽`; });
   }
 
   // 版型類別：scene（場景版各自獨立）/ classic / list（清單版，與經典共用一份）
@@ -212,6 +229,35 @@
   const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation'];
   const SETLIST_RECOMMENDED_LAYOUTS = ['classic', 'cards'];
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
+  const setlistOutputButtons = Array.from(document.querySelectorAll('[data-setlist-output]'));
+
+  function syncSetlistOutputMode() {
+    const supportsCanvas = supportsCanvasOutput();
+    const outputMode = activeSetlistOutputMode();
+    const outputField = document.getElementById('setlist-output-mode');
+    const unsupported = document.getElementById('setlist-output-unsupported');
+    const hint = document.getElementById('setlist-output-hint');
+    if (outputField) outputField.hidden = !supportsCanvas;
+    if (unsupported) unsupported.hidden = supportsCanvas;
+    setlistOutputButtons.forEach((button) => {
+      const selected = button.dataset.setlistOutput === outputMode;
+      button.setAttribute('aria-checked', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      button.classList.toggle('is-selected', selected);
+    });
+    if (!hint) return;
+    hint.textContent = outputMode === 'canvas'
+      ? '使用完整透明畫布；在 OBS 將 Browser Source 設為 1920 × 1080，常見尺寸會等比縮放。既有小元件網址不會被改動。'
+      : '保留原本的局部小元件輸出；適合已經在 OBS 裡裁切或定位好的來源。';
+  }
+
+  function chooseSetlistOutput(mode) {
+    if (!supportsCanvasOutput() || !['canvas', 'widget'].includes(mode)) return;
+    setlistOutputMode = mode;
+    syncSetlistOutputMode();
+    refreshSetlistUrl();
+  }
+
   function syncSetlistLayoutPicker() {
     if (!setlistLayoutSel) return;
     const layout = setlistLayoutSel.value || 'classic';
@@ -239,6 +285,7 @@
     const moreButton = document.getElementById('btn-setlist-more-layouts');
     if (more && !SETLIST_RECOMMENDED_LAYOUTS.includes(layout)) more.hidden = false;
     if (moreButton && more) moreButton.setAttribute('aria-expanded', String(!more.hidden));
+    syncSetlistOutputMode();
   }
   function chooseSetlistLayout(layout) {
     if (!setlistLayoutSel || !layout) return;
@@ -258,6 +305,22 @@
       event.preventDefault();
       const next = setlistLayoutButtons[nextIndex];
       chooseSetlistLayout(next.dataset.setlistLayout);
+      next.focus();
+    });
+  });
+  setlistOutputButtons.forEach((button, index) => {
+    button.addEventListener('click', () => chooseSetlistOutput(button.dataset.setlistOutput));
+    button.addEventListener('keydown', (event) => {
+      const lastIndex = setlistOutputButtons.length - 1;
+      let nextIndex = null;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = index === lastIndex ? 0 : index + 1;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = index === 0 ? lastIndex : index - 1;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = lastIndex;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      const next = setlistOutputButtons[nextIndex];
+      chooseSetlistOutput(next.dataset.setlistOutput);
       next.focus();
     });
   });
@@ -348,15 +411,15 @@
   }
   if (setlistLayoutSel) {
     setlistLayoutSel.addEventListener('change', () => {
-      refreshSetlistUrl();
       syncSetlistControlsForLayout();
       syncSetlistLayoutPicker();
+      refreshSetlistUrl();
       SocketClient.send('setlist:layout', { layout: setlistLayoutSel.value || 'classic' });
     });
   }
-  refreshSetlistUrl();
   syncSetlistControlsForLayout();
   syncSetlistLayoutPicker();
+  refreshSetlistUrl();
 
   // 歌單外觀細項：縮放 / 背板底色+不透明度 / 文字顏色覆蓋。
   // 改動只送 socket → 伺服器廣播 setlist:style，預覽 iframe 與真實 OBS 同步即時更新（與主題同機制）。
@@ -562,7 +625,7 @@
       if (sess.style) slStores.shared = sess.style;
       if (sess.sceneStyles) { ['timeline', 'diagonal', 'constellation'].forEach((k) => { if (sess.sceneStyles[k]) slStores[k] = sess.sceneStyles[k]; }); }
       if (sess.theme && dom.setlistTheme) { dom.setlistTheme.value = sess.theme; refreshSetlistUrl(); }
-      if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; refreshSetlistUrl(); syncSetlistControlsForLayout(); syncSetlistLayoutPicker(); }
+      if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; syncSetlistControlsForLayout(); syncSetlistLayoutPicker(); refreshSetlistUrl(); }
       const cur = slStores[setlistTarget()];
       if (cur) adoptStyleUI(cur);
     });

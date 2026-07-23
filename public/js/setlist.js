@@ -15,6 +15,54 @@
   // 目前資料模型（normalize 後）與版型
   let model = { active: false, startedAt: null, past: [], current: null, upcoming: [] };
   let layoutId = 'classic';
+  const q = new URLSearchParams(location.search);
+
+  // 畫布來源是 URL 層的輸出選項，不是另一份歌單設定：
+  // 同一個 state / Socket client 仍照常使用，舊 /setlist 來源則完全維持小元件行為。
+  const CANVAS_LAYOUTS = new Set(['classic', 'cards', 'billboard', 'terminal', 'index']);
+  const CANVAS_W = 1920;
+  const CANVAS_H = 1080;
+  const canvasRequested = q.get('mode') === 'canvas';
+  let canvasFitFrame = 0;
+
+  function isCanvasOutput() {
+    return canvasRequested && CANVAS_LAYOUTS.has(layoutId);
+  }
+
+  function syncCanvasViewport() {
+    if (!isCanvasOutput()) return;
+    const viewportW = Math.max(1, window.innerWidth || document.documentElement.clientWidth || CANVAS_W);
+    const viewportH = Math.max(1, window.innerHeight || document.documentElement.clientHeight || CANVAS_H);
+    const scale = Math.min(viewportW / CANVAS_W, viewportH / CANVAS_H);
+    rootEl.style.setProperty('--sl-canvas-scale', String(scale));
+    rootEl.style.setProperty('--sl-canvas-x', `${Math.round((viewportW - CANVAS_W * scale) / 2)}px`);
+    rootEl.style.setProperty('--sl-canvas-y', `${Math.round((viewportH - CANVAS_H * scale) / 2)}px`);
+  }
+
+  function queueCanvasViewportSync() {
+    if (!isCanvasOutput()) return;
+    if (canvasFitFrame) cancelAnimationFrame(canvasFitFrame);
+    canvasFitFrame = requestAnimationFrame(() => {
+      canvasFitFrame = 0;
+      syncCanvasViewport();
+    });
+  }
+
+  function syncOutputMode() {
+    const canvas = isCanvasOutput();
+    document.documentElement.dataset.setlistOutput = canvas ? 'canvas' : 'widget';
+    if (!canvas) {
+      if (canvasFitFrame) cancelAnimationFrame(canvasFitFrame);
+      canvasFitFrame = 0;
+      rootEl.style.removeProperty('--sl-canvas-scale');
+      rootEl.style.removeProperty('--sl-canvas-x');
+      rootEl.style.removeProperty('--sl-canvas-y');
+      return;
+    }
+    syncCanvasViewport();
+  }
+
+  window.addEventListener('resize', queueCanvasViewportSync);
 
   // ─── 共用工具（去重：現在統一在 shared-utils.js） ───
   const { escapeHtml } = SharedUtils;
@@ -623,6 +671,7 @@
     if (!LAYOUTS[id]) id = 'classic';
     layoutId = id;
     document.documentElement.dataset.layout = id;
+    syncOutputMode();
     rootEl.innerHTML = '';
     LAYOUTS[id].mount(rootEl);
     renderActive();
@@ -657,7 +706,6 @@
   }
 
   // 初始 layout/theme：URL 參數作為 socket 連上前的 fallback
-  const q = new URLSearchParams(location.search);
   if (q.get('theme')) applyTheme(q.get('theme'));
   setLayout(q.get('layout') || 'classic');
 
