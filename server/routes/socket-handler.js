@@ -204,6 +204,7 @@ module.exports = function socketHandler(io, {
   function syncTwitchRequests(socket) {
     if (socket && socket.clientType === 'controller' && twitchService) {
       socket.emit('twitch:requests', twitchService.getPendingRequests());
+      socket.emit('twitch:history', twitchService.getRequestHistory(80));
       socket.emit('twitch:reply-settings:update', ctx.playState.twitchReplySettings);
       socket.emit('twitch:request-settings:update', ctx.playState.twitchRequestSettings);
       socket.emit('twitch:reward-settings:update', ctx.playState.twitchRewardSettings);
@@ -216,6 +217,15 @@ module.exports = function socketHandler(io, {
     for (const id of clients.controllers) {
       const target = io.sockets.sockets.get(id);
       if (target && target.connected) target.emit('twitch:requests', requests);
+    }
+  }
+
+  function broadcastTwitchHistory(entries = null) {
+    if (!twitchService) return;
+    const history = Array.isArray(entries) ? entries : twitchService.getRequestHistory(80);
+    for (const id of clients.controllers) {
+      const target = io.sockets.sockets.get(id);
+      if (target && target.connected) target.emit('twitch:history', history);
     }
   }
 
@@ -369,6 +379,7 @@ module.exports = function socketHandler(io, {
     expireTwitchSongRequest,
     cancelTwitchSongRequest,
     broadcastTwitchRequests,
+    broadcastTwitchHistory,
     persistTwitchRequestSettingsFromService,
     setTwitchService(service) {
       twitchService = service;

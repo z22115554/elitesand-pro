@@ -131,6 +131,51 @@ function registerTwitchHandlers(io, socket, ctx, { getTwitchService }) {
       if (typeof ack === 'function') ack({ ok: false, error: err.message || 'Twitch 測試訊息未送出' });
     }
   });
+
+  socket.on('twitch:custom-command:test', async (payload, ack) => {
+    const validation = TwitchRequestSettings.validateSettings(payload?.settings);
+    const commandId = typeof payload?.commandId === 'string' ? payload.commandId : '';
+    if (!validation.ok || !/^[A-Za-z0-9_-]{1,80}$/.test(commandId)) {
+      if (typeof ack === 'function') ack({ ok: false, error: validation.errors[0]?.message || '自訂指令測試資料無效' });
+      return;
+    }
+    const twitchService = getTwitchService();
+    if (!twitchService) {
+      if (typeof ack === 'function') ack({ ok: false, error: 'Twitch 服務尚未啟用' });
+      return;
+    }
+    try {
+      const result = await twitchService.sendCustomCommandTest(validation.settings, commandId);
+      if (typeof ack === 'function') ack({ ok: true, ...result });
+    } catch (err) {
+      log.warn(`Twitch 自訂指令公開測試未送出: ${err.message}`);
+      if (typeof ack === 'function') ack({ ok: false, error: err.message || '自訂指令測試訊息未送出' });
+    }
+  });
+
+  socket.on('twitch:history:get', (payload, ack) => {
+    const twitchService = getTwitchService();
+    if (!twitchService) {
+      if (typeof ack === 'function') ack({ ok: false, error: 'Twitch 服務尚未啟用' });
+      return;
+    }
+    const limit = Math.max(1, Math.min(200, Number.parseInt(payload?.limit, 10) || 80));
+    if (typeof ack === 'function') ack({ ok: true, entries: twitchService.getRequestHistory(limit) });
+  });
+
+  socket.on('twitch:simulate', (payload, ack) => {
+    const twitchService = getTwitchService();
+    if (!twitchService || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      if (typeof ack === 'function') ack({ ok: false, error: '模擬資料無效' });
+      return;
+    }
+    try {
+      if (typeof ack === 'function') ack({ ok: true, result: twitchService.simulateSongRequest(payload) });
+    } catch (err) {
+      log.warn(`Twitch 點歌模擬失敗: ${err.message}`);
+      if (typeof ack === 'function') ack({ ok: false, error: err.message || '無法執行點歌模擬' });
+    }
+  });
 }
 
 module.exports = registerTwitchHandlers;
