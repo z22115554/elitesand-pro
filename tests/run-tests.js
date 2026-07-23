@@ -5092,7 +5092,8 @@ test('Electron assisted installer stays per-user with an updateable app root', (
   eq(packageJson.build.nsis.createStartMenuShortcut, false,
     'custom installer page must own the Start menu shortcut choice');
   eq(packageJson.build.nsis.include, 'electron/installer.nsh');
-  eq(packageJson.build.nsis.license, 'EULA.txt', 'installer must show the approved EULA before install');
+  eq(packageJson.build.nsis.license, 'dist/.electron-builder-resources/EULA-installer.txt',
+    'installer must use its generated Unicode-safe EULA copy before install');
   ok(packageJson.build.nsis.deleteAppDataOnUninstall !== true,
     'uninstaller must never delete Electron userData');
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root'), 'installer must contain resources/app-root');
@@ -5114,7 +5115,9 @@ test('Electron assisted installer stays per-user with an updateable app root', (
   ok(mainSource.includes("path.join(process.resourcesPath, 'app-root')"), 'Electron main must resolve the packed app root');
   const installerBuild = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
   ['build-portable.ps1', 'app-root', 'Remove-Item -LiteralPath $runtimeDir -Recurse -Force', 'electron-builder.cmd',
-    'node_modules\\express\\package.json', 'Test-InstallerBootOutsideRepo', 'win-unpacked\\resources'].forEach((required) =>
+    'node_modules\\express\\package.json', 'Test-InstallerBootOutsideRepo', 'win-unpacked\\resources',
+    'EULA-installer.txt', '[System.Text.UTF8Encoding]::new($true)', 'NSIS installer EULA must be UTF-8 with a BOM',
+    'NSIS installer EULA diverged from the approved EULA.txt'].forEach((required) =>
     ok(installerBuild.includes(required), `Installer build is missing ${required}`));
   const updater = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater-runner.js'), 'utf8');
   ok(!updater.includes("'electron'"), 'incremental updater must never allow Electron shell files');

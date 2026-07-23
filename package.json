@@ -1,6 +1,6 @@
 {
   "name": "elitesand-pro",
-  "version": "0.9.2",
+  "version": "0.9.4",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
@@ -84,7 +84,7 @@
       "createDesktopShortcut": false,
       "createStartMenuShortcut": false,
       "include": "electron/installer.nsh",
-      "license": "EULA.txt"
+      "license": "dist/.electron-builder-resources/EULA-installer.txt"
     }
   }
 }

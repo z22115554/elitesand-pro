@@ -21,6 +21,7 @@ $PortableOutput = Join-Path $Resources "portable"
 $Package = Get-Content -LiteralPath (Join-Path $Root "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 $PortableStage = Join-Path $PortableOutput "Elitesand-Pro-v$($Package.version)-portable"
 $InstallerOutput = Join-Path $Root "dist\releases\v$($Package.version)\installer"
+$InstallerLicense = Join-Path $Resources "EULA-installer.txt"
 
 Assert-Inside -Path $Resources -Parent $Root
 Assert-Inside -Path $PortableOutput -Parent $Root
@@ -80,6 +81,19 @@ function Test-InstallerBootOutsideRepo {
 }
 
 try {
+  # NSIS license pages do not reliably decode a bare UTF-8 text file. Keep the
+  # approved EULA.txt as the sole source, but give electron-builder a UTF-8 BOM
+  # copy (the format its own localized-license path uses) for the installer UI.
+  $EulaText = [System.IO.File]::ReadAllText((Join-Path $Root "EULA.txt"), [System.Text.UTF8Encoding]::new($false))
+  [System.IO.File]::WriteAllText($InstallerLicense, $EulaText, [System.Text.UTF8Encoding]::new($true))
+  $InstallerLicenseBytes = [System.IO.File]::ReadAllBytes($InstallerLicense)
+  if ($InstallerLicenseBytes.Length -lt 3 -or $InstallerLicenseBytes[0] -ne 0xEF -or $InstallerLicenseBytes[1] -ne 0xBB -or $InstallerLicenseBytes[2] -ne 0xBF) {
+    throw "NSIS installer EULA must be UTF-8 with a BOM."
+  }
+  if ([System.IO.File]::ReadAllText($InstallerLicense, [System.Text.UTF8Encoding]::new($true)) -cne $EulaText) {
+    throw "NSIS installer EULA diverged from the approved EULA.txt."
+  }
+
   # Keep the installer binaries and FFmpeg GPLv3 material on the exact same
   # path as the portable package. Do not duplicate its compliance workflow.
   & (Join-Path $PSScriptRoot "build-portable.ps1") -OutputRoot $PortableOutput -NoZip
