@@ -29,6 +29,7 @@ const registerPlaylistHandlers = require('./handlers/playlist');
 const registerLibraryHandlers = require('./handlers/library');
 const registerSetlistHandlers = require('./handlers/setlist');
 const registerTwitchHandlers = require('./handlers/twitch');
+const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
 const stateStore = require('../services/state-store');
@@ -209,6 +210,40 @@ module.exports = function socketHandler(io, {
     }
   }
 
+  function broadcastTwitchRequests() {
+    if (!twitchService) return;
+    const requests = twitchService.getPendingRequests();
+    for (const id of clients.controllers) {
+      const target = io.sockets.sockets.get(id);
+      if (target && target.connected) target.emit('twitch:requests', requests);
+    }
+  }
+
+  function dispatchTwitchAdminAction(action) {
+    for (const id of [...clients.controllers].reverse()) {
+      const target = io.sockets.sockets.get(id);
+      if (target && target.connected) {
+        target.emit('twitch:admin-action', action);
+        return target.id;
+      }
+    }
+    return null;
+  }
+
+  function persistTwitchRequestSettingsFromService(settings) {
+    const validation = TwitchRequestSettings.validateSettings(settings);
+    if (!validation.ok) return Promise.reject(new Error(validation.errors[0]?.message || 'Twitch 點歌設定格式無效'));
+    ctx.playState.twitchRequestSettings = validation.settings;
+    if (twitchService && typeof twitchService.setRequestSettings === 'function') twitchService.setRequestSettings(validation.settings);
+    io.emit('twitch:request-settings:update', validation.settings);
+    return new Promise((resolve, reject) => {
+      ctx.persistState((result) => {
+        if (result?.ok === false) reject(new Error(result.error || 'Twitch 點歌設定保存失敗'));
+        else resolve(validation.settings);
+      });
+    });
+  }
+
   function expireTwitchSongRequest(requestId) {
     for (const id of clients.controllers) {
       const target = io.sockets.sockets.get(id);
@@ -330,8 +365,11 @@ module.exports = function socketHandler(io, {
     startTwitchSession,
     stopTwitchSession,
     dispatchTwitchSongRequest,
+    dispatchTwitchAdminAction,
     expireTwitchSongRequest,
     cancelTwitchSongRequest,
+    broadcastTwitchRequests,
+    persistTwitchRequestSettingsFromService,
     setTwitchService(service) {
       twitchService = service;
       if (service && typeof service.setReplySettings === 'function') service.setReplySettings(ctx.playState.twitchReplySettings);

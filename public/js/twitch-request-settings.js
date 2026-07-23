@@ -41,14 +41,20 @@ const TwitchRequestSettings = (() => {
   ]);
   const DUPLICATE_SCOPE_KEYS = new Set(DUPLICATE_SCOPES.map((item) => item.key));
   const COMMAND_DEFINITIONS = Object.freeze([
-    { key: 'request', label: '點歌', description: '送出一個 YouTube 單曲連結，等待主播確認。', command: '!點歌', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
-    { key: 'currentSong', label: '目前歌曲', description: '查詢現在載入或播放中的歌曲。', command: '!目前歌曲', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
-    { key: 'nextSong', label: '下一首', description: '查詢播放清單中的下一首歌。', command: '!下一首', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
-    { key: 'myRequests', label: '我的點歌', description: '列出自己仍在待確認區的點歌。', command: '!我的點歌', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
-    { key: 'position', label: '順位', description: '查詢自己最新一筆待確認點歌的順位。', command: '!順位', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
-    { key: 'cancelRequest', label: '取消點歌', description: '取消自己最新一筆尚未匯入的點歌。', command: '!取消點歌', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
-    { key: 'rules', label: '點歌規則', description: '查看目前點歌指令、資格與主要限制。', command: '!點歌規則', userCooldownSeconds: 15, globalCooldownSeconds: 3 },
-    { key: 'queueSummary', label: '歌單摘要', description: '查看目前、下一首與待確認數量，不會貼本機網址。', command: '!歌單', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
+    { key: 'request', group: 'viewer', label: '點歌', description: '送出一個 YouTube 單曲連結，等待主播確認。', command: '!點歌', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
+    { key: 'currentSong', group: 'viewer', label: '目前歌曲', description: '查詢現在載入或播放中的歌曲。', command: '!目前歌曲', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
+    { key: 'nextSong', group: 'viewer', label: '下一首', description: '查詢播放清單中的下一首歌。', command: '!下一首', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
+    { key: 'myRequests', group: 'viewer', label: '我的點歌', description: '列出自己仍在待確認區的點歌。', command: '!我的點歌', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
+    { key: 'position', group: 'viewer', label: '順位', description: '查詢自己最新一筆待確認點歌的順位。', command: '!順位', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
+    { key: 'cancelRequest', group: 'viewer', label: '取消點歌', description: '取消自己最新一筆尚未匯入的點歌。', command: '!取消點歌', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
+    { key: 'rules', group: 'viewer', label: '點歌規則', description: '查看目前點歌指令、資格與主要限制。', command: '!點歌規則', userCooldownSeconds: 15, globalCooldownSeconds: 3 },
+    { key: 'queueSummary', group: 'viewer', label: '歌單摘要', description: '查看目前、下一首與待確認數量，不會貼本機網址。', command: '!歌單', userCooldownSeconds: 10, globalCooldownSeconds: 2 },
+    { key: 'adminOpen', group: 'admin', adminOnly: true, label: '開放點歌', description: '立即開放聊天室點歌；只允許管理員與實況主。', command: '!開放點歌', enabled: false, permissionLevel: 'moderator', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
+    { key: 'adminPause', group: 'admin', adminOnly: true, label: '暫停點歌', description: '立即暫停聊天室點歌；只允許管理員與實況主。', command: '!暫停點歌', enabled: false, permissionLevel: 'moderator', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
+    { key: 'adminReject', group: 'admin', adminOnly: true, label: '拒絕點歌', description: '以待確認編號拒絕一筆點歌；忠誠點數點歌會先退款。', command: '!拒絕點歌', usage: '<編號>', enabled: false, permissionLevel: 'moderator', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
+    { key: 'adminRemove', group: 'admin', adminOnly: true, label: '移除點歌', description: '以待確認編號或使用者名稱移除最新一筆待確認點歌。', command: '!移除點歌', usage: '<編號或使用者>', enabled: false, permissionLevel: 'moderator', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
+    { key: 'adminPromote', group: 'admin', adminOnly: true, label: '提升順位', description: '把一筆待確認點歌提升至待確認區最前面，不改正式播放清單。', command: '!提升順位', usage: '<編號>', enabled: false, permissionLevel: 'moderator', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
+    { key: 'adminSkip', group: 'admin', adminOnly: true, label: '略過歌曲', description: '請目前擁有音訊的桌面面板略過歌曲；伺服器不直接控制播放。', command: '!略過歌曲', enabled: false, permissionLevel: 'moderator', userCooldownSeconds: 0, globalCooldownSeconds: 0 },
   ]);
   const COMMAND_KEYS = new Set(COMMAND_DEFINITIONS.map((item) => item.key));
 
@@ -56,10 +62,10 @@ const TwitchRequestSettings = (() => {
 
   function defaultCommand(definition) {
     return {
-      enabled: true,
+      enabled: definition.enabled !== false,
       command: definition.command,
       aliases: [],
-      permissionLevel: 'everyone',
+      permissionLevel: definition.permissionLevel || 'everyone',
       userCooldownSeconds: definition.userCooldownSeconds,
       globalCooldownSeconds: definition.globalCooldownSeconds,
     };
@@ -218,6 +224,9 @@ const TwitchRequestSettings = (() => {
         if (!result.valid) errors.push({ field: `${fieldPrefix}.aliases`, message: `別名「${alias}」：${result.error}` });
       });
       if (!PERMISSION_KEYS.has(commandSettings.permissionLevel)) errors.push({ field: `${fieldPrefix}.permissionLevel`, message: `「${definition.label}」使用者資格格式無效。` });
+      if (definition.adminOnly && commandSettings.permissionLevel !== 'moderator') {
+        errors.push({ field: `${fieldPrefix}.permissionLevel`, message: `「${definition.label}」只允許管理員與實況主。` });
+      }
       integerRule(commandSettings, 'userCooldownSeconds', `「${definition.label}」每人冷卻秒數`, 0, LIMITS.cooldownSeconds, `${fieldPrefix}.userCooldownSeconds`);
       integerRule(commandSettings, 'globalCooldownSeconds', `「${definition.label}」全域冷卻秒數`, 0, LIMITS.cooldownSeconds, `${fieldPrefix}.globalCooldownSeconds`);
 
@@ -315,7 +324,7 @@ const TwitchRequestSettings = (() => {
       const commandSettings = normalized.commands[definition.key];
       if (!commandSettings?.enabled) return;
       [commandSettings.command, ...commandSettings.aliases].forEach((command) => {
-        candidates.push({ key: definition.key, command, settings: commandSettings });
+        candidates.push({ key: definition.key, command, settings: commandSettings, definition });
       });
     });
     candidates.sort((a, b) => b.command.length - a.command.length);

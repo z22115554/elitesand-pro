@@ -418,11 +418,12 @@
   // 這樣不管指令來自面板自己、遙控器、或 Stream Deck，永遠只換一次，不會連跳兩首。
   function advanceTrack(delta) {
     const playlist = state.playlist;
-    if (playlist.length === 0) return;
+    if (playlist.length === 0) return false;
     const newIndex = delta > 0
       ? (state.currentTrackIndex < playlist.length - 1 ? state.currentTrackIndex + 1 : 0)
       : (state.currentTrackIndex > 0 ? state.currentTrackIndex - 1 : playlist.length - 1);
     playTrack(newIndex);
+    return true;
   }
 
   dom.btnPrev.addEventListener('click', () => SocketClient.send('play:prev'));
@@ -860,4 +861,5 @@
   AppShared.updateOffsetDisplay = updateOffsetDisplay;
   AppShared.applyPitchAndSpeed = applyPitchAndSpeed;
   AppShared.reapplyTrackLoudness = reapplyTrackLoudness;
+  AppShared.advanceTrack = advanceTrack;
 })();
