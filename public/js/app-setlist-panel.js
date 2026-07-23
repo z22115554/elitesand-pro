@@ -205,12 +205,16 @@
     constellation: { name: '星座', hint: '裝飾性較強的全幅場景；建議搭配簡潔背景。', scope: '星座保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
     terminal: { name: '終端機', hint: '復古資訊風的小元件，適合科技或遊戲主題。', scope: '基礎配色與可讀性和其他清單型模板共用；終端機只保留它會用到的清單控制。' },
   };
-  const SETLIST_RECOMMENDED_LAYOUTS = ['classic', 'cards', 'diagonal'];
+  // 暫停提供的場景模板仍留在 renderer／server 驗證清單，讓已保存的 OBS 畫面不會被自動改版。
+  // 它們只從「新選擇」入口與設定面板隱藏，使用者選到其他現行模板後才會真正切換。
+  const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation'];
+  const SETLIST_RECOMMENDED_LAYOUTS = ['classic', 'cards'];
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
   function syncSetlistLayoutPicker() {
     if (!setlistLayoutSel) return;
     const layout = setlistLayoutSel.value || 'classic';
     const info = SETLIST_LAYOUT_UI[layout] || SETLIST_LAYOUT_UI.classic;
+    const isHiddenLayout = SETLIST_HIDDEN_LAYOUTS.includes(layout);
     setlistLayoutButtons.forEach((button) => {
       const selected = button.dataset.setlistLayout === layout;
       button.setAttribute('aria-checked', String(selected));
@@ -220,9 +224,15 @@
     const hint = document.getElementById('setlist-layout-hint');
     const status = document.getElementById('setlist-layout-status');
     const scope = document.getElementById('setlist-style-scope');
-    if (hint) hint.textContent = info.hint;
-    if (status) status.textContent = `目前：${info.name}`;
-    if (scope) scope.textContent = info.scope;
+    const legacyNotice = document.getElementById('setlist-legacy-layout-notice');
+    const appearance = document.getElementById('setlist-appearance');
+    const advancedButton = document.getElementById('btn-setlist-advanced');
+    if (hint) hint.textContent = isHiddenLayout ? '這個模板已暫停提供；選擇目前可用的模板後才會切換 OBS 輸出。' : info.hint;
+    if (status) status.textContent = `目前：${info.name}${isHiddenLayout ? '（暫停提供）' : ''}`;
+    if (scope) scope.textContent = isHiddenLayout ? '已保留目前 OBS 畫面與保存設定；為避免誤改，這個模板的調整項目暫時收起。' : info.scope;
+    if (legacyNotice) legacyNotice.hidden = !isHiddenLayout;
+    if (appearance) appearance.hidden = isHiddenLayout;
+    if (advancedButton) advancedButton.hidden = isHiddenLayout;
     const more = document.getElementById('setlist-more-layouts');
     const moreButton = document.getElementById('btn-setlist-more-layouts');
     if (more && !SETLIST_RECOMMENDED_LAYOUTS.includes(layout)) more.hidden = false;

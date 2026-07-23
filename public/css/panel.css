@@ -193,6 +193,8 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .setlist-layout-picker-more[hidden] { display:none; }
 .setlist-layout-picker-more .setlist-layout-card { min-height:76px; }
 .setlist-layout-hint { margin:9px 0 0; color:var(--text-faint); font-size:11px; line-height:1.55; }
+.setlist-legacy-layout-notice { margin:8px 0 0; }
+.setlist-legacy-layout-notice[hidden], #setlist-appearance[hidden], #btn-setlist-advanced[hidden] { display:none; }
 .setlist-style-scope { margin:0 0 12px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-raised); color:var(--text-dim); font-size:11px; line-height:1.45; }
 .setlist-quick-presets { margin-top:12px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-raised); }
 .setlist-quick-presets > summary { padding:10px 12px; color:var(--text-dim); font-size:12px; font-weight:600; cursor:pointer; }
