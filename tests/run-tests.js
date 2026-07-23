@@ -4112,6 +4112,23 @@ test('歌單經典資訊重排與兩個原創模板都走共用樣式，既有�
   ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation'];"), '新模板必須共用既有樣式資料，不得改成獨立場景資料');
 });
 
+test('歌單全畫布來源只擴充指定模板，並保留舊小元件網址', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  const canvasLayouts = ['classic', 'cards', 'billboard', 'terminal', 'index'];
+  ok(indexHtml.includes('id="setlist-output-mode"') && indexHtml.includes('data-setlist-output="canvas"'), '面板必須提供全畫布與小元件兩種來源選擇');
+  ok(setlistPanel.includes("const SETLIST_CANVAS_LAYOUTS = ['classic', 'cards', 'billboard', 'terminal', 'index'];"), '面板必須集中限制可使用畫布的模板');
+  ok(setlistPanel.includes("url.searchParams.set('mode', 'canvas')") && setlistPanel.includes("url.searchParams.set('preview', '1')"), '畫布 URL 與預覽 URL 必須安全合成查詢參數');
+  ok(setlistSource.includes("const CANVAS_LAYOUTS = new Set(['classic', 'cards', 'billboard', 'terminal', 'index']);"), 'OBS 頁必須用同一組白名單拒絕不支援模板的畫布模式');
+  ok(setlistSource.includes("const canvasRequested = q.get('mode') === 'canvas'") && setlistSource.includes('syncCanvasViewport()'), 'OBS 頁必須解析畫布網址並在 viewport 變更時等比重算');
+  ok(setlistCss.includes('html[data-setlist-output="canvas"][data-layout] #setlist-root') && setlistCss.includes('background: transparent;'), '全畫布根節點必須保持透明，不可建立全螢幕背板');
+  canvasLayouts.forEach((layout) => {
+    ok(setlistCss.includes(`html[data-setlist-output="canvas"][data-layout="${layout}"]`), `${layout} 必須有自己的畫布定位`);
+  });
+});
+
 test('OBS 經典歌單以歌名為第一優先，長歌手名不可擠壓歌名', () => {
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const titleRule = /\.setlist-title\s*\{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';

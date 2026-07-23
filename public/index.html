@@ -1267,6 +1267,15 @@
               <p class="setlist-layout-hint" id="setlist-layout-hint">完整資訊小元件，適合放在畫面左下或右下常駐。</p>
               <p class="field-hint setlist-legacy-layout-notice" id="setlist-legacy-layout-notice" role="status" hidden>這個模板已暫停提供。你目前的 OBS 畫面與已保存設定不會自動改變；選擇其他模板後才會切換。</p>
             </div>
+            <div class="setlist-output-mode" id="setlist-output-mode">
+              <div class="setlist-output-heading"><div><span class="label" id="setlist-output-label">OBS 顯示方式</span><p class="field-hint">畫布來源把歌單放在完整的透明畫面上；小元件來源維持你現有的裁切與定位方式。</p></div></div>
+              <div class="setlist-output-picker" role="radiogroup" aria-labelledby="setlist-output-label">
+                <button class="setlist-output-option" type="button" data-setlist-output="canvas" role="radio" aria-checked="true"><strong>全畫布</strong><span>適合 16:9 OBS 場景</span></button>
+                <button class="setlist-output-option" type="button" data-setlist-output="widget" role="radio" aria-checked="false"><strong>小元件</strong><span>保留原本來源行為</span></button>
+              </div>
+              <p class="setlist-output-hint" id="setlist-output-hint" role="status"></p>
+            </div>
+            <p class="field-hint setlist-output-unsupported" id="setlist-output-unsupported" role="status" hidden>此模板維持原本的小元件輸出，不提供全畫布來源。</p>
             <div id="setlist-style-scope" class="setlist-style-scope" role="status">目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。</div>
             <details class="collapse" id="setlist-appearance" open>
               <summary>快速調整 <span>先確保亮色背景看得清楚，再做必要的顏色與顯示調整</span></summary>
@@ -1762,7 +1771,7 @@
               <code id="setlist-obs-url">http://localhost:3000/setlist</code>
               <button id="copy-setlist-url" class="btn btn-sm" type="button">複製</button>
             </div>
-            <p class="val m-0">OBS 新增「瀏覽器來源」後貼上此網址；換歌單版型會自動同步，不需要更新網址。</p>
+            <p class="val m-0">選好模板與顯示方式後貼上此網址；已放進 OBS 的舊小元件來源不會被改動。</p>
           </aside>
           </div><!-- /.setlist-split -->
         </div>
