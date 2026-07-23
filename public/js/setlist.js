@@ -289,12 +289,13 @@
   // 文字標籤：套到目前畫面上的對應元素（各版型 class 不同，逐一更新）
   const lastLabels = { nowPlaying: '▶ Now Playing', done: '已唱', wait: '未唱', reserve: 'Reserve' };
   function applyLabels() {
-    const nowEls = document.querySelectorAll('.ns-label, #sm-eye, #tl-eye, #dg-eye');
+    const nowEls = document.querySelectorAll('.ns-label, #sm-eye, #tl-eye, #dg-eye, #sg-eye, .ix-state');
     nowEls.forEach((e) => { if (model.current) e.textContent = lastLabels.nowPlaying; });
     document.querySelectorAll('.sm-row:first-child .sm-row-lbl').forEach((e) => { e.textContent = lastLabels.done; });
     document.querySelectorAll('.sm-row:last-child .sm-row-lbl').forEach((e) => { e.textContent = lastLabels.wait; });
     document.querySelectorAll('.cl-lbl-up').forEach((e) => { e.textContent = lastLabels.wait; });
     document.querySelectorAll('.cl-lbl-done').forEach((e) => { e.textContent = lastLabels.done; });
+    document.querySelectorAll('#sg-next-label').forEach((e) => { e.textContent = lastLabels.wait; });
   }
 
   const PAST_LIMIT = 6, UP_LIMIT = 6;
@@ -303,11 +304,13 @@
   const classic = {
     mount(root) {
       root.innerHTML =
-        '<div class="now-singing" id="cl-now" hidden><div class="ns-label">♪ 現在正在唱</div><div class="ns-title" id="cl-t"></div><div class="ns-artist" id="cl-a"></div></div>' +
-        '<div class="cl-cols">' +
-          '<div class="cl-col cl-col-up"><div class="setlist-section-label cl-lbl-up">未唱</div><div class="setlist-upcoming" id="cl-up"></div></div>' +
-          '<div class="cl-col cl-col-done"><div class="setlist-section-label cl-lbl-done">已唱</div><div class="setlist-past" id="cl-past"></div></div>' +
-        '</div>';
+        '<section class="classic-shell">' +
+          '<div class="now-singing classic-now" id="cl-now" hidden><div class="classic-now-meta"><span class="classic-status-dot"></span><div class="ns-label">♪ 現在正在唱</div><div class="classic-ordinal" id="cl-ordinal"></div></div><div class="ns-title" id="cl-t"></div><div class="ns-artist" id="cl-a"></div></div>' +
+          '<div class="cl-cols">' +
+            '<section class="cl-col cl-col-up"><div class="classic-section-head"><div class="setlist-section-label cl-lbl-up">未唱</div><div class="classic-section-count" id="cl-up-count"></div></div><div class="setlist-upcoming" id="cl-up"></div></section>' +
+            '<section class="cl-col cl-col-done"><div class="classic-section-head"><div class="setlist-section-label cl-lbl-done">已唱</div><div class="classic-section-count" id="cl-done-count"></div></div><div class="setlist-past" id="cl-past"></div></section>' +
+          '</div>' +
+        '</section>';
     },
     render(root) {
       const now = root.querySelector('#cl-now');
@@ -315,6 +318,8 @@
         now.hidden = false;
         root.querySelector('#cl-t').textContent = model.current.title;
         const a = root.querySelector('#cl-a'); a.textContent = model.current.artist; a.hidden = !model.current.artist;
+        const total = model.past.length + 1 + model.upcoming.length;
+        root.querySelector('#cl-ordinal').textContent = `${String(model.past.length + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
       } else now.hidden = true;
       // 未唱（左）
       const upEl = root.querySelector('#cl-up');
@@ -324,6 +329,7 @@
         `<span class="setlist-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="setlist-artist"> — ${escapeHtml(s.artist)}</span>` : ''}`)));
       const upLabel = root.querySelector('.cl-lbl-up');
       upLabel.hidden = up.length === 0;
+      root.querySelector('#cl-up-count').textContent = up.length ? String(up.length).padStart(2, '0') : '';
       // 已唱（右）
       const pastEl = root.querySelector('#cl-past');
       const past = model.past.slice(-PAST_LIMIT);
@@ -332,6 +338,7 @@
         `${model.showTime ? `<span class="setlist-time">${escapeHtml(fmtOffset(s.offset))}</span>` : ''}<span class="setlist-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="setlist-artist"> — ${escapeHtml(s.artist)}</span>` : ''}`)));
       const doneLabel = root.querySelector('.cl-lbl-done');
       doneLabel.hidden = past.length === 0;
+      root.querySelector('#cl-done-count').textContent = past.length ? String(past.length).padStart(2, '0') : '';
       // 全空時的提示
       const empty = !model.current && past.length === 0 && up.length === 0;
       if (empty && model.active) {
@@ -555,7 +562,61 @@
     },
   };
 
-  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards };
+  // 新增版型只借用「正播主角、其餘退後」的資訊層級；DOM、樣式與動態皆為 Elitesand 原創。
+  const signal = {
+    mount(root) {
+      root.innerHTML =
+        '<div class="lay-stage signal-stage"><section class="signal-strip">' +
+          '<div class="signal-status"><span class="signal-status-dot"></span><span class="signal-eye" id="sg-eye">♪ 現在正在唱</span><span class="signal-ordinal" id="sg-ordinal"></span></div>' +
+          '<div class="signal-now"><div class="signal-title setlist-title" id="sg-title"></div><div class="signal-artist setlist-artist" id="sg-artist"></div></div>' +
+          '<div class="signal-next"><div class="signal-next-label" id="sg-next-label">未唱</div><div class="signal-next-list" id="sg-next"></div></div>' +
+        '</section></div>';
+    },
+    render(root) {
+      const hasCurrent = !!model.current;
+      const now = model.current || model.upcoming[0] || null;
+      const wait = (hasCurrent ? model.upcoming : model.upcoming.slice(1)).slice(0, 2);
+      const total = model.past.length + (model.current ? 1 : 0) + model.upcoming.length;
+      const ordinal = now ? model.past.length + 1 : 0;
+      const eye = root.querySelector('#sg-eye');
+      eye.textContent = hasCurrent ? lastLabels.nowPlaying : '即將播放';
+      root.querySelector('#sg-ordinal').textContent = ordinal ? `${String(ordinal).padStart(2, '0')} / ${String(total).padStart(2, '0')}` : '';
+      root.querySelector('#sg-title').textContent = now ? now.title : '尚未開始播放';
+      const artist = root.querySelector('#sg-artist');
+      artist.textContent = now ? now.artist : '';
+      artist.hidden = !now || !now.artist;
+      const nextStart = model.past.length + (now ? 2 : 1);
+      root.querySelector('#sg-next').innerHTML = wait.length
+        ? wait.map((song, index) => `<div class="signal-next-row"><span class="signal-next-no">${String(nextStart + index).padStart(2, '0')}</span><span class="signal-next-title setlist-title">${escapeHtml(song.title)}</span></div>`).join('')
+        : '<div class="signal-next-empty">暫無待播歌曲</div>';
+    },
+  };
+
+  const index = {
+    mount(root) {
+      root.innerHTML =
+        '<div class="lay-stage index-stage"><section class="index-sheet">' +
+          '<header class="index-head"><span class="index-kicker">演出清單</span><span class="index-total" id="ix-total"></span></header>' +
+          '<div class="index-list" id="ix-list"></div>' +
+        '</section></div>';
+    },
+    render(root) {
+      const list = windowList();
+      const firstNumber = Math.max(0, model.past.length - 5) + 1;
+      const total = model.past.length + (model.current ? 1 : 0) + model.upcoming.length;
+      const current = model.current ? model.past.length + 1 : 0;
+      root.querySelector('#ix-total').textContent = current ? `${String(current).padStart(2, '0')} / ${String(total).padStart(2, '0')}` : (total ? `00 / ${String(total).padStart(2, '0')}` : '');
+      root.querySelector('#ix-list').innerHTML = list.length
+        ? list.map((song, itemIndex) => {
+          const cls = song.state === 'active' ? 'active' : song.state === 'done' ? 'done' : 'wait';
+          const state = song.state === 'active' ? '<span class="ix-state">♪ 現在正在唱</span>' : '';
+          return `<div class="index-item ${cls}"><span class="index-number">${String(firstNumber + itemIndex).padStart(2, '0')}</span><span class="index-rail"></span><div class="index-info"><div class="index-title setlist-title">${escapeHtml(song.title)}</div>${song.artist ? `<div class="index-artist setlist-artist">${escapeHtml(song.artist)}</div>` : ''}</div>${state}</div>`;
+        }).join('')
+        : '<div class="index-empty">尚未加入歌曲</div>';
+    },
+  };
+
+  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index };
 
   // ─── 版型掛載/切換 ───
   function setLayout(id) {

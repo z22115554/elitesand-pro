@@ -91,7 +91,7 @@ function registerSetlistHandlers(io, socket, ctx) {
   });
 
   socket.on('setlist:layout', ({ layout } = {}) => {
-    const valid = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards'];
+    const valid = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index'];
     playState.setlistLayout = valid.includes(layout) ? layout : 'classic';
     io.emit('setlist:layout', { layout: playState.setlistLayout });
     // 連同該版型「生效的那一份」設定推給顯示端，切版型即套對應外觀
