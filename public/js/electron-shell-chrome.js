@@ -28,13 +28,23 @@ if (shell?.windowControl) {
 if (shell?.onCloseRequested && shell?.decideClose) {
   window.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('electron-close-modal');
+    const cancel = document.getElementById('electron-close-cancel');
     const toTray = document.getElementById('electron-close-to-tray');
     const quit = document.getElementById('electron-close-quit');
-    if (!modal || !toTray || !quit) return;
+    if (!modal || !cancel || !toTray || !quit) return;
 
+    // 取消＝什麼都不做：關窗事件已在殼端 preventDefault，通知殼放棄本次關閉即可。
+    const dismiss = () => {
+      modal.hidden = true;
+      shell.decideClose('cancel');
+    };
     shell.onCloseRequested(() => {
       modal.hidden = false;
-      toTray.focus();
+      cancel.focus();
+    });
+    cancel.addEventListener('click', dismiss);
+    modal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); dismiss(); }
     });
     toTray.addEventListener('click', () => {
       modal.hidden = true;

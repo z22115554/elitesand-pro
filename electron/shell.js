@@ -316,6 +316,11 @@ function createElectronShell({
     if (ipcMain?.on) {
       ipcMain.on('elitesand:close-decision', (event, action) => {
         if (event?.sender !== window.webContents || !isCloseDecisionPending) return;
+        if (action === 'cancel') {
+          // 放棄本次關閉：關窗事件已 preventDefault，視窗維持原狀，不藏匣也不結束。
+          isCloseDecisionPending = false;
+          return;
+        }
         if (action === 'quit') {
           isCloseDecisionPending = false;
           app.quit();
