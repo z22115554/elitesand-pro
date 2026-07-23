@@ -320,12 +320,19 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
       // 統一音量：本地上傳同樣量整曲響度（失敗回 null，不中斷上傳）
       const loudnessLufs = await AudioProcessor.measureLoudnessQueued(filePath).catch(() => null);
 
+      // file.originalname 由 busboy 以 latin1 解碼（把 UTF-8 位元組逐一當字元），中日文檔名會亂碼；
+      // 落盤檔名（multer storage）已各自還原，這裡同樣先還原成 UTF-8 再用於歌名/歌手。
+      const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      const nameWithoutExt = path.basename(decodedName, path.extname(decodedName));
+      // 沒有內嵌 ID3 標籤時，比照 YouTube 匯入從檔名自動拆歌手/歌名（如「周杰倫 - 稻香」）。
+      const parsedName = AudioProcessor.parseVideoTitle(nameWithoutExt);
+
       const track = {
         id: path.basename(filePath, path.extname(filePath)),
         filename: path.basename(filePath),
-        originalName: Buffer.from(file.originalname, 'latin1').toString('utf8'),
-        title: metadata.common.title || path.basename(file.originalname, path.extname(file.originalname)),
-        artist: metadata.common.artist || '',
+        originalName: decodedName,
+        title: metadata.common.title || parsedName.title || nameWithoutExt,
+        artist: metadata.common.artist || parsedName.artist || '',
         album: metadata.common.album || '',
         duration: metadata.format.duration || 0,
         cover: null,

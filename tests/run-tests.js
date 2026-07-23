@@ -3281,6 +3281,22 @@ test('電影宣傳型官方 MV 標題優先取書名號內歌名', () => {
   eq(parsed.artist, '范逸臣 Van Fan');
 });
 
+test('本地音檔上傳：檔名先還原 UTF-8 再自動拆歌手/歌名，不吃 latin1 亂碼', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+  // busboy 以 latin1 解碼 file.originalname，中日文檔名會亂碼；歌名 fallback 曾直接吃未解碼的
+  // originalname（落盤檔名有還原、歌名卻沒有）。守住：不可再用未解碼的 originalname 當歌名。
+  ok(!/title:\s*metadata\.common\.title\s*\|\|\s*path\.basename\(file\.originalname/.test(src),
+    '歌名 fallback 不可再用未解碼的 file.originalname（中日文會亂碼）：');
+  ok(/Buffer\.from\(file\.originalname,\s*'latin1'\)\.toString\('utf8'\)/.test(src),
+    '本地上傳需先把 originalname 還原成 UTF-8：');
+  ok(/parseVideoTitle\(/.test(src),
+    '本地上傳需比照 YouTube 從檔名自動拆歌手/歌名：');
+  // 還原後的檔名交給既有 parser：無內嵌標籤時「周杰倫 - 稻香」應拆成歌手/歌名（端到端已實測 200）。
+  const parsed = AudioProcessor.parseVideoTitle('周杰倫 - 稻香');
+  eq(parsed.artist, '周杰倫');
+  eq(parsed.title, '稻香');
+});
+
 test('95 首真實／伴奏標題基準：歌名與歌手正確率皆至少 95%', () => {
   const cases = require('./title-parser-cases');
   const normalizeIdentity = (value) => String(value || '')
