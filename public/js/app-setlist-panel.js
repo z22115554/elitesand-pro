@@ -247,7 +247,7 @@
     });
     if (!hint) return;
     hint.textContent = outputMode === 'canvas'
-      ? '使用完整透明畫布；在 OBS 將 Browser Source 設為 1920 × 1080，常見尺寸會等比縮放。既有小元件網址不會被改動。'
+      ? '使用完整透明畫布；歌單會跟著 OBS Browser Source 的實際寬高與你的外觀縮放調整。既有小元件網址不會被改動。'
       : '保留原本的局部小元件輸出；適合已經在 OBS 裡裁切或定位好的來源。';
   }
 
