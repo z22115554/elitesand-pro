@@ -1267,15 +1267,7 @@
               <p class="setlist-layout-hint" id="setlist-layout-hint">完整資訊小元件，適合放在畫面左下或右下常駐。</p>
               <p class="field-hint setlist-legacy-layout-notice" id="setlist-legacy-layout-notice" role="status" hidden>這個模板已暫停提供。你目前的 OBS 畫面與已保存設定不會自動改變；選擇其他模板後才會切換。</p>
             </div>
-            <div class="setlist-output-mode" id="setlist-output-mode">
-              <div class="setlist-output-heading"><div><span class="label" id="setlist-output-label">OBS 顯示方式</span><p class="field-hint">畫布來源把歌單放在完整的透明畫面上；小元件來源維持你現有的裁切與定位方式。</p></div></div>
-              <div class="setlist-output-picker" role="radiogroup" aria-labelledby="setlist-output-label">
-                <button class="setlist-output-option" type="button" data-setlist-output="canvas" role="radio" aria-checked="true"><strong>全畫布</strong><span>跟著 OBS 來源尺寸</span></button>
-                <button class="setlist-output-option" type="button" data-setlist-output="widget" role="radio" aria-checked="false"><strong>小元件</strong><span>保留原本來源行為</span></button>
-              </div>
-              <p class="setlist-output-hint" id="setlist-output-hint" role="status"></p>
-            </div>
-            <p class="field-hint setlist-output-unsupported" id="setlist-output-unsupported" role="status" hidden>此模板維持原本的小元件輸出，不提供全畫布來源。</p>
+            <p class="setlist-sizing-hint" id="setlist-sizing-hint" role="status">歌單大小＝你在 OBS 拉的 Browser Source 大小：來源拉多寬多高，版面就排多大，字級與顯示首數會跟著調整，不需要在這裡設定像素寬度。</p>
             <div id="setlist-style-scope" class="setlist-style-scope" role="status">目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。</div>
             <details class="collapse" id="setlist-appearance" open>
               <summary>快速調整 <span>先確保亮色背景看得清楚，再做必要的顏色與顯示調整</span></summary>
@@ -1413,9 +1405,15 @@
                         <button class="btn btn-sm btn-setlist-demo" type="button" class="flex-grow">載入示範資料</button>
                         <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button" class="flex-grow">清除示範資料</button>
                       </div>
+                      <div class="setlist-preview-sizes" role="radiogroup" aria-label="模擬 OBS 來源尺寸">
+                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="16x9" role="radio" aria-checked="true">橫式 1920×1080</button>
+                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="portrait" role="radio" aria-checked="false">直式 600×1080</button>
+                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="strip" role="radio" aria-checked="false">橫條 1920×320</button>
+                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="small" role="radio" aria-checked="false">小框 640×480</button>
+                      </div>
                       <div class="setlist-preview-wrap">
                         <iframe id="setlist-preview-modal" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" scrolling="no"></iframe>
-                        <div class="setlist-preview-tag">即時預覽</div>
+                        <div class="setlist-preview-tag">橫式 1920×1080</div>
                       </div>
                     </div>
                     <div class="mw-settings"><div class="setlist-settings-search"><label for="setlist-settings-search">找設定</label><input id="setlist-settings-search" class="input" type="search" placeholder="例如：字體、寬度、已唱、陰影、場景" autocomplete="off"><p id="setlist-settings-search-status" class="field-hint" aria-live="polite">可直接搜尋設定名稱或用途。</p></div>
@@ -1505,10 +1503,11 @@
                     <details class="card card-collapse" data-sl-scope="classic list">
                       <summary>版面尺寸 — 寬度／圓角／內距（經典／清單版）</summary>
                       <div class="card-collapse-body">
-                      <div class="field" data-setlist-widget-only>
-                        <label>整體寬度 <span id="sls-card-width-val" class="val">340px</span></label>
-                        <input id="sls-card-width" type="range" min="160" max="560" value="340">
-                        <p class="field-hint">「正在播放」大卡與底下清單一起變寬／變窄。</p>
+                      <p class="field-hint">清單型模板的寬度由 OBS Browser Source 決定，這裡不再提供固定像素寬度；要更寬就把來源拉寬，字級與間距會一起等比調整。</p>
+                      <div class="field">
+                        <label>整體大小倍率 <span id="sls-scale-val" class="val">100%</span></label>
+                        <input id="sls-scale" type="range" min="0.6" max="1.8" step="0.05" value="1">
+                        <p class="field-hint">在「跟著來源尺寸」算出的大小之上再整體放大或縮小；覺得字太小就往上調，不必改 OBS 來源。</p>
                       </div>
                       <div class="field">
                         <label>卡片圓角 <span id="sls-radius-val" class="val">14px</span></label>
@@ -1718,12 +1717,8 @@
 
                     <!-- ══ 經典版型專屬效果：注意「文字陰影/發光」跟「卡片外框發光」是不同的兩種效果 ══ -->
                     <details class="card card-collapse" data-sl-scope="classic">
-                      <summary>經典版專屬效果（縮放／文字陰影／發光／描邊）</summary>
+                      <summary>經典版專屬效果（文字陰影／發光／描邊）</summary>
                       <div class="card-collapse-body">
-                      <div class="field">
-                        <label>整體縮放大小 <span id="sls-scale-val" class="val">100%</span></label>
-                        <input id="sls-scale" type="range" min="0.6" max="1.8" step="0.05" value="1">
-                      </div>
                       <div class="field field--inline-spacious-center">
                         <div class="flex-grow"><label class="m-0">文字顏色覆蓋</label><p class="field-hint">勾選「用主題色」＝沿用「文字顏色」區的主要文字色；取消勾選才能自訂一個獨立的文字顏色。</p></div>
                         <label class="val val--inline-toggle"><input id="sls-text-theme" type="checkbox" checked>用主題色</label>
@@ -1763,15 +1758,21 @@
               <button class="btn btn-sm btn-setlist-demo" type="button">載入示範資料</button>
               <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button">清除示範資料</button>
             </div>
+            <div class="setlist-preview-sizes" role="radiogroup" aria-label="模擬 OBS 來源尺寸">
+              <button class="setlist-preview-size" type="button" data-setlist-preview-size="16x9" role="radio" aria-checked="true">橫式 1920×1080</button>
+              <button class="setlist-preview-size" type="button" data-setlist-preview-size="portrait" role="radio" aria-checked="false">直式 600×1080</button>
+              <button class="setlist-preview-size" type="button" data-setlist-preview-size="strip" role="radio" aria-checked="false">橫條 1920×320</button>
+              <button class="setlist-preview-size" type="button" data-setlist-preview-size="small" role="radio" aria-checked="false">小框 640×480</button>
+            </div>
             <div class="setlist-preview-wrap">
               <iframe id="setlist-preview" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" scrolling="no"></iframe>
-              <div class="setlist-preview-tag">OBS 預覽</div>
+              <div class="setlist-preview-tag">橫式 1920×1080</div>
             </div>
             <div class="url-field">
               <code id="setlist-obs-url">http://localhost:3000/setlist</code>
               <button id="copy-setlist-url" class="btn btn-sm" type="button">複製</button>
             </div>
-            <p class="val m-0">選好模板與顯示方式後貼上此網址；已放進 OBS 的舊小元件來源不會被改動。</p>
+            <p class="val m-0">貼上此網址後，直接在 OBS 把 Browser Source 拉成你要的大小與位置；模板、配色與大小都會即時同步，網址永遠不用換。</p>
           </aside>
           </div><!-- /.setlist-split -->
         </div>

@@ -891,94 +891,216 @@ html[data-layout="classic"] #setlist-root {
   .signal-next { padding: 8px 0 0; border-top: 1px solid var(--sl-readable-border, var(--sl-bc)); border-left: 0; }
 }
 
-/* ══ 全畫布輸出 ══
-   Browser Source 的實際 viewport 就是畫布。五個模板的外框直接使用
-   90vw（左右各保留 5vw 安全邊距），不再縮放固定像素小元件。
-   沒有固定 1920×1080 虛擬座標，也沒有全螢幕背板。 */
-html[data-setlist-output="canvas"],
-html[data-setlist-output="canvas"] body {
+/* ══ 來源即畫布（清單型模板）══
+   OBS Browser Source 的實際寬高就是歌單的版面框：來源拉多大、歌單就排多大，
+   字級與間距由 setlist.js 量到的 --sl-fit 等比帶動（原生字級，不是 transform 放大點陣），
+   列數由 trimToFit() 依實際高度決定。沒有固定像素寬度，也沒有第二種輸出模式。
+   場景版（timeline / diagonal / constellation）不套用這一段，維持原本行為。 */
+html[data-sl-fit="fill"],
+html[data-sl-fit="fill"] body {
   width: 100%;
   height: 100%;
   overflow: hidden;
   background: transparent;
 }
-/* Must outrank the legacy non-classic layout reset above, which clears
-   transforms for standalone widget layouts. */
-html[data-setlist-output="canvas"][data-layout] #setlist-root {
+/* 必須贏過上方「非 classic 版型 reset」與「classic 固定寬度」兩組既有規則。 */
+html[data-sl-fit="fill"][data-layout] #setlist-root {
   position: absolute;
   inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  height: auto;
   min-width: 0;
   max-width: none;
-  margin: 0;
   padding: 0;
   overflow: hidden;
-  background: transparent;
   border-radius: 0;
+  /* 縮放已折進 --sl-fit；transform 會讓文字變成放大的點陣，這裡一律不用。 */
   transform: none;
-  transform-origin: top left;
 }
-html[data-setlist-output="canvas"][data-layout="classic"] .classic-shell {
-  position: absolute;
-  left: 5vw;
-  bottom: 6vh;
-  box-sizing: border-box;
-  width: 90vw;
+html[data-sl-fit="fill"] .lay-stage {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── classic：整個資訊容器就是來源本身 ── */
+html[data-sl-fit="fill"][data-layout="classic"] .classic-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
   max-width: none;
-  transform: scale(var(--sl-scale, 1));
-  transform-origin: left bottom;
+  padding: calc(var(--sl-pv) * 1.3) var(--sl-ph);
 }
-html[data-setlist-output="canvas"][data-layout="cards"] .cards-stage {
-  position: absolute;
-  right: 5vw;
-  bottom: 6vh;
-  box-sizing: border-box;
-  width: 90vw;
-  max-width: none;
+html[data-sl-fit="fill"][data-layout="classic"] .cl-cols {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: calc(15px * var(--sl-fit));
+  padding-top: calc(10px * var(--sl-fit));
 }
-html[data-setlist-output="canvas"][data-layout="cards"] .cards {
+html[data-sl-fit="fill"][data-layout="classic"] .cl-col { min-height: 0; }
+html[data-sl-fit="fill"][data-layout="classic"] .classic-status-dot {
+  width: calc(6px * var(--sl-fit));
+  height: calc(6px * var(--sl-fit));
+}
+html[data-sl-fit="fill"] .setlist-upcoming,
+html[data-sl-fit="fill"] .setlist-past {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+/* 列必須保持自然高度：在 column flex 容器裡若允許壓縮，會變成一堆被擠扁的列，
+   而不是「放不下就少顯示一首」——trimToFit() 也就量不到溢出。 */
+html[data-sl-fit="fill"] .setlist-row,
+html[data-sl-fit="fill"] .card,
+html[data-sl-fit="fill"] .index-item,
+html[data-sl-fit="fill"] .term-item,
+html[data-sl-fit="fill"] .bb-item { flex: 0 0 auto; }
+
+/* ── simple：卡片置中，寬度跟著來源 ── */
+html[data-sl-fit="fill"][data-layout="simple"] .sm-bg {
+  align-items: center;
+  justify-content: center;
+}
+html[data-sl-fit="fill"][data-layout="simple"] .sm-card {
   width: 100%;
   max-width: none;
 }
-html[data-setlist-output="canvas"][data-layout="billboard"] .bb-stage {
-  position: absolute;
-  top: 6vh;
-  left: 5vw;
-  box-sizing: border-box;
-  width: 90vw;
+html[data-sl-fit="fill"][data-layout="simple"] .sm-row-head { padding: calc(var(--sl-pv) * .8) var(--sl-ph) calc(var(--sl-pv) * .4); }
+html[data-sl-fit="fill"][data-layout="simple"] .sm-chips { padding: calc(var(--sl-pv) * .5) var(--sl-ph) var(--sl-pv); min-height: calc(36px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="simple"] .sm-now { padding: calc(var(--sl-pv) * 1.6) var(--sl-ph) calc(var(--sl-pv) * 1.4); }
+html[data-sl-fit="fill"][data-layout="simple"] .sm-bars { height: calc(14px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="simple"] .sm-bars span { width: calc(3px * var(--sl-fit)); }
+/* 這幾個原本是寫死 px 或 clamp 上限 32px 的字級，會在大來源上卡住不跟著放大。 */
+html[data-sl-fit="fill"][data-layout="simple"] .sm-now-t { font-size: calc(var(--sl-sz-n) * 1.6); }
+html[data-sl-fit="fill"][data-layout="simple"] .sm-now-eye { font-size: calc(var(--sl-sz-m) * .85); }
+html[data-sl-fit="fill"][data-layout="simple"] .sm-row-lbl,
+html[data-sl-fit="fill"][data-layout="simple"] .sm-row-cnt,
+html[data-sl-fit="fill"][data-layout="simple"] .sm-empty { font-size: calc(var(--sl-sz-m) * .9); }
+
+/* ── terminal ── */
+html[data-sl-fit="fill"][data-layout="terminal"] .terminal {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
   max-width: none;
 }
-html[data-setlist-output="canvas"][data-layout="billboard"] .billboard {
+/* 被裁列的容器一律不留下內距：scrollHeight 對 padding-bottom 的計法各引擎不同，
+   留了會讓最後一列剛好被切掉一小截。內距改由外框負擔。 */
+html[data-sl-fit="fill"][data-layout="terminal"] .term-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--sl-pv) 0 0;
+}
+html[data-sl-fit="fill"][data-layout="terminal"] .term-bar { padding: calc(var(--sl-pv) * .9) var(--sl-ph); }
+html[data-sl-fit="fill"][data-layout="terminal"] .term-item { padding: calc(var(--sl-pv) * .5) var(--sl-ph); }
+html[data-sl-fit="fill"][data-layout="terminal"] .term-dot { width: calc(8px * var(--sl-fit)); height: calc(8px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="terminal"] .term-filename,
+html[data-sl-fit="fill"][data-layout="terminal"] .term-reserve,
+html[data-sl-fit="fill"][data-layout="terminal"] .t-prompt { font-size: var(--sl-sz-m); }
+html[data-sl-fit="fill"][data-layout="terminal"] .t-num { min-width: calc(22px * var(--sl-fit)); }
+
+/* ── billboard ── */
+html[data-sl-fit="fill"][data-layout="billboard"] .billboard {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  max-width: none;
+}
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: calc(var(--sl-pv) * .4) 0 0;
+}
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-header { padding: calc(var(--sl-pv) * 1.4) calc(var(--sl-ph) * 1.35); }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-item { padding: var(--sl-pv) calc(var(--sl-ph) * 1.35); }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-title { font-size: calc(var(--sl-sz-n) * 1.12); }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-meta { font-size: calc(var(--sl-sz-m) * .9); }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-rank { font-size: calc(var(--sl-sz-n) * 1.35); min-width: calc(28px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-vline { height: calc(28px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-bar { height: calc(16px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-bar span { width: calc(2px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-now-label { font-size: calc(var(--sl-sz-m) * .8); }
+
+/* ── cards ── */
+html[data-sl-fit="fill"][data-layout="cards"] .cards {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  max-width: none;
+  overflow: hidden;
+  gap: calc(9px * var(--sl-fit));
+}
+html[data-sl-fit="fill"][data-layout="cards"] .card { padding: var(--sl-pv) var(--sl-ph); gap: calc(12px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="cards"] .card-num { min-width: calc(18px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="cards"] .card-status { width: calc(6px * var(--sl-fit)); height: calc(6px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="cards"] .card:nth-child(even) { transform: translateX(calc(12px * var(--sl-fit))); }
+html[data-sl-fit="fill"][data-layout="cards"] .card.active { transform: translateX(calc(22px * var(--sl-fit))) scale(1.015); }
+
+/* ── signal：導播資訊條貼齊來源底部，寬度整條吃滿 ── */
+html[data-sl-fit="fill"][data-layout="signal"] .lay-stage { align-items: flex-end; }
+html[data-sl-fit="fill"][data-layout="signal"] .signal-stage { display: flex; }
+html[data-sl-fit="fill"][data-layout="signal"] .signal-strip {
   width: 100%;
   max-width: none;
+  min-height: calc(88px * var(--sl-fit));
+  grid-template-columns: auto minmax(calc(190px * var(--sl-fit)), 1fr) minmax(calc(145px * var(--sl-fit)), .56fr);
+  gap: calc(16px * var(--sl-fit));
+  padding: calc(var(--sl-pv) * 1.3) calc(var(--sl-ph) * 1.3);
 }
-html[data-setlist-output="canvas"][data-layout="terminal"] .term-stage {
-  position: absolute;
-  top: 6vh;
-  right: 5vw;
-  box-sizing: border-box;
-  width: 90vw;
-  max-width: none;
-}
-html[data-setlist-output="canvas"][data-layout="terminal"] .terminal {
+html[data-sl-fit="fill"][data-layout="signal"] .signal-status-dot { width: calc(6px * var(--sl-fit)); height: calc(6px * var(--sl-fit)); }
+html[data-sl-fit="fill"][data-layout="signal"] .signal-next { padding-left: var(--sl-ph); }
+html[data-sl-fit="fill"][data-layout="signal"] .signal-next-no { flex-basis: calc(19px * var(--sl-fit)); }
+
+/* ── index ── */
+html[data-sl-fit="fill"][data-layout="index"] .index-sheet {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   width: 100%;
+  min-height: 0;
   max-width: none;
+  padding: var(--sl-pv) 0 calc(var(--sl-pv) * .7);
 }
-html[data-setlist-output="canvas"][data-layout="index"] .index-stage {
-  position: absolute;
-  top: 50%;
-  right: 5vw;
-  box-sizing: border-box;
-  width: 90vw;
-  max-width: none;
-  transform: translateY(-50%);
-  transform-origin: right center;
+html[data-sl-fit="fill"][data-layout="index"] .index-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: calc(var(--sl-pv) * .5) 0 0;
 }
-html[data-setlist-output="canvas"][data-layout="index"] .index-sheet {
-  width: 100%;
-  max-width: none;
+html[data-sl-fit="fill"][data-layout="index"] .index-head { padding: 0 var(--sl-ph) calc(var(--sl-pv) * .9); }
+html[data-sl-fit="fill"][data-layout="index"] .index-item {
+  grid-template-columns: calc(30px * var(--sl-fit)) calc(2px * var(--sl-fit)) minmax(0, 1fr) auto;
+  column-gap: calc(9px * var(--sl-fit));
+  min-height: calc(44px * var(--sl-fit));
+  padding: calc(var(--sl-pv) * .6) var(--sl-ph);
+}
+
+/* 很窄的來源（例如直式 600px）：導播資訊條改成單欄堆疊。
+   必須放在上面填滿規則之後，否則同分特異度會被前面的三欄設定蓋掉。 */
+@media (max-width: 560px) {
+  html[data-sl-fit="fill"][data-layout="signal"] .signal-strip {
+    grid-template-columns: 1fr;
+    gap: calc(8px * var(--sl-fit));
+  }
+  html[data-sl-fit="fill"][data-layout="signal"] .signal-status { flex-direction: row; align-items: center; }
+  html[data-sl-fit="fill"][data-layout="signal"] .signal-ordinal { margin-left: auto; }
+  html[data-sl-fit="fill"][data-layout="signal"] .signal-next {
+    padding: calc(var(--sl-pv) * .8) 0 0;
+    border-top: 1px solid var(--sl-readable-border, var(--sl-bc));
+    border-left: 0;
+  }
 }
 
 html[data-layout="simple"] #setlist-root {
