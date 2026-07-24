@@ -4122,8 +4122,10 @@ test('歌單全畫布來源只擴充指定模板，並保留舊小元件網址',
   ok(setlistPanel.includes("const SETLIST_CANVAS_LAYOUTS = ['classic', 'cards', 'billboard', 'terminal', 'index'];"), '面板必須集中限制可使用畫布的模板');
   ok(setlistPanel.includes("url.searchParams.set('mode', 'canvas')") && setlistPanel.includes("url.searchParams.set('preview', '1')"), '畫布 URL 與預覽 URL 必須安全合成查詢參數');
   ok(setlistSource.includes("const CANVAS_LAYOUTS = new Set(['classic', 'cards', 'billboard', 'terminal', 'index']);"), 'OBS 頁必須用同一組白名單拒絕不支援模板的畫布模式');
-  ok(setlistSource.includes("const canvasRequested = q.get('mode') === 'canvas'") && setlistSource.includes('syncCanvasViewport()'), 'OBS 頁必須解析畫布網址並在 viewport 變更時等比重算');
+  ok(setlistSource.includes("const canvasRequested = q.get('mode') === 'canvas'") && setlistSource.includes('syncCanvasViewport()'), 'OBS 頁必須解析畫布網址並在 viewport 變更時重算');
+  ok(!setlistSource.includes('const CANVAS_W = 1920') && setlistSource.includes('const CANVAS_REFERENCE_WIDTH = 1000') && setlistSource.includes("'--sl-canvas-fit'"), '全畫布不可鎖死 1920 虛擬座標，必須改由來源 viewport 寬度計算內容倍率');
   ok(setlistCss.includes('html[data-setlist-output="canvas"][data-layout] #setlist-root') && setlistCss.includes('background: transparent;'), '全畫布根節點必須保持透明，不可建立全螢幕背板');
+  ok(setlistCss.includes('width: 100%;') && setlistCss.includes('height: 100%;') && setlistCss.includes('scale(var(--sl-canvas-fit, 1)) scale(var(--sl-scale, 1))'), '全畫布內容必須同時依來源尺寸與既有整體縮放設定調整');
   canvasLayouts.forEach((layout) => {
     ok(setlistCss.includes(`html[data-setlist-output="canvas"][data-layout="${layout}"]`), `${layout} 必須有自己的畫布定位`);
   });
