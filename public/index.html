@@ -1254,33 +1254,29 @@
           <section class="card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>OBS 來源 · 歌單畫面</p>
             <div class="field setlist-layout-field">
-              <div class="setlist-layout-heading"><div><label id="setlist-layout-label" for="setlist-layout">選擇歌單模板</label><p class="field-hint">先從經典資訊或卡片清單開始；選好後只顯示這個模板真正會作用的設定。</p></div><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
+              <div class="setlist-layout-heading"><label id="setlist-layout-label" for="setlist-layout">選擇歌單模板</label><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
               <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option></select>
+              <p class="setlist-layout-group-title">清單型 — 跟著來源尺寸重排</p>
               <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
-                <button class="setlist-layout-card" type="button" data-setlist-layout="classic" role="radio" aria-checked="true"><span class="setlist-layout-badge">推薦</span><strong>經典資訊</strong><span>現在、未唱、已唱一次看懂</span></button>
-                <button class="setlist-layout-card" type="button" data-setlist-layout="cards" role="radio" aria-checked="false"><span class="setlist-layout-badge">推薦</span><strong>卡片清單</strong><span>緊湊側欄，適合常駐</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="classic" role="radio" aria-checked="true"><strong>經典資訊</strong><span>現在、未唱、已唱一次看懂</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="cards" role="radio" aria-checked="false"><strong>卡片清單</strong><span>緊湊卡片，適合常駐</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="index" role="radio" aria-checked="false"><strong>章節索引</strong><span>曲序與狀態一眼掃讀</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="billboard" role="radio" aria-checked="false"><strong>排行榜</strong><span>活動感強的節目視覺</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="terminal" role="radio" aria-checked="false"><strong>終端機</strong><span>復古資訊風</span></button>
               </div>
-              <button id="btn-setlist-more-layouts" class="btn btn-sm btn-ghost setlist-more-layouts" type="button" aria-expanded="false" aria-controls="setlist-more-layouts">其他模板（含兩個新模板）</button>
-              <div id="setlist-more-layouts" hidden>
-                <p class="setlist-layout-group-title">清單型 — 跟著來源尺寸重排</p>
-                <p class="setlist-layout-group-desc">有已唱／未唱兩個區塊，可各自勾選；OBS 來源拉多大就排多大，顯示首數跟著高度自動增減。</p>
-                <div class="setlist-layout-picker setlist-layout-picker-more">
-                  <button class="setlist-layout-card" type="button" data-setlist-layout="index" role="radio" aria-checked="false"><span class="setlist-layout-badge">新</span><strong>章節索引</strong><span>曲序、狀態與歌名一眼掃讀</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="billboard" role="radio" aria-checked="false"><strong>排行榜</strong><span>活動感強的節目視覺</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="terminal" role="radio" aria-checked="false"><strong>終端機</strong><span>復古資訊風</span></button>
-                </div>
-                <p class="setlist-layout-group-title">固定版位 — 只呈現現在播放</p>
-                <p class="setlist-layout-group-desc">版位固定（貼齊底部／置中），不提供已唱與未唱清單；適合想讓直播畫面保有大面積留白的段落。</p>
-                <div class="setlist-layout-picker setlist-layout-picker-more">
-                  <button class="setlist-layout-card" type="button" data-setlist-layout="signal" role="radio" aria-checked="false"><span class="setlist-layout-badge">新</span><strong>舞台訊號</strong><span>貼齊來源底部的導播資訊條</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="simple" role="radio" aria-checked="false"><strong>極簡兩排</strong><span>置中卡片，只留現在與下一首</span></button>
-                </div>
+              <p class="setlist-layout-group-title">固定版位 — 只呈現現在播放</p>
+              <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
+                <button class="setlist-layout-card" type="button" data-setlist-layout="signal" role="radio" aria-checked="false"><strong>舞台訊號</strong><span>貼齊底部的導播資訊條</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="simple" role="radio" aria-checked="false"><strong>極簡兩排</strong><span>置中卡片，只留現在與下一首</span></button>
               </div>
-              <p class="setlist-layout-hint" id="setlist-layout-hint">完整資訊小元件，適合放在畫面左下或右下常駐。</p>
+              <p class="setlist-layout-hint" id="setlist-layout-hint">現在、未唱、已唱一次看懂，最完整的常駐歌單。</p>
+              <p class="setlist-layout-hint setlist-sizing-hint" id="setlist-sizing-hint" role="status">歌單大小＝你在 OBS 拉的 Browser Source 大小：來源拉多寬多高，版面就排多大，字級與顯示首數會跟著調整，不需要在這裡設定像素寬度。</p>
               <p class="field-hint setlist-legacy-layout-notice" id="setlist-legacy-layout-notice" role="status" hidden>這個模板已暫停提供。你目前的 OBS 畫面與已保存設定不會自動改變；選擇其他模板後才會切換。</p>
             </div>
-            <p class="setlist-sizing-hint" id="setlist-sizing-hint" role="status">歌單大小＝你在 OBS 拉的 Browser Source 大小：來源拉多寬多高，版面就排多大，字級與顯示首數會跟著調整，不需要在這裡設定像素寬度。</p>
-            <div id="setlist-style-scope" class="setlist-style-scope" role="status">目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。</div>
             <details class="collapse" id="setlist-appearance" open>
-              <summary>快速調整 <span>先確保亮色背景看得清楚，再做必要的顏色與顯示調整</span></summary>
+              <summary>快速調整 <span>版面、大小、顏色與可讀性</span></summary>
               <div class="collapse-body">
+                <div id="setlist-style-scope" class="setlist-style-scope" role="status">目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。</div>
                 <!-- 主題下拉已由「風格預設」取代（經典顏色改吃統一設定），保留 plumbing 但隱藏 -->
                 <div class="field" id="setlist-theme-field" hidden>
                   <label for="setlist-theme">主題</label>
@@ -1299,12 +1295,12 @@
 
                 <div class="field-group-title mt-0">版面</div>
                 <div class="field field--setlist-sections" data-sl-layout="classic cards terminal billboard index">
-                  <div class="label">要顯示哪些區塊</div>
+                  <label>要顯示哪些區塊</label>
                   <div class="check-row">
-                    <label class="check-inline"><input id="sls-show-upcoming" type="checkbox" checked><span>未唱歌曲</span></label>
-                    <label class="check-inline"><input id="sls-show-done" type="checkbox" checked><span>已唱歌曲</span></label>
+                    <label class="check-inline"><input id="sls-show-upcoming" type="checkbox" checked><span class="check-box" aria-hidden="true"></span><span class="check-text">未唱歌曲</span></label>
+                    <label class="check-inline"><input id="sls-show-done" type="checkbox" checked><span class="check-box" aria-hidden="true"></span><span class="check-text">已唱歌曲</span></label>
                   </div>
-                  <p class="field-hint">「正在播放」永遠顯示。兩個都不勾＝畫面上只留正在播放那一首。舞台訊號與極簡兩排是固定版位的單點式模板，不使用這組設定。</p>
+                  <p class="field-hint">「正在播放」永遠顯示；兩個都不勾＝只留正在播放那一首。</p>
                 </div>
                 <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index">
                   <div><div class="label">顯示歌手名字</div><div class="sub">關閉後歌單只顯示歌名，不顯示演唱者</div></div>
@@ -1352,28 +1348,32 @@
                   <div><div class="label">亮色背景可讀性保護</div><div class="sub">預設開啟。只替歌單自己的文字與卡片加深襯底，保留 OBS 背景與角色；關閉才是完全透明的演出效果。</div></div>
                   <label class="switch"><input id="sls-readability-guard" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <div class="field field-row field-row--spacious field-row--top">
-                  <div class="flex-grow">
-                    <label>可讀性襯底色</label>
-                    <input id="sls-card-color" type="color" value="#0b0907">
+                <div class="field">
+                  <div class="field-row field-row--spacious field-row--top">
+                    <div>
+                      <label>可讀性襯底色</label>
+                      <input id="sls-card-color" type="color" value="#0b0907">
+                    </div>
+                    <div class="flex-grow">
+                      <label>可讀性襯底不透明度 <span id="sls-card-opacity-val" class="val">93%</span></label>
+                      <input id="sls-card-opacity" type="range" min="0" max="100" value="93">
+                    </div>
                   </div>
-                  <div class="flex-grow">
-                    <label>可讀性襯底不透明度 <span id="sls-card-opacity-val" class="val">93%</span></label>
-                    <input id="sls-card-opacity" type="range" min="0" max="100" value="93">
-                  </div>
+                  <p class="field-hint">襯底是墊在歌單文字後面的那一層；開著可讀性保護時會維持安全下限。</p>
                 </div>
-                <p class="field-hint">襯底是墊在歌單文字後面的那一層：影響清單卡片，以及場景文字在亮色背景上的小襯底。開著可讀性保護時會維持安全下限。</p>
-                <div class="field field-row field-row--spacious field-row--top">
-                  <div class="flex-grow">
-                    <label>已唱歌曲的淡化程度 <span id="sls-done-opacity-val" class="val">54%</span></label>
-                    <input id="sls-done-opacity" type="range" min="0" max="100" value="54">
+                <div class="field">
+                  <div class="field-row field-row--spacious field-row--top">
+                    <div class="flex-grow">
+                      <label>已唱歌曲的淡化程度 <span id="sls-done-opacity-val" class="val">54%</span></label>
+                      <input id="sls-done-opacity" type="range" min="0" max="100" value="54">
+                    </div>
+                    <div class="flex-grow">
+                      <label>未唱歌曲的淡化程度 <span id="sls-wait-opacity-val" class="val">72%</span></label>
+                      <input id="sls-wait-opacity" type="range" min="0" max="100" value="72">
+                    </div>
                   </div>
-                  <div class="flex-grow">
-                    <label>未唱歌曲的淡化程度 <span id="sls-wait-opacity-val" class="val">72%</span></label>
-                    <input id="sls-wait-opacity" type="range" min="0" max="100" value="72">
-                  </div>
+                  <p class="field-hint">數字越大越清楚。開著可讀性保護時，已唱至少 52%、未唱至少 70%；想做極淡效果再關閉保護。</p>
                 </div>
-                <p class="field-hint">數字越大越清楚（越不淡化）。開著可讀性保護時，已唱至少 52%、未唱至少 70%；想做極淡效果再關閉保護。場景版仍會依距離保留層次。</p>
 
                 <!-- ══ 風格預設與儲存：保留功能，但不再擠在每次選模板的第一屏 ══ -->
                 <details class="setlist-quick-presets">
