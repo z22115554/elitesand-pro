@@ -4219,6 +4219,15 @@ test('歌單面板：模板分群與快速調整四區塊', () => {
 
   ok(indexHtml.includes('清單型 — 跟著來源尺寸重排') && indexHtml.includes('固定版位 — 只呈現現在播放'),
     '模板選擇器必須把清單型與固定版位分開');
+  // UI 清理（2026-07-25）：七個模板攤平常駐、不再有「其他模板」展開鈕與推薦/新徽章；
+  // 提示文字統一為一種淡色純文字樣式，不得回到多種灰底方框混用。
+  ok(!indexHtml.includes('btn-setlist-more-layouts') && !indexHtml.includes('setlist-layout-badge'),
+    '模板選擇器必須攤平顯示，不得恢復展開鈕或徽章');
+  ok(!panelCss.includes('.setlist-sizing-hint { margin:10px 0 0; padding') && !panelCss.includes('.setlist-style-scope { margin:0 0 12px; padding'),
+    '提示不得回到灰底方框樣式');
+  ok(indexHtml.includes('class="check-box"') && panelCss.includes('.check-inline input { position:absolute; opacity:0;'),
+    '勾選必須用自繪勾選框，不得露出原生 checkbox');
+  ok(panelCss.includes('#setlist-style-collapse > .field-group-title'), '快速調整四區必須有一致的分隔線節奏');
   ok(setlistPanel.includes("const SETLIST_SECTIONED_LAYOUTS = ['classic', 'cards', 'terminal', 'billboard', 'index'];"),
     '面板必須用同一組清單型白名單給說明文案');
   ok(panelCss.includes('.setlist-layout-group-title') && panelCss.includes('.check-inline'), '分群標題與勾選樣式必須存在');

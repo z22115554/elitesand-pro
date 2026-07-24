@@ -239,7 +239,7 @@
   // 版型類別：scene（場景版各自獨立）/ classic / list（清單版，與經典共用一份）
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
   const SETLIST_LAYOUT_UI = {
-    classic: { name: '經典資訊', hint: '完整資訊小元件，適合放在畫面左下或右下常駐。', scope: '目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。' },
+    classic: { name: '經典資訊', hint: '現在、未唱、已唱一次看懂，最完整的常駐歌單。', scope: '目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。' },
     cards: { name: '卡片清單', hint: '緊湊的卡片清單，已唱／未唱各自分群，可勾選要保留哪一段。', scope: '基礎配色與可讀性和其他清單型模板共用；卡片清單會立即反映每一個可見控制項。' },
     signal: { name: '舞台訊號', hint: '貼齊來源底部的導播資訊條，正在播放是唯一主角。', scope: '固定版位模板：不顯示已唱與未唱清單，其餘配色與可讀性和清單型共用。' },
     index: { name: '章節索引', hint: '曲序表：已唱／正在播放／待播分段標示，一眼掃讀。', scope: '基礎配色與可讀性和其他清單型模板共用；章節索引只保留真正會作用的資訊控制。' },
@@ -248,12 +248,11 @@
     simple: { name: '極簡兩排', hint: '置中卡片，只保留現在與下一首，畫面最輕量。', scope: '固定版位模板：不顯示已唱與未唱清單，其餘配色與可讀性和清單型共用。' },
     billboard: { name: '排行榜', hint: '活動型的排行榜視覺，已唱／未唱各自分群。', scope: '基礎配色與可讀性和其他清單型模板共用；排行榜會保留自己的排位視覺。' },
     constellation: { name: '星座', hint: '裝飾性較強的全幅場景；建議搭配簡潔背景。', scope: '星座保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
-    terminal: { name: '終端機', hint: '復古資訊風的小元件，適合科技或遊戲主題。', scope: '基礎配色與可讀性和其他清單型模板共用；終端機只保留它會用到的清單控制。' },
+    terminal: { name: '終端機', hint: '復古資訊風，適合科技或遊戲主題。', scope: '基礎配色與可讀性和其他清單型模板共用；終端機只保留它會用到的清單控制。' },
   };
   // 暫停提供的場景模板仍留在 renderer／server 驗證清單，讓已保存的 OBS 畫面不會被自動改版。
   // 它們只從「新選擇」入口與設定面板隱藏，使用者選到其他現行模板後才會真正切換。
   const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation'];
-  const SETLIST_RECOMMENDED_LAYOUTS = ['classic', 'cards'];
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
   // 清單型模板＝來源即畫布；場景型維持原本的全幅舞台語意。
   const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index'];
@@ -297,10 +296,6 @@
     if (legacyNotice) legacyNotice.hidden = !isHiddenLayout;
     if (appearance) appearance.hidden = isHiddenLayout;
     if (advancedButton) advancedButton.hidden = isHiddenLayout;
-    const more = document.getElementById('setlist-more-layouts');
-    const moreButton = document.getElementById('btn-setlist-more-layouts');
-    if (more && !SETLIST_RECOMMENDED_LAYOUTS.includes(layout)) more.hidden = false;
-    if (moreButton && more) moreButton.setAttribute('aria-expanded', String(!more.hidden));
     syncSetlistSizingHint();
   }
   function chooseSetlistLayout(layout) {
@@ -343,14 +338,6 @@
   // 面板寬度改變時預覽縮圖要重新對齊目前模擬的來源寬度。
   window.addEventListener('resize', applySetlistPreviewSize);
   document.addEventListener('view:change', () => setTimeout(applySetlistPreviewSize, 60));
-  const moreLayoutsButton = document.getElementById('btn-setlist-more-layouts');
-  const moreLayouts = document.getElementById('setlist-more-layouts');
-  if (moreLayoutsButton && moreLayouts) {
-    moreLayoutsButton.addEventListener('click', () => {
-      moreLayouts.hidden = !moreLayouts.hidden;
-      moreLayoutsButton.setAttribute('aria-expanded', String(!moreLayouts.hidden));
-    });
-  }
   function setlistCategory() {
     const l = setlistLayoutSel ? setlistLayoutSel.value : 'classic';
     if (SETLIST_SCENE.includes(l)) return 'scene';
