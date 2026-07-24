@@ -20,51 +20,15 @@
   // 畫布來源是 URL 層的輸出選項，不是另一份歌單設定：
   // 同一個 state / Socket client 仍照常使用，舊 /setlist 來源則完全維持小元件行為。
   const CANVAS_LAYOUTS = new Set(['classic', 'cards', 'billboard', 'terminal', 'index']);
-  // Canvas 模式沒有固定的虛擬舞台：OBS Browser Source 的實際 viewport
-  // 就是可用範圍。這個基準只用來把既有小元件依來源寬度平順地放大／縮小，
-  // 不會改寫使用者的 --sl-scale 或 --sl-w 設定。
-  const CANVAS_REFERENCE_WIDTH = 1000;
-  const CANVAS_MIN_FIT = 0.6;
-  const CANVAS_MAX_FIT = 1.8;
   const canvasRequested = q.get('mode') === 'canvas';
-  let canvasFitFrame = 0;
 
   function isCanvasOutput() {
     return canvasRequested && CANVAS_LAYOUTS.has(layoutId);
   }
 
-  function syncCanvasViewport() {
-    if (!isCanvasOutput()) return;
-    const viewportW = Math.max(1, window.innerWidth || document.documentElement.clientWidth || CANVAS_REFERENCE_WIDTH);
-    const fit = Math.min(CANVAS_MAX_FIT, Math.max(CANVAS_MIN_FIT, viewportW / CANVAS_REFERENCE_WIDTH));
-    const inset = Math.round(Math.min(64, Math.max(20, viewportW * 0.04)));
-    rootEl.style.setProperty('--sl-canvas-fit', String(fit));
-    rootEl.style.setProperty('--sl-canvas-inset', `${inset}px`);
-  }
-
-  function queueCanvasViewportSync() {
-    if (!isCanvasOutput()) return;
-    if (canvasFitFrame) cancelAnimationFrame(canvasFitFrame);
-    canvasFitFrame = requestAnimationFrame(() => {
-      canvasFitFrame = 0;
-      syncCanvasViewport();
-    });
-  }
-
   function syncOutputMode() {
-    const canvas = isCanvasOutput();
-    document.documentElement.dataset.setlistOutput = canvas ? 'canvas' : 'widget';
-    if (!canvas) {
-      if (canvasFitFrame) cancelAnimationFrame(canvasFitFrame);
-      canvasFitFrame = 0;
-      rootEl.style.removeProperty('--sl-canvas-fit');
-      rootEl.style.removeProperty('--sl-canvas-inset');
-      return;
-    }
-    syncCanvasViewport();
+    document.documentElement.dataset.setlistOutput = isCanvasOutput() ? 'canvas' : 'widget';
   }
-
-  window.addEventListener('resize', queueCanvasViewportSync);
 
   // ─── 共用工具（去重：現在統一在 shared-utils.js） ───
   const { escapeHtml } = SharedUtils;
