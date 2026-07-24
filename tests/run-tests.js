@@ -4112,24 +4112,61 @@ test('歌單經典資訊重排與兩個原創模板都走共用樣式，既有�
   ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation'];"), '新模板必須共用既有樣式資料，不得改成獨立場景資料');
 });
 
-test('歌單全畫布來源只擴充指定模板，並保留舊小元件網址', () => {
+test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行為', () => {
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
   const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
-  const canvasLayouts = ['classic', 'cards', 'billboard', 'terminal', 'index'];
-  ok(indexHtml.includes('id="setlist-output-mode"') && indexHtml.includes('data-setlist-output="canvas"'), '面板必須提供全畫布與小元件兩種來源選擇');
-  ok(setlistPanel.includes("const SETLIST_CANVAS_LAYOUTS = ['classic', 'cards', 'billboard', 'terminal', 'index'];"), '面板必須集中限制可使用畫布的模板');
-  ok(setlistPanel.includes("url.searchParams.set('mode', 'canvas')") && setlistPanel.includes("url.searchParams.set('preview', '1')"), '畫布 URL 與預覽 URL 必須安全合成查詢參數');
-  ok(setlistSource.includes("const CANVAS_LAYOUTS = new Set(['classic', 'cards', 'billboard', 'terminal', 'index']);"), 'OBS 頁必須用同一組白名單拒絕不支援模板的畫布模式');
-  ok(setlistSource.includes("const canvasRequested = q.get('mode') === 'canvas'") && setlistSource.includes('syncOutputMode()'), 'OBS 頁必須解析畫布網址並切換輸出模式');
-  ok(!setlistSource.includes('const CANVAS_W = 1920') && !setlistSource.includes('CANVAS_REFERENCE_WIDTH') && !setlistSource.includes('--sl-canvas-fit'), '全畫布不可鎖死虛擬座標或以固定小元件倍率模擬響應式');
-  ok(setlistCss.includes('html[data-setlist-output="canvas"][data-layout] #setlist-root') && setlistCss.includes('background: transparent;'), '全畫布根節點必須保持透明，不可建立全螢幕背板');
-  ok(setlistCss.includes('width: 90vw;') && setlistCss.includes('left: 5vw;') && setlistCss.includes('right: 5vw;'), '全畫布內容必須直接填滿來源寬度並保留相對安全邊距');
-  ok(indexHtml.includes('data-setlist-widget-only') && setlistPanel.includes("document.querySelectorAll('[data-setlist-widget-only]')"), '固定像素寬度設定在全畫布模式必須收起，避免顯示無效控制');
-  canvasLayouts.forEach((layout) => {
-    ok(setlistCss.includes(`html[data-setlist-output="canvas"][data-layout="${layout}"]`), `${layout} 必須有自己的畫布定位`);
+  const schema = require('../public/js/setlist-style-schema');
+  const fillLayouts = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index'];
+  const sceneLayouts = ['timeline', 'diagonal', 'constellation'];
+
+  // 只能有一種輸出：不可再回到「小元件 / 全畫布」兩種模式或 URL 開關。
+  ok(!setlistSource.includes("q.get('mode')") && !setlistCss.includes('data-setlist-output') && !indexHtml.includes('data-setlist-output'),
+    '歌單不可再有第二種輸出模式或 mode= 網址開關');
+  ok(setlistPanel.includes("const url = new URL('/setlist', window.location.origin);") && !setlistPanel.includes("set('mode'"),
+    'OBS 網址必須固定，尺寸改由 OBS Browser Source 決定');
+
+  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index']);"),
+    '七個清單型模板必須集中列在同一份填滿白名單');
+  ok(setlistSource.includes('const FIT_REF_W = 720, FIT_REF_H = 560') && setlistSource.includes('Math.min(w / FIT_REF_W, h / FIT_REF_H)'),
+    '縮放係數必須同時依來源寬與高計算，扁來源才不會爆版');
+  ok(setlistSource.includes("dataset.slFit = isFillLayout() ? 'fill' : 'scene'"), 'CSS 必須能分辨填滿與場景兩種語意');
+  ok(setlistSource.includes('new ResizeObserver(scheduleFit)') && setlistSource.includes("window.addEventListener('resize', scheduleFit)"),
+    '使用者在 OBS 拉動來源大小時必須重新排版');
+  ok(setlistSource.includes('function trimToFit(') && setlistSource.includes('box.scrollHeight - box.clientHeight > 0.5'),
+    '顯示首數必須依實際高度決定，不可再固定 6 首');
+  ok(!setlistSource.includes('model.upcoming.slice(0, UP_LIMIT)') && setlistSource.includes('model.upcoming.slice(0, upCap())'),
+    '列數上限必須跟著輸出模式切換');
+
+  // 字級／間距跟著來源走：schema 標 fitScale，setlist.js 才會乘上 --sl-fit。
+  ['sizeNow', 'sizeList', 'sizeArtist', 'sizeMeta', 'borderRadius', 'paddingV', 'paddingH', 'itemGap'].forEach((key) => {
+    ok(schema.FIELD_BY_KEY[key] && schema.FIELD_BY_KEY[key].fitScale === true, `${key} 必須跟著來源尺寸等比縮放`);
   });
+  ok(setlistSource.includes('if (f.fitScale && fill)'), 'fitScale 欄位必須實際乘上目前的 fit');
+  ok(!schema.FIELD_BY_KEY.cardWidth.fitScale, '固定像素寬度不得再參與填滿版面的計算');
+  ok(!indexHtml.includes('id="sls-card-width"') && !!schema.FIELD_BY_KEY.cardWidth,
+    '面板不得再顯示固定像素寬度，但 schema 欄位要保留讓舊設定讀得回來');
+
+  // 版面：七個模板都要有自己的填滿規則，且根節點不得殘留固定寬度或 transform 放大。
+  const fillRootRule = /html\[data-sl-fit="fill"\]\[data-layout\] #setlist-root \{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
+  ok(fillRootRule.includes('inset: 0') && fillRootRule.includes('max-width: none') && fillRootRule.includes('transform: none'),
+    '填滿模式的根節點必須貼齊來源、不留固定寬度、不用 transform 放大點陣');
+  fillLayouts.forEach((layout) => {
+    ok(setlistCss.includes(`html[data-sl-fit="fill"][data-layout="${layout}"]`), `${layout} 必須有自己的填滿版面規則`);
+  });
+  sceneLayouts.forEach((layout) => {
+    ok(!setlistCss.includes(`html[data-sl-fit="fill"][data-layout="${layout}"]`), `${layout} 是場景版，不可被改成填滿版面`);
+  });
+  ok(setlistCss.includes('html[data-sl-fit="fill"] .setlist-row,'), '清單列必須維持自然高度，否則會被壓扁而不是少顯示一首');
+
+  // 面板：說明與預覽尺寸切換（沒有尺寸切換就看不出「跟著來源變化」）。
+  ok(indexHtml.includes('id="setlist-sizing-hint"') && setlistPanel.includes('歌單大小＝你在 OBS 拉的 Browser Source 大小'),
+    '面板必須說明歌單大小由 OBS 來源決定');
+  ['16x9', 'portrait', 'strip', 'small'].forEach((size) => {
+    ok(indexHtml.includes(`data-setlist-preview-size="${size}"`), `預覽必須能模擬 ${size} 來源尺寸`);
+  });
+  ok(setlistPanel.includes('window.PreviewScale?.apply();'), '預覽縮放必須共用 preview-scale.js，不可各算一份');
 });
 
 test('OBS 經典歌單以歌名為第一優先，長歌手名不可擠壓歌名', () => {
@@ -4348,7 +4385,9 @@ test('R13-1 generated card layouts use classes instead of fixed inline styles', 
   const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const karaokeSource = fs.readFileSync(path.join(__dirname, '../public/js/karaoke.js'), 'utf8');
-  const displayCss = fs.readFileSync(path.join(__dirname, '../public/css/display.css'), 'utf8');
+  // 這個守衛比對的是跨行片段：git worktree 依 core.autocrlf 取出的檔案是 CRLF，
+  // 直接 includes() 會誤判成「守衛消失」。先正規化行尾，讓它只檢查真正的內容。
+  const displayCss = fs.readFileSync(path.join(__dirname, '../public/css/display.css'), 'utf8').replace(/\r\n/g, '\n');
   ok(!twitch.includes('style='), 'Twitch request cards must not restore fixed inline styles: ');
   ok(!playlist.includes('playlist-import-item" type="button" data-import-filename="${escapeHtml(f.filename)}" style='), 'playlist import items must not restore fixed inline styles: ');
   ok(!setlistPanel.includes('style.cssText'), 'setlist custom-style chips must not restore fixed inline cssText: ');
@@ -5431,7 +5470,8 @@ testAsync('Electron P1：重用既有 server 時決定結束後，關窗不可�
 });
 
 test('播放音量在 SoundTouch 先啟動時仍會寫入記憶，KTV 掃色對齊逐字來源且走合成器', () => {
-  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8');
+  // 同上：這裡有跨行片段的比對，worktree 取出的 CRLF 會誤判，先正規化行尾。
+  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8').replace(/\r\n/g, '\n');
   const ktv = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-ktv.js'), 'utf8');
   const display = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'display.js'), 'utf8');
   const panelCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8');

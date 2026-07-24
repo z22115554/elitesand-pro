@@ -2,9 +2,10 @@
  * Setlist OBS 疊加頁前端 — 多版型(layout)架構
  *
  * 同一套 socket 資料（已唱 past / 現在 current / 接下來 upcoming）驅動多種版型：
- *   classic（毛玻璃三段，支援 theme/style）
- *   simple / timeline / diagonal / constellation（v2，全幅 16:9 舞台）
- *   terminal / billboard / cards（清單型 variants）
+ *   清單型（classic / cards / simple / terminal / billboard / signal / index）
+ *     ——「來源即畫布」：OBS Browser Source 的實際寬高就是版面框，字級與間距由 --sl-fit
+ *       等比帶動、列數依高度自動增減。使用者不需要調像素寬度，拉 OBS 來源即可。
+ *   場景型（timeline / diagonal / constellation）：全幅 16:9 舞台，維持絕對像素語意。
  * 版型由 ?layout= 初始、socket setlist:layout 即時切換。
  */
 (function () {
@@ -17,17 +18,30 @@
   let layoutId = 'classic';
   const q = new URLSearchParams(location.search);
 
-  // 畫布來源是 URL 層的輸出選項，不是另一份歌單設定：
-  // 同一個 state / Socket client 仍照常使用，舊 /setlist 來源則完全維持小元件行為。
-  const CANVAS_LAYOUTS = new Set(['classic', 'cards', 'billboard', 'terminal', 'index']);
-  const canvasRequested = q.get('mode') === 'canvas';
+  // ─── 來源即畫布（清單型模板）───
+  // OBS Browser Source 的實際寬高就是歌單的版面框：來源拉多大，歌單就排多大。
+  // 沒有第二種輸出模式，也沒有 URL 參數——同一個 /setlist 網址在任何來源尺寸都成立。
+  // 場景版（timeline / diagonal / constellation）不走這條，維持原本的全幅舞台行為。
+  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index']);
+  // 尺度基準：來源正好是 720×560 時 fit = 1，也就是設定裡的 px 數字＝實際像素；
+  // 更大的來源等比放大字級與間距（原生字級，不是把小元件 transform 放大）。
+  const FIT_REF_W = 720, FIT_REF_H = 560, FIT_MIN = 0.6, FIT_MAX = 4;
+  let fitFactor = 1;
 
-  function isCanvasOutput() {
-    return canvasRequested && CANVAS_LAYOUTS.has(layoutId);
-  }
+  function isFillLayout() { return FILL_LAYOUTS.has(layoutId); }
 
   function syncOutputMode() {
-    document.documentElement.dataset.setlistOutput = isCanvasOutput() ? 'canvas' : 'widget';
+    document.documentElement.dataset.slFit = isFillLayout() ? 'fill' : 'scene';
+  }
+
+  // 目前來源尺寸對應的縮放係數；使用者的「整體縮放」折進來（不再用 transform 放大點陣）。
+  function measuredFit() {
+    if (!isFillLayout()) return 1;
+    const w = rootEl.clientWidth || window.innerWidth || FIT_REF_W;
+    const h = rootEl.clientHeight || window.innerHeight || FIT_REF_H;
+    const raw = Math.min(w / FIT_REF_W, h / FIT_REF_H);
+    const userScale = Number(curStyle.scale) > 0 ? Number(curStyle.scale) : 1;
+    return Math.min(FIT_MAX, Math.max(FIT_MIN, raw)) * userScale;
   }
 
   // ─── 共用工具（去重：現在統一在 shared-utils.js） ───
@@ -154,15 +168,49 @@
   // 的欄位標了 `composite`，這裡略過，改由 applyStyle 下面對應的 composite 區塊手動處理
   // ——新增一般數值/顏色/開關類欄位時，只要 schema 有寫 cssVar/dataAttr 就會自動生效，
   // 不需要再回來改這個函式。
+  /**
+   * 重算並寫入 --sl-fit。reapply=true 時連帶把已保存的設定重新套一次
+   * （字級/間距是 px × fit，來源尺寸一變就必須重寫）。
+   * @returns {boolean} fit 是否真的改變
+   */
+  function applyFit({ reapply = true, force = false } = {}) {
+    const next = measuredFit();
+    const changed = Math.abs(next - fitFactor) > 0.001;
+    fitFactor = next;
+    document.documentElement.style.setProperty('--sl-fit', String(Math.round(next * 1000) / 1000));
+    if ((changed || force) && reapply && curStyle && Object.keys(curStyle).length) {
+      applyGenericFields(curStyle, document.documentElement, document.documentElement.style);
+      if (isFillLayout()) document.documentElement.style.setProperty('--sl-scale', '1');
+    }
+    return changed;
+  }
+
+  // OBS 使用者拉動 Browser Source 尺寸時重排：量測 → 重算 fit → 重繪（重繪才會重新算列數）。
+  // 用 timer 而不是 requestAnimationFrame：版面重算不是動畫，且沒有合成畫面的分頁
+  // （最小化、隱藏場景、自動化環境）rAF 會停擺，等到再次顯示前都停留在舊尺寸。
+  let fitTimer = null;
+  function scheduleFit() {
+    if (fitTimer) return;
+    fitTimer = setTimeout(() => {
+      fitTimer = null;
+      const changed = applyFit();
+      if (changed || isFillLayout()) renderActive();
+    }, 60);
+  }
+
   function applyGenericFields(s, root, r) {
     const schema = window.SetlistStyleSchema;
     if (!schema) return;
+    const fill = isFillLayout();
     schema.FIELDS.forEach((f) => {
       const v = s[f.key];
       if (v == null || f.composite) return;
       if (f.cssVar) {
         const fmt = schema.FORMATS[f.cssFormat || f.format];
-        r.setProperty(f.cssVar, f.cssTransform ? f.cssTransform(v) : fmt ? fmt.toCss(v) : String(v));
+        // fitScale 欄位在「來源即畫布」模式下乘上目前的 fit：設定值是 720×560 來源時的
+        // 實際像素，來源變大變小就等比帶動。場景版 fill=false，完全維持絕對像素。
+        if (f.fitScale && fill) r.setProperty(f.cssVar, `${Math.round(Number(v) * fitFactor * 100) / 100}px`);
+        else r.setProperty(f.cssVar, f.cssTransform ? f.cssTransform(v) : fmt ? fmt.toCss(v) : String(v));
       }
       if (f.dataAttr) {
         if (f.type === 'boolean') root.toggleAttribute(f.dataAttr, f.invert ? v === false : v === true);
@@ -178,7 +226,13 @@
     const has = (k) => s[k] != null;
     const num = (k, d) => (has(k) ? Number(s[k]) : d);
 
+    // 先更新 curStyle，讓 measuredFit() 讀得到這次的「整體縮放」，再套用會被 fit 帶動的欄位。
+    curStyle = s;
+    if (typeof s.timeFormat === 'string') curTimeFormat = s.timeFormat;
+    applyFit({ reapply: false });
     applyGenericFields(s, root, r);
+    // 填滿模式的縮放已折進 --sl-fit（原生字級），不再疊 transform 放大點陣。
+    if (isFillLayout()) r.setProperty('--sl-scale', '1');
 
     // ── composite：多欄位合成的 CSS 變數（不在通用套用範圍內，schema 標了 composite）──
     // 背板/襯底：bgOpacity 0=透明（場景版看得到背後角色）；同時餵 classic 與場景
@@ -288,8 +342,6 @@
     // 才變──這裡改動時主動觸發一次重繪，避免「設定改了沒反應」。
     const schema = window.SetlistStyleSchema;
     const needsRerender = schema && schema.FIELDS.some((f) => f.needsRerender && has(f.key));
-    curStyle = s;
-    if (typeof s.timeFormat === 'string') curTimeFormat = s.timeFormat;
     if (needsRerender) renderActive();
 
     // ── 文字標籤（更新已掛載的 DOM；render 也會用到最新值）──
@@ -312,7 +364,36 @@
     document.querySelectorAll('#sg-next-label').forEach((e) => { e.textContent = lastLabels.wait; });
   }
 
+  // 列數上限：填滿模式先給一個寬鬆的取樣上限，實際顯示幾首由 trimToFit() 依來源高度決定
+  // （高的來源多顯示幾首、扁的來源自動收斂，且不會留下被切一半的半列）。
   const PAST_LIMIT = 6, UP_LIMIT = 6;
+  const FILL_PAST_LIMIT = 24, FILL_UP_LIMIT = 24;
+  const pastCap = () => (isFillLayout() ? FILL_PAST_LIMIT : PAST_LIMIT);
+  const upCap = () => (isFillLayout() ? FILL_UP_LIMIT : UP_LIMIT);
+
+  /**
+   * 把放不下的列裁掉，直到內容不再溢出容器。
+   * 正在播放的那一列永遠保留：離它較遠的那一端先被裁。
+   * @param {Element} box 有固定高度且 overflow:hidden 的清單容器
+   * @param {'start'|'end'} keep 沒有正在播放列時要保留哪一端（end＝保留最新的已唱）
+   */
+  function trimToFit(box, keep) {
+    if (!box || !box.clientHeight) return;
+    let guard = 80;
+    while (guard-- > 0 && box.children.length > 1 && box.scrollHeight - box.clientHeight > 0.5) {
+      const kids = box.children;
+      const active = box.querySelector('.active');
+      const activeIndex = active ? Array.prototype.indexOf.call(kids, active) : -1;
+      const dropFirst = activeIndex >= 0 ? activeIndex > (kids.length - 1) / 2 : keep === 'end';
+      box.removeChild(dropFirst ? kids[0] : kids[kids.length - 1]);
+    }
+  }
+  function fitRows() {
+    trimToFit(rootEl.querySelector('#cl-up'), 'start');
+    trimToFit(rootEl.querySelector('#cl-past'), 'end');
+    ['#term-list', '#bb-list', '#cards-list', '#ix-list']
+      .forEach((sel) => trimToFit(rootEl.querySelector(sel), 'start'));
+  }
 
   // 經典：上＝正在播放、左＝未唱、右＝已唱（可只保留其中一側）
   const classic = {
@@ -337,22 +418,23 @@
       } else now.hidden = true;
       // 未唱（左）
       const upEl = root.querySelector('#cl-up');
-      const up = model.upcoming.slice(0, UP_LIMIT);
+      const up = model.upcoming.slice(0, upCap());
       upEl.innerHTML = '';
       up.forEach((s) => upEl.appendChild(el('div', 'setlist-row setlist-upcoming-row',
         `<span class="setlist-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="setlist-artist"> — ${escapeHtml(s.artist)}</span>` : ''}`)));
       const upLabel = root.querySelector('.cl-lbl-up');
       upLabel.hidden = up.length === 0;
-      root.querySelector('#cl-up-count').textContent = up.length ? String(up.length).padStart(2, '0') : '';
+      // 計數用「總數」而非目前畫得下的列數：裁列是版面決定，數字不該跟著變。
+      root.querySelector('#cl-up-count').textContent = model.upcoming.length ? String(model.upcoming.length).padStart(2, '0') : '';
       // 已唱（右）
       const pastEl = root.querySelector('#cl-past');
-      const past = model.past.slice(-PAST_LIMIT);
+      const past = model.past.slice(-pastCap());
       pastEl.innerHTML = '';
       past.forEach((s) => pastEl.appendChild(el('div', 'setlist-row',
         `${model.showTime ? `<span class="setlist-time">${escapeHtml(fmtOffset(s.offset))}</span>` : ''}<span class="setlist-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="setlist-artist"> — ${escapeHtml(s.artist)}</span>` : ''}`)));
       const doneLabel = root.querySelector('.cl-lbl-done');
       doneLabel.hidden = past.length === 0;
-      root.querySelector('#cl-done-count').textContent = past.length ? String(past.length).padStart(2, '0') : '';
+      root.querySelector('#cl-done-count').textContent = model.past.length ? String(model.past.length).padStart(2, '0') : '';
       // 全空時的提示
       const empty = !model.current && past.length === 0 && up.length === 0;
       if (empty && model.active) {
@@ -528,14 +610,19 @@
   // ═══════════════════════════════════════════
   // 清單型 variants：terminal / billboard / cards
   // ═══════════════════════════════════════════
+  // 取「最近幾首已唱 + 現在 + 接下來幾首」的視窗。
+  // 填滿模式先多取一些，實際畫幾列交給 trimToFit() 依來源高度決定。
+  // start = 視窗第一項在整份歌單中的 0-based 位置（章節索引的曲序要用）。
   function windowList() {
-    // 取「最近 5 首已唱 + 現在 + 接下來 5 首」的視窗
-    const done = model.past.slice(-5).map((s) => ({ ...s, state: 'done' }));
+    const doneCap = isFillLayout() ? 16 : 5;
+    const waitCap = isFillLayout() ? 20 : 6;
+    const done = model.past.slice(-doneCap).map((s) => ({ ...s, state: 'done' }));
     const now = model.current ? [{ ...model.current, state: 'active' }] : [];
-    const wait = (model.current ? model.upcoming : model.upcoming.slice(0)).slice(0, 6).map((s) => ({ ...s, state: 'wait' }));
-    const list = [...done, ...now, ...wait];
-    list.forEach((it, i) => { it.n = String(i + 1).padStart(2, '0'); });
-    return list;
+    const wait = (model.current ? model.upcoming : model.upcoming.slice(0)).slice(0, waitCap).map((s) => ({ ...s, state: 'wait' }));
+    const items = [...done, ...now, ...wait];
+    items.forEach((it, i) => { it.n = String(i + 1).padStart(2, '0'); });
+    items.start = Math.max(0, model.past.length - doneCap);
+    return items;
   }
 
   const terminal = {
@@ -616,7 +703,7 @@
     },
     render(root) {
       const list = windowList();
-      const firstNumber = Math.max(0, model.past.length - 5) + 1;
+      const firstNumber = list.start + 1;
       const total = model.past.length + (model.current ? 1 : 0) + model.upcoming.length;
       const current = model.current ? model.past.length + 1 : 0;
       root.querySelector('#ix-total').textContent = current ? `${String(current).padStart(2, '0')} / ${String(total).padStart(2, '0')}` : (total ? `00 / ${String(total).padStart(2, '0')}` : '');
@@ -640,12 +727,18 @@
     syncOutputMode();
     rootEl.innerHTML = '';
     LAYOUTS[id].mount(rootEl);
+    // 切版型會改變填滿/場景語意，字級與間距的 px 基準也跟著換算方式改變。
+    applyFit({ force: true });
     renderActive();
   }
   function renderActive() {
+    // 每次重繪都先對齊目前來源尺寸：resize 事件依賴瀏覽器的 rendering lifecycle，
+    // 場景被隱藏、視窗最小化等情況可能延後送達；換歌時順手重算就不會停在舊尺寸。
+    applyFit();
     const lay = LAYOUTS[layoutId] || classic;
     lay.render(rootEl);
     applyLabels();
+    if (isFillLayout()) fitRows();
     requestAnimationFrame(applyMarquees);
   }
 
@@ -674,6 +767,13 @@
   // 初始 layout/theme：URL 參數作為 socket 連上前的 fallback
   if (q.get('theme')) applyTheme(q.get('theme'));
   setLayout(q.get('layout') || 'classic');
+
+  // 來源尺寸變化（OBS 直接拉 Browser Source、面板預覽切換模擬尺寸）都要重排。
+  // 部分嵌入式 WebView 的 ResizeObserver 會在 observe() 當下丟錯，故包 try 並保留 resize 事件。
+  try {
+    if (typeof ResizeObserver === 'function') new ResizeObserver(scheduleFit).observe(rootEl);
+  } catch (e) { /* 退回下面的 resize 監聽 */ }
+  window.addEventListener('resize', scheduleFit);
 
   // 場景版各自獨立、其餘共用 'shared'
   const SCENE = ['timeline', 'diagonal', 'constellation'];

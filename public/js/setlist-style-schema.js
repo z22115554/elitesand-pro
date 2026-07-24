@@ -93,19 +93,24 @@
     { key: 'fontMono', type: 'string', default: 'JetBrains Mono', domId: 'sls-font-mono', cssVar: '--sl-fm', cssTransform: (v) => `'${v}', ui-monospace, monospace` },
 
     // ── 字級 / 字重 ──
-    { key: 'sizeNow', type: 'number', default: 16, min: 10, max: 60, domId: 'sls-size-now', format: 'px', cssVar: '--sl-sz-n' },
-    { key: 'sizeList', type: 'number', default: 13, min: 8, max: 24, domId: 'sls-size-list', format: 'px', cssVar: '--sl-sz-l' },
-    { key: 'sizeArtist', type: 'number', default: 11, min: 7, max: 18, domId: 'sls-size-artist', format: 'px', cssVar: '--sl-sz-a' },
-    { key: 'sizeMeta', type: 'number', default: 10, min: 7, max: 14, domId: 'sls-size-meta', format: 'px', cssVar: '--sl-sz-m' },
+    // fitScale：清單型模板是「來源即畫布」——OBS Browser Source 的實際寬高就是版面框，
+    // 這些 px 值會乘上 setlist.js 量到的 --sl-fit 再寫進 CSS（來源在 720×560 時 fit=1，
+    // 也就是這裡的數字＝實際像素）。場景版不套用，維持原本的絕對像素語意。
+    { key: 'sizeNow', type: 'number', default: 16, min: 10, max: 60, domId: 'sls-size-now', format: 'px', cssVar: '--sl-sz-n', fitScale: true },
+    { key: 'sizeList', type: 'number', default: 13, min: 8, max: 24, domId: 'sls-size-list', format: 'px', cssVar: '--sl-sz-l', fitScale: true },
+    { key: 'sizeArtist', type: 'number', default: 11, min: 7, max: 18, domId: 'sls-size-artist', format: 'px', cssVar: '--sl-sz-a', fitScale: true },
+    { key: 'sizeMeta', type: 'number', default: 10, min: 7, max: 14, domId: 'sls-size-meta', format: 'px', cssVar: '--sl-sz-m', fitScale: true },
     { key: 'fwActive', type: 'string', default: '700', domId: 'sls-fw-active', cssVar: '--sl-fw-n' },
     { key: 'fwList', type: 'string', default: '400', domId: 'sls-fw-list', cssVar: '--sl-fw-l' },
 
     // ── 外觀幾何 ──
+    // cardWidth：只有場景版以外的「舊固定像素小元件」需要；清單型模板改為填滿 OBS 來源後
+    // 已不再決定版面，但欄位保留——舊 state.json 讀得回來，也不改變 server 驗證邊界。
     { key: 'cardWidth', type: 'number', default: 340, min: 160, max: 600, domId: 'sls-card-width', format: 'px', cssVar: '--sl-w' },
-    { key: 'borderRadius', type: 'number', default: 12, min: 0, max: 32, domId: 'sls-radius', format: 'px', cssVar: '--sl-r-new' },
-    { key: 'paddingV', type: 'number', default: 10, min: 0, max: 28, domId: 'sls-padding-v', format: 'px', cssVar: '--sl-pv' },
-    { key: 'paddingH', type: 'number', default: 14, min: 0, max: 40, domId: 'sls-padding-h', format: 'px', cssVar: '--sl-ph' },
-    { key: 'itemGap', type: 'number', default: 2, min: 0, max: 20, domId: 'sls-item-gap', format: 'px', cssVar: '--sl-gap-new' },
+    { key: 'borderRadius', type: 'number', default: 12, min: 0, max: 32, domId: 'sls-radius', format: 'px', cssVar: '--sl-r-new', fitScale: true },
+    { key: 'paddingV', type: 'number', default: 10, min: 0, max: 28, domId: 'sls-padding-v', format: 'px', cssVar: '--sl-pv', fitScale: true },
+    { key: 'paddingH', type: 'number', default: 14, min: 0, max: 40, domId: 'sls-padding-h', format: 'px', cssVar: '--sl-ph', fitScale: true },
+    { key: 'itemGap', type: 'number', default: 2, min: 0, max: 20, domId: 'sls-item-gap', format: 'px', cssVar: '--sl-gap-new', fitScale: true },
     { key: 'blurAmount', type: 'number', default: 12, min: 0, max: 48, domId: 'sls-blur', format: 'px', cssVar: '--sl-blur-new' },
     // glowSize：預留擴充欄位，目前尚無 UI 控制項（domId 留空），已可由 server 驗證與 applyStyle 套用
     { key: 'glowSize', type: 'number', default: 0, min: 0, max: 24, domId: null, format: 'px', cssVar: '--sl-glow' },
@@ -184,8 +189,8 @@
 
     // ── KHelper 深度：行高 / 外邊距 / 進出場動畫 / 時間格式 ──
     { key: 'lineHeight', type: 'number', default: 1.4, min: 1, max: 2.4, domId: 'sls-line-height', format: 'rawDecimal', cssVar: '--sl-lh' },
-    { key: 'marginV', type: 'number', default: 0, min: 0, max: 80, domId: 'sls-margin-v', format: 'px', cssVar: '--sl-mv' },
-    { key: 'marginH', type: 'number', default: 0, min: 0, max: 80, domId: 'sls-margin-h', format: 'px', cssVar: '--sl-mh' },
+    { key: 'marginV', type: 'number', default: 0, min: 0, max: 80, domId: 'sls-margin-v', format: 'px', cssVar: '--sl-mv', fitScale: true },
+    { key: 'marginH', type: 'number', default: 0, min: 0, max: 80, domId: 'sls-margin-h', format: 'px', cssVar: '--sl-mh', fitScale: true },
     { key: 'rowAnim', type: 'enum', default: 'fade', values: ['fade', 'none', 'slide-up', 'slide-side'], domId: 'sls-row-anim', dataAttr: 'data-row-anim' },
     // timeFormat 沒有 CSS 變數（在 fmtOffset() 當下讀取），改動需觸發重繪
     { key: 'timeFormat', type: 'enum', default: 'mmss', values: ['mmss', 'hmmss', 'none'], domId: 'sls-time-format', needsRerender: true },

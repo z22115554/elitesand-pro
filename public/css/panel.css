@@ -194,18 +194,13 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .setlist-layout-picker-more .setlist-layout-card { min-height:76px; }
 .setlist-layout-hint { margin:9px 0 0; color:var(--text-faint); font-size:11px; line-height:1.55; }
 .setlist-legacy-layout-notice { margin:8px 0 0; }
-.setlist-output-mode { margin:12px 0 0; padding:11px 12px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-raised); }
-.setlist-output-heading .label { display:block; color:var(--text); font-size:12px; font-weight:650; }
-.setlist-output-heading .field-hint { margin:4px 0 0; }
-.setlist-output-picker { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:9px; }
-.setlist-output-option { min-width:0; padding:9px 10px; border:1px solid var(--border-strong); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); text-align:left; cursor:pointer; transition:border-color .12s,background .12s,box-shadow .12s; }
-.setlist-output-option:hover { background:var(--bg-hover); }
-.setlist-output-option[aria-checked="true"] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--bg-surface)); box-shadow:0 0 0 1px var(--accent-soft); }
-.setlist-output-option strong, .setlist-output-option span { display:block; }
-.setlist-output-option strong { font-size:12px; font-weight:650; }
-.setlist-output-option span { margin-top:3px; color:var(--text-faint); font-size:10px; line-height:1.35; }
-.setlist-output-hint, .setlist-output-unsupported { margin:8px 0 0; color:var(--text-faint); font-size:11px; line-height:1.55; }
-.setlist-output-mode[hidden], .setlist-output-unsupported[hidden], .setlist-legacy-layout-notice[hidden], #setlist-appearance[hidden], #btn-setlist-advanced[hidden] { display:none; }
+.setlist-sizing-hint { margin:10px 0 0; padding:9px 11px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-raised); color:var(--text-dim); font-size:11px; line-height:1.55; }
+/* 預覽尺寸切換：模擬不同的 OBS Browser Source 寬高，用來確認版面真的跟著來源走 */
+.setlist-preview-sizes { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+.setlist-preview-size { padding:5px 9px; border:1px solid var(--border-strong); border-radius:999px; background:var(--bg-surface); color:var(--text-dim); font-size:11px; cursor:pointer; transition:border-color .12s,background .12s,color .12s; }
+.setlist-preview-size:hover { background:var(--bg-hover); }
+.setlist-preview-size[aria-checked="true"] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,var(--bg-surface)); color:var(--text); }
+.setlist-legacy-layout-notice[hidden], #setlist-appearance[hidden], #btn-setlist-advanced[hidden] { display:none; }
 .setlist-style-scope { margin:0 0 12px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-raised); color:var(--text-dim); font-size:11px; line-height:1.45; }
 .setlist-quick-presets { margin-top:12px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-raised); }
 .setlist-quick-presets > summary { padding:10px 12px; color:var(--text-dim); font-size:12px; font-weight:600; cursor:pointer; }
@@ -504,6 +499,9 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 /* 預覽＝OBS 的等比縮小：iframe 以真實 OBS 解析度(1920×1080)渲染，再整體 scale 縮到容器寬，
    字級/位置/邊距的「相對比例」才會和 OBS 輸出一模一樣（不再是小框裡的大字）。 */
 .obs-preview, .setlist-preview { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; display: block; background: transparent; transform: scale(var(--preview-scale, 0.2)); transform-origin: top left; }
+/* 歌單是「來源即畫布」：預覽 iframe 的邏輯尺寸＝目前模擬的 Browser Source 尺寸，
+   換尺寸就會看到真正的重排結果（而不是同一個版面被縮放）。 */
+.setlist-preview { width: var(--preview-w, 1920px); height: var(--preview-h, 1080px); }
 .obs-preview-tag { position: absolute; left: 8px; bottom: 8px; font-size: 10px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,0.55); color: #fff; pointer-events: none; }
 /* 歌單預覽：深色底（模擬 OBS 疊在畫面上），透明背景的 /setlist 在其上渲染，主題配色即時可見 */
 .setlist-preview-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-md); overflow: hidden; background: #0a0a12; border: 1px solid var(--border-strong); margin-bottom: 12px; }

@@ -175,27 +175,54 @@
   }
 
   const setlistLayoutSel = document.getElementById('setlist-layout');
-  const SETLIST_CANVAS_LAYOUTS = ['classic', 'cards', 'billboard', 'terminal', 'index'];
-  let setlistOutputMode = 'canvas';
 
-  function selectedSetlistLayout() {
-    return setlistLayoutSel?.value || 'classic';
-  }
-  function supportsCanvasOutput(layout = selectedSetlistLayout()) {
-    return SETLIST_CANVAS_LAYOUTS.includes(layout);
-  }
-  function activeSetlistOutputMode() {
-    return supportsCanvasOutput() ? setlistOutputMode : 'widget';
-  }
-
-  // 畫布輸出只寫進網址，不改 server state。舊 /setlist 保持原本的小元件來源，
-  // 因此已放進 OBS 的來源不會被新功能自動改版。
+  // Setlist OBS URL 固定；版型、主題與外觀都由 socket state 同步，
+  // 歌單大小則由使用者在 OBS 拉 Browser Source 的寬高決定，不需要換網址。
   function buildSetlistUrl({ preview = false, relative = false } = {}) {
     const url = new URL('/setlist', window.location.origin);
-    if (activeSetlistOutputMode() === 'canvas') url.searchParams.set('mode', 'canvas');
     if (preview) url.searchParams.set('preview', '1');
     return relative ? `${url.pathname}${url.search}` : url.toString();
   }
+
+  // ── 預覽尺寸：模擬不同的 OBS Browser Source 寬高 ──
+  // 清單型模板是「來源即畫布」，所以預覽必須能換尺寸才看得出真正的排版結果。
+  const SETLIST_PREVIEW_SIZES = {
+    '16x9': { w: 1920, h: 1080, label: '橫式 1920×1080' },
+    'portrait': { w: 600, h: 1080, label: '直式 600×1080' },
+    'strip': { w: 1920, h: 320, label: '橫條 1920×320' },
+    'small': { w: 640, h: 480, label: '小框 640×480' },
+  };
+  let setlistPreviewSize = '16x9';
+  const setlistPreviewButtons = Array.from(document.querySelectorAll('[data-setlist-preview-size]'));
+
+  function applySetlistPreviewSize() {
+    const size = SETLIST_PREVIEW_SIZES[setlistPreviewSize] || SETLIST_PREVIEW_SIZES['16x9'];
+    document.querySelectorAll('.setlist-preview-wrap').forEach((wrap) => {
+      wrap.style.aspectRatio = `${size.w} / ${size.h}`;
+      wrap.style.setProperty('--preview-w', `${size.w}px`);
+      wrap.style.setProperty('--preview-h', `${size.h}px`);
+    });
+    // 縮放交給 preview-scale.js（它會讀上面設好的 --preview-w 當基準）。
+    window.PreviewScale?.apply();
+    // 同源 iframe 換了邏輯尺寸後主動敲一下：預覽才會立刻依新尺寸重排，
+    // 不必等瀏覽器自己送出 resize（分頁沒在繪製時會延後）。
+    document.querySelectorAll('.setlist-preview').forEach((frame) => {
+      try { frame.contentWindow?.dispatchEvent(new Event('resize')); } catch (e) { /* 跨來源或尚未載入 */ }
+    });
+    document.querySelectorAll('.setlist-preview-tag').forEach((tag) => { tag.textContent = size.label; });
+    setlistPreviewButtons.forEach((button) => {
+      const selected = button.dataset.setlistPreviewSize === setlistPreviewSize;
+      button.setAttribute('aria-checked', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      button.classList.toggle('is-selected', selected);
+    });
+  }
+  function chooseSetlistPreviewSize(key) {
+    if (!SETLIST_PREVIEW_SIZES[key]) return;
+    setlistPreviewSize = key;
+    applySetlistPreviewSize();
+  }
+
   function refreshSetlistUrl() {
     if (dom.setlistObsUrl) dom.setlistObsUrl.textContent = buildSetlistUrl();
     const generalUrl = document.getElementById('setlist-url-general');
@@ -206,8 +233,7 @@
     document.querySelectorAll('.setlist-preview').forEach((prev) => {
       if (prev.getAttribute('src') !== want) prev.setAttribute('src', want);
     });
-    const outputName = activeSetlistOutputMode() === 'canvas' ? '全畫布' : '小元件';
-    document.querySelectorAll('.setlist-preview-tag').forEach((tag) => { tag.textContent = `${outputName}預覽`; });
+    applySetlistPreviewSize();
   }
 
   // 版型類別：scene（場景版各自獨立）/ classic / list（清單版，與經典共用一份）
@@ -229,35 +255,16 @@
   const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation'];
   const SETLIST_RECOMMENDED_LAYOUTS = ['classic', 'cards'];
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
-  const setlistOutputButtons = Array.from(document.querySelectorAll('[data-setlist-output]'));
+  // 清單型模板＝來源即畫布；場景型維持原本的全幅舞台語意。
+  const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index'];
 
-  function syncSetlistOutputMode() {
-    const supportsCanvas = supportsCanvasOutput();
-    const outputMode = activeSetlistOutputMode();
-    const outputField = document.getElementById('setlist-output-mode');
-    const unsupported = document.getElementById('setlist-output-unsupported');
-    const hint = document.getElementById('setlist-output-hint');
-    const widgetOnlyFields = document.querySelectorAll('[data-setlist-widget-only]');
-    if (outputField) outputField.hidden = !supportsCanvas;
-    if (unsupported) unsupported.hidden = supportsCanvas;
-    widgetOnlyFields.forEach((field) => { field.hidden = outputMode === 'canvas'; });
-    setlistOutputButtons.forEach((button) => {
-      const selected = button.dataset.setlistOutput === outputMode;
-      button.setAttribute('aria-checked', String(selected));
-      button.tabIndex = selected ? 0 : -1;
-      button.classList.toggle('is-selected', selected);
-    });
+  function syncSetlistSizingHint() {
+    const hint = document.getElementById('setlist-sizing-hint');
     if (!hint) return;
-    hint.textContent = outputMode === 'canvas'
-      ? '使用完整透明畫布；歌單寬度直接填滿 OBS Browser Source 的可用範圍，左右各保留約 5% 安全邊距。固定像素寬度只用於小元件來源。'
-      : '保留原本的局部小元件輸出；適合已經在 OBS 裡裁切或定位好的來源。';
-  }
-
-  function chooseSetlistOutput(mode) {
-    if (!supportsCanvasOutput() || !['canvas', 'widget'].includes(mode)) return;
-    setlistOutputMode = mode;
-    syncSetlistOutputMode();
-    refreshSetlistUrl();
+    const layout = setlistLayoutSel?.value || 'classic';
+    hint.textContent = SETLIST_FILL_LAYOUTS.includes(layout)
+      ? '歌單大小＝你在 OBS 拉的 Browser Source 大小：來源拉多寬多高，版面就排多大，字級與顯示首數會跟著調整，不需要在這裡設定像素寬度。'
+      : '這個模板是全幅 16:9 舞台，建議把 Browser Source 設成與畫布相同的比例。';
   }
 
   function syncSetlistLayoutPicker() {
@@ -287,7 +294,7 @@
     const moreButton = document.getElementById('btn-setlist-more-layouts');
     if (more && !SETLIST_RECOMMENDED_LAYOUTS.includes(layout)) more.hidden = false;
     if (moreButton && more) moreButton.setAttribute('aria-expanded', String(!more.hidden));
-    syncSetlistOutputMode();
+    syncSetlistSizingHint();
   }
   function chooseSetlistLayout(layout) {
     if (!setlistLayoutSel || !layout) return;
@@ -310,10 +317,10 @@
       next.focus();
     });
   });
-  setlistOutputButtons.forEach((button, index) => {
-    button.addEventListener('click', () => chooseSetlistOutput(button.dataset.setlistOutput));
+  setlistPreviewButtons.forEach((button, index) => {
+    button.addEventListener('click', () => chooseSetlistPreviewSize(button.dataset.setlistPreviewSize));
     button.addEventListener('keydown', (event) => {
-      const lastIndex = setlistOutputButtons.length - 1;
+      const lastIndex = setlistPreviewButtons.length - 1;
       let nextIndex = null;
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = index === lastIndex ? 0 : index + 1;
       if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = index === 0 ? lastIndex : index - 1;
@@ -321,11 +328,14 @@
       if (event.key === 'End') nextIndex = lastIndex;
       if (nextIndex === null) return;
       event.preventDefault();
-      const next = setlistOutputButtons[nextIndex];
-      chooseSetlistOutput(next.dataset.setlistOutput);
+      const next = setlistPreviewButtons[nextIndex];
+      chooseSetlistPreviewSize(next.dataset.setlistPreviewSize);
       next.focus();
     });
   });
+  // 面板寬度改變時預覽縮圖要重新對齊目前模擬的來源寬度。
+  window.addEventListener('resize', applySetlistPreviewSize);
+  document.addEventListener('view:change', () => setTimeout(applySetlistPreviewSize, 60));
   const moreLayoutsButton = document.getElementById('btn-setlist-more-layouts');
   const moreLayouts = document.getElementById('setlist-more-layouts');
   if (moreLayoutsButton && moreLayouts) {
