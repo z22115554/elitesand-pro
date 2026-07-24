@@ -237,8 +237,10 @@
     const outputField = document.getElementById('setlist-output-mode');
     const unsupported = document.getElementById('setlist-output-unsupported');
     const hint = document.getElementById('setlist-output-hint');
+    const widgetOnlyFields = document.querySelectorAll('[data-setlist-widget-only]');
     if (outputField) outputField.hidden = !supportsCanvas;
     if (unsupported) unsupported.hidden = supportsCanvas;
+    widgetOnlyFields.forEach((field) => { field.hidden = outputMode === 'canvas'; });
     setlistOutputButtons.forEach((button) => {
       const selected = button.dataset.setlistOutput === outputMode;
       button.setAttribute('aria-checked', String(selected));
@@ -247,7 +249,7 @@
     });
     if (!hint) return;
     hint.textContent = outputMode === 'canvas'
-      ? '使用完整透明畫布；歌單會跟著 OBS Browser Source 的實際寬高與你的外觀縮放調整。既有小元件網址不會被改動。'
+      ? '使用完整透明畫布；歌單寬度直接填滿 OBS Browser Source 的可用範圍，左右各保留約 5% 安全邊距。固定像素寬度只用於小元件來源。'
       : '保留原本的局部小元件輸出；適合已經在 OBS 裡裁切或定位好的來源。';
   }
 
