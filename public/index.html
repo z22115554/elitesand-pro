@@ -1261,8 +1261,17 @@
                 <button class="setlist-layout-card" type="button" data-setlist-layout="cards" role="radio" aria-checked="false"><span class="setlist-layout-badge">推薦</span><strong>卡片清單</strong><span>緊湊側欄，適合常駐</span></button>
               </div>
               <button id="btn-setlist-more-layouts" class="btn btn-sm btn-ghost setlist-more-layouts" type="button" aria-expanded="false" aria-controls="setlist-more-layouts">其他模板（含兩個新模板）</button>
-              <div id="setlist-more-layouts" class="setlist-layout-picker setlist-layout-picker-more" hidden>
-                <button class="setlist-layout-card" type="button" data-setlist-layout="signal" role="radio" aria-checked="false"><span class="setlist-layout-badge">新</span><strong>舞台訊號</strong><span>正播主角，右側保留兩首待播</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="index" role="radio" aria-checked="false"><span class="setlist-layout-badge">新</span><strong>章節索引</strong><span>曲序、狀態與歌名一眼掃讀</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="simple" role="radio" aria-checked="false"><strong>極簡兩排</strong><span>只留現在與下一首</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="billboard" role="radio" aria-checked="false"><strong>排行榜</strong><span>活動感強的節目視覺</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="terminal" role="radio" aria-checked="false"><strong>終端機</strong><span>復古資訊風</span></button>
+              <div id="setlist-more-layouts" hidden>
+                <p class="setlist-layout-group-title">清單型 — 跟著來源尺寸重排</p>
+                <p class="setlist-layout-group-desc">有已唱／未唱兩個區塊，可各自勾選；OBS 來源拉多大就排多大，顯示首數跟著高度自動增減。</p>
+                <div class="setlist-layout-picker setlist-layout-picker-more">
+                  <button class="setlist-layout-card" type="button" data-setlist-layout="index" role="radio" aria-checked="false"><span class="setlist-layout-badge">新</span><strong>章節索引</strong><span>曲序、狀態與歌名一眼掃讀</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="billboard" role="radio" aria-checked="false"><strong>排行榜</strong><span>活動感強的節目視覺</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="terminal" role="radio" aria-checked="false"><strong>終端機</strong><span>復古資訊風</span></button>
+                </div>
+                <p class="setlist-layout-group-title">固定版位 — 只呈現現在播放</p>
+                <p class="setlist-layout-group-desc">版位固定（貼齊底部／置中），不提供已唱與未唱清單；適合想讓直播畫面保有大面積留白的段落。</p>
+                <div class="setlist-layout-picker setlist-layout-picker-more">
+                  <button class="setlist-layout-card" type="button" data-setlist-layout="signal" role="radio" aria-checked="false"><span class="setlist-layout-badge">新</span><strong>舞台訊號</strong><span>貼齊來源底部的導播資訊條</span></button><button class="setlist-layout-card" type="button" data-setlist-layout="simple" role="radio" aria-checked="false"><strong>極簡兩排</strong><span>置中卡片，只留現在與下一首</span></button>
+                </div>
               </div>
               <p class="setlist-layout-hint" id="setlist-layout-hint">完整資訊小元件，適合放在畫面左下或右下常駐。</p>
               <p class="field-hint setlist-legacy-layout-notice" id="setlist-legacy-layout-notice" role="status" hidden>這個模板已暫停提供。你目前的 OBS 畫面與已保存設定不會自動改變；選擇其他模板後才會切換。</p>
@@ -1282,25 +1291,44 @@
                   </select>
                 </div>
 
-                <!-- 經典版面配置：只有經典版型會用到，且是「這首歌要顯示什麼區塊」的關鍵決定，放最上面 -->
-                <div class="field field--setlist-sections" id="setlist-classic-sections-field" data-sl-scope="classic">
-                  <label for="sls-classic-sections">要顯示哪些區塊（經典版型專用）</label>
-                  <select id="sls-classic-sections" class="input">
-                    <option value="both">左邊未唱歌曲 ＋ 右邊已唱歌曲</option>
-                    <option value="up">只顯示未唱歌曲</option>
-                    <option value="done">只顯示已唱歌曲</option>
-                  </select>
-                  <p class="field-hint">畫面最上方永遠顯示「正在播放」，這裡只決定下面要保留哪一側清單。</p>
-                </div>
-
                 <div id="setlist-style-collapse">
 
-                <!-- ══ 常用外觀：每個模板都會立即反映的少數控制項 ══ -->
-                <div class="field-group-title mt-0">可讀性與常用外觀</div>
-                <div class="switch-row switch-row--separated">
-                  <div><div class="label">亮色背景可讀性保護</div><div class="sub">預設開啟。只替歌單自己的文字與卡片加深襯底，保留 OBS 背景與角色；關閉才是完全透明的演出效果。</div></div>
-                  <label class="switch"><input id="sls-readability-guard" type="checkbox" checked><span class="track"></span></label>
+                <!-- ══ 快速調整＝四個固定區塊：版面 → 大小 → 顏色 → 可讀性 ══
+                     每個控制項都放在「使用者想做的事」底下，不再依實作分類混排。
+                     低頻且會蓋住整塊來源的「整體背板」已移到詳細設定。 -->
+
+                <div class="field-group-title mt-0">版面</div>
+                <div class="field field--setlist-sections" data-sl-layout="classic cards terminal billboard index">
+                  <div class="label">要顯示哪些區塊</div>
+                  <div class="check-row">
+                    <label class="check-inline"><input id="sls-show-upcoming" type="checkbox" checked><span>未唱歌曲</span></label>
+                    <label class="check-inline"><input id="sls-show-done" type="checkbox" checked><span>已唱歌曲</span></label>
+                  </div>
+                  <p class="field-hint">「正在播放」永遠顯示。兩個都不勾＝畫面上只留正在播放那一首。舞台訊號與極簡兩排是固定版位的單點式模板，不使用這組設定。</p>
                 </div>
+                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index">
+                  <div><div class="label">顯示歌手名字</div><div class="sub">關閉後歌單只顯示歌名，不顯示演唱者</div></div>
+                  <label class="switch"><input id="sls-show-artist" type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards index">
+                  <div><div class="label">已唱歌曲加上刪除線</div><div class="sub">用刪除線標示「這首已經唱過了」</div></div>
+                  <label class="switch"><input id="sls-strikethrough" type="checkbox"><span class="track"></span></label>
+                </div>
+
+                <div class="field-group-title">大小</div>
+                <p class="field-group-desc">整體大小由 OBS Browser Source 的寬高決定；這兩個是在那個基礎上微調。</p>
+                <div class="field" data-sl-scope="classic list">
+                  <label>整體大小倍率 <span id="sls-scale-val" class="val">100%</span></label>
+                  <input id="sls-scale" type="range" min="0.6" max="1.8" step="0.05" value="1">
+                  <p class="field-hint">覺得整體太小就往上調，不必改 OBS 來源；字放大後顯示首數會自動變少。</p>
+                </div>
+                <div class="field" data-sl-layout="classic simple timeline diagonal constellation signal index">
+                  <label>「正在播放」的文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
+                  <input id="sls-size-now" type="range" min="12" max="48" value="16">
+                  <p class="field-hint">只影響目前播放中的標題；清單列的字級在詳細設定的「字體與字級」。</p>
+                </div>
+
+                <div class="field-group-title">顏色</div>
                 <div class="field field-row field-row--spacious field-row--top">
                   <div class="flex-grow">
                     <label>主色（邊框／重點裝飾／「正在播放」標示）</label>
@@ -1310,43 +1338,31 @@
                   <div class="flex-grow">
                     <label>亮色（「正在播放」歌名文字）</label>
                     <input id="sls-accent-b" type="color" value="#f0c587">
-                    <p class="field-hint">影響：只有「正在播放」那一行的歌名文字顏色，其餘歌名用下面的「主要文字色」。</p>
+                    <p class="field-hint">影響：只有「正在播放」那一行的歌名文字顏色。</p>
                   </div>
                 </div>
+                <div class="field">
+                  <label>主要文字色</label>
+                  <input id="sls-text-primary" type="color" value="#f0ead8">
+                  <p class="field-hint">影響歌名、標題與正在播放文字；所有模板都會套用。</p>
+                </div>
+
+                <div class="field-group-title">可讀性</div>
+                <div class="switch-row switch-row--separated">
+                  <div><div class="label">亮色背景可讀性保護</div><div class="sub">預設開啟。只替歌單自己的文字與卡片加深襯底，保留 OBS 背景與角色；關閉才是完全透明的演出效果。</div></div>
+                  <label class="switch"><input id="sls-readability-guard" type="checkbox" checked><span class="track"></span></label>
+                </div>
                 <div class="field field-row field-row--spacious field-row--top">
-                  <div class="flex-grow">
-                    <label>主要文字色</label>
-                    <input id="sls-text-primary" type="color" value="#f0ead8">
-                    <p class="field-hint">影響歌名、標題與正在播放文字；所有模板都會套用。</p>
-                  </div>
                   <div class="flex-grow">
                     <label>可讀性襯底色</label>
                     <input id="sls-card-color" type="color" value="#0b0907">
-                    <p class="field-hint">影響清單卡片，以及場景文字在亮色背景上的小襯底。</p>
                   </div>
-                </div>
-                <div class="field" data-sl-layout="classic simple timeline diagonal constellation signal index">
-                  <label>「正在播放」的文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
-                  <input id="sls-size-now" type="range" min="12" max="48" value="16">
-                  <p class="field-hint">影響目前播放中的標題；卡片、排行榜與終端機的字級在詳細設定中調整。</p>
-                </div>
-                <div class="field field-row field-row--spacious field-row--top">
                   <div class="flex-grow">
                     <label>可讀性襯底不透明度 <span id="sls-card-opacity-val" class="val">93%</span></label>
                     <input id="sls-card-opacity" type="range" min="0" max="100" value="93">
-                    <p class="field-hint">用在清單卡片與場景文字襯底；開著可讀性保護時會維持安全下限。</p>
-                  </div>
-                  <div data-sl-scope="classic scene">
-                    <label>整體背板顏色</label>
-                    <input id="sls-bg-color" type="color" value="#000000">
-                    <p class="field-hint">只在經典與場景版使用的整片背板。經典資訊會鋪滿整個 OBS 來源範圍，所以要先把 Browser Source 縮成你要的框再開不透明度，否則會蓋住那塊區域內的直播畫面。</p>
                   </div>
                 </div>
-                <div class="field" data-sl-scope="classic scene">
-                  <label>整體背板不透明度 <span id="sls-bg-opacity-val" class="val">透明</span></label>
-                  <input id="sls-bg-opacity" type="range" min="0" max="100" value="0">
-                  <p class="field-hint">0＝不鋪滿畫面；畫面太亂時才拉高。這和上面的「可讀性襯底」是不同層。</p>
-                </div>
+                <p class="field-hint">襯底是墊在歌單文字後面的那一層：影響清單卡片，以及場景文字在亮色背景上的小襯底。開著可讀性保護時會維持安全下限。</p>
                 <div class="field field-row field-row--spacious field-row--top">
                   <div class="flex-grow">
                     <label>已唱歌曲的淡化程度 <span id="sls-done-opacity-val" class="val">54%</span></label>
@@ -1358,14 +1374,6 @@
                   </div>
                 </div>
                 <p class="field-hint">數字越大越清楚（越不淡化）。開著可讀性保護時，已唱至少 52%、未唱至少 70%；想做極淡效果再關閉保護。場景版仍會依距離保留層次。</p>
-                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index">
-                  <div><div class="label">顯示歌手名字</div><div class="sub">關閉後歌單只顯示歌名，不顯示演唱者</div></div>
-                  <label class="switch"><input id="sls-show-artist" type="checkbox" checked><span class="track"></span></label>
-                </div>
-                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards index">
-                  <div><div class="label">已唱歌曲加上刪除線</div><div class="sub">用刪除線標示「這首已經唱過了」</div></div>
-                  <label class="switch"><input id="sls-strikethrough" type="checkbox"><span class="track"></span></label>
-                </div>
 
                 <!-- ══ 風格預設與儲存：保留功能，但不再擠在每次選模板的第一屏 ══ -->
                 <details class="setlist-quick-presets">
@@ -1503,12 +1511,7 @@
                     <details class="card card-collapse" data-sl-scope="classic list">
                       <summary>版面尺寸 — 寬度／圓角／內距（經典／清單版）</summary>
                       <div class="card-collapse-body">
-                      <p class="field-hint">清單型模板的寬度由 OBS Browser Source 決定，這裡不再提供固定像素寬度；要更寬就把來源拉寬，字級與間距會一起等比調整。</p>
-                      <div class="field">
-                        <label>整體大小倍率 <span id="sls-scale-val" class="val">100%</span></label>
-                        <input id="sls-scale" type="range" min="0.6" max="1.8" step="0.05" value="1">
-                        <p class="field-hint">在「跟著來源尺寸」算出的大小之上再整體放大或縮小；覺得字太小就往上調，不必改 OBS 來源。</p>
-                      </div>
+                      <p class="field-hint">清單型模板的寬度由 OBS Browser Source 決定，這裡不再提供固定像素寬度；要更寬就把來源拉寬，字級與間距會一起等比調整。整體大小倍率已移到快速調整的「大小」。</p>
                       <div class="field">
                         <label>卡片圓角 <span id="sls-radius-val" class="val">14px</span></label>
                         <input id="sls-radius" type="range" min="0" max="32" value="14">
@@ -1717,8 +1720,20 @@
 
                     <!-- ══ 經典版型專屬效果：注意「文字陰影/發光」跟「卡片外框發光」是不同的兩種效果 ══ -->
                     <details class="card card-collapse" data-sl-scope="classic">
-                      <summary>經典版專屬效果（文字陰影／發光／描邊）</summary>
+                      <summary>經典版專屬效果（整體背板／文字陰影／發光／描邊）</summary>
                       <div class="card-collapse-body">
+                      <!-- 整體背板從快速調整移來：它會鋪滿整塊來源，屬於低頻但影響很大的設定 -->
+                      <div class="field field-row field-row--spacious field-row--top" data-sl-scope="classic list scene">
+                        <div>
+                          <label>整體背板顏色</label>
+                          <input id="sls-bg-color" type="color" value="#000000">
+                        </div>
+                        <div class="flex-grow">
+                          <label>整體背板不透明度 <span id="sls-bg-opacity-val" class="val">透明</span></label>
+                          <input id="sls-bg-opacity" type="range" min="0" max="100" value="0">
+                        </div>
+                      </div>
+                      <p class="field-hint" data-sl-scope="classic list scene">0＝完全不鋪，這是預設。清單型模板會<strong>鋪滿整個 OBS 來源範圍</strong>，所以要先把 Browser Source 縮成你要的框再開不透明度，否則會蓋掉那塊區域內的直播畫面。這和「可讀性襯底」是不同層：襯底只墊在文字後面，背板是整塊來源的底色。</p>
                       <div class="field field--inline-spacious-center">
                         <div class="flex-grow"><label class="m-0">文字顏色覆蓋</label><p class="field-hint">勾選「用主題色」＝沿用「文字顏色」區的主要文字色；取消勾選才能自訂一個獨立的文字顏色。</p></div>
                         <label class="val val--inline-toggle"><input id="sls-text-theme" type="checkbox" checked>用主題色</label>

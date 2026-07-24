@@ -4129,8 +4129,8 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
 
   ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index']);"),
     '七個清單型模板必須集中列在同一份填滿白名單');
-  ok(setlistSource.includes('const FIT_REF_W = 720, FIT_REF_H = 560') && setlistSource.includes('Math.min(w / FIT_REF_W, h / FIT_REF_H)'),
-    '縮放係數必須同時依來源寬與高計算，扁來源才不會爆版');
+  ok(setlistSource.includes('const FIT_REF_W = 460, FIT_REF_H = 320, FIT_MIN = 0.85, FIT_MAX = 3.2;') && setlistSource.includes('Math.min(w / FIT_REF_W, h / FIT_REF_H)'),
+    '縮放係數必須同時依來源寬與高計算，且基準要維持實機校準過的可讀字級');
   ok(setlistSource.includes("dataset.slFit = isFillLayout() ? 'fill' : 'scene'"), 'CSS 必須能分辨填滿與場景兩種語意');
   ok(setlistSource.includes('new ResizeObserver(scheduleFit)') && setlistSource.includes("window.addEventListener('resize', scheduleFit)"),
     '使用者在 OBS 拉動來源大小時必須重新排版');
@@ -4167,6 +4167,77 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
     ok(indexHtml.includes(`data-setlist-preview-size="${size}"`), `預覽必須能模擬 ${size} 來源尺寸`);
   });
   ok(setlistPanel.includes('window.PreviewScale?.apply();'), '預覽縮放必須共用 preview-scale.js，不可各算一份');
+});
+
+test('清單型歌單有已唱／未唱區塊與勾選，單點式模板不吃這組設定', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const schema = require('../public/js/setlist-style-schema');
+
+  // 設定欄位：改成兩個獨立 checkbox，但 key 名稱不准變（改名＝所有人既有設定失效）。
+  const up = schema.FIELD_BY_KEY.classicShowUpcoming;
+  const done = schema.FIELD_BY_KEY.classicShowDone;
+  ok(up && up.domId === 'sls-show-upcoming' && up.default === true && !up.special, '未唱區塊必須是一般布林欄位並綁到 checkbox');
+  ok(done && done.domId === 'sls-show-done' && done.default === true && !done.special, '已唱區塊必須是一般布林欄位並綁到 checkbox');
+  ok(indexHtml.includes('id="sls-show-upcoming"') && indexHtml.includes('id="sls-show-done"'), '面板必須提供兩個獨立勾選');
+  ok(!indexHtml.includes('sls-classic-sections') && !setlistPanel.includes('sls-classic-sections'), '舊的三態下拉與其特例程式碼必須整組移除');
+  ok(indexHtml.includes('data-sl-layout="classic cards terminal billboard index"'), '勾選只對五個清單型模板顯示');
+
+  // renderer：五個清單型模板才吃這組設定；四個非經典模板要有區塊標籤。
+  ok(setlistSource.includes("const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index']);"),
+    '清單型模板必須集中列在同一份白名單');
+  ok(setlistSource.includes('function showDone()') && setlistSource.includes('function showWait()')
+    && setlistSource.includes('const done = showDone() ?') && setlistSource.includes('const wait = showWait()'),
+    'windowList 必須依勾選過濾已唱／未唱');
+  ok(setlistSource.includes('items.start = showDone() ?'), '關掉已唱時曲序起點必須跟著調整，不可跳號');
+  ok(setlistSource.includes('function groupedHtml('), '四個清單型模板必須共用同一份分群輸出');
+  ['term-group', 'bb-group', 'card-group', 'index-group'].forEach((cls) => {
+    ok(setlistSource.includes(`class="${cls}" data-group-label`), `${cls} 必須是可辨識的區塊標籤`);
+    ok(setlistCss.includes(`.${cls}`), `${cls} 必須有樣式`);
+  });
+  ok(setlistSource.includes('function pruneOrphanLabels(') && setlistSource.includes('isGroupLabel(el)'),
+    '裁列後不可留下沒有內容的孤兒標籤');
+  ok(setlistSource.includes("document.querySelectorAll('[data-group-label]')"), '自訂已唱／未唱文字必須即時套到區塊標籤');
+
+  // 經典只留一側時要收成單欄（兩欄 grid 會讓可見那欄只佔一半寬）。
+  // data-layout 與 data-cl-hide-* 都在 <html> 上，必須是連續屬性選擇器而不是後代選擇器。
+  ok(setlistCss.includes('html[data-sl-fit="fill"][data-layout="classic"][data-cl-hide-up] .cl-cols')
+    && setlistCss.includes('html[data-sl-fit="fill"][data-layout="classic"][data-cl-hide-done] .cl-cols'),
+    '經典只顯示一側時必須收成單欄');
+
+  // 「整體背板」曾因經典重排把 root 背景寫死而失效；填滿模式必須讓它回到 root 上。
+  const fillRoot = /html\[data-sl-fit="fill"\]\[data-layout\] #setlist-root \{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
+  ok(fillRoot.includes('background: var(--sl-user-bg, transparent)'), '整體背板設定必須在填滿模式實際生效');
+});
+
+test('歌單面板：模板分群與快速調整四區塊', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+
+  ok(indexHtml.includes('清單型 — 跟著來源尺寸重排') && indexHtml.includes('固定版位 — 只呈現現在播放'),
+    '模板選擇器必須把清單型與固定版位分開');
+  ok(setlistPanel.includes("const SETLIST_SECTIONED_LAYOUTS = ['classic', 'cards', 'terminal', 'billboard', 'index'];"),
+    '面板必須用同一組清單型白名單給說明文案');
+  ok(panelCss.includes('.setlist-layout-group-title') && panelCss.includes('.check-inline'), '分群標題與勾選樣式必須存在');
+
+  ['版面', '大小', '顏色', '可讀性'].forEach((title) => {
+    ok(indexHtml.includes(`>${title}</div>`), `快速調整必須有「${title}」區塊`);
+  });
+  // 襯底色與襯底不透明度必須相鄰（先前中間被字級滑桿隔開，使用者找不到）。
+  const cardColorAt = indexHtml.indexOf('id="sls-card-color"');
+  const cardOpacityAt = indexHtml.indexOf('id="sls-card-opacity"');
+  ok(cardColorAt > 0 && cardOpacityAt > cardColorAt && indexHtml.slice(cardColorAt, cardOpacityAt).indexOf('type="range"') === -1,
+    '可讀性襯底色與襯底不透明度之間不可再插入其他控制項');
+  // 整體大小倍率搬到第一屏，且只能有一份。
+  eq(indexHtml.split('id="sls-scale"').length - 1, 1, '整體大小倍率是搬移不是複製：');
+  const scaleAt = indexHtml.indexOf('id="sls-scale"');
+  const modalAt = indexHtml.indexOf('id="setlist-advanced-modal"');
+  ok(scaleAt > 0 && modalAt > 0 && scaleAt < modalAt, '整體大小倍率必須在快速調整，不能留在詳細設定 modal 裡');
+  // 會鋪滿整塊來源的整體背板改放詳細設定。
+  ok(indexHtml.indexOf('id="sls-bg-opacity"') > modalAt, '整體背板屬於低頻且影響大的設定，必須移進詳細設定');
 });
 
 test('OBS 經典歌單以歌名為第一優先，長歌手名不可擠壓歌名', () => {

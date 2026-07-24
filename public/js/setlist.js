@@ -23,12 +23,23 @@
   // 沒有第二種輸出模式，也沒有 URL 參數——同一個 /setlist 網址在任何來源尺寸都成立。
   // 場景版（timeline / diagonal / constellation）不走這條，維持原本的全幅舞台行為。
   const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index']);
-  // 尺度基準：來源正好是 720×560 時 fit = 1，也就是設定裡的 px 數字＝實際像素；
+  // 尺度基準：來源正好是 460×320 時 fit = 1，也就是設定裡的 px 數字＝實際像素；
   // 更大的來源等比放大字級與間距（原生字級，不是把小元件 transform 放大）。
-  const FIT_REF_W = 720, FIT_REF_H = 560, FIT_MIN = 0.6, FIT_MAX = 4;
+  // 基準訂在這裡是實測校準過的：直播常用的 600×1080 直式來源會得到 fit ≈ 1.3
+  // （清單列約 17px、正播標題約 26px），與 karaoke-helper 同尺寸的固定 17／24px 相當。
+  // 訂太大（第一版是 720×560）會讓同一個來源只剩 10.8px，實機上根本看不清楚。
+  const FIT_REF_W = 460, FIT_REF_H = 320, FIT_MIN = 0.85, FIT_MAX = 3.2;
   let fitFactor = 1;
 
+  // 清單型模板：有「已唱／未唱」兩個區塊，各自可由設定開關。
+  // 單點式（signal 舞台訊號、simple 極簡兩排）版位固定、只呈現現在＋少量待播，不吃這組設定。
+  const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index']);
+
   function isFillLayout() { return FILL_LAYOUTS.has(layoutId); }
+  function isSectionedLayout() { return SECTIONED_LAYOUTS.has(layoutId); }
+  // key 名稱的 classic 前綴是歷史包袱，實際適用五個清單型模板（見 schema 註解）。
+  function showDone() { return !isSectionedLayout() || curStyle.classicShowDone !== false; }
+  function showWait() { return !isSectionedLayout() || curStyle.classicShowUpcoming !== false; }
 
   function syncOutputMode() {
     document.documentElement.dataset.slFit = isFillLayout() ? 'fill' : 'scene';
@@ -362,6 +373,11 @@
     document.querySelectorAll('.cl-lbl-up').forEach((e) => { e.textContent = lastLabels.wait; });
     document.querySelectorAll('.cl-lbl-done').forEach((e) => { e.textContent = lastLabels.done; });
     document.querySelectorAll('#sg-next-label').forEach((e) => { e.textContent = lastLabels.wait; });
+    // 清單型模板的已唱／未唱區塊標籤（終端機沿用註解行的 "# " 前綴）
+    document.querySelectorAll('[data-group-label]').forEach((e) => {
+      const text = e.dataset.group === 'done' ? lastLabels.done : lastLabels.wait;
+      e.textContent = e.classList.contains('term-group') ? `# ${text}` : text;
+    });
   }
 
   // 列數上限：填滿模式先給一個寬鬆的取樣上限，實際顯示幾首由 trimToFit() 依來源高度決定
@@ -371,22 +387,39 @@
   const pastCap = () => (isFillLayout() ? FILL_PAST_LIMIT : PAST_LIMIT);
   const upCap = () => (isFillLayout() ? FILL_UP_LIMIT : UP_LIMIT);
 
+  const isGroupLabel = (el) => !!(el && el.hasAttribute && el.hasAttribute('data-group-label'));
+
   /**
    * 把放不下的列裁掉，直到內容不再溢出容器。
    * 正在播放的那一列永遠保留：離它較遠的那一端先被裁。
+   * 區塊標籤（data-group-label）不當成可裁的列——先裁真正的歌曲列，
+   * 最後再清掉沒有內容的孤兒標籤，避免出現「已唱」底下什麼都沒有。
    * @param {Element} box 有固定高度且 overflow:hidden 的清單容器
    * @param {'start'|'end'} keep 沒有正在播放列時要保留哪一端（end＝保留最新的已唱）
    */
   function trimToFit(box, keep) {
     if (!box || !box.clientHeight) return;
+    const rows = () => Array.prototype.filter.call(box.children, (el) => !isGroupLabel(el));
     let guard = 80;
-    while (guard-- > 0 && box.children.length > 1 && box.scrollHeight - box.clientHeight > 0.5) {
-      const kids = box.children;
+    while (guard-- > 0 && rows().length > 1 && box.scrollHeight - box.clientHeight > 0.5) {
+      const list = rows();
       const active = box.querySelector('.active');
-      const activeIndex = active ? Array.prototype.indexOf.call(kids, active) : -1;
-      const dropFirst = activeIndex >= 0 ? activeIndex > (kids.length - 1) / 2 : keep === 'end';
-      box.removeChild(dropFirst ? kids[0] : kids[kids.length - 1]);
+      const activeIndex = active ? list.indexOf(active) : -1;
+      const dropFirst = activeIndex >= 0 ? activeIndex > (list.length - 1) / 2 : keep === 'end';
+      const victim = dropFirst ? list[0] : list[list.length - 1];
+      if (!victim || victim === active) break;
+      box.removeChild(victim);
+      pruneOrphanLabels(box);
     }
+    pruneOrphanLabels(box);
+  }
+  // 標籤後面若沒有跟著自己的內容列（被裁光或本來就空），就把標籤一起拿掉。
+  function pruneOrphanLabels(box) {
+    Array.prototype.slice.call(box.children).forEach((el) => {
+      if (!isGroupLabel(el)) return;
+      const next = el.nextElementSibling;
+      if (!next || isGroupLabel(next)) box.removeChild(el);
+    });
   }
   function fitRows() {
     trimToFit(rootEl.querySelector('#cl-up'), 'start');
@@ -612,28 +645,56 @@
   // ═══════════════════════════════════════════
   // 取「最近幾首已唱 + 現在 + 接下來幾首」的視窗。
   // 填滿模式先多取一些，實際畫幾列交給 trimToFit() 依來源高度決定。
-  // start = 視窗第一項在整份歌單中的 0-based 位置（章節索引的曲序要用）。
+  // 已唱／未唱兩個區塊各自可關（設定 key 沿用 classicShowDone / classicShowUpcoming），
+  // 兩個都關＝只留「正在播放」。過濾後才編號，曲序才不會跳號。
+  // 回傳陣列另帶 start＝視窗第一項在整份歌單中的 0-based 位置（章節索引的曲序要用）。
   function windowList() {
     const doneCap = isFillLayout() ? 16 : 5;
     const waitCap = isFillLayout() ? 20 : 6;
-    const done = model.past.slice(-doneCap).map((s) => ({ ...s, state: 'done' }));
+    const done = showDone() ? model.past.slice(-doneCap).map((s) => ({ ...s, state: 'done' })) : [];
     const now = model.current ? [{ ...model.current, state: 'active' }] : [];
-    const wait = (model.current ? model.upcoming : model.upcoming.slice(0)).slice(0, waitCap).map((s) => ({ ...s, state: 'wait' }));
+    const wait = showWait()
+      ? (model.current ? model.upcoming : model.upcoming.slice(0)).slice(0, waitCap).map((s) => ({ ...s, state: 'wait' }))
+      : [];
     const items = [...done, ...now, ...wait];
     items.forEach((it, i) => { it.n = String(i + 1).padStart(2, '0'); });
-    items.start = Math.max(0, model.past.length - doneCap);
+    items.start = showDone() ? Math.max(0, model.past.length - doneCap) : model.past.length;
     return items;
+  }
+
+  /**
+   * 依 state 切成「已唱／正在播放／未唱」三段，並在有內容的區塊前插入標籤列。
+   * 標籤帶 data-group-label，trimToFit() 會避免把它留成孤兒。
+   * @param {Array} items windowList() 的結果
+   * @param {(song:object)=>string} rowHtml 單列的 HTML
+   * @param {(text:string, kind:string)=>string} labelHtml 區塊標籤的 HTML
+   */
+  function groupedHtml(items, rowHtml, labelHtml) {
+    const out = [];
+    let lastKind = null;
+    items.forEach((song) => {
+      const kind = song.state === 'done' ? 'done' : song.state === 'wait' ? 'wait' : 'active';
+      if (kind !== lastKind && kind !== 'active') {
+        out.push(labelHtml(kind === 'done' ? lastLabels.done : lastLabels.wait, kind));
+      }
+      lastKind = kind;
+      out.push(rowHtml(song));
+    });
+    return out.join('');
   }
 
   const terminal = {
     mount(root) { root.innerHTML = '<div class="lay-stage term-stage"><div class="terminal"><div class="term-bar"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div><div class="term-filename">setlist.txt</div></div><div class="term-list" id="term-list"></div></div></div>'; },
     render(root) {
       const list = windowList();
-      root.querySelector('#term-list').innerHTML = list.map((s) => {
+      const row = (s) => {
         const prompt = s.state === 'done' ? '#' : s.state === 'active' ? '▶' : '·';
         const pc = s.state === 'active' ? ' t-prompt-active' : '';
         return `<div class="term-item ${s.state === 'active' ? 'active' : s.state === 'done' ? 'done' : ''}"><span class="t-prompt${pc}">${prompt}</span><span class="t-num">${s.n}</span><span class="t-line">${escapeHtml(s.title)}</span></div>`;
-      }).join('') || '<div class="term-reserve">— 尚無歌曲 —</div>';
+      };
+      const label = (text, kind) => `<div class="term-group" data-group-label data-group="${kind}"># ${escapeHtml(text)}</div>`;
+      root.querySelector('#term-list').innerHTML = groupedHtml(list, row, label)
+        || '<div class="term-reserve">— 尚無歌曲 —</div>';
     },
   };
 
@@ -644,11 +705,14 @@
       const total = model.past.length + (model.current ? 1 : 0) + model.upcoming.length;
       const idx = model.past.length + (model.current ? 1 : 0);
       root.querySelector('#bb-meta').textContent = `Live · ${idx}/${total}`;
-      root.querySelector('#bb-list').innerHTML = list.map((s) => {
+      const row = (s) => {
         const cls = s.state === 'active' ? 'active' : s.state === 'done' ? 'done' : '';
         const nowBlk = s.state === 'active' ? '<div class="bb-now"><div class="bb-bar"><span></span><span></span><span></span><span></span></div><div class="bb-now-label">NOW</div></div>' : '';
         return `<div class="bb-item ${cls}"><div class="bb-rank">${s.n}</div><div class="bb-vline"></div><div class="bb-info"><div class="bb-name">${escapeHtml(s.title)}</div><div class="bb-artist">${escapeHtml(s.artist)}</div></div>${nowBlk}</div>`;
-      }).join('') || '<div class="bb-item"><div class="bb-info"><div class="bb-name">尚無歌曲</div></div></div>';
+      };
+      const label = (text, kind) => `<div class="bb-group" data-group-label data-group="${kind}">${escapeHtml(text)}</div>`;
+      root.querySelector('#bb-list').innerHTML = groupedHtml(list, row, label)
+        || '<div class="bb-item"><div class="bb-info"><div class="bb-name">尚無歌曲</div></div></div>';
     },
   };
 
@@ -656,10 +720,13 @@
     mount(root) { root.innerHTML = '<div class="lay-stage cards-stage"><div class="cards" id="cards-list"></div></div>'; },
     render(root) {
       const list = windowList();
-      root.querySelector('#cards-list').innerHTML = list.map((s) => {
+      const row = (s) => {
         const cls = s.state === 'active' ? 'active' : s.state === 'done' ? 'done' : '';
         return `<div class="card ${cls}"><div class="card-num">${s.n}</div><div class="card-info"><div class="card-title">${escapeHtml(s.title)}</div><div class="card-artist">${escapeHtml(s.artist)}</div></div><div class="card-status"></div></div>`;
-      }).join('') || '<div class="card"><div class="card-info"><div class="card-title">尚無歌曲</div></div></div>';
+      };
+      const label = (text, kind) => `<div class="card-group" data-group-label data-group="${kind}">${escapeHtml(text)}</div>`;
+      root.querySelector('#cards-list').innerHTML = groupedHtml(list, row, label)
+        || '<div class="card"><div class="card-info"><div class="card-title">尚無歌曲</div></div></div>';
     },
   };
 
@@ -707,12 +774,16 @@
       const total = model.past.length + (model.current ? 1 : 0) + model.upcoming.length;
       const current = model.current ? model.past.length + 1 : 0;
       root.querySelector('#ix-total').textContent = current ? `${String(current).padStart(2, '0')} / ${String(total).padStart(2, '0')}` : (total ? `00 / ${String(total).padStart(2, '0')}` : '');
+      let itemIndex = -1;
+      const row = (song) => {
+        itemIndex += 1;
+        const cls = song.state === 'active' ? 'active' : song.state === 'done' ? 'done' : 'wait';
+        const state = song.state === 'active' ? '<span class="ix-state">♪ 現在正在唱</span>' : '';
+        return `<div class="index-item ${cls}"><span class="index-number">${String(firstNumber + itemIndex).padStart(2, '0')}</span><span class="index-rail"></span><div class="index-info"><div class="index-title setlist-title">${escapeHtml(song.title)}</div>${song.artist ? `<div class="index-artist setlist-artist">${escapeHtml(song.artist)}</div>` : ''}</div>${state}</div>`;
+      };
+      const label = (text, kind) => `<div class="index-group" data-group-label data-group="${kind}">${escapeHtml(text)}</div>`;
       root.querySelector('#ix-list').innerHTML = list.length
-        ? list.map((song, itemIndex) => {
-          const cls = song.state === 'active' ? 'active' : song.state === 'done' ? 'done' : 'wait';
-          const state = song.state === 'active' ? '<span class="ix-state">♪ 現在正在唱</span>' : '';
-          return `<div class="index-item ${cls}"><span class="index-number">${String(firstNumber + itemIndex).padStart(2, '0')}</span><span class="index-rail"></span><div class="index-info"><div class="index-title setlist-title">${escapeHtml(song.title)}</div>${song.artist ? `<div class="index-artist setlist-artist">${escapeHtml(song.artist)}</div>` : ''}</div>${state}</div>`;
-        }).join('')
+        ? groupedHtml(list, row, label)
         : '<div class="index-empty">尚未加入歌曲</div>';
     },
   };

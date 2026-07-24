@@ -195,6 +195,17 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .setlist-layout-hint { margin:9px 0 0; color:var(--text-faint); font-size:11px; line-height:1.55; }
 .setlist-legacy-layout-notice { margin:8px 0 0; }
 .setlist-sizing-hint { margin:10px 0 0; padding:9px 11px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-raised); color:var(--text-dim); font-size:11px; line-height:1.55; }
+/* 已唱／未唱區塊勾選：兩個並排的 checkbox，窄欄自動換行 */
+.check-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+.check-inline { display:inline-flex; align-items:center; gap:7px; min-width:0; padding:7px 12px; border:1px solid var(--border-strong); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font-size:12px; cursor:pointer; transition:border-color .12s,background .12s; }
+.check-inline:hover { background:var(--bg-hover); }
+.check-inline:has(input:checked) { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--bg-surface)); }
+.check-inline input { margin:0; cursor:pointer; }
+.field--setlist-sections .label { color:var(--text); font-size:12px; font-weight:650; }
+/* 模板選擇器分群標題 */
+.setlist-layout-group-title { margin:12px 0 6px; color:var(--text-faint); font-size:11px; font-weight:650; letter-spacing:.04em; }
+.setlist-layout-group-title:first-child { margin-top:0; }
+.setlist-layout-group-desc { margin:0 0 8px; color:var(--text-faint); font-size:10px; line-height:1.5; }
 /* 預覽尺寸切換：模擬不同的 OBS Browser Source 寬高，用來確認版面真的跟著來源走 */
 .setlist-preview-sizes { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
 .setlist-preview-size { padding:5px 9px; border:1px solid var(--border-strong); border-radius:999px; background:var(--bg-surface); color:var(--text-dim); font-size:11px; cursor:pointer; transition:border-color .12s,background .12s,color .12s; }
