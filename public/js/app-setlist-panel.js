@@ -240,13 +240,13 @@
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
   const SETLIST_LAYOUT_UI = {
     classic: { name: '經典資訊', hint: '完整資訊小元件，適合放在畫面左下或右下常駐。', scope: '目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。' },
-    cards: { name: '卡片清單', hint: '緊湊的側欄卡片，適合保留角色與遊戲畫面。', scope: '基礎配色與可讀性和其他清單型模板共用；卡片清單會立即反映每一個可見控制項。' },
-    signal: { name: '舞台訊號', hint: '橫向導播資訊條，讓正在播放成為唯一主角。', scope: '基礎配色與可讀性和其他清單型模板共用；舞台訊號只保留真正會作用的資訊控制。' },
-    index: { name: '章節索引', hint: '側邊曲序清單，快速看清已唱、正在播放與待播。', scope: '基礎配色與可讀性和其他清單型模板共用；章節索引只保留真正會作用的資訊控制。' },
+    cards: { name: '卡片清單', hint: '緊湊的卡片清單，已唱／未唱各自分群，可勾選要保留哪一段。', scope: '基礎配色與可讀性和其他清單型模板共用；卡片清單會立即反映每一個可見控制項。' },
+    signal: { name: '舞台訊號', hint: '貼齊來源底部的導播資訊條，正在播放是唯一主角。', scope: '固定版位模板：不顯示已唱與未唱清單，其餘配色與可讀性和清單型共用。' },
+    index: { name: '章節索引', hint: '曲序表：已唱／正在播放／待播分段標示，一眼掃讀。', scope: '基礎配色與可讀性和其他清單型模板共用；章節索引只保留真正會作用的資訊控制。' },
     diagonal: { name: '斜線舞台', hint: '全幅 16:9 場景；資訊在左、右側留給角色或遊戲。', scope: '斜線舞台保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
     timeline: { name: '時間軸', hint: '全幅 16:9 場景；適合想讓歌單成為畫面主角的直播段落。', scope: '時間軸保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
-    simple: { name: '極簡兩排', hint: '只保留現在與下一首，畫面最輕量。', scope: '基礎配色與可讀性和其他清單型模板共用；極簡兩排只保留必要的控制項。' },
-    billboard: { name: '排行榜', hint: '固定排行榜配色的活動型畫面，適合特別企劃。', scope: '基礎配色與可讀性和其他清單型模板共用；排行榜會保留自己的排位視覺。' },
+    simple: { name: '極簡兩排', hint: '置中卡片，只保留現在與下一首，畫面最輕量。', scope: '固定版位模板：不顯示已唱與未唱清單，其餘配色與可讀性和清單型共用。' },
+    billboard: { name: '排行榜', hint: '活動型的排行榜視覺，已唱／未唱各自分群。', scope: '基礎配色與可讀性和其他清單型模板共用；排行榜會保留自己的排位視覺。' },
     constellation: { name: '星座', hint: '裝飾性較強的全幅場景；建議搭配簡潔背景。', scope: '星座保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
     terminal: { name: '終端機', hint: '復古資訊風的小元件，適合科技或遊戲主題。', scope: '基礎配色與可讀性和其他清單型模板共用；終端機只保留它會用到的清單控制。' },
   };
@@ -258,13 +258,20 @@
   // 清單型模板＝來源即畫布；場景型維持原本的全幅舞台語意。
   const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index'];
 
+  // 清單型：填滿來源、有已唱／未唱區塊。單點式：填滿來源但版位固定、只呈現現在播放。
+  const SETLIST_SECTIONED_LAYOUTS = ['classic', 'cards', 'terminal', 'billboard', 'index'];
+
   function syncSetlistSizingHint() {
     const hint = document.getElementById('setlist-sizing-hint');
     if (!hint) return;
     const layout = setlistLayoutSel?.value || 'classic';
-    hint.textContent = SETLIST_FILL_LAYOUTS.includes(layout)
-      ? '歌單大小＝你在 OBS 拉的 Browser Source 大小：來源拉多寬多高，版面就排多大，字級與顯示首數會跟著調整，不需要在這裡設定像素寬度。'
-      : '這個模板是全幅 16:9 舞台，建議把 Browser Source 設成與畫布相同的比例。';
+    if (SETLIST_SECTIONED_LAYOUTS.includes(layout)) {
+      hint.textContent = '歌單大小＝你在 OBS 拉的 Browser Source 大小：來源拉多寬多高，版面就排多大，字級與顯示首數會跟著調整，不需要在這裡設定像素寬度。';
+    } else if (SETLIST_FILL_LAYOUTS.includes(layout)) {
+      hint.textContent = '固定版位模板：版位固定（舞台訊號貼齊來源底部、極簡兩排置中），來源寬高只決定資訊條的寬度與字級；它們不顯示已唱與未唱清單。';
+    } else {
+      hint.textContent = '這個模板是全幅 16:9 舞台，建議把 Browser Source 設成與畫布相同的比例。';
+    }
   }
 
   function syncSetlistLayoutPicker() {
@@ -442,8 +449,7 @@
 
     // 欄位定義（型別/預設值/邊界/CSS 套用）單一事實來源在 setlist-style-schema.js，
     // 這裡只負責「把 schema 欄位接到對應的 HTML 控制項」，新增欄位不需要再改這個檔案，
-    // 只有「一個控制項對應多個輸出欄位」的特例（textColor / classicShowUpcoming+Done）
-    // 才需要在下面手動處理。
+    // 只有「一個控制項對應多個輸出欄位」的特例（textColor）才需要在下面手動處理。
     const schema = window.SetlistStyleSchema;
     const FIELDS = schema.FIELDS;
     const FORMATS = schema.FORMATS;
@@ -458,10 +464,6 @@
       genericFields.forEach((f) => { const el = g(f.domId); if (el) out[f.key] = readVal(f, el); });
       // ── 特例：textColor（「用主題」checkbox + 色票，合成一個可為空字串的欄位）──
       out.textColor = g('sls-text-theme').checked ? '' : g('sls-text-color').value;
-      // ── 特例：classicShowUpcoming/classicShowDone（單一三態下拉衍生兩個布林）──
-      const cs = g('sls-classic-sections') ? g('sls-classic-sections').value : 'both';
-      out.classicShowUpcoming = cs !== 'done';
-      out.classicShowDone = cs !== 'up';
       out.target = setlistTarget(); // 場景版各自一份、其餘 'shared'
       return out;
     }
@@ -481,12 +483,6 @@
       const hasText = typeof s.textColor === 'string' && s.textColor;
       const tt = g('sls-text-theme'), tc = g('sls-text-color');
       if (tt) tt.checked = !hasText; if (tc) { tc.disabled = !hasText; if (hasText) tc.value = s.textColor; }
-      // ── 特例：classicShowUpcoming/classicShowDone ──
-      const csEl = g('sls-classic-sections');
-      if (csEl && (s.classicShowUpcoming != null || s.classicShowDone != null)) {
-        const u = s.classicShowUpcoming !== false, d = s.classicShowDone !== false;
-        csEl.value = (u && d) ? 'both' : (u ? 'up' : 'done');
-      }
     }
 
     // 事件綁定（input/change → 更新 val 標籤 + 送出）：checkbox 與 <select> 用 change，其餘用 input
@@ -499,8 +495,6 @@
       });
     });
     // 特例欄位事件
-    const csEl2 = g('sls-classic-sections');
-    if (csEl2) csEl2.addEventListener('change', sendStyle);
     const tt = g('sls-text-theme'), tc = g('sls-text-color');
     if (tt) tt.addEventListener('change', () => { if (tc) tc.disabled = tt.checked; sendStyle(); });
     if (tc) tc.addEventListener('input', sendStyle);

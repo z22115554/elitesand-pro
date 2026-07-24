@@ -144,11 +144,13 @@
     { key: 'sceneOffsetY', type: 'number', default: 0, min: -50, max: 50, domId: 'sls-scene-y', format: 'percent', cssVar: '--sl-stage-y' },
     { key: 'sceneScale', type: 'number', default: 1, min: 0.5, max: 2, domId: 'sls-scene-scale', format: 'multiplierPercent', cssVar: '--sl-scene-scale' },
 
-    // ── 經典版型專屬：左未唱/右已唱 是否顯示（可只留一側）──
-    // 對「套用」而言是兩個獨立布林（各自一個 data-attr，invert）；但面板 UI 是單一三態下拉
-    // （sls-classic-sections），故 domId 留空、collect/adopt 由 app.js 特例處理（special: 'classicSections'）。
-    { key: 'classicShowUpcoming', type: 'boolean', default: true, domId: null, dataAttr: 'data-cl-hide-up', invert: true, special: 'classicSections' },
-    { key: 'classicShowDone', type: 'boolean', default: true, domId: null, dataAttr: 'data-cl-hide-done', invert: true, special: 'classicSections' },
+    // ── 清單型模板：已唱／未唱區塊是否顯示（可各自開關；兩個都關＝只留「正在播放」）──
+    // key 名稱的 classic 前綴是歷史包袱（原本只有經典版型有這兩塊），實際適用五個清單型模板
+    // （classic / cards / terminal / billboard / index）。**不要改名**：既有 state.json 與
+    // server 驗證都用這兩個 key，改名等於強迫所有人重設。
+    // 經典版靠 data-attr 隱藏整欄；其餘四個在 renderer 依旗標過濾，裁列數才會跟著正確。
+    { key: 'classicShowUpcoming', type: 'boolean', default: true, domId: 'sls-show-upcoming', dataAttr: 'data-cl-hide-up', invert: true },
+    { key: 'classicShowDone', type: 'boolean', default: true, domId: 'sls-show-done', dataAttr: 'data-cl-hide-done', invert: true },
 
     // ── 場景版各自版面（timeline 軸線/歌名、diagonal 斜度、constellation 間距）──
     { key: 'tlAxisPos', type: 'number', default: 38, min: 20, max: 70, domId: 'sls-tl-axis', format: 'percent', cssVar: '--tl-axis-top' },

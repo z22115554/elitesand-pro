@@ -918,6 +918,10 @@ html[data-sl-fit="fill"][data-layout] #setlist-root {
   border-radius: 0;
   /* 縮放已折進 --sl-fit；transform 會讓文字變成放大的點陣，這裡一律不用。 */
   transform: none;
+  /* 「整體背板」＝替這塊來源鋪一層底色（預設 0＝完全透明）。
+     經典資訊重排時把 root 背景寫死成 transparent，這個設定因此一度失效；
+     填滿模式下歌單就是這塊來源，所以背板回到 root 上才符合語意。 */
+  background: var(--sl-user-bg, transparent);
 }
 html[data-sl-fit="fill"] .lay-stage {
   display: flex;
@@ -943,6 +947,11 @@ html[data-sl-fit="fill"][data-layout="classic"] .cl-cols {
   gap: calc(15px * var(--sl-fit));
   padding-top: calc(10px * var(--sl-fit));
 }
+/* 只留一側時要收成單欄：兩欄 grid 會讓可見的那一欄只佔一半寬，右半留白。
+   注意 data-layout 與 data-cl-hide-* 都在 <html> 同一個元素上，
+   必須寫成連續的屬性選擇器；寫成後代選擇器（:root[a] [b]）永遠不會命中。 */
+html[data-sl-fit="fill"][data-layout="classic"][data-cl-hide-up] .cl-cols,
+html[data-sl-fit="fill"][data-layout="classic"][data-cl-hide-done] .cl-cols { grid-template-columns: minmax(0, 1fr); }
 html[data-sl-fit="fill"][data-layout="classic"] .cl-col { min-height: 0; }
 html[data-sl-fit="fill"][data-layout="classic"] .classic-status-dot {
   width: calc(6px * var(--sl-fit));
@@ -1086,6 +1095,28 @@ html[data-sl-fit="fill"][data-layout="index"] .index-item {
   min-height: calc(44px * var(--sl-fit));
   padding: calc(var(--sl-pv) * .6) var(--sl-ph);
 }
+
+/* ── 已唱／未唱區塊標籤（清單型四個模板；經典資訊本來就是兩欄，不需要）──
+   標籤只是分隔用的小字，體積要明顯小於歌名，不可搶走清單的視覺重量。 */
+.card-group,
+.bb-group,
+.index-group,
+.term-group {
+  color: var(--sl-readable-txt4, var(--sl-txt4));
+  font-family: var(--es-mono);
+  font-size: calc(var(--sl-sz-m) * .92);
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+html[data-sl-fit="fill"][data-layout="cards"] .card-group { padding: calc(var(--sl-pv) * .5) calc(var(--sl-ph) * .2) 0; }
+html[data-sl-fit="fill"][data-layout="billboard"] .bb-group { padding: calc(var(--sl-pv) * .7) calc(var(--sl-ph) * 1.35) calc(var(--sl-pv) * .25); }
+html[data-sl-fit="fill"][data-layout="index"] .index-group { padding: calc(var(--sl-pv) * .7) var(--sl-ph) calc(var(--sl-pv) * .25); }
+html[data-sl-fit="fill"][data-layout="terminal"] .term-group { padding: calc(var(--sl-pv) * .6) var(--sl-ph) calc(var(--sl-pv) * .2); }
+html[data-sl-fit="fill"] .card-group,
+html[data-sl-fit="fill"] .bb-group,
+html[data-sl-fit="fill"] .index-group,
+html[data-sl-fit="fill"] .term-group { flex: 0 0 auto; }
 
 /* 很窄的來源（例如直式 600px）：導播資訊條改成單欄堆疊。
    必須放在上面填滿規則之後，否則同分特異度會被前面的三欄設定蓋掉。 */
