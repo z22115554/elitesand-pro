@@ -1269,8 +1269,7 @@
                 <button class="setlist-layout-card" type="button" data-setlist-layout="signal" role="radio" aria-checked="false"><strong>舞台訊號</strong><span>貼齊底部的導播資訊條</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="simple" role="radio" aria-checked="false"><strong>極簡兩排</strong><span>置中卡片，只留現在與下一首</span></button>
               </div>
-              <p class="setlist-layout-hint" id="setlist-layout-hint">現在、未唱、已唱一次看懂，最完整的常駐歌單。</p>
-              <p class="setlist-layout-hint setlist-sizing-hint" id="setlist-sizing-hint" role="status">歌單大小＝你在 OBS 拉的 Browser Source 大小：來源拉多寬多高，版面就排多大，字級與顯示首數會跟著調整，不需要在這裡設定像素寬度。</p>
+              <p class="setlist-layout-hint setlist-sizing-hint" id="setlist-sizing-hint" role="status">大小與顯示首數跟著你在 OBS 拉的 Browser Source 寬高變化。</p>
               <p class="field-hint setlist-legacy-layout-notice" id="setlist-legacy-layout-notice" role="status" hidden>這個模板已暫停提供。你目前的 OBS 畫面與已保存設定不會自動改變；選擇其他模板後才會切換。</p>
             </div>
             <details class="collapse" id="setlist-appearance" open>
@@ -1300,52 +1299,52 @@
                     <label class="check-inline"><input id="sls-show-upcoming" type="checkbox" checked><span class="check-box" aria-hidden="true"></span><span class="check-text">未唱歌曲</span></label>
                     <label class="check-inline"><input id="sls-show-done" type="checkbox" checked><span class="check-box" aria-hidden="true"></span><span class="check-text">已唱歌曲</span></label>
                   </div>
-                  <p class="field-hint">「正在播放」永遠顯示；兩個都不勾＝只留正在播放那一首。</p>
+                  <p class="field-hint">「正在播放」永遠顯示。</p>
                 </div>
                 <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index">
-                  <div><div class="label">顯示歌手名字</div><div class="sub">關閉後歌單只顯示歌名，不顯示演唱者</div></div>
+                  <div class="label">顯示歌手名字</div>
                   <label class="switch"><input id="sls-show-artist" type="checkbox" checked><span class="track"></span></label>
                 </div>
                 <div class="switch-row" data-sl-layout="classic simple constellation billboard cards index">
-                  <div><div class="label">已唱歌曲加上刪除線</div><div class="sub">用刪除線標示「這首已經唱過了」</div></div>
+                  <div class="label">已唱歌曲加上刪除線</div>
                   <label class="switch"><input id="sls-strikethrough" type="checkbox"><span class="track"></span></label>
                 </div>
 
                 <div class="field-group-title">大小</div>
-                <p class="field-group-desc">整體大小由 OBS Browser Source 的寬高決定；這兩個是在那個基礎上微調。</p>
                 <div class="field" data-sl-scope="classic list">
                   <label>整體大小倍率 <span id="sls-scale-val" class="val">100%</span></label>
                   <input id="sls-scale" type="range" min="0.6" max="1.8" step="0.05" value="1">
-                  <p class="field-hint">覺得整體太小就往上調，不必改 OBS 來源；字放大後顯示首數會自動變少。</p>
+                  <p class="field-hint">在 OBS 來源算出的大小之上再放大或縮小；放大後顯示首數會自動變少。</p>
                 </div>
                 <div class="field" data-sl-layout="classic simple timeline diagonal constellation signal index">
                   <label>「正在播放」的文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
                   <input id="sls-size-now" type="range" min="12" max="48" value="16">
-                  <p class="field-hint">只影響目前播放中的標題；清單列的字級在詳細設定的「字體與字級」。</p>
                 </div>
 
                 <div class="field-group-title">顏色</div>
-                <div class="field field-row field-row--spacious field-row--top">
-                  <div class="flex-grow">
-                    <label>主色（邊框／重點裝飾／「正在播放」標示）</label>
-                    <input id="sls-accent" type="color" value="#d9a25c">
-                    <p class="field-hint">影響：卡片邊框、強調線條、「正在播放」的外框發光色。</p>
-                  </div>
-                  <div class="flex-grow">
-                    <label>亮色（「正在播放」歌名文字）</label>
-                    <input id="sls-accent-b" type="color" value="#f0c587">
-                    <p class="field-hint">影響：只有「正在播放」那一行的歌名文字顏色。</p>
-                  </div>
-                </div>
                 <div class="field">
-                  <label>主要文字色</label>
-                  <input id="sls-text-primary" type="color" value="#f0ead8">
-                  <p class="field-hint">影響歌名、標題與正在播放文字；所有模板都會套用。</p>
+                  <div class="color-row">
+                    <div class="color-item">
+                      <label for="sls-accent">主色</label>
+                      <input id="sls-accent" type="color" value="#d9a25c">
+                      <span class="color-note">邊框與強調線</span>
+                    </div>
+                    <div class="color-item">
+                      <label for="sls-accent-b">亮色</label>
+                      <input id="sls-accent-b" type="color" value="#f0c587">
+                      <span class="color-note">正在播放的歌名</span>
+                    </div>
+                    <div class="color-item">
+                      <label for="sls-text-primary">主要文字色</label>
+                      <input id="sls-text-primary" type="color" value="#f0ead8">
+                      <span class="color-note">其他歌名與標題</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="field-group-title">可讀性</div>
-                <div class="switch-row switch-row--separated">
-                  <div><div class="label">亮色背景可讀性保護</div><div class="sub">預設開啟。只替歌單自己的文字與卡片加深襯底，保留 OBS 背景與角色；關閉才是完全透明的演出效果。</div></div>
+                <div class="switch-row">
+                  <div><div class="label">亮色背景可讀性保護</div><div class="sub">替歌單文字加深襯底，不影響 OBS 背景；關閉＝完全透明</div></div>
                   <label class="switch"><input id="sls-readability-guard" type="checkbox" checked><span class="track"></span></label>
                 </div>
                 <div class="field">
@@ -1359,7 +1358,6 @@
                       <input id="sls-card-opacity" type="range" min="0" max="100" value="93">
                     </div>
                   </div>
-                  <p class="field-hint">襯底是墊在歌單文字後面的那一層；開著可讀性保護時會維持安全下限。</p>
                 </div>
                 <div class="field">
                   <div class="field-row field-row--spacious field-row--top">
@@ -1372,7 +1370,7 @@
                       <input id="sls-wait-opacity" type="range" min="0" max="100" value="72">
                     </div>
                   </div>
-                  <p class="field-hint">數字越大越清楚。開著可讀性保護時，已唱至少 52%、未唱至少 70%；想做極淡效果再關閉保護。</p>
+                  <p class="field-hint">數字越大越清楚。開著保護時已唱至少 52%、未唱至少 70%。</p>
                 </div>
 
                 <!-- ══ 風格預設與儲存：保留功能，但不再擠在每次選模板的第一屏 ══ -->

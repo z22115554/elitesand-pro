@@ -265,11 +265,11 @@
     if (!hint) return;
     const layout = setlistLayoutSel?.value || 'classic';
     if (SETLIST_SECTIONED_LAYOUTS.includes(layout)) {
-      hint.textContent = '歌單大小＝你在 OBS 拉的 Browser Source 大小：來源拉多寬多高，版面就排多大，字級與顯示首數會跟著調整，不需要在這裡設定像素寬度。';
+      hint.textContent = '大小與顯示首數跟著你在 OBS 拉的 Browser Source 寬高變化。';
     } else if (SETLIST_FILL_LAYOUTS.includes(layout)) {
-      hint.textContent = '固定版位模板：版位固定（舞台訊號貼齊來源底部、極簡兩排置中），來源寬高只決定資訊條的寬度與字級；它們不顯示已唱與未唱清單。';
+      hint.textContent = '版位固定，來源寬高只決定寬度與字級；不顯示已唱與未唱清單。';
     } else {
-      hint.textContent = '這個模板是全幅 16:9 舞台，建議把 Browser Source 設成與畫布相同的比例。';
+      hint.textContent = '全幅 16:9 舞台，建議把 Browser Source 設成相同比例。';
     }
   }
 
