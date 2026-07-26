@@ -212,8 +212,12 @@
     };
 
     let compatibilityRefreshTimer = null;
+    // t() 的結果不會被語系層自動重繪（它只重繪 [data-i18n] 與長尾文字節點），
+    // 而首次 fetch 可能在 I18n.init 之前就回來；留著原始 payload 才能重畫。
+    let lastCompatibility = null;
     const renderCompatibility = (data) => {
       if (!dom.ytdlpCompatibilityStatus || !data) return;
+      lastCompatibility = data;
       dom.ytdlpCompatibilityStatus.textContent = compatibilityText(data.message);
       if (compatibilityRefreshTimer) clearTimeout(compatibilityRefreshTimer);
       compatibilityRefreshTimer = null;
@@ -249,6 +253,9 @@
         }
       });
       refreshCompatibility();
+      window.addEventListener('i18n:change', () => {
+        if (lastCompatibility) renderCompatibility(lastCompatibility);
+      });
     }
 
     const applyCheck = (data) => {

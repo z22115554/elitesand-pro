@@ -5980,6 +5980,94 @@ console.log('\n🌐 17. M6.1 介面語系層');
     });
   });
 
+  // 長尾表是機器產生的，結構檢查擋不住語意錯誤；下面四條是實機踩過的錯譯類型的回歸守衛。
+  test('長尾字串表沿用 curated 術語，不得各自表述', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const prefer = {
+      播放清單: 'nav.playlist',
+      複製: 'common.copy',
+      'OBS 來源網址': 'top.obsSources',
+      正在播放: 'home.nowPlaying',
+      已唱: 'setlist.done',
+      貼上歌詞: 'preview.pasteLyrics',
+      尚無歌曲: 'setlist.noTracks',
+    };
+    const curatedByZh = new Map();
+    Object.keys(catalogs['zh-TW']).forEach((key) => {
+      const zh = catalogs['zh-TW'][key];
+      if (curatedByZh.has(zh) && prefer[zh] !== key) return;
+      curatedByZh.set(zh, i18n.LOCALES.map((locale) => catalogs[locale][key]));
+    });
+    let shared = 0;
+    Object.entries(autoRows).forEach(([source, values]) => {
+      const curated = curatedByZh.get(source);
+      if (!curated) return;
+      shared += 1;
+      eq(values.join(''), curated.join(''), `「${source}」在長尾表與 curated 表必須完全一致：`);
+    });
+    ok(shared >= 150, '兩張表應有大量共用來源可比對：');
+  });
+
+  test('長尾字串表不得留下已知的機器誤譯術語', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    // 每一條都是 M6.1 初版實際出現過的錯譯：場→game、忠誠點數→loyalty、
+    // 字級→font level、諧音→homophone、直書→straight book、控制台→console。
+    const banned = {
+      en: /per game|loyalty point|font level|\bhomophon|straight book|direct book|refractive ladder|star sand streamer|classic layering|\bconsole\b|\bverbatim\b|\bunsung\b|account number|jiugong|bidiange|zhazhishu/i,
+      ja: /冷却|ロイヤルティ|ロイヤリティ|フォントレベル|同音異義語|コンソール|ゲームあたり|ゲームごと|試合|逐語|ピンイン|口座番号|ダイレクトブック|Jiugong|BiDianGe/,
+      ko: /냉방|냉각|로열티|글꼴 수준|동음|콘솔|게임당|세션당|축어|병음|계좌번호|직접 도서|Jiugong|Bidiange/i,
+    };
+    Object.entries(banned).forEach(([locale, pattern]) => {
+      const offset = i18n.LOCALES.indexOf(locale);
+      const offenders = Object.entries(autoRows).filter(([, values]) => pattern.test(String(values[offset])));
+      eq(offenders.length, 0, `${locale} 仍有機器誤譯術語（例如「${offenders[0] ? offenders[0][0] : ''}」）：`);
+    });
+  });
+
+  test('简中長尾使用簡中用語，不是繁中字轉簡', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    // 字形轉換不等於在地化：伺服器／匯入／檔案／程式 在简中要換詞而不是換字。
+    const taiwanOnly = /伺服器|汇入|汇出|档案|视窗|资料夹|介面|程式|解析度|快取|登入|滑鼠|连线|网路|搜寻|讯息|储存|回覆|载入|「|」/;
+    const offenders = Object.entries(autoRows)
+      .filter(([source]) => !source.startsWith('!'))
+      .filter(([, values]) => taiwanOnly.test(String(values[4])));
+    eq(offenders.length, 0, `简中仍有台灣用語或引號（例如「${offenders[0] ? offenders[0][0] : ''}」）：`);
+  });
+
+  test('英文長尾以大寫開頭，技術名詞除外', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const lowerAllowed = /^(yt-dlp|ffmpeg|npm|localhost|px|ms|http|www)/;
+    // 這些片段是被 <code> 切開的句子後半段，英文必須小寫接續前半句。
+    const sentenceTails = new Set(['手動查詢 IPv4 位址。']);
+    const offenders = Object.entries(autoRows).filter(([source, values]) => (
+      /^[㐀-鿿]/.test(source)
+      && !sentenceTails.has(source)
+      && /^[a-z]/.test(String(values[1]))
+      && !lowerAllowed.test(String(values[1]))
+    ));
+    eq(offenders.length, 0, `英文句首大小寫不一致（例如「${offenders[0] ? offenders[0][0] : ''}」）：`);
+  });
+
+  test('Twitch 設定搜尋在非中文介面也搜得到', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
+    ok(source.includes('function searchHaystack'), '搜尋必須同時比對中文索引與翻譯後文字：');
+    ok(/searchEntries\.filter\(\(entry\) => searchHaystack\(entry\)/.test(source), '搜尋過濾必須走 searchHaystack：');
+    ok(source.includes('tr(`已前往「${tr(entry.category)}」的「${tr(entry.label)}」。`)'), '跳轉提示不可把中文分類名塞進外語句子：');
+    const entries = [...source.matchAll(/\{ label: '([^']+)', category: '([^']+)', terms: '([^']+)'/g)]
+      .map(([, label, category, terms]) => [label, category, terms]);
+    ok(entries.length >= 10, '應取得設定搜尋索引：');
+    const haystack = (entry) => entry.concat(entry.map((value) => i18n.translate(value))).join(' ').toLocaleLowerCase();
+    const probes = { en: ['refund', 'blacklist', 'cooldown'], ja: ['返金', 'ブラックリスト'], ko: ['환불', '차단'] };
+    Object.entries(probes).forEach(([locale, words]) => {
+      i18n.setLocale(locale, { persist: false, updateQuery: false });
+      words.forEach((word) => {
+        const hits = entries.filter((entry) => haystack(entry).includes(word.toLocaleLowerCase()));
+        ok(hits.length > 0, `${locale} 介面搜尋「${word}」必須有結果：`);
+      });
+    });
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
   test('長尾翻譯保留動態內容與外部歌曲／公告欄位', () => {
     i18n.setLocale('en', { persist: false, updateQuery: false });
     eq(i18n.translate('最近同步：首頁'), 'Recent synchronization: 首頁', '動態插值不得把外部內容再次翻譯：');

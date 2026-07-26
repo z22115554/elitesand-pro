@@ -245,8 +245,15 @@
     if (entry.replyKey) { activeReplyKey = entry.replyKey; renderReplyEvents(); loadReplyEditor(); }
     switchManagementPane(entry.pane);
     hideSearchResults();
-    el('twitch-settings-search-status').textContent = `已前往「${entry.category}」的「${entry.label}」。`;
+    el('twitch-settings-search-status').textContent = tr(`已前往「${tr(entry.category)}」的「${tr(entry.label)}」。`);
     window.setTimeout(() => el(entry.focusId)?.focus(), 0);
+  }
+
+  // 搜尋索引是中文字面值，但面板已被語系層翻譯；兩份都要比對，
+  // 否則非中文介面照著自己的 placeholder 打字會一筆都搜不到。
+  function searchHaystack(entry) {
+    const fields = [entry.label, entry.category, entry.terms];
+    return fields.concat(fields.map(tr)).join(' ').toLocaleLowerCase();
   }
 
   function updateSettingsSearch() {
@@ -260,7 +267,7 @@
       status.textContent = '輸入設定名稱後可直接跳到對應分類。';
       return;
     }
-    const matched = searchEntries.filter((entry) => `${entry.label} ${entry.category} ${entry.terms}`.toLocaleLowerCase().includes(query));
+    const matched = searchEntries.filter((entry) => searchHaystack(entry).includes(query));
     results.innerHTML = '';
     matched.forEach((entry) => {
       const button = document.createElement('button');
@@ -284,6 +291,9 @@
     el('twitch-management-close')?.addEventListener('click', () => closeManagement());
     document.querySelectorAll('.twitch-management-nav-item').forEach((button) => button.addEventListener('click', () => switchManagementPane(button.dataset.twitchPane)));
     el('twitch-settings-search')?.addEventListener('input', updateSettingsSearch);
+    window.addEventListener('i18n:change', () => {
+      if (el('twitch-settings-search')?.value.trim()) updateSettingsSearch();
+    });
     modal.addEventListener('click', (event) => { if (event.target === modal) closeManagement(); });
     modal.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
@@ -515,7 +525,11 @@
       button.className = `twitch-blacklist-item${rule.id === activeBlacklistId ? ' is-active' : ''}`;
       button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', rule.id === activeBlacklistId ? 'true' : 'false');
-      button.innerHTML = `<span class="twitch-blacklist-item-value">${escapeHtml(rule.value)}</span><span class="twitch-blacklist-item-type">${escapeHtml(type.label)}</span><span class="twitch-blacklist-item-state">${expired ? '已到期' : (rule.enabled ? '啟用中' : '已暫停')} · ${rule.moderatorExempt ? '管理員豁免' : '管理員也套用'}${rule.reason ? ` · ${escapeHtml(rule.reason)}` : ''}</span>`;
+      // 這一列是把好幾段短句用 · 串起來的；串好之後就沒有對應的長尾來源了，
+      // 所以每一段要先各自翻譯（rule.reason 是使用者自己填的，維持原樣）。
+      const stateText = tr(expired ? '已到期' : (rule.enabled ? '啟用中' : '已暫停'));
+      const exemptText = tr(rule.moderatorExempt ? '管理員豁免' : '管理員也套用');
+      button.innerHTML = `<span class="twitch-blacklist-item-value">${escapeHtml(rule.value)}</span><span class="twitch-blacklist-item-type">${escapeHtml(type.label)}</span><span class="twitch-blacklist-item-state">${escapeHtml(stateText)} · ${escapeHtml(exemptText)}${rule.reason ? ` · ${escapeHtml(rule.reason)}` : ''}</span>`;
       button.addEventListener('click', () => { activeBlacklistId = rule.id; renderBlacklistList(); loadBlacklistEditor(); });
       list.appendChild(button);
     });
@@ -1608,6 +1622,10 @@
     renderRequests();
     renderActivityHistory();
     renderHistoryList();
+    renderBlacklistList();
+    validateCustomCommandEditor();
+    validateReplyEditor();
+    updateReplyTestPreview();
   });
   setInterval(refreshStatus, 10000);
 })();
