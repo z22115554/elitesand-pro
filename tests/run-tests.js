@@ -5927,18 +5927,34 @@ console.log('\n🌐 17. M6.1 介面語系層');
 
   test('HTML 與動態 UI 引用的翻譯鍵都存在', () => {
     const htmlFiles = ['index.html', 'controller.html', 'display.html', 'setlist.html'];
-    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'controller.js', 'pin-auth.js', 'setlist.js'];
+    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'controller.js', 'pin-auth.js', 'setlist.js'];
     const referenced = new Set();
     htmlFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public', file), 'utf8');
       ok(source.includes('/js/i18n.js'), `${file} 必須載入語系層：`);
-      for (const match of source.matchAll(/data-i18n(?:-title|-aria-label|-placeholder)?="([^"]+)"/g)) referenced.add(match[1]);
+      for (const match of source.matchAll(/data-i18n(?:-title|-aria-label|-placeholder|-alt)?="([^"]+)"/g)) referenced.add(match[1]);
     });
     jsFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public/js', file), 'utf8');
       for (const match of source.matchAll(/(?:I18n\.t|(?:^|[^\w])t)\(\s*['"]([^'"]+)['"]/gm)) referenced.add(match[1]);
     });
     referenced.forEach((key) => ok(baselineKeys.includes(key), `缺少翻譯鍵 ${key}：`));
+  });
+
+  test('桌面首頁與 Twitch 第二批字串不是繁中佔位值', () => {
+    const secondBatchKeys = baselineKeys.filter((key) => (
+      key.startsWith('home.')
+      || key.startsWith('playlist.')
+      || key.startsWith('source.')
+      || key.startsWith('preview.')
+      || key.startsWith('twitch.')
+      || key.startsWith('system.')
+    ));
+    ok(secondBatchKeys.length >= 70, '第二批應有至少 70 個受守衛字串：');
+    ['en', 'ja', 'ko'].forEach((locale) => {
+      const translatedCount = secondBatchKeys.filter((key) => catalogs[locale][key] !== catalogs['zh-TW'][key]).length;
+      ok(translatedCount / secondBatchKeys.length >= 0.95, `${locale} 第二批不得大量沿用繁中：`);
+    });
   });
 
   test('語系模組沒有網路、Socket 或伺服器狀態寫入行為', () => {

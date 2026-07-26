@@ -8,6 +8,7 @@
   const { escapeHtml } = SharedUtils;
   const el = (id) => document.getElementById(id);
   const clone = (value) => JSON.parse(JSON.stringify(value));
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
   const pending = new Map();
   const busy = new Map();
   const dirty = { commands: false, rules: false, blacklist: false, reward: false, replies: false, custom: false };
@@ -42,13 +43,17 @@
     const runtime = lastRuntimeStatus || {};
     const connected = !!runtime.connected;
     const authorized = !!runtime.authorized;
-    setStatusChip('twitch-status-connection', connected ? `已連接 ${runtime.broadcasterLogin || 'Twitch'}` : (authorized ? 'Twitch 連線中' : 'Twitch 未連接'), connected ? 'on' : (authorized ? 'warn' : 'off'));
-    setStatusChip('twitch-status-request', requestSaved.enabled ? '點歌已開放' : '點歌已暫停', requestSaved.enabled ? 'on' : 'off');
-    const rewardStatus = rewardSaved.enabled ? (rewardSaved.paused ? '忠誠點數已暫停' : '忠誠點數已啟用') : '忠誠點數已停用';
+    setStatusChip('twitch-status-connection', connected
+      ? t('twitch.connectedAs', { name: runtime.broadcasterLogin || 'Twitch' })
+      : (authorized ? t('twitch.connecting') : t('twitch.notConnected')), connected ? 'on' : (authorized ? 'warn' : 'off'));
+    setStatusChip('twitch-status-request', requestSaved.enabled ? t('twitch.requestsOpen') : t('twitch.requestsPaused'), requestSaved.enabled ? 'on' : 'off');
+    const rewardStatus = rewardSaved.enabled
+      ? (rewardSaved.paused ? t('twitch.rewardsPaused') : t('twitch.rewardsEnabled'))
+      : t('twitch.rewardsDisabled');
     setStatusChip('twitch-status-reward', rewardStatus, rewardSaved.enabled && !rewardSaved.paused ? 'on' : 'muted');
-    setStatusChip('twitch-status-replies', replySaved.enabled ? '自動回覆已啟用' : '自動回覆已停用', replySaved.enabled ? 'on' : 'muted');
+    setStatusChip('twitch-status-replies', replySaved.enabled ? t('twitch.repliesEnabled') : t('twitch.repliesDisabled'), replySaved.enabled ? 'on' : 'muted');
     const quick = el('twitch-request-quick-toggle');
-    if (quick) quick.textContent = requestSaved.enabled ? '暫停點歌' : '開放點歌';
+    if (quick) quick.textContent = requestSaved.enabled ? t('twitch.pauseRequests') : t('twitch.openRequests');
   }
 
   function applyRewardRuntimeStatus(status) {
@@ -148,7 +153,7 @@
     if (dot) dot.hidden = !dirty[category];
     const count = Object.values(dirty).filter(Boolean).length;
     const summary = el('twitch-management-dirty-summary');
-    if (summary) summary.textContent = count ? `${count} 個分類有尚未儲存的變更` : '所有設定都已儲存';
+    if (summary) summary.textContent = count ? t('twitch.unsavedCount', { count }) : t('twitch.allSaved');
   }
 
   function switchManagementPane(pane) {
@@ -812,7 +817,7 @@
     if (!entries.length) {
       const empty = document.createElement('div');
       empty.className = 'twitch-activity-empty';
-      empty.textContent = '目前還沒有點歌歷史；之後會在這裡看到成功、拒絕、退款與逾時結果。';
+      empty.textContent = t('twitch.noHistory');
       container.appendChild(empty);
       return;
     }
@@ -1472,7 +1477,7 @@
     const badge = el('twitch-nav-badge');
     if (badge) { badge.textContent = String(pending.size); badge.hidden = pending.size === 0; }
     if (el('twitch-reject-all')) el('twitch-reject-all').hidden = pending.size === 0;
-    if (!pending.size) { list.innerHTML = '<div class="twitch-request-empty">目前沒有待確認的點歌</div>'; return; }
+    if (!pending.size) { list.innerHTML = `<div class="twitch-request-empty">${escapeHtml(t('twitch.noPending'))}</div>`; return; }
     list.innerHTML = '';
     for (const req of pending.values()) {
       const isBusy = busy.has(req.requestId);
@@ -1580,5 +1585,12 @@
   renderRequests();
   updateMainStatus();
   refreshStatus();
+  window.addEventListener('i18n:change', () => {
+    updateMainStatus();
+    setDirty('commands', dirty.commands);
+    renderRequests();
+    renderActivityHistory();
+    renderHistoryList();
+  });
   setInterval(refreshStatus, 10000);
 })();
