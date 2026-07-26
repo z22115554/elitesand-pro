@@ -6004,6 +6004,13 @@ console.log('\n🌐 17. M6.1 介面語系層');
     ok(!/\.nav-item \.nav-label\s*\{[^}]*white-space:\s*nowrap/.test(panelCss), '側欄標籤不可強制單行：');
   });
 
+  test('深色模式所有原生下拉選項都有不透明底色與可讀文字', () => {
+    const baseCss = fs.readFileSync(path.join(__dirname, '../public/css/base.css'), 'utf8');
+    ok(/--select-popup-bg:\s*#[0-9a-f]{6};/i.test(baseCss), '深色下拉清單必須有不透明底色：');
+    ok(/select option,\s*select optgroup\s*\{[\s\S]*?background-color:\s*var\(--select-popup-bg\);[\s\S]*?color:\s*var\(--text\);/.test(baseCss), '語系與一般下拉都必須套用主題化選項樣式：');
+    ok(/select option:checked\s*\{[\s\S]*?background:\s*var\(--accent\);[\s\S]*?color:\s*var\(--accent-text\);/.test(baseCss), '選中項目必須維持強調色對比：');
+  });
+
   test('語系模組沒有網路、Socket 或伺服器狀態寫入行為', () => {
     ok(!/\bfetch\s*\(/.test(i18nSource), '語系層不得發出 HTTP 請求：');
     ok(!/\bSocketClient\s*[.(]/.test(i18nSource), '語系層不得讀寫 Socket：');

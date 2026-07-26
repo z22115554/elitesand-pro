@@ -234,13 +234,14 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; min-height:
 .input:focus { border-color: var(--accent); }
 .input::placeholder { color: var(--text-faint); }
 
-/* 原生下拉展開的選項清單：給不透明、跟主題走的底色與文字，避免玻璃半透明疊成白底白字 */
-select.input option,
-select.input optgroup {
+/* 原生下拉展開的選項清單：所有 select 都要給不透明、跟主題走的底色與文字。
+   語系選單不是 .input；若只涵蓋 select.input，Windows/Electron 會退回白底白字。 */
+select option,
+select optgroup {
   background-color: var(--select-popup-bg);
   color: var(--text);
 }
-select.input option:checked {
+select option:checked {
   background: var(--accent);
   color: var(--accent-text);
 }
