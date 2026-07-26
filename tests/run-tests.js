@@ -799,7 +799,15 @@ testAsync('診斷包只含已遮蔽的健康資訊、直播連線證據與日誌
     ok(page.includes('reliability-reset-btn'));
     ok(frontend.includes("PinAuth.fetchWithPin('/api/diagnostics/export'"));
     ok(frontend.includes("PinAuth.fetchWithPin('/api/diagnostics/reliability/reset'"));
-    ok(frontend.includes('四小時時長門檻') && frontend.includes('R12_MINIMUM_OBSERVED_MS'), '控制台必須清楚提示 R12 的時長門檻，而不是宣稱已完成直播驗收: ');
+    const i18nFrontend = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
+    ok(
+      frontend.includes("t('diagnostics.thresholdMet')") &&
+      frontend.includes("t('diagnostics.thresholdRemaining'") &&
+      frontend.includes('R12_MINIMUM_OBSERVED_MS') &&
+      i18nFrontend.includes("'diagnostics.thresholdMet': ['四小時時長門檻已達成'") &&
+      i18nFrontend.includes("'diagnostics.thresholdRemaining': ['距四小時時長門檻還差 {duration}'"),
+      '控制台必須以可翻譯字串清楚提示 R12 的時長門檻，而不是宣稱已完成直播驗收: '
+    );
   } finally {
     fs.rmSync(logDir, { recursive: true, force: true });
   }
@@ -5927,7 +5935,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
 
   test('HTML 與動態 UI 引用的翻譯鍵都存在', () => {
     const htmlFiles = ['index.html', 'controller.html', 'display.html', 'setlist.html'];
-    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'controller.js', 'pin-auth.js', 'setlist.js'];
+    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-diagnostics.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js'];
     const referenced = new Set();
     htmlFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public', file), 'utf8');
@@ -5955,6 +5963,45 @@ console.log('\n🌐 17. M6.1 介面語系層');
       const translatedCount = secondBatchKeys.filter((key) => catalogs[locale][key] !== catalogs['zh-TW'][key]).length;
       ok(translatedCount / secondBatchKeys.length >= 0.95, `${locale} 第二批不得大量沿用繁中：`);
     });
+  });
+
+  test('M6.1 長尾字串表涵蓋完整控制面板且五語非空', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const entries = Object.entries(autoRows);
+    ok(entries.length >= 1800, '完整控制面板長尾至少應有 1,800 個來源片段：');
+    entries.forEach(([source, values]) => {
+      ok(source.trim(), '長尾來源不得為空：');
+      eq(values.length, 5, `${source} 必須同時提供五語：`);
+      values.forEach((value, index) => ok(String(value || '').trim(), `${source} 第 ${index + 1} 語不得為空：`));
+    });
+    ['en', 'ja', 'ko'].forEach((locale, localeOffset) => {
+      const translated = entries.filter(([source, values]) => values[localeOffset + 1] !== source).length;
+      ok(translated / entries.length >= 0.95, `${locale} 長尾不得大量沿用繁中：`);
+    });
+  });
+
+  test('長尾翻譯保留動態內容與外部歌曲／公告欄位', () => {
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    eq(i18n.translate('最近同步：首頁'), 'Recent synchronization: 首頁', '動態插值不得把外部內容再次翻譯：');
+    [
+      '.pi-title',
+      '.pi-artist',
+      '.lib-title',
+      '.announcement-item-title',
+      '.twitch-req-title',
+      '.twitch-req-author',
+      '.twitch-req-url',
+    ].forEach((selector) => ok(i18nSource.includes(`'${selector}'`), `${selector} 必須排除自動翻譯：`));
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('側欄導覽標籤維持可讀字級並允許長語言換行', () => {
+    const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
+    const navLabelRule = panelCss.match(/\.nav-item \.nav-label\s*\{([\s\S]*?)\}/)?.[1] || '';
+    const fontSize = Number(navLabelRule.match(/font-size:\s*([\d.]+)px/)?.[1]);
+    ok(fontSize >= 11, '側欄標籤至少 11px：');
+    ok(panelCss.includes('-webkit-line-clamp: 2'), '長語言導覽標籤應可顯示兩行：');
+    ok(!/\.nav-item \.nav-label\s*\{[^}]*white-space:\s*nowrap/.test(panelCss), '側欄標籤不可強制單行：');
   });
 
   test('語系模組沒有網路、Socket 或伺服器狀態寫入行為', () => {

@@ -8,6 +8,9 @@
   const reliabilitySummary = dom?.reliabilityEvidenceSummary;
   const reliabilityResetBtn = dom?.reliabilityResetBtn;
   const R12_MINIMUM_OBSERVED_MS = 4 * 60 * 60 * 1000;
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
+  let lastEvidence = null;
   if (!button) return;
 
   function filenameFromDisposition(value) {
@@ -19,32 +22,33 @@
     const totalMinutes = Math.max(0, Math.floor(Number(ms || 0) / 60000));
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    if (hours > 0) return `${hours} 小時 ${minutes} 分`;
-    if (totalMinutes > 0) return `${totalMinutes} 分`;
-    return '未滿 1 分';
+    if (hours > 0) return t('diagnostics.hoursMinutes', { hours, minutes });
+    if (totalMinutes > 0) return t('diagnostics.minutes', { minutes: totalMinutes });
+    return t('diagnostics.underMinute');
   }
 
   function renderReliabilityEvidence(evidence) {
     if (!reliabilitySummary || !evidence || typeof evidence !== 'object') return;
+    lastEvidence = evidence;
     const obs = evidence.obs || {};
     const twitch = evidence.twitch || {};
     const observedMs = Math.max(0, Number(evidence.observedMs) || 0);
-    const parts = [`本場已記錄 ${formatDuration(observedMs)}`];
+    const parts = [t('diagnostics.recorded', { duration: formatDuration(observedMs) })];
     parts.push(observedMs >= R12_MINIMUM_OBSERVED_MS
-      ? '四小時時長門檻已達成'
-      : `距四小時時長門檻還差 ${formatDuration(R12_MINIMUM_OBSERVED_MS - observedMs)}`);
+      ? t('diagnostics.thresholdMet')
+      : t('diagnostics.thresholdRemaining', { duration: formatDuration(R12_MINIMUM_OBSERVED_MS - observedMs) }));
     if (obs.bothSourcesSeen) {
-      parts.push(`OBS 歌詞／歌單同時連線 ${formatDuration(obs.bothSourcesConnectedMs)}`);
-      parts.push(obs.interruptions ? `曾中斷 ${obs.interruptions} 次` : '未偵測到來源中斷');
+      parts.push(t('diagnostics.obsBoth', { duration: formatDuration(obs.bothSourcesConnectedMs) }));
+      parts.push(obs.interruptions ? t('diagnostics.interruptions', { count: obs.interruptions }) : t('diagnostics.noInterruptions'));
     } else if (obs.displaySeen || obs.setlistSeen) {
-      parts.push('OBS 兩個正式來源尚未同時連線');
+      parts.push(t('diagnostics.obsNotTogether'));
     } else {
-      parts.push('尚未偵測到正式 OBS 來源');
+      parts.push(t('diagnostics.noObs'));
     }
     if (twitch.configured) {
-      parts.push(twitch.connected ? 'Twitch 目前已連線' : `Twitch 狀態：${twitch.connectionState || '未連線'}`);
+      parts.push(twitch.connected ? t('diagnostics.twitchConnected') : t('diagnostics.twitchState', { state: twitch.connectionState || tr('未連線') }));
     } else {
-      parts.push('Twitch 未啟用，不列入本場觀測');
+      parts.push(t('diagnostics.twitchDisabled'));
     }
     reliabilitySummary.textContent = parts.join(' · ');
   }
@@ -105,4 +109,7 @@
   if (typeof SocketClient !== 'undefined') {
     SocketClient.on('client:counts', (counts = {}) => renderReliabilityEvidence(counts.runtimeEvidence));
   }
+  window.addEventListener('i18n:change', () => {
+    if (lastEvidence) renderReliabilityEvidence(lastEvidence);
+  });
 })();

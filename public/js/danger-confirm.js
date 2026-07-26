@@ -6,6 +6,8 @@
  */
 (function () {
   'use strict';
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
 
   const modal = document.getElementById('danger-confirm-modal');
   const title = document.getElementById('danger-confirm-title');
@@ -56,18 +58,18 @@
 
     const config = options && typeof options === 'object' ? options : {};
     requiresPhrase = config.requirePhrase !== false;
-    expectedPhrase = requiresPhrase ? String(config.phrase || '確認').trim() : '';
+    expectedPhrase = requiresPhrase ? tr(String(config.phrase || '確認').trim()) : '';
     if (requiresPhrase && !expectedPhrase) return Promise.resolve(false);
 
-    title.textContent = String(config.title || '確認此操作');
-    summary.textContent = String(config.summary || '這個動作會變更資料。');
-    impact.textContent = String(config.impact || '請確認這正是你要做的動作。');
+    title.textContent = tr(String(config.title || '確認此操作'));
+    summary.textContent = tr(String(config.summary || '這個動作會變更資料。'));
+    impact.textContent = tr(String(config.impact || '請確認這正是你要做的動作。'));
     input.value = '';
     inputField.hidden = !requiresPhrase;
     modal.classList.toggle('is-neutral', config.tone === 'neutral');
     phraseText.textContent = expectedPhrase;
-    input.placeholder = requiresPhrase ? `輸入「${expectedPhrase}」` : '';
-    submit.textContent = String(config.confirmLabel || (requiresPhrase ? expectedPhrase : '確認'));
+    input.placeholder = requiresPhrase ? t('common.enterPhrase', { phrase: expectedPhrase }) : '';
+    submit.textContent = tr(String(config.confirmLabel || (requiresPhrase ? expectedPhrase : '確認')));
     submit.disabled = requiresPhrase;
     previousFocus = document.activeElement;
     modal.hidden = false;

@@ -224,7 +224,7 @@
       if (!el) return;
       el.classList.remove('pending', 'ok', 'error');
       el.classList.add(state === true ? 'ok' : state === 'pending' ? 'pending' : 'error');
-      el.textContent = text;
+      el.textContent = window.I18n ? window.I18n.translate(text) : text;
     }
 
     function refreshReadiness() {
@@ -240,7 +240,9 @@
         updateChecklist();
         return fetch('/api/update-check').then((res) => res.json()).then((update) => {
           const newer = update && update.hasUpdate && update.latestVersion;
-          setReadiness('guide-check-version', true, newer ? `可更新 v${update.latestVersion}` : `目前 v${data.appVersion}`);
+          setReadiness('guide-check-version', true, newer
+            ? window.I18n.t('guide.updateVersion', { version: update.latestVersion })
+            : window.I18n.t('guide.currentVersion', { version: data.appVersion }));
         });
       }).catch(() => {
         readiness.ytdlp = false;
@@ -287,6 +289,10 @@
     });
     const refreshBtn = document.getElementById('guide-check-refresh');
     if (refreshBtn) refreshBtn.addEventListener('click', refreshReadiness);
+    window.addEventListener('i18n:change', () => {
+      updateChecklist();
+      if (!helpModal.hidden) refreshReadiness();
+    });
     refreshReadiness();
 
     let guideCompleted = false;
