@@ -4108,6 +4108,12 @@ test('歌單經典資訊重排與兩個原創模板都走共用樣式，既有�
     ok(setlistHandler.includes(`'${layout}'`), `${layout} 必須被 server allowlist 接受`);
   });
   ok(setlistSource.includes('classic-shell') && setlistCss.includes('[data-layout="classic"] .classic-shell'), '經典資訊必須使用新的局部資訊容器，而非逐列厚底');
+  // 襯底必須純色：漸層淡出在很寬或很扁的來源會讓右側文字懸在半透明上，反而更難讀。
+  const classicShellRules = setlistCss.split(/\n(?=[^\s}])/).filter((block) => /\.classic-shell\s*\{/.test(block));
+  ok(classicShellRules.length >= 2, '經典襯底規則必須同時涵蓋一般與可讀性保護兩種狀態');
+  classicShellRules.forEach((block) => {
+    ok(!/background:[^;]*gradient/.test(block), '經典襯底不可使用漸層淡出，必須純色填滿');
+  });
   ok(setlistCss.includes('.signal-strip') && setlistCss.includes('.index-sheet'), '兩個新模板必須有隔離的原創樣式');
   ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation'];"), '新模板必須共用既有樣式資料，不得改成獨立場景資料');
 });
