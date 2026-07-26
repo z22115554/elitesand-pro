@@ -22,17 +22,14 @@
   const navItems = document.querySelectorAll('.nav-item[data-nav]');
   const pageTitle = document.querySelector('.page-title');
 
-  const TITLES = {
-    karaoke: '首頁',
-    playlist: '播放清單',
-    setlist: '直播歌單',
-    library: '媒體庫',
-    settings: '歌詞設定',
-    general: '連線與系統',
-    twitch: 'Twitch 點歌',
-    templates: '模板',
-    marketplace: '商城',
-    account: '帳號',
+  const TITLE_KEYS = {
+    karaoke: 'nav.home',
+    playlist: 'nav.playlist',
+    setlist: 'nav.setlistTitle',
+    library: 'nav.library',
+    settings: 'nav.lyricsSettings',
+    general: 'nav.system',
+    twitch: 'nav.twitch',
   };
 
   const views = document.querySelectorAll('.view[data-view]');
@@ -40,8 +37,13 @@
 
   function setActive(nav) {
     navItems.forEach((b) => b.classList.toggle('active', b.dataset.nav === nav));
-    if (pageTitle && TITLES[nav]) pageTitle.textContent = TITLES[nav];
+    if (pageTitle && TITLE_KEYS[nav]) pageTitle.textContent = window.I18n.t(TITLE_KEYS[nav]);
   }
+
+  window.addEventListener('i18n:change', () => {
+    const active = document.querySelector('.nav-item.active[data-nav]');
+    if (active) setActive(active.dataset.nav);
+  });
 
   // 真正切換視圖：顯示對應 data-view、隱藏其他
   function showView(nav) {

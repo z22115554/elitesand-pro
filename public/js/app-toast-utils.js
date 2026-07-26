@@ -6,6 +6,9 @@
   'use strict';
 
   const { dom } = AppShared;
+  const t = (key) => (
+    typeof window !== 'undefined' && window.I18n ? window.I18n.t(key) : key
+  );
 
   // OBS 瀏覽器來源曾經連上、但控制台服務重啟後沒有回來時，OBS 可能還停在
   // 服務離線期間的透明頁面。這只能在同一個控制台工作階段確定，不能把首次
@@ -55,7 +58,7 @@
     const banner = document.getElementById('connection-banner');
     if (connected) {
       dom.connectionStatus.className = 'status-dot connected';
-      dom.connectionText.textContent = '已連線';
+      dom.connectionText.textContent = t('status.connected');
       if (banner) banner.classList.remove('visible');
       settleSourceRecoveryHint();
     } else {
@@ -67,19 +70,20 @@
       latestClientCounts = null;
       clearSourceRecoveryTimer();
       dom.connectionStatus.className = 'status-dot disconnected';
-      dom.connectionText.textContent = '連線中...';
+      dom.connectionText.textContent = t('status.connecting');
       if (banner) banner.classList.add('visible');
     }
   });
   SocketClient.on('operation:error', (data = {}) => showToast(data.message || '操作失敗', 'error'));
   SocketClient.on('server:alert', (data = {}) => showToast(`${data.area || '伺服器'}失敗：${data.message || '請檢查 logs'}`, 'error'));
 
-  function setSourceStatus(el, connected, label) {
+  function setSourceStatus(el, connected, source) {
     if (!el) return;
     el.classList.toggle('connected', connected);
     el.classList.toggle('disconnected', !connected);
-    el.setAttribute('aria-label', `${label}${connected ? '已連線' : '未連線'}`);
-    el.textContent = label + (connected ? '已連線' : '未連線');
+    const key = `status.${source}${connected ? 'Connected' : 'Disconnected'}`;
+    el.setAttribute('aria-label', t(key));
+    el.textContent = t(key);
   }
 
   let lastDisplayBuildWarning = null;
@@ -90,7 +94,7 @@
     const runtime = counts.displayRuntime;
     if (!connected) {
       lastDisplayBuildWarning = null;
-      setSourceStatus(el, false, '歌詞');
+      setSourceStatus(el, false, 'lyrics');
       return;
     }
 
@@ -116,13 +120,13 @@
       el.setAttribute('aria-label', '歌詞已連線，正在確認 OBS 程式版本');
       return;
     }
-    setSourceStatus(el, true, '歌詞');
+    setSourceStatus(el, true, 'lyrics');
   }
 
   SocketClient.on('client:counts', (counts = {}) => {
     latestClientCounts = counts;
     setDisplayRuntimeStatus(counts);
-    setSourceStatus(dom.setlistSourceStatus, (counts.setlists || 0) > 0, '歌單');
+    setSourceStatus(dom.setlistSourceStatus, (counts.setlists || 0) > 0, 'setlist');
     const missing = missingRecoveredSources(counts);
     if (!missing.length) {
       lastSourceRecoveryWarning = null;
@@ -132,6 +136,17 @@
       }
     }
   });
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('i18n:change', () => {
+      dom.connectionText.textContent = t(dom.connectionStatus.classList.contains('connected')
+        ? 'status.connected' : 'status.connecting');
+      if (latestClientCounts) {
+        setDisplayRuntimeStatus(latestClientCounts);
+        setSourceStatus(dom.setlistSourceStatus, (latestClientCounts.setlists || 0) > 0, 'setlist');
+      }
+    });
+  }
 
   // ═══════════════════════════════════════════
   // Toast 通知

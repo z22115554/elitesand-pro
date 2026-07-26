@@ -12,6 +12,9 @@
   'use strict';
 
   const rootEl = document.getElementById('setlist-root');
+  const t = (key, values) => (
+    typeof window !== 'undefined' && window.I18n ? window.I18n.t(key, values) : key
+  );
 
   // 目前資料模型（normalize 後）與版型
   let model = { active: false, startedAt: null, past: [], current: null, upcoming: [] };
@@ -356,15 +359,25 @@
     if (needsRerender) renderActive();
 
     // ── 文字標籤（更新已掛載的 DOM；render 也會用到最新值）──
-    if (typeof s.labelNowPlaying === 'string') lastLabels.nowPlaying = s.labelNowPlaying;
-    if (typeof s.labelDone === 'string') lastLabels.done = s.labelDone;
-    if (typeof s.labelWait === 'string') lastLabels.wait = s.labelWait;
-    if (typeof s.labelReserve === 'string') lastLabels.reserve = s.labelReserve;
+    if (typeof s.labelNowPlaying === 'string') lastLabelSource.nowPlaying = s.labelNowPlaying;
+    if (typeof s.labelDone === 'string') lastLabelSource.done = s.labelDone;
+    if (typeof s.labelWait === 'string') lastLabelSource.wait = s.labelWait;
+    if (typeof s.labelReserve === 'string') lastLabelSource.reserve = s.labelReserve;
+    localizeDefaultLabels();
     applyLabels();
   }
 
   // 文字標籤：套到目前畫面上的對應元素（各版型 class 不同，逐一更新）
-  const lastLabels = { nowPlaying: '▶ Now Playing', done: '已唱', wait: '未唱', reserve: 'Reserve' };
+  const lastLabelSource = { nowPlaying: '▶ Now Playing', done: '已唱', wait: '未唱', reserve: 'Reserve' };
+  const lastLabels = { ...lastLabelSource };
+  function localizeDefaultLabels() {
+    lastLabels.nowPlaying = lastLabelSource.nowPlaying === '▶ Now Playing'
+      ? `▶ ${t('setlist.nowPlaying')}` : lastLabelSource.nowPlaying;
+    lastLabels.done = lastLabelSource.done === '已唱' ? t('setlist.done') : lastLabelSource.done;
+    lastLabels.wait = lastLabelSource.wait === '未唱' ? t('setlist.upcoming') : lastLabelSource.wait;
+    lastLabels.reserve = lastLabelSource.reserve === 'Reserve' ? t('setlist.upcoming') : lastLabelSource.reserve;
+  }
+  localizeDefaultLabels();
   function applyLabels() {
     const nowEls = document.querySelectorAll('.ns-label, #sm-eye, #tl-eye, #dg-eye, #sg-eye, .ix-state');
     nowEls.forEach((e) => { if (model.current) e.textContent = lastLabels.nowPlaying; });
@@ -491,7 +504,7 @@
     },
     render(root) {
       const now = model.current || model.upcoming[0] || null;
-      root.querySelector('#sm-eye').textContent = model.current ? '▶ Now Playing' : '· Up Next';
+      root.querySelector('#sm-eye').textContent = model.current ? lastLabels.nowPlaying : `· ${t('setlist.upcoming')}`;
       root.querySelector('#sm-t').textContent = now ? now.title : '—';
       root.querySelector('#sm-a').textContent = now ? now.artist : '';
       const done = model.past, wait = model.current ? model.upcoming : model.upcoming.slice(1);
@@ -566,7 +579,7 @@
     },
     render(root) {
       const now = model.current;
-      root.querySelector('#dg-eye').textContent = now ? '▶ Now Playing' : '· Up Next';
+      root.querySelector('#dg-eye').textContent = now ? lastLabels.nowPlaying : `· ${t('setlist.upcoming')}`;
       root.querySelector('#dg-t').textContent = now ? now.title : (model.upcoming[0] ? model.upcoming[0].title : '—');
       root.querySelector('#dg-a').textContent = now ? now.artist : (model.upcoming[0] ? model.upcoming[0].artist : '');
       const total = model.past.length + (model.current ? 1 : 0) + model.upcoming.length;
@@ -694,7 +707,7 @@
       };
       const label = (text, kind) => `<div class="term-group" data-group-label data-group="${kind}"># ${escapeHtml(text)}</div>`;
       root.querySelector('#term-list').innerHTML = groupedHtml(list, row, label)
-        || '<div class="term-reserve">— 尚無歌曲 —</div>';
+        || `<div class="term-reserve">— ${escapeHtml(t('setlist.noTracks'))} —</div>`;
     },
   };
 
@@ -712,7 +725,7 @@
       };
       const label = (text, kind) => `<div class="bb-group" data-group-label data-group="${kind}">${escapeHtml(text)}</div>`;
       root.querySelector('#bb-list').innerHTML = groupedHtml(list, row, label)
-        || '<div class="bb-item"><div class="bb-info"><div class="bb-name">尚無歌曲</div></div></div>';
+        || `<div class="bb-item"><div class="bb-info"><div class="bb-name">${escapeHtml(t('setlist.noTracks'))}</div></div></div>`;
     },
   };
 
@@ -726,7 +739,7 @@
       };
       const label = (text, kind) => `<div class="card-group" data-group-label data-group="${kind}">${escapeHtml(text)}</div>`;
       root.querySelector('#cards-list').innerHTML = groupedHtml(list, row, label)
-        || '<div class="card"><div class="card-info"><div class="card-title">尚無歌曲</div></div></div>';
+        || `<div class="card"><div class="card-info"><div class="card-title">${escapeHtml(t('setlist.noTracks'))}</div></div></div>`;
     },
   };
 
@@ -747,16 +760,16 @@
       const total = model.past.length + (model.current ? 1 : 0) + model.upcoming.length;
       const ordinal = now ? model.past.length + 1 : 0;
       const eye = root.querySelector('#sg-eye');
-      eye.textContent = hasCurrent ? lastLabels.nowPlaying : '即將播放';
+      eye.textContent = hasCurrent ? lastLabels.nowPlaying : t('setlist.startingSoon');
       root.querySelector('#sg-ordinal').textContent = ordinal ? `${String(ordinal).padStart(2, '0')} / ${String(total).padStart(2, '0')}` : '';
-      root.querySelector('#sg-title').textContent = now ? now.title : '尚未開始播放';
+      root.querySelector('#sg-title').textContent = now ? now.title : t('setlist.notStarted');
       const artist = root.querySelector('#sg-artist');
       artist.textContent = now ? now.artist : '';
       artist.hidden = !now || !now.artist;
       const nextStart = model.past.length + (now ? 2 : 1);
       root.querySelector('#sg-next').innerHTML = wait.length
         ? wait.map((song, index) => `<div class="signal-next-row"><span class="signal-next-no">${String(nextStart + index).padStart(2, '0')}</span><span class="signal-next-title setlist-title">${escapeHtml(song.title)}</span></div>`).join('')
-        : '<div class="signal-next-empty">暫無待播歌曲</div>';
+        : `<div class="signal-next-empty">${escapeHtml(t('setlist.noUpcoming'))}</div>`;
     },
   };
 
@@ -764,7 +777,7 @@
     mount(root) {
       root.innerHTML =
         '<div class="lay-stage index-stage"><section class="index-sheet">' +
-          '<header class="index-head"><span class="index-kicker">演出清單</span><span class="index-total" id="ix-total"></span></header>' +
+          `<header class="index-head"><span class="index-kicker">${escapeHtml(t('setlist.performanceList'))}</span><span class="index-total" id="ix-total"></span></header>` +
           '<div class="index-list" id="ix-list"></div>' +
         '</section></div>';
     },
@@ -784,7 +797,7 @@
       const label = (text, kind) => `<div class="index-group" data-group-label data-group="${kind}">${escapeHtml(text)}</div>`;
       root.querySelector('#ix-list').innerHTML = list.length
         ? groupedHtml(list, row, label)
-        : '<div class="index-empty">尚未加入歌曲</div>';
+        : `<div class="index-empty">${escapeHtml(t('setlist.noAddedTracks'))}</div>`;
     },
   };
 
@@ -912,5 +925,9 @@
       const eff = effStyleFrom(data, layout);
       if (eff) applyStyle(eff);
     });
+  });
+  window.addEventListener('i18n:change', () => {
+    localizeDefaultLabels();
+    renderActive();
   });
 })();

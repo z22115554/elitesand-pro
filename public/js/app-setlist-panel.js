@@ -181,6 +181,10 @@
   function buildSetlistUrl({ preview = false, relative = false } = {}) {
     const url = new URL('/setlist', window.location.origin);
     if (preview) url.searchParams.set('preview', '1');
+    if (window.I18n) {
+      const localized = new URL(window.I18n.localizeUrl(url.toString()));
+      url.search = localized.search;
+    }
     return relative ? `${url.pathname}${url.search}` : url.toString();
   }
 
@@ -235,6 +239,7 @@
     });
     applySetlistPreviewSize();
   }
+  window.addEventListener('i18n:change', refreshSetlistUrl);
 
   // 版型類別：scene（場景版各自獨立）/ classic / list（清單版，與經典共用一份）
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];

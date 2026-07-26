@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Elitesand Pro 歌詞顯示</title>
+  <title data-i18n="app.displayTitle">Elitesand Pro 歌詞顯示</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/css/display.css">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
     <div id="display-background"></div>
 
     <!-- 連線狀態橫幅 -->
-    <div id="connection-banner" class="connection-banner">⚠️ 與伺服器連線中斷...</div>
+    <div id="connection-banner" class="connection-banner" data-i18n="overlay.connectionLost">⚠️ 與伺服器連線中斷…</div>
 
     <!-- 當前歌詞行容器 -->
     <div id="lyrics-container">
@@ -42,6 +42,7 @@
   <!-- Scripts -->
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/shared-utils.js"></script>
+  <script src="/js/i18n.js"></script>
   <!-- 簡轉繁（opencc-js cn→tw，自包含字典、離線可用）。載入失敗時轉換功能自動停用、不影響顯示。 -->
   <script src="/vendor/opencc-cn2t.js"></script>
   <script src="/vendor/gsap.min.js"></script>

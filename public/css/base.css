@@ -245,6 +245,26 @@ select.input option:checked {
   color: var(--accent-text);
 }
 
+.locale-select {
+  width: auto;
+  min-width: 112px;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background-color: var(--bg-raised);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.locale-select:hover { border-color: var(--border-strong); color: var(--text); }
+.locale-select:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
+}
+
 .field { margin-bottom: 14px; }
 .field:last-child { margin-bottom: 0; }
 .field-row {

@@ -11,6 +11,9 @@
  */
 const PinAuth = (() => {
   const STORAGE_KEY = 'es-pin';
+  const t = (key) => (
+    typeof window !== 'undefined' && window.I18n ? window.I18n.t(key) : key
+  );
 
   function get() {
     try { return localStorage.getItem(STORAGE_KEY) || ''; } catch (e) { return ''; }
@@ -53,7 +56,7 @@ const PinAuth = (() => {
 
     async function trySubmit() {
       const pin = (input.value || '').trim();
-      if (!pin) { showError('請輸入 PIN'); return; }
+      if (!pin) { showError(t('pin.enter')); return; }
       submit.disabled = true;
       try {
         const res = await fetch('/api/auth/verify', {
@@ -68,10 +71,10 @@ const PinAuth = (() => {
           input.value = '';
           if (typeof SocketClient !== 'undefined') SocketClient.reauth(pin);
         } else {
-          showError(data.message || 'PIN 不正確');
+          showError(data.message || t('pin.incorrect'));
         }
       } catch (e) {
-        showError('驗證失敗，請確認伺服器連線後再試');
+        showError(t('pin.verifyFailed'));
       } finally {
         submit.disabled = false;
       }
