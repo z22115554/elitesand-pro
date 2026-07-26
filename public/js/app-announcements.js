@@ -18,6 +18,7 @@
   if (!statusEl || !listEl || !refreshBtn) return;
   const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
   const locale = () => window.I18n ? window.I18n.current() : 'zh-TW';
+  let loaded = false;
 
   function protectedPost(url) {
     return typeof PinAuth !== 'undefined'
@@ -128,5 +129,7 @@
   }
 
   refreshBtn.addEventListener('click', () => load(true));
-  setTimeout(() => load(false), 4000);
+  // 這裡的狀態列是 JS 直接寫進 DOM 的，語系層不會回頭重繪；換語言時要自己重畫。
+  window.addEventListener('i18n:change', () => { if (loaded) load(false); });
+  setTimeout(() => { loaded = true; load(false); }, 4000);
 })();

@@ -289,9 +289,11 @@
     });
     const refreshBtn = document.getElementById('guide-check-refresh');
     if (refreshBtn) refreshBtn.addEventListener('click', refreshReadiness);
+    // 教學檢查清單的字是 JS 寫進去的；就算面板收著也要重畫，
+    // 否則換語言後再打開會看到上一個語言的殘留。
     window.addEventListener('i18n:change', () => {
       updateChecklist();
-      if (!helpModal.hidden) refreshReadiness();
+      refreshReadiness();
     });
     refreshReadiness();
 
