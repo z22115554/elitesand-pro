@@ -19,6 +19,30 @@ function Assert-Inside {
   }
 }
 
+function Get-ReleaseDownload {
+  param(
+    [Parameter(Mandatory = $true)][string]$Uri,
+    [Parameter(Mandatory = $true)][string]$OutFile
+  )
+
+  # Windows PowerShell's Invoke-WebRequest can leave a partial output file
+  # without surfacing a useful process exit status. Prefer the system curl
+  # when available so a failed compliance download always stops the build.
+  $CurlCommand = Get-Command curl.exe -ErrorAction SilentlyContinue
+  if ($CurlCommand -and (Test-Path $CurlCommand.Source)) {
+    & $CurlCommand.Source --fail --location --silent --show-error --output $OutFile $Uri
+    if ($LASTEXITCODE -ne 0) {
+      throw "Download failed: $Uri"
+    }
+  } else {
+    Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $OutFile
+  }
+
+  if (-not (Test-Path $OutFile) -or (Get-Item -LiteralPath $OutFile).Length -eq 0) {
+    throw "Download produced an empty file: $Uri"
+  }
+}
+
 $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Package = Get-Content (Join-Path $Root "package.json") -Raw | ConvertFrom-Json
 $Version = $Package.version
@@ -182,8 +206,8 @@ if ($ShouldBundleFfmpeg) {
   $LicenseUrl = "https://raw.githubusercontent.com/FFmpeg/FFmpeg/$FfmpegCommit/COPYING.GPLv3"
   $SourceZip = Join-Path $ComplianceOut "ffmpeg-source-$FfmpegCommit.zip"
   Write-Host "Downloading matching FFmpeg source: $FfmpegCommit"
-  Invoke-WebRequest -UseBasicParsing -Uri $SourceUrl -OutFile $SourceZip
-  Invoke-WebRequest -UseBasicParsing -Uri $LicenseUrl -OutFile (Join-Path $ComplianceOut "COPYING.GPLv3")
+  Get-ReleaseDownload -Uri $SourceUrl -OutFile $SourceZip
+  Get-ReleaseDownload -Uri $LicenseUrl -OutFile (Join-Path $ComplianceOut "COPYING.GPLv3")
   if ((Get-Item -LiteralPath $SourceZip).Length -lt 1000000) {
     throw "Cannot bundle FFmpeg: downloaded source archive is unexpectedly small"
   }
