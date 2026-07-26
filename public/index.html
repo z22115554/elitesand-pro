@@ -185,8 +185,8 @@
           <!-- Onboarding 提示（首次使用，可關閉，記憶於 localStorage）-->
           <div id="onboard-hint" class="onboard-hint" hidden>
             <span class="oh-dot"></span>
-            <span class="oh-text">歡迎使用 Elitesand Pro！先從下方「音樂來源」上傳檔案或貼上 YouTube 連結，再把右側的 OBS 來源網址加進 OBS 即可開始。<button id="onboard-open-help" class="oh-link" type="button">查看完整新手教學 →</button></span>
-            <button id="onboard-close" class="oh-close" type="button" aria-label="關閉提示">×</button>
+            <span class="oh-text"><span data-i18n="home.welcome">歡迎使用 Elitesand Pro！先從下方「音樂來源」上傳檔案或貼上 YouTube 連結，再把右側的 OBS 來源網址加進 OBS 即可開始。</span><button id="onboard-open-help" class="oh-link" type="button" data-i18n="home.openGuide">查看完整新手教學 →</button></span>
+            <button id="onboard-close" class="oh-close" type="button" aria-label="關閉提示" data-i18n-aria-label="home.closeHint">×</button>
           </div>
 
           <!-- Spotify 式 Now Playing -->
@@ -194,8 +194,8 @@
             <div class="np-top">
               <div id="album-art" class="np-art empty"></div>
               <div class="np-info">
-                <div class="np-eyebrow">正在播放</div>
-                <div id="track-title" class="np-title">尚未播放</div>
+                <div class="np-eyebrow" data-i18n="home.nowPlaying">正在播放</div>
+                <div id="track-title" class="np-title" data-i18n="player.noTrack">尚未播放</div>
                 <div id="track-artist" class="np-artist"></div>
               </div>
             </div>
@@ -213,22 +213,22 @@
 
             <div class="np-controls">
               <div class="transport">
-                <button id="btn-prev" class="btn-step" type="button" aria-label="上一首">
+                <button id="btn-prev" class="btn-step" type="button" aria-label="上一首" data-i18n-aria-label="player.previous">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6v12l-9-6z"/></svg>
                 </button>
-                <button id="btn-play" class="btn-play" type="button" aria-label="播放或暫停">
+                <button id="btn-play" class="btn-play" type="button" aria-label="播放或暫停" data-i18n-aria-label="player.playPause">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                 </button>
-                <button id="btn-next" class="btn-step" type="button" aria-label="下一首">
+                <button id="btn-next" class="btn-step" type="button" aria-label="下一首" data-i18n-aria-label="player.next">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6l9 6-9 6z"/></svg>
                 </button>
               </div>
               <div class="np-volume">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
-                <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量">
+                <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量" data-i18n-aria-label="home.volume">
                 <span id="volume-val" class="val">70%</span>
               </div>
-              <button id="btn-emergency" class="np-emergency" type="button">緊急隱藏</button>
+              <button id="btn-emergency" class="np-emergency" type="button" data-i18n="home.emergency">緊急隱藏</button>
             </div>
           </section>
 
@@ -238,44 +238,44 @@
           <!-- 播放清單（整合在歌詞頁，直播時不用切換頁面；獨立一欄、可容約 10 首） -->
           <section class="card playlist-card">
             <div class="playlist-head">
-              <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>播放清單 <span class="val ml-6" id="playlist-count">0 首</span></p>
-              <div class="playlist-head-actions" aria-label="播放清單管理">
-                <button id="btn-playlist-import" class="btn btn-sm btn-ghost" type="button">匯入</button>
-                <button id="btn-playlist-export" class="btn btn-sm btn-ghost" type="button">匯出</button>
-                <button id="btn-playlist-select" class="btn btn-sm btn-ghost" type="button" aria-pressed="false">選取</button>
-                <button id="btn-playlist-clear" class="btn btn-sm btn-ghost btn-danger" type="button">清除全部</button>
+              <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span data-i18n="playlist.title">播放清單</span> <span class="val ml-6" id="playlist-count">0 首</span></p>
+              <div class="playlist-head-actions" aria-label="播放清單管理" data-i18n-aria-label="playlist.manage">
+                <button id="btn-playlist-import" class="btn btn-sm btn-ghost" type="button" data-i18n="common.import">匯入</button>
+                <button id="btn-playlist-export" class="btn btn-sm btn-ghost" type="button" data-i18n="common.export">匯出</button>
+                <button id="btn-playlist-select" class="btn btn-sm btn-ghost" type="button" aria-pressed="false" data-i18n="common.select">選取</button>
+                <button id="btn-playlist-clear" class="btn btn-sm btn-ghost btn-danger" type="button" data-i18n="playlist.clearAll">清除全部</button>
               </div>
             </div>
-            <div class="playlist-tools" aria-label="播放清單搜尋與篩選">
+            <div class="playlist-tools" aria-label="播放清單搜尋與篩選" data-i18n-aria-label="playlist.searchAndFilter">
               <div class="playlist-filter-row">
-                <label class="sr-only" for="playlist-filter">搜尋播放清單</label>
-                <input id="playlist-filter" class="input" type="search" autocomplete="off" placeholder="搜尋歌名、歌手或翻唱者…">
-                <select id="playlist-filter-mode" class="input" aria-label="播放清單篩選">
-                  <option value="all">全部歌曲</option>
-                  <option value="upcoming">待唱</option>
-                  <option value="played">已唱</option>
-                  <option value="no-lyrics">無歌詞</option>
-                  <option value="missing-audio">音檔遺失</option>
+                <label class="sr-only" for="playlist-filter" data-i18n="playlist.search">搜尋播放清單</label>
+                <input id="playlist-filter" class="input" type="search" autocomplete="off" placeholder="搜尋歌名、歌手或翻唱者…" data-i18n-placeholder="playlist.searchPlaceholder">
+                <select id="playlist-filter-mode" class="input" aria-label="播放清單篩選" data-i18n-aria-label="playlist.filter">
+                  <option value="all" data-i18n="playlist.filterAll">全部歌曲</option>
+                  <option value="upcoming" data-i18n="playlist.filterUpcoming">待唱</option>
+                  <option value="played" data-i18n="playlist.filterPlayed">已唱</option>
+                  <option value="no-lyrics" data-i18n="playlist.filterNoLyrics">無歌詞</option>
+                  <option value="missing-audio" data-i18n="playlist.filterMissingAudio">音檔遺失</option>
                 </select>
-                <button id="btn-playlist-filter-clear" class="btn btn-sm btn-ghost" type="button" disabled>清除</button>
+                <button id="btn-playlist-filter-clear" class="btn btn-sm btn-ghost" type="button" disabled data-i18n="common.clear">清除</button>
               </div>
               <div id="playlist-selection-toolbar" class="playlist-selection-toolbar" role="status" aria-live="polite" hidden>
-                <span id="playlist-selection-count">已選 0 首</span>
-                <span class="playlist-selection-hint">正在播放的歌曲不會加入批次移除</span>
+                <span id="playlist-selection-count" data-i18n="playlist.selectedZero">已選 0 首</span>
+                <span class="playlist-selection-hint" data-i18n="playlist.selectionHint">正在播放的歌曲不會加入批次移除</span>
                 <div class="playlist-selection-actions">
-                  <button id="btn-playlist-select-visible" class="btn btn-sm btn-ghost" type="button">全選顯示結果</button>
-                  <button id="btn-playlist-selection-cancel" class="btn btn-sm btn-ghost" type="button">取消選取</button>
-                  <button id="btn-playlist-selection-remove" class="btn btn-sm btn-danger" type="button" disabled>移除已選</button>
+                  <button id="btn-playlist-select-visible" class="btn btn-sm btn-ghost" type="button" data-i18n="playlist.selectVisible">全選顯示結果</button>
+                  <button id="btn-playlist-selection-cancel" class="btn btn-sm btn-ghost" type="button" data-i18n="playlist.cancelSelection">取消選取</button>
+                  <button id="btn-playlist-selection-remove" class="btn btn-sm btn-danger" type="button" disabled data-i18n="playlist.removeSelected">移除已選</button>
                 </div>
               </div>
               <p id="playlist-filter-result" class="playlist-filter-result" role="status" aria-live="polite"></p>
             </div>
             <div id="playlist" class="playlist">
-              <div class="playlist-empty">尚無歌曲，請上傳檔案或貼上 YouTube 連結</div>
+              <div class="playlist-empty" data-i18n="playlist.empty">尚無歌曲，請上傳檔案或貼上 YouTube 連結</div>
             </div>
-            <p id="playlist-filter-empty" class="playlist-filter-empty" role="status" hidden>沒有符合目前搜尋與篩選條件的歌曲。</p>
+            <p id="playlist-filter-empty" class="playlist-filter-empty" role="status" hidden data-i18n="playlist.noMatches">沒有符合目前搜尋與篩選條件的歌曲。</p>
             <div class="switch-row switch-row--separated">
-              <div><div class="label">連續播放</div><div class="sub">一首播完自動播下一首（當純歌詞播放器用）；關閉＝單曲播完即停</div></div>
+              <div><div class="label" data-i18n="playlist.continuous">連續播放</div><div class="sub" data-i18n="playlist.continuousHint">一首播完自動播下一首；關閉時單曲播完即停</div></div>
               <label class="switch"><input id="continuous-toggle" type="checkbox"><span class="track"></span></label>
             </div>
           </section>
@@ -284,35 +284,35 @@
           <div class="kara-col kara-col-ctrl">
           <!-- 音樂來源 -->
           <section class="card" id="music-source-card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15V6l-9 2v9"/><circle cx="9" cy="17" r="3"/><circle cx="21" cy="15" r="3"/></svg>音樂來源</p>
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15V6l-9 2v9"/><circle cx="9" cy="17" r="3"/><circle cx="21" cy="15" r="3"/></svg><span data-i18n="source.title">音樂來源</span></p>
             <div class="segmented source-tabs">
               <button class="tab-btn active" data-tab="youtube">YouTube</button>
-              <button class="tab-btn" data-tab="local">本機檔案</button>
+              <button class="tab-btn" data-tab="local" data-i18n="source.localFiles">本機檔案</button>
             </div>
             <div id="tab-youtube" class="tab-content active">
               <div class="field">
-                <label for="yt-url">YouTube 連結</label>
-                <input id="yt-url" class="input" type="text" placeholder="貼上 YouTube 連結">
+                <label for="yt-url" data-i18n="source.youtubeLink">YouTube 連結</label>
+                <input id="yt-url" class="input" type="text" placeholder="貼上 YouTube 連結" data-i18n-placeholder="source.youtubePlaceholder">
               </div>
-              <button id="yt-fetch-btn" class="btn btn-primary w-full" type="button">匯入音訊</button>
+              <button id="yt-fetch-btn" class="btn btn-primary w-full" type="button" data-i18n="source.importAudio">匯入音訊</button>
               <div id="yt-progress" class="val mt-8"></div>
               <div id="youtube-risk-preference" class="risk-preference" hidden>
-                <span>匯入警告已關閉，遇到可疑影片會自動繼續。</span>
-                <button id="youtube-risk-reset" class="btn btn-sm btn-ghost" type="button">重新啟用</button>
+                <span data-i18n="source.warningDisabled">匯入警告已關閉，遇到可疑影片會自動繼續。</span>
+                <button id="youtube-risk-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="source.reenableWarnings">重新啟用</button>
               </div>
               <div id="work-center" class="work-center" hidden>
                 <div class="work-center-head">
-                  <span>工作中心</span>
-                  <button id="work-center-clear" class="btn btn-sm btn-ghost" type="button">清除已完成</button>
+                  <span data-i18n="source.workCenter">工作中心</span>
+                  <button id="work-center-clear" class="btn btn-sm btn-ghost" type="button" data-i18n="source.clearCompleted">清除已完成</button>
                 </div>
                 <div id="work-center-list" class="work-center-list" aria-live="polite"></div>
               </div>
             </div>
             <div id="tab-local" class="tab-content">
               <div id="drop-zone" class="dropzone">
-                <div class="hint">拖放音訊檔案到這裡</div>
-                <div class="sub">支援 MP3 / FLAC / WAV / M4A / OGG</div>
-                <button id="browse-btn" class="btn btn-sm" type="button">選擇檔案</button>
+                <div class="hint" data-i18n="source.dropFiles">拖放音訊檔案到這裡</div>
+                <div class="sub" data-i18n="source.supportedFormats">支援 MP3 / FLAC / WAV / M4A / OGG</div>
+                <button id="browse-btn" class="btn btn-sm" type="button" data-i18n="source.chooseFiles">選擇檔案</button>
                 <input id="file-input" type="file" accept="audio/*" multiple hidden>
               </div>
             </div>
@@ -373,26 +373,26 @@
           <section class="card kara-preview-card" id="lyrics-preview-card">
             <div class="lyrics-preview-head">
               <div>
-                <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>歌詞即時預覽</p>
-                <p class="field-hint m-0">選歌或調整設定時，這裡會即時顯示 OBS 輸出。</p>
+                <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span data-i18n="preview.title">歌詞即時預覽</span></p>
+                <p class="field-hint m-0" data-i18n="preview.homeHint">選歌或調整設定時，這裡會即時顯示 OBS 輸出。</p>
               </div>
-              <span class="save-status saved">已即時同步</span>
+              <span class="save-status saved" data-i18n="preview.synced">已即時同步</span>
             </div>
             <div class="lyrics-preview-controls">
-              <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost btn-preview-sample-lyrics" type="button">示範歌詞</button>
-              <button id="btn-lyrics-picker" class="btn btn-sm" type="button">選擇來源</button>
-              <button id="btn-paste-lyrics" class="btn btn-sm btn-ghost" type="button">貼上歌詞</button>
+              <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost btn-preview-sample-lyrics" type="button" data-i18n="preview.sampleLyrics">示範歌詞</button>
+              <button id="btn-lyrics-picker" class="btn btn-sm" type="button" data-i18n="preview.chooseSource">選擇來源</button>
+              <button id="btn-paste-lyrics" class="btn btn-sm btn-ghost" type="button" data-i18n="preview.pasteLyrics">貼上歌詞</button>
             </div>
             <!-- 內嵌 OBS 顯示端（preview 模式：緊急隱藏時面板仍看得到）-->
             <div class="obs-preview-wrap">
-              <iframe id="obs-preview" class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
-              <div class="obs-preview-tag">OBS 預覽</div>
+              <iframe id="obs-preview" class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
+              <div class="obs-preview-tag" data-i18n="preview.obs">OBS 預覽</div>
             </div>
             <div class="url-field">
               <code id="lyrics-preview-obs-url">http://localhost:3000/display</code>
-              <button id="copy-obs-url-preview" class="btn btn-sm" type="button">複製</button>
+              <button id="copy-obs-url-preview" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button>
             </div>
-            <p class="val m-0">OBS 新增「瀏覽器來源」後貼上此網址；歌詞設定會自動同步，不需要更新網址。</p>
+            <p class="val m-0" data-i18n="preview.obsHint">OBS 新增「瀏覽器來源」後貼上此網址；歌詞設定會自動同步，不需要更新網址。</p>
             <details class="collapse mt-10">
               <summary>歌詞純文字 / 上傳覆蓋</summary>
               <div class="collapse-body">
@@ -854,58 +854,58 @@
         <div class="view content-col" data-view="twitch">
           <section class="card twitch-live-status-card" aria-labelledby="twitch-live-status-title">
             <div class="twitch-live-status-head">
-              <div><p id="twitch-live-status-title" class="eyebrow m-0">點歌狀態</p><p class="sub">直播中常用的狀態與操作集中在這裡。</p></div>
+              <div><p id="twitch-live-status-title" class="eyebrow m-0" data-i18n="twitch.statusTitle">點歌狀態</p><p class="sub" data-i18n="twitch.statusHint">直播中常用的狀態與操作集中在這裡。</p></div>
               <div class="twitch-live-actions">
-                <button id="twitch-request-quick-toggle" class="btn btn-sm" type="button">暫停點歌</button>
-                <button id="twitch-management-open" class="btn btn-sm btn-primary" type="button">開啟點歌管理…</button>
+                <button id="twitch-request-quick-toggle" class="btn btn-sm" type="button" data-i18n="twitch.pauseRequests">暫停點歌</button>
+                <button id="twitch-management-open" class="btn btn-sm btn-primary" type="button" data-i18n="twitch.openManagement">開啟點歌管理…</button>
               </div>
             </div>
             <div class="twitch-status-chips" role="status" aria-live="polite">
-              <span id="twitch-status-connection" class="twitch-status-chip" data-state="muted">Twitch 讀取中</span>
-              <span id="twitch-status-request" class="twitch-status-chip" data-state="muted">點歌讀取中</span>
-              <span id="twitch-status-reward" class="twitch-status-chip" data-state="muted">忠誠點數讀取中</span>
-              <span id="twitch-status-replies" class="twitch-status-chip" data-state="muted">回覆讀取中</span>
+              <span id="twitch-status-connection" class="twitch-status-chip" data-state="muted" data-i18n="twitch.loadingConnection">Twitch 讀取中</span>
+              <span id="twitch-status-request" class="twitch-status-chip" data-state="muted" data-i18n="twitch.loadingRequests">點歌讀取中</span>
+              <span id="twitch-status-reward" class="twitch-status-chip" data-state="muted" data-i18n="twitch.loadingRewards">忠誠點數讀取中</span>
+              <span id="twitch-status-replies" class="twitch-status-chip" data-state="muted" data-i18n="twitch.loadingReplies">回覆讀取中</span>
             </div>
           </section>
 
           <section id="twitch-requests" class="card twitch-requests-card">
             <div class="playlist-head">
               <div>
-                <p class="eyebrow m-0">待確認點歌</p>
-                <p class="sub twitch-request-hint">觀眾的點歌會先排在這裡；確認後才開始下載。</p>
+                <p class="eyebrow m-0" data-i18n="twitch.pendingTitle">待確認點歌</p>
+                <p class="sub twitch-request-hint" data-i18n="twitch.pendingHint">觀眾的點歌會先排在這裡；確認後才開始下載。</p>
               </div>
-              <div class="twitch-request-count-actions"><button id="twitch-reject-all" class="btn btn-sm btn-ghost btn-danger" type="button" hidden>拒絕全部</button><span id="twitch-requests-count" class="val">0</span></div>
+              <div class="twitch-request-count-actions"><button id="twitch-reject-all" class="btn btn-sm btn-ghost btn-danger" type="button" hidden data-i18n="twitch.rejectAll">拒絕全部</button><span id="twitch-requests-count" class="val">0</span></div>
             </div>
             <div id="twitch-requests-list" class="twitch-requests-list"></div>
           </section>
 
           <section class="card twitch-activity-card">
-            <div class="playlist-head"><div><p class="eyebrow m-0">最近活動</p><p class="sub">只保留點歌結果與退款／完成狀態，不保存 token 或完整聊天室內容。</p></div><button id="twitch-history-open" class="btn btn-sm btn-ghost" type="button">查看完整歷史</button></div>
+            <div class="playlist-head"><div><p class="eyebrow m-0" data-i18n="twitch.activityTitle">最近活動</p><p class="sub" data-i18n="twitch.activityHint">只保留點歌結果與退款／完成狀態，不保存 token 或完整聊天室內容。</p></div><button id="twitch-history-open" class="btn btn-sm btn-ghost" type="button" data-i18n="twitch.viewHistory">查看完整歷史</button></div>
             <div id="twitch-activity-list" class="twitch-activity-list"></div>
           </section>
 
           <div id="twitch-management-modal" class="modal modal-wide twitch-management-modal" role="dialog" aria-modal="true" aria-labelledby="twitch-management-title" hidden>
             <div class="modal-card">
               <div class="modal-head twitch-management-head">
-                <div><h3 id="twitch-management-title" tabindex="-1">Twitch 點歌管理</h3><p id="twitch-management-dirty-summary" class="sub" aria-live="polite">所有設定都已儲存</p></div>
-                <div class="twitch-management-head-actions"><button id="twitch-management-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
+                <div><h3 id="twitch-management-title" tabindex="-1" data-i18n="twitch.managementTitle">Twitch 點歌管理</h3><p id="twitch-management-dirty-summary" class="sub" aria-live="polite" data-i18n="twitch.allSaved">所有設定都已儲存</p></div>
+                <div class="twitch-management-head-actions"><button id="twitch-management-close" class="btn btn-sm btn-ghost" type="button" data-i18n="common.close">關閉</button></div>
               </div>
               <div class="twitch-management-search">
-                <label class="sr-only" for="twitch-settings-search">找設定</label>
-                <input id="twitch-settings-search" class="input" type="search" placeholder="找設定，例如：冷卻、退款、黑名單、目前歌曲" autocomplete="off">
+                <label class="sr-only" for="twitch-settings-search" data-i18n="twitch.findSettings">找設定</label>
+                <input id="twitch-settings-search" class="input" type="search" placeholder="找設定，例如：冷卻、退款、黑名單、目前歌曲" data-i18n-placeholder="twitch.searchPlaceholder" autocomplete="off">
                 <div id="twitch-settings-search-results" class="twitch-settings-search-results" role="listbox" hidden></div>
-                <p id="twitch-settings-search-status" class="field-hint" aria-live="polite">輸入設定名稱後可直接跳到對應分類。</p>
+                <p id="twitch-settings-search-status" class="field-hint" aria-live="polite" data-i18n="twitch.searchHint">輸入設定名稱後可直接跳到對應分類。</p>
               </div>
               <div class="twitch-management-layout">
-                <nav class="twitch-management-nav" role="tablist" aria-label="Twitch 點歌管理分類">
-                  <button class="twitch-management-nav-item is-active" type="button" role="tab" aria-selected="true" data-twitch-pane="commands">指令<span class="twitch-dirty-dot" hidden>未儲存</span></button>
-                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="rules">接受規則<span class="twitch-dirty-dot" hidden>未儲存</span></button>
-                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="blacklist">黑名單<span class="twitch-dirty-dot" hidden>未儲存</span></button>
-                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="reward">忠誠點數<span class="twitch-dirty-dot" hidden>未儲存</span></button>
-                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="replies">聊天室回覆<span class="twitch-dirty-dot" hidden>未儲存</span></button>
-                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="custom">自訂指令<span class="twitch-dirty-dot" hidden>未儲存</span></button>
-                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="test">測試與預覽</button>
-                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="history">歷史</button>
+                <nav class="twitch-management-nav" role="tablist" aria-label="Twitch 點歌管理分類" data-i18n-aria-label="twitch.navLabel">
+                  <button class="twitch-management-nav-item is-active" type="button" role="tab" aria-selected="true" data-twitch-pane="commands"><span data-i18n="twitch.navCommands">指令</span><span class="twitch-dirty-dot" hidden data-i18n="twitch.unsaved">未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="rules"><span data-i18n="twitch.navRules">接受規則</span><span class="twitch-dirty-dot" hidden data-i18n="twitch.unsaved">未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="blacklist"><span data-i18n="twitch.navBlacklist">黑名單</span><span class="twitch-dirty-dot" hidden data-i18n="twitch.unsaved">未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="reward"><span data-i18n="twitch.navRewards">忠誠點數</span><span class="twitch-dirty-dot" hidden data-i18n="twitch.unsaved">未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="replies"><span data-i18n="twitch.navReplies">聊天室回覆</span><span class="twitch-dirty-dot" hidden data-i18n="twitch.unsaved">未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="custom"><span data-i18n="twitch.navCustom">自訂指令</span><span class="twitch-dirty-dot" hidden data-i18n="twitch.unsaved">未儲存</span></button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="test" data-i18n="twitch.navTest">測試與預覽</button>
+                  <button class="twitch-management-nav-item" type="button" role="tab" aria-selected="false" data-twitch-pane="history" data-i18n="twitch.navHistory">歷史</button>
                 </nav>
                 <div class="twitch-management-content">
                   <section class="twitch-management-pane is-active" role="tabpanel" data-twitch-pane-content="commands">
@@ -1047,12 +1047,12 @@
           <div class="general-settings-columns">
           <div class="general-settings-col">
           <section class="card" id="obs-url-card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>OBS 來源網址</p>
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span data-i18n="system.obsUrls">OBS 來源網址</span></p>
             <div class="obs-url-list">
-              <div><div class="label">歌詞畫面</div><div class="url-field"><code id="obs-url">http://localhost:3000/display</code><button id="copy-obs-url" class="btn btn-sm" type="button">複製</button></div></div>
-              <div><div class="label">歌單畫面</div><div class="url-field"><code id="setlist-url-general">http://localhost:3000/setlist</code><button id="copy-setlist-url-general" class="btn btn-sm" type="button">複製</button></div></div>
+              <div><div class="label" data-i18n="system.lyricsDisplay">歌詞畫面</div><div class="url-field"><code id="obs-url">http://localhost:3000/display</code><button id="copy-obs-url" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="system.setlistDisplay">歌單畫面</div><div class="url-field"><code id="setlist-url-general">http://localhost:3000/setlist</code><button id="copy-setlist-url-general" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button></div></div>
             </div>
-            <p class="val mt-10">在 OBS 新增「瀏覽器」來源後貼上對應網址；或用下方 OBS 連動一次建立兩個來源。</p>
+            <p class="val mt-10" data-i18n="system.obsUrlHint">在 OBS 新增「瀏覽器」來源後貼上對應網址；或用下方 OBS 連動一次建立兩個來源。</p>
           </section>
 
           <!-- ═══ 卡片：OBS 連動（WebSocket）═══
@@ -1082,17 +1082,17 @@
                這裡把 IP 網址跟 QR code 秀出來，手機同 Wi-Fi 掃碼即可直接開遙控器頁。 -->
           <div class="general-settings-col">
           <section class="card" id="lan-info-card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>手機遙控器</p>
-            <p class="sub section-intro">手機和這台電腦連同一個 Wi-Fi，掃下面的 QR code 或輸入網址，就能用手機遙控播放。<strong>不需要、也不要</strong>開放到外網。</p>
-            <div id="lan-info-loading" class="val">偵測區網位址中…</div>
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg><span data-i18n="system.remote">手機遙控器</span></p>
+            <p class="sub section-intro" data-i18n="system.remoteHint">手機和電腦連上同一個 Wi-Fi，掃描 QR code 或輸入網址即可遙控播放；不要開放到外網。</p>
+            <div id="lan-info-loading" class="val" data-i18n="system.detectingLan">偵測區網位址中…</div>
             <div id="lan-info-body" class="lan-info-layout" hidden>
-              <img id="lan-info-qr" class="lan-info-qr" alt="手機遙控器 QR code" width="120" height="120">
+              <img id="lan-info-qr" class="lan-info-qr" alt="手機遙控器 QR code" data-i18n-alt="system.remoteQrAlt" width="120" height="120">
               <div class="lan-info-copy">
                 <div class="url-field">
                   <code id="lan-info-url">—</code>
-                  <button id="copy-lan-url" class="btn btn-sm" type="button">複製</button>
+                  <button id="copy-lan-url" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button>
                 </div>
-                <p class="val mt-8">手機瀏覽器打開這個網址（不是 localhost），會自動轉到遙控器頁面。</p>
+                <p class="val mt-8" data-i18n="system.remoteUrlHint">手機瀏覽器打開這個網址（不是 localhost），會自動轉到遙控器頁面。</p>
               </div>
             </div>
             <p id="lan-info-error" class="val val--danger" hidden>找不到區網 IP（可能沒接網路，或只有虛擬網卡）。可在電腦命令提示字元打 <code>ipconfig</code> 手動查詢 IPv4 位址。</p>

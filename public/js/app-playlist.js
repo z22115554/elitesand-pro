@@ -14,6 +14,7 @@
   const { formatTime, escapeHtml, safeHttpUrl } = SharedUtils;
   const { dom } = AppShared;
   const state = AppShared.state;
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
 
   // 搜尋／篩選與批次選取只存在目前控制台，絕不寫進 state.json 或廣播給 OBS。
   // 選取 key 綁在目前記憶體中的歌曲物件，伺服器同步換掉清單物件時會自動清空，
@@ -102,7 +103,9 @@
     }
     if (dom.playlistFilterResult) {
       dom.playlistFilterResult.textContent = playlist.length
-        ? (activeFilter ? `顯示 ${visibleCount} / ${playlist.length} 首` : `共 ${playlist.length} 首歌曲`)
+        ? (activeFilter
+          ? t('playlist.visibleCount', { visible: visibleCount, total: playlist.length })
+          : t('playlist.totalCount', { count: playlist.length }))
         : '';
     }
     if (dom.playlistFilterEmpty) {
@@ -110,21 +113,23 @@
     }
     if (dom.btnPlaylistFilterClear) dom.btnPlaylistFilterClear.disabled = !activeFilter;
     if (dom.btnPlaylistSelect) {
-      dom.btnPlaylistSelect.textContent = selectionMode ? '完成選取' : '選取';
+      dom.btnPlaylistSelect.textContent = selectionMode ? t('playlist.doneSelecting') : t('common.select');
       dom.btnPlaylistSelect.setAttribute('aria-pressed', String(selectionMode));
       dom.btnPlaylistSelect.disabled = playlist.length === 0;
     }
     if (dom.playlistSelectionToolbar) dom.playlistSelectionToolbar.hidden = !selectionMode;
-    if (dom.playlistSelectionCount) dom.playlistSelectionCount.textContent = `已選 ${selectedCount} 首`;
+    if (dom.playlistSelectionCount) dom.playlistSelectionCount.textContent = t('playlist.selectedCount', { count: selectedCount });
     if (dom.btnPlaylistSelectVisible) {
       dom.btnPlaylistSelectVisible.disabled = selectableVisibleCount === 0;
       dom.btnPlaylistSelectVisible.textContent = allVisibleSelected
-        ? '取消顯示結果'
-        : '全選顯示結果';
+        ? t('playlist.deselectVisible')
+        : t('playlist.selectVisible');
     }
     if (dom.btnPlaylistSelectionRemove) {
       dom.btnPlaylistSelectionRemove.disabled = selectedCount === 0;
-      dom.btnPlaylistSelectionRemove.textContent = selectedCount ? `移除已選 (${selectedCount})` : '移除已選';
+      dom.btnPlaylistSelectionRemove.textContent = selectedCount
+        ? t('playlist.removeSelectedCount', { count: selectedCount })
+        : t('playlist.removeSelected');
     }
   }
 
@@ -404,14 +409,14 @@
     let remainingSec = 0;
     for (let i = fromIdx; i < playlist.length; i++) remainingSec += (playlist[i].duration || 0);
     if (dom.playlistCount) {
-      const remTxt = remainingSec > 0 ? ` · 剩 ${formatTime(remainingSec)}` : '';
-      dom.playlistCount.textContent = `${playlist.length} 首${remTxt}`;
+      const remTxt = remainingSec > 0 ? t('playlist.remaining', { time: formatTime(remainingSec) }) : '';
+      dom.playlistCount.textContent = t('playlist.count', { count: playlist.length }) + remTxt;
     }
     if (playlist.length === 0) {
       selectedTrackKeys.clear();
       selectionMode = false;
       dom.playlist.innerHTML = `
-        <div class="playlist-empty">尚無歌曲，請上傳檔案或貼上 YouTube 連結</div>`;
+        <div class="playlist-empty">${escapeHtml(t('playlist.empty'))}</div>`;
       syncPlaylistTools(0);
       return;
     }
@@ -729,4 +734,5 @@
   AppShared.setMarqueeText = setMarqueeText;
   AppShared.measureMarquee = measureMarquee;
   AppShared.updateMarquee = updateMarquee;
+  window.addEventListener('i18n:change', renderPlaylist);
 })();
