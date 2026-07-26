@@ -16,6 +16,8 @@
   const criticalLink = document.getElementById('announcement-critical-link');
   const criticalClose = document.getElementById('announcement-critical-close');
   if (!statusEl || !listEl || !refreshBtn) return;
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
+  const locale = () => window.I18n ? window.I18n.current() : 'zh-TW';
 
   function protectedPost(url) {
     return typeof PinAuth !== 'undefined'
@@ -40,7 +42,7 @@
     if (!items.length) {
       const empty = document.createElement('div');
       empty.className = 'sub';
-      empty.textContent = '目前沒有適用於此版本的公告。';
+      empty.textContent = tr('目前沒有適用於此版本的公告。');
       listEl.appendChild(empty);
       return;
     }
@@ -57,8 +59,8 @@
       title.textContent = item.title;
       const meta = document.createElement('span');
       meta.className = 'announcement-item-meta';
-      const date = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('zh-TW') : '未標日期';
-      meta.textContent = `${date} · ${item.read ? '已讀' : '未讀'}`;
+      const date = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString(locale()) : tr('未標日期');
+      meta.textContent = `${date} · ${tr(item.read ? '已讀' : '未讀')}`;
       head.append(level, title);
       row.append(head, meta);
       listEl.appendChild(row);
@@ -108,20 +110,20 @@
 
   async function load(force) {
     refreshBtn.disabled = true;
-    statusEl.textContent = force ? '正在重新整理…' : '背景讀取中…';
+    statusEl.textContent = tr(force ? '正在重新整理…' : '背景讀取中…');
     try {
       const response = await fetch(`/api/announcements${force ? '?force=1' : ''}`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '伺服器沒有回應');
       const items = Array.isArray(data.announcements) ? data.announcements : [];
       statusEl.textContent = data.fetchedAt
-        ? `最近同步：${new Date(data.fetchedAt).toLocaleString('zh-TW')}`
-        : '尚無成功下載的公告快取';
+        ? tr(`最近同步：${new Date(data.fetchedAt).toLocaleString(locale())}`)
+        : tr('尚無成功下載的公告快取');
       renderList(items);
       window.dispatchEvent(new CustomEvent('announcements:actions', { detail: data.actions || {} }));
       present(items);
     } catch (err) {
-      statusEl.textContent = `公告暫時無法讀取：${err.message}`;
+      statusEl.textContent = tr(`公告暫時無法讀取：${err.message}`);
     } finally { refreshBtn.disabled = false; }
   }
 

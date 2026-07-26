@@ -17,6 +17,45 @@
   const DEFAULT_LOCALE = 'zh-TW';
   const LOCALES = ['zh-TW', 'en', 'ja', 'ko', 'zh-CN'];
   const INDEX = Object.fromEntries(LOCALES.map((locale, index) => [locale, index]));
+  const AUTO_ROWS = (root && root.I18nAutoRows) || (
+    typeof require === 'function'
+      ? (() => { try { return require('./i18n-auto.js'); } catch (_) { return {}; } })()
+      : {}
+  );
+  const AUTO_EXCLUDE = [
+    '[data-i18n-skip]',
+    '[data-i18n]',
+    'script',
+    'style',
+    'code',
+    'pre',
+    'textarea',
+    '[contenteditable="true"]',
+    '.style-thumb-char',
+    '.style-thumb-column',
+    '#track-title',
+    '#track-artist',
+    '#lt-track-title',
+    '#mini-player-title',
+    '#mini-player-artist',
+    '.pi-title',
+    '.pi-artist',
+    '.lib-title',
+    '.announcement-item-title',
+    '#announcement-banner-title',
+    '#announcement-banner-message',
+    '#announcement-banner-link',
+    '#announcement-critical-title',
+    '#announcement-critical-message',
+    '#announcement-critical-link',
+    '.twitch-req-title',
+    '.twitch-req-author',
+    '.twitch-req-url'
+  ].join(',');
+  const AUTO_ATTRIBUTES = ['title', 'placeholder', 'aria-label', 'alt'];
+  const autoTextState = new WeakMap();
+  const autoAttributeState = new WeakMap();
+  let autoObserver = null;
 
   // Each row is [繁中, English, 日本語, 한국어, 简中].
   // Keeping all five values together makes missing translations mechanically testable.
@@ -36,6 +75,17 @@
     'nav.system': ['連線與系統', 'Connection & system', '接続とシステム', '연결 및 시스템', '连接与系统'],
     'nav.tutorial': ['教學', 'Guide', 'ガイド', '가이드', '教学'],
     'nav.tutorialTitle': ['新手教學', 'Getting started', 'はじめてガイド', '시작 가이드', '新手教学'],
+    'guide.obsTaskBefore': ['複製', 'Copy', 'コピーした', '복사한', '复制'],
+    'guide.obsTaskAfter': ['網址加入瀏覽器來源', 'URL into a Browser Source', 'URL をブラウザソースに追加', 'URL을 브라우저 소스에 추가', '网址加入浏览器来源'],
+    'guide.playlistUrlBefore': ['：只要網址裡有', ': A URL containing', '：URL に', ': URL에', '：只要网址里有'],
+    'guide.playlistUrlAfter': ['就會整批匯入。清單很長時會花比較久，第一次建議先貼幾首少量的測試。', 'imports the whole playlist. Long lists take more time, so start with a few tracks for your first test.', 'があればプレイリスト全体をインポートします。長いリストは時間がかかるため、最初は数曲で試してください。', '가 있으면 재생목록 전체를 가져옵니다. 긴 목록은 시간이 걸리므로 처음에는 몇 곡만 테스트하세요.', '就会整批导入。列表很长时会花较久，第一次建议先贴几首测试。'],
+    'guide.setlistUrlBefore': ['OBS 這邊的歌單網址固定是', 'The OBS setlist URL is always', 'OBS のセットリスト URL は常に', 'OBS 세트리스트 URL은 항상', 'OBS 这边的歌单网址固定是'],
+    'guide.setlistUrlAfter': ['，換版型不用換網址，會自動同步。', '; layouts sync automatically without changing the URL.', 'です。レイアウトを変えても URL はそのままで自動同期します。', '이며, 레이아웃을 바꿔도 URL은 그대로 자동 동기화됩니다.', '，更换版型不用换网址，会自动同步。'],
+    'guide.displayUrlBefore': ['：先確認網址真的是', ': First confirm the URL is', '：まず URL が', ': 먼저 URL이', '：先确认网址确实是'],
+    'guide.displayUrlAfter': ['；再看控制台右上角有沒有寫「歌詞已連線」；最後檢查 OBS 來源的寬高是不是設得太小。', '; then check for “Lyrics connected” at the top right, and confirm the OBS source is not too small.', 'であることを確認し、右上に「歌詞接続済み」と表示されるか、OBS ソースが小さすぎないかを確認してください。', '인지 확인하고 오른쪽 위에 “가사 연결됨”이 표시되는지, OBS 소스 크기가 너무 작지 않은지 확인하세요.', '；再看控制台右上角是否显示“歌词已连接”；最后检查 OBS 来源尺寸是否太小。'],
+    'guide.faqTwitchAnswer': ['不用，Twitch 只是選配功能，用來接收聊天室的「!點歌」指令；不接 Twitch，其他所有功能都能正常使用。', 'No. Twitch is optional and only receives the chat command “!點歌”; every other feature works without it.', '不要です。Twitch はチャットの「!點歌」コマンドを受け取るためのオプションで、接続しなくても他の機能はすべて使えます。', '아니요. Twitch는 채팅의 “!點歌” 명령을 받기 위한 선택 기능이며, 연결하지 않아도 다른 모든 기능을 사용할 수 있습니다.', '不用，Twitch 只是选配功能，用来接收聊天室的“!点歌”指令；不连接 Twitch，其他功能都能正常使用。'],
+    'guide.currentVersion': ['目前 v{version}', 'Current v{version}', '現在 v{version}', '현재 v{version}', '目前 v{version}'],
+    'guide.updateVersion': ['可更新 v{version}', 'Update available: v{version}', '更新可能：v{version}', '업데이트 가능: v{version}', '可更新 v{version}'],
     'theme.switch': ['切換主題', 'Switch theme', 'テーマを切り替え', '테마 전환', '切换主题'],
     'theme.toDark': ['切換深色模式', 'Switch to dark mode', 'ダークモードに切り替え', '다크 모드로 전환', '切换到深色模式'],
     'theme.toLight': ['切換淺色模式', 'Switch to light mode', 'ライトモードに切り替え', '라이트 모드로 전환', '切换到浅色模式'],
@@ -71,7 +121,11 @@
     'common.export': ['匯出', 'Export', 'エクスポート', '내보내기', '导出'],
     'common.select': ['選取', 'Select', '選択', '선택', '选择'],
     'common.retry': ['重試', 'Retry', '再試行', '다시 시도', '重试'],
+    'common.enterPhrase': ['輸入「{phrase}」', 'Enter “{phrase}”', '「{phrase}」と入力', '“{phrase}” 입력', '输入“{phrase}”'],
     'common.all': ['全部', 'All', 'すべて', '전체', '全部'],
+    'common.enabled': ['啟用', 'Enabled', '有効', '활성화', '启用'],
+    'common.disabled': ['停用', 'Disabled', '無効', '비활성화', '停用'],
+    'common.on': ['開', 'On', 'オン', '켬', '开'],
     'common.off': ['關', 'Off', 'オフ', '끔', '关'],
     'home.welcome': ['歡迎使用 Elitesand Pro！先從下方「音樂來源」上傳檔案或貼上 YouTube 連結，再把右側的 OBS 來源網址加進 OBS 即可開始。', 'Welcome to Elitesand Pro! Upload a file or paste a YouTube link under Music source, then add the OBS source URL on the right to OBS.', 'Elitesand Pro へようこそ！「音楽ソース」でファイルをアップロードするか YouTube リンクを貼り、右側の OBS ソース URL を OBS に追加してください。', 'Elitesand Pro에 오신 것을 환영합니다! 음악 소스에서 파일을 업로드하거나 YouTube 링크를 붙여넣고, 오른쪽 OBS 소스 URL을 OBS에 추가하세요.', '欢迎使用 Elitesand Pro！请在“音乐来源”上传文件或粘贴 YouTube 链接，再把右侧的 OBS 来源网址添加到 OBS。'],
     'home.openGuide': ['查看完整新手教學 →', 'Open the full guide →', '詳しいガイドを見る →', '전체 가이드 보기 →', '查看完整新手教程 →'],
@@ -108,6 +162,7 @@
     'playlist.noMatches': ['沒有符合目前搜尋與篩選條件的歌曲。', 'No tracks match the current search and filters.', '現在の検索・絞り込み条件に一致する曲はありません。', '현재 검색 및 필터 조건에 맞는 곡이 없습니다.', '没有符合当前搜索与筛选条件的歌曲。'],
     'playlist.continuous': ['連續播放', 'Continuous playback', '連続再生', '연속 재생', '连续播放'],
     'playlist.continuousHint': ['一首播完自動播下一首；關閉時單曲播完即停', 'Automatically play the next track; when off, stop after each track', '曲の終了後に次を自動再生。オフでは一曲ごとに停止します', '곡이 끝나면 다음 곡을 자동 재생합니다. 끄면 한 곡 뒤 멈춥니다', '一首播完后自动播放下一首；关闭时单曲播完即停'],
+    'playlist.defaultExportName': ['播放清單-{date}', 'Playlist-{date}', 'プレイリスト-{date}', '재생목록-{date}', '播放列表-{date}'],
     'source.title': ['音樂來源', 'Music source', '音楽ソース', '음악 소스', '音乐来源'],
     'source.localFiles': ['本機檔案', 'Local files', 'ローカルファイル', '로컬 파일', '本地文件'],
     'source.youtubeLink': ['YouTube 連結', 'YouTube link', 'YouTube リンク', 'YouTube 링크', 'YouTube 链接'],
@@ -172,6 +227,24 @@
     'twitch.repliesEnabled': ['自動回覆已啟用', 'Auto replies enabled', '自動返信有効', '자동 답변 활성화됨', '自动回复已启用'],
     'twitch.repliesDisabled': ['自動回覆已停用', 'Auto replies disabled', '自動返信無効', '자동 답변 비활성화됨', '自动回复已停用'],
     'twitch.unsavedCount': ['{count} 個分類有尚未儲存的變更', '{count} categories have unsaved changes', '{count} カテゴリに未保存の変更があります', '{count}개 분류에 저장하지 않은 변경사항이 있습니다', '{count} 个分类有未保存的更改'],
+    'twitch.preview': ['預覽：{message}', 'Preview: {message}', 'プレビュー：{message}', '미리보기: {message}', '预览：{message}'],
+    'twitch.localPreview': ['本機預覽：{message}', 'Local preview: {message}', 'ローカルプレビュー：{message}', '로컬 미리보기: {message}', '本机预览：{message}'],
+    'twitch.rule.accepting': ['接受點歌', 'Accepting requests', 'リクエスト受付中', '신청곡 접수 중', '接受点歌'],
+    'twitch.rule.maxPending': ['最多 {count} 首待確認', 'Up to {count} awaiting review', '確認待ちは最大 {count} 曲', '검토 대기 최대 {count}곡', '最多 {count} 首待确认'],
+    'twitch.rule.perUserMax': ['每人最多 {count} 首', 'Up to {count} per viewer', '1 人最大 {count} 曲', '시청자당 최대 {count}곡', '每人最多 {count} 首'],
+    'twitch.rule.perUserUnlimited': ['每人不限首數', 'No per-viewer limit', '1 人あたり無制限', '시청자당 제한 없음', '每人不限首数'],
+    'twitch.rule.maxDuration': ['最長 {count} 分鐘', 'Up to {count} minutes', '最長 {count} 分', '최대 {count}분', '最长 {count} 分钟'],
+    'twitch.rule.noDuration': ['不限制歌曲長度', 'No track-length limit', '曲の長さは無制限', '곡 길이 제한 없음', '不限制歌曲长度'],
+    'twitch.rule.recentHours': ['檢查最近 {count} 小時', 'Check the last {count} hours', '直近 {count} 時間を確認', '최근 {count}시간 확인', '检查最近 {count} 小时'],
+    'twitch.rule.duplicateScope': ['重複範圍：{scope}', 'Duplicate scope: {scope}', '重複チェック範囲：{scope}', '중복 확인 범위: {scope}', '重复范围：{scope}'],
+    'twitch.rule.liveOnly': ['只在直播中接受', 'Live only', '配信中のみ受付', '방송 중에만 접수', '只在直播中接受'],
+    'twitch.rule.offlineAccepted': ['離線也接受', 'Accept while offline', 'オフライン時も受付', '오프라인에서도 접수', '离线也接受'],
+    'twitch.rule.perSession': ['每人每場 {count} 首', '{count} per viewer per stream', '1 配信につき 1 人 {count} 曲', '방송당 시청자별 {count}곡', '每人每场 {count} 首'],
+    'twitch.rule.perSessionUnlimited': ['每人每場不限', 'No per-viewer stream limit', '1 配信あたりの個人上限なし', '방송당 시청자 제한 없음', '每人每场不限'],
+    'twitch.rule.streamTotal': ['全場 {count} 首', '{count} total per stream', '配信全体で {count} 曲', '방송 전체 {count}곡', '全场 {count} 首'],
+    'twitch.rule.streamUnlimited': ['全場不限', 'No stream-wide limit', '配信全体の上限なし', '방송 전체 제한 없음', '全场不限'],
+    'twitch.rule.warnConsecutive': ['連續點歌會提醒', 'Warn on consecutive requests', '連続リクエストを通知', '연속 신청곡 경고', '连续点歌会提醒'],
+    'twitch.rule.noConsecutiveWarning': ['不提醒連續點歌', 'No consecutive-request warning', '連続リクエストを通知しない', '연속 신청곡 경고 안 함', '不提醒连续点歌'],
     'system.obsUrls': ['OBS 來源網址', 'OBS source URLs', 'OBS ソース URL', 'OBS 소스 URL', 'OBS 来源网址'],
     'system.lyricsDisplay': ['歌詞畫面', 'Lyrics display', '歌詞画面', '가사 화면', '歌词画面'],
     'system.setlistDisplay': ['歌單畫面', 'Setlist display', 'セットリスト画面', '세트리스트 화면', '歌单画面'],
@@ -181,6 +254,30 @@
     'system.detectingLan': ['偵測區網位址中…', 'Detecting LAN address…', 'LAN アドレスを検出中…', 'LAN 주소 확인 중…', '正在检测局域网地址…'],
     'system.remoteQrAlt': ['手機遙控器 QR code', 'Mobile remote QR code', 'モバイルリモコン QR コード', '모바일 리모컨 QR 코드', '手机遥控器二维码'],
     'system.remoteUrlHint': ['手機瀏覽器打開這個網址（不是 localhost），會自動轉到遙控器頁面。', 'Open this URL on your phone (not localhost) to reach the remote.', 'スマートフォンでこの URL（localhost ではありません）を開くとリモコンへ移動します。', '휴대폰에서 이 URL(localhost 아님)을 열면 리모컨으로 이동합니다.', '在手机浏览器打开这个网址（不是 localhost），会自动转到遥控器页面。'],
+    'system.twitchHintBefore': ['連接後會以 Twitch 的實際', 'Once connected, the live setlist starts from Twitch’s actual', '接続後、Twitch の実際の', '연결 후 Twitch의 실제', '连接后会以 Twitch 的实际'],
+    'system.twitchHintMiddle': ['時間自動開始直播歌單；聊天室輸入', 'time; entering', '時刻から配信セットリストを自動開始します。チャットで', '시간을 기준으로 방송 세트리스트를 자동 시작합니다. 채팅에', '时间自动开始直播歌单；聊天室输入'],
+    'system.twitchHintAfter': ['會走既有單一下載佇列，完成後才在聊天室回覆成功。', 'uses the existing single download queue and replies in chat only after completion.', 'を入力すると既存の単一ダウンロードキューを使い、完了後にのみチャットへ成功を返信します。', '을 입력하면 기존 단일 다운로드 대기열을 사용하며, 완료 후에만 채팅에 성공 메시지를 보냅니다.', '会走既有单一下载队列，完成后才在聊天室回复成功。'],
+    'system.compatNotRun': ['尚未驗證 YouTube 相容性', 'YouTube compatibility has not been verified', 'YouTube 互換性は未検証です', 'YouTube 호환성을 확인하지 않았습니다', '尚未验证 YouTube 兼容性'],
+    'system.compatMissing': ['找不到 yt-dlp，無法驗證 YouTube 相容性。', 'yt-dlp was not found, so YouTube compatibility cannot be verified.', 'yt-dlp が見つからないため YouTube 互換性を検証できません。', 'yt-dlp를 찾을 수 없어 YouTube 호환성을 확인할 수 없습니다.', '找不到 yt-dlp，无法验证 YouTube 兼容性。'],
+    'system.compatTimeout': ['驗證 YouTube 相容性逾時；請檢查網路後重試。', 'YouTube compatibility check timed out. Check the network and try again.', 'YouTube 互換性の確認がタイムアウトしました。ネットワークを確認して再試行してください。', 'YouTube 호환성 확인 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도하세요.', '验证 YouTube 兼容性超时；请检查网络后重试。'],
+    'system.compatFailed': ['yt-dlp 目前無法讀取 YouTube；請先檢查或更新 yt-dlp，再重試。', 'yt-dlp cannot currently read YouTube. Check or update yt-dlp, then try again.', 'yt-dlp は現在 YouTube を読み取れません。yt-dlp を確認または更新して再試行してください。', '현재 yt-dlp가 YouTube를 읽을 수 없습니다. yt-dlp를 확인하거나 업데이트한 뒤 다시 시도하세요.', 'yt-dlp 目前无法读取 YouTube；请先检查或更新 yt-dlp，再重试。'],
+    'system.compatRunning': ['正在驗證 YouTube 相容性（不會下載音檔）', 'Checking YouTube compatibility (no audio will be downloaded)', 'YouTube 互換性を確認中（音声はダウンロードしません）', 'YouTube 호환성 확인 중(오디오는 다운로드하지 않음)', '正在验证 YouTube 兼容性（不会下载音频）'],
+    'system.compatOk': ['已確認 yt-dlp 可以讀取 YouTube（未下載任何音檔）。', 'Confirmed that yt-dlp can read YouTube (no audio was downloaded).', 'yt-dlp が YouTube を読み取れることを確認しました（音声はダウンロードしていません）。', 'yt-dlp가 YouTube를 읽을 수 있음을 확인했습니다(오디오 다운로드 없음).', '已确认 yt-dlp 可以读取 YouTube（未下载任何音频）。'],
+    'system.compatReadFailed': ['無法讀取 YouTube 相容性狀態', 'Could not read YouTube compatibility status', 'YouTube 互換性の状態を読み取れません', 'YouTube 호환성 상태를 읽을 수 없습니다', '无法读取 YouTube 兼容性状态'],
+    'diagnostics.hoursMinutes': ['{hours} 小時 {minutes} 分', '{hours} h {minutes} min', '{hours} 時間 {minutes} 分', '{hours}시간 {minutes}분', '{hours} 小时 {minutes} 分'],
+    'diagnostics.minutes': ['{minutes} 分', '{minutes} min', '{minutes} 分', '{minutes}분', '{minutes} 分'],
+    'diagnostics.underMinute': ['未滿 1 分', 'Under 1 min', '1 分未満', '1분 미만', '未满 1 分'],
+    'diagnostics.recorded': ['本場已記錄 {duration}', 'Recorded {duration} this session', 'このセッションを {duration} 記録', '이번 세션 {duration} 기록', '本场已记录 {duration}'],
+    'diagnostics.thresholdMet': ['四小時時長門檻已達成', 'Four-hour threshold reached', '4 時間の基準を達成', '4시간 기준 달성', '已达到四小时门槛'],
+    'diagnostics.thresholdRemaining': ['距四小時時長門檻還差 {duration}', '{duration} remaining to the four-hour threshold', '4 時間の基準まで残り {duration}', '4시간 기준까지 {duration} 남음', '距四小时门槛还差 {duration}'],
+    'diagnostics.obsBoth': ['OBS 歌詞／歌單同時連線 {duration}', 'OBS lyrics and setlist connected together for {duration}', 'OBS 歌詞／セットリスト同時接続 {duration}', 'OBS 가사/세트리스트 동시 연결 {duration}', 'OBS 歌词／歌单同时连接 {duration}'],
+    'diagnostics.interruptions': ['曾中斷 {count} 次', '{count} interruptions', '{count} 回中断', '{count}회 중단', '曾中断 {count} 次'],
+    'diagnostics.noInterruptions': ['未偵測到來源中斷', 'No source interruptions detected', 'ソースの切断なし', '소스 중단 감지 안 됨', '未检测到来源中断'],
+    'diagnostics.obsNotTogether': ['OBS 兩個正式來源尚未同時連線', 'The two official OBS sources have not connected together yet', '2 つの正式 OBS ソースはまだ同時接続されていません', '두 공식 OBS 소스가 아직 동시에 연결되지 않았습니다', '两个正式 OBS 来源尚未同时连接'],
+    'diagnostics.noObs': ['尚未偵測到正式 OBS 來源', 'No official OBS source detected yet', '正式な OBS ソースはまだ検出されていません', '공식 OBS 소스가 아직 감지되지 않았습니다', '尚未检测到正式 OBS 来源'],
+    'diagnostics.twitchConnected': ['Twitch 目前已連線', 'Twitch is connected', 'Twitch 接続済み', 'Twitch 연결됨', 'Twitch 已连接'],
+    'diagnostics.twitchState': ['Twitch 狀態：{state}', 'Twitch status: {state}', 'Twitch 状態：{state}', 'Twitch 상태: {state}', 'Twitch 状态：{state}'],
+    'diagnostics.twitchDisabled': ['Twitch 未啟用，不列入本場觀測', 'Twitch is disabled and excluded from this session', 'Twitch は無効のため、このセッションの観測対象外です', 'Twitch가 비활성화되어 이번 세션 관측에서 제외됩니다', 'Twitch 未启用，不列入本场观测'],
     'controller.emergency': ['緊急隱藏歌詞', 'Emergency hide lyrics', '歌詞を緊急非表示', '가사 긴급 숨김', '紧急隐藏歌词'],
     'controller.offset': ['歌詞時間偏移', 'Lyrics timing offset', '歌詞タイミング調整', '가사 시간 오프셋', '歌词时间偏移'],
     'controller.languageDisplay': ['語言顯示', 'Lyrics language display', '歌詞の言語表示', '가사 언어 표시', '语言显示'],
@@ -237,6 +334,13 @@
     'controller.selected': ['已選', 'Selected', '選択済み', '선택됨', '已选'],
     'controller.audioError': ['音訊播放錯誤', 'Audio playback error', '音声再生エラー', '오디오 재생 오류', '音频播放错误'],
     'controller.skipping': ['正在跳到下一首…', 'Skipping to the next track…', '次の曲へ移動中…', '다음 곡으로 이동 중…', '正在跳到下一首…'],
+    'eula.title': ['使用前請先閱讀授權條款', 'Read the license terms before use', '使用前にライセンス条項をお読みください', '사용 전 라이선스 약관을 읽어 주세요', '使用前请先阅读许可条款'],
+    'eula.subtitle': ['Elitesand Pro 最終使用者授權暨免責聲明（EULA）v{version} — 請完整捲動至最底部後勾選同意', 'Elitesand Pro End-User License Agreement and Disclaimer (EULA) v{version} — scroll to the end before accepting', 'Elitesand Pro エンドユーザー使用許諾契約および免責事項（EULA）v{version} — 最後までスクロールしてから同意してください', 'Elitesand Pro 최종 사용자 사용권 계약 및 면책 조항(EULA) v{version} — 끝까지 스크롤한 후 동의해 주세요', 'Elitesand Pro 最终用户许可协议暨免责声明（EULA）v{version} — 请完整滚动至底部后勾选同意'],
+    'eula.agree': ['我已完整閱讀並同意上述最終使用者授權暨免責聲明（EULA）與隨附的 LICENSE 授權條款', 'I have read and agree to the EULA above and the accompanying LICENSE terms', '上記の EULA と付属の LICENSE 条項をすべて読み、同意します', '위 EULA 및 동봉된 LICENSE 약관을 모두 읽고 동의합니다', '我已完整阅读并同意上述最终用户许可协议（EULA）与随附的 LICENSE 许可条款'],
+    'eula.scrollHint': ['請先將條款捲動到最底部，才能勾選同意。', 'Scroll to the end of the terms before accepting.', '同意する前に条項の最後までスクロールしてください。', '동의하기 전에 약관 끝까지 스크롤해 주세요.', '请先将条款滚动到底部，才能勾选同意。'],
+    'eula.scrolledHint': ['已捲動到最底部，可勾選同意。', 'You reached the end. You can now accept.', '最後までスクロールしました。同意できます。', '끝까지 스크롤했습니다. 이제 동의할 수 있습니다.', '已滚动到底部，可以勾选同意。'],
+    'eula.accept': ['同意並開始使用', 'Accept and start', '同意して開始', '동의하고 시작', '同意并开始使用'],
+    'eula.saveFailed': ['同意紀錄儲存失敗：{message}', 'Could not save acceptance: {message}', '同意記録を保存できませんでした：{message}', '동의 기록을 저장하지 못했습니다: {message}', '同意记录保存失败：{message}'],
     'pin.required': ['需要 PIN', 'PIN required', 'PIN が必要です', 'PIN 필요', '需要 PIN'],
     'pin.deviceHint': ['這台裝置需要輸入 PIN 才能操作 Elitesand Pro。', 'Enter the PIN to control Elitesand Pro from this device.', 'この端末から Elitesand Pro を操作するには PIN を入力してください。', '이 기기에서 Elitesand Pro를 제어하려면 PIN을 입력하세요.', '此设备需要输入 PIN 才能操作 Elitesand Pro。'],
     'pin.placeholder': ['輸入 PIN', 'Enter PIN', 'PIN を入力', 'PIN 입력', '输入 PIN'],
@@ -327,6 +431,190 @@
     return interpolate(value, vars);
   }
 
+  function normalizeAutoSource(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  const autoExactRows = new Map();
+  const autoPatternRows = [];
+  function registerAutoRow(source, values) {
+    const normalized = normalizeAutoSource(source);
+    const literal = normalized.replace(/\{\d+\}/g, '');
+    if (!normalized || !/[\u3400-\u9fff]/.test(literal) || !Array.isArray(values) || values.length !== LOCALES.length) return;
+    if (!/\{\d+\}/.test(normalized)) {
+      autoExactRows.set(normalized, values);
+      return;
+    }
+    const tokens = [];
+    const marker = normalized.replace(/\{(\d+)\}/g, (_, index) => {
+      const token = `___ES_I18N_${tokens.length}___`;
+      tokens.push(Number(index));
+      return token;
+    });
+    let pattern = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    tokens.forEach((_, index) => { pattern = pattern.replace(`___ES_I18N_${index}___`, '(.+?)'); });
+    autoPatternRows.push({
+      source: normalized,
+      values,
+      tokens,
+      regex: new RegExp(`^${pattern}$`),
+      segments: normalized.split(/\{\d+\}/)
+    });
+  }
+  Object.entries(AUTO_ROWS).forEach(([source, values]) => {
+    registerAutoRow(source, values);
+    const sourceSegments = [...source.matchAll(/>([^<>]+)</g)].map((match) => match[1]);
+    const translatedSegments = values.map((value) => (
+      [...String(value).matchAll(/>([^<>]+)</g)].map((match) => match[1])
+    ));
+    if (sourceSegments.length && translatedSegments.every((segments) => segments.length === sourceSegments.length)) {
+      sourceSegments.forEach((segment, segmentIndex) => {
+        registerAutoRow(segment, translatedSegments.map((segments) => segments[segmentIndex]));
+      });
+    }
+  });
+
+  function resolveAutoRow(value) {
+    const normalized = normalizeAutoSource(value);
+    const exact = autoExactRows.get(normalized);
+    if (exact) return { source: normalized, values: exact, captures: [] };
+    const matchPattern = (row) => {
+      const segments = row.segments || [];
+      if (!segments.length || !normalized.startsWith(segments[0])) return null;
+      const captures = [];
+      let cursor = segments[0].length;
+      let matched = true;
+      for (let index = 1; index < segments.length; index += 1) {
+        const segment = segments[index];
+        const next = segment ? normalized.indexOf(segment, cursor) : normalized.length;
+        if (next < cursor) {
+          matched = false;
+          break;
+        }
+        captures.push(normalized.slice(cursor, next));
+        cursor = next + segment.length;
+      }
+      if (matched && cursor === normalized.length) {
+        return { source: row.source, values: row.values, captures, tokens: row.tokens || [] };
+      }
+      return null;
+    };
+    for (const row of autoPatternRows) {
+      const result = matchPattern(row);
+      if (result) return result;
+    }
+    // Defensive fallback for generated catalogs: derive placeholder patterns
+    // directly if a host transformed the precompiled pattern table.
+    for (const [source, values] of Object.entries(AUTO_ROWS)) {
+      const tokenMatches = [...source.matchAll(/\{(\d+)\}/g)];
+      if (!tokenMatches.length || !/[\u3400-\u9fff]/.test(source.replace(/\{\d+\}/g, ''))) continue;
+      const result = matchPattern({
+        source,
+        values,
+        tokens: tokenMatches.map((match) => Number(match[1])),
+        segments: source.split(/\{\d+\}/)
+      });
+      if (result) return result;
+    }
+    return null;
+  }
+
+  function renderAutoRow(state) {
+    const index = INDEX[activeLocale] == null ? INDEX[DEFAULT_LOCALE] : INDEX[activeLocale];
+    let value = state.values[index] || state.values[INDEX[DEFAULT_LOCALE]] || state.source;
+    state.tokens && state.tokens.forEach((tokenIndex, captureIndex) => {
+      const capture = state.captures[captureIndex] || '';
+      value = value.replaceAll(`{${tokenIndex}}`, capture);
+    });
+    return value;
+  }
+
+  function translate(value) {
+    const resolved = resolveAutoRow(value);
+    if (!resolved) return String(value == null ? '' : value);
+    resolved.tokens = resolved.tokens || (autoPatternRows.find((row) => row.source === resolved.source) || {}).tokens || [];
+    return renderAutoRow(resolved);
+  }
+
+  function isAutoExcluded(element) {
+    return !element || (element.closest && !!element.closest(AUTO_EXCLUDE));
+  }
+
+  function translateAutoTextNode(node) {
+    if (!node || node.nodeType !== 3 || isAutoExcluded(node.parentElement)) return;
+    const raw = node.nodeValue || '';
+    const normalized = normalizeAutoSource(raw);
+    if (!normalized) return;
+    let state = autoTextState.get(node);
+    if (!state || (state.last && normalized !== normalizeAutoSource(state.last))) {
+      const resolved = resolveAutoRow(normalized);
+      if (!resolved) {
+        autoTextState.delete(node);
+        return;
+      }
+      state = {
+        ...resolved,
+        tokens: resolved.tokens || (autoPatternRows.find((row) => row.source === resolved.source) || {}).tokens || [],
+        leading: (raw.match(/^\s*/) || [''])[0],
+        trailing: (raw.match(/\s*$/) || [''])[0],
+        last: null
+      };
+      autoTextState.set(node, state);
+    }
+    const translated = `${state.leading}${renderAutoRow(state)}${state.trailing}`;
+    state.last = translated;
+    if (node.nodeValue !== translated) node.nodeValue = translated;
+  }
+
+  function translateAutoAttributes(element) {
+    if (!element || !element.getAttribute || isAutoExcluded(element)) return;
+    let states = autoAttributeState.get(element);
+    if (!states) {
+      states = {};
+      autoAttributeState.set(element, states);
+    }
+    AUTO_ATTRIBUTES.forEach((attribute) => {
+      if (element.hasAttribute(`data-i18n-${attribute}`) || !element.hasAttribute(attribute)) return;
+      const current = element.getAttribute(attribute);
+      let state = states[attribute];
+      if (!state || (state.last && current !== state.last)) {
+        state = resolveAutoRow(current);
+        if (!state) {
+          delete states[attribute];
+          return;
+        }
+        state.tokens = state.tokens || (autoPatternRows.find((row) => row.source === state.source) || {}).tokens || [];
+        state.last = null;
+        states[attribute] = state;
+      }
+      const translated = renderAutoRow(state);
+      state.last = translated;
+      if (current !== translated) element.setAttribute(attribute, translated);
+    });
+  }
+
+  function applyAuto(rootNode) {
+    if (typeof document === 'undefined') return;
+    const scope = rootNode && rootNode.querySelectorAll ? rootNode : document;
+    const roots = [];
+    if (scope.matches && scope.matches('[data-i18n-auto]')) roots.push(scope);
+    if (scope.closest) {
+      const owner = scope.closest('[data-i18n-auto]');
+      if (owner && !roots.includes(owner)) roots.push(scope);
+    }
+    if (scope.querySelectorAll) scope.querySelectorAll('[data-i18n-auto]').forEach((node) => roots.push(node));
+    roots.forEach((rootElement) => {
+      translateAutoAttributes(rootElement);
+      rootElement.querySelectorAll('*').forEach(translateAutoAttributes);
+      const walker = document.createTreeWalker(rootElement, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        translateAutoTextNode(node);
+        node = walker.nextNode();
+      }
+    });
+  }
+
   function translateElement(element) {
     if (!element || !element.getAttribute) return;
     const textKey = element.getAttribute('data-i18n');
@@ -350,6 +638,7 @@
     }
     scope.querySelectorAll('[data-i18n],[data-i18n-title],[data-i18n-aria-label],[data-i18n-placeholder],[data-i18n-alt]')
       .forEach(translateElement);
+    applyAuto(scope);
     document.querySelectorAll('[data-i18n-locale]').forEach((select) => {
       if (select.value !== activeLocale) select.value = activeLocale;
       select.setAttribute('aria-label', t('language.label'));
@@ -412,6 +701,18 @@
     activeLocale = resolveLocale();
     bindLocaleControls();
     apply();
+    if (!autoObserver && document.body) {
+      autoObserver = new MutationObserver((records) => {
+        records.forEach((record) => {
+          if (record.type === 'characterData') translateAutoTextNode(record.target);
+          record.addedNodes && record.addedNodes.forEach((node) => {
+            if (node.nodeType === 3) translateAutoTextNode(node);
+            else if (node.nodeType === 1) applyAuto(node);
+          });
+        });
+      });
+      autoObserver.observe(document.body, { childList: true, characterData: true, subtree: true });
+    }
     dispatchChange(activeLocale);
   }
 
@@ -429,7 +730,9 @@
     resolveLocale,
     current: () => activeLocale,
     t,
+    translate,
     apply,
+    applyAuto,
     setLocale,
     localizeUrl,
     init

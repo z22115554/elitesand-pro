@@ -9,6 +9,17 @@
   'use strict';
 
   const { dom } = AppShared;
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+  const COMPATIBILITY_MESSAGE_KEYS = {
+    '尚未驗證 YouTube 相容性': 'system.compatNotRun',
+    '找不到 yt-dlp，無法驗證 YouTube 相容性。': 'system.compatMissing',
+    '驗證 YouTube 相容性逾時；請檢查網路後重試。': 'system.compatTimeout',
+    'yt-dlp 目前無法讀取 YouTube；請先檢查或更新 yt-dlp，再重試。': 'system.compatFailed',
+    '正在驗證 YouTube 相容性（不會下載音檔）': 'system.compatRunning',
+    '已確認 yt-dlp 可以讀取 YouTube（未下載任何音檔）。': 'system.compatOk',
+    '無法讀取 YouTube 相容性狀態': 'system.compatReadFailed',
+  };
+  const compatibilityText = (message) => t(COMPATIBILITY_MESSAGE_KEYS[message] || 'system.compatNotRun');
 
   // ═══════════════════════════════════════════
   // 風格切換
@@ -203,7 +214,7 @@
     let compatibilityRefreshTimer = null;
     const renderCompatibility = (data) => {
       if (!dom.ytdlpCompatibilityStatus || !data) return;
-      dom.ytdlpCompatibilityStatus.textContent = data.message || '尚未驗證 YouTube 相容性';
+      dom.ytdlpCompatibilityStatus.textContent = compatibilityText(data.message);
       if (compatibilityRefreshTimer) clearTimeout(compatibilityRefreshTimer);
       compatibilityRefreshTimer = null;
       if (data.state === 'running') {
@@ -216,13 +227,13 @@
         if (!response.ok) throw new Error('狀態讀取失敗');
         renderCompatibility(await response.json());
       } catch (_) {
-        if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = '無法讀取 YouTube 相容性狀態';
+        if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = t('system.compatReadFailed');
       }
     };
     if (dom.ytdlpCompatibilityBtn) {
       dom.ytdlpCompatibilityBtn.addEventListener('click', async () => {
         dom.ytdlpCompatibilityBtn.disabled = true;
-        if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = '正在驗證 YouTube 相容性（不會下載音檔）';
+        if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = t('system.compatRunning');
         try {
           const request = typeof PinAuth !== 'undefined'
             ? PinAuth.fetchWithPin('/api/ytdlp/compatibility', { method: 'POST' })

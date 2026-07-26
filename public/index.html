@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/panel.css">
 </head>
-<body>
+<body data-i18n-auto>
   <header class="desktop-windowbar" aria-label="Elitesand Pro 控制面板">
     <img class="desktop-windowbar-logo" src="/img/logo-icon.png" alt="">
     <span class="desktop-windowbar-brand">Elitesand Pro</span>
@@ -121,7 +121,7 @@
       <header class="topbar">
         <div class="page-title" data-i18n="nav.home">首頁</div>
         <div class="right">
-          <select class="locale-select" data-i18n-locale aria-label="介面語言">
+          <select class="locale-select" data-i18n-locale data-i18n-skip aria-label="介面語言">
             <option value="zh-TW">繁體中文</option>
             <option value="en">English</option>
             <option value="ja">日本語</option>
@@ -1101,7 +1101,7 @@
           <details class="card card-collapse" id="twitch-card" open>
             <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3h16v12a4 4 0 0 1-4 4h-3l-4 3v-3H8a4 4 0 0 1-4-4V3z"/><path d="M9 7v4M15 7v4"/></svg>Twitch 開台／聊天室點歌</summary>
             <div class="card-collapse-body">
-              <p class="sub section-intro">連接後會以 Twitch 的實際 <code>stream.online</code> 時間自動開始直播歌單；聊天室輸入 <code>!點歌 YouTube連結</code> 會走既有單一下載佇列，完成後才在聊天室回覆成功。</p>
+              <p class="sub section-intro"><span data-i18n="system.twitchHintBefore">連接後會以 Twitch 的實際</span> <code>stream.online</code> <span data-i18n="system.twitchHintMiddle">時間自動開始直播歌單；聊天室輸入</span> <code>!點歌 YouTube連結</code> <span data-i18n="system.twitchHintAfter">會走既有單一下載佇列，完成後才在聊天室回覆成功。</span></p>
               <p id="twitch-status" class="val twitch-status">讀取 Twitch 狀態中…</p>
               <button id="twitch-connect" class="btn btn-primary" type="button">連接 Twitch</button>
               <a id="twitch-device-link" class="btn btn-sm ml-8" href="#" target="_blank" rel="noopener" hidden>前往 Twitch 輸入代碼</a>
@@ -1919,7 +1919,7 @@
           <div class="onboard-task-list">
             <button id="guide-task-environment" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="ytdlp-card"><span class="onboard-task-mark">1</span><span><strong>環境可用</strong><span>控制連線、yt-dlp 與 FFmpeg 就緒</span></span></button>
             <button id="guide-task-song" class="onboard-task pending" type="button" data-guide-nav="karaoke" data-guide-target="music-source-card"><span class="onboard-task-mark">2</span><span><strong>加入第一首歌</strong><span>上傳本機音檔，或貼 YouTube 連結完成匯入</span></span></button>
-            <button id="guide-task-obs" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="obs-url-card"><span class="onboard-task-mark">3</span><span><strong>OBS 看見歌詞來源</strong><span>複製 <code>/display</code> 網址加入瀏覽器來源</span></span></button>
+            <button id="guide-task-obs" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="obs-url-card"><span class="onboard-task-mark">3</span><span><strong>OBS 看見歌詞來源</strong><span><span data-i18n="guide.obsTaskBefore">複製</span> <code>/display</code> <span data-i18n="guide.obsTaskAfter">網址加入瀏覽器來源</span></span></span></button>
             <button id="guide-task-websocket" class="onboard-task optional" type="button" data-guide-nav="general" data-guide-target="obs-ws-card"><span class="onboard-task-mark">選</span><span><strong>設定 OBS WebSocket（選配）</strong><span>連上後可一鍵建立歌詞與歌單來源</span></span></button>
             <button id="guide-task-twitch" class="onboard-task optional" type="button" data-guide-nav="general" data-guide-target="twitch-card"><span class="onboard-task-mark">選</span><span><strong>Twitch 連線（選配）</strong><span>需要聊天室點歌或自動開台紀錄時再設定</span></span></button>
           </div>
@@ -1974,7 +1974,7 @@
           <div class="card-collapse-body">
             <ul class="help-list">
               <li><strong>YouTube 單曲網址都能貼</strong>：一般影片、短網址、Shorts、YouTube Music 都可以直接貼。私人影片、會員限定、要登入才能看的影片，通常匯不進來。</li>
-              <li><strong>YouTube 播放清單也可以</strong>：只要網址裡有 <code>list=</code> 就會整批匯入。清單很長時會花比較久，第一次建議先貼幾首少量的測試。</li>
+              <li><strong>YouTube 播放清單也可以</strong><span data-i18n="guide.playlistUrlBefore">：只要網址裡有</span> <code>list=</code> <span data-i18n="guide.playlistUrlAfter">就會整批匯入。清單很長時會花比較久，第一次建議先貼幾首少量的測試。</span></li>
               <li><strong>本機音檔也可以</strong>：你電腦裡本來就有的 mp3/wav 可以直接拖曳上傳。如果檔名或內建標籤是空的，匯入後可能要自己補歌名和歌手。</li>
               <li><strong>匯進去了但找不到人</strong>：先確認「播放清單」裡有沒有它；沒有的話，再去「媒體庫」找同一首歌，可能是之前就匯過了。</li>
               <li><strong>下載下來的檔名長什麼樣</strong>：程式會盡量把檔案存成「歌手 - 歌名.mp3」，方便你之後自己整理硬碟。</li>
@@ -2040,7 +2040,7 @@
           <div class="card-collapse-body help-steps">
             <div class="help-step"><span class="help-step-num">1</span><div>切到「歌單」頁。這裡不用手動按「開台」——你只要播放歌曲，就會自動被記進歌單清單。「精準的時間戳記」（幾分幾秒唱了哪首歌）則要等程式真的偵測到你開始直播（透過 OBS WebSocket 或 Twitch 開台事件）才會開始計算，下播後自動停止。</div></div>
             <div class="help-step"><span class="help-step-num">2</span><div>挑一個版型：經典版／清單版適合放畫面角落；場景版是設計來佔滿整個畫面用的。</div></div>
-            <div class="help-step"><span class="help-step-num">3</span><div>OBS 這邊的歌單網址固定是 <code>http://localhost:3000/setlist</code>，換版型不用換網址，會自動同步。</div></div>
+            <div class="help-step"><span class="help-step-num">3</span><div><span data-i18n="guide.setlistUrlBefore">OBS 這邊的歌單網址固定是</span> <code>http://localhost:3000/setlist</code><span data-i18n="guide.setlistUrlAfter">，換版型不用換網址，會自動同步。</span></div></div>
             <div class="help-step"><span class="help-step-num">4</span><div>如果用場景版，記得在 OBS 把這個瀏覽器來源的解析度設大一點（例如 1920×1080）；角落用的清單版才適合設小尺寸。</div></div>
             <div class="help-step"><span class="help-step-num">5</span><div>還沒真的開台、只是想先調外觀好不好看？按「載入示範資料」看效果，調完按「清除示範資料」，不會動到真正的歌單紀錄。</div></div>
             <div class="help-step"><span class="help-step-num">6</span><div>直播結束後按「複製 YouTube 章節」，可以直接貼到影片說明欄當時間戳使用。</div></div>
@@ -2065,7 +2065,7 @@
           <summary>⑪ 畫面怪怪的？先照這個順序檢查</summary>
           <div class="card-collapse-body">
             <ul class="help-list">
-              <li><strong>OBS 完全沒有歌詞畫面</strong>：先確認網址真的是 <code>localhost:3000/display</code>；再看控制台右上角有沒有寫「歌詞已連線」；最後檢查 OBS 來源的寬高是不是設得太小。</li>
+              <li><strong>OBS 完全沒有歌詞畫面</strong><span data-i18n="guide.displayUrlBefore">：先確認網址真的是</span> <code>localhost:3000/display</code><span data-i18n="guide.displayUrlAfter">；再看控制台右上角有沒有寫「歌詞已連線」；最後檢查 OBS 來源的寬高是不是設得太小。</span></li>
               <li><strong>控制台這邊改了，OBS 畫面沒反應</strong>：先在 OBS 那個瀏覽器來源上按右鍵、選「重新整理」；還是不行，就直接把這個來源關掉再重新加一次。</li>
               <li><strong>歌詞跟不上歌聲</strong>：整首都對不上，先用「對齊第一句」；只有中間幾句歪掉，改用「逐行時間軸編輯」。</li>
               <li><strong>字太小或被切掉一部分</strong>：先調字級和「最大寬度」；霓彩伴唱模板的上下位置要在「詳細設定 → 邊距．最大寬度 → 上下邊距」裡調，不是用一般的位置九宮格。</li>
@@ -2084,7 +2084,7 @@
               <li><strong>Q：這個視窗／伺服器一定要一直開著嗎？</strong> 要。OBS 是即時去讀這個網址的畫面，如果把程式關掉，OBS 那邊的歌詞畫面也會跟著消失。</li>
               <li><strong>Q：手機可以控制嗎？</strong> 可以，用手機瀏覽器連到同一台電腦的網址，會自動變成手機版的「遙控器」畫面，切歌、緊急隱藏都能用。</li>
               <li><strong>Q：需要設定 PIN 密碼嗎？</strong> 不是必要的。如果擔心同一個 Wi-Fi 的其他人也連得進來亂動，可以在一般設定裡開啟 PIN；OBS 的歌詞/歌單畫面不受 PIN 影響，一定看得到。</li>
-              <li><strong>Q：Twitch 一定要接嗎？</strong> 不用，Twitch 只是選配功能，用來接收聊天室的「!點歌」指令；不接 Twitch，其他所有功能都能正常使用。</li>
+              <li><strong>Q：Twitch 一定要接嗎？</strong> <span data-i18n="guide.faqTwitchAnswer">不用，Twitch 只是選配功能，用來接收聊天室的「!點歌」指令；不接 Twitch，其他所有功能都能正常使用。</span></li>
               <li><strong>Q：同一首歌會不會重複下載、佔用很多硬碟空間？</strong> 不會。同一首歌只要下載過一次，之後不管什麼時候要唱，都會直接沿用媒體庫裡的檔案，不會重新下載。</li>
               <li><strong>Q：一次可以匯入很多首歌嗎？</strong> 可以，但建議一次不要貼太長的播放清單，尤其是第一次用的時候，先貼幾首測試比較穩，長清單匯入本來就會花比較久時間。</li>
               <li><strong>Q：為什麼有些 YouTube 影片會跳出「非音樂／太長／太短」警告？</strong> 程式會先看影片類型和時長，避免把直播精華、教學或過長影片誤塞進歌單。確定要唱就按「仍然匯入」；不適合就按「略過這支影片」。勾選「不要再顯示」後，之後所有匯入風險警告都會直接繼續匯入，請只在你確定接受這個風險時使用。</li>
@@ -2237,6 +2237,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/shared-utils.js"></script>
+  <script src="/js/i18n-auto.js"></script>
   <script src="/js/i18n.js"></script>
   <script src="/vendor/Tone.js"></script>
   <script src="/js/theme.js"></script>

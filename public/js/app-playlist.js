@@ -639,7 +639,7 @@
     dom.btnPlaylistExport.addEventListener('click', () => {
       if (dom.playlistExportError) dom.playlistExportError.classList.remove('is-visible');
       if (dom.playlistExportName) {
-        dom.playlistExportName.value = `播放清單-${new Date().toISOString().slice(0, 10)}`;
+        dom.playlistExportName.value = t('playlist.defaultExportName', { date: new Date().toISOString().slice(0, 10) });
       }
       dom.playlistExportModal.hidden = false;
       if (dom.playlistExportName) { dom.playlistExportName.focus(); dom.playlistExportName.select(); }

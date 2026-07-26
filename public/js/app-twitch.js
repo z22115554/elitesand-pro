@@ -9,6 +9,7 @@
   const el = (id) => document.getElementById(id);
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
   const pending = new Map();
   const busy = new Map();
   const dirty = { commands: false, rules: false, blacklist: false, reward: false, replies: false, custom: false };
@@ -373,7 +374,12 @@
     if (save) save.disabled = !validation.ok;
     const definition = commandDefinition();
     const settings = requestDraft.commands[activeCommandKey];
-    if (el('twitch-command-preview')) el('twitch-command-preview').textContent = `${settings.enabled ? '啟用' : '停用'}｜${settings.command || '—'}${definition.usage ? ` ${definition.usage}` : (activeCommandKey === 'request' ? ' <YouTube URL>' : '')}｜${definition.description}`;
+    if (el('twitch-command-preview')) {
+      const enabledLabel = window.I18n
+        ? window.I18n.t(settings.enabled ? 'common.enabled' : 'common.disabled')
+        : (settings.enabled ? '啟用' : '停用');
+      el('twitch-command-preview').textContent = `${enabledLabel}｜${settings.command || '—'}${definition.usage ? ` ${definition.usage}` : (activeCommandKey === 'request' ? ' <YouTube URL>' : '')}｜${tr(definition.description)}`;
+    }
     return validation;
   }
 
@@ -421,17 +427,20 @@
     const recentField = el('twitch-request-recent-hours-field');
     if (recentField) recentField.hidden = requestDraft.duplicateScope !== 'recent';
     const requestCooldown = requestSaved.commands.request.globalCooldownSeconds;
-    if (el('twitch-request-cooldown-summary')) el('twitch-request-cooldown-summary').textContent = requestCooldown > 0 ? `所有觀眾共用 ${requestCooldown} 秒；管理員豁免開啟時不受此限制。` : '目前不限制；可到「觀眾指令 → 點歌」設定秒數。';
+    if (el('twitch-request-cooldown-summary')) el('twitch-request-cooldown-summary').textContent = tr(requestCooldown > 0 ? `所有觀眾共用 ${requestCooldown} 秒；管理員豁免開啟時不受此限制。` : '目前不限制；可到「觀眾指令 → 點歌」設定秒數。');
     const preview = [
-      requestDraft.enabled ? '接受點歌' : '暫停點歌', permission,
-      `最多 ${requestDraft.maxPending || '—'} 首待確認`,
-      requestDraft.perUserPending > 0 ? `每人最多 ${requestDraft.perUserPending} 首` : '每人不限首數',
-      requestDraft.maxDurationMinutes > 0 ? `最長 ${requestDraft.maxDurationMinutes} 分鐘` : '不限制歌曲長度',
-      requestDraft.duplicateScope === 'recent' ? `檢查最近 ${requestDraft.recentDuplicateHours || '—'} 小時` : `重複範圍：${duplicateLabel}`,
-      requestDraft.liveOnly ? '只在直播中接受' : '離線也接受',
-      requestDraft.perUserSessionLimit > 0 ? `每人每場 ${requestDraft.perUserSessionLimit} 首` : '每人每場不限',
-      requestDraft.sessionRequestLimit > 0 ? `全場 ${requestDraft.sessionRequestLimit} 首` : '全場不限',
-      requestDraft.warnConsecutiveRequests ? '連續點歌會提醒' : '不提醒連續點歌',
+      requestDraft.enabled ? t('twitch.rule.accepting') : t('twitch.pauseRequests'),
+      tr(permission),
+      t('twitch.rule.maxPending', { count: requestDraft.maxPending || '—' }),
+      requestDraft.perUserPending > 0 ? t('twitch.rule.perUserMax', { count: requestDraft.perUserPending }) : t('twitch.rule.perUserUnlimited'),
+      requestDraft.maxDurationMinutes > 0 ? t('twitch.rule.maxDuration', { count: requestDraft.maxDurationMinutes }) : t('twitch.rule.noDuration'),
+      requestDraft.duplicateScope === 'recent'
+        ? t('twitch.rule.recentHours', { count: requestDraft.recentDuplicateHours || '—' })
+        : t('twitch.rule.duplicateScope', { scope: tr(duplicateLabel) }),
+      requestDraft.liveOnly ? t('twitch.rule.liveOnly') : t('twitch.rule.offlineAccepted'),
+      requestDraft.perUserSessionLimit > 0 ? t('twitch.rule.perSession', { count: requestDraft.perUserSessionLimit }) : t('twitch.rule.perSessionUnlimited'),
+      requestDraft.sessionRequestLimit > 0 ? t('twitch.rule.streamTotal', { count: requestDraft.sessionRequestLimit }) : t('twitch.rule.streamUnlimited'),
+      requestDraft.warnConsecutiveRequests ? t('twitch.rule.warnConsecutive') : t('twitch.rule.noConsecutiveWarning'),
     ];
     if (el('twitch-request-rule-preview')) el('twitch-request-rule-preview').textContent = preview.join('；');
     return validation;
@@ -677,7 +686,7 @@
       preview.textContent = !command
         ? '新增一個自訂指令後，這裡會顯示本機回覆預覽。'
         : (templateValidation?.valid
-          ? '預覽：' + TwitchReplySettings.renderTemplate(command.template, customReplySampleValues(command))
+          ? t('twitch.preview', { message: TwitchReplySettings.renderTemplate(command.template, customReplySampleValues(command)) })
           : '預覽暫停：請先修正文案中的變數。');
     }
     if (el('twitch-custom-save')) el('twitch-custom-save').disabled = !whole.ok;
@@ -1061,13 +1070,14 @@
     if (error) { error.textContent = message; error.hidden = !message; }
     if (el('twitch-reward-save')) el('twitch-reward-save').disabled = !!message;
     if (el('twitch-reward-preview')) {
-      const state = rewardDraft.enabled ? (rewardDraft.paused ? '暫停兌換' : '啟用') : '停用';
+      const state = tr(rewardDraft.enabled ? (rewardDraft.paused ? '暫停兌換' : '啟用') : '停用');
       const limits = [
         rewardDraft.maxPerStream > 0 ? `每場 ${rewardDraft.maxPerStream} 次` : '每場不限',
         rewardDraft.maxPerUserPerStream > 0 ? `每人每場 ${rewardDraft.maxPerUserPerStream} 次` : '每人不限',
         rewardDraft.globalCooldownSeconds > 0 ? `冷卻 ${rewardDraft.globalCooldownSeconds} 秒` : '無冷卻',
-      ].join('｜');
-      el('twitch-reward-preview').textContent = `${state}｜${rewardDraft.title || '—'}｜${Number.isSafeInteger(rewardDraft.cost) ? rewardDraft.cost.toLocaleString() : '—'} 點｜${limits}｜${rewardDraft.prompt || '—'}`;
+      ].map(tr).join('｜');
+      const cost = tr(`${Number.isSafeInteger(rewardDraft.cost) ? rewardDraft.cost.toLocaleString() : '—'} 點`);
+      el('twitch-reward-preview').textContent = `${state}｜${rewardDraft.title || '—'}｜${cost}｜${limits}｜${rewardDraft.prompt || '—'}`;
     }
     return validation;
   }
@@ -1122,7 +1132,7 @@
     TwitchReplySettings.REPLY_GROUPS.forEach((group) => {
       const label = document.createElement('div');
       label.className = 'twitch-reply-group-label';
-      label.textContent = group.label;
+      label.textContent = tr(group.label);
       container.appendChild(label);
       TwitchReplySettings.REPLY_DEFINITIONS.filter((definition) => definition.group === group.key).forEach((definition) => {
         const reply = replyDraft.replies[definition.key];
@@ -1131,12 +1141,12 @@
         button.className = `twitch-reply-event${definition.key === activeReplyKey ? ' is-active' : ''}`;
         button.setAttribute('role', 'option');
         button.setAttribute('aria-selected', definition.key === activeReplyKey ? 'true' : 'false');
-        button.innerHTML = `<span>${escapeHtml(definition.label)}</span><span class="twitch-reply-event-state">${reply.enabled ? '開' : '關'}</span>`;
+        button.innerHTML = `<span>${escapeHtml(tr(definition.label))}</span><span class="twitch-reply-event-state">${t(reply.enabled ? 'common.on' : 'common.off')}</span>`;
         button.addEventListener('click', () => { activeReplyKey = definition.key; renderReplyEvents(); loadReplyEditor(); });
         container.appendChild(button);
         const option = document.createElement('option');
         option.value = definition.key;
-        option.textContent = `${group.label}｜${definition.label}`;
+        option.textContent = `${tr(group.label)}｜${tr(definition.label)}`;
         option.selected = definition.key === activeReplyKey;
         testEvent.appendChild(option);
       });
@@ -1184,7 +1194,7 @@
     el('twitch-reply-item-error').textContent = validation.errors[0] || '';
     el('twitch-reply-count').textContent = `${Array.from(reply.template).length}/${TwitchReplySettings.MAX_MESSAGE_LENGTH}`;
     el('twitch-reply-preview').textContent = validation.valid
-      ? `預覽：${TwitchReplySettings.renderTemplate(reply.template, replySampleValues())}`
+      ? t('twitch.preview', { message: TwitchReplySettings.renderTemplate(reply.template, replySampleValues()) })
       : '預覽暫停：請先修正文案中的變數。';
     const whole = TwitchReplySettings.validateSettings(replyDraft);
     const formError = el('twitch-reply-form-error');
@@ -1234,7 +1244,9 @@
     if (!select || !preview) return;
     const reply = replyDraft.replies[select.value];
     const validation = TwitchReplySettings.validateTemplate(reply?.template || '');
-    preview.textContent = validation.valid ? `本機預覽：${TwitchReplySettings.renderTemplate(reply.template, replySampleValues())}` : '請先修正文案中的錯誤。';
+    preview.textContent = validation.valid
+      ? t('twitch.localPreview', { message: TwitchReplySettings.renderTemplate(reply.template, replySampleValues()) })
+      : tr('請先修正文案中的錯誤。');
   }
 
   async function sendReplyTest() {
@@ -1588,6 +1600,11 @@
   window.addEventListener('i18n:change', () => {
     updateMainStatus();
     setDirty('commands', dirty.commands);
+    renderCommandList();
+    validateCommandForm();
+    validateRuleForm();
+    validateRewardForm();
+    renderReplyEvents();
     renderRequests();
     renderActivityHistory();
     renderHistoryList();

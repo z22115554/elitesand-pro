@@ -8,6 +8,7 @@
  */
 (() => {
   'use strict';
+  const t = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
 
   const STYLE = `
     .eula-gate {
@@ -69,18 +70,18 @@
     overlay.innerHTML = `
       <div class="eula-gate__card" role="dialog" aria-modal="true" aria-labelledby="eulaGateTitle">
         <div class="eula-gate__head">
-          <h2 class="eula-gate__title" id="eulaGateTitle">使用前請先閱讀授權條款</h2>
-          <p class="eula-gate__sub">Elitesand Pro 最終使用者授權暨免責聲明（EULA）v${status.version} — 請完整捲動至最底部後勾選同意</p>
+          <h2 class="eula-gate__title" id="eulaGateTitle"></h2>
+          <p class="eula-gate__sub"></p>
         </div>
         <pre class="eula-gate__text" tabindex="0"></pre>
         <div class="eula-gate__foot">
           <label class="eula-gate__check">
             <input type="checkbox" disabled>
-            <span>我已完整閱讀並同意上述最終使用者授權暨免責聲明（EULA）與隨附的 LICENSE 授權條款</span>
+            <span></span>
           </label>
-          <p class="eula-gate__hint">請先將條款捲動到最底部，才能勾選同意。</p>
+          <p class="eula-gate__hint"></p>
           <div class="eula-gate__actions">
-            <button type="button" class="eula-gate__accept" disabled>同意並開始使用</button>
+            <button type="button" class="eula-gate__accept" disabled></button>
           </div>
         </div>
       </div>
@@ -92,13 +93,24 @@
     const checkbox = overlay.querySelector('input[type="checkbox"]');
     const hint = overlay.querySelector('.eula-gate__hint');
     const acceptBtn = overlay.querySelector('.eula-gate__accept');
+    let hasScrolled = false;
+    const renderLocale = () => {
+      overlay.querySelector('.eula-gate__title').textContent = t('eula.title');
+      overlay.querySelector('.eula-gate__sub').textContent = t('eula.subtitle', { version: status.version });
+      overlay.querySelector('.eula-gate__check span').textContent = t('eula.agree');
+      hint.textContent = t(hasScrolled ? 'eula.scrolledHint' : 'eula.scrollHint');
+      acceptBtn.textContent = t('eula.accept');
+    };
+    renderLocale();
+    window.addEventListener('i18n:change', renderLocale);
 
     const atBottom = () => textBox.scrollTop + textBox.clientHeight >= textBox.scrollHeight - 16;
     const unlockIfScrolled = () => {
       if (checkbox.disabled && atBottom()) {
+        hasScrolled = true;
         checkbox.disabled = false;
         overlay.classList.remove('eula-gate--locked');
-        hint.textContent = '已捲動到最底部，可勾選同意。';
+        hint.textContent = t('eula.scrolledHint');
       }
     };
     textBox.addEventListener('scroll', unlockIfScrolled, { passive: true });
@@ -120,11 +132,12 @@
           throw new Error((body && body.error) || `HTTP ${res.status}`);
         }
         window.removeEventListener('resize', unlockIfScrolled);
+        window.removeEventListener('i18n:change', renderLocale);
         overlay.remove();
         style.remove();
       } catch (err) {
         acceptBtn.disabled = false;
-        hint.textContent = `同意紀錄儲存失敗：${err.message}`;
+        hint.textContent = t('eula.saveFailed', { message: err.message });
         hint.classList.add('eula-gate__hint--error');
       }
     });
