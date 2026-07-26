@@ -4161,7 +4161,7 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   ok(setlistCss.includes('html[data-sl-fit="fill"] .setlist-row,'), '清單列必須維持自然高度，否則會被壓扁而不是少顯示一首');
 
   // 面板：說明與預覽尺寸切換（沒有尺寸切換就看不出「跟著來源變化」）。
-  ok(indexHtml.includes('id="setlist-sizing-hint"') && setlistPanel.includes('歌單大小＝你在 OBS 拉的 Browser Source 大小'),
+  ok(indexHtml.includes('id="setlist-sizing-hint"') && setlistPanel.includes('跟著你在 OBS 拉的 Browser Source 寬高變化'),
     '面板必須說明歌單大小由 OBS 來源決定');
   ['16x9', 'portrait', 'strip', 'small'].forEach((size) => {
     ok(indexHtml.includes(`data-setlist-preview-size="${size}"`), `預覽必須能模擬 ${size} 來源尺寸`);

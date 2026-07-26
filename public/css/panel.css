@@ -183,15 +183,16 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .setlist-layout-heading label { margin-bottom:0; font-size:13px; font-weight:600; color:var(--text); }
 .setlist-layout-status { display:inline-flex; align-items:center; flex-shrink:0; width:max-content; padding:5px 9px; border:1px solid var(--border); border-radius:999px; font-size:10px; font-weight:650; line-height:1; color:var(--text-dim); background:var(--bg-raised); }
 .setlist-layout-group-title { margin:14px 0 7px; color:var(--text-faint); font-size:10.5px; font-weight:650; letter-spacing:.06em; }
-.setlist-layout-picker { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
-.setlist-layout-card { min-height:0; padding:10px 12px 11px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-raised); color:var(--text); text-align:left; cursor:pointer; transition:border-color .12s,background .12s,box-shadow .12s; }
+/* 模板清單改單欄列：名稱與說明同一行。五個清單型模板在兩欄格會留下孤兒空格，
+   單欄反而更緊湊也更好掃讀（總高度相同）。 */
+.setlist-layout-picker { display:flex; flex-direction:column; gap:5px; }
+.setlist-layout-card { display:flex; align-items:baseline; gap:10px; padding:9px 12px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-raised); color:var(--text); text-align:left; cursor:pointer; transition:border-color .12s,background .12s,box-shadow .12s; }
 .setlist-layout-card:hover { background:var(--bg-hover); border-color:var(--border-strong); }
-.setlist-layout-card[aria-checked="true"] { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--bg-raised)); }
-.setlist-layout-card strong, .setlist-layout-card span { display:block; }
-.setlist-layout-card strong { font-size:12.5px; font-weight:650; }
-.setlist-layout-card span { margin-top:3px; color:var(--text-faint); font-size:10.5px; line-height:1.45; }
+.setlist-layout-card[aria-checked="true"] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,var(--bg-raised)); }
+.setlist-layout-card:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.setlist-layout-card strong { flex:0 0 auto; font-size:12.5px; font-weight:650; }
+.setlist-layout-card span { min-width:0; color:var(--text-faint); font-size:10.5px; line-height:1.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .setlist-layout-hint { margin:10px 0 0; color:var(--text-faint); font-size:11px; line-height:1.6; }
-.setlist-layout-hint + .setlist-layout-hint { margin-top:4px; }
 .setlist-legacy-layout-notice { margin:8px 0 0; }
 /* ── 已唱／未唱勾選：自繪勾選框（原生 checkbox 在深色面板上格格不入）── */
 .check-row { display:flex; flex-wrap:wrap; gap:7px; }
@@ -211,7 +212,12 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .setlist-preview-size[aria-checked="true"] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,var(--bg-surface)); color:var(--text); }
 .setlist-legacy-layout-notice[hidden], #setlist-appearance[hidden], #btn-setlist-advanced[hidden] { display:none; }
 /* 設定範圍說明：改成快速調整開頭的一行引言（先前是又一個灰底方框，與上面的提示框疊在一起）。 */
-.setlist-style-scope { margin:0 0 4px; color:var(--text-faint); font-size:11px; line-height:1.6; }
+.setlist-style-scope { margin:0 0 14px; color:var(--text-faint); font-size:11px; line-height:1.6; }
+/* 三個色票並排：色票在中間、用途註記在下方，取代原本每個色票各自一段說明文字 */
+.color-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.color-item { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.color-item label { margin:0; }
+.color-item .color-note { color:var(--text-faint); font-size:10.5px; line-height:1.4; }
 /* ── 快速調整的四個區塊：髮絲線分隔，第一區不畫線；控制項之間共用 .field 的 14px 節奏 ── */
 #setlist-style-collapse > .field-group-title { margin:16px 0 10px; padding-top:14px; border-top:1px solid var(--border); font-size:11px; letter-spacing:.06em; color:var(--text-dim); }
 #setlist-style-collapse > .field-group-title.mt-0 { margin-top:6px; padding-top:0; border-top:0; }
