@@ -713,11 +713,13 @@ html[data-layout="classic"] #setlist-root {
   padding: 0;
   background: transparent;
 }
+/* 襯底一律純色填滿。曾經用 104deg 漸層往右淡出，但來源被拉成很寬或很扁時
+   淡出區會佔掉大半個容器、右側文字懸在半透明上，反而更難讀。 */
 [data-layout="classic"] .classic-shell {
   width: min(var(--sl-w), calc(100vw - 24px));
   padding: 13px 14px 12px;
   border-left: max(2px, var(--sl-bw)) solid var(--sl-acc);
-  background: linear-gradient(104deg, var(--sl-bg-card) 0%, var(--sl-bg-card) 76%, transparent 100%);
+  background: var(--sl-bg-card);
   box-shadow: var(--sl-box-shd, none);
 }
 [data-layout="classic"] .classic-now {
@@ -783,7 +785,7 @@ html[data-layout="classic"] #setlist-root {
 }
 [data-layout="classic"] .setlist-upcoming-row { opacity: var(--sl-op-w); }
 :root:not([data-sl-readable-off]) [data-layout="classic"] .classic-shell {
-  background: linear-gradient(104deg, var(--sl-readable-surface) 0%, var(--sl-readable-surface-soft) 76%, transparent 100%);
+  background: var(--sl-readable-surface);
   border-left-color: var(--sl-acc);
 }
 :root:not([data-sl-readable-off]) [data-layout="classic"] .classic-now,
