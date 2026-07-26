@@ -42,7 +42,8 @@ const ThemeManager = (() => {
     const moonIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
     document.querySelectorAll('.theme-toggle').forEach((btn) => {
       btn.innerHTML = t === 'light' ? moonIcon : sunIcon;
-      btn.title = t === 'light' ? '切換深色模式' : '切換淺色模式';
+      const titleKey = t === 'light' ? 'theme.toDark' : 'theme.toLight';
+      btn.title = window.I18n ? window.I18n.t(titleKey) : (t === 'light' ? '切換深色模式' : '切換淺色模式');
       btn.setAttribute('aria-label', btn.title);
     });
   }
@@ -67,6 +68,7 @@ const ThemeManager = (() => {
     document.querySelectorAll('.theme-toggle').forEach((btn) => {
       btn.addEventListener('click', toggle);
     });
+    window.addEventListener('i18n:change', () => apply(current()));
   }
 
   if (document.readyState === 'loading') {

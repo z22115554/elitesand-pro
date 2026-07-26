@@ -18,6 +18,12 @@ body.controller {
 .ctrl-top .right { display: flex; align-items: center; gap: 10px; }
 .ctrl-top .conn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
 
+@media (max-width: 360px) {
+  .ctrl-top .right { gap: 6px; }
+  .ctrl-top .conn #connection-text { display: none; }
+  .ctrl-top .locale-select { min-width: 92px; max-width: 100px; padding-inline: 8px 24px; }
+}
+
 /* 目前播放 */
 .ctrl-np {
   display: flex; align-items: center; gap: 14px;

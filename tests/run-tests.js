@@ -5890,6 +5890,64 @@ console.log('\n📦 16. EULA 首次同意閘門 (eula-store)');
   });
 }
 
+console.log('\n🌐 17. M6.1 介面語系層');
+{
+  const i18n = require('../public/js/i18n');
+  const i18nSource = fs.readFileSync(path.join(__dirname, '../public/js/i18n.js'), 'utf8');
+  const catalogs = i18n.catalogs;
+  const baselineKeys = Object.keys(catalogs['zh-TW']).sort();
+
+  test('五個支援語系都有完整且非空的相同字串鍵', () => {
+    eq(i18n.LOCALES.join('|'), 'zh-TW|en|ja|ko|zh-CN');
+    i18n.LOCALES.forEach((locale) => {
+      eq(Object.keys(catalogs[locale]).sort().join('|'), baselineKeys.join('|'), `${locale} 字串鍵：`);
+      baselineKeys.forEach((key) => ok(String(catalogs[locale][key] || '').trim(), `${locale}.${key} 不得為空：`));
+    });
+  });
+
+  test('瀏覽器語系別名會正規化到支援的五種語系', () => {
+    eq(i18n.normalizeLocale('zh-Hant-HK'), 'zh-TW');
+    eq(i18n.normalizeLocale('zh_Hans_CN'), 'zh-CN');
+    eq(i18n.normalizeLocale('en-US'), 'en');
+    eq(i18n.normalizeLocale('ja-JP'), 'ja');
+    eq(i18n.normalizeLocale('ko-KR'), 'ko');
+    eq(i18n.normalizeLocale('fr-FR'), null);
+  });
+
+  test('翻譯插值與 OBS lang 網址不改變既有路由', () => {
+    i18n.setLocale('ja', { persist: false, updateQuery: false });
+    eq(i18n.t('controller.lyricsLoaded', { count: 12 }), '歌詞を読み込みました（12 行）');
+    const localized = new URL(i18n.localizeUrl('http://localhost:3000/display?preview=1'));
+    eq(localized.pathname, '/display');
+    eq(localized.searchParams.get('preview'), '1');
+    eq(localized.searchParams.get('lang'), 'ja');
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+    eq(new URL(i18n.localizeUrl(localized.href)).searchParams.get('lang'), null);
+  });
+
+  test('HTML 與動態 UI 引用的翻譯鍵都存在', () => {
+    const htmlFiles = ['index.html', 'controller.html', 'display.html', 'setlist.html'];
+    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'controller.js', 'pin-auth.js', 'setlist.js'];
+    const referenced = new Set();
+    htmlFiles.forEach((file) => {
+      const source = fs.readFileSync(path.join(__dirname, '../public', file), 'utf8');
+      ok(source.includes('/js/i18n.js'), `${file} 必須載入語系層：`);
+      for (const match of source.matchAll(/data-i18n(?:-title|-aria-label|-placeholder)?="([^"]+)"/g)) referenced.add(match[1]);
+    });
+    jsFiles.forEach((file) => {
+      const source = fs.readFileSync(path.join(__dirname, '../public/js', file), 'utf8');
+      for (const match of source.matchAll(/(?:I18n\.t|(?:^|[^\w])t)\(\s*['"]([^'"]+)['"]/gm)) referenced.add(match[1]);
+    });
+    referenced.forEach((key) => ok(baselineKeys.includes(key), `缺少翻譯鍵 ${key}：`));
+  });
+
+  test('語系模組沒有網路、Socket 或伺服器狀態寫入行為', () => {
+    ok(!/\bfetch\s*\(/.test(i18nSource), '語系層不得發出 HTTP 請求：');
+    ok(!/\bSocketClient\s*[.(]/.test(i18nSource), '語系層不得讀寫 Socket：');
+    eq(i18n.STORAGE_KEY, 'elitesand-ui-locale', '只使用獨立的裝置語系偏好鍵：');
+  });
+}
+
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }
   process.exit(exitCode);

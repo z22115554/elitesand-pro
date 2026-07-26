@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1B141F">
-  <title>Elitesand Pro 控制面板</title>
+  <title data-i18n="app.panelTitle">Elitesand Pro 控制面板</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <script src="/js/electron-shell-chrome.js"></script>
   <link rel="stylesheet" href="/css/base.css">
@@ -44,7 +44,7 @@
       </div>
     </div>
   </div>
-  <div id="connection-banner" class="connection-banner">與伺服器連線中斷，重新連線中…</div>
+  <div id="connection-banner" class="connection-banner" data-i18n="status.reconnecting">與伺服器連線中斷，重新連線中…</div>
   <div id="announcement-banner" class="announcement-banner" hidden>
     <div>
       <strong id="announcement-banner-title"></strong>
@@ -61,25 +61,25 @@
     <nav class="sidebar">
       <div class="sidebar-logo" title="Elitesand Pro"></div>
       <div class="nav-group">
-        <button class="nav-item active" data-nav="karaoke" type="button" title="首頁">
+        <button class="nav-item active" data-nav="karaoke" type="button" title="首頁" data-i18n-title="nav.home">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
-          <span class="nav-label">首頁</span>
+          <span class="nav-label" data-i18n="nav.home">首頁</span>
         </button>
-        <button class="nav-item" data-nav="library" type="button" title="媒體庫">
+        <button class="nav-item" data-nav="library" type="button" title="媒體庫" data-i18n-title="nav.library">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
-          <span class="nav-label">媒體庫</span>
+          <span class="nav-label" data-i18n="nav.library">媒體庫</span>
         </button>
-        <button class="nav-item" data-nav="settings" type="button" title="歌詞設定">
+        <button class="nav-item" data-nav="settings" type="button" title="歌詞設定" data-i18n-title="nav.lyricsSettings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-          <span class="nav-label">歌詞設定</span>
+          <span class="nav-label" data-i18n="nav.lyricsSettings">歌詞設定</span>
         </button>
-        <button class="nav-item" data-nav="setlist" type="button" title="直播歌單與 OBS 輸出">
+        <button class="nav-item" data-nav="setlist" type="button" title="直播歌單與 OBS 輸出" data-i18n-title="nav.setlistTitle">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          <span class="nav-label">直播歌單</span>
+          <span class="nav-label" data-i18n="nav.setlist">直播歌單</span>
         </button>
-        <button class="nav-item" data-nav="twitch" type="button" title="Twitch 點歌">
+        <button class="nav-item" data-nav="twitch" type="button" title="Twitch 點歌" data-i18n-title="nav.twitch">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14v11a4 4 0 0 1-4 4h-3l-3 2v-2H9a4 4 0 0 1-4-4z"/><path d="M9 8v4M15 8v4"/></svg>
-          <span class="nav-label">Twitch</span>
+          <span class="nav-label" data-i18n="nav.twitch">Twitch 點歌</span>
           <span id="twitch-nav-badge" class="pi-badge" hidden>0</span>
         </button>
 
@@ -97,20 +97,20 @@
       <div class="nav-spacer"></div>
 
       <div class="nav-group">
-        <button class="nav-item" data-nav="general" type="button" title="連線與系統">
+        <button class="nav-item" data-nav="general" type="button" title="連線與系統" data-i18n-title="nav.system">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <span class="nav-label">連線與系統</span>
+          <span class="nav-label" data-i18n="nav.system">連線與系統</span>
         </button>
         <!-- 預留：使用者個人檔案（之後啟用）-->
         <button class="nav-item" data-nav="account" type="button" title="帳號" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <span class="nav-label">帳號</span>
         </button>
-        <button id="btn-open-help" class="nav-item" type="button" title="新手教學">
+        <button id="btn-open-help" class="nav-item" type="button" title="新手教學" data-i18n-title="nav.tutorialTitle">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <span class="nav-label">教學</span>
+          <span class="nav-label" data-i18n="nav.tutorial">教學</span>
         </button>
-        <button class="theme-toggle nav-item" type="button" title="切換主題" aria-label="切換主題">
+        <button class="theme-toggle nav-item" type="button" title="切換主題" aria-label="切換主題" data-i18n-title="theme.switch" data-i18n-aria-label="theme.switch">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
         </button>
       </div>
@@ -119,19 +119,26 @@
     <!-- ═══ 主內容區 ═══ -->
     <div class="main">
       <header class="topbar">
-        <div class="page-title">首頁</div>
+        <div class="page-title" data-i18n="nav.home">首頁</div>
         <div class="right">
-          <div class="topbar-obs-links" aria-label="OBS 來源網址">
-            <button id="copy-obs-url-top" class="topbar-link-btn" type="button">歌詞網址</button>
-            <button id="copy-setlist-url-top" class="topbar-link-btn" type="button">歌單網址</button>
+          <select class="locale-select" data-i18n-locale aria-label="介面語言">
+            <option value="zh-TW">繁體中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="zh-CN">简体中文</option>
+          </select>
+          <div class="topbar-obs-links" aria-label="OBS 來源網址" data-i18n-aria-label="top.obsSources">
+            <button id="copy-obs-url-top" class="topbar-link-btn" type="button" data-i18n="top.lyricsUrl">歌詞網址</button>
+            <button id="copy-setlist-url-top" class="topbar-link-btn" type="button" data-i18n="top.setlistUrl">歌單網址</button>
           </div>
-          <div class="obs-source-status" aria-label="OBS 來源連線狀態">
-            <span id="display-source-status" class="source-pill disconnected">歌詞未連線</span>
-            <span id="setlist-source-status" class="source-pill disconnected">歌單未連線</span>
+          <div class="obs-source-status" aria-label="OBS 來源連線狀態" data-i18n-aria-label="top.obsStatus">
+            <span id="display-source-status" class="source-pill disconnected" data-i18n="status.lyricsDisconnected">歌詞未連線</span>
+            <span id="setlist-source-status" class="source-pill disconnected" data-i18n="status.setlistDisconnected">歌單未連線</span>
           </div>
           <span class="conn">
             <span id="connection-status" class="status-dot disconnected"></span>
-            <span id="connection-text">連線中</span>
+            <span id="connection-text" data-i18n="status.connecting">連線中</span>
           </span>
         </div>
       </header>
@@ -141,17 +148,17 @@
         <div class="mini-player-main">
           <div id="mini-player-art" class="mini-player-art empty"></div>
           <div class="mini-player-info">
-            <div id="mini-player-title" class="mini-player-title">尚未播放</div>
+            <div id="mini-player-title" class="mini-player-title" data-i18n="player.noTrack">尚未播放</div>
             <div id="mini-player-artist" class="mini-player-artist"></div>
           </div>
           <div class="mini-player-controls">
-            <button id="mini-btn-prev" class="btn-step" type="button" aria-label="上一首">
+            <button id="mini-btn-prev" class="btn-step" type="button" aria-label="上一首" data-i18n-aria-label="player.previous">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6v12l-9-6z"/></svg>
             </button>
-            <button id="mini-btn-play" class="btn-play" type="button" aria-label="播放或暫停">
+            <button id="mini-btn-play" class="btn-play" type="button" aria-label="播放或暫停" data-i18n-aria-label="player.playPause">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             </button>
-            <button id="mini-btn-next" class="btn-step" type="button" aria-label="下一首">
+            <button id="mini-btn-next" class="btn-step" type="button" aria-label="下一首" data-i18n-aria-label="player.next">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6l9 6-9 6z"/></svg>
             </button>
           </div>
@@ -2230,6 +2237,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/shared-utils.js"></script>
+  <script src="/js/i18n.js"></script>
   <script src="/vendor/Tone.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/pin-auth.js"></script>

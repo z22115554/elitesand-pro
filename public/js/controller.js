@@ -12,6 +12,9 @@
   'use strict';
 
   const { formatTime, escapeHtml, safeHttpUrl } = SharedUtils;
+  const t = (key, values) => (
+    typeof window !== 'undefined' && window.I18n ? window.I18n.t(key, values) : key
+  );
 
   // ─── 初始化 Socket ───
   SocketClient.init('remote');
@@ -152,7 +155,7 @@
       dom.lyricPreset.innerHTML = '';
       const empty = document.createElement('option');
       empty.value = '';
-      empty.textContent = presets.length ? '選擇已保存預設' : '尚未保存預設';
+      empty.textContent = presets.length ? t('controller.savedPreset') : t('controller.noPreset');
       dom.lyricPreset.appendChild(empty);
       presets.forEach((preset) => {
         const option = document.createElement('option');
@@ -199,7 +202,7 @@
       const position = btn.dataset.position;
       if (!['center', 'left', 'right', 'split'].includes(position)) return;
       if (position === 'split' && (lyricSettings.template === 'classic' || lyricSettings.template === 'ktv')) {
-        showToast('這個模板不支援左右分散', 'info');
+        showToast(t('controller.unsupportedSplit'), 'info');
         return;
       }
       pushLyricPatch({ lyricPosition: position });
@@ -241,7 +244,7 @@
     dom.lyricPresetApply.addEventListener('click', () => {
       const presets = Array.isArray(lyricSettings[PRESET_KEY]) ? lyricSettings[PRESET_KEY] : [];
       const preset = presets.find((item) => String(item.id) === dom.lyricPreset.value);
-      if (!preset || !preset.settings) return showToast('請先選擇預設', 'info');
+      if (!preset || !preset.settings) return showToast(t('controller.choosePreset'), 'info');
       const next = { ...settingSnapshot(preset.settings) };
       if (!TEMPLATE_IDS.includes(next.template)) next.template = 'classic';
       if (next.template === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
@@ -252,7 +255,7 @@
       const payload = { ...next, [TEMPLATE_SETTING_KEY]: stores, [PRESET_KEY]: presets };
       applyLyricSettings(payload);
       SocketClient.send('lyric-settings:update', payload);
-      showToast('已套用歌詞預設', 'success');
+      showToast(t('controller.presetApplied'), 'success');
     });
   }
 
@@ -264,11 +267,11 @@
     const banner = document.getElementById('connection-banner');
     if (connected) {
       dom.connectionStatus.className = 'status-dot connected';
-      dom.connectionText.textContent = '已連線';
+      dom.connectionText.textContent = t('status.connected');
       if (banner) banner.classList.remove('visible');
     } else {
       dom.connectionStatus.className = 'status-dot disconnected';
-      dom.connectionText.textContent = '連線中...';
+      dom.connectionText.textContent = t('status.connecting');
       if (banner) banner.classList.add('visible');
     }
   });
@@ -337,7 +340,7 @@
   function adjustOffset(deltaMs) {
     const trackId = playlist[currentTrackIndex] ? playlist[currentTrackIndex].id : null;
     if (!trackId) {
-      showToast('請先選擇歌曲', 'error');
+      showToast(t('controller.chooseTrack'), 'error');
       return;
     }
     currentOffsetMs += deltaMs;
@@ -378,7 +381,7 @@
   async function uploadLyricsFile(file) {
     const trackId = playlist[currentTrackIndex] ? playlist[currentTrackIndex].id : null;
     if (!trackId) {
-      showToast('請先選擇歌曲', 'error');
+      showToast(t('controller.chooseTrack'), 'error');
       return;
     }
 
@@ -386,7 +389,7 @@
     formData.append('lyrics', file);
 
     try {
-      showToast('上傳中...', 'info');
+      showToast(t('controller.uploading'), 'info');
       const res = await PinAuth.fetchWithPin('/api/lyrics/upload', {
         method: 'POST',
         body: formData,
@@ -400,7 +403,7 @@
           lyricsType: data.lyricsType,
           parsedLyrics: data.parsedLyrics,
         });
-        showToast(`歌詞已載入 (${data.lineCount} 行)`, 'success');
+        showToast(t('controller.lyricsLoaded', { count: data.lineCount }), 'success');
 
         // 更新本地 playlist
         const track = playlist.find(t => t.id === trackId);
@@ -411,10 +414,10 @@
           renderPlaylist();
         }
       } else {
-        showToast(data.error || '歌詞解析失敗', 'error');
+        showToast(data.error || t('controller.lyricsParseFailed'), 'error');
       }
     } catch (err) {
-      showToast('上傳失敗: ' + err.message, 'error');
+      showToast(t('controller.uploadFailed', { message: err.message }), 'error');
     }
   }
 
@@ -422,7 +425,7 @@
     dom.btnLyricsPaste.addEventListener('click', () => {
       const trackId = playlist[currentTrackIndex] ? playlist[currentTrackIndex].id : null;
       if (!trackId) {
-        showToast('請先選擇歌曲', 'error');
+        showToast(t('controller.chooseTrack'), 'error');
         return;
       }
       if (dom.lyricsPasteModal) {
@@ -437,7 +440,7 @@
     dom.lyricsPasteConfirm.addEventListener('click', async () => {
       const content = dom.lyricsPasteTextarea ? dom.lyricsPasteTextarea.value.trim() : '';
       if (!content) {
-        showToast('請輸入歌詞內容', 'error');
+        showToast(t('controller.enterLyrics'), 'error');
         return;
       }
 
@@ -459,7 +462,7 @@
             lyricsType: data.lyricsType,
             parsedLyrics: data.parsedLyrics,
           });
-          showToast(`歌詞已載入 (${data.lineCount} 行)`, 'success');
+          showToast(t('controller.lyricsLoaded', { count: data.lineCount }), 'success');
 
           const track = playlist.find(t => t.id === trackId);
           if (track) {
@@ -469,10 +472,10 @@
             renderPlaylist();
           }
         } else {
-          showToast(data.error || '歌詞解析失敗', 'error');
+          showToast(data.error || t('controller.lyricsParseFailed'), 'error');
         }
       } catch (err) {
-        showToast('解析失敗: ' + err.message, 'error');
+        showToast(t('controller.parseFailed', { message: err.message }), 'error');
       }
 
       dom.lyricsPasteModal.classList.remove('active');
@@ -624,7 +627,7 @@
   // 播放歌曲
   SocketClient.on('play:track', (track) => {
     reconcileCurrentTrackIndex(track);
-    dom.trackTitle.textContent = track.title || '未知歌曲';
+    dom.trackTitle.textContent = track.title || t('player.unknownTrack');
     dom.trackArtist.textContent = track.artist || '';
 
     const coverUrl = safeHttpUrl(track.cover);
@@ -734,7 +737,7 @@
     if (state.currentTrack) {
       const track = state.currentTrack;
       reconcileCurrentTrackIndex(track);
-      dom.trackTitle.textContent = track.title || '未知歌曲';
+      dom.trackTitle.textContent = track.title || t('player.unknownTrack');
       dom.trackArtist.textContent = track.artist || '';
       const coverUrl = safeHttpUrl(track.cover);
       if (coverUrl) {
@@ -749,7 +752,7 @@
       }
     } else if (hasCurrentTrack) {
       reconcileCurrentTrackIndex(null);
-      dom.trackTitle.textContent = '尚未播放';
+      dom.trackTitle.textContent = t('player.noTrack');
       dom.trackArtist.textContent = '';
       dom.albumArt.style.backgroundImage = 'none';
     }
@@ -814,11 +817,11 @@
 
   // Phase 5: 音訊錯誤通知
   SocketClient.on('audio:error', (data) => {
-    showToast(data.message || '音訊播放錯誤', 'error');
+    showToast(data.message || t('controller.audioError'), 'error');
   });
 
   SocketClient.on('audio:skip', () => {
-    showToast('正在跳到下一首...', 'info');
+    showToast(t('controller.skipping'), 'info');
   });
 
   // ═══════════════════════════════════════════
@@ -829,8 +832,8 @@
     if (playlist.length === 0) {
       dom.playlist.innerHTML = `
         <div class="ctrl-playlist-empty">
-          <p>尚無歌曲</p>
-          <p class="hint">請從控制面板新增歌曲</p>
+          <p>${escapeHtml(t('controller.emptyPlaylist'))}</p>
+          <p class="hint">${escapeHtml(t('controller.addFromPanel'))}</p>
         </div>`;
       return;
     }
@@ -840,7 +843,7 @@
       // Phase 5: Status badges
       let statusBadge = '';
       if (track.manualLyrics) {
-        statusBadge = '<span class="ctrl-status-badge manual">已選</span>';
+        statusBadge = `<span class="ctrl-status-badge manual">${escapeHtml(t('controller.selected'))}</span>`;
       } else if (track.lyricsType) {
         statusBadge = `<span class="ctrl-status-badge">${escapeHtml(track.lyricsType.toUpperCase())}</span>`;
       }
@@ -855,7 +858,7 @@
           <div class="ctrl-playlist-item-cover"></div>
           <div class="ctrl-playlist-item-info">
             <div class="ctrl-playlist-item-title">${escapeHtml(track.title)}</div>
-            <div class="ctrl-playlist-item-artist">${escapeHtml(track.artist || '未知歌手')}</div>
+            <div class="ctrl-playlist-item-artist">${escapeHtml(track.artist || t('player.unknownArtist'))}</div>
           </div>
           <div class="ctrl-playlist-item-badges">
             ${statusBadge}
@@ -903,6 +906,16 @@
         toast.classList.remove('visible');
       }, 4000);
     }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('i18n:change', () => {
+      applyLyricSettings(lyricSettings);
+      renderPlaylist();
+      const connected = dom.connectionStatus.classList.contains('connected');
+      dom.connectionText.textContent = t(connected ? 'status.connected' : 'status.connecting');
+      if (currentTrackIndex < 0) dom.trackTitle.textContent = t('player.noTrack');
+    });
   }
 
 })();

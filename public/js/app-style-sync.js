@@ -115,12 +115,13 @@
     if (!button) return;
     const original = button.dataset.originalText || button.textContent;
     button.dataset.originalText = original;
-    button.textContent = '已複製';
+    button.textContent = window.I18n ? window.I18n.t('common.copied') : '已複製';
     setTimeout(() => { button.textContent = original; }, 2000);
   }
 
   function buildObsUrl() {
-    return window.location.origin + '/display';
+    const url = window.location.origin + '/display';
+    return window.I18n ? window.I18n.localizeUrl(url) : url;
   }
 
   function refreshObsUrls() {
@@ -146,6 +147,7 @@
   }
 
   refreshObsUrls();
+  window.addEventListener('i18n:change', refreshObsUrls);
   if (dom.copyObsUrlTop) dom.copyObsUrlTop.addEventListener('click', () => copyObsUrl(dom.copyObsUrlTop));
   if (dom.copyObsUrl) dom.copyObsUrl.addEventListener('click', () => copyObsUrl(dom.copyObsUrl));
   if (dom.copyObsUrlPreview) dom.copyObsUrlPreview.addEventListener('click', () => copyObsUrl(dom.copyObsUrlPreview));
