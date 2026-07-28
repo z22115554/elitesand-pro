@@ -50,7 +50,9 @@
     '#announcement-critical-link',
     '.twitch-req-title',
     '.twitch-req-author',
-    '.twitch-req-url'
+    '.twitch-req-url',
+    '#youtube-risk-title',
+    '#youtube-risk-author'
   ].join(',');
   const AUTO_ATTRIBUTES = ['title', 'placeholder', 'aria-label', 'alt'];
   const autoTextState = new WeakMap();
@@ -277,7 +279,7 @@
     'diagnostics.noObs': ['尚未偵測到正式 OBS 來源', 'No official OBS source detected yet', '正式な OBS ソースはまだ検出されていません', '공식 OBS 소스가 아직 감지되지 않았습니다', '尚未检测到正式 OBS 来源'],
     'diagnostics.twitchConnected': ['Twitch 目前已連線', 'Twitch is connected', 'Twitch 接続済み', 'Twitch 연결됨', 'Twitch 已连接'],
     'diagnostics.twitchState': ['Twitch 狀態：{state}', 'Twitch status: {state}', 'Twitch 状態：{state}', 'Twitch 상태: {state}', 'Twitch 状态：{state}'],
-    'diagnostics.twitchDisabled': ['Twitch 未啟用，不列入本場觀測', 'Twitch is disabled and excluded from this session', 'Twitch は無効のため、このセッションの観測対象外です', 'Twitch가 비활성화되어 이번 세션 관측에서 제외됩니다', 'Twitch 未启用，不列入本场观测'],
+    'diagnostics.twitchDisabled': ['Twitch 未啟用，不列入本場觀測', 'Twitch is disabled and excluded from this session', 'Twitch は無効のため、このセッションの観測対象外です', 'Twitch가 비활성화되어 이번 세션의 모니터링에서 제외됩니다', 'Twitch 未启用，不列入本场观测'],
     'controller.emergency': ['緊急隱藏歌詞', 'Emergency hide lyrics', '歌詞を緊急非表示', '가사 긴급 숨김', '紧急隐藏歌词'],
     'controller.offset': ['歌詞時間偏移', 'Lyrics timing offset', '歌詞タイミング調整', '가사 시간 오프셋', '歌词时间偏移'],
     'controller.languageDisplay': ['語言顯示', 'Lyrics language display', '歌詞の言語表示', '가사 언어 표시', '语言显示'],
@@ -348,7 +350,7 @@
     'pin.incorrect': ['PIN 不正確', 'Incorrect PIN', 'PIN が正しくありません', 'PIN이 올바르지 않습니다', 'PIN 不正确'],
     'pin.verifyFailed': ['驗證失敗，請確認伺服器連線後再試', 'Verification failed. Check the server connection and try again.', '認証に失敗しました。サーバー接続を確認して再試行してください。', '인증에 실패했습니다. 서버 연결을 확인한 후 다시 시도하세요.', '验证失败，请确认服务器连接后重试'],
     'overlay.connectionLost': ['⚠️ 與伺服器連線中斷…', '⚠️ Server connection lost…', '⚠️ サーバーとの接続が切れました…', '⚠️ 서버 연결이 끊겼습니다…', '⚠️ 与服务器连接中断…'],
-    'setlist.done': ['已唱', 'Performed', '歌唱済み', '완료', '已唱'],
+    'setlist.done': ['已唱', 'Performed', '歌唱済み', '부른 곡', '已唱'],
     'setlist.nowPlaying': ['正在播放', 'Now playing', '再生中', '재생 중', '正在播放'],
     'setlist.upcoming': ['未唱', 'Up next', '次の曲', '예정', '未唱'],
     'setlist.noTracks': ['尚無歌曲', 'No tracks yet', '曲がありません', '곡이 없습니다', '暂无歌曲'],
@@ -452,7 +454,7 @@
       return token;
     });
     let pattern = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    tokens.forEach((_, index) => { pattern = pattern.replace(`___ES_I18N_${index}___`, '(.+?)'); });
+    tokens.forEach((_, index) => { pattern = pattern.replace(`___ES_I18N_${index}___`, '(.*?)'); });
     autoPatternRows.push({
       source: normalized,
       values,
@@ -473,6 +475,13 @@
       });
     }
   });
+  // Specific templates must run before generic rows such as "{0}格式無效。" or
+  // "{0}失敗：{1}", otherwise the generic capture keeps the untranslated
+  // Traditional-Chinese prefix and silently overrides the intended row.
+  autoPatternRows.sort((left, right) => {
+    const literalLength = (row) => row.source.replace(/\{\d+\}/g, '').length;
+    return literalLength(right) - literalLength(left) || right.source.length - left.source.length;
+  });
 
   function resolveAutoRow(value) {
     const normalized = normalizeAutoSource(value);
@@ -480,24 +489,10 @@
     if (exact) return { source: normalized, values: exact, captures: [] };
     const matchPattern = (row) => {
       const segments = row.segments || [];
-      if (!segments.length || !normalized.startsWith(segments[0])) return null;
-      const captures = [];
-      let cursor = segments[0].length;
-      let matched = true;
-      for (let index = 1; index < segments.length; index += 1) {
-        const segment = segments[index];
-        const next = segment ? normalized.indexOf(segment, cursor) : normalized.length;
-        if (next < cursor) {
-          matched = false;
-          break;
-        }
-        captures.push(normalized.slice(cursor, next));
-        cursor = next + segment.length;
-      }
-      if (matched && cursor === normalized.length) {
-        return { source: row.source, values: row.values, captures, tokens: row.tokens || [] };
-      }
-      return null;
+      if (!segments.length || (segments[0] && !normalized.startsWith(segments[0]))) return null;
+      const match = row.regex && row.regex.exec(normalized);
+      if (!match) return null;
+      return { source: row.source, values: row.values, captures: match.slice(1), tokens: row.tokens || [] };
     };
     for (const row of autoPatternRows) {
       const result = matchPattern(row);
@@ -516,7 +511,11 @@
         source,
         values,
         tokens: tokenMatches.map((match) => Number(match[1])),
-        segments: source.split(/\{\d+\}/)
+        segments: source.split(/\{\d+\}/),
+        regex: new RegExp(`^${source
+          .replace(/\{\d+\}/g, '___ES_I18N_TOKEN___')
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          .replaceAll('___ES_I18N_TOKEN___', '(.*?)')}$`)
       });
       if (result) return result;
     }

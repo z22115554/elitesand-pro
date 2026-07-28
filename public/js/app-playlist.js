@@ -699,7 +699,7 @@
     dom.playlistImportList.innerHTML = files.map((f, i) => {
       const date = new Date(f.savedAt).toLocaleString('zh-TW', { hour12: false });
       return `<button class="btn btn-ghost playlist-import-item" type="button" data-import-filename="${escapeHtml(f.filename)}">
-        <span>${escapeHtml(f.name)}</span><span class="pi-artist playlist-import-item__date">${escapeHtml(date)}</span>
+        <span data-i18n-skip>${escapeHtml(f.name)}</span><span class="pi-artist playlist-import-item__date">${escapeHtml(date)}</span>
       </button>`;
     }).join('');
     dom.playlistImportList.querySelectorAll('[data-import-filename]').forEach((btn) => {
