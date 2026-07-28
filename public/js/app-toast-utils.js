@@ -104,20 +104,20 @@
     el.classList.remove('connected', 'disconnected', 'pending', 'stale');
     if (stale || unreported) {
       el.classList.add('stale');
-      el.textContent = '歌詞可能為舊版';
-      el.setAttribute('aria-label', '歌詞已連線，但 OBS 來源可能仍使用舊程式碼');
+      el.textContent = t('status.lyricsStale');
+      el.setAttribute('aria-label', t('status.lyricsStaleAria'));
       const warningKey = `${runtime?.expectedBuild || ''}:${stale}:${unreported}`;
       if (warningKey !== lastDisplayBuildWarning) {
         lastDisplayBuildWarning = warningKey;
-        showToast('偵測到 OBS 歌詞來源可能仍使用舊程式碼。請在 OBS 對「歌詞」瀏覽器來源按右鍵 → 重新整理快取；若仍無效，關閉再開啟該來源。', 'warning');
+        showToast(t('status.lyricsStaleWarning'), 'warning');
       }
       return;
     }
     lastDisplayBuildWarning = null;
     if (pending) {
       el.classList.add('pending');
-      el.textContent = '歌詞驗證中';
-      el.setAttribute('aria-label', '歌詞已連線，正在確認 OBS 程式版本');
+      el.textContent = t('status.lyricsPending');
+      el.setAttribute('aria-label', t('status.lyricsPendingAria'));
       return;
     }
     setSourceStatus(el, true, 'lyrics');

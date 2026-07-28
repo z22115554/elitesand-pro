@@ -86,11 +86,14 @@ const ErrorHandler = (() => {
 
     const toast = document.createElement('div');
     toast.className = `toast-item toast-${type}`;
+    const closeLabel = typeof window !== 'undefined' && window.I18n
+      ? window.I18n.t('common.close')
+      : '關閉';
 
     toast.innerHTML = `
       <span class="toast-dot"></span>
       <span class="toast-message">${escapeHtml(message)}</span>
-      <button class="toast-close" title="關閉" aria-label="關閉">&times;</button>
+      <button class="toast-close" title="${escapeHtml(closeLabel)}" aria-label="${escapeHtml(closeLabel)}">&times;</button>
     `;
 
     // 關閉按鈕
