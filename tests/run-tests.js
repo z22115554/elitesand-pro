@@ -6119,7 +6119,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
         '끄면 부하가 줄고 화면이 더 깔끔해집니다',
       ],
       '完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。': [
-        'The complete lyrics screen is suitable for performances that need to see historical lines, romanization or phonetic guides.',
+        'The full lyrics display, for performances that need previous lines, romanization or a phonetic guide.',
         '過去の歌詞行、ローマ字、または発音ガイドを見たい場合に適した完全な歌詞画面です。',
         '전체 가사 화면으로, 이전 가사 줄이나 로마자 또는 발음 가이드를 확인해야 하는 공연에 적합합니다.',
       ],
