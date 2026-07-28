@@ -5980,6 +5980,47 @@ console.log('\n🌐 17. M6.1 介面語系層');
     });
   });
 
+  test('長尾表只收人類看得到的文字，不收程式碼與 console log', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const entries = Object.entries(autoRows);
+    // 抽取腳本曾經把 JS 樣板字面值與 HTML 整串收進表裡：那些 key 永遠比對不到文字節點，
+    // 卻會讓每次比對多掃一輪，而且 class/id 被翻譯過會變成無聲的髒資料。
+    const fragments = entries.filter(([source]) => /[<>]|\$\{|=>|class=|id="/.test(source));
+    eq(fragments.length, 0, `長尾 key 不得含 HTML 或 JS 片段（例如「${fragments[0] ? fragments[0][0].slice(0, 40) : ''}」）：`);
+    const fragmentValues = entries.filter(([, values]) => values.some((value) => /<\/?[a-z]+[\s>]|\$\{|=>/.test(String(value))));
+    eq(fragmentValues.length, 0, `長尾譯文不得含 HTML 或 JS 片段（例如「${fragmentValues[0] ? fragmentValues[0][0].slice(0, 40) : ''}」）：`);
+    const consoleRows = entries.filter(([source]) => /^\[[A-Za-z]/.test(source));
+    eq(consoleRows.length, 0, `console log 不進翻譯表（例如「${consoleRows[0] ? consoleRows[0][0].slice(0, 40) : ''}」）：`);
+    eq(entries.length, new Set(entries.map(([source]) => source)).size, '長尾表不得有重複 key：');
+  });
+
+  test('長尾比對失敗時不掃全表（MutationObserver hot path）', () => {
+    // 每個不在表內的文字節點（歌名、時間、數字）都會走一次 miss；
+    // 之前的 defensive fallback 會在每次 miss 掃完 2,000 筆做 matchAll。
+    ok(
+      /if \(autoPatternRows\.length\) return null;[\s\S]{0,200}Object\.entries\(AUTO_ROWS\)/.test(i18nSource),
+      'resolveAutoRow 的全表 fallback 必須只在 autoPatternRows 為空時才跑：'
+    );
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    const started = process.hrtime.bigint();
+    for (let index = 0; index < 500; index += 1) i18n.translate(`Unmatched Song Title ${index}`);
+    const perCall = Number(process.hrtime.bigint() - started) / 1e6 / 500;
+    ok(perCall < 0.2, `比對失敗的單次成本必須遠低於 1ms（實測 ${perCall.toFixed(3)}ms）：`);
+    eq(i18n.translate('字級'), 'Font size', 'fallback 收斂後既有比對必須不變：');
+    eq(i18n.translate('冷卻 30 秒'), 'Cooldown 30 seconds', 'fallback 收斂後樣板比對必須不變：');
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('長尾狀態文字保留使用者可理解的語意', () => {
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    eq(i18n.translate('直播中…等待第一首歌'), 'Live — waiting for the first song', '英文直播等待狀態必須清楚說明目前正在等待第一首歌：');
+    eq(i18n.translate('已選歌詞'), 'Lyrics selected', '英文歌詞狀態不得誤解為精選歌詞：');
+    i18n.setLocale('ja', { persist: false, updateQuery: false });
+    eq(i18n.translate('時長吻合'), '再生時間が一致', '日文時長狀態必須指向播放時間：');
+    eq(i18n.translate('正在從各來源搜尋歌詞'), '各ソースから歌詞を検索中', '日文搜尋狀態必須使用進行式：');
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
   // 長尾表是機器產生的，結構檢查擋不住語意錯誤；下面四條是實機踩過的錯譯類型的回歸守衛。
   test('長尾字串表沿用 curated 術語，不得各自表述', () => {
     const autoRows = require('../public/js/i18n-auto');
@@ -6013,9 +6054,9 @@ console.log('\n🌐 17. M6.1 介面語系層');
     // 每一條都是 M6.1 初版實際出現過的錯譯：場→game、忠誠點數→loyalty、
     // 字級→font level、諧音→homophone、直書→straight book、控制台→console。
     const banned = {
-      en: /per game|loyalty point|font level|\bhomophon|straight book|direct book|refractive ladder|star sand streamer|classic layering|\bconsole\b|\bverbatim\b|\bunsung\b|account number|jiugong|bidiange|zhazhishu/i,
-      ja: /冷却|ロイヤルティ|ロイヤリティ|フォントレベル|同音異義語|コンソール|ゲームあたり|ゲームごと|試合|逐語|ピンイン|口座番号|ダイレクトブック|Jiugong|BiDianGe/,
-      ko: /냉방|냉각|로열티|글꼴 수준|동음|콘솔|게임당|세션당|축어|병음|계좌번호|직접 도서|Jiugong|Bidiange/i,
+      en: /per game|loyalty point|font level|\bhomophon|straight book|direct book|refractive ladder|star sand streamer|classic layering|\bconsole\b|\bverbatim\b|\bunsung\b|account number|jiugong|bidiange|zhazhishu|back panel|backplane|backing plate|readab\w* substrate|singing station|join tail|received station|still importing|song sheet page|analog singer|\bpen\b/i,
+      ja: /冷却|ロイヤルティ|ロイヤリティ|フォントレベル|同音異義語|コンソール|ゲームあたり|ゲームごと|試合|逐語|ピンイン|口座番号|ダイレクトブック|Jiugong|BiDianGe|バックパネル|バックプレーン|バッキング|基板|Neon Singing|Classic Layer|テールに参加/,
+      ko: /냉방|냉각|로열티|글꼴 수준|동음|콘솔|게임당|세션당|축어|병음|계좌번호|직접 도서|Jiugong|Bidiange|후면 패널|백플레인|뒷판|기판|Neon Singing|Classic Layer|테일 가입|제어판로|크기과/i,
     };
     Object.entries(banned).forEach(([locale, pattern]) => {
       const offset = i18n.LOCALES.indexOf(locale);
