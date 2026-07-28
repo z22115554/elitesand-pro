@@ -14,14 +14,20 @@ if (shell?.windowControl) {
     const close = document.getElementById('electron-window-close');
     if (!minimize || !maximize || !close) return;
 
+    let lastIsMaximized = false;
+    const translate = (key, fallback) => window.I18n?.t(key) || fallback;
     const updateMaximizeButton = (isMaximized) => {
-      maximize.classList.toggle('is-maximized', Boolean(isMaximized));
-      maximize.setAttribute('aria-label', isMaximized ? '還原視窗' : '最大化');
+      lastIsMaximized = Boolean(isMaximized);
+      maximize.classList.toggle('is-maximized', lastIsMaximized);
+      maximize.setAttribute('aria-label', lastIsMaximized
+        ? translate('window.restore', '還原視窗')
+        : translate('window.maximize', '最大化'));
     };
     minimize.addEventListener('click', () => shell.windowControl('minimize'));
     maximize.addEventListener('click', () => shell.windowControl('toggle-maximize'));
     close.addEventListener('click', () => shell.windowControl('close'));
     shell.onWindowMaximized?.(updateMaximizeButton);
+    window.addEventListener('i18n:change', () => updateMaximizeButton(lastIsMaximized));
   });
 }
 

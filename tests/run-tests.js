@@ -3829,7 +3829,7 @@ test('R6-2 display 快取診斷必須保留唯讀權限並提供面板提示', (
   ok(socketSource.includes("'client:build'"), 'display 指紋回報必須在唯讀白名單中: ');
   ok(socketSource.includes('displayRuntime:'), 'client:counts 必須回傳顯示端版本狀態: ');
   ok(displaySource.includes("SocketClient.send('client:build'"), 'display 必須主動回報版本指紋: ');
-  ok(panelSource.includes('歌詞可能為舊版') && panelSource.includes('重新整理快取'), '面板必須顯示可行的 OBS 快取修復指引: ');
+  ok(panelSource.includes("t('status.lyricsStale')") && panelSource.includes("t('status.lyricsStaleWarning')"), '面板必須以可翻譯字串顯示 OBS 快取修復指引: ');
 });
 
 test('R6-2 display 版本回報會區分待驗證、正確與舊快取', () => {
@@ -6119,7 +6119,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
         '끄면 부하가 줄고 화면이 더 깔끔해집니다',
       ],
       '完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。': [
-        'The full lyrics display, for performances that need previous lines, romanization or a phonetic guide.',
+        'A full lyrics display for performances that need previous lines, romanization, or a phonetic guide.',
         '過去の歌詞行、ローマ字、または発音ガイドを見たい場合に適した完全な歌詞画面です。',
         '전체 가사 화면으로, 이전 가사 줄이나 로마자 또는 발음 가이드를 확인해야 하는 공연에 적합합니다.',
       ],
@@ -6130,6 +6130,66 @@ console.log('\n🌐 17. M6.1 介面語系層');
     eq(autoRows['暫停兌換'][1], 'Pause redemptions', '英文忠誠點數狀態不可誤譯成 exchange：');
     eq(autoRows['仍然匯入'][1], 'Import anyway', '英文匯入風險按鈕名稱必須與說明一致：');
     ok(autoRows['程式會先看影片類型和時長，避免把直播精華、教學或過長影片誤塞進歌單。確定要唱就按「仍然匯入」；不適合就按「略過這支影片」。勾選「不要再顯示」後，之後所有匯入風險警告都會直接繼續匯入，請只在你確定接受這個風險時使用。'][1].includes('"Import anyway"'), '英文匯入風險說明必須引用正確按鈕名稱：');
+  });
+
+  test('第二輪深度審查的截斷、反轉與在地化問題已鎖定', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const expected = {
+      '不會馬上消失。待確認點歌在逾時前會保留到你選擇拒絕，下載失敗的可重試請求也會留著；重開程式後，尚未處理的請求仍會回到「點歌」頁。': {
+        ko: '바로 사라지지 않습니다. 확인 대기 중인 신청곡은 시간이 초과되거나 직접 거절할 때까지 유지되며, 다운로드에 실패해 다시 시도할 수 있는 요청도 남아 있습니다. 프로그램을 다시 실행해도 처리하지 않은 요청은 ‘신청곡’ 페이지에 다시 표시됩니다.',
+      },
+      '目前授權缺少忠誠點數管理權限，請重新連接 Twitch 一次。': {
+        ko: '현재 인증에 채널 포인트 관리 권한이 없습니다. Twitch에 다시 연결해 주세요.',
+      },
+      '尚無記錄，播放任一首歌後會自動加入。': {
+        ko: '아직 기록이 없습니다. 아무 곡이나 재생하면 자동으로 추가됩니다.',
+      },
+      '要。OBS 是即時去讀這個網址的畫面，如果把程式關掉，OBS 那邊的歌詞畫面也會跟著消失。': {
+        ko: '네, 필요합니다. OBS가 이 URL의 화면을 실시간으로 읽어 오기 때문에 프로그램을 종료하면 OBS의 가사 화면도 함께 사라집니다.',
+      },
+      '星座（暫停提供）': { ja: 'コンステレーション（一時提供停止）' },
+      '時間軸（暫停提供）': { ja: 'タイムライン（一時提供停止）' },
+      '斜線舞台（暫停提供）': { ja: 'スラッシュステージ（一時提供停止）' },
+      '每張縮圖的「字」會用該風格的高亮動態跑一次；滑鼠停在上面可看文字說明。': {
+        ja: '各サムネイルの「文字」が、そのスタイルのハイライト演出で 1 回再生されます。マウスを重ねると説明を確認できます。',
+      },
+      '依 Twitch 實際開台狀態判斷；重連後會向 Twitch 再確認一次。': {
+        ja: 'Twitch の実際の配信状態で判定し、再接続後に Twitch へもう一度確認します。',
+      },
+      '基礎配色與可讀性和其他清單型模板共用；卡片清單會立即反映每一個可見控制項。': {
+        ja: '基本の配色と読みやすさは他のリスト型テンプレートと共通で、カードリストには表示中の各操作項目がすぐに反映されます。',
+      },
+      '00:00 開台': { en: '00:00 Stream started' },
+      '所有內建指令的名稱、別名、資格與冷卻會回到預設值。': {
+        en: 'The name, aliases, permissions, and cooldown for every built-in command will be reset to their defaults.',
+      },
+      '直式 600×1080': { 'zh-CN': '竖屏 600×1080' },
+      '歌單即時預覽': { 'zh-CN': '歌单实时预览' },
+      'OBS 連動（一鍵建立來源）': { 'zh-CN': 'OBS 联动（一键创建来源）' },
+    };
+    Object.entries(expected).forEach(([source, locales]) => {
+      Object.entries(locales).forEach(([locale, value]) => {
+        const index = i18n.LOCALES.indexOf(locale);
+        eq(autoRows[source][index], value, `${locale} 深度審查字串不可回歸：「${source}」：`);
+      });
+    });
+    ok(!/^[，：]/.test(autoRows['，所以要先把 Browser Source 縮成你要的框再開不透明度，否則會蓋掉那塊區域內的直播畫面。這和「可讀性襯底」是不同層：襯底只墊在文字後面，背板是整塊來源的底色。'][1]), '英文接續片段不得混入全形中文標點：');
+    ok(!/^[，：]/.test(autoRows['：每首歌旁邊會寫「逐字」「逐句」或「無歌詞」。看到「無歌詞」不是壞掉，只是這次自動搜尋沒找到而已。'][1]), '英文說明片段不得混入全形中文冒號：');
+  });
+
+  test('動態無障礙標籤與 OBS 執行狀態跟隨介面語言', () => {
+    const controllerHtml = fs.readFileSync(path.join(__dirname, '../public/controller.html'), 'utf8');
+    const electronChrome = fs.readFileSync(path.join(__dirname, '../public/js/electron-shell-chrome.js'), 'utf8');
+    const toastUtils = fs.readFileSync(path.join(__dirname, '../public/js/app-toast-utils.js'), 'utf8');
+    const errorHandler = fs.readFileSync(path.join(__dirname, '../public/js/error-handler.js'), 'utf8');
+    ok(controllerHtml.includes('data-i18n-aria-label="controller.lyricPresetLabel"'), '遙控器預設選單的 aria-label 必須走語系層：');
+    ok(electronChrome.includes("translate('window.restore'") && electronChrome.includes("translate('window.maximize'"), 'Electron 最大化／還原 aria-label 必須走語系鍵：');
+    ok(electronChrome.includes("window.addEventListener('i18n:change'"), '切換語言後須重繪 Electron 動態視窗標籤：');
+    ['status.lyricsStale', 'status.lyricsStaleAria', 'status.lyricsStaleWarning', 'status.lyricsPending', 'status.lyricsPendingAria'].forEach((key) => {
+      ok(toastUtils.includes(`t('${key}')`), `OBS 動態狀態必須使用 ${key}：`);
+    });
+    ok(errorHandler.includes("window.I18n.t('common.close')"), 'toast 關閉按鈕的 title／aria-label 必須走語系層：');
+    ok(!errorHandler.includes('title="關閉" aria-label="關閉"'), 'toast 不得保留寫死的繁中無障礙標籤：');
   });
 
   test('具名變數只翻譯模板原文，不改寫已展開的 Twitch 對外回覆', () => {
