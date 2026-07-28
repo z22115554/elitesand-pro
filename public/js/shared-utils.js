@@ -6,6 +6,8 @@
  * 都要在自己專屬的 script 之前載入這個檔案。
  */
 window.SharedUtils = (function () {
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
+
   function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -42,13 +44,13 @@ window.SharedUtils = (function () {
   // error.message 關鍵字比對，但 MediaError.message 不是標準規範保證有內容的欄位，
   // 兩邊呼叫點傳進來的都是同一種 audioPlayer.error（原生 MediaError），code 判斷才可靠。
   function getAudioErrorMessage(error) {
-    if (!error) return '音訊播放失敗';
+    if (!error) return tr('音訊播放失敗');
     const code = error.code;
-    if (code === 1) return '音訊載入被中斷';
-    if (code === 2) return '網路錯誤，音訊下載失敗';
-    if (code === 3) return '音訊解碼失敗，請更換來源';
-    if (code === 4) return '音訊格式不支援或檔案不存在';
-    return '音訊播放失敗: ' + (error.message || '未知錯誤');
+    if (code === 1) return tr('音訊載入被中斷');
+    if (code === 2) return tr('網路錯誤，音訊下載失敗');
+    if (code === 3) return tr('音訊解碼失敗，請更換來源');
+    if (code === 4) return tr('音訊格式不支援或檔案不存在');
+    return `${tr('音訊播放失敗:')} ${error.message || tr('未知錯誤')}`;
   }
 
   return { formatTime, escapeHtml, safeHttpUrl, getAudioErrorMessage };

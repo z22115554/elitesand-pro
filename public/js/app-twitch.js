@@ -778,7 +778,7 @@
     if (!validation.ok || !command) return;
     const confirmed = await window.PanelConfirm?.request({
       title: '送出自訂指令公開測試？',
-      summary: '將把「' + command.command + '」的範例回覆公開送到目前連接的 Twitch 聊天室。',
+        summary: tr(`將把「${command.command}」的範例回覆公開送到目前連接的 Twitch 聊天室。`),
       impact: '不會建立點歌、不會下載歌曲，也不會儲存尚未儲存的設定。',
       confirmLabel: '送出測試訊息',
     });
@@ -793,10 +793,10 @@
     }, (result) => {
       validateCustomCommandEditor();
       if (!result?.ok) {
-        if (status) status.textContent = '測試未送出：' + (result?.error || '伺服器沒有回應');
+        if (status) status.textContent = tr(`測試未送出：${result?.error || '伺服器沒有回應'}`);
         return;
       }
-      if (status) status.textContent = '已送出：' + result.text;
+      if (status) status.textContent = tr(`已送出：${result.text}`);
       AppShared.showToast('Twitch 自訂指令測試訊息已送出', 'success');
     });
   }
@@ -824,7 +824,7 @@
       'fulfillment-failed': '忠誠點數完成待重試',
     };
     const label = labels[reward.status] || '';
-    return label && reward.cost ? label + '（' + Number(reward.cost).toLocaleString('zh-TW') + ' 點）' : label;
+    return label && reward.cost ? `${label}（${tr(`${Number(reward.cost).toLocaleString('zh-TW')} 點`)}）` : label;
   }
 
   function formatHistoryTime(value) {
@@ -863,7 +863,7 @@
         entry?.requestCode ? '#' + entry.requestCode : '',
         formatHistoryTime(entry?.updatedAt || entry?.createdAt),
         historyRewardLabel(entry?.reward),
-        entry?.reason ? '原因：' + String(entry.reason) : '',
+        entry?.reason ? `${tr('原因：')} ${tr(String(entry.reason))}` : '',
       ].filter(Boolean);
       meta.textContent = parts.join('｜');
       row.append(main, status, meta);
@@ -922,7 +922,7 @@
       const message = document.createElement('p');
       message.className = 'twitch-sim-summary';
       message.dataset.accepted = 'false';
-      message.textContent = '無法模擬：' + error;
+      message.textContent = `${tr('無法模擬：')} ${tr(error)}`;
       box.appendChild(message);
       return;
     }
@@ -946,7 +946,9 @@
     });
     const reply = document.createElement('p');
     reply.className = 'twitch-sim-reply';
-    reply.textContent = result.willReply ? '預計回覆：' + result.finalReply : '預計回覆：不會送出（自動回覆目前關閉）';
+    reply.textContent = result.willReply
+      ? `${tr('預計回覆：')} ${result.finalReply}`
+      : tr('預計回覆：不會送出（自動回覆目前關閉）');
     box.append(summary, checks, reply);
   }
 
@@ -1436,7 +1438,7 @@
     });
     el('twitch-custom-reset')?.addEventListener('click', async () => {
       const count = requestDraft.customCommands.length;
-      const confirmed = await window.PanelConfirm?.request({ title: '清除全部自訂指令？', summary: '目前 ' + count + ' 個自訂指令都會移除。', impact: '不會改動內建指令、接受規則、回覆文案或待確認點歌。', tone: 'danger', confirmLabel: '清除全部指令' });
+      const confirmed = await window.PanelConfirm?.request({ title: '清除全部自訂指令？', summary: tr(`目前 ${count} 個自訂指令都會移除。`), impact: '不會改動內建指令、接受規則、回覆文案或待確認點歌。', tone: 'danger', confirmLabel: '清除全部指令' });
       if (!confirmed) return;
       requestDraft.customCommands = [];
       activeCustomCommandId = '';

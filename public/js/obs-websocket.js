@@ -13,6 +13,7 @@
  * 認證字串 = base64(sha256( base64(sha256(password+salt)) + challenge ))。
  */
 const ObsWs = (() => {
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
   const OBS_OP = { HELLO: 0, IDENTIFY: 1, IDENTIFIED: 2, EVENT: 5, REQUEST: 6, REQUEST_RESPONSE: 7 };
   const DISPLAY_SOURCE = 'Elitesand 歌詞';
   const SETLIST_SOURCE = 'Elitesand 歌單';
@@ -102,7 +103,7 @@ const ObsWs = (() => {
       let settled = false;
       let ws;
       try { ws = new WebSocket(`ws://${host}:${port}`); socket = ws; }
-      catch (e) { reject(new Error('無法建立連線：' + e.message)); return; }
+      catch (e) { reject(new Error(`${tr('無法建立連線：')} ${e.message}`)); return; }
 
       const failTimer = setTimeout(() => {
         if (!settled) { settled = true; try { ws.close(); } catch (e) {} reject(new Error('連線逾時（OBS 沒開，或 WebSocket 伺服器未啟用/埠號不對）')); }
@@ -344,7 +345,7 @@ const ObsWs = (() => {
       showMsg(`場景「${r.scene}」（${r.width}×${r.height}）：\n歌詞來源${verb(r.display)}、歌單來源${verb(r.setlist)}。\n若沒看到，檢查該來源是否被其他來源蓋住。`);
       AppShared.showToast('OBS 來源已就緒', 'success');
     }).catch((err) => {
-      showMsg('建立失敗：' + (err.message || '未知錯誤'));
+      showMsg(`${tr('建立失敗：')} ${err.message || tr('未知錯誤')}`);
       AppShared.showToast('建立來源失敗', 'warning');
     }).finally(() => { createBtn.disabled = !ObsWs.isConnected(); });
   });

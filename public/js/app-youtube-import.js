@@ -13,6 +13,7 @@
 
   const { dom } = AppShared;
   const state = AppShared.state;
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
 
   // ═══════════════════════════════════════════
   // 本地檔案上傳
@@ -89,7 +90,7 @@
       }
     } catch (err) {
       console.error('上傳失敗:', err);
-      AppShared.showToast('上傳失敗: ' + err.message, 'error');
+      AppShared.showToast(`${tr('上傳失敗:')} ${err.message}`, 'error');
     } finally {
       dom.dropZone.innerHTML = `
         <div class="hint">拖放音訊檔案到這裡</div>
@@ -160,7 +161,7 @@
       AppShared.showToast(`播放清單匯入完成：${imported} 首${suffix}`, skipped || failed ? 'warning' : 'success');
       setYtProgress(`✓ 播放清單匯入完成：${imported} 首${suffix}`, true);
     } catch (err) {
-      AppShared.showToast('播放清單匯入失敗: ' + err.message, 'error');
+      AppShared.showToast(`${tr('播放清單匯入失敗:')} ${err.message}`, 'error');
       setYtProgress('');
     } finally {
       dom.ytFetchBtn.disabled = false;
@@ -502,7 +503,7 @@
         }
       } catch (err) {
         const intentionallyStopped = err.code === 'IMPORT_CANCELLED' || err.code === 'IMPORT_SKIPPED';
-        if (!intentionallyStopped) AppShared.showToast('YouTube 匯入失敗：' + err.message, 'error');
+      if (!intentionallyStopped) AppShared.showToast(`${tr('YouTube 匯入失敗：')} ${err.message}`, 'error');
         if (!intentionallyStopped) fail++;
         updateJob(job, {
           status: intentionallyStopped ? 'cancelled' : 'failed',

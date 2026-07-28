@@ -6070,6 +6070,111 @@ console.log('\n🌐 17. M6.1 介面語系層');
     eq(autoRows['OBS 推流中'][3], 'OBS가 현재 송출 중입니다', '韓文 OBS 推流狀態須明確表達正在送出串流：');
   });
 
+  test('長尾字串表發行阻擋級操作與狀態文案已人工鎖定', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const expected = {
+      '收到系統匣': [
+        'Minimize to system tray',
+        'システムトレイに最小化',
+        '시스템 트레이로 최소화',
+      ],
+      '送出 Twitch 公開測試？': [
+        'Send public Twitch test?',
+        'Twitch の公開テストを送信しますか？',
+        'Twitch 공개 테스트를 전송하시겠습니까?',
+      ],
+      '數字越大越清楚。開著保護時已唱至少 52%、未唱至少 70%。': [
+        'Higher values are more visible. With protection on, performed tracks stay at least 52% opaque and upcoming tracks at least 70% opaque.',
+        '数値が大きいほど鮮明になります。保護をオンにすると、歌唱済みは最低 52%、未唱は最低 70% になります。',
+        '값이 클수록 더 선명합니다. 보호 기능을 켜면 부른 곡의 불투명도는 최소 52%, 예정 곡은 최소 70%로 유지됩니다.',
+      ],
+      '獎勵已建立；EventSub 正在等待忠誠點數兌換訂閱。': [
+        'Rewards created; EventSub is waiting to subscribe to Channel Points redemption events.',
+        '報酬を作成しました。EventSub のチャンネルポイント報酬引き換えイベントの購読を待機しています。',
+        '보상이 생성되었습니다. EventSub가 채널 포인트 보상 교환 이벤트 구독을 기다리는 중입니다.',
+      ],
+      '✓ 播放清單匯入完成：{0} 首{1}': [
+        '✓ Playlist import complete: {0} tracks{1}',
+        '✓ プレイリストのインポートが完了しました：{0} 曲{1}',
+        '✓ 재생목록 가져오기가 완료되었습니다: {0}곡{1}',
+      ],
+      '切歌': [
+        'Switch tracks',
+        '曲を切り替える',
+        '곡 전환',
+      ],
+      '待確認編號': [
+        'Pending-request ID',
+        '確認待ち番号',
+        '확인 대기 번호',
+      ],
+      '點歌歷史': [
+        'Song request history',
+        '曲リクエスト履歴',
+        '신청곡 내역',
+      ],
+      '關閉可減輕負載／更乾淨': [
+        'Turning this off reduces load and gives a cleaner look.',
+        'オフにすると負荷が軽減され、表示がすっきりします',
+        '끄면 부하가 줄고 화면이 더 깔끔해집니다',
+      ],
+      '完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。': [
+        'The complete lyrics screen is suitable for performances that need to see historical lines, romanization or phonetic guides.',
+        '過去の歌詞行、ローマ字、または発音ガイドを見たい場合に適した完全な歌詞画面です。',
+        '전체 가사 화면으로, 이전 가사 줄이나 로마자 또는 발음 가이드를 확인해야 하는 공연에 적합합니다.',
+      ],
+    };
+    Object.entries(expected).forEach(([source, translations]) => {
+      eq(autoRows[source].slice(1, 4).join('\u0001'), translations.join('\u0001'), `高風險翻譯不可回歸：「${source}」：`);
+    });
+    eq(autoRows['暫停兌換'][1], 'Pause redemptions', '英文忠誠點數狀態不可誤譯成 exchange：');
+    eq(autoRows['仍然匯入'][1], 'Import anyway', '英文匯入風險按鈕名稱必須與說明一致：');
+    ok(autoRows['程式會先看影片類型和時長，避免把直播精華、教學或過長影片誤塞進歌單。確定要唱就按「仍然匯入」；不適合就按「略過這支影片」。勾選「不要再顯示」後，之後所有匯入風險警告都會直接繼續匯入，請只在你確定接受這個風險時使用。'][1].includes('"Import anyway"'), '英文匯入風險說明必須引用正確按鈕名稱：');
+  });
+
+  test('具名變數只翻譯模板原文，不改寫已展開的 Twitch 對外回覆', () => {
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    eq(
+      i18n.translate('會套入聊天室回覆的 {reason}；留空會使用安全預設文字。'),
+      '{reason} will be included in the chat room reply; leaving blank will use the safe default text.',
+      '介面中的具名變數說明仍須翻譯：'
+    );
+    eq(
+      i18n.translate('已取消待確認點歌：Sample Track'),
+      '已取消待確認點歌：Sample Track',
+      '已展開的聊天室回覆屬使用者對外內容，不可被 UI 自動翻譯：'
+    );
+    ok(i18nSource.includes("'textarea',"), 'Twitch 回覆文字框必須維持在自動翻譯排除範圍：');
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('動態數量與錯誤前綴必須走可命中的翻譯路徑', () => {
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    eq(
+      i18n.translate('目前 3 個自訂指令都會移除。'),
+      'All 3 custom commands will be removed.',
+      '動態數量不可只留下無法命中的句尾片段：'
+    );
+    eq(
+      i18n.translate(`目前模板：${i18n.t('template.classic')}`),
+      'Current template: Classic Overlay',
+      '動態模板狀態的前綴與模板名稱都必須翻譯：'
+    );
+    const twitchSource = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
+    const timelineSource = fs.readFileSync(path.join(__dirname, '../public/js/app-lyrics-timeline.js'), 'utf8');
+    const youtubeSource = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+    const sharedSource = fs.readFileSync(path.join(__dirname, '../public/js/shared-utils.js'), 'utf8');
+    const lyricExtrasSource = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
+    ok(twitchSource.includes('summary: tr(`目前 ${count} 個自訂指令都會移除。`)'), '清除自訂指令確認必須先翻譯完整動態句：');
+    ok(twitchSource.includes("`${tr('無法模擬：')} ${tr(error)}`"), 'Twitch 模擬錯誤前綴必須翻譯，錯誤內容另行處理：');
+    ok(timelineSource.includes("`${tr('歌詞上傳失敗:')} ${err.message}`"), '歌詞上傳錯誤前綴必須翻譯：');
+    ok(youtubeSource.includes("`${tr('YouTube 匯入失敗：')} ${err.message}`"), 'YouTube 匯入錯誤前綴必須翻譯：');
+    ok(sharedSource.includes("`${tr('音訊播放失敗:')} ${error.message || tr('未知錯誤')}`"), '共用音訊錯誤前綴必須翻譯：');
+    ok(lyricExtrasSource.includes("window.I18n?.t(`template.${settings.template}`)"), '動態模板名稱必須先經過 curated 翻譯：');
+    ok(lyricExtrasSource.includes("window.addEventListener('i18n:change', syncTemplateButtons)"), '切換語言後必須重新渲染動態模板名稱：');
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
   // 長尾表是機器產生的，結構檢查擋不住語意錯誤；下面四條是實機踩過的錯譯類型的回歸守衛。
   test('長尾字串表沿用 curated 術語，不得各自表述', () => {
     const autoRows = require('../public/js/i18n-auto');
@@ -6114,10 +6219,31 @@ console.log('\n🌐 17. M6.1 介面語系層');
     });
   });
 
+  test('長尾譯文不得出現機翻疊詞', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    // 「星座 星座」「リストリスト」「목록 목록」「列表列表」這類疊詞是取代式修譯的
+    // 典型副作用：某語言被修好了，另一語言把新詞疊在舊詞上。之前只有英文抓得到。
+    const keywordList = (source) => source.split(/\s+/).length >= 4 && !/[，。、：；]/.test(source);
+    const cjkDup = /([぀-ヿ㐀-鿿가-힯]{2,8})\s?\1/;
+    const enDup = /\b(\w{3,})\s+\1\b/i;
+    // 疊詞本來就合法的詞（韓文的 하나하나＝一個一個、日文的 一つ一つ 等）
+    const allowed = new Set(['하나', '하나하나', '탱글', '탱글탱글', '各々', '様々', '色々', '一つ', '一つ一つ', '人人']);
+    const offenders = [];
+    Object.entries(autoRows).forEach(([source, values]) => {
+      if (keywordList(source)) return; // 空白分隔的搜尋關鍵字列表本來就會重複詞根
+      [1, 2, 3, 4].forEach((index) => {
+        const match = cjkDup.exec(String(values[index]));
+        if (match && !allowed.has(match[1])) offenders.push(`${source.slice(0, 26)} [${index}] ${match[0]}`);
+      });
+      if (enDup.test(String(values[1]))) offenders.push(`${source.slice(0, 26)} [en]`);
+    });
+    eq(offenders.length, 0, `譯文出現疊詞（例如「${offenders[0] || ''}」）：`);
+  });
+
   test('简中長尾使用簡中用語，不是繁中字轉簡', () => {
     const autoRows = require('../public/js/i18n-auto');
     // 字形轉換不等於在地化：伺服器／匯入／檔案／程式 在简中要換詞而不是換字。
-    const taiwanOnly = /伺服器|汇入|汇出|档案|视窗|资料夹|介面|程式|解析度|快取|登入|滑鼠|连线|网路|搜寻|讯息|储存|回覆|载入|连结|音档|资讯|纪录|字元|套用|使用者|装置|内建|帐号|自订|实况主|程序码|下载档|命令列|回传值|伫列|可携版|套入|线上更新|系统匣|权杖|透过|顺位|开台|收台|「|」/;
+    const taiwanOnly = /伺服器|汇入|汇出|档案|视窗|资料夹|介面|程式|解析度|快取|登入|滑鼠|连线|网路|搜寻|讯息|储存|回覆|载入|连结|音档|资讯|纪录|字元|套用|使用者|装置|内建|帐号|自订|实况主|程序码|下载档|命令列|回传值|伫列|可携版|套入|线上更新|系统匣|权杖|透过|顺位|开台|收台|「|」|时间戳记|终端机|本机|变数|选配|相容|遗失|复原|存取|线上|全域|送出|贴上|建立|身分|联络|录影|存档/;
     const offenders = Object.entries(autoRows)
       .filter(([source]) => !source.startsWith('!'))
       .filter(([, values]) => taiwanOnly.test(String(values[4])));
