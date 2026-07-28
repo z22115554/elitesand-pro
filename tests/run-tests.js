@@ -4291,6 +4291,8 @@ test('歌詞預覽在首頁與設定頁都提供同步狀態、OBS 網址與複�
   ok(shared.includes('copyObsUrlPreview'));
   ok(shared.includes('copyObsUrlSettingsPreview'));
   ok(styleSync.includes('refreshObsUrls()'));
+  ok(styleSync.includes("buildObsUrl({ preview: true, relative: true })"));
+  ok(styleSync.includes("document.querySelectorAll('iframe.obs-preview')"));
   ok(styleSync.includes('copyObsUrlPreview.addEventListener'));
   ok(styleSync.includes('copyObsUrlSettingsPreview.addEventListener'));
   ok(panelCss.includes('.lyrics-preview-head'));
@@ -6011,6 +6013,35 @@ console.log('\n🌐 17. M6.1 介面語系層');
     i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
   });
 
+  test('長尾樣板由最具體列匹配，且全部 placeholder 組合都得到對應譯文', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const templated = Object.entries(autoRows).filter(([source]) => /\{\d+\}/.test(source));
+    ok(templated.length >= 170, '應覆蓋完整動態長尾樣板：');
+    i18n.LOCALES.forEach((locale, localeIndex) => {
+      i18n.setLocale(locale, { persist: false, updateQuery: false });
+      templated.forEach(([source, values]) => {
+        const sample = source.replace(/\{(\d+)\}/g, (_, index) => `CAP${index}`);
+        const expected = values[localeIndex].replace(/\{(\d+)\}/g, (_, index) => `CAP${index}`);
+        eq(i18n.translate(sample), expected, `${locale} 不可被較泛用樣板截走（${source}）：`);
+      });
+    });
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    eq(
+      i18n.translate('已連接 Twitch：正在監聽 !點歌。'),
+      'Connected Twitch: Listening for !點歌.',
+      '相鄰 placeholder 其中一段為空時仍須保留動態指令：'
+    );
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('長尾譯文不得含不可見控制字元', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const invisible = /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/;
+    const offenders = Object.entries(autoRows)
+      .filter(([, values]) => values.some((value) => invisible.test(String(value))));
+    eq(offenders.length, 0, `長尾譯文仍有零寬或方向控制字元（例如「${offenders[0] ? offenders[0][0] : ''}」）：`);
+  });
+
   test('長尾狀態文字保留使用者可理解的語意', () => {
     i18n.setLocale('en', { persist: false, updateQuery: false });
     eq(i18n.translate('直播中…等待第一首歌'), 'Live — waiting for the first song', '英文直播等待狀態必須清楚說明目前正在等待第一首歌：');
@@ -6019,6 +6050,24 @@ console.log('\n🌐 17. M6.1 介面語系層');
     eq(i18n.translate('時長吻合'), '再生時間が一致', '日文時長狀態必須指向播放時間：');
     eq(i18n.translate('正在從各來源搜尋歌詞'), '各ソースから歌詞を検索中', '日文搜尋狀態必須使用進行式：');
     i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('人工審查過的高風險長尾不再語意反轉或跨語混入', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    [
+      '星座（暫停提供）',
+      '時間軸（暫停提供）',
+      '斜線舞台（暫停提供）',
+    ].forEach((source) => {
+      ok(/temporarily unavailable/i.test(autoRows[source][1]), `英文「${source}」不可把 unavailable 翻成 available：`);
+    });
+    const throttle = Object.keys(autoRows).find((source) => source.includes('操作太快了，請再等'));
+    eq(autoRows[throttle][1], 'You are doing that too quickly. Please wait {seconds} seconds.', '英文限流訊息不可混入簡中：');
+    const bulkPlaying = Object.keys(autoRows).find((source) => source.includes('正在播放的歌曲不能批次選取'));
+    ok(!/[\u3400-\u9FFF]/.test(autoRows[bulkPlaying][1]), '英文批次操作警告不可混入中文：');
+    const floating = Object.keys(autoRows).find((source) => source.startsWith('漂浮：緩慢淡入'));
+    ok(/フェードイン/.test(autoRows[floating][2]) && !/フェードアウト/.test(autoRows[floating][2]), '日文漂浮效果不可把淡入寫成淡出：');
+    eq(autoRows['OBS 推流中'][3], 'OBS가 현재 송출 중입니다', '韓文 OBS 推流狀態須明確表達正在送出串流：');
   });
 
   // 長尾表是機器產生的，結構檢查擋不住語意錯誤；下面四條是實機踩過的錯譯類型的回歸守衛。
@@ -6068,11 +6117,14 @@ console.log('\n🌐 17. M6.1 介面語系層');
   test('简中長尾使用簡中用語，不是繁中字轉簡', () => {
     const autoRows = require('../public/js/i18n-auto');
     // 字形轉換不等於在地化：伺服器／匯入／檔案／程式 在简中要換詞而不是換字。
-    const taiwanOnly = /伺服器|汇入|汇出|档案|视窗|资料夹|介面|程式|解析度|快取|登入|滑鼠|连线|网路|搜寻|讯息|储存|回覆|载入|「|」/;
+    const taiwanOnly = /伺服器|汇入|汇出|档案|视窗|资料夹|介面|程式|解析度|快取|登入|滑鼠|连线|网路|搜寻|讯息|储存|回覆|载入|连结|音档|资讯|纪录|字元|套用|使用者|装置|内建|帐号|自订|实况主|程序码|下载档|命令列|回传值|伫列|可携版|套入|线上更新|系统匣|权杖|透过|顺位|开台|收台|「|」/;
     const offenders = Object.entries(autoRows)
       .filter(([source]) => !source.startsWith('!'))
       .filter(([, values]) => taiwanOnly.test(String(values[4])));
     eq(offenders.length, 0, `简中仍有台灣用語或引號（例如「${offenders[0] ? offenders[0][0] : ''}」）：`);
+    const classifierOffenders = Object.entries(autoRows)
+      .filter(([source, values]) => !source.includes('素筆') && String(values[4]).includes('笔'));
+    eq(classifierOffenders.length, 0, `简中數量詞仍誤用「笔」（例如「${classifierOffenders[0] ? classifierOffenders[0][0] : ''}」）：`);
   });
 
   test('英文長尾以大寫開頭，技術名詞除外', () => {
@@ -6120,7 +6172,15 @@ console.log('\n🌐 17. M6.1 介面語系層');
       '.twitch-req-title',
       '.twitch-req-author',
       '.twitch-req-url',
+      '#youtube-risk-title',
+      '#youtube-risk-author',
     ].forEach((selector) => ok(i18nSource.includes(`'${selector}'`), `${selector} 必須排除自動翻譯：`));
+    const playlistSource = fs.readFileSync(path.join(__dirname, '../public/js/app-playlist.js'), 'utf8');
+    const setlistPanelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+    const lyricExtrasSource = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
+    ok(playlistSource.includes('<span data-i18n-skip>${escapeHtml(f.name)}</span>'), '匯入紀錄名稱必須保留使用者文字：');
+    ok(setlistPanelSource.includes("b.dataset.i18nSkip = '1'"), '自訂歌單風格名稱必須排除自動翻譯：');
+    ok(lyricExtrasSource.includes('<option data-i18n-skip value="'), '自訂歌詞預設名稱必須排除自動翻譯：');
     i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
   });
 

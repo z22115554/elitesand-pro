@@ -130,9 +130,14 @@
     setTimeout(() => { button.textContent = original; }, 2000);
   }
 
-  function buildObsUrl() {
-    const url = window.location.origin + '/display';
-    return window.I18n ? window.I18n.localizeUrl(url) : url;
+  function buildObsUrl({ preview = false, relative = false } = {}) {
+    const url = new URL('/display', window.location.origin);
+    if (preview) url.searchParams.set('preview', '1');
+    if (window.I18n) {
+      const localized = new URL(window.I18n.localizeUrl(url.toString()));
+      url.search = localized.search;
+    }
+    return relative ? `${url.pathname}${url.search}` : url.toString();
   }
 
   function refreshObsUrls() {
@@ -140,6 +145,10 @@
     if (dom.obsUrl) dom.obsUrl.textContent = url;
     if (dom.lyricsPreviewObsUrl) dom.lyricsPreviewObsUrl.textContent = url;
     if (dom.settingsPreviewObsUrl) dom.settingsPreviewObsUrl.textContent = url;
+    const previewUrl = buildObsUrl({ preview: true, relative: true });
+    document.querySelectorAll('iframe.obs-preview').forEach((frame) => {
+      if (frame.getAttribute('src') !== previewUrl) frame.setAttribute('src', previewUrl);
+    });
   }
 
   function copyObsUrl(button) {

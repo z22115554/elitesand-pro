@@ -885,7 +885,7 @@
     if (!sel) return;
     const current = sel.value;
     sel.innerHTML = lyricPresets.length
-      ? lyricPresets.map((p) => '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>').join('')
+      ? lyricPresets.map((p) => '<option data-i18n-skip value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>').join('')
       : '<option value="">尚未保存預設</option>';
     if (lyricPresets.some((p) => p.id === current)) sel.value = current;
     const disabled = lyricPresets.length === 0;

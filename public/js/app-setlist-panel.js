@@ -537,7 +537,7 @@
         const chip = document.createElement('span');
         chip.className = 'sls-custom-chip';
         const b = document.createElement('button');
-        b.type = 'button'; b.className = 'btn btn-sm btn-ghost sls-custom-chip__apply'; b.textContent = name;
+        b.type = 'button'; b.className = 'btn btn-sm btn-ghost sls-custom-chip__apply'; b.dataset.i18nSkip = '1'; b.textContent = name;
         b.addEventListener('click', () => { const o = loadCustom(); if (o[name]) { adoptStyleUI(o[name]); sendStyle(); } });
         const del = document.createElement('button');
         del.type = 'button'; del.className = 'btn btn-sm btn-ghost sls-custom-chip__delete'; del.textContent = '×'; del.title = '刪除';
