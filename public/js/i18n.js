@@ -504,7 +504,11 @@
       if (result) return result;
     }
     // Defensive fallback for generated catalogs: derive placeholder patterns
-    // directly if a host transformed the precompiled pattern table.
+    // directly if a host transformed the precompiled pattern table. This is a
+    // full scan of the catalog, so it must only run when that table is really
+    // missing — every miss goes through here, and misses are the common case
+    // (song titles, timestamps, counts) on the MutationObserver hot path.
+    if (autoPatternRows.length) return null;
     for (const [source, values] of Object.entries(AUTO_ROWS)) {
       const tokenMatches = [...source.matchAll(/\{(\d+)\}/g)];
       if (!tokenMatches.length || !/[\u3400-\u9fff]/.test(source.replace(/\{\d+\}/g, ''))) continue;
