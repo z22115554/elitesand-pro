@@ -644,8 +644,12 @@
     const templateStatus = document.getElementById('lyric-template-status');
     const templateDesc = document.getElementById('template-desc');
     const templateScope = document.getElementById('lyric-template-scope');
-    if (templateLabel) templateLabel.textContent = ui.label;
-    if (templateStatus) templateStatus.textContent = `目前模板：${ui.label}`;
+    const localizedTemplateLabel = window.I18n?.t(`template.${settings.template}`) || ui.label;
+    if (templateLabel) templateLabel.textContent = localizedTemplateLabel;
+    if (templateStatus) {
+      const statusText = `目前模板：${localizedTemplateLabel}`;
+      templateStatus.textContent = window.I18n?.translate(statusText) || statusText;
+    }
     if (templateDesc) templateDesc.textContent = ui.description;
     if (templateScope) templateScope.textContent = ui.scope;
 
@@ -1327,6 +1331,7 @@
   function init() {
     initSettingsPanel();
     initPicker();
+    window.addEventListener('i18n:change', syncTemplateButtons);
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

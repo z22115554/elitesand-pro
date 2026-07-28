@@ -9,6 +9,7 @@
   'use strict';
 
   const { escapeHtml, safeHttpUrl } = SharedUtils;
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
 
   const listEl = document.getElementById('library-list');
   const emptyEl = document.getElementById('library-empty');
@@ -91,7 +92,7 @@
         <div class="lib-cover">${coverUrl ? '' : '♪'}</div>
         <div class="lib-meta">
           <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
-          <div class="lib-sub">${escapeHtml(item.artist || '未知歌手')}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
+          <div class="lib-sub">${escapeHtml(item.artist || tr('未知歌手'))}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
           <div class="lib-stats">▶ ${item.playCount || 0} 次 · ${fmtDate(item.lastPlayed)}</div>
         </div>
         <div class="lib-actions">

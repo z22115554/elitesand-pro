@@ -10,6 +10,7 @@
   const { escapeHtml } = SharedUtils;
   const { dom } = AppShared;
   const state = AppShared.state;
+  const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
 
   // ═══════════════════════════════════════════
   // 逐行歌詞時間軸編輯器
@@ -190,7 +191,7 @@
         AppShared.showToast(data.error || '歌詞解析失敗', 'error');
       }
     } catch (err) {
-      AppShared.showToast('歌詞上傳失敗: ' + err.message, 'error');
+        AppShared.showToast(`${tr('歌詞上傳失敗:')} ${err.message}`, 'error');
     }
   }
 
@@ -243,7 +244,7 @@
           AppShared.showToast(data.error || '歌詞解析失敗', 'error');
         }
       } catch (err) {
-        AppShared.showToast('歌詞解析失敗: ' + err.message, 'error');
+      AppShared.showToast(`${tr('歌詞解析失敗:')} ${err.message}`, 'error');
       }
       closeLyricsPasteModal();
     });
