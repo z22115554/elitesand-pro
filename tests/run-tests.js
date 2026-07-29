@@ -5937,7 +5937,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
 
   test('HTML 與動態 UI 引用的翻譯鍵都存在', () => {
     const htmlFiles = ['index.html', 'controller.html', 'display.html', 'setlist.html'];
-    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-diagnostics.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js'];
+    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-youtube-import.js', 'app-diagnostics.js', 'error-handler.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js'];
     const referenced = new Set();
     htmlFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public', file), 'utf8');
@@ -6226,12 +6226,52 @@ console.log('\n🌐 17. M6.1 介面語系層');
     const sharedSource = fs.readFileSync(path.join(__dirname, '../public/js/shared-utils.js'), 'utf8');
     const lyricExtrasSource = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
     ok(twitchSource.includes('summary: tr(`目前 ${count} 個自訂指令都會移除。`)'), '清除自訂指令確認必須先翻譯完整動態句：');
-    ok(twitchSource.includes("`${tr('無法模擬：')} ${tr(error)}`"), 'Twitch 模擬錯誤前綴必須翻譯，錯誤內容另行處理：');
+    ok(twitchSource.includes("t('twitch.simulation.failed', { message: error })"), 'Twitch 模擬錯誤前綴必須由 curated 模板翻譯，錯誤內容另行處理：');
     ok(timelineSource.includes("`${tr('歌詞上傳失敗:')} ${err.message}`"), '歌詞上傳錯誤前綴必須翻譯：');
-    ok(youtubeSource.includes("`${tr('YouTube 匯入失敗：')} ${err.message}`"), 'YouTube 匯入錯誤前綴必須翻譯：');
+    ok(youtubeSource.includes("t('import.error.importFailed', { message: err.message })"), 'YouTube 匯入錯誤前綴必須由 curated 模板翻譯：');
     ok(sharedSource.includes("`${tr('音訊播放失敗:')} ${error.message || tr('未知錯誤')}`"), '共用音訊錯誤前綴必須翻譯：');
     ok(lyricExtrasSource.includes("window.I18n?.t(`template.${settings.template}`)"), '動態模板名稱必須先經過 curated 翻譯：');
     ok(lyricExtrasSource.includes("window.addEventListener('i18n:change', syncTemplateButtons)"), '切換語言後必須重新渲染動態模板名稱：');
+    ok(youtubeSource.includes("window.addEventListener('i18n:change'"), '匯入工作中心切換語言後必須重新渲染：');
+    ok(youtubeSource.includes('progressStatus(job.progressStage'), '匯入中 Socket 階段必須在顯示時依目前語系格式化：');
+    ok(youtubeSource.includes('setYtProgressStage(stage, data.percent, error'), '匯入進度不可先拼成繁中快照再顯示：');
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('匯入工作中心的動態訊息以 curated key 重繪且保留外部資料', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+    ['import.playlist.confirmTitle', 'import.job.queued', 'import.progress.status', 'import.job.completed', 'import.error.importFailed'].forEach((key) => {
+      ok(baselineKeys.includes(key), `匯入動態介面缺少 ${key}：`);
+    });
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    eq(i18n.t('import.job.queued', { position: '3' }), 'Waiting · queue position 3', '工作中心佇列位置必須使用英文模板：');
+    eq(i18n.t('import.error.importFailed', { message: 'SERVER_MESSAGE' }), 'YouTube import failed: SERVER_MESSAGE', '外部錯誤僅作為插值，不可被改寫：');
+    ok(source.includes('const stageKeys = Object.freeze'), '伺服器進度階段必須以顯示層映射，不可改 Socket payload：');
+    ok(source.includes('source: options.source || \'YouTube\''), '匯入來源值必須保留為工作資料：');
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('語系切換會用快取資料重繪 Twitch runtime 與匯入中的動態 UI', () => {
+    const twitchSource = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
+    const youtubeSource = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+    const errorHandlerSource = fs.readFileSync(path.join(__dirname, '../public/js/error-handler.js'), 'utf8');
+    ['import.job.redownloadSource', 'import.job.twitchSource'].forEach((key) => {
+      ok(baselineKeys.includes(key), `動態匯入來源缺少 ${key}：`);
+    });
+    ok(twitchSource.includes('function renderRuntimeStatus(data)'), 'Twitch runtime 必須可由快取狀態重繪：');
+    ok(twitchSource.includes('if (lastRuntimeStatus) renderRuntimeStatus(lastRuntimeStatus);'), '切換語言後必須立即重繪 Twitch runtime：');
+    ok(youtubeSource.includes('function displayJobSource(job)'), '工作中心來源必須在顯示時才翻譯：');
+    ok(youtubeSource.includes('sourceKey: options.sourceKey'), '工作中心需保留來源資料與語系鍵：');
+    ok(youtubeSource.includes('setYtProgressPlaylistResult(imported, skipped, failed, true)'), '播放清單完成進度不可快照舊語言的片段：');
+    ok(youtubeSource.includes('if (activeRiskAssessment) renderRiskAssessment(activeRiskAssessment);'), '開啟中的風險確認視窗必須隨語系重繪：');
+    ok(youtubeSource.includes('const fallbackCatalog = Object.freeze'), '匯入 UI 在語系層短暫不可用時不得露出內部 key：');
+    ok(errorHandlerSource.includes('const fallbackCatalog = Object.freeze'), '錯誤 UI 在語系層短暫不可用時不得露出內部 key：');
+    i18n.setLocale('zh-CN', { persist: false, updateQuery: false });
+    eq(
+      i18n.t('twitch.runtime.reconnecting', { delay: i18n.t('twitch.runtime.retryIn', { seconds: '61' }), attempt: '6', error: '' }),
+      'Twitch 连接中断，61 秒后自动重连（第 6 次）',
+      '简中重连倒数的「后」只能由 delay 模板提供一次：'
+    );
     i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
   });
 
@@ -6331,7 +6371,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
     const source = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
     ok(source.includes('function searchHaystack'), '搜尋必須同時比對中文索引與翻譯後文字：');
     ok(/searchEntries\.filter\(\(entry\) => searchHaystack\(entry\)/.test(source), '搜尋過濾必須走 searchHaystack：');
-    ok(source.includes('tr(`已前往「${tr(entry.category)}」的「${tr(entry.label)}」。`)'), '跳轉提示不可把中文分類名塞進外語句子：');
+    ok(source.includes("t('twitch.settings.jump',"), '跳轉提示必須由具名變數的 curated 模板處理：');
     const entries = [...source.matchAll(/\{ label: '([^']+)', category: '([^']+)', terms: '([^']+)'/g)]
       .map(([, label, category, terms]) => [label, category, terms]);
     ok(entries.length >= 10, '應取得設定搜尋索引：');

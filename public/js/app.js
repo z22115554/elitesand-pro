@@ -53,7 +53,7 @@
     redownloadMissingTrack: (trackId) => {
       const track = playlist.find((item) => item.id === trackId);
       if (!track?.url) return Promise.reject(new Error('找不到可重新下載的 YouTube 來源'));
-      return AppShared.queueYouTubeImport(track.url, { source: '重新下載', replaceTrackId: track.id });
+      return AppShared.queueYouTubeImport(track.url, { source: '重新下載', sourceKey: 'import.job.redownloadSource', replaceTrackId: track.id });
     },
     // 媒體庫即時還原：直接把伺服器組好的 track（含本機檔名/歌詞/變調）加入清單，零下載。
     // 一律附加到清單末端（允許重複，由呼叫端先確認）；重複曲沿用同一 id＝共享該首的變調/歌詞記憶。

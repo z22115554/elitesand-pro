@@ -13,7 +13,47 @@
 
   const { dom } = AppShared;
   const state = AppShared.state;
+  const fallbackCatalog = Object.freeze({ ...(window.I18n?.catalogs?.['zh-TW'] || {}) });
+  const fallbackT = (key, vars = {}) => {
+    const template = fallbackCatalog[key];
+    return typeof template === 'string'
+      ? template.replace(/\{([^}]+)\}/g, (token, name) => Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : token)
+      : '';
+  };
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : fallbackT(key, vars);
   const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
+  const currentLocale = () => window.I18n?.current?.() || 'zh-TW';
+  const formatNumber = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? new Intl.NumberFormat(currentLocale()).format(number) : '—';
+  };
+  const stageKeys = Object.freeze({
+    '正在檢查影片': 'import.stage.inspecting',
+    '正在檢查時長與內容類型': 'import.stage.inspectDetails',
+    '等待中': 'import.stage.waiting',
+    '準備匯入': 'import.stage.preparing',
+    '等待使用者確認': 'import.stage.waitingForConfirmation',
+    '需要確認影片資訊': 'import.stage.needsAssessment',
+    '準備下載': 'import.stage.preparingDownload',
+    '已通過匯入檢查': 'import.stage.checkPassed',
+    '正在取得影片資訊': 'import.stage.gettingInfo',
+    '正在下載': 'import.stage.downloading',
+    '正在轉換音訊': 'import.stage.convertingAudio',
+    '正在搜尋歌詞': 'import.stage.searchingLyrics',
+    '已完成': 'import.stage.completed',
+    '已取消': 'import.stage.cancelled',
+    '已略過': 'import.stage.skipped',
+    '失敗': 'import.stage.failed',
+    '處理中': 'import.stage.processing',
+  });
+  // Keep Socket stages/errors and external metadata raw in job state. Only local
+  // stages and UI framing are translated when rendering the current locale.
+  const localizedStage = (value) => stageKeys[value] ? t(stageKeys[value]) : String(value || '');
+  const progressStatus = (stage, percent, error) => t('import.progress.status', {
+    stage: localizedStage(stage),
+    percent: Number.isFinite(percent) ? t('import.progress.percent', { value: formatNumber(Math.round(percent)) }) : '',
+    error: error ? t('import.progress.error', { message: error }) : '',
+  });
 
   // ═══════════════════════════════════════════
   // 本地檔案上傳
@@ -68,7 +108,7 @@
     files.forEach((file) => formData.append('files', file));
 
     try {
-      dom.dropZone.innerHTML = '<div class="hint">上傳處理中…</div>';
+      dom.dropZone.innerHTML = `<div class="hint">${t('import.uploading')}</div>`;
 
       const res = await PinAuth.fetchWithPin('/api/upload', {
         method: 'POST',
@@ -86,16 +126,18 @@
         }
         if (Array.isArray(data.warnings) && data.warnings.length) AppShared.showToast(data.warnings.join('；'), 'warning');
       } else {
-        AppShared.showToast(`上傳失敗：${data.error || '伺服器未接受檔案'}${data.details ? `（${data.details}）` : ''}`, 'error');
+        const reason = data.error || t('import.fileRejected');
+        const detail = data.details ? `（${data.details}）` : '';
+        AppShared.showToast(t('import.uploadFailed', { message: reason + detail }), 'error');
       }
     } catch (err) {
       console.error('上傳失敗:', err);
-      AppShared.showToast(`${tr('上傳失敗:')} ${err.message}`, 'error');
+      AppShared.showToast(t('import.uploadFailed', { message: err.message }), 'error');
     } finally {
       dom.dropZone.innerHTML = `
-        <div class="hint">拖放音訊檔案到這裡</div>
-        <div class="sub">支援 MP3 / FLAC / WAV / M4A / OGG</div>
-        <button id="browse-btn" class="btn btn-sm" type="button">選擇檔案</button>
+        <div class="hint">${t('source.dropFiles')}</div>
+        <div class="sub">${t('source.supportedFormats')}</div>
+        <button id="browse-btn" class="btn btn-sm" type="button">${t('source.chooseFiles')}</button>
         <input type="file" id="file-input" multiple accept=".mp3,.flac,.wav,.m4a,.ogg,.aac,.wma" hidden>`;
       dom.fileInput = document.getElementById('file-input');
       dom.browseBtn = document.getElementById('browse-btn');
@@ -127,45 +169,64 @@
     }).then(r => r.json());
   }
 
+  function playlistResultVars(imported, skipped, failed) {
+    return {
+      imported: formatNumber(imported),
+      skipped: skipped ? t('import.playlist.skippedSuffix', { count: formatNumber(skipped) }) : '',
+      failed: failed ? t('import.playlist.failedSuffix', { count: formatNumber(failed) }) : '',
+    };
+  }
+
+  function queueResultVars(imported, failed) {
+    return {
+      count: formatNumber(imported),
+      failed: failed ? t('import.queue.failedSuffix', { count: formatNumber(failed) }) : '',
+    };
+  }
+
   async function fetchYouTubePlaylist(url) {
-    setYtProgress('讀取播放清單中', false, true);
+    setYtProgressKey('import.playlist.loading', {}, false, true);
     dom.ytFetchBtn.disabled = true;
-    dom.ytFetchBtn.textContent = '處理中...';
+    dom.ytFetchBtn.textContent = t('import.playlist.processing');
     // 先掃出條目，再全部送進既有單工佇列；每首輪到時才做風險檢查與下載。
     dom.ytUrl.value = '';
     try {
       const data = await postPlaylist(url);
-      if (!data.success) throw new Error(data.error || '播放清單讀取失敗');
+      if (!data.success) throw new Error(data.error || t('import.playlist.loadFailed'));
       if (data.needsConfirm) {
         const all = await window.PanelConfirm?.request({
-          title: `匯入這份 ${data.total} 首的播放清單？`,
-          summary: '歌曲會逐首檢查、依序加入，完成前即可開始播放。',
-          impact: '可隨時在工作中心取消尚未開始的匯入；已完成的歌曲會保留在播放清單。',
-          confirmLabel: '開始匯入',
+          title: t('import.playlist.confirmTitle', { count: formatNumber(data.total) }),
+          summary: t('import.playlist.confirmSummary'),
+          impact: t('import.playlist.confirmImpact'),
+          confirmLabel: t('import.playlist.confirmStart'),
         });
-        if (!all) { setYtProgress('已取消播放清單匯入', true); return; }
+        if (!all) { setYtProgressKey('import.playlist.cancelled', {}, true); return; }
       }
       const entries = Array.isArray(data.entries) ? data.entries : [];
       const imports = entries.map((entry, index) => queueYouTubeImport(entry.url, {
         source: `播放清單 ${index + 1}/${entries.length}`,
-        label: entry.title || `播放清單第 ${index + 1} 首`,
+        sourceKey: 'import.playlist.source',
+        sourceVars: { index: index + 1, total: entries.length },
+        label: entry.title || '',
+        labelKey: entry.title ? '' : 'import.playlist.itemFallbackLabel',
+        labelVars: { index: index + 1 },
       }));
       dom.ytFetchBtn.disabled = false;
-      dom.ytFetchBtn.textContent = '匯入音訊';
-      setYtProgress(`已排入 ${imports.length} 首，將逐首檢查後匯入`, false, true);
+      dom.ytFetchBtn.textContent = t('source.importAudio');
+      setYtProgressKey('import.playlist.queued', { count: imports.length }, false, true);
       const results = await Promise.allSettled(imports);
       const imported = results.filter(result => result.status === 'fulfilled').length;
       const skipped = results.filter(result => result.status === 'rejected' && result.reason?.code === 'IMPORT_SKIPPED').length;
       const failed = results.length - imported - skipped;
-      const suffix = `${skipped ? `，略過 ${skipped} 首` : ''}${failed ? `，失敗 ${failed} 首` : ''}`;
-      AppShared.showToast(`播放清單匯入完成：${imported} 首${suffix}`, skipped || failed ? 'warning' : 'success');
-      setYtProgress(`✓ 播放清單匯入完成：${imported} 首${suffix}`, true);
+      const resultVars = playlistResultVars(imported, skipped, failed);
+      AppShared.showToast(t('import.playlist.complete', resultVars), skipped || failed ? 'warning' : 'success');
+      setYtProgressPlaylistResult(imported, skipped, failed, true);
     } catch (err) {
-      AppShared.showToast(`${tr('播放清單匯入失敗:')} ${err.message}`, 'error');
+      AppShared.showToast(t('import.playlist.failed', { message: err.message }), 'error');
       setYtProgress('');
     } finally {
       dom.ytFetchBtn.disabled = false;
-      dom.ytFetchBtn.textContent = '匯入音訊';
+      dom.ytFetchBtn.textContent = t('source.importAudio');
     }
   }
 
@@ -203,7 +264,7 @@
   setRiskWarningsDisabled(riskWarningsDisabled());
   riskPreferenceReset?.addEventListener('click', () => {
     setRiskWarningsDisabled(false);
-    AppShared.showToast('已重新啟用 YouTube 匯入警告', 'success');
+    AppShared.showToast(t('import.riskWarningsReenabled'), 'success');
   });
 
   function formatDuration(seconds) {
@@ -211,33 +272,43 @@
     return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
   }
 
-  function confirmRiskAssessment(assessment) {
-    if (!assessment?.warning || riskWarningsDisabled()) return Promise.resolve(true);
-    const modal = document.getElementById('youtube-risk-modal');
-    if (!modal) return Promise.resolve(false);
+  let activeRiskAssessment = null;
+
+  function renderRiskAssessment(assessment) {
     const title = document.getElementById('youtube-risk-title');
     const author = document.getElementById('youtube-risk-author');
     const duration = document.getElementById('youtube-risk-duration');
     const warnings = document.getElementById('youtube-risk-reasons');
     const thumbnail = document.getElementById('youtube-risk-thumbnail');
-    const remember = document.getElementById('youtube-risk-disable');
-    const skip = document.getElementById('youtube-risk-skip');
-    const proceed = document.getElementById('youtube-risk-proceed');
-    title.textContent = assessment.title || '無法取得影片標題';
-    author.textContent = assessment.author || '未知頻道';
-    duration.textContent = assessment.duration > 0 ? formatDuration(assessment.duration) : '時長未知';
+    if (!title || !author || !duration || !warnings || !thumbnail) return false;
+    title.textContent = assessment.title || t('import.assessment.unknownTitle');
+    author.textContent = assessment.author || t('import.assessment.unknownChannel');
+    duration.textContent = assessment.duration > 0 ? formatDuration(assessment.duration) : t('import.assessment.unknownDuration');
     warnings.textContent = '';
-    for (const reason of assessment.warnings || ['無法確認影片是否適合匯入']) {
+    for (const reason of assessment.warnings || [t('import.assessment.unavailable')]) {
       const item = document.createElement('li'); item.textContent = reason; warnings.appendChild(item);
     }
     thumbnail.hidden = !assessment.thumbnail;
     if (assessment.thumbnail) thumbnail.src = assessment.thumbnail;
+    return true;
+  }
+
+  function confirmRiskAssessment(assessment) {
+    if (!assessment?.warning || riskWarningsDisabled()) return Promise.resolve(true);
+    const modal = document.getElementById('youtube-risk-modal');
+    if (!modal) return Promise.resolve(false);
+    const remember = document.getElementById('youtube-risk-disable');
+    const skip = document.getElementById('youtube-risk-skip');
+    const proceed = document.getElementById('youtube-risk-proceed');
+    if (!remember || !skip || !proceed || !renderRiskAssessment(assessment)) return Promise.resolve(false);
+    activeRiskAssessment = assessment;
     remember.checked = false;
     modal.hidden = false;
     return new Promise((resolve) => {
       const finish = (allowed) => {
         if (remember.checked) setRiskWarningsDisabled(true);
         modal.hidden = true;
+        activeRiskAssessment = null;
         skip.removeEventListener('click', onSkip);
         proceed.removeEventListener('click', onProceed);
         modal.removeEventListener('click', onBackdrop);
@@ -255,31 +326,56 @@
 
   async function inspectImport(job) {
     if (job.assessment) return job.assessment;
-    updateJob(job, { stage: '正在檢查影片', message: '正在檢查時長與內容類型' });
+    updateJob(job, { stage: '正在檢查影片', messageKey: 'import.stage.inspectDetails' });
     const response = await PinAuth.fetchWithPin('/api/youtube/inspect', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: job.url, requestId: job.requestId }),
     });
     const data = await response.json();
     if (response.ok && data.success && data.assessment) return data.assessment;
     if (data.code === 'IMPORT_CANCELLED') {
-      const cancelled = new Error(data.error || '匯入已取消');
+      const cancelled = new Error(data.error || t('import.stage.cancelled'));
       cancelled.code = 'IMPORT_CANCELLED';
       throw cancelled;
     }
     return {
       warning: true,
       warningTypes: ['metadata-unavailable'],
-      warnings: [`無法在下載前確認影片資訊：${data.error || '未知原因'}`],
+      warnings: [t('import.assessment.unavailableWithReason', { message: data.error || t('import.assessment.unknownReason') })],
       title: job.label,
       author: '', duration: 0, thumbnail: '',
     };
   }
 
-  function jobLabel(url, source) {
+  function jobLabelParts(url, source) {
     try {
       const id = new URL(url).searchParams.get('v') || url.split('/').filter(Boolean).pop();
-      return `${source || 'YouTube'} · ${id || '待解析連結'}`;
-    } catch (_) { return source || 'YouTube 匯入'; }
+      return { key: 'import.job.defaultLabel', vars: { source: source || t('import.job.defaultSource'), id: id || t('import.job.unresolvedLink') } };
+    } catch (_) {
+      return { key: 'import.job.defaultLabel', vars: { source: source || t('import.job.defaultSource'), id: t('import.job.unresolvedLink') } };
+    }
+  }
+
+  function displayJobSource(job) {
+    if (job.sourceKey) return t(job.sourceKey, formatImportVars(job.sourceVars));
+    return job.source || t('import.job.defaultSource');
+  }
+
+  function displayJobLabel(job) {
+    if (job.label) return job.label;
+    if (job.labelKey) return t(job.labelKey, formatImportVars(job.labelVars));
+    const fallback = jobLabelParts(job.url, displayJobSource(job));
+    return t(fallback.key, fallback.vars);
+  }
+
+  function displayJobState(job, queueIndex) {
+    if (job.status === 'queued') return t('import.job.queued', { position: formatNumber(queueIndex + 1) });
+    if (job.progressStage) return progressStatus(job.progressStage, job.percent, job.progressError);
+    if (job.completedPlacement) return t('import.job.completed', { placement: t(job.completedPlacement), title: job.completedTitle || '' });
+    if (job.errorMessage) return t('import.error.importFailed', { message: job.errorMessage });
+    if (job.messageKey) return t(job.messageKey, job.messageVars);
+    if (job.message) return job.message;
+    if (job.stage) return localizedStage(job.stage);
+    return localizedStage(job.status);
   }
 
   function renderWorkCenter() {
@@ -293,26 +389,24 @@
       row.dataset.jobId = job.id;
       const title = document.createElement('div');
       title.className = 'work-item-title';
-      title.textContent = job.label;
+      title.textContent = displayJobLabel(job);
       title.title = job.url;
       const stateEl = document.createElement('div');
       stateEl.className = 'work-item-state';
       stateEl.dataset.state = job.status;
       const queueIndex = pending.indexOf(job);
-      stateEl.textContent = job.status === 'queued'
-        ? `等待中 · 佇列第 ${queueIndex + 1} 位`
-        : (job.message || job.stage || job.status);
+      stateEl.textContent = displayJobState(job, queueIndex);
       const actions = document.createElement('div');
       actions.className = 'work-item-actions';
       if (job.status === 'queued' || job.status === 'active' || job.status === 'cancelling') {
         const cancel = document.createElement('button');
         cancel.type = 'button'; cancel.className = 'btn btn-sm btn-ghost'; cancel.dataset.workAction = 'cancel';
-        cancel.textContent = job.status === 'cancelling' ? '取消中…' : '取消';
+        cancel.textContent = job.status === 'cancelling' ? t('import.job.cancelling') : t('import.job.cancel');
         cancel.disabled = job.status === 'cancelling';
         actions.appendChild(cancel);
       } else if (job.status === 'failed' || job.status === 'cancelled') {
         const retry = document.createElement('button');
-        retry.type = 'button'; retry.className = 'btn btn-sm btn-ghost'; retry.dataset.workAction = 'retry'; retry.textContent = '重試';
+        retry.type = 'button'; retry.className = 'btn btn-sm btn-ghost'; retry.dataset.workAction = 'retry'; retry.textContent = t('import.job.retry');
         actions.appendChild(retry);
       }
       row.append(title, stateEl, actions);
@@ -328,7 +422,10 @@
   }
 
   function updateJob(job, partial) {
-    Object.assign(job, partial, { updatedAt: Date.now() });
+    const next = { ...partial };
+    if ((Object.prototype.hasOwnProperty.call(next, 'stage') || Object.prototype.hasOwnProperty.call(next, 'messageKey'))
+      && !Object.prototype.hasOwnProperty.call(next, 'progressStage')) next.progressStage = '';
+    Object.assign(job, next, { updatedAt: Date.now() });
     renderWorkCenter();
   }
 
@@ -337,7 +434,7 @@
     if (index < 0) return false;
     ytImportQueue.splice(index, 1);
     const error = new Error('匯入已取消'); error.code = 'IMPORT_CANCELLED';
-    updateJob(job, { status: 'cancelled', message: '已取消，未開始下載' });
+    updateJob(job, { status: 'cancelled', stage: '已取消', messageKey: 'import.job.cancelledBeforeStart' });
     job.reject(error);
     return true;
   }
@@ -347,19 +444,23 @@
     if (job !== activeImportJob || !job.requestId) return;
     job.cancelRequested = true;
     if (job.stage === '等待使用者確認') {
-      updateJob(job, { status: 'cancelling', message: '將略過這項匯入' });
+      updateJob(job, { status: 'cancelling', messageKey: 'import.job.skipping' });
       document.getElementById('youtube-risk-skip')?.click();
       return;
     }
-    updateJob(job, { status: 'cancelling', message: '正在停止匯入…' });
+    updateJob(job, { status: 'cancelling', messageKey: 'import.job.stopping' });
     try {
       const response = await PinAuth.fetchWithPin('/api/youtube/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: job.requestId }),
       });
       const result = await response.json();
-      if (!response.ok) updateJob(job, { status: 'active', message: result.message || '工作已完成，無法取消' });
+      if (!response.ok) {
+        updateJob(job, result.message
+          ? { status: 'active', message: result.message, messageKey: '' }
+          : { status: 'active', messageKey: 'import.job.cannotCancel' });
+      }
     } catch (error) {
-      updateJob(job, { status: 'active', message: `取消要求失敗：${error.message}` });
+      updateJob(job, { status: 'active', messageKey: 'import.job.cancelFailed', messageVars: { message: error.message } });
     }
   }
 
@@ -369,7 +470,16 @@
     const job = row && ytImportJobs.find((item) => item.id === row.dataset.jobId);
     if (!button || !job) return;
     if (button.dataset.workAction === 'cancel') cancelImportJob(job);
-    if (button.dataset.workAction === 'retry') queueYouTubeImport(job.url, { source: job.source }).catch(() => {});
+    if (button.dataset.workAction === 'retry') {
+      queueYouTubeImport(job.url, {
+        source: job.source,
+        sourceKey: job.sourceKey,
+        sourceVars: job.sourceVars,
+        label: job.label,
+        labelKey: job.labelKey,
+        labelVars: job.labelVars,
+      }).catch(() => {});
+    }
   });
   workCenterClear?.addEventListener('click', () => {
     for (let i = ytImportJobs.length - 1; i >= 0; i--) {
@@ -380,11 +490,11 @@
 
   SocketClient.on('youtube:progress', (data) => {
     if (!data || !activeRequestIds.has(data.requestId)) return;
-    const pct = Number.isFinite(data.percent) ? ` ${Math.round(data.percent)}%` : '';
-    const detail = data.stage === '失敗' && data.error ? `：${data.error}` : '';
-    setYtProgress(`${data.stage || '處理中'}${pct}${detail}`, data.stage === '已完成', data.stage !== '已完成' && data.stage !== '失敗');
+    const stage = data.stage || '處理中';
+    const error = stage === '失敗' ? data.error || '' : '';
+    setYtProgressStage(stage, data.percent, error, stage === '已完成', stage !== '已完成' && stage !== '失敗');
     if (activeImportJob?.requestId === data.requestId) {
-      updateJob(activeImportJob, { stage: data.stage || '處理中', percent: data.percent, message: detail ? `${data.stage}${detail}` : data.stage });
+      updateJob(activeImportJob, { stage, progressStage: stage, progressError: error, percent: data.percent, messageKey: '' });
     }
   });
 
@@ -392,7 +502,13 @@
     return new Promise((resolve, reject) => {
       const job = {
         id: `work-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        url, source: options.source || 'YouTube', label: options.label || jobLabel(url, options.source),
+        url,
+        source: options.source || 'YouTube',
+        sourceKey: options.sourceKey || (!options.source ? 'import.job.defaultSource' : ''),
+        sourceVars: options.sourceVars || {},
+        label: options.label || '',
+        labelKey: options.labelKey || '',
+        labelVars: options.labelVars || {},
         replaceTrackId: options.replaceTrackId || null,
         placement: options.placement === 'next' ? 'next' : 'end',
         assessment: options.assessment || null,
@@ -409,8 +525,7 @@
   function updateYtQueueProgress() {
     const total = ytImportDoneCount + ytImportQueue.length + (ytImportActive ? 1 : 0);
     const nth = ytImportDoneCount + 1;
-    const suffix = total > 1 ? `（第 ${nth}/${total} 首）` : '（首次或長曲較久，請稍候）';
-    setYtProgress(`下載並處理中${suffix}`, false, true);
+    setYtProgressQueue(nth, total, false, true);
   }
 
   async function drainYtImportQueue() {
@@ -421,17 +536,17 @@
       const job = ytImportQueue.shift();
       const requestId = `yt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       activeImportJob = job;
-      updateJob(job, { status: 'active', requestId, stage: '準備匯入', message: '準備匯入', percent: 0 });
+      updateJob(job, { status: 'active', requestId, stage: '準備匯入', messageKey: 'import.stage.preparing', percent: 0, errorMessage: '', completedPlacement: '' });
       updateYtQueueProgress();
       try {
         const assessment = await inspectImport(job);
-        if (job.cancelRequested) { const cancelled = new Error('匯入已取消'); cancelled.code = 'IMPORT_CANCELLED'; throw cancelled; }
-        if (assessment?.warning && !riskWarningsDisabled()) updateJob(job, { stage: '等待使用者確認', message: '需要確認影片資訊' });
+        if (job.cancelRequested) { const cancelled = new Error(t('import.stage.cancelled')); cancelled.code = 'IMPORT_CANCELLED'; throw cancelled; }
+        if (assessment?.warning && !riskWarningsDisabled()) updateJob(job, { stage: '等待使用者確認', messageKey: 'import.stage.needsAssessment' });
         const allowed = await confirmRiskAssessment(assessment);
         if (!allowed) {
-          const skipped = new Error('已略過有警告的影片'); skipped.code = 'IMPORT_SKIPPED'; throw skipped;
+          const skipped = new Error(t('import.stage.skipped')); skipped.code = 'IMPORT_SKIPPED'; throw skipped;
         }
-        updateJob(job, { status: 'active', stage: '準備下載', message: '已通過匯入檢查' });
+        updateJob(job, { status: 'active', stage: '準備下載', messageKey: 'import.stage.checkPassed' });
         activeRequestIds.add(requestId);
         const res = await PinAuth.fetchWithPin('/api/youtube', {
           method: 'POST',
@@ -454,7 +569,7 @@
               };
               state.playlist.splice(index, 1, data.track);
               SocketClient.sendWithCallback('playlist:update', state.playlist, (result) => {
-                if (!result?.ok) AppShared.showToast(`重新下載後更新清單失敗：${result?.error || '伺服器沒有確認'}`, 'error');
+                if (!result?.ok) AppShared.showToast(t('import.error.playlistUpdateFailed', { message: result?.error || t('import.error.serverUnconfirmed') }), 'error');
               });
             } else {
               state.playlist.push(data.track);
@@ -482,33 +597,33 @@
             AppShared.playTrack(placement.insertAt, false);
           }
           ok++;
-          const placementText = job.placement === 'next'
-            ? (placement?.placement === 'next' ? '已插到下一首' : '目前沒有播放歌曲，已加入清單尾端')
-            : '已加入播放清單';
-          updateJob(job, { status: 'completed', stage: '已完成', message: `${placementText}：${data.track.title}`, percent: 100 });
+          const placementKey = job.placement === 'next'
+            ? (placement?.placement === 'next' ? 'import.placement.next' : 'import.placement.endBecauseIdle')
+            : 'import.placement.added';
+          updateJob(job, { status: 'completed', stage: '已完成', completedPlacement: placementKey, completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '' });
           job.resolve(data.track);
         } else {
-          const errorMsg = data.error || '未知錯誤';
+          const errorMsg = data.error || t('import.error.unknown');
           const recovery = data.recovery ? ` ${data.recovery}` : '';
           const error = new Error(`${errorMsg}${recovery}`);
           error.code = data.code || 'IMPORT_FAILED';
           error.retryable = data.retryable !== false;
-          AppShared.showToast(error.message, error.code === 'IMPORT_CANCELLED' ? 'info' : 'error');
+          AppShared.showToast(t('import.error.importFailed', { message: error.message }), error.code === 'IMPORT_CANCELLED' ? 'info' : 'error');
           fail++;
           updateJob(job, {
             status: error.code === 'IMPORT_CANCELLED' ? 'cancelled' : 'failed',
-            stage: error.code === 'IMPORT_CANCELLED' ? '已取消' : '失敗', message: error.message, errorCode: error.code,
+            stage: error.code === 'IMPORT_CANCELLED' ? '已取消' : '失敗', messageKey: '', message: '', errorMessage: error.code === 'IMPORT_CANCELLED' ? '' : error.message, errorCode: error.code,
           });
           job.reject(error);
         }
       } catch (err) {
         const intentionallyStopped = err.code === 'IMPORT_CANCELLED' || err.code === 'IMPORT_SKIPPED';
-      if (!intentionallyStopped) AppShared.showToast(`${tr('YouTube 匯入失敗：')} ${err.message}`, 'error');
+        if (!intentionallyStopped) AppShared.showToast(t('import.error.importFailed', { message: err.message }), 'error');
         if (!intentionallyStopped) fail++;
         updateJob(job, {
           status: intentionallyStopped ? 'cancelled' : 'failed',
           stage: err.code === 'IMPORT_SKIPPED' ? '已略過' : err.code === 'IMPORT_CANCELLED' ? '已取消' : '失敗',
-          message: err.message, errorCode: err.code || 'NETWORK_ERROR',
+          messageKey: '', message: '', errorMessage: intentionallyStopped ? '' : err.message, errorCode: err.code || 'NETWORK_ERROR',
         });
         job.reject(err);
       } finally {
@@ -521,7 +636,7 @@
     ytImportActive = false;
     ytImportDoneCount = 0;
     if (ok > 0) {
-      setYtProgress(`✓ 匯入完成：${ok} 首${fail ? `（${fail} 首失敗）` : ''}`, true);
+      setYtProgressQueueResult(ok, fail, true);
     } else {
       setYtProgress('');
     }
@@ -530,7 +645,7 @@
   function fetchYouTube() {
     const url = dom.ytUrl.value.trim();
     if (!url) {
-      AppShared.showToast('請輸入 YouTube 連結', 'warning');
+      AppShared.showToast(t('import.enterYouTubeLink'), 'warning');
       return;
     }
     // 播放清單連結（含 list=）→ 走分批匯入（伺服器端已逐首處理）
@@ -553,20 +668,85 @@
 
   // YT 進度文字。busy=true 時附加動態點點（CSS 動畫），讓使用者知道程式在跑而不是卡住。
   let _ytProgressClearTimer = null;
-  function setYtProgress(msg, autoClear, busy) {
+  let ytProgressState = { type: 'text', text: '', busy: false };
+  const formatImportVars = (vars = {}) => Object.fromEntries(Object.entries(vars).map(([key, value]) => [key,
+    typeof value === 'number' && Number.isFinite(value) ? formatNumber(value) : value,
+  ]));
+
+  function progressText() {
+    if (ytProgressState.type === 'key') return t(ytProgressState.key, formatImportVars(ytProgressState.vars));
+    if (ytProgressState.type === 'stage') return progressStatus(ytProgressState.stage, ytProgressState.percent, ytProgressState.error);
+    if (ytProgressState.type === 'playlistResult') {
+      return t('import.playlist.completeProgress', playlistResultVars(ytProgressState.imported, ytProgressState.skipped, ytProgressState.failed));
+    }
+    if (ytProgressState.type === 'queueResult') {
+      return t('import.queue.complete', queueResultVars(ytProgressState.imported, ytProgressState.failed));
+    }
+    if (ytProgressState.type === 'queue') {
+      const detail = ytProgressState.total > 1
+        ? t('import.progress.queuePosition', { current: formatNumber(ytProgressState.current), total: formatNumber(ytProgressState.total) })
+        : t('import.progress.firstItem');
+      return t('import.progress.downloadingAndProcessing', { detail });
+    }
+    return ytProgressState.text || '';
+  }
+
+  function renderYtProgress() {
     if (!dom.ytProgress) return;
-    if (_ytProgressClearTimer) { clearTimeout(_ytProgressClearTimer); _ytProgressClearTimer = null; }
-    dom.ytProgress.textContent = msg || '';
-    if (busy && msg) {
+    const message = progressText();
+    dom.ytProgress.textContent = message;
+    if (ytProgressState.busy && message) {
       const dots = document.createElement('span');
       dots.className = 'busy-dots';
       dom.ytProgress.appendChild(dots);
     }
+  }
+
+  function setYtProgressState(next, autoClear, busy) {
+    if (_ytProgressClearTimer) { clearTimeout(_ytProgressClearTimer); _ytProgressClearTimer = null; }
+    ytProgressState = { ...next, busy: !!busy };
+    renderYtProgress();
     if (autoClear) {
-      _ytProgressClearTimer = setTimeout(() => { dom.ytProgress.textContent = ''; _ytProgressClearTimer = null; }, 4000);
+      _ytProgressClearTimer = setTimeout(() => {
+        ytProgressState = { type: 'text', text: '', busy: false };
+        renderYtProgress();
+        _ytProgressClearTimer = null;
+      }, 4000);
     }
+  }
+
+  function setYtProgress(msg, autoClear, busy) {
+    setYtProgressState({ type: 'text', text: msg || '' }, autoClear, busy);
+  }
+
+  function setYtProgressKey(key, vars, autoClear, busy) {
+    setYtProgressState({ type: 'key', key, vars: vars || {} }, autoClear, busy);
+  }
+
+  function setYtProgressStage(stage, percent, error, autoClear, busy) {
+    setYtProgressState({ type: 'stage', stage, percent, error }, autoClear, busy);
+  }
+
+  function setYtProgressPlaylistResult(imported, skipped, failed, autoClear) {
+    setYtProgressState({ type: 'playlistResult', imported, skipped, failed }, autoClear);
+  }
+
+  function setYtProgressQueueResult(imported, failed, autoClear) {
+    setYtProgressState({ type: 'queueResult', imported, failed }, autoClear);
+  }
+
+  function setYtProgressQueue(current, total, autoClear, busy) {
+    setYtProgressState({ type: 'queue', current, total }, autoClear, busy);
   }
 
   // 供 window.VKState.importYouTubeUrl（app.js）與媒體庫（media-library.js）呼叫
   AppShared.queueYouTubeImport = queueYouTubeImport;
+  window.addEventListener('i18n:change', () => {
+    renderWorkCenter();
+    renderYtProgress();
+    if (activeRiskAssessment) renderRiskAssessment(activeRiskAssessment);
+    if (dom.ytFetchBtn) dom.ytFetchBtn.textContent = dom.ytFetchBtn.disabled ? t('import.playlist.processing') : t('source.importAudio');
+    const uploadingHint = dom.dropZone?.querySelector('.hint');
+    if (uploadingHint && !dom.dropZone.querySelector('#file-input')) uploadingHint.textContent = t('import.uploading');
+  });
 })();

@@ -8,8 +8,22 @@
   const { escapeHtml } = SharedUtils;
   const el = (id) => document.getElementById(id);
   const clone = (value) => JSON.parse(JSON.stringify(value));
-  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
+  const fallbackCatalog = Object.freeze({ ...(window.I18n?.catalogs?.['zh-TW'] || {}) });
+  const fallbackT = (key, vars = {}) => {
+    const template = fallbackCatalog[key];
+    return typeof template === 'string'
+      ? template.replace(/\{([^}]+)\}/g, (token, name) => Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : token)
+      : '';
+  };
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : fallbackT(key, vars);
   const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
+  const currentLocale = () => window.I18n?.current?.() || 'zh-TW';
+  const formatNumber = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? new Intl.NumberFormat(currentLocale()).format(number) : '—';
+  };
+  const formatPoints = (value) => t('twitch.points', { count: formatNumber(value) });
+  const serverMessage = (value) => String(value || t('twitch.error.noResponse'));
   const pending = new Map();
   const busy = new Map();
   const dirty = { commands: false, rules: false, blacklist: false, reward: false, replies: false, custom: false };
@@ -26,6 +40,12 @@
   let historyEntries = [];
   let focusBeforeManagement = null;
   let lastRuntimeStatus = null;
+  let lastRuntimeStatusError = '';
+
+  function setLastRuntimeStatus(status) {
+    lastRuntimeStatus = status;
+    lastRuntimeStatusError = '';
+  }
 
   function showStatus(message, type) {
     const status = el('twitch-status');
@@ -65,85 +85,97 @@
     if (!label || !reauthorize || !summary || !syncError) return;
     const missingRewardScope = Array.isArray(status?.missingScopes) && status.missingScopes.includes('channel:manage:redemptions');
     reauthorize.hidden = !status?.configured || (!!status?.authorized && !missingRewardScope);
-    if (!status?.configured) label.textContent = '尚未設定 Twitch Client ID。';
-    else if (!status?.authorized) label.textContent = '尚未連接 Twitch；啟用獎勵前需要先授權。';
-    else if (missingRewardScope) label.textContent = '目前授權缺少忠誠點數管理權限，請重新連接 Twitch 一次。';
-    else if (status.rewardSync?.error) label.textContent = '同步失敗；下方保留 Twitch 上次已確認的狀態。';
-    else if (status.reward?.paused && status.reward?.rewardId) label.textContent = '專用獎勵目前暫停兌換。';
-    else if (status.reward?.enabled && status.reward?.rewardId && status.rewardSubscriptionReady) label.textContent = '專用獎勵已啟用並監聽兌換。';
-    else if (status.reward?.enabled && status.reward?.rewardId) label.textContent = '獎勵已建立；EventSub 正在等待忠誠點數兌換訂閱。';
-    else if (status.reward?.rewardId) label.textContent = '專用獎勵已停用；再次開啟並儲存即可恢復。';
-    else label.textContent = '尚未建立專用獎勵；開啟後按「儲存並同步 Twitch」。';
+    if (!status?.configured) label.textContent = t('twitch.runtime.clientIdMissing');
+    else if (!status?.authorized) label.textContent = t('twitch.runtime.authorizationRequired');
+    else if (missingRewardScope) label.textContent = t('twitch.runtime.rewardScopeMissing');
+    else if (status.rewardSync?.error) label.textContent = t('twitch.runtime.rewardSyncFailed');
+    else if (status.reward?.paused && status.reward?.rewardId) label.textContent = t('twitch.runtime.rewardPaused');
+    else if (status.reward?.enabled && status.reward?.rewardId && status.rewardSubscriptionReady) label.textContent = t('twitch.runtime.rewardListening');
+    else if (status.reward?.enabled && status.reward?.rewardId) label.textContent = t('twitch.runtime.rewardSubscribing');
+    else if (status.reward?.rewardId) label.textContent = t('twitch.runtime.rewardDisabled');
+    else label.textContent = t('twitch.runtime.rewardNotCreated');
 
     const confirmed = TwitchRewardSettings.normalizeSettings(status?.reward);
     if (confirmed.rewardId) {
-      const state = confirmed.enabled ? (confirmed.paused ? '已暫停' : '已啟用') : '已停用';
+      const state = confirmed.enabled ? (confirmed.paused ? t('twitch.reward.paused') : t('twitch.reward.enabled')) : t('twitch.reward.disabled');
       const limits = [
-        confirmed.maxPerStream > 0 ? `每場 ${confirmed.maxPerStream} 次` : '每場不限',
-        confirmed.maxPerUserPerStream > 0 ? `每人每場 ${confirmed.maxPerUserPerStream} 次` : '每人不限',
-        confirmed.globalCooldownSeconds > 0 ? `冷卻 ${confirmed.globalCooldownSeconds} 秒` : '無冷卻',
+        confirmed.maxPerStream > 0 ? t('twitch.reward.perStream', { count: formatNumber(confirmed.maxPerStream) }) : t('twitch.reward.perStreamUnlimited'),
+        confirmed.maxPerUserPerStream > 0 ? t('twitch.reward.perUserPerStream', { count: formatNumber(confirmed.maxPerUserPerStream) }) : t('twitch.reward.perUserPerStreamUnlimited'),
+        confirmed.globalCooldownSeconds > 0 ? t('twitch.reward.cooldown', { count: formatNumber(confirmed.globalCooldownSeconds) }) : t('twitch.reward.noCooldown'),
       ].join('｜');
       const runtime = status.rewardSync || {};
       const extras = [];
-      if (Number.isSafeInteger(runtime.redemptionsRedeemedCurrentStream)) extras.push(`同步時本場已兌換 ${runtime.redemptionsRedeemedCurrentStream} 次`);
-      if (runtime.isInStock === false) extras.push('目前不可兌換');
-      summary.textContent = `${state}｜${confirmed.title}｜${Number(confirmed.cost).toLocaleString()} 點｜${limits}${extras.length ? `｜${extras.join('｜')}` : ''}`;
+      if (Number.isSafeInteger(runtime.redemptionsRedeemedCurrentStream)) extras.push(t('twitch.reward.redeemedThisStream', { count: formatNumber(runtime.redemptionsRedeemedCurrentStream) }));
+      if (runtime.isInStock === false) extras.push(t('twitch.reward.outOfStock'));
+      summary.textContent = [state, confirmed.title, formatPoints(confirmed.cost), limits].concat(extras).filter(Boolean).join('｜');
     } else {
-      summary.textContent = '尚無 Twitch 已確認的專用獎勵。';
+      summary.textContent = t('twitch.reward.none');
     }
     syncError.textContent = status.rewardSync?.error || '';
     syncError.hidden = !syncError.textContent;
   }
 
-  async function refreshStatus() {
+  function renderRuntimeStatus(data) {
     const statusText = el('twitch-status');
     const connect = el('twitch-connect');
     const deviceLink = el('twitch-device-link');
     const deauthorize = el('twitch-deauthorize');
+    applyRewardRuntimeStatus(data);
+    updateMainStatus();
+    if (!data.configured) {
+      if (statusText) statusText.textContent = t('twitch.runtime.notEnabled');
+      if (connect) connect.disabled = true;
+      if (deauthorize) deauthorize.hidden = true;
+      return;
+    }
+    if (connect) connect.disabled = false;
+    if (deauthorize) {
+      deauthorize.hidden = !data.authorized && !data.deviceAuthorization;
+      deauthorize.textContent = data.authorized ? t('twitch.runtime.deauthorize') : t('twitch.runtime.cancelConnect');
+    }
+    if (data.deviceAuthorization) {
+      if (statusText) statusText.textContent = t('twitch.runtime.enterCode', { code: data.deviceAuthorization.userCode });
+      if (deviceLink) { deviceLink.href = data.deviceAuthorization.verificationUri; deviceLink.hidden = false; }
+      return;
+    }
+    if (deviceLink) deviceLink.hidden = true;
+    if (!data.authorized) {
+      if (statusText) statusText.textContent = t('twitch.runtime.notConnectedHint');
+    } else if (data.connected) {
+      if (data.subscriptionState === 'error') {
+        if (statusText) statusText.textContent = t('twitch.runtime.subscriptionFailed', { reason: data.lastConnectionError || t('twitch.error.connectionCheckSoon') });
+      } else if (data.subscriptionState === 'subscribing') {
+        if (statusText) statusText.textContent = t('twitch.runtime.connectedSubscribing', { name: data.broadcasterLogin || 'Twitch' });
+      } else if (statusText) {
+        const pendingText = data.pendingRequestCount ? t('twitch.runtime.pendingCount', { count: formatNumber(data.pendingRequestCount) }) : '';
+        statusText.textContent = t('twitch.runtime.connectedListening', { name: data.broadcasterLogin || 'Twitch', command: data.command, pending: pendingText });
+      }
+    } else if (data.connectionState === 'reconnecting' && statusText) {
+      const seconds = data.nextRetryAt ? Math.max(1, Math.ceil((data.nextRetryAt - Date.now()) / 1000)) : null;
+      const delay = seconds ? t('twitch.runtime.retryIn', { seconds: formatNumber(seconds) }) : t('twitch.runtime.retrySoon');
+      const error = data.lastConnectionError ? t('twitch.runtime.errorDetail', { message: data.lastConnectionError }) : '';
+      statusText.textContent = t('twitch.runtime.reconnecting', { delay, attempt: formatNumber(data.reconnectAttempt || 1), error });
+    } else if (statusText) {
+      statusText.textContent = t('twitch.runtime.authorizedConnecting', { name: data.broadcasterLogin || 'Twitch' });
+    }
+  }
+
+  function renderRuntimeStatusError(message) {
+    const statusText = el('twitch-status');
+    if (statusText) statusText.textContent = t('twitch.runtime.readFailed', { message });
+    setStatusChip('twitch-status-connection', t('twitch.runtime.statusReadFailed'), 'off');
+  }
+
+  async function refreshStatus() {
     try {
       const response = await PinAuth.fetchWithPin('/api/twitch/status');
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || '無法讀取 Twitch 狀態');
-      lastRuntimeStatus = data;
-      applyRewardRuntimeStatus(data);
-      updateMainStatus();
-      if (!data.configured) {
-        if (statusText) statusText.textContent = 'Twitch 尚未啟用，請聯絡 Elitesand Pro 開發者。';
-        if (connect) connect.disabled = true;
-        if (deauthorize) deauthorize.hidden = true;
-        return;
-      }
-      if (connect) connect.disabled = false;
-      if (deauthorize) {
-        deauthorize.hidden = !data.authorized && !data.deviceAuthorization;
-        deauthorize.textContent = data.authorized ? '解除 Twitch 授權' : '取消 Twitch 連接流程';
-      }
-      if (data.deviceAuthorization) {
-        if (statusText) statusText.textContent = `請到 Twitch 輸入代碼：${data.deviceAuthorization.userCode}`;
-        if (deviceLink) { deviceLink.href = data.deviceAuthorization.verificationUri; deviceLink.hidden = false; }
-        return;
-      }
-      if (deviceLink) deviceLink.hidden = true;
-      if (!data.authorized) {
-        if (statusText) statusText.textContent = '尚未連接 Twitch。按「連接 Twitch」後登入並授權聊天室讀寫。';
-      } else if (data.connected) {
-        if (data.subscriptionState === 'error') {
-          if (statusText) statusText.textContent = `Twitch 已連線，但事件訂閱失敗：${data.lastConnectionError || '稍後會重新確認連線'}`;
-        } else if (data.subscriptionState === 'subscribing') {
-          if (statusText) statusText.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}，正在訂閱開台、下播與聊天室事件…`;
-        } else if (statusText) {
-          const pendingText = data.pendingRequestCount ? `；${data.pendingRequestCount} 筆點歌待確認` : '';
-          statusText.textContent = `已連接 ${data.broadcasterLogin || 'Twitch'}：正在監聽 ${data.command}${pendingText}。`;
-        }
-      } else if (data.connectionState === 'reconnecting' && statusText) {
-        const seconds = data.nextRetryAt ? Math.max(1, Math.ceil((data.nextRetryAt - Date.now()) / 1000)) : null;
-        statusText.textContent = `Twitch 連線中斷，${seconds ? `${seconds} 秒後` : '稍後'}自動重連（第 ${data.reconnectAttempt || 1} 次）${data.lastConnectionError ? `：${data.lastConnectionError}` : ''}`;
-      } else if (statusText) {
-        statusText.textContent = `已授權 ${data.broadcasterLogin || 'Twitch'}，正在連接 EventSub…`;
-      }
+      if (!response.ok) throw new Error(data.error || t('twitch.error.noResponse'));
+      setLastRuntimeStatus(data);
+      renderRuntimeStatus(data);
     } catch (err) {
-      if (statusText) statusText.textContent = `Twitch 狀態讀取失敗：${err.message}`;
-      setStatusChip('twitch-status-connection', 'Twitch 狀態讀取失敗', 'off');
+      lastRuntimeStatusError = err.message;
+      renderRuntimeStatusError(lastRuntimeStatusError);
     }
   }
 
@@ -245,7 +277,10 @@
     if (entry.replyKey) { activeReplyKey = entry.replyKey; renderReplyEvents(); loadReplyEditor(); }
     switchManagementPane(entry.pane);
     hideSearchResults();
-    el('twitch-settings-search-status').textContent = tr(`已前往「${tr(entry.category)}」的「${tr(entry.label)}」。`);
+    el('twitch-settings-search-status').textContent = t('twitch.settings.jump', {
+      category: tr(entry.category),
+      label: tr(entry.label),
+    });
     window.setTimeout(() => el(entry.focusId)?.focus(), 0);
   }
 
@@ -279,7 +314,7 @@
       results.appendChild(button);
     });
     results.hidden = matched.length === 0;
-    status.textContent = matched.length ? `找到 ${matched.length} 個設定。` : '找不到相符設定；可試試「冷卻」、「退款」、「黑名單」或「目前歌曲」。';
+    status.textContent = matched.length ? t('twitch.settings.matchCount', { count: formatNumber(matched.length) }) : t('twitch.searchHint');
   }
 
   function initManagementModal() {
@@ -511,7 +546,7 @@
     const list = el('twitch-blacklist-list');
     if (!list) return;
     const rules = Array.isArray(requestDraft.blacklist) ? requestDraft.blacklist : [];
-    el('twitch-blacklist-count').textContent = `${rules.length} 筆`;
+    el('twitch-blacklist-count').textContent = t('twitch.settings.ruleCount', { count: formatNumber(rules.length) });
     list.innerHTML = '';
     if (!rules.length) {
       list.innerHTML = '<div class="twitch-blacklist-empty">尚未建立規則。先選類型並填入比對內容。</div>';
@@ -778,7 +813,7 @@
     if (!validation.ok || !command) return;
     const confirmed = await window.PanelConfirm?.request({
       title: '送出自訂指令公開測試？',
-        summary: tr(`將把「${command.command}」的範例回覆公開送到目前連接的 Twitch 聊天室。`),
+        summary: t('twitch.publicTest.customSummary', { command: command.command }),
       impact: '不會建立點歌、不會下載歌曲，也不會儲存尚未儲存的設定。',
       confirmLabel: '送出測試訊息',
     });
@@ -793,46 +828,47 @@
     }, (result) => {
       validateCustomCommandEditor();
       if (!result?.ok) {
-        if (status) status.textContent = tr(`測試未送出：${result?.error || '伺服器沒有回應'}`);
+        if (status) status.textContent = t('twitch.error.testNotSent', { message: serverMessage(result?.error) });
         return;
       }
-      if (status) status.textContent = tr(`已送出：${result.text}`);
+      if (status) status.textContent = t('twitch.error.testSent', { message: result.text });
       AppShared.showToast('Twitch 自訂指令測試訊息已送出', 'success');
     });
   }
 
   function historyResultLabel(result) {
     const labels = {
-      pending: '等待確認',
-      retrying: '等待重試',
-      imported: '已匯入',
-      rejected: '已拒絕',
-      failed: '失敗',
-      canceled: '已取消',
-      expired: '等待逾時',
+      pending: 'twitch.history.pending',
+      retrying: 'twitch.history.retrying',
+      imported: 'twitch.history.imported',
+      rejected: 'twitch.history.rejected',
+      failed: 'twitch.history.failed',
+      canceled: 'twitch.history.canceled',
+      expired: 'twitch.history.expired',
     };
-    return labels[result] || '未知結果';
+    return t(labels[result] || 'twitch.history.unknownResult');
   }
 
   function historyRewardLabel(reward) {
     if (!reward || reward.status === 'not-applicable') return '';
     const labels = {
-      pending: '忠誠點數待處理',
-      fulfilled: '忠誠點數已完成',
-      refunded: '忠誠點數已退款',
-      'refund-failed': '忠誠點數退款待重試',
-      'fulfillment-failed': '忠誠點數完成待重試',
+      pending: 'twitch.history.rewardPending',
+      fulfilled: 'twitch.history.rewardFulfilled',
+      refunded: 'twitch.history.rewardRefunded',
+      'refund-failed': 'twitch.history.rewardRefundFailed',
+      'fulfillment-failed': 'twitch.history.rewardFulfillmentFailed',
     };
-    const label = labels[reward.status] || '';
-    return label && reward.cost ? `${label}（${tr(`${Number(reward.cost).toLocaleString('zh-TW')} 點`)}）` : label;
+    const labelKey = labels[reward.status];
+    const label = labelKey ? t(labelKey) : '';
+    return label && reward.cost ? `${label}（${formatPoints(reward.cost)}）` : label;
   }
 
   function formatHistoryTime(value) {
     const timestamp = Number(value);
-    if (!Number.isFinite(timestamp) || timestamp <= 0) return '時間不明';
-    return new Date(timestamp).toLocaleString('zh-TW', {
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return t('twitch.history.unknownTime');
+    return new Intl.DateTimeFormat(currentLocale(), {
       month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
+    }).format(new Date(timestamp));
   }
 
   function appendHistoryRows(container, entries) {
@@ -849,8 +885,8 @@
       row.className = container.id === 'twitch-history-list' ? 'twitch-history-row' : 'twitch-activity-row';
       const main = document.createElement('div');
       main.className = row.className + '-main';
-      const requester = String(entry?.requester?.name || '觀眾');
-      const title = String(entry?.video?.title || entry?.video?.id || '未取得歌曲資訊');
+      const requester = String(entry?.requester?.name || t('twitch.history.unknownRequester'));
+      const title = String(entry?.video?.title || entry?.video?.id || t('twitch.history.unknownTrack'));
       main.textContent = requester + ' · ' + title;
       const status = document.createElement('div');
       status.className = row.className + '-status';
@@ -859,11 +895,11 @@
       const meta = document.createElement('div');
       meta.className = row.className + '-meta';
       const parts = [
-        entry?.source === 'channel-points' ? '忠誠點數' : '聊天室',
+        entry?.source === 'channel-points' ? t('twitch.history.sourceChannelPoints') : t('twitch.history.sourceChat'),
         entry?.requestCode ? '#' + entry.requestCode : '',
         formatHistoryTime(entry?.updatedAt || entry?.createdAt),
         historyRewardLabel(entry?.reward),
-        entry?.reason ? `${tr('原因：')} ${tr(String(entry.reason))}` : '',
+        entry?.reason ? t('twitch.history.reason', { reason: String(entry.reason) }) : '',
       ].filter(Boolean);
       meta.textContent = parts.join('｜');
       row.append(main, status, meta);
@@ -922,7 +958,7 @@
       const message = document.createElement('p');
       message.className = 'twitch-sim-summary';
       message.dataset.accepted = 'false';
-      message.textContent = `${tr('無法模擬：')} ${tr(error)}`;
+      message.textContent = t('twitch.simulation.failed', { message: error });
       box.appendChild(message);
       return;
     }
@@ -930,7 +966,7 @@
     const summary = document.createElement('p');
     summary.className = 'twitch-sim-summary';
     summary.dataset.accepted = result.accepted ? 'true' : 'false';
-    summary.textContent = result.accepted ? '模擬結果：會接受這筆點歌' : '模擬結果：會拒絕這筆點歌';
+    summary.textContent = result.accepted ? t('twitch.simulation.accepted') : t('twitch.simulation.rejected');
     const checks = document.createElement('ul');
     checks.className = 'twitch-sim-checks';
     (Array.isArray(result.checks) ? result.checks : []).forEach((check) => {
@@ -938,7 +974,7 @@
       item.className = 'twitch-sim-check';
       item.dataset.passed = check.passed ? 'true' : 'false';
       const label = document.createElement('span');
-      label.textContent = check.label || '規則';
+      label.textContent = check.label || t('twitch.simulation.rule');
       const detail = document.createElement('span');
       detail.textContent = check.detail || '';
       item.append(label, detail);
@@ -947,8 +983,8 @@
     const reply = document.createElement('p');
     reply.className = 'twitch-sim-reply';
     reply.textContent = result.willReply
-      ? `${tr('預計回覆：')} ${result.finalReply}`
-      : tr('預計回覆：不會送出（自動回覆目前關閉）');
+      ? t('twitch.simulation.reply', { message: result.finalReply })
+      : t('twitch.simulation.noReply');
     box.append(summary, checks, reply);
   }
 
@@ -1023,7 +1059,7 @@
       if (!result?.ok) {
         if (button) button.disabled = false;
         const status = el(`${idPrefix}-save-status`);
-        if (status) status.textContent = `儲存失敗：${result?.error || '伺服器沒有回應'}`;
+        if (status) status.textContent = t('twitch.error.saveFailed', { message: serverMessage(result?.error) });
         return;
       }
       const normalized = TwitchRequestSettings.normalizeSettings(result.settings || validation.settings);
@@ -1086,14 +1122,13 @@
     if (error) { error.textContent = message; error.hidden = !message; }
     if (el('twitch-reward-save')) el('twitch-reward-save').disabled = !!message;
     if (el('twitch-reward-preview')) {
-      const state = tr(rewardDraft.enabled ? (rewardDraft.paused ? '暫停兌換' : '啟用') : '停用');
+      const state = rewardDraft.enabled ? (rewardDraft.paused ? t('twitch.reward.paused') : t('twitch.reward.enabled')) : t('twitch.reward.disabled');
       const limits = [
-        rewardDraft.maxPerStream > 0 ? `每場 ${rewardDraft.maxPerStream} 次` : '每場不限',
-        rewardDraft.maxPerUserPerStream > 0 ? `每人每場 ${rewardDraft.maxPerUserPerStream} 次` : '每人不限',
-        rewardDraft.globalCooldownSeconds > 0 ? `冷卻 ${rewardDraft.globalCooldownSeconds} 秒` : '無冷卻',
-      ].map(tr).join('｜');
-      const cost = tr(`${Number.isSafeInteger(rewardDraft.cost) ? rewardDraft.cost.toLocaleString() : '—'} 點`);
-      el('twitch-reward-preview').textContent = `${state}｜${rewardDraft.title || '—'}｜${cost}｜${limits}｜${rewardDraft.prompt || '—'}`;
+        rewardDraft.maxPerStream > 0 ? t('twitch.reward.perStream', { count: formatNumber(rewardDraft.maxPerStream) }) : t('twitch.reward.perStreamUnlimited'),
+        rewardDraft.maxPerUserPerStream > 0 ? t('twitch.reward.perUserPerStream', { count: formatNumber(rewardDraft.maxPerUserPerStream) }) : t('twitch.reward.perUserPerStreamUnlimited'),
+        rewardDraft.globalCooldownSeconds > 0 ? t('twitch.reward.cooldown', { count: formatNumber(rewardDraft.globalCooldownSeconds) }) : t('twitch.reward.noCooldown'),
+      ].join('｜');
+      el('twitch-reward-preview').textContent = [state, rewardDraft.title || '—', formatPoints(rewardDraft.cost), limits, rewardDraft.prompt || '—'].join('｜');
     }
     return validation;
   }
@@ -1117,7 +1152,7 @@
         const error = el('twitch-reward-form-error');
         if (error) { error.textContent = result?.error || 'Twitch 沒有回應'; error.hidden = false; }
         if (result?.status) {
-          lastRuntimeStatus = result.status;
+          setLastRuntimeStatus(result.status);
           applyRewardRuntimeStatus(result.status);
         }
         if (el('twitch-reward-save-status')) el('twitch-reward-save-status').textContent = '同步失敗，已保留上次確認狀態';
@@ -1127,7 +1162,7 @@
       rewardDraft = clone(rewardSaved);
       setDirty('reward', false);
       applyRewardFields();
-      lastRuntimeStatus = result.status || lastRuntimeStatus;
+      if (result.status) setLastRuntimeStatus(result.status);
       applyRewardRuntimeStatus(lastRuntimeStatus || {});
       el('twitch-reward-save-status').textContent = successMessage;
       updateMainStatus();
@@ -1240,7 +1275,7 @@
     SocketClient.sendWithCallback('twitch:reply-settings:update', validation.settings, (result) => {
       if (!result?.ok) {
         if (save) save.disabled = false;
-        el('twitch-reply-save-status').textContent = `儲存失敗：${result?.error || '伺服器沒有回應'}`;
+        el('twitch-reply-save-status').textContent = t('twitch.error.saveFailed', { message: serverMessage(result?.error) });
         return;
       }
       replySaved = TwitchReplySettings.normalizeSettings(result.settings || validation.settings);
@@ -1273,7 +1308,7 @@
     if (!definition) return;
     const confirmed = await window.PanelConfirm?.request({
       title: '送出 Twitch 公開測試？',
-      summary: `將把「${definition.label}」的範例回覆公開送到目前連接的 Twitch 聊天室。`,
+      summary: t('twitch.publicTest.replySummary', { label: tr(definition.label) }),
       impact: '不會建立點歌或儲存設定；聊天室中的觀眾會看得到這則測試訊息。',
       confirmLabel: '送出測試訊息',
     });
@@ -1284,8 +1319,8 @@
     if (status) status.textContent = '正在送出測試訊息…';
     SocketClient.sendWithCallback('twitch:reply-settings:test', { settings: validation.settings, replyKey }, (result) => {
       if (button) button.disabled = false;
-      if (!result?.ok) { if (status) status.textContent = `測試未送出：${result?.error || '伺服器沒有回應'}`; return; }
-      if (status) status.textContent = `已送出：${result.text}`;
+      if (!result?.ok) { if (status) status.textContent = t('twitch.error.testNotSent', { message: serverMessage(result?.error) }); return; }
+      if (status) status.textContent = t('twitch.error.testSent', { message: result.text });
       AppShared.showToast('Twitch 測試訊息已送出', 'success');
     });
   }
@@ -1468,21 +1503,21 @@
         const data = await response.json();
         if (!response.ok || !data.verificationUri || !data.userCode) throw new Error(data.error || '無法開始 Twitch 授權');
         if (el('twitch-device-link')) { el('twitch-device-link').href = data.verificationUri; el('twitch-device-link').hidden = false; }
-        if (authWindow) { authWindow.location.replace(data.verificationUri); showStatus('已開啟 Twitch 登入與授權頁，請依 Twitch 指示完成授權。', 'info'); }
+        if (authWindow) { authWindow.location.replace(data.verificationUri); showStatus(t('twitch.auth.opened'), 'info'); }
         else {
           // Electron 殼會拒絕空白彈窗（authWindow 為 null）；直接開驗證頁，殼會用系統瀏覽器外開。
           window.open(data.verificationUri, '_blank', 'noopener');
-          showStatus(`已開啟 Twitch 授權頁（若未自動開啟，請按「前往 Twitch 輸入代碼」）。代碼：${data.userCode}`, 'info');
+          showStatus(t('twitch.auth.openedCode', { code: data.userCode }), 'info');
         }
       } catch (err) {
         if (authWindow && !authWindow.closed) authWindow.close();
         connect.disabled = false;
-        showStatus(`無法開始 Twitch 授權：${err.message}`, 'error');
+        showStatus(t('twitch.auth.startFailed', { message: err.message }), 'error');
       }
     });
     el('twitch-deauthorize')?.addEventListener('click', async () => {
       const button = el('twitch-deauthorize');
-      const isAuthorized = button.textContent.includes('解除');
+      const isAuthorized = !!lastRuntimeStatus?.authorized;
       const confirmed = await window.DangerConfirm?.request({ title: isAuthorized ? '確認解除 Twitch 授權' : '確認取消 Twitch 連接流程', summary: isAuthorized ? '這會停止 Twitch EventSub 與聊天室點歌，並移除本機保存的 Twitch 權杖。' : '這會取消目前等待中的 Twitch Device Code 授權流程。', impact: '已收到、尚待確認的 Twitch 點歌會保留；歌曲、歌單與其他設定不會刪除。', phrase: isAuthorized ? '解除 Twitch 授權' : '取消 Twitch 連接', confirmLabel: isAuthorized ? '解除授權' : '取消流程' });
       if (!confirmed) return;
       try {
@@ -1490,9 +1525,9 @@
         const response = await PinAuth.fetchWithPin('/api/twitch/deauthorize', { method: 'POST' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || '解除 Twitch 授權失敗');
-        showStatus(data.remoteError ? `本機 Twitch 授權已移除，但暫時無法通知 Twitch：${data.remoteError}` : 'Twitch 授權已解除。', data.remoteError ? 'warning' : 'success');
+        showStatus(data.remoteError ? t('twitch.auth.remoteDeauthorizeFailed', { message: data.remoteError }) : t('twitch.auth.deauthorized'), data.remoteError ? 'warning' : 'success');
         await refreshStatus();
-      } catch (err) { showStatus(`解除 Twitch 授權失敗：${err.message}`, 'error'); }
+      } catch (err) { showStatus(t('twitch.auth.deauthorizeFailed', { message: err.message }), 'error'); }
       finally { button.disabled = false; }
     });
     el('twitch-reward-reauthorize')?.addEventListener('click', () => el('twitch-connect')?.click());
@@ -1512,11 +1547,23 @@
       const placement = busy.get(req.requestId);
       const row = document.createElement('div');
       row.className = 'twitch-req';
-      const title = req.title || '無法取得影片標題';
-      const author = req.author || '未知頻道';
+      const title = req.title || t('twitch.request.unknownTitle');
+      const author = req.author || t('twitch.request.unknownChannel');
       const thumbnail = req.thumbnail && /^https:\/\//i.test(req.thumbnail) ? req.thumbnail : '';
-      const requestCode = req.shortId ? ` · 編號 #${escapeHtml(req.shortId)}` : '';
-      row.innerHTML = `<div class="twitch-req-info">${thumbnail ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">無縮圖</div>'}<div class="twitch-req-copy"><div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div><div class="twitch-req-author">${escapeHtml(author)}</div><div class="twitch-req-user">點歌者：${escapeHtml(req.requester || '觀眾')}${requestCode}</div>${req.source === 'channel-points' ? `<div class="pi-badge twitch-req-reward">忠誠點數兌換 · ${Number(req.rewardRedemption?.cost || 0).toLocaleString()} 點</div>` : ''}${Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>` : req.durationWarning ? '<div class="pi-badge twitch-req-warning">⚠ 影片超過 15 分鐘，請確認後再下載</div>' : ''}<a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a></div></div><div class="twitch-req-actions"><button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${isBusy ? (placement === 'next' ? '插播下載中…' : '下載中…') : '插到下一首'}</button><button class="btn btn-sm btn-ghost" data-act="end"${isBusy ? ' disabled' : ''}>加入尾端</button><button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>${req.source === 'channel-points' ? '拒絕並退款' : '拒絕'}</button></div>`;
+      const requestCode = req.shortId ? t('twitch.request.code', { id: req.shortId }) : '';
+      const requester = req.requester || t('twitch.history.unknownRequester');
+      const requesterLabel = t('twitch.request.requester', { name: requester, code: requestCode });
+      const reward = req.source === 'channel-points'
+        ? `<div class="pi-badge twitch-req-reward">${escapeHtml(t('twitch.request.redemption', { cost: formatPoints(req.rewardRedemption?.cost || 0) }))}</div>`
+        : '';
+      const warning = Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length
+        ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>`
+        : (req.durationWarning ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(t('twitch.request.durationWarning'))}</div>` : '');
+      const nextLabel = isBusy
+        ? t(placement === 'next' ? 'twitch.request.downloadingNext' : 'twitch.request.downloading')
+        : t('twitch.request.addNext');
+      const rejectLabel = t(req.source === 'channel-points' ? 'twitch.request.rejectAndRefund' : 'twitch.request.reject');
+      row.innerHTML = `<div class="twitch-req-info">${thumbnail ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">${escapeHtml(t('twitch.request.missingThumbnail'))}</div>`}<div class="twitch-req-copy"><div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div><div class="twitch-req-author">${escapeHtml(author)}</div><div class="twitch-req-user">${escapeHtml(requesterLabel)}</div>${reward}${warning}<a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a></div></div><div class="twitch-req-actions"><button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${escapeHtml(nextLabel)}</button><button class="btn btn-sm btn-ghost" data-act="end"${isBusy ? ' disabled' : ''}>${escapeHtml(t('twitch.request.addEnd'))}</button><button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy ? ' disabled' : ''}>${escapeHtml(rejectLabel)}</button></div>`;
       row.querySelector('[data-act="next"]').addEventListener('click', () => confirmRequest(req.requestId, 'next'));
       row.querySelector('[data-act="end"]').addEventListener('click', () => confirmRequest(req.requestId, 'end'));
       row.querySelector('[data-act="reject"]').addEventListener('click', () => rejectRequest(req.requestId));
@@ -1529,10 +1576,18 @@
     if (!req || busy.has(requestId) || typeof AppShared.queueYouTubeImport !== 'function') return;
     busy.set(requestId, placement); renderRequests();
     try {
-      const track = await AppShared.queueYouTubeImport(req.url, { source: `Twitch · ${req.requester || req.userName || '觀眾點歌'}`, assessment: req.assessment || null, placement });
+      const requester = req.requester || req.userName || t('twitch.history.unknownRequester');
+      const track = await AppShared.queueYouTubeImport(req.url, {
+        source: `Twitch · ${requester}`,
+        sourceKey: 'import.job.twitchSource',
+        sourceVars: { requester },
+        assessment: req.assessment || null,
+        placement,
+      });
       const report = await new Promise((resolve) => SocketClient.sendWithCallback('twitch:song-request:result', { requestId, success: true, title: track && (track.title || track.name), artist: track && track.artist, position: placement === 'next' ? '下一首' : '歌單尾端', queue: Math.max(1, (AppShared.state.playlist || []).findIndex((item) => item && track && item.id === track.id) + 1) }, resolve));
       if (!report?.ok) throw new Error(report?.error || '無法回覆 Twitch 聊天室');
-      AppShared.showToast(`${placement === 'next' ? '已插到下一首' : '已加入清單尾端'}：${track?.title || '歌曲'}`, 'success');
+      const key = placement === 'next' ? 'twitch.request.addedNext' : 'twitch.request.addedEnd';
+      AppShared.showToast(t(key, { title: track?.title || t('twitch.request.fallbackTrack') }), 'success');
       pending.delete(requestId);
     } catch (err) {
       SocketClient.sendWithCallback('twitch:song-request:result', { requestId, success: false, retryable: true, error: err?.message || '下載或匯入失敗' }, () => {});
@@ -1546,7 +1601,7 @@
     busy.set(requestId, 'reject'); renderRequests();
     SocketClient.sendWithCallback('twitch:song-request:result', { requestId, success: false, rejected: true }, (result) => {
       busy.delete(requestId);
-      if (!result?.ok) { renderRequests(); AppShared.showToast(`拒絕失敗：${result?.error || '伺服器沒有回應'}`, 'error'); return; }
+      if (!result?.ok) { renderRequests(); AppShared.showToast(t('twitch.request.rejectFailed', { message: serverMessage(result?.error) }), 'error'); return; }
       pending.delete(requestId); renderRequests();
       AppShared.showToast(req.source === 'channel-points' ? '已拒絕並退還忠誠點數' : '已略過這首點歌', 'info');
     });
@@ -1554,7 +1609,7 @@
 
   el('twitch-reject-all')?.addEventListener('click', async () => {
     if (!pending.size) return;
-    const confirmed = await window.PanelConfirm?.request({ title: `拒絕全部 ${pending.size} 筆點歌？`, summary: '這些待確認點歌會全部標記為略過。', impact: '已加入播放清單的歌曲與其他設定不受影響。', tone: 'danger', confirmLabel: '全部拒絕' });
+    const confirmed = await window.PanelConfirm?.request({ title: t('twitch.request.rejectAllTitle', { count: formatNumber(pending.size) }), summary: t('twitch.request.rejectAllSummary'), impact: t('twitch.request.rejectAllImpact'), tone: 'danger', confirmLabel: t('twitch.rejectAll') });
     if (!confirmed) return;
     for (const requestId of [...pending.keys()]) rejectRequest(requestId);
   });
@@ -1565,7 +1620,7 @@
     button.disabled = true;
     SocketClient.sendWithCallback('twitch:request-settings:update', next, (result) => {
       button.disabled = false;
-      if (!result?.ok) { AppShared.showToast(`切換點歌狀態失敗：${result?.error || '伺服器沒有回應'}`, 'error'); return; }
+      if (!result?.ok) { AppShared.showToast(t('twitch.request.toggleFailed', { message: serverMessage(result?.error) }), 'error'); return; }
       const normalized = TwitchRequestSettings.normalizeSettings(result.settings || next);
       requestSaved = normalized;
       if (!dirty.rules) requestDraft.enabled = normalized.enabled;
@@ -1591,7 +1646,7 @@
   SocketClient.on('twitch:song-request', (request) => {
     if (!request?.requestId || !request.url) return;
     pending.set(request.requestId, request); renderRequests();
-    AppShared.showToast(`${request.requester || '觀眾'} 點了一首歌，請到「點歌」頁確認`, 'info');
+    AppShared.showToast(t('twitch.request.newRequest', { name: request.requester || t('twitch.history.unknownRequester') }), 'info');
   });
   SocketClient.on('twitch:requests', (requests) => {
     pending.clear();
@@ -1615,6 +1670,8 @@
   refreshStatus();
   window.addEventListener('i18n:change', () => {
     updateMainStatus();
+    if (lastRuntimeStatus) renderRuntimeStatus(lastRuntimeStatus);
+    if (lastRuntimeStatusError) renderRuntimeStatusError(lastRuntimeStatusError);
     setDirty('commands', dirty.commands);
     renderCommandList();
     validateCommandForm();
