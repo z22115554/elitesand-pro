@@ -11,6 +11,24 @@
  */
 const ErrorHandler = (() => {
   const { escapeHtml } = SharedUtils;
+  const fallbackCatalog = Object.freeze({ ...(window.I18n?.catalogs?.['zh-TW'] || {}) });
+  const fallbackT = (key, vars = {}) => {
+    const template = fallbackCatalog[key];
+    return typeof template === 'string'
+      ? template.replace(/\{([^}]+)\}/g, (token, name) => Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : token)
+      : '';
+  };
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : fallbackT(key, vars);
+  const currentLocale = () => window.I18n?.current?.() || 'zh-TW';
+  const formatNumber = (value, options) => new Intl.NumberFormat(currentLocale(), options).format(value);
+  const formatMegabytes = (bytes) => formatNumber(bytes / 1024 / 1024, { maximumFractionDigits: 1 });
+  const historySourceKeys = Object.freeze({
+    'operation-error': 'errorHistory.source.operation',
+    '操作錯誤': 'errorHistory.source.operation',
+    warning: 'errorHistory.source.warning',
+    '警告': 'errorHistory.source.warning',
+  });
+  const localizeHistorySource = (source) => historySourceKeys[source] ? t(historySourceKeys[source]) : source;
 
   // Toast 佇列（支援多條同時顯示）
   let toastContainer = null;
@@ -61,6 +79,7 @@ const ErrorHandler = (() => {
 
     bindHistoryUI();
     renderHistory();
+    window.addEventListener('i18n:change', renderHistory);
 
     console.log('[ErrorHandler] 已初始化');
   }
@@ -93,7 +112,7 @@ const ErrorHandler = (() => {
     toast.innerHTML = `
       <span class="toast-dot"></span>
       <span class="toast-message">${escapeHtml(message)}</span>
-      <button class="toast-close" title="${escapeHtml(closeLabel)}" aria-label="${escapeHtml(closeLabel)}">&times;</button>
+      <button class="toast-close" data-i18n-title="common.close" data-i18n-aria-label="common.close" title="${escapeHtml(closeLabel)}" aria-label="${escapeHtml(closeLabel)}">&times;</button>
     `;
 
     // 關閉按鈕
@@ -125,7 +144,7 @@ const ErrorHandler = (() => {
     // 同時記錄到 console
     const consoleFn = type === 'error' ? console.error : type === 'warning' ? console.warn : console.log;
     consoleFn(`[${type.toUpperCase()}] ${message}`);
-    if (type === 'error' || type === 'warning') recordError(type === 'error' ? '操作錯誤' : '警告', message);
+    if (type === 'error' || type === 'warning') recordError(type === 'error' ? 'operation-error' : 'warning', message);
   }
 
   function removeToast(toast, { immediate = false } = {}) {
@@ -192,13 +211,13 @@ const ErrorHandler = (() => {
   function renderHistory() {
     const list = document.getElementById('error-history-list');
     const count = document.getElementById('error-history-count');
-    if (count) count.textContent = String(errorHistory.length);
+    if (count) count.textContent = formatNumber(errorHistory.length);
     if (!list) return;
     list.textContent = '';
     if (!errorHistory.length) {
       const empty = document.createElement('div');
       empty.className = 'error-history-empty';
-      empty.textContent = '目前沒有錯誤記錄';
+      empty.textContent = t('errorHistory.empty');
       list.appendChild(empty);
       return;
     }
@@ -208,9 +227,11 @@ const ErrorHandler = (() => {
       const head = document.createElement('div');
       head.className = 'error-history-item-head';
       const source = document.createElement('span');
-      source.textContent = entry.source;
+      source.textContent = localizeHistorySource(entry.source);
       const time = document.createElement('time');
-      time.textContent = new Date(entry.timestamp).toLocaleString('zh-TW', { hour12: false });
+      time.textContent = new Intl.DateTimeFormat(currentLocale(), {
+        dateStyle: 'short', timeStyle: 'medium',
+      }).format(new Date(entry.timestamp));
       const message = document.createElement('div');
       message.className = 'error-history-item-message';
       message.textContent = entry.message;
@@ -228,17 +249,17 @@ const ErrorHandler = (() => {
     const copy = document.getElementById('error-history-copy');
     const clear = document.getElementById('error-history-clear');
     if (copy) copy.addEventListener('click', async () => {
-      if (!errorHistory.length) return showToast('目前沒有錯誤記錄', 'info');
+      if (!errorHistory.length) return showToast(t('errorHistory.empty'), 'info');
       try {
         await navigator.clipboard.writeText(historyText());
-        showToast('錯誤記錄已複製', 'success');
-      } catch (_) { showToast('無法存取剪貼簿，請檢查瀏覽器權限', 'error'); }
+        showToast(t('errorHistory.copied'), 'success');
+      } catch (_) { showToast(t('errorHistory.clipboardUnavailable'), 'error'); }
     });
     if (clear) clear.addEventListener('click', () => {
       errorHistory = [];
       saveHistory();
       renderHistory();
-      showToast('錯誤記錄已清除', 'info');
+      showToast(t('errorHistory.cleared'), 'info');
     });
   }
 
@@ -251,11 +272,11 @@ const ErrorHandler = (() => {
    */
   function validateYouTubeUrl(url) {
     if (!url || typeof url !== 'string') {
-      return { valid: false, message: '請輸入 YouTube 連結' };
+      return { valid: false, message: t('validation.youtubeRequired') };
     }
     const trimmed = url.trim();
     if (!trimmed) {
-      return { valid: false, message: '請輸入 YouTube 連結' };
+      return { valid: false, message: t('validation.youtubeRequired') };
     }
     const patterns = [
       /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[\w-]+/,
@@ -266,7 +287,7 @@ const ErrorHandler = (() => {
     ];
     const isValid = patterns.some(p => p.test(trimmed));
     if (!isValid) {
-      return { valid: false, message: '無效的 YouTube 連結格式，請確認連結正確' };
+      return { valid: false, message: t('validation.youtubeInvalid') };
     }
     return { valid: true, url: trimmed };
   }
@@ -276,16 +297,16 @@ const ErrorHandler = (() => {
    */
   function validateAudioFile(file) {
     if (!file) {
-      return { valid: false, message: '未選擇檔案' };
+      return { valid: false, message: t('validation.fileMissing') };
     }
     const allowed = ['.mp3', '.flac', '.wav', '.m4a', '.ogg', '.aac', '.wma'];
     const ext = '.' + (file.name || '').split('.').pop().toLowerCase();
     if (!allowed.includes(ext)) {
-      return { valid: false, message: `不支援的格式 ${ext}，僅支援: ${allowed.join(', ')}` };
+      return { valid: false, message: t('validation.unsupportedFormat', { ext, formats: allowed.join(', ') }) };
     }
     const maxSize = 200 * 1024 * 1024; // 200MB
     if (file.size > maxSize) {
-      return { valid: false, message: `檔案過大 (${(file.size / 1024 / 1024).toFixed(1)}MB)，上限 200MB` };
+      return { valid: false, message: t('validation.audioFileTooLarge', { size: formatMegabytes(file.size), limit: formatNumber(200) }) };
     }
     return { valid: true };
   }
@@ -295,16 +316,16 @@ const ErrorHandler = (() => {
    */
   function validateLyricsFile(file) {
     if (!file) {
-      return { valid: false, message: '未選擇歌詞檔案' };
+      return { valid: false, message: t('validation.lyricsFileMissing') };
     }
     const allowed = ['.lrc', '.srt', '.txt'];
     const ext = '.' + (file.name || '').split('.').pop().toLowerCase();
     if (!allowed.includes(ext)) {
-      return { valid: false, message: `不支援的格式 ${ext}，僅支援: ${allowed.join(', ')}` };
+      return { valid: false, message: t('validation.unsupportedFormat', { ext, formats: allowed.join(', ') }) };
     }
     const maxSize = 5 * 1024 * 1024; // 5MB
     if (file.size > maxSize) {
-      return { valid: false, message: `歌詞檔案過大 (${(file.size / 1024 / 1024).toFixed(1)}MB)，上限 5MB` };
+      return { valid: false, message: t('validation.lyricsFileTooLarge', { size: formatMegabytes(file.size), limit: formatNumber(5) }) };
     }
     return { valid: true };
   }
@@ -314,14 +335,14 @@ const ErrorHandler = (() => {
    */
   function validateLyricsContent(content) {
     if (!content || typeof content !== 'string') {
-      return { valid: false, message: '請輸入歌詞內容' };
+      return { valid: false, message: t('validation.lyricsRequired') };
     }
     const trimmed = content.trim();
     if (!trimmed) {
-      return { valid: false, message: '歌詞內容不能為空' };
+      return { valid: false, message: t('validation.lyricsEmpty') };
     }
     if (trimmed.length > 1000000) { // 1MB 文字上限
-      return { valid: false, message: '歌詞內容過長，上限 1 百萬字元' };
+      return { valid: false, message: t('validation.lyricsTooLong', { limit: formatNumber(1000000) }) };
     }
     return { valid: true, content: trimmed };
   }
@@ -371,7 +392,7 @@ const ErrorHandler = (() => {
 
       if (!response.ok) {
         const text = await response.text().catch(() => '');
-        let errorMsg = `請求失敗 (${response.status})`;
+        let errorMsg = t('network.requestFailed', { status: formatNumber(response.status) });
         try {
           const data = JSON.parse(text);
           errorMsg = data.error || data.details || errorMsg;
@@ -385,7 +406,7 @@ const ErrorHandler = (() => {
     } catch (err) {
       clearTimeout(timer);
       if (err.name === 'AbortError') {
-        throw new Error('請求逾時，請檢查網路連線');
+        throw new Error(t('network.requestTimedOut'));
       }
       throw err;
     }
