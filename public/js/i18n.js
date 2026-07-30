@@ -331,6 +331,7 @@
     'twitch.points': ['{count} 點', '{count} points', '{count} ポイント', '{count}포인트', '{count} 点'],
     'twitch.runtime.clientIdMissing': ['尚未設定 Twitch Client ID。', 'Twitch Client ID is not configured.', 'Twitch Client ID が設定されていません。', 'Twitch Client ID가 설정되지 않았습니다.', '尚未设置 Twitch Client ID。'],
     'twitch.runtime.authorizationRequired': ['尚未連接 Twitch；啟用獎勵前需要先授權。', 'Twitch is not connected. Authorize it before enabling rewards.', 'Twitch に接続されていません。特典を有効にする前に認証してください。', 'Twitch가 연결되지 않았습니다. 보상을 활성화하기 전에 인증하세요.', '尚未连接 Twitch；启用奖励前需要先授权。'],
+    'twitch.runtime.authorizationRefreshUnavailable': ['Twitch 授權暫時無法更新', 'Twitch authorization cannot be refreshed right now.', 'Twitch の認証情報を現在更新できません。', '현재 Twitch 인증을 갱신할 수 없습니다.', '暂时无法更新 Twitch 授权。'],
     'twitch.runtime.rewardScopeMissing': ['目前授權缺少忠誠點數管理權限，請重新連接 Twitch 一次。', 'The current authorization lacks Channel Points management permission. Reconnect Twitch once.', '現在の認証にはチャンネルポイント管理権限がありません。Twitch に再接続してください。', '현재 인증에 채널 포인트 관리 권한이 없습니다. Twitch에 다시 연결해 주세요.', '当前授权缺少频道积分管理权限，请重新连接 Twitch。'],
     'twitch.runtime.rewardSyncFailed': ['同步失敗；下方保留 Twitch 上次已確認的狀態。', 'Sync failed. The last confirmed Twitch state is kept below.', '同期に失敗しました。下には Twitch で最後に確認された状態を表示しています。', '동기화에 실패했습니다. 아래에는 Twitch에서 마지막으로 확인된 상태가 유지됩니다.', '同步失败；下方保留 Twitch 上次已确认的状态。'],
     'twitch.runtime.rewardPaused': ['專用獎勵目前暫停兌換。', 'The dedicated reward is currently paused.', '専用特典は現在一時停止中です。', '전용 보상은 현재 일시 중지되어 있습니다.', '专用奖励目前已暂停兑换。'],

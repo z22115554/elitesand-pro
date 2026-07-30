@@ -17,6 +17,15 @@
   };
   const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : fallbackT(key, vars);
   const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
+  const RUNTIME_ERROR_KEYS = Object.freeze({
+    'Twitch 授權暫時無法更新': 'twitch.runtime.authorizationRefreshUnavailable',
+  });
+  const localizeRuntimeError = (value) => {
+    const message = String(value || '').trim();
+    if (!message) return '';
+    const key = RUNTIME_ERROR_KEYS[message];
+    return key ? t(key) : tr(message);
+  };
   const currentLocale = () => window.I18n?.current?.() || 'zh-TW';
   const formatNumber = (value) => {
     const number = Number(value);
@@ -143,7 +152,7 @@
       if (statusText) statusText.textContent = t('twitch.runtime.notConnectedHint');
     } else if (data.connected) {
       if (data.subscriptionState === 'error') {
-        if (statusText) statusText.textContent = t('twitch.runtime.subscriptionFailed', { reason: data.lastConnectionError || t('twitch.error.connectionCheckSoon') });
+        if (statusText) statusText.textContent = t('twitch.runtime.subscriptionFailed', { reason: localizeRuntimeError(data.lastConnectionError) || t('twitch.error.connectionCheckSoon') });
       } else if (data.subscriptionState === 'subscribing') {
         if (statusText) statusText.textContent = t('twitch.runtime.connectedSubscribing', { name: data.broadcasterLogin || 'Twitch' });
       } else if (statusText) {
@@ -153,7 +162,8 @@
     } else if (data.connectionState === 'reconnecting' && statusText) {
       const seconds = data.nextRetryAt ? Math.max(1, Math.ceil((data.nextRetryAt - Date.now()) / 1000)) : null;
       const delay = seconds ? t('twitch.runtime.retryIn', { seconds: formatNumber(seconds) }) : t('twitch.runtime.retrySoon');
-      const error = data.lastConnectionError ? t('twitch.runtime.errorDetail', { message: data.lastConnectionError }) : '';
+      const localizedError = localizeRuntimeError(data.lastConnectionError);
+      const error = localizedError ? t('twitch.runtime.errorDetail', { message: localizedError }) : '';
       statusText.textContent = t('twitch.runtime.reconnecting', { delay, attempt: formatNumber(data.reconnectAttempt || 1), error });
     } else if (statusText) {
       statusText.textContent = t('twitch.runtime.authorizedConnecting', { name: data.broadcasterLogin || 'Twitch' });
@@ -162,7 +172,7 @@
 
   function renderRuntimeStatusError(message) {
     const statusText = el('twitch-status');
-    if (statusText) statusText.textContent = t('twitch.runtime.readFailed', { message });
+    if (statusText) statusText.textContent = t('twitch.runtime.readFailed', { message: localizeRuntimeError(message) });
     setStatusChip('twitch-status-connection', t('twitch.runtime.statusReadFailed'), 'off');
   }
 

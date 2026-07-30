@@ -6058,6 +6058,24 @@ console.log('\n🌐 17. M6.1 介面語系層');
     referenced.forEach((key) => ok(baselineKeys.includes(key), `缺少翻譯鍵 ${key}：`));
   });
 
+  test('Twitch 授權更新失敗原因會先翻譯再插入重連狀態', () => {
+    const twitchSource = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
+    const expected = {
+      en: 'Twitch authorization cannot be refreshed right now.',
+      ja: 'Twitch の認証情報を現在更新できません。',
+      ko: '현재 Twitch 인증을 갱신할 수 없습니다.',
+      'zh-CN': '暂时无法更新 Twitch 授权。',
+    };
+    Object.entries(expected).forEach(([locale, value]) => {
+      i18n.setLocale(locale, { persist: false, updateQuery: false });
+      eq(i18n.t('twitch.runtime.authorizationRefreshUnavailable'), value, `${locale} Twitch 授權更新錯誤：`);
+    });
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+    ok(twitchSource.includes("'Twitch 授權暫時無法更新': 'twitch.runtime.authorizationRefreshUnavailable'"));
+    ok(twitchSource.includes('const localizedError = localizeRuntimeError(data.lastConnectionError);'));
+    ok(twitchSource.includes("t('twitch.runtime.subscriptionFailed', { reason: localizeRuntimeError(data.lastConnectionError)"));
+  });
+
   test('本場直播與設定工作台的動態狀態不混入繁中', () => {
     const samples = {
       en: 'OBS streaming · 42:16 · 8 tracks performed',
