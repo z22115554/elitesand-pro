@@ -232,6 +232,48 @@
             </div>
           </section>
 
+          <!-- 本場直播摘要：完整 Session 與已唱紀錄集中到獨立視窗 -->
+          <section id="live-session-summary-card" class="card live-session-summary-card" aria-labelledby="live-session-summary-title">
+            <div class="live-session-summary-copy">
+              <p id="live-session-summary-title" class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span data-i18n="home.session.title">本場直播</span></p>
+              <p id="session-summary-status" class="live-session-summary-status" role="status" aria-live="polite" data-i18n="home.session.statusNotLive">尚未開台 · 已唱 0 首</p>
+            </div>
+            <button id="session-record-open" class="btn btn-sm" type="button" data-i18n="home.session.openRecord">查看本場紀錄</button>
+          </section>
+
+          <div id="session-record-modal" class="modal modal-wide session-record-modal" role="dialog" aria-modal="true" aria-labelledby="session-record-title" hidden>
+            <div class="modal-card">
+              <div class="modal-head">
+                <div>
+                  <h3 id="session-record-title" tabindex="-1" data-i18n="home.session.recordTitle">本場演出紀錄</h3>
+                  <p class="sub m-0" data-i18n="home.session.recordHint">直播 Session、已唱歌曲與 YouTube 章節集中在這裡管理。</p>
+                </div>
+                <button id="session-record-close" class="btn btn-sm btn-ghost" type="button" data-i18n="common.close">關閉</button>
+              </div>
+              <div class="modal-body session-record-layout">
+                <section class="card session-record-status-card">
+                  <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span data-i18n="home.session.statusTitle">直播 Session</span></p>
+                  <p class="sub section-intro" data-i18n="home.session.statusHint">開台與收台會由 OBS WebSocket 自動同步；播放的每首歌會自動記錄，可匯出為 YouTube 章節格式。</p>
+                  <div class="inline-row inline-row--wrap">
+                    <button id="session-refresh" class="btn btn-sm" type="button" data-i18n="home.session.refresh">重新整理狀態</button>
+                    <button id="session-reset" class="btn btn-ghost" type="button" disabled data-i18n="home.session.clear">清除歌單</button>
+                  </div>
+                  <div id="session-status" class="val session-status" data-i18n="home.session.waitingObs">等待 OBS 開始推流</div>
+                </section>
+
+                <section class="card session-record-songs-card">
+                  <div class="playlist-head">
+                    <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span data-i18n="home.session.performed">已唱歌曲</span> <span id="setlist-count" class="val ml-6" aria-live="polite"></span></p>
+                    <button id="btn-copy-chapters" class="btn btn-sm" type="button" disabled data-i18n="home.session.copyChapters">複製 YouTube 章節</button>
+                  </div>
+                  <div id="setlist-panel" class="playlist playlist--min-height">
+                    <div class="playlist-empty" data-i18n="home.session.empty">開台後播放歌曲，歌單會自動在此顯示。</div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+
           <!-- 歌詞頁分三區：①播放清單（會變長，獨立一欄）②音樂來源＋時間微調（高度固定）③獨立預覽（置頂跟隨）-->
           <div class="kara-split">
           <div class="kara-col kara-col-list">
@@ -414,26 +456,33 @@
         <div class="view" data-view="settings">
           <!-- 即時預覽（鏡像 OBS 輸出，調整下方設定時所見即所得；示範歌詞由歌詞頁按鈕手動載入）
                sticky 固定在設定頁頂部，往下捲設定時預覽不跟著走（見 .settings-preview-bar CSS） -->
-          <aside class="settings-preview-bar" aria-label="歌詞即時預覽">
+          <aside class="settings-preview-bar" aria-label="歌詞即時預覽" data-i18n-aria-label="preview.title">
             <div class="settings-preview-head">
               <div>
-                <p class="eyebrow m-0">歌詞即時預覽</p>
-                <p class="field-hint m-0">調整設定時，這裡會即時顯示 OBS 輸出。</p>
+                <p class="eyebrow m-0" data-i18n="preview.title">歌詞即時預覽</p>
+                <p class="field-hint m-0" data-i18n="settings.preview.hint">調整設定時，這裡會即時顯示 OBS 輸出。</p>
               </div>
-              <div id="lyrics-save-status" class="save-status saved" role="status" aria-live="polite">設定已保存</div>
+              <div id="lyrics-save-status" class="save-status saved" data-lyrics-save-status role="status" aria-live="polite" data-i18n="settings.workspace.liveSaved">已即時儲存</div>
             </div>
             <div class="settings-preview-controls">
-              <button id="btn-settings-preview-sample-lyrics" class="btn btn-sm btn-preview-sample-lyrics" type="button">示範歌詞</button>
+              <button id="btn-settings-preview-sample-lyrics" class="btn btn-sm btn-preview-sample-lyrics" type="button" data-i18n="preview.sampleLyrics">示範歌詞</button>
             </div>
             <div class="obs-preview-wrap">
-              <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
-              <div class="obs-preview-tag">OBS 預覽</div>
+              <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
+              <div class="obs-preview-tag" data-i18n="preview.obs">OBS 預覽</div>
             </div>
             <div class="url-field">
               <code id="settings-preview-obs-url">http://localhost:3000/display</code>
-              <button id="copy-obs-url-settings-preview" class="btn btn-sm" type="button">複製</button>
+              <button id="copy-obs-url-settings-preview" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button>
             </div>
-            <p class="val m-0">OBS 新增「瀏覽器來源」後貼上此網址；調整下方設定會立即同步，不需要更新網址。</p>
+            <p class="val m-0" data-i18n="preview.obsHint">OBS 新增「瀏覽器來源」後貼上此網址；歌詞設定會自動同步，不需要更新網址。</p>
+            <section class="card preview-detail-card" aria-labelledby="lyrics-detail-entry-title">
+              <div>
+                <p id="lyrics-detail-entry-title" class="eyebrow m-0" data-i18n="settings.lyrics.detailTitle">詳細外觀設定</p>
+                <p class="field-hint m-0" data-i18n="settings.lyrics.detailHint">位置、排版、歷史行、描邊、陰影、發光與背景等低頻設定。</p>
+              </div>
+              <button id="btn-display-advanced" class="btn btn-sm w-full" type="button" data-i18n="settings.openDetails">開啟詳細設定…</button>
+            </section>
           </aside>
 
           <!-- 設定卡片區（內層 grid，讓預覽 bar 能 sticky 在其上方）-->
@@ -687,37 +736,41 @@
 
           </div><!-- /settings-col basic-right -->
 
-          <!-- ─── 進階外觀（獨立視窗）─── -->
-          <div class="section-divider">進階外觀 <span class="sd-sub">位置 · 排版 · 進階效果</span></div>
-
-          <div class="settings-col">
-          <section class="card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>詳細外觀設定</p>
-            <p class="sub section-intro">歌詞位置、排版、當前行放大、歷史行、描邊／陰影／發光／背景框等較少動的設定，集中在獨立視窗（左側即時預覽、右側多欄）。</p>
-            <button id="btn-display-advanced" class="btn w-full" type="button">詳細設定…（位置 · 排版 · 進階效果）</button>
-            <p class="val mt-12">OBS 網址、手機遙控、yt-dlp、PIN 等已移到側欄「一般設定」。</p>
-          </section>
-          </div>
-
-          <!-- ═══ Modal：歌詞詳細設定（#display-advanced-modal，加寬彈窗：左預覽、右多欄）═══ -->
+          <!-- ═══ Modal：歌詞詳細設定 ═══ -->
           <div id="display-advanced-modal" class="modal modal-wide lyric-advanced-modal" role="dialog" aria-modal="true" aria-labelledby="display-advanced-title" hidden>
-            <div class="modal-card">
-              <div class="modal-head"><h3 id="display-advanced-title">歌詞詳細設定</h3><button id="display-advanced-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
-              <div class="modal-split">
+            <div class="modal-card settings-workspace">
+              <div class="modal-head settings-workspace__head">
+                <div class="settings-workspace__title-group">
+                  <p class="eyebrow m-0" data-i18n="settings.workspace.obsOutput">OBS 輸出</p>
+                  <h3 id="display-advanced-title" data-i18n="settings.lyrics.modalTitle">歌詞詳細設定</h3>
+                  <p id="lyrics-workspace-template-status" class="sub" aria-live="polite"></p>
+                </div>
+                <div class="settings-workspace__head-actions">
+                  <p id="lyrics-workspace-save-status" class="save-status saved" data-lyrics-save-status role="status" aria-live="polite" data-i18n="settings.workspace.liveSaved">已即時儲存</p>
+                  <button id="display-advanced-close" class="btn btn-sm btn-ghost" type="button" data-i18n="common.close">關閉</button>
+                </div>
+              </div>
+              <div class="modal-split settings-workspace__layout">
+                <nav class="settings-workspace__nav" aria-label="設定分類" data-i18n-aria-label="settings.workspace.navLabel">
+                  <button class="settings-workspace__tab" type="button" data-settings-workspace-tab="layout" data-settings-workspace-default="true" aria-pressed="true" data-i18n="settings.workspace.layout">版面</button>
+                  <button class="settings-workspace__tab" type="button" data-settings-workspace-tab="readability" aria-pressed="false" data-i18n="settings.workspace.readability">可讀性</button>
+                  <button class="settings-workspace__tab" type="button" data-settings-workspace-tab="appearance" aria-pressed="false" data-i18n="settings.workspace.appearance">外觀</button>
+                  <button class="settings-workspace__tab" type="button" data-settings-workspace-tab="advanced" aria-pressed="false" data-i18n="settings.workspace.advanced">進階</button>
+                </nav>
                 <div class="mw-preview">
                   <div class="obs-preview-wrap">
-                    <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" scrolling="no"></iframe>
-                    <div class="obs-preview-tag">即時預覽</div>
+                    <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
+                    <div class="obs-preview-tag" data-i18n="settings.workspace.livePreview">即時預覽</div>
                   </div>
                 </div>
                 <div class="mw-settings">
           <div class="lyrics-settings-search">
-            <label for="lyrics-settings-search">找設定</label>
-            <input id="lyrics-settings-search" class="input" type="search" placeholder="例如：位置、寬度、陰影、背景" autocomplete="off">
-            <p id="lyrics-settings-search-status" class="field-hint" aria-live="polite">只會顯示目前模板可用的設定。</p>
+            <label for="lyrics-settings-search" data-i18n="settings.workspace.findSettings">找設定</label>
+            <input id="lyrics-settings-search" class="input" type="search" placeholder="例如：位置、寬度、陰影、背景" data-i18n-placeholder="settings.workspace.searchPlaceholder" autocomplete="off">
+            <p id="lyrics-settings-search-status" class="field-hint" role="status" aria-live="polite" data-i18n="settings.workspace.searchHint">只會顯示目前模板可用的設定。</p>
           </div>
           <!-- ═══ 位置與排版 ═══ -->
-          <details class="card card-collapse" data-lyrics-search="位置 排版 對齊 邊距 寬度">
+          <details class="card card-collapse" data-settings-workspace-group="layout" data-lyrics-search="位置 排版 對齊 邊距 寬度">
             <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="3"/></svg>位置與排版</summary>
             <div class="card-collapse-body">
             <p class="field-hint" id="lyric-pos-grid-moved-hint" class="mt-0">歌詞在畫面上的九宮格定位已搬到「顯示設定」首頁「動畫風格」卡片裡的「歌詞位置」，選經典疊層時會出現。</p>
@@ -749,7 +802,7 @@
           </details>
 
           <!-- ═══ 進階效果 ═══ -->
-          <details id="classic-only-advanced-effect-card" class="card card-collapse" data-lyrics-search="效果 描邊 陰影 發光 背景框 歷史行">
+          <details id="classic-only-advanced-effect-card" class="card card-collapse" data-settings-workspace-group="readability advanced" data-lyrics-search="效果 描邊 陰影 發光 背景框 歷史行">
             <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>進階效果</summary>
             <div class="card-collapse-body">
             <div id="classic-only-advanced-effects">
@@ -812,10 +865,10 @@
             </div>
             </div>
           </details>
-          <button id="ls-reset" class="btn btn-sm btn-ghost btn--vertical-spaced" type="button">全部重置為預設</button>
+          <button id="ls-reset" class="btn btn-sm btn-ghost btn--vertical-spaced settings-workspace__utility" data-settings-workspace-group="advanced" type="button" data-i18n="settings.workspace.resetAll">全部重置為預設</button>
 
           <!-- ═══ 背景（Phase 4）═══ -->
-          <details class="card card-collapse" data-lyrics-search="背景 圖片 透明度 填滿 裁切">
+          <details class="card card-collapse" data-settings-workspace-group="appearance advanced" data-lyrics-search="背景 圖片 透明度 填滿 裁切">
             <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>背景</summary>
             <div class="card-collapse-body">
               <p class="field-hint mt-0">背景會鋪滿整個 OBS 來源。維持無背景＝透明疊加（預設）。</p>
@@ -886,8 +939,8 @@
 
           <div id="twitch-management-modal" class="modal modal-wide twitch-management-modal" role="dialog" aria-modal="true" aria-labelledby="twitch-management-title" hidden>
             <div class="modal-card">
-              <div class="modal-head twitch-management-head">
-                <div><h3 id="twitch-management-title" tabindex="-1" data-i18n="twitch.managementTitle">Twitch 點歌管理</h3><p id="twitch-management-dirty-summary" class="save-status saved twitch-management-status" role="status" aria-live="polite" data-i18n="twitch.allSaved">所有設定都已儲存</p></div>
+              <div class="modal-head twitch-management-head settings-workspace__head">
+                <div class="settings-workspace__title-group"><h3 id="twitch-management-title" tabindex="-1" data-i18n="twitch.managementTitle">Twitch 點歌管理</h3><p id="twitch-management-dirty-summary" class="save-status saved twitch-management-status" role="status" aria-live="polite" data-i18n="twitch.allSaved">所有設定都已儲存</p></div>
                 <div class="twitch-management-head-actions"><button id="twitch-management-close" class="btn btn-sm btn-ghost" type="button" data-i18n="common.close">關閉</button></div>
               </div>
               <div class="twitch-management-search">
@@ -1229,37 +1282,13 @@
 
         <!-- ═══ 視圖：直播歌單 ═══ -->
         <div class="view content-col" data-view="setlist">
-          <!-- 兩欄：左＝Session＋已唱歌單，右＝歌單外觀設定（加寬）-->
+          <!-- 左側兩欄：模板＋快速調整；右側固定 OBS 預覽 -->
           <div class="setlist-split">
           <div class="setlist-main">
-          <div class="setlist-left">
-          <!-- Session 控制 -->
+          <div class="setlist-template-column">
+          <!-- 模板選擇 -->
           <section class="card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>直播 Session</p>
-            <p class="sub section-intro">開台與收台會由 OBS WebSocket 自動同步；播放的每首歌會自動記入歌單，可匯出為 YouTube 章節格式。</p>
-            <div class="inline-row inline-row--wrap">
-              <button id="session-refresh" class="btn btn-sm" type="button">重新整理狀態</button>
-              <button id="session-reset" class="btn btn-ghost" type="button" disabled>清除歌單</button>
-            </div>
-            <div id="session-status" class="val session-status">等待 OBS 開始推流</div>
-          </section>
-
-          <!-- 已唱歌單 -->
-          <section class="card">
-            <div class="playlist-head">
-            <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>已唱歌單 <span id="setlist-count" class="val ml-6">0 首</span></p>
-              <button id="btn-copy-chapters" class="btn btn-sm" type="button" disabled>複製 YouTube 章節</button>
-            </div>
-            <div id="setlist-panel" class="playlist playlist--min-height">
-              <div class="playlist-empty">開台後播放歌曲，歌單會自動在此顯示。</div>
-            </div>
-          </section>
-          </div><!-- /.setlist-left -->
-
-          <div class="setlist-right">
-          <!-- OBS 連結 + 外觀設定 -->
-          <section class="card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>OBS 來源 · 歌單畫面</p>
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span data-i18n="settings.setlist.templateTitle">歌單模板</span></p>
             <div class="field setlist-layout-field">
               <div class="setlist-layout-heading"><label id="setlist-layout-label" for="setlist-layout">選擇歌單模板</label><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
               <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option></select>
@@ -1279,6 +1308,11 @@
               <p class="setlist-layout-hint setlist-sizing-hint" id="setlist-sizing-hint" role="status">大小與顯示首數跟著你在 OBS 拉的 Browser Source 寬高變化。</p>
               <p class="field-hint setlist-legacy-layout-notice" id="setlist-legacy-layout-notice" role="status" hidden>這個模板已暫停提供。你目前的 OBS 畫面與已保存設定不會自動改變；選擇其他模板後才會切換。</p>
             </div>
+          </section>
+          </div><!-- /.setlist-template-column -->
+
+          <div class="setlist-quick-column">
+          <section class="card">
             <details class="collapse" id="setlist-appearance" open>
               <summary>快速調整 <span>版面、大小、顏色與可讀性</span></summary>
               <div class="collapse-body">
@@ -1407,31 +1441,46 @@
                 </details>
 
                 <!-- ══ 詳細設定：色彩細項 / 字體 / 場景版專屬 / 特效 / 文字標籤，移到獨立視窗避免面板過長 ══ -->
-                <button id="btn-setlist-advanced" class="btn btn-sm btn--setlist-advanced" type="button">開啟詳細設定（只顯示目前模板有效的項目）</button>
-                <!-- ═══ Modal：歌單詳細設定（#setlist-advanced-modal，執行期會搬到 body 底下逃脫 backdrop-filter 容器）═══ -->
+                <!-- ═══ Modal：歌單詳細設定 ═══ -->
                 <div id="setlist-advanced-modal" class="modal modal-wide setlist-advanced-modal" role="dialog" aria-modal="true" aria-labelledby="setlist-advanced-title" hidden>
-                  <div class="modal-card">
-                    <div class="modal-head"><h3 id="setlist-advanced-title">歌單詳細設定</h3><button id="setlist-advanced-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
-                    <div class="modal-split">
+                  <div class="modal-card settings-workspace">
+                    <div class="modal-head settings-workspace__head">
+                      <div class="settings-workspace__title-group">
+                        <p class="eyebrow m-0" data-i18n="settings.workspace.obsOutput">OBS 輸出</p>
+                        <h3 id="setlist-advanced-title" data-i18n="settings.setlist.modalTitle">歌單詳細設定</h3>
+                        <p id="setlist-workspace-template-status" class="sub" aria-live="polite"></p>
+                      </div>
+                      <div class="settings-workspace__head-actions">
+                        <p id="setlist-workspace-save-status" class="save-status saved" data-setlist-save-status role="status" aria-live="polite" data-i18n="settings.workspace.liveSaved">已即時儲存</p>
+                        <button id="setlist-advanced-close" class="btn btn-sm btn-ghost" type="button" data-i18n="common.close">關閉</button>
+                      </div>
+                    </div>
+                    <div class="modal-split settings-workspace__layout">
+                      <nav class="settings-workspace__nav" aria-label="設定分類" data-i18n-aria-label="settings.workspace.navLabel">
+                        <button class="settings-workspace__tab" type="button" data-settings-workspace-tab="layout" data-settings-workspace-default="true" aria-pressed="true" data-i18n="settings.workspace.layout">版面</button>
+                        <button class="settings-workspace__tab" type="button" data-settings-workspace-tab="readability" aria-pressed="false" data-i18n="settings.workspace.readability">可讀性</button>
+                        <button class="settings-workspace__tab" type="button" data-settings-workspace-tab="appearance" aria-pressed="false" data-i18n="settings.workspace.appearance">外觀</button>
+                        <button class="settings-workspace__tab" type="button" data-settings-workspace-tab="advanced" aria-pressed="false" data-i18n="settings.workspace.advanced">進階</button>
+                      </nav>
                     <div class="mw-preview">
                       <div class="setlist-template-controls">
-                        <button class="btn btn-sm btn-setlist-demo" type="button" class="flex-grow">載入示範資料</button>
-                        <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button" class="flex-grow">清除示範資料</button>
+                        <button class="btn btn-sm btn-setlist-demo flex-grow" type="button" data-i18n="settings.setlist.demoLoad">載入示範資料</button>
+                        <button class="btn btn-sm btn-ghost btn-setlist-demo-clear flex-grow" type="button" data-i18n="settings.setlist.demoClear">清除示範資料</button>
                       </div>
-                      <div class="setlist-preview-sizes" role="radiogroup" aria-label="模擬 OBS 來源尺寸">
-                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="16x9" role="radio" aria-checked="true">橫式 1920×1080</button>
-                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="portrait" role="radio" aria-checked="false">直式 600×1080</button>
-                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="strip" role="radio" aria-checked="false">橫條 1920×320</button>
-                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="small" role="radio" aria-checked="false">小框 640×480</button>
+                      <div class="setlist-preview-sizes" role="radiogroup" aria-label="模擬 OBS 來源尺寸" data-i18n-aria-label="settings.setlist.previewSizeLabel">
+                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="16x9" role="radio" aria-checked="true" data-i18n="settings.setlist.sizeLandscape">橫式 1920×1080</button>
+                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="portrait" role="radio" aria-checked="false" data-i18n="settings.setlist.sizePortrait">直式 600×1080</button>
+                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="strip" role="radio" aria-checked="false" data-i18n="settings.setlist.sizeStrip">橫條 1920×320</button>
+                        <button class="setlist-preview-size" type="button" data-setlist-preview-size="small" role="radio" aria-checked="false" data-i18n="settings.setlist.sizeSmall">小框 640×480</button>
                       </div>
                       <div class="setlist-preview-wrap">
-                        <iframe id="setlist-preview-modal" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" scrolling="no"></iframe>
+                        <iframe id="setlist-preview-modal" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" data-i18n-title="settings.setlist.previewFrameTitle" scrolling="no"></iframe>
                         <div class="setlist-preview-tag">橫式 1920×1080</div>
                       </div>
                     </div>
-                    <div class="mw-settings"><div class="setlist-settings-search"><label for="setlist-settings-search">找設定</label><input id="setlist-settings-search" class="input" type="search" placeholder="例如：字體、寬度、已唱、陰影、場景" autocomplete="off"><p id="setlist-settings-search-status" class="field-hint" aria-live="polite">可直接搜尋設定名稱或用途。</p></div>
+                    <div class="mw-settings"><div class="setlist-settings-search"><label for="setlist-settings-search" data-i18n="settings.workspace.findSettings">找設定</label><input id="setlist-settings-search" class="input" type="search" placeholder="例如：字體、寬度、已唱、陰影、場景" data-i18n-placeholder="settings.setlist.searchPlaceholder" autocomplete="off"><p id="setlist-settings-search-status" class="field-hint" role="status" aria-live="polite" data-i18n="settings.setlist.searchHint">可直接搜尋設定名稱或用途。</p></div>
 
-                    <details class="card card-collapse" open>
+                    <details class="card card-collapse" data-settings-workspace-group="readability" open>
                       <summary>文字細節（次要文字）</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc">主要文字色已在快速調整；這裡只保留需要細調的次要文字層次。</p>
@@ -1448,7 +1497,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-sl-scope="classic list">
+                    <details class="card card-collapse" data-settings-workspace-group="appearance" data-sl-scope="classic list">
                       <summary>卡片邊框（經典／清單版）</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc">主要文字與可讀性襯底已移到快速調整；這裡只保留不常改的邊框細節。</p>
@@ -1464,7 +1513,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse">
+                    <details class="card card-collapse" data-settings-workspace-group="readability">
                       <summary>字體與字級</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc">字體分三種用途：場景版的大標題、一般內文、還有編號/標籤這種等寬數字。</p>
@@ -1513,7 +1562,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-sl-scope="classic list">
+                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="classic list">
                       <summary>版面尺寸 — 寬度／圓角／內距（經典／清單版）</summary>
                       <div class="card-collapse-body">
                       <p class="field-hint">清單型模板的寬度由 OBS Browser Source 決定，這裡不再提供固定像素寬度；要更寬就把來源拉寬，字級與間距會一起等比調整。整體大小倍率已移到快速調整的「大小」。</p>
@@ -1533,7 +1582,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-sl-scope="classic list">
+                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="classic list">
                       <summary>排版與動畫</summary>
                       <div class="card-collapse-body">
                       <div class="field">
@@ -1569,7 +1618,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-sl-scope="classic list">
+                    <details class="card card-collapse" data-settings-workspace-group="appearance" data-sl-scope="classic list">
                       <summary>特效（毛玻璃／外框發光）</summary>
                       <div class="card-collapse-body">
                       <div class="field">
@@ -1589,7 +1638,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards signal index">
+                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards signal index">
                       <summary>顯示項目</summary>
                       <div class="card-collapse-body">
                       <div class="switch-row">
@@ -1604,7 +1653,7 @@
                       <input id="sls-label-reserve" type="text" value="Reserve">
                     </div>
 
-                    <details class="card card-collapse" data-sl-layout="classic simple timeline diagonal index">
+                    <details class="card card-collapse" data-settings-workspace-group="advanced" data-sl-layout="classic simple timeline diagonal index">
                       <summary>自訂文字標籤</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc">畫面上固定顯示的文字，可以換成中文或你喜歡的用語。</p>
@@ -1620,7 +1669,7 @@
                     </details>
 
                     <!-- ══ 場景版設定：只在 Timeline/Diagonal/Constellation 顯示，各版型互相獨立 ══ -->
-                    <details class="card card-collapse" data-sl-scope="scene" open>
+                    <details class="card card-collapse" data-settings-workspace-group="layout advanced" data-sl-scope="scene" open>
                       <summary>場景版設定（目前版型專屬）</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc">場景版是全螢幕 16:9 舞台設計，背景透明可疊在角色身上；以下設定每個場景版型各自獨立，互不影響。</p>
@@ -1724,7 +1773,7 @@
                     </details>
 
                     <!-- ══ 經典版型專屬效果：注意「文字陰影/發光」跟「卡片外框發光」是不同的兩種效果 ══ -->
-                    <details class="card card-collapse" data-sl-scope="classic">
+                    <details class="card card-collapse" data-settings-workspace-group="appearance advanced" data-sl-scope="classic">
                       <summary>經典版專屬效果（整體背板／文字陰影／發光／描邊）</summary>
                       <div class="card-collapse-body">
                       <!-- 整體背板從快速調整移來：它會鋪滿整塊來源，屬於低頻但影響很大的設定 -->
@@ -1770,29 +1819,36 @@
               </div>
             </details>
           </section>
-          </div><!-- /.setlist-right -->
+          </div><!-- /.setlist-quick-column -->
           </div><!-- /.setlist-main -->
-          <aside class="setlist-preview-bar" aria-label="歌單即時預覽">
-            <div class="setlist-preview-head"><div><p class="eyebrow m-0">歌單即時預覽</p><p class="field-hint m-0">調整設定時，這裡會即時顯示 OBS 輸出。</p></div><span class="save-status saved">已即時同步</span></div>
+          <aside class="setlist-preview-bar" aria-label="歌單即時預覽" data-i18n-aria-label="settings.setlist.previewTitle">
+            <div class="setlist-preview-head"><div><p class="eyebrow m-0" data-i18n="settings.setlist.previewTitle">歌單即時預覽</p><p class="field-hint m-0" data-i18n="settings.preview.hint">調整設定時，這裡會即時顯示 OBS 輸出。</p></div><span class="save-status saved" data-setlist-save-status role="status" aria-live="polite" data-i18n="settings.workspace.liveSaved">已即時儲存</span></div>
             <div class="setlist-template-controls">
-              <button class="btn btn-sm btn-setlist-demo" type="button">載入示範資料</button>
-              <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button">清除示範資料</button>
+              <button class="btn btn-sm btn-setlist-demo" type="button" data-i18n="settings.setlist.demoLoad">載入示範資料</button>
+              <button class="btn btn-sm btn-ghost btn-setlist-demo-clear" type="button" data-i18n="settings.setlist.demoClear">清除示範資料</button>
             </div>
-            <div class="setlist-preview-sizes" role="radiogroup" aria-label="模擬 OBS 來源尺寸">
-              <button class="setlist-preview-size" type="button" data-setlist-preview-size="16x9" role="radio" aria-checked="true">橫式 1920×1080</button>
-              <button class="setlist-preview-size" type="button" data-setlist-preview-size="portrait" role="radio" aria-checked="false">直式 600×1080</button>
-              <button class="setlist-preview-size" type="button" data-setlist-preview-size="strip" role="radio" aria-checked="false">橫條 1920×320</button>
-              <button class="setlist-preview-size" type="button" data-setlist-preview-size="small" role="radio" aria-checked="false">小框 640×480</button>
+            <div class="setlist-preview-sizes" role="radiogroup" aria-label="模擬 OBS 來源尺寸" data-i18n-aria-label="settings.setlist.previewSizeLabel">
+              <button class="setlist-preview-size" type="button" data-setlist-preview-size="16x9" role="radio" aria-checked="true" data-i18n="settings.setlist.sizeLandscape">橫式 1920×1080</button>
+              <button class="setlist-preview-size" type="button" data-setlist-preview-size="portrait" role="radio" aria-checked="false" data-i18n="settings.setlist.sizePortrait">直式 600×1080</button>
+              <button class="setlist-preview-size" type="button" data-setlist-preview-size="strip" role="radio" aria-checked="false" data-i18n="settings.setlist.sizeStrip">橫條 1920×320</button>
+              <button class="setlist-preview-size" type="button" data-setlist-preview-size="small" role="radio" aria-checked="false" data-i18n="settings.setlist.sizeSmall">小框 640×480</button>
             </div>
             <div class="setlist-preview-wrap">
-              <iframe id="setlist-preview" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" scrolling="no"></iframe>
+              <iframe id="setlist-preview" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" data-i18n-title="settings.setlist.previewFrameTitle" scrolling="no"></iframe>
               <div class="setlist-preview-tag">橫式 1920×1080</div>
             </div>
             <div class="url-field">
               <code id="setlist-obs-url">http://localhost:3000/setlist</code>
-              <button id="copy-setlist-url" class="btn btn-sm" type="button">複製</button>
+              <button id="copy-setlist-url" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button>
             </div>
-            <p class="val m-0">貼上此網址後，直接在 OBS 把 Browser Source 拉成你要的大小與位置；模板、配色與大小都會即時同步，網址永遠不用換。</p>
+            <p class="val m-0" data-i18n="settings.setlist.obsHint">貼上此網址後，直接在 OBS 把 Browser Source 拉成你要的大小與位置；模板、配色與大小都會即時同步，網址永遠不用換。</p>
+            <section class="card preview-detail-card" aria-labelledby="setlist-detail-entry-title">
+              <div>
+                <p id="setlist-detail-entry-title" class="eyebrow m-0" data-i18n="settings.setlist.detailTitle">詳細歌單設定</p>
+                <p class="field-hint m-0" data-i18n="settings.setlist.detailHint">字體、尺寸、邊框、動畫、固定標籤與模板專屬設定。</p>
+              </div>
+              <button id="btn-setlist-advanced" class="btn btn-sm w-full" type="button" data-i18n="settings.openDetails">開啟詳細設定…</button>
+            </section>
           </aside>
           </div><!-- /.setlist-split -->
         </div>
@@ -2258,6 +2314,7 @@
   <script src="/js/twitch-request-settings.js"></script>
   <script src="/js/twitch-reward-settings.js"></script>
   <script src="/js/twitch-reply-settings.js"></script>
+  <script src="/js/settings-workspace.js"></script>
   <script src="/js/app-twitch.js"></script>
   <script src="/js/app-playlist.js"></script>
   <script src="/js/playback-sequence.js"></script>

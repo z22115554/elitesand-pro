@@ -3093,33 +3093,6 @@ test('Twitch 點歌頁有指令規則、回覆測試、變數驗證與各自還�
   ok(state.includes('twitchRewardSettings: playState.twitchRewardSettings'), 'Twitch 忠誠點數設定必須寫入 state.json: ');
 });
 
-test('Twitch 未儲存提示會比較實際草稿，且狀態文字完整支援五語', () => {
-  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
-  const client = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
-  const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
-  const i18n = require('../public/js/i18n');
-
-  ok(client.includes('function sameDraftValue(left, right)'));
-  ok(client.includes('function isCategoryDirty(category)'));
-  ['commands', 'blacklist', 'custom', 'reward', 'replies'].forEach((category) => {
-    ok(client.includes(`category === '${category}'`), `Twitch ${category} 必須比較草稿與已儲存內容：`);
-  });
-  ok(client.includes('dirty[category] = value ? isCategoryDirty(category) : false;'));
-  ok(client.includes("summary.classList.toggle('draft', count > 0)"));
-  ok(client.includes("summary.classList.toggle('saved', count === 0)"));
-  ok(client.includes("t('twitch.unsavedCount', { count })") && client.includes("t('twitch.allSaved')"));
-  ok(html.includes('id="twitch-management-dirty-summary" class="save-status saved twitch-management-status"'));
-  ok(html.includes('data-i18n="twitch.allSaved"'));
-  ok(panelCss.includes('.save-status.draft {'));
-
-  ['twitch.allSaved', 'twitch.unsavedCount'].forEach((key) => {
-    i18n.LOCALES.forEach((locale) => ok(String(i18n.catalogs[locale][key] || '').trim(), `${locale}.${key} 不得為空：`));
-    ['en', 'ja', 'ko', 'zh-CN'].forEach((locale) => {
-      ok(i18n.catalogs[locale][key] !== i18n.catalogs['zh-TW'][key], `${locale}.${key} 不可沿用繁中：`);
-    });
-  });
-});
-
 testAsync('Twitch 聊天回覆遇到 5xx 會退避重試', async () => {
   const pendingStore = { load: () => [], save: () => true };
   const service = new TwitchService({
@@ -5261,13 +5234,120 @@ test('統一音量開關會即時重套兩條播放鏈', () => {
   ].forEach((required) => ok(playback.includes(required), `統一音量開關缺少 ${required}`));
 });
 
-test('Setlist compact layout keeps settings flowing beside the preview', () => {
+test('Setlist keeps template and quick controls in two columns beside the preview', () => {
   const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const panelCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8');
   ok(panel.includes('class="setlist-main"'));
-  ok(panelCss.includes('.setlist-main { display: contents;'));
-  ok(panelCss.includes('.setlist-main { display: flex; flex-direction: column;'));
-  ok(panelCss.includes('.setlist-right { grid-column: auto; grid-row: auto; }'));
+  ok(panel.includes('class="setlist-template-column"'));
+  ok(panel.includes('class="setlist-quick-column"'));
+  ok(panel.includes('<span class="check-box" aria-hidden="true"></span><span class="check-text">未唱歌曲</span>'));
+  ok(panel.includes('<span class="check-box" aria-hidden="true"></span><span class="check-text">已唱歌曲</span>'));
+  ok(panelCss.includes('.setlist-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 440px);'));
+  ok(panelCss.includes('.setlist-main { display: grid; grid-template-columns: minmax(250px, .68fr) minmax(430px, 1.32fr);'));
+  ok(panelCss.includes('.setlist-preview-bar { grid-column: 2; grid-row: 1; position: sticky;'));
+  ok(panelCss.includes('.field--setlist-sections .check-row {'));
+  ok(panelCss.includes('display:inline-flex;'));
+  ok(panelCss.includes('border:1px solid var(--border-strong);'));
+  ok(panelCss.includes('.field--setlist-sections .check-inline {'));
+  ok(panelCss.includes('flex-direction:row;'));
+  ok(panelCss.includes('border:0;'));
+  ok(panelCss.includes('.field--setlist-sections .check-inline .check-text { order:1;'));
+  ok(panelCss.includes('.live-session-summary-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: var(--gap);'));
+});
+
+test('Lyrics and setlist advanced settings stay modal with entries below right previews', () => {
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const panelCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-setlist-panel.js'), 'utf8');
+  ok(!panel.includes('data-inline-settings-workspace="true"'), '詳細設定不可攤在頁面內：');
+  ok(panel.includes('id="display-advanced-modal" class="modal modal-wide lyric-advanced-modal"'));
+  ok(panel.includes('id="setlist-advanced-modal" class="modal modal-wide setlist-advanced-modal"'));
+  ok(panel.includes('class="card preview-detail-card" aria-labelledby="lyrics-detail-entry-title"'));
+  ok(panel.includes('class="card preview-detail-card" aria-labelledby="setlist-detail-entry-title"'));
+  ok(panelCss.includes('.settings-body { grid-column: 1; grid-row: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));'));
+  ok(panelCss.includes('.settings-preview-bar { grid-column: 2; grid-row: 1; position: sticky;'));
+  ok(app.includes('modal.hidden = false;'));
+  ok(setlistPanel.includes('advModal.hidden = false;'));
+  ok(!panel.includes('已放在本頁下方的詳細細調工作台'), '不得保留已取消的頁內詳細設定文案：');
+  ok(panel.includes('data-i18n="settings.workspace.livePreview"'));
+  ok(panel.includes('data-i18n="settings.workspace.findSettings"'));
+  ok(panel.includes('data-i18n-placeholder="settings.workspace.searchPlaceholder"'));
+  ok(panel.includes('data-i18n="settings.workspace.searchHint"'));
+  ok(panel.includes('data-i18n="settings.workspace.resetAll"'));
+  ok(panel.includes('data-i18n-placeholder="settings.setlist.searchPlaceholder"'));
+  ok(panel.includes('data-i18n="settings.setlist.searchHint"'));
+});
+
+test('Live session records live on the home view and no longer occupy setlist settings', () => {
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-setlist-panel.js'), 'utf8');
+  const setlistStart = panel.indexOf('data-view="setlist"');
+  const setlistEnd = panel.indexOf('<!-- ═══════════════════════════════════════════', setlistStart);
+  const setlistView = panel.slice(setlistStart, setlistEnd);
+  ok(panel.includes('id="live-session-summary-card"'));
+  ok(panel.includes('id="session-record-modal" class="modal modal-wide session-record-modal"'));
+  ok(panel.includes('id="session-status"'));
+  ok(panel.includes('id="setlist-panel"'));
+  ok(!setlistView.includes('id="session-status"'), 'Session 狀態不可留在歌單設定頁：');
+  ok(!setlistView.includes('id="setlist-panel"'), '已唱歌曲不可留在歌單設定頁：');
+  ok(setlistPanel.includes("document.getElementById('session-record-open')"));
+  ok(setlistPanel.includes("document.getElementById('session-summary-status')"));
+});
+
+test('Setlist style save stays immediate, sends once, and ignores stale acknowledgements', () => {
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-setlist-panel.js'), 'utf8');
+  ok(setlistPanel.includes("SocketClient.sendWithCallback('setlist:style', collectStyle()"));
+  ok(!setlistPanel.includes("SocketClient.send('setlist:style', collectStyle())"), '不可在 ACK 儲存前再額外送一次：');
+  ok(!setlistPanel.includes('styleSaveTimer'), '歌單預覽不可再因前端 debounce 延遲：');
+  ok(setlistPanel.includes('const requestId = ++latestStyleSaveRequest;'));
+  ok(setlistPanel.includes('if (requestId !== latestStyleSaveRequest) return;'), '舊 ACK 不可覆蓋最新歌單儲存狀態：');
+  ok(setlistPanel.includes("document.querySelectorAll('[data-setlist-save-status]')"));
+  ok(setlistPanel.includes('let styleSaveStatus = {'));
+  ok(setlistPanel.includes("window.addEventListener('i18n:change', renderStyleSaveStatus)"), '歌單儲存狀態必須在切換語言後重新格式化：');
+  ok(setlistPanel.includes('savedAt: savedAt || null'), '歌單儲存時間必須保留原始時間戳，而不是保留已翻譯字串：');
+});
+
+test('Settings pages keep right previews on desktop and move previews first at 1024px', () => {
+  const panelCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8');
+  const normalizedCss = panelCss.replace(/\r\n/g, '\n');
+  ok(normalizedCss.includes('@media (max-width: 1024px) {\n  .setlist-split { grid-template-columns: minmax(0, 1fr); }'));
+  ok(panelCss.includes('.setlist-preview-bar { grid-column: 1; grid-row: 1; position: static; }'));
+  ok(panelCss.includes('.setlist-main { grid-column: 1; grid-row: 2; }'));
+  ok(normalizedCss.includes('@media (max-width: 1024px) {\n  .view[data-view="settings"].is-active { display: block; }'));
+  ok(!normalizedCss.includes('@media (max-width: 1120px) {\n  .view[data-view="settings"].is-active { display: block; }'), '桌面設定頁不可過早把右側預覽移到頁首：');
+});
+
+test('Lyrics settings send exactly once and ignore stale acknowledgements', () => {
+  const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
+  eq((lyricExtras.match(/SocketClient\.sendWithCallback\('lyric-settings:update'/g) || []).length, 1, '歌詞設定只應有一個 ACK 傳送入口：');
+  ok(!lyricExtras.includes("SocketClient.send('lyric-settings:update'"), '歌詞設定不可先送一次再為 ACK 重送：');
+  ok(lyricExtras.includes('const requestId = ++latestSaveRequest;'));
+  ok(lyricExtras.includes('if (requestId !== latestSaveRequest) return;'), '舊 ACK 不可覆蓋最新儲存狀態：');
+  ok(lyricExtras.includes("window.I18n?.current?.() || 'zh-TW'"), '儲存時間必須跟隨目前介面語言：');
+  ok(lyricExtras.includes('let lyricSaveStatus = {'));
+  ok(lyricExtras.includes("window.addEventListener('i18n:change', renderLyricSaveStatus)"), '歌詞儲存狀態必須在切換語言後重新格式化：');
+  ok(lyricExtras.includes('savedAt: savedAt || null'), '歌詞儲存時間必須保留原始時間戳，而不是保留已翻譯字串：');
+});
+
+test('Shared settings workspace runtime is included before dependent panel scripts', () => {
+  const root = path.join(__dirname, '..');
+  const panel = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
+  const workspacePath = path.join(root, 'public', 'js', 'settings-workspace.js');
+  ok(fs.existsSync(workspacePath), '發行內容缺少 settings-workspace.js：');
+  const workspace = fs.readFileSync(workspacePath, 'utf8');
+  ok(workspace.includes('window.SettingsWorkspace = Object.freeze({ create });'));
+  ok(workspace.includes("nav.setAttribute('role', 'tablist')"));
+  ok(workspace.includes("tab.setAttribute('role', 'tab')"));
+  ok(workspace.includes("panel.setAttribute('role', 'tabpanel')"));
+  ok(workspace.includes("tab.setAttribute('aria-selected', String(selected))"));
+  ok(workspace.includes("tab.setAttribute('aria-controls', panel.id)"));
+  ok(workspace.includes("panel.setAttribute('aria-labelledby', activeTab.id)"));
+  ok(panel.includes('id="lyrics-settings-search-status" class="field-hint" role="status" aria-live="polite"'));
+  ok(panel.includes('id="setlist-settings-search-status" class="field-hint" role="status" aria-live="polite"'));
+  ok(panel.includes('<script src="/js/settings-workspace.js"></script>'));
+  ok(panel.indexOf('/js/settings-workspace.js') < panel.indexOf('/js/app-setlist-panel.js'), '共用工作台必須先於歌單面板載入：');
+  ok(panel.indexOf('/js/settings-workspace.js') < panel.indexOf('/js/app.js'), '共用工作台必須先於歌詞 Modal 邏輯載入：');
 });
 
 test('Electron P1 shell keeps runtime data isolated and locks down the renderer', () => {
@@ -5964,7 +6044,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
 
   test('HTML 與動態 UI 引用的翻譯鍵都存在', () => {
     const htmlFiles = ['index.html', 'controller.html', 'display.html', 'setlist.html'];
-    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-youtube-import.js', 'app-diagnostics.js', 'error-handler.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js'];
+    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-youtube-import.js', 'app-diagnostics.js', 'error-handler.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js', 'lyric-extras.js', 'app.js'];
     const referenced = new Set();
     htmlFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public', file), 'utf8');
@@ -5973,9 +6053,89 @@ console.log('\n🌐 17. M6.1 介面語系層');
     });
     jsFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public/js', file), 'utf8');
-      for (const match of source.matchAll(/(?:I18n\.t|(?:^|[^\w])t)\(\s*['"]([^'"]+)['"]/gm)) referenced.add(match[1]);
+      for (const match of source.matchAll(/(?:I18n\.t|workspaceText|(?:^|[^\w])t)\(\s*['"]([^'"]+)['"]/gm)) referenced.add(match[1]);
     });
     referenced.forEach((key) => ok(baselineKeys.includes(key), `缺少翻譯鍵 ${key}：`));
+  });
+
+  test('本場直播與設定工作台的動態狀態不混入繁中', () => {
+    const samples = {
+      en: 'OBS streaming · 42:16 · 8 tracks performed',
+      ja: 'OBS 配信中 · 42:16 · 歌唱済み 8 曲',
+      ko: 'OBS 송출 중 · 42:16 · 부른 곡 8개',
+      'zh-CN': 'OBS 推流中 · 42:16 · 已唱 8 首',
+    };
+    Object.entries(samples).forEach(([locale, expected]) => {
+      i18n.setLocale(locale, { persist: false, updateQuery: false });
+      const source = i18n.t('home.session.sourceObs');
+      eq(i18n.t('home.session.statusLive', { source, duration: '42:16', count: '8' }), expected, `${locale} 直播狀態：`);
+      ok(i18n.t('home.session.openRecord') !== catalogs['zh-TW']['home.session.openRecord'], `${locale} 本場紀錄入口不得沿用繁中：`);
+      ok(i18n.t('settings.openDetails') !== catalogs['zh-TW']['settings.openDetails'], `${locale} 詳細設定入口不得沿用繁中：`);
+    });
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('本場直播與設定工作台的五語字串完整且變數一致', () => {
+    const reviewedKeys = baselineKeys.filter((key) => (
+      key.startsWith('home.session.')
+      || key.startsWith('settings.workspace.')
+      || key.startsWith('settings.preview.')
+      || key.startsWith('settings.lyrics.')
+      || key.startsWith('settings.setlist.')
+      || key === 'settings.openDetails'
+    ));
+    ok(reviewedKeys.length >= 65, '本次設定與直播區塊應有完整的人工審查字串集合：');
+    const placeholders = (value) => [...String(value).matchAll(/\{([^{}]+)\}/g)].map((match) => match[1]).sort().join('|');
+    reviewedKeys.forEach((key) => {
+      const expectedPlaceholders = placeholders(catalogs['zh-TW'][key]);
+      i18n.LOCALES.forEach((locale) => {
+        const value = catalogs[locale][key];
+        ok(typeof value === 'string' && value.trim(), `${locale} 缺少 ${key}：`);
+        eq(placeholders(value), expectedPlaceholders, `${locale} ${key} 的變數不一致：`);
+      });
+    });
+    eq(catalogs.en['home.session.copySuccess'], '✓ Chapters copied', '複製多個章節時英文不得使用單數：');
+    ok(/history/i.test(catalogs.en['home.session.openRecord']), '英文「本場紀錄」不得誤解成錄影檔 record：');
+    eq(catalogs.ko['settings.workspace.appearance'], '외관', '韓文 Appearance 應使用軟體介面的「외관」：');
+    eq(catalogs.ko['settings.workspace.searchHint'], '현재 템플릿에서 사용할 수 있는 설정만 표시됩니다.', '韓文模板範圍助詞必須自然：');
+    eq(catalogs.ko['home.session.confirmSummary'], '이번 방송에서 부른 곡과 YouTube 챕터가 삭제됩니다.', '韓文清除提示語序必須自然：');
+    ok(catalogs['zh-CN']['home.session.confirmImpact'].includes('OBS 布局设置'), '簡中 OBS layout 不得沿用「版型」：');
+  });
+
+  test('新增簡中介面不混入台灣用語或繁體字', () => {
+    const reviewedKeys = baselineKeys.filter((key) => key.startsWith('home.session.') || key.startsWith('settings.'));
+    const taiwanOnly = /版型|載入|儲存|紀錄|連線|貼上|音檔|目前|開台|收台|瀏覽器來源|「|」/;
+    const traditionalOnly = /儲|載|錄|檔|網|體|開|關|過|這|裡|與|為|後|覽/;
+    const offenders = reviewedKeys.filter((key) => taiwanOnly.test(catalogs['zh-CN'][key]) || traditionalOnly.test(catalogs['zh-CN'][key]));
+    eq(offenders.length, 0, `新增簡中仍含台灣用語或繁體字（${offenders[0] || ''}）：`);
+  });
+
+  test('示範資料功能在五語中使用同一組 sample 術語', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const related = Object.entries(autoRows).filter(([source]) => source.includes('示範資料'));
+    ok(related.length >= 5, '示範資料相關操作、提示與教學必須一起受守衛：');
+    related.forEach(([source, values]) => {
+      ok(!/\bdemo\b/i.test(values[1]), `英文「${source}」不得混用 Demo data：`);
+      ok(!/デモ/.test(values[2]), `日文「${source}」不得混用デモデータ：`);
+      ok(!/데모/.test(values[3]), `韓文「${source}」不得混用데모 데이터：`);
+      ok(!/示范/.test(values[4]), `簡中「${source}」應統一使用示例数据：`);
+    });
+  });
+
+  test('本次新增具名變數與長尾數字變數使用同一譯法', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    const canonical = (value) => String(value).replace(/\{[^{}]+\}/g, '{}');
+    const autoBySource = new Map(Object.entries(autoRows).map(([source, values]) => [canonical(source), values]));
+    const reviewedKeys = baselineKeys.filter((key) => key.startsWith('home.session.') || key.startsWith('settings.'));
+    reviewedKeys.forEach((key) => {
+      const source = catalogs['zh-TW'][key];
+      if (!/\{[^{}]+\}/.test(source)) return;
+      const autoValues = autoBySource.get(canonical(source));
+      if (!autoValues) return;
+      i18n.LOCALES.forEach((locale, index) => {
+        eq(canonical(catalogs[locale][key]), canonical(autoValues[index]), `${locale} ${key} 與長尾變數模板譯法不一致：`);
+      });
+    });
   });
 
   test('桌面首頁與 Twitch 第二批字串不是繁中佔位值', () => {
@@ -6094,7 +6254,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
     ok(!/[\u3400-\u9FFF]/.test(autoRows[bulkPlaying][1]), '英文批次操作警告不可混入中文：');
     const floating = Object.keys(autoRows).find((source) => source.startsWith('漂浮：緩慢淡入'));
     ok(/フェードイン/.test(autoRows[floating][2]) && !/フェードアウト/.test(autoRows[floating][2]), '日文漂浮效果不可把淡入寫成淡出：');
-    eq(autoRows['OBS 推流中'][3], 'OBS가 현재 송출 중입니다', '韓文 OBS 推流狀態須明確表達正在送出串流：');
+    eq(autoRows['OBS 推流中'][3], 'OBS 송출 중', '韓文 OBS 推流狀態須簡潔且可自然組合進狀態列：');
   });
 
   test('長尾字串表發行阻擋級操作與狀態文案已人工鎖定', () => {

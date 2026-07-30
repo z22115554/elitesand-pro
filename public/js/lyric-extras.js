@@ -177,30 +177,57 @@
   // 是否已採用「伺服器端持久化設定」。每次（重）連線後採用一次，避免拖滑桿時被回推迴圈。
 
   let serverSettingsApplied = false;
-  let saveConfirmTimer = null;
+  let latestSaveRequest = 0;
+  let lyricSaveStatus = {
+    state: 'saved',
+    key: 'settings.workspace.liveSaved',
+    fallback: '已即時儲存',
+    vars: null,
+    savedAt: null,
+  };
 
-  function setSaveStatus(state, message) {
-    const el = document.getElementById('lyrics-save-status');
-    if (!el) return;
-    el.classList.remove('saving', 'saved', 'error');
-    el.classList.add(state);
-    el.textContent = message;
+  function workspaceText(key, fallback, vars) {
+    const translated = window.I18n?.t?.(key, vars);
+    return translated && translated !== key ? translated : fallback;
+  }
+
+  function renderLyricSaveStatus() {
+    let vars = lyricSaveStatus.vars || undefined;
+    let fallback = lyricSaveStatus.fallback;
+    if (lyricSaveStatus.savedAt) {
+      const time = new Date(lyricSaveStatus.savedAt).toLocaleTimeString(window.I18n?.current?.() || 'zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      vars = { time };
+      fallback = `已儲存 ${time}`;
+    }
+    const message = workspaceText(lyricSaveStatus.key, fallback, vars);
+    document.querySelectorAll('[data-lyrics-save-status]').forEach((el) => {
+      el.classList.remove('saving', 'saved', 'error');
+      el.classList.add(lyricSaveStatus.state);
+      el.textContent = message;
+    });
+  }
+
+  function setSaveStatus(state, key, fallback, vars, savedAt) {
+    lyricSaveStatus = { state, key, fallback, vars: vars || null, savedAt: savedAt || null };
+    renderLyricSaveStatus();
   }
 
   function confirmSettingsSaved(payload) {
-    clearTimeout(saveConfirmTimer);
-    setSaveStatus('saving', '設定保存中…');
-    saveConfirmTimer = setTimeout(() => {
-      SocketClient.sendWithCallback('lyric-settings:update', payload, (result, transportError) => {
-        if (result?.ok) {
-          const time = new Date(result.savedAt || Date.now()).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-          setSaveStatus('saved', `已保存 ${time}`);
-        } else {
-          setSaveStatus('error', `保存失敗：${result?.error || transportError?.code || '伺服器沒有回應'}`);
-        }
-      });
-    }, 450);
+    const requestId = ++latestSaveRequest;
+    setSaveStatus('saving', 'settings.workspace.saving', '儲存中…');
+    SocketClient.sendWithCallback('lyric-settings:update', payload, (result, transportError) => {
+      if (requestId !== latestSaveRequest) return;
+      if (result?.ok) {
+        setSaveStatus('saved', 'settings.workspace.savedAt', '已儲存', null, result.savedAt || Date.now());
+      } else {
+        const message = result?.error || transportError?.code || workspaceText('twitch.error.noResponse', '伺服器沒有回應');
+        setSaveStatus('error', 'settings.workspace.saveFailed', `儲存失敗：${message}`, { message });
+      }
+    });
   }
+
+  renderLyricSaveStatus();
+  window.addEventListener('i18n:change', renderLyricSaveStatus);
 
   function loadSettings() {
     try {
@@ -343,10 +370,9 @@
     const srv = state.lyricSettings;
     if (!applyServerSettings(srv)) {
       const payload = buildSettingsPayload();
-      SocketClient.send('lyric-settings:update', payload);
       confirmSettingsSaved(payload);
     } else {
-      setSaveStatus('saved', '設定已保存');
+      setSaveStatus('saved', 'settings.workspace.liveSaved', '已即時儲存');
     }
   }
 
@@ -382,7 +408,6 @@
     const payload = buildSettingsPayload();
     saveSettings();
     previewToIframe(settings);
-    SocketClient.send('lyric-settings:update', payload);
     confirmSettingsSaved(payload);
   }
 
@@ -642,14 +667,14 @@
 
     const templateLabel = document.getElementById('lyric-template-label');
     const templateStatus = document.getElementById('lyric-template-status');
+    const workspaceTemplateStatus = document.getElementById('lyrics-workspace-template-status');
     const templateDesc = document.getElementById('template-desc');
     const templateScope = document.getElementById('lyric-template-scope');
     const localizedTemplateLabel = window.I18n?.t(`template.${settings.template}`) || ui.label;
     if (templateLabel) templateLabel.textContent = localizedTemplateLabel;
-    if (templateStatus) {
-      const statusText = `目前模板：${localizedTemplateLabel}`;
-      templateStatus.textContent = window.I18n?.translate(statusText) || statusText;
-    }
+    const statusText = workspaceText('settings.workspace.currentTemplate', `目前：${localizedTemplateLabel}`, { template: localizedTemplateLabel });
+    if (templateStatus) templateStatus.textContent = statusText;
+    if (workspaceTemplateStatus) workspaceTemplateStatus.textContent = statusText;
     if (templateDesc) templateDesc.textContent = ui.description;
     if (templateScope) templateScope.textContent = ui.scope;
 
@@ -716,6 +741,7 @@
       const el = document.getElementById(id);
       if (el) el.hidden = !isClassic;
     });
+    document.getElementById('display-advanced-modal')?._settingsWorkspace?.sync();
   }
 
   function initTemplatePicker() {
@@ -975,7 +1001,6 @@
         else lyricPresets.push(item);
         saveSettings();
         const payload = buildSettingsPayload();
-        SocketClient.send('lyric-settings:update', payload);
         confirmSettingsSaved(payload);
         renderLyricPresetUI();
         if (sel) sel.value = item.id;
@@ -1015,7 +1040,6 @@
         lyricPresets = lyricPresets.filter((p) => p.id !== item.id);
         saveSettings();
         const payload = buildSettingsPayload();
-        SocketClient.send('lyric-settings:update', payload);
         confirmSettingsSaved(payload);
         renderLyricPresetUI();
         showToast('已刪除歌詞外觀預設');
@@ -1116,7 +1140,6 @@
         refreshControls();
         previewToIframe(settings);
         const payload = buildSettingsPayload();
-        SocketClient.send('lyric-settings:update', payload);
         confirmSettingsSaved(payload);
       });
     }

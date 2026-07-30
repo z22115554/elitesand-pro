@@ -100,7 +100,7 @@ function registerSetlistHandlers(io, socket, ctx) {
     persistState();
   });
 
-  socket.on('setlist:style', (style = {}) => {
+  socket.on('setlist:style', (style = {}, ack) => {
     if (!style || typeof style !== 'object') return;
     // 決定寫到哪一份：場景版各自一份，其餘 'shared'
     const target = SETLIST_SCENE.includes(style.target) ? style.target : 'shared';
@@ -112,7 +112,9 @@ function registerSetlistHandlers(io, socket, ctx) {
     setlistStyleSchema.validateAndApply(style, s);
 
     io.emit('setlist:style', { target, style: { ...s } });
-    persistState();
+    persistState((result) => {
+      if (typeof ack === 'function') ack(result);
+    });
   });
 
   // 示範資料（面板「載入示範資料」按鈕）：純轉播給所有 /setlist 端（面板內預覽 iframe

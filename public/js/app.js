@@ -123,7 +123,7 @@
     });
   });
 
-  // 歌詞詳細設定 modal 開關（設定頁進階區）
+  // 歌詞詳細設定 Modal（入口位於右側固定預覽下方）。
   (function initDisplayAdvancedModal() {
     const btn = document.getElementById('btn-display-advanced');
     const modal = document.getElementById('display-advanced-modal');
@@ -132,7 +132,18 @@
     const searchStatus = document.getElementById('lyrics-settings-search-status');
     if (!btn || !modal) return;
     if (modal.parentElement !== document.body) document.body.appendChild(modal);
+    const workspaceText = (key, fallback, vars) => {
+      const translated = window.I18n?.t?.(key, vars);
+      return translated && translated !== key ? translated : fallback;
+    };
 
+    const workspace = window.SettingsWorkspace?.create(modal, {
+      onSelect: () => {
+        if (!search?.value) return;
+        clearSearch();
+      },
+    });
+    modal._settingsWorkspace = workspace;
     const sections = Array.from(modal.querySelectorAll('.mw-settings > details.card-collapse'));
     let focusBeforeOpen = null;
     let openState = null;
@@ -158,7 +169,8 @@
         if (openState) section.open = openState[index];
       });
       openState = null;
-      if (searchStatus) searchStatus.textContent = '只會顯示目前模板可用的設定。';
+      workspace?.setSearching(false);
+      if (searchStatus) searchStatus.textContent = workspaceText('settings.workspace.searchHint', '只會顯示目前模板可用的設定。');
     };
     const applySearch = () => {
       const query = (search ? search.value : '').trim().toLocaleLowerCase();
@@ -171,9 +183,10 @@
         section.classList.toggle('is-search-hidden', !matched);
         if (matched) { section.open = true; matches += 1; }
       });
+      workspace?.setSearching(true);
       if (searchStatus) searchStatus.textContent = matches
-        ? `找到 ${matches} 個目前模板可用的設定分類。`
-        : '目前模板沒有相符設定；可改用另一個關鍵字或切換模板。';
+        ? workspaceText('settings.workspace.searchMatches', `找到 ${matches} 個目前模板可用的設定分類。`, { count: matches })
+        : workspaceText('settings.workspace.searchNoMatches', '目前模板沒有相符設定；可改用另一個關鍵字或切換模板。');
     };
     const closeModal = () => {
       clearSearch();
@@ -183,18 +196,23 @@
     const openModal = () => {
       focusBeforeOpen = document.activeElement;
       modal.hidden = false;
+      workspace?.sync();
       window.setTimeout(() => (search || close || btn).focus(), 0);
     };
 
     btn.addEventListener('click', openModal);
     if (close) close.addEventListener('click', closeModal);
     if (search) search.addEventListener('input', applySearch);
+    window.addEventListener('i18n:change', () => {
+      if (search?.value.trim()) applySearch();
+      else clearSearch();
+    });
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
     modal.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') { event.preventDefault(); closeModal(); return; }
       if (event.key !== 'Tab') return;
       const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
-        .filter((element) => !element.hidden && !element.closest('[hidden], .is-search-hidden'));
+        .filter((element) => element.getAttribute('aria-disabled') !== 'true' && !element.hidden && !element.closest('[hidden], .is-search-hidden, .settings-workspace__section-hidden'));
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];

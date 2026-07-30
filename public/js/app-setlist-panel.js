@@ -8,8 +8,15 @@
   'use strict';
 
   const { dom } = AppShared;
+  const workspaceText = (key, fallback, vars) => {
+    const translated = window.I18n?.t?.(key, vars);
+    return translated && translated !== key ? translated : fallback;
+  };
+  const translateText = (source) => window.I18n?.translate?.(source) || source;
+  const formatCount = (value) => new Intl.NumberFormat(window.I18n?.current?.() || 'zh-TW').format(value);
 
   let sessionState = { active: false, startedAt: null, source: null, songs: [] };
+  const sessionSummaryStatus = document.getElementById('session-summary-status');
 
   function fmtSessionOffset(ms) {
     const totalSec = Math.floor((ms || 0) / 1000);
@@ -20,25 +27,73 @@
 
   // 只更新狀態列（含每秒計時器），不重建清單 DOM → 計時器可每秒跳動而不閃爍/不打斷捲動
   function updateSessionStatus() {
-    if (!dom.sessionStatus) return;
+    if (!dom.sessionStatus && !sessionSummaryStatus) return;
     const songs = sessionState.songs || [];
+    const applyStatus = (text, active) => {
+      if (dom.sessionStatus) {
+        dom.sessionStatus.textContent = text;
+        dom.sessionStatus.classList.toggle('is-active', active);
+      }
+      if (sessionSummaryStatus) {
+        sessionSummaryStatus.textContent = text;
+        sessionSummaryStatus.classList.toggle('is-active', active);
+      }
+    };
     if (sessionState.active && !sessionState.source) {
-      dom.sessionStatus.textContent = `等待確認直播狀態 · ${songs.length} 首已記錄`;
-      dom.sessionStatus.classList.remove('is-active');
+      const count = formatCount(songs.length);
+      applyStatus(workspaceText('home.session.statusPending', `等待確認直播狀態 · ${count} 首已記錄`, { count }), false);
     } else if (sessionState.active) {
       const dur = sessionState.startedAt ? Math.floor((Date.now() - sessionState.startedAt) / 1000) : 0;
       const m = Math.floor(dur / 60), s = dur % 60;
-      const source = sessionState.source === 'obs' ? 'OBS 推流中' : sessionState.source === 'twitch' ? 'Twitch 開台中' : '直播中';
-      dom.sessionStatus.textContent = `${source} · ${m}:${String(s).padStart(2, '0')} · ${songs.length} 首`;
-      dom.sessionStatus.classList.add('is-active');
+      const source = sessionState.source === 'obs'
+        ? workspaceText('home.session.sourceObs', 'OBS 推流中')
+        : sessionState.source === 'twitch'
+          ? workspaceText('home.session.sourceTwitch', 'Twitch 開台中')
+          : workspaceText('home.session.sourceLive', '直播中');
+      const duration = `${m}:${String(s).padStart(2, '0')}`;
+      const count = formatCount(songs.length);
+      applyStatus(workspaceText('home.session.statusLive', `${source} · ${duration} · 已唱 ${count} 首`, { source, duration, count }), true);
     } else if (songs.length > 0) {
-      dom.sessionStatus.textContent = `已收台 · ${songs.length} 首已記錄`;
-      dom.sessionStatus.classList.remove('is-active');
+      const count = formatCount(songs.length);
+      applyStatus(workspaceText('home.session.statusEnded', `已收台 · ${count} 首已記錄`, { count }), false);
     } else {
-      dom.sessionStatus.textContent = '尚未開台';
-      dom.sessionStatus.classList.remove('is-active');
+      applyStatus(workspaceText('home.session.statusNotLive', '尚未開台 · 已唱 0 首'), false);
     }
   }
+
+  // 首頁只顯示精簡摘要；完整 Session 與已唱歌曲在獨立 Modal 管理。
+  (function initSessionRecordModal() {
+    const open = document.getElementById('session-record-open');
+    const modal = document.getElementById('session-record-modal');
+    const close = document.getElementById('session-record-close');
+    if (!open || !modal) return;
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
+    let focusBeforeOpen = null;
+    const closeModal = () => {
+      modal.hidden = true;
+      (focusBeforeOpen && focusBeforeOpen.isConnected ? focusBeforeOpen : open).focus();
+      focusBeforeOpen = null;
+    };
+    const openModal = () => {
+      focusBeforeOpen = document.activeElement;
+      modal.hidden = false;
+      window.setTimeout(() => (document.getElementById('session-record-title') || close || open).focus(), 0);
+    };
+    open.addEventListener('click', openModal);
+    if (close) close.addEventListener('click', closeModal);
+    modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
+    modal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeModal(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        .filter((element) => !element.hidden && !element.closest('[hidden]'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+  })();
 
   function renderSetlistPanel(data) {
     sessionState = data || { active: false, startedAt: null, source: null, songs: [] };
@@ -55,12 +110,19 @@
     updateSessionStatus();
 
     // 歌單計數
-    if (dom.setlistCount) dom.setlistCount.textContent = songs.length + ' 首';
+    if (dom.setlistCount) {
+      const count = formatCount(songs.length);
+      dom.setlistCount.textContent = workspaceText('home.session.count', `${count} 首`, { count });
+    }
 
     // 歌單列表
     if (dom.setlistPanel) {
       if (songs.length === 0) {
-        dom.setlistPanel.innerHTML = '<div class="playlist-empty">開台後播放歌曲，歌單會自動在此顯示。</div>';
+        dom.setlistPanel.innerHTML = '';
+        const empty = document.createElement('div');
+        empty.className = 'playlist-empty';
+        empty.textContent = workspaceText('home.session.empty', '開台後播放歌曲，歌單會自動在此顯示。');
+        dom.setlistPanel.appendChild(empty);
       } else {
         dom.setlistPanel.innerHTML = '';
         const showTime = songs.some((s) => (s.offset || 0) > 0); // 時間全 0（未開台）就不顯示時間
@@ -92,9 +154,20 @@
     }
   }
 
-  function copyText(text, btn, successLabel) {
-    const orig = btn.textContent;
-    const done = () => { btn.textContent = successLabel || '✓ 已複製'; setTimeout(() => { btn.textContent = orig; }, 2000); };
+  window.addEventListener('i18n:change', () => renderSetlistPanel(sessionState));
+
+  function copyText(text, btn, successLabel, restoreLabel) {
+    const originalLabel = btn.textContent;
+    const resolveRestoreLabel = () => {
+      if (typeof restoreLabel === 'function') return restoreLabel();
+      if (restoreLabel) return restoreLabel;
+      const key = btn.getAttribute('data-i18n');
+      return key ? workspaceText(key, originalLabel) : originalLabel;
+    };
+    const done = () => {
+      btn.textContent = successLabel || workspaceText('common.copied', '✓ 已複製');
+      setTimeout(() => { btn.textContent = resolveRestoreLabel(); }, 2000);
+    };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(() => {
         const el = document.createElement('textarea');
@@ -113,11 +186,11 @@
   function copyYoutubeChapters() {
     const songs = sessionState.songs || [];
     if (songs.length === 0) return;
-    const lines = ['00:00 開台'];
+    const lines = [workspaceText('home.session.chapterOpening', '00:00 開台')];
     for (const s of songs) {
       lines.push(`${fmtSessionOffset(s.offset)} ${s.title}${s.artist ? ' - ' + s.artist : ''}`);
     }
-    if (dom.btnCopyChapters) copyText(lines.join('\n'), dom.btnCopyChapters, '✓ 已複製章節');
+    if (dom.btnCopyChapters) copyText(lines.join('\n'), dom.btnCopyChapters, workspaceText('home.session.copySuccess', '✓ 已複製章節'));
   }
 
   if (dom.sessionStart) {
@@ -129,30 +202,29 @@
   const sessionRefresh = document.getElementById('session-refresh');
   if (sessionRefresh) {
     sessionRefresh.addEventListener('click', () => {
-      const label = sessionRefresh.textContent;
       sessionRefresh.disabled = true;
-      sessionRefresh.textContent = '重新整理中…';
+      sessionRefresh.textContent = workspaceText('home.session.refreshing', '重新整理中…');
       SocketClient.send('setlist:get');
       const finish = () => {
         window.setTimeout(() => {
           sessionRefresh.disabled = false;
-          sessionRefresh.textContent = label;
+          sessionRefresh.textContent = workspaceText('home.session.refresh', '重新整理狀態');
         }, 500);
       };
       if (typeof ObsWs !== 'undefined' && ObsWs.isConnected() && ObsWs.refreshStreamStatus) {
         ObsWs.refreshStreamStatus().then((stream) => {
           const twitchSessionContinues = !stream.active && sessionState.active && sessionState.source === 'twitch';
           const message = stream.active
-            ? 'OBS 正在推流，直播 Session 已重新確認'
+            ? workspaceText('home.session.toastObsStreaming', 'OBS 正在推流，直播 Session 已重新確認')
             : twitchSessionContinues
-              ? 'OBS 目前未推流；Twitch 開台中的 Session 維持不變'
-              : 'OBS 目前未推流，直播 Session 已重新確認';
+              ? workspaceText('home.session.toastTwitchContinues', 'OBS 目前未推流；Twitch 開台中的 Session 維持不變')
+              : workspaceText('home.session.toastObsNotStreaming', 'OBS 目前未推流，直播 Session 已重新確認');
           AppShared.showToast(message, stream.active ? 'success' : 'info');
         }).catch(() => {
-          AppShared.showToast('無法讀取 OBS 推流狀態，已重新讀取歌單資料', 'warning');
+          AppShared.showToast(workspaceText('home.session.toastObsReadFailed', '無法讀取 OBS 推流狀態，已重新讀取歌單資料'), 'warning');
         }).finally(finish);
       } else {
-        AppShared.showToast('已重新讀取歌單資料；OBS WebSocket 未連線，無法確認推流狀態', 'warning');
+        AppShared.showToast(workspaceText('home.session.toastObsDisconnected', '已重新讀取歌單資料；OBS WebSocket 未連線，無法確認推流狀態'), 'warning');
         finish();
       }
     });
@@ -160,11 +232,11 @@
   if (dom.sessionReset) {
     dom.sessionReset.addEventListener('click', async () => {
       const confirmed = await window.PanelConfirm?.request({
-        title: '清除整個直播歌單？',
-        summary: '本次直播已唱歌曲與 YouTube 章節將被清除。',
-        impact: '播放清單、音檔、媒體庫與 OBS 版型設定都會保留。',
+        title: workspaceText('home.session.confirmTitle', '清除整個直播歌單？'),
+        summary: workspaceText('home.session.confirmSummary', '本次直播已唱歌曲與 YouTube 章節將被清除。'),
+        impact: workspaceText('home.session.confirmImpact', '播放清單、音檔、媒體庫與 OBS 版型設定都會保留。'),
         tone: 'danger',
-        confirmLabel: '清除直播歌單',
+        confirmLabel: workspaceText('home.session.confirmLabel', '清除直播歌單'),
       });
       if (!confirmed) return;
       SocketClient.send('session:reset');
@@ -191,10 +263,10 @@
   // ── 預覽尺寸：模擬不同的 OBS Browser Source 寬高 ──
   // 清單型模板是「來源即畫布」，所以預覽必須能換尺寸才看得出真正的排版結果。
   const SETLIST_PREVIEW_SIZES = {
-    '16x9': { w: 1920, h: 1080, label: '橫式 1920×1080' },
-    'portrait': { w: 600, h: 1080, label: '直式 600×1080' },
-    'strip': { w: 1920, h: 320, label: '橫條 1920×320' },
-    'small': { w: 640, h: 480, label: '小框 640×480' },
+    '16x9': { w: 1920, h: 1080, labelKey: 'settings.setlist.sizeLandscape', fallback: '橫式 1920×1080' },
+    'portrait': { w: 600, h: 1080, labelKey: 'settings.setlist.sizePortrait', fallback: '直式 600×1080' },
+    'strip': { w: 1920, h: 320, labelKey: 'settings.setlist.sizeStrip', fallback: '橫條 1920×320' },
+    'small': { w: 640, h: 480, labelKey: 'settings.setlist.sizeSmall', fallback: '小框 640×480' },
   };
   let setlistPreviewSize = '16x9';
   const setlistPreviewButtons = Array.from(document.querySelectorAll('[data-setlist-preview-size]'));
@@ -213,7 +285,8 @@
     document.querySelectorAll('.setlist-preview').forEach((frame) => {
       try { frame.contentWindow?.dispatchEvent(new Event('resize')); } catch (e) { /* 跨來源或尚未載入 */ }
     });
-    document.querySelectorAll('.setlist-preview-tag').forEach((tag) => { tag.textContent = size.label; });
+    const sizeLabel = workspaceText(size.labelKey, size.fallback);
+    document.querySelectorAll('.setlist-preview-tag').forEach((tag) => { tag.textContent = sizeLabel; });
     setlistPreviewButtons.forEach((button) => {
       const selected = button.dataset.setlistPreviewSize === setlistPreviewSize;
       button.setAttribute('aria-checked', String(selected));
@@ -291,13 +364,20 @@
     });
     const hint = document.getElementById('setlist-layout-hint');
     const status = document.getElementById('setlist-layout-status');
+    const workspaceStatus = document.getElementById('setlist-workspace-template-status');
     const scope = document.getElementById('setlist-style-scope');
     const legacyNotice = document.getElementById('setlist-legacy-layout-notice');
     const appearance = document.getElementById('setlist-appearance');
     const advancedButton = document.getElementById('btn-setlist-advanced');
-    if (hint) hint.textContent = isHiddenLayout ? '這個模板已暫停提供；選擇目前可用的模板後才會切換 OBS 輸出。' : info.hint;
-    if (status) status.textContent = `目前：${info.name}${isHiddenLayout ? '（暫停提供）' : ''}`;
-    if (scope) scope.textContent = isHiddenLayout ? '已保留目前 OBS 畫面與保存設定；為避免誤改，這個模板的調整項目暫時收起。' : info.scope;
+    if (hint) hint.textContent = translateText(isHiddenLayout ? '這個模板已暫停提供；選擇目前可用的模板後才會切換 OBS 輸出。' : info.hint);
+    const localizedName = translateText(info.name);
+    const layoutLabel = isHiddenLayout
+      ? workspaceText('settings.workspace.pausedTemplate', `${localizedName}（暫停提供）`, { template: localizedName })
+      : localizedName;
+    const statusText = workspaceText('settings.workspace.currentTemplate', `目前：${layoutLabel}`, { template: layoutLabel });
+    if (status) status.textContent = statusText;
+    if (workspaceStatus) workspaceStatus.textContent = statusText;
+    if (scope) scope.textContent = translateText(isHiddenLayout ? '已保留目前 OBS 畫面與保存設定；為避免誤改，這個模板的調整項目暫時收起。' : info.scope);
     if (legacyNotice) legacyNotice.hidden = !isHiddenLayout;
     if (appearance) appearance.hidden = isHiddenLayout;
     if (advancedButton) advancedButton.hidden = isHiddenLayout;
@@ -381,7 +461,7 @@
   }
   if (dom.copySetlistUrlTop) {
     dom.copySetlistUrlTop.addEventListener('click', () => {
-      copyText(buildSetlistUrl(), dom.copySetlistUrlTop, '已複製');
+      copyText(buildSetlistUrl(), dom.copySetlistUrlTop, workspaceText('common.copied', '已複製'));
     });
   }
 
@@ -431,6 +511,7 @@
   syncSetlistControlsForLayout();
   syncSetlistLayoutPicker();
   refreshSetlistUrl();
+  window.addEventListener('i18n:change', syncSetlistLayoutPicker);
 
   // 歌單外觀細項：縮放 / 背板底色+不透明度 / 文字顏色覆蓋。
   // 改動只送 socket → 伺服器廣播 setlist:style，預覽 iframe 與真實 OBS 同步即時更新（與主題同機制）。
@@ -461,7 +542,54 @@
     }
     // 各版型獨立設定的本地快取（伺服器為真實來源；切版型時還原該份）
     const slStores = { shared: null, timeline: null, diagonal: null, constellation: null };
-    function sendStyle() { SocketClient.send('setlist:style', collectStyle()); }
+    let latestStyleSaveRequest = 0;
+    let styleSaveStatus = {
+      state: 'saved',
+      key: 'settings.workspace.liveSaved',
+      fallback: '已即時儲存',
+      vars: null,
+      savedAt: null,
+    };
+    function renderStyleSaveStatus() {
+      let vars = styleSaveStatus.vars || undefined;
+      let fallback = styleSaveStatus.fallback;
+      if (styleSaveStatus.savedAt) {
+        const time = new Date(styleSaveStatus.savedAt).toLocaleTimeString(window.I18n?.current?.() || 'zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        vars = { time };
+        fallback = `已儲存 ${time}`;
+      }
+      const message = workspaceText(styleSaveStatus.key, fallback, vars);
+      document.querySelectorAll('[data-setlist-save-status]').forEach((status) => {
+        status.classList.remove('saving', 'saved', 'error');
+        status.classList.add(styleSaveStatus.state);
+        status.textContent = message;
+      });
+    }
+    function setStyleSaveStatus(state, key, fallback, vars, savedAt) {
+      styleSaveStatus = { state, key, fallback, vars: vars || null, savedAt: savedAt || null };
+      renderStyleSaveStatus();
+    }
+    function confirmStyleSaved() {
+      const requestId = ++latestStyleSaveRequest;
+      setStyleSaveStatus('saving', 'settings.workspace.saving', '儲存中…');
+      // 伺服器端的 state-store 已有 800ms 磁碟 debounce；前端不應再等待，
+      // 否則面板與真實 OBS 來源都會延遲。每次操作只送一個帶 ACK 的事件，
+      // 並以 requestId 忽略較舊回應，避免舊狀態覆蓋最新儲存結果。
+      SocketClient.sendWithCallback('setlist:style', collectStyle(), (result, transportError) => {
+        if (requestId !== latestStyleSaveRequest) return;
+        if (result?.ok) {
+          setStyleSaveStatus('saved', 'settings.workspace.savedAt', '已儲存', null, result.savedAt || Date.now());
+        } else {
+          const message = result?.error || transportError?.code || workspaceText('twitch.error.noResponse', '伺服器沒有回應');
+          setStyleSaveStatus('error', 'settings.workspace.saveFailed', `儲存失敗：${message}`, { message });
+        }
+      });
+    }
+    function sendStyle() {
+      confirmStyleSaved();
+    }
+    renderStyleSaveStatus();
+    window.addEventListener('i18n:change', renderStyleSaveStatus);
 
     function adoptStyleUI(s) {
       if (!s || typeof s !== 'object') return;
@@ -559,10 +687,17 @@
     }
     renderCustomList();
 
-    // 詳細設定 modal 開關
+    // 詳細設定 Modal：入口位於右側固定預覽下方。
     const advBtn = g('btn-setlist-advanced'), advModal = g('setlist-advanced-modal'), advClose = g('setlist-advanced-close');
-    // .card 有 backdrop-filter 會成為 fixed 的容器區塊 → 把彈窗搬到 body 才能真正全螢幕
     if (advModal && advModal.parentElement !== document.body) document.body.appendChild(advModal);
+    const workspace = window.SettingsWorkspace?.create(advModal, {
+      onSelect: () => {
+        if (!search?.value) return;
+        search.value = '';
+        filterSetlistSettings();
+      },
+    });
+    if (advModal) advModal._settingsWorkspace = workspace;
     const search = g('setlist-settings-search');
     const searchStatus = g('setlist-settings-search-status');
     const searchSections = advModal ? Array.from(advModal.querySelectorAll('.mw-settings > details.card-collapse')) : [];
@@ -576,7 +711,8 @@
       if (!query) {
         searchSections.forEach((section, index) => { section.classList.remove('is-search-hidden'); if (searchOpenState) section.open = searchOpenState[index]; });
         searchOpenState = null;
-        if (searchStatus) searchStatus.textContent = '可直接搜尋設定名稱或用途。';
+        workspace?.setSearching(false);
+        if (searchStatus) searchStatus.textContent = workspaceText('settings.setlist.searchHint', '可直接搜尋設定名稱或用途。');
         return;
       }
       if (!searchOpenState) searchOpenState = searchSections.map((section) => section.open);
@@ -588,9 +724,13 @@
         section.classList.toggle('is-search-hidden', !visible);
         if (visible) { section.open = true; matches += 1; }
       });
-      if (searchStatus) searchStatus.textContent = matches ? `找到 ${matches} 個設定區塊。` : '找不到相符設定；可試試「字體」、「寬度」、「已唱」或「特效」。';
+      workspace?.setSearching(true);
+      if (searchStatus) searchStatus.textContent = matches
+        ? workspaceText('settings.setlist.searchMatches', `找到 ${matches} 個設定區塊。`, { count: matches })
+        : workspaceText('settings.setlist.searchNoMatches', '找不到相符設定；可試試「字體」、「寬度」、「已唱」或「特效」。');
     }
     if (search) search.addEventListener('input', filterSetlistSettings);
+    window.addEventListener('i18n:change', filterSetlistSettings);
     const closeAdvanced = () => {
       if (!advModal) return;
       if (search) { search.value = ''; filterSetlistSettings(); }
@@ -598,15 +738,32 @@
       (advancedFocusBeforeOpen && advancedFocusBeforeOpen.isConnected ? advancedFocusBeforeOpen : advBtn)?.focus();
       advancedFocusBeforeOpen = null;
     };
-    if (advBtn && advModal) advBtn.addEventListener('click', () => { advancedFocusBeforeOpen = document.activeElement; advModal.hidden = false; window.setTimeout(() => search?.focus(), 0); });
+    if (advBtn && advModal) advBtn.addEventListener('click', () => {
+      advancedFocusBeforeOpen = document.activeElement;
+      advModal.hidden = false;
+      workspace?.sync();
+      window.setTimeout(() => search?.focus(), 0);
+    });
     if (advClose && advModal) advClose.addEventListener('click', closeAdvanced);
     if (advModal) advModal.addEventListener('click', (e) => { if (e.target === advModal) closeAdvanced(); });
+    if (advModal) advModal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeAdvanced(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(advModal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        .filter((element) => element.getAttribute('aria-disabled') !== 'true' && !element.hidden && !element.closest('[hidden], .is-search-hidden, .settings-workspace__section-hidden'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
 
     // 切版型時：還原該版型（場景版）或共用份的設定到 UI
     if (setlistLayoutSel) {
       setlistLayoutSel.addEventListener('change', () => {
         const st = slStores[setlistTarget()];
         if (st) adoptStyleUI(st);
+        workspace?.sync();
       });
     }
 
@@ -623,7 +780,7 @@
       if (sess.style) slStores.shared = sess.style;
       if (sess.sceneStyles) { ['timeline', 'diagonal', 'constellation'].forEach((k) => { if (sess.sceneStyles[k]) slStores[k] = sess.sceneStyles[k]; }); }
       if (sess.theme && dom.setlistTheme) { dom.setlistTheme.value = sess.theme; refreshSetlistUrl(); }
-      if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; syncSetlistControlsForLayout(); syncSetlistLayoutPicker(); refreshSetlistUrl(); }
+      if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; syncSetlistControlsForLayout(); syncSetlistLayoutPicker(); refreshSetlistUrl(); workspace?.sync(); }
       const cur = slStores[setlistTarget()];
       if (cur) adoptStyleUI(cur);
     });
