@@ -14,13 +14,26 @@
 `v0.9.7` 將作為接下來兩週的穩定驗證版本，期間原則上不再新增功能或發布一般更新，只處理必要的重大問題。完成兩週實際直播與使用情境驗證後，預計發布 **`v1.0.0` 正式穩定版**。
 
 > [!WARNING]
-> `v0.7.1`～`v0.7.3` 的舊更新器無法安全完成跨版本升級。請下載完整新版安裝程式或 Portable 版本，並先保留舊資料夾備份。`v0.7.3-p0-hotfix.1` 或之後版本可依程式提示使用安全線上更新。
+> `v0.7.1`～`v0.7.3` 的舊更新器無法安全完成跨版本升級。另因 `v0.9.2` 導入 Electron 桌面框架與安裝／封裝架構等框架級更新，**從任何早於 `v0.9.2` 的版本升級時，都必須重新下載並安裝完整 Installer 或 Portable 版本，不能使用增量更新**。請先保留舊資料夾與使用者資料備份；完成 `v0.9.2` 或之後版本的完整安裝後，未來相容版本才可依程式提示使用安全增量更新。
 
 ### 產品定位
 
 Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows 桌面工具。它將歌曲管理、歌詞搜尋、同步播放、OBS 動態歌詞、直播歌單與 Twitch 點歌流程整合在同一套本機應用程式中。
 
 程式在本機執行，OBS 透過 Browser Source 載入透明歌詞與歌單畫面；桌面控制台、手機遙控器與 OBS 顯示來源會即時同步。
+
+### 使用說明
+
+1. 從 GitHub Releases 下載最新 Windows Installer 或 Portable 版本。
+2. 啟動 Elitesand Pro，依首次使用引導完成 yt-dlp、FFmpeg、網路與版本檢查。
+3. 匯入 YouTube 連結、播放清單或本機音檔，確認歌名、歌手與歌詞來源。
+4. 在歌詞設定中選擇動畫模板、字體、顏色、位置與預設。
+5. 複製「歌詞網址」與「歌單網址」，分別加入 OBS Browser Source。
+6. 需要觀眾點歌時，連接 Twitch，設定聊天室指令或忠誠點數獎勵與限制。
+7. 直播中可使用桌面控制台、手機遙控器或 Stream Deck 控制播放、切歌、時間偏移與緊急隱藏。
+8. 收播後可保存場次、匯出歌單，並複製 YouTube 章節時間戳。
+
+> 初次使用建議先用測試場景完成一首歌曲的匯入、歌詞同步、OBS 顯示與 Twitch 點歌流程，再投入正式直播。
 
 ### 主要功能
 
@@ -211,11 +224,24 @@ Elitesand Pro 採用 [Elitesand Pro 授權條款](LICENSE)：可免費用於個�
 `v0.9.7` is the stabilization build for the next two weeks. No normal feature updates are planned during this period; only critical fixes will be considered. After two weeks of real-world streaming validation, **`v1.0.0` stable** is planned for release.
 
 > [!WARNING]
-> The updater bundled with `v0.7.1`–`v0.7.3` cannot safely complete major upgrades. Download the latest full Installer or Portable build and keep a backup of the old folder. Users on `v0.7.3-p0-hotfix.1` or later may use the safe updater when the application allows it.
+> The updater bundled with `v0.7.1`–`v0.7.3` cannot safely complete major upgrades. In addition, `v0.9.2` introduced framework-level changes, including the Electron desktop shell and a new installation/packaging architecture. **Upgrading from any version earlier than `v0.9.2` requires downloading and reinstalling the full Installer or Portable build; incremental updates cannot be used.** Back up the old folder and user data first. After a full installation of `v0.9.2` or later, future compatible versions may use the safe incremental updater when offered by the application.
 
 ### Overview
 
 Elitesand Pro is a Windows desktop tool for VTubers, singing streamers, and live performers. It combines song import, lyrics lookup, synchronized playback, animated OBS lyrics, live setlists, and Twitch song requests in one local application.
+
+### How to use
+
+1. Download the latest Windows Installer or Portable build from GitHub Releases.
+2. Launch Elitesand Pro and complete the first-run checks for yt-dlp, FFmpeg, networking, and version status.
+3. Import a YouTube video, playlist, or local audio file, then verify the title, artist, and lyrics source.
+4. Choose a lyrics template and configure fonts, colors, position, motion, and presets.
+5. Copy the Lyrics URL and Setlist URL into separate OBS Browser Sources.
+6. Connect Twitch and configure chat commands or Channel Points rewards when viewer requests are needed.
+7. Control playback, skipping, timing offsets, and emergency hide from the desktop, phone remote, or Stream Deck.
+8. After the stream, save the session, export the setlist, and copy YouTube chapter timestamps.
+
+> Before a production stream, run one complete test song through import, lyrics synchronization, OBS display, and Twitch request handling.
 
 ### Core features
 
@@ -301,9 +327,23 @@ Elitesand Pro is free for personal and commercial streaming or performance. Priv
 
 `v0.9.7` は今後2週間の安定性検証版です。この期間は通常の機能追加や更新を行わず、重大な問題のみ必要に応じて修正します。2週間の実配信テスト完了後、**`v1.0.0` 正式安定版**を公開する予定です。
 
+> [!WARNING]
+> `v0.7.1`～`v0.7.3` の旧アップデーターでは大きなバージョン更新を安全に完了できません。また `v0.9.2` では Electron デスクトップ基盤とインストール／パッケージ構成を含むフレームワークレベルの変更が導入されました。**`v0.9.2` より前のバージョンから更新する場合は、完全版 Installer または Portable を再ダウンロードして再インストールする必要があり、差分更新は使用できません。** 先に旧フォルダーとユーザーデータをバックアップしてください。
+
 ### 概要
 
 Elitesand Pro は、VTuber、歌配信者、ライブ出演者向けの Windows デスクトップツールです。YouTube／ローカル音源の取り込み、歌詞検索、同期再生、OBS 用の動く歌詞、セットリスト、Twitch リクエストを一つのローカルアプリに統合します。
+
+### 使い方
+
+1. GitHub Releases から最新の Windows Installer または Portable 版をダウンロードします。
+2. Elitesand Pro を起動し、初回案内に従って yt-dlp、FFmpeg、ネットワーク、バージョンを確認します。
+3. YouTube 動画、プレイリスト、またはローカル音源を取り込み、曲名・アーティスト・歌詞を確認します。
+4. 歌詞テンプレート、フォント、色、位置、動き、プリセットを設定します。
+5. 歌詞 URL とセットリスト URL をそれぞれ OBS Browser Source に追加します。
+6. 必要に応じて Twitch を接続し、チャットコマンドまたはチャンネルポイント報酬を設定します。
+7. デスクトップ、スマートフォン、Stream Deck から再生、曲送り、タイミング、緊急非表示を操作します。
+8. 配信終了後、セッションを保存し、セットリストや YouTube チャプターを出力します。
 
 ### 主な機能
 
@@ -351,9 +391,23 @@ Elitesand Pro から歌詞 URL またはセットリスト URL をコピーし�
 
 `v0.9.7`은 앞으로 2주 동안 사용할 안정화 검증 버전입니다. 이 기간에는 일반 기능 추가나 정기 업데이트를 진행하지 않으며, 필요한 중대한 문제만 수정합니다. 2주간 실제 방송 검증을 마친 뒤 **`v1.0.0` 정식 안정 버전**을 출시할 예정입니다.
 
+> [!WARNING]
+> `v0.7.1`~`v0.7.3`의 기존 업데이터는 대규모 버전 업그레이드를 안전하게 완료할 수 없습니다. 또한 `v0.9.2`에서는 Electron 데스크톱 프레임워크와 새로운 설치·패키징 구조가 도입되는 프레임워크 수준의 변경이 이루어졌습니다. **`v0.9.2`보다 이전 버전에서 업그레이드할 경우 전체 Installer 또는 Portable 버전을 다시 다운로드해 재설치해야 하며 증분 업데이트를 사용할 수 없습니다.** 먼저 기존 폴더와 사용자 데이터를 백업하세요.
+
 ### 개요
 
 Elitesand Pro는 VTuber, 노래 방송 스트리머, 라이브 공연자를 위한 Windows 데스크톱 도구입니다. YouTube 및 로컬 음원 가져오기, 가사 검색, 동기화 재생, OBS 동적 가사, 라이브 세트리스트, Twitch 신청곡 기능을 하나의 로컬 앱에 통합합니다.
+
+### 사용 방법
+
+1. GitHub Releases에서 최신 Windows Installer 또는 Portable 버전을 다운로드합니다.
+2. Elitesand Pro를 실행하고 첫 실행 안내에 따라 yt-dlp, FFmpeg, 네트워크 및 버전을 확인합니다.
+3. YouTube 영상, 재생목록 또는 로컬 음원을 가져온 뒤 제목, 아티스트, 가사를 확인합니다.
+4. 가사 템플릿, 글꼴, 색상, 위치, 모션 및 프리셋을 설정합니다.
+5. 가사 URL과 세트리스트 URL을 각각 OBS Browser Source에 추가합니다.
+6. 필요한 경우 Twitch를 연결하고 채팅 명령 또는 채널 포인트 보상을 설정합니다.
+7. 데스크톱, 휴대폰 또는 Stream Deck에서 재생, 넘기기, 타이밍 및 긴급 숨김을 제어합니다.
+8. 방송 후 세션을 저장하고 세트리스트와 YouTube 챕터를 내보냅니다.
 
 ### 주요 기능
 
@@ -401,9 +455,23 @@ Elitesand Pro에서 가사 URL 또는 세트리스트 URL을 복사해 OBS Brows
 
 `v0.9.7` 将作为未来两周的稳定验证版本。期间原则上不再新增功能或发布常规更新，只处理必要的重大问题。完成两周实际直播与使用场景验证后，计划发布 **`v1.0.0` 正式稳定版**。
 
+> [!WARNING]
+> `v0.7.1`～`v0.7.3` 的旧更新器无法安全完成跨版本升级。另外，`v0.9.2` 引入了 Electron 桌面框架与新的安装／打包架构，属于框架级更新。**从任何早于 `v0.9.2` 的版本升级时，都必须重新下载并安装完整 Installer 或 Portable 版本，不能使用增量更新。** 请先备份旧文件夹与用户数据；完成 `v0.9.2` 或之后版本的完整安装后，未来兼容版本才可按程序提示使用安全增量更新。
+
 ### 产品定位
 
 Elitesand Pro 是面向 VTuber、歌回主播与直播演出者的 Windows 桌面工具。它将 YouTube／本地音频导入、歌词搜索、同步播放、OBS 动态歌词、直播歌单与 Twitch 点歌流程整合在同一个本地应用中。
+
+### 使用说明
+
+1. 从 GitHub Releases 下载最新 Windows Installer 或 Portable 版本。
+2. 启动 Elitesand Pro，并按首次使用引导检查 yt-dlp、FFmpeg、网络与版本状态。
+3. 导入 YouTube 视频、播放列表或本地音频，并确认歌名、歌手与歌词来源。
+4. 选择歌词模板并设置字体、颜色、位置、动画与预设。
+5. 将歌词网址与歌单网址分别加入 OBS Browser Source。
+6. 需要观众点歌时，连接 Twitch 并设置聊天命令或忠诚点数奖励。
+7. 通过桌面、手机遥控器或 Stream Deck 控制播放、切歌、时间偏移与紧急隐藏。
+8. 直播结束后保存场次、导出歌单并复制 YouTube 章节时间戳。
 
 ### 主要功能
 
