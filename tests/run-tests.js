@@ -3093,6 +3093,33 @@ test('Twitch 點歌頁有指令規則、回覆測試、變數驗證與各自還�
   ok(state.includes('twitchRewardSettings: playState.twitchRewardSettings'), 'Twitch 忠誠點數設定必須寫入 state.json: ');
 });
 
+test('Twitch 未儲存提示會比較實際草稿，且狀態文字完整支援五語', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const client = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
+  const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
+  const i18n = require('../public/js/i18n');
+
+  ok(client.includes('function sameDraftValue(left, right)'));
+  ok(client.includes('function isCategoryDirty(category)'));
+  ['commands', 'blacklist', 'custom', 'reward', 'replies'].forEach((category) => {
+    ok(client.includes(`category === '${category}'`), `Twitch ${category} 必須比較草稿與已儲存內容：`);
+  });
+  ok(client.includes('dirty[category] = value ? isCategoryDirty(category) : false;'));
+  ok(client.includes("summary.classList.toggle('draft', count > 0)"));
+  ok(client.includes("summary.classList.toggle('saved', count === 0)"));
+  ok(client.includes("t('twitch.unsavedCount', { count })") && client.includes("t('twitch.allSaved')"));
+  ok(html.includes('id="twitch-management-dirty-summary" class="save-status saved twitch-management-status"'));
+  ok(html.includes('data-i18n="twitch.allSaved"'));
+  ok(panelCss.includes('.save-status.draft {'));
+
+  ['twitch.allSaved', 'twitch.unsavedCount'].forEach((key) => {
+    i18n.LOCALES.forEach((locale) => ok(String(i18n.catalogs[locale][key] || '').trim(), `${locale}.${key} 不得為空：`));
+    ['en', 'ja', 'ko', 'zh-CN'].forEach((locale) => {
+      ok(i18n.catalogs[locale][key] !== i18n.catalogs['zh-TW'][key], `${locale}.${key} 不可沿用繁中：`);
+    });
+  });
+});
+
 testAsync('Twitch 聊天回覆遇到 5xx 會退避重試', async () => {
   const pendingStore = { load: () => [], save: () => true };
   const service = new TwitchService({

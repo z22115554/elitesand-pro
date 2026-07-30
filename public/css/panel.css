@@ -563,6 +563,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .save-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .save-status.saving { color: var(--text-dim); }
 .save-status.saved { color: var(--ok); }
+.save-status.draft { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
 .save-status.error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
 @media (max-width: 1120px) {
   .view[data-view="settings"].is-active { display: block; }
@@ -678,10 +679,13 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-search-result:hover, .twitch-search-result:focus-visible { background: var(--bg-hover); outline: none; }
 .twitch-search-result span { color: var(--text-faint); font-size: 11px; }
 .twitch-management-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); flex: 1; min-height: 0; }
-.twitch-management-nav { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 12px; overflow-y: auto; border-right: 1px solid var(--border); background: color-mix(in srgb, var(--bg-raised) 76%, transparent); }
-.twitch-management-nav-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); text-align: left; font-size: 12px; font-weight: 650; }
+.twitch-management-status { align-self: flex-start; margin-top: 4px; }
+.twitch-management-nav { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px; overflow-y: auto; border-right: 1px solid var(--border); background: color-mix(in srgb, var(--bg-raised) 82%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-edge) 52%, transparent); scrollbar-width: none; }
+.twitch-management-nav::-webkit-scrollbar { display: none; }
+.twitch-management-nav-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); text-align: left; font-size: 12px; font-weight: 650; transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, transform 150ms ease; }
 .twitch-management-nav-item:hover { background: var(--bg-hover); color: var(--text); }
-.twitch-management-nav-item.is-active { border-color: var(--border); background: var(--accent-soft); color: var(--accent); }
+.twitch-management-nav-item:active { transform: translateY(1px); }
+.twitch-management-nav-item.is-active { border-color: color-mix(in srgb, var(--accent) 46%, var(--border)); background: color-mix(in srgb, var(--accent) 18%, var(--bg-raised)); color: var(--text); }
 .twitch-dirty-dot { width: 7px; height: 7px; overflow: hidden; border-radius: 50%; background: var(--warning); color: transparent; }
 .twitch-dirty-dot[hidden] { display: none; }
 .twitch-phase-label { color: var(--text-faint); font-size: 9px; font-weight: 700; }
@@ -769,7 +773,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
   .twitch-management-modal { padding: 10px; }
   .twitch-management-modal .modal-card { width: 100%; height: 94vh; max-height: 94vh; }
   .twitch-management-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
-  .twitch-management-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .twitch-management-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 6px; border-right: 0; border-bottom: 1px solid var(--border); }
   .twitch-management-nav-item { width: auto; flex: none; white-space: nowrap; }
   .twitch-command-layout, .twitch-reply-master-detail, .twitch-blacklist-layout { grid-template-columns: 1fr; }
   .twitch-command-list, .twitch-reply-events { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(145px, 1fr); overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }

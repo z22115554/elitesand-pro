@@ -179,14 +179,55 @@
     }
   }
 
+  function sameDraftValue(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function isCategoryDirty(category) {
+    if (category === 'commands') return !sameDraftValue(requestDraft.commands, requestSaved.commands);
+    if (category === 'blacklist') return !sameDraftValue(requestDraft.blacklist, requestSaved.blacklist);
+    if (category === 'custom') return !sameDraftValue(requestDraft.customCommands, requestSaved.customCommands);
+    if (category === 'reward') return !sameDraftValue(rewardDraft, rewardSaved);
+    if (category === 'replies') return !sameDraftValue(replyDraft, replySaved);
+    return !sameDraftValue({
+      enabled: requestDraft.enabled,
+      maxPending: requestDraft.maxPending,
+      perUserPending: requestDraft.perUserPending,
+      duplicateScope: requestDraft.duplicateScope,
+      recentDuplicateHours: requestDraft.recentDuplicateHours,
+      maxDurationMinutes: requestDraft.maxDurationMinutes,
+      liveOnly: requestDraft.liveOnly,
+      perUserSessionLimit: requestDraft.perUserSessionLimit,
+      sessionRequestLimit: requestDraft.sessionRequestLimit,
+      fairnessModeratorExempt: requestDraft.fairnessModeratorExempt,
+      warnConsecutiveRequests: requestDraft.warnConsecutiveRequests,
+    }, {
+      enabled: requestSaved.enabled,
+      maxPending: requestSaved.maxPending,
+      perUserPending: requestSaved.perUserPending,
+      duplicateScope: requestSaved.duplicateScope,
+      recentDuplicateHours: requestSaved.recentDuplicateHours,
+      maxDurationMinutes: requestSaved.maxDurationMinutes,
+      liveOnly: requestSaved.liveOnly,
+      perUserSessionLimit: requestSaved.perUserSessionLimit,
+      sessionRequestLimit: requestSaved.sessionRequestLimit,
+      fairnessModeratorExempt: requestSaved.fairnessModeratorExempt,
+      warnConsecutiveRequests: requestSaved.warnConsecutiveRequests,
+    });
+  }
+
   function setDirty(category, value) {
-    dirty[category] = !!value;
+    dirty[category] = value ? isCategoryDirty(category) : false;
     const nav = document.querySelector(`[data-twitch-pane="${category}"]`);
     const dot = nav?.querySelector('.twitch-dirty-dot');
     if (dot) dot.hidden = !dirty[category];
     const count = Object.values(dirty).filter(Boolean).length;
     const summary = el('twitch-management-dirty-summary');
-    if (summary) summary.textContent = count ? t('twitch.unsavedCount', { count }) : t('twitch.allSaved');
+    if (summary) {
+      summary.classList.toggle('draft', count > 0);
+      summary.classList.toggle('saved', count === 0);
+      summary.textContent = count ? t('twitch.unsavedCount', { count }) : t('twitch.allSaved');
+    }
   }
 
   function switchManagementPane(pane) {
