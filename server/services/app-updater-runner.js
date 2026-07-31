@@ -9,8 +9,12 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const ALLOWED_DIRS = new Set(['server', 'public']);
-const ALLOWED_FILES = new Set(['package.json', 'package-lock.json']);
+// 與 app-updater.js 的清單保持同義；EULA.txt 必須可更新，否則條款變更搬不過去。
+const ALLOWED_FILES = new Set(['package.json', 'package-lock.json', 'EULA.txt']);
 const PROTECTED = ['data/', 'downloads/', 'logs/', 'node_modules/', '.git/'];
+// 與 app-updater.js 同義：server/config.js 在允許的 server/ 底下，目錄規則擋不住，
+// 必須逐檔排除，否則使用者的本機設定會被更新包覆蓋。
+const PROTECTED_FILES = new Set(['server/config.js']);
 
 function appendLog(file, message) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -58,6 +62,7 @@ function validRelativeFile(rel) {
   if (rel.split('/').some((part) => part === '..' || part === '.')) return false;
   const lower = rel.toLowerCase();
   if (PROTECTED.some((prefix) => lower === prefix.slice(0, -1) || lower.startsWith(prefix))) return false;
+  if (PROTECTED_FILES.has(lower)) return false;
   if (ALLOWED_FILES.has(rel)) return true;
   const top = rel.split('/')[0];
   return ALLOWED_DIRS.has(top) && rel.includes('/');
@@ -160,10 +165,21 @@ function spawnRestart(restart) {
         child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'start', '', restart.launcher], {
           detached: true, stdio: 'ignore', windowsHide: false, cwd: path.dirname(restart.launcher),
         });
+      } else if (restart?.type === 'electron-app') {
+        // 安裝版：重新啟動整個桌面 app。這個 runner 自己是被以
+        // ELECTRON_RUN_AS_NODE=1 啟動的，若原封不動繼承下去，Electron 會以純 Node 模式
+        // 開起來——使用者會看到「更新完卻沒有視窗」，只剩背景 server。必須明確清掉。
+        const env = { ...process.env, ELITESAND_UPDATE_CHILD: '1' };
+        delete env.ELECTRON_RUN_AS_NODE;
+        child = spawn(restart.command, [], {
+          detached: true, stdio: 'ignore', windowsHide: false,
+          cwd: path.dirname(restart.command), env,
+        });
       } else if (restart?.type === 'node') {
+        const env = { ...process.env, ELITESAND_UPDATE_CHILD: '1' };
+        delete env.ELECTRON_RUN_AS_NODE;
         child = spawn(restart.command, restart.args || [], {
-          detached: true, stdio: 'ignore', windowsHide: true, cwd: restart.cwd,
-          env: { ...process.env, ELITESAND_UPDATE_CHILD: '1' },
+          detached: true, stdio: 'ignore', windowsHide: true, cwd: restart.cwd, env,
         });
       } else {
         throw new Error('缺少重啟方式');

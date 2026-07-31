@@ -35,8 +35,15 @@ const MAX_ZIP_BYTES = 64 * 1024 * 1024;
 const MAX_UNPACKED_BYTES = 128 * 1024 * 1024;
 const MAX_ENTRIES = 4000;
 const ALLOWED_DIRS = new Set(['server', 'public']);
-const ALLOWED_FILES = new Set(['package.json', 'package-lock.json', 'update-manifest.json']);
+// EULA.txt 在清單裡，增量更新才搬得動條款變更。少了它會出現最糟的組合：
+// 使用者拿到新功能，但同意閘門讀到的仍是舊版本號、不會請他重新同意
+// （0.9.8 就踩到這個，只能靠 Release notes 補救）。
+const ALLOWED_FILES = new Set(['package.json', 'package-lock.json', 'update-manifest.json', 'EULA.txt']);
 const PROTECTED_PREFIXES = ['data/', 'downloads/', 'logs/', 'node_modules/', '.git/'];
+// server/config.js 是使用者的本機設定（埠號、Twitch、回報端點）。它落在允許的 server/
+// 目錄底下，所以目錄規則本身擋不住它——必須逐檔排除，否則更新包一旦（誤）含這個檔，
+// 使用者的設定會被靜默覆蓋。build-update.ps1 已經會排除，這裡是第二道防線。
+const PROTECTED_FILES = new Set(['server/config.js']);
 const WORK_BASE = path.join(os.tmpdir(), 'Elitesand-Pro-updates');
 
 let currentProgress = {
@@ -113,6 +120,7 @@ function isAllowedEntry(entryName) {
   if (!rel) return false;
   const lower = rel.toLowerCase();
   if (PROTECTED_PREFIXES.some((prefix) => lower === prefix.slice(0, -1) || lower.startsWith(prefix))) return false;
+  if (PROTECTED_FILES.has(lower)) return false;
   if (ALLOWED_FILES.has(rel)) return true;
   const top = rel.split('/')[0];
   if (isDirectory && rel === top) return ALLOWED_DIRS.has(top);
@@ -409,9 +417,14 @@ async function prepareUpdate(options = {}) {
     fs.copyFileSync(path.join(__dirname, 'app-updater-runner.js'), runnerPath);
 
     const portableLauncher = path.join(path.dirname(targetRoot), 'Start Elitesand Pro.cmd');
+    // 三種宿主要用三種重啟方式。安裝版必須重新啟動「整個桌面 app」而不是單獨的 server：
+    // 拿 Electron exe 配 server/index.js 當參數只是碰巧會開起 GUI（參數被忽略），
+    // 一旦 runner 帶著 ELECTRON_RUN_AS_NODE 就會退化成「只有 server、沒有視窗」。
     const restart = fs.existsSync(portableLauncher)
       ? { type: 'launcher', launcher: portableLauncher }
-      : { type: 'node', command: process.execPath, args: [path.join(targetRoot, 'server', 'index.js')], cwd: targetRoot };
+      : process.versions.electron
+        ? { type: 'electron-app', command: process.execPath }
+        : { type: 'node', command: process.execPath, args: [path.join(targetRoot, 'server', 'index.js')], cwd: targetRoot };
     const logDir = targetRoot === PROJECT_ROOT ? logsDir : path.join(targetRoot, 'logs');
     fs.mkdirSync(logDir, { recursive: true });
     const plan = {
@@ -448,11 +461,17 @@ async function launchUpdater(prepared, options = {}) {
   const spawnImpl = options.spawnImpl || spawn;
   let child;
   try {
+    // 安裝版（Electron）的 server 跑在 utilityProcess 裡，process.execPath 是
+    // 「Elitesand Pro.exe」而不是 node.exe。直接拿它 spawn 一個 .js 會啟動整個 GUI app、
+    // 忽略腳本參數，runner 永遠不會寫出 readyFile ——症狀就是「updater 未能完成啟動握手」。
+    // 開發機與可攜版看不出問題（execPath 是真的 node），所以這個缺陷一路活到 0.9.7。
+    // ELECTRON_RUN_AS_NODE=1 讓同一個 exe 以純 Node 模式執行腳本；可攜版沒有這個變數也不受影響。
     child = spawnImpl(process.execPath, [prepared.runnerPath, prepared.planPath], {
       detached: true,
       windowsHide: true,
       stdio: 'ignore',
       cwd: prepared.workRoot,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     });
     if (!child || typeof child.once !== 'function') throw new Error('無法建立 updater 程序');
     child.unref?.();

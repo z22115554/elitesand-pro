@@ -1159,6 +1159,61 @@ testAsync('updater 啟動失敗時主程序保持可用且回傳具體原因', a
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
+// 2026-08-01 實機根因：安裝版的 server 跑在 Electron utilityProcess 裡，
+// process.execPath 是 Elitesand Pro.exe。直接拿它 spawn 一個 .js 會啟動 GUI app、
+// 忽略腳本參數，runner 永不寫出 readyFile ＝ 使用者看到「updater 未能完成啟動握手」。
+// 可攜版與開發機的 execPath 是真 node，所以這個缺陷一路活到 0.9.7 都沒被發現。
+testAsync('updater 以 Node 模式啟動 runner，安裝版才不會卡在啟動握手', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-update-node-mode-'));
+  try {
+    appUpdater._resetForTests();
+    const prepared = await appUpdater.prepareUpdate({ targetRoot: root, zipBuffer: makeUpdateZip(), latestVersion: '0.7.4' });
+    ok(prepared.prepared);
+    let seenOptions = null;
+    await appUpdater.launchUpdater(prepared, {
+      readyTimeoutMs: 50,
+      spawnImpl(command, args, options) {
+        seenOptions = options;
+        return { once() {}, unref() {}, kill() {}, pid: 1 };
+      },
+    });
+    eq(seenOptions.env.ELECTRON_RUN_AS_NODE, '1', 'runner 必須以 ELECTRON_RUN_AS_NODE 啟動: ');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
+});
+
+test('重啟計畫依宿主分流，且 runner 不會把 Node 模式傳染給重啟的 app', () => {
+  const updaterSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater.js'), 'utf8');
+  const runnerSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater-runner.js'), 'utf8');
+
+  // 安裝版要重啟整個桌面 app，不是單獨的 server 行程。
+  ok(updaterSource.includes('process.versions.electron'), '必須辨識 Electron 宿主: ');
+  ok(updaterSource.includes("type: 'electron-app'"), '安裝版需要專屬的重啟方式: ');
+  ok(runnerSource.includes("restart?.type === 'electron-app'"), 'runner 必須支援 electron-app 重啟: ');
+
+  // 最容易漏的一步：runner 自己是被 ELECTRON_RUN_AS_NODE=1 啟動的，
+  // 若原封不動繼承給重啟的 app，使用者會看到「更新完卻沒有視窗」。
+  const restartSection = runnerSource.slice(runnerSource.indexOf('function spawnRestart'));
+  const deletions = (restartSection.match(/delete env\.ELECTRON_RUN_AS_NODE/g) || []).length;
+  ok(deletions >= 2, `重啟前必須清掉 ELECTRON_RUN_AS_NODE（目前 ${deletions} 處，需涵蓋 electron-app 與 node）: `);
+});
+
+test('增量更新白名單允許 EULA.txt，條款變更才搬得過去', () => {
+  const updaterSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater.js'), 'utf8');
+  const runnerSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater-runner.js'), 'utf8');
+  const buildScript = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-update.ps1'), 'utf8');
+
+  ok(appUpdater.isAllowedEntry('EULA.txt'), 'EULA.txt 必須是允許的更新項目: ');
+  ok(updaterSource.includes("'EULA.txt'") && runnerSource.includes("'EULA.txt'"), '兩份白名單都要涵蓋 EULA.txt: ');
+  // 但打包時不能無條件塞進去：舊 updater 遇到白名單外的項目會整包拒絕，
+  // 對 0.9.8 以前的基準包含 EULA.txt 會讓那些使用者連更新都跑不了。
+  ok(buildScript.includes('$BaselineAcceptsEula'), '建置腳本必須先確認基準版 updater 認得 EULA.txt: ');
+  ok(/BaselineAcceptsEula\s*\)\s*\{[\s\S]{0,200}Copy-Item[\s\S]{0,80}EULA\.txt/.test(buildScript), 'EULA.txt 必須只在基準相容時才打包: ');
+
+  // 放寬白名單不等於放行任意根檔；使用者資料與設定仍必須被擋。
+  ['README.md', 'LICENSE', 'data/state.json', 'logs/x.log', 'server/config.js', 'node_modules/x/a.js']
+    .forEach((entry) => ok(!appUpdater.isAllowedEntry(entry), `${entry} 仍不可通過: `));
+});
+
 function makeRunnerSandbox() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-runner-'));
   const workRoot = path.join(root, 'work');

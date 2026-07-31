@@ -73,6 +73,21 @@ foreach ($file in @("package.json", "package-lock.json")) {
   Copy-Item -LiteralPath (Join-Path $Root $file) -Destination $Stage -Force
 }
 
+# EULA.txt 只有在「基準版的 updater 認得它」時才可以放進更新包。
+# 舊版 updater 遇到白名單外的項目會整包拒絕（丟出「更新包含未允許的檔案」），
+# 所以對 0.9.8 以前的基準塞 EULA.txt 會讓那些使用者連更新都跑不了——
+# 比條款搬不過去更糟。等所有人都升到 0.9.8 以上，這個判斷就會自動開始包含它。
+$BaselineUpdater = Join-Path $BaselineRoot "server\services\app-updater.js"
+$BaselineAcceptsEula = (Test-Path -LiteralPath $BaselineUpdater) -and
+  ((Get-Content -LiteralPath $BaselineUpdater -Raw -Encoding UTF8) -match "'EULA\.txt'")
+if ($BaselineAcceptsEula) {
+  Copy-Item -LiteralPath (Join-Path $Root "EULA.txt") -Destination $Stage -Force
+  Write-Host "Baseline updater accepts EULA.txt: including licence terms in the update package."
+} else {
+  Write-Host "Baseline updater predates the EULA.txt allowance: excluding it so the baseline can still apply this update."
+  Write-Host "  -> Users updating incrementally keep their current EULA.txt; state this in the release notes."
+}
+
 $LocalConfig = Join-Path $Stage "server\config.js"
 if (Test-Path -LiteralPath $LocalConfig) { Remove-Item -LiteralPath $LocalConfig -Force }
 
