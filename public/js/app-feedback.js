@@ -46,6 +46,7 @@
   // 送出成功後才換新的——網路失敗時使用者按第二次仍是「同一份」。
   let requestId = null;
   let submitting = false;
+  let collecting = false;
 
   function toast(message, type) {
     if (window.AppShared && window.AppShared.showToast) window.AppShared.showToast(message, type);
@@ -106,44 +107,88 @@
     TOO_MANY: 'feedback.errorTooMany',
     INVALID_TYPE: 'feedback.errorInvalidType',
     UNSUPPORTED_SCHEMA: 'feedback.errorUnsupportedSchema',
+    PREVIEW_FAILED: 'feedback.previewFailed',
   };
 
-  function showFormError(message) {
-    dom.formError.textContent = message;
-    dom.formError.hidden = !message;
+  // 動態文字一律「存語意、不存字串」，切語言時才能重繪（見本檔結尾的 i18n:change）。
+  // 直接把翻譯後的字塞進 textContent 是這個專案踩過的坑：畫面會卡在切換前的語言。
+  let formErrors = null;   // 伺服器回的 [{ field, code }]
+  let statusState = null;  // { key, vars, isError }
+  let previewBytes = null; // 預覽大小，KB 文案本身要跟著語言走
+
+  function showFormError(errors) {
+    formErrors = errors && errors.length ? errors : null;
+    renderFormError();
   }
 
-  function describeValidationErrors(errors) {
-    return (errors || [])
+  function renderFormError() {
+    const message = (formErrors || [])
       .map((error) => t(ERROR_CODE_KEYS[error.code] || 'feedback.errorGeneric', {
         field: t(FIELD_LABEL_KEYS[error.field] || error.field),
       }))
       .join('\n');
+    dom.formError.textContent = message;
+    dom.formError.hidden = !message;
   }
 
-  function setStatus(message, isError) {
-    dom.status.textContent = message || '';
-    dom.status.classList.toggle('feedback-error', !!isError);
+  function setStatus(key, vars, isError) {
+    statusState = key ? { key, vars: vars || {}, isError: !!isError } : null;
+    renderStatus();
+  }
+
+  function renderStatus() {
+    if (!statusState) {
+      dom.status.textContent = '';
+      dom.status.classList.remove('feedback-error');
+      return;
+    }
+    // key 可以是單一 key 或多個 key（例如「送出失敗」＋「內容還在，可以複製」）
+    const keys = Array.isArray(statusState.key) ? statusState.key : [statusState.key];
+    dom.status.textContent = keys.map((key) => t(key, statusState.vars)).join(' ');
+    dom.status.classList.toggle('feedback-error', statusState.isError);
+  }
+
+  // 收集中時顯示暫時文案；結束後交還給 I18n.apply()，由 data-i18n 還原成當下語言的標籤。
+  function renderCollectingLabel() {
+    if (collecting) {
+      dom.previewBtn.textContent = t('feedback.collecting');
+    } else if (window.I18n) {
+      window.I18n.apply(dom.previewBtn);
+    } else {
+      dom.previewBtn.textContent = t('feedback.previewBtn');
+    }
+  }
+
+  function renderPreviewSize() {
+    dom.previewSize.textContent = previewBytes == null
+      ? ''
+      : t('feedback.previewSize', { size: Math.ceil(previewBytes / 1024) });
   }
 
   function showPreview(text, byteLength) {
     dom.previewText.textContent = text;
-    dom.previewSize.textContent = t('feedback.previewSize', { size: Math.ceil(byteLength / 1024) });
+    previewBytes = byteLength;
+    renderPreviewSize();
     dom.previewPanel.hidden = false;
     // 中繼沒啟用時不是隱藏按鈕，而是明說原因並留下複製路徑——
     // 隱藏按鈕會讓使用者以為功能壞了。
     dom.submitBtn.hidden = !canSubmit;
-    setStatus(canSubmit ? '' : t('feedback.relayDisabled'));
+    setStatus(canSubmit ? null : 'feedback.relayDisabled');
     dom.previewText.focus();
   }
 
+  // 預覽失敗（非欄位驗證問題）也走同一套 errors 結構，才能一起隨語言重繪。
+  const PREVIEW_FAILED_ERROR = [{ field: null, code: 'PREVIEW_FAILED' }];
+
   async function requestPreview() {
-    showFormError('');
+    showFormError(null);
     dom.previewBtn.disabled = true;
     // 第一次預覽要實際探測 yt-dlp 與 FFmpeg，可能要兩三秒。沒有這行提示的話
     // 使用者只會看到一顆按不動的按鈕，會以為壞了。
-    const originalLabel = dom.previewBtn.textContent;
-    dom.previewBtn.textContent = t('feedback.collecting');
+    // 收集中的暫時文案不寫回 textContent 之外的狀態；還原時直接重跑 I18n.apply()，
+    // 這樣即使使用者在請求進行中切換語言，按鈕也會回到「當下語言」的正確標籤。
+    collecting = true;
+    renderCollectingLabel();
     try {
       const response = await PinAuth.fetchWithPin('/api/feedback/preview', {
         method: 'POST',
@@ -152,16 +197,17 @@
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data || !data.ok) {
-        showFormError(data && data.errors ? describeValidationErrors(data.errors) : t('feedback.previewFailed'));
+        showFormError(data && data.errors ? data.errors : PREVIEW_FAILED_ERROR);
         return;
       }
       canSubmit = !!data.canSubmit;
       showPreview(data.preview, data.byteLength);
     } catch (_) {
-      showFormError(t('feedback.previewFailed'));
+      showFormError(PREVIEW_FAILED_ERROR);
     } finally {
+      collecting = false;
       dom.previewBtn.disabled = false;
-      dom.previewBtn.textContent = originalLabel;
+      renderCollectingLabel();
     }
   }
 
@@ -176,7 +222,7 @@
     if (submitting) return;
     submitting = true;
     dom.submitBtn.disabled = true;
-    setStatus(t('feedback.submitting'));
+    setStatus('feedback.submitting');
     if (!requestId) requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
       const response = await PinAuth.fetchWithPin('/api/feedback/submit', {
@@ -188,15 +234,15 @@
       if (response.ok && data && data.ok) {
         clearDraft();
         requestId = null;
-        setStatus(t('feedback.submitted', { id: data.reportId }));
+        setStatus('feedback.submitted', { id: data.reportId });
         toast(t('feedback.submitted', { id: data.reportId }), 'success');
         dom.submitBtn.hidden = true;
         return;
       }
       const code = (data && data.code) || 'BACKEND_UNAVAILABLE';
-      setStatus(`${t(SUBMIT_ERROR_KEYS[code] || 'feedback.errorBackend')} ${t('feedback.fallbackCopy')}`, true);
+      setStatus([SUBMIT_ERROR_KEYS[code] || 'feedback.errorBackend', 'feedback.fallbackCopy'], null, true);
     } catch (_) {
-      setStatus(`${t('feedback.errorNetwork')} ${t('feedback.fallbackCopy')}`, true);
+      setStatus(['feedback.errorNetwork', 'feedback.fallbackCopy'], null, true);
     } finally {
       submitting = false;
       dom.submitBtn.disabled = false;
@@ -226,8 +272,9 @@
     });
     dom.includeDiagnostics.checked = true;
     dom.previewPanel.hidden = true;
-    showFormError('');
-    setStatus('');
+    showFormError(null);
+    setStatus(null);
+    previewBytes = null;
     requestId = null;
     clearDraft();
   }
@@ -265,6 +312,15 @@
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !dom.modal || dom.modal.hidden) return;
     closeModal();
+  });
+
+  // 切換語言時重繪所有動態文字。專案裡每個有動態文字的模組都做同一件事
+  // （app-twitch、app-playlist、error-handler…），漏掉的話畫面會一半日文一半中文。
+  window.addEventListener('i18n:change', () => {
+    renderFormError();
+    renderStatus();
+    renderPreviewSize();
+    renderCollectingLabel();
   });
 
   loadDraft();

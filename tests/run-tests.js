@@ -986,6 +986,18 @@ test('問題回報端點受 PIN 保護，且中繼未設定時安全停用', () 
   // Worker 已於 2026-07-31 部署並端到端驗證通過（見 STATUS.md），範本填的是官方中繼的
   // 真實網址，讓一般使用者不必自己申請 Cloudflare 帳號就能用。這裡只驗證它是合法的
   // https 端點、指向正確的 Worker，不是隨口填的字串或誤留的本機測試網址。
+  // 動態文字必須「存語意、切語言時重繪」。2026-08-01 實測踩過：驗證錯誤與送出狀態
+  // 直接塞翻譯後的字串進 textContent，切成日文後畫面會卡在繁中（memory
+  // i18n-auto-catalog-traps）。專案裡每個有動態文字的模組都監聽 i18n:change。
+  ok(frontend.includes("addEventListener('i18n:change'"), '回報模組必須在切換語言時重繪動態文字: ');
+  ['renderFormError', 'renderStatus', 'renderPreviewSize'].forEach((renderer) => {
+    ok(frontend.includes(`${renderer}()`), `切換語言時必須重繪 ${renderer}: `);
+  });
+  // setStatus/showFormError 只能收 key 或錯誤結構，收不到「已經翻譯完的字串」，
+  // 否則就回到卡住語言的老路。
+  ok(!/setStatus\(\s*`/.test(frontend) && !/setStatus\(\s*t\(/.test(frontend), 'setStatus 不可接收已翻譯字串: ');
+  ok(!/showFormError\(\s*t\(/.test(frontend), 'showFormError 不可接收已翻譯字串: ');
+
   const feedbackEndpointLine = configExample.match(/feedbackEndpoint:\s*'[^']*'/);
   ok(feedbackEndpointLine, 'feedbackEndpoint 必須存在: ');
   ok(/^feedbackEndpoint:\s*'https:\/\/elitesand-pro-feedback\.[^']+\/api\/v1\/reports'$/.test(feedbackEndpointLine[0]), '範本必須指向已部署的官方中繼: ');

@@ -185,8 +185,9 @@
           <!-- RC 實戰期間的臨時入口：需要大量回報，先把按鈕放明顯。
                2026-08 使用者決定：1.0 正式版要移除這顆首頁按鈕（設定頁的入口保留）。
                見 docs/ROADMAP.md §8 M6.4 發版 checklist、STATUS.md 本功能待辦。 -->
-          <button id="feedback-launch-btn" class="feedback-launch-btn" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <!-- 窄視窗下 span 會被 CSS 藏起來變成純圖示，沒有 aria-label 就等於沒有可讀名稱。 -->
+          <button id="feedback-launch-btn" class="feedback-launch-btn" type="button" aria-label="回報問題" data-i18n-aria-label="feedback.launchBtn" title="回報問題" data-i18n-title="feedback.launchBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             <span data-i18n="feedback.launchBtn">回報問題</span>
           </button>
 
