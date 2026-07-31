@@ -2,7 +2,7 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 1.1.0
+Version: 1.2.0
 Effective Date / 生效日期：2026-07-24
 
 IMPORTANT INFORMATION / 重要資訊
