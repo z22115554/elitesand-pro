@@ -182,6 +182,14 @@
       <div class="content">
         <!-- ═══ 視圖：歌詞控制 ═══ -->
         <div class="view is-active content-col" data-view="karaoke">
+          <!-- RC 實戰期間的臨時入口：需要大量回報，先把按鈕放明顯。
+               2026-08 使用者決定：1.0 正式版要移除這顆首頁按鈕（設定頁的入口保留）。
+               見 docs/ROADMAP.md §8 M6.4 發版 checklist、STATUS.md 本功能待辦。 -->
+          <button id="feedback-launch-btn" class="feedback-launch-btn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span data-i18n="feedback.launchBtn">回報問題</span>
+          </button>
+
           <!-- Onboarding 提示（首次使用，可關閉，記憶於 localStorage）-->
           <div id="onboard-hint" class="onboard-hint" hidden>
             <span class="oh-dot"></span>
@@ -1254,6 +1262,12 @@
                 <p class="sub diagnostic-privacy-hint">診斷包會附上可讀的直播穩定性核對摘要、版本、工具健康狀態、連線時長／計數與少量已遮蔽的伺服器日誌；不含歌單、歌詞、音檔、PIN、Twitch 憑證、聊天室內容或裝置位址。日誌仍可能提到歌名或影片標題，分享前請先檢查。</p>
             </div>
           </details>
+
+          <div class="card" id="feedback-card">
+            <p class="eyebrow" data-i18n="feedback.title">回報問題給開發者</p>
+            <p class="sub diagnostic-description" data-i18n="feedback.intro">遇到問題可以直接回報，不需要 GitHub 帳號。送出前會把「實際要送出的完整內容」顯示給你確認，你可以先取消附加診斷資訊再送。</p>
+            <button id="feedback-open-btn" class="btn btn-sm btn-primary" type="button" data-i18n="feedback.openBtn">填寫問題回報</button>
+          </div>
           </div>
           </div>
         </div><!-- /view general -->
@@ -2278,6 +2292,95 @@
     </div>
   </div>
 
+  <!-- ═══ Modal：問題回報（app-feedback.js）═══ 兩個入口共用同一份表單：
+       首頁的臨時按鈕（RC 期間，見上方註解）與設定頁的「填寫問題回報」。 -->
+  <div id="feedback-modal" class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="feedback-modal-title" hidden>
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <h3 id="feedback-modal-title" data-i18n="feedback.title">回報問題給開發者</h3>
+        <button id="feedback-modal-close" class="btn btn-sm btn-ghost" type="button" aria-label="關閉" data-i18n-aria-label="common.close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="sub diagnostic-description" data-i18n="feedback.intro">遇到問題可以直接回報，不需要 GitHub 帳號。送出前會把「實際要送出的完整內容」顯示給你確認，你可以先取消附加診斷資訊再送。</p>
+
+        <div class="feedback-form">
+          <div class="field">
+            <label for="feedback-type" data-i18n="feedback.fieldType">問題類型</label>
+            <select id="feedback-type" class="input">
+              <option value="app-error" data-i18n="feedback.typeAppError">程式錯誤</option>
+              <option value="import-playback" data-i18n="feedback.typeImportPlayback">匯入或播放問題</option>
+              <option value="lyrics" data-i18n="feedback.typeLyrics">歌詞問題</option>
+              <option value="obs" data-i18n="feedback.typeObs">OBS 顯示問題</option>
+              <option value="twitch" data-i18n="feedback.typeTwitch">Twitch 點歌問題</option>
+              <option value="ui-i18n" data-i18n="feedback.typeUiI18n">介面或翻譯問題</option>
+              <option value="feature-request" data-i18n="feedback.typeFeature">功能建議</option>
+              <option value="other" data-i18n="feedback.typeOther">其他問題</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="feedback-title" data-i18n="feedback.fieldTitle">標題</label>
+            <input id="feedback-title" class="input" type="text" maxlength="120" data-i18n-placeholder="feedback.titlePlaceholder" placeholder="一句話描述問題">
+          </div>
+
+          <div class="field">
+            <label for="feedback-description" data-i18n="feedback.fieldDescription">問題說明</label>
+            <textarea id="feedback-description" class="input" rows="3" maxlength="5000" data-i18n-placeholder="feedback.descriptionPlaceholder" placeholder="發生了什麼事？"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="feedback-steps" data-i18n="feedback.fieldSteps">重現步驟（一行一步）</label>
+            <textarea id="feedback-steps" class="input" rows="3" data-i18n-placeholder="feedback.stepsPlaceholder" placeholder="1. 先做了什麼&#10;2. 再做了什麼"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="feedback-actual" data-i18n="feedback.fieldActual">實際結果</label>
+            <textarea id="feedback-actual" class="input" rows="2" maxlength="2000" data-i18n-placeholder="feedback.actualPlaceholder" placeholder="實際發生的情況"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="feedback-expected" data-i18n="feedback.fieldExpected">預期結果（選填）</label>
+            <textarea id="feedback-expected" class="input" rows="2" maxlength="2000" data-i18n-placeholder="feedback.expectedPlaceholder" placeholder="你原本期待會發生什麼"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="feedback-contact" data-i18n="feedback.fieldContact">聯絡方式（選填）</label>
+            <input id="feedback-contact" class="input" type="text" maxlength="200" data-i18n-placeholder="feedback.contactPlaceholder" placeholder="Discord 或 Email，沒留就無法回覆你">
+            <p class="field-hint" data-i18n="feedback.contactHint">沒有留聯絡方式的話，開發者收得到問題但沒辦法回覆你或追問細節。</p>
+          </div>
+
+          <div class="switch-row">
+            <div>
+              <div class="label" data-i18n="feedback.includeDiagnostics">附加診斷資訊</div>
+              <div class="sub" data-i18n="feedback.includeDiagnosticsHint">版本、系統、yt-dlp／FFmpeg 狀態、連線觀測與已遮蔽的最近日誌。取消後只送出你填的文字。</div>
+            </div>
+            <label class="switch"><input id="feedback-include-diagnostics" type="checkbox" checked><span class="track"></span></label>
+          </div>
+
+          <div class="inline-row mt-10">
+            <button id="feedback-preview-btn" class="btn btn-sm btn-primary" type="button" data-i18n="feedback.previewBtn">預覽將送出的內容</button>
+            <button id="feedback-clear-btn" class="btn btn-sm btn-ghost" type="button" data-i18n="feedback.clearBtn">清空表單</button>
+          </div>
+          <p id="feedback-form-error" class="field-hint feedback-error" role="alert" hidden></p>
+        </div>
+
+        <div id="feedback-preview-panel" class="feedback-preview" hidden>
+          <p class="sub diagnostic-description" data-i18n="feedback.previewNotice">以下就是實際會送出的全部內容，沒有其他隱藏欄位。確認沒問題再送出。</p>
+          <p id="feedback-preview-size" class="field-hint" role="status" aria-live="polite"></p>
+          <pre id="feedback-preview-text" class="feedback-preview-text" tabindex="0"></pre>
+          <div class="inline-row mt-10">
+            <button id="feedback-submit-btn" class="btn btn-sm btn-primary" type="button" data-i18n="feedback.submitBtn">送出回報</button>
+            <button id="feedback-copy-btn" class="btn btn-sm" type="button" data-i18n="feedback.copyBtn">複製全文</button>
+            <button id="feedback-back-btn" class="btn btn-sm btn-ghost" type="button" data-i18n="feedback.backBtn">返回修改</button>
+          </div>
+          <p id="feedback-status" class="field-hint" role="status" aria-live="polite"></p>
+        </div>
+
+        <p class="sub diagnostic-privacy-hint" data-i18n="feedback.privacyHint">回報只在你按下「送出回報」時才會離開這台電腦。內容會先移除 Token、Cookie、PIN、Email 與家目錄路徑，但日誌仍可能提到歌名或影片標題——送出前請看過預覽。</p>
+      </div>
+    </div>
+  </div>
+
   <div id="announcement-critical-modal" class="modal announcement-critical-modal" role="dialog" aria-modal="false" aria-labelledby="announcement-critical-title" hidden>
     <div class="modal-card">
       <div class="modal-head announcement-critical-head">
@@ -2324,6 +2427,7 @@
   <script src="/js/app-toast-utils.js"></script>
   <script src="/js/app-style-sync.js"></script>
   <script src="/js/app-diagnostics.js"></script>
+  <script src="/js/app-feedback.js"></script>
   <script src="/js/playlist-state.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/lyric-extras.js"></script>

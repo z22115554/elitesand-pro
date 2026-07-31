@@ -813,6 +813,186 @@ testAsync('診斷包只含已遮蔽的健康資訊、直播連線證據與日誌
   }
 });
 
+// 清理規則是診斷包與問題回報共用的唯一實作。這裡刻意同時測「該遮的有遮」與
+// 「不該動的沒動」——過度清理會讓回報變成一堆 [redacted]，跟外洩一樣讓功能失效。
+test('清理模組遮蔽憑證與個資，並保留除錯所需的一般內容', () => {
+  const { redactDiagnosticText, redactValue } = require('../server/utils/redaction');
+
+  const mustRedact = [
+    ['Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abcdefghij.KLMNOPqrst', 'KLMNOPqrst'],
+    ['access_token=abc123def&foo=1', 'abc123def'],
+    ['{"refresh_token":"r-secret-value","user":"bob"}', 'r-secret-value'],
+    ['Cookie: SID=xyz-session; HSID=abc', 'xyz-session'],
+    ['contact me at streamer@example.com thanks', 'streamer@example.com'],
+    ['https://api.example.com/x?token=SECRETVALUE&v=1', 'SECRETVALUE'],
+    ['PIN: 123456', '123456'],
+    ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NSJ9.dBjftJeZ4CVPmB92K27u', 'dBjftJeZ4CVPmB92K27u'],
+    ['Twitch 已授權頻道：streamer_private', 'streamer_private'],
+    ['C:\\Users\\thad\\Desktop\\a.mp3', 'thad'],
+    ['C:\\Users\\陳小明\\Desktop\\a.mp3', '陳小明'],
+    ['D:/Users/thad/downloads/a.mp3', 'thad'],
+    ['read C:\\MyPersonalFolder\\b.mp3 failed', 'MyPersonalFolder'],
+  ];
+  mustRedact.forEach(([input, secret]) => {
+    ok(!redactDiagnosticText(input).includes(secret), `必須遮蔽 ${secret}: `);
+  });
+
+  const mustKeep = [
+    ['https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123&t=42', 'dQw4w9WgXcQ'],
+    ['https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123&t=42', 'list=PL123'],
+    ['access_token=abc123def&foo=1', 'foo=1'],
+    ['ERROR: [youtube] dQw4w9WgXcQ: Video unavailable', 'Video unavailable'],
+    ['正在下載《夜に駆ける》 - YOASOBI', '夜に駆ける'],
+    ['匯入完成：已加入播放清單第 3 首', '已加入播放清單第 3 首'],
+    ['read C:\\MyPersonalFolder\\b.mp3 failed', 'failed'],
+    ['ffmpeg at C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe ok', 'Program Files'],
+    ['loaded C:\\Windows\\System32\\dwrite.dll', 'System32'],
+    ['C:\\Users\\thad\\AppData\\Roaming\\Elitesand Pro\\logs\\app.log', 'AppData'],
+  ];
+  mustKeep.forEach(([input, keep]) => {
+    ok(redactDiagnosticText(input).includes(keep), `不可過度清理，必須保留 ${keep}: `);
+  });
+
+  eq(redactDiagnosticText(''), '');
+  eq(redactDiagnosticText(null), '');
+  ok(redactDiagnosticText('x'.repeat(50000)).length === 50000, '一般長字串不應被截斷: ');
+
+  const redactedObject = redactValue({
+    ok: 'keep-me',
+    accessToken: 'secret-1',
+    nested: { cookie: 'secret-2', apiKey: 'secret-3', title: '夜に駆ける' },
+  });
+  eq(redactedObject.ok, 'keep-me');
+  eq(redactedObject.accessToken, '[redacted]');
+  eq(redactedObject.nested.cookie, '[redacted]');
+  eq(redactedObject.nested.apiKey, '[redacted]');
+  eq(redactedObject.nested.title, '夜に駆ける');
+
+  // 診斷包不可以自己再寫一份規則：兩邊分岔會出現「診斷包乾淨但回報外洩」。
+  const bundleSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'diagnostic-bundle.js'), 'utf8');
+  ok(bundleSource.includes("require('../utils/redaction')"), '診斷包必須共用 utils/redaction: ');
+  ok(!bundleSource.includes('function redactDiagnosticText'), '診斷包不可保留自己的 redactor 實作: ');
+});
+
+test('問題回報 schema 拒絕不完整或超長的內容', () => {
+  const feedbackReport = require('../server/services/feedback-report');
+  const base = {
+    schemaVersion: 1, type: 'obs', title: '切歌時閃白底',
+    description: '切到下一首時 OBS 歌詞來源會閃一格白底。',
+    steps: '加入來源\n按下一首', actual: '閃白', includeDiagnostics: false,
+  };
+  ok(feedbackReport.validateReport(base).ok, '完整內容應通過: ');
+
+  const codeFor = (patch) => {
+    const result = feedbackReport.validateReport({ ...base, ...patch });
+    return result.ok ? null : result.errors.map((error) => `${error.field}:${error.code}`).join(',');
+  };
+  eq(codeFor({ schemaVersion: 99 }), 'schemaVersion:UNSUPPORTED_SCHEMA');
+  eq(codeFor({ type: 'nope' }), 'type:INVALID_TYPE');
+  eq(codeFor({ title: '' }), 'title:TOO_SHORT');
+  eq(codeFor({ title: 'x'.repeat(121) }), 'title:TOO_LONG');
+  eq(codeFor({ description: '太短' }), 'description:TOO_SHORT');
+  eq(codeFor({ steps: '' }), 'steps:TOO_SHORT');
+  eq(codeFor({ steps: Array.from({ length: 21 }, (_, i) => `step ${i}`) }), 'steps:TOO_MANY');
+  eq(codeFor({ actual: '' }), 'actual:TOO_SHORT');
+  eq(codeFor({ contact: 'x'.repeat(201) }), 'contact:TOO_LONG');
+
+  // 使用者可能直接把含 token 的錯誤訊息貼進說明欄，組報告時必須一併清理。
+  const leaky = feedbackReport.buildReport({
+    ...base,
+    description: '匯入失敗，訊息是 Authorization: Bearer ghp_USER_PASTED_SECRET 在 C:\\Users\\thad\\Music 底下',
+  });
+  ok(leaky.ok);
+  ok(!leaky.plainText.includes('ghp_USER_PASTED_SECRET'), '使用者貼上的憑證必須被遮蔽: ');
+  ok(!leaky.plainText.includes('thad'), '使用者名稱必須被遮蔽: ');
+
+  // 報告內文固定繁中，不跟著介面語言跑，否則維護者會收到看不懂的 issue。
+  const japanese = feedbackReport.buildReport({ ...base, locale: 'ja' });
+  ok(japanese.plainText.includes('## 問題說明'), '報告內文必須固定繁體中文: ');
+  ok(japanese.plainText.includes('介面語言：ja'), '使用者語言必須另外記錄: ');
+  ok(japanese.report.issueLabels.includes('source:in-app'));
+});
+
+test('問題回報缺少外部工具或日誌時仍能產出報告', () => {
+  const feedbackReport = require('../server/services/feedback-report');
+  const emptyDir = path.join(os.tmpdir(), `elitesand-feedback-${Date.now()}`);
+  fs.mkdirSync(emptyDir, { recursive: true });
+  try {
+    // 沒有 systemCheck、沒有連線觀測、日誌目錄是空的——這些都不該讓回報送不出去。
+    const built = feedbackReport.buildReport({
+      schemaVersion: 1, type: 'other', title: '沒有工具也要能回報',
+      description: '在缺少 yt-dlp 與 FFmpeg 的機器上也要能送出回報。',
+      steps: '什麼都不做', actual: '不確定',
+    }, { logDir: emptyDir });
+    ok(built.ok);
+    ok(built.plainText.includes('工具健康狀態：取不到') || built.plainText.includes('yt-dlp：找不到'));
+    ok(built.plainText.includes('沒有可用的日誌'), '缺日誌要如實說明，不是假裝有資料: ');
+  } finally {
+    fs.rmSync(emptyDir, { recursive: true, force: true });
+  }
+});
+
+test('安裝識別碼是隨機 UUID，且不使用任何硬體指紋', () => {
+  const installIdModule = require('../server/services/install-id');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'install-id.js'), 'utf8');
+  ok(source.includes('crypto.randomUUID'), '必須是隨機 UUID: ');
+  ['networkInterfaces', 'cpus', 'hostname', 'machineId', 'serial'].forEach((forbidden) => {
+    ok(!source.includes(forbidden), `不可使用 ${forbidden} 之類的機器指紋: `);
+  });
+
+  const dir = path.join(os.tmpdir(), `elitesand-installid-${Date.now()}`);
+  const file = path.join(dir, 'install-id.json');
+  try {
+    installIdModule._resetForTests();
+    const first = installIdModule.getInstallId({ file });
+    installIdModule._resetForTests();
+    const second = installIdModule.getInstallId({ file });
+    eq(second, first, '同一台機器必須讀回同一個識別碼: ');
+    ok(/^[0-9a-f-]{36}$/i.test(first));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('問題回報端點受 PIN 保護，且中繼未設定時安全停用', () => {
+  const root = path.join(__dirname, '..');
+  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const frontend = fs.readFileSync(path.join(root, 'public/js/app-feedback.js'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'server/services/feedback-client.js'), 'utf8');
+
+  // 鐵則 15：會外送資料的新路由要逐一手動掛 requirePin。
+  ok(api.includes("router.post('/feedback/preview', requirePin"), '預覽端點必須掛 requirePin: ');
+  ok(api.includes("router.post('/feedback/submit', requirePin"), '送出端點必須掛 requirePin: ');
+  // 鐵則 16：面板受保護的 fetch 一律用 PinAuth.fetchWithPin。
+  ok(frontend.includes("PinAuth.fetchWithPin('/api/feedback/preview'"), '預覽必須帶 PIN: ');
+  ok(frontend.includes("PinAuth.fetchWithPin('/api/feedback/submit'"), '送出必須帶 PIN: ');
+  ok(page.includes('feedback-preview-btn') && page.includes('feedback-submit-btn'));
+  ok(page.includes('/js/app-feedback.js'), '面板必須載入回報模組: ');
+
+  // 送出必須由伺服器重新組報告，不能直接採用前端傳來的成品，
+  // 否則「預覽到的就是送出的」這個承諾在架構上不成立。
+  const submitHandler = api.slice(api.indexOf("router.post('/feedback/submit'"));
+  ok(submitHandler.includes('feedbackReport.buildReport'), '送出必須在伺服器端重組報告: ');
+
+  // 憑證不在客戶端：整個 App 端不可出現任何 GitHub token 或建立 issue 的呼叫。
+  ok(!client.includes('api.github.com'), 'App 端不可直接呼叫 GitHub: ');
+  ok(!/gh[pousr]_[A-Za-z0-9]{20,}/.test(client + api + frontend), 'App 端不可內嵌 GitHub token: ');
+
+  // 明文外送防線：只有 https 或本機中繼才啟用。
+  ok(client.includes("endpoint.startsWith('https://')"), '對外必須要求 HTTPS: ');
+
+  const configExample = fs.readFileSync(path.join(root, 'server/config.example.js'), 'utf8');
+  // Worker 已於 2026-07-31 部署並端到端驗證通過（見 STATUS.md），範本填的是官方中繼的
+  // 真實網址，讓一般使用者不必自己申請 Cloudflare 帳號就能用。這裡只驗證它是合法的
+  // https 端點、指向正確的 Worker，不是隨口填的字串或誤留的本機測試網址。
+  const feedbackEndpointLine = configExample.match(/feedbackEndpoint:\s*'[^']*'/);
+  ok(feedbackEndpointLine, 'feedbackEndpoint 必須存在: ');
+  ok(/^feedbackEndpoint:\s*'https:\/\/elitesand-pro-feedback\.[^']+\/api\/v1\/reports'$/.test(feedbackEndpointLine[0]), '範本必須指向已部署的官方中繼: ');
+  ok(!feedbackEndpointLine[0].includes('127.0.0.1') && !feedbackEndpointLine[0].includes('localhost'), '回報端點不可殘留本機測試位址: ');
+  ok(configExample.includes('feedbackEnabled'), '範本必須提供緊急停用開關: ');
+});
+
 test('發版稽核只檢查 production dependencies，且任何等級風險都會失敗', () => {
   const manifest = require('../package.json');
   eq(manifest.scripts['audit:release'], 'npm audit --omit=dev --audit-level=low');

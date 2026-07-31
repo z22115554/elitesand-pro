@@ -51,4 +51,16 @@ module.exports = {
   twitchRedirectUri: 'http://localhost:3000/auth/twitch/callback',
   // 聊天室格式：!點歌 https://youtu.be/...（目前只接受 YouTube 連結，才能安全走既有匯入佇列）
   twitchRequestCommand: '!點歌',
+
+  // ─── 程式內問題回報 ───
+  //
+  // 使用者在面板填寫問題後，由這台伺服器把「送出前已完整顯示給使用者看過」的文字
+  // 送到中繼，再由中繼建立私人 GitHub Issue。GitHub 憑證只存在中繼，不在這個程式裡。
+  //
+  // 留空字串（''）＝停用回報送出，面板會自動降級成「複製報告全文」，
+  // 使用者仍可自行把內容貼給開發者，不會看到壞掉的按鈕。
+  // 官方中繼（2026-07-31 部署並端到端驗證通過）：
+  feedbackEndpoint: 'https://elitesand-pro-feedback.elitesand.workers.dev/api/v1/reports',
+  // 緊急停用開關：設為 false 時完全不顯示送出按鈕，只保留複製與下載診斷包。
+  feedbackEnabled: true,
 };

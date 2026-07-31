@@ -42,6 +42,8 @@ const ytdlpCompatibility = require('../services/ytdlp-compatibility');
 const { getSystemCheck } = require('../services/system-check');
 const { createDiagnosticBundle } = require('../services/diagnostic-bundle');
 const runtimeEvidence = require('../services/runtime-evidence');
+const feedbackReport = require('../services/feedback-report');
+const feedbackClient = require('../services/feedback-client');
 
 // ─── Multer 設定（本地檔案上傳）───
 const storage = multer.diskStorage({
@@ -165,6 +167,62 @@ router.get('/diagnostics/export', requirePin, async (req, res) => {
 // stream is currently in progress on this LAN device.
 router.post('/diagnostics/reliability/reset', requirePin, (req, res) => {
   res.json({ ok: true, evidence: runtimeEvidence.reset() });
+});
+
+// ─── 程式內問題回報 ───
+// 兩個端點都手動掛 requirePin（鐵則 15）：報告內含已清理的日誌尾巴與連線觀測，
+// 跟診斷包同一個等級，不能讓區網上的其他人隨手取得或代替主機送出回報。
+
+// 唯讀：回傳「送出時會送出什麼」的完整文字。使用者一定先看到這個，才會出現送出按鈕。
+router.post('/feedback/preview', requirePin, async (req, res) => {
+  try {
+    const built = feedbackReport.buildReport(req.body || {}, {
+      systemCheck: await getSystemCheck(),
+      runtimeEvidence: runtimeEvidence.getSnapshot(),
+    });
+    if (!built.ok) return res.status(400).json({ ok: false, errors: built.errors });
+    res.json({
+      ok: true,
+      preview: built.plainText,
+      byteLength: built.byteLength,
+      canSubmit: feedbackClient.isEnabled(),
+    });
+  } catch (error) {
+    log.error('問題回報預覽失敗', error);
+    res.status(500).json({ ok: false, code: 'INTERNAL_ERROR' });
+  }
+});
+
+// 送出：伺服器自己重新組一次報告，不接受前端傳回來的成品——否則預覽跟實際送出的
+// 內容可以被改成不一樣的東西，「送出前預覽」這個承諾就不成立了。
+router.post('/feedback/submit', requirePin, async (req, res) => {
+  try {
+    if (!feedbackClient.isEnabled()) return res.status(503).json({ ok: false, code: 'DISABLED' });
+    const built = feedbackReport.buildReport(req.body || {}, {
+      systemCheck: await getSystemCheck(),
+      runtimeEvidence: runtimeEvidence.getSnapshot(),
+    });
+    if (!built.ok) return res.status(400).json({ ok: false, errors: built.errors });
+
+    // 冪等鍵由前端保存：同一份報告按第二次送出時帶同一個值，中繼會回原本的編號，
+    // 不會變成兩張 issue。前端沒帶就當成新報告。
+    const requestId = typeof req.body.requestId === 'string' && req.body.requestId.length <= 64
+      ? req.body.requestId
+      : feedbackClient.newRequestId();
+
+    const result = await feedbackClient.submitReport(built.report, requestId);
+    if (result.ok) return res.json({ ok: true, reportId: result.reportId, warnings: result.warnings, requestId });
+    const status = result.code === 'RATE_LIMITED' ? 429 : 502;
+    res.status(status).json({ ok: false, code: result.code, requestId });
+  } catch (error) {
+    log.error('問題回報送出失敗', error);
+    res.status(500).json({ ok: false, code: 'INTERNAL_ERROR' });
+  }
+});
+
+// 面板載入時用來決定要顯示「送出回報」還是只顯示「複製全文」。
+router.get('/feedback/status', (req, res) => {
+  res.json({ enabled: feedbackClient.isEnabled(), types: Object.keys(feedbackReport.REPORT_TYPES), limits: feedbackReport.LIMITS });
 });
 
 // ─── yt-dlp 版本檢查與更新 ───

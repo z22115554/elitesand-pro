@@ -5,33 +5,12 @@ const path = require('path');
 const AdmZip = require('adm-zip');
 const { APP_VERSION } = require('../utils/app-version');
 const { LOG_DIR } = require('../utils/logger');
+// 清理規則與問題回報共用，見 utils/redaction.js 開頭說明；不要在這裡另外寫一份。
+const { redactDiagnosticText, redactValue } = require('../utils/redaction');
 
 const MAX_LOG_FILES = 3;
 const MAX_LOG_BYTES_PER_FILE = 16 * 1024;
 const R12_MINIMUM_OBSERVED_MS = 4 * 60 * 60 * 1000;
-
-function redactDiagnosticText(value) {
-  return String(value == null ? '' : value)
-    .replace(/\b(Bearer|OAuth)\s+[A-Za-z0-9._~-]+/gi, '$1 [redacted]')
-    .replace(/((?:access|refresh)_?token["']?\s*[:=]\s*["']?)[^\s,"'}]+/gi, '$1[redacted]')
-    .replace(/\b(client_secret|authorization|password)\s*[:=]\s*[^\s,]+/gi, '$1=[redacted]')
-    .replace(/\bPIN\s*[:=]\s*\d+/gi, 'PIN: [redacted]')
-    .replace(/(Twitch\s+\u5DF2\u6388\u6B0A\u983B\u9053[\uFF1A:]\s*)[^\r\n]+/g, '$1[redacted]')
-    .replace(/\b[A-Za-z]:\\[^\r\n]*/g, '[local-path]');
-}
-
-function redactValue(value, depth = 0) {
-  if (depth > 8) return '[omitted]';
-  if (typeof value === 'string') return redactDiagnosticText(value);
-  if (Array.isArray(value)) return value.map((item) => redactValue(item, depth + 1));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
-      key,
-      /(?:token|secret|authorization|password|pin)/i.test(key) ? '[redacted]' : redactValue(item, depth + 1),
-    ]));
-  }
-  return value;
-}
 
 function tailFile(filePath, maxBytes = MAX_LOG_BYTES_PER_FILE, dependencies = fs) {
   let handle;
@@ -171,7 +150,7 @@ function createDiagnosticBundle(options = {}) {
     includesRuntimeEvidence: true,
     includesRuntimeEvidenceSummary: true,
     logTailBytesPerFile: MAX_LOG_BYTES_PER_FILE,
-    redaction: ['access tokens', 'refresh tokens', 'authorization values', 'PIN values', 'password values', 'Windows paths'],
+    redaction: ['access tokens', 'refresh tokens', 'authorization values', 'PIN values', 'password values', 'JWTs', 'cookies', 'email addresses', 'credential query parameters', 'Windows paths'],
   };
   zip.addFile('manifest.json', Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8'));
 

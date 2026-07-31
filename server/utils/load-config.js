@@ -35,6 +35,11 @@ const DEFAULTS = {
   twitchClientId: '0irb2nsejgtlbuslpjdt0sjbr5sbpl',
   twitchRedirectUri: 'http://localhost:3000/auth/twitch/callback',
   twitchRequestCommand: '!點歌',
+  // 程式內問題回報的中繼端點（Cloudflare Worker）。空字串＝停用，面板會自動降級成
+  // 「複製報告全文」，使用者仍能把內容貼到 Discord 或信件。憑證只存在 Worker，
+  // 這個端點本身是公開的，可以隨 App 發布。
+  feedbackEndpoint: '',
+  feedbackEnabled: true,
 };
 
 function tryRequire(modulePath) {
