@@ -5038,7 +5038,10 @@ test('歌詞模板使用 Elitesand Pro 自有名稱與新 ID', () => {
   ['Stardust Flow', 'Prism Steps', 'Diagonal Confession', 'Tidal Mindscape', 'Neon Duet'].forEach((retiredName) => {
     ok(!readme.includes(retiredName), `README 不可保留已退休的模板名稱 ${retiredName}: `);
   });
-  ok(readme.includes('Classic Overlay, Pulse, Facet, Drift, Aura, KTV, Vertical Flow'));
+  // drift（斜拍告白）目前從桌面與手機選擇器隱藏，README 一律以六種為準；
+  // 若使用者日後把它放回選擇器，再連同 README 與此處一起改回七種。
+  ok(readme.includes('Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow'));
+  ok(!/Classic Overlay, Pulse, Facet, Drift/.test(readme), 'README 不可把隱藏中的 Drift 列為可選模板: ');
 });
 
 test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', () => {
