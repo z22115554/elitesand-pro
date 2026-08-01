@@ -1113,6 +1113,11 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .announcement-banner strong { display: block; margin-bottom: 3px; color: var(--danger); font-size: 13px; }
 .announcement-banner span { color: var(--text-dim); font-size: 12px; line-height: 1.55; }
 .announcement-actions { display: flex; gap: 7px; flex-shrink: 0; }
+/* 當機提示沿用公告 banner 的版面，但換成中性色：這是「要不要幫忙回報」，
+   不是安全警告，用紅色會讓使用者以為資料出事了。z-index 比公告低一階，
+   真的有重要公告時讓公告蓋在上面。 */
+.crash-banner { z-index: 440; border-color: var(--border-strong); background: var(--bg-surface); }
+.crash-banner strong { display: block; margin-bottom: 3px; color: var(--text); font-size: 13px; }
 .announcement-list { display: flex; flex-direction: column; gap: 8px; }
 .error-history-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
 .error-history-item { padding: 8px 9px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-raised); }

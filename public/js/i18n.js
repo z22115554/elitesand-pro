@@ -559,6 +559,15 @@
 
     // 問題回報。介面文字跟著使用者語言，但送出的報告內文固定繁體中文
     // （見 server/services/feedback-report.js）——維護者要看得懂收到的東西。
+    // 上次未正常關閉的提示。措辭刻意保守：只說「未正常關閉」，不說「當機」——
+    // 使用者自己用工作管理員關掉、或 Windows 更新重開機也會觸發，講死了會嚇到人。
+    'crash.title': ['Elitesand Pro 上次未正常關閉', 'Elitesand Pro did not shut down cleanly last time', 'Elitesand Pro が前回正常に終了しませんでした', 'Elitesand Pro가 지난번에 정상적으로 종료되지 않았습니다', 'Elitesand Pro 上次未正常关闭'],
+    'crash.message': ['要傳送診斷資訊協助找出原因嗎？送出前你可以先看過完整內容。', 'Send diagnostics to help find the cause? You can review the full content before sending.', '原因調査のために診断情報を送信しますか？送信前に内容をすべて確認できます。', '원인 파악을 위해 진단 정보를 보낼까요? 보내기 전에 전체 내용을 확인할 수 있습니다.', '要发送诊断信息协助找出原因吗？送出前你可以先看过完整内容。'],
+    'crash.review': ['查看內容', 'Review and send', '内容を確認', '내용 확인', '查看内容'],
+    'crash.dismiss': ['不用了', 'No thanks', '今回は送らない', '보내지 않기', '不用了'],
+    'crash.prefillTitle': ['程式上次未正常關閉', 'The app did not shut down cleanly', 'アプリが正常に終了しませんでした', '앱이 정상적으로 종료되지 않았습니다', '程序上次未正常关闭'],
+    'crash.prefillActual': ['程式在未經我操作的情況下結束或沒有回應。', 'The app closed or stopped responding without me doing anything.', '操作していないのにアプリが終了、または応答しなくなりました。', '아무 조작도 하지 않았는데 앱이 종료되거나 응답하지 않았습니다.', '程序在未经我操作的情况下结束或没有响应。'],
+
     'feedback.title': ['回報問題給開發者', 'Report a problem', '開発者に問題を報告', '개발자에게 문제 신고', '回报问题给开发者'],
     'feedback.launchBtn': ['回報問題', 'Report a problem', '問題を報告', '문제 신고', '报告问题'],
     'feedback.openBtn': ['填寫問題回報', 'Open the report form', '報告フォームを開く', '신고 양식 열기', '填写问题回报'],

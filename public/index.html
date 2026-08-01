@@ -56,6 +56,19 @@
     </div>
   </div>
 
+  <!-- 上次未正常關閉時的提示。刻意做成可忽略的 banner 而非阻斷式視窗：
+       這只是「要不要幫忙回報」，不該擋住使用者開台。絕不自動傳送任何資料。 -->
+  <div id="crash-banner" class="announcement-banner crash-banner" role="status" hidden>
+    <div>
+      <strong data-i18n="crash.title">Elitesand Pro 上次未正常關閉</strong>
+      <span data-i18n="crash.message">要傳送診斷資訊協助找出原因嗎？送出前你可以先看過完整內容。</span>
+    </div>
+    <div class="announcement-actions">
+      <button id="crash-review" class="btn btn-sm btn-primary" type="button" data-i18n="crash.review">查看內容</button>
+      <button id="crash-dismiss" class="btn btn-sm btn-ghost" type="button" data-i18n="crash.dismiss">不用了</button>
+    </div>
+  </div>
+
   <div class="app">
     <!-- ═══ 左側導覽欄（Discord 式）═══ -->
     <nav class="sidebar">

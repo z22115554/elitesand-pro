@@ -954,6 +954,104 @@ test('安裝識別碼是隨機 UUID，且不使用任何硬體指紋', () => {
   }
 });
 
+test('非正常結束偵測：只有走完乾淨關閉才算 clean，其餘一律 fail-safe 成「不是當機」', () => {
+  const sessionMarker = require('../server/services/session-marker');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-marker-'));
+  const file = path.join(dir, '.session-marker');
+  try {
+    // 全新安裝：沒有標記檔不等於當機。
+    sessionMarker._resetForTests();
+    let state = sessionMarker.markStarted({ file, now: () => 1000 });
+    eq(state.wasClean, true, '首次啟動不可誤報當機: ');
+    ok(state.firstRun, '首次啟動要標記 firstRun: ');
+
+    // 走完 gracefulShutdown → 下次啟動是 clean。
+    sessionMarker.markClean('SIGINT', { file, now: () => 2000 });
+    eq(JSON.parse(fs.readFileSync(file, 'utf8')).clean, true);
+    sessionMarker._resetForTests();
+    eq(sessionMarker.markStarted({ file, now: () => 3000 }).wasClean, true, '乾淨關閉後不可報當機: ');
+
+    // 沒走到 markClean 就再啟動 → 判定為非正常結束。
+    sessionMarker._resetForTests();
+    state = sessionMarker.markStarted({ file, now: () => 4000 });
+    eq(state.wasClean, false, '未乾淨關閉必須被偵測到: ');
+    eq(state.previousStartedAt, 3000, '要帶出上次啟動時間當事件鍵: ');
+
+    // 壞掉/空的標記檔絕不能誤報成當機——誤報會讓使用者以為程式有問題。
+    ['{壞掉的 json', ''].forEach((broken) => {
+      fs.writeFileSync(file, broken, 'utf8');
+      sessionMarker._resetForTests();
+      eq(sessionMarker.markStarted({ file, now: () => 5000 }).wasClean, true, `標記檔為 ${JSON.stringify(broken)} 時不可誤報: `);
+    });
+
+    // 寫不進去（唯讀/權限）時只停用偵測，不可讓伺服器起不來。
+    sessionMarker._resetForTests();
+    const unavailable = sessionMarker.markStarted({ file: path.join(dir, 'no-such-dir', 'x', '.session-marker'), fs: {
+      readFileSync() { throw new Error('nope'); },
+      mkdirSync() { throw new Error('read-only'); },
+      writeFileSync() { throw new Error('read-only'); },
+    } });
+    eq(unavailable.wasClean, true, '無法寫入標記時不可誤報當機: ');
+  } finally {
+    sessionMarker._resetForTests();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('非正常結束偵測在 node --watch 下自動停用', () => {
+  const sessionMarker = require('../server/services/session-marker');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'session-marker.js'), 'utf8');
+  // 2026-08-01 實測：Windows 的 node --watch 重啟是硬砍（SIGTERM 以 TerminateProcess
+  // 實作、攔不到），gracefulShutdown 完全不會跑。不排除的話開發者每存一次檔就被當成當機。
+  ok(/execArgv/.test(source) && /--watch/.test(source), 'watch 模式必須自動停用偵測: ');
+  ok(source.includes('ELITESAND_DISABLE_CRASH_DETECT'), '必須保留可明確停用的環境變數: ');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-marker-watch-'));
+  const file = path.join(dir, '.session-marker');
+  const original = process.env.ELITESAND_DISABLE_CRASH_DETECT;
+  try {
+    // 先製造一次「未乾淨關閉」，再確認停用時不會據此報當機。
+    sessionMarker._resetForTests();
+    sessionMarker.markStarted({ file, now: () => 1000 });
+    process.env.ELITESAND_DISABLE_CRASH_DETECT = '1';
+    sessionMarker._resetForTests();
+    const state = sessionMarker.markStarted({ file, now: () => 2000 });
+    eq(state.wasClean, true, '停用時一律視為正常: ');
+    eq(state.disabled, true);
+    eq(sessionMarker.markClean('x', { file }), false, '停用時不可寫標記檔: ');
+  } finally {
+    if (original === undefined) delete process.env.ELITESAND_DISABLE_CRASH_DETECT;
+    else process.env.ELITESAND_DISABLE_CRASH_DETECT = original;
+    sessionMarker._resetForTests();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('當機提示接在既有回報流程上，且絕不自動送出', () => {
+  const root = path.join(__dirname, '..');
+  const indexSource = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
+  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const frontend = fs.readFileSync(path.join(root, 'public/js/app-feedback.js'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+
+  // markClean 必須是 gracefulShutdown 的第一件事：後面有 8 秒硬退保底，
+  // 放後面的話「關閉流程自己卡住」會被下次啟動誤判成當機。
+  const shutdownBody = indexSource.slice(indexSource.indexOf('async function gracefulShutdown'));
+  const cleanAt = shutdownBody.indexOf('markClean');
+  const stateFlushAt = shutdownBody.indexOf("state-store').saveNow");
+  ok(cleanAt > -1, 'gracefulShutdown 必須標記乾淨關閉: ');
+  ok(cleanAt < stateFlushAt, 'markClean 必須早於 flush，否則硬退保底會來不及寫: ');
+  ok(indexSource.includes('markStarted'), '啟動時必須寫下標記: ');
+
+  // 狀態端點只回布林與時間戳，不含診斷內容。
+  ok(api.includes('lastSessionCrashed'), '狀態端點要回報上次是否非正常結束: ');
+  ok(page.includes('id="crash-banner"'), '面板需要當機提示 banner: ');
+
+  // 核心承諾：沒有任何「不經預覽直接送出」的路徑。
+  ok(!/crash[^\n]*submitReport\(/.test(frontend), '當機提示不可直接呼叫送出: ');
+  ok(frontend.includes('CRASH_HANDLED_KEY'), '同一次事件只能提示一次: ');
+});
+
 test('問題回報端點受 PIN 保護，且中繼未設定時安全停用', () => {
   const root = path.join(__dirname, '..');
   const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');

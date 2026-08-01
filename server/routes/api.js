@@ -44,6 +44,7 @@ const { createDiagnosticBundle } = require('../services/diagnostic-bundle');
 const runtimeEvidence = require('../services/runtime-evidence');
 const feedbackReport = require('../services/feedback-report');
 const feedbackClient = require('../services/feedback-client');
+const sessionMarker = require('../services/session-marker');
 
 // ─── Multer 設定（本地檔案上傳）───
 const storage = multer.diskStorage({
@@ -221,8 +222,18 @@ router.post('/feedback/submit', requirePin, async (req, res) => {
 });
 
 // 面板載入時用來決定要顯示「送出回報」還是只顯示「複製全文」。
+// 一併帶上「上次是否非正常結束」，面板才知道要不要跳當機提示 banner。
+// 這裡只回布林與時間戳，不含任何診斷內容——真正的診斷仍要等使用者按下送出才收集。
 router.get('/feedback/status', (req, res) => {
-  res.json({ enabled: feedbackClient.isEnabled(), types: Object.keys(feedbackReport.REPORT_TYPES), limits: feedbackReport.LIMITS });
+  const startup = sessionMarker.getStartupState();
+  res.json({
+    enabled: feedbackClient.isEnabled(),
+    types: Object.keys(feedbackReport.REPORT_TYPES),
+    limits: feedbackReport.LIMITS,
+    lastSessionCrashed: startup.wasClean === false,
+    // 給前端當「這個事件已處理過沒」的鍵，避免同一次當機每次重整都再問一遍。
+    lastSessionStartedAt: startup.previousStartedAt || null,
+  });
 });
 
 // ─── yt-dlp 版本檢查與更新 ───
