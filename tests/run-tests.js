@@ -5738,6 +5738,14 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'ELITESAND_SHELL_USER_DATA_DIR',
     'SHUTDOWN_MESSAGE',
   ].forEach((required) => ok(source.includes(required), `Electron shell is missing ${required}`));
+
+  // 2026-08-03 實機根因守衛：utilityProcess 的 stdio 不可是 'pipe'。
+  // 'pipe' 會建立沒人讀的 stdout 管道；Windows 上 Node 對管道的 stdout 寫入是同步的，
+  // 緩衝區滿了之後下一次 console.log() 會卡在 WriteFile，凍結整個事件迴圈——
+  // 行程還活著但 HTTP／Socket／計時器全停。三次實機卡死的 stdout 累積量分別是
+  // 53,269／53,273／53,321 bytes（全距 0.1%），歷時卻差 4 倍，是固定容量緩衝區的指紋。
+  ok(source.includes("stdio: 'ignore'"), 'utilityProcess 必須用 stdio ignore，避免無人排空的 stdout 管道卡死事件迴圈: ');
+  ok(!/stdio:\s*'pipe'/.test(source), "不可把 utilityProcess 的 stdio 改回 'pipe'（除非同時持續排空 stdout 與 stderr）: ");
 });
 
 test('Electron assisted installer stays per-user with an updateable app root', () => {
