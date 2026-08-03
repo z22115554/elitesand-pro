@@ -216,9 +216,15 @@
     storageCard.hidden = false;
     if (storagePath) storagePath.textContent = info.mediaDir || '';
     if (storageStatus) {
-      storageStatus.textContent = info.legacyMigrationRequired
-        ? '找到舊版歌曲；搬遷後，新下載的歌曲會存到你選擇的磁碟。'
-        : '新下載與匯入的音檔會存放在這裡。';
+      if (info.migrationSourceDir && (!info.mediaDirExists || !info.mediaEntryCount)) {
+        storageStatus.textContent = `目前位置沒有歌曲；搬遷時會自動從原始位置搬移（${info.migrationSourceEntryCount} 個項目）。`;
+      } else if (!info.migrationSourceDir) {
+        storageStatus.textContent = '目前記錄的位置找不到歌曲；請先確認歌曲沒有被移除。';
+      } else {
+        storageStatus.textContent = info.legacyMigrationRequired
+          ? '找到舊版歌曲；搬遷後，新下載的歌曲會存到你選擇的磁碟。'
+          : '新下載與匯入的音檔會存放在這裡。';
+      }
     }
     if (storageChoose) storageChoose.disabled = !window.ElitesandShell?.chooseMediaLocation;
   }
@@ -233,7 +239,7 @@
     if (!prompted) {
       const confirmed = await window.PanelConfirm?.request({
         title: '搬遷媒體庫？',
-        summary: '歌曲、歌詞與封面會先複製到新位置，再移除原本的副本。',
+        summary: '歌曲、歌詞與封面會先複製到新位置，再移除原本的副本。若目標資料夾已名為 Elitesand Pro Media，會直接使用它，不會再建立一層。',
         impact: '搬遷時請先停止播放；完成後 Elitesand Pro 會重新啟動。',
         confirmLabel: '搬遷並重新啟動',
       });
@@ -250,7 +256,10 @@
       return;
     }
     toast(result.oldFilesRemoved ? '搬遷完成，正在重新啟動。' : '歌曲已複製完成；原位置仍有檔案，正在重新啟動。', 'success');
-    setTimeout(() => window.ElitesandShell.restartAfterMediaMigration?.(), 500);
+    setTimeout(async () => {
+      const restarting = await window.ElitesandShell.restartAfterMediaMigration?.();
+      if (restarting !== true) toast('搬遷完成，但無法自動重新啟動；請手動關閉並重新開啟 Elitesand Pro。', 'error');
+    }, 500);
   }
 
   async function promptLegacyMigration() {

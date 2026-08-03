@@ -261,8 +261,10 @@
               <p id="live-session-summary-title" class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span data-i18n="home.session.title">本場直播</span></p>
               <p id="session-summary-status" class="live-session-summary-status" role="status" aria-live="polite" data-i18n="home.session.statusNotLive">尚未開台 · 已唱 0 首</p>
             </div>
-            <button id="session-record-open" class="btn btn-sm" type="button" data-i18n="home.session.openRecord">查看本場紀錄</button>
-            <button id="session-new-start" class="btn btn-sm btn-primary" type="button" data-i18n="home.session.startNew">開始新場次</button>
+            <div class="live-session-summary-actions">
+              <button id="session-new-start" class="btn btn-sm btn-primary" type="button" data-i18n="home.session.startNew">開始新場次</button>
+              <button id="session-record-open" class="btn btn-sm" type="button" data-i18n="home.session.openRecord">查看本場紀錄</button>
+            </div>
           </section>
 
           <div id="session-record-modal" class="modal modal-wide session-record-modal" role="dialog" aria-modal="true" aria-labelledby="session-record-title" hidden>

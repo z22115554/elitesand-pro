@@ -301,6 +301,7 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .now-playing-hero { background: linear-gradient(135deg, var(--bg-raised), var(--bg-surface)); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; box-shadow: var(--shadow); }
 .live-session-summary-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: var(--gap); padding: 12px 16px; }
 .live-session-summary-copy { min-width: 0; }
+.live-session-summary-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .live-session-summary-status { margin: 5px 0 0; color: var(--text-dim); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .live-session-summary-status.is-active { color: var(--ok); }
 .session-record-modal .modal-card { max-width: 980px; }
@@ -312,6 +313,7 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .session-record-songs-card #setlist-panel { max-height: 52vh; overflow-y: auto; }
 @media (max-width: 760px) {
   .live-session-summary-card { align-items: flex-start; flex-direction: column; }
+  .live-session-summary-actions { width: 100%; margin-left: 0; flex-direction: column; }
   .live-session-summary-card .btn { width: 100%; }
   .session-record-layout { grid-template-columns: minmax(0, 1fr); }
 }

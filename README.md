@@ -15,6 +15,8 @@
 
 **發行形式調整：** `v0.9.9` 仍提供 Windows Installer 與 Portable；自 **`v1.0.0` 起只提供 Windows Installer，不再發布 Portable 可攜版**。
 
+**本次升級建議（非強制）：** 建議 Portable 使用者在 `v0.9.9` 就改用 Installer，先確認安裝版資料正常，再停用舊可攜版。遷移前請完整關閉程式並備份 `data/` 與 `downloads/`；若已使用媒體庫搬遷功能，則備份設定中顯示的 `Elitesand Pro Media` 資料夾取代 `downloads/`。`data/` 包含播放清單、設定、歌詞快取、授權、Twitch 與 PIN 狀態；媒體資料夾包含歌曲、封面與歌詞檔。`logs/` 不影響遷移，可不備份。
+
 > [!WARNING]
 > `v0.7.1`～`v0.7.3` 的舊更新器無法安全完成跨版本升級。另因 `v0.9.2` 導入 Electron 桌面框架與安裝／封裝架構等框架級更新，**從任何早於 `v0.9.2` 的版本升級時，都必須重新下載並安裝完整 Installer 或 Portable 版本，不能使用增量更新**。請先保留舊資料夾與使用者資料備份；完成 `v0.9.2` 或之後版本的完整安裝後，未來相容版本才可依程式提示使用安全增量更新。
 
@@ -226,6 +228,8 @@ Elitesand Pro 採用 [Elitesand Pro 授權條款](LICENSE)：可免費用於個�
 
 **Distribution change:** `v0.9.9` still ships both the Windows Installer and Portable build. Starting with **`v1.0.0`, only the Windows Installer will be released; Portable builds will be discontinued.**
 
+**Recommendation for this upgrade (not mandatory):** Portable users are encouraged to move to the Installer with `v0.9.9`, verify that the installed copy has loaded their data correctly, and only then retire the old Portable copy. Before migrating, fully close Elitesand Pro and back up `data/` and `downloads/`. If the media library has already been moved, back up the `Elitesand Pro Media` folder shown in settings instead of `downloads/`. `data/` contains playlists, settings, lyrics cache, authorization, Twitch, and PIN state; the media folder contains songs, cover art, and lyrics files. `logs/` is not required for migration.
+
 > [!WARNING]
 > The updater bundled with `v0.7.1`–`v0.7.3` cannot safely complete major upgrades. In addition, `v0.9.2` introduced framework-level changes, including the Electron desktop shell and a new installation/packaging architecture. **Upgrading from any version earlier than `v0.9.2` requires downloading and reinstalling the full Installer or Portable build; incremental updates cannot be used.** Back up the old folder and user data first. After a full installation of `v0.9.2` or later, future compatible versions may use the safe incremental updater when offered by the application.
 
@@ -332,6 +336,8 @@ Elitesand Pro is free for personal and commercial streaming or performance. Priv
 
 **配布形式の変更：** `v0.9.9` では Windows Installer と Portable 版を提供しますが、**`v1.0.0` 以降は Windows Installer のみを提供し、Portable 版は配布しません。**
 
+**今回の更新に関する推奨事項（必須ではありません）：** Portable 版の利用者は `v0.9.9` で Installer 版へ移行し、データが正しく読み込まれたことを確認してから旧 Portable 版を終了することを推奨します。移行前に Elitesand Pro を完全に終了し、`data/` と `downloads/` をバックアップしてください。メディアライブラリを既に移動している場合は、`downloads/` の代わりに設定画面に表示される `Elitesand Pro Media` フォルダーをバックアップします。`data/` にはプレイリスト、設定、歌詞キャッシュ、認証、Twitch、PIN の状態が含まれ、メディアフォルダーには楽曲、カバー画像、歌詞ファイルが含まれます。`logs/` は移行に不要です。
+
 > [!WARNING]
 > `v0.7.1`～`v0.7.3` の旧アップデーターでは大きなバージョン更新を安全に完了できません。また `v0.9.2` では Electron デスクトップ基盤とインストール／パッケージ構成を含むフレームワークレベルの変更が導入されました。**`v0.9.2` より前のバージョンから更新する場合は、完全版 Installer または Portable を再ダウンロードして再インストールする必要があり、差分更新は使用できません。** 先に旧フォルダーとユーザーデータをバックアップしてください。
 
@@ -398,6 +404,8 @@ Elitesand Pro から歌詞 URL またはセットリスト URL をコピーし�
 
 **배포 방식 변경:** `v0.9.9`은 Windows Installer와 Portable 버전을 모두 제공합니다. **`v1.0.0`부터는 Windows Installer만 제공하며 Portable 버전은 더 이상 배포하지 않습니다.**
 
+**이번 업데이트 권장 사항(필수 아님):** Portable 사용자는 `v0.9.9`에서 Installer 버전으로 전환하고, 설치 버전에서 데이터가 정상적으로 불러와졌는지 확인한 뒤 기존 Portable 버전을 정리하는 것을 권장합니다. 이전하기 전에 Elitesand Pro를 완전히 종료하고 `data/`와 `downloads/`를 백업하세요. 미디어 라이브러리를 이미 다른 위치로 옮겼다면 `downloads/` 대신 설정에 표시되는 `Elitesand Pro Media` 폴더를 백업해야 합니다. `data/`에는 재생목록, 설정, 가사 캐시, 인증, Twitch 및 PIN 상태가 포함되고, 미디어 폴더에는 노래, 커버 이미지, 가사 파일이 포함됩니다. `logs/`는 이전에 필요하지 않습니다.
+
 > [!WARNING]
 > `v0.7.1`~`v0.7.3`의 기존 업데이터는 대규모 버전 업그레이드를 안전하게 완료할 수 없습니다. 또한 `v0.9.2`에서는 Electron 데스크톱 프레임워크와 새로운 설치·패키징 구조가 도입되는 프레임워크 수준의 변경이 이루어졌습니다. **`v0.9.2`보다 이전 버전에서 업그레이드할 경우 전체 Installer 또는 Portable 버전을 다시 다운로드해 재설치해야 하며 증분 업데이트를 사용할 수 없습니다.** 먼저 기존 폴더와 사용자 데이터를 백업하세요.
 
@@ -463,6 +471,8 @@ Elitesand Pro에서 가사 URL 또는 세트리스트 URL을 복사해 OBS Brows
 `v0.9.9` 将作为未来两周的稳定验证版本。期间原则上不再新增功能或发布常规更新，只处理必要的重大问题。完成两周实际直播与使用场景验证后，计划发布 **`v1.0.0` 正式稳定版**。
 
 **发布形式调整：** `v0.9.9` 仍提供 Windows Installer 与 Portable；自 **`v1.0.0` 起只提供 Windows Installer，不再发布 Portable 便携版**。
+
+**本次升级建议（不强制）：** 建议 Portable 用户在 `v0.9.9` 就改用 Installer，先确认安装版已正确载入数据，再停用旧便携版。迁移前请完全关闭 Elitesand Pro，并备份 `data/` 与 `downloads/`；如果已经使用媒体库迁移功能，请改为备份设置中显示的 `Elitesand Pro Media` 文件夹。`data/` 包含播放列表、设置、歌词缓存、授权、Twitch 与 PIN 状态；媒体文件夹包含歌曲、封面与歌词文件。`logs/` 不影响迁移，可以不备份。
 
 > [!WARNING]
 > `v0.7.1`～`v0.7.3` 的旧更新器无法安全完成跨版本升级。另外，`v0.9.2` 引入了 Electron 桌面框架与新的安装／打包架构，属于框架级更新。**从任何早于 `v0.9.2` 的版本升级时，都必须重新下载并安装完整 Installer 或 Portable 版本，不能使用增量更新。** 请先备份旧文件夹与用户数据；完成 `v0.9.2` 或之后版本的完整安装后，未来兼容版本才可按程序提示使用安全增量更新。

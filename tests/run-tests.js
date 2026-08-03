@@ -1492,14 +1492,15 @@ test('showOnce、dismissed 與 critical 安全 action 只影響呈現/更新開�
   ok(!('run' in snapshot.announcements[0].actions));
 });
 
-test('v0.9.2 強制升級公告依有無 Electron 給予不同資料指引', () => {
+test('正式公告包含 v0.9.2 強制遷移與 v0.9.9 Installer 建議', () => {
   const document = announcementService.validateDocument(JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'announcement.json'), 'utf8'),
   ));
-  eq(document.announcements.length, 2);
+  eq(document.announcements.length, 3);
   const legacy = document.announcements.find((item) => item.id === 'v0.9.2-legacy-portable-migration');
   const electron = document.announcements.find((item) => item.id === 'v0.9.2-electron-full-update');
-  ok(legacy && electron);
+  const installerTransition = document.announcements.find((item) => item.id === 'v0.9.9-installer-transition');
+  ok(legacy && electron && installerTransition);
   for (const notice of [legacy, electron]) {
     eq(notice.level, 'critical');
     eq(notice.dismissible, false);
@@ -1516,6 +1517,17 @@ test('v0.9.2 強制升級公告依有無 Electron 給予不同資料指引', () 
   ok(announcementService.versionMatches(electron, '0.9.1'));
   ok(!announcementService.versionMatches(electron, '0.8.0'));
   ok(/覆蓋安裝/.test(electron.message) && /會保留/.test(electron.message));
+  eq(installerTransition.level, 'info');
+  eq(installerTransition.dismissible, true);
+  eq(installerTransition.showOnce, true);
+  eq(Object.keys(installerTransition.actions).length, 0);
+  ok(announcementService.versionMatches(installerTransition, '0.9.2'));
+  ok(announcementService.versionMatches(installerTransition, '0.9.9'));
+  ok(!announcementService.versionMatches(installerTransition, '1.0.0'));
+  ok(/建議，不是強制/.test(installerTransition.message));
+  ok(/data/.test(installerTransition.message) && /downloads/.test(installerTransition.message));
+  ok(/Elitesand Pro Media/.test(installerTransition.message));
+  ok(/logs 不影響遷移，可不備份/.test(installerTransition.message));
 });
 
 testAsync('公告請求逾時安全失敗，不影響程序', async () => {

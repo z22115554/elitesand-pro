@@ -5,7 +5,7 @@
 // therefore a successful migration is followed by an Electron restart.
 const fs = require('fs');
 const path = require('path');
-const { dataDir, downloadsDir } = require('../utils/app-paths');
+const { projectRoot, dataDir, downloadsDir } = require('../utils/app-paths');
 
 const MEDIA_FOLDER_NAME = 'Elitesand Pro Media';
 const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
@@ -15,6 +15,22 @@ const UNINSTALL_REFERENCE_FILE = path.join(path.dirname(dataDir), 'media-storage
 function isSubpath(parent, child) {
   const relative = path.relative(parent, child);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function samePath(left, right) {
+  const normalizedLeft = path.resolve(left);
+  const normalizedRight = path.resolve(right);
+  return process.platform === 'win32'
+    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
+    : normalizedLeft === normalizedRight;
+}
+
+function resolveDestinationMediaDir(selectedDir) {
+  const selected = path.resolve(selectedDir);
+  // The picker is allowed to select the final media folder itself. This avoids
+  // creating "Elitesand Pro Media\\Elitesand Pro Media" on a retry.
+  if (path.basename(selected).toLowerCase() === MEDIA_FOLDER_NAME.toLowerCase()) return selected;
+  return path.join(selected, MEDIA_FOLDER_NAME);
 }
 
 function markerPath(mediaDir) {
@@ -60,34 +76,69 @@ function visibleEntries(directory) {
   }
 }
 
+function migrationSourceCandidates() {
+  // Keep recovery automatic: a failed earlier migration can leave the current
+  // configured directory missing, while the actual legacy media is still in
+  // Electron userData or, during development, the project downloads folder.
+  const candidates = [
+    downloadsDir,
+    path.join(path.dirname(dataDir), 'downloads'),
+    path.join(projectRoot, 'downloads'),
+  ].map((directory) => path.resolve(directory));
+  return candidates.filter((directory, index) => candidates.findIndex((other) => samePath(directory, other)) === index);
+}
+
+function resolveMigrationSource(candidates = migrationSourceCandidates()) {
+  for (const directory of candidates) {
+    const entries = visibleEntries(directory);
+    if (entries.length) return { sourceDir: directory, entries };
+  }
+  return { sourceDir: null, entries: [] };
+}
+
 function status() {
   const configured = readConfig();
+  const mediaDirExists = fs.existsSync(downloadsDir);
+  const migrationSource = resolveMigrationSource();
   return {
     mediaDir: downloadsDir,
     configured: !!configured,
     managed: fs.existsSync(markerPath(downloadsDir)),
+    mediaDirExists,
+    mediaEntryCount: mediaDirExists ? visibleEntries(downloadsDir).length : 0,
+    migrationSourceDir: migrationSource.sourceDir,
+    migrationSourceEntryCount: migrationSource.entries.length,
     legacyMigrationRequired: process.env.ELITESAND_MEDIA_STORAGE_MODE === 'legacy-migration-required',
     folderName: MEDIA_FOLDER_NAME,
   };
 }
 
-function migrateToParent(parentDir) {
+function migrateToParent(parentDir, sourceOverride = null) {
   if (typeof parentDir !== 'string' || !path.isAbsolute(parentDir)) {
     throw new Error('A valid destination folder is required.');
   }
-  const sourceDir = path.resolve(downloadsDir);
-  const destinationParent = path.resolve(parentDir);
-  const destinationDir = path.join(destinationParent, MEDIA_FOLDER_NAME);
+  if (sourceOverride !== null && (typeof sourceOverride !== 'string' || !path.isAbsolute(sourceOverride))) {
+    throw new Error('A valid source media folder is required.');
+  }
+  const migrationSource = sourceOverride
+    ? { sourceDir: path.resolve(sourceOverride), entries: visibleEntries(sourceOverride) }
+    : resolveMigrationSource();
+  const { sourceDir, entries } = migrationSource;
+  if (!entries.length) {
+    throw new Error('No media files were found in the recorded media locations. The storage setting was not changed.');
+  }
+  const destinationDir = resolveDestinationMediaDir(parentDir);
+  if (samePath(sourceDir, destinationDir)) {
+    throw new Error('The selected folder is already the current media folder.');
+  }
   if (isSubpath(sourceDir, destinationDir) || isSubpath(destinationDir, sourceDir)) {
-    throw new Error('The destination cannot be inside the current media folder.');
+    throw new Error('The destination cannot be inside the source media folder.');
   }
   if (visibleEntries(destinationDir).length) {
     throw new Error('The destination already contains files. Choose an empty location.');
   }
 
-  fs.mkdirSync(destinationParent, { recursive: true });
   ensureMarker(destinationDir);
-  const entries = visibleEntries(sourceDir);
   try {
     for (const name of entries) {
       fs.cpSync(path.join(sourceDir, name), path.join(destinationDir, name), {
@@ -114,12 +165,14 @@ function migrateToParent(parentDir) {
   } catch (_) {
     oldFilesRemoved = false;
   }
-  return { mediaDir: destinationDir, movedEntries: entries.length, oldFilesRemoved };
+  return { mediaDir: destinationDir, sourceDir, movedEntries: entries.length, oldFilesRemoved };
 }
 
 module.exports = {
   MEDIA_FOLDER_NAME,
   MEDIA_MARKER_NAME,
+  resolveDestinationMediaDir,
+  resolveMigrationSource,
   readConfig,
   ensureMarker,
   writeConfiguration,

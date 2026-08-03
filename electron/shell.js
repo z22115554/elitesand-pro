@@ -47,16 +47,23 @@ function readConfiguredMediaDir(userDataPath, fsImpl = fs) {
 
 function resolveMediaRuntime(userDataPath, { isPackaged = false, executablePath = '', fsImpl = fs } = {}) {
   const legacyDir = path.join(path.resolve(userDataPath), 'downloads');
-  if (!isPackaged) return { downloadsDir: legacyDir, mode: 'legacy' };
   const configuredDir = readConfiguredMediaDir(userDataPath, fsImpl);
-  if (configuredDir) return { downloadsDir: configuredDir, mode: 'configured' };
+  // A migration writes this setting for both the development shell and the
+  // packaged app. Ignoring it in development made a successful move appear
+  // to revert after relaunch, with every new import returning to userData.
+  if (configuredDir && fsImpl.existsSync?.(configuredDir)) return { downloadsDir: configuredDir, mode: 'configured' };
+  if (!isPackaged) return { downloadsDir: legacyDir, mode: 'legacy' };
   if (hasFiles(legacyDir, fsImpl)) return { downloadsDir: legacyDir, mode: 'legacy-migration-required' };
+  // A stale configuration must not become a new empty migration source.
+  // The server will automatically search the legacy locations during a
+  // migration, without asking the user to locate them manually.
+  if (configuredDir) return { downloadsDir: configuredDir, mode: 'configured-missing' };
   const installRoot = path.dirname(path.resolve(executablePath || process.execPath));
   return { downloadsDir: path.join(installRoot, MEDIA_FOLDER_NAME), mode: 'install-default' };
 }
 
 function persistPackagedMediaReference(runtimePaths, mediaRuntime, fsImpl = fs) {
-  if (!mediaRuntime || mediaRuntime.mode === 'legacy-migration-required') return;
+  if (!mediaRuntime || ['legacy-migration-required', 'configured-missing'].includes(mediaRuntime.mode)) return;
   const mediaDir = runtimePaths.downloadsDir;
   const marker = path.join(mediaDir, MEDIA_MARKER_NAME);
   try {
@@ -71,8 +78,10 @@ function persistPackagedMediaReference(runtimePaths, mediaRuntime, fsImpl = fs) 
   }
 }
 
-function ensureRuntimePaths(paths, fsImpl = fs) {
-  for (const directory of [paths.root, paths.dataDir, paths.downloadsDir, paths.logsDir]) {
+function ensureRuntimePaths(paths, fsImpl = fs, { includeDownloads = true } = {}) {
+  const directories = [paths.root, paths.dataDir, paths.logsDir];
+  if (includeDownloads) directories.splice(2, 0, paths.downloadsDir);
+  for (const directory of directories) {
     fsImpl.mkdirSync(directory, { recursive: true });
   }
 }
@@ -305,7 +314,7 @@ function createElectronShell({
       fsImpl,
     });
     const runtimePaths = getRuntimePaths(app.getPath('userData'), mediaRuntime.downloadsDir);
-    ensureRuntimePaths(runtimePaths, fsImpl);
+    ensureRuntimePaths(runtimePaths, fsImpl, { includeDownloads: mediaRuntime.mode !== 'configured-missing' });
     if (app.isPackaged) persistPackagedMediaReference(runtimePaths, mediaRuntime, fsImpl);
     const packagedTools = app.isPackaged
       ? path.join(processObject.resourcesPath || process.resourcesPath, 'tools')
@@ -382,7 +391,7 @@ function createElectronShell({
       ipcMain.handle('elitesand:choose-media-location', async (event) => {
         if (event?.sender !== window.webContents || typeof dialog.showOpenDialog !== 'function') return null;
         const result = await dialog.showOpenDialog(window, {
-          title: 'Choose media storage location',
+          title: 'Choose a new media storage location',
           properties: ['openDirectory', 'createDirectory'],
         });
         return result?.canceled || !result?.filePaths?.[0] ? null : result.filePaths[0];
@@ -390,7 +399,9 @@ function createElectronShell({
       ipcMain.handle('elitesand:restart-after-media-migration', (event) => {
         if (event?.sender !== window.webContents) return false;
         app.relaunch?.();
-        app.exit?.(0);
+        // Do not use app.exit(): it bypasses before-quit, leaving the owned
+        // Node server without its graceful shutdown and clean-session marker.
+        app.quit?.();
         return true;
       });
     }

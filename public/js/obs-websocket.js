@@ -29,6 +29,7 @@ const ObsWs = (() => {
   let lastOptions = null;
   let shouldReconnect = false;
   let connecting = null;
+  let cancelConnecting = null;
   const HEALTH_CHECK_MS = 15000;
 
   function emit(evt, data) {
@@ -99,14 +100,28 @@ const ObsWs = (() => {
     shouldReconnect = true;
     if (connecting) return connecting;
     emit('status', { connected: false, connecting: true });
-    connecting = new Promise((resolve, reject) => {
+    let cancelThisAttempt = null;
+    const attempt = new Promise((resolve, reject) => {
       let settled = false;
       let ws;
+      let failTimer = null;
+      const rejectAttempt = (error) => {
+        if (settled) return;
+        settled = true;
+        if (failTimer) clearTimeout(failTimer);
+        reject(error);
+      };
       try { ws = new WebSocket(`ws://${host}:${port}`); socket = ws; }
       catch (e) { reject(new Error(`${tr('無法建立連線：')} ${e.message}`)); return; }
 
-      const failTimer = setTimeout(() => {
-        if (!settled) { settled = true; try { ws.close(); } catch (e) {} reject(new Error('連線逾時（OBS 沒開，或 WebSocket 伺服器未啟用/埠號不對）')); }
+      // 取消不只要清掉下一輪計時器，也要立即結束這個尚在握手的 Promise；否則 UI 會一直
+      // 視為 connecting，按鈕雖顯示「停止重連」卻無法真正回到可再次連線的狀態。
+      cancelThisAttempt = () => {
+        rejectAttempt(new Error('OBS 連線已取消'));
+        try { ws.close(); } catch (e) {}
+      };
+      failTimer = setTimeout(() => {
+        if (!settled) { try { ws.close(); } catch (e) {} rejectAttempt(new Error('連線逾時（OBS 沒開，或 WebSocket 伺服器未啟用/埠號不對）')); }
       }, 6000);
 
       socket.onmessage = async (raw) => {
@@ -148,7 +163,7 @@ const ObsWs = (() => {
       };
 
       ws.onerror = () => {
-        if (!settled) { clearTimeout(failTimer); settled = true; reject(new Error('連線錯誤（確認 OBS 已開、工具→WebSocket 伺服器設定已啟用）')); }
+        rejectAttempt(new Error('連線錯誤（確認 OBS 已開、工具→WebSocket 伺服器設定已啟用）'));
         emit('error', {});
       };
       ws.onclose = (ev) => {
@@ -160,16 +175,19 @@ const ObsWs = (() => {
         pending.clear();
         // 握手還沒完成就被關 → OBS 主動拒絕，最常見是密碼錯（v5 用 close code 4009）
         if (!settled) {
-          clearTimeout(failTimer);
-          settled = true;
-          reject(new Error(ev && ev.code === 4009 ? 'WebSocket 密碼不正確' : '連線被 OBS 關閉（密碼錯誤或版本不相容）'));
+          rejectAttempt(new Error(ev && ev.code === 4009 ? 'WebSocket 密碼不正確' : '連線被 OBS 關閉（密碼錯誤或版本不相容）'));
         }
         emit('status', { connected: false });
         scheduleReconnect();
       };
     });
-    connecting.finally(() => { connecting = null; }).catch(() => {});
-    return connecting;
+    connecting = attempt;
+    if (cancelThisAttempt) cancelConnecting = { attempt, cancel: cancelThisAttempt };
+    attempt.finally(() => {
+      if (connecting === attempt) connecting = null;
+      if (cancelConnecting?.attempt === attempt) cancelConnecting = null;
+    }).catch(() => {});
+    return attempt;
   }
 
   function disconnect() {
@@ -177,8 +195,16 @@ const ObsWs = (() => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = null;
     stopHealthCheck();
-    if (socket) { try { socket.close(); } catch (e) {} }
-    socket = null; connected = false;
+    const activeSocket = socket;
+    socket = null;
+    connected = false;
+    pending.forEach((p) => p.reject(new Error('連線已由使用者中斷')));
+    pending.clear();
+    const cancellation = cancelConnecting;
+    cancelConnecting = null;
+    if (cancellation) cancellation.cancel();
+    if (connecting === cancellation?.attempt) connecting = null;
+    if (activeSocket) { try { activeSocket.close(); } catch (e) {} }
     emit('status', { connected: false, manual: true });
   }
 
@@ -265,19 +291,23 @@ const ObsWs = (() => {
     if (state.connected) {
       statusEl.textContent = '已連線 · 持續監測';
       connectBtn.textContent = '中斷';
+      connectBtn.disabled = false;
       createBtn.disabled = false;
     } else if (state.reconnecting) {
       const seconds = Math.ceil((state.retryInMs || 0) / 1000);
       statusEl.textContent = `連線中斷 · ${seconds} 秒後重試`;
       connectBtn.textContent = '停止重連';
+      connectBtn.disabled = false;
       createBtn.disabled = true;
     } else if (state.connecting) {
       statusEl.textContent = '連線中…';
       connectBtn.textContent = '取消';
+      connectBtn.disabled = false;
       createBtn.disabled = true;
     } else {
       statusEl.textContent = '未連線';
       connectBtn.textContent = '連線';
+      connectBtn.disabled = false;
       createBtn.disabled = true;
     }
   }
