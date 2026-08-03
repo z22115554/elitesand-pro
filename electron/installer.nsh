@@ -14,6 +14,55 @@
   Var EsStartMenuShortcutCheckbox
 !endif
 
+!ifdef BUILD_UNINSTALLER
+  Var EsRemoveAllData
+  Var EsRemoveAllDataCheckbox
+
+  !macro customUnInit
+    StrCpy $EsRemoveAllData ${BST_UNCHECKED}
+  !macroend
+
+  ; This replaces only the normal welcome page, so the user's cleanup choice
+  ; is collected before the uninstall section runs.
+  !macro customUnWelcomePage
+    PageEx custom
+      PageCallbacks un.EsCleanupPre un.EsCleanupLeave
+    PageExEnd
+  !macroend
+
+  Function un.EsCleanupPre
+    nsDialogs::Create 1018
+    Pop $0
+
+    ${NSD_CreateLabel} 0u 0u 300u 30u "解除安裝 Elitesand Pro。預設會保留歌曲、設定與記錄。"
+    Pop $0
+
+    ${NSD_CreateCheckbox} 0u 40u 300u 24u "同時刪除所有 Elitesand Pro 歌曲、設定與記錄（無法復原）"
+    Pop $EsRemoveAllDataCheckbox
+    ${NSD_SetState} $EsRemoveAllDataCheckbox $EsRemoveAllData
+
+    nsDialogs::Show
+  FunctionEnd
+
+  Function un.EsCleanupLeave
+    ${NSD_GetState} $EsRemoveAllDataCheckbox $EsRemoveAllData
+  FunctionEnd
+
+  !macro customUnInstall
+    ${If} $EsRemoveAllData == ${BST_CHECKED}
+      ; The media path is written by the desktop host. Marker verification is
+      ; mandatory: even after explicit consent, never recursively delete an
+      ; arbitrary directory selected by the user.
+      ReadINIStr $0 "$APPDATA\Elitesand Pro\media-storage.ini" "media" "path"
+      ${If} $0 != ""
+        IfFileExists "$0\.elitesand-pro-media-root" 0 +2
+          RMDir /r "$0"
+      ${EndIf}
+      RMDir /r "$APPDATA\Elitesand Pro"
+    ${EndIf}
+  !macroend
+!endif
+
 ; electron-builder normally offers a per-machine choice for assisted installs.
 ; Elitesand Pro is per-user only: never elevate, never use Program Files, and
 ; never move runtime data out of Electron userData.
@@ -65,8 +114,8 @@
 !endif
 
 ; Built-in shortcut creation is disabled in package.json so these choices are
-; honoured independently. User data is not part of the install directory and is
-; never referenced by this script or by the uninstaller.
+; honoured independently. Runtime data is outside the install directory; the
+; uninstaller preserves it unless the explicit cleanup checkbox is selected.
 !macro customInstall
   ${If} $EsCreateDesktopShortcut == ${BST_CHECKED}
     CreateShortCut "$newDesktopLink" "$appExe" "" "$appExe" 0 "" "" "${APP_DESCRIPTION}"

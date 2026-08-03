@@ -1,6 +1,6 @@
 {
   "name": "elitesand-pro",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
@@ -48,6 +48,7 @@
     },
     "files": [
       "electron/**/*",
+      "assets/**/*",
       "package.json"
     ],
     "extraResources": [
@@ -75,7 +76,8 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/elitesand-pro.ico"
     },
     "nsis": {
       "oneClick": false,

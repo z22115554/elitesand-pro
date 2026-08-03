@@ -22,8 +22,11 @@ function createDeckCommands(io, ctx) {
     switch (action) {
       case 'play-toggle': {
         playState.isPlaying = !playState.isPlaying;
+        if (playState.isPlaying && playState.currentTrack) playState.currentTrackStarted = true;
         playState.lastStateUpdateTimestamp = Date.now();
-        io.emit('play:toggle', playState.isPlaying);
+        // payload 形狀需與 socket 端 play:toggle 一致（見 handlers/playback.js）；
+        // 這裡沒有觸發用的 socket，origin 留空即可，面板的來源過濾本來就只擋「另一個面板」。
+        io.emit('play:toggle', { playing: playState.isPlaying, _originSocketId: null, _originClientType: null });
         broadcastState();
         log.info(`播放切換: ${playState.isPlaying ? '播放' : '暫停'}`);
         return { ok: true, message: playState.isPlaying ? 'playing' : 'paused' };

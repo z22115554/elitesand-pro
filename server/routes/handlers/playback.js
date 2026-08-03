@@ -45,7 +45,11 @@ function registerPlaybackHandlers(io, socket, ctx) {
     }
     // 控制端只持有非目前歌曲的清單摘要。以伺服器的清單原件作為播放來源，
     // 才不會在選歌時把 lyrics／parsedLyrics 從 OBS 播放流程中遺失。
-    const storedTrack = playState?.playlist?.find((item) => item && item.id === requestedTrack.id);
+    // 優先用 entryId 找：同一首歌在清單裡出現兩次以上時，只用歌曲 id 找會永遠命中
+    // 第一個相符的那一列，播到後面重複的那首時畫面卻顯示成在播第一首。
+    const storedTrack = requestedTrack.entryId
+      ? playState?.playlist?.find((item) => item && item.entryId === requestedTrack.entryId)
+      : playState?.playlist?.find((item) => item && item.id === requestedTrack.id);
     track = storedTrack ? { ...storedTrack, autoplay: requestedTrack.autoplay } : requestedTrack;
     const trackId = track.id;
     // autoplay：面板「真的要播」=true；「載入待命/自動切歌待命」=false。
@@ -85,6 +89,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     track.playbackRate = savedSpeed;
     playState.currentTrack = track;
     playState.isPlaying = autoplay;
+    playState.currentTrackStarted = autoplay;
     playState.currentTime = 0;
     playState.currentOffset = offset;
     playState.pitchShift = savedPitch;
@@ -161,16 +166,29 @@ function registerPlaybackHandlers(io, socket, ctx) {
   socket.on('play:toggle', (val) => {
     // 有給明確布林值就採用（用於「載入待命=暫停」同步），否則切換
     playState.isPlaying = (typeof val === 'boolean') ? val : !playState.isPlaying;
+    if (playState.isPlaying && playState.currentTrack) playState.currentTrackStarted = true;
     playState.lastStateUpdateTimestamp = Date.now();
     log.info(`播放切換: ${playState.isPlaying ? '播放' : '暫停'}`);
-    io.emit('play:toggle', playState.isPlaying);
+    // 標來源同 play:track：面板不該對「另一個面板分頁」的廣播有反應，
+    // 否則兩個面板本地播放狀態一旦不同步，會無窮迴圈互送 play:toggle。
+    io.emit('play:toggle', {
+      playing: playState.isPlaying,
+      _originSocketId: socket.id,
+      _originClientType: socket.clientType,
+    });
     // 從待命「開始播放」這一刻才算唱這首 → 記入已唱歌單（去重避免暫停/續播重覆記錄）。
     if (playState.isPlaying) recordSessionSong();
     emitSetlist(); // 現在/未唱狀態（playing 旗標）同步
     broadcastState();
   });
 
-  socket.on('play:seek', (time) => {
+  socket.on('play:seek', (payload) => {
+    // 面板送物件帶 trackId；deck-commands 等舊來源可能仍送純數字，兩者都接受。
+    const time = (payload && typeof payload === 'object') ? payload.time : payload;
+    const trackId = (payload && typeof payload === 'object') ? payload.trackId : undefined;
+    // 快速切歌時，拖曳中殘留的舊 seek 訊息可能晚到；trackId 對不上目前歌曲就丟棄，
+    // 避免把舊歌的秒數蓋到新歌的 playState.currentTime 上（同「播放時補羅馬化」用的判斷）。
+    if (trackId && playState.currentTrack && trackId !== playState.currentTrack.id) return;
     playState.currentTime = time;
     playState.lastStateUpdateTimestamp = Date.now();
     io.emit('play:seek', time);
@@ -195,6 +213,9 @@ function registerPlaybackHandlers(io, socket, ctx) {
   });
 
   socket.on('lyrics:sync', (data) => {
+    // 同 play:seek：trackId 對不上目前歌曲的舊訊息（快速切歌時殘留）整包丟棄，不落地也不轉播，
+    // 否則顯示端會跟著跳到不屬於目前這首歌的秒數。
+    if (data?.trackId && playState.currentTrack && data.trackId !== playState.currentTrack.id) return;
     playState.currentTime = data.currentTime;
     playState.lastStateUpdateTimestamp = Date.now();
     io.emit('lyrics:sync', data);

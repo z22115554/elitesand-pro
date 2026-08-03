@@ -63,6 +63,9 @@ function createAppState(io) {
   const playState = {
     currentTrack: null,
     isPlaying: false,
+    // Distinguishes an unstarted standby track from a track paused after playback began.
+    // This remains transient because currentTrack itself is not persisted.
+    currentTrackStarted: false,
     currentTime: 0,
     playlist: [],
     style: 'cute',
@@ -236,17 +239,24 @@ function createAppState(io) {
   function setlistPayload() {
     const pl = Array.isArray(playState.playlist) ? playState.playlist : [];
     const cur = playState.currentTrack;
-    const playing = !!playState.isPlaying;
+    const currentTrackStarted = !!playState.currentTrackStarted;
     let upcoming = [];
     if (pl.length || cur) {
-      const idx = cur ? pl.findIndex((t) => t && t.id === cur.id) : -1;
+      // 同 play:track：優先用 entryId 定位，避免重複歌曲時「接下來」清單從錯的位置切出去。
+      const idx = cur
+        ? (cur.entryId
+          ? pl.findIndex((t) => t && t.entryId === cur.entryId)
+          : pl.findIndex((t) => t && t.id === cur.id))
+        : -1;
       // 待命中（選了歌但還沒按播放）的當前歌要排進「接下來」最前面，不能消失：
       //  - cur 在清單內：播放中→取其後；待命→連同 cur 本身（slice 到 idx）。
       //  - cur 不在清單（單獨載入）：待命→自己當接下來第一首；播放中→只列清單其餘。
       //  - 無 cur：整份清單都是接下來。
       let rest;
-      if (idx >= 0) rest = pl.slice(playing ? idx + 1 : idx);
-      else rest = cur ? (playing ? pl.slice(0) : [cur, ...pl]) : pl.slice(0);
+      // An unstarted standby track belongs in upcoming; an already-started track remains
+      // current even while paused, so it must not be duplicated in upcoming.
+      if (idx >= 0) rest = pl.slice(currentTrackStarted ? idx + 1 : idx);
+      else rest = cur ? (currentTrackStarted ? pl.slice(0) : [cur, ...pl]) : pl.slice(0);
       upcoming = rest.map((t) => ({ title: t.title || '', artist: t.artist || '' }));
     }
     return {

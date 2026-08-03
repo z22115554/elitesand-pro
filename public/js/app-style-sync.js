@@ -147,7 +147,8 @@
     if (dom.settingsPreviewObsUrl) dom.settingsPreviewObsUrl.textContent = url;
     const previewUrl = buildObsUrl({ preview: true, relative: true });
     document.querySelectorAll('iframe.obs-preview').forEach((frame) => {
-      if (frame.getAttribute('src') !== previewUrl) frame.setAttribute('src', previewUrl);
+      frame.dataset.previewSrc = previewUrl;
+      if (frame.hasAttribute('src') && frame.getAttribute('src') !== previewUrl) frame.setAttribute('src', previewUrl);
     });
   }
 

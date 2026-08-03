@@ -25,4 +25,10 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
     ipcRenderer.on('elitesand:window-maximized', listener);
     return () => ipcRenderer.removeListener('elitesand:window-maximized', listener);
   },
+  chooseMediaLocation() {
+    return ipcRenderer.invoke('elitesand:choose-media-location');
+  },
+  restartAfterMediaMigration() {
+    return ipcRenderer.invoke('elitesand:restart-after-media-migration');
+  },
 }));

@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const crypto = require('crypto');
 
 const MAX_PLAYLIST_SIZE = 500;
 const MAX_LYRIC_LINES = 5000;
@@ -82,6 +83,10 @@ function sanitizeTrack(value) {
   const lyricsType = ['lrc', 'krc', 'srt', 'txt'].includes(value.lyricsType) ? value.lyricsType : null;
   const out = {
     id,
+    // 清單裡「這一列」的專屬識別碼，跟歌曲 id 分開：同一首歌重複加入會拿到不同的 entryId。
+    // 只在真正加入清單時由伺服器產生（見 assignFreshEntryIds），這裡單純原樣通過既有值，
+    // 避免每次 sanitize 都洗掉既有識別碼。
+    entryId: text(value.entryId, 100, null),
     title,
     artist: text(value.artist, 500),
     performer: text(value.performer, 500),
@@ -120,6 +125,23 @@ function sanitizePlaylist(value) {
   return value.slice(0, MAX_PLAYLIST_SIZE).map(sanitizeTrack).filter(Boolean);
 }
 
+/**
+ * 真正「加入清單」的操作（add／insert-next／import）一律呼叫這個，無條件蓋掉任何
+ * 客戶端送來的 entryId——加入永遠代表全新的一列，就算是同一首歌重複加入也一樣。
+ */
+function assignFreshEntryIds(tracks) {
+  return tracks.map((track) => ({ ...track, entryId: crypto.randomUUID() }));
+}
+
+/**
+ * playlist:update／playlist:reorder 這類「回寫既有清單」的操作用這個：保留客戶端
+ * 帶回來的 entryId（本來就是從伺服器廣播拿到的），只在真的缺漏時（例如舊版客戶端
+ * 還沒帶這個欄位）才補一個新的，避免清單裡出現沒有 entryId 的列。
+ */
+function ensureEntryIds(tracks) {
+  return tracks.map((track) => (track.entryId ? track : { ...track, entryId: crypto.randomUUID() }));
+}
+
 function sanitizeJsonObject(value, depth = 0) {
   if (depth > 5) return undefined;
   if (value === null || typeof value === 'boolean') return value;
@@ -145,6 +167,8 @@ module.exports = {
   sanitizeManualLyrics,
   safeUrl,
   sanitizeJsonObject,
+  assignFreshEntryIds,
+  ensureEntryIds,
   MAX_PLAYLIST_SIZE,
   MAX_LYRICS_LENGTH,
 };

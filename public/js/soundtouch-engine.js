@@ -63,12 +63,21 @@ const SoundTouchEngine = (() => {
     timer = setInterval(() => { if (onTimeCb) onTimeCb(getTime()); }, 60);
   }
 
+  // AudioWorklet 會持有整首已解碼的 PCM buffer。單純 disconnect 不保證處理器會立刻
+  // 釋放它；切歌與完全停止時都必須明確通知、關閉舊 MessagePort，避免長時間播放把每首歌
+  // 的 raw audio 留在 renderer/worklet 記憶體裡。
+  function _releaseNode(target) {
+    if (!target) return;
+    try { target.port.postMessage({ type: 'dispose' }); } catch (e) {}
+    try { target.port.onmessage = null; } catch (e) {}
+    try { target.port.close(); } catch (e) {}
+    try { target.disconnect(); } catch (e) {}
+  }
+
   function _destroyNode() {
-    if (node) {
-      try { node.port.onmessage = null; } catch (e) {}
-      try { node.disconnect(); } catch (e) {}
-      node = null;
-    }
+    if (!node) return;
+    _releaseNode(node);
+    node = null;
   }
 
   function _onNodeMessage(msg) {
@@ -116,7 +125,7 @@ const SoundTouchEngine = (() => {
       });
       // 建立節點後再次確認仍是最新載入；否則銷毀剛建的節點、不要接上輸出
       if (myToken !== loadToken) {
-        try { newNode.disconnect(); } catch (e) {}
+        _releaseNode(newNode);
         return false;
       }
       newNode.port.onmessage = (e) => _onNodeMessage(e.data);
@@ -164,6 +173,18 @@ const SoundTouchEngine = (() => {
     _stopTimer();
   }
 
+  // 和 stop 的差別是：stop 保留當前歌供使用者立即重播；dispose 只在真正卸載歌曲時使用，
+  // 釋放 worklet 內保存的完整 PCM buffer。
+  function dispose() {
+    ++loadToken;
+    _stopTimer();
+    _destroyNode();
+    ready = false;
+    playing = false;
+    durationSec = 0;
+    lastPositionSec = 0;
+  }
+
   function seek(sec) {
     const target = Math.max(0, Math.min(sec, durationSec));
     lastPositionSec = target;
@@ -191,7 +212,7 @@ const SoundTouchEngine = (() => {
   function onEnded(cb) { onEndedCb = cb; }
 
   const api = {
-    ensureModule, attach, load, play, pause, stop, seek,
+    ensureModule, attach, load, play, pause, stop, dispose, seek,
     getTime, getDuration, isPlaying, isReady, setPitch, setTempo, onTime, onEnded,
   };
   try { window.SoundTouchEngine = api; } catch (e) {}

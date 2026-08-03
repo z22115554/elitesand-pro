@@ -5,7 +5,7 @@
 const { createLogger } = require('../../utils/logger');
 const playlistExportStore = require('../../services/playlist-export-store');
 const libraryStore = require('../../services/library-store');
-const { sanitizePlaylist, MAX_PLAYLIST_SIZE } = require('../../utils/track-schema');
+const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds, ensureEntryIds } = require('../../utils/track-schema');
 
 const log = createLogger('Socket');
 
@@ -66,7 +66,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
   socket.on('playlist:update', (playlist, ack) => {
     const clean = sanitizePlaylist(playlist);
     if (!clean) { log.warn('playlist:update 收到非陣列資料'); if (typeof ack === 'function') ack({ ok: false, error: '播放清單格式無效' }); return; }
-    const preserved = preserveLyricsFromExisting(clean, playState.playlist);
+    const preserved = ensureEntryIds(preserveLyricsFromExisting(clean, playState.playlist));
     playState.playlist = preserved;
     syncNamesToLibrary(preserved);
     emitPlaylistUpdate();
@@ -83,7 +83,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
       if (typeof ack === 'function') ack({ ok: false, error: '播放清單格式無效' });
       return;
     }
-    const added = clean.slice(0, Math.max(0, MAX_PLAYLIST_SIZE - playState.playlist.length));
+    const added = assignFreshEntryIds(clean.slice(0, Math.max(0, MAX_PLAYLIST_SIZE - playState.playlist.length)));
     if (added.length === 0) {
       if (typeof ack === 'function') ack({ ok: false, error: `播放清單已達 ${MAX_PLAYLIST_SIZE} 首上限` });
       return;
@@ -93,7 +93,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
     emitSetlist();
     broadcastState();
     persistState();
-    if (typeof ack === 'function') ack({ ok: true, added: added.length });
+    if (typeof ack === 'function') ack({ ok: true, added: added.length, tracks: added });
   });
 
   // 直播中的 Twitch 點歌需要以伺服器的正式播放狀態判定「下一首」，不能相信
@@ -110,17 +110,22 @@ function registerPlaylistHandlers(io, socket, ctx) {
     }
 
     let currentIndex = playState.playlist.indexOf(playState.currentTrack);
+    if (currentIndex < 0 && playState.currentTrack?.entryId) {
+      currentIndex = playState.playlist.findIndex((item) => item.entryId === playState.currentTrack.entryId);
+    }
     if (currentIndex < 0 && playState.currentTrack?.id) {
+      // 沒有 entryId 的舊資料才退回用歌曲 id 找（重複歌曲時可能找到錯的那一列，僅供相容）。
       currentIndex = playState.playlist.findIndex((item) => item.id === playState.currentTrack.id);
     }
     const insertAt = currentIndex >= 0 ? currentIndex + 1 : playState.playlist.length;
-    playState.playlist.splice(insertAt, 0, clean[0]);
+    const [insertedTrack] = assignFreshEntryIds(clean);
+    playState.playlist.splice(insertAt, 0, insertedTrack);
     emitPlaylistUpdate();
     emitSetlist();
     broadcastState();
     persistState();
     if (typeof ack === 'function') {
-      ack({ ok: true, insertAt, placement: currentIndex >= 0 ? 'next' : 'end' });
+      ack({ ok: true, insertAt, placement: currentIndex >= 0 ? 'next' : 'end', track: insertedTrack });
     }
   });
 
@@ -138,7 +143,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
   socket.on('playlist:reorder', (playlist) => {
     const clean = sanitizePlaylist(playlist);
     if (!clean) return log.warn('playlist:reorder 收到非陣列資料');
-    playState.playlist = preserveLyricsFromExisting(clean, playState.playlist);
+    playState.playlist = ensureEntryIds(preserveLyricsFromExisting(clean, playState.playlist));
     emitPlaylistUpdate();
     emitSetlist();
     broadcastState();
@@ -157,7 +162,11 @@ function registerPlaylistHandlers(io, socket, ctx) {
           : null,
       })),
       currentTrackIndex: playState.playlist.findIndex(
-        t => playState.currentTrack && t.id === playState.currentTrack.id
+        t => playState.currentTrack && (
+          playState.currentTrack.entryId
+            ? t.entryId === playState.currentTrack.entryId
+            : t.id === playState.currentTrack.id
+        )
       ),
       style: playState.style,
       romanizationMode: playState.romanizationMode,
@@ -221,7 +230,9 @@ function registerPlaylistHandlers(io, socket, ctx) {
 
     const clean = sanitizePlaylist(data.playlist);
     if (!clean) { if (typeof ack === 'function') ack({ ok: false, error: '播放清單內容無效' }); return; }
-    playState.playlist = clean;
+    // 匯入整份清單一律視為全新的列（就算是重新匯入自己先前匯出的檔案），
+    // 避免不同來源匯入的 entryId 剛好相同造成混淆。
+    playState.playlist = assignFreshEntryIds(clean);
 
     // 恢復 offset 和手動歌詞
     for (const track of clean) {

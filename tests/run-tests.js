@@ -199,6 +199,33 @@ test('預覽縮放不依賴可能在嵌入式 WebView 報錯的 ResizeObserver',
   ok(!source.includes('new ResizeObserver'), '預覽縮放不得建立不相容的 ResizeObserver: ');
 });
 
+test('面板只載入目前可見的 OBS 預覽，避免隱藏 iframe 持續耗用 CPU/GPU', () => {
+  const page = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const lifecycle = fs.readFileSync(path.join(__dirname, '../public/js/preview-scale.js'), 'utf8');
+  const previewFrames = page.match(/<iframe[^>]+(?:obs-preview|setlist-preview)[^>]*>/g) || [];
+  eq(previewFrames.length, 5, '面板預覽數量基準已改變，請同步檢查生命週期管理: ');
+  previewFrames.forEach((frame) => {
+    ok(frame.includes('data-preview-src='), '預覽 iframe 必須保存延遲載入來源: ');
+    ok(!/\ssrc=/.test(frame), '預覽 iframe 不可在 HTML 解析時直接載入: ');
+  });
+  ok(lifecycle.includes("frame.removeAttribute('src')"), '不可見預覽必須卸載子頁面與動畫迴圈: ');
+  ok(lifecycle.includes("document.addEventListener('view:change'"), '切換面板頁面時必須同步預覽生命週期: ');
+  ok(lifecycle.includes('window.PreviewLifecycle = { refresh, setSource }'), '詳細設定 modal 必須能要求重新判斷預覽可見性: ');
+});
+
+test('顯示端暫停時不持續逐幀重算歌詞', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/display.js'), 'utf8');
+  ok(source.includes('if (isControllerPlaying) {\n        const timeMs = getSmoothTimeMs();'), 'rAF 的高成本渲染必須只在播放時執行: ');
+});
+
+test('對齊第一句維持純文字按鈕，不加入 emoji', () => {
+  const page = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const autoRows = fs.readFileSync(path.join(__dirname, '../public/js/i18n-auto.js'), 'utf8');
+  const targetEmoji = String.fromCodePoint(0x1F3AF);
+  ok(page.includes('id="offset-align"') && page.includes('>對齊第一句</button>'), '對齊第一句按鈕必須保留純文字標籤: ');
+  ok(!page.includes(targetEmoji) && !autoRows.includes(targetEmoji), '對齊第一句的五語字串不可帶 emoji: ');
+});
+
 test('清單摘要只把完整歌詞合回目前歌曲', () => {
   const summaries = [
     { id: 'a', title: '目前歌曲', hasLyrics: true, lyricsType: 'lrc' },
@@ -952,6 +979,104 @@ test('安裝識別碼是隨機 UUID，且不使用任何硬體指紋', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('非正常結束偵測：只有走完乾淨關閉才算 clean，其餘一律 fail-safe 成「不是當機」', () => {
+  const sessionMarker = require('../server/services/session-marker');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-marker-'));
+  const file = path.join(dir, '.session-marker');
+  try {
+    // 全新安裝：沒有標記檔不等於當機。
+    sessionMarker._resetForTests();
+    let state = sessionMarker.markStarted({ file, now: () => 1000 });
+    eq(state.wasClean, true, '首次啟動不可誤報當機: ');
+    ok(state.firstRun, '首次啟動要標記 firstRun: ');
+
+    // 走完 gracefulShutdown → 下次啟動是 clean。
+    sessionMarker.markClean('SIGINT', { file, now: () => 2000 });
+    eq(JSON.parse(fs.readFileSync(file, 'utf8')).clean, true);
+    sessionMarker._resetForTests();
+    eq(sessionMarker.markStarted({ file, now: () => 3000 }).wasClean, true, '乾淨關閉後不可報當機: ');
+
+    // 沒走到 markClean 就再啟動 → 判定為非正常結束。
+    sessionMarker._resetForTests();
+    state = sessionMarker.markStarted({ file, now: () => 4000 });
+    eq(state.wasClean, false, '未乾淨關閉必須被偵測到: ');
+    eq(state.previousStartedAt, 3000, '要帶出上次啟動時間當事件鍵: ');
+
+    // 壞掉/空的標記檔絕不能誤報成當機——誤報會讓使用者以為程式有問題。
+    ['{壞掉的 json', ''].forEach((broken) => {
+      fs.writeFileSync(file, broken, 'utf8');
+      sessionMarker._resetForTests();
+      eq(sessionMarker.markStarted({ file, now: () => 5000 }).wasClean, true, `標記檔為 ${JSON.stringify(broken)} 時不可誤報: `);
+    });
+
+    // 寫不進去（唯讀/權限）時只停用偵測，不可讓伺服器起不來。
+    sessionMarker._resetForTests();
+    const unavailable = sessionMarker.markStarted({ file: path.join(dir, 'no-such-dir', 'x', '.session-marker'), fs: {
+      readFileSync() { throw new Error('nope'); },
+      mkdirSync() { throw new Error('read-only'); },
+      writeFileSync() { throw new Error('read-only'); },
+    } });
+    eq(unavailable.wasClean, true, '無法寫入標記時不可誤報當機: ');
+  } finally {
+    sessionMarker._resetForTests();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('非正常結束偵測在 node --watch 下自動停用', () => {
+  const sessionMarker = require('../server/services/session-marker');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'session-marker.js'), 'utf8');
+  // 2026-08-01 實測：Windows 的 node --watch 重啟是硬砍（SIGTERM 以 TerminateProcess
+  // 實作、攔不到），gracefulShutdown 完全不會跑。不排除的話開發者每存一次檔就被當成當機。
+  ok(/execArgv/.test(source) && /--watch/.test(source), 'watch 模式必須自動停用偵測: ');
+  ok(source.includes('ELITESAND_DISABLE_CRASH_DETECT'), '必須保留可明確停用的環境變數: ');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-marker-watch-'));
+  const file = path.join(dir, '.session-marker');
+  const original = process.env.ELITESAND_DISABLE_CRASH_DETECT;
+  try {
+    // 先製造一次「未乾淨關閉」，再確認停用時不會據此報當機。
+    sessionMarker._resetForTests();
+    sessionMarker.markStarted({ file, now: () => 1000 });
+    process.env.ELITESAND_DISABLE_CRASH_DETECT = '1';
+    sessionMarker._resetForTests();
+    const state = sessionMarker.markStarted({ file, now: () => 2000 });
+    eq(state.wasClean, true, '停用時一律視為正常: ');
+    eq(state.disabled, true);
+    eq(sessionMarker.markClean('x', { file }), false, '停用時不可寫標記檔: ');
+  } finally {
+    if (original === undefined) delete process.env.ELITESAND_DISABLE_CRASH_DETECT;
+    else process.env.ELITESAND_DISABLE_CRASH_DETECT = original;
+    sessionMarker._resetForTests();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('當機提示接在既有回報流程上，且絕不自動送出', () => {
+  const root = path.join(__dirname, '..');
+  const indexSource = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
+  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const frontend = fs.readFileSync(path.join(root, 'public/js/app-feedback.js'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+
+  // markClean 必須是 gracefulShutdown 的第一件事：後面有 8 秒硬退保底，
+  // 放後面的話「關閉流程自己卡住」會被下次啟動誤判成當機。
+  const shutdownBody = indexSource.slice(indexSource.indexOf('async function gracefulShutdown'));
+  const cleanAt = shutdownBody.indexOf('markClean');
+  const stateFlushAt = shutdownBody.indexOf("state-store').saveNow");
+  ok(cleanAt > -1, 'gracefulShutdown 必須標記乾淨關閉: ');
+  ok(cleanAt < stateFlushAt, 'markClean 必須早於 flush，否則硬退保底會來不及寫: ');
+  ok(indexSource.includes('markStarted'), '啟動時必須寫下標記: ');
+
+  // 狀態端點只回布林與時間戳，不含診斷內容。
+  ok(api.includes('lastSessionCrashed'), '狀態端點要回報上次是否非正常結束: ');
+  ok(page.includes('id="crash-banner"'), '面板需要當機提示 banner: ');
+
+  // 核心承諾：沒有任何「不經預覽直接送出」的路徑。
+  ok(!/crash[^\n]*submitReport\(/.test(frontend), '當機提示不可直接呼叫送出: ');
+  ok(frontend.includes('CRASH_HANDLED_KEY'), '同一次事件只能提示一次: ');
 });
 
 test('問題回報端點受 PIN 保護，且中繼未設定時安全停用', () => {
@@ -1760,7 +1885,7 @@ test('狀態持久化：隔離資料夾 round-trip 並建立 last-good', () => {
     eq(result.loaded.style, 'rock');
     eq(result.loaded.trackOffsets.t1, 300);
     eq(result.loaded.manualLyrics.t1.lyrics, '手動歌詞');
-    eq(result.loaded.schemaVersion, 2);
+    eq(result.loaded.schemaVersion, 3);
     ok(result.backup, '成功保存後應建立 last-good: ');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
@@ -1820,8 +1945,8 @@ test('無版本 state fixture 可逐步遷移並保留原檔', () => {
       "const preserved=files.find((name)=>/^state\\.json\\.pre-migration-v0-/.test(name));",
       "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,disk,files,preservedRaw:preserved?fs.readFileSync(path.join(dir,preserved),'utf8'):null}));",
     ].join('\n'));
-    eq(result.loaded.schemaVersion, 2);
-    eq(result.disk.schemaVersion, 2);
+    eq(result.loaded.schemaVersion, 3);
+    eq(result.disk.schemaVersion, 3);
     eq(result.loaded.playlist[0].title, '舊版測試歌曲');
     eq(result.loaded.trackOffsets['legacy-track'], 350);
     eq(result.loaded.manualLyrics['legacy-track'].lyrics, '[00:01.00]舊版歌詞');
@@ -1834,12 +1959,12 @@ test('無版本 state fixture 可逐步遷移並保留原檔', () => {
 test('目前 schema 載入不重複建立 migration 備份', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-current-schema-'));
   try {
-    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({ schemaVersion: 2, savedAt: 7, playlist: [] }), 'utf8');
+    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({ schemaVersion: 3, savedAt: 7, playlist: [] }), 'utf8');
     const result = runStateStoreChild(dataDir, [
       "const fs=require('fs'); const store=require(process.argv[1]); const dir=process.argv[2];",
       "const loaded=store.loadState(); process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,files:fs.readdirSync(dir)}));",
     ].join('\n'));
-    eq(result.loaded.schemaVersion, 2);
+    eq(result.loaded.schemaVersion, 3);
     ok(!result.files.some((name) => name.includes('.pre-migration-')), '目前 schema 不應產生多餘遷移備份: ');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
@@ -1892,7 +2017,7 @@ test('state.json 損壞時保留原檔並從 last-good 自動恢復', () => {
     ].join('\n'));
     eq(result.loaded.playlist[0].id, 'safe');
     eq(result.disk.playlist[0].id, 'safe');
-    eq(result.disk.schemaVersion, 2);
+    eq(result.disk.schemaVersion, 3);
     ok(result.files.some((name) => /^state\.json\.corrupt-/.test(name)), '應保留損壞原檔: ');
     ok(/最近可用備份恢復/.test(result.alert.message), `提示應說明恢復結果：${result.alert?.message}`);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
@@ -3875,7 +4000,7 @@ test('媒體庫連續加入採逐首佇列與伺服器確認，避免完整歌�
   const addLibraryTrack = app.slice(app.indexOf('addLibraryTrack: (track)'), app.indexOf('},\n  };'));
   ok(addLibraryTrack.indexOf("if (result?.ok) {") < addLibraryTrack.indexOf('if (shouldLoadFirstTrack) AppShared.playTrack'), '第一首只能在伺服器確認加入後才載入: ');
   ok(addLibraryTrack.indexOf('if (shouldLoadFirstTrack) AppShared.playTrack') < addLibraryTrack.indexOf('resolve(result)'), '第一首載入必須在成功回覆完成前送出: ');
-  ok(playlistHandler.includes("socket.on('playlist:add', (tracks, ack) =>") && playlistHandler.includes("ack({ ok: true, added: added.length })"), '伺服器 playlist:add 必須回傳加入確認: ');
+  ok(playlistHandler.includes("socket.on('playlist:add', (tracks, ack) =>") && playlistHandler.includes("ack({ ok: true, added: added.length, tracks: added })"), '伺服器 playlist:add 必須回傳加入確認: ');
 });
 
 testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡住後續佇列', async () => {
@@ -4036,6 +4161,82 @@ test('playlist:add 會逐次確認加入並拒絕超過上限，供媒體庫佇�
   eq(fullAck.ok, false);
   ok(fullAck.error.includes('500'));
   eq(state.playlist.length, 500);
+});
+
+test('重複歌曲加入清單時各自拿到獨立 entryId，不會共用同一個識別碼', () => {
+  const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
+  const events = new Map();
+  const state = { playlist: [] };
+  const ctx = {
+    playState: state, trackOffsets: new Map(), manualLyricsCache: new Map(),
+    persistState() {}, emitSetlist() {}, broadcastState() {},
+    getPublicPlaylist() { return state.playlist; },
+  };
+  registerPlaylistHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);
+
+  events.get('playlist:add')([{ id: 'same-song', title: 'Superwoman' }], () => {});
+  events.get('playlist:add')([{ id: 'same-song', title: 'Superwoman' }], () => {});
+
+  eq(state.playlist.length, 2);
+  ok(state.playlist[0].entryId, '第一次加入應有 entryId: ');
+  ok(state.playlist[1].entryId, '第二次加入應有 entryId: ');
+  ok(state.playlist[0].entryId !== state.playlist[1].entryId, '同一首歌重複加入的 entryId 不可相同: ');
+  eq(state.playlist[0].id, state.playlist[1].id); // 歌曲 id 仍然相同（同一首歌）
+});
+
+test('播放重複歌曲的最後一列時，伺服器以 entryId 精準定位，不會誤判成第一列', () => {
+  const registerPlaylistHandlers = require('../server/routes/handlers/playback');
+  const playlistHandlers = require('../server/routes/handlers/playlist');
+  const events = new Map();
+  const playbackEvents = new Map();
+  const state = { playlist: [], isPlaying: false, currentTrack: null };
+  const ctx = {
+    playState: state, trackOffsets: new Map(), trackPitch: new Map(), trackSpeed: new Map(),
+    manualLyricsCache: new Map(), persistState() {}, emitSetlist() {}, recordSessionSong() {},
+    broadcastState() {}, getEffectiveLyrics() { return null }, getPublicPlaylist() { return state.playlist; },
+  };
+  playlistHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);
+  registerPlaylistHandlers({ emit() {} }, { id: 'panel-1', clientType: 'controller', emit() {}, on(event, handler) { playbackEvents.set(event, handler); } }, ctx);
+
+  // play:track 播放前會檢查音檔是否存在於隔離的 downloads/；建立假音檔讓這個測試
+  // 專注在 entryId 定位邏輯，而不是（已由其他測試涵蓋的）音檔遺失分支。
+  fs.mkdirSync(TEST_RUNTIME_DIRS.downloads, { recursive: true });
+  fs.writeFileSync(path.join(TEST_RUNTIME_DIRS.downloads, 'sw.mp3'), '');
+  fs.writeFileSync(path.join(TEST_RUNTIME_DIRS.downloads, 'f.mp3'), '');
+
+  events.get('playlist:add')([{ id: 'superwoman', title: 'Superwoman', filename: 'sw.mp3' }], () => {});
+  for (let i = 0; i < 100; i++) events.get('playlist:add')([{ id: `filler-${i}`, title: `Filler ${i}`, filename: 'f.mp3' }], () => {});
+  events.get('playlist:add')([{ id: 'superwoman', title: 'Superwoman', filename: 'sw.mp3' }], () => {});
+
+  const first = state.playlist[0];
+  const last = state.playlist[state.playlist.length - 1];
+  eq(first.id, 'superwoman');
+  eq(last.id, 'superwoman');
+  ok(first.entryId !== last.entryId, '首尾兩個 Superwoman 的 entryId 必須不同: ');
+
+  playbackEvents.get('play:track')({ ...last, autoplay: true });
+  eq(state.currentTrack.entryId, last.entryId, '播放最後一首 Superwoman 後，目前歌曲的 entryId 必須是最後那一列: ');
+  ok(state.currentTrack.entryId !== first.entryId, '不可誤判成第一列的 Superwoman: ');
+});
+
+test('PlaylistState：重複歌曲以 entryId 定位目前播放列，避免永遠命中第一個相符 id', () => {
+  const PlaylistState = require('../public/js/playlist-state.js');
+  const playlist = [
+    { id: 'superwoman', entryId: 'entry-1', title: 'Superwoman' },
+    { id: 'other', entryId: 'entry-2', title: 'Other' },
+    { id: 'superwoman', entryId: 'entry-3', title: 'Superwoman' },
+  ];
+  // 沒有 entryId（舊資料/舊客戶端）：退回用 id 找，會命中第一個 —— 這是已知、可接受的向下相容限制。
+  eq(PlaylistState.reconcilePlaylist(playlist, 'superwoman', null).currentTrackIndex, 0);
+  // 有 entryId：精準命中最後一列，不會被 id 相符的第一列誤導。
+  eq(PlaylistState.reconcilePlaylist(playlist, 'superwoman', 'entry-3').currentTrackIndex, 2);
+  eq(PlaylistState.reconcilePlaylist(playlist, 'superwoman', 'entry-1').currentTrackIndex, 0);
+
+  // mergeCurrentTrackDetails 也要用 entryId 分辨，只合併到正確那一列，不會兩列都被蓋成同一份歌詞。
+  const currentTrack = { id: 'superwoman', entryId: 'entry-3', lyrics: '[00:00]最後一列的歌詞', hasLyrics: true };
+  const merged = PlaylistState.mergeCurrentTrackDetails(playlist, currentTrack, null);
+  eq(merged[0].lyrics, undefined, '第一列（entry-1）不應被目前歌曲的歌詞覆蓋: ');
+  eq(merged[2].lyrics, '[00:00]最後一列的歌詞', '第三列（entry-3）才是真正在播放、該被合併歌詞的那一列: ');
 });
 
 test('R4-2 播放清單可搜尋篩選並安全批次選取，不會選到目前歌曲', () => {
@@ -4221,12 +4422,17 @@ test('同 id 歌曲重新加入後播放時，會套回保留的手動歌詞與 
       },
     );
     events.get('play:track')({ id: stored.id, title: stored.title, filename: stored.filename, autoplay: false });
+    eq(playState.currentTrackStarted, false, '待命載入不可誤標成已開始播放: ');
     eq(playState.currentOffset, 2500);
     eq(playState.currentTrack.lyrics, manual.lyrics);
     eq(playState.currentTrack.parsedLyrics[0].text, '手動修正後的歌詞');
     const sent = emitted.find((item) => item.event === 'play:track').data;
     eq(sent.offset, 2500);
     eq(sent.lyrics, manual.lyrics);
+    events.get('play:toggle')(true);
+    eq(playState.currentTrackStarted, true, '首次開始播放後必須留下已開始標記: ');
+    events.get('play:toggle')(false);
+    eq(playState.currentTrackStarted, true, '暫停不可清掉已開始標記: ');
   } finally {
     libraryStore.audioExists = originalAudioExists;
     libraryStore.recordPlay = originalRecordPlay;
@@ -5119,6 +5325,26 @@ test('state:sync 每次廣播只序列化同一份 payload 並留下大小量測
   eq(metrics.lastPlaylistLength, emitted[0].payload.playlist.length);
 });
 
+test('歌單已開始的目前歌曲暫停後仍不可回到未唱區', () => {
+  const { createAppState } = require('../server/state/app-state');
+  const appState = createAppState({ emit() {} });
+  const current = { id: 'current', entryId: 'current-entry', title: '暫停中的歌', artist: '測試歌手' };
+  const next = { id: 'next', entryId: 'next-entry', title: '下一首', artist: '測試歌手' };
+  appState.playState.playlist = [current, next];
+  appState.playState.currentTrack = current;
+  appState.playState.isPlaying = false;
+  appState.playState.currentTrackStarted = true;
+
+  const paused = appState.setlistPayload();
+  eq(paused.current.title, '暫停中的歌');
+  eq(paused.current.playing, false);
+  eq(paused.upcoming.map((track) => track.title).join(','), '下一首');
+
+  appState.playState.currentTrackStarted = false;
+  const standby = appState.setlistPayload();
+  eq(standby.upcoming.map((track) => track.title).join(','), '暫停中的歌,下一首');
+});
+
 test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷線紅線', () => {
   const { createAppState } = require('../server/state/app-state');
   const emitted = [];
@@ -5378,8 +5604,8 @@ test('v2 將既有模板設定與預設快照遷移到新 ID', () => {
       lyricPresets: [{ id: 'legacy', name: '舊模板', settings: { template: 'tilt' } }],
     },
   });
-  eq(CURRENT_STATE_SCHEMA_VERSION, 2);
-  eq(result.state.schemaVersion, 2);
+  eq(CURRENT_STATE_SCHEMA_VERSION, 3);
+  eq(result.state.schemaVersion, 3);
   eq(result.state.lyricSettings.template, 'aura');
   eq(result.state.lyricSettings.lyricTemplateSettings.pulse.template, 'pulse');
   eq(result.state.lyricSettings.lyricTemplateSettings.facet.template, 'facet');
@@ -5412,8 +5638,8 @@ test('使用者更新時會把 v1 state.json 轉成新的模板 ID 並落盤', (
       "const backup=files.find((name)=>/^state\\.json\\.pre-migration-v1-/.test(name));",
       "process.stdout.write('__STATE_RESULT__'+JSON.stringify({loaded,disk,backupRaw:backup?fs.readFileSync(path.join(dir,backup),'utf8'):null}));",
     ].join('\n'));
-    eq(result.loaded.schemaVersion, 2);
-    eq(result.disk.schemaVersion, 2);
+    eq(result.loaded.schemaVersion, 3);
+    eq(result.disk.schemaVersion, 3);
     eq(result.loaded.lyricSettings.template, 'aura');
     eq(result.disk.lyricSettings.lyricTemplateSettings.pulse.template, 'pulse');
     eq(result.disk.lyricSettings.lyricTemplateSettings.facet.template, 'facet');
@@ -5421,6 +5647,23 @@ test('使用者更新時會把 v1 state.json 轉成新的模板 ID 並落盤', (
     eq(result.disk.lyricSettings.lyricTemplateSettings.aura.template, 'aura');
     eq(result.backupRaw, JSON.stringify(original));
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('v3 遷移：既有播放清單的每一列補上 entryId，讓重複歌曲不再靠歌曲 id 誤判位置', () => {
+  const { migrateState } = require('../server/services/state-migrations');
+  const result = migrateState({
+    schemaVersion: 2,
+    playlist: [
+      { id: 'superwoman', title: 'Superwoman' },
+      { id: 'other', title: 'Other', entryId: 'already-has-one' }, // 已有 entryId 的不該被換掉
+      { id: 'superwoman', title: 'Superwoman' },
+    ],
+  });
+  eq(result.state.schemaVersion, 3);
+  ok(result.state.playlist[0].entryId, '第一列應補上 entryId: ');
+  ok(result.state.playlist[2].entryId, '第三列應補上 entryId: ');
+  ok(result.state.playlist[0].entryId !== result.state.playlist[2].entryId, '兩個同名 Superwoman 補上的 entryId 不可相同: ');
+  eq(result.state.playlist[1].entryId, 'already-has-one', '已經有 entryId 的列不該被覆蓋: ');
 });
 
 test('統一音量：增益計算對齊 -14 LUFS 並夾在 ±12 dB', () => {
@@ -5661,6 +5904,27 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
   eq(runtimePaths.dataDir, path.join(path.resolve(runtimeRoot), 'data'));
   eq(runtimePaths.downloadsDir, path.join(path.resolve(runtimeRoot), 'downloads'));
   eq(runtimePaths.logsDir, path.join(path.resolve(runtimeRoot), 'logs'));
+  const freshMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
+    isPackaged: true,
+    executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
+    fsImpl: { readdirSync: () => [], readFileSync: () => { throw new Error('no config'); } },
+  });
+  eq(freshMedia.mode, 'install-default');
+  eq(freshMedia.downloadsDir, path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro Media'));
+  const legacyMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
+    isPackaged: true,
+    executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
+    fsImpl: { readdirSync: () => ['existing-song.mp3'], readFileSync: () => { throw new Error('no config'); } },
+  });
+  eq(legacyMedia.mode, 'legacy-migration-required');
+  eq(legacyMedia.downloadsDir, path.join(path.resolve(runtimeRoot), 'downloads'));
+  const configuredMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
+    isPackaged: true,
+    executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
+    fsImpl: { readdirSync: () => { throw new Error('must not inspect legacy'); }, readFileSync: () => JSON.stringify({ mediaDir: path.join('E:', 'Music', 'Elitesand Pro Media') }) },
+  });
+  eq(configuredMedia.mode, 'configured');
+  eq(configuredMedia.downloadsDir, path.join('E:', 'Music', 'Elitesand Pro Media'));
   eq(electronShell.resolveShellPort('3100'), 3100);
   eq(electronShell.resolveShellPort('not-a-port'), 3000);
   ok(electronShell.isTrustedLocalUrl('http://127.0.0.1:3000/panel', 3000));
@@ -5691,8 +5955,12 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'showMessageBoxSync',
     'setWindowOpenHandler',
     'ELITESAND_SHELL_USER_DATA_DIR',
+    'ELITESAND_MEDIA_STORAGE_MODE',
+    'elitesand:choose-media-location',
+    'restart-after-media-migration',
     'SHUTDOWN_MESSAGE',
   ].forEach((required) => ok(source.includes(required), `Electron shell is missing ${required}`));
+
 });
 
 test('Electron assisted installer stays per-user with an updateable app root', () => {
@@ -5712,8 +5980,23 @@ test('Electron assisted installer stays per-user with an updateable app root', (
   eq(packageJson.build.nsis.include, 'electron/installer.nsh');
   eq(packageJson.build.nsis.license, 'dist/.electron-builder-resources/EULA-installer.txt',
     'installer must use its generated Unicode-safe EULA copy before install');
+  eq(packageJson.build.win.icon, 'assets/elitesand-pro.ico', 'installer 必須使用正式 Elitesand Pro 圖示：');
+  ok(packageJson.build.files.includes('assets/**/*'), 'Electron 殼必須攜帶視窗圖示資產：');
+  const iconPath = path.join(root, packageJson.build.win.icon);
+  const icon = fs.readFileSync(iconPath);
+  eq(icon.readUInt16LE(0), 0, 'ICO reserved header 必須為 0：');
+  eq(icon.readUInt16LE(2), 1, 'Electron 圖示必須是 ICO：');
+  const iconCount = icon.readUInt16LE(4);
+  ok(iconCount >= 9, 'ICO 必須包含至少九個為 Windows 小尺寸優化的圖層：');
+  const iconSizes = new Set(Array.from({ length: iconCount }, (_, index) => {
+    const encoded = icon[6 + (index * 16)];
+    return encoded === 0 ? 256 : encoded;
+  }));
+  [16, 20, 24, 32, 40, 48, 64, 128, 256].forEach((size) => {
+    ok(iconSizes.has(size), `ICO 缺少 ${size}px 圖層：`);
+  });
   ok(packageJson.build.nsis.deleteAppDataOnUninstall !== true,
-    'uninstaller must never delete Electron userData');
+    'uninstaller must not delete Electron userData without explicit consent');
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root'), 'installer must contain resources/app-root');
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root/node_modules'), 'installer must explicitly ship app-root/node_modules (electron-builder drops it from extraResources)');
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'tools'), 'installer must contain bundled tools');
@@ -5724,6 +6007,8 @@ test('Electron assisted installer stays per-user with an updateable app root', (
   ok(installerNsh.includes('!macro customPageAfterChangeDir'), 'installer must provide shortcut options after choosing a directory');
   ok(installerNsh.includes('EsCreateDesktopShortcut') && installerNsh.includes('EsCreateStartMenuShortcut'),
     'desktop and Start menu shortcuts must remain independent choices');
+  ['!macro customUnWelcomePage', 'EsRemoveAllData', 'media-storage.ini', '.elitesand-pro-media-root', 'RMDir /r "$APPDATA\\Elitesand Pro"'].forEach((required) =>
+    ok(installerNsh.includes(required), `uninstaller cleanup flow is missing ${required}`));
   const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'showPortableDataMigrationNotice',
     'function needsPortableDataMigrationNotice', 'shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice()',
@@ -5749,6 +6034,8 @@ test('Electron P1 smoke starts with a disposable Electron user-data directory', 
   eq(packageJson.devDependencies.electron, '^43.1.1');
   ok(smoke.includes('ELITESAND_SHELL_USER_DATA_DIR'));
   ok(smoke.includes('ELITESAND_SHELL_HEADLESS'));
+  ['STDIO_STRESS_REQUESTS', 'MIN_STRESS_LOG_BYTES', '/api/twitch/status', 'healthAfterStress']
+    .forEach((required) => ok(smoke.includes(required), `Electron smoke 缺少 stdout 壓力守衛 ${required}: `));
   ok(!smoke.includes("ELITESAND_DATA_DIR: path.join(runtimeRoot"));
 });
 
@@ -6125,6 +6412,8 @@ testAsync('Electron P1：系統匣結束會先 graceful shutdown，並釋放防�
   let trayInstance;
   const shutdownMessages = [];
   const powerStops = [];
+  let forkOptions;
+  let windowOptions;
   const child = new EventEmitter();
   child.pid = 4321;
   child.postMessage = (message) => shutdownMessages.push(message);
@@ -6143,8 +6432,9 @@ testAsync('Electron P1：系統匣結束會先 graceful shutdown，並釋放防�
     app.emit('before-quit', { preventDefault() { this.prevented = true; } });
   };
   class FakeWindow extends EventEmitter {
-    constructor() {
+    constructor(options) {
       super();
+      windowOptions = options;
       this.webContents = { setWindowOpenHandler: () => {}, on: () => {} };
     }
     async loadURL() { this.emit('ready-to-show'); }
@@ -6162,7 +6452,7 @@ testAsync('Electron P1：系統匣結束會先 graceful shutdown，並釋放防�
   const desktop = createElectronShell({
     app,
     BrowserWindow: FakeWindow,
-    utilityProcess: { fork: () => child },
+    utilityProcess: { fork: (_entry, _args, options) => { forkOptions = options; return child; } },
     dialog: { showErrorBox: () => {}, showMessageBoxSync: () => 1 },
     shell: { openExternal: () => {} },
     Tray: FakeTray,
@@ -6177,6 +6467,9 @@ testAsync('Electron P1：系統匣結束會先 graceful shutdown，並釋放防�
   });
 
   await desktop.start();
+  eq(forkOptions.stdio, 'ignore', 'utilityProcess 必須在實際啟動路徑使用 stdio ignore：');
+  eq(windowOptions.icon, path.join(path.resolve(__dirname, '..'), 'assets', 'elitesand-pro.ico'),
+    '桌面視窗必須從 Electron 殼資源讀取正式圖示：');
   trayInstance.menu.template.find((item) => item.label === '結束').click();
   await new Promise((resolve) => setImmediate(resolve));
   eq(app.quitCalls, 1);
@@ -6359,6 +6652,43 @@ console.log('\n🌐 17. M6.1 介面語系層');
       for (const match of source.matchAll(/(?:I18n\.t|workspaceText|(?:^|[^\w])t)\(\s*['"]([^'"]+)['"]/gm)) referenced.add(match[1]);
     });
     referenced.forEach((key) => ok(baselineKeys.includes(key), `缺少翻譯鍵 ${key}：`));
+  });
+
+  test('EULA 與桌面操作視窗維持 dialog 語意與鍵盤焦點管理', () => {
+    const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+    const eula = fs.readFileSync(path.join(__dirname, '../public/js/eula-gate.js'), 'utf8');
+    const modalFocus = fs.readFileSync(path.join(__dirname, '../public/js/modal-focus.js'), 'utf8');
+    const labels = {
+      'lyrics-paste-modal': 'lyrics-paste-title',
+      'track-edit-modal': 'track-edit-title-heading',
+      'lyrics-picker-modal': 'lyrics-picker-title',
+      'lyrics-timeline-modal': 'lyrics-timeline-title',
+      'help-modal': 'help-modal-title',
+      'playlist-export-modal': 'playlist-export-title',
+      'playlist-import-modal': 'playlist-import-title',
+      'lyric-preset-name-modal': 'lyric-preset-name-title',
+      'pin-required-modal': 'pin-required-title',
+      'pin-manage-modal': 'pin-manage-title',
+    };
+    Object.entries(labels).forEach(([modalId, labelId]) => {
+      const start = html.indexOf(`id="${modalId}"`);
+      const section = html.slice(start, start + 600);
+      ok(start >= 0, `找不到 ${modalId}: `);
+      ok(section.includes('role="dialog" aria-modal="true"'), `${modalId} 必須有 dialog 語意: `);
+      ok(section.includes(`aria-labelledby="${labelId}"`), `${modalId} 必須有可存取名稱: `);
+    });
+    ['previousFocus', 'trapFocus', 'stopImmediatePropagation', "textBox.focus()", "document.removeEventListener('keydown', trapFocus, true)"]
+      .forEach((fragment) => ok(eula.includes(fragment), `EULA 閘門必須管理焦點（缺少 ${fragment}）: `));
+    ['FOCUSABLE_SELECTOR', 'previousFocus', 'data-modal-initial-focus', "event.key !== 'Tab'", 'target.focus()']
+      .forEach((fragment) => ok(modalFocus.includes(fragment), `桌面 modal 必須限制焦點並在關閉後還原（缺少 ${fragment}）: `));
+  });
+
+  test('非正常關閉回報與日文播放提示維持中性且正確的語意', () => {
+    const autoRows = require('../public/js/i18n-auto');
+    eq(autoRows['播放後，'][2], '再生後、', '日文播放提示不可誤寫成玩遊戲後：');
+    const actual = catalogs.en['crash.prefillActual'];
+    ok(!/without me doing anything/i.test(actual), '非正常關閉回報不可預設歸咎為使用者未操作：');
+    ok(/shut down cleanly/i.test(actual) && /closed manually/i.test(actual), '回報預填必須如實涵蓋手動關閉：');
   });
 
   test('Twitch 授權更新失敗原因會先翻譯再插入重連狀態', () => {

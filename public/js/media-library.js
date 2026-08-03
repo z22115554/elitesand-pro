@@ -40,9 +40,9 @@
     if (!ts) return '';
     const d = new Date(ts), now = Date.now();
     const diff = now - ts;
-    if (diff < 60000) return '剛剛';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分鐘前`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小時前`;
+    if (diff < 60000) return tr('剛剛');
+    if (diff < 3600000) return tr(`${Math.floor(diff / 60000)} 分鐘前`);
+    if (diff < 86400000) return tr(`${Math.floor(diff / 3600000)} 小時前`);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   }
 
@@ -75,7 +75,7 @@
     if (!view.length) {
       if (emptyEl) {
         emptyEl.hidden = false;
-        emptyEl.textContent = cache.length ? '找不到符合的歌曲' : '尚無記錄，播放任一首歌後會自動加入。';
+        emptyEl.textContent = cache.length ? tr('找不到符合的歌曲') : tr('尚無記錄，播放任一首歌後會自動加入。');
       }
       return;
     }
@@ -93,11 +93,11 @@
         <div class="lib-meta">
           <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
           <div class="lib-sub">${escapeHtml(item.artist || tr('未知歌手'))}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
-          <div class="lib-stats">▶ ${item.playCount || 0} 次 · ${fmtDate(item.lastPlayed)}</div>
+          <div class="lib-stats">▶ ${tr(`${item.playCount || 0} 次`)} · ${fmtDate(item.lastPlayed)}</div>
         </div>
         <div class="lib-actions">
-          <button class="btn btn-sm lib-reimport" type="button">加入清單</button>
-          <button class="btn btn-sm btn-ghost lib-remove" type="button" title="從媒體庫移除">✕</button>
+          <button class="btn btn-sm lib-reimport" type="button">${tr('加入清單')}</button>
+          <button class="btn btn-sm btn-ghost lib-remove" type="button" title="${tr('從媒體庫移除')}">✕</button>
         </div>`;
 
       // Do not interpolate external metadata into a style attribute. The URL
@@ -126,7 +126,7 @@
       while (restoreQueue.length) {
       const job = restoreQueue.shift();
       const { item, btn, originalLabel } = job;
-      if (btn) { btn.disabled = true; btn.textContent = '加入中…'; }
+      if (btn) { btn.disabled = true; btn.textContent = tr('加入中…'); }
       const fail = (message) => {
         toast(message, 'error');
         if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
@@ -136,22 +136,22 @@
       if (resp?.track) {
         const result = await window.VKState.addLibraryTrack(resp.track);
         if (result?.ok) {
-          toast(`已加入清單：${item.title}`, 'success');
-          if (btn) btn.textContent = '已加入';
+          toast(tr(`已加入清單：${item.title}`), 'success');
+          if (btn) btn.textContent = tr('已加入');
         } else {
-          fail(`加入播放清單失敗：${result?.error || '伺服器沒有確認'}`);
+          fail(tr(`加入播放清單失敗：${result?.error || tr('伺服器沒有確認')}`));
         }
       } else if (resp?.needsDownload && resp.url && window.VKState.importYouTubeUrl) {
-        if (btn) btn.textContent = '排隊下載中…';
+        if (btn) btn.textContent = tr('排隊下載中…');
         try {
           await window.VKState.importYouTubeUrl(resp.url);
-          toast(`已加入清單：${item.title}`, 'success');
-          if (btn) btn.textContent = '已加入';
+          toast(tr(`已加入清單：${item.title}`), 'success');
+          if (btn) btn.textContent = tr('已加入');
         } catch (err) {
-          fail(`重新匯入失敗：${err.message}`);
+          fail(tr(`重新匯入失敗：${err.message}`));
         }
       } else {
-        fail('無法重新匯入：無本機音檔也無 YouTube 網址');
+        fail(tr('無法重新匯入：無本機音檔也無 YouTube 網址'));
       }
       }
     } finally {
@@ -160,7 +160,7 @@
   }
 
   async function reimport(item, row) {
-    if (!window.VKState) { toast('匯入功能未就緒', 'error'); return; }
+    if (!window.VKState) { toast(tr('匯入功能未就緒'), 'error'); return; }
     // 重複加入警告：已在播放清單中就先問，確認後仍會再加一首到清單末端
     if (window.VKState.isInPlaylist && window.VKState.isInPlaylist(item.id)) {
       const confirmed = await window.PanelConfirm?.request({
@@ -175,7 +175,7 @@
     if (!btn || btn.disabled) return;
     const originalLabel = btn.textContent;
     btn.disabled = true;
-    btn.textContent = restoreQueueRunning ? '加入佇列中…' : '加入中…';
+    btn.textContent = restoreQueueRunning ? tr('加入佇列中…') : tr('加入中…');
     restoreQueue.push({ item, btn, originalLabel });
     runRestoreQueue();
   }
@@ -193,14 +193,84 @@
     });
     if (!confirmed) return;
     SocketClient.sendWithCallback('library:remove', id, (res) => {
-      if (!res?.ok) return toast(`刪除失敗：${res?.error || '伺服器沒有確認'}`, 'error');
-      cache = cache.filter((x) => x.id !== id); render(cache); toast('已從媒體庫移除', 'success');
+      if (!res?.ok) return toast(tr(`刪除失敗：${res?.error || tr('伺服器沒有確認')}`), 'error');
+      cache = cache.filter((x) => x.id !== id); render(cache); toast(tr('已從媒體庫移除'), 'success');
     });
   }
 
   function refresh() {
     if (!SocketClient.connected()) return;
     SocketClient.sendWithCallback('library:get', null, (list) => render(list || []));
+  }
+
+  const storageCard = document.getElementById('library-storage');
+  const storagePath = document.getElementById('library-storage-path');
+  const storageStatus = document.getElementById('library-storage-status');
+  const storageChoose = document.getElementById('library-storage-choose');
+  let storageInfo = null;
+  let legacyPromptShown = false;
+
+  function renderStorage(info) {
+    storageInfo = info || null;
+    if (!storageCard || !info?.ok) return;
+    storageCard.hidden = false;
+    if (storagePath) storagePath.textContent = info.mediaDir || '';
+    if (storageStatus) {
+      storageStatus.textContent = info.legacyMigrationRequired
+        ? '找到舊版歌曲；搬遷後，新下載的歌曲會存到你選擇的磁碟。'
+        : '新下載與匯入的音檔會存放在這裡。';
+    }
+    if (storageChoose) storageChoose.disabled = !window.ElitesandShell?.chooseMediaLocation;
+  }
+
+  async function migrateStorage({ prompted = false } = {}) {
+    if (!window.ElitesandShell?.chooseMediaLocation) {
+      toast('請在 Elitesand Pro 桌面版中設定媒體位置。', 'error');
+      return;
+    }
+    const parentDir = await window.ElitesandShell.chooseMediaLocation();
+    if (!parentDir) return;
+    if (!prompted) {
+      const confirmed = await window.PanelConfirm?.request({
+        title: '搬遷媒體庫？',
+        summary: '歌曲、歌詞與封面會先複製到新位置，再移除原本的副本。',
+        impact: '搬遷時請先停止播放；完成後 Elitesand Pro 會重新啟動。',
+        confirmLabel: '搬遷並重新啟動',
+      });
+      if (!confirmed) return;
+    }
+    if (storageChoose) storageChoose.disabled = true;
+    const result = await requestSocket('library:storage:migrate', { parentDir });
+    if (storageChoose) storageChoose.disabled = false;
+    if (!result?.ok) {
+      const message = result?.error === 'stop_playback_first'
+        ? '請先停止播放中的歌曲，再搬遷媒體庫。'
+        : (result?.message || '搬遷未完成，原本的歌曲沒有被刪除。');
+      toast(message, 'error');
+      return;
+    }
+    toast(result.oldFilesRemoved ? '搬遷完成，正在重新啟動。' : '歌曲已複製完成；原位置仍有檔案，正在重新啟動。', 'success');
+    setTimeout(() => window.ElitesandShell.restartAfterMediaMigration?.(), 500);
+  }
+
+  async function promptLegacyMigration() {
+    if (!storageInfo?.legacyMigrationRequired || legacyPromptShown) return;
+    legacyPromptShown = true;
+    const confirmed = await window.PanelConfirm?.request({
+      title: '找到舊版歌曲',
+      summary: '舊歌曲目前仍存放在原本的應用程式資料夾。你可以現在搬到安裝磁碟或其他位置。',
+      impact: '不搬遷也能繼續使用；下次進入媒體庫仍可隨時設定。',
+      confirmLabel: '選擇位置並搬遷',
+    });
+    if (confirmed) migrateStorage({ prompted: true });
+  }
+
+  function refreshStorage() {
+    if (!SocketClient.connected()) return;
+    SocketClient.sendWithCallback('library:storage:get', null, (info) => {
+      renderStorage(info);
+      promptLegacyMigration();
+    });
   }
 
   // ─── 工具列 ───
@@ -214,6 +284,7 @@
   if (sortSelect) sortSelect.addEventListener('change', () => { sortBy = sortSelect.value; applyView(); });
 
   if (btnRefresh) btnRefresh.addEventListener('click', refresh);
+  if (storageChoose) storageChoose.addEventListener('click', () => migrateStorage());
 
   if (btnCleanup) btnCleanup.addEventListener('click', async () => {
     const confirmed = await window.DangerConfirm?.request({
@@ -226,8 +297,8 @@
     if (!confirmed) return;
     SocketClient.sendWithCallback('library:cleanupAudio', null, (res) => {
       if (res?.ok && typeof res.deleted === 'number') {
-        toast(`已清理 ${res.deleted} 個音檔，釋放 ${(res.freedBytes / 1048576).toFixed(1)}MB`, 'success');
-      } else toast('音檔清理失敗：伺服器沒有確認', 'error');
+        toast(tr(`已清理 ${res.deleted} 個音檔，釋放 ${(res.freedBytes / 1048576).toFixed(1)}MB`), 'success');
+      } else toast(tr('音檔清理失敗：伺服器沒有確認'), 'error');
     });
   });
 
@@ -241,18 +312,28 @@
     });
     if (!confirmed) return;
     SocketClient.sendWithCallback('library:clear', null, (res) => {
-      if (res?.ok) { cache = []; render([]); toast('媒體庫已清空', 'success'); }
-      else toast('清空失敗：伺服器沒有確認', 'error');
+      if (res?.ok) { cache = []; render([]); toast(tr('媒體庫已清空'), 'success'); }
+      else toast(tr('清空失敗：伺服器沒有確認'), 'error');
     });
   });
 
   // ─── 事件：切到媒體庫視圖時自動刷新；伺服器推播時更新 ───
   document.addEventListener('view:change', (e) => {
-    if (e.detail && e.detail.view === 'library') refresh();
+    if (e.detail && e.detail.view === 'library') {
+      refresh();
+      refreshStorage();
+    }
   });
   SocketClient.on('library:list', (list) => render(list || []));
+  // 語系切換時重繪：render() 只在收到伺服器資料才會跑，光切語言不會自動更新已經畫出來的列。
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('i18n:change', () => { if (cache.length) applyView(); });
+  }
   SocketClient.on('connection-change', (ok) => { if (ok) { /* 連線後若正在媒體庫視圖則刷新 */
     const v = document.querySelector('.view[data-view="library"]');
-    if (v && v.classList.contains('is-active')) refresh();
+    if (v && v.classList.contains('is-active')) {
+      refresh();
+      refreshStorage();
+    }
   } });
 })();

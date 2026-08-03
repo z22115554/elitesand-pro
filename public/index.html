@@ -56,6 +56,19 @@
     </div>
   </div>
 
+  <!-- 上次未正常關閉時的提示。刻意做成可忽略的 banner 而非阻斷式視窗：
+       這只是「要不要幫忙回報」，不該擋住使用者開台。絕不自動傳送任何資料。 -->
+  <div id="crash-banner" class="announcement-banner crash-banner" role="status" hidden>
+    <div>
+      <strong data-i18n="crash.title">Elitesand Pro 上次未正常關閉</strong>
+      <span data-i18n="crash.message">要傳送診斷資訊協助找出原因嗎？送出前你可以先看過完整內容。</span>
+    </div>
+    <div class="announcement-actions">
+      <button id="crash-review" class="btn btn-sm btn-primary" type="button" data-i18n="crash.review">查看內容</button>
+      <button id="crash-dismiss" class="btn btn-sm btn-ghost" type="button" data-i18n="crash.dismiss">不用了</button>
+    </div>
+  </div>
+
   <div class="app">
     <!-- ═══ 左側導覽欄（Discord 式）═══ -->
     <nav class="sidebar">
@@ -248,6 +261,7 @@
               <p id="session-summary-status" class="live-session-summary-status" role="status" aria-live="polite" data-i18n="home.session.statusNotLive">尚未開台 · 已唱 0 首</p>
             </div>
             <button id="session-record-open" class="btn btn-sm" type="button" data-i18n="home.session.openRecord">查看本場紀錄</button>
+            <button id="session-new-start" class="btn btn-sm btn-primary" type="button" data-i18n="home.session.startNew">開始新場次</button>
           </section>
 
           <div id="session-record-modal" class="modal modal-wide session-record-modal" role="dialog" aria-modal="true" aria-labelledby="session-record-title" hidden>
@@ -375,7 +389,7 @@
             <div class="card-collapse-body">
             <div class="field">
               <label>歌詞時間偏移</label>
-              <button id="offset-align" class="btn btn-primary btn--wide btn--mb-8" type="button">🎯 對齊第一句</button>
+              <button id="offset-align" class="btn btn-primary btn--wide btn--mb-8" type="button">對齊第一句</button>
               <p class="sub offset-align-hint">播放後，<strong>聽到第一句該唱的瞬間按這顆</strong>，整首歌詞就自動對齊（不必來回微調）。之後仍可用下方按鈕細調。</p>
               <div class="offset-row">
                 <button id="offset-minus05" class="btn btn-sm" type="button">−0.5s</button>
@@ -436,7 +450,7 @@
             </div>
             <!-- 內嵌 OBS 顯示端（preview 模式：緊急隱藏時面板仍看得到）-->
             <div class="obs-preview-wrap">
-              <iframe id="obs-preview" class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
+              <iframe id="obs-preview" class="obs-preview" data-preview-src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
               <div class="obs-preview-tag" data-i18n="preview.obs">OBS 預覽</div>
             </div>
             <div class="url-field">
@@ -477,7 +491,7 @@
               <button id="btn-settings-preview-sample-lyrics" class="btn btn-sm btn-preview-sample-lyrics" type="button" data-i18n="preview.sampleLyrics">示範歌詞</button>
             </div>
             <div class="obs-preview-wrap">
-              <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
+              <iframe class="obs-preview" data-preview-src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
               <div class="obs-preview-tag" data-i18n="preview.obs">OBS 預覽</div>
             </div>
             <div class="url-field">
@@ -768,7 +782,7 @@
                 </nav>
                 <div class="mw-preview">
                   <div class="obs-preview-wrap">
-                    <iframe class="obs-preview" src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
+                    <iframe class="obs-preview" data-preview-src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
                     <div class="obs-preview-tag" data-i18n="settings.workspace.livePreview">即時預覽</div>
                   </div>
                 </div>
@@ -1278,6 +1292,14 @@
           <section class="card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>媒體庫 · 唱過的歌</p>
             <p class="sub section-intro">記錄唱過的歌與播放次數。點任一首可用原 YouTube 網址重新匯入並加入播放清單。音檔可清理省空間，庫保留網址隨時重抓。</p>
+            <div class="library-storage" id="library-storage" hidden>
+              <div>
+                <strong>音檔存放位置</strong>
+                <p class="field-hint" id="library-storage-path" aria-live="polite"></p>
+                <p class="field-hint" id="library-storage-status"></p>
+              </div>
+              <button id="library-storage-choose" class="btn btn-sm" type="button">選擇位置並搬遷</button>
+            </div>
             <div class="library-toolbar">
               <input id="lib-search" class="input" type="text" placeholder="搜尋歌名 / 歌手…">
               <select id="lib-sort" class="input">
@@ -1511,7 +1533,7 @@
                         <button class="setlist-preview-size" type="button" data-setlist-preview-size="small" role="radio" aria-checked="false" data-i18n="settings.setlist.sizeSmall">小框 640×480</button>
                       </div>
                       <div class="setlist-preview-wrap">
-                        <iframe id="setlist-preview-modal" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" data-i18n-title="settings.setlist.previewFrameTitle" scrolling="no"></iframe>
+                        <iframe id="setlist-preview-modal" class="setlist-preview" data-preview-src="/setlist?preview=1" title="歌單預覽" data-i18n-title="settings.setlist.previewFrameTitle" scrolling="no"></iframe>
                         <div class="setlist-preview-tag">橫式 1920×1080</div>
                       </div>
                     </div>
@@ -1886,7 +1908,7 @@
               <button class="setlist-preview-size" type="button" data-setlist-preview-size="small" role="radio" aria-checked="false" data-i18n="settings.setlist.sizeSmall">小框 640×480</button>
             </div>
             <div class="setlist-preview-wrap">
-              <iframe id="setlist-preview" class="setlist-preview" src="/setlist?preview=1" title="歌單預覽" data-i18n-title="settings.setlist.previewFrameTitle" scrolling="no"></iframe>
+              <iframe id="setlist-preview" class="setlist-preview" data-preview-src="/setlist?preview=1" title="歌單預覽" data-i18n-title="settings.setlist.previewFrameTitle" scrolling="no"></iframe>
               <div class="setlist-preview-tag">橫式 1920×1080</div>
             </div>
             <div class="url-field">
@@ -1915,10 +1937,10 @@
 
   <!-- ═══ Modal：貼上歌詞（#lyrics-paste-modal）═══ -->
   <div id="lyrics-paste-modal" class="modal" hidden>
-    <div class="modal-card">
-      <div class="modal-head"><h3>貼上歌詞</h3><button id="lyrics-paste-cancel" class="btn btn-sm btn-ghost" type="button">取消</button></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lyrics-paste-title">
+      <div class="modal-head"><h3 id="lyrics-paste-title">貼上歌詞</h3><button id="lyrics-paste-cancel" class="btn btn-sm btn-ghost" type="button">取消</button></div>
       <div class="modal-body">
-        <textarea id="lyrics-paste-textarea" class="input modal-lyrics-textarea" placeholder="貼上 LRC 或純文字歌詞…"></textarea>
+        <textarea id="lyrics-paste-textarea" class="input modal-lyrics-textarea" placeholder="貼上 LRC 或純文字歌詞…" data-modal-initial-focus></textarea>
         <button id="lyrics-paste-confirm" class="btn btn-primary modal-submit modal-submit--spaced" type="button">套用歌詞</button>
       </div>
     </div>
@@ -1949,11 +1971,11 @@
 
   <!-- ═══ Modal：修改歌名／歌手（#track-edit-modal）═══ -->
   <div id="track-edit-modal" class="modal" hidden>
-    <div class="modal-card">
-      <div class="modal-head"><h3>修改歌名／歌手</h3><button id="track-edit-cancel" class="btn btn-sm btn-ghost" type="button">取消</button></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="track-edit-title-heading">
+      <div class="modal-head"><h3 id="track-edit-title-heading">修改歌名／歌手</h3><button id="track-edit-cancel" class="btn btn-sm btn-ghost" type="button">取消</button></div>
       <div class="modal-body">
         <p class="sub track-edit-hint">自動抓到的歌名/歌手偶爾會抓錯，這裡可以直接手動修正。</p>
-        <div class="field"><label for="track-edit-title">歌名</label><input id="track-edit-title" class="input" type="text"></div>
+        <div class="field"><label for="track-edit-title">歌名</label><input id="track-edit-title" class="input" type="text" data-modal-initial-focus></div>
         <div class="field"><label for="track-edit-artist">原唱歌手（翻唱影片可留空）</label><input id="track-edit-artist" class="input" type="text" placeholder="原唱待確認" list="track-edit-artist-candidates"><datalist id="track-edit-artist-candidates"></datalist></div>
         <button id="track-edit-save" class="btn btn-primary btn--track-edit-save" type="button">儲存</button>
       </div>
@@ -1962,10 +1984,10 @@
 
   <!-- ═══ Modal：選擇歌詞來源（#lyrics-picker-modal，lyric-extras.js 的 window.LyricPicker）═══ -->
   <div id="lyrics-picker-modal" class="modal" hidden>
-    <div class="modal-card">
-      <div class="modal-head"><h3>選擇歌詞來源</h3><button id="lyrics-picker-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lyrics-picker-title">
+      <div class="modal-head"><h3 id="lyrics-picker-title">選擇歌詞來源</h3><button id="lyrics-picker-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
       <div class="picker-search">
-        <input id="picker-artist" class="input" type="text" placeholder="歌手（可留空，例如：周杰倫）">
+        <input id="picker-artist" class="input" type="text" placeholder="歌手（可留空，例如：周杰倫）" data-modal-initial-focus>
         <input id="picker-title" class="input" type="text" placeholder="歌名（例如：聽媽媽的話）">
         <button id="picker-search-btn" class="btn btn-primary" type="button">搜尋</button>
       </div>
@@ -1975,10 +1997,10 @@
 
   <!-- ═══ Modal：逐行歌詞時間軸編輯（#lyrics-timeline-modal，對「對齊第一句」解決不了的中段跑掉問題做逐行微調）═══ -->
   <div id="lyrics-timeline-modal" class="modal modal-wide" hidden>
-    <div class="modal-card">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lyrics-timeline-title">
       <div class="modal-head">
-        <h3>逐行時間軸編輯 <span id="lt-track-title" class="val"></span></h3>
-        <button id="lt-close" class="btn btn-sm btn-ghost" type="button">關閉</button>
+        <h3 id="lyrics-timeline-title">逐行時間軸編輯 <span id="lt-track-title" class="val"></span></h3>
+        <button id="lt-close" class="btn btn-sm btn-ghost" type="button" data-modal-initial-focus>關閉</button>
       </div>
       <div class="modal-body">
         <p class="field-hint mt-0">播放歌曲，唱到某一行的當下按「設為目前時間」最快；也可以直接用 −/+ 微調或手動輸入時間。改完按「套用」才會生效。</p>
@@ -1994,8 +2016,8 @@
 
   <!-- ═══ Modal：新手教學（#help-modal，nav.js 開關）═══ -->
   <div id="help-modal" class="modal modal-wide" hidden>
-    <div class="modal-card">
-      <div class="modal-head"><h3>新手教學</h3><button id="help-close" class="btn btn-sm btn-ghost" type="button">關閉</button></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+      <div class="modal-head"><h3 id="help-modal-title">新手教學</h3><button id="help-close" class="btn btn-sm btn-ghost" type="button" data-modal-initial-focus>關閉</button></div>
       <div class="modal-body help-body">
 
         <section class="onboard-readiness" aria-label="啟動環境檢查">
@@ -2215,15 +2237,15 @@
 
   <!-- ═══ Modal：匯出播放清單（#playlist-export-modal，只跳 App 內取名視窗，不跳系統「另存新檔」）═══ -->
   <div id="playlist-export-modal" class="modal" hidden>
-    <div class="modal-card modal-card--small">
+    <div class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="playlist-export-title">
       <div class="modal-head">
-        <h3>匯出播放清單</h3>
+        <h3 id="playlist-export-title">匯出播放清單</h3>
         <button id="playlist-export-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
       </div>
       <div class="modal-body">
         <div class="field">
           <label>名稱</label>
-          <input id="playlist-export-name" class="input" type="text" maxlength="60" placeholder="例如：週五直播歌單">
+          <input id="playlist-export-name" class="input" type="text" maxlength="60" placeholder="例如：週五直播歌單" data-modal-initial-focus>
         </div>
         <div id="playlist-export-error" class="modal-error"></div>
         <button id="playlist-export-confirm" class="btn btn-primary modal-submit" type="button">確認匯出</button>
@@ -2233,10 +2255,10 @@
 
   <!-- ═══ Modal：匯入播放清單（#playlist-import-modal，只跳 App 內選擇清單，不跳系統「開啟檔案」）═══ -->
   <div id="playlist-import-modal" class="modal" hidden>
-    <div class="modal-card modal-card--medium">
+    <div class="modal-card modal-card--medium" role="dialog" aria-modal="true" aria-labelledby="playlist-import-title">
       <div class="modal-head">
-        <h3>匯入播放清單</h3>
-        <button id="playlist-import-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
+        <h3 id="playlist-import-title">匯入播放清單</h3>
+        <button id="playlist-import-cancel" class="btn btn-sm btn-ghost" type="button" data-modal-initial-focus>取消</button>
       </div>
       <div class="modal-body">
         <div id="playlist-import-list"></div>
@@ -2275,15 +2297,15 @@
 
   <!-- ═══ Modal：保存歌詞外觀預設（#lyric-preset-name-modal，避免使用部分 WebView 不支援的 prompt）═══ -->
   <div id="lyric-preset-name-modal" class="modal" hidden>
-    <div class="modal-card modal-card--small">
+    <div class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="lyric-preset-name-title">
       <div class="modal-head">
-        <h3>保存歌詞預設</h3>
+        <h3 id="lyric-preset-name-title">保存歌詞預設</h3>
         <button id="lyric-preset-name-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
       </div>
       <div class="modal-body">
         <div class="field">
           <label for="lyric-preset-name-input">預設名稱</label>
-          <input id="lyric-preset-name-input" class="input" type="text" maxlength="40" placeholder="例如：KTV 藍字">
+          <input id="lyric-preset-name-input" class="input" type="text" maxlength="40" placeholder="例如：KTV 藍字" data-modal-initial-focus>
         </div>
         <div id="lyric-preset-name-error" class="modal-error"></div>
         <button id="lyric-preset-name-confirm" class="btn btn-primary modal-submit" type="button">保存</button>
@@ -2293,11 +2315,11 @@
 
   <!-- ═══ Modal：要求輸入 PIN（#pin-required-modal，連線被拒時跳出，見 pin-auth.js）═══ -->
   <div id="pin-required-modal" class="modal" hidden>
-    <div class="modal-card modal-card--narrow">
-      <div class="modal-head"><h3>需要 PIN</h3></div>
+    <div class="modal-card modal-card--narrow" role="dialog" aria-modal="true" aria-labelledby="pin-required-title">
+      <div class="modal-head"><h3 id="pin-required-title">需要 PIN</h3></div>
       <div class="modal-body">
         <p class="field-hint modal-form-hint">這台裝置需要輸入 PIN 才能操作 Elitesand Pro（防止同網路其他人誤觸）。</p>
-        <input id="pin-required-input" class="input modal-form-input" type="password" inputmode="numeric" autocomplete="off" placeholder="輸入 PIN">
+        <input id="pin-required-input" class="input modal-form-input" type="password" inputmode="numeric" autocomplete="off" placeholder="輸入 PIN" data-modal-initial-focus>
         <div id="pin-required-error" class="modal-error modal-error--spaced"></div>
         <button id="pin-required-submit" class="btn btn-primary modal-submit" type="button">確認</button>
       </div>
@@ -2306,7 +2328,7 @@
 
   <!-- ═══ Modal：PIN 管理（#pin-manage-modal，設定／更改／停用，見 pin-auth.js）═══ -->
   <div id="pin-manage-modal" class="modal" hidden>
-    <div class="modal-card modal-card--small">
+    <div class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="pin-manage-title">
       <div class="modal-head">
         <h3 id="pin-manage-title">設定 PIN</h3>
         <button id="pin-manage-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
@@ -2314,11 +2336,11 @@
       <div class="modal-body">
         <div id="pin-manage-current-wrap" class="field" hidden>
           <label>目前的 PIN</label>
-          <input id="pin-manage-current" class="input" type="password" inputmode="numeric" autocomplete="off">
+          <input id="pin-manage-current" class="input" type="password" inputmode="numeric" autocomplete="off" data-modal-initial-focus>
         </div>
         <div id="pin-manage-new-wrap" class="field">
           <label>新的 PIN（4~32 字元）</label>
-          <input id="pin-manage-new" class="input" type="password" inputmode="numeric" autocomplete="off">
+          <input id="pin-manage-new" class="input" type="password" inputmode="numeric" autocomplete="off" data-modal-initial-focus>
         </div>
         <div id="pin-manage-confirm-wrap" class="field">
           <label>再輸入一次確認</label>
@@ -2449,6 +2471,7 @@
   <script src="/js/eula-gate.js"></script>
   <script src="/js/app-shared.js"></script>
   <script src="/js/danger-confirm.js"></script>
+  <script src="/js/modal-focus.js"></script>
   <script src="/js/app-youtube-import.js"></script>
   <script src="/js/app-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>

@@ -170,16 +170,20 @@
 
   function animationLoop() {
     try {
-      const timeMs = getSmoothTimeMs();
       lastRafWall = performance.now(); // 給 lyrics:sync 判斷 rAF 是否被 OBS 節流
-      // 拖曳/連續跳轉期間，重繪交給節流的同步事件處理，rAF 這幾幀不重複 render（避免雙重工作）
-      if (!seekDriving) KaraokeEngine.update(timeMs);
+      // 暫停／閒置時畫面不會變，不必讓每個 OBS 預覽每秒重算 60 次歌詞與樣式。
+      // seek、設定與 state 事件都有自己的立即重繪路徑；重新播放後下一幀自然恢復。
+      if (isControllerPlaying) {
+        const timeMs = getSmoothTimeMs();
+        // 拖曳/連續跳轉期間，重繪交給節流的同步事件處理，rAF 這幾幀不重複 render（避免雙重工作）
+        if (!seekDriving) KaraokeEngine.update(timeMs);
 
-      // Phase 7: 更新前奏倒數視覺節拍器
-      updateIntroMetronome(timeMs);
+        // Phase 7: 更新前奏倒數視覺節拍器
+        updateIntroMetronome(timeMs);
 
-      // Phase 7: 更新極細進度條
-      updateProgressBar(timeMs);
+        // Phase 7: 更新極細進度條
+        updateProgressBar(timeMs);
+      }
     } catch (e) {
       // 防止單一幀錯誤中斷整個迴圈
       console.warn('[Display] 動畫迴圈錯誤:', e.message);
@@ -416,7 +420,7 @@
   });
 
   // 播放/暫停
-  SocketClient.on('play:toggle', (playing) => {
+  SocketClient.on('play:toggle', ({ playing } = {}) => {
     isControllerPlaying = playing;
     if (playing) {
       if (localAudioReady) audioPlayer.play().catch(() => {});

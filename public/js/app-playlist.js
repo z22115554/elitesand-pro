@@ -607,6 +607,23 @@
   if (dom.btnPlaylistSelectionCancel) dom.btnPlaylistSelectionCancel.addEventListener('click', () => setSelectionMode(false));
   if (dom.btnPlaylistSelectionRemove) dom.btnPlaylistSelectionRemove.addEventListener('click', removeSelectedTracks);
 
+  // 實際清空播放清單（不含確認視窗）：「清除全部」按鈕與「開始新場次」共用同一份，
+  // 避免兩個入口各自維護一份清空邏輯、日後改一邊忘了改另一邊。
+  function performClearPlaylist() {
+    return new Promise((resolve) => {
+      SocketClient.sendWithCallback('playlist:update', [], (result) => {
+        if (result?.ok) {
+          AppShared.stopPlayback();
+          state.playlist = [];
+          state.currentTrackIndex = -1;
+          renderPlaylist();
+        }
+        resolve(result);
+      });
+    });
+  }
+  AppShared.clearPlaylist = performClearPlaylist;
+
   // 一鍵清除整個播放清單（含確認警告）
   async function clearAllTracks() {
     const playlist = state.playlist;
@@ -619,15 +636,9 @@
       confirmLabel: '清除全部',
     });
     if (!confirmed) return;
-    SocketClient.sendWithCallback('playlist:update', [], (result) => {
-      if (result?.ok) {
-        AppShared.stopPlayback();
-        state.playlist = [];
-        state.currentTrackIndex = -1;
-        renderPlaylist();
-        AppShared.showToast('已清除播放清單', 'success');
-      } else AppShared.showToast(`清除失敗：${result?.error || '伺服器沒有回應'}`, 'error');
-    });
+    const result = await performClearPlaylist();
+    if (result?.ok) AppShared.showToast('已清除播放清單', 'success');
+    else AppShared.showToast(`清除失敗：${result?.error || '伺服器沒有回應'}`, 'error');
   }
   if (dom.btnPlaylistClear) dom.btnPlaylistClear.addEventListener('click', clearAllTracks);
 

@@ -61,6 +61,7 @@
   `;
 
   function show(status) {
+    const previousFocus = document.activeElement;
     const style = document.createElement('style');
     style.textContent = STYLE;
     document.head.appendChild(style);
@@ -68,7 +69,7 @@
     const overlay = document.createElement('div');
     overlay.className = 'eula-gate eula-gate--locked';
     overlay.innerHTML = `
-      <div class="eula-gate__card" role="dialog" aria-modal="true" aria-labelledby="eulaGateTitle">
+      <div class="eula-gate__card" role="dialog" aria-modal="true" aria-labelledby="eulaGateTitle" tabindex="-1">
         <div class="eula-gate__head">
           <h2 class="eula-gate__title" id="eulaGateTitle"></h2>
           <p class="eula-gate__sub"></p>
@@ -93,6 +94,27 @@
     const checkbox = overlay.querySelector('input[type="checkbox"]');
     const hint = overlay.querySelector('.eula-gate__hint');
     const acceptBtn = overlay.querySelector('.eula-gate__accept');
+    const focusable = () => [...overlay.querySelectorAll('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter((element) => !element.closest('[hidden]') && element.getClientRects().length);
+    const trapFocus = (event) => {
+      if (event.key !== 'Tab') return;
+      // EULA 是阻擋式閘門；不要讓背景 modal 的共用焦點管理接到這次 Tab。
+      event.stopImmediatePropagation();
+      const targets = focusable();
+      if (!targets.length) {
+        event.preventDefault();
+        textBox.focus();
+        return;
+      }
+      const first = targets[0];
+      const last = targets[targets.length - 1];
+      if (event.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      }
+    };
+    document.addEventListener('keydown', trapFocus, true);
+    requestAnimationFrame(() => textBox.focus());
     let hasScrolled = false;
     const renderLocale = () => {
       overlay.querySelector('.eula-gate__title').textContent = t('eula.title');
@@ -133,8 +155,10 @@
         }
         window.removeEventListener('resize', unlockIfScrolled);
         window.removeEventListener('i18n:change', renderLocale);
+        document.removeEventListener('keydown', trapFocus, true);
         overlay.remove();
         style.remove();
+        if (previousFocus && document.contains(previousFocus)) requestAnimationFrame(() => previousFocus.focus());
       } catch (err) {
         acceptBtn.disabled = false;
         hint.textContent = t('eula.saveFailed', { message: err.message });

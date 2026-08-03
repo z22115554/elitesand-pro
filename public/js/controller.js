@@ -82,6 +82,7 @@
   let playlist = [];
   let currentTrackIndex = -1;
   let currentTrackId = null;
+  let currentEntryId = null;
   let playlistVisible = false;
   let currentOffsetMs = 0;
   let currentPitchShift = 0;
@@ -93,7 +94,8 @@
   // 集中走與桌面面板相同的純函式，讓貼歌詞、上傳歌詞與 offset 都指向正確歌曲。
   function reconcileCurrentTrackIndex(track) {
     currentTrackId = track && track.id != null ? track.id : null;
-    currentTrackIndex = PlaylistState.reconcilePlaylist(playlist, currentTrackId).currentTrackIndex;
+    currentEntryId = track && track.entryId != null ? track.entryId : null;
+    currentTrackIndex = PlaylistState.reconcilePlaylist(playlist, currentTrackId, currentEntryId).currentTrackIndex;
     return currentTrackIndex;
   }
 
@@ -649,7 +651,7 @@
   });
 
   // 播放/暫停
-  SocketClient.on('play:toggle', (playing) => {
+  SocketClient.on('play:toggle', ({ playing } = {}) => {
     isPlaying = playing;
     dom.playIcon.textContent = playing ? '❚❚' : '▶';
   });
@@ -698,7 +700,7 @@
   // 播放列表更新
   SocketClient.on('playlist:update', (newPlaylist) => {
     playlist = Array.isArray(newPlaylist) ? newPlaylist : [];
-    reconcileCurrentTrackIndex(currentTrackId ? { id: currentTrackId } : null);
+    reconcileCurrentTrackIndex((currentTrackId || currentEntryId) ? { id: currentTrackId, entryId: currentEntryId } : null);
     renderPlaylist();
   });
 

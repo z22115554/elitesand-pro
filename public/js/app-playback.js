@@ -104,6 +104,13 @@
     if (myToken !== stLoadToken) return; // 已有更新的載入發生 → 丟棄這次結果
     stReady = ok;
   }
+  // 快速切歌時，拖曳/timeupdate 殘留的舊訊息可能晚到；帶上 trackId 讓伺服器可以擋掉對不上目前歌曲的舊值
+  // （見 play:seek、lyrics:sync 的伺服器端過濾，同一套道理已用在播放時補羅馬化的推播判斷上）。
+  function currentTrackId() {
+    const track = state.playlist[state.currentTrackIndex];
+    return track ? track.id : null;
+  }
+
   // SoundTouch 播放時的時間回呼：更新進度條 + 廣播 lyrics:sync（取代 audioPlayer 的 timeupdate）
   function stOnTime(t) {
     const dur = SoundTouchEngine.getDuration() || 0;
@@ -117,7 +124,7 @@
     const now = Date.now();
     if (now - lastSyncTime >= SYNC_INTERVAL) {
       lastSyncTime = now;
-      SocketClient.send('lyrics:sync', { currentTime: t, duration: dur });
+      SocketClient.send('lyrics:sync', { currentTime: t, duration: dur, trackId: currentTrackId() });
     }
   }
 
@@ -315,6 +322,12 @@
   function stopPlayback() {
     audioPlayer.pause();
     audioPlayer.src = '';
+    // 使用者完整停止/清空播放時，不需要保留 SoundTouch 的整首 PCM buffer 供續播。
+    // 暫停仍只走 pause，維持立即續播；這裡才真正釋放記憶體。
+    if (useSoundTouch) {
+      try { SoundTouchEngine.dispose(); } catch (e) {}
+      stReady = false;
+    }
     isPlaying = false;
     updatePlayButton();
     AppShared.setMarqueeText(dom.trackTitle, '尚未播放');
@@ -409,8 +422,13 @@
 
   // 遙控器/Stream Deck 送來的播放/暫停：伺服器 io.emit 會連寄件者自己也收到一份回音，
   // 靠上面「已經是這個狀態」的提早 return 擋掉重複動作，兩種來源共用同一段真正執行播放的邏輯。
-  SocketClient.on('play:toggle', (playing) => {
-    if (typeof playing === 'boolean') requestPlayback(playing);
+  // 同 play:track 的道理：忽略「另一個面板分頁」的廣播，否則兩個面板本地播放狀態
+  // 一旦不同步（例如清單被清空重建），會無窮迴圈互送 play:toggle（實測會看到播放/暫停瞬間狂跳）。
+  SocketClient.on('play:toggle', (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    if (payload._originSocketId === SocketClient.getId()) return;
+    if (payload._originClientType === 'controller') return;
+    if (typeof payload.playing === 'boolean') requestPlayback(payload.playing);
   });
 
   // 上一首/下一首是「相對移動」指令，不像播放/暫停有絕對值可以拿來擋回音，
@@ -441,7 +459,11 @@
     if (!track) return;
     if (track._originSocketId === SocketClient.getId()) return;
     if (track._originClientType === 'controller') return;
-    const idx = state.playlist.findIndex((t) => t.id === track.id);
+    // 優先用 entryId 定位，避免同一首歌在清單裡出現不只一次時，換到後面那個重複的
+    // 反而找到第一個相符的位置去播（那樣清單高亮跟實際播放的位置就對不上）。
+    const idx = track.entryId != null
+      ? state.playlist.findIndex((t) => t.entryId === track.entryId)
+      : state.playlist.findIndex((t) => t.id === track.id);
     if (idx === -1) return;
     playTrack(idx, track.autoplay !== false);
   });
@@ -458,7 +480,7 @@
     const now = Date.now();
     if (now - lastSyncTime >= SYNC_INTERVAL) {
       lastSyncTime = now;
-      SocketClient.send('lyrics:sync', { currentTime: audioPlayer.currentTime, duration: audioPlayer.duration || 0 });
+      SocketClient.send('lyrics:sync', { currentTime: audioPlayer.currentTime, duration: audioPlayer.duration || 0, trackId: currentTrackId() });
     }
   });
 
@@ -548,9 +570,9 @@
     const now = Date.now();
     if (finalize || now - lastSeekBroadcast >= 60) {
       lastSeekBroadcast = now;
-      SocketClient.send('play:seek', t);
+      SocketClient.send('play:seek', { time: t, trackId: currentTrackId() });
       // 同步推播位置：讓 OBS 顯示端即時跟著移動（暫停時也是）
-      SocketClient.send('lyrics:sync', { currentTime: t, duration: dur || 0, seeking: !finalize });
+      SocketClient.send('lyrics:sync', { currentTime: t, duration: dur || 0, seeking: !finalize, trackId: currentTrackId() });
     }
   }
   // 把一條 track 綁上拖曳跳轉（主/迷你共用；isSeeking 是共享旗標，同時只會有一條在拖）

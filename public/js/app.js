@@ -27,18 +27,21 @@
   let playlist = [];
   let currentTrackIndex = -1;
 
-  function applySyncedPlaylist(nextPlaylist, currentTrackId, currentTrack) {
+  function applySyncedPlaylist(nextPlaylist, currentTrackId, currentTrack, currentEntryId) {
     // playlist:update 只帶摘要時，保留本機目前歌曲的完整歌詞；state:sync 則以
     // 伺服器附帶的 currentTrack 為準，其他歌曲不常駐解析歌詞。
-    const localCurrentTrack = PlaylistState.getTrackIdAtIndex(playlist, currentTrackIndex) === currentTrackId
-      ? playlist[currentTrackIndex]
-      : null;
+    // 優先比對 entryId：同一首歌在清單裡出現不只一次時，只比 id 會誤判成本機目前這列
+    // 一直都是「目前歌曲」（永遠命中第一個相符的）。
+    const localMatchesCurrent = currentEntryId != null
+      ? PlaylistState.getEntryIdAtIndex(playlist, currentTrackIndex) === currentEntryId
+      : PlaylistState.getTrackIdAtIndex(playlist, currentTrackIndex) === currentTrackId;
+    const localCurrentTrack = localMatchesCurrent ? playlist[currentTrackIndex] : null;
     const hydratedPlaylist = PlaylistState.mergeCurrentTrackDetails(
       nextPlaylist,
       currentTrack,
       localCurrentTrack,
     );
-    const reconciled = PlaylistState.reconcilePlaylist(hydratedPlaylist, currentTrackId);
+    const reconciled = PlaylistState.reconcilePlaylist(hydratedPlaylist, currentTrackId, currentEntryId);
     playlist = reconciled.playlist;
     currentTrackIndex = reconciled.currentTrackIndex;
     AppShared.renderPlaylist();
@@ -191,11 +194,13 @@
     const closeModal = () => {
       clearSearch();
       modal.hidden = true;
+      window.PreviewLifecycle?.refresh();
       (focusBeforeOpen || btn).focus();
     };
     const openModal = () => {
       focusBeforeOpen = document.activeElement;
       modal.hidden = false;
+      window.PreviewLifecycle?.refresh();
       workspace?.sync();
       window.setTimeout(() => (search || close || btn).focus(), 0);
     };
@@ -359,7 +364,12 @@
       dom.btnEmergency.classList.toggle('active', isEmergencyHidden);
     }
     if (Array.isArray(state.playlist)) {
-      applySyncedPlaylist(state.playlist, state.currentTrack && state.currentTrack.id, state.currentTrack);
+      applySyncedPlaylist(
+        state.playlist,
+        state.currentTrack && state.currentTrack.id,
+        state.currentTrack,
+        state.currentTrack && state.currentTrack.entryId,
+      );
     }
     // Phase 5: offset 恢復
     if (typeof state.currentOffset === 'number') {
@@ -389,7 +399,8 @@
 
   SocketClient.on('playlist:update', (newPlaylist) => {
     const currentTrackId = PlaylistState.getTrackIdAtIndex(playlist, currentTrackIndex);
-    applySyncedPlaylist(newPlaylist, currentTrackId);
+    const currentEntryId = PlaylistState.getEntryIdAtIndex(playlist, currentTrackIndex);
+    applySyncedPlaylist(newPlaylist, currentTrackId, undefined, currentEntryId);
   });
 
   // Phase 5: 歌詞更新（手動覆蓋後）

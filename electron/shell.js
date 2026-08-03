@@ -16,14 +16,59 @@ function resolveShellPort(value) {
   return Number.isInteger(port) && port > 0 && port < 65536 ? port : DEFAULT_PORT;
 }
 
-function getRuntimePaths(userDataPath) {
+const MEDIA_FOLDER_NAME = 'Elitesand Pro Media';
+const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
+
+function getRuntimePaths(userDataPath, downloadsDir) {
   const root = path.resolve(userDataPath);
   return {
     root,
     dataDir: path.join(root, 'data'),
-    downloadsDir: path.join(root, 'downloads'),
+    downloadsDir: downloadsDir ? path.resolve(downloadsDir) : path.join(root, 'downloads'),
     logsDir: path.join(root, 'logs'),
   };
+}
+
+function hasFiles(directory, fsImpl = fs) {
+  try { return fsImpl.readdirSync(directory).length > 0; } catch (_) { return false; }
+}
+
+function readConfiguredMediaDir(userDataPath, fsImpl = fs) {
+  try {
+    const file = path.join(path.resolve(userDataPath), 'data', 'media-storage.json');
+    const parsed = JSON.parse(fsImpl.readFileSync(file, 'utf8'));
+    return typeof parsed?.mediaDir === 'string' && path.isAbsolute(parsed.mediaDir)
+      ? path.resolve(parsed.mediaDir)
+      : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function resolveMediaRuntime(userDataPath, { isPackaged = false, executablePath = '', fsImpl = fs } = {}) {
+  const legacyDir = path.join(path.resolve(userDataPath), 'downloads');
+  if (!isPackaged) return { downloadsDir: legacyDir, mode: 'legacy' };
+  const configuredDir = readConfiguredMediaDir(userDataPath, fsImpl);
+  if (configuredDir) return { downloadsDir: configuredDir, mode: 'configured' };
+  if (hasFiles(legacyDir, fsImpl)) return { downloadsDir: legacyDir, mode: 'legacy-migration-required' };
+  const installRoot = path.dirname(path.resolve(executablePath || process.execPath));
+  return { downloadsDir: path.join(installRoot, MEDIA_FOLDER_NAME), mode: 'install-default' };
+}
+
+function persistPackagedMediaReference(runtimePaths, mediaRuntime, fsImpl = fs) {
+  if (!mediaRuntime || mediaRuntime.mode === 'legacy-migration-required') return;
+  const mediaDir = runtimePaths.downloadsDir;
+  const marker = path.join(mediaDir, MEDIA_MARKER_NAME);
+  try {
+    fsImpl.mkdirSync(mediaDir, { recursive: true });
+    if (!fsImpl.existsSync(marker)) fsImpl.writeFileSync(marker, 'Elitesand Pro managed media root\n', 'utf8');
+    fsImpl.mkdirSync(runtimePaths.dataDir, { recursive: true });
+    const config = path.join(runtimePaths.dataDir, 'media-storage.json');
+    if (!fsImpl.existsSync(config)) fsImpl.writeFileSync(config, `${JSON.stringify({ version: 1, mediaDir }, null, 2)}\n`, 'utf8');
+    fsImpl.writeFileSync(path.join(runtimePaths.root, 'media-storage.ini'), `[media]\npath=${mediaDir}\n`, 'utf8');
+  } catch (_) {
+    // Media storage should never prevent the local server from starting.
+  }
 }
 
 function ensureRuntimePaths(paths, fsImpl = fs) {
@@ -242,8 +287,14 @@ function createElectronShell({
   }
 
   function runtimeEnvironment() {
-    const runtimePaths = getRuntimePaths(app.getPath('userData'));
+    const mediaRuntime = resolveMediaRuntime(app.getPath('userData'), {
+      isPackaged: app.isPackaged,
+      executablePath: app.getPath?.('exe') || processObject.execPath,
+      fsImpl,
+    });
+    const runtimePaths = getRuntimePaths(app.getPath('userData'), mediaRuntime.downloadsDir);
     ensureRuntimePaths(runtimePaths, fsImpl);
+    if (app.isPackaged) persistPackagedMediaReference(runtimePaths, mediaRuntime, fsImpl);
     const packagedTools = app.isPackaged
       ? path.join(processObject.resourcesPath || process.resourcesPath, 'tools')
       : '';
@@ -261,6 +312,7 @@ function createElectronShell({
       ELITESAND_DATA_DIR: runtimePaths.dataDir,
       ELITESAND_DOWNLOADS_DIR: runtimePaths.downloadsDir,
       ELITESAND_LOGS_DIR: runtimePaths.logsDir,
+      ELITESAND_MEDIA_STORAGE_MODE: mediaRuntime.mode,
     };
   }
 
@@ -300,6 +352,7 @@ function createElectronShell({
       show: false,
       backgroundColor: '#20222a',
       title: 'Elitesand Pro',
+      icon: path.join(shellRoot, 'assets', 'elitesand-pro.ico'),
       // The panel owns the entire title strip, including controls, so the
       // chrome stays visually consistent across Windows versions.
       frame: false,
@@ -313,6 +366,22 @@ function createElectronShell({
     });
     mainWindow = window;
     window.removeMenu?.();
+    if (ipcMain?.handle) {
+      ipcMain.handle('elitesand:choose-media-location', async (event) => {
+        if (event?.sender !== window.webContents || typeof dialog.showOpenDialog !== 'function') return null;
+        const result = await dialog.showOpenDialog(window, {
+          title: 'Choose media storage location',
+          properties: ['openDirectory', 'createDirectory'],
+        });
+        return result?.canceled || !result?.filePaths?.[0] ? null : result.filePaths[0];
+      });
+      ipcMain.handle('elitesand:restart-after-media-migration', (event) => {
+        if (event?.sender !== window.webContents) return false;
+        app.relaunch?.();
+        app.exit?.(0);
+        return true;
+      });
+    }
     if (ipcMain?.on) {
       ipcMain.on('elitesand:close-decision', (event, action) => {
         if (event?.sender !== window.webContents || !isCloseDecisionPending) return;
@@ -431,10 +500,25 @@ function createElectronShell({
   }
 
   function startServer() {
+    // stdio 必須是 'ignore'，不可改回 'pipe'。
+    //
+    // 2026-08-03 實機根因：'pipe' 會建立 stdout/stderr 管道，但這個檔案從來沒有讀取
+    // child.stdout／child.stderr。伺服器每寫一行日誌都會先 console.log()（見
+    // server/utils/logger.js 的 writeLog），而 Node 在 Windows 上對「管道」的
+    // stdout 寫入是同步的——管道緩衝區被寫滿又沒人排空時，下一次 console.log()
+    // 就會卡在 WriteFile 不返回，直接凍結整個事件迴圈：HTTP、Socket.io、所有計時器
+    // 全部停擺，行程還活著但完全沒回應（使用者看到「與伺服器連線中斷」）。
+    //
+    // 三次實機卡死的量化指紋：歷時 19.5／68.7／77 分鐘（差約 4 倍），但累積寫入
+    // stdout 的量是 53,269／53,273／53,321 bytes（全距 52 bytes，0.1%）。卡死取決於
+    // 寫了多少位元組、與經過多久無關，正是固定容量緩衝區被填滿的行為。
+    //
+    // 日誌檔本身是獨立的 createWriteStream，不受影響，功能完全不減。若日後真的需要
+    // 讀取子行程輸出，必須「同時」持續排空 stdout 與 stderr 兩條，否則等於重演本 bug。
     const child = utilityProcess.fork(serverEntry, [], {
       cwd: projectRoot,
       env: runtimeEnvironment(),
-      stdio: 'pipe',
+      stdio: 'ignore',
       serviceName: 'Elitesand Pro Server',
     });
     serverProcess = child;
@@ -547,6 +631,9 @@ module.exports = {
   SHUTDOWN_TIMEOUT_MS,
   resolveShellPort,
   getRuntimePaths,
+  resolveMediaRuntime,
+  readConfiguredMediaDir,
+  persistPackagedMediaReference,
   ensureRuntimePaths,
   isTrustedLocalUrl,
   isProjectReleaseUrl,

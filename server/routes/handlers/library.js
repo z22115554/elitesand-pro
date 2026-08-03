@@ -5,6 +5,7 @@
  */
 
 const libraryStore = require('../../services/library-store');
+const mediaStorage = require('../../services/media-storage');
 
 /**
  * @param {import('socket.io').Server} io
@@ -13,6 +14,34 @@ const libraryStore = require('../../services/library-store');
  */
 function registerLibraryHandlers(io, socket, ctx) {
   const { playState } = ctx;
+
+  // Storage locations are a desktop-shell capability. A phone remote may use
+  // normal library controls, but it must never select filesystem paths.
+  socket.on('library:storage:get', (_data, ack) => {
+    if (typeof ack !== 'function') return;
+    if (socket.clientType !== 'controller') {
+      ack({ ok: false, error: 'desktop_only' });
+      return;
+    }
+    ack({ ok: true, ...mediaStorage.status() });
+  });
+
+  socket.on('library:storage:migrate', (data, ack) => {
+    const reply = (result) => { if (typeof ack === 'function') ack(result); };
+    if (socket.clientType !== 'controller') {
+      reply({ ok: false, error: 'desktop_only' });
+      return;
+    }
+    if (playState.isPlaying) {
+      reply({ ok: false, error: 'stop_playback_first' });
+      return;
+    }
+    try {
+      reply({ ok: true, ...mediaStorage.migrateToParent(data?.parentDir) });
+    } catch (error) {
+      reply({ ok: false, error: 'migration_failed', message: error.message });
+    }
+  });
 
   socket.on('library:get', (_data, ack) => {
     const list = libraryStore.getLibrary();

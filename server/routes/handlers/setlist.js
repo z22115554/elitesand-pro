@@ -59,6 +59,11 @@ function registerSetlistHandlers(io, socket, ctx) {
     emitSetlist();
     broadcastState();
     persistState();
+    // 已唱歌單走到這裡已經自動歸零；播放清單還留著上一場的歌時，讓面板問一次要不要
+    // 順便清空。只在真的是新場次（通過上面的重連去重判斷）才問，避免斷線重連狂跳窗。
+    if (playState.playlist.length > 0) {
+      io.emit('session:new-start', { startedAt: effectiveStartedAt, source: sessionSource });
+    }
   });
 
   socket.on('session:stop', ({ source } = {}) => {

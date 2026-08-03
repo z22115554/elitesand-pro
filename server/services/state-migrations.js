@@ -5,7 +5,9 @@
  * 讓跨多版升級可以逐步執行，也讓每一版都能用 fixture 獨立驗證。
  */
 
-const CURRENT_STATE_SCHEMA_VERSION = 2;
+const crypto = require('crypto');
+
+const CURRENT_STATE_SCHEMA_VERSION = 3;
 
 // v2 gives the four custom lyric templates clean, project-owned IDs. Keep this
 // map in the migration only: every runtime, CSS, file, Socket and saved-state
@@ -95,6 +97,19 @@ const MIGRATIONS = new Map([
     ...state,
     schemaVersion: 2,
     lyricSettings: migrateLyricSettings(state.lyricSettings),
+  })],
+  // v3：播放清單每一列補上專屬 entryId（跟歌曲 id 分開），讓同一首歌重複加入清單時
+  // 「目前播放到哪一列」不會靠歌曲 id 誤判成永遠是第一個相符的那一列。
+  [2, (state) => ({
+    ...state,
+    schemaVersion: 3,
+    playlist: Array.isArray(state.playlist)
+      ? state.playlist.map((track) => (
+        track && typeof track === 'object' && !track.entryId
+          ? { ...track, entryId: crypto.randomUUID() }
+          : track
+      ))
+      : state.playlist,
   })],
 ]);
 

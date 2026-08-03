@@ -18,11 +18,14 @@
   let sessionState = { active: false, startedAt: null, source: null, songs: [] };
   const sessionSummaryStatus = document.getElementById('session-summary-status');
 
+  // YouTube 章節時間戳：超過 1 小時必須是 H:MM:SS，否則貼上去不會被辨識成章節
+  // （直播常常一開就是好幾小時，MM:SS 撐不住三位數分鐘）。
   function fmtSessionOffset(ms) {
     const totalSec = Math.floor((ms || 0) / 1000);
-    const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
+    const h = Math.floor(totalSec / 3600);
+    const m = (Math.floor(totalSec / 60) % 60).toString().padStart(2, '0');
     const s = (totalSec % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
+    return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
   }
 
   // 只更新狀態列（含每秒計時器），不重建清單 DOM → 計時器可每秒跳動而不閃爍/不打斷捲動
@@ -104,6 +107,7 @@
     if (dom.sessionStart) dom.sessionStart.disabled = active;
     if (dom.sessionStop) dom.sessionStop.disabled = !active;
     if (dom.sessionReset) dom.sessionReset.disabled = active || songs.length === 0;
+    if (sessionNewStart) sessionNewStart.disabled = active;
     if (dom.btnCopyChapters) dom.btnCopyChapters.disabled = songs.length === 0;
 
     // 狀態文字（含計時器，另由每秒 timer 單獨刷新）
@@ -242,6 +246,49 @@
       SocketClient.send('session:reset');
     });
   }
+
+  // 「開始新場次」：session-reset（已唱歌單）＋ 清空播放清單，一次備妥下一場的乾淨起點。
+  // 跟 session-reset 一樣，直播中不給按——避免收播前手滑把還在用的清單跟已唱記錄一起清掉。
+  const sessionNewStart = document.getElementById('session-new-start');
+  async function runStartNewSession() {
+    const confirmed = await window.PanelConfirm?.request({
+      title: workspaceText('home.session.newTitle', '開始新場次？'),
+      summary: workspaceText('home.session.newSummary', '會清空目前的播放清單與本場已唱記錄，準備好唱新的一場。'),
+      impact: workspaceText('home.session.newImpact', '歌曲音檔、媒體庫紀錄與歌詞設定都會保留；播放清單與已唱歌單清空後可從媒體庫重新加入歌曲。'),
+      tone: 'danger',
+      confirmLabel: workspaceText('home.session.newConfirmLabel', '開始新場次'),
+    });
+    if (!confirmed) return;
+    SocketClient.send('session:reset');
+    if (AppShared.clearPlaylist) await AppShared.clearPlaylist();
+    AppShared.showToast(workspaceText('home.session.newDone', '已開始新場次'), 'success');
+  }
+  if (sessionNewStart) sessionNewStart.addEventListener('click', runStartNewSession);
+
+  // 偵測到「真的開新場次」（非重連，見伺服器端判斷）且播放清單還留著上一場的歌時，
+  // 主動問一次要不要順便清空——已唱記錄這時已經自動歸零了，這裡只問播放清單。
+  const NEW_SESSION_PROMPT_KEY = 'elite-new-session-prompt-handled-v1';
+  function newSessionPromptHandled(startedAt) {
+    try { return localStorage.getItem(NEW_SESSION_PROMPT_KEY) === String(startedAt); } catch (_) { return false; }
+  }
+  function markNewSessionPromptHandled(startedAt) {
+    try { localStorage.setItem(NEW_SESSION_PROMPT_KEY, String(startedAt)); } catch (_) { /* 無痕模式可能拒絕 */ }
+  }
+  SocketClient.on('session:new-start', async (data) => {
+    const startedAt = data && data.startedAt;
+    if (!startedAt || newSessionPromptHandled(startedAt)) return;
+    markNewSessionPromptHandled(startedAt);
+    const confirmed = await window.PanelConfirm?.request({
+      title: workspaceText('home.session.detectTitle', '偵測到新場次開始'),
+      summary: workspaceText('home.session.detectSummary', '播放清單裡還留著上一場的歌，要順便清空嗎？'),
+      impact: workspaceText('home.session.detectImpact', '歌曲音檔、媒體庫紀錄與歌詞設定都會保留；清空後可從媒體庫重新加入歌曲。'),
+      tone: 'neutral',
+      confirmLabel: workspaceText('home.session.detectConfirmLabel', '清空播放清單'),
+    });
+    if (!confirmed) return;
+    if (AppShared.clearPlaylist) await AppShared.clearPlaylist();
+    AppShared.showToast(workspaceText('home.session.newDone', '已開始新場次'), 'success');
+  });
   if (dom.btnCopyChapters) {
     dom.btnCopyChapters.addEventListener('click', copyYoutubeChapters);
   }
@@ -308,7 +355,8 @@
     // 預覽 iframe 必須保留 ?preview=1——沒帶的話會被伺服器當成真的 OBS 歌單來源計入連線數。
     const want = buildSetlistUrl({ preview: true, relative: true });
     document.querySelectorAll('.setlist-preview').forEach((prev) => {
-      if (prev.getAttribute('src') !== want) prev.setAttribute('src', want);
+      prev.dataset.previewSrc = want;
+      if (prev.hasAttribute('src') && prev.getAttribute('src') !== want) prev.setAttribute('src', want);
     });
     applySetlistPreviewSize();
   }
@@ -844,12 +892,14 @@
       if (!advModal) return;
       if (search) { search.value = ''; filterSetlistSettings(); }
       advModal.hidden = true;
+      window.PreviewLifecycle?.refresh();
       (advancedFocusBeforeOpen && advancedFocusBeforeOpen.isConnected ? advancedFocusBeforeOpen : advBtn)?.focus();
       advancedFocusBeforeOpen = null;
     };
     if (advBtn && advModal) advBtn.addEventListener('click', () => {
       advancedFocusBeforeOpen = document.activeElement;
       advModal.hidden = false;
+      window.PreviewLifecycle?.refresh();
       workspace?.sync();
       window.setTimeout(() => search?.focus(), 0);
     });

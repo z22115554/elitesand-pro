@@ -208,6 +208,16 @@
     'home.session.confirmSummary': ['本次直播已唱歌曲與 YouTube 章節將被清除。', 'Performed tracks and YouTube chapters from this stream will be cleared.', '今回の配信で歌唱した曲と YouTube チャプターが消去されます。', '이번 방송에서 부른 곡과 YouTube 챕터가 삭제됩니다.', '本次直播的已唱歌曲与 YouTube 章节将被清除。'],
     'home.session.confirmImpact': ['播放清單、音檔、媒體庫與 OBS 版型設定都會保留。', 'The playlist, audio files, media library, and OBS layout settings will be kept.', 'プレイリスト、音声ファイル、メディアライブラリ、OBS レイアウト設定は保持されます。', '재생목록, 오디오 파일, 미디어 라이브러리와 OBS 레이아웃 설정은 유지됩니다.', '播放列表、音频文件、媒体库与 OBS 布局设置都会保留。'],
     'home.session.confirmLabel': ['清除直播歌單', 'Clear stream setlist', '配信セットリストを消去', '방송 세트리스트 지우기', '清除直播歌单'],
+    'home.session.startNew': ['開始新場次', 'Start new session', '新しいセッションを開始', '새 세션 시작', '开始新场次'],
+    'home.session.newTitle': ['開始新場次？', 'Start a new session?', '新しいセッションを開始しますか？', '새 세션을 시작할까요？', '开始新场次？'],
+    'home.session.newSummary': ['會清空目前的播放清單與本場已唱記錄，準備好唱新的一場。', 'This clears the current playlist and this session’s performed-track history, ready for a fresh start.', '現在の再生リストと今回のセッションの歌唱履歴を消去し、新しいセッションに備えます。', '현재 재생목록과 이번 세션의 부른 곡 기록을 지우고 새 세션을 준비합니다.', '会清空当前播放清单与本场已唱记录，准备好开始新的一场。'],
+    'home.session.newImpact': ['歌曲音檔、媒體庫紀錄與歌詞設定都會保留；播放清單與已唱歌單清空後可從媒體庫重新加入歌曲。', 'Audio files, media library records, and lyric settings are kept; after the playlist and performed-track list are cleared, songs can be re-added from the media library.', '音声ファイル、メディアライブラリの記録、歌詞設定は保持されます。再生リストと歌唱履歴を消去した後は、メディアライブラリから曲を再度追加できます。', '오디오 파일, 미디어 라이브러리 기록과 가사 설정은 유지됩니다. 재생목록과 부른 곡 목록을 지운 후에는 미디어 라이브러리에서 곡을 다시 추가할 수 있습니다.', '歌曲音频文件、媒体库记录与歌词设置都会保留；播放清单与已唱歌单清空后可从媒体库重新添加歌曲。'],
+    'home.session.newConfirmLabel': ['開始新場次', 'Start new session', '新しいセッションを開始', '새 세션 시작', '开始新场次'],
+    'home.session.newDone': ['已開始新場次', 'New session started', '新しいセッションを開始しました', '새 세션을 시작했습니다', '已开始新场次'],
+    'home.session.detectTitle': ['偵測到新場次開始', 'New session detected', '新しいセッションの開始を検出しました', '새 세션 시작이 감지되었습니다', '侦测到新场次开始'],
+    'home.session.detectSummary': ['播放清單裡還留著上一場的歌，要順便清空嗎？', 'The playlist still has tracks from the last session. Want to clear it too?', '再生リストには前回のセッションの曲がまだ残っています。一緒に消去しますか？', '재생목록에 지난 세션의 곡이 아직 남아 있습니다. 함께 지울까요？', '播放清单里还留着上一场的歌，要顺便清空吗？'],
+    'home.session.detectImpact': ['歌曲音檔、媒體庫紀錄與歌詞設定都會保留；清空後可從媒體庫重新加入歌曲。', 'Audio files, media library records, and lyric settings are kept; songs can be re-added from the media library after clearing.', '音声ファイル、メディアライブラリの記録、歌詞設定は保持されます。消去後はメディアライブラリから曲を再度追加できます。', '오디오 파일, 미디어 라이브러리 기록과 가사 설정은 유지됩니다. 지운 후에는 미디어 라이브러리에서 곡을 다시 추가할 수 있습니다.', '歌曲音频文件、媒体库记录与歌词设置都会保留；清空后可从媒体库重新添加歌曲。'],
+    'home.session.detectConfirmLabel': ['清空播放清單', 'Clear playlist', '再生リストを消去', '재생목록 지우기', '清空播放清单'],
     'home.welcome': ['歡迎使用 Elitesand Pro！先從下方「音樂來源」上傳檔案或貼上 YouTube 連結，再把右側的 OBS 來源網址加進 OBS 即可開始。', 'Welcome to Elitesand Pro! Upload a file or paste a YouTube link under Music source, then add the OBS source URL on the right to OBS.', 'Elitesand Pro へようこそ！「音楽ソース」でファイルをアップロードするか YouTube リンクを貼り、右側の OBS ソース URL を OBS に追加してください。', 'Elitesand Pro에 오신 것을 환영합니다! 음악 소스에서 파일을 업로드하거나 YouTube 링크를 붙여넣고, 오른쪽 OBS 소스 URL을 OBS에 추가하세요.', '欢迎使用 Elitesand Pro！请在“音乐来源”上传文件或粘贴 YouTube 链接，再把右侧的 OBS 来源网址添加到 OBS。'],
     'home.openGuide': ['查看完整新手教學 →', 'Open the full guide →', '詳しいガイドを見る →', '전체 가이드 보기 →', '查看完整新手教程 →'],
     'home.closeHint': ['關閉提示', 'Dismiss tip', 'ヒントを閉じる', '도움말 닫기', '关闭提示'],
@@ -559,6 +569,15 @@
 
     // 問題回報。介面文字跟著使用者語言，但送出的報告內文固定繁體中文
     // （見 server/services/feedback-report.js）——維護者要看得懂收到的東西。
+    // 上次未正常關閉的提示。措辭刻意保守：只說「未正常關閉」，不說「當機」——
+    // 使用者自己用工作管理員關掉、或 Windows 更新重開機也會觸發，講死了會嚇到人。
+    'crash.title': ['Elitesand Pro 上次未正常關閉', 'Elitesand Pro did not shut down cleanly last time', 'Elitesand Pro が前回正常に終了しませんでした', 'Elitesand Pro가 지난번에 정상적으로 종료되지 않았습니다', 'Elitesand Pro 上次未正常关闭'],
+    'crash.message': ['要傳送診斷資訊協助找出原因嗎？送出前你可以先看過完整內容。', 'Send diagnostics to help find the cause? You can review the full content before sending.', '原因調査のために診断情報を送信しますか？送信前に内容をすべて確認できます。', '원인 파악을 위해 진단 정보를 보낼까요? 보내기 전에 전체 내용을 확인할 수 있습니다.', '要发送诊断信息协助找出原因吗？送出前你可以先看过完整内容。'],
+    'crash.review': ['查看內容', 'Review and send', '内容を確認', '내용 확인', '查看内容'],
+    'crash.dismiss': ['不用了', 'No thanks', '今回は送らない', '보내지 않기', '不用了'],
+    'crash.prefillTitle': ['程式上次未正常關閉', 'The app did not shut down cleanly', 'アプリが正常に終了しませんでした', '앱이 정상적으로 종료되지 않았습니다', '程序上次未正常关闭'],
+    'crash.prefillActual': ['程式上次未正常關閉，可能是意外結束、系統重啟或手動關閉。', 'The app did not shut down cleanly. It may have closed unexpectedly, been restarted by the system, or been closed manually.', 'アプリが正常に終了しませんでした。予期しない終了、システムの再起動、または手動での終了の可能性があります。', '앱이 정상적으로 종료되지 않았습니다. 예기치 않은 종료, 시스템 재시작 또는 수동 종료일 수 있습니다.', '程序上次未正常关闭，可能是意外结束、系统重启或手动关闭。'],
+
     'feedback.title': ['回報問題給開發者', 'Report a problem', '開発者に問題を報告', '개발자에게 문제 신고', '回报问题给开发者'],
     'feedback.launchBtn': ['回報問題', 'Report a problem', '問題を報告', '문제 신고', '报告问题'],
     'feedback.openBtn': ['填寫問題回報', 'Open the report form', '報告フォームを開く', '신고 양식 열기', '填写问题回报'],

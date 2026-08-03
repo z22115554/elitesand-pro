@@ -6,6 +6,10 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
+const STDIO_STRESS_REQUESTS = 1000;
+const STDIO_STRESS_BATCH_SIZE = 25;
+const MIN_STRESS_LOG_BYTES = 65536;
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -36,6 +40,24 @@ async function waitForHealth(port, child) {
   throw new Error(`Electron shell did not become healthy: ${lastError?.message || 'timeout'}`);
 }
 
+async function generateServerLogVolume(port) {
+  for (let offset = 0; offset < STDIO_STRESS_REQUESTS; offset += STDIO_STRESS_BATCH_SIZE) {
+    const count = Math.min(STDIO_STRESS_BATCH_SIZE, STDIO_STRESS_REQUESTS - offset);
+    const responses = await Promise.all(Array.from({ length: count }, () => request(port, '/api/twitch/status')));
+    responses.forEach((response) => assert(
+      response.status === 200 || response.status === 304,
+      `Twitch status stress request returned HTTP ${response.status}`,
+    ));
+  }
+}
+
+function totalLogBytes(logsDir) {
+  if (!fs.existsSync(logsDir)) return 0;
+  return fs.readdirSync(logsDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .reduce((total, entry) => total + fs.statSync(path.join(logsDir, entry.name)).size, 0);
+}
+
 async function main() {
   const root = path.resolve(__dirname, '..');
   const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-electron-smoke-'));
@@ -49,7 +71,7 @@ async function main() {
     env: {
       ...process.env,
       ELITESAND_SHELL_HEADLESS: '1',
-      ELITESAND_SHELL_QUIT_AFTER_READY_MS: '1000',
+      ELITESAND_SHELL_QUIT_AFTER_READY_MS: '10000',
       ELITESAND_SHELL_PORT: String(port),
       ELITESAND_SHELL_USER_DATA_DIR: userDataDir,
     },
@@ -63,9 +85,19 @@ async function main() {
     const panel = await request(port, '/panel');
     assert(health.status === 'ok', 'Electron server health response is invalid');
     assert(panel.status === 200, `Electron panel returned HTTP ${panel.status}`);
+    await generateServerLogVolume(port);
+    const healthAfterStress = await request(port, '/api/health');
+    assert(healthAfterStress.status === 200, `Electron server stopped responding after stdout stress (HTTP ${healthAfterStress.status})`);
+    assert(JSON.parse(healthAfterStress.body).status === 'ok', 'Electron health payload became invalid after stdout stress');
     await new Promise((resolve) => child.once('exit', resolve));
     assert(child.exitCode === 0, `Electron did not exit cleanly (${child.exitCode})`);
-    process.stdout.write(`Electron shell smoke passed: port ${port}, server lifecycle, health, and panel route OK.\n`);
+    const logBytes = totalLogBytes(path.join(userDataDir, 'logs'));
+    assert(logBytes > MIN_STRESS_LOG_BYTES,
+      `Electron stdout stress produced only ${logBytes} log bytes; expected more than ${MIN_STRESS_LOG_BYTES}`);
+    process.stdout.write(
+      `Electron shell smoke passed: port ${port}, ${STDIO_STRESS_REQUESTS} logged requests (${logBytes} bytes), `
+      + 'health after stdout stress, server lifecycle, and panel route OK.\n',
+    );
   } catch (error) {
     throw new Error(`${error.message}\nElectron output:\n${output}`);
   } finally {

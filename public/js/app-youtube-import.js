@@ -238,6 +238,9 @@
   // ═══════════════════════════════════════════
   const ytImportQueue = [];   // work job objects waiting to start
   const ytImportJobs = [];    // recent queue/active/completed/failed history
+  // 面板只呈現最新 20 筆；保留有限的終態歷史供重試/查錯即可，不能讓千首匯入把錯誤、
+  // assessment 與 Promise callback 無限留在 renderer 記憶體。
+  const MAX_RETAINED_TERMINAL_IMPORT_JOBS = 120;
   let ytImportActive = false;
   let activeImportJob = null;
   let ytImportDoneCount = 0;  // 本批已完成數（佇列清空時歸零）
@@ -426,7 +429,21 @@
     if ((Object.prototype.hasOwnProperty.call(next, 'stage') || Object.prototype.hasOwnProperty.call(next, 'messageKey'))
       && !Object.prototype.hasOwnProperty.call(next, 'progressStage')) next.progressStage = '';
     Object.assign(job, next, { updatedAt: Date.now() });
+    if (['completed', 'cancelled', 'failed'].includes(job.status)) pruneTerminalImportJobs();
     renderWorkCenter();
+  }
+
+  function pruneTerminalImportJobs() {
+    let retained = 0;
+    // 新工作永遠插在開頭；由新到舊掃描可保留最近完成的終態工作，同時不碰 queued/active。
+    for (let i = 0; i < ytImportJobs.length; i++) {
+      if (!['completed', 'cancelled', 'failed'].includes(ytImportJobs[i].status)) continue;
+      retained++;
+      if (retained > MAX_RETAINED_TERMINAL_IMPORT_JOBS) {
+        ytImportJobs.splice(i, 1);
+        i--;
+      }
+    }
   }
 
   function cancelQueuedJob(job) {
@@ -483,7 +500,7 @@
   });
   workCenterClear?.addEventListener('click', () => {
     for (let i = ytImportJobs.length - 1; i >= 0; i--) {
-      if (['completed', 'cancelled'].includes(ytImportJobs[i].status)) ytImportJobs.splice(i, 1);
+      if (['completed', 'cancelled', 'failed'].includes(ytImportJobs[i].status)) ytImportJobs.splice(i, 1);
     }
     renderWorkCenter();
   });

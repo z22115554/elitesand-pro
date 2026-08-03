@@ -418,6 +418,8 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
   _onMessage(msg) {
     switch (msg.type) {
       case 'load': {
+        // 同一個節點若被重用，先卸載舊來源，避免其 channel data 被 filter 鏈保留。
+        this._releaseSource();
         const src = new ArraySource(msg.left, msg.right);
         this._st = new SoundTouch();
         this._pitch = msg.pitchSemitones || 0;
@@ -430,6 +432,11 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
         this._playing = false;
         break;
       }
+      case 'dispose':
+        // 主執行緒切歌或完整停止時呼叫。ArraySource 透過 _filter 持有整首 transferred PCM；
+        // 清掉這條鏈讓 worklet 可以在下一個 GC 週期回收，不必對數十 MB 的陣列做 fill。
+        this._releaseSource();
+        break;
       case 'play':
         if (!this._ready) break;
         if (typeof msg.position === 'number') this._filter.sourcePosition = Math.max(0, msg.position);
@@ -454,6 +461,15 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
         if (this._st) this._st.tempo = msg.value;
         break;
     }
+  }
+
+  _releaseSource() {
+    this._playing = false;
+    this._ready = false;
+    this._ended = false;
+    this._filter = null;
+    this._st = null;
+    this._posCounter = 0;
   }
 
   _postPosition() {
