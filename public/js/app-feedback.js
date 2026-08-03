@@ -325,49 +325,9 @@
 
   loadDraft();
 
-  // ─── 上次未正常關閉的提示 ───
-  // 刻意只有「查看內容」與「不用了」，**沒有「直接傳送」**：直接傳送等於在使用者
-  // 沒看過內容的情況下送出診斷，違反 EULA 第七條第 6 項寫的「送出前會顯示實際將
-  // 傳送的完整內容供你確認」。要送就走跟手動回報一模一樣的預覽流程。
-  const CRASH_HANDLED_KEY = 'elitesand-crash-handled-v1';
-
-  function crashAlreadyHandled(eventKey) {
-    try { return localStorage.getItem(CRASH_HANDLED_KEY) === String(eventKey); } catch (_) { return false; }
-  }
-  function markCrashHandled(eventKey) {
-    // 記的是「哪一次當機已經處理過」而不是布林值：下次真的又當機（不同的
-    // previousStartedAt）仍然會問，但同一次事件重整頁面不會一直跳。
-    try { localStorage.setItem(CRASH_HANDLED_KEY, String(eventKey)); } catch (_) { /* 無痕模式 */ }
-  }
-
-  function showCrashBanner(eventKey) {
-    const banner = document.getElementById('crash-banner');
-    if (!banner) return;
-    banner.hidden = false;
-    const finish = () => { banner.hidden = true; markCrashHandled(eventKey); };
-    document.getElementById('crash-review')?.addEventListener('click', () => {
-      finish();
-      // 預填成一份當機回報，其餘欄位留給使用者補充；照樣要按預覽才送得出去。
-      dom.type.value = 'app-error';
-      if (!dom.title.value.trim()) dom.title.value = t('crash.prefillTitle');
-      if (!dom.actual.value.trim()) dom.actual.value = t('crash.prefillActual');
-      dom.includeDiagnostics.checked = true;
-      saveDraft();
-      if (window.I18n) window.I18n.apply(dom.modal);
-      openModal();
-      dom.description.focus();
-    }, { once: true });
-    document.getElementById('crash-dismiss')?.addEventListener('click', finish, { once: true });
-  }
-
   // 先問一次中繼狀態，讓「送出」按鈕在預覽前就決定好要不要出現。
   fetch('/api/feedback/status', { cache: 'no-store' })
     .then((response) => (response.ok ? response.json() : null))
-    .then((data) => {
-      canSubmit = !!(data && data.enabled);
-      if (!data || !data.lastSessionCrashed) return;
-      const eventKey = data.lastSessionStartedAt || 'unknown';
-      if (!crashAlreadyHandled(eventKey)) showCrashBanner(eventKey);
-    })
+    .then((data) => { canSubmit = !!(data && data.enabled); })
     .catch(() => { canSubmit = false; });
 })();

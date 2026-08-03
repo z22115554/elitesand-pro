@@ -88,9 +88,11 @@
     { key: 'borderWidth', type: 'number', default: 1, min: 0, max: 5, domId: 'sls-border-width', format: 'px', cssVar: '--sl-bw' },
 
     // ── 字體 ──
-    { key: 'fontDisplay', type: 'string', default: 'Fraunces', domId: 'sls-font-display', cssVar: '--sl-fd', cssTransform: (v) => `'${v}', 'Noto Serif TC', Georgia, serif` },
-    { key: 'fontBody', type: 'string', default: 'Manrope', domId: 'sls-font-body', cssVar: '--sl-fb', cssTransform: (v) => `'${v}', 'Noto Sans TC', sans-serif` },
-    { key: 'fontMono', type: 'string', default: 'JetBrains Mono', domId: 'sls-font-mono', cssVar: '--sl-fm', cssTransform: (v) => `'${v}', ui-monospace, monospace` },
+    // special: 'font' — 面板用「預設下拉 + 自訂／系統字體」UI 手動處理（見 app-setlist-panel.js
+    // initFontPicker），不走通用 domId 綁定；欄位值本身仍是單一字體名稱，cssTransform 照樣通用套用。
+    { key: 'fontDisplay', type: 'string', default: 'Fraunces', domId: 'sls-font-display', special: 'font', cssVar: '--sl-fd', cssTransform: (v) => `'${v}', 'Noto Serif TC', Georgia, serif` },
+    { key: 'fontBody', type: 'string', default: 'Manrope', domId: 'sls-font-body', special: 'font', cssVar: '--sl-fb', cssTransform: (v) => `'${v}', 'Noto Sans TC', sans-serif` },
+    { key: 'fontMono', type: 'string', default: 'JetBrains Mono', domId: 'sls-font-mono', special: 'font', cssVar: '--sl-fm', cssTransform: (v) => `'${v}', ui-monospace, monospace` },
 
     // ── 字級 / 字重 ──
     // fitScale：清單型模板是「來源即畫布」——OBS Browser Source 的實際寬高就是版面框，
@@ -112,9 +114,6 @@
     { key: 'paddingH', type: 'number', default: 14, min: 0, max: 40, domId: 'sls-padding-h', format: 'px', cssVar: '--sl-ph', fitScale: true },
     { key: 'itemGap', type: 'number', default: 2, min: 0, max: 20, domId: 'sls-item-gap', format: 'px', cssVar: '--sl-gap-new', fitScale: true },
     { key: 'blurAmount', type: 'number', default: 12, min: 0, max: 48, domId: 'sls-blur', format: 'px', cssVar: '--sl-blur-new' },
-    // glowSize：預留擴充欄位，目前尚無 UI 控制項（domId 留空），已可由 server 驗證與 applyStyle 套用
-    { key: 'glowSize', type: 'number', default: 0, min: 0, max: 24, domId: null, format: 'px', cssVar: '--sl-glow' },
-
     // 外框陰影（用強調色，開關 + 兩個數值）
     { key: 'shadowEnabled', type: 'boolean', default: false, domId: 'sls-shadow-enabled', composite: 'boxShadow' },
     { key: 'shadowBlur', type: 'number', default: 20, min: 0, max: 60, domId: 'sls-shadow-blur', format: 'px', composite: 'boxShadow' },
@@ -131,13 +130,15 @@
     { key: 'showArtist', type: 'boolean', default: true, domId: 'sls-show-artist', dataAttr: 'data-hide-artist', invert: true },
     { key: 'showNumber', type: 'boolean', default: true, domId: 'sls-show-number', dataAttr: 'data-hide-num', invert: true },
     { key: 'strikethrough', type: 'boolean', default: false, domId: 'sls-strikethrough', dataAttr: 'data-strike', invert: false },
-    { key: 'showReserve', type: 'boolean', default: true, domId: 'sls-show-reserve' }, // 目前僅 server 保存，畫面尚未接顯示邏輯（預留）
+    // 圓角氣泡：背景的莓果球體與薄荷圓環純裝飾，預設關閉（不影響資訊本身，先讓畫面乾淨）
+    { key: 'roundShowDecor', type: 'boolean', default: false, domId: 'sls-round-decor', dataAttr: 'data-round-decor', invert: false },
 
     // ── 文字標籤（非 CSS 變數，套到 JS 標籤物件 + DOM textContent）──
     { key: 'labelNowPlaying', type: 'string', default: '▶ Now Playing', domId: 'sls-label-now', composite: 'label' },
-    { key: 'labelReserve', type: 'string', default: 'Reserve', domId: 'sls-label-reserve', composite: 'label' },
     { key: 'labelDone', type: 'string', default: '已唱', domId: 'sls-label-done', composite: 'label' },
     { key: 'labelWait', type: 'string', default: '未唱', domId: 'sls-label-wait', composite: 'label' },
+    // 夜間霓虹：左上角的看板文字，純裝飾但可能想換成自己的品牌名
+    { key: 'glowHeaderText', type: 'string', default: 'Elitesand Pro // LIVE SETLIST', domId: 'sls-glow-header', cssVar: '--glow-header-text', cssTransform: (v) => JSON.stringify(String(v)) },
 
     // ── 場景版專屬：內容位置/縮放（避開角色站位）──
     { key: 'sceneOffsetX', type: 'number', default: 0, min: -50, max: 50, domId: 'sls-scene-x', format: 'percent', cssVar: '--sl-stage-x' },

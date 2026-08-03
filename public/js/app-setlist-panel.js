@@ -314,29 +314,35 @@
   }
   window.addEventListener('i18n:change', refreshSetlistUrl);
 
-  // 版型類別：scene（場景版各自獨立）/ classic / list（清單版，與經典共用一份）
+  // 版型類別：用於只顯示真正會作用的控制項；外觀值本身每個模板各自保存。
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager'];
   const SETLIST_LAYOUT_UI = {
-    classic: { name: '經典資訊', hint: '現在、未唱、已唱一次看懂，最完整的常駐歌單。', scope: '目前只顯示經典資訊真正會用到的項目；基礎配色與可讀性會同步給清單型模板。' },
-    cards: { name: '卡片清單', hint: '緊湊的卡片清單，已唱／未唱各自分群，可勾選要保留哪一段。', scope: '基礎配色與可讀性和其他清單型模板共用；卡片清單會立即反映每一個可見控制項。' },
-    signal: { name: '舞台訊號', hint: '貼齊來源底部的導播資訊條，正在播放是唯一主角。', scope: '固定版位模板：不顯示已唱與未唱清單，其餘配色與可讀性和清單型共用。' },
-    index: { name: '章節索引', hint: '曲序表：已唱／正在播放／待播分段標示，一眼掃讀。', scope: '基礎配色與可讀性和其他清單型模板共用；章節索引只保留真正會作用的資訊控制。' },
-    diagonal: { name: '斜線舞台', hint: '全幅 16:9 場景；資訊在左、右側留給角色或遊戲。', scope: '斜線舞台保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
-    timeline: { name: '時間軸', hint: '全幅 16:9 場景；適合想讓歌單成為畫面主角的直播段落。', scope: '時間軸保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
-    simple: { name: '極簡兩排', hint: '置中卡片，只保留現在與下一首，畫面最輕量。', scope: '固定版位模板：不顯示已唱與未唱清單，其餘配色與可讀性和清單型共用。' },
-    billboard: { name: '排行榜', hint: '活動型的排行榜視覺，已唱／未唱各自分群。', scope: '基礎配色與可讀性和其他清單型模板共用；排行榜會保留自己的排位視覺。' },
-    constellation: { name: '星座', hint: '裝飾性較強的全幅場景；建議搭配簡潔背景。', scope: '星座保有自己的外觀設定；只顯示這個模板真正會作用的細項。' },
-    terminal: { name: '終端機', hint: '復古資訊風，適合科技或遊戲主題。', scope: '基礎配色與可讀性和其他清單型模板共用；終端機只保留它會用到的清單控制。' },
+    classic: { name: '經典資訊', hint: '現在、未唱、已唱一次看懂，最完整的常駐歌單。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    cards: { name: '卡片清單', hint: '緊湊的卡片清單，已唱／未唱各自分群，可勾選要保留哪一段。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    signal: { name: '舞台訊號', hint: '貼齊來源底部的導播資訊條，正在播放是唯一主角。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    index: { name: '章節索引', hint: '曲序表：已唱／正在播放／待播分段標示，一眼掃讀。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    diagonal: { name: '斜線舞台', hint: '全幅 16:9 場景；資訊在左、右側留給角色或遊戲。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    timeline: { name: '時間軸', hint: '全幅 16:9 場景；適合想讓歌單成為畫面主角的直播段落。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    simple: { name: '極簡兩排', hint: '置中卡片，只保留現在與下一首，畫面最輕量。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    billboard: { name: '排行榜', hint: '活動型的排行榜視覺，已唱／未唱各自分群。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    constellation: { name: '星座', hint: '裝飾性較強的全幅場景；建議搭配簡潔背景。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    terminal: { name: '終端機', hint: '復古資訊風，適合科技或遊戲主題。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    label: { name: '紙牌標籤', hint: '色塊小標籤＋錯位紙卡，手作感較強的聊天型歌回。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    glow: { name: '夜間霓虹', hint: '等寬字體、細框發光，適合夜唱或科技主題。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    round: { name: '圓角氣泡', hint: '每首歌一顆膠囊，正在播放放大加亮。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    pager: { name: '復古字卡', hint: '模擬 LCD 呼叫器，等寬字＋掃描線。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
   };
   // 暫停提供的場景模板仍留在 renderer／server 驗證清單，讓已保存的 OBS 畫面不會被自動改版。
   // 它們只從「新選擇」入口與設定面板隱藏，使用者選到其他現行模板後才會真正切換。
   const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation'];
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
   // 清單型模板＝來源即畫布；場景型維持原本的全幅舞台語意。
-  const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index'];
+  const SETLIST_SKIN_LAYOUTS = ['label', 'glow', 'round', 'pager'];
+  const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', ...SETLIST_SKIN_LAYOUTS];
 
   // 清單型：填滿來源、有已唱／未唱區塊。單點式：填滿來源但版位固定、只呈現現在播放。
-  const SETLIST_SECTIONED_LAYOUTS = ['classic', 'cards', 'terminal', 'billboard', 'index'];
+  const SETLIST_SECTIONED_LAYOUTS = ['classic', 'cards', 'terminal', 'billboard', 'index', ...SETLIST_SKIN_LAYOUTS];
 
   function syncSetlistSizingHint() {
     const hint = document.getElementById('setlist-sizing-hint');
@@ -423,15 +429,18 @@
   // 面板寬度改變時預覽縮圖要重新對齊目前模擬的來源寬度。
   window.addEventListener('resize', applySetlistPreviewSize);
   document.addEventListener('view:change', () => setTimeout(applySetlistPreviewSize, 60));
+  // 'skin' 類：8 款皮膚只有原型 label/glow/round/pager，配色/裝飾是固定設計，
+  // 不吃 accent／可讀性襯底／特效等一般清單型設定；獨立分類才能正確隱藏無效控制項。
   function setlistCategory() {
     const l = setlistLayoutSel ? setlistLayoutSel.value : 'classic';
     if (SETLIST_SCENE.includes(l)) return 'scene';
+    if (SETLIST_SKIN_LAYOUTS.includes(l)) return 'skin';
     return l === 'classic' ? 'classic' : 'list';
   }
-  // 目前設定要寫到哪一份：場景版各自一份、其餘共用 'shared'
+  // 每個模板都持有自己的外觀快照；切換模板只讀寫目前這一份。
   function setlistTarget() {
     const l = setlistLayoutSel ? setlistLayoutSel.value : 'classic';
-    return SETLIST_SCENE.includes(l) ? l : 'shared';
+    return SETLIST_LAYOUTS.includes(l) ? l : 'classic';
   }
   // 依目前版型「能動什麼顯示什麼」：data-sl-scope 列出適用類別
   function syncSetlistControlsForLayout() {
@@ -537,11 +546,109 @@
       genericFields.forEach((f) => { const el = g(f.domId); if (el) out[f.key] = readVal(f, el); });
       // ── 特例：textColor（「用主題」checkbox + 色票，合成一個可為空字串的欄位）──
       out.textColor = g('sls-text-theme').checked ? '' : g('sls-text-color').value;
-      out.target = setlistTarget(); // 場景版各自一份、其餘 'shared'
+      // ── 特例：字體（預設下拉 + 自訂／系統字體）──
+      Object.keys(FONT_FIELD_IDS).forEach((key) => { out[key] = readFontValue(key); });
+      out.target = setlistTarget();
       return out;
     }
+
+    // ── 特例：字體（fontDisplay/fontBody/fontMono）——
+    // 下拉預設 + 「自訂／系統字體…」：選了自訂才顯示系統字體下拉／手動輸入。
+    // 欄位值本身仍是單一字體名稱字串（schema 的 cssTransform 會補上回退堆疊）。
+    const FONT_FIELD_IDS = { fontDisplay: 'sls-font-display', fontBody: 'sls-font-body', fontMono: 'sls-font-mono' };
+    const CUSTOM_FONT_VALUE = '__custom__';
+    function fontPresetValues(key) {
+      const sel = g(FONT_FIELD_IDS[key]);
+      if (!sel) return [];
+      return Array.from(sel.options).map((o) => o.value).filter((v) => v !== CUSTOM_FONT_VALUE);
+    }
+    function readFontValue(key) {
+      const sel = g(FONT_FIELD_IDS[key]);
+      if (!sel) return schema.FIELD_BY_KEY[key].default;
+      if (sel.value !== CUSTOM_FONT_VALUE) return sel.value;
+      const custom = g(`${FONT_FIELD_IDS[key]}-custom`);
+      const name = (custom?.value || '').trim();
+      return name || schema.FIELD_BY_KEY[key].default;
+    }
+    function writeFontValue(key, value) {
+      const sel = g(FONT_FIELD_IDS[key]);
+      const wrap = g(`${FONT_FIELD_IDS[key]}-custom-wrap`);
+      const custom = g(`${FONT_FIELD_IDS[key]}-custom`);
+      if (!sel) return;
+      const isPreset = fontPresetValues(key).includes(value);
+      sel.value = isPreset ? value : CUSTOM_FONT_VALUE;
+      if (wrap) wrap.hidden = isPreset;
+      if (!isPreset && custom) custom.value = value || '';
+    }
+    // 系統字體清單：伺服器 /api/fonts 掃描本機字體目錄為主，瀏覽器 queryLocalFonts()（若可用）補充。
+    let cachedFontList = null;
+    async function fetchAllFonts() {
+      if (cachedFontList) return cachedFontList;
+      const names = new Set();
+      try {
+        const r = await fetch('/api/fonts');
+        const data = await r.json();
+        if (data && data.success && Array.isArray(data.fonts)) data.fonts.forEach((f) => names.add(f));
+      } catch (_) { /* 伺服器掃描失敗 → 退回瀏覽器 API */ }
+      if (typeof window.queryLocalFonts === 'function') {
+        try { (await window.queryLocalFonts()).forEach((f) => names.add(f.family)); } catch (_) { /* 使用者拒絕授權時仍有伺服器來源 */ }
+      }
+      cachedFontList = [...names].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+      return cachedFontList;
+    }
+    // 字體名稱只寫進 textContent/value 與單一 CSSOM 屬性，不會被拼進 HTML/attribute 字串。
+    function setFontSelectOptions(select, fams, placeholder) {
+      if (!select) return;
+      const fragment = document.createDocumentFragment();
+      const emptyOption = document.createElement('option');
+      emptyOption.value = ''; emptyOption.textContent = placeholder;
+      fragment.appendChild(emptyOption);
+      fams.forEach((family) => {
+        if (typeof family !== 'string' || !family) return;
+        const option = document.createElement('option');
+        option.value = family; option.textContent = family; option.style.fontFamily = family;
+        fragment.appendChild(option);
+      });
+      select.textContent = ''; select.appendChild(fragment);
+    }
+    function initFontPicker(key) {
+      const baseId = FONT_FIELD_IDS[key];
+      const sel = g(baseId);
+      if (!sel) return;
+      const wrap = g(`${baseId}-custom-wrap`);
+      const custom = g(`${baseId}-custom`);
+      const sysSel = g(`${baseId}-system`);
+      const loadBtn = g(`${baseId}-load`);
+      sel.addEventListener('change', () => {
+        if (sel.value === CUSTOM_FONT_VALUE) {
+          if (wrap) wrap.hidden = false;
+          if (!(custom?.value || '').trim()) return; // 自訂欄位還空著就先不送，避免用預設字體覆蓋掉
+        } else if (wrap) wrap.hidden = true;
+        sendStyle();
+      });
+      if (custom) custom.addEventListener('input', () => sendStyle());
+      if (sysSel) sysSel.addEventListener('change', () => {
+        if (sysSel.value) { if (custom) custom.value = sysSel.value; sendStyle(); }
+      });
+      if (loadBtn) loadBtn.addEventListener('click', async () => {
+        try {
+          loadBtn.disabled = true; loadBtn.textContent = '載入中…';
+          const fams = await fetchAllFonts();
+          if (!fams.length) { AppShared.showToast('讀取系統字體失敗，請改用手動輸入', 'error'); return; }
+          setFontSelectOptions(sysSel, fams, '（選擇系統字體）');
+          const current = (custom?.value || '').trim();
+          if (current && fams.includes(current)) sysSel.value = current;
+          AppShared.showToast(`已載入 ${fams.length} 個系統字體`);
+        } catch (e) {
+          AppShared.showToast('讀取系統字體失敗，請改用手動輸入', 'error');
+        } finally {
+          loadBtn.disabled = false; loadBtn.textContent = '瀏覽系統字體';
+        }
+      });
+    }
+    Object.keys(FONT_FIELD_IDS).forEach(initFontPicker);
     // 各版型獨立設定的本地快取（伺服器為真實來源；切版型時還原該份）
-    const slStores = { shared: null, timeline: null, diagonal: null, constellation: null };
+    const slStores = Object.fromEntries(SETLIST_LAYOUTS.map((layout) => [layout, null]));
     let latestStyleSaveRequest = 0;
     let styleSaveStatus = {
       state: 'saved',
@@ -603,6 +710,8 @@
       const hasText = typeof s.textColor === 'string' && s.textColor;
       const tt = g('sls-text-theme'), tc = g('sls-text-color');
       if (tt) tt.checked = !hasText; if (tc) { tc.disabled = !hasText; if (hasText) tc.value = s.textColor; }
+      // ── 特例：字體 ──
+      Object.keys(FONT_FIELD_IDS).forEach((key) => { if (s[key] != null) writeFontValue(key, s[key]); });
     }
 
     // 事件綁定（input/change → 更新 val 標籤 + 送出）：checkbox 與 <select> 用 change，其餘用 input
@@ -647,7 +756,7 @@
         adoptStyleUI(p); sendStyle();
       });
     });
-    // 重置目前版型（場景版重置自己那份、其餘重置共用份）
+    // 重置只影響目前模板，不會覆寫其他模板已調好的外觀。
     const resetBtn = g('sls-reset');
     if (resetBtn) resetBtn.addEventListener('click', () => { adoptStyleUI(DEFAULT_STYLE); sendStyle(); });
 
@@ -767,9 +876,9 @@
       });
     }
 
-    // Socket 同步（伺服器為真實來源）；payload = { target, style }（向後相容舊格式）
+    // Socket 同步（伺服器為真實來源）；payload = { target, style }（向後相容舊格式）。
     SocketClient.on('setlist:style', (payload) => {
-      const t = (payload && payload.target) || 'shared';
+      const t = (payload && payload.target) || 'classic';
       const st = (payload && payload.style) ? payload.style : payload;
       slStores[t] = st;
       if (t === setlistTarget()) adoptStyleUI(st);
@@ -777,8 +886,13 @@
     SocketClient.on('state:sync', (state) => {
       const sess = state && state.session;
       if (!sess) return;
-      if (sess.style) slStores.shared = sess.style;
-      if (sess.sceneStyles) { ['timeline', 'diagonal', 'constellation'].forEach((k) => { if (sess.sceneStyles[k]) slStores[k] = sess.sceneStyles[k]; }); }
+      if (sess.styles && typeof sess.styles === 'object') {
+        SETLIST_LAYOUTS.forEach((layout) => { if (sess.styles[layout]) slStores[layout] = sess.styles[layout]; });
+      } else {
+        // 可讀取舊 server payload：shared 作為所有模板的基底，舊場景設定再覆蓋對應模板。
+        SETLIST_LAYOUTS.forEach((layout) => { if (sess.style) slStores[layout] = sess.style; });
+        if (sess.sceneStyles) SETLIST_SCENE.forEach((layout) => { if (sess.sceneStyles[layout]) slStores[layout] = sess.sceneStyles[layout]; });
+      }
       if (sess.theme && dom.setlistTheme) { dom.setlistTheme.value = sess.theme; refreshSetlistUrl(); }
       if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; syncSetlistControlsForLayout(); syncSetlistLayoutPicker(); refreshSetlistUrl(); workspace?.sync(); }
       const cur = slStores[setlistTarget()];

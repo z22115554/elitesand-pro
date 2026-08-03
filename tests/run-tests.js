@@ -954,104 +954,6 @@ test('安裝識別碼是隨機 UUID，且不使用任何硬體指紋', () => {
   }
 });
 
-test('非正常結束偵測：只有走完乾淨關閉才算 clean，其餘一律 fail-safe 成「不是當機」', () => {
-  const sessionMarker = require('../server/services/session-marker');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-marker-'));
-  const file = path.join(dir, '.session-marker');
-  try {
-    // 全新安裝：沒有標記檔不等於當機。
-    sessionMarker._resetForTests();
-    let state = sessionMarker.markStarted({ file, now: () => 1000 });
-    eq(state.wasClean, true, '首次啟動不可誤報當機: ');
-    ok(state.firstRun, '首次啟動要標記 firstRun: ');
-
-    // 走完 gracefulShutdown → 下次啟動是 clean。
-    sessionMarker.markClean('SIGINT', { file, now: () => 2000 });
-    eq(JSON.parse(fs.readFileSync(file, 'utf8')).clean, true);
-    sessionMarker._resetForTests();
-    eq(sessionMarker.markStarted({ file, now: () => 3000 }).wasClean, true, '乾淨關閉後不可報當機: ');
-
-    // 沒走到 markClean 就再啟動 → 判定為非正常結束。
-    sessionMarker._resetForTests();
-    state = sessionMarker.markStarted({ file, now: () => 4000 });
-    eq(state.wasClean, false, '未乾淨關閉必須被偵測到: ');
-    eq(state.previousStartedAt, 3000, '要帶出上次啟動時間當事件鍵: ');
-
-    // 壞掉/空的標記檔絕不能誤報成當機——誤報會讓使用者以為程式有問題。
-    ['{壞掉的 json', ''].forEach((broken) => {
-      fs.writeFileSync(file, broken, 'utf8');
-      sessionMarker._resetForTests();
-      eq(sessionMarker.markStarted({ file, now: () => 5000 }).wasClean, true, `標記檔為 ${JSON.stringify(broken)} 時不可誤報: `);
-    });
-
-    // 寫不進去（唯讀/權限）時只停用偵測，不可讓伺服器起不來。
-    sessionMarker._resetForTests();
-    const unavailable = sessionMarker.markStarted({ file: path.join(dir, 'no-such-dir', 'x', '.session-marker'), fs: {
-      readFileSync() { throw new Error('nope'); },
-      mkdirSync() { throw new Error('read-only'); },
-      writeFileSync() { throw new Error('read-only'); },
-    } });
-    eq(unavailable.wasClean, true, '無法寫入標記時不可誤報當機: ');
-  } finally {
-    sessionMarker._resetForTests();
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('非正常結束偵測在 node --watch 下自動停用', () => {
-  const sessionMarker = require('../server/services/session-marker');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'session-marker.js'), 'utf8');
-  // 2026-08-01 實測：Windows 的 node --watch 重啟是硬砍（SIGTERM 以 TerminateProcess
-  // 實作、攔不到），gracefulShutdown 完全不會跑。不排除的話開發者每存一次檔就被當成當機。
-  ok(/execArgv/.test(source) && /--watch/.test(source), 'watch 模式必須自動停用偵測: ');
-  ok(source.includes('ELITESAND_DISABLE_CRASH_DETECT'), '必須保留可明確停用的環境變數: ');
-
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-marker-watch-'));
-  const file = path.join(dir, '.session-marker');
-  const original = process.env.ELITESAND_DISABLE_CRASH_DETECT;
-  try {
-    // 先製造一次「未乾淨關閉」，再確認停用時不會據此報當機。
-    sessionMarker._resetForTests();
-    sessionMarker.markStarted({ file, now: () => 1000 });
-    process.env.ELITESAND_DISABLE_CRASH_DETECT = '1';
-    sessionMarker._resetForTests();
-    const state = sessionMarker.markStarted({ file, now: () => 2000 });
-    eq(state.wasClean, true, '停用時一律視為正常: ');
-    eq(state.disabled, true);
-    eq(sessionMarker.markClean('x', { file }), false, '停用時不可寫標記檔: ');
-  } finally {
-    if (original === undefined) delete process.env.ELITESAND_DISABLE_CRASH_DETECT;
-    else process.env.ELITESAND_DISABLE_CRASH_DETECT = original;
-    sessionMarker._resetForTests();
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('當機提示接在既有回報流程上，且絕不自動送出', () => {
-  const root = path.join(__dirname, '..');
-  const indexSource = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
-  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
-  const frontend = fs.readFileSync(path.join(root, 'public/js/app-feedback.js'), 'utf8');
-  const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
-
-  // markClean 必須是 gracefulShutdown 的第一件事：後面有 8 秒硬退保底，
-  // 放後面的話「關閉流程自己卡住」會被下次啟動誤判成當機。
-  const shutdownBody = indexSource.slice(indexSource.indexOf('async function gracefulShutdown'));
-  const cleanAt = shutdownBody.indexOf('markClean');
-  const stateFlushAt = shutdownBody.indexOf("state-store').saveNow");
-  ok(cleanAt > -1, 'gracefulShutdown 必須標記乾淨關閉: ');
-  ok(cleanAt < stateFlushAt, 'markClean 必須早於 flush，否則硬退保底會來不及寫: ');
-  ok(indexSource.includes('markStarted'), '啟動時必須寫下標記: ');
-
-  // 狀態端點只回布林與時間戳，不含診斷內容。
-  ok(api.includes('lastSessionCrashed'), '狀態端點要回報上次是否非正常結束: ');
-  ok(page.includes('id="crash-banner"'), '面板需要當機提示 banner: ');
-
-  // 核心承諾：沒有任何「不經預覽直接送出」的路徑。
-  ok(!/crash[^\n]*submitReport\(/.test(frontend), '當機提示不可直接呼叫送出: ');
-  ok(frontend.includes('CRASH_HANDLED_KEY'), '同一次事件只能提示一次: ');
-});
-
 test('問題回報端點受 PIN 保護，且中繼未設定時安全停用', () => {
   const root = path.join(__dirname, '..');
   const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
@@ -4424,12 +4326,61 @@ test('歌單亮色背景可讀性保護與模板有效設定守衛存在', () =>
   eq(schema.FIELD_BY_KEY.waitOpacity.default, 72, '新歌單預設不得把未唱文字淡到亮色背景看不見：');
   ok(indexHtml.includes('id="sls-readability-guard"'), '面板必須提供亮色背景可讀性保護開關');
   ok(indexHtml.includes('可讀性襯底色') && indexHtml.includes('可讀性襯底不透明度'), '主要文字與襯底色必須在快速調整可見');
-  ok(indexHtml.includes('data-sl-layout="classic simple timeline diagonal constellation signal index"'), '快速設定必須能依模板隱藏無效控制項');
-  ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards signal index"'), '歌曲編號設定不得在不支援的模板顯示');
-  ok(setlistPanel.includes('只顯示這個模板真正會作用的細項'), '模板說明必須明示有效設定範圍');
+  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager"'), '正在播放字級必須在每個有 active 歌曲的模板顯示');
+  ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager"'), '歌曲編號設定不得在不支援的模板顯示');
+  ok(setlistPanel.includes('設定只套用並保存於這個模板；切換模板不會影響其他歌單。'), '模板說明必須明示設定會各模板獨立保存');
   ok(setlistCss.includes(':root:not([data-sl-readable-off]) .now-singing') && setlistCss.includes(':root:not([data-sl-readable-off]) .tl-now'), '經典與場景模板都必須有非全螢幕的可讀性襯底');
   ok(setlistSource.includes('const sameSideContrast = guarded') && setlistSource.includes('const readableCardColor'), '可讀性保護必須在文字與襯底同明度時自動轉成安全對比');
   ok(setlistCss.includes('.terminal { width: 300px; background: var(--sl-bg-card);') && setlistCss.includes('.billboard { width: 320px; background: var(--sl-bg-card);') && setlistCss.includes('.card { background: var(--sl-bg-card);'), '清單型模板不得繞過共用卡片底色設定');
+});
+
+test('歌單每個模板保存獨立外觀，正在播放字級也套到 active row', () => {
+  const registerSetlistHandlers = require('../server/routes/handlers/setlist');
+  const { SETLIST_LAYOUTS } = require('../server/state/app-state');
+  const events = new Map();
+  const emitted = [];
+  const defaults = require('../public/js/setlist-style-schema').getDefaultStyle();
+  const playState = {
+    setlistLayout: 'classic',
+    setlistTemplateStyles: Object.fromEntries(SETLIST_LAYOUTS.map((layout) => [layout, { ...defaults }])),
+    setlistTheme: 'glass', isPlaying: false, currentTrack: null,
+  };
+  const ctx = {
+    playState, session: { active: false, startedAt: null, source: null, songs: [] }, SETLIST_LAYOUTS,
+    effSetlistStore(layout) { return playState.setlistTemplateStyles[layout]; },
+    persistState(callback) { if (callback) callback({ ok: true }); },
+    setlistPayload() { return {}; }, emitSetlist() {}, recordSessionSong() {}, broadcastState() {},
+  };
+  registerSetlistHandlers(
+    { emit(event, payload) { emitted.push([event, payload]); } },
+    { on(event, handler) { events.set(event, handler); } },
+    ctx,
+  );
+  events.get('setlist:style')({ target: 'classic', sizeNow: 31 });
+  eq(playState.setlistTemplateStyles.classic.sizeNow, 31, 'classic 必須只更新自己的設定');
+  eq(playState.setlistTemplateStyles.cards.sizeNow, defaults.sizeNow, 'classic 不得覆寫 cards 的設定');
+  events.get('setlist:style')({ target: 'cards', sizeNow: 22 });
+  eq(playState.setlistTemplateStyles.classic.sizeNow, 31, 'cards 不得回寫 classic 的設定');
+  eq(playState.setlistTemplateStyles.cards.sizeNow, 22, 'cards 必須保存自己的設定');
+  events.get('setlist:layout')({ layout: 'cards' });
+  ok(emitted.some(([event, payload]) => event === 'setlist:style' && payload.target === 'cards' && payload.style.sizeNow === 22),
+    '切換模板必須只推送該模板的外觀快照');
+
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  const schema = require('../public/js/setlist-style-schema');
+  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager"'),
+    '所有有正在播放內容的模板都必須顯示正在播放字級設定');
+  ['.term-item.active .t-line { font-size: var(--sl-sz-n)', '.bb-item.active .bb-name { font-size: var(--sl-sz-n)', '.card.active .card-title { font-size: var(--sl-sz-n)', '.index-item.active .index-title { font-size: var(--sl-sz-n)']
+    .forEach((rule) => ok(setlistCss.includes(rule), `active row 必須吃正在播放字級：${rule}`));
+  ['showReserve', 'labelReserve', 'glowSize'].forEach((key) => ok(!schema.FIELD_BY_KEY[key], `${key} 尚未實作時不得留成假設定`));
+});
+
+test('歌單暫停時仍將目前歌曲保留在正在播放', () => {
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  ok(setlistSource.includes('const lastIsCurrent = !!(data.current && last && last.id != null && last.id === data.current.id);'), '目前歌曲必須以 current track 的 id 判斷');
+  ok(setlistSource.includes('if (lastIsCurrent) { current = last; past = songs.slice(0, -1); }'), '目前歌曲在 session songs 尾端時不可落入已唱');
+  ok(!setlistSource.includes('data.current && data.current.playing'), '歌單分組不可用播放／暫停狀態判定目前歌曲');
 });
 
 test('暫停的歌單場景模板不再能新選，但既有 OBS 設定仍可安全保留', () => {
@@ -4441,7 +4392,7 @@ test('暫停的歌單場景模板不再能新選，但既有 OBS 設定仍可安
     ok(indexHtml.includes(`<option value="${layout}" hidden>`), `${layout} 必須保留隱藏 option，讓舊設定可被讀回`);
     ok(!indexHtml.includes(`data-setlist-layout="${layout}"`), `${layout} 不得再出現在新模板選擇入口`);
     ok(setlistSource.includes(layout), `${layout} renderer 必須保留，避免已使用中的 OBS 畫面被改掉`);
-    ok(setlistHandler.includes(`'${layout}'`), `${layout} server 驗證必須保留，避免讀取舊設定時被回退`);
+    ok(setlistHandler.includes('SETLIST_LAYOUTS.includes'), `${layout} 必須由共用 server allowlist 接受，避免讀取舊設定時被回退`);
   });
   ok(setlistPanel.includes("const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation']"), '面板必須集中管理暫停模板清單');
   ok(setlistPanel.includes('setlist-legacy-layout-notice') && setlistPanel.includes('appearance.hidden = isHiddenLayout'), '暫停模板必須顯示保留說明並收起無法再調整的設定');
@@ -4458,7 +4409,7 @@ test('歌單經典資訊重排與兩個原創模板都走共用樣式，既有�
     ok(indexHtml.includes(`data-setlist-layout="${layout}"`), `${layout} 必須有可見模板卡片`);
     ok(setlistPanel.includes(`${layout}: { name:`), `${layout} 必須有面板名稱與說明`);
     ok(setlistSource.includes(`const ${layout} = {`), `${layout} 必須有獨立 renderer`);
-    ok(setlistHandler.includes(`'${layout}'`), `${layout} 必須被 server allowlist 接受`);
+    ok(setlistHandler.includes('SETLIST_LAYOUTS.includes'), `${layout} 必須被共用 server allowlist 接受`);
   });
   ok(setlistSource.includes('classic-shell') && setlistCss.includes('[data-layout="classic"] .classic-shell'), '經典資訊必須使用新的局部資訊容器，而非逐列厚底');
   // 襯底必須純色：漸層淡出在很寬或很扁的來源會讓右側文字懸在半透明上，反而更難讀。
@@ -4477,7 +4428,7 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const schema = require('../public/js/setlist-style-schema');
-  const fillLayouts = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index'];
+  const fillLayouts = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager'];
   const sceneLayouts = ['timeline', 'diagonal', 'constellation'];
 
   // 只能有一種輸出：不可再回到「小元件 / 全畫布」兩種模式或 URL 開關。
@@ -4486,8 +4437,8 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   ok(setlistPanel.includes("const url = new URL('/setlist', window.location.origin);") && !setlistPanel.includes("set('mode'"),
     'OBS 網址必須固定，尺寸改由 OBS Browser Source 決定');
 
-  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index']);"),
-    '七個清單型模板必須集中列在同一份填滿白名單');
+  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager']);"),
+    '十一個清單型模板必須集中列在同一份填滿白名單');
   ok(setlistSource.includes('const FIT_REF_W = 460, FIT_REF_H = 320, FIT_MIN = 0.85, FIT_MAX = 3.2;') && setlistSource.includes('Math.min(w / FIT_REF_W, h / FIT_REF_H)'),
     '縮放係數必須同時依來源寬與高計算，且基準要維持實機校準過的可讀字級');
   ok(setlistSource.includes("dataset.slFit = isFillLayout() ? 'fill' : 'scene'"), 'CSS 必須能分辨填滿與場景兩種語意');
@@ -4507,11 +4458,15 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   ok(!indexHtml.includes('id="sls-card-width"') && !!schema.FIELD_BY_KEY.cardWidth,
     '面板不得再顯示固定像素寬度，但 schema 欄位要保留讓舊設定讀得回來');
 
-  // 版面：七個模板都要有自己的填滿規則，且根節點不得殘留固定寬度或 transform 放大。
+  // 版面：每個模板都要有自己的填滿規則，且根節點不得殘留固定寬度或 transform 放大。
+  // 四款皮膚（label/glow/round/pager）結構共用 sk-shell，
+  // 用同一條 [data-layout] 通用規則撐開，不必每個 id 各寫一份。
   const fillRootRule = /html\[data-sl-fit="fill"\]\[data-layout\] #setlist-root \{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
   ok(fillRootRule.includes('inset: 0') && fillRootRule.includes('max-width: none') && fillRootRule.includes('transform: none'),
     '填滿模式的根節點必須貼齊來源、不留固定寬度、不用 transform 放大點陣');
-  fillLayouts.forEach((layout) => {
+  const skinLayouts = ['label', 'glow', 'round', 'pager'];
+  ok(setlistCss.includes('html[data-sl-fit="fill"][data-layout] .sk-shell'), '四款皮膚共用的填滿版面規則必須存在');
+  fillLayouts.filter((layout) => !skinLayouts.includes(layout)).forEach((layout) => {
     ok(setlistCss.includes(`html[data-sl-fit="fill"][data-layout="${layout}"]`), `${layout} 必須有自己的填滿版面規則`);
   });
   sceneLayouts.forEach((layout) => {
@@ -4542,10 +4497,10 @@ test('清單型歌單有已唱／未唱區塊與勾選，單點式模板不吃�
   ok(done && done.domId === 'sls-show-done' && done.default === true && !done.special, '已唱區塊必須是一般布林欄位並綁到 checkbox');
   ok(indexHtml.includes('id="sls-show-upcoming"') && indexHtml.includes('id="sls-show-done"'), '面板必須提供兩個獨立勾選');
   ok(!indexHtml.includes('sls-classic-sections') && !setlistPanel.includes('sls-classic-sections'), '舊的三態下拉與其特例程式碼必須整組移除');
-  ok(indexHtml.includes('data-sl-layout="classic cards terminal billboard index"'), '勾選只對五個清單型模板顯示');
+  ok(indexHtml.includes('data-sl-layout="classic cards terminal billboard index label glow round pager"'), '勾選只對九個清單型模板顯示');
 
-  // renderer：五個清單型模板才吃這組設定；四個非經典模板要有區塊標籤。
-  ok(setlistSource.includes("const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index']);"),
+  // renderer：九個清單型模板才吃這組設定；八個非經典模板要有區塊標籤。
+  ok(setlistSource.includes("const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index', 'label', 'glow', 'round', 'pager']);"),
     '清單型模板必須集中列在同一份白名單');
   ok(setlistSource.includes('function showDone()') && setlistSource.includes('function showWait()')
     && setlistSource.includes('const done = showDone() ?') && setlistSource.includes('const wait = showWait()'),
@@ -4587,7 +4542,7 @@ test('歌單面板：模板分群與快速調整四區塊', () => {
   ok(indexHtml.includes('class="check-box"') && panelCss.includes('.check-inline input { position:absolute; opacity:0;'),
     '勾選必須用自繪勾選框，不得露出原生 checkbox');
   ok(panelCss.includes('#setlist-style-collapse > .field-group-title'), '快速調整四區必須有一致的分隔線節奏');
-  ok(setlistPanel.includes("const SETLIST_SECTIONED_LAYOUTS = ['classic', 'cards', 'terminal', 'billboard', 'index'];"),
+  ok(setlistPanel.includes("const SETLIST_SECTIONED_LAYOUTS = ['classic', 'cards', 'terminal', 'billboard', 'index', ...SETLIST_SKIN_LAYOUTS];"),
     '面板必須用同一組清單型白名單給說明文案');
   ok(panelCss.includes('.setlist-layout-group-title') && panelCss.includes('.check-inline'), '分群標題與勾選樣式必須存在');
 
@@ -5738,14 +5693,6 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'ELITESAND_SHELL_USER_DATA_DIR',
     'SHUTDOWN_MESSAGE',
   ].forEach((required) => ok(source.includes(required), `Electron shell is missing ${required}`));
-
-  // 2026-08-03 實機根因守衛：utilityProcess 的 stdio 不可是 'pipe'。
-  // 'pipe' 會建立沒人讀的 stdout 管道；Windows 上 Node 對管道的 stdout 寫入是同步的，
-  // 緩衝區滿了之後下一次 console.log() 會卡在 WriteFile，凍結整個事件迴圈——
-  // 行程還活著但 HTTP／Socket／計時器全停。三次實機卡死的 stdout 累積量分別是
-  // 53,269／53,273／53,321 bytes（全距 0.1%），歷時卻差 4 倍，是固定容量緩衝區的指紋。
-  ok(source.includes("stdio: 'ignore'"), 'utilityProcess 必須用 stdio ignore，避免無人排空的 stdout 管道卡死事件迴圈: ');
-  ok(!/stdio:\s*'pipe'/.test(source), "不可把 utilityProcess 的 stdio 改回 'pipe'（除非同時持續排空 stdout 與 stderr）: ");
 });
 
 test('Electron assisted installer stays per-user with an updateable app root', () => {

@@ -25,7 +25,7 @@
   // OBS Browser Source 的實際寬高就是歌單的版面框：來源拉多大，歌單就排多大。
   // 沒有第二種輸出模式，也沒有 URL 參數——同一個 /setlist 網址在任何來源尺寸都成立。
   // 場景版（timeline / diagonal / constellation）不走這條，維持原本的全幅舞台行為。
-  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index']);
+  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager']);
   // 尺度基準：來源正好是 460×320 時 fit = 1，也就是設定裡的 px 數字＝實際像素；
   // 更大的來源等比放大字級與間距（原生字級，不是把小元件 transform 放大）。
   // 基準訂在這裡是實測校準過的：直播常用的 600×1080 直式來源會得到 fit ≈ 1.3
@@ -36,7 +36,7 @@
 
   // 清單型模板：有「已唱／未唱」兩個區塊，各自可由設定開關。
   // 單點式（signal 舞台訊號、simple 極簡兩排）版位固定、只呈現現在＋少量待播，不吃這組設定。
-  const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index']);
+  const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index', 'label', 'glow', 'round', 'pager']);
 
   function isFillLayout() { return FILL_LAYOUTS.has(layoutId); }
   function isSectionedLayout() { return SECTIONED_LAYOUTS.has(layoutId); }
@@ -175,8 +175,7 @@
   // ═══════════════════════════════════════════
   function applyTheme(t) { document.documentElement.dataset.theme = t || 'glass'; }
 
-  // 完整外觀套用：把伺服器的 setlistStyle（全欄位）映射到 CSS 變數 / data-attr。
-  // 同一組變數 classic 與場景版共用（場景版再透過 --es-* 別名取用），故一次套用所有版型同步更新。
+  // 完整外觀套用：把目前模板的外觀設定映射到 CSS 變數 / data-attr。
   // 通用套用：把 schema 裡「單一欄位 → 單一 CSS 變數 / data-attr」的欄位自動套用。
   // 多欄位合成一個輸出（如 accent 衍生 4 個變數、cardColor+cardOpacity 合成一個 rgba）
   // 的欄位標了 `composite`，這裡略過，改由 applyStyle 下面對應的 composite 區塊手動處理
@@ -362,20 +361,18 @@
     if (typeof s.labelNowPlaying === 'string') lastLabelSource.nowPlaying = s.labelNowPlaying;
     if (typeof s.labelDone === 'string') lastLabelSource.done = s.labelDone;
     if (typeof s.labelWait === 'string') lastLabelSource.wait = s.labelWait;
-    if (typeof s.labelReserve === 'string') lastLabelSource.reserve = s.labelReserve;
     localizeDefaultLabels();
     applyLabels();
   }
 
   // 文字標籤：套到目前畫面上的對應元素（各版型 class 不同，逐一更新）
-  const lastLabelSource = { nowPlaying: '▶ Now Playing', done: '已唱', wait: '未唱', reserve: 'Reserve' };
+  const lastLabelSource = { nowPlaying: '▶ Now Playing', done: '已唱', wait: '未唱' };
   const lastLabels = { ...lastLabelSource };
   function localizeDefaultLabels() {
     lastLabels.nowPlaying = lastLabelSource.nowPlaying === '▶ Now Playing'
       ? `▶ ${t('setlist.nowPlaying')}` : lastLabelSource.nowPlaying;
     lastLabels.done = lastLabelSource.done === '已唱' ? t('setlist.done') : lastLabelSource.done;
     lastLabels.wait = lastLabelSource.wait === '未唱' ? t('setlist.upcoming') : lastLabelSource.wait;
-    lastLabels.reserve = lastLabelSource.reserve === 'Reserve' ? t('setlist.upcoming') : lastLabelSource.reserve;
   }
   localizeDefaultLabels();
   function applyLabels() {
@@ -439,6 +436,11 @@
     trimToFit(rootEl.querySelector('#cl-past'), 'end');
     ['#term-list', '#bb-list', '#cards-list', '#ix-list']
       .forEach((sel) => trimToFit(rootEl.querySelector(sel), 'start'));
+    // 四款皮膚：未唱靠近正播（裁遠端）、已唱保留最新（裁最舊）——跟 classic 的 cl-up/cl-past 邏輯一致。
+    SKIN_LAYOUT_IDS.forEach((id) => {
+      trimToFit(rootEl.querySelector(`#${id}-wait`), 'start');
+      trimToFit(rootEl.querySelector(`#${id}-done`), 'end');
+    });
   }
 
   // 經典：上＝正在播放、左＝未唱、右＝已唱（可只保留其中一側）
@@ -801,7 +803,85 @@
     },
   };
 
-  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index };
+  // ═══════════════════════════════════════════
+  // 四款清單型皮膚（label / glow / round / pager）
+  // 結構＝獨立的「正在播放」英雄區 + 已唱／未唱分區（跟 classic 同一種資訊層級，
+  // 不是 terminal/cards 那種把正在播放混進同一條清單的做法）。
+  // label/glow/round 用左右兩欄（sk-cols）；其餘五款上下堆疊（sk-stack），
+  // pager 再靠 CSS 把每個分區包成獨立面板——結構不必為它另外分支。
+  // 裝飾（旋轉、缺角、發光、書籤耳朵、縫線…）全部在 setlist.css 用 [data-layout="xxx"] 做，
+  // 這裡只負責骨架與資料，跟 classic 的 done/wait 計算邏輯保持一致。
+  // ═══════════════════════════════════════════
+  const SKIN_ARRANGEMENT = {
+    label: 'columns', glow: 'columns', round: 'columns',
+    pager: 'stack',
+  };
+
+  function skinSectionHtml(id, kind) {
+    return `<section class="sk-sec sk-sec--${kind}">` +
+      `<div class="sk-sec-head"><span class="sk-sec-title" data-group-label data-group="${kind}"></span><span class="sk-count" id="${id}-${kind}-count"></span></div>` +
+      `<div class="sk-list" id="${id}-${kind}"></div>` +
+      '</section>';
+  }
+
+  function makeSkinLayout(id) {
+    const arrangement = SKIN_ARRANGEMENT[id];
+    return {
+      mount(root) {
+        const hero =
+          '<div class="sk-now">' +
+            '<div class="ns-label sk-now-eye">▶ Now Playing</div>' +
+            `<div class="sk-now-ordinal" id="${id}-ordinal"></div>` +
+            `<div class="sk-now-title" id="${id}-now-t"></div>` +
+            `<div class="sk-now-artist" id="${id}-now-a"></div>` +
+          '</div>';
+        const body = arrangement === 'columns'
+          ? `<div class="sk-cols">${skinSectionHtml(id, 'wait')}${skinSectionHtml(id, 'done')}</div>`
+          : `<div class="sk-stack">${skinSectionHtml(id, 'wait')}${skinSectionHtml(id, 'done')}</div>`;
+        root.innerHTML = `<div class="lay-stage sk-stage sk-stage--${id}"><div class="sk-shell">${hero}${body}</div></div>`;
+      },
+      render(root) {
+        const nowEl = root.querySelector('.sk-now');
+        const nowT = root.querySelector(`#${id}-now-t`);
+        const nowA = root.querySelector(`#${id}-now-a`);
+        if (model.current) {
+          nowEl.hidden = false;
+          nowT.textContent = model.current.title;
+          nowA.textContent = model.current.artist || ''; nowA.hidden = !model.current.artist;
+          const total = model.past.length + 1 + model.upcoming.length;
+          root.querySelector(`#${id}-ordinal`).textContent = `${String(model.past.length + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
+        } else {
+          nowEl.hidden = true;
+        }
+        const row = (s, kind) => `<div class="sk-row sk-row--${kind}"><span class="sk-num">${s.n || ''}</span><div class="sk-info"><span class="sk-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="sk-artist">${escapeHtml(s.artist)}</span>` : ''}</div></div>`;
+        const doneAll = model.past;
+        const doneShown = showDone() ? doneAll.slice(-pastCap()) : [];
+        const doneStart = doneAll.length - doneShown.length;
+        const doneItems = doneShown.map((s, i) => ({ ...s, n: String(doneStart + i + 1).padStart(2, '0') }));
+        const waitAll = model.current ? model.upcoming : model.upcoming.slice(0);
+        const waitShown = showWait() ? waitAll.slice(0, upCap()) : [];
+        const waitBase = model.past.length + (model.current ? 1 : 0);
+        const waitItems = waitShown.map((s, i) => ({ ...s, n: String(waitBase + i + 1).padStart(2, '0') }));
+        const fillSection = (kind, items, totalCount) => {
+          const list = root.querySelector(`#${id}-${kind}`);
+          const head = list.closest('.sk-sec').querySelector('.sk-sec-head');
+          list.innerHTML = items.map((s) => row(s, kind)).join('');
+          head.hidden = items.length === 0;
+          root.querySelector(`#${id}-${kind}-count`).textContent = totalCount ? String(totalCount).padStart(2, '0') : '';
+        };
+        fillSection('done', doneItems, showDone() ? doneAll.length : 0);
+        fillSection('wait', waitItems, showWait() ? waitAll.length : 0);
+        if (!model.current && doneItems.length === 0 && waitItems.length === 0 && model.active) {
+          root.querySelector(`#${id}-wait`).innerHTML = `<div class="sk-empty">${escapeHtml(t('setlist.startingSoon'))}</div>`;
+        }
+      },
+    };
+  }
+  const SKIN_LAYOUT_IDS = ['label', 'glow', 'round', 'pager'];
+  const skinLayouts = {};
+  SKIN_LAYOUT_IDS.forEach((id) => { skinLayouts[id] = makeSkinLayout(id); });
+
+  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index, ...skinLayouts };
 
   // ─── 版型掛載/切換 ───
   function setLayout(id) {
@@ -827,7 +907,7 @@
   }
 
   // ── 長歌名跑馬燈：文字超出容器時來回滾動（不超出就維持靜態，不加動畫）──
-  const MARQUEE_SEL = '.ns-title, .setlist-title, .bb-name, .card-title, .t-line';
+  const MARQUEE_SEL = '.ns-title, .setlist-title, .bb-name, .card-title, .t-line, .sk-title';
   function applyMarquees() {
     rootEl.querySelectorAll(MARQUEE_SEL).forEach((el) => {
       let span = el.querySelector(':scope > .sl-mq');
@@ -859,12 +939,13 @@
   } catch (e) { /* 退回下面的 resize 監聽 */ }
   window.addEventListener('resize', scheduleFit);
 
-  // 場景版各自獨立、其餘共用 'shared'
-  const SCENE = ['timeline', 'diagonal', 'constellation'];
-  const effTarget = (l) => (SCENE.includes(l) ? l : 'shared');
-  // 取某版型生效的設定（連線初始用：data.sceneStyles[layout] 或 data.style 共用份）
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager'];
+  const effTarget = (l) => (SETLIST_LAYOUTS.includes(l) ? l : 'classic');
+  // 取某版型生效的設定；舊 payload 仍可讀，避免 OBS 快取中的舊頁面在更新過渡時失去外觀。
   function effStyleFrom(data, layout) {
     if (!data) return null;
+    if (data.styles && data.styles[layout]) return data.styles[layout];
+    const SCENE = ['timeline', 'diagonal', 'constellation'];
     if (SCENE.includes(layout) && data.sceneStyles && data.sceneStyles[layout]) return data.sceneStyles[layout];
     return data.style || null;
   }
@@ -880,9 +961,9 @@
   SocketClient.on('setlist:theme', ({ theme } = {}) => applyTheme(theme));
   // payload = { target, style }（向後相容：直接是 style 物件）；只套用符合目前版型的那一份
   SocketClient.on('setlist:style', (payload) => {
-    const t = (payload && payload.target) || 'shared';
+    const t = (payload && payload.target) || layoutId;
     const style = (payload && payload.style) ? payload.style : payload;
-    if (t === effTarget(layoutId)) applyStyle(style);
+    if (t === effTarget(layoutId) || t === 'shared') applyStyle(style);
   });
   SocketClient.on('setlist:layout', ({ layout } = {}) => { if (layout !== layoutId) setLayout(layout); });
   // 示範資料：伺服器純轉播（不落地存檔），面板內預覽 iframe 與真實 OBS 來源都會收到同一份，

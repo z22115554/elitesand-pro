@@ -39,8 +39,9 @@ function getDefaultLyricSettings() {
   };
 }
 
-// 場景版 setlist 版型（各自持有一份獨立外觀設定；其餘版型共用 shared 份）
+// 所有歌單模板都各自持有一份外觀設定。舊 state 的 shared/scene 資料在載入時遷移。
 const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
+const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager'];
 
 /**
  * 建立狀態容器
@@ -80,22 +81,21 @@ function createAppState(io) {
     styleOverrides: {},     // 動畫風格微調（速度/放大/光暈等，覆蓋當前 preset）
     setlistTheme: 'glass',  // 直播歌單 OBS 外觀主題（glass/neon/minimal）
     setlistLayout: 'classic', // 直播歌單版型
-    // 直播歌單 OBS 外觀細項。預設值單一事實來源見 public/js/setlist-style-schema.js
-    setlistStyle: setlistStyleSchema.getDefaultStyle(),
-    // 場景版各自獨立的外觀設定（經典＋清單版共用上面的 setlistStyle）
-    setlistSceneStyles: {},
+    // 直播歌單 OBS 外觀細項：每個模板一份，預設值單一事實來源見 schema。
+    setlistTemplateStyles: {},
     // Twitch 聊天室回覆設定；面板與 server 共用 public/js/twitch-reply-settings.js 契約。
     twitchReplySettings: twitchReplySettings.getDefaults(),
     twitchRequestSettings: twitchRequestSettings.getDefaults(),
     twitchRewardSettings: twitchRewardSettings.getDefaults(),
   };
 
-  // 場景版各一份完整設定（預設＝共用份的複製）
-  SETLIST_SCENE.forEach((k) => { playState.setlistSceneStyles[k] = { ...playState.setlistStyle }; });
+  SETLIST_LAYOUTS.forEach((layout) => {
+    playState.setlistTemplateStyles[layout] = setlistStyleSchema.getDefaultStyle();
+  });
 
   /** 取某版型「生效的那一份」設定 */
   function effSetlistStore(layout) {
-    return SETLIST_SCENE.includes(layout) ? playState.setlistSceneStyles[layout] : playState.setlistStyle;
+    return playState.setlistTemplateStyles[SETLIST_LAYOUTS.includes(layout) ? layout : 'classic'];
   }
 
   // ─── 每首歌的記憶（key: track.id）───
@@ -163,13 +163,24 @@ function createAppState(io) {
     }
     if (typeof saved.setlistTheme === 'string') playState.setlistTheme = saved.setlistTheme;
     if (typeof saved.setlistLayout === 'string') playState.setlistLayout = saved.setlistLayout;
+    // v1 相容：舊 shared 樣式先複製給每個模板，三個場景的獨立值再覆蓋。
     if (saved.setlistStyle && typeof saved.setlistStyle === 'object') {
-      playState.setlistStyle = { ...playState.setlistStyle, ...saved.setlistStyle };
+      SETLIST_LAYOUTS.forEach((layout) => {
+        playState.setlistTemplateStyles[layout] = { ...playState.setlistTemplateStyles[layout], ...saved.setlistStyle };
+      });
     }
     if (saved.setlistSceneStyles && typeof saved.setlistSceneStyles === 'object') {
       SETLIST_SCENE.forEach((k) => {
         if (saved.setlistSceneStyles[k] && typeof saved.setlistSceneStyles[k] === 'object') {
-          playState.setlistSceneStyles[k] = { ...playState.setlistSceneStyles[k], ...saved.setlistSceneStyles[k] };
+          playState.setlistTemplateStyles[k] = { ...playState.setlistTemplateStyles[k], ...saved.setlistSceneStyles[k] };
+        }
+      });
+    }
+    // v2：模板快照是權威，放在舊資料之後以便升級時保留使用者後來的個別調整。
+    if (saved.setlistTemplateStyles && typeof saved.setlistTemplateStyles === 'object') {
+      SETLIST_LAYOUTS.forEach((layout) => {
+        if (saved.setlistTemplateStyles[layout] && typeof saved.setlistTemplateStyles[layout] === 'object') {
+          playState.setlistTemplateStyles[layout] = { ...playState.setlistTemplateStyles[layout], ...saved.setlistTemplateStyles[layout] };
         }
       });
     }
@@ -207,8 +218,7 @@ function createAppState(io) {
       session: { active: session.active, startedAt: session.startedAt, source: session.source, songs: session.songs },
       setlistTheme: playState.setlistTheme,
       setlistLayout: playState.setlistLayout,
-      setlistStyle: playState.setlistStyle,
-      setlistSceneStyles: playState.setlistSceneStyles,
+      setlistTemplateStyles: playState.setlistTemplateStyles,
       twitchReplySettings: playState.twitchReplySettings,
       twitchRequestSettings: playState.twitchRequestSettings,
       twitchRewardSettings: playState.twitchRewardSettings,
@@ -248,12 +258,10 @@ function createAppState(io) {
       upcoming,
       theme: playState.setlistTheme || 'glass',
       layout: playState.setlistLayout || 'classic',
-      style: { ...playState.setlistStyle }, // 共用份（經典＋清單版）；面板當 shared 用
-      sceneStyles: {
-        timeline: { ...playState.setlistSceneStyles.timeline },
-        diagonal: { ...playState.setlistSceneStyles.diagonal },
-        constellation: { ...playState.setlistSceneStyles.constellation },
-      },
+      styles: Object.fromEntries(SETLIST_LAYOUTS.map((layout) => [layout, { ...playState.setlistTemplateStyles[layout] }])),
+      // 舊版 OBS 頁面仍讀 style / sceneStyles；新版以 styles 為權威。
+      style: { ...effSetlistStore(playState.setlistLayout) },
+      sceneStyles: Object.fromEntries(SETLIST_SCENE.map((layout) => [layout, { ...playState.setlistTemplateStyles[layout] }])),
     };
   }
 
@@ -413,6 +421,7 @@ function createAppState(io) {
     manualLyricsCache,
     session,
     SETLIST_SCENE,
+    SETLIST_LAYOUTS,
     effSetlistStore,
     persistState,
     setlistPayload,
@@ -427,4 +436,4 @@ function createAppState(io) {
   };
 }
 
-module.exports = { createAppState, SETLIST_SCENE };
+module.exports = { createAppState, SETLIST_SCENE, SETLIST_LAYOUTS };

@@ -59,7 +59,6 @@
   --sl-ph: 14px;              /* 卡片左右內距 */
   --sl-gap-new: 2px;          /* 項目間距 */
   --sl-blur-new: 12px;        /* 毛玻璃模糊 */
-  --sl-glow: 0px;             /* 強調發光大小 */
   --sl-op-d: 0.35;            /* 已唱透明度 */
   --sl-op-w: 0.55;            /* 未唱透明度 */
   /* 亮色背景可讀性保護：預設不關閉。由 setlist.js 依使用者配色重算，
@@ -450,6 +449,7 @@ html, body {
 .term-item.done .t-line { color: var(--sl-readable-txt3, var(--sl-txt3)); text-decoration: line-through; text-decoration-color: var(--sl-bc); }
 .term-item.done .t-prompt { color: var(--sl-readable-txt4, var(--sl-txt4)); }
 .term-item.active { background: var(--sl-acc-dim); }
+.term-item.active .t-line { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); }
 .term-item.active .t-line, .term-item.active .t-prompt { color: var(--sl-acc-b); }
 .term-item.active .t-num { color: var(--sl-acc); }
 .t-prompt { color: var(--sl-readable-txt4, var(--sl-txt4)); margin-right: 8px; flex-shrink: 0; font-size: 11px; }
@@ -476,7 +476,7 @@ html, body {
 .bb-info { flex: 1; min-width: 0; }
 .bb-name { font-size: calc(var(--sl-sz-l, 13px) * 0.96); font-weight: 600; color: var(--sl-txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bb-item.done .bb-name { color: var(--sl-readable-txt3, var(--sl-txt3)); }
-.bb-item.active .bb-name { color: var(--es-sand-b); }
+.bb-item.active .bb-name { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); color: var(--es-sand-b); }
 .bb-artist { font-size: calc(var(--sl-sz-a, 11px) * 0.91); color: var(--sl-readable-txt2, var(--sl-txt2)); margin-top: 2px; }
 .bb-now { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0; }
 .bb-bar { display: flex; align-items: flex-end; gap: 2px; height: 16px; }
@@ -496,11 +496,40 @@ html, body {
 .card-info { flex: 1; min-width: 0; }
 .card-title { font-size: calc(var(--sl-sz-l, 13px) * 0.96); font-weight: 600; color: var(--sl-txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card.done .card-title { text-decoration: line-through; text-decoration-color: var(--sl-bc); color: var(--sl-readable-txt3, var(--sl-txt3)); }
-.card.active .card-title { color: var(--es-sand-b); }
+.card.active .card-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); color: var(--es-sand-b); }
 .card-artist { font-size: calc(var(--sl-sz-a, 11px) * 0.91); color: var(--sl-readable-txt2, var(--sl-txt2)); margin-top: 2px; }
 .card-status { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--sl-readable-txt4, var(--sl-txt4)); }
 .card.done .card-status { background: var(--sl-readable-txt3, var(--sl-txt3)); }
 .card.active .card-status { background: var(--es-sand); box-shadow: 0 0 8px var(--sl-acc-g); animation: es-glow 2s ease-in-out infinite; }
+
+/* ══════════ 四款清單型皮膚共用骨架（label / glow / round / pager）══
+   結構＝獨立的「正在播放」英雄區（sk-now）+ 已唱／未唱分區（sk-sec），跟 classic 同一種
+   資訊層級，不是把正在播放混進同一條清單。label/glow/round 用左右兩欄（sk-cols）；
+   其餘五款上下堆疊（sk-stack）。裝飾（旋轉、缺角、發光、書籤耳朵、縫線…）都在下面
+   「皮膚各自的裝飾」用 [data-layout="xxx"] 覆蓋，這裡只定義共用骨架。 */
+.sk-stage { font-family: var(--es-sans); }
+.sk-shell { width: var(--sl-w); }
+.sk-now { padding: calc(var(--sl-pv) * 1.3) var(--sl-ph) calc(var(--sl-pv) * 1.1); }
+.sk-now-ordinal { margin-top: 2px; color: var(--sl-readable-txt4, var(--sl-txt4)); font-family: var(--sl-fm); font-size: calc(var(--sl-sz-m) * .92); font-variant-numeric: tabular-nums; letter-spacing: .08em; }
+.sk-now-title, .sk-now-artist { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sk-now-title { margin-top: 4px; }
+.sk-now-artist { margin-top: 4px; }
+.sk-cols { display: flex; gap: 14px; }
+.sk-stack { display: flex; flex-direction: column; gap: 10px; }
+.sk-sec { min-width: 0; }
+.sk-sec-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.sk-count { margin-left: auto; color: var(--sl-readable-txt4, var(--sl-txt4)); font-family: var(--sl-fm); font-size: calc(var(--sl-sz-m) * .92); font-variant-numeric: tabular-nums; letter-spacing: .08em; }
+.sk-list { display: flex; flex-direction: column; gap: var(--sl-gap-new); }
+.sk-row { display: flex; align-items: center; gap: 9px; min-width: 0; line-height: var(--sl-lh, 1.4); }
+.sk-now-title { line-height: var(--sl-lh, 1.4); }
+.sk-num { flex-shrink: 0; min-width: 18px; font-family: var(--es-mono); font-size: var(--sl-sz-m, 10px); color: var(--sl-readable-txt4, var(--sl-txt4)); }
+.sk-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sk-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(var(--sl-sz-l, 13px) * .96); font-weight: var(--sl-fw-l); color: var(--sl-txt-ov, var(--sl-txt)); }
+.sk-artist { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(var(--sl-sz-a, 11px) * .95); color: var(--sl-readable-txt2, var(--sl-txt2)); margin-top: 2px; }
+.sk-row--done { opacity: var(--sl-op-d); }
+.sk-row--done .sk-title { color: var(--sl-readable-txt3, var(--sl-txt3)); }
+.sk-row--wait { opacity: var(--sl-op-w); }
+.sk-empty { padding: calc(var(--sl-pv) * .5) 0; font-size: calc(var(--sl-sz-a) * .95); color: var(--sl-readable-txt3, var(--sl-txt3)); font-style: italic; }
 
 /* ══════════════════════════════════════════════════════════════
    外觀設定接線（applyStyle 改變數 → 這裡實際生效）
@@ -519,11 +548,11 @@ html, body {
 :root[data-cl-hide-up] [data-layout="classic"] #setlist-root,
 :root[data-cl-hide-done] [data-layout="classic"] #setlist-root { max-width: var(--sl-w); }
 
-/* ── classic：字級 / 字重 / 字體 ── */
-.ns-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); font-family: var(--sl-fd); }
+/* ── classic：字級 / 字重 / 字體（四款皮膚的英雄區 sk-now-title/artist 沿用同一組）── */
+.ns-title, .sk-now-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); font-family: var(--sl-fd); }
 .setlist-title { font-size: var(--sl-sz-l); font-weight: var(--sl-fw-l); font-family: var(--sl-fb); }
-.ns-artist, .setlist-artist { font-size: var(--sl-sz-a); font-family: var(--sl-fb); }
-.setlist-time, .setlist-section-label, .ns-label { font-size: var(--sl-sz-m); font-family: var(--sl-fm); }
+.ns-artist, .setlist-artist, .sk-now-artist { font-size: var(--sl-sz-a); font-family: var(--sl-fb); }
+.setlist-time, .setlist-section-label, .ns-label, .sk-sec-title { font-size: var(--sl-sz-m); font-family: var(--sl-fm); }
 .now-singing { padding: var(--sl-pv) var(--sl-ph); }
 .setlist-past, .setlist-upcoming { gap: var(--sl-gap-new); }
 .setlist-upcoming-row { opacity: var(--sl-op-w); }
@@ -535,6 +564,8 @@ html, body {
 .terminal, .billboard { width: var(--sl-w); border-radius: var(--sl-r-new); box-shadow: var(--sl-box-shd, none); }
 .cards { width: var(--sl-w); }
 .card { border-radius: var(--sl-r-new); border-width: var(--sl-bw); box-shadow: var(--sl-box-shd, none); -webkit-backdrop-filter: blur(var(--sl-blur-new)); backdrop-filter: blur(var(--sl-blur-new)); }
+/* 四款皮膚外觀寫死（配色/形狀是各自的招牌），不接使用者可調的顏色/圓角/陰影設定；
+   只有寬度（--sl-w）與字級/間距（--sl-fit 等比）跟著使用者設定走。 */
 
 /* ── 已唱 / 未唱 透明度 ── */
 .sm-chip.done { opacity: var(--sl-op-d); }
@@ -552,19 +583,22 @@ html, body {
 :root[data-hide-artist] .dg-a,
 :root[data-hide-artist] .cn-artist,
 :root[data-hide-artist] .bb-artist,
-:root[data-hide-artist] .card-artist { display: none !important; }
+:root[data-hide-artist] .card-artist,
+:root[data-hide-artist] .sk-artist { display: none !important; }
 
 :root[data-hide-num] .cn-num,
 :root[data-hide-num] .t-num,
 :root[data-hide-num] .bb-rank,
 :root[data-hide-num] .card-num,
-:root[data-hide-num] .dg-wn { display: none !important; }
+:root[data-hide-num] .dg-wn,
+:root[data-hide-num] .sk-num { display: none !important; }
 
 :root[data-strike] .setlist-row:not(.setlist-upcoming-row) .setlist-title,
 :root[data-strike] .sm-chip.done .sm-chip-t,
 :root[data-strike] .bb-item.done .bb-name,
 :root[data-strike] .card.done .card-title,
-:root[data-strike] .cn-item.done .cn-title { text-decoration: line-through; }
+:root[data-strike] .cn-item.done .cn-title,
+:root[data-strike] .sk-row--done .sk-title { text-decoration: line-through; }
 
 /* ══ 經典版：把顏色/邊框/底色接到統一設定變數（主題色→框色、textPrimary→字色都可動）══
    覆蓋上方主題色（theme）預設；textColor 覆蓋以 --sl-txt-ov 為準（空＝用 textPrimary）。 */
@@ -643,6 +677,8 @@ html, body {
 :root:not([data-sl-readable-off]) .terminal,
 :root:not([data-sl-readable-off]) .billboard,
 :root:not([data-sl-readable-off]) .card {
+  /* 四款皮膚的殼底色是招牌的一部分（紙卡/LCD/氣泡），不套用可讀性襯底覆蓋，
+     只留下面的文字陰影／淡化，避免蓋掉各自的裝飾底色。 */
   background: var(--sl-readable-surface);
   border-color: var(--sl-readable-border);
 }
@@ -665,6 +701,7 @@ html, body {
 :root:not([data-sl-readable-off]) .bb-name,
 :root:not([data-sl-readable-off]) .card-title,
 :root:not([data-sl-readable-off]) .t-line {
+  /* 四款皮膚的字色/底色寫死、對比已保證，不套用可讀性文字陰影（設計是淺底深字時陰影反而難看）。 */
   text-shadow: var(--sl-readable-text-shadow);
 }
 :root:not([data-sl-readable-off]) .tl-now,
@@ -690,11 +727,13 @@ html, body {
 :root:not([data-sl-readable-off]) .bb-item.done,
 :root:not([data-sl-readable-off]) .card.done,
 :root:not([data-sl-readable-off]) .term-item.done,
-:root:not([data-sl-readable-off]) .setlist-past .setlist-row {
+:root:not([data-sl-readable-off]) .setlist-past .setlist-row,
+:root:not([data-sl-readable-off]) .sk-row--done {
   opacity: var(--sl-readable-done-op);
 }
 :root:not([data-sl-readable-off]) .sm-chip.wait,
-:root:not([data-sl-readable-off]) .setlist-upcoming-row {
+:root:not([data-sl-readable-off]) .setlist-upcoming-row,
+:root:not([data-sl-readable-off]) .sk-row--wait {
   opacity: var(--sl-readable-wait-op);
 }
 :root:not([data-sl-readable-off]) .card.active {
@@ -873,7 +912,7 @@ html[data-layout="classic"] #setlist-root {
 .index-item.wait { opacity: var(--sl-op-w); }
 .index-item.active { background: var(--sl-acc-dim); }
 .index-item.active .index-rail { background: var(--sl-acc); box-shadow: 0 0 10px var(--sl-acc-g); }
-.index-item.active .index-title { font-size: calc(var(--sl-sz-l) * 1.16); font-weight: 700; }
+.index-item.active .index-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); }
 .ix-state { color: var(--sl-acc); font-family: var(--es-mono); font-size: calc(var(--sl-sz-m) * .86); letter-spacing: .06em; white-space: nowrap; }
 .index-empty { padding: 10px 14px; color: var(--sl-readable-txt3, var(--sl-txt3)); font-size: calc(var(--sl-sz-a) * .95); }
 :root:not([data-sl-readable-off]) .index-sheet { background: var(--sl-readable-surface); }
@@ -971,7 +1010,8 @@ html[data-sl-fit="fill"] .setlist-row,
 html[data-sl-fit="fill"] .card,
 html[data-sl-fit="fill"] .index-item,
 html[data-sl-fit="fill"] .term-item,
-html[data-sl-fit="fill"] .bb-item { flex: 0 0 auto; }
+html[data-sl-fit="fill"] .bb-item,
+html[data-sl-fit="fill"] .sk-row { flex: 0 0 auto; }
 
 /* ── simple：卡片置中，寬度跟著來源 ── */
 html[data-sl-fit="fill"][data-layout="simple"] .sm-bg {
@@ -1098,7 +1138,46 @@ html[data-sl-fit="fill"][data-layout="index"] .index-item {
   padding: calc(var(--sl-pv) * .6) var(--sl-ph);
 }
 
-/* ── 已唱／未唱區塊標籤（清單型四個模板；經典資訊本來就是兩欄，不需要）──
+/* ── 四款清單型皮膚：填滿模式（來源＝畫布）──
+   殼＝直欄：正在播放固定高度，分區（兩欄或上下堆疊）吃剩餘高度；
+   每個分區內部的清單各自 overflow:hidden，trimToFit() 各自裁列。 */
+html[data-sl-fit="fill"][data-layout] .sk-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  max-width: none;
+}
+html[data-sl-fit="fill"] .sk-now { flex: 0 0 auto; }
+html[data-sl-fit="fill"] .sk-cols,
+html[data-sl-fit="fill"] .sk-stack {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+html[data-sl-fit="fill"] .sk-cols .sk-sec {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+html[data-sl-fit="fill"] .sk-stack .sk-sec {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+html[data-sl-fit="fill"] .sk-sec-head { flex: 0 0 auto; }
+html[data-sl-fit="fill"] .sk-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── 已唱／未唱區塊標籤（清單型模板；經典資訊本來就是兩欄，不需要）──
    標籤只是分隔用的小字，體積要明顯小於歌名，不可搶走清單的視覺重量。 */
 .card-group,
 .bb-group,
@@ -1149,6 +1228,153 @@ html[data-layout="simple"] .sm-bg {
 html[data-layout="simple"] .sm-card {
   width: 100%;
 }
+/* ══════════════════════════════════════════════════════════════
+   四款皮膚各自的裝飾（結構共用 sk-*：sk-now 英雄區 + sk-cols/sk-stack 分區）
+   配色寫死（使用者面板的顏色設定對這 8 款無效），只有寬度與 --sl-fit 等比縮放跟著走。
+   ══════════════════════════════════════════════════════════════ */
+.sk-shell { position: relative; }
+
+/* ── label：紙牌標籤（日系手作感：米色紙卡、硬邊位移陰影、旋轉小標籤）── */
+[data-layout="label"] .sk-shell { padding: calc(16px * var(--sl-fit)); font-family: var(--es-serif); }
+[data-layout="label"] .sk-shell::before {
+  content: ''; position: absolute; left: 4%; top: 6%; width: calc(50px * var(--sl-fit)); height: calc(50px * var(--sl-fit));
+  border: calc(6px * var(--sl-fit)) solid rgba(244, 201, 98, .28); border-radius: 50%; pointer-events: none;
+}
+[data-layout="label"] .sk-shell::after {
+  content: 'SONG LIST'; position: absolute; right: 4%; bottom: 3%; color: rgba(255, 255, 255, .28);
+  font-family: var(--es-mono); font-size: calc(10px * var(--sl-fit)); letter-spacing: .4em; pointer-events: none;
+}
+[data-layout="label"] .sk-now {
+  position: relative; z-index: 1; max-width: 74%; padding: calc(16px * var(--sl-fit)) calc(20px * var(--sl-fit));
+  background: #fff8ea; border-radius: 4px; box-shadow: calc(6px * var(--sl-fit)) calc(6px * var(--sl-fit)) 0 rgba(237, 127, 159, .86);
+  transform: rotate(-1deg);
+}
+[data-layout="label"] .sk-now-eye {
+  position: absolute; left: -2%; top: -24%; padding: 3px calc(10px * var(--sl-fit)); white-space: nowrap;
+  color: #fff; background: #ed7f9f; font-family: var(--es-mono); font-weight: 900; letter-spacing: .16em; transform: rotate(-2deg);
+}
+[data-layout="label"] .sk-now::after {
+  content: '♪'; position: absolute; right: 4%; top: -20%; color: #f4c962; font-size: calc(38px * var(--sl-fit));
+  transform: rotate(12deg); text-shadow: 2px 2px 0 rgba(43, 35, 48, .2);
+}
+[data-layout="label"] .sk-now-ordinal, [data-layout="label"] .sk-now-artist { color: rgba(43, 35, 48, .58); }
+[data-layout="label"] .sk-now-title { color: var(--sl-txt-ov, #2b2330); font-weight: 900; }
+[data-layout="label"] .sk-cols { position: relative; z-index: 1; margin-top: calc(16px * var(--sl-fit)); }
+[data-layout="label"] .sk-sec-title {
+  display: inline-block; padding: 3px calc(10px * var(--sl-fit)); color: #2b2330; background: #f4c962; transform: rotate(-1deg);
+}
+[data-layout="label"] .sk-sec--wait .sk-sec-title { background: #ed7f9f; color: #fff; transform: rotate(1deg); }
+[data-layout="label"] .sk-count { color: rgba(255, 255, 255, .38); }
+[data-layout="label"] .sk-row {
+  margin: 3px 2px; padding: calc(6px * var(--sl-fit)) calc(10px * var(--sl-fit));
+  background: rgba(255, 250, 244, .92); border-left: calc(4px * var(--sl-fit)) solid #f4c962;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, .12);
+}
+[data-layout="label"] .sk-sec--wait .sk-row { border-left-color: #ed7f9f; }
+[data-layout="label"] .sk-num { color: #ed7f9f; font-family: var(--es-mono); font-weight: 900; }
+[data-layout="label"] .sk-title { color: var(--sl-txt-ov, #2b2330); }
+[data-layout="label"] .sk-artist { color: rgba(43, 35, 48, .5); }
+
+/* ── glow：夜間霓虹（缺角外框、青色輝光、巨大 NOW 浮水印，賽博資訊看板感）── */
+[data-layout="glow"] .sk-shell { padding: calc(18px * var(--sl-fit)); font-family: var(--es-mono); }
+/* 缺角外框是裝飾框，用內縮的 pseudo-element 疊在殼上，不裁切真正的內容 */
+[data-layout="glow"] .sk-shell::before {
+  content: ''; position: absolute; inset: calc(6px * var(--sl-fit)); pointer-events: none;
+  border: calc(1.5px * var(--sl-fit)) solid #58f6ef;
+  box-shadow: 0 0 calc(14px * var(--sl-fit)) rgba(88, 246, 239, .32), inset 0 0 calc(14px * var(--sl-fit)) rgba(88, 246, 239, .14);
+  clip-path: polygon(0 0, 38% 0, 41% 8%, 100% 8%, 100% 100%, 16% 100%, 13% 92%, 0 92%);
+}
+[data-layout="glow"] .sk-shell::after {
+  content: var(--glow-header-text, 'Elitesand Pro // LIVE SETLIST'); position: absolute; left: 8%; top: calc(9px * var(--sl-fit)); pointer-events: none;
+  max-width: 84%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #58f6ef; font-weight: 800; font-size: calc(10px * var(--sl-fit)); letter-spacing: .22em;
+  text-shadow: 0 0 calc(8px * var(--sl-fit)) rgba(88, 246, 239, .8);
+}
+[data-layout="glow"] .sk-now,
+[data-layout="glow"] .sk-cols,
+[data-layout="glow"] .sk-stack { position: relative; z-index: 1; }
+[data-layout="glow"] .sk-now { position: relative; margin-top: calc(22px * var(--sl-fit)); padding-left: calc(14px * var(--sl-fit)); border-left: calc(3px * var(--sl-fit)) solid #58f6ef; }
+[data-layout="glow"] .sk-now::before {
+  content: 'NOW'; position: absolute; right: 4%; top: 6%; color: rgba(88, 246, 239, .16);
+  font-size: calc(56px * var(--sl-fit)); font-weight: 900; letter-spacing: -.04em; z-index: 0; pointer-events: none;
+}
+[data-layout="glow"] .sk-now-eye, [data-layout="glow"] .sk-now-ordinal { position: relative; color: #58f6ef; }
+[data-layout="glow"] .sk-now-title { position: relative; color: var(--sl-txt-ov, #fff); text-shadow: 0 0 calc(12px * var(--sl-fit)) rgba(88, 246, 239, .35); }
+[data-layout="glow"] .sk-now-artist { position: relative; color: #58f6ef; }
+[data-layout="glow"] .sk-sec-title { color: #81ff9d; text-shadow: 0 0 calc(6px * var(--sl-fit)) rgba(129, 255, 157, .65); }
+[data-layout="glow"] .sk-sec--wait .sk-sec-title { color: #c58cff; text-shadow: 0 0 calc(6px * var(--sl-fit)) rgba(197, 140, 255, .65); }
+[data-layout="glow"] .sk-row { padding: calc(4px * var(--sl-fit)) 0; border-bottom: 1px solid rgba(255, 255, 255, .1); background: linear-gradient(90deg, rgba(6, 12, 18, .5), transparent); }
+[data-layout="glow"] .sk-title { color: var(--sl-txt-ov, rgba(255, 255, 255, .88)); }
+[data-layout="glow"] .sk-num { color: #81ff9d; }
+[data-layout="glow"] .sk-sec--wait .sk-num { color: #c58cff; }
+
+/* ── round：圓角氣泡（不對稱大氣泡、莓果球體背景、實心莓果反白的未唱膠囊）── */
+[data-layout="round"] .sk-shell { padding: calc(16px * var(--sl-fit)); font-family: var(--es-sans); }
+/* 球體＋圓環是純裝飾，預設關閉；開啟後（data-round-decor）才顯示。
+   data-layout 與 data-round-decor 都在 <html> 同一個元素上，必須寫成連續的屬性選擇器
+   （:root[a][b]），寫成後代選擇器（:root[a] [b]）永遠不會命中。 */
+html[data-round-decor][data-layout="round"] .sk-shell::before {
+  content: ''; position: absolute; right: 4%; top: 5%; width: 24%; aspect-ratio: 1; border-radius: 50%; opacity: .5; z-index: 0;
+  background: radial-gradient(circle at 35% 35%, #ffdeef, #a32963 66%, transparent 67%);
+}
+html[data-round-decor][data-layout="round"] .sk-shell::after {
+  content: ''; position: absolute; left: 3%; bottom: 4%; width: 15%; aspect-ratio: 1; border-radius: 50%; opacity: .5; z-index: 0;
+  border: calc(10px * var(--sl-fit)) solid rgba(153, 224, 199, .6);
+}
+[data-layout="round"] .sk-now {
+  position: relative; z-index: 1; max-width: 66%; min-height: calc(70px * var(--sl-fit));
+  padding: calc(14px * var(--sl-fit)) calc(18px * var(--sl-fit));
+  background: rgba(88, 25, 54, .88); color: #fffaf1; border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: calc(26px * var(--sl-fit)) calc(26px * var(--sl-fit)) calc(26px * var(--sl-fit)) calc(6px * var(--sl-fit));
+  box-shadow: 0 calc(14px * var(--sl-fit)) calc(28px * var(--sl-fit)) rgba(32, 7, 20, .3);
+}
+[data-layout="round"] .sk-now-eye {
+  position: absolute; left: 4%; top: calc(-11px * var(--sl-fit)); padding: 3px calc(9px * var(--sl-fit));
+  color: #581936; background: #99e0c7; border-radius: 999px; font-weight: 900; letter-spacing: .12em; white-space: nowrap;
+}
+[data-layout="round"] .sk-now-ordinal { color: rgba(255, 250, 241, .55); }
+[data-layout="round"] .sk-now-title { color: var(--sl-txt-ov, #fffaf1); font-weight: 850; }
+[data-layout="round"] .sk-now-artist { color: rgba(255, 250, 241, .68); }
+[data-layout="round"] .sk-cols { position: relative; z-index: 1; margin-top: calc(14px * var(--sl-fit)); }
+[data-layout="round"] .sk-sec-title { color: #fff; margin-left: calc(4px * var(--sl-fit)); }
+[data-layout="round"] .sk-count { color: rgba(255, 255, 255, .4); }
+[data-layout="round"] .sk-list { gap: calc(var(--sl-gap-new) + 4px); }
+[data-layout="round"] .sk-row {
+  border-radius: 999px; padding: calc(7px * var(--sl-fit)) calc(13px * var(--sl-fit));
+  background: rgba(255, 250, 241, .92); box-shadow: 0 calc(4px * var(--sl-fit)) calc(9px * var(--sl-fit)) rgba(20, 8, 14, .12);
+}
+[data-layout="round"] .sk-row--wait { background: rgba(163, 41, 99, .8); border: 1px solid rgba(255, 255, 255, .25); opacity: 1; }
+[data-layout="round"] .sk-row--wait .sk-title, [data-layout="round"] .sk-row--wait .sk-artist { color: #fff; }
+[data-layout="round"] .sk-row--wait .sk-num { color: #99e0c7; }
+[data-layout="round"] .sk-title { color: var(--sl-txt-ov, #581936); }
+[data-layout="round"] .sk-num { color: #a32963; font-weight: 900; }
+
+/* ── pager：復古字卡（每個分區各自一台 LCD 呼叫器：厚機殼＋掃描線＋等寬字）── */
+[data-layout="pager"] { --lcd: #d8e6bd; --lcd-dark: #243323; --lcd-mid: #536548; }
+[data-layout="pager"] .sk-shell { padding: calc(10px * var(--sl-fit)); font-family: var(--es-mono); gap: calc(10px * var(--sl-fit)); display: flex; flex-direction: column; }
+[data-layout="pager"] .sk-now,
+[data-layout="pager"] .sk-sec {
+  background: var(--lcd); background-image: repeating-linear-gradient(to bottom, rgba(36, 51, 35, .05) 0 1px, transparent 1px 4px);
+  border: calc(5px * var(--sl-fit)) solid #252a28; border-radius: calc(10px * var(--sl-fit));
+  box-shadow: inset 0 0 0 calc(2px * var(--sl-fit)) #70786e, inset 0 0 calc(18px * var(--sl-fit)) rgba(36, 51, 35, .28);
+  padding: calc(10px * var(--sl-fit)) calc(14px * var(--sl-fit));
+}
+[data-layout="pager"] .sk-now-eye { color: var(--lcd-mid); }
+[data-layout="pager"] .sk-now-ordinal { color: var(--lcd-mid); }
+[data-layout="pager"] .sk-now-title { color: var(--sl-txt-ov, var(--lcd-dark)); text-transform: uppercase; text-shadow: 1px 1px 0 rgba(36, 51, 35, .16); }
+[data-layout="pager"] .sk-now-artist { color: var(--lcd-mid); }
+[data-layout="pager"] .sk-stack { gap: calc(10px * var(--sl-fit)); }
+[data-layout="pager"] .sk-sec-title { color: var(--lcd-mid); }
+[data-layout="pager"] .sk-count { color: var(--lcd-mid); }
+[data-layout="pager"] .sk-row { padding: calc(3px * var(--sl-fit)) 0; border-bottom: 1px dashed rgba(36, 51, 35, .22); }
+[data-layout="pager"] .sk-title { color: var(--sl-txt-ov, var(--lcd-dark)); text-transform: uppercase; letter-spacing: .02em; }
+[data-layout="pager"] .sk-artist { color: var(--lcd-mid); }
+[data-layout="pager"] .sk-num { color: var(--lcd-mid); }
+[data-layout="pager"] .sk-shell::after {
+  content: '◀ SONG QUEUE ▶'; position: absolute; right: 14%; top: calc(2px * var(--sl-fit));
+  color: rgba(216, 230, 189, .7); font-size: calc(10px * var(--sl-fit)); letter-spacing: .12em; pointer-events: none;
+}
+
 /* Keep the OBS setlist independent from base.css while preserving the same
    semantic hidden-state contract as the panel and controller. */
 [hidden] { display: none !important; }

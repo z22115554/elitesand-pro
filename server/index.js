@@ -33,10 +33,6 @@ process.on('unhandledRejection', (reason) => {
   log.error('Unhandled promise rejection', reason);
 });
 
-// 非正常結束偵測：寫下本輪啟動標記，同時把「上一輪是否乾淨關閉」定案在記憶體。
-// 必須在這裡（安全網之後、服務啟動之前）——才能涵蓋啟動過程本身就崩潰的情況。
-require('./services/session-marker').markStarted({ version: require('./utils/app-version').APP_VERSION });
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -259,9 +255,6 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
   if (shutdownPromise) return shutdownPromise;
   shutdownPromise = (async () => {
     log.info(`開始優雅關閉：${reason}`);
-    // 必須是第一件事：下面有 8 秒硬退保底，放後面的話「優雅關閉自己卡住」會被
-    // 下次啟動誤判成當機。標記只寫一個小檔案，不會拖慢關閉。
-    try { require('./services/session-marker').markClean(reason); } catch (err) { log.warn(`關閉標記失敗：${err.message}`); }
     try { require('./services/state-store').saveNow(); } catch (err) { log.warn(`狀態 flush 失敗：${err.message}`); }
     try { require('./services/library-store').saveNow(); } catch (err) { log.warn(`媒體庫 flush 失敗：${err.message}`); }
     try { twitch.stop(); } catch (err) { log.warn(`Twitch 關閉失敗：${err.message}`); }

@@ -300,7 +300,6 @@ function createElectronShell({
       show: false,
       backgroundColor: '#20222a',
       title: 'Elitesand Pro',
-      icon: path.join(projectRoot, 'assets', 'elitesand-pro.ico'),
       // The panel owns the entire title strip, including controls, so the
       // chrome stays visually consistent across Windows versions.
       frame: false,
@@ -432,25 +431,10 @@ function createElectronShell({
   }
 
   function startServer() {
-    // stdio 必須是 'ignore'，不可改回 'pipe'。
-    //
-    // 2026-08-03 實機根因：'pipe' 會建立 stdout/stderr 管道，但這個檔案從來沒有讀取
-    // child.stdout／child.stderr。伺服器每寫一行日誌都會先 console.log()（見
-    // server/utils/logger.js 的 writeLog），而 Node 在 Windows 上對「管道」的
-    // stdout 寫入是同步的——管道緩衝區被寫滿又沒人排空時，下一次 console.log()
-    // 就會卡在 WriteFile 不返回，直接凍結整個事件迴圈：HTTP、Socket.io、所有計時器
-    // 全部停擺，行程還活著但完全沒回應（使用者看到「與伺服器連線中斷」）。
-    //
-    // 三次實機卡死的量化指紋：歷時 19.5／68.7／77 分鐘（差約 4 倍），但累積寫入
-    // stdout 的量是 53,269／53,273／53,321 bytes（全距 52 bytes，0.1%）。卡死取決於
-    // 寫了多少位元組、與經過多久無關，正是固定容量緩衝區被填滿的行為。
-    //
-    // 日誌檔本身是獨立的 createWriteStream，不受影響，功能完全不減。若日後真的需要
-    // 讀取子行程輸出，必須「同時」持續排空 stdout 與 stderr 兩條，否則等於重演本 bug。
     const child = utilityProcess.fork(serverEntry, [], {
       cwd: projectRoot,
       env: runtimeEnvironment(),
-      stdio: 'ignore',
+      stdio: 'pipe',
       serviceName: 'Elitesand Pro Server',
     });
     serverProcess = child;

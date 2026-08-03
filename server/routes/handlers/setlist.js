@@ -5,6 +5,7 @@
  */
 
 const { createLogger } = require('../../utils/logger');
+const { SETLIST_LAYOUTS } = require('../../state/app-state');
 // 歌單外觀（setlistStyle）預設值 + 驗證邊界的單一事實來源，client 端也讀同一份定義
 // （public/js/setlist-style-schema.js，UMD 包裝可同時被 Node require 與瀏覽器 <script> 使用）
 const setlistStyleSchema = require('../../../public/js/setlist-style-schema');
@@ -18,12 +19,19 @@ const log = createLogger('Socket');
  */
 function registerSetlistHandlers(io, socket, ctx) {
   const {
-    playState, session, SETLIST_SCENE, effSetlistStore,
+    playState, session, effSetlistStore,
     persistState, setlistPayload, emitSetlist, recordSessionSong, broadcastState,
   } = ctx;
 
   function normalizeSessionSource(source) {
     return ['obs', 'twitch', 'manual'].includes(source) ? source : 'manual';
+  }
+
+  function emitTemplateStyle(target) {
+    const style = { ...effSetlistStore(target) };
+    io.emit('setlist:style', { target, style });
+    // 過渡期照顧快取中的舊 OBS 頁面：它們只認 shared；新版會優先套 target。
+    if (target !== 'shared') io.emit('setlist:style', { target: 'shared', style });
   }
 
   socket.on('session:start', ({ source, startedAt } = {}) => {
@@ -91,27 +99,26 @@ function registerSetlistHandlers(io, socket, ctx) {
   });
 
   socket.on('setlist:layout', ({ layout } = {}) => {
-    const valid = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index'];
+    const valid = SETLIST_LAYOUTS;
     playState.setlistLayout = valid.includes(layout) ? layout : 'classic';
     io.emit('setlist:layout', { layout: playState.setlistLayout });
     // 連同該版型「生效的那一份」設定推給顯示端，切版型即套對應外觀
-    const tgt = SETLIST_SCENE.includes(playState.setlistLayout) ? playState.setlistLayout : 'shared';
-    io.emit('setlist:style', { target: tgt, style: { ...effSetlistStore(playState.setlistLayout) } });
+    emitTemplateStyle(playState.setlistLayout);
     persistState();
   });
 
   socket.on('setlist:style', (style = {}, ack) => {
     if (!style || typeof style !== 'object') return;
-    // 決定寫到哪一份：場景版各自一份，其餘 'shared'
-    const target = SETLIST_SCENE.includes(style.target) ? style.target : 'shared';
-    const s = target === 'shared' ? playState.setlistStyle : playState.setlistSceneStyles[target];
+    // 每個模板只寫回自己的快照；未知 target 安全退回 classic。
+    const target = SETLIST_LAYOUTS.includes(style.target) ? style.target : 'classic';
+    const s = effSetlistStore(target);
 
     // 型別/邊界驗證：單一事實來源見 public/js/setlist-style-schema.js
     // （數值 clamp 到 min~max、enum 限定合法值、color/string 需為字串、boolean 轉型；
     //  不合法的欄位直接忽略，不寫入、不影響其他欄位——比舊版「壞數字退回 0 再 clamp」更安全）。
     setlistStyleSchema.validateAndApply(style, s);
 
-    io.emit('setlist:style', { target, style: { ...s } });
+    emitTemplateStyle(target);
     persistState((result) => {
       if (typeof ack === 'function') ack(result);
     });

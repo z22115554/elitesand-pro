@@ -56,19 +56,6 @@
     </div>
   </div>
 
-  <!-- 上次未正常關閉時的提示。刻意做成可忽略的 banner 而非阻斷式視窗：
-       這只是「要不要幫忙回報」，不該擋住使用者開台。絕不自動傳送任何資料。 -->
-  <div id="crash-banner" class="announcement-banner crash-banner" role="status" hidden>
-    <div>
-      <strong data-i18n="crash.title">Elitesand Pro 上次未正常關閉</strong>
-      <span data-i18n="crash.message">要傳送診斷資訊協助找出原因嗎？送出前你可以先看過完整內容。</span>
-    </div>
-    <div class="announcement-actions">
-      <button id="crash-review" class="btn btn-sm btn-primary" type="button" data-i18n="crash.review">查看內容</button>
-      <button id="crash-dismiss" class="btn btn-sm btn-ghost" type="button" data-i18n="crash.dismiss">不用了</button>
-    </div>
-  </div>
-
   <div class="app">
     <!-- ═══ 左側導覽欄（Discord 式）═══ -->
     <nav class="sidebar">
@@ -1319,7 +1306,7 @@
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span data-i18n="settings.setlist.templateTitle">歌單模板</span></p>
             <div class="field setlist-layout-field">
               <div class="setlist-layout-heading"><label id="setlist-layout-label" for="setlist-layout">選擇歌單模板</label><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
-              <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option></select>
+              <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option><option value="label">紙牌標籤</option><option value="glow">夜間霓虹</option><option value="round">圓角氣泡</option><option value="pager">復古字卡</option></select>
               <p class="setlist-layout-group-title">清單型 — 跟著來源尺寸重排</p>
               <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
                 <button class="setlist-layout-card" type="button" data-setlist-layout="classic" role="radio" aria-checked="true"><strong>經典資訊</strong><span>現在、未唱、已唱一次看懂</span></button>
@@ -1327,6 +1314,10 @@
                 <button class="setlist-layout-card" type="button" data-setlist-layout="index" role="radio" aria-checked="false"><strong>章節索引</strong><span>曲序與狀態一眼掃讀</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="billboard" role="radio" aria-checked="false"><strong>排行榜</strong><span>活動感強的節目視覺</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="terminal" role="radio" aria-checked="false"><strong>終端機</strong><span>復古資訊風</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="label" role="radio" aria-checked="false"><strong>紙牌標籤</strong><span>色塊小標籤，手作聊天感</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="glow" role="radio" aria-checked="false"><strong>夜間霓虹</strong><span>細框發光，適合夜唱</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="round" role="radio" aria-checked="false"><strong>圓角氣泡</strong><span>膠囊清單，正播放大</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="pager" role="radio" aria-checked="false"><strong>復古字卡</strong><span>LCD 呼叫器質感</span></button>
               </div>
               <p class="setlist-layout-group-title">固定版位 — 只呈現現在播放</p>
               <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
@@ -1362,7 +1353,7 @@
                      低頻且會蓋住整塊來源的「整體背板」已移到詳細設定。 -->
 
                 <div class="field-group-title mt-0">版面</div>
-                <div class="field field--setlist-sections" data-sl-layout="classic cards terminal billboard index">
+                <div class="field field--setlist-sections" data-sl-layout="classic cards terminal billboard index label glow round pager">
                   <label>要顯示哪些區塊</label>
                   <div class="check-row">
                     <label class="check-inline"><input id="sls-show-upcoming" type="checkbox" checked><span class="check-box" aria-hidden="true"></span><span class="check-text">未唱歌曲</span></label>
@@ -1370,28 +1361,28 @@
                   </div>
                   <p class="field-hint">「正在播放」永遠顯示。</p>
                 </div>
-                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index">
+                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index label glow round pager">
                   <div class="label">顯示歌手名字</div>
                   <label class="switch"><input id="sls-show-artist" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards index">
+                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards index label glow round pager">
                   <div class="label">已唱歌曲加上刪除線</div>
                   <label class="switch"><input id="sls-strikethrough" type="checkbox"><span class="track"></span></label>
                 </div>
 
                 <div class="field-group-title">大小</div>
-                <div class="field" data-sl-scope="classic list">
+                <div class="field" data-sl-scope="classic list skin">
                   <label>整體大小倍率 <span id="sls-scale-val" class="val">100%</span></label>
                   <input id="sls-scale" type="range" min="0.6" max="1.8" step="0.05" value="1">
                   <p class="field-hint">在 OBS 來源算出的大小之上再放大或縮小；放大後顯示首數會自動變少。</p>
                 </div>
-                <div class="field" data-sl-layout="classic simple timeline diagonal constellation signal index">
-                  <label>「正在播放」的文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
+                <div class="field" data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager">
+                  <label>正在播放歌曲文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
                   <input id="sls-size-now" type="range" min="12" max="48" value="16">
                 </div>
 
-                <div class="field-group-title">顏色</div>
-                <div class="field">
+                <div class="field-group-title" data-sl-scope="classic list scene">顏色</div>
+                <div class="field" data-sl-scope="classic list scene">
                   <div class="color-row">
                     <div class="color-item">
                       <label for="sls-accent">主色</label>
@@ -1410,13 +1401,18 @@
                     </div>
                   </div>
                 </div>
+                <div class="field field--inline-spacious-center" data-sl-scope="classic list scene skin">
+                  <div class="flex-grow"><label class="m-0">文字顏色覆蓋</label><p class="field-hint">勾選「用預設色」＝沿用上面的主要文字色（固定設計的模板則用它自己的預設墨色）；取消勾選才能自訂一個獨立的文字顏色。</p></div>
+                  <label class="val val--inline-toggle"><input id="sls-text-theme" type="checkbox" checked>用預設色</label>
+                  <input id="sls-text-color" type="color" value="#ffffff" disabled>
+                </div>
 
-                <div class="field-group-title">可讀性</div>
-                <div class="switch-row">
+                <div class="field-group-title" data-sl-scope="classic list">可讀性</div>
+                <div class="switch-row" data-sl-scope="classic list">
                   <div><div class="label">亮色背景可讀性保護</div><div class="sub">替歌單文字加深襯底，不影響 OBS 背景；關閉＝完全透明</div></div>
                   <label class="switch"><input id="sls-readability-guard" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <div class="field">
+                <div class="field" data-sl-scope="classic list">
                   <div class="field-row field-row--spacious field-row--top">
                     <div>
                       <label>可讀性襯底色</label>
@@ -1428,6 +1424,7 @@
                     </div>
                   </div>
                 </div>
+                <div class="field-group-title" data-sl-scope="skin">已唱／未唱</div>
                 <div class="field">
                   <div class="field-row field-row--spacious field-row--top">
                     <div class="flex-grow">
@@ -1439,11 +1436,23 @@
                       <input id="sls-wait-opacity" type="range" min="0" max="100" value="72">
                     </div>
                   </div>
-                  <p class="field-hint">數字越大越清楚。開著保護時已唱至少 52%、未唱至少 70%。</p>
+                  <p class="field-hint" data-sl-scope="classic list">數字越大越清楚。開著保護時已唱至少 52%、未唱至少 70%。</p>
+                </div>
+
+                <div class="field-group-title" data-sl-layout="round">圓角氣泡專屬</div>
+                <div class="switch-row" data-sl-layout="round">
+                  <div><div class="label">顯示背景球體與圓環裝飾</div><div class="sub">純裝飾用的莓果球體與薄荷圓環，預設關閉讓畫面更乾淨</div></div>
+                  <label class="switch"><input id="sls-round-decor" type="checkbox"><span class="track"></span></label>
+                </div>
+
+                <div class="field-group-title" data-sl-layout="glow">夜間霓虹專屬</div>
+                <div class="field" data-sl-layout="glow">
+                  <label>左上角看板文字</label>
+                  <input id="sls-glow-header" type="text" class="input" value="Elitesand Pro // LIVE SETLIST">
                 </div>
 
                 <!-- ══ 風格預設與儲存：保留功能，但不再擠在每次選模板的第一屏 ══ -->
-                <details class="setlist-quick-presets">
+                <details class="setlist-quick-presets" data-sl-scope="classic list">
                   <summary>風格預設與儲存（選用）</summary>
                   <div class="setlist-quick-presets__body">
                     <p class="field-group-desc">套用到目前選擇的設定範圍；每個預設都會保留亮色背景可讀性。</p>
@@ -1552,8 +1561,17 @@
                           <option value="DM Serif Display">DM Serif Display（襯線體）</option>
                           <option value="Noto Serif TC">思源宋體（中文襯線）</option>
                           <option value="Georgia">Georgia（襯線體）</option>
+                          <option value="__custom__">自訂／系統字體…</option>
                         </select>
-                        <p class="field-hint">用在 Timeline／Diagonal／Constellation 的大標題，以及經典版的「正在播放」歌名。</p>
+                        <p class="field-hint">用在 Timeline／Diagonal／Constellation 的大標題，以及經典版與四款皮膚的「正在播放」歌名。</p>
+                        <div id="sls-font-display-custom-wrap" hidden class="mt-8">
+                          <div class="field-row">
+                            <select id="sls-font-display-system" class="input flex-grow"><option value="">點右側「瀏覽系統字體」載入清單…</option></select>
+                            <button id="sls-font-display-load" class="btn btn-sm" type="button">瀏覽系統字體</button>
+                          </div>
+                          <input id="sls-font-display-custom" class="input mt-8" type="text" placeholder="或手動輸入字體名稱，例如：微軟正黑體">
+                          <div class="sub font-family-hint">清單由本機字體目錄完整掃描，OBS 與此控制台須在同一台電腦才生效；找不到時自動退回 Noto／系統字體。</div>
+                        </div>
                       </div>
                       <div class="field">
                         <label>內文字體（歌名、歌手名等一般文字）</label>
@@ -1561,7 +1579,15 @@
                           <option value="Manrope">Manrope（預設，無襯線）</option>
                           <option value="Inter">Inter（無襯線）</option>
                           <option value="Noto Sans TC">思源黑體（中文無襯線）</option>
+                          <option value="__custom__">自訂／系統字體…</option>
                         </select>
+                        <div id="sls-font-body-custom-wrap" hidden class="mt-8">
+                          <div class="field-row">
+                            <select id="sls-font-body-system" class="input flex-grow"><option value="">點右側「瀏覽系統字體」載入清單…</option></select>
+                            <button id="sls-font-body-load" class="btn btn-sm" type="button">瀏覽系統字體</button>
+                          </div>
+                          <input id="sls-font-body-custom" class="input mt-8" type="text" placeholder="或手動輸入字體名稱，例如：微軟正黑體">
+                        </div>
                       </div>
                       <div class="field">
                         <label>等寬字體（編號、時間戳記）</label>
@@ -1569,10 +1595,18 @@
                           <option value="JetBrains Mono">JetBrains Mono（預設）</option>
                           <option value="Space Mono">Space Mono</option>
                           <option value="Courier New">Courier New</option>
+                          <option value="__custom__">自訂／系統字體…</option>
                         </select>
+                        <div id="sls-font-mono-custom-wrap" hidden class="mt-8">
+                          <div class="field-row">
+                            <select id="sls-font-mono-system" class="input flex-grow"><option value="">點右側「瀏覽系統字體」載入清單…</option></select>
+                            <button id="sls-font-mono-load" class="btn btn-sm" type="button">瀏覽系統字體</button>
+                          </div>
+                          <input id="sls-font-mono-custom" class="input mt-8" type="text" placeholder="或手動輸入字體名稱，例如：微軟正黑體">
+                        </div>
                         <p class="field-hint">影響：清單編號（01、02…）與已唱歌曲的時間戳記，等寬字體數字比較整齊好讀。</p>
                       </div>
-                      <div data-sl-scope="classic list">
+                      <div data-sl-scope="classic list skin">
                         <div class="field field-row">
                           <div class="flex-grow"><label>清單列表字級 <span id="sls-size-list-val" class="val">13px</span></label><input id="sls-size-list" type="range" min="8" max="24" value="13"></div>
                           <div class="flex-grow"><label>歌手名字級 <span id="sls-size-artist-val" class="val">11px</span></label><input id="sls-size-artist" type="range" min="7" max="18" value="11"></div>
@@ -1586,15 +1620,15 @@
                           <div class="flex-grow"><label>清單列表文字粗細</label><select id="sls-fw-list" class="input"><option value="300">細（300）</option><option value="400" selected>正常（400，預設）</option><option value="500">中等（500）</option><option value="600">半粗（600）</option></select></div>
                         </div>
                       </div>
-                      <p class="field-hint" data-sl-scope="scene">場景版的字級：大標題跟著常用外觀的「正在播放文字大小」縮放，整體大小用場景版設定裡的「整體縮放」。</p>
+                      <p class="field-hint" data-sl-scope="scene">場景版的正在播放歌曲文字大小可個別調整；整體大小用場景版設定裡的「整體縮放」。</p>
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="classic list">
-                      <summary>版面尺寸 — 寬度／圓角／內距（經典／清單版）</summary>
+                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="classic list skin">
+                      <summary>版面尺寸 — 寬度／圓角／內距</summary>
                       <div class="card-collapse-body">
                       <p class="field-hint">清單型模板的寬度由 OBS Browser Source 決定，這裡不再提供固定像素寬度；要更寬就把來源拉寬，字級與間距會一起等比調整。整體大小倍率已移到快速調整的「大小」。</p>
-                      <div class="field">
+                      <div class="field" data-sl-scope="classic list">
                         <label>卡片圓角 <span id="sls-radius-val" class="val">14px</span></label>
                         <input id="sls-radius" type="range" min="0" max="32" value="14">
                         <p class="field-hint">「正在播放」大卡用這個值；已唱／未唱每列自動略小一點（−6px）比較協調。</p>
@@ -1610,7 +1644,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="classic list">
+                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="classic list skin">
                       <summary>排版與動畫</summary>
                       <div class="card-collapse-body">
                       <div class="field">
@@ -1666,7 +1700,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards signal index">
+                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager">
                       <summary>顯示項目</summary>
                       <div class="card-collapse-body">
                       <div class="switch-row">
@@ -1675,13 +1709,7 @@
                       </div>
                       </div>
                     </details>
-                    <!-- Reserve 功能尚未實作：控制項先隱藏（設定值仍保留於伺服器，之後功能上線直接解除 hidden）-->
-                    <div hidden>
-                      <input id="sls-show-reserve" type="checkbox" checked>
-                      <input id="sls-label-reserve" type="text" value="Reserve">
-                    </div>
-
-                    <details class="card card-collapse" data-settings-workspace-group="advanced" data-sl-layout="classic simple timeline diagonal index">
+                    <details class="card card-collapse" data-settings-workspace-group="advanced" data-sl-layout="classic simple timeline diagonal index label glow round pager">
                       <summary>自訂文字標籤</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc">畫面上固定顯示的文字，可以換成中文或你喜歡的用語。</p>
@@ -1816,11 +1844,7 @@
                         </div>
                       </div>
                       <p class="field-hint" data-sl-scope="classic list scene">0＝完全不鋪，這是預設。清單型模板會<strong>鋪滿整個 OBS 來源範圍</strong>，所以要先把 Browser Source 縮成你要的框再開不透明度，否則會蓋掉那塊區域內的直播畫面。這和「可讀性襯底」是不同層：襯底只墊在文字後面，背板是整塊來源的底色。</p>
-                      <div class="field field--inline-spacious-center">
-                        <div class="flex-grow"><label class="m-0">文字顏色覆蓋</label><p class="field-hint">勾選「用主題色」＝沿用「文字顏色」區的主要文字色；取消勾選才能自訂一個獨立的文字顏色。</p></div>
-                        <label class="val val--inline-toggle"><input id="sls-text-theme" type="checkbox" checked>用主題色</label>
-                        <input id="sls-text-color" type="color" value="#ffffff" disabled>
-                      </div>
+                      <!-- 文字顏色覆蓋已搬到快速調整的「顏色」區塊（所有模板共用同一組控制項）。 -->
                       <div class="field field-row field-row--spacious">
                         <div class="flex-grow"><label>文字陰影深度 <span id="sls-shadow-val" class="val">關</span></label><input id="sls-shadow" type="range" min="0" max="20" step="1" value="0"></div>
                         <div><label>陰影顏色</label><input id="sls-shadow-color" type="color" value="#000000"></div>
