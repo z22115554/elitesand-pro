@@ -134,6 +134,7 @@
       <header class="topbar">
         <div class="page-title" data-i18n="nav.home">首頁</div>
         <div class="right">
+          <button id="btn-open-prompter" class="topbar-link-btn topbar-link-btn--accent" type="button" title="開啟跟唱視圖（整句歌詞，給主播自己看）" data-i18n="prompter.open" data-i18n-title="prompter.openTitle">跟唱視圖</button>
           <select class="locale-select" data-i18n-locale data-i18n-skip aria-label="介面語言">
             <option value="zh-TW">繁體中文</option>
             <option value="en">English</option>
@@ -1699,6 +1700,11 @@
                           <p class="field-hint">直播超過一小時建議選「時:分:秒」，比較好對照真實時間。</p>
                         </div>
                       </div>
+                      <div class="field field-row" data-sl-scope="classic skin">
+                        <div class="flex-grow"><label><span data-i18n="settings.setlist.queueScrollDelay">捲動前停留秒數</span> <span id="sls-queue-scroll-delay-val" class="val">2.5s</span></label><input id="sls-queue-scroll-delay" type="range" min="0" max="8" step="0.5" value="2.5"></div>
+                        <div class="flex-grow"><label><span data-i18n="settings.setlist.queueScrollSpeed">捲動速度</span> <span id="sls-queue-scroll-speed-val" class="val">24px/s</span></label><input id="sls-queue-scroll-speed" type="range" min="6" max="80" step="2" value="24"></div>
+                      </div>
+                      <p class="field-hint" data-sl-scope="classic skin" data-i18n="settings.setlist.queueScrollHint">已唱／未唱清單放不下才會自動捲動：每輪先停留幾秒讓觀眾看清楚，再往上捲；捲動速度越大，捲得越快。</p>
                       </div>
                     </details>
 

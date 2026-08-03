@@ -66,6 +66,7 @@
     'app.remoteTitle': ['Elitesand Pro 遙控器', 'Elitesand Pro Remote', 'Elitesand Pro リモコン', 'Elitesand Pro 리모컨', 'Elitesand Pro 遥控器'],
     'app.displayTitle': ['Elitesand Pro 歌詞顯示', 'Elitesand Pro Lyrics Display', 'Elitesand Pro 歌詞表示', 'Elitesand Pro 가사 화면', 'Elitesand Pro 歌词显示'],
     'app.setlistTitle': ['Elitesand Pro 歌單', 'Elitesand Pro Setlist', 'Elitesand Pro セットリスト', 'Elitesand Pro 세트리스트', 'Elitesand Pro 歌单'],
+    'app.prompterTitle': ['Elitesand Pro 跟唱視圖', 'Elitesand Pro Sing-Along View', 'Elitesand Pro 歌唱ビュー', 'Elitesand Pro 따라 부르기 화면', 'Elitesand Pro 跟唱视图'],
     'language.label': ['介面語言', 'Interface language', '表示言語', '인터페이스 언어', '界面语言'],
     'nav.home': ['首頁', 'Home', 'ホーム', '홈', '首页'],
     'nav.playlist': ['播放清單', 'Playlist', 'プレイリスト', '재생목록', '播放列表'],
@@ -115,6 +116,29 @@
     'player.previous': ['上一首', 'Previous track', '前の曲', '이전 곡', '上一首'],
     'player.playPause': ['播放或暫停', 'Play or pause', '再生または一時停止', '재생 또는 일시정지', '播放或暂停'],
     'player.next': ['下一首', 'Next track', '次の曲', '다음 곡', '下一首'],
+    'prompter.name': ['跟唱視圖', 'Sing-Along View', '歌唱ビュー', '따라 부르기 화면', '跟唱视图'],
+    'prompter.open': ['跟唱視圖', 'Sing-Along View', '歌唱ビュー', '따라 부르기', '跟唱视图'],
+    'prompter.openTitle': ['開啟跟唱視圖（整句歌詞，給主播自己看）', 'Open the sing-along view with full-line lyrics for the streamer', '配信者向けの一行歌詞を表示する歌唱ビューを開く', '스트리머용 전체 줄 가사가 표시되는 따라 부르기 화면 열기', '打开跟唱视图（整句歌词，供主播查看）'],
+    'prompter.appearance': ['歌詞外觀', 'Lyrics appearance', '歌詞の表示設定', '가사 모양', '歌词外观'],
+    'prompter.progress': ['播放進度', 'Playback progress', '再生位置', '재생 진행률', '播放进度'],
+    'prompter.playlistEmpty': ['尚無歌曲', 'No tracks yet', '曲がありません', '아직 곡이 없습니다', '暂无歌曲'],
+    'prompter.noLyrics': ['此歌曲無歌詞', 'This song has no lyrics', 'この曲には歌詞がありません', '이 노래에는 가사가 없습니다', '此歌曲无歌词'],
+    'prompter.font': ['字體', 'Font', 'フォント', '글꼴', '字体'],
+    'prompter.builtInFonts': ['內建字體', 'Built-in fonts', '内蔵フォント', '기본 글꼴', '内置字体'],
+    'prompter.localFonts': ['本機字體', 'Installed fonts', 'インストール済みフォント', '설치된 글꼴', '本机字体'],
+    'prompter.fontDefault': ['預設（圓體）', 'Default (rounded sans)', '標準（丸ゴシック）', '기본(둥근 고딕)', '默认（圆体）'],
+    'prompter.fontSerif': ['襯線', 'Serif', '明朝体', '명조체', '衬线'],
+    'prompter.fontMono': ['等寬', 'Monospace', '等幅', '고정폭', '等宽'],
+    'prompter.fontSystem': ['系統無襯線', 'System sans-serif', 'システムゴシック', '시스템 고딕', '系统无衬线'],
+    'prompter.fontLoading': ['開啟設定時會讀取這台電腦已安裝的字體。', 'Installed fonts on this computer are loaded when settings open.', '設定を開くと、このパソコンにインストール済みのフォントを読み込みます。', '설정을 열면 이 컴퓨터에 설치된 글꼴을 불러옵니다.', '打开设置时会读取此电脑已安装的字体。'],
+    'prompter.fontLoadingActive': ['正在讀取本機字體…', 'Loading installed fonts…', 'インストール済みフォントを読み込み中…', '설치된 글꼴을 불러오는 중…', '正在读取本机字体…'],
+    'prompter.fontLoaded': ['已載入 {count} 個本機字體', 'Loaded {count} installed fonts', 'インストール済みフォントを {count} 件読み込みました', '설치된 글꼴 {count}개를 불러왔습니다', '已加载 {count} 个本机字体'],
+    'prompter.fontUnavailable': ['無法讀取本機字體；仍可使用內建字體。', 'Installed fonts could not be read; built-in fonts remain available.', 'インストール済みフォントを読み込めませんでした。内蔵フォントは使用できます。', '설치된 글꼴을 읽지 못했습니다. 기본 글꼴은 계속 사용할 수 있습니다.', '无法读取本机字体；仍可使用内置字体。'],
+    'prompter.fontSize': ['字級', 'Font size', 'フォントサイズ', '글꼴 크기', '字号'],
+    'prompter.textColor': ['文字顏色', 'Text color', '文字色', '글자 색상', '文字颜色'],
+    'prompter.strokeColor': ['描邊顏色', 'Stroke color', 'ストロークの色', '획 색상', '描边颜色'],
+    'prompter.strokeWidth': ['描邊寬度', 'Outline width', '縁取り幅', '외곽선 너비', '描边宽度'],
+    'prompter.resetAppearance': ['重置為預設', 'Reset to defaults', 'デフォルトに戻す', '기본값으로 재설정', '重置为默认值'],
     'common.close': ['關閉', 'Close', '閉じる', '닫기', '关闭'],
     'common.cancel': ['取消', 'Cancel', 'キャンセル', '취소', '取消'],
     'common.confirm': ['確認', 'Confirm', '確認', '확인', '确认'],
@@ -176,6 +200,9 @@
     'settings.setlist.sizeSmall': ['小框 640×480', 'Small frame 640×480', '小型 640×480', '소형 640×480', '小窗口 640×480'],
     'settings.setlist.previewFrameTitle': ['歌單預覽', 'Setlist preview', 'セットリストプレビュー', '세트리스트 미리보기', '歌单预览'],
     'settings.setlist.obsHint': ['貼上此網址後，直接在 OBS 把 Browser Source 拉成你要的大小與位置；模板、配色與大小都會即時同步，網址永遠不用換。', 'Paste this URL into OBS, then resize and position the Browser Source as needed. Templates, colors, and sizing sync live, so the URL never changes.', 'この URL を OBS に貼り付け、ブラウザソースを必要なサイズと位置に調整してください。テンプレート、配色、サイズはリアルタイムで同期され、URL を変更する必要はありません。', '이 URL을 OBS에 붙여넣고 브라우저 소스를 원하는 크기와 위치로 조정하세요. 템플릿, 색상과 크기는 실시간으로 동기화되며 URL은 바꿀 필요가 없습니다.', '粘贴此网址后，直接在 OBS 中把浏览器来源调整到所需大小与位置；模板、配色与尺寸会实时同步，网址无需更换。'],
+    'settings.setlist.queueScrollDelay': ['捲動前停留秒數', 'Pause before scrolling', 'スクロール前の停止時間', '스크롤 전 대기 시간', '滚动前停留秒数'],
+    'settings.setlist.queueScrollSpeed': ['捲動速度', 'Scroll speed', 'スクロール速度', '스크롤 속도', '滚动速度'],
+    'settings.setlist.queueScrollHint': ['已唱／未唱清單放不下才會自動捲動：每輪先停留幾秒讓觀眾看清楚，再往上捲；捲動速度越大，捲得越快。', 'Performed and upcoming lists scroll only when they overflow. Each loop pauses first, then moves upward; a higher speed scrolls faster.', '歌唱済み／未歌唱リストが収まらない場合のみ自動スクロールします。各周回で一度停止してから上へ移動し、速度を上げるほど速くなります。', '부른 곡／예정 곡 목록이 공간을 넘을 때만 자동으로 스크롤됩니다. 매 반복마다 잠시 멈춘 뒤 위로 이동하며, 속도 값이 클수록 더 빠르게 움직입니다.', '已唱／未唱列表放不下时才会自动滚动：每轮先停留几秒再向上滚动；速度数值越大，滚动越快。'],
     'home.session.title': ['本場直播', 'Current stream', '今回の配信', '이번 방송', '本场直播'],
     'home.session.openRecord': ['查看本場紀錄', 'View stream history', '今回の配信履歴を見る', '이번 방송 기록 보기', '查看本场记录'],
     'home.session.recordTitle': ['本場演出紀錄', 'Current stream history', '今回の配信履歴', '이번 방송 기록', '本场直播记录'],
@@ -979,21 +1006,23 @@
     const ariaKey = element.getAttribute('data-i18n-aria-label');
     const placeholderKey = element.getAttribute('data-i18n-placeholder');
     const altKey = element.getAttribute('data-i18n-alt');
+    const labelKey = element.getAttribute('data-i18n-label');
     if (textKey) element.textContent = t(textKey);
     if (titleKey) element.setAttribute('title', t(titleKey));
     if (ariaKey) element.setAttribute('aria-label', t(ariaKey));
     if (placeholderKey) element.setAttribute('placeholder', t(placeholderKey));
     if (altKey) element.setAttribute('alt', t(altKey));
+    if (labelKey) element.setAttribute('label', t(labelKey));
   }
 
   function apply(rootNode) {
     if (typeof document === 'undefined') return;
     document.documentElement.lang = activeLocale;
     const scope = rootNode && rootNode.querySelectorAll ? rootNode : document;
-    if (scope.matches && scope.matches('[data-i18n],[data-i18n-title],[data-i18n-aria-label],[data-i18n-placeholder],[data-i18n-alt]')) {
+    if (scope.matches && scope.matches('[data-i18n],[data-i18n-title],[data-i18n-aria-label],[data-i18n-placeholder],[data-i18n-alt],[data-i18n-label]')) {
       translateElement(scope);
     }
-    scope.querySelectorAll('[data-i18n],[data-i18n-title],[data-i18n-aria-label],[data-i18n-placeholder],[data-i18n-alt]')
+    scope.querySelectorAll('[data-i18n],[data-i18n-title],[data-i18n-aria-label],[data-i18n-placeholder],[data-i18n-alt],[data-i18n-label]')
       .forEach(translateElement);
     applyAuto(scope);
     document.querySelectorAll('[data-i18n-locale]').forEach((select) => {

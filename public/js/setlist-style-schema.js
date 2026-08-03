@@ -49,6 +49,8 @@
     // 陰影/發光/描邊強度：0 時顯示「關」，CSS 由呼叫端(composite)自行處理，這裡僅供標籤用
     offPx: { toCss: (v) => `${v}px`, toLabel: (v) => (Number(v) ? `${v}px` : '關') },
     raw: { toCss: (v) => String(v), toLabel: (v) => String(v) },
+    seconds: { toCss: (v) => String(v), toLabel: (v) => `${v}s` },
+    pxPerSec: { toCss: (v) => String(v), toLabel: (v) => `${v}px/s` },
   };
 
   // ── 欄位定義 ──
@@ -197,6 +199,13 @@
     { key: 'rowAnim', type: 'enum', default: 'fade', values: ['fade', 'none', 'slide-up', 'slide-side'], domId: 'sls-row-anim', dataAttr: 'data-row-anim' },
     // timeFormat 沒有 CSS 變數（在 fmtOffset() 當下讀取），改動需觸發重繪
     { key: 'timeFormat', type: 'enum', default: 'mmss', values: ['mmss', 'hmmss', 'none'], domId: 'sls-time-format', needsRerender: true },
+
+    // ── 已唱／未唱清單自動捲動（classic 與四款皮膚：清單放不下才會觸發捲動）──
+    // 兩者都沒有 CSS 變數：捲動的每輪停留秒數／速度要換算成每個清單各自的動態 @keyframes
+    // 百分比（見 setlist.js applyQueueScrolls），只能在 render 當下讀 curStyle 計算，
+    // 故標 needsRerender，改動時才會立刻重算生效，不必等下一次換歌。
+    { key: 'queueScrollDelay', type: 'number', default: 2.5, min: 0, max: 8, domId: 'sls-queue-scroll-delay', format: 'seconds', needsRerender: true },
+    { key: 'queueScrollSpeed', type: 'number', default: 24, min: 6, max: 80, domId: 'sls-queue-scroll-speed', format: 'pxPerSec', needsRerender: true },
   ];
 
   const FIELD_BY_KEY = {};

@@ -4621,12 +4621,198 @@ test('setlist queue scrolling is limited to the intended vertical templates', ()
     'Only classic and the four vertically queued skins should auto-scroll.');
   ok(setlistSource.includes('function applyQueueScrolls()') && setlistSource.includes("runway.appendChild(copy);"),
     'Overflowing queues should duplicate one complete track for a seamless loop.');
-  ok(setlistCss.includes('.sl-queue-scroll .sl-queue-runway') && setlistCss.includes('@keyframes sl-queue-up'),
-    'The queue loop needs a dedicated transform animation.');
+  // 停留秒數／捲動速度可調（使用者實測回報希望能調整），@keyframes 的百分比 offset 又只能是
+  // 寫死的數字沒法用 var()/calc()，所以改成逐份清單動態產生一段 @keyframes，見 applyQueueScrolls()。
+  ok(setlistCss.includes('.sl-queue-scroll .sl-queue-runway { will-change: transform; }'),
+    'The queue loop needs the base runway rule (per-instance @keyframes are generated at runtime, not static CSS).');
+  ok(setlistSource.includes('function ensureQueueKfStyleEl()') && setlistSource.includes("kfRules.push("),
+    'Auto-scroll must generate its own @keyframes per list so the configurable hold time can be an absolute duration.');
   ok(setlistCss.includes('background: #2c3138;') && setlistCss.includes('[data-layout="glow"] .sk-row { padding: calc(4px * var(--sl-fit)) 0; border-bottom: 1px solid rgba(255, 255, 255, .1); background: transparent; }'),
     'Night Neon should use one gray panel instead of shaded individual rows.');
   ok(setlistCss.includes('top: calc(8px * var(--sl-fit));') && setlistCss.includes('padding: calc(29px * var(--sl-fit))'),
     'Paper Tag now-playing label should remain inside the card.');
+});
+
+test('自動捲動的停留秒數與速度可調，且捲動速度改動即時生效', () => {
+  const schema = require('../public/js/setlist-style-schema');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8').replace(/\r\n/g, '\n');
+  const delayField = schema.FIELD_BY_KEY.queueScrollDelay;
+  const speedField = schema.FIELD_BY_KEY.queueScrollSpeed;
+  ok(delayField && delayField.default === 2.5 && delayField.min === 0 && delayField.max === 8, '捲動前停留秒數欄位缺少或預設值跑掉：');
+  ok(speedField && speedField.default === 24 && speedField.min > 0, '捲動速度欄位缺少或預設值跑掉：');
+  // 兩個欄位沒有 cssVar：換算成 @keyframes 百分比只能在 render 當下讀 curStyle 計算，
+  // 標 needsRerender 才會在滑桿改動時立刻重算，不必等下一次換歌才生效。
+  ok(delayField.needsRerender === true && speedField.needsRerender === true, '捲動設定改動必須立刻重繪生效（needsRerender）：');
+  ok(indexHtml.includes('id="sls-queue-scroll-delay"') && indexHtml.includes('id="sls-queue-scroll-speed"'), '面板必須提供捲動前停留秒數與捲動速度兩個控制項：');
+  ok(setlistSource.includes('const speed = Math.max(1, Number(curStyle.queueScrollSpeed) || 24);'), '捲動速度必須讀取使用者設定，不能寫死：');
+  ok(setlistSource.includes('const delaySec = Math.max(0, Number(curStyle.queueScrollDelay) || 0);'), '停留秒數必須讀取使用者設定，不能寫死：');
+  ok(setlistSource.includes('const holdPct = Math.min(45, (delaySec / totalSec) * 100);'), '停留比例必須設上限，避免停留秒數設太長時動畫看起來像完全沒在動：');
+});
+
+test('圓角氣泡（round）已唱／未唱不因有沒有歌手忽大忽小', () => {
+  // 使用者實測回報：圓角氣泡大小不一致看了不舒服。根因是歌手欄用條件式渲染
+  // （有歌手才輸出 <span>），造成同一份清單裡有的氣泡一行、有的兩行。
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8').replace(/\r\n/g, '\n');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8').replace(/\r\n/g, '\n');
+  ok(setlistSource.includes('<span class="sk-artist">${escapeHtml(s.artist || \'\')}</span>'), '歌手欄必須一律輸出（沒有歌手就留空 span），高度才會一致：');
+  ok(!setlistSource.includes("${s.artist ? `<span class=\"sk-artist\">"), '不可恢復條件式渲染歌手欄，否則氣泡高度又會忽高忽低：');
+  ok(setlistCss.includes('.sk-artist { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(var(--sl-sz-a, 11px) * .95); line-height: 1.3; min-height: 1.3em;'),
+    '歌手欄需要 min-height 保底，沒有歌手的空 span 才會佔住跟有歌手時一樣的高度：');
+  ok(setlistCss.includes('[data-layout="round"] .sk-row {\n  border-radius: 999px; padding: calc(7px * var(--sl-fit)) calc(13px * var(--sl-fit));\n  background: rgba(255, 250, 241, .92); box-shadow: 0 calc(4px * var(--sl-fit)) calc(9px * var(--sl-fit)) rgba(20, 8, 14, .12);\n  /* 已唱／未唱共用同一個 1px 邊框寬度'),
+    '已唱／未唱氣泡必須共用同一個邊框寬度，否則未唱多了一圈邊框會比已唱高 2px：');
+  ok(setlistCss.includes('[data-layout="round"] .sk-artist { color: rgba(88, 25, 54, .62); }'),
+    '已唱（淺色氣泡）的歌手字色必須有自己的深色版本，否則沿用暗底文字色會在淺底上看不見：');
+});
+
+test('跟唱視圖（/prompter）路由與 PIN／clientType 保護到位', () => {
+  const serverSource = fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8');
+  const socketHandlerSource = fs.readFileSync(path.join(__dirname, '../server/routes/socket-handler.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const appSource = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
+  ok(serverSource.includes("app.get('/prompter'") && serverSource.includes("sendNoCache(res, 'prompter.html')"), '/prompter 必須用 sendNoCache 送出頁面，跟其他頁面路由一致：');
+  ok(socketHandlerSource.includes("new Set(['controller', 'remote', 'prompter', ...PIN_EXEMPT_CLIENT_TYPES])"), 'prompter 必須是合法 clientType，但不可加進 PIN_EXEMPT_CLIENT_TYPES（不是唯讀 OBS 疊加層，要跟 remote 一樣受 PIN 保護）：');
+  ok(!/PIN_EXEMPT_CLIENT_TYPES = new Set\(\[[^\]]*'prompter'/.test(socketHandlerSource), 'prompter 不可被加進 PIN 豁免清單：');
+  ok(socketHandlerSource.includes("else if (type === 'prompter') clients.prompters.add(socket.id);") && socketHandlerSource.includes('clients.prompters.delete(socket.id);'), 'prompter 連線必須正確加入/移出計數集合，斷線才不會計數卡住：');
+  ok(fs.existsSync(path.join(__dirname, '../public/prompter.html')), '缺少 public/prompter.html');
+  ok(fs.existsSync(path.join(__dirname, '../public/js/prompter.js')), '缺少 public/js/prompter.js');
+  ok(indexHtml.includes('id="btn-open-prompter"'), '面板頂欄必須有開啟跟唱視圖的按鈕');
+  ok(appSource.includes("window.open('/prompter', '_blank', 'noopener')"), '跟唱視圖必須開新分頁，不是像歌詞/歌單網址那樣複製到剪貼簿：');
+});
+
+test('跟唱視圖整句歌詞：時間跳轉不留殘影，逐句判斷純函式正確', () => {
+  const promptSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8').replace(/\r\n/g, '\n');
+  // 一次跨好幾句（拖曳進度條、遠端 seek）時，舊的 --next 預覽標記若只清「前一個 active」跟
+  // 「前一個 next」兩個定點，中間被跳過的那句會留下沒清掉的殘影 class。
+  ok(promptSource.includes("dom.lyrics.querySelectorAll('.pt-line--active, .pt-line--next').forEach((el) => {"),
+    '切換目前句時必須整批清除舊的 active/next 標記，不能只清兩個定點：');
+  ok(promptSource.includes('// 不等下一次輪詢：面板拖曳進度條時（seeking）落點可能跨好幾句，\n    // 拖到哪就該立刻反映在哪，等 250ms 的輪詢會讓歌詞明顯慢半拍。\n    updateLyricsHighlight();'),
+    'lyrics:sync 必須立即重算目前句，不能只靠 250ms 輪詢，否則面板拖曳進度條時歌詞會慢半拍：');
+
+  // findCurrentLine 純邏輯抽出來跑，不用真的開瀏覽器：最後一個 time<=t 的行才是目前句。
+  function findLineIndex(lines, t) {
+    let idx = -1;
+    for (let i = 0; i < lines.length; i++) { if (lines[i].time <= t) idx = i; else break; }
+    return idx;
+  }
+  const lines = [{ time: 0 }, { time: 3000 }, { time: 6000 }, { time: 9000 }];
+  eq(findLineIndex(lines, 0), 0, 't=0 應該落在第一句：');
+  eq(findLineIndex(lines, 2999), 0, 't=2999 還沒到第二句的時間點：');
+  eq(findLineIndex(lines, 8999), 2, 't=8999 應該還在第三句：');
+  eq(findLineIndex(lines, 15000), 3, '超過最後一句的時間點應該停在最後一句，不是 -1：');
+  eq(findLineIndex(lines, -1), -1, '歌曲一開始（時間軸之前）不該有任何句子亮起：');
+});
+
+test('跟唱視圖歌詞外觀設定：齒輪鈕不可誤套 theme-toggle class', () => {
+  // 實測踩過：齒輪鈕如果共用 .theme-toggle（跟真正的主題切換鈕同一個 class），
+  // theme.js 的 querySelectorAll('.theme-toggle') 會把它一起接管——點下去圖示被換成
+  // 太陽/月亮、還會連帶把主題切掉，變成「打開設定」跟「切主題」兩個動作黏在一起。
+  const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  const promptCss = fs.readFileSync(path.join(__dirname, '../public/css/prompter.css'), 'utf8');
+  const promptJs = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  ok(promptHtml.includes('id="pt-settings-btn" class="pt-icon-btn"'), '齒輪鈕必須用獨立的 class，不可跟主題切換鈕共用 .theme-toggle：');
+  ok(promptHtml.includes('id="pt-theme-toggle" class="theme-toggle"'), '主題切換鈕本身仍要保留 .theme-toggle，theme.js 才找得到它：');
+  ok(promptCss.includes('.pt-icon-btn {'), 'prompter.css 必須有獨立的齒輪鈕樣式：');
+  ok(promptJs.includes("settingsBtn: document.getElementById('pt-settings-btn')") && promptJs.includes('dom.settingsBtn.addEventListener'), '齒輪鈕必須自己接開啟設定的事件，不能靠共用 class 順便觸發：');
+});
+
+test('跟唱視圖歌詞外觀設定：字體/字級/顏色/描邊只存本機，套到正確的 CSS 變數', () => {
+  const promptJs = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  const promptCss = fs.readFileSync(path.join(__dirname, '../public/css/prompter.css'), 'utf8').replace(/\r\n/g, '\n');
+  ok(promptJs.includes("const APPEARANCE_KEY = 'es-prompter-appearance';"), '外觀設定必須有自己的 localStorage key：');
+  ok(promptJs.includes('localStorage.setItem(APPEARANCE_KEY') && promptJs.includes('localStorage.getItem(APPEARANCE_KEY'),
+    '外觀設定必須讀寫 localStorage，不能只存在記憶體裡（重新整理就消失）：');
+  ok(!promptJs.includes("SocketClient.send('lyric-settings"), '外觀設定是這台裝置的個人偏好，不可誤送到伺服器影響 OBS 或其他裝置：');
+  [
+    "r.setProperty('--pt-font'",
+    "r.setProperty('--pt-size'",
+    "r.setProperty('--pt-color'",
+    "r.setProperty('--pt-stroke-w'",
+    "r.setProperty('--pt-stroke-c'",
+  ].forEach((required) => ok(promptJs.includes(required), `外觀設定缺少 ${required}`));
+  ok(promptCss.includes('font-family: var(--pt-font);') && promptCss.includes('font-size: var(--pt-size);'),
+    '.pt-line 必須實際套用字體/字級變數，不能設定了卻沒接上：');
+  ok(promptCss.includes('color: var(--pt-color);') && promptCss.includes('-webkit-text-stroke: var(--pt-stroke-w) var(--pt-stroke-c);'),
+    '.pt-line--active 必須套用顏色與描邊變數：');
+});
+
+test('跟唱視圖進度條支援滑鼠／觸控拖曳與鍵盤跳轉', () => {
+  const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  const promptJs = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  const promptCss = fs.readFileSync(path.join(__dirname, '../public/css/prompter.css'), 'utf8');
+  ok(promptHtml.includes('id="pt-progress-track"') && promptHtml.includes('role="slider"') && promptHtml.includes('tabindex="0"'),
+    '進度條必須具備可聚焦 slider 語意，才能用鍵盤操作：');
+  ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'keydown'].forEach((eventName) => {
+    ok(promptJs.includes(`addEventListener('${eventName}'`), `進度條缺少 ${eventName} 操作：`);
+  });
+  ok(promptJs.includes('setPointerCapture?.(event.pointerId)') && promptCss.includes('touch-action: none;'),
+    '拖曳必須持續捕捉指標並停用瀏覽器原生觸控捲動：');
+  ok(promptJs.includes("? { time: scrubSeconds, trackId: currentTrackId }") && promptJs.includes("SocketClient.send('play:seek', payload)"),
+    '拖曳放開後必須帶目前 trackId 送出 seek，避免快速切歌時舊 seek 汙染新歌：');
+  ok(promptJs.includes("if (event.key === 'Home') target = 0;") && promptJs.includes("if (event.key === 'End') target = lastDuration;"),
+    '鍵盤必須支援方向鍵與 Home／End：');
+});
+
+test('跟唱視圖可載入使用者電腦字體，並保留五語介面', () => {
+  const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  const promptJs = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  const i18n = require('../public/js/i18n');
+  ok(promptJs.includes("fetch('/api/fonts')") && promptJs.includes("typeof window.queryLocalFonts === 'function'"),
+    '本機字體必須以伺服器完整掃描為主、Font Access API 為補充：');
+  ok(promptJs.includes("const LOCAL_FONT_PREFIX = 'local:';") && promptJs.includes('option.style.fontFamily = family;'),
+    '本機字體選項需要獨立值前綴，並以實際字體預覽名稱：');
+  ok(promptHtml.includes('id="pt-font-local"') && promptHtml.includes('data-i18n-locale') && promptHtml.includes('/js/i18n.js'),
+    '跟唱視圖必須有本機字體選單與五語切換入口：');
+  ['app.prompterTitle', 'prompter.open', 'prompter.progress', 'prompter.fontLoaded', 'prompter.resetAppearance'].forEach((key) => {
+    i18n.LOCALES.forEach((locale) => ok(String(i18n.catalogs[locale][key] || '').trim(), `${locale}.${key} 不得為空：`));
+  });
+  ok(promptJs.includes("window.addEventListener('i18n:change'"), '切換語言後必須重繪動態播放清單、空狀態與字體載入狀態：');
+});
+
+test('logger 對 console 寫入失敗有防護，不會觸發無限迴圈把硬碟寫爆', () => {
+  // 2026-08-04 真實事故：孤兒 node 行程的 stdout 管道斷了，console.error 丟出 EPIPE，
+  // 這個丟出被 uncaughtException 接到、再呼叫 log.error() 想記錄它、又再丟一次 EPIPE，
+  // 無限迴圈全速跑了 5 小時，單一 log 檔寫到 80GB 把整顆系統碟灌滿。
+  // 這裡直接模擬「console.error 本身會丟出」的情境，驗證 log.error() 不會把這個丟出
+  // 傳給呼叫端——傳出去的話，server/index.js 的 uncaughtException handler 接到後
+  // 再呼叫一次 log.error()，就是當時真的發生過的那個迴圈。
+  const { createLogger } = require('../server/utils/logger');
+  const testLog = createLogger('LoggerSafetyTest');
+  const originalConsoleError = console.error;
+  let consoleErrorCalls = 0;
+  console.error = () => { consoleErrorCalls++; throw new Error('EPIPE: broken pipe, write'); };
+  let threw = false;
+  try {
+    testLog.error('模擬管道斷掉時的寫入', new Error('boom'));
+  } catch (e) {
+    threw = true;
+  } finally {
+    console.error = originalConsoleError;
+  }
+  eq(threw, false, 'console 寫入失敗絕不能傳出 log.error()，否則呼叫端（uncaughtException handler）會被牽連一起炸：');
+  eq(consoleErrorCalls, 1, 'console.error 應該只被呼叫一次（這裡驗證的是「丟出不會外洩」，不是重試機制）：');
+
+  // 第二層防線：server/index.js 的 uncaughtException/unhandledRejection handler
+  // 必須有重入旗標，就算未來出現其他「記錄錯誤本身又拋錯」的狀況，也不能無限重入。
+  const serverSource = fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8');
+  ok(serverSource.includes('let handlingFatalError = false;'), 'uncaughtException handler 必須有重入旗標：');
+  ok(serverSource.includes('if (handlingFatalError) return;'), '重入時必須直接放棄，不能再嘗試記錄一次：');
+  ok(serverSource.includes('function logFatalSafely(') && serverSource.includes("process.on('uncaughtException'") && serverSource.includes("process.on('unhandledRejection'"),
+    'uncaughtException 與 unhandledRejection 都必須走同一個有防護的記錄函式：');
+
+  const loggerSource = fs.readFileSync(path.join(__dirname, '../server/utils/logger.js'), 'utf8');
+  ok(loggerSource.includes('try { consoleFn(formatted); } catch (err) {'), 'console 寫入本身必須包 try/catch：');
+});
+
+test('logger 同一天內寫超過大小上限會主動輪替，不必等隔天開新檔案才檢查', () => {
+  // 2026-08-04 事故的第二個破口：原本的輪替檢查只在「開新串流那一刻」（開機/跨天）
+  // 執行一次，同一天內持續寫入完全不會再重新檢查——搭配上面那個無限迴圈，
+  // 這就是為什麼「MAX_LOG_SIZE = 50MB」的上限形同虛設，能一路寫到 80GB。
+  const loggerSource = fs.readFileSync(path.join(__dirname, '../server/utils/logger.js'), 'utf8');
+  ok(loggerSource.includes('let currentStreamBytes = 0;'), '必須有即時位元組計數，不能只在開新串流時看一次檔案大小：');
+  ok(loggerSource.includes('if (currentStreamBytes > MAX_LOG_SIZE) rotateLogFile();') && loggerSource.includes('currentStreamBytes += Buffer.byteLength(line);'),
+    'writeLog() 每次寫入都要即時累加並檢查上限，不能只在 getLogStream() 開新串流時檢查：');
+  ok(loggerSource.includes('function rotateLogFile()'), '輪替必須是獨立函式：關掉目前串流、更名、讓下一次寫入重新開一個全新檔案：');
 });
 
 test('歌單暫停時仍將目前歌曲保留在正在播放', () => {
@@ -6018,6 +6204,12 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
   ok(!electronShell.isTwitchVerificationUrl('http://www.twitch.tv/activate'), '非 https 不放行：');
   ok(!electronShell.isTwitchVerificationUrl('https://twitch.tv.evil.com/activate'), '仿冒網域不放行：');
   ok(!electronShell.isTwitchVerificationUrl('https://example.com/activate'));
+  // 跟唱視圖用 window.open 開 /prompter；殼裡預設 deny 一切 window.open，
+  // 使用者實測回報 Electron 打不開、看到的視窗沒有退出按鈕，根因是這裡沒放行。
+  ok(electronShell.isPrompterUrl('http://127.0.0.1:3000/prompter', 3000), '/prompter 必須被殼放行，否則 Electron 裡按鈕沒反應：');
+  ok(!electronShell.isPrompterUrl('http://127.0.0.1:3000/panel', 3000), '只放行 /prompter，不是整個本機來源都放行：');
+  ok(!electronShell.isPrompterUrl('https://127.0.0.1:3000/prompter', 3000), '非 http 不放行：');
+  ok(!electronShell.isPrompterUrl('http://evil.com/prompter', 3000), '非本機網域不放行：');
 
   const source = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   [
@@ -6038,6 +6230,10 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'elitesand:choose-media-location',
     'restart-after-media-migration',
     'SHUTDOWN_MESSAGE',
+    // 跟唱視圖子視窗必須是一般原生 frame（有系統關閉鈕）：這個子視窗沒有配對的自訂標題列
+    // IPC 控制鈕，用主視窗那套 frame:false 會開出一個關不掉的視窗（已修的實測回報）。
+    'frame: true',
+    'did-create-window',
   ].forEach((required) => ok(source.includes(required), `Electron shell is missing ${required}`));
 
 });
@@ -6826,13 +7022,13 @@ console.log('\n🌐 17. M6.1 介面語系層');
   });
 
   test('HTML 與動態 UI 引用的翻譯鍵都存在', () => {
-    const htmlFiles = ['index.html', 'controller.html', 'display.html', 'setlist.html'];
-    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-youtube-import.js', 'app-diagnostics.js', 'error-handler.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js', 'lyric-extras.js', 'app.js'];
+    const htmlFiles = ['index.html', 'controller.html', 'display.html', 'setlist.html', 'prompter.html'];
+    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-youtube-import.js', 'app-diagnostics.js', 'error-handler.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js', 'prompter.js', 'lyric-extras.js', 'app.js'];
     const referenced = new Set();
     htmlFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public', file), 'utf8');
       ok(source.includes('/js/i18n.js'), `${file} 必須載入語系層：`);
-      for (const match of source.matchAll(/data-i18n(?:-title|-aria-label|-placeholder|-alt)?="([^"]+)"/g)) referenced.add(match[1]);
+      for (const match of source.matchAll(/data-i18n(?:-title|-aria-label|-placeholder|-alt|-label)?="([^"]+)"/g)) referenced.add(match[1]);
     });
     jsFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public/js', file), 'utf8');

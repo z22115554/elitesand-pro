@@ -26,11 +26,30 @@ const PORT = process.env.PORT || config.port || 3000;
 // ─── Process 級安全網 ───
 // 放在伺服器進入點（而非藏在 logger 模組裡），之後的人才找得到。
 // 直播工具的原則：能繼續跑就繼續跑，但要留下完整紀錄。
+//
+// 2026-08-04 實測踩過：stdout/stderr 管道斷掉（父行程/終端機已關閉，這個 node 子行程
+// 卻沒被一起結束——孤兒行程）時，log.error() 內部的 console.error 會丟出 EPIPE；
+// 這個丟出又被這裡的 handler 接到、再呼叫 log.error() 想記錄它、又再丟一次 EPIPE，
+// 無限迴圈全速跑了 5 小時，寫出 80GB 的 log 檔把整顆 C 槽灌滿。
+// logger.js 的 console 寫入本身已經補上 try/catch（見該檔案），這裡的旗標是第二層
+// 防線：就算未來出現其他「記錄錯誤本身又拋錯」的狀況，也不能再無限重入同一個 handler。
+let handlingFatalError = false;
+function logFatalSafely(prefix, err) {
+  if (handlingFatalError) return; // 已經在處理上一個致命錯誤，絕不重入
+  handlingFatalError = true;
+  try {
+    log.error(prefix, err);
+  } catch (_) {
+    // 連記錄這件事本身都失敗——放棄記錄，但絕不能讓這個 throw 再次觸發這個 handler。
+  } finally {
+    handlingFatalError = false;
+  }
+}
 process.on('uncaughtException', (err) => {
-  log.error('Uncaught exception（伺服器繼續運行，請檢查日誌）', err);
+  logFatalSafely('Uncaught exception（伺服器繼續運行，請檢查日誌）', err);
 });
 process.on('unhandledRejection', (reason) => {
-  log.error('Unhandled promise rejection', reason);
+  logFatalSafely('Unhandled promise rejection', reason);
 });
 
 // 非正常結束偵測：寫下本輪啟動標記，同時把「上一輪是否乾淨關閉」定案在記憶體。
@@ -189,6 +208,11 @@ app.get('/display', (req, res) => {
 // Setlist 疊加頁（透明背景 + 直播歌單）
 app.get('/setlist', (req, res) => {
   sendNoCache(res, 'setlist.html');
+});
+
+// 跟唱視圖：給主播自己看的整句歌詞（不逐字），不是 OBS 疊加層，PIN 保護同控制面板/遙控器
+app.get('/prompter', (req, res) => {
+  sendNoCache(res, 'prompter.html');
 });
 
 // ─── Audio Streaming ───

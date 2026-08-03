@@ -126,6 +126,14 @@
     });
   });
 
+  // 跟唱視圖：給主播自己看的整句歌詞頁，開新分頁——不是要複製網址貼進 OBS，
+  // 所以直接開，不是走「歌詞網址/歌單網址」那種複製到剪貼簿的模式。
+  if (dom.btnOpenPrompter) {
+    dom.btnOpenPrompter.addEventListener('click', () => {
+      window.open('/prompter', '_blank', 'noopener');
+    });
+  }
+
   // 歌詞詳細設定 Modal（入口位於右側固定預覽下方）。
   (function initDisplayAdvancedModal() {
     const btn = document.getElementById('btn-display-advanced');

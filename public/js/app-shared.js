@@ -72,6 +72,7 @@ window.AppShared = (function () {
     animLinesVal: document.getElementById('anim-lines-val'),
     animFontsize: document.getElementById('anim-fontsize'),
     animFontsizeVal: document.getElementById('anim-fontsize-val'),
+    btnOpenPrompter: document.getElementById('btn-open-prompter'),
     copyObsUrl: document.getElementById('copy-obs-url'),
     copyObsUrlTop: document.getElementById('copy-obs-url-top'),
     copyObsUrlPreview: document.getElementById('copy-obs-url-preview'),

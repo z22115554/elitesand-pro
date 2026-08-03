@@ -114,6 +114,18 @@ function isTwitchVerificationUrl(rawUrl) {
   }
 }
 
+// 跟唱視圖（面板頂欄「跟唱視圖」按鈕）走 window.open 開新分頁；殼裡預設 deny 一切
+// window.open（見下方 setWindowOpenHandler），不特別放行的話按了會完全沒反應。
+// 只收斂到自己 server 的 /prompter 這條路徑，不是任何同源網址都放行。
+function isPrompterUrl(rawUrl, port) {
+  if (!isTrustedLocalUrl(rawUrl, port)) return false;
+  try {
+    return new URL(rawUrl).pathname === '/prompter';
+  } catch (_) {
+    return false;
+  }
+}
+
 function probeHealth(port, { httpImpl = http, timeoutMs = 1000 } = {}) {
   return new Promise((resolve) => {
     const request = httpImpl.get({
@@ -422,11 +434,42 @@ function createElectronShell({
     window.on('unmaximize', () => window.webContents.send?.('elitesand:window-maximized', false));
     window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
     window.webContents.setWindowOpenHandler(({ url }) => {
-      if (isProjectReleaseUrl(url) || isTwitchVerificationUrl(url)) shell.openExternal(url);
+      if (isProjectReleaseUrl(url) || isTwitchVerificationUrl(url)) {
+        shell.openExternal(url);
+        return { action: 'deny' };
+      }
+      // 跟唱視圖用一般原生視窗（有系統標題列與關閉鈕），不像主視窗走自家 frame:false
+      // 那套自訂標題列——這個子視窗沒有配對的 IPC 控制鈕，用 frame:false 反而會開出一個
+      // 關不掉的視窗（使用者實測回報：Electron 打不開、看預覽窗找不到退出按鈕，根因就是這裡）。
+      if (isPrompterUrl(url, port)) {
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            width: 1000,
+            height: 700,
+            minWidth: 640,
+            minHeight: 480,
+            backgroundColor: '#121317',
+            title: 'Elitesand Pro 跟唱視圖',
+            icon: path.join(shellRoot, 'assets', 'elitesand-pro.ico'),
+            frame: true,
+            webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+          },
+        };
+      }
       return { action: 'deny' };
     });
     window.webContents.on('will-navigate', (event, url) => {
       if (!isTrustedLocalUrl(url, port)) event.preventDefault();
+    });
+    // 跟唱視圖子視窗建立後，一樣把「拒絕未知彈窗／只信任本機網址」的防護補上，
+    // 不能因為它是子視窗就少一層——防禦深度跟主視窗一致。
+    window.webContents.on('did-create-window', (childWindow) => {
+      childWindow.removeMenu?.();
+      childWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+      childWindow.webContents.on('will-navigate', (event, url) => {
+        if (!isTrustedLocalUrl(url, port)) event.preventDefault();
+      });
     });
     await window.loadURL(`http://127.0.0.1:${port}/panel?electronShell=1`);
     return window;
@@ -638,6 +681,7 @@ module.exports = {
   isTrustedLocalUrl,
   isProjectReleaseUrl,
   isTwitchVerificationUrl,
+  isPrompterUrl,
   probeHealth,
   waitForExit,
   createElectronShell,

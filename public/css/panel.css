@@ -1158,6 +1158,10 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 /* 注意：背景要用 base.css 既有變數（--bg-raised/--bg-hover）；曾誤用未定義的 --surface-2/3 導致按鈕背景變透明 */
 .topbar-link-btn { border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-dim); border-radius: var(--r-sm); padding: 5px 9px; font-size: 12px; cursor: pointer; }
 .topbar-link-btn:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-hover); }
+/* 跟唱視圖入口：用強調色實心填滿，跟其餘「複製網址」類的中性按鈕區分開──
+   那些是給 OBS 用的網址，這顆是開一個給主播自己看的新分頁，性質不同故意跳出來。 */
+.topbar-link-btn--accent { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.topbar-link-btn--accent:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-text); }
 .source-pill { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-faint); border-radius: 999px; padding: 4px 9px; font-size: 12px; white-space: nowrap; }
 .source-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
 .source-pill.connected { color: #22c55e; border-color: rgba(34, 197, 94, 0.62); background: rgba(34, 197, 94, 0.13); }

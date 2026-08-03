@@ -42,7 +42,8 @@ const log = createLogger('Socket');
 // display-preview / setlist-preview = 控制面板內嵌的預覽 iframe（?preview=1）：
 // 資料照餵、豁免 PIN（iframe 拿不到面板的 PIN），但不計入「OBS 已連線」數。
 const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'setlist', 'display-preview', 'setlist-preview']);
-const CLIENT_TYPES = new Set(['controller', 'remote', ...PIN_EXEMPT_CLIENT_TYPES]);
+// prompter（跟唱視圖）給主播自己看，不是唯讀的 OBS 疊加層——跟 remote 一樣要 PIN、也能送播放指令。
+const CLIENT_TYPES = new Set(['controller', 'remote', 'prompter', ...PIN_EXEMPT_CLIENT_TYPES]);
 const READ_ONLY_EVENTS = new Set(['client:type', 'client:build', 'state:request', 'setlist:get']);
 const DISPLAY_BUILD_REPORT_GRACE_MS = 3500;
 
@@ -96,6 +97,7 @@ module.exports = function socketHandler(io, {
     displays: new Set(),
     remotes: new Set(),
     setlists: new Set(),
+    prompters: new Set(),
   };
   const displayBuildReports = new Map();
   const displayConnectedAt = new Map();
@@ -131,7 +133,8 @@ module.exports = function socketHandler(io, {
       displays: clients.displays.size,
       remotes: clients.remotes.size,
       setlists: clients.setlists.size,
-      total: clients.controllers.size + clients.displays.size + clients.remotes.size + clients.setlists.size,
+      prompters: clients.prompters.size,
+      total: clients.controllers.size + clients.displays.size + clients.remotes.size + clients.setlists.size + clients.prompters.size,
       displayRuntime: { expectedBuild: expectedDisplayBuild, current, stale, pending, unreported },
       runtimeEvidence: runtimeEvidence.getSnapshot(),
     };
@@ -296,6 +299,7 @@ module.exports = function socketHandler(io, {
       }
       else if (type === 'remote') clients.remotes.add(socket.id);
       else if (type === 'setlist') clients.setlists.add(socket.id);
+      else if (type === 'prompter') clients.prompters.add(socket.id);
       runtimeEvidence.recordSocketConnected({ socketId: socket.id, clientType: type });
 
       // 顯示端發送完整恢復狀態（含歌詞），而非基本狀態；預覽 iframe 吃跟正式來源一樣的資料
@@ -362,6 +366,7 @@ module.exports = function socketHandler(io, {
       clients.displays.delete(socket.id);
       clients.remotes.delete(socket.id);
       clients.setlists.delete(socket.id);
+      clients.prompters.delete(socket.id);
       forgetDisplayConnection(socket.id);
       const c = getClientCounts();
       emitClientCounts();

@@ -16,6 +16,10 @@ let currentLogLevel = LOG_LEVELS.INFO;
 let logStream = null;
 let currentLogDate = '';
 let fileLoggingDisabled = false;
+// 目前這條串流已經寫了多少 bytes：輪替判斷改成「寫入當下即時檢查」，不能只在開新
+// 串流那一刻檢查一次——同一天內持續寫入（例如失控迴圈）原本完全不會被這個上限攔住，
+// 2026-08-04 就是這樣一路寫到 80GB 才把 C 槽灌滿。
+let currentStreamBytes = 0;
 
 function ensureLogDir() {
   if (fileLoggingDisabled) return false;
@@ -61,18 +65,7 @@ function formatMessage(level, moduleName, message, extra) {
   return line;
 }
 
-function checkLogRotation(logFile) {
-  try {
-    const stats = fs.statSync(logFile);
-    if (stats.size > MAX_LOG_SIZE) {
-      const backupFile = logFile.replace('.log', `.${Date.now()}.log`);
-      fs.renameSync(logFile, backupFile);
-      console.log(`[Logger] rotated log: ${path.basename(backupFile)}`);
-    }
-  } catch (err) {
-    // Best-effort only.
-  }
-
+function pruneOldLogFiles() {
   try {
     const files = fs.readdirSync(LOG_DIR)
       .filter((f) => f.startsWith('elitesand-pro-') && f.endsWith('.log'))
@@ -85,6 +78,27 @@ function checkLogRotation(logFile) {
   } catch (err) {
     // Best-effort only.
   }
+}
+
+// 把目前這條串流關掉、把檔案更名成備份檔，讓下一次 writeLog() 的 getLogStream()
+// 開出全新的檔案——不能只把檔案更名卻讓現有串流繼續往（已改名的）舊檔案寫下去，
+// 那樣輪替形同虛設（改名瞬間之後所有內容仍流進同一個 inode，只是檔名變了）。
+function rotateLogFile() {
+  const stream = logStream;
+  const rotatingDate = currentLogDate;
+  logStream = null;
+  currentStreamBytes = 0;
+  if (!stream) return;
+  try { stream.end(); } catch (err) { /* ignore */ }
+  const logFile = path.join(LOG_DIR, `elitesand-pro-${rotatingDate}.log`);
+  try {
+    const backupFile = logFile.replace('.log', `.${Date.now()}.log`);
+    fs.renameSync(logFile, backupFile);
+    console.log(`[Logger] rotated log: ${path.basename(backupFile)}`);
+  } catch (err) {
+    // Best-effort only.
+  }
+  pruneOldLogFiles();
 }
 
 function disableFileLogging(err) {
@@ -114,11 +128,17 @@ function getLogStream() {
     stream.on('error', disableFileLogging);
     logStream = stream;
     currentLogDate = today;
-    stream.write(`\n${'='.repeat(60)}\n`);
-    stream.write(`  Elitesand Pro log - ${today}\n`);
-    stream.write(`  Started: ${getTimestamp()}\n`);
-    stream.write(`${'='.repeat(60)}\n\n`);
-    checkLogRotation(logFile);
+    currentStreamBytes = 0;
+    const header = `\n${'='.repeat(60)}\n  Elitesand Pro log - ${today}\n  Started: ${getTimestamp()}\n${'='.repeat(60)}\n\n`;
+    stream.write(header);
+    currentStreamBytes += Buffer.byteLength(header);
+    // 開檔當下若已存在（附加模式，可能是同一天重啟）且已經超過上限，先輪替一次；
+    // 之後的上限檢查交給 writeLog() 每次寫入即時判斷，不再只靠這裡的單次快照。
+    try {
+      const stats = fs.statSync(logFile);
+      if (stats.size > MAX_LOG_SIZE) rotateLogFile();
+    } catch (err) { /* 檔案不存在等同全新，忽略 */ }
+    pruneOldLogFiles();
   } catch (err) {
     disableFileLogging(err);
   }
@@ -133,12 +153,22 @@ function writeLog(level, levelName, moduleName, message, extra) {
   const consoleFn = level >= LOG_LEVELS.ERROR ? console.error
     : level >= LOG_LEVELS.WARN ? console.warn
     : console.log;
-  consoleFn(formatted);
+  // 曾經在正式環境把 80GB 空間吃光：stdout/stderr 管道斷掉時（父行程/終端機已關閉，
+  // 子行程還活著）console.error 本身會丟出 EPIPE，若不包住，這個丟出會被 server/index.js
+  // 的 uncaughtException 安全網接到、再呼叫這裡想記錄它、又再丟一次 EPIPE——無限迴圈，
+  // 每一輪都把完整 stack trace 寫進 log，全速跑到硬碟見底。這裡吞掉寫入失敗就好，
+  // 檔案那邊的寫入已經有獨立的 try/catch（見下方 stream.write），沒有理由 console 這邊沒有。
+  try { consoleFn(formatted); } catch (err) { /* 靜默：console 本身寫壞不該讓伺服器跟著炸 */ }
 
   const stream = getLogStream();
   if (stream && stream.writable) {
     try {
-      stream.write(formatted + '\n');
+      const line = formatted + '\n';
+      stream.write(line);
+      currentStreamBytes += Buffer.byteLength(line);
+      // 即時檢查，不等下一次開新串流才輪替——見檔案開頭的說明，這是這次 80GB
+      // 事故的第二個破口（原本只在開新串流那一刻檢查一次，同一天內完全不會再重算）。
+      if (currentStreamBytes > MAX_LOG_SIZE) rotateLogFile();
     } catch (err) {
       disableFileLogging(err);
     }

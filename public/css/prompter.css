@@ -1,0 +1,254 @@
+/* ─── 跟唱視圖：主播自己看的整句歌詞（不逐字），沿用 base.css 的極簡設計變數，
+   刻意不做任何炫技排版——這一頁的唯一任務是「唱歌時瞄一眼看得清楚」。 ─── */
+
+html, body.prompter {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg-gradient), var(--bg-base);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+body.prompter {
+  display: flex;
+  flex-direction: column;
+}
+
+.pt-top {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  backdrop-filter: blur(var(--glass-blur));
+}
+.pt-brand { font-size: 14px; font-weight: 700; letter-spacing: .01em; }
+.pt-brand-sub { font-weight: 400; color: var(--text-dim); margin-left: 6px; }
+.pt-top-right { display: flex; align-items: center; gap: 14px; }
+.conn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+/* 跟 .theme-toggle 同樣的視覺（32px 方形圖示鈕），但獨立一個 class——不能共用
+   .theme-toggle，那個 class 是 theme.js 用來找按鈕的通用選擇器，共用會讓這顆齒輪
+   鈕被 theme.js 接管：一點下去圖示被換成太陽/月亮，還會連帶把主題切掉。 */
+.pt-icon-btn {
+  width: 32px; height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background .12s;
+}
+.pt-icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+.pt-icon-btn svg { width: 16px; height: 16px; }
+
+.pt-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.pt-side {
+  flex: 0 0 260px;
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pt-side-head {
+  flex: 0 0 auto;
+  padding: 14px 16px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.pt-playlist { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 12px; }
+.pt-playlist-empty { padding: 20px 12px; color: var(--text-faint); font-size: 13px; text-align: center; }
+.pt-playlist-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.pt-playlist-item:hover { background: var(--bg-hover); }
+.pt-playlist-item.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.pt-playlist-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pt-playlist-item.active .pt-playlist-item-title { color: var(--accent-2); }
+.pt-playlist-item-artist {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pt-lyrics-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+.pt-lyrics {
+  height: 100%;
+  overflow-y: auto;
+  padding: 18vh 8% 40vh;
+  scroll-behavior: smooth;
+}
+.pt-lyrics-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 15px;
+}
+/* 字體/字級/顏色/描邊：使用者可在右上角齒輪調整（prompter.js 寫進這幾個變數），
+   只存這台裝置的 localStorage，預設值即這裡的 fallback。 */
+.pt-lyrics {
+  --pt-font: var(--font);
+  --pt-size: 22px;
+  --pt-color: var(--text);
+  --pt-stroke-w: 0px;
+  --pt-stroke-c: transparent;
+}
+.pt-line {
+  font-family: var(--pt-font);
+  font-size: var(--pt-size);
+  line-height: 1.7;
+  font-weight: 500;
+  color: var(--text-faint);
+  padding: 6px 0;
+  transition: color .25s ease, opacity .25s ease;
+  opacity: .55;
+}
+.pt-line.pt-line--past { opacity: .3; }
+.pt-line.pt-line--active {
+  color: var(--pt-color);
+  font-weight: 800;
+  font-size: calc(var(--pt-size) * 1.23);
+  opacity: 1;
+  -webkit-text-stroke: var(--pt-stroke-w) var(--pt-stroke-c);
+}
+.pt-line.pt-line--next { color: var(--text-dim); opacity: .8; }
+
+.pt-transport {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  backdrop-filter: blur(var(--glass-blur));
+}
+.pt-np { flex: 0 0 200px; min-width: 0; }
+.pt-np-title { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pt-np-artist { font-size: 11.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pt-transport-controls { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+.pt-step, .pt-play {
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pt-step { width: 34px; height: 34px; }
+.pt-step:hover { background: var(--bg-hover); }
+.pt-play {
+  width: 42px; height: 42px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-size: 15px;
+}
+.pt-play:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.pt-progress { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.pt-time { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-faint); flex: 0 0 auto; }
+.pt-progress-track {
+  flex: 1 1 auto;
+  height: 14px;
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.pt-progress-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track-off);
+}
+.pt-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  height: 4px;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+.pt-progress-thumb {
+  position: absolute;
+  left: 0%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--bg-surface);
+  transform: translate(-50%, -50%) scale(.72);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease;
+}
+.pt-progress-track:hover .pt-progress-thumb,
+.pt-progress-track:focus-visible .pt-progress-thumb,
+.pt-progress-track.is-scrubbing .pt-progress-thumb {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.pt-progress-track:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+#pt-font-local:empty { display: none; }
+#pt-font-status { margin: 7px 0 0; }
+
+@media (max-width: 720px) {
+  .pt-side { display: none; }
+  /* 窄螢幕整體縮一點，但仍尊重使用者調過的字級（乘係數，不是寫死覆蓋）。 */
+  .pt-line { font-size: calc(var(--pt-size) * .82); }
+  .pt-line.pt-line--active { font-size: calc(var(--pt-size) * 1.23 * .82); }
+  .pt-np { display: none; }
+}

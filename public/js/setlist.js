@@ -26,6 +26,9 @@
   // 沒有第二種輸出模式，也沒有 URL 參數——同一個 /setlist 網址在任何來源尺寸都成立。
   // 場景版（timeline / diagonal / constellation）不走這條，維持原本的全幅舞台行為。
   const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager']);
+  // 長歌單只在有直向清單的模板循環捲動。卡片／索引／排行榜／終端機維持裁列；
+  // simple 與 signal 是固定版位，只顯示現在與下一首，沒有可捲動的直向隊列。
+  const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager']);
   // 尺度基準：來源正好是 460×320 時 fit = 1，也就是設定裡的 px 數字＝實際像素；
   // 更大的來源等比放大字級與間距（原生字級，不是把小元件 transform 放大）。
   // 基準訂在這裡是實測校準過的：直播常用的 600×1080 直式來源會得到 fit ≈ 1.3
@@ -40,6 +43,7 @@
 
   function isFillLayout() { return FILL_LAYOUTS.has(layoutId); }
   function isSectionedLayout() { return SECTIONED_LAYOUTS.has(layoutId); }
+  function usesAutoScrollQueues() { return AUTO_SCROLL_QUEUE_LAYOUTS.has(layoutId); }
   // key 名稱的 classic 前綴是歷史包袱，實際適用五個清單型模板（見 schema 註解）。
   function showDone() { return !isSectionedLayout() || curStyle.classicShowDone !== false; }
   function showWait() { return !isSectionedLayout() || curStyle.classicShowUpcoming !== false; }
@@ -431,7 +435,65 @@
       if (!next || isGroupLabel(next)) box.removeChild(el);
     });
   }
+
+  function makeQueueTrack(box) {
+    const runway = document.createElement('div');
+    runway.className = 'sl-queue-runway';
+    const track = document.createElement('div');
+    track.className = 'sl-queue-track';
+    runway.appendChild(track);
+    box.replaceChildren(runway);
+    return track;
+  }
+
+  // 動態 @keyframes 容器：捲動前停留秒數／速度是使用者可調的「秒數」，但 CSS @keyframes
+  // 的百分比必須是寫死的數字，沒辦法用 var()/calc() 算——所以改成每次重繪時，依當下清單的
+  // 實際捲動距離換算出這份清單專屬的停留比例，用 <style> 動態產生一段獨立的 @keyframes。
+  let queueKfStyleEl = null;
+  function ensureQueueKfStyleEl() {
+    if (!queueKfStyleEl) {
+      queueKfStyleEl = document.createElement('style');
+      queueKfStyleEl.id = 'sl-queue-dynamic-keyframes';
+      document.head.appendChild(queueKfStyleEl);
+    }
+    return queueKfStyleEl;
+  }
+
+  // 只在確實放不下時複製一次內容，從第二份接回第一份形成無縫循環。
+  // 動畫不改 state，也不重繪歌曲列，避免 OBS 每次循環都閃動。
+  function applyQueueScrolls() {
+    if (!usesAutoScrollQueues()) return;
+    const speed = Math.max(1, Number(curStyle.queueScrollSpeed) || 24); // px/s
+    const delaySec = Math.max(0, Number(curStyle.queueScrollDelay) || 0); // 每輪頭尾各停留這麼久
+    const kfRules = [];
+    let kfIndex = 0;
+    rootEl.querySelectorAll('.setlist-upcoming, .setlist-past, .sk-list').forEach((box) => {
+      const runway = box.querySelector(':scope > .sl-queue-runway');
+      const track = runway && runway.firstElementChild;
+      if (!track || !box.clientHeight || track.scrollHeight <= box.clientHeight + 1) return;
+      const gap = Number.parseFloat(getComputedStyle(runway).rowGap) || 0;
+      const distance = track.getBoundingClientRect().height + gap;
+      const copy = track.cloneNode(true);
+      copy.setAttribute('aria-hidden', 'true');
+      runway.appendChild(copy);
+      box.classList.add('sl-queue-scroll');
+      box.style.setProperty('--sl-queue-shift', `${-distance}px`);
+      const scrollSec = distance / speed;
+      const totalSec = Math.max(0.5, scrollSec + delaySec * 2);
+      // 頭尾各停留 delaySec，換算成這份清單（總時長各不相同）的百分比；最多各佔 45%，
+      // 避免使用者把停留秒數調到比捲動本身還長時，動畫完全看不出在動。
+      const holdPct = Math.min(45, (delaySec / totalSec) * 100);
+      const kfName = `sl-queue-kf-${kfIndex++}`;
+      kfRules.push(
+        `@keyframes ${kfName} { 0%, ${holdPct}% { transform: translateY(0); } ${100 - holdPct}%, 100% { transform: translateY(var(--sl-queue-shift, 0)); } }`
+      );
+      runway.style.animation = `${kfName} ${totalSec}s linear infinite`;
+    });
+    ensureQueueKfStyleEl().textContent = kfRules.join('\n');
+  }
+
   function fitRows() {
+    if (usesAutoScrollQueues()) return;
     trimToFit(rootEl.querySelector('#cl-up'), 'start');
     trimToFit(rootEl.querySelector('#cl-past'), 'end');
     ['#term-list', '#bb-list', '#cards-list', '#ix-list']
@@ -466,9 +528,9 @@
       } else now.hidden = true;
       // 未唱（左）
       const upEl = root.querySelector('#cl-up');
-      const up = model.upcoming.slice(0, upCap());
-      upEl.innerHTML = '';
-      up.forEach((s) => upEl.appendChild(el('div', 'setlist-row setlist-upcoming-row',
+      const up = usesAutoScrollQueues() ? model.upcoming : model.upcoming.slice(0, upCap());
+      const upTrack = makeQueueTrack(upEl);
+      up.forEach((s) => upTrack.appendChild(el('div', 'setlist-row setlist-upcoming-row',
         `<span class="setlist-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="setlist-artist"> — ${escapeHtml(s.artist)}</span>` : ''}`)));
       const upLabel = root.querySelector('.cl-lbl-up');
       upLabel.hidden = up.length === 0;
@@ -476,9 +538,9 @@
       root.querySelector('#cl-up-count').textContent = model.upcoming.length ? String(model.upcoming.length).padStart(2, '0') : '';
       // 已唱（右）
       const pastEl = root.querySelector('#cl-past');
-      const past = model.past.slice(-pastCap());
-      pastEl.innerHTML = '';
-      past.forEach((s) => pastEl.appendChild(el('div', 'setlist-row',
+      const past = usesAutoScrollQueues() ? model.past : model.past.slice(-pastCap());
+      const pastTrack = makeQueueTrack(pastEl);
+      past.forEach((s) => pastTrack.appendChild(el('div', 'setlist-row',
         `${model.showTime ? `<span class="setlist-time">${escapeHtml(fmtOffset(s.offset))}</span>` : ''}<span class="setlist-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="setlist-artist"> — ${escapeHtml(s.artist)}</span>` : ''}`)));
       const doneLabel = root.querySelector('.cl-lbl-done');
       doneLabel.hidden = past.length === 0;
@@ -853,26 +915,30 @@
         } else {
           nowEl.hidden = true;
         }
-        const row = (s, kind) => `<div class="sk-row sk-row--${kind}"><span class="sk-num">${s.n || ''}</span><div class="sk-info"><span class="sk-title">${escapeHtml(s.title)}</span>${s.artist ? `<span class="sk-artist">${escapeHtml(s.artist)}</span>` : ''}</div></div>`;
+        // 歌手欄一律輸出（沒有歌手就留空 span），氣泡高度才不會因為「這首有歌手、那首沒有」
+        // 一行/兩行忽高忽低——使用者反應圓角氣泡忽大忽小看了不舒服，根源就是這裡的條件式渲染。
+        const row = (s, kind) => `<div class="sk-row sk-row--${kind}"><span class="sk-num">${s.n || ''}</span><div class="sk-info"><span class="sk-title">${escapeHtml(s.title)}</span><span class="sk-artist">${escapeHtml(s.artist || '')}</span></div></div>`;
         const doneAll = model.past;
-        const doneShown = showDone() ? doneAll.slice(-pastCap()) : [];
+        const doneShown = showDone() ? (usesAutoScrollQueues() ? doneAll : doneAll.slice(-pastCap())) : [];
         const doneStart = doneAll.length - doneShown.length;
         const doneItems = doneShown.map((s, i) => ({ ...s, n: String(doneStart + i + 1).padStart(2, '0') }));
         const waitAll = model.current ? model.upcoming : model.upcoming.slice(0);
-        const waitShown = showWait() ? waitAll.slice(0, upCap()) : [];
+        const waitShown = showWait() ? (usesAutoScrollQueues() ? waitAll : waitAll.slice(0, upCap())) : [];
         const waitBase = model.past.length + (model.current ? 1 : 0);
         const waitItems = waitShown.map((s, i) => ({ ...s, n: String(waitBase + i + 1).padStart(2, '0') }));
         const fillSection = (kind, items, totalCount) => {
           const list = root.querySelector(`#${id}-${kind}`);
           const head = list.closest('.sk-sec').querySelector('.sk-sec-head');
-          list.innerHTML = items.map((s) => row(s, kind)).join('');
+          const track = makeQueueTrack(list);
+          track.innerHTML = items.map((s) => row(s, kind)).join('');
           head.hidden = items.length === 0;
           root.querySelector(`#${id}-${kind}-count`).textContent = totalCount ? String(totalCount).padStart(2, '0') : '';
         };
         fillSection('done', doneItems, showDone() ? doneAll.length : 0);
         fillSection('wait', waitItems, showWait() ? waitAll.length : 0);
         if (!model.current && doneItems.length === 0 && waitItems.length === 0 && model.active) {
-          root.querySelector(`#${id}-wait`).innerHTML = `<div class="sk-empty">${escapeHtml(t('setlist.startingSoon'))}</div>`;
+          const track = makeQueueTrack(root.querySelector(`#${id}-wait`));
+          track.innerHTML = `<div class="sk-empty">${escapeHtml(t('setlist.startingSoon'))}</div>`;
         }
       },
     };
@@ -903,7 +969,10 @@
     lay.render(rootEl);
     applyLabels();
     if (isFillLayout()) fitRows();
-    requestAnimationFrame(applyMarquees);
+    requestAnimationFrame(() => {
+      applyMarquees();
+      applyQueueScrolls();
+    });
   }
 
   // ── 長歌名跑馬燈：文字超出容器時來回滾動（不超出就維持靜態，不加動畫）──
