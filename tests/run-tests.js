@@ -6334,6 +6334,8 @@ test('Electron assisted installer stays per-user with an updateable app root', (
     'desktop and Start menu shortcuts must remain independent choices');
   ['!macro customUnWelcomePage', 'EsRemoveAllData', 'media-storage.ini', '.elitesand-pro-media-root', 'RMDir /r "$APPDATA\\Elitesand Pro"'].forEach((required) =>
     ok(installerNsh.includes(required), `uninstaller cleanup flow is missing ${required}`));
+  ok(installerNsh.includes('UninstPage custom un.EsCleanupPre un.EsCleanupLeave'),
+    'custom uninstall welcome page must use the explicit UninstPage form, otherwise NSIS rejects the callbacks');
   const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'showPortableDataMigrationNotice',
     'function needsPortableDataMigrationNotice', 'shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice()',

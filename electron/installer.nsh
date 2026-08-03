@@ -25,9 +25,11 @@
   ; This replaces only the normal welcome page, so the user's cleanup choice
   ; is collected before the uninstall section runs.
   !macro customUnWelcomePage
-    PageEx custom
-      PageCallbacks un.EsCleanupPre un.EsCleanupLeave
-    PageExEnd
+    ; electron-builder expands this macro while compiling the uninstaller.
+    ; NSIS therefore requires the explicit UninstPage form; PageEx custom is
+    ; treated as an installer page and rejects even correctly prefixed un.*
+    ; callbacks with "function names must start with un.".
+    UninstPage custom un.EsCleanupPre un.EsCleanupLeave
   !macroend
 
   Function un.EsCleanupPre
