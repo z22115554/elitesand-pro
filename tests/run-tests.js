@@ -214,7 +214,8 @@ test('面板只載入目前可見的 OBS 預覽，避免隱藏 iframe 持續耗�
 });
 
 test('顯示端暫停時不持續逐幀重算歌詞', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../public/js/display.js'), 'utf8');
+  // 跨行比對：CRLF 取出的檔案會誤判成失敗，先正規化行尾（同下方 KTV 掃色那題的作法）。
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/display.js'), 'utf8').replace(/\r\n/g, '\n');
   ok(source.includes('if (isControllerPlaying) {\n        const timeMs = getSmoothTimeMs();'), 'rAF 的高成本渲染必須只在播放時執行: ');
 });
 
@@ -4520,6 +4521,37 @@ test('歌單固定預覽、直書句流縮圖與直播狀態重新整理入口�
   ok(obsWebsocket.includes('refreshStreamStatus: publishStreamStatus'));
 });
 
+testAsync('OBS WebSocket 密碼錯誤進入重連後，可立即停止並解除握手狀態', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/obs-websocket.js'), 'utf8');
+  const timers = [];
+  class FakeWebSocket {
+    constructor() { this.closed = false; FakeWebSocket.instances.push(this); }
+    close() {
+      if (this.closed) return;
+      this.closed = true;
+      if (this.onclose) this.onclose({ code: 4009 });
+    }
+  }
+  FakeWebSocket.instances = [];
+  const sandbox = {
+    window: {}, console, WebSocket: FakeWebSocket,
+    document: { getElementById() { return null; } },
+    setTimeout(fn) { const timer = { fn, cleared: false }; timers.push(timer); return timer; },
+    clearTimeout(timer) { if (timer) timer.cleared = true; },
+    setInterval() { return {}; }, clearInterval() {},
+  };
+  vm.runInNewContext(`${source}\n;globalThis.__obsWsForTest = ObsWs;`, sandbox);
+  const client = sandbox.__obsWsForTest;
+  const attempt = client.connect({ host: '127.0.0.1', port: 4455, password: 'wrong' });
+  const socket = FakeWebSocket.instances[0];
+  socket.close();
+  await attempt.catch(() => {});
+  ok(client.isReconnecting(), '密碼錯誤後應進入可取消的重連等待：');
+  client.disconnect();
+  eq(client.isReconnecting(), false, '停止重連後不可殘留 connecting 或重試計時器：');
+  ok(timers.some((timer) => timer.cleared), '停止重連必須清除已排定的重試計時器：');
+});
+
 test('歌單亮色背景可讀性保護與模板有效設定守衛存在', () => {
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const schema = require('../public/js/setlist-style-schema');
@@ -4580,6 +4612,21 @@ test('歌單每個模板保存獨立外觀，正在播放字級也套到 active 
   ['.term-item.active .t-line { font-size: var(--sl-sz-n)', '.bb-item.active .bb-name { font-size: var(--sl-sz-n)', '.card.active .card-title { font-size: var(--sl-sz-n)', '.index-item.active .index-title { font-size: var(--sl-sz-n)']
     .forEach((rule) => ok(setlistCss.includes(rule), `active row 必須吃正在播放字級：${rule}`));
   ['showReserve', 'labelReserve', 'glowSize'].forEach((key) => ok(!schema.FIELD_BY_KEY[key], `${key} 尚未實作時不得留成假設定`));
+});
+
+test('setlist queue scrolling is limited to the intended vertical templates', () => {
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  ok(setlistSource.includes("const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager']);"),
+    'Only classic and the four vertically queued skins should auto-scroll.');
+  ok(setlistSource.includes('function applyQueueScrolls()') && setlistSource.includes("runway.appendChild(copy);"),
+    'Overflowing queues should duplicate one complete track for a seamless loop.');
+  ok(setlistCss.includes('.sl-queue-scroll .sl-queue-runway') && setlistCss.includes('@keyframes sl-queue-up'),
+    'The queue loop needs a dedicated transform animation.');
+  ok(setlistCss.includes('background: #2c3138;') && setlistCss.includes('[data-layout="glow"] .sk-row { padding: calc(4px * var(--sl-fit)) 0; border-bottom: 1px solid rgba(255, 255, 255, .1); background: transparent; }'),
+    'Night Neon should use one gray panel instead of shaded individual rows.');
+  ok(setlistCss.includes('top: calc(8px * var(--sl-fit));') && setlistCss.includes('padding: calc(29px * var(--sl-fit))'),
+    'Paper Tag now-playing label should remain inside the card.');
 });
 
 test('歌單暫停時仍將目前歌曲保留在正在播放', () => {
@@ -5780,6 +5827,19 @@ test('統一音量開關會即時重套兩條播放鏈', () => {
   ].forEach((required) => ok(playback.includes(required), `統一音量開關缺少 ${required}`));
 });
 
+test('連點切歌不會讓 <audio> 與 SoundTouch 兩條鏈同時出聲', () => {
+  // 實測回報：連點「下一首」會聽到兩個不同進度的音訊、暫停後進度條照跑、再播放歌詞亂跳。
+  // 根因是舊的 stLoadCurrent().then() 沒有作廢判斷：較早的載入被丟棄後，回呼仍以「當下的
+  // stReady」（新歌還在 decode 時是 false）誤判成解碼失敗，於是降級去 audioPlayer.play()。
+  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8').replace(/\r\n/g, '\n');
+  ok(playback.includes("return 'stale'; // 已有更新的載入發生"), 'stLoadCurrent 必須回報作廢，呼叫端才擋得掉舊回呼：');
+  ok(playback.includes("if (result === 'stale') return; // 已被更新的切歌取代"), '切歌的載入回呼必須先擋掉作廢的載入：');
+  ok(playback.includes("if (result === 'stale') return; // 已被更新的載入取代"), '播放鍵的載入回呼必須先擋掉作廢的載入：');
+  ok(playback.includes('if (stActive()) return;\n    lastPlayTimeMs'), 'SoundTouch 生效時 <audio> 的 timeupdate 不可再搶進度與 lyrics:sync：');
+  ok(playback.includes('if (useSoundTouch) { try { SoundTouchEngine.pause(); } catch (e) { /* 靜默 */ } }\n      audioPlayer.pause();'),
+    '暫停必須兩條鏈都停，否則另一條仍會讓進度條繼續走：');
+});
+
 test('Setlist keeps template and quick controls in two columns beside the preview', () => {
   const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const panelCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8');
@@ -5921,10 +5981,29 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
   const configuredMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
     isPackaged: true,
     executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
-    fsImpl: { readdirSync: () => { throw new Error('must not inspect legacy'); }, readFileSync: () => JSON.stringify({ mediaDir: path.join('E:', 'Music', 'Elitesand Pro Media') }) },
+    fsImpl: { existsSync: () => true, readdirSync: () => { throw new Error('must not inspect legacy'); }, readFileSync: () => JSON.stringify({ mediaDir: path.join('E:', 'Music', 'Elitesand Pro Media') }) },
   });
   eq(configuredMedia.mode, 'configured');
   eq(configuredMedia.downloadsDir, path.join('E:', 'Music', 'Elitesand Pro Media'));
+  const configuredDevelopmentMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
+    isPackaged: false,
+    fsImpl: {
+      existsSync: () => true,
+      readFileSync: () => JSON.stringify({ mediaDir: path.join('E:', 'Music', 'Elitesand Pro Media') }),
+    },
+  });
+  eq(configuredDevelopmentMedia.mode, 'configured', 'development Electron must respect a completed media migration');
+  eq(configuredDevelopmentMedia.downloadsDir, path.join('E:', 'Music', 'Elitesand Pro Media'));
+  const staleConfiguredMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
+    isPackaged: true,
+    executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
+    fsImpl: {
+      existsSync: () => false,
+      readdirSync: () => ['existing-song.mp3'],
+      readFileSync: () => JSON.stringify({ mediaDir: path.join('E:', 'Missing', 'Elitesand Pro Media') }),
+    },
+  });
+  eq(staleConfiguredMedia.mode, 'legacy-migration-required', 'stale media config must fall back to a usable legacy source');
   eq(electronShell.resolveShellPort('3100'), 3100);
   eq(electronShell.resolveShellPort('not-a-port'), 3000);
   ok(electronShell.isTrustedLocalUrl('http://127.0.0.1:3000/panel', 3000));
@@ -5961,6 +6040,44 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'SHUTDOWN_MESSAGE',
   ].forEach((required) => ok(source.includes(required), `Electron shell is missing ${required}`));
 
+});
+
+test('Media migration copies from the selected source without nesting the media folder', () => {
+  const mediaStorage = require('../server/services/media-storage');
+  const fixtureRoot = fs.mkdtempSync(path.join(TEST_RUNTIME_ROOT, 'media-migration-unit-'));
+  const sourceDir = path.join(fixtureRoot, 'old-media');
+  const destinationDir = path.join(fixtureRoot, 'Elitesand Pro Media');
+  const emptySourceDir = path.join(fixtureRoot, 'empty-media');
+  const emptyDestinationParent = path.join(fixtureRoot, 'empty-target');
+  const configFile = path.join(TEST_RUNTIME_DIRS.data, 'media-storage.json');
+  const uninstallReference = path.join(TEST_RUNTIME_ROOT, 'media-storage.ini');
+  const originalConfig = fs.existsSync(configFile) ? fs.readFileSync(configFile) : null;
+  const originalReference = fs.existsSync(uninstallReference) ? fs.readFileSync(uninstallReference) : null;
+  try {
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.writeFileSync(path.join(sourceDir, 'song.mp3'), 'audio');
+    fs.mkdirSync(emptySourceDir, { recursive: true });
+    const recoveredSource = mediaStorage.resolveMigrationSource([emptySourceDir, sourceDir]);
+    eq(recoveredSource.sourceDir, sourceDir, 'migration must automatically fall back to the first location that still has media');
+    const result = mediaStorage.migrateToParent(destinationDir, sourceDir);
+    eq(result.mediaDir, destinationDir, 'selecting the final media folder must not create a nested copy');
+    eq(result.sourceDir, sourceDir);
+    eq(result.movedEntries, 1);
+    ok(fs.existsSync(path.join(destinationDir, 'song.mp3')));
+    ok(!fs.existsSync(path.join(destinationDir, 'Elitesand Pro Media', 'song.mp3')));
+    ok(!fs.existsSync(path.join(sourceDir, 'song.mp3')));
+    let error;
+    try { mediaStorage.migrateToParent(emptyDestinationParent, emptySourceDir); } catch (caught) { error = caught; }
+    ok(error?.message.includes('No media files were found'), 'empty migrations must fail before creating a destination');
+    ok(!fs.existsSync(emptyDestinationParent), 'empty migrations must not create an empty destination folder');
+    const mediaLibrary = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'media-library.js'), 'utf8');
+    ok(!mediaLibrary.includes("chooseMediaLocation('source')"), 'migration UI must never ask the user to locate the original media folder');
+    ok(mediaLibrary.includes("library:storage:migrate', { parentDir }"), 'migration UI sends only the destination; the server resolves the source');
+  } finally {
+    if (originalConfig) fs.writeFileSync(configFile, originalConfig); else fs.rmSync(configFile, { force: true });
+    if (originalReference) fs.writeFileSync(uninstallReference, originalReference); else fs.rmSync(uninstallReference, { force: true });
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
 });
 
 test('Electron assisted installer stays per-user with an updateable app root', () => {
@@ -6060,6 +6177,76 @@ test('Electron shell chrome stays inside the Elitesand Pro design system', () =>
   ok(chrome.includes("shell.windowControl('toggle-maximize')"));
   ok(preload.includes("ipcRenderer.send('elitesand:close-decision', action)"));
   ok(preload.includes("ipcRenderer.send('elitesand:window-control', action)"));
+});
+
+testAsync('Media migration relaunches through Electron graceful quit', async () => {
+  const { EventEmitter } = require('events');
+  const { createElectronShell } = require('../electron/shell');
+  let windowInstance;
+  let restartHandler;
+  const shutdownMessages = [];
+  const child = new EventEmitter();
+  child.pid = 9876;
+  child.postMessage = (message) => shutdownMessages.push(message);
+  child.kill = () => { child.killed = true; };
+  const app = new EventEmitter();
+  app.setName = () => {};
+  app.setAppUserModelId = () => {};
+  app.requestSingleInstanceLock = () => true;
+  app.whenReady = async () => {};
+  app.getPath = () => path.join(TEST_RUNTIME_ROOT, 'electron-media-restart-unit');
+  app.relaunchCalls = 0;
+  app.relaunch = () => { app.relaunchCalls++; };
+  app.quitCalls = 0;
+  app.quit = () => {
+    app.quitCalls++;
+    app.emit('before-quit', { preventDefault() {} });
+  };
+  app.exitCodes = [];
+  app.exit = (code) => app.exitCodes.push(code);
+  class FakeWindow extends EventEmitter {
+    constructor() {
+      super();
+      windowInstance = this;
+      this.webContents = { setWindowOpenHandler: () => {}, on: () => {} };
+    }
+    async loadURL() { this.emit('ready-to-show'); }
+    show() {}
+    hide() {}
+    focus() {}
+    isMinimized() { return false; }
+  }
+  class FakeTray extends EventEmitter {
+    setToolTip() {}
+    setContextMenu() {}
+  }
+  let probes = 0;
+  const desktop = createElectronShell({
+    app,
+    BrowserWindow: FakeWindow,
+    utilityProcess: { fork: () => child },
+    dialog: { showErrorBox: () => {}, showMessageBoxSync: () => 1 },
+    shell: { openExternal: () => {} },
+    Tray: FakeTray,
+    Menu: { buildFromTemplate: () => ({}) },
+    nativeImage: { createFromPath: () => ({}) },
+    clipboard: { writeText: () => {} },
+    powerSaveBlocker: { start: () => 1, stop: () => {} },
+    ipcMain: { handle: (channel, handler) => { if (channel === 'elitesand:restart-after-media-migration') restartHandler = handler; } },
+    processObject: { env: {}, platform: 'win32' },
+    fsImpl: { mkdirSync: () => {} },
+    probeHealthImpl: async () => (++probes === 1 ? { state: 'free' } : { state: 'healthy', payload: { status: 'ok' } }),
+    delay: async () => {},
+  });
+
+  await desktop.start();
+  eq(restartHandler({ sender: windowInstance.webContents }), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  eq(app.relaunchCalls, 1);
+  eq(app.quitCalls, 1, 'migration must use app.quit so before-quit can run');
+  eq(shutdownMessages[0]?.type, 'elitesand:shutdown');
+  ok(child.killed, 'graceful shutdown keeps the bounded fallback kill');
+  eq(app.exitCodes.join(','), '0');
 });
 
 testAsync('Electron P1：關窗可明確選擇結束或收到系統匣，四項選單可叫回面板', async () => {

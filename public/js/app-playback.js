@@ -93,16 +93,21 @@
   }
   function stActive() { return useSoundTouch && stReady; }
   let stLoadToken = 0; // 防止快速切歌時，較舊的載入結果覆蓋較新的 stReady
+  // 回傳 'stale' 代表這次載入已被更新的載入取代——呼叫端必須直接放棄，什麼都不做。
+  // 少了這個回報，舊的 .then() 會拿「當下的 stReady」（還在 decode 新歌時是 false）誤判成
+  // 「SoundTouch 解碼失敗」而降級去 audioPlayer.play()，於是 <audio> 與 SoundTouch 兩條鏈
+  // 同時出聲、進度各走各的（實測：連點下一首會聽到兩個不同進度的音訊，且暫停後進度條照跑）。
   async function stLoadCurrent(filename) {
     stReady = false;
-    if (!useSoundTouch || !filename) return;
-    if (!stInitChain()) return;
+    if (!useSoundTouch || !filename) return 'skip';
+    if (!stInitChain()) return 'skip';
     applyStLoudnessGain(); // 首次載歌才建鏈：建好後補套當前歌曲的響度校正
     const myToken = ++stLoadToken;
     try { if (stCtx.state === 'suspended') await stCtx.resume(); } catch (e) { /* 靜默 */ }
     const ok = await SoundTouchEngine.load('/audio/' + encodeURIComponent(filename));
-    if (myToken !== stLoadToken) return; // 已有更新的載入發生 → 丟棄這次結果
+    if (myToken !== stLoadToken) return 'stale'; // 已有更新的載入發生 → 丟棄這次結果
     stReady = ok;
+    return 'ok';
   }
   // 快速切歌時，拖曳/timeupdate 殘留的舊訊息可能晚到；帶上 trackId 讓伺服器可以擋掉對不上目前歌曲的舊值
   // （見 play:seek、lyrics:sync 的伺服器端過濾，同一套道理已用在播放時補羅馬化的推播判斷上）。
@@ -268,7 +273,9 @@
         if (useSoundTouch) {
           // SoundTouch 路徑：等 buffer 好再播；<audio> 靜音待命當備援
           audioPlayer.muted = true;
-          stLoadCurrent(track.filename).then(() => {
+          audioPlayer.pause(); // 走 SoundTouch 就不該有 <audio> 在跑：靜音的 <audio> 仍會發 timeupdate 搶進度條
+          stLoadCurrent(track.filename).then((result) => {
+            if (result === 'stale') return; // 已被更新的切歌取代，交給那一次處理
             if (stReady) {
               SoundTouchEngine.setPitch(currentPitchShift);
               SoundTouchEngine.setTempo(currentPlaybackRate);
@@ -386,7 +393,10 @@
     // 會讓 SoundTouch 被啟動兩次、雪崩式狂送 play:toggle（實測會看到播放/暫停瞬間狂跳）。
     isPlaying = shouldPlay;
     if (!shouldPlay) {
-      if (stActive()) SoundTouchEngine.pause(); else audioPlayer.pause();
+      // 兩條鏈都停。只停「當前那條」的話，另一條若因載入競態還在跑，
+      // 暫停後 <audio> 的 timeupdate 會讓進度條繼續走、還繼續送 lyrics:sync。
+      if (useSoundTouch) { try { SoundTouchEngine.pause(); } catch (e) { /* 靜默 */ } }
+      audioPlayer.pause();
       updatePlayButton();
       SocketClient.send('play:toggle', isPlaying);
       return;
@@ -394,6 +404,7 @@
     if (useSoundTouch) {
       // 高品質變調路徑：buffer 沒好就先 decode 再播
       audioPlayer.muted = true;
+      audioPlayer.pause();
       const startST = () => {
         SoundTouchEngine.setPitch(currentPitchShift);
         SoundTouchEngine.setTempo(currentPlaybackRate);
@@ -401,7 +412,8 @@
         updatePlayButton(); SocketClient.send('play:toggle', true);
       };
       if (stReady) startST();
-      else stLoadCurrent(state.playlist[state.currentTrackIndex] && state.playlist[state.currentTrackIndex].filename).then(() => {
+      else stLoadCurrent(state.playlist[state.currentTrackIndex] && state.playlist[state.currentTrackIndex].filename).then((result) => {
+        if (result === 'stale') return; // 已被更新的載入取代（多半是又切了歌），放棄這次播放
         if (!isPlaying) return; // decode 完成前又被暫停了（本地或遠端），放棄這次播放
         if (stReady) startST();
         else { audioPlayer.muted = false; initAudioProcessorOnce(); if (audioProcessorReady) applyPitchAndSpeed(); audioPlayer.play().catch((e) => handleAudioError(e)); updatePlayButton(); SocketClient.send('play:toggle', true); }
@@ -469,6 +481,9 @@
   });
 
   audioPlayer.addEventListener('timeupdate', () => {
+    // SoundTouch 生效時，時間一律以 stOnTime 為準。<audio> 在切歌/載入時仍可能吐幾次
+    // timeupdate，讓兩個時間源同時寫進度條與 lyrics:sync，OBS 端就會看到歌詞來回跳。
+    if (stActive()) return;
     lastPlayTimeMs = (audioPlayer.currentTime || 0) * 1000; // 給「對齊第一句」用（非 SoundTouch 路徑）
     if (!audioPlayer.duration) return;
     setTotalTime(formatTime(audioPlayer.duration));
