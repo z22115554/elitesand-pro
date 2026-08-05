@@ -16,6 +16,24 @@
 
   SocketClient.init('prompter');
 
+  // ─── 簡轉繁（opencc-js cn→tw）：與 karaoke.js／setlist.js 同一套轉換邏輯，套用在歌詞文字上。
+  // 這裡是獨立頁面，有自己的 opencc-cn2t.js 載入與轉換快取，不共用其他頁面的實例。
+  let s2tEnabled = true; // 預設開啟；實際值以伺服器同步的 lyricSettings.convertTraditional 為準
+  let _s2tConv = null;
+  function getS2T() {
+    if (_s2tConv) return _s2tConv;
+    try {
+      if (typeof OpenCC !== 'undefined' && OpenCC.Converter) _s2tConv = OpenCC.Converter({ from: 'cn', to: 'tw' });
+    } catch (e) { _s2tConv = null; }
+    return _s2tConv;
+  }
+  function s2t(str) {
+    if (!s2tEnabled || !str) return str;
+    const conv = getS2T();
+    if (!conv) return str;
+    try { return conv(str); } catch (e) { return str; }
+  }
+
   const dom = {
     connectionStatus: document.getElementById('connection-status'),
     connectionText: document.getElementById('connection-text'),
@@ -181,12 +199,22 @@
     return systemFontsLoading;
   }
 
+  // 小面板不是鋪滿全螢幕的 .modal，沒有背景遮罩可以點擊關閉，改成「點面板外面任何地方」
+  // 跟 Escape 都能關閉（跟專案其他 modal 的 Escape 慣例一致）。
+  function closeSettingsPopover() { dom.settingsModal.hidden = true; }
   dom.settingsBtn.addEventListener('click', () => {
     dom.settingsModal.hidden = false;
     loadSystemFonts();
   });
-  dom.settingsClose.addEventListener('click', () => { dom.settingsModal.hidden = true; });
-  dom.settingsModal.addEventListener('click', (e) => { if (e.target === dom.settingsModal) dom.settingsModal.hidden = true; });
+  dom.settingsClose.addEventListener('click', closeSettingsPopover);
+  document.addEventListener('click', (e) => {
+    if (dom.settingsModal.hidden) return;
+    if (dom.settingsModal.contains(e.target) || dom.settingsBtn.contains(e.target)) return;
+    closeSettingsPopover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !dom.settingsModal.hidden) { e.preventDefault(); closeSettingsPopover(); }
+  });
   dom.setFont.addEventListener('change', () => updateAppearance({ font: dom.setFont.value }));
   dom.setSize.addEventListener('input', () => {
     dom.setSizeVal.textContent = `${dom.setSize.value}px`;
@@ -286,7 +314,7 @@
       return;
     }
     dom.lyrics.innerHTML = parsedLines.map((line, i) =>
-      `<div class="pt-line" data-index="${i}">${escapeHtml(line.text || '')}</div>`).join('');
+      `<div class="pt-line" data-index="${i}">${escapeHtml(s2t(line.text || ''))}</div>`).join('');
     activeLineIndex = -1;
   }
 
@@ -475,6 +503,16 @@
     updateLyricsHighlight();
   });
 
+  // 簡轉繁設定：跟歌詞顯示頁／歌單頁共用同一份 lyricSettings（同一套 lyric-settings:update
+  // 事件），設定改變時重繪目前這份歌詞（不必等下一次 play:track）。
+  SocketClient.on('lyric-settings:update', (settings) => {
+    if (!settings || typeof settings.convertTraditional !== 'boolean') return;
+    if (settings.convertTraditional === s2tEnabled) return;
+    s2tEnabled = settings.convertTraditional;
+    renderLyricsSkeleton();
+    updateLyricsHighlight();
+  });
+
   SocketClient.on('offset:update', (data) => {
     if (!data || !playlist[currentTrackIndex] || data.trackId !== playlist[currentTrackIndex].id) return;
     currentOffsetMs = data.offset || 0;
@@ -494,6 +532,9 @@
   // 完整狀態同步（連線/重連時）
   SocketClient.on('state:sync', (state) => {
     if (!state) return;
+    if (state.lyricSettings && typeof state.lyricSettings.convertTraditional === 'boolean') {
+      s2tEnabled = state.lyricSettings.convertTraditional;
+    }
     const hasCurrentTrack = Object.prototype.hasOwnProperty.call(state, 'currentTrack');
     const hasPlaylist = Array.isArray(state.playlist);
     if (hasPlaylist) playlist = state.playlist;

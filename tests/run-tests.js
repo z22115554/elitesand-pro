@@ -4715,6 +4715,30 @@ test('跟唱視圖整句歌詞：時間跳轉不留殘影，逐句判斷純函�
   eq(findLineIndex(lines, -1), -1, '歌曲一開始（時間軸之前）不該有任何句子亮起：');
 });
 
+test('跟唱視圖歌詞套用簡轉繁設定，跟歌詞顯示頁／歌單頁同一套規則', () => {
+  const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  const promptSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  ok(promptHtml.includes('/vendor/opencc-cn2t.js'), '跟唱視圖必須載入 opencc-cn2t.js，否則簡轉繁函式永遠拿不到轉換器：');
+  const openccIdx = promptHtml.indexOf('/vendor/opencc-cn2t.js');
+  const prompterJsIdx = promptHtml.indexOf('/js/prompter.js');
+  ok(openccIdx > -1 && prompterJsIdx > openccIdx, 'opencc-cn2t.js 必須在 prompter.js 之前載入，不然 OpenCC 還沒定義：');
+
+  ok(promptSource.includes("OpenCC.Converter({ from: 'cn', to: 'tw' })"), '轉換方向必須是簡轉繁（cn→tw），跟 karaoke.js／setlist.js 一致：');
+  ok(promptSource.includes('function s2t(str) {') && promptSource.includes('if (!s2tEnabled || !str) return str;'),
+    's2t() 必須尊重 s2tEnabled 開關：關閉時原樣輸出，不能永遠轉換：');
+  ok(promptSource.includes('`<div class="pt-line" data-index="${i}">${escapeHtml(s2t(line.text || \'\'))}</div>`'),
+    '歌詞逐句渲染必須先過 s2t() 再 escapeHtml，兩者順序顛倒會轉換不到已跳脫的字元：');
+
+  // 面板的簡轉繁開關就是同一個 lyricSettings.convertTraditional：勾選＝轉繁體，取消勾選＝維持原文。
+  ok(promptSource.includes("SocketClient.on('lyric-settings:update', (settings) => {") &&
+    promptSource.includes("if (!settings || typeof settings.convertTraditional !== 'boolean') return;") &&
+    promptSource.includes('s2tEnabled = settings.convertTraditional;'),
+    '必須監聽 lyric-settings:update 並即時套用開關切換，不能只在切歌時讀一次：');
+  ok(promptSource.includes("state.lyricSettings && typeof state.lyricSettings.convertTraditional === 'boolean'") &&
+    promptSource.includes('s2tEnabled = state.lyricSettings.convertTraditional;'),
+    '連線／重連的 state:sync 也必須帶出目前的簡轉繁設定，不能只靠之後的 lyric-settings:update 事件：');
+});
+
 test('跟唱視圖歌詞外觀設定：齒輪鈕不可誤套 theme-toggle class', () => {
   // 實測踩過：齒輪鈕如果共用 .theme-toggle（跟真正的主題切換鈕同一個 class），
   // theme.js 的 querySelectorAll('.theme-toggle') 會把它一起接管——點下去圖示被換成
@@ -4726,6 +4750,27 @@ test('跟唱視圖歌詞外觀設定：齒輪鈕不可誤套 theme-toggle class'
   ok(promptHtml.includes('id="pt-theme-toggle" class="theme-toggle"'), '主題切換鈕本身仍要保留 .theme-toggle，theme.js 才找得到它：');
   ok(promptCss.includes('.pt-icon-btn {'), 'prompter.css 必須有獨立的齒輪鈕樣式：');
   ok(promptJs.includes("settingsBtn: document.getElementById('pt-settings-btn')") && promptJs.includes('dom.settingsBtn.addEventListener'), '齒輪鈕必須自己接開啟設定的事件，不能靠共用 class 順便觸發：');
+});
+
+test('跟唱視圖歌詞外觀設定：面板是錨定齒輪鈕的小面板，不是鋪滿全螢幕的 .modal', () => {
+  // 使用者實測回報：共用的 .modal（全螢幕深色遮罩＋置中卡片）會擋住畫面中央，
+  // 調字體/字級時完全看不到歌詞跟著變化，加背景模糊也無法兩全。改成錨定在齒輪鈕
+  // 旁邊的小面板，不鋪遮罩，歌詞區永遠完整可見。
+  const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  const promptCss = fs.readFileSync(path.join(__dirname, '../public/css/prompter.css'), 'utf8');
+  const promptJs = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  ok(promptHtml.includes('id="pt-settings-modal" class="pt-settings-popover"'), '設定面板不可用共用的 .modal class（會鋪滿全螢幕深色遮罩）：');
+  ok(!/class="pt-settings-popover[^"]*\bmodal\b/.test(promptHtml), 'pt-settings-popover 不可同時混用 modal class：');
+  ok(promptCss.includes('.pt-settings-popover {') && promptCss.includes('position: fixed;') && promptCss.includes('background: transparent;'),
+    '面板必須是絕對定位的小面板、背景透明，不能鋪整個畫面：');
+  ok(promptCss.includes('.pt-settings-popover[hidden] { display: none; }'), '面板隱藏時必須真的從版面移除，不能只是視覺上蓋住：');
+
+  // 沒有全螢幕遮罩可以點擊關閉了，必須改成「點面板外任何地方」+ Escape 都能關閉。
+  ok(promptJs.includes("document.addEventListener('click', (e) => {") &&
+    promptJs.includes('if (dom.settingsModal.contains(e.target) || dom.settingsBtn.contains(e.target)) return;') &&
+    promptJs.includes('closeSettingsPopover();'),
+    '必須有「點面板外面關閉」的邏輯，且不能誤判成點了面板內部的控制項：');
+  ok(promptJs.includes("if (e.key === 'Escape' && !dom.settingsModal.hidden)"), '必須支援 Escape 關閉，跟其他 modal 的慣例一致：');
 });
 
 test('跟唱視圖歌詞外觀設定：字體/字級/顏色/描邊只存本機，套到正確的 CSS 變數', () => {

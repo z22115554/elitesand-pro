@@ -75,8 +75,11 @@
   </footer>
 
   <!-- 歌詞外觀設定：只存這台裝置的 localStorage，不是伺服器 state.json 的一部分——
-       純粹是「這台螢幕看起來要多大多粗」的個人偏好，不影響 OBS 或其他裝置。 -->
-  <div id="pt-settings-modal" class="modal" hidden>
+       純粹是「這台螢幕看起來要多大多粗」的個人偏好，不影響 OBS 或其他裝置。
+       故意不用共用的 .modal（全螢幕深色遮罩＋置中卡片）：這頁的重點是「調的時候
+       要看得到歌詞跟著變」，蓋住整個畫面中央等於邊調邊瞎。改成錨定在齒輪鈕旁邊的
+       小面板，不鋪遮罩，歌詞永遠完整可見。 -->
+  <div id="pt-settings-modal" class="pt-settings-popover" hidden>
     <div class="modal-card modal-card--compact">
       <div class="modal-head">
         <h3 data-i18n="prompter.appearance">歌詞外觀</h3>
@@ -137,6 +140,8 @@
   <script src="/js/i18n.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/pin-auth.js"></script>
+  <!-- 簡轉繁（opencc-js cn→tw，自包含字典、離線可用）。載入失敗時轉換功能自動停用、不影響顯示。 -->
+  <script src="/vendor/opencc-cn2t.js"></script>
   <script src="/js/socket-client.js"></script>
   <script src="/js/playlist-state.js"></script>
   <script src="/js/prompter.js"></script>

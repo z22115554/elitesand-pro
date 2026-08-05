@@ -245,6 +245,41 @@ body.prompter {
 #pt-font-local:empty { display: none; }
 #pt-font-status { margin: 7px 0 0; }
 
+/* 歌詞外觀設定面板：錨定在齒輪鈕正下方的小面板，不是鋪滿全螢幕的 .modal——
+   調字體/字級/顏色時要能同時看到歌詞區的即時變化，蓋住畫面中央等於邊調邊瞎。 */
+.pt-settings-popover {
+  position: fixed;
+  top: 58px;
+  right: 20px;
+  z-index: 400;
+  width: min(300px, calc(100vw - 40px));
+  background: transparent;
+  padding: 0;
+}
+.pt-settings-popover[hidden] { display: none; }
+.pt-settings-popover::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 22px;
+  width: 12px;
+  height: 12px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-strong);
+  border-top: 1px solid var(--border-strong);
+  transform: rotate(45deg);
+}
+.pt-settings-popover .modal-card {
+  width: 100%;
+  max-width: none;
+  max-height: min(72vh, 560px);
+  animation: pt-popover-in .14s ease-out;
+}
+@keyframes pt-popover-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 720px) {
   .pt-side { display: none; }
   /* 窄螢幕整體縮一點，但仍尊重使用者調過的字級（乘係數，不是寫死覆蓋）。 */
