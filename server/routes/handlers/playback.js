@@ -202,6 +202,21 @@ function registerPlaybackHandlers(io, socket, ctx) {
     io.emit('play:next');
   });
 
+  // 播放清單播完最後一首、沒有下一首可接時，面板會送這個事件。playState.currentTrack
+  // 過去沒有任何地方會被設回 null——OBS 顯示端／跟唱視圖只有在「換到下一首」時才更新畫面，
+  // 播完最後一首後沒有下一首可換，歌詞就永遠卡在最後一句，直到有人手動點別首歌才會消失。
+  socket.on('play:stop', () => {
+    playState.currentTrack = null;
+    playState.currentTrackStarted = false;
+    playState.isPlaying = false;
+    playState.currentTime = 0;
+    log.info('播放清單播畢，清空目前歌曲');
+    io.emit('play:stop');
+    emitSetlist();
+    broadcastState();
+    persistState();
+  });
+
   // ─── 歌詞同步管線（純轉播）───
 
   socket.on('lyrics:line', (data) => {

@@ -133,23 +133,40 @@ body.prompter {
 }
 .pt-line {
   font-family: var(--pt-font);
-  font-size: var(--pt-size);
   line-height: 1.7;
-  font-weight: 500;
-  color: var(--text-faint);
-  padding: 6px 0;
-  transition: color .25s ease, opacity .25s ease;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color .25s ease, opacity .25s ease, background .12s ease;
   opacity: .55;
 }
+.pt-line:hover { background: var(--bg-hover); }
 .pt-line.pt-line--past { opacity: .3; }
-.pt-line.pt-line--active {
+.pt-line.pt-line--active { opacity: 1; }
+.pt-line.pt-line--next { opacity: .8; }
+.pt-line-text {
+  font-size: var(--pt-size);
+  font-weight: 500;
+  color: var(--text-faint);
+}
+.pt-line.pt-line--active .pt-line-text {
   color: var(--pt-color);
   font-weight: 800;
   font-size: calc(var(--pt-size) * 1.23);
-  opacity: 1;
   -webkit-text-stroke: var(--pt-stroke-w) var(--pt-stroke-c);
 }
-.pt-line.pt-line--next { color: var(--text-dim); opacity: .8; }
+.pt-line.pt-line--next .pt-line-text { color: var(--text-dim); }
+/* 拼音/諧音：輔助發音用，字級跟著主字級走但明顯縮小，跟主字一樣是可選開關（見設定面板）。 */
+.pt-line-romaji, .pt-line-xieyin {
+  font-size: calc(var(--pt-size) * .5);
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+.pt-line.pt-line--active .pt-line-romaji,
+.pt-line.pt-line--active .pt-line-xieyin {
+  font-size: calc(var(--pt-size) * .62);
+}
 
 .pt-transport {
   flex: 0 0 auto;
@@ -283,7 +300,10 @@ body.prompter {
 @media (max-width: 720px) {
   .pt-side { display: none; }
   /* 窄螢幕整體縮一點，但仍尊重使用者調過的字級（乘係數，不是寫死覆蓋）。 */
-  .pt-line { font-size: calc(var(--pt-size) * .82); }
-  .pt-line.pt-line--active { font-size: calc(var(--pt-size) * 1.23 * .82); }
+  .pt-line-text { font-size: calc(var(--pt-size) * .82); }
+  .pt-line.pt-line--active .pt-line-text { font-size: calc(var(--pt-size) * 1.23 * .82); }
+  .pt-line-romaji, .pt-line-xieyin { font-size: calc(var(--pt-size) * .5 * .82); }
+  .pt-line.pt-line--active .pt-line-romaji,
+  .pt-line.pt-line--active .pt-line-xieyin { font-size: calc(var(--pt-size) * .62 * .82); }
   .pt-np { display: none; }
 }

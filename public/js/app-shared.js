@@ -13,6 +13,7 @@ window.AppShared = (function () {
     connectionStatus: document.getElementById('connection-status'),
     updateBanner: document.getElementById('update-banner'),
     updateBannerVersion: document.getElementById('update-banner-version'),
+    updateBannerApply: document.getElementById('update-banner-apply'),
     updateBannerLink: document.getElementById('update-banner-link'),
     updateBannerDismiss: document.getElementById('update-banner-dismiss'),
     connectionText: document.getElementById('connection-text'),

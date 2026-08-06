@@ -430,6 +430,15 @@
     }
   });
 
+  // 播放清單播完最後一首、沒有下一首可接：清空歌詞，不能讓最後一句永遠卡在畫面上。
+  SocketClient.on('play:stop', () => {
+    isControllerPlaying = false;
+    audioPlayer.pause();
+    localAudioReady = false;
+    KaraokeEngine.clearDisplay();
+    hideMetronome();
+  });
+
   // 跳轉
   SocketClient.on('play:seek', (time) => {
     if (typeof time !== 'number' || !isFinite(time)) return;

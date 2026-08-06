@@ -62,6 +62,8 @@
     setStrokeW: document.getElementById('pt-set-stroke-w'),
     setStrokeWVal: document.getElementById('pt-set-stroke-w-val'),
     setStrokeC: document.getElementById('pt-set-stroke-c'),
+    setRomaji: document.getElementById('pt-set-romaji'),
+    setXieyin: document.getElementById('pt-set-xieyin'),
     setReset: document.getElementById('pt-set-reset'),
   };
 
@@ -78,7 +80,11 @@
   };
   const LOCAL_FONT_PREFIX = 'local:';
   const FONT_FALLBACK = "'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif";
-  const DEFAULT_APPEARANCE = { font: 'default', size: 27, color: '#f2f3f5', strokeWidth: 0, strokeColor: '#000000' };
+  const DEFAULT_APPEARANCE = {
+    font: 'default', size: 27, color: '#f2f3f5', strokeWidth: 0, strokeColor: '#000000',
+    // 預設關閉：跟 OBS 顯示端的 romanizationMode 預設 'original' 一致，沒資料的歌不會顯示空行。
+    showRomaji: false, showXieyin: false,
+  };
 
   function localFontValue(family) { return `${LOCAL_FONT_PREFIX}${family}`; }
   function localFontFamily(value) {
@@ -127,12 +133,24 @@
     dom.setStrokeW.value = appearance.strokeWidth;
     dom.setStrokeWVal.textContent = `${appearance.strokeWidth}px`;
     dom.setStrokeC.value = appearance.strokeColor;
+    dom.setRomaji.checked = appearance.showRomaji;
+    dom.setXieyin.checked = appearance.showXieyin;
   }
 
   function updateAppearance(patch) {
     appearance = { ...appearance, ...patch };
     saveAppearance(appearance);
     applyAppearance();
+  }
+
+  // 拼音/諧音會改變歌詞區的 DOM 結構（多加/少一行），不只是 CSS 變數，要重繪才會生效；
+  // 跟 updateAppearance() 分開是因為那個給連續拖曳的滑桿用（字級/描邊寬度），每次
+  // input 事件都整批重繪歌詞會很浪費，也會讓目前這句的高亮閃一下。
+  function updateLyricsDisplayOptions(patch) {
+    appearance = { ...appearance, ...patch };
+    saveAppearance(appearance);
+    renderLyricsSkeleton();
+    updateLyricsHighlight();
   }
 
   applyAppearance();
@@ -226,11 +244,15 @@
     updateAppearance({ strokeWidth: Number(dom.setStrokeW.value) });
   });
   dom.setStrokeC.addEventListener('input', () => updateAppearance({ strokeColor: dom.setStrokeC.value }));
+  dom.setRomaji.addEventListener('change', () => updateLyricsDisplayOptions({ showRomaji: dom.setRomaji.checked }));
+  dom.setXieyin.addEventListener('change', () => updateLyricsDisplayOptions({ showXieyin: dom.setXieyin.checked }));
   dom.setReset.addEventListener('click', () => {
     appearance = { ...DEFAULT_APPEARANCE };
     saveAppearance(appearance);
     applyAppearance();
     syncAppearanceInputs();
+    renderLyricsSkeleton();
+    updateLyricsHighlight();
   });
 
   // ─── 狀態 ───
@@ -313,8 +335,18 @@
       activeLineIndex = -1;
       return;
     }
-    dom.lyrics.innerHTML = parsedLines.map((line, i) =>
-      `<div class="pt-line" data-index="${i}">${escapeHtml(s2t(line.text || ''))}</div>`).join('');
+    // 拼音/諧音不經過 s2t()：跟 karaoke.js 同一套規則，簡轉繁只轉「原文 Han 字」，
+    // 拼音/諧音是輔助發音用的獨立資料，不是原文的一部分，轉了反而可能跟實際讀音對不上。
+    dom.lyrics.innerHTML = parsedLines.map((line, i) => {
+      const romaji = appearance.showRomaji && line.phonetic
+        ? `<div class="pt-line-romaji">${escapeHtml(line.phonetic)}</div>` : '';
+      const xieyin = appearance.showXieyin && line.xieyin
+        ? `<div class="pt-line-xieyin">${escapeHtml(line.xieyin)}</div>` : '';
+      return `<div class="pt-line" data-index="${i}">
+        <div class="pt-line-text">${escapeHtml(s2t(line.text || ''))}</div>
+        ${romaji}${xieyin}
+      </div>`;
+    }).join('');
     activeLineIndex = -1;
   }
 
@@ -347,6 +379,27 @@
     const nextEl = idx >= 0 ? dom.lyrics.querySelector(`[data-index="${idx + 1}"]`) : dom.lyrics.querySelector('[data-index="0"]');
     if (nextEl) { nextEl.classList.remove('pt-line--past'); nextEl.classList.add('pt-line--next'); }
   }
+
+  // 點歌詞跳到那一句的起點：用事件代理綁在容器上，因為 renderLyricsSkeleton() 每次都整批
+  // 重建 innerHTML，綁在個別 .pt-line 上的監聽器會跟著舊 DOM 一起被丟掉。
+  // line.time 是「音訊時間 + offset」的調整後時間軸（見 updateLyricsHighlight 的 adjustedMs、
+  // 跟歌詞時間軸編輯器 app-lyrics-timeline.js 寫入 line.time 時的算法一致），所以要還原成
+  // 音訊本身的秒數就得先扣掉 offset，否則歌詞/音訊有偏移時，點下去反而會跳到偏移過的位置。
+  dom.lyrics.addEventListener('click', (e) => {
+    const lineEl = e.target.closest('.pt-line');
+    if (!lineEl) return;
+    const idx = parseInt(lineEl.dataset.index, 10);
+    const line = parsedLines[idx];
+    if (!line || typeof line.time !== 'number') return;
+    const seconds = Math.max(0, (line.time - currentOffsetMs) / 1000);
+    const payload = currentTrackId != null ? { time: seconds, trackId: currentTrackId } : seconds;
+    SocketClient.send('play:seek', payload);
+    isScrubbing = false;
+    syncTimeMs = seconds * 1000;
+    lastSyncTimestamp = performance.now();
+    setProgressDisplay(seconds);
+    updateLyricsHighlight();
+  });
 
   // 播放中才需要輪詢（省電）；暫停時畫面已經是正確狀態，不必每 250ms 重算一次。
   let tickTimer = null;
@@ -451,6 +504,53 @@
     commitScrub();
   });
 
+  // 羅馬化是非同步的：歌曲切過來當下伺服器可能還沒跑完 kuromoji/pinyin-pro，之後才用這個
+  // 事件補推。用「時間」對齊合併回 parsedLines，不能用索引——伺服器過濾製作資訊行後行數
+  // 可能跟本地不同，索引對齊會把拼音/諧音貼到錯的句子（跟 karaoke.js 同一套規則，見
+  // memory lyrics-romanization-pipeline）。
+  SocketClient.on('lyrics:romanized', (data) => {
+    if (!data || !Array.isArray(data.parsedLyrics) || !parsedLines.length) return;
+    const byTime = new Map();
+    for (const rl of data.parsedLyrics) {
+      if (rl && typeof rl.time === 'number') byTime.set(rl.time, rl);
+    }
+    let changed = false;
+    for (const line of parsedLines) {
+      const rl = byTime.get(line.time);
+      if (!rl) continue;
+      if (rl.phonetic && rl.phonetic !== line.phonetic) { line.phonetic = rl.phonetic; changed = true; }
+      if (rl.xieyin && rl.xieyin !== line.xieyin) { line.xieyin = rl.xieyin; changed = true; }
+    }
+    if (changed && (appearance.showRomaji || appearance.showXieyin)) {
+      renderLyricsSkeleton();
+      updateLyricsHighlight();
+    }
+  });
+
+  // 回到「尚未播放」的空狀態：state:sync 沒帶 currentTrack、以及播放清單播完最後一首
+  // 沒有下一首可接時（play:stop）都要走這裡，兩處各自維護一份很容易漏改其中一邊。
+  function resetToEmpty() {
+    reconcileCurrentTrackIndex(null);
+    dom.npTitle.textContent = t('player.noTrack');
+    dom.npArtist.textContent = '';
+    parsedLines = [];
+    lastDuration = 0;
+    isPlaying = false;
+    syncTimeMs = 0;
+    isScrubbing = false;
+    scrubSeconds = 0;
+    setProgressDisplay(0);
+    setPlayIcon();
+    renderLyricsSkeleton();
+    stopTicking();
+  }
+
+  // 播放清單播完最後一首、沒有下一首可接：過去這裡沒有任何訊號，歌詞會永遠卡在最後一句。
+  SocketClient.on('play:stop', () => {
+    resetToEmpty();
+    renderPlaylist();
+  });
+
   SocketClient.on('play:track', (track) => {
     if (!track) return;
     reconcileCurrentTrackIndex(track);
@@ -489,13 +589,31 @@
     updateLyricsHighlight();
   });
 
+  // 面板每 200ms 廣播一次 lyrics:sync；網路抖動可能讓某次送到的 currentTime 比本地已經
+  // 推算出的時間還早個幾十毫秒（不是真的倒轉，單純抖動）。跟 display.js 踩過的同一種時鐘
+  // 抖動坑（見 memory display-clock-granularity）：不設防線，快跳到下一句的時候就會先退回
+  // 上一句一下、再跳回來。那邊靠 getSmoothTimeMs() 逐幀平滑；這裡只需要整句級的精度，
+  // 用最簡單的「小幅倒退就忽略、只有真的 seek（落差夠大）才接受」即可。
+  const SYNC_REGRESSION_TOLERANCE_MS = 400;
   SocketClient.on('lyrics:sync', (data) => {
     if (!data || typeof data.currentTime !== 'number') return;
     if (typeof data.duration === 'number' && data.duration > 0) {
       lastDuration = data.duration;
     }
     if (isScrubbing) return;
-    syncTimeMs = data.currentTime * 1000;
+    const proposedMs = data.currentTime * 1000;
+    if (isPlaying) {
+      const estimatedMs = getCurrentTimeMs();
+      const regressedMs = estimatedMs - proposedMs;
+      if (regressedMs > 0 && regressedMs < SYNC_REGRESSION_TOLERANCE_MS) {
+        // 忽略這次抖動造成的倒退：只重新校準時間戳基準，畫面維持原本估計值繼續往前跑，
+        // 不會有「跳到下一句前先退回上一句」的閃爍。
+        lastSyncTimestamp = performance.now();
+        setProgressDisplay(estimatedMs / 1000);
+        return;
+      }
+    }
+    syncTimeMs = proposedMs;
     lastSyncTimestamp = performance.now();
     setProgressDisplay(data.currentTime);
     // 不等下一次輪詢：面板拖曳進度條時（seeking）落點可能跨好幾句，
@@ -560,15 +678,7 @@
       updateLyricsHighlight();
       if (isPlaying) ensureTicking(); else stopTicking();
     } else if (hasCurrentTrack) {
-      reconcileCurrentTrackIndex(null);
-      dom.npTitle.textContent = t('player.noTrack');
-      dom.npArtist.textContent = '';
-      parsedLines = [];
-      lastDuration = 0;
-      syncTimeMs = 0;
-      setProgressDisplay(0);
-      renderLyricsSkeleton();
-      stopTicking();
+      resetToEmpty();
     }
 
     if (hasPlaylist || hasCurrentTrack) renderPlaylist();

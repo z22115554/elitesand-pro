@@ -117,6 +117,16 @@
           <label><span data-i18n="prompter.strokeWidth">描邊寬度</span> <span id="pt-set-stroke-w-val" class="val">0px</span></label>
           <input id="pt-set-stroke-w" type="range" min="0" max="4" step="0.5" value="0">
         </div>
+        <!-- 拼音/諧音只存這台裝置，跟字體/字級一樣是個人偏好；跟 OBS 顯示端的 romanizationMode
+             是各自獨立的設定，主播想看輔助發音不代表觀眾畫面也要跟著顯示。 -->
+        <div class="switch-row">
+          <div><div class="label" data-i18n="prompter.showRomaji">羅馬拼音</div><div class="sub" data-i18n="prompter.showRomajiHint">歌詞下方加一行拼音，沒有資料的行不會顯示</div></div>
+          <label class="switch"><input id="pt-set-romaji" type="checkbox"><span class="track"></span></label>
+        </div>
+        <div class="switch-row">
+          <div><div class="label" data-i18n="prompter.showXieyin">諧音</div><div class="sub" data-i18n="prompter.showXieyinHint">歌詞下方加一行中文諧音，沒有資料的行不會顯示</div></div>
+          <label class="switch"><input id="pt-set-xieyin" type="checkbox"><span class="track"></span></label>
+        </div>
         <button id="pt-set-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="prompter.resetAppearance">重置為預設</button>
       </div>
     </div>

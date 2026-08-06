@@ -1160,6 +1160,41 @@ testAsync('更新計畫只讀 Release metadata，未確認前不下載更新包'
   ok(updatePanelSource.includes('目前只確認 Release 資產存在'), '面板不可把尚未下載的更新包說成已驗證: ');
 });
 
+test('首頁更新橫幅接的是真正的增量更新，不是永遠開新分頁去 GitHub', () => {
+  // 實測踩過：舊版橫幅打 /api/update-check，那支 API 只回傳 downloadUrl/releaseUrl，
+  // 完全沒有 canIncremental，導致橫幅的「下載更新」不管有沒有安全增量更新可用，
+  // 一律開新分頁連去 GitHub release 頁——使用者得自己找到設定頁才有一鍵套用可選。
+  const toastSource = fs.readFileSync(path.join(__dirname, '../public/js/app-toast-utils.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const sharedSource = fs.readFileSync(path.join(__dirname, '../public/js/app-shared.js'), 'utf8');
+  const applyModuleSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-apply.js'), 'utf8');
+
+  ok(!toastSource.includes("fetch('/api/update-check')"), '首頁橫幅不可再打舊的 /api/update-check（沒有 canIncremental 欄位）: ');
+  ok(toastSource.includes("fetch('/api/app-update/plan')"), '首頁橫幅必須改打 /api/app-update/plan，才拿得到 canIncremental: ');
+  ok(toastSource.includes('window.AppUpdateApply.applyIncrementalUpdate('), '「立即更新」按鈕必須呼叫共用的增量更新流程，不能自己重寫一份: ');
+  ok(toastSource.includes("window.addEventListener('announcements:actions'"), '安全公告停用增量更新時，橫幅必須跟設定頁看到同一個結論: ');
+  ok(toastSource.includes('plan.canIncremental') && toastSource.includes('!remoteActions.disableIncrementalUpdate') && toastSource.includes('!remoteActions.showFullDownloadOnly'),
+    'canApply() 必須同時檢查 canIncremental 與安全公告的兩個停用旗標: ');
+
+  // 兩個按鈕互斥：能增量更新才顯示「立即更新」，不行才退回下載連結，不能同時出現或同時消失。
+  ok(indexHtml.includes('id="update-banner-apply"') && indexHtml.includes('id="update-banner-link"'),
+    '橫幅必須同時有「立即更新」按鈕與退回用的下載連結: ');
+  ok(sharedSource.includes("updateBannerApply: document.getElementById('update-banner-apply')"), 'app-shared.js 必須查好新按鈕的 dom 參照，供其他模組共用: ');
+
+  // 設定頁的「線上更新」按鈕也要改走同一份共用邏輯，不能兩邊各自維護一份確認/輪詢/套用流程。
+  const updatePanelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-check.js'), 'utf8');
+  ok(updatePanelSource.includes('window.AppUpdateApply.applyIncrementalUpdate('), '設定頁「線上更新」按鈕也必須改呼叫同一份共用流程: ');
+  ok(applyModuleSource.includes('window.AppUpdateApply = ') && applyModuleSource.includes('async function applyIncrementalUpdate('),
+    '共用流程模組必須真的存在並掛在 window.AppUpdateApply: ');
+  ok(applyModuleSource.includes("PinAuth.fetchWithPin('/api/app-update/apply'"), '套用更新一定要走 PIN 驗證的 fetch，不能是裸 fetch: ');
+
+  // 載入順序：共用模組必須在兩個呼叫端「之前」，否則點下去時 window.AppUpdateApply 還沒定義。
+  const applyIdx = indexHtml.indexOf('/js/app-update-apply.js');
+  const checkIdx = indexHtml.indexOf('/js/app-update-check.js');
+  const toastIdx = indexHtml.indexOf('/js/app-toast-utils.js');
+  ok(applyIdx > -1 && applyIdx < checkIdx && applyIdx < toastIdx, 'app-update-apply.js 必須比 app-update-check.js 與 app-toast-utils.js 都早載入: ');
+});
+
 test('更新檢查會納入 prerelease、排除 draft，並挑最高版本', () => {
   const result = selectLatestRelease([
     { tag_name: 'v0.7.1', prerelease: true, draft: false },
@@ -4452,6 +4487,70 @@ test('同 id 歌曲重新加入後播放時，會套回保留的手動歌詞與 
   }
 });
 
+test('play:stop 清空目前歌曲並廣播，播放清單播完最後一首才不會讓歌詞卡在畫面上', () => {
+  // 使用者實測回報：唱完最後一首後，歌詞（OBS 顯示端／跟唱視圖）留在畫面上不會消失。
+  // 根因：playState.currentTrack 過去沒有任何地方會被設回 null，播完清單最後一首、
+  // 沒有下一首可接時完全沒有訊號通知顯示端清空。
+  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
+  const events = new Map();
+  const emitted = [];
+  const playState = {
+    currentTrack: { id: 'last-song', title: '最後一首' },
+    currentTrackStarted: true,
+    isPlaying: true,
+    currentTime: 123,
+  };
+  let setlistCalls = 0;
+  let broadcastCalls = 0;
+  let persistCalls = 0;
+  registerPlaybackHandlers(
+    { emit(event, data) { emitted.push({ event, data }); } },
+    { on(event, handler) { events.set(event, handler); }, emit() {} },
+    {
+      playState, trackOffsets: new Map(), trackPitch: new Map(), trackSpeed: new Map(), manualLyricsCache: new Map(),
+      persistState() { persistCalls++; },
+      emitSetlist() { setlistCalls++; },
+      recordSessionSong() {},
+      broadcastState() { broadcastCalls++; },
+      getEffectiveLyrics() { return null; },
+    },
+  );
+
+  events.get('play:stop')();
+
+  eq(playState.currentTrack, null, 'play:stop 必須清空 currentTrack，否則顯示端沒有訊號可以清空歌詞：');
+  eq(playState.currentTrackStarted, false);
+  eq(playState.isPlaying, false);
+  eq(playState.currentTime, 0);
+  ok(emitted.some((item) => item.event === 'play:stop'), '必須轉播 play:stop，顯示端/跟唱視圖才會即時清空（不能只等下一次 state:sync）：');
+  eq(setlistCalls, 1, '必須廣播 setlist:update，歌單頁的「現在播放」才會跟著清空：');
+  eq(broadcastCalls, 1, '必須廣播完整狀態，重連/新連線的客戶端也要看到目前沒有歌曲在播：');
+  eq(persistCalls, 1, '必須持久化，重開程式後不能又冒出剛剛播完的那首：');
+});
+
+test('播放清單播完最後一首、沒有下一首可接時，面板會送出 play:stop', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
+  const endedFn = source.slice(source.indexOf("addEventListener('ended'"), source.indexOf("addEventListener('ended'") + 700);
+  ok(endedFn.includes('if (next) {') && endedFn.includes('return;'), '有下一首時必須播下一首並直接結束，不能繼續往下跑到清空邏輯：');
+  ok(endedFn.includes('stopPlayback();') && endedFn.includes("SocketClient.send('play:stop');"),
+    '沒有下一首時必須本地清空並廣播 play:stop，不能什麼都不做（否則歌詞永遠卡在最後一句）：');
+});
+
+test('OBS 顯示端／跟唱視圖／遙控器都要接 play:stop 才能清空歌詞，不能只有面板自己知道', () => {
+  const displaySource = fs.readFileSync(path.join(__dirname, '../public/js/display.js'), 'utf8');
+  const prompterSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  const controllerSource = fs.readFileSync(path.join(__dirname, '../public/js/controller.js'), 'utf8');
+  const playbackSource = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
+
+  ok(displaySource.includes("SocketClient.on('play:stop', () => {") && displaySource.includes('KaraokeEngine.clearDisplay();'),
+    'OBS 顯示端必須監聽 play:stop 並清空歌詞畫面：');
+  ok(prompterSource.includes("SocketClient.on('play:stop', () => {") && prompterSource.includes('resetToEmpty();'),
+    '跟唱視圖必須監聽 play:stop 並重置回空狀態：');
+  ok(controllerSource.includes("SocketClient.on('play:stop', () => {"), '手機遙控器也要監聽 play:stop，不能只有 OBS/跟唱視圖清空、遙控器還停在最後一首：');
+  ok(playbackSource.includes("SocketClient.on('play:stop', () => {"),
+    '面板自己也要監聽 play:stop：另一個已連線的面板分頁播完清單時，這個分頁才會跟著清空：');
+});
+
 test('playlist:insert-next uses canonical playback state and appends only when idle', () => {
   const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
   const events = new Map();
@@ -4518,6 +4617,116 @@ test('OBS 未推流只結束 OBS 或待確認的直播 Session，不會中斷 Tw
   events.get('session:stop')({ source: 'twitch' });
   eq(session.active, false);
   eq(session.source, null);
+});
+
+test('已唱歌單可以單獨刪除一筆，用 entryId 定位，同一首唱兩次不會刪錯', () => {
+  // 使用者實測回報：點錯歌被誤記進已唱、或切歌太快連點兩次，過去只能整場「清除全部」，
+  // 沒辦法單獨修正。id 只是歌曲本身的 id，同一首歌在同一場唱兩次會有兩筆同 id 的記錄，
+  // 不能拿來當刪除的定位鍵，必須用各自獨立的 entryId。
+  const registerSetlistHandlers = require('../server/routes/handlers/setlist');
+  const events = new Map();
+  const session = {
+    active: true, startedAt: Date.now(), source: 'manual',
+    songs: [
+      { id: 'song-a', entryId: 'entry-1', title: '第一次唱 A', artist: '歌手' },
+      { id: 'song-b', entryId: 'entry-2', title: 'B', artist: '歌手' },
+      { id: 'song-a', entryId: 'entry-3', title: '第二次唱 A', artist: '歌手' },
+    ],
+  };
+  let setlistEmitted = 0;
+  let persisted = 0;
+  const ctx = {
+    playState: {
+      isPlaying: false, currentTrack: null, setlistTheme: 'glass', setlistLayout: 'classic',
+      setlistStyle: {}, setlistSceneStyles: {},
+    },
+    session, SETLIST_SCENE: [],
+    effSetlistStore() { return {}; },
+    persistState() { persisted++; },
+    setlistPayload() { return { ...session }; },
+    emitSetlist() { setlistEmitted++; },
+    recordSessionSong() {}, broadcastState() {},
+  };
+  registerSetlistHandlers(
+    { emit() {} },
+    { on(event, handler) { events.set(event, handler); }, emit() {} },
+    ctx,
+  );
+
+  // 不存在的 entryId：不動任何資料，也不廣播（避免誤刪或無謂的重繪）
+  events.get('session:remove-song')({ entryId: 'not-exist' });
+  eq(session.songs.length, 3, '找不到對應 entryId 時不該動任何資料：');
+  eq(setlistEmitted, 0);
+
+  // 刪中間那筆：只少一筆，兩筆同 id 的 A（entry-1／entry-3）要各自獨立、都還在
+  events.get('session:remove-song')({ entryId: 'entry-2' });
+  eq(session.songs.length, 2, '刪除後應該只少一筆：');
+  eq(session.songs.map((s) => s.entryId).join(','), 'entry-1,entry-3', '同一首歌唱兩次的兩筆記錄必須各自獨立，刪其中一筆不能連帶刪到另一筆：');
+  eq(setlistEmitted, 1, '刪除成功要廣播 setlist:update，面板才會即時更新：');
+  eq(persisted, 1, '刪除成功要持久化，否則重開程式又會冒出來：');
+
+  // 缺 entryId、型別不對：直接忽略，不能誤判成「刪第一筆」
+  events.get('session:remove-song')({});
+  events.get('session:remove-song')(undefined);
+  events.get('session:remove-song')({ entryId: 123 });
+  eq(session.songs.length, 2, '沒有合法 entryId 的請求必須被忽略，不能刪錯筆：');
+  eq(setlistEmitted, 1);
+});
+
+test('recordSessionSong 每次記錄都給獨立 entryId，同一首歌唱兩次也能分別刪除', () => {
+  const { createAppState } = require('../server/state/app-state');
+  const appState = createAppState({ emit() {} });
+  // 這個 appState 實例會載到共用測試資料夾裡殘留的舊資料，先歸零避免被其他測試的殘留污染這裡的斷言。
+  appState.session.songs = [];
+  appState.session.active = true;
+  appState.session.startedAt = Date.now();
+
+  appState.playState.currentTrack = { id: 'song-a', title: 'A' };
+  appState.recordSessionSong();
+  appState.playState.currentTrack = { id: 'song-b', title: 'B' };
+  appState.recordSessionSong();
+  appState.playState.currentTrack = { id: 'song-a', title: 'A' };
+  appState.recordSessionSong();
+
+  eq(appState.session.songs.length, 3);
+  const entryIds = appState.session.songs.map((s) => s.entryId);
+  eq(new Set(entryIds).size, 3, '三筆記錄的 entryId 必須各自不同，即使 id 重複（同一首歌唱兩次）：');
+  ok(entryIds.every((id) => typeof id === 'string' && id.length > 0), 'entryId 必須是非空字串：');
+});
+
+test('舊資料（session.songs 沒有 entryId）載入時自動補齊，否則永遠刪不掉', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../server/state/app-state.js'), 'utf8');
+  ok(source.includes("session.songs = saved.session.songs.map((s) => (s && s.entryId ? s : { ...s, entryId: crypto.randomUUID() }));"),
+    '載入舊 state.json 時，沒有 entryId 的已唱歌單記錄必須補上，不能原封不動放著（否則單獨刪除功能對這些舊記錄永遠失效）：');
+
+  // 純函式驗證補齊邏輯本身：有 entryId 的保留原樣，沒有的才補新的。
+  function backfillEntryId(songs, makeId) {
+    return songs.map((s) => (s && s.entryId ? s : { ...s, entryId: makeId() }));
+  }
+  let counter = 0;
+  const result = backfillEntryId(
+    [{ id: 'a', entryId: 'keep-me' }, { id: 'b' }],
+    () => `generated-${++counter}`,
+  );
+  eq(result[0].entryId, 'keep-me', '已經有 entryId 的記錄不該被覆蓋：');
+  eq(result[1].entryId, 'generated-1', '沒有 entryId 的記錄要補上新的：');
+});
+
+test('已唱歌單面板：刪除鈕用事件代理、只在有 entryId 時才渲染，且套用共用的 .pi-remove 樣式', () => {
+  const panelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
+
+  ok(panelSource.includes("if (s.entryId) {"), '沒有 entryId 的記錄不該生出刪除鈕（理論上不會發生，但寧可不給按也不要刪錯）：');
+  ok(panelSource.includes("removeBtn.className = 'pi-remove';"), '刪除鈕必須套用既有的 .pi-remove 樣式，不要另外自創一套：');
+  ok(panelSource.includes("removeBtn.dataset.removeSongEntryId = s.entryId;"), '刪除鈕必須把 entryId 存在 dataset 上，點擊時才知道要刪哪一筆：');
+
+  // 事件代理：renderSetlistPanel() 每次都整批重建 innerHTML，監聽器必須綁在不會被替換的容器上。
+  ok(panelSource.includes("dom.setlistPanel.addEventListener('click', (event) => {") &&
+    panelSource.includes("const btn = event.target.closest('.pi-remove');") &&
+    panelSource.includes("SocketClient.send('session:remove-song', { entryId });"),
+    '刪除鈕必須用事件代理綁在容器上，並送出 session:remove-song：');
+
+  ok(panelCss.includes('.pi-remove'), '.pi-remove 的樣式必須存在（hover 才顯示、danger 色），不能是空按鈕：');
 });
 
 test('歌單固定預覽、直書句流縮圖與直播狀態重新整理入口都存在', () => {
@@ -4715,6 +4924,103 @@ test('跟唱視圖整句歌詞：時間跳轉不留殘影，逐句判斷純函�
   eq(findLineIndex(lines, -1), -1, '歌曲一開始（時間軸之前）不該有任何句子亮起：');
 });
 
+test('跟唱視圖 lyrics:sync 時鐘抖動不會讓歌詞先退回上一句再跳回來', () => {
+  // 使用者實測回報：快跳到下一句的時候，歌詞會先閃回上一句一下、再跳回來。
+  // 根因跟 display.js 踩過的同一種時鐘抖動坑（見 memory display-clock-granularity）：
+  // 面板每 200ms 廣播 lyrics:sync，網路抖動可能讓某次送到的 currentTime 比本地已經推算出
+  // 的時間還早幾十毫秒；原本每次都硬重設 syncTimeMs，剛好卡在句子邊界時就會讓 findLineIndex
+  // 算出前一句的索引，畫面因此先退後、下一輪輪詢或下一次同步才又跳回正確位置。
+  const promptSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  ok(promptSource.includes('const SYNC_REGRESSION_TOLERANCE_MS = 400;'), '必須設定一個小幅倒退的容忍值，不能照單全收每一次同步：');
+  ok(promptSource.includes('const regressedMs = estimatedMs - proposedMs;') &&
+    promptSource.includes('if (regressedMs > 0 && regressedMs < SYNC_REGRESSION_TOLERANCE_MS) {'),
+    '只有「小幅倒退」才要忽略；真的倒退很多（seek 到更早的位置）必須照樣接受，不能永遠鎖死: ');
+  ok(promptSource.includes('setProgressDisplay(estimatedMs / 1000);'),
+    '忽略抖動時仍要用估計值更新進度條顯示，不能整個不動（否則進度條會卡住）：');
+
+  // 純函式驗證核心判斷邏輯本身正確，不用真的開瀏覽器跑 setInterval。
+  function shouldIgnoreSync(estimatedMs, proposedMs, toleranceMs) {
+    const regressedMs = estimatedMs - proposedMs;
+    return regressedMs > 0 && regressedMs < toleranceMs;
+  }
+  eq(shouldIgnoreSync(6050, 6000, 400), true, '50ms 的小幅抖動應該被忽略：');
+  eq(shouldIgnoreSync(6390, 6000, 400), true, '正好在容忍值邊界內（390ms）也該忽略：');
+  eq(shouldIgnoreSync(6500, 6000, 400), false, '超過容忍值（500ms）代表是真的 seek，必須接受：');
+  eq(shouldIgnoreSync(5000, 6000, 400), false, '往前跳（proposed 比 estimated 還大）本來就不是倒退，要照樣接受：');
+});
+
+test('跟唱視圖點歌詞跳到那一句的起點，並正確扣掉 offset', () => {
+  const promptCss = fs.readFileSync(path.join(__dirname, '../public/css/prompter.css'), 'utf8');
+  const promptSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+
+  // 事件代理：renderLyricsSkeleton() 每次都整批重建 innerHTML，綁在個別 .pt-line 上的
+  // 監聽器會跟著舊 DOM 一起被丟掉，必須綁在容器上才能持續有效。
+  ok(promptSource.includes("dom.lyrics.addEventListener('click', (e) => {"), '點擊歌詞必須綁在容器上做事件代理，不能綁在個別 .pt-line（重繪後會失效）：');
+  ok(promptSource.includes("const lineEl = e.target.closest('.pt-line');"), '必須用 closest 找到整句的容器，點到內層的拼音/諧音子元素也要能定位到對的句子：');
+
+  // line.time 是「音訊時間 + offset」的調整後時間軸（跟 updateLyricsHighlight 的 adjustedMs、
+  // app-lyrics-timeline.js 寫入 line.time 的算法一致），還原成音訊秒數要扣掉 offset，
+  // 不能直接拿 line.time 送出去，否則歌詞/音訊有偏移時點下去會跳到偏移過的位置。
+  ok(promptSource.includes('const seconds = Math.max(0, (line.time - currentOffsetMs) / 1000);'),
+    '換算音訊秒數必須扣掉 currentOffsetMs，直接用 line.time 會忽略偏移：');
+  ok(promptSource.includes("const payload = currentTrackId != null ? { time: seconds, trackId: currentTrackId } : seconds;") ,
+    '送出的 seek payload 格式必須跟其他地方（commitScrub）一致，帶 trackId 避免快速切歌後舊 seek 晚到污染新歌：');
+  ok(promptSource.includes("SocketClient.send('play:seek', payload);"), '必須真的送出 play:seek，不能只更新本地畫面：');
+
+  // 點下去要立即反映（樂觀更新），不用等伺服器回廣播才動，體感才會跟點擊同步。
+  ok(promptSource.includes('syncTimeMs = seconds * 1000;') && promptSource.includes('updateLyricsHighlight();'),
+    '點擊後必須立即更新本地時鐘與高亮，不能乾等下一次 lyrics:sync 才有反應：');
+
+  // 純函式驗證換算公式本身：offset 為正代表歌詞比音訊晚出現，adjustedMs = audioMs + offsetMs。
+  function seekSecondsFromLineTime(lineTimeMs, offsetMs) {
+    return Math.max(0, (lineTimeMs - offsetMs) / 1000);
+  }
+  eq(seekSecondsFromLineTime(5000, 0), 5, '沒有 offset 時，line.time 5000ms 應該對應音訊第 5 秒：');
+  eq(seekSecondsFromLineTime(5000, 500), 4.5, 'offset +500ms（歌詞晚 0.5 秒出現）時，音訊要少跳 0.5 秒才會對上這句：');
+  eq(seekSecondsFromLineTime(500, 2000), 0, '換算結果為負數時要夾在 0，不能送出負的秒數：');
+
+  // 要有游標/hover 提示，使用者才知道這是可以點的。
+  ok(promptCss.includes('cursor: pointer;'), '.pt-line 必須有 cursor:pointer 提示可點擊：');
+});
+
+test('跟唱視圖新增羅馬拼音／諧音開關，各自獨立、預設關閉、不影響 OBS', () => {
+  const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  const promptCss = fs.readFileSync(path.join(__dirname, '../public/css/prompter.css'), 'utf8');
+  const promptSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+
+  ok(promptHtml.includes('id="pt-set-romaji"') && promptHtml.includes('id="pt-set-xieyin"'), '設定面板必須有拼音跟諧音兩個獨立的開關：');
+  ok(promptSource.includes('showRomaji: false, showXieyin: false'), '兩個開關預設必須是關閉（跟 OBS 顯示端 romanizationMode 預設 original 一致），沒資料的歌不該冒出空行：');
+
+  // 拼音/諧音會改變 DOM 結構，不是單純 CSS 變數，開關必須觸發重繪，不能只是存個旗標。
+  const displayOptionsFn = promptSource.slice(
+    promptSource.indexOf('function updateLyricsDisplayOptions(patch) {'),
+    promptSource.indexOf('function updateLyricsDisplayOptions(patch) {') + 200,
+  );
+  ok(displayOptionsFn.includes('renderLyricsSkeleton()') && displayOptionsFn.includes('updateLyricsHighlight()'),
+    '切換拼音/諧音開關必須重繪歌詞區，不能只存進 appearance 卻沒反映到畫面：');
+  ok(promptSource.includes("dom.setRomaji.addEventListener('change', () => updateLyricsDisplayOptions({ showRomaji: dom.setRomaji.checked }))"),
+    '拼音開關必須接上 updateLyricsDisplayOptions，不能誤用只存 CSS 變數的 updateAppearance：');
+  ok(promptSource.includes("dom.setXieyin.addEventListener('change', () => updateLyricsDisplayOptions({ showXieyin: dom.setXieyin.checked }))"),
+    '諧音開關必須接上 updateLyricsDisplayOptions，不能誤用只存 CSS 變數的 updateAppearance：');
+
+  // 渲染邏輯：沒開開關或該行沒有資料都不該生出空的拼音/諧音行。
+  ok(promptSource.includes('appearance.showRomaji && line.phonetic') && promptSource.includes('appearance.showXieyin && line.xieyin'),
+    '拼音/諧音行必須同時檢查「開關有沒有開」跟「這一行有沒有資料」，兩個條件缺一都不該渲染：');
+  ok(!promptSource.includes('s2t(line.phonetic') && !promptSource.includes('s2t(line.xieyin'),
+    '拼音/諧音不可經過簡轉繁：跟 karaoke.js 同一套規則，簡轉繁只轉原文 Han 字，轉了拼音/諧音反而可能跟實際讀音對不上：');
+
+  // 非同步羅馬化：歌曲切過來當下可能還沒跑完 kuromoji/pinyin-pro，之後才用這個事件補上，
+  // 若沒接這個監聽，使用者開了開關卻要等下一次切歌才看得到拼音/諧音（見 memory
+  // lyrics-romanization-pipeline 的「非同步」根因）。
+  ok(promptSource.includes("SocketClient.on('lyrics:romanized', (data) => {"), '必須監聽 lyrics:romanized，補推的羅馬化結果才進得來：');
+  ok(promptSource.includes('const byTime = new Map();') && promptSource.includes('byTime.set(rl.time, rl)'),
+    '合併羅馬化結果必須用時間對齊，不能用索引（伺服器過濾製作資訊行後行數可能跟本地不同，索引對齊會貼到錯的句子）：');
+
+  // CSS 結構：拼音/諧音是獨立於主歌詞文字的子區塊，字級/顏色狀態要能跟著 active/past/next 走。
+  ok(promptCss.includes('.pt-line-romaji') && promptCss.includes('.pt-line-xieyin'), '必須有拼音跟諧音各自的樣式：');
+  ok(promptCss.includes('.pt-line.pt-line--active .pt-line-text'), '主歌詞文字的 active 樣式必須套在新的 .pt-line-text 子元素上，不能還留在舊的 .pt-line 選擇器（結構改了，樣式沒跟著改就會失效）：');
+});
+
 test('跟唱視圖歌詞套用簡轉繁設定，跟歌詞顯示頁／歌單頁同一套規則', () => {
   const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
   const promptSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
@@ -4726,7 +5032,7 @@ test('跟唱視圖歌詞套用簡轉繁設定，跟歌詞顯示頁／歌單頁�
   ok(promptSource.includes("OpenCC.Converter({ from: 'cn', to: 'tw' })"), '轉換方向必須是簡轉繁（cn→tw），跟 karaoke.js／setlist.js 一致：');
   ok(promptSource.includes('function s2t(str) {') && promptSource.includes('if (!s2tEnabled || !str) return str;'),
     's2t() 必須尊重 s2tEnabled 開關：關閉時原樣輸出，不能永遠轉換：');
-  ok(promptSource.includes('`<div class="pt-line" data-index="${i}">${escapeHtml(s2t(line.text || \'\'))}</div>`'),
+  ok(promptSource.includes('<div class="pt-line-text">${escapeHtml(s2t(line.text || \'\'))}</div>'),
     '歌詞逐句渲染必須先過 s2t() 再 escapeHtml，兩者順序顛倒會轉換不到已跳脫的字元：');
 
   // 面板的簡轉繁開關就是同一個 lyricSettings.convertTraditional：勾選＝轉繁體，取消勾選＝維持原文。

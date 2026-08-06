@@ -480,6 +480,13 @@
     playTrack(idx, track.autoplay !== false);
   });
 
+  // 另一個已連線的面板分頁播完清單最後一首：本地也要跟著清空，不能只有原分頁自己知道。
+  SocketClient.on('play:stop', () => {
+    stopPlayback();
+    state.currentTrackIndex = -1;
+    AppShared.renderPlaylist();
+  });
+
   audioPlayer.addEventListener('timeupdate', () => {
     // SoundTouch 生效時，時間一律以 stOnTime 為準。<audio> 在切歌/載入時仍可能吐幾次
     // timeupdate，讓兩個時間源同時寫進度條與 lyrics:sync，OBS 端就會看到歌詞來回跳。
@@ -520,7 +527,16 @@
       playlist.length,
       continuousPlay,
     );
-    if (next) playTrack(next.index, next.autoplay);
+    if (next) {
+      playTrack(next.index, next.autoplay);
+      return;
+    }
+    // 播放清單播完最後一首，沒有下一首可接：過去這裡什麼都不做，OBS 顯示端／跟唱視圖
+    // 沒有任何訊號可以清空歌詞，最後一句就會永遠卡在畫面上，直到有人手動點別首歌。
+    stopPlayback();
+    state.currentTrackIndex = -1;
+    AppShared.renderPlaylist();
+    SocketClient.send('play:stop');
   });
 
   // Phase 5: 音訊錯誤處理

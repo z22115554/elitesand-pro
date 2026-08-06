@@ -10,6 +10,7 @@
  * - 「事件怎麼回應」屬於 routes/handlers/*，不在這裡
  */
 
+const crypto = require('crypto');
 const stateStore = require('../services/state-store');
 const setlistStyleSchema = require('../../public/js/setlist-style-schema');
 const twitchReplySettings = require('../../public/js/twitch-reply-settings');
@@ -162,7 +163,10 @@ function createAppState(io) {
       if (typeof saved.session.active === 'boolean') session.active = saved.session.active;
       if (typeof saved.session.startedAt === 'number') session.startedAt = saved.session.startedAt;
       if (['obs', 'twitch', 'manual'].includes(saved.session.source)) session.source = saved.session.source;
-      if (Array.isArray(saved.session.songs)) session.songs = saved.session.songs;
+      // 舊資料可能沒有 entryId（單獨刪除功能加入前存的）——補齊，否則這些歌永遠刪不掉。
+      if (Array.isArray(saved.session.songs)) {
+        session.songs = saved.session.songs.map((s) => (s && s.entryId ? s : { ...s, entryId: crypto.randomUUID() }));
+      }
     }
     if (typeof saved.setlistTheme === 'string') playState.setlistTheme = saved.setlistTheme;
     if (typeof saved.setlistLayout === 'string') playState.setlistLayout = saved.setlistLayout;
@@ -290,6 +294,7 @@ function createAppState(io) {
     const counting = session.active && session.startedAt != null;
     session.songs.push({
       id: t.id,
+      entryId: crypto.randomUUID(), // 同一首歌可能唱兩次（id 重複），單獨刪除要認這個才唯一
       title: t.title || '',
       artist: t.artist || '',
       startedAt: Date.now(),

@@ -656,6 +656,18 @@
     dom.playIcon.textContent = playing ? '❚❚' : '▶';
   });
 
+  // 播放清單播完最後一首、沒有下一首可接：跟 state:sync 沒有 currentTrack 時的空狀態一致。
+  SocketClient.on('play:stop', () => {
+    reconcileCurrentTrackIndex(null);
+    dom.trackTitle.textContent = t('player.noTrack');
+    dom.trackArtist.textContent = '';
+    dom.albumArt.style.backgroundImage = 'none';
+    isPlaying = false;
+    dom.playIcon.textContent = '▶';
+    if (dom.progressFill) dom.progressFill.style.width = '0%';
+    dom.timeCurrent.textContent = formatTime(0);
+  });
+
   // 歌詞時間同步（同時驅動進度條填色與總時長）
   SocketClient.on('lyrics:sync', (data) => {
     if (!data || typeof data.currentTime !== 'number') return;

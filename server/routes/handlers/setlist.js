@@ -90,6 +90,18 @@ function registerSetlistHandlers(io, socket, ctx) {
     persistState();
   });
 
+  // 已唱歌單單獨刪一筆——不用整場清空。常見情境：點錯歌被誤記進已唱、切歌太快連點兩次。
+  // 用 entryId 定位（不能用 id：同一首歌可能在這場唱兩次，id 會重複，刪錯會刪到另一筆）。
+  socket.on('session:remove-song', ({ entryId } = {}) => {
+    if (typeof entryId !== 'string' || !entryId) return;
+    const idx = session.songs.findIndex((s) => s && s.entryId === entryId);
+    if (idx === -1) return;
+    const [removed] = session.songs.splice(idx, 1);
+    log.info(`已唱歌單移除單筆：${removed.title || removed.id}`);
+    emitSetlist();
+    persistState();
+  });
+
   socket.on('setlist:get', (_data, ack) => {
     const data = setlistPayload();
     if (typeof ack === 'function') ack(data);

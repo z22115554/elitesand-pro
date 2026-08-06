@@ -140,6 +140,8 @@
             time.textContent = fmtSessionOffset(s.offset);
             row.appendChild(time);
           }
+          const meta = document.createElement('div');
+          meta.className = 'pi-meta';
           const title = document.createElement('span');
           title.className = 'pi-title';
           title.appendChild(document.createTextNode(s.title || ''));
@@ -149,7 +151,20 @@
             artist.textContent = `— ${s.artist}`;
             title.append(' ', artist);
           }
-          row.appendChild(title);
+          meta.appendChild(title);
+          row.appendChild(meta);
+          // 單獨刪一筆：點錯歌被誤記進已唱、切歌太快連點兩次，不用整場清空才能修正。
+          // 沒有 entryId（理論上不該發生，state.js 載入時已幫舊資料補齊）就不給按，避免刪錯。
+          if (s.entryId) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'pi-remove';
+            removeBtn.type = 'button';
+            removeBtn.dataset.removeSongEntryId = s.entryId;
+            removeBtn.title = workspaceText('home.session.removeSong', '從已唱歌單移除');
+            removeBtn.setAttribute('aria-label', workspaceText('home.session.removeSong', '從已唱歌單移除'));
+            removeBtn.textContent = '×';
+            row.appendChild(removeBtn);
+          }
           dom.setlistPanel.appendChild(row);
         }
         // 自動捲到底（最新一首）
@@ -159,6 +174,18 @@
   }
 
   window.addEventListener('i18n:change', () => renderSetlistPanel(sessionState));
+
+  // 事件代理綁在容器上：renderSetlistPanel() 每次都整批重建 innerHTML，綁在個別按鈕上的
+  // 監聽器會跟著舊 DOM 一起被丟掉，只有綁在容器（本身不會被替換）才能持續有效。
+  if (dom.setlistPanel) {
+    dom.setlistPanel.addEventListener('click', (event) => {
+      const btn = event.target.closest('.pi-remove');
+      if (!btn) return;
+      const entryId = btn.dataset.removeSongEntryId;
+      if (!entryId) return;
+      SocketClient.send('session:remove-song', { entryId });
+    });
+  }
 
   function copyText(text, btn, successLabel, restoreLabel) {
     const originalLabel = btn.textContent;

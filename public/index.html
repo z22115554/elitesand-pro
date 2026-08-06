@@ -189,7 +189,10 @@
 
       <div id="update-banner" class="banner" hidden>
         <span>新版本 <strong id="update-banner-version"></strong> 已發布</span>
-        <a id="update-banner-link" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer">下載更新</a>
+        <!-- 兩個按鈕互斥顯示：能安全增量更新就直接原地套用（apply），不行才退回開新分頁
+             下載完整版（link）。兩個都存在是為了「無法增量時仍要有路可走」，不是同時顯示。 -->
+        <button id="update-banner-apply" class="btn btn-sm btn-primary" type="button" hidden>立即更新</button>
+        <a id="update-banner-link" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer" hidden>下載更新</a>
         <button id="update-banner-dismiss" class="btn btn-sm btn-ghost" type="button">關閉</button>
       </div>
 
@@ -2481,6 +2484,7 @@
   <script src="/js/danger-confirm.js"></script>
   <script src="/js/modal-focus.js"></script>
   <script src="/js/app-youtube-import.js"></script>
+  <script src="/js/app-update-apply.js"></script>
   <script src="/js/app-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>
   <script src="/js/twitch-request-settings.js"></script>
