@@ -18,7 +18,8 @@ function Assert-Inside {
 $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Resources = Join-Path $Root "dist\.electron-builder-resources"
 $PortableOutput = Join-Path $Resources "portable"
-$Package = Get-Content -LiteralPath (Join-Path $Root "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+$RootPackagePath = Join-Path $Root "package.json"
+$Package = Get-Content -LiteralPath $RootPackagePath -Raw -Encoding UTF8 | ConvertFrom-Json
 $PortableStage = Join-Path $PortableOutput "Elitesand-Pro-v$($Package.version)-portable"
 $InstallerOutput = Join-Path $Root "dist\releases\v$($Package.version)\installer"
 $InstallerLicense = Join-Path $Resources "EULA-installer.txt"
@@ -119,12 +120,53 @@ try {
     if (Test-Path -LiteralPath $runtimeDir) { throw "Installer app-root still contains $name" }
   }
 
+  # electron-builder only accepts three-part SemVer, while Elitesand Pro patch
+  # releases use a four-part public version such as 0.9.9.1. Keep the staged
+  # server package and public artifact names on the real version, but give the
+  # Electron wrapper temporary valid metadata during packaging. buildVersion
+  # preserves the exact four-part Windows file version.
+  $OriginalRootPackageBytes = [System.IO.File]::ReadAllBytes($RootPackagePath)
+  $BuilderMetadataWritten = $false
+  $BuilderVersion = [string]$Package.version
+  if ($BuilderVersion -match '^(\d+)\.(\d+)\.(\d+)\.(\d+)$') {
+    $BuilderVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3])+$($Matches[4])"
+  }
+  if ($BuilderVersion -ne [string]$Package.version) {
+    $BuilderPackage = Get-Content -LiteralPath $RootPackagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $BuilderPackage.version = $BuilderVersion
+    if ($null -eq $BuilderPackage.build -or $null -eq $BuilderPackage.build.directories) {
+      throw "package.json is missing build.directories; cannot prepare installer metadata."
+    }
+    $BuilderPackage.build.directories.output = "dist/releases/v$($Package.version)/installer"
+    $ArtifactName = "Elitesand Pro Setup $($Package.version).`${ext}"
+    if ($BuilderPackage.build.PSObject.Properties.Name -contains 'artifactName') {
+      $BuilderPackage.build.artifactName = $ArtifactName
+    } else {
+      $BuilderPackage.build | Add-Member -NotePropertyName artifactName -NotePropertyValue $ArtifactName
+    }
+    if ($BuilderPackage.build.PSObject.Properties.Name -contains 'buildVersion') {
+      $BuilderPackage.build.buildVersion = [string]$Package.version
+    } else {
+      $BuilderPackage.build | Add-Member -NotePropertyName buildVersion -NotePropertyValue ([string]$Package.version)
+    }
+    [System.IO.File]::WriteAllText(
+      $RootPackagePath,
+      ($BuilderPackage | ConvertTo-Json -Depth 20),
+      [System.Text.UTF8Encoding]::new($false)
+    )
+    $BuilderMetadataWritten = $true
+    Write-Host "Installer metadata version: $BuilderVersion (public version remains $($Package.version))"
+  }
+
   Push-Location $Root
   try {
     & (Join-Path $Root "node_modules\.bin\electron-builder.cmd") --win nsis
     if ($LASTEXITCODE -ne 0) { throw "electron-builder failed." }
   } finally {
     Pop-Location
+    if ($BuilderMetadataWritten) {
+      [System.IO.File]::WriteAllBytes($RootPackagePath, $OriginalRootPackageBytes)
+    }
   }
 
   # electron-builder has silently dropped node_modules from extraResources before.
