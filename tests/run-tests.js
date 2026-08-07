@@ -6188,6 +6188,7 @@ test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', ()
 test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設定與伺服器白名單', () => {
   const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
   const templateJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-paperstrip.js'), 'utf8');
+  const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
   const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
   const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
   const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
@@ -6196,6 +6197,10 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(templateJs.includes("id: 'paperstrip'") && templateJs.includes('onFrame(timeMs, ctx)') && templateJs.includes('onSeek(timeMs, ctx)'), '紙帶逐字必須透過 registry 並以時間驅動: ');
   ok(templateJs.includes('LyricMotion.ensureWordTimings') && templateJs.includes('LyricMotion.buildGraphemeTimings'), '紙帶逐字必須沿用既有逐字時間資料與 LRC 降級管線: ');
   ok(templateJs.includes('PRE_ROLL_MS') && templateJs.includes("classList.toggle('is-current'"), '紙帶逐字必須有預展開與逐字目前字狀態: ');
+  ok(templateJs.includes('const BATCH_SIZE = 3;') && templateJs.includes('assignBatchSizes(plans)') && templateJs.includes('renderBatch(renderedBatchStart)'), '紙帶逐字必須固定三句一頁，尺寸在頁面建立前決定且滿頁後整組切換: ');
+  ok(templateJs.includes("['small', 'large', 'medium']") && templateJs.includes("['large', 'small', 'medium']") && templateJs.includes("['medium', 'large', 'small']"), '紙帶逐字必須保留小大中／大小中／中大小的主要尺寸循環: ');
+  ok(templateJs.includes('constrainRowWidth') && displayCss.includes('body.lyric-pos-left #paperstrip-root .ps-group') && displayCss.includes('width: min(100%, 760px);'), '紙帶逐字偏左／偏右必須有單邊寬度上限，超長句在首次顯示前縮放: ');
+  ok(!displayCss.includes('@keyframes ps-row-enter'), '紙帶逐字不可在每句重播整列進場動畫造成閃爍: ');
   ok(lyricExtras.includes("paperstrip: { label: '紙帶逐字'") && lyricExtras.includes("template: 'paperstrip'"), '桌面設定必須提供紙帶逐字能力與獨立預設: ');
   ok(lyricsHandler.includes("'columnflow', 'paperstrip'"), 'server 模板白名單必須接受 paperstrip: ');
   ok(appState.includes("paperstrip: { template: 'paperstrip'"), 'server 預設 lyricTemplateSettings 必須包含 paperstrip: ');

@@ -637,7 +637,7 @@ body.template-paperstrip #lyrics-container {
   align-items: center;
 }
 
-/* ─── 紙帶逐字：白色紙帶先展開，再依時間逐字填入；保留最近兩句做 PV 式層級 ─── */
+/* ─── 紙帶逐字：每三句一頁，尺寸在進場前固定；白色紙帶依時間展開 ─── */
 #paperstrip-root {
   position: absolute;
   inset: 0;
@@ -653,7 +653,8 @@ body.template-paperstrip #lyrics-container {
   position: absolute;
   left: 50%;
   top: calc(50% + var(--ps-y-shift));
-  width: min(92%, 1120px);
+  width: min(78vw, 980px);
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -664,7 +665,14 @@ body.template-paperstrip #lyrics-container {
 
 #paperstrip-root[data-side="left"] .ps-group,
 #paperstrip-root[data-side="right"] .ps-group {
-  width: 44%;
+  width: min(44%, 760px);
+}
+
+/* 偏左／偏右時 #lyrics-container 本身已被限制在單邊 46vw；這裡再加一道模板上限，
+   避免 nowrap 紙帶因內容寬度把整組撐回畫面中央。實際超長句會在建立該頁時同步縮字。 */
+body.lyric-pos-left #paperstrip-root .ps-group,
+body.lyric-pos-right #paperstrip-root .ps-group {
+  width: min(100%, 760px);
 }
 
 #paperstrip-root[data-side="left"] .ps-group {
@@ -680,31 +688,26 @@ body.template-paperstrip #lyrics-container {
 
 .ps-row {
   --ps-font-scale: 0.5;
-  --ps-open: 1;
+  --ps-open: 0;
   position: relative;
   max-width: 100%;
   font-size: clamp(14px, calc(var(--display-font-size, 56px) * var(--ps-font-scale)), 86px);
   line-height: 1.04;
   letter-spacing: var(--lyric-letter-spacing, 0px);
   transform-origin: left center;
-  animation: ps-row-enter 360ms cubic-bezier(.12, .78, .18, 1) both;
-  will-change: transform, opacity;
+  will-change: auto;
 }
 
-.ps-row--old {
+.ps-row--slot-0 {
   margin-left: 0.3em;
-  opacity: 0.82;
-  animation-delay: 35ms;
 }
 
-.ps-row--hero {
+.ps-row--slot-1 {
   margin-left: 0.7em;
-  animation-delay: 70ms;
 }
 
-.ps-row--live {
+.ps-row--slot-2 {
   margin-left: 1.2em;
-  animation-delay: 105ms;
 }
 
 .ps-plate {
@@ -732,6 +735,7 @@ body.template-paperstrip #lyrics-container {
 
 .ps-text {
   display: inline-flex;
+  max-width: 100%;
   white-space: pre;
   color: var(--lyric-color, #111111);
   text-shadow: none;
@@ -756,13 +760,7 @@ body.template-paperstrip #lyrics-container {
   transform: translate3d(0, -.06em, 0) scale(1.035);
 }
 
-@keyframes ps-row-enter {
-  from { opacity: 0; transform: translate3d(-.38em, .18em, 0) scale(.985); }
-  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .ps-row { animation: none !important; }
   .ps-glyph { transition-duration: .01ms !important; }
 }
 
