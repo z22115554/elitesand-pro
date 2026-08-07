@@ -99,7 +99,7 @@
     return currentTrackIndex;
   }
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
@@ -114,6 +114,17 @@
     shadow: 'none',
     verticalPosition: 'center',
     lyricPosition: 'center',
+    letterSpacing: 1,
+  };
+  const MIRROR_DEFAULTS = {
+    fontWeight: 900,
+    fontSize: 60,
+    color: '#ffffff',
+    activeColor: '#ffffff',
+    shadow: 'none',
+    verticalPosition: 'center',
+    lyricPosition: 'split',
+    stageSafeMargin: 13,
     letterSpacing: 1,
   };
 
@@ -140,7 +151,8 @@
     const template = TEMPLATE_IDS.includes(lyricSettings.template) ? lyricSettings.template : 'classic';
     const isColumnflow = template === 'columnflow';
     const isClassic = template === 'classic';
-    const isFixedPosition = template === 'ktv' || isColumnflow;
+    const isMirror = template === 'mirror';
+    const isFixedPosition = template === 'ktv' || isColumnflow || isMirror;
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
     document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowVariant === (lyricSettings.columnflowVariant || 'sen')));
     document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowPlacement === (lyricSettings.columnflowPlacement || 'split')));
@@ -200,9 +212,11 @@
         : {
           ...settingSnapshot(lyricSettings),
           ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
+          ...(nextTemplate === 'mirror' ? MIRROR_DEFAULTS : {}),
           template: nextTemplate,
         };
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
+      if (nextTemplate === 'mirror') next.lyricPosition = 'split';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
       if (nextTemplate === 'columnflow') next.columnflowMaxLines = normalizeColumnflowMaxLines(next.columnflowMaxLines);

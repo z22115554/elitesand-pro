@@ -6137,7 +6137,7 @@ test('R6-2 follow-up OBS 來源服務重啟恢復提示只針對曾連線卻未�
 test('R6-3 非經典模板會在可見範圍說明中交代拼音與諧音限制', () => {
   const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
   const unsupportedCopy = '此模板不支援拼音／諧音；需要雙語請選「經典疊層」。';
-  const expectedTemplates = ['pulse', 'facet', 'drift', 'aura', 'ktv', 'paperstrip'];
+  const expectedTemplates = ['pulse', 'facet', 'drift', 'aura', 'ktv', 'paperstrip', 'mirror'];
   expectedTemplates.forEach((template) => {
     const entry = new RegExp(`${template}: \\{[^\\n]*${unsupportedCopy.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`).exec(lyricExtras)?.[0] || '';
     ok(entry.includes(unsupportedCopy), `${template} 必須在模板範圍說明中交代雙語限制: `);
@@ -6170,16 +6170,17 @@ test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', ()
   const controllerJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const controllerCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'controller-new.css'), 'utf8');
-  ['pulse', 'facet', 'aura', 'paperstrip'].forEach((template) => {
+  ['pulse', 'facet', 'aura', 'paperstrip', 'mirror'].forEach((template) => {
     ok(controllerHtml.includes(`class="ctrl-template-btn" data-template="${template}"`), `${template} 必須出現在手機模板選項: `);
   });
   const panelDrift = /<button[^>]*data-template="drift"[^>]*>/.exec(panelHtml)?.[0] || '';
   const controllerDrift = /<button[^>]*data-template="drift"[^>]*>/.exec(controllerHtml)?.[0] || '';
   ok(panelDrift.includes('hidden') && controllerDrift.includes('hidden'), '斜拍告白必須從桌面與手機模板選擇器隱藏: ');
   ok(!controllerHtml.includes('ctrl-template-legacy-notice'), '手機不應保留舊模板的相容性介面: ');
-  ok(controllerJs.includes("const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip'];"), '遙控器必須使用新的模板 ID: ');
+  ok(controllerJs.includes("const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror'];"), '遙控器必須使用新的模板 ID: ');
   ok(controllerJs.includes('if (!TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換必須接受所有現行模板: ');
   ok(controllerJs.includes("nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS"), '舊 state 從手機首次切到 paperstrip 時必須套用黑字預設，避免白底白字: ');
+  ok(controllerJs.includes("nextTemplate === 'mirror' ? MIRROR_DEFAULTS") && controllerJs.includes("if (nextTemplate === 'mirror') next.lyricPosition = 'split';"), '手機首次切到 mirror 必須套用雙側預設並鎖定 split: ');
   ok(controllerHtml.includes('id="ctrl-intensity-group"') && controllerJs.includes('intensityGroup.hidden = !templateSupportsIntensity(template);'), '手機動態強度必須與桌面模板能力同步: ');
   ok(controllerHtml.includes('id="ctrl-classic-style-group"') && controllerJs.includes('classicStyleGroup.hidden = !isClassic;'), '配色風格必須只在經典疊層顯示: ');
   ok(controllerCss.includes('#ctrl-intensity-group[hidden]') && controllerCss.includes('#ctrl-classic-style-group[hidden]'), '手機模板設定的 hidden 狀態不得被 CSS 蓋掉: ');
@@ -6217,14 +6218,41 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(templateJs.includes('constrainRowWidth') && displayCss.includes('body.lyric-pos-left #paperstrip-root .ps-group') && displayCss.includes('width: min(100%, 760px);'), '紙帶逐字偏左／偏右必須有單邊寬度上限，超長句在首次顯示前縮放: ');
   ok(!displayCss.includes('@keyframes ps-row-enter'), '紙帶逐字不可在每句重播整列進場動畫造成閃爍: ');
   ok(motionKernel.includes('function stageSafeMarginPercent()') && motionKernel.includes('function mountStageSafeZoneGuide(rootEl)'), '主線舞台安全框核心必須移植到共用 LyricMotion: ');
-  ok(lyricExtras.includes("const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip'];") && panelHtml.includes('id="stage-safe-margin-field"'), 'Paper Strip 必須接入舞台安全距離設定 UI: ');
-  ok(displayJs.includes("['pulse', 'facet', 'drift', 'aura', 'paperstrip'].includes(s.template)") && displayJs.includes("setProperty('--stage-safe-margin'"), 'display 必須把 Paper Strip 的安全距離同步成共用 dataset/CSS 變數: ');
+  ok(lyricExtras.includes("const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'];") && panelHtml.includes('id="stage-safe-margin-field"'), 'Paper Strip 必須接入舞台安全距離設定 UI: ');
+  ok(displayJs.includes("['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)") && displayJs.includes("setProperty('--stage-safe-margin'"), 'display 必須把 Paper Strip 的安全距離同步成共用 dataset/CSS 變數: ');
   ok(templateJs.includes('LyricMotion.mountStageSafeZoneGuide(rootEl)') && templateJs.includes('onSettings()') && displayCss.includes('.stage-safe-zone-band'), 'Paper Strip 必須掛共用安全框並在設定變更時即時同步: ');
   ok(displayCss.includes('width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);') && displayCss.includes('overflow: visible;') && templateJs.includes('entry.groupEl.clientWidth - indent - 2') && templateJs.includes('Math.max(0.22'), 'Paper Strip 安全框必須作為排版寬度而不是裁切遮罩；超長句要先計入縮排並縮到完整可見: ');
   ok(lyricExtras.includes("paperstrip: { label: '紙帶逐字'") && lyricExtras.includes("template: 'paperstrip'"), '桌面設定必須提供紙帶逐字能力與獨立預設: ');
   ok(lyricsHandler.includes("'columnflow', 'paperstrip'"), 'server 模板白名單必須接受 paperstrip: ');
   ok(appState.includes("paperstrip: { template: 'paperstrip'"), 'server 預設 lyricTemplateSettings 必須包含 paperstrip: ');
   ok(i18n.includes("'template.paperstrip':"), '紙帶逐字模板名稱必須有五語 i18n key: ');
+});
+
+test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic glyph 排版', () => {
+  const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const templateJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-mirror.js'), 'utf8');
+  const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
+  const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  const i18n = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
+
+  ok(displayHtml.includes('/js/lyric-template-mirror.js'), 'display 必須載入 Mirror P0 模板腳本: ');
+  ok(templateJs.includes("id: 'mirror'") && templateJs.includes('onFrame(timeMs, ctx)') && templateJs.includes('onSeek(timeMs, ctx)'), 'Mirror 必須透過 registry 並保持完全時間驅動: ');
+  ok(templateJs.includes('const MIN_BATCH_SIZE = 2;') && templateJs.includes('const MAX_BATCH_SIZE = 4;') && templateJs.includes('scoreBatchCandidate') && templateJs.includes('buildBatches(plans)'), 'Mirror P0 必須穩定分成 2～4 句一頁: ');
+  ok(templateJs.includes('function mirrorText(text)') && templateJs.includes('code + 0x60') && templateJs.includes("normalize('NFC')"), 'Mirror 右側只能用 Unicode 平假名→片假名安全轉換，不可改寫漢字／中文: ');
+  ok(templateJs.includes('const pureChinese = hasHan(plan.text) && !hasKana(plan.text);') && templateJs.includes('if (pureChinese && chars.length > 7) return -1;'), '中文歌曲不可把所有漢字當日文 kanji hero，長中文句要停用漢字加權: ');
+  ok(templateJs.includes('LyricMotion.hashNoise') && templateJs.includes('glyphVisual') && templateJs.includes('--mirror-glyph-rotation') && templateJs.includes('--mirror-glyph-y'), 'glyph 級大小、旋轉、上下錯位必須由 deterministic hash 在進場前決定: ');
+  ok(templateJs.includes("primaryPanel.className = 'mirror-panel mirror-panel--primary'") && templateJs.includes("echoPanel.className = 'mirror-panel mirror-panel--echo'"), 'Mirror 只能使用固定左右雙側 DOM，不得退回單側位置模式: ');
+  ok(displayCss.includes('.mirror-panel--primary') && displayCss.includes('right: calc(50% + var(--stage-safe-margin, 13) * 1%);') && displayCss.includes('.mirror-panel--echo') && displayCss.includes('left: calc(50% + var(--stage-safe-margin, 13) * 1%);'), '左右兩側必須直接以中央安全距離作為排版邊界: ');
+  ok(displayCss.includes('.mirror-line--echo .mirror-glyph') && displayCss.includes('-webkit-text-fill-color: transparent;') && displayCss.includes('-webkit-text-stroke:'), '右側鏡像必須是透明填色＋描邊，不可只是降低實心字透明度: ');
+  ok(templateJs.includes('constrainLine') && templateJs.includes("Math.max(0.44") && !displayCss.includes('#mirror-root {\r\n  position: fixed;\r\n  inset: 0;\r\n  overflow: hidden;'), 'Mirror 超長句必須縮放而不是用 overflow hidden 裁字: ');
+  ok(lyricExtras.includes("mirror: { label: '鏡像'") && lyricExtras.includes("template: 'mirror'") && lyricExtras.includes("lyricPosition: 'split'") && lyricExtras.includes('stageSafeMargin: 13'), '桌面設定必須提供 Mirror P0 獨立預設並鎖定 split: ');
+  ok(panelHtml.includes('data-template="mirror"') && panelHtml.includes('style-thumb-mirror'), '桌面模板選擇器必須有 Mirror P0 卡片: ');
+  ok(lyricsHandler.includes("'paperstrip', 'mirror'"), 'server 模板白名單必須接受 mirror: ');
+  ok(appState.includes("mirror: { template: 'mirror'"), 'server 預設 lyricTemplateSettings 必須包含 mirror: ');
+  ok(i18n.includes("'template.mirror':"), 'Mirror 模板名稱必須有五語 i18n key: ');
 });
 
 test('v2 將既有模板設定與預設快照遷移到新 ID', () => {

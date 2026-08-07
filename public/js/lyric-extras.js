@@ -70,7 +70,7 @@
     xieyinColor: '#ffd6a5',
     xieyinSize: 0.92,     // 相對主字級的倍率（em）
     // ── 排版模板（v4/v5）──
-    template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura' | 'ktv' | 'columnflow' | 'paperstrip'
+    template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura' | 'ktv' | 'columnflow' | 'paperstrip' | 'mirror'
     animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
     lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
     columnflowVariant: 'sen', // 直書句流：'sen' | 'fuda'
@@ -84,7 +84,7 @@
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -96,6 +96,7 @@
     ktv: { label: 'KTV', description: '固定雙行演唱畫面，適合逐字或跟唱情境。', scope: '可調：字型、配色、背景與詳細的邊距設定；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，逐字浮現，唱過的句子留下淡淡殘影。', scope: '可調：直書樣式、左右配置、保留句數、字型、配色與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     paperstrip: { label: '紙帶逐字', description: '白色紙帶先展開，再依歌詞時間逐字填入；每頁會依句長、總字數與節奏穩定選擇 2～4 句，小／中／大尺寸在進場前一次決定。', scope: '可調：舞台位置、中央安全距離、字型、文字色與背景；白色紙帶為模板固定視覺。偏左／偏右與左右分散都會限制可用寬度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: false, supportsClassicControls: false },
+    mirror: { label: '鏡像', description: '固定左右雙側構圖：左側實心原文、右側描邊鏡像字，中央完整保留人物空間。', scope: 'P0：固定左右雙側、2～4 句自動分頁、glyph 級大小／角度／錯位與中央安全距離。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。暫不含組裝動畫。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
   };
 
   function getTemplateUI(template) {
@@ -111,12 +112,13 @@
     ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
     columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4 },
     paperstrip: { ...DEFAULT_SETTINGS, template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1 },
+    mirror: { ...DEFAULT_SETTINGS, template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1 },
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
-  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip'];
+  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'];
   const STAGE_MIN_SAFE_MARGIN = 2;
   const STAGE_MAX_SAFE_MARGIN = 25;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
@@ -163,12 +165,14 @@
             out[id].stageSafeMargin = normalizeStageSafeMargin(out[id].stageSafeMargin);
             out[id].stageShowSafeZoneOnObs = !!out[id].stageShowSafeZoneOnObs;
           }
+          if (id === 'mirror') out[id].lyricPosition = 'split';
         }
       });
     }
     const base = cleanSettingSnapshot(fallback || {});
     const tpl = TEMPLATE_IDS.includes(base.template) ? base.template : 'classic';
     if (!out[tpl]) out[tpl] = { ...templateDefaults(tpl), ...base, template: tpl };
+    if (out.mirror) out.mirror.lyricPosition = 'split';
     return out;
   }
 
@@ -716,7 +720,8 @@
     if (offsetXRow) offsetXRow.hidden = !isClassic;
     if (offsetYRow) offsetYRow.hidden = !isClassic;
     if (quadRow) quadRow.hidden = isClassic || ui.positionMode === 'fixed' || isColumnflow;
-    if (lyricPosField) lyricPosField.hidden = isColumnflow;
+    const isMirror = settings.template === 'mirror';
+    if (lyricPosField) lyricPosField.hidden = isColumnflow || isMirror;
     const columnflowVariantField = document.getElementById('columnflow-variant-field');
     const columnflowPlacementField = document.getElementById('columnflow-placement-field');
     const columnflowMaxLinesField = document.getElementById('columnflow-max-lines-field');
@@ -780,6 +785,7 @@
       const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
       settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
       if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
+      if (settings.template === 'mirror') settings.lyricPosition = 'split';
       if (settings.template === 'columnflow') {
         if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
         if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';

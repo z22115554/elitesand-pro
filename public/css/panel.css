@@ -513,6 +513,10 @@ input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(-
 #template-buttons [data-template="paperstrip"] .style-thumb-paperstrip i:nth-child(2) { width: 68%; height: 8px; }
 #template-buttons [data-template="paperstrip"] .style-thumb-paperstrip i:nth-child(3) { width: 88%; transform-origin: left center; animation: tpl-paperstrip 1.8s cubic-bezier(.12,.78,.18,1) infinite; }
 @keyframes tpl-paperstrip { 0%, 16% { transform: scaleX(.16); opacity: .72; } 48%, 82% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1); opacity: .72; } }
+#template-buttons [data-template="mirror"] .style-thumb-mirror { position: relative; display: grid; grid-template-columns: 1fr 18px 1fr; align-items: center; padding: 0 10px; background: #171717; }
+#template-buttons [data-template="mirror"] .style-thumb-mirror i { font-style: normal; font-size: 20px; font-weight: 900; line-height: 1; color: #fff; transform: rotate(-4deg); }
+#template-buttons [data-template="mirror"] .style-thumb-mirror i:last-child { justify-self: end; color: transparent; -webkit-text-stroke: 1px #fff; transform: rotate(4deg); opacity: .78; }
+#template-buttons [data-template="mirror"] .style-thumb-mirror b { display: block; width: 1px; height: 68%; justify-self: center; background: repeating-linear-gradient(180deg, rgba(255,90,110,.75) 0 3px, transparent 3px 6px); opacity: .55; }
 #template-buttons [data-template="columnflow"] .style-thumb-char,
 #columnflow-variant-buttons .style-thumb-char { writing-mode: vertical-rl; text-orientation: upright; font-family: Georgia, 'Noto Serif TC', serif; line-height: .9; letter-spacing: .04em; }
 #columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-preview { background: #eee5d4; border-color: #bcae96; }

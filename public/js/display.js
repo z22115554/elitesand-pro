@@ -627,8 +627,8 @@
       delete document.body.dataset.columnflowPlacement;
       delete document.body.dataset.columnflowMaxLines;
     }
-    // 舞台模板共用中央安全距離。paperstrip 也吃同一套，讓左右分散時真的把中央人物區挖空。
-    if (['pulse', 'facet', 'drift', 'aura', 'paperstrip'].includes(s.template)) {
+    // 舞台模板共用中央安全距離。paperstrip / mirror 也吃同一套，讓中央人物區真的留白。
+    if (['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)) {
       const stageSafeMargin = Math.round(Number(s.stageSafeMargin));
       const clampedStageSafeMargin = Number.isFinite(stageSafeMargin)
         ? Math.max(2, Math.min(25, stageSafeMargin))

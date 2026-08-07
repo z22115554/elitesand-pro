@@ -657,7 +657,8 @@ body.template-facet #lyrics-container,
 body.template-drift #lyrics-container,
 body.template-aura #lyrics-container,
 body.template-columnflow #lyrics-container,
-body.template-paperstrip #lyrics-container {
+body.template-paperstrip #lyrics-container,
+body.template-mirror #lyrics-container {
   min-height: 70vh;
   justify-content: center;
 }
@@ -670,9 +671,106 @@ body.template-drift #lyrics-container,
 body.template-aura #lyrics-container,
 body.template-ktv #lyrics-container,
 body.template-columnflow #lyrics-container,
-body.template-paperstrip #lyrics-container {
+body.template-paperstrip #lyrics-container,
+body.template-mirror #lyrics-container {
   transform: none;
   align-items: center;
+}
+
+/* ─── 鏡像 P0：固定左右雙側、中央人物安全區、glyph 級靜態排版 ─── */
+#mirror-root {
+  position: fixed;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
+  font-weight: var(--display-font-weight, 900);
+}
+
+.mirror-panel {
+  --mirror-page-y: 0vh;
+  position: absolute;
+  top: calc(50% + var(--mirror-page-y));
+  bottom: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(10px, 1.15vh, 18px);
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.mirror-panel--primary {
+  left: 0;
+  right: calc(50% + var(--stage-safe-margin, 13) * 1%);
+  padding: 3vh 1.1vw 3vh 3.2vw;
+  align-items: stretch;
+  color: var(--lyric-color, #ffffff);
+}
+
+.mirror-panel--echo {
+  left: calc(50% + var(--stage-safe-margin, 13) * 1%);
+  right: 0;
+  padding: 3vh 3.2vw 3vh 1.1vw;
+  align-items: stretch;
+  color: var(--lyric-color, #ffffff);
+}
+
+.mirror-line {
+  --mirror-line-scale: .82;
+  --mirror-fit-scale: 1;
+  --mirror-outward-shift: 0vw;
+  --mirror-line-rotation: 0deg;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+  line-height: .98;
+  letter-spacing: var(--lyric-letter-spacing, 0px);
+  font-size: clamp(12px, calc(var(--display-font-size, 60px) * var(--mirror-line-scale) * var(--mirror-fit-scale)), 96px);
+  transform: rotate(var(--mirror-line-rotation));
+  transform-origin: center center;
+}
+
+.mirror-line--primary {
+  justify-content: flex-end;
+  padding-right: var(--mirror-outward-shift);
+  text-align: right;
+}
+
+.mirror-line--echo {
+  justify-content: flex-start;
+  padding-left: var(--mirror-outward-shift);
+  text-align: left;
+}
+
+.mirror-glyph {
+  display: inline-block;
+  flex: 0 0 auto;
+  transform: translate(var(--mirror-glyph-x, 0), var(--mirror-glyph-y, 0)) rotate(var(--mirror-glyph-rotation, 0deg)) scale(var(--mirror-glyph-scale, 1));
+  transform-origin: 50% 70%;
+  color: inherit;
+  text-shadow: none;
+}
+
+.mirror-line--primary .mirror-glyph {
+  -webkit-text-stroke: 0 transparent;
+  paint-order: stroke fill;
+}
+
+.mirror-line--echo .mirror-glyph {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: clamp(1px, .035em, 2.2px) var(--lyric-color, #ffffff);
+  opacity: .78;
+  paint-order: stroke fill;
+}
+
+.mirror-glyph.is-accent {
+  z-index: 1;
 }
 
 /* ─── 紙帶逐字：每頁 2～4 句，尺寸在進場前固定；白色紙帶依時間展開 ─── */
