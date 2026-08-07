@@ -19,9 +19,14 @@
     return;
   }
 
-  const PRE_ROLL_MS = 520;
-  const BAR_OPEN_MS = 400;
-  const MIN_BAR_OPEN = 0.12;
+  // 白條必須先於文字完成主要動作：提早 700ms 進場，約 430ms 完成展開，
+  // 因此正常播放時會在第一個字出現前約 270ms 已經完全到位。
+  const PRE_ROLL_MS = 700;
+  const BAR_OPEN_MS = 430;
+  // 剛開始只露出中心的一條細白線，接近使用者 AE 參考的起始狀態。
+  const MIN_BAR_OPEN = 0.018;
+  // 保險閘門：就算逐字 timing 有極端誤差，白條未幾乎展開完成前，文字一律不准顯示。
+  const TEXT_REVEAL_MIN_OPEN = 0.985;
   const MIN_BATCH_SIZE = 2;
   const MAX_BATCH_SIZE = 4;
   const EMPTY_TARGET = -999;
@@ -399,12 +404,19 @@
     const preStart = plan.startMs - PRE_ROLL_MS;
     const openRaw = smoothstep((timeMs - preStart) / BAR_OPEN_MS);
     const open = timeMs < preStart ? 0 : MIN_BAR_OPEN + (1 - MIN_BAR_OPEN) * openRaw;
-    row.style.setProperty('--ps-open', clamp01(open).toFixed(4));
+    const clampedOpen = clamp01(open);
+    row.style.setProperty('--ps-open', clampedOpen.toFixed(4));
+    // 中心對稱遮罩：0 = 完全夾住，1 = 完全展開。JS 直接算百分比，避免依賴
+    // CSS 尚未普遍支援的百分比乘法，OBS/CEF 版本差異也比較安全。
+    row.style.setProperty('--ps-clip-x', `${(50 - clampedOpen * 50).toFixed(3)}%`);
 
     let revealCount = 0;
-    for (let i = 0; i < glyphEls.length; i += 1) {
-      if (glyphEls[i].startMs <= timeMs) revealCount = i + 1;
-      else break;
+    const textReady = clampedOpen >= TEXT_REVEAL_MIN_OPEN;
+    if (textReady) {
+      for (let i = 0; i < glyphEls.length; i += 1) {
+        if (glyphEls[i].startMs <= timeMs) revealCount = i + 1;
+        else break;
+      }
     }
     const lineActive = timeMs >= plan.startMs && timeMs < plan.endMs;
     if (revealCount === entry.revealCount && lineActive === entry.lineActive) return;

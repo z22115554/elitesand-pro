@@ -728,6 +728,7 @@ body.lyric-pos-right #paperstrip-root .ps-group {
 .ps-row {
   --ps-font-scale: 0.5;
   --ps-open: 0;
+  --ps-clip-x: 50%;
   position: relative;
   max-width: 100%;
   font-size: clamp(14px, calc(var(--display-font-size, 56px) * var(--ps-font-scale)), 86px);
@@ -771,9 +772,10 @@ body.lyric-pos-right #paperstrip-root .ps-group {
   background: rgba(255, 255, 255, .97);
   border: 1px solid rgba(15, 15, 15, .12);
   box-shadow: 0 .08em .34em rgba(0, 0, 0, .16);
-  transform: scaleX(var(--ps-open));
-  transform-origin: left center;
-  will-change: transform;
+  /* 不縮放白條本體，而是用中心對稱遮罩揭露；邊框與陰影不會被 scaleX 壓扁，
+     起始像一條細直線，再從中心同時往左右打開。 */
+  clip-path: inset(0 var(--ps-clip-x) 0 var(--ps-clip-x));
+  will-change: clip-path;
 }
 
 .ps-text {

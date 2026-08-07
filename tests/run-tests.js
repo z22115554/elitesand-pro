@@ -6200,6 +6200,9 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(templateJs.includes("id: 'paperstrip'") && templateJs.includes('onFrame(timeMs, ctx)') && templateJs.includes('onSeek(timeMs, ctx)'), '紙帶逐字必須透過 registry 並以時間驅動: ');
   ok(templateJs.includes('LyricMotion.ensureWordTimings') && templateJs.includes('LyricMotion.buildGraphemeTimings'), '紙帶逐字必須沿用既有逐字時間資料與 LRC 降級管線: ');
   ok(templateJs.includes('PRE_ROLL_MS') && templateJs.includes("classList.toggle('is-current'"), '紙帶逐字必須有預展開與逐字目前字狀態: ');
+  ok(templateJs.includes('const PRE_ROLL_MS = 700;') && templateJs.includes('const BAR_OPEN_MS = 430;') && templateJs.includes('const TEXT_REVEAL_MIN_OPEN = 0.985;'), '白條必須提早進場並在文字出現前幾乎完成展開: ');
+  ok(templateJs.includes("setProperty('--ps-clip-x'") && templateJs.includes('const textReady = clampedOpen >= TEXT_REVEAL_MIN_OPEN'), '白條必須用中心揭露比例，且文字受白條完成度硬閘門保護: ');
+  ok(displayCss.includes('clip-path: inset(0 var(--ps-clip-x) 0 var(--ps-clip-x));') && !displayCss.includes('transform: scaleX(var(--ps-open));'), '紙帶白底必須從中心向左右展開，而不是從左側 scaleX 拉開: ');
   ok(templateJs.includes('const MIN_BATCH_SIZE = 2;') && templateJs.includes('const MAX_BATCH_SIZE = 4;') && templateJs.includes('buildBatches(plans)') && templateJs.includes('scoreBatchCandidate'), '紙帶逐字必須在播放前依內容穩定分成 2～4 句一頁，而不是固定三句或播放途中臨時抽樣: ');
   ok(templateJs.includes('metrics.totalChars') && templateJs.includes('metrics.totalDuration') && templateJs.includes('metrics.averageChars') && templateJs.includes('count === previousCount'), '2～4 句分組必須同時考慮總字數、播放時間、平均句長與避免連續相同句數: ');
   ok(templateJs.includes('remaining - count === 1') && templateJs.includes('LyricMotion.hashNoise(seed, 53)'), '分組必須避免可避免的單句尾頁，並使用可重現的穩定亂數: ');
