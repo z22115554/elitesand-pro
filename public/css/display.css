@@ -788,6 +788,10 @@ body.lyric-pos-right #paperstrip-root .ps-group {
   text-shadow: none;
 }
 
+.ps-group--incoming {
+  visibility: hidden;
+}
+
 .ps-glyph {
   display: inline-block;
   opacity: 0;

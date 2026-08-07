@@ -424,26 +424,13 @@
     });
 
     const lastPlan = plans[batchStart + batchCount - 1] || plans[batchStart];
-    const firstPlan = plans[batchStart];
-    const previousPlan = plans[batchStart - 1];
-    const previousBatchStart = previousPlan?.batchStart;
-    let previousBatchEndMs = 0;
-    if (Number.isInteger(previousBatchStart) && previousBatchStart !== batchStart) {
-      const previousCount = plans[previousBatchStart]?.batchCount || 1;
-      const previousLast = plans[previousBatchStart + previousCount - 1] || previousPlan;
-      previousBatchEndMs = previousLast?.endMs || 0;
-    }
     const view = {
       batchStart,
       batchCount,
       endMs: lastPlan?.endMs || 0,
-      // 跨頁時白條可以照常 pre-roll，但下一頁文字必須等上一頁最後一句真的結束。
-      // 正常沒有時間重疊時等於 firstPlan.startMs，不會額外延遲歌詞。
-      textReleaseMs: Math.max(firstPlan?.startMs || 0, previousBatchEndMs),
       groupEl: group,
       rows,
     };
-    rows.forEach((entry) => { entry.pageTextReleaseMs = view.textReleaseMs; });
     pageViews.set(batchStart, view);
     // 安全框 guide 使用較高 z-index；頁面本身只在 1～3 間切換層級。
     rootEl.appendChild(group);
@@ -493,7 +480,7 @@
     return { needed, started, target };
   }
 
-  function applyRowState(timeMs, entry) {
+  function applyRowState(timeMs, entry, allowText) {
     if (!entry?.plan || !entry.row) return;
     const { plan, row, glyphEls } = entry;
 
@@ -507,12 +494,9 @@
     row.style.setProperty('--ps-clip-right', `${(100 - clampedOpen * 100).toFixed(3)}%`);
 
     let revealCount = 0;
-    const pageTextReleaseMs = Number.isFinite(entry.pageTextReleaseMs) ? entry.pageTextReleaseMs : plan.startMs;
-    const splitMode = (document.body.dataset.lyricPos || 'center') === 'split';
-    // 左右分散時兩頁本來就落在不同側，現有雙頁共存效果良好，因此只保留白條完成度 gate；
-    // 置中／偏左／偏右會疊在同一區，下一頁文字必須等上一頁最後一句結束後才放行。
-    const pageHandoffReady = splitMode || timeMs >= pageTextReleaseMs;
-    const textReady = clampedOpen >= TEXT_REVEAL_MIN_OPEN && pageHandoffReady;
+    // 非 split 模式由 computeAndRender 選出唯一可顯示文字的 active page。
+    // incoming page 即使白條已完全展開，也必須保持 revealCount=0；這是跨頁不重疊的硬保證。
+    const textReady = allowText && clampedOpen >= TEXT_REVEAL_MIN_OPEN;
     if (textReady) {
       for (let i = 0; i < glyphEls.length; i += 1) {
         if (glyphEls[i].startMs <= timeMs) revealCount = i + 1;
@@ -544,8 +528,8 @@
       if (!needed.has(batchStart)) removeBatch(batchStart);
     });
 
-    // 若兩頁歌詞時間真的重疊，較早開始、仍未唱完的上一頁優先在最上層；
-    // 下一頁白條照樣在底下提前跑，上一頁結束後才自然露出。
+    // 若兩頁歌詞時間真的重疊，較早開始、仍未唱完的上一頁優先成為 active page；
+    // 下一頁白條照樣能在底下 pre-roll，但非 split 模式下它的文字整頁禁止顯示。
     let foregroundBatch = null;
     Array.from(needed).sort((a, b) => a - b).some((batchStart) => {
       const view = pageViews.get(batchStart);
@@ -557,10 +541,14 @@
       return false;
     });
     if (foregroundBatch === null && started >= 0) foregroundBatch = plans[started]?.batchStart ?? null;
+    const splitMode = (document.body.dataset.lyricPos || 'center') === 'split';
     pageViews.forEach((view, batchStart) => {
-      // 正在唱的上一頁永遠壓在 pre-roll 下一頁上方；就算兩頁同側重疊，也不會讓新白條蓋掉舊歌詞。
+      const allowText = splitMode || batchStart === foregroundBatch;
+      // CSS 再加一道整頁文字保險：即使未來逐字 reveal 邏輯被修改，incoming page 也不會漏字。
+      view.groupEl.classList.toggle('ps-group--incoming', !allowText);
+      // 正在唱的上一頁永遠壓在 pre-roll 下一頁上方；split 則維持目前已確認良好的雙頁共存行為。
       view.groupEl.style.zIndex = batchStart === foregroundBatch ? '3' : '1';
-      view.rows.forEach((entry) => applyRowState(timeMs, entry));
+      view.rows.forEach((entry) => applyRowState(timeMs, entry, allowText));
     });
   }
 
