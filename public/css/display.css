@@ -762,8 +762,6 @@ body.template-mirror #lyrics-container {
 
 .mirror-line--echo .mirror-line-content {
   transform-origin: 0 50%;
-  /* 空心字的描邊會向字框兩側長；給 glyph 一點真實間距，避免相鄰描邊在交界處互吃。 */
-  column-gap: .018em;
 }
 
 .mirror-glyph {
@@ -783,9 +781,11 @@ body.template-mirror #lyrics-container {
 .mirror-line--echo .mirror-glyph {
   color: transparent !important;
   -webkit-text-fill-color: transparent !important;
-  -webkit-text-stroke: clamp(1px, .032em, 2px) var(--lyric-color, #ffffff);
+  /* Mirror 側要像線稿，不是接近實心的粗描邊。
+     保留粗字形本身，僅把外框線壓細，讓每一筆內部的透明區域明顯打開。 */
+  -webkit-text-stroke: clamp(.65px, .014em, 1.05px) var(--lyric-color, #ffffff);
   text-shadow: none !important;
-  opacity: .82;
+  opacity: .96;
   paint-order: stroke;
 }
 
