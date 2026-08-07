@@ -678,6 +678,12 @@ body.template-mirror #lyrics-container {
 }
 
 /* ─── 鏡像 P0：固定左右雙側、中央人物安全區、glyph 級靜態排版 ─── */
+@font-face {
+  font-family: 'Kongyuan Sans L Test';
+  src: url('/__mirror-font/kongyuan-sans-l.otf') format('opentype');
+  font-display: block;
+}
+
 #mirror-root {
   position: fixed;
   inset: 0;
@@ -787,6 +793,19 @@ body.template-mirror #lyrics-container {
   text-shadow: none !important;
   opacity: .96;
   paint-order: stroke;
+}
+
+/* Kongyuan Sans 本身就是每一筆筆畫各自空心的字形；載入成功後不能再疊 CSS text-stroke。 */
+#mirror-root.mirror-kongyuan-ready .mirror-line--echo .mirror-line-content {
+  font-family: 'Kongyuan Sans L Test', var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
+}
+
+#mirror-root.mirror-kongyuan-ready .mirror-line--echo .mirror-glyph {
+  color: var(--lyric-color, #ffffff) !important;
+  -webkit-text-fill-color: var(--lyric-color, #ffffff) !important;
+  -webkit-text-stroke: 0 transparent !important;
+  opacity: 1;
+  paint-order: fill;
 }
 
 .mirror-glyph.is-accent {

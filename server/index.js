@@ -13,6 +13,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 const { projectRoot, dataDir, downloadsDir } = require('./utils/app-paths');
 const { createLogger, shutdown: shutdownLogger } = require('./utils/logger');
 const { attachParentShutdown } = require('./utils/parent-shutdown');
@@ -152,6 +153,16 @@ app.use((req, res, next) => {
     res.set('Expires', '0');
   }
   next();
+});
+
+// Mirror P0 本機 A/B 測試用：不把 Kongyuan Sans 字體提交進專案，
+// 只在工作區旁邊存在測試 clone 時提供固定唯讀路由；正式環境找不到就直接 404。
+const mirrorKongyuanTestFont = path.resolve(projectRoot, '..', '_tmp-kongyuan-inspect', 'L', 'Kongyuan Sans L.otf');
+app.get('/__mirror-font/kongyuan-sans-l.otf', (req, res, next) => {
+  if (!fs.existsSync(mirrorKongyuanTestFont)) return next();
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.type('font/otf');
+  return res.sendFile(mirrorKongyuanTestFont);
 });
 app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
 

@@ -6235,6 +6235,7 @@ test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic g
   const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
   const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
   const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const serverIndex = fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8');
   const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
   const i18n = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
 
@@ -6250,7 +6251,8 @@ test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic g
   ok(templateJs.includes('function contentBounds(entry)') && templateJs.includes('glyph.getBoundingClientRect()') && templateJs.includes('allowedLeft') && templateJs.includes('allowedRight'), 'Mirror 長度限制必須量測 glyph 旋轉／放大後的真實外框，同時守住畫面邊緣與中央安全區: ');
   ok(templateJs.includes('constrainLine') && templateJs.includes('Math.max(0.20') && templateJs.includes("setProperty('--mirror-compress-x'") && !displayCss.includes('#mirror-root {\r\n  position: fixed;\r\n  inset: 0;\r\n  overflow: hidden;'), 'Mirror 極端長句必須先縮字、最後才水平壓縮，不可用 overflow hidden 裁字: ');
   ok(templateJs.includes("content.className = 'mirror-line-content'") && displayCss.includes('.mirror-line-content') && displayCss.includes('transform: none;') && displayCss.includes('transform-origin: 100% 50%;') && displayCss.includes('transform-origin: 0 50%;'), 'Mirror 不可旋轉 100% 寬 line；只允許自然寬度文字 wrapper／glyph 輕微旋轉，避免安全區與畫面邊界被甩出: ');
-  ok(displayCss.includes('.mirror-line--echo .mirror-line-content') && displayCss.includes('column-gap: .018em;'), '右側空心 glyph 必須保留微小真實間距，降低相鄰描邊在交界處重疊: ');
+  ok(displayCss.includes("font-family: 'Kongyuan Sans L Test'") && displayCss.includes('#mirror-root.mirror-kongyuan-ready') && displayCss.includes('-webkit-text-stroke: 0 transparent !important;') && templateJs.includes('enableKongyuanTestFont'), 'Kongyuan 測試字體載入成功後必須直接使用字體內建空心筆畫，不可再疊 CSS text-stroke: ');
+  ok(serverIndex.includes('/__mirror-font/kongyuan-sans-l.otf') && serverIndex.includes('_tmp-kongyuan-inspect'), 'Mirror P0 Kongyuan A/B 測試必須只從本機測試 clone 提供字體，不可把大型字體檔提交進 public: ');
   ok(lyricExtras.includes("mirror: { label: '鏡像'") && lyricExtras.includes("template: 'mirror'") && lyricExtras.includes("lyricPosition: 'split'") && lyricExtras.includes('stageSafeMargin: 13'), '桌面設定必須提供 Mirror P0 獨立預設並鎖定 split: ');
   ok(panelHtml.includes('data-template="mirror"') && panelHtml.includes('style-thumb-mirror'), '桌面模板選擇器必須有 Mirror P0 卡片: ');
   ok(lyricsHandler.includes("'paperstrip', 'mirror'"), 'server 模板白名單必須接受 mirror: ');

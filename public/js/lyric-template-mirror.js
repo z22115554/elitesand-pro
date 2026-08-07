@@ -56,6 +56,15 @@
   let renderedBatchStart = -999;
   let renderedEntries = [];
 
+  function enableKongyuanTestFont() {
+    if (!rootEl || !document.fonts?.load) return;
+    document.fonts.load('32px "Kongyuan Sans L Test"', '星見中泡').then((faces) => {
+      if (!rootEl || !Array.isArray(faces) || faces.length === 0) return;
+      rootEl.classList.add('mirror-kongyuan-ready');
+      syncLayout();
+    }).catch(() => {});
+  }
+
   function clamp01(value) {
     return Math.max(0, Math.min(1, value));
   }
@@ -460,6 +469,7 @@
       rootEl.appendChild(primaryPanel);
       rootEl.appendChild(echoPanel);
       container.appendChild(rootEl);
+      enableKongyuanTestFont();
       safeZoneGuide = LyricMotion.mountStageSafeZoneGuide(rootEl);
       plansForLines = null;
       renderedBatchStart = -999;
