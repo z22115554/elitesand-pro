@@ -368,12 +368,22 @@
 
   function constrainRowWidth(entry) {
     if (!entry?.row || !entry?.plate || !entry?.groupEl) return;
-    const available = Math.max(1, entry.groupEl.clientWidth);
-    const measured = entry.plate.scrollWidth;
-    if (!Number.isFinite(measured) || measured <= available) return;
-    const currentScale = Number.parseFloat(entry.row.style.getPropertyValue('--ps-font-scale')) || 0.76;
-    const nextScale = Math.max(0.34, currentScale * (available / measured) * 0.97);
-    entry.row.style.setProperty('--ps-font-scale', nextScale.toFixed(3));
+    const style = window.getComputedStyle(entry.row);
+    const indent = Number.parseFloat(style.marginLeft) || 0;
+    const available = Math.max(1, entry.groupEl.clientWidth - indent - 2);
+
+    // nowrap 紙帶不能靠 overflow:hidden「假裝有遵守安全框」；那會直接裁掉歌詞。
+    // 反覆量測實際 scrollWidth 並縮字，直到整條紙帶（含每列縮排）真的落在可用寬度內。
+    // 最低允許比舊版更小，寧可讓極端長句縮小，也不可把字切掉。
+    for (let pass = 0; pass < 3; pass += 1) {
+      const measured = entry.plate.scrollWidth;
+      if (!Number.isFinite(measured) || measured <= available + 0.5) return;
+      const currentScale = Number.parseFloat(entry.row.style.getPropertyValue('--ps-font-scale')) || 0.76;
+      const nextScale = Math.max(0.22, currentScale * (available / measured) * 0.965);
+      entry.row.style.setProperty('--ps-font-scale', nextScale.toFixed(3));
+      // 已碰到底仍放不下時保留完整內容；CSS 不再裁切，至少不會出現半句消失。
+      if (nextScale <= 0.2201) return;
+    }
   }
 
   function resetAndConstrainRowWidth(entry) {
@@ -414,13 +424,26 @@
     });
 
     const lastPlan = plans[batchStart + batchCount - 1] || plans[batchStart];
+    const firstPlan = plans[batchStart];
+    const previousPlan = plans[batchStart - 1];
+    const previousBatchStart = previousPlan?.batchStart;
+    let previousBatchEndMs = 0;
+    if (Number.isInteger(previousBatchStart) && previousBatchStart !== batchStart) {
+      const previousCount = plans[previousBatchStart]?.batchCount || 1;
+      const previousLast = plans[previousBatchStart + previousCount - 1] || previousPlan;
+      previousBatchEndMs = previousLast?.endMs || 0;
+    }
     const view = {
       batchStart,
       batchCount,
       endMs: lastPlan?.endMs || 0,
+      // 跨頁時白條可以照常 pre-roll，但下一頁文字必須等上一頁最後一句真的結束。
+      // 正常沒有時間重疊時等於 firstPlan.startMs，不會額外延遲歌詞。
+      textReleaseMs: Math.max(firstPlan?.startMs || 0, previousBatchEndMs),
       groupEl: group,
       rows,
     };
+    rows.forEach((entry) => { entry.pageTextReleaseMs = view.textReleaseMs; });
     pageViews.set(batchStart, view);
     // 安全框 guide 使用較高 z-index；頁面本身只在 1～3 間切換層級。
     rootEl.appendChild(group);
@@ -484,14 +507,19 @@
     row.style.setProperty('--ps-clip-right', `${(100 - clampedOpen * 100).toFixed(3)}%`);
 
     let revealCount = 0;
-    const textReady = clampedOpen >= TEXT_REVEAL_MIN_OPEN;
+    const pageTextReleaseMs = Number.isFinite(entry.pageTextReleaseMs) ? entry.pageTextReleaseMs : plan.startMs;
+    const splitMode = (document.body.dataset.lyricPos || 'center') === 'split';
+    // 左右分散時兩頁本來就落在不同側，現有雙頁共存效果良好，因此只保留白條完成度 gate；
+    // 置中／偏左／偏右會疊在同一區，下一頁文字必須等上一頁最後一句結束後才放行。
+    const pageHandoffReady = splitMode || timeMs >= pageTextReleaseMs;
+    const textReady = clampedOpen >= TEXT_REVEAL_MIN_OPEN && pageHandoffReady;
     if (textReady) {
       for (let i = 0; i < glyphEls.length; i += 1) {
         if (glyphEls[i].startMs <= timeMs) revealCount = i + 1;
         else break;
       }
     }
-    const lineActive = timeMs >= plan.startMs && timeMs < plan.endMs;
+    const lineActive = textReady && timeMs >= plan.startMs && timeMs < plan.endMs;
     if (revealCount === entry.revealCount && lineActive === entry.lineActive) return;
 
     glyphEls.forEach((glyph, index) => {

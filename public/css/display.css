@@ -704,7 +704,9 @@ body.template-paperstrip #lyrics-container {
 #paperstrip-root .ps-group[data-side="left"],
 #paperstrip-root .ps-group[data-side="right"] {
   width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);
-  overflow: hidden;
+  /* 安全框是排版邊界，不是裁切遮罩。超長紙帶由 JS 在首次顯示前縮到可用寬度，
+     禁止用 hidden 直接切掉歌詞尾端。 */
+  overflow: visible;
 }
 
 /* 偏左／偏右時 #lyrics-container 本身已被限制在單邊 46vw；這裡再加一道模板上限，
@@ -728,7 +730,7 @@ body.lyric-pos-right #paperstrip-root .ps-group {
 .ps-row {
   --ps-font-scale: 0.5;
   --ps-open: 0;
-  --ps-clip-x: 50%;
+  --ps-clip-right: 100%;
   position: relative;
   max-width: 100%;
   font-size: clamp(14px, calc(var(--display-font-size, 56px) * var(--ps-font-scale)), 86px);
