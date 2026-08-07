@@ -95,7 +95,7 @@
     aura: { label: 'Aura', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     ktv: { label: 'KTV', description: '固定雙行演唱畫面，適合逐字或跟唱情境。', scope: '可調：字型、配色、背景與詳細的邊距設定；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，逐字浮現，唱過的句子留下淡淡殘影。', scope: '可調：直書樣式、左右配置、保留句數、字型、配色與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    paperstrip: { label: '紙帶逐字', description: '白色紙帶先展開，再依歌詞時間逐字填入；每三句固定成一頁，小／中／大尺寸在進場前決定，滿三句後整頁換新。', scope: '可調：舞台位置、字型、文字色與背景；白色紙帶為模板固定視覺。偏左／偏右會限制在單邊寬度內。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: false, supportsClassicControls: false },
+    paperstrip: { label: '紙帶逐字', description: '白色紙帶先展開，再依歌詞時間逐字填入；每頁會依句長、總字數與節奏穩定選擇 2～4 句，小／中／大尺寸在進場前一次決定。', scope: '可調：舞台位置、中央安全距離、字型、文字色與背景；白色紙帶為模板固定視覺。偏左／偏右與左右分散都會限制可用寬度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: false, supportsClassicControls: false },
   };
 
   function getTemplateUI(template) {

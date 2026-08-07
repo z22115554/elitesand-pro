@@ -675,7 +675,7 @@ body.template-paperstrip #lyrics-container {
   align-items: center;
 }
 
-/* ─── 紙帶逐字：每三句一頁，尺寸在進場前固定；白色紙帶依時間展開 ─── */
+/* ─── 紙帶逐字：每頁 2～4 句，尺寸在進場前固定；白色紙帶依時間展開 ─── */
 #paperstrip-root {
   position: absolute;
   inset: 0;
@@ -747,6 +747,10 @@ body.lyric-pos-right #paperstrip-root .ps-group {
 
 .ps-row--slot-2 {
   margin-left: 1.2em;
+}
+
+.ps-row--slot-3 {
+  margin-left: 0.55em;
 }
 
 .ps-plate {

@@ -6200,8 +6200,11 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(templateJs.includes("id: 'paperstrip'") && templateJs.includes('onFrame(timeMs, ctx)') && templateJs.includes('onSeek(timeMs, ctx)'), '紙帶逐字必須透過 registry 並以時間驅動: ');
   ok(templateJs.includes('LyricMotion.ensureWordTimings') && templateJs.includes('LyricMotion.buildGraphemeTimings'), '紙帶逐字必須沿用既有逐字時間資料與 LRC 降級管線: ');
   ok(templateJs.includes('PRE_ROLL_MS') && templateJs.includes("classList.toggle('is-current'"), '紙帶逐字必須有預展開與逐字目前字狀態: ');
-  ok(templateJs.includes('const BATCH_SIZE = 3;') && templateJs.includes('assignBatchSizes(plans)') && templateJs.includes('renderBatch(renderedBatchStart)'), '紙帶逐字必須固定三句一頁，尺寸在頁面建立前決定且滿頁後整組切換: ');
-  ok(templateJs.includes("['small', 'large', 'medium']") && templateJs.includes("['large', 'small', 'medium']") && templateJs.includes("['medium', 'large', 'small']"), '紙帶逐字必須保留小大中／大小中／中大小的主要尺寸循環: ');
+  ok(templateJs.includes('const MIN_BATCH_SIZE = 2;') && templateJs.includes('const MAX_BATCH_SIZE = 4;') && templateJs.includes('buildBatches(plans)') && templateJs.includes('scoreBatchCandidate'), '紙帶逐字必須在播放前依內容穩定分成 2～4 句一頁，而不是固定三句或播放途中臨時抽樣: ');
+  ok(templateJs.includes('metrics.totalChars') && templateJs.includes('metrics.totalDuration') && templateJs.includes('metrics.averageChars') && templateJs.includes('count === previousCount'), '2～4 句分組必須同時考慮總字數、播放時間、平均句長與避免連續相同句數: ');
+  ok(templateJs.includes('remaining - count === 1') && templateJs.includes('LyricMotion.hashNoise(seed, 53)'), '分組必須避免可避免的單句尾頁，並使用可重現的穩定亂數: ');
+  ok(templateJs.includes("2: [") && templateJs.includes("3: [") && templateJs.includes("4: [") && templateJs.includes('emphasisScore'), '紙帶逐字必須為 2／3／4 句各自提供尺寸構圖，並用句長與節奏決定大字優先句: ');
+  ok(templateJs.includes('plan.batchCount = batch.length') && templateJs.includes('plans[nextTarget]?.batchStart'), '可變句數頁面必須把頁面邊界預先寫回每句，seek 時直接定位同一頁: ');
   ok(templateJs.includes('constrainRowWidth') && displayCss.includes('body.lyric-pos-left #paperstrip-root .ps-group') && displayCss.includes('width: min(100%, 760px);'), '紙帶逐字偏左／偏右必須有單邊寬度上限，超長句在首次顯示前縮放: ');
   ok(!displayCss.includes('@keyframes ps-row-enter'), '紙帶逐字不可在每句重播整列進場動畫造成閃爍: ');
   ok(motionKernel.includes('function stageSafeMarginPercent()') && motionKernel.includes('function mountStageSafeZoneGuide(rootEl)'), '主線舞台安全框核心必須移植到共用 LyricMotion: ');
