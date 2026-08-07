@@ -618,7 +618,8 @@ body.template-pulse #lyrics-container,
 body.template-facet #lyrics-container,
 body.template-drift #lyrics-container,
 body.template-aura #lyrics-container,
-body.template-columnflow #lyrics-container {
+body.template-columnflow #lyrics-container,
+body.template-paperstrip #lyrics-container {
   min-height: 70vh;
   justify-content: center;
 }
@@ -630,9 +631,139 @@ body.template-facet #lyrics-container,
 body.template-drift #lyrics-container,
 body.template-aura #lyrics-container,
 body.template-ktv #lyrics-container,
-body.template-columnflow #lyrics-container {
+body.template-columnflow #lyrics-container,
+body.template-paperstrip #lyrics-container {
   transform: none;
   align-items: center;
+}
+
+/* ─── 紙帶逐字：白色紙帶先展開，再依時間逐字填入；保留最近兩句做 PV 式層級 ─── */
+#paperstrip-root {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
+  font-weight: var(--display-font-weight, 600);
+  color: var(--lyric-color, #111111);
+}
+
+.ps-group {
+  --ps-y-shift: 0vh;
+  position: absolute;
+  left: 50%;
+  top: calc(50% + var(--ps-y-shift));
+  width: min(92%, 1120px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(6px, 0.85vh, 12px);
+  transform: translate(-50%, -50%);
+  text-align: left;
+}
+
+#paperstrip-root[data-side="left"] .ps-group,
+#paperstrip-root[data-side="right"] .ps-group {
+  width: 44%;
+}
+
+#paperstrip-root[data-side="left"] .ps-group {
+  left: 3%;
+  transform: translate(0, -50%);
+}
+
+#paperstrip-root[data-side="right"] .ps-group {
+  left: auto;
+  right: 3%;
+  transform: translate(0, -50%);
+}
+
+.ps-row {
+  --ps-font-scale: 0.5;
+  --ps-open: 1;
+  position: relative;
+  max-width: 100%;
+  font-size: clamp(14px, calc(var(--display-font-size, 56px) * var(--ps-font-scale)), 86px);
+  line-height: 1.04;
+  letter-spacing: var(--lyric-letter-spacing, 0px);
+  transform-origin: left center;
+  animation: ps-row-enter 360ms cubic-bezier(.12, .78, .18, 1) both;
+  will-change: transform, opacity;
+}
+
+.ps-row--old {
+  margin-left: 0.3em;
+  opacity: 0.82;
+  animation-delay: 35ms;
+}
+
+.ps-row--hero {
+  margin-left: 0.7em;
+  animation-delay: 70ms;
+}
+
+.ps-row--live {
+  margin-left: 1.2em;
+  animation-delay: 105ms;
+}
+
+.ps-plate {
+  position: relative;
+  z-index: 0;
+  display: inline-flex;
+  max-width: 100%;
+  padding: .15em .34em .13em;
+  white-space: pre;
+  isolation: isolate;
+}
+
+.ps-plate::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(255, 255, 255, .97);
+  border: 1px solid rgba(15, 15, 15, .12);
+  box-shadow: 0 .08em .34em rgba(0, 0, 0, .16);
+  transform: scaleX(var(--ps-open));
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.ps-text {
+  display: inline-flex;
+  white-space: pre;
+  color: var(--lyric-color, #111111);
+  text-shadow: none;
+}
+
+.ps-glyph {
+  display: inline-block;
+  opacity: 0;
+  color: var(--lyric-color, #111111);
+  transform: translate3d(-.16em, .04em, 0) scale(.97);
+  transition: opacity 110ms ease-out, transform 250ms cubic-bezier(.12, .78, .18, 1), color 110ms ease-out;
+  will-change: transform, opacity;
+}
+
+.ps-glyph.is-on {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.ps-glyph.is-current {
+  color: var(--lyric-color-active, #111111);
+  transform: translate3d(0, -.06em, 0) scale(1.035);
+}
+
+@keyframes ps-row-enter {
+  from { opacity: 0; transform: translate3d(-.38em, .18em, 0) scale(.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ps-row { animation: none !important; }
+  .ps-glyph { transition-duration: .01ms !important; }
 }
 
 /* ─── 直書句流：每頁四句亂數錯落、逐字填入、殘影淡出 ─── */

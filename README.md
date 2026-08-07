@@ -67,7 +67,7 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 
 #### OBS 動態歌詞
 
-內建六種歌詞演出模板：
+內建七種歌詞演出模板：
 
 - 經典疊層
 - Pulse
@@ -75,6 +75,7 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 - Aura
 - KTV
 - 直書句流
+- 紙帶逐字
 
 每個模板可獨立保存：
 
@@ -259,7 +260,7 @@ Elitesand Pro is a Windows desktop tool for VTubers, singing streamers, and live
 - Multi-source lyrics search: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase, and fallbacks.
 - Word-synced, line-synced, LRC, KRC, TTML, SRT, and plain-text lyrics.
 - Timeline editor, first-line alignment, romanization, pinyin, and Simplified-to-Traditional display conversion.
-- Six animated lyrics templates — Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow — with independent style settings and named presets.
+- Seven animated lyrics templates — Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow, and Paper Strip — with independent style settings and named presets.
 - Transparent OBS lyrics and setlist Browser Sources with instant synchronization.
 - KTV word highlighting, interlude countdowns, clock synchronization, and emergency hide.
 - Live setlist sessions with sung / now playing / up next states and YouTube chapter timestamps.
@@ -365,7 +366,7 @@ Elitesand Pro は、VTuber、歌配信者、ライブ出演者向けの Windows 
 - BetterLyrics、Apple Music、Kugou、QQ Music、LRCLIB、NetEase などの複数歌詞ソース。
 - 単語同期、行同期、LRC、KRC、TTML、SRT、プレーンテキスト対応。
 - タイムライン編集、先頭行合わせ、ローマ字、ピンイン、簡体字から繁体字への表示変換。
-- 6種類の歌詞アニメーション（Classic Overlay／Pulse／Facet／Aura／KTV／Vertical Flow）とテンプレート別設定・プリセット。
+- 7種類の歌詞アニメーション（Classic Overlay／Pulse／Facet／Aura／KTV／Vertical Flow／Paper Strip）とテンプレート別設定・プリセット。
 - OBS 用透明歌詞／セットリスト Browser Source とリアルタイム同期。
 - KTV ハイライト、間奏カウントダウン、時計同期、緊急非表示。
 - 配信セットリスト、歌唱履歴、次曲表示、YouTube チャプター出力。
@@ -433,7 +434,7 @@ Elitesand Pro는 VTuber, 노래 방송 스트리머, 라이브 공연자를 위�
 - BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase 등 다중 가사 소스.
 - 단어 동기화, 문장 동기화, LRC, KRC, TTML, SRT, 일반 텍스트 지원.
 - 타임라인 편집, 첫 줄 정렬, 로마자, 병음, 간체→번체 표시 변환.
-- 6가지 가사 애니메이션(Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow)과 템플릿별 독립 설정 및 프리셋.
+- 7가지 가사 애니메이션(Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow, Paper Strip)과 템플릿별 독립 설정 및 프리셋.
 - OBS 투명 가사 및 세트리스트 Browser Source 실시간 동기화.
 - KTV 하이라이트, 간주 카운트다운, 시계 동기화, 긴급 숨김.
 - 방송 세트리스트, 부른 곡 기록, 현재 곡/다음 곡, YouTube 챕터 출력.
@@ -501,7 +502,7 @@ Elitesand Pro 是面向 VTuber、歌回主播与直播演出者的 Windows 桌�
 - BetterLyrics、Apple Music、酷狗、QQ Music、LRCLIB、网易云等多歌词来源。
 - 支持逐字、逐句、LRC、KRC、TTML、SRT 与纯文本歌词。
 - 时间轴编辑、首句对齐、罗马音、拼音与简繁显示转换。
-- 六种歌词动画模板（Classic Overlay、Pulse、Facet、Aura、KTV、Vertical Flow），各模板独立保存样式与预设。
+- 七种歌词动画模板（Classic Overlay、Pulse、Facet、Aura、KTV、Vertical Flow、Paper Strip），各模板独立保存样式与预设。
 - OBS 透明歌词与直播歌单 Browser Source 实时同步。
 - KTV 扫光、间奏倒计时、时钟同步与紧急隐藏。
 - 直播歌单、已唱／正在唱／下一首、YouTube 章节时间戳。

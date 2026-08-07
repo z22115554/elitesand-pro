@@ -99,13 +99,23 @@
     return currentTrackIndex;
   }
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
+  const PAPERSTRIP_DEFAULTS = {
+    fontWeight: 600,
+    fontSize: 56,
+    color: '#111111',
+    activeColor: '#111111',
+    shadow: 'none',
+    verticalPosition: 'center',
+    lyricPosition: 'center',
+    letterSpacing: 1,
+  };
 
   function templateSupportsIntensity(template) {
     return ['pulse', 'facet', 'drift', 'aura'].includes(template);
@@ -187,7 +197,11 @@
       stores[currentTemplate] = { ...settingSnapshot(lyricSettings), template: currentTemplate };
       const next = stores[nextTemplate]
         ? { ...settingSnapshot(stores[nextTemplate]), template: nextTemplate }
-        : { ...settingSnapshot(lyricSettings), template: nextTemplate };
+        : {
+          ...settingSnapshot(lyricSettings),
+          ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
+          template: nextTemplate,
+        };
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
