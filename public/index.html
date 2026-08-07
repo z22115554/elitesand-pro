@@ -576,6 +576,12 @@
                 <button class="lyric-template-card" data-template="columnflow" type="button" role="radio" aria-checked="false" title="直書句流：直行在畫面兩側錯落，逐字浮現，唱過的句子留下淡淡殘影">
                   <span class="style-thumb-preview style-thumb-columnflow" aria-hidden="true"><span class="style-thumb-column">句流</span><span class="style-thumb-column">歌詞</span><span class="style-thumb-column">餘韻</span></span><strong>直書句流</strong><span>直書殘影、中央留白</span>
                 </button>
+                <button class="lyric-template-card" data-template="paperstrip" type="button" role="radio" aria-checked="false" title="紙帶逐字：白色紙帶先展開，再依句長、總字數與節奏分成 2～4 句一頁，尺寸進場前就決定">
+                  <span class="style-thumb-preview style-thumb-paperstrip" aria-hidden="true"><i></i><i></i><i></i></span><strong data-i18n="template.paperstrip">紙帶逐字</strong><span>白底展開、逐字填入</span>
+                </button>
+                <button class="lyric-template-card" data-template="mirror" type="button" role="radio" aria-checked="false" title="鏡像：固定左右雙側，左實心原文、右描邊鏡像字，中央保留人物安全區">
+                  <span class="style-thumb-preview style-thumb-mirror" aria-hidden="true"><i>歌</i><b></b><i>歌</i></span><strong data-i18n="template.mirror">鏡像</strong><span>雙側排版、中央留白</span>
+                </button>
               </div>
               <p class="field-hint" id="template-desc">完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。</p>
               <p class="lyric-template-scope" id="lyric-template-scope" role="status">可調：九宮格位置、歷史行、拼音／諧音、經典動畫風格與進階文字效果。</p>
@@ -600,15 +606,6 @@
                 <label>同時保留句數 <span id="ls-columnflow-max-lines-val" class="val">4 句</span></label>
                 <input id="ls-columnflow-max-lines" data-ls-control="columnflowMaxLines" type="range" min="1" max="6" step="1" value="4">
                 <p class="field-hint">偏左或偏右畫面較擠時，可把句數調低。</p>
-              </div>
-              <div class="field" id="columnflow-safe-margin-field" hidden>
-                <label>中央安全距離 <span id="ls-columnflow-safe-margin-val" class="val">11%</span></label>
-                <input id="ls-columnflow-safe-margin" data-ls-control="columnflowSafeMargin" type="range" min="5" max="25" step="1" value="11">
-                <p class="field-hint">畫面正中保留給主播真人／人物模型的區域，直行不會跨入；拖曳時右側預覽會用紅色斜線標出目前的範圍，調到剛好蓋住人物即可放開。數字越大留白越寬。</p>
-                <div class="switch-row">
-                  <div><div class="label">安全框也疊在 OBS 來源上</div><div class="sub">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。⚠️ 調完記得關掉，不然直播畫面會一直帶著這條線。</div></div>
-                  <label class="switch"><input id="ls-columnflow-show-safe-zone" data-ls-control="columnflowShowSafeZoneOnObs" type="checkbox"><span class="track"></span></label>
-                </div>
               </div>
               <div class="field" id="lyric-pos-field">
                 <label>歌詞位置</label>
@@ -650,7 +647,7 @@
                 <input id="ls-stage-safe-margin" data-ls-control="stageSafeMargin" type="range" min="2" max="25" step="1" value="2">
                 <p class="field-hint">畫面正中保留給主播真人／人物模型的區域，歌詞最多只會貼齊安全框邊界，不會跨入。拖曳時右側預覽會用紅色斜線標出目前的範圍。數字越大留白越寬。</p>
                 <div class="switch-row">
-                  <div><div class="label">安全框也疊在 OBS 來源上</div><div class="sub">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。⚠️ 調完記得關掉，不然直播畫面會一直帶著這條線。</div></div>
+                  <div><div class="label">安全框也疊在 OBS 來源上</div><div class="sub">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。調完記得關掉，避免引導線留在直播畫面。</div></div>
                   <label class="switch"><input id="ls-stage-show-safe-zone" data-ls-control="stageShowSafeZoneOnObs" type="checkbox"><span class="track"></span></label>
                 </div>
               </div>
@@ -2061,7 +2058,6 @@
             <span id="guide-check-ffmpeg" class="readiness-pill pending">FFmpeg 檢查中</span>
             <span id="guide-check-version" class="readiness-pill pending">版本檢查中</span>
           </div>
-          <button id="guide-ffmpeg-download" class="btn btn-sm btn-primary" type="button" hidden>下載 FFmpeg</button>
           <button id="guide-check-refresh" class="btn btn-sm btn-ghost" type="button">重新檢查</button>
         </section>
 

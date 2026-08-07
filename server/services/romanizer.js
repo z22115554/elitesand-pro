@@ -17,7 +17,6 @@ try {
 } catch (e) {
   // 延後到 logger 初始化後再警告
 }
-const path = require('path');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Romanizer');
 const { addXieyin } = require('./xieyin');
@@ -61,11 +60,7 @@ function getKuromojiTokenizer() {
   }
 
   _tokenizerPromise = new Promise((resolve, reject) => {
-    // require.resolve 找的是 kuromoji 套件實際安裝位置，不是這個原始檔案
-    // 自己的路徑深度——production build 把 server/**/*.js 打包成單一檔案後
-    // __dirname 相對算法會跑掉，這個寫法在 bundle 前後都正確。
-    const kuromojiDictPath = path.join(path.dirname(require.resolve('kuromoji/package.json')), 'dict');
-    kuromoji.builder({ dicPath: kuromojiDictPath }).build((err, tokenizer) => {
+    kuromoji.builder({ dicPath: __dirname + '/../../node_modules/kuromoji/dict' }).build((err, tokenizer) => {
       if (err) {
         log.warn('kuromoji 初始化失敗，將使用內建漢字表降級: ' + err.message);
         _tokenizerPromise = null;

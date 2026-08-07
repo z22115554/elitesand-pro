@@ -111,23 +111,6 @@ foreach ($dir in $DirsToCopy) {
   Copy-Item -LiteralPath $src -Destination $AppRoot -Recurse -Force
 }
 
-# Production-only bundling: minify server/**（結構不變）與把每個 HTML 頁面的
-# 本機 <script> 合併成單一 bundle。只對這份 staging 副本動手，repo 裡的
-# server/、public/ 原始碼完全不受影響——npm start、npm test 繼續吃原始檔案。
-# Source map 另存到 dist/.source-maps/（不隨任何發布產物打包），供未來對照
-# production stack trace 用。
-$NodeCommandForBundling = Get-Command node -ErrorAction Stop
-$SourceMapOut = Join-Path $Root "dist\.source-maps\v$Version"
-if (Test-Path $SourceMapOut) {
-  Remove-Item -LiteralPath $SourceMapOut -Recurse -Force
-}
-New-Item -ItemType Directory -Force -Path $SourceMapOut | Out-Null
-Write-Host "Building production bundles (server minify + per-page frontend bundles)..."
-& $NodeCommandForBundling.Source (Join-Path $Root "tools\build-production-bundles.js") $AppRoot --sourcemap-out $SourceMapOut
-if ($LASTEXITCODE -ne 0) {
-  throw "Production bundling failed (build-production-bundles.js). Portable build stopped."
-}
-
 # Never ship the developer's machine-local configuration. It may contain API keys.
 $BundledConfig = Join-Path $AppRoot "server\config.js"
 if (Test-Path $BundledConfig) {
@@ -168,64 +151,21 @@ Reset-PackagedRuntimeData
 $LicensesDir = Join-Path $Stage "licenses"
 New-Item -ItemType Directory -Force -Path $LicensesDir | Out-Null
 
-# Nunito 字體的 OFL.txt 已經跟著 public/fonts/ 一起被複製進 app-root（滿足 OFL 授權要求
-# 「授權文字要跟字體放在一起」），這裡在 licenses/ 底下再放一份方便集中查閱。
-$NunitoLicenseSource = Join-Path $Root "public\fonts\OFL.txt"
-if (-not (Test-Path -LiteralPath $NunitoLicenseSource)) {
-  throw "Missing public/fonts/OFL.txt; Nunito is bundled but its OFL license text is not."
-}
-$NunitoLicenseOut = Join-Path $LicensesDir "nunito"
-New-Item -ItemType Directory -Force -Path $NunitoLicenseOut | Out-Null
-Copy-Item -LiteralPath $NunitoLicenseSource -Destination (Join-Path $NunitoLicenseOut "OFL.txt") -Force
-
 # Machine-readable npm license inventory. Package-level license texts remain in app/node_modules.
-# 批次 D-2：不能只看 package.json 的 "license" 欄位就放棄——有些套件（如 busboy、
-# streamsearch）用的是舊式 "licenses": [{type: "MIT", ...}] 陣列格式，欄位對不上但
-# 授權其實很清楚。依序嘗試：現代 license 欄位 → 舊式 licenses 陣列 → 套件目錄內是否
-# 存在 LICENSE 類檔案（存在就不算真的 UNKNOWN，只是需要人工看檔案內容）。
-# 三者都沒有才是真的 UNKNOWN，最後會讓這次建置直接失敗，而不是靜默放行。
 $NpmLicenses = @()
 Get-ChildItem -LiteralPath (Join-Path $AppRoot "node_modules") -Directory | ForEach-Object {
   $Candidates = if ($_.Name.StartsWith("@")) { Get-ChildItem -LiteralPath $_.FullName -Directory } else { @($_) }
   foreach ($Candidate in $Candidates) {
     $PackageJson = Join-Path $Candidate.FullName "package.json"
-    if (-not (Test-Path $PackageJson)) { continue }
-    try {
-      $Meta = Get-Content -LiteralPath $PackageJson -Raw | ConvertFrom-Json
-    } catch { continue }
-
-    $License = $null
-    $Source = $null
-    if ($Meta.license) {
-      $License = if ($Meta.license -is [string]) { $Meta.license } else { $Meta.license.type }
-      $Source = 'license-field'
-    } elseif ($Meta.licenses -and $Meta.licenses.Count -gt 0) {
-      $License = ($Meta.licenses | ForEach-Object { $_.type }) -join ' OR '
-      $Source = 'legacy-licenses-array'
-    } else {
-      $LicenseFile = Get-ChildItem -LiteralPath $Candidate.FullName -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match '^(LICEN[SC]E|COPYING)(\..*)?$' } | Select-Object -First 1
-      if ($LicenseFile) {
-        $License = "SEE $($LicenseFile.Name)"
-        $Source = 'license-file-present'
-      }
-    }
-
-    $NpmLicenses += [ordered]@{
-      name = $Meta.name
-      version = $Meta.version
-      license = $License
-      source = $Source
+    if (Test-Path $PackageJson) {
+      try {
+        $Meta = Get-Content -LiteralPath $PackageJson -Raw | ConvertFrom-Json
+        $NpmLicenses += [ordered]@{ name = $Meta.name; version = $Meta.version; license = $Meta.license }
+      } catch { }
     }
   }
 }
-$UnknownLicenses = $NpmLicenses | Where-Object { -not $_.license }
-if ($UnknownLicenses.Count -gt 0) {
-  $UnknownNames = ($UnknownLicenses | ForEach-Object { "$($_.name)@$($_.version)" }) -join ', '
-  throw "Release audit failed: packages with no discoverable license (field, legacy array, or LICENSE file): $UnknownNames"
-}
 $NpmLicenses | Sort-Object { $_.name } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $LicensesDir "npm-license-inventory.json") -Encoding UTF8
-Write-Host "npm license inventory: $($NpmLicenses.Count) packages, 0 unknown"
 
 $NodeCommand = Get-Command node -ErrorAction Stop
 Copy-Item -LiteralPath $NodeCommand.Source -Destination (Join-Path $Stage "runtime\node.exe") -Force
@@ -235,41 +175,15 @@ foreach ($toolName in @("yt-dlp")) {
   if ($tool -and (Test-Path $tool.Source)) {
     Copy-Item -LiteralPath $tool.Source -Destination (Join-Path $Stage "tools") -Force
     Write-Host "Bundled $toolName from $($tool.Source)"
-
-    # 批次 D-2：不能只從 PATH 複製一個無法追溯版本的 exe——記錄實際版本與 SHA-256，
-    # 並抓對應的授權文件。任何一步失敗就停止，不產生缺授權材料的公開包。
-    $YtdlpLicenseOut = Join-Path $LicensesDir "yt-dlp"
-    New-Item -ItemType Directory -Force -Path $YtdlpLicenseOut | Out-Null
-    $YtdlpVersion = (& $tool.Source --version 2>&1 | Select-Object -First 1).ToString().Trim()
-    $YtdlpHash = (Get-FileHash -LiteralPath (Join-Path $Stage "tools\yt-dlp.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
-    Get-ReleaseDownload -Uri "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$YtdlpVersion/LICENSE" -OutFile (Join-Path $YtdlpLicenseOut "LICENSE.txt")
-    Get-ReleaseDownload -Uri "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$YtdlpVersion/THIRD_PARTY_LICENSES.txt" -OutFile (Join-Path $YtdlpLicenseOut "THIRD_PARTY_LICENSES.txt")
-    $YtdlpInfo = @"
-yt-dlp binary provenance
-=========================
-
-Bundled version: $YtdlpVersion
-Source: $($tool.Source)
-SHA-256 of bundled tools\yt-dlp.exe: $YtdlpHash
-Upstream: https://github.com/yt-dlp/yt-dlp/releases/tag/$YtdlpVersion
-License: LICENSE.txt (Unlicense/public domain) and THIRD_PARTY_LICENSES.txt
-(bundled dependency licenses) in this folder, fetched from the matching
-upstream tag at build time.
-"@
-    Set-Content -LiteralPath (Join-Path $YtdlpLicenseOut "PROVENANCE.txt") -Value $YtdlpInfo -Encoding UTF8
-    Write-Host "yt-dlp provenance recorded: $YtdlpVersion, sha256 $YtdlpHash"
   } else {
     Write-Warning "$toolName not found on PATH. YouTube import may be limited without it."
   }
 }
 
-# 批次 D-1（CLOSED_SOURCE_MIGRATION_PLAN.md）：預設不再內附 FFmpeg。
-# GPLv3 static build 的完整對應原始碼義務很重，改成程式內「按需下載＋SHA-256 驗證」
-# （見 server/services/ffmpeg-provider.js）。只有明確傳 -BundleFfmpeg 才會走舊的內附流程
-# （每次打包都從實際 exe 讀出 commit，下載同一 commit 的 FFmpeg source + GPLv3，
-# 任何一步失敗就停止，不產生缺授權材料的公開包）——保留這個選項只是給需要離線內附版的
-# 情境用，預設關閉。
-$ShouldBundleFfmpeg = [bool]$BundleFfmpeg
+# v0.7.2 公開測試暫時預設隨附 FFmpeg；可用 -WithoutFfmpeg 建立分離版。
+# 每次打包都從實際 exe 讀出 commit，下載同一 commit 的 FFmpeg source + GPLv3。
+# 任何一步失敗就停止，不產生缺授權材料的公開包。
+$ShouldBundleFfmpeg = -not $WithoutFfmpeg
 if ($ShouldBundleFfmpeg) {
   $FfmpegCommand = Get-Command ffmpeg -ErrorAction Stop
   $FfprobeCommand = Get-Command ffprobe -ErrorAction Stop
@@ -331,7 +245,7 @@ notice and BUILD.txt must remain with any redistribution of these binaries.
 "@
   Set-Content -LiteralPath (Join-Path $ComplianceOut "SOURCE.txt") -Value $SourceInfo -Encoding UTF8
 } else {
-  Write-Host "FFmpeg not bundled (default since batch D-1). App will offer an in-app download on first use, or a system/config-specified FFmpeg is used automatically."
+  Write-Warning "FFmpeg was excluded with -WithoutFfmpeg. YouTube-to-MP3 requires a separate FFmpeg installation."
 }
 
 $HasFfmpeg = Test-Path (Join-Path $Stage "tools\ffmpeg.exe")
@@ -384,8 +298,8 @@ pause >nul
 # all ASCII, so ascii encoding is the safest and is guaranteed BOM-free.
 Set-Content -LiteralPath (Join-Path $Stage "Start Elitesand Pro.cmd") -Value $Launcher -Encoding ascii
 
-$FfmpegStatusZh = if ($HasFfmpeg) { "已隨附完整授權資料" } else { "未內附；第一次需要轉 MP3 時，控制面板會提示一鍵下載（來自官方建置頁，自動驗證雜湊）" }
-$FfmpegStatusEn = if ($HasFfmpeg) { "bundled with matching compliance materials" } else { "not bundled; the control panel offers a one-click download from the official build page (SHA-256 verified) the first time MP3 conversion is needed" }
+$FfmpegStatusZh = if ($HasFfmpeg) { "已隨附完整授權資料" } else { "未內附；要使用 YouTube 轉 MP3，請另外安裝 FFmpeg" }
+$FfmpegStatusEn = if ($HasFfmpeg) { "bundled with matching compliance materials" } else { "not bundled; install FFmpeg separately for YouTube-to-MP3 conversion" }
 
 $Readme = @"
 ==============================================

@@ -56,7 +56,7 @@ function preserveLyricsFromExisting(cleanPlaylist, previousPlaylist) {
 function registerPlaylistHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, manualLyricsCache,
-    persistState, emitSetlist, broadcastState, getPublicPlaylist, reconcilePlaybackProgress,
+    persistState, emitSetlist, broadcastState, getPublicPlaylist,
   } = ctx;
 
   function emitPlaylistUpdate() {
@@ -68,7 +68,6 @@ function registerPlaylistHandlers(io, socket, ctx) {
     if (!clean) { log.warn('playlist:update 收到非陣列資料'); if (typeof ack === 'function') ack({ ok: false, error: '播放清單格式無效' }); return; }
     const preserved = ensureEntryIds(preserveLyricsFromExisting(clean, playState.playlist));
     playState.playlist = preserved;
-    if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
     syncNamesToLibrary(preserved);
     emitPlaylistUpdate();
     emitSetlist(); // 未唱清單跟著清單變動更新
@@ -132,7 +131,6 @@ function registerPlaylistHandlers(io, socket, ctx) {
 
   socket.on('playlist:remove', (trackId) => {
     playState.playlist = playState.playlist.filter((t) => t.id !== trackId);
-    if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
     // 從播放清單移除不等於刪除歌曲記憶。offset / 手動歌詞仍以 track.id
     // 保留在 state.json，日後從媒體庫或重新匯入同一首歌時自動恢復。
     // 只有使用者明確執行歌詞／同步重設時才應清除對應資料。
@@ -146,7 +144,6 @@ function registerPlaylistHandlers(io, socket, ctx) {
     const clean = sanitizePlaylist(playlist);
     if (!clean) return log.warn('playlist:reorder 收到非陣列資料');
     playState.playlist = ensureEntryIds(preserveLyricsFromExisting(clean, playState.playlist));
-    if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
     emitPlaylistUpdate();
     emitSetlist();
     broadcastState();
@@ -236,12 +233,6 @@ function registerPlaylistHandlers(io, socket, ctx) {
     // 匯入整份清單一律視為全新的列（就算是重新匯入自己先前匯出的檔案），
     // 避免不同來源匯入的 entryId 剛好相同造成混淆。
     playState.playlist = assignFreshEntryIds(clean);
-    if (playState.playedEntryIds instanceof Set) playState.playedEntryIds.clear();
-    playState.lastPlayedEntryId = null;
-    playState.currentTrack = null;
-    playState.currentTrackStarted = false;
-    playState.isPlaying = false;
-    playState.currentTime = 0;
 
     // 恢復 offset 和手動歌詞
     for (const track of clean) {

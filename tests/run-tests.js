@@ -4528,52 +4528,12 @@ test('play:stop 清空目前歌曲並廣播，播放清單播完最後一首才�
   eq(persistCalls, 1, '必須持久化，重開程式後不能又冒出剛剛播完的那首：');
 });
 
-test('播放秒數只留在記憶體，暫停時只保存目前歌曲狀態', () => {
-  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
-  const events = new Map();
-  let persisted = 0;
-  const playState = {
-    currentTrack: { id: 'recovery-song', entryId: 'recovery-entry', title: '恢復測試' },
-    currentTrackStarted: true,
-    currentTime: 0,
-    isPlaying: true,
-    playedEntryIds: new Set(['recovery-entry']),
-    lastPlayedEntryId: 'recovery-entry',
-  };
-  registerPlaybackHandlers(
-    { emit() {} },
-    { on(event, handler) { events.set(event, handler); }, emit() {} },
-    {
-      playState, trackOffsets: new Map(), trackPitch: new Map(), trackSpeed: new Map(), manualLyricsCache: new Map(),
-      persistState() { persisted++; }, emitSetlist() {}, recordSessionSong() {}, broadcastState() {},
-      getEffectiveLyrics() { return null; }, markTrackPlayed() {},
-    },
-  );
-
-  events.get('lyrics:sync')({ currentTime: 12.5, duration: 200, trackId: 'recovery-song' });
-  events.get('lyrics:sync')({ currentTime: 12.8, duration: 200, trackId: 'recovery-song' });
-  eq(playState.currentTime, 12.8);
-  eq(persisted, 0, '高頻歌詞同步只能留在記憶體，不可排程寫磁碟：');
-
-  events.get('play:seek')({ time: 88, trackId: 'recovery-song' });
-  eq(playState.currentTime, 88);
-  eq(persisted, 0, '使用者拖曳位置也不保存歌曲內秒數：');
-
-  events.get('play:toggle')(false);
-  eq(persisted, 1, '暫停時只保存目前歌曲與已唱狀態，不保存秒數：');
-});
-
-test('單曲模式與 SoundTouch 播畢都會清空目前歌曲並送出 play:stop', () => {
+test('播放清單播完最後一首、沒有下一首可接時，面板會送出 play:stop', () => {
   const source = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
-  const endedFn = source.slice(source.indexOf('function handlePlaybackEnded()'), source.indexOf('function handlePlaybackEnded()') + 1500);
-  ok(source.includes('SoundTouchEngine.onEnded(() => handlePlaybackEnded())'),
-    'SoundTouch 播畢必須走和原生 audio 相同的清空流程：');
-  ok(source.includes("audioPlayer.addEventListener('ended', handlePlaybackEnded)"),
-    '原生 audio 播畢必須走共用流程：');
-  ok(endedFn.includes('if (next) {') && endedFn.includes('return;'),
-    '連續播放且仍有下一首時必須直接播放下一首：');
-  ok(endedFn.includes('stopPlayback();') && endedFn.includes("SocketClient.send('play:stop',"),
-    '單曲模式或清單尾端必須本地清空並廣播 play:stop：');
+  const endedFn = source.slice(source.indexOf("addEventListener('ended'"), source.indexOf("addEventListener('ended'") + 700);
+  ok(endedFn.includes('if (next) {') && endedFn.includes('return;'), '有下一首時必須播下一首並直接結束，不能繼續往下跑到清空邏輯：');
+  ok(endedFn.includes('stopPlayback();') && endedFn.includes("SocketClient.send('play:stop');"),
+    '沒有下一首時必須本地清空並廣播 play:stop，不能什麼都不做（否則歌詞永遠卡在最後一句）：');
 });
 
 test('OBS 顯示端／跟唱視圖／遙控器都要接 play:stop 才能清空歌詞，不能只有面板自己知道', () => {
@@ -4587,7 +4547,7 @@ test('OBS 顯示端／跟唱視圖／遙控器都要接 play:stop 才能清空�
   ok(prompterSource.includes("SocketClient.on('play:stop', () => {") && prompterSource.includes('resetToEmpty();'),
     '跟唱視圖必須監聽 play:stop 並重置回空狀態：');
   ok(controllerSource.includes("SocketClient.on('play:stop', () => {"), '手機遙控器也要監聽 play:stop，不能只有 OBS/跟唱視圖清空、遙控器還停在最後一首：');
-  ok(playbackSource.includes("SocketClient.on('play:stop', (payload) => {"),
+  ok(playbackSource.includes("SocketClient.on('play:stop', () => {"),
     '面板自己也要監聽 play:stop：另一個已連線的面板分頁播完清單時，這個分頁才會跟著清空：');
 });
 
@@ -5931,13 +5891,12 @@ test('狀態保存：另一伺服器停止寫入後會自動接管並備份對�
 });
 
 console.log('\n15. P2 播放邊界與 state:sync 量測');
-test('單曲模式播完清空目前歌曲，等待使用者主動按下一首', () => {
+test('單曲模式播完只預載下一首，不會從最後一首繞回第一首', () => {
   const sequence = require('../public/js/playback-sequence');
-  eq(sequence.nextAfterEnded(0, 2, false), null);
+  const next = sequence.nextAfterEnded(0, 2, false);
+  eq(next.index, 1);
+  eq(next.autoplay, false);
   eq(sequence.nextAfterEnded(1, 2, false), null);
-  eq(sequence.manualAdvance(-1, 3, 0, 1), 1, '播完第一首後按下一首應到第二首：');
-  eq(sequence.manualAdvance(-1, 3, 1, -1), 1, '播完第二首後按上一首應重播第二首：');
-  eq(sequence.manualAdvance(-1, 3, 2, 1), 0, '播完最後一首後按下一首維持既有循環行為：');
 });
 
 test('連續模式會自動播放下一首，但最後一首仍自然停止', () => {
@@ -5946,23 +5905,6 @@ test('連續模式會自動播放下一首，但最後一首仍自然停止', ()
   eq(next.index, 1);
   eq(next.autoplay, true);
   eq(sequence.nextAfterEnded(1, 2, true), null);
-});
-
-test('沒有目前歌曲時，已唱 entryId 仍會從未唱清單排除', () => {
-  const { createAppState } = require('../server/state/app-state');
-  const appState = createAppState({ emit() {} });
-  const first = { id: 'done-a', entryId: 'done-entry-a', title: '已唱 A' };
-  const second = { id: 'done-b', entryId: 'done-entry-b', title: '已唱 B' };
-  const third = { id: 'wait-c', entryId: 'wait-entry-c', title: '未唱 C' };
-  appState.playState.playlist = [first, second, third];
-  appState.playState.currentTrack = null;
-  appState.playState.currentTrackStarted = false;
-  appState.playState.playedEntryIds = new Set([first.entryId, second.entryId]);
-  appState.playState.lastPlayedEntryId = second.entryId;
-
-  const payload = appState.setlistPayload();
-  eq(payload.current, null);
-  eq(payload.upcoming.map((track) => track.title).join(','), '未唱 C');
 });
 
 test('state:sync 每次廣播只序列化同一份 payload 並留下大小量測', () => {
@@ -5997,134 +5939,6 @@ test('歌單已開始的目前歌曲暫停後仍不可回到未唱區', () => {
   appState.playState.currentTrackStarted = false;
   const standby = appState.setlistPayload();
   eq(standby.upcoming.map((track) => track.title).join(','), '暫停中的歌,下一首');
-});
-
-test('意外關閉後會恢復目前歌曲與已唱／未唱狀態，但播放位置歸零且不自動播放', () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-playback-recovery-'));
-  try {
-    const appStatePath = path.join(__dirname, '..', 'server', 'state', 'app-state.js');
-    const stateStorePath = path.join(__dirname, '..', 'server', 'services', 'state-store.js');
-    const script = [
-      "const appStatePath=process.argv[1];",
-      "const stateStorePath=process.argv[2];",
-      "const {createAppState}=require(appStatePath);",
-      "const stateStore=require(stateStorePath);",
-      "const io={emit(){}};",
-      "const first=createAppState(io);",
-      "first.playState.playlist=[",
-      " {id:'a',entryId:'entry-a',title:'A'},",
-      " {id:'b',entryId:'entry-b',title:'B'},",
-      " {id:'c',entryId:'entry-c',title:'C'}",
-      "];",
-      "first.playState.currentTrack=first.playState.playlist[1];",
-      "first.playState.currentTrackStarted=true;",
-      "first.playState.currentTime=87.25;",
-      "first.playState.isPlaying=true;",
-      "first.markTrackPlayed(first.playState.playlist[0]);",
-      "first.markTrackPlayed(first.playState.playlist[1]);",
-      "first.persistState();",
-      "stateStore.saveNow();",
-      "const restored=createAppState(io);",
-      "const publicState=restored.getPublicState();",
-      "const setlist=restored.setlistPayload();",
-      "process.stdout.write('__RECOVERY__'+JSON.stringify({",
-      " currentEntryId:publicState.currentTrack&&publicState.currentTrack.entryId,",
-      " currentTime:publicState.currentTime, isPlaying:publicState.isPlaying,",
-      " currentTrackStarted:publicState.currentTrackStarted,",
-      " playedEntryIds:publicState.playedEntryIds, lastPlayedEntryId:publicState.lastPlayedEntryId,",
-      " upcoming:setlist.upcoming.map((track)=>track.title)",
-      "})+'\\n');",
-    ].join('\n');
-    const child = spawnStateStore(process.execPath, ['-e', script, appStatePath, stateStorePath], {
-      env: { ...process.env, ELITESAND_DATA_DIR: dataDir },
-      encoding: 'utf8', timeout: 10000, windowsHide: true,
-    });
-    eq(child.status, 0, `playback recovery child stderr=${child.stderr} stdout=${child.stdout}: `);
-    const markerAt = child.stdout.lastIndexOf('__RECOVERY__');
-    ok(markerAt >= 0, `playback recovery child 缺少結果：${child.stdout}`);
-    const result = JSON.parse(child.stdout.slice(markerAt + '__RECOVERY__'.length).trim().split(/\r?\n/, 1)[0]);
-    eq(result.currentEntryId, 'entry-b');
-    eq(result.currentTime, 0, '不保存歌曲內秒數，重開後應從該首開頭準備：');
-    eq(result.isPlaying, false, '重開後不可自行播放出聲：');
-    eq(result.currentTrackStarted, true, '暫停中的已開始歌曲要維持已唱狀態：');
-    eq(result.playedEntryIds.sort().join(','), 'entry-a,entry-b');
-    eq(result.lastPlayedEntryId, 'entry-b');
-    eq(result.upcoming.join(','), 'C');
-  } finally {
-    fs.rmSync(dataDir, { recursive: true, force: true });
-  }
-});
-
-test('舊 state 沒有播放恢復欄位時，會用既有 session 歌曲回填已唱狀態', () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-playback-backfill-'));
-  try {
-    fs.mkdirSync(dataDir, { recursive: true });
-    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({
-      schemaVersion: 3,
-      savedAt: 1,
-      playlist: [
-        { id: 'a', entryId: 'entry-a', title: 'A' },
-        { id: 'b', entryId: 'entry-b', title: 'B' },
-        { id: 'c', entryId: 'entry-c', title: 'C' },
-      ],
-      session: {
-        active: false, startedAt: null, source: null,
-        songs: [{ id: 'a', entryId: 'session-a', title: 'A' }, { id: 'b', entryId: 'session-b', title: 'B' }],
-      },
-    }), 'utf8');
-    const appStatePath = path.join(__dirname, '..', 'server', 'state', 'app-state.js');
-    const script = [
-      "const {createAppState}=require(process.argv[1]);",
-      "const restored=createAppState({emit(){}});",
-      "const publicState=restored.getPublicState();",
-      "const setlist=restored.setlistPayload();",
-      "process.stdout.write('__BACKFILL__'+JSON.stringify({played:publicState.playedEntryIds,upcoming:setlist.upcoming.map((t)=>t.title)})+'\\n');",
-    ].join('\n');
-    const child = spawnStateStore(process.execPath, ['-e', script, appStatePath], {
-      env: { ...process.env, ELITESAND_DATA_DIR: dataDir },
-      encoding: 'utf8', timeout: 10000, windowsHide: true,
-    });
-    eq(child.status, 0, `playback backfill child stderr=${child.stderr} stdout=${child.stdout}: `);
-    const markerAt = child.stdout.lastIndexOf('__BACKFILL__');
-    ok(markerAt >= 0, `playback backfill child 缺少結果：${child.stdout}`);
-    const result = JSON.parse(child.stdout.slice(markerAt + '__BACKFILL__'.length).trim().split(/\r?\n/, 1)[0]);
-    eq(result.played.sort().join(','), 'entry-a,entry-b');
-    eq(result.upcoming.join(','), 'C');
-  } finally {
-    fs.rmSync(dataDir, { recursive: true, force: true });
-  }
-});
-
-test('控制面板重開後只在本地載入保存歌曲，不回送 play:track 改寫伺服器狀態', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
-  const restore = source.slice(source.indexOf('function restorePlaybackState'), source.indexOf('function restorePlaybackState') + 1800);
-  ok(restore.includes("playTrack(index, false, { notifyServer: false, startTime: seconds })"),
-    '恢復歌曲必須禁止回送 play:track；程式重開後伺服器提供的秒數固定為 0：');
-  ok(source.includes('AppShared.restorePlaybackState = restorePlaybackState'),
-    'app.js 的 state:sync 必須能呼叫本地恢復流程：');
-});
-
-test('播放秒數不寫入 state.json，lyrics:sync 與拖曳 seek 也不觸發存檔', () => {
-  const appStateSource = fs.readFileSync(path.join(__dirname, '../server/state/app-state.js'), 'utf8');
-  const playbackSource = fs.readFileSync(path.join(__dirname, '../server/routes/handlers/playback.js'), 'utf8');
-  const snapshot = appStateSource.slice(
-    appStateSource.indexOf('playback: {'),
-    appStateSource.indexOf('playback: {') + 700,
-  );
-  ok(!snapshot.includes('currentTime:'), 'playback 持久化快照不可保存歌曲內秒數：');
-
-  const seekHandler = playbackSource.slice(
-    playbackSource.indexOf("socket.on('play:seek'"),
-    playbackSource.indexOf("socket.on('play:prev'"),
-  );
-  const syncHandler = playbackSource.slice(
-    playbackSource.indexOf("socket.on('lyrics:sync'"),
-    playbackSource.indexOf("socket.on('lyrics:romanized'"),
-  );
-  ok(!seekHandler.includes('persistState('), '拖曳進度只做即時同步，不可寫入 state.json：');
-  ok(!syncHandler.includes('persistState('), '播放中的高頻 lyrics:sync 不可寫入 state.json：');
-  ok(!playbackSource.includes('PROGRESS_PERSIST_INTERVAL_MS') && !playbackSource.includes('persistPlaybackProgress'),
-    '不可保留每 5 秒存檔的計時／節流邏輯：');
 });
 
 test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷線紅線', () => {
@@ -6323,7 +6137,7 @@ test('R6-2 follow-up OBS 來源服務重啟恢復提示只針對曾連線卻未�
 test('R6-3 非經典模板會在可見範圍說明中交代拼音與諧音限制', () => {
   const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
   const unsupportedCopy = '此模板不支援拼音／諧音；需要雙語請選「經典疊層」。';
-  const expectedTemplates = ['pulse', 'facet', 'drift', 'aura', 'ktv'];
+  const expectedTemplates = ['pulse', 'facet', 'drift', 'aura', 'ktv', 'paperstrip', 'mirror'];
   expectedTemplates.forEach((template) => {
     const entry = new RegExp(`${template}: \\{[^\\n]*${unsupportedCopy.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`).exec(lyricExtras)?.[0] || '';
     ok(entry.includes(unsupportedCopy), `${template} 必須在模板範圍說明中交代雙語限制: `);
@@ -6346,9 +6160,8 @@ test('歌詞模板使用 Elitesand Pro 自有名稱與新 ID', () => {
   ['Stardust Flow', 'Prism Steps', 'Diagonal Confession', 'Tidal Mindscape', 'Neon Duet'].forEach((retiredName) => {
     ok(!readme.includes(retiredName), `README 不可保留已退休的模板名稱 ${retiredName}: `);
   });
-  // drift（斜拍告白）目前從桌面與手機選擇器隱藏，README 一律以六種為準；
-  // 若使用者日後把它放回選擇器，再連同 README 與此處一起改回七種。
-  ok(readme.includes('Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow'));
+  // drift（斜拍告白）目前從桌面與手機選擇器隱藏；Paper Strip 加入後 README 以七種為準。
+  ok(readme.includes('Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow, and Paper Strip'));
   ok(!/Classic Overlay, Pulse, Facet, Drift/.test(readme), 'README 不可把隱藏中的 Drift 列為可選模板: ');
 });
 
@@ -6357,18 +6170,92 @@ test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', ()
   const controllerJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const controllerCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'controller-new.css'), 'utf8');
-  ['pulse', 'facet', 'aura'].forEach((template) => {
+  ['pulse', 'facet', 'aura', 'paperstrip', 'mirror'].forEach((template) => {
     ok(controllerHtml.includes(`class="ctrl-template-btn" data-template="${template}"`), `${template} 必須出現在手機模板選項: `);
   });
   const panelDrift = /<button[^>]*data-template="drift"[^>]*>/.exec(panelHtml)?.[0] || '';
   const controllerDrift = /<button[^>]*data-template="drift"[^>]*>/.exec(controllerHtml)?.[0] || '';
   ok(panelDrift.includes('hidden') && controllerDrift.includes('hidden'), '斜拍告白必須從桌面與手機模板選擇器隱藏: ');
   ok(!controllerHtml.includes('ctrl-template-legacy-notice'), '手機不應保留舊模板的相容性介面: ');
-  ok(controllerJs.includes("const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow'];"), '遙控器必須使用新的模板 ID: ');
+  ok(controllerJs.includes("const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror'];"), '遙控器必須使用新的模板 ID: ');
   ok(controllerJs.includes('if (!TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換必須接受所有現行模板: ');
+  ok(controllerJs.includes("nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS"), '舊 state 從手機首次切到 paperstrip 時必須套用黑字預設，避免白底白字: ');
+  ok(controllerJs.includes("nextTemplate === 'mirror' ? MIRROR_DEFAULTS") && controllerJs.includes("if (nextTemplate === 'mirror') next.lyricPosition = 'split';"), '手機首次切到 mirror 必須套用雙側預設並鎖定 split: ');
   ok(controllerHtml.includes('id="ctrl-intensity-group"') && controllerJs.includes('intensityGroup.hidden = !templateSupportsIntensity(template);'), '手機動態強度必須與桌面模板能力同步: ');
   ok(controllerHtml.includes('id="ctrl-classic-style-group"') && controllerJs.includes('classicStyleGroup.hidden = !isClassic;'), '配色風格必須只在經典疊層顯示: ');
   ok(controllerCss.includes('#ctrl-intensity-group[hidden]') && controllerCss.includes('#ctrl-classic-style-group[hidden]'), '手機模板設定的 hidden 狀態不得被 CSS 蓋掉: ');
+});
+
+test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設定與伺服器白名單', () => {
+  const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const templateJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-paperstrip.js'), 'utf8');
+  const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
+  const displayJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'display.js'), 'utf8');
+  const motionKernel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-motion-kernel.js'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
+  const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  const i18n = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
+  ok(displayHtml.includes('/js/lyric-template-paperstrip.js'), 'display 必須載入紙帶逐字模板腳本: ');
+  ok(templateJs.includes("id: 'paperstrip'") && templateJs.includes('onFrame(timeMs, ctx)') && templateJs.includes('onSeek(timeMs, ctx)'), '紙帶逐字必須透過 registry 並以時間驅動: ');
+  ok(templateJs.includes('LyricMotion.ensureWordTimings') && templateJs.includes('LyricMotion.buildGraphemeTimings'), '紙帶逐字必須沿用既有逐字時間資料與 LRC 降級管線: ');
+  ok(templateJs.includes('PRE_ROLL_MS') && templateJs.includes("classList.toggle('is-current'"), '紙帶逐字必須有預展開與逐字目前字狀態: ');
+  ok(templateJs.includes('function barRevealProgress(value)') && templateJs.includes('t <= 0.24') && templateJs.includes('t <= 0.34') && templateJs.includes('Math.pow(1 - u, 2.45)'), '紙帶展開必須使用前段蓄力、中段快速拉開、後段長尾減速的分段速度曲線，不可退回單一 smoothstep: ');
+  ok(templateJs.includes('const PRE_ROLL_MS = 900;') && templateJs.includes('const BAR_OPEN_MS = 700;') && templateJs.includes('const MIN_BAR_OPEN = 0.08;'), '同頁紙帶必須保留 pre-roll 與足夠動畫時長，起始為短白條而不是瞬間從零寬拉滿: ');
+  ok(templateJs.includes('const TEXT_REVEAL_MIN_OPEN = 0.985;'), '同頁與 split 仍需保留白條完成度文字閘門: ');
+  ok(templateJs.includes("setProperty('--ps-clip-right'") && templateJs.includes('clampedOpen >= TEXT_REVEAL_MIN_OPEN'), '白條必須使用左到右揭露比例，且文字受白條完成度硬閘門保護: ');
+  ok(displayCss.includes('clip-path: inset(0 var(--ps-clip-right, 100%) 0 0);') && templateJs.includes("setProperty('--ps-clip-right', `${(100 - clampedOpen * 100).toFixed(3)}%`)") && !displayCss.includes('transform: scaleX(var(--ps-open));'), '紙帶白底必須固定左邊界、從左往右展開，且不可用 scaleX 壓扁邊框與陰影: ');
+  ok(templateJs.includes('const MIN_BATCH_SIZE = 2;') && templateJs.includes('const MAX_BATCH_SIZE = 4;') && templateJs.includes('buildBatches(plans)') && templateJs.includes('scoreBatchCandidate'), '紙帶逐字必須在播放前依內容穩定分成 2～4 句一頁，而不是固定三句或播放途中臨時抽樣: ');
+  ok(templateJs.includes('metrics.totalChars') && templateJs.includes('metrics.totalDuration') && templateJs.includes('metrics.averageChars') && templateJs.includes('count === previousCount'), '2～4 句分組必須同時考慮總字數、播放時間、平均句長與避免連續相同句數: ');
+  ok(templateJs.includes('remaining - count === 1') && templateJs.includes('LyricMotion.hashNoise(seed, 53)'), '分組必須避免可避免的單句尾頁，並使用可重現的穩定亂數: ');
+  ok(templateJs.includes("2: [") && templateJs.includes("3: [") && templateJs.includes("4: [") && templateJs.includes('emphasisScore'), '紙帶逐字必須為 2／3／4 句各自提供尺寸構圖，並用句長與節奏決定大字優先句: ');
+  ok(templateJs.includes('plan.batchCount = batch.length') && templateJs.includes('plans[target].batchStart'), '可變句數頁面必須把頁面邊界預先寫回每句，seek 時直接定位同一頁: ');
+  ok(templateJs.includes('const pageViews = new Map();') && templateJs.includes('function neededBatchStarts(timeMs)') && templateJs.includes('timeMs < (lastPlan?.endMs || 0)'), 'split 模式必須保留既有前後頁短暫共存，上一頁保留到最後一句真正結束: ');
+  ok(templateJs.includes('function batchEntryMs(batchStart)') && templateJs.includes('Math.max(batchPreviousEndMs(batchStart), firstPlan.startMs - PRE_ROLL_MS)') && templateJs.includes('function nonSplitBatchStart(timeMs)'), '非 split 跨頁必須等上一頁結束後才允許下一頁進場，空拍時才可利用剩餘 pre-roll: ');
+  ok(templateJs.includes('spatialGate: 0.14') && templateJs.includes('function measureGlyphSpatialGates(entry)') && templateJs.includes('clampedOpen >= glyph.spatialGate'), '非 split 跨頁第一句必須用白條實際掃過每個字的位置逐字放行，避免交棒時整句突然跳出: ');
+  ok(templateJs.includes('const crossPageLead = !splitMode && plan.batchSlot === 0 && plan.batchStart > 0;') && templateJs.includes('pageEntryMs: view.entryMs') && !displayCss.includes('.ps-group--incoming {'), '非 split 不再建立隱藏 incoming 頁；跨頁第一條白帶從 page entry 時刻真正開始，split 維持既有行為: ');
+  ok(templateJs.includes('constrainRowWidth') && displayCss.includes('body.lyric-pos-left #paperstrip-root .ps-group') && displayCss.includes('width: min(100%, 760px);'), '紙帶逐字偏左／偏右必須有單邊寬度上限，超長句在首次顯示前縮放: ');
+  ok(!displayCss.includes('@keyframes ps-row-enter'), '紙帶逐字不可在每句重播整列進場動畫造成閃爍: ');
+  ok(motionKernel.includes('function stageSafeMarginPercent()') && motionKernel.includes('function mountStageSafeZoneGuide(rootEl)'), '主線舞台安全框核心必須移植到共用 LyricMotion: ');
+  ok(lyricExtras.includes("const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'];") && panelHtml.includes('id="stage-safe-margin-field"'), 'Paper Strip 必須接入舞台安全距離設定 UI: ');
+  ok(displayJs.includes("['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)") && displayJs.includes("setProperty('--stage-safe-margin'"), 'display 必須把 Paper Strip 的安全距離同步成共用 dataset/CSS 變數: ');
+  ok(templateJs.includes('LyricMotion.mountStageSafeZoneGuide(rootEl)') && templateJs.includes('onSettings()') && displayCss.includes('.stage-safe-zone-band'), 'Paper Strip 必須掛共用安全框並在設定變更時即時同步: ');
+  ok(displayCss.includes('width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);') && displayCss.includes('overflow: visible;') && templateJs.includes('entry.groupEl.clientWidth - indent - 2') && templateJs.includes('Math.max(0.22'), 'Paper Strip 安全框必須作為排版寬度而不是裁切遮罩；超長句要先計入縮排並縮到完整可見: ');
+  ok(lyricExtras.includes("paperstrip: { label: '紙帶逐字'") && lyricExtras.includes("template: 'paperstrip'"), '桌面設定必須提供紙帶逐字能力與獨立預設: ');
+  ok(lyricsHandler.includes("'columnflow', 'paperstrip'"), 'server 模板白名單必須接受 paperstrip: ');
+  ok(appState.includes("paperstrip: { template: 'paperstrip'"), 'server 預設 lyricTemplateSettings 必須包含 paperstrip: ');
+  ok(i18n.includes("'template.paperstrip':"), '紙帶逐字模板名稱必須有五語 i18n key: ');
+});
+
+test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic glyph 排版', () => {
+  const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const templateJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-mirror.js'), 'utf8');
+  const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
+  const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  const i18n = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
+
+  ok(displayHtml.includes('/js/lyric-template-mirror.js'), 'display 必須載入 Mirror P0 模板腳本: ');
+  ok(templateJs.includes("id: 'mirror'") && templateJs.includes('onFrame(timeMs, ctx)') && templateJs.includes('onSeek(timeMs, ctx)'), 'Mirror 必須透過 registry 並保持完全時間驅動: ');
+  ok(templateJs.includes('const MIN_BATCH_SIZE = 2;') && templateJs.includes('const MAX_BATCH_SIZE = 4;') && templateJs.includes('scoreBatchCandidate') && templateJs.includes('buildBatches(plans)'), 'Mirror P0 必須穩定分成 2～4 句一頁: ');
+  ok(templateJs.includes('function mirrorText(text)') && templateJs.includes('code + 0x60') && templateJs.includes("normalize('NFC')"), 'Mirror 右側只能用 Unicode 平假名→片假名安全轉換，不可改寫漢字／中文: ');
+  ok(templateJs.includes('const pureChinese = hasHan(plan.text) && !hasKana(plan.text);') && templateJs.includes('if (pureChinese && chars.length > 7) return -1;'), '中文歌曲不可把所有漢字當日文 kanji hero，長中文句要停用漢字加權: ');
+  ok(templateJs.includes('LyricMotion.hashNoise') && templateJs.includes('glyphVisual') && templateJs.includes('--mirror-glyph-rotation') && templateJs.includes('--mirror-glyph-y'), 'glyph 級大小、旋轉、上下錯位必須由 deterministic hash 在進場前決定: ');
+  ok(templateJs.includes("primaryPanel.className = 'mirror-panel mirror-panel--primary'") && templateJs.includes("echoPanel.className = 'mirror-panel mirror-panel--echo'"), 'Mirror 只能使用固定左右雙側 DOM，不得退回單側位置模式: ');
+  ok(displayCss.includes('.mirror-panel--primary') && displayCss.includes('right: calc(50% + var(--stage-safe-margin, 13) * 1%);') && displayCss.includes('.mirror-panel--echo') && displayCss.includes('left: calc(50% + var(--stage-safe-margin, 13) * 1%);'), '左右兩側必須直接以中央安全距離作為排版邊界: ');
+  ok(displayCss.includes('.mirror-line--echo .mirror-glyph') && displayCss.includes('-webkit-text-fill-color: transparent !important;') && displayCss.includes('-webkit-text-stroke:') && displayCss.includes('paint-order: stroke;'), '右側鏡像必須是真正透明填色＋純描邊，不可只是降低實心字透明度: ');
+  ok(templateJs.includes('function contentBounds(entry)') && templateJs.includes('glyph.getBoundingClientRect()') && templateJs.includes('allowedLeft') && templateJs.includes('allowedRight'), 'Mirror 長度限制必須量測 glyph 旋轉／放大後的真實外框，同時守住畫面邊緣與中央安全區: ');
+  ok(templateJs.includes('constrainLine') && templateJs.includes('Math.max(0.20') && templateJs.includes("setProperty('--mirror-compress-x'") && !displayCss.includes('#mirror-root {\r\n  position: fixed;\r\n  inset: 0;\r\n  overflow: hidden;'), 'Mirror 極端長句必須先縮字、最後才水平壓縮，不可用 overflow hidden 裁字: ');
+  ok(templateJs.includes("content.className = 'mirror-line-content'") && displayCss.includes('.mirror-line-content') && displayCss.includes('transform: none;') && displayCss.includes('transform-origin: 100% 50%;') && displayCss.includes('transform-origin: 0 50%;'), 'Mirror 不可旋轉 100% 寬 line；只允許自然寬度文字 wrapper／glyph 輕微旋轉，避免安全區與畫面邊界被甩出: ');
+  ok(displayCss.includes('.mirror-line--echo .mirror-line-content') && displayCss.includes('column-gap: .018em;'), '右側空心 glyph 必須保留微小真實間距，降低相鄰描邊在交界處重疊: ');
+  ok(lyricExtras.includes("mirror: { label: '鏡像'") && lyricExtras.includes("template: 'mirror'") && lyricExtras.includes("lyricPosition: 'split'") && lyricExtras.includes('stageSafeMargin: 13'), '桌面設定必須提供 Mirror P0 獨立預設並鎖定 split: ');
+  ok(panelHtml.includes('data-template="mirror"') && panelHtml.includes('style-thumb-mirror'), '桌面模板選擇器必須有 Mirror P0 卡片: ');
+  ok(lyricsHandler.includes("'paperstrip', 'mirror'"), 'server 模板白名單必須接受 mirror: ');
+  ok(appState.includes("mirror: { template: 'mirror'"), 'server 預設 lyricTemplateSettings 必須包含 mirror: ');
+  ok(i18n.includes("'template.mirror':"), 'Mirror 模板名稱必須有五語 i18n key: ');
 });
 
 test('v2 將既有模板設定與預設快照遷移到新 ID', () => {
@@ -8202,676 +8089,6 @@ console.log('\n🌐 17. M6.1 介面語系層');
     ok(!/\bfetch\s*\(/.test(i18nSource), '語系層不得發出 HTTP 請求：');
     ok(!/\bSocketClient\s*[.(]/.test(i18nSource), '語系層不得讀寫 Socket：');
     eq(i18n.STORAGE_KEY, 'elitesand-ui-locale', '只使用獨立的裝置語系偏好鍵：');
-  });
-}
-
-// ─── 閉源化批次 B-2：SoundTouch LGPL 不得混進專有 production bundle ───
-{
-  const soundtouchGuard = require('../tools/build-production-bundles');
-  const guardTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-soundtouch-guard-'));
-
-  test('SoundTouch 守衛：乾淨的 bundle 內容不會被誤判', () => {
-    const cleanFile = path.join(guardTmpDir, 'clean.bundle.js');
-    fs.writeFileSync(cleanFile, 'function playTrack(a,b){return a+b}\nconst x=1;');
-    const hits = soundtouchGuard.scanForSoundTouchFingerprint([cleanFile]);
-    eq(hits.length, 0, '乾淨檔案不應命中任何 SoundTouch 特徵字串：');
-  });
-
-  test('SoundTouch 守衛：負向案例——故意混入 LGPL 特徵字串必須被抓到', () => {
-    const contaminatedFile = path.join(guardTmpDir, 'contaminated.bundle.js');
-    // 刻意塞進 SoundTouch 演算法核心才有的識別字串，模擬「不小心把 vendor/soundtouch*.js
-    // 也讀進 bundle」的意外情況——這個測試必須失敗（也就是守衛必須抓到它），
-    // 才能證明守衛不是形式主義的空氣測試。
-    fs.writeFileSync(
-      contaminatedFile,
-      'class FifoSampleBuffer{putSamples(a,b,c){this.sourcePosition=b}}'
-    );
-    const hits = soundtouchGuard.scanForSoundTouchFingerprint([contaminatedFile]);
-    ok(hits.length > 0, '混入 SoundTouch 特徵字串的檔案必須被守衛偵測到：');
-    ok(hits.some((h) => h.file === contaminatedFile), '偵測結果必須指出確切的受污染檔案：');
-  });
-
-  test('SoundTouch 守衛：特徵字串清單涵蓋 soundtouch-worklet.js 實際使用的識別字', () => {
-    const worklet = fs.readFileSync(
-      path.join(__dirname, '../public/vendor/soundtouch-worklet.js'),
-      'utf8'
-    );
-    for (const fingerprint of soundtouchGuard.SOUNDTOUCH_FINGERPRINTS) {
-      ok(worklet.includes(fingerprint), `特徵字串「${fingerprint}」必須真的出現在 soundtouch-worklet.js，守衛才有意義：`);
-    }
-  });
-
-  fs.rmSync(guardTmpDir, { recursive: true, force: true });
-}
-
-// ─── 閉源化批次 C-1：模板加密遞送 ───
-{
-  const templateDelivery = require('../server/services/template-delivery');
-
-  test('模板遞送：開發模式（無 template-store）直接讀原始碼', () => {
-    ok(!templateDelivery.isPacked(), '測試環境不應存在 server/template-store/：');
-    const source = templateDelivery.getTemplateSource('aura');
-    ok(typeof source === 'string' && source.length > 0, 'aura 模板應能讀到原始碼：');
-    ok(source.includes("id: 'aura'") || source.includes('id:"aura"') || source.includes("id:'aura'"), '讀到的內容應該是 aura 模板本身：');
-  });
-
-  test('模板遞送：不在白名單的 id 回傳 null（server/index.js 據此回 404）', () => {
-    eq(templateDelivery.getTemplateSource('not-a-real-template'), null, '未知 id 不應回傳任何內容：');
-    eq(templateDelivery.getTemplateSource('../../etc/passwd'), null, '路徑穿越字串不在白名單內，必須被拒絕：');
-  });
-
-  test('模板遞送：六個模板 id 都在白名單內', () => {
-    for (const id of ['pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow']) {
-      ok(templateDelivery.TEMPLATE_IDS.has(id), `${id} 應在 TEMPLATE_IDS 白名單：`);
-    }
-    eq(templateDelivery.TEMPLATE_IDS.size, 6, '白名單應剛好六個（classic 是免費內建，不走這條）：');
-  });
-
-  test('模板遞送：指紋函式對相同內容回傳相同雜湊，用於 OBS 快取指紋', () => {
-    const fp1 = templateDelivery.getTemplateFingerprint('ktv');
-    const fp2 = templateDelivery.getTemplateFingerprint('ktv');
-    eq(fp1, fp2, '同一份內容的指紋必須穩定：');
-    ok(typeof fp1 === 'string' && fp1.length === 16, '指紋應為 16 字元十六進位字串：');
-  });
-
-  test('模板遞送：開發模式絕不快取——存檔改動立刻反映（曾經真的卡住過的 bug）', () => {
-    // 開發模式讀的是開發者正在編輯的原始檔案，不像 production 的加密 blob 在整個
-    // server 行程生命週期內都不會變。這裡曾經因為兩種模式共用同一份 sourceCache，
-    // 導致 dev server 一起來、模板第一次被請求後，不管檔案怎麼改都讀到舊內容——
-    // 「改完存檔、Ctrl+F5 就看得到」這句話當時其實是假的。
-    const filePath = path.join(__dirname, '../public/js/lyric-template-pulse.js');
-    const original = fs.readFileSync(filePath, 'utf8');
-    try {
-      const first = templateDelivery.getTemplateSource('pulse');
-      eq(first, original, '第一次讀取應該等於目前檔案內容：');
-
-      const marker = `\n// __cache_invalidation_probe_${Date.now()}__\n`;
-      fs.writeFileSync(filePath, original + marker);
-      const second = templateDelivery.getTemplateSource('pulse');
-      ok(second.includes(marker), '開發模式下，檔案存檔後下一次讀取必須立刻反映新內容，不可回傳快取的舊版本：');
-    } finally {
-      fs.writeFileSync(filePath, original);
-    }
-  });
-}
-
-// ─── 閉源化批次 C-1：加密封裝往返正確性（build-production-bundles.js 的 packTemplates）───
-{
-  const { packTemplates, TEMPLATE_IDS: PACK_TEMPLATE_IDS } = require('../tools/build-production-bundles');
-  const esbuild = require('esbuild');
-
-  test('模板封裝：加密後解密內容與原始碼 minify 結果逐位元組一致', () => {
-    const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-template-pack-'));
-    try {
-      const publicJsDir = path.join(stageDir, 'public', 'js');
-      const serverServicesDir = path.join(stageDir, 'server', 'services');
-      fs.mkdirSync(publicJsDir, { recursive: true });
-      fs.mkdirSync(serverServicesDir, { recursive: true });
-
-      const originals = {};
-      for (const id of PACK_TEMPLATE_IDS) {
-        const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', `lyric-template-${id}.js`), 'utf8');
-        originals[id] = src;
-        fs.writeFileSync(path.join(publicJsDir, `lyric-template-${id}.js`), src);
-      }
-
-      packTemplates(stageDir);
-
-      ok(!fs.existsSync(path.join(publicJsDir, 'lyric-template-aura.js')), '封裝後原始檔必須刪除：');
-      const keyModule = require(path.join(serverServicesDir, 'template-key.generated.js'));
-      const key = Buffer.from(keyModule.key, 'hex');
-      eq(key.length, 32, 'AES-256-GCM 金鑰長度必須是 32 bytes：');
-
-      const crypto = require('crypto');
-      for (const id of PACK_TEMPLATE_IDS) {
-        const blob = fs.readFileSync(path.join(stageDir, 'server', 'template-store', `${id}.eltpl`));
-        const iv = blob.subarray(0, 12);
-        const authTag = blob.subarray(12, 28);
-        const ciphertext = blob.subarray(28);
-        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-        decipher.setAuthTag(authTag);
-        const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
-        const expected = esbuild.transformSync(originals[id], { loader: 'js', minify: true, legalComments: 'none' }).code;
-        eq(decrypted, expected, `${id} 解密內容應與原始碼 minify 後逐位元組一致：`);
-      }
-    } finally {
-      fs.rmSync(stageDir, { recursive: true, force: true });
-    }
-  });
-
-  test('模板封裝：竄改密文的任一位元組必須讓解密失敗（GCM 完整性驗證生效）', () => {
-    const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-template-pack-tamper-'));
-    try {
-      const publicJsDir = path.join(stageDir, 'public', 'js');
-      fs.mkdirSync(publicJsDir, { recursive: true });
-      fs.mkdirSync(path.join(stageDir, 'server', 'services'), { recursive: true });
-      for (const id of PACK_TEMPLATE_IDS) {
-        const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', `lyric-template-${id}.js`), 'utf8');
-        fs.writeFileSync(path.join(publicJsDir, `lyric-template-${id}.js`), src);
-      }
-      packTemplates(stageDir);
-
-      const crypto = require('crypto');
-      const keyModule = require(path.join(stageDir, 'server', 'services', 'template-key.generated.js'));
-      const key = Buffer.from(keyModule.key, 'hex');
-      const blobPath = path.join(stageDir, 'server', 'template-store', 'pulse.eltpl');
-      const blob = fs.readFileSync(blobPath);
-      blob[blob.length - 1] ^= 0xff; // 竄改密文最後一個 byte
-
-      const iv = blob.subarray(0, 12);
-      const authTag = blob.subarray(12, 28);
-      const ciphertext = blob.subarray(28);
-      let threw = false;
-      try {
-        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-        decipher.setAuthTag(authTag);
-        Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-      } catch (_) {
-        threw = true;
-      }
-      ok(threw, '竄改過的密文必須讓 GCM 驗證失敗，而不是悄悄解出錯誤內容：');
-    } finally {
-      fs.rmSync(stageDir, { recursive: true, force: true });
-    }
-  });
-}
-
-// ─── 閉源化批次 C-2：付費模板簽章驗證與安裝閘門 ───
-{
-  const crypto = require('crypto');
-  const pkgVerify = require('../server/services/template-package-verify');
-  const pkgInstall = require('../server/services/template-package-install');
-  const { BUILTIN_TEMPLATE_IDS } = require('../server/services/template-ids');
-
-  // 每個測試用自己的一次性測試金鑰簽章，絕不依賴 .local/ 裡的真正私鑰
-  // （那份檔案只存在開發者本機，clone 下來的環境不會有，測試不能依賴它存在）。
-  function makeTestKeypair() {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-    const publicKeyHex = publicKey.export({ type: 'spki', format: 'der' }).toString('hex');
-    return { publicKeyHex, privateKey };
-  }
-
-  function buildSignedPackage(dir, { privateKey, templateId = 'test-premium', version = '1.0.0', code = 'console.log("premium template")', minEngineVersion, maxEngineVersion }) {
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'template.js'), code);
-    const assetHash = crypto.createHash('sha256').update(code).digest('hex');
-    const manifest = {
-      schemaVersion: 1,
-      templateId,
-      version,
-      displayName: { 'zh-TW': '測試付費模板', en: 'Test Premium Template' },
-      assets: [{ path: 'template.js', sha256: assetHash }],
-    };
-    if (minEngineVersion) manifest.minEngineVersion = minEngineVersion;
-    if (maxEngineVersion) manifest.maxEngineVersion = maxEngineVersion;
-    const message = Buffer.from(pkgVerify.canonicalize(manifest), 'utf8');
-    manifest.signature = crypto.sign(null, message, privateKey).toString('hex');
-    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
-    return manifest;
-  }
-
-  test('模板包驗證：合法簽章＋正確雜湊通過驗證', () => {
-    const { publicKeyHex, privateKey } = makeTestKeypair();
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-pkg-valid-'));
-    try {
-      buildSignedPackage(dir, { privateKey });
-      const result = pkgVerify.verifyTemplatePackageDir(dir, { publicKeyHex });
-      ok(result.ok, `合法模板包應該通過驗證：${result.reason || ''}`);
-      eq(result.manifest.templateId, 'test-premium', 'manifest 應正確解析：');
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test('模板包驗證：竄改 manifest 任一欄位會讓簽章失效', () => {
-    const { publicKeyHex, privateKey } = makeTestKeypair();
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-pkg-tamper-manifest-'));
-    try {
-      buildSignedPackage(dir, { privateKey, version: '1.0.0' });
-      const manifestPath = path.join(dir, 'manifest.json');
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      manifest.version = '9.9.9'; // 竄改一個欄位，簽章沒有跟著改
-      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-      const result = pkgVerify.verifyTemplatePackageDir(dir, { publicKeyHex });
-      ok(!result.ok, '竄改過 manifest 但簽章沒變的包必須驗證失敗：');
-      ok(/簽章/.test(result.reason), '失敗原因應該指出是簽章問題：' + result.reason);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test('模板包驗證：竄改資產內容（但沒改 manifest 雜湊）會被雜湊比對抓到', () => {
-    const { publicKeyHex, privateKey } = makeTestKeypair();
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-pkg-tamper-asset-'));
-    try {
-      buildSignedPackage(dir, { privateKey });
-      fs.writeFileSync(path.join(dir, 'template.js'), 'console.log("evil injected code")');
-      const result = pkgVerify.verifyTemplatePackageDir(dir, { publicKeyHex });
-      ok(!result.ok, '資產內容被換掉但雜湊沒對應更新，必須驗證失敗：');
-      ok(/雜湊/.test(result.reason), '失敗原因應該指出是雜湊問題：' + result.reason);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test('模板包驗證：用不對的公鑰驗證會失敗（不是官方簽發）', () => {
-    const { privateKey } = makeTestKeypair();
-    const { publicKeyHex: wrongPublicKeyHex } = makeTestKeypair(); // 另一把跟簽章不成對的公鑰
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-pkg-wrong-key-'));
-    try {
-      buildSignedPackage(dir, { privateKey });
-      const result = pkgVerify.verifyTemplatePackageDir(dir, { publicKeyHex: wrongPublicKeyHex });
-      ok(!result.ok, '用不成對的公鑰驗證必須失敗：');
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test('模板包驗證：不相容的引擎版本會被拒絕', () => {
-    const { publicKeyHex, privateKey } = makeTestKeypair();
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-pkg-engine-range-'));
-    try {
-      buildSignedPackage(dir, { privateKey, minEngineVersion: '99.0.0' });
-      const result = pkgVerify.verifyTemplatePackageDir(dir, { publicKeyHex, engineVersion: '0.9.9.1' });
-      ok(!result.ok, '需要 99.0.0 以上但目前引擎是 0.9.9.1，必須拒絕：');
-      ok(/引擎版本/.test(result.reason), '失敗原因應該指出引擎版本不相容：' + result.reason);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test('模板包驗證：路徑穿越的 asset path 必須被拒絕', () => {
-    const { publicKeyHex, privateKey } = makeTestKeypair();
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-pkg-path-traversal-'));
-    try {
-      const code = 'console.log(1)';
-      fs.writeFileSync(path.join(dir, 'template.js'), code);
-      const manifest = {
-        schemaVersion: 1,
-        templateId: 'evil-template',
-        version: '1.0.0',
-        assets: [{ path: '../../../etc/passwd', sha256: crypto.createHash('sha256').update(code).digest('hex') }],
-      };
-      const message = Buffer.from(pkgVerify.canonicalize(manifest), 'utf8');
-      manifest.signature = crypto.sign(null, message, privateKey).toString('hex');
-      fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
-      const result = pkgVerify.verifyTemplatePackageDir(dir, { publicKeyHex });
-      ok(!result.ok, '含路徑分隔符的 asset path 必須在格式檢查就被拒絕：');
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test('模板安裝：templateId 跟內建模板衝突必須被拒絕（就算簽章驗證已經通過）', () => {
-    ok(BUILTIN_TEMPLATE_IDS.has('aura'), '前提：aura 應該在內建清單裡：');
-    // 用 installVerifiedTemplate 跳過簽章驗證階段，直接測「已驗證通過的 manifest」
-    // 還會不會被 ID 衝突擋下——這是安裝流程自己的防線，不該依賴簽章驗證失敗才擋住。
-    const fakeManifest = {
-      schemaVersion: 1,
-      templateId: 'aura',
-      version: '1.0.0',
-      assets: [{ path: 'template.js', sha256: 'a'.repeat(64) }],
-    };
-    const result = pkgInstall.installVerifiedTemplate(fakeManifest, { 'template.js': Buffer.from('x') });
-    ok(!result.ok, '即使 manifest 已通過驗證，templateId 撞到內建模板也必須被安裝流程拒絕：');
-    ok(!pkgInstall.isInstalled('aura'), '不應該把假冒 aura 的模板寫進已安裝清單：');
-  });
-
-  test('模板安裝：production 安裝路徑（template-package-install.js）絕不傳測試金鑰參數', () => {
-    // 白箱檢查：production 可達的程式碼路徑一旦意外傳了 publicKeyHex，
-    // 就等於讓任何人用自己簽的假金鑰包冒充官方模板——這條防線必須用原始碼掃描鎖死。
-    const installSource = fs.readFileSync(path.join(__dirname, '../server/services/template-package-install.js'), 'utf8');
-    ok(!/publicKeyHex/.test(installSource), 'template-package-install.js 不得出現 publicKeyHex（絕不可覆蓋成測試金鑰）：');
-  });
-
-  test('模板安裝：完整流程——驗證失敗的包（用假金鑰）不會被裝進本機儲存', () => {
-    const { privateKey } = makeTestKeypair(); // 跟 template-public-key.js 內建的真公鑰不成對
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-pkg-install-reject-'));
-    try {
-      buildSignedPackage(dir, { privateKey, templateId: 'fake-premium-template' });
-      const result = pkgInstall.installTemplatePackage(dir);
-      ok(!result.ok, '用非官方金鑰簽的包，走真正的安裝流程（用真公鑰驗證）必須被拒絕：');
-      ok(!pkgInstall.isInstalled('fake-premium-template'), '驗證失敗的模板不應該被寫進已安裝清單：');
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test('模板安裝／移除：isInstalled 與 removeInstalledTemplate 的基本狀態轉移', () => {
-    // 不需要真正簽章通過就能測狀態機本身：直接確認初始狀態，以及移除不存在項目的行為。
-    ok(!pkgInstall.isInstalled('never-installed-xyz'), '從未安裝的 id 應回傳 false：');
-    eq(pkgInstall.removeInstalledTemplate('never-installed-xyz'), false, '移除不存在的項目應回傳 false，不拋錯：');
-  });
-
-  test('模板簽章私鑰絕不可出現在任何會被打包的原始碼裡（server/、public/）', () => {
-    // 私鑰只該存在 .local/template-signing/（gitignore 排除、不進任何 build）。
-    // 這裡掃 server/ 與 public/ 的所有 .js/.json，防的是「手滑把私鑰複製進某個
-    // 會被 minify 進 production bundle 的檔案」這種事故。
-    const dirsToScan = ['server', 'public'];
-    const offenders = [];
-    function scanDir(dir) {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          scanDir(full);
-        } else if (/\.(js|json)$/.test(entry.name)) {
-          const content = fs.readFileSync(full, 'utf8');
-          if (content.includes('BEGIN PRIVATE KEY') || content.includes('BEGIN EC PRIVATE KEY') || content.includes('BEGIN RSA PRIVATE KEY')) {
-            offenders.push(full);
-          }
-        }
-      }
-    }
-    scanDir(path.join(__dirname, '..', 'server'));
-    scanDir(path.join(__dirname, '..', 'public'));
-    eq(offenders.length, 0, `不得含私鑰字樣的檔案卻找到: ${offenders.join(', ')}`);
-  });
-}
-
-// ─── 閉源化批次 D-1：FFmpeg 按需下載 ───
-{
-  const AdmZip = require('adm-zip');
-  const ffmpegProvider = require('../server/services/ffmpeg-provider');
-  const loadConfig = require('../server/utils/load-config');
-
-  test('FFmpeg 供應：能在合成的 zip 內找到 bin/ffmpeg.exe 與 bin/ffprobe.exe（gyan.dev 慣例結構）', () => {
-    const zip = new AdmZip();
-    zip.addFile('ffmpeg-9.0-essentials_build/bin/ffmpeg.exe', Buffer.from('fake ffmpeg binary'));
-    zip.addFile('ffmpeg-9.0-essentials_build/bin/ffprobe.exe', Buffer.from('fake ffprobe binary'));
-    zip.addFile('ffmpeg-9.0-essentials_build/bin/ffplay.exe', Buffer.from('fake ffplay binary'));
-    zip.addFile('ffmpeg-9.0-essentials_build/doc/ffmpeg.html', Buffer.from('docs'));
-    zip.addFile('ffmpeg-9.0-essentials_build/LICENSE.txt', Buffer.from('license'));
-    const { ffmpegEntry, ffprobeEntry } = ffmpegProvider.findFfmpegEntries(zip.getEntries());
-    ok(ffmpegEntry, '應該找到 bin/ffmpeg.exe：');
-    ok(ffprobeEntry, '應該找到 bin/ffprobe.exe：');
-    eq(ffmpegEntry.getData().toString(), 'fake ffmpeg binary', '取出的內容應該是正確的那個 entry：');
-  });
-
-  test('FFmpeg 供應：版本資料夾名稱改變也找得到（不寫死版本號）', () => {
-    const zip = new AdmZip();
-    zip.addFile('ffmpeg-2099-git-deadbeef-essentials_build/bin/ffmpeg.exe', Buffer.from('x'));
-    zip.addFile('ffmpeg-2099-git-deadbeef-essentials_build/bin/ffprobe.exe', Buffer.from('x'));
-    const { ffmpegEntry, ffprobeEntry } = ffmpegProvider.findFfmpegEntries(zip.getEntries());
-    ok(ffmpegEntry && ffprobeEntry, '不同版本號的資料夾名稱不該影響尋找：');
-  });
-
-  test('FFmpeg 供應：不會誤判非 bin/ 目錄下同名檔案', () => {
-    const zip = new AdmZip();
-    zip.addFile('ffmpeg-9.0-essentials_build/doc/ffmpeg.exe', Buffer.from('wrong location'));
-    zip.addFile('ffmpeg-9.0-essentials_build/presets/ffprobe.exe', Buffer.from('wrong location'));
-    const { ffmpegEntry, ffprobeEntry } = ffmpegProvider.findFfmpegEntries(zip.getEntries());
-    ok(!ffmpegEntry, '不在 bin/ 底下的同名檔案不該被當成正牌 ffmpeg.exe：');
-    ok(!ffprobeEntry, '不在 bin/ 底下的同名檔案不該被當成正牌 ffprobe.exe：');
-  });
-
-  test('FFmpeg 供應：缺少其中一個執行檔時視為找不到（extract 那邊會整體拒絕）', () => {
-    const zip = new AdmZip();
-    zip.addFile('pkg/bin/ffmpeg.exe', Buffer.from('x'));
-    const { ffmpegEntry, ffprobeEntry } = ffmpegProvider.findFfmpegEntries(zip.getEntries());
-    ok(ffmpegEntry, '前提：ffmpeg.exe 應該找得到：');
-    ok(!ffprobeEntry, 'ffprobe.exe 沒放進去就應該找不到，不能只有一半就當作可用：');
-  });
-
-  test('FFmpeg 供應：resolveFfmpegPaths 優先採用 config.js 指定的路徑', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-ffmpeg-config-'));
-    const fakeFfmpeg = path.join(tmpDir, 'ffmpeg.exe');
-    fs.writeFileSync(fakeFfmpeg, 'fake');
-    const original = loadConfig.ffmpegPath;
-    try {
-      loadConfig.ffmpegPath = fakeFfmpeg;
-      const resolved = ffmpegProvider.resolveFfmpegPaths();
-      eq(resolved.source, 'config', 'config.js 指定路徑應該是最高優先：');
-      eq(resolved.ffmpeg, fakeFfmpeg, '應該回傳 config 指定的確切路徑：');
-    } finally {
-      loadConfig.ffmpegPath = original;
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  test('FFmpeg 供應：config.js 指定的路徑若檔案不存在，不該被誤採用（fall through 到下一優先序）', () => {
-    const original = loadConfig.ffmpegPath;
-    try {
-      loadConfig.ffmpegPath = 'C:/this/path/definitely/does/not/exist/ffmpeg.exe';
-      const resolved = ffmpegProvider.resolveFfmpegPaths();
-      ok(!resolved || resolved.source !== 'config', '不存在的路徑不該被當成有效設定：');
-    } finally {
-      loadConfig.ffmpegPath = original;
-    }
-  });
-
-  test('FFmpeg 供應：commandExistsOnPath 對已知存在／不存在的指令行為正確', () => {
-    ok(ffmpegProvider.commandExistsOnPath('node'), 'node 本身一定在 PATH 上（測試就是這樣跑起來的）：');
-    ok(!ffmpegProvider.commandExistsOnPath('this-command-definitely-does-not-exist-xyz123'), '不存在的指令應回傳 false：');
-  });
-
-  testAsync('FFmpeg 供應：非 Windows 平台呼叫 downloadFfmpeg 應該明確拒絕，而不是嘗試下載 .exe', async () => {
-    if (process.platform === 'win32') return; // 這台是 Windows，跳過（行為只在非 Windows 平台觸發）
-    try {
-      await ffmpegProvider.downloadFfmpeg();
-      throw new Error('非 Windows 平台不應該讓下載成功');
-    } catch (err) {
-      ok(/Windows/.test(err.message), '應該明確說明只支援 Windows：');
-    }
-  });
-}
-
-// ─── 直書句流：中央安全距離（使用者反映「兩邊分散仍會跑到中間」的修復） ───
-{
-  const columnflowSource = fs.readFileSync(path.join(__dirname, '../public/js/lyric-template-columnflow.js'), 'utf8');
-
-  function loadColumnflowSandbox() {
-    const sandbox = {
-      LyricTemplates: { register(template) { this.template = template; } },
-      LyricMotion: {
-        hashNoise: (seed, salt) => {
-          const x = Math.sin(seed * 12.9898 + salt * 78.233) * 43758.5453;
-          return x - Math.floor(x);
-        },
-        ensureWordTimings: (line) => line.words,
-        buildGraphemeTimings: (word) => Array.from(word.text).map((char, i) => ({
-          char, startMs: word.start + i * (word.duration / Math.max(1, word.text.length)),
-        })),
-      },
-      document: { documentElement: {}, body: { dataset: {} } },
-      window: { innerWidth: 1280, innerHeight: 720 },
-      getComputedStyle: () => ({ getPropertyValue: () => '' }),
-      console,
-    };
-    // makeNode 要在 sandbox 建好、可以參照 sandbox.document.body 之後才定義
-    function makeNode(options = {}) {
-      const node = {
-        style: {},
-        classList: {
-          _set: new Set(),
-          add(c) { this._set.add(c); },
-          remove(c) { this._set.delete(c); },
-          toggle(c, on) { if (on) this._set.add(c); else this._set.delete(c); },
-          contains(c) { return this._set.has(c); },
-        },
-        children: [],
-        parentNode: null,
-        offsetWidth: options.offsetWidth || 0,
-        offsetHeight: options.offsetHeight || 0,
-        clientWidth: options.clientWidth || 0,
-        clientHeight: options.clientHeight || 0,
-        appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
-        removeChild(child) { this.children = this.children.filter((c) => c !== child); child.parentNode = null; return child; },
-        querySelectorAll(selector) {
-          const cls = selector.replace('.', '');
-          const out = [];
-          (function walk(n) { n.children.forEach((c) => { if (c.classList.contains(cls)) out.push(c); walk(c); }); })(this);
-          return out;
-        },
-        querySelector(selector) {
-          return this.querySelectorAll(selector)[0] || null;
-        },
-        getBoundingClientRect() {
-          const left = parseFloat(this.style.left) || 0;
-          const top = parseFloat(this.style.top) || 0;
-          return { left, top, right: left + this.offsetWidth, bottom: top + this.offsetHeight, width: this.offsetWidth, height: this.offsetHeight };
-        },
-        setAttribute() {},
-        set className(v) { this._className = v; this.classList._set = new Set(v.split(/\s+/).filter(Boolean)); },
-        get className() { return this._className || ''; },
-        set textContent(v) { this._textContent = v; },
-        get textContent() { return this._textContent || ''; },
-        set innerHTML(v) { this._innerHTML = v; this.children = []; },
-        get innerHTML() { return this._innerHTML || ''; },
-      };
-      node.style.setProperty = function setProperty(name, value) { this[name] = value; };
-      return node;
-    }
-    sandbox.document.createElement = () => makeNode();
-    vm.runInNewContext(columnflowSource, sandbox, { filename: 'lyric-template-columnflow.js' });
-    return { sandbox, makeNode };
-  }
-
-  // computeLanes 定義在模板 IIFE 內部（閉包私有），要在 IIFE 結束前插入匯出語句
-  // 才拿得到——直接在收尾的 "})();" 前插入，不動實際檔案。
-  const columnflowSourceWithExport = columnflowSource.replace(
-    /\}\)\(\);\s*$/,
-    ';globalThis.__computeLanesForTest = computeLanes;\n})();'
-  );
-
-  test('直書句流：computeLanes 在預設安全距離（11%）下重現原本的車道位置', () => {
-    const exportSandbox = loadColumnflowSandbox().sandbox;
-    vm.runInNewContext(columnflowSourceWithExport, exportSandbox, { filename: 'lyric-template-columnflow.js' });
-    const { leftLanes, rightLanes } = exportSandbox.__computeLanesForTest(11);
-    eq(leftLanes.map((v) => Math.round(v)).join(','), '9,19,29,39', '預設 11% 安全距離應重現原本寫死的 LEFT_LANES：');
-    eq(rightLanes.map((v) => Math.round(v)).join(','), '91,81,71,61', '預設 11% 安全距離應重現原本寫死的 RIGHT_LANES：');
-  });
-
-  test('直書句流：安全距離調大，車道會整體遠離中央', () => {
-    const exportSandbox = loadColumnflowSandbox().sandbox;
-    vm.runInNewContext(columnflowSourceWithExport, exportSandbox, { filename: 'lyric-template-columnflow.js' });
-    const wide = exportSandbox.__computeLanesForTest(25);
-    ok(Math.max(...wide.leftLanes) < 39, '安全距離拉大到 25%，左側最內車道必須比預設（39%）更靠邊：');
-    ok(Math.min(...wide.rightLanes) > 61, '安全距離拉大到 25%，右側最內車道必須比預設（61%）更靠邊：');
-  });
-
-  testAsync('直書句流：很長的一句（多段續接、實際寬度很寬）不會被放到跨過中央安全區', async () => {
-    const { sandbox, makeNode } = loadColumnflowSandbox();
-    // 模擬「一個很寬的直行」：8 個續接段，每段 40px，總寬度 320px——在 1280px 寬的畫面裡
-    // 這個寬度確實有可能從左側車道（起點約 29%＝371px）一路延伸超過中央安全線（39%＝499px）。
-    // 這正是使用者回報「兩邊分散仍會跑到中間」的根因：舊邏輯只用車道起點決定位置，
-    // 從不檢查實際渲染寬度會不會越界。
-    const container = makeNode({ clientWidth: 1280, clientHeight: 720 });
-    const template = sandbox.LyricTemplates.template;
-    const ctx = { getLyrics: () => lines };
-    template.mount(container, ctx);
-    const rootEl = container.children[0];
-    rootEl.clientWidth = 1280;
-    rootEl.clientHeight = 720;
-
-    const longText = '甲'.repeat(60); // 60 字，遠超單一直行可容納的字數，強制切成多段續接
-    const lines = [{
-      time: 0,
-      text: longText,
-      words: [{ text: longText, start: 0, duration: 6000 }],
-    }];
-
-    template.onLyricsLoaded(lines, ctx);
-    template.onFrame(0, ctx);
-
-    const col = rootEl.querySelectorAll('cf-col')[0];
-    ok(col, '應該建立出一個直行元素：');
-    // 模擬瀏覽器量出很寬的實際渲染寬度（8 段續接 × 40px／段）。
-    col.offsetWidth = 320;
-    col.offsetHeight = 500;
-    template.onSeek(0, ctx); // 觸發重新 placeColumn
-
-    const rect = col.getBoundingClientRect();
-    const safeMargin = 11;
-    const centerLeftLimitPx = 1280 * (50 - safeMargin) / 100; // 499.2px
-    const centerRightLimitPx = 1280 * (50 + safeMargin) / 100; // 780.8px
-    if (rect.left < 1280 / 2) {
-      ok(rect.right <= centerLeftLimitPx + 0.5, `左側直行的右邊界（${rect.right}px）不得跨過中央安全線（${centerLeftLimitPx}px）：`);
-    } else {
-      ok(rect.left >= centerRightLimitPx - 0.5, `右側直行的左邊界（${rect.left}px）不得跨過中央安全線（${centerRightLimitPx}px）：`);
-    }
-  });
-}
-
-// ─── 舞台模板（Pulse/Facet/Drift/Aura）共用的中央安全距離 ───
-{
-  const kernelSourceRaw = fs.readFileSync(path.join(__dirname, '../public/js/lyric-motion-kernel.js'), 'utf8');
-  // LyricMotion 是頂層 const，不會自動掛到 sandbox 物件上（跟模組系統無關的 JS 語意），
-  // 附加一行匯出語句才能從 sandbox 外部拿到它——跟既有 KTV sandbox 測試同一招。
-  const kernelSource = `${kernelSourceRaw}\n;globalThis.LyricMotion = LyricMotion;`;
-
-  function loadKernelSandbox(bodyDataset) {
-    const sandbox = {
-      document: { body: { dataset: bodyDataset }, documentElement: {} },
-      window: { innerWidth: 1280 },
-      console,
-    };
-    vm.runInNewContext(kernelSource, sandbox, { filename: 'lyric-motion-kernel.js' });
-    return sandbox.LyricMotion;
-  }
-
-  test('舞台安全距離：預設 2% 對應原本寫死的 48/52% 分界（向下相容）', () => {
-    const motion = loadKernelSandbox({});
-    eq(motion.stageSafeMarginPercent(), 2, '沒設定時預設應該是 2：');
-    const rootEl = { clientWidth: 1000 };
-    const vp = (() => {
-      const sandbox = { document: { body: { dataset: { lyricPos: 'split' } } }, window: { innerWidth: 1280 }, console };
-      vm.runInNewContext(kernelSource, sandbox, { filename: 'lyric-motion-kernel.js' });
-      return sandbox.LyricMotion.layoutViewport(rootEl, 0);
-    })();
-    eq(vp.width, 480, '預設安全距離下，split 模式的排版寬度應該是容器的 48%（跟原本寫死的值一致）：');
-    eq(vp.sideClass, 'pos-left', '偶數行應該是 pos-left：');
-  });
-
-  test('舞台安全距離：使用者調大安全距離，排版可用寬度會跟著縮小', () => {
-    const sandbox = { document: { body: { dataset: { lyricPos: 'split', stageSafeMargin: '20' } } }, window: { innerWidth: 1280 }, console };
-    vm.runInNewContext(kernelSource, sandbox, { filename: 'lyric-motion-kernel.js' });
-    const vp = sandbox.LyricMotion.layoutViewport({ clientWidth: 1000 }, 0);
-    eq(vp.width, 300, '安全距離拉到 20%，可用寬度應該是容器的 (50-20)%=30%：');
-  });
-
-  test('舞台安全距離：數值會被限制在 2–25 的範圍內，不合法輸入退回預設', () => {
-    const tooSmall = loadKernelSandbox({ stageSafeMargin: '0' });
-    eq(tooSmall.stageSafeMarginPercent(), 2, '小於下限應該被夾到 2：');
-    const tooBig = loadKernelSandbox({ stageSafeMargin: '99' });
-    eq(tooBig.stageSafeMarginPercent(), 25, '大於上限應該被夾到 25：');
-    const garbage = loadKernelSandbox({ stageSafeMargin: 'not-a-number' });
-    eq(garbage.stageSafeMarginPercent(), 2, '無法解析的值應該退回預設 2：');
-  });
-
-  test('舞台安全距離：mountStageSafeZoneGuide 會建立引導元件並可重複同步／銷毀', () => {
-    const nodes = [];
-    function makeNode() {
-      const node = {
-        style: { setProperty(name, value) { this[name] = value; } },
-        children: [], parentNode: null,
-        appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
-        removeChild(child) { this.children = this.children.filter((c) => c !== child); child.parentNode = null; },
-        set innerHTML(v) { this._innerHTML = v; },
-        get innerHTML() { return this._innerHTML || ''; },
-      };
-      nodes.push(node);
-      return node;
-    }
-    const sandbox = {
-      document: { body: { dataset: { stageSafeMargin: '9' } }, documentElement: {}, createElement: makeNode },
-      window: { innerWidth: 1280 },
-      console,
-    };
-    vm.runInNewContext(kernelSource, sandbox, { filename: 'lyric-motion-kernel.js' });
-    const rootEl = makeNode();
-    const guide = sandbox.LyricMotion.mountStageSafeZoneGuide(rootEl);
-    eq(rootEl.children.length, 1, 'mount 時應該立刻建立一個引導元件：');
-    const guideEl = rootEl.children[0];
-    eq(guideEl.style['--stage-safe-left'], '41%', '9% 安全距離應該對應 --stage-safe-left=41%：');
-    eq(guideEl.style['--stage-safe-right'], '59%', '9% 安全距離應該對應 --stage-safe-right=59%：');
-
-    sandbox.document.body.dataset.stageSafeMargin = '15';
-    guide.sync();
-    eq(rootEl.children.length, 1, '調整安全距離不應該重建元件，只更新既有的：');
-    eq(guideEl.style['--stage-safe-left'], '35%', 'sync 後應該反映新的安全距離：');
-
-    guide.destroy();
-    eq(rootEl.children.length, 0, 'destroy 應該把引導元件從畫面移除：');
   });
 }
 

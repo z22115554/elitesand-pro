@@ -33,59 +33,16 @@
   const DEAD_REMOVE_MS = 750; // 淡出後移除 DOM 的延遲（略大於 CSS transition）
   const EDGE_GAP_PX = 8;
   const COLLISION_GAP_PX = 16;
-  const LANE_COUNT = 4;
-  const OUTER_EDGE_PERCENT = 9; // 最外側車道跟畫面邊緣的距離（沿用原本 9%）
-  const DEFAULT_SAFE_MARGIN = 11; // 沿用原本 LEFT_LANES/RIGHT_LANES 隱含的中央留白（39~61）
-  const MIN_SAFE_MARGIN = 5;
-  const MAX_SAFE_MARGIN = 25;
+  const LEFT_LANES = [9, 19, 29, 39];
+  const RIGHT_LANES = [91, 81, 71, 61];
   const TOP_RATIOS = [0.04, 0.23, 0.42, 0.61];
 
-  /** 依「中央安全距離」百分比算出左右車道位置；margin 越大，中央留白越寬。 */
-  function computeLanes(safeMargin) {
-    const leftMax = 50 - safeMargin;
-    const rightMin = 50 + safeMargin;
-    const leftLanes = [];
-    const rightLanes = [];
-    for (let i = 0; i < LANE_COUNT; i += 1) {
-      const t = i / (LANE_COUNT - 1);
-      leftLanes.push(OUTER_EDGE_PERCENT + t * (leftMax - OUTER_EDGE_PERCENT));
-      rightLanes.push((100 - OUTER_EDGE_PERCENT) - t * ((100 - OUTER_EDGE_PERCENT) - rightMin));
-    }
-    return { leftLanes, rightLanes };
-  }
-
-  function currentSafeMargin() {
-    const parsed = Math.round(Number(document.body.dataset.columnflowSafeMargin));
-    if (!Number.isFinite(parsed)) return DEFAULT_SAFE_MARGIN;
-    return Math.max(MIN_SAFE_MARGIN, Math.min(MAX_SAFE_MARGIN, parsed));
-  }
-
   let rootEl = null;
-  let guideEl = null; // 中央安全區可視化——只在面板即時預覽（body.preview-mode）顯示，OBS 正式輸出不會看到
-  let guideMargin = null;
   let cols = new Map();       // planOrdinal -> { el, glyphs: [{el, startMs}], age, onCount }
   let plans = [];
   let plansForLines = null;
   let plansKey = '';
   let variantApplied = '';
-
-  /** 建立／更新中央安全區的可視化引導線，讓使用者調整安全距離時看得到邊界在哪。 */
-  function syncSafeZoneGuide(safeMargin) {
-    if (!rootEl) return;
-    if (guideMargin === safeMargin && guideEl) return;
-    guideMargin = safeMargin;
-    if (!guideEl) {
-      guideEl = document.createElement('div');
-      guideEl.className = 'cf-safe-zone-guide';
-      guideEl.innerHTML = '<span class="cf-safe-zone-band"></span>'
-        + '<span class="cf-safe-zone-line cf-safe-zone-line-left"></span>'
-        + '<span class="cf-safe-zone-line cf-safe-zone-line-right"></span>'
-        + '<span class="cf-safe-zone-label">安全距離：中央保留區，直行不會跨入</span>';
-      rootEl.appendChild(guideEl);
-    }
-    guideEl.style.setProperty('--cf-safe-left', `${50 - safeMargin}%`);
-    guideEl.style.setProperty('--cf-safe-right', `${50 + safeMargin}%`);
-  }
 
   function getCssVar(name, fallback) {
     try {
@@ -175,9 +132,7 @@
   function ensurePlans(lines) {
     const fontPx = fontPxFromSettings();
     const maxLines = currentMaxLines();
-    const safeMargin = currentSafeMargin();
-    syncSafeZoneGuide(safeMargin);
-    const key = `${currentVariant()}|${currentPlacement()}|${maxLines}|${fontPx.toFixed(1)}|${Math.round(availableColumnHeight())}|${safeMargin}`;
+    const key = `${currentVariant()}|${currentPlacement()}|${maxLines}|${fontPx.toFixed(1)}|${Math.round(availableColumnHeight())}`;
     if (plansForLines === lines && plansKey === key) return plans;
     plans = buildPlans(lines, fontPx, maxLines);
     plansForLines = lines;
@@ -216,24 +171,14 @@
     if (!rootEl || rootEl.clientWidth <= 0 || rootEl.clientHeight <= 0) return;
     const rootRect = rootEl.getBoundingClientRect();
     const otherColumns = Array.from(rootEl.querySelectorAll('.cf-col')).filter((node) => node !== el);
-    const safeMargin = currentSafeMargin();
-    const { leftLanes, rightLanes } = computeLanes(safeMargin);
-    const lanes = plan.side === 'left' ? leftLanes : rightLanes;
+    const lanes = plan.side === 'left' ? LEFT_LANES : RIGHT_LANES;
     const maxTop = Math.max(0, rootEl.clientHeight - el.offsetHeight - EDGE_GAP_PX);
-    // 中央安全區的硬邊界（px）：不管句子多長、多少段續接，欄位都不得跨進這條線。
-    // 這是真正解決「歌詞跑到中間」的關鍵——車道只決定起始落點，長句實際佔用的寬度
-    // 過去沒有另外檢查，遇到很長的續接段落就可能吃進中央保留區。
-    const centerLeftLimitPx = rootEl.clientWidth * (50 - safeMargin) / 100;
-    const centerRightLimitPx = rootEl.clientWidth * (50 + safeMargin) / 100;
     const laneLeft = (lane) => {
       const laneX = rootEl.clientWidth * lane / 100;
       // 左側欄位用左緣定位，右側欄位用右緣定位：同一個百分比不會因句子變長而推出畫面。
       const rawLeft = plan.side === 'right' ? laneX - el.offsetWidth : laneX;
-      const minLeft = plan.side === 'right' ? Math.max(EDGE_GAP_PX, centerRightLimitPx) : EDGE_GAP_PX;
-      const maxLeft = plan.side === 'left'
-        ? Math.max(minLeft, Math.min(rootEl.clientWidth - el.offsetWidth - EDGE_GAP_PX, centerLeftLimitPx - el.offsetWidth))
-        : Math.max(minLeft, rootEl.clientWidth - el.offsetWidth - EDGE_GAP_PX);
-      return `${Math.round(Math.max(minLeft, Math.min(maxLeft, rawLeft)))}px`;
+      const maxLeft = Math.max(EDGE_GAP_PX, rootEl.clientWidth - el.offsetWidth - EDGE_GAP_PX);
+      return `${Math.round(Math.max(EDGE_GAP_PX, Math.min(maxLeft, rawLeft)))}px`;
     };
     let best = null;
 
@@ -406,24 +351,12 @@
       cols = new Map();
       plansForLines = null;
       variantApplied = '';
-      guideEl = null;
-      guideMargin = null;
       syncVariant();
-      syncSafeZoneGuide(currentSafeMargin());
-    },
-
-    // 安全距離只影響引導線與排版車道，不影響哪一句該顯示——不能只靠 onFrame 同步
-    // （暫停或還沒開始播放時，karaoke.js 根本不會再呼叫 onFrame）。karaoke.js 在套用
-    // 設定時會直接同步呼叫這裡，使用者拖曳滑桿就能立刻在預覽看到引導線跟著動。
-    onSettings(settings, ctx) {
-      syncSafeZoneGuide(currentSafeMargin());
     },
 
     destroy() {
       if (rootEl && rootEl.parentNode) rootEl.parentNode.removeChild(rootEl);
       rootEl = null;
-      guideEl = null;
-      guideMargin = null;
       cols = new Map();
       plans = [];
       plansForLines = null;

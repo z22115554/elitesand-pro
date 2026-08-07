@@ -26,8 +26,6 @@
   // ─── 狀態 ───
   let playlist = [];
   let currentTrackIndex = -1;
-  let playedEntryIds = new Set();
-  let lastPlayedEntryId = null;
 
   function applySyncedPlaylist(nextPlaylist, currentTrackId, currentTrack, currentEntryId) {
     // playlist:update 只帶摘要時，保留本機目前歌曲的完整歌詞；state:sync 則以
@@ -108,14 +106,6 @@
   });
   Object.defineProperty(AppShared.state, 'currentTrackIndex', {
     get: () => currentTrackIndex, set: (v) => { currentTrackIndex = v; },
-  });
-  Object.defineProperty(AppShared.state, 'playedEntryIds', {
-    get: () => playedEntryIds,
-    set: (v) => { playedEntryIds = v instanceof Set ? v : new Set(Array.isArray(v) ? v : []); },
-  });
-  Object.defineProperty(AppShared.state, 'lastPlayedEntryId', {
-    get: () => lastPlayedEntryId,
-    set: (v) => { lastPlayedEntryId = typeof v === 'string' && v ? v : null; },
   });
   // 跨模組會呼叫到的核心函式（函式本體現在還在 app.js 裡，之後批次搬到各自的檔案時
   // 只要把函式定義搬過去、這裡的曝露方式不用變）。
@@ -381,25 +371,12 @@
       isEmergencyHidden = state.emergencyHide;
       dom.btnEmergency.classList.toggle('active', isEmergencyHidden);
     }
-    if (Array.isArray(state.playedEntryIds)) {
-      playedEntryIds = new Set(state.playedEntryIds.filter((entryId) => typeof entryId === 'string' && entryId));
-    }
-    lastPlayedEntryId = typeof state.lastPlayedEntryId === 'string' && state.lastPlayedEntryId
-      ? state.lastPlayedEntryId
-      : null;
     if (Array.isArray(state.playlist)) {
       applySyncedPlaylist(
         state.playlist,
         state.currentTrack && state.currentTrack.id,
         state.currentTrack,
         state.currentTrack && state.currentTrack.entryId,
-      );
-    }
-    if (typeof AppShared.restorePlaybackState === 'function') {
-      AppShared.restorePlaybackState(
-        state.currentTrack || null,
-        state.currentTime,
-        state.currentTrackStarted === true,
       );
     }
     // Phase 5: offset 恢復

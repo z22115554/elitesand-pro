@@ -67,7 +67,7 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 
 #### OBS 動態歌詞
 
-內建六種歌詞演出模板：
+內建七種歌詞演出模板：
 
 - 經典疊層
 - Pulse
@@ -75,6 +75,7 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 - Aura
 - KTV
 - 直書句流
+- 紙帶逐字
 
 每個模板可獨立保存：
 
@@ -156,11 +157,6 @@ Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
 
 #### 原始碼開發
 
-> 本檔案是私人主開發倉庫（`Elitesand-Pro-src`）的 README，以下開發指令僅適用於這裡。
-> 公開的 `elitesand-pro` 倉庫自 2026-08 起只發布編譯後的官方安裝包（binary-only
-> distribution），不再提供可讀原始碼；第三方開放原始碼元件（SoundTouch、GSAP、
-> Tone.js、OpenCC 等）仍各自依其授權條款可取得，見下方「[授權](#授權)」。
-
 需求：Node.js 18+
 
 ```bash
@@ -213,18 +209,13 @@ npm run package:update -- -BaselineRoot "C:\path\to\previous-portable\app"
 npm run package:installer
 ```
 
-建置會產生對應 SHA-256 檔案。Portable 的封裝腳本只保留給 `v0.9.9` 與既有版本維護；`v1.0.0` 起不再發行 Portable。Node.js 與 yt-dlp 隨附；FFmpeg／ffprobe 自批次 D-1 起預設不再內附，改由控制面板在第一次需要時提供一鍵下載（來源固定是 gyan.dev 官方 Windows 建置頁，下載後驗證 SHA-256），也可用 `-BundleFfmpeg` 建出含 FFmpeg 原始碼快照與 GPLv3 文件的內附版。
+建置會產生對應 SHA-256 檔案。Portable 的封裝腳本只保留給 `v0.9.9` 與既有版本維護；`v1.0.0` 起不再發行 Portable。既有 Portable 預設包含 Node.js、yt-dlp、FFmpeg／ffprobe，並附 FFmpeg 原始碼快照、GPLv3 與建置資訊。
 
 ### 授權
 
-Elitesand Pro 是原始碼不公開的專有軟體（proprietary，non-open-source），採用
-[Elitesand Pro 授權條款](LICENSE)：可免費用於個人與商業直播／演出，允許私人且
-不對外散布的自用修改；未經書面同意不得重新散布原版或修改版，也不得重新散布本專案
-自有的原始碼。官方發布一律只透過本頁面的 GitHub Releases。
+Elitesand Pro 採用 [Elitesand Pro 授權條款](LICENSE)：可免費用於個人與商業直播／演出，允許私人且不對外散布的自用修改；未經書面同意不得重新散布原版或修改版。
 
-第三方元件（含 SoundTouch 等 LGPL 元件）依其原授權使用，不受上述限制拘束，
-詳見 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。歌曲、歌詞、封面及其他
-媒體權利不包含在本專案授權內。
+第三方元件依其原授權使用，詳見 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。歌曲、歌詞、封面及其他媒體權利不包含在本專案授權內。
 
 ---
 
@@ -269,7 +260,7 @@ Elitesand Pro is a Windows desktop tool for VTubers, singing streamers, and live
 - Multi-source lyrics search: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase, and fallbacks.
 - Word-synced, line-synced, LRC, KRC, TTML, SRT, and plain-text lyrics.
 - Timeline editor, first-line alignment, romanization, pinyin, and Simplified-to-Traditional display conversion.
-- Six animated lyrics templates — Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow — with independent style settings and named presets.
+- Seven animated lyrics templates — Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow, and Paper Strip — with independent style settings and named presets.
 - Transparent OBS lyrics and setlist Browser Sources with instant synchronization.
 - KTV word highlighting, interlude countdowns, clock synchronization, and emergency hide.
 - Live setlist sessions with sung / now playing / up next states and YouTube chapter timestamps.
@@ -332,15 +323,7 @@ npm run package:installer
 
 ### License
 
-Elitesand Pro is proprietary, closed-source software (not open source). It is free
-for personal and commercial streaming or performance. Private, non-distributed
-modifications are allowed. Redistribution of the original or modified application,
-including its own source code, requires written permission. Official releases are
-published only through the GitHub Releases page above.
-
-Third-party components (including LGPL components such as SoundTouch) are not
-subject to these restrictions and remain governed by their own licenses — see
-[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). See [LICENSE](LICENSE) for full terms.
+Elitesand Pro is free for personal and commercial streaming or performance. Private, non-distributed modifications are allowed. Redistribution of the original or modified application requires written permission. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
 
 ---
 
@@ -383,7 +366,7 @@ Elitesand Pro は、VTuber、歌配信者、ライブ出演者向けの Windows 
 - BetterLyrics、Apple Music、Kugou、QQ Music、LRCLIB、NetEase などの複数歌詞ソース。
 - 単語同期、行同期、LRC、KRC、TTML、SRT、プレーンテキスト対応。
 - タイムライン編集、先頭行合わせ、ローマ字、ピンイン、簡体字から繁体字への表示変換。
-- 6種類の歌詞アニメーション（Classic Overlay／Pulse／Facet／Aura／KTV／Vertical Flow）とテンプレート別設定・プリセット。
+- 7種類の歌詞アニメーション（Classic Overlay／Pulse／Facet／Aura／KTV／Vertical Flow／Paper Strip）とテンプレート別設定・プリセット。
 - OBS 用透明歌詞／セットリスト Browser Source とリアルタイム同期。
 - KTV ハイライト、間奏カウントダウン、時計同期、緊急非表示。
 - 配信セットリスト、歌唱履歴、次曲表示、YouTube チャプター出力。
@@ -451,7 +434,7 @@ Elitesand Pro는 VTuber, 노래 방송 스트리머, 라이브 공연자를 위�
 - BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase 등 다중 가사 소스.
 - 단어 동기화, 문장 동기화, LRC, KRC, TTML, SRT, 일반 텍스트 지원.
 - 타임라인 편집, 첫 줄 정렬, 로마자, 병음, 간체→번체 표시 변환.
-- 6가지 가사 애니메이션(Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow)과 템플릿별 독립 설정 및 프리셋.
+- 7가지 가사 애니메이션(Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow, Paper Strip)과 템플릿별 독립 설정 및 프리셋.
 - OBS 투명 가사 및 세트리스트 Browser Source 실시간 동기화.
 - KTV 하이라이트, 간주 카운트다운, 시계 동기화, 긴급 숨김.
 - 방송 세트리스트, 부른 곡 기록, 현재 곡/다음 곡, YouTube 챕터 출력.
@@ -519,7 +502,7 @@ Elitesand Pro 是面向 VTuber、歌回主播与直播演出者的 Windows 桌�
 - BetterLyrics、Apple Music、酷狗、QQ Music、LRCLIB、网易云等多歌词来源。
 - 支持逐字、逐句、LRC、KRC、TTML、SRT 与纯文本歌词。
 - 时间轴编辑、首句对齐、罗马音、拼音与简繁显示转换。
-- 六种歌词动画模板（Classic Overlay、Pulse、Facet、Aura、KTV、Vertical Flow），各模板独立保存样式与预设。
+- 七种歌词动画模板（Classic Overlay、Pulse、Facet、Aura、KTV、Vertical Flow、Paper Strip），各模板独立保存样式与预设。
 - OBS 透明歌词与直播歌单 Browser Source 实时同步。
 - KTV 扫光、间奏倒计时、时钟同步与紧急隐藏。
 - 直播歌单、已唱／正在唱／下一首、YouTube 章节时间戳。
@@ -544,7 +527,4 @@ Elitesand Pro 是面向 VTuber、歌回主播与直播演出者的 Windows 桌�
 
 ### 授权
 
-Elitesand Pro 是原始代码不公开的专有软件（非开源），可免费用于个人与商业直播／演出，
-并允许不对外分发的私人修改；未经书面许可，不得重新分发原版或修改版，也不得重新分发
-本项目自有的原始代码。第三方组件（含 SoundTouch 等 LGPL 组件）不受此限制，仍依其原
-授权使用。详细内容请参阅 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
+可免费用于个人与商业直播／演出，并允许不对外分发的私人修改；未经书面许可，不得重新分发原版或修改版。详细内容请参阅 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
