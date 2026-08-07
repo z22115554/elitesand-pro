@@ -1,8 +1,8 @@
 Elitesand Pro License (Free-Use, No-Redistribution)
 Elitesand Pro 授權條款（免費使用、禁止重新散布）
 
-Version: 1.1.0
-Effective Date / 生效日期：2026-07-24
+Version: 1.2.0
+Effective Date / 生效日期：2026-08-07
 
 Copyright (c) 2026 一粒沙. All rights reserved.
 
@@ -46,6 +46,11 @@ licenses.
 4. 本授權僅適用於權利人控制部分。除本授權明確授予的權利外，權利人保留
    其依法得保留的所有權利。本授權適用於目前免費提供的版本；日後的付費
    版本、訂閱或代管服務，得適用另行公布的授權或交易條款。
+
+5. 權利人日後可能不再公開發布本軟體新版本的原始碼，僅提供編譯後的
+   執行檔。本條變更不影響已依當時隨附授權條款取得的舊版本原始碼副本；
+   權利人不得以本授權或其後續版本，追溯收回已對外授予的權利。第三方
+   依當時授權條款取得的舊版本副本，其權利依當時條款認定。
 
 二、人工智慧輔助開發與權利界線
 
@@ -207,6 +212,14 @@ expressly granted here, the rights holder reserves all rights that may lawfully
 be reserved. This License governs the currently distributed free version.
 Future paid versions, subscriptions, or hosted services may be governed by
 separate license or transaction terms.
+
+1.5 The rights holder may in the future stop publicly releasing source code for
+new versions of the Software and distribute only compiled executables. This
+change does not affect copies of older-version source code already obtained
+under the license terms that accompanied them at the time; the rights holder
+will not use this License or a later version of it to retroactively revoke
+rights already granted. Rights in older-version copies obtained by third
+parties are determined by the terms in effect at the time they were obtained.
 
 2. AI-ASSISTED DEVELOPMENT AND RIGHTS BOUNDARY
 

@@ -21,6 +21,7 @@
   const { hashNoise, hashSpread, clamp } = LyricMotion;
 
   let rootEl = null;        // 主容器（呼吸浮動作用對象）
+  let safeZoneGuide = null; // 中央安全區可視化（左右分散時），見 lyric-motion-kernel.js
   let breathTl = null;
   let currentLineEl = null; // 目前行容器
   let currentWordStates = [];
@@ -67,8 +68,12 @@
   const JITTER = { calm: 0, normal: 5, chaotic: 11 };      // 抖動（px）
   const TILT_MAX = { calm: 0, normal: 2.4, chaotic: 6.5 }; // 微傾（deg）
 
-  function buildLayout(line, displayWords, fontPx) {
+  function buildLayout(line, displayWords, fontPx, side) {
     const seed = line.time | 0;
+    // 左右分散模式下，「外側」是遠離中央安全線的那一側：pos-left 的外側是畫面左緣，
+    // pos-right 的外側是畫面右緣。放大的重點字會從外側邊緣長大，長大的量整份偏外，
+    // 而不是啃進中央保留區。
+    const originBias = side === 'pos-left' ? 'right' : side === 'pos-right' ? 'left' : null;
     const interlude = isInterludeText(line.text);
     const amp = WAVE_AMP[intensity];
     const jit = JITTER[intensity];
@@ -118,6 +123,7 @@
         dx, dy,
         tiltDeg: hashSpread(seed, i * 8 + 5) * tiltMax,
         scaleBase,
+        originBias: isAnchor ? originBias : null,
         gapPx,
         riseFrom: 14 + hashNoise(seed, i * 8 + 6) * 8,
         // 唱過後的漂移終點：沿波形法線方向散開一小段
@@ -145,7 +151,7 @@
     const displayWords = LyricMotion.buildDisplayWords(words);
     const vp = LyricMotion.layoutViewport(rootEl, lineIndex);
     const fontPx = fontPxFor(line, vp.width);
-    const wordCfgs = buildLayout(line, displayWords, fontPx);
+    const wordCfgs = buildLayout(line, displayWords, fontPx, vp.sideClass);
 
     const lineEl = document.createElement('div');
     lineEl.className = 'pulse-line';
@@ -220,6 +226,14 @@
       refreshColors();
       breathTl = LyricWordEngine.startBreathing(rootEl, intensity);
       currentLineIndex = -1;
+      safeZoneGuide = LyricMotion.mountStageSafeZoneGuide(rootEl);
+    },
+
+    // 安全距離只影響左右分散時的中央保留區，跟播放進度無關——不能只靠 onFrame／
+    // onLineChange 同步（暫停或還沒開始播放時不會再觸發）。karaoke.js 套用設定時
+    // 會直接同步呼叫這裡。
+    onSettings(settings, ctx) {
+      if (safeZoneGuide) safeZoneGuide.sync();
     },
 
     destroy() {
@@ -228,6 +242,7 @@
         LyricWordEngine.destroyWords(currentWordStates);
         gsap.killTweensOf(currentLineEl);
       }
+      if (safeZoneGuide) { safeZoneGuide.destroy(); safeZoneGuide = null; }
       if (rootEl) {
         gsap.killTweensOf(rootEl.querySelectorAll('*'));
         if (rootEl.parentNode) rootEl.parentNode.removeChild(rootEl);

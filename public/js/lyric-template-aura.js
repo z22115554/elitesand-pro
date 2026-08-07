@@ -32,6 +32,7 @@
   const DRIFT_SPAN_MS = 2400;   // 唱過後外漂的總時長
 
   let rootEl = null;
+  let safeZoneGuide = null; // 中央安全區可視化（左右分散時），見 lyric-motion-kernel.js
   let current = null;       // 目前行的完整狀態 { lineEl, words:[wordState], tempo, layout, lineIndex }
   let lastFrameNow = null;
   let colorsCache = { base: '#ffffff', active: '#ffd6a5' };
@@ -389,9 +390,16 @@
     tideRings.appendChild(document.createElement('i'));
     lineEl.appendChild(tideRings);
 
+    // 中央安全距離（左右分散模式）：hero 詞放大 1.52 倍時，固定點設在靠近安全線
+    // 那一側，讓放大的量整份偏向畫面外側，不會啃進中央保留區。
+    const originBias = vp.sideClass === 'pos-left' ? 'right' : vp.sideClass === 'pos-right' ? 'left' : null;
+
     const wordStates = layout.placements.map((pl) => {
       const outer = document.createElement('div');
       outer.className = 'ms-word';
+      if (pl.isHero && originBias) {
+        outer.style.transformOrigin = originBias === 'left' ? 'left center' : 'right center';
+      }
 
       const body = document.createElement('span');
       body.className = 'ms-body';
@@ -594,10 +602,16 @@
       refreshColors();
       current = null;
       lastFrameNow = null;
+      safeZoneGuide = LyricMotion.mountStageSafeZoneGuide(rootEl);
+    },
+
+    onSettings(settings, ctx) {
+      if (safeZoneGuide) safeZoneGuide.sync();
     },
 
     destroy() {
       if (current && typeof gsap !== 'undefined') gsap.killTweensOf(current.lineEl);
+      if (safeZoneGuide) { safeZoneGuide.destroy(); safeZoneGuide = null; }
       if (rootEl && rootEl.parentNode) rootEl.parentNode.removeChild(rootEl);
       rootEl = null; current = null;
     },

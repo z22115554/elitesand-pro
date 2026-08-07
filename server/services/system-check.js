@@ -4,6 +4,7 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { APP_VERSION } = require('../utils/app-version');
 const ytdlpCompatibility = require('./ytdlp-compatibility');
+const ffmpegProvider = require('./ffmpeg-provider');
 
 const execFileAsync = promisify(execFile);
 const TOOL_ENV = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
@@ -37,14 +38,14 @@ async function getSystemCheck(options = {}) {
   }
   const [ytdlp, ffmpeg] = await Promise.all([
     toolStatus('yt-dlp', ['--version'], options),
-    toolStatus('ffmpeg', ['-version'], options),
+    toolStatus(ffmpegProvider.getFfmpegPath(), ['-version'], options),
   ]);
   const payload = {
     appVersion: APP_VERSION,
     updateRepo: 'z22115554/elitesand-pro',
     ytdlp,
     ytdlpCompatibility: compatibility.getStatus(),
-    ffmpeg,
+    ffmpeg: { ...ffmpeg, downloadable: !ffmpeg.available },
   };
   cache = { checkedAt: nowMs, payload };
   return payload;

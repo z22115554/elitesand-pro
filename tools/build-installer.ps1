@@ -172,7 +172,8 @@ try {
   # electron-builder has silently dropped node_modules from extraResources before.
   # Verify the actual output, then boot the packaged server outside the repo.
   $UnpackedResources = Join-Path $InstallerOutput "win-unpacked\resources"
-  foreach ($required in @("app-root\node_modules\express\package.json", "app-root\server\index.js", "tools\yt-dlp.exe", "tools\ffmpeg.exe")) {
+  # 批次 D-1：ffmpeg.exe 不再是必要產物（預設不內附，改成按需下載）。
+  foreach ($required in @("app-root\node_modules\express\package.json", "app-root\server\index.js", "tools\yt-dlp.exe")) {
     if (-not (Test-Path -LiteralPath (Join-Path $UnpackedResources $required))) {
       throw "Installer output is missing $required; the built installer would be broken on user machines."
     }

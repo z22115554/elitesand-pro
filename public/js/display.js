@@ -622,18 +622,29 @@
       document.body.dataset.columnflowMaxLines = String(Number.isFinite(columnflowMaxLines)
         ? Math.max(1, Math.min(6, columnflowMaxLines))
         : 4);
+      // 中央安全距離：畫面正中保留給主播真人／人物模型的區域，兩側直行不得跨入。
+      const columnflowSafeMargin = Math.round(Number(s.columnflowSafeMargin));
+      document.body.dataset.columnflowSafeMargin = String(Number.isFinite(columnflowSafeMargin)
+        ? Math.max(5, Math.min(25, columnflowSafeMargin))
+        : 11);
+      // 安全距離引導線預設只有面板預覽看得到；使用者明確打開才會疊在真正的 OBS 來源上。
+      document.body.classList.toggle('cf-show-safe-zone', !!s.columnflowShowSafeZoneOnObs);
     } else {
       delete document.body.dataset.columnflowVariant;
       delete document.body.dataset.columnflowPlacement;
       delete document.body.dataset.columnflowMaxLines;
+      delete document.body.dataset.columnflowSafeMargin;
+      document.body.classList.remove('cf-show-safe-zone');
     }
-    // 舞台模板共用中央安全距離。paperstrip / mirror 也吃同一套，讓中央人物區真的留白。
-    if (['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)) {
+    // 舞台模板（Pulse/Facet/Drift/Aura）共用同一套「左右分散」機制與中央安全距離。
+    if (['pulse', 'facet', 'drift', 'aura'].includes(s.template)) {
       const stageSafeMargin = Math.round(Number(s.stageSafeMargin));
       const clampedStageSafeMargin = Number.isFinite(stageSafeMargin)
         ? Math.max(2, Math.min(25, stageSafeMargin))
         : 2;
       document.body.dataset.stageSafeMargin = String(clampedStageSafeMargin);
+      // CSS 的 .pos-left/.pos-right 邊界讀的是 CSS 自訂屬性（var()），不是 dataset——
+      // 兩者是不同機制，只寫 dataset 的話排版邊界會一直吃 CSS 裡的預設值，量不到使用者真正調的數字。
       document.body.style.setProperty('--stage-safe-margin', String(clampedStageSafeMargin));
       document.body.classList.toggle('stage-show-safe-zone', !!s.stageShowSafeZoneOnObs);
     } else {
@@ -657,6 +668,9 @@
     if (typeof s.template === 'string' && KaraokeEngine.setTemplate) {
       KaraokeEngine.setTemplate(s.template);
     }
+    // 通知目前模板「設定更新了」，讓純設定驅動、跟播放進度無關的畫面（例如直書句流的
+    // 中央安全距離引導線）不必等下一次 onFrame／onSeek 就能即時反映——暫停或還沒開始播放時
+    // 根本不會再有下一次。
     if (KaraokeEngine.notifyTemplateSettings) {
       KaraokeEngine.notifyTemplateSettings(s);
     }

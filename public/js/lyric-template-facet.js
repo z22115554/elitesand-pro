@@ -28,6 +28,7 @@
   const LAYOUT_CACHE_LIMIT = 48;
 
   let rootEl = null;
+  let safeZoneGuide = null; // 中央安全區可視化（左右分散時），見 lyric-motion-kernel.js
   let breathTl = null;
   let currentLineEl = null;
   let currentWordStates = [];
@@ -193,6 +194,9 @@
     const seed = line.time | 0;
     const spread = WORD_SPREAD[intensity];
     const tiltMax = WORD_TILT[intensity];
+    // 中央安全距離（左右分散模式）：字放大時固定點設在靠近安全線那一側，讓放大的量
+    // 整份偏向畫面外側，不會啃進中央保留區。見 lyric-word-engine.js 的 cfg.originBias。
+    const originBias = vp.sideClass === 'pos-left' ? 'right' : vp.sideClass === 'pos-right' ? 'left' : null;
 
     const wordStates = [];
     const stepStates = [];
@@ -215,6 +219,7 @@
           dy: hashSpread(seed, salt + 2) * spread * 0.6,
           tiltDeg: hashSpread(seed, salt + 3) * tiltMax,
           scaleBase: row.scale,
+          originBias,
           gapPx: fontPx * 0.2,
           riseFrom: 12 + hashNoise(seed, salt + 4) * 8,
           drift: {
@@ -317,6 +322,11 @@
       breathTl = LyricWordEngine.startBreathing(rootEl, intensity);
       currentLineIndex = -1;
       layoutCache.clear();
+      safeZoneGuide = LyricMotion.mountStageSafeZoneGuide(rootEl);
+    },
+
+    onSettings(settings, ctx) {
+      if (safeZoneGuide) safeZoneGuide.sync();
     },
 
     destroy() {
@@ -325,6 +335,7 @@
         LyricWordEngine.destroyWords(currentWordStates);
         gsap.killTweensOf(currentLineEl);
       }
+      if (safeZoneGuide) { safeZoneGuide.destroy(); safeZoneGuide = null; }
       if (rootEl) {
         gsap.killTweensOf(rootEl.querySelectorAll('*'));
         if (rootEl.parentNode) rootEl.parentNode.removeChild(rootEl);

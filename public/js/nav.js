@@ -237,6 +237,10 @@
         readiness.ffmpeg = !!data.ffmpeg?.available;
         setReadiness('guide-check-ytdlp', readiness.ytdlp, readiness.ytdlp ? `yt-dlp ${data.ytdlp.version}` : '找不到 yt-dlp');
         setReadiness('guide-check-ffmpeg', readiness.ffmpeg, readiness.ffmpeg ? 'FFmpeg 已就緒' : '找不到 FFmpeg');
+        const downloadBtn = document.getElementById('guide-ffmpeg-download');
+        if (downloadBtn && !downloadBtn.dataset.busy) {
+          downloadBtn.hidden = readiness.ffmpeg || !data.ffmpeg?.downloadable;
+        }
         updateChecklist();
         return fetch('/api/update-check').then((res) => res.json()).then((update) => {
           const newer = update && update.hasUpdate && update.latestVersion;
@@ -289,6 +293,32 @@
     });
     const refreshBtn = document.getElementById('guide-check-refresh');
     if (refreshBtn) refreshBtn.addEventListener('click', refreshReadiness);
+
+    const ffmpegDownloadBtn = document.getElementById('guide-ffmpeg-download');
+    if (ffmpegDownloadBtn) {
+      ffmpegDownloadBtn.addEventListener('click', () => {
+        ffmpegDownloadBtn.dataset.busy = '1';
+        ffmpegDownloadBtn.disabled = true;
+        ffmpegDownloadBtn.textContent = '下載中…（約 100MB，請稍候）';
+        setReadiness('guide-check-ffmpeg', 'pending', 'FFmpeg 下載中…');
+        PinAuth.fetchWithPin('/api/ffmpeg/download', { method: 'POST' })
+          .then((res) => res.json())
+          .then((data) => {
+            if (!data.ok) throw new Error(data.reason || '下載失敗');
+            delete ffmpegDownloadBtn.dataset.busy;
+            ffmpegDownloadBtn.disabled = false;
+            ffmpegDownloadBtn.textContent = '下載 FFmpeg';
+            refreshReadiness();
+          })
+          .catch((err) => {
+            delete ffmpegDownloadBtn.dataset.busy;
+            ffmpegDownloadBtn.disabled = false;
+            ffmpegDownloadBtn.textContent = '下載 FFmpeg';
+            setReadiness('guide-check-ffmpeg', false, 'FFmpeg 下載失敗');
+            if (typeof ErrorHandler !== 'undefined') ErrorHandler.showToast(`FFmpeg 下載失敗：${err.message}`);
+          });
+      });
+    }
     // 教學檢查清單的字是 JS 寫進去的；就算面板收著也要重畫，
     // 否則換語言後再打開會看到上一個語言的殘留。
     window.addEventListener('i18n:change', () => {

@@ -20,6 +20,7 @@ const log = createLogger('Server');
 const config = require('./utils/load-config');
 const { isAllowedSocketRequest, isAllowedCorsOrigin } = require('./utils/socket-origin');
 const { renderDisplayRuntimePage } = require('./services/display-runtime-build');
+const templateDelivery = require('./services/template-delivery');
 const ytdlpCompatibility = require('./services/ytdlp-compatibility');
 const PORT = process.env.PORT || config.port || 3000;
 
@@ -203,6 +204,26 @@ app.get('/display', (req, res) => {
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
   res.type('html').send(page.html);
+});
+
+// 歌詞模板遞送（批次 C-1）：模板不再是安裝目錄裡具名可讀的 .js 檔，改由這條路由
+// 決定要不要送、送什麼。跟其他 /js/*.js 靜態檔一樣不掛 PIN——express.static 本來就
+// 對所有本機資產開放，這裡只是把「讀哪個檔案」的決定權從檔案系統換成這支 service。
+app.get('/js/t/:id', (req, res) => {
+  const { id } = req.params;
+  if (!/^[a-z0-9-]+$/.test(id)) return res.status(400).end();
+  let code;
+  try {
+    code = templateDelivery.getTemplateSource(id);
+  } catch (err) {
+    log.error('模板遞送失敗', err);
+    return res.status(500).type('text/plain').send('// template delivery error');
+  }
+  if (code == null) return res.status(404).end();
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.type('application/javascript').send(code);
 });
 
 // Setlist 疊加頁（透明背景 + 直播歌單）

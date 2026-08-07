@@ -753,8 +753,6 @@
     'template.aura': ['潮汐心景', 'Tidal Mindscape', '潮汐の心景', '조수 심상', '潮汐心景'],
     'template.ktv': ['霓彩伴唱', 'Neon KTV', 'ネオン KTV', '네온 KTV', '霓彩伴唱'],
     'template.columnflow': ['直書句流', 'Vertical Verse Flow', '縦書き句流', '세로쓰기 문장 흐름', '竖排句流'],
-    'template.paperstrip': ['紙帶逐字', 'Paper Strip', 'ペーパーストリップ', '페이퍼 스트립', '纸带逐字'],
-    'template.mirror': ['鏡像', 'Mirror', 'ミラー', '미러', '镜像'],
     'template.columnSen': ['素筆直書', 'Plain Brush Vertical', '素筆の縦書き', '담백한 세로쓰기', '素笔竖排'],
     'template.columnFuda': ['字札直書', 'Card Vertical', '字札の縦書き', '글패 세로쓰기', '字札竖排']
   };
