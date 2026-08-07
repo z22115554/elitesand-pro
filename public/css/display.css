@@ -701,8 +701,8 @@ body.template-paperstrip #lyrics-container {
   text-align: left;
 }
 
-#paperstrip-root[data-side="left"] .ps-group,
-#paperstrip-root[data-side="right"] .ps-group {
+#paperstrip-root .ps-group[data-side="left"],
+#paperstrip-root .ps-group[data-side="right"] {
   width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);
   overflow: hidden;
 }
@@ -714,12 +714,12 @@ body.lyric-pos-right #paperstrip-root .ps-group {
   width: min(100%, 760px);
 }
 
-#paperstrip-root[data-side="left"] .ps-group {
+#paperstrip-root .ps-group[data-side="left"] {
   left: 2%;
   transform: translate(0, -50%);
 }
 
-#paperstrip-root[data-side="right"] .ps-group {
+#paperstrip-root .ps-group[data-side="right"] {
   left: auto;
   right: 2%;
   transform: translate(0, -50%);
@@ -772,9 +772,9 @@ body.lyric-pos-right #paperstrip-root .ps-group {
   background: rgba(255, 255, 255, .97);
   border: 1px solid rgba(15, 15, 15, .12);
   box-shadow: 0 .08em .34em rgba(0, 0, 0, .16);
-  /* 不縮放白條本體，而是用中心對稱遮罩揭露；邊框與陰影不會被 scaleX 壓扁，
-     起始像一條細直線，再從中心同時往左右打開。 */
-  clip-path: inset(0 var(--ps-clip-x) 0 var(--ps-clip-x));
+  /* 不縮放白條本體，而是固定左邊界、只收右側遮罩：白條從左往右展開，
+     同時避免 scaleX 把邊框與陰影一起壓扁。未收到第一幀狀態前預設完全收起，避免首幀閃白。 */
+  clip-path: inset(0 var(--ps-clip-right, 100%) 0 0);
   will-change: clip-path;
 }
 

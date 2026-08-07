@@ -19,17 +19,17 @@
     return;
   }
 
-  // 白條必須先於文字完成主要動作：提早 700ms 進場，約 430ms 完成展開，
-  // 因此正常播放時會在第一個字出現前約 270ms 已經完全到位。
-  const PRE_ROLL_MS = 700;
-  const BAR_OPEN_MS = 430;
-  // 剛開始只露出中心的一條細白線，接近使用者 AE 參考的起始狀態。
-  const MIN_BAR_OPEN = 0.018;
+  // 白條必須先於文字完成主要動作。參考影片的速度不是標準 ease-in-out，而是
+  // 「前段蓄力 → 中段快速拉開 → 後段長尾收住」；把整段拉長到 700ms，
+  // 並提前 900ms 啟動，正常播放時仍會在第一個字前約 200ms 完整定位。
+  const PRE_ROLL_MS = 900;
+  const BAR_OPEN_MS = 700;
+  // 參考影片起始不是 1px 細線，而是一小截白色短條（約完成寬度的 8～10%）。
+  const MIN_BAR_OPEN = 0.08;
   // 保險閘門：就算逐字 timing 有極端誤差，白條未幾乎展開完成前，文字一律不准顯示。
   const TEXT_REVEAL_MIN_OPEN = 0.985;
   const MIN_BATCH_SIZE = 2;
   const MAX_BATCH_SIZE = 4;
-  const EMPTY_TARGET = -999;
   const SIZE_PATTERNS = {
     2: [
       ['large', 'small'],
@@ -54,20 +54,36 @@
   };
 
   let rootEl = null;
-  let groupEl = null;
   let safeZoneGuide = null;
   let plans = [];
   let plansForLines = null;
-  let renderedBatchStart = EMPTY_TARGET;
-  let batchRows = [];
+  // 同一時間最多保留「正在唱的上一頁」與「正在 pre-roll 的下一頁」。
+  // 這讓跨頁白條可以提早進場，但不會用 replaceChildren() 把上一頁最後一句提前清掉。
+  const pageViews = new Map();
 
   function clamp01(value) {
     return Math.max(0, Math.min(1, value));
   }
 
-  function smoothstep(value) {
+  function barRevealProgress(value) {
     const t = clamp01(value);
-    return t * t * (3 - 2 * t);
+
+    // 0～24%：先慢慢蓄力，只走到約 20%。
+    if (t <= 0.24) {
+      const u = t / 0.24;
+      return 0.20 * u * u;
+    }
+
+    // 24～34%：參考影片最有辨識度的「突然拉開」段，短時間衝到約 74%。
+    if (t <= 0.34) {
+      const u = (t - 0.24) / 0.10;
+      const kick = u * u * (3 - 2 * u);
+      return 0.20 + 0.54 * kick;
+    }
+
+    // 34～100%：剩下約四分之一寬度用長尾慢慢收滿，不做彈跳或 overshoot。
+    const u = (t - 0.34) / 0.66;
+    return 0.74 + 0.26 * (1 - Math.pow(1 - u, 2.45));
   }
 
   function lineEndMs(lines, index) {
@@ -266,10 +282,15 @@
     plans = lines.map((line, index) => buildPlan(lines, index)).filter(Boolean);
     buildBatches(plans);
     plansForLines = lines;
-    renderedBatchStart = EMPTY_TARGET;
-    batchRows = [];
-    if (groupEl) groupEl.replaceChildren();
+    clearPageViews();
     return plans;
+  }
+
+  function clearPageViews() {
+    pageViews.forEach((view) => {
+      if (view?.groupEl?.parentNode) view.groupEl.parentNode.removeChild(view.groupEl);
+    });
+    pageViews.clear();
   }
 
   function findStartedIndex(timeMs) {
@@ -346,8 +367,8 @@
   }
 
   function constrainRowWidth(entry) {
-    if (!entry?.row || !entry?.plate || !groupEl) return;
-    const available = Math.max(1, groupEl.clientWidth);
+    if (!entry?.row || !entry?.plate || !entry?.groupEl) return;
+    const available = Math.max(1, entry.groupEl.clientWidth);
     const measured = entry.plate.scrollWidth;
     if (!Number.isFinite(measured) || measured <= available) return;
     const currentScale = Number.parseFloat(entry.row.style.getPropertyValue('--ps-font-scale')) || 0.76;
@@ -363,38 +384,90 @@
 
   function syncStageLayout() {
     if (safeZoneGuide) safeZoneGuide.sync();
-    if (renderedBatchStart >= 0 && plans[renderedBatchStart] && rootEl) {
-      rootEl.dataset.side = currentPlacement(plans[renderedBatchStart]);
-    }
     // 安全距離或左右模式改變時，先回到該句原始尺寸再依新的可用寬度縮放。
     // 這是使用者設定造成的即時重排，不會發生在正常逐句播放期間。
-    batchRows.forEach(resetAndConstrainRowWidth);
+    pageViews.forEach((view) => {
+      view.groupEl.dataset.side = currentPlacement(plans[view.batchStart]);
+      view.rows.forEach(resetAndConstrainRowWidth);
+    });
   }
 
   function renderBatch(batchStart) {
-    if (!groupEl) return;
-    groupEl.replaceChildren();
-    batchRows = [];
+    if (!rootEl || batchStart < 0 || !plans[batchStart]) return null;
+    if (pageViews.has(batchStart)) return pageViews.get(batchStart);
 
-    if (batchStart < 0 || !plans[batchStart]) {
-      rootEl?.removeAttribute('data-side');
-      return;
-    }
-
-    rootEl.dataset.side = currentPlacement(plans[batchStart]);
+    const group = document.createElement('div');
+    group.className = 'ps-group';
+    group.dataset.side = currentPlacement(plans[batchStart]);
+    group.dataset.batchStart = String(batchStart);
     const yNoise = LyricMotion.hashNoise(batchStart * 73 + 19, 11);
-    groupEl.style.setProperty('--ps-y-shift', `${((yNoise - 0.5) * 8).toFixed(2)}vh`);
+    group.style.setProperty('--ps-y-shift', `${((yNoise - 0.5) * 8).toFixed(2)}vh`);
 
     const batchCount = plans[batchStart]?.batchCount || 1;
+    const rows = [];
     plans.slice(batchStart, batchStart + batchCount).forEach((plan) => {
       const entry = makeRow(plan);
       if (!entry) return;
-      groupEl.appendChild(entry.row);
-      batchRows.push(entry);
+      entry.groupEl = group;
+      group.appendChild(entry.row);
+      rows.push(entry);
     });
 
+    const lastPlan = plans[batchStart + batchCount - 1] || plans[batchStart];
+    const view = {
+      batchStart,
+      batchCount,
+      endMs: lastPlan?.endMs || 0,
+      groupEl: group,
+      rows,
+    };
+    pageViews.set(batchStart, view);
+    // 安全框 guide 使用較高 z-index；頁面本身只在 1～3 間切換層級。
+    rootEl.appendChild(group);
+
     // 先把整頁都建好且保持不可見，再同步量測單邊寬度；第一個 paint 前就完成縮放，不會肉眼看到跳尺寸。
-    batchRows.forEach(constrainRowWidth);
+    rows.forEach(constrainRowWidth);
+    return view;
+  }
+
+  function removeBatch(batchStart) {
+    const view = pageViews.get(batchStart);
+    if (!view) return;
+    if (view.groupEl?.parentNode) view.groupEl.parentNode.removeChild(view.groupEl);
+    pageViews.delete(batchStart);
+  }
+
+  function neededBatchStarts(timeMs) {
+    const needed = new Set();
+    const started = findStartedIndex(timeMs);
+    const target = findTargetIndex(timeMs);
+
+    // 正在唱的頁面必須保留到「該頁最後一句 endMs」之後，不能因下一頁 pre-roll 而消失。
+    if (started >= 0) {
+      const startedPlan = plans[started];
+      const startedBatch = startedPlan?.batchStart;
+      if (Number.isInteger(startedBatch)) {
+        const count = plans[startedBatch]?.batchCount || 1;
+        const lastPlan = plans[startedBatch + count - 1] || startedPlan;
+        if (timeMs < (lastPlan?.endMs || 0)) needed.add(startedBatch);
+
+        // 逐字來源偶爾會出現相鄰兩句時間重疊。即使 started 已經跳到下一頁，
+        // seek／掉幀後也要把仍未到 endMs 的上一頁補回來，避免上一句尾字被截斷。
+        const previousPlan = plans[startedBatch - 1];
+        const previousBatch = previousPlan?.batchStart;
+        if (Number.isInteger(previousBatch) && previousBatch !== startedBatch) {
+          const previousCount = plans[previousBatch]?.batchCount || 1;
+          const previousLast = plans[previousBatch + previousCount - 1] || previousPlan;
+          if (timeMs < (previousLast?.endMs || 0)) needed.add(previousBatch);
+        }
+      }
+    }
+
+    // target 可以是同頁下一句，也可以是下一頁第一句的 pre-roll；後者只新增下一頁，不清上一頁。
+    if (target >= 0 && Number.isInteger(plans[target]?.batchStart)) {
+      needed.add(plans[target].batchStart);
+    }
+    return { needed, started, target };
   }
 
   function applyRowState(timeMs, entry) {
@@ -402,13 +475,13 @@
     const { plan, row, glyphEls } = entry;
 
     const preStart = plan.startMs - PRE_ROLL_MS;
-    const openRaw = smoothstep((timeMs - preStart) / BAR_OPEN_MS);
+    const openRaw = barRevealProgress((timeMs - preStart) / BAR_OPEN_MS);
     const open = timeMs < preStart ? 0 : MIN_BAR_OPEN + (1 - MIN_BAR_OPEN) * openRaw;
     const clampedOpen = clamp01(open);
     row.style.setProperty('--ps-open', clampedOpen.toFixed(4));
-    // 中心對稱遮罩：0 = 完全夾住，1 = 完全展開。JS 直接算百分比，避免依賴
-    // CSS 尚未普遍支援的百分比乘法，OBS/CEF 版本差異也比較安全。
-    row.style.setProperty('--ps-clip-x', `${(50 - clampedOpen * 50).toFixed(3)}%`);
+    // 左到右遮罩：左邊界固定，只逐步放開右側。0 = 完全收起、1 = 完全展開。
+    // JS 直接算百分比，避免依賴 CSS 百分比乘法造成 OBS/CEF 版本差異。
+    row.style.setProperty('--ps-clip-right', `${(100 - clampedOpen * 100).toFixed(3)}%`);
 
     let revealCount = 0;
     const textReady = clampedOpen >= TEXT_REVEAL_MIN_OPEN;
@@ -430,23 +503,37 @@
   }
 
   function computeAndRender(timeMs, lines) {
-    if (!rootEl || !groupEl) return;
+    if (!rootEl) return;
     ensurePlans(lines);
     if (plans.length === 0) {
-      if (renderedBatchStart !== -1) {
-        renderedBatchStart = -1;
-        renderBatch(-1);
-      }
+      clearPageViews();
       return;
     }
 
-    const nextTarget = findTargetIndex(timeMs);
-    const nextBatchStart = nextTarget >= 0 ? plans[nextTarget]?.batchStart ?? -1 : -1;
-    if (nextBatchStart !== renderedBatchStart) {
-      renderedBatchStart = nextBatchStart;
-      renderBatch(renderedBatchStart);
-    }
-    batchRows.forEach((entry) => applyRowState(timeMs, entry));
+    const { needed, started } = neededBatchStarts(timeMs);
+    needed.forEach((batchStart) => renderBatch(batchStart));
+    Array.from(pageViews.keys()).forEach((batchStart) => {
+      if (!needed.has(batchStart)) removeBatch(batchStart);
+    });
+
+    // 若兩頁歌詞時間真的重疊，較早開始、仍未唱完的上一頁優先在最上層；
+    // 下一頁白條照樣在底下提前跑，上一頁結束後才自然露出。
+    let foregroundBatch = null;
+    Array.from(needed).sort((a, b) => a - b).some((batchStart) => {
+      const view = pageViews.get(batchStart);
+      const firstStart = plans[batchStart]?.startMs ?? Number.POSITIVE_INFINITY;
+      if (view && firstStart <= timeMs && timeMs < view.endMs) {
+        foregroundBatch = batchStart;
+        return true;
+      }
+      return false;
+    });
+    if (foregroundBatch === null && started >= 0) foregroundBatch = plans[started]?.batchStart ?? null;
+    pageViews.forEach((view, batchStart) => {
+      // 正在唱的上一頁永遠壓在 pre-roll 下一頁上方；就算兩頁同側重疊，也不會讓新白條蓋掉舊歌詞。
+      view.groupEl.style.zIndex = batchStart === foregroundBatch ? '3' : '1';
+      view.rows.forEach((entry) => applyRowState(timeMs, entry));
+    });
   }
 
   LyricTemplates.register({
@@ -456,32 +543,24 @@
     mount(container) {
       rootEl = document.createElement('div');
       rootEl.id = 'paperstrip-root';
-      groupEl = document.createElement('div');
-      groupEl.className = 'ps-group';
-      rootEl.appendChild(groupEl);
       container.appendChild(rootEl);
       safeZoneGuide = LyricMotion.mountStageSafeZoneGuide(rootEl);
       plansForLines = null;
-      renderedBatchStart = EMPTY_TARGET;
-      batchRows = [];
+      clearPageViews();
     },
 
     destroy() {
       if (safeZoneGuide) { safeZoneGuide.destroy(); safeZoneGuide = null; }
+      clearPageViews();
       if (rootEl && rootEl.parentNode) rootEl.parentNode.removeChild(rootEl);
       rootEl = null;
-      groupEl = null;
       plans = [];
       plansForLines = null;
-      renderedBatchStart = EMPTY_TARGET;
-      batchRows = [];
     },
 
     onLyricsLoaded() {
       plansForLines = null;
-      renderedBatchStart = EMPTY_TARGET;
-      batchRows = [];
-      if (groupEl) groupEl.replaceChildren();
+      clearPageViews();
     },
 
     onSettings() {
