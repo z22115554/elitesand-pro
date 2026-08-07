@@ -6201,8 +6201,8 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(templateJs.includes('LyricMotion.ensureWordTimings') && templateJs.includes('LyricMotion.buildGraphemeTimings'), '紙帶逐字必須沿用既有逐字時間資料與 LRC 降級管線: ');
   ok(templateJs.includes('PRE_ROLL_MS') && templateJs.includes("classList.toggle('is-current'"), '紙帶逐字必須有預展開與逐字目前字狀態: ');
   ok(templateJs.includes('function barRevealProgress(value)') && templateJs.includes('t <= 0.24') && templateJs.includes('t <= 0.34') && templateJs.includes('Math.pow(1 - u, 2.45)'), '紙帶展開必須使用前段蓄力、中段快速拉開、後段長尾減速的分段速度曲線，不可退回單一 smoothstep: ');
-  ok(templateJs.includes('const PRE_ROLL_MS = 900;') && templateJs.includes('const BAR_OPEN_MS = 700;') && templateJs.includes('const MIN_BAR_OPEN = 0.08;'), '紙帶必須提早進場並保留足夠動畫時長，起始為短白條而不是瞬間從零寬拉滿: ');
-  ok(templateJs.includes('const PRE_ROLL_MS = 900;') && templateJs.includes('const BAR_OPEN_MS = 700;') && templateJs.includes('const TEXT_REVEAL_MIN_OPEN = 0.985;'), '白條必須提早進場並在文字出現前幾乎完成展開: ');
+  ok(templateJs.includes('const PRE_ROLL_MS = 900;') && templateJs.includes('const BAR_OPEN_MS = 700;') && templateJs.includes('const MIN_BAR_OPEN = 0.08;'), '同頁紙帶必須保留 pre-roll 與足夠動畫時長，起始為短白條而不是瞬間從零寬拉滿: ');
+  ok(templateJs.includes('const TEXT_REVEAL_MIN_OPEN = 0.985;'), '同頁與 split 仍需保留白條完成度文字閘門: ');
   ok(templateJs.includes("setProperty('--ps-clip-right'") && templateJs.includes('clampedOpen >= TEXT_REVEAL_MIN_OPEN'), '白條必須使用左到右揭露比例，且文字受白條完成度硬閘門保護: ');
   ok(displayCss.includes('clip-path: inset(0 var(--ps-clip-right, 100%) 0 0);') && templateJs.includes("setProperty('--ps-clip-right', `${(100 - clampedOpen * 100).toFixed(3)}%`)") && !displayCss.includes('transform: scaleX(var(--ps-open));'), '紙帶白底必須固定左邊界、從左往右展開，且不可用 scaleX 壓扁邊框與陰影: ');
   ok(templateJs.includes('const MIN_BATCH_SIZE = 2;') && templateJs.includes('const MAX_BATCH_SIZE = 4;') && templateJs.includes('buildBatches(plans)') && templateJs.includes('scoreBatchCandidate'), '紙帶逐字必須在播放前依內容穩定分成 2～4 句一頁，而不是固定三句或播放途中臨時抽樣: ');
@@ -6210,9 +6210,10 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(templateJs.includes('remaining - count === 1') && templateJs.includes('LyricMotion.hashNoise(seed, 53)'), '分組必須避免可避免的單句尾頁，並使用可重現的穩定亂數: ');
   ok(templateJs.includes("2: [") && templateJs.includes("3: [") && templateJs.includes("4: [") && templateJs.includes('emphasisScore'), '紙帶逐字必須為 2／3／4 句各自提供尺寸構圖，並用句長與節奏決定大字優先句: ');
   ok(templateJs.includes('plan.batchCount = batch.length') && templateJs.includes('plans[target].batchStart'), '可變句數頁面必須把頁面邊界預先寫回每句，seek 時直接定位同一頁: ');
-  ok(templateJs.includes('const pageViews = new Map();') && templateJs.includes('function neededBatchStarts(timeMs)') && templateJs.includes('timeMs < (lastPlan?.endMs || 0)'), '跨頁 pre-roll 必須允許前後兩頁短暫共存，上一頁要保留到最後一句真正結束: ');
-  ok(templateJs.includes("view.groupEl.style.zIndex = batchStart === foregroundBatch ? '3' : '1'") && templateJs.includes('previousLast?.endMs') && !templateJs.includes('groupEl.replaceChildren();'), '下一頁提前展開時不得清空或蓋住仍在演唱的上一頁，時間重疊與 seek 也要保留上一頁: ');
-  ok(templateJs.includes("const splitMode = (document.body.dataset.lyricPos || 'center') === 'split';") && templateJs.includes('const allowText = splitMode || batchStart === foregroundBatch;') && templateJs.includes("classList.toggle('ps-group--incoming', !allowText)") && displayCss.includes('.ps-group--incoming {') && displayCss.includes('visibility: hidden;'), '非 split 任一時間只允許 active page 可見；incoming page 的白條與文字都隱藏，左右分散維持既有雙頁共存: ');
+  ok(templateJs.includes('const pageViews = new Map();') && templateJs.includes('function neededBatchStarts(timeMs)') && templateJs.includes('timeMs < (lastPlan?.endMs || 0)'), 'split 模式必須保留既有前後頁短暫共存，上一頁保留到最後一句真正結束: ');
+  ok(templateJs.includes('function batchEntryMs(batchStart)') && templateJs.includes('Math.max(batchPreviousEndMs(batchStart), firstPlan.startMs - PRE_ROLL_MS)') && templateJs.includes('function nonSplitBatchStart(timeMs)'), '非 split 跨頁必須等上一頁結束後才允許下一頁進場，空拍時才可利用剩餘 pre-roll: ');
+  ok(templateJs.includes('spatialGate: 0.14') && templateJs.includes('function measureGlyphSpatialGates(entry)') && templateJs.includes('clampedOpen >= glyph.spatialGate'), '非 split 跨頁第一句必須用白條實際掃過每個字的位置逐字放行，避免交棒時整句突然跳出: ');
+  ok(templateJs.includes('const crossPageLead = !splitMode && plan.batchSlot === 0 && plan.batchStart > 0;') && templateJs.includes('pageEntryMs: view.entryMs') && !displayCss.includes('.ps-group--incoming {'), '非 split 不再建立隱藏 incoming 頁；跨頁第一條白帶從 page entry 時刻真正開始，split 維持既有行為: ');
   ok(templateJs.includes('constrainRowWidth') && displayCss.includes('body.lyric-pos-left #paperstrip-root .ps-group') && displayCss.includes('width: min(100%, 760px);'), '紙帶逐字偏左／偏右必須有單邊寬度上限，超長句在首次顯示前縮放: ');
   ok(!displayCss.includes('@keyframes ps-row-enter'), '紙帶逐字不可在每句重播整列進場動畫造成閃爍: ');
   ok(motionKernel.includes('function stageSafeMarginPercent()') && motionKernel.includes('function mountStageSafeZoneGuide(rootEl)'), '主線舞台安全框核心必須移植到共用 LyricMotion: ');

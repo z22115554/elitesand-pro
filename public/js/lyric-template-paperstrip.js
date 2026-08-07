@@ -19,14 +19,13 @@
     return;
   }
 
-  // 白條必須先於文字完成主要動作。參考影片的速度不是標準 ease-in-out，而是
-  // 「前段蓄力 → 中段快速拉開 → 後段長尾收住」；把整段拉長到 700ms，
-  // 並提前 900ms 啟動，正常播放時仍會在第一個字前約 200ms 完整定位。
+  // 同頁下一句仍可提早展開；跨頁（非 split）則不允許在上一頁還可見時 pre-roll。
+  // 白條速度沿用參考影片的「前段蓄力 → 中段快速拉開 → 後段長尾收住」。
   const PRE_ROLL_MS = 900;
   const BAR_OPEN_MS = 700;
   // 參考影片起始不是 1px 細線，而是一小截白色短條（約完成寬度的 8～10%）。
   const MIN_BAR_OPEN = 0.08;
-  // 保險閘門：就算逐字 timing 有極端誤差，白條未幾乎展開完成前，文字一律不准顯示。
+  // split 與同頁的一般保險閘門。非 split 跨頁第一句改用「白條掃過字的位置」逐字放行。
   const TEXT_REVEAL_MIN_OPEN = 0.985;
   const MIN_BATCH_SIZE = 2;
   const MAX_BATCH_SIZE = 4;
@@ -57,8 +56,7 @@
   let safeZoneGuide = null;
   let plans = [];
   let plansForLines = null;
-  // 同一時間最多保留「正在唱的上一頁」與「正在 pre-roll 的下一頁」。
-  // 這讓跨頁白條可以提早進場，但不會用 replaceChildren() 把上一頁最後一句提前清掉。
+  // split 模式可同時保留前後頁；非 split 任一時間只渲染一頁。
   const pageViews = new Map();
 
   function clamp01(value) {
@@ -325,6 +323,38 @@
     return (plan?.batchIndex || 0) % 2 === 0 ? 'left' : 'right';
   }
 
+  function batchPreviousEndMs(batchStart) {
+    const previousPlan = plans[batchStart - 1];
+    const previousBatchStart = previousPlan?.batchStart;
+    if (!Number.isInteger(previousBatchStart) || previousBatchStart === batchStart) {
+      return Number.NEGATIVE_INFINITY;
+    }
+    const previousCount = plans[previousBatchStart]?.batchCount || 1;
+    const previousLast = plans[previousBatchStart + previousCount - 1] || previousPlan;
+    return previousLast?.endMs || Number.NEGATIVE_INFINITY;
+  }
+
+  function batchEntryMs(batchStart) {
+    const firstPlan = plans[batchStart];
+    if (!firstPlan) return Number.POSITIVE_INFINITY;
+    if (batchStart === 0) return firstPlan.startMs - PRE_ROLL_MS;
+    // 跨頁不能在上一頁仍顯示時偷跑；若中間本來有空拍，最多利用第一句前 PRE_ROLL_MS。
+    return Math.max(batchPreviousEndMs(batchStart), firstPlan.startMs - PRE_ROLL_MS);
+  }
+
+  function nonSplitBatchStart(timeMs) {
+    let active = -1;
+    for (let index = 0; index < plans.length;) {
+      const plan = plans[index];
+      if (!plan || !Number.isInteger(plan.batchStart)) break;
+      const batchStart = plan.batchStart;
+      if (timeMs < batchEntryMs(batchStart)) break;
+      active = batchStart;
+      index = batchStart + (plans[batchStart]?.batchCount || 1);
+    }
+    return active;
+  }
+
   function fitScale(text, sizeRole) {
     const length = visibleLength(text);
     const base = sizeRole === 'large' ? 1.06 : (sizeRole === 'small' ? 0.52 : 0.76);
@@ -354,7 +384,7 @@
       span.className = 'ps-glyph';
       span.textContent = glyph.char;
       text.appendChild(span);
-      glyphEls.push({ el: span, startMs: glyph.startMs, endMs: glyph.endMs });
+      glyphEls.push({ el: span, startMs: glyph.startMs, endMs: glyph.endMs, spatialGate: 0.14 });
     });
     return {
       plan,
@@ -386,10 +416,23 @@
     }
   }
 
+  function measureGlyphSpatialGates(entry) {
+    if (!entry?.plate || !entry?.glyphEls?.length) return;
+    const plateRect = entry.plate.getBoundingClientRect();
+    const width = Math.max(1, plateRect.width);
+    entry.glyphEls.forEach((glyph) => {
+      const rect = glyph.el.getBoundingClientRect();
+      const center = rect.left - plateRect.left + rect.width * 0.5;
+      // 14% 約對應目前 speed-ramp 的前 90～110ms，第一字不會和白條同幀硬跳出。
+      glyph.spatialGate = Math.max(0.14, Math.min(0.985, center / width));
+    });
+  }
+
   function resetAndConstrainRowWidth(entry) {
     if (!entry?.plan || !entry.row) return;
     entry.row.style.setProperty('--ps-font-scale', fitScale(entry.plan.text, entry.plan.sizeRole).toFixed(3));
     constrainRowWidth(entry);
+    measureGlyphSpatialGates(entry);
   }
 
   function syncStageLayout() {
@@ -428,6 +471,7 @@
       batchStart,
       batchCount,
       endMs: lastPlan?.endMs || 0,
+      entryMs: batchEntryMs(batchStart),
       groupEl: group,
       rows,
     };
@@ -436,7 +480,10 @@
     rootEl.appendChild(group);
 
     // 先把整頁都建好且保持不可見，再同步量測單邊寬度；第一個 paint 前就完成縮放，不會肉眼看到跳尺寸。
-    rows.forEach(constrainRowWidth);
+    rows.forEach((entry) => {
+      constrainRowWidth(entry);
+      measureGlyphSpatialGates(entry);
+    });
     return view;
   }
 
@@ -480,11 +527,15 @@
     return { needed, started, target };
   }
 
-  function applyRowState(timeMs, entry, allowText) {
+  function applyRowState(timeMs, entry, options = {}) {
     if (!entry?.plan || !entry.row) return;
     const { plan, row, glyphEls } = entry;
 
-    const preStart = plan.startMs - PRE_ROLL_MS;
+    const splitMode = !!options.splitMode;
+    const crossPageLead = !splitMode && plan.batchSlot === 0 && plan.batchStart > 0;
+    const preStart = crossPageLead
+      ? (Number.isFinite(options.pageEntryMs) ? options.pageEntryMs : plan.startMs)
+      : plan.startMs - PRE_ROLL_MS;
     const openRaw = barRevealProgress((timeMs - preStart) / BAR_OPEN_MS);
     const open = timeMs < preStart ? 0 : MIN_BAR_OPEN + (1 - MIN_BAR_OPEN) * openRaw;
     const clampedOpen = clamp01(open);
@@ -494,15 +545,18 @@
     row.style.setProperty('--ps-clip-right', `${(100 - clampedOpen * 100).toFixed(3)}%`);
 
     let revealCount = 0;
-    // 非 split 模式由 computeAndRender 選出唯一可顯示文字的 active page。
-    // incoming page 即使白條已完全展開，也必須保持 revealCount=0；這是跨頁不重疊的硬保證。
-    const textReady = allowText && clampedOpen >= TEXT_REVEAL_MIN_OPEN;
-    if (textReady) {
-      for (let i = 0; i < glyphEls.length; i += 1) {
-        if (glyphEls[i].startMs <= timeMs) revealCount = i + 1;
-        else break;
-      }
+    for (let i = 0; i < glyphEls.length; i += 1) {
+      const glyph = glyphEls[i];
+      if (glyph.startMs > timeMs) break;
+      // 非 split 跨頁第一句：時間到了還不夠，白條必須真的掃過這個字的位置。
+      // split 與同頁下一句維持原本「白條幾乎到位後再按 timing 出字」的行為。
+      const barReady = crossPageLead
+        ? clampedOpen >= glyph.spatialGate
+        : clampedOpen >= TEXT_REVEAL_MIN_OPEN;
+      if (!barReady) break;
+      revealCount = i + 1;
     }
+    const textReady = revealCount > 0;
     const lineActive = textReady && timeMs >= plan.startMs && timeMs < plan.endMs;
     if (revealCount === entry.revealCount && lineActive === entry.lineActive) return;
 
@@ -522,14 +576,20 @@
       return;
     }
 
-    const { needed, started } = neededBatchStarts(timeMs);
+    const splitMode = (document.body.dataset.lyricPos || 'center') === 'split';
+    const splitState = splitMode ? neededBatchStarts(timeMs) : null;
+    const needed = splitMode ? splitState.needed : new Set();
+    const started = splitMode ? splitState.started : findStartedIndex(timeMs);
+    if (!splitMode) {
+      const batchStart = nonSplitBatchStart(timeMs);
+      if (batchStart >= 0) needed.add(batchStart);
+    }
     needed.forEach((batchStart) => renderBatch(batchStart));
     Array.from(pageViews.keys()).forEach((batchStart) => {
       if (!needed.has(batchStart)) removeBatch(batchStart);
     });
 
-    // 若兩頁歌詞時間真的重疊，較早開始、仍未唱完的上一頁優先成為 active page；
-    // 下一頁白條照樣能在底下 pre-roll，但非 split 模式下它的文字整頁禁止顯示。
+    // split 保留已驗證過的雙頁共存；非 split 上面已收斂成唯一頁面，不再建立 incoming 頁。
     let foregroundBatch = null;
     Array.from(needed).sort((a, b) => a - b).some((batchStart) => {
       const view = pageViews.get(batchStart);
@@ -541,14 +601,15 @@
       return false;
     });
     if (foregroundBatch === null && started >= 0) foregroundBatch = plans[started]?.batchStart ?? null;
-    const splitMode = (document.body.dataset.lyricPos || 'center') === 'split';
+    if (!splitMode && needed.size === 1) foregroundBatch = Array.from(needed)[0];
     pageViews.forEach((view, batchStart) => {
-      const allowText = splitMode || batchStart === foregroundBatch;
-      // CSS 再加一道整頁文字保險：即使未來逐字 reveal 邏輯被修改，incoming page 也不會漏字。
-      view.groupEl.classList.toggle('ps-group--incoming', !allowText);
+      view.groupEl.classList.remove('ps-group--incoming');
       // 正在唱的上一頁永遠壓在 pre-roll 下一頁上方；split 則維持目前已確認良好的雙頁共存行為。
       view.groupEl.style.zIndex = batchStart === foregroundBatch ? '3' : '1';
-      view.rows.forEach((entry) => applyRowState(timeMs, entry, allowText));
+      view.rows.forEach((entry) => applyRowState(timeMs, entry, {
+        splitMode,
+        pageEntryMs: view.entryMs,
+      }));
     });
   }
 
