@@ -37,6 +37,7 @@
 
   let rootEl = null;
   let groupEl = null;
+  let safeZoneGuide = null;
   let plans = [];
   let plansForLines = null;
   let renderedBatchStart = EMPTY_TARGET;
@@ -217,6 +218,22 @@
     entry.row.style.setProperty('--ps-font-scale', nextScale.toFixed(3));
   }
 
+  function resetAndConstrainRowWidth(entry) {
+    if (!entry?.plan || !entry.row) return;
+    entry.row.style.setProperty('--ps-font-scale', fitScale(entry.plan.text, entry.plan.sizeRole).toFixed(3));
+    constrainRowWidth(entry);
+  }
+
+  function syncStageLayout() {
+    if (safeZoneGuide) safeZoneGuide.sync();
+    if (renderedBatchStart >= 0 && plans[renderedBatchStart] && rootEl) {
+      rootEl.dataset.side = currentPlacement(plans[renderedBatchStart].index);
+    }
+    // 安全距離或左右模式改變時，先回到該句原始尺寸再依新的可用寬度縮放。
+    // 這是使用者設定造成的即時重排，不會發生在正常逐句播放期間。
+    batchRows.forEach(resetAndConstrainRowWidth);
+  }
+
   function renderBatch(batchStart) {
     if (!groupEl) return;
     groupEl.replaceChildren();
@@ -298,12 +315,14 @@
       groupEl.className = 'ps-group';
       rootEl.appendChild(groupEl);
       container.appendChild(rootEl);
+      safeZoneGuide = LyricMotion.mountStageSafeZoneGuide(rootEl);
       plansForLines = null;
       renderedBatchStart = EMPTY_TARGET;
       batchRows = [];
     },
 
     destroy() {
+      if (safeZoneGuide) { safeZoneGuide.destroy(); safeZoneGuide = null; }
       if (rootEl && rootEl.parentNode) rootEl.parentNode.removeChild(rootEl);
       rootEl = null;
       groupEl = null;
@@ -318,6 +337,10 @@
       renderedBatchStart = EMPTY_TARGET;
       batchRows = [];
       if (groupEl) groupEl.replaceChildren();
+    },
+
+    onSettings() {
+      syncStageLayout();
     },
 
     onSeek(timeMs, ctx) {

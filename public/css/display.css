@@ -131,25 +131,63 @@ body.lyric-pos-right #lyrics-container {
   margin-right: 2vw;
 }
 
-/* split：行容器本來是 absolute inset 0 滿版，交替收窄到左/右 48%。
+/* split：行容器本來是 absolute inset 0 滿版，交替收窄到左/右安全區邊界。
    width:auto + max-width:none 必須帶上——行容器多半自帶 width:100%/max-width，
-   absolute 定位下 width 有明示值時 right/left 收窄會被直接忽略（over-constrained 規則）。 */
+   absolute 定位下 width 有明示值時 right/left 收窄會被直接忽略（over-constrained 規則）。
+   --stage-safe-margin 由 display.js 寫入，overflow:hidden 作為最終硬邊界。 */
 .pulse-line.pos-left,
 .facet-line.pos-left,
 .drift-line-stack.pos-left,
 .aura-line.pos-left {
-  right: 52%;
+  right: calc(50% + var(--stage-safe-margin, 2) * 1%);
   width: auto;
   max-width: none;
+  overflow: hidden;
 }
 
 .pulse-line.pos-right,
 .facet-line.pos-right,
 .drift-line-stack.pos-right,
 .aura-line.pos-right {
-  left: 52%;
+  left: calc(50% + var(--stage-safe-margin, 2) * 1%);
   width: auto;
   max-width: none;
+  overflow: hidden;
+}
+
+.stage-safe-zone-guide { display: none; }
+body.preview-mode .stage-safe-zone-guide,
+body.stage-show-safe-zone .stage-safe-zone-guide {
+  display: block;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.stage-safe-zone-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--stage-safe-left, 48%);
+  right: calc(100% - var(--stage-safe-right, 52%));
+  background: repeating-linear-gradient(135deg, rgba(255, 92, 92, .16) 0 10px, rgba(255, 92, 92, .05) 10px 20px);
+  border-left: 1px dashed rgba(255, 92, 92, .85);
+  border-right: 1px dashed rgba(255, 92, 92, .85);
+}
+.stage-safe-zone-label {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font, sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(200, 40, 40, .82);
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: .02em;
 }
 
 /* ═══ History Lyrics (舊行) ═══ */
@@ -665,7 +703,8 @@ body.template-paperstrip #lyrics-container {
 
 #paperstrip-root[data-side="left"] .ps-group,
 #paperstrip-root[data-side="right"] .ps-group {
-  width: min(44%, 760px);
+  width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);
+  overflow: hidden;
 }
 
 /* 偏左／偏右時 #lyrics-container 本身已被限制在單邊 46vw；這裡再加一道模板上限，
@@ -676,13 +715,13 @@ body.lyric-pos-right #paperstrip-root .ps-group {
 }
 
 #paperstrip-root[data-side="left"] .ps-group {
-  left: 3%;
+  left: 2%;
   transform: translate(0, -50%);
 }
 
 #paperstrip-root[data-side="right"] .ps-group {
   left: auto;
-  right: 3%;
+  right: 2%;
   transform: translate(0, -50%);
 }
 

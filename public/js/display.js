@@ -627,6 +627,20 @@
       delete document.body.dataset.columnflowPlacement;
       delete document.body.dataset.columnflowMaxLines;
     }
+    // 舞台模板共用中央安全距離。paperstrip 也吃同一套，讓左右分散時真的把中央人物區挖空。
+    if (['pulse', 'facet', 'drift', 'aura', 'paperstrip'].includes(s.template)) {
+      const stageSafeMargin = Math.round(Number(s.stageSafeMargin));
+      const clampedStageSafeMargin = Number.isFinite(stageSafeMargin)
+        ? Math.max(2, Math.min(25, stageSafeMargin))
+        : 2;
+      document.body.dataset.stageSafeMargin = String(clampedStageSafeMargin);
+      document.body.style.setProperty('--stage-safe-margin', String(clampedStageSafeMargin));
+      document.body.classList.toggle('stage-show-safe-zone', !!s.stageShowSafeZoneOnObs);
+    } else {
+      delete document.body.dataset.stageSafeMargin;
+      document.body.style.removeProperty('--stage-safe-margin');
+      document.body.classList.remove('stage-show-safe-zone');
+    }
     // 歌詞水平位置：CSS 靠 body class 縮排容器；split 的逐行交替由各模板讀 dataset 處理。
     // 經典疊層完全不支援這個機制（面板已改用九宮格當它的位置控制、對應的四鍵整批隱藏），
     // 但 settings.lyricPosition 的值本身仍會保留使用者在動畫模板下的偏好（不強制清空），
@@ -642,6 +656,9 @@
     // 排版模板（v4）：setTemplate 內部已對同值早退，高頻重送設定不會反覆重建畫面
     if (typeof s.template === 'string' && KaraokeEngine.setTemplate) {
       KaraokeEngine.setTemplate(s.template);
+    }
+    if (KaraokeEngine.notifyTemplateSettings) {
+      KaraokeEngine.notifyTemplateSettings(s);
     }
     // 自訂背景（Phase 4）
     applyBackgroundSettings(s);

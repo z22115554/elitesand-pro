@@ -76,6 +76,8 @@
     columnflowVariant: 'sen', // 直書句流：'sen' | 'fuda'
     columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
     columnflowMaxLines: 4, // 直書句流：同時保留 1–6 句
+    stageSafeMargin: 2, // 舞台模板左右分散時，中央保留區單側距離（%，2–25）
+    stageShowSafeZoneOnObs: false, // 安全框是否也疊在真正 OBS 來源上
     // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
     displayBgImage: '',   // 檔名（'' = 無背景，維持透明）
     displayBgOpacity: 1,
@@ -114,6 +116,9 @@
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
+  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip'];
+  const STAGE_MIN_SAFE_MARGIN = 2;
+  const STAGE_MAX_SAFE_MARGIN = 25;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
   let templateSettings = {};
@@ -127,6 +132,12 @@
     const parsed = Math.round(Number(value));
     if (!Number.isFinite(parsed)) return DEFAULT_SETTINGS.columnflowMaxLines;
     return Math.max(COLUMNFLOW_MIN_LINES, Math.min(COLUMNFLOW_MAX_LINES, parsed));
+  }
+
+  function normalizeStageSafeMargin(value) {
+    const parsed = Math.round(Number(value));
+    if (!Number.isFinite(parsed)) return DEFAULT_SETTINGS.stageSafeMargin;
+    return Math.max(STAGE_MIN_SAFE_MARGIN, Math.min(STAGE_MAX_SAFE_MARGIN, parsed));
   }
 
   function cleanSettingSnapshot(src) {
@@ -147,6 +158,10 @@
             if (!COLUMNFLOW_VARIANTS.includes(out[id].columnflowVariant)) out[id].columnflowVariant = 'sen';
             if (!COLUMNFLOW_PLACEMENTS.includes(out[id].columnflowPlacement)) out[id].columnflowPlacement = 'split';
             out[id].columnflowMaxLines = normalizeColumnflowMaxLines(out[id].columnflowMaxLines);
+          }
+          if (STAGE_POSITION_TEMPLATES.includes(id)) {
+            out[id].stageSafeMargin = normalizeStageSafeMargin(out[id].stageSafeMargin);
+            out[id].stageShowSafeZoneOnObs = !!out[id].stageShowSafeZoneOnObs;
           }
         }
       });
@@ -666,6 +681,7 @@
     });
     const isClassic = ui.supportsClassicControls;
     const isColumnflow = settings.template === 'columnflow';
+    const isStageSplit = STAGE_POSITION_TEMPLATES.includes(settings.template) && settings.lyricPosition === 'split';
 
     const templateLabel = document.getElementById('lyric-template-label');
     const templateStatus = document.getElementById('lyric-template-status');
@@ -718,6 +734,15 @@
     const maxLinesValue = document.getElementById('ls-columnflow-max-lines-val');
     if (maxLinesInput) maxLinesInput.value = String(maxLines);
     if (maxLinesValue) maxLinesValue.textContent = `${maxLines} 句`;
+    const stageSafeMarginField = document.getElementById('stage-safe-margin-field');
+    if (stageSafeMarginField) stageSafeMarginField.hidden = !isStageSplit;
+    const stageSafeMargin = normalizeStageSafeMargin(settings.stageSafeMargin);
+    const stageSafeMarginInput = document.getElementById('ls-stage-safe-margin');
+    const stageSafeMarginValue = document.getElementById('ls-stage-safe-margin-val');
+    if (stageSafeMarginInput) stageSafeMarginInput.value = String(stageSafeMargin);
+    if (stageSafeMarginValue) stageSafeMarginValue.textContent = `${stageSafeMargin}%`;
+    const stageShowSafeZoneInput = document.getElementById('ls-stage-show-safe-zone');
+    if (stageShowSafeZoneInput) stageShowSafeZoneInput.checked = !!settings.stageShowSafeZoneOnObs;
     if (posHint) {
       posHint.textContent = isClassic
         ? '九宮格是整個歌詞區塊在畫面上的位置；細調 X/Y 可再微調偏移。'
@@ -759,6 +784,10 @@
         if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
         if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
         settings.columnflowMaxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
+      }
+      if (STAGE_POSITION_TEMPLATES.includes(settings.template)) {
+        settings.stageSafeMargin = normalizeStageSafeMargin(settings.stageSafeMargin);
+        settings.stageShowSafeZoneOnObs = !!settings.stageShowSafeZoneOnObs;
       }
       refreshControls();
       pushSettings();
@@ -809,6 +838,22 @@
         if (settings.template !== 'columnflow') return;
         settings.columnflowMaxLines = normalizeColumnflowMaxLines(maxLinesInput.value);
         syncTemplateButtons();
+        pushSettings();
+      });
+    }
+    const stageSafeMarginInput = document.getElementById('ls-stage-safe-margin');
+    if (stageSafeMarginInput) {
+      stageSafeMarginInput.addEventListener('input', () => {
+        if (!STAGE_POSITION_TEMPLATES.includes(settings.template)) return;
+        settings.stageSafeMargin = normalizeStageSafeMargin(stageSafeMarginInput.value);
+        pushSettings();
+      });
+    }
+    const stageShowSafeZoneInput = document.getElementById('ls-stage-show-safe-zone');
+    if (stageShowSafeZoneInput) {
+      stageShowSafeZoneInput.addEventListener('change', () => {
+        if (!STAGE_POSITION_TEMPLATES.includes(settings.template)) return;
+        settings.stageShowSafeZoneOnObs = !!stageShowSafeZoneInput.checked;
         pushSettings();
       });
     }

@@ -1166,6 +1166,13 @@ const KaraokeEngine = (() => {
     };
   }
 
+  /** 通知目前掛載模板設定已更新，讓安全框等純設定 UI 在暫停時也能立即同步。 */
+  function notifyTemplateSettings(settings) {
+    if (activeTemplateObj && activeTemplateObj.onSettings) {
+      try { activeTemplateObj.onSettings(settings, buildTemplateContext()); } catch (e) { console.warn(`[Karaoke] 模板 ${templateId} onSettings 錯誤:`, e); }
+    }
+  }
+
   /**
    * 切換排版模板。id 未註冊時退回 'classic'；同 id 早退（避免高頻 lyric-settings 重送時反覆重建）。
    */
@@ -1238,5 +1245,6 @@ const KaraokeEngine = (() => {
     getLyricsEndTime,
     setTemplate,
     getTemplate,
+    notifyTemplateSettings,
   };
 })();

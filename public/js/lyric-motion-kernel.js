@@ -555,16 +555,54 @@ const LyricMotion = (() => {
   /**
    * 歌詞水平位置（v5.1）：模板排版前呼叫，取得「有效排版寬度」與該行的分散側 class。
    * - left/right 模式：容器本身被 CSS 收窄，模板只要以 rootEl.clientWidth 為準即可
-   * - split 模式：行容器逐行交替 .pos-left/.pos-right（各佔 48% 寬），排版寬也要跟著縮
+   * - split 模式：行容器逐行交替 .pos-left/.pos-right，並扣掉中央安全距離
    * 註：讀 document.body.dataset 是刻意的例外（顯示端全域狀態），kernel 其餘部分保持純函式。
    */
+  function stageSafeMarginPercent() {
+    if (typeof document === 'undefined' || !document.body) return 2;
+    const parsed = Math.round(Number(document.body.dataset.stageSafeMargin));
+    return Number.isFinite(parsed) ? Math.max(2, Math.min(25, parsed)) : 2;
+  }
+
   function layoutViewport(rootEl, lineIndex) {
     const rootW = (rootEl && rootEl.clientWidth) || window.innerWidth || 1280;
     const split = typeof document !== 'undefined' && document.body
       && document.body.dataset.lyricPos === 'split';
+    const margin = stageSafeMarginPercent();
     return {
-      width: split ? rootW * 0.48 : rootW,
+      width: split ? rootW * (0.5 - margin / 100) : rootW,
       sideClass: split ? (lineIndex % 2 === 0 ? 'pos-left' : 'pos-right') : '',
+    };
+  }
+
+  // 舞台模板共用的中央安全區可視化。預設只有控制面板 preview-mode 看得到；
+  // 使用者明確打開 stage-show-safe-zone 後才會疊到真正 OBS 來源。
+  function mountStageSafeZoneGuide(rootEl) {
+    if (!rootEl) return { sync() {}, destroy() {} };
+    let guideEl = null;
+    let lastMargin = null;
+    function sync() {
+      const margin = stageSafeMarginPercent();
+      if (lastMargin === margin && guideEl) return;
+      lastMargin = margin;
+      if (!guideEl) {
+        guideEl = document.createElement('div');
+        guideEl.className = 'stage-safe-zone-guide';
+        guideEl.innerHTML = '<span class="stage-safe-zone-band"></span>'
+          + '<span class="stage-safe-zone-label">安全距離：中央保留區，歌詞不會跨入</span>';
+        rootEl.appendChild(guideEl);
+      }
+      guideEl.style.setProperty('--stage-safe-left', `${50 - margin}%`);
+      guideEl.style.setProperty('--stage-safe-right', `${50 + margin}%`);
+    }
+    sync();
+    return {
+      sync,
+      destroy() {
+        if (guideEl && guideEl.parentNode) guideEl.parentNode.removeChild(guideEl);
+        guideEl = null;
+        lastMargin = null;
+      },
     };
   }
 
@@ -596,6 +634,8 @@ const LyricMotion = (() => {
     buildDisplayWords,
     splitSentenceSegments,
     layoutViewport,
+    stageSafeMarginPercent,
+    mountStageSafeZoneGuide,
     hashNoise,
     hashSpread,
     measureCharOffsets,

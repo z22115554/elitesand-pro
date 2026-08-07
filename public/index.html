@@ -639,6 +639,15 @@
                 </div>
                 <p class="field-hint" id="lyric-pos-hint">方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。</p>
               </div>
+              <div class="field" id="stage-safe-margin-field" hidden>
+                <label>中央安全距離 <span id="ls-stage-safe-margin-val" class="val">2%</span></label>
+                <input id="ls-stage-safe-margin" data-ls-control="stageSafeMargin" type="range" min="2" max="25" step="1" value="2">
+                <p class="field-hint">畫面正中保留給主播真人／人物模型的區域，歌詞最多只會貼齊安全框邊界，不會跨入。拖曳時右側預覽會用紅色斜線標出目前的範圍。數字越大留白越寬。</p>
+                <div class="switch-row">
+                  <div><div class="label">安全框也疊在 OBS 來源上</div><div class="sub">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。調完記得關掉，避免引導線留在直播畫面。</div></div>
+                  <label class="switch"><input id="ls-stage-show-safe-zone" data-ls-control="stageShowSafeZoneOnObs" type="checkbox"><span class="track"></span></label>
+                </div>
+              </div>
               <div class="field" id="intensity-field" hidden>
                 <label>動畫強度</label>
                 <div class="style-thumb-row" id="intensity-buttons">
