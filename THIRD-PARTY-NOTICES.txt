@@ -12,20 +12,36 @@ License: https://github.com/nodejs/node/blob/main/LICENSE
 
 yt-dlp
 ------
-The main yt-dlp project is dedicated under The Unlicense. Official standalone
-executables also contain separately licensed components; see the release's
-THIRD_PARTY_LICENSES information.
+The main yt-dlp project is dedicated under The Unlicense. The standalone
+yt-dlp.exe bundled with this app also contains separately licensed components.
+The package's licenses/yt-dlp directory records the exact bundled version,
+its SHA-256, and copies of LICENSE.txt and THIRD_PARTY_LICENSES.txt fetched
+from the matching upstream release tag at build time.
 Source and license: https://github.com/yt-dlp/yt-dlp
 
-FFmpeg (bundled in the current portable build)
-----------------------------------------------
-The current portable build includes separate ffmpeg.exe and ffprobe.exe tools
-from a Gyan static GPLv3 essentials build. They are not linked into Elitesand
-Pro. The package's licenses/ffmpeg directory contains the GPLv3 text, exact
-FFmpeg source snapshot, detected build/configuration details, and source links.
-Future builds may return to requiring a separate FFmpeg installation.
+FFmpeg (not bundled by default; downloaded on demand)
+------------------------------------------------------
+Elitesand Pro does not bundle ffmpeg.exe/ffprobe.exe by default. The first
+time an FFmpeg-dependent feature (e.g. YouTube-to-MP3) is used, the app offers
+to download the official Windows "essentials" build from gyan.dev — the
+distribution gyan.dev's own build page and ffmpeg.org both point to for
+Windows — and verifies its SHA-256 against a checksum fetched from the same
+source before using it. The app never links FFmpeg into its own code; it is
+only ever invoked as a separate process. Because Elitesand Pro itself does not
+redistribute the GPLv3 binary, it carries no obligation to provide FFmpeg's
+corresponding source. Users who already have FFmpeg installed, or who set
+ffmpegPath in server/config.js, are not prompted to download anything.
 License guidance: https://ffmpeg.org/legal.html
 Gyan build information: https://www.gyan.dev/ffmpeg/builds/
+
+Nunito (font)
+-------------
+Copyright 2014 The Nunito Project Authors
+(https://github.com/googlefonts/nunito). Licensed under the SIL Open Font
+License, Version 1.1. Full license text ships alongside the font at
+public/fonts/OFL.txt (and a copy in licenses/nunito/OFL.txt in packaged
+builds).
+License: https://openfontlicense.org/
 
 GSAP 3.12.5
 -----------
