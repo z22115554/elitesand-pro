@@ -42,6 +42,11 @@ const LyricWordEngine = (() => {
     const el = document.createElement('div');
     el.className = 'gw-word';
     if (cfg.gapPx) el.style.marginRight = `${cfg.gapPx}px`;
+    // 中央安全距離（左右分散模式）：放大的重點字（scaleBase>1）預設從正中心長大，
+    // 一半的放大量會长向安全線那一側。cfg.originBias 讓呼叫端（模板的 buildLayout）
+    // 指定「固定點」在字的哪一側，讓長大的量整份偏向畫面外側，而不是啃進中央保留區。
+    if (cfg.originBias === 'left') el.style.transformOrigin = 'left center';
+    else if (cfg.originBias === 'right') el.style.transformOrigin = 'right center';
 
     const inkEl = document.createElement('span');
     inkEl.className = 'gw-ink';

@@ -34,7 +34,8 @@
   },
   "devDependencies": {
     "electron": "^43.1.1",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1"
   },
   "engines": {
     "node": ">=18.0.0"

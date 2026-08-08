@@ -9,8 +9,13 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const templateDelivery = require('./template-delivery');
 
 const LOCAL_ASSET_RE = /(?:src|href)="(\/(?:js|css)\/[^"?#]+)"/g;
+// 批次 C-1：/js/t/<id> 是動態遞送的加密模板，不是 public/ 底下的實體檔案，
+// 指紋要改問 template-delivery 拿內容雜湊，不能直接找檔案（會一律變成 MISSING，
+// 導致模板換版後 OBS 快取指紋沒變、疊層還是舊碼）。
+const TEMPLATE_ROUTE_RE = /^\/js\/t\/([a-z0-9-]+)$/;
 
 function getLocalAssets(html) {
   const assets = new Set();
@@ -34,6 +39,12 @@ function getDisplayRuntimeBuild(publicDir) {
   hash.update('display.html\0').update(html);
   for (const asset of assets) {
     hash.update(`\0${asset}\0`);
+    const templateMatch = asset.match(TEMPLATE_ROUTE_RE);
+    if (templateMatch) {
+      const fingerprint = templateDelivery.getTemplateFingerprint(templateMatch[1]);
+      hash.update(fingerprint || 'MISSING');
+      continue;
+    }
     const file = fileForAsset(publicDir, asset);
     if (fs.existsSync(file)) hash.update(fs.readFileSync(file));
     else hash.update('MISSING');

@@ -558,6 +558,8 @@ const LyricMotion = (() => {
    * - split 模式：行容器逐行交替 .pos-left/.pos-right，並扣掉中央安全距離
    * 註：讀 document.body.dataset 是刻意的例外（顯示端全域狀態），kernel 其餘部分保持純函式。
    */
+  /** 舞台模板（Pulse/Facet/Drift/Aura）左右分散時的中央安全距離（%，離中線的單側留白）。
+   *  預設 2 對應這幾個模板原本寫死的 48%/52% 分界，行為不變；使用者可在設定裡調大。 */
   function stageSafeMarginPercent() {
     if (typeof document === 'undefined' || !document.body) return 2;
     const parsed = Math.round(Number(document.body.dataset.stageSafeMargin));
@@ -575,8 +577,8 @@ const LyricMotion = (() => {
     };
   }
 
-  // 舞台模板共用的中央安全區可視化。預設只有控制面板 preview-mode 看得到；
-  // 使用者明確打開 stage-show-safe-zone 後才會疊到真正 OBS 來源。
+  // ─── 舞台模板共用的中央安全區可視化（Pulse/Facet/Drift/Aura 共用同一顆元件）───
+  // 跟直書句流是同一個設計：預設只有面板即時預覽看得到，使用者可另外打開「也疊在 OBS 上」。
   function mountStageSafeZoneGuide(rootEl) {
     if (!rootEl) return { sync() {}, destroy() {} };
     let guideEl = null;

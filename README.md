@@ -157,6 +157,11 @@ Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
 
 #### 原始碼開發
 
+> 本檔案是私人主開發倉庫（`Elitesand-Pro-src`）的 README，以下開發指令僅適用於這裡。
+> 公開的 `elitesand-pro` 倉庫自 2026-08 起只發布編譯後的官方安裝包（binary-only
+> distribution），不再提供可讀原始碼；第三方開放原始碼元件（SoundTouch、GSAP、
+> Tone.js、OpenCC 等）仍各自依其授權條款可取得，見下方「[授權](#授權)」。
+
 需求：Node.js 18+
 
 ```bash
@@ -209,13 +214,18 @@ npm run package:update -- -BaselineRoot "C:\path\to\previous-portable\app"
 npm run package:installer
 ```
 
-建置會產生對應 SHA-256 檔案。Portable 的封裝腳本只保留給 `v0.9.9` 與既有版本維護；`v1.0.0` 起不再發行 Portable。既有 Portable 預設包含 Node.js、yt-dlp、FFmpeg／ffprobe，並附 FFmpeg 原始碼快照、GPLv3 與建置資訊。
+建置會產生對應 SHA-256 檔案。Portable 的封裝腳本只保留給 `v0.9.9` 與既有版本維護；`v1.0.0` 起不再發行 Portable。Node.js 與 yt-dlp 隨附；FFmpeg／ffprobe 自批次 D-1 起預設不再內附，改由控制面板在第一次需要時提供一鍵下載（來源固定是 gyan.dev 官方 Windows 建置頁，下載後驗證 SHA-256），也可用 `-BundleFfmpeg` 建出含 FFmpeg 原始碼快照與 GPLv3 文件的內附版。
 
 ### 授權
 
-Elitesand Pro 採用 [Elitesand Pro 授權條款](LICENSE)：可免費用於個人與商業直播／演出，允許私人且不對外散布的自用修改；未經書面同意不得重新散布原版或修改版。
+Elitesand Pro 是原始碼不公開的專有軟體（proprietary，non-open-source），採用
+[Elitesand Pro 授權條款](LICENSE)：可免費用於個人與商業直播／演出，允許私人且
+不對外散布的自用修改；未經書面同意不得重新散布原版或修改版，也不得重新散布本專案
+自有的原始碼。官方發布一律只透過本頁面的 GitHub Releases。
 
-第三方元件依其原授權使用，詳見 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。歌曲、歌詞、封面及其他媒體權利不包含在本專案授權內。
+第三方元件（含 SoundTouch 等 LGPL 元件）依其原授權使用，不受上述限制拘束，
+詳見 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。歌曲、歌詞、封面及其他
+媒體權利不包含在本專案授權內。
 
 ---
 
@@ -323,7 +333,15 @@ npm run package:installer
 
 ### License
 
-Elitesand Pro is free for personal and commercial streaming or performance. Private, non-distributed modifications are allowed. Redistribution of the original or modified application requires written permission. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
+Elitesand Pro is proprietary, closed-source software (not open source). It is free
+for personal and commercial streaming or performance. Private, non-distributed
+modifications are allowed. Redistribution of the original or modified application,
+including its own source code, requires written permission. Official releases are
+published only through the GitHub Releases page above.
+
+Third-party components (including LGPL components such as SoundTouch) are not
+subject to these restrictions and remain governed by their own licenses — see
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). See [LICENSE](LICENSE) for full terms.
 
 ---
 
@@ -527,4 +545,7 @@ Elitesand Pro 是面向 VTuber、歌回主播与直播演出者的 Windows 桌�
 
 ### 授权
 
-可免费用于个人与商业直播／演出，并允许不对外分发的私人修改；未经书面许可，不得重新分发原版或修改版。详细内容请参阅 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
+Elitesand Pro 是原始代码不公开的专有软件（非开源），可免费用于个人与商业直播／演出，
+并允许不对外分发的私人修改；未经书面许可，不得重新分发原版或修改版，也不得重新分发
+本项目自有的原始代码。第三方组件（含 SoundTouch 等 LGPL 组件）不受此限制，仍依其原
+授权使用。详细内容请参阅 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。

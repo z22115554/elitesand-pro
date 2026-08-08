@@ -1153,6 +1153,10 @@ const KaraokeEngine = (() => {
     return {
       getLyrics: () => getTemplateLyrics(),
       getLineIndex: () => currentLineIndex,
+      // 目前播放到的時間（沿用 onSeek 落地時用的同一份數值）：onSettings 若要重建目前這一行，
+      // 必須拿它去 snap 到正確相位，否則暫停時重建的行會停在「剛出生」的初始狀態
+      // （字沒有進場動畫可以推它、也沒有下一個 onFrame 幫它補上正確位置/透明度）。
+      getCurrentTimeMs: () => lastAdjustedTimeMs,
       isWordMode,
       showsRomaji,
       showsXieyin,
@@ -1167,6 +1171,18 @@ const KaraokeEngine = (() => {
   }
 
   /** 通知目前掛載模板設定已更新，讓安全框等純設定 UI 在暫停時也能立即同步。 */
+  function notifyTemplateSettings(settings) {
+    if (activeTemplateObj && activeTemplateObj.onSettings) {
+      try { activeTemplateObj.onSettings(settings, buildTemplateContext()); } catch (e) { console.warn(`[Karaoke] 模板 ${templateId} onSettings 錯誤:`, e); }
+    }
+  }
+
+  /**
+   * 通知目前掛載的模板「設定有更新」（registry.js 文件裡的 onSettings 生命週期，
+   * 過去只有定義、沒有任何呼叫端真的用過）。用途：模板內部有跟播放進度無關、
+   * 純粹由設定驅動的畫面（例如直書句流的中央安全距離引導線）時，不必等下一次
+   * onFrame／onSeek（暫停或還沒開始播放時根本不會再觸發）就能即時更新。
+   */
   function notifyTemplateSettings(settings) {
     if (activeTemplateObj && activeTemplateObj.onSettings) {
       try { activeTemplateObj.onSettings(settings, buildTemplateContext()); } catch (e) { console.warn(`[Karaoke] 模板 ${templateId} onSettings 錯誤:`, e); }

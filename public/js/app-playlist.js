@@ -41,6 +41,13 @@
     return String(value || '').normalize('NFKC').toLocaleLowerCase('zh-TW');
   }
 
+  function isTrackPlayed(track, index, currentTrackIndex = state.currentTrackIndex) {
+    if (track && track.entryId && state.playedEntryIds instanceof Set
+      && state.playedEntryIds.has(track.entryId)) return true;
+    // 舊伺服器／尚未收到新版 state:sync 時維持原本的索引推算，避免 UI 短暫全部變未唱。
+    return currentTrackIndex >= 0 && index < currentTrackIndex;
+  }
+
   function trackMatchesFilter(track, index, currentTrackIndex) {
     const query = normalizeFilterText(playlistFilterQuery).trim();
     if (query) {
@@ -54,8 +61,8 @@
     }
 
     switch (playlistFilterMode) {
-      case 'upcoming': return currentTrackIndex < 0 || index >= currentTrackIndex;
-      case 'played': return currentTrackIndex >= 0 && index < currentTrackIndex;
+      case 'upcoming': return index !== currentTrackIndex && !isTrackPlayed(track, index, currentTrackIndex);
+      case 'played': return isTrackPlayed(track, index, currentTrackIndex) && index !== currentTrackIndex;
       case 'no-lyrics': return !(track.hasLyrics || track.lyrics);
       case 'missing-audio': return !!track.audioMissing;
       default: return true;
@@ -404,10 +411,13 @@
     const playlist = state.playlist;
     const currentTrackIndex = state.currentTrackIndex;
     reconcileSelectedTracks();
-    // 剩餘時間：從「目前播放（含）」往後加總；尚未開始播放則加總全部
-    const fromIdx = currentTrackIndex >= 0 ? currentTrackIndex : 0;
+    // 剩餘時間：目前歌曲加上所有尚未唱過的歌曲；自然播畢清空目前歌曲後也能正確延續。
     let remainingSec = 0;
-    for (let i = fromIdx; i < playlist.length; i++) remainingSec += (playlist[i].duration || 0);
+    for (let i = 0; i < playlist.length; i++) {
+      if (i === currentTrackIndex || !isTrackPlayed(playlist[i], i, currentTrackIndex)) {
+        remainingSec += (playlist[i].duration || 0);
+      }
+    }
     if (dom.playlistCount) {
       const remTxt = remainingSec > 0 ? t('playlist.remaining', { time: formatTime(remainingSec) }) : '';
       dom.playlistCount.textContent = t('playlist.count', { count: playlist.length }) + remTxt;
@@ -430,7 +440,7 @@
     let visibleCount = 0;
     playlist.forEach((track, i) => {
       const isActive = i === currentTrackIndex;
-      const isPlayed = currentTrackIndex >= 0 && i < currentTrackIndex;
+      const isPlayed = !isActive && isTrackPlayed(track, i, currentTrackIndex);
       const selectionKey = getSelectionKey(track);
       const isSelected = selectedTrackKeys.has(selectionKey);
       const isVisible = trackMatchesFilter(track, i, currentTrackIndex);

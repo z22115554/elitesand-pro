@@ -607,6 +607,15 @@
                 <input id="ls-columnflow-max-lines" data-ls-control="columnflowMaxLines" type="range" min="1" max="6" step="1" value="4">
                 <p class="field-hint">偏左或偏右畫面較擠時，可把句數調低。</p>
               </div>
+              <div class="field" id="columnflow-safe-margin-field" hidden>
+                <label>中央安全距離 <span id="ls-columnflow-safe-margin-val" class="val">11%</span></label>
+                <input id="ls-columnflow-safe-margin" data-ls-control="columnflowSafeMargin" type="range" min="5" max="25" step="1" value="11">
+                <p class="field-hint">畫面正中保留給主播真人／人物模型的區域，直行不會跨入；拖曳時右側預覽會用紅色斜線標出目前的範圍，調到剛好蓋住人物即可放開。數字越大留白越寬。</p>
+                <div class="switch-row">
+                  <div><div class="label">安全框也疊在 OBS 來源上</div><div class="sub">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。⚠️ 調完記得關掉，不然直播畫面會一直帶著這條線。</div></div>
+                  <label class="switch"><input id="ls-columnflow-show-safe-zone" data-ls-control="columnflowShowSafeZoneOnObs" type="checkbox"><span class="track"></span></label>
+                </div>
+              </div>
               <div class="field" id="lyric-pos-field">
                 <label>歌詞位置</label>
                 <!-- 經典疊層：九宮格全畫面定位＋X/Y 細調（從「詳細設定」移過來，同一份 DOM／同一套事件，不是複本）-->
@@ -627,10 +636,6 @@
                       <button type="button" data-v="flex-end" data-h="center" aria-label="下 中"></button>
                       <button type="button" data-v="flex-end" data-h="flex-end" aria-label="下 右"></button>
                     </div>
-                    <div class="pos-fine">
-                      <div id="ls-offset-x-row" class="slider-row"><span class="sl-label">水平 X</span><input id="ls-offset-x" data-ls-control="offsetX" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-x-val" class="val">0px</span></div>
-                      <div id="ls-offset-y-row" class="slider-row"><span class="sl-label">垂直 Y</span><input id="ls-offset-y" data-ls-control="offsetY" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-y-val" class="val">0px</span></div>
-                    </div>
                   </div>
                 </div>
                 <!-- 動畫模板：置中/偏左/偏右/左右分散 -->
@@ -641,6 +646,28 @@
                   <button class="style-thumb" data-lyric-pos="split" type="button" title="左右分散：一句左、一句右交替出現，中間留給人物（經典疊層不支援）"><span class="style-thumb-preview"><span class="style-thumb-char">分</span></span><span class="style-thumb-label">左右分散</span></button>
                 </div>
                 <p class="field-hint" id="lyric-pos-hint">方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。</p>
+                <!-- 位置微調：置中/偏左/偏右都可再做小範圍位移；範圍會依目前內容自動收緊，
+                     不會把歌詞推出畫面（見 display.js reclampLyricOffset）。左右分散不適用
+                     （每行交替左右，微調沒有單一位置的意義；那個模式改調「中央安全距離」）。-->
+                <div id="lyric-pos-fine-wrap" hidden>
+                  <div class="pos-head">
+                    <span class="sub sub--fine-hint">小範圍微調，超出安全範圍會自動收回</span>
+                    <button id="ls-offset-reset" class="btn btn-sm btn-ghost" type="button">重置微調</button>
+                  </div>
+                  <div class="pos-fine">
+                    <div id="ls-offset-x-row" class="slider-row"><span class="sl-label">水平 X</span><input id="ls-offset-x" data-ls-control="offsetX" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-x-val" class="val">0px</span></div>
+                    <div id="ls-offset-y-row" class="slider-row"><span class="sl-label">垂直 Y</span><input id="ls-offset-y" data-ls-control="offsetY" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-y-val" class="val">0px</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="field" id="stage-safe-margin-field" hidden>
+                <label>中央安全距離 <span id="ls-stage-safe-margin-val" class="val">2%</span></label>
+                <input id="ls-stage-safe-margin" data-ls-control="stageSafeMargin" type="range" min="2" max="25" step="1" value="2">
+                <p class="field-hint">畫面正中保留給主播真人／人物模型的區域，歌詞最多只會貼齊安全框邊界，不會跨入。拖曳時右側預覽會用紅色斜線標出目前的範圍。數字越大留白越寬。</p>
+                <div class="switch-row">
+                  <div><div class="label">安全框也疊在 OBS 來源上</div><div class="sub">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。⚠️ 調完記得關掉，不然直播畫面會一直帶著這條線。</div></div>
+                  <label class="switch"><input id="ls-stage-show-safe-zone" data-ls-control="stageShowSafeZoneOnObs" type="checkbox"><span class="track"></span></label>
+                </div>
               </div>
               <div class="field" id="stage-safe-margin-field" hidden>
                 <label>中央安全距離 <span id="ls-stage-safe-margin-val" class="val">2%</span></label>
@@ -2058,6 +2085,7 @@
             <span id="guide-check-ffmpeg" class="readiness-pill pending">FFmpeg 檢查中</span>
             <span id="guide-check-version" class="readiness-pill pending">版本檢查中</span>
           </div>
+          <button id="guide-ffmpeg-download" class="btn btn-sm btn-primary" type="button" hidden>下載 FFmpeg</button>
           <button id="guide-check-refresh" class="btn btn-sm btn-ghost" type="button">重新檢查</button>
         </section>
 

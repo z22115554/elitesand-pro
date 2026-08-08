@@ -54,12 +54,15 @@
   <script src="/js/lyric-template-registry.js"></script>
   <script src="/js/karaoke.js"></script>
   <script src="/js/lyric-word-engine.js"></script>
-  <script src="/js/lyric-template-pulse.js"></script>
-  <script src="/js/lyric-template-facet.js"></script>
-  <script src="/js/lyric-template-drift.js"></script>
-  <script src="/js/lyric-template-aura.js"></script>
-  <script src="/js/lyric-template-ktv.js"></script>
-  <script src="/js/lyric-template-columnflow.js"></script>
+  <!-- 批次 C-1：自訂模板改由 server 動態遞送（開發模式讀原始碼；production build
+       封裝後讀加密 blob 並解密），不再是安裝目錄裡具名可讀的 .js 檔。 -->
+  <script src="/js/t/pulse"></script>
+  <script src="/js/t/facet"></script>
+  <script src="/js/t/drift"></script>
+  <script src="/js/t/aura"></script>
+  <script src="/js/t/ktv"></script>
+  <script src="/js/t/columnflow"></script>
+  <!-- Paper Strip／Mirror 尚未加入加密遞送批次，維持一般 public 靜態檔。 -->
   <script src="/js/lyric-template-paperstrip.js"></script>
   <script src="/js/lyric-template-mirror.js"></script>
   <script src="/js/audio-processor.js"></script>

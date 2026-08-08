@@ -67,9 +67,12 @@ function createAppState(io) {
     currentTrack: null,
     isPlaying: false,
     // Distinguishes an unstarted standby track from a track paused after playback began.
-    // This remains transient because currentTrack itself is not persisted.
     currentTrackStarted: false,
     currentTime: 0,
+    // 播放清單進度不能只靠 currentTrack 推算：歌曲自然播畢後 currentTrack 會清空，
+    // 但已唱／未唱狀態仍必須保留，重開程式後也不能全部退回未唱。
+    playedEntryIds: new Set(),
+    lastPlayedEntryId: null,
     playlist: [],
     style: 'cute',
     showRomanization: false,
@@ -109,6 +112,49 @@ function createAppState(io) {
   const trackPitch = new Map();         // semitones (-12 ~ 12)
   const trackSpeed = new Map();         // rate (0.5 ~ 1.5)
   const manualLyricsCache = new Map();  // { lyrics, lyricsType, parsedLyrics, source, timestamp }
+
+  function playlistEntryId(track) {
+    return track && typeof track.entryId === 'string' && track.entryId ? track.entryId : null;
+  }
+
+  function findPlaylistTrack({ entryId, trackId } = {}) {
+    if (entryId) {
+      const exact = playState.playlist.find((track) => playlistEntryId(track) === entryId);
+      if (exact) return exact;
+    }
+    if (trackId) return playState.playlist.find((track) => track && track.id === trackId) || null;
+    return null;
+  }
+
+  function markTrackPlayed(track) {
+    const entryId = playlistEntryId(track);
+    if (!entryId) return false;
+    playState.playedEntryIds.add(entryId);
+    playState.lastPlayedEntryId = entryId;
+    return true;
+  }
+
+  function reconcilePlaybackProgress() {
+    const validEntryIds = new Set(playState.playlist.map(playlistEntryId).filter(Boolean));
+    for (const entryId of playState.playedEntryIds) {
+      if (!validEntryIds.has(entryId)) playState.playedEntryIds.delete(entryId);
+    }
+    if (playState.lastPlayedEntryId && !validEntryIds.has(playState.lastPlayedEntryId)) {
+      playState.lastPlayedEntryId = null;
+    }
+    if (playState.currentTrack) {
+      const current = findPlaylistTrack({
+        entryId: playlistEntryId(playState.currentTrack),
+        trackId: playState.currentTrack.id,
+      });
+      if (!current) {
+        playState.currentTrack = null;
+        playState.currentTrackStarted = false;
+        playState.isPlaying = false;
+        playState.currentTime = 0;
+      }
+    }
+  }
 
   // ─── 直播 Session / Setlist ───
   const session = {
@@ -202,6 +248,60 @@ function createAppState(io) {
     if (saved.twitchRewardSettings && typeof saved.twitchRewardSettings === 'object') {
       playState.twitchRewardSettings = twitchRewardSettings.normalizeSettings(saved.twitchRewardSettings);
     }
+
+    const savedPlayback = saved.playback && typeof saved.playback === 'object'
+      ? saved.playback
+      : null;
+    if (savedPlayback) {
+      if (Array.isArray(savedPlayback.playedEntryIds)) {
+        for (const entryId of savedPlayback.playedEntryIds) {
+          if (typeof entryId === 'string' && entryId) playState.playedEntryIds.add(entryId);
+        }
+      }
+      if (typeof savedPlayback.lastPlayedEntryId === 'string') {
+        playState.lastPlayedEntryId = savedPlayback.lastPlayedEntryId;
+      }
+
+      const restoredTrack = findPlaylistTrack({
+        entryId: typeof savedPlayback.currentEntryId === 'string' ? savedPlayback.currentEntryId : null,
+        trackId: typeof savedPlayback.currentTrackId === 'string' ? savedPlayback.currentTrackId : null,
+      });
+      if (restoredTrack) {
+        playState.currentTrack = { ...restoredTrack, autoplay: false };
+        playState.currentTrackStarted = savedPlayback.currentTrackStarted === true;
+        // 只記得播到哪一首，不記歌曲內秒數。意外重開後從該首開頭重新準備。
+        playState.currentTime = 0;
+        // 重開後只恢復待命／暫停狀態，不可自行出聲；使用者按播放後從頭開始。
+        playState.isPlaying = false;
+        playState.currentOffset = trackOffsets.get(restoredTrack.id) || 0;
+        playState.pitchShift = trackPitch.has(restoredTrack.id) ? trackPitch.get(restoredTrack.id) : 0;
+        playState.playbackRate = trackSpeed.has(restoredTrack.id) ? trackSpeed.get(restoredTrack.id) : 1.0;
+        if (playState.currentTrackStarted) markTrackPlayed(restoredTrack);
+      }
+    }
+
+    // 升級前的 state.json 沒有 playback.playedEntryIds。利用既有的已唱 session 記錄，
+    // 依清單順序回填一次，讓使用者更新後不會看到所有歌曲突然變回未唱。
+    if (playState.playedEntryIds.size === 0 && session.songs.length > 0) {
+      const used = new Set();
+      let searchFrom = 0;
+      for (const song of session.songs) {
+        let index = playState.playlist.findIndex((track, i) => i >= searchFrom
+          && track && track.id === song.id && !used.has(playlistEntryId(track)));
+        if (index < 0) {
+          index = playState.playlist.findIndex((track) => track && track.id === song.id
+            && !used.has(playlistEntryId(track)));
+        }
+        if (index < 0) continue;
+        const entryId = playlistEntryId(playState.playlist[index]);
+        if (!entryId) continue;
+        used.add(entryId);
+        playState.playedEntryIds.add(entryId);
+        playState.lastPlayedEntryId = entryId;
+        searchFrom = index + 1;
+      }
+    }
+    reconcilePlaybackProgress();
     log.info('狀態已從 state.json 還原');
   })();
 
@@ -224,6 +324,13 @@ function createAppState(io) {
       manualLyrics: Object.fromEntries(manualLyricsCache),
       trackPitch: Object.fromEntries(trackPitch),
       trackSpeed: Object.fromEntries(trackSpeed),
+      playback: {
+        currentEntryId: playlistEntryId(playState.currentTrack),
+        currentTrackId: playState.currentTrack ? playState.currentTrack.id : null,
+        currentTrackStarted: !!playState.currentTrackStarted,
+        playedEntryIds: [...playState.playedEntryIds],
+        lastPlayedEntryId: playState.lastPlayedEntryId,
+      },
       session: { active: session.active, startedAt: session.startedAt, source: session.source, songs: session.songs },
       setlistTheme: playState.setlistTheme,
       setlistLayout: playState.setlistLayout,
@@ -246,6 +353,13 @@ function createAppState(io) {
     const pl = Array.isArray(playState.playlist) ? playState.playlist : [];
     const cur = playState.currentTrack;
     const currentTrackStarted = !!playState.currentTrackStarted;
+    const playedEntryIds = playState.playedEntryIds;
+    const isCurrentTrack = (track) => {
+      if (!cur || !track) return false;
+      const curEntryId = playlistEntryId(cur);
+      const trackEntryId = playlistEntryId(track);
+      return curEntryId && trackEntryId ? curEntryId === trackEntryId : track.id === cur.id;
+    };
     let upcoming = [];
     if (pl.length || cur) {
       // 同 play:track：優先用 entryId 定位，避免重複歌曲時「接下來」清單從錯的位置切出去。
@@ -259,10 +373,16 @@ function createAppState(io) {
       //  - cur 不在清單（單獨載入）：待命→自己當接下來第一首；播放中→只列清單其餘。
       //  - 無 cur：整份清單都是接下來。
       let rest;
-      // An unstarted standby track belongs in upcoming; an already-started track remains
-      // current even while paused, so it must not be duplicated in upcoming.
-      if (idx >= 0) rest = pl.slice(currentTrackStarted ? idx + 1 : idx);
-      else rest = cur ? (currentTrackStarted ? pl.slice(0) : [cur, ...pl]) : pl.slice(0);
+      // 已唱狀態以實際開始播放過的 entryId 為準，而不是只靠目前索引切片。
+      // 這樣自然播畢清空 currentTrack、或程式意外關閉重開後，已唱歌曲仍不會回到未唱。
+      if (idx >= 0 && !currentTrackStarted) {
+        rest = pl.filter((track) => !playedEntryIds.has(playlistEntryId(track)));
+      } else if (idx < 0 && cur && !currentTrackStarted) {
+        rest = [cur, ...pl.filter((track) => !playedEntryIds.has(playlistEntryId(track)))];
+      } else {
+        rest = pl.filter((track) => !isCurrentTrack(track)
+          && !playedEntryIds.has(playlistEntryId(track)));
+      }
       upcoming = rest.map((t) => ({ title: t.title || '', artist: t.artist || '' }));
     }
     return {
@@ -396,7 +516,10 @@ function createAppState(io) {
         ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset })
         : null,
       isPlaying: playState.isPlaying,
+      currentTrackStarted: !!playState.currentTrackStarted,
       currentTime: playState.currentTime,
+      playedEntryIds: [...playState.playedEntryIds],
+      lastPlayedEntryId: playState.lastPlayedEntryId,
       playlist: enrichedPlaylist,
       style: playState.style,
       styleOverrides: playState.styleOverrides,
@@ -444,6 +567,8 @@ function createAppState(io) {
     setlistPayload,
     emitSetlist,
     recordSessionSong,
+    markTrackPlayed,
+    reconcilePlaybackProgress,
     broadcastState,
     getStateSyncMetrics,
     getPublicPlaylist,
