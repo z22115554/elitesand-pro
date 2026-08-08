@@ -66,14 +66,42 @@
     if (!isPreview) return;
     if (!document.body.className.match(/style-/)) document.body.classList.add('style-cute');
     const sampleLines = [
-      { time: 0, text: '這是一句示範用的歌詞 This is an example lyric.', phonetic: 'zhè shì yī jù shì fàn yòng de gē cí', xieyin: '', words: [] },
+      // Deliberately uneven word timings make the Mirror preview prove that
+      // its sung-glyph pulse follows source time, rather than a fixed rhythm.
+      { time: 0, text: '這是一句示範用的歌詞 This is an example lyric.', phonetic: 'zhè shì yī jù shì fàn yòng de gē cí', xieyin: '', words: [
+        { text: '這', start: 0, duration: 260 }, { text: '是', start: 340, duration: 430 },
+        { text: '一', start: 830, duration: 180 }, { text: '句', start: 1060, duration: 610 },
+        { text: '示', start: 1740, duration: 220 }, { text: '範', start: 2030, duration: 430 },
+        { text: '用', start: 2520, duration: 180 }, { text: '的', start: 2770, duration: 340 },
+        { text: '歌詞 ', start: 3180, duration: 360 }, { text: 'This ', start: 3570, duration: 220 },
+        { text: 'is ', start: 3810, duration: 150 }, { text: 'an ', start: 3970, duration: 120 },
+        { text: 'example ', start: 4100, duration: 80 }, { text: 'lyric.', start: 4190, duration: 10 },
+      ] },
       { time: 4200, text: '字體效果測試 Font preview sample.', phonetic: 'zì tǐ xiào guǒ cè shì', xieyin: '', words: [] },
     ];
     previewSampleActive = true;
     KaraokeEngine.loadLyrics('', 'lrc', sampleLines);
-    syncTimeMs = 1800;
+    // Mirror is the only template whose core promise is a line-entry motion.
+    // Let its sample replay that entry, then park on a settled frame
+    // so the normal settings preview remains useful for typography checks.
+    const replayMirrorEntry = Boolean(document.getElementById('mirror-root'));
+    syncTimeMs = replayMirrorEntry ? 0 : 1800;
     lastSyncTimestamp = performance.now();
+    isControllerPlaying = replayMirrorEntry;
     KaraokeEngine.update(syncTimeMs);
+    if (previewMotionTimer) window.clearTimeout(previewMotionTimer);
+    if (replayMirrorEntry) {
+      previewMotionTimer = window.setTimeout(() => {
+        if (!previewSampleActive) return;
+        // Let the intentionally distant second sample line become visible.
+        // This proves the temporal batch split in the normal settings preview
+        // instead of parking before the next group can replace the first one.
+        syncTimeMs = 5100;
+        lastSyncTimestamp = performance.now();
+        isControllerPlaying = false;
+        KaraokeEngine.update(syncTimeMs);
+      }, 5100);
+    }
   }
 
   // ─── 同步時間追蹤 ───
@@ -86,6 +114,7 @@
   let audioErrorCount = 0; // Phase 5: 音訊錯誤計數
   const MAX_AUDIO_ERRORS = 3; // 最大重試次數
   let previewSampleActive = false;
+  let previewMotionTimer = null;
 
   // Phase 7: 變調與變速狀態
   let currentPitchShift = 0;    // 使用者音高偏移（半音），-12 ~ +12
@@ -542,61 +571,6 @@
     StylePresets.setOverrides(overrides || {});
   });
 
-  // ─── 位置微調自動夾限（v5.2）───
-  // 使用者滑桿調的是「意圖位移」；實際寫進 --lyric-offset-x/y 的是收緊後的值。
-  // 每次內容改變（換行、切換模板、字級變動）容器的實際邊界都可能不同，靠 ResizeObserver
-  // 監看 #lyrics-container 的版面框大小變化，一有變動就用同一個「意圖位移」重新收緊一次，
-  // 使用者永遠調不出畫面外，也不需要每個模板各自處理。
-  let lyricOffsetTargetX = 0;
-  let lyricOffsetTargetY = 0;
-  let lyricOffsetAppliedX = 0;
-  let lyricOffsetAppliedY = 0;
-  const LYRIC_OFFSET_EDGE_PAD = 12; // 留給邊界的最小可視安全距離（px）
-  let lyricOffsetResizeObserver = null;
-
-  function reclampLyricOffset() {
-    const container = document.getElementById('lyrics-container');
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return; // 尚未 layout，之後 resize 會再觸發
-    // 減掉「目前已套用的位移」還原出容器在零位移時的自然邊界，才能算出這次能再位移多少
-    const baseLeft = rect.left - lyricOffsetAppliedX;
-    const baseRight = rect.right - lyricOffsetAppliedX;
-    const baseTop = rect.top - lyricOffsetAppliedY;
-    const baseBottom = rect.bottom - lyricOffsetAppliedY;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const pad = LYRIC_OFFSET_EDGE_PAD;
-
-    let minX = pad - baseLeft;
-    let maxX = vw - pad - baseRight;
-    if (minX > maxX) { const mid = (minX + maxX) / 2; minX = mid; maxX = mid; } // 內容比畫面寬，兩難時取中間值
-    let minY = pad - baseTop;
-    let maxY = vh - pad - baseBottom;
-    if (minY > maxY) { const mid = (minY + maxY) / 2; minY = mid; maxY = mid; }
-
-    const effX = Math.min(Math.max(lyricOffsetTargetX, minX), maxX);
-    const effY = Math.min(Math.max(lyricOffsetTargetY, minY), maxY);
-
-    if (effX !== lyricOffsetAppliedX) {
-      lyricOffsetAppliedX = effX;
-      document.documentElement.style.setProperty('--lyric-offset-x', `${effX}px`);
-    }
-    if (effY !== lyricOffsetAppliedY) {
-      lyricOffsetAppliedY = effY;
-      document.documentElement.style.setProperty('--lyric-offset-y', `${effY}px`);
-    }
-  }
-
-  function ensureLyricOffsetObserver() {
-    if (lyricOffsetResizeObserver || typeof ResizeObserver === 'undefined') return;
-    const container = document.getElementById('lyrics-container');
-    if (!container) return;
-    lyricOffsetResizeObserver = new ResizeObserver(() => reclampLyricOffset());
-    lyricOffsetResizeObserver.observe(container);
-    window.addEventListener('resize', reclampLyricOffset);
-  }
-
   // ─── 歌詞外觀/位置設定（從控制面板即時推送，寫入 CSS 變數）───
   function applyLyricSettings(s) {
     if (!s || typeof s !== 'object') return;
@@ -620,8 +594,8 @@
       paddingX: ['--lyric-padding-x', v => `${v}px`],
       paddingY: ['--lyric-padding-y', v => `${v}px`],
       maxWidth: ['--lyric-max-width', v => `${v}%`],
-      // offsetX/offsetY 不走這裡直接寫 CSS 變數——見下方 reclampLyricOffset，
-      // 使用者調的是「意圖位移」，實際套用值會依當下內容自動收緊，不會把歌詞推出畫面。
+      offsetX: ['--lyric-offset-x', v => `${v}px`],
+      offsetY: ['--lyric-offset-y', v => `${v}px`],
       // 文字排版細項
       lineHeight: ['--lyric-line-height', v => String(v)],
       letterSpacing: ['--lyric-letter-spacing', v => `${v}px`],
@@ -642,10 +616,6 @@
         root.setProperty(cssVar, fmt(s[key]));
       }
     }
-    if (typeof s.offsetX === 'number') lyricOffsetTargetX = s.offsetX;
-    if (typeof s.offsetY === 'number') lyricOffsetTargetY = s.offsetY;
-    ensureLyricOffsetObserver();
-    reclampLyricOffset();
     // KTV 伴唱是底部雙行絕對定位，原本 paddingY 的 0..300px 幅度對「上下位置」
     // 太小；把同一個「上下邊距」控制轉成較大的 KTV 專用位移，避免主設定區再多一條 Y 控制。
     if (typeof s.paddingY === 'number') {
@@ -681,29 +651,18 @@
       document.body.dataset.columnflowMaxLines = String(Number.isFinite(columnflowMaxLines)
         ? Math.max(1, Math.min(6, columnflowMaxLines))
         : 4);
-      // 中央安全距離：畫面正中保留給主播真人／人物模型的區域，兩側直行不得跨入。
-      const columnflowSafeMargin = Math.round(Number(s.columnflowSafeMargin));
-      document.body.dataset.columnflowSafeMargin = String(Number.isFinite(columnflowSafeMargin)
-        ? Math.max(5, Math.min(25, columnflowSafeMargin))
-        : 11);
-      // 安全距離引導線預設只有面板預覽看得到；使用者明確打開才會疊在真正的 OBS 來源上。
-      document.body.classList.toggle('cf-show-safe-zone', !!s.columnflowShowSafeZoneOnObs);
     } else {
       delete document.body.dataset.columnflowVariant;
       delete document.body.dataset.columnflowPlacement;
       delete document.body.dataset.columnflowMaxLines;
-      delete document.body.dataset.columnflowSafeMargin;
-      document.body.classList.remove('cf-show-safe-zone');
     }
-    // 舞台模板（Pulse/Facet/Drift/Aura）共用同一套「左右分散」機制與中央安全距離。
-    if (['pulse', 'facet', 'drift', 'aura'].includes(s.template)) {
+    // 舞台模板共用中央安全距離。paperstrip / mirror 也吃同一套，讓中央人物區真的留白。
+    if (['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)) {
       const stageSafeMargin = Math.round(Number(s.stageSafeMargin));
       const clampedStageSafeMargin = Number.isFinite(stageSafeMargin)
         ? Math.max(2, Math.min(25, stageSafeMargin))
         : 2;
       document.body.dataset.stageSafeMargin = String(clampedStageSafeMargin);
-      // CSS 的 .pos-left/.pos-right 邊界讀的是 CSS 自訂屬性（var()），不是 dataset——
-      // 兩者是不同機制，只寫 dataset 的話排版邊界會一直吃 CSS 裡的預設值，量不到使用者真正調的數字。
       document.body.style.setProperty('--stage-safe-margin', String(clampedStageSafeMargin));
       document.body.classList.toggle('stage-show-safe-zone', !!s.stageShowSafeZoneOnObs);
     } else {
@@ -727,9 +686,6 @@
     if (typeof s.template === 'string' && KaraokeEngine.setTemplate) {
       KaraokeEngine.setTemplate(s.template);
     }
-    // 通知目前模板「設定更新了」，讓純設定驅動、跟播放進度無關的畫面（例如直書句流的
-    // 中央安全距離引導線）不必等下一次 onFrame／onSeek 就能即時反映——暫停或還沒開始播放時
-    // 根本不會再有下一次。
     if (KaraokeEngine.notifyTemplateSettings) {
       KaraokeEngine.notifyTemplateSettings(s);
     }

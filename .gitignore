@@ -50,10 +50,3 @@ data-preview-*/
 
 # Codex 遠端 session 的本機附件暫存
 .codex-remote-attachments/
-
-# 閉源化計畫與遷移操作文件（同 HANDOFF/STATUS 性質，只留本機）
-CLOSED_SOURCE_MIGRATION_PLAN.md
-REPO_MIGRATION.md
-
-# 本機暫存與私密資料（release 備份、簽章私鑰等，絕不可進 git）
-.local/

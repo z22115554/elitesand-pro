@@ -40,7 +40,6 @@ const { isYouTubeUrl } = require('../utils/youtube-url');
 const { classifyImportError } = require('../utils/import-error');
 const ytdlpCompatibility = require('../services/ytdlp-compatibility');
 const { getSystemCheck } = require('../services/system-check');
-const ffmpegProvider = require('../services/ffmpeg-provider');
 const { createDiagnosticBundle } = require('../services/diagnostic-bundle');
 const runtimeEvidence = require('../services/runtime-evidence');
 const feedbackReport = require('../services/feedback-report');
@@ -143,31 +142,6 @@ router.get('/health', (req, res) => {
 
 router.get('/system-check', async (req, res) => {
   res.json(await getSystemCheck());
-});
-
-// ─── FFmpeg 按需下載（批次 D-1）───
-// 這條路由會觸發真正的網路下載＋寫入本機檔案，依鐵則 15 必須手動掛 requirePin。
-router.post('/ffmpeg/download', requirePin, async (req, res) => {
-  if (ffmpegProvider.isAvailable()) {
-    const resolved = ffmpegProvider.resolveFfmpegPaths();
-    return res.json({ ok: true, alreadyAvailable: true, source: resolved.source });
-  }
-  try {
-    const result = await ffmpegProvider.downloadFfmpeg();
-    res.json({ ok: true, alreadyAvailable: false, ffmpeg: result.ffmpeg });
-  } catch (err) {
-    log.error('FFmpeg 下載失敗', err);
-    res.status(502).json({ ok: false, reason: err.message });
-  }
-});
-
-router.get('/ffmpeg/status', (req, res) => {
-  const resolved = ffmpegProvider.resolveFfmpegPaths();
-  res.json({
-    available: !!resolved,
-    source: resolved?.source || null,
-    downloadUrl: ffmpegProvider.DOWNLOAD_URL,
-  });
 });
 
 // Support export is deliberately opt-in and PIN-protected when a PIN exists.

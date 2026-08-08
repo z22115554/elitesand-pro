@@ -20,8 +20,6 @@ const DEFAULTS = {
   cacheDays: 7,
   // 歌詞快取筆數上限
   maxCacheEntries: 500,
-  // 使用者自行指定的 FFmpeg 路徑（選填，留空則自動偵測／可按需下載，見 ffmpeg-provider.js）
-  ffmpegPath: '',
   // 官方公開 repo；可在 config.js 覆蓋成其他 fork，空字串可停用。
   updateCheckRepo: 'z22115554/elitesand-pro',
   // 更新檢查間隔（毫秒）

@@ -334,19 +334,6 @@
       currentLineIndex = -1;
     },
 
-    // 字級等視覺設定即時生效：重建目前這一行並 snap 到目前時間，理由與做法同
-    // Pulse/Facet/Aura／onSeek——暫停時沒有後續 onFrame 幫忙把段落／字推到正確狀態，
-    // 只重建不 snap 的話，段落會停在剛建立的「尚未浮現」狀態（等於整行消失）。
-    onSettings(settings, ctx) {
-      if (currentLineIndex >= 0 && ctx && typeof ctx.getLyrics === 'function') {
-        const idx = currentLineIndex;
-        const timeMs = ctx.getCurrentTimeMs ? ctx.getCurrentTimeMs() : 0;
-        retireCurrentLine(ctx, true);
-        buildLine(ctx, idx);
-        updateSegments(timeMs, true);
-      }
-    },
-
     destroy() {
       if (currentLineEl) {
         gsap.killTweensOf(currentLineEl);

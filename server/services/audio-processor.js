@@ -18,7 +18,6 @@ const { createLogger } = require('../utils/logger');
 const log = createLogger('Audio');
 const { isYouTubeUrl, isPlaylistUrl, extractVideoId } = require('../utils/youtube-url');
 const { assessYouTubeImport } = require('../utils/youtube-import-risk');
-const ffmpegProvider = require('./ffmpeg-provider');
 const importTempRegistry = require('./import-temp-registry');
 const { inspectDiskSpace, appendDiskSpaceWarning } = require('./disk-space');
 const { downloadsDir } = require('../utils/app-paths');
@@ -845,7 +844,7 @@ class AudioProcessor {
     throwIfCancelled(signal);
     const started = Date.now();
     return new Promise((resolve, reject) => {
-      const child = spawn(ffmpegProvider.getFfmpegPath(), ['-hide_banner', '-nostats', '-i', filePath, '-vn', '-af', 'ebur128', '-f', 'null', '-'],
+      const child = spawn('ffmpeg', ['-hide_banner', '-nostats', '-i', filePath, '-vn', '-af', 'ebur128', '-f', 'null', '-'],
         { env: process.env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
       const onAbort = () => child.kill();
       signal?.addEventListener('abort', onAbort, { once: true });
@@ -875,20 +874,13 @@ class AudioProcessor {
     const outputPath = path.join(path.dirname(inputPath), `${path.basename(inputPath, path.extname(inputPath))}.mp3`);
     if (path.resolve(inputPath) === path.resolve(outputPath)) return Promise.resolve(outputPath);
     return new Promise((resolve, reject) => {
-      const child = spawn(ffmpegProvider.getFfmpegPath(), ['-y', '-i', inputPath, '-vn', '-codec:a', 'libmp3lame', '-b:a', '192k', outputPath],
+      const child = spawn('ffmpeg', ['-y', '-i', inputPath, '-vn', '-codec:a', 'libmp3lame', '-b:a', '192k', outputPath],
         { env: process.env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
       const onAbort = () => child.kill();
       signal?.addEventListener('abort', onAbort, { once: true });
       let stderr = ''; const timer = setTimeout(() => child.kill(), YTDLP_DOWNLOAD_TIMEOUT);
       child.stderr.on('data', c => { stderr = (stderr + c.toString()).slice(-YTDLP_MAX_BUFFER); });
-      child.on('error', (error) => {
-        signal?.removeEventListener('abort', onAbort);
-        if (signal?.aborted) return reject(new ImportCancelledError());
-        if (error.code === 'ENOENT') {
-          return reject(new Error('找不到 FFmpeg，YouTube 轉 MP3 需要它。請到控制面板的系統檢查點「下載 FFmpeg」，或在 config.js 指定 ffmpegPath。'));
-        }
-        reject(error);
-      });
+      child.on('error', (error) => { signal?.removeEventListener('abort', onAbort); reject(signal?.aborted ? new ImportCancelledError() : error); });
       child.on('close', code => {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);

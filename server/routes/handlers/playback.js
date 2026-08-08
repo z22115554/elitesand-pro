@@ -21,7 +21,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, trackPitch, trackSpeed, manualLyricsCache,
     persistState, emitSetlist, recordSessionSong, broadcastState, getEffectiveLyrics,
-    markTrackPlayed,
   } = ctx;
 
   socket.on('play:track', (track) => {
@@ -97,7 +96,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.playbackRate = savedSpeed;
     playState.emergencyHide = false;
     playState.lastStateUpdateTimestamp = Date.now();
-    if (autoplay && typeof markTrackPlayed === 'function') markTrackPlayed(track);
 
     log.info(`播放歌曲: ${track.title} (id: ${trackId}, offset: ${offset}ms, pitch: ${savedPitch}, speed: ${savedSpeed}x)`);
 
@@ -168,10 +166,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
   socket.on('play:toggle', (val) => {
     // 有給明確布林值就採用（用於「載入待命=暫停」同步），否則切換
     playState.isPlaying = (typeof val === 'boolean') ? val : !playState.isPlaying;
-    if (playState.isPlaying && playState.currentTrack) {
-      playState.currentTrackStarted = true;
-      if (typeof markTrackPlayed === 'function') markTrackPlayed(playState.currentTrack);
-    }
+    if (playState.isPlaying && playState.currentTrack) playState.currentTrackStarted = true;
     playState.lastStateUpdateTimestamp = Date.now();
     log.info(`播放切換: ${playState.isPlaying ? '播放' : '暫停'}`);
     // 標來源同 play:track：面板不該對「另一個面板分頁」的廣播有反應，
@@ -185,8 +180,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     if (playState.isPlaying) recordSessionSong();
     emitSetlist(); // 現在/未唱狀態（playing 旗標）同步
     broadcastState();
-    // 只在歌曲狀態真的改變時保存「目前是哪一首／是否已開始」，不保存播放秒數。
-    persistState();
   });
 
   socket.on('play:seek', (payload) => {
@@ -212,22 +205,13 @@ function registerPlaybackHandlers(io, socket, ctx) {
   // 播放清單播完最後一首、沒有下一首可接時，面板會送這個事件。playState.currentTrack
   // 過去沒有任何地方會被設回 null——OBS 顯示端／跟唱視圖只有在「換到下一首」時才更新畫面，
   // 播完最後一首後沒有下一首可換，歌詞就永遠卡在最後一句，直到有人手動點別首歌才會消失。
-  socket.on('play:stop', (payload = {}) => {
-    if (payload && typeof payload === 'object' && payload.endedEntryId
-      && playState.currentTrack && payload.endedEntryId === playState.currentTrack.entryId
-      && typeof markTrackPlayed === 'function') {
-      markTrackPlayed(playState.currentTrack);
-    }
+  socket.on('play:stop', () => {
     playState.currentTrack = null;
     playState.currentTrackStarted = false;
     playState.isPlaying = false;
     playState.currentTime = 0;
     log.info('播放清單播畢，清空目前歌曲');
-    io.emit('play:stop', {
-      reason: payload && typeof payload.reason === 'string' ? payload.reason : 'stopped',
-      lastPlayedEntryId: playState.lastPlayedEntryId || null,
-      playedEntryIds: playState.playedEntryIds instanceof Set ? [...playState.playedEntryIds] : [],
-    });
+    io.emit('play:stop');
     emitSetlist();
     broadcastState();
     persistState();

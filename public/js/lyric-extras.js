@@ -70,23 +70,21 @@
     xieyinColor: '#ffd6a5',
     xieyinSize: 0.92,     // 相對主字級的倍率（em）
     // ── 排版模板（v4/v5）──
-    template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura'
+    template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura' | 'ktv' | 'columnflow' | 'paperstrip' | 'mirror'
     animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
     lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
     columnflowVariant: 'sen', // 直書句流：'sen' | 'fuda'
     columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
     columnflowMaxLines: 4, // 直書句流：同時保留 1–6 句
-    columnflowSafeMargin: 11, // 直書句流：中央安全距離（%，5–25），兩側直行不會跨入
-    columnflowShowSafeZoneOnObs: false, // 直書句流：安全距離引導線是否也疊在真正的 OBS 來源上（預設只有面板預覽看得到）
-    stageSafeMargin: 2, // Pulse/Facet/Drift/Aura：左右分散時的中央安全距離（%，2–25），預設對應原本寫死的 48/52%
-    stageShowSafeZoneOnObs: false, // 同上：安全距離引導線是否也疊在真正的 OBS 來源上
+    stageSafeMargin: 2, // 舞台模板左右分散時，中央保留區單側距離（%，2–25）
+    stageShowSafeZoneOnObs: false, // 安全框是否也疊在真正 OBS 來源上
     // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
     displayBgImage: '',   // 檔名（'' = 無背景，維持透明）
     displayBgOpacity: 1,
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -97,6 +95,8 @@
     aura: { label: 'Aura', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     ktv: { label: 'KTV', description: '固定雙行演唱畫面，適合逐字或跟唱情境。', scope: '可調：字型、配色、背景與詳細的邊距設定；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，逐字浮現，唱過的句子留下淡淡殘影。', scope: '可調：直書樣式、左右配置、保留句數、字型、配色與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
+    paperstrip: { label: '紙帶逐字', description: '白色紙帶先展開，再依歌詞時間逐字填入；每頁會依句長、總字數與節奏穩定選擇 2～4 句，小／中／大尺寸在進場前一次決定。', scope: '可調：舞台位置、中央安全距離、字型、文字色與背景；白色紙帶為模板固定視覺。偏左／偏右與左右分散都會限制可用寬度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: false, supportsClassicControls: false },
+    mirror: { label: '鏡像', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
   };
 
   function getTemplateUI(template) {
@@ -110,25 +110,17 @@
     drift: { ...DEFAULT_SETTINGS, template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
     aura: { ...DEFAULT_SETTINGS, template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
     ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
-    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4, columnflowSafeMargin: 11, columnflowShowSafeZoneOnObs: false },
+    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4 },
+    paperstrip: { ...DEFAULT_SETTINGS, template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1 },
+    mirror: { ...DEFAULT_SETTINGS, template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
-  const COLUMNFLOW_MIN_SAFE_MARGIN = 5;
-  const COLUMNFLOW_MAX_SAFE_MARGIN = 25;
-  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura'];
+  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'];
   const STAGE_MIN_SAFE_MARGIN = 2;
   const STAGE_MAX_SAFE_MARGIN = 25;
-  // 位置微調（X/Y）滑桿刻度：實際套用時 display.js 還會依當下內容再收緊一次（reclampLyricOffset），
-  // 這裡只是配合「調得到的範圍」給合理刻度，避免滑桿大半段拖了沒效果。
-  // 舞台模板貼著畫面邊界：往外（更靠近該側邊緣）能調的範圍很小，往內（回中央）空間大很多。
-  const STAGE_OFFSET_X_OUTWARD = 50;
-  const STAGE_OFFSET_X_OUTWARD_AURA = 70; // 潮汐心景版面比其他三款鬆，往外多留 20px（見 display.css）
-  const STAGE_OFFSET_X_INWARD = 400;
-  const STAGE_OFFSET_Y_RANGE = 150;
-  const CLASSIC_OFFSET_RANGE = 400;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
   let templateSettings = {};
@@ -142,12 +134,6 @@
     const parsed = Math.round(Number(value));
     if (!Number.isFinite(parsed)) return DEFAULT_SETTINGS.columnflowMaxLines;
     return Math.max(COLUMNFLOW_MIN_LINES, Math.min(COLUMNFLOW_MAX_LINES, parsed));
-  }
-
-  function normalizeColumnflowSafeMargin(value) {
-    const parsed = Math.round(Number(value));
-    if (!Number.isFinite(parsed)) return DEFAULT_SETTINGS.columnflowSafeMargin;
-    return Math.max(COLUMNFLOW_MIN_SAFE_MARGIN, Math.min(COLUMNFLOW_MAX_SAFE_MARGIN, parsed));
   }
 
   function normalizeStageSafeMargin(value) {
@@ -174,19 +160,19 @@
             if (!COLUMNFLOW_VARIANTS.includes(out[id].columnflowVariant)) out[id].columnflowVariant = 'sen';
             if (!COLUMNFLOW_PLACEMENTS.includes(out[id].columnflowPlacement)) out[id].columnflowPlacement = 'split';
             out[id].columnflowMaxLines = normalizeColumnflowMaxLines(out[id].columnflowMaxLines);
-            out[id].columnflowSafeMargin = normalizeColumnflowSafeMargin(out[id].columnflowSafeMargin);
-            out[id].columnflowShowSafeZoneOnObs = !!out[id].columnflowShowSafeZoneOnObs;
           }
           if (STAGE_POSITION_TEMPLATES.includes(id)) {
             out[id].stageSafeMargin = normalizeStageSafeMargin(out[id].stageSafeMargin);
             out[id].stageShowSafeZoneOnObs = !!out[id].stageShowSafeZoneOnObs;
           }
+          if (id === 'mirror') out[id].lyricPosition = 'split';
         }
       });
     }
     const base = cleanSettingSnapshot(fallback || {});
     const tpl = TEMPLATE_IDS.includes(base.template) ? base.template : 'classic';
     if (!out[tpl]) out[tpl] = { ...templateDefaults(tpl), ...base, template: tpl };
+    if (out.mirror) out.mirror.lyricPosition = 'split';
     return out;
   }
 
@@ -672,15 +658,6 @@
       });
     }
     syncPosGrid();
-    const offsetReset = document.getElementById('ls-offset-reset');
-    if (offsetReset) {
-      offsetReset.addEventListener('click', () => {
-        settings.offsetX = 0;
-        settings.offsetY = 0;
-        refreshControls();
-        pushSettings();
-      });
-    }
   }
 
   // ═══════════════════════════════════════════
@@ -708,10 +685,7 @@
     });
     const isClassic = ui.supportsClassicControls;
     const isColumnflow = settings.template === 'columnflow';
-    // 安全距離只有「舞台位置」模板（Pulse/Facet/Aura；Drift 共用同一套排版機制，
-    // 但這次只開放這三個的設定 UI）在「左右分散」時才有意義——其他位置模式沒有中央保留區可調。
-    const STAGE_SAFE_MARGIN_UI_TEMPLATES = ['pulse', 'facet', 'aura'];
-    const isStageSplit = STAGE_SAFE_MARGIN_UI_TEMPLATES.includes(settings.template) && settings.lyricPosition === 'split';
+    const isStageSplit = STAGE_POSITION_TEMPLATES.includes(settings.template) && settings.lyricPosition === 'split';
 
     const templateLabel = document.getElementById('lyric-template-label');
     const templateStatus = document.getElementById('lyric-template-status');
@@ -735,68 +709,25 @@
     // 歌詞位置：經典疊層用九宮格全畫面定位，其他模板用置中/偏左/偏右/左右分散
     const gridWrap = document.getElementById('lyric-pos-grid-wrap');
     const posGrid = document.getElementById('ls-pos-grid');
-    const fineWrap = document.getElementById('lyric-pos-fine-wrap');
     const offsetXRow = document.getElementById('ls-offset-x-row');
     const offsetYRow = document.getElementById('ls-offset-y-row');
-    const offsetXInput = document.getElementById('ls-offset-x');
-    const offsetYInput = document.getElementById('ls-offset-y');
     const quadRow = document.getElementById('lyric-pos-buttons');
     const lyricPosField = document.getElementById('lyric-pos-field');
     const posHint = document.getElementById('lyric-pos-hint');
     const fineHint = document.getElementById('lyric-pos-fine-hint');
     if (gridWrap) gridWrap.hidden = !isClassic;
     if (posGrid) posGrid.hidden = !isClassic;
+    if (offsetXRow) offsetXRow.hidden = !isClassic;
+    if (offsetYRow) offsetYRow.hidden = !isClassic;
     if (quadRow) quadRow.hidden = isClassic || ui.positionMode === 'fixed' || isColumnflow;
-    // 位置微調（X/Y）：經典疊層一律可調；舞台模板（Pulse/Facet/Drift/Aura）在「置中/偏左/偏右」
-    // 也開放微調，但「左右分散」不適用——那個模式每行交替左右，沒有單一位置可微調，
-    // 邊界靠「中央安全距離」控制。KTV 雙行構圖固定、沒有左右可調，只開放 Y。
-    // 實際套用時 display.js 會依當下內容自動收緊範圍，使用者調到極端值也不會把歌詞推出畫面；
-    // 這裡的滑桿 min/max 只是配合「調得到的範圍」給合理刻度，避免大半段滑桿沒有效果。
-    const isKtv = settings.template === 'ktv';
-    const supportsOffsetFineTune = (isClassic || ui.positionMode === 'stage' || isKtv) && settings.lyricPosition !== 'split';
-    if (fineWrap) fineWrap.hidden = !supportsOffsetFineTune;
-    if (offsetXRow) offsetXRow.hidden = !supportsOffsetFineTune || isKtv;
-    if (offsetYRow) offsetYRow.hidden = !supportsOffsetFineTune;
-    if (offsetXInput && supportsOffsetFineTune && !isKtv) {
-      // 舞台模板貼著畫面邊界：往「外」（更靠近該側邊緣）能調的範圍很小，往「內」（回中央）
-      // 空間大很多；偏左/偏右方向相反，置中兩邊都寬裕，維持跟經典疊層一樣的大範圍。
-      // 潮汐心景版面比其他三款鬆，往外可以多留 20px（見 STAGE_OFFSET_X_OUTWARD_AURA）。
-      const outward = settings.template === 'aura' ? STAGE_OFFSET_X_OUTWARD_AURA : STAGE_OFFSET_X_OUTWARD;
-      if (!isClassic && settings.lyricPosition === 'left') {
-        offsetXInput.min = String(-outward);
-        offsetXInput.max = String(STAGE_OFFSET_X_INWARD);
-      } else if (!isClassic && settings.lyricPosition === 'right') {
-        offsetXInput.min = String(-STAGE_OFFSET_X_INWARD);
-        offsetXInput.max = String(outward);
-      } else {
-        offsetXInput.min = String(-CLASSIC_OFFSET_RANGE);
-        offsetXInput.max = String(CLASSIC_OFFSET_RANGE);
-      }
-      const clampedX = Math.min(Math.max(settings.offsetX || 0, Number(offsetXInput.min)), Number(offsetXInput.max));
-      if (clampedX !== settings.offsetX) { settings.offsetX = clampedX; pushSettings(); }
-      offsetXInput.value = String(settings.offsetX || 0);
-      const offsetXVal = document.getElementById('ls-offset-x-val');
-      if (offsetXVal) offsetXVal.textContent = `${settings.offsetX || 0}px`;
-    }
-    if (offsetYInput && supportsOffsetFineTune) {
-      const yRange = isClassic ? CLASSIC_OFFSET_RANGE : STAGE_OFFSET_Y_RANGE;
-      offsetYInput.min = String(-yRange);
-      offsetYInput.max = String(yRange);
-      const clampedY = Math.min(Math.max(settings.offsetY || 0, -yRange), yRange);
-      if (clampedY !== settings.offsetY) { settings.offsetY = clampedY; pushSettings(); }
-      offsetYInput.value = String(settings.offsetY || 0);
-      const offsetYVal = document.getElementById('ls-offset-y-val');
-      if (offsetYVal) offsetYVal.textContent = `${settings.offsetY || 0}px`;
-    }
-    if (lyricPosField) lyricPosField.hidden = isColumnflow;
+    const isMirror = settings.template === 'mirror';
+    if (lyricPosField) lyricPosField.hidden = isColumnflow || isMirror;
     const columnflowVariantField = document.getElementById('columnflow-variant-field');
     const columnflowPlacementField = document.getElementById('columnflow-placement-field');
     const columnflowMaxLinesField = document.getElementById('columnflow-max-lines-field');
-    const columnflowSafeMarginField = document.getElementById('columnflow-safe-margin-field');
     if (columnflowVariantField) columnflowVariantField.hidden = !isColumnflow;
     if (columnflowPlacementField) columnflowPlacementField.hidden = !isColumnflow;
     if (columnflowMaxLinesField) columnflowMaxLinesField.hidden = !isColumnflow;
-    if (columnflowSafeMarginField) columnflowSafeMarginField.hidden = !isColumnflow;
     document.querySelectorAll('#columnflow-variant-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.columnflowVariant === (settings.columnflowVariant || 'sen'));
     });
@@ -808,16 +739,6 @@
     const maxLinesValue = document.getElementById('ls-columnflow-max-lines-val');
     if (maxLinesInput) maxLinesInput.value = String(maxLines);
     if (maxLinesValue) maxLinesValue.textContent = `${maxLines} 句`;
-    const safeMargin = normalizeColumnflowSafeMargin(settings.columnflowSafeMargin);
-    const safeMarginInput = document.getElementById('ls-columnflow-safe-margin');
-    const safeMarginValue = document.getElementById('ls-columnflow-safe-margin-val');
-    if (safeMarginInput) safeMarginInput.value = String(safeMargin);
-    if (safeMarginValue) safeMarginValue.textContent = `${safeMargin}%`;
-    const showSafeZoneInput = document.getElementById('ls-columnflow-show-safe-zone');
-    if (showSafeZoneInput) showSafeZoneInput.checked = !!settings.columnflowShowSafeZoneOnObs;
-
-    // 舞台模板（Pulse/Facet/Aura）的中央安全距離：只有選了「左右分散」才顯示，
-    // 其他位置模式（置中/偏左/偏右）沒有中央保留區的概念。
     const stageSafeMarginField = document.getElementById('stage-safe-margin-field');
     if (stageSafeMarginField) stageSafeMarginField.hidden = !isStageSplit;
     const stageSafeMargin = normalizeStageSafeMargin(settings.stageSafeMargin);
@@ -827,12 +748,11 @@
     if (stageSafeMarginValue) stageSafeMarginValue.textContent = `${stageSafeMargin}%`;
     const stageShowSafeZoneInput = document.getElementById('ls-stage-show-safe-zone');
     if (stageShowSafeZoneInput) stageShowSafeZoneInput.checked = !!settings.stageShowSafeZoneOnObs;
-
     if (posHint) {
       posHint.textContent = isClassic
         ? '九宮格是整個歌詞區塊在畫面上的位置；細調 X/Y 可再微調偏移。'
-        : (isKtv
-          ? 'KTV 伴唱固定雙行構圖，左右不可調；下面可微調整體上下位置。'
+        : (ui.positionMode === 'fixed'
+          ? 'KTV 伴唱固定雙行構圖；上下位置請到「詳細設定 → 邊距 · 最大寬度 → 上下邊距」調整。'
           : '方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。');
     }
     if (fineHint) {
@@ -865,12 +785,11 @@
       const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
       settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
       if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
+      if (settings.template === 'mirror') settings.lyricPosition = 'split';
       if (settings.template === 'columnflow') {
         if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
         if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
         settings.columnflowMaxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
-        settings.columnflowSafeMargin = normalizeColumnflowSafeMargin(settings.columnflowSafeMargin);
-        settings.columnflowShowSafeZoneOnObs = !!settings.columnflowShowSafeZoneOnObs;
       }
       if (STAGE_POSITION_TEMPLATES.includes(settings.template)) {
         settings.stageSafeMargin = normalizeStageSafeMargin(settings.stageSafeMargin);
@@ -925,23 +844,6 @@
         if (settings.template !== 'columnflow') return;
         settings.columnflowMaxLines = normalizeColumnflowMaxLines(maxLinesInput.value);
         syncTemplateButtons();
-        pushSettings();
-      });
-    }
-    const safeMarginInput = document.getElementById('ls-columnflow-safe-margin');
-    if (safeMarginInput) {
-      safeMarginInput.addEventListener('input', () => {
-        if (settings.template !== 'columnflow') return;
-        settings.columnflowSafeMargin = normalizeColumnflowSafeMargin(safeMarginInput.value);
-        syncTemplateButtons();
-        pushSettings();
-      });
-    }
-    const showSafeZoneInput = document.getElementById('ls-columnflow-show-safe-zone');
-    if (showSafeZoneInput) {
-      showSafeZoneInput.addEventListener('change', () => {
-        if (settings.template !== 'columnflow') return;
-        settings.columnflowShowSafeZoneOnObs = !!showSafeZoneInput.checked;
         pushSettings();
       });
     }

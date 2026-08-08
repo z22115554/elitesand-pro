@@ -41,32 +41,6 @@
   let isPlaying = false;
   let currentOffsetMs = 0; // Phase 5: 當前歌曲 offset
   let lastPlayTimeMs = 0;  // 最新播放位置（ms）；timeupdate 與 SoundTouch 回呼都更新，給「對齊第一句」用
-  let loadedTrackEntryId = null;
-  let lastRecoverySignature = null;
-
-  function markLocalTrackPlayed(track) {
-    if (!track || !track.entryId) return;
-    if (!(state.playedEntryIds instanceof Set)) state.playedEntryIds = new Set();
-    state.playedEntryIds.add(track.entryId);
-    state.lastPlayedEntryId = track.entryId;
-  }
-
-  function seekLoadedTrack(seconds) {
-    const target = Number.isFinite(Number(seconds)) ? Math.max(0, Number(seconds)) : 0;
-    lastPlayTimeMs = target * 1000;
-    setCurrentTime(formatTime(target));
-    if (stReady && typeof SoundTouchEngine !== 'undefined') {
-      SoundTouchEngine.seek(target);
-    }
-    const applyAudioSeek = () => {
-      if (!Number.isFinite(audioPlayer.duration) || audioPlayer.duration <= 0) return;
-      audioPlayer.currentTime = Math.max(0, Math.min(audioPlayer.duration, target));
-      setTotalTime(formatTime(audioPlayer.duration));
-      setProgressFill((audioPlayer.currentTime / audioPlayer.duration) * 100);
-    };
-    if (audioPlayer.readyState >= 1) applyAudioSeek();
-    else audioPlayer.addEventListener('loadedmetadata', applyAudioSeek, { once: true });
-  }
 
   // 這幾個只有播放相關程式碼會動（原本背後變數在 app.js，現在搬到這裡當本體）。
   Object.defineProperty(state, 'currentOffsetMs', {
@@ -106,7 +80,14 @@
       // 與下方 <audio> 的 'ended' 處理邏輯一致：連續播放才自動播下一首，
       // 否則只載入待命（先前這裡忽略了 continuousPlay，導致開啟 SoundTouch 高品質變調時
       // 「連續播放」開關完全失效，一律表現成單曲播完就停）。
-      SoundTouchEngine.onEnded(() => handlePlaybackEnded());
+      SoundTouchEngine.onEnded(() => {
+        const next = PlaybackSequence.nextAfterEnded(
+          state.currentTrackIndex,
+          state.playlist.length,
+          continuousPlay,
+        );
+        if (next) playTrack(next.index, next.autoplay);
+      });
       return true;
     } catch (e) { console.warn('[SoundTouch] 初始化失敗，降級:', e.message); return false; }
   }
@@ -240,12 +221,9 @@
 
   // autoplay：是否載入後立即播放。匯入新歌、自動換下一首時為 false（載入待命，由使用者按播放），
   // 使用者主動點歌 / 按上下首時為 true。
-  function playTrack(index, autoplay = true, options = {}) {
+  function playTrack(index, autoplay = true) {
     const playlist = state.playlist;
     if (index < 0 || index >= playlist.length) return;
-
-    const notifyServer = options.notifyServer !== false;
-    const startTime = Number.isFinite(Number(options.startTime)) ? Math.max(0, Number(options.startTime)) : 0;
 
     const track = playlist[index];
     if (track.audioMissing) {
@@ -257,8 +235,6 @@
     }
 
     state.currentTrackIndex = index;
-    loadedTrackEntryId = track.entryId || track.id || null;
-    if (autoplay) markLocalTrackPlayed(track);
 
     AppShared.setMarqueeText(dom.trackTitle, track.title);
     AppShared.setMarqueeText(dom.trackArtist, track.artist || '');
@@ -303,7 +279,7 @@
             if (stReady) {
               SoundTouchEngine.setPitch(currentPitchShift);
               SoundTouchEngine.setTempo(currentPlaybackRate);
-              SoundTouchEngine.play(startTime);
+              SoundTouchEngine.play(0);
               isPlaying = true; updatePlayButton();
             } else {
               // decode 失敗 → 降級回 <audio>+Tone
@@ -330,14 +306,8 @@
         }
       } else {
         // 載入但不播放：暫停待命，由使用者按播放鍵開始
-        if (useSoundTouch) {
-          stLoadCurrent(track.filename).then((result) => {
-            if (result === 'stale') return;
-            seekLoadedTrack(startTime);
-          });
-        }
+        if (useSoundTouch) stLoadCurrent(track.filename); // 待命載入（不自動播）
         audioPlayer.load();
-        seekLoadedTrack(startTime);
         isPlaying = false;
         updatePlayButton();
       }
@@ -350,17 +320,15 @@
     }
 
     // 帶上 autoplay：伺服器據此決定 isPlaying 與「是否記入已唱歌單」（待命載入不記錄）
-    if (notifyServer) SocketClient.send('play:track', { ...track, autoplay });
+    SocketClient.send('play:track', { ...track, autoplay });
     // 載入待命時明確告知顯示端「暫停」，否則顯示端會以為在播放而讓歌詞自走
-    if (notifyServer && !autoplay) SocketClient.send('play:toggle', false);
+    if (!autoplay) SocketClient.send('play:toggle', false);
     AppShared.renderPlaylist();
   }
 
   function stopPlayback() {
     audioPlayer.pause();
     audioPlayer.src = '';
-    loadedTrackEntryId = null;
-    lastRecoverySignature = null;
     // 使用者完整停止/清空播放時，不需要保留 SoundTouch 的整首 PCM buffer 供續播。
     // 暫停仍只走 pause，維持立即續播；這裡才真正釋放記憶體。
     if (useSoundTouch) {
@@ -377,29 +345,6 @@
     dom.lyricsPreview.innerHTML = '<div class="lyric-preview-empty">尚無歌詞</div>';
     currentOffsetMs = 0;
     updateOffsetDisplay();
-  }
-
-  function restorePlaybackState(track, currentTime, currentTrackStarted) {
-    if (!track) return;
-    const key = track.entryId || track.id || null;
-    const seconds = Number.isFinite(Number(currentTime)) ? Math.max(0, Number(currentTime)) : 0;
-    const signature = `${key || ''}:${Math.round(seconds * 10)}:${currentTrackStarted ? 1 : 0}`;
-    const index = track.entryId
-      ? state.playlist.findIndex((item) => item && item.entryId === track.entryId)
-      : state.playlist.findIndex((item) => item && item.id === track.id);
-    if (index < 0) return;
-
-    if (loadedTrackEntryId === key) {
-      // 正常播放中的 state:sync 不可反覆 seek；只有本地已暫停／待命時才套用伺服器保存位置。
-      if (!isPlaying && lastRecoverySignature !== signature) seekLoadedTrack(seconds);
-      lastRecoverySignature = signature;
-      return;
-    }
-
-    // 程式重開後只在本地載入並定位，不回送 play:track，否則會把伺服器剛還原的
-    // currentTime 重設成 0，也會把「意外關閉前的歌曲」重複記入已唱紀錄。
-    playTrack(index, false, { notifyServer: false, startTime: seconds });
-    lastRecoverySignature = signature;
   }
 
   function updatePlayButton() {
@@ -447,7 +392,6 @@
     // 若又收到一次回音/重複指令，上面的提早 return 擋不住（isPlaying 當下還是舊值），
     // 會讓 SoundTouch 被啟動兩次、雪崩式狂送 play:toggle（實測會看到播放/暫停瞬間狂跳）。
     isPlaying = shouldPlay;
-    if (shouldPlay) markLocalTrackPlayed(state.playlist[state.currentTrackIndex]);
     if (!shouldPlay) {
       // 兩條鏈都停。只停「當前那條」的話，另一條若因載入競態還在跑，
       // 暫停後 <audio> 的 timeupdate 會讓進度條繼續走、還繼續送 lyrics:sync。
@@ -505,17 +449,9 @@
   function advanceTrack(delta) {
     const playlist = state.playlist;
     if (playlist.length === 0) return false;
-    const cursorIndex = state.lastPlayedEntryId
-      ? playlist.findIndex((track) => track && track.entryId === state.lastPlayedEntryId)
-      : -1;
-    // 單曲模式自然播畢後目前歌曲已清空：下一首從剛播完的位置往後，
-    // 上一首則重播剛播完的歌曲；找不到游標時退回清單首／尾。
-    const newIndex = PlaybackSequence.manualAdvance(
-      state.currentTrackIndex,
-      playlist.length,
-      cursorIndex,
-      delta,
-    );
+    const newIndex = delta > 0
+      ? (state.currentTrackIndex < playlist.length - 1 ? state.currentTrackIndex + 1 : 0)
+      : (state.currentTrackIndex > 0 ? state.currentTrackIndex - 1 : playlist.length - 1);
     playTrack(newIndex);
     return true;
   }
@@ -545,13 +481,7 @@
   });
 
   // 另一個已連線的面板分頁播完清單最後一首：本地也要跟著清空，不能只有原分頁自己知道。
-  SocketClient.on('play:stop', (payload) => {
-    if (payload && Array.isArray(payload.playedEntryIds)) {
-      state.playedEntryIds = new Set(payload.playedEntryIds.filter((entryId) => typeof entryId === 'string' && entryId));
-    }
-    if (payload && typeof payload.lastPlayedEntryId === 'string') {
-      state.lastPlayedEntryId = payload.lastPlayedEntryId;
-    }
+  SocketClient.on('play:stop', () => {
     stopPlayback();
     state.currentTrackIndex = -1;
     AppShared.renderPlaylist();
@@ -590,9 +520,8 @@
     audioPlayer.currentTime = Math.max(0, Math.min(audioPlayer.duration, time));
   });
 
-  function handlePlaybackEnded() {
+  audioPlayer.addEventListener('ended', () => {
     const playlist = state.playlist;
-    const endedTrack = playlist[state.currentTrackIndex] || null;
     const next = PlaybackSequence.nextAfterEnded(
       state.currentTrackIndex,
       playlist.length,
@@ -602,20 +531,13 @@
       playTrack(next.index, next.autoplay);
       return;
     }
-    // 單曲模式不論後面還有沒有歌，都要清空「正在播放」與歌詞，等待使用者主動按下一首。
-    // 連續模式只有播到最後一首時會走到這裡。SoundTouch 與原生 audio 共用同一段，
-    // 避免高品質變調路徑播完後漏送 play:stop，讓最後一句歌詞留在畫面上。
-    markLocalTrackPlayed(endedTrack);
+    // 播放清單播完最後一首，沒有下一首可接：過去這裡什麼都不做，OBS 顯示端／跟唱視圖
+    // 沒有任何訊號可以清空歌詞，最後一句就會永遠卡在畫面上，直到有人手動點別首歌。
     stopPlayback();
     state.currentTrackIndex = -1;
     AppShared.renderPlaylist();
-    SocketClient.send('play:stop', {
-      reason: 'ended',
-      endedEntryId: endedTrack && endedTrack.entryId ? endedTrack.entryId : null,
-    });
-  }
-
-  audioPlayer.addEventListener('ended', handlePlaybackEnded);
+    SocketClient.send('play:stop');
+  });
 
   // Phase 5: 音訊錯誤處理
   audioPlayer.addEventListener('error', () => {
@@ -993,5 +915,4 @@
   AppShared.applyPitchAndSpeed = applyPitchAndSpeed;
   AppShared.reapplyTrackLoudness = reapplyTrackLoudness;
   AppShared.advanceTrack = advanceTrack;
-  AppShared.restorePlaybackState = restorePlaybackState;
 })();

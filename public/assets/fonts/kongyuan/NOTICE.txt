@@ -1,0 +1,6 @@
+Kongyuan Sans L
+
+This unmodified font file is included with Elitesand Pro as a public runtime asset.
+
+Source: https://github.com/Miiiller/Kongyuan-Sans
+License: SIL Open Font License, Version 1.1. See OFL-1.1.txt in this directory.
