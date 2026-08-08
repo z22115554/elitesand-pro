@@ -2,8 +2,8 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 1.2.0
-Effective Date / 生效日期：2026-07-24
+Version: 1.3.0
+Effective Date / 生效日期：2026-08-07
 
 IMPORTANT INFORMATION / 重要資訊
 --------------------------------
@@ -37,6 +37,24 @@ and consumer information.
 本 EULA 適用於目前免費提供的 Elitesand Pro。日後如提供付費版本、訂閱、
 代管服務或其他收費交易，應另行提供交易條款，以及法律要求的企業經營者與
 消費資訊；不得僅以本免費版本 EULA 取代。
+
+For clarity, the Software distinguishes: (a) the core application; (b) lyric
+templates currently bundled free of charge; (c) any lyric template that may in
+the future be offered as a separate paid product, which — as of this EULA's
+effective date — is not yet offered for sale and is not covered by this
+paragraph until it is actually released with its own terms; (d) third-party
+components governed by their own licenses (see THIRD-PARTY-NOTICES.txt); and
+(e) user-imported or user-created content, in which the rights holder claims
+no rights. This paragraph reserves a category for future paid templates; it
+does not represent that such a store, purchase flow, or product currently
+exists.
+
+為求明確，本軟體區分：(a) 主程式本體；(b) 目前隨附、免費提供的歌詞模板；
+(c) 日後可能另外推出的付費歌詞模板——截至本 EULA 生效日尚未開始銷售，
+在該項目實際上市並公布自己的交易條款前，不適用本段之收費交易規定；
+(d) 依各自授權條款規範的第三方元件（見 THIRD-PARTY-NOTICES.txt）；以及
+(e) 使用者匯入或創作的內容，權利人不主張其權利。本段僅為未來付費模板
+預留分類，不代表目前已存在對應的商城、購買流程或產品。
 
 ================================================================
 中文（具約束力；與下方英文翻譯衝突時，以本中文版為準）
@@ -123,7 +141,12 @@ and consumer information.
    平台規則或第三方服務條款。
 
 本條所定限制僅拘束依本 EULA 取得本軟體的使用者，不意圖縮減任何第三方
-開放原始碼授權或法律強制授予的權利。
+開放原始碼授權或法律強制授予的權利。特別是：本軟體隨附的 SoundTouch
+（public/vendor/soundtouch.js、soundtouch-worklet.js）依 GNU Lesser General
+Public License v2.1 或其後版本（LGPL）授權，第四條第 4 項的還原工程限制
+不適用於 LGPL 依法或依其授權條款允許的修改、替換與除錯；你可以自行替換
+相容的 SoundTouch 元件，本軟體不會以簽章、雜湊或其他機制阻止替換後的
+版本啟動。LGPL 授權全文與對應原始碼位置見 THIRD-PARTY-NOTICES.txt。
 
 五、音訊、歌詞與使用者內容
 
@@ -407,7 +430,15 @@ g. use the Software to infringe copyright, privacy, trademark, publicity, or
 
 These restrictions bind users who receive the Software under this EULA. They
 are not intended to reduce rights granted by third-party open-source licenses
-or mandatory law.
+or mandatory law. In particular: the bundled SoundTouch component
+(public/vendor/soundtouch.js, soundtouch-worklet.js) is licensed under the
+GNU Lesser General Public License v2.1 or later (LGPL). The reverse-engineering
+restriction in Section 4(d) does not apply to modification, replacement, or
+debugging that the LGPL lawfully permits; you may replace it with a compatible
+SoundTouch component, and the Software does not use signatures, hashes, or
+other mechanisms to prevent a replaced component from loading. See
+THIRD-PARTY-NOTICES.txt for the full LGPL text and corresponding source
+location.
 
 5. AUDIO, LYRICS, AND USER CONTENT
 

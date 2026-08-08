@@ -16,18 +16,27 @@ const log = createLogger('Deck');
  * @returns {(action: string, params?: object) => {ok: boolean, message: string, state?: object}}
  */
 function createDeckCommands(io, ctx) {
-  const { playState, trackOffsets, persistState, broadcastState, getPublicState } = ctx;
+  const {
+    playState, trackOffsets, persistState, broadcastState, getPublicState,
+    markTrackPlayed, recordSessionSong, emitSetlist,
+  } = ctx;
 
   return function executeCommand(action, params = {}) {
     switch (action) {
       case 'play-toggle': {
         playState.isPlaying = !playState.isPlaying;
-        if (playState.isPlaying && playState.currentTrack) playState.currentTrackStarted = true;
+        if (playState.isPlaying && playState.currentTrack) {
+          playState.currentTrackStarted = true;
+          if (typeof markTrackPlayed === 'function') markTrackPlayed(playState.currentTrack);
+          if (typeof recordSessionSong === 'function') recordSessionSong();
+        }
         playState.lastStateUpdateTimestamp = Date.now();
         // payload 形狀需與 socket 端 play:toggle 一致（見 handlers/playback.js）；
         // 這裡沒有觸發用的 socket，origin 留空即可，面板的來源過濾本來就只擋「另一個面板」。
         io.emit('play:toggle', { playing: playState.isPlaying, _originSocketId: null, _originClientType: null });
+        if (typeof emitSetlist === 'function') emitSetlist();
         broadcastState();
+        persistState();
         log.info(`播放切換: ${playState.isPlaying ? '播放' : '暫停'}`);
         return { ok: true, message: playState.isPlaying ? 'playing' : 'paused' };
       }

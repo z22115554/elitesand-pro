@@ -16,6 +16,14 @@ module.exports = {
   cacheDays: 7,
   maxCacheEntries: 500,
 
+  // ─── FFmpeg（選填）───
+  // Installer 預設不再內附 FFmpeg（GPLv3 對應原始碼義務較重，改為需要時由控制面板
+  // 的系統檢查一鍵下載，來源固定是 gyan.dev 官方 Windows 建置頁，下載後會驗證 SHA-256）。
+  // 這裡留空就好：程式會依序找 (1) 這裡指定的路徑 (2) 之前下載過的副本 (3) 系統 PATH。
+  // 只有你想固定用某個特定版本、或系統已經裝好 FFmpeg 想直接指過去時才需要填，
+  // 填完整的 ffmpeg.exe 路徑（ffprobe.exe 必須在同一個資料夾）。
+  ffmpegPath: '',
+
   // ─── GitHub 更新檢查 ───
   //
   // 設定後，控制面板會在啟動時自動檢查 GitHub Releases 是否有新版本，

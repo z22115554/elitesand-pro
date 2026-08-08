@@ -117,24 +117,40 @@ html, body {
    方便 VTuber/實況主留出人物位置：left/right 把歌詞區縮到 46% 靠一側（所有模板通用，
    模板的字級/折行以容器寬為準會自動適應）；split（左右分散）由各 folia 模板逐行交替
    加 .pos-left/.pos-right（經典疊層不支援 split）。 */
+/* 基準留白刻意比視覺上需要的多留 50px：這是「位置微調」往外（貼近邊緣）方向的可動空間——
+   單純 2vw 在常見解析度下只有 25~38px，扣掉夾限安全距離幾乎打平，滑桿往外調了也看不出移動。
+   保留這段空間讓 offsetX 往外真的有 50px 可以動（見 STAGE_OFFSET_X_OUTWARD、
+   display.js 的 reclampLyricOffset）。 */
 body.lyric-pos-left #lyrics-container {
   width: 46%;
   align-self: flex-start;
   margin-right: auto;
-  margin-left: 2vw;
+  margin-left: calc(2vw + 50px);
 }
 
 body.lyric-pos-right #lyrics-container {
   width: 46%;
   align-self: flex-end;
   margin-left: auto;
-  margin-right: 2vw;
+  margin-right: calc(2vw + 50px);
+}
+
+/* 潮汐心景版面比其他三款鬆，往外可以再多留 20px（見 lyric-extras.js 的
+   STAGE_OFFSET_X_OUTWARD_AURA）。兩個 class 疊加，選擇器特異度天然比上面單 class 規則高。 */
+body.template-aura.lyric-pos-left #lyrics-container {
+  margin-left: calc(2vw + 70px);
+}
+body.template-aura.lyric-pos-right #lyrics-container {
+  margin-right: calc(2vw + 70px);
 }
 
 /* split：行容器本來是 absolute inset 0 滿版，交替收窄到左/右安全區邊界。
    width:auto + max-width:none 必須帶上——行容器多半自帶 width:100%/max-width，
    absolute 定位下 width 有明示值時 right/left 收窄會被直接忽略（over-constrained 規則）。
-   --stage-safe-margin 由 display.js 寫入，overflow:hidden 作為最終硬邊界。 */
+   邊界改用 --stage-safe-margin（由 display.js 寫在 body 上，預設 2 對應原本寫死的 48/52%，
+   使用者可在設定調大）。刻意不加 overflow:hidden——會把跨線的字硬生生切一半，很醜；
+   邊界保證改靠 fontPxFor() 用 vp.width 算字級縮放（見各模板 buildLine），讓內容自然縮放
+   貼合邊界，而不是渲染完再暴力裁切。 */
 .pulse-line.pos-left,
 .facet-line.pos-left,
 .drift-line-stack.pos-left,
@@ -142,7 +158,6 @@ body.lyric-pos-right #lyrics-container {
   right: calc(50% + var(--stage-safe-margin, 2) * 1%);
   width: auto;
   max-width: none;
-  overflow: hidden;
 }
 
 .pulse-line.pos-right,
@@ -152,12 +167,16 @@ body.lyric-pos-right #lyrics-container {
   left: calc(50% + var(--stage-safe-margin, 2) * 1%);
   width: auto;
   max-width: none;
-  overflow: hidden;
 }
 
+/* 舞台模板共用的中央安全區可視化（Pulse/Facet/Drift/Aura）。跟直書句流同一套設計：
+   預設只有面板即時預覽（body.preview-mode）看得到；body.stage-show-safe-zone 是
+   使用者明確打開的開關，打開後連真正的 OBS 來源也會疊出引導線。
+   只在「左右分散」（body.lyric-pos-split）才顯示——置中/偏左/偏右沒有中央保留區這回事，
+   引導線不該出現。 */
 .stage-safe-zone-guide { display: none; }
-body.preview-mode .stage-safe-zone-guide,
-body.stage-show-safe-zone .stage-safe-zone-guide {
+body.lyric-pos-split.preview-mode .stage-safe-zone-guide,
+body.lyric-pos-split.stage-show-safe-zone .stage-safe-zone-guide {
   display: block;
   position: absolute;
   inset: 0;
@@ -656,296 +675,27 @@ body.template-pulse #lyrics-container,
 body.template-facet #lyrics-container,
 body.template-drift #lyrics-container,
 body.template-aura #lyrics-container,
-body.template-columnflow #lyrics-container,
-body.template-paperstrip #lyrics-container,
-body.template-mirror #lyrics-container {
+body.template-columnflow #lyrics-container {
   min-height: 70vh;
   justify-content: center;
 }
 
-/* 經典九宮格的位移與對齊是「經典疊層專屬」控制項；
-   v5 模板不吃 offset，避免經典九宮格/細調把 KTV 等模板推歪。 */
+/* 經典九宮格全螢幕定位是「經典疊層專屬」，v5 模板一律置中對齊。 */
 body.template-pulse #lyrics-container,
 body.template-facet #lyrics-container,
 body.template-drift #lyrics-container,
 body.template-aura #lyrics-container,
 body.template-ktv #lyrics-container,
-body.template-columnflow #lyrics-container,
-body.template-paperstrip #lyrics-container,
-body.template-mirror #lyrics-container {
-  transform: none;
+body.template-columnflow #lyrics-container {
   align-items: center;
 }
 
-/* ─── 鏡像 P0：固定左右雙側、中央人物安全區、glyph 級靜態排版 ─── */
-@font-face {
-  font-family: 'Kongyuan Sans L Test';
-  src: url('/__mirror-font/kongyuan-sans-l.otf') format('opentype');
-  font-display: block;
-}
-
-#mirror-root {
-  position: fixed;
-  inset: 0;
-  overflow: visible;
-  pointer-events: none;
-  font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
-  font-weight: var(--display-font-weight, 900);
-}
-
-.mirror-panel {
-  --mirror-page-y: 0vh;
-  position: absolute;
-  top: calc(50% + var(--mirror-page-y));
-  bottom: auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: clamp(10px, 1.15vh, 18px);
-  transform: translateY(-50%);
-  box-sizing: border-box;
-  overflow: visible;
-}
-
-.mirror-panel--primary {
-  left: 0;
-  right: calc(50% + var(--stage-safe-margin, 13) * 1%);
-  padding: 3vh 1.1vw 3vh 3.2vw;
-  align-items: stretch;
-  color: var(--lyric-color, #ffffff);
-}
-
-.mirror-panel--echo {
-  left: calc(50% + var(--stage-safe-margin, 13) * 1%);
-  right: 0;
-  padding: 3vh 3.2vw 3vh 1.1vw;
-  align-items: stretch;
-  color: var(--lyric-color, #ffffff);
-}
-
-.mirror-line {
-  --mirror-line-scale: .82;
-  --mirror-fit-scale: 1;
-  --mirror-outward-shift: 0vw;
-  --mirror-line-rotation: 0deg;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  align-items: baseline;
-  white-space: pre;
-  line-height: .98;
-  letter-spacing: var(--lyric-letter-spacing, 0px);
-  font-size: clamp(8px, calc(var(--display-font-size, 60px) * var(--mirror-line-scale) * var(--mirror-fit-scale)), 96px);
+/* 直書句流是固定構圖模板（無置中/偏左/偏右概念），offset 對它沒有意義，維持不吃。
+   Pulse/Facet/Drift/Aura 是「舞台位置」模板，置中/偏左/偏右下開放 X/Y 微調；
+   KTV 雙行構圖固定，只開放 Y 微調（X 維持 0，UI 也不給調）——
+   見設定面板「位置微調」與 display.js 的 reclampLyricOffset 自動夾限。 */
+body.template-columnflow #lyrics-container {
   transform: none;
-}
-
-.mirror-line--primary {
-  justify-content: flex-end;
-  padding-right: var(--mirror-outward-shift);
-  text-align: right;
-}
-
-.mirror-line--echo {
-  justify-content: flex-start;
-  padding-left: var(--mirror-outward-shift);
-  text-align: left;
-}
-
-.mirror-line-content {
-  display: inline-flex;
-  flex: 0 0 auto;
-  width: max-content;
-  max-width: none;
-  align-items: baseline;
-  white-space: pre;
-  transform: rotate(var(--mirror-line-rotation)) scaleX(var(--mirror-compress-x, 1));
-}
-
-.mirror-line--primary .mirror-line-content {
-  transform-origin: 100% 50%;
-}
-
-.mirror-line--echo .mirror-line-content {
-  transform-origin: 0 50%;
-}
-
-.mirror-glyph {
-  display: inline-block;
-  flex: 0 0 auto;
-  transform: translate(var(--mirror-glyph-x, 0), var(--mirror-glyph-y, 0)) rotate(var(--mirror-glyph-rotation, 0deg)) scale(var(--mirror-glyph-scale, 1));
-  transform-origin: 50% 70%;
-  color: inherit;
-  text-shadow: none;
-}
-
-.mirror-line--primary .mirror-glyph {
-  -webkit-text-stroke: 0 transparent;
-  paint-order: stroke fill;
-}
-
-.mirror-line--echo .mirror-glyph {
-  color: transparent !important;
-  -webkit-text-fill-color: transparent !important;
-  /* Mirror 側要像線稿，不是接近實心的粗描邊。
-     保留粗字形本身，僅把外框線壓細，讓每一筆內部的透明區域明顯打開。 */
-  -webkit-text-stroke: clamp(.65px, .014em, 1.05px) var(--lyric-color, #ffffff);
-  text-shadow: none !important;
-  opacity: .96;
-  paint-order: stroke;
-}
-
-/* Kongyuan Sans 本身就是每一筆筆畫各自空心的字形；載入成功後不能再疊 CSS text-stroke。 */
-#mirror-root.mirror-kongyuan-ready .mirror-line--echo .mirror-line-content {
-  font-family: 'Kongyuan Sans L Test', var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
-}
-
-#mirror-root.mirror-kongyuan-ready .mirror-line--echo .mirror-glyph {
-  color: var(--lyric-color, #ffffff) !important;
-  -webkit-text-fill-color: var(--lyric-color, #ffffff) !important;
-  -webkit-text-stroke: 0 transparent !important;
-  opacity: 1;
-  paint-order: fill;
-}
-
-.mirror-glyph.is-accent {
-  z-index: 1;
-}
-
-/* ─── 紙帶逐字：每頁 2～4 句，尺寸在進場前固定；白色紙帶依時間展開 ─── */
-#paperstrip-root {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
-  pointer-events: none;
-  font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
-  font-weight: var(--display-font-weight, 600);
-  color: var(--lyric-color, #111111);
-}
-
-.ps-group {
-  --ps-y-shift: 0vh;
-  position: absolute;
-  left: 50%;
-  top: calc(50% + var(--ps-y-shift));
-  width: min(78vw, 980px);
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: clamp(6px, 0.85vh, 12px);
-  transform: translate(-50%, -50%);
-  text-align: left;
-}
-
-#paperstrip-root .ps-group[data-side="left"],
-#paperstrip-root .ps-group[data-side="right"] {
-  width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);
-  /* 安全框是排版邊界，不是裁切遮罩。超長紙帶由 JS 在首次顯示前縮到可用寬度，
-     禁止用 hidden 直接切掉歌詞尾端。 */
-  overflow: visible;
-}
-
-/* 偏左／偏右時 #lyrics-container 本身已被限制在單邊 46vw；這裡再加一道模板上限，
-   避免 nowrap 紙帶因內容寬度把整組撐回畫面中央。實際超長句會在建立該頁時同步縮字。 */
-body.lyric-pos-left #paperstrip-root .ps-group,
-body.lyric-pos-right #paperstrip-root .ps-group {
-  width: min(100%, 760px);
-}
-
-#paperstrip-root .ps-group[data-side="left"] {
-  left: 2%;
-  transform: translate(0, -50%);
-}
-
-#paperstrip-root .ps-group[data-side="right"] {
-  left: auto;
-  right: 2%;
-  transform: translate(0, -50%);
-}
-
-.ps-row {
-  --ps-font-scale: 0.5;
-  --ps-open: 0;
-  --ps-clip-right: 100%;
-  position: relative;
-  max-width: 100%;
-  font-size: clamp(14px, calc(var(--display-font-size, 56px) * var(--ps-font-scale)), 86px);
-  line-height: 1.04;
-  letter-spacing: var(--lyric-letter-spacing, 0px);
-  transform-origin: left center;
-  will-change: auto;
-}
-
-.ps-row--slot-0 {
-  margin-left: 0.3em;
-}
-
-.ps-row--slot-1 {
-  margin-left: 0.7em;
-}
-
-.ps-row--slot-2 {
-  margin-left: 1.2em;
-}
-
-.ps-row--slot-3 {
-  margin-left: 0.55em;
-}
-
-.ps-plate {
-  position: relative;
-  z-index: 0;
-  display: inline-flex;
-  max-width: 100%;
-  padding: .15em .34em .13em;
-  white-space: pre;
-  isolation: isolate;
-}
-
-.ps-plate::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: rgba(255, 255, 255, .97);
-  border: 1px solid rgba(15, 15, 15, .12);
-  box-shadow: 0 .08em .34em rgba(0, 0, 0, .16);
-  /* 不縮放白條本體，而是固定左邊界、只收右側遮罩：白條從左往右展開，
-     同時避免 scaleX 把邊框與陰影一起壓扁。未收到第一幀狀態前預設完全收起，避免首幀閃白。 */
-  clip-path: inset(0 var(--ps-clip-right, 100%) 0 0);
-  will-change: clip-path;
-}
-
-.ps-text {
-  display: inline-flex;
-  max-width: 100%;
-  white-space: pre;
-  color: var(--lyric-color, #111111);
-  text-shadow: none;
-}
-
-.ps-glyph {
-  display: inline-block;
-  opacity: 0;
-  color: var(--lyric-color, #111111);
-  transform: translate3d(-.16em, .04em, 0) scale(.97);
-  transition: opacity 110ms ease-out, transform 250ms cubic-bezier(.12, .78, .18, 1), color 110ms ease-out;
-  will-change: transform, opacity;
-}
-
-.ps-glyph.is-on {
-  opacity: 1;
-  transform: translate3d(0, 0, 0) scale(1);
-}
-
-.ps-glyph.is-current {
-  color: var(--lyric-color-active, #111111);
-  transform: translate3d(0, -.06em, 0) scale(1.035);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ps-glyph { transition-duration: .01ms !important; }
 }
 
 /* ─── 直書句流：每頁四句亂數錯落、逐字填入、殘影淡出 ─── */
@@ -965,6 +715,46 @@ body.template-columnflow #lyrics-container {
   pointer-events: none;
   font-family: var(--display-font-family, Georgia, 'Noto Serif TC', 'PMingLiU', serif);
   font-weight: var(--display-font-weight, 600);
+}
+
+/* 中央安全區可視化：預設只在控制面板的即時預覽（body.preview-mode）顯示。
+   body.cf-show-safe-zone 是使用者在設定裡明確打開的開關（見 lyric-extras.js 的
+   columnflowShowSafeZoneOnObs），打開後連真正的 OBS 來源也會疊出引導線，方便
+   對著 OBS 實際畫面調整安全距離；預設關閉，不會意外把引導線疊進直播畫面。 */
+.cf-safe-zone-guide { display: none; }
+body.preview-mode .cf-safe-zone-guide,
+body.cf-show-safe-zone .cf-safe-zone-guide {
+  display: block;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.cf-safe-zone-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--cf-safe-left, 39%);
+  right: calc(100% - var(--cf-safe-right, 61%));
+  background: repeating-linear-gradient(135deg, rgba(255, 92, 92, .16) 0 10px, rgba(255, 92, 92, .05) 10px 20px);
+  border-left: 1px dashed rgba(255, 92, 92, .85);
+  border-right: 1px dashed rgba(255, 92, 92, .85);
+}
+.cf-safe-zone-line { display: none; } /* 邊界線已經由 .cf-safe-zone-band 的 border 呈現，保留元素供未來擴充 */
+.cf-safe-zone-label {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font, sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(200, 40, 40, .82);
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: .02em;
 }
 
 .cf-col {

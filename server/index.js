@@ -13,7 +13,6 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const fs = require('fs');
 const { projectRoot, dataDir, downloadsDir } = require('./utils/app-paths');
 const { createLogger, shutdown: shutdownLogger } = require('./utils/logger');
 const { attachParentShutdown } = require('./utils/parent-shutdown');
@@ -21,6 +20,7 @@ const log = createLogger('Server');
 const config = require('./utils/load-config');
 const { isAllowedSocketRequest, isAllowedCorsOrigin } = require('./utils/socket-origin');
 const { renderDisplayRuntimePage } = require('./services/display-runtime-build');
+const templateDelivery = require('./services/template-delivery');
 const ytdlpCompatibility = require('./services/ytdlp-compatibility');
 const PORT = process.env.PORT || config.port || 3000;
 
@@ -154,16 +154,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-// Mirror P0 本機 A/B 測試用：不把 Kongyuan Sans 字體提交進專案，
-// 只在工作區旁邊存在測試 clone 時提供固定唯讀路由；正式環境找不到就直接 404。
-const mirrorKongyuanTestFont = path.resolve(projectRoot, '..', '_tmp-kongyuan-inspect', 'L', 'Kongyuan Sans L.otf');
-app.get('/__mirror-font/kongyuan-sans-l.otf', (req, res, next) => {
-  if (!fs.existsSync(mirrorKongyuanTestFont)) return next();
-  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.type('font/otf');
-  return res.sendFile(mirrorKongyuanTestFont);
-});
 app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
 
 // ─── Routes ───
@@ -214,6 +204,26 @@ app.get('/display', (req, res) => {
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
   res.type('html').send(page.html);
+});
+
+// 歌詞模板遞送（批次 C-1）：模板不再是安裝目錄裡具名可讀的 .js 檔，改由這條路由
+// 決定要不要送、送什麼。跟其他 /js/*.js 靜態檔一樣不掛 PIN——express.static 本來就
+// 對所有本機資產開放，這裡只是把「讀哪個檔案」的決定權從檔案系統換成這支 service。
+app.get('/js/t/:id', (req, res) => {
+  const { id } = req.params;
+  if (!/^[a-z0-9-]+$/.test(id)) return res.status(400).end();
+  let code;
+  try {
+    code = templateDelivery.getTemplateSource(id);
+  } catch (err) {
+    log.error('模板遞送失敗', err);
+    return res.status(500).type('text/plain').send('// template delivery error');
+  }
+  if (code == null) return res.status(404).end();
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.type('application/javascript').send(code);
 });
 
 // Setlist 疊加頁（透明背景 + 直播歌單）
