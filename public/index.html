@@ -126,11 +126,12 @@
   <div id="tour-complete" class="tour-welcome-layer" role="dialog" aria-modal="true" aria-labelledby="tour-complete-title" hidden>
     <section class="tour-welcome-card tour-complete-card">
       <div class="tour-complete-mark" aria-hidden="true">✓</div>
-      <span class="tour-kicker" data-i18n="tour.complete.kicker">基本操作完成</span>
-      <h2 id="tour-complete-title" data-i18n="tour.complete.title">第一個歌詞畫面已準備好</h2>
-      <p data-i18n="tour.complete.body">你已經知道如何加入歌曲、播放、確認歌詞、調整外觀並接到 OBS。其他功能可以在需要時再學。</p>
+      <span id="tour-complete-kicker" class="tour-kicker">基本操作完成</span>
+      <h2 id="tour-complete-title">第一個歌詞畫面已準備好</h2>
+      <p id="tour-complete-body">你已經知道如何加入歌曲、播放、確認歌詞、調整外觀並接到 OBS。其他功能可以在需要時再學。</p>
       <div class="tour-welcome-actions">
         <button id="tour-complete-use" class="btn btn-primary" type="button" data-i18n="tour.complete.use">開始使用</button>
+        <button id="tour-complete-advanced" class="btn" type="button" data-i18n="tour.complete.advanced">查看進階導覽</button>
         <button id="tour-complete-help" class="btn" type="button" data-i18n="tour.complete.fullGuide">閱讀完整教學</button>
       </div>
     </section>
@@ -457,7 +458,7 @@
           </section>
 
           <!-- 時間與音訊微調（預設展開）-->
-          <details class="card card-collapse" open>
+          <details class="card card-collapse" id="lyrics-timing-card" open>
             <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>時間與音訊微調</summary>
             <div class="card-collapse-body">
             <div class="field">
@@ -2160,6 +2161,21 @@
           <div class="guide-route-head"><div><span class="guide-route-eyebrow">最短路徑 · 約 1 分鐘</span><strong id="guide-route-title">先讓右側預覽出現一行歌詞</strong><p>做到這一步，就代表核心流程正常。先別打開 OBS，也不用讀完下面的說明。</p></div><span id="guide-route-status" class="guide-route-status" aria-live="polite">選一種開始方式</span></div>
           <div class="guide-route-actions"><button id="guide-start-interactive" class="btn btn-primary guide-route-action" type="button" data-i18n="tour.welcome.start">開始互動導覽</button><button id="guide-start-sample" class="btn guide-route-action" type="button">我先看示範歌詞</button><button id="guide-start-song" class="btn btn-ghost guide-route-action" type="button">我有歌，要匯入</button><button id="guide-confirm-preview" class="btn btn-ghost guide-route-action" type="button" disabled>我看到了</button></div>
             <div id="guide-route-success" class="guide-route-success" hidden aria-live="polite"><div><strong>第一個成功完成</strong><span>你已確認核心歌詞流程正常；這段最短路徑會自動收起，接下來可慢慢加入歌曲或再接 OBS。</span></div></div>
+        </section>
+
+        <section id="guide-advanced-route" class="guide-route guide-route--advanced" aria-labelledby="guide-advanced-title">
+          <div class="guide-route-head">
+            <div>
+              <span class="guide-route-eyebrow" data-i18n="tour.advanced.entry.kicker">進階互動教學 · 約 4 分鐘</span>
+              <strong id="guide-advanced-title" data-i18n="tour.advanced.entry.title">修正歌詞同步，再把來源穩定接到 OBS</strong>
+              <p data-i18n="tour.advanced.entry.body">分成「歌詞來源與同步」和「OBS 連接」兩章；可以只學現在需要的部分。</p>
+            </div>
+            <span class="guide-route-status" data-i18n="tour.advanced.entry.badge">可隨時離開並續接</span>
+          </div>
+          <div class="guide-route-actions">
+            <button id="guide-start-lyrics" class="btn btn-primary guide-route-action" type="button" data-i18n="tour.advanced.entry.lyrics">歌詞來源與同步</button>
+            <button id="guide-start-obs" class="btn guide-route-action" type="button" data-i18n="tour.advanced.entry.obs">OBS 連接</button>
+          </div>
         </section>
 
         <section class="onboard-checklist" aria-labelledby="guide-checklist-title">
