@@ -325,6 +325,10 @@
   .tour-welcome-actions { margin-top: 16px; }
 }
 
+@media (max-width: 760px) and (max-height: 620px) {
+  .tour-card { max-height: min(46vh, calc(100vh - 16px)); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tour-mask,
   .tour-highlight { transition: none; }
