@@ -238,9 +238,6 @@
     'home.session.toastObsDisconnected': ['已重新讀取歌單資料；OBS WebSocket 未連線，無法確認推流狀態', 'Setlist data was refreshed, but OBS WebSocket is disconnected so stream status could not be confirmed.', 'セットリストデータを再読み込みしましたが、OBS WebSocket が未接続のため配信状態を確認できません。', '세트리스트 데이터를 다시 불러왔지만 OBS WebSocket이 연결되지 않아 송출 상태를 확인할 수 없습니다.', '已重新读取歌单数据；OBS WebSocket 未连接，无法确认推流状态'],
     'home.session.confirmTitle': ['清除整個直播歌單？', 'Clear the entire stream setlist?', '配信セットリストをすべて消去しますか？', '방송 세트리스트 전체를 지울까요?', '清除整个直播歌单？'],
     'home.session.confirmSummary': ['本次直播已唱歌曲與 YouTube 章節將被清除。', 'Performed tracks and YouTube chapters from this stream will be cleared.', '今回の配信で歌唱した曲と YouTube チャプターが消去されます。', '이번 방송에서 부른 곡과 YouTube 챕터가 삭제됩니다.', '本次直播的已唱歌曲与 YouTube 章节将被清除。'],
-Warning: truncated output (original token count: 13133)
-Total output lines: 240
-
     'home.session.confirmImpact': ['播放清單、音檔、媒體庫與 OBS 版型設定都會保留。', 'The playlist, audio files, media library, and OBS layout settings will be kept.', 'プレイリスト、音声ファイル、メディアライブラリ、OBS レイアウト設定は保持されます。', '재생목록, 오디오 파일, 미디어 라이브러리와 OBS 레이아웃 설정은 유지됩니다.', '播放列表、音频文件、媒体库与 OBS 布局设置都会保留。'],
     'home.session.confirmLabel': ['清除直播歌單', 'Clear stream setlist', '配信セットリストを消去', '방송 세트리스트 지우기', '清除直播歌单'],
     'home.session.startNew': ['開始新場次', 'Start new session', '新しいセッションを開始', '새 세션 시작', '开始新场次'],
@@ -358,7 +355,28 @@ Total output lines: 240
     'twitch.rule.accepting': ['接受點歌', 'Accepting requests', 'リクエスト受付中', '신청곡 접수 중', '接受点歌'],
     'twitch.rule.maxPending': ['最多 {count} 首待確認', 'Up to {count} awaiting review', '確認待ちは最大 {count} 曲', '검토 대기 최대 {count}곡', '最多 {count} 首待确认'],
     'twitch.rule.perUserMax': ['每人最多 {count} 首', 'Up to {count} per viewer', '1 人最大 {count} 曲', '시청자당 최대 {count}곡', '每人最多 {count} 首'],
-    'twitch.rule.perUserUnlimited': ['每人不限首數', 'No per-viewer limit', '1 人あたり無制限', '시청자당 제한 없음', '每人不限首…1133 tokens truncated…은 현재 일시 중지되어 있습니다.', '专用奖励目前已暂停兑换。'],
+    'twitch.rule.perUserUnlimited': ['每人不限首數', 'No per-viewer limit', '1 人あたり無制限', '시청자당 제한 없음', '每人不限首数'],
+    'twitch.rule.maxDuration': ['最長 {count} 分鐘', 'Up to {count} minutes', '最長 {count} 分', '최대 {count}분', '最长 {count} 分钟'],
+    'twitch.rule.noDuration': ['不限制歌曲長度', 'No track-length limit', '曲の長さは無制限', '곡 길이 제한 없음', '不限制歌曲长度'],
+    'twitch.rule.recentHours': ['檢查最近 {count} 小時', 'Check the last {count} hours', '直近 {count} 時間を確認', '최근 {count}시간 확인', '检查最近 {count} 小时'],
+    'twitch.rule.duplicateScope': ['重複範圍：{scope}', 'Duplicate scope: {scope}', '重複チェック範囲：{scope}', '중복 확인 범위: {scope}', '重复范围：{scope}'],
+    'twitch.rule.liveOnly': ['只在直播中接受', 'Live only', '配信中のみ受付', '방송 중에만 접수', '只在直播中接受'],
+    'twitch.rule.offlineAccepted': ['離線也接受', 'Accept while offline', 'オフライン時も受付', '오프라인에서도 접수', '离线也接受'],
+    'twitch.rule.perSession': ['每人每場 {count} 首', '{count} per viewer per stream', '1 配信につき 1 人 {count} 曲', '방송당 시청자별 {count}곡', '每人每场 {count} 首'],
+    'twitch.rule.perSessionUnlimited': ['每人每場不限', 'No per-viewer stream limit', '1 配信あたりの個人上限なし', '시청자 1인당 방송별 제한 없음', '每人每场不限'],
+    'twitch.rule.streamTotal': ['全場 {count} 首', '{count} total per stream', '配信全体で {count} 曲', '방송 전체 {count}곡', '全场 {count} 首'],
+    'twitch.rule.streamUnlimited': ['全場不限', 'No stream-wide limit', '配信全体の上限なし', '방송 전체 제한 없음', '全场不限'],
+    'twitch.rule.warnConsecutive': ['連續點歌會提醒', 'Warn on consecutive requests', '連続リクエストを通知', '연속 신청곡 경고', '连续点歌会提醒'],
+    'twitch.rule.noConsecutiveWarning': ['不提醒連續點歌', 'No consecutive-request warning', '連続リクエストを通知しない', '연속 신청곡 경고 안 함', '不提醒连续点歌'],
+    // Dynamic Twitch surfaces use curated keys.  User, command, title, URL, and
+    // server-error values stay presentation variables and are never translated.
+    'twitch.points': ['{count} 點', '{count} points', '{count} ポイント', '{count}포인트', '{count} 点'],
+    'twitch.runtime.clientIdMissing': ['尚未設定 Twitch Client ID。', 'Twitch Client ID is not configured.', 'Twitch Client ID が設定されていません。', 'Twitch Client ID가 설정되지 않았습니다.', '尚未设置 Twitch Client ID。'],
+    'twitch.runtime.authorizationRequired': ['尚未連接 Twitch；啟用獎勵前需要先授權。', 'Twitch is not connected. Authorize it before enabling rewards.', 'Twitch に接続されていません。特典を有効にする前に認証してください。', 'Twitch가 연결되지 않았습니다. 보상을 활성화하기 전에 인증하세요.', '尚未连接 Twitch；启用奖励前需要先授权。'],
+    'twitch.runtime.authorizationRefreshUnavailable': ['Twitch 授權暫時無法更新', 'Twitch authorization cannot be refreshed right now.', 'Twitch の認証情報を現在更新できません。', '현재 Twitch 인증을 갱신할 수 없습니다.', '暂时无法更新 Twitch 授权。'],
+    'twitch.runtime.rewardScopeMissing': ['目前授權缺少忠誠點數管理權限，請重新連接 Twitch 一次。', 'The current authorization lacks Channel Points management permission. Reconnect Twitch once.', '現在の認証にはチャンネルポイント管理権限がありません。Twitch に再接続してください。', '현재 인증에 채널 포인트 관리 권한이 없습니다. Twitch에 다시 연결해 주세요.', '当前授权缺少频道积分管理权限，请重新连接 Twitch。'],
+    'twitch.runtime.rewardSyncFailed': ['同步失敗；下方保留 Twitch 上次已確認的狀態。', 'Sync failed. The last confirmed Twitch state is kept below.', '同期に失敗しました。下には Twitch で最後に確認された状態を表示しています。', '동기화에 실패했습니다. 아래에는 Twitch에서 마지막으로 확인된 상태가 유지됩니다.', '同步失败；下方保留 Twitch 上次已确认的状态。'],
+    'twitch.runtime.rewardPaused': ['專用獎勵目前暫停兌換。', 'The dedicated reward is currently paused.', '専用特典は現在一時停止中です。', '전용 보상은 현재 일시 중지되어 있습니다.', '专用奖励目前已暂停兑换。'],
     'twitch.runtime.rewardListening': ['專用獎勵已啟用並監聽兌換。', 'The dedicated reward is enabled and redemption events are being monitored.', '専用特典は有効で、引き換えイベントを監視しています。', '전용 보상이 활성화되어 교환 이벤트를 감시하고 있습니다.', '专用奖励已启用，正在监听兑换事件。'],
     'twitch.runtime.rewardSubscribing': ['獎勵已建立；EventSub 正在等待忠誠點數兌換訂閱。', 'Rewards created; EventSub is waiting to subscribe to Channel Points redemption events.', '報酬を作成しました。EventSub のチャンネルポイント報酬引き換えイベントの購読を待機しています。', '보상이 생성되었습니다. EventSub가 채널 포인트 보상 교환 이벤트 구독을 기다리는 중입니다.', '奖励已创建；EventSub 正在等待订阅频道积分兑换事件。'],
     'twitch.runtime.rewardDisabled': ['專用獎勵已停用；再次開啟並儲存即可恢復。', 'The dedicated reward is disabled. Turn it back on and save to restore it.', '専用特典は無効です。再び有効にして保存すると復元できます。', '전용 보상이 비활성화되어 있습니다. 다시 켠 뒤 저장하면 복원됩니다.', '专用奖励已停用；重新开启并保存即可恢复。'],
@@ -460,9 +478,6 @@ Total output lines: 240
     // Import jobs keep transport/state data untouched and localize only their UI framing.
     'import.uploading': ['上傳處理中…', 'Uploading…', 'アップロード中…', '업로드 중…', '正在上传…'],
     'import.playlist.loading': ['讀取播放清單中', 'Loading playlist', 'プレイリストを読み込み中', '재생목록을 불러오는 중', '正在读取播放列表'],
-Warning: truncated output (original token count: 13149)
-Total output lines: 240
-
     'import.playlist.processing': ['處理中…', 'Processing…', '処理中…', '처리 중…', '正在处理…'],
     'import.playlist.loadFailed': ['播放清單讀取失敗', 'Could not load the playlist', 'プレイリストを読み込めません', '재생목록을 불러오지 못했습니다', '读取播放列表失败'],
     'import.playlist.confirmTitle': ['匯入這份 {count} 首的播放清單？', 'Import this {count}-track playlist?', 'この {count} 曲のプレイリストをインポートしますか？', '이 {count}곡 재생목록을 가져올까요?', '导入这份 {count} 首的播放列表？'],
@@ -565,7 +580,29 @@ Total output lines: 240
     'system.compatNotRun': ['尚未驗證 YouTube 相容性', 'YouTube compatibility has not been verified', 'YouTube 互換性は未検証です', 'YouTube 호환성을 확인하지 않았습니다', '尚未验证 YouTube 兼容性'],
     'system.compatMissing': ['找不到 yt-dlp，無法驗證 YouTube 相容性。', 'yt-dlp was not found, so YouTube compatibility cannot be verified.', 'yt-dlp が見つからないため YouTube 互換性を検証できません。', 'yt-dlp를 찾을 수 없어 YouTube 호환성을 확인할 수 없습니다.', '找不到 yt-dlp，无法验证 YouTube 兼容性。'],
     'system.compatTimeout': ['驗證 YouTube 相容性逾時；請檢查網路後重試。', 'YouTube compatibility check timed out. Check the network and try again.', 'YouTube 互換性の確認がタイムアウトしました。ネットワークを確認して再試行してください。', 'YouTube 호환성 확인 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도하세요.', '验证 YouTube 兼容性超时；请检查网络后重试。'],
-    'system.compatFailed': ['yt-dlp 目前無法讀取 YouTube；請先檢查或更新 yt-dlp，再重試。', 'yt-dlp cannot currently read YouTube. Check or update yt-dlp, then try again.', 'yt-dlp は現在 YouTube を読み取れません。yt-dlp を確認または更新して再試行してください。', '현재 yt-dlp가 YouTube를 읽을 수 없습…1149 tokens truncated…死了會嚇到人。
+    'system.compatFailed': ['yt-dlp 目前無法讀取 YouTube；請先檢查或更新 yt-dlp，再重試。', 'yt-dlp cannot currently read YouTube. Check or update yt-dlp, then try again.', 'yt-dlp は現在 YouTube を読み取れません。yt-dlp を確認または更新して再試行してください。', '현재 yt-dlp가 YouTube를 읽을 수 없습니다. yt-dlp를 확인하거나 업데이트한 뒤 다시 시도하세요.', 'yt-dlp 目前无法读取 YouTube；请先检查或更新 yt-dlp，再重试。'],
+    'system.compatRunning': ['正在驗證 YouTube 相容性（不會下載音檔）', 'Checking YouTube compatibility (no audio will be downloaded)', 'YouTube 互換性を確認中（音声はダウンロードしません）', 'YouTube 호환성 확인 중(오디오는 다운로드하지 않음)', '正在验证 YouTube 兼容性（不会下载音频）'],
+    'system.compatOk': ['已確認 yt-dlp 可以讀取 YouTube（未下載任何音檔）。', 'Confirmed that yt-dlp can read YouTube (no audio was downloaded).', 'yt-dlp が YouTube を読み取れることを確認しました（音声はダウンロードしていません）。', 'yt-dlp가 YouTube를 읽을 수 있음을 확인했습니다(오디오 다운로드 없음).', '已确认 yt-dlp 可以读取 YouTube（未下载任何音频）。'],
+    'system.compatReadFailed': ['無法讀取 YouTube 相容性狀態', 'Could not read YouTube compatibility status', 'YouTube 互換性の状態を読み取れません', 'YouTube 호환성 상태를 읽을 수 없습니다', '无法读取 YouTube 兼容性状态'],
+    'diagnostics.hoursMinutes': ['{hours} 小時 {minutes} 分', '{hours} h {minutes} min', '{hours} 時間 {minutes} 分', '{hours}시간 {minutes}분', '{hours} 小时 {minutes} 分'],
+    'diagnostics.minutes': ['{minutes} 分', '{minutes} min', '{minutes} 分', '{minutes}분', '{minutes} 分'],
+    'diagnostics.underMinute': ['未滿 1 分', 'Under 1 min', '1 分未満', '1분 미만', '未满 1 分'],
+    'diagnostics.recorded': ['本場已記錄 {duration}', 'Recorded {duration} this session', 'このセッションを {duration} 記録', '이번 세션 {duration} 기록', '本场已记录 {duration}'],
+    'diagnostics.thresholdMet': ['四小時時長門檻已達成', 'Four-hour threshold reached', '4 時間の基準を達成', '4시간 기준 달성', '已达到四小时门槛'],
+    'diagnostics.thresholdRemaining': ['距四小時時長門檻還差 {duration}', '{duration} remaining to the four-hour threshold', '4 時間の基準まで残り {duration}', '4시간 기준까지 {duration} 남음', '距四小时门槛还差 {duration}'],
+    'diagnostics.obsBoth': ['OBS 歌詞／歌單同時連線 {duration}', 'OBS lyrics and setlist connected together for {duration}', 'OBS 歌詞／セットリスト同時接続 {duration}', 'OBS 가사/세트리스트 동시 연결 {duration}', 'OBS 歌词／歌单同时连接 {duration}'],
+    'diagnostics.interruptions': ['曾中斷 {count} 次', '{count} interruptions', '{count} 回中断', '{count}회 중단', '曾中断 {count} 次'],
+    'diagnostics.noInterruptions': ['未偵測到來源中斷', 'No source interruptions detected', 'ソースの切断なし', '소스 중단 감지 안 됨', '未检测到来源中断'],
+    'diagnostics.obsNotTogether': ['OBS 兩個正式來源尚未同時連線', 'The two official OBS sources are not both connected yet.', '2 つの正式 OBS ソースはまだ同時接続されていません', '두 공식 OBS 소스가 아직 동시에 연결되지 않았습니다', '两个正式 OBS 来源尚未同时连接'],
+    'diagnostics.noObs': ['尚未偵測到正式 OBS 來源', 'No official OBS source detected yet', '正式な OBS ソースはまだ検出されていません', '공식 OBS 소스가 아직 감지되지 않았습니다', '尚未检测到正式 OBS 来源'],
+    'diagnostics.twitchConnected': ['Twitch 目前已連線', 'Twitch is connected', 'Twitch 接続済み', 'Twitch 연결됨', 'Twitch 已连接'],
+    'diagnostics.twitchState': ['Twitch 狀態：{state}', 'Twitch status: {state}', 'Twitch 状態：{state}', 'Twitch 상태: {state}', 'Twitch 状态：{state}'],
+    'diagnostics.twitchDisabled': ['Twitch 未啟用，不列入本場觀測', 'Twitch is disabled and excluded from this session', 'Twitch は無効のため、このセッションの観測対象外です', 'Twitch가 비활성화되어 이번 세션의 모니터링에서 제외됩니다', 'Twitch 未启用，不列入本场观测'],
+
+    // 問題回報。介面文字跟著使用者語言，但送出的報告內文固定繁體中文
+    // （見 server/services/feedback-report.js）——維護者要看得懂收到的東西。
+    // 上次未正常關閉的提示。措辭刻意保守：只說「未正常關閉」，不說「當機」——
+    // 使用者自己用工作管理員關掉、或 Windows 更新重開機也會觸發，講死了會嚇到人。
     'crash.title': ['Elitesand Pro 上次未正常關閉', 'Elitesand Pro did not shut down cleanly last time', 'Elitesand Pro が前回正常に終了しませんでした', 'Elitesand Pro가 지난번에 정상적으로 종료되지 않았습니다', 'Elitesand Pro 上次未正常关闭'],
     'crash.message': ['要傳送診斷資訊協助找出原因嗎？送出前你可以先看過完整內容。', 'Send diagnostics to help find the cause? You can review the full content before sending.', '原因調査のために診断情報を送信しますか？送信前に内容をすべて確認できます。', '원인 파악을 위해 진단 정보를 보낼까요? 보내기 전에 전체 내용을 확인할 수 있습니다.', '要发送诊断信息协助找出原因吗？送出前你可以先看过完整内容。'],
     'crash.review': ['查看內容', 'Review and send', '内容を確認', '내용 확인', '查看内容'],
