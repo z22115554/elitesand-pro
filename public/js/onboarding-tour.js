@@ -8,9 +8,12 @@
   'use strict';
 
   const STORAGE_KEY = 'elite-interactive-tour-v3';
+  const ADVANCED_LYRICS_STORAGE_KEY = 'elite-advanced-lyrics-tour-v1';
+  const ADVANCED_OBS_STORAGE_KEY = 'elite-advanced-obs-tour-v1';
   const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1'];
   const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2';
   const TOUR_VERSION = 3;
+  const ADVANCED_TOUR_VERSION = 1;
   const HOLE_PADDING = 9;
   const VIEWPORT_MARGIN = 10;
   const CARD_GAP = 30;
@@ -86,8 +89,83 @@
     },
   ];
 
+  const ADVANCED_LYRICS_STEPS = [
+    {
+      id: 'lyrics-source',
+      view: 'karaoke',
+      target: '#btn-lyrics-picker',
+      mobileTarget: '#btn-lyrics-picker',
+      title: 'tour.advanced.step.lyricsSource.title',
+      body: 'tour.advanced.step.lyricsSource.body',
+      hint: 'tour.advanced.step.lyricsSource.hint',
+    },
+    {
+      id: 'lyrics-align',
+      view: 'karaoke',
+      target: '#offset-align',
+      mobileTarget: '#offset-align',
+      title: 'tour.advanced.step.lyricsAlign.title',
+      body: 'tour.advanced.step.lyricsAlign.body',
+      hint: 'tour.advanced.step.lyricsAlign.hint',
+    },
+    {
+      id: 'lyrics-nudge',
+      view: 'karaoke',
+      target: '.offset-row',
+      mobileTarget: '.offset-row',
+      title: 'tour.advanced.step.lyricsNudge.title',
+      body: 'tour.advanced.step.lyricsNudge.body',
+      hint: 'tour.advanced.step.lyricsNudge.hint',
+    },
+    {
+      id: 'lyrics-timeline',
+      view: 'karaoke',
+      target: '#btn-lyrics-timeline',
+      mobileTarget: '#btn-lyrics-timeline',
+      title: 'tour.advanced.step.lyricsTimeline.title',
+      body: 'tour.advanced.step.lyricsTimeline.body',
+      hint: 'tour.advanced.step.lyricsTimeline.hint',
+    },
+  ];
+
+  const ADVANCED_OBS_STEPS = [
+    {
+      id: 'obs-copy',
+      view: 'general',
+      target: '#copy-obs-url',
+      mobileTarget: '#copy-obs-url',
+      title: 'tour.advanced.step.obsCopy.title',
+      body: 'tour.advanced.step.obsCopy.body',
+      hint: 'tour.advanced.step.obsCopy.hint',
+    },
+    {
+      id: 'obs-add',
+      view: 'general',
+      target: '#obs-url-card',
+      mobileTarget: '#obs-url',
+      title: 'tour.advanced.step.obsUrl.title',
+      body: 'tour.advanced.step.obsUrl.body',
+      hint: 'tour.advanced.step.obsUrl.hint',
+    },
+    {
+      id: 'obs-status',
+      view: 'general',
+      target: '#display-source-status',
+      mobileTarget: '#display-source-status',
+      title: 'tour.advanced.step.obsStatus.title',
+      body: 'tour.advanced.step.obsStatus.body',
+      hint: 'tour.advanced.step.obsStatus.hint',
+    },
+  ];
+
+  const ADVANCED_STEPS = [...ADVANCED_LYRICS_STEPS, ...ADVANCED_OBS_STEPS];
+
   const dom = {};
-  let state = loadState();
+  let basicState = loadState();
+  let advancedLyricsState = loadAdvancedLyricsState();
+  let advancedObsState = loadAdvancedObsState();
+  let state = basicState;
+  let tourKind = 'basic';
   let activeTarget = null;
   let active = false;
   let debugBypassRequirements = false;
@@ -99,6 +177,7 @@
   let initialized = false;
   let playlistObserver = null;
   let modalObserver = null;
+  let targetObserver = null;
   let returnFocus = null;
   let compactViewport = Number(root.innerWidth) <= 760;
 
@@ -106,11 +185,12 @@
     return root.I18n ? root.I18n.t(key, vars) : key;
   }
 
-  function defaultState() {
+  function defaultState(version = TOUR_VERSION) {
     return {
-      version: TOUR_VERSION,
+      version,
       status: 'not_started',
       currentStep: 0,
+      stepId: null,
       path: null,
       completedAt: null,
       postponedAt: null,
@@ -118,17 +198,51 @@
   }
 
   function loadState() {
+    return loadStoredState(STORAGE_KEY, TOUR_VERSION, STEPS);
+  }
+
+  function loadAdvancedLyricsState() {
+    return loadStoredState(ADVANCED_LYRICS_STORAGE_KEY, ADVANCED_TOUR_VERSION, ADVANCED_LYRICS_STEPS);
+  }
+
+  function loadAdvancedObsState() {
+    return loadStoredState(ADVANCED_OBS_STORAGE_KEY, ADVANCED_TOUR_VERSION, ADVANCED_OBS_STEPS);
+  }
+
+  function loadStoredState(key, version, steps) {
     try {
-      const parsed = JSON.parse(root.localStorage.getItem(STORAGE_KEY) || 'null');
-      if (!parsed || parsed.version !== TOUR_VERSION) return defaultState();
-      return { ...defaultState(), ...parsed };
+      const parsed = JSON.parse(root.localStorage.getItem(key) || 'null');
+      if (!parsed || parsed.version !== version) return defaultState(version);
+      const next = { ...defaultState(version), ...parsed };
+      const byId = steps.findIndex((step) => step.id === parsed.stepId);
+      const byIndex = Math.min(steps.length - 1, Math.max(0, Math.floor(Number(parsed.currentStep) || 0)));
+      next.currentStep = byId >= 0 ? byId : byIndex;
+      next.stepId = steps[next.currentStep]?.id || null;
+      if (!['not_started', 'in_progress', 'postponed', 'completed'].includes(next.status)) next.status = 'not_started';
+      return next;
     } catch (_) {
-      return defaultState();
+      return defaultState(version);
     }
   }
 
   function saveState() {
-    try { root.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) { /* device-local best effort */ }
+    state.stepId = currentSteps()[state.currentStep]?.id || null;
+    if (tourKind === 'lyrics') advancedLyricsState = state;
+    else if (tourKind === 'obs') advancedObsState = state;
+    else basicState = state;
+    const key = tourKind === 'lyrics'
+      ? ADVANCED_LYRICS_STORAGE_KEY
+      : tourKind === 'obs' ? ADVANCED_OBS_STORAGE_KEY : STORAGE_KEY;
+    try { root.localStorage.setItem(key, JSON.stringify(state)); } catch (_) { /* device-local best effort */ }
+  }
+
+  function selectTour(kind) {
+    tourKind = kind === 'lyrics' || kind === 'obs' ? kind : 'basic';
+    state = tourKind === 'lyrics' ? advancedLyricsState : tourKind === 'obs' ? advancedObsState : basicState;
+  }
+
+  function currentSteps() {
+    return tourKind === 'lyrics' ? ADVANCED_LYRICS_STEPS : tourKind === 'obs' ? ADVANCED_OBS_STEPS : STEPS;
   }
 
   function cacheDom() {
@@ -154,7 +268,11 @@
     dom.leaveResume = document.getElementById('tour-leave-resume');
     dom.leaveButton = document.getElementById('tour-leave-confirm-button');
     dom.complete = document.getElementById('tour-complete');
+    dom.completeKicker = document.getElementById('tour-complete-kicker');
+    dom.completeTitle = document.getElementById('tour-complete-title');
+    dom.completeBody = document.getElementById('tour-complete-body');
     dom.completeUse = document.getElementById('tour-complete-use');
+    dom.completeAdvanced = document.getElementById('tour-complete-advanced');
     dom.completeHelp = document.getElementById('tour-complete-help');
   }
 
@@ -174,6 +292,18 @@
     dom.leaveButton?.addEventListener('click', leave);
     dom.action?.addEventListener('click', runStepAction);
     dom.completeUse?.addEventListener('click', closeCompletion);
+    dom.completeAdvanced?.addEventListener('click', () => {
+      dom.complete.hidden = true;
+      if (tourKind === 'lyrics') {
+        startAdvanced({
+          kind: 'obs',
+          force: advancedObsState.status === 'completed',
+          resume: advancedObsState.status === 'in_progress',
+        });
+      } else {
+        document.dispatchEvent(new CustomEvent('onboarding:open-advanced-guide'));
+      }
+    });
     dom.completeHelp?.addEventListener('click', () => openFullGuide(dom.complete));
 
     root.addEventListener('resize', handleResize, { passive: true });
@@ -221,6 +351,8 @@
 
   function maybeShowWelcome(options = {}) {
     init();
+    if (active) return false;
+    selectTour('basic');
     migrateLegacy(options);
     if (!initialized || state.status === 'completed' || state.status === 'postponed') return false;
     if (!isSafeToInterrupt()) {
@@ -246,6 +378,7 @@
   }
 
   function postponeWelcome() {
+    selectTour('basic');
     state.status = 'postponed';
     state.postponedAt = new Date().toISOString();
     saveState();
@@ -258,10 +391,13 @@
   function start(options = {}) {
     init();
     if (!initialized) return false;
+    root.clearTimeout(deferredWelcomeTimer);
+    deferredWelcomeTimer = null;
+    selectTour(options.kind);
     const force = !!options.force;
     const resume = !!options.resume;
     if (force || !resume || state.status === 'completed' || state.status === 'postponed') {
-      state = { ...defaultState(), status: 'in_progress' };
+      state = { ...defaultState(tourKind === 'basic' ? TOUR_VERSION : ADVANCED_TOUR_VERSION), status: 'in_progress' };
     } else {
       state.status = 'in_progress';
       state.currentStep = clampStep(state.currentStep);
@@ -278,14 +414,19 @@
     dom.next.disabled = true;
     document.body.classList.add('tour-active');
     renderStep();
-    document.dispatchEvent(new CustomEvent('onboarding:started', { detail: { step: state.currentStep } }));
+    document.dispatchEvent(new CustomEvent('onboarding:started', { detail: { kind: tourKind, step: state.currentStep } }));
     return true;
   }
 
-  function clampStep(value) {
+  function startAdvanced(options = {}) {
+    const kind = options.kind === 'obs' ? 'obs' : 'lyrics';
+    return start({ ...options, kind });
+  }
+
+  function clampStep(value, steps = currentSteps()) {
     const number = Number(value);
     if (!Number.isFinite(number)) return 0;
-    return Math.min(STEPS.length - 1, Math.max(0, Math.floor(number)));
+    return Math.min(steps.length - 1, Math.max(0, Math.floor(number)));
   }
 
   async function renderStep(options = {}) {
@@ -293,14 +434,16 @@
     const token = ++renderToken;
     renderPending = true;
     dom.next.disabled = true;
-    const step = STEPS[clampStep(state.currentStep)];
-    state.currentStep = STEPS.indexOf(step);
+    const steps = currentSteps();
+    const step = steps[clampStep(state.currentStep, steps)];
+    state.currentStep = steps.indexOf(step);
     saveState();
 
     if (!options.skipNavigation) switchView(step.view);
     const resolvedTarget = await resolveTarget(step);
     if (token !== renderToken || !active) return;
     activeTarget = resolvedTarget;
+    observeActiveTarget(activeTarget);
     updateCard(step);
     await nextFrame();
     if (token !== renderToken || !active) return;
@@ -308,7 +451,7 @@
     renderPending = false;
     updateRequirementState();
     focusPrimary(step);
-    document.dispatchEvent(new CustomEvent('onboarding:step', { detail: { id: step.id, index: state.currentStep } }));
+    document.dispatchEvent(new CustomEvent('onboarding:step', { detail: { kind: tourKind, id: step.id, index: state.currentStep } }));
   }
 
   function switchView(view) {
@@ -345,12 +488,13 @@
   }
 
   function updateCard(step) {
-    dom.progress.textContent = t('tour.progress', { current: state.currentStep + 1, total: STEPS.length });
+    const steps = currentSteps();
+    dom.progress.textContent = t('tour.progress', { current: state.currentStep + 1, total: steps.length });
     dom.title.textContent = t(step.title);
     dom.body.textContent = t(root.innerWidth <= 760 && step.mobileBody ? step.mobileBody : step.body);
     dom.hint.textContent = t(step.hint);
     dom.back.disabled = state.currentStep === 0;
-    dom.next.textContent = state.currentStep === STEPS.length - 1 ? t('tour.finish') : t('tour.next');
+    dom.next.textContent = state.currentStep === steps.length - 1 ? t('tour.finish') : t('tour.next');
     dom.close.textContent = t('tour.leave.label');
     dom.close.setAttribute('aria-label', t('tour.leave.label'));
     dom.status.hidden = true;
@@ -369,7 +513,7 @@
 
   function updateRequirementState() {
     if (!active || suspendedByModal || renderPending) return;
-    const step = STEPS[state.currentStep];
+    const step = currentSteps()[state.currentStep];
     if (!step) return;
     const sourceReady = debugBypassRequirements || state.path === 'sample' || hasPlaylistTrack();
     if (step.requiresSource) {
@@ -393,7 +537,8 @@
   }
 
   async function runStepAction() {
-    const step = STEPS[state.currentStep];
+    const steps = currentSteps();
+    const step = steps[state.currentStep];
     if (!step) return;
     if (step.action === 'sample') {
       const button = document.getElementById('btn-preview-sample-lyrics');
@@ -403,7 +548,7 @@
       }
       dom.action.disabled = true;
       const frames = await waitForPreviewFrames();
-      if (!frames.length || !active || STEPS[state.currentStep]?.id !== 'source') {
+      if (!frames.length || !active || steps[state.currentStep]?.id !== 'source') {
         dom.action.disabled = false;
         showStatus(t('tour.status.sampleUnavailable'), 'error');
         return;
@@ -418,7 +563,7 @@
       }
       const ready = await acknowledgment;
       dom.action.disabled = false;
-      if (!ready || !active || STEPS[state.currentStep]?.id !== 'source') {
+      if (!ready || !active || steps[state.currentStep]?.id !== 'source') {
         showStatus(t('tour.status.sampleUnavailable'), 'error');
         return;
       }
@@ -500,7 +645,8 @@
 
   function next() {
     if (renderPending || dom.next.disabled) return;
-    if (state.currentStep >= STEPS.length - 1) {
+    const steps = currentSteps();
+    if (state.currentStep >= steps.length - 1) {
       complete();
       return;
     }
@@ -519,8 +665,9 @@
   }
 
   function complete() {
+    const steps = currentSteps();
     state.status = 'completed';
-    state.currentStep = STEPS.length - 1;
+    state.currentStep = steps.length - 1;
     state.completedAt = new Date().toISOString();
     saveState();
     active = false;
@@ -528,12 +675,27 @@
     suspendedByModal = false;
     renderToken += 1;
     activeTarget = null;
+    targetObserver?.disconnect();
     dom.root.hidden = true;
     dom.leaveConfirm.hidden = true;
     document.body.classList.remove('tour-active');
+    updateCompletionContent();
     dom.complete.hidden = false;
     dom.completeUse.focus();
-    document.dispatchEvent(new CustomEvent('onboarding:completed'));
+    document.dispatchEvent(new CustomEvent('onboarding:completed', { detail: { kind: tourKind } }));
+  }
+
+  function updateCompletionContent() {
+    const prefix = tourKind === 'lyrics'
+      ? 'tour.advanced.lyricsComplete'
+      : tourKind === 'obs' ? 'tour.advanced.obsComplete' : 'tour.complete';
+    dom.completeKicker.textContent = t(`${prefix}.kicker`);
+    dom.completeTitle.textContent = t(`${prefix}.title`);
+    dom.completeBody.textContent = t(`${prefix}.body`);
+    dom.completeUse.textContent = t('tour.complete.use');
+    dom.completeHelp.textContent = t('tour.complete.fullGuide');
+    dom.completeAdvanced.hidden = tourKind === 'obs';
+    dom.completeAdvanced.textContent = t(tourKind === 'lyrics' ? 'tour.advanced.complete.nextObs' : 'tour.complete.advanced');
   }
 
   function closeCompletion() {
@@ -559,11 +721,12 @@
     suspendedByModal = false;
     renderToken += 1;
     activeTarget = null;
+    targetObserver?.disconnect();
     dom.leaveConfirm.hidden = true;
     dom.root.hidden = true;
     document.body.classList.remove('tour-active');
     document.getElementById('btn-open-help')?.focus();
-    document.dispatchEvent(new CustomEvent('onboarding:paused', { detail: { step: state.currentStep } }));
+    document.dispatchEvent(new CustomEvent('onboarding:paused', { detail: { kind: tourKind, step: state.currentStep } }));
   }
 
   function openFullGuide(layer) {
@@ -573,6 +736,7 @@
       renderPending = false;
       suspendedByModal = false;
       renderToken += 1;
+      targetObserver?.disconnect();
       dom.root.hidden = true;
       document.body.classList.remove('tour-active');
     }
@@ -584,6 +748,7 @@
       dom.welcomeStart.textContent = state.status === 'in_progress' ? t('tour.welcome.resume') : t('tour.welcome.start');
     }
     if (active) renderStep({ skipNavigation: true });
+    if (dom.complete && !dom.complete.hidden) updateCompletionContent();
   }
 
   function schedulePlacement() {
@@ -842,6 +1007,23 @@
     }
   }
 
+  function observeActiveTarget(target) {
+    targetObserver?.disconnect();
+    if (!target || !document.body || typeof MutationObserver === 'undefined') return;
+    targetObserver = new MutationObserver(() => {
+      if (!active || suspendedByModal || renderPending || !activeTarget) return;
+      if (!activeTarget.isConnected || activeTarget.hidden || activeTarget.getAttribute('aria-hidden') === 'true' || !activeTarget.getClientRects().length) {
+        renderStep({ skipNavigation: true });
+      }
+    });
+    targetObserver.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['hidden', 'class', 'aria-hidden', 'open'],
+    });
+  }
+
   function rememberFocus() {
     if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
       returnFocus = document.activeElement;
@@ -870,34 +1052,49 @@
   }
 
   function isComplete() {
-    return state.status === 'completed';
+    return basicState.status === 'completed';
   }
 
   // Used by automated visual QA. It does not persist bypass state.
   function debugStart(step = 0, options = {}) {
+    const kind = options.kind === 'lyrics' || options.kind === 'obs' ? options.kind : 'basic';
+    selectTour(kind);
     debugBypassRequirements = options.bypassRequirements !== false;
-    state = { ...defaultState(), status: 'in_progress', currentStep: clampStep(step), path: options.sample === false ? null : 'sample' };
+    state = {
+      ...defaultState(kind === 'basic' ? TOUR_VERSION : ADVANCED_TOUR_VERSION),
+      status: 'in_progress',
+      currentStep: clampStep(step),
+      path: options.sample === false ? null : 'sample',
+    };
     saveState();
-    start({ resume: true });
+    start({ resume: true, kind });
   }
 
   root.OnboardingTour = {
     init,
     start,
+    startAdvanced,
     maybeShowWelcome,
     isComplete,
     openWelcome() {
       init();
+      selectTour('basic');
       rememberFocus();
       dom.welcomeStart.textContent = state.status === 'in_progress' ? t('tour.welcome.resume') : t('tour.welcome.start');
       dom.welcome.hidden = false;
       dom.welcomeStart.focus();
     },
-    getState() { return { ...state }; },
+    getState() { return { ...basicState }; },
+    getAdvancedState() {
+      return { lyrics: { ...advancedLyricsState }, obs: { ...advancedObsState } };
+    },
     debugStart,
-    debugGoTo(step) {
+    debugGoTo(step, options = {}) {
+      const kind = options.kind === 'lyrics' || options.kind === 'obs' ? options.kind : tourKind;
+      selectTour(kind);
       state.currentStep = clampStep(step);
-      if (!active) start({ resume: true });
+      saveState();
+      if (!active) start({ resume: true, kind });
       else renderStep();
     },
   };
@@ -905,7 +1102,11 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       TOUR_VERSION,
+      ADVANCED_TOUR_VERSION,
       STEPS: STEPS.map((step) => ({ ...step })),
+      ADVANCED_LYRICS_STEPS: ADVANCED_LYRICS_STEPS.map((step) => ({ ...step })),
+      ADVANCED_OBS_STEPS: ADVANCED_OBS_STEPS.map((step) => ({ ...step })),
+      ADVANCED_STEPS: ADVANCED_STEPS.map((step) => ({ ...step })),
       clamp,
       clampStep,
       calculateCardPlacement,
