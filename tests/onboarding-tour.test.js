@@ -14,6 +14,8 @@ const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'public/css/onboarding-tour.css'), 'utf8');
 const source = fs.readFileSync(path.join(root, 'public/js/onboarding-tour.js'), 'utf8');
 const nav = fs.readFileSync(path.join(root, 'public/js/nav.js'), 'utf8');
+const displayPath = path.join(root, 'public/js/display.js');
+const display = fs.existsSync(displayPath) ? fs.readFileSync(displayPath, 'utf8') : null;
 
 let passed = 0;
 let failed = 0;
@@ -154,6 +156,7 @@ test('source step cannot advance until a song or sample lyrics are ready', () =>
   ok(source.includes('if (!button || button.disabled)'), 'Missing or disabled sample action must not unlock the source gate');
   ok(source.indexOf('await acknowledgment') < source.indexOf("state.path = 'sample'"), 'Sample path must unlock only after the preview acknowledges rendering');
   ok(source.includes("event.data?.type !== 'lyrics-preview:sample-ready'"), 'Sample action needs a preview acknowledgment message');
+  if (display !== null) ok(display.includes("{ type: 'lyrics-preview:sample-ready' }"), 'The real preview must acknowledge rendered sample lyrics');
 });
 
 test('legacy guide state migrates and new users no longer get the old blocking modal', () => {
