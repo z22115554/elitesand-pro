@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const root = path.join(__dirname, '..');
 const tour = require(path.join(root, 'public/js/onboarding-tour.js'));
@@ -49,6 +50,73 @@ console.log('\n🧭 Interactive onboarding tour');
 test('core tour remains exactly seven focused steps', () => {
   eq(tour.STEPS.length, 7);
   eq(tour.STEPS.map((step) => step.id).join(','), 'navigation,source,playlist,player,preview,style,obs');
+});
+
+test('advanced tour is split into independent lyrics and OBS chapters', () => {
+  eq(tour.ADVANCED_LYRICS_STEPS.length, 4);
+  eq(tour.ADVANCED_OBS_STEPS.length, 3);
+  eq(tour.ADVANCED_LYRICS_STEPS.map((step) => step.id).join(','), 'lyrics-source,lyrics-align,lyrics-nudge,lyrics-timeline');
+  eq(tour.ADVANCED_OBS_STEPS.map((step) => step.id).join(','), 'obs-copy,obs-add,obs-status');
+  ok(page.includes('id="guide-start-lyrics"'), 'Lyrics chapter entry missing');
+  ok(page.includes('id="guide-start-obs"'), 'OBS chapter entry missing');
+  ok(nav.includes("startAdvancedChapter('lyrics')") && nav.includes("startAdvancedChapter('obs')"), 'Chapter entries are not wired independently');
+});
+
+test('every advanced desktop and mobile spotlight selector exists', () => {
+  const selectors = new Set(tour.ADVANCED_STEPS.flatMap((step) => [step.target, step.mobileTarget]));
+  selectors.forEach((selector) => {
+    if (selector.startsWith('#')) ok(page.includes(`id="${selector.slice(1)}"`), `Missing ${selector}`);
+    else if (selector.startsWith('.')) ok(new RegExp(`class="[^"]*${selector.slice(1)}`).test(page), `Missing ${selector}`);
+    else throw new Error(`Unsupported advanced selector: ${selector}`);
+  });
+});
+
+test('advanced progress is stable by step id and isolated from the basic tour', () => {
+  ok(source.includes("elite-advanced-lyrics-tour-v1"), 'Lyrics storage key missing');
+  ok(source.includes("elite-advanced-obs-tour-v1"), 'OBS storage key missing');
+  ok(source.includes('state.stepId = currentSteps()[state.currentStep]?.id'), 'Stable step-id persistence missing');
+  ok(source.includes('steps.findIndex((step) => step.id === parsed.stepId)'), 'Step-id restoration missing');
+  ok(source.includes('return basicState.status === \'completed\''), 'Basic completion semantics changed');
+  ok(/getAdvancedState\(\)[\s\S]*?lyrics:[\s\S]*?obs:/.test(source), 'Independent chapter states are not exposed');
+});
+
+test('malformed saved progress cannot crash tour initialization', () => {
+  const modulePath = path.join(root, 'public/js/onboarding-tour.js');
+  execFileSync(process.execPath, ['-e', `
+    global.localStorage = {
+      getItem() { return '{not-valid-json'; },
+      setItem() {},
+    };
+    require(${JSON.stringify(modulePath)});
+  `], { stdio: 'pipe' });
+});
+
+test('all advanced copy resolves in all five locales', () => {
+  const keys = new Set([
+    'tour.complete.advanced',
+    'tour.advanced.entry.kicker',
+    'tour.advanced.entry.title',
+    'tour.advanced.entry.body',
+    'tour.advanced.entry.badge',
+    'tour.advanced.entry.lyrics',
+    'tour.advanced.entry.obs',
+    'tour.advanced.lyricsComplete.kicker',
+    'tour.advanced.lyricsComplete.title',
+    'tour.advanced.lyricsComplete.body',
+    'tour.advanced.obsComplete.kicker',
+    'tour.advanced.obsComplete.title',
+    'tour.advanced.obsComplete.body',
+    'tour.advanced.complete.nextObs',
+    ...tour.ADVANCED_STEPS.flatMap((step) => [step.title, step.body, step.hint]),
+  ]);
+  for (const locale of I18n.LOCALES) {
+    I18n.setLocale(locale, { persist: false, updateQuery: false });
+    keys.forEach((key) => {
+      const rendered = I18n.t(key, { current: 1, total: 4 });
+      ok(rendered && rendered !== key, `${locale} is missing ${key}`);
+      ok(!/\{(?:current|total)\}/.test(rendered), `${locale}:${key} left interpolation tokens behind`);
+    });
+  }
 });
 
 test('every spotlight selector exists in the panel HTML', () => {
@@ -132,6 +200,13 @@ test('stale async positioning cannot overwrite a newer rapidly selected step', (
   ok(/function next\(\)[\s\S]*?dom\.next\.disabled = true;[\s\S]*?state\.currentStep \+= 1/.test(source), 'Next must lock synchronously before async navigation');
   ok(/const resolvedTarget = await resolveTarget\(step\);[\s\S]*?token !== renderToken[\s\S]*?activeTarget = resolvedTarget/.test(source), 'A stale render must not overwrite the global active target');
   ok(source.includes('if (!active || suspendedByModal || renderPending) return;'), 'Mutation-driven requirement updates must stay locked during a render');
+});
+
+test('a deferred first-run welcome cannot replace an active advanced chapter', () => {
+  ok(/function maybeShowWelcome\(options = \{\}\) \{[\s\S]*?init\(\);\s*if \(active\) return false;\s*selectTour\('basic'\)/.test(source),
+    'Welcome guard must run before switching the shared tour state back to basic');
+  ok(/function start\(options = \{\}\) \{[\s\S]*?root\.clearTimeout\(deferredWelcomeTimer\);[\s\S]*?deferredWelcomeTimer = null;[\s\S]*?selectTour\(options\.kind\)/.test(source),
+    'Starting any tour must cancel the pending first-run welcome retry');
 });
 
 test('external confirmation dialogs suspend the tour and release keyboard handling', () => {
@@ -246,6 +321,30 @@ test('10,000 adversarial geometry samples never place the card outside the viewp
   }
 });
 
+test('10,000 compact and ultrawide placements remain finite and inside the viewport', () => {
+  let seed = 0xa11ce55;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    return seed / 0x100000000;
+  };
+  for (let index = 0; index < 10000; index += 1) {
+    const compact = index % 2 === 0;
+    const vw = compact ? 320 + Math.floor(random() * 441) : 1920 + Math.floor(random() * 1521);
+    const vh = compact ? 480 + Math.floor(random() * 241) : 300 + Math.floor(random() * 1141);
+    const cw = Math.min(370, vw - 20);
+    const ch = Math.min(compact ? Math.max(120, Math.floor(vh * 0.46)) : 420, vh - 20);
+    const left = 10 + random() * Math.max(1, vw - 30);
+    const top = 10 + random() * Math.max(1, vh - 30);
+    const right = Math.min(vw - 10, left + 1 + random() * Math.max(1, vw - left - 10));
+    const bottom = Math.min(vh - 10, top + 1 + random() * Math.max(1, vh - top - 10));
+    const hole = { left, top, right, bottom, width: right - left, height: bottom - top };
+    const result = tour.calculateCardPlacement(hole, vw, vh, cw, ch);
+    ok(Number.isFinite(result.left) && Number.isFinite(result.top), `Non-finite compact result at ${index}`);
+    ok(result.left >= 10 - 0.01 && result.left + cw <= vw - 10 + 0.01, `Horizontal compact overflow at ${index}`);
+    ok(result.top >= 10 - 0.01 && result.top + ch <= vh - 10 + 0.01, `Vertical compact overflow at ${index}`);
+  }
+});
+
 test('responsive and reduced-motion fallbacks are present', () => {
   ok(css.includes('@media (max-width: 760px)'), 'Narrow layout fallback missing');
   ok(css.includes('@media (max-height: 620px)'), 'Short viewport fallback missing');
@@ -262,6 +361,16 @@ test('responsive and reduced-motion fallbacks are present', () => {
   ok(/nextCompactViewport !== compactViewport[\s\S]*?renderStep\(\{ skipNavigation: true \}\)/.test(source), 'Crossing 760px must resolve the correct desktop/mobile target again');
   ok(/\.tour-close\s*\{[^}]*color:\s*var\(--text-dim\)[^}]*font-size:\s*12px/s.test(css), 'Small close label needs readable size and contrast');
   ok(/\.tour-card \.tour-hint\s*\{[^}]*color:\s*var\(--text-dim\)/s.test(css), 'Core tour hints need the readable text token');
+  ok(/@media \(max-width: 760px\) and \(max-height: 620px\)[\s\S]*?max-height:\s*min\(46vh, calc\(100vh - 16px\)\)/.test(css), 'Short mobile viewports must preserve the 46vh card cap');
+});
+
+test('advanced targets survive modal pauses and dynamic DOM replacement', () => {
+  ok(source.includes('targetObserver = new MutationObserver'), 'Active target replacement is not observed');
+  ok(source.includes("attributeFilter: ['hidden', 'class', 'aria-hidden', 'open']"), 'Target visibility changes are not fully observed');
+  ok(/!activeTarget\.isConnected[\s\S]*?renderStep\(\{ skipNavigation: true \}\)/.test(source), 'Removed targets are not re-resolved');
+  ok(source.includes('modalObserver = new MutationObserver(handleBlockingModalChange)'), 'Existing dialog suspension contract changed');
+  ok(tour.ADVANCED_LYRICS_STEPS.every((step) => !step.action), 'Lyrics chapter must not submit or mutate real lyrics operations');
+  ok(tour.ADVANCED_OBS_STEPS.every((step) => !step.action), 'OBS chapter must not fake copy/connect/create success');
 });
 
 test('tour failure is isolated from playback, OBS, and Twitch business logic', () => {
