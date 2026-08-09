@@ -133,12 +133,26 @@
     if (onboardOpenBtn) onboardOpenBtn.addEventListener('click', openHelp);
     if (closeBtn) closeBtn.addEventListener('click', () => closeHelp(false));
     document.addEventListener('onboarding:open-full-guide', openHelp);
+    document.addEventListener('onboarding:open-advanced-guide', () => {
+      openHelp();
+      requestAnimationFrame(() => document.getElementById('guide-advanced-route')?.scrollIntoView({ block: 'center' }));
+    });
     document.getElementById('guide-start-interactive')?.addEventListener('click', () => {
       helpModal.hidden = true;
       firstRunRequired = false;
       if (closeBtn) closeBtn.hidden = false;
       window.OnboardingTour?.start({ force: true });
     });
+    const startAdvancedChapter = (kind) => {
+      helpModal.hidden = true;
+      firstRunRequired = false;
+      if (closeBtn) closeBtn.hidden = false;
+      const chapter = window.OnboardingTour?.getAdvancedState?.()?.[kind];
+      const resume = !!chapter && ['in_progress', 'postponed'].includes(chapter.status);
+      window.OnboardingTour?.startAdvanced({ kind, force: !resume, resume });
+    };
+    document.getElementById('guide-start-lyrics')?.addEventListener('click', () => startAdvancedChapter('lyrics'));
+    document.getElementById('guide-start-obs')?.addEventListener('click', () => startAdvancedChapter('obs'));
     if (completeBtn) completeBtn.addEventListener('click', () => {
       if (checklist.environment && checklist.song && checklist.obs) closeHelp(true);
     });
