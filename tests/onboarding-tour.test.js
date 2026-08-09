@@ -1,0 +1,272 @@
+/**
+ * Focused contract and extreme geometry tests for the interactive onboarding tour.
+ * Run directly with: node tests/onboarding-tour.test.js
+ */
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const root = path.join(__dirname, '..');
+const tour = require(path.join(root, 'public/js/onboarding-tour.js'));
+const I18n = require(path.join(root, 'public/js/i18n.js'));
+const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'public/css/onboarding-tour.css'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'public/js/onboarding-tour.js'), 'utf8');
+const nav = fs.readFileSync(path.join(root, 'public/js/nav.js'), 'utf8');
+
+let passed = 0;
+let failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    passed += 1;
+    console.log(`  ✓ ${name}`);
+  } catch (error) {
+    failed += 1;
+    console.error(`  ✗ ${name}`);
+    console.error(`    → ${error.message}`);
+  }
+}
+
+function ok(value, message) {
+  if (!value) throw new Error(message || `Expected truthy value, got ${JSON.stringify(value)}`);
+}
+
+function eq(actual, expected, message) {
+  if (actual !== expected) throw new Error(`${message || 'Values differ'}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+}
+
+function attrKeys(attribute) {
+  return Array.from(page.matchAll(new RegExp(`${attribute}="([^"]+)"`, 'g')), (match) => match[1]);
+}
+
+console.log('\n🧭 Interactive onboarding tour');
+
+test('core tour remains exactly seven focused steps', () => {
+  eq(tour.STEPS.length, 7);
+  eq(tour.STEPS.map((step) => step.id).join(','), 'navigation,source,playlist,player,preview,style,obs');
+});
+
+test('every spotlight selector exists in the panel HTML', () => {
+  tour.STEPS.forEach((step) => {
+    const selector = step.target;
+    if (selector.startsWith('#')) ok(page.includes(`id="${selector.slice(1)}"`), `Missing ${selector}`);
+    else if (selector.startsWith('.')) ok(page.includes(selector.slice(1)), `Missing ${selector}`);
+    else throw new Error(`Unsupported selector in contract test: ${selector}`);
+  });
+});
+
+test('tour assets load after base panel CSS and after i18n', () => {
+  const baseIndex = page.indexOf('/css/panel.css');
+  const tourCssIndex = page.indexOf('/css/onboarding-tour.css');
+  const i18nIndex = page.indexOf('/js/i18n.js');
+  const tourIndex = page.indexOf('/js/onboarding-tour.js');
+  const navIndex = page.indexOf('/js/nav.js');
+  ok(baseIndex >= 0 && tourCssIndex > baseIndex, 'Tour CSS must follow panel CSS');
+  ok(i18nIndex >= 0 && tourIndex > i18nIndex, 'Tour JS must follow i18n');
+  ok(navIndex > tourIndex, 'Tour JS must be available when nav initializes first-run flow');
+});
+
+test('all explicit tour i18n keys resolve in all five locales', () => {
+  const keys = new Set([
+    ...attrKeys('data-i18n'),
+    ...attrKeys('data-i18n-title'),
+    ...attrKeys('data-i18n-aria-label'),
+    ...Array.from(source.matchAll(/(?:title|body|mobileBody|hint):\s*'(tour\.[^']+)'/g), (match) => match[1]),
+    ...Array.from(source.matchAll(/t\('(tour\.[^']+)'/g), (match) => match[1]),
+  ]);
+  const tourKeys = Array.from(keys).filter((key) => key.startsWith('tour.'));
+  ok(tourKeys.length >= 50, `Expected at least 50 tour keys, got ${tourKeys.length}`);
+  for (const locale of I18n.LOCALES) {
+    I18n.setLocale(locale, { persist: false, updateQuery: false });
+    for (const key of tourKeys) {
+      const rendered = I18n.t(key, { current: 1, total: 7 });
+      ok(rendered && rendered !== key, `${locale} is missing ${key}`);
+      ok(!/\{(?:current|total)\}/.test(rendered), `${locale}:${key} left interpolation tokens behind`);
+    }
+  }
+});
+
+test('FFmpeg readiness flow is fully localized in all five locales', () => {
+  const keys = [
+    'guide.ffmpegDownload',
+    'guide.ffmpegDownloadingButton',
+    'guide.ffmpegDownloading',
+    'guide.ffmpegDownloadFailed',
+    'guide.ffmpegDownloadFailedWithError',
+    'guide.downloadFailed',
+  ];
+  for (const locale of I18n.LOCALES) {
+    I18n.setLocale(locale, { persist: false, updateQuery: false });
+    keys.forEach((key) => {
+      const rendered = I18n.t(key, { error: 'E_TEST' });
+      ok(rendered && rendered !== key, `${locale} is missing ${key}`);
+      ok(!rendered.includes('{error}'), `${locale}:${key} left interpolation tokens behind`);
+    });
+  }
+  ok(page.includes('data-i18n="guide.ffmpegDownload"'), 'FFmpeg download button is not declaratively localized');
+  ok(!nav.includes("ffmpegDownloadBtn.textContent = '下載"), 'FFmpeg button contains a hard-coded Traditional Chinese state');
+  ok(nav.includes("updateFfmpegButtonText();\n      updateChecklist()") || nav.includes("refreshReadiness();\n      updateFfmpegButtonText();"), 'FFmpeg button must refresh after a locale change');
+});
+
+test('welcome, spotlight, leave confirmation, and completion surfaces are accessible dialogs', () => {
+  ok(/id="tour-welcome"[^>]+role="dialog"[^>]+aria-modal="true"/.test(page), 'Welcome dialog semantics missing');
+  ok(/id="tour-card"[^>]+role="dialog"/.test(page), 'Step card dialog semantics missing');
+  ok(!/id="tour-card"[^>]+aria-modal="true"/.test(page), 'Spotlight must keep the real highlighted target available to assistive technology');
+  ok(/id="tour-leave-confirm"[^>]+role="alertdialog"/.test(page), 'Leave confirmation semantics missing');
+  ok(/id="tour-complete"[^>]+role="dialog"[^>]+aria-modal="true"/.test(page), 'Completion dialog semantics missing');
+  ok(source.includes("event.key === 'Escape'") && source.includes("event.key === 'Tab'"), 'Keyboard close/focus trap missing');
+  ok(source.includes('trapSurfaceFocus(event, dom.welcome)'), 'Welcome dialog focus trap missing');
+  ok(source.includes('trapSurfaceFocus(event, dom.leaveConfirm)'), 'Leave confirmation focus trap missing');
+  ok(source.includes('trapSurfaceFocus(event, dom.complete)'), 'Completion dialog focus trap missing');
+});
+
+test('stale async positioning cannot overwrite a newer rapidly selected step', () => {
+  ok(source.includes('const token = ++renderToken'), 'Each async render needs a generation token');
+  ok((source.match(/token !== renderToken \|\| !active/g) || []).length >= 2, 'Async render must abort after each awaited boundary');
+  ok(source.includes('dom.next.disabled = true'), 'Navigation must be locked until the first step is ready');
+  ok(/function next\(\)[\s\S]*?dom\.next\.disabled = true;[\s\S]*?state\.currentStep \+= 1/.test(source), 'Next must lock synchronously before async navigation');
+  ok(/const resolvedTarget = await resolveTarget\(step\);[\s\S]*?token !== renderToken[\s\S]*?activeTarget = resolvedTarget/.test(source), 'A stale render must not overwrite the global active target');
+  ok(source.includes('if (!active || suspendedByModal || renderPending) return;'), 'Mutation-driven requirement updates must stay locked during a render');
+});
+
+test('external confirmation dialogs suspend the tour and release keyboard handling', () => {
+  ok(source.includes("document.querySelectorAll('[aria-modal=\"true\"]')"), 'External modal detection missing');
+  ok(source.includes('modalObserver = new MutationObserver(handleBlockingModalChange)'), 'External modal visibility is not observed');
+  ok(source.includes('if (suspendedByModal) return;'), 'Keyboard capture must be released while an external modal is open');
+  ok(/blocker && !suspendedByModal[\s\S]*?dom\.root\.hidden = true/.test(source), 'Tour layer must hide behind an external modal');
+  ok(/!blocker && suspendedByModal[\s\S]*?dom\.root\.hidden = false[\s\S]*?renderStep\(\)/.test(source), 'Tour must resume the same step after the external modal closes');
+});
+
+test('four-pane mask blocks outside clicks while the real target hole stays interactive', () => {
+  ['top', 'right', 'bottom', 'left'].forEach((side) => ok(page.includes(`data-tour-mask="${side}"`), `Missing ${side} mask`));
+  ok(/\.tour-root\s*\{[^}]*pointer-events:\s*none/s.test(css), 'Root should not block the target hole');
+  ok(/\.tour-mask\s*\{[^}]*pointer-events:\s*auto/s.test(css), 'Mask panes must block outside clicks');
+  ok(/\.tour-highlight\s*\{[^}]*pointer-events:\s*none/s.test(css), 'Highlight ring must not block the target');
+});
+
+test('source step cannot advance until a song or sample lyrics are ready', () => {
+  ok(tour.STEPS.find((step) => step.id === 'source').requiresSource, 'Source gate missing');
+  ok(source.includes("state.path === 'sample' || hasPlaylistTrack()"), 'Song/sample completion gate missing');
+  ok(source.includes("dom.next.disabled = !sourceReady"), 'Next button is not connected to completion gate');
+  ok(source.includes('if (!button || button.disabled)'), 'Missing or disabled sample action must not unlock the source gate');
+  ok(source.indexOf('await acknowledgment') < source.indexOf("state.path = 'sample'"), 'Sample path must unlock only after the preview acknowledges rendering');
+  ok(source.includes("event.data?.type !== 'lyrics-preview:sample-ready'"), 'Sample action needs a preview acknowledgment message');
+});
+
+test('legacy guide state migrates and new users no longer get the old blocking modal', () => {
+  ok(source.includes('elite-guide-completed-v2') && source.includes('elite-guide-completed-v1'), 'Legacy completion keys missing');
+  ok(source.includes('elite-guide-postponed-v2'), 'Legacy postponed key missing');
+  ok(nav.includes('OnboardingTour.maybeShowWelcome'), 'Nav does not hand first-run entry to the interactive tour');
+  ok(nav.includes('else if (!guideCompleted && !guidePostponed)'), 'Fallback full guide path missing');
+});
+
+test('target failure degrades to a skippable explanation instead of crashing the panel', () => {
+  ok(source.includes("showStatus(t('tour.targetUnavailable'), 'error')"), 'Missing unavailable-target explanation');
+  ok(source.includes('for (let attempt = 0; attempt < 10; attempt++)'), 'Missing bounded target retry');
+  ok(!source.includes('while (true)'), 'Tour must not contain an unbounded retry loop');
+});
+
+const geometryCases = [
+  {
+    name: 'wide desktop, left target',
+    viewport: [1920, 1080], card: [370, 300],
+    hole: { left: 80, top: 160, right: 520, bottom: 720, width: 440, height: 560 },
+    expectedSide: 'right',
+  },
+  {
+    name: 'wide desktop, right target',
+    viewport: [1920, 1080], card: [370, 300],
+    hole: { left: 1420, top: 180, right: 1880, bottom: 760, width: 460, height: 580 },
+    expectedSide: 'left',
+  },
+  {
+    name: 'top banner target',
+    viewport: [1280, 720], card: [370, 260],
+    hole: { left: 340, top: 10, right: 940, bottom: 120, width: 600, height: 110 },
+    expectedSide: 'bottom',
+  },
+  {
+    name: 'bottom target',
+    viewport: [1280, 720], card: [370, 260],
+    hole: { left: 340, top: 600, right: 940, bottom: 710, width: 600, height: 110 },
+    expectedSide: 'top',
+  },
+];
+
+geometryCases.forEach((fixture) => {
+  test(`placement: ${fixture.name}`, () => {
+    const [vw, vh] = fixture.viewport;
+    const [cw, ch] = fixture.card;
+    const result = tour.calculateCardPlacement(fixture.hole, vw, vh, cw, ch);
+    eq(result.side, fixture.expectedSide);
+    ok(result.left >= 10 && result.top >= 10, 'Card escaped top/left viewport');
+    ok(result.left + cw <= vw - 10 + 0.01, 'Card escaped right viewport');
+    ok(result.top + ch <= vh - 10 + 0.01, 'Card escaped bottom viewport');
+  });
+});
+
+test('extreme minimum viewport clamps the card inside the visible area', () => {
+  const result = tour.calculateCardPlacement(
+    { left: 10, top: 10, right: 510, bottom: 310, width: 500, height: 300 },
+    520, 320, 370, 280,
+  );
+  ok(Number.isFinite(result.left) && Number.isFinite(result.top), 'Placement returned NaN/Infinity');
+  ok(result.left >= 10 && result.left + 370 <= 510.01, 'Horizontal clamp failed');
+  ok(result.top >= 10 && result.top + 280 <= 310.01, 'Vertical clamp failed');
+});
+
+test('10,000 adversarial geometry samples never place the card outside the viewport', () => {
+  let seed = 0x5eed1234;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  for (let index = 0; index < 10000; index += 1) {
+    const vw = 520 + Math.floor(random() * 2040);
+    const vh = 320 + Math.floor(random() * 1120);
+    const cw = Math.min(370, vw - 20);
+    const ch = Math.min(420, vh - 20);
+    const left = 10 + random() * Math.max(1, vw - 40);
+    const top = 10 + random() * Math.max(1, vh - 40);
+    const right = Math.min(vw - 10, left + 1 + random() * Math.max(1, vw - left - 10));
+    const bottom = Math.min(vh - 10, top + 1 + random() * Math.max(1, vh - top - 10));
+    const hole = { left, top, right, bottom, width: right - left, height: bottom - top };
+    const result = tour.calculateCardPlacement(hole, vw, vh, cw, ch);
+    ok(Number.isFinite(result.left) && Number.isFinite(result.top), `Non-finite result at sample ${index}`);
+    ok(result.left >= 10 - 0.01, `Left overflow at sample ${index}`);
+    ok(result.top >= 10 - 0.01, `Top overflow at sample ${index}`);
+    ok(result.left + cw <= vw - 10 + 0.01, `Right overflow at sample ${index}`);
+    ok(result.top + ch <= vh - 10 + 0.01, `Bottom overflow at sample ${index}`);
+  }
+});
+
+test('responsive and reduced-motion fallbacks are present', () => {
+  ok(css.includes('@media (max-width: 760px)'), 'Narrow layout fallback missing');
+  ok(css.includes('@media (max-height: 620px)'), 'Short viewport fallback missing');
+  ok(css.includes('@media (prefers-reduced-motion: reduce)'), 'Reduced-motion fallback missing');
+  ok(tour.STEPS[0].mobileTarget === '.nav-item[data-nav="karaoke"]', 'Mobile navigation spotlight must use a compact real target');
+  ok(tour.STEPS.every((step) => step.mobileTarget), 'Every mobile step needs a compact spotlight target');
+  ok(source.includes("block: root.innerWidth <= 760 ? 'start' : 'center'"), 'Mobile targets should be scrolled toward the top to leave room for the guide card');
+  ok(source.includes("scrollIntoView({ block: 'nearest'"), 'Focused controls inside a short scrollable tour card must remain visible');
+  ok(tour.STEPS.find((step) => step.id === 'source').mobileTarget === '#tab-youtube', 'Mobile source spotlight must keep the URL input and import button interactive');
+  ok(tour.STEPS.find((step) => step.id === 'source').mobileBody === 'tour.step.source.mobileBody', 'Mobile source instructions must match the controls available inside the spotlight');
+  ok(tour.STEPS.find((step) => step.id === 'style').mobileTarget === '.lyric-template-card.active', 'Mobile style spotlight must stay compact');
+  ok(tour.STEPS.find((step) => step.id === 'style').action === 'cycleStyle', 'Compact mobile style step still needs a real style-changing action');
+  ok(source.includes("root.addEventListener('resize', handleResize"), 'Resize must detect mobile breakpoint changes');
+  ok(/nextCompactViewport !== compactViewport[\s\S]*?renderStep\(\{ skipNavigation: true \}\)/.test(source), 'Crossing 760px must resolve the correct desktop/mobile target again');
+  ok(/\.tour-close\s*\{[^}]*color:\s*var\(--text-dim\)[^}]*font-size:\s*12px/s.test(css), 'Small close label needs readable size and contrast');
+  ok(/\.tour-card \.tour-hint\s*\{[^}]*color:\s*var\(--text-dim\)/s.test(css), 'Core tour hints need the readable text token');
+});
+
+test('tour failure is isolated from playback, OBS, and Twitch business logic', () => {
+  ok(!/SocketClient\.send|ObsWs\.(?:connect|disconnect)|PinAuth\.fetchWithPin|fetch\(/.test(source), 'Tour must not mutate or call backend business flows');
+  ok(source.includes("document.getElementById('copy-obs-url')"), 'OBS action should delegate to the existing copy button');
+  ok(/step\.action === 'copyObs'[\s\S]*?if \(!button \|\| button\.disabled\)/.test(source), 'Missing or disabled OBS copy action must not report success');
+  ok(source.includes("document.getElementById('btn-preview-sample-lyrics')"), 'Sample action should delegate to the existing preview button');
+});
+
+console.log(`\nTour test result: ${passed} passed, ${failed} failed`);
+if (failed) process.exit(1);
