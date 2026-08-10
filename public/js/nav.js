@@ -90,8 +90,7 @@
   if (hint) {
     let dismissed = false;
     try { dismissed = localStorage.getItem(HINT_KEY) === '1'; } catch (e) { /* 靜默 */ }
-    // 全新使用者先由互動導覽接手；完成或略過後，這張短提示仍可作為回訪入口。
-    if (!dismissed && (!window.OnboardingTour || window.OnboardingTour.isComplete())) hint.hidden = false;
+    if (!dismissed) hint.hidden = false;
     if (hintClose) {
       hintClose.addEventListener('click', () => {
         hint.hidden = true;
@@ -132,27 +131,6 @@
     if (openBtn) openBtn.addEventListener('click', openHelp);
     if (onboardOpenBtn) onboardOpenBtn.addEventListener('click', openHelp);
     if (closeBtn) closeBtn.addEventListener('click', () => closeHelp(false));
-    document.addEventListener('onboarding:open-full-guide', openHelp);
-    document.addEventListener('onboarding:open-advanced-guide', () => {
-      openHelp();
-      requestAnimationFrame(() => document.getElementById('guide-advanced-route')?.scrollIntoView({ block: 'center' }));
-    });
-    document.getElementById('guide-start-interactive')?.addEventListener('click', () => {
-      helpModal.hidden = true;
-      firstRunRequired = false;
-      if (closeBtn) closeBtn.hidden = false;
-      window.OnboardingTour?.start({ force: true });
-    });
-    const startAdvancedChapter = (kind) => {
-      helpModal.hidden = true;
-      firstRunRequired = false;
-      if (closeBtn) closeBtn.hidden = false;
-      const chapter = window.OnboardingTour?.getAdvancedState?.()?.[kind];
-      const resume = !!chapter && ['in_progress', 'postponed'].includes(chapter.status);
-      window.OnboardingTour?.startAdvanced({ kind, force: !resume, resume });
-    };
-    document.getElementById('guide-start-lyrics')?.addEventListener('click', () => startAdvancedChapter('lyrics'));
-    document.getElementById('guide-start-obs')?.addEventListener('click', () => startAdvancedChapter('obs'));
     if (completeBtn) completeBtn.addEventListener('click', () => {
       if (checklist.environment && checklist.song && checklist.obs) closeHelp(true);
     });
@@ -317,34 +295,27 @@
     if (refreshBtn) refreshBtn.addEventListener('click', refreshReadiness);
 
     const ffmpegDownloadBtn = document.getElementById('guide-ffmpeg-download');
-    const guideT = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
-    const updateFfmpegButtonText = () => {
-      if (!ffmpegDownloadBtn) return;
-      ffmpegDownloadBtn.textContent = guideT(ffmpegDownloadBtn.dataset.busy === '1'
-        ? 'guide.ffmpegDownloadingButton'
-        : 'guide.ffmpegDownload');
-    };
     if (ffmpegDownloadBtn) {
       ffmpegDownloadBtn.addEventListener('click', () => {
         ffmpegDownloadBtn.dataset.busy = '1';
         ffmpegDownloadBtn.disabled = true;
-        updateFfmpegButtonText();
-        setReadiness('guide-check-ffmpeg', 'pending', guideT('guide.ffmpegDownloading'));
+        ffmpegDownloadBtn.textContent = '下載中…（約 100MB，請稍候）';
+        setReadiness('guide-check-ffmpeg', 'pending', 'FFmpeg 下載中…');
         PinAuth.fetchWithPin('/api/ffmpeg/download', { method: 'POST' })
           .then((res) => res.json())
           .then((data) => {
-            if (!data.ok) throw new Error(data.reason || guideT('guide.downloadFailed'));
+            if (!data.ok) throw new Error(data.reason || '下載失敗');
             delete ffmpegDownloadBtn.dataset.busy;
             ffmpegDownloadBtn.disabled = false;
-            updateFfmpegButtonText();
+            ffmpegDownloadBtn.textContent = '下載 FFmpeg';
             refreshReadiness();
           })
           .catch((err) => {
             delete ffmpegDownloadBtn.dataset.busy;
             ffmpegDownloadBtn.disabled = false;
-            updateFfmpegButtonText();
-            setReadiness('guide-check-ffmpeg', false, guideT('guide.ffmpegDownloadFailed'));
-            if (typeof ErrorHandler !== 'undefined') ErrorHandler.showToast(guideT('guide.ffmpegDownloadFailedWithError', { error: err.message }));
+            ffmpegDownloadBtn.textContent = '下載 FFmpeg';
+            setReadiness('guide-check-ffmpeg', false, 'FFmpeg 下載失敗');
+            if (typeof ErrorHandler !== 'undefined') ErrorHandler.showToast(`FFmpeg 下載失敗：${err.message}`);
           });
       });
     }
@@ -353,7 +324,6 @@
     window.addEventListener('i18n:change', () => {
       updateChecklist();
       refreshReadiness();
-      updateFfmpegButtonText();
     });
     refreshReadiness();
 
@@ -369,14 +339,7 @@
       SocketClient.send('client:type', 'controller');
       SocketClient.send('state:request');
     }
-    // v3 起首次體驗改由介面高亮導覽負責；舊版完整教學保留為查詢手冊。
-    // 若互動導覽模組未載入，才安全退回原本的阻斷式教學。
-    if (window.OnboardingTour) {
-      window.OnboardingTour.maybeShowWelcome({
-        legacyCompleted: guideCompleted,
-        legacyPostponed: guidePostponed,
-      });
-    } else if (!guideCompleted && !guidePostponed) {
+    if (!guideCompleted && !guidePostponed) {
       firstRunRequired = true;
       if (closeBtn) closeBtn.hidden = true;
       if (hint) hint.hidden = true;

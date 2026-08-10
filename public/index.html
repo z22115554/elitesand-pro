@@ -9,7 +9,6 @@
   <script src="/js/electron-shell-chrome.js"></script>
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/panel.css">
-  <link rel="stylesheet" href="/css/onboarding-tour.css">
 </head>
 <body data-i18n-auto>
   <header class="desktop-windowbar" aria-label="Elitesand Pro 控制面板">
@@ -68,83 +67,6 @@
       <button id="crash-review" class="btn btn-sm btn-primary" type="button" data-i18n="crash.review">查看內容</button>
       <button id="crash-dismiss" class="btn btn-sm btn-ghost" type="button" data-i18n="crash.dismiss">不用了</button>
     </div>
-  </div>
-
-  <!-- 互動式新手導覽：使用真實介面目標，不複製或偽造控制項。 -->
-  <div id="tour-welcome" class="tour-welcome-layer" role="dialog" aria-modal="true" aria-labelledby="tour-welcome-title" hidden>
-    <section class="tour-welcome-card">
-      <span class="tour-kicker" data-i18n="tour.welcome.kicker">3～5 分鐘快速導覽</span>
-      <h2 id="tour-welcome-title" data-i18n="tour.welcome.title">第一次使用 Elitesand Pro？</h2>
-      <p data-i18n="tour.welcome.body">跟著畫面完成一次基本流程：加入歌曲、播放、確認歌詞，再了解如何放進 OBS。</p>
-      <ul class="tour-benefits">
-        <li data-i18n="tour.welcome.pointOne">畫面會直接高亮現在要操作的位置</li>
-        <li data-i18n="tour.welcome.pointTwo">可以先用示範歌詞，不必準備歌曲</li>
-        <li data-i18n="tour.welcome.pointThree">中途離開後可以從原步驟繼續</li>
-      </ul>
-      <div class="tour-welcome-actions">
-        <button id="tour-welcome-start" class="btn btn-primary" type="button" data-i18n="tour.welcome.start">開始互動導覽</button>
-        <button id="tour-welcome-help" class="btn" type="button" data-i18n="tour.welcome.fullGuide">閱讀完整教學</button>
-        <button id="tour-welcome-later" class="btn btn-ghost" type="button" data-i18n="tour.welcome.later">先自己探索</button>
-      </div>
-    </section>
-  </div>
-
-  <div id="tour-root" class="tour-root" aria-live="polite" hidden>
-    <div class="tour-mask tour-mask-top" data-tour-mask="top"></div>
-    <div class="tour-mask tour-mask-right" data-tour-mask="right"></div>
-    <div class="tour-mask tour-mask-bottom" data-tour-mask="bottom"></div>
-    <div class="tour-mask tour-mask-left" data-tour-mask="left"></div>
-    <div id="tour-highlight" class="tour-highlight" aria-hidden="true"></div>
-    <div id="tour-connector" class="tour-connector" aria-hidden="true"></div>
-
-    <section id="tour-viewport-warning" class="tour-viewport-warning" role="dialog" aria-modal="true" aria-labelledby="tour-viewport-warning-title" aria-describedby="tour-viewport-warning-body" hidden>
-      <div class="tour-viewport-warning-card">
-        <span class="tour-kicker" data-i18n="tour.viewportTooSmall.kicker">導覽已暫停</span>
-        <h2 id="tour-viewport-warning-title" data-i18n="tour.viewportTooSmall.title">請把視窗拉大後繼續</h2>
-        <p id="tour-viewport-warning-body">導覽至少需要 640 × 480 的可用空間。達到尺寸後會自動回到目前步驟。</p>
-        <p id="tour-viewport-warning-current" class="tour-viewport-warning-current" role="status"></p>
-        <button id="tour-viewport-leave" class="btn btn-ghost" type="button" data-i18n="tour.leave.label">暫時離開</button>
-      </div>
-    </section>
-
-    <section id="tour-card" class="tour-card" role="dialog" aria-labelledby="tour-title" aria-describedby="tour-body">
-      <div class="tour-card-head">
-        <span id="tour-progress" class="tour-progress"></span>
-        <button id="tour-close" class="tour-close" type="button" aria-label="暫時離開導覽" data-i18n-aria-label="tour.leave.label">暫時離開</button>
-      </div>
-      <h2 id="tour-title"></h2>
-      <p id="tour-body"></p>
-      <p id="tour-hint" class="tour-hint"></p>
-      <div id="tour-status" class="tour-status" role="status" hidden></div>
-      <button id="tour-action" class="btn tour-action" type="button" hidden></button>
-      <div class="tour-controls">
-        <button id="tour-back" class="btn btn-ghost" type="button" data-i18n="tour.back">上一步</button>
-        <button id="tour-next" class="btn btn-primary" type="button" data-i18n="tour.next">下一步</button>
-      </div>
-    </section>
-
-    <section id="tour-leave-confirm" class="tour-confirm" role="alertdialog" aria-modal="true" aria-labelledby="tour-leave-title" hidden>
-      <h2 id="tour-leave-title" data-i18n="tour.leave.title">暫時離開導覽？</h2>
-      <p data-i18n="tour.leave.body">目前進度會保留，下次可以從同一步繼續。</p>
-      <div class="tour-confirm-actions">
-        <button id="tour-leave-resume" class="btn btn-primary" type="button" data-i18n="tour.leave.resume">繼續導覽</button>
-        <button id="tour-leave-confirm-button" class="btn btn-ghost" type="button" data-i18n="tour.leave.confirm">暫時離開</button>
-      </div>
-    </section>
-  </div>
-
-  <div id="tour-complete" class="tour-welcome-layer" role="dialog" aria-modal="true" aria-labelledby="tour-complete-title" hidden>
-    <section class="tour-welcome-card tour-complete-card">
-      <div class="tour-complete-mark" aria-hidden="true">✓</div>
-      <span id="tour-complete-kicker" class="tour-kicker">基本操作完成</span>
-      <h2 id="tour-complete-title">第一個歌詞畫面已準備好</h2>
-      <p id="tour-complete-body">你已經知道如何加入歌曲、播放、確認歌詞、調整外觀並接到 OBS。其他功能可以在需要時再學。</p>
-      <div class="tour-welcome-actions">
-        <button id="tour-complete-use" class="btn btn-primary" type="button" data-i18n="tour.complete.use">開始使用</button>
-        <button id="tour-complete-advanced" class="btn" type="button" data-i18n="tour.complete.advanced">查看進階導覽</button>
-        <button id="tour-complete-help" class="btn" type="button" data-i18n="tour.complete.fullGuide">閱讀完整教學</button>
-      </div>
-    </section>
   </div>
 
   <div class="app">
@@ -468,7 +390,7 @@
           </section>
 
           <!-- 時間與音訊微調（預設展開）-->
-          <details class="card card-collapse" id="lyrics-timing-card" open>
+          <details class="card card-collapse" open>
             <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>時間與音訊微調</summary>
             <div class="card-collapse-body">
             <div class="field">
@@ -2163,29 +2085,14 @@
             <span id="guide-check-ffmpeg" class="readiness-pill pending">FFmpeg 檢查中</span>
             <span id="guide-check-version" class="readiness-pill pending">版本檢查中</span>
           </div>
-          <button id="guide-ffmpeg-download" class="btn btn-sm btn-primary" type="button" data-i18n="guide.ffmpegDownload" hidden>下載 FFmpeg</button>
+          <button id="guide-ffmpeg-download" class="btn btn-sm btn-primary" type="button" hidden>下載 FFmpeg</button>
           <button id="guide-check-refresh" class="btn btn-sm btn-ghost" type="button">重新檢查</button>
         </section>
 
         <section id="guide-route" class="guide-route" aria-labelledby="guide-route-title">
           <div class="guide-route-head"><div><span class="guide-route-eyebrow">最短路徑 · 約 1 分鐘</span><strong id="guide-route-title">先讓右側預覽出現一行歌詞</strong><p>做到這一步，就代表核心流程正常。先別打開 OBS，也不用讀完下面的說明。</p></div><span id="guide-route-status" class="guide-route-status" aria-live="polite">選一種開始方式</span></div>
-          <div class="guide-route-actions"><button id="guide-start-interactive" class="btn btn-primary guide-route-action" type="button" data-i18n="tour.welcome.start">開始互動導覽</button><button id="guide-start-sample" class="btn guide-route-action" type="button">我先看示範歌詞</button><button id="guide-start-song" class="btn btn-ghost guide-route-action" type="button">我有歌，要匯入</button><button id="guide-confirm-preview" class="btn btn-ghost guide-route-action" type="button" disabled>我看到了</button></div>
+          <div class="guide-route-actions"><button id="guide-start-sample" class="btn guide-route-action" type="button">我先看示範歌詞</button><button id="guide-start-song" class="btn btn-ghost guide-route-action" type="button">我有歌，要匯入</button><button id="guide-confirm-preview" class="btn btn-ghost guide-route-action" type="button" disabled>我看到了</button></div>
             <div id="guide-route-success" class="guide-route-success" hidden aria-live="polite"><div><strong>第一個成功完成</strong><span>你已確認核心歌詞流程正常；這段最短路徑會自動收起，接下來可慢慢加入歌曲或再接 OBS。</span></div></div>
-        </section>
-
-        <section id="guide-advanced-route" class="guide-route guide-route--advanced" aria-labelledby="guide-advanced-title">
-          <div class="guide-route-head">
-            <div>
-              <span class="guide-route-eyebrow" data-i18n="tour.advanced.entry.kicker">進階互動教學 · 約 4 分鐘</span>
-              <strong id="guide-advanced-title" data-i18n="tour.advanced.entry.title">修正歌詞同步，再把來源穩定接到 OBS</strong>
-              <p data-i18n="tour.advanced.entry.body">分成「歌詞來源與同步」和「OBS 連接」兩章；可以只學現在需要的部分。</p>
-            </div>
-            <span class="guide-route-status" data-i18n="tour.advanced.entry.badge">可隨時離開並續接</span>
-          </div>
-          <div class="guide-route-actions">
-            <button id="guide-start-lyrics" class="btn btn-primary guide-route-action" type="button" data-i18n="tour.advanced.entry.lyrics">歌詞來源與同步</button>
-            <button id="guide-start-obs" class="btn guide-route-action" type="button" data-i18n="tour.advanced.entry.obs">OBS 連接</button>
-          </div>
         </section>
 
         <section class="onboard-checklist" aria-labelledby="guide-checklist-title">
@@ -2644,7 +2551,6 @@
   <script src="/js/style-tuner.js"></script>
   <script src="/js/preview-scale.js"></script>
   <script src="/js/obs-websocket.js"></script>
-  <script src="/js/onboarding-tour.js"></script>
   <script src="/js/nav.js"></script>
 </body>
 </html>

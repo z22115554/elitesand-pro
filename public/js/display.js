@@ -813,14 +813,6 @@
       applyLyricSettings(d.settings);
     } else if (d && d.type === 'lyrics-preview:sample') {
       renderPreviewSample();
-      // The interactive tour must unlock only after the real preview handled the sample.
-      // Reply to the exact source window; no playback or server state is changed.
-      if (e.source && typeof e.source.postMessage === 'function') {
-        e.source.postMessage(
-          { type: 'lyrics-preview:sample-ready' },
-          e.origin && e.origin !== 'null' ? e.origin : '*',
-        );
-      }
     }
   });
 
