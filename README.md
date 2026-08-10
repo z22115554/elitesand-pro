@@ -9,11 +9,11 @@
 
 ### 版本狀態
 
-**最新穩定版：`v0.9.9`**
+**最新穩定版：`v0.9.9.1`**
 
-`v0.9.9` 將作為接下來兩週的穩定驗證版本，期間原則上不再新增功能或發布一般更新，只處理必要的重大問題。完成兩週實際直播與使用情境驗證後，預計發布 **`v1.0.0` 正式穩定版**。
+`v0.9.9.1` 將作為接下來兩週的穩定驗證版本，期間原則上不再新增功能或發布一般更新，只處理必要的重大問題。完成兩週實際直播與使用情境驗證後，預計發布 **`v1.0.0` 正式穩定版**。
 
-**發行形式調整：** `v0.9.9` 仍提供 Windows Installer 與 Portable；自 **`v1.0.0` 起只提供 Windows Installer，不再發布 Portable 可攜版**。
+**發行形式調整：** `v0.9.9` 仍提供 Windows Installer 與 Portable；自 **`v0.9.9.1` 起只提供 Windows Installer，不再發布 Portable 可攜版**。
 
 **本次升級建議（非強制）：** 建議 Portable 使用者在 `v0.9.9` 就改用 Installer，先確認安裝版資料正常，再停用舊可攜版。遷移前請完整關閉程式並備份 `data/` 與 `downloads/`；若已使用媒體庫搬遷功能，則備份設定中顯示的 `Elitesand Pro Media` 資料夾取代 `downloads/`。`data/` 包含播放清單、設定、歌詞快取、授權、Twitch 與 PIN 狀態；媒體資料夾包含歌曲、封面與歌詞檔。`logs/` 不影響遷移，可不備份。
 
@@ -28,7 +28,7 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 
 ### 使用說明
 
-1. 從 GitHub Releases 下載最新 Windows Installer。`v0.9.9` 仍可下載 Portable；自 `v1.0.0` 起不再提供可攜版。
+1. 從 GitHub Releases 下載最新 Windows Installer。`v0.9.9.1` 仍可下載 Portable；自 `v0.9.9.1` 起不再提供可攜版。
 2. 啟動 Elitesand Pro，依首次使用引導完成 yt-dlp、FFmpeg、網路與版本檢查。
 3. 匯入 YouTube 連結、播放清單或本機音檔，確認歌名、歌手與歌詞來源。
 4. 在歌詞設定中選擇動畫模板、字體、顏色、位置與預設。
@@ -141,7 +141,7 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 
 #### 一般使用者
 
-請從 GitHub Releases 下載最新的 Windows Installer。`v0.9.9` 仍可下載 Portable；自 `v1.0.0` 起不再提供可攜版。
+請從 GitHub Releases 下載最新的 Windows Installer。`v0.9.9` 仍可下載 Portable；自 `v0.9.9.1` 起不再提供可攜版。
 
 - **Installer**：執行安裝程式並依精靈完成安裝。
 - **Portable**：解壓縮後直接執行啟動檔，不需另外安裝 Node.js、yt-dlp 或 FFmpeg。
@@ -152,25 +152,6 @@ PowerShell 驗證範例：
 
 ```powershell
 Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
-```
-
-#### 原始碼開發
-
-需求：Node.js 18+
-
-```bash
-npm install
-npm start
-```
-
-Electron 開發與測試：
-
-```bash
-npm run electron
-npm test
-npm run smoke:electron
-npm run smoke:portable
-npm run smoke:reliability
 ```
 
 ### OBS 設定
@@ -198,17 +179,7 @@ npm run smoke:reliability
 
 更新器會驗證 SHA-256、ZIP 路徑與大小、檔案白名單、manifest、依賴與 lockfile 結構。`data/`、`downloads/`、`logs/`、設定、授權資料、Twitch token、PIN 與使用者媒體不會被增量更新覆蓋。
 
-若依賴或封裝結構不相容，程式會要求下載完整安裝包；`v0.9.x` 舊版仍可能提供 Portable，但 `v1.0.0` 起不再提供。
-
-### 打包
-
-```powershell
-npm run package:portable
-npm run package:update -- -BaselineRoot "C:\path\to\previous-portable\app"
-npm run package:installer
-```
-
-建置會產生對應 SHA-256 檔案。Portable 的封裝腳本只保留給 `v0.9.9` 與既有版本維護；`v1.0.0` 起不再發行 Portable。既有 Portable 預設包含 Node.js、yt-dlp、FFmpeg／ffprobe，並附 FFmpeg 原始碼快照、GPLv3 與建置資訊。
+若依賴或封裝結構不相容，程式會要求下載完整安裝包；`v0.9.x` 舊版仍可能提供 Portable，但 `v0.9.9.1` 起不再提供。
 
 ### 授權
 
