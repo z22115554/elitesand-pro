@@ -204,6 +204,7 @@ test('tour pauses below a 640 x 480 safe viewport and resumes without resetting 
   ok(!tour.isViewportSafe(NaN, 480), 'Invalid viewport dimensions should be rejected');
   ok(page.includes('id="tour-viewport-warning"'), 'Small-viewport warning surface missing');
   ok(page.includes('id="tour-viewport-warning-current"'), 'Current viewport dimensions are not exposed');
+  ok(page.includes('導覽至少需要 640 × 480') && !page.includes('導覽至少需要 1024 × 720'), 'Static warning fallback must match the current safe viewport');
   ok(source.includes("showViewportWarning('size')"), 'Resize guard does not pause the tour');
   ok(/active && viewportBlocked[\s\S]*?hideViewportWarning\(\)[\s\S]*?renderStep\(\{ skipNavigation: true, retryViewport: true \}\)/.test(source),
     'Returning to a safe viewport must render the existing step again');
@@ -408,7 +409,8 @@ test('responsive and reduced-motion fallbacks are present', () => {
   ok(css.includes('@media (prefers-reduced-motion: reduce)'), 'Reduced-motion fallback missing');
   ok(tour.STEPS[0].mobileTarget === '.nav-item[data-nav="karaoke"]', 'Mobile navigation spotlight must use a compact real target');
   ok(tour.STEPS.every((step) => step.mobileTarget), 'Every mobile step needs a compact spotlight target');
-  ok(source.includes("block: root.innerWidth <= 760 ? 'start' : 'center'"), 'Mobile targets should be scrolled toward the top to leave room for the guide card');
+  ok(source.includes("behavior: compact || reduceMotion ? 'auto' : 'smooth'"), 'Compact viewports must settle immediately before measuring placement');
+  ok(source.includes("block: compact ? 'start' : 'center'"), 'Mobile targets should be scrolled toward the top to leave room for the guide card');
   ok(source.includes("scrollIntoView({ block: 'nearest'"), 'Focused controls inside a short scrollable tour card must remain visible');
   ok(tour.STEPS.find((step) => step.id === 'source').mobileTarget === '#tab-youtube', 'Mobile source spotlight must keep the URL input and import button interactive');
   ok(tour.STEPS.find((step) => step.id === 'source').mobileBody === 'tour.step.source.mobileBody', 'Mobile source instructions must match the controls available inside the spotlight');
