@@ -71,10 +71,4 @@ module.exports = {
   feedbackEndpoint: 'https://elitesand-pro-feedback.elitesand.workers.dev/api/v1/reports',
   // 緊急停用開關：設為 false 時完全不顯示送出按鈕，只保留複製與下載診斷包。
   feedbackEnabled: true,
-
-  // ─── 匿名活躍統計 ───
-  // 只送版本、啟動／核心功能使用事件，以及每日／每週／每月輪替的匿名 HMAC 代碼。
-  // 不送固定安裝 ID、歌名、歌詞、歌單、帳號、硬體或裝置資訊；可在程式設定內關閉。
-  usageEndpoint: 'https://elitesand-pro-usage.elitesand.workers.dev/api/v1/usage',
-  anonymousUsageEnabled: true,
 };

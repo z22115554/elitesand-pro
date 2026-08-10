@@ -34,7 +34,6 @@ const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
 const stateStore = require('../services/state-store');
 const defaultRuntimeEvidence = require('../services/runtime-evidence');
-const defaultUsageTelemetry = require('../services/usage-telemetry');
 
 const log = createLogger('Socket');
 
@@ -46,21 +45,11 @@ const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'setlist', 'display-preview'
 // prompter（跟唱視圖）給主播自己看，不是唯讀的 OBS 疊加層——跟 remote 一樣要 PIN、也能送播放指令。
 const CLIENT_TYPES = new Set(['controller', 'remote', 'prompter', ...PIN_EXEMPT_CLIENT_TYPES]);
 const READ_ONLY_EVENTS = new Set(['client:type', 'client:build', 'state:request', 'setlist:get']);
-const CORE_USAGE_EVENTS = new Set([
-  'play:track', 'play:toggle', 'play:seek', 'play:prev', 'play:next', 'play:stop',
-  'playlist:update', 'playlist:add', 'playlist:insert-next', 'playlist:remove', 'playlist:reorder', 'playlist:import',
-  'lyrics:manual', 'lyric-settings:update', 'offset:adjust', 'offset:set', 'offset:reset',
-  'style:change', 'style:override', 'pitch:change', 'speed:change',
-  'session:start', 'session:stop', 'session:reset', 'session:remove-song',
-  'setlist:theme', 'setlist:layout', 'setlist:style',
-  'library:reimport', 'library:storage:migrate',
-]);
 const DISPLAY_BUILD_REPORT_GRACE_MS = 3500;
 
 module.exports = function socketHandler(io, {
   runtimeEvidence = defaultRuntimeEvidence,
   getDisplayBuild = () => getDisplayRuntimeBuild(path.join(projectRoot, 'public')).build,
-  usageTelemetry = defaultUsageTelemetry,
 } = {}) {
   // ─── 全域狀態（單一事實來源，含 state.json 還原）───
   const ctx = createAppState(io);
@@ -312,10 +301,6 @@ module.exports = function socketHandler(io, {
       else if (type === 'setlist') clients.setlists.add(socket.id);
       else if (type === 'prompter') clients.prompters.add(socket.id);
       runtimeEvidence.recordSocketConnected({ socketId: socket.id, clientType: type });
-      // 正式 OBS 輸出連線本身就是核心功能使用；面板內預覽不計入。
-      if (type === 'display' || type === 'setlist') {
-        usageTelemetry.markCoreUsed().catch((error) => log.warn(`匿名使用統計標記失敗：${error.message}`));
-      }
 
       // 顯示端發送完整恢復狀態（含歌詞），而非基本狀態；預覽 iframe 吃跟正式來源一樣的資料
       if (type === 'display' || type === 'display-preview') {
@@ -359,13 +344,6 @@ module.exports = function socketHandler(io, {
     });
 
     // ─── 各領域事件：只有通過控制權限的 controller/remote 才掛寫入 handler ───
-    // 只看事件名稱，不讀取歌曲、歌詞或其他 payload；同一 UTC 日最多嘗試傳送一次。
-    if (!socket.readOnly && typeof socket.onAny === 'function') {
-      socket.onAny((event) => {
-        if (!CORE_USAGE_EVENTS.has(event)) return;
-        usageTelemetry.markCoreUsed().catch((error) => log.warn(`匿名使用統計標記失敗：${error.message}`));
-      });
-    }
     if (!socket.readOnly) {
       registerPlaybackHandlers(io, socket, ctx);
       registerLyricsHandlers(io, socket, ctx);

@@ -42,9 +42,6 @@ const DEFAULTS = {
   // 這個端點本身是公開的，可以隨 App 發布。
   feedbackEndpoint: '',
   feedbackEnabled: true,
-  // 匿名活躍統計：只傳送版本、事件類型與每日／每週／每月輪替代碼；可在程式內關閉。
-  usageEndpoint: 'https://elitesand-pro-usage.elitesand.workers.dev/api/v1/usage',
-  anonymousUsageEnabled: true,
 };
 
 function tryRequire(modulePath) {
