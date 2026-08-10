@@ -186,9 +186,25 @@
       const route = document.getElementById('guide-route');
       const status = document.getElementById('guide-route-status');
       const confirm = document.getElementById('guide-confirm-preview');
+      const interactive = document.getElementById('guide-start-interactive');
+      const sample = document.getElementById('guide-start-sample');
+      const song = document.getElementById('guide-start-song');
       const success = document.getElementById('guide-route-success');
-      if (route) route.hidden = guideFirstSuccess;
-      if (confirm) confirm.disabled = !guideStartPath || guideFirstSuccess;
+      // 完成「最短路徑」後仍要保留基本互動導覽的回顧入口。
+      // 只收起已完成的快速測試按鈕，不再把整個 section 隱藏。
+      if (route) route.hidden = false;
+      const tourCompleted = !!window.OnboardingTour?.isComplete?.();
+      if (interactive) {
+        const key = tourCompleted ? 'tour.guide.review' : 'tour.welcome.start';
+        interactive.dataset.i18n = key;
+        interactive.textContent = window.I18n ? window.I18n.t(key) : (tourCompleted ? '重新觀看新手導覽' : '開始互動導覽');
+      }
+      if (sample) sample.hidden = guideFirstSuccess;
+      if (song) song.hidden = guideFirstSuccess;
+      if (confirm) {
+        confirm.hidden = guideFirstSuccess;
+        confirm.disabled = !guideStartPath || guideFirstSuccess;
+      }
       if (success) success.hidden = !guideFirstSuccess;
       if (status) status.textContent = guideFirstSuccess ? '第一次成功完成' : (guideStartPath === 'sample' ? '確認右側出現示範文字' : guideStartPath === 'song' ? '匯入完成後回來確認' : '選一種開始方式');
     };
@@ -352,6 +368,7 @@
     // 教學檢查清單的字是 JS 寫進去的；就算面板收著也要重畫，
     // 否則換語言後再打開會看到上一個語言的殘留。
     window.addEventListener('i18n:change', () => {
+      updateGuideRoute();
       updateChecklist();
       refreshReadiness();
       updateFfmpegButtonText();

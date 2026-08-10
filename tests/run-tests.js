@@ -2164,7 +2164,8 @@ test('新手教學完成預覽後會收起，里程碑可跳到對應設定並�
   }
   ok(html.includes('設定 OBS WebSocket（選配）'));
   ok(nav.includes("GUIDE_PREVIEW_COMPLETE_KEY = 'elite-guide-preview-complete-v1'"));
-  ok(nav.includes('if (route) route.hidden = guideFirstSuccess'));
+  ok(nav.includes('if (route) route.hidden = false'));
+  ok(nav.includes("tourCompleted ? 'tour.guide.review' : 'tour.welcome.start'"));
   ok(nav.includes(".onboard-task[data-guide-nav][data-guide-target]"));
   ok(nav.includes("target.classList.add('guide-target-highlight')"));
   ok(css.includes('.guide-target-highlight') && css.includes('@keyframes guide-target-highlight'));

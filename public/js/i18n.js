@@ -779,6 +779,7 @@
     'tour.welcome.pointTwo': ['可以先用示範歌詞，不必準備歌曲', 'Use sample lyrics if you do not have a song ready', '曲がなくてもサンプル歌詞で始められます', '곡이 없어도 샘플 가사로 시작할 수 있습니다', '可以先用示范歌词，不必准备歌曲'],
     'tour.welcome.pointThree': ['中途離開後可以從原步驟繼續', 'Leave anytime and resume from the same step', '途中で閉じても同じ手順から再開できます', '중간에 나가도 같은 단계부터 이어서 할 수 있습니다', '中途离开后可以从原步骤继续'],
     'tour.welcome.start': ['開始互動導覽', 'Start interactive tour', '操作ツアーを開始', '대화형 둘러보기 시작', '开始互动导览'],
+    'tour.guide.review': ['重新觀看新手導覽', 'Replay beginner tour', '初心者ツアーをもう一度見る', '초보자 둘러보기 다시 보기', '重新观看新手导览'],
     'tour.welcome.resume': ['繼續上次的導覽', 'Resume the tour', '前回のツアーを再開', '이전 둘러보기 계속', '继续上次的导览'],
     'tour.welcome.fullGuide': ['閱讀完整教學', 'Read the full guide', '詳しいガイドを読む', '전체 가이드 읽기', '阅读完整教学'],
     'tour.welcome.later': ['先自己探索', 'Explore on my own', 'まず自分で試す', '먼저 직접 둘러보기', '先自己探索'],

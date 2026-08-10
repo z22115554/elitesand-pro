@@ -68,6 +68,13 @@ test('advanced tour is split into independent lyrics, OBS, and live-operations c
   ok(nav.includes("startAdvancedChapter('lyrics')") && nav.includes("startAdvancedChapter('obs')") && nav.includes("startAdvancedChapter('live')"), 'Chapter entries are not wired independently');
 });
 
+test('completed users can replay the beginner tour from Help', () => {
+  ok(page.includes('id="guide-start-interactive"'), 'Beginner replay button missing from Help');
+  ok(nav.includes("tourCompleted ? 'tour.guide.review' : 'tour.welcome.start'"), 'Help entry does not switch to replay copy after completion');
+  ok(nav.includes('if (route) route.hidden = false'), 'Completed quick-start state still hides the whole beginner section');
+  ok(nav.includes('window.OnboardingTour?.start({ force: true })'), 'Beginner replay does not force-restart the tour');
+});
+
 test('every advanced desktop and mobile spotlight selector exists', () => {
   const selectors = new Set(tour.ADVANCED_STEPS.flatMap((step) => [step.target, step.mobileTarget]));
   selectors.forEach((selector) => {
