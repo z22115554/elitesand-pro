@@ -17,6 +17,8 @@
   const HOLE_PADDING = 9;
   const VIEWPORT_MARGIN = 10;
   const CARD_GAP = 30;
+  const MIN_TOUR_VIEWPORT_WIDTH = 1024;
+  const MIN_TOUR_VIEWPORT_HEIGHT = 720;
 
   const STEPS = [
     {
@@ -168,6 +170,8 @@
   let tourKind = 'basic';
   let activeTarget = null;
   let active = false;
+  let viewportBlocked = false;
+  let viewportBlockReason = null;
   let debugBypassRequirements = false;
   let deferredWelcomeTimer = null;
   let placementFrame = 0;
@@ -255,6 +259,10 @@
     dom.highlight = document.getElementById('tour-highlight');
     dom.connector = document.getElementById('tour-connector');
     dom.masks = Object.fromEntries(Array.from(document.querySelectorAll('[data-tour-mask]')).map((el) => [el.dataset.tourMask, el]));
+    dom.viewportWarning = document.getElementById('tour-viewport-warning');
+    dom.viewportWarningBody = document.getElementById('tour-viewport-warning-body');
+    dom.viewportWarningCurrent = document.getElementById('tour-viewport-warning-current');
+    dom.viewportLeave = document.getElementById('tour-viewport-leave');
     dom.progress = document.getElementById('tour-progress');
     dom.title = document.getElementById('tour-title');
     dom.body = document.getElementById('tour-body');
@@ -290,6 +298,7 @@
     dom.close?.addEventListener('click', requestLeave);
     dom.leaveResume?.addEventListener('click', resumeAfterLeavePrompt);
     dom.leaveButton?.addEventListener('click', leave);
+    dom.viewportLeave?.addEventListener('click', requestLeave);
     dom.action?.addEventListener('click', runStepAction);
     dom.completeUse?.addEventListener('click', closeCompletion);
     dom.completeAdvanced?.addEventListener('click', () => {
@@ -431,6 +440,8 @@
 
   async function renderStep(options = {}) {
     if (!active || suspendedByModal || !dom.root || dom.root.hidden) return;
+    if (viewportBlocked && viewportBlockReason === 'placement' && !options.retryViewport) return;
+    if (!ensureSafeViewport()) return;
     const token = ++renderToken;
     renderPending = true;
     dom.next.disabled = true;
@@ -447,7 +458,10 @@
     updateCard(step);
     await nextFrame();
     if (token !== renderToken || !active) return;
-    place(activeTarget);
+    if (!place(activeTarget)) {
+      renderPending = false;
+      return;
+    }
     renderPending = false;
     updateRequirementState();
     focusPrimary(step);
@@ -671,12 +685,17 @@
     state.completedAt = new Date().toISOString();
     saveState();
     active = false;
+    viewportBlocked = false;
+    viewportBlockReason = null;
     renderPending = false;
     suspendedByModal = false;
     renderToken += 1;
     activeTarget = null;
     targetObserver?.disconnect();
     dom.root.hidden = true;
+    if (dom.viewportWarning) dom.viewportWarning.hidden = true;
+    dom.card.hidden = false;
+    dom.highlight.hidden = false;
     dom.leaveConfirm.hidden = true;
     document.body.classList.remove('tour-active');
     updateCompletionContent();
@@ -710,13 +729,15 @@
 
   function resumeAfterLeavePrompt() {
     dom.leaveConfirm.hidden = true;
-    dom.close.focus();
+    focusTourElement(viewportBlocked ? dom.viewportLeave : dom.close);
   }
 
   function leave() {
     state.status = 'in_progress';
     saveState();
     active = false;
+    viewportBlocked = false;
+    viewportBlockReason = null;
     renderPending = false;
     suspendedByModal = false;
     renderToken += 1;
@@ -724,6 +745,9 @@
     targetObserver?.disconnect();
     dom.leaveConfirm.hidden = true;
     dom.root.hidden = true;
+    if (dom.viewportWarning) dom.viewportWarning.hidden = true;
+    dom.card.hidden = false;
+    dom.highlight.hidden = false;
     document.body.classList.remove('tour-active');
     document.getElementById('btn-open-help')?.focus();
     document.dispatchEvent(new CustomEvent('onboarding:paused', { detail: { kind: tourKind, step: state.currentStep } }));
@@ -733,11 +757,16 @@
     if (layer) layer.hidden = true;
     if (active) {
       active = false;
+      viewportBlocked = false;
+      viewportBlockReason = null;
       renderPending = false;
       suspendedByModal = false;
       renderToken += 1;
       targetObserver?.disconnect();
       dom.root.hidden = true;
+      if (dom.viewportWarning) dom.viewportWarning.hidden = true;
+      dom.card.hidden = false;
+      dom.highlight.hidden = false;
       document.body.classList.remove('tour-active');
     }
     document.dispatchEvent(new CustomEvent('onboarding:open-full-guide'));
@@ -747,12 +776,13 @@
     if (dom.welcome && !dom.welcome.hidden) {
       dom.welcomeStart.textContent = state.status === 'in_progress' ? t('tour.welcome.resume') : t('tour.welcome.start');
     }
-    if (active) renderStep({ skipNavigation: true });
+    if (viewportBlocked) updateViewportWarning();
+    else if (active) renderStep({ skipNavigation: true });
     if (dom.complete && !dom.complete.hidden) updateCompletionContent();
   }
 
   function schedulePlacement() {
-    if (!active || suspendedByModal || renderPending) return;
+    if (!active || suspendedByModal || renderPending || viewportBlocked) return;
     root.cancelAnimationFrame(placementFrame);
     placementFrame = root.requestAnimationFrame(() => {
       if (activeTarget && (!activeTarget.isConnected || !activeTarget.getClientRects().length)) {
@@ -764,6 +794,15 @@
   }
 
   function handleResize() {
+    if (active && !isViewportSafe(root.innerWidth, root.innerHeight)) {
+      showViewportWarning('size');
+      return;
+    }
+    if (active && viewportBlocked) {
+      hideViewportWarning();
+      if (!suspendedByModal) renderStep({ skipNavigation: true, retryViewport: true });
+      return;
+    }
     const nextCompactViewport = root.innerWidth <= 760;
     if (nextCompactViewport !== compactViewport) {
       compactViewport = nextCompactViewport;
@@ -771,6 +810,71 @@
       return;
     }
     schedulePlacement();
+  }
+
+  function ensureSafeViewport() {
+    if (!isViewportSafe(root.innerWidth, root.innerHeight)) {
+      showViewportWarning('size');
+      return false;
+    }
+    if (viewportBlocked && viewportBlockReason === 'size') hideViewportWarning();
+    return !viewportBlocked;
+  }
+
+  function showViewportWarning(reason = 'size') {
+    if (!active || !dom.root || !dom.viewportWarning) return;
+    const wasBlocked = viewportBlocked;
+    viewportBlocked = true;
+    viewportBlockReason = reason;
+    renderPending = false;
+    renderToken += 1;
+    activeTarget = null;
+    targetObserver?.disconnect();
+    setMask(dom.masks.top, 0, 0, root.innerWidth, root.innerHeight);
+    setMask(dom.masks.right, 0, 0, 0, 0);
+    setMask(dom.masks.bottom, 0, 0, 0, 0);
+    setMask(dom.masks.left, 0, 0, 0, 0);
+    dom.card.hidden = true;
+    dom.highlight.hidden = true;
+    dom.connector.hidden = true;
+    dom.viewportWarning.hidden = false;
+    updateViewportWarning();
+    if (!wasBlocked) {
+      focusTourElement(dom.viewportLeave);
+      document.dispatchEvent(new CustomEvent('onboarding:viewport-blocked', {
+        detail: {
+          reason,
+          width: root.innerWidth,
+          height: root.innerHeight,
+          minimumWidth: MIN_TOUR_VIEWPORT_WIDTH,
+          minimumHeight: MIN_TOUR_VIEWPORT_HEIGHT,
+        },
+      }));
+    }
+  }
+
+  function hideViewportWarning() {
+    viewportBlocked = false;
+    viewportBlockReason = null;
+    if (dom.viewportWarning) dom.viewportWarning.hidden = true;
+    if (dom.card) dom.card.hidden = false;
+    if (dom.highlight) dom.highlight.hidden = false;
+  }
+
+  function updateViewportWarning() {
+    if (!dom.viewportWarning || dom.viewportWarning.hidden) return;
+    if (dom.viewportWarningBody) {
+      dom.viewportWarningBody.textContent = t('tour.viewportTooSmall.body', {
+        width: MIN_TOUR_VIEWPORT_WIDTH,
+        height: MIN_TOUR_VIEWPORT_HEIGHT,
+      });
+    }
+    if (dom.viewportWarningCurrent) {
+      dom.viewportWarningCurrent.textContent = t('tour.viewportTooSmall.current', {
+        width: Math.max(0, Math.floor(Number(root.innerWidth) || 0)),
+        height: Math.max(0, Math.floor(Number(root.innerHeight) || 0)),
+      });
+    }
   }
 
   function place(target) {
@@ -784,7 +888,7 @@
       setBox(dom.highlight, -20, -20, 0, 0);
       dom.connector.hidden = true;
       centerCard();
-      return;
+      return true;
     }
 
     const rect = target.getBoundingClientRect();
@@ -802,7 +906,7 @@
     setMask(dom.masks.left, 0, hole.top, hole.left, hole.height);
     setMask(dom.masks.right, hole.right, hole.top, Math.max(0, viewportWidth - hole.right), hole.height);
     setBox(dom.highlight, hole.left, hole.top, hole.width, hole.height);
-    placeCard(hole, viewportWidth, viewportHeight);
+    return placeCard(hole, viewportWidth, viewportHeight);
   }
 
   function setMask(element, left, top, width, height) {
@@ -823,9 +927,26 @@
     const cardWidth = cardRect.width || Math.min(370, viewportWidth - 24);
     const cardHeight = cardRect.height || 280;
     const placement = calculateCardPlacement(hole, viewportWidth, viewportHeight, cardWidth, cardHeight);
+    if (!placement.fits) {
+      showViewportWarning('placement');
+      return false;
+    }
     dom.card.style.left = `${Math.round(placement.left)}px`;
     dom.card.style.top = `${Math.round(placement.top)}px`;
-    placeConnector(hole, { left: placement.left, top: placement.top, width: cardWidth, height: cardHeight }, placement.side);
+    const card = {
+      left: placement.left,
+      top: placement.top,
+      right: placement.left + cardWidth,
+      bottom: placement.top + cardHeight,
+      width: cardWidth,
+      height: cardHeight,
+    };
+    if (rectanglesIntersect(card, hole)) {
+      showViewportWarning('placement');
+      return false;
+    }
+    placeConnector(hole, card, placement.side);
+    return true;
   }
 
   function calculateCardPlacement(hole, viewportWidth, viewportHeight, cardWidth, cardHeight) {
@@ -835,30 +956,53 @@
       bottom: viewportHeight - hole.bottom,
       top: hole.top,
     };
-    let side = ['right', 'left', 'bottom', 'top'].find((name) => (
-      available[name] >= ((name === 'right' || name === 'left') ? cardWidth : cardHeight) + CARD_GAP
-    ));
-    if (!side) side = Object.entries(available).sort((a, b) => b[1] - a[1])[0][0];
+    const candidates = [
+      {
+        side: 'right',
+        left: hole.right + CARD_GAP,
+        top: clamp(hole.top + (hole.height - cardHeight) / 2, VIEWPORT_MARGIN, viewportHeight - cardHeight - VIEWPORT_MARGIN),
+      },
+      {
+        side: 'left',
+        left: hole.left - cardWidth - CARD_GAP,
+        top: clamp(hole.top + (hole.height - cardHeight) / 2, VIEWPORT_MARGIN, viewportHeight - cardHeight - VIEWPORT_MARGIN),
+      },
+      {
+        side: 'bottom',
+        left: clamp(hole.left + (hole.width - cardWidth) / 2, VIEWPORT_MARGIN, viewportWidth - cardWidth - VIEWPORT_MARGIN),
+        top: hole.bottom + CARD_GAP,
+      },
+      {
+        side: 'top',
+        left: clamp(hole.left + (hole.width - cardWidth) / 2, VIEWPORT_MARGIN, viewportWidth - cardWidth - VIEWPORT_MARGIN),
+        top: hole.top - cardHeight - CARD_GAP,
+      },
+    ];
+    const preferredSides = ['right', 'left', 'bottom', 'top'];
+    const valid = candidates.filter((candidate) => {
+      const card = {
+        left: candidate.left,
+        top: candidate.top,
+        right: candidate.left + cardWidth,
+        bottom: candidate.top + cardHeight,
+      };
+      return card.left >= VIEWPORT_MARGIN
+        && card.top >= VIEWPORT_MARGIN
+        && card.right <= viewportWidth - VIEWPORT_MARGIN
+        && card.bottom <= viewportHeight - VIEWPORT_MARGIN
+        && !rectanglesIntersect(card, hole);
+    });
+    const side = preferredSides.find((name) => valid.some((candidate) => candidate.side === name));
+    if (side) return { ...valid.find((candidate) => candidate.side === side), fits: true };
 
-    let left;
-    let top;
-    if (side === 'right') {
-      left = hole.right + CARD_GAP;
-      top = hole.top + (hole.height - cardHeight) / 2;
-    } else if (side === 'left') {
-      left = hole.left - cardWidth - CARD_GAP;
-      top = hole.top + (hole.height - cardHeight) / 2;
-    } else if (side === 'bottom') {
-      left = hole.left + (hole.width - cardWidth) / 2;
-      top = hole.bottom + CARD_GAP;
-    } else {
-      left = hole.left + (hole.width - cardWidth) / 2;
-      top = hole.top - cardHeight - CARD_GAP;
-    }
-
-    left = clamp(left, VIEWPORT_MARGIN, viewportWidth - cardWidth - VIEWPORT_MARGIN);
-    top = clamp(top, VIEWPORT_MARGIN, viewportHeight - cardHeight - VIEWPORT_MARGIN);
-    return { left, top, side };
+    const fallbackSide = Object.entries(available).sort((a, b) => b[1] - a[1])[0]?.[0] || 'right';
+    const fallback = candidates.find((candidate) => candidate.side === fallbackSide) || candidates[0];
+    return {
+      left: clamp(fallback.left, VIEWPORT_MARGIN, viewportWidth - cardWidth - VIEWPORT_MARGIN),
+      top: clamp(fallback.top, VIEWPORT_MARGIN, viewportHeight - cardHeight - VIEWPORT_MARGIN),
+      side: fallback.side,
+      fits: false,
+    };
   }
 
   function placeConnector(hole, card, side) {
@@ -931,6 +1075,10 @@
     }
     if (!dom.leaveConfirm.hidden) {
       if (event.key === 'Tab') trapSurfaceFocus(event, dom.leaveConfirm);
+      return;
+    }
+    if (viewportBlocked) {
+      if (event.key === 'Tab') trapSurfaceFocus(event, dom.viewportWarning);
       return;
     }
     if (event.key === 'ArrowRight' && !isTextEntry(event.target)) {
@@ -1039,6 +1187,22 @@
     return !!element?.matches?.('input, textarea, select, [contenteditable="true"]');
   }
 
+  function isViewportSafe(width, height) {
+    const viewportWidth = Number(width);
+    const viewportHeight = Number(height);
+    return Number.isFinite(viewportWidth)
+      && Number.isFinite(viewportHeight)
+      && viewportWidth >= MIN_TOUR_VIEWPORT_WIDTH
+      && viewportHeight >= MIN_TOUR_VIEWPORT_HEIGHT;
+  }
+
+  function rectanglesIntersect(a, b) {
+    return a.left < b.right
+      && a.right > b.left
+      && a.top < b.bottom
+      && a.bottom > b.top;
+  }
+
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
   }
@@ -1103,12 +1267,16 @@
     module.exports = {
       TOUR_VERSION,
       ADVANCED_TOUR_VERSION,
+      MIN_TOUR_VIEWPORT_WIDTH,
+      MIN_TOUR_VIEWPORT_HEIGHT,
       STEPS: STEPS.map((step) => ({ ...step })),
       ADVANCED_LYRICS_STEPS: ADVANCED_LYRICS_STEPS.map((step) => ({ ...step })),
       ADVANCED_OBS_STEPS: ADVANCED_OBS_STEPS.map((step) => ({ ...step })),
       ADVANCED_STEPS: ADVANCED_STEPS.map((step) => ({ ...step })),
       clamp,
       clampStep,
+      isViewportSafe,
+      rectanglesIntersect,
       calculateCardPlacement,
     };
   }
