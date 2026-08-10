@@ -2,8 +2,25 @@
 
 // Only the Electron shell opts into the frameless app chrome. Browser and OBS
 // sessions keep their existing layout with no extra title strip.
-if (new URLSearchParams(window.location.search).get('electronShell') === '1') {
+const shellQuery = new URLSearchParams(window.location.search);
+if (shellQuery.get('electronShell') === '1') {
   document.documentElement.classList.add('electron-shell');
+
+  // electron/shell.js appends ?lang= exactly once, straight from the marker
+  // electron/installer.nsh left behind for the language picked in the
+  // install wizard. I18n's own query-param handling already makes this the
+  // first screen's language, but resolveLocale() does not persist a
+  // query-sourced value — without this, the very next normal launch (no
+  // ?lang= anymore) would fall back to the OS/browser locale and could
+  // silently revert. setLocale() persists it so it sticks. This script runs
+  // in <head>, before i18n.js (near the end of body) has assigned
+  // window.I18n, so the call has to wait for DOMContentLoaded.
+  const installerLang = shellQuery.get('lang');
+  if (installerLang) {
+    window.addEventListener('DOMContentLoaded', () => {
+      window.I18n?.setLocale?.(installerLang);
+    });
+  }
 }
 
 const shell = window.ElitesandShell;

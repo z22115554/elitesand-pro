@@ -6457,6 +6457,7 @@ test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic g
   ok(mirrorConstrainIdx >= 0 && mirrorUpdateAssemblyIdx >= 0 && mirrorConstrainIdx < mirrorUpdateAssemblyIdx, 'Mirror P1 先以最散布狀態限縮，倒退 seek 不會把 glyph 推出安全側: ');
   ok(lyricExtras.includes("mirror: { label: '鏡像'") && lyricExtras.includes("template: 'mirror'") && lyricExtras.includes("lyricPosition: 'split'") && lyricExtras.includes('stageSafeMargin: 13'), '桌面設定必須提供 Mirror P0 獨立預設並鎖定 split: ');
   ok(panelHtml.includes('data-template="mirror"') && panelHtml.includes('style-thumb-mirror'), '桌面模板選擇器必須有 Mirror P0 卡片: ');
+  ok(!/data-template="mirror"[^>]*\bhidden\b/.test(panelHtml), 'Mirror 模板已正式公開，桌面模板卡片不可再帶 hidden: ');
   ok(lyricsHandler.includes("'paperstrip', 'mirror'"), 'server 模板白名單必須接受 mirror: ');
   ok(appState.includes("mirror: { template: 'mirror'"), 'server 預設 lyricTemplateSettings 必須包含 mirror: ');
   ok(i18n.includes("'template.mirror':"), 'Mirror 模板名稱必須有五語 i18n key: ');
@@ -6854,6 +6855,25 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
   ok(!electronShell.isPrompterUrl('https://127.0.0.1:3000/prompter', 3000), '非 http 不放行：');
   ok(!electronShell.isPrompterUrl('http://evil.com/prompter', 3000), '非本機網域不放行：');
 
+  // electron/installer.nsh 把使用者在精靈選的語言寫進這個 marker，殼要讀一次、刪一次，
+  // 只影響安裝後的第一次啟動，不能每次開程式都覆蓋使用者後來自己在面板改的語言。
+  let unlinked = null;
+  const localeFsImpl = {
+    readFileSync: () => ' en \n',
+    unlinkSync: (file) => { unlinked = file; },
+  };
+  eq(electronShell.consumeInstallerLocale(runtimeRoot, localeFsImpl), 'en', '合法語言代碼必須被讀出並套用：');
+  ok(unlinked.endsWith('installer-locale.txt'), 'consumeInstallerLocale 必須刪除 marker，避免每次啟動都套用：');
+
+  const invalidLocaleFsImpl = { readFileSync: () => 'not-a-real-locale', unlinkSync: () => {} };
+  eq(electronShell.consumeInstallerLocale(runtimeRoot, invalidLocaleFsImpl), null, '非白名單內容不可被當成語言代碼採用：');
+
+  const missingMarkerFsImpl = {
+    readFileSync: () => { throw new Error('ENOENT'); },
+    unlinkSync: () => { throw new Error('ENOENT'); },
+  };
+  eq(electronShell.consumeInstallerLocale(runtimeRoot, missingMarkerFsImpl), null, '沒有 marker（開發模式／Portable／已消費過）必須安靜回傳 null：');
+
   const source = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   [
     'utilityProcess.fork',
@@ -6870,6 +6890,7 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
     'setWindowOpenHandler',
     'ELITESAND_SHELL_USER_DATA_DIR',
     'ELITESAND_MEDIA_STORAGE_MODE',
+    'consumeInstallerLocale(app.getPath(\'userData\'))',
     'elitesand:choose-media-location',
     'restart-after-media-migration',
     'SHUTDOWN_MESSAGE',
@@ -6968,6 +6989,8 @@ test('Electron assisted installer stays per-user with an updateable app root', (
   ok(installerNsh.includes('UninstPage custom un.EsCleanupPre un.EsCleanupLeave'),
     'custom uninstall welcome page must use the explicit UninstPage form, otherwise NSIS rejects the callbacks');
   const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
+  ok(!shellSource.includes("require('../public/js/i18n.js')"),
+    'packaged Electron shell 不可直接 require renderer 的 i18n.js；兩者位於不同 resources 目錄，會讓 installer 啟動直接 MODULE_NOT_FOUND：');
   ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'showPortableDataMigrationNotice',
     'function needsPortableDataMigrationNotice', 'shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice()',
     "Object.keys(processObject.env).find((key) => key.toUpperCase() === 'PATH')"].forEach((required) =>
@@ -7018,6 +7041,15 @@ test('Electron shell chrome stays inside the Elitesand Pro design system', () =>
   ok(chrome.includes("shell.windowControl('toggle-maximize')"));
   ok(preload.includes("ipcRenderer.send('elitesand:close-decision', action)"));
   ok(preload.includes("ipcRenderer.send('elitesand:window-control', action)"));
+
+  // 安裝精靈選的語言要能一路傳到面板並被記住，否則使用者裝英文版打開卻看到中文。
+  const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
+  const installerNsh = fs.readFileSync(path.join(__dirname, '..', 'electron', 'installer.nsh'), 'utf8');
+  ok(chrome.includes("shellQuery.get('lang')"), '殼層必須讀出精靈語言參數：');
+  ok(chrome.includes('window.I18n?.setLocale?.(installerLang)'), '讀到的語言必須真的套用並持久化，不能只是顯示一次：');
+  ok(shellSource.includes("await window.loadURL(`http://127.0.0.1:${port}/panel?electronShell=1${localeQuery}`)"), '殼層開窗網址必須帶上語言參數：');
+  ok(shellSource.includes('function consumeInstallerLocale'), '缺少讀取＋刪除 installer-locale marker 的邏輯：');
+  ok(installerNsh.includes('installer-locale.txt'), 'NSIS 端必須把精靈語言寫進 marker 檔：');
 });
 
 testAsync('Media migration relaunches through Electron graceful quit', async () => {

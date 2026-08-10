@@ -1,13 +1,13 @@
 {
   "name": "elitesand-pro",
-  "version": "0.9.9.1",
+  "version": "0.9.9.5",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/run-tests.js && node tests/onboarding-tour.test.js",
+    "test": "node tests/run-tests.js && node tests/usage-telemetry.test.js && node tests/onboarding-tour.test.js",
     "test:onboarding": "node tests/onboarding-tour.test.js",
     "audit:release": "npm audit --omit=dev --audit-level=low",
     "smoke:portable": "node tools/smoke-portable.js",
@@ -88,7 +88,17 @@
       "createDesktopShortcut": false,
       "createStartMenuShortcut": false,
       "include": "electron/installer.nsh",
-      "license": "dist/.electron-builder-resources/EULA-installer.txt"
+      "license": "dist/.electron-builder-resources/EULA-installer.txt",
+      "multiLanguageInstaller": true,
+      "displayLanguageSelector": true,
+      "installerLanguages": [
+        "en_US",
+        "zh_TW",
+        "ja_JP",
+        "ko_KR",
+        "zh_CN"
+      ],
+      "language": "1033"
     }
   }
 }

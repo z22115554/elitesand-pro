@@ -657,7 +657,7 @@
                 <button class="lyric-template-card" data-template="columnflow" type="button" role="radio" aria-checked="false" title="直書句流：直行在畫面兩側錯落，逐字浮現，唱過的句子留下淡淡殘影">
                   <span class="style-thumb-preview style-thumb-columnflow" aria-hidden="true"><span class="style-thumb-column">句流</span><span class="style-thumb-column">歌詞</span><span class="style-thumb-column">餘韻</span></span><strong>直書句流</strong><span>直書殘影、中央留白</span>
                 </button>
-                <button class="lyric-template-card" data-template="paperstrip" type="button" role="radio" aria-checked="false" title="紙帶逐字：白色紙帶先展開，再依句長、總字數與節奏分成 2～4 句一頁，尺寸進場前就決定">
+                <button class="lyric-template-card" data-template="paperstrip" type="button" role="radio" aria-checked="false" hidden aria-hidden="true" title="紙帶逐字：白色紙帶先展開，再依句長、總字數與節奏分成 2～4 句一頁，尺寸進場前就決定">
                   <span class="style-thumb-preview style-thumb-paperstrip" aria-hidden="true"><i></i><i></i><i></i></span><strong data-i18n="template.paperstrip">紙帶逐字</strong><span>白底展開、逐字填入</span>
                 </button>
                 <button class="lyric-template-card" data-template="mirror" type="button" role="radio" aria-checked="false" title="鏡像：固定左右雙側，左實心原文、右描邊鏡像字，中央保留人物安全區">
@@ -1406,6 +1406,22 @@
                 <p class="sub diagnostic-privacy-hint">診斷包會附上可讀的直播穩定性核對摘要、版本、工具健康狀態、連線時長／計數與少量已遮蔽的伺服器日誌；不含歌單、歌詞、音檔、PIN、Twitch 憑證、聊天室內容或裝置位址。日誌仍可能提到歌名或影片標題，分享前請先檢查。</p>
             </div>
           </details>
+
+          <section class="card" id="usage-telemetry-card">
+            <p class="eyebrow" data-i18n="system.usageTitle">匿名活躍統計</p>
+            <p class="sub diagnostic-description" data-i18n="system.usageDescription">協助了解實際使用人數。只傳送程式版本、啟動／核心功能使用事件，以及每日／每週／每月輪替的匿名代碼。</p>
+            <p class="field-hint" data-i18n="system.usagePrivacy">不傳送固定安裝 ID、IP、電腦或硬體資訊、歌名、歌詞、歌單、Twitch 帳號或憑證；傳送失敗不影響程式，也不會補傳。</p>
+            <div class="switch-row">
+              <div>
+                <div class="label" data-i18n="system.usageToggle">允許匿名活躍統計</div>
+                <div id="usage-telemetry-status" class="sub" role="status" aria-live="polite" data-i18n="system.usageEnabled">已啟用</div>
+              </div>
+              <label class="switch" title="允許匿名活躍統計" data-i18n-title="system.usageToggle">
+                <input id="usage-telemetry-enabled" type="checkbox" checked>
+                <span class="track"></span>
+              </label>
+            </div>
+          </section>
 
           <div class="card" id="feedback-card">
             <p class="eyebrow" data-i18n="feedback.title">回報問題給開發者</p>
@@ -2641,6 +2657,7 @@
   <script src="/js/app-style-sync.js"></script>
   <script src="/js/app-diagnostics.js"></script>
   <script src="/js/app-feedback.js"></script>
+  <script src="/js/usage-telemetry-settings.js"></script>
   <script src="/js/playlist-state.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/lyric-extras.js"></script>

@@ -19,6 +19,29 @@ function resolveShellPort(value) {
 const MEDIA_FOLDER_NAME = 'Elitesand Pro Media';
 const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
 
+const INSTALLER_LOCALE_FILE = 'installer-locale.txt';
+// Keep the shell independent from renderer assets. The packaged Electron shell
+// lives in resources/app while the actual web app (including i18n.js) lives in
+// resources/app-root, so requiring ../public/js/i18n.js here breaks installed
+// builds with MODULE_NOT_FOUND before the window can even open.
+const VALID_LOCALES = new Set(['zh-TW', 'en', 'ja', 'ko', 'zh-CN']);
+
+// electron/installer.nsh writes this marker with the language the user picked
+// in the installer wizard, since that choice has no other way to reach the
+// renderer's i18n layer. Consumed (and deleted) at most once, on the very
+// first launch after install/reinstall; later launches fall back to the
+// panel's normal saved-preference/browser-locale detection.
+function consumeInstallerLocale(userDataPath, fsImpl = fs) {
+  const file = path.join(path.resolve(userDataPath), INSTALLER_LOCALE_FILE);
+  let locale = null;
+  try {
+    const raw = fsImpl.readFileSync(file, 'utf8').trim();
+    if (VALID_LOCALES.has(raw)) locale = raw;
+  } catch (_) { /* no marker: dev mode, Portable build, or already consumed */ }
+  try { fsImpl.unlinkSync(file); } catch (_) { /* best effort; missing file is fine */ }
+  return locale;
+}
+
 function getRuntimePaths(userDataPath, downloadsDir) {
   const root = path.resolve(userDataPath);
   return {
@@ -482,7 +505,9 @@ function createElectronShell({
         if (!isTrustedLocalUrl(url, port)) event.preventDefault();
       });
     });
-    await window.loadURL(`http://127.0.0.1:${port}/panel?electronShell=1`);
+    const installerLocale = consumeInstallerLocale(app.getPath('userData'));
+    const localeQuery = installerLocale ? `&lang=${installerLocale}` : '';
+    await window.loadURL(`http://127.0.0.1:${port}/panel?electronShell=1${localeQuery}`);
     return window;
   }
 
@@ -684,6 +709,7 @@ module.exports = {
   HEALTH_INTERVAL_MS,
   SHUTDOWN_TIMEOUT_MS,
   resolveShellPort,
+  consumeInstallerLocale,
   getRuntimePaths,
   resolveMediaRuntime,
   readConfiguredMediaDir,
