@@ -134,6 +134,58 @@
   pointer-events: none;
 }
 
+.tour-viewport-warning {
+  position: fixed;
+  inset: 0;
+  z-index: 20005;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  pointer-events: auto;
+}
+
+.tour-viewport-warning-card {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 26px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-raised) 97%, var(--accent) 3%);
+  box-shadow: 0 28px 86px rgba(0, 0, 0, .58);
+  color: var(--text);
+  text-align: center;
+}
+
+.tour-viewport-warning-card h2 {
+  margin: 16px 0 9px;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.tour-viewport-warning-card > p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.tour-viewport-warning-card .tour-viewport-warning-current {
+  margin-top: 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.tour-viewport-warning-card .btn {
+  width: 100%;
+  margin-top: 18px;
+}
+
 .tour-card {
   position: fixed;
   z-index: 20003;
