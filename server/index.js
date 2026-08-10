@@ -274,6 +274,7 @@ app.get('/background/:filename', (req, res) => {
 
 // ─── Socket.io 即時通訊 ───
 const socketHandler = require('./routes/socket-handler');
+const usageTelemetry = require('./services/usage-telemetry');
 const socketApi = socketHandler(io);
 
 // ─── Twitch：本機 Device Code Flow + EventSub WebSocket ───
@@ -381,6 +382,7 @@ const handleDeckCommand = (req, res) => {
   if (params.ms !== undefined) params.ms = Number(params.ms);
   try {
     const result = socketApi.command(action, params);
+    if (result.ok) usageTelemetry.markCoreUsed().catch((error) => log.warn(`匿名使用統計標記失敗：${error.message}`));
     res.status(result.ok ? 200 : 400).json(result);
   } catch (err) {
     log.error(`Deck 指令錯誤: ${action}`, err);
@@ -430,6 +432,7 @@ server.listen(PORT, '0.0.0.0', () => {
   log.info(`║  OBS 歌詞: http://localhost:${PORT}/display    ║`);
   log.info(`║  OBS 歌單: http://localhost:${PORT}/setlist    ║`);
   ytdlpCompatibility.scheduleProbe();
+  usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
   log.info('╚══════════════════════════════════════════╝');
 
   // 可攜版啟動器會設 OPEN_BROWSER=1：伺服器就緒後自動以預設瀏覽器開啟控制面板。
