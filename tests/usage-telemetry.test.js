@@ -52,6 +52,13 @@ async function run() {
   await telemetry.markCoreUsed();
   assert.strictEqual(requests.length, 2, 'disabled telemetry sends nothing');
 
+  const disabledReload = createUsageTelemetry({
+    config: { anonymousUsageEnabled: true, usageEndpoint: 'https://usage.example.test/api/v1/usage' },
+    dataDir: dir,
+    randomBytes: () => { throw new Error('disabled reload must not create a secret'); },
+  });
+  assert.strictEqual(disabledReload.getSettings().enabled, false);
+
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('usage-telemetry tests passed');
 }
