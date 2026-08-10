@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/run-tests.js",
+    "test": "node tests/run-tests.js && node tests/usage-telemetry.test.js",
     "audit:release": "npm audit --omit=dev --audit-level=low",
     "smoke:portable": "node tools/smoke-portable.js",
     "smoke:reliability": "node tools/reliability-smoke.js",
