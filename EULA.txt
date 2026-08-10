@@ -2,8 +2,8 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 1.3.0
-Effective Date / 生效日期：2026-08-07
+Version: 1.4.0
+Effective Date / 生效日期：2026-08-10
 
 IMPORTANT INFORMATION / 重要資訊
 --------------------------------
@@ -218,6 +218,21 @@ Public License v2.1 或其後版本（LGPL）授權，第四條第 4 項的還�
 
    回報內容用於重現與修正問題，儲存於權利人控管的非公開問題追蹤儲存庫；
    未經你同意不會公開你的聯絡方式。進階使用者可依設定檔說明停用本功能。
+
+7. 為了解實際活躍使用人數並改善本軟體，本軟體在你同意本版本 EULA 後
+   預設啟用匿名活躍統計；你可隨時在「連線與系統」設定中關閉。程式啟動時，
+   以及每日第一次實際使用播放、匯入、歌詞、歌單或正式 OBS 輸出等核心功能
+   時，會傳送軟體版本、事件類型、接收端時間，以及每日、每週、每月各自輪替
+   的匿名 HMAC 代碼。
+
+   產生代碼所用的隨機密鑰只儲存於本機，不會傳送；接收端不會收到固定安裝
+   識別碼，亦不會收到或儲存姓名、電子郵件、電腦名稱、硬體資訊、歌名、歌詞、
+   歌單、Twitch 帳號或憑證。一般 HTTPS 連線在技術上會向 Cloudflare 顯示來源
+   IP 位址，但權利人不將 IP 寫入統計資料庫，也不以 IP 建立使用行為分析。
+
+   關閉統計時會刪除本機隨機密鑰並停止後續傳送；傳送失敗不影響程式運作，
+   不排隊且不在之後補傳。因接收端只有輪替代碼，先前的彙總記錄無法再定位到
+   你的裝置並個別刪除；記錄至多保留 400 天後自動清除。
 
 八、更新、測試版與服務變更
 
@@ -510,6 +525,41 @@ ordinary network request (such as your IP address and the Software version)
 and do not upload your playlists, media, accounts, or other data. Connection
 failures do not affect operation of the Software. Advanced users may disable
 these automatic checks as described in the configuration documentation.
+
+7.6 The in-app problem-report feature is passive and optional. Nothing is
+sent until you choose to submit a report, and the complete outgoing text is
+shown for review first. A submitted report may include your description and
+optional contact details, Software and operating-system versions, tool
+availability, OBS/Twitch connection counts and durations, and a redacted log
+tail. Tokens, cookies, PINs, keys, email addresses, and Windows home-directory
+paths are redacted, but log excerpts may still mention song or video titles.
+
+A random installation identifier is stored locally and sent only with a report
+to limit abuse. It is not derived from hardware or a device fingerprint and is
+not used for behavioral analytics. Reports are stored in a non-public issue
+tracker controlled by the rights holder. The feature can be disabled as
+described in the configuration documentation.
+
+7.7 To measure active use and improve the Software, anonymous usage statistics
+are enabled by default after you accept this version of the EULA and can be
+disabled at any time under Connection & System. On startup, and on the first
+actual use per day of playback, import, lyrics, setlist, or production OBS
+output features, the Software sends its version, the event type, server receipt
+time, and separate daily, weekly, and monthly rotating HMAC codes.
+
+The random secret used to create those codes stays on the device. The receiver
+does not obtain a permanent installation identifier and does not receive or
+store names, email addresses, computer names, hardware information, song
+titles, lyrics, playlists, Twitch accounts, or credentials. An ordinary HTTPS
+connection necessarily exposes the source IP address to Cloudflare, but the
+rights holder does not write IP addresses to the statistics database or use
+them for behavioral analytics.
+
+Disabling statistics deletes the local random secret and stops future sends.
+Failed sends do not affect operation, are not queued, and are not retried
+later. Because the receiver holds only rotating codes, prior aggregate records
+cannot be located by device and individually deleted. Records are automatically
+deleted after no more than 400 days.
 
 8. UPDATES, PRE-RELEASES, AND SERVICE CHANGES
 
