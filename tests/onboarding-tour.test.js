@@ -195,13 +195,13 @@ test('welcome, spotlight, leave confirmation, and completion surfaces are access
   ok(source.includes('trapSurfaceFocus(event, dom.complete)'), 'Completion dialog focus trap missing');
 });
 
-test('tour pauses below a 1024 x 720 safe viewport and resumes without resetting progress', () => {
-  eq(tour.MIN_TOUR_VIEWPORT_WIDTH, 1024);
-  eq(tour.MIN_TOUR_VIEWPORT_HEIGHT, 720);
-  ok(tour.isViewportSafe(1024, 720), 'Exact minimum viewport should be accepted');
-  ok(!tour.isViewportSafe(1023, 720), 'Width below minimum should be rejected');
-  ok(!tour.isViewportSafe(1024, 719), 'Height below minimum should be rejected');
-  ok(!tour.isViewportSafe(NaN, 720), 'Invalid viewport dimensions should be rejected');
+test('tour pauses below a 640 x 480 safe viewport and resumes without resetting progress', () => {
+  eq(tour.MIN_TOUR_VIEWPORT_WIDTH, 640);
+  eq(tour.MIN_TOUR_VIEWPORT_HEIGHT, 480);
+  ok(tour.isViewportSafe(640, 480), 'Exact minimum viewport should be accepted');
+  ok(!tour.isViewportSafe(639, 480), 'Width below minimum should be rejected');
+  ok(!tour.isViewportSafe(640, 479), 'Height below minimum should be rejected');
+  ok(!tour.isViewportSafe(NaN, 480), 'Invalid viewport dimensions should be rejected');
   ok(page.includes('id="tour-viewport-warning"'), 'Small-viewport warning surface missing');
   ok(page.includes('id="tour-viewport-warning-current"'), 'Current viewport dimensions are not exposed');
   ok(source.includes("showViewportWarning('size')"), 'Resize guard does not pause the tour');
