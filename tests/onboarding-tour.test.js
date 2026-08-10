@@ -186,11 +186,28 @@ test('welcome, spotlight, leave confirmation, and completion surfaces are access
   ok(/id="tour-card"[^>]+role="dialog"/.test(page), 'Step card dialog semantics missing');
   ok(!/id="tour-card"[^>]+aria-modal="true"/.test(page), 'Spotlight must keep the real highlighted target available to assistive technology');
   ok(/id="tour-leave-confirm"[^>]+role="alertdialog"/.test(page), 'Leave confirmation semantics missing');
+  ok(/id="tour-viewport-warning"[^>]+role="dialog"[^>]+aria-modal="true"/.test(page), 'Small-viewport warning dialog semantics missing');
   ok(/id="tour-complete"[^>]+role="dialog"[^>]+aria-modal="true"/.test(page), 'Completion dialog semantics missing');
   ok(source.includes("event.key === 'Escape'") && source.includes("event.key === 'Tab'"), 'Keyboard close/focus trap missing');
   ok(source.includes('trapSurfaceFocus(event, dom.welcome)'), 'Welcome dialog focus trap missing');
   ok(source.includes('trapSurfaceFocus(event, dom.leaveConfirm)'), 'Leave confirmation focus trap missing');
+  ok(source.includes('trapSurfaceFocus(event, dom.viewportWarning)'), 'Small-viewport warning focus trap missing');
   ok(source.includes('trapSurfaceFocus(event, dom.complete)'), 'Completion dialog focus trap missing');
+});
+
+test('tour pauses below a 1024 x 720 safe viewport and resumes without resetting progress', () => {
+  eq(tour.MIN_TOUR_VIEWPORT_WIDTH, 1024);
+  eq(tour.MIN_TOUR_VIEWPORT_HEIGHT, 720);
+  ok(tour.isViewportSafe(1024, 720), 'Exact minimum viewport should be accepted');
+  ok(!tour.isViewportSafe(1023, 720), 'Width below minimum should be rejected');
+  ok(!tour.isViewportSafe(1024, 719), 'Height below minimum should be rejected');
+  ok(!tour.isViewportSafe(NaN, 720), 'Invalid viewport dimensions should be rejected');
+  ok(page.includes('id="tour-viewport-warning"'), 'Small-viewport warning surface missing');
+  ok(page.includes('id="tour-viewport-warning-current"'), 'Current viewport dimensions are not exposed');
+  ok(source.includes("showViewportWarning('size')"), 'Resize guard does not pause the tour');
+  ok(/active && viewportBlocked[\s\S]*?hideViewportWarning\(\)[\s\S]*?renderStep\(\{ skipNavigation: true, retryViewport: true \}\)/.test(source),
+    'Returning to a safe viewport must render the existing step again');
+  ok(!/showViewportWarning[\s\S]{0,600}state\.currentStep\s*=/.test(source), 'Viewport warning must not reset the current step');
 });
 
 test('stale async positioning cannot overwrite a newer rapidly selected step', () => {
@@ -280,20 +297,41 @@ geometryCases.forEach((fixture) => {
     const [cw, ch] = fixture.card;
     const result = tour.calculateCardPlacement(fixture.hole, vw, vh, cw, ch);
     eq(result.side, fixture.expectedSide);
+    ok(result.fits, 'Expected fixture to have a non-overlapping placement');
     ok(result.left >= 10 && result.top >= 10, 'Card escaped top/left viewport');
     ok(result.left + cw <= vw - 10 + 0.01, 'Card escaped right viewport');
     ok(result.top + ch <= vh - 10 + 0.01, 'Card escaped bottom viewport');
+    ok(!tour.rectanglesIntersect({
+      left: result.left,
+      top: result.top,
+      right: result.left + cw,
+      bottom: result.top + ch,
+    }, fixture.hole), 'Card intersects the highlighted target');
   });
 });
 
-test('extreme minimum viewport clamps the card inside the visible area', () => {
+test('impossible compact placement is marked unsafe instead of overlapping the target', () => {
   const result = tour.calculateCardPlacement(
     { left: 10, top: 10, right: 510, bottom: 310, width: 500, height: 300 },
     520, 320, 370, 280,
   );
   ok(Number.isFinite(result.left) && Number.isFinite(result.top), 'Placement returned NaN/Infinity');
+  ok(!result.fits, 'Impossible placement must be rejected');
   ok(result.left >= 10 && result.left + 370 <= 510.01, 'Horizontal clamp failed');
   ok(result.top >= 10 && result.top + 280 <= 310.01, 'Vertical clamp failed');
+});
+
+test('reported OBS-status screenshot geometry keeps the card away from the spotlight', () => {
+  const hole = { left: 850, top: 10, right: 1053, bottom: 116, width: 203, height: 106 };
+  const result = tour.calculateCardPlacement(hole, 1363, 936, 370, 282);
+  ok(result.fits, 'OBS status step should fit at the captured desktop viewport');
+  const card = {
+    left: result.left,
+    top: result.top,
+    right: result.left + 370,
+    bottom: result.top + 282,
+  };
+  ok(!tour.rectanglesIntersect(card, hole), 'OBS status card overlaps its highlighted status target');
 });
 
 test('10,000 adversarial geometry samples never place the card outside the viewport', () => {
@@ -318,6 +356,14 @@ test('10,000 adversarial geometry samples never place the card outside the viewp
     ok(result.top >= 10 - 0.01, `Top overflow at sample ${index}`);
     ok(result.left + cw <= vw - 10 + 0.01, `Right overflow at sample ${index}`);
     ok(result.top + ch <= vh - 10 + 0.01, `Bottom overflow at sample ${index}`);
+    if (result.fits) {
+      ok(!tour.rectanglesIntersect({
+        left: result.left,
+        top: result.top,
+        right: result.left + cw,
+        bottom: result.top + ch,
+      }, hole), `Card/spotlight overlap at sample ${index}`);
+    }
   }
 });
 
@@ -342,6 +388,17 @@ test('10,000 compact and ultrawide placements remain finite and inside the viewp
     ok(Number.isFinite(result.left) && Number.isFinite(result.top), `Non-finite compact result at ${index}`);
     ok(result.left >= 10 - 0.01 && result.left + cw <= vw - 10 + 0.01, `Horizontal compact overflow at ${index}`);
     ok(result.top >= 10 - 0.01 && result.top + ch <= vh - 10 + 0.01, `Vertical compact overflow at ${index}`);
+    if (result.fits) {
+      ok(!tour.rectanglesIntersect({
+        left: result.left,
+        top: result.top,
+        right: result.left + cw,
+        bottom: result.top + ch,
+      }, hole), `Compact card/spotlight overlap at ${index}`);
+    }
+    if (vw < tour.MIN_TOUR_VIEWPORT_WIDTH || vh < tour.MIN_TOUR_VIEWPORT_HEIGHT) {
+      ok(!tour.isViewportSafe(vw, vh), `Unsafe viewport was accepted at ${index}`);
+    }
   }
 });
 
@@ -358,6 +415,8 @@ test('responsive and reduced-motion fallbacks are present', () => {
   ok(tour.STEPS.find((step) => step.id === 'style').mobileTarget === '.lyric-template-card.active', 'Mobile style spotlight must stay compact');
   ok(tour.STEPS.find((step) => step.id === 'style').action === 'cycleStyle', 'Compact mobile style step still needs a real style-changing action');
   ok(source.includes("root.addEventListener('resize', handleResize"), 'Resize must detect mobile breakpoint changes');
+  ok(source.includes("showViewportWarning('placement')"), 'A no-space placement must fall back to the resize warning');
+  ok(/\.tour-viewport-warning\s*\{[^}]*pointer-events:\s*auto/s.test(css), 'Viewport warning must remain interactive above the mask');
   ok(/nextCompactViewport !== compactViewport[\s\S]*?renderStep\(\{ skipNavigation: true \}\)/.test(source), 'Crossing 760px must resolve the correct desktop/mobile target again');
   ok(/\.tour-close\s*\{[^}]*color:\s*var\(--text-dim\)[^}]*font-size:\s*12px/s.test(css), 'Small close label needs readable size and contrast');
   ok(/\.tour-card \.tour-hint\s*\{[^}]*color:\s*var\(--text-dim\)/s.test(css), 'Core tour hints need the readable text token');
