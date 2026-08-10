@@ -17,8 +17,8 @@
   const HOLE_PADDING = 9;
   const VIEWPORT_MARGIN = 10;
   const CARD_GAP = 30;
-  const MIN_TOUR_VIEWPORT_WIDTH = 1024;
-  const MIN_TOUR_VIEWPORT_HEIGHT = 720;
+  const MIN_TOUR_VIEWPORT_WIDTH = 640;
+  const MIN_TOUR_VIEWPORT_HEIGHT = 480;
 
   const STEPS = [
     {
