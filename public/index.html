@@ -97,6 +97,16 @@
     <div id="tour-highlight" class="tour-highlight" aria-hidden="true"></div>
     <div id="tour-connector" class="tour-connector" aria-hidden="true"></div>
 
+    <section id="tour-viewport-warning" class="tour-viewport-warning" role="dialog" aria-modal="true" aria-labelledby="tour-viewport-warning-title" aria-describedby="tour-viewport-warning-body" hidden>
+      <div class="tour-viewport-warning-card">
+        <span class="tour-kicker" data-i18n="tour.viewportTooSmall.kicker">導覽已暫停</span>
+        <h2 id="tour-viewport-warning-title" data-i18n="tour.viewportTooSmall.title">請把視窗拉大後繼續</h2>
+        <p id="tour-viewport-warning-body">導覽至少需要 1024 × 720 的可用空間。達到尺寸後會自動回到目前步驟。</p>
+        <p id="tour-viewport-warning-current" class="tour-viewport-warning-current" role="status"></p>
+        <button id="tour-viewport-leave" class="btn btn-ghost" type="button" data-i18n="tour.leave.label">暫時離開</button>
+      </div>
+    </section>
+
     <section id="tour-card" class="tour-card" role="dialog" aria-labelledby="tour-title" aria-describedby="tour-body">
       <div class="tour-card-head">
         <span id="tour-progress" class="tour-progress"></span>
