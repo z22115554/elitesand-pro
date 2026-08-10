@@ -88,7 +88,9 @@ function createUsageTelemetry(options = {}) {
       stateCache = {
         schemaVersion: STATE_SCHEMA_VERSION,
         enabled: parsed.enabled,
-        localSecret: /^[a-f0-9]{64}$/.test(parsed.localSecret || '') ? parsed.localSecret : newSecret(),
+        localSecret: parsed.enabled
+          ? (/^[a-f0-9]{64}$/.test(parsed.localSecret || '') ? parsed.localSecret : newSecret())
+          : null,
         coreUseAttemptDay: typeof parsed.coreUseAttemptDay === 'string' ? parsed.coreUseAttemptDay : null,
       };
     } catch (_) {
