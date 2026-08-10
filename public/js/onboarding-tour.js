@@ -480,9 +480,11 @@
       const target = document.querySelector(selector);
       if (target) openAncestors(target);
       if (target && !target.hidden && target.getClientRects().length) {
+        const compact = root.innerWidth <= 760;
+        const reduceMotion = !!root.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
         target.scrollIntoView({
-          behavior: root.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-          block: root.innerWidth <= 760 ? 'start' : 'center',
+          behavior: compact || reduceMotion ? 'auto' : 'smooth',
+          block: compact ? 'start' : 'center',
           inline: 'center',
         });
         await delay(attempt === 0 ? 220 : 60);
