@@ -193,107 +193,183 @@ Elitesand Pro 採用 [Elitesand Pro 授權條款](LICENSE)：可免費用於個�
 
 ### Release status
 
-**Latest stable release: `v0.9.9`**
+**Latest stable release: `v0.9.9.1`**
 
-`v0.9.9` is the stabilization build for the next two weeks. No normal feature updates are planned during this period; only critical fixes will be considered. After two weeks of real-world streaming validation, **`v1.0.0` stable** is planned for release.
+`v0.9.9.1` will serve as the stabilization build for the next two weeks. During this period, no normal feature additions or routine releases are planned; only necessary critical issues will be addressed. After two weeks of validation in real streaming and usage scenarios, **`v1.0.0` stable** is planned for release.
 
-**Distribution change:** `v0.9.9` still ships both the Windows Installer and Portable build. Starting with **`v1.0.0`, only the Windows Installer will be released; Portable builds will be discontinued.**
+**Distribution format change:** `v0.9.9` still provides both the Windows Installer and Portable build. Starting with **`v0.9.9.1`, only the Windows Installer is provided and the Portable build is no longer released**.
 
-**Recommendation for this upgrade (not mandatory):** Portable users are encouraged to move to the Installer with `v0.9.9`, verify that the installed copy has loaded their data correctly, and only then retire the old Portable copy. Before migrating, fully close Elitesand Pro and back up `data/` and `downloads/`. If the media library has already been moved, back up the `Elitesand Pro Media` folder shown in settings instead of `downloads/`. `data/` contains playlists, settings, lyrics cache, authorization, Twitch, and PIN state; the media folder contains songs, cover art, and lyrics files. `logs/` is not required for migration.
+**Upgrade recommendation for this release (not mandatory):** Portable users are encouraged to switch to the Installer with `v0.9.9`, verify that their data loads correctly in the installed version, and only then stop using the old Portable copy. Before migration, fully exit the application and back up `data/` and `downloads/`. If the media library relocation feature has already been used, back up the `Elitesand Pro Media` folder shown in Settings instead of `downloads/`. `data/` contains playlists, settings, lyrics cache, authorization data, Twitch state, and PIN state; the media folder contains songs, cover images, and lyrics files. `logs/` is not required for migration and does not need to be backed up.
 
 > [!WARNING]
-> The updater bundled with `v0.7.1`–`v0.7.3` cannot safely complete major upgrades. In addition, `v0.9.2` introduced framework-level changes, including the Electron desktop shell and a new installation/packaging architecture. **Upgrading from any version earlier than `v0.9.2` requires downloading and reinstalling the full Installer or Portable build; incremental updates cannot be used.** Back up the old folder and user data first. After a full installation of `v0.9.2` or later, future compatible versions may use the safe incremental updater when offered by the application.
+> The old updater used by `v0.7.1`–`v0.7.3` cannot safely complete cross-version upgrades. In addition, `v0.9.2` introduced framework-level changes including the Electron desktop framework and a new installation/packaging architecture. **When upgrading from any version earlier than `v0.9.2`, you must download and install a complete Installer or Portable build again; incremental updates cannot be used.** Keep the old folder and a backup of user data first. After completing a full installation of `v0.9.2` or later, future compatible versions may use safe incremental updates when prompted by the application.
 
-### Overview
+### Product overview
 
-Elitesand Pro is a Windows desktop tool for VTubers, singing streamers, and live performers. It combines song import, lyrics lookup, synchronized playback, animated OBS lyrics, live setlists, and Twitch song requests in one local application.
+Elitesand Pro is a Windows desktop tool designed for VTubers, karaoke/ singing streamers, and live performers. It combines song management, lyrics search, synchronized playback, animated OBS lyrics, live setlists, and Twitch song-request workflows in one local application.
 
-### How to use
+The application runs locally. OBS loads transparent lyrics and setlist views through Browser Sources, while the desktop control panel, phone remote, and OBS display sources remain synchronized in real time.
 
-1. Download the latest Windows Installer from GitHub Releases. The `v0.9.9` Portable build remains available, but Portable builds end with `v1.0.0`.
-2. Launch Elitesand Pro and complete the first-run checks for yt-dlp, FFmpeg, networking, and version status.
-3. Import a YouTube video, playlist, or local audio file, then verify the title, artist, and lyrics source.
-4. Choose a lyrics template and configure fonts, colors, position, motion, and presets.
-5. Copy the Lyrics URL and Setlist URL into separate OBS Browser Sources.
-6. Connect Twitch and configure chat commands or Channel Points rewards when viewer requests are needed.
-7. Control playback, skipping, timing offsets, and emergency hide from the desktop, phone remote, or Stream Deck.
+### Usage
+
+1. Download the latest Windows Installer from GitHub Releases. `v0.9.9.1` can still be downloaded as Portable; starting with `v0.9.9.1`, Portable builds are no longer provided.
+2. Launch Elitesand Pro and follow the first-run guide to complete yt-dlp, FFmpeg, network, and version checks.
+3. Import a YouTube link, playlist, or local audio file, then verify the song title, artist, and lyrics source.
+4. Choose an animation template, font, colors, position, and preset in Lyrics Settings.
+5. Copy the Lyrics URL and Setlist URL and add each one to OBS as a Browser Source.
+6. When viewer song requests are needed, connect Twitch and configure chat commands or Channel Points rewards and limits.
+7. During a stream, use the desktop control panel, phone remote, or Stream Deck to control playback, switch songs, adjust timing offsets, and trigger emergency hide.
 8. After the stream, save the session, export the setlist, and copy YouTube chapter timestamps.
 
-> Before a production stream, run one complete test song through import, lyrics synchronization, OBS display, and Twitch request handling.
+> For first-time use, it is recommended to run one complete test song through import, lyrics synchronization, OBS display, and Twitch request handling in a test scene before using it in a production stream.
 
-### Core features
+### Main features
 
-- YouTube single-video and playlist import with audio, metadata, cover art, and lyrics lookup.
-- Local MP3, FLAC, WAV, M4A, and OGG import.
-- Playlist queue, cancellation, retry, duplicate checks, duration checks, and media library persistence.
-- Per-song transpose, tempo, timing offset, lyrics, and playback settings.
-- Multi-source lyrics search: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase, and fallbacks.
-- Word-synced, line-synced, LRC, KRC, TTML, SRT, and plain-text lyrics.
-- Timeline editor, first-line alignment, romanization, pinyin, and Simplified-to-Traditional display conversion.
-- Six animated lyrics templates — Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow — with independent style settings and named presets.
-- Transparent OBS lyrics and setlist Browser Sources with instant synchronization.
-- KTV word highlighting, interlude countdowns, clock synchronization, and emergency hide.
-- Live setlist sessions with sung / now playing / up next states and YouTube chapter timestamps.
-- Twitch Device Code login, chat requests, approval queue, retries, expiration, and persistence.
-- Twitch Channel Points requests with completion, rejection, timeout, and automatic refund handling.
-- Fair-request sessions, duplicate limits, viewer quotas, self-cancel, moderator controls, and custom replies.
-- Phone remote, Stream Deck HTTP API, optional PIN protection, health checks, logs, backup, recovery, and rollback.
-- Five-language UI: Traditional Chinese, English, Japanese, Korean, and Simplified Chinese.
+#### Song import and playback
+
+- Paste a YouTube video or playlist link to automatically download audio, identify the artist/title, search for lyrics, and retrieve cover art.
+- Drag and drop local audio files including MP3, FLAC, WAV, M4A, and OGG.
+- Check video duration, content type, and duplicates before import to reduce accidental downloads of non-music content.
+- Single import queue, playlist batch jobs, cancellation, retry, and job-status management.
+- Play, pause, previous, next, seek by dragging, and mini-player controls.
+- Save per-song transpose of ±12 semitones, playback speed from 0.5x to 1.5x, and timing offset independently.
+- Built-in SoundTouch/WSOLA processing for high-quality pitch and tempo changes.
+- Drag-and-drop playlist reordering, song metadata editing, playlist import/export, and clear confirmation.
+- The media library automatically stores used songs, play counts, lyrics, timing corrections, and playback settings.
+
+#### Lyrics search and processing
+
+- Parallel multi-source search: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase, and others.
+- Automatically selects the best lyrics match while still allowing manual source selection.
+- Supports word-synced, line-synced, LRC, KRC, TTML, SRT, and plain-text lyrics.
+- Lyrics can be pasted directly, or each line can be corrected with the line-by-line timeline editor.
+- One-click “Align First Line” shifts the entire lyrics timeline.
+- Japanese/Korean romanization, Chinese pinyin, and partial Chinese phonetic-homophone display.
+- Simplified-to-Traditional Chinese display conversion without damaging pinyin or original timing data.
+- Cleans unnecessary production credits, studio names, version notes, and incorrect titles from source lyrics.
+- Lyrics source caching, health status, retry handling, and source fallback/degradation handling.
+
+#### Animated OBS lyrics
+
+Six built-in lyric-performance templates:
+
+- Classic Overlay
+- Pulse
+- Facet
+- Aura
+- KTV
+- Vertical Flow
+
+Each template can independently save:
+
+- Font, font size, colors, outline, and opacity
+- Position, spacing, alignment, and display range
+- Animation intensity and transition effects
+- Named presets
+
+Additional capabilities:
+
+- Transparent-background OBS Browser Source.
+- Word-by-word sweep highlighting, line transitions, interlude countdowns, and KTV clock synchronization.
+- Emergency hide only hides Elitesand Pro elements and does not cover the entire stream canvas.
+- Real-time connection status for OBS lyrics and setlist sources.
+- Setting changes synchronize immediately without needing to paste the OBS URL again.
+
+#### Live setlist
+
+- Shows songs already sung, the current song, and upcoming songs.
+- Automatically records session songs and timestamps that can be copied as YouTube chapters.
+- Supports both corner-list layouts and full-screen scene layouts.
+- Multiple themes and more than 40 appearance settings.
+- Automatically adapts layout to the OBS Browser Source size.
+- Long song titles and artist names automatically receive space so important information is not squeezed out.
+- Create, save, and switch between different live sessions.
+
+#### Twitch integration
+
+- Twitch Device Code Flow login with no Client Secret required.
+- Automatically creates a live setlist session based on the actual Twitch stream start time.
+- Chat song-request commands and YouTube link parsing.
+- Requests first enter a pending approval area and are only downloaded after streamer approval, preventing unapproved requests from polluting the main playlist.
+- Failed imports can be retried; expired or rejected requests can be cancelled.
+- Channel Points song requests with required text input, successful completion, and refunds on failure.
+- Request limits, song-duration limits, duplicate-song rules, per-user quotas, and fair-request sessions.
+- Viewers can check and cancel their own requests; moderators can manage requests through chat.
+- Custom success, failure, waiting, and rejection replies.
+- Twitch reconnection, request persistence, and recovery after application restart.
+- Unknown EventSub events or chat fragments are safely ignored without interrupting the overall workflow.
+
+#### Controls and safety
+
+- Phone remote: playback, song switching, seek position, transpose, lyrics source, template, and preset controls.
+- Stream Deck HTTP API: `/api/deck/:action`.
+- Optional PIN protection prevents accidental control by devices on the same local network; OBS display sources remain unaffected.
+- Read-only/write control permissions and request-size limits.
+- State versioning, corruption backups, automatic recovery, data migration, and rollback.
+- Multiple-instance and connection-conflict protection.
+- Detailed logs, error messages, and yt-dlp/FFmpeg health checks.
+
+#### Multilingual interface
+
+The application currently supports:
+
+- Traditional Chinese
+- English
+- Japanese
+- Korean
+- Simplified Chinese
+
+Major desktop operations, Twitch status, error messages, authorization flows, and dynamic number formatting are localized. Missing strings fall back to Traditional Chinese.
 
 ### Installation
 
-Download the latest Windows Installer from GitHub Releases. The `v0.9.9` Portable build remains available, but Portable builds end with `v1.0.0`.
+#### General users
 
-- **Installer**: run the setup wizard.
-- **Portable**: extract and launch directly; Node.js, yt-dlp, and FFmpeg are bundled.
+Download the latest Windows Installer from GitHub Releases. `v0.9.9` remains available as a Portable build; starting with `v0.9.9.1`, Portable builds are no longer provided.
 
-The build is currently unsigned, so Windows SmartScreen may display a warning. Verify the download source and SHA-256 checksum before running it.
+- **Installer**: run the setup program and complete the installation wizard.
+- **Portable**: extract the archive and launch it directly; Node.js, yt-dlp, and FFmpeg do not need to be installed separately.
+
+The installer is currently not commercially code-signed, so Windows SmartScreen may display a warning. Verify the download source and SHA-256 checksum before running it.
+
+PowerShell verification example:
 
 ```powershell
 Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
 ```
 
-### Development
-
-Requires Node.js 18+.
-
-```bash
-npm install
-npm start
-npm run electron
-npm test
-npm run smoke:electron
-npm run smoke:portable
-npm run smoke:reliability
-```
-
 ### OBS setup
 
-1. Copy the Lyrics URL or Setlist URL from Elitesand Pro.
-2. Add an OBS Browser Source.
-3. Paste the URL and set the source size, usually 1920×1080 for lyrics.
-4. Changes sync immediately. Refresh the Browser Source cache if OBS shows stale content.
+1. Copy the Lyrics URL or Setlist URL in Elitesand Pro.
+2. Add a Browser Source in OBS.
+3. Paste the URL and set the dimensions; for lyrics, the stream canvas size such as 1920×1080 is generally recommended.
+4. Changes synchronize immediately. If OBS still shows old content, right-click the source and refresh its cache.
+
+Common URLs:
 
 | URL | Purpose |
 |---|---|
 | `/` | Desktop control panel |
 | `/controller` | Phone remote |
-| `/display` | Animated lyrics overlay |
-| `/setlist` | Live setlist overlay |
+| `/display` | Animated OBS lyrics |
+| `/setlist` | OBS live setlist |
 
-### Updates and packaging
+### Secure updates
 
-Incremental updates only accept `update.zip` and `update.zip.sha256`, and validate checksums, paths, sizes, manifests, file allowlists, dependencies, and lockfiles. User data, downloads, logs, settings, tokens, PIN state, and media are preserved.
+Safe incremental updates only accept files with these exact names from GitHub Releases:
 
-```powershell
-npm run package:portable
-npm run package:update -- -BaselineRoot "C:\path\to\previous-portable\app"
-npm run package:installer
-```
+- `update.zip`
+- `update.zip.sha256`
+
+The updater validates SHA-256, ZIP paths and sizes, the file allowlist, manifest, dependencies, and lockfile structure. `data/`, `downloads/`, `logs/`, settings, authorization data, Twitch tokens, PIN state, and user media are not overwritten by incremental updates.
+
+If the dependency or packaging structure is incompatible, the application will require a full installer download. Older `v0.9.x` releases may still provide Portable builds, but they are no longer provided starting with `v0.9.9.1`.
 
 ### License
 
-Elitesand Pro is free for personal and commercial streaming or performance. Private, non-distributed modifications are allowed. Redistribution of the original or modified application requires written permission. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
+Elitesand Pro uses the [Elitesand Pro License](LICENSE): it is free for personal and commercial streaming/performance, and private modifications that are not redistributed are allowed. Redistribution of the original or modified application requires written permission.
+
+Third-party components are used under their respective licenses; see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Rights to songs, lyrics, cover art, and other media are not included in this project's license.
 
 ---
 
@@ -301,67 +377,183 @@ Elitesand Pro is free for personal and commercial streaming or performance. Priv
 
 ### リリース状況
 
-**最新安定版：`v0.9.9`**
+**最新安定版：`v0.9.9.1`**
 
-`v0.9.9` は今後2週間の安定性検証版です。この期間は通常の機能追加や更新を行わず、重大な問題のみ必要に応じて修正します。2週間の実配信テスト完了後、**`v1.0.0` 正式安定版**を公開する予定です。
+`v0.9.9.1` は今後2週間の安定性検証版として運用します。この期間は原則として新機能の追加や通常アップデートを行わず、必要な重大問題のみ対応します。2週間の実配信および実利用環境での検証完了後、**`v1.0.0` 正式安定版**を公開する予定です。
 
-**配布形式の変更：** `v0.9.9` では Windows Installer と Portable 版を提供しますが、**`v1.0.0` 以降は Windows Installer のみを提供し、Portable 版は配布しません。**
+**配布形式の変更：** `v0.9.9` では Windows Installer と Portable を提供しますが、**`v0.9.9.1` 以降は Windows Installer のみを提供し、Portable 版は配布しません**。
 
-**今回の更新に関する推奨事項（必須ではありません）：** Portable 版の利用者は `v0.9.9` で Installer 版へ移行し、データが正しく読み込まれたことを確認してから旧 Portable 版を終了することを推奨します。移行前に Elitesand Pro を完全に終了し、`data/` と `downloads/` をバックアップしてください。メディアライブラリを既に移動している場合は、`downloads/` の代わりに設定画面に表示される `Elitesand Pro Media` フォルダーをバックアップします。`data/` にはプレイリスト、設定、歌詞キャッシュ、認証、Twitch、PIN の状態が含まれ、メディアフォルダーには楽曲、カバー画像、歌詞ファイルが含まれます。`logs/` は移行に不要です。
+**今回のアップグレードに関する推奨事項（必須ではありません）：** Portable ユーザーは `v0.9.9` の段階で Installer 版へ移行し、インストール版でデータが正常に読み込まれることを確認してから旧 Portable 版の使用を終了することを推奨します。移行前にアプリを完全に終了し、`data/` と `downloads/` をバックアップしてください。メディアライブラリの移動機能をすでに使用している場合は、`downloads/` の代わりに設定画面に表示される `Elitesand Pro Media` フォルダーをバックアップしてください。`data/` にはプレイリスト、設定、歌詞キャッシュ、認証情報、Twitch 状態、PIN 状態が含まれ、メディアフォルダーには楽曲、カバー画像、歌詞ファイルが含まれます。`logs/` は移行に影響しないため、バックアップは不要です。
 
 > [!WARNING]
-> `v0.7.1`～`v0.7.3` の旧アップデーターでは大きなバージョン更新を安全に完了できません。また `v0.9.2` では Electron デスクトップ基盤とインストール／パッケージ構成を含むフレームワークレベルの変更が導入されました。**`v0.9.2` より前のバージョンから更新する場合は、完全版 Installer または Portable を再ダウンロードして再インストールする必要があり、差分更新は使用できません。** 先に旧フォルダーとユーザーデータをバックアップしてください。
+> `v0.7.1`～`v0.7.3` の旧アップデーターでは、バージョンをまたぐアップグレードを安全に完了できません。また `v0.9.2` では Electron デスクトップフレームワークやインストール／パッケージ構成を含むフレームワークレベルの変更が導入されました。**`v0.9.2` より前のバージョンからアップグレードする場合は、完全版 Installer または Portable を再ダウンロードして再インストールする必要があり、差分更新は使用できません。** 先に旧フォルダーとユーザーデータのバックアップを保管してください。`v0.9.2` 以降を完全インストールした後は、互換性のある将来バージョンでアプリの案内に従って安全な差分更新を利用できます。
 
-### 概要
+### 製品概要
 
-Elitesand Pro は、VTuber、歌配信者、ライブ出演者向けの Windows デスクトップツールです。YouTube／ローカル音源の取り込み、歌詞検索、同期再生、OBS 用の動く歌詞、セットリスト、Twitch リクエストを一つのローカルアプリに統合します。
+Elitesand Pro は、VTuber、歌配信者、ライブパフォーマー向けに設計された Windows デスクトップツールです。楽曲管理、歌詞検索、同期再生、OBS の動的歌詞、ライブセットリスト、Twitch のリクエスト機能を1つのローカルアプリに統合します。
+
+アプリはローカル環境で動作し、OBS は Browser Source を通して透明背景の歌詞・セットリスト画面を読み込みます。デスクトップ操作画面、スマートフォンリモコン、OBS 表示ソースはリアルタイムで同期します。
 
 ### 使い方
 
-1. GitHub Releases から最新の Windows Installer をダウンロードします。Portable 版は `v0.9.9` まで提供され、`v1.0.0` 以降は提供されません。
-2. Elitesand Pro を起動し、初回案内に従って yt-dlp、FFmpeg、ネットワーク、バージョンを確認します。
-3. YouTube 動画、プレイリスト、またはローカル音源を取り込み、曲名・アーティスト・歌詞を確認します。
-4. 歌詞テンプレート、フォント、色、位置、動き、プリセットを設定します。
-5. 歌詞 URL とセットリスト URL をそれぞれ OBS Browser Source に追加します。
-6. 必要に応じて Twitch を接続し、チャットコマンドまたはチャンネルポイント報酬を設定します。
-7. デスクトップ、スマートフォン、Stream Deck から再生、曲送り、タイミング、緊急非表示を操作します。
-8. 配信終了後、セッションを保存し、セットリストや YouTube チャプターを出力します。
+1. GitHub Releases から最新の Windows Installer をダウンロードします。`v0.9.9.1` では Portable もダウンロードできますが、`v0.9.9.1` 以降は Portable 版を提供しません。
+2. Elitesand Pro を起動し、初回利用ガイドに従って yt-dlp、FFmpeg、ネットワーク、バージョン確認を完了します。
+3. YouTube リンク、プレイリスト、またはローカル音源を取り込み、曲名、アーティスト、歌詞ソースを確認します。
+4. 歌詞設定でアニメーションテンプレート、フォント、色、位置、プリセットを選択します。
+5. 「歌詞 URL」と「セットリスト URL」をコピーし、それぞれ OBS Browser Source に追加します。
+6. 視聴者からのリクエストを受け付ける場合は Twitch を接続し、チャットコマンドまたはチャンネルポイント報酬と制限を設定します。
+7. 配信中はデスクトップ操作画面、スマートフォンリモコン、Stream Deck から再生、曲切り替え、タイミングオフセット、緊急非表示を操作できます。
+8. 配信終了後はセッションを保存し、セットリストをエクスポートして YouTube チャプターのタイムスタンプをコピーできます。
+
+> 初めて使用する場合は、本番配信の前にテストシーンで1曲分の取り込み、歌詞同期、OBS 表示、Twitch リクエスト処理を一通り確認することを推奨します。
 
 ### 主な機能
 
-- YouTube 単曲・プレイリストの音源、曲情報、カバー、歌詞の自動取得。
-- MP3、FLAC、WAV、M4A、OGG のローカル音源取り込み。
-- 再生キュー、キャンセル、再試行、重複・時間チェック、メディアライブラリ。
-- 曲ごとのキー、テンポ、歌詞タイミング、再生設定の保存。
-- BetterLyrics、Apple Music、Kugou、QQ Music、LRCLIB、NetEase などの複数歌詞ソース。
-- 単語同期、行同期、LRC、KRC、TTML、SRT、プレーンテキスト対応。
-- タイムライン編集、先頭行合わせ、ローマ字、ピンイン、簡体字から繁体字への表示変換。
-- 6種類の歌詞アニメーション（Classic Overlay／Pulse／Facet／Aura／KTV／Vertical Flow）とテンプレート別設定・プリセット。
-- OBS 用透明歌詞／セットリスト Browser Source とリアルタイム同期。
-- KTV ハイライト、間奏カウントダウン、時計同期、緊急非表示。
-- 配信セットリスト、歌唱履歴、次曲表示、YouTube チャプター出力。
-- Twitch Device Code 認証、チャットリクエスト、承認、再試行、期限切れ、永続化。
-- チャンネルポイントによる曲リクエスト、完了・拒否・タイムアウト・自動返金。
-- 公平な受付セッション、重複制限、視聴者枠、自分でキャンセル、モデレーター操作。
-- スマートフォンリモコン、Stream Deck HTTP API、PIN 保護、ログ、バックアップ、復旧。
-- 対応言語：繁体字中国語、英語、日本語、韓国語、簡体字中国語。
+#### 楽曲の取り込みと再生
 
-### インストール
+- YouTube の単曲またはプレイリスト URL を貼り付けると、音声のダウンロード、アーティスト／曲名の認識、歌詞検索、カバー取得を自動実行します。
+- MP3、FLAC、WAV、M4A、OGG などのローカル音源をドラッグ＆ドロップで取り込めます。
+- 取り込み前に動画時間、種類、重複項目を確認し、音楽以外のコンテンツを誤ってダウンロードするリスクを減らします。
+- 単一取り込みキュー、プレイリストの一括処理、キャンセル、再試行、ジョブ状態管理。
+- 再生、一時停止、前の曲、次の曲、シークバーのドラッグ、ミニプレイヤー。
+- 曲ごとに ±12 半音のキー変更、0.5x～1.5x の速度変更、タイミングオフセットを個別保存できます。
+- SoundTouch／WSOLA による高品質なキー・速度変更処理を内蔵。
+- プレイリストのドラッグ並び替え、曲情報編集、リストのインポート／エクスポート、全消去確認。
+- メディアライブラリは使用済み楽曲、再生回数、歌詞、タイミング補正、再生設定を自動保存します。
 
-GitHub Releases から最新の Windows Installer をダウンロードしてください。Portable 版は `v0.9.9` まで提供され、`v1.0.0` 以降は提供されません。
+#### 歌詞検索と処理
 
-- **Installer**：セットアップウィザードを実行します。
-- **Portable**：展開して直接起動できます。Node.js、yt-dlp、FFmpeg は同梱されています。
+- 複数ソースを並列検索：BetterLyrics、Apple Music、Kugou、QQ Music、LRCLIB、NetEase など。
+- 最適な歌詞を自動照合し、必要に応じて手動でソースを選択できます。
+- 単語同期、行同期、LRC、KRC、TTML、SRT、プレーンテキスト歌詞に対応。
+- 歌詞を直接貼り付けるか、行ごとのタイムラインエディターで各行の時刻を修正できます。
+- 「先頭行を合わせる」機能で歌詞全体のタイミングを一括移動できます。
+- 日本語／韓国語のローマ字、中国語ピンイン、一部中国語の同音・読み補助表示。
+- ピンインや元のタイミング情報を壊さずに簡体字を繁体字表示へ変換します。
+- ソースに含まれる不要な制作情報、スタジオ名、バージョン表記、誤ったタイトルを除去します。
+- 歌詞ソースのキャッシュ、ヘルス状態、失敗時の再試行、ソースのフォールバック処理。
 
-現在の配布物はコード署名されていないため、Windows SmartScreen の警告が表示される場合があります。配布元と SHA-256 を確認してください。
+#### OBS 動的歌詞
+
+6種類の歌詞演出テンプレートを内蔵：
+
+- Classic Overlay
+- Pulse
+- Facet
+- Aura
+- KTV
+- Vertical Flow
+
+各テンプレートで個別に保存可能：
+
+- フォント、文字サイズ、色、縁取り、透明度
+- 位置、間隔、配置、表示範囲
+- アニメーション強度、切り替え効果
+- 名前付きプリセット
+
+その他の機能：
+
+- OBS 用の透明背景 Browser Source。
+- 単語ごとのハイライト、行単位の切り替え、間奏カウントダウン、KTV 時計同期。
+- 緊急非表示は Elitesand Pro の要素だけを隠し、配信画面全体を覆いません。
+- OBS の歌詞・セットリストソースの接続状態をリアルタイム表示。
+- 設定変更は即時同期され、OBS URL を貼り直す必要はありません。
+
+#### ライブセットリスト
+
+- 歌唱済み、現在歌唱中、次に歌う曲を表示します。
+- セッションの曲とタイムスタンプを自動記録し、YouTube チャプターとしてコピーできます。
+- 画面隅のリスト表示とフルスクリーンシーン用レイアウトに対応。
+- 複数テーマと40項目以上の外観設定。
+- OBS Browser Source のサイズに応じてレイアウトを自動調整します。
+- 長い曲名やアーティスト名でも重要情報が押しつぶされないよう自動で表示領域を配分します。
+- 複数の配信セッションを作成、保存、切り替えできます。
+
+#### Twitch 連携
+
+- Client Secret が不要な Twitch Device Code Flow ログイン。
+- Twitch の実際の配信開始時刻に基づいてライブセットリストセッションを自動作成します。
+- チャットのリクエストコマンドと YouTube リンク解析。
+- リクエストはまず承認待ち領域に入り、配信者が承認した後にのみダウンロードされるため、未承認曲が正式プレイリストを汚しません。
+- 取り込み失敗は再試行でき、期限切れや拒否されたリクエストはキャンセルできます。
+- チャンネルポイントによる曲リクエスト、必要なテキスト入力、正常完了、失敗時返金。
+- リクエスト制限、曲の長さ、重複曲、ユーザーごとの上限、公平な受付セッション。
+- 視聴者は自分のリクエストを確認・キャンセルでき、モデレーターはチャットから管理できます。
+- 成功、失敗、待機、拒否の返信文をカスタマイズできます。
+- Twitch の再接続、リクエスト永続化、アプリ再起動後の復元。
+- 未知の EventSub やチャット fragment は安全に無視され、全体の処理を中断しません。
+
+#### 操作と安全性
+
+- スマートフォンリモコン：再生、曲切り替え、進行位置、キー変更、歌詞ソース、テンプレート、プリセット操作。
+- Stream Deck HTTP API：`/api/deck/:action`。
+- 任意の PIN 保護により同一 LAN 上の端末からの誤操作を防止し、OBS 表示ソースには影響しません。
+- 読み取り専用／書き込み可能な操作権限とリクエストサイズ制限。
+- 状態バージョン、破損バックアップ、自動復旧、データ移行、ロールバック。
+- 複数起動と接続競合の保護。
+- 詳細ログ、エラー表示、yt-dlp／FFmpeg のヘルスチェック。
+
+#### 多言語インターフェース
+
+現在の対応言語：
+
+- 繁体字中国語
+- English
+- 日本語
+- 한국어
+- 简体中文
+
+主要なデスクトップ操作、Twitch 状態、エラーメッセージ、認証フロー、動的な数値書式はローカライズ済みです。未翻訳の文字列は繁体字中国語へフォールバックします。
+
+### インストール方法
+
+#### 一般ユーザー
+
+GitHub Releases から最新の Windows Installer をダウンロードしてください。`v0.9.9` では Portable も利用できますが、`v0.9.9.1` 以降は Portable 版を提供しません。
+
+- **Installer**：セットアッププログラムを実行し、ウィザードに従ってインストールします。
+- **Portable**：展開して直接起動できます。Node.js、yt-dlp、FFmpeg を別途インストールする必要はありません。
+
+インストーラーは現在、商用コード署名を行っていないため、Windows SmartScreen の警告が表示される場合があります。実行前にダウンロード元と SHA-256 チェックサムを確認してください。
+
+PowerShell での確認例：
+
+```powershell
+Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
+```
 
 ### OBS 設定
 
-Elitesand Pro から歌詞 URL またはセットリスト URL をコピーし、OBS の Browser Source に貼り付けます。設定変更は即時反映されます。表示が古い場合は Browser Source のキャッシュを更新してください。
+1. Elitesand Pro で「歌詞 URL」または「セットリスト URL」をコピーします。
+2. OBS に「ブラウザ」ソースを追加します。
+3. URL を貼り付けてサイズを設定します。歌詞は通常、1920×1080 など配信キャンバスと同じサイズを推奨します。
+4. 設定変更は即時同期されます。OBS に古い内容が残る場合は、ソースを右クリックしてキャッシュを更新してください。
+
+よく使う URL：
+
+| URL | 用途 |
+|---|---|
+| `/` | デスクトップ操作画面 |
+| `/controller` | スマートフォンリモコン |
+| `/display` | OBS 動的歌詞 |
+| `/setlist` | OBS ライブセットリスト |
+
+### 安全なアップデート
+
+安全な差分更新では、GitHub Release 内の次の完全一致ファイル名のみを受け付けます：
+
+- `update.zip`
+- `update.zip.sha256`
+
+アップデーターは SHA-256、ZIP 内のパスとサイズ、ファイル許可リスト、manifest、依存関係、lockfile 構造を検証します。`data/`、`downloads/`、`logs/`、設定、認証データ、Twitch token、PIN、ユーザーメディアは差分更新で上書きされません。
+
+依存関係やパッケージ構成に互換性がない場合、アプリは完全版インストーラーのダウンロードを要求します。旧 `v0.9.x` では Portable が提供される場合がありますが、`v0.9.9.1` 以降は提供されません。
 
 ### ライセンス
 
-個人・商用の配信や演奏で無料利用できます。個人利用の非公開改造は可能ですが、原版または改造版の再配布には書面による許可が必要です。詳細は [LICENSE](LICENSE) を参照してください。
+Elitesand Pro は [Elitesand Pro ライセンス](LICENSE) を採用しています。個人・商用の配信／演出で無料利用でき、外部へ配布しない私的な改造も許可されています。原版または改造版を再配布するには書面による許可が必要です。
+
+第三者コンポーネントはそれぞれの原ライセンスに従って使用しています。詳細は [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) を参照してください。楽曲、歌詞、カバー画像、その他メディアの権利は本プロジェクトのライセンスには含まれません。
 
 ---
 
@@ -369,67 +561,183 @@ Elitesand Pro から歌詞 URL またはセットリスト URL をコピーし�
 
 ### 릴리스 상태
 
-**최신 안정 버전: `v0.9.9`**
+**최신 안정 버전: `v0.9.9.1`**
 
-`v0.9.9`은 앞으로 2주 동안 사용할 안정화 검증 버전입니다. 이 기간에는 일반 기능 추가나 정기 업데이트를 진행하지 않으며, 필요한 중대한 문제만 수정합니다. 2주간 실제 방송 검증을 마친 뒤 **`v1.0.0` 정식 안정 버전**을 출시할 예정입니다.
+`v0.9.9.1`은 앞으로 2주 동안 안정성 검증 버전으로 운영됩니다. 이 기간에는 원칙적으로 새로운 기능 추가나 일반 업데이트를 진행하지 않으며, 필요한 중대한 문제만 처리합니다. 2주 동안 실제 방송 및 사용 환경 검증을 완료한 뒤 **`v1.0.0` 정식 안정 버전**을 출시할 예정입니다.
 
-**배포 방식 변경:** `v0.9.9`은 Windows Installer와 Portable 버전을 모두 제공합니다. **`v1.0.0`부터는 Windows Installer만 제공하며 Portable 버전은 더 이상 배포하지 않습니다.**
+**배포 형식 변경:** `v0.9.9`은 Windows Installer와 Portable을 모두 제공하지만, **`v0.9.9.1`부터는 Windows Installer만 제공하며 Portable 버전은 더 이상 배포하지 않습니다**.
 
-**이번 업데이트 권장 사항(필수 아님):** Portable 사용자는 `v0.9.9`에서 Installer 버전으로 전환하고, 설치 버전에서 데이터가 정상적으로 불러와졌는지 확인한 뒤 기존 Portable 버전을 정리하는 것을 권장합니다. 이전하기 전에 Elitesand Pro를 완전히 종료하고 `data/`와 `downloads/`를 백업하세요. 미디어 라이브러리를 이미 다른 위치로 옮겼다면 `downloads/` 대신 설정에 표시되는 `Elitesand Pro Media` 폴더를 백업해야 합니다. `data/`에는 재생목록, 설정, 가사 캐시, 인증, Twitch 및 PIN 상태가 포함되고, 미디어 폴더에는 노래, 커버 이미지, 가사 파일이 포함됩니다. `logs/`는 이전에 필요하지 않습니다.
+**이번 업그레이드 권장 사항(필수 아님):** Portable 사용자는 `v0.9.9` 단계에서 Installer 버전으로 전환하고, 설치 버전에서 데이터가 정상적으로 불러와지는지 확인한 뒤 기존 Portable 사용을 중단하는 것을 권장합니다. 이전 전에 프로그램을 완전히 종료하고 `data/`와 `downloads/`를 백업하세요. 미디어 라이브러리 이동 기능을 이미 사용했다면 `downloads/` 대신 설정에 표시되는 `Elitesand Pro Media` 폴더를 백업하세요. `data/`에는 재생목록, 설정, 가사 캐시, 인증 정보, Twitch 상태, PIN 상태가 포함되며, 미디어 폴더에는 노래, 커버 이미지, 가사 파일이 포함됩니다. `logs/`는 이전에 영향을 주지 않으므로 백업하지 않아도 됩니다.
 
 > [!WARNING]
-> `v0.7.1`~`v0.7.3`의 기존 업데이터는 대규모 버전 업그레이드를 안전하게 완료할 수 없습니다. 또한 `v0.9.2`에서는 Electron 데스크톱 프레임워크와 새로운 설치·패키징 구조가 도입되는 프레임워크 수준의 변경이 이루어졌습니다. **`v0.9.2`보다 이전 버전에서 업그레이드할 경우 전체 Installer 또는 Portable 버전을 다시 다운로드해 재설치해야 하며 증분 업데이트를 사용할 수 없습니다.** 먼저 기존 폴더와 사용자 데이터를 백업하세요.
+> `v0.7.1`~`v0.7.3`의 기존 업데이터는 버전을 건너뛰는 업그레이드를 안전하게 완료할 수 없습니다. 또한 `v0.9.2`에서는 Electron 데스크톱 프레임워크와 설치/패키징 구조를 포함한 프레임워크 수준의 변경이 도입되었습니다. **`v0.9.2`보다 이전 버전에서 업그레이드할 경우 전체 Installer 또는 Portable 버전을 다시 다운로드해 설치해야 하며 증분 업데이트를 사용할 수 없습니다.** 먼저 기존 폴더와 사용자 데이터 백업을 보관하세요. `v0.9.2` 이상을 전체 설치한 뒤에는 호환되는 향후 버전에서 프로그램 안내에 따라 안전한 증분 업데이트를 사용할 수 있습니다.
 
-### 개요
+### 제품 개요
 
-Elitesand Pro는 VTuber, 노래 방송 스트리머, 라이브 공연자를 위한 Windows 데스크톱 도구입니다. YouTube 및 로컬 음원 가져오기, 가사 검색, 동기화 재생, OBS 동적 가사, 라이브 세트리스트, Twitch 신청곡 기능을 하나의 로컬 앱에 통합합니다.
+Elitesand Pro는 VTuber, 노래 방송 스트리머, 라이브 공연자를 위해 설계된 Windows 데스크톱 도구입니다. 곡 관리, 가사 검색, 동기화 재생, OBS 동적 가사, 라이브 세트리스트, Twitch 신청곡 흐름을 하나의 로컬 애플리케이션에 통합합니다.
+
+프로그램은 로컬에서 실행되며 OBS는 Browser Source를 통해 투명 배경의 가사와 세트리스트 화면을 불러옵니다. 데스크톱 제어판, 휴대폰 리모컨, OBS 표시 소스는 실시간으로 동기화됩니다.
 
 ### 사용 방법
 
-1. GitHub Releases에서 최신 Windows Installer를 다운로드합니다. Portable 버전은 `v0.9.9`까지 제공되며 `v1.0.0`부터는 제공하지 않습니다.
-2. Elitesand Pro를 실행하고 첫 실행 안내에 따라 yt-dlp, FFmpeg, 네트워크 및 버전을 확인합니다.
-3. YouTube 영상, 재생목록 또는 로컬 음원을 가져온 뒤 제목, 아티스트, 가사를 확인합니다.
-4. 가사 템플릿, 글꼴, 색상, 위치, 모션 및 프리셋을 설정합니다.
-5. 가사 URL과 세트리스트 URL을 각각 OBS Browser Source에 추가합니다.
-6. 필요한 경우 Twitch를 연결하고 채팅 명령 또는 채널 포인트 보상을 설정합니다.
-7. 데스크톱, 휴대폰 또는 Stream Deck에서 재생, 넘기기, 타이밍 및 긴급 숨김을 제어합니다.
-8. 방송 후 세션을 저장하고 세트리스트와 YouTube 챕터를 내보냅니다.
+1. GitHub Releases에서 최신 Windows Installer를 다운로드합니다. `v0.9.9.1`에서는 Portable도 다운로드할 수 있지만, `v0.9.9.1`부터 Portable 버전은 더 이상 제공하지 않습니다.
+2. Elitesand Pro를 실행하고 최초 사용 안내에 따라 yt-dlp, FFmpeg, 네트워크, 버전 확인을 완료합니다.
+3. YouTube 링크, 재생목록 또는 로컬 오디오 파일을 가져온 뒤 곡명, 아티스트, 가사 소스를 확인합니다.
+4. 가사 설정에서 애니메이션 템플릿, 글꼴, 색상, 위치, 프리셋을 선택합니다.
+5. “가사 URL”과 “세트리스트 URL”을 복사해 각각 OBS Browser Source에 추가합니다.
+6. 시청자 신청곡이 필요하면 Twitch를 연결하고 채팅 명령어 또는 채널 포인트 보상 및 제한을 설정합니다.
+7. 방송 중에는 데스크톱 제어판, 휴대폰 리모컨, Stream Deck으로 재생, 곡 전환, 시간 오프셋, 긴급 숨기기를 제어할 수 있습니다.
+8. 방송 종료 후 세션을 저장하고 세트리스트를 내보낸 뒤 YouTube 챕터 타임스탬프를 복사할 수 있습니다.
+
+> 처음 사용할 때는 실제 방송에 투입하기 전에 테스트 장면에서 한 곡의 가져오기, 가사 동기화, OBS 표시, Twitch 신청곡 흐름을 끝까지 테스트하는 것을 권장합니다.
 
 ### 주요 기능
 
-- YouTube 단일 영상 및 재생목록의 음원, 메타데이터, 커버, 가사 자동 가져오기.
-- MP3, FLAC, WAV, M4A, OGG 로컬 음원 지원.
-- 가져오기 대기열, 취소, 재시도, 중복 및 길이 검사, 미디어 라이브러리.
-- 곡별 키, 속도, 가사 오프셋, 재생 설정 저장.
-- BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase 등 다중 가사 소스.
-- 단어 동기화, 문장 동기화, LRC, KRC, TTML, SRT, 일반 텍스트 지원.
-- 타임라인 편집, 첫 줄 정렬, 로마자, 병음, 간체→번체 표시 변환.
-- 6가지 가사 애니메이션(Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow)과 템플릿별 독립 설정 및 프리셋.
-- OBS 투명 가사 및 세트리스트 Browser Source 실시간 동기화.
-- KTV 하이라이트, 간주 카운트다운, 시계 동기화, 긴급 숨김.
-- 방송 세트리스트, 부른 곡 기록, 현재 곡/다음 곡, YouTube 챕터 출력.
-- Twitch Device Code 로그인, 채팅 신청곡, 승인, 재시도, 만료, 상태 복구.
-- 채널 포인트 신청곡, 완료·거절·시간 초과·자동 환불.
-- 공정 신청 세션, 중복 제한, 시청자 한도, 직접 취소, 관리자 제어.
-- 휴대폰 리모컨, Stream Deck HTTP API, PIN 보호, 로그, 백업, 복구.
-- 지원 언어: 번체 중국어, 영어, 일본어, 한국어, 간체 중국어.
+#### 곡 가져오기 및 재생
 
-### 설치
+- YouTube 단일 영상 또는 재생목록 링크를 붙여 넣으면 오디오 다운로드, 아티스트/곡명 인식, 가사 검색, 커버 이미지 가져오기를 자동으로 수행합니다.
+- MP3, FLAC, WAV, M4A, OGG 등의 로컬 오디오 파일을 드래그 앤 드롭으로 가져올 수 있습니다.
+- 가져오기 전에 영상 길이, 유형, 중복 항목을 확인해 음악이 아닌 콘텐츠를 실수로 다운로드할 위험을 줄입니다.
+- 단일 가져오기 큐, 재생목록 일괄 작업, 취소, 재시도, 작업 상태 관리.
+- 재생, 일시정지, 이전 곡, 다음 곡, 진행 위치 드래그, 미니 플레이어.
+- 곡마다 ±12 반음 키 변경, 0.5x~1.5x 속도 변경, 시간 오프셋을 개별 저장할 수 있습니다.
+- SoundTouch/WSOLA 기반 고품질 키 및 속도 변경 처리를 내장합니다.
+- 재생목록 드래그 정렬, 곡 정보 편집, 목록 가져오기/내보내기, 전체 삭제 확인.
+- 미디어 라이브러리가 사용한 곡, 재생 횟수, 가사, 시간 보정, 재생 설정을 자동 저장합니다.
 
-GitHub Releases에서 최신 Windows Installer를 다운로드하세요. Portable 버전은 `v0.9.9`까지 제공되며 `v1.0.0`부터는 제공하지 않습니다.
+#### 가사 검색 및 처리
 
-- **Installer**: 설치 마법사를 실행합니다.
-- **Portable**: 압축을 풀고 바로 실행합니다. Node.js, yt-dlp, FFmpeg가 포함되어 있습니다.
+- 여러 소스를 병렬 검색: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase 등.
+- 최적의 가사를 자동 매칭하며 필요하면 소스를 직접 선택할 수 있습니다.
+- 단어 동기화, 줄 동기화, LRC, KRC, TTML, SRT, 일반 텍스트 가사를 지원합니다.
+- 가사를 직접 붙여 넣거나 줄별 타임라인 편집기로 각 줄의 시간을 수정할 수 있습니다.
+- “첫 줄 맞추기” 기능으로 전체 가사 시간을 한 번에 이동할 수 있습니다.
+- 일본어/한국어 로마자, 중국어 병음, 일부 중국어 발음/동음 보조 표시.
+- 병음과 원본 시간 데이터를 손상하지 않고 간체자를 번체자로 표시 변환합니다.
+- 소스에 포함된 불필요한 제작 정보, 스튜디오명, 버전 표기, 잘못된 제목을 정리합니다.
+- 가사 소스 캐시, 상태 확인, 실패 재시도, 소스 폴백 처리.
 
-현재 배포 파일은 코드 서명이 없으므로 Windows SmartScreen 경고가 표시될 수 있습니다. 다운로드 출처와 SHA-256 체크섬을 확인하세요.
+#### OBS 동적 가사
+
+6가지 가사 연출 템플릿을 내장합니다:
+
+- Classic Overlay
+- Pulse
+- Facet
+- Aura
+- KTV
+- Vertical Flow
+
+각 템플릿별로 독립 저장 가능:
+
+- 글꼴, 글자 크기, 색상, 외곽선, 투명도
+- 위치, 간격, 정렬, 표시 범위
+- 애니메이션 강도 및 전환 효과
+- 이름이 지정된 프리셋
+
+기타 기능:
+
+- OBS용 투명 배경 Browser Source.
+- 단어별 하이라이트, 줄 전환, 간주 카운트다운, KTV 시계 동기화.
+- 긴급 숨기기는 Elitesand Pro 요소만 숨기며 방송 화면 전체를 가리지 않습니다.
+- OBS 가사 및 세트리스트 소스의 연결 상태를 실시간으로 표시합니다.
+- 설정 변경은 즉시 동기화되므로 OBS URL을 다시 붙여 넣을 필요가 없습니다.
+
+#### 라이브 세트리스트
+
+- 이미 부른 곡, 현재 곡, 다음 곡을 표시합니다.
+- 세션 곡과 타임스탬프를 자동 기록하며 YouTube 챕터 형식으로 복사할 수 있습니다.
+- 화면 모서리 목록과 전체 화면 장면 레이아웃을 지원합니다.
+- 다양한 테마와 40개 이상의 외형 설정.
+- OBS Browser Source 크기에 맞춰 레이아웃을 자동 조정합니다.
+- 긴 곡명과 아티스트명도 중요 정보가 눌리지 않도록 공간을 자동 배분합니다.
+- 서로 다른 라이브 세션을 생성, 저장, 전환할 수 있습니다.
+
+#### Twitch 연동
+
+- Client Secret이 필요 없는 Twitch Device Code Flow 로그인.
+- Twitch의 실제 방송 시작 시간을 기준으로 라이브 세트리스트 세션을 자동 생성합니다.
+- 채팅 신청곡 명령어와 YouTube 링크 분석.
+- 신청곡은 먼저 승인 대기 영역에 들어가며 스트리머가 승인한 뒤에만 다운로드되어 승인되지 않은 곡이 정식 재생목록을 오염시키지 않습니다.
+- 가져오기 실패는 재시도할 수 있고, 만료되거나 거절된 요청은 취소할 수 있습니다.
+- 채널 포인트 신청곡, 필수 텍스트 입력, 성공 완료, 실패 시 환불.
+- 신청 제한, 곡 길이, 중복 곡, 사용자별 할당량, 공정 요청 세션.
+- 시청자는 자신의 요청을 조회하고 취소할 수 있으며 관리자는 채팅에서 관리할 수 있습니다.
+- 성공, 실패, 대기, 거절 응답을 사용자 지정할 수 있습니다.
+- Twitch 재연결, 요청 영속화, 프로그램 재시작 후 복구.
+- 알 수 없는 EventSub 이벤트나 채팅 fragment는 전체 흐름을 중단하지 않고 안전하게 무시됩니다.
+
+#### 제어 및 안전
+
+- 휴대폰 리모컨: 재생, 곡 전환, 진행 위치, 키 변경, 가사 소스, 템플릿, 프리셋 제어.
+- Stream Deck HTTP API: `/api/deck/:action`.
+- 선택적 PIN 보호로 같은 로컬 네트워크의 장치가 실수로 조작하는 것을 방지하며 OBS 표시 소스에는 영향을 주지 않습니다.
+- 읽기 전용/쓰기 가능 제어 권한 및 요청 크기 제한.
+- 상태 버전 관리, 손상 백업, 자동 복구, 데이터 이전, 롤백.
+- 다중 실행 및 연결 충돌 보호.
+- 상세 로그, 오류 메시지, yt-dlp/FFmpeg 상태 확인.
+
+#### 다국어 인터페이스
+
+현재 지원 언어:
+
+- 繁體中文
+- English
+- 日本語
+- 한국어
+- 简体中文
+
+주요 데스크톱 작업, Twitch 상태, 오류 메시지, 인증 흐름, 동적 숫자 형식은 현지화되어 있습니다. 번역되지 않은 문자열은 번체 중국어로 대체됩니다.
+
+### 설치 방법
+
+#### 일반 사용자
+
+GitHub Releases에서 최신 Windows Installer를 다운로드하세요. `v0.9.9`에서는 Portable을 계속 다운로드할 수 있지만, `v0.9.9.1`부터는 Portable 버전을 제공하지 않습니다.
+
+- **Installer**: 설치 프로그램을 실행하고 마법사에 따라 설치를 완료합니다.
+- **Portable**: 압축을 풀고 바로 실행할 수 있으며 Node.js, yt-dlp, FFmpeg를 별도로 설치할 필요가 없습니다.
+
+현재 설치 패키지는 상용 코드 서명이 되어 있지 않아 Windows SmartScreen 경고가 표시될 수 있습니다. 실행 전에 다운로드 출처와 SHA-256 체크섬을 확인하세요.
+
+PowerShell 확인 예시:
+
+```powershell
+Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
+```
 
 ### OBS 설정
 
-Elitesand Pro에서 가사 URL 또는 세트리스트 URL을 복사해 OBS Browser Source에 붙여 넣습니다. 설정은 즉시 동기화되며, 오래된 화면이 보이면 Browser Source 캐시를 새로 고치세요.
+1. Elitesand Pro에서 “가사 URL” 또는 “세트리스트 URL”을 복사합니다.
+2. OBS에 “브라우저” 소스를 추가합니다.
+3. URL을 붙여 넣고 크기를 설정합니다. 가사는 일반적으로 1920×1080 같은 방송 캔버스 크기를 권장합니다.
+4. 설정 변경은 즉시 동기화됩니다. OBS에 이전 내용이 계속 표시되면 소스를 우클릭해 캐시를 새로고침하세요.
+
+자주 사용하는 URL:
+
+| URL | 용도 |
+|---|---|
+| `/` | 데스크톱 제어판 |
+| `/controller` | 휴대폰 리모컨 |
+| `/display` | OBS 동적 가사 |
+| `/setlist` | OBS 라이브 세트리스트 |
+
+### 안전 업데이트
+
+안전한 증분 업데이트는 GitHub Release에서 이름이 정확히 일치하는 다음 파일만 허용합니다:
+
+- `update.zip`
+- `update.zip.sha256`
+
+업데이터는 SHA-256, ZIP 경로와 크기, 파일 허용 목록, manifest, 의존성, lockfile 구조를 검증합니다. `data/`, `downloads/`, `logs/`, 설정, 인증 데이터, Twitch token, PIN, 사용자 미디어는 증분 업데이트로 덮어쓰지 않습니다.
+
+의존성이나 패키징 구조가 호환되지 않으면 프로그램이 전체 설치 패키지 다운로드를 요구합니다. 이전 `v0.9.x` 버전은 Portable을 제공할 수 있지만 `v0.9.9.1`부터는 제공하지 않습니다.
 
 ### 라이선스
 
-개인 및 상업 방송·공연에서 무료로 사용할 수 있습니다. 비공개 개인 수정은 허용되지만 원본 또는 수정본을 재배포하려면 서면 허가가 필요합니다. 자세한 내용은 [LICENSE](LICENSE)를 확인하세요.
+Elitesand Pro는 [Elitesand Pro 라이선스](LICENSE)를 사용합니다. 개인 및 상업 방송/공연에서 무료로 사용할 수 있고 외부에 배포하지 않는 개인용 수정도 허용됩니다. 원본 또는 수정 버전을 재배포하려면 서면 허가가 필요합니다.
+
+서드파티 구성 요소는 각 원래 라이선스에 따라 사용됩니다. 자세한 내용은 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)를 확인하세요. 곡, 가사, 커버 이미지 및 기타 미디어의 권리는 이 프로젝트의 라이선스에 포함되지 않습니다.
 
 ---
 
@@ -437,64 +745,180 @@ Elitesand Pro에서 가사 URL 또는 세트리스트 URL을 복사해 OBS Brows
 
 ### 版本状态
 
-**最新稳定版：`v0.9.9`**
+**最新稳定版：`v0.9.9.1`**
 
-`v0.9.9` 将作为未来两周的稳定验证版本。期间原则上不再新增功能或发布常规更新，只处理必要的重大问题。完成两周实际直播与使用场景验证后，计划发布 **`v1.0.0` 正式稳定版**。
+`v0.9.9.1` 将作为接下来两周的稳定验证版本，期间原则上不再新增功能或发布常规更新，只处理必要的重大问题。完成两周实际直播与使用场景验证后，预计发布 **`v1.0.0` 正式稳定版**。
 
-**发布形式调整：** `v0.9.9` 仍提供 Windows Installer 与 Portable；自 **`v1.0.0` 起只提供 Windows Installer，不再发布 Portable 便携版**。
+**发行形式调整：** `v0.9.9` 仍提供 Windows Installer 与 Portable；自 **`v0.9.9.1` 起只提供 Windows Installer，不再发布 Portable 便携版**。
 
-**本次升级建议（不强制）：** 建议 Portable 用户在 `v0.9.9` 就改用 Installer，先确认安装版已正确载入数据，再停用旧便携版。迁移前请完全关闭 Elitesand Pro，并备份 `data/` 与 `downloads/`；如果已经使用媒体库迁移功能，请改为备份设置中显示的 `Elitesand Pro Media` 文件夹。`data/` 包含播放列表、设置、歌词缓存、授权、Twitch 与 PIN 状态；媒体文件夹包含歌曲、封面与歌词文件。`logs/` 不影响迁移，可以不备份。
+**本次升级建议（非强制）：** 建议 Portable 用户在 `v0.9.9` 就改用 Installer，先确认安装版数据正常，再停用旧便携版。迁移前请完全关闭程序并备份 `data/` 与 `downloads/`；若已使用媒体库迁移功能，则备份设置中显示的 `Elitesand Pro Media` 文件夹来替代 `downloads/`。`data/` 包含播放列表、设置、歌词缓存、授权、Twitch 与 PIN 状态；媒体文件夹包含歌曲、封面与歌词文件。`logs/` 不影响迁移，可不备份。
 
 > [!WARNING]
-> `v0.7.1`～`v0.7.3` 的旧更新器无法安全完成跨版本升级。另外，`v0.9.2` 引入了 Electron 桌面框架与新的安装／打包架构，属于框架级更新。**从任何早于 `v0.9.2` 的版本升级时，都必须重新下载并安装完整 Installer 或 Portable 版本，不能使用增量更新。** 请先备份旧文件夹与用户数据；完成 `v0.9.2` 或之后版本的完整安装后，未来兼容版本才可按程序提示使用安全增量更新。
+> `v0.7.1`～`v0.7.3` 的旧更新器无法安全完成跨版本升级。另外由于 `v0.9.2` 引入 Electron 桌面框架与安装／封装架构等框架级更新，**从任何早于 `v0.9.2` 的版本升级时，都必须重新下载并安装完整 Installer 或 Portable 版本，不能使用增量更新**。请先保留旧文件夹与用户数据备份；完成 `v0.9.2` 或之后版本的完整安装后，未来兼容版本才可按照程序提示使用安全增量更新。
 
 ### 产品定位
 
-Elitesand Pro 是面向 VTuber、歌回主播与直播演出者的 Windows 桌面工具。它将 YouTube／本地音频导入、歌词搜索、同步播放、OBS 动态歌词、直播歌单与 Twitch 点歌流程整合在同一个本地应用中。
+Elitesand Pro 是为 VTuber、歌回主播与直播演出者设计的 Windows 桌面工具。它将歌曲管理、歌词搜索、同步播放、OBS 动态歌词、直播歌单与 Twitch 点歌流程整合在同一套本地应用程序中。
+
+程序在本地运行，OBS 通过 Browser Source 加载透明歌词与歌单画面；桌面控制台、手机遥控器与 OBS 显示来源会实时同步。
 
 ### 使用说明
 
-1. 从 GitHub Releases 下载最新 Windows Installer。`v0.9.9` 仍可下载 Portable；自 `v1.0.0` 起不再提供便携版。
-2. 启动 Elitesand Pro，并按首次使用引导检查 yt-dlp、FFmpeg、网络与版本状态。
-3. 导入 YouTube 视频、播放列表或本地音频，并确认歌名、歌手与歌词来源。
-4. 选择歌词模板并设置字体、颜色、位置、动画与预设。
-5. 将歌词网址与歌单网址分别加入 OBS Browser Source。
-6. 需要观众点歌时，连接 Twitch 并设置聊天命令或忠诚点数奖励。
-7. 通过桌面、手机遥控器或 Stream Deck 控制播放、切歌、时间偏移与紧急隐藏。
-8. 直播结束后保存场次、导出歌单并复制 YouTube 章节时间戳。
+1. 从 GitHub Releases 下载最新 Windows Installer。`v0.9.9.1` 仍可下载 Portable；自 `v0.9.9.1` 起不再提供便携版。
+2. 启动 Elitesand Pro，按照首次使用引导完成 yt-dlp、FFmpeg、网络与版本检查。
+3. 导入 YouTube 链接、播放列表或本地音频文件，确认歌名、歌手与歌词来源。
+4. 在歌词设置中选择动画模板、字体、颜色、位置与预设。
+5. 复制“歌词网址”与“歌单网址”，分别加入 OBS Browser Source。
+6. 需要观众点歌时，连接 Twitch，设置聊天室命令或频道点数奖励与限制。
+7. 直播中可使用桌面控制台、手机遥控器或 Stream Deck 控制播放、切歌、时间偏移与紧急隐藏。
+8. 收播后可保存场次、导出歌单，并复制 YouTube 章节时间戳。
+
+> 初次使用建议先用测试场景完成一首歌曲的导入、歌词同步、OBS 显示与 Twitch 点歌流程，再投入正式直播。
 
 ### 主要功能
 
-- YouTube 单曲与播放列表的音频、歌曲信息、封面和歌词自动导入。
-- 支持 MP3、FLAC、WAV、M4A、OGG 本地音频。
-- 导入队列、取消、重试、重复检查、时长检查与媒体库。
-- 每首歌曲独立保存升降调、速度、歌词偏移与播放设置。
-- BetterLyrics、Apple Music、酷狗、QQ Music、LRCLIB、网易云等多歌词来源。
+#### 歌曲导入与播放
+
+- 粘贴 YouTube 单曲或播放列表链接，自动下载音频、识别歌手／歌名、搜索歌词并获取封面。
+- 支持 MP3、FLAC、WAV、M4A、OGG 等本地音频拖放导入。
+- 导入前检查视频时长、类型与重复项目，降低误下载非音乐内容的风险。
+- 单一导入队列、播放列表批量任务、取消、重试与任务状态管理。
+- 播放、暂停、上一首、下一首、进度拖动与迷你播放器。
+- 每首歌可独立保存 ±12 半音变调、0.5x～1.5x 变速与时间偏移。
+- 内置 SoundTouch／WSOLA 高质量变调与变速处理。
+- 播放列表拖动排序、歌曲信息编辑、列表导入／导出与清空确认。
+- 媒体库自动保存已使用歌曲、播放次数、歌词、时间校正与播放设置。
+
+#### 歌词搜索与处理
+
+- 多来源并行搜索：BetterLyrics、Apple Music、酷狗、QQ Music、LRCLIB、网易云等。
+- 自动匹配最佳歌词，也可手动选择来源。
 - 支持逐字、逐句、LRC、KRC、TTML、SRT 与纯文本歌词。
-- 时间轴编辑、首句对齐、罗马音、拼音与简繁显示转换。
-- 六种歌词动画模板（Classic Overlay、Pulse、Facet、Aura、KTV、Vertical Flow），各模板独立保存样式与预设。
-- OBS 透明歌词与直播歌单 Browser Source 实时同步。
-- KTV 扫光、间奏倒计时、时钟同步与紧急隐藏。
-- 直播歌单、已唱／正在唱／下一首、YouTube 章节时间戳。
-- Twitch Device Code 登录、聊天室点歌、确认、重试、超时与状态恢复。
-- 忠诚点数点歌、完成、拒绝、超时与自动退款。
-- 公平点歌场次、重复限制、观众名额、自助取消与管理员控制。
-- 手机遥控器、Stream Deck HTTP API、PIN 保护、日志、备份与恢复。
-- 支持语言：繁体中文、English、日本語、한국어、简体中文。
+- 可直接粘贴歌词，或使用逐行时间轴编辑器修正每句时间。
+- 一键“对齐第一句”整体平移歌词时间。
+- 日文／韩文罗马拼音、中文汉语拼音与部分中文谐音显示。
+- 简体转繁体显示，不破坏拼音与原始时间数据。
+- 清理来源中的多余制作信息、工作室名称、版本备注与错误标题。
+- 歌词来源缓存、健康状态、失败重试与来源降级处理。
 
-### 安装
+#### OBS 动态歌词
 
-请从 GitHub Releases 下载最新 Windows Installer。`v0.9.9` 仍可下载 Portable；自 `v1.0.0` 起不再提供便携版。
+内置六种歌词演出模板：
 
-- **Installer**：运行安装向导。
-- **Portable**：解压后直接运行，已包含 Node.js、yt-dlp 与 FFmpeg。
+- 经典叠层
+- Pulse
+- Facet
+- Aura
+- KTV
+- 直书句流
 
-当前安装包尚未进行商业代码签名，Windows SmartScreen 可能显示警告。请确认下载来源与 SHA-256 校验值。
+每个模板可独立保存：
+
+- 字体、字号、颜色、描边与透明度
+- 位置、间距、对齐、显示范围
+- 动画强度与切换效果
+- 命名预设
+
+其他能力：
+
+- OBS 透明背景 Browser Source。
+- 逐字扫光、逐句切换、间奏倒计时与 KTV 时钟同步。
+- 紧急隐藏只隐藏 Elitesand Pro 元素，不遮盖整个直播画面。
+- OBS 歌词与歌单来源连接状态实时显示。
+- 修改设置后实时同步，不需要重新粘贴 OBS 网址。
+
+#### 直播歌单
+
+- 显示已唱、正在唱与接下来的歌曲。
+- 自动记录场次歌曲与时间戳，可复制为 YouTube 章节。
+- 支持角落列表与全屏场景版式。
+- 多种主题与 40 项以上外观设置。
+- 根据 OBS Browser Source 尺寸自动调整版面。
+- 长歌名与长歌手名称会自动分配空间，避免重要信息被挤压。
+- 可创建、保存与切换不同直播场次。
+
+#### Twitch 集成
+
+- Twitch Device Code Flow 登录，不需要 Client Secret。
+- 根据 Twitch 实际开播时间自动创建直播歌单场次。
+- 聊天室点歌命令与 YouTube 链接解析。
+- 点歌先进入待确认区，由主播确认后才下载，不会直接污染正式歌单。
+- 导入失败可重试，超时或拒绝可取消。
+- 频道点数兑换点歌、必要文字输入、成功完成与失败退款。
+- 点歌限制、歌曲长度、重复歌曲、用户名额与公平工作阶段。
+- 观众可查询、自行取消，管理员可通过聊天室管理。
+- 自定义成功、失败、等待与拒绝回复。
+- Twitch 断线重连、请求持久化与程序重启后恢复。
+- 未知 EventSub 或聊天 fragment 会安全忽略，不中断整体流程。
+
+#### 控制与安全
+
+- 手机遥控器：播放、切歌、进度、变调、歌词来源、模板与预设控制。
+- Stream Deck HTTP API：`/api/deck/:action`。
+- 可选 PIN 保护，避免同一局域网设备误操作；OBS 显示来源不受影响。
+- 只读／可写控制权限与请求大小限制。
+- 状态版本、损坏备份、自动恢复、数据迁移与回滚。
+- 多实例与连接冲突保护。
+- 详细日志、错误提示、yt-dlp／FFmpeg 健康检查。
+
+#### 多语言界面
+
+程序目前支持：
+
+- 繁體中文
+- English
+- 日本語
+- 한국어
+- 简体中文
+
+主要桌面操作、Twitch 状态、错误消息、授权流程与动态数字格式都已纳入本地化；缺少字符串时会回退至繁体中文。
+
+### 安装方式
+
+#### 一般用户
+
+请从 GitHub Releases 下载最新的 Windows Installer。`v0.9.9` 仍可下载 Portable；自 `v0.9.9.1` 起不再提供便携版。
+
+- **Installer**：运行安装程序并按照向导完成安装。
+- **Portable**：解压后直接运行启动文件，不需要另外安装 Node.js、yt-dlp 或 FFmpeg。
+
+安装包目前未进行商业代码签名，Windows SmartScreen 可能显示警告。请确认下载来源与 SHA-256 校验值后再运行。
+
+PowerShell 验证示例：
+
+```powershell
+Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
+```
 
 ### OBS 设置
 
-从 Elitesand Pro 复制歌词网址或歌单网址，粘贴到 OBS Browser Source。设置会即时同步；若显示旧内容，请刷新 Browser Source 缓存。
+1. 在 Elitesand Pro 复制“歌词网址”或“歌单网址”。
+2. OBS 新增“浏览器”来源。
+3. 粘贴网址并设置尺寸；歌词通常建议使用直播画布尺寸，例如 1920×1080。
+4. 设置修改后会实时同步。如果 OBS 仍显示旧内容，请右键点击来源并刷新缓存。
+
+常用网址：
+
+| 网址 | 用途 |
+|---|---|
+| `/` | 桌面控制面板 |
+| `/controller` | 手机遥控器 |
+| `/display` | OBS 动态歌词 |
+| `/setlist` | OBS 直播歌单 |
+
+### 安全更新
+
+安全增量更新只接受 GitHub Release 中名称完全相符的：
+
+- `update.zip`
+- `update.zip.sha256`
+
+更新器会验证 SHA-256、ZIP 路径与大小、文件白名单、manifest、依赖与 lockfile 结构。`data/`、`downloads/`、`logs/`、设置、授权数据、Twitch token、PIN 与用户媒体不会被增量更新覆盖。
+
+如果依赖或封装结构不兼容，程序会要求下载完整安装包；旧版 `v0.9.x` 仍可能提供 Portable，但从 `v0.9.9.1` 起不再提供。
 
 ### 授权
 
-可免费用于个人与商业直播／演出，并允许不对外分发的私人修改；未经书面许可，不得重新分发原版或修改版。详细内容请参阅 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
+Elitesand Pro 采用 [Elitesand Pro 授权条款](LICENSE)：可免费用于个人与商业直播／演出，允许私人且不对外散布的自用修改；未经书面同意不得重新散布原版或修改版。
+
+第三方组件按其原授权使用，详见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。歌曲、歌词、封面及其他媒体权利不包含在本项目授权内。
