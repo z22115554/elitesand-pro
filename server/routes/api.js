@@ -46,6 +46,7 @@ const runtimeEvidence = require('../services/runtime-evidence');
 const feedbackReport = require('../services/feedback-report');
 const feedbackClient = require('../services/feedback-client');
 const sessionMarker = require('../services/session-marker');
+const usageTelemetry = require('../services/usage-telemetry');
 
 // ─── Multer 設定（本地檔案上傳）───
 const storage = multer.diskStorage({
@@ -194,6 +195,28 @@ router.get('/diagnostics/export', requirePin, async (req, res) => {
 // stream is currently in progress on this LAN device.
 router.post('/diagnostics/reliability/reset', requirePin, (req, res) => {
   res.json({ ok: true, evidence: runtimeEvidence.reset() });
+});
+
+// ─── 匿名活躍統計 ───
+// GET 只回開關狀態；POST 會寫本機偏好，依其他設定寫入端點的規則掛 requirePin。
+router.get('/usage/settings', (req, res) => {
+  res.json(usageTelemetry.getSettings());
+});
+
+router.post('/usage/settings', requirePin, (req, res) => {
+  if (!req.body || typeof req.body.enabled !== 'boolean') {
+    return res.status(400).json({ ok: false, code: 'INVALID_REQUEST' });
+  }
+  try {
+    const settings = usageTelemetry.setEnabled(req.body.enabled);
+    if (settings.enabled) {
+      usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
+    }
+    res.json({ ok: true, settings });
+  } catch (error) {
+    log.warn(`匿名使用統計設定保存失敗：${error.message}`);
+    res.status(500).json({ ok: false, code: 'SAVE_FAILED' });
+  }
 });
 
 // ─── 程式內問題回報 ───
@@ -368,6 +391,7 @@ router.get('/eula', (req, res) => {
 router.post('/eula/accept', (req, res) => {
   try {
     const status = eulaStore.accept(req.body && req.body.version);
+    usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
     res.json({ success: true, ...status });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
