@@ -280,6 +280,11 @@
         if (downloadBtn && !downloadBtn.dataset.busy) {
           downloadBtn.hidden = readiness.ffmpeg || !data.ffmpeg?.downloadable;
         }
+        setReadiness('ffmpeg-status', readiness.ffmpeg, readiness.ffmpeg ? 'FFmpeg 已就緒' : '找不到 FFmpeg，YouTube 匯入的轉檔步驟需要它');
+        const settingsFfmpegBtn = document.getElementById('ffmpeg-download-btn');
+        if (settingsFfmpegBtn && !settingsFfmpegBtn.dataset.busy) {
+          settingsFfmpegBtn.hidden = readiness.ffmpeg || !data.ffmpeg?.downloadable;
+        }
         updateChecklist();
         return fetch('/api/update-check').then((res) => res.json()).then((update) => {
           const newer = update && update.hasUpdate && update.latestVersion;
@@ -292,6 +297,7 @@
         readiness.ffmpeg = false;
         setReadiness('guide-check-ytdlp', false, 'yt-dlp 檢查失敗');
         setReadiness('guide-check-ffmpeg', false, 'FFmpeg 檢查失敗');
+        setReadiness('ffmpeg-status', false, 'FFmpeg 檢查失敗');
         setReadiness('guide-check-version', false, '版本檢查失敗');
         updateChecklist();
       });
@@ -333,37 +339,46 @@
     const refreshBtn = document.getElementById('guide-check-refresh');
     if (refreshBtn) refreshBtn.addEventListener('click', refreshReadiness);
 
-    const ffmpegDownloadBtn = document.getElementById('guide-ffmpeg-download');
     const guideT = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
-    const updateFfmpegButtonText = () => {
-      if (!ffmpegDownloadBtn) return;
-      ffmpegDownloadBtn.textContent = guideT(ffmpegDownloadBtn.dataset.busy === '1'
-        ? 'guide.ffmpegDownloadingButton'
-        : 'guide.ffmpegDownload');
-    };
-    if (ffmpegDownloadBtn) {
-      ffmpegDownloadBtn.addEventListener('click', () => {
-        ffmpegDownloadBtn.dataset.busy = '1';
-        ffmpegDownloadBtn.disabled = true;
-        updateFfmpegButtonText();
-        setReadiness('guide-check-ffmpeg', 'pending', guideT('guide.ffmpegDownloading'));
+    // 「新手教學」的節點跟「連線與系統」設定卡的節點各自獨立顯示/隱藏，
+    // 但都是同一顆下載按鈕的行為，共用同一段邏輯，用哪個 pillId 就回報到哪個狀態文字。
+    // updateText 收進這個陣列，換語言時（見下方 i18n:change）逐一重畫按鈕文字。
+    const ffmpegButtonTextUpdaters = [];
+    function wireFfmpegDownloadButton(btn, pillId) {
+      if (!btn) return;
+      const updateText = () => {
+        btn.textContent = guideT(btn.dataset.busy === '1' ? 'guide.ffmpegDownloadingButton' : 'guide.ffmpegDownload');
+      };
+      ffmpegButtonTextUpdaters.push(updateText);
+      updateText();
+      btn.addEventListener('click', () => {
+        btn.dataset.busy = '1';
+        btn.disabled = true;
+        updateText();
+        setReadiness(pillId, 'pending', guideT('guide.ffmpegDownloading'));
         PinAuth.fetchWithPin('/api/ffmpeg/download', { method: 'POST' })
           .then((res) => res.json())
           .then((data) => {
             if (!data.ok) throw new Error(data.reason || guideT('guide.downloadFailed'));
-            delete ffmpegDownloadBtn.dataset.busy;
-            ffmpegDownloadBtn.disabled = false;
-            updateFfmpegButtonText();
+            delete btn.dataset.busy;
+            btn.disabled = false;
+            updateText();
             refreshReadiness();
           })
           .catch((err) => {
-            delete ffmpegDownloadBtn.dataset.busy;
-            ffmpegDownloadBtn.disabled = false;
-            updateFfmpegButtonText();
-            setReadiness('guide-check-ffmpeg', false, guideT('guide.ffmpegDownloadFailed'));
+            delete btn.dataset.busy;
+            btn.disabled = false;
+            updateText();
+            setReadiness(pillId, false, guideT('guide.ffmpegDownloadFailed'));
             if (typeof ErrorHandler !== 'undefined') ErrorHandler.showToast(guideT('guide.ffmpegDownloadFailedWithError', { error: err.message }));
           });
       });
+    }
+    wireFfmpegDownloadButton(document.getElementById('guide-ffmpeg-download'), 'guide-check-ffmpeg');
+    wireFfmpegDownloadButton(document.getElementById('ffmpeg-download-btn'), 'ffmpeg-status');
+    // 兩顆下載按鈕（新手教學／連線與系統）共用同一組文字更新函式；換語言時要一起重畫。
+    function updateFfmpegButtonText() {
+      ffmpegButtonTextUpdaters.forEach((fn) => fn());
     }
     // 教學檢查清單的字是 JS 寫進去的；就算面板收著也要重畫，
     // 否則換語言後再打開會看到上一個語言的殘留。

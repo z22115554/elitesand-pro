@@ -25,6 +25,9 @@ function classifyImportError(error) {
   if (code === 'ETIMEDOUT' || /timed?\s*out|timeout|逾時|超時/.test(text)) {
     return { code: 'IMPORT_TIMEOUT', status: 504, message: 'YouTube 回應逾時，這次匯入沒有完成。', recovery: '確認網路後重試；若持續發生，先更新 yt-dlp。', retryable: true, technical };
   }
+  if (/找不到 ffmpeg/.test(text)) {
+    return { code: 'FFMPEG_MISSING', status: 422, message: '找不到 FFmpeg，YouTube 匯入的轉檔步驟需要它。', recovery: '請到「連線與系統」頁下載 FFmpeg，完成後再重試。', retryable: true, technical };
+  }
   return { code: 'IMPORT_FAILED', status: 500, message: 'YouTube 匯入失敗。', recovery: '可重試一次；若仍失敗，請檢查 yt-dlp 或改用本機音檔。', retryable: true, technical };
 }
 

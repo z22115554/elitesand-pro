@@ -1502,7 +1502,33 @@ test('showOnce、dismissed 與 critical 安全 action 只影響呈現/更新開�
   ok(!('run' in snapshot.announcements[0].actions));
 });
 
-test('正式公告會強制所有已發布版本改用完整 Installer', () => {
+testAsync('來源樹 Electron shell 不讀取或套用遠端強制公告', async () => {
+  const critical = announcementService.sanitizeAnnouncement(sampleAnnouncement({
+    id: 'development-shell-notice', level: 'critical', dismissible: false,
+    actions: { disableIncrementalUpdate: true, showFullDownloadOnly: true },
+  }));
+  announcementService._resetForTests({
+    cache: { schemaVersion: 1, fetchedAt: '2026-08-12T00:00:00Z', announcements: [critical] },
+    state: { dismissed: [], shownOnce: [], read: [] },
+  });
+  ok(!announcementService.remoteAnnouncementsEnabled({ ELITESAND_SHELL_DEVELOPMENT: '1' }));
+  ok(announcementService.remoteAnnouncementsEnabled({ ELITESAND_SHELL_DEVELOPMENT: '0' }));
+  const snapshot = announcementService.getSnapshot({
+    currentVersion: '0.9.9.6',
+    remoteEnabled: false,
+  });
+  eq(snapshot.enabled, false);
+  eq(snapshot.announcements.length, 0);
+  eq(Object.keys(snapshot.actions).length, 0);
+  const result = await announcementService.refresh({ force: true, remoteEnabled: false });
+  eq(result.disabled, true);
+  announcementService._resetForTests({
+    cache: { schemaVersion: 1, fetchedAt: null, announcements: [] },
+    state: { dismissed: [], shownOnce: [], read: [] },
+  });
+});
+
+test('正式公告會強制 0.9.9.5 與更舊版本改用完整 Installer', () => {
   const document = announcementService.validateDocument(JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'announcement.json'), 'utf8'),
   ));
@@ -1526,8 +1552,9 @@ test('正式公告會強制所有已發布版本改用完整 Installer', () => {
   ok(announcementService.versionMatches(electron, '0.9.1'));
   ok(!announcementService.versionMatches(electron, '0.8.0'));
   ok(announcementService.versionMatches(current, '0.9.2'));
-  ok(announcementService.versionMatches(current, '0.9.9.6'));
-  ok(announcementService.versionMatches(current, '1.0.0'));
+  ok(announcementService.versionMatches(current, '0.9.9.5'));
+  ok(!announcementService.versionMatches(current, '0.9.9.6'));
+  ok(!announcementService.versionMatches(current, '1.0.0'));
 });
 
 testAsync('公告請求逾時安全失敗，不影響程序', async () => {
@@ -3553,6 +3580,7 @@ test('匯入錯誤分類：登入、Premium、地區、下架、逾時與磁碟�
     [new Error('Private video'), 'VIDEO_UNAVAILABLE'],
     [Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' }), 'IMPORT_TIMEOUT'],
     [Object.assign(new Error('no space left'), { code: 'ENOSPC' }), 'DISK_FULL'],
+    [new Error('找不到 FFmpeg，YouTube 轉 MP3 需要它。請到控制面板的系統檢查點「下載 FFmpeg」，或在 config.js 指定 ffmpegPath。'), 'FFMPEG_MISSING'],
   ];
   for (const [error, expected] of cases) {
     const result = classifyImportError(error);
@@ -7056,7 +7084,7 @@ test('Electron P1 smoke starts with a disposable Electron user-data directory', 
   eq(packageJson.devDependencies.electron, '^43.1.1');
   ok(smoke.includes('ELITESAND_SHELL_USER_DATA_DIR'));
   ok(smoke.includes('ELITESAND_SHELL_HEADLESS'));
-  ['STDIO_STRESS_REQUESTS', 'MIN_STRESS_LOG_BYTES', '/api/twitch/status', 'healthAfterStress']
+  ['STDIO_STRESS_REQUESTS', 'MIN_STRESS_LOG_BYTES', '/api/twitch/status', '/api/announcements?force=1', 'healthAfterStress']
     .forEach((required) => ok(smoke.includes(required), `Electron smoke 缺少 stdout 壓力守衛 ${required}: `));
   ok(!smoke.includes("ELITESAND_DATA_DIR: path.join(runtimeRoot"));
 });
