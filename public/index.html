@@ -270,10 +270,7 @@
 
       <div id="update-banner" class="banner" hidden>
         <span>新版本 <strong id="update-banner-version"></strong> 已發布</span>
-        <!-- 兩個按鈕互斥顯示：能安全增量更新就直接原地套用（apply），不行才退回開新分頁
-             下載完整版（link）。兩個都存在是為了「無法增量時仍要有路可走」，不是同時顯示。 -->
-        <button id="update-banner-apply" class="btn btn-sm btn-primary" type="button" hidden>立即更新</button>
-        <a id="update-banner-link" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer" hidden>下載更新</a>
+        <a id="update-banner-link" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer" hidden>下載 Installer</a>
         <button id="update-banner-dismiss" class="btn btn-sm btn-ghost" type="button">關閉</button>
       </div>
 
@@ -1340,15 +1337,14 @@
 
           <section class="card" id="app-update-card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg>程式更新</p>
-            <p class="sub section-intro">有新版本時只通知；可選擇「線上更新」只換程式碼（保留你的設定與歌曲、不用下載整包），或下載完整可攜版。絕不自動執行或中斷直播。</p>
+            <p class="sub section-intro">有新版本時只通知；請從 GitHub Releases 下載並執行完整 Windows Installer。程式內增量更新已停用，不會自動重新啟動或中斷直播。</p>
             <div class="switch-row">
               <div><div class="label">目前版本</div><div class="sub" id="app-version-current">讀取中…</div></div>
               <button id="app-update-check-btn" class="btn btn-sm" type="button">檢查更新</button>
             </div>
             <p id="app-update-status" class="val val--status-message">尚未檢查。</p>
             <div class="inline-row inline-row--wrap mt-10">
-              <button id="app-update-online-btn" class="btn btn-sm btn-primary" type="button" hidden>線上更新（只更新程式碼）</button>
-              <a id="app-update-link" class="btn btn-sm btn-ghost" href="#" target="_blank" rel="noopener noreferrer" hidden>下載完整版</a>
+              <a id="app-update-link" class="btn btn-sm btn-ghost" href="#" target="_blank" rel="noopener noreferrer" hidden>下載 Installer</a>
             </div>
           </section>
 
@@ -2388,7 +2384,7 @@
               <li><strong>Q：我不小心把播放清單清空了，歌會不見嗎？</strong> 歌曲本身不會不見，之前下載過的檔案都還留在媒體庫，可以從媒體庫直接加回播放清單，不用重新下載。</li>
               <li><strong>Q：把歌從播放清單移除後，再加回來，手動歌詞和時間偏移還在嗎？</strong> 同一首歌曲以相同 ID 加回時，手動歌詞和時間偏移會一起恢復；「移除播放清單」只移除這次排隊，不會刪除媒體庫檔案。</li>
               <li><strong>Q：Twitch 點歌下載失敗或我暫時不想處理，請求會消失嗎？</strong> 不會馬上消失。待確認點歌在逾時前會保留到你選擇拒絕，下載失敗的可重試請求也會留著；重開程式後，尚未處理的請求仍會回到「點歌」頁。</li>
-              <li><strong>Q：按線上更新後程式暫時關掉、卻沒有自動回來怎麼辦？</strong> 更新時舊程式必須先結束，才能安全覆蓋檔案。等約一分鐘仍沒重開，就用原本方式重新開啟 Elitesand Pro；更新失敗不會主動清除你的歌單、設定或下載檔。不要同時開兩個程式視窗更新。</li>
+              <li><strong>Q：程式顯示有新版本時，應如何更新？</strong> 請從 GitHub Releases 下載完整 Windows Installer 並執行安裝程式。程式內增量更新已停用；安裝前請先關閉 Elitesand Pro，並避免同時開啟兩個程式視窗。</li>
               <li><strong>Q：可以離線（沒有網路）使用嗎？</strong> 播放已經下載好的本機歌曲可以離線；但匯入新歌、自動搜尋歌詞、Twitch 點歌都需要網路連線。</li>
             </ul>
           </div>
@@ -2640,7 +2636,6 @@
   <script src="/js/danger-confirm.js"></script>
   <script src="/js/modal-focus.js"></script>
   <script src="/js/app-youtube-import.js"></script>
-  <script src="/js/app-update-apply.js"></script>
   <script src="/js/app-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>
   <script src="/js/twitch-request-settings.js"></script>

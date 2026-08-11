@@ -5,6 +5,7 @@ const { isNewerVersion } = require('../utils/version-compare');
 const UPDATE_ZIP_NAME = 'update.zip';
 const UPDATE_HASH_NAME = 'update.zip.sha256';
 const PORTABLE_ASSET_PATTERN = /^Elitesand-Pro-v?[0-9][^/]*-portable\.zip$/i;
+const INSTALLER_ASSET_PATTERN = /^Elitesand\.Pro\.Setup\.\d+\.\d+\.\d+(?:[-.][^/]+)?\.exe$/i;
 
 // One shared interpretation of GitHub Releases. Notification-only and
 // installation flows must choose the same version and recognise the same files.
@@ -22,6 +23,11 @@ function findPortableAsset(release) {
   return assets.find((asset) => PORTABLE_ASSET_PATTERN.test(asset?.name || '')) || null;
 }
 
+function findInstallerAsset(release) {
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  return assets.find((asset) => INSTALLER_ASSET_PATTERN.test(asset?.name || '')) || null;
+}
+
 function findVerifiedUpdateAssets(release) {
   const assets = Array.isArray(release?.assets) ? release.assets : [];
   const zip = assets.find((asset) => asset?.name === UPDATE_ZIP_NAME);
@@ -33,7 +39,9 @@ module.exports = {
   UPDATE_ZIP_NAME,
   UPDATE_HASH_NAME,
   PORTABLE_ASSET_PATTERN,
+  INSTALLER_ASSET_PATTERN,
   selectLatestRelease,
   findPortableAsset,
+  findInstallerAsset,
   findVerifiedUpdateAssets,
 };

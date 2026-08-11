@@ -1136,13 +1136,13 @@ test('發版稽核只檢查 production dependencies，且任何等級風險都�
   eq(manifest.scripts['audit:release'], 'npm audit --omit=dev --audit-level=low');
 });
 
-testAsync('更新計畫只讀 Release metadata，未確認前不下載更新包', async () => {
+testAsync('更新計畫只讀 Release metadata，且只提供完整 Installer', async () => {
   const release = {
     tag_name: 'v9.9.9', html_url: 'https://example.test/release',
     assets: [
       { name: 'update.zip', browser_download_url: 'https://example.test/update.zip' },
       { name: 'update.zip.sha256', browser_download_url: 'https://example.test/update.zip.sha256' },
-      { name: 'Elitesand-Pro-v9.9.9-portable.zip', browser_download_url: 'https://example.test/portable.zip' },
+      { name: 'Elitesand.Pro.Setup.9.9.9.exe', browser_download_url: 'https://example.test/installer.exe' },
     ],
   };
   let releaseCalls = 0;
@@ -1151,48 +1151,28 @@ testAsync('更新計畫只讀 Release metadata，未確認前不下載更新包'
     fetchLatestRelease: async () => { releaseCalls += 1; return release; },
   });
   eq(releaseCalls, 1);
-  eq(plan.canIncremental, true);
-  eq(plan.needsFull, false);
+  eq(plan.canIncremental, false);
+  eq(plan.needsFull, true);
+  eq(plan.downloadUrl, 'https://example.test/installer.exe');
+  ok(/Windows Installer/.test(plan.reason));
   const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/app-updater.js'), 'utf8');
   const getPlanSource = updaterSource.slice(updaterSource.indexOf('async function getPlan'), updaterSource.indexOf('function ensureInside'));
   ok(!getPlanSource.includes('downloadReleaseUpdate('), '檢查更新不可預先下載 update.zip: ');
   const updatePanelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-check.js'), 'utf8');
-  ok(updatePanelSource.includes('目前只確認 Release 資產存在'), '面板不可把尚未下載的更新包說成已驗證: ');
+  ok(updatePanelSource.includes('完整 Windows Installer'), '面板必須明確導向完整 Installer: ');
 });
 
-test('首頁更新橫幅接的是真正的增量更新，不是永遠開新分頁去 GitHub', () => {
-  // 實測踩過：舊版橫幅打 /api/update-check，那支 API 只回傳 downloadUrl/releaseUrl，
-  // 完全沒有 canIncremental，導致橫幅的「下載更新」不管有沒有安全增量更新可用，
-  // 一律開新分頁連去 GitHub release 頁——使用者得自己找到設定頁才有一鍵套用可選。
+test('首頁更新橫幅只導向完整 Installer，不提供增量更新入口', () => {
   const toastSource = fs.readFileSync(path.join(__dirname, '../public/js/app-toast-utils.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
-  const sharedSource = fs.readFileSync(path.join(__dirname, '../public/js/app-shared.js'), 'utf8');
-  const applyModuleSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-apply.js'), 'utf8');
 
-  ok(!toastSource.includes("fetch('/api/update-check')"), '首頁橫幅不可再打舊的 /api/update-check（沒有 canIncremental 欄位）: ');
-  ok(toastSource.includes("fetch('/api/app-update/plan')"), '首頁橫幅必須改打 /api/app-update/plan，才拿得到 canIncremental: ');
-  ok(toastSource.includes('window.AppUpdateApply.applyIncrementalUpdate('), '「立即更新」按鈕必須呼叫共用的增量更新流程，不能自己重寫一份: ');
-  ok(toastSource.includes("window.addEventListener('announcements:actions'"), '安全公告停用增量更新時，橫幅必須跟設定頁看到同一個結論: ');
-  ok(toastSource.includes('plan.canIncremental') && toastSource.includes('!remoteActions.disableIncrementalUpdate') && toastSource.includes('!remoteActions.showFullDownloadOnly'),
-    'canApply() 必須同時檢查 canIncremental 與安全公告的兩個停用旗標: ');
-
-  // 兩個按鈕互斥：能增量更新才顯示「立即更新」，不行才退回下載連結，不能同時出現或同時消失。
-  ok(indexHtml.includes('id="update-banner-apply"') && indexHtml.includes('id="update-banner-link"'),
-    '橫幅必須同時有「立即更新」按鈕與退回用的下載連結: ');
-  ok(sharedSource.includes("updateBannerApply: document.getElementById('update-banner-apply')"), 'app-shared.js 必須查好新按鈕的 dom 參照，供其他模組共用: ');
-
-  // 設定頁的「線上更新」按鈕也要改走同一份共用邏輯，不能兩邊各自維護一份確認/輪詢/套用流程。
+  ok(toastSource.includes("fetch('/api/app-update/plan')"), '首頁橫幅必須讀取更新計畫: ');
+  ok(!toastSource.includes('applyIncrementalUpdate'), '首頁橫幅不可提供增量更新流程: ');
+  ok(indexHtml.includes('id="update-banner-link"'), '橫幅必須提供 Installer 下載連結: ');
+  ok(!indexHtml.includes('id="update-banner-apply"'), '橫幅不可保留立即增量更新按鈕: ');
   const updatePanelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-check.js'), 'utf8');
-  ok(updatePanelSource.includes('window.AppUpdateApply.applyIncrementalUpdate('), '設定頁「線上更新」按鈕也必須改呼叫同一份共用流程: ');
-  ok(applyModuleSource.includes('window.AppUpdateApply = ') && applyModuleSource.includes('async function applyIncrementalUpdate('),
-    '共用流程模組必須真的存在並掛在 window.AppUpdateApply: ');
-  ok(applyModuleSource.includes("PinAuth.fetchWithPin('/api/app-update/apply'"), '套用更新一定要走 PIN 驗證的 fetch，不能是裸 fetch: ');
-
-  // 載入順序：共用模組必須在兩個呼叫端「之前」，否則點下去時 window.AppUpdateApply 還沒定義。
-  const applyIdx = indexHtml.indexOf('/js/app-update-apply.js');
-  const checkIdx = indexHtml.indexOf('/js/app-update-check.js');
-  const toastIdx = indexHtml.indexOf('/js/app-toast-utils.js');
-  ok(applyIdx > -1 && applyIdx < checkIdx && applyIdx < toastIdx, 'app-update-apply.js 必須比 app-update-check.js 與 app-toast-utils.js 都早載入: ');
+  ok(!updatePanelSource.includes('applyIncrementalUpdate'), '設定頁不可提供增量更新流程: ');
+  ok(!fs.existsSync(path.join(__dirname, '../public/js/app-update-apply.js')), '舊的前端增量更新模組必須移除: ');
 });
 
 test('更新檢查會納入 prerelease、排除 draft，並挑最高版本', () => {
@@ -1309,36 +1289,31 @@ testAsync('SHA 不符與 staging 寫入失敗都不修改正式目錄、也不�
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
-testAsync('updater 啟動失敗時主程序保持可用且回傳具體原因', async () => {
+testAsync('程式內增量更新已停用，準備階段不會寫入或啟動 updater', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-update-launch-'));
   try {
     appUpdater._resetForTests();
     const prepared = await appUpdater.prepareUpdate({ targetRoot: root, zipBuffer: makeUpdateZip(), latestVersion: '0.7.4' });
-    ok(prepared.prepared);
-    const launched = await appUpdater.launchUpdater(prepared, { spawnImpl() { throw new Error('spawn denied'); } });
-    ok(!launched.launched && /spawn denied/.test(launched.reason));
+    ok(!prepared.prepared && prepared.needsFull);
+    ok(/Windows Installer/.test(prepared.reason));
+    ok(!fs.existsSync(path.join(root, 'server')), '停用時不可建立 staging 或修改目標目錄: ');
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
-// 2026-08-01 實機根因：安裝版的 server 跑在 Electron utilityProcess 裡，
-// process.execPath 是 Elitesand Pro.exe。直接拿它 spawn 一個 .js 會啟動 GUI app、
-// 忽略腳本參數，runner 永不寫出 readyFile ＝ 使用者看到「updater 未能完成啟動握手」。
-// 可攜版與開發機的 execPath 是真 node，所以這個缺陷一路活到 0.9.7 都沒被發現。
-testAsync('updater 以 Node 模式啟動 runner，安裝版才不會卡在啟動握手', async () => {
+testAsync('程式內增量更新被拒絕時不會呼叫外部 updater', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-update-node-mode-'));
   try {
     appUpdater._resetForTests();
     const prepared = await appUpdater.prepareUpdate({ targetRoot: root, zipBuffer: makeUpdateZip(), latestVersion: '0.7.4' });
-    ok(prepared.prepared);
-    let seenOptions = null;
-    await appUpdater.launchUpdater(prepared, {
-      readyTimeoutMs: 50,
-      spawnImpl(command, args, options) {
-        seenOptions = options;
-        return { once() {}, unref() {}, kill() {}, pid: 1 };
-      },
+    let spawnCalled = false;
+    const result = await appUpdater.prepareAndLaunchUpdate({
+      targetRoot: root,
+      zipBuffer: makeUpdateZip(),
+      latestVersion: '0.7.4',
+      spawnImpl() { spawnCalled = true; },
     });
-    eq(seenOptions.env.ELECTRON_RUN_AS_NODE, '1', 'runner 必須以 ELECTRON_RUN_AS_NODE 啟動: ');
+    ok(!prepared.prepared && !result.prepared && result.needsFull);
+    ok(!spawnCalled, '停用時不可建立外部 updater 子程序: ');
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
@@ -1527,42 +1502,32 @@ test('showOnce、dismissed 與 critical 安全 action 只影響呈現/更新開�
   ok(!('run' in snapshot.announcements[0].actions));
 });
 
-test('正式公告包含 v0.9.2 強制遷移與 v0.9.9 Installer 建議', () => {
+test('正式公告會強制所有已發布版本改用完整 Installer', () => {
   const document = announcementService.validateDocument(JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'announcement.json'), 'utf8'),
   ));
   eq(document.announcements.length, 3);
-  const legacy = document.announcements.find((item) => item.id === 'v0.9.2-legacy-portable-migration');
-  const electron = document.announcements.find((item) => item.id === 'v0.9.2-electron-full-update');
-  const installerTransition = document.announcements.find((item) => item.id === 'v0.9.9-installer-transition');
-  ok(legacy && electron && installerTransition);
-  for (const notice of [legacy, electron]) {
+  const legacy = document.announcements.find((item) => item.id === 'installer-only-update-legacy');
+  const electron = document.announcements.find((item) => item.id === 'installer-only-update-electron');
+  const current = document.announcements.find((item) => item.id === 'installer-only-update-current');
+  ok(legacy && electron && current);
+  for (const notice of [legacy, electron, current]) {
     eq(notice.level, 'critical');
     eq(notice.dismissible, false);
     eq(notice.showOnce, false);
     ok(notice.actions.disableIncrementalUpdate && notice.actions.showFullDownloadOnly);
-    eq(notice.url, 'https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.2');
-    ok(!announcementService.versionMatches(notice, '0.9.2'));
+    eq(notice.url, 'https://github.com/z22115554/elitesand-pro/releases/latest');
+    ok(/Windows Installer/.test(notice.message));
+    ok(!/portable/i.test(notice.message));
   }
   ok(announcementService.versionMatches(legacy, '0.8.0'));
   ok(!announcementService.versionMatches(legacy, '0.8.1-pre.1'));
-  ok(/app\/data/.test(legacy.message) && /app\/downloads/.test(legacy.message));
-  ok(/%APPDATA%\\Elitesand Pro/.test(legacy.message));
   ok(announcementService.versionMatches(electron, '0.8.1-pre.1'));
   ok(announcementService.versionMatches(electron, '0.9.1'));
   ok(!announcementService.versionMatches(electron, '0.8.0'));
-  ok(/覆蓋安裝/.test(electron.message) && /會保留/.test(electron.message));
-  eq(installerTransition.level, 'info');
-  eq(installerTransition.dismissible, true);
-  eq(installerTransition.showOnce, true);
-  eq(Object.keys(installerTransition.actions).length, 0);
-  ok(announcementService.versionMatches(installerTransition, '0.9.2'));
-  ok(announcementService.versionMatches(installerTransition, '0.9.9'));
-  ok(!announcementService.versionMatches(installerTransition, '1.0.0'));
-  ok(/建議，不是強制/.test(installerTransition.message));
-  ok(/data/.test(installerTransition.message) && /downloads/.test(installerTransition.message));
-  ok(/Elitesand Pro Media/.test(installerTransition.message));
-  ok(/logs 不影響遷移，可不備份/.test(installerTransition.message));
+  ok(announcementService.versionMatches(current, '0.9.2'));
+  ok(announcementService.versionMatches(current, '0.9.9.5'));
+  ok(announcementService.versionMatches(current, '1.0.0'));
 });
 
 testAsync('公告請求逾時安全失敗，不影響程序', async () => {

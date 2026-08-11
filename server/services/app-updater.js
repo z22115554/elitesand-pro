@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * 安全增量更新的主程序端。
+ * 已停用的舊增量更新器。
  *
  * 這個模組只做「準備」：精確挑選 Release asset、下載、SHA-256、ZIP 路徑與
  * 白名單檢查、相依相容性檢查、解壓到 staging，最後啟動獨立 updater。
@@ -20,7 +20,7 @@ const {
   UPDATE_ZIP_NAME,
   UPDATE_HASH_NAME,
   selectLatestRelease,
-  findPortableAsset,
+  findInstallerAsset,
   findVerifiedUpdateAssets,
 } = require('./release-client');
 const config = require('../utils/load-config');
@@ -31,6 +31,10 @@ const currentLock = require('../../package-lock.json');
 const log = createLogger('AppUpdater');
 const PROJECT_ROOT = projectRoot;
 const MIN_SAFE_UPDATER_VERSION = '0.7.3';
+// 0.9.9.5 的實機更新流程會讓 Electron 的 utilityProcess 被誤判為意外結束，
+// 且更新包不會同步重建加密模板儲存區。完整 Installer 是唯一支援的更新方式，
+// 在替換為具簽章驗證的安裝器更新機制前，任何程式內增量更新都必須拒絕。
+const INCREMENTAL_UPDATES_DISABLED = true;
 const MAX_ZIP_BYTES = 64 * 1024 * 1024;
 const MAX_UNPACKED_BYTES = 128 * 1024 * 1024;
 const MAX_ENTRIES = 4000;
@@ -195,7 +199,7 @@ function inspectUpdateZip(buffer, options = {}) {
     return {
       ok: false,
       needsFull: true,
-      reason: '新版的 dependencies 或 lockfile 相依結構有變動，必須下載完整 Portable 版本。',
+      reason: '新版的相依結構有變動，請下載並執行完整 Windows Installer。',
       version: nextPackage.version,
     };
   }
@@ -265,15 +269,13 @@ async function getPlan(options = {}) {
     const release = await fetchLatestReleaseImpl(repo);
     base.latestVersion = String(release.tag_name).replace(/^[vV]/, '');
     base.releaseUrl = typeof release.html_url === 'string' ? release.html_url : null;
-    const portable = findPortableAsset(release);
-    base.downloadUrl = portable?.browser_download_url || base.releaseUrl;
+    const installer = findInstallerAsset(release);
+    base.downloadUrl = installer?.browser_download_url || base.releaseUrl;
     base.hasUpdate = isNewerVersion(base.latestVersion, APP_VERSION);
-    const updaterSupported = !isNewerVersion(MIN_SAFE_UPDATER_VERSION, APP_VERSION);
-    base.canIncremental = base.hasUpdate && updaterSupported && !!findVerifiedUpdateAssets(release);
-    base.needsFull = base.hasUpdate && !base.canIncremental;
+    base.canIncremental = false;
+    base.needsFull = base.hasUpdate;
     if (!base.hasUpdate) base.reason = '已是最新版本';
-    else if (!updaterSupported) base.reason = '此版本尚未具備安全 updater，只能下載完整 Portable 版本';
-    else if (!base.canIncremental) base.reason = '新版未同時提供固定名稱 update.zip 與 update.zip.sha256，請使用完整下載';
+    else base.reason = '程式內增量更新已停用，請下載並執行完整 Windows Installer。';
     return base;
   } catch (err) {
     base.reason = err.status === 404 ? '更新來源尚未公開或尚未發布 Release' : `檢查失敗：${err.message}`;
@@ -373,6 +375,13 @@ async function downloadLatestUpdate(repo, options = {}) {
 }
 
 async function prepareUpdate(options = {}) {
+  if (INCREMENTAL_UPDATES_DISABLED) {
+    return {
+      prepared: false,
+      needsFull: true,
+      reason: '程式內增量更新已停用，請下載並執行完整 Windows Installer。',
+    };
+  }
   if (currentProgress.active) return { prepared: false, busy: true, reason: '已有更新工作正在進行' };
   currentProgress = { active: true, phase: 'checking', message: '正在檢查更新', startedAt: Date.now(), updatedAt: Date.now() };
   let workRoot = null;
@@ -515,6 +524,7 @@ module.exports = {
   UPDATE_ZIP_NAME,
   UPDATE_HASH_NAME,
   MIN_SAFE_UPDATER_VERSION,
+  INCREMENTAL_UPDATES_DISABLED,
   getPlan,
   getProgress,
   prepareUpdate,

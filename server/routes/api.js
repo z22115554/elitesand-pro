@@ -323,10 +323,10 @@ router.get('/app-update/plan', async (req, res) => {
   try {
     const plan = await appUpdater.getPlan();
     const remoteActions = announcements.getSnapshot().actions;
-    if (remoteActions.disableIncrementalUpdate || remoteActions.showFullDownloadOnly) {
+    if (appUpdater.INCREMENTAL_UPDATES_DISABLED || remoteActions.disableIncrementalUpdate || remoteActions.showFullDownloadOnly) {
       plan.canIncremental = false;
       plan.needsFull = plan.hasUpdate;
-      plan.reason = '目前版本已由安全公告停用增量更新，請下載完整 Portable 版本';
+      plan.reason = '程式內增量更新已停用，請下載並執行完整 Windows Installer。';
     }
     res.json(plan);
   } catch (err) {
@@ -346,8 +346,8 @@ router.post('/app-update/apply', requirePin, async (req, res) => {
       return res.status(503).json({ prepared: false, reason: '伺服器未建立安全關閉協調器，已拒絕更新' });
     }
     const remoteActions = announcements.getSnapshot().actions;
-    if (remoteActions.disableIncrementalUpdate || remoteActions.showFullDownloadOnly) {
-      return res.status(423).json({ prepared: false, needsFull: true, reason: '安全公告已停用此版本的增量更新，請下載完整 Portable 版本' });
+    if (appUpdater.INCREMENTAL_UPDATES_DISABLED || remoteActions.disableIncrementalUpdate || remoteActions.showFullDownloadOnly) {
+      return res.status(423).json({ prepared: false, needsFull: true, reason: '程式內增量更新已停用，請下載並執行完整 Windows Installer。' });
     }
     const result = await appUpdater.prepareAndLaunchUpdate();
     if (!result.prepared) return res.status(result.needsFull ? 409 : 422).json(result);

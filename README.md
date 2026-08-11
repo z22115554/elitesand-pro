@@ -9,16 +9,12 @@
 
 ### 版本狀態
 
-**最新穩定版：`v0.9.9`**
+**最新官方版本：`v0.9.9.5`**
 
-`v0.9.9` 將作為接下來兩週的穩定驗證版本，期間原則上不再新增功能或發布一般更新，只處理必要的重大問題。完成兩週實際直播與使用情境驗證後，預計發布 **`v1.0.0` 正式穩定版**。
-
-**發行形式調整：** `v0.9.9` 仍提供 Windows Installer 與 Portable；自 **`v1.0.0` 起只提供 Windows Installer，不再發布 Portable 可攜版**。
-
-**本次升級建議（非強制）：** 建議 Portable 使用者在 `v0.9.9` 就改用 Installer，先確認安裝版資料正常，再停用舊可攜版。遷移前請完整關閉程式並備份 `data/` 與 `downloads/`；若已使用媒體庫搬遷功能，則備份設定中顯示的 `Elitesand Pro Media` 資料夾取代 `downloads/`。`data/` 包含播放清單、設定、歌詞快取、授權、Twitch 與 PIN 狀態；媒體資料夾包含歌曲、封面與歌詞檔。`logs/` 不影響遷移，可不備份。
+**發行政策：** Elitesand Pro 僅提供 Windows Installer。
 
 > [!WARNING]
-> `v0.7.1`～`v0.7.3` 的舊更新器無法安全完成跨版本升級。另因 `v0.9.2` 導入 Electron 桌面框架與安裝／封裝架構等框架級更新，**從任何早於 `v0.9.2` 的版本升級時，都必須重新下載並安裝完整 Installer 或 Portable 版本，不能使用增量更新**。請先保留舊資料夾與使用者資料備份；完成 `v0.9.2` 或之後版本的完整安裝後，未來相容版本才可依程式提示使用安全增量更新。
+> **程式內增量更新已停用。** 請一律從 GitHub Releases 下載最新的完整 Windows Installer，關閉 Elitesand Pro 後再執行安裝程式。安裝前請備份重要資料。
 
 ### 產品定位
 
@@ -28,7 +24,7 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 
 ### 使用說明
 
-1. 從 GitHub Releases 下載最新 Windows Installer。`v0.9.9` 仍可下載 Portable；自 `v1.0.0` 起不再提供可攜版。
+1. 從 GitHub Releases 下載最新 Windows Installer，關閉 Elitesand Pro 後執行安裝程式。
 2. 啟動 Elitesand Pro，依首次使用引導完成 yt-dlp、FFmpeg、網路與版本檢查。
 3. 匯入 YouTube 連結、播放清單或本機音檔，確認歌名、歌手與歌詞來源。
 4. 在歌詞設定中選擇動畫模板、字體、顏色、位置與預設。
@@ -142,42 +138,11 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 
 #### 一般使用者
 
-請從 GitHub Releases 下載最新的 Windows Installer。`v0.9.9` 仍可下載 Portable；自 `v1.0.0` 起不再提供可攜版。
+請從 GitHub Releases 下載最新的 Windows Installer。
 
-- **Installer**：執行安裝程式並依精靈完成安裝。
-- **Portable**：解壓縮後直接執行啟動檔，不需另外安裝 Node.js、yt-dlp 或 FFmpeg。
+- **Installer**：關閉 Elitesand Pro，執行安裝程式並依精靈完成安裝。
 
-安裝包目前未進行商業程式碼簽章，Windows SmartScreen 可能顯示警告。請確認下載來源與 SHA-256 校驗值後再執行。
-
-PowerShell 驗證範例：
-
-```powershell
-Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
-```
-
-#### 原始碼開發
-
-> 本檔案是私人主開發倉庫（`Elitesand-Pro-src`）的 README，以下開發指令僅適用於這裡。
-> 公開的 `elitesand-pro` 倉庫自 2026-08 起只發布編譯後的官方安裝包（binary-only
-> distribution），不再提供可讀原始碼；第三方開放原始碼元件（SoundTouch、GSAP、
-> Tone.js、OpenCC 等）仍各自依其授權條款可取得，見下方「[授權](#授權)」。
-
-需求：Node.js 18+
-
-```bash
-npm install
-npm start
-```
-
-Electron 開發與測試：
-
-```bash
-npm run electron
-npm test
-npm run smoke:electron
-npm run smoke:portable
-npm run smoke:reliability
-```
+安裝包目前未進行商業程式碼簽章，Windows SmartScreen 可能顯示警告。請只從官方 GitHub Releases 下載。
 
 ### OBS 設定
 
@@ -195,26 +160,9 @@ npm run smoke:reliability
 | `/display` | OBS 動態歌詞 |
 | `/setlist` | OBS 直播歌單 |
 
-### 安全更新
+### 更新
 
-安全增量更新只接受 GitHub Release 中名稱完全相符的：
-
-- `update.zip`
-- `update.zip.sha256`
-
-更新器會驗證 SHA-256、ZIP 路徑與大小、檔案白名單、manifest、依賴與 lockfile 結構。`data/`、`downloads/`、`logs/`、設定、授權資料、Twitch token、PIN 與使用者媒體不會被增量更新覆蓋。
-
-若依賴或封裝結構不相容，程式會要求下載完整安裝包；`v0.9.x` 舊版仍可能提供 Portable，但 `v1.0.0` 起不再提供。
-
-### 打包
-
-```powershell
-npm run package:portable
-npm run package:update -- -BaselineRoot "C:\path\to\previous-portable\app"
-npm run package:installer
-```
-
-建置會產生對應 SHA-256 檔案。Portable 的封裝腳本只保留給 `v0.9.9` 與既有版本維護；`v1.0.0` 起不再發行 Portable。Node.js 與 yt-dlp 隨附；FFmpeg／ffprobe 自批次 D-1 起預設不再內附，改由控制面板在第一次需要時提供一鍵下載（來源固定是 gyan.dev 官方 Windows 建置頁，下載後驗證 SHA-256），也可用 `-BundleFfmpeg` 建出含 FFmpeg 原始碼快照與 GPLv3 文件的內附版。
+程式內增量更新已停用。請從 GitHub Releases 下載完整 Windows Installer；安裝時請先關閉 Elitesand Pro。
 
 ### 授權
 
@@ -233,16 +181,12 @@ Elitesand Pro 是原始碼不公開的專有軟體（proprietary，non-open-sour
 
 ### Release status
 
-**Latest stable release: `v0.9.9`**
+**Latest official release: `v0.9.9.5`**
 
-`v0.9.9` is the stabilization build for the next two weeks. No normal feature updates are planned during this period; only critical fixes will be considered. After two weeks of real-world streaming validation, **`v1.0.0` stable** is planned for release.
-
-**Distribution change:** `v0.9.9` still ships both the Windows Installer and Portable build. Starting with **`v1.0.0`, only the Windows Installer will be released; Portable builds will be discontinued.**
-
-**Recommendation for this upgrade (not mandatory):** Portable users are encouraged to move to the Installer with `v0.9.9`, verify that the installed copy has loaded their data correctly, and only then retire the old Portable copy. Before migrating, fully close Elitesand Pro and back up `data/` and `downloads/`. If the media library has already been moved, back up the `Elitesand Pro Media` folder shown in settings instead of `downloads/`. `data/` contains playlists, settings, lyrics cache, authorization, Twitch, and PIN state; the media folder contains songs, cover art, and lyrics files. `logs/` is not required for migration.
+**Distribution policy:** Elitesand Pro is available only as a Windows Installer.
 
 > [!WARNING]
-> The updater bundled with `v0.7.1`–`v0.7.3` cannot safely complete major upgrades. In addition, `v0.9.2` introduced framework-level changes, including the Electron desktop shell and a new installation/packaging architecture. **Upgrading from any version earlier than `v0.9.2` requires downloading and reinstalling the full Installer or Portable build; incremental updates cannot be used.** Back up the old folder and user data first. After a full installation of `v0.9.2` or later, future compatible versions may use the safe incremental updater when offered by the application.
+> **In-app incremental updates are disabled.** Always download the latest full Windows Installer from GitHub Releases, close Elitesand Pro, then run the installer. Back up important data before installing.
 
 ### Overview
 
@@ -250,7 +194,7 @@ Elitesand Pro is a Windows desktop tool for VTubers, singing streamers, and live
 
 ### How to use
 
-1. Download the latest Windows Installer from GitHub Releases. The `v0.9.9` Portable build remains available, but Portable builds end with `v1.0.0`.
+1. Download the latest Windows Installer from GitHub Releases, close Elitesand Pro, and run the installer.
 2. Launch Elitesand Pro and complete the first-run checks for yt-dlp, FFmpeg, networking, and version status.
 3. Import a YouTube video, playlist, or local audio file, then verify the title, artist, and lyrics source.
 4. Choose a lyrics template and configure fonts, colors, position, motion, and presets.
@@ -282,30 +226,11 @@ Elitesand Pro is a Windows desktop tool for VTubers, singing streamers, and live
 
 ### Installation
 
-Download the latest Windows Installer from GitHub Releases. The `v0.9.9` Portable build remains available, but Portable builds end with `v1.0.0`.
+Download the latest Windows Installer from GitHub Releases.
 
-- **Installer**: run the setup wizard.
-- **Portable**: extract and launch directly; Node.js, yt-dlp, and FFmpeg are bundled.
+- **Installer**: close Elitesand Pro and run the setup wizard.
 
-The build is currently unsigned, so Windows SmartScreen may display a warning. Verify the download source and SHA-256 checksum before running it.
-
-```powershell
-Get-FileHash ".\Elitesand Pro Setup 0.9.9.exe" -Algorithm SHA256
-```
-
-### Development
-
-Requires Node.js 18+.
-
-```bash
-npm install
-npm start
-npm run electron
-npm test
-npm run smoke:electron
-npm run smoke:portable
-npm run smoke:reliability
-```
+The build is currently unsigned, so Windows SmartScreen may display a warning. Download only from the official GitHub Releases page.
 
 ### OBS setup
 
@@ -321,15 +246,9 @@ npm run smoke:reliability
 | `/display` | Animated lyrics overlay |
 | `/setlist` | Live setlist overlay |
 
-### Updates and packaging
+### Updates
 
-Incremental updates only accept `update.zip` and `update.zip.sha256`, and validate checksums, paths, sizes, manifests, file allowlists, dependencies, and lockfiles. User data, downloads, logs, settings, tokens, PIN state, and media are preserved.
-
-```powershell
-npm run package:portable
-npm run package:update -- -BaselineRoot "C:\path\to\previous-portable\app"
-npm run package:installer
-```
+In-app incremental updates are disabled. Download the full Windows Installer from GitHub Releases and close Elitesand Pro before running it.
 
 ### License
 
@@ -349,16 +268,12 @@ subject to these restrictions and remain governed by their own licenses — see
 
 ### リリース状況
 
-**最新安定版：`v0.9.9`**
+**最新公式版：`v0.9.9.5`**
 
-`v0.9.9` は今後2週間の安定性検証版です。この期間は通常の機能追加や更新を行わず、重大な問題のみ必要に応じて修正します。2週間の実配信テスト完了後、**`v1.0.0` 正式安定版**を公開する予定です。
-
-**配布形式の変更：** `v0.9.9` では Windows Installer と Portable 版を提供しますが、**`v1.0.0` 以降は Windows Installer のみを提供し、Portable 版は配布しません。**
-
-**今回の更新に関する推奨事項（必須ではありません）：** Portable 版の利用者は `v0.9.9` で Installer 版へ移行し、データが正しく読み込まれたことを確認してから旧 Portable 版を終了することを推奨します。移行前に Elitesand Pro を完全に終了し、`data/` と `downloads/` をバックアップしてください。メディアライブラリを既に移動している場合は、`downloads/` の代わりに設定画面に表示される `Elitesand Pro Media` フォルダーをバックアップします。`data/` にはプレイリスト、設定、歌詞キャッシュ、認証、Twitch、PIN の状態が含まれ、メディアフォルダーには楽曲、カバー画像、歌詞ファイルが含まれます。`logs/` は移行に不要です。
+**配布ポリシー：** Elitesand Pro は Windows Installer のみで提供されます。
 
 > [!WARNING]
-> `v0.7.1`～`v0.7.3` の旧アップデーターでは大きなバージョン更新を安全に完了できません。また `v0.9.2` では Electron デスクトップ基盤とインストール／パッケージ構成を含むフレームワークレベルの変更が導入されました。**`v0.9.2` より前のバージョンから更新する場合は、完全版 Installer または Portable を再ダウンロードして再インストールする必要があり、差分更新は使用できません。** 先に旧フォルダーとユーザーデータをバックアップしてください。
+> **アプリ内の差分更新は停止されています。** GitHub Releases から最新の完全版 Windows Installer をダウンロードし、Elitesand Pro を終了してから実行してください。インストール前に大切なデータをバックアップしてください。
 
 ### 概要
 
@@ -366,7 +281,7 @@ Elitesand Pro は、VTuber、歌配信者、ライブ出演者向けの Windows 
 
 ### 使い方
 
-1. GitHub Releases から最新の Windows Installer をダウンロードします。Portable 版は `v0.9.9` まで提供され、`v1.0.0` 以降は提供されません。
+1. GitHub Releases から最新の Windows Installer をダウンロードし、Elitesand Pro を終了してから実行します。
 2. Elitesand Pro を起動し、初回案内に従って yt-dlp、FFmpeg、ネットワーク、バージョンを確認します。
 3. YouTube 動画、プレイリスト、またはローカル音源を取り込み、曲名・アーティスト・歌詞を確認します。
 4. 歌詞テンプレート、フォント、色、位置、動き、プリセットを設定します。
@@ -396,10 +311,9 @@ Elitesand Pro は、VTuber、歌配信者、ライブ出演者向けの Windows 
 
 ### インストール
 
-GitHub Releases から最新の Windows Installer をダウンロードしてください。Portable 版は `v0.9.9` まで提供され、`v1.0.0` 以降は提供されません。
+GitHub Releases から最新の Windows Installer をダウンロードしてください。
 
-- **Installer**：セットアップウィザードを実行します。
-- **Portable**：展開して直接起動できます。Node.js、yt-dlp、FFmpeg は同梱されています。
+- **Installer**：Elitesand Pro を終了してからセットアップウィザードを実行します。
 
 現在の配布物はコード署名されていないため、Windows SmartScreen の警告が表示される場合があります。配布元と SHA-256 を確認してください。
 
@@ -417,16 +331,12 @@ Elitesand Pro から歌詞 URL またはセットリスト URL をコピーし�
 
 ### 릴리스 상태
 
-**최신 안정 버전: `v0.9.9`**
+**최신 공식 버전: `v0.9.9.5`**
 
-`v0.9.9`은 앞으로 2주 동안 사용할 안정화 검증 버전입니다. 이 기간에는 일반 기능 추가나 정기 업데이트를 진행하지 않으며, 필요한 중대한 문제만 수정합니다. 2주간 실제 방송 검증을 마친 뒤 **`v1.0.0` 정식 안정 버전**을 출시할 예정입니다.
-
-**배포 방식 변경:** `v0.9.9`은 Windows Installer와 Portable 버전을 모두 제공합니다. **`v1.0.0`부터는 Windows Installer만 제공하며 Portable 버전은 더 이상 배포하지 않습니다.**
-
-**이번 업데이트 권장 사항(필수 아님):** Portable 사용자는 `v0.9.9`에서 Installer 버전으로 전환하고, 설치 버전에서 데이터가 정상적으로 불러와졌는지 확인한 뒤 기존 Portable 버전을 정리하는 것을 권장합니다. 이전하기 전에 Elitesand Pro를 완전히 종료하고 `data/`와 `downloads/`를 백업하세요. 미디어 라이브러리를 이미 다른 위치로 옮겼다면 `downloads/` 대신 설정에 표시되는 `Elitesand Pro Media` 폴더를 백업해야 합니다. `data/`에는 재생목록, 설정, 가사 캐시, 인증, Twitch 및 PIN 상태가 포함되고, 미디어 폴더에는 노래, 커버 이미지, 가사 파일이 포함됩니다. `logs/`는 이전에 필요하지 않습니다.
+**배포 정책:** Elitesand Pro는 Windows Installer로만 제공됩니다.
 
 > [!WARNING]
-> `v0.7.1`~`v0.7.3`의 기존 업데이터는 대규모 버전 업그레이드를 안전하게 완료할 수 없습니다. 또한 `v0.9.2`에서는 Electron 데스크톱 프레임워크와 새로운 설치·패키징 구조가 도입되는 프레임워크 수준의 변경이 이루어졌습니다. **`v0.9.2`보다 이전 버전에서 업그레이드할 경우 전체 Installer 또는 Portable 버전을 다시 다운로드해 재설치해야 하며 증분 업데이트를 사용할 수 없습니다.** 먼저 기존 폴더와 사용자 데이터를 백업하세요.
+> **앱 내 증분 업데이트는 비활성화되어 있습니다.** GitHub Releases에서 최신 전체 Windows Installer를 다운로드하고 Elitesand Pro를 종료한 뒤 실행하세요. 설치하기 전에 중요한 데이터를 백업하세요.
 
 ### 개요
 
@@ -434,7 +344,7 @@ Elitesand Pro는 VTuber, 노래 방송 스트리머, 라이브 공연자를 위�
 
 ### 사용 방법
 
-1. GitHub Releases에서 최신 Windows Installer를 다운로드합니다. Portable 버전은 `v0.9.9`까지 제공되며 `v1.0.0`부터는 제공하지 않습니다.
+1. GitHub Releases에서 최신 Windows Installer를 다운로드하고 Elitesand Pro를 종료한 뒤 실행합니다.
 2. Elitesand Pro를 실행하고 첫 실행 안내에 따라 yt-dlp, FFmpeg, 네트워크 및 버전을 확인합니다.
 3. YouTube 영상, 재생목록 또는 로컬 음원을 가져온 뒤 제목, 아티스트, 가사를 확인합니다.
 4. 가사 템플릿, 글꼴, 색상, 위치, 모션 및 프리셋을 설정합니다.
@@ -464,10 +374,9 @@ Elitesand Pro는 VTuber, 노래 방송 스트리머, 라이브 공연자를 위�
 
 ### 설치
 
-GitHub Releases에서 최신 Windows Installer를 다운로드하세요. Portable 버전은 `v0.9.9`까지 제공되며 `v1.0.0`부터는 제공하지 않습니다.
+GitHub Releases에서 최신 Windows Installer를 다운로드하세요.
 
-- **Installer**: 설치 마법사를 실행합니다.
-- **Portable**: 압축을 풀고 바로 실행합니다. Node.js, yt-dlp, FFmpeg가 포함되어 있습니다.
+- **Installer**: Elitesand Pro를 종료한 뒤 설치 마법사를 실행합니다.
 
 현재 배포 파일은 코드 서명이 없으므로 Windows SmartScreen 경고가 표시될 수 있습니다. 다운로드 출처와 SHA-256 체크섬을 확인하세요.
 
@@ -485,16 +394,12 @@ Elitesand Pro에서 가사 URL 또는 세트리스트 URL을 복사해 OBS Brows
 
 ### 版本状态
 
-**最新稳定版：`v0.9.9`**
+**最新官方版本：`v0.9.9.5`**
 
-`v0.9.9` 将作为未来两周的稳定验证版本。期间原则上不再新增功能或发布常规更新，只处理必要的重大问题。完成两周实际直播与使用场景验证后，计划发布 **`v1.0.0` 正式稳定版**。
-
-**发布形式调整：** `v0.9.9` 仍提供 Windows Installer 与 Portable；自 **`v1.0.0` 起只提供 Windows Installer，不再发布 Portable 便携版**。
-
-**本次升级建议（不强制）：** 建议 Portable 用户在 `v0.9.9` 就改用 Installer，先确认安装版已正确载入数据，再停用旧便携版。迁移前请完全关闭 Elitesand Pro，并备份 `data/` 与 `downloads/`；如果已经使用媒体库迁移功能，请改为备份设置中显示的 `Elitesand Pro Media` 文件夹。`data/` 包含播放列表、设置、歌词缓存、授权、Twitch 与 PIN 状态；媒体文件夹包含歌曲、封面与歌词文件。`logs/` 不影响迁移，可以不备份。
+**发布政策：** Elitesand Pro 仅提供 Windows Installer。
 
 > [!WARNING]
-> `v0.7.1`～`v0.7.3` 的旧更新器无法安全完成跨版本升级。另外，`v0.9.2` 引入了 Electron 桌面框架与新的安装／打包架构，属于框架级更新。**从任何早于 `v0.9.2` 的版本升级时，都必须重新下载并安装完整 Installer 或 Portable 版本，不能使用增量更新。** 请先备份旧文件夹与用户数据；完成 `v0.9.2` 或之后版本的完整安装后，未来兼容版本才可按程序提示使用安全增量更新。
+> **程序内增量更新已停用。** 请从 GitHub Releases 下载最新完整 Windows Installer，关闭 Elitesand Pro 后再运行安装程序。安装前请备份重要数据。
 
 ### 产品定位
 
@@ -502,7 +407,7 @@ Elitesand Pro 是面向 VTuber、歌回主播与直播演出者的 Windows 桌�
 
 ### 使用说明
 
-1. 从 GitHub Releases 下载最新 Windows Installer。`v0.9.9` 仍可下载 Portable；自 `v1.0.0` 起不再提供便携版。
+1. 从 GitHub Releases 下载最新 Windows Installer，关闭 Elitesand Pro 后运行安装程序。
 2. 启动 Elitesand Pro，并按首次使用引导检查 yt-dlp、FFmpeg、网络与版本状态。
 3. 导入 YouTube 视频、播放列表或本地音频，并确认歌名、歌手与歌词来源。
 4. 选择歌词模板并设置字体、颜色、位置、动画与预设。
@@ -532,10 +437,9 @@ Elitesand Pro 是面向 VTuber、歌回主播与直播演出者的 Windows 桌�
 
 ### 安装
 
-请从 GitHub Releases 下载最新 Windows Installer。`v0.9.9` 仍可下载 Portable；自 `v1.0.0` 起不再提供便携版。
+请从 GitHub Releases 下载最新 Windows Installer。
 
-- **Installer**：运行安装向导。
-- **Portable**：解压后直接运行，已包含 Node.js、yt-dlp 与 FFmpeg。
+- **Installer**：关闭 Elitesand Pro 后运行安装向导。
 
 当前安装包尚未进行商业代码签名，Windows SmartScreen 可能显示警告。请确认下载来源与 SHA-256 校验值。
 

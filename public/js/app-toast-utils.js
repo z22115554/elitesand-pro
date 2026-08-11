@@ -174,20 +174,12 @@
   // ═══════════════════════════════════════════
   // 更新檢查（GitHub Releases）
   // ═══════════════════════════════════════════
-  // 改讀 /api/app-update/plan（跟設定頁「檢查更新」同一支 API）而不是舊的 /api/update-check：
-  // 後者只回傳「有沒有新版本」跟一個下載連結，永遠只能開新分頁去 GitHub，就算新版本其實
-  // 有安全增量更新（update.zip）可以一鍵套用也一樣，使用者得自己找到設定頁才有得選。
-  // 這裡改成能一鍵增量更新就直接原地套用，不必先按下載再自己解壓覆蓋。
+  // 只讀 /api/app-update/plan 並導向完整 Windows Installer；程式內增量更新已停用。
   (function checkForUpdate() {
     if (!dom.updateBanner) return;
 
     const DISMISS_KEY = 'vk-update-dismissed-version';
-    let remoteActions = {};
     let plan = null;
-
-    function canApply() {
-      return !!(plan && plan.canIncremental && !remoteActions.disableIncrementalUpdate && !remoteActions.showFullDownloadOnly);
-    }
 
     function render() {
       if (!plan || !plan.hasUpdate || !plan.latestVersion) { dom.updateBanner.hidden = true; return; }
@@ -197,15 +189,11 @@
       if (dismissed === plan.latestVersion) { dom.updateBanner.hidden = true; return; }
 
       const updateUrl = plan.downloadUrl || plan.releaseUrl;
-      const applyable = canApply();
-      // 兩個按鈕互斥：能安全增量更新才顯示「立即更新」；不行才退回連到 GitHub 的下載連結。
-      // 兩個都沒有（沒有有效 asset/release）就不顯示假按鈕，避免 href="#" 回到 localhost/#。
-      if (dom.updateBannerApply) dom.updateBannerApply.hidden = !applyable;
       if (dom.updateBannerLink) {
-        dom.updateBannerLink.hidden = applyable || !updateUrl;
+        dom.updateBannerLink.hidden = !updateUrl;
         if (updateUrl) dom.updateBannerLink.href = updateUrl;
       }
-      if (!applyable && !updateUrl) { dom.updateBanner.hidden = true; return; }
+      if (!updateUrl) { dom.updateBanner.hidden = true; return; }
 
       if (dom.updateBannerVersion) dom.updateBannerVersion.textContent = 'v' + plan.latestVersion;
       dom.updateBanner.hidden = false;
@@ -228,34 +216,6 @@
         }
       });
     }
-
-    if (dom.updateBannerApply) {
-      dom.updateBannerApply.addEventListener('click', async () => {
-        if (!canApply()) return;
-        dom.updateBannerApply.disabled = true;
-        if (dom.updateBannerDismiss) dom.updateBannerDismiss.disabled = true;
-        const original = dom.updateBannerApply.textContent;
-        const result = await window.AppUpdateApply.applyIncrementalUpdate({
-          onStatus: (message) => { dom.updateBannerApply.textContent = message; },
-        });
-        if (result.applied) {
-          dom.updateBannerApply.textContent = '即將重新啟動…';
-          AppShared.showToast('安全更新已準備完成，即將重新啟動', 'success');
-          return; // 保持停用狀態：伺服器接下來就會重啟，不需要再恢復成可點擊
-        }
-        dom.updateBannerApply.textContent = original;
-        dom.updateBannerApply.disabled = false;
-        if (dom.updateBannerDismiss) dom.updateBannerDismiss.disabled = false;
-        if (!result.cancelled) AppShared.showToast(`更新失敗，程式仍可繼續使用：${result.reason}`, 'error');
-      });
-    }
-
-    // 安全公告可能事後停用某版本的增量更新（見 app-update-check.js 同一套機制）；
-    // 橫幅要跟設定頁看到同一個結論，不能各判各的。
-    window.addEventListener('announcements:actions', (event) => {
-      remoteActions = event.detail || {};
-      render();
-    });
 
     refreshPlan();
   })();

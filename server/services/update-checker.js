@@ -10,7 +10,7 @@
 const { fetchWithTimeout } = require('../utils/helpers');
 const { isNewerVersion } = require('../utils/version-compare');
 const { createLogger } = require('../utils/logger');
-const { selectLatestRelease, findPortableAsset } = require('./release-client');
+const { selectLatestRelease, findInstallerAsset } = require('./release-client');
 const { APP_VERSION, githubJsonHeaders } = require('../utils/app-version');
 const config = require('../utils/load-config');
 
@@ -107,8 +107,8 @@ async function checkForUpdate({ force = false } = {}) {
       base.releaseUrl = data.html_url || null;
       // release notes 截斷，避免面板顯示過長內容
       base.releaseNotes = typeof data.body === 'string' ? data.body.slice(0, 500) : null;
-      const portable = findPortableAsset(data);
-      base.downloadUrl = portable ? portable.browser_download_url : null;
+      const installer = findInstallerAsset(data);
+      base.downloadUrl = installer ? installer.browser_download_url : base.releaseUrl;
       base.hasUpdate = latestVersion ? isNewerVersion(latestVersion, currentVersion) : false;
 
       if (base.hasUpdate) {
