@@ -9,7 +9,7 @@
 
 ### 版本狀態
 
-**最新官方版本：`v0.9.9.5`**
+**最新官方版本：`v0.9.9.6`**
 
 **發行政策：** Elitesand Pro 僅提供 Windows Installer。
 
@@ -181,7 +181,7 @@ Elitesand Pro 是原始碼不公開的專有軟體（proprietary，non-open-sour
 
 ### Release status
 
-**Latest official release: `v0.9.9.5`**
+**Latest official release: `v0.9.9.6`**
 
 **Distribution policy:** Elitesand Pro is available only as a Windows Installer.
 
@@ -268,7 +268,7 @@ subject to these restrictions and remain governed by their own licenses — see
 
 ### リリース状況
 
-**最新公式版：`v0.9.9.5`**
+**最新公式版：`v0.9.9.6`**
 
 **配布ポリシー：** Elitesand Pro は Windows Installer のみで提供されます。
 
@@ -331,7 +331,7 @@ Elitesand Pro から歌詞 URL またはセットリスト URL をコピーし�
 
 ### 릴리스 상태
 
-**최신 공식 버전: `v0.9.9.5`**
+**최신 공식 버전: `v0.9.9.6`**
 
 **배포 정책:** Elitesand Pro는 Windows Installer로만 제공됩니다.
 
@@ -394,7 +394,7 @@ Elitesand Pro에서 가사 URL 또는 세트리스트 URL을 복사해 OBS Brows
 
 ### 版本状态
 
-**最新官方版本：`v0.9.9.5`**
+**最新官方版本：`v0.9.9.6`**
 
 **发布政策：** Elitesand Pro 仅提供 Windows Installer。
 
