@@ -5,7 +5,9 @@ const { isNewerVersion } = require('../utils/version-compare');
 const UPDATE_ZIP_NAME = 'update.zip';
 const UPDATE_HASH_NAME = 'update.zip.sha256';
 const PORTABLE_ASSET_PATTERN = /^Elitesand-Pro-v?[0-9][^/]*-portable\.zip$/i;
-const INSTALLER_ASSET_PATTERN = /^Elitesand\.Pro\.Setup\.\d+\.\d+\.\d+(?:[-.][^/]+)?\.exe$/i;
+// Keep the download link compatible with both historical dotted release names
+// and the human-readable name emitted by the NSIS installer build.
+const INSTALLER_ASSET_PATTERN = /^Elitesand[ .]Pro[ .]Setup[ .]\d+(?:\.\d+){2,3}(?:[-.][^/]+)?\.exe$/i;
 
 // One shared interpretation of GitHub Releases. Notification-only and
 // installation flows must choose the same version and recognise the same files.

@@ -3824,6 +3824,8 @@ test('Release 選版與資產辨識由通知與更新器共用同一規則', () 
   ];
   eq(releaseClient.selectLatestRelease(releases).tag_name, selectLatestRelease(releases).tag_name);
   eq(releaseClient.findPortableAsset(releases[1]).name, 'Elitesand-Pro-v0.8.0-rc.1-portable.zip');
+  eq(releaseClient.findInstallerAsset({ assets: [{ name: 'Elitesand.Pro.Setup.0.9.9.5.exe' }] }).name, 'Elitesand.Pro.Setup.0.9.9.5.exe');
+  eq(releaseClient.findInstallerAsset({ assets: [{ name: 'Elitesand Pro Setup 0.9.9.6.exe' }] }).name, 'Elitesand Pro Setup 0.9.9.6.exe');
   const checkerSource = fs.readFileSync(path.join(__dirname, '../server/services/update-checker.js'), 'utf8');
   const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/app-updater.js'), 'utf8');
   ok(checkerSource.includes("require('./release-client')"));
