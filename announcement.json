@@ -2,18 +2,18 @@
   "schemaVersion": 1,
   "announcements": [
     {
-      "id": "v0.9.2-legacy-portable-migration",
+      "id": "installer-only-update-legacy",
       "level": "critical",
-      "title": "v0.8.0 以前版本：升級 v0.9.2 前請搬移舊資料",
-      "message": "你目前使用的是沒有 Electron 桌面殼的舊可攜版。安裝 v0.9.2 不會刪除舊版資料，但不會自動搬移；若直接開啟，v0.9.2 會像全新安裝。請先完全關閉新舊程式，再把舊版 app/data 內容複製到 %APPDATA%\\Elitesand Pro\\data，並把舊版 app/downloads 內容複製到 %APPDATA%\\Elitesand Pro\\downloads，才能沿用播放清單、設定與下載音檔。此版含桌面殼修正，無法增量更新，請下載完整版。本程式尚未取得 Windows 程式碼簽章；若出現 SmartScreen，請確認來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
+      "title": "重要：請改用完整 Windows Installer 更新",
+      "message": "程式內增量更新已停用。請從 GitHub Releases 下載最新 Windows Installer，完整關閉 Elitesand Pro 後執行安裝程式。安裝前請先備份重要資料。",
       "minVersion": "0.7.0",
       "maxVersion": "0.8.0",
-      "publishedAt": "2026-07-23T00:00:00+08:00",
-      "expiresAt": "2027-01-31T23:59:59+08:00",
+      "publishedAt": "2026-08-12T04:00:00+08:00",
+      "expiresAt": "2027-12-31T23:59:59+08:00",
       "dismissible": false,
       "showOnce": false,
-      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.2",
-      "buttonText": "下載 v0.9.2 完整版",
+      "url": "https://github.com/z22115554/elitesand-pro/releases/latest",
+      "buttonText": "下載最新 Installer",
       "actions": {
         "disableIncrementalUpdate": true,
         "showFullDownloadOnly": true
@@ -21,18 +21,18 @@
       "enabled": true
     },
     {
-      "id": "v0.9.2-electron-full-update",
+      "id": "installer-only-update-electron",
       "level": "critical",
-      "title": "請完整安裝 v0.9.2（既有資料會保留）",
-      "message": "你目前使用的是 Electron 安裝版。使用 v0.9.2 installer 直接覆蓋安裝時，%APPDATA%\\Elitesand Pro 內的設定、媒體庫、播放清單與下載音檔會保留。v0.9.2 修正 Twitch 授權連結無法開啟的問題，這項修正屬於 Electron 桌面殼，不在增量更新白名單，因此必須下載完整 installer，不能使用程式內增量更新。本程式尚未取得 Windows 程式碼簽章；若出現 SmartScreen，請確認來源為官方 GitHub Releases，再點選「其他資訊」→「仍要執行」。",
+      "title": "重要：請改用完整 Windows Installer 更新",
+      "message": "程式內增量更新已停用。請從 GitHub Releases 下載最新 Windows Installer，完整關閉 Elitesand Pro 後執行安裝程式。安裝前請先備份重要資料。",
       "minVersion": "0.8.1-pre.1",
       "maxVersion": "0.9.1",
-      "publishedAt": "2026-07-23T00:00:00+08:00",
-      "expiresAt": "2027-01-31T23:59:59+08:00",
+      "publishedAt": "2026-08-12T04:00:00+08:00",
+      "expiresAt": "2027-12-31T23:59:59+08:00",
       "dismissible": false,
       "showOnce": false,
-      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.2",
-      "buttonText": "下載 v0.9.2 完整安裝檔",
+      "url": "https://github.com/z22115554/elitesand-pro/releases/latest",
+      "buttonText": "下載最新 Installer",
       "actions": {
         "disableIncrementalUpdate": true,
         "showFullDownloadOnly": true
@@ -40,19 +40,21 @@
       "enabled": true
     },
     {
-      "id": "v0.9.9-installer-transition",
-      "level": "info",
-      "title": "v0.9.9 建議改用 Installer，後續僅提供安裝版",
-      "message": "v0.9.9 仍提供 Installer 與 Portable，但從下一個版本起只會發布 Installer。這次改用 Installer 是建議，不是強制；你仍可繼續使用 v0.9.9 Portable。為準備遷移，請先完整關閉 Elitesand Pro，備份舊版資料夾中的 data 與 downloads；若你已把媒體庫搬到其他位置，請改為備份該「Elitesand Pro Media」資料夾。data 包含播放清單、設定、歌詞快取、授權與 Twitch／PIN 等狀態；downloads 或自訂媒體資料夾包含歌曲、封面與歌詞檔。logs 不影響遷移，可不備份。安裝完成並確認資料正常後，再刪除舊版。",
+      "id": "installer-only-update-current",
+      "level": "critical",
+      "title": "重要：請改用完整 Windows Installer 更新",
+      "message": "程式內增量更新已停用。請從 GitHub Releases 下載最新 Windows Installer，完整關閉 Elitesand Pro 後執行安裝程式。安裝前請先備份重要資料。",
       "minVersion": "0.9.2",
-      "maxVersion": "0.9.9",
-      "publishedAt": "2026-08-04T05:47:00+08:00",
-      "expiresAt": "2027-01-31T23:59:59+08:00",
-      "dismissible": true,
-      "showOnce": true,
-      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.9",
-      "buttonText": "下載 v0.9.9 Installer",
-      "actions": {},
+      "publishedAt": "2026-08-12T04:00:00+08:00",
+      "expiresAt": "2027-12-31T23:59:59+08:00",
+      "dismissible": false,
+      "showOnce": false,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/latest",
+      "buttonText": "下載最新 Installer",
+      "actions": {
+        "disableIncrementalUpdate": true,
+        "showFullDownloadOnly": true
+      },
       "enabled": true
     }
   ]
