@@ -1526,7 +1526,7 @@ test('正式公告會強制所有已發布版本改用完整 Installer', () => {
   ok(announcementService.versionMatches(electron, '0.9.1'));
   ok(!announcementService.versionMatches(electron, '0.8.0'));
   ok(announcementService.versionMatches(current, '0.9.2'));
-  ok(announcementService.versionMatches(current, '0.9.9.5'));
+  ok(announcementService.versionMatches(current, '0.9.9.6'));
   ok(announcementService.versionMatches(current, '1.0.0'));
 });
 
@@ -6842,7 +6842,10 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
 
   const source = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   [
-    'utilityProcess.fork',
+   'utilityProcess.fork',
+    "stdio: 'pipe'",
+    "child.stdout?.on('data', () => {})",
+    'cwd: app.isPackaged ? path.dirname(projectRoot) : projectRoot',
     "OPEN_BROWSER: '0'",
     'contextIsolation: true',
     'nodeIntegration: false',
@@ -6906,12 +6909,27 @@ test('Media migration copies from the selected source without nesting the media 
   }
 });
 
-test('Electron assisted installer stays per-user with an updateable app root', () => {
+test('Electron assisted installer stays per-user with an integrity-protected ASAR app', () => {
   const root = path.join(__dirname, '..');
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   eq(packageJson.main, 'electron/main.js');
-  eq(packageJson.build.asar, false);
+  eq(packageJson.build.asar.smartUnpack, false, 'all application code must remain inside app.asar');
+  eq(packageJson.build.directories.app, 'dist/.electron-builder-resources/app');
   eq(packageJson.build.directories.output, 'dist/releases/v${version}/installer');
+  eq(packageJson.build.afterPack, 'tools/after-pack-electron-security.js');
+  eq(packageJson.build.forceCodeSigning, false, 'current releases must support an unsigned Windows distribution');
+  const expectedFuses = {
+    runAsNode: false,
+    enableCookieEncryption: true,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true,
+    loadBrowserProcessSpecificV8Snapshot: false,
+    grantFileProtocolExtraPrivileges: false,
+  };
+  Object.entries(expectedFuses).forEach(([name, expected]) =>
+    eq(packageJson.build.electronFuses[name], expected, `Electron security fuse ${name} must be explicit`));
   eq(packageJson.build.nsis.oneClick, false);
   eq(packageJson.build.nsis.perMachine, false, 'NSIS must not install per-machine');
   eq(packageJson.build.nsis.allowToChangeInstallationDirectory, true,
@@ -6940,8 +6958,8 @@ test('Electron assisted installer stays per-user with an updateable app root', (
   });
   ok(packageJson.build.nsis.deleteAppDataOnUninstall !== true,
     'uninstaller must not delete Electron userData without explicit consent');
-  ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root'), 'installer must contain resources/app-root');
-  ok(packageJson.build.extraResources.some((entry) => entry.to === 'app-root/node_modules'), 'installer must explicitly ship app-root/node_modules (electron-builder drops it from extraResources)');
+  ok(!packageJson.build.extraResources.some((entry) => String(entry.to || '').startsWith('app-root')),
+    'installer must not expose a raw app-root directory outside app.asar');
   ok(packageJson.build.extraResources.some((entry) => entry.to === 'tools'), 'installer must contain bundled tools');
   const installerNsh = fs.readFileSync(path.join(root, 'electron', 'installer.nsh'), 'utf8');
   ok(installerNsh.includes('!macro customInstallMode'), 'assisted installer must force the current-user mode');
@@ -6957,20 +6975,75 @@ test('Electron assisted installer stays per-user with an updateable app root', (
   const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   ok(!shellSource.includes("require('../public/js/i18n.js')"),
     'packaged Electron shell 不可直接 require renderer 的 i18n.js；兩者位於不同 resources 目錄，會讓 installer 啟動直接 MODULE_NOT_FOUND：');
-  ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'showPortableDataMigrationNotice',
+  ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'verifyPackagedResourceIntegrity',
+    'showPortableDataMigrationNotice',
     'function needsPortableDataMigrationNotice', 'shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice()',
     "Object.keys(processObject.env).find((key) => key.toUpperCase() === 'PATH')"].forEach((required) =>
     ok(shellSource.includes(required), `Electron packed runtime is missing ${required}`));
   const mainSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.js'), 'utf8');
-  ok(mainSource.includes("path.join(process.resourcesPath, 'app-root')"), 'Electron main must resolve the packed app root');
+  ok(mainSource.includes('app.getAppPath()'), 'Electron main must resolve the packaged app from app.asar');
+  ok(mainSource.includes('packaged-resource-integrity.generated'),
+    'Electron main must load the generated external-resource integrity manifest');
   const installerBuild = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
-  ['build-portable.ps1', 'app-root', 'Remove-Item -LiteralPath $runtimeDir -Recurse -Force', 'electron-builder.cmd',
-    'node_modules\\express\\package.json', 'Test-InstallerBootOutsideRepo', 'win-unpacked\\resources',
+  ['build-portable.ps1', 'dist\\.electron-builder-resources', 'Get-RelativeWorkspacePath',
+    'write-packaged-resource-integrity.js',
+    '--electron-only', 'electron-builder.cmd', 'node_modules\\express\\package.json',
+    'Test-InstallerBootOutsideRepo', 'win-unpacked\\resources', 'verify-electron-package.js',
+    'RedirectStandardOutput', 'RedirectStandardError',
     'EULA-installer.txt', '[System.Text.UTF8Encoding]::new($true)', 'NSIS installer EULA must be UTF-8 with a BOM',
     'NSIS installer EULA diverged from the approved EULA.txt'].forEach((required) =>
     ok(installerBuild.includes(required), `Installer build is missing ${required}`));
   const updater = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater-runner.js'), 'utf8');
   ok(!updater.includes("'electron'"), 'incremental updater must never allow Electron shell files');
+  const updaterService = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater.js'), 'utf8');
+  ok(updaterService.includes('try {') && updaterService.includes('currentLock = null'),
+    'packaged installer must not require a development package-lock.json at module load');
+  ok(!installerBuild.includes('[System.IO.Path]::GetRelativePath('),
+    'installer build must remain compatible with Windows PowerShell 5.1');
+  ok(installerBuild.includes("Properties.Remove('build')"),
+    'staged app package must not carry electron-builder development configuration');
+});
+
+testAsync('Electron ASAR security hook adds readable per-file SHA-256 metadata', async () => {
+  const asar = require('@electron/asar');
+  const securityHook = require('../tools/after-pack-electron-security');
+  const fixtureRoot = fs.mkdtempSync(path.join(TEST_RUNTIME_ROOT, 'asar-integrity-'));
+  const sourceRoot = path.join(fixtureRoot, 'source');
+  const archivePath = path.join(fixtureRoot, 'app.asar');
+  try {
+    fs.mkdirSync(sourceRoot, { recursive: true });
+    fs.writeFileSync(path.join(sourceRoot, 'fixture.txt'), 'integrity-fixture', 'utf8');
+    const archiveStream = await asar.createPackage(sourceRoot, archivePath);
+    await new Promise((resolve, reject) => archiveStream.once('close', resolve).once('error', reject));
+    const result = securityHook.addAsarFileIntegrity(archivePath);
+    ok(result.protectedFiles >= 1, 'security hook must protect every packed ASAR file');
+    const entry = asar.getRawHeader(archivePath).header.files['fixture.txt'];
+    eq(entry.integrity.algorithm, 'SHA256');
+    eq(entry.integrity.hash.length, 64);
+    eq(asar.extractFile(archivePath, 'fixture.txt').toString('utf8'), 'integrity-fixture');
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test('Packaged helper integrity rejects a changed external binary', () => {
+  const shell = require('../electron/shell');
+  const fixtureRoot = fs.mkdtempSync(path.join(TEST_RUNTIME_ROOT, 'external-integrity-'));
+  try {
+    const toolsDir = path.join(fixtureRoot, 'tools');
+    fs.mkdirSync(toolsDir, { recursive: true });
+    const helperPath = path.join(toolsDir, 'helper.exe');
+    fs.writeFileSync(helperPath, 'trusted-helper', 'utf8');
+    const crypto = require('crypto');
+    const manifest = { files: { 'tools/helper.exe': crypto.createHash('sha256').update('trusted-helper').digest('hex') } };
+    shell.verifyPackagedResourceIntegrity(fixtureRoot, manifest);
+    fs.writeFileSync(helperPath, 'changed-helper', 'utf8');
+    let rejection;
+    try { shell.verifyPackagedResourceIntegrity(fixtureRoot, manifest); } catch (error) { rejection = error; }
+    ok(rejection && /integrity/i.test(rejection.message), 'changed external helpers must abort the packaged shell');
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
 });
 
 test('Electron P1 smoke starts with a disposable Electron user-data directory', () => {
@@ -7493,7 +7566,7 @@ testAsync('Electron P1：系統匣結束會先 graceful shutdown，並釋放防�
   });
 
   await desktop.start();
-  eq(forkOptions.stdio, 'ignore', 'utilityProcess 必須在實際啟動路徑使用 stdio ignore：');
+  eq(forkOptions.stdio, 'pipe', 'utilityProcess 必須使用已持續排空的 pipe，保留啟動錯誤且不可塞住：');
   eq(windowOptions.icon, path.join(path.resolve(__dirname, '..'), 'assets', 'elitesand-pro.ico'),
     '桌面視窗必須從 Electron 殼資源讀取正式圖示：');
   trayInstance.menu.template.find((item) => item.label === '結束').click();

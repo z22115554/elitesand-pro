@@ -26,7 +26,15 @@ const {
 const config = require('../utils/load-config');
 const { APP_PACKAGE, APP_VERSION, appUserAgent, githubJsonHeaders } = require('../utils/app-version');
 const { projectRoot, logsDir } = require('../utils/app-paths');
-const currentLock = require('../../package-lock.json');
+// Installer builds deliberately omit development lockfiles. Incremental
+// updates are disabled, but keep this legacy comparison fail-closed if it is
+// ever called by diagnostic code in a packaged app.
+let currentLock = null;
+try {
+  currentLock = require('../../package-lock.json');
+} catch (_) {
+  currentLock = null;
+}
 
 const log = createLogger('AppUpdater');
 const PROJECT_ROOT = projectRoot;
@@ -192,7 +200,7 @@ function inspectUpdateZip(buffer, options = {}) {
   if (JSON.stringify(payloadFiles) !== JSON.stringify(declaredFiles)) throw new Error('更新 manifest 檔案清單與 ZIP 內容不一致');
 
   const currentPackage = options.currentPackage || APP_PACKAGE;
-  const currentLockJson = options.currentLock || currentLock;
+  const currentLockJson = options.currentLock || currentLock || { lockfileVersion: null, packages: {} };
   const dependencyChanged = depsSignature(nextPackage) !== depsSignature(currentPackage)
     || lockStructureSignature(nextLock) !== lockStructureSignature(currentLockJson);
   if (dependencyChanged) {

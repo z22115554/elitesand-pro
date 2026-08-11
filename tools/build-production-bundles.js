@@ -90,11 +90,13 @@ const SOUNDTOUCH_FINGERPRINTS = [
 ];
 
 function parseArgs(argv) {
-  const args = { stagingRoot: null, sourcemapOut: null };
+  const args = { stagingRoot: null, sourcemapOut: null, electronOnly: false };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--sourcemap-out') {
       args.sourcemapOut = argv[++i];
+    } else if (argv[i] === '--electron-only') {
+      args.electronOnly = true;
     } else {
       rest.push(argv[i]);
     }
@@ -207,7 +209,7 @@ function scanForSoundTouchFingerprint(files) {
 }
 
 function main() {
-  const { stagingRoot, sourcemapOut } = parseArgs(process.argv.slice(2));
+  const { stagingRoot, sourcemapOut, electronOnly } = parseArgs(process.argv.slice(2));
   if (!stagingRoot || !fs.existsSync(stagingRoot)) {
     console.error('用法: node build-production-bundles.js <stagingRoot> [--sourcemap-out <dir>]');
     process.exit(1);
@@ -215,6 +217,14 @@ function main() {
   const serverDir = path.join(stagingRoot, 'server');
   const publicDir = path.join(stagingRoot, 'public');
   const publicJsDir = path.join(publicDir, 'js');
+
+  if (electronOnly) {
+    const electronDir = path.join(stagingRoot, 'electron');
+    if (!fs.existsSync(electronDir)) throw new Error(`Missing staged Electron directory: ${electronDir}`);
+    const electronCount = minifyInPlace(walk(electronDir), { rootForRelPath: stagingRoot, sourcemapOut });
+    console.log(`[production-bundles] Electron shell: ${electronCount} files minified`);
+    return;
+  }
 
   if (!fs.existsSync(serverDir)) throw new Error(`Missing staged server dir: ${serverDir}`);
   if (!fs.existsSync(publicJsDir)) throw new Error(`Missing staged public/js dir: ${publicJsDir}`);

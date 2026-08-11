@@ -1,4 +1,6 @@
-﻿param()
+﻿param(
+  [string]$OutputRoot = ""
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -15,48 +17,64 @@ function Assert-Inside {
   }
 }
 
+function Get-RelativeWorkspacePath {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Parent
+  )
+  $resolvedPath = [System.IO.Path]::GetFullPath($Path)
+  $resolvedParent = [System.IO.Path]::GetFullPath($Parent).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  $parentUri = [System.Uri]::new($resolvedParent + [System.IO.Path]::DirectorySeparatorChar)
+  $pathUri = [System.Uri]::new($resolvedPath)
+  return [System.Uri]::UnescapeDataString($parentUri.MakeRelativeUri($pathUri).ToString()).Replace('\', '/')
+}
+
 $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Resources = Join-Path $Root "dist\.electron-builder-resources"
 $PortableOutput = Join-Path $Resources "portable"
 $RootPackagePath = Join-Path $Root "package.json"
 $Package = Get-Content -LiteralPath $RootPackagePath -Raw -Encoding UTF8 | ConvertFrom-Json
 $PortableStage = Join-Path $PortableOutput "Elitesand-Pro-v$($Package.version)-portable"
-$InstallerOutput = Join-Path $Root "dist\releases\v$($Package.version)\installer"
+$AppStage = Join-Path $Resources "app"
+$DefaultInstallerOutput = Join-Path $Root "dist\releases\v$($Package.version)\installer"
+$InstallerOutput = if ([string]::IsNullOrWhiteSpace($OutputRoot)) { $DefaultInstallerOutput } else { [System.IO.Path]::GetFullPath($OutputRoot) }
 $InstallerLicense = Join-Path $Resources "EULA-installer.txt"
 
 Assert-Inside -Path $Resources -Parent $Root
 Assert-Inside -Path $PortableOutput -Parent $Root
 Assert-Inside -Path $PortableStage -Parent $Root
+Assert-Inside -Path $AppStage -Parent $Root
+Assert-Inside -Path $InstallerOutput -Parent $Root
 
 if (Test-Path -LiteralPath $Resources) {
   Remove-Item -LiteralPath $Resources -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $Resources | Out-Null
 
-# 打包版 server 的可啟動驗證：把 resources 複製到 repo「外」的 temp 目錄再開機。
-# 在 repo 內驗證是無效的——app-root 缺 node_modules 時，Node 模組解析會往上層
-# 找到開發用的 node_modules，開發機上永遠正常、使用者機器上直接崩潰。
+# The final check launches the generated Electron executable, not Node. This
+# is the only meaningful way to exercise app.asar, its embedded integrity
+# metadata, the fuse configuration, and the utility-process server together.
 function Test-InstallerBootOutsideRepo {
   param([Parameter(Mandatory = $true)][string]$UnpackedResources)
 
   $bootRoot = Join-Path $env:TEMP ("elitesand-installer-boot-" + [System.IO.Path]::GetRandomFileName())
-  $bootAppRoot = Join-Path $bootRoot "app-root"
-  $bootData = Join-Path $bootRoot "data"
-  $bootDownloads = Join-Path $bootRoot "downloads"
-  $bootLogs = Join-Path $bootRoot "logs"
+  $bootUserData = Join-Path $bootRoot "user-data"
+  $bootStdout = Join-Path $bootRoot "electron.stdout.log"
+  $bootStderr = Join-Path $bootRoot "electron.stderr.log"
+  $unpackedRoot = Split-Path -Parent $UnpackedResources
+  $appExe = Join-Path $unpackedRoot "Elitesand Pro.exe"
   $port = 39000 + (Get-Random -Maximum 1000)
   $serverProcess = $null
   try {
-    Write-Host "Installer boot check: staging app-root outside the repo ($bootRoot)..."
-    New-Item -ItemType Directory -Force -Path $bootRoot, $bootData, $bootDownloads, $bootLogs | Out-Null
-    Copy-Item -LiteralPath (Join-Path $UnpackedResources "app-root") -Destination $bootAppRoot -Recurse -Force
-
-    $env:ELITESAND_DATA_DIR = $bootData
-    $env:ELITESAND_DOWNLOADS_DIR = $bootDownloads
-    $env:ELITESAND_LOGS_DIR = $bootLogs
+    if (-not (Test-Path -LiteralPath $appExe)) { throw "Installer boot check cannot find $appExe" }
+    Write-Host "Installer boot check: launching the packaged Electron app outside the repo ($bootRoot)..."
+    New-Item -ItemType Directory -Force -Path $bootRoot, $bootUserData | Out-Null
     $env:PORT = "$port"
-    $env:OPEN_BROWSER = "0"
-    $serverProcess = Start-Process -FilePath "node" -ArgumentList @((Join-Path $bootAppRoot "server\index.js")) -PassThru -WindowStyle Hidden
+    $env:ELITESAND_SHELL_HEADLESS = "1"
+    $env:ELITESAND_SHELL_PORT = "$port"
+    $env:ELITESAND_SHELL_USER_DATA_DIR = $bootUserData
+    $env:ELITESAND_SHELL_QUIT_AFTER_READY_MS = "0"
+    $serverProcess = Start-Process -FilePath $appExe -ArgumentList @("--user-data-dir=$bootUserData") -PassThru -WindowStyle Hidden -RedirectStandardOutput $bootStdout -RedirectStandardError $bootStderr
 
     $healthy = $false
     for ($i = 0; $i -lt 60; $i++) {
@@ -67,14 +85,20 @@ function Test-InstallerBootOutsideRepo {
       } catch { Start-Sleep -Milliseconds 500 }
     }
     if (-not $healthy) {
-      throw "Installer boot check failed: packaged app-root server never became healthy on port $port (missing node_modules?)."
+      $exitDetail = if ($serverProcess.HasExited) { " Electron exit code: $($serverProcess.ExitCode)." } else { "" }
+      $lineBreak = [Environment]::NewLine
+      $diagnostic = @($bootStdout, $bootStderr) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object {
+        $content = Get-Content -LiteralPath $_ -Tail 80 -ErrorAction SilentlyContinue
+        if ($content) { "$lineBreak--- $(Split-Path -Leaf $_) ---$lineBreak$($content -join $lineBreak)" }
+      }
+      throw "Installer boot check failed: packaged Electron app never became healthy on port $port.$exitDetail$($diagnostic -join '')"
     }
-    Write-Host "Installer boot check passed: packaged app-root serves /api/health outside the repo."
+    Write-Host "Installer boot check passed: integrity-protected Electron app serves /api/health outside the repo."
   } finally {
     if ($serverProcess -and -not $serverProcess.HasExited) {
       try { Stop-Process -Id $serverProcess.Id -Force -Confirm:$false } catch {}
     }
-    Remove-Item Env:ELITESAND_DATA_DIR, Env:ELITESAND_DOWNLOADS_DIR, Env:ELITESAND_LOGS_DIR, Env:PORT, Env:OPEN_BROWSER -ErrorAction SilentlyContinue
+    Remove-Item Env:PORT, Env:ELITESAND_SHELL_HEADLESS, Env:ELITESAND_SHELL_PORT, Env:ELITESAND_SHELL_USER_DATA_DIR, Env:ELITESAND_SHELL_QUIT_AFTER_READY_MS -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $bootRoot) {
       try { Remove-Item -LiteralPath $bootRoot -Recurse -Force } catch {}
     }
@@ -103,21 +127,27 @@ try {
   foreach ($name in @("app", "tools", "licenses")) {
     $source = Join-Path $PortableStage $name
     if (-not (Test-Path -LiteralPath $source)) { throw "Portable staging is missing $name" }
-    Copy-Item -LiteralPath $source -Destination (Join-Path $Resources $(if ($name -eq "app") { "app-root" } else { $name })) -Recurse -Force
+    Copy-Item -LiteralPath $source -Destination (Join-Path $Resources $(if ($name -eq "app") { "app" } else { $name })) -Recurse -Force
   }
 
-  # The staged app-root must carry its production dependency tree; without it the
-  # installed server dies with MODULE_NOT_FOUND on any machine that is not this one.
-  if (-not (Test-Path -LiteralPath (Join-Path $Resources "app-root\node_modules\express\package.json"))) {
-    throw "Staged app-root is missing node_modules\express; refusing to build a broken installer."
+  foreach ($name in @("electron", "assets")) {
+    $source = Join-Path $Root $name
+    if (-not (Test-Path -LiteralPath $source)) { throw "Missing required Electron application directory: $source" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $AppStage $name) -Recurse -Force
   }
 
-  # The installer must never carry an empty-but-writable portable layout.
-  $AppRoot = Join-Path $Resources "app-root"
+  # The staged application must carry its production dependency tree; without it
+  # the installed server dies with MODULE_NOT_FOUND on user machines.
+  if (-not (Test-Path -LiteralPath (Join-Path $AppStage "node_modules\express\package.json"))) {
+    throw "Staged app is missing node_modules\express; refusing to build a broken installer."
+  }
+
+  # Installer runtime data belongs in Electron userData, never in app.asar.
+  $AppRoot = $AppStage
   foreach ($name in @("data", "downloads", "logs")) {
     $runtimeDir = Join-Path $AppRoot $name
     if (Test-Path -LiteralPath $runtimeDir) { Remove-Item -LiteralPath $runtimeDir -Recurse -Force }
-    if (Test-Path -LiteralPath $runtimeDir) { throw "Installer app-root still contains $name" }
+    if (Test-Path -LiteralPath $runtimeDir) { throw "Installer app still contains $name" }
   }
 
   # electron-builder only accepts three-part SemVer, while Elitesand Pro patch
@@ -131,13 +161,17 @@ try {
   if ($BuilderVersion -match '^(\d+)\.(\d+)\.(\d+)\.(\d+)$') {
     $BuilderVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3])+$($Matches[4])"
   }
-  if ($BuilderVersion -ne [string]$Package.version) {
+  $BuilderOutputRelative = Get-RelativeWorkspacePath -Path $InstallerOutput -Parent $Root
+  if ($BuilderOutputRelative -eq '..' -or $BuilderOutputRelative.StartsWith('../')) {
+    throw "Installer output must stay inside the workspace."
+  }
+  if ($BuilderVersion -ne [string]$Package.version -or -not [string]::IsNullOrWhiteSpace($OutputRoot)) {
     $BuilderPackage = Get-Content -LiteralPath $RootPackagePath -Raw -Encoding UTF8 | ConvertFrom-Json
     $BuilderPackage.version = $BuilderVersion
     if ($null -eq $BuilderPackage.build -or $null -eq $BuilderPackage.build.directories) {
       throw "package.json is missing build.directories; cannot prepare installer metadata."
     }
-    $BuilderPackage.build.directories.output = "dist/releases/v$($Package.version)/installer"
+    $BuilderPackage.build.directories.output = $BuilderOutputRelative
     $ArtifactName = "Elitesand Pro Setup $($Package.version).`${ext}"
     if ($BuilderPackage.build.PSObject.Properties.Name -contains 'artifactName') {
       $BuilderPackage.build.artifactName = $ArtifactName
@@ -158,6 +192,32 @@ try {
     Write-Host "Installer metadata version: $BuilderVersion (public version remains $($Package.version))"
   }
 
+  # The app directory is now app.asar, so it needs a SemVer package version for
+  # electron-builder while retaining the four-part public release version for
+  # all update and diagnostic paths inside the packaged server.
+  $StagedAppPackagePath = Join-Path $AppStage "package.json"
+  $StagedAppPackage = Get-Content -LiteralPath $StagedAppPackagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $StagedAppPackage.version = $BuilderVersion
+  # electron-builder reads configuration from the development package only.
+  # The portable staging copy inherits package.json, so remove this field from
+  # the app-asar copy without touching the source package.json.
+  if ($StagedAppPackage.PSObject.Properties.Name -contains 'build') {
+    [void]$StagedAppPackage.PSObject.Properties.Remove('build')
+  }
+  if ($StagedAppPackage.PSObject.Properties.Name -contains 'elitesandPublicVersion') {
+    $StagedAppPackage.elitesandPublicVersion = [string]$Package.version
+  } else {
+    $StagedAppPackage | Add-Member -NotePropertyName elitesandPublicVersion -NotePropertyValue ([string]$Package.version)
+  }
+  [System.IO.File]::WriteAllText($StagedAppPackagePath, ($StagedAppPackage | ConvertTo-Json -Depth 20), [System.Text.UTF8Encoding]::new($false))
+
+  $NodeCommand = Get-Command node -ErrorAction Stop
+  $SourceMapOut = Join-Path $Root "dist\.source-maps\v$($Package.version)"
+  & $NodeCommand.Source (Join-Path $Root "tools\build-production-bundles.js") $AppStage --electron-only --sourcemap-out $SourceMapOut
+  if ($LASTEXITCODE -ne 0) { throw "Electron shell minification failed; Installer build stopped." }
+  & $NodeCommand.Source (Join-Path $Root "tools\write-packaged-resource-integrity.js") $AppStage (Join-Path $Resources "tools")
+  if ($LASTEXITCODE -ne 0) { throw "Packaged external-resource integrity manifest generation failed." }
+
   Push-Location $Root
   try {
     & (Join-Path $Root "node_modules\.bin\electron-builder.cmd") --win nsis
@@ -169,15 +229,20 @@ try {
     }
   }
 
-  # electron-builder has silently dropped node_modules from extraResources before.
-  # Verify the actual output, then boot the packaged server outside the repo.
+  # Verify the actual output before launching it. app.asar, the Windows ASAR
+  # resource, per-file archive hashes, and every configured fuse are checked by
+  # the verifier; this is intentionally stronger than checking for a raw file.
   $UnpackedResources = Join-Path $InstallerOutput "win-unpacked\resources"
-  # 批次 D-1：ffmpeg.exe 不再是必要產物（預設不內附，改成按需下載）。
-  foreach ($required in @("app-root\node_modules\express\package.json", "app-root\server\index.js", "tools\yt-dlp.exe")) {
+  foreach ($required in @("app.asar", "tools\yt-dlp.exe")) {
     if (-not (Test-Path -LiteralPath (Join-Path $UnpackedResources $required))) {
       throw "Installer output is missing $required; the built installer would be broken on user machines."
     }
   }
+  if (Test-Path -LiteralPath (Join-Path $UnpackedResources "app")) {
+    throw "Installer output still contains raw resources\app; refusing a bypassable ASAR build."
+  }
+  & $NodeCommand.Source (Join-Path $Root "tools\verify-electron-package.js") (Join-Path $InstallerOutput "win-unpacked")
+  if ($LASTEXITCODE -ne 0) { throw "Secure Electron package verification failed." }
   $InstallerPath = Join-Path $InstallerOutput "Elitesand Pro Setup $($Package.version).exe"
   $InstallerHashPath = "$InstallerPath.sha256"
   if (-not (Test-Path -LiteralPath $InstallerPath) -or (Get-Item -LiteralPath $InstallerPath).Length -eq 0) {

@@ -5,6 +5,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 
 const DEFAULT_PORT = 3000;
 const START_TIMEOUT_MS = 15000;
@@ -21,9 +22,8 @@ const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
 
 const INSTALLER_LOCALE_FILE = 'installer-locale.txt';
 // Keep the shell independent from renderer assets. The packaged Electron shell
-// lives in resources/app while the actual web app (including i18n.js) lives in
-// resources/app-root, so requiring ../public/js/i18n.js here breaks installed
-// builds with MODULE_NOT_FOUND before the window can even open.
+// and the web application now live together in app.asar, so all packaged paths
+// resolve from one integrity-protected application root.
 const VALID_LOCALES = new Set(['zh-TW', 'en', 'ja', 'ko', 'zh-CN']);
 
 // electron/installer.nsh writes this marker with the language the user picked
@@ -195,6 +195,33 @@ function waitForExit(child, timeoutMs, delay = (ms) => new Promise((resolve) => 
   ]);
 }
 
+function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
+  const files = manifest?.files;
+  if (!files || typeof files !== 'object' || Array.isArray(files) || Object.keys(files).length === 0) {
+    throw new Error('Packaged resource integrity manifest is missing or invalid.');
+  }
+
+  const root = path.resolve(resourcesPath);
+  const rootPrefix = `${root}${path.sep}`;
+  for (const [relativePath, expectedHash] of Object.entries(files)) {
+    if (typeof relativePath !== 'string' || !relativePath.startsWith('tools/') ||
+      relativePath.includes('..') || !/^[a-f0-9]{64}$/i.test(String(expectedHash || ''))) {
+      throw new Error('Packaged resource integrity manifest contains an unsafe entry.');
+    }
+    const target = path.resolve(root, ...relativePath.split('/'));
+    if (!target.startsWith(rootPrefix)) throw new Error('Packaged resource integrity path escaped resources.');
+    let actualHash;
+    try {
+      actualHash = crypto.createHash('sha256').update(fsImpl.readFileSync(target)).digest('hex');
+    } catch (_) {
+      throw new Error(`Required packaged resource is missing: ${relativePath}`);
+    }
+    if (actualHash !== String(expectedHash).toLowerCase()) {
+      throw new Error(`Packaged resource integrity check failed: ${relativePath}`);
+    }
+  }
+}
+
 function createElectronShell({
   app,
   BrowserWindow,
@@ -220,6 +247,7 @@ function createElectronShell({
   headless = processObject.env.ELITESAND_SHELL_HEADLESS === '1',
   autoQuitAfterReadyMs = Number.parseInt(processObject.env.ELITESAND_SHELL_QUIT_AFTER_READY_MS || '0', 10) || 0,
   userDataPath = processObject.env.ELITESAND_SHELL_USER_DATA_DIR || '',
+  packagedResourceIntegrity = null,
 } = {}) {
   if (!app || !BrowserWindow || !utilityProcess || !dialog || !shell || !Tray || !Menu || !nativeImage || !clipboard || !powerSaveBlocker) {
     throw new TypeError('createElectronShell requires Electron app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, and powerSaveBlocker');
@@ -579,7 +607,8 @@ function createElectronShell({
   }
 
   function startServer() {
-    // stdio 必須是 'ignore'，不可改回 'pipe'。
+    // Keep both pipes drained. This retains server startup diagnostics without
+    // allowing a full stdout buffer to freeze the utility process.
     //
     // 2026-08-03 實機根因：'pipe' 會建立 stdout/stderr 管道，但這個檔案從來沒有讀取
     // child.stdout／child.stderr。伺服器每寫一行日誌都會先 console.log()（見
@@ -595,12 +624,20 @@ function createElectronShell({
     // 日誌檔本身是獨立的 createWriteStream，不受影響，功能完全不減。若日後真的需要
     // 讀取子行程輸出，必須「同時」持續排空 stdout 與 stderr 兩條，否則等於重演本 bug。
     const child = utilityProcess.fork(serverEntry, [], {
-      cwd: projectRoot,
+      // app.asar is a file, not a valid process working directory. The
+      // server entry itself can be loaded from ASAR; its cwd must remain the
+      // enclosing resources directory on packaged Windows builds.
+      cwd: app.isPackaged ? path.dirname(projectRoot) : projectRoot,
       env: runtimeEnvironment(),
-      stdio: 'ignore',
+      stdio: 'pipe',
       serviceName: 'Elitesand Pro Server',
     });
     serverProcess = child;
+    child.stdout?.on('data', () => {});
+    child.stderr?.on('data', (chunk) => {
+      const message = String(chunk || '').trim();
+      if (message) console.error(`[Elitesand Pro Server] ${message}`);
+    });
     child.on('exit', (code) => {
       startupExitCode = code;
       if (serverProcess === child) serverProcess = null;
@@ -673,6 +710,13 @@ function createElectronShell({
       shutdownOwnedServer().finally(() => app.exit(0));
     });
     await app.whenReady();
+    if (app.isPackaged) {
+      verifyPackagedResourceIntegrity(
+        processObject.resourcesPath || process.resourcesPath,
+        packagedResourceIntegrity,
+        fsImpl,
+      );
+    }
     // Snapshot before the server creates its state files. Checking after the
     // fork makes a genuinely first-run data directory look non-empty, so the
     // portable-data handoff notice would never be shown.
@@ -721,5 +765,6 @@ module.exports = {
   isPrompterUrl,
   probeHealth,
   waitForExit,
+  verifyPackagedResourceIntegrity,
   createElectronShell,
 };

@@ -1,6 +1,6 @@
 {
   "name": "elitesand-pro",
-  "version": "0.9.9.5",
+  "version": "0.9.9.6",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
@@ -44,30 +44,30 @@
   "build": {
     "appId": "com.elitesand.pro",
     "productName": "Elitesand Pro",
-    "asar": false,
+    "asar": {
+      "smartUnpack": false
+    },
     "directories": {
+      "app": "dist/.electron-builder-resources/app",
       "output": "dist/releases/v${version}/installer"
     },
+    "afterPack": "tools/after-pack-electron-security.js",
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "loadBrowserProcessSpecificV8Snapshot": false,
+      "grantFileProtocolExtraPrivileges": false
+    },
+    "forceCodeSigning": false,
     "files": [
-      "electron/**/*",
-      "assets/**/*",
-      "package.json"
+      "**/*",
+      "assets/**/*"
     ],
     "extraResources": [
-      {
-        "from": "dist/.electron-builder-resources/app-root",
-        "to": "app-root",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "dist/.electron-builder-resources/app-root/node_modules",
-        "to": "app-root/node_modules",
-        "filter": [
-          "**/*"
-        ]
-      },
       {
         "from": "dist/.electron-builder-resources/tools",
         "to": "tools"
