@@ -142,7 +142,7 @@ Elitesand Pro 是為 VTuber、歌回實況主與直播演出者設計的 Windows
 
 - **Installer**：關閉 Elitesand Pro，執行安裝程式並依精靈完成安裝。
 
-安裝包目前未進行商業程式碼簽章，Windows SmartScreen 可能顯示警告。請只從官方 GitHub Releases 下載。
+安裝包目前未進行商業程式碼簽章，Windows SmartScreen 可能顯示警告。請只從官方 GitHub Releases 下載，並核對 SHA-256 校驗值。
 
 ### OBS 設定
 
@@ -230,7 +230,7 @@ Download the latest Windows Installer from GitHub Releases.
 
 - **Installer**: close Elitesand Pro and run the setup wizard.
 
-The build is currently unsigned, so Windows SmartScreen may display a warning. Download only from the official GitHub Releases page.
+The build is currently unsigned, so Windows SmartScreen may display a warning. Download only from the official GitHub Releases page and verify the SHA-256 checksum.
 
 ### OBS setup
 
