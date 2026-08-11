@@ -160,6 +160,13 @@ function isCurrentlyActive(announcement, now = Date.now(), currentVersion = APP_
   return true;
 }
 
+// `npm run shell` runs the Electron host from the source tree. It must not be
+// treated as an installed customer build or be blocked by a remote mandatory
+// release announcement. The packaged Electron host explicitly passes `0`.
+function remoteAnnouncementsEnabled(environment = process.env) {
+  return environment.ELITESAND_SHELL_DEVELOPMENT !== '1';
+}
+
 async function fetchJsonDocument(url, timeoutMs = 5000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -188,7 +195,8 @@ async function fetchJsonDocument(url, timeoutMs = 5000) {
   } finally { clearTimeout(timer); }
 }
 
-async function refresh({ force = false } = {}) {
+async function refresh({ force = false, remoteEnabled = remoteAnnouncementsEnabled() } = {}) {
+  if (!remoteEnabled) return { ok: false, disabled: true, fromCache: true };
   const url = config.announcementUrl;
   if (!url) return { ok: false, error: '未設定公告來源', fromCache: true };
   if (validHttpsUrl(url) === null) return { ok: false, error: '公告來源必須使用 HTTPS', fromCache: true };
@@ -211,7 +219,16 @@ async function refresh({ force = false } = {}) {
   return inFlight;
 }
 
-function getSnapshot({ now = Date.now(), currentVersion = APP_VERSION } = {}) {
+function getSnapshot({ now = Date.now(), currentVersion = APP_VERSION, remoteEnabled = remoteAnnouncementsEnabled() } = {}) {
+  if (!remoteEnabled) {
+    return {
+      enabled: false,
+      currentVersion,
+      fetchedAt: null,
+      announcements: [],
+      actions: {},
+    };
+  }
   const dismissed = new Set(state.dismissed);
   const shownOnce = new Set(state.shownOnce);
   const read = new Set(state.read);
@@ -284,6 +301,7 @@ module.exports = {
   validateDocument,
   versionMatches,
   isCurrentlyActive,
+  remoteAnnouncementsEnabled,
   fetchJsonDocument,
   refresh,
   getSnapshot,

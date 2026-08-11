@@ -83,8 +83,16 @@ async function main() {
   try {
     const health = await waitForHealth(port, child);
     const panel = await request(port, '/panel');
+    const announcements = await request(port, '/api/announcements?force=1');
     assert(health.status === 'ok', 'Electron server health response is invalid');
     assert(panel.status === 200, `Electron panel returned HTTP ${panel.status}`);
+    assert(announcements.status === 200, `Electron announcements returned HTTP ${announcements.status}`);
+    const announcementPayload = JSON.parse(announcements.body);
+    assert(
+      Array.isArray(announcementPayload.announcements) && announcementPayload.announcements.length === 0
+        && Object.keys(announcementPayload.actions || {}).length === 0,
+      'Source-tree Electron shell must not apply remote production announcements',
+    );
     await generateServerLogVolume(port);
     const healthAfterStress = await request(port, '/api/health');
     assert(healthAfterStress.status === 200, `Electron server stopped responding after stdout stress (HTTP ${healthAfterStress.status})`);

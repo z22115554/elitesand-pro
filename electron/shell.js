@@ -381,6 +381,9 @@ function createElectronShell({
       PORT: String(port),
       OPEN_BROWSER: '0',
       ELITESAND_SHELL: '1',
+      // Production-only remote announcements must never lock the source-tree
+      // Electron shell. The packaged installer deliberately receives `0`.
+      ELITESAND_SHELL_DEVELOPMENT: app.isPackaged ? '0' : '1',
       ELITESAND_DATA_DIR: runtimePaths.dataDir,
       ELITESAND_DOWNLOADS_DIR: runtimePaths.downloadsDir,
       ELITESAND_LOGS_DIR: runtimePaths.logsDir,
