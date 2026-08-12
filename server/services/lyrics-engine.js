@@ -23,10 +23,26 @@ const log = createLogger('Lyrics');
 const APP_USER_AGENT = appUserAgent('lyrics');
 const simplifiedToTraditional = OpenCC.Converter({ from: 'cn', to: 'tw' });
 
+// 日系/華語官方標題常見「中文歌名 English Echo」雙語並列（如「與浪之間 Waves」），
+// 但歌詞資料庫多半只索引其中一種語言。這裡只是多一個查詢候選，不動原始 title 顯示。
+const TRAILING_LATIN_ECHO = /^(.*?)\s+([A-Za-z][A-Za-z0-9'&.,!?-]*(?:\s+[A-Za-z][A-Za-z0-9'&.,!?-]*)*)$/;
+
+function stripTrailingLatinEcho(title) {
+  const match = title.match(TRAILING_LATIN_ECHO);
+  if (!match) return null;
+  const head = match[1].trim();
+  if (head.length < 2 || !/\p{Script=Han}/u.test(head)) return null;
+  return head;
+}
+
 function lyricTitleVariants(title) {
   const original = String(title || '').trim();
+  const variants = [original];
   const traditional = simplifiedToTraditional(original);
-  return traditional && traditional !== original ? [original, traditional] : [original];
+  if (traditional && traditional !== original) variants.push(traditional);
+  const withoutLatinEcho = stripTrailingLatinEcho(original);
+  if (withoutLatinEcho && !variants.includes(withoutLatinEcho)) variants.push(withoutLatinEcho);
+  return variants;
 }
 
 // ─── 時長驗證閾值（±5 秒）───
@@ -592,6 +608,11 @@ class LyricsEngine {
 
       const matchedSong = this.findAppleMusicMatch(searchData, artist, title, duration);
       if (!matchedSong) return null;
+      const matchedAttrs = searchData.resources?.songs?.[matchedSong.id]?.attributes || {};
+      const matchedDuration = matchedAttrs.durationInMillis ? matchedAttrs.durationInMillis / 1000 : 0;
+      const durationVerified = duration > 0 && matchedDuration > 0
+        ? Math.abs(matchedDuration - duration) <= DURATION_TOLERANCE
+        : undefined;
 
       const lyricsUrl = `https://lyrics.paxsenix.org/apple-music/lyrics?id=${matchedSong.id}`;
       const lyricsRes = await fetchWithTimeout(lyricsUrl, {
@@ -603,18 +624,18 @@ class LyricsEngine {
 
       if (lyricsData.ttmlContent) {
         const krcText = parseTTML(lyricsData.ttmlContent);
-        if (krcText) return { lyrics: krcText, type: 'krc', source: 'paxsenix' };
+        if (krcText) return { lyrics: krcText, type: 'krc', source: 'paxsenix', durationVerified };
       }
 
-      if (lyricsData.elrc) return { lyrics: lyricsData.elrc, type: 'lrc', source: 'paxsenix' };
-      if (lyricsData.elrcMultiPerson) return { lyrics: lyricsData.elrcMultiPerson, type: 'lrc', source: 'paxsenix' };
+      if (lyricsData.elrc) return { lyrics: lyricsData.elrc, type: 'lrc', source: 'paxsenix', durationVerified };
+      if (lyricsData.elrcMultiPerson) return { lyrics: lyricsData.elrcMultiPerson, type: 'lrc', source: 'paxsenix', durationVerified };
 
       if (lyricsData.content && Array.isArray(lyricsData.content) && lyricsData.content.length > 0) {
         const krcText = this.paxsenixContentToKrc(lyricsData.content);
-        if (krcText) return { lyrics: krcText, type: 'krc', source: 'paxsenix' };
+        if (krcText) return { lyrics: krcText, type: 'krc', source: 'paxsenix', durationVerified };
       }
 
-      if (lyricsData.plain) return { lyrics: lyricsData.plain, type: 'txt', source: 'paxsenix' };
+      if (lyricsData.plain) return { lyrics: lyricsData.plain, type: 'txt', source: 'paxsenix', durationVerified };
 
       return null;
     } catch (e) {
@@ -658,16 +679,18 @@ class LyricsEngine {
         if (!Array.isArray(results) || results.length === 0) continue;
 
         let filtered = results;
+        let durationVerified;
         if (duration > 0) {
           const withDuration = results.filter(r => r.duration && Math.abs(r.duration - duration) <= DURATION_TOLERANCE);
-          if (withDuration.length > 0) filtered = withDuration;
+          durationVerified = withDuration.length > 0;
+          if (durationVerified) filtered = withDuration;
         }
 
         const synced = filtered.find(r => r.syncedLyrics);
-        if (synced?.syncedLyrics) return { lyrics: synced.syncedLyrics, type: 'lrc', source: 'lrclib' };
+        if (synced?.syncedLyrics) return { lyrics: synced.syncedLyrics, type: 'lrc', source: 'lrclib', durationVerified };
 
         const plain = filtered.find(r => r.plainLyrics);
-        if (plain?.plainLyrics) return { lyrics: plain.plainLyrics, type: 'txt', source: 'lrclib' };
+        if (plain?.plainLyrics) return { lyrics: plain.plainLyrics, type: 'txt', source: 'lrclib', durationVerified };
       } catch { continue; }
     }
 
@@ -698,6 +721,10 @@ class LyricsEngine {
 
         const matchedSong = this.findBestMatch(data.result.songs, artist, title, duration, isCover);
         if (!matchedSong) continue;
+        const matchedDuration = (matchedSong.duration || matchedSong.dt || 0) / 1000;
+        const durationVerified = duration > 0 && matchedDuration > 0
+          ? Math.abs(matchedDuration - duration) <= DURATION_TOLERANCE
+          : undefined;
 
         const lyricUrl = `https://music.163.com/api/song/lyric?id=${matchedSong.id}&lv=1&tv=1`;
         const lyricRes = await fetchWithTimeout(lyricUrl, {
@@ -712,7 +739,7 @@ class LyricsEngine {
         const tlyric = lyricData.tlyric?.lyric || '';
         if (tlyric) lrcText = this.mergeBilingualLrc(lrcText, tlyric);
 
-        return { lyrics: lrcText, type: 'lrc', source: 'netease' };
+        return { lyrics: lrcText, type: 'lrc', source: 'netease', durationVerified };
       } catch { continue; }
     }
 
@@ -778,12 +805,14 @@ class LyricsEngine {
     if (!candidates?.length) return null;
 
     let matched = candidates.find(c => c.productFrom === '官方推荐歌词') || candidates[0];
+    let durationVerified;
     if (duration > 0) {
       const durationMatch = candidates.find(c => {
         const cDuration = c.duration ? c.duration / 1000 : 0;
         return cDuration > 0 && Math.abs(cDuration - duration) <= DURATION_TOLERANCE;
       });
       if (durationMatch) matched = durationMatch;
+      durationVerified = !!durationMatch;
     }
 
     const lrcUrl = `https://lyrics.kugou.com/download?ver=1&client=pc&id=${matched.id}&accesskey=${matched.accesskey}&fmt=krc&lrcid=${matched.lrcid || 0}`;
@@ -796,13 +825,13 @@ class LyricsEngine {
     try {
       const krcContent = Buffer.from(lrcData.content, 'base64');
       const decoded = krcDecode(krcContent);
-      if (decoded) return { lyrics: decoded, type: 'krc', source: 'kugou' };
+      if (decoded) return { lyrics: decoded, type: 'krc', source: 'kugou', durationVerified };
     } catch (e) {
       log.warn('KRC 解碼失敗，嘗試 LRC 降級: ' + e.message);
     }
 
     if (lrcData.lrccontent) {
-      return { lyrics: Buffer.from(lrcData.lrccontent, 'base64').toString('utf-8'), type: 'lrc', source: 'kugou' };
+      return { lyrics: Buffer.from(lrcData.lrccontent, 'base64').toString('utf-8'), type: 'lrc', source: 'kugou', durationVerified };
     }
 
     return null;
@@ -851,6 +880,10 @@ class LyricsEngine {
       }
 
       if (!matchedSong?.songmid) return null;
+      const matchedDuration = matchedSong.interval || 0;
+      const durationVerified = duration > 0 && matchedDuration > 0
+        ? Math.abs(matchedDuration - duration) <= DURATION_TOLERANCE
+        : undefined;
 
       const lyricUrl = `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=${matchedSong.songmid}&g_tk=5381&format=json&inCharset=utf8&outCharset=utf-8&nobase64=1`;
       const lyricRes = await fetchWithTimeout(lyricUrl, {
@@ -869,7 +902,7 @@ class LyricsEngine {
       const trans = lyricData.trans || '';
       if (trans) lrcText = this.mergeBilingualLrc(lrcText, trans);
 
-      return { lyrics: lrcText, type: 'lrc', source: 'qqmusic' };
+      return { lyrics: lrcText, type: 'lrc', source: 'qqmusic', durationVerified };
     } catch (e) {
       log.warn('QQ音樂搜尋失敗: ' + e.message);
       return null;
@@ -940,10 +973,21 @@ class LyricsEngine {
   }
 
   /**
-   * 只供 YouTube 低信心標題校正。歌名必須實際出現在輸入內容，不能只靠歌手或時長猜測，
-   * 避免「楊丞琳 如願」被目錄中另一首楊丞琳歌曲覆蓋。
+   * 只供 YouTube 低信心標題校正，及不分信心高低的官方時長查詢。歌名必須實際出現在輸入內容，
+   * 不能只靠歌手或時長猜測，避免「楊丞琳 如願」被目錄中另一首楊丞琳歌曲覆蓋。
+   * 走 providerHealth 斷路器：Apple 目錄連續失敗/逾時會自動暫停一段時間直接跳過查詢，
+   * 讓匯入照常完成、只是拿不到時長驗證，不會卡住或拖慢正常歌詞輸出。
    */
-  static async resolveAppleMusicMetadata({ artist = '', title = '', rawTitle = '', duration = 0 } = {}) {
+  static async resolveAppleMusicMetadata(params) {
+    const outcome = await providerHealth.execute(
+      'apple-catalog',
+      () => this._resolveAppleMusicMetadataInner(params),
+      { isSuccess: (result) => !!result },
+    );
+    return outcome.status === 'success' || outcome.status === 'miss' ? outcome.result : null;
+  }
+
+  static async _resolveAppleMusicMetadataInner({ artist = '', title = '', rawTitle = '', duration = 0 } = {}) {
     const token = await this.getAppleMusicToken();
     if (!token || !title) return null;
 
@@ -997,7 +1041,12 @@ class LyricsEngine {
       }
       if (score > bestScore) {
         bestScore = score;
-        best = { artist: attrs.artistName || artist, title: attrs.name || title, confidence: Math.min(0.98, score / 100) };
+        best = {
+          artist: attrs.artistName || artist,
+          title: attrs.name || title,
+          confidence: Math.min(0.98, score / 100),
+          durationSec: attrs.durationInMillis > 0 ? attrs.durationInMillis / 1000 : null,
+        };
       }
     }
 
@@ -1167,4 +1216,4 @@ class LyricsEngine {
   }
 }
 
-module.exports = { LyricsEngine, setIo, LYRICS_SOURCE_PRIORITY, cacheEntryIsFresh };
+module.exports = { LyricsEngine, setIo, LYRICS_SOURCE_PRIORITY, cacheEntryIsFresh, DURATION_TOLERANCE };

@@ -18,6 +18,7 @@ const page = readNormalized(path.join(root, 'public/index.html'));
 const css = readNormalized(path.join(root, 'public/css/onboarding-tour.css'));
 const source = readNormalized(path.join(root, 'public/js/onboarding-tour.js'));
 const nav = readNormalized(path.join(root, 'public/js/nav.js'));
+const youtubeImport = readNormalized(path.join(root, 'public/js/app-youtube-import.js'));
 const displayPath = path.join(root, 'public/js/display.js');
 const display = fs.existsSync(displayPath) ? readNormalized(displayPath) : null;
 
@@ -180,6 +181,8 @@ test('all explicit tour i18n keys resolve in all five locales', () => {
 test('FFmpeg readiness flow is fully localized in all five locales', () => {
   const keys = [
     'guide.ffmpegDownload',
+    'guide.ffmpegRecheck',
+    'guide.ffmpegChecking',
     'guide.ffmpegDownloadingButton',
     'guide.ffmpegDownloading',
     'guide.ffmpegDownloadFailed',
@@ -195,8 +198,12 @@ test('FFmpeg readiness flow is fully localized in all five locales', () => {
     });
   }
   ok(page.includes('data-i18n="guide.ffmpegDownload"'), 'FFmpeg download button is not declaratively localized');
+  ok(page.includes('id="ffmpeg-check-btn"') && page.includes('data-i18n="guide.ffmpegRecheck"'), 'Settings FFmpeg recheck button is missing or not localized');
   ok(!nav.includes("ffmpegDownloadBtn.textContent = '下載"), 'FFmpeg button contains a hard-coded Traditional Chinese state');
   ok(nav.includes("updateFfmpegButtonText();\n      updateChecklist()") || nav.includes("refreshReadiness();\n      updateFfmpegButtonText();"), 'FFmpeg button must refresh after a locale change');
+  ok(nav.includes("event.detail?.view === 'general'") && nav.includes('forceRefreshFfmpegReadiness()'), 'Opening Connection & System must force-refresh FFmpeg readiness');
+  ok(nav.includes("window.addEventListener('elitesand:ffmpeg-invalidated'"), 'FFmpeg invalidation event must refresh readiness immediately');
+  ok(youtubeImport.includes("code === 'FFMPEG_MISSING'") && youtubeImport.includes("new CustomEvent('elitesand:ffmpeg-invalidated')"), 'YouTube import must invalidate FFmpeg readiness after a runtime missing-FFmpeg error');
 });
 
 test('welcome, spotlight, leave confirmation, and completion surfaces are accessible dialogs', () => {

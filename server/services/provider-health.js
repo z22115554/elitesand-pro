@@ -21,7 +21,7 @@ class ProviderHealthRegistry {
     return this.providers.get(name);
   }
 
-  async execute(name, task) {
+  async execute(name, task, options = {}) {
     const entry = this._entry(name);
     if (entry.openUntil > this.now()) {
       entry.skipped += 1;
@@ -50,7 +50,10 @@ class ProviderHealthRegistry {
       entry.lastDurationMs = durationMs;
       entry.consecutiveFailures = 0;
       entry.lastError = '';
-      if (result && result.lyrics) {
+      const isSuccess = typeof options.isSuccess === 'function'
+        ? options.isSuccess(result)
+        : !!(result && result.lyrics);
+      if (isSuccess) {
         entry.successes += 1;
         entry.lastSuccessAt = this.now();
         return { status: 'success', result, durationMs };

@@ -38,8 +38,9 @@ const { autoParseLyrics, parseOffset } = require('../services/lrc-parser');
 const requirePin = require('../middleware/require-pin');
 const { isYouTubeUrl } = require('../utils/youtube-url');
 const { classifyImportError } = require('../utils/import-error');
+const { decodeUploadedText } = require('../utils/decode-text');
 const ytdlpCompatibility = require('../services/ytdlp-compatibility');
-const { getSystemCheck } = require('../services/system-check');
+const systemCheck = require('../services/system-check');
 const ffmpegProvider = require('../services/ffmpeg-provider');
 const { createDiagnosticBundle } = require('../services/diagnostic-bundle');
 const runtimeEvidence = require('../services/runtime-evidence');
@@ -143,30 +144,64 @@ router.get('/health', (req, res) => {
 });
 
 router.get('/system-check', async (req, res) => {
-  res.json(await getSystemCheck());
+  res.set('Cache-Control', 'no-store');
+  const force = req.query?.force === '1' || req.query?.force === 'true';
+  res.json(await systemCheck.getSystemCheck({ force }));
 });
 
 // ─── FFmpeg 按需下載（批次 D-1）───
+// 只讀進度，不含本機路徑或敏感資料；前端下載期間輪詢它，避免 100MB+ 下載看起來像卡死。
+router.get('/ffmpeg/download/status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(ffmpegProvider.getDownloadStatus());
+});
+
 // 這條路由會觸發真正的網路下載＋寫入本機檔案，依鐵則 15 必須手動掛 requirePin。
 router.post('/ffmpeg/download', requirePin, async (req, res) => {
   if (ffmpegProvider.isAvailable()) {
     const resolved = ffmpegProvider.resolveFfmpegPaths();
-    return res.json({ ok: true, alreadyAvailable: true, source: resolved.source });
+    systemCheck.clearCache();
+    const refreshed = await systemCheck.getSystemCheck({ force: true });
+    if (refreshed.ffmpeg?.available) {
+      return res.json({
+        ok: true,
+        alreadyAvailable: true,
+        source: resolved.source,
+        version: refreshed.ffmpeg.version || null,
+      });
+    }
+    log.warn('FFmpeg 初步檢查可用，但強制 system-check 失敗，改走重新下載修復');
   }
   try {
     const result = await ffmpegProvider.downloadFfmpeg();
-    res.json({ ok: true, alreadyAvailable: false, ffmpeg: result.ffmpeg });
+    systemCheck.clearCache();
+    const refreshed = await systemCheck.getSystemCheck({ force: true });
+    if (!refreshed.ffmpeg?.available) {
+      const err = new Error('FFmpeg 已下載，但重新驗證仍無法執行');
+      err.ffmpegStage = 'system-check';
+      throw err;
+    }
+    res.json({
+      ok: true,
+      alreadyAvailable: false,
+      ffmpeg: result.ffmpeg,
+      source: result.source || null,
+      version: refreshed.ffmpeg.version || null,
+    });
   } catch (err) {
-    log.error('FFmpeg 下載失敗', err);
-    res.status(502).json({ ok: false, reason: err.message });
+    const stage = err.ffmpegStage || 'unknown';
+    systemCheck.clearCache();
+    log.error(`FFmpeg 下載失敗（stage=${stage}）`, err);
+    res.status(502).json({ ok: false, stage, reason: err.message });
   }
 });
 
 router.get('/ffmpeg/status', (req, res) => {
   const resolved = ffmpegProvider.resolveFfmpegPaths();
+  const available = ffmpegProvider.isAvailable();
   res.json({
-    available: !!resolved,
-    source: resolved?.source || null,
+    available,
+    source: available ? (resolved?.source || null) : null,
     downloadUrl: ffmpegProvider.DOWNLOAD_URL,
   });
 });
@@ -176,7 +211,7 @@ router.get('/ffmpeg/status', (req, res) => {
 router.get('/diagnostics/export', requirePin, async (req, res) => {
   try {
     const bundle = createDiagnosticBundle({
-      systemCheck: await getSystemCheck(),
+      systemCheck: await systemCheck.getSystemCheck(),
       runtimeEvidence: runtimeEvidence.getSnapshot(),
     });
     res.type('application/zip');
@@ -227,7 +262,7 @@ router.post('/usage/settings', requirePin, (req, res) => {
 router.post('/feedback/preview', requirePin, async (req, res) => {
   try {
     const built = feedbackReport.buildReport(req.body || {}, {
-      systemCheck: await getSystemCheck(),
+      systemCheck: await systemCheck.getSystemCheck(),
       runtimeEvidence: runtimeEvidence.getSnapshot(),
     });
     if (!built.ok) return res.status(400).json({ ok: false, errors: built.errors });
@@ -249,7 +284,7 @@ router.post('/feedback/submit', requirePin, async (req, res) => {
   try {
     if (!feedbackClient.isEnabled()) return res.status(503).json({ ok: false, code: 'DISABLED' });
     const built = feedbackReport.buildReport(req.body || {}, {
-      systemCheck: await getSystemCheck(),
+      systemCheck: await systemCheck.getSystemCheck(),
       runtimeEvidence: runtimeEvidence.getSnapshot(),
     });
     if (!built.ok) return res.status(400).json({ ok: false, errors: built.errors });
@@ -682,29 +717,8 @@ router.post('/lyrics/upload', requirePin, lyricsUpload.single('lyrics'), (req, r
     const filePath = req.file.path;
     const ext = path.extname(req.file.originalname).toLowerCase();
 
-    // 嘗試多種編碼讀取
-    let content = '';
-    const encodings = ['utf8', 'utf-8'];
-
-    // 嘗試用 iconv-lite 讀取其他編碼
-    try {
-      const iconv = require('iconv-lite');
-      const rawBuffer = fs.readFileSync(filePath);
-      content = iconv.decode(rawBuffer, 'utf8');
-
-      // 如果出現亂碼特徵，嘗試其他編碼
-      if (content.includes('') || content.includes('ÿþ')) {
-        content = iconv.decode(rawBuffer, 'utf-16le');
-      }
-      if (content.includes('') || content.includes('ÿþ')) {
-        content = iconv.decode(rawBuffer, 'shift_jis');
-      }
-      if (content.includes('') || content.includes('ÿþ')) {
-        content = iconv.decode(rawBuffer, 'gbk');
-      }
-    } catch (e) {
-      content = fs.readFileSync(filePath, 'utf8');
-    }
+    // 猜編碼讀取；UI locale 只用於無 BOM 純 CJK UTF-16 的保守 fallback，不影響 legacy 編碼判定。
+    const content = decodeUploadedText(fs.readFileSync(filePath), req.body?.locale);
 
     if (!content.trim()) {
       // 清理上傳的檔案

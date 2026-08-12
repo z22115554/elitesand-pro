@@ -103,4 +103,8 @@ module.exports = [
   { group: 'live-clips', raw: '【煌Kirali歌回剪輯】看著我的眼睛說｜張遠｜中文字幕', title: '看著我的眼睛說', artist: '張遠' },
   { group: 'live-clips', raw: '【厄倫蒂兒 Earendel】太陽與地球｜盧廣仲【中文字幕】【歌回剪輯】', title: '太陽與地球', artist: '盧廣仲' },
   { group: 'live-clips', raw: '【官方歌回剪輯】我好想你／蘇打綠 sodagreen｜cover by 森森鈴蘭 Lily Linglan', title: '我好想你', artist: '蘇打綠 sodagreen' },
+
+  // 轉貼/合輯頻道常見的音質行銷字樣（無損音樂／FLAC／純享…），混進標題會同時污染顯示歌名跟
+  // 歌詞搜尋 query（見 issue #9：使用者匯入這支影片，播放的卻是別首歌的歌詞）。
+  { group: 'quality-tags', raw: '張宇 傘下 無損音樂FLAC 歌詞LYRICS 純享', title: '傘下', artist: '張宇' },
 ];

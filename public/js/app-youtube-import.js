@@ -23,6 +23,9 @@
   const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : fallbackT(key, vars);
   const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
   const currentLocale = () => window.I18n?.current?.() || 'zh-TW';
+  const notifyFfmpegInvalidated = (code) => {
+    if (code === 'FFMPEG_MISSING') window.dispatchEvent(new CustomEvent('elitesand:ffmpeg-invalidated'));
+  };
   const formatNumber = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? new Intl.NumberFormat(currentLocale()).format(number) : '—';
@@ -625,6 +628,7 @@
           const error = new Error(`${errorMsg}${recovery}`);
           error.code = data.code || 'IMPORT_FAILED';
           error.retryable = data.retryable !== false;
+          notifyFfmpegInvalidated(error.code);
           AppShared.showToast(t('import.error.importFailed', { message: error.message }), error.code === 'IMPORT_CANCELLED' ? 'info' : 'error');
           fail++;
           updateJob(job, {
@@ -635,6 +639,7 @@
         }
       } catch (err) {
         const intentionallyStopped = err.code === 'IMPORT_CANCELLED' || err.code === 'IMPORT_SKIPPED';
+        notifyFfmpegInvalidated(err.code);
         if (!intentionallyStopped) AppShared.showToast(t('import.error.importFailed', { message: err.message }), 'error');
         if (!intentionallyStopped) fail++;
         updateJob(job, {

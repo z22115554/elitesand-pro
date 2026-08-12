@@ -33,12 +33,19 @@ async function getSystemCheck(options = {}) {
   const now = options.now || (() => Date.now());
   const compatibility = options.compatibility || ytdlpCompatibility;
   const nowMs = now();
-  if (!options.force && cache && nowMs - cache.checkedAt < CACHE_MS) {
+  const cachedDownloadedPairStillExists = !cache
+    || cache.ffmpegSource !== 'downloaded'
+    || !cache.payload?.ffmpeg?.available
+    || ffmpegProvider.hasDownloadedPair();
+  if (!options.force && cache && nowMs - cache.checkedAt < CACHE_MS && cachedDownloadedPairStillExists) {
     return { ...cache.payload, ytdlpCompatibility: compatibility.getStatus() };
   }
+  if (!cachedDownloadedPairStillExists) cache = null;
+
+  const resolvedFfmpeg = ffmpegProvider.resolveFfmpegPaths();
   const [ytdlp, ffmpeg] = await Promise.all([
     toolStatus('yt-dlp', ['--version'], options),
-    toolStatus(ffmpegProvider.getFfmpegPath(), ['-version'], options),
+    toolStatus(resolvedFfmpeg?.ffmpeg || 'ffmpeg', ['-version'], options),
   ]);
   const payload = {
     appVersion: APP_VERSION,
@@ -47,10 +54,16 @@ async function getSystemCheck(options = {}) {
     ytdlpCompatibility: compatibility.getStatus(),
     ffmpeg: { ...ffmpeg, downloadable: !ffmpeg.available },
   };
-  cache = { checkedAt: nowMs, payload };
+  cache = {
+    checkedAt: nowMs,
+    payload,
+    // 只記來源類型，不保存/回傳本機路徑。若下載版 pair 在程式執行期間被刪除，
+    // 下一次讀 cache 就能用便宜的 existsSync 立即讓 60 秒快取失效。
+    ffmpegSource: resolvedFfmpeg?.source || null,
+  };
   return payload;
 }
 
-function resetForTests() { cache = null; }
+function clearCache() { cache = null; }
 
-module.exports = { getSystemCheck, toolStatus, _resetForTests: resetForTests };
+module.exports = { getSystemCheck, toolStatus, clearCache, _resetForTests: clearCache };

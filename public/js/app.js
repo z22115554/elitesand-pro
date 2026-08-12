@@ -47,6 +47,11 @@
     playlist = reconciled.playlist;
     currentTrackIndex = reconciled.currentTrackIndex;
     AppShared.renderPlaylist();
+    // playTrack() 換歌當下，清單裡那一列還沒被這次 sync 帶來的完整歌詞 hydrate，「歌詞純文字」
+    // 預覽框只能先樂觀顯示「此歌曲無歌詞」；hydrate 完成後這裡要補畫一次，不然框會卡在舊字樣，
+    // 明明整首都有逐字歌詞（OBS 那邊靠 currentTrack 直接播動畫，不受這個框影響）也還是顯示沒有。
+    const nowCurrent = currentTrackIndex >= 0 ? playlist[currentTrackIndex] : null;
+    if (nowCurrent) renderLyricsPreview(nowCurrent.lyrics);
   }
 
   // 對外暴露當前歌曲，供歌詞選擇器（lyric-extras.js）使用

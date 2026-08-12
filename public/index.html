@@ -1333,7 +1333,10 @@
               </div>
               <div class="switch-row mt-8">
                 <div><div class="label">FFmpeg（音訊轉檔）</div><div class="sub" id="ffmpeg-status">尚未檢查</div></div>
-                <button id="ffmpeg-download-btn" class="btn btn-sm" type="button" hidden>下載 FFmpeg</button>
+                <div class="ffmpeg-actions">
+                  <button id="ffmpeg-check-btn" class="btn btn-sm" type="button" data-i18n="guide.ffmpegRecheck">重新檢查</button>
+                  <button id="ffmpeg-download-btn" class="btn btn-sm" type="button" hidden>下載 FFmpeg</button>
+                </div>
               </div>
             <p id="ytdlp-msg" class="val mt-10 pre-line" hidden></p>
             </div>

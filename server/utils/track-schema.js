@@ -7,6 +7,10 @@ const MAX_PLAYLIST_SIZE = 500;
 const MAX_LYRIC_LINES = 5000;
 const MAX_WORDS_PER_LINE = 1000;
 const MAX_LYRICS_LENGTH = 1024 * 1024;
+// 官方 MV 常見的大段片頭（跳舞畫面、口白、企劃卡）可以輕鬆超過 10 秒；±10s 對真實內容太緊，
+// 只是防呆用的上限，不是「合理的歌曲偏移」上限，所以放寬到 ±5 分鐘。offset:adjust／offset:set
+// （server/routes/handlers/lyrics.js）與 deck-commands.js 都要 import 同一個值，不要各自硬寫常數。
+const MAX_OFFSET_MS = 300000;
 
 function text(value, max = 500, fallback = '') {
   if (value === undefined || value === null) return fallback;
@@ -94,6 +98,9 @@ function sanitizeTrack(value) {
     isCover: value.isCover === true,
     artistConfidence: finite(value.artistConfidence, 0, 0, 1),
     needsArtistConfirmation: value.needsArtistConfirmation === true,
+    // true＝有來源驗到官方時長吻合；false＝有查到候選但時長對不上（可能需手動校正字幕起始點）；
+    // null＝沒有可驗證的資料（來源不支援本機時長比對，或影片本身沒有時長）。
+    lyricsDurationVerified: typeof value.lyricsDurationVerified === 'boolean' ? value.lyricsDurationVerified : null,
     artistCandidates: Array.isArray(value.artistCandidates) ? value.artistCandidates.slice(0, 10).map(v => text(v, 500)).filter(Boolean) : [],
     album: text(value.album, 500),
     duration: finite(value.duration, 0, 0, 24 * 60 * 60),
@@ -112,8 +119,8 @@ function sanitizeTrack(value) {
       : null,
     pitchShift: finite(value.pitchShift, 0, -12, 12),
     playbackRate: finite(value.playbackRate, 1, 0.5, 1.5),
-    offset: finite(value.offset, 0, -10000, 10000),
-    lrcOffset: finite(value.lrcOffset, 0, -10000, 10000),
+    offset: finite(value.offset, 0, -MAX_OFFSET_MS, MAX_OFFSET_MS),
+    lrcOffset: finite(value.lrcOffset, 0, -MAX_OFFSET_MS, MAX_OFFSET_MS),
     autoplay: value.autoplay !== false,
     manualLyrics: sanitizeManualLyrics(value.manualLyrics),
   };
@@ -169,6 +176,7 @@ module.exports = {
   sanitizeJsonObject,
   assignFreshEntryIds,
   ensureEntryIds,
+  MAX_OFFSET_MS,
   MAX_PLAYLIST_SIZE,
   MAX_LYRICS_LENGTH,
 };

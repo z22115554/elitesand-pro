@@ -7,7 +7,7 @@
 const { createLogger } = require('../../utils/logger');
 const { LyricsEngine } = require('../../services/lyrics-engine');
 const { addRomanization, needsRomanization } = require('../../services/romanizer');
-const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH } = require('../../utils/track-schema');
+const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS } = require('../../utils/track-schema');
 
 const log = createLogger('Socket');
 
@@ -76,11 +76,10 @@ function registerLyricsHandlers(io, socket, ctx) {
       return;
     }
 
-    // 將 delta 限制在 ±10s 範圍內
-    const clampedDelta = Math.max(-10000, Math.min(10000, delta));
-
+    // 限制的是「調整後的總偏移」，不是單次 delta——先前只夾住單次 delta，累積多次小幅微調
+    // （±0.1s／±0.5s 按鈕）就能繞過上限，跟「對齊第一句」一次到位卻被砍掉的結果不一致。
     const currentOffset = trackOffsets.get(trackId) || 0;
-    const newOffset = currentOffset + clampedDelta;
+    const newOffset = Math.max(-MAX_OFFSET_MS, Math.min(MAX_OFFSET_MS, currentOffset + delta));
     trackOffsets.set(trackId, newOffset);
 
     // 如果是當前播放的歌曲，更新即時 offset
@@ -88,7 +87,7 @@ function registerLyricsHandlers(io, socket, ctx) {
       playState.currentOffset = newOffset;
     }
 
-    log.info(`Offset 調整: ${trackId}: ${currentOffset}ms → ${newOffset}ms (Δ${clampedDelta}ms)`);
+    log.info(`Offset 調整: ${trackId}: ${currentOffset}ms → ${newOffset}ms (Δ${delta}ms)`);
 
     io.emit('offset:update', { trackId, offset: newOffset });
     broadcastState();
@@ -109,8 +108,7 @@ function registerLyricsHandlers(io, socket, ctx) {
       return;
     }
 
-    // 將 offset 限制在 ±10000ms 範圍內
-    const clampedOffset = Math.max(-10000, Math.min(10000, offset));
+    const clampedOffset = Math.max(-MAX_OFFSET_MS, Math.min(MAX_OFFSET_MS, offset));
     trackOffsets.set(trackId, clampedOffset);
 
     if (playState.currentTrack && playState.currentTrack.id === trackId) {

@@ -482,6 +482,99 @@ test('LRC offset 標籤（含 + 號寫法）', () => {
   eq(lrcParser.parseLrc('[offset:200]\n[00:10.00]歌詞').offset, 200);
 });
 
+test('歌詞上傳猜編碼：五語常見編碼都要正確還原（issue #9 回歸測試）', () => {
+  const { decodeUploadedText } = require('../server/utils/decode-text');
+  const iconv = require('iconv-lite');
+
+  // 原本的判斷式是 content.includes('')（空字串對任何字串恆為 true），導致不管上傳檔案原本
+  // 是什麼編碼，一路被強制級聯改判、最後蓋成 gbk——連正常的 UTF-8 上傳都會變亂碼。
+  const utf8Text = '[00:01.00]測試歌詞 test lyric';
+  eq(decodeUploadedText(Buffer.from(utf8Text, 'utf8')), utf8Text);
+
+  // 使用者實際回報的情境：kugeci.com 這類華語歌詞站常見輸出 GBK 編碼的 .lrc。
+  const gbkText = '[00:01.00]傘下 這一刻最好能更緩慢';
+  eq(decodeUploadedText(iconv.encode(gbkText, 'gbk')), gbkText);
+
+  // EUC-KR / GBK 的位元組範圍高度重疊；補韓文候選後不能反過來把正常簡中誤判成韓文。
+  const simplifiedGbkText = '[00:01.00]简体中文歌词 时间都去哪儿了';
+  eq(decodeUploadedText(iconv.encode(simplifiedGbkText, 'gbk')), simplifiedGbkText);
+
+  const big5Text = '[00:01.00]臺灣繁體歌詞 測試資料';
+  eq(decodeUploadedText(iconv.encode(big5Text, 'big5')), big5Text);
+
+  const big5TaggedText = '[ar:歌手]\r\n[ti:歌曲]\r\n[00:01.00]臺灣繁體歌詞 愛情夢想雨天風聲';
+  eq(decodeUploadedText(iconv.encode(big5TaggedText, 'big5'), 'zh-TW'), big5TaggedText);
+
+  const shiftJisText = '[00:01.00]残響散歌 日本語 テスト';
+  eq(decodeUploadedText(iconv.encode(shiftJisText, 'shift_jis')), shiftJisText);
+
+  const shiftJisTaggedText = '[ar:Aimer]\r\n[ti:残響散歌]\r\n[00:01.00]誰が袖に咲く幻花';
+  eq(decodeUploadedText(iconv.encode(shiftJisTaggedText, 'shift_jis'), 'ja'), shiftJisTaggedText);
+
+  const koreanText = '[00:01.00]한국어 가사 테스트';
+  eq(decodeUploadedText(iconv.encode(koreanText, 'euc-kr')), koreanText);
+  eq(decodeUploadedText(iconv.encode(koreanText, 'cp949')), koreanText);
+
+  const koreanTaggedText = '[ar:가수]\r\n[ti:노래]\r\n[00:01.00]한국어 가사 사랑해 안녕 고마워';
+  eq(decodeUploadedText(iconv.encode(koreanTaggedText, 'cp949'), 'ko'), koreanTaggedText);
+
+  const utf16Text = '[00:01.00]Unicode 測試';
+  eq(decodeUploadedText(iconv.encode(utf16Text, 'utf-16le', { addBOM: true })), utf16Text);
+
+  const utf16BeText = '[00:01.00]五語 Unicode テスト 한국어';
+  const utf16BeBom = Buffer.concat([Buffer.from([0xfe, 0xff]), iconv.encode(utf16BeText, 'utf16-be')]);
+  eq(decodeUploadedText(utf16BeBom), utf16BeText);
+
+  // 有些編輯器輸出 UTF-16 卻不帶 BOM；LRC/SRT 的 ASCII 時間碼足以安全判定 LE/BE 方向。
+  const bomlessUtf16Text = '[00:01.00]繁中 简中 日本語 한국어 English';
+  eq(decodeUploadedText(iconv.encode(bomlessUtf16Text, 'utf-16le')), bomlessUtf16Text);
+  eq(decodeUploadedText(iconv.encode(bomlessUtf16Text, 'utf16-be')), bomlessUtf16Text);
+
+  // 純文字 TXT 沒有時間碼/NUL 可利用時，用 UI locale 作低權重提示，避免五語無 BOM UTF-16 變亂碼。
+  const bomlessPlainTextCases = [
+    ['zh-TW', '臺灣繁體歌詞 我想念你'],
+    ['zh-CN', '简体中文歌词 我想念你'],
+    ['ja', '残響散歌 君の声が聞こえる'],
+    ['ko', '한국어 가사 너의 목소리가 들려'],
+  ];
+  for (const [locale, text] of bomlessPlainTextCases) {
+    eq(decodeUploadedText(iconv.encode(text, 'utf-16le'), locale), text);
+    eq(decodeUploadedText(iconv.encode(text, 'utf16-be'), locale), text);
+  }
+
+  // 極短純 CJK TXT 也覆蓋常見兩三字案例；一字且無 BOM 的跨編碼資料在位元組層可能天生歧義。
+  const shortBomlessCases = [
+    ['zh-TW', '雨天'],
+    ['zh-CN', '梦想'],
+    ['ja', '雨の日'],
+    ['ko', '안녕'],
+  ];
+  for (const [locale, text] of shortBomlessCases) {
+    eq(decodeUploadedText(iconv.encode(text, 'utf-16le'), locale), text);
+    eq(decodeUploadedText(iconv.encode(text, 'utf16-be'), locale), text);
+  }
+
+  // UI 語言不等於歌曲語言：legacy 編碼判定不可被介面語系帶歪。
+  const crossLocaleLegacyCases = [
+    ['zh-TW', '残響散歌 君の声が聞こえる', 'shift_jis'],
+    ['zh-CN', '残響散歌 君の声が聞こえる', 'shift_jis'],
+    ['ja', '한국어 가사 사랑해 안녕 고마워', 'cp949'],
+    ['zh-TW', '한국어 가사 사랑해 안녕 고마워', 'euc-kr'],
+    ['ko', '臺灣繁體歌詞 愛情夢想雨天風聲', 'big5'],
+    ['ko', '臺灣繁體歌詞', 'big5'],
+    ['ko', '简体中文歌词 时间都去哪儿了', 'gbk'],
+    ['ko', '밤하늘의 별을 바라봐', 'cp949'],
+    ['zh-TW', '君の声が聞こえる', 'shift_jis'],
+    ['zh-CN', '夜空に輝く星', 'shift_jis'],
+    ['ja', '简体中文歌词 时间都去哪儿了', 'gbk'],
+  ];
+  for (const [uiLocale, text, encoding] of crossLocaleLegacyCases) {
+    eq(decodeUploadedText(iconv.encode(text, encoding), uiLocale), text);
+    const tagged = `[ar:Artist]\r\n[ti:Song]\r\n[00:01.00]${text}`;
+    eq(decodeUploadedText(iconv.encode(tagged, encoding), uiLocale), tagged);
+  }
+});
+
 // ═══════════════════════════════════════════
 console.log('\n📦 4. Stream Deck HTTP 指令 API (socket-handler)');
 // ═══════════════════════════════════════════
@@ -817,12 +910,79 @@ testAsync('診斷包只含已遮蔽的健康資訊、直播連線證據與日誌
     eq(check.ytdlp.available, true);
     eq(check.ffmpeg.available, true);
 
+    // FFmpeg 下載完成後會立刻 clearCache + force check；這裡保護「60 秒舊快取
+    // 讓 UI 明明下載成功卻仍顯示找不到 FFmpeg」的回歸。
+    systemCheck.clearCache();
+    let ffmpegHealthy = false;
+    let toolRuns = 0;
+    const cacheOptions = {
+      compatibility: { getStatus: () => ({ state: 'ok', message: 'metadata only' }) },
+      execFileImpl: async (command) => {
+        toolRuns++;
+        if (command === 'yt-dlp') return { stdout: '2026.07\n', stderr: '' };
+        if (!ffmpegHealthy) throw new Error('broken ffmpeg');
+        return { stdout: 'ffmpeg version repaired\n', stderr: '' };
+      },
+      now: () => 2000,
+    };
+    const beforeRepair = await systemCheck.getSystemCheck(cacheOptions);
+    eq(beforeRepair.ffmpeg.available, false, '修復前應該記錄 FFmpeg 不可用：');
+    const runsAfterFirstCheck = toolRuns;
+    ffmpegHealthy = true;
+    const staleCheck = await systemCheck.getSystemCheck(cacheOptions);
+    eq(staleCheck.ffmpeg.available, false, '未清快取時應仍是舊狀態，證明測試確實覆蓋 cache：');
+    eq(toolRuns, runsAfterFirstCheck, '命中 60 秒快取時不應重新執行工具：');
+    systemCheck.clearCache();
+    const afterRepair = await systemCheck.getSystemCheck(cacheOptions);
+    eq(afterRepair.ffmpeg.available, true, '下載流程清除快取後必須立即看到修復後 FFmpeg：');
+
+    // 程式執行期間若使用者/防毒把 data/bin 的其中一個檔案刪掉，不能等 60 秒 cache 才更新。
+    // cache 只要記得上次來源是 downloaded，就應在每次命中前用 existsSync 等級的便宜檢查淘汰舊狀態。
+    const ffmpegProviderForCacheTest = require('../server/services/ffmpeg-provider');
+    const originalResolveFfmpegPaths = ffmpegProviderForCacheTest.resolveFfmpegPaths;
+    const originalHasDownloadedPair = ffmpegProviderForCacheTest.hasDownloadedPair;
+    let downloadedPairExists = true;
+    let runtimeChecks = 0;
+    try {
+      ffmpegProviderForCacheTest.resolveFfmpegPaths = () => downloadedPairExists
+        ? { source: 'downloaded', ffmpeg: 'C:/fake/ffmpeg.exe', ffprobe: 'C:/fake/ffprobe.exe' }
+        : null;
+      ffmpegProviderForCacheTest.hasDownloadedPair = () => downloadedPairExists;
+      systemCheck.clearCache();
+      const deletionOptions = {
+        compatibility: { getStatus: () => ({ state: 'ok', message: 'metadata only' }) },
+        execFileImpl: async (command) => {
+          runtimeChecks++;
+          if (command === 'yt-dlp') return { stdout: '2026.07\n', stderr: '' };
+          if (downloadedPairExists) return { stdout: 'ffmpeg version downloaded\n', stderr: '' };
+          throw new Error('ffmpeg deleted while app is running');
+        },
+        now: () => 3000,
+      };
+      const beforeDelete = await systemCheck.getSystemCheck(deletionOptions);
+      eq(beforeDelete.ffmpeg.available, true, '刪除前下載版 FFmpeg 應為可用：');
+      const checksBeforeDelete = runtimeChecks;
+      downloadedPairExists = false;
+      const afterDelete = await systemCheck.getSystemCheck(deletionOptions);
+      eq(afterDelete.ffmpeg.available, false, '下載版 pair 消失後下一次檢查應立即淘汰舊 cache：');
+      ok(runtimeChecks > checksBeforeDelete, 'pair 消失時必須真的重跑工具檢查，而不是沿用 60 秒舊 cache：');
+    } finally {
+      ffmpegProviderForCacheTest.resolveFfmpegPaths = originalResolveFfmpegPaths;
+      ffmpegProviderForCacheTest.hasDownloadedPair = originalHasDownloadedPair;
+      systemCheck.clearCache();
+    }
+
     const root = path.join(__dirname, '..');
     const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+    const nav = fs.readFileSync(path.join(root, 'public/js/nav.js'), 'utf8');
     const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
     const frontend = fs.readFileSync(path.join(root, 'public/js/app-diagnostics.js'), 'utf8');
     ok(api.includes("router.get('/diagnostics/export', requirePin"));
     ok(api.includes("router.post('/diagnostics/reliability/reset', requirePin"));
+    ok(api.includes("req.query?.force === '1'"), 'system-check API 必須支援手動強制跳過 cache：');
+    ok(api.includes("res.set('Cache-Control', 'no-store')"), 'system-check 不可再被瀏覽器 HTTP cache 留住舊狀態：');
+    ok(nav.includes("'/api/system-check?force=1'"), '重新檢查按鈕必須呼叫強制 system-check：');
+    ok(nav.includes("{ cache: 'no-store' }"), '前端 system-check fetch 也應明確停用 HTTP cache：');
     ok(page.includes('diagnostic-export-btn'));
     ok(page.includes('reliability-reset-btn'));
     ok(frontend.includes("PinAuth.fetchWithPin('/api/diagnostics/export'"));
@@ -4436,6 +4596,32 @@ test('offset:set 會立即持久化，歌曲移出清單後重開程式仍可恢
   eq(persisted, 1, 'offset:set 不可只留在記憶體: ');
 });
 
+test('offset:adjust 一次到位的大偏移，跟分好幾次小幅微調的累積結果一致（都不再被單次 delta 誤夾在 10s）', () => {
+  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
+  const { MAX_OFFSET_MS } = require('../server/utils/track-schema');
+  const events = new Map();
+  const trackOffsets = new Map();
+  const ctx = {
+    playState: { currentTrack: null }, trackOffsets, manualLyricsCache: new Map(),
+    persistState() {}, broadcastState() {},
+  };
+  registerLyricsHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);
+
+  // 模擬「對齊第一句」：MV 前奏 33 秒，一次送出 -33000ms 的 delta。
+  events.get('offset:adjust')({ trackId: 'mv-long-intro', delta: -33000 });
+  eq(trackOffsets.get('mv-long-intro'), -33000, '單次大偏移不該被砍到只剩 10s: ');
+
+  // 模擬使用者連點 -0.5s 66 次達到一樣的總量，兩種方式的最終結果必須相同。
+  for (let i = 0; i < 66; i++) events.get('offset:adjust')({ trackId: 'mv-nudged', delta: -500 });
+  eq(trackOffsets.get('mv-nudged'), -33000);
+
+  // 總偏移仍有上限（防呆，不是拿掉限制），且 adjust／set 用同一個常數，超過會被夾住而不是任意暴衝。
+  events.get('offset:adjust')({ trackId: 'mv-extreme', delta: -(MAX_OFFSET_MS + 999999) });
+  eq(trackOffsets.get('mv-extreme'), -MAX_OFFSET_MS);
+  events.get('offset:set')({ trackId: 'mv-extreme-2', offset: MAX_OFFSET_MS + 999999 });
+  eq(trackOffsets.get('mv-extreme-2'), MAX_OFFSET_MS);
+});
+
 test('同 id 歌曲重新加入後播放時，會套回保留的手動歌詞與 offset', () => {
   const registerPlaybackHandlers = require('../server/routes/handlers/playback');
   const libraryStore = require('../server/services/library-store');
@@ -5742,6 +5928,27 @@ test('極短非歌曲影片不做 Apple Music 歌手猜測', () => {
 test('一般官方歌曲影片：結構化 metadata 優先', () => {
   const x = AudioProcessor.resolveTrackIdentity({ title: 'Uploader - Wrong', track: '夜に駆ける', artist: 'YOASOBI', uploader: 'Label' });
   eq(x.title, '夜に駆ける'); eq(x.artist, 'YOASOBI');
+});
+test('結構化 metadata 本身填反時（track=歌手、artist=歌名），命中已知歌手清單會調正方向', () => {
+  const x = AudioProcessor.resolveTrackIdentity({ title: 'YOASOBI《夜に駆ける》Official Music Video', track: 'YOASOBI', artist: '夜に駆ける' });
+  eq(x.artist, 'YOASOBI'); eq(x.title, '夜に駆ける');
+});
+test('影片夠長就一律查 Apple Music 官方時長，不再受信心分數限制', () => {
+  ok(AudioProcessor.shouldResolveAppleMetadata({ duration: 213 }, { confidence: 1 }, false));
+});
+test('Apple Music metadata 經 provider health 包裝後仍保留非 lyrics 型成功結果', async () => {
+  const original = LyricsEngine._resolveAppleMusicMetadataInner;
+  try {
+    LyricsEngine._resolveAppleMusicMetadataInner = async () => ({
+      artist: 'Aimer', title: '残響散歌', confidence: 0.98, durationSec: 184.898,
+    });
+    const result = await LyricsEngine.resolveAppleMusicMetadata({ artist: 'Aimer', title: '残響散歌' });
+    eq(result.artist, 'Aimer');
+    eq(result.title, '残響散歌');
+    eq(result.durationSec, 184.898);
+  } finally {
+    LyricsEngine._resolveAppleMusicMetadataInner = original;
+  }
 });
 test('標題含歌手與歌名：可正確拆解', () => {
   const x = AudioProcessor.resolveTrackIdentity({ title: 'Aimer - 残響散歌' }); eq(x.artist, 'Aimer'); eq(x.title, '残響散歌');
@@ -8837,6 +9044,159 @@ console.log('\n🌐 17. M6.1 介面語系層');
   test('FFmpeg 供應：commandExistsOnPath 對已知存在／不存在的指令行為正確', () => {
     ok(ffmpegProvider.commandExistsOnPath('node'), 'node 本身一定在 PATH 上（測試就是這樣跑起來的）：');
     ok(!ffmpegProvider.commandExistsOnPath('this-command-definitely-does-not-exist-xyz123'), '不存在的指令應回傳 false：');
+  });
+
+  test('FFmpeg 供應：available 必須要求 ffmpeg 與 ffprobe 都能真的執行，不可只看檔案存在', () => {
+    const calls = [];
+    const validation = ffmpegProvider.validateFfmpegPair(
+      { ffmpeg: 'C:/fake/ffmpeg.exe', ffprobe: 'C:/fake/ffprobe.exe' },
+      {
+        spawnSyncImpl: (command, args) => {
+          calls.push({ command, args });
+          return { status: command.endsWith('ffmpeg.exe') ? 0 : 1, error: null };
+        },
+      },
+    );
+    eq(validation.ffmpegOk, true, 'ffmpeg 可執行時應通過自己的檢查：');
+    eq(validation.ffprobeOk, false, 'ffprobe 壞掉時必須明確失敗：');
+    eq(validation.ok, false, '只有一半能執行絕不能視為 FFmpeg 已就緒：');
+    eq(calls.length, 2, '必須同時驗證 ffmpeg 與 ffprobe：');
+    ok(calls.every((call) => call.args[0] === '-version'), '驗證只允許執行唯讀的 -version：');
+  });
+
+  test('FFmpeg 供應：下載快取只有 ffmpeg.exe、缺 ffprobe.exe 時不可當成 downloaded pair', () => {
+    const originalConfigPath = loadConfig.ffmpegPath;
+    const originalFfmpeg = fs.existsSync(ffmpegProvider.FFMPEG_EXE) ? fs.readFileSync(ffmpegProvider.FFMPEG_EXE) : null;
+    const originalFfprobe = fs.existsSync(ffmpegProvider.FFPROBE_EXE) ? fs.readFileSync(ffmpegProvider.FFPROBE_EXE) : null;
+    try {
+      loadConfig.ffmpegPath = '';
+      fs.mkdirSync(ffmpegProvider.BIN_DIR, { recursive: true });
+      fs.writeFileSync(ffmpegProvider.FFMPEG_EXE, 'partial-install');
+      fs.rmSync(ffmpegProvider.FFPROBE_EXE, { force: true });
+      const resolved = ffmpegProvider.resolveFfmpegPaths();
+      ok(!resolved || resolved.source !== 'downloaded', '半套下載不可被當成已安裝完成：');
+    } finally {
+      loadConfig.ffmpegPath = originalConfigPath;
+      if (originalFfmpeg) fs.writeFileSync(ffmpegProvider.FFMPEG_EXE, originalFfmpeg);
+      else fs.rmSync(ffmpegProvider.FFMPEG_EXE, { force: true });
+      if (originalFfprobe) fs.writeFileSync(ffmpegProvider.FFPROBE_EXE, originalFfprobe);
+      else fs.rmSync(ffmpegProvider.FFPROBE_EXE, { force: true });
+    }
+  });
+
+  test('FFmpeg 供應：替換交易可回滾，避免只換成功一半就破壞原本 pair', () => {
+    const backupFfmpeg = `${ffmpegProvider.FFMPEG_EXE}.previous`;
+    const backupFfprobe = `${ffmpegProvider.FFPROBE_EXE}.previous`;
+    const tmpFfmpeg = path.join(ffmpegProvider.BIN_DIR, 'ffmpeg.transaction-test.exe');
+    const tmpFfprobe = path.join(ffmpegProvider.BIN_DIR, 'ffprobe.transaction-test.exe');
+    fs.mkdirSync(ffmpegProvider.BIN_DIR, { recursive: true });
+    fs.rmSync(backupFfmpeg, { force: true });
+    fs.rmSync(backupFfprobe, { force: true });
+    fs.writeFileSync(ffmpegProvider.FFMPEG_EXE, 'old-ffmpeg');
+    fs.writeFileSync(ffmpegProvider.FFPROBE_EXE, 'old-ffprobe');
+    fs.writeFileSync(tmpFfmpeg, 'new-ffmpeg');
+    fs.writeFileSync(tmpFfprobe, 'new-ffprobe');
+
+    const transaction = ffmpegProvider._beginPairInstall(tmpFfmpeg, tmpFfprobe);
+    eq(fs.readFileSync(ffmpegProvider.FFMPEG_EXE, 'utf8'), 'new-ffmpeg');
+    eq(fs.readFileSync(ffmpegProvider.FFPROBE_EXE, 'utf8'), 'new-ffprobe');
+    transaction.rollback();
+    eq(fs.readFileSync(ffmpegProvider.FFMPEG_EXE, 'utf8'), 'old-ffmpeg', 'rollback 要恢復舊 ffmpeg：');
+    eq(fs.readFileSync(ffmpegProvider.FFPROBE_EXE, 'utf8'), 'old-ffprobe', 'rollback 要恢復舊 ffprobe：');
+    fs.rmSync(ffmpegProvider.FFMPEG_EXE, { force: true });
+    fs.rmSync(ffmpegProvider.FFPROBE_EXE, { force: true });
+    fs.rmSync(backupFfmpeg, { force: true });
+    fs.rmSync(backupFfprobe, { force: true });
+  });
+
+  test('FFmpeg 供應：上次若死在半套替換，下一次交易會先整組恢復舊版', () => {
+    const backupFfmpeg = `${ffmpegProvider.FFMPEG_EXE}.previous`;
+    const backupFfprobe = `${ffmpegProvider.FFPROBE_EXE}.previous`;
+    const tmpFfmpeg = path.join(ffmpegProvider.BIN_DIR, 'ffmpeg.recovery-test.exe');
+    const tmpFfprobe = path.join(ffmpegProvider.BIN_DIR, 'ffprobe.recovery-test.exe');
+    fs.mkdirSync(ffmpegProvider.BIN_DIR, { recursive: true });
+    fs.writeFileSync(backupFfmpeg, 'old-ffmpeg');
+    fs.writeFileSync(backupFfprobe, 'old-ffprobe');
+    fs.writeFileSync(ffmpegProvider.FFMPEG_EXE, 'half-installed-new-ffmpeg');
+    fs.rmSync(ffmpegProvider.FFPROBE_EXE, { force: true });
+    fs.writeFileSync(tmpFfmpeg, 'newer-ffmpeg');
+    fs.writeFileSync(tmpFfprobe, 'newer-ffprobe');
+
+    const transaction = ffmpegProvider._beginPairInstall(tmpFfmpeg, tmpFfprobe);
+    transaction.rollback();
+    eq(fs.readFileSync(ffmpegProvider.FFMPEG_EXE, 'utf8'), 'old-ffmpeg', '半套交易要先恢復舊 ffmpeg：');
+    eq(fs.readFileSync(ffmpegProvider.FFPROBE_EXE, 'utf8'), 'old-ffprobe', '半套交易要先恢復舊 ffprobe：');
+    fs.rmSync(ffmpegProvider.FFMPEG_EXE, { force: true });
+    fs.rmSync(ffmpegProvider.FFPROBE_EXE, { force: true });
+    fs.rmSync(backupFfmpeg, { force: true });
+    fs.rmSync(backupFfprobe, { force: true });
+  });
+
+  test('FFmpeg 供應：BtbN checksums.sha256 會精確挑出目標 Windows LGPL zip 的雜湊', () => {
+    const source = ffmpegProvider.DOWNLOAD_SOURCES.find((item) => item.id === 'btbn');
+    ok(source && source.checksumFile, 'BtbN 來源必須指定 checksum 檔名：');
+    const wanted = 'a'.repeat(64);
+    const other = 'b'.repeat(64);
+    const checksum = Buffer.from(`${other}  some-other-build.zip\n${wanted}  ${source.checksumFile}\n`, 'utf8');
+    eq(ffmpegProvider.parseExpectedHash(source, checksum), wanted);
+  });
+
+  testAsync('FFmpeg 供應：主要來源失敗會自動切備援，且下載進度可被查詢', async () => {
+    ffmpegProvider._resetForTests();
+    const zip = new AdmZip();
+    zip.addFile('ffmpeg-test/bin/ffmpeg.exe', Buffer.from('fake-ffmpeg'));
+    zip.addFile('ffmpeg-test/bin/ffprobe.exe', Buffer.from('fake-ffprobe'));
+    const zipBuffer = zip.toBuffer();
+    const zipHash = require('crypto').createHash('sha256').update(zipBuffer).digest('hex');
+    const sources = [
+      { id: 'primary-test', label: 'primary-test', url: 'https://primary.test/ffmpeg.zip', checksumUrl: 'https://primary.test/hash', checksumFile: null },
+      { id: 'backup-test', label: 'backup-test', url: 'https://backup.test/ffmpeg.zip', checksumUrl: 'https://backup.test/hash', checksumFile: null },
+    ];
+    const stages = [];
+    const cleanup = [
+      ffmpegProvider.FFMPEG_EXE,
+      ffmpegProvider.FFPROBE_EXE,
+      `${ffmpegProvider.FFMPEG_EXE}.previous`,
+      `${ffmpegProvider.FFPROBE_EXE}.previous`,
+      path.join(ffmpegProvider.BIN_DIR, 'ffmpeg.download.zip'),
+      path.join(ffmpegProvider.BIN_DIR, 'ffmpeg.download.exe'),
+      path.join(ffmpegProvider.BIN_DIR, 'ffprobe.download.exe'),
+    ];
+    cleanup.forEach((file) => fs.rmSync(file, { force: true }));
+    try {
+      const result = await ffmpegProvider.downloadFfmpeg({
+        platform: 'win32',
+        sources,
+        fetchBufferImpl: async () => Buffer.from(`${zipHash}\n`, 'utf8'),
+        fetchFileImpl: async (url, filePath, options) => {
+          if (url.includes('primary.test')) throw new Error('simulated source timeout');
+          fs.writeFileSync(filePath, zipBuffer);
+          options.onProgress?.({
+            downloadedBytes: zipBuffer.length,
+            totalBytes: zipBuffer.length,
+            percent: 100,
+            speedBytesPerSec: zipBuffer.length * 2,
+          });
+          return {
+            downloadedBytes: zipBuffer.length,
+            totalBytes: zipBuffer.length,
+            sha256: zipHash,
+          };
+        },
+        spawnSyncImpl: () => ({ status: 0, error: null }),
+        onProgress: (status) => stages.push(status.stage),
+      });
+      eq(result.source, 'backup-test', '主要來源失敗後應由備援完成：');
+      ok(stages.includes('source-fallback'), '進度流必須看得到切換備援來源：');
+      ok(stages.includes('download'), '進度流必須包含真正下載階段：');
+      const finalStatus = ffmpegProvider.getDownloadStatus();
+      eq(finalStatus.active, false, '完成後進度狀態不可繼續宣稱下載中：');
+      eq(finalStatus.stage, 'done', '完成後狀態必須停在 done：');
+      eq(finalStatus.percent, 100, '完成後進度必須是 100%：');
+    } finally {
+      cleanup.forEach((file) => fs.rmSync(file, { force: true }));
+      ffmpegProvider._resetForTests();
+    }
   });
 
   testAsync('FFmpeg 供應：非 Windows 平台呼叫 downloadFfmpeg 應該明確拒絕，而不是嘗試下載 .exe', async () => {

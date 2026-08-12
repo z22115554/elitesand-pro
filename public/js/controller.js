@@ -418,6 +418,7 @@
 
     const formData = new FormData();
     formData.append('lyrics', file);
+    formData.append('locale', window.I18n?.current?.() || '');
 
     try {
       showToast(t('controller.uploading'), 'info');

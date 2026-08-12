@@ -6,6 +6,7 @@
  */
 
 const { createLogger } = require('../utils/logger');
+const { MAX_OFFSET_MS } = require('../utils/track-schema');
 
 const log = createLogger('Deck');
 
@@ -74,12 +75,14 @@ function createDeckCommands(io, ctx) {
         }
         const trackId = playState.currentTrack.id;
         let delta = Number(params.ms);
+        // 這裡夾住的是「單次按鍵」的跳動幅度（避免參數誤填造成一按跳很誇張），跟下面
+        // 「調整後總偏移」的上限（MAX_OFFSET_MS）是兩回事，不要合併成同一個常數。
         if (!isFinite(delta) || delta <= 0) delta = 100;
         delta = Math.min(10000, delta);
         if (action === 'offset-minus') delta = -delta;
 
         const currentOffset = trackOffsets.get(trackId) || 0;
-        const newOffset = Math.max(-10000, Math.min(10000, currentOffset + delta));
+        const newOffset = Math.max(-MAX_OFFSET_MS, Math.min(MAX_OFFSET_MS, currentOffset + delta));
         trackOffsets.set(trackId, newOffset);
         playState.currentOffset = newOffset;
         io.emit('offset:update', { trackId, offset: newOffset });

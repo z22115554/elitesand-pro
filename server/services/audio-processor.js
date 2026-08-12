@@ -13,7 +13,7 @@ const path = require('path');
 const fs = require('fs');
 const { promisify } = require('util');
 const { fetchWithTimeout } = require('../utils/helpers');
-const { LyricsEngine } = require('./lyrics-engine');
+const { LyricsEngine, DURATION_TOLERANCE } = require('./lyrics-engine');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Audio');
 const { isYouTubeUrl, isPlaylistUrl, extractVideoId } = require('../utils/youtube-url');
@@ -186,6 +186,12 @@ const NOISE_PATTERNS = [
   /\(?\s*(中文字幕|中文歌詞|日文字幕|英文字幕|繁體中文|简体中文|CC|Subtitle)\s*\)?/gi,
   // 發行相關
   /\(?\s*(新曲|New\s*Release|Latest)\s*\)?/gi,
+  // 音質/格式行銷字樣：轉貼/合輯頻道常見（例：「張宇 傘下 無損音樂FLAC 純享」），不屬於正式
+  // 歌名，混進去會同時污染顯示的歌名跟歌詞搜尋 query（見 issue #9：歌詞比對成另一首歌）。
+  /\(?\s*(?:無損|无损)(?:音樂|音乐|音質|音质)?\s*\)?/gi,
+  /\bFLAC\b/gi,
+  /\(?\s*(?:純享|纯享|精享|臻享)(?:版)?\s*\)?/gi,
+  /\(?\s*(?:高音質|高音质|極致音質|极致音质|母帶|母带)\s*\)?/gi,
   // 特殊標記
   /\(?\s*(Promo|Teaser|Preview|Clip|Edit)\s*\)?/gi,
   /[【「『《〈][^】」』》〉]*(?:伴奏|動態|动态|字幕|歌詞|歌词)[^】」』》〉]*[】」』》〉]/gi,
@@ -265,8 +271,9 @@ const KNOWN_ARTISTS_RAW = [
   '周華健', '李宗盛', '品冠', '范逸臣', '林憶蓮', '任賢齊', '王力宏', '陳奕迅', '縱貫線',
   '林俊傑', '楊丞琳', '蕭煌奇', '梁靜茹', '葉倩文', '藍又時', '韋禮安', '周杰倫', '張學友',
   '蔡依林', '五月天', '告五人', '茄子蛋', '頑童MJ116', 'RPG', '芒果醬', '蘇打綠', '田馥甄',
+  '珂拉琪 Collage', '珂拉琪',
   '孫燕姿', '鄧紫棋', '徐佳瑩', '盧廣仲', '陶喆', '伍佰', '楊宗緯', '張惠妹', '莫文蔚',
-  '劉若英', '動力火車', 'A-Lin', '理想混蛋', '張碧晨', '周興哲', '艾薇', '陳壹千',
+  '劉若英', '動力火車', 'A-Lin', '理想混蛋', '張碧晨', '周興哲', '艾薇', '陳壹千', '張宇',
   '黃小琥', '王艷薇', '阿冗', '蘇打綠', '曾瑋中', '張遠',
   'YOASOBI', 'ヨルシカ', 'ずっと真夜中でいいのに。', 'ZUTOMAYO', 'ヒグチアイ', 'Ado', 'Aimer', 'LiSA',
   '米津玄師', 'Kenshi Yonezu', 'King Gnu', 'Eve', 'Reol', 'れをる', 'majiko', 'みきとP', 'DECO*27',
@@ -326,8 +333,11 @@ class AudioProcessor {
     if (!controller.signal.aborted) controller.abort();
     return { ok: true, code: 'CANCEL_REQUESTED', message: '已要求取消匯入。' };
   }
+  // 不再只在信心低時才查：影片夠長就一律查一次 Apple Music 官方目錄，拿官方時長當「事前」
+  // 驗證基準（唱片公司頻道歌名抓得再準，影片本身還是可能剪進額外片段）。是否要拿查詢結果
+  // 覆寫歌手/歌名，仍由呼叫端另外用信心分數把關，這裡只決定要不要發查詢。
   static shouldResolveAppleMetadata(info, identity, cover) {
-    return !cover && Number(info?.duration) >= 60 && Number(identity?.confidence) < 0.8;
+    return !cover && Number(info?.duration) >= 60;
   }
   /**
    * 處理 YouTube 連結
@@ -409,19 +419,34 @@ class AudioProcessor {
     // track / artist(s)，沒有才回退到影片標題規則。
     let identity = this.resolveTrackIdentity(info);
     const cover = this.detectCover(info);
+    // 官方時長：拿 Apple Music 目錄裡這首歌的官方時長，跟下載的影片時長比對，在搜歌詞之前
+    // 就先抓出「影片可能剪了額外片段」的情況（唱片公司頻道歌名抓得再準也可能踩到）。
+    // resolveAppleMusicMetadata 內部走斷路器，Apple 端被打爆時會自動跳過查詢直接回 null，
+    // 不拋錯、不重試，確保匯入與歌詞照常完成。
+    let officialDurationSec = null;
     if (this.shouldResolveAppleMetadata(info, identity, cover)) {
       try {
-        const catalogIdentity = await LyricsEngine.resolveAppleMusicMetadata({
+        const catalogResult = await LyricsEngine.resolveAppleMusicMetadata({
           artist: identity.artist,
           title: identity.title,
           rawTitle: info.title,
           duration: info.duration || 0,
         });
-        if (catalogIdentity) identity = { ...identity, ...catalogIdentity, reason: 'apple-catalog' };
+        if (catalogResult) {
+          officialDurationSec = typeof catalogResult.durationSec === 'number' ? catalogResult.durationSec : null;
+          // 只有原本信心不足時才拿目錄結果覆寫歌手/歌名，避免已經抓對的標題被目錄裡同名曲蓋掉。
+          if (Number(identity.confidence) < 0.8) {
+            const { durationSec, ...catalogIdentity } = catalogResult;
+            identity = { ...identity, ...catalogIdentity, reason: 'apple-catalog' };
+          }
+        }
       } catch (e) {
-        log.warn('Apple Music 歌名校正失敗，沿用本機解析: ' + e.message);
+        log.warn('Apple Music 官方時長查詢失敗，沿用本機解析: ' + e.message);
       }
     }
+    const officialDurationVerified = officialDurationSec != null && info.duration
+      ? Math.abs(officialDurationSec - info.duration) <= DURATION_TOLERANCE
+      : null;
     const performer = cover ? (identity.artist || info.channel || info.uploader || '') : '';
     if (cover) identity = { ...identity, artist: '', confidence: 0, reason: 'cover-original-unknown' };
     let artist = identity.artist;
@@ -469,6 +494,11 @@ class AudioProcessor {
       artistConfidence: originalArtist?.confidence || identity.confidence || 0,
       needsArtistConfirmation: !artist,
       artistCandidates: originalArtist?.candidates || [],
+      // 優先採用 Apple Music 官方目錄時長比對（跟哪個歌詞來源命中無關，覆蓋率更完整）；
+      // 查不到官方時長（斷路器暫停/歌曲不在目錄/API 失敗）才退回歌詞來源自己回報的比對結果。
+      lyricsDurationVerified: typeof officialDurationVerified === 'boolean'
+        ? officialDurationVerified
+        : (typeof lyricsResult?.durationVerified === 'boolean' ? lyricsResult.durationVerified : null),
       album: info.album || '',
       duration: info.duration || 0,
       cover: info.thumbnail || null,
@@ -534,13 +564,20 @@ class AudioProcessor {
     const metadataArtist = this.getMetadataArtist(info);
     const metadataTitle = this.cleanTrackTitle(info.track);
     let artist = metadataArtist || parsed.artist || '';
-    const title = metadataTitle || parsed.title || this.cleanTrackTitle(info.title) || info.title || '';
+    let title = metadataTitle || parsed.title || this.cleanTrackTitle(info.title) || info.title || '';
 
     if (!artist) {
       const channel = this.cleanArtistName(info.channel || info.uploader || '');
       const normalizedRaw = normalizeVideoText(info.title).toLowerCase().replace(/\s+/g, '');
       const normalizedChannel = normalizeVideoText(channel).toLowerCase().replace(/\s+/g, '');
       if (normalizedChannel.length >= 2 && normalizedRaw.includes(normalizedChannel)) artist = channel;
+    }
+
+    // yt-dlp 的 track/artist 結構化欄位一樣是別人（唱片公司/上傳者）填的中繼資料，一樣可能填反
+    // （例如樂團名「珂拉琪 Collage」被填進 track，歌名被填進 artist）。parseVideoTitle 的規則
+    // 路徑已有這個兜底，這裡把它也套用到結構化欄位路徑，兩邊命中已知歌手清單時都會調正方向。
+    if (artist && title && isKnownArtist(title) && !isKnownArtist(artist)) {
+      const swap = artist; artist = title; title = swap;
     }
 
     return {

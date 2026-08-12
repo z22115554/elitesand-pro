@@ -266,12 +266,13 @@
       el.textContent = window.I18n ? window.I18n.translate(text) : text;
     }
 
-    function refreshReadiness() {
+    function refreshReadiness(options = {}) {
+      const forceSystemCheck = options === true || options?.force === true;
       readiness.control = SocketClient.connected();
       setReadiness('guide-check-control', readiness.control, readiness.control ? '控制台已連線' : '控制台未連線');
       readiness.obsWebSocket = typeof ObsWs !== 'undefined' && ObsWs.isConnected();
       setReadiness('guide-check-websocket', readiness.obsWebSocket, readiness.obsWebSocket ? 'OBS WebSocket 已連線' : 'OBS WebSocket 未連線');
-      fetch('/api/system-check').then((res) => res.json()).then((data) => {
+      const systemCheckRequest = fetch(forceSystemCheck ? '/api/system-check?force=1' : '/api/system-check', { cache: 'no-store' }).then((res) => res.json()).then((data) => {
         readiness.ytdlp = !!data.ytdlp?.available;
         readiness.ffmpeg = !!data.ffmpeg?.available;
         setReadiness('guide-check-ytdlp', readiness.ytdlp, readiness.ytdlp ? `yt-dlp ${data.ytdlp.version}` : '找不到 yt-dlp');
@@ -305,6 +306,15 @@
         checklist.twitch = !!data.connected;
         updateChecklist();
       }).catch(() => { checklist.twitch = false; updateChecklist(); });
+      return systemCheckRequest;
+    }
+
+    function forceRefreshFfmpegReadiness() {
+      readiness.ffmpeg = false;
+      const checkingText = window.I18n ? window.I18n.t('guide.ffmpegChecking') : 'FFmpeg 檢查中…';
+      setReadiness('guide-check-ffmpeg', 'pending', checkingText);
+      setReadiness('ffmpeg-status', 'pending', checkingText);
+      return refreshReadiness({ force: true });
     }
 
     SocketClient.on('connection-change', (connected) => {
@@ -337,7 +347,18 @@
       updateChecklist();
     });
     const refreshBtn = document.getElementById('guide-check-refresh');
-    if (refreshBtn) refreshBtn.addEventListener('click', refreshReadiness);
+    if (refreshBtn) refreshBtn.addEventListener('click', () => refreshReadiness({ force: true }));
+    const ffmpegCheckBtn = document.getElementById('ffmpeg-check-btn');
+    if (ffmpegCheckBtn) {
+      ffmpegCheckBtn.addEventListener('click', () => {
+        ffmpegCheckBtn.disabled = true;
+        forceRefreshFfmpegReadiness().finally(() => { ffmpegCheckBtn.disabled = false; });
+      });
+    }
+    document.addEventListener('view:change', (event) => {
+      if (event.detail?.view === 'general') forceRefreshFfmpegReadiness();
+    });
+    window.addEventListener('elitesand:ffmpeg-invalidated', forceRefreshFfmpegReadiness);
 
     const guideT = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
     // 「新手教學」的節點跟「連線與系統」設定卡的節點各自獨立顯示/隱藏，
@@ -346,26 +367,57 @@
     const ffmpegButtonTextUpdaters = [];
     function wireFfmpegDownloadButton(btn, pillId) {
       if (!btn) return;
-      const updateText = () => {
-        btn.textContent = guideT(btn.dataset.busy === '1' ? 'guide.ffmpegDownloadingButton' : 'guide.ffmpegDownload');
+      let latestProgress = null;
+      let progressTimer = null;
+      const progressText = () => {
+        if (!latestProgress || latestProgress.stage !== 'download' || !latestProgress.totalBytes) {
+          return guideT('guide.ffmpegDownloadingButton');
+        }
+        const downloaded = (Number(latestProgress.downloadedBytes || 0) / (1024 * 1024)).toFixed(1);
+        const total = (Number(latestProgress.totalBytes || 0) / (1024 * 1024)).toFixed(1);
+        const speed = (Number(latestProgress.speedBytesPerSec || 0) / (1024 * 1024)).toFixed(2);
+        const percent = Math.max(0, Math.min(100, Math.floor(Number(latestProgress.percent || 0))));
+        return guideT('guide.ffmpegDownloadingProgress', { percent, downloaded, total, speed });
       };
+      const updateText = () => {
+        btn.textContent = btn.dataset.busy === '1' ? progressText() : guideT('guide.ffmpegDownload');
+      };
+      const stopProgressPolling = () => {
+        if (progressTimer) clearInterval(progressTimer);
+        progressTimer = null;
+        latestProgress = null;
+      };
+      const pollProgress = () => fetch('/api/ffmpeg/download/status', { cache: 'no-store' })
+        .then((res) => res.json())
+        .then((status) => {
+          if (!status || btn.dataset.busy !== '1') return;
+          latestProgress = status;
+          updateText();
+          setReadiness(pillId, 'pending', status.stage === 'download' ? progressText() : guideT('guide.ffmpegDownloading'));
+        })
+        .catch(() => {});
       ffmpegButtonTextUpdaters.push(updateText);
       updateText();
       btn.addEventListener('click', () => {
         btn.dataset.busy = '1';
         btn.disabled = true;
+        latestProgress = null;
         updateText();
         setReadiness(pillId, 'pending', guideT('guide.ffmpegDownloading'));
+        pollProgress();
+        progressTimer = setInterval(pollProgress, 500);
         PinAuth.fetchWithPin('/api/ffmpeg/download', { method: 'POST' })
           .then((res) => res.json())
           .then((data) => {
             if (!data.ok) throw new Error(data.reason || guideT('guide.downloadFailed'));
+            stopProgressPolling();
             delete btn.dataset.busy;
             btn.disabled = false;
             updateText();
             refreshReadiness();
           })
           .catch((err) => {
+            stopProgressPolling();
             delete btn.dataset.busy;
             btn.disabled = false;
             updateText();
