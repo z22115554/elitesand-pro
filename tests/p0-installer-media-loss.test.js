@@ -129,22 +129,34 @@ for (let round = 1; round <= 3; round++) runRound(round);
   assert.strictEqual(fs.readFileSync(path.join(untrusted, 'song.webm'), 'utf8'), 'not-marked');
 })();
 
+function executableNsi(source) {
+  return source
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith(';'))
+    .join('\n');
+}
+
 (function releaseContracts() {
   const root = path.join(__dirname, '..');
   const mainSource = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
   assert.ok(mainSource.includes('Reflect.get(target, prop, target)'));
   assert.ok(!mainSource.includes('Reflect.get(target, prop, receiver)'));
 
-  const preserveSource = fs.readFileSync(path.join(root, 'electron', 'installer-p0-media-preserve.nsh'), 'utf8');
-  assert.ok(preserveSource.includes('Call EsPreserveVulnerableMedia'));
-  assert.ok(preserveSource.includes('robocopy.exe'));
-  assert.ok(preserveSource.includes('/L /E /COPY:DAT'));
-  assert.ok(preserveSource.includes('media-preserve.ini'));
-  assert.ok(!preserveSource.includes('$APPDATA\\Elitesand Pro\\downloads'));
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.strictEqual(packageJson.build.nsis.include, 'electron/installer.nsh');
 
   const installerSource = fs.readFileSync(path.join(root, 'electron', 'installer.nsh'), 'utf8');
-  assert.ok(!installerSource.includes('EsCleanupDeleteAll'));
+  const installerExecutable = executableNsi(installerSource);
   assert.ok(installerSource.includes('DATA-SAFETY CONTRACT'));
+  assert.ok(installerExecutable.includes('Call EsPreserveVulnerableMedia'));
+  assert.ok(installerExecutable.includes('robocopy.exe'));
+  assert.ok(installerExecutable.includes('/L /E /COPY:DAT'));
+  assert.ok(installerExecutable.includes('media-preserve.ini'));
+  assert.ok(!installerExecutable.includes('EsRemoveAllData'));
+  assert.ok(!installerExecutable.includes('EsCleanupDeleteAll'));
+  assert.ok(!installerExecutable.includes('RMDir /r "$APPDATA\\Elitesand Pro"'));
+  assert.ok(!/RMDir\s+\/r\s+"\$0"/i.test(installerExecutable));
+  assert.ok(!installerExecutable.includes('$APPDATA\\Elitesand Pro\\downloads'));
 
   const updaterSource = fs.readFileSync(path.join(root, 'server', 'services', 'app-updater-runner-v2.js'), 'utf8');
   assert.ok(updaterSource.includes("normalized === 'Elitesand Pro.exe'"));
