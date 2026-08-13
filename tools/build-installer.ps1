@@ -51,9 +51,6 @@ if (Test-Path -LiteralPath $Resources) {
 }
 New-Item -ItemType Directory -Force -Path $Resources | Out-Null
 
-# The final check launches the generated Electron executable, not Node. This
-# is the only meaningful way to exercise app.asar, its embedded integrity
-# metadata, the fuse configuration, and the utility-process server together.
 function Test-InstallerBootOutsideRepo {
   param([Parameter(Mandatory = $true)][string]$UnpackedResources)
 
@@ -106,9 +103,6 @@ function Test-InstallerBootOutsideRepo {
 }
 
 try {
-  # NSIS license pages do not reliably decode a bare UTF-8 text file. Keep the
-  # approved EULA.txt as the sole source, but give electron-builder a UTF-8 BOM
-  # copy (the format its own localized-license path uses) for the installer UI.
   $EulaText = [System.IO.File]::ReadAllText((Join-Path $Root "EULA.txt"), [System.Text.UTF8Encoding]::new($false))
   [System.IO.File]::WriteAllText($InstallerLicense, $EulaText, [System.Text.UTF8Encoding]::new($true))
   $InstallerLicenseBytes = [System.IO.File]::ReadAllBytes($InstallerLicense)
@@ -119,8 +113,6 @@ try {
     throw "NSIS installer EULA diverged from the approved EULA.txt."
   }
 
-  # Keep the installer binaries and FFmpeg GPLv3 material on the exact same
-  # path as the portable package. Do not duplicate its compliance workflow.
   & (Join-Path $PSScriptRoot "build-portable.ps1") -OutputRoot $PortableOutput -NoZip
   if ($LASTEXITCODE -ne 0) { throw "Portable staging failed; installer build stopped." }
 
@@ -130,19 +122,26 @@ try {
     Copy-Item -LiteralPath $source -Destination (Join-Path $Resources $(if ($name -eq "app") { "app" } else { $name })) -Recurse -Force
   }
 
+  # A dedicated Node runtime executes updater-v2 outside the Electron process.
+  # It is integrity-protected as a resources/tools file and remains immutable
+  # across incremental updates; changing it forces the next full Installer.
+  $UpdaterNodeSource = Join-Path $PortableStage "runtime\node.exe"
+  $UpdaterNodeTarget = Join-Path $Resources "tools\updater-node.exe"
+  if (-not (Test-Path -LiteralPath $UpdaterNodeSource)) {
+    throw "Portable staging is missing runtime\node.exe; secure updater runtime cannot be created."
+  }
+  Copy-Item -LiteralPath $UpdaterNodeSource -Destination $UpdaterNodeTarget -Force
+
   foreach ($name in @("electron", "assets")) {
     $source = Join-Path $Root $name
     if (-not (Test-Path -LiteralPath $source)) { throw "Missing required Electron application directory: $source" }
     Copy-Item -LiteralPath $source -Destination (Join-Path $AppStage $name) -Recurse -Force
   }
 
-  # The staged application must carry its production dependency tree; without it
-  # the installed server dies with MODULE_NOT_FOUND on user machines.
   if (-not (Test-Path -LiteralPath (Join-Path $AppStage "node_modules\express\package.json"))) {
     throw "Staged app is missing node_modules\express; refusing to build a broken installer."
   }
 
-  # Installer runtime data belongs in Electron userData, never in app.asar.
   $AppRoot = $AppStage
   foreach ($name in @("data", "downloads", "logs")) {
     $runtimeDir = Join-Path $AppRoot $name
@@ -150,11 +149,6 @@ try {
     if (Test-Path -LiteralPath $runtimeDir) { throw "Installer app still contains $name" }
   }
 
-  # electron-builder only accepts three-part SemVer, while Elitesand Pro patch
-  # releases use a four-part public version such as 0.9.9.1. Keep the staged
-  # server package and public artifact names on the real version, but give the
-  # Electron wrapper temporary valid metadata during packaging. buildVersion
-  # preserves the exact four-part Windows file version.
   $OriginalRootPackageBytes = [System.IO.File]::ReadAllBytes($RootPackagePath)
   $BuilderMetadataWritten = $false
   $BuilderVersion = [string]$Package.version
@@ -192,15 +186,9 @@ try {
     Write-Host "Installer metadata version: $BuilderVersion (public version remains $($Package.version))"
   }
 
-  # The app directory is now app.asar, so it needs a SemVer package version for
-  # electron-builder while retaining the four-part public release version for
-  # all update and diagnostic paths inside the packaged server.
   $StagedAppPackagePath = Join-Path $AppStage "package.json"
   $StagedAppPackage = Get-Content -LiteralPath $StagedAppPackagePath -Raw -Encoding UTF8 | ConvertFrom-Json
   $StagedAppPackage.version = $BuilderVersion
-  # electron-builder reads configuration from the development package only.
-  # The portable staging copy inherits package.json, so remove this field from
-  # the app-asar copy without touching the source package.json.
   if ($StagedAppPackage.PSObject.Properties.Name -contains 'build') {
     [void]$StagedAppPackage.PSObject.Properties.Remove('build')
   }
@@ -229,11 +217,9 @@ try {
     }
   }
 
-  # Verify the actual output before launching it. app.asar, the Windows ASAR
-  # resource, per-file archive hashes, and every configured fuse are checked by
-  # the verifier; this is intentionally stronger than checking for a raw file.
+  $UnpackedRoot = Join-Path $InstallerOutput "win-unpacked"
   $UnpackedResources = Join-Path $InstallerOutput "win-unpacked\resources"
-  foreach ($required in @("app.asar", "tools\yt-dlp.exe")) {
+  foreach ($required in @("app.asar", "tools\yt-dlp.exe", "tools\updater-node.exe")) {
     if (-not (Test-Path -LiteralPath (Join-Path $UnpackedResources $required))) {
       throw "Installer output is missing $required; the built installer would be broken on user machines."
     }
@@ -241,8 +227,9 @@ try {
   if (Test-Path -LiteralPath (Join-Path $UnpackedResources "app")) {
     throw "Installer output still contains raw resources\app; refusing a bypassable ASAR build."
   }
-  & $NodeCommand.Source (Join-Path $Root "tools\verify-electron-package.js") (Join-Path $InstallerOutput "win-unpacked")
+  & $NodeCommand.Source (Join-Path $Root "tools\verify-electron-package.js") $UnpackedRoot
   if ($LASTEXITCODE -ne 0) { throw "Secure Electron package verification failed." }
+
   $InstallerPath = Join-Path $InstallerOutput "Elitesand Pro Setup $($Package.version).exe"
   $InstallerHashPath = "$InstallerPath.sha256"
   if (-not (Test-Path -LiteralPath $InstallerPath) -or (Get-Item -LiteralPath $InstallerPath).Length -eq 0) {
@@ -256,7 +243,18 @@ try {
 
   Test-InstallerBootOutsideRepo -UnpackedResources $UnpackedResources
 
+  # Persist a small hash-only description of the immutable Electron runtime.
+  # The next release can build update.zip from this file without retaining the
+  # entire previous win-unpacked directory, and clients can verify their local
+  # runtime against it before updater-v2 replaces EXE/app.asar.
+  $IncrementalBaselinePath = Join-Path $InstallerOutput "incremental-baseline.json"
+  & $NodeCommand.Source (Join-Path $Root "tools\write-update-baseline.js") $UnpackedRoot $IncrementalBaselinePath
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $IncrementalBaselinePath)) {
+    throw "Incremental runtime baseline generation failed."
+  }
+
   Write-Host "Installer build complete: $InstallerOutput"
+  Write-Host "Incremental baseline: $IncrementalBaselinePath"
 } finally {
   if (Test-Path -LiteralPath $Resources) { Remove-Item -LiteralPath $Resources -Recurse -Force }
 }

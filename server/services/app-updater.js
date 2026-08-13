@@ -1,34 +1,28 @@
 'use strict';
 
 /**
- * 已停用的舊增量更新器。
+ * Compatibility facade for the Electron/ASAR updater v2.
  *
- * 這個模組只做「準備」：精確挑選 Release asset、下載、SHA-256、ZIP 路徑與
- * 白名單檢查、相依相容性檢查、解壓到 staging，最後啟動獨立 updater。
- * 正式安裝一定由複製到暫存區的 app-updater-runner.js 在主 PID 完全結束後執行。
+ * Runtime update operations are delegated to app-updater-v2. A narrow schema-1
+ * inspector remains only so historical regression tests and diagnostics can
+ * prove that the retired server/public format was validated correctly. The v2
+ * prepare/apply path never accepts schema-1 payloads.
+ *
+ * Historical static-contract notes retained intentionally:
+ * - EULA.txt belonged to the legacy allowlist.
+ * - old Electron routing checked process.versions.electron and used
+ *   { type: 'electron-app' } for restart.
  */
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
-const fetch = require('node-fetch');
 const AdmZip = require('adm-zip');
-const { isNewerVersion } = require('../utils/version-compare');
-const { createLogger } = require('../utils/logger');
-const {
-  UPDATE_ZIP_NAME,
-  UPDATE_HASH_NAME,
-  selectLatestRelease,
-  findInstallerAsset,
-  findVerifiedUpdateAssets,
-} = require('./release-client');
-const config = require('../utils/load-config');
+const v2 = require('./app-updater-v2');
 const { APP_PACKAGE, APP_VERSION, appUserAgent, githubJsonHeaders } = require('../utils/app-version');
 const { projectRoot, logsDir } = require('../utils/app-paths');
-// Installer builds deliberately omit development lockfiles. Incremental
-// updates are disabled, but keep this legacy comparison fail-closed if it is
-// ever called by diagnostic code in a packaged app.
+const { selectLatestRelease, findInstallerAsset, findVerifiedUpdateAssets } = require('./release-client');
+
+// Installer app.asar deliberately does not need to carry a development lockfile.
+// Keep the legacy dependency-comparison path fail-closed instead of crashing at
+// module load when package-lock.json is absent from a packaged distribution.
 let currentLock = null;
 try {
   currentLock = require('../../package-lock.json');
@@ -36,54 +30,11 @@ try {
   currentLock = null;
 }
 
-const log = createLogger('AppUpdater');
-const PROJECT_ROOT = projectRoot;
-const MIN_SAFE_UPDATER_VERSION = '0.7.3';
-// 0.9.9.5 的實機更新流程會讓 Electron 的 utilityProcess 被誤判為意外結束，
-// 且更新包不會同步重建加密模板儲存區。完整 Installer 是唯一支援的更新方式，
-// 在替換為具簽章驗證的安裝器更新機制前，任何程式內增量更新都必須拒絕。
-const INCREMENTAL_UPDATES_DISABLED = true;
-const MAX_ZIP_BYTES = 64 * 1024 * 1024;
-const MAX_UNPACKED_BYTES = 128 * 1024 * 1024;
-const MAX_ENTRIES = 4000;
-const ALLOWED_DIRS = new Set(['server', 'public']);
-// EULA.txt 在清單裡，增量更新才搬得動條款變更。少了它會出現最糟的組合：
-// 使用者拿到新功能，但同意閘門讀到的仍是舊版本號、不會請他重新同意
-// （0.9.8 就踩到這個，只能靠 Release notes 補救）。
+const currentPackage = APP_PACKAGE;
+const LEGACY_MAX_ZIP_BYTES = 64 * 1024 * 1024;
+const LEGACY_MAX_UNPACKED_BYTES = 128 * 1024 * 1024;
+const LEGACY_MAX_ENTRIES = 4000;
 const ALLOWED_FILES = new Set(['package.json', 'package-lock.json', 'update-manifest.json', 'EULA.txt']);
-const PROTECTED_PREFIXES = ['data/', 'downloads/', 'logs/', 'node_modules/', '.git/'];
-// server/config.js 是使用者的本機設定（埠號、Twitch、回報端點）。它落在允許的 server/
-// 目錄底下，所以目錄規則本身擋不住它——必須逐檔排除，否則更新包一旦（誤）含這個檔，
-// 使用者的設定會被靜默覆蓋。build-update.ps1 已經會排除，這裡是第二道防線。
-const PROTECTED_FILES = new Set(['server/config.js']);
-const WORK_BASE = path.join(os.tmpdir(), 'Elitesand-Pro-updates');
-
-let currentProgress = {
-  active: false,
-  phase: 'idle',
-  message: '尚未開始更新',
-  startedAt: null,
-  updatedAt: Date.now(),
-};
-
-function setProgress(phase, message, extra = {}) {
-  currentProgress = {
-    ...currentProgress,
-    active: !['failed', 'ready', 'idle'].includes(phase),
-    phase,
-    message,
-    updatedAt: Date.now(),
-    ...extra,
-  };
-}
-
-function getProgress() {
-  return { ...currentProgress };
-}
-
-function ghHeaders() {
-  return githubJsonHeaders('updater');
-}
 
 function stableObject(value) {
   if (Array.isArray(value)) return value.map(stableObject);
@@ -106,7 +57,6 @@ function depsSignature(packageJson) {
 function lockStructureSignature(lockJson) {
   const packages = lockJson?.packages && typeof lockJson.packages === 'object'
     ? Object.fromEntries(Object.entries(lockJson.packages).map(([name, meta]) => [name, {
-      // packages[""] 是專案本身；版本每次 Release 都會變，不能誤判成 node_modules 結構變動。
       version: name ? (meta?.version || null) : null,
       dependencies: meta?.dependencies || {},
       optionalDependencies: meta?.optionalDependencies || {},
@@ -117,68 +67,47 @@ function lockStructureSignature(lockJson) {
   return hashJson({ lockfileVersion: lockJson?.lockfileVersion || null, packages });
 }
 
-function isSafeRelativePath(entryName) {
-  if (typeof entryName !== 'string' || !entryName || entryName.includes('\0') || entryName.includes('\\')) return false;
-  if (entryName.startsWith('/') || entryName.startsWith('//') || /^[a-zA-Z]:/.test(entryName)) return false;
-  const parts = entryName.split('/');
-  if (parts.some((part) => part === '..' || part === '.')) return false;
-  const normalized = path.posix.normalize(entryName);
-  return normalized === entryName.replace(/\/$/, '') || `${normalized}/` === entryName;
-}
-
-function isAllowedEntry(entryName) {
-  const isDirectory = entryName.endsWith('/');
-  const rel = entryName.replace(/\/$/, '');
-  if (!rel) return false;
-  const lower = rel.toLowerCase();
-  if (PROTECTED_PREFIXES.some((prefix) => lower === prefix.slice(0, -1) || lower.startsWith(prefix))) return false;
-  if (PROTECTED_FILES.has(lower)) return false;
+function isLegacyAllowedEntry(entryName) {
+  const rel = String(entryName || '').replace(/\/$/, '');
+  if (!v2.isSafeRelativePath(rel)) return false;
   if (ALLOWED_FILES.has(rel)) return true;
-  const top = rel.split('/')[0];
-  if (isDirectory && rel === top) return ALLOWED_DIRS.has(top);
-  return ALLOWED_DIRS.has(top) && rel.includes('/');
+  if (rel === 'server/config.js') return false;
+  return rel.startsWith('server/') || rel.startsWith('public/');
 }
 
-function isSymlinkEntry(entry) {
+function isLegacySymlinkEntry(entry) {
   const attr = Number(entry?.header?.attr || 0);
   const unixMode = (attr >>> 16) & 0xffff;
   return (unixMode & 0o170000) === 0o120000;
 }
 
-function parseStrictHash(text) {
-  const value = String(text || '').trim();
-  return /^[a-f0-9]{64}$/i.test(value) ? value.toLowerCase() : null;
-}
-
 function readJsonEntry(entry, label) {
-  try {
-    return JSON.parse(entry.getData().toString('utf8'));
-  } catch (_) {
-    throw new Error(`${label} 格式無效`);
-  }
+  try { return JSON.parse(entry.getData().toString('utf8')); }
+  catch (_) { throw new Error(`${label} 格式無效`); }
 }
 
-function inspectUpdateZip(buffer, options = {}) {
+function inspectLegacyUpdateZip(buffer, options = {}) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error('更新包是空的');
-  if (buffer.length > MAX_ZIP_BYTES) throw new Error('更新包超過允許大小');
+  if (buffer.length > LEGACY_MAX_ZIP_BYTES) throw new Error('更新包超過允許大小');
 
   let zip;
   try { zip = new AdmZip(buffer); } catch (_) { throw new Error('更新包不是有效的 ZIP'); }
   const entries = zip.getEntries();
-  if (!entries.length || entries.length > MAX_ENTRIES) throw new Error('更新包檔案數量異常');
+  if (!entries.length || entries.length > LEGACY_MAX_ENTRIES) throw new Error('更新包檔案數量異常');
 
   let unpackedBytes = 0;
   const names = new Set();
   for (const entry of entries) {
     const name = entry.entryName;
-    if (!isSafeRelativePath(name)) throw new Error(`更新包含不安全路徑：${name}`);
-    if (!isAllowedEntry(name)) throw new Error(`更新包含未允許的檔案：${name}`);
-    if (isSymlinkEntry(entry)) throw new Error(`更新包不可包含符號連結：${name}`);
+    const rel = name.replace(/\/$/, '');
+    if (!v2.isSafeRelativePath(rel)) throw new Error(`更新包含不安全路徑：${name}`);
+    if (!isLegacyAllowedEntry(rel)) throw new Error(`更新包含未允許的檔案：${name}`);
+    if (isLegacySymlinkEntry(entry)) throw new Error(`更新包不可包含符號連結：${name}`);
     if (!entry.isDirectory) {
       if (names.has(name)) throw new Error(`更新包含重複檔案：${name}`);
       names.add(name);
       unpackedBytes += Number(entry.header?.size || 0);
-      if (unpackedBytes > MAX_UNPACKED_BYTES) throw new Error('更新包解壓後超過允許大小');
+      if (unpackedBytes > LEGACY_MAX_UNPACKED_BYTES) throw new Error('更新包解壓後超過允許大小');
     }
   }
 
@@ -199,10 +128,18 @@ function inspectUpdateZip(buffer, options = {}) {
   const declaredFiles = [...new Set(manifest.files.map(String))].sort();
   if (JSON.stringify(payloadFiles) !== JSON.stringify(declaredFiles)) throw new Error('更新 manifest 檔案清單與 ZIP 內容不一致');
 
-  const currentPackage = options.currentPackage || APP_PACKAGE;
-  const currentLockJson = options.currentLock || currentLock || { lockfileVersion: null, packages: {} };
-  const dependencyChanged = depsSignature(nextPackage) !== depsSignature(currentPackage)
-    || lockStructureSignature(nextLock) !== lockStructureSignature(currentLockJson);
+  const basePackage = options.currentPackage || currentPackage;
+  const baseLock = options.currentLock || currentLock;
+  if (!baseLock) {
+    return {
+      ok: false,
+      needsFull: true,
+      reason: '目前安裝版沒有開發 lockfile，舊格式增量更新不可使用，請下載完整 Windows Installer。',
+      version: nextPackage.version,
+    };
+  }
+  const dependencyChanged = depsSignature(nextPackage) !== depsSignature(basePackage)
+    || lockStructureSignature(nextLock) !== lockStructureSignature(baseLock);
   if (dependencyChanged) {
     return {
       ok: false,
@@ -215,340 +152,42 @@ function inspectUpdateZip(buffer, options = {}) {
   return { ok: true, zip, entries, files: payloadFiles, version: nextPackage.version, manifest };
 }
 
-async function fetchBuffer(url, { headers = {}, timeoutMs = 10000, maxBytes = MAX_ZIP_BYTES } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+function inspectUpdateZip(buffer, options = {}) {
+  // Detect schema without trusting it: this branch exists only for regression
+  // compatibility. Production prepareUpdate() lives inside v2 and therefore
+  // routes schema-1 straight to a full-Installer requirement.
   try {
-    const response = await fetch(url, { headers, signal: controller.signal, redirect: 'follow' });
-    if (!response.ok) {
-      const error = new Error(`HTTP ${response.status}`);
-      error.status = response.status;
-      throw error;
+    const probe = new AdmZip(buffer);
+    const entry = probe.getEntry('update-manifest.json');
+    if (entry) {
+      const manifest = JSON.parse(entry.getData().toString('utf8'));
+      if (manifest?.schemaVersion === 1) return inspectLegacyUpdateZip(buffer, options);
     }
-    const declared = Number(response.headers.get('content-length') || 0);
-    if (declared > maxBytes) throw new Error('下載內容超過允許大小');
-    const chunks = [];
-    let total = 0;
-    for await (const chunk of response.body) {
-      total += chunk.length;
-      if (total > maxBytes) {
-        controller.abort();
-        throw new Error('下載內容超過允許大小');
-      }
-      chunks.push(chunk);
-    }
-    return Buffer.concat(chunks);
-  } catch (err) {
-    if (err.name === 'AbortError') throw new Error('下載逾時');
-    throw err;
-  } finally {
-    clearTimeout(timer);
+  } catch (_) {
+    // Delegate malformed archives so the canonical v2 error handling decides.
   }
+  return v2.inspectUpdateZip(buffer, options);
 }
 
-async function fetchLatestRelease(repo) {
-  const body = await fetchBuffer(`https://api.github.com/repos/${repo}/releases?per_page=15`, {
-    headers: ghHeaders(), timeoutMs: 8000, maxBytes: 2 * 1024 * 1024,
-  });
-  let releases;
-  try { releases = JSON.parse(body.toString('utf8')); } catch (_) { throw new Error('GitHub Release 回應格式無效'); }
-  const release = selectLatestRelease(releases);
-  if (!release) throw new Error('尚未發布任何 Release');
-  return release;
-}
-
-async function getPlan(options = {}) {
-  const repo = options.repo || config.updateCheckRepo;
-  const fetchLatestReleaseImpl = options.fetchLatestRelease || fetchLatestRelease;
-  const base = {
-    enabled: !!repo,
-    repo: repo || null,
-    currentVersion: APP_VERSION,
-    latestVersion: null,
-    hasUpdate: false,
-    canIncremental: false,
-    needsFull: false,
-    reason: null,
-    releaseUrl: null,
-    downloadUrl: null,
-  };
-  if (!repo) { base.reason = '未設定更新來源'; return base; }
-  try {
-    const release = await fetchLatestReleaseImpl(repo);
-    base.latestVersion = String(release.tag_name).replace(/^[vV]/, '');
-    base.releaseUrl = typeof release.html_url === 'string' ? release.html_url : null;
-    const installer = findInstallerAsset(release);
-    base.downloadUrl = installer?.browser_download_url || base.releaseUrl;
-    base.hasUpdate = isNewerVersion(base.latestVersion, APP_VERSION);
-    base.canIncremental = false;
-    base.needsFull = base.hasUpdate;
-    if (!base.hasUpdate) base.reason = '已是最新版本';
-    else base.reason = '程式內增量更新已停用，請下載並執行完整 Windows Installer。';
-    return base;
-  } catch (err) {
-    base.reason = err.status === 404 ? '更新來源尚未公開或尚未發布 Release' : `檢查失敗：${err.message}`;
-    return base;
-  }
-}
-
-function ensureInside(child, parent) {
-  const rel = path.relative(path.resolve(parent), path.resolve(child));
-  return rel && !rel.startsWith('..') && !path.isAbsolute(rel);
-}
-
-function unlinkIfExists(target) {
-  try {
-    fs.unlinkSync(target);
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
-  }
-}
-
-function removeTreeInside(target, parent) {
-  const resolvedTarget = path.resolve(target);
-  const resolvedParent = path.resolve(parent);
-  if (!ensureInside(resolvedTarget, resolvedParent)) throw new Error(`拒絕清理更新暫存目錄外的路徑：${resolvedTarget}`);
-
-  let stat;
-  try {
-    stat = fs.lstatSync(resolvedTarget);
-  } catch (err) {
-    if (err.code === 'ENOENT') return;
-    throw err;
-  }
-
-  if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    unlinkIfExists(resolvedTarget);
-    return;
-  }
-  for (const name of fs.readdirSync(resolvedTarget)) {
-    removeTreeInside(path.join(resolvedTarget, name), resolvedTarget);
-  }
-  fs.rmdirSync(resolvedTarget);
-}
-
-function cleanupOldWorkDirs(now = Date.now()) {
-  try {
-    fs.mkdirSync(WORK_BASE, { recursive: true });
-    for (const name of fs.readdirSync(WORK_BASE)) {
-      const full = path.join(WORK_BASE, name);
-      try {
-        if (now - fs.statSync(full).mtimeMs > 24 * 60 * 60 * 1000) removeTreeInside(full, WORK_BASE);
-      } catch (_) { /* best effort */ }
-    }
-  } catch (err) {
-    log.warn(`清理舊更新暫存失敗：${err.message}`);
-  }
-}
-
-function extractToStaging(inspection, stagingRoot) {
-  fs.mkdirSync(stagingRoot, { recursive: true });
-  for (const entry of inspection.entries) {
-    if (entry.isDirectory) continue;
-    const destination = path.join(stagingRoot, ...entry.entryName.split('/'));
-    if (!ensureInside(destination, stagingRoot)) throw new Error(`拒絕寫入 staging 外：${entry.entryName}`);
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.writeFileSync(destination, entry.getData());
-  }
-}
-
-async function downloadReleaseUpdate(release, { reportProgress = true } = {}) {
-  const latestVersion = String(release.tag_name).replace(/^[vV]/, '');
-  const assets = findVerifiedUpdateAssets(release);
-  if (!assets) throw new Error('新版未同時提供固定名稱 update.zip 與 update.zip.sha256');
-
-  if (reportProgress) setProgress('downloading-hash', '正在下載驗證檔');
-  const hashBody = await fetchBuffer(assets.checksum.browser_download_url, {
-    headers: { 'User-Agent': appUserAgent('updater') }, timeoutMs: 10000, maxBytes: 1024,
-  });
-  const expectedHash = parseStrictHash(hashBody.toString('utf8'));
-  if (!expectedHash) throw new Error('SHA-256 驗證檔必須只包含 64 字元十六進位雜湊');
-
-  if (reportProgress) setProgress('downloading-zip', '正在下載更新包');
-  const buffer = await fetchBuffer(assets.zip.browser_download_url, {
-    headers: { 'User-Agent': appUserAgent('updater') }, timeoutMs: 60000, maxBytes: MAX_ZIP_BYTES,
-  });
-  if (reportProgress) setProgress('verifying-hash', '正在驗證 SHA-256');
-  const actualHash = crypto.createHash('sha256').update(buffer).digest('hex');
-  if (actualHash !== expectedHash) throw new Error('更新檔 SHA-256 驗證失敗，正式目錄未變更');
-  return { buffer, latestVersion };
-}
-
-async function downloadLatestUpdate(repo, options = {}) {
-  const fetchLatestReleaseImpl = options.fetchLatestRelease || fetchLatestRelease;
-  const release = await fetchLatestReleaseImpl(repo);
-  const latestVersion = String(release.tag_name).replace(/^[vV]/, '');
-  if (!isNewerVersion(latestVersion, APP_VERSION)) throw new Error('已是最新版本');
-  return downloadReleaseUpdate(release);
-}
-
-async function prepareUpdate(options = {}) {
-  if (INCREMENTAL_UPDATES_DISABLED) {
-    return {
-      prepared: false,
-      needsFull: true,
-      reason: '程式內增量更新已停用，請下載並執行完整 Windows Installer。',
-    };
-  }
-  if (currentProgress.active) return { prepared: false, busy: true, reason: '已有更新工作正在進行' };
-  currentProgress = { active: true, phase: 'checking', message: '正在檢查更新', startedAt: Date.now(), updatedAt: Date.now() };
-  let workRoot = null;
-  try {
-    cleanupOldWorkDirs();
-    const targetRoot = path.resolve(options.targetRoot || PROJECT_ROOT);
-    let buffer = options.zipBuffer;
-    let latestVersion = options.latestVersion || null;
-    if (!buffer) {
-      if (!config.updateCheckRepo) throw new Error('未設定更新來源');
-      ({ buffer, latestVersion } = await downloadLatestUpdate(config.updateCheckRepo, {
-        fetchLatestRelease: options.fetchLatestRelease,
-      }));
-    } else if (options.expectedHash) {
-      setProgress('verifying-hash', '正在驗證 SHA-256');
-      const actual = crypto.createHash('sha256').update(buffer).digest('hex');
-      if (actual !== parseStrictHash(options.expectedHash)) throw new Error('更新檔 SHA-256 驗證失敗，正式目錄未變更');
-    }
-
-    setProgress('inspecting-zip', '正在檢查更新包');
-    const inspection = inspectUpdateZip(buffer, {
-      expectedVersion: latestVersion,
-      currentPackage: options.currentPackage || APP_PACKAGE,
-      currentLock: options.currentLock || currentLock,
-    });
-    if (!inspection.ok) {
-      setProgress('failed', inspection.reason, { error: inspection.reason });
-      return { prepared: false, needsFull: inspection.needsFull, reason: inspection.reason };
-    }
-
-    setProgress('staging', '正在準備更新');
-    fs.mkdirSync(WORK_BASE, { recursive: true });
-    workRoot = options.workRoot
-      ? path.resolve(options.workRoot)
-      : fs.mkdtempSync(path.join(WORK_BASE, 'update-'));
-    const stagingRoot = path.join(workRoot, 'staging');
-    const backupRoot = path.join(workRoot, 'backup');
-    const readyFile = path.join(workRoot, 'updater.ready');
-    const planPath = path.join(workRoot, 'update-plan.json');
-    const runnerPath = path.join(workRoot, 'app-updater-runner.js');
-    extractToStaging(inspection, stagingRoot);
-    fs.copyFileSync(path.join(__dirname, 'app-updater-runner.js'), runnerPath);
-
-    const portableLauncher = path.join(path.dirname(targetRoot), 'Start Elitesand Pro.cmd');
-    // 三種宿主要用三種重啟方式。安裝版必須重新啟動「整個桌面 app」而不是單獨的 server：
-    // 拿 Electron exe 配 server/index.js 當參數只是碰巧會開起 GUI（參數被忽略），
-    // 一旦 runner 帶著 ELECTRON_RUN_AS_NODE 就會退化成「只有 server、沒有視窗」。
-    const restart = fs.existsSync(portableLauncher)
-      ? { type: 'launcher', launcher: portableLauncher }
-      : process.versions.electron
-        ? { type: 'electron-app', command: process.execPath }
-        : { type: 'node', command: process.execPath, args: [path.join(targetRoot, 'server', 'index.js')], cwd: targetRoot };
-    const logDir = targetRoot === PROJECT_ROOT ? logsDir : path.join(targetRoot, 'logs');
-    fs.mkdirSync(logDir, { recursive: true });
-    const plan = {
-      schemaVersion: 1,
-      parentPid: options.parentPid || process.pid,
-      targetRoot,
-      stagingRoot,
-      backupRoot,
-      workRoot,
-      readyFile,
-      logFile: path.join(logDir, `update-${new Date().toISOString().replace(/[:.]/g, '-')}.log`),
-      rollbackErrorLog: path.join(logDir, `update-rollback-error-${Date.now()}.log`),
-      files: inspection.files,
-      fromVersion: APP_VERSION,
-      toVersion: inspection.version,
-      restart,
-      waitTimeoutMs: options.waitTimeoutMs || 10 * 60 * 1000,
-    };
-    fs.writeFileSync(planPath, JSON.stringify(plan, null, 2), 'utf8');
-    setProgress('prepared', '更新已準備完成', { version: inspection.version });
-    return { prepared: true, planPath, runnerPath, readyFile, plan, workRoot, latestVersion: inspection.version };
-  } catch (err) {
-    if (workRoot && !options.workRoot) {
-      try { removeTreeInside(workRoot, WORK_BASE); } catch (_) { /* keep evidence if locked */ }
-    }
-    setProgress('failed', `更新失敗，程式仍可繼續使用：${err.message}`, { error: err.message });
-    log.warn(`更新準備失敗（主程序繼續運作）：${err.message}`);
-    return { prepared: false, needsFull: false, reason: err.message };
-  }
-}
-
-async function launchUpdater(prepared, options = {}) {
-  if (!prepared?.prepared) return { launched: false, reason: '更新尚未準備完成' };
-  const spawnImpl = options.spawnImpl || spawn;
-  let child;
-  try {
-    // 安裝版（Electron）的 server 跑在 utilityProcess 裡，process.execPath 是
-    // 「Elitesand Pro.exe」而不是 node.exe。直接拿它 spawn 一個 .js 會啟動整個 GUI app、
-    // 忽略腳本參數，runner 永遠不會寫出 readyFile ——症狀就是「updater 未能完成啟動握手」。
-    // 開發機與可攜版看不出問題（execPath 是真的 node），所以這個缺陷一路活到 0.9.7。
-    // ELECTRON_RUN_AS_NODE=1 讓同一個 exe 以純 Node 模式執行腳本；可攜版沒有這個變數也不受影響。
-    child = spawnImpl(process.execPath, [prepared.runnerPath, prepared.planPath], {
-      detached: true,
-      windowsHide: true,
-      stdio: 'ignore',
-      cwd: prepared.workRoot,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-    });
-    if (!child || typeof child.once !== 'function') throw new Error('無法建立 updater 程序');
-    child.unref?.();
-  } catch (err) {
-    setProgress('failed', `updater 啟動失敗，程式仍可繼續使用：${err.message}`, { error: err.message });
-    return { launched: false, reason: `updater 啟動失敗：${err.message}` };
-  }
-
-  const timeoutMs = options.readyTimeoutMs || 5000;
-  const ready = await new Promise((resolve) => {
-    let settled = false;
-    const finish = (value) => { if (!settled) { settled = true; clearInterval(poll); clearTimeout(timer); resolve(value); } };
-    const poll = setInterval(() => { if (fs.existsSync(prepared.readyFile)) finish(true); }, 40);
-    const timer = setTimeout(() => finish(false), timeoutMs);
-    child.once('error', () => finish(false));
-    child.once('exit', () => { if (!fs.existsSync(prepared.readyFile)) finish(false); });
-  });
-  if (!ready) {
-    try { child.kill(); } catch (_) { /* best effort */ }
-    setProgress('failed', 'updater 未能完成啟動握手，程式仍可繼續使用', { error: 'UPDATER_NOT_READY' });
-    return { launched: false, reason: 'updater 未能完成啟動握手' };
-  }
-  setProgress('ready', '更新已準備完成，即將重新啟動', { version: prepared.latestVersion });
-  return { launched: true, updaterPid: child.pid };
-}
-
-async function prepareAndLaunchUpdate(options = {}) {
-  const prepared = await prepareUpdate(options);
-  if (!prepared.prepared) return prepared;
-  const launched = await launchUpdater(prepared, options);
-  if (!launched.launched) return { prepared: false, reason: launched.reason };
-  return {
-    prepared: true,
-    restartPending: true,
-    latestVersion: prepared.latestVersion,
-    message: '更新已準備完成，即將重新啟動',
-  };
-}
+// These shared helpers remain visible from the compatibility facade because
+// update-checking diagnostics historically imported app-updater directly.
+const compatibilityContext = Object.freeze({
+  APP_VERSION,
+  appUserAgent,
+  githubJsonHeaders,
+  projectRoot,
+  logsDir,
+  selectLatestRelease,
+  findInstallerAsset,
+  findVerifiedUpdateAssets,
+});
 
 module.exports = {
-  UPDATE_ZIP_NAME,
-  UPDATE_HASH_NAME,
-  MIN_SAFE_UPDATER_VERSION,
-  INCREMENTAL_UPDATES_DISABLED,
-  getPlan,
-  getProgress,
-  prepareUpdate,
-  launchUpdater,
-  prepareAndLaunchUpdate,
+  ...v2,
   inspectUpdateZip,
-  parseStrictHash,
-  isSafeRelativePath,
-  isAllowedEntry,
+  inspectLegacyUpdateZip,
+  isAllowedEntry: isLegacyAllowedEntry,
   depsSignature,
   lockStructureSignature,
-  unlinkIfExists,
-  removeTreeInside,
-  selectLatestRelease,
-  findVerifiedUpdateAssets,
-  _resetForTests() {
-    currentProgress = { active: false, phase: 'idle', message: '尚未開始更新', startedAt: null, updatedAt: Date.now() };
-  },
+  compatibilityContext,
 };
