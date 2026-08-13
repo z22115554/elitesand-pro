@@ -2867,6 +2867,55 @@ test('Twitch EventSub welcome watchdog closes a stalled socket and returns to re
   }
 });
 
+testAsync('Twitch EventSub keepalive watchdog and revocation never leave a false connected state', async () => {
+  const timers = [];
+  const fakeTimers = {
+    setTimeout(fn, delay) { const timer = { fn, delay, cleared: false }; timers.push(timer); return timer; },
+    clearTimeout(timer) { if (timer) timer.cleared = true; },
+  };
+  let cleared = 0;
+  const socket = { closed: false, close() { this.closed = true; } };
+  const retries = [];
+  const service = new TwitchService({
+    config: { twitchClientId: 'fixture' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {},
+    pendingStore: { load: () => [], save: () => true },
+    sessionStore: { load: () => null, save: () => true },
+    historyStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => { cleared += 1; return true; } },
+    timers: fakeTimers,
+  });
+  service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
+  service.ws = socket;
+  service.createSubscription = async () => {};
+  service.refreshLiveState = async () => {};
+  service.scheduleReconnect = (reason) => retries.push(reason);
+  await service.handleWebSocketMessage(JSON.stringify({
+    metadata: { message_type: 'session_welcome' },
+    payload: { session: { id: 'session-1', keepalive_timeout_seconds: 30 } },
+  }), socket);
+  eq(timers.at(-1).delay, 35000);
+  timers.at(-1).fn();
+  eq(service.ws, null);
+  ok(socket.closed, 'keepalive 逾時必須主動關閉 stale socket');
+  ok(retries.at(-1).includes('keepalive'));
+
+  const revokedSocket = { closed: false, close() { this.closed = true; } };
+  service.ws = revokedSocket;
+  service.wsSessionId = 'session-2';
+  service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
+  await service.handleWebSocketMessage(JSON.stringify({
+    metadata: { message_type: 'revocation' },
+    payload: { subscription: { status: 'authorization_revoked' } },
+  }), revokedSocket);
+  eq(service.auth, null);
+  eq(cleared, 1);
+  eq(service.connectionState, 'authorization_required');
+  ok(revokedSocket.closed, '撤銷後必須主動關閉舊 socket');
+  service.stop();
+});
+
 test('Twitch status observation reports a safe lifecycle without changing a disabled service', () => {
   const statuses = [];
   const service = new TwitchService({

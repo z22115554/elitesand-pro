@@ -34,6 +34,9 @@ const RECONNECT_MAX_MS = 60000;
 // A TCP/WebSocket handshake can stay open forever without the EventSub welcome.
 // Bound it so a stalled connection falls back to the existing exponential retry path.
 const CONNECT_WATCHDOG_MS = 20000;
+const KEEPALIVE_WATCHDOG_GRACE_MS = 5000;
+const DEFAULT_EVENTSUB_KEEPALIVE_SECONDS = 30;
+const MAX_EVENTSUB_KEEPALIVE_SECONDS = 120;
 const ADMIN_ACTION_TIMEOUT_MS = 12000;
 const HISTORY_MAX_ENTRIES = 5000;
 const HISTORY_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -152,6 +155,9 @@ class TwitchService {
     this.adminPanelActions = new Map();
     this.reconnectTimer = null;
     this.connectionWatchdogTimer = null;
+    this.keepaliveWatchdogTimer = null;
+    this.lastEventSubMessageAt = 0;
+    this.eventSubKeepaliveSeconds = DEFAULT_EVENTSUB_KEEPALIVE_SECONDS;
     this.reconnectAttempt = 0;
     this.nextRetryAt = 0;
     this.connectionState = 'idle';
@@ -720,27 +726,71 @@ class TwitchService {
     this.connectionWatchdogTimer = null;
   }
 
+  clearKeepaliveWatchdog() {
+    if (this.keepaliveWatchdogTimer) this.timers.clearTimeout(this.keepaliveWatchdogTimer);
+    this.keepaliveWatchdogTimer = null;
+  }
+
+  handleStalledEventSubSocket(ws, reason) {
+    if (this.closed || this.ws !== ws) return;
+    this.clearConnectionWatchdog();
+    this.clearKeepaliveWatchdog();
+    this.ws = null;
+    this.wsSessionId = null;
+    this.rewardSubscriptionReady = false;
+    this.subscriptionState = 'idle';
+    this.lastDisconnectedAt = Date.now();
+    this.lastConnectionError = reason;
+    this.notifyStatusChange();
+    try { if (typeof ws.close === 'function') ws.close(); } catch (_) { /* best effort */ }
+    this.scheduleReconnect(reason);
+  }
+
   armConnectionWatchdog(ws) {
     this.clearConnectionWatchdog();
     this.connectionWatchdogTimer = this.timers.setTimeout(() => {
       this.connectionWatchdogTimer = null;
       // A welcome message clears the watchdog. Ignore stale timers belonging to
       // a replaced socket so a normal EventSub reconnect cannot be interrupted.
-      if (this.closed || this.ws !== ws || this.wsSessionId) return;
-      this.ws = null;
-      this.wsSessionId = null;
-      this.rewardSubscriptionReady = false;
-      this.subscriptionState = 'idle';
-      this.lastDisconnectedAt = Date.now();
-      this.lastConnectionError = 'EventSub 連線逾時，未收到 session welcome';
-      this.notifyStatusChange();
-      try { if (typeof ws.close === 'function') ws.close(); } catch (_) { /* best effort */ }
-      this.scheduleReconnect(this.lastConnectionError);
+      if (this.wsSessionId) return;
+      this.handleStalledEventSubSocket(ws, 'EventSub 連線逾時，未收到 session welcome');
     }, CONNECT_WATCHDOG_MS);
+  }
+
+  armKeepaliveWatchdog(ws) {
+    this.clearKeepaliveWatchdog();
+    if (this.closed || this.ws !== ws || !this.wsSessionId) return;
+    const delay = Math.max(10000, Math.min(
+      MAX_EVENTSUB_KEEPALIVE_SECONDS * 1000 + KEEPALIVE_WATCHDOG_GRACE_MS,
+      this.eventSubKeepaliveSeconds * 1000 + KEEPALIVE_WATCHDOG_GRACE_MS,
+    ));
+    this.keepaliveWatchdogTimer = this.timers.setTimeout(() => {
+      this.keepaliveWatchdogTimer = null;
+      this.handleStalledEventSubSocket(ws, 'EventSub keepalive 逾時，連線已重新建立');
+    }, delay);
+  }
+
+  handleEventSubRevocation(message, ws) {
+    if (this.ws !== ws) return;
+    const status = String(message?.payload?.subscription?.status || 'revoked').slice(0, 80);
+    this.clearConnectionWatchdog();
+    this.clearKeepaliveWatchdog();
+    this.ws = null;
+    this.wsSessionId = null;
+    this.rewardSubscriptionReady = false;
+    this.subscriptionState = 'revoked';
+    this.lastDisconnectedAt = Date.now();
+    this.lastConnectionError = `EventSub 訂閱已撤銷（${status}），請重新連接 Twitch`;
+    this.auth = null;
+    try { this.authStore.clear(); } catch (err) { log.warn(`清除已撤銷 Twitch 授權失敗：${err.message}`); }
+    this.connectionState = this.configured() ? 'authorization_required' : 'disabled';
+    this.notifyStatusChange();
+    try { if (typeof ws.close === 'function') ws.close(); } catch (_) { /* best effort */ }
   }
 
   disconnectEventSub() {
     this.clearConnectionWatchdog();
+    this.clearKeepaliveWatchdog();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     const ws = this.ws;
@@ -826,12 +876,13 @@ class TwitchService {
     const ws = new WebSocket(url);
     this.ws = ws;
     this.armConnectionWatchdog(ws);
-    const onMessage = (event) => this.handleWebSocketMessage(event && event.data !== undefined ? event.data : event)
+    const onMessage = (event) => this.handleWebSocketMessage(event && event.data !== undefined ? event.data : event, ws)
       .catch((err) => log.warn(`Twitch 訊息處理失敗：${err.message}`));
     const onOpen = () => log.info('正在連線 Twitch EventSub WebSocket');
     const onClose = () => {
       if (this.ws !== ws) return;
       this.clearConnectionWatchdog();
+      this.clearKeepaliveWatchdog();
       this.ws = null;
       this.wsSessionId = null;
       this.rewardSubscriptionReady = false;
@@ -871,13 +922,24 @@ class TwitchService {
     }, delay);
   }
 
-  async handleWebSocketMessage(raw) {
+  async handleWebSocketMessage(raw, ws = this.ws) {
+    if (!ws || ws !== this.ws) return;
     let message;
     try { message = JSON.parse(Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw)); } catch (_) { return; }
     const type = message && message.metadata && message.metadata.message_type;
+    if (this.wsSessionId) {
+      this.lastEventSubMessageAt = Date.now();
+      this.armKeepaliveWatchdog(ws);
+    }
     if (type === 'session_welcome') {
       this.clearConnectionWatchdog();
       this.wsSessionId = message.payload.session.id;
+      const advertisedKeepalive = Number(message.payload?.session?.keepalive_timeout_seconds);
+      this.eventSubKeepaliveSeconds = Number.isFinite(advertisedKeepalive) && advertisedKeepalive >= 10
+        ? Math.min(MAX_EVENTSUB_KEEPALIVE_SECONDS, advertisedKeepalive)
+        : DEFAULT_EVENTSUB_KEEPALIVE_SECONDS;
+      this.lastEventSubMessageAt = Date.now();
+      this.armKeepaliveWatchdog(ws);
       this.connectionState = 'connected';
       this.subscriptionState = 'subscribing';
       this.lastConnectedAt = Date.now();
@@ -920,7 +982,7 @@ class TwitchService {
     }
     if (type === 'session_reconnect') {
       const reconnectUrl = message.payload && message.payload.session && message.payload.session.reconnect_url;
-      const old = this.ws; this.clearConnectionWatchdog(); this.ws = null; this.wsSessionId = null;
+      const old = this.ws; this.clearConnectionWatchdog(); this.clearKeepaliveWatchdog(); this.ws = null; this.wsSessionId = null;
       this.rewardSubscriptionReady = false;
       this.subscriptionState = 'idle';
       this.connectionState = 'reconnecting';
@@ -928,6 +990,10 @@ class TwitchService {
       this.notifyStatusChange();
       if (old && typeof old.close === 'function') old.close();
       if (reconnectUrl) this.connectEventSub(reconnectUrl);
+      return;
+    }
+    if (type === 'revocation') {
+      this.handleEventSubRevocation(message, ws);
       return;
     }
     if (type !== 'notification') return;
@@ -1927,6 +1993,7 @@ class TwitchService {
   stop() {
     this.closed = true;
     this.clearConnectionWatchdog();
+    this.clearKeepaliveWatchdog();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     for (const timer of this.requestExpiryTimers.values()) clearTimeout(timer);
     this.requestExpiryTimers.clear();
