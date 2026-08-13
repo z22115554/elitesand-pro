@@ -17,6 +17,7 @@ const requestHistoryStore = require('./twitch-history-store');
 const TwitchReplySettings = require('../../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const TwitchRewardSettings = require('../../public/js/twitch-reward-settings');
+const { fetchWithTimeout } = require('../utils/helpers');
 const { createLogger } = require('../utils/logger');
 
 const log = createLogger('Twitch');
@@ -38,6 +39,9 @@ const KEEPALIVE_WATCHDOG_GRACE_MS = 5000;
 const DEFAULT_EVENTSUB_KEEPALIVE_SECONDS = 30;
 const MAX_EVENTSUB_KEEPALIVE_SECONDS = 120;
 const ADMIN_ACTION_TIMEOUT_MS = 12000;
+const HELIX_TIMEOUT_MS = 15000;
+const CHAT_REPLY_USER_COOLDOWN_MS = 5000;
+const CHAT_REPLY_GLOBAL_COOLDOWN_MS = 750;
 const HISTORY_MAX_ENTRIES = 5000;
 const HISTORY_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -178,6 +182,8 @@ class TwitchService {
     };
     this.commandUserCooldowns = new Map();
     this.commandGlobalCooldowns = new Map();
+    this.chatReplyUserCooldowns = new Map();
+    this.lastChatReplyAt = 0;
     this.rewardSubscriptionReady = false;
     this.seenRedemptions = new Map();
     this.requestSession = this.restoreRequestSession();
@@ -1033,7 +1039,11 @@ class TwitchService {
       Authorization: `Bearer ${this.auth.accessToken}`,
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     };
-    return fetch(`${HELIX}${path}`, { ...options, headers, body: options.body ? JSON.stringify(options.body) : undefined });
+    return fetchWithTimeout(`${HELIX}${path}`, {
+      ...options,
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    }, HELIX_TIMEOUT_MS);
   }
 
   async requireRedemptionAuthorization() {
@@ -1149,6 +1159,20 @@ class TwitchService {
     if (commandSettings.globalCooldownSeconds > 0) this.commandGlobalCooldowns.set(commandKey, now);
     const userKey = requesterKey(event);
     if (userKey && commandSettings.userCooldownSeconds > 0) this.commandUserCooldowns.set(`${commandKey}:${userKey}`, now);
+  }
+
+  async sendCommandReply(event, replyKey, values = {}) {
+    const now = Date.now();
+    const userKey = requesterKey(event);
+    if (!userKey) return this.sendConfiguredReply(event, replyKey, values);
+    const lastForUser = userKey ? this.chatReplyUserCooldowns.get(userKey) || 0 : 0;
+    if (now - this.lastChatReplyAt < CHAT_REPLY_GLOBAL_COOLDOWN_MS
+      || (userKey && now - lastForUser < CHAT_REPLY_USER_COOLDOWN_MS)) {
+      return { sent: false, skipped: true, throttled: true };
+    }
+    this.lastChatReplyAt = now;
+    if (userKey) this.chatReplyUserCooldowns.set(userKey, now);
+    return this.sendConfiguredReply(event, replyKey, values);
   }
 
   playbackSummary() {
@@ -1490,9 +1514,17 @@ class TwitchService {
     if (!match) return;
     const command = match.command;
     const commandSettings = match.settings;
+    const cooldownKey = match.kind === 'custom' ? `custom:${match.key}` : match.key;
+    const fairnessExempt = match.key === 'request' && this.requestFairnessExempt(event);
+    const earlyCooldown = fairnessExempt ? 0 : this.commandCooldown(cooldownKey, commandSettings, event);
+    if (earlyCooldown > 0) {
+      await this.sendCommandReply(event, 'cooldownActive', { command, seconds: earlyCooldown });
+      return;
+    }
     if (!TwitchRequestSettings.permissionAllows(event, commandSettings.permissionLevel)
       || (match.definition?.adminOnly && !TwitchRequestSettings.rolesForEvent(event).moderator)) {
-      await this.sendConfiguredReply(event, 'permissionDenied', { command });
+      if (!fairnessExempt) this.recordCommandCooldown(cooldownKey, commandSettings, event);
+      await this.sendCommandReply(event, 'permissionDenied', { command });
       return;
     }
     if (match.definition?.adminOnly) {
@@ -1524,25 +1556,19 @@ class TwitchService {
       }
       return;
     }
-    const fairnessExempt = match.key === 'request' && this.requestFairnessExempt(event);
-    const remainingSeconds = fairnessExempt ? 0 : this.commandCooldown(match.key, commandSettings, event);
-    if (remainingSeconds > 0) {
-      await this.sendConfiguredReply(event, 'cooldownActive', { command, seconds: remainingSeconds });
-      return;
-    }
-
     if (match.key !== 'request') {
       await this.handleSelfServiceCommand(match.key, event);
       this.recordCommandCooldown(match.key, commandSettings, event);
       return;
     }
     if (!rules.enabled) {
-      await this.sendConfiguredReply(event, 'requestDisabled', { command });
+      if (!fairnessExempt) this.recordCommandCooldown(match.key, commandSettings, event);
+      await this.sendCommandReply(event, 'requestDisabled', { command });
       return;
     }
     const requestId = event.message_id || fallbackId || crypto.randomUUID();
-    const accepted = await this.handleSongRequestInput({ event, requestId, url: String(match.argument || '').trim(), command, source: 'chat' });
-    if (accepted && !fairnessExempt) this.recordCommandCooldown(match.key, commandSettings, event);
+    await this.handleSongRequestInput({ event, requestId, url: String(match.argument || '').trim(), command, source: 'chat' });
+    if (!fairnessExempt) this.recordCommandCooldown(match.key, commandSettings, event);
   }
 
   async handleRewardRedemption(redemptionEvent, fallbackId) {
@@ -1925,6 +1951,9 @@ class TwitchService {
     }
     for (const [key, acceptedAt] of this.commandGlobalCooldowns) {
       if (acceptedAt <= cooldownCutoff) this.commandGlobalCooldowns.delete(key);
+    }
+    for (const [key, repliedAt] of this.chatReplyUserCooldowns) {
+      if (repliedAt <= now - CHAT_REPLY_USER_COOLDOWN_MS) this.chatReplyUserCooldowns.delete(key);
     }
     for (const [redemptionId, seenAt] of this.seenRedemptions) {
       if (seenAt <= now - 24 * 60 * 60 * 1000) this.seenRedemptions.delete(redemptionId);

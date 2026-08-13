@@ -44,6 +44,10 @@ function Get-ReleaseDownload {
 }
 
 $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$TestCommand = Get-Command npm.cmd -ErrorAction Stop
+Write-Host "Running required test gate before packaging..."
+& $TestCommand.Source --prefix $Root test
+if ($LASTEXITCODE -ne 0) { throw "npm test failed; refusing to package an unverified portable build." }
 $Package = Get-Content (Join-Path $Root "package.json") -Raw | ConvertFrom-Json
 $Version = $Package.version
 

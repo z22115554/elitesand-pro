@@ -80,9 +80,10 @@ function seedState() {
 }
 
 class WireClient {
-  constructor(url, clientType) {
+  constructor(url, clientType, pin = '') {
     this.url = url;
     this.clientType = clientType;
+    this.pin = pin;
     this.socket = null;
     this.events = new Map();
     this.waiters = new Map();
@@ -123,7 +124,7 @@ class WireClient {
     // Engine.IO open packet.  Socket.IO middleware reads auth from the first
     // CONNECT packet, before the application-level client:type event.
     if (packet.startsWith('0')) {
-      this.sendRaw(`40${JSON.stringify({ clientType: this.clientType })}`);
+      this.sendRaw(`40${JSON.stringify({ clientType: this.clientType, pin: this.pin })}`);
       return;
     }
     if (packet.startsWith('40')) {
@@ -228,6 +229,9 @@ function validatePlaylistUpdate(payload, label, { readOnly = false } = {}) {
 
 async function run() {
   seedState();
+  const authStore = require(path.join(root, 'server', 'services', 'auth-store'));
+  const pin = 'matrix-test-pin';
+  if (!authStore.setPin(pin).ok) fail('failed to seed matrix control PIN');
   const { server, io, gracefulShutdown } = require(path.join(root, 'server', 'index'));
   const clients = [];
   let exitCode = 0;
@@ -237,7 +241,7 @@ async function run() {
     const url = `ws://127.0.0.1:${port}/socket.io/?EIO=4&transport=websocket`;
     const byType = {};
     for (const type of ['controller', 'remote', 'display', 'setlist']) {
-      const client = new WireClient(url, type);
+      const client = new WireClient(url, type, type === 'controller' || type === 'remote' ? pin : '');
       clients.push(client);
       byType[type] = await client.connect();
     }

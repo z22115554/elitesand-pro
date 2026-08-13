@@ -1868,6 +1868,13 @@ test('portable build creates a clean production-only dependency tree in staging'
   ok(source.includes('Installing production dependencies in staging'));
 });
 
+test('installer and portable builds run the full test gate before packaging', () => {
+  const installer = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
+  const portable = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-portable.ps1'), 'utf8');
+  ok(installer.includes('npm.cmd') && installer.includes('--prefix $Root test'), 'installer build must run npm test before packaging');
+  ok(portable.includes('npm.cmd') && portable.includes('--prefix $Root test'), 'portable build must run npm test before packaging');
+});
+
 test('bilingual EULA is shipped with portable builds as a finalized agreement', () => {
   const root = path.join(__dirname, '..');
   const eulaPath = path.join(root, 'EULA.txt');
@@ -2099,6 +2106,19 @@ test('狀態持久化：狀態檔不存在時回傳 null 不報錯', () => {
     ].join('\n'));
     eq(result.loaded, null);
     eq(result.alert, null);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('狀態持久化：last-good 保留前一份有效狀態而非鏡像新檔', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-last-good-'));
+  try {
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const first={savedAt:100,marker:'first',playlist:[]}; const second={savedAt:200,marker:'second',playlist:[]};",
+      "store.scheduleSave(()=>first); store.saveNow(); store.scheduleSave(()=>second); store.saveNow();",
+      "const primary=JSON.parse(fs.readFileSync(store.STATE_FILE,'utf8')); const backup=JSON.parse(fs.readFileSync(store.STATE_BACKUP_FILE,'utf8')); process.stdout.write('__STATE_RESULT__'+JSON.stringify({primary,backup}));",
+    ].join('\n'));
+    eq(result.primary.marker, 'second');
+    eq(result.backup.marker, 'first');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
@@ -5885,8 +5905,8 @@ test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件
     on(event, fn) { if (event === 'connection') this.connectionHandler = fn; },
     emit(event, data) { this.emitted.push({ event, data }); },
   });
-  const makeSocket = (type) => ({
-    id: `${type}-1`, handshake: { auth: { clientType: type, pin: '' }, address: '127.0.0.1' },
+  const makeSocket = (type, pin = '') => ({
+    id: `${type}-1`, handshake: { auth: { clientType: type, pin }, address: '127.0.0.1' },
     events: new Map(), emitted: [],
     on(event, fn) { this.events.set(event, fn); },
     emit(event, data) { this.emitted.push({ event, data }); },
@@ -5902,13 +5922,20 @@ test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件
   ok(!overlay.events.has('play:toggle'));
   ok(!overlay.events.has('library:clear'));
 
-  const controlIo = makeIo();
-  socketHandler(controlIo);
-  const controller = makeSocket('controller');
-  controlIo.authMiddleware(controller, (err) => { if (err) throw err; });
-  controlIo.connectionHandler(controller);
-  ok(controller.events.has('play:toggle'));
-  ok(controller.events.has('library:clear'));
+  const authStore = require('../server/services/auth-store');
+  const testPin = 'role-test-pin';
+  ok(authStore.setPin(testPin).ok, 'socket role test must seed its control PIN');
+  try {
+    const controlIo = makeIo();
+    socketHandler(controlIo);
+    const controller = makeSocket('controller', testPin);
+    controlIo.authMiddleware(controller, (err) => { if (err) throw err; });
+    controlIo.connectionHandler(controller);
+    ok(controller.events.has('play:toggle'));
+    ok(controller.events.has('library:clear'));
+  } finally {
+    authStore.clearPin(testPin);
+  }
 });
 
 test('Stored XSS 回歸：歌單與遙控器以文字節點輸出外部 metadata', () => {
@@ -9607,6 +9634,25 @@ console.log('\n🌐 17. M6.1 介面語系層');
     eq(rootEl.children.length, 0, 'destroy 應該把引導元件從畫面移除：');
   });
 }
+
+testAsync('Twitch rejected requests create cooldown and suppress repeat chat replies', async () => {
+  const replies = [];
+  const service = new TwitchService({
+    config: { twitchClientId: '' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  service.setRequestSettings({ ...TwitchRequestSettings.getDefaults(), enabled: false, cooldownSeconds: 60 });
+  service.sendConfiguredReply = async (_event, key, values = {}) => { replies.push({ key, values }); return { sent: true }; };
+  const event = { chatter_user_id: 'spam-viewer', chatter_user_name: 'spam-viewer', message: { text: '!點歌 https://youtu.be/dQw4w9WgXcQ' } };
+  await service.handleChatMessage(event);
+  eq(replies.at(-1).key, 'requestDisabled');
+  await service.handleChatMessage(event);
+  eq(replies.length, 1, 'cooldown repeat must not keep posting to chat');
+  ok(service.commandUserCooldowns.has('request:spam-viewer'));
+  service.stop();
+});
 
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }

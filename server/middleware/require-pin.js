@@ -14,7 +14,14 @@ const authStore = require('../services/auth-store');
 const rateLimiter = require('../services/auth-rate-limiter');
 
 function requirePin(req, res, next) {
-  if (!authStore.hasPin()) return next();
+  // The initial PIN is created only through the local /api/auth/set route.
+  // Other protected actions remain unavailable until that setup is complete.
+  if (!authStore.hasPin()) {
+    return res.status(428).json({
+      error: '請先在執行 Elitesand Pro 的本機控制面板設定第一組 PIN',
+      code: 'PIN_SETUP_REQUIRED',
+    });
+  }
   const key = `protected:${req.ip || req.socket?.remoteAddress || 'unknown'}`;
   const limit = rateLimiter.status(key);
   if (!limit.allowed) {

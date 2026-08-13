@@ -14,6 +14,7 @@ process.env.ELITESAND_LOGS_DIR = path.join(TEST_ROOT, 'logs');
 const { canSetFirstPin, isLoopbackAddress } = require('../server/utils/pin-setup-policy');
 const { isAllowedHttpHost, isAllowedSocketRequest } = require('../server/utils/socket-origin');
 const { hostGuard } = require('../server/middleware/host-guard');
+const requirePin = require('../server/middleware/require-pin');
 const authStore = require('../server/services/auth-store');
 const authRouter = require('../server/routes/auth');
 
@@ -32,6 +33,12 @@ function test(name, fn) {
 function setHandler() {
   const layer = authRouter.stack.find((item) => item.route?.path === '/set' && item.route.methods.post);
   if (!layer) throw new Error('找不到 POST /api/auth/set route');
+  return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+function clearHandler() {
+  const layer = authRouter.stack.find((item) => item.route?.path === '/clear' && item.route.methods.post);
+  if (!layer) throw new Error('missing POST /api/auth/clear route');
   return layer.route.stack[layer.route.stack.length - 1].handle;
 }
 
@@ -58,6 +65,28 @@ function invokeSet({ address, newPin, currentPin = '' }) {
     socket: { remoteAddress: address },
     connection: { remoteAddress: address },
   }, response);
+  return response;
+}
+
+function invokeRequirePin(pin = '') {
+  const response = {
+    statusCode: 200,
+    set() { return this; },
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.payload = payload; return this; },
+  };
+  let calledNext = false;
+  requirePin({ headers: pin ? { 'x-pin': pin } : {}, query: {}, body: {}, socket: { remoteAddress: '127.0.0.1' } }, response, () => { calledNext = true; });
+  return { response, calledNext };
+}
+
+function invokeClear() {
+  const response = {
+    statusCode: 200,
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.payload = payload; return this; },
+  };
+  clearHandler()({ body: {}, socket: { remoteAddress: '127.0.0.1' } }, response);
   return response;
 }
 
@@ -100,6 +129,10 @@ test('loopback address 判定不會把私人網段誤認為本機', () => {
 
 test('第一組 PIN 只能由本機設定，既有 PIN 可由已授權遠端更新', () => {
   assert.strictEqual(authStore.hasPin(), false);
+  const setupRequired = invokeRequirePin();
+  assert.strictEqual(setupRequired.calledNext, false);
+  assert.strictEqual(setupRequired.response.statusCode, 428);
+  assert.strictEqual(setupRequired.response.payload.code, 'PIN_SETUP_REQUIRED');
 
   const blocked = invokeSet({ address: '192.168.1.9', newPin: '1234' });
   assert.strictEqual(blocked.statusCode, 403);
@@ -114,11 +147,17 @@ test('第一組 PIN 只能由本機設定，既有 PIN 可由已授權遠端更�
   assert.strictEqual(firstSet.statusCode, 200);
   assert.strictEqual(firstSet.payload.ok, true);
   assert.strictEqual(authStore.verifyPin('1234'), true);
+  const allowed = invokeRequirePin('1234');
+  assert.strictEqual(allowed.calledNext, true);
 
   const remoteChange = invokeSet({ address: '192.168.1.9', currentPin: '1234', newPin: '5678' });
   assert.strictEqual(remoteChange.statusCode, 200);
   assert.strictEqual(remoteChange.payload.ok, true);
   assert.strictEqual(authStore.verifyPin('5678'), true);
+  const clearAttempt = invokeClear();
+  assert.strictEqual(clearAttempt.statusCode, 409);
+  assert.strictEqual(clearAttempt.payload.code, 'PIN_REQUIRED_ALWAYS');
+  assert.strictEqual(authStore.hasPin(), true);
   assert.strictEqual(authStore.clearPin('5678').ok, true);
 });
 

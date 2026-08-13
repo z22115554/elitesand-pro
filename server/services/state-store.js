@@ -87,7 +87,15 @@ function atomicWrite(filename, raw) {
   const temporary = `${filename}.tmp-${process.pid}-${Date.now()}`;
   try {
     fs.writeFileSync(temporary, raw, 'utf8');
+    // Flush file contents before atomically replacing the live state file.
+    const fd = fs.openSync(temporary, 'r+');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
     fs.renameSync(temporary, filename);
+    // Directory metadata flush is best effort because Windows may reject it.
+    try {
+      const dirFd = fs.openSync(path.dirname(filename), 'r');
+      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+    } catch (_) { /* best effort */ }
   } finally {
     try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) { /* best effort */ }
   }
@@ -145,7 +153,9 @@ function setStartupAlert(message, type = 'warning') {
 }
 
 function refreshLastGood(state) {
-  atomicWrite(STATE_BACKUP_FILE, JSON.stringify(state));
+  // A successful startup must not replace the prior recovery point with the
+  // current primary file. Only bootstrap a missing backup.
+  if (!fs.existsSync(STATE_BACKUP_FILE)) atomicWrite(STATE_BACKUP_FILE, JSON.stringify(state));
 }
 
 function blockWritesForFutureSchema(error, filename = STATE_FILE) {
@@ -328,6 +338,7 @@ function saveNow() {
     const rawSnapshot = _lastSnapshotFn();
     if (!rawSnapshot) throw new Error('無法取得要保存的狀態快照');
     const snapshot = { ...rawSnapshot, schemaVersion: CURRENT_STATE_SCHEMA_VERSION };
+    let previousSerialized = null;
     if (fs.existsSync(STATE_FILE)) {
       try {
         const diskResult = readMigratedStateFile(STATE_FILE);
@@ -339,6 +350,7 @@ function saveNow() {
           }
         }
         const disk = diskResult.state;
+        previousSerialized = fs.readFileSync(STATE_FILE, 'utf8');
         const diskSavedAt = Number(disk.savedAt) || 0;
         if (diskSavedAt > _lastKnownSavedAt) {
           const now = Date.now();
@@ -386,10 +398,17 @@ function saveNow() {
     }
 
     const serialized = JSON.stringify(snapshot);
+    // Create the recovery point before replacing the primary file. This is the
+    // previous valid on-disk state, not a second copy of the new state.
+    if (previousSerialized !== null) {
+      atomicWrite(STATE_BACKUP_FILE, previousSerialized);
+    } else if (!fs.existsSync(STATE_BACKUP_FILE)) {
+      atomicWrite(STATE_BACKUP_FILE, serialized);
+    }
     atomicWrite(STATE_FILE, serialized);
     _lastKnownSavedAt = Number(snapshot.savedAt) || Date.now();
     try {
-      atomicWrite(STATE_BACKUP_FILE, serialized);
+      if (!fs.existsSync(STATE_BACKUP_FILE)) atomicWrite(STATE_BACKUP_FILE, serialized);
     } catch (backupError) {
       log.warn(`狀態已保存，但安全備份更新失敗: ${backupError.message}`);
       if (_errorReporter) _errorReporter({ area: '狀態備份', message: '狀態已保存，但安全備份更新失敗；請檢查磁碟空間或資料夾權限。' });

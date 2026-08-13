@@ -75,6 +75,12 @@ router.post('/set', (req, res) => {
 
 // 關閉 PIN 保護（需先驗證目前的 PIN）
 router.post('/clear', (req, res) => {
+  return res.status(409).json({
+    ok: false,
+    code: 'PIN_REQUIRED_ALWAYS',
+    message: 'PIN protection is required. Use /api/auth/set to change it.',
+  });
+  /*
   if (rejectIfLimited(req, res)) return;
   const { currentPin } = req.body || {};
   const result = authStore.clearPin(currentPin);
@@ -86,6 +92,7 @@ router.post('/clear', (req, res) => {
     recordAuthResult(req, false);
     res.status(400).json(result);
   }
+  */
 });
 
 module.exports = router;

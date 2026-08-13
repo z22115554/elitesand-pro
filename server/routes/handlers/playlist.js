@@ -259,6 +259,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
     if (data.romanizationMode) playState.romanizationMode = data.romanizationMode;
 
     emitPlaylistUpdate();
+    emitSetlist();
     broadcastState();
     persistState();
     log.info(`播放清單匯入完成: ${playState.playlist.length} 首`);

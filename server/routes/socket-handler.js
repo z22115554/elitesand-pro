@@ -90,7 +90,7 @@ module.exports = function socketHandler(io, {
     socket.clientType = auth.clientType;
     socket.readOnly = PIN_EXEMPT_CLIENT_TYPES.has(auth.clientType);
     if (socket.readOnly) return next();
-    if (!authStore.hasPin()) return next();
+    if (!authStore.hasPin()) return next(new Error('PIN_SETUP_REQUIRED'));
     const key = `socket:${socket.handshake.address || 'unknown'}`;
     const limit = authRateLimiter.status(key);
     if (!limit.allowed) return next(new Error('PIN_RATE_LIMITED'));
