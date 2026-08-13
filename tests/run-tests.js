@@ -5666,6 +5666,27 @@ test('音檔巡檢：缺少檔名或檔案時標記遺失，存在時標記可�
   ok(libraryStore.audioStatus({ filename: 'ready.mp3' }, (name) => name === 'ready.mp3').audioAvailable);
 });
 
+test('播放清單同步以目錄快照避免每首歌重複同步檔案檢查', () => {
+  const libraryStore = require('../server/services/library-store');
+  libraryStore.resetAudioStatusCache();
+  let reads = 0;
+  const first = libraryStore.getAudioExistsLookup({
+    now: () => 1000,
+    readDirectory: () => { reads++; return ['ready.mp3', 'other.mp3']; },
+  });
+  const second = libraryStore.getAudioExistsLookup({
+    now: () => 1500,
+    readDirectory: () => { reads++; return []; },
+  });
+  const refreshed = libraryStore.getAudioExistsLookup({
+    now: () => 2000,
+    readDirectory: () => { reads++; return ['refreshed.mp3']; },
+  });
+  eq(reads, 2, '快取期內不得為每個 state payload 重讀目錄: ');
+  ok(first('ready.mp3') && second('other.mp3'));
+  ok(refreshed('refreshed.mp3') && !refreshed('ready.mp3'));
+});
+
 test('播放前預檢：音檔遺失時不改播放狀態並回傳可恢復錯誤', () => {
   const registerPlaybackHandlers = require('../server/routes/handlers/playback');
   const events = new Map();

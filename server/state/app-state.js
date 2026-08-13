@@ -445,7 +445,8 @@ function createAppState(io) {
   /** 廣播完整播放狀態給所有客戶端 */
   function broadcastState() {
     playState.lastStateUpdateTimestamp = Date.now();
-    const payload = getPublicState();
+    const exists = libraryStore.getAudioExistsLookup();
+    const payload = getPublicState(exists);
     const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
     const nextSample = stateSyncMetrics.samples + 1;
     // 「舊結構」估算只在記錄點序列化，避免為了量測又在每次廣播重建一份大型 payload。
@@ -454,7 +455,7 @@ function createAppState(io) {
     let savingsBytes = stateSyncMetrics.lastSavingsBytes;
     if (shouldEstimateLegacy) {
       const publicPlaylistBytes = Buffer.byteLength(JSON.stringify(payload.playlist), 'utf8');
-      const legacyPlaylistBytes = Buffer.byteLength(JSON.stringify(getLegacyPlaylist()), 'utf8');
+      const legacyPlaylistBytes = Buffer.byteLength(JSON.stringify(getLegacyPlaylist(exists)), 'utf8');
       estimatedLegacyBytes = bytes - publicPlaylistBytes + legacyPlaylistBytes;
       savingsBytes = Math.max(0, estimatedLegacyBytes - bytes);
     }
@@ -478,14 +479,14 @@ function createAppState(io) {
       log.warn(`state:sync payload 已達 ${bytes} bytes（playlist=${payload.playlist.length}），P2 應評估拆分同步事件`);
     }
 
-    emitToAccessRooms(io, 'state:sync', payload, getReadOnlyState());
+    emitToAccessRooms(io, 'state:sync', payload, getReadOnlyState(exists));
   }
 
   function getStateSyncMetrics() {
     return { ...stateSyncMetrics };
   }
 
-  function getTrackPayload(track, { includeLyrics = false, offset } = {}) {
+  function getTrackPayload(track, { includeLyrics = false, offset, exists } = {}) {
     if (!track) return null;
     const manual = manualLyricsCache.get(track.id);
     const { lyrics, parsedLyrics, manualLyrics: _storedManualLyrics, ...summary } = track;
@@ -500,7 +501,7 @@ function createAppState(io) {
       pitchShift: trackPitch.has(track.id) ? trackPitch.get(track.id) : 0,
       playbackRate: trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0,
       manualLyrics: !!manual,
-      ...libraryStore.audioStatus(track),
+      ...libraryStore.audioStatus(track, exists),
     };
     if (includeLyrics) {
       payload.lyrics = effectiveLyrics == null ? null : effectiveLyrics;
@@ -510,26 +511,26 @@ function createAppState(io) {
   }
 
   /** 可傳給所有端點的清單摘要；歌詞內容只隨目前歌曲發送。 */
-  function getPublicPlaylist() {
-    return playState.playlist.map(track => getTrackPayload(track));
+  function getPublicPlaylist(exists = libraryStore.getAudioExistsLookup()) {
+    return playState.playlist.map(track => getTrackPayload(track, { exists }));
   }
 
-  function getReadOnlyPlaylist() {
-    return getPublicPlaylist().map(redactTrackForReadOnly);
+  function getReadOnlyPlaylist(exists = libraryStore.getAudioExistsLookup()) {
+    return getPublicPlaylist(exists).map(redactTrackForReadOnly);
   }
 
   // 僅供 P2 量測舊 payload 用，絕不可拿去 io.emit。
-  function getLegacyPlaylist() {
-    return playState.playlist.map(track => getTrackPayload(track, { includeLyrics: true }));
+  function getLegacyPlaylist(exists = libraryStore.getAudioExistsLookup()) {
+    return playState.playlist.map(track => getTrackPayload(track, { includeLyrics: true, exists }));
   }
 
   /** 取得可公開的播放狀態：清單是摘要，currentTrack 保留完整歌詞供播放／編輯／OBS 恢復。 */
-  function getPublicState() {
-    const enrichedPlaylist = getPublicPlaylist();
+  function getPublicState(exists = libraryStore.getAudioExistsLookup()) {
+    const enrichedPlaylist = getPublicPlaylist(exists);
 
     return {
       currentTrack: playState.currentTrack
-        ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset })
+        ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset, exists })
         : null,
       isPlaying: playState.isPlaying,
       currentTrackStarted: !!playState.currentTrackStarted,
@@ -562,8 +563,8 @@ function createAppState(io) {
   }
 
   /** Full lyrics remain available to OBS, but media path/source fields do not. */
-  function getReadOnlyState() {
-    const publicState = getPublicState();
+  function getReadOnlyState(exists = libraryStore.getAudioExistsLookup()) {
+    const publicState = getPublicState(exists);
     return {
       ...publicState,
       currentTrack: redactTrackForReadOnly(publicState.currentTrack),
