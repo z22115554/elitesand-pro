@@ -271,7 +271,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     log.info(`風格切換: ${style}`);
     io.emit('style:change', style);
     io.emit('style:override', playState.styleOverrides);
-    broadcastState();
+    // style:* 已是顯示端的即時契約；不要在滑桿／切換時再送整份 state:sync。
     persistState();
   });
 
@@ -280,7 +280,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     const clean = sanitizeJsonObject(overrides);
     playState.styleOverrides = (clean && typeof clean === 'object' && !Array.isArray(clean)) ? clean : {};
     io.emit('style:override', playState.styleOverrides);
-    broadcastState();
     persistState();
   });
 
@@ -300,7 +299,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.romanizationMode = mode;
     log.info(`顯示模式: ${mode}`);
     io.emit('romanization:mode', mode);
-    broadcastState();
     persistState();
   });
 
@@ -362,7 +360,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
       try { libraryStore.updateMeta(id, { pitchShift: playState.pitchShift }); } catch (e) { /* 靜默 */ }
     }
     io.emit('pitch:update', playState.pitchShift);
-    broadcastState();
     persistState();
   });
 
@@ -386,7 +383,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
       try { libraryStore.updateMeta(id, { playbackRate: playState.playbackRate }); } catch (e) { /* 靜默 */ }
     }
     io.emit('speed:update', playState.playbackRate);
-    broadcastState();
     persistState();
   });
 
@@ -395,7 +391,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.metronomeEnabled = typeof enabled === 'boolean' ? enabled : !playState.metronomeEnabled;
     log.info(`前奏倒數: ${playState.metronomeEnabled ? '啟用' : '停用'}`);
     io.emit('metronome:update', playState.metronomeEnabled);
-    broadcastState();
     persistState();
   });
 }

@@ -4672,6 +4672,35 @@ test('R4-2 批次移除部分歌曲後，留下的清單與所有歌曲記憶都
   eq(manualLyricsCache.get('batch-remove-b').lyrics, '[00:00.40]B');
 });
 
+test('高頻播放控制只送細粒度事件，不重複廣播完整 state:sync', () => {
+  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
+  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
+  const lyricEvents = new Map();
+  const playbackEvents = new Map();
+  const emitted = [];
+  const io = { emit(event, data) { emitted.push({ event, data }); } };
+  const noFullState = () => { throw new Error('高頻控制不可廣播 state:sync'); };
+  const playState = {
+    currentTrack: { id: 'hot-track', title: 'Hot track' }, currentOffset: 0,
+    pitchShift: 0, playbackRate: 1, metronomeEnabled: true,
+    style: 'cute', styleOverrides: {}, romanizationMode: 'original',
+  };
+  registerLyricsHandlers(io, { on(event, handler) { lyricEvents.set(event, handler); } }, {
+    playState, trackOffsets: new Map(), manualLyricsCache: new Map(),
+    persistState() {}, broadcastState: noFullState,
+  });
+  registerPlaybackHandlers(io, { on(event, handler) { playbackEvents.set(event, handler); }, id: 'fixture', clientType: 'controller' }, {
+    playState, trackOffsets: new Map(), trackPitch: new Map(), trackSpeed: new Map(), manualLyricsCache: new Map(),
+    persistState() {}, emitSetlist() {}, recordSessionSong() {}, broadcastState: noFullState, getEffectiveLyrics() { return null; },
+  });
+  lyricEvents.get('offset:adjust')({ trackId: 'hot-track', delta: 100 });
+  playbackEvents.get('style:override')({ intensity: 2 });
+  playbackEvents.get('pitch:change')(1);
+  playbackEvents.get('speed:change')(1.1);
+  playbackEvents.get('metronome:toggle')(false);
+  ok(['offset:update', 'style:override', 'pitch:update', 'speed:update', 'metronome:update'].every((event) => emitted.some((item) => item.event === event)));
+});
+
 test('offset:set 會立即持久化，歌曲移出清單後重開程式仍可恢復', () => {
   const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
   const events = new Map();

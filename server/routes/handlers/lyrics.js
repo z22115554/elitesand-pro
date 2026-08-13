@@ -57,7 +57,7 @@ function sanitizeLyricPresets(value) {
 function registerLyricsHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, manualLyricsCache,
-    persistState, broadcastState,
+    persistState,
   } = ctx;
 
   // ─── 時間偏移控制 ───
@@ -90,7 +90,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     log.info(`Offset 調整: ${trackId}: ${currentOffset}ms → ${newOffset}ms (Δ${delta}ms)`);
 
     io.emit('offset:update', { trackId, offset: newOffset });
-    broadcastState();
+    // offset:update 是所有即時端都已訂閱的細粒度事件；不再讓連按對齊鍵
+    // 夾帶完整 state:sync，重連時仍會從已更新的 playState 取得正確初始值。
     persistState();
   });
 
@@ -118,7 +119,6 @@ function registerLyricsHandlers(io, socket, ctx) {
     log.info(`Offset 設定: ${trackId}: ${clampedOffset}ms`);
 
     io.emit('offset:update', { trackId, offset: clampedOffset });
-    broadcastState();
     persistState();
   });
 
@@ -133,7 +133,6 @@ function registerLyricsHandlers(io, socket, ctx) {
 
     log.info(`Offset 重置: ${trackId}`);
     io.emit('offset:update', { trackId, offset: 0 });
-    broadcastState();
     persistState();
   });
 
