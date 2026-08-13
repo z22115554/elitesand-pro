@@ -259,29 +259,41 @@ async function run() {
     assert(initialBytes.display === initialBytes.setlist, 'read-only clients must receive identical initial state');
     assert(initialBytes.controller > initialBytes.display, 'read-only initial state must omit media details');
 
-    // Force a normal server broadcast after all four roles are connected.
-    const syncCounts = Object.fromEntries(Object.entries(byType).map(([type, client]) => [type, client.eventCount('state:sync')]));
+    // High-frequency visual settings use their explicit Socket contract rather
+    // than resending a 500-song state snapshot to every client.
+    const styleCounts = Object.fromEntries(Object.entries(byType).map(([type, client]) => [type, client.eventCount('style:change')]));
     byType.controller.send('style:change', 'matrix');
-    const synced = await Promise.all(Object.entries(byType).map(async ([type, client]) => {
-      const payload = await client.waitFor('state:sync', { after: syncCounts[type] });
-      return [type, payload];
-    }));
+    const styleUpdates = await Promise.all(Object.entries(byType).map(async ([type, client]) => [
+      type,
+      await client.waitFor('style:change', { after: styleCounts[type] }),
+    ]));
+    for (const [type, style] of styleUpdates) {
+      assert(style === 'matrix', `${type} must receive the direct style update`);
+    }
+
+    // A playlist mutation remains a full-state boundary. Validate the room
+    // split and compact payload for that authoritative broadcast.
+    const syncCounts = Object.fromEntries(Object.entries(byType).map(([type, client]) => [type, client.eventCount('state:sync')]));
+    const playlistCounts = Object.fromEntries(Object.entries(byType).map(([type, client]) => [type, client.eventCount('playlist:update')]));
+    byType.controller.send('playlist:update', initialController.playlist);
+    const [synced, playlistUpdates] = await Promise.all([
+      Promise.all(Object.entries(byType).map(async ([type, client]) => [
+        type,
+        await client.waitFor('state:sync', { after: syncCounts[type] }),
+      ])),
+      Promise.all(Object.entries(byType).map(async ([type, client]) => [
+        type,
+        await client.waitFor('playlist:update', { after: playlistCounts[type] }),
+      ])),
+    ]);
     const broadcastBytes = Object.fromEntries(synced.map(([type, payload]) => [
       type,
-      validatePublicState(payload, `${type} broadcast sync`, { readOnly: type === 'display' || type === 'setlist' }),
+      validatePublicState(payload, `${type} playlist broadcast sync`, { readOnly: type === 'display' || type === 'setlist' }),
     ]));
     assert(broadcastBytes.controller === broadcastBytes.remote, 'control clients must receive identical broadcast state');
     assert(broadcastBytes.display === broadcastBytes.setlist, 'read-only clients must receive identical broadcast state');
     assert(broadcastBytes.controller > broadcastBytes.display, 'read-only broadcast state must omit media details');
 
-    // A playlist mutation also emits its own payload. It must follow the same
-    // room split rather than reintroducing filename or source-url disclosure.
-    const playlistCounts = Object.fromEntries(Object.entries(byType).map(([type, client]) => [type, client.eventCount('playlist:update')]));
-    byType.controller.send('playlist:update', initialController.playlist);
-    const playlistUpdates = await Promise.all(Object.entries(byType).map(async ([type, client]) => [
-      type,
-      await client.waitFor('playlist:update', { after: playlistCounts[type] }),
-    ]));
     for (const [type, payload] of playlistUpdates) {
       validatePlaylistUpdate(payload, `${type} playlist update`, { readOnly: type === 'display' || type === 'setlist' });
     }
