@@ -6523,7 +6523,10 @@ test('state:sync excludes setlist style snapshots while setlist:update retains t
   eq(Object.keys(setlist.styles).length, SETLIST_LAYOUTS.length, 'setlist:update 初始載入必須保留各模板外觀: ');
   const socketSource = fs.readFileSync(path.join(__dirname, '../server/routes/socket-handler.js'), 'utf8');
   const panelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
-  ok(socketSource.includes("if (type === 'controller') socket.emit('setlist:update', ctx.setlistPayload())"));
+  ok(socketSource.includes("socket.on('setlist:get', (_data, ack) => {"),
+    'setlist payload 必須可按需取得，不能綁在 controller 初始同步後: ');
+  ok(panelSource.includes("SocketClient.on('connection-change', (connected) => {"),
+    '控制面板連線後必須主動取得 setlist 外觀: ');
   ok(panelSource.includes("SocketClient.on('setlist:update', applySetlistControls)"));
 });
 
