@@ -25,13 +25,14 @@ async function waitForTemplateRuntime(page) {
 
 async function renderVisualFrame(page, templateId, frame) {
   await page.evaluate(({ id, timeMs, lyrics }) => {
+    const updateAt = window.__visualUpdateAt || KaraokeEngine.update;
     const timeline = typeof gsap !== 'undefined' ? gsap.globalTimeline : null;
     if (timeline) timeline.clear().pause(0);
 
     KaraokeEngine.setFastMode(true);
     KaraokeEngine.setTemplate(id);
     KaraokeEngine.loadLyrics('', 'lrc', lyrics);
-    KaraokeEngine.update(timeMs);
+    updateAt(timeMs);
 
     // 固定 GSAP 時間軸，讓快照只反映指定歌詞時間點，而非截圖機器的當下時鐘。
     if (timeline) timeline.totalTime(2, false).pause();
@@ -42,9 +43,9 @@ async function renderVisualFrame(page, templateId, frame) {
   // stale preview state or a half-applied transform.
   await page.evaluate((timeMs) => new Promise((resolve) => {
     requestAnimationFrame(() => {
-      KaraokeEngine.update(timeMs);
+      window.__visualUpdateAt(timeMs);
       requestAnimationFrame(() => {
-        KaraokeEngine.update(timeMs);
+        window.__visualUpdateAt(timeMs);
         resolve();
       });
     });
@@ -90,6 +91,11 @@ test.describe('OBS lyric template visual regression', () => {
     await page.goto('/display?preview=1', { waitUntil: 'domcontentloaded' });
     await waitForTemplateRuntime(page);
     await page.evaluate(async () => {
+      // display.js drives KaraokeEngine from its live playback loop.  During a
+      // visual fixture that loop would race the explicit fixed time below, so
+      // retain a private test driver and make incidental live ticks no-ops.
+      window.__visualUpdateAt = KaraokeEngine.update.bind(KaraokeEngine);
+      KaraokeEngine.update = () => {};
       await document.fonts.ready;
       const style = document.createElement('style');
       style.textContent = `
