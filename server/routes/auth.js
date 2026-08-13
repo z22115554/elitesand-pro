@@ -7,6 +7,7 @@ const router = express.Router();
 const authStore = require('../services/auth-store');
 const rateLimiter = require('../services/auth-rate-limiter');
 const { createLogger } = require('../utils/logger');
+const { canSetFirstPin, getClientAddress } = require('../utils/pin-setup-policy');
 
 const log = createLogger('Auth');
 
@@ -45,9 +46,21 @@ router.post('/verify', (req, res) => {
   }
 });
 
-// 設定或更改 PIN。首次設定 currentPin 可留空；已有 PIN 時必須帶對的 currentPin。
+// 設定或更改 PIN。首次設定 currentPin 可留空，但只允許在桌面本機完成；
+// 已有 PIN 時仍須帶對 currentPin，並保留既有的遠端管理流程。
 router.post('/set', (req, res) => {
   if (rejectIfLimited(req, res)) return;
+  const hasPin = authStore.hasPin();
+  if (!canSetFirstPin({ hasPin, address: getClientAddress(req) })) {
+    log.warn('拒絕從遠端進行第一組 PIN 設定');
+    res.status(403).json({
+      ok: false,
+      code: 'LOCAL_SETUP_REQUIRED',
+      message: '請在執行 Elitesand Pro 的本機控制面板設定第一組 PIN',
+    });
+    return;
+  }
+
   const { newPin, currentPin } = req.body || {};
   const result = authStore.setPin(newPin, currentPin);
   if (result.ok) {

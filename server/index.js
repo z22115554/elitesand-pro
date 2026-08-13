@@ -19,6 +19,7 @@ const { attachParentShutdown } = require('./utils/parent-shutdown');
 const log = createLogger('Server');
 const config = require('./utils/load-config');
 const { isAllowedSocketRequest, isAllowedCorsOrigin } = require('./utils/socket-origin');
+const { hostGuard } = require('./middleware/host-guard');
 const { renderDisplayRuntimePage } = require('./services/display-runtime-build');
 const templateDelivery = require('./services/template-delivery');
 const ytdlpCompatibility = require('./services/ytdlp-compatibility');
@@ -91,6 +92,9 @@ require('./services/library-store').setErrorReporter(reportStorageError);
 
 // ─── Middleware ───
 app.disable('x-powered-by');
+// 必須在靜態檔、body parser 與 API 之前驗證 Host，避免 DNS rebinding 透過惡意網域
+// 讀取或控制同一台機器上的服務。Socket.io upgrade 則由 allowRequest 做相同檢查。
+app.use(hostGuard);
 app.use((req, res, next) => {
   res.set({
     'X-Content-Type-Options': 'nosniff',
