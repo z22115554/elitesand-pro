@@ -66,9 +66,7 @@
   "build": {
     "appId": "com.elitesand.pro",
     "productName": "Elitesand Pro",
-    "asar": {
-      "smartUnpack": false
-    },
+    "asar": { "smartUnpack": false },
     "directories": {
       "app": "dist/.electron-builder-resources/app",
       "output": "dist/releases/v${version}/installer"
@@ -85,41 +83,23 @@
       "grantFileProtocolExtraPrivileges": false
     },
     "forceCodeSigning": false,
-    "files": [
-      "**/*",
-      "assets/**/*"
-    ],
+    "files": ["**/*", "assets/**/*"],
     "extraResources": [
-      {
-        "from": "dist/.electron-builder-resources/tools",
-        "to": "tools"
-      },
-      {
-        "from": "dist/.electron-builder-resources/licenses",
-        "to": "licenses"
-      }
+      { "from": "dist/.electron-builder-resources/tools", "to": "tools" },
+      { "from": "dist/.electron-builder-resources/licenses", "to": "licenses" }
     ],
-    "win": {
-      "target": "nsis",
-      "icon": "assets/elitesand-pro.ico"
-    },
+    "win": { "target": "nsis", "icon": "assets/elitesand-pro.ico" },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": false,
       "createStartMenuShortcut": false,
-      "include": "electron/installer-p0-media-preserve.nsh",
+      "include": "electron/installer.nsh",
       "license": "dist/.electron-builder-resources/EULA-installer.txt",
       "multiLanguageInstaller": true,
       "displayLanguageSelector": true,
-      "installerLanguages": [
-        "en_US",
-        "zh_TW",
-        "ja_JP",
-        "ko_KR",
-        "zh_CN"
-      ],
+      "installerLanguages": ["en_US", "zh_TW", "ja_JP", "ko_KR", "zh_CN"],
       "language": "1033"
     }
   }
