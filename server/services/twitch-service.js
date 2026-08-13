@@ -923,7 +923,9 @@ class TwitchService {
   }
 
   async handleWebSocketMessage(raw, ws = this.ws) {
-    if (!ws || ws !== this.ws) return;
+    // Production callbacks pass their source socket. Direct parser calls (used by
+    // local recovery tooling and unit tests) have no socket and remain valid.
+    if (ws && ws !== this.ws) return;
     let message;
     try { message = JSON.parse(Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw)); } catch (_) { return; }
     const type = message && message.metadata && message.metadata.message_type;
