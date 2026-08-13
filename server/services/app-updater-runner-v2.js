@@ -15,6 +15,9 @@ const { spawn } = require('child_process');
 
 const UPDATE_MODE = 'electron-asar-v1';
 const PROTECTED_UPDATER_RUNTIME = 'resources/tools/updater-node.exe';
+const FILE_LOCK_RETRY_MS = 10000;
+const FILE_LOCK_RETRY_INTERVAL_MS = 100;
+const RETRYABLE_FILE_CODES = new Set(['EACCES', 'EPERM', 'EBUSY']);
 
 function appendLog(file, message) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -60,8 +63,43 @@ function canonicalBaselineFingerprint(files) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function withFileLockRetry(operation, label, timeoutMs = FILE_LOCK_RETRY_MS) {
+  const started = Date.now();
+  let lastError = null;
+  for (;;) {
+    try { return operation(); }
+    catch (error) {
+      lastError = error;
+      if (!RETRYABLE_FILE_CODES.has(error?.code) || Date.now() - started >= timeoutMs) {
+        if (RETRYABLE_FILE_CODES.has(error?.code)) {
+          const wrapped = new Error(`${label} remained locked for ${Date.now() - started}ms: ${error.message}`);
+          wrapped.code = error.code;
+          throw wrapped;
+        }
+        throw error;
+      }
+      sleepSync(FILE_LOCK_RETRY_INTERVAL_MS);
+    }
+  }
+}
+
 function unlinkIfExists(target) {
-  try { fs.unlinkSync(target); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  withFileLockRetry(() => {
+    try { fs.unlinkSync(target); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }, `Unable to remove ${target}`);
+}
+
+function copyFileWithRetry(source, destination) {
+  return withFileLockRetry(() => fs.copyFileSync(source, destination), `Unable to copy ${source} -> ${destination}`);
+}
+
+function renameFileWithRetry(source, destination) {
+  return withFileLockRetry(() => fs.renameSync(source, destination), `Unable to rename ${source} -> ${destination}`);
 }
 
 function removeTreeInside(target, parent) {
@@ -72,7 +110,7 @@ function removeTreeInside(target, parent) {
   try { stat = fs.lstatSync(resolvedTarget); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
   if (!stat.isDirectory() || stat.isSymbolicLink()) { unlinkIfExists(resolvedTarget); return; }
   for (const name of fs.readdirSync(resolvedTarget)) removeTreeInside(path.join(resolvedTarget, name), resolvedTarget);
-  fs.rmdirSync(resolvedTarget);
+  withFileLockRetry(() => fs.rmdirSync(resolvedTarget), `Unable to remove directory ${resolvedTarget}`);
 }
 
 function validatePlan(plan) {
@@ -167,7 +205,7 @@ function backupFiles(plan) {
     const existed = fs.existsSync(destination);
     if (existed) {
       fs.mkdirSync(path.dirname(backup), { recursive: true });
-      fs.copyFileSync(destination, backup);
+      copyFileWithRetry(destination, backup);
     }
     records.push({ rel, existed });
   }
@@ -184,13 +222,13 @@ function installFiles(plan, options = {}) {
     const destination = path.join(plan.targetRoot, ...rel.split('/'));
     const temporary = `${destination}.update-new-${process.pid}`;
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.copyFileSync(source, temporary);
+    copyFileWithRetry(source, temporary);
     if (fs.statSync(temporary).size !== item.size || sha256File(temporary) !== item.sha256.toLowerCase()) {
       unlinkIfExists(temporary);
       throw new Error(`Temporary copy failed integrity verification: ${rel}`);
     }
     unlinkIfExists(destination);
-    fs.renameSync(temporary, destination);
+    renameFileWithRetry(temporary, destination);
     count++;
   }
   return count;
@@ -204,7 +242,7 @@ function rollback(plan, records) {
     try {
       if (record.existed) {
         fs.mkdirSync(path.dirname(destination), { recursive: true });
-        fs.copyFileSync(backup, destination);
+        copyFileWithRetry(backup, destination);
       } else {
         unlinkIfExists(destination);
       }
@@ -295,12 +333,15 @@ if (require.main === module) {
 module.exports = {
   UPDATE_MODE,
   PROTECTED_UPDATER_RUNTIME,
+  FILE_LOCK_RETRY_MS,
+  RETRYABLE_FILE_CODES,
   validRelativeFile,
   validImmutableFile,
   canonicalBaselineFingerprint,
   verifyImmutableRuntime,
   validatePlan,
   waitForExit,
+  withFileLockRetry,
   backupFiles,
   installFiles,
   rollback,
