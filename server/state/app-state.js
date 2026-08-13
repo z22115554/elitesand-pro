@@ -19,11 +19,23 @@ const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const { createLogger } = require('../utils/logger');
 const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
+const { emitToAccessRooms } = require('../utils/socket-broadcast');
 
 const log = createLogger('State');
 const STATE_SYNC_WARN_BYTES = 512 * 1024;
 const STATE_SYNC_LOG_EVERY = 100;
 const STATE_SYNC_WARN_INTERVAL_MS = 60 * 1000;
+const READ_ONLY_TRACK_FIELDS = ['filename', 'url', 'cover', 'originalName', 'audioAvailable', 'audioMissing'];
+
+// OBS / setlist renderers need song identity and lyrics, but never the media
+// file location or its original remote source. Keep this as a narrow,
+// explicit deny-list so access-room payloads cannot accidentally leak them.
+function redactTrackForReadOnly(track) {
+  if (!track || typeof track !== 'object') return track;
+  const safe = { ...track };
+  for (const field of READ_ONLY_TRACK_FIELDS) delete safe[field];
+  return safe;
+}
 
 function getDefaultLyricSettings() {
   return {
@@ -466,7 +478,7 @@ function createAppState(io) {
       log.warn(`state:sync payload 已達 ${bytes} bytes（playlist=${payload.playlist.length}），P2 應評估拆分同步事件`);
     }
 
-    io.emit('state:sync', payload);
+    emitToAccessRooms(io, 'state:sync', payload, getReadOnlyState());
   }
 
   function getStateSyncMetrics() {
@@ -500,6 +512,10 @@ function createAppState(io) {
   /** 可傳給所有端點的清單摘要；歌詞內容只隨目前歌曲發送。 */
   function getPublicPlaylist() {
     return playState.playlist.map(track => getTrackPayload(track));
+  }
+
+  function getReadOnlyPlaylist() {
+    return getPublicPlaylist().map(redactTrackForReadOnly);
   }
 
   // 僅供 P2 量測舊 payload 用，絕不可拿去 io.emit。
@@ -545,6 +561,16 @@ function createAppState(io) {
     return getPublicState();
   }
 
+  /** Full lyrics remain available to OBS, but media path/source fields do not. */
+  function getReadOnlyState() {
+    const publicState = getPublicState();
+    return {
+      ...publicState,
+      currentTrack: redactTrackForReadOnly(publicState.currentTrack),
+      playlist: publicState.playlist.map(redactTrackForReadOnly),
+    };
+  }
+
   /** 取得 track 的有效歌詞（考慮手動覆蓋），無手動覆蓋時回 null */
   function getEffectiveLyrics(trackId) {
     if (manualLyricsCache.has(trackId)) {
@@ -572,8 +598,11 @@ function createAppState(io) {
     broadcastState,
     getStateSyncMetrics,
     getPublicPlaylist,
+    getReadOnlyPlaylist,
     getPublicState,
     getFullRecoveryState,
+    getReadOnlyState,
+    redactTrackForReadOnly,
     getEffectiveLyrics,
   };
 }

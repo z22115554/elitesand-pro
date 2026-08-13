@@ -6,6 +6,7 @@
  */
 
 const { createLogger } = require('../../utils/logger');
+const { emitToAccessRooms } = require('../../utils/socket-broadcast');
 const libraryStore = require('../../services/library-store');
 const { addRomanization, needsRomanization } = require('../../services/romanizer');
 const { sanitizeTrack, sanitizeJsonObject } = require('../../utils/track-schema');
@@ -21,7 +22,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, trackPitch, trackSpeed, manualLyricsCache,
     persistState, emitSetlist, recordSessionSong, broadcastState, getEffectiveLyrics,
-    markTrackPlayed,
+    markTrackPlayed, redactTrackForReadOnly = (track) => track,
   } = ctx;
 
   socket.on('play:track', (track) => {
@@ -104,7 +105,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     // 媒體庫：記錄一次播放 + 累加播放次數（連同歌詞/檔名/變調一起存）
     try { libraryStore.recordPlay(track); } catch (e) { /* 不影響播放 */ }
 
-    io.emit('play:track', {
+    const playTrackPayload = {
       ...track,
       offset,
       pitchShift: savedPitch,
@@ -117,7 +118,8 @@ function registerPlaybackHandlers(io, socket, ctx) {
       // 兩邊都是 clientType='controller'，若面板也對其他面板的廣播做出反應，
       // 會形成互相驅動對方換歌→再廣播→對方又反應的無窮迴圈。
       _originClientType: socket.clientType,
-    });
+    };
+    emitToAccessRooms(io, 'play:track', playTrackPayload, redactTrackForReadOnly(playTrackPayload));
     // 廣播該首記憶的變調/變速，讓面板與顯示端套用（每首切換時自動還原）
     io.emit('pitch:update', savedPitch);
     io.emit('speed:update', savedSpeed);

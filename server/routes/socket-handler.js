@@ -35,6 +35,7 @@ const authRateLimiter = require('../services/auth-rate-limiter');
 const stateStore = require('../services/state-store');
 const defaultRuntimeEvidence = require('../services/runtime-evidence');
 const defaultUsageTelemetry = require('../services/usage-telemetry');
+const { CONTROL_ROOM, READ_ONLY_ROOM } = require('../utils/socket-broadcast');
 
 const log = createLogger('Socket');
 
@@ -311,6 +312,9 @@ module.exports = function socketHandler(io, {
       else if (type === 'remote') clients.remotes.add(socket.id);
       else if (type === 'setlist') clients.setlists.add(socket.id);
       else if (type === 'prompter') clients.prompters.add(socket.id);
+      // Room membership is assigned only after the handshake-fixed type is confirmed.
+      // All state/media broadcasts below can therefore choose the least-privilege payload.
+      if (typeof socket.join === 'function') socket.join(socket.readOnly ? READ_ONLY_ROOM : CONTROL_ROOM);
       runtimeEvidence.recordSocketConnected({ socketId: socket.id, clientType: type });
       // 正式 OBS 輸出連線本身就是核心功能使用；面板內預覽不計入。
       if (type === 'display' || type === 'setlist') {
@@ -319,12 +323,12 @@ module.exports = function socketHandler(io, {
 
       // 顯示端發送完整恢復狀態（含歌詞），而非基本狀態；預覽 iframe 吃跟正式來源一樣的資料
       if (type === 'display' || type === 'display-preview') {
-        socket.emit('state:recovery', ctx.getFullRecoveryState());
+        socket.emit('state:recovery', ctx.getReadOnlyState());
       } else if (type === 'setlist' || type === 'setlist-preview') {
         socket.emit('setlist:update', ctx.setlistPayload());
         // 歌單頁也需要 lyricSettings（簡轉繁等）：setlist:update 只有清單資料沒有這塊，
         // 過去只能等某個無關操作觸發 broadcastState() 才會補到，OBS 剛載入來源時吃不到設定。
-        socket.emit('state:sync', ctx.getPublicState());
+        socket.emit('state:sync', ctx.getReadOnlyState());
       } else {
         socket.emit('state:sync', ctx.getPublicState());
       }
@@ -355,7 +359,7 @@ module.exports = function socketHandler(io, {
     // ─── OBS 顯示頁面狀態恢復請求 ───
     socket.on('state:request', () => {
       log.info(`狀態恢復請求: ${socket.id}`);
-      socket.emit('state:recovery', ctx.getFullRecoveryState());
+      socket.emit('state:recovery', socket.readOnly ? ctx.getReadOnlyState() : ctx.getFullRecoveryState());
     });
 
     // ─── 各領域事件：只有通過控制權限的 controller/remote 才掛寫入 handler ───

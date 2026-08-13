@@ -6383,8 +6383,17 @@ test('R2-2 500-song playlist stays compact across all four real Socket roles', (
     ok(matrix.ok, matrix.error || 'state-sync matrix should pass');
     eq(matrix.playlistLength, 500);
     eq(matrix.roles.join(','), 'controller,remote,display,setlist');
-    ok(matrix.initialBytes < 1024 * 1024 && matrix.broadcastBytes < 1024 * 1024 && matrix.recoveryBytes < 1024 * 1024,
+    const statePayloadBytes = [
+      ...Object.values(matrix.initialBytes || {}),
+      ...Object.values(matrix.broadcastBytes || {}),
+      matrix.recoveryBytes,
+    ];
+    ok(statePayloadBytes.length === 9 && statePayloadBytes.every((bytes) => bytes < 1024 * 1024),
       `state-sync matrix public payload exceeds 1 MiB: ${JSON.stringify(matrix)}`);
+    ok(matrix.initialBytes.controller === matrix.initialBytes.remote
+      && matrix.initialBytes.display === matrix.initialBytes.setlist
+      && matrix.initialBytes.controller > matrix.initialBytes.display,
+    `state-sync matrix must keep control and read-only payloads separated: ${JSON.stringify(matrix)}`);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
