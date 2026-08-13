@@ -978,6 +978,9 @@
     // 控制端初始外觀改走 setlist:update，避免 state:sync 帶著所有模板快照。
     SocketClient.on('setlist:update', applySetlistControls);
     SocketClient.on('state:sync', (state) => applySetlistControls(state && state.session));
+    SocketClient.on('connection-change', (connected) => {
+      if (connected) SocketClient.send('setlist:get');
+    });
   })();
 
   // Session 計時器：每秒只刷新狀態列文字（不重建清單），直播時長即時跳動
