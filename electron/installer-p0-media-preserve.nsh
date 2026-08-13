@@ -59,7 +59,7 @@ LangString EsMediaPreserveFailed 2052 "为保护已下载歌曲，安装已停�
 ; installer.nsh already defines customInit. Replace only that macro so all of
 ; its existing per-user and shortcut behavior stays identical while the P0
 ; backup runs before the install sections can replace the previous app.
-!undef customInit
+!macroundef customInit
 !macro customInit
   !insertmacro setInstallModePerUser
   !ifndef BUILD_UNINSTALLER
