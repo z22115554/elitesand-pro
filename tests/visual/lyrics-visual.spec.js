@@ -37,11 +37,18 @@ async function renderVisualFrame(page, templateId, frame) {
     if (timeline) timeline.totalTime(2, false).pause();
   }, { id: templateId, timeMs: frame.timeMs, lyrics: visualLyrics });
 
-  await page.evaluate(() => new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
-  }));
-  // KTV／Columnflow 會在換行後完成一次內部排版；固定等候讓快照落在同一個穩定 frame。
-  await page.waitForTimeout(150);
+  // A template switch can schedule its own preview frame.  Drive the fixture
+  // time through two compositor frames so the snapshot cannot capture that
+  // stale preview state or a half-applied transform.
+  await page.evaluate((timeMs) => new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      KaraokeEngine.update(timeMs);
+      requestAnimationFrame(() => {
+        KaraokeEngine.update(timeMs);
+        resolve();
+      });
+    });
+  }), frame.timeMs);
 }
 
 
