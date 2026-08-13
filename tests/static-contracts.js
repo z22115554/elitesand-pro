@@ -5,9 +5,7 @@ const path = require('path');
 
 const SOCKET_LIFECYCLE_EVENTS = new Set(['connect', 'connect_error', 'disconnect']);
 const UNPROTECTED_ROUTE_ALLOWLIST = new Map([
-  ['server/routes/auth.js:POST:/verify', 'PIN login must remain reachable before authentication'],
-  ['server/routes/auth.js:POST:/set', 'initial PIN setup and current-PIN verification happen inside the handler'],
-  ['server/routes/auth.js:POST:/clear', 'current-PIN verification happens inside the handler'],
+  ['server/routes/device-access.js:POST:/pairing/complete', 'one-time pairing secret is verified inside the handler'],
   ['server/routes/api.js:POST:/eula/accept', 'first-run EULA acceptance happens before PIN setup; the handler only records acceptance of the current EULA version'],
 ]);
 
@@ -63,7 +61,7 @@ function routeContractReport(serverSources, allowlist = UNPROTECTED_ROUTE_ALLOWL
       const nextDecl = guardWindow.search(ROUTE_DECL);
       if (nextDecl >= 0) guardWindow = guardWindow.slice(0, nextDecl);
       const key = `${relative}:${method}:${route}`;
-      routes.push({ file: relative, method, route, key, protected: /\brequirePin\b/.test(guardWindow), allowed: allowlist.has(key) });
+      routes.push({ file: relative, method, route, key, protected: /\b(?:requirePin|requireControlAccess)\b/.test(guardWindow), allowed: allowlist.has(key) });
     }
   }
   return {

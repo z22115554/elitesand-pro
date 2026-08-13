@@ -32,6 +32,8 @@ const registerTwitchHandlers = require('./handlers/twitch');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
+const deviceAccess = require('../services/device-access-store');
+const { isLoopbackAddress } = require('../utils/pin-setup-policy');
 const stateStore = require('../services/state-store');
 const defaultRuntimeEvidence = require('../services/runtime-evidence');
 const defaultUsageTelemetry = require('../services/usage-telemetry');
@@ -89,7 +91,13 @@ module.exports = function socketHandler(io, {
     if (!CLIENT_TYPES.has(auth.clientType)) return next(new Error('INVALID_CLIENT_TYPE'));
     socket.clientType = auth.clientType;
     socket.readOnly = PIN_EXEMPT_CLIENT_TYPES.has(auth.clientType);
-    if (socket.readOnly) return next();
+    const loopback = isLoopbackAddress(socket.handshake.address);
+    if (socket.readOnly) {
+      const preview = auth.clientType === 'display-preview' || auth.clientType === 'setlist-preview';
+      if (loopback || (!preview && deviceAccess.verifySourceToken(auth.sourceToken))) return next();
+      return next(new Error('SOURCE_TOKEN_REQUIRED'));
+    }
+    if (!loopback && !deviceAccess.verifyControllerToken(auth.controllerToken)) return next(new Error('CONTROLLER_PAIRING_REQUIRED'));
     if (!authStore.hasPin()) return next();
     const key = `socket:${socket.handshake.address || 'unknown'}`;
     const limit = authRateLimiter.status(key);

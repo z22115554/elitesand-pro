@@ -327,6 +327,7 @@
   function buildSetlistUrl({ preview = false, relative = false } = {}) {
     const url = new URL('/setlist', window.location.origin);
     if (preview) url.searchParams.set('preview', '1');
+    if (!preview && typeof AccessAuth !== 'undefined' && AccessAuth.sourceToken()) url.searchParams.set('source', AccessAuth.sourceToken());
     if (window.I18n) {
       const localized = new URL(window.I18n.localizeUrl(url.toString()));
       url.search = localized.search;
@@ -388,6 +389,7 @@
     applySetlistPreviewSize();
   }
   window.addEventListener('i18n:change', refreshSetlistUrl);
+  window.addEventListener('access:source-token', refreshSetlistUrl);
 
   // 版型類別：用於只顯示真正會作用的控制項；外觀值本身每個模板各自保存。
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];

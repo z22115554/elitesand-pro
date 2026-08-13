@@ -8,6 +8,7 @@ const authStore = require('../services/auth-store');
 const rateLimiter = require('../services/auth-rate-limiter');
 const { createLogger } = require('../utils/logger');
 const { canSetFirstPin, getClientAddress } = require('../utils/pin-setup-policy');
+const { requireControlAccess } = require('../middleware/require-control-access');
 
 const log = createLogger('Auth');
 
@@ -34,7 +35,7 @@ router.get('/status', (req, res) => {
 });
 
 // 驗證 PIN（用於：面板/遙控器連線前的登入 modal）
-router.post('/verify', (req, res) => {
+router.post('/verify', requireControlAccess, (req, res) => {
   if (rejectIfLimited(req, res)) return;
   const { pin } = req.body || {};
   if (authStore.verifyPin(pin)) {
@@ -48,7 +49,7 @@ router.post('/verify', (req, res) => {
 
 // 設定或更改 PIN。首次設定 currentPin 可留空，但只允許在桌面本機完成；
 // 已有 PIN 時仍須帶對 currentPin，並保留既有的遠端管理流程。
-router.post('/set', (req, res) => {
+router.post('/set', requireControlAccess, (req, res) => {
   if (rejectIfLimited(req, res)) return;
   const hasPin = authStore.hasPin();
   if (!canSetFirstPin({ hasPin, address: getClientAddress(req) })) {
@@ -74,7 +75,7 @@ router.post('/set', (req, res) => {
 });
 
 // 關閉 PIN 保護（需先驗證目前的 PIN）
-router.post('/clear', (req, res) => {
+router.post('/clear', requireControlAccess, (req, res) => {
   if (rejectIfLimited(req, res)) return;
   const { currentPin } = req.body || {};
   const result = authStore.clearPin(currentPin);
