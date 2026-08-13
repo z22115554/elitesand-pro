@@ -6,6 +6,7 @@
 
 const libraryStore = require('../../services/library-store');
 const mediaStorage = require('../../services/media-storage');
+const { emitToControlClients } = require('../../utils/socket-broadcast');
 
 /**
  * @param {import('socket.io').Server} io
@@ -50,13 +51,13 @@ function registerLibraryHandlers(io, socket, ctx) {
 
   socket.on('library:remove', (id, ack) => {
     const removed = libraryStore.remove(id);
-    io.emit('library:list', libraryStore.getLibrary());
+    emitToControlClients(io, 'library:list', libraryStore.getLibrary());
     if (typeof ack === 'function') ack({ ok: removed, error: removed ? null : '找不到媒體庫項目' });
   });
 
   socket.on('library:clear', (_data, ack) => {
     libraryStore.clear();
-    io.emit('library:list', libraryStore.getLibrary());
+    emitToControlClients(io, 'library:list', libraryStore.getLibrary());
     if (typeof ack === 'function') ack({ ok: true });
   });
 

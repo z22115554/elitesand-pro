@@ -19,10 +19,14 @@ const { attachParentShutdown } = require('./utils/parent-shutdown');
 const log = createLogger('Server');
 const config = require('./utils/load-config');
 const { isAllowedSocketRequest, isAllowedCorsOrigin } = require('./utils/socket-origin');
+const { hostGuard } = require('./middleware/host-guard');
+const { requireSourceAccess } = require('./middleware/require-source-access');
+const deviceAccess = require('./services/device-access-store');
 const { renderDisplayRuntimePage } = require('./services/display-runtime-build');
 const templateDelivery = require('./services/template-delivery');
 const ytdlpCompatibility = require('./services/ytdlp-compatibility');
 const PORT = process.env.PORT || config.port || 3000;
+deviceAccess.initialize();
 
 // ─── Process 級安全網 ───
 // 放在伺服器進入點（而非藏在 logger 模組裡），之後的人才找得到。
@@ -91,6 +95,9 @@ require('./services/library-store').setErrorReporter(reportStorageError);
 
 // ─── Middleware ───
 app.disable('x-powered-by');
+// 必須在靜態檔、body parser 與 API 之前驗證 Host，避免 DNS rebinding 透過惡意網域
+// 讀取或控制同一台機器上的服務。Socket.io upgrade 則由 allowRequest 做相同檢查。
+app.use(hostGuard);
 app.use((req, res, next) => {
   res.set({
     'X-Content-Type-Options': 'nosniff',
@@ -132,7 +139,7 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    const safeUrl = req.originalUrl.replace(/([?&]pin=)[^&]*/i, '$1[REDACTED]');
+    const safeUrl = req.originalUrl.replace(/([?&](?:pin|source|pair|token)=)[^&]*/gi, '$1[REDACTED]');
     log.request(req.method, safeUrl, res.statusCode, duration);
   });
   next();
@@ -163,6 +170,7 @@ app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
 // PIN 登入/管理端點：刻意在這裡掛（而非套用保護 middleware），因為這本身就是
 // 「輸入 PIN 換取存取權」的流程。見 server/routes/auth.js。
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/access', require('./routes/device-access'));
 
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
@@ -199,7 +207,7 @@ app.get('/panel', (req, res) => {
 });
 
 // OBS 顯示頁面（透明背景 + 歌詞動畫）
-app.get('/display', (req, res) => {
+app.get('/display', requireSourceAccess, (req, res) => {
   // 除了 no-cache 標頭，也把本機 display 資產加上內容指紋。這對容易固執快取的 OBS CEF
   // 是實際強制刷新，而非只要求它「請不要快取」。指紋同時由 display.js 回報給面板診斷。
   const page = renderDisplayRuntimePage(path.join(projectRoot, 'public'));
@@ -230,7 +238,7 @@ app.get('/js/t/:id', (req, res) => {
 });
 
 // Setlist 疊加頁（透明背景 + 直播歌單）
-app.get('/setlist', (req, res) => {
+app.get('/setlist', requireSourceAccess, (req, res) => {
   sendNoCache(res, 'setlist.html');
 });
 
@@ -408,7 +416,7 @@ app.get('/api/update-check', async (req, res) => {
 
 // ─── Error Handling Middleware ───
 app.use((err, req, res, next) => {
-  const safeUrl = req.originalUrl.replace(/([?&]pin=)[^&]*/i, '$1[REDACTED]');
+  const safeUrl = req.originalUrl.replace(/([?&](?:pin|source|pair|token)=)[^&]*/gi, '$1[REDACTED]');
   log.error(`未處理的錯誤: ${req.method} ${safeUrl}`, err);
   if (err && (err.type === 'entity.too.large' || err.code === 'LIMIT_FILE_SIZE' || err.code === 'LIMIT_FILE_COUNT')) {
     return res.status(413).json({ error: '請求內容超過允許大小' });

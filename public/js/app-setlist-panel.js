@@ -327,6 +327,7 @@
   function buildSetlistUrl({ preview = false, relative = false } = {}) {
     const url = new URL('/setlist', window.location.origin);
     if (preview) url.searchParams.set('preview', '1');
+    if (!preview && typeof AccessAuth !== 'undefined' && AccessAuth.sourceToken()) url.searchParams.set('source', AccessAuth.sourceToken());
     if (window.I18n) {
       const localized = new URL(window.I18n.localizeUrl(url.toString()));
       url.search = localized.search;
@@ -388,6 +389,7 @@
     applySetlistPreviewSize();
   }
   window.addEventListener('i18n:change', refreshSetlistUrl);
+  window.addEventListener('access:source-token', refreshSetlistUrl);
 
   // 版型類別：用於只顯示真正會作用的控制項；外觀值本身每個模板各自保存。
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
@@ -960,8 +962,7 @@
       slStores[t] = st;
       if (t === setlistTarget()) adoptStyleUI(st);
     });
-    SocketClient.on('state:sync', (state) => {
-      const sess = state && state.session;
+    function applySetlistControls(sess) {
       if (!sess) return;
       if (sess.styles && typeof sess.styles === 'object') {
         SETLIST_LAYOUTS.forEach((layout) => { if (sess.styles[layout]) slStores[layout] = sess.styles[layout]; });
@@ -974,6 +975,13 @@
       if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; syncSetlistControlsForLayout(); syncSetlistLayoutPicker(); refreshSetlistUrl(); workspace?.sync(); }
       const cur = slStores[setlistTarget()];
       if (cur) adoptStyleUI(cur);
+    }
+
+    // 控制端初始外觀改走 setlist:update，避免 state:sync 帶著所有模板快照。
+    SocketClient.on('setlist:update', applySetlistControls);
+    SocketClient.on('state:sync', (state) => applySetlistControls(state && state.session));
+    SocketClient.on('connection-change', (connected) => {
+      if (connected) SocketClient.send('setlist:get');
     });
   })();
 

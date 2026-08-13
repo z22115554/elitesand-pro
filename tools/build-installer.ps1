@@ -30,6 +30,10 @@ function Get-RelativeWorkspacePath {
 }
 
 $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$TestCommand = Get-Command npm.cmd -ErrorAction Stop
+Write-Host "Running required test gate before packaging..."
+& $TestCommand.Source --prefix $Root test
+if ($LASTEXITCODE -ne 0) { throw "npm test failed; refusing to package an unverified installer." }
 $Resources = Join-Path $Root "dist\.electron-builder-resources"
 $PortableOutput = Join-Path $Resources "portable"
 $RootPackagePath = Join-Path $Root "package.json"

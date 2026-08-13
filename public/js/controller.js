@@ -19,6 +19,15 @@
   // ─── 初始化 Socket ───
   SocketClient.init('remote');
 
+  SocketClient.on('auth:access-required', () => {
+    const notice = document.getElementById('controller-pairing-notice');
+    if (notice) notice.hidden = false;
+  });
+  SocketClient.on('auth:ok', () => {
+    const notice = document.getElementById('controller-pairing-notice');
+    if (notice) notice.hidden = true;
+  });
+
   // 初始化錯誤處理系統
   if (typeof ErrorHandler !== 'undefined') {
     ErrorHandler.init();

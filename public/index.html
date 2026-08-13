@@ -1321,6 +1321,11 @@
                   <code id="lan-info-url">—</code>
                   <button id="copy-lan-url" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button>
                 </div>
+                <div class="row-gap-10 mt-8">
+                  <button id="start-controller-pairing" class="btn btn-sm btn-primary" type="button">產生配對 QR Code</button>
+                  <button id="revoke-controller-pairings" class="btn btn-sm btn-ghost" type="button">撤銷所有手機</button>
+                </div>
+                <p id="controller-pairing-status" class="val mt-8" aria-live="polite">掃描前請先產生一次性配對 QR Code。</p>
                 <p class="val mt-8" data-i18n="system.remoteUrlHint">手機瀏覽器打開這個網址（不是 localhost），會自動轉到遙控器頁面。</p>
               </div>
             </div>
@@ -2524,6 +2529,16 @@
   </div>
 
   <!-- ═══ Modal：PIN 管理（#pin-manage-modal，設定／更改／停用，見 pin-auth.js）═══ -->
+  <div id="pin-onboarding-modal" class="modal" hidden>
+    <div class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="pin-onboarding-title">
+      <div class="modal-head"><h3 id="pin-onboarding-title">要設定 PIN 嗎？</h3></div>
+      <div class="modal-body">
+        <p class="field-hint modal-form-hint">PIN 是選用的進階防護。即使略過，手機仍須掃描一次性 QR Code 配對；之後可隨時在設定中開啟 PIN。</p>
+        <div class="row-gap-10"><button id="pin-onboarding-set" class="btn btn-primary" type="button">設定 PIN</button><button id="pin-onboarding-skip" class="btn btn-ghost" type="button">先略過</button></div>
+      </div>
+    </div>
+  </div>
+
   <div id="pin-manage-modal" class="modal" hidden>
     <div class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="pin-manage-title">
       <div class="modal-head">
@@ -2658,6 +2673,7 @@
   <script src="/js/i18n.js"></script>
   <script src="/vendor/Tone.js"></script>
   <script src="/js/theme.js"></script>
+  <script src="/js/access-auth.js"></script>
   <script src="/js/pin-auth.js"></script>
   <script src="/js/socket-client.js"></script>
   <script src="/js/setlist-style-schema.js"></script>

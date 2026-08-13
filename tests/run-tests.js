@@ -1961,6 +1961,13 @@ test('portable build creates a clean production-only dependency tree in staging'
   ok(source.includes('Installing production dependencies in staging'));
 });
 
+test('installer and portable builds run the full test gate before packaging', () => {
+  const installer = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
+  const portable = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-portable.ps1'), 'utf8');
+  ok(installer.includes('npm.cmd') && installer.includes('--prefix $Root test'), 'installer build must run npm test before packaging');
+  ok(portable.includes('npm.cmd') && portable.includes('--prefix $Root test'), 'portable build must run npm test before packaging');
+});
+
 test('bilingual EULA is shipped with portable builds as a finalized agreement', () => {
   const root = path.join(__dirname, '..');
   const eulaPath = path.join(root, 'EULA.txt');
@@ -2192,6 +2199,19 @@ test('狀態持久化：狀態檔不存在時回傳 null 不報錯', () => {
     ].join('\n'));
     eq(result.loaded, null);
     eq(result.alert, null);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('狀態持久化：last-good 保留前一份有效狀態而非鏡像新檔', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-last-good-'));
+  try {
+    const result = runStateStoreChild(dataDir, [
+      "const fs=require('fs'); const store=require(process.argv[1]); const first={savedAt:100,marker:'first',playlist:[]}; const second={savedAt:200,marker:'second',playlist:[]};",
+      "store.scheduleSave(()=>first); store.saveNow(); store.scheduleSave(()=>second); store.saveNow();",
+      "const primary=JSON.parse(fs.readFileSync(store.STATE_FILE,'utf8')); const backup=JSON.parse(fs.readFileSync(store.STATE_BACKUP_FILE,'utf8')); process.stdout.write('__STATE_RESULT__'+JSON.stringify({primary,backup}));",
+    ].join('\n'));
+    eq(result.primary.marker, 'second');
+    eq(result.backup.marker, 'first');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
@@ -2576,7 +2596,7 @@ test('lyric-settings 可被 state-store 持久化', () => {
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
-const { TwitchService, reconnectDelay } = require('../server/services/twitch-service');
+const { TwitchService, reconnectDelay, CONNECT_WATCHDOG_MS } = require('../server/services/twitch-service');
 const TwitchReplySettings = require('../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../public/js/twitch-request-settings');
 const TwitchRewardSettings = require('../public/js/twitch-reward-settings');
@@ -2916,6 +2936,97 @@ test('Twitch EventSub 重連採指數退避並有上限', () => {
   eq(reconnectDelay(1, () => 0.5), 3000);
   eq(reconnectDelay(2, () => 0.5), 6000);
   eq(reconnectDelay(10, () => 0.5), 60000);
+});
+
+test('Twitch EventSub welcome watchdog closes a stalled socket and returns to retry', () => {
+  const timers = [];
+  const fakeTimers = {
+    setTimeout(fn, delay) { const timer = { fn, delay, cleared: false }; timers.push(timer); return timer; },
+    clearTimeout(timer) { if (timer) timer.cleared = true; },
+  };
+  const sockets = [];
+  const originalWebSocket = globalThis.WebSocket;
+  class FakeWebSocket {
+    constructor() { this.handlers = {}; this.closed = false; sockets.push(this); }
+    on(event, handler) { this.handlers[event] = handler; }
+    close() { this.closed = true; this.handlers.close?.(); }
+  }
+  globalThis.WebSocket = FakeWebSocket;
+  try {
+    const retries = [];
+    const service = new TwitchService({
+      config: { twitchClientId: 'fixture' },
+      onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+      onSongRequestExpired: () => {},
+      pendingStore: { load: () => [], save: () => true },
+      sessionStore: { load: () => null, save: () => true },
+      historyStore: { load: () => [], save: () => true },
+      authStore: { load: () => null, save: () => true, clear: () => true },
+      timers: fakeTimers,
+    });
+    service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
+    service.scheduleReconnect = (reason) => retries.push(reason);
+    service.connectEventSub();
+    eq(sockets.length, 1);
+    eq(timers.length, 1);
+    eq(timers[0].delay, CONNECT_WATCHDOG_MS);
+    timers[0].fn();
+    ok(sockets[0].closed, '逾時連線必須主動關閉');
+    eq(service.ws, null);
+    ok(retries[0].includes('逾時'), '逾時後必須走既有退避重連');
+    service.stop();
+  } finally {
+    globalThis.WebSocket = originalWebSocket;
+  }
+});
+
+testAsync('Twitch EventSub keepalive watchdog and revocation never leave a false connected state', async () => {
+  const timers = [];
+  const fakeTimers = {
+    setTimeout(fn, delay) { const timer = { fn, delay, cleared: false }; timers.push(timer); return timer; },
+    clearTimeout(timer) { if (timer) timer.cleared = true; },
+  };
+  let cleared = 0;
+  const socket = { closed: false, close() { this.closed = true; } };
+  const retries = [];
+  const service = new TwitchService({
+    config: { twitchClientId: 'fixture' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {},
+    pendingStore: { load: () => [], save: () => true },
+    sessionStore: { load: () => null, save: () => true },
+    historyStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => { cleared += 1; return true; } },
+    timers: fakeTimers,
+  });
+  service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
+  service.ws = socket;
+  service.createSubscription = async () => {};
+  service.refreshLiveState = async () => {};
+  service.scheduleReconnect = (reason) => retries.push(reason);
+  await service.handleWebSocketMessage(JSON.stringify({
+    metadata: { message_type: 'session_welcome' },
+    payload: { session: { id: 'session-1', keepalive_timeout_seconds: 30 } },
+  }), socket);
+  eq(timers.at(-1).delay, 35000);
+  timers.at(-1).fn();
+  eq(service.ws, null);
+  ok(socket.closed, 'keepalive 逾時必須主動關閉 stale socket');
+  ok(retries.at(-1).includes('keepalive'));
+
+  const revokedSocket = { closed: false, close() { this.closed = true; } };
+  service.ws = revokedSocket;
+  service.wsSessionId = 'session-2';
+  service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
+  await service.handleWebSocketMessage(JSON.stringify({
+    metadata: { message_type: 'revocation' },
+    payload: { subscription: { status: 'authorization_revoked' } },
+  }), revokedSocket);
+  eq(service.auth, null);
+  eq(cleared, 1);
+  eq(service.connectionState, 'authorization_required');
+  ok(revokedSocket.closed, '撤銷後必須主動關閉舊 socket');
+  service.stop();
 });
 
 test('Twitch status observation reports a safe lifecycle without changing a disabled service', () => {
@@ -4674,6 +4785,35 @@ test('R4-2 批次移除部分歌曲後，留下的清單與所有歌曲記憶都
   eq(manualLyricsCache.get('batch-remove-b').lyrics, '[00:00.40]B');
 });
 
+test('高頻播放控制只送細粒度事件，不重複廣播完整 state:sync', () => {
+  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
+  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
+  const lyricEvents = new Map();
+  const playbackEvents = new Map();
+  const emitted = [];
+  const io = { emit(event, data) { emitted.push({ event, data }); } };
+  const noFullState = () => { throw new Error('高頻控制不可廣播 state:sync'); };
+  const playState = {
+    currentTrack: { id: 'hot-track', title: 'Hot track' }, currentOffset: 0,
+    pitchShift: 0, playbackRate: 1, metronomeEnabled: true,
+    style: 'cute', styleOverrides: {}, romanizationMode: 'original',
+  };
+  registerLyricsHandlers(io, { on(event, handler) { lyricEvents.set(event, handler); } }, {
+    playState, trackOffsets: new Map(), manualLyricsCache: new Map(),
+    persistState() {}, broadcastState: noFullState,
+  });
+  registerPlaybackHandlers(io, { on(event, handler) { playbackEvents.set(event, handler); }, id: 'fixture', clientType: 'controller' }, {
+    playState, trackOffsets: new Map(), trackPitch: new Map(), trackSpeed: new Map(), manualLyricsCache: new Map(),
+    persistState() {}, emitSetlist() {}, recordSessionSong() {}, broadcastState: noFullState, getEffectiveLyrics() { return null; },
+  });
+  lyricEvents.get('offset:adjust')({ trackId: 'hot-track', delta: 100 });
+  playbackEvents.get('style:override')({ intensity: 2 });
+  playbackEvents.get('pitch:change')(1);
+  playbackEvents.get('speed:change')(1.1);
+  playbackEvents.get('metronome:toggle')(false);
+  ok(['offset:update', 'style:override', 'pitch:update', 'speed:update', 'metronome:update'].every((event) => emitted.some((item) => item.event === event)));
+});
+
 test('offset:set 會立即持久化，歌曲移出清單後重開程式仍可恢復', () => {
   const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
   const events = new Map();
@@ -5784,6 +5924,27 @@ test('音檔巡檢：缺少檔名或檔案時標記遺失，存在時標記可�
   ok(libraryStore.audioStatus({ filename: 'ready.mp3' }, (name) => name === 'ready.mp3').audioAvailable);
 });
 
+test('播放清單同步以目錄快照避免每首歌重複同步檔案檢查', () => {
+  const libraryStore = require('../server/services/library-store');
+  libraryStore.resetAudioStatusCache();
+  let reads = 0;
+  const first = libraryStore.getAudioExistsLookup({
+    now: () => 1000,
+    readDirectory: () => { reads++; return ['ready.mp3', 'other.mp3']; },
+  });
+  const second = libraryStore.getAudioExistsLookup({
+    now: () => 1500,
+    readDirectory: () => { reads++; return []; },
+  });
+  const refreshed = libraryStore.getAudioExistsLookup({
+    now: () => 2000,
+    readDirectory: () => { reads++; return ['refreshed.mp3']; },
+  });
+  eq(reads, 2, '快取期內不得為每個 state payload 重讀目錄: ');
+  ok(first('ready.mp3') && second('other.mp3'));
+  ok(refreshed('refreshed.mp3') && !refreshed('ready.mp3'));
+});
+
 test('播放前預檢：音檔遺失時不改播放狀態並回傳可恢復錯誤', () => {
   const registerPlaybackHandlers = require('../server/routes/handlers/playback');
   const events = new Map();
@@ -5862,8 +6023,8 @@ test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件
     on(event, fn) { if (event === 'connection') this.connectionHandler = fn; },
     emit(event, data) { this.emitted.push({ event, data }); },
   });
-  const makeSocket = (type) => ({
-    id: `${type}-1`, handshake: { auth: { clientType: type, pin: '' }, address: '127.0.0.1' },
+  const makeSocket = (type, pin = '') => ({
+    id: `${type}-1`, handshake: { auth: { clientType: type, pin }, address: '127.0.0.1' },
     events: new Map(), emitted: [],
     on(event, fn) { this.events.set(event, fn); },
     emit(event, data) { this.emitted.push({ event, data }); },
@@ -5879,13 +6040,20 @@ test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件
   ok(!overlay.events.has('play:toggle'));
   ok(!overlay.events.has('library:clear'));
 
-  const controlIo = makeIo();
-  socketHandler(controlIo);
-  const controller = makeSocket('controller');
-  controlIo.authMiddleware(controller, (err) => { if (err) throw err; });
-  controlIo.connectionHandler(controller);
-  ok(controller.events.has('play:toggle'));
-  ok(controller.events.has('library:clear'));
+  const authStore = require('../server/services/auth-store');
+  const testPin = 'role-test-pin';
+  ok(authStore.setPin(testPin).ok, 'socket role test must seed its control PIN');
+  try {
+    const controlIo = makeIo();
+    socketHandler(controlIo);
+    const controller = makeSocket('controller', testPin);
+    controlIo.authMiddleware(controller, (err) => { if (err) throw err; });
+    controlIo.connectionHandler(controller);
+    ok(controller.events.has('play:toggle'));
+    ok(controller.events.has('library:clear'));
+  } finally {
+    authStore.clearPin(testPin);
+  }
 });
 
 test('Stored XSS 回歸：歌單與遙控器以文字節點輸出外部 metadata', () => {
@@ -6479,6 +6647,34 @@ test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷
   ok(metrics.lastSavingsBytes > 8 * 1024 * 1024, '應量測到超過 8MB 的節省: ');
 });
 
+test('state-store debounce has a bounded max wait during continuous edits', () => {
+  const { SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS, saveDelayMs } = require('../server/services/state-store');
+  eq(SAVE_DEBOUNCE_MS, 800);
+  eq(SAVE_MAX_WAIT_MS, 5000);
+  eq(saveDelayMs(1000, 1000), 800, '第一次排程保留正常 debounce: ');
+  eq(saveDelayMs(1000, 4500), 800, '距離 max wait 還遠時持續合併: ');
+  eq(saveDelayMs(1000, 5600), 400, '接近 max wait 時只能再延到上限: ');
+  eq(saveDelayMs(1000, 7000), 0, '超過上限必須立刻保存，不得無限重設計時器: ');
+});
+
+test('state:sync excludes setlist style snapshots while setlist:update retains them', () => {
+  const { createAppState, SETLIST_LAYOUTS } = require('../server/state/app-state');
+  const state = createAppState({ emit() {} });
+  const sync = state.getPublicState();
+  const setlist = state.setlistPayload();
+  ok(!Object.prototype.hasOwnProperty.call(sync.session, 'styles'), 'state:sync 不可攜帶完整 setlist styles: ');
+  ok(!Object.prototype.hasOwnProperty.call(sync.session, 'style') && !Object.prototype.hasOwnProperty.call(sync.session, 'sceneStyles'),
+    'state:sync 不可攜帶 legacy setlist style 視圖: ');
+  eq(Object.keys(setlist.styles).length, SETLIST_LAYOUTS.length, 'setlist:update 初始載入必須保留各模板外觀: ');
+  const socketSource = fs.readFileSync(path.join(__dirname, '../server/routes/socket-handler.js'), 'utf8');
+  const panelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  ok(socketSource.includes("socket.on('setlist:get', (_data, ack) => {"),
+    'setlist payload 必須可按需取得，不能綁在 controller 初始同步後: ');
+  ok(panelSource.includes("SocketClient.on('connection-change', (connected) => {"),
+    '控制面板連線後必須主動取得 setlist 外觀: ');
+  ok(panelSource.includes("SocketClient.on('setlist:update', applySetlistControls)"));
+});
+
 test('R2-2 500-song playlist stays compact across all real Socket roles including display-spout', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-sync-matrix-'));
   try {
@@ -6501,8 +6697,18 @@ test('R2-2 500-song playlist stays compact across all real Socket roles includin
     ok(matrix.ok, matrix.error || 'state-sync matrix should pass');
     eq(matrix.playlistLength, 500);
     eq(matrix.roles.join(','), 'controller,remote,display,display-spout,setlist');
-    ok(matrix.initialBytes < 1024 * 1024 && matrix.broadcastBytes < 1024 * 1024 && matrix.recoveryBytes < 1024 * 1024,
+    const statePayloadBytes = [
+      ...Object.values(matrix.initialBytes || {}),
+      ...Object.values(matrix.broadcastBytes || {}),
+      matrix.recoveryBytes,
+    ];
+    ok(statePayloadBytes.length === 11 && statePayloadBytes.every((bytes) => bytes < 1024 * 1024),
       `state-sync matrix public payload exceeds 1 MiB: ${JSON.stringify(matrix)}`);
+    ok(matrix.initialBytes.controller === matrix.initialBytes.remote
+      && matrix.initialBytes.display === matrix.initialBytes['display-spout']
+      && matrix.initialBytes.display === matrix.initialBytes.setlist
+      && matrix.initialBytes.controller > matrix.initialBytes.display,
+    `state-sync matrix must keep control and read-only payloads separated: ${JSON.stringify(matrix)}`);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
@@ -7198,8 +7404,7 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
   const source = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
   [
    'utilityProcess.fork',
-    "stdio: 'pipe'",
-    "child.stdout?.on('data', () => {})",
+    "stdio: 'ignore'",
     'cwd: app.isPackaged ? path.dirname(projectRoot) : projectRoot',
     "OPEN_BROWSER: '0'",
     'contextIsolation: true',
@@ -7921,7 +8126,7 @@ testAsync('Electron P1：系統匣結束會先 graceful shutdown，並釋放防�
   });
 
   await desktop.start();
-  eq(forkOptions.stdio, 'pipe', 'utilityProcess 必須使用已持續排空的 pipe，保留啟動錯誤且不可塞住：');
+  eq(forkOptions.stdio, 'ignore', 'utilityProcess 不可建立會堵塞 server event loop 的 stdout/stderr pipe：');
   eq(windowOptions.icon, path.join(path.resolve(__dirname, '..'), 'assets', 'elitesand-pro.ico'),
     '桌面視窗必須從 Electron 殼資源讀取正式圖示：');
   trayInstance.menu.template.find((item) => item.label === '結束').click();
@@ -9547,6 +9752,25 @@ console.log('\n🌐 17. M6.1 介面語系層');
     eq(rootEl.children.length, 0, 'destroy 應該把引導元件從畫面移除：');
   });
 }
+
+testAsync('Twitch rejected requests create cooldown and suppress repeat chat replies', async () => {
+  const replies = [];
+  const service = new TwitchService({
+    config: { twitchClientId: '' },
+    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
+    authStore: { load: () => null, save: () => true, clear: () => true },
+  });
+  service.setRequestSettings({ ...TwitchRequestSettings.getDefaults(), enabled: false, cooldownSeconds: 60 });
+  service.sendConfiguredReply = async (_event, key, values = {}) => { replies.push({ key, values }); return { sent: true }; };
+  const event = { chatter_user_id: 'spam-viewer', chatter_user_name: 'spam-viewer', message: { text: '!點歌 https://youtu.be/dQw4w9WgXcQ' } };
+  await service.handleChatMessage(event);
+  eq(replies.at(-1).key, 'requestDisabled');
+  await service.handleChatMessage(event);
+  eq(replies.length, 1, 'cooldown repeat must not keep posting to chat');
+  ok(service.commandUserCooldowns.has('request:spam-viewer'));
+  service.stop();
+});
 
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }

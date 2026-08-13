@@ -6,6 +6,7 @@
  */
 
 const { createLogger } = require('../../utils/logger');
+const { emitToAccessRooms } = require('../../utils/socket-broadcast');
 const libraryStore = require('../../services/library-store');
 const { addRomanization, needsRomanization, needsFurigana } = require('../../services/romanizer');
 const { sanitizeTrack, sanitizeJsonObject } = require('../../utils/track-schema');
@@ -21,7 +22,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, trackPitch, trackSpeed, manualLyricsCache,
     persistState, emitSetlist, recordSessionSong, broadcastState, getEffectiveLyrics,
-    markTrackPlayed,
+    markTrackPlayed, redactTrackForReadOnly = (track) => track,
   } = ctx;
 
   socket.on('play:track', (track) => {
@@ -104,7 +105,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     // 媒體庫：記錄一次播放 + 累加播放次數（連同歌詞/檔名/變調一起存）
     try { libraryStore.recordPlay(track); } catch (e) { /* 不影響播放 */ }
 
-    io.emit('play:track', {
+    const playTrackPayload = {
       ...track,
       offset,
       pitchShift: savedPitch,
@@ -117,7 +118,8 @@ function registerPlaybackHandlers(io, socket, ctx) {
       // 兩邊都是 clientType='controller'，若面板也對其他面板的廣播做出反應，
       // 會形成互相驅動對方換歌→再廣播→對方又反應的無窮迴圈。
       _originClientType: socket.clientType,
-    });
+    };
+    emitToAccessRooms(io, 'play:track', playTrackPayload, redactTrackForReadOnly(playTrackPayload));
     // 廣播該首記憶的變調/變速，讓面板與顯示端套用（每首切換時自動還原）
     io.emit('pitch:update', savedPitch);
     io.emit('speed:update', savedSpeed);
@@ -272,7 +274,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     log.info(`風格切換: ${style}`);
     io.emit('style:change', style);
     io.emit('style:override', playState.styleOverrides);
-    broadcastState();
+    // style:* 已是顯示端的即時契約；不要在滑桿／切換時再送整份 state:sync。
     persistState();
   });
 
@@ -281,7 +283,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     const clean = sanitizeJsonObject(overrides);
     playState.styleOverrides = (clean && typeof clean === 'object' && !Array.isArray(clean)) ? clean : {};
     io.emit('style:override', playState.styleOverrides);
-    broadcastState();
     persistState();
   });
 
@@ -301,7 +302,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.romanizationMode = mode;
     log.info(`顯示模式: ${mode}`);
     io.emit('romanization:mode', mode);
-    broadcastState();
     persistState();
   });
 
@@ -363,7 +363,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
       try { libraryStore.updateMeta(id, { pitchShift: playState.pitchShift }); } catch (e) { /* 靜默 */ }
     }
     io.emit('pitch:update', playState.pitchShift);
-    broadcastState();
     persistState();
   });
 
@@ -387,7 +386,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
       try { libraryStore.updateMeta(id, { playbackRate: playState.playbackRate }); } catch (e) { /* 靜默 */ }
     }
     io.emit('speed:update', playState.playbackRate);
-    broadcastState();
     persistState();
   });
 
@@ -396,7 +394,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.metronomeEnabled = typeof enabled === 'boolean' ? enabled : !playState.metronomeEnabled;
     log.info(`前奏倒數: ${playState.metronomeEnabled ? '啟用' : '停用'}`);
     io.emit('metronome:update', playState.metronomeEnabled);
-    broadcastState();
     persistState();
   });
 }

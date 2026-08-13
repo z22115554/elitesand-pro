@@ -1,13 +1,13 @@
 {
   "name": "elitesand-pro",
-  "version": "0.9.9.6",
+  "version": "0.9.9.7",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/run-tests.js && node tests/app-updater-v2.test.js && node tests/usage-telemetry.test.js && node tests/onboarding-tour.test.js && node tests/updater-in-progress-lock.test.js && node tests/app-update-check.test.js && node tests/app-update-i18n.test.js",
+    "test": "node tests/run-tests.js && node tests/pin-first-setup.test.js && node tests/device-access.test.js && node tests/app-updater-v2.test.js && node tests/usage-telemetry.test.js && node tests/onboarding-tour.test.js && node tests/updater-in-progress-lock.test.js && node tests/app-update-check.test.js && node tests/app-update-i18n.test.js",
     "test:onboarding": "node tests/onboarding-tour.test.js",
     "audit:release": "npm audit --omit=dev --audit-level=low",
     "smoke:portable": "node tools/smoke-portable.js",
@@ -36,7 +36,8 @@
     "shell:spout:rtx": "set ELITESAND_SPOUT_EXPERIMENT=1&& set ELITESAND_DISABLE_ANNOUNCEMENTS=1&& set ELITESAND_SHELL_USER_DATA_DIR=.local\\spout-shell-user-data&& set ELITESAND_SHELL_PORT=3226&& set ELITESAND_SPOUT_GPU_PREFERENCE=high-performance&& set ELITESAND_SPOUT_NATIVE_ADDON=.local\\spout-output-build-adapterdiag\\elitesand_spout_output.node&& electron electron/main.js",
     "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-portable.ps1",
     "package:update": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-update.ps1",
-    "package:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1"
+    "package:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1",
+    "test:visual": "playwright test --config=playwright.config.js"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
@@ -56,7 +57,8 @@
   "devDependencies": {
     "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "@playwright/test": "^1.62.1"
   },
   "engines": {
     "node": ">=18.0.0"

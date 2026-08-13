@@ -46,6 +46,7 @@ const MAX_MANUAL_LYRICS_ENTRIES = 200;
 let _saveTimer = null;
 let _lastSnapshotFn = null;
 let _saveCallbacks = [];
+let _firstScheduledAt = 0;
 
 // 多伺服器衝突的「靜默期接管」：偵測到磁碟上有更新的 savedAt（另一個伺服器在寫）時
 // 先拒寫保護對方；但若同一個較新值連續 TAKEOVER_QUIET_MS 沒再前進（對方已關閉/停寫），
@@ -86,7 +87,15 @@ function atomicWrite(filename, raw) {
   const temporary = `${filename}.tmp-${process.pid}-${Date.now()}`;
   try {
     fs.writeFileSync(temporary, raw, 'utf8');
+    // Flush file contents before atomically replacing the live state file.
+    const fd = fs.openSync(temporary, 'r+');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
     fs.renameSync(temporary, filename);
+    // Directory metadata flush is best effort because Windows may reject it.
+    try {
+      const dirFd = fs.openSync(path.dirname(filename), 'r');
+      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+    } catch (_) { /* best effort */ }
   } finally {
     try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) { /* best effort */ }
   }
@@ -144,7 +153,9 @@ function setStartupAlert(message, type = 'warning') {
 }
 
 function refreshLastGood(state) {
-  atomicWrite(STATE_BACKUP_FILE, JSON.stringify(state));
+  // A successful startup must not replace the prior recovery point with the
+  // current primary file. Only bootstrap a missing backup.
+  if (!fs.existsSync(STATE_BACKUP_FILE)) atomicWrite(STATE_BACKUP_FILE, JSON.stringify(state));
 }
 
 function blockWritesForFutureSchema(error, filename = STATE_FILE) {
@@ -290,16 +301,28 @@ function loadState() {
 // 舊值 3000ms 在「改設定後立刻重開測試」的開發節奏下，幾乎每次都會把還沒落地的設定弄丟。
 // 縮到 800ms：仍能合併同一次拖曳滑桿/選色器的高頻事件，但把資料遺失的風險窗口縮到最小。
 const SAVE_DEBOUNCE_MS = 800;
+// 連續拖曳 range input 時仍要在有限時間內落盤。Windows 常見的關閉方式
+// 不會送可 await 的訊號，若無上限就會在整段拖曳期間完全沒有可復原狀態。
+const SAVE_MAX_WAIT_MS = 5000;
+
+function saveDelayMs(firstScheduledAt, now = Date.now()) {
+  const first = Number(firstScheduledAt) || now;
+  const remaining = Math.max(0, SAVE_MAX_WAIT_MS - Math.max(0, now - first));
+  return Math.min(SAVE_DEBOUNCE_MS, remaining);
+}
 
 function scheduleSave(snapshotFn, callback) {
   _lastSnapshotFn = snapshotFn;
   if (typeof callback === 'function') _saveCallbacks.push(callback);
+  const now = Date.now();
+  if (!_firstScheduledAt) _firstScheduledAt = now;
   if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(saveNow, SAVE_DEBOUNCE_MS);
+  _saveTimer = setTimeout(saveNow, saveDelayMs(_firstScheduledAt, now));
 }
 
 function saveNow() {
   _saveTimer = null;
+  _firstScheduledAt = 0;
   if (!_lastSnapshotFn) return;
   const callbacks = _saveCallbacks;
   _saveCallbacks = [];
@@ -315,6 +338,7 @@ function saveNow() {
     const rawSnapshot = _lastSnapshotFn();
     if (!rawSnapshot) throw new Error('無法取得要保存的狀態快照');
     const snapshot = { ...rawSnapshot, schemaVersion: CURRENT_STATE_SCHEMA_VERSION };
+    let previousSerialized = null;
     if (fs.existsSync(STATE_FILE)) {
       try {
         const diskResult = readMigratedStateFile(STATE_FILE);
@@ -326,6 +350,7 @@ function saveNow() {
           }
         }
         const disk = diskResult.state;
+        previousSerialized = fs.readFileSync(STATE_FILE, 'utf8');
         const diskSavedAt = Number(disk.savedAt) || 0;
         if (diskSavedAt > _lastKnownSavedAt) {
           const now = Date.now();
@@ -373,10 +398,17 @@ function saveNow() {
     }
 
     const serialized = JSON.stringify(snapshot);
+    // Create the recovery point before replacing the primary file. This is the
+    // previous valid on-disk state, not a second copy of the new state.
+    if (previousSerialized !== null) {
+      atomicWrite(STATE_BACKUP_FILE, previousSerialized);
+    } else if (!fs.existsSync(STATE_BACKUP_FILE)) {
+      atomicWrite(STATE_BACKUP_FILE, serialized);
+    }
     atomicWrite(STATE_FILE, serialized);
     _lastKnownSavedAt = Number(snapshot.savedAt) || Date.now();
     try {
-      atomicWrite(STATE_BACKUP_FILE, serialized);
+      if (!fs.existsSync(STATE_BACKUP_FILE)) atomicWrite(STATE_BACKUP_FILE, serialized);
     } catch (backupError) {
       log.warn(`狀態已保存，但安全備份更新失敗: ${backupError.message}`);
       if (_errorReporter) _errorReporter({ area: '狀態備份', message: '狀態已保存，但安全備份更新失敗；請檢查磁碟空間或資料夾權限。' });
@@ -414,4 +446,7 @@ module.exports = {
   STATE_FILE,
   STATE_BACKUP_FILE,
   CURRENT_STATE_SCHEMA_VERSION,
+  SAVE_DEBOUNCE_MS,
+  SAVE_MAX_WAIT_MS,
+  saveDelayMs,
 };
