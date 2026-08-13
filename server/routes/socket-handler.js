@@ -35,7 +35,6 @@ const authRateLimiter = require('../services/auth-rate-limiter');
 const stateStore = require('../services/state-store');
 const defaultRuntimeEvidence = require('../services/runtime-evidence');
 const defaultUsageTelemetry = require('../services/usage-telemetry');
-const { CONTROL_ROOM, READ_ONLY_ROOM } = require('../utils/socket-broadcast');
 
 const log = createLogger('Socket');
 
@@ -90,7 +89,7 @@ module.exports = function socketHandler(io, {
     socket.clientType = auth.clientType;
     socket.readOnly = PIN_EXEMPT_CLIENT_TYPES.has(auth.clientType);
     if (socket.readOnly) return next();
-    if (!authStore.hasPin()) return next(new Error('PIN_SETUP_REQUIRED'));
+    if (!authStore.hasPin()) return next();
     const key = `socket:${socket.handshake.address || 'unknown'}`;
     const limit = authRateLimiter.status(key);
     if (!limit.allowed) return next(new Error('PIN_RATE_LIMITED'));
@@ -312,9 +311,6 @@ module.exports = function socketHandler(io, {
       else if (type === 'remote') clients.remotes.add(socket.id);
       else if (type === 'setlist') clients.setlists.add(socket.id);
       else if (type === 'prompter') clients.prompters.add(socket.id);
-      // Room membership is assigned only after the handshake-fixed type is confirmed.
-      // All state/media broadcasts below can therefore choose the least-privilege payload.
-      if (typeof socket.join === 'function') socket.join(socket.readOnly ? READ_ONLY_ROOM : CONTROL_ROOM);
       runtimeEvidence.recordSocketConnected({ socketId: socket.id, clientType: type });
       // 正式 OBS 輸出連線本身就是核心功能使用；面板內預覽不計入。
       if (type === 'display' || type === 'setlist') {
@@ -323,12 +319,12 @@ module.exports = function socketHandler(io, {
 
       // 顯示端發送完整恢復狀態（含歌詞），而非基本狀態；預覽 iframe 吃跟正式來源一樣的資料
       if (type === 'display' || type === 'display-preview') {
-        socket.emit('state:recovery', ctx.getReadOnlyState());
+        socket.emit('state:recovery', ctx.getFullRecoveryState());
       } else if (type === 'setlist' || type === 'setlist-preview') {
         socket.emit('setlist:update', ctx.setlistPayload());
         // 歌單頁也需要 lyricSettings（簡轉繁等）：setlist:update 只有清單資料沒有這塊，
         // 過去只能等某個無關操作觸發 broadcastState() 才會補到，OBS 剛載入來源時吃不到設定。
-        socket.emit('state:sync', ctx.getReadOnlyState());
+        socket.emit('state:sync', ctx.getPublicState());
       } else {
         socket.emit('state:sync', ctx.getPublicState());
       }
@@ -356,18 +352,10 @@ module.exports = function socketHandler(io, {
       emitClientCounts();
     });
 
-    // Setlist 外觀與清單改為按需取得：控制面板在連線完成後請求，
-    // 避免初始 state:sync 後緊接大型第二包造成其他角色的握手壅塞。
-    socket.on('setlist:get', (_data, ack) => {
-      const data = ctx.setlistPayload();
-      if (typeof ack === 'function') ack(data);
-      else socket.emit('setlist:update', data);
-    });
-
     // ─── OBS 顯示頁面狀態恢復請求 ───
     socket.on('state:request', () => {
       log.info(`狀態恢復請求: ${socket.id}`);
-      socket.emit('state:recovery', socket.readOnly ? ctx.getReadOnlyState() : ctx.getFullRecoveryState());
+      socket.emit('state:recovery', ctx.getFullRecoveryState());
     });
 
     // ─── 各領域事件：只有通過控制權限的 controller/remote 才掛寫入 handler ───
@@ -385,6 +373,12 @@ module.exports = function socketHandler(io, {
       registerLibraryHandlers(io, socket, ctx);
       registerSetlistHandlers(io, socket, ctx);
       registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });
+    } else if (socket.clientType === 'setlist' || socket.clientType === 'setlist-preview') {
+      socket.on('setlist:get', (_data, ack) => {
+        const data = ctx.setlistPayload();
+        if (typeof ack === 'function') ack(data);
+        else socket.emit('setlist:update', data);
+      });
     }
 
     // ─── 斷線處理 ───

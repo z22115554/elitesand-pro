@@ -52,7 +52,6 @@ const SocketClient = (() => {
     socket.on('connect_error', (err) => {
       console.error('[Socket] 連線錯誤:', err.message);
       if (err.message === 'PIN_REQUIRED') emit('auth:required');
-      if (err.message === 'PIN_SETUP_REQUIRED') emit('auth:setup-required');
     });
 
     // 角色、PIN 與唯讀權限都由伺服器端執行；前端不是安全邊界。

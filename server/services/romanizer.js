@@ -321,7 +321,107 @@ async function romanizeWithLang(text, lang) {
  * 判斷文字是否包含日文漢字（不含假名也可能需要羅馬化）
  */
 function hasKanji(text) {
-  return /[\u4E00-\u9FFF]/.test(text);
+  return /[\u3400-\u9FFF\u3005]/u.test(text);
+}
+
+const KANJI_RUN_RE = /[\u3400-\u9FFF\u3005]+/gu;
+const KANA_RE = /[\u3040-\u30FF]/u;
+
+function katakanaToHiragana(text) {
+  return Array.from(String(text || ''), (char) => {
+    const code = char.codePointAt(0);
+    return code >= 0x30A1 && code <= 0x30F6 ? String.fromCodePoint(code - 0x60) : char;
+  }).join('');
+}
+
+/**
+ * Turn one kuromoji token into safe ruby segments. We only annotate a kanji
+ * run when its surrounding kana can be aligned with the tokenizer reading;
+ * a mismatch leaves the original token untouched instead of guessing.
+ */
+function furiganaSegmentsForToken(surface, reading) {
+  const text = String(surface || '');
+  const hiraganaReading = katakanaToHiragana(reading);
+  if (!text || !hasKanji(text) || !hiraganaReading) return [{ text }];
+
+  const runs = [...text.matchAll(KANJI_RUN_RE)];
+  if (!runs.length) return [{ text }];
+  const segments = [];
+  let surfaceIndex = 0;
+  let readingIndex = 0;
+
+  for (let runIndex = 0; runIndex < runs.length; runIndex += 1) {
+    const run = runs[runIndex];
+    const runText = run[0];
+    const runStart = run.index;
+    const before = text.slice(surfaceIndex, runStart);
+    const normalizedBefore = katakanaToHiragana(before);
+    if (normalizedBefore && KANA_RE.test(normalizedBefore)) {
+      if (!hiraganaReading.startsWith(normalizedBefore, readingIndex)) return [{ text }];
+      readingIndex += normalizedBefore.length;
+    }
+    if (before) segments.push({ text: before });
+
+    const runEnd = runStart + runText.length;
+    const nextRunStart = runIndex + 1 < runs.length ? runs[runIndex + 1].index : text.length;
+    const after = text.slice(runEnd, nextRunStart);
+    const normalizedAfter = katakanaToHiragana(after);
+    let readingEnd = hiraganaReading.length;
+    if (normalizedAfter && KANA_RE.test(normalizedAfter)) {
+      const matchAt = hiraganaReading.indexOf(normalizedAfter, readingIndex);
+      if (matchAt < 0) return [{ text }];
+      readingEnd = matchAt;
+    } else if (runIndex + 1 < runs.length) {
+      // Adjacent kanji are a single ruby group. kuromoji normally splits words
+      // before this point; keeping the group intact is safer than inventing a
+      // boundary from an ambiguous reading.
+      continue;
+    }
+    const runReading = hiraganaReading.slice(readingIndex, readingEnd);
+    if (!runReading) return [{ text }];
+    segments.push({ text: runText, reading: runReading });
+    readingIndex = readingEnd;
+    surfaceIndex = runEnd;
+  }
+
+  const tail = text.slice(surfaceIndex);
+  const normalizedTail = katakanaToHiragana(tail);
+  if (normalizedTail && KANA_RE.test(normalizedTail)) {
+    if (!hiraganaReading.startsWith(normalizedTail, readingIndex)) return [{ text }];
+    readingIndex += normalizedTail.length;
+  }
+  if (tail) segments.push({ text: tail });
+  return readingIndex === hiraganaReading.length ? segments : [{ text }];
+}
+
+async function japaneseReadingAnalysis(text) {
+  if (!hasKanji(text)) return { phonetic: japaneseToRomaji(text), furigana: [] };
+  try {
+    const tokenizer = await getKuromojiTokenizer();
+    const tokens = tokenizer.tokenize(text);
+    let phonetic = '';
+    let prevPos = 1;
+    const furigana = [];
+
+    for (const token of tokens) {
+      const surface = token.surface_form || '';
+      const reading = token.reading || '';
+      if (reading && /[\u30A0-\u30FF]/u.test(reading)) {
+        if (phonetic.length > 0 && shouldAddSpace(prevPos, token.pos)) phonetic += ' ';
+        phonetic += katakanaToRomaji(reading);
+        furigana.push(...furiganaSegmentsForToken(surface, reading));
+      } else {
+        const fallback = japaneseToRomaji(surface);
+        if (fallback && fallback.trim()) phonetic += fallback;
+        furigana.push({ text: surface });
+      }
+      prevPos = token.pos;
+    }
+    return { phonetic: phonetic.replace(/\s+/g, ' ').trim(), furigana };
+  } catch (e) {
+    log.warn('kuromoji 處理失敗，振假名將安全停用: ' + e.message);
+    return { phonetic: japaneseToRomaji(text), furigana: [] };
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -334,48 +434,7 @@ function hasKanji(text) {
  * @returns {Promise<string>} 羅馬拼音
  */
 async function japaneseToRomajiWithKuromoji(text) {
-  if (!hasKanji(text)) {
-    // 無漢字，直接用假名表轉換
-    return japaneseToRomaji(text);
-  }
-
-  try {
-    const tokenizer = await getKuromojiTokenizer();
-    const tokens = tokenizer.tokenize(text);
-
-    let result = '';
-    let prevPos = 1; // 1 = 名詞, 2 = 動詞, etc.
-
-    for (const token of tokens) {
-      const pos = token.pos;
-      const reading = token.reading || '';
-      const surface = token.surface_form;
-
-      // 用 reading（片假名）轉羅馬拼音
-      if (reading && /[\u30A0-\u30FF]/.test(reading)) {
-        const romaji = katakanaToRomaji(reading);
-        // 詞性邊界加空格
-        if (result.length > 0 && shouldAddSpace(prevPos, pos)) {
-          result += ' ';
-        }
-        result += romaji;
-      } else {
-        // 沒有 reading（可能是標點、數字等），嘗試用假名表或保留
-        const romaji = japaneseToRomaji(surface);
-        if (romaji && romaji.trim()) {
-          result += romaji;
-        }
-      }
-
-      prevPos = pos;
-    }
-
-    return result.replace(/\s+/g, ' ').trim();
-  } catch (e) {
-    // kuromoji 失敗，降級到內建漢字表
-    log.warn('kuromoji 處理失敗，降級到內建漢字表: ' + e.message);
-    return japaneseToRomaji(text);
-  }
+  return (await japaneseReadingAnalysis(text)).phonetic;
 }
 
 /**
@@ -637,12 +696,14 @@ async function addRomanization(lyricsLines) {
   const results = [];
 
   for (const line of lyricsLines) {
-    const phonetic = await romanizeWithLang(line.text, lang);
+    const japaneseAnalysis = lang === 'ja' ? await japaneseReadingAnalysis(line.text) : null;
+    const phonetic = japaneseAnalysis ? japaneseAnalysis.phonetic : await romanizeWithLang(line.text, lang);
 
     const result = {
       ...line,
       phonetic,
     };
+    if (japaneseAnalysis && japaneseAnalysis.furigana.length > 0) result.furigana = japaneseAnalysis.furigana;
 
     // KRC 逐字模式：為每個 word 也加上 phonetic
     if (line.words && Array.isArray(line.words)) {
@@ -710,15 +771,29 @@ function needsRomanization(lyricsLines) {
   return lyricsLines.some(line => isJapanese(line.text) || isKorean(line.text));
 }
 
+/**
+ * 日文歌詞中有漢字行尚未取得振假名時，讓既有歌曲在下次播放補齊。
+ * 只接受整首歌已有假名的日文判定，避免純中文歌詞重複進入 kuromoji。
+ */
+function needsFurigana(lyricsLines) {
+  if (detectSongLang(lyricsLines) !== 'ja') return false;
+  return lyricsLines.some(line => (
+    line && hasKanji(line.text || '') && !Array.isArray(line.furigana)
+  ));
+}
+
 module.exports = {
   romanize,
   romanizeAsync,
   addRomanization,
   addRomanizationSync,
   needsRomanization,
+  needsFurigana,
   isJapanese,
   isKorean,
   japaneseToRomaji,
+  japaneseReadingAnalysis,
+  furiganaSegmentsForToken,
   koreanToRomaja,
   getKuromojiTokenizer,
 };

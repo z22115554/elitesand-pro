@@ -88,16 +88,6 @@ const PinAuth = (() => {
         modal.hidden = false;
         setTimeout(() => input.focus(), 50);
       });
-      SocketClient.on('auth:setup-required', () => {
-        if (document.getElementById('pin-settings-card')) {
-          window.dispatchEvent(new CustomEvent('pin:setup-required'));
-          return;
-        }
-        modal.hidden = false;
-        input.disabled = true;
-        submit.disabled = true;
-        showError('請在執行 Elitesand Pro 的本機控制面板設定第一組 PIN。');
-      });
       SocketClient.on('auth:ok', () => { modal.hidden = true; });
     }
   }
@@ -126,9 +116,7 @@ const PinAuth = (() => {
     const submitBtn = document.getElementById('pin-manage-submit');
     const cancelBtn = document.getElementById('pin-manage-cancel');
 
-    let mode = 'set'; // 'set' | 'change'
-    let setupPrompted = false;
-    if (disableBtn) disableBtn.hidden = true;
+    let mode = 'set'; // 'set' | 'change' | 'disable'
 
     function refreshStatus() {
       fetch('/api/auth/status').then((r) => r.json()).then((data) => {
@@ -137,11 +125,6 @@ const PinAuth = (() => {
         // 卡片預設收合（存取控制設一次很少再動）；但 PIN 目前已啟用時強制展開，
         // 避免使用中的安全設定被藏起來、使用者以為沒設定。
         if (data.hasPin && card.tagName === 'DETAILS') card.open = true;
-        if (!data.hasPin && !setupPrompted) {
-          setupPrompted = true;
-          if (card.tagName === 'DETAILS') card.open = true;
-          openModal('set');
-        }
       }).catch(() => { /* 讀不到就維持現狀，不阻擋介面 */ });
     }
 
@@ -228,8 +211,7 @@ const PinAuth = (() => {
 
     enableBtn.addEventListener('click', () => openModal('set'));
     changeBtn.addEventListener('click', () => openModal('change'));
-    if (disableBtn) disableBtn.addEventListener('click', () => openModal('disable'));
-    window.addEventListener('pin:setup-required', () => openModal('set'));
+    disableBtn.addEventListener('click', () => openModal('disable'));
     cancelBtn.addEventListener('click', closeModal);
     submitBtn.addEventListener('click', submit);
 

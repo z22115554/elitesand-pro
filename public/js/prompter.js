@@ -64,6 +64,7 @@
     setStrokeC: document.getElementById('pt-set-stroke-c'),
     setRomaji: document.getElementById('pt-set-romaji'),
     setXieyin: document.getElementById('pt-set-xieyin'),
+    setFurigana: document.getElementById('pt-set-furigana'),
     setReset: document.getElementById('pt-set-reset'),
   };
 
@@ -83,7 +84,7 @@
   const DEFAULT_APPEARANCE = {
     font: 'default', size: 27, color: '#f2f3f5', strokeWidth: 0, strokeColor: '#000000',
     // 預設關閉：跟 OBS 顯示端的 romanizationMode 預設 'original' 一致，沒資料的歌不會顯示空行。
-    showRomaji: false, showXieyin: false,
+    showRomaji: false, showXieyin: false, showFurigana: false,
   };
 
   function localFontValue(family) { return `${LOCAL_FONT_PREFIX}${family}`; }
@@ -135,6 +136,7 @@
     dom.setStrokeC.value = appearance.strokeColor;
     dom.setRomaji.checked = appearance.showRomaji;
     dom.setXieyin.checked = appearance.showXieyin;
+    dom.setFurigana.checked = appearance.showFurigana;
   }
 
   function updateAppearance(patch) {
@@ -246,6 +248,7 @@
   dom.setStrokeC.addEventListener('input', () => updateAppearance({ strokeColor: dom.setStrokeC.value }));
   dom.setRomaji.addEventListener('change', () => updateLyricsDisplayOptions({ showRomaji: dom.setRomaji.checked }));
   dom.setXieyin.addEventListener('change', () => updateLyricsDisplayOptions({ showXieyin: dom.setXieyin.checked }));
+  dom.setFurigana.addEventListener('change', () => updateLyricsDisplayOptions({ showFurigana: dom.setFurigana.checked }));
   dom.setReset.addEventListener('click', () => {
     appearance = { ...DEFAULT_APPEARANCE };
     saveAppearance(appearance);
@@ -337,13 +340,29 @@
     }
     // 拼音/諧音不經過 s2t()：跟 karaoke.js 同一套規則，簡轉繁只轉「原文 Han 字」，
     // 拼音/諧音是輔助發音用的獨立資料，不是原文的一部分，轉了反而可能跟實際讀音對不上。
+    const renderFurigana = (line) => {
+      const segments = Array.isArray(line.furigana) ? line.furigana : [];
+      const source = String(line.text || '');
+      const converted = s2t(source);
+      // Ruby data belongs to the exact original characters. If a conversion or
+      // stale async payload no longer matches, show plain text rather than put
+      // a potentially wrong reading above a different character.
+      if (!segments.length || converted !== source || segments.map((segment) => segment.text || '').join('') !== source) {
+        return escapeHtml(converted);
+      }
+      return segments.map((segment) => {
+        const text = escapeHtml(segment.text || '');
+        const reading = escapeHtml(segment.reading || '');
+        return reading ? `<ruby>${text}<rt>${reading}</rt></ruby>` : text;
+      }).join('');
+    };
     dom.lyrics.innerHTML = parsedLines.map((line, i) => {
       const romaji = appearance.showRomaji && line.phonetic
         ? `<div class="pt-line-romaji">${escapeHtml(line.phonetic)}</div>` : '';
       const xieyin = appearance.showXieyin && line.xieyin
         ? `<div class="pt-line-xieyin">${escapeHtml(line.xieyin)}</div>` : '';
       return `<div class="pt-line" data-index="${i}">
-        <div class="pt-line-text">${escapeHtml(s2t(line.text || ''))}</div>
+        <div class="pt-line-text">${appearance.showFurigana ? renderFurigana(line) : escapeHtml(s2t(line.text || ''))}</div>
         ${romaji}${xieyin}
       </div>`;
     }).join('');
@@ -520,8 +539,9 @@
       if (!rl) continue;
       if (rl.phonetic && rl.phonetic !== line.phonetic) { line.phonetic = rl.phonetic; changed = true; }
       if (rl.xieyin && rl.xieyin !== line.xieyin) { line.xieyin = rl.xieyin; changed = true; }
+      if (Array.isArray(rl.furigana) && JSON.stringify(rl.furigana) !== JSON.stringify(line.furigana)) { line.furigana = rl.furigana; changed = true; }
     }
-    if (changed && (appearance.showRomaji || appearance.showXieyin)) {
+    if (changed && (appearance.showRomaji || appearance.showXieyin || appearance.showFurigana)) {
       renderLyricsSkeleton();
       updateLyricsHighlight();
     }
