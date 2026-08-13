@@ -6502,6 +6502,16 @@ test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷
   ok(metrics.lastSavingsBytes > 8 * 1024 * 1024, '應量測到超過 8MB 的節省: ');
 });
 
+test('state-store debounce has a bounded max wait during continuous edits', () => {
+  const { SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS, saveDelayMs } = require('../server/services/state-store');
+  eq(SAVE_DEBOUNCE_MS, 800);
+  eq(SAVE_MAX_WAIT_MS, 5000);
+  eq(saveDelayMs(1000, 1000), 800, '第一次排程保留正常 debounce: ');
+  eq(saveDelayMs(1000, 4500), 800, '距離 max wait 還遠時持續合併: ');
+  eq(saveDelayMs(1000, 5600), 400, '接近 max wait 時只能再延到上限: ');
+  eq(saveDelayMs(1000, 7000), 0, '超過上限必須立刻保存，不得無限重設計時器: ');
+});
+
 test('state:sync excludes setlist style snapshots while setlist:update retains them', () => {
   const { createAppState, SETLIST_LAYOUTS } = require('../server/state/app-state');
   const state = createAppState({ emit() {} });

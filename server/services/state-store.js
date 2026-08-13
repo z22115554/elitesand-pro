@@ -46,6 +46,7 @@ const MAX_MANUAL_LYRICS_ENTRIES = 200;
 let _saveTimer = null;
 let _lastSnapshotFn = null;
 let _saveCallbacks = [];
+let _firstScheduledAt = 0;
 
 // 多伺服器衝突的「靜默期接管」：偵測到磁碟上有更新的 savedAt（另一個伺服器在寫）時
 // 先拒寫保護對方；但若同一個較新值連續 TAKEOVER_QUIET_MS 沒再前進（對方已關閉/停寫），
@@ -290,16 +291,28 @@ function loadState() {
 // 舊值 3000ms 在「改設定後立刻重開測試」的開發節奏下，幾乎每次都會把還沒落地的設定弄丟。
 // 縮到 800ms：仍能合併同一次拖曳滑桿/選色器的高頻事件，但把資料遺失的風險窗口縮到最小。
 const SAVE_DEBOUNCE_MS = 800;
+// 連續拖曳 range input 時仍要在有限時間內落盤。Windows 常見的關閉方式
+// 不會送可 await 的訊號，若無上限就會在整段拖曳期間完全沒有可復原狀態。
+const SAVE_MAX_WAIT_MS = 5000;
+
+function saveDelayMs(firstScheduledAt, now = Date.now()) {
+  const first = Number(firstScheduledAt) || now;
+  const remaining = Math.max(0, SAVE_MAX_WAIT_MS - Math.max(0, now - first));
+  return Math.min(SAVE_DEBOUNCE_MS, remaining);
+}
 
 function scheduleSave(snapshotFn, callback) {
   _lastSnapshotFn = snapshotFn;
   if (typeof callback === 'function') _saveCallbacks.push(callback);
+  const now = Date.now();
+  if (!_firstScheduledAt) _firstScheduledAt = now;
   if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(saveNow, SAVE_DEBOUNCE_MS);
+  _saveTimer = setTimeout(saveNow, saveDelayMs(_firstScheduledAt, now));
 }
 
 function saveNow() {
   _saveTimer = null;
+  _firstScheduledAt = 0;
   if (!_lastSnapshotFn) return;
   const callbacks = _saveCallbacks;
   _saveCallbacks = [];
@@ -414,4 +427,7 @@ module.exports = {
   STATE_FILE,
   STATE_BACKUP_FILE,
   CURRENT_STATE_SCHEMA_VERSION,
+  SAVE_DEBOUNCE_MS,
+  SAVE_MAX_WAIT_MS,
+  saveDelayMs,
 };
