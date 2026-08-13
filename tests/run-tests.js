@@ -2483,7 +2483,7 @@ test('lyric-settings 可被 state-store 持久化', () => {
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
-const { TwitchService, reconnectDelay } = require('../server/services/twitch-service');
+const { TwitchService, reconnectDelay, CONNECT_WATCHDOG_MS } = require('../server/services/twitch-service');
 const TwitchReplySettings = require('../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../public/js/twitch-request-settings');
 const TwitchRewardSettings = require('../public/js/twitch-reward-settings');
@@ -2823,6 +2823,48 @@ test('Twitch EventSub 重連採指數退避並有上限', () => {
   eq(reconnectDelay(1, () => 0.5), 3000);
   eq(reconnectDelay(2, () => 0.5), 6000);
   eq(reconnectDelay(10, () => 0.5), 60000);
+});
+
+test('Twitch EventSub welcome watchdog closes a stalled socket and returns to retry', () => {
+  const timers = [];
+  const fakeTimers = {
+    setTimeout(fn, delay) { const timer = { fn, delay, cleared: false }; timers.push(timer); return timer; },
+    clearTimeout(timer) { if (timer) timer.cleared = true; },
+  };
+  const sockets = [];
+  const originalWebSocket = globalThis.WebSocket;
+  class FakeWebSocket {
+    constructor() { this.handlers = {}; this.closed = false; sockets.push(this); }
+    on(event, handler) { this.handlers[event] = handler; }
+    close() { this.closed = true; this.handlers.close?.(); }
+  }
+  globalThis.WebSocket = FakeWebSocket;
+  try {
+    const retries = [];
+    const service = new TwitchService({
+      config: { twitchClientId: 'fixture' },
+      onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
+      onSongRequestExpired: () => {},
+      pendingStore: { load: () => [], save: () => true },
+      sessionStore: { load: () => null, save: () => true },
+      historyStore: { load: () => [], save: () => true },
+      authStore: { load: () => null, save: () => true, clear: () => true },
+      timers: fakeTimers,
+    });
+    service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
+    service.scheduleReconnect = (reason) => retries.push(reason);
+    service.connectEventSub();
+    eq(sockets.length, 1);
+    eq(timers.length, 1);
+    eq(timers[0].delay, CONNECT_WATCHDOG_MS);
+    timers[0].fn();
+    ok(sockets[0].closed, '逾時連線必須主動關閉');
+    eq(service.ws, null);
+    ok(retries[0].includes('逾時'), '逾時後必須走既有退避重連');
+    service.stop();
+  } finally {
+    globalThis.WebSocket = originalWebSocket;
+  }
 });
 
 test('Twitch status observation reports a safe lifecycle without changing a disabled service', () => {
