@@ -331,9 +331,6 @@ module.exports = function socketHandler(io, {
         socket.emit('state:sync', ctx.getReadOnlyState());
       } else {
         socket.emit('state:sync', ctx.getPublicState());
-        // 控制面板需要完整 setlist 外觀來還原調校器；把它走 setlist 專用事件，
-        // 不再讓所有 client 的 state:sync 每次都附 14 組樣式快照。
-        if (type === 'controller') socket.emit('setlist:update', ctx.setlistPayload());
       }
       // 啟動時的 state.json 恢復發生在任何瀏覽器連線之前；延遲到第一個桌面面板完成
       // client:type 註冊後再提示，避免 io.emit 太早而靜默遺失。OBS 疊加層不顯示管理警告。
@@ -359,6 +356,14 @@ module.exports = function socketHandler(io, {
       emitClientCounts();
     });
 
+    // Setlist 外觀與清單改為按需取得：控制面板在連線完成後請求，
+    // 避免初始 state:sync 後緊接大型第二包造成其他角色的握手壅塞。
+    socket.on('setlist:get', (_data, ack) => {
+      const data = ctx.setlistPayload();
+      if (typeof ack === 'function') ack(data);
+      else socket.emit('setlist:update', data);
+    });
+
     // ─── OBS 顯示頁面狀態恢復請求 ───
     socket.on('state:request', () => {
       log.info(`狀態恢復請求: ${socket.id}`);
@@ -380,12 +385,6 @@ module.exports = function socketHandler(io, {
       registerLibraryHandlers(io, socket, ctx);
       registerSetlistHandlers(io, socket, ctx);
       registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });
-    } else if (socket.clientType === 'setlist' || socket.clientType === 'setlist-preview') {
-      socket.on('setlist:get', (_data, ack) => {
-        const data = ctx.setlistPayload();
-        if (typeof ack === 'function') ack(data);
-        else socket.emit('setlist:update', data);
-      });
     }
 
     // ─── 斷線處理 ───
