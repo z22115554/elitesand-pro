@@ -3,6 +3,7 @@
 // Media files are deliberately separated from state/logs in packaged Electron
 // builds. The current server keeps its path constants for its whole lifetime,
 // therefore a successful migration is followed by an Electron restart.
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { projectRoot, dataDir, downloadsDir } = require('../utils/app-paths');
@@ -10,7 +11,7 @@ const { projectRoot, dataDir, downloadsDir } = require('../utils/app-paths');
 const MEDIA_FOLDER_NAME = 'Elitesand Pro Media';
 const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
 const CONFIG_FILE = path.join(dataDir, 'media-storage.json');
-const UNINSTALL_REFERENCE_FILE = path.join(path.dirname(dataDir), 'media-storage.ini');
+const MEDIA_REFERENCE_FILE = path.join(path.dirname(dataDir), 'media-storage.ini');
 
 function isSubpath(parent, child) {
   const relative = path.relative(parent, child);
@@ -27,8 +28,6 @@ function samePath(left, right) {
 
 function resolveDestinationMediaDir(selectedDir) {
   const selected = path.resolve(selectedDir);
-  // The picker is allowed to select the final media folder itself. This avoids
-  // creating "Elitesand Pro Media\\Elitesand Pro Media" on a retry.
   if (path.basename(selected).toLowerCase() === MEDIA_FOLDER_NAME.toLowerCase()) return selected;
   return path.join(selected, MEDIA_FOLDER_NAME);
 }
@@ -57,9 +56,10 @@ function writeFileAtomic(file, contents) {
 function writeConfiguration(mediaDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   writeFileAtomic(CONFIG_FILE, `${JSON.stringify({ version: 1, mediaDir }, null, 2)}\n`);
-  // This small INI is intentionally duplicated outside `data`: NSIS can read
-  // it before deleting userData during an explicitly opted-in uninstall.
-  writeFileAtomic(UNINSTALL_REFERENCE_FILE, `[media]\npath=${mediaDir}\n`);
+  // Duplicated outside data so the Installer can identify a historical media
+  // location before replacing an old application. It is only a reference; the
+  // Installer and uninstaller are never allowed to delete the referenced data.
+  writeFileAtomic(MEDIA_REFERENCE_FILE, `[media]\npath=${mediaDir}\n`);
 }
 
 function ensureMarker(mediaDir) {
@@ -76,10 +76,30 @@ function visibleEntries(directory) {
   }
 }
 
+function sha256File(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function verifyCopiedEntry(source, destination) {
+  const sourceStat = fs.statSync(source);
+  const destinationStat = fs.statSync(destination);
+  if (sourceStat.isDirectory()) {
+    if (!destinationStat.isDirectory()) return false;
+    const sourceNames = fs.readdirSync(source).sort();
+    const destinationNames = fs.readdirSync(destination).sort();
+    if (sourceNames.length !== destinationNames.length) return false;
+    for (let index = 0; index < sourceNames.length; index++) {
+      if (sourceNames[index] !== destinationNames[index]) return false;
+      if (!verifyCopiedEntry(path.join(source, sourceNames[index]), path.join(destination, destinationNames[index]))) return false;
+    }
+    return true;
+  }
+  return destinationStat.isFile()
+    && sourceStat.size === destinationStat.size
+    && sha256File(source) === sha256File(destination);
+}
+
 function migrationSourceCandidates() {
-  // Keep recovery automatic: a failed earlier migration can leave the current
-  // configured directory missing, while the actual legacy media is still in
-  // Electron userData or, during development, the project downloads folder.
   const candidates = [
     downloadsDir,
     path.join(path.dirname(dataDir), 'downloads'),
@@ -128,9 +148,7 @@ function migrateToParent(parentDir, sourceOverride = null) {
     throw new Error('No media files were found in the recorded media locations. The storage setting was not changed.');
   }
   const destinationDir = resolveDestinationMediaDir(parentDir);
-  if (samePath(sourceDir, destinationDir)) {
-    throw new Error('The selected folder is already the current media folder.');
-  }
+  if (samePath(sourceDir, destinationDir)) throw new Error('The selected folder is already the current media folder.');
   if (isSubpath(sourceDir, destinationDir) || isSubpath(destinationDir, sourceDir)) {
     throw new Error('The destination cannot be inside the source media folder.');
   }
@@ -147,25 +165,27 @@ function migrateToParent(parentDir, sourceOverride = null) {
         force: false,
       });
     }
+    for (const name of entries) {
+      if (!verifyCopiedEntry(path.join(sourceDir, name), path.join(destinationDir, name))) {
+        throw new Error(`verification failed for ${name}`);
+      }
+    }
+    // Only after every file passes size + SHA-256 verification may the active
+    // storage reference change. The source copy is intentionally retained: a
+    // storage-location change must never destroy the user's previous library.
     writeConfiguration(destinationDir);
   } catch (error) {
-    // The destination is owned by this operation only when its marker exists;
-    // leave copied files intact for recovery rather than deleting unknown data.
-    throw new Error(`Media copy did not complete: ${error.message}`);
+    // Keep source and any partial destination intact for manual recovery.
+    throw new Error(`Media copy did not complete safely: ${error.message}`);
   }
 
-  let oldFilesRemoved = true;
-  try {
-    for (const name of entries) fs.rmSync(path.join(sourceDir, name), { recursive: true, force: false });
-    // A prior managed external folder contains only our marker after a
-    // zero-file/custom relocation. Remove that empty app-owned root as well.
-    if (fs.existsSync(markerPath(sourceDir)) && visibleEntries(sourceDir).length === 0) {
-      fs.rmSync(sourceDir, { recursive: true, force: false });
-    }
-  } catch (_) {
-    oldFilesRemoved = false;
-  }
-  return { mediaDir: destinationDir, sourceDir, movedEntries: entries.length, oldFilesRemoved };
+  return {
+    mediaDir: destinationDir,
+    sourceDir,
+    movedEntries: entries.length,
+    oldFilesRemoved: false,
+    sourceRetained: true,
+  };
 }
 
 module.exports = {
