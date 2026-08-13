@@ -19,23 +19,11 @@ const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const { createLogger } = require('../utils/logger');
 const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
-const { emitToAccessRooms } = require('../utils/socket-broadcast');
 
 const log = createLogger('State');
 const STATE_SYNC_WARN_BYTES = 512 * 1024;
 const STATE_SYNC_LOG_EVERY = 100;
 const STATE_SYNC_WARN_INTERVAL_MS = 60 * 1000;
-const READ_ONLY_TRACK_FIELDS = ['filename', 'url', 'cover', 'originalName', 'audioAvailable', 'audioMissing'];
-
-// OBS / setlist renderers need song identity and lyrics, but never the media
-// file location or its original remote source. Keep this as a narrow,
-// explicit deny-list so access-room payloads cannot accidentally leak them.
-function redactTrackForReadOnly(track) {
-  if (!track || typeof track !== 'object') return track;
-  const safe = { ...track };
-  for (const field of READ_ONLY_TRACK_FIELDS) delete safe[field];
-  return safe;
-}
 
 function getDefaultLyricSettings() {
   return {
@@ -361,9 +349,7 @@ function createAppState(io) {
    * 組出 setlist 疊加頁 / 面板需要的完整資料：已唱(songs) + 現在(current) + 未唱(upcoming)。
    * upcoming＝播放清單中「目前歌曲之後」尚未輪到的歌（找不到目前歌時就是整份清單）。
    */
-  // styles 僅屬於 setlist 顯示與控制面板；絕不能跟著每次 state:sync
-  // 廣播給所有角色。正式 setlist:update 仍保留完整資料供初始載入。
-  function setlistPayload({ includeStyles = true } = {}) {
+  function setlistPayload() {
     const pl = Array.isArray(playState.playlist) ? playState.playlist : [];
     const cur = playState.currentTrack;
     const currentTrackStarted = !!playState.currentTrackStarted;
@@ -399,7 +385,7 @@ function createAppState(io) {
       }
       upcoming = rest.map((t) => ({ title: t.title || '', artist: t.artist || '' }));
     }
-    const payload = {
+    return {
       active: session.active,
       startedAt: session.startedAt,
       source: session.source,
@@ -408,10 +394,6 @@ function createAppState(io) {
       upcoming,
       theme: playState.setlistTheme || 'glass',
       layout: playState.setlistLayout || 'classic',
-    };
-    if (!includeStyles) return payload;
-    return {
-      ...payload,
       styles: Object.fromEntries(SETLIST_LAYOUTS.map((layout) => [layout, { ...playState.setlistTemplateStyles[layout] }])),
       // 舊版 OBS 頁面仍讀 style / sceneStyles；新版以 styles 為權威。
       style: { ...effSetlistStore(playState.setlistLayout) },
@@ -451,8 +433,7 @@ function createAppState(io) {
   /** 廣播完整播放狀態給所有客戶端 */
   function broadcastState() {
     playState.lastStateUpdateTimestamp = Date.now();
-    const exists = libraryStore.getAudioExistsLookup();
-    const payload = getPublicState(exists);
+    const payload = getPublicState();
     const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
     const nextSample = stateSyncMetrics.samples + 1;
     // 「舊結構」估算只在記錄點序列化，避免為了量測又在每次廣播重建一份大型 payload。
@@ -461,7 +442,7 @@ function createAppState(io) {
     let savingsBytes = stateSyncMetrics.lastSavingsBytes;
     if (shouldEstimateLegacy) {
       const publicPlaylistBytes = Buffer.byteLength(JSON.stringify(payload.playlist), 'utf8');
-      const legacyPlaylistBytes = Buffer.byteLength(JSON.stringify(getLegacyPlaylist(exists)), 'utf8');
+      const legacyPlaylistBytes = Buffer.byteLength(JSON.stringify(getLegacyPlaylist()), 'utf8');
       estimatedLegacyBytes = bytes - publicPlaylistBytes + legacyPlaylistBytes;
       savingsBytes = Math.max(0, estimatedLegacyBytes - bytes);
     }
@@ -485,14 +466,14 @@ function createAppState(io) {
       log.warn(`state:sync payload 已達 ${bytes} bytes（playlist=${payload.playlist.length}），P2 應評估拆分同步事件`);
     }
 
-    emitToAccessRooms(io, 'state:sync', payload, getReadOnlyState(exists));
+    io.emit('state:sync', payload);
   }
 
   function getStateSyncMetrics() {
     return { ...stateSyncMetrics };
   }
 
-  function getTrackPayload(track, { includeLyrics = false, offset, exists } = {}) {
+  function getTrackPayload(track, { includeLyrics = false, offset } = {}) {
     if (!track) return null;
     const manual = manualLyricsCache.get(track.id);
     const { lyrics, parsedLyrics, manualLyrics: _storedManualLyrics, ...summary } = track;
@@ -507,7 +488,7 @@ function createAppState(io) {
       pitchShift: trackPitch.has(track.id) ? trackPitch.get(track.id) : 0,
       playbackRate: trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0,
       manualLyrics: !!manual,
-      ...libraryStore.audioStatus(track, exists),
+      ...libraryStore.audioStatus(track),
     };
     if (includeLyrics) {
       payload.lyrics = effectiveLyrics == null ? null : effectiveLyrics;
@@ -517,26 +498,22 @@ function createAppState(io) {
   }
 
   /** 可傳給所有端點的清單摘要；歌詞內容只隨目前歌曲發送。 */
-  function getPublicPlaylist(exists = libraryStore.getAudioExistsLookup()) {
-    return playState.playlist.map(track => getTrackPayload(track, { exists }));
-  }
-
-  function getReadOnlyPlaylist(exists = libraryStore.getAudioExistsLookup()) {
-    return getPublicPlaylist(exists).map(redactTrackForReadOnly);
+  function getPublicPlaylist() {
+    return playState.playlist.map(track => getTrackPayload(track));
   }
 
   // 僅供 P2 量測舊 payload 用，絕不可拿去 io.emit。
-  function getLegacyPlaylist(exists = libraryStore.getAudioExistsLookup()) {
-    return playState.playlist.map(track => getTrackPayload(track, { includeLyrics: true, exists }));
+  function getLegacyPlaylist() {
+    return playState.playlist.map(track => getTrackPayload(track, { includeLyrics: true }));
   }
 
   /** 取得可公開的播放狀態：清單是摘要，currentTrack 保留完整歌詞供播放／編輯／OBS 恢復。 */
-  function getPublicState(exists = libraryStore.getAudioExistsLookup()) {
-    const enrichedPlaylist = getPublicPlaylist(exists);
+  function getPublicState() {
+    const enrichedPlaylist = getPublicPlaylist();
 
     return {
       currentTrack: playState.currentTrack
-        ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset, exists })
+        ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset })
         : null,
       isPlaying: playState.isPlaying,
       currentTrackStarted: !!playState.currentTrackStarted,
@@ -557,7 +534,7 @@ function createAppState(io) {
       // 附帶伺服器時間戳，讓 OBS 重連時計算補償
       serverTimestamp: playState.lastStateUpdateTimestamp,
       // Setlist（含現在/未唱，初次同步即完整）
-      session: setlistPayload({ includeStyles: false }),
+      session: setlistPayload(),
     };
   }
 
@@ -566,16 +543,6 @@ function createAppState(io) {
    */
   function getFullRecoveryState() {
     return getPublicState();
-  }
-
-  /** Full lyrics remain available to OBS, but media path/source fields do not. */
-  function getReadOnlyState(exists = libraryStore.getAudioExistsLookup()) {
-    const publicState = getPublicState(exists);
-    return {
-      ...publicState,
-      currentTrack: redactTrackForReadOnly(publicState.currentTrack),
-      playlist: publicState.playlist.map(redactTrackForReadOnly),
-    };
   }
 
   /** 取得 track 的有效歌詞（考慮手動覆蓋），無手動覆蓋時回 null */
@@ -605,11 +572,8 @@ function createAppState(io) {
     broadcastState,
     getStateSyncMetrics,
     getPublicPlaylist,
-    getReadOnlyPlaylist,
     getPublicState,
     getFullRecoveryState,
-    getReadOnlyState,
-    redactTrackForReadOnly,
     getEffectiveLyrics,
   };
 }

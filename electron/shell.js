@@ -248,6 +248,8 @@ function createElectronShell({
   autoQuitAfterReadyMs = Number.parseInt(processObject.env.ELITESAND_SHELL_QUIT_AFTER_READY_MS || '0', 10) || 0,
   userDataPath = processObject.env.ELITESAND_SHELL_USER_DATA_DIR || '',
   packagedResourceIntegrity = null,
+  spoutDisplayAutostart = processObject.env.ELITESAND_SPOUT_DISPLAY_AUTOSTART === '1',
+  spoutAddonLoader = null,
 } = {}) {
   if (!app || !BrowserWindow || !utilityProcess || !dialog || !shell || !Tray || !Menu || !nativeImage || !clipboard || !powerSaveBlocker) {
     throw new TypeError('createElectronShell requires Electron app, BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, and powerSaveBlocker');
@@ -256,6 +258,8 @@ function createElectronShell({
   const { SHUTDOWN_MESSAGE } = require(path.join(projectRoot, 'server', 'utils', 'parent-shutdown'));
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
   const preload = path.join(shellRoot, 'electron', 'preload.js');
+  const isSpoutExperiment = processObject.env.ELITESAND_SPOUT_EXPERIMENT === '1';
+  const { createSpoutIssueDiagnostics } = require('./spout-issue-diagnostics');
   let mainWindow = null;
   // Keep the Tray instance in this closure. Electron will garbage-collect an
   // unreferenced tray icon, which would make a hidden window unrecoverable.
@@ -270,6 +274,80 @@ function createElectronShell({
   let powerSaveBlockerId = null;
   let serverRestartAttempted = false;
   let shouldShowPortableDataMigrationNotice = false;
+  let spoutDisplayOutput = null;
+  let spoutOutputOptions = null;
+  const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
+
+  function resolveExperimentalSpoutNumber(name, fallback) {
+    const value = Number.parseInt(processObject.env[name] || '', 10);
+    return Number.isInteger(value) ? value : fallback;
+  }
+
+  function getSpoutOutputOptions() {
+    if (spoutOutputOptions) return spoutOutputOptions;
+    const spoutSettings = require('./spout-settings');
+    spoutOutputOptions = spoutSettings.load(app.getPath('userData'), fsImpl);
+    return spoutOutputOptions;
+  }
+
+  function saveSpoutOutputOptions(options) {
+    const spoutSettings = require('./spout-settings');
+    spoutOutputOptions = spoutSettings.save(app.getPath('userData'), options, fsImpl);
+    return spoutOutputOptions;
+  }
+
+  async function startSpoutDisplayOutput(nextOptions = null, { persist = true } = {}) {
+    const spoutSettings = require('./spout-settings');
+    const options = spoutSettings.normalize(nextOptions || getSpoutOutputOptions());
+    const active = spoutDisplayOutput?.getStatus?.();
+    const activeOptionsMatch = !!active && JSON.stringify(options) === JSON.stringify({
+      senderName: active.senderName, width: active.width, height: active.height, fps: active.fps,
+    });
+    // A paint event is what changes the output from starting to running. Do
+    // not tear down and recreate that one window when the user double-clicks.
+    if ((active?.state === 'starting' || active?.state === 'running') && activeOptionsMatch) return active;
+    if (spoutDisplayOutput) await stopSpoutDisplayOutput();
+    if (persist) saveSpoutOutputOptions(options);
+    const { createSpoutDisplayOutput, loadSpoutAddon } = require('./spout-display-output');
+    const addon = spoutAddonLoader
+      ? spoutAddonLoader()
+      : loadSpoutAddon(projectRoot, processObject.env.ELITESAND_SPOUT_NATIVE_ADDON || '');
+    spoutDisplayOutput = createSpoutDisplayOutput({
+      BrowserWindow,
+      addon,
+      port,
+      ...options,
+      nativeAdapterPreference: processObject.env.ELITESAND_SPOUT_GPU_PREFERENCE || '',
+    });
+    await spoutDisplayOutput.start();
+    if (isSpoutExperiment) spoutIssueDiagnostics.start(getSpoutOutputStatus);
+    return spoutDisplayOutput.getStatus();
+  }
+
+  async function stopSpoutDisplayOutput() {
+    const output = spoutDisplayOutput;
+    if (isSpoutExperiment) spoutIssueDiagnostics.stop();
+    spoutDisplayOutput = null;
+    if (output) await output.stop();
+  }
+
+  function getSpoutOutputStatus() {
+    return Object.freeze({
+      available: true,
+      options: getSpoutOutputOptions(),
+      output: spoutDisplayOutput?.getStatus?.() || { state: 'idle' },
+    });
+  }
+
+  async function startExperimentalSpoutDisplayOutput() {
+    if (!spoutDisplayAutostart || spoutDisplayOutput) return null;
+    return startSpoutDisplayOutput({
+      senderName: processObject.env.ELITESAND_SPOUT_SENDER_NAME || 'Elitesand Pro Lyrics Dev',
+      width: resolveExperimentalSpoutNumber('ELITESAND_SPOUT_WIDTH', 1920),
+      height: resolveExperimentalSpoutNumber('ELITESAND_SPOUT_HEIGHT', 1080),
+      fps: resolveExperimentalSpoutNumber('ELITESAND_SPOUT_FPS', 30),
+    }, { persist: false });
+  }
 
   function focusWindow() {
     if (!mainWindow) return;
@@ -457,6 +535,29 @@ function createElectronShell({
         // Node server without its graceful shutdown and clean-session marker.
         app.quit?.();
         return true;
+      });
+      ipcMain.handle('elitesand:spout-status', (event) => {
+        if (event?.sender !== window.webContents) return null;
+        return getSpoutOutputStatus();
+      });
+      ipcMain.handle('elitesand:spout-issue-diagnostics', (event) => {
+        if (!isSpoutExperiment || event?.sender !== window.webContents) return null;
+        return spoutIssueDiagnostics.getSnapshot();
+      });
+      ipcMain.handle('elitesand:spout-save-settings', (event, options) => {
+        if (event?.sender !== window.webContents) return null;
+        const saved = saveSpoutOutputOptions(options);
+        return { ...getSpoutOutputStatus(), options: saved };
+      });
+      ipcMain.handle('elitesand:spout-start', async (event, options) => {
+        if (event?.sender !== window.webContents) return null;
+        await startSpoutDisplayOutput(options);
+        return getSpoutOutputStatus();
+      });
+      ipcMain.handle('elitesand:spout-stop', async (event) => {
+        if (event?.sender !== window.webContents) return null;
+        await stopSpoutDisplayOutput();
+        return getSpoutOutputStatus();
       });
     }
     if (ipcMain?.on) {
@@ -669,6 +770,12 @@ function createElectronShell({
     if (serverProcess === child) serverProcess = null;
   }
 
+  async function shutdown() {
+    await stopSpoutDisplayOutput();
+    await shutdownOwnedServer();
+    stopPowerSaveBlocker();
+  }
+
   function showStartupError(error) {
     if (/already occupied by another application/.test(error?.message || '')) {
       const choice = dialog.showMessageBoxSync({
@@ -693,8 +800,8 @@ function createElectronShell({
     if (String(userDataPath || '').trim() && typeof app.setPath === 'function') {
       app.setPath('userData', path.resolve(userDataPath));
     }
-    app.setName?.('Elitesand Pro');
-    app.setAppUserModelId?.('com.elitesand.pro');
+    app.setName?.(isSpoutExperiment ? 'Elitesand Pro Spout Lab' : 'Elitesand Pro');
+    app.setAppUserModelId?.(isSpoutExperiment ? 'com.elitesand.pro.spout-lab' : 'com.elitesand.pro');
     if (!app.requestSingleInstanceLock()) {
       app.quit();
       return { started: false, reason: 'second-instance' };
@@ -708,9 +815,13 @@ function createElectronShell({
       // 卡住。這對「重用既有 server（ownsServer=false）」尤其關鍵：那條路徑本來不會
       // 設 isQuitting，於是系統匣「結束」與確認關閉都會被關窗攔截而永遠關不掉。
       isQuitting = true;
-      if (!ownsServer || !serverProcess?.pid) return;
+      const needsAsyncCleanup = !!spoutDisplayOutput || (ownsServer && !!serverProcess?.pid);
+      if (!needsAsyncCleanup) return;
       event.preventDefault();
-      shutdownOwnedServer().finally(() => app.exit(0));
+      Promise.resolve()
+        .then(stopSpoutDisplayOutput)
+        .then(shutdownOwnedServer)
+        .finally(() => app.exit(0));
     });
     await app.whenReady();
     if (app.isPackaged) {
@@ -730,13 +841,13 @@ function createElectronShell({
       serverReady = true;
       showPortableDataMigrationNotice();
       createTray();
+      await startExperimentalSpoutDisplayOutput();
       await createWindow();
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
       return { started: true, ...server };
     } catch (error) {
       showStartupError(error);
-      await shutdownOwnedServer();
-      stopPowerSaveBlocker();
+      await shutdown();
       app.exit(1);
       throw error;
     }
@@ -744,9 +855,17 @@ function createElectronShell({
 
   return {
     start,
+    shutdown,
     shutdownOwnedServer,
     focusWindow,
-    getState: () => ({ port, ownsServer, serverReady, hasWindow: !!mainWindow, serverPid: serverProcess?.pid || null }),
+    getState: () => ({
+      port,
+      ownsServer,
+      serverReady,
+      hasWindow: !!mainWindow,
+      serverPid: serverProcess?.pid || null,
+      spout: getSpoutOutputStatus(),
+    }),
   };
 }
 

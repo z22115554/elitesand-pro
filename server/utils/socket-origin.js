@@ -34,14 +34,8 @@ function localHostnames() {
 const LOCAL_HOSTS = localHostnames();
 
 function parseHostHeader(hostHeader) {
-  const raw = String(hostHeader || '').trim();
-  // Host 標頭只能是 hostname[:port] 或 [IPv6]:port；拒絕 userinfo/path/query，
-  // 避免 URL parser 把「evil@example」之類的輸入誤解成一個可信 hostname。
-  if (!raw || /[\s/@\\?#]/.test(raw)) return '';
   try {
-    const url = new URL(`http://${raw}`);
-    if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) return '';
-    return normalizeHost(url.hostname);
+    return new URL(`http://${hostHeader}`).hostname;
   } catch (_) {
     return '';
   }
@@ -52,11 +46,6 @@ function isTrustedHostname(hostname) {
   return LOCAL_HOSTS.has(host) || isPrivateAddress(host);
 }
 
-function isAllowedHttpHost(hostHeader) {
-  const hostname = parseHostHeader(hostHeader);
-  return !!hostname && isTrustedHostname(hostname);
-}
-
 /**
  * Socket.io 的 CORS 設定只保護 HTTP polling，WebSocket 仍需 allowRequest。
  * 接受：沒有 Origin 的 OBS/CLI，或 Origin 與實際 Host 完全同源且 Host 為本機/私有網段。
@@ -64,14 +53,12 @@ function isAllowedHttpHost(hostHeader) {
 function isAllowedSocketRequest(req) {
   const headers = (req && req.headers) || {};
   const origin = headers.origin;
-  // Upgrade 請求不會經過 Express middleware；即使沒有 Origin 的 OBS/CLI，
-  // 仍必須帶本機或私網 Host，否則 DNS rebinding 可直接打到 Socket.io。
-  const requestHostname = parseHostHeader(headers.host);
-  if (!requestHostname || !isTrustedHostname(requestHostname)) return false;
   if (!origin) return true;
   try {
     const originUrl = new URL(origin);
-    return originUrl.host.toLowerCase() === String(headers.host || '').trim().toLowerCase()
+    const requestHostname = parseHostHeader(headers.host);
+    if (!requestHostname || !isTrustedHostname(requestHostname)) return false;
+    return originUrl.host.toLowerCase() === String(headers.host || '').toLowerCase()
       && isTrustedHostname(originUrl.hostname);
   } catch (_) {
     return false;
@@ -90,8 +77,6 @@ function isAllowedCorsOrigin(origin) {
 module.exports = {
   isAllowedSocketRequest,
   isAllowedCorsOrigin,
-  isAllowedHttpHost,
   isPrivateAddress,
   isTrustedHostname,
-  parseHostHeader,
 };

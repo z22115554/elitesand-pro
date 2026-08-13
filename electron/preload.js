@@ -31,4 +31,13 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
   restartAfterMediaMigration() {
     return ipcRenderer.invoke('elitesand:restart-after-media-migration');
   },
+  // A fixed Spout surface only. Do not expose a generic IPC bridge or allow
+  // renderer-controlled channels/filesystem access.
+  spout: Object.freeze({
+    getStatus() { return ipcRenderer.invoke('elitesand:spout-status'); },
+    getIssueDiagnostics() { return ipcRenderer.invoke('elitesand:spout-issue-diagnostics'); },
+    saveSettings(options) { return ipcRenderer.invoke('elitesand:spout-save-settings', options); },
+    start(options) { return ipcRenderer.invoke('elitesand:spout-start', options); },
+    stop() { return ipcRenderer.invoke('elitesand:spout-stop'); },
+  }),
 }));

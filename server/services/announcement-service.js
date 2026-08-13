@@ -16,6 +16,10 @@ const MAX_JSON_BYTES = 256 * 1024;
 const MAX_ANNOUNCEMENTS = 100;
 const LEVELS = new Set(['info', 'warning', 'critical']);
 const ACTIONS = new Set(['disableIncrementalUpdate', 'showFullDownloadOnly']);
+// Development experiments can be intentionally isolated from production
+// update notices. This is opt-in only; normal and packaged launches retain
+// the official announcement service unchanged.
+const announcementsDisabled = process.env.ELITESAND_DISABLE_ANNOUNCEMENTS === '1';
 
 let cache = { schemaVersion: 1, fetchedAt: null, announcements: [] };
 let state = { dismissed: [], shownOnce: [], read: [] };
@@ -196,7 +200,7 @@ async function fetchJsonDocument(url, timeoutMs = 5000) {
 }
 
 async function refresh({ force = false, remoteEnabled = remoteAnnouncementsEnabled() } = {}) {
-  if (!remoteEnabled) return { ok: false, disabled: true, fromCache: true };
+  if (!remoteEnabled || announcementsDisabled) return { ok: false, disabled: true, fromCache: true };
   const url = config.announcementUrl;
   if (!url) return { ok: false, error: '未設定公告來源', fromCache: true };
   if (validHttpsUrl(url) === null) return { ok: false, error: '公告來源必須使用 HTTPS', fromCache: true };
@@ -220,7 +224,7 @@ async function refresh({ force = false, remoteEnabled = remoteAnnouncementsEnabl
 }
 
 function getSnapshot({ now = Date.now(), currentVersion = APP_VERSION, remoteEnabled = remoteAnnouncementsEnabled() } = {}) {
-  if (!remoteEnabled) {
+  if (!remoteEnabled || announcementsDisabled) {
     return {
       enabled: false,
       currentVersion,
@@ -288,6 +292,8 @@ function dismiss(id) {
 }
 
 function startBackgroundRefresh(delayMs = 3500) {
+  if (announcementsDisabled) return null;
+  if (!remoteAnnouncementsEnabled()) return null;
   const timer = setTimeout(() => { refresh().catch(() => {}); }, delayMs);
   timer.unref?.();
   return timer;

@@ -157,6 +157,14 @@ body.prompter {
   -webkit-text-stroke: var(--pt-stroke-w) var(--pt-stroke-c);
 }
 .pt-line.pt-line--next .pt-line-text { color: var(--text-dim); }
+.pt-line-text ruby { ruby-position: over; ruby-align: center; }
+.pt-line-text rt {
+  font-size: .46em;
+  font-weight: 600;
+  color: currentColor;
+  opacity: .82;
+  user-select: none;
+}
 /* 拼音/諧音：輔助發音用，字級跟著主字級走但明顯縮小，跟主字一樣是可選開關（見設定面板）。 */
 .pt-line-romaji, .pt-line-xieyin {
   font-size: calc(var(--pt-size) * .5);

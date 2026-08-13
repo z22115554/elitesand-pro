@@ -17,8 +17,13 @@
   // ─── 初始化 ───
   // 面板內嵌的預覽 iframe（?preview=1）註冊成 display-preview：伺服器餵一樣的資料，
   // 但不計入「OBS 已連線」數——否則面板一開就自帶 3 個假 display，連線燈永遠亮。
-  const isPreviewClient = new URLSearchParams(location.search).get('preview') === '1';
-  SocketClient.init(isPreviewClient ? 'display-preview' : 'display');
+  const displayQuery = new URLSearchParams(location.search);
+  const isPreviewClient = displayQuery.get('preview') === '1';
+  // The Spout output window deliberately loads this same /display runtime.
+  // It only receives a separate read-only socket identity; no rendering or
+  // lyric-state logic is duplicated for the native output path.
+  const isSpoutOutput = displayQuery.get('output') === 'spout';
+  SocketClient.init(isPreviewClient ? 'display-preview' : (isSpoutOutput ? 'display-spout' : 'display'));
 
   // /display 由 server 注入整組本機 JS/CSS 的內容指紋。正式 OBS 來源回報它，讓面板可以
   // 直接告知「已連線但仍跑舊快取」；預覽 iframe 不納入正式 OBS 狀態，刻意不回報。

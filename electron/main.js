@@ -5,6 +5,22 @@ const electron = require('electron');
 const { app } = electron;
 const { inspectUpdateLock } = require('./update-in-progress-lock');
 
+// CP04's offscreen test window has an explicitly requested pixel canvas.
+// On a high-DPI desktop Electron otherwise reports the shared texture in DIPs
+// (for example 1280x720 for a requested 1920x1080), which is unsafe to pass
+// to a native sender configured for the requested output. This is development
+// opt-in only; normal Electron and OBS launches retain their existing DPI.
+if (process.env.ELITESAND_SPOUT_DISPLAY_AUTOSTART === '1') {
+  app.commandLine.appendSwitch('force-device-scale-factor', '1');
+}
+// CP07 mixed-GPU measurement only. This is never persisted or exposed in the
+// product UI; the native sender receives the matching preference separately.
+if (process.env.ELITESAND_SPOUT_GPU_PREFERENCE === 'low-power') {
+  app.commandLine.appendSwitch('force_low_power_gpu');
+} else if (process.env.ELITESAND_SPOUT_GPU_PREFERENCE === 'high-performance') {
+  app.commandLine.appendSwitch('force_high_performance_gpu');
+}
+
 const isPackaged = app.isPackaged;
 const updateBlocked = isPackaged && inspectUpdateLock(app.getPath('exe')).active;
 

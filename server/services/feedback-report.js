@@ -28,6 +28,7 @@ const REPORT_TYPES = Object.freeze({
   'import-playback': { label: '匯入或播放問題', issueLabel: 'type:bug' },
   lyrics: { label: '歌詞問題', issueLabel: 'type:lyrics' },
   obs: { label: 'OBS 顯示問題', issueLabel: 'type:obs' },
+  spout: { label: 'Spout 透明輸出問題', issueLabel: 'type:spout' },
   twitch: { label: 'Twitch 點歌問題', issueLabel: 'type:twitch' },
   'ui-i18n': { label: '介面或翻譯問題', issueLabel: 'type:i18n' },
   'feature-request': { label: '功能建議', issueLabel: 'type:feature' },
@@ -57,6 +58,56 @@ const LOG_NOISE = new RegExp([
 
 function asText(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function boundedNumber(value, min, max, fallback = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function safeSpoutState(value) {
+  return ['idle', 'starting', 'running', 'error'].includes(value) ? value : 'unknown';
+}
+
+// This is deliberately a whitelist, not a generic renderer payload. The
+// Electron bridge already excludes paths and the adapter LUID; validate again
+// at the server boundary because feedback requests are still untrusted input.
+function sanitizeSpoutDiagnostics(input) {
+  const source = input && typeof input === 'object' ? input : null;
+  if (!source || Number(source.schemaVersion) !== 1 || !Array.isArray(source.samples)) return null;
+  const samples = source.samples.slice(-60).map((sample) => {
+    const row = sample && typeof sample === 'object' ? sample : {};
+    const gpu = row.gpuSync && typeof row.gpuSync === 'object' ? row.gpuSync : {};
+    const sourceCopy = row.sourceCopySync && typeof row.sourceCopySync === 'object' ? row.sourceCopySync : {};
+    const adapter = row.adapter && typeof row.adapter === 'object' ? row.adapter : {};
+    return {
+      elapsedMs: boundedNumber(row.elapsedMs, 0, 24 * 60 * 60 * 1000),
+      state: safeSpoutState(row.state),
+      width: boundedNumber(row.width, 0, 3840),
+      height: boundedNumber(row.height, 0, 2160),
+      configuredFps: boundedNumber(row.configuredFps, 0, 240),
+      framesReceived: boundedNumber(row.framesReceived, 0, Number.MAX_SAFE_INTEGER),
+      framesReleased: boundedNumber(row.framesReleased, 0, Number.MAX_SAFE_INTEGER),
+      framesSent: boundedNumber(row.framesSent, 0, Number.MAX_SAFE_INTEGER),
+      framesDropped: boundedNumber(row.framesDropped, 0, Number.MAX_SAFE_INTEGER),
+      queueDepth: boundedNumber(row.queueDepth, 0, 16),
+      maxQueueDepth: boundedNumber(row.maxQueueDepth, 0, 16),
+      inFlightFrames: boundedNumber(row.inFlightFrames, 0, 16),
+      gpuSync: {
+        lastMs: boundedNumber(gpu.lastMs, 0, 60000), averageMs: boundedNumber(gpu.averageMs, 0, 60000),
+        maxMs: boundedNumber(gpu.maxMs, 0, 60000), timeouts: boundedNumber(gpu.timeouts, 0, Number.MAX_SAFE_INTEGER),
+      },
+      sourceCopySync: {
+        lastMs: boundedNumber(sourceCopy.lastMs, 0, 60000), averageMs: boundedNumber(sourceCopy.averageMs, 0, 60000),
+        maxMs: boundedNumber(sourceCopy.maxMs, 0, 60000), timeouts: boundedNumber(sourceCopy.timeouts, 0, Number.MAX_SAFE_INTEGER),
+      },
+      adapter: {
+        vendorId: boundedNumber(adapter.vendorId, 0, 0xFFFFFFFF), deviceId: boundedNumber(adapter.deviceId, 0, 0xFFFFFFFF),
+      },
+    };
+  });
+  return { active: !!source.active, durationMs: boundedNumber(source.durationMs, 0, 24 * 60 * 60 * 1000), samples };
 }
 
 /**
@@ -113,6 +164,9 @@ function validateReport(input) {
       contact,
       includeDiagnostics: source.includeDiagnostics !== false,
       locale: asText(source.locale) || 'zh-TW',
+      spoutDiagnostics: type === 'spout' && source.includeDiagnostics !== false
+        ? sanitizeSpoutDiagnostics(source.spoutDiagnostics)
+        : null,
     },
   };
 }
@@ -244,6 +298,32 @@ function formatLogBlock(diagnostics) {
  * plainText 給面板預覽與「複製全文」降級路徑 —— 兩者內容一致，
  * 使用者預覽到的就是實際送出的，不會有隱藏欄位。
  */
+function formatSpoutDiagnosticsBlock(diagnostics) {
+  if (!diagnostics || !diagnostics.samples.length) {
+    return ['## Spout 透明輸出紀錄', '', '沒有可附加的本機 Spout 紀錄；請重現問題後，從 Elitesand Pro 送出回報。', ''];
+  }
+  const latest = diagnostics.samples.at(-1);
+  const lines = diagnostics.samples.map((sample) => [
+    `+${Math.round(sample.elapsedMs)}ms`, sample.state, `${sample.width}x${sample.height}@${sample.configuredFps}`,
+    `sent=${sample.framesSent}`, `received=${sample.framesReceived}`, `dropped=${sample.framesDropped}`,
+    `gpu=${sample.gpuSync.lastMs.toFixed(2)}/${sample.gpuSync.averageMs.toFixed(2)}ms`,
+    `gpuTimeout=${sample.gpuSync.timeouts}`, `copyTimeout=${sample.sourceCopySync.timeouts}`,
+    `queue=${sample.queueDepth}/${sample.maxQueueDepth}`, `adapter=${sample.adapter.vendorId}:${sample.adapter.deviceId}`,
+  ].join(' | '));
+  return [
+    '## Spout 透明輸出紀錄',
+    '',
+    `- 取樣：${diagnostics.samples.length} 筆；範圍：${Math.round(diagnostics.durationMs)} ms；送出當下：${diagnostics.active ? '仍在輸出' : '已停止'}`,
+    `- 最後狀態：${latest.state}；送出 ${latest.framesSent}／收到 ${latest.framesReceived}／丟棄 ${latest.framesDropped}`,
+    '- 僅包含近期效能數值；不包含 Sender 名稱、檔案路徑或裝置 LUID。',
+    '',
+    '```text',
+    ...lines,
+    '```',
+    '',
+  ];
+}
+
 function buildReport(input, options = {}) {
   const validation = validateReport(input);
   if (!validation.ok) return { ok: false, errors: validation.errors };
@@ -281,6 +361,7 @@ function buildReport(input, options = {}) {
     '',
     ...formatLogBlock(diagnostics),
     '',
+    ...(value.type === 'spout' && value.includeDiagnostics ? formatSpoutDiagnosticsBlock(value.spoutDiagnostics) : []),
     '## 聯絡方式',
     '',
     value.contact || '（未留；此回報無法回覆）',
@@ -315,5 +396,6 @@ module.exports = {
   LIMITS,
   validateReport,
   collectDiagnostics,
+  sanitizeSpoutDiagnostics,
   buildReport,
 };

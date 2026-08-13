@@ -28,7 +28,7 @@ const PinAuth = (() => {
 
   function headers() {
     const pin = get();
-    return Object.assign({}, pin ? { 'X-Pin': pin } : {}, typeof AccessAuth !== 'undefined' ? AccessAuth.headers() : {});
+    return pin ? { 'X-Pin': pin } : {};
   }
 
   /** 帶 PIN header 的 fetch 包裝，給會觸發下載/處理的 API 呼叫用 */
@@ -59,7 +59,7 @@ const PinAuth = (() => {
       if (!pin) { showError(t('pin.enter')); return; }
       submit.disabled = true;
       try {
-        const res = await fetchWithPin('/api/auth/verify', {
+        const res = await fetch('/api/auth/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pin }),
@@ -115,10 +115,6 @@ const PinAuth = (() => {
     const errEl = document.getElementById('pin-manage-error');
     const submitBtn = document.getElementById('pin-manage-submit');
     const cancelBtn = document.getElementById('pin-manage-cancel');
-    const onboardingModal = document.getElementById('pin-onboarding-modal');
-    const onboardingSet = document.getElementById('pin-onboarding-set');
-    const onboardingSkip = document.getElementById('pin-onboarding-skip');
-    const ONBOARDING_KEY = 'es-pin-onboarding-seen';
 
     let mode = 'set'; // 'set' | 'change' | 'disable'
 
@@ -129,9 +125,6 @@ const PinAuth = (() => {
         // 卡片預設收合（存取控制設一次很少再動）；但 PIN 目前已啟用時強制展開，
         // 避免使用中的安全設定被藏起來、使用者以為沒設定。
         if (data.hasPin && card.tagName === 'DETAILS') card.open = true;
-        let onboardingSeen = true;
-        try { onboardingSeen = !!localStorage.getItem(ONBOARDING_KEY); } catch (_) { onboardingSeen = false; }
-        if (!data.hasPin && onboardingModal && !onboardingSeen) onboardingModal.hidden = false;
       }).catch(() => { /* 讀不到就維持現狀，不阻擋介面 */ });
     }
 
@@ -221,15 +214,6 @@ const PinAuth = (() => {
     disableBtn.addEventListener('click', () => openModal('disable'));
     cancelBtn.addEventListener('click', closeModal);
     submitBtn.addEventListener('click', submit);
-    if (onboardingSet) onboardingSet.addEventListener('click', () => {
-      try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* next launch may ask again */ }
-      onboardingModal.hidden = true;
-      openModal('set');
-    });
-    if (onboardingSkip) onboardingSkip.addEventListener('click', () => {
-      try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* next launch may ask again */ }
-      onboardingModal.hidden = true;
-    });
 
     refreshStatus();
   }

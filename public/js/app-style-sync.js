@@ -133,7 +133,6 @@
   function buildObsUrl({ preview = false, relative = false } = {}) {
     const url = new URL('/display', window.location.origin);
     if (preview) url.searchParams.set('preview', '1');
-    if (!preview && typeof AccessAuth !== 'undefined' && AccessAuth.sourceToken()) url.searchParams.set('source', AccessAuth.sourceToken());
     if (window.I18n) {
       const localized = new URL(window.I18n.localizeUrl(url.toString()));
       url.search = localized.search;
@@ -168,21 +167,7 @@
     });
   }
 
-  function refreshAccessStatus() {
-    const request = typeof PinAuth !== 'undefined' ? PinAuth.fetchWithPin('/api/access/status', { cache: 'no-store' }) : fetch('/api/access/status', { cache: 'no-store' });
-    return request.then((res) => {
-      if (!res.ok) throw new Error('Unable to load local access status');
-      return res.json();
-    }).then((data) => {
-      if (typeof AccessAuth !== 'undefined') AccessAuth.setSourceToken(data.sourceToken || '');
-      refreshObsUrls();
-      window.dispatchEvent(new Event('access:source-token'));
-      return data;
-    });
-  }
-
   refreshObsUrls();
-  refreshAccessStatus().catch(() => { /* The desktop may still be starting; URLs refresh again on reload. */ });
   window.addEventListener('i18n:change', refreshObsUrls);
   if (dom.copyObsUrlTop) dom.copyObsUrlTop.addEventListener('click', () => copyObsUrl(dom.copyObsUrlTop));
   if (dom.copyObsUrl) dom.copyObsUrl.addEventListener('click', () => copyObsUrl(dom.copyObsUrl));
@@ -216,58 +201,12 @@
         return;
       }
       dom.lanInfoUrl.textContent = data.controllerUrl;
+      if (data.qrDataUrl) dom.lanInfoQr.src = data.qrDataUrl;
       dom.lanInfoBody.hidden = false;
       if (dom.copyLanUrl) dom.copyLanUrl.addEventListener('click', () => copyLanUrl(dom.copyLanUrl));
     }).catch(() => {
       dom.lanInfoLoading.hidden = true;
       dom.lanInfoError.hidden = false;
-    });
-  }
-
-  const pairingButton = document.getElementById('start-controller-pairing');
-  const revokeButton = document.getElementById('revoke-controller-pairings');
-  const pairingStatus = document.getElementById('controller-pairing-status');
-  if (pairingButton) {
-    pairingButton.addEventListener('click', async () => {
-      pairingButton.disabled = true;
-      if (pairingStatus) pairingStatus.textContent = '正在建立一次性配對 QR Code…';
-      try {
-        const request = typeof PinAuth !== 'undefined'
-          ? PinAuth.fetchWithPin('/api/access/pairing/start', { method: 'POST' })
-          : fetch('/api/access/pairing/start', { method: 'POST' });
-        const response = await request;
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Unable to start pairing');
-        if (dom.lanInfoQr) dom.lanInfoQr.src = data.qrDataUrl;
-        if (dom.lanInfoUrl) dom.lanInfoUrl.textContent = data.controllerUrl;
-        if (pairingStatus) pairingStatus.textContent = `QR Code 已建立，請在 ${Math.max(1, Math.ceil((data.expiresAt - Date.now()) / 60000))} 分鐘內掃描；每張只能配對一台手機。`;
-      } catch (error) {
-        if (pairingStatus) pairingStatus.textContent = error.message || '無法建立配對 QR Code。';
-      } finally {
-        pairingButton.disabled = false;
-      }
-    });
-  }
-  if (revokeButton) {
-    revokeButton.addEventListener('click', async () => {
-      const accepted = typeof PanelConfirm !== 'undefined'
-        ? await PanelConfirm.request({ title: '撤銷所有手機', summary: '這會讓所有已配對的手機立即失效。', impact: '之後需要重新掃描 QR Code 才能控制。', confirmLabel: '撤銷' })
-        : false;
-      if (!accepted) return;
-      revokeButton.disabled = true;
-      try {
-        const request = typeof PinAuth !== 'undefined'
-          ? PinAuth.fetchWithPin('/api/access/controllers/revoke', { method: 'POST' })
-          : fetch('/api/access/controllers/revoke', { method: 'POST' });
-        const response = await request;
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Unable to revoke controllers');
-        if (pairingStatus) pairingStatus.textContent = `已撤銷 ${data.revoked} 台手機；請重新產生 QR Code 進行配對。`;
-      } catch (error) {
-        if (pairingStatus) pairingStatus.textContent = error.message || '撤銷手機失敗。';
-      } finally {
-        revokeButton.disabled = false;
-      }
     });
   }
 

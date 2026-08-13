@@ -590,6 +590,33 @@
               </div>
               <button id="btn-display-advanced" class="btn btn-sm w-full" type="button" data-i18n="settings.openDetails">開啟詳細設定…</button>
             </section>
+            <section id="spout-output-card" class="card spout-output-card" aria-labelledby="spout-output-title" hidden>
+              <div class="spout-output-head">
+                <div>
+                  <p class="eyebrow m-0" data-i18n="spout.eyebrow">外部透明輸出</p>
+                  <h3 id="spout-output-title" data-i18n="spout.title">Spout 透明歌詞輸出</h3>
+                </div>
+                <span id="spout-output-status" class="save-status" role="status" aria-live="polite"></span>
+              </div>
+              <p class="field-hint m-0" data-i18n="spout.description">讓 Shoost 或其他 Spout 接收軟體取得含 Alpha 的歌詞畫面，不需要色度鍵。</p>
+              <div class="spout-output-grid">
+                <label for="spout-sender-name" data-i18n="spout.senderName">Sender 名稱</label>
+                <input id="spout-sender-name" class="input" type="text" maxlength="64" autocomplete="off">
+                <label for="spout-width" data-i18n="spout.width">寬度</label>
+                <input id="spout-width" class="input" type="number" min="640" max="3840" step="1" inputmode="numeric">
+                <label for="spout-height" data-i18n="spout.height">高度</label>
+                <input id="spout-height" class="input" type="number" min="360" max="2160" step="1" inputmode="numeric">
+                <label for="spout-fps" data-i18n="spout.fps">FPS</label>
+                <select id="spout-fps" class="input"><option value="30">30</option><option value="60">60</option></select>
+              </div>
+              <p class="field-hint m-0" data-i18n="spout.fpsHint">建議使用 30 FPS；60 FPS 仍可選擇，但需要足夠的 GPU 效能。</p>
+              <p id="spout-output-message" class="field-hint m-0" aria-live="polite">預設不會自動啟動；開始後在 Shoost 的 Spout 捕捉選擇 Sender 名稱。</p>
+              <p id="spout-output-metrics" class="field-hint m-0 spout-output-metrics" aria-live="polite" hidden></p>
+              <div class="spout-output-actions">
+                <button id="spout-output-start" class="btn btn-primary" type="button" data-i18n="spout.start">開始透明輸出</button>
+                <button id="spout-output-stop" class="btn btn-ghost" type="button" data-i18n="spout.stop">停止輸出</button>
+              </div>
+            </section>
           </aside>
 
           <!-- 設定卡片區（內層 grid，讓預覽 bar 能 sticky 在其上方）-->
@@ -1294,11 +1321,6 @@
                   <code id="lan-info-url">—</code>
                   <button id="copy-lan-url" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button>
                 </div>
-                <div class="row-gap-10 mt-8">
-                  <button id="start-controller-pairing" class="btn btn-sm btn-primary" type="button">產生配對 QR Code</button>
-                  <button id="revoke-controller-pairings" class="btn btn-sm btn-ghost" type="button">撤銷所有手機</button>
-                </div>
-                <p id="controller-pairing-status" class="val mt-8" aria-live="polite">掃描前請先產生一次性配對 QR Code。</p>
                 <p class="val mt-8" data-i18n="system.remoteUrlHint">手機瀏覽器打開這個網址（不是 localhost），會自動轉到遙控器頁面。</p>
               </div>
             </div>
@@ -2502,16 +2524,6 @@
   </div>
 
   <!-- ═══ Modal：PIN 管理（#pin-manage-modal，設定／更改／停用，見 pin-auth.js）═══ -->
-  <div id="pin-onboarding-modal" class="modal" hidden>
-    <div class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="pin-onboarding-title">
-      <div class="modal-head"><h3 id="pin-onboarding-title">要設定 PIN 嗎？</h3></div>
-      <div class="modal-body">
-        <p class="field-hint modal-form-hint">PIN 是選用的進階防護。即使略過，手機仍須掃描一次性 QR Code 配對；之後可隨時在設定中開啟 PIN。</p>
-        <div class="row-gap-10"><button id="pin-onboarding-set" class="btn btn-primary" type="button">設定 PIN</button><button id="pin-onboarding-skip" class="btn btn-ghost" type="button">先略過</button></div>
-      </div>
-    </div>
-  </div>
-
   <div id="pin-manage-modal" class="modal" hidden>
     <div class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="pin-manage-title">
       <div class="modal-head">
@@ -2556,6 +2568,7 @@
               <option value="import-playback" data-i18n="feedback.typeImportPlayback">匯入或播放問題</option>
               <option value="lyrics" data-i18n="feedback.typeLyrics">歌詞問題</option>
               <option value="obs" data-i18n="feedback.typeObs">OBS 顯示問題</option>
+              <option value="spout" data-i18n="feedback.typeSpout">Spout 透明輸出問題</option>
               <option value="twitch" data-i18n="feedback.typeTwitch">Twitch 點歌問題</option>
               <option value="ui-i18n" data-i18n="feedback.typeUiI18n">介面或翻譯問題</option>
               <option value="feature-request" data-i18n="feedback.typeFeature">功能建議</option>
@@ -2645,7 +2658,6 @@
   <script src="/js/i18n.js"></script>
   <script src="/vendor/Tone.js"></script>
   <script src="/js/theme.js"></script>
-  <script src="/js/access-auth.js"></script>
   <script src="/js/pin-auth.js"></script>
   <script src="/js/socket-client.js"></script>
   <script src="/js/setlist-style-schema.js"></script>
@@ -2678,6 +2690,7 @@
   <script src="/js/usage-telemetry-settings.js"></script>
   <script src="/js/playlist-state.js"></script>
   <script src="/js/app.js"></script>
+  <script src="/js/app-spout-output.js"></script>
   <script src="/js/lyric-extras.js"></script>
   <script src="/js/media-library.js"></script>
   <script src="/js/style-tuner.js"></script>

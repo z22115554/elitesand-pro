@@ -365,8 +365,8 @@ const ObsWs = (() => {
 
   createBtn.addEventListener('click', () => {
     const urls = {
-      displayUrl: (typeof AccessAuth !== 'undefined') ? AccessAuth.sourceUrl('/display') : window.location.origin + '/display',
-      setlistUrl: (typeof AccessAuth !== 'undefined') ? AccessAuth.sourceUrl('/setlist') : window.location.origin + '/setlist',
+      displayUrl: window.location.origin + '/display',
+      setlistUrl: window.location.origin + '/setlist',
     };
     createBtn.disabled = true;
     showMsg('建立中…');

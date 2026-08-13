@@ -47,6 +47,7 @@
   let requestId = null;
   let submitting = false;
   let collecting = false;
+  let previewSpoutDiagnostics = null;
 
   function toast(message, type) {
     if (window.AppShared && window.AppShared.showToast) window.AppShared.showToast(message, type);
@@ -65,6 +66,17 @@
       includeDiagnostics: !!dom.includeDiagnostics.checked,
       locale: window.I18n ? window.I18n.current() : 'zh-TW',
     };
+  }
+
+  async function attachSpoutDiagnostics(report) {
+    if (report.type !== 'spout' || !report.includeDiagnostics) return report;
+    try {
+      const diagnostics = await window.ElitesandShell?.spout?.getIssueDiagnostics?.();
+      if (diagnostics && typeof diagnostics === 'object') report.spoutDiagnostics = diagnostics;
+    } catch (_) {
+      // Diagnostics are helpful but never allowed to block a user's report.
+    }
+    return report;
   }
 
   // ─── 草稿：送出失敗時使用者填的東西絕不能不見 ───
@@ -190,10 +202,12 @@
     collecting = true;
     renderCollectingLabel();
     try {
+      const report = await attachSpoutDiagnostics(readForm());
+      previewSpoutDiagnostics = report.spoutDiagnostics || null;
       const response = await PinAuth.fetchWithPin('/api/feedback/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(readForm()),
+        body: JSON.stringify(report),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data || !data.ok) {
@@ -225,10 +239,16 @@
     setStatus('feedback.submitting');
     if (!requestId) requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
+      const report = readForm();
+      if (report.type === 'spout' && report.includeDiagnostics && previewSpoutDiagnostics) {
+        report.spoutDiagnostics = previewSpoutDiagnostics;
+      } else {
+        await attachSpoutDiagnostics(report);
+      }
       const response = await PinAuth.fetchWithPin('/api/feedback/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.assign(readForm(), { requestId })),
+        body: JSON.stringify(Object.assign(report, { requestId })),
       });
       const data = await response.json().catch(() => null);
       if (response.ok && data && data.ok) {
@@ -275,16 +295,17 @@
     showFormError(null);
     setStatus(null);
     previewBytes = null;
+    previewSpoutDiagnostics = null;
     requestId = null;
     clearDraft();
   }
 
   // select 在部分瀏覽器只發 change 不發 input，兩個都接才不會漏存問題類型。
   FIELDS.forEach((field) => {
-    dom[field].addEventListener('input', saveDraft);
-    dom[field].addEventListener('change', saveDraft);
+    dom[field].addEventListener('input', () => { previewSpoutDiagnostics = null; saveDraft(); });
+    dom[field].addEventListener('change', () => { previewSpoutDiagnostics = null; saveDraft(); });
   });
-  dom.includeDiagnostics.addEventListener('change', saveDraft);
+  dom.includeDiagnostics.addEventListener('change', () => { previewSpoutDiagnostics = null; saveDraft(); });
   dom.previewBtn.addEventListener('click', requestPreview);
   dom.clearBtn.addEventListener('click', clearForm);
   dom.submitBtn.addEventListener('click', submitReport);

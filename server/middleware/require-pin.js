@@ -12,10 +12,8 @@
 
 const authStore = require('../services/auth-store');
 const rateLimiter = require('../services/auth-rate-limiter');
-const { requireControlAccess } = require('./require-control-access');
 
 function requirePin(req, res, next) {
-  return requireControlAccess(req, res, () => {
   if (!authStore.hasPin()) return next();
   const key = `protected:${req.ip || req.socket?.remoteAddress || 'unknown'}`;
   const limit = rateLimiter.status(key);
@@ -27,7 +25,6 @@ function requirePin(req, res, next) {
   if (authStore.verifyPin(pin)) { rateLimiter.reset(key); return next(); }
   rateLimiter.recordFailure(key);
   res.status(401).json({ error: '需要正確的 PIN 才能執行此操作', code: 'PIN_REQUIRED' });
-  });
 }
 
 module.exports = requirePin;

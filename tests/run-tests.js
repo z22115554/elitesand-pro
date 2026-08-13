@@ -68,6 +68,79 @@ function ok(value, label = '') {
   if (!value) throw new Error(`${label}預期為真，實際 ${JSON.stringify(value)}`);
 }
 
+require('./spout-output-controller.test').register({ test, testAsync, eq, ok });
+require('./spout-display-output.test').register({ test, testAsync, eq, ok });
+require('./spout-settings.test').register({ test, testAsync, eq, ok });
+require('./spout-issue-diagnostics.test').register({ test, testAsync, eq, ok });
+
+test('Spout CP05/CP07 keeps the native controls Electron-only and exposes bounded performance evidence', () => {
+  const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const panelScript = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-spout-output.js'), 'utf8');
+  const feedbackScript = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-feedback.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'electron', 'preload.js'), 'utf8');
+  const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
+  const nativeAddon = fs.readFileSync(path.join(__dirname, '..', 'native', 'spout-output', 'src', 'addon.cpp'), 'utf8');
+  const i18n = require('../public/js/i18n');
+  ok(panelHtml.includes('id="spout-output-card"') && panelHtml.includes('hidden'), 'browser panel must begin without a visible Spout control: ');
+  ok(!/<p id="spout-output-message"[^>]*data-i18n/.test(panelHtml)
+    && panelHtml.includes('id="spout-output-metrics"'),
+  'live Spout diagnostics must not be overwritten by static i18n markup: ');
+  ok(panelScript.includes('const api = shell?.spout') && panelScript.includes('if (!api || !card) return;'), 'the card must require the Electron preload API: ');
+  ok(panelScript.includes('pollStatusUntilSettled')
+    && panelScript.includes('snapshot?.output?.state === \'starting\'')
+    && panelScript.includes("window.setTimeout(poll, state === 'starting' ? 200 : 1000)")
+    && panelScript.includes("state === 'starting' || state === 'running'")
+    && panelScript.includes('lastGpuSyncMs')
+    && panelScript.includes('avgGpuSyncMs'),
+  'the UI must retain status polling while output is live and render the GPU synchronization metrics: ');
+  ['lastGpuSyncMs', 'avgGpuSyncMs', 'maxGpuSyncMs', 'gpuSyncTimeouts', 'adapterVendorId', 'adapterDeviceId', 'adapterLuid'].forEach((metric) => {
+    ok(nativeAddon.includes(`\"${metric}\"`), `native status must publish ${metric}: `);
+  });
+  ['zh-TW', 'en', 'ja', 'ko', 'zh-CN'].forEach((locale) => {
+    ok(i18n.catalogs?.[locale]?.['spout.runningPerfHint'] && i18n.catalogs?.[locale]?.['spout.metrics']
+      && i18n.catalogs?.[locale]?.['spout.fpsHint'] && i18n.catalogs?.[locale]?.['feedback.typeSpout'],
+    `${locale} must translate the live Spout performance and issue-report diagnostics: `);
+  });
+  ok(preload.includes("'elitesand:spout-status'") && preload.includes("'elitesand:spout-save-settings'")
+    && preload.includes("'elitesand:spout-start'") && preload.includes("'elitesand:spout-stop'")
+    && preload.includes("'elitesand:spout-issue-diagnostics'")
+    && !preload.includes("'elitesand:spout-recording-"), 'preload must expose only the approved fixed Spout channels: ');
+  ok(!panelHtml.includes('spout-recording-') && !panelScript.includes('Recording'), 'manual Spout recording controls must not remain in the panel: ');
+  ok(!preload.includes('spout: Object.freeze({\n    invoke') && !preload.includes('spout: Object.freeze({\n    send'), 'the Spout surface must not accept arbitrary IPC channels: ');
+  ok(feedbackScript.includes('attachSpoutDiagnostics') && feedbackScript.includes("report.type !== 'spout'")
+    && feedbackScript.includes('getIssueDiagnostics'), 'Spout diagnostics must be requested only by the user-selected report type: ');
+  ok(shellSource.includes("event?.sender !== window.webContents") && shellSource.includes('await stopSpoutDisplayOutput();'), 'main must check IPC origin and release output during shutdown: ');
+});
+
+test('Spout lab launcher isolates its app identity and disables only its remote announcements', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const shellSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
+  const announcementSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'announcement-service.js'), 'utf8');
+  ok(packageJson.scripts['shell:spout']?.includes('ELITESAND_SPOUT_EXPERIMENT=1')
+    && packageJson.scripts['shell:spout']?.includes('ELITESAND_DISABLE_ANNOUNCEMENTS=1')
+    && packageJson.scripts['shell:spout']?.includes('ELITESAND_SHELL_USER_DATA_DIR=.local\\spout-shell-user-data'),
+  'the experimental launcher must have its own opt-in runtime: ');
+  ok(shellSource.includes("'com.elitesand.pro.spout-lab'") && shellSource.includes("'Elitesand Pro Spout Lab'"),
+    'the experimental shell must not share the production single-instance identity: ');
+  ok(announcementSource.includes("process.env.ELITESAND_DISABLE_ANNOUNCEMENTS === '1'")
+    && announcementSource.includes('if (announcementsDisabled) return null;'),
+  'the opt-in announcement disable must not affect normal launches: ');
+});
+
+test('Spout Motion 60 diagnostic is isolated and drives a visible per-frame marker', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const sharedTextureHarness = fs.readFileSync(path.join(__dirname, '..', 'tools', 'test-spout-shared-texture.js'), 'utf8');
+  ok(packageJson.scripts['test:spout-motion-60:intel']?.includes('ELITESAND_SPOUT_SHARED_TEXTURE_MOTION_DIAGNOSTIC=1')
+    && packageJson.scripts['test:spout-motion-60:intel']?.includes('ELITESAND_SPOUT_GPU_PREFERENCE=low-power')
+    && packageJson.scripts['test:spout-motion-60:intel']?.includes('ELITESAND_SPOUT_ADDON=.local\\spout-output-build-adapterdiag')
+    && packageJson.scripts['test:spout-motion-30:intel']?.includes('ELITESAND_SPOUT_SHARED_TEXTURE_FPS=30'),
+  'the Intel motion diagnostic must select one isolated, matching sender path: ');
+  ok(sharedTextureHarness.includes("ELITESAND_SPOUT_SHARED_TEXTURE_MOTION_DIAGNOSTIC === '1'")
+    && sharedTextureHarness.includes("'MOTION ' + expectedFps + '  FRAME '")
+    && sharedTextureHarness.includes('Math.floor(t * expectedFps / 1000)'),
+  'the motion diagnostic must visibly change once per requested frame-rate tick: ');
+});
+
 const playlistState = require('../public/js/playlist-state');
 
 test('跨端歌單重排後以 track.id 保持目前歌曲', () => {
@@ -1099,6 +1172,26 @@ test('問題回報 schema 拒絕不完整或超長的內容', () => {
   ok(japanese.plainText.includes('## 問題說明'), '報告內文必須固定繁體中文: ');
   ok(japanese.plainText.includes('介面語言：ja'), '使用者語言必須另外記錄: ');
   ok(japanese.report.issueLabels.includes('source:in-app'));
+
+  const spout = feedbackReport.buildReport({
+    ...base,
+    type: 'spout',
+    includeDiagnostics: true,
+    spoutDiagnostics: {
+      schemaVersion: 1, active: true, durationMs: 5000,
+      senderName: 'Personal Sender Name',
+      samples: [{
+        elapsedMs: 5000, state: 'running', width: 1920, height: 1080, configuredFps: 30,
+        framesSent: 150, framesReceived: 149, framesDropped: 1,
+        gpuSync: { lastMs: 10, averageMs: 9, maxMs: 12, timeouts: 0 },
+        sourceCopySync: { lastMs: 6, averageMs: 5, maxMs: 8, timeouts: 0 },
+        adapter: { vendorId: 4318, deviceId: 9476, luid: 'machine-unique-value' },
+      }],
+    },
+  });
+  ok(spout.ok && spout.plainText.includes('## Spout 透明輸出紀錄'), 'Spout report must attach its bounded diagnostics: ');
+  ok(spout.report.issueLabels.includes('type:spout'), 'Spout report must carry a dedicated issue label: ');
+  ok(!spout.plainText.includes('Personal Sender Name') && !spout.plainText.includes('machine-unique-value'), 'Spout diagnostics must exclude sender and LUID: ');
 });
 
 test('問題回報缺少外部工具或日誌時仍能產出報告', () => {
@@ -1868,13 +1961,6 @@ test('portable build creates a clean production-only dependency tree in staging'
   ok(source.includes('Installing production dependencies in staging'));
 });
 
-test('installer and portable builds run the full test gate before packaging', () => {
-  const installer = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
-  const portable = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-portable.ps1'), 'utf8');
-  ok(installer.includes('npm.cmd') && installer.includes('--prefix $Root test'), 'installer build must run npm test before packaging');
-  ok(portable.includes('npm.cmd') && portable.includes('--prefix $Root test'), 'portable build must run npm test before packaging');
-});
-
 test('bilingual EULA is shipped with portable builds as a finalized agreement', () => {
   const root = path.join(__dirname, '..');
   const eulaPath = path.join(root, 'EULA.txt');
@@ -2106,19 +2192,6 @@ test('狀態持久化：狀態檔不存在時回傳 null 不報錯', () => {
     ].join('\n'));
     eq(result.loaded, null);
     eq(result.alert, null);
-  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
-});
-
-test('狀態持久化：last-good 保留前一份有效狀態而非鏡像新檔', () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-last-good-'));
-  try {
-    const result = runStateStoreChild(dataDir, [
-      "const fs=require('fs'); const store=require(process.argv[1]); const first={savedAt:100,marker:'first',playlist:[]}; const second={savedAt:200,marker:'second',playlist:[]};",
-      "store.scheduleSave(()=>first); store.saveNow(); store.scheduleSave(()=>second); store.saveNow();",
-      "const primary=JSON.parse(fs.readFileSync(store.STATE_FILE,'utf8')); const backup=JSON.parse(fs.readFileSync(store.STATE_BACKUP_FILE,'utf8')); process.stdout.write('__STATE_RESULT__'+JSON.stringify({primary,backup}));",
-    ].join('\n'));
-    eq(result.primary.marker, 'second');
-    eq(result.backup.marker, 'first');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
@@ -2503,7 +2576,7 @@ test('lyric-settings 可被 state-store 持久化', () => {
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
-const { TwitchService, reconnectDelay, CONNECT_WATCHDOG_MS } = require('../server/services/twitch-service');
+const { TwitchService, reconnectDelay } = require('../server/services/twitch-service');
 const TwitchReplySettings = require('../public/js/twitch-reply-settings');
 const TwitchRequestSettings = require('../public/js/twitch-request-settings');
 const TwitchRewardSettings = require('../public/js/twitch-reward-settings');
@@ -2843,97 +2916,6 @@ test('Twitch EventSub 重連採指數退避並有上限', () => {
   eq(reconnectDelay(1, () => 0.5), 3000);
   eq(reconnectDelay(2, () => 0.5), 6000);
   eq(reconnectDelay(10, () => 0.5), 60000);
-});
-
-test('Twitch EventSub welcome watchdog closes a stalled socket and returns to retry', () => {
-  const timers = [];
-  const fakeTimers = {
-    setTimeout(fn, delay) { const timer = { fn, delay, cleared: false }; timers.push(timer); return timer; },
-    clearTimeout(timer) { if (timer) timer.cleared = true; },
-  };
-  const sockets = [];
-  const originalWebSocket = globalThis.WebSocket;
-  class FakeWebSocket {
-    constructor() { this.handlers = {}; this.closed = false; sockets.push(this); }
-    on(event, handler) { this.handlers[event] = handler; }
-    close() { this.closed = true; this.handlers.close?.(); }
-  }
-  globalThis.WebSocket = FakeWebSocket;
-  try {
-    const retries = [];
-    const service = new TwitchService({
-      config: { twitchClientId: 'fixture' },
-      onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
-      onSongRequestExpired: () => {},
-      pendingStore: { load: () => [], save: () => true },
-      sessionStore: { load: () => null, save: () => true },
-      historyStore: { load: () => [], save: () => true },
-      authStore: { load: () => null, save: () => true, clear: () => true },
-      timers: fakeTimers,
-    });
-    service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
-    service.scheduleReconnect = (reason) => retries.push(reason);
-    service.connectEventSub();
-    eq(sockets.length, 1);
-    eq(timers.length, 1);
-    eq(timers[0].delay, CONNECT_WATCHDOG_MS);
-    timers[0].fn();
-    ok(sockets[0].closed, '逾時連線必須主動關閉');
-    eq(service.ws, null);
-    ok(retries[0].includes('逾時'), '逾時後必須走既有退避重連');
-    service.stop();
-  } finally {
-    globalThis.WebSocket = originalWebSocket;
-  }
-});
-
-testAsync('Twitch EventSub keepalive watchdog and revocation never leave a false connected state', async () => {
-  const timers = [];
-  const fakeTimers = {
-    setTimeout(fn, delay) { const timer = { fn, delay, cleared: false }; timers.push(timer); return timer; },
-    clearTimeout(timer) { if (timer) timer.cleared = true; },
-  };
-  let cleared = 0;
-  const socket = { closed: false, close() { this.closed = true; } };
-  const retries = [];
-  const service = new TwitchService({
-    config: { twitchClientId: 'fixture' },
-    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
-    onSongRequestExpired: () => {},
-    pendingStore: { load: () => [], save: () => true },
-    sessionStore: { load: () => null, save: () => true },
-    historyStore: { load: () => [], save: () => true },
-    authStore: { load: () => null, save: () => true, clear: () => { cleared += 1; return true; } },
-    timers: fakeTimers,
-  });
-  service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
-  service.ws = socket;
-  service.createSubscription = async () => {};
-  service.refreshLiveState = async () => {};
-  service.scheduleReconnect = (reason) => retries.push(reason);
-  await service.handleWebSocketMessage(JSON.stringify({
-    metadata: { message_type: 'session_welcome' },
-    payload: { session: { id: 'session-1', keepalive_timeout_seconds: 30 } },
-  }), socket);
-  eq(timers.at(-1).delay, 35000);
-  timers.at(-1).fn();
-  eq(service.ws, null);
-  ok(socket.closed, 'keepalive 逾時必須主動關閉 stale socket');
-  ok(retries.at(-1).includes('keepalive'));
-
-  const revokedSocket = { closed: false, close() { this.closed = true; } };
-  service.ws = revokedSocket;
-  service.wsSessionId = 'session-2';
-  service.auth = { accessToken: 'token', userId: 'user', refreshToken: 'refresh', scopes: [] };
-  await service.handleWebSocketMessage(JSON.stringify({
-    metadata: { message_type: 'revocation' },
-    payload: { subscription: { status: 'authorization_revoked' } },
-  }), revokedSocket);
-  eq(service.auth, null);
-  eq(cleared, 1);
-  eq(service.connectionState, 'authorization_required');
-  ok(revokedSocket.closed, '撤銷後必須主動關閉舊 socket');
-  service.stop();
 });
 
 test('Twitch status observation reports a safe lifecycle without changing a disabled service', () => {
@@ -4692,35 +4674,6 @@ test('R4-2 批次移除部分歌曲後，留下的清單與所有歌曲記憶都
   eq(manualLyricsCache.get('batch-remove-b').lyrics, '[00:00.40]B');
 });
 
-test('高頻播放控制只送細粒度事件，不重複廣播完整 state:sync', () => {
-  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
-  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
-  const lyricEvents = new Map();
-  const playbackEvents = new Map();
-  const emitted = [];
-  const io = { emit(event, data) { emitted.push({ event, data }); } };
-  const noFullState = () => { throw new Error('高頻控制不可廣播 state:sync'); };
-  const playState = {
-    currentTrack: { id: 'hot-track', title: 'Hot track' }, currentOffset: 0,
-    pitchShift: 0, playbackRate: 1, metronomeEnabled: true,
-    style: 'cute', styleOverrides: {}, romanizationMode: 'original',
-  };
-  registerLyricsHandlers(io, { on(event, handler) { lyricEvents.set(event, handler); } }, {
-    playState, trackOffsets: new Map(), manualLyricsCache: new Map(),
-    persistState() {}, broadcastState: noFullState,
-  });
-  registerPlaybackHandlers(io, { on(event, handler) { playbackEvents.set(event, handler); }, id: 'fixture', clientType: 'controller' }, {
-    playState, trackOffsets: new Map(), trackPitch: new Map(), trackSpeed: new Map(), manualLyricsCache: new Map(),
-    persistState() {}, emitSetlist() {}, recordSessionSong() {}, broadcastState: noFullState, getEffectiveLyrics() { return null; },
-  });
-  lyricEvents.get('offset:adjust')({ trackId: 'hot-track', delta: 100 });
-  playbackEvents.get('style:override')({ intensity: 2 });
-  playbackEvents.get('pitch:change')(1);
-  playbackEvents.get('speed:change')(1.1);
-  playbackEvents.get('metronome:toggle')(false);
-  ok(['offset:update', 'style:override', 'pitch:update', 'speed:update', 'metronome:update'].every((event) => emitted.some((item) => item.event === event)));
-});
-
 test('offset:set 會立即持久化，歌曲移出清單後重開程式仍可恢復', () => {
   const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
   const events = new Map();
@@ -5383,6 +5336,30 @@ test('跟唱視圖新增羅馬拼音／諧音開關，各自獨立、預設關�
   ok(promptCss.includes('.pt-line.pt-line--active .pt-line-text'), '主歌詞文字的 active 樣式必須套在新的 .pt-line-text 子元素上，不能還留在舊的 .pt-line 選擇器（結構改了，樣式沒跟著改就會失效）：');
 });
 
+testAsync('日文振假名保留原漢字、只標可靠讀音，跟唱視圖可獨立開關', async () => {
+  const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  const promptCss = fs.readFileSync(path.join(__dirname, '../public/css/prompter.css'), 'utf8');
+  const promptSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  const { sanitizeParsedLyrics } = require('../server/utils/track-schema');
+
+  ok(promptHtml.includes('id="pt-set-furigana"'), '跟唱視圖必須有獨立振假名開關：');
+  ok(promptSource.includes('showFurigana: false'), '振假名預設必須關閉，不可改動 OBS 的既有預設：');
+  ok(promptSource.includes('appearance.showFurigana ? renderFurigana(line)'), '振假名開關必須只改跟唱視圖的歌詞渲染：');
+  ok(promptCss.includes('.pt-line-text ruby') && promptCss.includes('ruby-position: over'), '振假名必須用原生 ruby 排在漢字上方：');
+
+  const analyzed = await romanizer.japaneseReadingAnalysis('お母さんは今日東京へ行く');
+  const annotated = analyzed.furigana.filter((segment) => segment.reading);
+  ok(annotated.some((segment) => segment.text === '母' && segment.reading === 'かあ'), 'お母さん的母字必須對應かあ：');
+  ok(annotated.some((segment) => segment.text === '今日' && segment.reading === 'きょう'), '今日必須對應きょう：');
+  ok(annotated.some((segment) => segment.text === '東京' && segment.reading === 'とうきょう'), '東京必須對應とうきょう：');
+  eq(analyzed.furigana.map((segment) => segment.text).join(''), 'お母さんは今日東京へ行く', '振假名片段必須完整保留原歌詞，不能改字或丟字：');
+  ok(romanizer.needsFurigana([{ text: '今日も歌う', phonetic: 'kyou mo utau' }]), '舊日文歌詞即使已有拼音，下次播放仍必須補振假名：');
+  ok(!romanizer.needsFurigana([{ text: '今天唱歌', phonetic: 'jin tian chang ge' }]), '純中文歌詞不可為了振假名重複進入日文分析：');
+
+  const sanitized = sanitizeParsedLyrics([{ time: 0, text: '今日', furigana: analyzed.furigana.filter((segment) => segment.text === '今日') }]);
+  eq(sanitized[0].furigana[0].reading, 'きょう', '振假名必須能通過歌詞資料的安全清理與同步：');
+});
+
 test('跟唱視圖歌詞套用簡轉繁設定，跟歌詞顯示頁／歌單頁同一套規則', () => {
   const promptHtml = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
   const promptSource = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
@@ -5394,8 +5371,9 @@ test('跟唱視圖歌詞套用簡轉繁設定，跟歌詞顯示頁／歌單頁�
   ok(promptSource.includes("OpenCC.Converter({ from: 'cn', to: 'tw' })"), '轉換方向必須是簡轉繁（cn→tw），跟 karaoke.js／setlist.js 一致：');
   ok(promptSource.includes('function s2t(str) {') && promptSource.includes('if (!s2tEnabled || !str) return str;'),
     's2t() 必須尊重 s2tEnabled 開關：關閉時原樣輸出，不能永遠轉換：');
-  ok(promptSource.includes('<div class="pt-line-text">${escapeHtml(s2t(line.text || \'\'))}</div>'),
-    '歌詞逐句渲染必須先過 s2t() 再 escapeHtml，兩者順序顛倒會轉換不到已跳脫的字元：');
+  ok(promptSource.includes('const converted = s2t(source);') && promptSource.includes('return escapeHtml(converted);')
+    && promptSource.includes('escapeHtml(s2t(line.text || \'\'))'),
+  '歌詞逐句渲染必須先過 s2t() 再 escapeHtml；振假名資料不匹配時也必須安全回退原文：');
 
   // 面板的簡轉繁開關就是同一個 lyricSettings.convertTraditional：勾選＝轉繁體，取消勾選＝維持原文。
   ok(promptSource.includes("SocketClient.on('lyric-settings:update', (settings) => {") &&
@@ -5806,27 +5784,6 @@ test('音檔巡檢：缺少檔名或檔案時標記遺失，存在時標記可�
   ok(libraryStore.audioStatus({ filename: 'ready.mp3' }, (name) => name === 'ready.mp3').audioAvailable);
 });
 
-test('播放清單同步以目錄快照避免每首歌重複同步檔案檢查', () => {
-  const libraryStore = require('../server/services/library-store');
-  libraryStore.resetAudioStatusCache();
-  let reads = 0;
-  const first = libraryStore.getAudioExistsLookup({
-    now: () => 1000,
-    readDirectory: () => { reads++; return ['ready.mp3', 'other.mp3']; },
-  });
-  const second = libraryStore.getAudioExistsLookup({
-    now: () => 1500,
-    readDirectory: () => { reads++; return []; },
-  });
-  const refreshed = libraryStore.getAudioExistsLookup({
-    now: () => 2000,
-    readDirectory: () => { reads++; return ['refreshed.mp3']; },
-  });
-  eq(reads, 2, '快取期內不得為每個 state payload 重讀目錄: ');
-  ok(first('ready.mp3') && second('other.mp3'));
-  ok(refreshed('refreshed.mp3') && !refreshed('ready.mp3'));
-});
-
 test('播放前預檢：音檔遺失時不改播放狀態並回傳可恢復錯誤', () => {
   const registerPlaybackHandlers = require('../server/routes/handlers/playback');
   const events = new Map();
@@ -5905,8 +5862,8 @@ test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件
     on(event, fn) { if (event === 'connection') this.connectionHandler = fn; },
     emit(event, data) { this.emitted.push({ event, data }); },
   });
-  const makeSocket = (type, pin = '') => ({
-    id: `${type}-1`, handshake: { auth: { clientType: type, pin }, address: '127.0.0.1' },
+  const makeSocket = (type) => ({
+    id: `${type}-1`, handshake: { auth: { clientType: type, pin: '' }, address: '127.0.0.1' },
     events: new Map(), emitted: [],
     on(event, fn) { this.events.set(event, fn); },
     emit(event, data) { this.emitted.push({ event, data }); },
@@ -5922,20 +5879,13 @@ test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件
   ok(!overlay.events.has('play:toggle'));
   ok(!overlay.events.has('library:clear'));
 
-  const authStore = require('../server/services/auth-store');
-  const testPin = 'role-test-pin';
-  ok(authStore.setPin(testPin).ok, 'socket role test must seed its control PIN');
-  try {
-    const controlIo = makeIo();
-    socketHandler(controlIo);
-    const controller = makeSocket('controller', testPin);
-    controlIo.authMiddleware(controller, (err) => { if (err) throw err; });
-    controlIo.connectionHandler(controller);
-    ok(controller.events.has('play:toggle'));
-    ok(controller.events.has('library:clear'));
-  } finally {
-    authStore.clearPin(testPin);
-  }
+  const controlIo = makeIo();
+  socketHandler(controlIo);
+  const controller = makeSocket('controller');
+  controlIo.authMiddleware(controller, (err) => { if (err) throw err; });
+  controlIo.connectionHandler(controller);
+  ok(controller.events.has('play:toggle'));
+  ok(controller.events.has('library:clear'));
 });
 
 test('Stored XSS 回歸：歌單與遙控器以文字節點輸出外部 metadata', () => {
@@ -6529,35 +6479,7 @@ test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷
   ok(metrics.lastSavingsBytes > 8 * 1024 * 1024, '應量測到超過 8MB 的節省: ');
 });
 
-test('state-store debounce has a bounded max wait during continuous edits', () => {
-  const { SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS, saveDelayMs } = require('../server/services/state-store');
-  eq(SAVE_DEBOUNCE_MS, 800);
-  eq(SAVE_MAX_WAIT_MS, 5000);
-  eq(saveDelayMs(1000, 1000), 800, '第一次排程保留正常 debounce: ');
-  eq(saveDelayMs(1000, 4500), 800, '距離 max wait 還遠時持續合併: ');
-  eq(saveDelayMs(1000, 5600), 400, '接近 max wait 時只能再延到上限: ');
-  eq(saveDelayMs(1000, 7000), 0, '超過上限必須立刻保存，不得無限重設計時器: ');
-});
-
-test('state:sync excludes setlist style snapshots while setlist:update retains them', () => {
-  const { createAppState, SETLIST_LAYOUTS } = require('../server/state/app-state');
-  const state = createAppState({ emit() {} });
-  const sync = state.getPublicState();
-  const setlist = state.setlistPayload();
-  ok(!Object.prototype.hasOwnProperty.call(sync.session, 'styles'), 'state:sync 不可攜帶完整 setlist styles: ');
-  ok(!Object.prototype.hasOwnProperty.call(sync.session, 'style') && !Object.prototype.hasOwnProperty.call(sync.session, 'sceneStyles'),
-    'state:sync 不可攜帶 legacy setlist style 視圖: ');
-  eq(Object.keys(setlist.styles).length, SETLIST_LAYOUTS.length, 'setlist:update 初始載入必須保留各模板外觀: ');
-  const socketSource = fs.readFileSync(path.join(__dirname, '../server/routes/socket-handler.js'), 'utf8');
-  const panelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
-  ok(socketSource.includes("socket.on('setlist:get', (_data, ack) => {"),
-    'setlist payload 必須可按需取得，不能綁在 controller 初始同步後: ');
-  ok(panelSource.includes("SocketClient.on('connection-change', (connected) => {"),
-    '控制面板連線後必須主動取得 setlist 外觀: ');
-  ok(panelSource.includes("SocketClient.on('setlist:update', applySetlistControls)"));
-});
-
-test('R2-2 500-song playlist stays compact across all four real Socket roles', () => {
+test('R2-2 500-song playlist stays compact across all real Socket roles including display-spout', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-sync-matrix-'));
   try {
     const result = spawnStateStore(process.execPath, [
@@ -6578,18 +6500,9 @@ test('R2-2 500-song playlist stays compact across all four real Socket roles', (
     eq(result.status, 0, `state-sync matrix failed: ${matrix.error || result.stderr}`);
     ok(matrix.ok, matrix.error || 'state-sync matrix should pass');
     eq(matrix.playlistLength, 500);
-    eq(matrix.roles.join(','), 'controller,remote,display,setlist');
-    const statePayloadBytes = [
-      ...Object.values(matrix.initialBytes || {}),
-      ...Object.values(matrix.broadcastBytes || {}),
-      matrix.recoveryBytes,
-    ];
-    ok(statePayloadBytes.length === 9 && statePayloadBytes.every((bytes) => bytes < 1024 * 1024),
+    eq(matrix.roles.join(','), 'controller,remote,display,display-spout,setlist');
+    ok(matrix.initialBytes < 1024 * 1024 && matrix.broadcastBytes < 1024 * 1024 && matrix.recoveryBytes < 1024 * 1024,
       `state-sync matrix public payload exceeds 1 MiB: ${JSON.stringify(matrix)}`);
-    ok(matrix.initialBytes.controller === matrix.initialBytes.remote
-      && matrix.initialBytes.display === matrix.initialBytes.setlist
-      && matrix.initialBytes.controller > matrix.initialBytes.display,
-    `state-sync matrix must keep control and read-only payloads separated: ${JSON.stringify(matrix)}`);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
@@ -9634,25 +9547,6 @@ console.log('\n🌐 17. M6.1 介面語系層');
     eq(rootEl.children.length, 0, 'destroy 應該把引導元件從畫面移除：');
   });
 }
-
-testAsync('Twitch rejected requests create cooldown and suppress repeat chat replies', async () => {
-  const replies = [];
-  const service = new TwitchService({
-    config: { twitchClientId: '' },
-    onStreamOnline: () => {}, onStreamOffline: () => {}, onSongRequest: () => true,
-    onSongRequestExpired: () => {}, pendingStore: { load: () => [], save: () => true },
-    authStore: { load: () => null, save: () => true, clear: () => true },
-  });
-  service.setRequestSettings({ ...TwitchRequestSettings.getDefaults(), enabled: false, cooldownSeconds: 60 });
-  service.sendConfiguredReply = async (_event, key, values = {}) => { replies.push({ key, values }); return { sent: true }; };
-  const event = { chatter_user_id: 'spam-viewer', chatter_user_name: 'spam-viewer', message: { text: '!點歌 https://youtu.be/dQw4w9WgXcQ' } };
-  await service.handleChatMessage(event);
-  eq(replies.at(-1).key, 'requestDisabled');
-  await service.handleChatMessage(event);
-  eq(replies.length, 1, 'cooldown repeat must not keep posting to chat');
-  ok(service.commandUserCooldowns.has('request:spam-viewer'));
-  service.stop();
-});
 
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }

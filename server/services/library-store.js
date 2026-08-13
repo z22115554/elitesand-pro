@@ -14,14 +14,10 @@ const { sanitizeTrack } = require('../utils/track-schema');
 const { dataDir: DATA_DIR, downloadsDir: DOWNLOADS_DIR } = require('../utils/app-paths');
 const LIBRARY_FILE = path.join(DATA_DIR, 'library.json');
 const MAX_ENTRIES = 1000; // 上限保護
-// state:sync 會在每次操作後重建整份播放清單。以目錄快照取代每首
-// fs.existsSync，可把 500 首歌的同步 I/O 壓成短暫快取期內至多一次 readdirSync。
-const AUDIO_SNAPSHOT_TTL_MS = 1000;
 
 let library = {}; // { [id]: { id, url, title, artist, cover, duration, source, playCount, lastPlayed } }
 let _saveTimer = null;
 let _errorReporter = null;
-let _audioSnapshot = { checkedAt: 0, files: new Set() };
 
 const libraryDiskStore = createJsonStore({
   file: LIBRARY_FILE,
@@ -110,8 +106,6 @@ function rememberImport(track) {
   if (!track || !track.id) return;
   const prev = library[String(track.id)] || {};
   library[String(track.id)] = { ...prev, ...track, playCount: prev.playCount || 0, lastPlayed: prev.lastPlayed || 0 };
-  // 匯入流程走到這裡代表音檔已完成落地；不必等下一次目錄掃描才讓 UI 顯示可播放。
-  noteAudioSnapshot(track.filename, true);
   scheduleSave();
 }
 
@@ -129,35 +123,6 @@ function updateMeta(id, partial) {
 function getEntry(id) {
   if (!id) return null;
   return library[String(id)] || null;
-}
-
-/**
- * 回傳可重用的檔名存在查詢。這是播放清單同步專用的批次快照；播放
- * 前的安全檢查仍會走下方 audioExists() 的即時檔案檢查，避免快取造成誤播。
- */
-function getAudioExistsLookup({ now = Date.now, readDirectory = fs.readdirSync } = {}) {
-  const checkedAt = now();
-  if (checkedAt - _audioSnapshot.checkedAt >= AUDIO_SNAPSHOT_TTL_MS) {
-    let files = new Set();
-    try {
-      files = new Set(readDirectory(DOWNLOADS_DIR));
-    } catch (_) {
-      // downloads 尚未建立或暫時無法讀取時，安全地視為沒有可播放的本機音檔。
-    }
-    _audioSnapshot = { checkedAt, files };
-  }
-  const files = _audioSnapshot.files;
-  return (filename) => typeof filename === 'string' && filename.length > 0 && files.has(filename);
-}
-
-function noteAudioSnapshot(filename, available) {
-  if (!_audioSnapshot.checkedAt || !filename || typeof filename !== 'string') return;
-  if (available) _audioSnapshot.files.add(filename);
-  else _audioSnapshot.files.delete(filename);
-}
-
-function resetAudioStatusCache() {
-  _audioSnapshot = { checkedAt: 0, files: new Set() };
 }
 
 /** 判斷某本機音檔是否仍存在於 downloads/。 */
@@ -202,7 +167,7 @@ function cleanupAudio(keepFilenames = new Set()) {
       const fp = path.join(DOWNLOADS_DIR, name);
       try {
         const st = fs.statSync(fp);
-        if (st.isFile()) { freedBytes += st.size; fs.unlinkSync(fp); noteAudioSnapshot(name, false); deleted++; }
+        if (st.isFile()) { freedBytes += st.size; fs.unlinkSync(fp); deleted++; }
       } catch (e) { /* 略過單檔錯誤 */ }
     }
     log.info(`音檔清理: 刪除 ${deleted} 個檔、釋放 ${(freedBytes / 1048576).toFixed(1)}MB`);
@@ -215,4 +180,4 @@ function cleanupAudio(keepFilenames = new Set()) {
 process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
 function setErrorReporter(fn) { _errorReporter = typeof fn === 'function' ? fn : null; }
-module.exports = { recordPlay, rememberImport, updateMeta, getEntry, audioExists, audioStatus, getAudioExistsLookup, resetAudioStatusCache, getLibrary, remove, clear, cleanupAudio, setErrorReporter, saveNow };
+module.exports = { recordPlay, rememberImport, updateMeta, getEntry, audioExists, audioStatus, getLibrary, remove, clear, cleanupAudio, setErrorReporter, saveNow };

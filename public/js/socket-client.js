@@ -22,20 +22,17 @@ const SocketClient = (() => {
    */
   function init(clientType) {
     _clientType = clientType;
-    const start = () => {
     // display/setlist（OBS 疊加層）伺服器端永遠豁免 PIN，這裡帶不帶 pin 都無所謂；
     // controller/remote（面板/手機遙控）若伺服器設了 PIN，握手驗證失敗會收到
     // connect_error('PIN_REQUIRED')，交給 pin-auth.js 跳出輸入框後呼叫 reauth() 重試。
     const pin = (typeof PinAuth !== 'undefined') ? PinAuth.get() : '';
-    const controllerToken = (typeof AccessAuth !== 'undefined') ? AccessAuth.getControllerToken() : '';
-    const sourceToken = (typeof AccessAuth !== 'undefined') ? AccessAuth.sourceToken() : '';
     socket = io({
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      auth: { clientType, pin, controllerToken, sourceToken },
+      auth: { clientType, pin },
     });
 
     socket.on('connect', () => {
@@ -55,7 +52,6 @@ const SocketClient = (() => {
     socket.on('connect_error', (err) => {
       console.error('[Socket] 連線錯誤:', err.message);
       if (err.message === 'PIN_REQUIRED') emit('auth:required');
-      if (err.message === 'CONTROLLER_PAIRING_REQUIRED' || err.message === 'SOURCE_TOKEN_REQUIRED') emit('auth:access-required', err.message);
     });
 
     // 角色、PIN 與唯讀權限都由伺服器端執行；前端不是安全邊界。
@@ -94,9 +90,6 @@ const SocketClient = (() => {
     // 先前漏接此行 → OBS 只能靠 state:sync 拿設定，連帶每次都重渲染當前行＝拖滑桿卡頓。
 
     // Phase 7: 變調與變速
-    };
-    if (typeof AccessAuth !== 'undefined' && typeof AccessAuth.ready === 'function') AccessAuth.ready().finally(start);
-    else start();
   }
 
   /**
@@ -184,12 +177,7 @@ const SocketClient = (() => {
   function reauth(pin) {
     if (typeof PinAuth !== 'undefined') PinAuth.set(pin);
     if (!socket) return;
-    socket.auth = {
-      clientType: _clientType,
-      pin,
-      controllerToken: (typeof AccessAuth !== 'undefined') ? AccessAuth.getControllerToken() : '',
-      sourceToken: (typeof AccessAuth !== 'undefined') ? AccessAuth.sourceToken() : '',
-    };
+    socket.auth = { clientType: _clientType, pin };
     socket.disconnect();
     socket.connect();
   }
