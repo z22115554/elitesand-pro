@@ -1,16 +1,28 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const MEDIA_FOLDER_NAME = 'Elitesand Pro Media';
 const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
-const SAFE_MEDIA_FOLDER_NAME = 'downloads';
+const RECOVERY_REFERENCE_NAME = 'media-preserve.ini';
 
 function samePath(left, right) {
   const a = path.resolve(left);
   const b = path.resolve(right);
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+function readIniPath(file, fsImpl = fs) {
+  try {
+    const raw = fsImpl.readFileSync(file, 'utf8');
+    const match = raw.match(/^path=(.+)$/mi);
+    const value = match?.[1]?.trim();
+    return value && path.isAbsolute(value) ? path.resolve(value) : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 function readConfiguredMediaDir(userDataPath, fsImpl = fs) {
@@ -23,6 +35,10 @@ function readConfiguredMediaDir(userDataPath, fsImpl = fs) {
   } catch (_) {
     return null;
   }
+}
+
+function readRecoveryMediaDir(userDataPath, fsImpl = fs) {
+  return readIniPath(path.join(path.resolve(userDataPath), RECOVERY_REFERENCE_NAME), fsImpl);
 }
 
 function writeFileAtomic(file, contents, fsImpl = fs) {
@@ -57,12 +73,53 @@ function writeReferences(userDataPath, mediaDir, fsImpl = fs) {
   writeFileAtomic(path.join(root, 'media-storage.ini'), `[media]\npath=${path.resolve(mediaDir)}\n`, fsImpl);
 }
 
-function getSafeMediaDir(userDataPath) {
-  return path.join(path.resolve(userDataPath), SAFE_MEDIA_FOLDER_NAME);
+function getInstallRoot(executablePath) {
+  return path.dirname(path.resolve(executablePath));
+}
+
+function getPreferredSiblingMediaDir(executablePath) {
+  return path.join(path.dirname(getInstallRoot(executablePath)), MEDIA_FOLDER_NAME);
 }
 
 function getVulnerableInstallMediaDir(executablePath) {
-  return path.join(path.dirname(path.resolve(executablePath)), MEDIA_FOLDER_NAME);
+  return path.join(getInstallRoot(executablePath), MEDIA_FOLDER_NAME);
+}
+
+function hasMarker(directory, fsImpl = fs) {
+  return fsImpl.existsSync(path.join(directory, MEDIA_MARKER_NAME));
+}
+
+function numberedSiblingCandidate(preferred, index) {
+  return index === 1 ? preferred : `${preferred} (${index})`;
+}
+
+function chooseDefaultSiblingMediaDir(executablePath, fsImpl = fs) {
+  const preferred = getPreferredSiblingMediaDir(executablePath);
+  // If an earlier install already created a managed sibling media folder, reuse
+  // it rather than hiding preserved songs behind a fresh empty directory.
+  if (hasMarker(preferred, fsImpl)) return preferred;
+  if (!fsImpl.existsSync(preferred) || visibleEntries(preferred, fsImpl).length === 0) return preferred;
+
+  // Never adopt a non-empty unmarked directory. Pick a collision-free sibling
+  // on the same parent volume instead of overwriting unknown user files.
+  for (let index = 2; index <= 99; index++) {
+    const candidate = numberedSiblingCandidate(preferred, index);
+    if (!fsImpl.existsSync(candidate) || visibleEntries(candidate, fsImpl).length === 0) return candidate;
+  }
+  throw new Error('No safe sibling media directory is available.');
+}
+
+function chooseEmptyMigrationDestination(executablePath, fsImpl = fs) {
+  const preferred = getPreferredSiblingMediaDir(executablePath);
+  for (let index = 1; index <= 99; index++) {
+    const candidate = numberedSiblingCandidate(preferred, index);
+    if (!fsImpl.existsSync(candidate) || visibleEntries(candidate, fsImpl).length === 0) return candidate;
+  }
+  throw new Error('No empty sibling media directory is available for recovery.');
+}
+
+function sha256File(file, fsImpl = fs) {
+  return crypto.createHash('sha256').update(fsImpl.readFileSync(file)).digest('hex');
 }
 
 function verifyCopiedEntry(source, destination, fsImpl = fs) {
@@ -75,13 +132,14 @@ function verifyCopiedEntry(source, destination, fsImpl = fs) {
     }
     return true;
   }
-  return destinationStat.isFile() && sourceStat.size === destinationStat.size;
+  return destinationStat.isFile()
+    && sourceStat.size === destinationStat.size
+    && sha256File(source, fsImpl) === sha256File(destination, fsImpl);
 }
 
 function copyVulnerableMedia(sourceDir, destinationDir, fsImpl = fs) {
   const entries = visibleEntries(sourceDir, fsImpl);
-  const destinationEntries = visibleEntries(destinationDir, fsImpl);
-  if (destinationEntries.length > 0) {
+  if (visibleEntries(destinationDir, fsImpl).length > 0) {
     return { copied: false, reason: 'destination-not-empty', entries: 0 };
   }
 
@@ -101,6 +159,10 @@ function copyVulnerableMedia(sourceDir, destinationDir, fsImpl = fs) {
   return { copied: true, reason: null, entries: entries.length };
 }
 
+function isUsableRecoveryDir(directory, fsImpl = fs) {
+  return !!directory && fsImpl.existsSync(directory) && hasMarker(directory, fsImpl);
+}
+
 function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs } = {}) {
   if (typeof userDataPath !== 'string' || !path.isAbsolute(userDataPath)) {
     throw new TypeError('preparePackagedMediaStorage requires an absolute userDataPath');
@@ -109,50 +171,50 @@ function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs
     throw new TypeError('preparePackagedMediaStorage requires an absolute executablePath');
   }
 
-  const safeMediaDir = getSafeMediaDir(userDataPath);
   const vulnerableMediaDir = getVulnerableInstallMediaDir(executablePath);
   const configuredMediaDir = readConfiguredMediaDir(userDataPath, fsImpl);
+  const recoveryMediaDir = readRecoveryMediaDir(userDataPath, fsImpl);
 
-  // New installs and legacy installs without an explicit media setting both use
-  // userData/downloads. That directory survives a normal per-user uninstall and
-  // is never replaced by electron-builder when the application itself updates.
+  // Fresh installs keep large, unbounded media on the same parent location as
+  // the chosen application directory, but outside the directory that an
+  // installer/update is allowed to replace. Example:
+  //   D:\\Apps\\Elitesand Pro            (program)
+  //   D:\\Apps\\Elitesand Pro Media      (user media)
   if (!configuredMediaDir) {
+    const safeMediaDir = chooseDefaultSiblingMediaDir(executablePath, fsImpl);
     ensureMarker(safeMediaDir, fsImpl);
     writeReferences(userDataPath, safeMediaDir, fsImpl);
-    return { mediaDir: safeMediaDir, action: 'initialized-safe-default' };
+    return { mediaDir: safeMediaDir, action: 'initialized-sibling-default' };
   }
 
-  // Custom storage locations, including migrated external folders, are user
-  // choices and must never be silently redirected.
+  // User-selected custom storage is authoritative. Never silently redirect it,
+  // even if it is unavailable right now.
   if (!samePath(configuredMediaDir, vulnerableMediaDir)) {
     return { mediaDir: configuredMediaDir, action: 'kept-configured' };
   }
 
-  // v0.9.9.7 could place media inside the install directory. If that directory
-  // still exists, copy (never move/delete) it into the persistent userData area,
-  // verify the copy, then switch the configuration. Leaving the source intact
-  // keeps rollback/cancel scenarios recoverable.
+  // v0.9.9.7 could place media inside the install directory. If the source is
+  // still present (for example an incremental update), copy it to an empty
+  // sibling directory, verify every file by size + SHA-256, update references,
+  // and deliberately leave the original source untouched.
   if (fsImpl.existsSync(configuredMediaDir)) {
-    const result = copyVulnerableMedia(configuredMediaDir, safeMediaDir, fsImpl);
-    if (result.copied) {
-      writeReferences(userDataPath, safeMediaDir, fsImpl);
-      return { mediaDir: safeMediaDir, action: 'copied-from-install-dir', copiedEntries: result.entries };
+    const destination = chooseEmptyMigrationDestination(executablePath, fsImpl);
+    const result = copyVulnerableMedia(configuredMediaDir, destination, fsImpl);
+    if (!result.copied) {
+      return { mediaDir: configuredMediaDir, action: 'vulnerable-copy-deferred', reason: result.reason };
     }
-    return {
-      mediaDir: configuredMediaDir,
-      action: 'vulnerable-copy-deferred',
-      reason: result.reason,
-    };
+    writeReferences(userDataPath, destination, fsImpl);
+    return { mediaDir: destination, action: 'copied-from-install-dir', copiedEntries: result.entries };
   }
 
-  // The fixed installer performs a pre-uninstall backup of the vulnerable
-  // install-root folder. After the old uninstaller removes the source, recover
-  // the stale JSON reference only when the persistent destination is clearly
-  // app-managed. Never reinterpret an arbitrary missing custom path.
-  const safeMarker = path.join(safeMediaDir, MEDIA_MARKER_NAME);
-  if (fsImpl.existsSync(safeMarker)) {
-    writeReferences(userDataPath, safeMediaDir, fsImpl);
-    return { mediaDir: safeMediaDir, action: 'recovered-installer-backup' };
+  // A full Installer upgrade may have had to run the old uninstaller before the
+  // new Electron process starts. The fixed installer records exactly where it
+  // copied the vulnerable media. Accept only an existing app-marked directory;
+  // otherwise keep the stale reference and fail closed rather than inventing a
+  // new empty library that would make preserved songs appear lost.
+  if (isUsableRecoveryDir(recoveryMediaDir, fsImpl)) {
+    writeReferences(userDataPath, recoveryMediaDir, fsImpl);
+    return { mediaDir: recoveryMediaDir, action: 'recovered-installer-backup' };
   }
 
   return { mediaDir: configuredMediaDir, action: 'vulnerable-source-missing' };
@@ -161,11 +223,14 @@ function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs
 module.exports = {
   MEDIA_FOLDER_NAME,
   MEDIA_MARKER_NAME,
-  SAFE_MEDIA_FOLDER_NAME,
+  RECOVERY_REFERENCE_NAME,
   samePath,
   readConfiguredMediaDir,
-  getSafeMediaDir,
+  readRecoveryMediaDir,
+  getPreferredSiblingMediaDir,
   getVulnerableInstallMediaDir,
+  chooseDefaultSiblingMediaDir,
+  chooseEmptyMigrationDestination,
   copyVulnerableMedia,
   preparePackagedMediaStorage,
 };
