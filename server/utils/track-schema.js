@@ -46,17 +46,6 @@ function sanitizeWord(word) {
   };
 }
 
-function sanitizeFurigana(value) {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 1000).map((segment) => {
-    if (!segment || typeof segment !== 'object') return null;
-    const out = { text: text(segment.text, 1000) };
-    const reading = text(segment.reading, 1000);
-    if (reading) out.reading = reading;
-    return out.text ? out : null;
-  }).filter(Boolean);
-}
-
 function sanitizeParsedLyrics(value) {
   if (!Array.isArray(value)) return null;
   return value.slice(0, MAX_LYRIC_LINES).map((line) => {
@@ -69,8 +58,6 @@ function sanitizeParsedLyrics(value) {
       phonetic: text(line.phonetic, 20000),
       xieyin: text(line.xieyin, 20000),
     };
-    const furigana = sanitizeFurigana(line.furigana);
-    if (furigana.length > 0) out.furigana = furigana;
     if (Array.isArray(line.words)) {
       out.words = line.words.slice(0, MAX_WORDS_PER_LINE).map(sanitizeWord).filter(Boolean);
     }
@@ -184,7 +171,6 @@ module.exports = {
   sanitizeTrack,
   sanitizePlaylist,
   sanitizeParsedLyrics,
-  sanitizeFurigana,
   sanitizeManualLyrics,
   safeUrl,
   sanitizeJsonObject,

@@ -6,8 +6,9 @@
  */
 
 const { createLogger } = require('../../utils/logger');
+const { emitToAccessRooms } = require('../../utils/socket-broadcast');
 const libraryStore = require('../../services/library-store');
-const { addRomanization, needsRomanization, needsFurigana } = require('../../services/romanizer');
+const { addRomanization, needsRomanization } = require('../../services/romanizer');
 const { sanitizeTrack, sanitizeJsonObject } = require('../../utils/track-schema');
 
 const log = createLogger('Socket');
@@ -21,7 +22,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, trackPitch, trackSpeed, manualLyricsCache,
     persistState, emitSetlist, recordSessionSong, broadcastState, getEffectiveLyrics,
-    markTrackPlayed,
+    markTrackPlayed, redactTrackForReadOnly = (track) => track,
   } = ctx;
 
   socket.on('play:track', (track) => {
@@ -104,7 +105,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     // 媒體庫：記錄一次播放 + 累加播放次數（連同歌詞/檔名/變調一起存）
     try { libraryStore.recordPlay(track); } catch (e) { /* 不影響播放 */ }
 
-    io.emit('play:track', {
+    const playTrackPayload = {
       ...track,
       offset,
       pitchShift: savedPitch,
@@ -117,7 +118,8 @@ function registerPlaybackHandlers(io, socket, ctx) {
       // 兩邊都是 clientType='controller'，若面板也對其他面板的廣播做出反應，
       // 會形成互相驅動對方換歌→再廣播→對方又反應的無窮迴圈。
       _originClientType: socket.clientType,
-    });
+    };
+    emitToAccessRooms(io, 'play:track', playTrackPayload, redactTrackForReadOnly(playTrackPayload));
     // 廣播該首記憶的變調/變速，讓面板與顯示端套用（每首切換時自動還原）
     io.emit('pitch:update', savedPitch);
     io.emit('speed:update', savedSpeed);
@@ -137,33 +139,30 @@ function registerPlaybackHandlers(io, socket, ctx) {
     // 確保拼音/諧音一定會出現（逐字 KRC 也以整句羅馬化）。
     try {
       const pl = track.parsedLyrics;
-      if (Array.isArray(pl) && pl.length > 0 && needsRomanization(pl)) {
-        const missingRomanization = !pl.some(l => l && (l.phonetic || l.xieyin));
-        if (missingRomanization || needsFurigana(pl)) {
-          addRomanization(pl).then((romanized) => {
-            for (let i = 0; i < pl.length; i++) {
-              if (!romanized[i]) continue;
-              pl[i].phonetic = romanized[i].phonetic;
-              pl[i].xieyin = romanized[i].xieyin;
-              pl[i].furigana = romanized[i].furigana;
-              if (pl[i].words && romanized[i].words) {
-                for (let j = 0; j < pl[i].words.length && j < romanized[i].words.length; j++) {
-                  if (romanized[i].words[j]) {
-                    pl[i].words[j].phonetic = romanized[i].words[j].phonetic;
-                    pl[i].words[j].xieyin = romanized[i].words[j].xieyin;
-                  }
+      if (Array.isArray(pl) && pl.length > 0 && needsRomanization(pl) &&
+          !pl.some(l => l && (l.phonetic || l.xieyin))) {
+        addRomanization(pl).then((romanized) => {
+          for (let i = 0; i < pl.length; i++) {
+            if (!romanized[i]) continue;
+            pl[i].phonetic = romanized[i].phonetic;
+            pl[i].xieyin = romanized[i].xieyin;
+            if (pl[i].words && romanized[i].words) {
+              for (let j = 0; j < pl[i].words.length && j < romanized[i].words.length; j++) {
+                if (romanized[i].words[j]) {
+                  pl[i].words[j].phonetic = romanized[i].words[j].phonetic;
+                  pl[i].words[j].xieyin = romanized[i].words[j].xieyin;
                 }
               }
             }
-            // 只在仍是當前歌時推播，避免快速切歌時把舊歌詞蓋上去
-            if (playState.currentTrack && playState.currentTrack.id === trackId) {
-              io.emit('lyrics:romanized', { parsedLyrics: pl, type: track.lyricsType || 'lrc', query: track.title });
-              log.info(`播放時補羅馬化完成並推播: ${track.title}`);
-            }
-            // 把已羅馬化的歌詞存回媒體庫，之後拉回來即時還原、不必再羅馬化
-            try { libraryStore.updateMeta(trackId, { lyrics: track.lyrics, lyricsType: track.lyricsType || 'lrc', parsedLyrics: pl }); } catch (e) { /* 靜默 */ }
-          }).catch((e) => log.warn(`播放時補羅馬化失敗: ${e.message}`));
-        }
+          }
+          // 只在仍是當前歌時推播，避免快速切歌時把舊歌詞蓋上去
+          if (playState.currentTrack && playState.currentTrack.id === trackId) {
+            io.emit('lyrics:romanized', { parsedLyrics: pl, type: track.lyricsType || 'lrc', query: track.title });
+            log.info(`播放時補羅馬化完成並推播: ${track.title}`);
+          }
+          // 把已羅馬化的歌詞存回媒體庫，之後拉回來即時還原、不必再羅馬化
+          try { libraryStore.updateMeta(trackId, { lyrics: track.lyrics, lyricsType: track.lyricsType || 'lrc', parsedLyrics: pl }); } catch (e) { /* 靜默 */ }
+        }).catch((e) => log.warn(`播放時補羅馬化失敗: ${e.message}`));
       }
     } catch (e) { /* 不影響播放 */ }
   });
@@ -272,7 +271,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     log.info(`風格切換: ${style}`);
     io.emit('style:change', style);
     io.emit('style:override', playState.styleOverrides);
-    broadcastState();
+    // style:* 已是顯示端的即時契約；不要在滑桿／切換時再送整份 state:sync。
     persistState();
   });
 
@@ -281,7 +280,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     const clean = sanitizeJsonObject(overrides);
     playState.styleOverrides = (clean && typeof clean === 'object' && !Array.isArray(clean)) ? clean : {};
     io.emit('style:override', playState.styleOverrides);
-    broadcastState();
     persistState();
   });
 
@@ -301,7 +299,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.romanizationMode = mode;
     log.info(`顯示模式: ${mode}`);
     io.emit('romanization:mode', mode);
-    broadcastState();
     persistState();
   });
 
@@ -363,7 +360,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
       try { libraryStore.updateMeta(id, { pitchShift: playState.pitchShift }); } catch (e) { /* 靜默 */ }
     }
     io.emit('pitch:update', playState.pitchShift);
-    broadcastState();
     persistState();
   });
 
@@ -387,7 +383,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
       try { libraryStore.updateMeta(id, { playbackRate: playState.playbackRate }); } catch (e) { /* 靜默 */ }
     }
     io.emit('speed:update', playState.playbackRate);
-    broadcastState();
     persistState();
   });
 
@@ -396,7 +391,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.metronomeEnabled = typeof enabled === 'boolean' ? enabled : !playState.metronomeEnabled;
     log.info(`前奏倒數: ${playState.metronomeEnabled ? '啟用' : '停用'}`);
     io.emit('metronome:update', playState.metronomeEnabled);
-    broadcastState();
     persistState();
   });
 }

@@ -3,6 +3,7 @@
  */
 
 const { createLogger } = require('../../utils/logger');
+const { emitToAccessRooms } = require('../../utils/socket-broadcast');
 const playlistExportStore = require('../../services/playlist-export-store');
 const libraryStore = require('../../services/library-store');
 const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds, ensureEntryIds } = require('../../utils/track-schema');
@@ -56,11 +57,11 @@ function preserveLyricsFromExisting(cleanPlaylist, previousPlaylist) {
 function registerPlaylistHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, manualLyricsCache,
-    persistState, emitSetlist, broadcastState, getPublicPlaylist, reconcilePlaybackProgress,
+    persistState, emitSetlist, broadcastState, getPublicPlaylist, getReadOnlyPlaylist = () => [], reconcilePlaybackProgress,
   } = ctx;
 
   function emitPlaylistUpdate() {
-    io.emit('playlist:update', getPublicPlaylist());
+    emitToAccessRooms(io, 'playlist:update', getPublicPlaylist(), getReadOnlyPlaylist());
   }
 
   socket.on('playlist:update', (playlist, ack) => {
@@ -258,6 +259,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
     if (data.romanizationMode) playState.romanizationMode = data.romanizationMode;
 
     emitPlaylistUpdate();
+    emitSetlist();
     broadcastState();
     persistState();
     log.info(`播放清單匯入完成: ${playState.playlist.length} 首`);

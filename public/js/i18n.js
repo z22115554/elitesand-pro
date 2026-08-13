@@ -142,8 +142,6 @@
     'prompter.showRomajiHint': ['歌詞下方加一行拼音，沒有資料的行不會顯示', 'Adds a romanization line under each lyric; lines without data are skipped.', '歌詞の下にローマ字を1行追加します。データがない行は表示されません。', '가사 아래에 로마자 한 줄을 추가합니다. 데이터가 없는 줄은 표시되지 않습니다.', '歌词下方加一行拼音，没有数据的行不会显示'],
     'prompter.showXieyin': ['諧音', 'Phonetic guide', '発音ガイド', '발음 가이드', '谐音'],
     'prompter.showXieyinHint': ['歌詞下方加一行中文諧音，沒有資料的行不會顯示', 'Adds a Chinese phonetic-guide line under each lyric; lines without data are skipped.', '歌詞の下に中国語の発音ガイドを1行追加します。データがない行は表示されません。', '가사 아래에 중국어 발음 가이드 한 줄을 추가합니다. 데이터가 없는 줄은 표시되지 않습니다.', '歌词下方加一行中文谐音，没有数据的行不会显示'],
-    'prompter.showFurigana': ['振假名', 'Furigana', 'ふりがな', '후리가나', '振假名'],
-    'prompter.showFuriganaHint': ['在日文漢字上方顯示平假名讀音，沒有資料的行不會顯示', 'Shows hiragana readings above Japanese kanji; lines without data are skipped.', '日本語の漢字の上にひらがなの読みを表示します。データがない行は表示されません。', '일본어 한자 위에 히라가나 읽기를 표시합니다. 데이터가 없는 줄은 표시되지 않습니다.', '在日文汉字上方显示平假名读音，没有数据的行不会显示'],
     'prompter.resetAppearance': ['重置為預設', 'Reset to defaults', 'デフォルトに戻す', '기본값으로 재설정', '重置为默认值'],
     'common.close': ['關閉', 'Close', '閉じる', '닫기', '关闭'],
     'common.cancel': ['取消', 'Cancel', 'キャンセル', '취소', '取消'],

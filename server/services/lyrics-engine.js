@@ -457,7 +457,6 @@ class LyricsEngine {
         if (romanized[i]) {
           parsedLyrics[i].phonetic = romanized[i].phonetic;
           parsedLyrics[i].xieyin = romanized[i].xieyin;   // 諧音：之前漏複製，導致諧音永遠不顯示
-          parsedLyrics[i].furigana = romanized[i].furigana;
           if (parsedLyrics[i].words && romanized[i].words) {
             for (let j = 0; j < parsedLyrics[i].words.length; j++) {
               if (romanized[i].words[j]) {
