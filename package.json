@@ -16,7 +16,8 @@
     "shell": "electron electron/main.js",
     "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-portable.ps1",
     "package:update": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-update.ps1",
-    "package:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1"
+    "package:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1",
+    "test:visual": "playwright test --config=playwright.config.js"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
@@ -36,7 +37,8 @@
   "devDependencies": {
     "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "@playwright/test": "^1.62.1"
   },
   "engines": {
     "node": ">=18.0.0"
