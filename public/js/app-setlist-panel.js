@@ -960,8 +960,7 @@
       slStores[t] = st;
       if (t === setlistTarget()) adoptStyleUI(st);
     });
-    SocketClient.on('state:sync', (state) => {
-      const sess = state && state.session;
+    function applySetlistControls(sess) {
       if (!sess) return;
       if (sess.styles && typeof sess.styles === 'object') {
         SETLIST_LAYOUTS.forEach((layout) => { if (sess.styles[layout]) slStores[layout] = sess.styles[layout]; });
@@ -974,7 +973,11 @@
       if (sess.layout && setlistLayoutSel) { setlistLayoutSel.value = sess.layout; syncSetlistControlsForLayout(); syncSetlistLayoutPicker(); refreshSetlistUrl(); workspace?.sync(); }
       const cur = slStores[setlistTarget()];
       if (cur) adoptStyleUI(cur);
-    });
+    }
+
+    // 控制端初始外觀改走 setlist:update，避免 state:sync 帶著所有模板快照。
+    SocketClient.on('setlist:update', applySetlistControls);
+    SocketClient.on('state:sync', (state) => applySetlistControls(state && state.session));
   })();
 
   // Session 計時器：每秒只刷新狀態列文字（不重建清單），直播時長即時跳動

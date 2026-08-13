@@ -6473,6 +6473,21 @@ test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷
   ok(metrics.lastSavingsBytes > 8 * 1024 * 1024, '應量測到超過 8MB 的節省: ');
 });
 
+test('state:sync excludes setlist style snapshots while setlist:update retains them', () => {
+  const { createAppState, SETLIST_LAYOUTS } = require('../server/state/app-state');
+  const state = createAppState({ emit() {} });
+  const sync = state.getPublicState();
+  const setlist = state.setlistPayload();
+  ok(!Object.prototype.hasOwnProperty.call(sync.session, 'styles'), 'state:sync 不可攜帶完整 setlist styles: ');
+  ok(!Object.prototype.hasOwnProperty.call(sync.session, 'style') && !Object.prototype.hasOwnProperty.call(sync.session, 'sceneStyles'),
+    'state:sync 不可攜帶 legacy setlist style 視圖: ');
+  eq(Object.keys(setlist.styles).length, SETLIST_LAYOUTS.length, 'setlist:update 初始載入必須保留各模板外觀: ');
+  const socketSource = fs.readFileSync(path.join(__dirname, '../server/routes/socket-handler.js'), 'utf8');
+  const panelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  ok(socketSource.includes("if (type === 'controller') socket.emit('setlist:update', ctx.setlistPayload())"));
+  ok(panelSource.includes("SocketClient.on('setlist:update', applySetlistControls)"));
+});
+
 test('R2-2 500-song playlist stays compact across all four real Socket roles', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-sync-matrix-'));
   try {

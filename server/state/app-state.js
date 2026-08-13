@@ -361,7 +361,9 @@ function createAppState(io) {
    * 組出 setlist 疊加頁 / 面板需要的完整資料：已唱(songs) + 現在(current) + 未唱(upcoming)。
    * upcoming＝播放清單中「目前歌曲之後」尚未輪到的歌（找不到目前歌時就是整份清單）。
    */
-  function setlistPayload() {
+  // styles 僅屬於 setlist 顯示與控制面板；絕不能跟著每次 state:sync
+  // 廣播給所有角色。正式 setlist:update 仍保留完整資料供初始載入。
+  function setlistPayload({ includeStyles = true } = {}) {
     const pl = Array.isArray(playState.playlist) ? playState.playlist : [];
     const cur = playState.currentTrack;
     const currentTrackStarted = !!playState.currentTrackStarted;
@@ -397,7 +399,7 @@ function createAppState(io) {
       }
       upcoming = rest.map((t) => ({ title: t.title || '', artist: t.artist || '' }));
     }
-    return {
+    const payload = {
       active: session.active,
       startedAt: session.startedAt,
       source: session.source,
@@ -406,6 +408,10 @@ function createAppState(io) {
       upcoming,
       theme: playState.setlistTheme || 'glass',
       layout: playState.setlistLayout || 'classic',
+    };
+    if (!includeStyles) return payload;
+    return {
+      ...payload,
       styles: Object.fromEntries(SETLIST_LAYOUTS.map((layout) => [layout, { ...playState.setlistTemplateStyles[layout] }])),
       // 舊版 OBS 頁面仍讀 style / sceneStyles；新版以 styles 為權威。
       style: { ...effSetlistStore(playState.setlistLayout) },
@@ -551,7 +557,7 @@ function createAppState(io) {
       // 附帶伺服器時間戳，讓 OBS 重連時計算補償
       serverTimestamp: playState.lastStateUpdateTimestamp,
       // Setlist（含現在/未唱，初次同步即完整）
-      session: setlistPayload(),
+      session: setlistPayload({ includeStyles: false }),
     };
   }
 
