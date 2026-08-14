@@ -33,6 +33,7 @@ const {
 const config = require('../utils/load-config');
 const { APP_VERSION, appUserAgent, githubJsonHeaders } = require('../utils/app-version');
 const { logsDir } = require('../utils/app-paths');
+const { verifyUpdateManifestSignature } = require('./update-signature');
 
 const log = createLogger('AppUpdaterV2');
 const UPDATE_SCHEMA_VERSION = 2;
@@ -200,6 +201,12 @@ function inspectUpdateZip(buffer, options = {}) {
   if (manifest.schemaVersion !== UPDATE_SCHEMA_VERSION || manifest.mode !== UPDATE_MODE || !Array.isArray(manifest.files)) {
     return { ok: false, needsFull: true, reason: '此更新包屬於舊版增量格式，請改用完整 Windows Installer。' };
   }
+
+  const signatureCheck = verifyUpdateManifestSignature(manifest, { publicKeyHex: options.publicKeyHex });
+  if (!signatureCheck.ok) {
+    throw new Error(`更新 manifest 官方簽章驗證失敗：${signatureCheck.reason}`);
+  }
+
   if (!manifest.fromVersion || !manifest.version) throw new Error('更新 manifest 缺少版本資訊');
   if (options.expectedVersion && String(manifest.version) !== String(options.expectedVersion)) {
     throw new Error('更新包版本與 GitHub Release 不一致');
