@@ -91,6 +91,13 @@ function makeV2Zip({
 
 console.log('\n[app-updater-v2]');
 
+test('release signing helper accepts the pre-parsed PrivateKeyObject used by sign-manifest.js', () => {
+  const privateKey = crypto.createPrivateKey(TEST_PRIVATE_KEY_PEM);
+  const signed = signUpdateManifest({ schemaVersion: 2, mode: 'electron-asar-v1', marker: 'key-object-path' }, privateKey);
+  assert.equal(signed.signatureAlgorithm, 'Ed25519');
+  assert.match(signed.signature, /^[a-f0-9]{128}$/);
+});
+
 test('schema-v2 accepts matched EXE + ASAR payload only when the manifest has a valid Ed25519 signature', () => {
   const result = inspectTestZip(makeV2Zip(), { currentVersion: pkg.version, expectedVersion: nextPatch(pkg.version) });
   assert.equal(result.ok, true);
