@@ -21,6 +21,14 @@ function canonicalManifestBytes(manifest) {
   return Buffer.from(canonicalize(rest), 'utf8');
 }
 
+function normalizePrivateKey(key) {
+  if (key instanceof crypto.KeyObject) {
+    if (key.type !== 'private') throw new Error('update signing key must be a private key');
+    return key;
+  }
+  return crypto.createPrivateKey(key);
+}
+
 function publicKeyHexFromKey(key) {
   return crypto.createPublicKey(key).export({ format: 'der', type: 'spki' }).toString('hex');
 }
@@ -48,7 +56,7 @@ function signUpdateManifest(manifest, privateKey) {
     signatureKeyId: UPDATE_SIGNATURE_KEY_ID,
   };
   delete unsigned.signature;
-  const key = crypto.createPrivateKey(privateKey);
+  const key = normalizePrivateKey(privateKey);
   const signature = crypto.sign(null, canonicalManifestBytes(unsigned), key).toString('hex');
   return { ...unsigned, signature };
 }
@@ -83,6 +91,7 @@ function verifyUpdateManifestSignature(manifest, { publicKeyHex = UPDATE_PUBLIC_
 module.exports = {
   canonicalize,
   canonicalManifestBytes,
+  normalizePrivateKey,
   publicKeyHexFromKey,
   loadPublicKey,
   signUpdateManifest,
