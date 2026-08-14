@@ -57,6 +57,25 @@
         "showFullDownloadOnly": true
       },
       "enabled": true
+    },
+    {
+      "id": "installer-only-update-v0996-security",
+      "level": "critical",
+      "title": "重要：安全性更新，請改用完整 Windows Installer",
+      "message": "此版本修正更新簽章金鑰的安全問題。程式內增量更新暫不支援此次升級，請從 GitHub Releases 下載 v0.9.9.7 Windows Installer，完整關閉 Elitesand Pro 後執行安裝程式。安裝前請先備份重要資料。",
+      "minVersion": "0.9.9.6",
+      "maxVersion": "0.9.9.6",
+      "publishedAt": "2026-08-15T02:05:00+08:00",
+      "expiresAt": "2027-12-31T23:59:59+08:00",
+      "dismissible": false,
+      "showOnce": false,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.9.7",
+      "buttonText": "下載 v0.9.9.7 Installer",
+      "actions": {
+        "disableIncrementalUpdate": true,
+        "showFullDownloadOnly": true
+      },
+      "enabled": true
     }
   ]
 }
