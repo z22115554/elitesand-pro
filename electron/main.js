@@ -6,6 +6,17 @@ const { app } = electron;
 const { inspectUpdateLock } = require('./update-in-progress-lock');
 const { preparePackagedMediaStorage } = require('./packaged-media-storage');
 
+// Electron resolves and caches the 'userData' special path from app.name the
+// first time anything calls app.getPath('userData')/app.getPath('exe') touches
+// path setup; a later app.setName() (shell.js start()) cannot change it
+// afterwards. Without this, the media-preservation getPath('userData') call
+// below runs first, locking userData to the package.json "name" default
+// ("elitesand-pro") instead of the intended "Elitesand Pro" — silently
+// pointing the whole app at an empty profile on every launch.
+const isSpoutExperiment = process.env.ELITESAND_SPOUT_EXPERIMENT === '1';
+app.setName(isSpoutExperiment ? 'Elitesand Pro Spout Lab' : 'Elitesand Pro');
+app.setAppUserModelId?.(isSpoutExperiment ? 'com.elitesand.pro.spout-lab' : 'com.elitesand.pro');
+
 // CP04's offscreen test window has an explicitly requested pixel canvas.
 // On a high-DPI desktop Electron otherwise reports the shared texture in DIPs
 // (for example 1280x720 for a requested 1920x1080), which is unsafe to pass
