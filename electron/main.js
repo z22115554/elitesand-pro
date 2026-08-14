@@ -4,7 +4,6 @@ const path = require('path');
 const electron = require('electron');
 const { app } = electron;
 const { inspectUpdateLock } = require('./update-in-progress-lock');
-const { preparePackagedMediaStorage } = require('./packaged-media-storage');
 
 // CP04's offscreen test window has an explicitly requested pixel canvas.
 // On a high-DPI desktop Electron otherwise reports the shared texture in DIPs
@@ -45,18 +44,6 @@ if (updateBlocked) {
   let packagedResourceIntegrity = null;
 
   if (isPackaged) {
-    // v0.9.9.7 could place downloaded media under the installation directory,
-    // which electron-builder replaces during a reinstall/update. Prepare the
-    // persistent userData/downloads location before the shell resolves runtime
-    // paths. Custom media locations are left untouched.
-    const mediaPreparation = preparePackagedMediaStorage({
-      userDataPath: app.getPath('userData'),
-      executablePath: app.getPath('exe'),
-    });
-    if (mediaPreparation.action === 'vulnerable-copy-deferred') {
-      console.warn('[Elitesand Pro Electron] Media recovery deferred:', mediaPreparation.reason || 'unknown');
-    }
-
     // The utility-process server needs the physical installation root and the
     // Electron host PID for updater-v2. app.getAppPath() points inside app.asar,
     // so it must never be used as a writable update target.
@@ -80,7 +67,7 @@ if (updateBlocked) {
     fork(...args) {
       const child = utilityProcess.fork(...args);
       return new Proxy(child, {
-        get(target, prop) {
+        get(target, prop, receiver) {
           if (prop === 'on') {
             return (event, handler) => {
               if (event !== 'exit') return target.on(event, handler);
@@ -93,9 +80,9 @@ if (updateBlocked) {
               });
             };
           }
-          // Electron UtilityProcess getters (notably pid) use private class
-          // state. The receiver must be the real UtilityProcess instance, not
-          // this Proxy, or V8 throws "Cannot read private member".
+          // Electron UtilityProcess exposes native getters (notably pid) backed
+          // by private fields. They must run with the real UtilityProcess as
+          // `this`; using the Proxy receiver throws before the app can start.
           const value = Reflect.get(target, prop, target);
           return typeof value === 'function' ? value.bind(target) : value;
         },
