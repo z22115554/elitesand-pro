@@ -1040,6 +1040,13 @@ const KaraokeEngine = (() => {
         try { effect.onDestroy(); } catch (e) { /* 靜默 */ }
       }
     }
+    // registry 模板（直書句流／鏡像／紙帶逐字…）不經過 effectRegistry，也不會被下面的
+    // historyEl/activeEl 清空動到——它們各自的 root 元素是獨立掛在 containerEl 底下。
+    // 沒有專門的「清空但保留掛載」生命週期方法，但 onLyricsLoaded() 本來就是「回到
+    // 沒有歌詞的畫面」，語意上跟歌曲結束要清空是同一件事，且各模板呼叫它都不依賴參數。
+    if (activeTemplateObj && activeTemplateObj.onLyricsLoaded) {
+      try { activeTemplateObj.onLyricsLoaded([], buildTemplateContext()); } catch (e) { /* 靜默 */ }
+    }
     // 清空前先終止所有殘留 tween，釋放 GSAP 引用
     if (typeof gsap !== 'undefined') {
       if (historyEl) gsap.killTweensOf(historyEl.querySelectorAll('*'));
