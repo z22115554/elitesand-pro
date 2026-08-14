@@ -623,8 +623,8 @@
           updateJob(job, { status: 'completed', stage: '已完成', completedPlacement: placementKey, completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '' });
           job.resolve(data.track);
         } else {
-          const errorMsg = data.error || t('import.error.unknown');
-          const recovery = data.recovery ? ` ${data.recovery}` : '';
+          const errorMsg = data.error ? tr(data.error) : t('import.error.unknown');
+          const recovery = data.recovery ? ` ${tr(data.recovery)}` : '';
           const error = new Error(`${errorMsg}${recovery}`);
           error.code = data.code || 'IMPORT_FAILED';
           error.retryable = data.retryable !== false;

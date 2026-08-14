@@ -44,18 +44,18 @@
       <div class="lt-row" data-idx="${i}">
         <input class="lt-time input" type="text" value="${msToClock(l.time)}" inputmode="decimal">
         <div class="lt-btns">
-          <button class="btn btn-sm" data-lt-nudge="-100" data-idx="${i}" type="button" title="往前 0.1 秒">−0.1s</button>
-          <button class="btn btn-sm" data-lt-nudge="100" data-idx="${i}" type="button" title="往後 0.1 秒">+0.1s</button>
-          <button class="btn btn-sm btn-primary" data-lt-tap="${i}" type="button" title="用目前播放位置設定這一行">設為目前時間</button>
+          <button class="btn btn-sm" data-lt-nudge="-100" data-idx="${i}" type="button" title="${escapeHtml(tr('往前 0.1 秒'))}">−0.1s</button>
+          <button class="btn btn-sm" data-lt-nudge="100" data-idx="${i}" type="button" title="${escapeHtml(tr('往後 0.1 秒'))}">+0.1s</button>
+          <button class="btn btn-sm btn-primary" data-lt-tap="${i}" type="button" title="${escapeHtml(tr('用目前播放位置設定這一行'))}">${escapeHtml(tr('設為目前時間'))}</button>
         </div>
-        <div class="lt-text">${escapeHtml(l.text || '（空行）')}</div>
+        <div class="lt-text">${escapeHtml(l.text || tr('（空行）'))}</div>
       </div>`).join('');
   }
 
   function openLyricsTimeline() {
-    const tr = state.playlist[state.currentTrackIndex];
-    if (!tr) { AppShared.showToast('請先選一首歌'); return; }
-    if (!Array.isArray(tr.parsedLyrics) || tr.parsedLyrics.length === 0) {
+    const track = state.playlist[state.currentTrackIndex];
+    if (!track) { AppShared.showToast(tr('請先選一首歌')); return; }
+    if (!Array.isArray(track.parsedLyrics) || track.parsedLyrics.length === 0) {
       dom.ltEmpty.hidden = false;
       dom.ltRows.innerHTML = '';
       dom.ltApply.hidden = true;
@@ -63,10 +63,10 @@
       dom.ltEmpty.hidden = true;
       dom.ltApply.hidden = false;
       // 深拷貝：取消時不影響目前正在播放的歌詞
-      ltWorkingLines = tr.parsedLyrics.map((l) => ({ ...l }));
+      ltWorkingLines = track.parsedLyrics.map((l) => ({ ...l }));
       renderLyricsTimelineRows();
     }
-    dom.ltTrackTitle.textContent = `· ${tr.title}`;
+    dom.ltTrackTitle.textContent = `· ${track.title}`;
     dom.ltModal.hidden = false;
   }
   function closeLyricsTimeline() { dom.ltModal.hidden = true; ltWorkingLines = null; }
@@ -83,7 +83,7 @@
       if (!input || !ltWorkingLines) return;
       const idx = Number(input.closest('.lt-row').dataset.idx);
       const ms = clockToMs(input.value);
-      if (ms == null) { input.value = msToClock(ltWorkingLines[idx].time); AppShared.showToast('時間格式錯誤，請用 分:秒.百分秒（例如 1:23.45）', 'error'); return; }
+      if (ms == null) { input.value = msToClock(ltWorkingLines[idx].time); AppShared.showToast(tr('時間格式錯誤，請用 分:秒.百分秒（例如 1:23.45）'), 'error'); return; }
       ltWorkingLines[idx].time = ms;
     });
     dom.ltRows.addEventListener('click', (e) => {
@@ -108,15 +108,15 @@
 
   if (dom.ltApply) {
     dom.ltApply.addEventListener('click', () => {
-      const tr = state.playlist[state.currentTrackIndex];
-      if (!tr || !ltWorkingLines) { closeLyricsTimeline(); return; }
+      const track = state.playlist[state.currentTrackIndex];
+      if (!track || !ltWorkingLines) { closeLyricsTimeline(); return; }
       // 依時間排序：使用者可能把某行調到比前一行晚，顯示端逐行比對「下一句時間」判斷換行，
       // 順序錯亂會导致跳字/卡住，套用前排序保險。
       const sorted = [...ltWorkingLines].sort((a, b) => a.time - b.time);
       if (window.VKState && window.VKState.applyManualLyrics) {
-        window.VKState.applyManualLyrics(tr.id, tr.lyrics, tr.lyricsType, sorted);
+        window.VKState.applyManualLyrics(track.id, track.lyrics, track.lyricsType, sorted);
       }
-      AppShared.showToast('已套用逐行時間軸');
+      AppShared.showToast(tr('已套用逐行時間軸'));
       closeLyricsTimeline();
     });
   }
@@ -150,7 +150,7 @@
       if (files.length > 0) {
         uploadLyricsFile(files[0]);
       } else {
-        AppShared.showToast('請拖曳 .lrc 或 .srt 檔案', 'error');
+        AppShared.showToast(tr('請拖曳 .lrc 或 .srt 檔案'), 'error');
       }
     });
 
@@ -170,7 +170,7 @@
   async function uploadLyricsFile(file) {
     const trackId = state.playlist[state.currentTrackIndex] ? state.playlist[state.currentTrackIndex].id : null;
     if (!trackId) {
-      AppShared.showToast('請先選擇一首歌曲', 'error');
+      AppShared.showToast(tr('請先選擇一首歌曲'), 'error');
       return;
     }
 
@@ -187,9 +187,9 @@
 
       if (data.success) {
         applyManualLyrics(trackId, data.lyrics, data.lyricsType, data.parsedLyrics, data.offset);
-        AppShared.showToast(`歌詞已載入 (${data.lineCount} 行)`, 'success');
+        AppShared.showToast(tr(`歌詞已載入 (${data.lineCount} 行)`), 'success');
       } else {
-        AppShared.showToast(data.error || '歌詞解析失敗', 'error');
+        AppShared.showToast(data.error || tr('歌詞解析失敗'), 'error');
       }
     } catch (err) {
         AppShared.showToast(`${tr('歌詞上傳失敗:')} ${err.message}`, 'error');
@@ -207,7 +207,7 @@
     dom.btnPasteLyrics.addEventListener('click', () => {
       const trackId = state.playlist[state.currentTrackIndex] ? state.playlist[state.currentTrackIndex].id : null;
       if (!trackId) {
-        AppShared.showToast('請先選擇一首歌曲', 'error');
+        AppShared.showToast(tr('請先選擇一首歌曲'), 'error');
         return;
       }
       if (dom.lyricsPasteModal) {
@@ -223,7 +223,7 @@
     dom.lyricsPasteConfirm.addEventListener('click', async () => {
       const content = dom.lyricsPasteTextarea ? dom.lyricsPasteTextarea.value.trim() : '';
       if (!content) {
-        AppShared.showToast('請輸入歌詞內容', 'error');
+        AppShared.showToast(tr('請輸入歌詞內容'), 'error');
         return;
       }
 
@@ -240,9 +240,9 @@
 
         if (data.success) {
           applyManualLyrics(trackId, data.lyrics, data.lyricsType, data.parsedLyrics, data.offset);
-          AppShared.showToast(`歌詞已載入 (${data.lineCount} 行)`, 'success');
+          AppShared.showToast(tr(`歌詞已載入 (${data.lineCount} 行)`), 'success');
         } else {
-          AppShared.showToast(data.error || '歌詞解析失敗', 'error');
+          AppShared.showToast(data.error || tr('歌詞解析失敗'), 'error');
         }
       } catch (err) {
       AppShared.showToast(`${tr('歌詞解析失敗:')} ${err.message}`, 'error');

@@ -731,8 +731,8 @@
     const statusText = workspaceText('settings.workspace.currentTemplate', `目前：${localizedTemplateLabel}`, { template: localizedTemplateLabel });
     if (templateStatus) templateStatus.textContent = statusText;
     if (workspaceTemplateStatus) workspaceTemplateStatus.textContent = statusText;
-    if (templateDesc) templateDesc.textContent = ui.description;
-    if (templateScope) templateScope.textContent = ui.scope;
+    if (templateDesc) templateDesc.textContent = window.I18n ? window.I18n.translate(ui.description) : ui.description;
+    if (templateScope) templateScope.textContent = window.I18n ? window.I18n.translate(ui.scope) : ui.scope;
 
     const intensityField = document.getElementById('intensity-field');
     if (intensityField) intensityField.hidden = !ui.supportsIntensity;
