@@ -30,6 +30,14 @@ const YTDLP_INFO_TIMEOUT = 45000;     // 取得影片資訊超時: 45s
 const YTDLP_DOWNLOAD_TIMEOUT = 300000; // 下載音訊超時: 5min
 const YTDLP_MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 const YTDLP_METADATA_PRINT = 'before_dl:__ES_META__%()j';
+// 下載階段的 player_client 輪替：getVideoInfo() 對 metadata 已有多重 client fallback，
+// 但實際下載音訊原本固定只用預設 client，YouTube 近期擋預設 client 下載格式時完全沒有退路，
+// 使用者只能手動重試。這裡讓下載也比照跟進，最多 3 次嘗試，命中就不再往下試。
+const YTDLP_DOWNLOAD_CLIENT_ARGS = [
+  [],
+  ['--extractor-args', 'youtube:player_client=android'],
+  ['--extractor-args', 'youtube:player_client=ios'],
+];
 
 // ─── yt-dlp 執行環境：強制 UTF-8 輸出（跨機器穩定）───
 // Windows 上 Python(yt-dlp) 的 stdout 被導管(pipe)時，預設用「系統 ANSI codepage」
@@ -765,24 +773,29 @@ class AudioProcessor {
     const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
     let resolveMeta, rejectMeta;
     const metadata = new Promise((resolve, reject) => { resolveMeta = resolve; rejectMeta = reject; });
+    let metaDone = !!fallbackInfo;
     if (fallbackInfo) resolveMeta(fallbackInfo);
-    const completed = new Promise((resolve, reject) => {
-      const args = ['--js-runtimes', 'node', '-f', 'bestaudio/best', '--concurrent-fragments', '4', '--no-playlist',
+    const rejectMetadata = (message) => {
+      if (metaDone) return;
+      metaDone = true;
+      const err = new Error(message);
+      err.code = 'YTDLP_METADATA';
+      rejectMeta(err);
+    };
+
+    // 單次 yt-dlp 下載嘗試；client 由呼叫端輪替帶入。metadata 是跨嘗試共用狀態
+    // （resolveMeta/rejectMeta/metaDone 皆在外層閉包），只要任一次嘗試印出 __ES_META__
+    // 就會定案，之後的嘗試不會再改動它。
+    const runAttempt = (extractorArgs) => new Promise((resolve, reject) => {
+      const args = ['--js-runtimes', 'node', ...extractorArgs, '-f', 'bestaudio/best', '--concurrent-fragments', '4', '--no-playlist',
         '-o', outputTemplate, '--print', YTDLP_METADATA_PRINT, '--print', 'after_move:__ES_FILE__%(filepath)s',
         '--progress', '--newline', '--progress-template', 'download:__ES_PROGRESS__%(progress._percent_str)s', url];
       const started = Date.now();
       const child = spawn('yt-dlp', args, { env: YTDLP_ENV, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-      let stderr = '', rawPath = '', metaDone = !!fallbackInfo, timedOut = false;
+      let stderr = '', rawPath = '', timedOut = false;
       const onAbort = () => child.kill();
       signal?.addEventListener('abort', onAbort, { once: true });
-      const rejectMetadata = (message) => {
-        if (metaDone) return;
-        metaDone = true;
-        const err = new Error(message);
-        err.code = 'YTDLP_METADATA';
-        rejectMeta(err);
-      };
-      const metadataTimer = fallbackInfo ? null : setTimeout(() => rejectMetadata('yt-dlp 未在 15 秒內提供影片 metadata'), 15000);
+      const metadataTimer = metaDone ? null : setTimeout(() => rejectMetadata('yt-dlp 未在 15 秒內提供影片 metadata'), 15000);
       const lineBuffers = { stdout: '', stderr: '' };
       // 逐流 StringDecoder：yt-dlp 輸出的中文路徑（歌詞動畫專案…）多位元組字元可能被切在
       // chunk 邊界，若每個 chunk 各自 toString('utf8') 會產生 U+FFFD 亂碼，導致後續 ffmpeg
@@ -815,24 +828,19 @@ class AudioProcessor {
       };
       child.stdout.on('data', c => consume(c, false)); child.stderr.on('data', c => consume(c, true));
       const timer = setTimeout(() => { timedOut = true; child.kill(); }, YTDLP_DOWNLOAD_TIMEOUT);
-      child.on('error', err => { clearTimeout(timer); if (metadataTimer) clearTimeout(metadataTimer); signal?.removeEventListener('abort', onAbort); cleanupTempImport(); if (!metaDone) rejectMeta(signal?.aborted ? new ImportCancelledError() : err); reject(signal?.aborted ? new ImportCancelledError() : err); });
-      child.on('close', async code => {
+      child.on('error', err => {
+        clearTimeout(timer); if (metadataTimer) clearTimeout(metadataTimer);
+        signal?.removeEventListener('abort', onAbort);
+        reject(signal?.aborted ? new ImportCancelledError() : err);
+      });
+      child.on('close', code => {
         clearTimeout(timer);
         if (metadataTimer) clearTimeout(metadataTimer);
         signal?.removeEventListener('abort', onAbort);
-        if (signal?.aborted) {
-          cleanupTempImport();
-          const err = new ImportCancelledError();
-          if (!metaDone) rejectMeta(err);
-          reject(err);
-          return;
-        }
+        if (signal?.aborted) return reject(new ImportCancelledError());
         if (code !== 0 || !rawPath) {
-          const err = new Error(timedOut ? 'yt-dlp 下載逾時' : (stderr.trim().split('\n').pop() || `yt-dlp exit ${code}`));
-          cleanupTempImport();
-          if (!metaDone) rejectMeta(err); reject(err); return;
+          return reject(new Error(timedOut ? 'yt-dlp 下載逾時' : (stderr.trim().split('\n').pop() || `yt-dlp exit ${code}`)));
         }
-        if (!metaDone) rejectMetadata('yt-dlp 下載完成但未提供影片 metadata');
         const downloadMs = Date.now() - started;
         // yt-dlp 在 Windows 印出的 filepath 目錄段（含中文的專案路徑）是經 mbcs/surrogateescape
         // 產生的非法 UTF-8，任何解碼都還原不了（PYTHONUTF8 也無效）；直接拿去餵 ffmpeg -i 會找不到
@@ -840,18 +848,45 @@ class AudioProcessor {
         // 掌握、完全正確的 outputDir 重組路徑，徹底繞開 yt-dlp 的壞路徑。
         const cleanPath = path.join(outputDir, path.basename(rawPath));
         log.perf('youtube-download', downloadMs, { path: cleanPath });
-        try {
-          onProgress('正在轉換音訊');
-          const filePath = await withFfmpegLock(() => this.convertToMp3(cleanPath, signal));
-          resolve({ filePath, outputDir, downloadMs });
-        } catch (err) {
-          // 取消發生在轉碼中：yt-dlp 已正常結束（上面的 aborted 分支沒走到），
-          // 這裡才是唯一能清掉 videoId.webm 原檔＋寫到一半 videoId.mp3 的地方。
-          cleanupTempImport();
-          reject(err);
-        }
+        resolve({ cleanPath, downloadMs });
       });
     });
+
+    const completed = (async () => {
+      let lastError;
+      let downloaded = null;
+      for (let attempt = 0; attempt < YTDLP_DOWNLOAD_CLIENT_ARGS.length; attempt++) {
+        throwIfCancelled(signal);
+        try {
+          downloaded = await runAttempt(YTDLP_DOWNLOAD_CLIENT_ARGS[attempt]);
+          break;
+        } catch (err) {
+          if (signal?.aborted || err instanceof ImportCancelledError) { cleanupTempImport(); rejectMetadata('匯入已取消'); throw new ImportCancelledError(); }
+          lastError = err;
+          // Music Premium 或已是最後一次嘗試：換 client 也無法補救，不再往下試。
+          if (isYouTubeMusicPremiumError(err) || attempt === YTDLP_DOWNLOAD_CLIENT_ARGS.length - 1) break;
+          log.warn(`yt-dlp 下載第 ${attempt + 1} 次嘗試失敗，改用下一個 client 重試: ${err.message}`);
+          // 換 client 前清掉這次嘗試留下的半套檔案（.part/.webm…），避免跟下一次嘗試混淆。
+          cleanupOwnedTemporaryDownload(tempImport?.videoId, outputDir);
+        }
+      }
+      if (!downloaded) {
+        cleanupTempImport();
+        rejectMetadata('yt-dlp 下載失敗且未提供影片 metadata');
+        throw lastError;
+      }
+      rejectMetadata('yt-dlp 下載完成但未提供影片 metadata');
+      try {
+        onProgress('正在轉換音訊');
+        const filePath = await withFfmpegLock(() => this.convertToMp3(downloaded.cleanPath, signal));
+        return { filePath, outputDir, downloadMs: downloaded.downloadMs };
+      } catch (err) {
+        // 取消發生在轉碼中：yt-dlp 已正常結束（上面的 aborted 分支沒走到），
+        // 這裡才是唯一能清掉 videoId.webm 原檔＋寫到一半 videoId.mp3 的地方。
+        cleanupTempImport();
+        throw err;
+      }
+    })();
     return { metadata, completed, completeTempImport: () => importTempRegistry.finish(tempImport) };
   }
 
