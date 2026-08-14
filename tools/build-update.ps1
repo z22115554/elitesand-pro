@@ -2,6 +2,7 @@
   [string]$OutputRoot = "",
   [string]$BaselineManifest = "",
   [string]$BaselineRoot = "",
+  [string]$SigningKeyPath = "",
   [switch]$SkipBaselineCheck
 )
 
@@ -110,6 +111,30 @@ $Stage = Join-Path $OutputRoot ".update-stage"
 $ZipPath = Join-Path $OutputRoot "update.zip"
 $HashPath = Join-Path $OutputRoot "update.zip.sha256"
 $GeneratedBaselineManifest = Join-Path $OutputRoot ".baseline-from-root.json"
+$DefaultSigningKeyPath = Join-Path $Root ".local\update-signing\private-key.pem"
+$TestSigningKeyPath = Join-Path $Root "tests\fixtures\update-signing-test-private.pem"
+$HasSigningSecret = -not [string]::IsNullOrWhiteSpace([string]$env:ELITESAND_UPDATE_SIGNING_PRIVATE_KEY_B64)
+
+if ([string]::IsNullOrWhiteSpace($SigningKeyPath)) {
+  if ($HasSigningSecret) {
+    $SigningKeyPath = ""
+  } elseif ($SkipBaselineCheck) {
+    $SigningKeyPath = $TestSigningKeyPath
+  } else {
+    $SigningKeyPath = $DefaultSigningKeyPath
+  }
+}
+if (-not [string]::IsNullOrWhiteSpace($SigningKeyPath)) {
+  $SigningKeyPath = [System.IO.Path]::GetFullPath($SigningKeyPath)
+  if (-not (Test-Path -LiteralPath $SigningKeyPath -PathType Leaf)) {
+    throw "Update signing private key not found: $SigningKeyPath. Put the official key at .local\update-signing\private-key.pem, pass -SigningKeyPath, or set ELITESAND_UPDATE_SIGNING_PRIVATE_KEY_B64."
+  }
+  if (-not $SkipBaselineCheck -and $SigningKeyPath -eq [System.IO.Path]::GetFullPath($TestSigningKeyPath)) {
+    throw "Refusing to publish with the repository test signing key. Use the official private key."
+  }
+} elseif (-not $HasSigningSecret) {
+  throw "Secure incremental updates require an Ed25519 signing private key."
+}
 
 foreach ($target in @($OutputRoot, $BuildRoot, $Stage, $ZipPath, $HashPath, $GeneratedBaselineManifest)) {
   Assert-Inside -Path $target -Parent $Root
@@ -236,6 +261,21 @@ $ManifestPath = Join-Path $Stage 'update-manifest.json'
   [System.Text.UTF8Encoding]::new($false)
 )
 
+$SignScript = Join-Path $Root "tools\update-signing\sign-manifest.js"
+$SignArgs = @($SignScript, $ManifestPath)
+if (-not [string]::IsNullOrWhiteSpace($SigningKeyPath)) {
+  $SignArgs += @('--private-key', $SigningKeyPath)
+}
+if ($SkipBaselineCheck) {
+  $SignArgs += '--allow-nonproduction-key'
+}
+& node @SignArgs
+if ($LASTEXITCODE -ne 0) { throw "Ed25519 update manifest signing failed; update.zip was not created." }
+$SignedManifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($SignedManifest.signatureAlgorithm -ne 'Ed25519' -or [string]$SignedManifest.signature -notmatch '^[a-f0-9]{128}$') {
+  throw "Signed update manifest is missing a valid Ed25519 signature."
+}
+
 # Final leakage guard: update.zip contains no raw server/public source, no
 # source maps, no named lyric-template JS, and never the updater runtime itself.
 Get-ChildItem -LiteralPath $Stage -File -Recurse | ForEach-Object {
@@ -279,3 +319,4 @@ Write-Host "  from : $FromVersion"
 Write-Host "  to   : $Version"
 Write-Host "  zip  : $ZipPath"
 Write-Host "  sha  : $HashPath"
+Write-Host "  sign : Ed25519 / update-ed25519-2026-08-14-01"
