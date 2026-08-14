@@ -9,14 +9,29 @@ function createError(code, message) {
   return error;
 }
 
-function loadSpoutAddon(projectRoot, addonPath = '') {
-  const resolved = addonPath
-    ? path.resolve(addonPath)
-    : path.join(projectRoot, '.local', 'spout-output-build', 'elitesand_spout_output.node');
+function loadSpoutAddon(projectRoot, addonPath = '', { isPackaged = false, resourcesPath = '' } = {}) {
+  // '.local/spout-output-build' is a gitignored dev build output; it never
+  // ships. A packaged app's projectRoot points inside app.asar, and native
+  // .node addons cannot dlopen from within an asar archive anyway — the
+  // packaged build stages the compiled addon as an extraResource instead
+  // (resources/tools/spout), same as yt-dlp.exe.
+  let resolved;
+  if (addonPath) {
+    resolved = path.resolve(addonPath);
+  } else if (isPackaged) {
+    resolved = path.join(resourcesPath, 'tools', 'spout', 'elitesand_spout_output.node');
+  } else {
+    resolved = path.join(projectRoot, '.local', 'spout-output-build', 'elitesand_spout_output.node');
+  }
   try {
     return require(resolved);
   } catch (error) {
-    const wrapped = createError('SPOUT_ADDON_LOAD_FAILED', `Could not load the Spout native addon: ${resolved}`);
+    const wrapped = createError(
+      'SPOUT_ADDON_LOAD_FAILED',
+      isPackaged
+        ? 'This build does not include the Spout native addon yet (alpha feature, not bundled in every release).'
+        : `Could not load the Spout native addon: ${resolved}`,
+    );
     wrapped.cause = error;
     throw wrapped;
   }

@@ -267,6 +267,21 @@ upstream tag at build time.
   }
 }
 
+# Spout 透明輸出是實驗性功能；原生 addon 要靠 tools/build-spout-native.ps1 手動編譯到
+# .local/spout-output-build/，不是每台開發機或每次打包都有。有編譯好的就跟著 yt-dlp
+# 一樣塞進 resources/tools/spout/；沒有就跳過，讓這個版本乾脆不含 Spout（electron/
+# spout-display-output.js 的 loadSpoutAddon 在打包版找不到時會給清楚的錯誤訊息，
+# 不會再誤指到開發機專用、根本不會被打包的 .local 路徑)。
+$SpoutAddonSource = Join-Path $Root ".local\spout-output-build\elitesand_spout_output.node"
+if (Test-Path -LiteralPath $SpoutAddonSource) {
+  $SpoutToolsDir = Join-Path $Stage "tools\spout"
+  New-Item -ItemType Directory -Force -Path $SpoutToolsDir | Out-Null
+  Copy-Item -LiteralPath $SpoutAddonSource -Destination $SpoutToolsDir -Force
+  Write-Host "Bundled Spout native addon from $SpoutAddonSource"
+} else {
+  Write-Host "Spout native addon not built locally; this package will not include transparent Spout output."
+}
+
 # 批次 D-1（CLOSED_SOURCE_MIGRATION_PLAN.md）：預設不再內附 FFmpeg。
 # GPLv3 static build 的完整對應原始碼義務很重，改成程式內「按需下載＋SHA-256 驗證」
 # （見 server/services/ffmpeg-provider.js）。只有明確傳 -BundleFfmpeg 才會走舊的內附流程

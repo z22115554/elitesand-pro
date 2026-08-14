@@ -311,7 +311,10 @@ function createElectronShell({
     const { createSpoutDisplayOutput, loadSpoutAddon } = require('./spout-display-output');
     const addon = spoutAddonLoader
       ? spoutAddonLoader()
-      : loadSpoutAddon(projectRoot, processObject.env.ELITESAND_SPOUT_NATIVE_ADDON || '');
+      : loadSpoutAddon(projectRoot, processObject.env.ELITESAND_SPOUT_NATIVE_ADDON || '', {
+          isPackaged: app.isPackaged,
+          resourcesPath: processObject.resourcesPath || process.resourcesPath,
+        });
     spoutDisplayOutput = createSpoutDisplayOutput({
       BrowserWindow,
       addon,
