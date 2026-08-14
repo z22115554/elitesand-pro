@@ -5,9 +5,14 @@
  * 詳見 D-1 決策）。改成：使用者需要時按一次「下載」，由這支模組直接向上游抓檔、
  * 驗證雜湊，成功才能用；不下載也不會讓程式無法啟動，只有依賴 FFmpeg 的功能受影響。
  *
- * 下載來源：優先使用 ffmpeg.org 官方下載頁列出的 BtbN Windows build（LGPL），
- * gyan.dev release-essentials 作為備援。兩邊都先取得上游提供的 SHA-256，再串流
- * 下載到暫存 zip；不把 100MB+ 壓縮檔整包留在 RAM。雜湊不符一律拒絕使用。
+ * 下載來源（依序 fallback）：
+ * 1. BtbN / GitHub（LGPL build）
+ * 2. gyan 的 essentials build，但走它同步發布在 GitHub 的鏡像（GyanD/codexffmpeg）
+ *    ——內容跟官網那份相同，只是換成 GitHub 主機，實測比 gyan.dev 直連快 20 倍以上
+ * 3. gyan.dev 官網直連，當最後手段（前兩個 GitHub 來源都失敗，例如 GitHub 本身出問題時）
+ * 全部先取得上游提供的 SHA-256 才下載到暫存 zip；不把 100MB+ 壓縮檔整包留在 RAM。
+ * 雜湊不符一律拒絕使用。BtbN／gyan.dev 兩個是「先抓純文字雜湊檔」；GitHub 鏡像沒有
+ * 獨立雜湊檔，改成打 Releases API，用回應裡每個 asset 自帶的 sha256 digest。
  *
  * 找 ffmpeg 的優先序：
  * 1. 使用者在 server/config.js 指定的 ffmpegPath
@@ -41,6 +46,12 @@ const DOWNLOAD_SOURCES = [
     url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip',
     checksumUrl: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256',
     checksumFile: 'ffmpeg-master-latest-win64-lgpl.zip',
+  },
+  {
+    id: 'gyan-github',
+    label: 'gyan（GitHub 鏡像）',
+    resolveApiUrl: 'https://api.github.com/repos/GyanD/codexffmpeg/releases/latest',
+    assetNamePattern: /^ffmpeg-.+-essentials_build\.zip$/i,
   },
   {
     id: 'gyan',
@@ -188,6 +199,30 @@ function parseExpectedHash(source, checksumBuf) {
     if (match[2].trim() === source.checksumFile) return match[1].toLowerCase();
   }
   return null;
+}
+
+/**
+ * gyan 的 GitHub 鏡像（GyanD/codexffmpeg）沒有獨立雜湊檔，改打 Releases API：
+ * 用回應裡對應 asset 自帶的 sha256 digest 當預期雜湊，網址也從這裡取得
+ * （這個來源的 zip 網址含版本號，無法寫死，只能查完最新版才知道）。
+ */
+async function resolveGithubReleaseAsset(source, fetchBufferImpl) {
+  const buf = await fetchBufferImpl(source.resolveApiUrl, { maxBytes: 512 * 1024 });
+  let release;
+  try {
+    release = JSON.parse(buf.toString('utf8'));
+  } catch (_) {
+    throw new Error(`解析 ${source.label} release 資訊失敗`);
+  }
+  const asset = (release.assets || []).find((item) => source.assetNamePattern.test(item?.name || ''));
+  if (!asset?.browser_download_url) {
+    throw new Error(`${source.label} release 找不到符合的下載檔案`);
+  }
+  const match = /^sha256:([a-f0-9]{64})$/i.exec(String(asset.digest || ''));
+  if (!match) {
+    throw new Error(`${source.label} release 的 asset 缺少 SHA-256 digest`);
+  }
+  return { url: asset.browser_download_url, expectedHash: match[1].toLowerCase() };
 }
 
 function fetchToFile(url, filePath, {
@@ -444,17 +479,33 @@ async function downloadFfmpeg({
       for (let index = 0; index < sources.length; index++) {
         const source = sources[index];
         try {
-          progress('checksum', {
-            source: source.id,
-            downloadedBytes: 0,
-            totalBytes: null,
-            percent: null,
-            speedBytesPerSec: null,
-          });
-          const checksumBuf = await fetchBufferImpl(source.checksumUrl, { maxBytes: 64 * 1024 });
-          const expectedHash = parseExpectedHash(source, checksumBuf);
-          if (!expectedHash) {
-            throw new Error(`取得的雜湊格式不正確（${source.label}）`);
+          let downloadUrl = source.url;
+          let expectedHash;
+
+          if (source.resolveApiUrl) {
+            progress('resolve', {
+              source: source.id,
+              downloadedBytes: 0,
+              totalBytes: null,
+              percent: null,
+              speedBytesPerSec: null,
+            });
+            const resolved = await resolveGithubReleaseAsset(source, fetchBufferImpl);
+            downloadUrl = resolved.url;
+            expectedHash = resolved.expectedHash;
+          } else {
+            progress('checksum', {
+              source: source.id,
+              downloadedBytes: 0,
+              totalBytes: null,
+              percent: null,
+              speedBytesPerSec: null,
+            });
+            const checksumBuf = await fetchBufferImpl(source.checksumUrl, { maxBytes: 64 * 1024 });
+            expectedHash = parseExpectedHash(source, checksumBuf);
+            if (!expectedHash) {
+              throw new Error(`取得的雜湊格式不正確（${source.label}）`);
+            }
           }
 
           progress('download', {
@@ -464,7 +515,7 @@ async function downloadFfmpeg({
             percent: 0,
             speedBytesPerSec: 0,
           });
-          const result = await fetchFileImpl(source.url, tmpZip, {
+          const result = await fetchFileImpl(downloadUrl, tmpZip, {
             maxBytes: MAX_ZIP_BYTES,
             onProgress: (downloadProgress) => {
               setDownloadStatus({

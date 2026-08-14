@@ -9464,18 +9464,18 @@ console.log('\n🌐 17. M6.1 介面語系層');
     eq(ffmpegProvider.parseExpectedHash(source, checksum), wanted);
   });
 
-  testAsync('FFmpeg 供應：主要來源失敗會自動切備援，且下載進度可被查詢', async () => {
-    ffmpegProvider._resetForTests();
-    const zip = new AdmZip();
-    zip.addFile('ffmpeg-test/bin/ffmpeg.exe', Buffer.from('fake-ffmpeg'));
-    zip.addFile('ffmpeg-test/bin/ffprobe.exe', Buffer.from('fake-ffprobe'));
-    const zipBuffer = zip.toBuffer();
-    const zipHash = require('crypto').createHash('sha256').update(zipBuffer).digest('hex');
-    const sources = [
-      { id: 'primary-test', label: 'primary-test', url: 'https://primary.test/ffmpeg.zip', checksumUrl: 'https://primary.test/hash', checksumFile: null },
-      { id: 'backup-test', label: 'backup-test', url: 'https://backup.test/ffmpeg.zip', checksumUrl: 'https://backup.test/hash', checksumFile: null },
-    ];
-    const stages = [];
+  test('FFmpeg 供應：備援順序為 BtbN → gyan GitHub 鏡像 → gyan.dev 官網直連', () => {
+    const ids = ffmpegProvider.DOWNLOAD_SOURCES.map((item) => item.id);
+    eq(ids.join(','), 'btbn,gyan-github,gyan', '三個來源的優先序不可被打亂：');
+    const mirror = ffmpegProvider.DOWNLOAD_SOURCES.find((item) => item.id === 'gyan-github');
+    ok(mirror?.resolveApiUrl, 'GitHub 鏡像來源需要 Releases API 網址（沒有獨立雜湊檔可抓）：');
+    ok(mirror?.assetNamePattern instanceof RegExp, 'GitHub 鏡像來源需要用來挑出正確 asset 的檔名規則：');
+  });
+
+  testAsync('FFmpeg 供應：主要來源失敗會自動切備援；GitHub 鏡像來源改打 Releases API 挑對 essentials zip', async () => {
+    // 兩個情境共用 downloadFfmpeg 內部固定的暫存檔路徑與 downloadInFlight 鎖，
+    // 測試框架的 testAsync 會讓所有非同步測試同時起跑，若拆成兩個獨立 testAsync
+    // 會互相搶同一份暫存檔而讓另一邊誤判成功/污染結果，因此在同一個測試裡循序執行。
     const cleanup = [
       ffmpegProvider.FFMPEG_EXE,
       ffmpegProvider.FFPROBE_EXE,
@@ -9485,8 +9485,20 @@ console.log('\n🌐 17. M6.1 介面語系層');
       path.join(ffmpegProvider.BIN_DIR, 'ffmpeg.download.exe'),
       path.join(ffmpegProvider.BIN_DIR, 'ffprobe.download.exe'),
     ];
+
+    ffmpegProvider._resetForTests();
     cleanup.forEach((file) => fs.rmSync(file, { force: true }));
     try {
+      const zip = new AdmZip();
+      zip.addFile('ffmpeg-test/bin/ffmpeg.exe', Buffer.from('fake-ffmpeg'));
+      zip.addFile('ffmpeg-test/bin/ffprobe.exe', Buffer.from('fake-ffprobe'));
+      const zipBuffer = zip.toBuffer();
+      const zipHash = require('crypto').createHash('sha256').update(zipBuffer).digest('hex');
+      const sources = [
+        { id: 'primary-test', label: 'primary-test', url: 'https://primary.test/ffmpeg.zip', checksumUrl: 'https://primary.test/hash', checksumFile: null },
+        { id: 'backup-test', label: 'backup-test', url: 'https://backup.test/ffmpeg.zip', checksumUrl: 'https://backup.test/hash', checksumFile: null },
+      ];
+      const stages = [];
       const result = await ffmpegProvider.downloadFfmpeg({
         platform: 'win32',
         sources,
@@ -9516,6 +9528,52 @@ console.log('\n🌐 17. M6.1 介面語系層');
       eq(finalStatus.active, false, '完成後進度狀態不可繼續宣稱下載中：');
       eq(finalStatus.stage, 'done', '完成後狀態必須停在 done：');
       eq(finalStatus.percent, 100, '完成後進度必須是 100%：');
+    } finally {
+      cleanup.forEach((file) => fs.rmSync(file, { force: true }));
+      ffmpegProvider._resetForTests();
+    }
+
+    try {
+      const zip = new AdmZip();
+      zip.addFile('ffmpeg-9.9-essentials_build/bin/ffmpeg.exe', Buffer.from('fake-ffmpeg'));
+      zip.addFile('ffmpeg-9.9-essentials_build/bin/ffprobe.exe', Buffer.from('fake-ffprobe'));
+      const zipBuffer = zip.toBuffer();
+      const zipHash = require('crypto').createHash('sha256').update(zipBuffer).digest('hex');
+      const releaseJson = JSON.stringify({
+        assets: [
+          { name: 'ffmpeg-9.9-full_build.zip', browser_download_url: 'https://mirror.test/ffmpeg-9.9-full_build.zip', digest: `sha256:${'f'.repeat(64)}` },
+          { name: 'ffmpeg-9.9-essentials_build.zip', browser_download_url: 'https://mirror.test/ffmpeg-9.9-essentials_build.zip', digest: `sha256:${zipHash}` },
+        ],
+      });
+      const sources = [{
+        id: 'mirror-test',
+        label: 'mirror-test',
+        resolveApiUrl: 'https://api.test/releases/latest',
+        assetNamePattern: /^ffmpeg-.+-essentials_build\.zip$/i,
+      }];
+      let requestedUrl = null;
+      const result = await ffmpegProvider.downloadFfmpeg({
+        platform: 'win32',
+        sources,
+        fetchBufferImpl: async (url) => {
+          eq(url, 'https://api.test/releases/latest', '應該打 Releases API，不是純文字雜湊檔：');
+          return Buffer.from(releaseJson, 'utf8');
+        },
+        fetchFileImpl: async (url, filePath, options) => {
+          requestedUrl = url;
+          fs.writeFileSync(filePath, zipBuffer);
+          options.onProgress?.({
+            downloadedBytes: zipBuffer.length,
+            totalBytes: zipBuffer.length,
+            percent: 100,
+            speedBytesPerSec: zipBuffer.length,
+          });
+          return { downloadedBytes: zipBuffer.length, totalBytes: zipBuffer.length, sha256: zipHash };
+        },
+        spawnSyncImpl: () => ({ status: 0, error: null }),
+      });
+      eq(result.source, 'mirror-test', '解析出的 asset 應該能成功完成安裝：');
+      eq(requestedUrl, 'https://mirror.test/ffmpeg-9.9-essentials_build.zip', '要挑中 essentials zip，不能抓錯排在前面的 full_build：');
     } finally {
       cleanup.forEach((file) => fs.rmSync(file, { force: true }));
       ffmpegProvider._resetForTests();
