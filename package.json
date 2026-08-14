@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/run-tests.js && node tests/pin-first-setup.test.js && node tests/device-access.test.js && node tests/app-updater-v2.test.js && node tests/usage-telemetry.test.js && node tests/onboarding-tour.test.js && node tests/updater-in-progress-lock.test.js && node tests/app-update-check.test.js && node tests/app-update-i18n.test.js",
+    "test": "node tests/run-tests.js && node tests/p0-installer-media-loss.test.js && node tests/pin-first-setup.test.js && node tests/device-access.test.js && node tests/app-updater-v2.test.js && node tests/usage-telemetry.test.js && node tests/onboarding-tour.test.js && node tests/updater-in-progress-lock.test.js && node tests/app-update-check.test.js && node tests/app-update-i18n.test.js",
     "test:onboarding": "node tests/onboarding-tour.test.js",
     "audit:release": "npm audit --omit=dev --audit-level=low",
     "smoke:portable": "node tools/smoke-portable.js",
@@ -66,9 +66,7 @@
   "build": {
     "appId": "com.elitesand.pro",
     "productName": "Elitesand Pro",
-    "asar": {
-      "smartUnpack": false
-    },
+    "asar": { "smartUnpack": false },
     "directories": {
       "app": "dist/.electron-builder-resources/app",
       "output": "dist/releases/v${version}/installer"
@@ -85,24 +83,12 @@
       "grantFileProtocolExtraPrivileges": false
     },
     "forceCodeSigning": false,
-    "files": [
-      "**/*",
-      "assets/**/*"
-    ],
+    "files": ["**/*", "assets/**/*"],
     "extraResources": [
-      {
-        "from": "dist/.electron-builder-resources/tools",
-        "to": "tools"
-      },
-      {
-        "from": "dist/.electron-builder-resources/licenses",
-        "to": "licenses"
-      }
+      { "from": "dist/.electron-builder-resources/tools", "to": "tools" },
+      { "from": "dist/.electron-builder-resources/licenses", "to": "licenses" }
     ],
-    "win": {
-      "target": "nsis",
-      "icon": "assets/elitesand-pro.ico"
-    },
+    "win": { "target": "nsis", "icon": "assets/elitesand-pro.ico" },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -113,13 +99,7 @@
       "license": "dist/.electron-builder-resources/EULA-installer.txt",
       "multiLanguageInstaller": true,
       "displayLanguageSelector": true,
-      "installerLanguages": [
-        "en_US",
-        "zh_TW",
-        "ja_JP",
-        "ko_KR",
-        "zh_CN"
-      ],
+      "installerLanguages": ["en_US", "zh_TW", "ja_JP", "ko_KR", "zh_CN"],
       "language": "1033"
     }
   }
