@@ -14,7 +14,13 @@ process.env.ELITESAND_LOGS_DIR = path.join(runtimeRoot, 'logs');
 
 const updater = require('../server/services/app-updater-v2');
 const runner = require('../server/services/app-updater-runner-v2');
+const { signUpdateManifest } = require('../server/services/update-signature');
 const pkg = require('../package.json');
+
+const TEST_PRIVATE_KEY_PEM = fs.readFileSync(path.join(__dirname, 'fixtures', 'update-signing-test-private.pem'), 'utf8');
+const TEST_PUBLIC_KEY_HEX = crypto.createPublicKey(TEST_PRIVATE_KEY_PEM)
+  .export({ format: 'der', type: 'spki' })
+  .toString('hex');
 
 let passed = 0;
 function test(name, fn) {
@@ -45,7 +51,17 @@ function makeBaselineFiles() {
   return values.map(([filePath, data]) => ({ path: filePath, size: data.length, sha256: sha(data) }));
 }
 
-function makeV2Zip({ fromVersion = pkg.version, version = nextPatch(pkg.version), mutateManifest } = {}) {
+function inspectTestZip(buffer, options = {}) {
+  return updater.inspectUpdateZip(buffer, { publicKeyHex: TEST_PUBLIC_KEY_HEX, ...options });
+}
+
+function makeV2Zip({
+  fromVersion = pkg.version,
+  version = nextPatch(pkg.version),
+  mutateManifest,
+  tamperAfterSign,
+  skipSignature = false,
+} = {}) {
   const payload = new Map([
     ['Elitesand Pro.exe', Buffer.from('new-exe')],
     ['resources/app.asar', Buffer.from('new-asar')],
@@ -64,31 +80,59 @@ function makeV2Zip({ fromVersion = pkg.version, version = nextPatch(pkg.version)
     files: [...payload.entries()].map(([filePath, data]) => ({ path: filePath, size: data.length, sha256: sha(data) })),
   };
   mutateManifest?.(manifest, payload);
+  const finalManifest = skipSignature ? manifest : signUpdateManifest(manifest, TEST_PRIVATE_KEY_PEM);
+  tamperAfterSign?.(finalManifest, payload);
+
   const zip = new AdmZip();
   for (const [filePath, data] of payload) zip.addFile(filePath, data);
-  zip.addFile('update-manifest.json', Buffer.from(JSON.stringify(manifest)));
+  zip.addFile('update-manifest.json', Buffer.from(JSON.stringify(finalManifest)));
   return zip.toBuffer();
 }
 
 console.log('\n[app-updater-v2]');
 
-test('schema-v2 accepts matched EXE + ASAR payload and verifies every file hash', () => {
-  const result = updater.inspectUpdateZip(makeV2Zip(), { currentVersion: pkg.version, expectedVersion: nextPatch(pkg.version) });
+test('schema-v2 accepts matched EXE + ASAR payload only when the manifest has a valid Ed25519 signature', () => {
+  const result = inspectTestZip(makeV2Zip(), { currentVersion: pkg.version, expectedVersion: nextPatch(pkg.version) });
   assert.equal(result.ok, true);
   assert.equal(result.fromVersion, pkg.version);
+  assert.equal(result.manifest.signatureAlgorithm, 'Ed25519');
+  assert.equal(result.manifest.signature.length, 128);
   assert(result.files.some((item) => item.path === 'Elitesand Pro.exe'));
   assert(result.files.some((item) => item.path === 'resources/app.asar'));
   assert(result.baselineImmutableFiles.some((item) => item.path === 'resources/tools/updater-node.exe'));
 });
 
+test('schema-v2 rejects an unsigned manifest before trusting payload hashes', () => {
+  assert.throws(
+    () => inspectTestZip(makeV2Zip({ skipSignature: true }), { currentVersion: pkg.version }),
+    /官方簽章驗證失敗/,
+  );
+});
+
+test('schema-v2 rejects a manifest changed after signing', () => {
+  assert.throws(() => inspectTestZip(makeV2Zip({
+    tamperAfterSign(manifest) { manifest.files[0].sha256 = 'b'.repeat(64); },
+  }), { currentVersion: pkg.version }), /官方簽章驗證失敗/);
+});
+
+test('schema-v2 rejects a valid signature made by a different publisher key', () => {
+  const other = crypto.generateKeyPairSync('ed25519').publicKey
+    .export({ format: 'der', type: 'spki' })
+    .toString('hex');
+  assert.throws(
+    () => updater.inspectUpdateZip(makeV2Zip(), { currentVersion: pkg.version, publicKeyHex: other }),
+    /官方簽章驗證失敗/,
+  );
+});
+
 test('schema-v2 rejects a manifest payload hash mismatch before staging', () => {
-  assert.throws(() => updater.inspectUpdateZip(makeV2Zip({
+  assert.throws(() => inspectTestZip(makeV2Zip({
     mutateManifest(manifest) { manifest.files.find((item) => item.path === 'resources/app.asar').sha256 = 'f'.repeat(64); },
   }), { currentVersion: pkg.version }), /完整性驗證失敗/);
 });
 
 test('schema-v2 rejects a modified runtime baseline fingerprint', () => {
-  assert.throws(() => updater.inspectUpdateZip(makeV2Zip({
+  assert.throws(() => inspectTestZip(makeV2Zip({
     mutateManifest(manifest) { manifest.baselineImmutableFiles[0].sha256 = 'a'.repeat(64); },
   }), { currentVersion: pkg.version }), /baseline fingerprint/);
 });
@@ -106,8 +150,8 @@ test('schema-v2 rejects raw server/public source and source maps', () => {
   }
 });
 
-test('wrong fromVersion fails closed to the full Installer', () => {
-  const result = updater.inspectUpdateZip(makeV2Zip({ fromVersion: '0.0.1' }), { currentVersion: pkg.version });
+test('wrong fromVersion fails closed to the full Installer after signature verification', () => {
+  const result = inspectTestZip(makeV2Zip({ fromVersion: '0.0.1' }), { currentVersion: pkg.version });
   assert.equal(result.ok, false);
   assert.equal(result.needsFull, true);
 });
@@ -173,7 +217,7 @@ test('runner atomically replaces EXE/ASAR and leaves updater-node untouched', ()
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('build-update is fail-closed and can no longer package repo server/public directly', () => {
+test('build-update is fail-closed, signs the manifest, and can no longer package repo server/public directly', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-update.ps1'), 'utf8');
   assert(source.includes('build-installer.ps1'));
   assert(source.includes('resources/app.asar'));
@@ -181,7 +225,17 @@ test('build-update is fail-closed and can no longer package repo server/public d
   assert(source.includes('BaselineManifest'));
   assert(source.includes('baselineImmutableFiles'));
   assert(source.includes('Raw template/source-map material is forbidden'));
+  assert(source.includes('sign-manifest.js'));
+  assert(source.includes('ELITESAND_UPDATE_SIGNING_PRIVATE_KEY_B64'));
+  assert(source.includes('Refusing to publish with the repository test signing key'));
   assert(!/foreach\s*\(\$dir\s+in\s+@\("server",\s*"public"\)\)/i.test(source));
+});
+
+test('sign-manifest refuses a non-production private key unless explicitly used by smoke tests', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'update-signing', 'sign-manifest.js'), 'utf8');
+  assert(source.includes('UPDATE_PUBLIC_KEY_HEX'));
+  assert(source.includes('--allow-nonproduction-key'));
+  assert(source.includes('does not match the public key embedded in Elitesand Pro'));
 });
 
 test('Installer build emits a hash-only incremental baseline for the following release', () => {
