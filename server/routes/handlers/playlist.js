@@ -6,9 +6,27 @@ const { createLogger } = require('../../utils/logger');
 const { emitToAccessRooms } = require('../../utils/socket-broadcast');
 const playlistExportStore = require('../../services/playlist-export-store');
 const libraryStore = require('../../services/library-store');
+const lyricOffsetSync = require('../../services/lyric-offset-sync');
 const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds, ensureEntryIds } = require('../../utils/track-schema');
 
 const log = createLogger('Socket');
+
+/**
+ * 新加入清單、本機還沒有這首歌校正記憶時，去問一次社群建議的偏移值當預設。
+ * 使用者自己調過（trackOffsets 已有記錄）的一律不覆蓋；查詢期間使用者也可能自己調了，
+ * 拿到回應時要再檢查一次同一個條件，避免用舊建議蓋掉使用者剛做的調整。
+ */
+async function applyCommunityOffsetSuggestion(ctx, io, track) {
+  if (!track || !track.id || ctx.trackOffsets.has(track.id)) return;
+  const result = await lyricOffsetSync.getSuggestedOffset(track.id).catch(() => null);
+  if (!result || typeof result.suggestedOffsetMs !== 'number' || ctx.trackOffsets.has(track.id)) return;
+  ctx.trackOffsets.set(track.id, result.suggestedOffsetMs);
+  if (ctx.playState.currentTrack && ctx.playState.currentTrack.id === track.id) {
+    ctx.playState.currentOffset = result.suggestedOffsetMs;
+  }
+  io.emit('offset:update', { trackId: track.id, offset: result.suggestedOffsetMs });
+  ctx.persistState();
+}
 
 /**
  * 播放清單改名（或任何 title/artist 變動）同步回媒體庫，讓兩邊名稱一致。
@@ -96,6 +114,10 @@ function registerPlaylistHandlers(io, socket, ctx) {
     broadcastState();
     persistState();
     if (typeof ack === 'function') ack({ ok: true, added: added.length, tracks: added });
+    added.forEach((track) => {
+      applyCommunityOffsetSuggestion(ctx, io, track)
+        .catch((error) => log.warn(`歌詞偏移建議值套用失敗：${error.message}`));
+    });
   });
 
   // 直播中的 Twitch 點歌需要以伺服器的正式播放狀態判定「下一首」，不能相信
@@ -129,6 +151,8 @@ function registerPlaylistHandlers(io, socket, ctx) {
     if (typeof ack === 'function') {
       ack({ ok: true, insertAt, placement: currentIndex >= 0 ? 'next' : 'end', track: insertedTrack });
     }
+    applyCommunityOffsetSuggestion(ctx, io, insertedTrack)
+      .catch((error) => log.warn(`歌詞偏移建議值套用失敗：${error.message}`));
   });
 
   socket.on('playlist:remove', (trackId) => {

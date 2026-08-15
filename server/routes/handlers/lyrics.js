@@ -8,8 +8,33 @@ const { createLogger } = require('../../utils/logger');
 const { LyricsEngine } = require('../../services/lyrics-engine');
 const { addRomanization, needsRomanization } = require('../../services/romanizer');
 const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS } = require('../../utils/track-schema');
+const lyricOffsetSync = require('../../services/lyric-offset-sync');
 
 const log = createLogger('Socket');
+
+// 使用者還在按 +/-0.1s 微調時不要每按一下就送一次；等 10 秒沒再變動才算「定案值」。
+const LYRIC_OFFSET_SYNC_DEBOUNCE_MS = 10000;
+
+function scheduleLyricOffsetSync(ctx, trackId, offsetMs) {
+  const timers = ctx.lyricOffsetSyncTimers;
+  const existing = timers.get(trackId);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    timers.delete(trackId);
+    lyricOffsetSync.submitOffset({ videoId: trackId, offsetMs })
+      .catch((error) => log.warn(`歌詞偏移回饋送出失敗：${error.message}`));
+  }, LYRIC_OFFSET_SYNC_DEBOUNCE_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+  timers.set(trackId, timer);
+}
+
+function cancelLyricOffsetSync(ctx, trackId) {
+  const existing = ctx.lyricOffsetSyncTimers.get(trackId);
+  if (existing) {
+    clearTimeout(existing);
+    ctx.lyricOffsetSyncTimers.delete(trackId);
+  }
+}
 
 const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror'];
 
@@ -93,6 +118,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     // offset:update 是所有即時端都已訂閱的細粒度事件；不再讓連按對齊鍵
     // 夾帶完整 state:sync，重連時仍會從已更新的 playState 取得正確初始值。
     persistState();
+    scheduleLyricOffsetSync(ctx, trackId, newOffset);
   });
 
   socket.on('offset:set', (data) => {
@@ -120,12 +146,14 @@ function registerLyricsHandlers(io, socket, ctx) {
 
     io.emit('offset:update', { trackId, offset: clampedOffset });
     persistState();
+    scheduleLyricOffsetSync(ctx, trackId, clampedOffset);
   });
 
   socket.on('offset:reset', (trackId) => {
     if (!trackId) return;
 
     trackOffsets.delete(trackId);
+    cancelLyricOffsetSync(ctx, trackId);
 
     if (playState.currentTrack && playState.currentTrack.id === trackId) {
       playState.currentOffset = 0;

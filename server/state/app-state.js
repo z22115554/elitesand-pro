@@ -124,6 +124,10 @@ function createAppState(io) {
   const trackPitch = new Map();         // semitones (-12 ~ 12)
   const trackSpeed = new Map();         // rate (0.5 ~ 1.5)
   const manualLyricsCache = new Map();  // { lyrics, lyricsType, parsedLyrics, source, timestamp }
+  // trackId -> debounce Timeout；歌詞偏移社群回饋用，見 handlers/lyrics.js。放在這裡
+  // （而不是 handler 模組頂層）是因為要跟這個 app-state 實例同壽命，不能被其他測試用的
+  // app-state 實例共用到。
+  const lyricOffsetSyncTimers = new Map();
 
   function playlistEntryId(track) {
     return track && typeof track.entryId === 'string' && track.entryId ? track.entryId : null;
@@ -592,6 +596,7 @@ function createAppState(io) {
     trackPitch,
     trackSpeed,
     manualLyricsCache,
+    lyricOffsetSyncTimers,
     session,
     SETLIST_SCENE,
     SETLIST_LAYOUTS,

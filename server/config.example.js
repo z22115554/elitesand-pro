@@ -77,4 +77,11 @@ module.exports = {
   // 不送固定安裝 ID、歌名、歌詞、歌單、帳號、硬體或裝置資訊；可在程式設定內關閉。
   usageEndpoint: 'https://elitesand-pro-usage.elitesand.workers.dev/api/v1/usage',
   anonymousUsageEnabled: true,
+
+  // ─── 歌詞偏移社群回饋 ───
+  // 跟上面的「匿名活躍統計」是兩個獨立功能，不要混為一談：這裡會送出 YouTube 影片 ID
+  // 與你調整過的時間偏移毫秒數，讓下次匯入同一支影片的人能拿到社群已校正過的建議值。
+  // 刻意預設關閉（opt-in，不是 opt-out），使用者要自己在面板打開才會送出／取得建議。
+  lyricOffsetEndpoint: 'https://elitesand-pro-lyric-offset.elitesand.workers.dev/api/v1/offset',
+  lyricOffsetSyncEnabled: false,
 };

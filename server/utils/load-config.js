@@ -45,6 +45,12 @@ const DEFAULTS = {
   // 匿名活躍統計：只傳送版本、事件類型與每日／每週／每月輪替代碼；可在程式內關閉。
   usageEndpoint: 'https://elitesand-pro-usage.elitesand.workers.dev/api/v1/usage',
   anonymousUsageEnabled: true,
+  // 歌詞偏移社群回饋：跟上面的匿名活躍統計是兩個獨立的東西，這裡會送出 YouTube 影片 ID
+  // 與使用者調整過的時間偏移。端點預設指向官方 Worker（跟 usageEndpoint 同一套邏輯：
+  // 就算使用者的 config.js 是舊版、沒帶這個鍵，仍要能用到這個功能）；但 enabled 刻意
+  // 預設關閉（opt-in，不是 opt-out）——見 lyric-offset-sync.js 的 defaultState()。
+  lyricOffsetEndpoint: 'https://elitesand-pro-lyric-offset.elitesand.workers.dev/api/v1/offset',
+  lyricOffsetSyncEnabled: false,
 };
 
 function tryRequire(modulePath) {

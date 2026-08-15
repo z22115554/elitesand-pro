@@ -4799,7 +4799,7 @@ test('高頻播放控制只送細粒度事件，不重複廣播完整 state:sync
     style: 'cute', styleOverrides: {}, romanizationMode: 'original',
   };
   registerLyricsHandlers(io, { on(event, handler) { lyricEvents.set(event, handler); } }, {
-    playState, trackOffsets: new Map(), manualLyricsCache: new Map(),
+    playState, trackOffsets: new Map(), manualLyricsCache: new Map(), lyricOffsetSyncTimers: new Map(),
     persistState() {}, broadcastState: noFullState,
   });
   registerPlaybackHandlers(io, { on(event, handler) { playbackEvents.set(event, handler); }, id: 'fixture', clientType: 'controller' }, {
@@ -4820,7 +4820,7 @@ test('offset:set 會立即持久化，歌曲移出清單後重開程式仍可恢
   const trackOffsets = new Map();
   let persisted = 0;
   const ctx = {
-    playState: { currentTrack: null }, trackOffsets, manualLyricsCache: new Map(),
+    playState: { currentTrack: null }, trackOffsets, manualLyricsCache: new Map(), lyricOffsetSyncTimers: new Map(),
     persistState() { persisted += 1; }, broadcastState() {},
   };
   registerLyricsHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);
@@ -4835,7 +4835,7 @@ test('offset:adjust 一次到位的大偏移，跟分好幾次小幅微調的累
   const events = new Map();
   const trackOffsets = new Map();
   const ctx = {
-    playState: { currentTrack: null }, trackOffsets, manualLyricsCache: new Map(),
+    playState: { currentTrack: null }, trackOffsets, manualLyricsCache: new Map(), lyricOffsetSyncTimers: new Map(),
     persistState() {}, broadcastState() {},
   };
   registerLyricsHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);

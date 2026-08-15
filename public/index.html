@@ -1458,6 +1458,22 @@
             </div>
           </section>
 
+          <section class="card" id="lyric-offset-sync-card">
+            <p class="eyebrow" data-i18n="system.lyricOffsetSyncTitle">歌詞偏移社群回饋</p>
+            <p class="sub diagnostic-description" data-i18n="system.lyricOffsetSyncDescription">分享你調整過的歌詞時間偏移，也取得其他人已校正過的建議值，讓同一支影片下次匯入時更準。</p>
+            <p class="field-hint" data-i18n="system.lyricOffsetSyncPrivacy">會傳送 YouTube 影片 ID 與你調整過的偏移毫秒數，以及每日／每月輪替的匿名代碼；不傳送固定安裝 ID、歌名、歌詞內容、歌單或帳號。跟上方的匿名活躍統計是各自獨立的開關。</p>
+            <div class="switch-row">
+              <div>
+                <div class="label" data-i18n="system.lyricOffsetSyncToggle">允許歌詞偏移社群回饋</div>
+                <div id="lyric-offset-sync-status" class="sub" role="status" aria-live="polite" data-i18n="system.lyricOffsetSyncDisabled">已停用</div>
+              </div>
+              <label class="switch" title="允許歌詞偏移社群回饋" data-i18n-title="system.lyricOffsetSyncToggle">
+                <input id="lyric-offset-sync-enabled" type="checkbox">
+                <span class="track"></span>
+              </label>
+            </div>
+          </section>
+
           <div class="card" id="feedback-card">
             <p class="eyebrow" data-i18n="feedback.title">回報問題給開發者</p>
             <p class="sub diagnostic-description" data-i18n="feedback.intro">遇到問題可以直接回報，不需要 GitHub 帳號。送出前會把「實際要送出的完整內容」顯示給你確認，你可以先取消附加診斷資訊再送。</p>
@@ -2704,6 +2720,7 @@
   <script src="/js/app-diagnostics.js"></script>
   <script src="/js/app-feedback.js"></script>
   <script src="/js/usage-telemetry-settings.js"></script>
+  <script src="/js/lyric-offset-sync-settings.js"></script>
   <script src="/js/playlist-state.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/app-spout-output.js"></script>

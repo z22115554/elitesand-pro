@@ -48,6 +48,7 @@ const feedbackReport = require('../services/feedback-report');
 const feedbackClient = require('../services/feedback-client');
 const sessionMarker = require('../services/session-marker');
 const usageTelemetry = require('../services/usage-telemetry');
+const lyricOffsetSync = require('../services/lyric-offset-sync');
 
 // ─── Multer 設定（本地檔案上傳）───
 const storage = multer.diskStorage({
@@ -250,6 +251,25 @@ router.post('/usage/settings', requirePin, (req, res) => {
     res.json({ ok: true, settings });
   } catch (error) {
     log.warn(`匿名使用統計設定保存失敗：${error.message}`);
+    res.status(500).json({ ok: false, code: 'SAVE_FAILED' });
+  }
+});
+
+// ─── 歌詞偏移社群回饋 ───
+// 跟上面的匿名活躍統計是兩個獨立開關，不要共用同一組端點或狀態。
+router.get('/lyric-offset-sync/settings', (req, res) => {
+  res.json(lyricOffsetSync.getSettings());
+});
+
+router.post('/lyric-offset-sync/settings', requirePin, (req, res) => {
+  if (!req.body || typeof req.body.enabled !== 'boolean') {
+    return res.status(400).json({ ok: false, code: 'INVALID_REQUEST' });
+  }
+  try {
+    const settings = lyricOffsetSync.setEnabled(req.body.enabled);
+    res.json({ ok: true, settings });
+  } catch (error) {
+    log.warn(`歌詞偏移回饋設定保存失敗：${error.message}`);
     res.status(500).json({ ok: false, code: 'SAVE_FAILED' });
   }
 });
