@@ -2,8 +2,8 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 1.5.0
-Effective Date / 生效日期：2026-08-10
+Version: 1.6.0
+Effective Date / 生效日期：2026-08-16
 
 IMPORTANT INFORMATION / 重要資訊
 --------------------------------
@@ -235,16 +235,20 @@ Public License v2.1 或其後版本（LGPL）授權，第四條第 4 項的還�
    你的裝置並個別刪除；記錄至多保留 400 天後自動清除。
 
 8. 為了讓你手動校正過的歌詞時間偏移能在下次匯入同一支影片時提供參考建議，
-   本軟體提供「歌詞偏移社群回饋」功能。此功能與前項匿名活躍統計各自獨立、
-   使用各自的傳送端點與本機密鑰，且**預設關閉**；你可隨時在「連線與系統」
-   設定中開啟或關閉。
+   本軟體提供「歌詞偏移社群回饋」功能。此功能與前項匿名活躍統計各自獨立，
+   使用各自的傳送端點與本機密鑰。你同意本版 EULA 後，本功能將**預設啟用**；
+   你可隨時在「連線與系統」設定中關閉。
 
-   開啟後，當你調整某首歌曲的歌詞時間偏移，本軟體會在你停止調整約 10 秒後，
+   啟用後，當你調整某首歌曲的歌詞時間偏移，本軟體會在你停止調整約 10 秒後，
    傳送該 YouTube 影片識別碼、調整後的偏移毫秒數、軟體版本，以及每日、每月
    各自輪替的匿名 HMAC 代碼（產生代碼所用的隨機密鑰只儲存於本機，且與前項
-   統計功能使用的密鑰各自獨立，不會傳送）。開啟後，本軟體也會在你匯入尚無
+   統計功能使用的密鑰各自獨立，不會傳送）。啟用後，本軟體也會在你匯入尚無
    本機偏移記錄的影片時，查詢並可能自動套用其他使用者已回饋、且達最低票數
    門檻確認的建議偏移值。
+
+   你同意本版 EULA 時，若本機已存有本功能上線前你所做的歌詞偏移調整記錄，
+   本軟體會將這些既有記錄一次性傳送，傳送內容與用途比照前段；此後新產生的
+   調整才會持續即時傳送。此一次性傳送每台裝置只會執行一次。
 
    接收端不會收到固定安裝識別碼，亦不會收到或儲存姓名、電子郵件、電腦名稱、
    硬體資訊、歌曲名稱、歌詞內容、播放清單或帳號憑證。一般 HTTPS 連線在技術
@@ -582,11 +586,11 @@ cannot be located by device and individually deleted. Records are automatically
 deleted after no more than 400 days.
 
 7.8 To let lyric-timing corrections you make be offered as a suggestion the
-next time anyone imports the same YouTube video, the Software provides an
-opt-in "community lyric-offset sharing" feature. It is independent of the
-anonymous usage statistics above, uses its own transmission endpoint and
-local secret, and is disabled by default. You can enable or disable it at
-any time under Connection & System.
+next time anyone imports the same YouTube video, the Software provides a
+"community lyric-offset sharing" feature. It is independent of the anonymous
+usage statistics above and uses its own transmission endpoint and local
+secret. This feature is enabled by default once you accept this version of
+the EULA; you can disable it at any time under Connection & System.
 
 When enabled, about 10 seconds after you stop adjusting a song's lyric
 offset, the Software sends that YouTube video identifier, the adjusted
@@ -597,6 +601,12 @@ While enabled, the Software also looks up, and may automatically apply, an
 offset suggestion already submitted by other users and confirmed past a
 minimum-vote threshold, when you import a video with no local offset
 recorded.
+
+When you accept this version of the EULA, if the device already holds lyric
+offset corrections you made before this feature existed, the Software sends
+those existing records once, on the same terms described above. Corrections
+you make afterward are sent going forward as described above. This one-time
+send happens at most once per device.
 
 The receiver does not obtain a permanent installation identifier and does
 not receive or store names, email addresses, computer names, hardware

@@ -19,6 +19,7 @@ const eulaStore = require('../services/eula-store');
 const QRCode = require('qrcode');
 const path = require('path');
 const { dataDir, downloadsDir } = require('../utils/app-paths');
+const stateStore = require('../services/state-store');
 const fs = require('fs');
 const { APP_VERSION } = require('../utils/app-version');
 let musicMetadataPromise = null;
@@ -447,6 +448,17 @@ router.post('/eula/accept', (req, res) => {
   try {
     const status = eulaStore.accept(req.body && req.body.version);
     usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
+    // 一次性回補：把這個功能上線前，使用者已經在本機存下的偏移記錄也送一次
+    // （backfillFromExistingOffsets 內部自己保證只真的執行一次，見服務內註解）。
+    // 這段刻意 fire-and-forget、自己吃掉所有例外——回補失敗不該讓 EULA 同意這個
+    // 動作本身回傳失敗，使用者已經同意了，不能因為背景任務出錯就卡住往下走。
+    try {
+      const saved = stateStore.loadState();
+      lyricOffsetSync.backfillFromExistingOffsets((saved && saved.trackOffsets) || {})
+        .catch((error) => log.warn(`歌詞偏移回饋一次性回補失敗：${error.message}`));
+    } catch (error) {
+      log.warn(`歌詞偏移回饋一次性回補啟動失敗：${error.message}`);
+    }
     res.json({ success: true, ...status });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });

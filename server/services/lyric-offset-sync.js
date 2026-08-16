@@ -5,11 +5,11 @@
  *
  * usage-telemetry 對使用者的承諾是「不記錄看了什麼」；這裡的整個目的剛好相反——記住
  * 「這支 YouTube 影片需要多少毫秒的歌詞校正」，換取下次匯入同一支影片時能拿到別人
- * 已經校正過的建議值。兩者必須各自獨立的 opt-in 開關、各自的本機密鑰、各自的狀態檔，
- * 使用者關掉其中一個不該影響另一個。
+ * 已經校正過的建議值。兩者必須各自獨立的開關、各自的本機密鑰、各自的狀態檔，使用者
+ * 關掉其中一個不該影響另一個。
  *
- * 預設關閉（opt-in，不是像 usage-telemetry 那樣預設開啟的 opt-out）：這裡送出的資料
- * 比匿名使用統計更具體（影片 ID），不能假設使用者會接受跟活躍統計一樣的預設值。
+ * 2026-08-16 改為預設開啟（opt-out，跟 usage-telemetry 同一個預設極性），使用者可隨時
+ * 在設定內關閉；同意本版 EULA＝取得揭露後的同意（見 EULA.txt 條款七之 8）。
  *
  * enabled 這一個開關同時控制「送出我的校正」跟「讀取社群建議值」兩個方向——不要拆成
  * 兩個開關，那樣「關掉分享」卻仍偷偷讀取的行為，違反 install-id.js 訂下的「使用者沒
@@ -98,10 +98,13 @@ function createLyricOffsetSync(options = {}) {
   function defaultState() {
     return {
       schemaVersion: STATE_SCHEMA_VERSION,
-      // 明確要求 === true 才算開啟；跟 usage-telemetry 的 `!== false`（預設開）相反，
-      // 這裡要的是預設關（opt-in）。
-      enabled: dependencies.config.lyricOffsetSyncEnabled === true,
+      // `!== false`：跟 usage-telemetry 同一個極性，預設開（opt-out）。使用者的 config.js
+      // 要明確寫 false 才會預設關閉。
+      enabled: dependencies.config.lyricOffsetSyncEnabled !== false,
       localSecret: null,
+      // 只做一次：把「這個功能存在以前」使用者已經在本機存下的偏移記錄回補到社群。
+      // 之後新產生的調整一律走 offset:adjust/offset:set 的即時 debounce 送出，不再靠這個。
+      backfillDone: false,
     };
   }
 
@@ -118,6 +121,7 @@ function createLyricOffsetSync(options = {}) {
         localSecret: parsed.enabled
           ? (/^[a-f0-9]{64}$/.test(parsed.localSecret || '') ? parsed.localSecret : newSecret())
           : null,
+        backfillDone: parsed.backfillDone === true,
       };
     } catch (_) {
       stateCache = defaultState();
@@ -235,7 +239,36 @@ function createLyricOffsetSync(options = {}) {
     }
   }
 
-  return { getSettings, setEnabled, submitOffset, getSuggestedOffset, isSyncableVideoId };
+  /**
+   * 一次性回補：把這個功能上線前，使用者早就在本機存下的偏移記錄（`server/state/app-state.js`
+   * 的 trackOffsets，序列化在 state.json 裡）補送一次。只會真的執行一次——不管當下有沒有
+   * 送成功都會立刻標記 backfillDone，避免功能關閉/端點暫時不可用時每次啟動都重跑一輪。
+   * 呼叫端（EULA 同意端點）應該 fire-and-forget，不等待這個 function 完成再回應。
+   */
+  async function backfillFromExistingOffsets(offsets) {
+    const state = loadState();
+    if (state.backfillDone) return { skipped: true };
+    state.backfillDone = true;
+    saveState();
+    if (!canUseNetwork()) return { skipped: true };
+
+    const entries = Object.entries(offsets || {})
+      .filter(([videoId, offsetMs]) => isSyncableVideoId(videoId) && typeof offsetMs === 'number' && Number.isInteger(offsetMs))
+      .slice(0, 500);
+    let sent = 0;
+    for (const [videoId, offsetMs] of entries) {
+      const result = await submitOffset({ videoId, offsetMs });
+      if (result && result.ok) sent += 1;
+      // 不必快，這是一次性的背景工作；小間隔純粹是不要一次對 Worker 開一串連發請求。
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    dependencies.log.info(`歌詞偏移回饋：一次性回補既有記錄 ${sent}/${entries.length} 筆已送出`);
+    return { sent, total: entries.length };
+  }
+
+  return {
+    getSettings, setEnabled, submitOffset, getSuggestedOffset, isSyncableVideoId, backfillFromExistingOffsets,
+  };
 }
 
 const singleton = createLyricOffsetSync();

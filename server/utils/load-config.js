@@ -46,11 +46,12 @@ const DEFAULTS = {
   usageEndpoint: 'https://elitesand-pro-usage.elitesand.workers.dev/api/v1/usage',
   anonymousUsageEnabled: true,
   // 歌詞偏移社群回饋：跟上面的匿名活躍統計是兩個獨立的東西，這裡會送出 YouTube 影片 ID
-  // 與使用者調整過的時間偏移。端點預設指向官方 Worker（跟 usageEndpoint 同一套邏輯：
-  // 就算使用者的 config.js 是舊版、沒帶這個鍵，仍要能用到這個功能）；但 enabled 刻意
-  // 預設關閉（opt-in，不是 opt-out）——見 lyric-offset-sync.js 的 defaultState()。
+  // 與使用者調整過的時間偏移。端點預設指向官方 Worker，跟 usageEndpoint 同一套邏輯：
+  // 就算使用者的 config.js 是舊版、沒帶這個鍵，仍要能用到這個功能。enabled 預設開啟
+  // （opt-out，2026-08-16 起跟 anonymousUsageEnabled 同一個極性）——見 lyric-offset-sync.js
+  // 的 defaultState()；同意 EULA 條款七之 8 即取得揭露後的同意。
   lyricOffsetEndpoint: 'https://elitesand-pro-lyric-offset.elitesand.workers.dev/api/v1/offset',
-  lyricOffsetSyncEnabled: false,
+  lyricOffsetSyncEnabled: true,
 };
 
 function tryRequire(modulePath) {

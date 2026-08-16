@@ -81,7 +81,8 @@ module.exports = {
   // ─── 歌詞偏移社群回饋 ───
   // 跟上面的「匿名活躍統計」是兩個獨立功能，不要混為一談：這裡會送出 YouTube 影片 ID
   // 與你調整過的時間偏移毫秒數，讓下次匯入同一支影片的人能拿到社群已校正過的建議值。
-  // 刻意預設關閉（opt-in，不是 opt-out），使用者要自己在面板打開才會送出／取得建議。
+  // 預設開啟（opt-out，跟上面的匿名活躍統計同一個極性），可在面板隨時關閉；同意 EULA
+  // 條款七之 8 即取得揭露後的同意。
   lyricOffsetEndpoint: 'https://elitesand-pro-lyric-offset.elitesand.workers.dev/api/v1/offset',
-  lyricOffsetSyncEnabled: false,
+  lyricOffsetSyncEnabled: true,
 };
