@@ -1074,6 +1074,55 @@ testAsync('診斷包只含已遮蔽的健康資訊、直播連線證據與日誌
   }
 });
 
+test('system-check 真的重新探測時會記依賴狀態遙測，命中快取不重複記', () => {
+  // 用子行程隔離：主測試行程裡有其他測試（loudness backfill 等）也會在背景
+  // 真的呼叫 systemCheck.getSystemCheck()，跟這裡 monkey-patch 的共用 singleton
+  // 撞在一起會讓呼叫次數不可預期。子行程給一個乾淨、沒有其他背景活動的環境。
+  const tempData = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-syscheck-telemetry-'));
+  const systemCheckPath = path.join(__dirname, '..', 'server', 'services', 'system-check.js');
+  const script = `
+    const systemCheck = require(process.argv[1]);
+    const usageTelemetry = require(require('path').join(require('path').dirname(process.argv[1]), 'usage-telemetry'));
+    const deps = [];
+    usageTelemetry.recordDependency = (name, ok) => { deps.push([name, ok]); return true; };
+    (async () => {
+      systemCheck._resetForTests();
+      await systemCheck.getSystemCheck({
+        force: true,
+        compatibility: { getStatus: () => ({ state: 'ok', message: 'metadata only' }) },
+        execFileImpl: async (command) => {
+          if (command === 'yt-dlp') return { stdout: '2026.07\\n', stderr: '' };
+          throw new Error('ffmpeg missing');
+        },
+        now: () => 5000,
+      });
+      const afterProbe = deps.slice();
+      deps.length = 0;
+      // 命中 60 秒快取時不該重新呼叫 recordDependency——沒有真的重新探測，
+      // 記了也只是重複同一個布林值，白白多做事。
+      await systemCheck.getSystemCheck({
+        compatibility: { getStatus: () => ({ state: 'ok', message: 'metadata only' }) },
+        execFileImpl: async () => { throw new Error('不該被呼叫：應該命中快取'); },
+        now: () => 5000,
+      });
+      process.stdout.write('__RESULT__' + JSON.stringify({ afterProbe, afterCacheHit: deps }));
+      process.exit(0);
+    })();
+  `;
+  try {
+    const result = require('child_process').spawnSync(process.execPath, ['-e', script, systemCheckPath], {
+      encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: tempData }, timeout: 10000,
+    });
+    ok(result.status === 0, result.stderr || 'system-check 遙測子程序失敗: ');
+    const payload = JSON.parse((result.stdout.split('__RESULT__')[1] || '{}').trim());
+
+    eq(payload.afterProbe.length, 2, '應該各記一次 ytdlp 與 ffmpeg 的狀態: ');
+    ok(payload.afterProbe.some(([name, v]) => name === 'ytdlp' && v === true), 'yt-dlp 可用應記為 true: ');
+    ok(payload.afterProbe.some(([name, v]) => name === 'ffmpeg' && v === false), 'ffmpeg 探測失敗應記為 false: ');
+    eq(payload.afterCacheHit.length, 0, '快取命中不該重複記錄依賴狀態: ');
+  } finally { fs.rmSync(tempData, { recursive: true, force: true }); }
+});
+
 // 清理規則是診斷包與問題回報共用的唯一實作。這裡刻意同時測「該遮的有遮」與
 // 「不該動的沒動」——過度清理會讓回報變成一堆 [redacted]，跟外洩一樣讓功能失效。
 test('清理模組遮蔽憑證與個資，並保留除錯所需的一般內容', () => {
@@ -2556,6 +2605,106 @@ test('找不到歌詞會命中 negative cache，不重打六個來源', () => {
   } finally { fs.rmSync(tempData, { recursive: true, force: true }); }
 });
 
+test('歌詞搜尋遙測：每個來源同一次搜尋只記一次，不隨 title variant 重複灌水', () => {
+  // 用會產生「原文 + 去掉尾端英文回聲」兩個 title variant 的標題，確保每個
+  // 來源真的被試超過一次——這樣才驗證得到 search() 裡按來源去重的邏輯，
+  // 而不是巧合下只跑了一輪就通過。
+  const tempData = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-lyrics-telemetry-'));
+  const enginePath = path.join(__dirname, '..', 'server', 'services', 'lyrics-engine.js');
+  const script = `
+    const { LyricsEngine, LYRICS_SOURCE_PRIORITY } = require(process.argv[1]);
+    const usageTelemetry = require(require('path').join(require('path').dirname(process.argv[1]), 'usage-telemetry'));
+    const method = { betterlyrics:'searchBetterLyrics', paxsenix:'searchPaxsenix', kugou:'searchKugou', qqmusic:'searchQQMusic', lrclib:'searchLrclib', netease:'searchNetease' };
+    const callCounts = {};
+    for (const name of LYRICS_SOURCE_PRIORITY) {
+      callCounts[name] = 0;
+      LyricsEngine[method[name]] = async () => {
+        callCounts[name] += 1;
+        // netease 故意在第一個 title variant 沒中，第二個才中——逼搜尋真的
+        // 跨過第二輪 variant，這樣其餘 5 個來源才會被試兩次，才測得到「試了
+        // 兩次但只記一次」這件事。若一輪就中，迴圈馬上 return，永遠測不到。
+        if (name === 'netease' && callCounts[name] >= 2) return { lyrics: '[00:00.00]hello', type: 'lrc' };
+        return null;
+      };
+    }
+    const sourceCalls = [];
+    const outcomeCalls = [];
+    usageTelemetry.recordLyricSource = (source, hit) => { sourceCalls.push([source, hit]); return true; };
+    usageTelemetry.recordOutcome = (family, ok, code) => { outcomeCalls.push([family, ok, code]); return true; };
+    (async () => {
+      const result = await LyricsEngine.search('漢字之歌', '漢字之歌 Song Title Echo', 123, false);
+      process.stdout.write('__RESULT__' + JSON.stringify({
+        found: !!result, callCounts, sourceCalls, outcomeCalls,
+      }));
+      process.exit(0);
+    })();
+  `;
+  try {
+    const result = require('child_process').spawnSync(process.execPath, ['-e', script, enginePath], {
+      encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: tempData }, timeout: 10000,
+    });
+    ok(result.status === 0, result.stderr || '歌詞遙測子程序失敗: ');
+    const payload = JSON.parse((result.stdout.split('__RESULT__')[1] || '{}').trim());
+
+    ok(payload.found, 'netease 應該命中: ');
+    // netease 故意設計成第二輪 variant 才中，逼所有 5 個其他來源真的被試兩次
+    // （每個 variant 一次）——這樣才是在測「試了兩次但只記一次」，不是巧合下
+    // 只跑了一輪就通過。
+    const others0 = LYRICS_SOURCE_PRIORITY.filter((n) => n !== 'netease');
+    ok(others0.every((n) => payload.callCounts[n] === 2), '測試前提不成立：其餘來源沒有真的被試兩輪: ');
+    eq(payload.callCounts.netease, 2, 'netease 應該恰好被試兩次（第一輪 miss、第二輪 hit）才 return: ');
+
+    // 不論底層被試了幾次，每個來源在遙測裡只能出現一筆
+    const sourceNames = payload.sourceCalls.map((entry) => entry[0]);
+    eq(new Set(sourceNames).size, sourceNames.length, '同一次搜尋裡每個來源只能記一次，不可重複: ');
+    eq(sourceNames.length, LYRICS_SOURCE_PRIORITY.length, '六個來源應該各記一次: ');
+
+    const netease = payload.sourceCalls.find((entry) => entry[0] === 'netease');
+    ok(netease && netease[1] === true, 'netease 命中應記為 hit: ');
+    const others = payload.sourceCalls.filter((entry) => entry[0] !== 'netease');
+    ok(others.every((entry) => entry[1] === false), '沒命中的來源應記為 miss: ');
+
+    eq(payload.outcomeCalls.length, 1, 'family 層 outcome 只該記一次: ');
+    eq(payload.outcomeCalls[0][0], 'lyrics');
+    eq(payload.outcomeCalls[0][1], true);
+  } finally { fs.rmSync(tempData, { recursive: true, force: true }); }
+});
+
+test('歌詞搜尋遙測：全部來源都沒找到時，family 記 no_match，'
+  + 'skipped 的來源不計入命中率', () => {
+  const tempData = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-lyrics-telemetry-miss-'));
+  const enginePath = path.join(__dirname, '..', 'server', 'services', 'lyrics-engine.js');
+  const script = `
+    const { LyricsEngine, LYRICS_SOURCE_PRIORITY } = require(process.argv[1]);
+    const usageTelemetry = require(require('path').join(require('path').dirname(process.argv[1]), 'usage-telemetry'));
+    const method = { betterlyrics:'searchBetterLyrics', paxsenix:'searchPaxsenix', kugou:'searchKugou', qqmusic:'searchQQMusic', lrclib:'searchLrclib', netease:'searchNetease' };
+    for (const name of LYRICS_SOURCE_PRIORITY) LyricsEngine[method[name]] = async () => null;
+    const sourceCalls = [];
+    const outcomeCalls = [];
+    usageTelemetry.recordLyricSource = (source, hit) => { sourceCalls.push([source, hit]); return true; };
+    usageTelemetry.recordOutcome = (family, ok, code) => { outcomeCalls.push([family, ok, code]); return true; };
+    (async () => {
+      const result = await LyricsEngine.search('no-such-artist', 'no-such-title-xyz', 999, false);
+      process.stdout.write('__RESULT__' + JSON.stringify({ found: !!result, sourceCalls, outcomeCalls }));
+      process.exit(0);
+    })();
+  `;
+  try {
+    const result = require('child_process').spawnSync(process.execPath, ['-e', script, enginePath], {
+      encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: tempData }, timeout: 10000,
+    });
+    ok(result.status === 0, result.stderr || '歌詞遙測子程序失敗: ');
+    const payload = JSON.parse((result.stdout.split('__RESULT__')[1] || '{}').trim());
+
+    ok(!payload.found, '應該找不到: ');
+    ok(payload.sourceCalls.every((entry) => entry[1] === false), '全部來源都該記 miss: ');
+    eq(payload.outcomeCalls.length, 1);
+    eq(payload.outcomeCalls[0][0], 'lyrics');
+    eq(payload.outcomeCalls[0][1], false);
+    eq(payload.outcomeCalls[0][2], 'no_match', '找不到時 family 失敗碼要是 no_match: ');
+  } finally { fs.rmSync(tempData, { recursive: true, force: true }); }
+});
+
 testAsync('歌詞來源連續失敗會暫停，冷卻後自動恢復', async () => {
   let now = 1000;
   const health = new ProviderHealthRegistry({ failureThreshold: 2, cooldownMs: 100, timeoutMs: 50, now: () => now });
@@ -3930,7 +4079,7 @@ test('播放清單只掃描條目，逐首下載仍由前端共用佇列執行',
   ok(frontend.includes('RISK_WARNING_DISABLED_KEY'));
   ok(frontend.includes('queueYouTubeImport(entry.url'));
 });
-const { classifyImportError } = require('../server/utils/import-error');
+const { classifyImportError, toImportTelemetryCode } = require('../server/utils/import-error');
 
 test('normalizeText：全形空白→半形、壓縮空白、去頭尾', () => {
   eq(normalizeText('　你好　　世界  '), '你好 世界');
@@ -3951,6 +4100,40 @@ test('匯入錯誤分類：登入、Premium、地區、下架、逾時與磁碟�
     eq(result.code, expected);
     ok(result.message && result.recovery, `${expected} 應有人話與恢復方式: `);
   }
+});
+
+test('匯入錯誤 → 遙測碼對照：取消不計入，其餘各碼對得上 telemetry-fields 的封閉分類', () => {
+  const fields = require('../server/services/telemetry-fields');
+  const mapped = {
+    IMPORT_CANCELLED: null,
+    DISK_FULL: 'disk_full',
+    YOUTUBE_AUTH_REQUIRED: 'ytdlp_auth_required',
+    REGION_RESTRICTED: 'ytdlp_geo_blocked',
+    VIDEO_UNAVAILABLE: 'ytdlp_private',
+    IMPORT_TIMEOUT: 'ytdlp_timeout',
+    FFMPEG_MISSING: 'ffmpeg_missing',
+  };
+  for (const [productCode, telemetryCode] of Object.entries(mapped)) {
+    eq(toImportTelemetryCode(productCode), telemetryCode, `${productCode} → ${telemetryCode}: `);
+    if (telemetryCode !== null) {
+      ok(fields.ERROR_CODES.import.includes(telemetryCode), `${telemetryCode} 必須存在於 telemetry-fields 的封閉清單: `);
+    }
+  }
+  // 沒有明確對照的碼（Music Premium、未分類的 IMPORT_FAILED）原樣通過，
+  // 交給 usage-telemetry 的 mapError() 兜底成 'other'，而不是勉強塞進錯的分類
+  eq(toImportTelemetryCode('YOUTUBE_MUSIC_PREMIUM'), 'YOUTUBE_MUSIC_PREMIUM');
+  eq(fields.mapError('import', toImportTelemetryCode('YOUTUBE_MUSIC_PREMIUM')), 'other');
+  eq(toImportTelemetryCode('IMPORT_FAILED'), 'IMPORT_FAILED');
+  eq(fields.mapError('import', toImportTelemetryCode('IMPORT_FAILED')), 'other');
+});
+
+test('YouTube 匯入路由：成功與失敗都記遙測，取消不記、未知格式歸 other', () => {
+  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const block = api.slice(api.indexOf("router.post('/youtube',"), api.indexOf("router.post('/youtube/cancel',"));
+  ok(block.includes("usageTelemetry.recordOutcome('import', true)"), '成功路徑要記 import.ok: ');
+  ok(block.includes("usageTelemetry.recordOutcome('import', false, 'other')"), 'sanitizeTrack 失敗要記一次失敗（歸 other）: ');
+  ok(block.includes('toImportTelemetryCode(classified.code)'), '失敗要先轉成遙測碼: ');
+  ok(block.includes('if (telemetryCode !== null) usageTelemetry.recordOutcome'), '取消（telemetryCode 為 null）不可記錄，否則會灌水失敗率的分母: ');
 });
 
 test('Music Premium 限制會在 metadata 策略中明確中止，不降級成一般匯入失敗', () => {
@@ -4722,6 +4905,63 @@ test('R6-2 display 版本回報會區分待驗證、正確與舊快取', () => {
   socket.events.get('client:build')({ displayBuild: 'a'.repeat(16) });
   const stale = io.emitted.at(-1).data.displayRuntime;
   eq(stale.stale, 1, '不同指紋必須標示為舊快取: ');
+});
+
+test('OBS display/setlist 意外斷線才記事故；正常關閉、面板/預覽 iframe 都不算', () => {
+  const usageTelemetry = require('../server/services/usage-telemetry');
+  const makeIo = () => ({
+    emitted: [], authMiddleware: null, connectionHandler: null, sockets: { sockets: new Map() },
+    use(fn) { this.authMiddleware = fn; },
+    on(event, fn) { if (event === 'connection') this.connectionHandler = fn; },
+    emit(event, data) { this.emitted.push({ event, data }); },
+  });
+  const makeSocket = (id, clientType) => ({
+    id, handshake: { auth: { clientType, pin: '' }, address: '127.0.0.1' },
+    events: new Map(), emitted: [], connected: true,
+    on(event, fn) { this.events.set(event, fn); },
+    emit(event, data) { this.emitted.push({ event, data }); },
+    use(fn) { this.packetMiddleware = fn; },
+  });
+
+  const incidents = [];
+  const originalRecordIncident = usageTelemetry.recordIncident;
+  usageTelemetry.recordIncident = (name) => { incidents.push(name); return true; };
+  try {
+    const io = makeIo();
+    socketHandler(io, { getDisplayBuild: () => 'a'.repeat(16) });
+
+    const cases = [
+      ['display', 'transport close', true, 'obs_display_disconnect'],
+      ['display', 'ping timeout', true, 'obs_display_disconnect'],
+      ['display', 'transport error', true, 'obs_display_disconnect'],
+      ['display', 'client namespace disconnect', false, null],
+      ['display', 'server namespace disconnect', false, null],
+      ['display', 'server shutting down', false, null],
+      ['setlist', 'transport close', true, 'obs_setlist_disconnect'],
+      ['setlist', 'client namespace disconnect', false, null],
+      ['display-preview', 'transport close', false, null],
+      ['setlist-preview', 'transport close', false, null],
+      ['display-spout', 'transport close', false, null],
+      ['controller', 'transport close', false, null],
+    ];
+    for (const [clientType, reason, shouldRecord, expectedIncident] of cases) {
+      incidents.length = 0;
+      const socket = makeSocket(`${clientType}-${reason}`, clientType);
+      io.authMiddleware(socket, (err) => { if (err) throw err; });
+      io.sockets.sockets.set(socket.id, socket);
+      io.connectionHandler(socket);
+      socket.events.get('client:type')(clientType);
+      socket.events.get('disconnect')(reason);
+      if (shouldRecord) {
+        eq(incidents.length, 1, `${clientType} / ${reason} 應該記一次事故: `);
+        eq(incidents[0], expectedIncident, `${clientType} / ${reason} 記錯了事故類型: `);
+      } else {
+        eq(incidents.length, 0, `${clientType} / ${reason} 不該被記為事故: `);
+      }
+    }
+  } finally {
+    usageTelemetry.recordIncident = originalRecordIncident;
+  }
 });
 
 test('面板以 playlist:update 移除歌曲時，同樣不會清掉歌曲記憶', () => {

@@ -38,7 +38,7 @@ const { autoParseLyrics, parseOffset } = require('../services/lrc-parser');
 // 見 server/middleware/require-pin.js 開頭說明。
 const requirePin = require('../middleware/require-pin');
 const { isYouTubeUrl } = require('../utils/youtube-url');
-const { classifyImportError } = require('../utils/import-error');
+const { classifyImportError, toImportTelemetryCode } = require('../utils/import-error');
 const { decodeUploadedText } = require('../utils/decode-text');
 const ytdlpCompatibility = require('../services/ytdlp-compatibility');
 const systemCheck = require('../services/system-check');
@@ -599,12 +599,22 @@ router.post('/youtube', requirePin, async (req, res) => {
     log.info(`YouTube 處理完成: ${result.title || result.id} (${duration}ms)`);
     log.perf('youtube', duration, { title: result.title });
     const safeTrack = sanitizeTrack(result);
-    if (!safeTrack) return res.status(422).json({ error: '音訊處理結果格式無效' });
+    if (!safeTrack) {
+      // 下載本身成功但輸出格式不合預期——仍是一次匯入失敗，只是不在
+      // classifyImportError 的分類範圍內，歸給 usage-telemetry 的 'other' 兜底碼。
+      usageTelemetry.recordOutcome('import', false, 'other');
+      return res.status(422).json({ error: '音訊處理結果格式無效' });
+    }
+    usageTelemetry.recordOutcome('import', true);
     res.json({ success: true, track: safeTrack });
   } catch (err) {
     const duration = Date.now() - start;
     log.error(`YouTube 處理失敗 (${duration}ms)`, err);
     const classified = classifyImportError(err);
+    // 使用者主動取消不是管線失敗，toImportTelemetryCode() 回傳 null 時完全不記錄
+    // ——連 attempt 都不計，避免取消把「匯入到底穩不穩」的分母灌水。
+    const telemetryCode = toImportTelemetryCode(classified.code);
+    if (telemetryCode !== null) usageTelemetry.recordOutcome('import', false, telemetryCode);
     res.status(classified.status).json({
       error: classified.message,
       code: classified.code,

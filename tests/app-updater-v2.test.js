@@ -34,6 +34,24 @@ function test(name, fn) {
   }
 }
 
+// 這個檔案本來全部是同步 test()：applyStagedUpdate() 是 async function，
+// 需要真的 await 才能量到結果，不能沿用同步版本（同步版本會在 promise
+// resolve 前就回報「通過」）。只加這一個最小的非同步佇列，其餘同步測試
+// 完全不受影響——它們照樣立刻執行，佇列只在檔案最後才被 await。
+const pendingAsync = [];
+function testAsync(name, fn) {
+  pendingAsync.push((async () => {
+    try {
+      await fn();
+      passed += 1;
+      console.log(`  ✓ ${name}`);
+    } catch (error) {
+      console.error(`  ✗ ${name}`);
+      throw error;
+    }
+  })());
+}
+
 function sha(buffer) { return crypto.createHash('sha256').update(buffer).digest('hex'); }
 
 function nextPatch(version) {
@@ -224,6 +242,176 @@ test('runner atomically replaces EXE/ASAR and leaves updater-node untouched', ()
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+/**
+ * 建立一組跟上面那個測試相同結構的合法 plan fixture，供下面兩個更新結果
+ * 標記檔測試共用，避免重複整組 90 行的 fixture 建置。
+ */
+function buildRunnerFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-runner-v2-marker-'));
+  const targetRoot = path.join(root, 'installed');
+  const workRoot = path.join(root, 'work');
+  const stagingRoot = path.join(workRoot, 'staging');
+  const backupRoot = path.join(workRoot, 'backup');
+  fs.mkdirSync(path.join(targetRoot, 'resources', 'tools'), { recursive: true });
+  fs.mkdirSync(path.join(stagingRoot, 'resources'), { recursive: true });
+  fs.writeFileSync(path.join(targetRoot, 'Elitesand Pro.exe'), 'old-exe');
+  fs.writeFileSync(path.join(targetRoot, 'resources', 'app.asar'), 'old-asar');
+  fs.writeFileSync(path.join(targetRoot, 'resources', 'tools', 'updater-node.exe'), 'immutable-node');
+  fs.writeFileSync(path.join(stagingRoot, 'Elitesand Pro.exe'), 'new-exe');
+  fs.writeFileSync(path.join(stagingRoot, 'resources', 'app.asar'), 'new-asar');
+
+  const files = [
+    { path: 'Elitesand Pro.exe', size: 7, sha256: sha(Buffer.from('new-exe')) },
+    { path: 'resources/app.asar', size: 8, sha256: sha(Buffer.from('new-asar')) },
+  ];
+  const baselineImmutableFiles = [{
+    path: 'resources/tools/updater-node.exe',
+    size: Buffer.byteLength('immutable-node'),
+    sha256: sha(Buffer.from('immutable-node')),
+  }];
+  const plan = runner.validatePlan({
+    schemaVersion: 2,
+    mode: 'electron-asar-v1',
+    parentPid: 999999,
+    targetRoot,
+    stagingRoot,
+    backupRoot,
+    workRoot,
+    readyFile: path.join(workRoot, 'ready'),
+    logFile: path.join(workRoot, 'update.log'),
+    rollbackErrorLog: path.join(workRoot, 'rollback.log'),
+    files,
+    baselineImmutableFiles,
+    baselineRuntimeFingerprint: runner.canonicalBaselineFingerprint(baselineImmutableFiles),
+    restart: { type: 'electron-app', command: path.join(targetRoot, 'Elitesand Pro.exe') },
+  });
+  return { root, targetRoot, plan };
+}
+
+function readMarker(targetRoot) {
+  return JSON.parse(fs.readFileSync(path.join(targetRoot, runner.UPDATE_RESULT_MARKER_NAME), 'utf8'));
+}
+
+testAsync('applyStagedUpdate 成功時寫下 ok:true 的更新結果標記檔，不影響既有安裝行為', async () => {
+  const { root, targetRoot, plan } = buildRunnerFixture();
+  try {
+    const result = await runner.applyStagedUpdate(plan, { skipRestart: true });
+    assert.equal(result.ok, true);
+    assert.equal(fs.readFileSync(path.join(targetRoot, 'Elitesand Pro.exe'), 'utf8'), 'new-exe',
+      '標記檔是純附加，不該改變既有的安裝結果: ');
+    const marker = readMarker(targetRoot);
+    assert.equal(marker.ok, true);
+    assert.equal(typeof marker.appliedAt, 'string');
+    assert.ok(!('error' in marker), '成功時標記檔不該帶任何錯誤細節: ');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+testAsync('applyStagedUpdate 安裝失敗觸發回滾時，標記檔記 ok:false 且不外流錯誤路徑細節', async () => {
+  const { root, targetRoot, plan } = buildRunnerFixture();
+  try {
+    const result = await runner.applyStagedUpdate(plan, { skipRestart: true, failAfter: 0 });
+    assert.equal(result.ok, false);
+    assert.equal(fs.readFileSync(path.join(targetRoot, 'Elitesand Pro.exe'), 'utf8'), 'old-exe',
+      '回滾後應還原成安裝前的檔案: ');
+    const marker = readMarker(targetRoot);
+    assert.equal(marker.ok, false);
+    assert.equal(typeof marker.appliedAt, 'string');
+    // 標記檔的欄位表只有 ok/appliedAt——telemetry-fields.js 目前只定義
+    // update.ok／update.failed 兩個布林旗標，故意不含技術性錯誤內容。
+    assert.deepEqual(Object.keys(marker).sort(), ['appliedAt', 'ok']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('immutable runtime 驗證失敗（handoff 後基準被動過）的分支也會寫失敗標記', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'app-updater-runner-v2.js'), 'utf8');
+  const block = source.slice(source.indexOf('if (!runtimeCheck.ok)'), source.indexOf('appendLog(plan.logFile, \'Immutable runtime baseline verified'));
+  assert.ok(block.includes('writeUpdateResultMarker(plan.targetRoot, false)'),
+    'runtime baseline 被拒的分支必須也寫失敗標記，否則這條路徑的更新結果永遠不會被回報: ');
+});
+
+test('consumeUpdateResultMarker：沒有安裝根目錄時直接跳過，可攜版／開發環境不受影響', () => {
+  const savedInstallRoot = process.env.ELITESAND_INSTALL_ROOT;
+  delete process.env.ELITESAND_INSTALL_ROOT; // 模擬可攜版/開發環境，不受目前執行環境的實際值影響
+  try {
+    const calls = [];
+    const result = updater.consumeUpdateResultMarker({
+      usageTelemetry: { recordUpdateResult: (ok) => calls.push(ok) },
+    });
+    assert.equal(result, null);
+    assert.equal(calls.length, 0, '沒有安裝根目錄時不該呼叫遙測: ');
+  } finally {
+    if (savedInstallRoot === undefined) delete process.env.ELITESAND_INSTALL_ROOT;
+    else process.env.ELITESAND_INSTALL_ROOT = savedInstallRoot;
+  }
+});
+
+test('consumeUpdateResultMarker：讀到成功標記會回報 true 並刪除標記檔', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-consume-marker-'));
+  try {
+    fs.writeFileSync(path.join(root, runner.UPDATE_RESULT_MARKER_NAME), JSON.stringify({ ok: true, appliedAt: '2026-01-01T00:00:00.000Z' }));
+    const calls = [];
+    const result = updater.consumeUpdateResultMarker({
+      targetRoot: root,
+      usageTelemetry: { recordUpdateResult: (ok) => calls.push(ok) },
+    });
+    assert.deepEqual(calls, [true]);
+    assert.equal(result.ok, true);
+    assert.ok(!fs.existsSync(path.join(root, runner.UPDATE_RESULT_MARKER_NAME)), '讀過的標記檔必須被刪除，避免下次啟動重複回報: ');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('consumeUpdateResultMarker：讀到失敗標記會回報 false', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-consume-marker-'));
+  try {
+    fs.writeFileSync(path.join(root, runner.UPDATE_RESULT_MARKER_NAME), JSON.stringify({ ok: false, appliedAt: '2026-01-01T00:00:00.000Z' }));
+    const calls = [];
+    updater.consumeUpdateResultMarker({
+      targetRoot: root,
+      usageTelemetry: { recordUpdateResult: (ok) => calls.push(ok) },
+    });
+    assert.deepEqual(calls, [false]);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('consumeUpdateResultMarker：沒有標記檔時安靜跳過，不噴例外', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-consume-marker-empty-'));
+  try {
+    const calls = [];
+    const result = updater.consumeUpdateResultMarker({
+      targetRoot: root,
+      usageTelemetry: { recordUpdateResult: (ok) => calls.push(ok) },
+    });
+    assert.equal(result, null);
+    assert.equal(calls.length, 0);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('consumeUpdateResultMarker：標記檔壞掉（非合法 JSON／缺 ok）不回報也不崩潰，且仍清掉壞檔', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-consume-marker-corrupt-'));
+  try {
+    fs.writeFileSync(path.join(root, runner.UPDATE_RESULT_MARKER_NAME), '{ not valid json');
+    const calls = [];
+    const result = updater.consumeUpdateResultMarker({
+      targetRoot: root,
+      usageTelemetry: { recordUpdateResult: (ok) => calls.push(ok) },
+    });
+    assert.equal(result, null);
+    assert.equal(calls.length, 0);
+    assert.ok(!fs.existsSync(path.join(root, runner.UPDATE_RESULT_MARKER_NAME)), '壞掉的標記檔也該被清掉，否則會卡住每次啟動: ');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+testAsync('applyStagedUpdate 標記檔寫入失敗不影響更新本身的成敗（唯讀 targetRoot 時仍完成安裝）', async () => {
+  const { root, targetRoot, plan } = buildRunnerFixture();
+  const readonlyMarkerPath = path.join(targetRoot, runner.UPDATE_RESULT_MARKER_NAME);
+  fs.mkdirSync(readonlyMarkerPath); // 讓標記檔路徑被目錄佔用，寫入必定拋錯
+  try {
+    const result = await runner.applyStagedUpdate(plan, { skipRestart: true });
+    assert.equal(result.ok, true, '標記檔寫不出去不該讓已經成功的更新被回報成失敗: ');
+    assert.equal(fs.readFileSync(path.join(targetRoot, 'Elitesand Pro.exe'), 'utf8'), 'new-exe');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('build-update is fail-closed, signs the manifest, and can no longer package repo server/public directly', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-update.ps1'), 'utf8');
   assert(source.includes('build-installer.ps1'));
@@ -262,5 +450,13 @@ test('Electron host exports physical install root/PID and reserves exit code 42 
   assert(source.includes('app.exit(0)'));
 });
 
-fs.rmSync(runtimeRoot, { recursive: true, force: true });
-console.log(`[app-updater-v2] ${passed} tests passed.`);
+Promise.all(pendingAsync)
+  .then(() => {
+    fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    console.log(`[app-updater-v2] ${passed} tests passed.`);
+  })
+  .catch((error) => {
+    fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    console.error(error);
+    process.exitCode = 1;
+  });

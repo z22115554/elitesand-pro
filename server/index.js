@@ -283,6 +283,7 @@ app.get('/background/:filename', (req, res) => {
 // ─── Socket.io 即時通訊 ───
 const socketHandler = require('./routes/socket-handler');
 const usageTelemetry = require('./services/usage-telemetry');
+const { consumeUpdateResultMarker } = require('./services/app-updater-v2');
 const socketApi = socketHandler(io);
 
 // ─── Twitch：本機 Device Code Flow + EventSub WebSocket ───
@@ -440,6 +441,9 @@ server.listen(PORT, '0.0.0.0', () => {
   log.info(`║  OBS 歌詞: http://localhost:${PORT}/display    ║`);
   log.info(`║  OBS 歌單: http://localhost:${PORT}/setlist    ║`);
   ytdlpCompatibility.scheduleProbe();
+  // 上一輪更新（若有）留在安裝目錄的結果標記檔，讀到就當場消費掉：可攜版／
+  // 開發環境沒有 ELITESAND_INSTALL_ROOT 會直接跳過，不影響一般啟動。
+  try { consumeUpdateResultMarker(); } catch (error) { log.warn(`更新結果標記讀取失敗：${error.message}`); }
   usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
   log.info('╚══════════════════════════════════════════╝');
 

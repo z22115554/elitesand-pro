@@ -34,6 +34,8 @@ const config = require('../utils/load-config');
 const { APP_VERSION, appUserAgent, githubJsonHeaders } = require('../utils/app-version');
 const { logsDir } = require('../utils/app-paths');
 const { verifyUpdateManifestSignature } = require('./update-signature');
+const { UPDATE_RESULT_MARKER_NAME } = require('./app-updater-runner-v2');
+const usageTelemetry = require('./usage-telemetry');
 
 const log = createLogger('AppUpdaterV2');
 const UPDATE_SCHEMA_VERSION = 2;
@@ -304,6 +306,32 @@ async function fetchLatestRelease(repo) {
 function resolveInstallRoot(options = {}) {
   const value = options.targetRoot || process.env.ELITESAND_INSTALL_ROOT || '';
   return value && path.isAbsolute(value) ? path.resolve(value) : null;
+}
+
+/**
+ * 消費上一輪更新（若有）留在安裝目錄的結果標記檔：讀取、回報遙測、刪除。
+ * 讀到就當場刪掉，不管布林值合不合法、不管遙測有沒有送出去——標記檔只負責
+ * 「有沒有東西可讀」，不負責重試；重送邏輯本來就是 usage-telemetry 自己的事
+ * （送不出去不補傳，是既有設計，跟這裡一致）。
+ *
+ * 呼叫時機是程式啟動：可攜版／開發環境沒有 ELITESAND_INSTALL_ROOT，
+ * resolveInstallRoot() 回傳 null 就直接跳過，不強求每個執行形態都要有這個。
+ */
+function consumeUpdateResultMarker(options = {}) {
+  const installRoot = resolveInstallRoot(options);
+  if (!installRoot) return null;
+  const markerPath = path.join(installRoot, UPDATE_RESULT_MARKER_NAME);
+  let marker = null;
+  try {
+    marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  } catch (_) {
+    return null; // 沒有標記檔、或壞掉讀不出來，都當作沒有可回報的結果
+  } finally {
+    try { fs.unlinkSync(markerPath); } catch (_) { /* 刪不掉不影響回報本身 */ }
+  }
+  if (typeof marker?.ok !== 'boolean') return null;
+  (options.usageTelemetry || usageTelemetry).recordUpdateResult(marker.ok);
+  return marker;
 }
 
 function resolveUpdaterRuntime(installRoot, options = {}) {
@@ -584,5 +612,6 @@ module.exports = {
   getProgress,
   hostCanIncremental,
   resolveInstallRoot,
+  consumeUpdateResultMarker,
   _resetForTests,
 };

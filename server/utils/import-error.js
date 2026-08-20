@@ -31,4 +31,31 @@ function classifyImportError(error) {
   return { code: 'IMPORT_FAILED', status: 500, message: 'YouTube 匯入失敗。', recovery: '可重試一次；若仍失敗，請檢查 yt-dlp 或改用本機音檔。', retryable: true, technical };
 }
 
-module.exports = { classifyImportError };
+/**
+ * 把上面這套面向使用者的產品碼，轉成 telemetry-fields.js 的封閉遙測碼。
+ * 回傳 null 代表「這次不算管線失敗，不計入遙測」——目前只有使用者主動
+ * 取消是這種情況：那不是 yt-dlp／FFmpeg／網路的問題，算進失敗率只會讓
+ * 「匯入到底穩不穩」這個數字失真。
+ *
+ * YOUTUBE_MUSIC_PREMIUM 與 IMPORT_FAILED（未分類）刻意不列在對照表——
+ * 讓它們落到 usage-telemetry.js 的 mapError() 兜底成 'other'，而不是勉強
+ * 塞進語意不合的既有分類。
+ */
+const TELEMETRY_CODE_BY_IMPORT_CODE = {
+  IMPORT_CANCELLED: null,
+  DISK_FULL: 'disk_full',
+  YOUTUBE_AUTH_REQUIRED: 'ytdlp_auth_required',
+  REGION_RESTRICTED: 'ytdlp_geo_blocked',
+  VIDEO_UNAVAILABLE: 'ytdlp_private',
+  IMPORT_TIMEOUT: 'ytdlp_timeout',
+  FFMPEG_MISSING: 'ffmpeg_missing',
+};
+
+function toImportTelemetryCode(classifiedCode) {
+  if (Object.prototype.hasOwnProperty.call(TELEMETRY_CODE_BY_IMPORT_CODE, classifiedCode)) {
+    return TELEMETRY_CODE_BY_IMPORT_CODE[classifiedCode];
+  }
+  return classifiedCode; // 未知碼原樣交給 mapError()，會被歸類 'other'
+}
+
+module.exports = { classifyImportError, toImportTelemetryCode };

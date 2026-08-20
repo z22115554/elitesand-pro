@@ -24,6 +24,34 @@ function appendLog(file, message) {
   fs.appendFileSync(file, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
 }
 
+const UPDATE_RESULT_MARKER_NAME = 'update-result.json';
+
+/**
+ * 純附加：只在既有驗證／安裝／回滾邏輯已經算出最終結果之後，多寫一個標記檔，
+ * 不改動、不插進任何既有的完整性驗證或安裝流程。
+ *
+ * 寫在 targetRoot（app 實際安裝目錄，跟 Elitesand Pro.exe 同一層）而不是
+ * workRoot 下的暫存目錄：workRoot 是這次更新用的臨時工作區，成功時
+ * applyStagedUpdate() 會清掉 stagingRoot／backupRoot，且整個 workRoot 本來就
+ * 不保證在下次啟動時還存在；targetRoot 保證存在（它就是安裝目錄本身）。
+ * 主程式下次啟動用同一個 resolveInstallRoot() 找到這裡讀取並清掉標記檔。
+ *
+ * 內容故意只留 ok / appliedAt：遙測欄位表（telemetry-fields.js）目前只定義了
+ * update.ok／update.failed 兩個布林旗標，沒有進一步的失敗原因分類，所以這裡
+ * 也不需要、不多寫使用者機器上的路徑或錯誤細節。
+ */
+function writeUpdateResultMarker(targetRoot, ok) {
+  try {
+    fs.writeFileSync(
+      path.join(targetRoot, UPDATE_RESULT_MARKER_NAME),
+      JSON.stringify({ ok: !!ok, appliedAt: new Date().toISOString() }),
+      'utf8',
+    );
+  } catch (_) {
+    // 標記檔寫不出去不該讓更新流程失敗——這只是遙測，不是更新本身的一部分。
+  }
+}
+
 function inside(child, parent) {
   const rel = path.relative(path.resolve(parent), path.resolve(child));
   return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
@@ -290,6 +318,7 @@ async function applyStagedUpdate(plan, options = {}) {
     }
     removeTreeInside(plan.stagingRoot, plan.workRoot);
     removeTreeInside(plan.backupRoot, plan.workRoot);
+    writeUpdateResultMarker(plan.targetRoot, true);
     return { ok: true, updatedCount: count };
   } catch (error) {
     appendLog(plan.logFile, `Install failed: ${error.message}; starting rollback.`);
@@ -301,6 +330,7 @@ async function applyStagedUpdate(plan, options = {}) {
       try { await spawnRestart(plan.restart); appendLog(plan.logFile, 'Restarted the rolled-back application.'); }
       catch (restartError) { appendLog(plan.logFile, `Rollback restart failed: ${restartError.message}`); }
     }
+    writeUpdateResultMarker(plan.targetRoot, false);
     return { ok: false, error: error.message };
   }
 }
@@ -316,10 +346,11 @@ async function runFromPlanFile(planPath) {
     appendLog(plan.logFile, `Runtime baseline changed after handoff: ${runtimeCheck.reason}; update aborted.`);
     try { await spawnRestart(plan.restart); appendLog(plan.logFile, 'Restarted the unchanged application after baseline rejection.'); }
     catch (restartError) { appendLog(plan.logFile, `Failed to restart after baseline rejection: ${restartError.message}`); }
+    writeUpdateResultMarker(plan.targetRoot, false);
     return { ok: false, error: runtimeCheck.reason };
   }
   appendLog(plan.logFile, 'Immutable runtime baseline verified; beginning replacement.');
-  return applyStagedUpdate(plan);
+  return applyStagedUpdate(plan); // 標記檔已經在 applyStagedUpdate() 兩個分支各寫一次，這裡不必重寫
 }
 
 if (require.main === module) {
@@ -348,4 +379,6 @@ module.exports = {
   applyStagedUpdate,
   runFromPlanFile,
   sha256File,
+  UPDATE_RESULT_MARKER_NAME,
+  writeUpdateResultMarker,
 };

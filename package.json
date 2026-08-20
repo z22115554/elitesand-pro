@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/run-tests.js && node tests/p0-installer-media-loss.test.js && node tests/pin-first-setup.test.js && node tests/device-access.test.js && node tests/app-updater-v2.test.js && node tests/usage-telemetry.test.js && node tests/lyric-offset-sync.test.js && node tests/onboarding-tour.test.js && node tests/updater-in-progress-lock.test.js && node tests/app-update-check.test.js && node tests/app-update-i18n.test.js",
+    "test": "node tests/run-tests.js && node tests/p0-installer-media-loss.test.js && node tests/pin-first-setup.test.js && node tests/device-access.test.js && node tests/app-updater-v2.test.js && node tests/usage-telemetry.test.js && node tests/telemetry-daily.test.js && node tests/lyric-offset-sync.test.js && node tests/onboarding-tour.test.js && node tests/updater-in-progress-lock.test.js && node tests/app-update-check.test.js && node tests/app-update-i18n.test.js",
     "test:onboarding": "node tests/onboarding-tour.test.js",
     "audit:release": "npm audit --omit=dev --audit-level=low",
     "smoke:portable": "node tools/smoke-portable.js",

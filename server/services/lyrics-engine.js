@@ -18,6 +18,7 @@ const { createLogger } = require('../utils/logger');
 const { createJsonStore } = require('./json-store');
 const { ProviderHealthRegistry } = require('./provider-health');
 const { dataDir } = require('../utils/app-paths');
+const usageTelemetry = require('./usage-telemetry');
 const { appUserAgent } = require('../utils/app-version');
 const log = createLogger('Lyrics');
 const APP_USER_AGENT = appUserAgent('lyrics');
@@ -228,10 +229,17 @@ class LyricsEngine {
     })));
 
     const outcomes = [];
+    // 每個來源在這次搜尋內只記一次最終結果，不逐個 title variant 重複記——
+    // 同一來源可能因為多個 title variant 被試好幾次，command 命中率若逐次記錄
+    // 會被灌水。'skipped'（circuit breaker 冷卻中）不算真的試過，不記。
+    // Map 的 last-write-wins 在這裡剛好正確：一旦某來源命中，迴圈立刻 return，
+    // 不會再有更晚的嘗試把它覆寫掉。
+    const sourceVerdicts = new Map();
     for (const source of sources) {
       log.info(`嘗試來源: ${source.name}`);
       const outcome = await providerHealth.execute(source.name, source.fn);
       outcomes.push(outcome.status);
+      if (outcome.status !== 'skipped') sourceVerdicts.set(source.name, outcome.status === 'success');
       try {
         const result = outcome.result;
         const sourceDuration = outcome.durationMs;
@@ -262,6 +270,8 @@ class LyricsEngine {
 
           lyricsCache.set(cacheKey, { result, timestamp: Date.now() });
           scheduleCacheSave();
+          for (const [name, hit] of sourceVerdicts) usageTelemetry.recordLyricSource(name, hit, true);
+          usageTelemetry.recordOutcome('lyrics', true);
           return result;
         } else if (outcome.status === 'miss') {
           log.info(`來源 ${source.name} 未找到結果 (${sourceDuration}ms)`);
@@ -282,6 +292,12 @@ class LyricsEngine {
       lyricsCache.set(cacheKey, { result: null, timestamp: Date.now(), negative: true });
       scheduleCacheSave();
     }
+    for (const [name, hit] of sourceVerdicts) usageTelemetry.recordLyricSource(name, hit, true);
+    // 全部來源都是 'skipped'（例如剛好都在 circuit breaker 冷卻中）時，
+    // sourceVerdicts 會是空的、什麼來源計數都不記——但這次搜尋本身確實嘗試過、
+    // 也確實沒拿到結果，family 層的 attempt/fail 一定要記，否則這輪失敗完全
+    // 不會反映在任何統計裡。
+    usageTelemetry.recordOutcome('lyrics', false, 'no_match');
     return null;
   }
 

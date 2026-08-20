@@ -5,6 +5,7 @@ const { promisify } = require('util');
 const { APP_VERSION } = require('../utils/app-version');
 const ytdlpCompatibility = require('./ytdlp-compatibility');
 const ffmpegProvider = require('./ffmpeg-provider');
+const usageTelemetry = require('./usage-telemetry');
 
 const execFileAsync = promisify(execFile);
 const TOOL_ENV = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
@@ -54,6 +55,10 @@ async function getSystemCheck(options = {}) {
     ytdlpCompatibility: compatibility.getStatus(),
     ffmpeg: { ...ffmpeg, downloadable: !ffmpeg.available },
   };
+  // 只在真的重新探測時記錄（跳過快取命中），避免 60 秒內同一個結果被記很多次；
+  // 布林語意本身已經冪等，這裡只是不必要地少做幾次函式呼叫。
+  usageTelemetry.recordDependency('ytdlp', ytdlp.available);
+  usageTelemetry.recordDependency('ffmpeg', ffmpeg.available);
   cache = {
     checkedAt: nowMs,
     payload,

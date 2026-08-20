@@ -58,7 +58,24 @@ const CORE_USAGE_EVENTS = new Set([
   'setlist:theme', 'setlist:layout', 'setlist:style',
   'library:reimport', 'library:storage:migrate',
 ]);
+// CORE_USAGE_EVENTS 裡，有些事件同時也是特定選用功能有沒有被用到的訊號。
+// 其餘事件（play:*／playlist:*／lyrics:manual／style:*／session:* 等）屬於
+// 基礎操作，只算進 markCoreUsed()，不對應任何一個 telemetry-fields.js 的 FEATURES。
+const CORE_USAGE_FEATURE_BY_EVENT = Object.freeze({
+  'pitch:change': 'pitch_shift',
+  'speed:change': 'tempo_shift',
+  'library:reimport': 'media_library',
+  'library:storage:migrate': 'media_library',
+  'offset:adjust': 'lyrics_offset_edit',
+  'offset:set': 'lyrics_offset_edit',
+  'offset:reset': 'lyrics_offset_edit',
+});
 const DISPLAY_BUILD_REPORT_GRACE_MS = 3500;
+// Socket.IO 斷線原因中，非使用者／非伺服器主動結束連線的那幾種——用來判斷
+// OBS 疊加層斷線是否算「意外事故」該計入遙測。'client namespace disconnect'
+// （頁面正常關閉/切換）與 'server namespace disconnect'／'server shutting down'
+// （伺服器主動踢除）刻意不算。詳細取捨見呼叫端 socket.on('disconnect', ...) 的註解。
+const UNEXPECTED_DISCONNECT_REASONS = new Set(['transport close', 'ping timeout', 'transport error', 'parse error']);
 
 module.exports = function socketHandler(io, {
   runtimeEvidence = defaultRuntimeEvidence,
@@ -213,6 +230,9 @@ module.exports = function socketHandler(io, {
   }
 
   function dispatchTwitchSongRequest(request) {
+    // 觀眾點歌指令實際觸發到這裡，就是這個功能被用到了——不論當下有沒有
+    // 控制面板在線接收；沒面板接收是另一個問題，不代表觀眾沒有點歌。
+    usageTelemetry.recordFeature('twitch_request');
     // 只交給桌面控制面板：那裡才有既有的 queueYouTubeImport()，可保證 yt-dlp 單工。
     for (const id of [...clients.controllers].reverse()) {
       const target = io.sockets.sockets.get(id);
@@ -327,7 +347,11 @@ module.exports = function socketHandler(io, {
       // 正式 OBS 輸出連線本身就是核心功能使用；面板內預覽不計入。
       if (type === 'display' || type === 'setlist') {
         usageTelemetry.markCoreUsed().catch((error) => log.warn(`匿名使用統計標記失敗：${error.message}`));
+        usageTelemetry.recordFeature(type === 'display' ? 'obs_display' : 'obs_setlist');
       }
+      // 手機遙控連上（PIN 已驗證過才能連到這裡）本身就是使用了這個功能，
+      // 不需要等它送出第一個指令才算——跟上面 display/setlist 的判斷邏輯一致。
+      if (type === 'remote') usageTelemetry.recordFeature('remote_control');
 
       // 顯示端發送完整恢復狀態（含歌詞），而非基本狀態；預覽 iframe 吃跟正式來源一樣的資料
       if (type === 'display' || type === 'display-spout' || type === 'display-preview') {
@@ -384,6 +408,8 @@ module.exports = function socketHandler(io, {
       socket.onAny((event) => {
         if (!CORE_USAGE_EVENTS.has(event)) return;
         usageTelemetry.markCoreUsed().catch((error) => log.warn(`匿名使用統計標記失敗：${error.message}`));
+        const feature = CORE_USAGE_FEATURE_BY_EVENT[event];
+        if (feature) usageTelemetry.recordFeature(feature);
       });
     }
     if (!socket.readOnly) {
@@ -407,6 +433,26 @@ module.exports = function socketHandler(io, {
       const c = getClientCounts();
       emitClientCounts();
       log.info(`斷線: ${socket.id} (${socket.clientType || 'unknown'}, 原因: ${reason}) (剩餘連線: ${c.total})`);
+
+      // 正式 OBS 輸出（非預覽 iframe）意外斷線才算「事故」，跟 markCoreUsed()
+      // 判斷正式使用時用的同一組 clientType（'display'／'setlist'，不含
+      // -preview／-spout），維持全檔一致。
+      //
+      // 只有非使用者主動、非伺服器主動的斷線原因才算意外：
+      // 'transport close'／'ping timeout'／'transport error'／'parse error'。
+      // 'client namespace disconnect'（頁面正常關閉/切換）與
+      // 'server namespace disconnect'／'server shutting down'（伺服器主動踢除）
+      // 是正常流程，不算事故。
+      //
+      // 已知限制：OBS 若設定「來源不可見時關閉」，切場景時瀏覽器行程被直接砍掉，
+      // 來不及送出正常關閉信號，一樣會落在 'transport close'——這種場景切換仍可能
+      // 被誤記成事故。這是選擇「用 reason 過濾」這個做法時已知會有的雜訊，
+      // 不是實作疏漏；之後若這個訊號雜訊太大，才需要再補「近期是否有播放」之類
+      // 的門檻收斂。
+      if (UNEXPECTED_DISCONNECT_REASONS.has(reason)) {
+        if (socket.clientType === 'display') usageTelemetry.recordIncident('obs_display_disconnect');
+        else if (socket.clientType === 'setlist') usageTelemetry.recordIncident('obs_setlist_disconnect');
+      }
     });
   });
 

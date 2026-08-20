@@ -2,8 +2,8 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 1.5.0
-Effective Date / 生效日期：2026-08-16
+Version: 1.6.0
+Effective Date / 生效日期：2026-08-19
 
 IMPORTANT INFORMATION / 重要資訊
 --------------------------------
@@ -257,6 +257,50 @@ Public License v2.1 或其後版本（LGPL）授權，第四條第 4 項的還�
 
    關閉此功能時會刪除本機隨機密鑰並停止後續傳送與查詢；傳送失敗不影響程式
    運作，不排隊且不在之後補傳。記錄至多保留 730 天後自動清除。
+
+9. 為了解核心功能的實際成功率、了解哪些功能真正有人使用、及早發現直播中的
+   高風險事故，並在你使用 AI 人聲分離功能時了解其在不同硬體上的表現，本軟體
+   提供「核心功能與直播穩定度統計」。本功能**與第 7 項匿名活躍統計共用同一個
+   開關與本機隨機密鑰**，不是獨立功能：在「連線與系統」設定關閉第 7 項統計，
+   本項也會一併關閉；本項不因此設有獨立的開關。你同意本版（1.6.0）以上的
+   EULA 後，本功能即納入第 7 項統計傳送的內容。
+
+   本軟體會在本機以「日期＋軟體版本」為單位彙總計數，至少每日傳送一次；
+   若你當天完全沒有使用本軟體，當天不會有任何記錄產生或傳送。傳送內容除
+   第 7 項已載明的軟體版本與各自輪替的匿名 HMAC 代碼外，新增下列以類別或
+   區間彙總的計數：
+
+   (a) YouTube 匯入、歌詞搜尋、Twitch 授權與點歌、AI 人聲分離的嘗試與成功
+       ／失敗次數。失敗僅以本軟體預先定義的封閉錯誤類別記錄（例如「逾時」
+       「認證過期」「找不到相符歌詞」），不含錯誤訊息原文、程式堆疊、檔案
+       路徑或網址；
+   (b) 你當天是否使用過手機遙控、Twitch 點歌、OBS 歌單、OBS 畫面輸出、
+       變調、變速、媒體庫、AI 人聲分離、歌詞偏移調整等特定功能，僅記錄
+       「當天用過／沒用過」，不含使用次數與時間點；
+   (c) 各歌詞來源的命中或未命中次數（以來源名稱分類，不含歌名或歌詞內容）、
+       自動配對結果當天是否曾被你手動修改；
+   (d) 直播期間下列事故當天是否發生：播放器錯誤、找不到音檔、OBS 畫面或
+       歌單連線意外中斷、播放異常中斷、AI 人聲分離資源不足；Socket 重新
+       連線次數僅以區間分類（例如 0 次、1 至 2 次、3 至 10 次、10 次以上）
+       記錄，不含精確次數與時間點；
+   (e) yt-dlp 與 FFmpeg 當天是否可正常運作、上一次更新是否成功；
+   (f) 若你當天使用 AI 人聲分離：使用的運算後端類型（例如 CUDA、WebGPU、
+       DirectML 或 CPU）、顯示卡廠牌與粗略架構世代、顯示卡記憶體所屬區間
+       （例如小於 4GB、4 至 6GB、6 至 8GB、8GB 以上）、處理速度所屬區間、
+       原始音訊長度所屬區間、是否曾自動切換回 CPU 運算——以上均為區間或
+       分類形式，不含精確顯示卡型號、精確秒數或精確處理時間。
+
+   接收端不會收到固定安裝識別碼，亦不會收到或儲存姓名、電子郵件、電腦
+   名稱、精確顯示卡型號或其他可識別特定裝置的精確硬體資訊、歌名、歌詞
+   內容、播放清單、YouTube 影片識別碼、檔案名稱或路徑、網址、錯誤訊息
+   原文或程式堆疊、帳號憑證，亦不會記錄個別事件發生的時間點。一般 HTTPS
+   連線在技術上會向 Cloudflare 顯示來源 IP 位址，但權利人不將 IP 寫入
+   統計資料庫，也不以 IP 建立使用行為分析。
+
+   關閉第 7 項統計時，本項會同時停止傳送，並刪除本機尚未送出的暫存彙總
+   資料；傳送失敗不影響程式運作，不排隊且不在之後補傳。因接收端只有輪替
+   代碼與彙總後的每日計數，先前的彙總記錄無法再定位到你的裝置並個別刪除；
+   記錄至多保留 400 天後自動清除。
 
 八、更新、測試版與服務變更
 
@@ -619,6 +663,68 @@ Disabling this feature deletes the local random secret and stops future
 sends and lookups. Failed sends do not affect operation, are not queued, and
 are not retried later. Records are automatically deleted after no more than
 730 days.
+
+7.9 To understand the real success rate of core features, learn which
+features are actually used, catch high-risk incidents during a live stream
+early, and understand how AI vocal separation performs across different
+hardware, the Software provides "core feature and live-stability
+statistics." This feature **shares the same on/off switch and local random
+secret as the anonymous usage statistics in Section 7**; it is not
+independent. Turning off the statistics in Section 7 under Connection &
+System also turns this off; there is no separate switch for it. Once you
+accept this version (1.6.0) or later of the EULA, this feature is included
+in what Section 7 sends.
+
+The Software aggregates counts locally by day and software version, and
+sends at least once per day; if you do not use the Software on a given day,
+no record is created or sent for that day. In addition to the version and
+rotating HMAC codes already described in Section 7, the following
+categorized or bucketed counts are added:
+
+(a) Attempt and success/failure counts for YouTube import, lyric search,
+    Twitch authorization and requests, and AI vocal separation. Failures
+    are recorded only as one of the Software's predefined closed error
+    categories (for example "timeout," "authorization expired," "no
+    matching lyrics found"), never the original error message, stack
+    trace, file path, or URL;
+(b) Whether you used specific features on a given day -- remote control,
+    Twitch requests, OBS setlist, OBS display output, pitch shift, tempo
+    shift, media library, AI vocal separation, lyric offset adjustment --
+    recorded only as used/not used that day, never a count or a time;
+(c) Hit/miss counts per lyric source (categorized by source name, never
+    song titles or lyric content), and whether an automatic lyric match was
+    manually edited that day;
+(d) Whether the following live-stream incidents occurred that day: player
+    errors, missing audio files, unexpected OBS display or setlist
+    disconnection, playback aborted, AI separation resource exhaustion;
+    socket reconnect counts are recorded only in ranges (for example 0,
+    1-2, 3-10, 10+), never an exact count or time;
+(e) Whether yt-dlp and FFmpeg were working that day, and whether the last
+    update succeeded;
+(f) If you used AI vocal separation that day: the compute backend used
+    (for example CUDA, WebGPU, DirectML, or CPU), GPU vendor and a coarse
+    architecture generation, a VRAM range (for example under 4GB, 4-6GB,
+    6-8GB, 8GB+), a processing-speed range, a range for the source audio's
+    length, and whether it automatically fell back to CPU -- all as ranges
+    or categories, never an exact GPU model, exact seconds, or exact
+    processing time.
+
+The receiver does not obtain a permanent installation identifier and does
+not receive or store names, email addresses, computer names, exact GPU
+models or other precise device-identifying hardware information, song
+titles, lyrics content, playlists, YouTube video identifiers, file names or
+paths, URLs, original error messages or stack traces, or account
+credentials, and does not record the time of individual events. An
+ordinary HTTPS connection necessarily exposes the source IP address to
+Cloudflare, but the rights holder does not write IP addresses to the
+statistics database or use them for behavioral analytics.
+
+Disabling the Section 7 statistics also stops this feature and deletes any
+locally pending aggregate not yet sent. Failed sends do not affect
+operation, are not queued, and are not retried later. Because the receiver
+holds only rotating codes and aggregated daily counts, prior aggregate
+records cannot be located by device and individually deleted. Records are
+automatically deleted after no more than 400 days.
 
 8. UPDATES, PRE-RELEASES, AND SERVICE CHANGES
 
