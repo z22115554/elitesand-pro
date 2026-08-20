@@ -5142,6 +5142,83 @@ test('同 id 歌曲重新加入後播放時，會套回保留的手動歌詞與 
   }
 });
 
+test('play:track 找不到音檔會記 media_missing 事故，既有的 audio:error 回應不受影響', () => {
+  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
+  const libraryStore = require('../server/services/library-store');
+  const usageTelemetry = require('../server/services/usage-telemetry');
+  const originalAudioExists = libraryStore.audioExists;
+  const originalRecordIncident = usageTelemetry.recordIncident;
+  const events = new Map();
+  const emitted = [];
+  const incidents = [];
+  const playState = { playlist: [{ id: 'missing-track', title: '找不到的歌', filename: 'gone.mp3', url: null }], currentTrack: null };
+  try {
+    libraryStore.audioExists = () => false;
+    usageTelemetry.recordIncident = (name) => { incidents.push(name); return true; };
+    registerPlaybackHandlers(
+      { emit(event, data) { emitted.push({ event, data }); } },
+      { id: 'fixture-missing', clientType: 'controller', on(event, handler) { events.set(event, handler); }, emit(event, data) { emitted.push({ event, data }); } },
+      {
+        playState, trackOffsets: new Map(), trackPitch: new Map(), trackSpeed: new Map(), manualLyricsCache: new Map(),
+        getEffectiveLyrics() { return null; }, persistState() {}, emitSetlist() {}, recordSessionSong() {}, broadcastState() {},
+      },
+    );
+    events.get('play:track')({ id: 'missing-track', title: '找不到的歌', filename: 'gone.mp3' });
+    eq(incidents.length, 1);
+    eq(incidents[0], 'media_missing');
+    const errorSent = emitted.find((item) => item.event === 'audio:error');
+    ok(errorSent, '既有的音檔找不到通知必須照樣送出: ');
+    eq(errorSent.data.code, 'AUDIO_FILE_MISSING');
+  } finally {
+    libraryStore.audioExists = originalAudioExists;
+    usageTelemetry.recordIncident = originalRecordIncident;
+  }
+});
+
+test('audio:error／audio:skip 轉播：解碼錯誤記 player_error，只有解碼失敗導致的跳過才記 playback_aborted', () => {
+  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
+  const libraryStore = require('../server/services/library-store');
+  const usageTelemetry = require('../server/services/usage-telemetry');
+  const originalAudioExists = libraryStore.audioExists;
+  const originalRecordIncident = usageTelemetry.recordIncident;
+  const events = new Map();
+  const emitted = [];
+  const incidents = [];
+  try {
+    libraryStore.audioExists = () => true;
+    usageTelemetry.recordIncident = (name) => { incidents.push(name); return true; };
+    registerPlaybackHandlers(
+      { emit(event, data) { emitted.push({ event, data }); } },
+      { id: 'fixture-relay', clientType: 'display', on(event, handler) { events.set(event, handler); }, emit() {} },
+      {
+        playState: { playlist: [], currentTrack: null }, trackOffsets: new Map(), trackPitch: new Map(), trackSpeed: new Map(),
+        manualLyricsCache: new Map(), getEffectiveLyrics() { return null; }, persistState() {}, emitSetlist() {}, recordSessionSong() {}, broadcastState() {},
+      },
+    );
+
+    // 面板/OBS 端回報的真實播放錯誤——一定要記
+    events.get('audio:error')({ trackId: 'decode-fail', message: '解碼失敗' });
+    eq(incidents.join(','), 'player_error');
+    ok(emitted.some((item) => item.event === 'audio:error'), '既有的轉播行為必須照樣保留: ');
+
+    // 解碼失敗導致的自動跳過——算事故
+    incidents.length = 0;
+    events.get('audio:skip')({ trackId: 'decode-fail', reason: 'audio_decode_failed' });
+    eq(incidents.join(','), 'playback_aborted');
+
+    // 其他原因（或沒帶 reason）的跳過——目前唯一來源就是解碼失敗，
+    // 但防呆：不是這個原因就不該記，避免將來新增別的跳過理由時被誤算成事故。
+    incidents.length = 0;
+    events.get('audio:skip')({ trackId: 'user-skip' });
+    eq(incidents.length, 0, '沒有 reason 的跳過不該被記為事故: ');
+    events.get('audio:skip')({ trackId: 'user-skip-2', reason: 'user_requested' });
+    eq(incidents.length, 0, '非解碼失敗的跳過原因不該被記為事故: ');
+  } finally {
+    libraryStore.audioExists = originalAudioExists;
+    usageTelemetry.recordIncident = originalRecordIncident;
+  }
+});
+
 test('play:stop 清空目前歌曲並廣播，播放清單播完最後一首才不會讓歌詞卡在畫面上', () => {
   // 使用者實測回報：唱完最後一首後，歌詞（OBS 顯示端／跟唱視圖）留在畫面上不會消失。
   // 根因：playState.currentTrack 過去沒有任何地方會被設回 null，播完清單最後一首、

@@ -10,6 +10,7 @@ const { emitToAccessRooms } = require('../../utils/socket-broadcast');
 const libraryStore = require('../../services/library-store');
 const { addRomanization, needsRomanization, needsFurigana } = require('../../services/romanizer');
 const { sanitizeTrack, sanitizeJsonObject } = require('../../utils/track-schema');
+const usageTelemetry = require('../../services/usage-telemetry');
 
 const log = createLogger('Socket');
 
@@ -62,6 +63,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     // 或匯入舊清單後留下的失效路徑，避免 UI/OBS 先切歌才在 <audio> 端報 404。
     if (!track.filename || !libraryStore.audioExists(track.filename)) {
       const canDownloadAgain = !!track.url;
+      usageTelemetry.recordIncident('media_missing');
       socket.emit('audio:error', {
         code: 'AUDIO_FILE_MISSING',
         trackId,
@@ -333,11 +335,18 @@ function registerPlaybackHandlers(io, socket, ctx) {
 
   socket.on('audio:error', (data) => {
     log.error(`音訊錯誤: ${data.trackId} - ${data.message}`);
+    // 這裡收到的一定是面板 <audio> 或 OBS 畫面端回報的真實播放/解碼失敗——
+    // 「找不到檔案」那個 code:'AUDIO_FILE_MISSING' 是伺服器單獨 emit 給請求端的
+    // 另一條訊息，不會回流到這個 handler，不必在這裡排除。
+    usageTelemetry.recordIncident('player_error');
     io.emit('audio:error', data);
   });
 
   socket.on('audio:skip', (data) => {
     log.info(`自動跳過: ${data.trackId}`);
+    // 目前唯一會送 audio:skip 的來源是 OBS 畫面端解碼連續失敗、放棄這首歌
+    // （見 display.js 的 reason: 'audio_decode_failed'）；只有這個原因才算事故。
+    if (data && data.reason === 'audio_decode_failed') usageTelemetry.recordIncident('playback_aborted');
     io.emit('audio:skip', data);
   });
 
