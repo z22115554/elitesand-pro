@@ -6,7 +6,9 @@ const path = require('path');
 const SOCKET_LIFECYCLE_EVENTS = new Set(['connect', 'connect_error', 'disconnect']);
 const UNPROTECTED_ROUTE_ALLOWLIST = new Map([
   ['server/routes/device-access.js:POST:/pairing/complete', 'one-time pairing secret is verified inside the handler'],
-  ['server/routes/api.js:POST:/eula/accept', 'first-run EULA acceptance happens before PIN setup; the handler only records acceptance of the current EULA version'],
+  // /eula/accept 曾在這份清單上（理由：首次同意先於 PIN 設定）。理由對 PIN 成立，但它
+  // 讓區網任何裝置都能代替使用者同意條款並觸發外送，現已改掛 requireControlAccess
+  // （loopback 直接放行，首次啟動流程不受影響），因此不再需要例外。
 ]);
 
 function walkJavaScriptFiles(root) {

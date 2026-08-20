@@ -44,6 +44,10 @@ const DEFAULTS = {
   feedbackEnabled: true,
   // 匿名活躍統計：只傳送版本、事件類型與每日／每週／每月輪替代碼；可在程式內關閉。
   usageEndpoint: 'https://elitesand-pro-usage.elitesand.workers.dev/api/v1/usage',
+  // 日彙總端點。usage-telemetry.js 的 dailyEndpoint() 一直有讀這個鍵，但它沒列在
+  // DEFAULTS 裡，而下面的合併只接受 DEFAULTS 既有的鍵——等於使用者永遠設不動它。
+  // 預設留空字串，讓既有的「usageEndpoint + /daily」推導行為完全不變。
+  usageDailyEndpoint: '',
   anonymousUsageEnabled: true,
   // 歌詞偏移社群回饋：跟上面的匿名活躍統計是兩個獨立的東西，這裡會送出 YouTube 影片 ID
   // 與使用者調整過的時間偏移。端點預設指向官方 Worker，跟 usageEndpoint 同一套邏輯：

@@ -115,7 +115,9 @@ function createUsageTelemetry(options = {}) {
     randomBytes: options.randomBytes || crypto.randomBytes,
     appVersion: options.appVersion || APP_VERSION,
     userAgent: options.userAgent || appUserAgent('anonymous-usage'),
-    eulaAccepted: options.eulaAccepted || (() => !eulaStore.getStatus().required),
+    // fail-closed：讀不到 EULA.txt 時 getStatus().required 也是 false，用 `!required`
+    // 會把「缺檔」當成「已同意」，在使用者從未看過條款的情況下開始連外。
+    eulaAccepted: options.eulaAccepted || (() => eulaStore.isAccepted()),
     eulaAcceptedVersion: options.eulaAcceptedVersion || (() => eulaStore.getStatus().acceptedVersion),
     log: options.log || createLogger('UsageTelemetry'),
   };

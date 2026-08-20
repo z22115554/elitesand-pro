@@ -167,7 +167,9 @@ const PinAuth = (() => {
         if (!currentPin) { showError('請輸入目前的 PIN'); return; }
         submitBtn.disabled = true;
         try {
-          const res = await fetch('/api/auth/clear', {
+          // 鐵則 16：/api/auth/clear 掛了 requireControlAccess，裸 fetch 不會帶
+          // AccessAuth 的 X-Elitesand-Controller，已配對的手機/平板會被自己伺服器 401。
+          const res = await fetchWithPin('/api/auth/clear', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ currentPin }),
           });
@@ -177,7 +179,9 @@ const PinAuth = (() => {
             closeModal();
             refreshStatus();
           } else {
-            showError(data.message || '停用失敗');
+            // 401/403 回的是 { error, code }（沒有 message），只讀 message 會讓
+            // CONTROLLER_PAIRING_REQUIRED 這種可行動的原因變成無訊息的「停用失敗」。
+            showError(data.message || data.error || '停用失敗');
           }
         } catch (e) {
           showError('請求失敗，請確認伺服器連線');
@@ -196,7 +200,8 @@ const PinAuth = (() => {
 
       submitBtn.disabled = true;
       try {
-        const res = await fetch('/api/auth/set', {
+        // 鐵則 16，理由同上：/api/auth/set 一樣掛了 requireControlAccess。
+        const res = await fetchWithPin('/api/auth/set', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ newPin, currentPin }),
         });
@@ -207,7 +212,7 @@ const PinAuth = (() => {
           closeModal();
           refreshStatus();
         } else {
-          showError(data.message || '設定失敗');
+          showError(data.message || data.error || '設定失敗');
         }
       } catch (e) {
         showError('請求失敗，請確認伺服器連線');

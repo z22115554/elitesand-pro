@@ -9,6 +9,11 @@
  *   伺服器為真實來源，面板不可用 localStorage 記這件事
  * - EULA.txt 的「Version:」行變更時視為尚未同意，面板會重新顯示條款
  * - 讀不到 EULA.txt 時回報 required=false：缺檔不應把整個面板鎖死
+ *
+ * ⚠️ `required === false` 有兩個完全不同的來源：「使用者已同意目前版本」與「根本讀不到
+ * 條款」。閘門的 UX 可以把兩者一視同仁（都不要鎖住面板），但**任何會連外的功能都不行**
+ * ——那等於在使用者從未看過條款的情況下把缺檔當成同意。要判斷「是否取得同意」一律用
+ * 下面的 isAccepted()，不可自己寫 `!getStatus().required`。
  */
 
 const fs = require('fs');
@@ -64,6 +69,16 @@ function getText() {
   return eula ? eula.text : null;
 }
 
+/**
+ * 是否真的取得目前這版條款的同意。**fail-closed**：讀不到 EULA.txt、沒有同意紀錄、
+ * 或紀錄的是舊版本，一律回 false。連外功能（usage-telemetry、lyric-offset-sync）的
+ * 同意判定必須用這個，不可用 `!getStatus().required`——見檔案開頭的警語。
+ */
+function isAccepted() {
+  const status = getStatus();
+  return !!status.version && status.acceptedVersion === status.version;
+}
+
 function accept(version) {
   const eula = loadEula();
   if (!eula || !eula.version) {
@@ -84,4 +99,4 @@ function accept(version) {
   return getStatus();
 }
 
-module.exports = { getStatus, getText, accept, ACCEPTANCE_FILE };
+module.exports = { getStatus, getText, isAccepted, accept, ACCEPTANCE_FILE };

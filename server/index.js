@@ -118,9 +118,32 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 200 }));
 
 // 防跨站網站偷偷控制 localhost/LAN：瀏覽器跨站請求一律拒絕；OBS/CLI/Stream Deck
-// 沒有 Sec-Fetch-Site/Origin，仍維持相容。GET Deck 也是寫入操作，納入保護。
+// 沒有 Sec-Fetch-Site/Origin，仍維持相容。
+//
+// 「非 GET 才保護」不夠：有一批 GET 路由其實有真實副作用，任何網頁一行
+// fetch(..., {mode:'no-cors'}) 就能在直播機上重複觸發。最嚴重的是
+// /api/system-check?force=1——force 直接繞過 60 秒快取，每次都真的 spawn
+// yt-dlp 與 ffmpeg 兩個 child process（見 services/system-check.js）。攻擊者讀不到
+// opaque 回應，所以這不是資料外洩，但在直播中連續 spawn 進程會影響 OBS 疊加層。
+//
+// 這份清單是「GET 但有副作用」的白名單，不是全部 GET：/api/cover、/audio、
+// /api/health 這些會被 <img>／<audio>／Electron health probe 直接載入的唯讀路由
+// 必須維持開放，納進來會直接弄壞畫面與桌面殼啟動。新增 GET 路由時，只要它會
+// spawn 行程、寫檔、外連或改變本機狀態，就要加進這裡。
+const SIDE_EFFECT_GET_PREFIXES = [
+  '/api/deck/',            // Stream Deck 指令，GET 也是寫入操作
+  '/api/system-check',     // ?force=1 繞過快取 → spawn yt-dlp/ffmpeg
+  '/api/fonts',            // ?refresh=1 重掃並解析全系統字體檔
+  '/api/diagnostics/export', // 讀 log、redact、產 ZIP
+  '/api/twitch/',          // status/authorize：authorize 會啟動 Device Code flow
+  '/api/ytdlp/check',      // ?force=1 強制外連 GitHub
+  '/api/announcements',    // ?force=1 強制抓遠端公告
+  '/api/update-check',     // ?force=1 強制外連
+  '/api/app-update/plan',  // 外連 GitHub Releases
+];
 app.use((req, res, next) => {
-  const protectedRequest = req.path.startsWith('/api/') && (req.method !== 'GET' || req.path.startsWith('/api/deck/'));
+  const protectedRequest = req.path.startsWith('/api/')
+    && (req.method !== 'GET' || SIDE_EFFECT_GET_PREFIXES.some((prefix) => req.path.startsWith(prefix)));
   if (!protectedRequest) return next();
   const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
   if (fetchSite === 'cross-site') return res.status(403).json({ error: '已拒絕跨網站操作', code: 'CROSS_SITE_REQUEST' });
@@ -384,6 +407,11 @@ attachParentShutdown({
 // 設定 PIN 後，Deck 指令也需要驗證（同網段誰都能打這些網址，等於繞過面板的 PIN 保護）。
 // Stream Deck 的「開啟網址」動作通常無法自訂 Header，所以除了 X-Pin header，
 // 也接受 URL 上直接帶 ?pin=1234（見 require-pin.js）。
+//
+// 注意：requirePin 內層先過 requireControlAccess，所以「?pin= 就能用」只對
+// **跟本程式同一台機器**的 Stream Deck 成立。跑在另一台電腦上的 Stream Deck
+// 現在還需要 X-Elitesand-Controller（裝置配對取得），而「開啟網址」動作帶不了
+// 這個標頭——區網 Stream Deck 已不是支援情境，別再照這段註解假設它能用。
 const requirePin = require('./middleware/require-pin');
 const handleDeckCommand = (req, res) => {
   const action = req.params.action;

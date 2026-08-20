@@ -11,6 +11,9 @@ const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds, ensureEntryIds
 
 const log = createLogger('Socket');
 
+// 與 handlers/playback.js 的 romanization:mode 同一份白名單。
+const VALID_ROMANIZATION_MODES = ['original', 'romanized', 'both', 'xieyin', 'full'];
+
 /**
  * 新加入清單、本機還沒有這首歌校正記憶時，去問一次社群建議的偏移值當預設。
  * 使用者自己調過（trackOffsets 已有記錄）的一律不覆蓋；查詢期間使用者也可能自己調了，
@@ -155,8 +158,18 @@ function registerPlaylistHandlers(io, socket, ctx) {
       .catch((error) => log.warn(`歌詞偏移建議值套用失敗：${error.message}`));
   });
 
-  socket.on('playlist:remove', (trackId) => {
-    playState.playlist = playState.playlist.filter((t) => t.id !== trackId);
+  // 目前面板不用這條（改用整份 playlist:update，見 app-playlist.js 的註解），但它仍是
+  // 任何 controller/remote 都能呼叫的事件。只用 id 過濾會把「同一首歌在這場加了兩次」
+  // 的兩列一起刪掉——entryId 存在的唯一理由就是分辨這種重複列（見 track-schema.js）。
+  // 相容寫法：仍接受純字串 trackId（舊語意），另外接受 { entryId } 精準刪一列。
+  socket.on('playlist:remove', (payload) => {
+    const entryId = payload && typeof payload === 'object' ? payload.entryId : null;
+    const trackId = payload && typeof payload === 'object' ? payload.trackId : payload;
+    if (typeof entryId === 'string' && entryId) {
+      playState.playlist = playState.playlist.filter((t) => t.entryId !== entryId);
+    } else {
+      playState.playlist = playState.playlist.filter((t) => t.id !== trackId);
+    }
     if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
     // 從播放清單移除不等於刪除歌曲記憶。offset / 手動歌詞仍以 track.id
     // 保留在 state.json，日後從媒體庫或重新匯入同一首歌時自動恢復。
@@ -278,9 +291,13 @@ function registerPlaylistHandlers(io, socket, ctx) {
       }
     }
 
-    // 恢復風格設定
-    if (data.style) playState.style = data.style;
-    if (data.romanizationMode) playState.romanizationMode = data.romanizationMode;
+    // 恢復風格設定。匯入檔是使用者可自行編輯的 JSON，驗證標準必須跟 style:change／
+    // romanization:mode 兩個 socket 事件一致（見 handlers/playback.js）——否則手改過的
+    // 清單能把非法值寫進 playState 並廣播到顯示端，症狀是「重開程式就好」的難查 bug。
+    if (typeof data.style === 'string' && data.style) playState.style = data.style;
+    if (VALID_ROMANIZATION_MODES.includes(data.romanizationMode)) {
+      playState.romanizationMode = data.romanizationMode;
+    }
 
     emitPlaylistUpdate();
     emitSetlist();

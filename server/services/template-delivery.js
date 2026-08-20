@@ -91,18 +91,47 @@ function getTemplateSource(id) {
   return code;
 }
 
+/** 內建模板的來源檔路徑（packed 是加密 blob、dev 是原始碼）；非內建模板回 null。 */
+function builtinSourcePath(id) {
+  if (!TEMPLATE_IDS.has(id)) return null;
+  return isPacked()
+    ? path.join(STORE_DIR, `${id}.eltpl`)
+    : path.join(DEV_SOURCE_DIR, `lyric-template-${id}.js`);
+}
+
+// display-runtime-build.js 現在每次算快取鍵都會問一次這裡的指紋，所以它自己也要便宜。
+// 鍵用 mtimeMs+size：dev 模式下改檔會立刻失效（維持「存檔後 Ctrl+F5 就看得到」），
+// packed 模式下檔案不會變、等於一次雜湊。非內建（使用者安裝的付費模板）不快取，
+// 理由與 getTemplateSource() 內的註解相同——那是可變的使用者資料。
+const fingerprintCache = new Map();
+
 /** 給 display-runtime-build.js 的快取指紋用：這個模板目前的內容雜湊。 */
 function getTemplateFingerprint(id) {
+  const sourcePath = builtinSourcePath(id);
+  let stamp = null;
+  if (sourcePath) {
+    try {
+      const stat = fs.statSync(sourcePath);
+      stamp = `${stat.mtimeMs}:${stat.size}`;
+    } catch (_) { stamp = null; }
+    const cached = stamp && fingerprintCache.get(id);
+    if (cached && cached.stamp === stamp) return cached.fingerprint;
+  }
   const code = getTemplateSource(id);
   if (code == null) return null;
-  return crypto.createHash('sha256').update(code).digest('hex').slice(0, 16);
+  const fingerprint = crypto.createHash('sha256').update(code).digest('hex').slice(0, 16);
+  if (stamp) fingerprintCache.set(id, { stamp, fingerprint });
+  return fingerprint;
 }
+
+function resetTemplateFingerprintCache() { fingerprintCache.clear(); }
 
 module.exports = {
   TEMPLATE_IDS,
   isPacked,
   getTemplateSource,
   getTemplateFingerprint,
+  resetTemplateFingerprintCache,
   IV_LENGTH,
   AUTH_TAG_LENGTH,
 };

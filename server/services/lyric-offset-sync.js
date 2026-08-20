@@ -85,7 +85,9 @@ function createLyricOffsetSync(options = {}) {
     randomBytes: options.randomBytes || crypto.randomBytes,
     appVersion: options.appVersion || APP_VERSION,
     userAgent: options.userAgent || appUserAgent('lyric-offset-sync'),
-    eulaAccepted: options.eulaAccepted || (() => !eulaStore.getStatus().required),
+    // fail-closed，理由同 usage-telemetry.js：`!required` 會把「讀不到 EULA.txt」
+    // 誤判成已同意，而這條通道送的是 YouTube 影片 ID，絕不能在無同意時外送。
+    eulaAccepted: options.eulaAccepted || (() => eulaStore.isAccepted()),
     log: options.log || createLogger('LyricOffsetSync'),
   };
   const stateFile = path.join(dependencies.dataDir, 'lyric-offset-sync.json');

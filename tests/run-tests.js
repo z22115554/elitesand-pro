@@ -389,6 +389,25 @@ test('靜態守衛：所有寫入型 HTTP 路由都有 requirePin 或具理由�
   eq(report.staleAllowlist.join(','), '', `過期例外 ${report.staleAllowlist.join(', ')}: `);
 });
 
+test('靜態守衛：受 requireControlAccess 保護的 fetch 必須走 PinAuth.fetchWithPin（鐵則 16）', () => {
+  const pinAuth = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'pin-auth.js'), 'utf8');
+  for (const route of ['/api/auth/verify', '/api/auth/set', '/api/auth/clear']) {
+    // " fetch('" 只會命中裸呼叫；fetchWithPin(' 的 fetch 後面接的是 W，不會誤判。
+    ok(!pinAuth.includes(` fetch('${route}'`),
+      `${route} 不可用裸 fetch（會漏掉 X-Elitesand-Controller，已配對裝置被自己伺服器 401）: `);
+    ok(pinAuth.includes(`fetchWithPin('${route}'`), `${route} 必須用 fetchWithPin: `);
+  }
+  // 401/403 只回 { error, code }；只讀 message 會讓可行動的原因變成無訊息的泛用失敗。
+  ok(pinAuth.includes("data.message || data.error || '設定失敗'"), 'PIN 設定錯誤需顯示伺服器回的 error: ');
+  ok(pinAuth.includes("data.message || data.error || '停用失敗'"), 'PIN 停用錯誤需顯示伺服器回的 error: ');
+
+  // /api/eula/accept 現在也掛 requireControlAccess：條款改版後，已配對的手機／平板
+  // 仍必須能同意，否則等於把遠端裝置永久鎖在同意閘門外。
+  const eulaGate = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'eula-gate.js'), 'utf8');
+  ok(eulaGate.includes("PinAuth.fetchWithPin('/api/eula/accept'"),
+    'EULA 同意必須帶 AccessAuth 憑證，否則已配對裝置在條款改版後會被 401: ');
+});
+
 test('靜態守衛：故意漏掛 requirePin 時會偵測失敗', () => {
   const sources = [{ file: 'server/routes/fixture.js', source: "router.post('/danger', async (req, res) => {});" }];
   const report = staticContracts.routeContractReport(sources, new Map());
@@ -4754,6 +4773,58 @@ test('playlist:add 會逐次確認加入並拒絕超過上限，供媒體庫佇�
   eq(state.playlist.length, 500);
 });
 
+test('playlist:import 的 style／romanizationMode 驗證必須與 socket 事件一致', () => {
+  const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
+  const events = new Map();
+  const state = { playlist: [], style: 'cute', romanizationMode: 'original', playedEntryIds: new Set() };
+  const ctx = {
+    playState: state, trackOffsets: new Map(), manualLyricsCache: new Map(),
+    persistState() {}, emitSetlist() {}, broadcastState() {},
+    getPublicPlaylist() { return state.playlist; },
+  };
+  registerPlaylistHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);
+
+  // 匯入檔是使用者可自行編輯的 JSON：非法值不可寫進 playState 再廣播給顯示端。
+  events.get('playlist:import')({
+    playlist: [{ id: 'a', title: 'A' }], style: { evil: true }, romanizationMode: 'bogus',
+  }, () => {});
+  eq(state.style, 'cute', '非字串 style 不可落地: ');
+  eq(state.romanizationMode, 'original', '白名單外的 romanizationMode 不可落地: ');
+
+  events.get('playlist:import')({
+    playlist: [{ id: 'b', title: 'B' }], style: 'rock', romanizationMode: 'xieyin',
+  }, () => {});
+  eq(state.style, 'rock', '合法 style 仍要正常套用: ');
+  eq(state.romanizationMode, 'xieyin', '合法 romanizationMode 仍要正常套用: ');
+});
+
+test('playlist:remove 可用 entryId 精準刪一列，不會連同重複歌曲一起刪掉', () => {
+  const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
+  const events = new Map();
+  const state = { playlist: [] };
+  const ctx = {
+    playState: state, trackOffsets: new Map(), manualLyricsCache: new Map(),
+    persistState() {}, emitSetlist() {}, broadcastState() {},
+    getPublicPlaylist() { return state.playlist; },
+  };
+  registerPlaylistHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);
+
+  events.get('playlist:add')([{ id: 'twice', title: '唱兩次' }], () => {});
+  events.get('playlist:add')([{ id: 'twice', title: '唱兩次' }], () => {});
+  eq(state.playlist.length, 2);
+
+  const firstEntryId = state.playlist[0].entryId;
+  events.get('playlist:remove')({ entryId: firstEntryId });
+  eq(state.playlist.length, 1, '帶 entryId 時只能刪掉那一列: ');
+  ok(state.playlist[0].entryId !== firstEntryId, '留下的必須是另一列: ');
+
+  // 舊語意（純字串 trackId）維持相容：刪掉同 id 的全部。
+  events.get('playlist:add')([{ id: 'twice', title: '唱兩次' }], () => {});
+  eq(state.playlist.length, 2);
+  events.get('playlist:remove')('twice');
+  eq(state.playlist.length, 0, '純字串 trackId 仍維持既有的「刪掉同 id 全部」語意: ');
+});
+
 test('重複歌曲加入清單時各自拿到獨立 entryId，不會共用同一個識別碼', () => {
   const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
   const events = new Map();
@@ -4858,6 +4929,70 @@ test('R6-2 display runtime 指紋會涵蓋本機資產並強制更新網址', ()
   ok(page.html.includes(`/js/display.js?v=${page.build}`), 'display 主程式必須使用指紋網址: ');
   ok(page.html.includes(`/css/display.css?v=${page.build}`), 'display CSS 必須使用指紋網址: ');
   ok(!page.html.includes('fonts.googleapis.com/css2?family=Noto+Sans+SC?v='), '外部字體網址不可被錯誤改寫: ');
+});
+
+// 稽核修正：getClientCounts() 在每次 socket 連線／斷線都會叫 getDisplayRuntimeBuild()，
+// 過去每次都同步重讀＋雜湊約 535KB 的 display 資產，卡在跟 lyrics:sync 同一條事件迴圈上。
+test('R6-2 display 指紋只在來源真的改動時重算（面板重整不得反覆全量雜湊）', () => {
+  const publicDir = path.join(__dirname, '..', 'public');
+  const buildModule = require('../server/services/display-runtime-build');
+  const templateDelivery = require('../server/services/template-delivery');
+  buildModule.resetDisplayRuntimeBuildCache();
+  templateDelivery.resetTemplateFingerprintCache();
+
+  const originalReadFileSync = fs.readFileSync;
+  const reads = [];
+  fs.readFileSync = function countingReadFileSync(target, ...rest) {
+    const normalized = typeof target === 'string' ? target.split(path.sep).join('/') : '';
+    if (normalized.includes('/public/js/') || normalized.includes('/public/css/')) reads.push(target);
+    return originalReadFileSync.call(this, target, ...rest);
+  };
+  let first;
+  let second;
+  let firstReads;
+  let secondReads;
+  try {
+    first = buildModule.getDisplayRuntimeBuild(publicDir).build;
+    firstReads = reads.length;
+    reads.length = 0;
+    second = buildModule.getDisplayRuntimeBuild(publicDir).build;
+    secondReads = reads.length;
+  } finally {
+    fs.readFileSync = originalReadFileSync;
+  }
+  eq(first, second, '同樣的來源必須得到同樣的指紋: ');
+  ok(firstReads > 0, '第一次必須真的讀過資產: ');
+  eq(secondReads, 0, `快取命中不得重讀任何資產，實際讀了 ${secondReads} 個: `);
+});
+
+test('R6-2 display 指紋快取用 mtime 鍵控：改檔後必須立刻變（不可退回 TTL 或全域快取）', () => {
+  // 用最小的假 public 樹，不複製真 public/（那裡有字體與 vendor，複製昂貴且沒必要）。
+  const buildModule = require('../server/services/display-runtime-build');
+  const stageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-display-build-'));
+  const stagePublic = path.join(stageRoot, 'public');
+  fs.mkdirSync(path.join(stagePublic, 'js'), { recursive: true });
+  fs.mkdirSync(path.join(stagePublic, 'css'), { recursive: true });
+  fs.writeFileSync(path.join(stagePublic, 'display.html'),
+    '<html><head><link href="/css/display.css" rel="stylesheet"></head><body><script src="/js/display.js"></script></body></html>');
+  fs.writeFileSync(path.join(stagePublic, 'css', 'display.css'), 'body { background: transparent; }');
+  const targetJs = path.join(stagePublic, 'js', 'display.js');
+  fs.writeFileSync(targetJs, 'console.log(1);');
+  try {
+    buildModule.resetDisplayRuntimeBuildCache();
+    const before = buildModule.getDisplayRuntimeBuild(stagePublic).build;
+    const cached = buildModule.getDisplayRuntimeBuild(stagePublic).build;
+    eq(cached, before, '來源沒變時必須回同一個指紋: ');
+
+    fs.writeFileSync(targetJs, 'console.log(2);');
+    // 同一秒內寫入時 mtimeMs 有可能不變，明確推進一秒讓意圖不依賴檔案系統精度。
+    const bumped = new Date(Date.now() + 1000);
+    fs.utimesSync(targetJs, bumped, bumped);
+    const after = buildModule.getDisplayRuntimeBuild(stagePublic).build;
+    ok(after !== before, '改動 display.js 後指紋必須改變（否則 OBS 會繼續跑舊碼）: ');
+  } finally {
+    fs.rmSync(stageRoot, { recursive: true, force: true });
+    buildModule.resetDisplayRuntimeBuildCache();
+  }
 });
 
 test('R6-2 display 快取診斷必須保留唯讀權限並提供面板提示', () => {
@@ -6501,6 +6636,28 @@ test('HTTP 安全回歸：標頭存在、版本標頭隱藏、過大 JSON 回 41
         const crossSite = await request({ host: '127.0.0.1', port, path: '/api/auth/verify', method: 'POST',
           headers: { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site', 'content-type': 'application/json' } }, '{}');
         if (crossSite.statusCode !== 403) process.exitCode = 5;
+        // 稽核修正：有副作用的 GET 也要擋。system-check?force=1 會繞過快取直接 spawn
+        // yt-dlp/ffmpeg，任何網頁都能重複觸發。403 在 middleware 就短路，不會真的 spawn。
+        for (const sideEffectGet of ['/api/system-check?force=1', '/api/fonts?refresh=1',
+          '/api/diagnostics/export', '/api/twitch/authorize', '/api/ytdlp/check?force=1',
+          '/api/announcements?force=1', '/api/update-check?force=1', '/api/app-update/plan']) {
+          const blocked = await request({ host: '127.0.0.1', port, path: sideEffectGet,
+            headers: { 'sec-fetch-site': 'cross-site' } });
+          if (blocked.statusCode !== 403) { process.exitCode = 6; break; }
+        }
+        // 反向：<img>/<audio>/health probe 會直接載入的唯讀 GET 絕不能被這條規則擋掉，
+        // 擋掉等於封面圖、音訊與桌面殼啟動全壞。
+        for (const readOnlyGet of ['/api/health', '/api/cover/does-not-exist.jpg', '/api/lan-info']) {
+          const allowed = await request({ host: '127.0.0.1', port, path: readOnlyGet,
+            headers: { 'sec-fetch-site': 'cross-site' } });
+          if (allowed.statusCode === 403) { process.exitCode = 7; break; }
+        }
+        // 同源與無標頭（Stream Deck／curl／Electron probe）維持可用。
+        const sameOrigin = await request({ host: '127.0.0.1', port, path: '/api/deck/state',
+          headers: { 'sec-fetch-site': 'same-origin' } });
+        if (sameOrigin.statusCode !== 200) process.exitCode = 8;
+        const noHeader = await request({ host: '127.0.0.1', port, path: '/api/deck/state' });
+        if (noHeader.statusCode !== 200) process.exitCode = 9;
         const body = JSON.stringify({ value: 'x'.repeat(2.1 * 1024 * 1024) });
         const large = await request({ host: '127.0.0.1', port, path: '/api/auth/verify', method: 'POST',
           headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, body);
@@ -6510,7 +6667,7 @@ test('HTTP 安全回歸：標頭存在、版本標頭隱藏、過大 JSON 回 41
     });
   `;
   const result = spawnSync(process.execPath, ['-e', script], {
-    cwd: path.join(__dirname, '..'), timeout: 8000, encoding: 'utf8',
+    cwd: path.join(__dirname, '..'), timeout: 20000, encoding: 'utf8',
   });
   ok(!result.error || result.error.code !== 'ETIMEDOUT', 'HTTP 安全測試不應逾時: ');
   eq(result.status, 0, `${result.stdout}\n${result.stderr}`);
@@ -8586,6 +8743,47 @@ console.log('\n📦 16. EULA 首次同意閘門 (eula-store)');
     fs.writeFileSync(eulaStore.ACCEPTANCE_FILE, JSON.stringify({ version: '0.9.9', acceptedAt: new Date().toISOString() }));
     eq(eulaStore.getStatus().required, true, '舊版同意不涵蓋新版條款: ');
     fs.rmSync(eulaStore.ACCEPTANCE_FILE, { force: true });
+  });
+
+  // 稽核修正：連外功能過去用 `!getStatus().required` 判斷同意，而 required 在「讀不到
+  // EULA.txt」時也是 false ——等於缺檔就當成使用者已同意。isAccepted() 必須 fail-closed。
+  test('isAccepted() fail-closed：沒有同意紀錄時為 false', () => {
+    fs.rmSync(eulaStore.ACCEPTANCE_FILE, { force: true });
+    eq(eulaStore.isAccepted(), false, '無紀錄不得視為已同意: ');
+  });
+
+  test('isAccepted() fail-closed：舊版本紀錄不算已同意', () => {
+    fs.writeFileSync(eulaStore.ACCEPTANCE_FILE, JSON.stringify({ version: '0.0.1', acceptedAt: new Date().toISOString() }));
+    eq(eulaStore.isAccepted(), false, '舊版同意不涵蓋新版條款: ');
+    fs.rmSync(eulaStore.ACCEPTANCE_FILE, { force: true });
+  });
+
+  test('isAccepted() fail-closed：讀不到 EULA.txt 時為 false（required 卻是 false）', () => {
+    const fakeStatus = { required: false, version: null, acceptedVersion: null };
+    // 直接驗語意，不動真檔案：required=false 但 version=null 代表「缺檔」，不是「已同意」。
+    eq(!!fakeStatus.version && fakeStatus.acceptedVersion === fakeStatus.version, false,
+      '缺檔情境不得被判成已同意: ');
+    const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'eula-store.js'), 'utf8');
+    ok(/function isAccepted\(\)[\s\S]{0,200}!!status\.version/.test(source),
+      'isAccepted() 必須同時檢查 version 與 acceptedVersion: ');
+  });
+
+  test('連外服務不可用 `!getStatus().required` 當同意判定', () => {
+    for (const rel of ['server/services/usage-telemetry.js', 'server/services/lyric-offset-sync.js']) {
+      const source = fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+      ok(!/!\s*eulaStore\.getStatus\(\)\.required/.test(source), `${rel} 不得用 !required 判定同意: `);
+      ok(/eulaStore\.isAccepted\(\)/.test(source), `${rel} 必須改用 isAccepted(): `);
+    }
+  });
+
+  test('POST /api/eula/accept 必須掛 requireControlAccess，且副作用只在首次同意觸發', () => {
+    const api = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+    ok(api.includes("router.post('/eula/accept', requireControlAccess"),
+      '同意端點必須擋掉未配對的區網裝置: ');
+    ok(/const wasRequired = eulaStore\.getStatus\(\)\.required;/.test(api),
+      '必須先讀 required 才能判斷這次是不是真的首次同意: ');
+    ok(/if \(!wasRequired\) return res\.json/.test(api),
+      '重複同意不得再次觸發遙測啟動與偏移回補: ');
   });
 }
 

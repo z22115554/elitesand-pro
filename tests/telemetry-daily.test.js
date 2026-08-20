@@ -22,7 +22,7 @@ Module._load = function mockProjectDependencies(request, parent, isMain) {
   if (request === '../utils/load-config') return {};
   if (request === '../utils/app-paths') return { dataDir: os.tmpdir() };
   if (request === '../utils/app-version') return { APP_VERSION: 'test', appUserAgent: () => 'test' };
-  if (request === './eula-store') return { getStatus: () => ({ required: false }) };
+  if (request === './eula-store') return { getStatus: () => ({ required: false }), isAccepted: () => true };
   if (request === '../utils/logger') return { createLogger: () => ({ warn() {} }) };
   return originalLoad(request, parent, isMain);
 };

@@ -144,11 +144,21 @@
     acceptBtn.addEventListener('click', async () => {
       acceptBtn.disabled = true;
       try {
-        const res = await fetch('/api/eula/accept', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ version: status.version }),
-        });
+        // /api/eula/accept 掛了 requireControlAccess（擋掉未配對的區網裝置代替使用者同意）。
+        // 本機面板是 loopback、一定放行；但條款改版後，已配對的手機／平板也要能同意，
+        // 那條路徑需要 AccessAuth 的 X-Elitesand-Controller —— 鐵則 16，一律走 fetchWithPin。
+        const request = typeof PinAuth !== 'undefined'
+          ? PinAuth.fetchWithPin('/api/eula/accept', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version: status.version }),
+          })
+          : fetch('/api/eula/accept', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version: status.version }),
+          });
+        const res = await request;
         if (!res.ok) {
           const body = await res.json().catch(() => null);
           throw new Error((body && body.error) || `HTTP ${res.status}`);

@@ -59,6 +59,13 @@
   audioPlayer.volume = 0;
   // 顯示端完全不載入/播放本地音訊：時間軸純粹靠面板的 lyrics:sync 驅動。
   // 原本會載入並隨同步「跳轉」本地音訊，拖曳進度條時這些 seek 會讓顯示端卡住、需重整 OBS。
+  //
+  // ⚠️ 想改回 true 的話，這條路徑另外還被兩層擋住，兩層都要一起處理，否則會靜默失效：
+  //   1. app-state.js 的 READ_ONLY_TRACK_FIELDS 已把 filename／url 從送給疊加層的
+  //      payload 移除，所以 track.filename 永遠是 undefined（下方的守衛也就永遠為假）。
+  //   2. socket-handler.js 的唯讀 middleware 只放行 READ_ONLY_EVENTS，
+  //      下方 handleAudioError() 送的 audio:error／audio:skip 會被伺服器拒絕並記 warn。
+  // 也就是說目前 handleAudioError() 與所有 audioPlayer 事件監聽器都是不可達的死碼。
   const USE_LOCAL_AUDIO = false;
   // 預覽模式（控制面板內嵌 /display?preview=1）：忽略緊急隱藏，讓主播在面板始終看得到歌詞，
   // 即使 OBS 已被緊急隱藏（避免發現歌詞錯誤、按下緊急隱藏後自己也看不到）。

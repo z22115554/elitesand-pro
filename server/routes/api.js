@@ -37,6 +37,8 @@ const { autoParseLyrics, parseOffset } = require('../services/lrc-parser');
 // PIN 存取控制（選用）：只套在會觸發下載/處理的路由，唯讀端點（cover/fonts/health）不套，
 // 見 server/middleware/require-pin.js 開頭說明。
 const requirePin = require('../middleware/require-pin');
+// EULA 同意閘門專用：只要「本機桌面或已配對的遙控器」，不要 PIN——首次同意先於 PIN 設定。
+const { requireControlAccess } = require('../middleware/require-control-access');
 const { isYouTubeUrl } = require('../utils/youtube-url');
 const { classifyImportError, toImportTelemetryCode } = require('../utils/import-error');
 const { decodeUploadedText } = require('../utils/decode-text');
@@ -444,9 +446,19 @@ router.get('/eula', (req, res) => {
   res.json({ ...status, text: status.required ? eulaStore.getText() : null });
 });
 
-router.post('/eula/accept', (req, res) => {
+// 但仍要 requireControlAccess（本機 loopback 或已配對的遙控器）。伺服器綁 0.0.0.0，
+// 沒有這一關的話同網段任何裝置都能代替使用者「同意」條款：使用者從此看不到同意閘門，
+// 而且會當場觸發 usageTelemetry.start() 與歌詞偏移的一次性回補（把本機存的 YouTube
+// 影片 ID＋偏移送往社群 Worker）。首次啟動一定發生在本機面板，loopback 直接放行，
+// 這一關不會擋到任何正常流程。同一個信任模型見 utils/pin-setup-policy.js。
+router.post('/eula/accept', requireControlAccess, (req, res) => {
   try {
+    // 副作用只在「這次呼叫真的把未同意翻成已同意」時觸發。重複 POST（重整、重送）
+    // 不該再叫一次 start()／backfill——backfill 內部雖有 backfillDone 一次性旗標，
+    // 但這裡先擋掉才是正確的因果，不依賴下游的去重。
+    const wasRequired = eulaStore.getStatus().required;
     const status = eulaStore.accept(req.body && req.body.version);
+    if (!wasRequired) return res.json({ success: true, ...status });
     usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
     // 一次性回補：把這個功能上線前，使用者已經在本機存下的偏移記錄也送一次
     // （backfillFromExistingOffsets 內部自己保證只真的執行一次，見服務內註解）。
