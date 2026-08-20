@@ -6520,6 +6520,16 @@ console.log('\n📦 12. YouTube 單次流程、翻唱辨識與佇列');
 test('yt-dlp before_dl 使用完整 info dict 格式，不可使用會輸出 NA 的舊 %(json)j', () => {
   eq(AudioProcessor._metadataPrintTemplateForTest(), 'before_dl:__ES_META__%()j');
 });
+test('yt-dlp 403 fallback keeps the client until both HLS routes fail', () => {
+  const plan = AudioProcessor._downloadStrategyPlanForTest();
+  eq(plan.primary.format, 'bestaudio/best');
+  eq(plan.primary.concurrentFragments, 4);
+  eq(plan.hls.map((strategy) => strategy.id).join(','), 'hls-audio,hls-combined');
+  eq(plan.hls.map((strategy) => strategy.format).join(','), 'bestaudio[protocol^=m3u8],best[protocol^=m3u8]');
+  eq(plan.hls.map((strategy) => strategy.concurrentFragments).join(','), '1,1', 'HLS recovery must not fetch fragments concurrently: ');
+  ok(plan.hls.every((strategy) => strategy.extractorArgs.join(',') === '--extractor-args,youtube:player_client=web_safari'), 'HLS recovery must use the HLS-capable web_safari client: ');
+  eq(plan.clientFallbacks.map((strategy) => strategy.id).join(','), 'android-audio,ios-audio');
+});
 test('官方影片 Remaster 後綴不會讓歌手與歌名顛倒', () => {
   const x = AudioProcessor.resolveTrackIdentity({ title: 'Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)' });
   eq(x.artist, 'Rick Astley'); eq(x.title, 'Never Gonna Give You Up');

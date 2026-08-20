@@ -30,14 +30,27 @@ const YTDLP_INFO_TIMEOUT = 45000;     // 取得影片資訊超時: 45s
 const YTDLP_DOWNLOAD_TIMEOUT = 300000; // 下載音訊超時: 5min
 const YTDLP_MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 const YTDLP_METADATA_PRINT = 'before_dl:__ES_META__%()j';
-// 下載階段的 player_client 輪替：getVideoInfo() 對 metadata 已有多重 client fallback，
-// 但實際下載音訊原本固定只用預設 client，YouTube 近期擋預設 client 下載格式時完全沒有退路，
-// 使用者只能手動重試。這裡讓下載也比照跟進，最多 3 次嘗試，命中就不再往下試。
-const YTDLP_DOWNLOAD_CLIENT_ARGS = [
-  [],
-  ['--extractor-args', 'youtube:player_client=android'],
-  ['--extractor-args', 'youtube:player_client=ios'],
+// 下載退路的原則是「不先用 client 交換音質」：首先維持預設 client 的最佳 audio-only
+// DASH/HTTPS 音訊。只有它因 HTTP 403 失敗時，才嘗試 HLS audio-only；
+// HLS 格式需由 web_safari client 才會暴露（預設 client 的 m3u8 manifest 不保證有可選格式），
+// 所以這是 HLS 退路專屬的 client。連 HLS audio-only 都不可用時，再將含音訊的 HLS 視訊視為救援；
+// Android/iOS 的一般 audio-only client 輪替仍放在最後，不會因為一次 403 就使用。
+const YTDLP_PRIMARY_DOWNLOAD_STRATEGY = {
+  id: 'primary-audio',
+  extractorArgs: [],
+  format: 'bestaudio/best',
+  concurrentFragments: 4,
+};
+const YTDLP_HLS_DOWNLOAD_STRATEGIES = [
+  { id: 'hls-audio', extractorArgs: ['--extractor-args', 'youtube:player_client=web_safari'], format: 'bestaudio[protocol^=m3u8]', concurrentFragments: 1 },
+  { id: 'hls-combined', extractorArgs: ['--extractor-args', 'youtube:player_client=web_safari'], format: 'best[protocol^=m3u8]', concurrentFragments: 1 },
 ];
+// 若 HLS 也無法下載，最後才輪替 player client；每個 client 仍選它自己的最佳 audio-only。
+const YTDLP_CLIENT_FALLBACK_STRATEGIES = [
+  { id: 'android-audio', extractorArgs: ['--extractor-args', 'youtube:player_client=android'], format: 'bestaudio/best', concurrentFragments: 4 },
+  { id: 'ios-audio', extractorArgs: ['--extractor-args', 'youtube:player_client=ios'], format: 'bestaudio/best', concurrentFragments: 4 },
+];
+const YTDLP_SOURCE_FORMAT_PRINT = 'after_move:__ES_FORMAT__%(format_id)s|%(acodec)s|%(abr)s|%(protocol)s';
 
 // ─── yt-dlp 執行環境：強制 UTF-8 輸出（跨機器穩定）───
 // Windows 上 Python(yt-dlp) 的 stdout 被導管(pipe)時，預設用「系統 ANSI codepage」
@@ -60,6 +73,10 @@ const PREFETCH_TTL_MS = 10 * 60 * 1000;
 
 function isYouTubeMusicPremiumError(error) {
   return /only available to music premium members/i.test(String(error?.message || error || ''));
+}
+
+function isYouTubeHttp403Error(error) {
+  return /(?:http\s*error|httperror)\s*403\b|\b403\s*(?:forbidden)?\b/i.test(String(error?.message || error || ''));
 }
 
 function createYouTubeMusicPremiumError() {
@@ -331,6 +348,13 @@ class AudioProcessor {
   static setProgressEmitter(emitter) { this._progressEmitter = emitter; }
   static _runQueuedForTest(job, priority = 'batch', signal = null) { return runQueued(job, priority, signal); }
   static _metadataPrintTemplateForTest() { return YTDLP_METADATA_PRINT; }
+  static _downloadStrategyPlanForTest() {
+    return {
+      primary: { ...YTDLP_PRIMARY_DOWNLOAD_STRATEGY },
+      hls: YTDLP_HLS_DOWNLOAD_STRATEGIES.map((strategy) => ({ ...strategy })),
+      clientFallbacks: YTDLP_CLIENT_FALLBACK_STRATEGIES.map((strategy) => ({ ...strategy })),
+    };
+  }
   static _registerCancellationForTest(requestId) {
     const controller = registerRequestController(requestId);
     return { signal: controller.signal, cleanup: () => clearRequestController(requestId, controller) };
@@ -783,16 +807,18 @@ class AudioProcessor {
       rejectMeta(err);
     };
 
-    // 單次 yt-dlp 下載嘗試；client 由呼叫端輪替帶入。metadata 是跨嘗試共用狀態
+    // 單次 yt-dlp 下載嘗試；策略決定格式與 client。metadata 是跨嘗試共用狀態
     // （resolveMeta/rejectMeta/metaDone 皆在外層閉包），只要任一次嘗試印出 __ES_META__
     // 就會定案，之後的嘗試不會再改動它。
-    const runAttempt = (extractorArgs) => new Promise((resolve, reject) => {
-      const args = ['--js-runtimes', 'node', ...extractorArgs, '-f', 'bestaudio/best', '--concurrent-fragments', '4', '--no-playlist',
+    const runAttempt = (strategy) => new Promise((resolve, reject) => {
+      const args = ['--js-runtimes', 'node', ...strategy.extractorArgs, '-f', strategy.format,
+        '--concurrent-fragments', String(strategy.concurrentFragments), '--no-playlist',
         '-o', outputTemplate, '--print', YTDLP_METADATA_PRINT, '--print', 'after_move:__ES_FILE__%(filepath)s',
+        '--print', YTDLP_SOURCE_FORMAT_PRINT,
         '--progress', '--newline', '--progress-template', 'download:__ES_PROGRESS__%(progress._percent_str)s', url];
       const started = Date.now();
       const child = spawn('yt-dlp', args, { env: YTDLP_ENV, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-      let stderr = '', rawPath = '', timedOut = false;
+      let stderr = '', rawPath = '', sourceFormat = '', timedOut = false;
       const onAbort = () => child.kill();
       signal?.addEventListener('abort', onAbort, { once: true });
       const metadataTimer = metaDone ? null : setTimeout(() => rejectMetadata('yt-dlp 未在 15 秒內提供影片 metadata'), 15000);
@@ -821,6 +847,7 @@ class AudioProcessor {
               rejectMetadata('yt-dlp metadata 格式無法解析');
             }
           } else if (line.startsWith('__ES_FILE__')) rawPath = line.slice(11).trim();
+          else if (line.startsWith('__ES_FORMAT__')) sourceFormat = line.slice(13).trim();
           else if (line.startsWith('__ES_PROGRESS__')) {
             const percent = Number.parseFloat(line.slice(15)); onProgress('正在下載', Number.isFinite(percent) ? percent : undefined);
           }
@@ -847,27 +874,43 @@ class AudioProcessor {
         // 檔案而卡住。但輸出模板是 %(id)s.%(ext)s，basename 永遠是 ASCII video id，於是用我們自己
         // 掌握、完全正確的 outputDir 重組路徑，徹底繞開 yt-dlp 的壞路徑。
         const cleanPath = path.join(outputDir, path.basename(rawPath));
-        log.perf('youtube-download', downloadMs, { path: cleanPath });
-        resolve({ cleanPath, downloadMs });
+        log.info(`yt-dlp 下載成功 (${strategy.id}): ${sourceFormat || '未取得來源格式'}`);
+        log.perf('youtube-download', downloadMs, { path: cleanPath, strategy: strategy.id, sourceFormat });
+        resolve({ cleanPath, downloadMs, strategy: strategy.id, sourceFormat });
       });
     });
 
     const completed = (async () => {
       let lastError;
       let downloaded = null;
-      for (let attempt = 0; attempt < YTDLP_DOWNLOAD_CLIENT_ARGS.length; attempt++) {
+      const tryStrategy = async (strategy, message) => {
         throwIfCancelled(signal);
         try {
-          downloaded = await runAttempt(YTDLP_DOWNLOAD_CLIENT_ARGS[attempt]);
-          break;
+          downloaded = await runAttempt(strategy);
+          return true;
         } catch (err) {
           if (signal?.aborted || err instanceof ImportCancelledError) { cleanupTempImport(); rejectMetadata('匯入已取消'); throw new ImportCancelledError(); }
           lastError = err;
-          // Music Premium 或已是最後一次嘗試：換 client 也無法補救，不再往下試。
-          if (isYouTubeMusicPremiumError(err) || attempt === YTDLP_DOWNLOAD_CLIENT_ARGS.length - 1) break;
-          log.warn(`yt-dlp 下載第 ${attempt + 1} 次嘗試失敗，改用下一個 client 重試: ${err.message}`);
-          // 換 client 前清掉這次嘗試留下的半套檔案（.part/.webm…），避免跟下一次嘗試混淆。
+          if (isYouTubeMusicPremiumError(err)) return false;
+          log.warn(`yt-dlp ${strategy.id} 失敗，${message}: ${err.message}`);
+          // 每次重試前清掉留下的半套檔案（.part/.webm…），避免和下一策略混淆。
           cleanupOwnedTemporaryDownload(tempImport?.videoId, outputDir);
+          return false;
+        }
+      };
+
+      const primarySucceeded = await tryStrategy(YTDLP_PRIMARY_DOWNLOAD_STRATEGY, '保留高品質格式結束此次匯入');
+      if (!primarySucceeded && isYouTubeHttp403Error(lastError)) {
+        // HTTP 403 才改走 HLS。格式 selector 的 / 只會處理「格式不存在」，不會在實際下載取得 403 後自動重選，因此必須是獨立嘗試。
+        for (const strategy of YTDLP_HLS_DOWNLOAD_STRATEGIES) {
+          if (await tryStrategy(strategy, '改用下一個 HLS 退路')) break;
+        }
+      }
+
+      // 只有原本高品質路徑與 HLS 退路都沒成功，才改用其他 player client。
+      if (!downloaded && !isYouTubeMusicPremiumError(lastError)) {
+        for (const strategy of YTDLP_CLIENT_FALLBACK_STRATEGIES) {
+          if (await tryStrategy(strategy, '改用下一個 player client 重試')) break;
         }
       }
       if (!downloaded) {
