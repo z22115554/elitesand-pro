@@ -227,4 +227,9 @@ class AISeparationSupervisor {
   }
 }
 
-module.exports = { AISeparationSupervisor };
+// 整個 app 共用一個 supervisor（跟 ffmpegProvider/systemCheck 同樣是 singleton 模組）：
+// API 路由觸發分離、`ai-separation-jobs.js` 監聽事件寫回 playState，兩邊要看到同一個
+// instance 的 emitter，不能各自 new 一份。
+const supervisor = new AISeparationSupervisor();
+
+module.exports = { AISeparationSupervisor, supervisor };
