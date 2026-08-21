@@ -162,7 +162,7 @@
     btn.disabled = true;
     btn.textContent = tr('分離中…');
     try {
-      const res = await window.PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(item.id)}/separate`, { method: 'POST' });
+      const res = await PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(item.id)}/separate`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         const reason = data.error === 'AI_RUNTIME_NOT_READY'
@@ -182,31 +182,32 @@
     }
   }
 
-  if (window.SocketClient) {
-    SocketClient.on('separation:progress', (data) => {
-      if (!data || !data.trackId) return;
-      const row = listEl.querySelector(`.lib-row[data-id="${CSS.escape(String(data.trackId))}"]`);
-      const btn = row && row.querySelector('.lib-separate');
-      const cached = cache.find((x) => String(x.id) === String(data.trackId));
-      if (data.stage === 'done') {
-        // 不在這裡手動拼按鈕 HTML：伺服器完成後會廣播 library:list（見
-        // ai-separation-jobs.js），那次 render() 會帶著正確的 vocalsFile/instrumentalFile
-        // 重畫整列，這裡只負責立刻跳 toast，不用等 render 完成。
-        toast(tr('人聲分離完成'), 'success');
-      } else if (data.stage === 'error') {
-        if (cached) cached.separationStatus = 'failed';
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = tr('重試分離（實驗性）');
-        }
-        toast(tr(`人聲分離失敗：${data.error || ''}`), 'error');
-      } else if (btn) {
-        // worker.py 的 progress 是 0.0-1.0 的比例，不是 0-100（見 ai/worker.py）。
-        const pct = typeof data.progress === 'number' ? Math.round(data.progress * 100) : null;
-        btn.textContent = pct !== null ? tr(`分離中… ${pct}%`) : tr('分離中…');
+  // SocketClient 跟 PinAuth 一樣是頂層 const 宣告，不會掛在 window 上（見上面
+  // fetchWithPin 那個 bug 的教訓）；直接用裸變數，不要再用 window.SocketClient 判斷，
+  // 那個判斷式恆假，等於整段訂閱從沒真的執行過。
+  SocketClient.on('separation:progress', (data) => {
+    if (!data || !data.trackId) return;
+    const row = listEl.querySelector(`.lib-row[data-id="${CSS.escape(String(data.trackId))}"]`);
+    const btn = row && row.querySelector('.lib-separate');
+    const cached = cache.find((x) => String(x.id) === String(data.trackId));
+    if (data.stage === 'done') {
+      // 不在這裡手動拼按鈕 HTML：伺服器完成後會廣播 library:list（見
+      // ai-separation-jobs.js），那次 render() 會帶著正確的 vocalsFile/instrumentalFile
+      // 重畫整列，這裡只負責立刻跳 toast，不用等 render 完成。
+      toast(tr('人聲分離完成'), 'success');
+    } else if (data.stage === 'error') {
+      if (cached) cached.separationStatus = 'failed';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = tr('重試分離（實驗性）');
       }
-    });
-  }
+      toast(tr(`人聲分離失敗：${data.errorMessage || data.error || ''}`), 'error');
+    } else if (btn) {
+      // worker.py 的 progress 是 0.0-1.0 的比例，不是 0-100（見 ai/worker.py）。
+      const pct = typeof data.progress === 'number' ? Math.round(data.progress * 100) : null;
+      btn.textContent = pct !== null ? tr(`分離中… ${pct}%`) : tr('分離中…');
+    }
+  });
 
   function requestSocket(event, data) {
     return new Promise((resolve) => {

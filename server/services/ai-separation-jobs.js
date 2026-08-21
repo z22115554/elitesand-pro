@@ -89,6 +89,9 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
     io.emit('separation:progress', {
       trackId, jobId: msg.id, stage: 'error', progress: 0,
       error: (msg.error && msg.error.code) || 'UNKNOWN',
+      // 之前只傳 code，把 supervisor.py／worker.py 包起來的實際錯誤訊息吞掉了——
+      // 除錯只能翻 server 終端機才看得到，太不方便，一併送給前端顯示。
+      errorMessage: (msg.error && msg.error.message) || null,
     });
   });
 }

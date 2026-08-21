@@ -230,6 +230,15 @@ class AISeparationSupervisor {
 // 整個 app 共用一個 supervisor（跟 ffmpegProvider/systemCheck 同樣是 singleton 模組）：
 // API 路由觸發分離、`ai-separation-jobs.js` 監聽事件寫回 playState，兩邊要看到同一個
 // instance 的 emitter，不能各自 new 一份。
-const supervisor = new AISeparationSupervisor();
+//
+// ⚠️ 2026-08-22 真機踩到的 bug：建構子預設值是 `process.env.ELITESAND_AI_PYTHON ||
+// 'python'`——若沒有明確傳入，會去吃系統 PATH 上的 python，不是 A2
+// （ai-runtime-provider.js）下載安裝好的那個 embeddable runtime。實測結果是
+// runtime 明明下載成功、audio_separator 也真的裝進
+// data/ai-runtime/python/Lib/site-packages/，worker 卻拋
+// `No module named 'audio_separator'`——因為 spawn 出去的根本是另一個 python。
+// 必須明確指到 aiRuntimeProvider.PYTHON_EXE，不能依賴建構子預設值。
+const aiRuntimeProvider = require('./ai-runtime-provider');
+const supervisor = new AISeparationSupervisor(aiRuntimeProvider.PYTHON_EXE);
 
 module.exports = { AISeparationSupervisor, supervisor };
