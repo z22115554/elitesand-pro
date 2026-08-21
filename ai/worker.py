@@ -90,12 +90,21 @@ def _run_fake_job(job_id, params):
     _emit({"id": job_id, "result": {"vocal": "(fake) vocal.mp3", "instrumental": "(fake) instrumental.mp3"}})
 
 
-def _install_progress_and_cancel_hook(job_id):
+def _install_progress_and_cancel_hook(job_id, stage_ref):
     """audio_separator has no progress callback API — every chunk goes
     through tqdm.update() internally, so that's the one hook point we have
     for both progress reporting AND graceful cancellation (raising inside
     update() unwinds out of audio_separator's separate() call cleanly,
-    same as a real interrupt would)."""
+    same as a real interrupt would).
+
+    2026-08-22 加了 stage_ref（外部可變的一格陣列，stage_ref[0] 是目前階段名稱）：
+    第一次真的分離某首歌時，audio_separator 會在 Separator()/load_model() 裡
+    自己下載模型權重（Kim checkpoint 動輒 900MB+），那段下載也是用 tqdm，但這個
+    hook 原本裝在 load_model() 之後，所以模型下載的進度完全沒有被轉成 NDJSON
+    事件，只會原始 tqdm 文字漏到 stderr（使用者只在終端機看得到、UI 上卡在
+    「分離中…」看不出真正進度，網路慢的話會誤以為卡死）。現在改成呼叫端在
+    下載階段跟推論階段呼叫前，各自把 stage_ref[0] 設成對應的名字，同一個
+    patched_update 動態讀這個值，不用重新裝解一次 hook。"""
     import tqdm as tqdm_module
 
     original_update = tqdm_module.tqdm.update
@@ -110,7 +119,7 @@ def _install_progress_and_cancel_hook(job_id):
             _emit({
                 "id": job_id,
                 "event": "progress",
-                "stage": "inference",
+                "stage": stage_ref[0],
                 "progress": round(min(1.0, current / total), 3),
             })
         return result
@@ -162,6 +171,14 @@ def _run_real_job(job_id, params):
         # 可接受：這段本來就短（正常 3-5 秒），沒有人需要在這裡按取消。
         from audio_separator.separator import Separator
 
+        # 2026-08-22：第一次真的分離某首歌時，Separator()/load_model() 會自己下載
+        # 模型權重（Kim checkpoint 900MB+），這段下載本來完全沒有進度事件——hook
+        # 提早裝在這裡（import 完成之後、load_model 之前），下載的 tqdm 進度才會
+        # 一起被轉成 NDJSON。stage_ref 是可變的一格陣列，讓同一個 hook 在「下載
+        # 模型」跟「推論」兩個階段回報不同的 stage 名稱，不用重裝兩次。
+        stage_ref = ["download-model"]
+        restore_tqdm = _install_progress_and_cancel_hook(job_id, stage_ref)
+
         # 測試專用：人為限制這個 process 能配置的顯存上限，逼真的觸發 GPU_OOM
         # 來驗證 A4 的降級鏈,不用等真的低顯存硬體（跟 vram_limit_test.py 同技巧）。
         # 只有測試腳本會傳這個參數，正式流程不會用到。
@@ -179,11 +196,14 @@ def _run_real_job(job_id, params):
         )
         sep.load_model(model_filename=model_filename)
 
+        # watcher thread 故意延後到這裡（import + load_model 都跑完）才啟動，
+        # 見上面／main() 的說明：heavy import 當下有背景 thread 在 blocking 讀
+        # stdin 會直接卡死。tqdm hook 已經提早裝好了，這裡只補上取消監聽。
         threading.Thread(target=_watch_stdin_for_cancel, daemon=True).start()
-        restore_tqdm = _install_progress_and_cancel_hook(job_id)
         if _cancel_requested.is_set():
             raise _CancelledDuringInference()
 
+        stage_ref[0] = "inference"
         _emit({"id": job_id, "event": "progress", "stage": "inference", "progress": 0.0})
         outputs = sep.separate(input_path)
         if not outputs:

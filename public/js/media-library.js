@@ -205,7 +205,10 @@
     } else if (btn) {
       // worker.py 的 progress 是 0.0-1.0 的比例，不是 0-100（見 ai/worker.py）。
       const pct = typeof data.progress === 'number' ? Math.round(data.progress * 100) : null;
-      btn.textContent = pct !== null ? tr(`分離中… ${pct}%`) : tr('分離中…');
+      // 第一次分離會先下載 Kim 模型權重（900MB+），沒有這個提示的話，網路慢時
+      // 使用者會誤以為卡住——2026-08-22 這個 stage 是新加的，之前完全沒有進度事件。
+      const label = data.stage === 'download-model' ? tr('下載模型中(僅第一次)… ') : tr('分離中… ');
+      btn.textContent = pct !== null ? `${label}${pct}%` : label.trim();
     }
   });
 
