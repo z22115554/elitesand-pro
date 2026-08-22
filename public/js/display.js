@@ -638,6 +638,40 @@
     window.addEventListener('resize', reclampLyricOffset);
   }
 
+  let fontAssetApplyVersion = 0;
+
+  function quoteLocalFontFamily(family) {
+    return `'${String(family).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+  }
+
+  // 用 FontFace 直接載入掃描器驗證過的本機字型檔。這是 Windows 使用者字型在 Chromium/CEF
+  // 沒有註冊成 CSS family 時的可靠路徑；失敗則保留原本的 CSS fallback，不讓 OBS 出現空字。
+  async function applyLocalFontAssets(settings, fallbackStack) {
+    const version = ++fontAssetApplyVersion;
+    const loader = window.ElitesandFontAssets;
+    const mainId = settings.fontAssetId;
+    const latinId = settings.fontFamilyLatinAssetId;
+    const canLoad = loader && typeof loader.isAssetId === 'function' && typeof loader.load === 'function';
+    if (!canLoad || (!loader.isAssetId(mainId) && !loader.isAssetId(latinId))) return;
+    try {
+      const [main, latin] = await Promise.all([
+        loader.isAssetId(mainId) ? loader.load(mainId) : null,
+        loader.isAssetId(latinId) ? loader.load(latinId) : null,
+      ]);
+      if (version !== fontAssetApplyVersion) return;
+      const mainStack = main ? `${quoteLocalFontFamily(main.family)}, ${settings.fontFamily || fallbackStack}` : (settings.fontFamily || fallbackStack);
+      const finalStack = latin
+        ? `${quoteLocalFontFamily(latin.family)}, ${mainStack}`
+        : mainStack;
+      document.documentElement.style.setProperty('--display-font-family', finalStack);
+    } catch (err) {
+      if (version !== fontAssetApplyVersion) return;
+      // display 是透明 OBS 輸出頁，不顯示錯誤遮罩；面板在選取前已會把錯誤提示給操作者。
+      console.warn('[Elitesand] 本機字型載入失敗，保留備援字型：', err?.message || err);
+      document.documentElement.style.setProperty('--display-font-family', fallbackStack);
+    }
+  }
+
   // ─── 歌詞外觀/位置設定（從控制面板即時推送，寫入 CSS 變數）───
   function applyLyricSettings(s) {
     if (!s || typeof s !== 'object') return;
@@ -695,11 +729,14 @@
     // 中英文分離字體：把英文字體排在主字體「前面」——拉丁字母/數字先被英文字體吃掉，
     // 中日韓字元英文字體沒有字形、自動落到後面的主字體，兩套字體就分開了。
     // fontFamilyLatin 為空＝不指定（英文跟著主字體；上面的 map 已還原成純 fontFamily）。
+    let fallbackFontStack = (typeof s.fontFamily === 'string' && s.fontFamily) ? s.fontFamily : root.getPropertyValue('--display-font-family');
     if (typeof s.fontFamilyLatin === 'string' && s.fontFamilyLatin.trim() && typeof s.fontFamily === 'string' && s.fontFamily) {
       const latin = s.fontFamilyLatin.trim();
       const quoted = /[,'"]/.test(latin) ? latin : `'${latin}'`;
-      root.setProperty('--display-font-family', `${quoted}, ${s.fontFamily}`);
+      fallbackFontStack = `${quoted}, ${s.fontFamily}`;
+      root.setProperty('--display-font-family', fallbackFontStack);
     }
+    applyLocalFontAssets(s, fallbackFontStack);
     // 保留句數
     if (typeof s.historyLines === 'number') {
       KaraokeEngine.setMaxHistoryLines(s.historyLines);

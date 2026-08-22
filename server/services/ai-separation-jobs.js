@@ -26,6 +26,12 @@ const log = createLogger('AISeparationJobs');
 
 let deps = null; // { io, playState, persistState, broadcastState, updateLibraryMeta }
 const jobTrackMap = new Map(); // jobId -> trackId
+// supervisor.py 一次只跑一個 active job（鐵則 #12 同一套理由：GPU/CPU 一次分離一份，
+// 併發會 OOM/搶資源）。以前第二首分離請求會直接被 Python 端擋下回 BUSY error，UI 上
+// 看起來像「按了沒反應/直接失敗」。2026-08-23 改成 Node 端排隊：目前這首完成/失敗時
+// 自動接上排隊的下一首，不用使用者自己重試。
+const queue = []; // { trackId, params }，等待中、還沒真的送給 supervisor 的請求
+let activeTrackId = null; // 目前「真的」在跑（已送進 supervisor）的那首歌，null＝目前沒有
 let wired = false;
 
 function findTrack(playState, trackId) {
@@ -78,6 +84,7 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
       separationStatus: (result.vocal || result.instrumental) ? 'done' : 'failed',
     });
     io.emit('separation:progress', { trackId, jobId: msg.id, stage: 'done', progress: 100 });
+    advanceQueue();
   });
 
   supervisor.emitter.on('error', (msg) => {
@@ -93,21 +100,48 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
       // 除錯只能翻 server 終端機才看得到，太不方便，一併送給前端顯示。
       errorMessage: (msg.error && msg.error.message) || null,
     });
+    advanceQueue();
   });
 }
 
-/** API 路由呼叫這個啟動分離；回傳 jobId 給呼叫端（目前沒有直接用途，保留供除錯）。 */
-function startJobForTrack(trackId, params) {
-  if (!wired) throw new Error('ai-separation-jobs not wired yet (call wireDependencies first)');
+/** 真的把一個 job 送進 supervisor（不經過佇列）。 */
+function dispatch(trackId, params) {
+  activeTrackId = trackId;
   const jobId = supervisor.separateWithFallback(params);
   jobTrackMap.set(jobId, trackId);
   return jobId;
+}
+
+/** 目前這首分離完成／失敗後呼叫：接上排隊的下一首（沒有排隊就什麼都不做）。 */
+function advanceQueue() {
+  activeTrackId = null;
+  if (!queue.length) return;
+  const next = queue.shift();
+  const jobId = dispatch(next.trackId, next.params);
+  // 排隊的下一首正式開始跑了，通知前端從「排隊中」換成看得到進度的「分離中」。
+  if (deps) deps.io.emit('separation:progress', { trackId: next.trackId, jobId, stage: 'load', progress: 0 });
+}
+
+/**
+ * API 路由呼叫這個啟動分離。目前沒有其他 job 在跑就直接送出，回傳 jobId；
+ * 已經有一首在跑就排進佇列，回傳 null（呼叫端據此判斷是否要顯示「排隊中」）。
+ */
+function startJobForTrack(trackId, params) {
+  if (!wired) throw new Error('ai-separation-jobs not wired yet (call wireDependencies first)');
+  if (activeTrackId !== null) {
+    queue.push({ trackId, params });
+    deps.io.emit('separation:progress', { trackId, jobId: null, stage: 'queued', progress: 0, queuePosition: queue.length });
+    return null;
+  }
+  return dispatch(trackId, params);
 }
 
 function _resetForTests() {
   deps = null;
   wired = false;
   jobTrackMap.clear();
+  queue.length = 0;
+  activeTrackId = null;
 }
 
 module.exports = { wireDependencies, startJobForTrack, _resetForTests };

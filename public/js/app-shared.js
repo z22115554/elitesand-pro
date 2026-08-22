@@ -154,6 +154,7 @@ window.AppShared = (function () {
     speedDown: document.getElementById('speed-down'),
     volumeSlider: document.getElementById('volume-slider'),
     volumeVal: document.getElementById('volume-val'),
+    volumeRow: document.getElementById('volume-row'),
     normalizationToggle: document.getElementById('normalization-toggle'),
     metronomeToggle: document.getElementById('metronome-toggle'),
     // AI 分離播放模式（實驗性）

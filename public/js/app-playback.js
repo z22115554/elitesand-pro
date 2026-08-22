@@ -110,9 +110,11 @@
   if (dom.separationVocalsVolume) {
     dom.separationVocalsVolume.value = Math.round(vocalsVolume * 100);
     if (dom.separationVocalsVolumeVal) dom.separationVocalsVolumeVal.textContent = Math.round(vocalsVolume * 100) + '%';
+    updateRangeFill(dom.separationVocalsVolume);
     dom.separationVocalsVolume.addEventListener('input', () => {
       vocalsVolume = parseInt(dom.separationVocalsVolume.value, 10) / 100;
       if (dom.separationVocalsVolumeVal) dom.separationVocalsVolumeVal.textContent = dom.separationVocalsVolume.value + '%';
+      updateRangeFill(dom.separationVocalsVolume);
       if (vocalsGain) { try { vocalsGain.gain.value = vocalsVolume; } catch (e) { /* 靜默 */ } }
       try { localStorage.setItem('vk-separation-vocals-volume', String(vocalsVolume)); } catch (e) { /* 靜默 */ }
     });
@@ -1039,6 +1041,21 @@
   // 走 Web Audio 後 audio.volume 失效，必須用 GainNode）
   // ═══════════════════════════════════════════
 
+  // 滑桿本身的填色軌道（--range-fill，CSS 見 panel.css）＋伴奏音量圖示的音波狀態
+  // （靜音/低/高，像 Windows 音量混音器）：使用者實測回報純色軌道「看不出音量高低，
+  // 只能看數字」，圖示原本又只有喇叭外殼、沒有音波，永遠看起來像沒聲音。
+  function updateRangeFill(el) {
+    if (!el) return;
+    const min = parseFloat(el.min) || 0;
+    const max = parseFloat(el.max) || 100;
+    const pct = max > min ? ((parseFloat(el.value) - min) / (max - min)) * 100 : 0;
+    el.style.setProperty('--range-fill', `${Math.max(0, Math.min(100, pct))}%`);
+  }
+  function updateVolumeIconLevel(pct) {
+    if (!dom.volumeRow) return;
+    dom.volumeRow.dataset.level = pct <= 0 ? 'muted' : pct < 50 ? 'low' : 'high';
+  }
+
   if (dom.volumeSlider) {
     // 初始化：讀取 AudioProcessor 記住的音量（預設 70%）
     let initVol = 0.7;
@@ -1047,12 +1064,16 @@
     }
     dom.volumeSlider.value = Math.round(initVol * 100);
     if (dom.volumeVal) dom.volumeVal.textContent = Math.round(initVol * 100) + '%';
+    updateRangeFill(dom.volumeSlider);
+    updateVolumeIconLevel(Math.round(initVol * 100));
     // 套用初始音量到 audio 元素（AudioProcessor 尚未初始化前的後備）
     audioPlayer.volume = initVol;
 
     dom.volumeSlider.addEventListener('input', () => {
       const vol = parseInt(dom.volumeSlider.value, 10) / 100;
       if (dom.volumeVal) dom.volumeVal.textContent = dom.volumeSlider.value + '%';
+      updateRangeFill(dom.volumeSlider);
+      updateVolumeIconLevel(parseInt(dom.volumeSlider.value, 10));
       // 不論降級鏈是否已初始化，都交給 AudioProcessor 記住音量；SoundTouch 常在
       // 它之前就可播放，若只在 ready 後呼叫會造成「這次聽得到、重開又回 70%」。
       if (typeof AudioProcessor !== 'undefined' && AudioProcessor.setVolume) {

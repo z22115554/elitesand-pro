@@ -928,10 +928,89 @@ router.get('/fonts', async (req, res) => {
   try {
     const { listSystemFonts } = require('../services/font-scanner');
     const result = await listSystemFonts(req.query.refresh === '1');
-    res.json({ success: true, fonts: result.fonts, fileCount: result.fileCount });
+    // assets 是不含本機路徑的 opaque ID。顯示端用它向下面的 loopback-only 路由取字型檔，
+    // 不再賭 Chromium 是否剛好把 Windows 使用者字型註冊成可用 CSS family。
+    res.json({ success: true, fonts: result.fonts, aliases: result.aliases, assets: result.assets, fileCount: result.fileCount });
   } catch (err) {
     log.error('掃描系統字體失敗', err);
     res.status(500).json({ success: false, error: '掃描系統字體失敗' });
+  }
+});
+
+function isDirectLoopback(req) {
+  const address = req.socket && req.socket.remoteAddress;
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+function requireLocalFontAsset(req, res, next) {
+  // Server 本身會綁在 LAN；字型檔卻不應因而被 LAN/隧道來源下載。不要信任
+  // X-Forwarded-For，只有 TCP 對端確實是 loopback 才可繼續。
+  if (!isDirectLoopback(req)) return res.status(403).json({ success: false, error: '本機字型資源只限這台電腦的輸出頁使用' });
+  next();
+}
+
+function safeAssetId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{16,32}$/.test(value);
+}
+
+// 先給 FontFace 載入器一份已驗證的 face 描述；不暴露實體字型路徑。
+router.get('/fonts/assets/:assetId', requireLocalFontAsset, async (req, res) => {
+  if (!safeAssetId(req.params.assetId)) return res.status(400).json({ success: false, error: '無效的字型資源' });
+  try {
+    const { getFontAsset } = require('../services/font-scanner');
+    const asset = await getFontAsset(req.params.assetId);
+    if (!asset) return res.status(404).json({ success: false, error: '字型資源已不存在，請重新選擇' });
+    res.set({
+      'Cache-Control': 'private, max-age=300',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.json({
+      success: true,
+      id: asset.id,
+      family: `ElitesandLocalFont-${asset.id}`,
+      faces: asset.faces.map((face) => ({
+        id: face.id,
+        weight: face.weight,
+        style: face.style,
+        format: face.format,
+        url: `/api/fonts/assets/${asset.id}/${face.id}`,
+      })),
+    });
+  } catch (err) {
+    log.error('讀取本機字型資源資訊失敗', err);
+    res.status(500).json({ success: false, error: '讀取本機字型資源失敗' });
+  }
+});
+
+// 實際字型位元組只由掃描器已知的 opaque ID 對應；scanner 會再 realpath 驗證其仍位於
+// Windows/macOS/Linux 受管字型目錄內，避免把此 API 變成任意檔案讀取器。
+router.get('/fonts/assets/:assetId/:faceId', requireLocalFontAsset, async (req, res) => {
+  if (!safeAssetId(req.params.assetId) || !safeAssetId(req.params.faceId)) {
+    return res.status(400).json({ success: false, error: '無效的字型資源' });
+  }
+  try {
+    const { resolveFontAssetFace } = require('../services/font-scanner');
+    const face = await resolveFontAssetFace(req.params.assetId, req.params.faceId);
+    if (!face) return res.status(404).json({ success: false, error: '字型資源已不存在，請重新選擇' });
+    const mime = face.format === 'opentype' ? 'font/otf' : face.format === 'truetype' ? 'font/ttf' : 'font/collection';
+    res.set({
+      'Cache-Control': 'private, max-age=300',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Length': String(face.size),
+    });
+    res.type(mime);
+    const stream = fs.createReadStream(face.file);
+    stream.on('error', (err) => {
+      log.warn(`讀取本機字型檔失敗: ${err.message}`);
+      if (!res.headersSent) res.status(404).end();
+      else res.destroy(err);
+    });
+    stream.pipe(res);
+  } catch (err) {
+    log.error('傳送本機字型資源失敗', err);
+    if (!res.headersSent) res.status(500).json({ success: false, error: '傳送本機字型資源失敗' });
   }
 });
 
@@ -984,7 +1063,9 @@ router.post('/library/:id/separate', requirePin, async (req, res) => {
       modelFileDir: path.join(dataDir, 'ai-models'),
     });
     libraryStore.updateMeta(trackId, { separationStatus: 'processing' });
-    res.json({ ok: true, jobId });
+    // jobId 為 null 代表已經有另一首在跑，這首排進佇列了（見 ai-separation-jobs.js 的
+    // startJobForTrack）——不是失敗，前端靠 separation:progress 的 stage:'queued' 顯示排隊中。
+    res.json({ ok: true, jobId, queued: jobId === null });
   } catch (err) {
     log.error(`啟動 AI 分離失敗 track=${trackId}`, err);
     res.status(500).json({ ok: false, error: err.message });

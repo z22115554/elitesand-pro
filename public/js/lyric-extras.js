@@ -29,6 +29,9 @@
     fontSize: 56,
     fontFamily: "'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif",
     fontFamilyLatin: '', // 英文（拉丁字母/數字）專用字體；空＝跟主字體。display 端會組成「英文字體, 主字體」
+    // 由 /api/fonts 回傳的 opaque ID；只有輸出端成功以 FontFace 載入字型檔才會使用。
+    fontAssetId: '',
+    fontFamilyLatinAssetId: '',
     fontWeight: 900,
     color: '#8f8f8f',
     activeColor: '#febc6c',
@@ -491,20 +494,54 @@
   const CUSTOM_FONT_VALUE = '__custom__';
   const FONT_FALLBACK = "'Noto Sans TC', 'Noto Sans SC', 'Noto Sans JP', sans-serif";
 
+  // 字型檔的 name 表常有一個以上「家族名稱」（nameID 1 相容家族／16 印刷家族），作業系統
+  // 實際拿去比對已安裝字型的是哪一個因字型而異——只套用我們選的那一個名稱，對不上系統
+  // 註冊名稱時 CSS 會整組靜默 fallback 回 FONT_FALLBACK（2026-08-24 使用者實測「辰宇落雁體
+  // 2.0」踩到這個坑：選了字體卻被退回 Noto）。`fontAliases[家族名稱]` 存這款字所有候選名稱
+  // （見 server/services/font-scanner.js），套用時整組放進 font-family 堆疊，任何一個系統
+  // 認得就會生效；使用者手動輸入的名稱查不到別名時，維持原本「只有一個名稱」的行為。
+  let fontAliases = {};
+  let fontAssets = {};
+  let fontSelectionVersion = 0;
+
   function extractPrimaryFont(family) {
     if (!family) return '';
     return String(family).split(',')[0].trim().replace(/^['"]|['"]$/g, '');
   }
 
-  function applyCustomFont(name) {
+  function quotedFontStack(name) {
     const trimmed = (name || '').trim();
-    if (trimmed) {
-      const quoted = /[,'"]/.test(trimmed) ? trimmed : `'${trimmed}'`;
-      settings.fontFamily = `${quoted}, ${FONT_FALLBACK}`;
-    } else {
-      settings.fontFamily = DEFAULT_SETTINGS.fontFamily;
+    if (!trimmed) return DEFAULT_SETTINGS.fontFamily;
+    const candidates = (Array.isArray(fontAliases[trimmed]) && fontAliases[trimmed].length)
+      ? fontAliases[trimmed] : [trimmed];
+    const quoted = candidates
+      .map((n) => (/[,'"]/.test(n) ? n : `'${n}'`))
+      .join(', ');
+    return `${quoted}, ${FONT_FALLBACK}`;
+  }
+
+  async function verifyFontAsset(name) {
+    const asset = fontAssets[(name || '').trim()];
+    if (!asset || !window.ElitesandFontAssets?.isAssetId?.(asset.id)) return '';
+    await window.ElitesandFontAssets.load(asset.id);
+    return asset.id;
+  }
+
+  async function applyCustomFont(name) {
+    const trimmed = (name || '').trim();
+    const version = ++fontSelectionVersion;
+    let assetId = '';
+    try {
+      assetId = await verifyFontAsset(trimmed);
+    } catch (err) {
+      if (version === fontSelectionVersion) showToast(`無法載入「${trimmed}」字型檔，未套用設定`);
+      return;
     }
+    if (version !== fontSelectionVersion) return;
+    settings.fontFamily = quotedFontStack(trimmed);
+    settings.fontAssetId = assetId;
     pushSettings();
+    if (assetId) showToast(`已驗證並套用「${trimmed}」本機字型`);
   }
 
   // 依目前 settings.fontFamily 還原字體下拉與自訂區塊的顯示狀態
@@ -532,6 +569,8 @@
       const r = await fetch('/api/fonts');
       const data = await r.json();
       if (data && data.success && Array.isArray(data.fonts)) data.fonts.forEach((f) => names.add(f));
+      if (data && data.aliases && typeof data.aliases === 'object') Object.assign(fontAliases, data.aliases);
+      if (data && data.assets && typeof data.assets === 'object') Object.assign(fontAssets, data.assets);
     } catch (_) { /* 伺服器掃描失敗 → 退回瀏覽器 API */ }
     if (typeof window.queryLocalFonts === 'function') {
       try {
@@ -604,6 +643,7 @@
       } else {
         if (wrap) wrap.hidden = true;
         settings.fontFamily = sel.value;
+        settings.fontAssetId = '';
         pushSettings();
       }
     });
@@ -621,9 +661,21 @@
     const latinSel = document.getElementById('ls-font-latin');
     const latinInput = document.getElementById('ls-font-latin-custom');
     const latinLoad = document.getElementById('ls-font-latin-load');
-    const setLatin = (name) => {
-      settings.fontFamilyLatin = (name || '').trim();
+    const setLatin = async (name) => {
+      const trimmed = (name || '').trim();
+      const version = ++fontSelectionVersion;
+      let assetId = '';
+      try {
+        assetId = await verifyFontAsset(trimmed);
+      } catch (err) {
+        if (version === fontSelectionVersion) showToast(`無法載入「${trimmed}」字型檔，未套用設定`);
+        return;
+      }
+      if (version !== fontSelectionVersion) return;
+      settings.fontFamilyLatin = trimmed;
+      settings.fontFamilyLatinAssetId = assetId;
       pushSettings();
+      if (assetId) showToast(`已驗證並套用「${trimmed}」英文字型`);
     };
     if (latinInput) {
       latinInput.value = settings.fontFamilyLatin || '';

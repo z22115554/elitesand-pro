@@ -200,6 +200,13 @@ function registerLyricsHandlers(io, socket, ctx) {
       && (!Number.isInteger(settings.columnflowMaxLines) || settings.columnflowMaxLines < 1 || settings.columnflowMaxLines > 6)) {
       delete settings.columnflowMaxLines;
     }
+    // 本機字型資源只接受掃描器產生的 opaque ID。實際檔案路徑從不進 state，也不接受
+    // 客戶端拼出的 URL；顯示端仍會由 API 再做一次 ID/realpath 驗證。
+    for (const key of ['fontAssetId', 'fontFamilyLatinAssetId']) {
+      if (settings[key] !== undefined && (typeof settings[key] !== 'string' || !/^[A-Za-z0-9_-]{16,32}$/.test(settings[key]))) {
+        delete settings[key];
+      }
+    }
     // 合併（容許部分更新）
     playState.lyricSettings = { ...playState.lyricSettings, ...settings };
     // 只發 lyric-settings:update（顯示端據此直接套 CSS 變數）。
