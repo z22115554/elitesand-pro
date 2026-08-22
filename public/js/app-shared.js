@@ -156,6 +156,12 @@ window.AppShared = (function () {
     volumeVal: document.getElementById('volume-val'),
     normalizationToggle: document.getElementById('normalization-toggle'),
     metronomeToggle: document.getElementById('metronome-toggle'),
+    // AI 分離播放模式（實驗性）
+    separationModeToggle: document.getElementById('separation-mode-toggle'),
+    separationStatusHint: document.getElementById('separation-status-hint'),
+    separationVocalsRow: document.getElementById('separation-vocals-row'),
+    separationVocalsVolume: document.getElementById('separation-vocals-volume'),
+    separationVocalsVolumeVal: document.getElementById('separation-vocals-volume-val'),
     // Setlist / Session
     sessionStart: document.getElementById('session-start'),
     sessionStop: document.getElementById('session-stop'),
