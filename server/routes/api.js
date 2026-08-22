@@ -45,9 +45,6 @@ const { decodeUploadedText } = require('../utils/decode-text');
 const ytdlpCompatibility = require('../services/ytdlp-compatibility');
 const systemCheck = require('../services/system-check');
 const ffmpegProvider = require('../services/ffmpeg-provider');
-const aiRuntimeProvider = require('../services/ai-runtime-provider');
-const aiSeparationJobs = require('../services/ai-separation-jobs');
-const libraryStore = require('../services/library-store');
 const { createDiagnosticBundle } = require('../services/diagnostic-bundle');
 const runtimeEvidence = require('../services/runtime-evidence');
 const feedbackReport = require('../services/feedback-report');
@@ -1011,64 +1008,6 @@ router.get('/fonts/assets/:assetId/:faceId', requireLocalFontAsset, async (req, 
   } catch (err) {
     log.error('傳送本機字型資源失敗', err);
     if (!res.headersSent) res.status(500).json({ success: false, error: '傳送本機字型資源失敗' });
-  }
-});
-
-// ─── AI 人聲分離（實驗性功能）───
-// 定位見 CLAUDE.md「AI 人聲分離」：使用 Kim Mel-Band RoFormer 模型，作者書面授權確認
-// （docs/AI-SEPARATION-PLAN.md §6）截至上線時仍在等待中——這是使用者知情後的決定，
-// 不是遺漏，見 STATUS.md 對應記錄。
-
-// 只讀進度，不含本機路徑，前端下載期間輪詢它（同 /ffmpeg/download/status 的理由）。
-router.get('/ai-separation/runtime-status', (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  res.json({ available: aiRuntimeProvider.isAvailable(), ...aiRuntimeProvider.getDownloadStatus() });
-});
-
-// 觸發真正的網路下載＋寫入本機檔案，依鐵則 15 必須手動掛 requirePin。
-router.post('/ai-separation/runtime/download', requirePin, async (req, res) => {
-  if (aiRuntimeProvider.isAvailable()) {
-    return res.json({ ok: true, alreadyAvailable: true });
-  }
-  try {
-    await aiRuntimeProvider.downloadRuntime({});
-    res.json({ ok: true, alreadyAvailable: false });
-  } catch (err) {
-    log.error('AI 分離 runtime 下載失敗', err);
-    res.status(502).json({ ok: false, reason: err.message });
-  }
-});
-
-// 啟動一次分離 job。這是一支會觸發真正 GPU/CPU 運算＋寫入本機檔案的路由，依鐵則 15
-// 必須手動掛 requirePin。只回傳 jobId；實際進度/完成走 Socket.io 的 separation:progress
-// 事件（見 server/services/ai-separation-jobs.js），不是這個 HTTP response。
-router.post('/library/:id/separate', requirePin, async (req, res) => {
-  const trackId = req.params.id;
-  const entry = libraryStore.getEntry(trackId);
-  if (!entry || !entry.filename) {
-    return res.status(404).json({ ok: false, error: '找不到這首歌的音檔' });
-  }
-  if (!aiRuntimeProvider.isAvailable()) {
-    return res.status(409).json({ ok: false, error: 'AI_RUNTIME_NOT_READY' });
-  }
-  if (entry.separationStatus === 'processing') {
-    return res.status(409).json({ ok: false, error: 'ALREADY_PROCESSING' });
-  }
-  try {
-    const jobId = aiSeparationJobs.startJobForTrack(trackId, {
-      inputPath: path.join(downloadsDir, entry.filename),
-      // /audio/:filename 只認 downloadsDir 直接底下的檔名（server/index.js），輸出必須
-      // 直接落在這裡，分離出來的兩個檔案才能透過既有的 /audio 端點播放，不用另開路由。
-      outputDir: downloadsDir,
-      modelFileDir: path.join(dataDir, 'ai-models'),
-    });
-    libraryStore.updateMeta(trackId, { separationStatus: 'processing' });
-    // jobId 為 null 代表已經有另一首在跑，這首排進佇列了（見 ai-separation-jobs.js 的
-    // startJobForTrack）——不是失敗，前端靠 separation:progress 的 stage:'queued' 顯示排隊中。
-    res.json({ ok: true, jobId, queued: jobId === null });
-  } catch (err) {
-    log.error(`啟動 AI 分離失敗 track=${trackId}`, err);
-    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

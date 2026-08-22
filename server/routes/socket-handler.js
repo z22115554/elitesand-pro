@@ -97,15 +97,6 @@ module.exports = function socketHandler(io, {
     updateLibraryMeta: libraryStore.updateMeta,
   }).start();
 
-  // ─── AI 人聲分離（實驗性）：job 完成/失敗時寫回 playState.playlist（鐵則 17）───
-  require('../services/ai-separation-jobs').wireDependencies({
-    io,
-    playState: ctx.playState,
-    persistState: ctx.persistState,
-    broadcastState: ctx.broadcastState,
-    updateLibraryMeta: libraryStore.updateMeta,
-  });
-
   // ─── 讓 LyricsEngine 能主動推播（羅馬化完成等後台事件）───
   const { setIo } = require('../services/lyrics-engine');
   setIo(io);

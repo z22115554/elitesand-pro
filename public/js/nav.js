@@ -428,63 +428,6 @@
     }
     wireFfmpegDownloadButton(document.getElementById('guide-ffmpeg-download'), 'guide-check-ffmpeg');
     wireFfmpegDownloadButton(document.getElementById('ffmpeg-download-btn'), 'ffmpeg-status');
-
-    // ─── AI 人聲分離（實驗性）：跟 FFmpeg 同一個「檢查→下載→輪詢」形狀，
-    // 但不進「新手教學」清單、不影響 guide 的整體就緒判斷——這是獨立的選用功能。 ───
-    (function wireAiSeparationDownload() {
-      const statusEl = document.getElementById('ai-separation-status');
-      const btn = document.getElementById('ai-separation-download-btn');
-      if (!statusEl || !btn) return;
-      let pollTimer = null;
-
-      function refresh() {
-        fetch('/api/ai-separation/runtime-status', { cache: 'no-store' }).then((res) => res.json()).then((status) => {
-          if (status.available) {
-            statusEl.textContent = '已就緒';
-            btn.hidden = true;
-            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-            return;
-          }
-          if (status.active) {
-            const percent = Math.max(0, Math.min(100, Math.floor(Number(status.percent || 0))));
-            statusEl.textContent = `下載中… ${percent}%`;
-            btn.hidden = true;
-            if (!pollTimer) pollTimer = setInterval(refresh, 500);
-            return;
-          }
-          statusEl.textContent = '尚未安裝';
-          btn.hidden = false;
-          btn.disabled = false;
-          btn.textContent = '下載元件';
-          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        }).catch(() => { statusEl.textContent = '檢查失敗'; });
-      }
-
-      btn.addEventListener('click', () => {
-        btn.disabled = true;
-        btn.textContent = '下載中…';
-        statusEl.textContent = '下載中…';
-        pollTimer = setInterval(refresh, 500);
-        PinAuth.fetchWithPin('/api/ai-separation/runtime/download', { method: 'POST' })
-          .then((res) => res.json())
-          .then((data) => {
-            if (!data.ok) throw new Error(data.reason || '下載失敗');
-            refresh();
-          })
-          .catch((err) => {
-            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-            statusEl.textContent = `下載失敗：${err.message}`;
-            btn.disabled = false;
-            btn.hidden = false;
-            btn.textContent = '重新下載';
-          });
-      });
-
-      document.addEventListener('view:change', (event) => {
-        if (event.detail?.view === 'general') refresh();
-      });
-      refresh();
-    })();
     // 兩顆下載按鈕（新手教學／連線與系統）共用同一組文字更新函式；換語言時要一起重畫。
     function updateFfmpegButtonText() {
       ffmpegButtonTextUpdaters.forEach((fn) => fn());

@@ -58,33 +58,3 @@ REPO_MIGRATION.md
 
 # 本機暫存與私密資料（release 備份、簽章私鑰等，絕不可進 git）
 .local/
-
-# AI 人聲分離探索分支（explore/ai-vocal-separation-kim）：venv、模型權重、產物、
-# 實測筆記（.md，同 CLAUDE.md/STATUS.md 性質，只留本機）絕不可進 git
-ai-experiments/**/.venv/
-ai-experiments/**/models/
-ai-experiments/**/*.ckpt
-ai-experiments/**/*.pth
-ai-experiments/**/output/
-ai-experiments/**/output-*/
-ai-experiments/**/eval-audio-80/
-ai-experiments/**/eval-audio-50/
-ai-experiments/**/eval-audio-50b/
-ai-experiments/**/ab10-source/
-ai-experiments/**/output-ab10-*/
-ai-experiments/**/output-a3-test/
-ai-experiments/**/*.md
-
-# W0 WebGPU 探針（探索分支，不進 repo）
-ai-experiments/**/node_modules/
-ai-experiments/webgpu-probe/models/
-ai-experiments/webgpu-probe/work/
-ai-experiments/webgpu-probe/output-w1/
-ai-experiments/webgpu-probe/fft-browser.mjs
-
-ai-experiments/webgpu-probe/dist-test-app/
-ai-experiments/webgpu-probe/test-app/output/
-ai-experiments/audio-routing-probe/drift-raw.json
-ai-experiments/audio-routing-probe/drift-summary.json
-ai-experiments/audio-routing-probe/obs-drift-test/obs-drift-result.json
-ai-experiments/audio-routing-probe/obs-drift-test/synthetic*.wav
