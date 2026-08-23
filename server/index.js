@@ -17,6 +17,7 @@ const { projectRoot, dataDir, downloadsDir } = require('./utils/app-paths');
 const { createLogger, shutdown: shutdownLogger } = require('./utils/logger');
 const { attachParentShutdown } = require('./utils/parent-shutdown');
 const { attachStartupUpdateCoordinator } = require('./services/startup-update-coordinator');
+const { createCloudflareUpdateProvider } = require('./services/cloudflare-update-provider');
 const log = createLogger('Server');
 const config = require('./utils/load-config');
 const { isAllowedSocketRequest, isAllowedCorsOrigin } = require('./utils/socket-origin');
@@ -393,6 +394,7 @@ attachParentShutdown({
 // parentPort. This has no HTTP/Socket.io surface and the P4 provider is an
 // offline fake until the later, separately-gated Cloudflare wiring phase.
 attachStartupUpdateCoordinator({
+  provider: createCloudflareUpdateProvider(),
   onError: (err) => log.error(`Startup update coordinator failed: ${err.message}`, err),
 });
 
