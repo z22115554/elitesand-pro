@@ -1457,7 +1457,7 @@ test('發版稽核只檢查 production dependencies，且任何等級風險都�
   eq(manifest.scripts['audit:release'], 'npm audit --omit=dev --audit-level=low');
 });
 
-testAsync('更新計畫只讀 Release metadata，且只提供完整 Installer', async () => {
+testAsync('legacy release metadata adapter remains read-only and is not wired to the cold-start gate', async () => {
   const release = {
     tag_name: 'v9.9.9', html_url: 'https://example.test/release',
     assets: [
@@ -1479,21 +1479,21 @@ testAsync('更新計畫只讀 Release metadata，且只提供完整 Installer', 
   const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/app-updater.js'), 'utf8');
   const getPlanSource = updaterSource.slice(updaterSource.indexOf('async function getPlan'), updaterSource.indexOf('function ensureInside'));
   ok(!getPlanSource.includes('downloadReleaseUpdate('), '檢查更新不可預先下載 update.zip: ');
-  const updatePanelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-check.js'), 'utf8');
-  ok(updatePanelSource.includes('完整 Windows Installer'), '面板必須明確導向完整 Installer: ');
+  const shellSource = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
+  const coordinatorSource = fs.readFileSync(path.join(__dirname, '../server/services/startup-update-coordinator.js'), 'utf8');
+  ok(!shellSource.includes('app-updater') && !coordinatorSource.includes('app-updater'), 'P4 gate 不可接到 legacy updater: ');
 });
 
-test('首頁更新橫幅只導向完整 Installer，不提供增量更新入口', () => {
+test('運行中的首頁與設定頁沒有 HTTP 更新入口，只能確認後重新啟動', () => {
   const toastSource = fs.readFileSync(path.join(__dirname, '../public/js/app-toast-utils.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const restartSource = fs.readFileSync(path.join(__dirname, '../public/js/app-restart-update-check.js'), 'utf8');
 
-  ok(toastSource.includes("fetch('/api/app-update/plan')"), '首頁橫幅必須讀取更新計畫: ');
-  ok(!toastSource.includes('applyIncrementalUpdate'), '首頁橫幅不可提供增量更新流程: ');
-  ok(indexHtml.includes('id="update-banner-link"'), '橫幅必須提供 Installer 下載連結: ');
-  ok(!indexHtml.includes('id="update-banner-apply"'), '橫幅不可保留立即增量更新按鈕: ');
-  const updatePanelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-check.js'), 'utf8');
-  ok(!updatePanelSource.includes('applyIncrementalUpdate'), '設定頁不可提供增量更新流程: ');
-  ok(!fs.existsSync(path.join(__dirname, '../public/js/app-update-apply.js')), '舊的前端增量更新模組必須移除: ');
+  ok(!toastSource.includes('/api/app-update/') && !toastSource.includes('fetch('), '首頁不可查詢更新計畫: ');
+  ok(!indexHtml.includes('update-banner') && !indexHtml.includes('app-update-check-btn'), '首頁不可保留更新橫幅或檢查按鈕: ');
+  ok(indexHtml.includes('id="restart-update-check-btn"'), '設定頁只保留重新啟動入口: ');
+  ok(!restartSource.includes('fetch(') && restartSource.includes('restartForUpdateCheck'), '設定頁不可自行查詢或下載更新: ');
+  ok(!fs.existsSync(path.join(__dirname, '../public/js/app-update-check.js')), '舊的前端更新模組必須移除: ');
 });
 
 test('更新檢查會納入 prerelease、排除 draft，並挑最高版本', () => {
@@ -1765,11 +1765,11 @@ test('外部 updater 在獨立 Node 子程序可完成覆蓋與清理', () => {
   } finally { fs.rmSync(sandbox.root, { recursive: true, force: true }); }
 });
 
-test('更新 API 只在 response finish 後要求 graceful shutdown', () => {
+test('更新 HTTP API 已移除，只有 private parentPort coordinator 可在冷啟動使用', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
-  const finishAt = source.indexOf("res.once('finish'");
-  const shutdownAt = source.indexOf("gracefulShutdown({ reason: 'app-update'", finishAt);
-  ok(finishAt >= 0 && shutdownAt > finishAt);
+  const coordinator = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'startup-update-coordinator.js'), 'utf8');
+  ok(!source.includes("'/app-update/plan'") && !source.includes("'/app-update/status'") && !source.includes("'/app-update/apply'"));
+  ok(coordinator.includes('process.parentPort') && !coordinator.includes('router.') && !coordinator.includes('socket'));
 });
 
 function sampleAnnouncement(patch = {}) {
@@ -6666,7 +6666,7 @@ test('HTTP 安全回歸：標頭存在、版本標頭隱藏、過大 JSON 回 41
         // yt-dlp/ffmpeg，任何網頁都能重複觸發。403 在 middleware 就短路，不會真的 spawn。
         for (const sideEffectGet of ['/api/system-check?force=1', '/api/fonts?refresh=1',
           '/api/diagnostics/export', '/api/twitch/authorize', '/api/ytdlp/check?force=1',
-          '/api/announcements?force=1', '/api/update-check?force=1', '/api/app-update/plan']) {
+          '/api/announcements?force=1', '/api/update-check?force=1']) {
           const blocked = await request({ host: '127.0.0.1', port, path: sideEffectGet,
             headers: { 'sec-fetch-site': 'cross-site' } });
           if (blocked.statusCode !== 403) { process.exitCode = 6; break; }

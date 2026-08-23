@@ -268,12 +268,6 @@
         </div>
       </div>
 
-      <div id="update-banner" class="banner" hidden>
-        <span>新版本 <strong id="update-banner-version"></strong> 已發布</span>
-        <a id="update-banner-link" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer" hidden>下載 Installer</a>
-        <button id="update-banner-dismiss" class="btn btn-sm btn-ghost" type="button">關閉</button>
-      </div>
-
       <div class="content">
         <!-- ═══ 視圖：歌詞控制 ═══ -->
         <div class="view is-active content-col" data-view="karaoke">
@@ -1376,14 +1370,10 @@
 
           <section class="card" id="app-update-card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg>程式更新</p>
-            <p class="sub section-intro">有新版本時只通知；請從 GitHub Releases 下載並執行完整 Windows Installer。程式內增量更新已停用，不會自動重新啟動或中斷直播。</p>
+            <p class="sub section-intro">更新只會在重新啟動 Elitesand Pro 前檢查；正在使用中的程式絕不會被要求更新或中斷。</p>
             <div class="switch-row">
-              <div><div class="label">目前版本</div><div class="sub" id="app-version-current">讀取中…</div></div>
-              <button id="app-update-check-btn" class="btn btn-sm" type="button">檢查更新</button>
-            </div>
-            <p id="app-update-status" class="val val--status-message">尚未檢查。</p>
-            <div class="inline-row inline-row--wrap mt-10">
-              <a id="app-update-link" class="btn btn-sm btn-ghost" href="#" target="_blank" rel="noopener noreferrer" hidden>下載 Installer</a>
+              <div><div class="label">檢查時機</div><div class="sub">下次重新啟動時</div></div>
+              <button id="restart-update-check-btn" class="btn btn-sm" type="button">重新啟動並檢查</button>
             </div>
           </section>
 
@@ -2703,7 +2693,7 @@
   <script src="/js/danger-confirm.js"></script>
   <script src="/js/modal-focus.js"></script>
   <script src="/js/app-youtube-import.js"></script>
-  <script src="/js/app-update-check.js"></script>
+  <script src="/js/app-restart-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>
   <script src="/js/twitch-request-settings.js"></script>
   <script src="/js/twitch-reward-settings.js"></script>

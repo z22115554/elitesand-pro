@@ -11,10 +11,6 @@
 window.AppShared = (function () {
   const dom = {
     connectionStatus: document.getElementById('connection-status'),
-    updateBanner: document.getElementById('update-banner'),
-    updateBannerVersion: document.getElementById('update-banner-version'),
-    updateBannerLink: document.getElementById('update-banner-link'),
-    updateBannerDismiss: document.getElementById('update-banner-dismiss'),
     connectionText: document.getElementById('connection-text'),
     dropZone: document.getElementById('drop-zone'),
     fileInput: document.getElementById('file-input'),

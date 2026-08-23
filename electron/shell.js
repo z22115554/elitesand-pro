@@ -256,6 +256,10 @@ function createElectronShell({
   }
 
   const { SHUTDOWN_MESSAGE } = require(path.join(projectRoot, 'server', 'utils', 'parent-shutdown'));
+  const { createStartupUpdateGate, PHASES: UPDATE_PHASES } = require('./startup-update-gate');
+  const { createStartupUpdateRequester } = require('./startup-update-requester');
+  const { createStartupUpdateDeferStore } = require('./startup-update-defer-store');
+  const { format: formatUpdateText, getCatalog: getUpdateCatalog } = require('./startup-update-i18n');
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
   const preload = path.join(shellRoot, 'electron', 'preload.js');
   const isSpoutExperiment = processObject.env.ELITESAND_SPOUT_EXPERIMENT === '1';
@@ -276,6 +280,8 @@ function createElectronShell({
   let shouldShowPortableDataMigrationNotice = false;
   let spoutDisplayOutput = null;
   let spoutOutputOptions = null;
+  let startupUpdateGate = null;
+  let startupUpdateRequester = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
 
   function resolveExperimentalSpoutNumber(name, fallback) {
@@ -499,6 +505,65 @@ function createElectronShell({
     shouldShowPortableDataMigrationNotice = false;
   }
 
+  function getNativeUpdateCatalog() {
+    return getUpdateCatalog(app.getLocale?.() || 'zh-TW');
+  }
+
+  async function showNativeUpdateDialog(options) {
+    // Cold-start decisions have no BrowserWindow yet. Use Electron's native
+    // dialog directly, never an HTML preflight window or renderer modal.
+    if (typeof dialog.showMessageBox === 'function') return dialog.showMessageBox(options);
+    if (typeof dialog.showMessageBoxSync === 'function') return { response: dialog.showMessageBoxSync(options) };
+    return { response: options.cancelId ?? options.defaultId ?? 0 };
+  }
+
+  async function promptOptionalUpdate(plan) {
+    const text = getNativeUpdateCatalog();
+    const result = await showNativeUpdateDialog({
+      type: 'info',
+      title: text.title,
+      message: formatUpdateText(text.optionalMessage, { version: plan.targetVersion }),
+      detail: text.optionalDetail,
+      buttons: [text.updateNow, text.defer],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    return result?.response === 0 ? 'accept' : 'defer';
+  }
+
+  async function promptRequiredUpdate(plan) {
+    const text = getNativeUpdateCatalog();
+    const isInstaller = plan.delivery === 'installer';
+    const result = await showNativeUpdateDialog({
+      type: 'warning',
+      title: text.title,
+      message: text.requiredMessage,
+      detail: text.requiredDetail,
+      buttons: [isInstaller ? text.openInstaller : text.updateNow, text.exit],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    return result?.response === 0 ? 'open' : 'exit';
+  }
+
+  async function runStartupUpdateGate() {
+    const eligible = app.isPackaged && ownsServer && !isSpoutExperiment;
+    if (!eligible) {
+      startupUpdateGate = createStartupUpdateGate({ request: async () => ({ ok: false }) });
+      return startupUpdateGate.lock(ownsServer ? 'non-production-shell' : 'reused-server');
+    }
+    startupUpdateRequester = createStartupUpdateRequester({ child: serverProcess });
+    startupUpdateGate = createStartupUpdateGate({
+      request: startupUpdateRequester.request,
+      promptOptional: promptOptionalUpdate,
+      promptRequired: promptRequiredUpdate,
+      deferStore: createStartupUpdateDeferStore(app.getPath('userData'), { fsImpl }),
+    });
+    return startupUpdateGate.run({ eligible: true });
+  }
+
   async function createWindow() {
     const window = new BrowserWindow({
       width: 1280,
@@ -536,6 +601,26 @@ function createElectronShell({
         app.relaunch?.();
         // Do not use app.exit(): it bypasses before-quit, leaving the owned
         // Node server without its graceful shutdown and clean-session marker.
+        app.quit?.();
+        return true;
+      });
+      ipcMain.handle('elitesand:restart-for-update-check', async (event) => {
+        if (event?.sender !== window.webContents) return false;
+        const text = getNativeUpdateCatalog();
+        const result = await showNativeUpdateDialog({
+          type: 'question',
+          title: text.title,
+          message: text.restartMessage,
+          detail: text.restartDetail,
+          buttons: [text.restart, text.cancel],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true,
+        });
+        if (result?.response !== 0) return false;
+        app.relaunch?.();
+        // Let before-quit own the server shutdown. A renderer can only ask for
+        // this after the native confirmation above; it cannot start a check.
         app.quit?.();
         return true;
       });
@@ -757,6 +842,8 @@ function createElectronShell({
 
   async function shutdown() {
     await stopSpoutDisplayOutput();
+    startupUpdateRequester?.close?.();
+    startupUpdateRequester = null;
     await shutdownOwnedServer();
     stopPowerSaveBlocker();
   }
@@ -823,13 +910,19 @@ function createElectronShell({
     startPowerSaveBlocker();
     try {
       const server = await startServerOrReuseExisting();
+      const updateSession = await runStartupUpdateGate();
+      if (updateSession.phase !== UPDATE_PHASES.RUNNING_LOCKED) {
+        await shutdown();
+        app.exit(0);
+        return { started: false, reason: 'startup-update-exit', ...server, updateSession };
+      }
       serverReady = true;
       showPortableDataMigrationNotice();
       createTray();
       await startExperimentalSpoutDisplayOutput();
       await createWindow();
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
-      return { started: true, ...server };
+      return { started: true, ...server, updateSession };
     } catch (error) {
       showStartupError(error);
       await shutdown();
@@ -849,6 +942,7 @@ function createElectronShell({
       serverReady,
       hasWindow: !!mainWindow,
       serverPid: serverProcess?.pid || null,
+      updateSession: startupUpdateGate?.getSession?.() || null,
       spout: getSpoutOutputStatus(),
     }),
   };

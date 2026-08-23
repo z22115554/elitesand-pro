@@ -13,7 +13,6 @@ const multer = require('multer');
 const { sanitizeTrack } = require('../utils/track-schema');
 const { getLanIp } = require('../utils/lan-info');
 const ytdlpUpdater = require('../services/ytdlp-updater');
-const appUpdater = require('../services/app-updater');
 const announcements = require('../services/announcement-service');
 const eulaStore = require('../services/eula-store');
 const QRCode = require('qrcode');
@@ -373,53 +372,6 @@ router.get('/ytdlp/compatibility', (req, res) => {
 
 router.post('/ytdlp/compatibility', requirePin, async (req, res) => {
   res.json(await ytdlpCompatibility.probe());
-});
-
-// ─── 安全程式更新 ───
-// 主程序只下載、驗證、解壓 staging 並啟動外部 updater；正式覆蓋一定等主 PID 完全退出。
-router.get('/app-update/plan', async (req, res) => {
-  try {
-    const plan = await appUpdater.getPlan();
-    const remoteActions = announcements.getSnapshot().actions;
-    if (appUpdater.INCREMENTAL_UPDATES_DISABLED || remoteActions.disableIncrementalUpdate || remoteActions.showFullDownloadOnly) {
-      plan.canIncremental = false;
-      plan.needsFull = plan.hasUpdate;
-      plan.reason = '程式內增量更新已停用，請下載並執行完整 Windows Installer。';
-    }
-    res.json(plan);
-  } catch (err) {
-    log.error('線上更新檢查失敗', err);
-    res.status(500).json({ error: '線上更新檢查失敗' });
-  }
-});
-
-router.get('/app-update/status', (req, res) => {
-  res.json(appUpdater.getProgress());
-});
-
-router.post('/app-update/apply', requirePin, async (req, res) => {
-  try {
-    const gracefulShutdown = req.app.get('gracefulShutdown');
-    if (typeof gracefulShutdown !== 'function') {
-      return res.status(503).json({ prepared: false, reason: '伺服器未建立安全關閉協調器，已拒絕更新' });
-    }
-    const remoteActions = announcements.getSnapshot().actions;
-    if (appUpdater.INCREMENTAL_UPDATES_DISABLED || remoteActions.disableIncrementalUpdate || remoteActions.showFullDownloadOnly) {
-      return res.status(423).json({ prepared: false, needsFull: true, reason: '程式內增量更新已停用，請下載並執行完整 Windows Installer。' });
-    }
-    const result = await appUpdater.prepareAndLaunchUpdate();
-    if (!result.prepared) return res.status(result.needsFull ? 409 : 422).json(result);
-
-    // 只有 updater 啟動握手成功後才回成功；只有 response 的 finish 事件發生後才開始關閉。
-    // 若瀏覽器中途斷線而沒有 finish，主程序不退出，外部 updater 最終會逾時離開。
-    res.once('finish', () => {
-      setImmediate(() => gracefulShutdown({ reason: 'app-update', exitCode: 42 }));
-    });
-    return res.status(202).json(result);
-  } catch (err) {
-    log.error('線上更新失敗', err);
-    return res.status(500).json({ prepared: false, reason: `線上更新失敗，程式仍可繼續使用：${err.message}` });
-  }
 });
 
 // ─── 遠端公告（固定 HTTPS JSON；本機快取與已讀狀態在 data/）───
