@@ -26,8 +26,23 @@ function parseArgs(argv) {
   return parsed;
 }
 
+function buildProcessInvocation(command, args, { platform = process.platform, comSpec = process.env.ComSpec } = {}) {
+  const isWindowsBatch = platform === 'win32' && /\.cmd$/i.test(command);
+  // `run` only receives the publisher's fixed npm gate commands below.  Drive
+  // a .cmd through cmd.exe explicitly instead of `shell: true`, which both
+  // emits a Node security warning and obscures how the command is launched.
+  return isWindowsBatch
+    ? { executable: comSpec || 'cmd.exe', args: ['/d', '/s', '/c', [command, ...args].join(' ')] }
+    : { executable: command, args };
+}
+
 function run(command, args, root) {
-  const result = childProcess.spawnSync(command, args, { cwd: root, stdio: 'inherit', windowsHide: true });
+  const invocation = buildProcessInvocation(command, args);
+  const result = childProcess.spawnSync(invocation.executable, invocation.args, {
+    cwd: root,
+    stdio: 'inherit',
+    windowsHide: true,
+  });
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed`);
 }
 
@@ -105,4 +120,8 @@ async function main() {
   });
 }
 
-main().catch((error) => { process.stderr.write(`${error.stack || error.message}\n`); process.exitCode = 1; });
+if (require.main === module) {
+  main().catch((error) => { process.stderr.write(`${error.stack || error.message}\n`); process.exitCode = 1; });
+}
+
+module.exports = { buildProcessInvocation, parseArgs };

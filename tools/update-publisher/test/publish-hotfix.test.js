@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const test = require('node:test');
 const policy = require('../../../server/services/update-policy');
+const { buildProcessInvocation } = require('../cli');
 const { BETA_ARTIFACT_ORIGIN, MAX_BETA_ARTIFACTS, artifactKey, controlKey, runHotfixRelease } = require('../lib/publish-hotfix');
 const { createFakeR2Endpoint } = require('./fake-r2-endpoint');
 
@@ -12,6 +13,17 @@ const TEST_PRIVATE_KEY = fs.readFileSync(path.join(__dirname, '..', '..', '..', 
 const TEST_KEY_ID = 'update-policy-test-fixture';
 const TEST_PUBLIC_KEYS = { [TEST_KEY_ID]: policy.publicKeyHexFromPrivateKey(TEST_PRIVATE_KEY) };
 const now = () => new Date('2026-08-23T00:00:00.000Z');
+
+test('Windows release gates run npm.cmd through cmd.exe without shell mode', () => {
+  assert.deepStrictEqual(
+    buildProcessInvocation('npm.cmd', ['run', 'smoke:electron'], { platform: 'win32', comSpec: 'C:\\Windows\\System32\\cmd.exe' }),
+    { executable: 'C:\\Windows\\System32\\cmd.exe', args: ['/d', '/s', '/c', 'npm.cmd run smoke:electron'] },
+  );
+  assert.deepStrictEqual(
+    buildProcessInvocation('npm', ['test'], { platform: 'linux' }),
+    { executable: 'npm', args: ['test'] },
+  );
+});
 
 function inspector(_zip, { fromVersion, targetVersion }) {
   return {
