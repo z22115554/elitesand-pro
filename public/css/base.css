@@ -530,8 +530,6 @@ label.btn.btn--label { cursor: pointer; }
 .diagnostic-reliability .field-hint { margin: 0 0 8px; }
 .diagnostic-privacy-hint { margin: 10px 0 0; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
 .library-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
-.lib-filter-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); cursor: pointer; user-select: none; }
-.lib-filter-toggle input { cursor: pointer; }
 .library-storage { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin: 0 0 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-raised); }
 .library-storage .field-hint { margin: 4px 0 0; overflow-wrap: anywhere; }
 .library-storage #library-storage-status { color: var(--text-dim); }

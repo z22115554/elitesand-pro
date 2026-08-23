@@ -1023,16 +1023,6 @@
   // 記住最近一次收到的原始資料，簡轉繁設定切換時要用同一份原始資料重新 normalize，
   // 不能只改旗標不重繪——normalize() 是唯一做轉換的地方，且轉換結果已經寫進 model 裡。
   let lastRawData = null;
-  // 字體別名：同一款字型可能有一個以上「家族名稱」（見 setlist-style-schema.js 的
-  // setFontAliases 註解），這裡抓一次 /api/fonts 灌進 schema，讓 fontDisplay/fontBody/
-  // fontMono 這三個欄位的 cssTransform 套用時能對到候選清單，不只賭使用者選的那個名稱
-  // 系統剛好認得。抓到之前若已經套用過一次樣式（curStyle），補套一次讓字體立刻生效。
-  fetch('/api/fonts').then((res) => res.json()).then((data) => {
-    if (data && data.success && window.SetlistStyleSchema) {
-      window.SetlistStyleSchema.setFontAliases(data.aliases);
-      if (curStyle) applyStyle(curStyle);
-    }
-  }).catch(() => { /* 靜默：拿不到別名就照舊只用單一名稱 */ });
   // 面板內嵌的預覽 iframe（?preview=1）註冊成 setlist-preview：資料照餵、不計入連線數（同 display）。
   const isPreviewClient = new URLSearchParams(location.search).get('preview') === '1';
   SocketClient.init(isPreviewClient ? 'setlist-preview' : 'setlist');

@@ -136,12 +136,6 @@ function sanitizeTrack(value) {
     lrcOffset: finite(value.lrcOffset, 0, -MAX_OFFSET_MS, MAX_OFFSET_MS),
     autoplay: value.autoplay !== false,
     manualLyrics: sanitizeManualLyrics(value.manualLyrics),
-    // AI 人聲分離（實驗性功能，見 CLAUDE.md「AI 人聲分離」）：分離完成後的伴奏/人聲檔名，
-    // 跟 filename 同樣只存 basename，不信任路徑。null＝尚未分離或分離失敗。
-    vocalsFile: value.vocalsFile ? path.basename(text(value.vocalsFile, 500)) : null,
-    instrumentalFile: value.instrumentalFile ? path.basename(text(value.instrumentalFile, 500)) : null,
-    separationStatus: ['processing', 'done', 'failed'].includes(value.separationStatus)
-      ? value.separationStatus : 'none',
   };
   return out;
 }

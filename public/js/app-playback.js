@@ -18,10 +18,6 @@
 
   const audioPlayer = document.getElementById('audio-player');
   let audioErrorCount = 0;
-  // stopPlayback() 主動把 src 清空收尾（例如播完清單最後一首）時，瀏覽器仍會非同步吐出一次
-  // MEDIA_ERR_SRC_NOT_SUPPORTED 的 'error' 事件——這不是真的播放失敗，靠這個旗標讓下一次
-  // error 事件略過，不要跳出「音訊格式不支援」的錯誤 toast。
-  let suppressNextAudioError = false;
 
   let lastSyncTime = 0;
   const SYNC_INTERVAL = 200;
@@ -43,223 +39,6 @@
   let stTrackGain = null;         // 統一音量：每首歌的響度校正增益（-14 LUFS 對齊）
   let stLimiter = null;           // 統一音量提升小聲歌時的防爆音保險（高門檻，平常完全透明）
   let isPlaying = false;
-
-  // ── AI 分離播放模式（實驗性）：伴奏＝主 SoundTouchEngine（跟一般單軌播放共用同一份，
-  // 只是把它載入的檔案換成伴奏檔）；人聲＝第二份獨立的 SoundTouchEngine（同一個
-  // AudioContext、各自的 AudioWorkletNode），跟著伴奏同步 play/pause/seek/pitch/tempo。
-  // 2026-08-23 研究過 soundtouch-worklet.js 的實際演算法：WSOLA 的相關性搜尋只影響混音
-  // 品質，不影響每次迭代吃掉/吐出幾個 sample（那由 tempo/pitch 參數決定，跟音檔內容無關）；
-  // 兩份 instance 只要同一個 AudioContext、同樣起始位置、同樣 tempo/pitch，理論上不會飄。
-  // 這是這輪從「plain <audio> 影子軌、強制原速原調」升級成「雙引擎、支援變調變速」的取代
-  // 設計，變調/變速滑桿在分離播放模式下不再停用。──
-  let separationModeEnabled = false;
-  try { separationModeEnabled = localStorage.getItem('vk-separation-mode') === '1'; } catch (e) { /* 靜默 */ }
-  let separationActive = false; // 目前這首歌是否「實際」在用分離播放（toggle 開但這首沒分離過時仍是 false）
-  let vocalsSTEngine = null, vocalsGain = null;
-  // 「載入待命」與「按播放」是兩個獨立時機（點清單只載入不播放，稍後才按播放鍵）。
-  // 伴奏／人聲平行解碼，誰先好誰不一定；若使用者在人聲還沒解完前就按播放，伴奏
-  // 這邊可能已經 ready 而直接開播，此時必須知道「人聲還在飛」才能等它、而不是
-  // 誤判成「這首沒有人聲」直接放棄（見 requestPlayback 的 startST）。
-  let vocalsLoadPromise = null;
-  let vocalsVolume = 1.0;
-  try {
-    const saved = parseFloat(localStorage.getItem('vk-separation-vocals-volume'));
-    if (Number.isFinite(saved)) vocalsVolume = Math.max(0, Math.min(1.5, saved));
-  } catch (e) { /* 靜默 */ }
-
-  function trackSupportsSeparation(track) {
-    return !!(track && track.separationStatus === 'done' && track.vocalsFile && track.instrumentalFile);
-  }
-
-  function ensureVocalsChain() {
-    if (vocalsSTEngine) return;
-    stInitChain(); // 確保 stCtx 存在（人聲共用同一個 AudioContext；idempotent，可安全重複呼叫）
-    if (!stCtx || typeof window.createSoundTouchEngine !== 'function') return; // 極罕見：SoundTouch 完全不可用，人聲留空、伴奏正常播放
-    vocalsSTEngine = window.createSoundTouchEngine();
-    vocalsGain = stCtx.createGain();
-    vocalsGain.gain.value = vocalsVolume;
-    vocalsGain.connect(stCtx.destination); // 獨立接到輸出，不經過伴奏的 stTrackGain/limiter
-                                            // （人聲不套用響度標準化，維持既有決定）
-    vocalsSTEngine.attach(stCtx, vocalsGain);
-  }
-
-  /** 載入這首歌的人聲，並把 promise 記在模組層——requestPlayback 按播放鍵時若伴奏已經
-   * ready、人聲卻還沒解完，要能拿到這個 promise 等它，而不是直接放棄人聲。 */
-  function loadVocalsFor(track) {
-    vocalsLoadPromise = vocalsSTEngine
-      ? vocalsSTEngine.load('/audio/' + encodeURIComponent(track.vocalsFile))
-      : Promise.resolve(false);
-    return vocalsLoadPromise;
-  }
-
-  // 分離播放模式下的 UI 狀態（人聲音量滑桿顯示/隱藏、狀態提示文字）
-  function updateSeparationUiForTrack() {
-    if (dom.separationVocalsRow) dom.separationVocalsRow.hidden = !separationActive;
-    if (dom.separationStatusHint) {
-      if (!separationModeEnabled) {
-        dom.separationStatusHint.textContent = '只對已分離人聲的歌曲生效，其餘歌曲仍播放原始音軌';
-      } else if (separationActive) {
-        dom.separationStatusHint.textContent = '目前歌曲：使用分離音軌播放（人聲/伴奏獨立音量）';
-      } else {
-        dom.separationStatusHint.textContent = '目前歌曲尚未分離人聲，播放原始音軌';
-      }
-    }
-  }
-
-  if (dom.separationModeToggle) {
-    dom.separationModeToggle.checked = separationModeEnabled;
-    dom.separationModeToggle.addEventListener('change', () => {
-      separationModeEnabled = dom.separationModeToggle.checked;
-      try { localStorage.setItem('vk-separation-mode', separationModeEnabled ? '1' : '0'); } catch (e) { /* 靜默 */ }
-      if (state.currentTrackIndex !== -1) {
-        // 立刻用目前播放位置重新載入這首歌，讓新模式馬上生效（沿用 restorePlaybackState 的
-        // 「重新載入到指定位置」寫法，不另外發明一套換源邏輯）。
-        playTrack(state.currentTrackIndex, isPlaying, { notifyServer: false, startTime: lastPlayTimeMs / 1000 });
-      } else {
-        updateSeparationUiForTrack();
-      }
-    });
-  }
-
-  if (dom.separationVocalsVolume) {
-    dom.separationVocalsVolume.value = Math.round(vocalsVolume * 100);
-    if (dom.separationVocalsVolumeVal) dom.separationVocalsVolumeVal.textContent = Math.round(vocalsVolume * 100) + '%';
-    updateRangeFill(dom.separationVocalsVolume);
-    dom.separationVocalsVolume.addEventListener('input', () => {
-      vocalsVolume = parseInt(dom.separationVocalsVolume.value, 10) / 100;
-      if (dom.separationVocalsVolumeVal) dom.separationVocalsVolumeVal.textContent = dom.separationVocalsVolume.value + '%';
-      updateRangeFill(dom.separationVocalsVolume);
-      if (vocalsGain) { try { vocalsGain.gain.value = vocalsVolume; } catch (e) { /* 靜默 */ } }
-      try { localStorage.setItem('vk-separation-vocals-volume', String(vocalsVolume)); } catch (e) { /* 靜默 */ }
-    });
-  }
-
-  // ── 雙路音訊路由（實驗性，docs/AI-SEPARATION-PLAN.md §14 路線 A）：觀眾/OBS 裝置只聽
-  // 伴奏、主播耳機聽伴奏+人聲。刻意不搬探索分支的獨立 DualAudioEngine 模組——這裡要的
-  // 只是把「已經同步好的伴奏/人聲雙 SoundTouchEngine 輸出」分別送到兩個實體裝置，是下游
-  // 的路由/扇出問題，不是要不要疊加變調的問題，直接在 stGain/vocalsGain（兩個引擎各自
-  // 的最終輸出節點，平常直接接 stCtx.destination）後面插入 DelayNode 路由層即可，完全
-  // 複用已驗證的雙 SoundTouch 架構，不必重做 pause/seek/變調。
-  let dualAudioModeEnabled = false;
-  try { dualAudioModeEnabled = localStorage.getItem('vk-dual-audio-mode') === '1'; } catch (e) { /* 靜默 */ }
-  let dualAudioActive = false; // 目前這首歌是否「實際」在用雙路路由（需要 trackSupportsSeparation()）
-  let dualStreamDeviceId = '', dualHeadphoneDeviceId = '';
-  try { dualStreamDeviceId = localStorage.getItem('vk-dual-audio-stream-device') || ''; } catch (e) { /* 靜默 */ }
-  try { dualHeadphoneDeviceId = localStorage.getItem('vk-dual-audio-headphone-device') || ''; } catch (e) { /* 靜默 */ }
-  let dualSyncOffsetMs = 0;
-  try {
-    const savedOffset = parseFloat(localStorage.getItem('vk-dual-audio-sync-offset-ms'));
-    if (Number.isFinite(savedOffset)) dualSyncOffsetMs = Math.max(-1000, Math.min(1000, savedOffset));
-  } catch (e) { /* 靜默 */ }
-  let dualStreamDelay = null, dualHeadphoneDelay = null, dualStreamGain = null;
-  let dualStreamMediaDest = null, dualStreamAudioEl = null;
-  let dualRoutingWired = false; // stGain/vocalsGain 目前是接到雙路節點還是直接接 stCtx.destination
-
-  function ensureDualAudioRouting() {
-    if (dualStreamDelay) return;
-    stInitChain(); // 確保 stCtx 存在（idempotent，可安全重複呼叫）
-    if (!stCtx) return;
-    dualStreamDelay = stCtx.createDelay(1); // 上限 1000ms，跟文件量到的基準偏移（150-180ms 等級）留足餘裕
-    dualHeadphoneDelay = stCtx.createDelay(1);
-    dualStreamGain = stCtx.createGain();
-    dualStreamDelay.connect(dualStreamGain);
-    dualStreamMediaDest = stCtx.createMediaStreamDestination();
-    dualStreamGain.connect(dualStreamMediaDest);
-    dualStreamAudioEl = new Audio();
-    dualStreamAudioEl.srcObject = dualStreamMediaDest.stream;
-    dualHeadphoneDelay.connect(stCtx.destination);
-    applyDualSyncOffset(dualSyncOffsetMs);
-  }
-
-  /** 套用觀眾/耳機兩個裝置的 setSinkId；裝置可能已拔除或使用者還沒選，一律靜默失敗。 */
-  async function applyDualDeviceSinks() {
-    if (!stCtx) return;
-    if (dualHeadphoneDeviceId && typeof stCtx.setSinkId === 'function') {
-      try { await stCtx.setSinkId(dualHeadphoneDeviceId); } catch (e) { /* 靜默 */ }
-    }
-    if (dualStreamAudioEl) {
-      if (dualStreamDeviceId && dualStreamAudioEl.setSinkId) {
-        try { await dualStreamAudioEl.setSinkId(dualStreamDeviceId); } catch (e) { /* 靜默 */ }
-      }
-      try { await dualStreamAudioEl.play(); } catch (e) { /* 靜默：可能撞上 autoplay 限制 */ }
-    }
-  }
-
-  /** 切換 stGain/vocalsGain 的下游接線：雙路路由節點 vs 直接接 stCtx.destination。 */
-  function wireDualRouting(active) {
-    if (active === dualRoutingWired) return;
-    if (active) {
-      ensureDualAudioRouting();
-      if (!dualStreamDelay) return; // 極罕見：SoundTouch 完全不可用，放棄雙路路由，伴奏/人聲仍正常播放
-      dualRoutingWired = true;
-      try { stGain.disconnect(stCtx.destination); } catch (e) { /* 靜默 */ }
-      stGain.connect(dualHeadphoneDelay);
-      stGain.connect(dualStreamDelay); // 伴奏兩路都要
-      if (vocalsGain) {
-        try { vocalsGain.disconnect(stCtx.destination); } catch (e) { /* 靜默 */ }
-        vocalsGain.connect(dualHeadphoneDelay); // 人聲只接主播路，觀眾/串流路收不到
-      }
-      applyDualDeviceSinks();
-    } else {
-      dualRoutingWired = false;
-      if (dualStreamDelay) {
-        try { stGain.disconnect(dualHeadphoneDelay); } catch (e) { /* 靜默 */ }
-        try { stGain.disconnect(dualStreamDelay); } catch (e) { /* 靜默 */ }
-        if (vocalsGain) { try { vocalsGain.disconnect(dualHeadphoneDelay); } catch (e) { /* 靜默 */ } }
-      }
-      if (stGain && stCtx) { try { stGain.connect(stCtx.destination); } catch (e) { /* 靜默 */ } }
-      if (vocalsGain && stCtx) { try { vocalsGain.connect(stCtx.destination); } catch (e) { /* 靜默 */ } }
-      if (stCtx && typeof stCtx.setSinkId === 'function') { stCtx.setSinkId('').catch(() => { /* 靜默 */ }); }
-    }
-  }
-
-  /** 手動同步偏移（毫秒）。正值延遲主播路、負值延遲觀眾路，跟文件校正 UI 的正負號慣例
-   * 一致；setTargetAtTime 平滑過渡，播放中就能調，不用停止重播。 */
-  function applyDualSyncOffset(ms) {
-    dualSyncOffsetMs = Math.max(-1000, Math.min(1000, Number(ms) || 0));
-    if (!dualStreamDelay || !stCtx) return;
-    const sec = Math.abs(dualSyncOffsetMs) / 1000;
-    const now = stCtx.currentTime;
-    dualStreamDelay.delayTime.setTargetAtTime(dualSyncOffsetMs < 0 ? sec : 0, now, 0.05);
-    dualHeadphoneDelay.delayTime.setTargetAtTime(dualSyncOffsetMs > 0 ? sec : 0, now, 0.05);
-  }
-
-  // 對外入口（UI 接線在 public/js/nav.js，「連線與系統」頁的裝置選擇/校正卡片，不在這裡
-  // 直接綁 DOM——那組控制項是獨立的一張卡片，不是 app-shared.js 的 dom 表既有成員）。
-  function setDualAudioMode(enabled) {
-    dualAudioModeEnabled = !!enabled;
-    try { localStorage.setItem('vk-dual-audio-mode', dualAudioModeEnabled ? '1' : '0'); } catch (e) { /* 靜默 */ }
-    if (state.currentTrackIndex !== -1) {
-      // 沿用既有「重新載入到目前位置」的換模式寫法（跟分離播放模式的 toggle 同一招）。
-      playTrack(state.currentTrackIndex, isPlaying, { notifyServer: false, startTime: lastPlayTimeMs / 1000 });
-    } else {
-      wireDualRouting(false);
-      dualAudioActive = false;
-    }
-  }
-  function setDualAudioDevices({ streamDeviceId, headphoneDeviceId } = {}) {
-    if (typeof streamDeviceId === 'string') {
-      dualStreamDeviceId = streamDeviceId;
-      try { localStorage.setItem('vk-dual-audio-stream-device', dualStreamDeviceId); } catch (e) { /* 靜默 */ }
-    }
-    if (typeof headphoneDeviceId === 'string') {
-      dualHeadphoneDeviceId = headphoneDeviceId;
-      try { localStorage.setItem('vk-dual-audio-headphone-device', dualHeadphoneDeviceId); } catch (e) { /* 靜默 */ }
-    }
-    if (dualRoutingWired) applyDualDeviceSinks(); // 播放中換裝置，立刻套用
-  }
-  function setDualAudioSyncOffset(ms) {
-    applyDualSyncOffset(ms);
-    try { localStorage.setItem('vk-dual-audio-sync-offset-ms', String(dualSyncOffsetMs)); } catch (e) { /* 靜默 */ }
-  }
-  function getDualAudioState() {
-    return {
-      enabled: dualAudioModeEnabled, active: dualAudioActive,
-      streamDeviceId: dualStreamDeviceId, headphoneDeviceId: dualHeadphoneDeviceId,
-      syncOffsetMs: dualSyncOffsetMs,
-    };
-  }
-
   let currentOffsetMs = 0; // Phase 5: 當前歌曲 offset
   let lastPlayTimeMs = 0;  // 最新播放位置（ms）；timeupdate 與 SoundTouch 回呼都更新，給「對齊第一句」用
   let loadedTrackEntryId = null;
@@ -278,7 +57,6 @@
     setCurrentTime(formatTime(target));
     if (stReady && typeof SoundTouchEngine !== 'undefined') {
       SoundTouchEngine.seek(target);
-      if (separationActive && vocalsSTEngine) vocalsSTEngine.seek(target);
     }
     const applyAudioSeek = () => {
       if (!Number.isFinite(audioPlayer.duration) || audioPlayer.duration <= 0) return;
@@ -404,11 +182,6 @@
       SoundTouchEngine.setPitch(currentPitchShift);
       SoundTouchEngine.setTempo(currentPlaybackRate);
     }
-    // 分離播放模式：人聲那份獨立引擎也要跟著套同樣的 pitch/tempo，兩軌才能維持對齊。
-    if (separationActive && vocalsSTEngine) {
-      vocalsSTEngine.setPitch(currentPitchShift);
-      vocalsSTEngine.setTempo(currentPlaybackRate);
-    }
   }
 
   /**
@@ -513,61 +286,27 @@
     // 統一音量：同樣要在啟動播放前套好這首的響度校正
     applyTrackLoudness(track);
 
-    // AI 分離播放模式：toggle 開著且這首歌真的分離過，才實際生效——toggle 開但這首沒分離時
-    // 仍走原始音軌（不是硬性要求，是刻意的自動降級，見計畫書）。
-    // 雙路音訊路由開著時自動連帶載入雙 stem（不用使用者再另外開一次「分離播放模式」）——
-    // 沒有雙 stem 就沒有東西可以分開送到兩個裝置，這兩個開關在「要不要載入分離結果」
-    // 這件事上是 OR 的關係，但 dualAudioActive 仍獨立追蹤（決定要不要接雙路路由節點）。
-    const wantDualAudio = dualAudioModeEnabled && trackSupportsSeparation(track);
-    const wantSeparation = (separationModeEnabled || wantDualAudio) && trackSupportsSeparation(track);
-    separationActive = wantSeparation;
-    dualAudioActive = wantDualAudio;
-    if (wantSeparation) ensureVocalsChain();
-    wireDualRouting(wantDualAudio);
-    updateSeparationUiForTrack();
-    // toggle 開著但這首「還沒」分離完成時，原本是靜默降級回原始音軌——使用者實測回報
-    // 「切到下一首突然沒分離」，體感像是壞掉，其實常是分離工作還在跑（CPU 分離可能要
-    // 好幾分鐘，比一首歌的播放時間還長）。這裡補一個提示，讓使用者知道原因、不用去猜。
-    if ((separationModeEnabled || dualAudioModeEnabled) && !wantSeparation && track.separationStatus === 'processing') {
-      AppShared.showToast(`「${track.title}」的人聲分離還在處理中，先播放原始音軌`, 'info');
-    }
-
-    const masterFilename = wantSeparation ? track.instrumentalFile : track.filename;
-    if (masterFilename) {
+    if (track.filename) {
       audioErrorCount = 0;
-      audioPlayer.src = `/audio/${encodeURIComponent(masterFilename)}`;
-      audioPlayer.playbackRate = currentPlaybackRate;
+      audioPlayer.src = `/audio/${encodeURIComponent(track.filename)}`;
+      audioPlayer.playbackRate = currentPlaybackRate; // Phase 7: 保持當前速率
       // 切歌：先停掉並銷毀上一首的 SoundTouch 節點，避免舊節點變孤兒繼續播放、停不下來。
       // 注意：load 只在下方各分支「呼叫一次」——重複 stLoadCurrent 會讓兩個 load 競態、產生孤兒節點。
       if (useSoundTouch) { try { SoundTouchEngine.stop(); } catch (e) {} }
-      if (wantSeparation && vocalsSTEngine) { try { vocalsSTEngine.stop(); } catch (e) {} }
       if (autoplay) {
         if (useSoundTouch) {
           // SoundTouch 路徑：等 buffer 好再播；<audio> 靜音待命當備援
           audioPlayer.muted = true;
           audioPlayer.pause(); // 走 SoundTouch 就不該有 <audio> 在跑：靜音的 <audio> 仍會發 timeupdate 搶進度條
-          // 分離播放模式：伴奏＋人聲要平行載入（不能先播伴奏、等它 ready 才去載人聲，
-          // 那樣人聲會晚個幾百 ms 才進來），載入完成才一起 play()，起頭才會對齊。
-          const loadPromises = [stLoadCurrent(masterFilename)];
-          if (wantSeparation) {
-            loadPromises.push(loadVocalsFor(track));
-          }
-          Promise.all(loadPromises).then(([result, vocalsOk]) => {
+          stLoadCurrent(track.filename).then((result) => {
             if (result === 'stale') return; // 已被更新的切歌取代，交給那一次處理
             if (stReady) {
               SoundTouchEngine.setPitch(currentPitchShift);
               SoundTouchEngine.setTempo(currentPlaybackRate);
               SoundTouchEngine.play(startTime);
-              if (wantSeparation && vocalsOk) {
-                vocalsSTEngine.setPitch(currentPitchShift);
-                vocalsSTEngine.setTempo(currentPlaybackRate);
-                vocalsSTEngine.play(startTime);
-              }
               isPlaying = true; updatePlayButton();
             } else {
-              // decode 失敗 → 降級回 <audio>+Tone（分離的人聲這時放棄，只播伴奏原檔——
-              // decode 失敗本來就是罕見的損壞檔案邊界情況，不值得為它另外設計一套
-              // 「伴奏降級、人聲還撐著」的混合狀態）
+              // decode 失敗 → 降級回 <audio>+Tone
               audioPlayer.muted = false;
               initAudioProcessorOnce();
               if (audioProcessorReady) applyPitchAndSpeed();
@@ -592,11 +331,7 @@
       } else {
         // 載入但不播放：暫停待命，由使用者按播放鍵開始
         if (useSoundTouch) {
-          const loadPromises = [stLoadCurrent(masterFilename)];
-          if (wantSeparation) {
-            loadPromises.push(loadVocalsFor(track));
-          }
-          Promise.all(loadPromises).then(([result]) => {
+          stLoadCurrent(track.filename).then((result) => {
             if (result === 'stale') return;
             seekLoadedTrack(startTime);
           });
@@ -623,7 +358,6 @@
 
   function stopPlayback() {
     audioPlayer.pause();
-    suppressNextAudioError = true;
     audioPlayer.src = '';
     loadedTrackEntryId = null;
     lastRecoverySignature = null;
@@ -633,11 +367,6 @@
       try { SoundTouchEngine.dispose(); } catch (e) {}
       stReady = false;
     }
-    if (vocalsSTEngine) { try { vocalsSTEngine.dispose(); } catch (e) {} }
-    wireDualRouting(false);
-    dualAudioActive = false;
-    separationActive = false;
-    updateSeparationUiForTrack();
     isPlaying = false;
     updatePlayButton();
     AppShared.setMarqueeText(dom.trackTitle, '尚未播放');
@@ -723,7 +452,6 @@
       // 兩條鏈都停。只停「當前那條」的話，另一條若因載入競態還在跑，
       // 暫停後 <audio> 的 timeupdate 會讓進度條繼續走、還繼續送 lyrics:sync。
       if (useSoundTouch) { try { SoundTouchEngine.pause(); } catch (e) { /* 靜默 */ } }
-      if (separationActive && vocalsSTEngine) { try { vocalsSTEngine.pause(); } catch (e) { /* 靜默 */ } }
       audioPlayer.pause();
       updatePlayButton();
       SocketClient.send('play:toggle', isPlaying);
@@ -733,44 +461,19 @@
       // 高品質變調路徑：buffer 沒好就先 decode 再播
       audioPlayer.muted = true;
       audioPlayer.pause();
-      // 人聲跟伴奏是平行解碼，誰先好誰不一定：點清單載入待命、幾秒內就按播放，常會撞上
-      // 伴奏已經 ready、人聲還在飛的窗口。原本這裡只在「當下」isReady() 才播人聲，錯過
-      // 這個瞬間就直接放棄，變成整首歌都聽不到人聲、要重新切一次歌才會恢復（使用者實測
-      // 抓到：3 秒內按播放會觸發，3 秒後按或連續播放自動接歌都不會——後者走 playTrack()
-      // 自己的 Promise.all，本來就會等兩邊一起好）。改成人聲沒好就等 loadVocalsFor() 記下
-      // 的 promise，好了才補播，並用伴奏「當下」位置對齊，不是從頭開始。
-      const startVocalsWhenReady = () => {
-        if (!separationActive || !vocalsSTEngine) return;
-        const startVocals = () => {
-          if (!isPlaying || !vocalsSTEngine.isReady()) return; // 等待期間可能又被暫停或切了歌
-          vocalsSTEngine.setPitch(currentPitchShift);
-          vocalsSTEngine.setTempo(currentPlaybackRate);
-          vocalsSTEngine.play(SoundTouchEngine.getTime());
-        };
-        if (vocalsSTEngine.isReady()) { startVocals(); return; }
-        if (vocalsLoadPromise) vocalsLoadPromise.then(startVocals);
-      };
       const startST = () => {
         SoundTouchEngine.setPitch(currentPitchShift);
         SoundTouchEngine.setTempo(currentPlaybackRate);
         SoundTouchEngine.play();
-        startVocalsWhenReady();
         updatePlayButton(); SocketClient.send('play:toggle', true);
       };
       if (stReady) startST();
-      else {
-        const curTrack = state.playlist[state.currentTrackIndex];
-        // 分離播放模式下伴奏軌是 instrumentalFile，不是原始 filename——這裡跟 playTrack()
-        // 的 masterFilename 算法保持一致，否則重新載入時會播回帶人聲的原始混音，
-        // 疊在獨立播放的人聲軌上面變成雙重人聲。
-        const reloadFilename = curTrack && (separationActive ? curTrack.instrumentalFile : curTrack.filename);
-        stLoadCurrent(reloadFilename).then((result) => {
-          if (result === 'stale') return; // 已被更新的載入取代（多半是又切了歌），放棄這次播放
-          if (!isPlaying) return; // decode 完成前又被暫停了（本地或遠端），放棄這次播放
-          if (stReady) startST();
-          else { audioPlayer.muted = false; initAudioProcessorOnce(); if (audioProcessorReady) applyPitchAndSpeed(); audioPlayer.play().catch((e) => handleAudioError(e)); updatePlayButton(); SocketClient.send('play:toggle', true); }
-        });
-      }
+      else stLoadCurrent(state.playlist[state.currentTrackIndex] && state.playlist[state.currentTrackIndex].filename).then((result) => {
+        if (result === 'stale') return; // 已被更新的載入取代（多半是又切了歌），放棄這次播放
+        if (!isPlaying) return; // decode 完成前又被暫停了（本地或遠端），放棄這次播放
+        if (stReady) startST();
+        else { audioPlayer.muted = false; initAudioProcessorOnce(); if (audioProcessorReady) applyPitchAndSpeed(); audioPlayer.play().catch((e) => handleAudioError(e)); updatePlayButton(); SocketClient.send('play:toggle', true); }
+      });
       return;
     }
     // 關鍵：先建立 Web Audio 管線（createMediaElementSource）再 play()。
@@ -878,11 +581,7 @@
     if (typeof time !== 'number' || !isFinite(time)) return;
     if (stActive()) {
       const dur = SoundTouchEngine.getDuration();
-      if (dur) {
-        const target = Math.max(0, Math.min(dur, time));
-        SoundTouchEngine.seek(target);
-        if (separationActive && vocalsSTEngine) vocalsSTEngine.seek(target);
-      }
+      if (dur) SoundTouchEngine.seek(Math.max(0, Math.min(dur, time)));
       return;
     }
     if (!audioPlayer.duration) return;
@@ -920,10 +619,6 @@
 
   // Phase 5: 音訊錯誤處理
   audioPlayer.addEventListener('error', () => {
-    if (suppressNextAudioError) {
-      suppressNextAudioError = false;
-      return;
-    }
     const error = audioPlayer.error;
     if (error) {
       handleAudioError(error);
@@ -931,7 +626,6 @@
   });
 
   function handleAudioError(error) {
-    if (separationActive && vocalsSTEngine) { try { vocalsSTEngine.pause(); } catch (e) { /* 靜默 */ } } // 伴奏出錯下線時，避免人聲引擎孤兒繼續播放
     audioErrorCount++;
     const msg = SharedUtils.getAudioErrorMessage(error);
     AppShared.showToast(msg, 'error');
@@ -981,12 +675,7 @@
     const dur = stActive() ? SoundTouchEngine.getDuration() : audioPlayer.duration;
     if (!dur) return;
     const t = ratio * dur;
-    if (stActive()) {
-      SoundTouchEngine.seek(t);
-      if (separationActive && vocalsSTEngine) vocalsSTEngine.seek(t);
-    } else {
-      audioPlayer.currentTime = t;
-    }
+    if (stActive()) SoundTouchEngine.seek(t); else audioPlayer.currentTime = t;
     const now = Date.now();
     if (finalize || now - lastSeekBroadcast >= 60) {
       lastSeekBroadcast = now;
@@ -1211,21 +900,6 @@
   // 走 Web Audio 後 audio.volume 失效，必須用 GainNode）
   // ═══════════════════════════════════════════
 
-  // 滑桿本身的填色軌道（--range-fill，CSS 見 panel.css）＋伴奏音量圖示的音波狀態
-  // （靜音/低/高，像 Windows 音量混音器）：使用者實測回報純色軌道「看不出音量高低，
-  // 只能看數字」，圖示原本又只有喇叭外殼、沒有音波，永遠看起來像沒聲音。
-  function updateRangeFill(el) {
-    if (!el) return;
-    const min = parseFloat(el.min) || 0;
-    const max = parseFloat(el.max) || 100;
-    const pct = max > min ? ((parseFloat(el.value) - min) / (max - min)) * 100 : 0;
-    el.style.setProperty('--range-fill', `${Math.max(0, Math.min(100, pct))}%`);
-  }
-  function updateVolumeIconLevel(pct) {
-    if (!dom.volumeRow) return;
-    dom.volumeRow.dataset.level = pct <= 0 ? 'muted' : pct < 50 ? 'low' : 'high';
-  }
-
   if (dom.volumeSlider) {
     // 初始化：讀取 AudioProcessor 記住的音量（預設 70%）
     let initVol = 0.7;
@@ -1234,16 +908,12 @@
     }
     dom.volumeSlider.value = Math.round(initVol * 100);
     if (dom.volumeVal) dom.volumeVal.textContent = Math.round(initVol * 100) + '%';
-    updateRangeFill(dom.volumeSlider);
-    updateVolumeIconLevel(Math.round(initVol * 100));
     // 套用初始音量到 audio 元素（AudioProcessor 尚未初始化前的後備）
     audioPlayer.volume = initVol;
 
     dom.volumeSlider.addEventListener('input', () => {
       const vol = parseInt(dom.volumeSlider.value, 10) / 100;
       if (dom.volumeVal) dom.volumeVal.textContent = dom.volumeSlider.value + '%';
-      updateRangeFill(dom.volumeSlider);
-      updateVolumeIconLevel(parseInt(dom.volumeSlider.value, 10));
       // 不論降級鏈是否已初始化，都交給 AudioProcessor 記住音量；SoundTouch 常在
       // 它之前就可播放，若只在 ready 後呼叫會造成「這次聽得到、重開又回 70%」。
       if (typeof AudioProcessor !== 'undefined' && AudioProcessor.setVolume) {
@@ -1324,8 +994,4 @@
   AppShared.reapplyTrackLoudness = reapplyTrackLoudness;
   AppShared.advanceTrack = advanceTrack;
   AppShared.restorePlaybackState = restorePlaybackState;
-  AppShared.setDualAudioMode = setDualAudioMode;
-  AppShared.setDualAudioDevices = setDualAudioDevices;
-  AppShared.setDualAudioSyncOffset = setDualAudioSyncOffset;
-  AppShared.getDualAudioState = getDualAudioState;
 })();

@@ -352,9 +352,6 @@
     const audioBadge = track.audioMissing
       ? '<span class="pi-badge pi-badge--danger" title="音檔遺失，播放前需要重新下載">音檔遺失</span>'
       : '';
-    const separatedBadge = track.separationStatus === 'done'
-      ? '<span class="pi-badge pi-badge--separated" title="已分離人聲，可用分離播放模式">🎤 已分離</span>'
-      : '';
     // 歌詞是找到了，但沒有任何來源驗到官方時長吻合（可能是剪輯過的影片），時間軸可能對不上。
     // 可點擊：跟旁邊的歌詞狀態徽章共用同一個 data-lyrics-fix 開歌詞選擇器，讓使用者直接挑一個
     // 時長更吻合的候選（選擇器本身就會顯示每個候選的時長差），不用先切到這首歌才能處理。
@@ -363,7 +360,7 @@
     const durationWarningBadge = track.lyricsDurationVerified === false && offsetMs === 0
       ? `<span class="pi-badge pi-badge--warning" data-lyrics-fix="${i}" role="button" tabindex="0" title="找到的歌詞沒有驗到官方時長吻合，影片可能含額外片段。點擊挑選時長更吻合的歌詞來源；如果就是目前播放中的這首，也可以到下方「歌詞時間偏移」手動校正起始點——校正後（offset 不為 0）這個警示會自動消失">⚠ 時長未驗證</span>`
       : '';
-    return `${audioBadge}<button class="pi-lyrics-status pi-lyrics-status--${readiness.level}" data-lyrics-fix="${i}" title="${escapeHtml(readiness.label)}" aria-label="${escapeHtml(readiness.label)}">${readiness.text}</button>${manualBadge}${offsetBadge}${durationWarningBadge}${separatedBadge}`;
+    return `${audioBadge}<button class="pi-lyrics-status pi-lyrics-status--${readiness.level}" data-lyrics-fix="${i}" title="${escapeHtml(readiness.label)}" aria-label="${escapeHtml(readiness.label)}">${readiness.text}</button>${manualBadge}${offsetBadge}${durationWarningBadge}`;
   }
 
   function playlistItemMarkup(track, i, selectionKey, isActive, isSelected) {

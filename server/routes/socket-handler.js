@@ -45,17 +45,10 @@ const log = createLogger('Socket');
 // 風險比「同網路的人連上控制」還大，不能因為 PIN 錯誤就把它擋在外面。
 // display-preview / setlist-preview = 控制面板內嵌的預覽 iframe（?preview=1）：
 // 資料照餵、豁免 PIN（iframe 拿不到面板的 PIN），但不計入「OBS 已連線」數。
-// webgpu-engine：Electron 主程序開的隱藏 BrowserWindow（docs/AI-SEPARATION-PLAN.md §13
-// musetric 路線），永遠是本機 loopback 連線、沒有使用者能輸入 PIN 的介面，比照 OBS
-// 疊加層豁免 PIN；但它不是「畫面唯讀」而是「引擎回報結果」，允許送的事件見下面
-// READ_ONLY_EVENTS 的 webgpu:job:* 那幾個，且每個 handler 都會再驗證真的是這個 socket。
-const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'display-spout', 'setlist', 'display-preview', 'setlist-preview', 'webgpu-engine']);
+const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'display-spout', 'setlist', 'display-preview', 'setlist-preview']);
 // prompter（跟唱視圖）給主播自己看，不是唯讀的 OBS 疊加層——跟 remote 一樣要 PIN、也能送播放指令。
 const CLIENT_TYPES = new Set(['controller', 'remote', 'prompter', ...PIN_EXEMPT_CLIENT_TYPES]);
-const READ_ONLY_EVENTS = new Set([
-  'client:type', 'client:build', 'state:request', 'setlist:get',
-  'webgpu:job:progress', 'webgpu:job:error', 'webgpu:job:device-lost',
-]);
+const READ_ONLY_EVENTS = new Set(['client:type', 'client:build', 'state:request', 'setlist:get']);
 const CORE_USAGE_EVENTS = new Set([
   'play:track', 'play:toggle', 'play:seek', 'play:prev', 'play:next', 'play:stop',
   'playlist:update', 'playlist:add', 'playlist:insert-next', 'playlist:remove', 'playlist:reorder', 'playlist:import',
@@ -103,26 +96,6 @@ module.exports = function socketHandler(io, {
     audioExists: libraryStore.audioExists,
     updateLibraryMeta: libraryStore.updateMeta,
   }).start();
-
-  // ─── AI 人聲分離（實驗性）：job 完成/失敗時寫回 playState.playlist（鐵則 17）───
-  require('../services/ai-separation-jobs').wireDependencies({
-    io,
-    playState: ctx.playState,
-    persistState: ctx.persistState,
-    broadcastState: ctx.broadcastState,
-    updateLibraryMeta: libraryStore.updateMeta,
-  });
-
-  // ─── WebGPU 人聲分離（實驗性，§13 musetric 路線）：跟上面 CUDA 路徑平行的另一個引擎，
-  // 由 Electron 隱藏視窗以 webgpu-engine client 的身分連進來（見下面 io.on('connection')）。
-  const webgpuSeparationJobs = require('../services/webgpu-separation-jobs');
-  webgpuSeparationJobs.wireDependencies({
-    io,
-    playState: ctx.playState,
-    persistState: ctx.persistState,
-    broadcastState: ctx.broadcastState,
-    updateLibraryMeta: libraryStore.updateMeta,
-  });
 
   // ─── 讓 LyricsEngine 能主動推播（羅馬化完成等後台事件）───
   const { setIo } = require('../services/lyrics-engine');
@@ -367,7 +340,6 @@ module.exports = function socketHandler(io, {
       else if (type === 'remote') clients.remotes.add(socket.id);
       else if (type === 'setlist') clients.setlists.add(socket.id);
       else if (type === 'prompter') clients.prompters.add(socket.id);
-      else if (type === 'webgpu-engine') webgpuSeparationJobs.handleEngineConnected(socket);
       // Room membership is assigned only after the handshake-fixed type is confirmed.
       // All state/media broadcasts below can therefore choose the least-privilege payload.
       if (typeof socket.join === 'function') socket.join(socket.readOnly ? READ_ONLY_ROOM : CONTROL_ROOM);
@@ -389,9 +361,7 @@ module.exports = function socketHandler(io, {
         // 歌單頁也需要 lyricSettings（簡轉繁等）：setlist:update 只有清單資料沒有這塊，
         // 過去只能等某個無關操作觸發 broadcastState() 才會補到，OBS 剛載入來源時吃不到設定。
         socket.emit('state:sync', ctx.getReadOnlyState());
-      } else if (type !== 'webgpu-engine') {
-        // webgpu-engine 不需要完整 state（歌詞、播放清單等）——它只回應伺服器主動
-        // 派發的 webgpu:job:start，不需要自己知道目前播放狀態，省一份無用的大 payload。
+      } else {
         socket.emit('state:sync', ctx.getPublicState());
       }
       // 啟動時的 state.json 恢復發生在任何瀏覽器連線之前；延遲到第一個桌面面板完成
@@ -432,17 +402,6 @@ module.exports = function socketHandler(io, {
       socket.emit('state:recovery', socket.readOnly ? ctx.getReadOnlyState() : ctx.getFullRecoveryState());
     });
 
-    // ─── WebGPU 分離引擎回報（見上方 wireDependencies 註解）───
-    // 每個 handler 內部都會再驗證真的是目前認定的 engine socket、jobId 對得上，
-    // 這裡不用另外擋——READ_ONLY_EVENTS 只決定「能不能送這個事件名稱」，
-    // 不代表送的內容會被信任。
-    // webgpu:job:result 已經改成 HTTP multipart 上傳（見 api.js 的
-    // POST /webgpu-separation/result/:jobId 與 webgpu-separation-jobs.js 的
-    // finishJobWithResult 註解），不再是 socket 事件。
-    socket.on('webgpu:job:progress', (payload) => webgpuSeparationJobs.handleProgress(socket, payload));
-    socket.on('webgpu:job:error', (payload) => webgpuSeparationJobs.handleError(socket, payload));
-    socket.on('webgpu:job:device-lost', (payload) => webgpuSeparationJobs.handleDeviceLost(socket, payload));
-
     // ─── 各領域事件：只有通過控制權限的 controller/remote 才掛寫入 handler ───
     // 只看事件名稱，不讀取歌曲、歌詞或其他 payload；同一 UTC 日最多嘗試傳送一次。
     if (!socket.readOnly && typeof socket.onAny === 'function') {
@@ -471,7 +430,6 @@ module.exports = function socketHandler(io, {
       clients.setlists.delete(socket.id);
       clients.prompters.delete(socket.id);
       forgetDisplayConnection(socket.id);
-      webgpuSeparationJobs.handleEngineDisconnected(socket.id);
       const c = getClientCounts();
       emitClientCounts();
       log.info(`斷線: ${socket.id} (${socket.clientType || 'unknown'}, 原因: ${reason}) (剩餘連線: ${c.total})`);

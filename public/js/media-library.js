@@ -48,7 +48,6 @@
 
   let searchQuery = '';
   let sortBy = 'plays';
-  let filterSeparatedOnly = false;
 
   // 收到伺服器清單→存快取後套用目前的搜尋/排序再渲染
   function render(list) {
@@ -70,16 +69,13 @@
     let view = q
       ? cache.filter((it) => (it.title || '').toLowerCase().includes(q) || (it.artist || '').toLowerCase().includes(q))
       : cache.slice();
-    if (filterSeparatedOnly) view = view.filter((it) => it.separationStatus === 'done');
     view = sortView(view);
 
     listEl.innerHTML = '';
     if (!view.length) {
       if (emptyEl) {
         emptyEl.hidden = false;
-        emptyEl.textContent = cache.length
-          ? tr(filterSeparatedOnly ? '沒有已分離人聲的歌曲' : '找不到符合的歌曲')
-          : tr('尚無記錄，播放任一首歌後會自動加入。');
+        emptyEl.textContent = cache.length ? tr('找不到符合的歌曲') : tr('尚無記錄，播放任一首歌後會自動加入。');
       }
       return;
     }
@@ -101,7 +97,6 @@
         </div>
         <div class="lib-actions">
           <button class="btn btn-sm lib-reimport" type="button">${tr('加入清單')}</button>
-          ${separationButtonHtml(item)}
           <button class="btn btn-sm btn-ghost lib-remove" type="button" title="${tr('從媒體庫移除')}">✕</button>
         </div>`;
 
@@ -114,226 +109,9 @@
 
       row.querySelector('.lib-reimport').addEventListener('click', () => reimport(item, row));
       row.querySelector('.lib-remove').addEventListener('click', () => removeItem(item.id));
-      const separateBtn = row.querySelector('.lib-separate');
-      if (separateBtn) separateBtn.addEventListener('click', () => startSeparation(item, row));
-      const previewBtn = row.querySelector('.lib-separate-preview');
-      if (previewBtn) previewBtn.addEventListener('click', () => togglePreview(item, row));
       listEl.appendChild(row);
     }
   }
-
-  // ─── AI 人聲分離（實驗性功能，見 CLAUDE.md）───
-  // 授權確認（Kim 作者）截至目前仍在等待中，這是使用者知情後決定先開放測試的功能，
-  // 不是忽略了授權關卡；按鈕文案刻意保留「實驗性」字樣，不要拿掉。
-  function separationButtonHtml(item) {
-    const status = item.separationStatus || 'none';
-    if (status === 'done') {
-      // ✓ 前綴：分離過的歌在清單裡要能一眼掃到，跟其他還沒分離的區分開，不用逐行讀文字。
-      return `<button class="btn btn-sm btn-ghost lib-separate" type="button" disabled>✓ ${tr('已分離人聲')}</button>
-        <button class="btn btn-sm lib-separate-preview" type="button">${tr('試聽')}</button>`;
-    }
-    if (status === 'processing') {
-      // 進度視覺化：跟 nav.js 的 FFmpeg 下載、app-youtube-import.js 的 .work-item-progress
-      // 同一套「細長進度條 + --work-progress CSS 變數」寫法，不是這輪才發明的新元件。
-      // 按鈕文字本身仍保留百分比/階段字樣（排隊中/下載模型中/分離中），進度條只是視覺加強。
-      return `<div class="lib-separate-wrap">
-        <button class="btn btn-sm lib-separate" type="button" disabled>${tr('分離中…')}</button>
-        <div class="lib-separate-progress"><span></span></div>
-      </div>`;
-    }
-    const label = status === 'failed' ? tr('重試分離（實驗性）') : tr('分離人聲（實驗性）');
-    return `<button class="btn btn-sm btn-ghost lib-separate" type="button">${label}</button>`;
-  }
-
-  // 純試聽用：一個統一播放鍵＋兩條獨立音量滑桿（人聲/伴奏），兩個 <audio> 元素本身不顯示
-  // 原生控制列，只當成播放引擎用，靠這裡的單一按鈕同步播放/暫停/進度。純原生 <audio>.volume
-  // 就能各自調音量，不需要 Web Audio GainNode——這是刻意的最小風險做法，不碰 app-playback.js
-  // 既有的（脆弱、已經過大量實戰強化的）主播放引擎。正式的分離播放模式（含變調/變速）已經
-  // 另外接在 app-playback.js，這裡維持純試聽用途不變。
-  // 滑桿填色軌道（--range-fill，CSS 見 panel.css）：純色軌道只能靠旁邊數字判斷音量/進度，
-  // 使用者實測回報「看不出高低」，這裡讓滑桿本身視覺化目前位置，比照 app-playback.js
-  // 音量滑桿同一套做法。
-  function updateRangeFill(el) {
-    if (!el) return;
-    const min = parseFloat(el.min) || 0;
-    const max = parseFloat(el.max) || 100;
-    const pct = max > min ? ((parseFloat(el.value) - min) / (max - min)) * 100 : 0;
-    el.style.setProperty('--range-fill', `${Math.max(0, Math.min(100, pct))}%`);
-  }
-
-  function fmtClock(sec) {
-    if (!Number.isFinite(sec) || sec < 0) return '0:00';
-    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
-    return `${m}:${String(s).padStart(2, '0')}`;
-  }
-
-  function togglePreview(item, row) {
-    const existing = row.nextElementSibling;
-    if (existing && existing.classList.contains('lib-separate-preview-panel')) {
-      const vocalsEl = existing.querySelector('.lib-separate-preview-vocals');
-      const instEl = existing.querySelector('.lib-separate-preview-instrumental');
-      if (vocalsEl) vocalsEl.pause();
-      if (instEl) instEl.pause();
-      existing.remove();
-      return;
-    }
-    const panel = document.createElement('div');
-    panel.className = 'lib-separate-preview-panel';
-    panel.innerHTML = `
-      <div class="lib-separate-preview-transport">
-        <button class="btn btn-sm btn-primary lib-separate-preview-play" type="button" aria-label="${tr('播放試聽')}">▶</button>
-        <input class="lib-separate-preview-seek" type="range" min="0" max="1000" value="0">
-        <span class="lib-separate-preview-time val">0:00 / 0:00</span>
-      </div>
-      <div class="lib-separate-preview-volumes">
-        <label class="lib-separate-preview-vol-row">${tr('人聲')}
-          <input class="lib-separate-preview-vol-vocals" type="range" min="0" max="100" value="100">
-        </label>
-        <label class="lib-separate-preview-vol-row">${tr('伴奏')}
-          <input class="lib-separate-preview-vol-instrumental" type="range" min="0" max="100" value="100">
-        </label>
-      </div>
-      <audio class="lib-separate-preview-vocals" preload="metadata" src="/audio/${encodeURIComponent(item.vocalsFile || '')}"></audio>
-      <audio class="lib-separate-preview-instrumental" preload="metadata" src="/audio/${encodeURIComponent(item.instrumentalFile || '')}"></audio>`;
-    row.insertAdjacentElement('afterend', panel);
-
-    const vocalsEl = panel.querySelector('.lib-separate-preview-vocals');
-    const instEl = panel.querySelector('.lib-separate-preview-instrumental');
-    const playBtn = panel.querySelector('.lib-separate-preview-play');
-    const seekEl = panel.querySelector('.lib-separate-preview-seek');
-    const timeEl = panel.querySelector('.lib-separate-preview-time');
-    let isSeeking = false;
-
-    // 伴奏當「主軌」驅動進度條/時間顯示，跟正式分離播放模式（app-playback.js）同一個決定：
-    // 一律用同一條做時間基準，避免兩邊各自的 timeupdate 互相打架。
-    instEl.addEventListener('timeupdate', () => {
-      if (isSeeking || !instEl.duration) return;
-      seekEl.value = Math.round((instEl.currentTime / instEl.duration) * 1000);
-      updateRangeFill(seekEl);
-      timeEl.textContent = `${fmtClock(instEl.currentTime)} / ${fmtClock(instEl.duration)}`;
-    });
-    instEl.addEventListener('ended', () => {
-      vocalsEl.pause();
-      playBtn.textContent = '▶';
-    });
-
-    playBtn.addEventListener('click', () => {
-      if (instEl.paused) {
-        vocalsEl.currentTime = instEl.currentTime;
-        Promise.all([instEl.play(), vocalsEl.play()]).catch(() => { /* 靜默：可能撞上 autoplay 限制 */ });
-        playBtn.textContent = '⏸';
-      } else {
-        instEl.pause();
-        vocalsEl.pause();
-        playBtn.textContent = '▶';
-      }
-    });
-
-    seekEl.addEventListener('input', () => {
-      isSeeking = true;
-      updateRangeFill(seekEl);
-      if (instEl.duration) {
-        const t = (seekEl.value / 1000) * instEl.duration;
-        timeEl.textContent = `${fmtClock(t)} / ${fmtClock(instEl.duration)}`;
-      }
-    });
-    seekEl.addEventListener('change', () => {
-      if (instEl.duration) {
-        const t = (seekEl.value / 1000) * instEl.duration;
-        instEl.currentTime = t;
-        vocalsEl.currentTime = t;
-      }
-      isSeeking = false;
-    });
-
-    const volVocalsEl = panel.querySelector('.lib-separate-preview-vol-vocals');
-    const volInstEl = panel.querySelector('.lib-separate-preview-vol-instrumental');
-    updateRangeFill(seekEl);
-    updateRangeFill(volVocalsEl);
-    updateRangeFill(volInstEl);
-    volVocalsEl.addEventListener('input', (e) => {
-      vocalsEl.volume = e.target.value / 100;
-      updateRangeFill(e.target);
-    });
-    volInstEl.addEventListener('input', (e) => {
-      instEl.volume = e.target.value / 100;
-      updateRangeFill(e.target);
-    });
-  }
-
-  async function startSeparation(item, row) {
-    const btn = row.querySelector('.lib-separate');
-    if (!btn || btn.disabled) return;
-    btn.disabled = true;
-    btn.textContent = tr('分離中…');
-    try {
-      const res = await PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(item.id)}/separate`, { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        // reason 先各自過一次 tr()，再組進外層「啟動分離失敗：{0}」樣板——不然伺服器回傳的
-        // 中文訊息（例如「找不到這首歌的音檔」）會被包在已翻譯的外層句子裡卻本身沒被翻譯，
-        // 變成中英夾雜；data.error 若是 ALREADY_PROCESSING 這種代碼，tr() 對到沒有的
-        // 詞條會原樣傳回，不影響顯示。
-        const reason = data.error === 'AI_RUNTIME_NOT_READY'
-          ? tr('AI 分離元件尚未安裝，請先到「連線與系統」下載')
-          : data.error === 'ALREADY_PROCESSING'
-            ? tr('這首歌已經在分離中')
-            : data.error === 'WEBGPU_ENGINE_OFFLINE'
-              ? tr('WebGPU 分離引擎離線，請確認桌面版已啟動')
-              : data.error === 'WEBGPU_ENGINE_BUSY'
-                ? tr('WebGPU 分離引擎正在跑另一首歌，請稍後再試')
-                : data.error === 'WEBGPU_MODEL_NOT_READY'
-                  ? tr('WebGPU 分離模型尚未下載，請先到「連線與系統」下載')
-                  : tr(data.error || '伺服器沒有確認');
-        toast(tr(`啟動分離失敗：${reason}`), 'error');
-        btn.disabled = false;
-        btn.textContent = tr('分離人聲（實驗性）');
-        return;
-      }
-      const cached = cache.find((x) => x.id === item.id);
-      if (cached) cached.separationStatus = 'processing';
-    } catch (err) {
-      toast(tr(`啟動分離失敗：${err.message}`), 'error');
-      btn.disabled = false;
-      btn.textContent = tr('分離人聲（實驗性）');
-    }
-  }
-
-  // SocketClient 跟 PinAuth 一樣是頂層 const 宣告，不會掛在 window 上（見上面
-  // fetchWithPin 那個 bug 的教訓）；直接用裸變數，不要再用 window.SocketClient 判斷，
-  // 那個判斷式恆假，等於整段訂閱從沒真的執行過。
-  SocketClient.on('separation:progress', (data) => {
-    if (!data || !data.trackId) return;
-    const row = listEl.querySelector(`.lib-row[data-id="${CSS.escape(String(data.trackId))}"]`);
-    const btn = row && row.querySelector('.lib-separate');
-    const cached = cache.find((x) => String(x.id) === String(data.trackId));
-    if (data.stage === 'done') {
-      // 不在這裡手動拼按鈕 HTML：伺服器完成後會廣播 library:list（見
-      // ai-separation-jobs.js），那次 render() 會帶著正確的 vocalsFile/instrumentalFile
-      // 重畫整列，這裡只負責立刻跳 toast，不用等 render 完成。
-      toast(tr('人聲分離完成'), 'success');
-    } else if (data.stage === 'error') {
-      if (cached) cached.separationStatus = 'failed';
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = tr('重試分離（實驗性）');
-      }
-      toast(tr(`人聲分離失敗：${data.errorMessage || data.error || ''}`), 'error');
-    } else if (data.stage === 'queued') {
-      // GPU/CPU 一次只分離一首（鐵則 #12 同一套理由），2026-08-23 起第二首以後不再直接
-      // 被拒絕，而是排隊等前一首完成——按鈕文字要能看出「還沒開始跑」，不是卡住。
-      if (btn) btn.textContent = tr(`排隊中（第 ${data.queuePosition || 1} 位）…`);
-    } else if (btn) {
-      // worker.py 的 progress 是 0.0-1.0 的比例，不是 0-100（見 ai/worker.py）。
-      const pct = typeof data.progress === 'number' ? Math.round(data.progress * 100) : null;
-      // 第一次分離會先下載 Kim 模型權重（900MB+），沒有這個提示的話，網路慢時
-      // 使用者會誤以為卡住——2026-08-22 這個 stage 是新加的，之前完全沒有進度事件。
-      const label = data.stage === 'download-model' ? tr('下載模型中(僅第一次)…') : tr('分離中…');
-      btn.textContent = pct !== null ? `${label} ${pct}%` : label;
-      const progressBar = row && row.querySelector('.lib-separate-progress');
-      if (progressBar && pct !== null) progressBar.style.setProperty('--work-progress', `${pct}%`);
-    }
-  });
 
   function requestSocket(event, data) {
     return new Promise((resolve) => {
@@ -510,11 +288,9 @@
   const btnClear = document.getElementById('lib-clear');
   const searchInput = document.getElementById('lib-search');
   const sortSelect = document.getElementById('lib-sort');
-  const filterSeparatedInput = document.getElementById('lib-filter-separated');
 
   if (searchInput) searchInput.addEventListener('input', () => { searchQuery = searchInput.value; applyView(); });
   if (sortSelect) sortSelect.addEventListener('change', () => { sortBy = sortSelect.value; applyView(); });
-  if (filterSeparatedInput) filterSeparatedInput.addEventListener('change', () => { filterSeparatedOnly = filterSeparatedInput.checked; applyView(); });
 
   if (btnRefresh) btnRefresh.addEventListener('click', refresh);
   if (storageChoose) storageChoose.addEventListener('click', () => migrateStorage());

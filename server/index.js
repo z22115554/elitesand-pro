@@ -185,64 +185,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// WebGPU 人聲分離（實驗性，§13 musetric 路線）的隱藏視窗工作頁需要
-// cross-origin-isolation 才能用 SharedArrayBuffer（onnxruntime-web 的 WebGPU EP 依賴這個，
-// W0 探針階段就踩過這個坑）。只對這一個路由加，不動全域 middleware——其餘既有路由
-// （/display、/setlist 等）都不需要、也不該多這兩個標頭。
-//
-// 全域 CSP（上面那段 app.use）的 script-src 只有 'self'，onnxruntime-web 的 WASM 後備
-// 路徑（webgpu EP 初始化過程中一定會先摸一次 wasm backend）需要編譯 WebAssembly，
-// 沒有 'wasm-unsafe-eval' 會被 CSP 擋下、實測直接讓 canary 探測失敗。這裡只針對這兩個
-// 檔案覆寫 CSP，不放寬其餘任何頁面（那些頁面不需要，也不該有這個權限）。
-const WEBGPU_WORKER_CSP = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' ws: wss:; worker-src 'self' blob:; frame-src 'self'";
-app.get('/webgpu-separation-worker.html', (req, res, next) => {
-  res.set('Cross-Origin-Opener-Policy', 'same-origin');
-  res.set('Cross-Origin-Embedder-Policy', 'require-corp');
-  res.set('Content-Security-Policy', WEBGPU_WORKER_CSP);
-  next();
-});
-app.use('/js/webgpu-separation-worker.mjs', (req, res, next) => {
-  res.set('Cross-Origin-Opener-Policy', 'same-origin');
-  res.set('Cross-Origin-Embedder-Policy', 'require-corp');
-  res.set('Content-Security-Policy', WEBGPU_WORKER_CSP);
-  next();
-});
-
-// onnxruntime-web 的 WebGPU EP（同一份 dev build，pin 版本理由見
-// package.json／docs/AI-SEPARATION-PLAN.md §13-2：storageBufferCacheMode 顯存修正
-// 尚未進穩定版）。只給 webgpu-separation-worker 頁面用，不是給整個 app 用的通用 vendor。
-//
-// COEP require-corp 的頁面底下，用 `new Worker(...)` 開的多執行緒 wasm 背景執行緒
-// 各自的腳本回應也要帶 Cross-Origin-Resource-Policy，光是同源還不夠——實測沒加這行
-// 會讓 ort-wasm-simd-threaded.asyncify.mjs 直接被瀏覽器擋下（ERR_BLOCKED_BY_RESPONSE），
-// canary 探測因此連 wasm 後備路徑都起不來。
-//
-// Worker 的 CSP 不是繼承自開它的文件，是看這個 worker 腳本自己回應的 CSP header——
-// 沒有這行，pthread worker 內部再編譯一次 wasm 時吃到的還是全域那份沒有
-// 'wasm-unsafe-eval' 的 CSP，canary 探測會在 worker 內部又炸一次一模一樣的
-// CompileError，跟只覆寫 .html/.mjs 那兩個路由是兩回事。
-app.use('/vendor/onnxruntime-web', (req, res, next) => {
-  res.set('Cross-Origin-Resource-Policy', 'same-origin');
-  res.set('Content-Security-Policy', WEBGPU_WORKER_CSP);
-  next();
-}, express.static(path.join(projectRoot, 'node_modules', 'onnxruntime-web', 'dist')));
-
-// WebGPU 分離模型檔案（下載到 dataDir，不在 repo 裡）。跟 /audio 同一套路徑穿越防護。
-app.get('/webgpu-separation/model/:filename', (req, res) => {
-  const webgpuRuntimeProvider = require('./services/webgpu-runtime-provider');
-  const safeName = path.basename(req.params.filename);
-  const resolvedModelDir = path.resolve(webgpuRuntimeProvider.MODEL_DIR);
-  const modelPath = path.resolve(resolvedModelDir, safeName);
-  if (!modelPath.startsWith(resolvedModelDir + path.sep)) {
-    return res.status(400).json({ error: '無效的檔案名稱' });
-  }
-  res.sendFile(modelPath, (err) => {
-    if (err) {
-      if (!res.headersSent) res.status(404).json({ error: '模型檔案不存在' });
-    }
-  });
-});
-
 // Mirror P0 本機 A/B 測試用：不把 Kongyuan Sans 字體提交進專案，
 // 只在工作區旁邊存在測試 clone 時提供固定唯讀路由；正式環境找不到就直接 404。
 app.use(express.static(path.join(projectRoot, 'public'), { index: false }));

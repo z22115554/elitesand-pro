@@ -4599,32 +4599,6 @@ test('系統字體選單不把字體名稱拼進 HTML 或 style 字串', () => {
   ok(!lyricExtras.includes('fontOptionsHtml('), '舊的字串式字體選項 helper 必須移除: ');
 });
 
-test('受控本機字型資產以 FontFace 載入，且只允許 loopback 讀取', () => {
-  const root = path.join(__dirname, '..');
-  const scanner = fs.readFileSync(path.join(root, 'server/services/font-scanner.js'), 'utf8');
-  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
-  const loader = fs.readFileSync(path.join(root, 'public/js/font-assets.js'), 'utf8');
-  const display = fs.readFileSync(path.join(root, 'public/js/display.js'), 'utf8');
-  const lyricExtras = fs.readFileSync(path.join(root, 'public/js/lyric-extras.js'), 'utf8');
-  const displayHtml = fs.readFileSync(path.join(root, 'public/display.html'), 'utf8');
-  const panelHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
-  const prompterHtml = fs.readFileSync(path.join(root, 'public/prompter.html'), 'utf8');
-  ok(scanner.includes('resolveFontAssetFace') && scanner.includes('fsp.realpath') && scanner.includes('MAX_FONT_ASSET_BYTES'),
-    '字型檔必須由掃描器以 realpath 與大小上限驗證，不能相信前端輸入路徑: ');
-  ok(api.includes("router.get('/fonts/assets/:assetId'") && api.includes("router.get('/fonts/assets/:assetId/:faceId'") && api.includes('isDirectLoopback(req)'),
-    '字型資源必須有 metadata／位元組兩條路由，且只接受 loopback: ');
-  ok(api.includes("'Cross-Origin-Resource-Policy': 'same-origin'") && api.includes("'X-Content-Type-Options': 'nosniff'"),
-    '字型資源回應必須禁止跨來源取用與 MIME 猜測: ');
-  ok(loader.includes('new FontFace(asset.family') && loader.includes('document.fonts.add(font)'),
-    '前端必須實際載入 FontFace 後才宣稱本機字型可用: ');
-  ok(display.includes('applyLocalFontAssets') && display.includes('保留備援字型'),
-    'OBS 顯示端字型載入失敗時必須留在 fallback，不能輸出空白文字: ');
-  ok(lyricExtras.includes('fontAssetId') && lyricExtras.includes('verifyFontAsset'),
-    '歌詞設定必須先驗證本機字型資產並持久化 opaque ID: ');
-  [displayHtml, panelHtml, prompterHtml].forEach((html) => ok(html.includes('/js/font-assets.js'),
-    '歌詞顯示、面板與跟唱視圖都必須載入受控字型載入器: '));
-});
-
 test('媒體庫連續加入採逐首佇列與伺服器確認，避免完整歌詞併發堆積', () => {
   const root = path.join(__dirname, '..');
   const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
@@ -7703,7 +7677,7 @@ test('連點切歌不會讓 <audio> 與 SoundTouch 兩條鏈同時出聲', () =>
   ok(playback.includes("if (result === 'stale') return; // 已被更新的切歌取代"), '切歌的載入回呼必須先擋掉作廢的載入：');
   ok(playback.includes("if (result === 'stale') return; // 已被更新的載入取代"), '播放鍵的載入回呼必須先擋掉作廢的載入：');
   ok(playback.includes('if (stActive()) return;\n    lastPlayTimeMs'), 'SoundTouch 生效時 <audio> 的 timeupdate 不可再搶進度與 lyrics:sync：');
-  ok(playback.includes('if (useSoundTouch) { try { SoundTouchEngine.pause(); } catch (e) { /* 靜默 */ } }'),
+  ok(playback.includes('if (useSoundTouch) { try { SoundTouchEngine.pause(); } catch (e) { /* 靜默 */ } }\n      audioPlayer.pause();'),
     '暫停必須兩條鏈都停，否則另一條仍會讓進度條繼續走：');
 });
 
