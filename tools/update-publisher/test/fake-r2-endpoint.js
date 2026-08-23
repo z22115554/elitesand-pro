@@ -37,6 +37,10 @@ function createFakeR2Endpoint({ controlKey, control = { schemaVersion: 1, disabl
       if (!current || current.etag !== ifMatch) return null;
       return { etag: save(key, body).etag };
     },
+    listPrefix(prefix) {
+      calls.push(['listPrefix', prefix]);
+      return [...objects.keys()].filter((key) => key.startsWith(prefix)).sort();
+    },
     object(key) {
       const value = objects.get(key);
       return value ? { body: Buffer.from(value.body), etag: value.etag } : null;

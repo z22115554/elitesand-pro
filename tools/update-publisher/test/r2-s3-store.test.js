@@ -92,3 +92,22 @@ test('R2 precondition conflicts are reported as immutable-key failures', async (
     /immutable R2 key already exists/,
   );
 });
+
+test('beta retention listing only uses the requested prefix and completes paginated R2 listings', async () => {
+  const { commands, store } = createStore({
+    onSend: async (command) => {
+      assert.strictEqual(command.constructor.name, 'ListObjectsV2Command');
+      if (!command.input.ContinuationToken) {
+        return { Contents: [{ Key: 'artifacts/beta/0.9.9.7/0.9.9.8/update.zip' }], IsTruncated: true, NextContinuationToken: 'next' };
+      }
+      return { Contents: [{ Key: 'artifacts/beta/0.9.9.8/0.9.9.9/update.zip' }], IsTruncated: false };
+    },
+  });
+  assert.deepStrictEqual(await store.listPrefix('artifacts/beta/'), [
+    'artifacts/beta/0.9.9.7/0.9.9.8/update.zip',
+    'artifacts/beta/0.9.9.8/0.9.9.9/update.zip',
+  ]);
+  assert.strictEqual(commands.length, 2);
+  assert.strictEqual(commands[0].input.Prefix, 'artifacts/beta/');
+  assert.strictEqual(commands[1].input.ContinuationToken, 'next');
+});

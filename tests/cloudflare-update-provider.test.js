@@ -8,9 +8,12 @@ const test = require('node:test');
 const policy = require('../server/services/update-policy');
 const { createPersistentReplayGuard } = require('../server/services/update-policy-replay-store');
 const {
+  BETA_UPDATE_CONTROL_ORIGIN,
   UPDATE_CONTROL_ORIGIN,
   createCloudflareUpdateProvider,
   createRequestFingerprint,
+  defaultChannel,
+  isEnabled,
 } = require('../server/services/cloudflare-update-provider');
 
 const TEST_PRIVATE_KEY = fs.readFileSync(path.join(__dirname, 'fixtures', 'update-policy-test-private.pem'), 'utf8');
@@ -57,6 +60,19 @@ function requiredInstallerPlan(overrides = {}) {
       url: 'https://github.com/z22115554/elitesand-pro/releases/download/v1.0.0/Elitesand.Pro.Setup.1.0.0.exe',
       sha256: 'b'.repeat(64),
       size: 123456,
+    },
+    ...overrides,
+  });
+}
+
+function signedBetaPlan(overrides = {}) {
+  return signedPlan({
+    planId: 'beta-win32-x64-0.9.9.7-0.9.9.8-p5',
+    channel: 'beta',
+    artifact: {
+      url: 'https://elitesand-update-artifacts.elitesand.workers.dev/artifacts/beta/0.9.9.7/0.9.9.8/update.zip',
+      sha256: 'a'.repeat(64),
+      size: 1234,
     },
     ...overrides,
   });
@@ -114,6 +130,35 @@ test('feature flag defaults off and an untrusted endpoint cannot trigger a fetch
   assert.strictEqual((await hostile.check()).kind, 'none');
   assert.strictEqual(calls, 0);
   assert.strictEqual(runtimeCalls, 0);
+});
+
+test('beta build only selects the isolated beta Worker and beta channel can never fall back to the stable endpoint', async () => {
+  assert.strictEqual(defaultChannel({}, '0.9.9.8-beta.1'), 'beta');
+  assert.strictEqual(isEnabled({}, '0.9.9.8-beta.1'), true);
+  assert.strictEqual(isEnabled({}, '0.9.9.8'), false);
+  let observedUrl;
+  const beta = createCloudflareUpdateProvider({
+    currentVersion: '0.9.9.7',
+    channel: 'beta',
+    enabled: true,
+    publicKeys: TEST_PUBLIC_KEYS,
+    nowMs: () => NOW_MS,
+    runtimeFingerprint: async () => TEST_RUNTIME_FINGERPRINT,
+    fetchImpl: async (url) => { observedUrl = new URL(url); return response(signedBetaPlan()); },
+  });
+  assert.strictEqual((await beta.check()).kind, 'plan');
+  assert.strictEqual(observedUrl.origin, BETA_UPDATE_CONTROL_ORIGIN);
+  assert.strictEqual(observedUrl.searchParams.get('channel'), 'beta');
+
+  let calls = 0;
+  const crossChannel = createCloudflareUpdateProvider({
+    currentVersion: '0.9.9.7', channel: 'beta', enabled: true,
+    endpoint: `${UPDATE_CONTROL_ORIGIN}/v1/plan`,
+    runtimeFingerprint: async () => TEST_RUNTIME_FINGERPRINT,
+    fetchImpl: async () => { calls += 1; return response(signedBetaPlan()); },
+  });
+  assert.strictEqual((await crossChannel.check()).kind, 'none');
+  assert.strictEqual(calls, 0);
 });
 
 test('missing installed runtime fingerprint fails closed before a Worker request', async () => {

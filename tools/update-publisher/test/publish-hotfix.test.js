@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const test = require('node:test');
 const policy = require('../../../server/services/update-policy');
-const { controlKey, runHotfixRelease } = require('../lib/publish-hotfix');
+const { BETA_ARTIFACT_ORIGIN, MAX_BETA_ARTIFACTS, artifactKey, controlKey, runHotfixRelease } = require('../lib/publish-hotfix');
 const { createFakeR2Endpoint } = require('./fake-r2-endpoint');
 
 const TEST_PRIVATE_KEY = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'tests', 'fixtures', 'update-policy-test-private.pem'), 'utf8');
@@ -42,12 +42,44 @@ function baseOptions(extra = {}) {
 }
 
 function createWorkerProbe(store) {
-  return async ({ version }) => {
-    const control = JSON.parse(store.object(controlKey('stable')).body.toString('utf8'));
+  return async ({ version, channel = 'stable' }) => {
+    const control = JSON.parse(store.object(controlKey(channel)).body.toString('utf8'));
     const plan = store.object(control.plans[version]);
     return plan?.body || Buffer.alloc(0);
   };
 }
+
+test('beta only supports one installed beta baseline and uses its own artifact origin/control pointer', async () => {
+  await assert.rejects(() => runHotfixRelease(baseOptions({ channel: 'beta', dryRun: true })), /exactly one installed beta baseline/);
+  const pointer = controlKey('beta');
+  const store = createFakeR2Endpoint({ controlKey: pointer, control: { schemaVersion: 1, disabled: true, plans: {} } });
+  const result = await runHotfixRelease(baseOptions({
+    channel: 'beta',
+    fromVersions: ['0.9.9.7'],
+    dryRun: false,
+    store,
+    publicArtifactRead: async (url) => store.object(new URL(url).pathname.slice(1)).body,
+    workerProbe: createWorkerProbe(store),
+  }));
+  assert.strictEqual(result.controlKey, pointer);
+  assert.strictEqual(result.plans[0].plan.artifact.url, `${BETA_ARTIFACT_ORIGIN}/artifacts/beta/0.9.9.7/0.9.9.8/update.zip`);
+  assert.ok(store.calls.some(([operation, key]) => operation === 'listPrefix' && key === 'artifacts/beta/'));
+});
+
+test('beta publisher refuses a ninth retained ZIP before it starts another package build', async () => {
+  const pointer = controlKey('beta');
+  const store = createFakeR2Endpoint({ controlKey: pointer, control: { schemaVersion: 1, disabled: true, plans: {} } });
+  for (let index = 0; index < MAX_BETA_ARTIFACTS; index += 1) {
+    store.putImmutable(artifactKey('beta', `0.9.9.${index}`, `0.9.10.${index}`), Buffer.from(`old-${index}`));
+  }
+  let builds = 0;
+  await assert.rejects(() => runHotfixRelease(baseOptions({
+    channel: 'beta', fromVersions: ['0.9.9.7'], dryRun: false, store,
+    artifactBuilder: async () => { builds += 1; return Buffer.from('new'); },
+    publicArtifactRead: async () => Buffer.alloc(0), workerProbe: createWorkerProbe(store),
+  })), /retention limit reached/);
+  assert.strictEqual(builds, 0);
+});
 
 test('dry-run builds and verifies exact support-set plans without writing a fake R2 endpoint', async () => {
   let checks = 0;
@@ -67,6 +99,13 @@ test('dry-run builds and verifies exact support-set plans without writing a fake
 test('release tooling refuses a test policy key unless a local test explicitly opts in', async () => {
   const options = baseOptions({ allowTestKey: false, dryRun: true });
   await assert.rejects(() => runHotfixRelease(options), /test update policy key/);
+});
+
+test('a channel-scoped production policy key cannot be used to generate a stable release', async () => {
+  await assert.rejects(() => runHotfixRelease(baseOptions({
+    keyId: 'elitesand-beta-policy-2026-08',
+    allowTestKey: false,
+  })), /not allowed for the stable channel/);
 });
 
 test('fake R2 transaction uploads immutable artifacts/plans, verifies read-back, then conditionally switches only the supported pointers', async () => {

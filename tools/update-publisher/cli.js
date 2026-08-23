@@ -9,18 +9,18 @@ const { APP_VERSION } = require('../../server/utils/app-version');
 const updater = require('../../server/services/app-updater-v2');
 const { createPowerShellArtifactBuilder, runHotfixRelease } = require('./lib/publish-hotfix');
 const { createR2S3Store } = require('./lib/r2-s3-store');
-const { createRequestFingerprint } = require('../../server/services/cloudflare-update-provider');
+const { createRequestFingerprint, controlOriginForChannel } = require('../../server/services/cloudflare-update-provider');
 
 function parseArgs(argv) {
-  const parsed = { publish: false, from: '', version: '' };
+  const parsed = { publish: false, from: '', version: '', channel: 'stable', notesUrl: '' };
   for (let index = 0; index < argv.length; index++) {
     const value = argv[index];
     if (value === '--publish') parsed.publish = true;
     else if (value === '--dry-run') parsed.publish = false;
-    else if (value === '--version' || value === '--from') {
+    else if (value === '--version' || value === '--from' || value === '--channel' || value === '--notes-url') {
       const next = argv[++index];
       if (!next || next.startsWith('--')) throw new Error(`${value} requires a value`);
-      parsed[value.slice(2)] = next;
+      parsed[value === '--notes-url' ? 'notesUrl' : value.slice(2)] = next;
     } else throw new Error(`unknown argument: ${value}`);
   }
   return parsed;
@@ -44,7 +44,7 @@ async function readPublicArtifact(url) {
 }
 
 async function probeWorker({ version, platform, arch, channel }) {
-  const url = new URL('https://updates.elitesand.pro/v1/plan');
+  const url = new URL(`${controlOriginForChannel(channel)}/v1/plan`);
   // This probe has no installed app.asar. It only verifies the Worker routing
   // contract after a publish, so it supplies a deterministic release-probe
   // runtime value; production clients always derive theirs from app.asar.
@@ -60,11 +60,14 @@ async function probeWorker({ version, platform, arch, channel }) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const root = path.resolve(__dirname, '..', '..');
-  if (!args.version || !args.from) throw new Error('Usage: npm run release:hotfix -- --version <current-package-version> --from <v1,v2> [--publish]');
+  if (!args.version || !args.from) throw new Error('Usage: npm run release:hotfix -- --version <current-package-version> --from <v1> [--channel stable|beta] [--notes-url <HTTPS URL>] [--publish]');
   if (args.version !== APP_VERSION) throw new Error(`--version ${args.version} does not match package version ${APP_VERSION}`);
   const fromVersions = args.from.split(',').map((value) => value.trim()).filter(Boolean);
+  if (args.channel !== 'stable' && args.channel !== 'beta') throw new Error('--channel must be stable or beta');
+  const releaseNotesUrl = args.notesUrl || (args.channel === 'stable' ? `https://github.com/z22115554/elitesand-pro/releases/tag/v${args.version}` : '');
+  if (!/^https:\/\//.test(releaseNotesUrl)) throw new Error('--notes-url is required for a beta release and must be HTTPS');
   if (!args.publish) {
-    process.stdout.write(`Dry run accepted for v${args.version} from ${fromVersions.join(', ')}. No build, credential read, R2 write, Worker call, or control switch was performed. Pass --publish only after P9 approval.\n`);
+    process.stdout.write(`Dry run accepted for ${args.channel} v${args.version} from ${fromVersions.join(', ')}. No build, credential read, R2 write, Worker call, or control switch was performed.\n`);
     return;
   }
 
@@ -84,9 +87,10 @@ async function main() {
   await runHotfixRelease({
     targetVersion: args.version,
     fromVersions,
+    channel: args.channel,
     privateKey: readPolicyPrivateKey(),
     keyId: policyKeyId,
-    releaseNotesUrl: `https://github.com/z22115554/elitesand-pro/releases/tag/v${args.version}`,
+    releaseNotesUrl,
     artifactBuilder: builder,
     inspectIncremental: async (zip, { fromVersion, targetVersion }) => updater.inspectUpdateZip(zip, { currentVersion: fromVersion, expectedVersion: targetVersion }),
     store,

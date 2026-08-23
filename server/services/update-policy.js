@@ -6,6 +6,7 @@ const {
   UPDATE_POLICY_SIGNATURE_ALGORITHM,
   UPDATE_POLICY_PUBLIC_KEYS,
   getUpdatePolicyPublicKey,
+  isUpdatePolicyKeyAllowedForChannel,
 } = require('./update-policy-public-keys');
 
 const UPDATE_POLICY_SCHEMA_VERSION = 1;
@@ -31,6 +32,7 @@ const ALLOWED_DELIVERIES = new Set(['incremental', 'installer']);
 const ALLOWED_URGENCIES = new Set(['optional', 'required']);
 const ALLOWED_REASON_CODES = new Set(['hotfix', 'major-release', 'owner-forced', 'security']);
 const UPDATE_ARTIFACT_ORIGIN = 'https://updates.elitesand.pro';
+const BETA_UPDATE_ARTIFACT_ORIGIN = 'https://elitesand-update-artifacts.elitesand.workers.dev';
 const OFFICIAL_GITHUB_OWNER = 'z22115554';
 const OFFICIAL_GITHUB_REPOSITORY = 'elitesand-pro';
 const INSTALLER_NAME_RE = /^Elitesand[ .]Pro[ .]Setup[ .]\d+(?:\.\d+){2,3}(?:[-.][^/]+)?\.exe$/i;
@@ -87,9 +89,13 @@ function parseHttpsUrl(value) {
   }
 }
 
+function artifactOriginForChannel(channel) {
+  return channel === 'beta' ? BETA_UPDATE_ARTIFACT_ORIGIN : UPDATE_ARTIFACT_ORIGIN;
+}
+
 function isExactIncrementalArtifactUrl(value, plan) {
   const url = parseHttpsUrl(value);
-  if (!url || url.origin !== UPDATE_ARTIFACT_ORIGIN || url.search) return false;
+  if (!url || url.origin !== artifactOriginForChannel(plan?.channel) || url.search) return false;
   const expectedPath = `/artifacts/${plan.channel}/${plan.fromVersion}/${plan.targetVersion}/update.zip`;
   return url.pathname === expectedPath;
 }
@@ -239,6 +245,9 @@ function verifyUpdatePlan(plan, options = {}) {
   const publicKeys = options.publicKeys || UPDATE_POLICY_PUBLIC_KEYS;
   const publicKeyHex = getUpdatePolicyPublicKey(plan.keyId, publicKeys);
   if (!publicKeyHex) return { ok: false, reason: `update plan keyId 不受信任：${plan.keyId}` };
+  if (!options.publicKeys && !isUpdatePolicyKeyAllowedForChannel(plan.keyId, plan.channel)) {
+    return { ok: false, reason: `update plan keyId 不允許用於 ${plan.channel} channel：${plan.keyId}` };
+  }
   try {
     const valid = crypto.verify(null, canonicalPlanBytes(plan), loadEd25519PublicKey(publicKeyHex), Buffer.from(plan.signature, 'hex'));
     if (!valid) return { ok: false, reason: 'update plan Ed25519 驗章失敗' };
@@ -255,12 +264,16 @@ module.exports = {
   UPDATE_POLICY_SCHEMA_VERSION,
   UPDATE_POLICY_SIGNATURE_ALGORITHM,
   UPDATE_POLICY_PUBLIC_KEYS,
+  UPDATE_ARTIFACT_ORIGIN,
+  BETA_UPDATE_ARTIFACT_ORIGIN,
   MAX_UPDATE_ZIP_BYTES,
   MAX_CLOCK_FUTURE_MS,
   MAX_PLAN_LIFETIME_MS,
   canonicalize,
   canonicalPlanBytes,
+  artifactOriginForChannel,
   validateUpdatePlanShape,
+  isUpdatePolicyKeyAllowedForChannel,
   isExactIncrementalArtifactUrl,
   isExactInstallerUrl,
   loadEd25519PublicKey,

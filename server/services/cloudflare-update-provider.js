@@ -10,14 +10,26 @@ const { createStartupIncrementalUpdateExecutor } = require('./startup-incrementa
 const { getInstalledRuntimeFingerprint } = require('./update-runtime-fingerprint');
 
 const UPDATE_CONTROL_ORIGIN = 'https://updates.elitesand.pro';
+const BETA_UPDATE_CONTROL_ORIGIN = 'https://elitesand-update-control.elitesand.workers.dev';
 const UPDATE_CONTROL_PATH = '/v1/plan';
 const CONNECT_TIMEOUT_MS = 1500;
 const TOTAL_TIMEOUT_MS = 4500;
 const MAX_PLAN_BYTES = 64 * 1024;
 const DEFAULT_CHANNEL = 'stable';
 
-function isEnabled(env = process.env) {
-  return env.ELITESAND_ENABLE_CLOUDFLARE_UPDATES === '1';
+function isBetaBuildVersion(version = APP_VERSION) {
+  return typeof version === 'string' && /-beta(?:[.-]|$)/i.test(version);
+}
+
+function defaultChannel(env = process.env, version = APP_VERSION) {
+  if (env.ELITESAND_UPDATE_CHANNEL === 'beta') return 'beta';
+  if (env.ELITESAND_UPDATE_CHANNEL === 'stable') return 'stable';
+  return isBetaBuildVersion(version) ? 'beta' : DEFAULT_CHANNEL;
+}
+
+function isEnabled(env = process.env, version = APP_VERSION) {
+  if (env.ELITESAND_ENABLE_CLOUDFLARE_UPDATES === '0') return false;
+  return env.ELITESAND_ENABLE_CLOUDFLARE_UPDATES === '1' || isBetaBuildVersion(version);
 }
 
 function normalizeChannel(value) {
@@ -32,8 +44,12 @@ function createRequestFingerprint({ version = APP_VERSION, platform = 'win32', a
   return crypto.createHash('sha256').update(`elitesand-update-request-v2\n${version}\n${platform}\n${arch}\n${channel}\n${String(runtimeFingerprint).toLowerCase()}`, 'utf8').digest('hex');
 }
 
-function controlEndpoint(endpoint, { allowTestEndpoint = false } = {}) {
-  const expected = `${UPDATE_CONTROL_ORIGIN}${UPDATE_CONTROL_PATH}`;
+function controlOriginForChannel(channel) {
+  return normalizeChannel(channel) === 'beta' ? BETA_UPDATE_CONTROL_ORIGIN : UPDATE_CONTROL_ORIGIN;
+}
+
+function controlEndpoint(endpoint, { channel = DEFAULT_CHANNEL, allowTestEndpoint = false } = {}) {
+  const expected = `${controlOriginForChannel(channel)}${UPDATE_CONTROL_PATH}`;
   const raw = endpoint == null ? expected : String(endpoint);
   try {
     const url = new URL(raw);
@@ -80,12 +96,12 @@ async function fetchPlanJson(url, { fetchImpl = globalThis.fetch, connectTimeout
 }
 
 function createCloudflareUpdateProvider({
-  enabled = isEnabled(),
+  currentVersion = APP_VERSION,
+  enabled = isEnabled(process.env, currentVersion),
   endpoint,
   allowTestEndpoint = false,
   fetchImpl = globalThis.fetch,
-  currentVersion = APP_VERSION,
-  channel = normalizeChannel(process.env.ELITESAND_UPDATE_CHANNEL),
+  channel = defaultChannel(process.env, currentVersion),
   platform = 'win32',
   arch = 'x64',
   replayGuard = createPersistentReplayGuard({ file: path.join(dataDir, 'update-policy-replay-v1.json') }),
@@ -96,28 +112,29 @@ function createCloudflareUpdateProvider({
   incrementalExecutor,
   runtimeFingerprint = getInstalledRuntimeFingerprint,
 } = {}) {
-  const base = controlEndpoint(endpoint, { allowTestEndpoint });
-  const canCheck = enabled === true && base !== null && platform === 'win32' && arch === 'x64' && (channel === 'stable' || channel === 'beta');
+  const selectedChannel = normalizeChannel(channel);
+  const base = controlEndpoint(endpoint, { channel: selectedChannel, allowTestEndpoint });
+  const canCheck = enabled === true && base !== null && platform === 'win32' && arch === 'x64' && (selectedChannel === 'stable' || selectedChannel === 'beta');
   const executor = incrementalExecutor || createStartupIncrementalUpdateExecutor({
-    currentVersion, channel, platform, arch, publicKeys, replayGuard, nowMs,
+    currentVersion, channel: selectedChannel, platform, arch, publicKeys, replayGuard, nowMs,
   });
 
   async function check() {
     if (!canCheck) return { kind: 'none' };
     let installedRuntimeFingerprint;
     try {
-      installedRuntimeFingerprint = await runtimeFingerprint({ version: currentVersion, platform, arch, channel });
+      installedRuntimeFingerprint = await runtimeFingerprint({ version: currentVersion, platform, arch, channel: selectedChannel });
     } catch (_) {
       return { kind: 'none' };
     }
-    const fingerprint = createRequestFingerprint({ version: currentVersion, platform, arch, channel, runtimeFingerprint: installedRuntimeFingerprint });
+    const fingerprint = createRequestFingerprint({ version: currentVersion, platform, arch, channel: selectedChannel, runtimeFingerprint: installedRuntimeFingerprint });
     if (!fingerprint) return { kind: 'none' };
     const url = new URL(base.href);
     url.search = new URLSearchParams({
       version: currentVersion,
       platform,
       arch,
-      channel,
+      channel: selectedChannel,
       fingerprint,
     }).toString();
     try {
@@ -125,7 +142,7 @@ function createCloudflareUpdateProvider({
       if (result.kind !== 'plan') return { kind: 'none' };
       const verified = verifyUpdatePlan(result.plan, {
         currentVersion,
-        channel,
+        channel: selectedChannel,
         platform,
         arch,
         publicKeys,
@@ -142,7 +159,7 @@ function createCloudflareUpdateProvider({
     if (!canCheck || plan?.delivery !== 'installer' || plan?.urgency !== 'required') return false;
     const verified = verifyUpdatePlan(plan, {
       currentVersion,
-      channel,
+      channel: selectedChannel,
       platform,
       arch,
       publicKeys,
@@ -170,11 +187,15 @@ module.exports = {
   MAX_PLAN_BYTES,
   TOTAL_TIMEOUT_MS,
   UPDATE_CONTROL_ORIGIN,
+  BETA_UPDATE_CONTROL_ORIGIN,
   UPDATE_CONTROL_PATH,
   controlEndpoint,
+  controlOriginForChannel,
   createCloudflareUpdateProvider,
   createRequestFingerprint,
   fetchPlanJson,
+  defaultChannel,
+  isBetaBuildVersion,
   isEnabled,
   normalizeChannel,
 };

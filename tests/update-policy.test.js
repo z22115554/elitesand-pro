@@ -13,6 +13,7 @@ const TEST_PRIVATE_KEY_PATH = path.join(__dirname, 'fixtures', 'update-policy-te
 const TEST_PRIVATE_KEY = fs.readFileSync(TEST_PRIVATE_KEY_PATH, 'utf8');
 const TEST_PUBLIC_KEY_HEX = crypto.createPublicKey(TEST_PRIVATE_KEY).export({ type: 'spki', format: 'der' }).toString('hex');
 const TEST_KEYS = Object.freeze({ [TEST_KEY_ID]: TEST_PUBLIC_KEY_HEX });
+const BETA_POLICY_KEY_ID = 'elitesand-beta-policy-2026-08';
 const NOW_MS = Date.parse('2026-08-23T00:00:00.000Z');
 
 let passed = 0;
@@ -125,6 +126,30 @@ test('版本、時間、枚舉、hash、size 與 host 全部有明確拒絕條�
   assert.throws(() => policy.signUpdatePlan(badSize, TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /size/);
 });
 
+test('stable 與 beta artifact host 是雙向隔離，beta 不能偷用未來 stable 網域', () => {
+  const beta = unsignedPlan({
+    planId: 'beta-win32-x64-0.9.9.7-1.0.0-20260823t000000z',
+    channel: 'beta',
+    artifact: {
+      url: 'https://elitesand-update-artifacts.elitesand.workers.dev/artifacts/beta/0.9.9.7/1.0.0/update.zip',
+      sha256: 'a'.repeat(64),
+      size: 1024,
+    },
+  });
+  const signedBeta = policy.signUpdatePlan(beta, TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID });
+  assert.equal(policy.verifyUpdatePlan(signedBeta, {
+    currentVersion: '0.9.9.7', channel: 'beta', platform: 'win32', arch: 'x64', publicKeys: TEST_KEYS, nowMs: NOW_MS,
+  }).ok, true);
+
+  assert.throws(() => policy.signUpdatePlan(unsignedPlan({
+    artifact: { ...beta.artifact, url: beta.artifact.url.replace('/artifacts/beta/', '/artifacts/stable/') },
+  }), TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /artifact URL/);
+  assert.throws(() => policy.signUpdatePlan({
+    ...beta,
+    artifact: { ...beta.artifact, url: 'https://updates.elitesand.pro/artifacts/beta/0.9.9.7/1.0.0/update.zip' },
+  }, TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /artifact URL/);
+});
+
 test('required delivery 只允許簽署的 major-release Installer 或 owner-forced，且舊版本 policy 不會套到新版', () => {
   const ownerForcedIncremental = signedPlan({ urgency: 'required', reasonCode: 'owner-forced' });
   assert.equal(verify(ownerForcedIncremental).ok, true);
@@ -157,12 +182,17 @@ test('replay guard 僅接受遞增 issuedAt，拒絕舊 policy 或同時間不�
   assert.equal(verify(signedPlan({ issuedAt: '2026-08-23T00:00:00.000Z', planId: 'stable-win32-x64-newer' }), { replayGuard: guard }).ok, true);
 });
 
-test('預設 production trust store 未配置正式 key 時拒絕所有遠端 policy', () => {
+test('production trust store 拒絕未知的 repository fixture key', () => {
   const result = policy.verifyUpdatePlan(signedPlan(), {
     currentVersion: '0.9.9.7', channel: 'stable', platform: 'win32', arch: 'x64', nowMs: NOW_MS,
   });
   assert.equal(result.ok, false);
   assert.match(result.reason, /keyId 不受信任/);
+});
+
+test('embedded beta policy key cannot authorize a stable plan', () => {
+  assert.equal(policy.isUpdatePolicyKeyAllowedForChannel(BETA_POLICY_KEY_ID, 'beta'), true);
+  assert.equal(policy.isUpdatePolicyKeyAllowedForChannel(BETA_POLICY_KEY_ID, 'stable'), false);
 });
 
 test('production signer 拒絕 repository test policy key，只有明確 test opt-in 可用', () => {

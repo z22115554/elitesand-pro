@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const {
   UPDATE_POLICY_PUBLIC_KEYS,
   getUpdatePolicyPublicKey,
+  isUpdatePolicyKeyAllowedForChannel,
 } = require('../../server/services/update-policy-public-keys');
 const {
   publicKeyHexFromPrivateKey,
@@ -63,6 +64,9 @@ function main() {
   const privateKey = crypto.createPrivateKey(loadPrivateKey(args));
   assertTrustedSigner(args.keyId, privateKey, args.allowTestKey);
   const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
+  if (!args.allowTestKey && !isUpdatePolicyKeyAllowedForChannel(args.keyId, plan?.channel)) {
+    throw new Error(`The supplied policy key is not allowed for the ${plan?.channel || 'unknown'} channel.`);
+  }
   const signed = signUpdatePlan(plan, privateKey, { keyId: args.keyId });
   fs.writeFileSync(planPath, `${JSON.stringify(signed, null, 2)}\n`, 'utf8');
   console.log(`Signed ${path.basename(planPath)} with update-policy Ed25519 (${args.keyId}).`);

@@ -7,6 +7,8 @@
 // can never be overwritten; fail closed rather than silently losing that
 // guarantee to multipart's unsupported precondition.
 const MAX_CONDITIONALLY_IMMUTABLE_PUT_BYTES = 5 * 1024 * 1024 * 1024;
+const MAX_LIST_PAGES = 16;
+const MAX_LISTED_KEYS = 1024;
 
 function loadS3() {
   // This dependency is local to the release tool, never the packaged app.
@@ -101,7 +103,31 @@ function createR2S3Store({
     }
   }
 
-  return Object.freeze({ get, putImmutable, putControlIfMatch });
+  async function listPrefix(prefix) {
+    if (typeof prefix !== 'string' || !prefix || prefix.length > 512 || prefix.includes('\\') || prefix.includes('..')) {
+      throw new Error('R2 list prefix is invalid');
+    }
+    const keys = [];
+    let continuationToken;
+    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+      const result = await s3Client.send(new s3.ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+      }));
+      for (const object of result.Contents || []) {
+        if (typeof object?.Key !== 'string') continue;
+        keys.push(object.Key);
+        if (keys.length > MAX_LISTED_KEYS) throw new Error('R2 list result is unexpectedly large; refusing beta cleanup decision');
+      }
+      if (!result.IsTruncated) return keys.sort();
+      continuationToken = result.NextContinuationToken;
+      if (!continuationToken) throw new Error('R2 list pagination is incomplete');
+    }
+    throw new Error('R2 list pagination exceeded the safe release-tool limit');
+  }
+
+  return Object.freeze({ get, putImmutable, putControlIfMatch, listPrefix });
 }
 
-module.exports = { MAX_CONDITIONALLY_IMMUTABLE_PUT_BYTES, createR2S3Store, isR2Endpoint };
+module.exports = { MAX_CONDITIONALLY_IMMUTABLE_PUT_BYTES, MAX_LIST_PAGES, MAX_LISTED_KEYS, createR2S3Store, isR2Endpoint };

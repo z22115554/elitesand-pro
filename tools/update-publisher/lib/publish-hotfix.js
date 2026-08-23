@@ -9,6 +9,8 @@ const ARCH = 'x64';
 const CHANNELS = new Set(['stable', 'beta']);
 const VERSION_RE = /^\d+(?:\.\d+){2,3}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const ARTIFACT_ORIGIN = 'https://updates.elitesand.pro';
+const BETA_ARTIFACT_ORIGIN = 'https://elitesand-update-artifacts.elitesand.workers.dev';
+const MAX_BETA_ARTIFACTS = 8;
 
 function sha256(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
@@ -38,7 +40,20 @@ function artifactKey(channel, fromVersion, targetVersion) {
 }
 
 function artifactUrl(channel, fromVersion, targetVersion) {
-  return `${ARTIFACT_ORIGIN}/${artifactKey(channel, fromVersion, targetVersion)}`;
+  return `${policy.artifactOriginForChannel(channel)}/${artifactKey(channel, fromVersion, targetVersion)}`;
+}
+
+function isBetaArtifactKey(key) {
+  return typeof key === 'string' && /^artifacts\/beta\/[^/]+\/[^/]+\/update\.zip$/.test(key);
+}
+
+async function assertBetaRetentionCapacity(store, incomingCount) {
+  if (!store || typeof store.listPrefix !== 'function') throw new Error('beta publish requires an R2 store that can list the beta artifact prefix');
+  const existing = (await store.listPrefix('artifacts/beta/')).filter(isBetaArtifactKey);
+  if (existing.length + incomingCount > MAX_BETA_ARTIFACTS) {
+    throw new Error(`beta artifact retention limit reached (${existing.length}/${MAX_BETA_ARTIFACTS}); explicitly retire expired beta artifacts before publishing`);
+  }
+  return existing;
 }
 
 function controlKey(channel) {
@@ -98,8 +113,10 @@ async function runHotfixRelease({
   assertVersion(targetVersion, 'target version');
   if (!CHANNELS.has(channel)) throw new Error('unsupported release channel');
   const supportSet = normalizeSupportSet(fromVersions, targetVersion);
+  if (channel === 'beta' && supportSet.length !== 1) throw new Error('beta releases support exactly one installed beta baseline');
   if (!privateKey || typeof keyId !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(keyId)) throw new Error('a release-only update policy signing key and key id are required');
   if (!allowTestKey && /(?:^|[-_.])test(?:$|[-_.])/i.test(keyId)) throw new Error('refusing to publish with a test update policy key');
+  if (!allowTestKey && !policy.isUpdatePolicyKeyAllowedForChannel(keyId, channel)) throw new Error(`policy key ${keyId} is not allowed for the ${channel} channel`);
   if (typeof artifactBuilder !== 'function' || typeof inspectIncremental !== 'function') throw new Error('artifactBuilder and inspectIncremental are required');
   if (!/^https:\/\//.test(String(releaseNotesUrl || ''))) throw new Error('releaseNotesUrl must be HTTPS');
   if (!dryRun && (!store || typeof store.get !== 'function' || typeof store.putImmutable !== 'function' || typeof store.putControlIfMatch !== 'function')) {
@@ -107,6 +124,7 @@ async function runHotfixRelease({
   }
 
   await runChecks();
+  if (!dryRun && channel === 'beta') await assertBetaRetentionCapacity(store, supportSet.length);
   const issuedAt = now().toISOString();
   const signingPublicKey = policy.publicKeyHexFromPrivateKey(privateKey);
   const planned = [];
@@ -218,13 +236,17 @@ function createPowerShellArtifactBuilder({ projectRoot, baselineDirectory, outpu
 module.exports = {
   ARCH,
   ARTIFACT_ORIGIN,
+  BETA_ARTIFACT_ORIGIN,
+  MAX_BETA_ARTIFACTS,
   PLATFORM,
+  assertBetaRetentionCapacity,
   artifactKey,
   artifactUrl,
   controlKey,
   createPowerShellArtifactBuilder,
   makePlanId,
   normalizeSupportSet,
+  isBetaArtifactKey,
   parseControl,
   planKey,
   runHotfixRelease,
