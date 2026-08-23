@@ -2,6 +2,7 @@
 'use strict';
 
 const childProcess = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { APP_VERSION } = require('../../server/utils/app-version');
@@ -44,7 +45,13 @@ async function readPublicArtifact(url) {
 
 async function probeWorker({ version, platform, arch, channel }) {
   const url = new URL('https://updates.elitesand.pro/v1/plan');
-  url.search = new URLSearchParams({ version, platform, arch, channel, fingerprint: createRequestFingerprint({ version, platform, arch, channel }) }).toString();
+  // This probe has no installed app.asar. It only verifies the Worker routing
+  // contract after a publish, so it supplies a deterministic release-probe
+  // runtime value; production clients always derive theirs from app.asar.
+  const runtimeFingerprint = crypto.createHash('sha256').update(`elitesand-release-probe-v1\n${version}\n${platform}\n${arch}\n${channel}`, 'utf8').digest('hex');
+  const fingerprint = createRequestFingerprint({ version, platform, arch, channel, runtimeFingerprint });
+  if (!fingerprint) throw new Error('could not build release Worker probe fingerprint');
+  url.search = new URLSearchParams({ version, platform, arch, channel, fingerprint }).toString();
   const response = await fetch(url, { redirect: 'error', headers: { Accept: 'application/json' } });
   if (response.status !== 200 || response.headers.get('cache-control') !== 'no-store') throw new Error('Worker probe did not return an uncached signed plan');
   return Buffer.from(await response.arrayBuffer());

@@ -17,6 +17,7 @@ const TEST_PRIVATE_KEY = fs.readFileSync(path.join(__dirname, 'fixtures', 'updat
 const TEST_KEY_ID = 'update-policy-test-fixture';
 const TEST_PUBLIC_KEYS = Object.freeze({ [TEST_KEY_ID]: policy.publicKeyHexFromPrivateKey(TEST_PRIVATE_KEY) });
 const NOW_MS = Date.parse('2026-08-23T00:00:00.000Z');
+const TEST_RUNTIME_FINGERPRINT = 'c'.repeat(64);
 
 function signedPlan(overrides = {}) {
   return policy.signUpdatePlan({
@@ -78,6 +79,7 @@ function providerWith(plan, extra = {}) {
     publicKeys: TEST_PUBLIC_KEYS,
     nowMs: () => NOW_MS,
     fetchImpl: async () => response(plan),
+    runtimeFingerprint: async () => TEST_RUNTIME_FINGERPRINT,
     ...extra,
   });
 }
@@ -100,15 +102,27 @@ test('Cloudflare provider only makes one exact cold-start Worker request and acc
   assert.strictEqual(observedUrl.origin, UPDATE_CONTROL_ORIGIN);
   assert.strictEqual(observedUrl.pathname, '/v1/plan');
   assert.deepStrictEqual([...observedUrl.searchParams.keys()].sort(), ['arch', 'channel', 'fingerprint', 'platform', 'version']);
-  assert.strictEqual(observedUrl.searchParams.get('fingerprint'), createRequestFingerprint({ version: '0.9.9.7', channel: 'stable' }));
+  assert.strictEqual(observedUrl.searchParams.get('fingerprint'), createRequestFingerprint({ version: '0.9.9.7', channel: 'stable', runtimeFingerprint: TEST_RUNTIME_FINGERPRINT }));
 });
 
 test('feature flag defaults off and an untrusted endpoint cannot trigger a fetch', async () => {
   let calls = 0;
-  const disabled = createCloudflareUpdateProvider({ fetchImpl: async () => { calls += 1; return response({}); } });
+  let runtimeCalls = 0;
+  const disabled = createCloudflareUpdateProvider({ fetchImpl: async () => { calls += 1; return response({}); }, runtimeFingerprint: async () => { runtimeCalls += 1; return TEST_RUNTIME_FINGERPRINT; } });
   assert.strictEqual((await disabled.check()).kind, 'none');
   const hostile = createCloudflareUpdateProvider({ enabled: true, endpoint: 'https://evil.example/v1/plan', fetchImpl: async () => { calls += 1; return response({}); } });
   assert.strictEqual((await hostile.check()).kind, 'none');
+  assert.strictEqual(calls, 0);
+  assert.strictEqual(runtimeCalls, 0);
+});
+
+test('missing installed runtime fingerprint fails closed before a Worker request', async () => {
+  let calls = 0;
+  const provider = providerWith(signedPlan(), {
+    runtimeFingerprint: async () => null,
+    fetchImpl: async () => { calls += 1; return response(signedPlan()); },
+  });
+  assert.strictEqual((await provider.check()).kind, 'none');
   assert.strictEqual(calls, 0);
 });
 

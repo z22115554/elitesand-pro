@@ -7,6 +7,7 @@ const { dataDir } = require('../utils/app-paths');
 const { verifyUpdatePlan } = require('./update-policy');
 const { createPersistentReplayGuard } = require('./update-policy-replay-store');
 const { createStartupIncrementalUpdateExecutor } = require('./startup-incremental-update');
+const { getInstalledRuntimeFingerprint } = require('./update-runtime-fingerprint');
 
 const UPDATE_CONTROL_ORIGIN = 'https://updates.elitesand.pro';
 const UPDATE_CONTROL_PATH = '/v1/plan';
@@ -23,10 +24,12 @@ function normalizeChannel(value) {
   return value === 'beta' ? 'beta' : DEFAULT_CHANNEL;
 }
 
-function createRequestFingerprint({ version = APP_VERSION, platform = 'win32', arch = 'x64', channel = DEFAULT_CHANNEL } = {}) {
-  // This is a coarse release/runtime selector, never an installation ID or a
-  // hardware fingerprint. Identical app versions send identical values.
-  return crypto.createHash('sha256').update(`elitesand-update-v1\n${version}\n${platform}\n${arch}\n${channel}`, 'utf8').digest('hex');
+function createRequestFingerprint({ version = APP_VERSION, platform = 'win32', arch = 'x64', channel = DEFAULT_CHANNEL, runtimeFingerprint } = {}) {
+  // The input is a content hash of app.asar, never an install ID, hostname, or
+  // hardware value. Hash it again with the public selector so the Worker sees
+  // a fixed-length opaque request value rather than raw application metadata.
+  if (!/^[a-f0-9]{64}$/i.test(String(runtimeFingerprint || ''))) return null;
+  return crypto.createHash('sha256').update(`elitesand-update-request-v2\n${version}\n${platform}\n${arch}\n${channel}\n${String(runtimeFingerprint).toLowerCase()}`, 'utf8').digest('hex');
 }
 
 function controlEndpoint(endpoint, { allowTestEndpoint = false } = {}) {
@@ -91,6 +94,7 @@ function createCloudflareUpdateProvider({
   connectTimeoutMs = CONNECT_TIMEOUT_MS,
   totalTimeoutMs = TOTAL_TIMEOUT_MS,
   incrementalExecutor,
+  runtimeFingerprint = getInstalledRuntimeFingerprint,
 } = {}) {
   const base = controlEndpoint(endpoint, { allowTestEndpoint });
   const canCheck = enabled === true && base !== null && platform === 'win32' && arch === 'x64' && (channel === 'stable' || channel === 'beta');
@@ -100,13 +104,21 @@ function createCloudflareUpdateProvider({
 
   async function check() {
     if (!canCheck) return { kind: 'none' };
+    let installedRuntimeFingerprint;
+    try {
+      installedRuntimeFingerprint = await runtimeFingerprint({ version: currentVersion, platform, arch, channel });
+    } catch (_) {
+      return { kind: 'none' };
+    }
+    const fingerprint = createRequestFingerprint({ version: currentVersion, platform, arch, channel, runtimeFingerprint: installedRuntimeFingerprint });
+    if (!fingerprint) return { kind: 'none' };
     const url = new URL(base.href);
     url.search = new URLSearchParams({
       version: currentVersion,
       platform,
       arch,
       channel,
-      fingerprint: createRequestFingerprint({ version: currentVersion, platform, arch, channel }),
+      fingerprint,
     }).toString();
     try {
       const result = await fetchPlanJson(url, { fetchImpl, connectTimeoutMs, totalTimeoutMs });
