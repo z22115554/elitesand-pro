@@ -36,6 +36,7 @@ const { logsDir } = require('../utils/app-paths');
 const { verifyUpdateManifestSignature } = require('./update-signature');
 const { UPDATE_RESULT_MARKER_NAME } = require('./app-updater-runner-v2');
 const usageTelemetry = require('./usage-telemetry');
+const { createGitHubReleaseProvider, assertNormalizedUpdatePlan } = require('./update-provider');
 
 const log = createLogger('AppUpdaterV2');
 const UPDATE_SCHEMA_VERSION = 2;
@@ -350,39 +351,14 @@ function hostCanIncremental(options = {}) {
 async function getPlan(options = {}) {
   const repo = options.repo || config.updateCheckRepo;
   const fetchLatestReleaseImpl = options.fetchLatestRelease || fetchLatestRelease;
-  const base = {
-    enabled: !!repo,
-    repo: repo || null,
+  const provider = options.provider || createGitHubReleaseProvider({
+    repo,
     currentVersion: APP_VERSION,
-    latestVersion: null,
-    hasUpdate: false,
-    canIncremental: false,
-    needsFull: false,
-    reason: null,
-    releaseUrl: null,
-    downloadUrl: null,
-  };
-  if (!repo) { base.reason = '未設定更新來源'; return base; }
-  try {
-    const release = await fetchLatestReleaseImpl(repo);
-    base.latestVersion = String(release.tag_name).replace(/^[vV]/, '');
-    base.releaseUrl = typeof release.html_url === 'string' ? release.html_url : null;
-    const installer = findInstallerAsset(release);
-    base.downloadUrl = installer?.browser_download_url || base.releaseUrl;
-    base.hasUpdate = isNewerVersion(base.latestVersion, APP_VERSION);
-    if (!base.hasUpdate) { base.reason = '已是最新版本'; return base; }
-
-    const verifiedAssets = findVerifiedUpdateAssets(release);
-    const capable = !INCREMENTAL_UPDATES_DISABLED && hostCanIncremental(options);
-    base.canIncremental = !!verifiedAssets && capable;
-    base.needsFull = !base.canIncremental;
-    if (!capable) base.reason = '目前安裝版本尚未具備安全增量更新執行環境，請使用完整 Windows Installer。';
-    else if (!verifiedAssets) base.reason = '新版未提供安全增量更新包，請使用完整 Windows Installer。';
-    return base;
-  } catch (error) {
-    base.reason = error.status === 404 ? '更新來源尚未公開或尚未發布 Release' : `檢查失敗：${error.message}`;
-    return base;
-  }
+    fetchLatestRelease: fetchLatestReleaseImpl,
+    canIncremental: () => !INCREMENTAL_UPDATES_DISABLED && hostCanIncremental(options),
+  });
+  if (!provider || typeof provider.getPlan !== 'function') throw new TypeError('update provider 必須提供 getPlan()');
+  return assertNormalizedUpdatePlan(await provider.getPlan());
 }
 
 async function downloadReleaseUpdate(release, { reportProgress = true } = {}) {
