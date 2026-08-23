@@ -121,12 +121,12 @@ test('Cloudflare provider only makes one exact cold-start Worker request and acc
   assert.strictEqual(observedUrl.searchParams.get('fingerprint'), createRequestFingerprint({ version: '0.9.9.7', channel: 'stable', runtimeFingerprint: TEST_RUNTIME_FINGERPRINT }));
 });
 
-test('feature flag defaults off and an untrusted endpoint cannot trigger a fetch', async () => {
+test('stable builds default off and an untrusted endpoint cannot trigger a fetch', async () => {
   let calls = 0;
   let runtimeCalls = 0;
-  const disabled = createCloudflareUpdateProvider({ fetchImpl: async () => { calls += 1; return response({}); }, runtimeFingerprint: async () => { runtimeCalls += 1; return TEST_RUNTIME_FINGERPRINT; } });
+  const disabled = createCloudflareUpdateProvider({ currentVersion: '0.9.9.8', fetchImpl: async () => { calls += 1; return response({}); }, runtimeFingerprint: async () => { runtimeCalls += 1; return TEST_RUNTIME_FINGERPRINT; } });
   assert.strictEqual((await disabled.check()).kind, 'none');
-  const hostile = createCloudflareUpdateProvider({ enabled: true, endpoint: 'https://evil.example/v1/plan', fetchImpl: async () => { calls += 1; return response({}); } });
+  const hostile = createCloudflareUpdateProvider({ currentVersion: '0.9.9.8', enabled: true, endpoint: 'https://evil.example/v1/plan', fetchImpl: async () => { calls += 1; return response({}); } });
   assert.strictEqual((await hostile.check()).kind, 'none');
   assert.strictEqual(calls, 0);
   assert.strictEqual(runtimeCalls, 0);
