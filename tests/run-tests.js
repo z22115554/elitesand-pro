@@ -1610,18 +1610,18 @@ testAsync('SHA 不符與 staging 寫入失敗都不修改正式目錄、也不�
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
-testAsync('程式內增量更新已停用，準備階段不會寫入或啟動 updater', async () => {
+testAsync('非冷啟動簽章政策的增量更新會被拒絕，準備階段不會寫入或啟動 updater', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-update-launch-'));
   try {
     appUpdater._resetForTests();
     const prepared = await appUpdater.prepareUpdate({ targetRoot: root, zipBuffer: makeUpdateZip(), latestVersion: '0.7.4' });
-    ok(!prepared.prepared && prepared.needsFull);
-    ok(/Windows Installer/.test(prepared.reason));
-    ok(!fs.existsSync(path.join(root, 'server')), '停用時不可建立 staging 或修改目標目錄: ');
+    ok(!prepared.prepared && !prepared.needsFull);
+    ok(/冷啟動簽章政策/.test(prepared.reason));
+    ok(!fs.existsSync(path.join(root, 'server')), '拒絕時不可建立 staging 或修改目標目錄: ');
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
-testAsync('程式內增量更新被拒絕時不會呼叫外部 updater', async () => {
+testAsync('非冷啟動簽章政策的增量更新被拒絕時不會呼叫外部 updater', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-update-node-mode-'));
   try {
     appUpdater._resetForTests();
@@ -1633,8 +1633,8 @@ testAsync('程式內增量更新被拒絕時不會呼叫外部 updater', async (
       latestVersion: '0.7.4',
       spawnImpl() { spawnCalled = true; },
     });
-    ok(!prepared.prepared && !result.prepared && result.needsFull);
-    ok(!spawnCalled, '停用時不可建立外部 updater 子程序: ');
+    ok(!prepared.prepared && !result.prepared && !result.needsFull);
+    ok(!spawnCalled, '拒絕時不可建立外部 updater 子程序: ');
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 

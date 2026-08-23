@@ -421,6 +421,23 @@ async function prepareUpdate(options = {}) {
   if (INCREMENTAL_UPDATES_DISABLED) return { prepared: false, needsFull: true, reason: '程式內增量更新已停用，請使用完整 Windows Installer。' };
   if (currentProgress.active) return { prepared: false, busy: true, reason: '已有更新工作正在進行' };
 
+  // P7 capability boundary: this updater is never a metadata client.  Only
+  // the private cold-start coordinator may provide already authenticated
+  // bytes, binding the outer signed policy to this inner signed ZIP check.
+  if (options.authorizedColdStart !== true) {
+    return { prepared: false, needsFull: false, reason: '增量更新只允許由冷啟動簽章政策啟動。' };
+  }
+  if (!Buffer.isBuffer(options.zipBuffer) || options.zipBuffer.length === 0) {
+    return { prepared: false, needsFull: false, reason: '冷啟動簽章政策未提供更新檔案。' };
+  }
+  if (!parseStrictHash(options.expectedHash)) {
+    return { prepared: false, needsFull: false, reason: '冷啟動簽章政策未提供有效 SHA-256。' };
+  }
+  if (typeof options.latestVersion !== 'string' || !options.latestVersion.trim() ||
+      typeof options.outerPlanId !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,159}$/i.test(options.outerPlanId)) {
+    return { prepared: false, needsFull: false, reason: '冷啟動簽章政策缺少版本或計畫識別。' };
+  }
+
   const targetRoot = resolveInstallRoot(options);
   if (!targetRoot || !hostCanIncremental({ ...options, targetRoot })) {
     return { prepared: false, needsFull: true, reason: '目前安裝版本缺少安全 updater runtime，請先使用完整 Windows Installer 升級。' };
@@ -429,16 +446,11 @@ async function prepareUpdate(options = {}) {
   currentProgress = { active: true, phase: 'checking', message: '正在檢查更新', startedAt: Date.now(), updatedAt: Date.now() };
   let workRoot = null;
   try {
-    let buffer = options.zipBuffer;
-    let latestVersion = options.latestVersion || null;
-    if (!buffer) {
-      if (!config.updateCheckRepo) throw new Error('未設定更新來源');
-      ({ buffer, latestVersion } = await downloadLatestUpdate(config.updateCheckRepo, { fetchLatestRelease: options.fetchLatestRelease }));
-    } else if (options.expectedHash) {
-      setProgress('verifying-hash', '正在驗證 SHA-256');
-      const expected = parseStrictHash(options.expectedHash);
-      if (!expected || sha256Buffer(buffer) !== expected) throw new Error('更新檔 SHA-256 驗證失敗，正式目錄未變更');
-    }
+    const buffer = options.zipBuffer;
+    const latestVersion = options.latestVersion;
+    setProgress('verifying-hash', '正在驗證 SHA-256');
+    const expected = parseStrictHash(options.expectedHash);
+    if (sha256Buffer(buffer) !== expected) throw new Error('更新檔 SHA-256 驗證失敗，正式目錄未變更');
 
     setProgress('inspecting-zip', '正在檢查 ASAR 更新包');
     const inspection = inspectUpdateZip(buffer, { expectedVersion: latestVersion, currentVersion: options.currentVersion || APP_VERSION });

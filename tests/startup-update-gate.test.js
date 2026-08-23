@@ -89,6 +89,23 @@ test('optional 接受與 required gate 的分支都只能在 cold-start 決策�
   assert.deepStrictEqual(requiredActions, ['check', 'open-required-installer']);
 });
 
+test('incremental staging 或 runner 失敗時鎖回正常啟動，絕不在使用中途再試', async () => {
+  const actions = [];
+  const gate = createStartupUpdateGate({
+    request: async (message) => {
+      actions.push(message.action);
+      return message.action === 'check' ? { ok: true, kind: 'plan', plan: optionalPlan } : { ok: false };
+    },
+    promptOptional: async () => 'accept',
+  });
+  const result = await gate.run();
+  assert.strictEqual(result.phase, PHASES.RUNNING_LOCKED);
+  assert.strictEqual(result.decision, 'accept-rejected');
+  assert.deepStrictEqual(actions, ['check', 'accept-incremental']);
+  await gate.run();
+  assert.deepStrictEqual(actions, ['check', 'accept-incremental']);
+});
+
 function createLinkedPorts() {
   const child = new EventEmitter();
   const parentPort = new EventEmitter();

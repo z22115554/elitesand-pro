@@ -138,3 +138,15 @@ test('corrupt persistent replay storage fails closed before accepting a plan', a
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('accepted incremental plans can only enter the injected cold-start executor after policy check', async () => {
+  const calls = [];
+  const provider = providerWith(signedPlan(), {
+    incrementalExecutor: { accept: async (plan) => { calls.push(plan.planId); return { ok: true }; } },
+  });
+  const checked = await provider.check();
+  assert.strictEqual(checked.kind, 'plan');
+  assert.deepStrictEqual(await provider.acceptIncremental(checked.plan), { ok: true });
+  assert.deepStrictEqual(calls, [checked.plan.planId]);
+  assert.deepStrictEqual(await provider.acceptIncremental({ delivery: 'installer' }), { ok: false });
+});

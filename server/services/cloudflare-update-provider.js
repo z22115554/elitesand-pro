@@ -6,6 +6,7 @@ const { APP_VERSION, appUserAgent } = require('../utils/app-version');
 const { dataDir } = require('../utils/app-paths');
 const { verifyUpdatePlan } = require('./update-policy');
 const { createPersistentReplayGuard } = require('./update-policy-replay-store');
+const { createStartupIncrementalUpdateExecutor } = require('./startup-incremental-update');
 
 const UPDATE_CONTROL_ORIGIN = 'https://updates.elitesand.pro';
 const UPDATE_CONTROL_PATH = '/v1/plan';
@@ -89,9 +90,13 @@ function createCloudflareUpdateProvider({
   nowMs = () => Date.now(),
   connectTimeoutMs = CONNECT_TIMEOUT_MS,
   totalTimeoutMs = TOTAL_TIMEOUT_MS,
+  incrementalExecutor,
 } = {}) {
   const base = controlEndpoint(endpoint, { allowTestEndpoint });
   const canCheck = enabled === true && base !== null && platform === 'win32' && arch === 'x64' && (channel === 'stable' || channel === 'beta');
+  const executor = incrementalExecutor || createStartupIncrementalUpdateExecutor({
+    currentVersion, channel, platform, arch, publicKeys, replayGuard, nowMs,
+  });
 
   async function check() {
     if (!canCheck) return { kind: 'none' };
@@ -121,13 +126,14 @@ function createCloudflareUpdateProvider({
     }
   }
 
-  // P5 is read-only. These are private-protocol acknowledgements only; P7/P8
-  // replace their work paths after an outer signed plan has been accepted.
   return Object.freeze({
     enabled: canCheck,
     check,
     defer: async () => ({ ok: true }),
-    acceptIncremental: async () => ({ ok: true }),
+    acceptIncremental: async (plan) => {
+      if (!canCheck || plan?.delivery !== 'incremental') return { ok: false };
+      return executor.accept(plan);
+    },
     openRequiredInstaller: async () => ({ ok: true }),
   });
 }
