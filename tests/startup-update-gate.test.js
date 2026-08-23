@@ -9,6 +9,7 @@ const { attachStartupUpdateCoordinator, createFakeStartupUpdateProvider } = requ
 
 const optionalPlan = Object.freeze({ planId: 'optional-plan-1', targetVersion: '1.0.1', urgency: 'optional', delivery: 'incremental' });
 const requiredPlan = Object.freeze({ planId: 'required-plan-1', targetVersion: '2.0.0', urgency: 'required', delivery: 'installer' });
+const requiredIncrementalPlan = Object.freeze({ planId: 'required-incremental-plan-1', targetVersion: '1.0.1', urgency: 'required', delivery: 'incremental' });
 
 function makeClock() {
   let tick = Date.parse('2026-08-23T00:00:00Z');
@@ -88,6 +89,21 @@ test('optional 接受與 required gate 的分支都只能在 cold-start 決策�
   assert.strictEqual(requiredResult.phase, PHASES.EXIT_FOR_INSTALLER_OR_UPDATER);
   assert.strictEqual(required.getAcceptedPlan().planId, requiredPlan.planId);
   assert.deepStrictEqual(requiredActions, ['check', 'open-required-installer']);
+});
+
+test('required incremental 不提供 defer，僅能在冷啟動接受或結束', async () => {
+  const actions = [];
+  const gate = createStartupUpdateGate({
+    request: async (message) => {
+      actions.push(message.action);
+      return message.action === 'check' ? { ok: true, kind: 'plan', plan: requiredIncrementalPlan } : { ok: true };
+    },
+    promptRequired: async () => 'open',
+  });
+  const result = await gate.run();
+  assert.strictEqual(result.phase, PHASES.EXIT_FOR_INSTALLER_OR_UPDATER);
+  assert.strictEqual(result.decision, 'accepted-required');
+  assert.deepStrictEqual(actions, ['check', 'accept-incremental']);
 });
 
 test('incremental staging 或 runner 失敗時鎖回正常啟動，絕不在使用中途再試', async () => {

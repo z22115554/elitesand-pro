@@ -125,6 +125,30 @@ test('版本、時間、枚舉、hash、size 與 host 全部有明確拒絕條�
   assert.throws(() => policy.signUpdatePlan(badSize, TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /size/);
 });
 
+test('required delivery 只允許簽署的 major-release Installer 或 owner-forced，且舊版本 policy 不會套到新版', () => {
+  const ownerForcedIncremental = signedPlan({ urgency: 'required', reasonCode: 'owner-forced' });
+  assert.equal(verify(ownerForcedIncremental).ok, true);
+
+  const majorInstaller = signedPlan({
+    delivery: 'installer',
+    urgency: 'required',
+    reasonCode: 'major-release',
+    artifact: null,
+    installer: {
+      url: 'https://github.com/z22115554/elitesand-pro/releases/download/v1.0.0/Elitesand.Pro.Setup.1.0.0.exe',
+      sha256: 'b'.repeat(64),
+      size: 123456,
+    },
+  });
+  assert.equal(verify(majorInstaller).ok, true);
+
+  assert.throws(() => policy.signUpdatePlan(unsignedPlan({ urgency: 'required', reasonCode: 'major-release' }), TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /major-release 必須使用 Installer/);
+  assert.throws(() => policy.signUpdatePlan(unsignedPlan({ urgency: 'optional', reasonCode: 'owner-forced' }), TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /owner-forced 必須是 required/);
+  assert.match(policy.verifyUpdatePlan(ownerForcedIncremental, {
+    currentVersion: '1.0.0', channel: 'stable', platform: 'win32', arch: 'x64', publicKeys: TEST_KEYS, nowMs: NOW_MS,
+  }).reason, /fromVersion/);
+});
+
 test('replay guard 僅接受遞增 issuedAt，拒絕舊 policy 或同時間不同 plan', () => {
   const guard = policy.createInMemoryReplayGuard();
   assert.equal(verify(signedPlan(), { replayGuard: guard }).ok, true);
