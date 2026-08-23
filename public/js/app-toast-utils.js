@@ -171,6 +171,55 @@
     }
   }
 
+  // ═══════════════════════════════════════════
+  // 更新檢查（GitHub Releases）
+  // ═══════════════════════════════════════════
+  // 只讀 /api/app-update/plan 並導向完整 Windows Installer；程式內增量更新已停用。
+  (function checkForUpdate() {
+    if (!dom.updateBanner) return;
+
+    const DISMISS_KEY = 'vk-update-dismissed-version';
+    let plan = null;
+
+    function render() {
+      if (!plan || !plan.hasUpdate || !plan.latestVersion) { dom.updateBanner.hidden = true; return; }
+
+      let dismissed = null;
+      try { dismissed = localStorage.getItem(DISMISS_KEY); } catch (e) { /* 靜默 */ }
+      if (dismissed === plan.latestVersion) { dom.updateBanner.hidden = true; return; }
+
+      const updateUrl = plan.downloadUrl || plan.releaseUrl;
+      if (dom.updateBannerLink) {
+        dom.updateBannerLink.hidden = !updateUrl;
+        if (updateUrl) dom.updateBannerLink.href = updateUrl;
+      }
+      if (!updateUrl) { dom.updateBanner.hidden = true; return; }
+
+      if (dom.updateBannerVersion) dom.updateBannerVersion.textContent = 'v' + plan.latestVersion;
+      dom.updateBanner.hidden = false;
+    }
+
+    function refreshPlan() {
+      fetch('/api/app-update/plan')
+        .then((r) => r.json())
+        .then((data) => { plan = data; render(); })
+        .catch(() => {
+          // 離線或伺服器尚未支援此 API：靜默忽略，不影響面板使用
+        });
+    }
+
+    if (dom.updateBannerDismiss) {
+      dom.updateBannerDismiss.addEventListener('click', () => {
+        dom.updateBanner.hidden = true;
+        if (plan?.latestVersion) {
+          try { localStorage.setItem(DISMISS_KEY, plan.latestVersion); } catch (e) { /* 靜默 */ }
+        }
+      });
+    }
+
+    refreshPlan();
+  })();
+
   // 供其他所有模組呼叫
   AppShared.showToast = showToast;
 })();

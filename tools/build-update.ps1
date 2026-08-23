@@ -8,18 +8,6 @@
 
 $ErrorActionPreference = "Stop"
 
-function Get-Sha256Hex {
-  param([Parameter(Mandatory = $true)][string]$LiteralPath)
-  $stream = [System.IO.File]::OpenRead($LiteralPath)
-  $hasher = [System.Security.Cryptography.SHA256]::Create()
-  try {
-    return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
-  } finally {
-    $hasher.Dispose()
-    $stream.Dispose()
-  }
-}
-
 # Legacy schema-v1 regression anchor only. v2 never stages EULA.txt as a loose
 # root file because EULA now lives inside the integrity-protected app.asar.
 # if ($BaselineAcceptsEula) {
@@ -252,7 +240,7 @@ foreach ($rel in $PayloadRelativePaths) {
   $ManifestFiles += [ordered]@{
     path = $rel
     size = [int64]$item.Length
-    sha256 = Get-Sha256Hex -LiteralPath $destination
+    sha256 = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
   }
 }
 
@@ -316,7 +304,7 @@ try {
   $Archive.Dispose()
 }
 
-$Hash = Get-Sha256Hex -LiteralPath $ZipPath
+$Hash = (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
 [System.IO.File]::WriteAllText($HashPath, $Hash, [System.Text.Encoding]::ASCII)
 if ((Get-Content -LiteralPath $HashPath -Raw -Encoding ASCII) -notmatch '^[a-f0-9]{64}$') {
   throw "Generated SHA-256 file is not exactly 64 hexadecimal characters."

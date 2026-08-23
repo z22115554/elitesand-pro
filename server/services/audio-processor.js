@@ -191,6 +191,11 @@ function buildTrackFilename(artist, title, ext) {
 
 // ─── 標題解析干擾詞過濾表 ───
 const NOISE_PATTERNS = [
+  // 括號內混雜多個宣傳詞（例如「(官方完整版MV)」＝官方＋完整版＋MV 疊在一起）時，
+  // 下面逐一比對的規則只咬得到其中一個詞，另一個詞跟落單的括號會殘留變成尾綴垃圾
+  // （見踩坑：「月亮惹的禍 Troubled By The Moon )」多出一個沒配對的右括號）。
+  // 先把整個「含宣傳詞的括號」整組吃掉，後面逐一比對的規則才不會咬到只剩半個括號。
+  /[（(][^（）()]{0,24}(?:官方|完整版|精華版|精华版|首播|MV|音樂錄影帶|音乐录影带)[^（）()]{0,24}[）)]/gi,
   // 官方相關（中英日）
   /\(?\s*Official\s*(Music\s*)?Video\s*\)?/gi,
   /\(?\s*Official\s*(Audio|Lyric|Visualizer)\s*Video?\s*\)?/gi,
@@ -280,9 +285,7 @@ function cleanIdentityPart(value, kind = 'title') {
       .replace(/\s*(?:主題曲|主题曲|片頭曲|片头曲|片尾曲|插曲)\s*$/i, '')
       .trim();
   } else {
-    const knownPrefix = KNOWN_ARTISTS_RAW
-      .filter((name) => text.toLowerCase().startsWith(name.toLowerCase()))
-      .sort((a, b) => b.length - a.length)[0];
+    const knownPrefix = matchLeadingKnownArtist(text);
     if (knownPrefix && /^[、,，]/.test(text.slice(knownPrefix.length))) text = knownPrefix;
   }
   return compactSpaces(text);
@@ -299,7 +302,7 @@ const KNOWN_ARTISTS_RAW = [
   '珂拉琪 Collage', '珂拉琪',
   '孫燕姿', '鄧紫棋', '徐佳瑩', '盧廣仲', '陶喆', '伍佰', '楊宗緯', '張惠妹', '莫文蔚',
   '劉若英', '動力火車', 'A-Lin', '理想混蛋', '張碧晨', '周興哲', '艾薇', '陳壹千', '張宇',
-  '黃小琥', '王艷薇', '阿冗', '蘇打綠', '曾瑋中', '張遠',
+  '黃小琥', '王艷薇', '阿冗', '蘇打綠', '曾瑋中', '張遠', '王菲', '王靖雯', '蘇慧倫',
   'YOASOBI', 'ヨルシカ', 'ずっと真夜中でいいのに。', 'ZUTOMAYO', 'ヒグチアイ', 'Ado', 'Aimer', 'LiSA',
   '米津玄師', 'Kenshi Yonezu', 'King Gnu', 'Eve', 'Reol', 'れをる', 'majiko', 'みきとP', 'DECO*27',
   'sasakure.UK', 'Vaundy', 'tuki.', 'imase', 'yama', 'ヨアソビ', 'Official髭男dism', 'ヒゲダン',
@@ -319,10 +322,14 @@ const KNOWN_ARTISTS_RAW = [
   'L\'Arc～en～Ciel', 'GLAY', 'X JAPAN', 'flumpool', 'いきものがかり', 'ポルノグラフィティ',
   'Vaundy', 'Saucy Dog', 'マカロニえんぴつ', 'optical_frame', 'r-906', 'Misumi', 'koresawa',
 ];
-const KNOWN_ARTISTS = new Set(KNOWN_ARTISTS_RAW.map(s => s.toLowerCase().replace(/\s+/g, '')));
+// 連字號/空白視為同義字元：真實標題常把「A-Lin」寫成「A Lin」，反之亦然，
+// 一律歸一化掉才比對，否則名單裡明明有這個歌手卻因為標點不同而比對不到。
+const ARTIST_KEY_NOISE_RE = /[\s\-–—]+/g;
+const artistKey = (s) => String(s || '').toLowerCase().replace(ARTIST_KEY_NOISE_RE, '');
+const KNOWN_ARTISTS = new Set(KNOWN_ARTISTS_RAW.map(artistKey));
 function isKnownArtist(name) {
   if (!name) return false;
-  const k = String(name).toLowerCase().replace(/\s+/g, '');
+  const k = artistKey(name);
   if (KNOWN_ARTISTS.has(k)) return true;
   // 寬鬆比對：清單名稱是否為輸入的子字串（處理「歌手 feat. X」等）
   for (const a of KNOWN_ARTISTS) {
@@ -332,6 +339,28 @@ function isKnownArtist(name) {
     if (k.length >= 5 && a.includes(k)) return true;
   }
   return false;
+}
+
+// 找出文字開頭是否為已知歌手名（連字號／空白同義，例如「A-Lin」也要吃得到「A Lin」），
+// 回傳原文字中對應的實際長度，方便呼叫端用 text.slice(len) 取得剩餘部分。
+const ARTIST_PREFIX_REGEX_CACHE = new Map();
+function artistPrefixRegex(rawName) {
+  let re = ARTIST_PREFIX_REGEX_CACHE.get(rawName);
+  if (!re) {
+    const escaped = rawName.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\s\-–—]+/g, '[\\s\\-–—]+');
+    re = new RegExp('^' + escaped);
+    ARTIST_PREFIX_REGEX_CACHE.set(rawName, re);
+  }
+  return re;
+}
+function matchLeadingKnownArtist(text) {
+  const lower = String(text || '').toLowerCase();
+  let best = null;
+  for (const rawName of KNOWN_ARTISTS_RAW) {
+    const m = lower.match(artistPrefixRegex(rawName));
+    if (m && (!best || m[0].length > best.length)) best = m[0];
+  }
+  return best ? text.slice(0, best.length) : null;
 }
 
 function looksLikeArtist(value) {
@@ -346,6 +375,10 @@ function looksLikeArtist(value) {
 
 class AudioProcessor {
   static setProgressEmitter(emitter) { this._progressEmitter = emitter; }
+  // 本地上傳的 MP3 常是從歌詞網站/盜版聚合站下載，檔案自帶的 ID3 標籤本身就可能把
+  // 歌手/歌名寫反（來源端的錯，不是我們解析錯）。上傳路由直接信任 ID3，完全沒有
+  // 交叉檢查；曝露這個方法讓呼叫端能比照 parseVideoTitle 內部同款的已知歌手校正。
+  static isKnownArtistName(name) { return isKnownArtist(name); }
   static _runQueuedForTest(job, priority = 'batch', signal = null) { return runQueued(job, priority, signal); }
   static _metadataPrintTemplateForTest() { return YTDLP_METADATA_PRINT; }
   static _downloadStrategyPlanForTest() {
@@ -1194,10 +1227,13 @@ class AudioProcessor {
       }
     }
 
-    // Title by Artist
+    // Title by Artist——但英文歌名本身常常就含有介系詞 by（例如「Troubled By The Moon」），
+    // 這時「by」右邊接的是歌名的一部分而不是真正的歌手，必須先確認右邊看起來像歌手名
+    // （已知歌手 / feat. 等）才採信，否則整個「歌手 - 歌名 By XXX」都會被這條規則吃掉、
+    // 蓋掉後面本來能靠連字號正確辨識的 dashMatch。
     if (!title) {
       const byMatch = cleaned.match(/^(.+?)\s+by\s+(.+)$/i);
-      if (byMatch) {
+      if (byMatch && looksLikeArtist(byMatch[2].trim())) {
         title = byMatch[1].trim();
         artist = byMatch[2].trim();
         confidence = 0.9;
@@ -1241,18 +1277,18 @@ class AudioProcessor {
 
     if (!title) {
       // 少數官方頻道省略所有分隔符：「蕭煌奇 只能勇敢」。僅在命中完整歌手名時拆分。
-      const normalized = cleaned.toLowerCase();
-      const knownPrefix = KNOWN_ARTISTS_RAW
-        .filter((name) => normalized.startsWith(name.toLowerCase() + ' '))
-        .sort((a, b) => b.length - a.length)[0];
+      // 名字後面必須接空白才算邊界完整（避免「周杰倫」誤吃到「周杰倫粉絲團」）。
+      const matchBoundaryPrefix = (text) => {
+        const m = matchLeadingKnownArtist(text);
+        return m && /^\s/.test(text.slice(m.length)) ? m : null;
+      };
+      const knownPrefix = matchBoundaryPrefix(cleaned);
       if (knownPrefix) {
         const artists = [cleaned.slice(0, knownPrefix.length).trim()];
         let remainder = cleaned.slice(knownPrefix.length).trim();
         // 無分隔符的多人伴奏：「周杰倫 張惠妹 不該」。連續剝離已知歌手，最後才是歌名。
         while (remainder) {
-          const next = KNOWN_ARTISTS_RAW
-            .filter((name) => remainder.toLowerCase().startsWith(name.toLowerCase() + ' '))
-            .sort((a, b) => b.length - a.length)[0];
+          const next = matchBoundaryPrefix(remainder);
           if (!next) break;
           artists.push(remainder.slice(0, next.length).trim());
           remainder = remainder.slice(next.length).trim();

@@ -16,8 +16,6 @@ const path = require('path');
 const { projectRoot, dataDir, downloadsDir } = require('./utils/app-paths');
 const { createLogger, shutdown: shutdownLogger } = require('./utils/logger');
 const { attachParentShutdown } = require('./utils/parent-shutdown');
-const { attachStartupUpdateCoordinator } = require('./services/startup-update-coordinator');
-const { createCloudflareUpdateProvider } = require('./services/cloudflare-update-provider');
 const log = createLogger('Server');
 const config = require('./utils/load-config');
 const { isAllowedSocketRequest, isAllowedCorsOrigin } = require('./utils/socket-origin');
@@ -141,6 +139,7 @@ const SIDE_EFFECT_GET_PREFIXES = [
   '/api/ytdlp/check',      // ?force=1 強制外連 GitHub
   '/api/announcements',    // ?force=1 強制抓遠端公告
   '/api/update-check',     // ?force=1 強制外連
+  '/api/app-update/plan',  // 外連 GitHub Releases
 ];
 app.use((req, res, next) => {
   const protectedRequest = req.path.startsWith('/api/')
@@ -389,13 +388,6 @@ process.on('SIGTERM', () => { gracefulShutdown({ reason: 'SIGTERM', exitCode: 0 
 attachParentShutdown({
   onShutdown: () => gracefulShutdown({ reason: 'parent-message', exitCode: 0 }),
   onError: (err) => log.error(`Parent shutdown failed: ${err.message}`, err),
-});
-// Electron's update gate talks to this server only through the utility-process
-// parentPort. This has no HTTP/Socket.io surface and the P4 provider is an
-// offline fake until the later, separately-gated Cloudflare wiring phase.
-attachStartupUpdateCoordinator({
-  provider: createCloudflareUpdateProvider(),
-  onError: (err) => log.error(`Startup update coordinator failed: ${err.message}`, err),
 });
 
 // ─── Stream Deck / 全域快捷鍵 HTTP API ───

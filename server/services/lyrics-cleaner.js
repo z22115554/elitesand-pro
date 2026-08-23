@@ -17,7 +17,7 @@
 // 真實的製作人員名單常把兩個角色用「/」合寫在冒號前（例如「混音/母带：」「吉他编写/吉他：」），
 // 不是單一關鍵字後面緊接冒號，所以不能用「^關鍵字\s*[:：]」硬性錨定——改成「冒號前的短標籤
 // 內含任一關鍵字」（見 isCreditLine），這裡只需要關鍵字本身的清單，不含冒號錨點。
-const CREDIT_KEYWORDS_RE = /(作詞|作词|作曲|編曲|编曲|製作人|制作人|製作|制作|出品|出品人|發行|发行|企劃|企划|企宣|統籌|统筹|監製|监制|監修|监修|混音|母帶|母带|和聲|和声|和音|合聲|合声|配唱|配器|配樂|配乐|吉他|guitar|貝斯|贝斯|bass|鼓|drums?|鍵盤|键盘|piano|鋼琴|钢琴|弦樂|弦乐|strings|producer|produced\s*by|composer|composed\s*by|lyricist|written\s*by|arrang(?:ed|er|ement)|arranged\s*by|vocals?|演唱|原唱|主唱|歌手|original\s*artist|錄音|录音|recording|mix(?:ing|ed\s*by)?|master(?:ing|ed\s*by)?|錄音室|录音室|studio|label|唱片公司|聯合出品|联合出品|改編製作|改编制作|音樂營銷|音乐营销|營銷|营销|詞|词|曲|編|编|chorus|backing\s*vocals?|A\s*&\s*R|artwork|design|director|video|攝影|摄影|視覺|视觉|美術|美术|鳴謝|鸣谢|特別感謝|特别感谢|OP|SP|ISRC)/i;
+const CREDIT_KEYWORDS_RE = /(作詞|作词|作曲|編曲|编曲|製作人|制作人|製作|制作|出品|出品人|發行|发行|企劃|企划|企宣|策劃|策划|推廣|推广|統籌|统筹|監製|监制|監修|监修|混音|母帶|母带|和聲|和声|和音|合聲|合声|合音|人聲|人声|配唱|配器|配樂|配乐|吉他|guitar|貝斯|贝斯|bass|鼓|drums?|打擊樂|打击乐|percussion|program(?:ming)?|鍵盤|键盘|piano|鋼琴|钢琴|弦樂|弦乐|strings|producer|produced\s*by|composer|composed\s*by|lyricist|lyrics\s*by|written\s*by|arrang(?:ed|er|ement)|arranged\s*by|vocals?|演唱|原唱|主唱|歌手|original\s*artist|錄音|录音|recording|mix(?:ing|ed\s*by)?|master(?:ing|ed\s*by)?|錄音室|录音室|studio|label|唱片公司|聯合出品|联合出品|改編製作|改编制作|音樂營銷|音乐营销|營銷|营销|總監|总监|設計|设计|詞|词|曲|編|编|chorus|backing\s*vocals?|A\s*&\s*R|artwork|design|director|video|攝影|摄影|視覺|视觉|美術|美术|鳴謝|鸣谢|特別感謝|特别感谢|OP|SP|ISRC)/i;
 // 冒號前標籤太長就不算（避免把「今天的天氣：真好」這種一般語句誤判成製作資訊）
 // 中英雙語角色名會很長，例如「數位發行 Digital Release」「錄音師 Recording Engineer」。
 // 只在首尾 credit block 使用此上限，放寬到 36 仍不會掃描正文中段。
@@ -27,8 +27,10 @@ const CREDIT_LABEL_MAX_LEN = 36;
 // compact 格式只有在下一行確定是 credit 時才移除，避免把正常歌詞中的連字號誤判成標題。
 const HEADER_RE = /^.{1,80}\s*[-–—－]\s*.{1,80}$/;
 
-// 版權/授權聲明整行（通常用【】或［］包住，不一定有冒號，例如「【本歌曲已获得原词曲版权方授权】」）
-const RIGHTS_NOTICE_RE = /^[【\[［].{0,60}(授權|授权|版權|版权|copyright|保留一切權利|保留一切权利)[^】\]］]{0,20}[】\]］]$/i;
+// 版權/授權聲明整行：常見兩種形式——用【】/［］/() 包住（例如「【本歌曲已获得原词曲版权方授权】」
+// 「(未经著作权人许可，不得翻唱、翻录或使用)」），或完全不加框直接一整行（例如「本音乐作品已获得正版授权」）。
+// 括號是否成對在此不苛求（寧可少量誤放行，也不要漏掉沒配對括號的真實聲明）。
+const RIGHTS_NOTICE_RE = /^[【\[［(（]?.{0,70}(未經(?:著作權人|版權方)?許可|未经(?:著作权人|版权方)?许可|已獲得.{0,12}授權|已获得.{0,12}授权|正版授權|正版授权|著作權|著作权|版權所有|版权所有|保留(?:一切|所有)?權利|保留(?:一切|所有)?权利|授權|授权|版權|版权|copyright|all\s+rights\s+reserved)[^\n]{0,30}[】\]］)）]?$/i;
 const COPYRIGHT_LINE_RE = /^(?:©|℗|\(c\)|\(p\)|copyright\b|all\s+rights\s+reserved\b).{0,120}$/i;
 
 // 整行就是「純演奏 / 無歌詞」之類的提示（非歌詞）
@@ -99,7 +101,9 @@ function cleanLyrics(lines, opts = {}) {
     stripInstrumental: false,
     dedupe: true,
     removeEmpty: true,
-    edge: 20,
+    // 大編制製作（弦樂/管樂/多位樂手各自掛名）名單可以輕鬆超過 20 行——實測「為愛癡狂」
+    // 單首就有 21 行——20 太容易被砍到一半就停手，改成 40 留更多餘裕，仍是有界防呆值。
+    edge: 40,
     ...opts,
   };
 
@@ -128,12 +132,26 @@ function cleanLyrics(lines, opts = {}) {
   // 內容被誤判成連續製作資訊而砍過頭。
   if (o.stripCredits && out.length >= 2) {
     const maxRun = o.edge;
+    const isBlank = (l) => l && typeof l.text === 'string' && l.text.trim() === '';
     let start = 0;
     // 酷狗常先放「歌名-歌手」，下一行才開始 credit。只有兩者連續出現才把標題一起清掉。
     if (isHeaderLine(out[0], 0) && isCreditLine(out[1], 1)) start = 1;
-    while (start < out.length && start < maxRun && isCreditLine(out[start], start)) start++;
+    // 真實名單常用空白行分隔每個角色（「作曲：X」空一行「編曲：Y」），空白行本身
+    // 不算 credit，但不該讓它中止「連續符合」——否則名單稍長、夾了空行就會在
+    // 半途停手，漏砍後段（見踩坑：弦樂/和聲/混音/母帶/製作團隊被擋在空行後面）。
+    // 做法：掃描時跳過空白行，但只有在空白之後仍接得上 credit 行才一併吃掉；
+    // 一旦遇到非空白且非 credit 的正文，立刻停止（含期間跳過的空白不倒退）。
+    while (start < out.length && start < maxRun) {
+      if (isBlank(out[start])) { start++; continue; }
+      if (isCreditLine(out[start], start)) { start++; continue; }
+      break;
+    }
     let end = out.length;
-    while (end > start && (out.length - end) < maxRun && isCreditLine(out[end - 1], end - 1)) end--;
+    while (end > start && (out.length - end) < maxRun) {
+      if (isBlank(out[end - 1])) { end--; continue; }
+      if (isCreditLine(out[end - 1], end - 1)) { end--; continue; }
+      break;
+    }
     if (start > 0 || end < out.length) {
       const filtered = out.slice(start, end);
       if (filtered.length > 0) out = filtered; // 保險：整首被砍光則維持原樣

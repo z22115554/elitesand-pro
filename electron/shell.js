@@ -6,7 +6,6 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
-const { validateUpdatePlanShape } = require('../server/services/update-policy');
 
 const DEFAULT_PORT = 3000;
 const START_TIMEOUT_MS = 15000;
@@ -129,35 +128,6 @@ function isProjectReleaseUrl(rawUrl) {
       && url.pathname.startsWith('/z22115554/elitesand-pro');
   } catch (_) {
     return false;
-  }
-}
-
-// A plan reaches Electron only through the private coordinator after its
-// signature has been checked there. Re-check the complete serialized shape at
-// the external-launch boundary so no renderer, URL, or generic release page
-// can ever become an Installer handoff.
-function isRequiredInstallerHandoffPlan(plan) {
-  return validateUpdatePlanShape(plan) === null
-    && plan.delivery === 'installer'
-    && plan.urgency === 'required'
-    && (plan.reasonCode === 'major-release' || plan.reasonCode === 'owner-forced');
-}
-
-async function runRequiredInstallerHandoff({ plan, openExternal, prompt } = {}) {
-  if (!isRequiredInstallerHandoffPlan(plan) || typeof openExternal !== 'function' || typeof prompt !== 'function') return false;
-  // Opening an Installer never exits the app. The next native gate gives the
-  // user the explicit Exit choice when they are ready for the Installer to
-  // replace the running files; the main panel remains locked throughout.
-  let openFailed = false;
-  while (true) {
-    try {
-      await openExternal(plan.installer.url);
-      openFailed = false;
-    } catch (_) {
-      openFailed = true;
-    }
-    const choice = await prompt({ plan, openFailed });
-    if (choice !== 'open') return true;
   }
 }
 
@@ -286,10 +256,6 @@ function createElectronShell({
   }
 
   const { SHUTDOWN_MESSAGE } = require(path.join(projectRoot, 'server', 'utils', 'parent-shutdown'));
-  const { createStartupUpdateGate, PHASES: UPDATE_PHASES } = require('./startup-update-gate');
-  const { createStartupUpdateRequester } = require('./startup-update-requester');
-  const { createStartupUpdateDeferStore } = require('./startup-update-defer-store');
-  const { format: formatUpdateText, getCatalog: getUpdateCatalog } = require('./startup-update-i18n');
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
   const preload = path.join(shellRoot, 'electron', 'preload.js');
   const isSpoutExperiment = processObject.env.ELITESAND_SPOUT_EXPERIMENT === '1';
@@ -310,8 +276,6 @@ function createElectronShell({
   let shouldShowPortableDataMigrationNotice = false;
   let spoutDisplayOutput = null;
   let spoutOutputOptions = null;
-  let startupUpdateGate = null;
-  let startupUpdateRequester = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
 
   function resolveExperimentalSpoutNumber(name, fallback) {
@@ -535,65 +499,6 @@ function createElectronShell({
     shouldShowPortableDataMigrationNotice = false;
   }
 
-  function getNativeUpdateCatalog() {
-    return getUpdateCatalog(app.getLocale?.() || 'zh-TW');
-  }
-
-  async function showNativeUpdateDialog(options) {
-    // Cold-start decisions have no BrowserWindow yet. Use Electron's native
-    // dialog directly, never an HTML preflight window or renderer modal.
-    if (typeof dialog.showMessageBox === 'function') return dialog.showMessageBox(options);
-    if (typeof dialog.showMessageBoxSync === 'function') return { response: dialog.showMessageBoxSync(options) };
-    return { response: options.cancelId ?? options.defaultId ?? 0 };
-  }
-
-  async function promptOptionalUpdate(plan) {
-    const text = getNativeUpdateCatalog();
-    const result = await showNativeUpdateDialog({
-      type: 'info',
-      title: text.title,
-      message: formatUpdateText(text.optionalMessage, { version: plan.targetVersion }),
-      detail: text.optionalDetail,
-      buttons: [text.updateNow, text.defer],
-      defaultId: 1,
-      cancelId: 1,
-      noLink: true,
-    });
-    return result?.response === 0 ? 'accept' : 'defer';
-  }
-
-  async function promptRequiredUpdate(plan, { openFailed = false } = {}) {
-    const text = getNativeUpdateCatalog();
-    const isInstaller = plan.delivery === 'installer';
-    const result = await showNativeUpdateDialog({
-      type: 'warning',
-      title: text.title,
-      message: text.requiredMessage,
-      detail: openFailed ? `${text.requiredDetail}\n\n${text.requiredInstallerOpenFailed}` : text.requiredDetail,
-      buttons: [isInstaller ? text.openInstaller : text.updateNow, text.exit],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    });
-    return result?.response === 0 ? 'open' : 'exit';
-  }
-
-  async function runStartupUpdateGate() {
-    const eligible = app.isPackaged && ownsServer && !isSpoutExperiment;
-    if (!eligible) {
-      startupUpdateGate = createStartupUpdateGate({ request: async () => ({ ok: false }) });
-      return startupUpdateGate.lock(ownsServer ? 'non-production-shell' : 'reused-server');
-    }
-    startupUpdateRequester = createStartupUpdateRequester({ child: serverProcess });
-    startupUpdateGate = createStartupUpdateGate({
-      request: startupUpdateRequester.request,
-      promptOptional: promptOptionalUpdate,
-      promptRequired: promptRequiredUpdate,
-      deferStore: createStartupUpdateDeferStore(app.getPath('userData'), { fsImpl }),
-    });
-    return startupUpdateGate.run({ eligible: true });
-  }
-
   async function createWindow() {
     const window = new BrowserWindow({
       width: 1280,
@@ -631,26 +536,6 @@ function createElectronShell({
         app.relaunch?.();
         // Do not use app.exit(): it bypasses before-quit, leaving the owned
         // Node server without its graceful shutdown and clean-session marker.
-        app.quit?.();
-        return true;
-      });
-      ipcMain.handle('elitesand:restart-for-update-check', async (event) => {
-        if (event?.sender !== window.webContents) return false;
-        const text = getNativeUpdateCatalog();
-        const result = await showNativeUpdateDialog({
-          type: 'question',
-          title: text.title,
-          message: text.restartMessage,
-          detail: text.restartDetail,
-          buttons: [text.restart, text.cancel],
-          defaultId: 1,
-          cancelId: 1,
-          noLink: true,
-        });
-        if (result?.response !== 0) return false;
-        app.relaunch?.();
-        // Let before-quit own the server shutdown. A renderer can only ask for
-        // this after the native confirmation above; it cannot start a check.
         app.quit?.();
         return true;
       });
@@ -872,8 +757,6 @@ function createElectronShell({
 
   async function shutdown() {
     await stopSpoutDisplayOutput();
-    startupUpdateRequester?.close?.();
-    startupUpdateRequester = null;
     await shutdownOwnedServer();
     stopPowerSaveBlocker();
   }
@@ -940,31 +823,13 @@ function createElectronShell({
     startPowerSaveBlocker();
     try {
       const server = await startServerOrReuseExisting();
-      const updateSession = await runStartupUpdateGate();
-      if (updateSession.decision === 'required-installer-opened') {
-        const installerPlan = startupUpdateGate?.getAcceptedPlan?.();
-        const exitedByUser = await runRequiredInstallerHandoff({
-          plan: installerPlan,
-          openExternal: (url) => shell.openExternal(url),
-          prompt: ({ plan, openFailed }) => promptRequiredUpdate(plan, { openFailed }),
-        });
-        if (!exitedByUser) throw new Error('已拒絕不受信任的必要 Installer 交接。');
-        await shutdown();
-        app.exit(0);
-        return { started: false, reason: 'required-installer-exit', ...server, updateSession };
-      }
-      if (updateSession.phase !== UPDATE_PHASES.RUNNING_LOCKED) {
-        await shutdown();
-        app.exit(0);
-        return { started: false, reason: 'startup-update-exit', ...server, updateSession };
-      }
       serverReady = true;
       showPortableDataMigrationNotice();
       createTray();
       await startExperimentalSpoutDisplayOutput();
       await createWindow();
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
-      return { started: true, ...server, updateSession };
+      return { started: true, ...server };
     } catch (error) {
       showStartupError(error);
       await shutdown();
@@ -984,7 +849,6 @@ function createElectronShell({
       serverReady,
       hasWindow: !!mainWindow,
       serverPid: serverProcess?.pid || null,
-      updateSession: startupUpdateGate?.getSession?.() || null,
       spout: getSpoutOutputStatus(),
     }),
   };
@@ -1004,12 +868,10 @@ module.exports = {
   ensureRuntimePaths,
   isTrustedLocalUrl,
   isProjectReleaseUrl,
-  isRequiredInstallerHandoffPlan,
   isTwitchVerificationUrl,
   isPrompterUrl,
   probeHealth,
   waitForExit,
   verifyPackagedResourceIntegrity,
-  runRequiredInstallerHandoff,
   createElectronShell,
 };

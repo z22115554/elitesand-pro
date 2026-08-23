@@ -13,8 +13,15 @@
  * 對外介面與舊版相同（attach/load/play/pause/stop/seek/getTime/getDuration/isPlaying/isReady/
  * setPitch/setTempo/onTime/onEnded），時間一律以「原曲秒數」表示（worklet 回報 sourcePosition）。
  * 任一步驟失敗（worklet 不支援/decode 失敗）一律回傳 false，呼叫端降級回 <audio>+Tone。
+ *
+ * 2026-08-23：singleton → factory。AI 分離播放模式要讓人聲/伴奏各自獨立變調變速（兩軌各跑
+ * 一份 WSOLA，共用同一個 AudioContext、各自的 AudioWorkletNode——worklet processor 本體
+ * 完全不用改，AudioWorkletNode 本來就支援同一個 context 掛多個獨立 instance，只有這層 JS
+ * wrapper 原本是模組級單例，需要能生第二份）。`window.SoundTouchEngine` 仍是預設那一份，
+ * 一般（非分離）單軌播放的所有既有呼叫點完全不用改；分離播放模式再呼叫
+ * `window.createSoundTouchEngine()` 額外生一份給人聲用。
  */
-const SoundTouchEngine = (() => {
+function createSoundTouchEngine() {
   let ctx = null;
   let outNode = null;            // 呼叫端提供的接點（音量鏈入口）
   let moduleAdded = false;
@@ -215,6 +222,10 @@ const SoundTouchEngine = (() => {
     ensureModule, attach, load, play, pause, stop, dispose, seek,
     getTime, getDuration, isPlaying, isReady, setPitch, setTempo, onTime, onEnded,
   };
-  try { window.SoundTouchEngine = api; } catch (e) {}
   return api;
-})();
+}
+
+try {
+  window.createSoundTouchEngine = createSoundTouchEngine;
+  window.SoundTouchEngine = createSoundTouchEngine();
+} catch (e) { /* 靜默 */ }

@@ -31,9 +31,6 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
   restartAfterMediaMigration() {
     return ipcRenderer.invoke('elitesand:restart-after-media-migration');
   },
-  restartForUpdateCheck() {
-    return ipcRenderer.invoke('elitesand:restart-for-update-check');
-  },
   // A fixed Spout surface only. Do not expose a generic IPC bridge or allow
   // renderer-controlled channels/filesystem access.
   spout: Object.freeze({

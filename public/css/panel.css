@@ -379,9 +379,27 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .btn-play:active { transform: scale(0.97); }
 .btn-step { width: 44px; height: 44px; border-radius: 50%; background: transparent; border: none; color: var(--text-dim); display: inline-flex; align-items: center; justify-content: center; transition: color 0.12s, background 0.12s; }
 .btn-step:hover { color: var(--text); background: var(--bg-hover); }
-.np-volume { display: flex; align-items: center; gap: 10px; flex: 1; justify-content: flex-end; }
+.np-volume-group { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.np-volume { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.np-volume-group > .np-volume { flex: none; }
+.np-controls > .np-volume { flex: 1; }
 .np-volume svg { width: 18px; height: 18px; color: var(--text-dim); flex-shrink: 0; }
-.np-volume input[type="range"] { max-width: 130px; }
+/* 滑桿要固定寬度（flex: 0 0 130px），不能只靠 max-width：右邊 .val 數字文字寬度不固定
+   （"0%" 跟 "150%" 差兩個字元），沒有這行時滑桿會用 flex-shrink 分掉那個寬度差，導致
+   兩條滑桿即使同樣百分比、拖曳出來的滑塊實際像素位置卻不一樣——2026-08-23 使用者拿
+   150%/0% 的截圖直接比對抓到的。.val 固定寬度 + 靠右對齊，兩者合起來才能讓滑桿本身的
+   比例穩定、不被數字字數牽動。 */
+.np-volume input[type="range"] { flex: 0 0 130px; max-width: 130px; }
+.np-volume .val { min-width: 40px; text-align: right; flex-shrink: 0; }
+
+/* 伴奏音量圖示依目前音量顯示對應狀態（靜音/低/高），像 Windows 音量混音器一樣一眼看出
+   有沒有聲音——原本的圖示固定只有喇叭外殼、沒有音波，使用者實測回報「看起來永遠像沒聲音」。
+   JS（app-playback.js）依滑桿值設定 data-level="muted"|"low"|"high"，預設值見 index.html。 */
+.np-volume .vol-wave, .np-volume .vol-mute { display: none; }
+.np-volume[data-level="low"] .vol-wave-1 { display: inline; }
+.np-volume[data-level="high"] .vol-wave-1,
+.np-volume[data-level="high"] .vol-wave-2 { display: inline; }
+.np-volume[data-level="muted"] .vol-mute { display: inline; }
 .np-emergency { height: 40px; padding: 0 16px; background: transparent; border: 1.5px solid var(--danger); color: var(--danger); border-radius: var(--r-md); font-size: 13px; font-weight: 600; transition: background 0.12s, color 0.12s; }
 .np-emergency:hover { background: var(--danger); color: #fff; }
 
@@ -411,8 +429,15 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; min-height:
 .field-group-title { margin: 16px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--text-dim); }
 .field-group-title:first-child { margin-top: 4px; }
 .field-group-desc { margin: 0 0 10px; font-size: 11px; line-height: 1.5; color: var(--text-faint); }
-/* 滑桿：軌道用 --track-off（深淺色都看得清），滑塊加陰影避免融進淺色背景 */
-input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 5px; background: var(--track-off, var(--bg-hover)); border-radius: 3px; outline: none; }
+/* 滑桿：軌道用 --track-off（深淺色都看得清），滑塊加陰影避免融進淺色背景。
+   軌道左側用 --range-fill（JS 算 (value-min)/(max-min) 設的百分比）填色，讓滑桿本身就看得出
+   目前音量高低，不用只靠旁邊的數字——沒有 JS 主動設定這個變數的滑桿，預設 0% 等同原本的
+   純色軌道，不會有視覺差異（2026-08-23 使用者實測回報：純色軌道「看起來都一樣」，數字才是
+   唯一線索，體驗上像 Windows 系統音量那樣滑桿本身要能看出音量）。 */
+input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 5px; border-radius: 3px; outline: none;
+  background: linear-gradient(to right, var(--accent) var(--range-fill, 0%), var(--track-off, var(--bg-hover)) var(--range-fill, 0%));
+}
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg-surface); box-shadow: 0 1px 3px rgba(0,0,0,0.35); }
 input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg-surface); box-shadow: 0 1px 3px rgba(0,0,0,0.35); }
 input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(--bg-raised); border: 1px solid var(--border-strong); border-radius: var(--r-md); cursor: pointer; }
@@ -1288,3 +1313,18 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .lib-stats { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; margin-top: 3px; }
 .lib-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 .lib-actions .lib-remove { padding: 4px 9px; }
+
+/* AI 人聲分離：分離中的進度條跟 nav.js/app-youtube-import.js 的 .work-item-progress 同一套
+   「細長進度條 + --work-progress CSS 變數」寫法，不是另外發明的元件。 */
+.lib-separate-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+.lib-separate-progress { width: 100%; height: 3px; overflow: hidden; border-radius: 2px; background: var(--bg-hover); }
+.lib-separate-progress > span { display: block; width: var(--work-progress, 0%); height: 100%; background: var(--accent); transition: width .15s linear; }
+.lib-separate-preview-panel { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 14px; }
+.lib-separate-preview-panel audio { display: none; } /* 只當播放引擎用，不要原生控制列（見統一播放鍵） */
+.lib-separate-preview-transport { display: flex; align-items: center; gap: 10px; }
+.lib-separate-preview-transport .lib-separate-preview-play { flex-shrink: 0; width: 34px; padding: 0; }
+.lib-separate-preview-seek { flex: 1; min-width: 0; }
+.lib-separate-preview-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.lib-separate-preview-volumes { display: flex; gap: 20px; flex-wrap: wrap; }
+.lib-separate-preview-vol-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
+.lib-separate-preview-vol-row input[type="range"] { width: 120px; }

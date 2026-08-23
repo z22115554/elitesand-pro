@@ -268,6 +268,12 @@
         </div>
       </div>
 
+      <div id="update-banner" class="banner" hidden>
+        <span>新版本 <strong id="update-banner-version"></strong> 已發布</span>
+        <a id="update-banner-link" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer" hidden>下載 Installer</a>
+        <button id="update-banner-dismiss" class="btn btn-sm btn-ghost" type="button">關閉</button>
+      </div>
+
       <div class="content">
         <!-- ═══ 視圖：歌詞控制 ═══ -->
         <div class="view is-active content-col" data-view="karaoke">
@@ -321,10 +327,25 @@
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6l9 6-9 6z"/></svg>
                 </button>
               </div>
-              <div class="np-volume">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
-                <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量" data-i18n-aria-label="home.volume">
-                <span id="volume-val" class="val">70%</span>
+              <div class="np-volume-group">
+                <div class="np-volume" id="volume-row" title="伴奏音量" data-level="high">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path fill="currentColor" stroke="none" d="M3 9v6h4l5 5V4L7 9H3z"/>
+                    <path class="vol-wave vol-wave-1" d="M15.5 8.5a5 5 0 0 1 0 7"/>
+                    <path class="vol-wave vol-wave-2" d="M18.5 5.5a9 9 0 0 1 0 13"/>
+                    <g class="vol-mute"><line x1="16" y1="9" x2="22" y2="15"/><line x1="22" y1="9" x2="16" y2="15"/></g>
+                  </svg>
+                  <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量" data-i18n-aria-label="home.volume">
+                  <span id="volume-val" class="val">70%</span>
+                </div>
+                <!-- 只在分離播放模式對目前歌曲生效時顯示（見 app-playback.js 的
+                     updateSeparationUiForTrack）；跟上面的伴奏音量並排，避免使用者要捲到
+                     下面「時間與音訊微調」卡片才找得到人聲音量，兩顆調整音量的滑桿放一起。 -->
+                <div class="np-volume" id="separation-vocals-row" hidden title="人聲音量">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V22h2v-2.06A9 9 0 0 0 21 11h-2z"/></svg>
+                  <input id="separation-vocals-volume" type="range" min="0" max="150" value="100">
+                  <span id="separation-vocals-volume-val" class="val">100%</span>
+                </div>
               </div>
               <button id="btn-emergency" class="np-emergency" type="button" data-i18n="home.emergency">緊急隱藏</button>
             </div>
@@ -502,6 +523,12 @@
                 <button id="speed-reset" class="btn btn-sm btn-ghost" type="button">重置</button>
                 <input id="speed-slider" type="range" min="0.5" max="1.5" step="0.05" value="1" hidden>
               </div>
+            </div>
+            <!-- AI 人聲分離播放模式（實驗性）：只對已分離人聲的歌曲生效，見 CLAUDE.md 授權狀態說明。
+                 人聲音量滑桿已移到上面「正在播放」卡的音量區，跟伴奏音量並排（不要在這裡重複加）。 -->
+            <div class="switch-row switch-row--separated">
+              <div><div class="label">分離播放模式（實驗性）</div><div class="sub" id="separation-status-hint">只對已分離人聲的歌曲生效，其餘歌曲仍播放原始音軌</div></div>
+              <label class="switch"><input id="separation-mode-toggle" type="checkbox"><span class="track"></span></label>
             </div>
             <div class="switch-row switch-row--separated">
               <div><div class="label">統一音量（響度標準化）</div><div class="sub">依每首歌的實測響度校正播放增益；關閉時保留原始音量</div></div>
@@ -1364,16 +1391,25 @@
                   <button id="ffmpeg-download-btn" class="btn btn-sm" type="button" hidden>下載 FFmpeg</button>
                 </div>
               </div>
+              <div class="switch-row mt-8">
+                <div><div class="label">AI 人聲分離（實驗性）</div><div class="sub" id="ai-separation-status">尚未檢查</div></div>
+                <button id="ai-separation-download-btn" class="btn btn-sm" type="button" hidden>下載元件</button>
+              </div>
+              <p class="val mt-10">實驗性功能：使用第三方 AI 模型自動分離人聲與伴奏，作者的書面授權確認目前仍在等待中。</p>
             <p id="ytdlp-msg" class="val mt-10 pre-line" hidden></p>
             </div>
           </details>
 
           <section class="card" id="app-update-card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg>程式更新</p>
-            <p class="sub section-intro">更新只會在重新啟動 Elitesand Pro 前檢查；正在使用中的程式絕不會被要求更新或中斷。</p>
+            <p class="sub section-intro">有新版本時只通知；請從 GitHub Releases 下載並執行完整 Windows Installer。程式內增量更新已停用，不會自動重新啟動或中斷直播。</p>
             <div class="switch-row">
-              <div><div class="label">檢查時機</div><div class="sub">下次重新啟動時</div></div>
-              <button id="restart-update-check-btn" class="btn btn-sm" type="button">重新啟動並檢查</button>
+              <div><div class="label">目前版本</div><div class="sub" id="app-version-current">讀取中…</div></div>
+              <button id="app-update-check-btn" class="btn btn-sm" type="button">檢查更新</button>
+            </div>
+            <p id="app-update-status" class="val val--status-message">尚未檢查。</p>
+            <div class="inline-row inline-row--wrap mt-10">
+              <a id="app-update-link" class="btn btn-sm btn-ghost" href="#" target="_blank" rel="noopener noreferrer" hidden>下載 Installer</a>
             </div>
           </section>
 
@@ -2693,7 +2729,7 @@
   <script src="/js/danger-confirm.js"></script>
   <script src="/js/modal-focus.js"></script>
   <script src="/js/app-youtube-import.js"></script>
-  <script src="/js/app-restart-update-check.js"></script>
+  <script src="/js/app-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>
   <script src="/js/twitch-request-settings.js"></script>
   <script src="/js/twitch-reward-settings.js"></script>
