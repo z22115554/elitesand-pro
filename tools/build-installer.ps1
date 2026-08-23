@@ -4,6 +4,18 @@
 
 $ErrorActionPreference = "Stop"
 
+function Get-Sha256Hex {
+  param([Parameter(Mandatory = $true)][string]$LiteralPath)
+  $stream = [System.IO.File]::OpenRead($LiteralPath)
+  $hasher = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $hasher.Dispose()
+    $stream.Dispose()
+  }
+}
+
 function Assert-Inside {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -239,7 +251,7 @@ try {
   if (-not (Test-Path -LiteralPath $InstallerPath) -or (Get-Item -LiteralPath $InstallerPath).Length -eq 0) {
     throw "Installer output is missing or empty: $InstallerPath"
   }
-  $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $InstallerHash = Get-Sha256Hex -LiteralPath $InstallerPath
   [System.IO.File]::WriteAllText($InstallerHashPath, $InstallerHash, [System.Text.Encoding]::ASCII)
   if ((Get-Content -LiteralPath $InstallerHashPath -Raw -Encoding ASCII) -notmatch '^[a-f0-9]{64}$') {
     throw "Installer SHA-256 file is not exactly 64 hexadecimal characters."

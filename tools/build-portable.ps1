@@ -7,6 +7,18 @@
 
 $ErrorActionPreference = "Stop"
 
+function Get-Sha256Hex {
+  param([Parameter(Mandatory = $true)][string]$LiteralPath)
+  $stream = [System.IO.File]::OpenRead($LiteralPath)
+  $hasher = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $hasher.Dispose()
+    $stream.Dispose()
+  }
+}
+
 function Assert-Inside {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -245,7 +257,7 @@ foreach ($toolName in @("yt-dlp")) {
     $YtdlpLicenseOut = Join-Path $LicensesDir "yt-dlp"
     New-Item -ItemType Directory -Force -Path $YtdlpLicenseOut | Out-Null
     $YtdlpVersion = (& $tool.Source --version 2>&1 | Select-Object -First 1).ToString().Trim()
-    $YtdlpHash = (Get-FileHash -LiteralPath (Join-Path $Stage "tools\yt-dlp.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
+    $YtdlpHash = Get-Sha256Hex -LiteralPath (Join-Path $Stage "tools\yt-dlp.exe")
     Get-ReleaseDownload -Uri "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$YtdlpVersion/LICENSE" -OutFile (Join-Path $YtdlpLicenseOut "LICENSE.txt")
     Get-ReleaseDownload -Uri "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$YtdlpVersion/THIRD_PARTY_LICENSES.txt" -OutFile (Join-Path $YtdlpLicenseOut "THIRD_PARTY_LICENSES.txt")
     $YtdlpInfo = @"
@@ -505,7 +517,7 @@ Reset-PackagedRuntimeData
 if (-not $NoZip) {
   Write-Host "Creating zip..."
   Compress-Archive -LiteralPath $Stage -DestinationPath $ZipPath -Force
-  $Hash = (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $Hash = Get-Sha256Hex -LiteralPath $ZipPath
   [System.IO.File]::WriteAllText($HashPath, $Hash, [System.Text.Encoding]::ASCII)
   if ((Get-Content -LiteralPath $HashPath -Raw -Encoding ASCII) -notmatch '^[a-f0-9]{64}$') {
     throw "Generated portable SHA-256 file is not exactly 64 hexadecimal characters."
