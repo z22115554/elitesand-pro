@@ -71,6 +71,7 @@ function createStartupUpdateGate({
     decision: null,
     lockedAt: null,
   };
+  let acceptedPlan = null;
 
   function snapshot() {
     return cloneSession(session);
@@ -118,6 +119,7 @@ function createStartupUpdateGate({
     try {
       const response = await requestAction(ACTIONS.ACCEPT_INCREMENTAL, PHASES.OPTIONAL_PROMPT, plan.planId);
       if (!response?.ok) return lock('accept-rejected');
+      acceptedPlan = plan;
       session.phase = PHASES.EXIT_FOR_UPDATER;
       session.decision = 'accepted-optional';
       return snapshot();
@@ -139,6 +141,7 @@ function createStartupUpdateGate({
     try {
       const response = await requestAction(action, PHASES.REQUIRED_GATE, plan.planId);
       if (!response?.ok) return lock('required-action-rejected');
+      acceptedPlan = plan;
       session.phase = PHASES.EXIT_FOR_INSTALLER_OR_UPDATER;
       session.decision = plan.delivery === 'installer' ? 'required-installer-opened' : 'accepted-required';
       return snapshot();
@@ -167,7 +170,12 @@ function createStartupUpdateGate({
     return plan.urgency === 'optional' ? decideOptional(plan) : decideRequired(plan);
   }
 
-  return Object.freeze({ run, lock, getSession: snapshot });
+  function getAcceptedPlan() {
+    if (!acceptedPlan || ![PHASES.EXIT_FOR_UPDATER, PHASES.EXIT_FOR_INSTALLER_OR_UPDATER].includes(session.phase)) return null;
+    return Object.freeze({ ...acceptedPlan, artifact: acceptedPlan.artifact ? { ...acceptedPlan.artifact } : null, installer: acceptedPlan.installer ? { ...acceptedPlan.installer } : null });
+  }
+
+  return Object.freeze({ run, lock, getSession: snapshot, getAcceptedPlan });
 }
 
 module.exports = { ACTIONS, DEFER_DURATION_MS, PHASES, createStartupUpdateGate, isPlan };

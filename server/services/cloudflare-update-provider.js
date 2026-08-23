@@ -126,6 +126,20 @@ function createCloudflareUpdateProvider({
     }
   }
 
+  function verifyRequiredInstaller(plan) {
+    if (!canCheck || plan?.delivery !== 'installer' || plan?.urgency !== 'required') return false;
+    const verified = verifyUpdatePlan(plan, {
+      currentVersion,
+      channel,
+      platform,
+      arch,
+      publicKeys,
+      replayGuard,
+      nowMs: nowMs(),
+    });
+    return verified.ok;
+  }
+
   return Object.freeze({
     enabled: canCheck,
     check,
@@ -134,7 +148,7 @@ function createCloudflareUpdateProvider({
       if (!canCheck || plan?.delivery !== 'incremental') return { ok: false };
       return executor.accept(plan);
     },
-    openRequiredInstaller: async () => ({ ok: true }),
+    openRequiredInstaller: async (plan) => ({ ok: verifyRequiredInstaller(plan) }),
   });
 }
 

@@ -44,6 +44,23 @@ function signedPlan(overrides = {}) {
   }, TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID });
 }
 
+function requiredInstallerPlan(overrides = {}) {
+  return signedPlan({
+    planId: 'stable-win32-x64-0.9.9.7-1.0.0-p8',
+    targetVersion: '1.0.0',
+    delivery: 'installer',
+    urgency: 'required',
+    reasonCode: 'major-release',
+    artifact: null,
+    installer: {
+      url: 'https://github.com/z22115554/elitesand-pro/releases/download/v1.0.0/Elitesand.Pro.Setup.1.0.0.exe',
+      sha256: 'b'.repeat(64),
+      size: 123456,
+    },
+    ...overrides,
+  });
+}
+
 function response(body, { status = 200, contentType = 'application/json; charset=utf-8' } = {}) {
   const bytes = Buffer.from(typeof body === 'string' ? body : JSON.stringify(body), 'utf8');
   return {
@@ -149,4 +166,13 @@ test('accepted incremental plans can only enter the injected cold-start executor
   assert.deepStrictEqual(await provider.acceptIncremental(checked.plan), { ok: true });
   assert.deepStrictEqual(calls, [checked.plan.planId]);
   assert.deepStrictEqual(await provider.acceptIncremental({ delivery: 'installer' }), { ok: false });
+});
+
+test('required Installer handoff is reverified privately and never launches from the server', async () => {
+  const provider = providerWith(requiredInstallerPlan(), { replayGuard: policy.createInMemoryReplayGuard() });
+  const checked = await provider.check();
+  assert.strictEqual(checked.kind, 'plan');
+  assert.strictEqual(checked.plan.delivery, 'installer');
+  assert.deepStrictEqual(await provider.openRequiredInstaller(checked.plan), { ok: true });
+  assert.deepStrictEqual(await provider.openRequiredInstaller({ ...checked.plan, installer: null }), { ok: false });
 });

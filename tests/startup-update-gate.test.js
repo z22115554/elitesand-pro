@@ -86,6 +86,7 @@ test('optional 接受與 required gate 的分支都只能在 cold-start 決策�
   });
   const requiredResult = await required.run();
   assert.strictEqual(requiredResult.phase, PHASES.EXIT_FOR_INSTALLER_OR_UPDATER);
+  assert.strictEqual(required.getAcceptedPlan().planId, requiredPlan.planId);
   assert.deepStrictEqual(requiredActions, ['check', 'open-required-installer']);
 });
 

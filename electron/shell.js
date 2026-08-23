@@ -6,6 +6,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const { validateUpdatePlanShape } = require('../server/services/update-policy');
 
 const DEFAULT_PORT = 3000;
 const START_TIMEOUT_MS = 15000;
@@ -128,6 +129,35 @@ function isProjectReleaseUrl(rawUrl) {
       && url.pathname.startsWith('/z22115554/elitesand-pro');
   } catch (_) {
     return false;
+  }
+}
+
+// A plan reaches Electron only through the private coordinator after its
+// signature has been checked there. Re-check the complete serialized shape at
+// the external-launch boundary so no renderer, URL, or generic release page
+// can ever become an Installer handoff.
+function isRequiredInstallerHandoffPlan(plan) {
+  return validateUpdatePlanShape(plan) === null
+    && plan.delivery === 'installer'
+    && plan.urgency === 'required'
+    && (plan.reasonCode === 'major-release' || plan.reasonCode === 'owner-forced');
+}
+
+async function runRequiredInstallerHandoff({ plan, openExternal, prompt } = {}) {
+  if (!isRequiredInstallerHandoffPlan(plan) || typeof openExternal !== 'function' || typeof prompt !== 'function') return false;
+  // Opening an Installer never exits the app. The next native gate gives the
+  // user the explicit Exit choice when they are ready for the Installer to
+  // replace the running files; the main panel remains locked throughout.
+  let openFailed = false;
+  while (true) {
+    try {
+      await openExternal(plan.installer.url);
+      openFailed = false;
+    } catch (_) {
+      openFailed = true;
+    }
+    const choice = await prompt({ plan, openFailed });
+    if (choice !== 'open') return true;
   }
 }
 
@@ -532,14 +562,14 @@ function createElectronShell({
     return result?.response === 0 ? 'accept' : 'defer';
   }
 
-  async function promptRequiredUpdate(plan) {
+  async function promptRequiredUpdate(plan, { openFailed = false } = {}) {
     const text = getNativeUpdateCatalog();
     const isInstaller = plan.delivery === 'installer';
     const result = await showNativeUpdateDialog({
       type: 'warning',
       title: text.title,
       message: text.requiredMessage,
-      detail: text.requiredDetail,
+      detail: openFailed ? `${text.requiredDetail}\n\n${text.requiredInstallerOpenFailed}` : text.requiredDetail,
       buttons: [isInstaller ? text.openInstaller : text.updateNow, text.exit],
       defaultId: 0,
       cancelId: 1,
@@ -911,6 +941,18 @@ function createElectronShell({
     try {
       const server = await startServerOrReuseExisting();
       const updateSession = await runStartupUpdateGate();
+      if (updateSession.decision === 'required-installer-opened') {
+        const installerPlan = startupUpdateGate?.getAcceptedPlan?.();
+        const exitedByUser = await runRequiredInstallerHandoff({
+          plan: installerPlan,
+          openExternal: (url) => shell.openExternal(url),
+          prompt: ({ plan, openFailed }) => promptRequiredUpdate(plan, { openFailed }),
+        });
+        if (!exitedByUser) throw new Error('已拒絕不受信任的必要 Installer 交接。');
+        await shutdown();
+        app.exit(0);
+        return { started: false, reason: 'required-installer-exit', ...server, updateSession };
+      }
       if (updateSession.phase !== UPDATE_PHASES.RUNNING_LOCKED) {
         await shutdown();
         app.exit(0);
@@ -962,10 +1004,12 @@ module.exports = {
   ensureRuntimePaths,
   isTrustedLocalUrl,
   isProjectReleaseUrl,
+  isRequiredInstallerHandoffPlan,
   isTwitchVerificationUrl,
   isPrompterUrl,
   probeHealth,
   waitForExit,
   verifyPackagedResourceIntegrity,
+  runRequiredInstallerHandoff,
   createElectronShell,
 };

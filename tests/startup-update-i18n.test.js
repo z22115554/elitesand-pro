@@ -7,7 +7,7 @@ const test = require('node:test');
 const { CATALOGS, format, getCatalog, resolveLocale } = require('../electron/startup-update-i18n');
 
 const root = path.join(__dirname, '..');
-const fields = ['title', 'optionalMessage', 'optionalDetail', 'updateNow', 'defer', 'requiredMessage', 'requiredDetail', 'openInstaller', 'exit', 'restartMessage', 'restartDetail', 'restart', 'cancel'];
+const fields = ['title', 'optionalMessage', 'optionalDetail', 'updateNow', 'defer', 'requiredMessage', 'requiredDetail', 'requiredInstallerOpenFailed', 'openInstaller', 'exit', 'restartMessage', 'restartDetail', 'restart', 'cancel'];
 
 test('native cold-start update dialogs have complete five-language catalogs', () => {
   assert.deepStrictEqual(Object.keys(CATALOGS).sort(), ['en', 'ja', 'ko', 'zh-CN', 'zh-TW']);
