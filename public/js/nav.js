@@ -485,6 +485,200 @@
       });
       refresh();
     })();
+
+    // ─── 雙路音訊路由（實驗性）：docs/AI-SEPARATION-PLAN.md §14 路線 A ───
+    // 裝置清單只在使用者按「重新整理」時才列舉（比照本機字體「瀏覽系統字體」的「使用者
+    // 主動觸發」模式，不做 ondevicechange 即時熱插拔監聽，這輪範圍刻意縮小）。
+    (function wireDualAudioRouting() {
+      const card = document.getElementById('dual-audio-card');
+      if (!card) return;
+      const refreshBtn = document.getElementById('dual-audio-refresh-devices');
+      const warningEl = document.getElementById('dual-audio-device-warning');
+      const streamSel = document.getElementById('dual-audio-stream-device');
+      const headphoneSel = document.getElementById('dual-audio-headphone-device');
+      const toggle = document.getElementById('dual-audio-mode-toggle');
+      const offsetSlider = document.getElementById('dual-audio-sync-offset');
+      const offsetVal = document.getElementById('dual-audio-sync-offset-val');
+
+      // 還原上次選過的偏移／開關狀態（裝置下拉選單的還原值要等 populateDevices() 建好
+      // 選項後才套得上，見下面 fillSelect 的 savedId 參數）。
+      const initialState = (typeof AppShared.getDualAudioState === 'function') ? AppShared.getDualAudioState() : null;
+      if (initialState) {
+        toggle.checked = initialState.enabled;
+        offsetSlider.value = initialState.syncOffsetMs;
+        offsetVal.textContent = `${initialState.syncOffsetMs}ms`;
+      }
+
+      // 過濾 default/communications 這兩個「別名」，避免同一顆實體裝置在清單裡重複出現
+      // （比照 docs §14 D2 的判斷邏輯）。
+      function dedupedOutputDevices(devices) {
+        return devices.filter((d) => d.kind === 'audiooutput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+      }
+
+      function fillSelect(sel, devices, savedId) {
+        sel.innerHTML = '';
+        devices.forEach((d) => {
+          const opt = document.createElement('option');
+          opt.value = d.deviceId;
+          opt.textContent = d.label || d.deviceId;
+          sel.appendChild(opt);
+        });
+        if (savedId && devices.some((d) => d.deviceId === savedId)) sel.value = savedId;
+      }
+
+      async function populateDevices({ silent = false } = {}) {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = '偵測中…';
+        try {
+          // 裝置 label 要先取得任一個媒體權限才拿得到；用完立刻停止，不留下常駐的麥克風佔用。
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach((t) => t.stop());
+          } catch (e) { /* 使用者拒絕權限：裝置清單可能沒有 label，仍繼續嘗試列舉 */ }
+          const all = await navigator.mediaDevices.enumerateDevices();
+          const outputs = dedupedOutputDevices(all);
+          const st = (typeof AppShared.getDualAudioState === 'function') ? AppShared.getDualAudioState() : {};
+          fillSelect(streamSel, outputs, st.streamDeviceId);
+          fillSelect(headphoneSel, outputs, st.headphoneDeviceId);
+          const enough = outputs.length >= 2;
+          warningEl.hidden = enough;
+          [streamSel, headphoneSel, toggle].forEach((el) => { el.disabled = !enough; });
+          if (!enough) toggle.checked = false;
+          // 開頁面時的安靜自動列舉（見下方 Permissions API 那段）不彈 toast——只有使用者
+          // 自己按「重新整理」才需要這個確認回饋，安靜載入跳出來反而像沒來由的通知。
+          if (!silent) AppShared.showToast(`已偵測到 ${outputs.length} 個獨立音訊輸出裝置`, enough ? 'success' : 'info');
+        } catch (e) {
+          if (!silent) AppShared.showToast(`無法列舉音訊裝置：${e.message}`, 'error');
+        } finally {
+          refreshBtn.disabled = false;
+          refreshBtn.textContent = '重新整理裝置清單';
+        }
+      }
+      refreshBtn.addEventListener('click', () => populateDevices());
+      // 麥克風權限是同源永久記住的（Chrome 同意過後不會再跳提示）；已經同意過的話，
+      // 開頁面就安靜列一次裝置，開關/下拉選單才不會每次重整頁面都要先手動按一次才能用。
+      // 沒有 Permissions API 或還沒同意過就跳過，維持原本「使用者主動觸發」行為，
+      // 絕不主動彈出授權請求本身。
+      if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: 'microphone' }).then((status) => {
+          if (status.state === 'granted') populateDevices({ silent: true });
+        }).catch(() => { /* 瀏覽器不支援這個查詢，安靜跳過 */ });
+      }
+
+      function pushDevices() {
+        if (typeof AppShared.setDualAudioDevices === 'function') {
+          AppShared.setDualAudioDevices({ streamDeviceId: streamSel.value, headphoneDeviceId: headphoneSel.value });
+        }
+      }
+      streamSel.addEventListener('change', pushDevices);
+      headphoneSel.addEventListener('change', pushDevices);
+
+      toggle.addEventListener('change', () => {
+        if (typeof AppShared.setDualAudioMode === 'function') AppShared.setDualAudioMode(toggle.checked);
+      });
+
+      offsetSlider.addEventListener('input', () => {
+        const ms = parseInt(offsetSlider.value, 10) || 0;
+        offsetVal.textContent = `${ms}ms`;
+        if (typeof AppShared.setDualAudioSyncOffset === 'function') AppShared.setDualAudioSyncOffset(ms);
+      });
+    })();
+
+    // ─── WebGPU 人聲分離（實驗性）：docs/AI-SEPARATION-PLAN.md §13 musetric 路線 ───
+    // 僅限桌面版；純網頁版（npm start 直接開瀏覽器）沒有 window.ElitesandShell，開關
+    // 保持停用並顯示「僅限桌面版」，不去嘗試連一個根本不存在的隱藏視窗。
+    (function wireWebgpuSeparation() {
+      const toggle = document.getElementById('webgpu-separation-toggle');
+      const statusEl = document.getElementById('webgpu-separation-status');
+      const downloadBtn = document.getElementById('webgpu-separation-download-btn');
+      if (!toggle || !statusEl) return;
+      const isElectron = typeof window.ElitesandShell !== 'undefined' && !!window.ElitesandShell.webgpuEngine;
+      if (!isElectron) {
+        statusEl.textContent = '僅限桌面版';
+        toggle.disabled = true;
+        return;
+      }
+      let pollTimer = null;
+
+      function refreshRuntimeStatus() {
+        fetch('/api/webgpu-separation/runtime-status', { cache: 'no-store' }).then((res) => res.json()).then((status) => {
+          if (status.active) {
+            const percent = Math.max(0, Math.min(100, Math.floor(Number(status.percent || 0))));
+            statusEl.textContent = `模型下載中… ${percent}%`;
+            downloadBtn.hidden = true;
+            if (!pollTimer) pollTimer = setInterval(refreshRuntimeStatus, 500);
+            return;
+          }
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          if (!status.available) {
+            statusEl.textContent = toggle.checked ? '尚未下載模型' : '尚未下載模型（開啟後自動下載）';
+            downloadBtn.hidden = false;
+            downloadBtn.disabled = false;
+            downloadBtn.textContent = '重新下載模型';
+            return;
+          }
+          downloadBtn.hidden = true;
+          if (!toggle.checked) { statusEl.textContent = '已停用'; return; }
+          statusEl.textContent = status.engineConnected ? '已就緒（引擎連線中）' : '已就緒，等待引擎連線…';
+        }).catch(() => { statusEl.textContent = '狀態讀取失敗'; });
+      }
+
+      function refreshSettings() {
+        fetch('/api/webgpu-separation/settings', { cache: 'no-store' }).then((res) => res.json()).then((settings) => {
+          toggle.checked = !!settings.enabled;
+          toggle.disabled = false;
+          refreshRuntimeStatus();
+        }).catch(() => { statusEl.textContent = '設定讀取失敗'; });
+      }
+
+      toggle.addEventListener('change', () => {
+        const enabled = toggle.checked;
+        toggle.disabled = true;
+        PinAuth.fetchWithPin('/api/webgpu-separation/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (!data.ok) throw new Error(data.code || '設定保存失敗');
+            // 讓 Electron 主程序立刻知道要不要建立/關閉隱藏視窗，不用重啟整個 App。
+            return window.ElitesandShell.webgpuEngine.setEnabled(enabled);
+          })
+          .then(() => { toggle.disabled = false; refreshRuntimeStatus(); })
+          .catch((err) => {
+            toggle.checked = !enabled; // 失敗時復原成變更前的狀態，同專案既有慣例
+            toggle.disabled = false;
+            statusEl.textContent = `設定失敗：${err.message}`;
+          });
+      });
+
+      downloadBtn?.addEventListener('click', () => {
+        downloadBtn.disabled = true;
+        downloadBtn.textContent = '下載中…';
+        statusEl.textContent = '模型下載中…';
+        pollTimer = setInterval(refreshRuntimeStatus, 500);
+        PinAuth.fetchWithPin('/api/webgpu-separation/runtime/download', { method: 'POST' })
+          .then((res) => res.json())
+          .then((data) => {
+            if (!data.ok) throw new Error(data.reason || '下載失敗');
+            refreshRuntimeStatus();
+          })
+          .catch((err) => {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            statusEl.textContent = `下載失敗：${err.message}`;
+            downloadBtn.disabled = false;
+            downloadBtn.hidden = false;
+            downloadBtn.textContent = '重新下載模型';
+          });
+      });
+
+      document.addEventListener('view:change', (event) => {
+        if (event.detail?.view === 'general') refreshRuntimeStatus();
+      });
+      refreshSettings();
+    })();
+
     // 兩顆下載按鈕（新手教學／連線與系統）共用同一組文字更新函式；換語言時要一起重畫。
     function updateFfmpegButtonText() {
       ffmpegButtonTextUpdaters.forEach((fn) => fn());

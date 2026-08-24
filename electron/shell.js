@@ -277,6 +277,10 @@ function createElectronShell({
   let spoutDisplayOutput = null;
   let spoutOutputOptions = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
+  // WebGPU 人聲分離引擎（實驗性，§13 musetric 路線）：只在使用者已經開啟設定時才建立，
+  // 不是每次啟動都硬開一個吃資源的隱藏視窗（跟 Spout 的 env-var autostart 不同，
+  // 這個是讀伺服器持久化的使用者設定，見 syncWebgpuEngineWindow）。
+  let webgpuEngineWindow = null;
 
   function resolveExperimentalSpoutNumber(name, fallback) {
     const value = Number.parseInt(processObject.env[name] || '', 10);
@@ -340,6 +344,55 @@ function createElectronShell({
       options: getSpoutOutputOptions(),
       output: spoutDisplayOutput?.getStatus?.() || { state: 'idle' },
     });
+  }
+
+  // ─── WebGPU 人聲分離引擎（實驗性）───
+  // 設定存在 server 端（跟遙測開關同一種持久化方式，不是 localStorage），這裡用一次
+  // 本機 HTTP 讀，跟 probeHealth() 是同一套「Electron 主程序打自己 server」的既有手法。
+  function fetchWebgpuSeparationEnabled({ httpImpl = http, timeoutMs = 2000 } = {}) {
+    return new Promise((resolve) => {
+      const request = httpImpl.get({
+        hostname: '127.0.0.1',
+        port,
+        path: '/api/webgpu-separation/settings',
+        timeout: timeoutMs,
+        headers: { 'User-Agent': 'ElitesandProElectronShell/1.0' },
+      }, (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => {
+          try {
+            const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            resolve(!!payload?.enabled);
+          } catch (_) { resolve(false); }
+        });
+      });
+      request.once('timeout', () => request.destroy());
+      request.once('error', () => resolve(false));
+    });
+  }
+
+  // 開啟：確保隱藏視窗活著；關閉：確保它不存在。啟動時呼叫一次，設定頁的開關切換時
+  // 透過 IPC 再呼叫一次（見下方 elitesand:webgpu-engine-toggle），不用重啟整個 App。
+  async function syncWebgpuEngineWindow(knownEnabled = null) {
+    const enabled = knownEnabled === null ? await fetchWebgpuSeparationEnabled() : knownEnabled;
+    if (enabled) {
+      if (!webgpuEngineWindow) {
+        const { createWebgpuEngineWindow } = require('./webgpu-engine-window');
+        webgpuEngineWindow = createWebgpuEngineWindow({ BrowserWindow, port });
+      }
+      await webgpuEngineWindow.start();
+    } else if (webgpuEngineWindow) {
+      await webgpuEngineWindow.stop();
+      webgpuEngineWindow = null;
+    }
+    return enabled;
+  }
+
+  async function stopWebgpuEngineWindow() {
+    const output = webgpuEngineWindow;
+    webgpuEngineWindow = null;
+    if (output) await output.stop();
   }
 
   async function startExperimentalSpoutDisplayOutput() {
@@ -562,6 +615,14 @@ function createElectronShell({
         await stopSpoutDisplayOutput();
         return getSpoutOutputStatus();
       });
+      // 設定頁的開關切換呼叫這個，讓隱藏視窗立刻反映新狀態，不用重啟整個 App。
+      // 設定本身的持久化（server 端 JSON）由呼叫端另外打 /api/webgpu-separation/settings，
+      // 這裡只負責「視窗要不要活著」這件事，跟 §13 架構決策一致：electron/ 完全不碰
+      // server/ 的業務邏輯，只做「開一個隱藏視窗指到某個 URL」。
+      ipcMain.handle('elitesand:webgpu-engine-toggle', async (event, enabled) => {
+        if (event?.sender !== window.webContents) return null;
+        return syncWebgpuEngineWindow(!!enabled);
+      });
     }
     if (ipcMain?.on) {
       ipcMain.on('elitesand:close-decision', (event, action) => {
@@ -757,6 +818,7 @@ function createElectronShell({
 
   async function shutdown() {
     await stopSpoutDisplayOutput();
+    await stopWebgpuEngineWindow();
     await shutdownOwnedServer();
     stopPowerSaveBlocker();
   }
@@ -800,11 +862,12 @@ function createElectronShell({
       // 卡住。這對「重用既有 server（ownsServer=false）」尤其關鍵：那條路徑本來不會
       // 設 isQuitting，於是系統匣「結束」與確認關閉都會被關窗攔截而永遠關不掉。
       isQuitting = true;
-      const needsAsyncCleanup = !!spoutDisplayOutput || (ownsServer && !!serverProcess?.pid);
+      const needsAsyncCleanup = !!spoutDisplayOutput || !!webgpuEngineWindow || (ownsServer && !!serverProcess?.pid);
       if (!needsAsyncCleanup) return;
       event.preventDefault();
       Promise.resolve()
         .then(stopSpoutDisplayOutput)
+        .then(stopWebgpuEngineWindow)
         .then(shutdownOwnedServer)
         .finally(() => app.exit(0));
     });
@@ -827,6 +890,10 @@ function createElectronShell({
       showPortableDataMigrationNotice();
       createTray();
       await startExperimentalSpoutDisplayOutput();
+      // 失敗絕不能擋住主程式啟動——這是實驗性附加功能，不是核心播放/OBS 路徑。
+      try { await syncWebgpuEngineWindow(); } catch (error) {
+        console.error?.('[WebGPU Engine] 啟動時同步失敗（不影響主程式）:', error.message);
+      }
       await createWindow();
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
       return { started: true, ...server };

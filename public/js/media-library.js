@@ -48,6 +48,7 @@
 
   let searchQuery = '';
   let sortBy = 'plays';
+  let filterSeparatedOnly = false;
 
   // 收到伺服器清單→存快取後套用目前的搜尋/排序再渲染
   function render(list) {
@@ -69,13 +70,16 @@
     let view = q
       ? cache.filter((it) => (it.title || '').toLowerCase().includes(q) || (it.artist || '').toLowerCase().includes(q))
       : cache.slice();
+    if (filterSeparatedOnly) view = view.filter((it) => it.separationStatus === 'done');
     view = sortView(view);
 
     listEl.innerHTML = '';
     if (!view.length) {
       if (emptyEl) {
         emptyEl.hidden = false;
-        emptyEl.textContent = cache.length ? tr('找不到符合的歌曲') : tr('尚無記錄，播放任一首歌後會自動加入。');
+        emptyEl.textContent = cache.length
+          ? tr(filterSeparatedOnly ? '沒有已分離人聲的歌曲' : '找不到符合的歌曲')
+          : tr('尚無記錄，播放任一首歌後會自動加入。');
       }
       return;
     }
@@ -274,7 +278,13 @@
           ? tr('AI 分離元件尚未安裝，請先到「連線與系統」下載')
           : data.error === 'ALREADY_PROCESSING'
             ? tr('這首歌已經在分離中')
-            : tr(data.error || '伺服器沒有確認');
+            : data.error === 'WEBGPU_ENGINE_OFFLINE'
+              ? tr('WebGPU 分離引擎離線，請確認桌面版已啟動')
+              : data.error === 'WEBGPU_ENGINE_BUSY'
+                ? tr('WebGPU 分離引擎正在跑另一首歌，請稍後再試')
+                : data.error === 'WEBGPU_MODEL_NOT_READY'
+                  ? tr('WebGPU 分離模型尚未下載，請先到「連線與系統」下載')
+                  : tr(data.error || '伺服器沒有確認');
         toast(tr(`啟動分離失敗：${reason}`), 'error');
         btn.disabled = false;
         btn.textContent = tr('分離人聲（實驗性）');
@@ -500,9 +510,11 @@
   const btnClear = document.getElementById('lib-clear');
   const searchInput = document.getElementById('lib-search');
   const sortSelect = document.getElementById('lib-sort');
+  const filterSeparatedInput = document.getElementById('lib-filter-separated');
 
   if (searchInput) searchInput.addEventListener('input', () => { searchQuery = searchInput.value; applyView(); });
   if (sortSelect) sortSelect.addEventListener('change', () => { sortBy = sortSelect.value; applyView(); });
+  if (filterSeparatedInput) filterSeparatedInput.addEventListener('change', () => { filterSeparatedOnly = filterSeparatedInput.checked; applyView(); });
 
   if (btnRefresh) btnRefresh.addEventListener('click', refresh);
   if (storageChoose) storageChoose.addEventListener('click', () => migrateStorage());

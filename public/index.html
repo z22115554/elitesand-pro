@@ -1325,6 +1325,36 @@
               <p id="obs-ws-msg" class="val mt-10 pre-line" hidden></p>
             </div>
           </details>
+
+          <!-- ═══ 卡片：雙路音訊路由（實驗性）═══
+               觀眾/OBS 裝置只聽伴奏、主播耳機聽伴奏+人聲。只對已分離人聲的歌曲生效
+               （見媒體庫的「分離人聲」）。docs/AI-SEPARATION-PLAN.md §14 路線 A。 -->
+          <details class="card card-collapse" id="dual-audio-card">
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15v-6a8 8 0 0 1 16 0v6"/><path d="M4 15a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H4z"/><path d="M20 15a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/></svg>雙路音訊路由（實驗性）</summary>
+            <div class="card-collapse-body">
+              <p class="sub section-intro">觀眾/OBS 只聽得到伴奏、主播耳機聽伴奏+人聲當導唱。只對已在媒體庫分離過人聲的歌曲生效。需要電腦有至少兩個獨立的音訊輸出裝置（例如虛擬音訊線＋耳機）。<strong>務必把 OBS 與 Windows 音效裝置的取樣率都設成 44100Hz</strong>，這是消除長時間播放漂移最重要的免費設定。</p>
+              <button id="dual-audio-refresh-devices" class="btn btn-sm" type="button">重新整理裝置清單</button>
+              <p id="dual-audio-device-warning" class="val val--danger mt-8" hidden>偵測到少於兩個獨立的音訊輸出裝置，這個功能目前無法使用。</p>
+              <div class="field mt-8">
+                <label>觀眾／OBS 裝置</label>
+                <select id="dual-audio-stream-device" class="input" disabled><option value="">（先按上面「重新整理裝置清單」）</option></select>
+              </div>
+              <div class="field">
+                <label>主播耳機裝置</label>
+                <select id="dual-audio-headphone-device" class="input" disabled><option value="">（先按上面「重新整理裝置清單」）</option></select>
+              </div>
+              <div class="switch-row switch-row--separated">
+                <div><div class="label">雙路音訊路由</div><div class="sub" id="dual-audio-status-hint">只對已分離人聲的歌曲生效</div></div>
+                <label class="switch"><input id="dual-audio-mode-toggle" type="checkbox" disabled><span class="track"></span></label>
+              </div>
+              <div class="field mt-8">
+                <label>同步偏移</label>
+                <input id="dual-audio-sync-offset" type="range" min="-1000" max="1000" step="5" value="0">
+                <span id="dual-audio-sync-offset-val" class="val">0ms</span>
+              </div>
+              <p class="field-hint">主播路與觀眾路實際上會經過不同的音訊管線，天生會有固定偏移，不是 bug。戴耳機播放一首歌，邊聽邊調這條滑桿，直到兩邊的節奏聽起來對上為止；正值＝延遲主播路，負值＝延遲觀眾路。調好後長時間有效，不用每次開播都重調。</p>
+            </div>
+          </details>
           </div>
 
           <!-- ═══ 卡片：手機遙控器 ═══
@@ -1397,6 +1427,24 @@
               </div>
               <p class="val mt-10">實驗性功能：使用第三方 AI 模型自動分離人聲與伴奏，作者的書面授權確認目前仍在等待中。</p>
             <p id="ytdlp-msg" class="val mt-10 pre-line" hidden></p>
+            </div>
+          </details>
+
+          <!-- ═══ 卡片：WebGPU 人聲分離（實驗性）═══
+               docs/AI-SEPARATION-PLAN.md §13 musetric 路線，公開測試換取非 NVIDIA 真機
+               相容性資料（W4）。跟上面的「AI 人聲分離」是兩個不同引擎、共用同一組
+               separationStatus／vocalsFile／instrumentalFile 欄位，這個開關決定分離
+               按鈕實際走哪一條。只在桌面版（Electron）可用，純網頁版永遠停用。 -->
+          <details class="card card-collapse" id="webgpu-separation-card">
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15v-6a8 8 0 0 1 16 0v6"/><path d="M4 15a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H4z"/><path d="M20 15a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/></svg>WebGPU 人聲分離（實驗性）</summary>
+            <div class="card-collapse-body">
+              <p class="sub section-intro">另一種人聲分離方式：直接用瀏覽器內建的 WebGPU 運算，不需要另外下載 Python／CUDA，主要提供給沒有 NVIDIA 顯示卡的使用者測試相容性。</p>
+              <div class="switch-row switch-row--separated">
+                <div><div class="label">WebGPU 人聲分離</div><div class="sub" id="webgpu-separation-status">讀取中…</div></div>
+                <label class="switch"><input id="webgpu-separation-toggle" type="checkbox" disabled><span class="track"></span></label>
+              </div>
+              <button id="webgpu-separation-download-btn" class="btn btn-sm mt-8" type="button" hidden>重新下載模型</button>
+              <p class="val mt-10">實驗性功能，會回報 GPU 廠商與分離成功/失敗等匿名資料（同「連線與系統」頁匿名活躍統計的既有揭露，見 EULA 條款七之 9，不是新的揭露）。極少數情況下顯示卡可能因為顯存不足而停止回應——這只會讓這一次分離失敗，不影響播放、歌詞或其他功能。</p>
             </div>
           </details>
 
@@ -1533,6 +1581,10 @@
               <button id="lib-refresh" class="btn btn-sm" type="button">重新整理</button>
               <button id="lib-cleanup" class="btn btn-sm btn-ghost" type="button">清理音檔</button>
               <button id="lib-clear" class="btn btn-sm btn-ghost" type="button">清空媒體庫</button>
+              <label class="lib-filter-toggle">
+                <input id="lib-filter-separated" type="checkbox">
+                <span>🎤 只看已分離人聲</span>
+              </label>
             </div>
             <div id="library-list" class="library-list"></div>
             <p id="library-empty" class="val library-empty">尚無記錄，播放任一首歌後會自動加入。</p>

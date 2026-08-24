@@ -9,6 +9,7 @@ const UNPROTECTED_ROUTE_ALLOWLIST = new Map([
   // /eula/accept 曾在這份清單上（理由：首次同意先於 PIN 設定）。理由對 PIN 成立，但它
   // 讓區網任何裝置都能代替使用者同意條款並觸發外送，現已改掛 requireControlAccess
   // （loopback 直接放行，首次啟動流程不受影響），因此不再需要例外。
+  ['server/routes/api.js:POST:/webgpu-separation/result/:jobId', 'called only by the hidden Electron webgpu-engine window, which has no PIN context — same exemption rationale as the webgpu-engine socket clientType in PIN_EXEMPT_CLIENT_TYPES; authorized instead by jobId matching the current activeJob'],
 ]);
 
 function walkJavaScriptFiles(root) {
