@@ -5,127 +5,116 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-update-check.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-restart-update-check.js'), 'utf8');
 
 function element(id) {
   return {
     id,
-    hidden: false,
+    hidden: id === 'app-update-restart-btn',
     disabled: false,
     textContent: '',
-    href: '',
-    parentElement: null,
     listeners: {},
     addEventListener(name, handler) { this.listeners[name] = handler; },
   };
 }
 
-async function flush() {
-  await new Promise((resolve) => setTimeout(resolve, 20));
+function response(body, ok = true) {
+  return {
+    ok,
+    status: ok ? 200 : 500,
+    async json() { return body; },
+  };
 }
 
-async function runScenario(plan, applyResponse = null, confirmResult = true) {
-  const created = [];
-  const row = { insertBefore(child) { created.push(child); } };
-  const elements = {
-    'app-version-current': element('app-version-current'),
-    'app-update-status': element('app-update-status'),
-    'app-update-check-btn': element('app-update-check-btn'),
-    'app-update-link': element('app-update-link'),
-  };
-  elements['app-update-link'].parentElement = row;
-  const intro = element('intro');
-  const calls = [];
-  const confirmations = [];
-  const responses = [plan, applyResponse].filter((item) => item !== null);
+async function flush() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
-  const document = {
-    getElementById(id) { return elements[id] || null; },
-    querySelector() { return intro; },
-    createElement() { return element('dynamic'); },
-  };
-  async function request(url, opts = {}) {
-    calls.push({ url, opts });
-    const body = responses.shift();
-    return {
-      ok: true,
-      status: 200,
-      async text() { return JSON.stringify(body); },
-    };
-  }
+async function createScenario(updateResult) {
+  const elements = Object.fromEntries([
+    'app-update-check-btn',
+    'app-update-restart-btn',
+    'app-version-current',
+    'app-update-status',
+  ].map((id) => [id, element(id)]));
+  const calls = [];
+  let restartCalls = 0;
+  const listeners = {};
+
   const context = {
-    document,
-    fetch: request,
-    PinAuth: { fetchWithPin: request },
+    document: { getElementById(id) { return elements[id] || null; } },
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      if (url === '/api/health') return response({ status: 'ok', version: '1.0.0' });
+      if (url === '/api/update-check?force=1') return response(updateResult);
+      throw new Error(`unexpected URL: ${url}`);
+    },
     window: {
-      PanelConfirm: {
-        async request(options) {
-          confirmations.push(options);
-          return confirmResult;
+      ElitesandShell: {
+        async restartForUpdateCheck() { restartCalls += 1; return true; },
+      },
+      I18n: {
+        t(key, vars) {
+          const values = {
+            'appUpdate.check': '檢查更新',
+            'appUpdate.currentUnknown': '目前版本未知',
+            'appUpdate.checking': '正在檢查更新…',
+            'appUpdate.notChecked': '尚未檢查。',
+            'appUpdate.latest': '已是最新版本。',
+            'appUpdate.available': '發現新版本 {version}。',
+            'appUpdate.restart': '重新啟動並更新',
+            'appUpdate.restarting': '正在重新啟動並準備更新…',
+            'appUpdate.checkFailed': '暫時無法檢查更新，請稍後再試。',
+            'appUpdate.notConfigured': '更新來源尚未設定。',
+          };
+          return String(values[key] || key).replace('{version}', vars?.version || '');
         },
       },
+      addEventListener(name, handler) { listeners[name] = handler; },
     },
     console,
-    setTimeout,
-    clearTimeout,
   };
   vm.createContext(context);
   vm.runInContext(source, context);
   await flush();
-  return { created, elements, calls, confirmations, context };
+  return { elements, calls, listeners, get restartCalls() { return restartCalls; } };
 }
 
 (async () => {
-  const incremental = await runScenario({
+  const scenario = await createScenario({
     enabled: true,
     currentVersion: '1.0.0',
     hasUpdate: true,
     latestVersion: '1.0.1',
-    canIncremental: true,
-    downloadUrl: 'https://example.invalid/installer',
-  }, {
-    prepared: true,
-    latestVersion: '1.0.1',
+    error: null,
   });
 
-  const applyButton = incremental.created[0];
-  assert.ok(applyButton, 'incremental action button should be created');
-  assert.strictEqual(applyButton.hidden, false, 'compatible update should show incremental action');
-  assert.match(incremental.elements['app-update-status'].textContent, /可直接安裝/);
-  await applyButton.listeners.click();
-  assert.strictEqual(incremental.confirmations.length, 1, 'update should use the in-app confirmation modal');
-  assert.match(incremental.confirmations[0].summary, /10～20 秒/);
-  assert.match(incremental.confirmations[0].impact, /請勿手動重新開啟/);
-  assert.strictEqual(incremental.confirmations[0].confirmLabel, '安裝更新');
-  assert.strictEqual(incremental.calls[1].url, '/api/app-update/apply');
-  assert.strictEqual(incremental.calls[1].opts.method, 'POST');
-  assert.match(incremental.elements['app-update-status'].textContent, /自動重新啟動/);
+  assert.deepStrictEqual(scenario.calls.map((call) => call.url), ['/api/health'], '啟動時只能讀取目前版本，不可自動檢查更新');
+  assert.strictEqual(scenario.elements['app-version-current'].textContent, 'v1.0.0');
+  assert.strictEqual(scenario.elements['app-update-status'].textContent, '尚未檢查。');
+  assert.strictEqual(scenario.elements['app-update-restart-btn'].hidden, true, '尚未檢查時不可顯示重新啟動');
 
-  const cancelled = await runScenario({
+  await scenario.elements['app-update-check-btn'].listeners.click();
+  await flush();
+  assert.strictEqual(scenario.calls[1].url, '/api/update-check?force=1');
+  assert.strictEqual(scenario.elements['app-update-restart-btn'].hidden, false, '查到新版本後才顯示重新啟動更新');
+  assert.match(scenario.elements['app-update-status'].textContent, /v1\.0\.1/);
+
+  await scenario.elements['app-update-restart-btn'].listeners.click();
+  await flush();
+  assert.strictEqual(scenario.restartCalls, 1, '重新啟動必須由使用者再次點擊後才呼叫 Electron');
+
+  const latest = await createScenario({
     enabled: true,
     currentVersion: '1.0.0',
-    hasUpdate: true,
-    latestVersion: '1.0.1',
-    canIncremental: true,
-    downloadUrl: 'https://example.invalid/installer',
-  }, null, false);
-  await cancelled.created[0].listeners.click();
-  assert.strictEqual(cancelled.confirmations.length, 1, 'cancel path should still use the in-app modal');
-  assert.strictEqual(cancelled.calls.length, 1, 'cancelling confirmation must not POST the update');
-
-  const fallback = await runScenario({
-    enabled: true,
-    currentVersion: '0.9.9.6',
-    hasUpdate: true,
+    hasUpdate: false,
     latestVersion: '1.0.0',
-    canIncremental: false,
-    downloadUrl: 'https://example.invalid/installer',
-    reason: '此版本需要完整 Installer。',
+    error: null,
   });
-
-  assert.strictEqual(fallback.created[0].hidden, true, 'incompatible update must hide incremental action');
-  assert.strictEqual(fallback.elements['app-update-link'].hidden, false, 'Installer fallback must stay visible');
-  assert.match(fallback.elements['app-update-status'].textContent, /完整 Installer/);
+  await latest.elements['app-update-check-btn'].listeners.click();
+  await flush();
+  assert.strictEqual(latest.elements['app-update-restart-btn'].hidden, true, '已是最新版時不可顯示重新啟動');
+  assert.strictEqual(latest.elements['app-update-status'].textContent, '已是最新版本。');
 
   console.log('app-update-check: all tests passed');
 })().catch((error) => {

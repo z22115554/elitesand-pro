@@ -82,7 +82,7 @@
   const LOCAL_FONT_PREFIX = 'local:';
   const FONT_FALLBACK = "'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif";
   const DEFAULT_APPEARANCE = {
-    font: 'default', size: 27, color: '#f2f3f5', strokeWidth: 0, strokeColor: '#000000',
+    font: 'default', fontAssetId: '', size: 27, color: '#f2f3f5', strokeWidth: 0, strokeColor: '#000000',
     // 預設關閉：跟 OBS 顯示端的 romanizationMode 預設 'original' 一致，沒資料的歌不會顯示空行。
     showRomaji: false, showXieyin: false, showFurigana: false,
   };
@@ -93,9 +93,21 @@
       ? value.slice(LOCAL_FONT_PREFIX.length).trim()
       : '';
   }
+  // 家族名稱 → 這款字所有可用於 CSS font-family 比對的候選名稱（含自己）。伺服器解析字型檔
+  // 的 name 表時，同一款字常有一個以上「家族名稱」（nameID 1 相容家族／16 印刷家族），
+  // 作業系統實際拿去比對已安裝字型的是哪一個因字型而異——只套用我們選的那一個名稱，
+  // 對不上系統註冊名稱時會整組靜默 fallback 回預設字體（2026-08-24 使用者實測「辰宇落雁體
+  // 2.0」踩到這個坑）。改成把整組候選都放進 font-family 堆疊，任何一個系統認得就會生效。
+  let localFontAliases = {};
+  let localFontAssets = {};
   function quoteFontFamily(family) {
-    const escaped = String(family || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    return escaped ? `'${escaped}', ${FONT_FALLBACK}` : FONT_STACKS.default;
+    if (!family) return FONT_STACKS.default;
+    const candidates = (Array.isArray(localFontAliases[family]) && localFontAliases[family].length)
+      ? localFontAliases[family] : [family];
+    const quoted = candidates
+      .map((name) => `'${String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`)
+      .join(', ');
+    return `${quoted}, ${FONT_FALLBACK}`;
   }
   function resolveFontStack(value) {
     const local = localFontFamily(value);
@@ -116,9 +128,21 @@
 
   let appearance = loadAppearance();
 
+  let fontAssetApplyVersion = 0;
+
   function applyAppearance() {
     const r = dom.lyrics.style;
-    r.setProperty('--pt-font', resolveFontStack(appearance.font));
+    const fallbackStack = resolveFontStack(appearance.font);
+    r.setProperty('--pt-font', fallbackStack);
+    const version = ++fontAssetApplyVersion;
+    const assetId = appearance.fontAssetId;
+    if (window.ElitesandFontAssets?.isAssetId?.(assetId)) {
+      window.ElitesandFontAssets.load(assetId).then((asset) => {
+        if (version === fontAssetApplyVersion) r.setProperty('--pt-font', `'${asset.family}', ${fallbackStack}`);
+      }).catch(() => {
+        if (version === fontAssetApplyVersion) setFontStatus('prompter.fontUnavailable');
+      });
+    }
     r.setProperty('--pt-size', `${appearance.size}px`);
     r.setProperty('--pt-color', appearance.color);
     r.setProperty('--pt-stroke-w', `${appearance.strokeWidth}px`);
@@ -184,11 +208,14 @@
     systemFontsLoading = (async () => {
       setFontStatus('prompter.fontLoadingActive');
       const names = new Set();
+      const aliases = {};
       try {
         const response = await fetch('/api/fonts');
         const data = await response.json();
         if (data && data.success && Array.isArray(data.fonts)) {
           data.fonts.forEach((family) => { if (typeof family === 'string' && family.trim()) names.add(family.trim()); });
+          if (data.aliases && typeof data.aliases === 'object') Object.assign(aliases, data.aliases);
+          if (data.assets && typeof data.assets === 'object') Object.assign(localFontAssets, data.assets);
         }
       } catch (_) { /* 伺服器掃描失敗時仍嘗試瀏覽器 Font Access API */ }
       if (typeof window.queryLocalFonts === 'function') {
@@ -198,6 +225,7 @@
           });
         } catch (_) { /* 使用者拒絕授權時仍保留伺服器掃描結果 */ }
       }
+      localFontAliases = aliases;
       const families = [...names].sort((a, b) => a.localeCompare(b, window.I18n?.current?.() || 'zh-TW'));
       if (dom.fontLocalGroup) {
         dom.fontLocalGroup.textContent = '';
@@ -235,7 +263,21 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !dom.settingsModal.hidden) { e.preventDefault(); closeSettingsPopover(); }
   });
-  dom.setFont.addEventListener('change', () => updateAppearance({ font: dom.setFont.value }));
+  dom.setFont.addEventListener('change', async () => {
+    const nextFont = dom.setFont.value;
+    const family = localFontFamily(nextFont);
+    const assetId = localFontAssets[family]?.id || '';
+    if (assetId && window.ElitesandFontAssets?.isAssetId?.(assetId)) {
+      try {
+        await window.ElitesandFontAssets.load(assetId);
+      } catch (_) {
+        setFontStatus('prompter.fontUnavailable');
+        syncAppearanceInputs();
+        return;
+      }
+    }
+    updateAppearance({ font: nextFont, fontAssetId: assetId });
+  });
   dom.setSize.addEventListener('input', () => {
     dom.setSizeVal.textContent = `${dom.setSize.value}px`;
     updateAppearance({ size: Number(dom.setSize.value) });

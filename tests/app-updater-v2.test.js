@@ -450,6 +450,19 @@ test('Electron host exports physical install root/PID and reserves exit code 42 
   assert(source.includes('app.exit(0)'));
 });
 
+test('reporting the pre-download "downloading-artifact" phase never trips prepareUpdate()\'s own busy re-entrancy guard', () => {
+  // Regression: startup-incremental-update.js reports this phase *before*
+  // calling prepareAndLaunchUpdate(), purely so a caller polling
+  // getProgress() sees something during the untracked artifact download. If
+  // it counted as "active", prepareUpdate()'s first-line guard would reject
+  // its own caller's very next step with "已有更新工作正在進行" — every real
+  // accept would silently fail before it even started downloading anything.
+  updater._resetForTests();
+  updater.setProgress('downloading-artifact', '正在下載更新套件');
+  assert.strictEqual(updater.getProgress().active, false);
+  updater._resetForTests();
+});
+
 Promise.all(pendingAsync)
   .then(() => {
     fs.rmSync(runtimeRoot, { recursive: true, force: true });

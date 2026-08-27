@@ -31,6 +31,18 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
   restartAfterMediaMigration() {
     return ipcRenderer.invoke('elitesand:restart-after-media-migration');
   },
+  restartForUpdateCheck() {
+    return ipcRenderer.invoke('elitesand:restart-for-update-check');
+  },
+  cloudflareUpdateCheck() {
+    return ipcRenderer.invoke('elitesand:cloudflare-update-check');
+  },
+  onCloudflareUpdateProgress(callback) {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('elitesand:cloudflare-update-progress', listener);
+    return () => ipcRenderer.removeListener('elitesand:cloudflare-update-progress', listener);
+  },
   // A fixed Spout surface only. Do not expose a generic IPC bridge or allow
   // renderer-controlled channels/filesystem access.
   spout: Object.freeze({

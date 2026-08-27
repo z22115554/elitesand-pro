@@ -361,6 +361,19 @@
     try { localStorage.setItem(CRASH_HANDLED_KEY, String(eventKey)); } catch (_) { /* 無痕模式 */ }
   }
 
+  // 共用的預填開啟：當機／更新失敗都走同一條路——預填、其餘欄位留給使用者補充，
+  // 一律要按預覽才送得出去，絕不因為是「自動偵測到的問題」就跳過確認。
+  function openPrefilled({ type, title, actual, includeDiagnostics = true } = {}) {
+    if (type) dom.type.value = type;
+    if (title && !dom.title.value.trim()) dom.title.value = title;
+    if (actual && !dom.actual.value.trim()) dom.actual.value = actual;
+    if (includeDiagnostics) dom.includeDiagnostics.checked = true;
+    saveDraft();
+    if (window.I18n) window.I18n.apply(dom.modal);
+    openModal();
+    dom.description.focus();
+  }
+
   function showCrashBanner(eventKey) {
     const banner = document.getElementById('crash-banner');
     if (!banner) return;
@@ -368,18 +381,26 @@
     const finish = () => { banner.hidden = true; markCrashHandled(eventKey); };
     document.getElementById('crash-review')?.addEventListener('click', () => {
       finish();
-      // 預填成一份當機回報，其餘欄位留給使用者補充；照樣要按預覽才送得出去。
-      dom.type.value = 'app-error';
-      if (!dom.title.value.trim()) dom.title.value = t('crash.prefillTitle');
-      if (!dom.actual.value.trim()) dom.actual.value = t('crash.prefillActual');
-      dom.includeDiagnostics.checked = true;
-      saveDraft();
-      if (window.I18n) window.I18n.apply(dom.modal);
-      openModal();
-      dom.description.focus();
+      openPrefilled({ type: 'app-error', title: t('crash.prefillTitle'), actual: t('crash.prefillActual') });
     }, { once: true });
     document.getElementById('crash-dismiss')?.addEventListener('click', finish, { once: true });
   }
+
+  // 更新套用失敗的回報入口：呼叫端（app-restart-update-check.js）只負責在失敗時
+  // 顯示 banner，實際預填/送出仍全部走這裡同一套「先預覽才送出」的流程。
+  function showUpdateFailBanner({ title, actual } = {}) {
+    const banner = document.getElementById('update-fail-banner');
+    if (!banner) return;
+    banner.hidden = false;
+    const finish = () => { banner.hidden = true; };
+    document.getElementById('update-fail-review')?.addEventListener('click', () => {
+      finish();
+      openPrefilled({ type: 'app-error', title, actual });
+    }, { once: true });
+    document.getElementById('update-fail-dismiss')?.addEventListener('click', finish, { once: true });
+  }
+
+  window.AppFeedback = Object.freeze({ showUpdateFailBanner });
 
   // 先問一次中繼狀態，讓「送出」按鈕在預覽前就決定好要不要出現。
   fetch('/api/feedback/status', { cache: 'no-store' })

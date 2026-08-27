@@ -15,7 +15,23 @@
  * matches the previous Installer build before the host is allowed to exit.
  */
 const crypto = require('crypto');
+// Two different filesystems are needed in this module, not one:
+//  - `fs` (Electron's patched, ASAR-transparent module) for anything that
+//    reads a file that genuinely lives inside THIS running app's own
+//    resources/app.asar — e.g. copying app-updater-runner-v2.js out to a
+//    staging directory. original-fs cannot resolve a path through a real
+//    archive and fails with ENOENT there.
+//  - `physicalFs` (Electron's ASAR-bypassing filesystem, when available) for
+//    writing/cleaning the STAGED replacement app.asar in a temp staging
+//    directory — plain `fs` treats any path containing an `app.asar` segment
+//    as a virtual archive mount, even when that path is a brand-new file this
+//    module is about to create, and throws "Invalid package ..." trying to
+//    validate it as an existing archive header. Same split as
+//    update-runtime-fingerprint.js; plain Node tests/dev server fall back to
+//    the normal filesystem for both.
 const fs = require('fs');
+let physicalFs = fs;
+try { physicalFs = require('original-fs'); } catch (_) { /* Plain Node runtime. */ }
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -36,6 +52,7 @@ const { logsDir } = require('../utils/app-paths');
 const { verifyUpdateManifestSignature } = require('./update-signature');
 const { UPDATE_RESULT_MARKER_NAME } = require('./app-updater-runner-v2');
 const usageTelemetry = require('./usage-telemetry');
+const { createGitHubReleaseProvider, assertNormalizedUpdatePlan } = require('./update-provider');
 
 const log = createLogger('AppUpdaterV2');
 const UPDATE_SCHEMA_VERSION = 2;
@@ -58,10 +75,19 @@ let currentProgress = {
   updatedAt: Date.now(),
 };
 
+// 'downloading-artifact' is set by startup-incremental-update.js *before*
+// prepareUpdate() is ever called, purely so a caller polling getProgress()
+// sees something during the (untracked) artifact download. prepareUpdate()'s
+// own first line uses currentProgress.active as a re-entrancy guard against a
+// second concurrent prepareUpdate() call — if this phase counted as active,
+// that guard would trip against its own caller's download step and reject
+// every real accept with "已有更新工作正在進行" before it even started.
+const NOT_ACTIVE_PHASES = ['failed', 'ready', 'idle', 'downloading-artifact'];
+
 function setProgress(phase, message, extra = {}) {
   currentProgress = {
     ...currentProgress,
-    active: !['failed', 'ready', 'idle'].includes(phase),
+    active: !NOT_ACTIVE_PHASES.includes(phase),
     phase,
     message,
     updatedAt: Date.now(),
@@ -350,39 +376,14 @@ function hostCanIncremental(options = {}) {
 async function getPlan(options = {}) {
   const repo = options.repo || config.updateCheckRepo;
   const fetchLatestReleaseImpl = options.fetchLatestRelease || fetchLatestRelease;
-  const base = {
-    enabled: !!repo,
-    repo: repo || null,
+  const provider = options.provider || createGitHubReleaseProvider({
+    repo,
     currentVersion: APP_VERSION,
-    latestVersion: null,
-    hasUpdate: false,
-    canIncremental: false,
-    needsFull: false,
-    reason: null,
-    releaseUrl: null,
-    downloadUrl: null,
-  };
-  if (!repo) { base.reason = '未設定更新來源'; return base; }
-  try {
-    const release = await fetchLatestReleaseImpl(repo);
-    base.latestVersion = String(release.tag_name).replace(/^[vV]/, '');
-    base.releaseUrl = typeof release.html_url === 'string' ? release.html_url : null;
-    const installer = findInstallerAsset(release);
-    base.downloadUrl = installer?.browser_download_url || base.releaseUrl;
-    base.hasUpdate = isNewerVersion(base.latestVersion, APP_VERSION);
-    if (!base.hasUpdate) { base.reason = '已是最新版本'; return base; }
-
-    const verifiedAssets = findVerifiedUpdateAssets(release);
-    const capable = !INCREMENTAL_UPDATES_DISABLED && hostCanIncremental(options);
-    base.canIncremental = !!verifiedAssets && capable;
-    base.needsFull = !base.canIncremental;
-    if (!capable) base.reason = '目前安裝版本尚未具備安全增量更新執行環境，請使用完整 Windows Installer。';
-    else if (!verifiedAssets) base.reason = '新版未提供安全增量更新包，請使用完整 Windows Installer。';
-    return base;
-  } catch (error) {
-    base.reason = error.status === 404 ? '更新來源尚未公開或尚未發布 Release' : `檢查失敗：${error.message}`;
-    return base;
-  }
+    fetchLatestRelease: fetchLatestReleaseImpl,
+    canIncremental: () => !INCREMENTAL_UPDATES_DISABLED && hostCanIncremental(options),
+  });
+  if (!provider || typeof provider.getPlan !== 'function') throw new TypeError('update provider 必須提供 getPlan()');
+  return assertNormalizedUpdatePlan(await provider.getPlan());
 }
 
 async function downloadReleaseUpdate(release, { reportProgress = true } = {}) {
@@ -418,32 +419,54 @@ function ensureInside(child, parent) {
 }
 
 function removeTreeInside(target, parent) {
+  // Only ever called on our own staging/backup temp directories, which may
+  // contain a staged replacement app.asar — always the ASAR-bypassing fs.
   const resolvedTarget = path.resolve(target);
   const resolvedParent = path.resolve(parent);
   if (!ensureInside(resolvedTarget, resolvedParent)) throw new Error(`拒絕清理更新暫存目錄外的路徑：${resolvedTarget}`);
   let stat;
-  try { stat = fs.lstatSync(resolvedTarget); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
-  if (!stat.isDirectory() || stat.isSymbolicLink()) { fs.unlinkSync(resolvedTarget); return; }
-  for (const name of fs.readdirSync(resolvedTarget)) removeTreeInside(path.join(resolvedTarget, name), resolvedTarget);
-  fs.rmdirSync(resolvedTarget);
+  try { stat = physicalFs.lstatSync(resolvedTarget); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) { physicalFs.unlinkSync(resolvedTarget); return; }
+  for (const name of physicalFs.readdirSync(resolvedTarget)) removeTreeInside(path.join(resolvedTarget, name), resolvedTarget);
+  physicalFs.rmdirSync(resolvedTarget);
 }
 
 function extractToStaging(inspection, stagingRoot) {
-  fs.mkdirSync(stagingRoot, { recursive: true });
+  // Writing a brand-new file named resources/app.asar into staging: use the
+  // ASAR-bypassing fs so Electron never tries to validate the destination as
+  // an existing archive header before the write has even happened.
+  physicalFs.mkdirSync(stagingRoot, { recursive: true });
   const wanted = new Set(inspection.files.map((item) => item.path));
   for (const entry of inspection.entries) {
     const rel = entry.entryName.replace(/\/$/, '');
     if (entry.isDirectory || !wanted.has(rel)) continue;
     const destination = path.join(stagingRoot, ...rel.split('/'));
     if (!ensureInside(destination, stagingRoot)) throw new Error(`拒絕寫入 staging 外：${rel}`);
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.writeFileSync(destination, entry.getData());
+    physicalFs.mkdirSync(path.dirname(destination), { recursive: true });
+    physicalFs.writeFileSync(destination, entry.getData());
   }
 }
 
 async function prepareUpdate(options = {}) {
   if (INCREMENTAL_UPDATES_DISABLED) return { prepared: false, needsFull: true, reason: '程式內增量更新已停用，請使用完整 Windows Installer。' };
   if (currentProgress.active) return { prepared: false, busy: true, reason: '已有更新工作正在進行' };
+
+  // P7 capability boundary: this updater is never a metadata client.  Only
+  // the private cold-start coordinator may provide already authenticated
+  // bytes, binding the outer signed policy to this inner signed ZIP check.
+  if (options.authorizedColdStart !== true) {
+    return { prepared: false, needsFull: false, reason: '增量更新只允許由冷啟動簽章政策啟動。' };
+  }
+  if (!Buffer.isBuffer(options.zipBuffer) || options.zipBuffer.length === 0) {
+    return { prepared: false, needsFull: false, reason: '冷啟動簽章政策未提供更新檔案。' };
+  }
+  if (!parseStrictHash(options.expectedHash)) {
+    return { prepared: false, needsFull: false, reason: '冷啟動簽章政策未提供有效 SHA-256。' };
+  }
+  if (typeof options.latestVersion !== 'string' || !options.latestVersion.trim() ||
+      typeof options.outerPlanId !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,159}$/i.test(options.outerPlanId)) {
+    return { prepared: false, needsFull: false, reason: '冷啟動簽章政策缺少版本或計畫識別。' };
+  }
 
   const targetRoot = resolveInstallRoot(options);
   if (!targetRoot || !hostCanIncremental({ ...options, targetRoot })) {
@@ -453,16 +476,11 @@ async function prepareUpdate(options = {}) {
   currentProgress = { active: true, phase: 'checking', message: '正在檢查更新', startedAt: Date.now(), updatedAt: Date.now() };
   let workRoot = null;
   try {
-    let buffer = options.zipBuffer;
-    let latestVersion = options.latestVersion || null;
-    if (!buffer) {
-      if (!config.updateCheckRepo) throw new Error('未設定更新來源');
-      ({ buffer, latestVersion } = await downloadLatestUpdate(config.updateCheckRepo, { fetchLatestRelease: options.fetchLatestRelease }));
-    } else if (options.expectedHash) {
-      setProgress('verifying-hash', '正在驗證 SHA-256');
-      const expected = parseStrictHash(options.expectedHash);
-      if (!expected || sha256Buffer(buffer) !== expected) throw new Error('更新檔 SHA-256 驗證失敗，正式目錄未變更');
-    }
+    const buffer = options.zipBuffer;
+    const latestVersion = options.latestVersion;
+    setProgress('verifying-hash', '正在驗證 SHA-256');
+    const expected = parseStrictHash(options.expectedHash);
+    if (sha256Buffer(buffer) !== expected) throw new Error('更新檔 SHA-256 驗證失敗，正式目錄未變更');
 
     setProgress('inspecting-zip', '正在檢查 ASAR 更新包');
     const inspection = inspectUpdateZip(buffer, { expectedVersion: latestVersion, currentVersion: options.currentVersion || APP_VERSION });
@@ -610,6 +628,7 @@ module.exports = {
   launchUpdater,
   prepareAndLaunchUpdate,
   getProgress,
+  setProgress,
   hostCanIncremental,
   resolveInstallRoot,
   consumeUpdateResultMarker,

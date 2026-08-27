@@ -53,6 +53,23 @@
     pxPerSec: { toCss: (v) => String(v), toLabel: (v) => `${v}px/s` },
   };
 
+  // ── 字體別名（同一款字型的 OpenType name 表可能有一個以上「家族名稱」——nameID 1
+  // 相容家族／16 印刷家族，作業系統實際拿去比對已安裝字型用的是哪一個因字型而異；只套用
+  // 使用者選的那一個名稱，對不上系統註冊名稱時 CSS 會靜默 fallback 回備援字體，使用者
+  // 看起來就像「選了字體卻沒套用」，2026-08-24 使用者在跟唱視圖/歌詞設定實測踩到過。
+  // setlist.js（真正跑在 OBS/預覽 iframe 裡）在啟動時抓 /api/fonts 的 aliases 呼叫
+  // setFontAliases() 灌進來；這裡只是存一份給下面三個字體欄位的 cssTransform 查表用，
+  // 不在這個共用 schema 檔案裡碰 DOM/fetch（這個檔案同時給 Node 用，見檔頭 UMD 註解）。──
+  let fontAliasMap = {};
+  function setFontAliases(map) { fontAliasMap = (map && typeof map === 'object') ? map : {}; }
+  function fontFamilyCss(name, fallback) {
+    const candidates = (Array.isArray(fontAliasMap[name]) && fontAliasMap[name].length) ? fontAliasMap[name] : [name];
+    const quoted = candidates
+      .map((n) => `'${String(n).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`)
+      .join(', ');
+    return `${quoted}, ${fallback}`;
+  }
+
   // ── 欄位定義 ──
   // type: 'color' | 'number' | 'percent' | 'string' | 'boolean' | 'enum'
   // domId: 對應 HTML 控制項 id；null = 沒有直接的單一控制項（由 app.js 特例處理，
@@ -92,9 +109,9 @@
     // ── 字體 ──
     // special: 'font' — 面板用「預設下拉 + 自訂／系統字體」UI 手動處理（見 app-setlist-panel.js
     // initFontPicker），不走通用 domId 綁定；欄位值本身仍是單一字體名稱，cssTransform 照樣通用套用。
-    { key: 'fontDisplay', type: 'string', default: 'Fraunces', domId: 'sls-font-display', special: 'font', cssVar: '--sl-fd', cssTransform: (v) => `'${v}', 'Noto Serif TC', Georgia, serif` },
-    { key: 'fontBody', type: 'string', default: 'Manrope', domId: 'sls-font-body', special: 'font', cssVar: '--sl-fb', cssTransform: (v) => `'${v}', 'Noto Sans TC', sans-serif` },
-    { key: 'fontMono', type: 'string', default: 'JetBrains Mono', domId: 'sls-font-mono', special: 'font', cssVar: '--sl-fm', cssTransform: (v) => `'${v}', ui-monospace, monospace` },
+    { key: 'fontDisplay', type: 'string', default: 'Fraunces', domId: 'sls-font-display', special: 'font', cssVar: '--sl-fd', cssTransform: (v) => fontFamilyCss(v, "'Noto Serif TC', Georgia, serif") },
+    { key: 'fontBody', type: 'string', default: 'Manrope', domId: 'sls-font-body', special: 'font', cssVar: '--sl-fb', cssTransform: (v) => fontFamilyCss(v, "'Noto Sans TC', sans-serif") },
+    { key: 'fontMono', type: 'string', default: 'JetBrains Mono', domId: 'sls-font-mono', special: 'font', cssVar: '--sl-fm', cssTransform: (v) => fontFamilyCss(v, 'ui-monospace, monospace') },
 
     // ── 字級 / 字重 ──
     // fitScale：清單型模板是「來源即畫布」——OBS Browser Source 的實際寬高就是版面框，
@@ -260,5 +277,6 @@
     FORMATS,
     getDefaultStyle,
     validateAndApply,
+    setFontAliases,
   };
 }));

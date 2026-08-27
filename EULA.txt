@@ -2,7 +2,7 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 1.6.0
+Version: 1.7.0
 Effective Date / 生效日期：2026-08-19
 
 IMPORTANT INFORMATION / 重要資訊
@@ -301,6 +301,29 @@ Public License v2.1 或其後版本（LGPL）授權，第四條第 4 項的還�
    資料；傳送失敗不影響程式運作，不排隊且不在之後補傳。因接收端只有輪替
    代碼與彙總後的每日計數，先前的彙總記錄無法再定位到你的裝置並個別刪除；
    記錄至多保留 400 天後自動清除。
+
+10. 為了讓你能收到權利人核實過的軟體更新，本軟體在每次冷啟動、進入主控制
+    面板前，會連線至權利人控管的 Cloudflare 更新服務查詢一次是否有可用
+    更新；進入主控制面板後，本次執行期間不會再重複查詢，也不會中斷你正在
+    使用的功能或直播。
+
+    查詢時傳送的內容為：軟體版本、作業系統平台與架構、你所在的更新頻道
+    （例如穩定版或測試版），以及一組由本軟體安裝檔案內容本身運算而得、
+    無法反推回原始檔案的技術指紋——同一個版本、同一種架構的所有安裝都會
+    產生相同數值，不因裝置或使用者而異，不構成、也不用於識別特定裝置或
+    使用者。查詢內容不含姓名、電子郵件、電腦名稱、硬體序號、歌名、歌詞、
+    播放清單或帳號憑證。一般 HTTPS 連線在技術上會向 Cloudflare 顯示來源
+    IP 位址，但權利人不將 IP 寫入資料庫，也不以 IP 建立使用行為分析。
+
+    查到可延後的更新時，本軟體會先徵詢你的同意，你可選擇立即套用或延後；
+    選擇延後時不會下載任何更新內容。查到權利人標記為必要（例如安全性）的
+    更新時，因無法保證延後使用的安全性，本軟體會在冷啟動階段先行套用後才
+    能繼續使用；此一行為僅發生於程式啟動階段，不會中斷已在執行中的程式或
+    直播。
+
+    實際下載的更新內容於套用前，本軟體會驗證權利人簽章與檔案雜湊；驗證
+    失敗、下載中斷、連線逾時或無法連線時，本軟體一律維持原有版本正常啟動，
+    不套用任何內容，也不影響本軟體其他功能運作。
 
 八、更新、測試版與服務變更
 
@@ -725,6 +748,38 @@ operation, are not queued, and are not retried later. Because the receiver
 holds only rotating codes and aggregated daily counts, prior aggregate
 records cannot be located by device and individually deleted. Records are
 automatically deleted after no more than 400 days.
+
+7.10 To deliver software updates the rights holder has verified, the
+Software connects once to a Cloudflare-hosted update service controlled by
+the rights holder on every cold start, before you reach the main control
+panel. Once you reach the main panel, no further query occurs during that
+run, and this never interrupts a feature or stream already in progress.
+
+Each query sends: the software version, OS platform and architecture, the
+update channel you are on (for example stable or beta), and a technical
+fingerprint computed from the Software's own installation files, which
+cannot be reversed back into those files -- every install of the same
+version and architecture produces the identical value, so it does not vary
+by device or user and is not used to identify a specific device or user.
+The query never includes your name, email address, computer name, hardware
+serial numbers, song titles, lyrics, playlists, or account credentials. An
+ordinary HTTPS connection necessarily exposes the source IP address to
+Cloudflare, but the rights holder does not write IP addresses to a database
+or use them for behavioral analytics.
+
+When a deferrable update is found, the Software asks for your consent
+first; you may apply it immediately or defer it, and deferring downloads
+nothing. When an update the rights holder has marked required (for example
+a security fix) is found, the Software applies it during the cold-start
+stage before you can continue, because deferring it cannot be guaranteed
+safe -- this only happens at startup and never interrupts a program or
+stream that is already running.
+
+Before applying any downloaded update, the Software verifies the rights
+holder's signature and file hashes. If verification fails, the download is
+interrupted, the connection times out, or no connection can be made, the
+Software always starts normally on the existing version, applies nothing,
+and no other feature is affected.
 
 8. UPDATES, PRE-RELEASES, AND SERVICE CHANGES
 

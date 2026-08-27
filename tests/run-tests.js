@@ -1457,7 +1457,7 @@ test('發版稽核只檢查 production dependencies，且任何等級風險都�
   eq(manifest.scripts['audit:release'], 'npm audit --omit=dev --audit-level=low');
 });
 
-testAsync('更新計畫只讀 Release metadata，且只提供完整 Installer', async () => {
+testAsync('legacy release metadata adapter remains read-only and is not wired to the cold-start gate', async () => {
   const release = {
     tag_name: 'v9.9.9', html_url: 'https://example.test/release',
     assets: [
@@ -1479,21 +1479,23 @@ testAsync('更新計畫只讀 Release metadata，且只提供完整 Installer', 
   const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/app-updater.js'), 'utf8');
   const getPlanSource = updaterSource.slice(updaterSource.indexOf('async function getPlan'), updaterSource.indexOf('function ensureInside'));
   ok(!getPlanSource.includes('downloadReleaseUpdate('), '檢查更新不可預先下載 update.zip: ');
-  const updatePanelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-check.js'), 'utf8');
-  ok(updatePanelSource.includes('完整 Windows Installer'), '面板必須明確導向完整 Installer: ');
+  const shellSource = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
+  const coordinatorSource = fs.readFileSync(path.join(__dirname, '../server/services/startup-update-coordinator.js'), 'utf8');
+  ok(!shellSource.includes('app-updater') && !coordinatorSource.includes('app-updater'), 'P4 gate 不可接到 legacy updater: ');
 });
 
-test('首頁更新橫幅只導向完整 Installer，不提供增量更新入口', () => {
+test('首頁必須手動檢查更新，只有確認有新版本後才能重新啟動', () => {
   const toastSource = fs.readFileSync(path.join(__dirname, '../public/js/app-toast-utils.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const restartSource = fs.readFileSync(path.join(__dirname, '../public/js/app-restart-update-check.js'), 'utf8');
 
-  ok(toastSource.includes("fetch('/api/app-update/plan')"), '首頁橫幅必須讀取更新計畫: ');
-  ok(!toastSource.includes('applyIncrementalUpdate'), '首頁橫幅不可提供增量更新流程: ');
-  ok(indexHtml.includes('id="update-banner-link"'), '橫幅必須提供 Installer 下載連結: ');
-  ok(!indexHtml.includes('id="update-banner-apply"'), '橫幅不可保留立即增量更新按鈕: ');
-  const updatePanelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-update-check.js'), 'utf8');
-  ok(!updatePanelSource.includes('applyIncrementalUpdate'), '設定頁不可提供增量更新流程: ');
-  ok(!fs.existsSync(path.join(__dirname, '../public/js/app-update-apply.js')), '舊的前端增量更新模組必須移除: ');
+  ok(!toastSource.includes('/api/app-update/') && !toastSource.includes('fetch('), '首頁不可查詢更新計畫: ');
+  ok(!indexHtml.includes('update-banner') && indexHtml.includes('id="app-update-check-btn"'), '首頁必須保留手動檢查更新按鈕: ');
+  ok(indexHtml.includes('id="app-version-current"') && indexHtml.includes('id="app-update-status"'), '首頁必須顯示目前版本與檢查結果: ');
+  ok(indexHtml.includes('id="app-update-restart-btn"'), '首頁必須保留確認後的重新啟動入口: ');
+  ok(restartSource.includes("fetch('/api/health'") && restartSource.includes("fetch('/api/update-check?force=1'"), '更新檢查必須由使用者手動觸發: ');
+  ok(!restartSource.includes('/api/app-update/') && restartSource.includes('restartForUpdateCheck'), '前端不可自行下載或套用更新: ');
+  ok(!fs.existsSync(path.join(__dirname, '../public/js/app-update-check.js')), '舊的前端更新模組必須移除: ');
 });
 
 test('更新檢查會納入 prerelease、排除 draft，並挑最高版本', () => {
@@ -1610,18 +1612,18 @@ testAsync('SHA 不符與 staging 寫入失敗都不修改正式目錄、也不�
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
-testAsync('程式內增量更新已停用，準備階段不會寫入或啟動 updater', async () => {
+testAsync('非冷啟動簽章政策的增量更新會被拒絕，準備階段不會寫入或啟動 updater', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-update-launch-'));
   try {
     appUpdater._resetForTests();
     const prepared = await appUpdater.prepareUpdate({ targetRoot: root, zipBuffer: makeUpdateZip(), latestVersion: '0.7.4' });
-    ok(!prepared.prepared && prepared.needsFull);
-    ok(/Windows Installer/.test(prepared.reason));
-    ok(!fs.existsSync(path.join(root, 'server')), '停用時不可建立 staging 或修改目標目錄: ');
+    ok(!prepared.prepared && !prepared.needsFull);
+    ok(/冷啟動簽章政策/.test(prepared.reason));
+    ok(!fs.existsSync(path.join(root, 'server')), '拒絕時不可建立 staging 或修改目標目錄: ');
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
-testAsync('程式內增量更新被拒絕時不會呼叫外部 updater', async () => {
+testAsync('非冷啟動簽章政策的增量更新被拒絕時不會呼叫外部 updater', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-update-node-mode-'));
   try {
     appUpdater._resetForTests();
@@ -1633,8 +1635,8 @@ testAsync('程式內增量更新被拒絕時不會呼叫外部 updater', async (
       latestVersion: '0.7.4',
       spawnImpl() { spawnCalled = true; },
     });
-    ok(!prepared.prepared && !result.prepared && result.needsFull);
-    ok(!spawnCalled, '停用時不可建立外部 updater 子程序: ');
+    ok(!prepared.prepared && !result.prepared && !result.needsFull);
+    ok(!spawnCalled, '拒絕時不可建立外部 updater 子程序: ');
   } finally { fs.rmSync(root, { recursive: true, force: true }); appUpdater._resetForTests(); }
 });
 
@@ -1765,11 +1767,11 @@ test('外部 updater 在獨立 Node 子程序可完成覆蓋與清理', () => {
   } finally { fs.rmSync(sandbox.root, { recursive: true, force: true }); }
 });
 
-test('更新 API 只在 response finish 後要求 graceful shutdown', () => {
+test('更新 HTTP API 已移除，只有 private parentPort coordinator 可在冷啟動使用', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
-  const finishAt = source.indexOf("res.once('finish'");
-  const shutdownAt = source.indexOf("gracefulShutdown({ reason: 'app-update'", finishAt);
-  ok(finishAt >= 0 && shutdownAt > finishAt);
+  const coordinator = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'startup-update-coordinator.js'), 'utf8');
+  ok(!source.includes("'/app-update/plan'") && !source.includes("'/app-update/status'") && !source.includes("'/app-update/apply'"));
+  ok(coordinator.includes('process.parentPort') && !coordinator.includes('router.') && !coordinator.includes('socket'));
 });
 
 function sampleAnnouncement(patch = {}) {
@@ -4599,6 +4601,32 @@ test('系統字體選單不把字體名稱拼進 HTML 或 style 字串', () => {
   ok(!lyricExtras.includes('fontOptionsHtml('), '舊的字串式字體選項 helper 必須移除: ');
 });
 
+test('受控本機字型資產以 FontFace 載入，且只允許 loopback 讀取', () => {
+  const root = path.join(__dirname, '..');
+  const scanner = fs.readFileSync(path.join(root, 'server/services/font-scanner.js'), 'utf8');
+  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const loader = fs.readFileSync(path.join(root, 'public/js/font-assets.js'), 'utf8');
+  const display = fs.readFileSync(path.join(root, 'public/js/display.js'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(root, 'public/js/lyric-extras.js'), 'utf8');
+  const displayHtml = fs.readFileSync(path.join(root, 'public/display.html'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const prompterHtml = fs.readFileSync(path.join(root, 'public/prompter.html'), 'utf8');
+  ok(scanner.includes('resolveFontAssetFace') && scanner.includes('fsp.realpath') && scanner.includes('MAX_FONT_ASSET_BYTES'),
+    '字型檔必須由掃描器以 realpath 與大小上限驗證，不能相信前端輸入路徑: ');
+  ok(api.includes("router.get('/fonts/assets/:assetId'") && api.includes("router.get('/fonts/assets/:assetId/:faceId'") && api.includes('isDirectLoopback(req)'),
+    '字型資源必須有 metadata／位元組兩條路由，且只接受 loopback: ');
+  ok(api.includes("'Cross-Origin-Resource-Policy': 'same-origin'") && api.includes("'X-Content-Type-Options': 'nosniff'"),
+    '字型資源回應必須禁止跨來源取用與 MIME 猜測: ');
+  ok(loader.includes('new FontFace(asset.family') && loader.includes('document.fonts.add(font)'),
+    '前端必須實際載入 FontFace 後才宣稱本機字型可用: ');
+  ok(display.includes('applyLocalFontAssets') && display.includes('保留備援字型'),
+    'OBS 顯示端字型載入失敗時必須留在 fallback，不能輸出空白文字: ');
+  ok(lyricExtras.includes('fontAssetId') && lyricExtras.includes('verifyFontAsset'),
+    '歌詞設定必須先驗證本機字型資產並持久化 opaque ID: ');
+  [displayHtml, panelHtml, prompterHtml].forEach((html) => ok(html.includes('/js/font-assets.js'),
+    '歌詞顯示、面板與跟唱視圖都必須載入受控字型載入器: '));
+});
+
 test('媒體庫連續加入採逐首佇列與伺服器確認，避免完整歌詞併發堆積', () => {
   const root = path.join(__dirname, '..');
   const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
@@ -6640,7 +6668,7 @@ test('HTTP 安全回歸：標頭存在、版本標頭隱藏、過大 JSON 回 41
         // yt-dlp/ffmpeg，任何網頁都能重複觸發。403 在 middleware 就短路，不會真的 spawn。
         for (const sideEffectGet of ['/api/system-check?force=1', '/api/fonts?refresh=1',
           '/api/diagnostics/export', '/api/twitch/authorize', '/api/ytdlp/check?force=1',
-          '/api/announcements?force=1', '/api/update-check?force=1', '/api/app-update/plan']) {
+          '/api/announcements?force=1', '/api/update-check?force=1']) {
           const blocked = await request({ host: '127.0.0.1', port, path: sideEffectGet,
             headers: { 'sec-fetch-site': 'cross-site' } });
           if (blocked.statusCode !== 403) { process.exitCode = 6; break; }

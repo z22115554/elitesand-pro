@@ -1,13 +1,13 @@
 {
   "name": "elitesand-pro",
-  "version": "0.9.9.7",
+  "version": "1.0.0",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/run-tests.js && node tests/p0-installer-media-loss.test.js && node tests/pin-first-setup.test.js && node tests/device-access.test.js && node tests/app-updater-v2.test.js && node tests/usage-telemetry.test.js && node tests/telemetry-daily.test.js && node tests/lyric-offset-sync.test.js && node tests/onboarding-tour.test.js && node tests/updater-in-progress-lock.test.js && node tests/app-update-check.test.js && node tests/app-update-i18n.test.js",
+    "test": "node tests/run-tests.js && node tests/p0-installer-media-loss.test.js && node tests/pin-first-setup.test.js && node tests/device-access.test.js && node tests/app-updater-v2.test.js && node tests/update-policy.test.js && node tests/update-provider.test.js && node --test tests/cloudflare-update-provider.test.js && node --test tests/update-policy-keygen.test.js && node --test tests/update-runtime-fingerprint.test.js && node --test tests/signed-update-artifact.test.js && node --test tests/startup-incremental-update.test.js && node --test tests/required-installer-handoff.test.js && node --test tools/update-publisher/test/publish-hotfix.test.js tools/update-publisher/test/r2-s3-store.test.js && node tests/usage-telemetry.test.js && node tests/telemetry-daily.test.js && node tests/lyric-offset-sync.test.js && node tests/onboarding-tour.test.js && node tests/updater-in-progress-lock.test.js && node --test tests/startup-update-gate.test.js && node --test tests/startup-update-i18n.test.js && node --test tests/manual-update-check.test.js && node tests/app-update-check.test.js",
     "test:onboarding": "node tests/onboarding-tour.test.js",
     "audit:release": "npm audit --omit=dev --audit-level=low",
     "smoke:portable": "node tools/smoke-portable.js",
@@ -37,6 +37,7 @@
     "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-portable.ps1",
     "package:update": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-update.ps1",
     "package:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1",
+    "release:hotfix": "node tools/update-publisher/cli.js",
     "test:visual": "playwright test --config=playwright.config.js"
   },
   "dependencies": {
@@ -55,10 +56,11 @@
     "soundtouchjs": "^0.3.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1119.0",
+    "@playwright/test": "^1.62.1",
     "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
-    "esbuild": "^0.28.1",
-    "@playwright/test": "^1.62.1"
+    "esbuild": "^0.28.1"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -66,7 +68,10 @@
   "build": {
     "appId": "com.elitesand.pro",
     "productName": "Elitesand Pro",
-    "asar": { "smartUnpack": false },
+    "publish": null,
+    "asar": {
+      "smartUnpack": false
+    },
     "directories": {
       "app": "dist/.electron-builder-resources/app",
       "output": "dist/releases/v${version}/installer"
@@ -83,12 +88,24 @@
       "grantFileProtocolExtraPrivileges": false
     },
     "forceCodeSigning": false,
-    "files": ["**/*", "assets/**/*"],
-    "extraResources": [
-      { "from": "dist/.electron-builder-resources/tools", "to": "tools" },
-      { "from": "dist/.electron-builder-resources/licenses", "to": "licenses" }
+    "files": [
+      "**/*",
+      "assets/**/*"
     ],
-    "win": { "target": "nsis", "icon": "assets/elitesand-pro.ico" },
+    "extraResources": [
+      {
+        "from": "dist/.electron-builder-resources/tools",
+        "to": "tools"
+      },
+      {
+        "from": "dist/.electron-builder-resources/licenses",
+        "to": "licenses"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/elitesand-pro.ico"
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -99,8 +116,15 @@
       "license": "dist/.electron-builder-resources/EULA-installer.txt",
       "multiLanguageInstaller": true,
       "displayLanguageSelector": true,
-      "installerLanguages": ["en_US", "zh_TW", "ja_JP", "ko_KR", "zh_CN"],
+      "installerLanguages": [
+        "en_US",
+        "zh_TW",
+        "ja_JP",
+        "ko_KR",
+        "zh_CN"
+      ],
       "language": "1033"
     }
-  }
+  },
+  "elitesandPublicVersion": "1.0.0"
 }

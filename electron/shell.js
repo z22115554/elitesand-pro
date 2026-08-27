@@ -6,6 +6,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const { validateUpdatePlanShape } = require('../server/services/update-policy');
 
 const DEFAULT_PORT = 3000;
 const START_TIMEOUT_MS = 15000;
@@ -128,6 +129,35 @@ function isProjectReleaseUrl(rawUrl) {
       && url.pathname.startsWith('/z22115554/elitesand-pro');
   } catch (_) {
     return false;
+  }
+}
+
+// A plan reaches Electron only through the private coordinator after its
+// signature has been checked there. Re-check the complete serialized shape at
+// the external-launch boundary so no renderer, URL, or generic release page
+// can ever become an Installer handoff.
+function isRequiredInstallerHandoffPlan(plan) {
+  return validateUpdatePlanShape(plan) === null
+    && plan.delivery === 'installer'
+    && plan.urgency === 'required'
+    && (plan.reasonCode === 'major-release' || plan.reasonCode === 'owner-forced');
+}
+
+async function runRequiredInstallerHandoff({ plan, openExternal, prompt } = {}) {
+  if (!isRequiredInstallerHandoffPlan(plan) || typeof openExternal !== 'function' || typeof prompt !== 'function') return false;
+  // Opening an Installer never exits the app. The next native gate gives the
+  // user the explicit Exit choice when they are ready for the Installer to
+  // replace the running files; the main panel remains locked throughout.
+  let openFailed = false;
+  while (true) {
+    try {
+      await openExternal(plan.installer.url);
+      openFailed = false;
+    } catch (_) {
+      openFailed = true;
+    }
+    const choice = await prompt({ plan, openFailed });
+    if (choice !== 'open') return true;
   }
 }
 
@@ -256,6 +286,11 @@ function createElectronShell({
   }
 
   const { SHUTDOWN_MESSAGE } = require(path.join(projectRoot, 'server', 'utils', 'parent-shutdown'));
+  const { createStartupUpdateGate, PHASES: UPDATE_PHASES } = require('./startup-update-gate');
+  const { createStartupUpdateRequester } = require('./startup-update-requester');
+  const { createManualUpdateRequester } = require('./manual-update-requester');
+  const { createStartupUpdateDeferStore } = require('./startup-update-defer-store');
+  const { format: formatUpdateText, getCatalog: getUpdateCatalog } = require('./startup-update-i18n');
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
   const preload = path.join(shellRoot, 'electron', 'preload.js');
   const isSpoutExperiment = processObject.env.ELITESAND_SPOUT_EXPERIMENT === '1';
@@ -276,6 +311,9 @@ function createElectronShell({
   let shouldShowPortableDataMigrationNotice = false;
   let spoutDisplayOutput = null;
   let spoutOutputOptions = null;
+  let startupUpdateGate = null;
+  let startupUpdateRequester = null;
+  let manualUpdateRequester = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
 
   function resolveExperimentalSpoutNumber(name, fallback) {
@@ -499,6 +537,65 @@ function createElectronShell({
     shouldShowPortableDataMigrationNotice = false;
   }
 
+  function getNativeUpdateCatalog() {
+    return getUpdateCatalog(app.getLocale?.() || 'zh-TW');
+  }
+
+  async function showNativeUpdateDialog(options) {
+    // Cold-start decisions have no BrowserWindow yet. Use Electron's native
+    // dialog directly, never an HTML preflight window or renderer modal.
+    if (typeof dialog.showMessageBox === 'function') return dialog.showMessageBox(options);
+    if (typeof dialog.showMessageBoxSync === 'function') return { response: dialog.showMessageBoxSync(options) };
+    return { response: options.cancelId ?? options.defaultId ?? 0 };
+  }
+
+  async function promptOptionalUpdate(plan) {
+    const text = getNativeUpdateCatalog();
+    const result = await showNativeUpdateDialog({
+      type: 'info',
+      title: text.title,
+      message: formatUpdateText(text.optionalMessage, { version: plan.targetVersion }),
+      detail: text.optionalDetail,
+      buttons: [text.updateNow, text.defer],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    return result?.response === 0 ? 'accept' : 'defer';
+  }
+
+  async function promptRequiredUpdate(plan, { openFailed = false } = {}) {
+    const text = getNativeUpdateCatalog();
+    const isInstaller = plan.delivery === 'installer';
+    const result = await showNativeUpdateDialog({
+      type: 'warning',
+      title: text.title,
+      message: text.requiredMessage,
+      detail: openFailed ? `${text.requiredDetail}\n\n${text.requiredInstallerOpenFailed}` : text.requiredDetail,
+      buttons: [isInstaller ? text.openInstaller : text.updateNow, text.exit],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    return result?.response === 0 ? 'open' : 'exit';
+  }
+
+  async function runStartupUpdateGate() {
+    const eligible = app.isPackaged && ownsServer && !isSpoutExperiment;
+    if (!eligible) {
+      startupUpdateGate = createStartupUpdateGate({ request: async () => ({ ok: false }) });
+      return startupUpdateGate.lock(ownsServer ? 'non-production-shell' : 'reused-server');
+    }
+    startupUpdateRequester = createStartupUpdateRequester({ child: serverProcess });
+    startupUpdateGate = createStartupUpdateGate({
+      request: startupUpdateRequester.request,
+      promptOptional: promptOptionalUpdate,
+      promptRequired: promptRequiredUpdate,
+      deferStore: createStartupUpdateDeferStore(app.getPath('userData'), { fsImpl }),
+    });
+    return startupUpdateGate.run({ eligible: true });
+  }
+
   async function createWindow() {
     const window = new BrowserWindow({
       width: 1280,
@@ -538,6 +635,97 @@ function createElectronShell({
         // Node server without its graceful shutdown and clean-session marker.
         app.quit?.();
         return true;
+      });
+      ipcMain.handle('elitesand:restart-for-update-check', async (event) => {
+        if (event?.sender !== window.webContents) return false;
+        const text = getNativeUpdateCatalog();
+        const result = await showNativeUpdateDialog({
+          type: 'question',
+          title: text.title,
+          message: text.restartMessage,
+          detail: text.restartDetail,
+          buttons: [text.restart, text.cancel],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true,
+        });
+        if (result?.response !== 0) return false;
+        app.relaunch?.();
+        // Let before-quit own the server shutdown. A renderer can only ask for
+        // this after the native confirmation above; it cannot start a check.
+        app.quit?.();
+        return true;
+      });
+      function logManualUpdateDebug(message) {
+        // Temporary diagnostic trail: this IPC runs entirely in the main
+        // process, so a thrown error never reaches the server's own logger
+        // or a console the packaged GUI subsystem process actually shows.
+        try {
+          const file = path.join(app.getPath('userData'), 'logs', 'manual-update-debug.log');
+          fsImpl.mkdirSync(path.dirname(file), { recursive: true });
+          fsImpl.appendFileSync(file, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
+        } catch (_) { /* best-effort diagnostic only */ }
+      }
+      ipcMain.handle('elitesand:cloudflare-update-check', async (event) => {
+        if (event?.sender !== window.webContents) return { status: 'unavailable' };
+        const eligible = app.isPackaged && ownsServer && !isSpoutExperiment;
+        if (!eligible) { logManualUpdateDebug(`not eligible: isPackaged=${app.isPackaged} ownsServer=${ownsServer} isSpoutExperiment=${isSpoutExperiment}`); return { status: 'unavailable' }; }
+        try {
+          if (!manualUpdateRequester) manualUpdateRequester = createManualUpdateRequester({ child: serverProcess });
+          const checked = await manualUpdateRequester.request({ action: 'check' });
+          logManualUpdateDebug(`check response: ${JSON.stringify(checked)}`);
+          if (!checked?.ok) return { status: 'failed' };
+          if (checked.kind !== 'plan' || !checked.plan) return { status: 'up-to-date' };
+          const plan = checked.plan;
+          const choice = plan.urgency === 'required'
+            ? (await promptRequiredUpdate(plan)) === 'open' ? 'accept' : 'defer'
+            : await promptOptionalUpdate(plan);
+          if (choice !== 'accept') return { status: 'declined', targetVersion: plan.targetVersion };
+          // Accepting can take minutes (download + verify + stage a real,
+          // hundreds-of-MB artifact) before it replies at all. Poll the
+          // server's own progress state and push it to the panel so the user
+          // sees *something* moving instead of a dead "checking" spinner for
+          // the whole duration.
+          const progressTimer = setInterval(() => {
+            manualUpdateRequester?.request({ action: 'progress' })
+              .then((progress) => {
+                logManualUpdateDebug(`progress poll: ${JSON.stringify(progress)}`);
+                if (progress?.ok && event.sender && !event.sender.isDestroyed()) {
+                  event.sender.send('elitesand:cloudflare-update-progress', progress.progress);
+                }
+              })
+              .catch((error) => logManualUpdateDebug(`progress poll error: ${error?.message || error}`));
+          }, 1000);
+          let accepted;
+          try {
+            accepted = await manualUpdateRequester.request({ action: 'accept', planId: plan.planId });
+          } finally {
+            clearInterval(progressTimer);
+          }
+          logManualUpdateDebug(`accept response: ${JSON.stringify(accepted)}`);
+          if (!accepted?.ok) {
+            // The interval above may not have gotten one more tick in before
+            // this settled; ask once more so the real getProgress().error is
+            // always captured, not just whichever poll happened to land.
+            try {
+              const finalProgress = await manualUpdateRequester.request({ action: 'progress' });
+              logManualUpdateDebug(`final progress after failure: ${JSON.stringify(finalProgress)}`);
+            } catch (error) {
+              logManualUpdateDebug(`final progress request failed: ${error?.message || error}`);
+            }
+            return { status: 'accept-failed', targetVersion: plan.targetVersion };
+          }
+          // The updater runtime is already spawned and detached, waiting only
+          // for this Electron host (and its owned server child) to fully
+          // exit before it swaps the payload and restarts the app itself.
+          // Never app.relaunch() here — that would race a second old-version
+          // launch against the updater's own post-swap restart.
+          app.quit?.();
+          return { status: 'restarting', targetVersion: plan.targetVersion };
+        } catch (error) {
+          logManualUpdateDebug(`exception: ${error?.stack || error}`);
+          return { status: 'failed' };
+        }
       });
       ipcMain.handle('elitesand:spout-status', (event) => {
         if (event?.sender !== window.webContents) return null;
@@ -757,6 +945,10 @@ function createElectronShell({
 
   async function shutdown() {
     await stopSpoutDisplayOutput();
+    startupUpdateRequester?.close?.();
+    startupUpdateRequester = null;
+    manualUpdateRequester?.close?.();
+    manualUpdateRequester = null;
     await shutdownOwnedServer();
     stopPowerSaveBlocker();
   }
@@ -823,13 +1015,31 @@ function createElectronShell({
     startPowerSaveBlocker();
     try {
       const server = await startServerOrReuseExisting();
+      const updateSession = await runStartupUpdateGate();
+      if (updateSession.decision === 'required-installer-opened') {
+        const installerPlan = startupUpdateGate?.getAcceptedPlan?.();
+        const exitedByUser = await runRequiredInstallerHandoff({
+          plan: installerPlan,
+          openExternal: (url) => shell.openExternal(url),
+          prompt: ({ plan, openFailed }) => promptRequiredUpdate(plan, { openFailed }),
+        });
+        if (!exitedByUser) throw new Error('已拒絕不受信任的必要 Installer 交接。');
+        await shutdown();
+        app.exit(0);
+        return { started: false, reason: 'required-installer-exit', ...server, updateSession };
+      }
+      if (updateSession.phase !== UPDATE_PHASES.RUNNING_LOCKED) {
+        await shutdown();
+        app.exit(0);
+        return { started: false, reason: 'startup-update-exit', ...server, updateSession };
+      }
       serverReady = true;
       showPortableDataMigrationNotice();
       createTray();
       await startExperimentalSpoutDisplayOutput();
       await createWindow();
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
-      return { started: true, ...server };
+      return { started: true, ...server, updateSession };
     } catch (error) {
       showStartupError(error);
       await shutdown();
@@ -849,6 +1059,7 @@ function createElectronShell({
       serverReady,
       hasWindow: !!mainWindow,
       serverPid: serverProcess?.pid || null,
+      updateSession: startupUpdateGate?.getSession?.() || null,
       spout: getSpoutOutputStatus(),
     }),
   };
@@ -868,10 +1079,12 @@ module.exports = {
   ensureRuntimePaths,
   isTrustedLocalUrl,
   isProjectReleaseUrl,
+  isRequiredInstallerHandoffPlan,
   isTwitchVerificationUrl,
   isPrompterUrl,
   probeHealth,
   waitForExit,
   verifyPackagedResourceIntegrity,
+  runRequiredInstallerHandoff,
   createElectronShell,
 };

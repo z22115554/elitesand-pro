@@ -70,6 +70,19 @@
     </div>
   </div>
 
+  <!-- 更新套用失敗時的提示，跟上次未正常關閉的 crash-banner 同一種設計：
+       只問要不要回報，絕不自動傳送，送出前一樣先走預覽。 -->
+  <div id="update-fail-banner" class="announcement-banner crash-banner" role="status" hidden>
+    <div>
+      <strong data-i18n="appUpdate.failBannerTitle">這次更新沒有套用成功</strong>
+      <span data-i18n="appUpdate.failBannerMessage">要傳送診斷資訊協助找出原因嗎？送出前你可以先看過完整內容。</span>
+    </div>
+    <div class="announcement-actions">
+      <button id="update-fail-review" class="btn btn-sm btn-primary" type="button" data-i18n="crash.review">查看內容</button>
+      <button id="update-fail-dismiss" class="btn btn-sm btn-ghost" type="button" data-i18n="crash.dismiss">不用了</button>
+    </div>
+  </div>
+
   <!-- 互動式新手導覽：使用真實介面目標，不複製或偽造控制項。 -->
   <div id="tour-welcome" class="tour-welcome-layer" role="dialog" aria-modal="true" aria-labelledby="tour-welcome-title" hidden>
     <section class="tour-welcome-card">
@@ -266,12 +279,6 @@
           </div>
           <span id="mini-time-total" class="mini-time">0:00</span>
         </div>
-      </div>
-
-      <div id="update-banner" class="banner" hidden>
-        <span>新版本 <strong id="update-banner-version"></strong> 已發布</span>
-        <a id="update-banner-link" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer" hidden>下載 Installer</a>
-        <button id="update-banner-dismiss" class="btn btn-sm btn-ghost" type="button">關閉</button>
       </div>
 
       <div class="content">
@@ -1375,15 +1382,15 @@
           </details>
 
           <section class="card" id="app-update-card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg>程式更新</p>
-            <p class="sub section-intro">有新版本時只通知；請從 GitHub Releases 下載並執行完整 Windows Installer。程式內增量更新已停用，不會自動重新啟動或中斷直播。</p>
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg><span data-i18n="appUpdate.title">程式更新</span></p>
+            <p class="sub section-intro" data-i18n="appUpdate.intro">請先按「檢查更新」查看是否有新版本；確認後才會由你決定是否重新啟動更新，直播中不會自動中斷。</p>
             <div class="switch-row">
-              <div><div class="label">目前版本</div><div class="sub" id="app-version-current">讀取中…</div></div>
-              <button id="app-update-check-btn" class="btn btn-sm" type="button">檢查更新</button>
+              <div><div class="label" data-i18n="appUpdate.currentVersion">目前版本</div><div class="sub" id="app-version-current">讀取中…</div></div>
+              <button id="app-update-check-btn" class="btn btn-sm" type="button" data-i18n="appUpdate.check">檢查更新</button>
             </div>
-            <p id="app-update-status" class="val val--status-message">尚未檢查。</p>
+            <p id="app-update-status" class="val val--status-message" aria-live="polite" data-i18n="appUpdate.notChecked">尚未檢查。</p>
             <div class="inline-row inline-row--wrap mt-10">
-              <a id="app-update-link" class="btn btn-sm btn-ghost" href="#" target="_blank" rel="noopener noreferrer" hidden>下載 Installer</a>
+              <button id="app-update-restart-btn" class="btn btn-sm btn-primary" type="button" hidden data-i18n="appUpdate.restart">重新啟動並更新</button>
             </div>
           </section>
 
@@ -2703,7 +2710,7 @@
   <script src="/js/danger-confirm.js"></script>
   <script src="/js/modal-focus.js"></script>
   <script src="/js/app-youtube-import.js"></script>
-  <script src="/js/app-update-check.js"></script>
+  <script src="/js/app-restart-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>
   <script src="/js/twitch-request-settings.js"></script>
   <script src="/js/twitch-reward-settings.js"></script>
@@ -2724,6 +2731,7 @@
   <script src="/js/playlist-state.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/app-spout-output.js"></script>
+  <script src="/js/font-assets.js"></script>
   <script src="/js/lyric-extras.js"></script>
   <script src="/js/media-library.js"></script>
   <script src="/js/style-tuner.js"></script>
