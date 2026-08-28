@@ -449,6 +449,7 @@
       track.manualLyrics = true;
       if (playlist[currentTrackIndex] && playlist[currentTrackIndex].id === data.trackId) {
         renderLyricsPreview(data.lyrics);
+        if (typeof AppShared.renderHomeLyricNow === 'function') AppShared.renderHomeLyricNow(true);
       }
       AppShared.renderPlaylist();
     }

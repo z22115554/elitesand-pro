@@ -306,6 +306,15 @@
   });
 
   dom.ytFetchBtn.addEventListener('click', fetchYouTube);
+  dom.youtubeAutoSeparate?.addEventListener('change', async () => {
+    if (!dom.youtubeAutoSeparate.checked) return;
+    try {
+      if (!await window.AiSeparation.ensureReady()) dom.youtubeAutoSeparate.checked = false;
+    } catch (error) {
+      dom.youtubeAutoSeparate.checked = false;
+      AppShared.showToast(t('import.separation.prepareFailed', { message: error.message }), 'error');
+    }
+  });
   dom.ytUrl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') fetchYouTube();
   });
@@ -676,6 +685,9 @@
   }
 
   async function separateImportedTrack(job, track) {
+    if (!await window.AiSeparation.ensureReady()) {
+      throw new Error(t('import.separation.notEnabled'));
+    }
     updateJob(job, {
       status: 'separating', stage: '', percent: 0,
       postActionKey: 'import.separation.starting', postActionVars: {},
@@ -708,17 +720,17 @@
         });
         return;
       }
-      const rawProgress = Number(data.progress);
-      const percent = Number.isFinite(rawProgress)
-        ? Math.max(0, Math.min(100, rawProgress <= 1 ? rawProgress * 100 : rawProgress))
-        : 0;
+      const percent = Number.isFinite(data.percent) ? data.percent : 0;
       updateJob(job, {
         status: 'separating', percent,
-        postActionKey: 'import.separation.processing',
-        postActionVars: { percent: Number.isFinite(rawProgress) ? `${formatNumber(Math.round(percent))}%` : '' },
+        postActionKey: 'import.separation.state',
+        postActionVars: {
+          state: window.AiSeparation.label(data),
+          percent: Number.isFinite(data.percent) ? `${formatNumber(Math.round(percent))}%` : '',
+        },
       });
     };
-    SocketClient.on('separation:progress', onProgress);
+    const unsubscribe = window.AiSeparation.subscribe(onProgress, { replay: false });
     timer = setTimeout(() => {
       if (finished) return;
       finished = true;
@@ -735,7 +747,7 @@
     } finally {
       finished = true;
       if (timer) clearTimeout(timer);
-      SocketClient.off('separation:progress', onProgress);
+      unsubscribe();
     }
   }
 

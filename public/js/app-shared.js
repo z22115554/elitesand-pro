@@ -112,6 +112,10 @@ window.AppShared = (function () {
     offsetMinus01: document.getElementById('offset-minus01'),
     offsetReset: document.getElementById('offset-reset'),
     offsetAlign: document.getElementById('offset-align'),
+    countdownAlignBox: document.getElementById('countdown-align-box'),
+    countdownNumber: document.getElementById('countdown-number'),
+    lyricNowLine: document.getElementById('lyric-now-line'),
+    lyricNextLine: document.getElementById('lyric-next-line'),
     // 逐行時間軸編輯器
     btnLyricsTimeline: document.getElementById('btn-lyrics-timeline'),
     ltModal: document.getElementById('lyrics-timeline-modal'),

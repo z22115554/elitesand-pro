@@ -211,7 +211,7 @@
     document.getElementById('guide-start-sample')?.addEventListener('click', () => {
       guideStartPath = 'sample';
       updateGuideRoute();
-      jumpToGuideTarget('karaoke', 'lyrics-preview-card');
+      jumpToGuideTarget('karaoke', 'lyric-now-line');
       document.getElementById('btn-preview-sample-lyrics')?.click();
     });
     document.getElementById('guide-start-song')?.addEventListener('click', () => {
@@ -429,55 +429,42 @@
     wireFfmpegDownloadButton(document.getElementById('guide-ffmpeg-download'), 'guide-check-ffmpeg');
     wireFfmpegDownloadButton(document.getElementById('ffmpeg-download-btn'), 'ffmpeg-status');
 
-    // ─── AI 人聲分離（實驗性）：跟 FFmpeg 同一個「檢查→下載→輪詢」形狀，
-    // 但不進「新手教學」清單、不影響 guide 的整體就緒判斷——這是獨立的選用功能。 ───
+    // ─── AI 伴奏製作（實驗性）：對使用者只有一個完整元件，不再分開顯示
+    // Python/WebGPU。真正的備援順序由 server 協調器負責。 ───
     (function wireAiSeparationDownload() {
       const statusEl = document.getElementById('ai-separation-status');
       const btn = document.getElementById('ai-separation-download-btn');
       if (!statusEl || !btn) return;
-      let pollTimer = null;
 
       function refresh() {
-        fetch('/api/ai-separation/runtime-status', { cache: 'no-store' }).then((res) => res.json()).then((status) => {
+        window.AiSeparation.getBundleStatus().then((status) => {
           if (status.available) {
-            statusEl.textContent = '已就緒';
+            statusEl.textContent = guideT('aiInstall.stageDone');
             btn.hidden = true;
-            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
             return;
           }
           if (status.active) {
             const percent = Math.max(0, Math.min(100, Math.floor(Number(status.percent || 0))));
-            statusEl.textContent = `下載中… ${percent}%`;
-            btn.hidden = true;
-            if (!pollTimer) pollTimer = setInterval(refresh, 500);
+            statusEl.textContent = `${guideT('aiInstall.downloading')} ${percent}%`;
+            btn.hidden = false;
+            btn.disabled = false;
+            btn.textContent = guideT('aiInstall.viewProgress');
             return;
           }
-          statusEl.textContent = '尚未安裝';
+          statusEl.textContent = guideT('aiInstall.notInstalled');
           btn.hidden = false;
           btn.disabled = false;
-          btn.textContent = '下載元件';
-          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        }).catch(() => { statusEl.textContent = '檢查失敗'; });
+          btn.textContent = guideT('aiInstall.downloadComponents');
+        }).catch(() => { statusEl.textContent = guideT('aiInstall.checkFailed'); });
       }
 
-      btn.addEventListener('click', () => {
-        btn.disabled = true;
-        btn.textContent = '下載中…';
-        statusEl.textContent = '下載中…';
-        pollTimer = setInterval(refresh, 500);
-        PinAuth.fetchWithPin('/api/ai-separation/runtime/download', { method: 'POST' })
-          .then((res) => res.json())
-          .then((data) => {
-            if (!data.ok) throw new Error(data.reason || '下載失敗');
-            refresh();
-          })
-          .catch((err) => {
-            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-            statusEl.textContent = `下載失敗：${err.message}`;
-            btn.disabled = false;
-            btn.hidden = false;
-            btn.textContent = '重新下載';
-          });
+      btn.addEventListener('click', async () => {
+        try {
+          await window.AiSeparation.ensureReady();
+        } catch (error) {
+          AppShared.showToast(`${guideT('aiInstall.statusFailed')}：${error.message}`, 'error');
+        }
+        refresh();
       });
 
       document.addEventListener('view:change', (event) => {
@@ -582,101 +569,6 @@
         offsetVal.textContent = `${ms}ms`;
         if (typeof AppShared.setDualAudioSyncOffset === 'function') AppShared.setDualAudioSyncOffset(ms);
       });
-    })();
-
-    // ─── WebGPU 人聲分離（實驗性）：docs/AI-SEPARATION-PLAN.md §13 musetric 路線 ───
-    // 僅限桌面版；純網頁版（npm start 直接開瀏覽器）沒有 window.ElitesandShell，開關
-    // 保持停用並顯示「僅限桌面版」，不去嘗試連一個根本不存在的隱藏視窗。
-    (function wireWebgpuSeparation() {
-      const toggle = document.getElementById('webgpu-separation-toggle');
-      const statusEl = document.getElementById('webgpu-separation-status');
-      const downloadBtn = document.getElementById('webgpu-separation-download-btn');
-      if (!toggle || !statusEl) return;
-      const isElectron = typeof window.ElitesandShell !== 'undefined' && !!window.ElitesandShell.webgpuEngine;
-      if (!isElectron) {
-        statusEl.textContent = '僅限桌面版';
-        toggle.disabled = true;
-        return;
-      }
-      let pollTimer = null;
-
-      function refreshRuntimeStatus() {
-        fetch('/api/webgpu-separation/runtime-status', { cache: 'no-store' }).then((res) => res.json()).then((status) => {
-          if (status.active) {
-            const percent = Math.max(0, Math.min(100, Math.floor(Number(status.percent || 0))));
-            statusEl.textContent = `模型下載中… ${percent}%`;
-            downloadBtn.hidden = true;
-            if (!pollTimer) pollTimer = setInterval(refreshRuntimeStatus, 500);
-            return;
-          }
-          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-          if (!status.available) {
-            statusEl.textContent = toggle.checked ? '尚未下載模型' : '尚未下載模型（開啟後自動下載）';
-            downloadBtn.hidden = false;
-            downloadBtn.disabled = false;
-            downloadBtn.textContent = '重新下載模型';
-            return;
-          }
-          downloadBtn.hidden = true;
-          if (!toggle.checked) { statusEl.textContent = '已停用'; return; }
-          statusEl.textContent = status.engineConnected ? '已就緒（引擎連線中）' : '已就緒，等待引擎連線…';
-        }).catch(() => { statusEl.textContent = '狀態讀取失敗'; });
-      }
-
-      function refreshSettings() {
-        fetch('/api/webgpu-separation/settings', { cache: 'no-store' }).then((res) => res.json()).then((settings) => {
-          toggle.checked = !!settings.enabled;
-          toggle.disabled = false;
-          refreshRuntimeStatus();
-        }).catch(() => { statusEl.textContent = '設定讀取失敗'; });
-      }
-
-      toggle.addEventListener('change', () => {
-        const enabled = toggle.checked;
-        toggle.disabled = true;
-        PinAuth.fetchWithPin('/api/webgpu-separation/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled }),
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            if (!data.ok) throw new Error(data.code || '設定保存失敗');
-            // 讓 Electron 主程序立刻知道要不要建立/關閉隱藏視窗，不用重啟整個 App。
-            return window.ElitesandShell.webgpuEngine.setEnabled(enabled);
-          })
-          .then(() => { toggle.disabled = false; refreshRuntimeStatus(); })
-          .catch((err) => {
-            toggle.checked = !enabled; // 失敗時復原成變更前的狀態，同專案既有慣例
-            toggle.disabled = false;
-            statusEl.textContent = `設定失敗：${err.message}`;
-          });
-      });
-
-      downloadBtn?.addEventListener('click', () => {
-        downloadBtn.disabled = true;
-        downloadBtn.textContent = '下載中…';
-        statusEl.textContent = '模型下載中…';
-        pollTimer = setInterval(refreshRuntimeStatus, 500);
-        PinAuth.fetchWithPin('/api/webgpu-separation/runtime/download', { method: 'POST' })
-          .then((res) => res.json())
-          .then((data) => {
-            if (!data.ok) throw new Error(data.reason || '下載失敗');
-            refreshRuntimeStatus();
-          })
-          .catch((err) => {
-            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-            statusEl.textContent = `下載失敗：${err.message}`;
-            downloadBtn.disabled = false;
-            downloadBtn.hidden = false;
-            downloadBtn.textContent = '重新下載模型';
-          });
-      });
-
-      document.addEventListener('view:change', (event) => {
-        if (event.detail?.view === 'general') refreshRuntimeStatus();
-      });
-      refreshSettings();
     })();
 
     // 兩顆下載按鈕（新手教學／連線與系統）共用同一組文字更新函式；換語言時要一起重畫。

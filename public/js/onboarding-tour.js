@@ -64,8 +64,8 @@
     {
       id: 'preview',
       view: 'karaoke',
-      target: '#lyrics-preview-card',
-      mobileTarget: '.lyrics-preview-controls',
+      target: '.lb-lyric',
+      mobileTarget: '.lb-lyric-actions',
       title: 'tour.step.preview.title',
       body: 'tour.step.preview.body',
       hint: 'tour.step.preview.hint',
@@ -201,8 +201,8 @@
     {
       id: 'live-session',
       view: 'karaoke',
-      target: '#live-session-summary-card',
-      mobileTarget: '#live-session-summary-card',
+      target: '#session-status',
+      mobileTarget: '#session-status',
       title: 'tour.advanced.step.liveSession.title',
       body: 'tour.advanced.step.liveSession.body',
       hint: 'tour.advanced.step.liveSession.hint',

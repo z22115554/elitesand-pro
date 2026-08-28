@@ -367,6 +367,7 @@
       setCurrentTime(formatTime(t));
     }
     lastPlayTimeMs = (t || 0) * 1000; // SoundTouch 播放位置（給「對齊第一句」用）
+    renderHomeLyricNow();
     const now = Date.now();
     if (now - lastSyncTime >= SYNC_INTERVAL) {
       lastSyncTime = now;
@@ -540,7 +541,9 @@
       // 切歌：先停掉並銷毀上一首的 SoundTouch 節點，避免舊節點變孤兒繼續播放、停不下來。
       // 注意：load 只在下方各分支「呼叫一次」——重複 stLoadCurrent 會讓兩個 load 競態、產生孤兒節點。
       if (useSoundTouch) { try { SoundTouchEngine.stop(); } catch (e) {} }
-      if (wantSeparation && vocalsSTEngine) { try { vocalsSTEngine.stop(); } catch (e) {} }
+      // 上一首的人聲引擎「無條件」停：從分離歌手動切到非分離歌時 wantSeparation 為 false，
+      // 若在這裡加 wantSeparation 判斷，舊人聲軌會變孤兒繼續唱、下一首又照播（實測事故）。
+      if (vocalsSTEngine) { try { vocalsSTEngine.stop(); } catch (e) {} }
       if (autoplay) {
         if (useSoundTouch) {
           // SoundTouch 路徑：等 buffer 好再播；<audio> 靜音待命當備援
@@ -634,6 +637,7 @@
       stReady = false;
     }
     if (vocalsSTEngine) { try { vocalsSTEngine.dispose(); } catch (e) {} }
+    vocalsSTEngine = null; vocalsGain = null; vocalsLoadPromise = null; // 銷毀後要歸零，否則 ensureVocalsChain() 會早退、下一首分離歌拿到死引擎
     wireDualRouting(false);
     dualAudioActive = false;
     separationActive = false;
@@ -859,6 +863,7 @@
     // timeupdate，讓兩個時間源同時寫進度條與 lyrics:sync，OBS 端就會看到歌詞來回跳。
     if (stActive()) return;
     lastPlayTimeMs = (audioPlayer.currentTime || 0) * 1000; // 給「對齊第一句」用（非 SoundTouch 路徑）
+    renderHomeLyricNow();
     if (!audioPlayer.duration) return;
     setTotalTime(formatTime(audioPlayer.duration));
     if (isSeeking) return; // 拖曳中由拖曳邏輯控制進度條，避免互相打架
@@ -1032,6 +1037,7 @@
       const sign = currentOffsetMs >= 0 ? '+' : '';
       dom.offsetDisplay.textContent = `${sign}${(currentOffsetMs / 1000).toFixed(1)}s`;
     }
+    if (typeof renderHomeLyricNow === 'function') renderHomeLyricNow(true);
   }
 
   if (dom.offsetPlus05) {
@@ -1108,6 +1114,75 @@
     AppShared.showToast(`已對齊第一句（偏移 ${desired >= 0 ? '+' : ''}${(desired / 1000).toFixed(1)}s）`);
   }
   if (dom.offsetAlign) dom.offsetAlign.addEventListener('click', alignFirstLine);
+
+  // Live Bar「目前歌詞」對時視圖：顯示端判斷式 adjustedTime = audioTime + offset，
+  // 某行在 adjustedTime >= line.time 時出現 → 目前句 = 最後一個 time <= lastPlayTimeMs + currentOffsetMs 的行。
+  let lastLyricNowPaint = 0;
+  function renderHomeLyricNow(force) {
+    if (!dom.lyricNowLine) return;
+    const now = Date.now();
+    if (!force && now - lastLyricNowPaint < 150) return;
+    lastLyricNowPaint = now;
+    const tr = state.playlist[state.currentTrackIndex];
+    const lines = tr && Array.isArray(tr.parsedLyrics)
+      ? tr.parsedLyrics.filter((l) => l && typeof l.time === 'number' && l.text)
+      : [];
+    if (!lines.length) {
+      dom.lyricNowLine.textContent = tr ? '這首歌詞沒有時間軸' : '尚無歌詞';
+      if (dom.lyricNextLine) dom.lyricNextLine.textContent = '';
+      return;
+    }
+    const adjusted = lastPlayTimeMs + currentOffsetMs;
+    let idx = -1;
+    for (let i = 0; i < lines.length; i++) { if (lines[i].time <= adjusted) idx = i; else break; }
+    dom.lyricNowLine.textContent = idx >= 0 ? lines[idx].text : ('♪ ' + lines[0].text);
+    if (dom.lyricNextLine) dom.lyricNextLine.textContent = lines[idx + 1] ? lines[idx + 1].text : '';
+  }
+  AppShared.renderHomeLyricNow = renderHomeLyricNow;
+
+  // 倒數對齊：從第一句前約 5 秒開始播放並倒數，把「聽到第一個字」這一刻交回給使用者手動按
+  // 「對齊第一句」——不自動改 offset，因為解析出來的時間軸常常本來就是歪的。
+  const COUNTDOWN_LEAD_S = 10;
+  let countdownTimer = null;
+  function resetCountdownBox() {
+    if (!dom.countdownAlignBox) return;
+    dom.countdownAlignBox.classList.remove('is-running');
+    if (dom.countdownNumber) dom.countdownNumber.textContent = String(COUNTDOWN_LEAD_S);
+  }
+  function stopCountdown() {
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    resetCountdownBox();
+    if (dom.offsetAlign) dom.offsetAlign.classList.remove('is-cue');
+  }
+  function countdownAlign() {
+    const tr = state.playlist[state.currentTrackIndex];
+    if (!tr) { AppShared.showToast('沒有正在播放的歌曲'); return; }
+    const tFirstRaw = firstLineTimeMs();
+    if (tFirstRaw == null) { AppShared.showToast('這首歌詞沒有時間軸，無法倒數對齊', 'error'); return; }
+    // 用「已套用偏移後」的實際出現時間當基準：顯示端 adjustedTime = audioTime + offset，
+    // 第一句在 audioTime = tFirst − offset 出現。若用原始 tFirst，對已校準過的歌，倒數 0
+    // 就整整差一個 offset，複查偏移毫無意義。
+    const tFirst = tFirstRaw - currentOffsetMs;
+    stopCountdown();
+    seekLoadedTrack(Math.max(0, tFirst / 1000 - COUNTDOWN_LEAD_S));
+    if (!isPlaying) requestPlayback(true);
+    if (dom.countdownAlignBox) dom.countdownAlignBox.classList.add('is-running');
+    if (dom.countdownNumber) dom.countdownNumber.textContent = String(COUNTDOWN_LEAD_S);
+    countdownTimer = setInterval(() => {
+      const remain = (tFirst - lastPlayTimeMs) / 1000;
+      if (remain > 0.05) {
+        if (dom.countdownNumber) dom.countdownNumber.textContent = String(Math.min(COUNTDOWN_LEAD_S, Math.ceil(remain)));
+      } else {
+        clearInterval(countdownTimer); countdownTimer = null;
+        if (dom.countdownNumber) dom.countdownNumber.textContent = '▶';
+        if (dom.offsetAlign) dom.offsetAlign.classList.add('is-cue');
+        setTimeout(resetCountdownBox, 800);
+        setTimeout(() => { if (dom.offsetAlign) dom.offsetAlign.classList.remove('is-cue'); }, 6000);
+      }
+    }, 100);
+  }
+  if (dom.countdownAlignBox) dom.countdownAlignBox.addEventListener('click', countdownAlign);
+  if (dom.offsetAlign) dom.offsetAlign.addEventListener('click', stopCountdown);
 
   // ═══════════════════════════════════════════
   // Phase 7: 變調控制

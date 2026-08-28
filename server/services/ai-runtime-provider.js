@@ -36,6 +36,10 @@ const RUNTIME_DIR = path.join(dataDir, 'ai-runtime');
 const PYTHON_DIR = path.join(RUNTIME_DIR, 'python');
 const PYTHON_EXE = path.join(PYTHON_DIR, 'python.exe');
 const MARKER_FILE = path.join(RUNTIME_DIR, '.installed.json');
+const MODEL_DIR = path.join(dataDir, 'ai-models');
+const MODEL_FILENAME = 'vocals_mel_band_roformer.ckpt';
+const MODEL_FILE = path.join(MODEL_DIR, MODEL_FILENAME);
+const MODEL_MIN_BYTES = 850 * 1024 * 1024;
 
 const PYTHON_EMBED_VERSION = '3.11.9';
 const PYTHON_EMBED_URL = `https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/python-${PYTHON_EMBED_VERSION}-embed-amd64.zip`;
@@ -60,6 +64,14 @@ function isAvailable() {
     if (!fs.existsSync(PYTHON_EXE) || !fs.existsSync(MARKER_FILE)) return false;
     const marker = JSON.parse(fs.readFileSync(MARKER_FILE, 'utf8'));
     return marker.pythonEmbedVersion === PYTHON_EMBED_VERSION && marker.pipInstallDone === true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function isModelAvailable() {
+  try {
+    return fs.statSync(MODEL_FILE).size >= MODEL_MIN_BYTES;
   } catch (_) {
     return false;
   }
@@ -257,6 +269,59 @@ function runPythonStep(args, { cwd, pythonExe = PYTHON_EXE, onOutput, spawnImpl 
   });
 }
 
+// ─── pip / tqdm 即時輸出解析：把「安裝套件」「下載主模型」這兩個原本靜默的長步驟
+// 拆成可讀的子階段與位元組進度。帶 \r 的進度列也吃。 ───
+function parseByteSize(str) {
+  const m = String(str).match(/([\d.]+)\s*(K|M|G|T)?i?B?/i);
+  if (!m) return null;
+  const mult = { '': 1, K: 1e3, M: 1e6, G: 1e9, T: 1e12 }[(m[2] || '').toUpperCase()] || 1;
+  return Math.round(parseFloat(m[1]) * mult);
+}
+
+function parseToolProgress(text) {
+  const out = {};
+  for (const raw of String(text).split(/[\r\n]+/)) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    // pip：正在下載某個 wheel（`Downloading torch-2.6.0+cu124-...whl (2.5 GB)`）
+    let m = line.match(/^Downloading\s+([A-Za-z0-9._+-]+?)-\d[\w.+]*\.(?:whl|tar\.gz|zip)\b/i);
+    if (m) out.step = 'pip-download', out.detail = m[1];
+    m = line.match(/^Downloading\s+\S+\s+\(([\d.]+\s*[KMGT]?i?B)\)/i);
+    if (m) { const t = parseByteSize(m[1]); if (t != null) out.totalBytes = t; }
+
+    // pip：解析相依
+    m = line.match(/^Collecting\s+([A-Za-z0-9._[\]-]+)/i);
+    if (m && !out.step) out.step = 'pip-resolve', out.detail = m[1].replace(/[<>=!~[].*/, '');
+
+    // pip：開始安裝（解壓，無位元組訊號）
+    if (/^Installing collected packages/i.test(line) || /^Successfully installed/i.test(line)) {
+      out.step = 'pip-install';
+      out.downloadedBytes = null;
+      out.totalBytes = null;
+    }
+
+    // tqdm（audio-separator 主模型）：`name:  45%|████▌     | 410M/913M [00:32<00:38, 12.8MB/s]`
+    m = line.match(/\|\s*([\d.]+\s*[KMGT]?i?B?)\s*\/\s*([\d.]+\s*[KMGT]?i?B?)\s*[[\]]/i);
+    if (m) {
+      const cur = parseByteSize(m[1]); const tot = parseByteSize(m[2]);
+      if (cur != null) out.downloadedBytes = cur;
+      if (tot != null) out.totalBytes = tot;
+      if (!out.step) out.step = 'model-download';
+    }
+
+    // pip Rich 進度列：`1.5/2.5 GB 42.1 MB/s`
+    m = line.match(/(?:^|\s)([\d.]+)\s*\/\s*([\d.]+)\s*(K|M|G|T)i?B(?:\s|$)/i);
+    if (m) {
+      const mult = { K: 1e3, M: 1e6, G: 1e9, T: 1e12 }[m[3].toUpperCase()] || 1;
+      out.downloadedBytes = Math.round(parseFloat(m[1]) * mult);
+      out.totalBytes = Math.round(parseFloat(m[2]) * mult);
+      if (!out.step) out.step = 'pip-download';
+    }
+  }
+  return out;
+}
+
 let downloadInFlight = null;
 let downloadStatus = { active: false, stage: 'idle', percent: null, error: null, updatedAt: null };
 
@@ -331,10 +396,21 @@ async function downloadRuntime({
       const tmpPythonExe = path.join(tmpPythonDir, 'python.exe');
       await runPythonStepImpl(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe });
 
-      progress('install-packages', { percent: null });
+      progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
       await runPythonStepImpl(
-        ['-m', 'pip', 'install', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL, ...PIP_PACKAGES],
-        { cwd: tmpPythonDir, pythonExe: tmpPythonExe, timeoutMs: 30 * 60 * 1000 },
+        ['-m', 'pip', 'install', '--progress-bar', 'on', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL, ...PIP_PACKAGES],
+        {
+          cwd: tmpPythonDir,
+          pythonExe: tmpPythonExe,
+          timeoutMs: 30 * 60 * 1000,
+          onOutput: (text) => {
+            const p = parseToolProgress(text);
+            if (Object.keys(p).length) {
+              setDownloadStatus({ active: true, stage: 'install-packages', error: null, ...p });
+              onProgress?.(getDownloadStatus());
+            }
+          },
+        },
       );
 
       progress('install');
@@ -370,6 +446,39 @@ async function downloadRuntime({
   }
 }
 
+/**
+ * 把 Python 主引擎實際會用到的 Kim 模型先下載完成。以前由第一首歌在 load_model()
+ * 階段臨時下載，會讓「安裝完成」與「真的可以開始分離」變成兩種狀態；統一安裝流程
+ * 改用 audio-separator 自己提供的 download_model_only 入口，沿用它的模型清單與驗證。
+ */
+async function downloadPrimaryModel({ runPythonStepImpl = runPythonStep, onOutput, onProgress } = {}) {
+  if (!isAvailable()) throw new Error('AI 分離 Python 元件尚未安裝。');
+  if (isModelAvailable()) return { ok: true, alreadyAvailable: true, modelFile: MODEL_FILE };
+  fs.mkdirSync(MODEL_DIR, { recursive: true });
+  setDownloadStatus({ active: true, stage: 'primary-model', step: 'model-download', detail: MODEL_FILENAME, downloadedBytes: 0, totalBytes: MODEL_MIN_BYTES, error: null });
+  onProgress?.(getDownloadStatus());
+  await runPythonStepImpl([
+    '-c', 'from audio_separator.utils.cli import main; main()',
+    '--model_file_dir', MODEL_DIR,
+    '--download_model_only',
+    '-m', MODEL_FILENAME,
+  ], {
+    cwd: RUNTIME_DIR,
+    pythonExe: PYTHON_EXE,
+    timeoutMs: 30 * 60 * 1000,
+    onOutput: (text) => {
+      onOutput?.(text);
+      const p = parseToolProgress(text);
+      if (Object.keys(p).length) {
+        setDownloadStatus({ active: true, stage: 'primary-model', step: 'model-download', detail: MODEL_FILENAME, error: null, ...p });
+        onProgress?.(getDownloadStatus());
+      }
+    },
+  });
+  if (!isModelAvailable()) throw new Error('主分離模型下載完成後仍找不到有效檔案。');
+  return { ok: true, alreadyAvailable: false, modelFile: MODEL_FILE };
+}
+
 function resetForTests() {
   downloadInFlight = null;
   downloadStatus = { active: false, stage: 'idle', percent: null, error: null, updatedAt: null };
@@ -377,8 +486,11 @@ function resetForTests() {
 
 module.exports = {
   isAvailable,
+  isModelAvailable,
   downloadRuntime,
+  downloadPrimaryModel,
   getDownloadStatus,
+  parseToolProgress,
   enableSitePackages,
   fetchToFile,
   fetchToBuffer,
@@ -386,6 +498,9 @@ module.exports = {
   PYTHON_DIR,
   PYTHON_EXE,
   MARKER_FILE,
+  MODEL_DIR,
+  MODEL_FILENAME,
+  MODEL_FILE,
   PYTHON_EMBED_URL,
   PYTHON_EMBED_SHA256,
   REQUIRED_DISK_BYTES,

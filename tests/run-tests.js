@@ -276,7 +276,9 @@ test('面板只載入目前可見的 OBS 預覽，避免隱藏 iframe 持續耗�
   const page = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const lifecycle = fs.readFileSync(path.join(__dirname, '../public/js/preview-scale.js'), 'utf8');
   const previewFrames = page.match(/<iframe[^>]+(?:obs-preview|setlist-preview)[^>]*>/g) || [];
-  eq(previewFrames.length, 5, '面板預覽數量基準已改變，請同步檢查生命週期管理: ');
+  // 首頁重構後不再內嵌 OBS 預覽 iframe（改用 Live Bar 的目前句文字視圖）；剩下的預覽 iframe
+  // 都在「歌詞設定」「直播歌單」頁。數量變動時請同步檢查 preview-scale.js 的生命週期管理。
+  eq(previewFrames.length, 4, '面板預覽數量基準已改變，請同步檢查生命週期管理: ');
   previewFrames.forEach((frame) => {
     ok(frame.includes('data-preview-src='), '預覽 iframe 必須保存延遲載入來源: ');
     ok(!/\ssrc=/.test(frame), '預覽 iframe 不可在 HTML 解析時直接載入: ');
@@ -4167,8 +4169,7 @@ test('YouTube 搜尋 UI：自動分離只會在下載成功取得 track 後啟�
   const separationCall = frontend.indexOf('await separateImportedTrack(job, data.track)', successStart);
   ok(successStart >= 0 && separationCall > successStart, '自動分離必須位於下載成功分支內: ');
   ok(frontend.includes('options.autoSeparate === true'));
-  ok(frontend.includes('SocketClient.on(\'separation:progress\', onProgress)'));
-  ok(frontend.includes('SocketClient.off(\'separation:progress\', onProgress)'));
+  ok(frontend.includes('window.AiSeparation.subscribe(onProgress, { replay: false })'));
   const i18n = require('../public/js/i18n');
   const keys = [
     'source.youtubeModeLink', 'source.youtubeModeSearch', 'youtubeSearch.label',
@@ -4178,6 +4179,35 @@ test('YouTube 搜尋 UI：自動分離只會在下載成功取得 track 後啟�
   for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
     for (const key of keys) ok(i18n.catalogs?.[locale]?.[key], `${locale} 缺少 ${key}: `);
   }
+});
+
+test('AI 伴奏首次啟用：只呈現一個完整下載入口並清楚揭露空間', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const bundle = fs.readFileSync(path.join(__dirname, '../server/services/ai-separation-bundle.js'), 'utf8');
+  ok(html.includes('id="ai-separation-install-modal"'));
+  ok(html.includes('7.3 GB') && html.includes('至少 9 GB'));
+  ok(!html.includes('id="webgpu-separation-toggle"'), 'WebGPU 不可再是使用者可切換的獨立功能: ');
+  ok(api.includes("router.post('/ai-separation/bundle/download', requirePin"));
+  ok(bundle.includes('downloadRuntime') && bundle.includes('downloadPrimaryModel') && bundle.includes('downloadModel'));
+  ok(bundle.includes('cpu: aiRuntimeProvider.isAvailable() && aiRuntimeProvider.isModelAvailable()'));
+});
+
+test('AI 伴奏工作：Python GPU → WebGPU → CPU 共用單一工作與進度來源', () => {
+  const jobs = fs.readFileSync(path.join(__dirname, '../server/services/ai-separation-jobs.js'), 'utf8');
+  const client = fs.readFileSync(path.join(__dirname, '../public/js/ai-separation-client.js'), 'utf8');
+  const library = fs.readFileSync(path.join(__dirname, '../public/js/media-library.js'), 'utf8');
+  const youtube = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+  const gpuStart = jobs.indexOf("startPython(job, { forceCpu: false })");
+  const webgpuStart = jobs.indexOf('tryStartWebgpu(job)', gpuStart);
+  const cpuStart = jobs.indexOf('startCpu(job)', webgpuStart);
+  ok(gpuStart >= 0 && webgpuStart > gpuStart && cpuStart > webgpuStart, '初始引擎順序必須是 Python GPU → WebGPU → CPU: ');
+  ok(jobs.includes("emitProgress(job, 'fallback-webgpu'"));
+  ok(jobs.includes("emitProgress(job, 'fallback-cpu'"));
+  ok(client.includes("SocketClient.on('separation:progress', ingest)"));
+  ok(library.includes('window.AiSeparation?.subscribe((data) =>'));
+  ok(youtube.includes('window.AiSeparation.subscribe(onProgress, { replay: false })'));
+  ok(!library.includes("SocketClient.on('separation:progress'"));
 });
 const { classifyImportError, toImportTelemetryCode } = require('../server/utils/import-error');
 
@@ -6415,29 +6445,26 @@ test('OBS 經典歌單以歌名為第一優先，長歌手名不可擠壓歌名'
   ok(artistRule.includes('text-overflow: ellipsis'), '過長歌手名必須省略而非擠壓歌名');
 });
 
-test('歌詞預覽在首頁與設定頁都提供同步狀態、OBS 網址與複製操作', () => {
+test('首頁重構後歌詞預覽只在設定頁完整呈現；首頁 Live Bar 只留目前句視圖與示範歌詞入口', () => {
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
-  const shared = fs.readFileSync(path.join(__dirname, '../public/js/app-shared.js'), 'utf8');
   const styleSync = fs.readFileSync(path.join(__dirname, '../public/js/app-style-sync.js'), 'utf8');
   const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
-  ok(indexHtml.includes('class="lyrics-preview-head"'));
-  ok(indexHtml.includes('已即時同步'));
-  ok(indexHtml.includes('id="lyrics-preview-obs-url"'));
-  ok(indexHtml.includes('id="copy-obs-url-preview"'));
+  // 首頁不再內嵌 OBS 預覽卡與 OBS 網址（頂部已有歌詞/歌單網址按鈕；完整預覽在歌詞設定頁）
+  ok(!indexHtml.includes('id="lyrics-preview-obs-url"'), '首頁不應再內嵌 OBS 網址：');
+  ok(!indexHtml.includes('id="obs-preview"'), '首頁不應再內嵌 OBS 預覽 iframe：');
+  // 首頁 Live Bar 的歌詞迷你對時站
+  ok(indexHtml.includes('id="lyric-now-line"') && indexHtml.includes('id="lyric-next-line"'), '首頁 Live Bar 必須有目前句/下一句視圖：');
+  ok(indexHtml.includes('id="btn-preview-sample-lyrics"'), '首頁必須保留示範歌詞入口：');
+  ok(indexHtml.includes('id="countdown-align-box"'), '首頁必須有倒數對齊：');
+  // 設定頁保留完整所見即所得預覽
   ok(indexHtml.includes('class="settings-preview-head"'));
   ok(indexHtml.includes('id="settings-preview-obs-url"'));
   ok(indexHtml.includes('id="copy-obs-url-settings-preview"'));
   ok(indexHtml.includes('id="btn-settings-preview-sample-lyrics"'));
-  ok(indexHtml.includes('id="btn-preview-sample-lyrics"'));
-  ok(shared.includes('copyObsUrlPreview'));
-  ok(shared.includes('copyObsUrlSettingsPreview'));
   ok(styleSync.includes('refreshObsUrls()'));
   ok(styleSync.includes("buildObsUrl({ preview: true, relative: true })"));
   ok(styleSync.includes("document.querySelectorAll('iframe.obs-preview')"));
-  ok(styleSync.includes('copyObsUrlPreview.addEventListener'));
   ok(styleSync.includes('copyObsUrlSettingsPreview.addEventListener'));
-  ok(panelCss.includes('.lyrics-preview-head'));
-  ok(panelCss.includes('.lyrics-preview-controls'));
   ok(panelCss.includes('.settings-preview-head'));
   ok(panelCss.includes('.settings-preview-controls'));
 });
@@ -7839,13 +7866,18 @@ test('Live session records live on the home view and no longer occupy setlist se
   const setlistStart = panel.indexOf('data-view="setlist"');
   const setlistEnd = panel.indexOf('<!-- ═══════════════════════════════════════════', setlistStart);
   const setlistView = panel.slice(setlistStart, setlistEnd);
-  ok(panel.includes('id="live-session-summary-card"'));
-  ok(panel.includes('id="session-record-modal" class="modal modal-wide session-record-modal"'));
-  ok(panel.includes('id="session-status"'));
-  ok(panel.includes('id="setlist-panel"'));
+  // 首頁重構：本場直播從獨立 Modal 攤平成「本場直播」分頁，直接展開，不再另開視窗。
+  const sessionPanelStart = panel.indexOf('data-prep-panel="session"');
+  const sessionPanelEnd = panel.indexOf('/.prep-panel session', sessionPanelStart);
+  const sessionPanel = panel.slice(sessionPanelStart, sessionPanelEnd);
+  ok(sessionPanelStart > 0, '首頁必須有「本場直播」分頁：');
+  ok(!panel.includes('id="session-record-modal"'), '本場直播不應再是獨立 Modal：');
+  ok(sessionPanel.includes('id="session-status"'));
+  ok(sessionPanel.includes('id="setlist-panel"'));
+  ok(sessionPanel.includes('id="session-new-start"'));
+  ok(sessionPanel.includes('id="btn-copy-chapters"'));
   ok(!setlistView.includes('id="session-status"'), 'Session 狀態不可留在歌單設定頁：');
   ok(!setlistView.includes('id="setlist-panel"'), '已唱歌曲不可留在歌單設定頁：');
-  ok(setlistPanel.includes("document.getElementById('session-record-open')"));
   ok(setlistPanel.includes("document.getElementById('session-summary-status')"));
 });
 

@@ -64,39 +64,8 @@
     }
   }
 
-  // 首頁只顯示精簡摘要；完整 Session 與已唱歌曲在獨立 Modal 管理。
-  (function initSessionRecordModal() {
-    const open = document.getElementById('session-record-open');
-    const modal = document.getElementById('session-record-modal');
-    const close = document.getElementById('session-record-close');
-    if (!open || !modal) return;
-    if (modal.parentElement !== document.body) document.body.appendChild(modal);
-    let focusBeforeOpen = null;
-    const closeModal = () => {
-      modal.hidden = true;
-      (focusBeforeOpen && focusBeforeOpen.isConnected ? focusBeforeOpen : open).focus();
-      focusBeforeOpen = null;
-    };
-    const openModal = () => {
-      focusBeforeOpen = document.activeElement;
-      modal.hidden = false;
-      window.setTimeout(() => (document.getElementById('session-record-title') || close || open).focus(), 0);
-    };
-    open.addEventListener('click', openModal);
-    if (close) close.addEventListener('click', closeModal);
-    modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
-    modal.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') { event.preventDefault(); closeModal(); return; }
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
-        .filter((element) => !element.hidden && !element.closest('[hidden]'));
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    });
-  })();
+  // 首頁重構：本場直播（Session 狀態 + 已唱歌曲）已從獨立 Modal 攤平成「本場直播」分頁，
+  // 直接展開在頁面上，不再需要開關視窗的邏輯。
 
   function renderSetlistPanel(data) {
     sessionState = data || { active: false, startedAt: null, source: null, songs: [] };

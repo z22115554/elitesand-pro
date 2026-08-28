@@ -109,10 +109,16 @@ def handle_hello(request):
 
 
 def handle_probe(request):
-    # Real hardware probe (GPU vendor/VRAM/driver) is out of scope for the
-    # A1 skeleton — this is a stub so Node's contract test can exercise the
-    # method dispatch path without needing torch installed yet.
-    _emit({"id": request.get("id"), "result": {"implemented": False}})
+    # 只回答主 Python 引擎能不能使用 CUDA；產品層不把這個能力做成使用者選項，
+    # 但協調器需要它來維持 Python GPU → WebGPU → CPU 的固定順序。探測失敗時
+    # 保守回 false，讓工作走 WebGPU/CPU，不因驅動資訊查詢本身卡死。
+    try:
+        import torch
+        available = bool(torch.cuda.is_available())
+        name = torch.cuda.get_device_name(0) if available else None
+        _emit({"id": request.get("id"), "result": {"implemented": True, "cudaAvailable": available, "deviceName": name}})
+    except Exception as exc:  # noqa: BLE001
+        _emit({"id": request.get("id"), "result": {"implemented": True, "cudaAvailable": False, "error": str(exc)}})
 
 
 def handle_separate(request):

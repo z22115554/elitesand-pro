@@ -10,6 +10,7 @@
 
   const { escapeHtml, safeHttpUrl } = SharedUtils;
   const tr = (value) => window.I18n ? window.I18n.translate(value) : value;
+  const tx = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
 
   const listEl = document.getElementById('library-list');
   const emptyEl = document.getElementById('library-empty');
@@ -126,22 +127,33 @@
   // 授權確認（Kim 作者）截至目前仍在等待中，這是使用者知情後決定先開放測試的功能，
   // 不是忽略了授權關卡；按鈕文案刻意保留「實驗性」字樣，不要拿掉。
   function separationButtonHtml(item) {
-    const status = item.separationStatus || 'none';
+    const liveState = window.AiSeparation?.get(item.id);
+    // 即時工作狀態優先，且 done/error 也直接採信——不要因為 library:list 尚未把
+    // separationStatus 廣播回來就把「剛完成」畫回「製作伴奏中」（兩個事件會競速）。
+    const status = !liveState
+      ? (item.separationStatus || 'none')
+      : liveState.stage === 'done'
+        ? 'done'
+        : liveState.stage === 'error'
+          ? (item.separationStatus === 'done' ? 'done' : 'failed')
+          : 'processing';
     if (status === 'done') {
       // ✓ 前綴：分離過的歌在清單裡要能一眼掃到，跟其他還沒分離的區分開，不用逐行讀文字。
-      return `<button class="btn btn-sm btn-ghost lib-separate" type="button" disabled>✓ ${tr('已分離人聲')}</button>
+      return `<button class="btn btn-sm btn-ghost lib-separate" type="button" disabled>✓ ${tx('aiJob.completedAction')}</button>
         <button class="btn btn-sm lib-separate-preview" type="button">${tr('試聽')}</button>`;
     }
     if (status === 'processing') {
       // 進度視覺化：跟 nav.js 的 FFmpeg 下載、app-youtube-import.js 的 .work-item-progress
       // 同一套「細長進度條 + --work-progress CSS 變數」寫法，不是這輪才發明的新元件。
       // 按鈕文字本身仍保留百分比/階段字樣（排隊中/下載模型中/分離中），進度條只是視覺加強。
+      const percent = liveState?.percent ?? 0;
+      const label = liveState ? window.AiSeparation.label(liveState) : tr('製作伴奏中…');
       return `<div class="lib-separate-wrap">
-        <button class="btn btn-sm lib-separate" type="button" disabled>${tr('分離中…')}</button>
-        <div class="lib-separate-progress"><span></span></div>
+        <button class="btn btn-sm lib-separate" type="button" disabled>${label}${percent ? ` ${percent}%` : ''}</button>
+        <div class="lib-separate-progress"><span style="--work-progress:${percent}%"></span></div>
       </div>`;
     }
-    const label = status === 'failed' ? tr('重試分離（實驗性）') : tr('分離人聲（實驗性）');
+    const label = status === 'failed' ? tx('aiJob.retryAction') : tx('aiJob.action');
     return `<button class="btn btn-sm btn-ghost lib-separate" type="button">${label}</button>`;
   }
 
@@ -264,8 +276,14 @@
   async function startSeparation(item, row) {
     const btn = row.querySelector('.lib-separate');
     if (!btn || btn.disabled) return;
+    try {
+      if (!await window.AiSeparation.ensureReady()) return;
+    } catch (error) {
+      toast(tr(`無法準備 AI 伴奏元件：${error.message}`), 'error');
+      return;
+    }
     btn.disabled = true;
-    btn.textContent = tr('分離中…');
+    btn.textContent = tx('aiJob.preparing');
     try {
       const res = await PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(item.id)}/separate`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
@@ -287,7 +305,7 @@
                   : tr(data.error || '伺服器沒有確認');
         toast(tr(`啟動分離失敗：${reason}`), 'error');
         btn.disabled = false;
-        btn.textContent = tr('分離人聲（實驗性）');
+        btn.textContent = tx('aiJob.action');
         return;
       }
       const cached = cache.find((x) => x.id === item.id);
@@ -295,28 +313,33 @@
     } catch (err) {
       toast(tr(`啟動分離失敗：${err.message}`), 'error');
       btn.disabled = false;
-      btn.textContent = tr('分離人聲（實驗性）');
+      btn.textContent = tx('aiJob.action');
     }
   }
 
   // SocketClient 跟 PinAuth 一樣是頂層 const 宣告，不會掛在 window 上（見上面
   // fetchWithPin 那個 bug 的教訓）；直接用裸變數，不要再用 window.SocketClient 判斷，
   // 那個判斷式恆假，等於整段訂閱從沒真的執行過。
-  SocketClient.on('separation:progress', (data) => {
+  window.AiSeparation?.subscribe((data) => {
     if (!data || !data.trackId) return;
     const row = listEl.querySelector(`.lib-row[data-id="${CSS.escape(String(data.trackId))}"]`);
     const btn = row && row.querySelector('.lib-separate');
     const cached = cache.find((x) => String(x.id) === String(data.trackId));
     if (data.stage === 'done') {
-      // 不在這裡手動拼按鈕 HTML：伺服器完成後會廣播 library:list（見
-      // ai-separation-jobs.js），那次 render() 會帶著正確的 vocalsFile/instrumentalFile
-      // 重畫整列，這裡只負責立刻跳 toast，不用等 render 完成。
+      // library:list 與 separation:progress(stage:done) 是兩個獨立 socket 事件、會競速：
+      // 伺服器先送 library:list、再送 done。若 library:list 先到，那次 render() 讀到的
+      // liveState.stage 還停在 'inference'（done 事件還沒被 ingest），separationButtonHtml
+      // 就照舊畫「製作伴奏中 100%」，之後沒有任何事件再觸發重畫——所以要切畫面或等
+      // 下一首完成才會翻成「✓ 已完成」。done 事件走到這裡時 ingest 已把 state 設成 done，
+      // 補一次重畫（含 separationStatus 回填，避免 library:list 已重置 cache）才會立即翻面。
+      if (cached) cached.separationStatus = 'done';
       toast(tr('人聲分離完成'), 'success');
+      applyView();
     } else if (data.stage === 'error') {
       if (cached) cached.separationStatus = 'failed';
       if (btn) {
         btn.disabled = false;
-        btn.textContent = tr('重試分離（實驗性）');
+        btn.textContent = tx('aiJob.retryAction');
       }
       toast(tr(`人聲分離失敗：${data.errorMessage || data.error || ''}`), 'error');
     } else if (data.stage === 'queued') {
@@ -325,10 +348,8 @@
       if (btn) btn.textContent = tr(`排隊中（第 ${data.queuePosition || 1} 位）…`);
     } else if (btn) {
       // worker.py 的 progress 是 0.0-1.0 的比例，不是 0-100（見 ai/worker.py）。
-      const pct = typeof data.progress === 'number' ? Math.round(data.progress * 100) : null;
-      // 第一次分離會先下載 Kim 模型權重（900MB+），沒有這個提示的話，網路慢時
-      // 使用者會誤以為卡住——2026-08-22 這個 stage 是新加的，之前完全沒有進度事件。
-      const label = data.stage === 'download-model' ? tr('下載模型中(僅第一次)…') : tr('分離中…');
+      const pct = typeof data.percent === 'number' ? data.percent : null;
+      const label = window.AiSeparation.label(data);
       btn.textContent = pct !== null ? `${label} ${pct}%` : label;
       const progressBar = row && row.querySelector('.lib-separate-progress');
       if (progressBar && pct !== null) progressBar.style.setProperty('--work-progress', `${pct}%`);

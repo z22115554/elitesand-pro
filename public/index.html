@@ -300,7 +300,11 @@
             <button id="onboard-close" class="oh-close" type="button" aria-label="關閉提示" data-i18n-aria-label="home.closeHint">×</button>
           </div>
 
-          <!-- Spotify 式 Now Playing -->
+          <!-- 歌詞頁版面：正在播放（橫跨左＋中列）｜播放清單｜音樂來源｜右欄＝即時預覽＋時間與音訊微調（sticky）。
+               版面由 .kara-split 的 grid-template-areas 控制，DOM 順序不代表視覺位置。 -->
+          <div class="kara-split">
+          <!-- Live Bar（grid-area: np）：唯一常駐、直播中要即時操作的區塊＝正在播放 ＋ 歌詞迷你對時站 -->
+          <div class="live-bar">
           <section class="now-playing-hero">
             <div class="np-top">
               <div id="album-art" class="np-art empty"></div>
@@ -347,7 +351,7 @@
                 </div>
                 <!-- 只在分離播放模式對目前歌曲生效時顯示（見 app-playback.js 的
                      updateSeparationUiForTrack）；跟上面的伴奏音量並排，避免使用者要捲到
-                     下面「時間與音訊微調」卡片才找得到人聲音量，兩顆調整音量的滑桿放一起。 -->
+                     「時間與音訊微調」卡片才找得到人聲音量，兩顆調整音量的滑桿放一起。 -->
                 <div class="np-volume" id="separation-vocals-row" hidden title="人聲音量">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V22h2v-2.06A9 9 0 0 0 21 11h-2z"/></svg>
                   <input id="separation-vocals-volume" type="range" min="0" max="150" value="100">
@@ -358,53 +362,27 @@
             </div>
           </section>
 
-          <!-- 本場直播摘要：完整 Session 與已唱紀錄集中到獨立視窗 -->
-          <section id="live-session-summary-card" class="card live-session-summary-card" aria-labelledby="live-session-summary-title">
-            <div class="live-session-summary-copy">
-              <p id="live-session-summary-title" class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span data-i18n="home.session.title">本場直播</span></p>
-              <p id="session-summary-status" class="live-session-summary-status" role="status" aria-live="polite" data-i18n="home.session.statusNotLive">尚未開台 · 已唱 0 首</p>
+          <!-- 歌詞迷你對時站：目前句／下一句 ＋ 來源選擇 ＋ 對齊／倒數對齊。
+               首頁不再放完整 OBS iframe；完整所見即所得預覽在「歌詞設定」頁。 -->
+          <div class="lb-lyric">
+            <p class="lb-lyric-k" data-i18n="home.lyricNow.label">目前歌詞（對時用）</p>
+            <div id="lyric-now-line" class="lb-line-now" data-i18n="home.lyricNow.empty">尚無歌詞</div>
+            <div id="lyric-next-line" class="lb-line-next"></div>
+            <div class="lb-lyric-actions">
+              <button id="btn-lyrics-picker" class="btn btn-sm" type="button" data-i18n="preview.chooseSource">選擇來源</button>
+              <button id="btn-paste-lyrics" class="btn btn-sm btn-ghost" type="button" data-i18n="preview.pasteLyrics">貼上歌詞</button>
+              <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost btn-preview-sample-lyrics" type="button" data-i18n="preview.sampleLyrics">示範歌詞</button>
             </div>
-            <div class="live-session-summary-actions">
-              <button id="session-new-start" class="btn btn-sm btn-primary" type="button" data-i18n="home.session.startNew">開始新場次</button>
-              <button id="session-record-open" class="btn btn-sm" type="button" data-i18n="home.session.openRecord">查看本場紀錄</button>
+            <div class="lb-lyric-actions">
+              <button id="offset-align" class="btn btn-sm btn-primary" type="button">對齊第一句</button>
             </div>
-          </section>
-
-          <div id="session-record-modal" class="modal modal-wide session-record-modal" role="dialog" aria-modal="true" aria-labelledby="session-record-title" hidden>
-            <div class="modal-card">
-              <div class="modal-head">
-                <div>
-                  <h3 id="session-record-title" tabindex="-1" data-i18n="home.session.recordTitle">本場演出紀錄</h3>
-                  <p class="sub m-0" data-i18n="home.session.recordHint">直播 Session、已唱歌曲與 YouTube 章節集中在這裡管理。</p>
-                </div>
-                <button id="session-record-close" class="btn btn-sm btn-ghost" type="button" data-i18n="common.close">關閉</button>
-              </div>
-              <div class="modal-body session-record-layout">
-                <section class="card session-record-status-card">
-                  <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span data-i18n="home.session.statusTitle">直播 Session</span></p>
-                  <p class="sub section-intro" data-i18n="home.session.statusHint">開台與收台會由 OBS WebSocket 自動同步；播放的每首歌會自動記錄，可匯出為 YouTube 章節格式。</p>
-                  <div class="inline-row inline-row--wrap">
-                    <button id="session-refresh" class="btn btn-sm" type="button" data-i18n="home.session.refresh">重新整理狀態</button>
-                    <button id="session-reset" class="btn btn-ghost" type="button" disabled data-i18n="home.session.clear">清除歌單</button>
-                  </div>
-                  <div id="session-status" class="val session-status" data-i18n="home.session.waitingObs">等待 OBS 開始推流</div>
-                </section>
-
-                <section class="card session-record-songs-card">
-                  <div class="playlist-head">
-                    <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span data-i18n="home.session.performed">已唱歌曲</span> <span id="setlist-count" class="val ml-6" aria-live="polite"></span></p>
-                    <button id="btn-copy-chapters" class="btn btn-sm" type="button" disabled data-i18n="home.session.copyChapters">複製 YouTube 章節</button>
-                  </div>
-                  <div id="setlist-panel" class="playlist playlist--min-height">
-                    <div class="playlist-empty" data-i18n="home.session.empty">開台後播放歌曲，歌單會自動在此顯示。</div>
-                  </div>
-                </section>
-              </div>
-            </div>
+            <button id="countdown-align-box" class="countdown-box" type="button" aria-live="assertive">
+              <span id="countdown-number" class="countdown-box-num">10</span>
+              <span class="countdown-box-label" data-i18n="home.countdownAlign.boxLabel">倒數對齊：從第一句前 10 秒開始播放並倒數；聽到第一個字時按「對齊第一句」定位</span>
+            </button>
           </div>
+          </div><!-- /.live-bar -->
 
-          <!-- 歌詞頁分三區：①播放清單（會變長，獨立一欄）②音樂來源＋時間微調（高度固定）③獨立預覽（置頂跟隨）-->
-          <div class="kara-split">
           <div class="kara-col kara-col-list">
           <!-- 播放清單（整合在歌詞頁，直播時不用切換頁面；獨立一欄、可容約 10 首） -->
           <section class="card playlist-card">
@@ -452,7 +430,16 @@
           </section>
           </div><!-- /.kara-col-list -->
 
-          <div class="kara-col kara-col-ctrl">
+          <div class="kara-prep" role="tablist" aria-label="準備工作" data-i18n-aria-label="home.tab.groupLabel">
+          <div class="prep-tabs">
+            <button class="prep-tab is-active" type="button" role="tab" aria-selected="true" data-prep-tab="add" data-i18n="home.tab.add">加入音樂</button>
+            <button class="prep-tab" type="button" role="tab" aria-selected="false" data-prep-tab="sync" data-i18n="home.tab.sync">歌詞對時</button>
+            <button class="prep-tab" type="button" role="tab" aria-selected="false" data-prep-tab="audio" data-i18n="home.tab.audio">音訊</button>
+            <button class="prep-tab" type="button" role="tab" aria-selected="false" data-prep-tab="session" data-i18n="home.tab.session">本場直播</button>
+          </div>
+
+          <!-- 分頁：加入音樂 -->
+          <div class="prep-panel is-active" data-prep-panel="add">
           <!-- 音樂來源 -->
           <section class="card" id="music-source-card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15V6l-9 2v9"/><circle cx="9" cy="17" r="3"/><circle cx="21" cy="15" r="3"/></svg><span data-i18n="source.title">音樂來源</span></p>
@@ -510,15 +497,15 @@
             </div>
           </section>
 
-          <!-- 時間與音訊微調（預設展開）-->
-          <details class="card card-collapse" id="lyrics-timing-card" open>
-            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>時間與音訊微調</summary>
-            <div class="card-collapse-body">
+          </div><!-- /.prep-panel add -->
+
+          <!-- 分頁：歌詞對時 -->
+          <div class="prep-panel" data-prep-panel="sync" hidden>
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg><span data-i18n="home.tab.sync">歌詞對時</span></p>
             <div class="field">
-              <label>歌詞時間偏移</label>
-              <button id="offset-align" class="btn btn-primary btn--wide btn--mb-8" type="button">對齊第一句</button>
-              <p class="sub offset-align-hint">播放後，<strong>聽到第一句該唱的瞬間按這顆</strong>，整首歌詞就自動對齊（不必來回微調）。之後仍可用下方按鈕細調。</p>
-              <div class="offset-row">
+              <p class="field-hint m-0">整首平移用 Live Bar 的「對齊第一句 / 倒數對齊」；這裡做中段跑掉時的細調。</p>
+              <div class="offset-row mt-8">
                 <button id="offset-minus05" class="btn btn-sm" type="button">−0.5s</button>
                 <button id="offset-minus01" class="btn btn-sm" type="button">−0.1s</button>
                 <span id="offset-display" class="offset-display">0.0s</span>
@@ -527,8 +514,27 @@
                 <button id="offset-reset" class="btn btn-sm btn-ghost" type="button">歸零</button>
               </div>
               <button id="btn-lyrics-timeline" class="btn btn-sm btn--wide mt-8" type="button">逐行時間軸編輯…</button>
-              <p class="field-hint mt-6">「對齊第一句」只能整首一起挪動；如果中段某幾句慢慢跑掉，用這個逐行微調每一行的時間點。</p>
+              <p class="field-hint mt-6">整首偏移只能一起挪動；如果中段某幾句慢慢跑掉，用逐行編輯每一行的時間點。</p>
             </div>
+            <details class="collapse mt-10">
+              <summary>歌詞純文字 / 上傳覆蓋</summary>
+              <div class="collapse-body">
+                <div id="lyrics-preview" class="lyric-preview-box">
+                  <div class="lyric-preview-empty">尚無歌詞</div>
+                </div>
+                <div id="lyrics-drop-zone" class="dropzone dropzone--compact">
+                  <div class="sub m-0">拖放 .lrc / .srt 覆蓋目前歌詞</div>
+                  <input id="lyrics-file-input" type="file" accept=".lrc,.srt,.txt" hidden>
+                </div>
+              </div>
+            </details>
+          </section>
+          </div><!-- /.prep-panel sync -->
+
+          <!-- 分頁：音訊 -->
+          <div class="prep-panel" data-prep-panel="audio" hidden>
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg><span data-i18n="home.tab.audio">音訊</span></p>
             <div class="field">
               <label>變調 / 變速</label>
               <div class="stepper-row">
@@ -553,7 +559,7 @@
               </div>
             </div>
             <!-- AI 人聲分離播放模式（實驗性）：只對已分離人聲的歌曲生效，見 CLAUDE.md 授權狀態說明。
-                 人聲音量滑桿已移到上面「正在播放」卡的音量區，跟伴奏音量並排（不要在這裡重複加）。 -->
+                 人聲音量滑桿已移到「正在播放」卡的音量區，跟伴奏音量並排（不要在這裡重複加）。 -->
             <div class="switch-row switch-row--separated">
               <div><div class="label">分離播放模式（實驗性）</div><div class="sub" id="separation-status-hint">只對已分離人聲的歌曲生效，其餘歌曲仍播放原始音軌</div></div>
               <label class="switch"><input id="separation-mode-toggle" type="checkbox"><span class="track"></span></label>
@@ -562,49 +568,33 @@
               <div><div class="label">統一音量（響度標準化）</div><div class="sub">依每首歌的實測響度校正播放增益；關閉時保留原始音量</div></div>
               <label class="switch"><input id="normalization-toggle" type="checkbox" checked><span class="track"></span></label>
             </div>
-            </div>
-          </details>
-          </div><!-- /.kara-col-ctrl -->
-
-          <!-- 右區：獨立預覽（高、sticky 跟隨捲動）-->
-          <div class="kara-right">
-          <section class="card kara-preview-card" id="lyrics-preview-card">
-            <div class="lyrics-preview-head">
-              <div>
-                <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span data-i18n="preview.title">歌詞即時預覽</span></p>
-                <p class="field-hint m-0" data-i18n="preview.homeHint">選歌或調整設定時，這裡會即時顯示 OBS 輸出。</p>
-              </div>
-              <span class="save-status saved" data-i18n="preview.synced">已即時同步</span>
-            </div>
-            <div class="lyrics-preview-controls">
-              <button id="btn-preview-sample-lyrics" class="btn btn-sm btn-ghost btn-preview-sample-lyrics" type="button" data-i18n="preview.sampleLyrics">示範歌詞</button>
-              <button id="btn-lyrics-picker" class="btn btn-sm" type="button" data-i18n="preview.chooseSource">選擇來源</button>
-              <button id="btn-paste-lyrics" class="btn btn-sm btn-ghost" type="button" data-i18n="preview.pasteLyrics">貼上歌詞</button>
-            </div>
-            <!-- 內嵌 OBS 顯示端（preview 模式：緊急隱藏時面板仍看得到）-->
-            <div class="obs-preview-wrap">
-              <iframe id="obs-preview" class="obs-preview" data-preview-src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
-              <div class="obs-preview-tag" data-i18n="preview.obs">OBS 預覽</div>
-            </div>
-            <div class="url-field">
-              <code id="lyrics-preview-obs-url">http://localhost:3000/display</code>
-              <button id="copy-obs-url-preview" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button>
-            </div>
-            <p class="val m-0" data-i18n="preview.obsHint">OBS 新增「瀏覽器來源」後貼上此網址；歌詞設定會自動同步，不需要更新網址。</p>
-            <details class="collapse mt-10">
-              <summary>歌詞純文字 / 上傳覆蓋</summary>
-              <div class="collapse-body">
-                <div id="lyrics-preview" class="lyric-preview-box">
-                  <div class="lyric-preview-empty">尚無歌詞</div>
-                </div>
-                <div id="lyrics-drop-zone" class="dropzone dropzone--compact">
-                  <div class="sub m-0">拖放 .lrc / .srt 覆蓋目前歌詞</div>
-                  <input id="lyrics-file-input" type="file" accept=".lrc,.srt,.txt" hidden>
-                </div>
-              </div>
-            </details>
           </section>
-          </div><!-- /.kara-right -->
+          </div><!-- /.prep-panel audio -->
+
+          <!-- 分頁：本場直播 -->
+          <div class="prep-panel" data-prep-panel="session" hidden>
+          <section class="card" aria-labelledby="live-session-summary-title">
+            <p id="live-session-summary-title" class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span data-i18n="home.session.statusTitle">直播 Session</span></p>
+            <p class="sub section-intro" data-i18n="home.session.statusHint">開台與收台會由 OBS WebSocket 自動同步；播放的每首歌會自動記錄，可匯出為 YouTube 章節格式。</p>
+            <div class="inline-row inline-row--wrap">
+              <button id="session-new-start" class="btn btn-sm btn-primary" type="button" data-i18n="home.session.startNew">開始新場次</button>
+              <button id="session-refresh" class="btn btn-sm" type="button" data-i18n="home.session.refresh">重新整理狀態</button>
+              <button id="session-reset" class="btn btn-ghost" type="button" disabled data-i18n="home.session.clear">清除歌單</button>
+            </div>
+            <div id="session-status" class="val session-status" data-i18n="home.session.waitingObs">等待 OBS 開始推流</div>
+            <p id="session-summary-status" class="live-session-summary-status" role="status" aria-live="polite" data-i18n="home.session.statusNotLive">尚未開台 · 已唱 0 首</p>
+          </section>
+          <section class="card">
+            <div class="playlist-head">
+              <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span data-i18n="home.session.performed">已唱歌曲</span> <span id="setlist-count" class="val ml-6" aria-live="polite"></span></p>
+              <button id="btn-copy-chapters" class="btn btn-sm" type="button" disabled data-i18n="home.session.copyChapters">複製 YouTube 章節</button>
+            </div>
+            <div id="setlist-panel" class="playlist playlist--min-height">
+              <div class="playlist-empty" data-i18n="home.session.empty">開台後播放歌曲，歌單會自動在此顯示。</div>
+            </div>
+          </section>
+          </div><!-- /.prep-panel session -->
+          </div><!-- /.kara-prep -->
           </div><!-- /.kara-split -->
         </div>
 
@@ -1450,29 +1440,11 @@
                 </div>
               </div>
               <div class="switch-row mt-8">
-                <div><div class="label">AI 人聲分離（實驗性）</div><div class="sub" id="ai-separation-status">尚未檢查</div></div>
-                <button id="ai-separation-download-btn" class="btn btn-sm" type="button" hidden>下載元件</button>
+                <div><div class="label" data-i18n="aiInstall.featureName">AI 伴奏製作（實驗性）</div><div class="sub" id="ai-separation-status">尚未檢查</div></div>
+                <button id="ai-separation-download-btn" class="btn btn-sm" type="button" hidden data-i18n="aiInstall.downloadComponents">下載完整元件</button>
               </div>
-              <p class="val mt-10">實驗性功能：使用第三方 AI 模型自動分離人聲與伴奏，作者的書面授權確認目前仍在等待中。</p>
+              <p class="val mt-10" data-i18n="aiInstall.featureHint">程式會自動依序使用 Python GPU、WebGPU、CPU，不需要手動選引擎。第三方模型作者的書面授權確認目前仍在等待中。</p>
             <p id="ytdlp-msg" class="val mt-10 pre-line" hidden></p>
-            </div>
-          </details>
-
-          <!-- ═══ 卡片：WebGPU 人聲分離（實驗性）═══
-               docs/AI-SEPARATION-PLAN.md §13 musetric 路線，公開測試換取非 NVIDIA 真機
-               相容性資料（W4）。跟上面的「AI 人聲分離」是兩個不同引擎、共用同一組
-               separationStatus／vocalsFile／instrumentalFile 欄位，這個開關決定分離
-               按鈕實際走哪一條。只在桌面版（Electron）可用，純網頁版永遠停用。 -->
-          <details class="card card-collapse" id="webgpu-separation-card">
-            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15v-6a8 8 0 0 1 16 0v6"/><path d="M4 15a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H4z"/><path d="M20 15a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/></svg>WebGPU 人聲分離（實驗性）</summary>
-            <div class="card-collapse-body">
-              <p class="sub section-intro">另一種人聲分離方式：直接用瀏覽器內建的 WebGPU 運算，不需要另外下載 Python／CUDA，主要提供給沒有 NVIDIA 顯示卡的使用者測試相容性。</p>
-              <div class="switch-row switch-row--separated">
-                <div><div class="label">WebGPU 人聲分離</div><div class="sub" id="webgpu-separation-status">讀取中…</div></div>
-                <label class="switch"><input id="webgpu-separation-toggle" type="checkbox" disabled><span class="track"></span></label>
-              </div>
-              <button id="webgpu-separation-download-btn" class="btn btn-sm mt-8" type="button" hidden>重新下載模型</button>
-              <p class="val mt-10">實驗性功能，會回報 GPU 廠商與分離成功/失敗等匿名資料（同「連線與系統」頁匿名活躍統計的既有揭露，見 EULA 條款七之 9，不是新的揭露）。極少數情況下顯示卡可能因為顯存不足而停止回應——這只會讓這一次分離失敗，不影響播放、歌詞或其他功能。</p>
             </div>
           </details>
 
@@ -2276,6 +2248,30 @@
     </div>
   </div>
 
+  <!-- ═══ Modal：首次啟用 AI 伴奏製作（完整元件一次下載）═══ -->
+  <div id="ai-separation-install-modal" class="modal" hidden>
+    <div class="modal-card modal-card--small ai-separation-install-card" role="dialog" aria-modal="true" aria-labelledby="ai-separation-install-title" aria-describedby="ai-separation-install-summary">
+      <div class="modal-head"><h3 id="ai-separation-install-title" data-i18n="aiInstall.title">首次啟用 AI 伴奏製作</h3></div>
+      <div class="modal-body">
+        <p id="ai-separation-install-summary" class="ai-install-summary" data-i18n="aiInstall.summary">需要先下載完整的離線分離元件。安裝完成後約佔 7.3 GB，安裝過程需要至少 9 GB 可用空間。</p>
+        <div class="ai-install-stack" aria-label="自動備援順序" data-i18n-aria-label="aiInstall.orderLabel">
+          <div><span>1</span><strong data-i18n="aiInstall.python">Python GPU 主引擎</strong></div>
+          <div><span>2</span><strong data-i18n="aiInstall.webgpu">WebGPU 自動備援</strong></div>
+          <div><span>3</span><strong data-i18n="aiInstall.cpu">CPU 最後備援</strong></div>
+        </div>
+        <p class="sub" data-i18n="aiInstall.shared">CPU 會共用 Python 元件，不會再下載第三套模型。下載完成前請保持程式開啟。</p>
+        <div id="ai-separation-install-progress" class="ai-install-progress" hidden aria-live="polite">
+          <div class="ai-install-progress-copy"><span id="ai-separation-install-stage">準備下載…</span><strong id="ai-separation-install-percent">0%</strong></div>
+          <div class="ai-install-progress-track"><span></span></div>
+        </div>
+        <div class="ai-install-actions">
+          <button id="ai-separation-install-cancel" class="btn btn-ghost" type="button" data-i18n="common.cancel">取消</button>
+          <button id="ai-separation-install-confirm" class="btn btn-primary" type="button" data-i18n="aiInstall.confirm">下載並啟用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Modal：修改歌名／歌手（#track-edit-modal）═══ -->
   <div id="track-edit-modal" class="modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="track-edit-title-heading">
@@ -2808,6 +2804,7 @@
   <script src="/js/app-shared.js"></script>
   <script src="/js/danger-confirm.js"></script>
   <script src="/js/modal-focus.js"></script>
+  <script src="/js/ai-separation-client.js"></script>
   <script src="/js/app-youtube-import.js"></script>
   <script src="/js/app-restart-update-check.js"></script>
   <script src="/js/app-announcements.js"></script>
@@ -2836,6 +2833,7 @@
   <script src="/js/style-tuner.js"></script>
   <script src="/js/preview-scale.js"></script>
   <script src="/js/obs-websocket.js"></script>
+  <script src="/js/home-prep-tabs.js"></script>
   <script src="/js/onboarding-tour.js"></script>
   <script src="/js/nav.js"></script>
 </body>

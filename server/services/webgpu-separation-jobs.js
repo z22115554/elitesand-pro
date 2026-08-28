@@ -19,6 +19,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { EventEmitter } = require('events');
 const { createLogger } = require('../utils/logger');
 const libraryStore = require('./library-store');
 const { emitToControlClients } = require('../utils/socket-broadcast');
@@ -57,6 +58,7 @@ let deps = null; // { io, playState, persistState, broadcastState, updateLibrary
 let wired = false;
 let engineSocket = null; // 目前連線的 webgpu-engine socket；同時只認最新那一個
 let activeJob = null; // { jobId, trackId, startedAt, params }
+const events = new EventEmitter();
 
 function findTrack(playState, trackId) {
   return (playState.playlist || []).find((t) => t && String(t.id) === String(trackId));
@@ -125,11 +127,14 @@ function handleEngineDisconnected(socketId) {
     // 引擎斷線時若有進行中的工作，視為失敗，不留一個永遠卡在 processing 的假狀態。
     const job = activeJob;
     activeJob = null;
-    applyResult(job.trackId, { separationStatus: 'failed' });
-    deps?.io.emit('separation:progress', {
-      trackId: job.trackId, jobId: job.jobId, stage: 'error', progress: 0,
-      error: 'ENGINE_DISCONNECTED', errorMessage: null,
-    });
+    if (!job.deferFailure) {
+      applyResult(job.trackId, { separationStatus: 'failed' });
+      deps?.io.emit('separation:progress', {
+        trackId: job.trackId, jobId: job.publicJobId || job.jobId, stage: 'error', progress: 0,
+        error: 'ENGINE_DISCONNECTED', errorMessage: null,
+      });
+    }
+    events.emit('error', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, code: 'ENGINE_DISCONNECTED' });
     recordTelemetry({ ok: false, code: 'engine_disconnected' });
   }
 }
@@ -144,7 +149,7 @@ function handleEngineDisconnected(socketId) {
  *   組 `/audio/<filename>` 的 URL 自己 fetch；跟 CUDA 路徑不同，這裡不傳絕對路徑，
  *   因為引擎是瀏覽器頁面，只能透過 HTTP URL 拿音檔，沒有檔案系統存取權）。
  */
-function startJobForTrack(trackId, params) {
+function startJobForTrack(trackId, params, { deferFailure = false, publicJobId = null } = {}) {
   if (!wired) throw new Error('webgpu-separation-jobs not wired yet (call wireDependencies first)');
   if (!isEngineAvailable()) {
     throw Object.assign(new Error('WebGPU engine 目前離線'), { code: 'WEBGPU_ENGINE_OFFLINE' });
@@ -153,7 +158,7 @@ function startJobForTrack(trackId, params) {
     throw Object.assign(new Error('WebGPU engine 目前忙碌中'), { code: 'WEBGPU_ENGINE_BUSY' });
   }
   const jobId = `webgpu-${trackId}-${Date.now()}`;
-  activeJob = { jobId, trackId, startedAt: Date.now(), params };
+  activeJob = { jobId, publicJobId, trackId, startedAt: Date.now(), params, deferFailure };
   engineSocket.emit('webgpu:job:start', {
     jobId, trackId,
     audioUrl: `/audio/${encodeURIComponent(params.sourceFilename)}`,
@@ -169,7 +174,11 @@ function handleProgress(socket, payload) {
   if (!engineSocket || socket.id !== engineSocket.id || !activeJob) return;
   if (!payload || payload.jobId !== activeJob.jobId) return;
   deps?.io.emit('separation:progress', {
-    trackId: activeJob.trackId, jobId: activeJob.jobId, stage: payload.stage, progress: payload.progress,
+    trackId: activeJob.trackId, jobId: activeJob.publicJobId || activeJob.jobId, stage: payload.stage, progress: payload.progress,
+  });
+  events.emit('progress', {
+    trackId: activeJob.trackId, jobId: activeJob.publicJobId || activeJob.jobId,
+    stage: payload.stage, progress: payload.progress,
   });
 }
 
@@ -195,21 +204,40 @@ function finishJobWithResult(jobId, { vocalsBuffer, instrumentalBuffer, gpuVendo
     written = writeResultFiles(job.trackId, job.params?.sourceFilename, { vocalsBuffer, instrumentalBuffer });
   } catch (err) {
     log.error(`寫入 WebGPU 分離結果檔案失敗 track=${job.trackId}`, err);
-    applyResult(job.trackId, { separationStatus: 'failed' });
-    deps?.io.emit('separation:progress', {
-      trackId: job.trackId, jobId: job.jobId, stage: 'error', progress: 0,
-      error: 'WRITE_FAILED', errorMessage: err.message,
+    if (!job.deferFailure) {
+      applyResult(job.trackId, { separationStatus: 'failed' });
+      deps?.io.emit('separation:progress', {
+        trackId: job.trackId, jobId: job.publicJobId || job.jobId, stage: 'error', progress: 0,
+        error: 'WRITE_FAILED', errorMessage: err.message,
+      });
+    }
+    events.emit('error', {
+      trackId: job.trackId, jobId: job.publicJobId || job.jobId,
+      code: 'WRITE_FAILED', message: err.message,
     });
     recordTelemetry({ ok: false, code: 'write_failed', gpuVendor, audioSeconds });
     return { ok: false, code: 'WRITE_FAILED' };
   }
   const ok = !!(written.vocalsFile || written.instrumentalFile);
+  if (!ok) {
+    if (!job.deferFailure) {
+      applyResult(job.trackId, { separationStatus: 'failed' });
+      deps?.io.emit('separation:progress', {
+        trackId: job.trackId, jobId: job.publicJobId || job.jobId, stage: 'error', progress: 0,
+        error: 'NO_OUTPUT', errorMessage: null,
+      });
+    }
+    events.emit('error', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, code: 'NO_OUTPUT' });
+    recordTelemetry({ ok: false, code: 'no_output', gpuVendor, audioSeconds });
+    return { ok: false, code: 'NO_OUTPUT' };
+  }
   applyResult(job.trackId, {
     vocalsFile: written.vocalsFile || null,
     instrumentalFile: written.instrumentalFile || null,
-    separationStatus: ok ? 'done' : 'failed',
+    separationStatus: 'done',
   });
-  deps?.io.emit('separation:progress', { trackId: job.trackId, jobId: job.jobId, stage: 'done', progress: 100 });
+  deps?.io.emit('separation:progress', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, stage: 'done', progress: 100 });
+  events.emit('result', { trackId: job.trackId, jobId: job.publicJobId || job.jobId });
   recordTelemetry({
     ok, code: ok ? null : 'no_output',
     gpuVendor, vramMb: peakBufferMb,
@@ -225,10 +253,16 @@ function handleError(socket, payload) {
   const job = activeJob;
   activeJob = null;
   log.warn(`WebGPU 分離失敗 track=${job.trackId}: ${payload.message || payload.code}`);
-  applyResult(job.trackId, { separationStatus: 'failed' });
-  deps?.io.emit('separation:progress', {
-    trackId: job.trackId, jobId: job.jobId, stage: 'error', progress: 0,
-    error: payload.code || 'UNKNOWN', errorMessage: payload.message || null,
+  if (!job.deferFailure) {
+    applyResult(job.trackId, { separationStatus: 'failed' });
+    deps?.io.emit('separation:progress', {
+      trackId: job.trackId, jobId: job.publicJobId || job.jobId, stage: 'error', progress: 0,
+      error: payload.code || 'UNKNOWN', errorMessage: payload.message || null,
+    });
+  }
+  events.emit('error', {
+    trackId: job.trackId, jobId: job.publicJobId || job.jobId,
+    code: payload.code || 'UNKNOWN', message: payload.message || null,
   });
   recordTelemetry({
     ok: false, code: payload.code || 'unknown',
@@ -251,6 +285,7 @@ function _resetForTests() {
 module.exports = {
   wireDependencies,
   startJobForTrack,
+  events,
   isEngineAvailable,
   handleEngineConnected,
   handleEngineDisconnected,

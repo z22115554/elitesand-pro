@@ -45,6 +45,7 @@ const ytdlpCompatibility = require('../services/ytdlp-compatibility');
 const systemCheck = require('../services/system-check');
 const ffmpegProvider = require('../services/ffmpeg-provider');
 const aiRuntimeProvider = require('../services/ai-runtime-provider');
+const aiSeparationBundle = require('../services/ai-separation-bundle');
 const aiSeparationJobs = require('../services/ai-separation-jobs');
 const webgpuRuntimeProvider = require('../services/webgpu-runtime-provider');
 const webgpuSeparationJobs = require('../services/webgpu-separation-jobs');
@@ -1003,6 +1004,27 @@ router.get('/fonts/assets/:assetId/:faceId', requireLocalFontAsset, async (req, 
 // （docs/AI-SEPARATION-PLAN.md §6）截至上線時仍在等待中——這是使用者知情後的決定，
 // 不是遺漏，見 STATUS.md 對應記錄。
 
+// 對前端公開的唯一安裝入口。Python/WebGPU/CPU 是內部備援順序，不再要求使用者
+// 分別理解或下載；舊的個別 runtime 端點暫時保留給既有測試與維修工具。
+router.get('/ai-separation/bundle-status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    ...aiSeparationBundle.getStatus(),
+    webgpuEngineConnected: webgpuSeparationJobs.isEngineAvailable(),
+    jobs: aiSeparationJobs.getActiveJobs(),
+  });
+});
+
+router.post('/ai-separation/bundle/download', requirePin, async (req, res) => {
+  try {
+    const result = await aiSeparationBundle.downloadBundle();
+    res.json(result);
+  } catch (err) {
+    log.error('AI 伴奏完整元件下載失敗', err);
+    res.status(502).json({ ok: false, reason: err.message });
+  }
+});
+
 // 只讀進度，不含本機路徑，前端下載期間輪詢它（同 /ffmpeg/download/status 的理由）。
 router.get('/ai-separation/runtime-status', (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -1099,7 +1121,7 @@ router.post('/webgpu-separation/runtime/download', requirePin, async (req, res) 
 // 啟動一次分離 job。這是一支會觸發真正 GPU/CPU 運算＋寫入本機檔案的路由，依鐵則 15
 // 必須手動掛 requirePin。只回傳 jobId；實際進度/完成走 Socket.io 的 separation:progress
 // 事件（見 server/services/ai-separation-jobs.js／webgpu-separation-jobs.js），不是這個
-// HTTP response。WebGPU 設定開著時走那條引擎，否則維持原本的 CUDA/CPU 路徑不變。
+// HTTP response。引擎選擇由 ai-separation-jobs 統一協調：Python GPU → WebGPU → CPU。
 router.post('/library/:id/separate', requirePin, async (req, res) => {
   const trackId = req.params.id;
   const entry = libraryStore.getEntry(trackId);
@@ -1110,36 +1132,20 @@ router.post('/library/:id/separate', requirePin, async (req, res) => {
     return res.status(409).json({ ok: false, error: 'ALREADY_PROCESSING' });
   }
 
-  if (webgpuSeparationSettings.getSettings().enabled) {
-    if (!webgpuSeparationJobs.isEngineAvailable()) {
-      return res.status(409).json({ ok: false, error: 'WEBGPU_ENGINE_OFFLINE' });
-    }
-    if (!webgpuRuntimeProvider.isAvailable()) {
-      return res.status(409).json({ ok: false, error: 'WEBGPU_MODEL_NOT_READY' });
-    }
-    try {
-      const jobId = webgpuSeparationJobs.startJobForTrack(trackId, { sourceFilename: entry.filename });
-      libraryStore.updateMeta(trackId, { separationStatus: 'processing' });
-      res.json({ ok: true, jobId, queued: false });
-    } catch (err) {
-      log.error(`啟動 WebGPU 分離失敗 track=${trackId}`, err);
-      res.status(err.code === 'WEBGPU_ENGINE_BUSY' ? 409 : 500).json({ ok: false, error: err.code || err.message });
-    }
-    return;
-  }
-
-  if (!aiRuntimeProvider.isAvailable()) {
+  if (!aiSeparationBundle.isAvailable()) {
     return res.status(409).json({ ok: false, error: 'AI_RUNTIME_NOT_READY' });
   }
   try {
-    const jobId = aiSeparationJobs.startJobForTrack(trackId, {
+    const jobId = await aiSeparationJobs.startJobForTrack(trackId, {
       inputPath: path.join(downloadsDir, entry.filename),
       // /audio/:filename 只認 downloadsDir 直接底下的檔名（server/index.js），輸出必須
       // 直接落在這裡，分離出來的兩個檔案才能透過既有的 /audio 端點播放，不用另開路由。
       outputDir: downloadsDir,
       modelFileDir: path.join(dataDir, 'ai-models'),
+      sourceFilename: entry.filename,
     });
-    libraryStore.updateMeta(trackId, { separationStatus: 'processing' });
+    // separationStatus:'processing' 現在由 aiSeparationJobs.startJobForTrack 統一寫入
+    // （playState + libraryStore 兩邊，鐵則 #17）；這裡不再單寫 libraryStore，避免重開後不一致。
     // jobId 為 null 代表已經有另一首在跑，這首排進佇列了（見 ai-separation-jobs.js 的
     // startJobForTrack）——不是失敗，前端靠 separation:progress 的 stage:'queued' 顯示排隊中。
     res.json({ ok: true, jobId, queued: jobId === null });
