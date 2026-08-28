@@ -89,6 +89,14 @@ function registerLibraryHandlers(io, socket, ctx) {
         parsedLyrics: Array.isArray(entry.parsedLyrics) ? entry.parsedLyrics : null,
         pitchShift: typeof entry.pitchShift === 'number' ? entry.pitchShift : 0,
         playbackRate: typeof entry.playbackRate === 'number' ? entry.playbackRate : 1.0,
+        // AI 人聲分離：這支 handler 手動列了一份自己的欄位白名單，跟
+        // sanitizeTrack() 的白名單是兩份分開的東西——只改 sanitizeTrack 那邊，
+        // 這裡沒同步加，分離過的歌一經過「加入清單」就會被這裡重新組出的 track
+        // 蓋掉，看起來像「又變回沒分離」（實際上是媒體庫紀錄沒事，前端顯示的
+        // playState.playlist 那份被這裡的白名單漏掉的欄位重置了）。
+        vocalsFile: entry.vocalsFile || null,
+        instrumentalFile: entry.instrumentalFile || null,
+        separationStatus: entry.separationStatus || 'none',
       };
       reply({ track });
     } else if (entry.url) {

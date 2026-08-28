@@ -27,6 +27,7 @@ const execFileAsync = promisify(execFile);
 
 // ─── yt-dlp 命令超時設定 ───
 const YTDLP_INFO_TIMEOUT = 45000;     // 取得影片資訊超時: 45s
+const YTDLP_SEARCH_TIMEOUT = 15000;   // 搜尋只讀扁平 metadata，逾時要比單曲 inspect 短
 const YTDLP_DOWNLOAD_TIMEOUT = 300000; // 下載音訊超時: 5min
 const YTDLP_MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 const YTDLP_METADATA_PRINT = 'before_dl:__ES_META__%()j';
@@ -70,6 +71,68 @@ const importQueue = [];
 let activeYtDlpJobs = 0;
 let ffmpegTail = Promise.resolve();
 const PREFETCH_TTL_MS = 10 * 60 * 1000;
+
+const YOUTUBE_SEARCH_LIMIT_MAX = 10;
+const YOUTUBE_SEARCH_QUERY_MIN = 2;
+const YOUTUBE_SEARCH_QUERY_MAX = 100;
+
+function normalizeYouTubeSearchQuery(value) {
+  const query = String(value || '').replace(/\s+/g, ' ').trim();
+  if (query.length < YOUTUBE_SEARCH_QUERY_MIN || query.length > YOUTUBE_SEARCH_QUERY_MAX) {
+    const error = new Error(`搜尋文字需為 ${YOUTUBE_SEARCH_QUERY_MIN}–${YOUTUBE_SEARCH_QUERY_MAX} 個字元`);
+    error.code = 'YOUTUBE_SEARCH_INVALID_QUERY';
+    throw error;
+  }
+  return query;
+}
+
+function normalizeYouTubeSearchLimit(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return YOUTUBE_SEARCH_LIMIT_MAX;
+  return Math.max(1, Math.min(YOUTUBE_SEARCH_LIMIT_MAX, parsed));
+}
+
+function isAllowedYouTubeThumbnail(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return url.protocol === 'https:' && (url.hostname === 'i.ytimg.com' || url.hostname.endsWith('.ytimg.com'));
+  } catch (_) {
+    return false;
+  }
+}
+
+function sanitizeYouTubeSearchPayload(payload, limit = YOUTUBE_SEARCH_LIMIT_MAX) {
+  const rawEntries = Array.isArray(payload?.entries) ? payload.entries : [];
+  const results = [];
+  const seen = new Set();
+  for (const entry of rawEntries) {
+    const videoId = String(entry?.id || '').trim();
+    if (!/^[A-Za-z0-9_-]{6,32}$/.test(videoId) || seen.has(videoId)) continue;
+    const title = String(entry?.title || '').replace(/\s+/g, ' ').trim();
+    if (!title) continue;
+    seen.add(videoId);
+    const thumbnails = Array.isArray(entry.thumbnails) ? entry.thumbnails : [];
+    const thumbnailCandidate = [entry.thumbnail, ...thumbnails.map((item) => item?.url)]
+      .find(isAllowedYouTubeThumbnail);
+    const duration = Number(entry.duration);
+    const viewCount = Number(entry.view_count);
+    const liveStatus = typeof entry.live_status === 'string' ? entry.live_status : null;
+    results.push({
+      videoId,
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      title: title.slice(0, 300),
+      channel: String(entry.channel || entry.uploader || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+      duration: Number.isFinite(duration) && duration >= 0 ? Math.round(duration) : 0,
+      thumbnail: thumbnailCandidate || '',
+      viewCount: Number.isFinite(viewCount) && viewCount >= 0 ? Math.round(viewCount) : null,
+      liveStatus,
+      unavailable: liveStatus === 'is_live' || liveStatus === 'is_upcoming',
+      isShort: /\/shorts\//i.test(String(entry.webpage_url || entry.original_url || entry.url || '')),
+    });
+    if (results.length >= normalizeYouTubeSearchLimit(limit)) break;
+  }
+  return results;
+}
 
 function isYouTubeMusicPremiumError(error) {
   return /only available to music premium members/i.test(String(error?.message || error || ''));
@@ -388,6 +451,17 @@ class AudioProcessor {
       clientFallbacks: YTDLP_CLIENT_FALLBACK_STRATEGIES.map((strategy) => ({ ...strategy })),
     };
   }
+  static _normalizeYouTubeSearchQueryForTest(value) { return normalizeYouTubeSearchQuery(value); }
+  static _sanitizeYouTubeSearchPayloadForTest(payload, limit) { return sanitizeYouTubeSearchPayload(payload, limit); }
+  static _youtubeSearchArgsForTest(query, limit) {
+    const normalizedQuery = normalizeYouTubeSearchQuery(query);
+    const normalizedLimit = normalizeYouTubeSearchLimit(limit);
+    return [
+      '--no-config', '--js-runtimes', 'node', '--flat-playlist', '--dump-single-json',
+      '--skip-download', '--no-warnings', '--playlist-end', String(normalizedLimit),
+      `ytsearch${normalizedLimit}:${normalizedQuery}`,
+    ];
+  }
   static _registerCancellationForTest(requestId) {
     const controller = registerRequestController(requestId);
     return { signal: controller.signal, cleanup: () => clearRequestController(requestId, controller) };
@@ -660,6 +734,59 @@ class AudioProcessor {
       throw new Error('音訊下載失敗，歌曲未加入播放清單；請稍後重試或檢查 yt-dlp／cookies 設定。');
     }
     return filename;
+  }
+
+  // ─── YouTube 搜尋（只讀 metadata，不下載）───
+  static async searchYouTube(query, options = {}) {
+    const normalizedQuery = normalizeYouTubeSearchQuery(query);
+    const limit = normalizeYouTubeSearchLimit(options.limit);
+    const requestId = options.requestId ? String(options.requestId) : '';
+    const controller = registerRequestController(requestId);
+    const signal = controller?.signal || options.signal;
+    try {
+      return await runQueued(async () => {
+        throwIfCancelled(signal);
+        const args = this._youtubeSearchArgsForTest(normalizedQuery, limit);
+        let stdout = '';
+        try {
+          ({ stdout } = await execFileAsync('yt-dlp', args, {
+            ...YTDLP_BASE_OPTS,
+            timeout: YTDLP_SEARCH_TIMEOUT,
+            maxBuffer: YTDLP_MAX_BUFFER,
+            signal,
+          }));
+        } catch (error) {
+          if (signal?.aborted) throw new ImportCancelledError();
+          stdout = typeof error?.stdout === 'string' ? error.stdout : '';
+          if (!stdout) {
+            const isTimeout = error?.killed || error?.code === 'ETIMEDOUT';
+            const isMissingRuntime = error?.code === 'ENOENT';
+            const wrapped = new Error(isTimeout
+              ? 'YouTube 搜尋逾時'
+              : isMissingRuntime
+                ? '找不到 YouTube 搜尋元件'
+                : 'YouTube 搜尋服務暫時無法使用');
+            wrapped.code = isTimeout
+              ? 'YOUTUBE_SEARCH_TIMEOUT'
+              : isMissingRuntime
+                ? 'YOUTUBE_SEARCH_RUNTIME_MISSING'
+                : 'YOUTUBE_SEARCH_FAILED';
+            throw wrapped;
+          }
+        }
+        let payload;
+        try {
+          payload = JSON.parse(String(stdout).trim());
+        } catch (_) {
+          const error = new Error('YouTube 搜尋回傳格式無法解析');
+          error.code = 'YOUTUBE_SEARCH_INVALID_RESPONSE';
+          throw error;
+        }
+        return sanitizeYouTubeSearchPayload(payload, limit);
+      }, 'batch', signal);
+    } finally {
+      clearRequestController(requestId, controller);
+    }
   }
 
   // ─── YouTube 播放清單 ───

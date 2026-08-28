@@ -98,6 +98,15 @@ function recordPlay(track) {
     // 每首記憶的變調/變速
     pitchShift: typeof track.pitchShift === 'number' ? track.pitchShift : (prev && prev.pitchShift) || 0,
     playbackRate: typeof track.playbackRate === 'number' ? track.playbackRate : (prev && prev.playbackRate) || 1.0,
+    // AI 人聲分離：recordPlay() 整個重建 library[id]（不是像 updateMeta 那樣 spread prev
+    // 再蓋部分欄位），這三個欄位沒列進來就等於每次播放都被重置成「未分離」——
+    // 2026-08-23 實測踩到：已分離的歌播放一次，媒體庫馬上又顯示「分離人聲」按鈕。
+    // track 這邊來自面板送的 play:track payload，通常沒有這三個欄位（面板不需要送），
+    // 一律優先保留 prev 已經記錄的分離結果。
+    vocalsFile: pick(track.vocalsFile, prev && prev.vocalsFile) || null,
+    instrumentalFile: pick(track.instrumentalFile, prev && prev.instrumentalFile) || null,
+    separationStatus: (track.separationStatus && track.separationStatus !== 'none')
+      ? track.separationStatus : (prev && prev.separationStatus) || 'none',
     playCount: (prev ? prev.playCount : 0) + 1,
     lastPlayed: Date.now(),
   };
@@ -109,7 +118,19 @@ function rememberImport(track) {
   track = sanitizeTrack(track);
   if (!track || !track.id) return;
   const prev = library[String(track.id)] || {};
-  library[String(track.id)] = { ...prev, ...track, playCount: prev.playCount || 0, lastPlayed: prev.lastPlayed || 0 };
+  library[String(track.id)] = {
+    ...prev,
+    ...track,
+    playCount: prev.playCount || 0,
+    lastPlayed: prev.lastPlayed || 0,
+    // 剛匯入的 track 不可能帶有分離結果（那是之後使用者自己按分離才有的），`{...prev, ...track}`
+    // 若直接讓 sanitizeTrack() 給的預設值（none/null）覆蓋，重新匯入同一部影片會把已經分離過
+    // 的紀錄清空——跟 recordPlay() 那個坑同一個模式，這裡也要保留 prev 的分離結果。
+    vocalsFile: track.vocalsFile || prev.vocalsFile || null,
+    instrumentalFile: track.instrumentalFile || prev.instrumentalFile || null,
+    separationStatus: (track.separationStatus && track.separationStatus !== 'none')
+      ? track.separationStatus : (prev.separationStatus || 'none'),
+  };
   // 匯入流程走到這裡代表音檔已完成落地；不必等下一次目錄掃描才讓 UI 顯示可播放。
   noteAudioSnapshot(track.filename, true);
   scheduleSave();

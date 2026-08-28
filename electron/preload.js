@@ -52,4 +52,10 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
     start(options) { return ipcRenderer.invoke('elitesand:spout-start', options); },
     stop() { return ipcRenderer.invoke('elitesand:spout-stop'); },
   }),
+  // WebGPU 人聲分離引擎（實驗性）：設定頁開關切換時呼叫，讓隱藏視窗立刻反映新狀態，
+  // 不用重啟整個 App。設定本身的持久化走既有 HTTP（/api/webgpu-separation/settings），
+  // 這裡只負責讓 Electron 主程序知道「現在要不要讓那個隱藏視窗活著」。
+  webgpuEngine: Object.freeze({
+    setEnabled(enabled) { return ipcRenderer.invoke('elitesand:webgpu-engine-toggle', !!enabled); },
+  }),
 }));

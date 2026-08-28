@@ -160,6 +160,151 @@
   // YouTube 處理
   // ═══════════════════════════════════════════
 
+  let youtubeSearchGeneration = 0;
+  let activeSearchRequestId = '';
+  let youtubeSearchUi = { key: '', vars: {}, results: [] };
+
+  function setYouTubeMode(mode) {
+    const searchMode = mode === 'search';
+    dom.youtubeModeLink?.classList.toggle('active', !searchMode);
+    dom.youtubeModeSearch?.classList.toggle('active', searchMode);
+    dom.youtubeModeLink?.setAttribute('aria-selected', String(!searchMode));
+    dom.youtubeModeSearch?.setAttribute('aria-selected', String(searchMode));
+    if (dom.youtubeLinkPanel) dom.youtubeLinkPanel.hidden = searchMode;
+    if (dom.youtubeSearchPanel) dom.youtubeSearchPanel.hidden = !searchMode;
+    if (searchMode) dom.youtubeSearchQuery?.focus();
+  }
+
+  function renderYouTubeSearch() {
+    if (!dom.youtubeSearchStatus || !dom.youtubeSearchResults) return;
+    dom.youtubeSearchStatus.textContent = youtubeSearchUi.key ? t(youtubeSearchUi.key, youtubeSearchUi.vars) : '';
+    dom.youtubeSearchResults.textContent = '';
+    for (const result of youtubeSearchUi.results) {
+      const row = document.createElement('article');
+      row.className = 'youtube-search-result';
+      row.dataset.videoId = result.videoId;
+
+      const thumbnail = document.createElement('img');
+      thumbnail.className = 'youtube-search-thumb';
+      thumbnail.alt = '';
+      thumbnail.loading = 'lazy';
+      thumbnail.hidden = !result.thumbnail;
+      if (result.thumbnail) thumbnail.src = result.thumbnail;
+      thumbnail.addEventListener('error', () => { thumbnail.hidden = true; });
+
+      const copy = document.createElement('div');
+      copy.className = 'youtube-search-copy';
+      const title = document.createElement('div');
+      title.className = 'youtube-search-title';
+      title.textContent = result.title;
+      title.title = result.title;
+      const meta = document.createElement('div');
+      meta.className = 'youtube-search-meta';
+      const metaParts = [result.channel || t('youtubeSearch.unknownChannel')];
+      metaParts.push(result.duration > 0 ? formatDuration(result.duration) : t('youtubeSearch.unknownDuration'));
+      if (Number.isFinite(result.viewCount)) metaParts.push(t('youtubeSearch.views', { count: formatNumber(result.viewCount) }));
+      meta.textContent = metaParts.join(' · ');
+      copy.append(title, meta);
+      if (result.unavailable || result.isShort) {
+        const badge = document.createElement('span');
+        badge.className = 'youtube-search-badge';
+        badge.textContent = result.liveStatus === 'is_live'
+          ? t('youtubeSearch.live')
+          : result.liveStatus === 'is_upcoming'
+            ? t('youtubeSearch.upcoming')
+            : t('youtubeSearch.short');
+        copy.appendChild(badge);
+      }
+
+      const choose = document.createElement('button');
+      choose.type = 'button';
+      choose.className = 'btn btn-sm';
+      choose.textContent = t('youtubeSearch.choose');
+      choose.disabled = !!result.unavailable;
+      choose.addEventListener('click', () => {
+        choose.disabled = true;
+        choose.textContent = t('youtubeSearch.queued');
+        queueYouTubeImport(result.url, {
+          sourceKey: 'source.youtubeModeSearch',
+          label: result.title,
+          autoSeparate: !!dom.youtubeAutoSeparate?.checked,
+        }).catch(() => {
+          choose.disabled = false;
+          choose.textContent = t('youtubeSearch.choose');
+        });
+      });
+      row.append(thumbnail, copy, choose);
+      dom.youtubeSearchResults.appendChild(row);
+    }
+  }
+
+  function cancelActiveYouTubeSearch() {
+    const requestId = activeSearchRequestId;
+    if (!requestId) return;
+    activeSearchRequestId = '';
+    PinAuth.fetchWithPin('/api/youtube/cancel', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId }),
+    }).catch(() => {});
+  }
+
+  function youtubeSearchErrorMessage(data, response) {
+    if (data?.code === 'YOUTUBE_SEARCH_TIMEOUT') return t('youtubeSearch.timeout');
+    if (data?.code === 'YOUTUBE_SEARCH_RUNTIME_MISSING') return t('youtubeSearch.runtimeMissing');
+    if (data?.code === 'YOUTUBE_SEARCH_INVALID_QUERY') return t('validation.searchLength');
+    if (data?.code === 'IMPORT_CANCELLED') return '';
+    return t('youtubeSearch.unavailable', { status: response?.status || 0 });
+  }
+
+  async function searchYouTube() {
+    const query = String(dom.youtubeSearchQuery?.value || '').replace(/\s+/g, ' ').trim();
+    if (query.length < 2 || query.length > 100) {
+      youtubeSearchUi = { key: 'youtubeSearch.failed', vars: { message: t('validation.searchLength') }, results: [] };
+      renderYouTubeSearch();
+      return;
+    }
+    cancelActiveYouTubeSearch();
+    const generation = ++youtubeSearchGeneration;
+    const requestId = `yt-search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    activeSearchRequestId = requestId;
+    youtubeSearchUi = { key: 'youtubeSearch.searching', vars: {}, results: [] };
+    renderYouTubeSearch();
+    if (dom.youtubeSearchSubmit) dom.youtubeSearchSubmit.disabled = true;
+    try {
+      const response = await PinAuth.fetchWithPin('/api/youtube/search', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, limit: 10, requestId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (generation !== youtubeSearchGeneration) return;
+      if (!response.ok || !data.success) {
+        const error = new Error(youtubeSearchErrorMessage(data, response));
+        error.code = data.code || 'YOUTUBE_SEARCH_FAILED';
+        throw error;
+      }
+      const results = Array.isArray(data.results) ? data.results : [];
+      youtubeSearchUi = results.length
+        ? { key: 'youtubeSearch.resultCount', vars: { count: formatNumber(results.length) }, results }
+        : { key: 'youtubeSearch.empty', vars: {}, results: [] };
+      renderYouTubeSearch();
+    } catch (error) {
+      if (generation !== youtubeSearchGeneration || error?.code === 'IMPORT_CANCELLED') return;
+      youtubeSearchUi = { key: 'youtubeSearch.failed', vars: { message: error.message }, results: [] };
+      renderYouTubeSearch();
+    } finally {
+      if (generation === youtubeSearchGeneration) {
+        activeSearchRequestId = '';
+        if (dom.youtubeSearchSubmit) dom.youtubeSearchSubmit.disabled = false;
+      }
+    }
+  }
+
+  dom.youtubeModeLink?.addEventListener('click', () => setYouTubeMode('link'));
+  dom.youtubeModeSearch?.addEventListener('click', () => setYouTubeMode('search'));
+  dom.youtubeSearchSubmit?.addEventListener('click', searchYouTube);
+  dom.youtubeSearchQuery?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') searchYouTube();
+  });
+
   dom.ytFetchBtn.addEventListener('click', fetchYouTube);
   dom.ytUrl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') fetchYouTube();
@@ -213,6 +358,7 @@
         label: entry.title || '',
         labelKey: entry.title ? '' : 'import.playlist.itemFallbackLabel',
         labelVars: { index: index + 1 },
+        autoSeparate: !!dom.youtubeAutoSeparate?.checked,
       }));
       dom.ytFetchBtn.disabled = false;
       dom.ytFetchBtn.textContent = t('source.importAudio');
@@ -376,6 +522,7 @@
   function displayJobState(job, queueIndex) {
     if (job.status === 'queued') return t('import.job.queued', { position: formatNumber(queueIndex + 1) });
     if (job.progressStage) return progressStatus(job.progressStage, job.percent, job.progressError);
+    if (job.postActionKey) return t(job.postActionKey, formatImportVars(job.postActionVars));
     if (job.completedPlacement) return t('import.job.completed', { placement: t(job.completedPlacement), title: job.completedTitle || '' });
     if (job.errorMessage) return t('import.error.importFailed', { message: job.errorMessage });
     if (job.messageKey) return t(job.messageKey, job.messageVars);
@@ -416,7 +563,7 @@
         actions.appendChild(retry);
       }
       row.append(title, stateEl, actions);
-      if (job.status === 'active' && Number.isFinite(job.percent)) {
+      if ((job.status === 'active' || job.status === 'separating') && Number.isFinite(job.percent)) {
         const progress = document.createElement('div');
         progress.className = 'work-item-progress';
         const fill = document.createElement('span');
@@ -498,6 +645,7 @@
         label: job.label,
         labelKey: job.labelKey,
         labelVars: job.labelVars,
+        autoSeparate: job.autoSeparate,
       }).catch(() => {});
     }
   });
@@ -518,6 +666,79 @@
     }
   });
 
+  function separationStartError(data) {
+    if (data?.error === 'AI_RUNTIME_NOT_READY') return tr('AI 分離元件尚未安裝，請先到「連線與系統」下載');
+    if (data?.error === 'ALREADY_PROCESSING') return tr('這首歌已經在分離中');
+    if (data?.error === 'WEBGPU_ENGINE_OFFLINE') return tr('WebGPU 分離引擎離線，請確認桌面版已啟動');
+    if (data?.error === 'WEBGPU_ENGINE_BUSY') return tr('WebGPU 分離引擎正在跑另一首歌，請稍後再試');
+    if (data?.error === 'WEBGPU_MODEL_NOT_READY') return tr('WebGPU 分離模型尚未下載，請先到「連線與系統」下載');
+    return tr(data?.error || t('import.error.serverUnconfirmed'));
+  }
+
+  async function separateImportedTrack(job, track) {
+    updateJob(job, {
+      status: 'separating', stage: '', percent: 0,
+      postActionKey: 'import.separation.starting', postActionVars: {},
+    });
+    let finished = false;
+    let timer = null;
+    let resolveCompletion;
+    let rejectCompletion;
+    const completion = new Promise((resolve, reject) => {
+      resolveCompletion = resolve;
+      rejectCompletion = reject;
+    });
+    const onProgress = (data) => {
+      if (!data || String(data.trackId) !== String(track.id) || finished) return;
+      if (data.stage === 'done') {
+        finished = true;
+        resolveCompletion();
+        return;
+      }
+      if (data.stage === 'error') {
+        finished = true;
+        rejectCompletion(new Error(data.errorMessage || data.error || t('import.separation.unknownFailure')));
+        return;
+      }
+      if (data.stage === 'queued') {
+        updateJob(job, {
+          status: 'separating', percent: 0,
+          postActionKey: 'import.separation.queued',
+          postActionVars: { position: data.queuePosition || 1 },
+        });
+        return;
+      }
+      const rawProgress = Number(data.progress);
+      const percent = Number.isFinite(rawProgress)
+        ? Math.max(0, Math.min(100, rawProgress <= 1 ? rawProgress * 100 : rawProgress))
+        : 0;
+      updateJob(job, {
+        status: 'separating', percent,
+        postActionKey: 'import.separation.processing',
+        postActionVars: { percent: Number.isFinite(rawProgress) ? `${formatNumber(Math.round(percent))}%` : '' },
+      });
+    };
+    SocketClient.on('separation:progress', onProgress);
+    timer = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      rejectCompletion(new Error(t('import.separation.timeout')));
+    }, 2 * 60 * 60 * 1000);
+    try {
+      const response = await PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(track.id)}/separate`, { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) {
+        finished = true;
+        throw new Error(separationStartError(data));
+      }
+      await completion;
+    } finally {
+      finished = true;
+      if (timer) clearTimeout(timer);
+      SocketClient.off('separation:progress', onProgress);
+    }
+  }
+
   function queueYouTubeImport(url, options = {}) {
     return new Promise((resolve, reject) => {
       const job = {
@@ -532,6 +753,7 @@
         replaceTrackId: options.replaceTrackId || null,
         placement: options.placement === 'next' ? 'next' : 'end',
         assessment: options.assessment || null,
+        autoSeparate: options.autoSeparate === true,
         status: 'queued', stage: '等待中', percent: 0, resolve, reject, createdAt: Date.now(),
       };
       ytImportQueue.push(job);
@@ -616,11 +838,32 @@
             // this point the authoritative appended track is already in state.
             AppShared.playTrack(placement.insertAt, false);
           }
-          ok++;
           const placementKey = job.placement === 'next'
             ? (placement?.placement === 'next' ? 'import.placement.next' : 'import.placement.endBecauseIdle')
             : 'import.placement.added';
-          updateJob(job, { status: 'completed', stage: '已完成', completedPlacement: placementKey, completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '' });
+          if (job.autoSeparate) {
+            try {
+              await separateImportedTrack(job, data.track);
+              updateJob(job, {
+                status: 'completed', stage: '已完成', completedPlacement: placementKey,
+                completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '',
+                postActionKey: 'import.separation.completed', postActionVars: { title: data.track.title },
+              });
+            } catch (separationError) {
+              AppShared.showToast(t('import.separation.failedAfterImport', { message: separationError.message }), 'warning');
+              updateJob(job, {
+                status: 'completed', stage: '已完成', completedPlacement: placementKey,
+                completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '',
+                postActionKey: 'import.separation.failedAfterImport', postActionVars: { message: separationError.message },
+              });
+            }
+          } else {
+            updateJob(job, {
+              status: 'completed', stage: '已完成', completedPlacement: placementKey,
+              completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '',
+            });
+          }
+          ok++;
           job.resolve(data.track);
         } else {
           const errorMsg = data.error ? tr(data.error) : t('import.error.unknown');
@@ -685,7 +928,8 @@
 
     // 驗證通過＝知道要抓什麼了 → 立即清空欄位讓使用者能接著貼下一首；下載交給佇列。
     dom.ytUrl.value = '';
-    queueYouTubeImport(url).catch(() => { /* 失敗已在佇列內 toast，這裡吞掉避免 unhandled */ });
+    queueYouTubeImport(url, { autoSeparate: !!dom.youtubeAutoSeparate?.checked })
+      .catch(() => { /* 失敗已在佇列內 toast，這裡吞掉避免 unhandled */ });
   }
 
   // YT 進度文字。busy=true 時附加動態點點（CSS 動畫），讓使用者知道程式在跑而不是卡住。
@@ -766,6 +1010,7 @@
   window.addEventListener('i18n:change', () => {
     renderWorkCenter();
     renderYtProgress();
+    renderYouTubeSearch();
     if (activeRiskAssessment) renderRiskAssessment(activeRiskAssessment);
     if (dom.ytFetchBtn) dom.ytFetchBtn.textContent = dom.ytFetchBtn.disabled ? t('import.playlist.processing') : t('source.importAudio');
     const uploadingHint = dom.dropZone?.querySelector('.hint');

@@ -44,6 +44,12 @@ const { decodeUploadedText } = require('../utils/decode-text');
 const ytdlpCompatibility = require('../services/ytdlp-compatibility');
 const systemCheck = require('../services/system-check');
 const ffmpegProvider = require('../services/ffmpeg-provider');
+const aiRuntimeProvider = require('../services/ai-runtime-provider');
+const aiSeparationJobs = require('../services/ai-separation-jobs');
+const webgpuRuntimeProvider = require('../services/webgpu-runtime-provider');
+const webgpuSeparationJobs = require('../services/webgpu-separation-jobs');
+const webgpuSeparationSettings = require('../services/webgpu-separation-settings');
+const libraryStore = require('../services/library-store');
 const { createDiagnosticBundle } = require('../services/diagnostic-bundle');
 const runtimeEvidence = require('../services/runtime-evidence');
 const feedbackReport = require('../services/feedback-report');
@@ -602,6 +608,27 @@ router.post('/youtube/cancel', requirePin, (req, res) => {
   res.status(result.ok ? 202 : 404).json(result);
 });
 
+// ─── YouTube 關鍵字搜尋：只讀扁平 metadata，不下載音訊 ───
+router.post('/youtube/search', requirePin, async (req, res) => {
+  try {
+    const results = await AudioProcessor.searchYouTube(req.body?.query, {
+      limit: req.body?.limit,
+      requestId: req.body?.requestId,
+    });
+    res.json({ success: true, results });
+  } catch (err) {
+    if (err.code === 'YOUTUBE_SEARCH_INVALID_QUERY') {
+      return res.status(400).json({ success: false, code: err.code, error: err.message });
+    }
+    if (err.code === 'IMPORT_CANCELLED') {
+      return res.status(499).json({ success: false, code: err.code, error: '搜尋已取消' });
+    }
+    const status = err.code === 'YOUTUBE_SEARCH_TIMEOUT' ? 504 : 502;
+    log.warn(`YouTube 搜尋失敗 (${err.code || 'YOUTUBE_SEARCH_FAILED'})`);
+    res.status(status).json({ success: false, code: err.code || 'YOUTUBE_SEARCH_FAILED', error: err.message });
+  }
+});
+
 // ─── YouTube 影片下載前檢查：只讀 metadata，不開始下載 ───
 router.post('/youtube/inspect', requirePin, async (req, res) => {
   try {
@@ -968,6 +995,157 @@ router.get('/fonts/assets/:assetId/:faceId', requireLocalFontAsset, async (req, 
   } catch (err) {
     log.error('傳送本機字型資源失敗', err);
     if (!res.headersSent) res.status(500).json({ success: false, error: '傳送本機字型資源失敗' });
+  }
+});
+
+// ─── AI 人聲分離（實驗性功能）───
+// 定位見 CLAUDE.md「AI 人聲分離」：使用 Kim Mel-Band RoFormer 模型，作者書面授權確認
+// （docs/AI-SEPARATION-PLAN.md §6）截至上線時仍在等待中——這是使用者知情後的決定，
+// 不是遺漏，見 STATUS.md 對應記錄。
+
+// 只讀進度，不含本機路徑，前端下載期間輪詢它（同 /ffmpeg/download/status 的理由）。
+router.get('/ai-separation/runtime-status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ available: aiRuntimeProvider.isAvailable(), ...aiRuntimeProvider.getDownloadStatus() });
+});
+
+// 觸發真正的網路下載＋寫入本機檔案，依鐵則 15 必須手動掛 requirePin。
+router.post('/ai-separation/runtime/download', requirePin, async (req, res) => {
+  if (aiRuntimeProvider.isAvailable()) {
+    return res.json({ ok: true, alreadyAvailable: true });
+  }
+  try {
+    await aiRuntimeProvider.downloadRuntime({});
+    res.json({ ok: true, alreadyAvailable: false });
+  } catch (err) {
+    log.error('AI 分離 runtime 下載失敗', err);
+    res.status(502).json({ ok: false, reason: err.message });
+  }
+});
+
+// ─── WebGPU 人聲分離（實驗性，§13 musetric 路線）───
+// GET 只回開關狀態；POST 會寫本機偏好，依其他設定寫入端點的規則掛 requirePin。
+// 跟上面的匿名活躍統計是同一種模式，但刻意是獨立的檔案/端點——這個開關關掉
+// 不該影響其他任何功能。
+router.get('/webgpu-separation/settings', (req, res) => {
+  res.json(webgpuSeparationSettings.getSettings());
+});
+
+router.post('/webgpu-separation/settings', requirePin, (req, res) => {
+  if (!req.body || typeof req.body.enabled !== 'boolean') {
+    return res.status(400).json({ ok: false, code: 'INVALID_REQUEST' });
+  }
+  const settings = webgpuSeparationSettings.setEnabled(req.body.enabled);
+  // 剛打開開關、模型還沒下載過：先開始下載，不用使用者再多按一次。跟 CUDA runtime
+  // 的下載按鈕不同的地方是這裡自動觸發——模型下載失敗不影響開關本身能不能存，
+  // 使用者之後可以用下面的 runtime/download 端點重試。
+  if (settings.enabled && !webgpuRuntimeProvider.isAvailable()) {
+    webgpuRuntimeProvider.downloadModel({}).catch((err) => log.warn(`WebGPU 模型自動下載失敗：${err.message}`));
+  }
+  res.json({ ok: true, settings });
+});
+
+// 只讀進度，前端下載期間輪詢它（同 /ai-separation/runtime-status 的理由）；額外帶
+// engineConnected——設定開了但 Electron 隱藏視窗還沒連上時，前端要能顯示「引擎離線」
+// 而不是誤導使用者以為隨時能點分離。
+router.get('/webgpu-separation/runtime-status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    available: webgpuRuntimeProvider.isAvailable(),
+    engineConnected: webgpuSeparationJobs.isEngineAvailable(),
+    ...webgpuRuntimeProvider.getDownloadStatus(),
+  });
+});
+
+// 分離結果的 WAV 檔改用 HTTP multipart 上傳（見 webgpu-separation-jobs.js 的
+// finishJobWithResult 註解：一首幾分鐘的歌兩個 WAV 加起來很容易超過 Socket.io
+// 的 8MB 封包上限，真機首測就是在送結果時炸掉，誤報成分離失敗）。故意不掛
+// requirePin：呼叫者是沒有 PIN 內容的隱藏引擎視窗，授權改用「jobId 對得上目前
+// activeJob」這個等同於 socket 版本 payload.jobId 檢查的門檻。
+const webgpuResultUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 500 * 1024 * 1024, files: 2 },
+});
+
+router.post('/webgpu-separation/result/:jobId', webgpuResultUpload.fields([
+  { name: 'vocals', maxCount: 1 },
+  { name: 'instrumental', maxCount: 1 },
+]), (req, res) => {
+  const result = webgpuSeparationJobs.finishJobWithResult(req.params.jobId, {
+    vocalsBuffer: req.files?.vocals?.[0]?.buffer,
+    instrumentalBuffer: req.files?.instrumental?.[0]?.buffer,
+    gpuVendor: req.body?.gpuVendor,
+    peakBufferMb: req.body?.peakBufferMb ? Number(req.body.peakBufferMb) : undefined,
+    realtimeFactor: req.body?.realtimeFactor ? Number(req.body.realtimeFactor) : undefined,
+    audioSeconds: req.body?.audioSeconds ? Number(req.body.audioSeconds) : undefined,
+  });
+  if (!result.ok) return res.status(409).json({ ok: false, error: result.code });
+  res.json({ ok: true });
+});
+
+router.post('/webgpu-separation/runtime/download', requirePin, async (req, res) => {
+  if (webgpuRuntimeProvider.isAvailable()) {
+    return res.json({ ok: true, alreadyAvailable: true });
+  }
+  try {
+    await webgpuRuntimeProvider.downloadModel({});
+    res.json({ ok: true, alreadyAvailable: false });
+  } catch (err) {
+    log.error('WebGPU 分離模型下載失敗', err);
+    res.status(502).json({ ok: false, reason: err.message });
+  }
+});
+
+// 啟動一次分離 job。這是一支會觸發真正 GPU/CPU 運算＋寫入本機檔案的路由，依鐵則 15
+// 必須手動掛 requirePin。只回傳 jobId；實際進度/完成走 Socket.io 的 separation:progress
+// 事件（見 server/services/ai-separation-jobs.js／webgpu-separation-jobs.js），不是這個
+// HTTP response。WebGPU 設定開著時走那條引擎，否則維持原本的 CUDA/CPU 路徑不變。
+router.post('/library/:id/separate', requirePin, async (req, res) => {
+  const trackId = req.params.id;
+  const entry = libraryStore.getEntry(trackId);
+  if (!entry || !entry.filename) {
+    return res.status(404).json({ ok: false, error: '找不到這首歌的音檔' });
+  }
+  if (entry.separationStatus === 'processing') {
+    return res.status(409).json({ ok: false, error: 'ALREADY_PROCESSING' });
+  }
+
+  if (webgpuSeparationSettings.getSettings().enabled) {
+    if (!webgpuSeparationJobs.isEngineAvailable()) {
+      return res.status(409).json({ ok: false, error: 'WEBGPU_ENGINE_OFFLINE' });
+    }
+    if (!webgpuRuntimeProvider.isAvailable()) {
+      return res.status(409).json({ ok: false, error: 'WEBGPU_MODEL_NOT_READY' });
+    }
+    try {
+      const jobId = webgpuSeparationJobs.startJobForTrack(trackId, { sourceFilename: entry.filename });
+      libraryStore.updateMeta(trackId, { separationStatus: 'processing' });
+      res.json({ ok: true, jobId, queued: false });
+    } catch (err) {
+      log.error(`啟動 WebGPU 分離失敗 track=${trackId}`, err);
+      res.status(err.code === 'WEBGPU_ENGINE_BUSY' ? 409 : 500).json({ ok: false, error: err.code || err.message });
+    }
+    return;
+  }
+
+  if (!aiRuntimeProvider.isAvailable()) {
+    return res.status(409).json({ ok: false, error: 'AI_RUNTIME_NOT_READY' });
+  }
+  try {
+    const jobId = aiSeparationJobs.startJobForTrack(trackId, {
+      inputPath: path.join(downloadsDir, entry.filename),
+      // /audio/:filename 只認 downloadsDir 直接底下的檔名（server/index.js），輸出必須
+      // 直接落在這裡，分離出來的兩個檔案才能透過既有的 /audio 端點播放，不用另開路由。
+      outputDir: downloadsDir,
+      modelFileDir: path.join(dataDir, 'ai-models'),
+    });
+    libraryStore.updateMeta(trackId, { separationStatus: 'processing' });
+    // jobId 為 null 代表已經有另一首在跑，這首排進佇列了（見 ai-separation-jobs.js 的
+    // startJobForTrack）——不是失敗，前端靠 separation:progress 的 stage:'queued' 顯示排隊中。
+    res.json({ ok: true, jobId, queued: jobId === null });
+  } catch (err) {
+    log.error(`啟動 AI 分離失敗 track=${trackId}`, err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

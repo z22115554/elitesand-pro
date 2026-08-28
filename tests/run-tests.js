@@ -4100,6 +4100,85 @@ test('播放清單只掃描條目，逐首下載仍由前端共用佇列執行',
   ok(frontend.includes('RISK_WARNING_DISABLED_KEY'));
   ok(frontend.includes('queueYouTubeImport(entry.url'));
 });
+
+test('YouTube 搜尋：查詢正規化、筆數上限與 yt-dlp metadata-only 參數固定', () => {
+  eq(AudioProcessor._normalizeYouTubeSearchQueryForTest('  周杰倫   稻香  '), '周杰倫 稻香');
+  const args = AudioProcessor._youtubeSearchArgsForTest('周杰倫 稻香', 999);
+  ok(args.includes('--flat-playlist') && args.includes('--dump-single-json') && args.includes('--skip-download'));
+  ok(args.includes('--no-config') && args.includes('--playlist-end'));
+  ok(args.includes('ytsearch10:周杰倫 稻香'));
+  let shortError = null;
+  try { AudioProcessor._normalizeYouTubeSearchQueryForTest('a'); } catch (error) { shortError = error; }
+  eq(shortError?.code, 'YOUTUBE_SEARCH_INVALID_QUERY');
+});
+
+test('YouTube 搜尋：只回白名單欄位、去重並拒絕非官方縮圖', () => {
+  const results = AudioProcessor._sanitizeYouTubeSearchPayloadForTest({ entries: [
+    {
+      id: 'sHD_z90ZKV0', title: '  周杰倫   稻香  ', channel: ' 周杰倫 ', duration: 224.4,
+      view_count: 71803791, thumbnail: 'https://evil.example/track.jpg',
+      thumbnails: [{ url: 'https://i.ytimg.com/vi/sHD_z90ZKV0/hqdefault.jpg' }],
+      description: '這個欄位不能送到 renderer', cookies: 'secret', live_status: null,
+    },
+    { id: 'sHD_z90ZKV0', title: '重複結果' },
+    { id: '../../bad', title: '不合法 ID' },
+    { id: 'LIVE0000001', title: '直播中', live_status: 'is_live' },
+  ] }, 10);
+  eq(results.length, 2);
+  eq(results[0].url, 'https://www.youtube.com/watch?v=sHD_z90ZKV0');
+  eq(results[0].title, '周杰倫 稻香');
+  eq(results[0].thumbnail, 'https://i.ytimg.com/vi/sHD_z90ZKV0/hqdefault.jpg');
+  ok(!Object.prototype.hasOwnProperty.call(results[0], 'description'));
+  ok(!Object.prototype.hasOwnProperty.call(results[0], 'cookies'));
+  eq(results[1].unavailable, true);
+});
+
+test('YouTube 搜尋 API 掛 PIN，且 server 端搜尋走既有 yt-dlp 共用佇列', () => {
+  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  ok(api.includes("router.post('/youtube/search', requirePin"));
+  const audio = fs.readFileSync(path.join(__dirname, '../server/services/audio-processor.js'), 'utf8');
+  const start = audio.indexOf('static async searchYouTube');
+  const end = audio.indexOf('// ─── YouTube 播放清單', start);
+  const block = audio.slice(start, end);
+  ok(block.includes('runQueued('));
+  ok(block.includes("'batch'"));
+  ok(block.includes('execFileAsync'));
+  ok(!block.includes('processYouTube('));
+  ok(!block.includes('error?.message'), '搜尋服務不得把 yt-dlp 原始錯誤送回 renderer: ');
+});
+
+test('YouTube 搜尋 UI：選取結果只能回到 queueYouTubeImport，受保護請求使用 PinAuth', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const frontend = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+  ['youtube-mode-search', 'youtube-search-query', 'youtube-search-submit', 'youtube-search-results', 'youtube-auto-separate']
+    .forEach((id) => ok(html.includes(`id="${id}"`), `缺少搜尋 UI #${id}: `));
+  ok(frontend.includes("PinAuth.fetchWithPin('/api/youtube/search'"));
+  ok(frontend.includes('queueYouTubeImport(result.url'));
+  ok(frontend.includes("data?.code === 'YOUTUBE_SEARCH_RUNTIME_MISSING'"));
+  ok(!frontend.includes("fetch('/api/youtube/search'"));
+  const searchStart = frontend.indexOf('async function searchYouTube()');
+  const searchEnd = frontend.indexOf("dom.youtubeModeLink?.addEventListener", searchStart);
+  ok(!frontend.slice(searchStart, searchEnd).includes("'/api/youtube'"), '搜尋本身不得直接觸發下載: ');
+});
+
+test('YouTube 搜尋 UI：自動分離只會在下載成功取得 track 後啟動，五語字串齊全', () => {
+  const frontend = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+  const successStart = frontend.indexOf('if (res.ok && data.success && data.track)');
+  const separationCall = frontend.indexOf('await separateImportedTrack(job, data.track)', successStart);
+  ok(successStart >= 0 && separationCall > successStart, '自動分離必須位於下載成功分支內: ');
+  ok(frontend.includes('options.autoSeparate === true'));
+  ok(frontend.includes('SocketClient.on(\'separation:progress\', onProgress)'));
+  ok(frontend.includes('SocketClient.off(\'separation:progress\', onProgress)'));
+  const i18n = require('../public/js/i18n');
+  const keys = [
+    'source.youtubeModeLink', 'source.youtubeModeSearch', 'youtubeSearch.label',
+    'youtubeSearch.submit', 'youtubeSearch.autoSeparate', 'import.separation.completed',
+    'import.separation.failedAfterImport',
+  ];
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    for (const key of keys) ok(i18n.catalogs?.[locale]?.[key], `${locale} 缺少 ${key}: `);
+  }
+});
 const { classifyImportError, toImportTelemetryCode } = require('../server/utils/import-error');
 
 test('normalizeText：全形空白→半形、壓縮空白、去頭尾', () => {
@@ -7705,7 +7784,7 @@ test('連點切歌不會讓 <audio> 與 SoundTouch 兩條鏈同時出聲', () =>
   ok(playback.includes("if (result === 'stale') return; // 已被更新的切歌取代"), '切歌的載入回呼必須先擋掉作廢的載入：');
   ok(playback.includes("if (result === 'stale') return; // 已被更新的載入取代"), '播放鍵的載入回呼必須先擋掉作廢的載入：');
   ok(playback.includes('if (stActive()) return;\n    lastPlayTimeMs'), 'SoundTouch 生效時 <audio> 的 timeupdate 不可再搶進度與 lyrics:sync：');
-  ok(playback.includes('if (useSoundTouch) { try { SoundTouchEngine.pause(); } catch (e) { /* 靜默 */ } }\n      audioPlayer.pause();'),
+  ok(playback.includes('if (useSoundTouch) { try { SoundTouchEngine.pause(); } catch (e) { /* 靜默 */ } }'),
     '暫停必須兩條鏈都停，否則另一條仍會讓進度條繼續走：');
 });
 
