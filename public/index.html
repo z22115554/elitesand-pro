@@ -437,6 +437,7 @@
             <button class="prep-tab is-active" type="button" role="tab" aria-selected="true" data-prep-tab="add" data-i18n="home.tab.add">加入音樂</button>
             <button class="prep-tab" type="button" role="tab" aria-selected="false" data-prep-tab="sync" data-i18n="home.tab.sync">歌詞對時</button>
             <button class="prep-tab" type="button" role="tab" aria-selected="false" data-prep-tab="audio" data-i18n="home.tab.audio">音訊</button>
+            <button class="prep-tab" type="button" role="tab" aria-selected="false" data-prep-tab="ai" data-i18n="home.tab.ai">AI 伴奏</button>
             <button class="prep-tab" type="button" role="tab" aria-selected="false" data-prep-tab="session" data-i18n="home.tab.session">本場直播</button>
           </div>
 
@@ -600,6 +601,30 @@
             </div>
           </section>
           </div><!-- /.prep-panel session -->
+
+          <!-- 分頁：AI 伴奏（把 AI 人聲分離做成本場直播的準備步驟；渲染在 home-ai-separation-panel.js） -->
+          <div class="prep-panel" data-prep-panel="ai" hidden>
+          <section class="card" aria-labelledby="home-ai-title">
+            <p id="home-ai-title" class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span data-i18n="home.tab.ai">AI 伴奏</span></p>
+            <p class="sub section-intro" data-i18n="home.ai.intro">用 AI 去掉人聲、留下純伴奏。想邊唱邊聽原唱當參考，開「分離播放模式」並照「雙路音訊」教學設定 OBS。</p>
+            <div id="home-ai-engine" class="home-ai-engine val" role="status" aria-live="polite" data-i18n="home.ai.engineChecking">正在檢查 AI 伴奏元件…</div>
+            <div class="inline-row inline-row--wrap">
+              <button id="home-ai-install" class="btn btn-sm btn-primary" type="button" hidden data-i18n="home.ai.install">安裝 AI 伴奏元件</button>
+              <button id="home-ai-make-all" class="btn btn-sm btn-primary" type="button" disabled data-i18n="home.ai.makeAll">未製作的全部排進佇列</button>
+              <button id="home-ai-retry-failed" class="btn btn-sm" type="button" hidden data-i18n="home.ai.retryFailed">重試失敗的</button>
+              <button id="home-ai-open-audio" class="btn btn-sm btn-ghost" type="button" data-i18n="home.ai.openAudio">分離播放模式</button>
+              <button id="home-ai-open-guide" class="btn btn-sm btn-ghost" type="button" data-i18n="home.ai.openGuide">雙路音訊教學</button>
+            </div>
+          </section>
+          <section class="card">
+            <div class="playlist-head">
+              <p class="eyebrow m-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span data-i18n="home.ai.listTitle">本場清單的伴奏狀態</span> <span id="home-ai-coverage" class="val ml-6" aria-live="polite"></span></p>
+            </div>
+            <div id="home-ai-track-list" class="home-ai-track-list playlist playlist--min-height">
+              <div class="playlist-empty" data-i18n="home.ai.empty">播放清單裡有歌之後，這裡會列出每首的伴奏狀態。</div>
+            </div>
+          </section>
+          </div><!-- /.prep-panel ai -->
           </div><!-- /.kara-prep -->
           </div><!-- /.kara-split -->
         </div>
@@ -2553,6 +2578,48 @@
           </div>
         </details>
 
+        <details id="help-ai-instrumental" class="card card-collapse">
+          <summary>⑬ AI 伴奏（去人聲）怎麼用？</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>它在做什麼</strong>：把一首歌用 AI 分成「人聲」和「伴奏」兩軌，讓你可以只播伴奏、自己唱。首頁的「AI 伴奏」分頁會列出本場播放清單每一首的狀態（未製作／製作中／已分離／失敗）。</li>
+              <li><strong>第一次要先安裝元件</strong>：第一次按「製作伴奏」會跳出下載視窗，把 AI 模型抓下來（只需一次）。沒有 NVIDIA 顯示卡也能跑，只是慢一些。</li>
+              <li><strong>一次做整份清單</strong>：在「AI 伴奏」分頁按「未製作的全部排進佇列」，它會一首一首排隊處理，不會一次全開把電腦壓垮。</li>
+              <li><strong>做好之後怎麼用</strong>：到「音訊」分頁打開「分離播放模式」。之後播到「已分離」的歌就會自動只放伴奏，其他沒分離的歌照原樣播。</li>
+              <li><strong>只想先試聽</strong>：媒體庫每首歌旁邊有「試聽」，可以分別調人聲和伴奏的音量，確認分離品質再決定要不要用。</li>
+              <li><strong>做到一半想停</strong>：按製作中那首旁邊的「✕」即可取消，這首會回到「未製作」，不算失敗，也不影響已經匯入的歌。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details id="help-dual-audio" class="card card-collapse">
+          <summary>⑭ 雙路音訊：觀眾只聽伴奏、你自己聽原唱當參考</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>目標</strong>：直播出去的聲音只有「伴奏 ＋ 你的歌聲」，但你自己的耳機裡還能聽到「原唱人聲」當導唱參考，而這個原唱不會被直播收進去。</li>
+              <li><strong>這程式負責哪一半</strong>：打開「分離播放模式」後，這程式播放的就是純伴奏。這條聲音正常被 OBS／直播收音，沒問題。</li>
+              <li><strong>原唱參考要另外走一條</strong>：用媒體庫的「試聽」單獨播原唱人聲軌，或用另一個播放器開 vocals 檔；把這個播放程式的聲音，在 Windows「音量混合器」指定到你的耳機裝置，不要進 OBS 的擷取來源。</li>
+              <li><strong>用 OBS 做法（進階）</strong>：把「原唱參考」放成 OBS 的一個獨立音訊來源，在「進階音訊內容」把它的「音訊監控」設成「僅監聽」，並取消它在直播／錄影軌道的勾選。這樣只有你戴耳機聽得到，觀眾聽不到。</li>
+              <li><strong>最簡單的替代方案</strong>：不需要導唱就別開原唱那條——只播伴奏、看著首頁的逐字歌詞跟拍，一樣能唱，設定也最不容易出錯。</li>
+              <li><strong>提醒</strong>：務必先在錄一小段測試檔、或找一個人幫你聽直播，確認觀眾端「真的只有伴奏」再正式開唱。</li>
+            </ul>
+          </div>
+        </details>
+
+        <details id="help-spout" class="card card-collapse">
+          <summary>⑮ Spout 透明輸出（進階，給 Shoost 等軟體）</summary>
+          <div class="card-collapse-body">
+            <ul class="help-list">
+              <li><strong>什麼時候需要它</strong>：一般用 OBS 瀏覽器來源就夠了。只有當你的直播畫面是走 Shoost 這類「Spout 接收」軟體、而不是 OBS 時，才需要開 Spout 輸出。</li>
+              <li><strong>在哪裡開</strong>：「連線與系統」頁的「Spout 透明歌詞輸出」卡（此功能為實驗性，若沒看到卡片代表這個版本未開放）。</li>
+              <li><strong>怎麼設</strong>：填一個「Sender 名稱」（例如 <code>ElitesandLyrics</code>），設寬高跟你的直播畫面一樣大，FPS 建議 30。按「開始透明輸出」。</li>
+              <li><strong>接收端怎麼抓</strong>：在 Shoost（或其他 Spout 接收軟體）新增一個 Spout 捕捉，選剛剛那個同名的 Sender，畫面就會進去，含透明背景、不需要色度鍵去背。</li>
+              <li><strong>效能</strong>：60 FPS 只有在顯示卡夠力時才選；發現掉格或卡頓就降回 30 FPS。</li>
+              <li><strong>它跟 OBS 瀏覽器來源可以並存</strong>：兩邊吃的是同一份歌詞畫面與設定，你在控制台改字體顏色，兩邊都會跟著變。</li>
+            </ul>
+          </div>
+        </details>
+
         <div class="modal-actions">
           <button id="guide-later" class="btn btn-ghost" type="button">先進控制台，稍後繼續</button>
           <button id="guide-complete" class="btn btn-primary" type="button" disabled>完成第一次直播準備</button>
@@ -2841,6 +2908,7 @@
   <script src="/js/preview-scale.js"></script>
   <script src="/js/obs-websocket.js"></script>
   <script src="/js/home-prep-tabs.js"></script>
+  <script src="/js/home-ai-separation-panel.js"></script>
   <script src="/js/onboarding-tour.js"></script>
   <script src="/js/nav.js"></script>
 </body>

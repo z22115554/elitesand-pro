@@ -6737,6 +6737,42 @@ test('首頁 Live Bar 逐字對時：對時點掛在每個字底下，只有帶�
     'CSS 要有一字一格容器與 播放中/已唱 點狀態：');
 });
 
+test('首頁「AI 伴奏」分頁：只讀 state＋走既有分離路由，不新增 socket/broadcast', () => {
+  const root = path.join(__dirname, '..');
+  const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const mod = fs.readFileSync(path.join(root, 'public/js/home-ai-separation-panel.js'), 'utf8');
+  const prepTabs = fs.readFileSync(path.join(root, 'public/js/home-prep-tabs.js'), 'utf8');
+  ok(indexHtml.includes('data-prep-tab="ai"') && indexHtml.includes('data-prep-panel="ai"'),
+    '首頁準備區要有第 5 個分頁 ai（tab＋panel）：');
+  ok(indexHtml.includes('id="home-ai-track-list"') && indexHtml.includes('id="home-ai-make-all"'),
+    'AI 伴奏分頁要有清單容器與「全部排進佇列」：');
+  ok(indexHtml.includes('/js/home-ai-separation-panel.js'), 'index.html 必須載入 AI 伴奏分頁腳本：');
+  ok(mod.includes('AppShared.state') && mod.includes('window.AiSeparation.subscribe'),
+    'AI 伴奏分頁只讀 state.playlist、訂閱既有 AiSeparation：');
+  ok(mod.includes('/api/library/') && mod.includes('/separate`') && mod.includes("method: 'POST'"),
+    '觸發分離走既有 /api/library/:id/separate：');
+  ok(mod.includes('window.AiSeparation.ensureReady') && mod.includes('window.AiSeparation.cancel'),
+    '安裝流程與取消都走既有 AiSeparation（含 PinAuth）：');
+  ok(!/broadcastState\s*\(|SocketClient\.send\s*\(|new WebSocket\s*\(/.test(mod),
+    'AI 伴奏分頁不得自己發 socket 或呼叫 broadcastState：');
+  ok(prepTabs.includes("window.HomePrepTabs = { show: activate }"), 'HomePrepTabs.show 泛用切分頁仍可用：');
+});
+
+test('新手教學：分頁化目標會先切分頁；雙路音訊／Spout／AI 伴奏有說明章節', () => {
+  const root = path.join(__dirname, '..');
+  const tour = fs.readFileSync(path.join(root, 'public/js/onboarding-tour.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  ok(/const TOUR_VERSION = 4;/.test(tour), '首頁重構後導覽版本要 bump（讓既有使用者重看新版）：');
+  ok(tour.includes("prepTab: 'add'") && tour.includes("prepTab: 'sync'") && tour.includes("prepTab: 'session'"),
+    '被移進準備分頁的導覽步驟要標 prepTab：');
+  ok(tour.includes('root.HomePrepTabs.show(step.prepTab)'),
+    'renderStep 聚光前要先把該步驟的準備分頁切出來（不然目標在收合分頁裡是 hidden）：');
+  ['help-ai-instrumental', 'help-dual-audio', 'help-spout'].forEach((id) => ok(indexHtml.includes(`id="${id}"`),
+    `新手教學要有 #${id} 說明章節：`));
+  ok(indexHtml.includes('僅監聽') && indexHtml.includes('音訊監控'),
+    '雙路音訊章節要講到 OBS「進階音訊內容 → 音訊監控 → 僅監聽」：');
+});
+
 const socketOrigin = require('../server/utils/socket-origin');
 const trackSchema = require('../server/utils/track-schema');
 const authLimiter = require('../server/services/auth-rate-limiter');

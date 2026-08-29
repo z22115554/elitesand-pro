@@ -13,7 +13,7 @@
   const ADVANCED_LIVE_STORAGE_KEY = 'elite-advanced-live-tour-v1';
   const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1'];
   const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2';
-  const TOUR_VERSION = 3;
+  const TOUR_VERSION = 4;
   const ADVANCED_TOUR_VERSION = 1;
   const HOLE_PADDING = 9;
   const VIEWPORT_MARGIN = 10;
@@ -34,6 +34,7 @@
     {
       id: 'source',
       view: 'karaoke',
+      prepTab: 'add',
       target: '#music-source-card',
       mobileTarget: '#tab-youtube',
       title: 'tour.step.source.title',
@@ -114,6 +115,7 @@
     {
       id: 'lyrics-nudge',
       view: 'karaoke',
+      prepTab: 'sync',
       target: '.offset-row',
       mobileTarget: '.offset-row',
       title: 'tour.advanced.step.lyricsNudge.title',
@@ -123,6 +125,7 @@
     {
       id: 'lyrics-timeline',
       view: 'karaoke',
+      prepTab: 'sync',
       target: '#btn-lyrics-timeline',
       mobileTarget: '#btn-lyrics-timeline',
       title: 'tour.advanced.step.lyricsTimeline.title',
@@ -201,6 +204,7 @@
     {
       id: 'live-session',
       view: 'karaoke',
+      prepTab: 'session',
       target: '#session-status',
       mobileTarget: '#session-status',
       title: 'tour.advanced.step.liveSession.title',
@@ -517,6 +521,11 @@
     saveState();
 
     if (!options.skipNavigation) switchView(step.view);
+    // 首頁重構後，部分導覽目標被移進「準備工作」分頁（add / sync / audio / session / ai）。
+    // 目標元素在收合的分頁裡是 hidden、拿不到位置——聚光前先把那一頁切出來。
+    if (step.prepTab && root.HomePrepTabs && typeof root.HomePrepTabs.show === 'function') {
+      root.HomePrepTabs.show(step.prepTab);
+    }
     const resolvedTarget = await resolveTarget(step);
     if (token !== renderToken || !active) return;
     activeTarget = resolvedTarget;

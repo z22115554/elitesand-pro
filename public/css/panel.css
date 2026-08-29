@@ -1426,6 +1426,18 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 /* AI 人聲分離：分離中的進度條跟 nav.js/app-youtube-import.js 的 .work-item-progress 同一套
    「細長進度條 + --work-progress CSS 變數」寫法，不是另外發明的元件。 */
 .lib-separate-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+/* 首頁「AI 伴奏」分頁 */
+.home-ai-engine { margin: 6px 0 10px; font-size: 12px; color: var(--text-faint); }
+.home-ai-track-list { display: flex; flex-direction: column; gap: 4px; }
+.home-ai-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-surface); }
+.home-ai-row-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.home-ai-row-actions { display: flex; gap: 4px; }
+.home-ai-chip { flex-shrink: 0; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.home-ai-chip.is-done { background: color-mix(in srgb, var(--success, #3fa66a) 15%, transparent); color: var(--success, #3fa66a); }
+.home-ai-chip.is-working { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.home-ai-chip.is-failed { background: color-mix(in srgb, var(--warning, #d59b36) 15%, transparent); color: var(--warning, #d59b36); }
+.home-ai-chip.is-none { background: var(--bg-hover); color: var(--text-faint); }
+
 .lib-separate-row { display: flex; align-items: stretch; gap: 4px; }
 .lib-separate-row .lib-separate { flex: 1; min-width: 0; }
 .lib-separate-cancel { flex-shrink: 0; padding: 0 8px; }
