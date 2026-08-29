@@ -6762,7 +6762,9 @@ test('新手教學：分頁化目標會先切分頁；雙路音訊／Spout／AI 
   const root = path.join(__dirname, '..');
   const tour = fs.readFileSync(path.join(root, 'public/js/onboarding-tour.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
-  ok(/const TOUR_VERSION = 4;/.test(tour), '首頁重構後導覽版本要 bump（讓既有使用者重看新版）：');
+  ok(/const TOUR_VERSION = 5;/.test(tour), '首頁重構後導覽版本要 bump（讓既有使用者重看新版）：');
+  ok(tour.includes("id: 'obs-dual-audio'") && tour.includes("prepTab: 'audio'"),
+    'OBS 連線那一章要加「雙路音訊」步驟（直播只送伴奏；指向分離播放模式）：');
   ok(tour.includes("prepTab: 'add'") && tour.includes("prepTab: 'sync'") && tour.includes("prepTab: 'session'"),
     '被移進準備分頁的導覽步驟要標 prepTab：');
   ok(tour.includes('root.HomePrepTabs.show(step.prepTab)'),
