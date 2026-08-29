@@ -435,14 +435,31 @@
     } catch (e) { /* 靜默：預覽失敗不影響正式推送 */ }
   }
 
-  function showSampleLyricsInPreview() {
+  function postSampleToPreviewFrames() {
+    let sent = 0;
     try {
       document.querySelectorAll('iframe.obs-preview').forEach((frame) => {
-        if (frame.contentWindow) {
+        if (frame.getAttribute('src') && frame.contentWindow) {
           frame.contentWindow.postMessage({ type: 'lyrics-preview:sample' }, '*');
+          sent += 1;
         }
       });
     } catch (e) { /* 靜默：示範預覽失敗不影響正式 OBS */ }
+    return sent;
+  }
+
+  // 首頁重構後，唯一的所見即所得預覽 iframe 在「歌詞設定」頁。首頁 Live Bar 的「示範歌詞」
+  // 鈕按下時如果當前頁沒有已載入的預覽 iframe，就先切到歌詞設定頁，等 iframe 載好再送。
+  function showSampleLyricsInPreview() {
+    if (postSampleToPreviewFrames() > 0) return;
+    const settingsNav = document.querySelector('.nav-item[data-nav="settings"]');
+    if (!settingsNav) return;
+    settingsNav.click();
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (postSampleToPreviewFrames() > 0 || tries > 40) clearInterval(timer);
+    }, 100);
   }
 
   // 推送設定到顯示端：預覽（postMessage）與 OBS（socket）都「每次 input 立即送」，與歌單一致＝真正即時跟手。

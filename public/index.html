@@ -284,9 +284,8 @@
       <div class="content">
         <!-- ═══ 視圖：歌詞控制 ═══ -->
         <div class="view is-active content-col" data-view="karaoke">
-          <!-- RC 實戰期間的臨時入口：需要大量回報，先把按鈕放明顯。
-               2026-08 使用者決定：1.0 正式版要移除這顆首頁按鈕（設定頁的入口保留）。
-               見 docs/ROADMAP.md §8 M6.4 發版 checklist、STATUS.md 本功能待辦。 -->
+          <!-- 1.0 正式常駐的首頁問題回報入口，與設定頁入口開啟同一份表單。
+               見 docs/ROADMAP.md §8 M6.4 發版 checklist。 -->
           <!-- 窄視窗下 span 會被 CSS 藏起來變成純圖示，沒有 aria-label 就等於沒有可讀名稱。 -->
           <button id="feedback-launch-btn" class="feedback-launch-btn" type="button" aria-label="回報問題" data-i18n-aria-label="feedback.launchBtn" title="回報問題" data-i18n-title="feedback.launchBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -2584,7 +2583,7 @@
             <ul class="help-list">
               <li><strong>它在做什麼</strong>：把一首歌用 AI 分成「人聲」和「伴奏」兩軌，讓你可以只播伴奏、自己唱。首頁的「AI 伴奏」分頁會列出本場播放清單每一首的狀態（未製作／製作中／已分離／失敗）。</li>
               <li><strong>第一次要先安裝元件</strong>：第一次按「製作伴奏」會跳出下載視窗，把 AI 模型抓下來（只需一次）。沒有 NVIDIA 顯示卡也能跑，只是慢一些。</li>
-              <li><strong>一次做整份清單</strong>：在「AI 伴奏」分頁按「未製作的全部排進佇列」，它會一首一首排隊處理，不會一次全開把電腦壓垮。</li>
+              <li><strong>一次做整份清單</strong>：在「AI 伴奏」分頁按「未製作的全部排進佇列」，它會逐首排隊處理，不會一次全開把電腦壓垮。</li>
               <li><strong>做好之後怎麼用</strong>：到「音訊」分頁打開「分離播放模式」。之後播到「已分離」的歌就會自動只放伴奏，其他沒分離的歌照原樣播。</li>
               <li><strong>只想先試聽</strong>：媒體庫每首歌旁邊有「試聽」，可以分別調人聲和伴奏的音量，確認分離品質再決定要不要用。</li>
               <li><strong>做到一半想停</strong>：按製作中那首旁邊的「✕」即可取消，這首會回到「未製作」，不算失敗，也不影響已經匯入的歌。</li>

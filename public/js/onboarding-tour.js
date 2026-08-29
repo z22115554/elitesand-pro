@@ -648,7 +648,12 @@
         return;
       }
       dom.action.disabled = true;
-      const frames = await waitForPreviewFrames();
+      // 首頁重構後預覽 iframe 只在「歌詞設定」頁；那裡沒被啟用時先切過去，等 iframe 載好。
+      let frames = await waitForPreviewFrames();
+      if (!frames.length) {
+        document.querySelector('.nav-item[data-nav="settings"]')?.click();
+        frames = await waitForPreviewFrames(4000);
+      }
       if (!frames.length || !active || steps[state.currentStep]?.id !== 'source') {
         dom.action.disabled = false;
         showStatus(t('tour.status.sampleUnavailable'), 'error');
@@ -670,8 +675,12 @@
       }
       state.path = 'sample';
       saveState();
+      // 切回原本的導覽步驟視圖，聚光燈回到「加入音樂」。
+      switchView(step.view);
+      if (step.prepTab && root.HomePrepTabs) root.HomePrepTabs.show(step.prepTab);
       showStatus(t('tour.status.sampleReady'));
       updateRequirementState();
+      root.setTimeout(() => renderStep({ skipNavigation: true }), 0);
       return;
     }
     if (step.action === 'copyObs') {
