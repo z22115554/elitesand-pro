@@ -410,6 +410,77 @@ function createElectronShell({
     });
   }
 
+  // 引擎健康狀態（同一套本機 HTTP 手法）。engineRestartRequestedAt 由 server 端的
+  // webgpu-separation-jobs.js 在 watchdog 逾時／job 進行中斷線時寫入——server 跟這個
+  // 主程序是兩個 process，沒有共用 EventEmitter，只能靠這裡輪詢把訊號接過來。
+  function fetchWebgpuEngineHealth({ httpImpl = http, timeoutMs = 2000 } = {}) {
+    return new Promise((resolve) => {
+      const request = httpImpl.get({
+        hostname: '127.0.0.1',
+        port,
+        path: '/api/webgpu-separation/runtime-status',
+        timeout: timeoutMs,
+        headers: { 'User-Agent': 'ElitesandProElectronShell/1.0' },
+      }, (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => {
+          try {
+            const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            resolve({
+              engineConnected: !!payload?.engineConnected,
+              engineRestartRequestedAt: Number(payload?.engineRestartRequestedAt) || 0,
+            });
+          } catch (_) { resolve(null); }
+        });
+      });
+      request.once('timeout', () => request.destroy());
+      request.once('error', () => resolve(null));
+    });
+  }
+
+  let webgpuHealthTimer = null;
+  let webgpuLastHandledRestartAt = 0;
+  let webgpuOfflineStrikes = 0;
+  const WEBGPU_HEALTH_TICK_MS = 20000;
+  const WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART = 3; // ~1 分鐘沒連上才動手，給正常啟動留餘裕
+
+  async function runWebgpuHealthCheck() {
+    if (!webgpuEngineWindow) return;
+    const health = await fetchWebgpuEngineHealth();
+    if (!webgpuEngineWindow || !health) return; // 這期間可能剛被關掉／server 沒回應
+    // 1) server 明確要求重開（watchdog 逾時、job 中斷線）——比上次處理過的新才動手
+    if (health.engineRestartRequestedAt > webgpuLastHandledRestartAt) {
+      webgpuLastHandledRestartAt = health.engineRestartRequestedAt;
+      webgpuOfflineStrikes = 0;
+      console.warn?.('[WebGPU Engine] server 要求重開引擎視窗，執行 restart()');
+      await webgpuEngineWindow.restart().catch((e) => console.error?.('[WebGPU Engine] restart 失敗:', e.message));
+      return;
+    }
+    // 2) 視窗還在、但連續多次都沒連上 server＝崩了或載入卡住，自己重開一次
+    if (health.engineConnected) {
+      webgpuOfflineStrikes = 0;
+    } else if (++webgpuOfflineStrikes >= WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART) {
+      webgpuOfflineStrikes = 0;
+      console.warn?.(`[WebGPU Engine] 連續 ${WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART} 次未連上 server，執行 restart()`);
+      await webgpuEngineWindow.restart().catch((e) => console.error?.('[WebGPU Engine] restart 失敗:', e.message));
+    }
+  }
+
+  function startWebgpuEngineHealthLoop() {
+    if (webgpuHealthTimer) return;
+    webgpuOfflineStrikes = 0;
+    webgpuHealthTimer = setInterval(() => { runWebgpuHealthCheck().catch(() => {}); }, WEBGPU_HEALTH_TICK_MS);
+    webgpuHealthTimer.unref?.();
+  }
+
+  function stopWebgpuEngineHealthLoop() {
+    if (webgpuHealthTimer) {
+      clearInterval(webgpuHealthTimer);
+      webgpuHealthTimer = null;
+    }
+  }
+
   // 開啟：確保隱藏視窗活著；關閉：確保它不存在。啟動時呼叫一次，設定頁的開關切換時
   // 透過 IPC 再呼叫一次（見下方 elitesand:webgpu-engine-toggle），不用重啟整個 App。
   async function syncWebgpuEngineWindow(knownEnabled = null) {
@@ -420,7 +491,9 @@ function createElectronShell({
         webgpuEngineWindow = createWebgpuEngineWindow({ BrowserWindow, port });
       }
       await webgpuEngineWindow.start();
+      startWebgpuEngineHealthLoop();
     } else if (webgpuEngineWindow) {
+      stopWebgpuEngineHealthLoop();
       await webgpuEngineWindow.stop();
       webgpuEngineWindow = null;
     }
@@ -428,6 +501,7 @@ function createElectronShell({
   }
 
   async function stopWebgpuEngineWindow() {
+    stopWebgpuEngineHealthLoop();
     const output = webgpuEngineWindow;
     webgpuEngineWindow = null;
     if (output) await output.stop();

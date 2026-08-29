@@ -1082,6 +1082,9 @@ router.get('/webgpu-separation/runtime-status', (req, res) => {
   res.json({
     available: webgpuRuntimeProvider.isAvailable(),
     engineConnected: webgpuSeparationJobs.isEngineAvailable(),
+    // Electron 的健康輪詢（shell.js）讀這個：比上次新的時間戳＝引擎卡死/崩了，
+    // 請把隱藏 BrowserWindow 重開一次。0＝沒有待處理的重開請求。
+    engineRestartRequestedAt: webgpuSeparationJobs.getRestartRequestedAt(),
     ...webgpuRuntimeProvider.getDownloadStatus(),
   });
 });
@@ -1160,6 +1163,15 @@ router.post('/library/:id/separate', requirePin, async (req, res) => {
     log.error(`啟動 AI 分離失敗 track=${trackId}`, err);
     res.status(500).json({ ok: false, error: err.message });
   }
+});
+
+// 使用者在分離進行中／排隊中按「取消」。掛 requirePin（鐵則 #15，會動到正在跑的
+// GPU/CPU 工作）。收尾（狀態回 'none'、廣播 stage:'cancelled'、佇列推進）都在
+// aiSeparationJobs.cancelJobForTrack 裡做，這裡只轉呼叫。
+router.post('/library/:id/separate/cancel', requirePin, (req, res) => {
+  const result = aiSeparationJobs.cancelJobForTrack(req.params.id);
+  if (!result.ok) return res.status(404).json({ ok: false, error: 'NO_ACTIVE_SEPARATION' });
+  res.json({ ok: true, state: result.state });
 });
 
 module.exports = router;

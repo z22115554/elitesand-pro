@@ -249,18 +249,73 @@ function instrumentGpuMemory() {
   return mem;
 }
 
-async function getAdapterInfo() {
-  if (!navigator.gpu) return { ok: false };
+// ─── 單一 GPUDevice ───────────────────────────────────────────────────────────
+// adapter 偵測、ORT WebGPU 推論、device.lost 監聽全部對到「同一顆」實體裝置。
+// 之前這裡有三處各自 requestAdapter()／requestDevice()：adapter 偵測拿完就丟、
+// ORT 內部自己再建一顆、device.lost 監聽器又建第三顆——在雙 GPU（例如 AMD
+// 內顯＋Intel、或獨顯＋內顯）機器上，這三顆可能不是同一張卡，於是 vendor 記錯、
+// device.lost 監聽到一顆跟推論無關的裝置。現在只建一次，全程共用。
+let gpuAdapter = null;
+let gpuDevice = null;
+let gpuInfo = null; // { vendor, architecture, shaderF16 }
+
+function classifyVendor(raw) {
+  const v = String(raw || '').toLowerCase();
+  if (v.includes('nvidia') || v === '0x10de') return 'nvidia';
+  if (v.includes('amd') || v.includes('ati') || v === '0x1002') return 'amd';
+  if (v.includes('intel') || v === '0x8086') return 'intel';
+  if (v.includes('apple')) return 'apple';
+  return 'unknown';
+}
+
+async function acquireGpu() {
+  if (gpuDevice) return { device: gpuDevice, info: gpuInfo };
+  if (!navigator.gpu) return null;
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => null);
-  if (!adapter) return { ok: false };
-  const info = adapter.info || {};
-  const vendorRaw = (info.vendor || '').toLowerCase();
-  let vendor = 'unknown';
-  if (vendorRaw.includes('nvidia')) vendor = 'nvidia';
-  else if (vendorRaw.includes('amd') || vendorRaw.includes('ati')) vendor = 'amd';
-  else if (vendorRaw.includes('intel')) vendor = 'intel';
-  else if (vendorRaw.includes('apple')) vendor = 'apple';
-  return { ok: true, vendor, architecture: info.architecture || '', shaderF16: adapter.features.has('shader-f16') };
+  if (!adapter) return null;
+  const hasF16 = adapter.features.has('shader-f16');
+  const device = await adapter.requestDevice({ requiredFeatures: hasF16 ? ['shader-f16'] : [] }).catch(() => null);
+  if (!device) return null;
+  const raw = adapter.info || {};
+  gpuAdapter = adapter;
+  gpuDevice = device;
+  gpuInfo = { vendor: classifyVendor(raw.vendor), architecture: raw.architecture || '', shaderF16: hasF16 };
+  // 這顆、也只有這顆，才是 ORT 待會拿去跑推論的裝置——把 device.lost 掛在它身上。
+  device.lost.then(handleDeviceLost);
+  return { device: gpuDevice, info: gpuInfo };
+}
+
+async function getAdapterInfo() {
+  const gpu = await acquireGpu();
+  if (!gpu) return { ok: false };
+  return { ok: true, vendor: gpu.info.vendor, architecture: gpu.info.architecture, shaderF16: gpu.info.shaderF16 };
+}
+
+function handleDeviceLost(info) {
+  // reason 'destroyed' 是正常 teardown，不是故障：清掉本地引用就好，不回報。
+  const destroyed = info && info.reason === 'destroyed';
+  gpuAdapter = null;
+  gpuDevice = null;
+  gpuInfo = null;
+  session = null;       // 裝置已死，下一個 job 要重建 session
+  canaryPassed = false; // 也要重新 canary，不能沿用「探測過沒事」的舊結論
+  if (destroyed || deviceLostReported) return;
+  deviceLostReported = true;
+  log(`GPU 裝置遺失: ${info && info.reason} - ${info && info.message}`);
+  if (currentJob) reportDeviceLost(currentJob, info);
+}
+
+// ─── 輸出健檢：WebGPU EP 偶發會吐 NaN/Inf（fp16 溢位、驅動 bug），若原封不動寫進
+// WAV 就是使用者聽到的爆音。抓到就把這次推論當失效，讓上層降級到 CPU。
+function assertFinite(arr, label, stride = 1) {
+  for (let i = 0; i < arr.length; i += stride) {
+    if (!Number.isFinite(arr[i])) {
+      throw Object.assign(
+        new Error(`${label} 含非有限值（NaN/Inf），WebGPU 推論結果不可用`),
+        { code: 'invalid_output' },
+      );
+    }
+  }
 }
 
 // ─── ONNX session（懶建立，job 之間重用；跟 canary 探測共用同一份 session）───
@@ -276,35 +331,25 @@ let deviceLostReported = false;
 
 async function ensureSession() {
   if (session) return session;
+  const gpu = await acquireGpu();
+  if (!gpu) throw Object.assign(new Error('這台機器沒有可用的 WebGPU 裝置'), { code: 'unsupported_gpu' });
+  if (!gpu.info.shaderF16) {
+    throw Object.assign(new Error('這張顯示卡不支援 shader-f16，fp16 模型無法執行'), { code: 'unsupported_gpu' });
+  }
   sessionMem = instrumentGpuMemory();
+  // 把預先建立好的那顆 device 交給 ORT，別讓它自己 requestAdapter/requestDevice
+  // ——否則 adapter 偵測與實際推論會落在不同 GPU 上（見上方「單一 GPUDevice」）。
+  ort.env.webgpu.device = gpu.device;
   session = await ort.InferenceSession.create(`/webgpu-separation/model/${GRAPH_FILE}`, {
     executionProviders: [{ name: 'webgpu', storageBufferCacheMode: 'simple' }],
     externalData: [{ path: WEIGHTS_FILE, data: `/webgpu-separation/model/${WEIGHTS_FILE}` }],
   });
-  // 全程監聽 device lost（規劃時已確認：WebGPU 無法事先精確查詢可用顯存，這是
-  // 「偵測後擋下」在目前技術限制下最接近的實作——canary 探測 + 全程監聽，見下方 runJob）。
-  // 每次重建 session 都是一個新的 GPUDevice，要重新掛一次，不能只掛一次就以為終身有效。
-  attachDeviceLostWatcher();
   return session;
 }
 
-function attachDeviceLostWatcher() {
-  if (!navigator.gpu) return;
-  navigator.gpu.requestAdapter().then((adapter) => adapter?.requestDevice()).then((device) => {
-    if (!device) return;
-    device.lost.then((info) => {
-      if (deviceLostReported) return; // 這個 job 期間已經回報過，不要重複回報
-      deviceLostReported = true;
-      log(`GPU 裝置遺失: ${info.reason} - ${info.message}`);
-      if (currentJob) reportDeviceLost(currentJob, info);
-      session = null; // 裝置已死，下次 job 要重建 session
-      canaryPassed = false; // 剛當機過一次，下個 job 要重新 canary，不能沿用舊的「探測過沒事」結論
-    });
-  }).catch(() => { /* 探測不到裝置就算了，真正跑 job 時仍會自然失敗並回報 */ });
-}
-
 // ─── canary 探測：用假輸入跑一次完整 session-create + 單次推論，本身若讓裝置當機
-// 就直接擋下、不進到正式那首歌的推論（規劃時跟使用者確認過的因應方式，見 plan）───
+// （W3 實測：~4GB 顯存會一致性 DXGI_ERROR_DEVICE_HUNG）就直接擋下、不進到正式那首歌
+// 的推論。WebGPU 無法事先精確查詢可用顯存，canary 就是實質的顯存 admission 關卡。
 let canaryPassed = false;
 async function runCanary() {
   if (canaryPassed) return true;
@@ -317,7 +362,9 @@ async function runCanary() {
     const data = new Float32Array(size);
     const feeds = { [s.inputNames[0]]: new ort.Tensor('float32', data, [1, 2050, 1101, 2]) };
     const result = await s.run(feeds);
-    result[s.outputNames[0]]?.dispose?.();
+    const out = result[s.outputNames[0]];
+    assertFinite(out?.data || [], 'canary 輸出', 997); // 全零輸入本來就該給有限輸出
+    out?.dispose?.();
     canaryPassed = true;
     return true;
   } catch (err) {
@@ -327,6 +374,7 @@ async function runCanary() {
 }
 
 let currentJob = null;
+let cancelRequested = false;
 
 function reportProgress(job, stage, progress) {
   SocketClient.send('webgpu:job:progress', { jobId: job.jobId, stage, progress });
@@ -350,17 +398,21 @@ async function runJob({ jobId, trackId, audioUrl }) {
   const job = { jobId, trackId };
   currentJob = job;
   deviceLostReported = false;
+  cancelRequested = false;
   const t0 = performance.now();
   try {
     const adapterInfo = await getAdapterInfo();
     job.gpuVendor = adapterInfo.ok ? adapterInfo.vendor : 'unknown';
     if (!adapterInfo.ok) throw Object.assign(new Error('這台機器沒有可用的 WebGPU adapter'), { code: 'unsupported_gpu' });
+    if (!adapterInfo.shaderF16) {
+      throw Object.assign(new Error('這張顯示卡不支援 shader-f16，fp16 模型無法執行'), { code: 'unsupported_gpu' });
+    }
 
     reportProgress(job, 'canary', 0);
     const canaryOk = await runCanary();
     if (!canaryOk) {
       if (deviceLostReported) return; // device.lost 監聽器已經處理過回報，這裡不要重複送
-      throw Object.assign(new Error('canary 探測失敗，這張顯示卡目前不適合跑 WebGPU 分離'), { code: 'canary_failed' });
+      throw Object.assign(new Error('canary 探測失敗，這張顯示卡目前不適合跑 WebGPU 分離'), { code: 'unsupported_gpu' });
     }
 
     reportProgress(job, 'download-audio', 0);
@@ -383,6 +435,9 @@ async function runJob({ jobId, trackId, audioUrl }) {
 
     let stepIndex = 0;
     for (let offset = 0; offset < source.samples; stepIndex++, offset += stepSize) {
+      // 伺服器端的 hang watchdog 逾時後會送 webgpu:job:cancel，讓卡在慢（但還沒完全
+      // wedge）的迴圈能在下一個 chunk 之前收手，不要在上層已經改走 CPU 之後還在燒 GPU。
+      if (cancelRequested) throw Object.assign(new Error('工作已取消'), { code: 'cancelled' });
       const win = getChunkWindow(offset, source.samples);
       fillChunk(chunk, mixture, source.samples, win.start, win.length);
       const specL = stftChannel(chunk.subarray(0, CHUNK_SAMPLES));
@@ -396,6 +451,9 @@ async function runJob({ jobId, trackId, audioUrl }) {
       // dispose 的話，每個 chunk 都會再累加一塊，跑到長一點的歌就會把顯存吃爆到
       // 驅動層當機（真機實測就是這樣爆的：canary 只跑一次抓不到，累積到一半才炸）。
       outputTensor.dispose?.();
+      // 抓 NaN/Inf 用跨步取樣就夠了——溢位/驅動 bug 造成的非有限值幾乎都是整片，
+      // 不會只有零星一格；每個 chunk 全掃 450 萬個 float × 33 次太貴。
+      assertFinite(masksPacked, '模型輸出遮罩', 101);
       const maskedPacked = applyMasks(stftPacked, masksPacked);
       const outL = istftChannel(unpackChannel(maskedPacked, 0), CHUNK_SAMPLES);
       const outR = istftChannel(unpackChannel(maskedPacked, 1), CHUNK_SAMPLES);
@@ -408,6 +466,10 @@ async function runJob({ jobId, trackId, audioUrl }) {
     const rawVocals = finalizeOverlap(target, counter);
     const vocals = normalizePeak(rawVocals, 0.9, 0);
     const instrumental = normalizePeak(subtractPlanarStereo(mixture, rawVocals), 0.9, 0);
+    // 最終成品全掃一次（各只有一趟，成本可忽略）——確保沒有任何一個 chunk 的
+    // 非有限值漏過跨步取樣、混進了 overlap-add 的結果。
+    assertFinite(vocals, '人聲輸出');
+    assertFinite(instrumental, '伴奏輸出');
     const vocalsWav = encodeWav({ sampleRate: source.sampleRate, samples: source.samples, channels: 2, data: vocals });
     const instWav = encodeWav({ sampleRate: source.sampleRate, samples: source.samples, channels: 2, data: instrumental });
 
@@ -445,5 +507,11 @@ SocketClient.on('webgpu:job:start', (payload) => {
     return;
   }
   runJob(payload);
+});
+SocketClient.on('webgpu:job:cancel', (payload) => {
+  if (currentJob && payload && payload.jobId === currentJob.jobId) {
+    log(`收到 job:cancel ${payload.jobId}，將在下個 chunk 前收手`);
+    cancelRequested = true;
+  }
 });
 log('WebGPU 分離引擎已啟動，等待連線與工作派發。');

@@ -17,9 +17,75 @@ const { supervisor } = require('./ai-separation');
 const webgpuJobs = require('./webgpu-separation-jobs');
 const webgpuRuntimeProvider = require('./webgpu-runtime-provider');
 const libraryStore = require('./library-store');
+const usageTelemetry = require('./usage-telemetry');
 const { emitToControlClients } = require('../utils/socket-broadcast');
 
 const log = createLogger('AISeparationJobs');
+
+// Python worker 的錯誤碼 → telemetry-fields.js 的封閉 AI 錯誤分類。對不上的交給
+// usage-telemetry 的 mapError() 兜底成 'other'（例如 INTERNAL、INPUT_UNREADABLE）。
+const PY_AI_CODE_MAP = {
+  GPU_OOM: 'oom',
+  RUNTIME_MISSING: 'runtime_missing',
+  MODEL_MISSING: 'runtime_missing',
+  PROVIDER_UNAVAILABLE: 'unsupported_gpu',
+  CANCELLED: 'cancelled',
+};
+
+// CPU 真的很慢（弱機一首要 6～60 分鐘），是最後的最後手段。所以顯卡路徑（CUDA 或
+// WebGPU）失敗時，先在「同一個引擎」上重算幾次，全都不行才往下一關走。多數失敗
+// （worker 崩一下、掉裝置、單一 chunk 吐壞數字、引擎剛好斷線）都是一次性的，隔幾秒
+// 重跑就過。順序仍是 CUDA → WebGPU → CPU，只是每一關現在都有重試。
+const CUDA_MAX_ATTEMPTS = Number(process.env.ELITESAND_CUDA_MAX_ATTEMPTS) || 3;
+const CUDA_RETRY_DELAY_MS = Number(process.env.ELITESAND_CUDA_RETRY_DELAY_MS) || 5000;
+// 這些 CUDA 失敗重試沒意義，直接往 WebGPU→CPU 走：runtime/模型沒裝、CUDA 本來就
+// 不能用、顯存不足（同設定重跑一樣爆）。（CANCELLED / INPUT_UNREADABLE 更早就 return 了。）
+const CUDA_NO_RETRY_CODES = new Set(['RUNTIME_MISSING', 'MODEL_MISSING', 'PROVIDER_UNAVAILABLE', 'GPU_OOM']);
+
+const WEBGPU_MAX_ATTEMPTS = Number(process.env.ELITESAND_WEBGPU_MAX_ATTEMPTS) || 3; // 初次 + 最多 2 次重試
+const WEBGPU_RETRY_DELAY_MS = Number(process.env.ELITESAND_WEBGPU_RETRY_DELAY_MS) || 5000;
+// 這兩種重試沒意義、只會白等：硬體/前提不符（不會變），或引擎整個 wedge 住（短時間
+// 不會自己解開，而且它還卡著上一輪的 s.run，重派只會被回「忙碌中」）。
+const WEBGPU_NO_RETRY_CODES = new Set(['unsupported_gpu', 'timeout']);
+
+/**
+ * 分離工作的唯一遙測入口：三條引擎（Python CUDA／WebGPU／Python CPU）的終態都在
+ * 這裡記「一次」，帶上試過哪些引擎、最終哪個引擎、有沒有 fallback 到 CPU。
+ * 以前只有 WebGPU 那條路在送，Python 兩條路完全沒記，於是 `fellBackToCpu` 永遠是
+ * false、CPU 成功會把 WebGPU 失敗蓋掉。欄位全部對齊 EULA §7.9 已揭露清單、一律分桶。
+ */
+function recordJobTelemetry(job, { ok, code, finalBackend }) {
+  try {
+    const attempts = Array.from(new Set(job && Array.isArray(job.attempts) ? job.attempts : []));
+    const info = (job && job.webgpuInfo) || {};
+    const fellBackToCpu = finalBackend === 'cpu' && attempts.some((b) => b && b !== 'cpu');
+    // 「曾在同一後端重試」＝任一顯卡後端試超過一次（EULA §7.9(f) 1.8.0；只送布林）。
+    const retried = ((job && job.cudaAttempts) || 0) > 1 || ((job && job.webgpuAttempts) || 0) > 1;
+    // 匿名遙測只送「有沒有重試過」這個布林（ai.retried，EULA §7.9(f) 1.8.0 起揭露）。
+    // 精確的 CUDA×n / WebGPU×n 次數只進本機 log（→ 診斷包 / 問題回報），EULA 明講不送次數。
+    log[ok ? 'info' : 'warn'](
+      `分離結束 track=${job && job.trackId} finalBackend=${finalBackend} ok=${ok}`
+      + `${code ? ' code=' + code : ''} 嘗試次數: CUDA×${(job && job.cudaAttempts) || 0} `
+      + `WebGPU×${(job && job.webgpuAttempts) || 0}${fellBackToCpu ? ' (退回CPU)' : ''}`,
+    );
+    usageTelemetry.recordAiSeparation({
+      attemptedBackends: attempts.length ? attempts : (finalBackend ? [finalBackend] : []),
+      backend: finalBackend,
+      gpuVendor: finalBackend === 'webgpu' ? (info.gpuVendor || 'unknown')
+        : finalBackend === 'cuda' ? 'nvidia'
+        : 'unknown',
+      vramMb: finalBackend === 'webgpu' && info.peakBufferMb !== undefined ? info.peakBufferMb : undefined,
+      realtimeFactor: finalBackend === 'webgpu' ? info.realtimeFactor : undefined,
+      audioSeconds: info.audioSeconds,
+      fellBackToCpu,
+      retried,
+      ok,
+      code,
+    });
+  } catch (error) {
+    log.warn(`分離遙測記錄失敗（不影響分離本身）：${error.message}`);
+  }
+}
 
 let deps = null;
 let wired = false;
@@ -61,7 +127,11 @@ function emitProgress(job, stage, progress = 0, extra = {}) {
 
 function startPython(job, { forceCpu }) {
   job.mode = forceCpu ? 'cpu' : 'python-gpu';
+  const backend = forceCpu ? 'cpu' : 'cuda';
+  if (!job.attempts.includes(backend)) job.attempts.push(backend);
+  if (!forceCpu) job.cudaAttempts = (job.cudaAttempts || 0) + 1;
   const attemptId = supervisor.separate({ ...job.params, forceCpu });
+  job.currentAttemptId = attemptId; // 給 cancelJobForTrack 用來 supervisor.cancel()
   pythonAttempts.set(attemptId, {
     trackId: job.trackId,
     publicJobId: job.publicJobId,
@@ -83,6 +153,8 @@ function tryStartWebgpu(job) {
       sourceFilename: job.params.sourceFilename || path.basename(job.params.inputPath || ''),
     }, { deferFailure: true, publicJobId: job.publicJobId });
     job.mode = 'webgpu';
+    job.webgpuAttempts = (job.webgpuAttempts || 0) + 1;
+    if (!job.attempts.includes('webgpu')) job.attempts.push('webgpu');
     return true;
   } catch (error) {
     log.warn(`WebGPU 備援無法啟動 track=${job.trackId}: ${error.message}`);
@@ -96,6 +168,10 @@ async function dispatch(trackId, params, publicJobId = null) {
     params,
     publicJobId: publicJobId || `separation-${trackId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     mode: 'probing',
+    attempts: [], // 記錄試過的引擎（'cuda' / 'webgpu' / 'cpu'），供終態遙測用
+    webgpuInfo: null, // WebGPU 那條路帶回來的 gpuVendor / peakBufferMb / realtimeFactor / audioSeconds
+    cudaAttempts: 0, // CUDA 已經試了幾次（含重試），到 CUDA_MAX_ATTEMPTS 才換 WebGPU
+    webgpuAttempts: 0, // WebGPU 已經試了幾次（含重試），到 WEBGPU_MAX_ATTEMPTS 才退 CPU
   };
   activeJob = job;
   emitProgress(job, 'preparing', 0);
@@ -108,7 +184,7 @@ async function dispatch(trackId, params, publicJobId = null) {
     log.warn(`Python GPU 探測失敗，改走備援：${error.message}`);
   }
 
-  if (!activeJob || activeJob.publicJobId !== job.publicJobId) return job.publicJobId;
+  if (!activeJob || activeJob.publicJobId !== job.publicJobId || job.cancelled) return job.publicJobId;
   if (cudaAvailable) {
     startPython(job, { forceCpu: false });
   } else if (!tryStartWebgpu(job)) {
@@ -128,12 +204,75 @@ function finishAndAdvance() {
 
 function finalizeError(job, error = {}) {
   log.warn(`分離失敗 track=${job.trackId} job=${job.publicJobId}: ${error.message || error.code || 'unknown'}`);
+  // 使用者主動取消不計入失敗率（會灌水分母），其餘終態失敗都記一次。
+  if (error.code !== 'CANCELLED') {
+    const finalBackend = job.mode === 'python-gpu' ? 'cuda'
+      : job.mode === 'webgpu' ? 'webgpu'
+      : job.mode === 'cpu' ? 'cpu'
+      : 'unknown';
+    const code = PY_AI_CODE_MAP[error.code]
+      || (typeof error.code === 'string' && error.code ? error.code.toLowerCase() : null)
+      || (job && job.webgpuError)
+      || 'other';
+    recordJobTelemetry(job, { ok: false, code, finalBackend });
+  }
   applyResult(job.trackId, { separationStatus: 'failed' });
   emitProgress(job, 'error', 0, {
     error: error.code || 'UNKNOWN',
     errorMessage: error.message || null,
   });
   finishAndAdvance();
+}
+
+/** 使用者取消：狀態回到可再點的 'none'（不是 'failed'），不記遙測，讓佇列下一首接上。 */
+function finalizeCancelled(job) {
+  if (job.currentAttemptId) pythonAttempts.delete(job.currentAttemptId);
+  applyResult(job.trackId, { separationStatus: 'none' });
+  emitProgress(job, 'cancelled', 0);
+  finishAndAdvance();
+}
+
+/**
+ * 使用者按「取消」。針對某一首歌：
+ *  - 正在跑的 → 依目前引擎砍 Python worker / 中止 WebGPU、清掉待重試計時器，直接收尾。
+ *    （之後 supervisor/engine 遲到的 result/error 會因 activeJob 已換而被既有守衛忽略。）
+ *  - 排隊中的 → 從佇列移除。
+ * @returns {{ok:boolean, state:'active'|'queued'|'not-found'}}
+ */
+function cancelJobForTrack(trackId) {
+  const key = String(trackId);
+
+  if (activeJob && String(activeJob.trackId) === key) {
+    const job = activeJob;
+    job.cancelled = true;
+    if (job.retryTimer) { clearTimeout(job.retryTimer); job.retryTimer = null; }
+    if (job.mode === 'python-gpu' || job.mode === 'cpu') {
+      try {
+        if (job.currentAttemptId) supervisor.cancel(job.currentAttemptId);
+      } catch (error) {
+        log.warn(`supervisor.cancel 失敗（仍照樣收尾）：${error.message}`);
+      }
+    } else if (job.mode === 'webgpu') {
+      webgpuJobs.cancelJob(job.publicJobId);
+    }
+    // mode === 'probing'：還沒 spawn 任何 worker，dispatch() 過了 probe 會看到 job.cancelled 而中止。
+    log.info(`分離已取消 track=${key}（mode=${job.mode}）`);
+    finalizeCancelled(job);
+    return { ok: true, state: 'active' };
+  }
+
+  const idx = queue.findIndex((q) => String(q.trackId) === key);
+  if (idx !== -1) {
+    const [removed] = queue.splice(idx, 1);
+    applyResult(removed.trackId, { separationStatus: 'none' });
+    deps?.io.emit('separation:progress', {
+      trackId: removed.trackId, jobId: removed.publicJobId, stage: 'cancelled', progress: 0,
+    });
+    log.info(`已從佇列移除分離工作 track=${key}`);
+    return { ok: true, state: 'queued' };
+  }
+
+  return { ok: false, state: 'not-found' };
 }
 
 function wireDependencies({ io, playState, persistState, broadcastState, updateLibraryMeta = () => {} }) {
@@ -171,6 +310,10 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
       instrumentalFile: result.instrumental ? path.basename(result.instrumental) : null,
       separationStatus: 'done',
     });
+    recordJobTelemetry(activeJob, {
+      ok: true, code: null,
+      finalBackend: attempt.mode === 'cpu' ? 'cpu' : 'cuda',
+    });
     emitProgress(activeJob, 'done', 100);
     finishAndAdvance();
   });
@@ -180,15 +323,44 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
     pythonAttempts.delete(message.id);
     if (!attempt || !activeJob || activeJob.publicJobId !== attempt.publicJobId) return;
     const error = message.error || {};
-    if (attempt.mode === 'python-gpu' && error.code !== 'CANCELLED' && error.code !== 'INPUT_UNREADABLE') {
-      if (!tryStartWebgpu(activeJob)) startCpu(activeJob);
+    const job = activeJob;
+
+    // 使用者取消、輸入檔讀不到——任何引擎重試都沒用，直接收尾。
+    if (error.code === 'CANCELLED' || error.code === 'INPUT_UNREADABLE') {
+      finalizeError(job, error);
       return;
     }
-    finalizeError(activeJob, error);
+
+    if (attempt.mode === 'python-gpu') {
+      const retryable = !CUDA_NO_RETRY_CODES.has(error.code) && (job.cudaAttempts || 0) < CUDA_MAX_ATTEMPTS;
+      if (retryable) {
+        log.warn(`CUDA 失敗（${error.code || 'unknown'}）track=${job.trackId}，${CUDA_RETRY_DELAY_MS}ms 後重試 CUDA（第 ${(job.cudaAttempts || 0) + 1}/${CUDA_MAX_ATTEMPTS} 次）`);
+        emitProgress(job, 'preparing', 0);
+        job.retryTimer = setTimeout(() => {
+          job.retryTimer = null;
+          if (job.cancelled || !activeJob || activeJob.publicJobId !== job.publicJobId) return; // 已取消或被取代
+          startPython(job, { forceCpu: false });
+        }, CUDA_RETRY_DELAY_MS);
+        job.retryTimer.unref?.();
+        return;
+      }
+      // CUDA 這關結束（重試用完或不值得重試）→ 換 WebGPU，撐不住才 CPU
+      if (!tryStartWebgpu(job)) startCpu(job);
+      return;
+    }
+
+    finalizeError(job, error);
   });
 
   webgpuJobs.events.on('result', (message) => {
     if (!activeJob || activeJob.mode !== 'webgpu' || activeJob.publicJobId !== message.jobId) return;
+    activeJob.webgpuInfo = {
+      gpuVendor: message.gpuVendor,
+      peakBufferMb: message.peakBufferMb,
+      realtimeFactor: message.realtimeFactor,
+      audioSeconds: message.audioSeconds,
+    };
+    recordJobTelemetry(activeJob, { ok: true, code: null, finalBackend: 'webgpu' });
     finishAndAdvance();
   });
 
@@ -200,8 +372,28 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
 
   webgpuJobs.events.on('error', (message) => {
     if (!activeJob || activeJob.mode !== 'webgpu' || activeJob.publicJobId !== message.jobId) return;
-    log.warn(`WebGPU 備援失敗 track=${activeJob.trackId}，切換 CPU：${message.message || message.code}`);
-    startCpu(activeJob);
+    const job = activeJob;
+    // 記下 WebGPU 這次為什麼失敗、以及它帶回來的音長——之後 CPU 成功時仍要知道
+    // 「WebGPU 試過而且失敗了」，CPU 失敗時錯誤碼也沿用它。
+    job.webgpuInfo = { gpuVendor: message.gpuVendor, audioSeconds: message.audioSeconds };
+    job.webgpuError = message.code || 'other';
+
+    const retryable = !WEBGPU_NO_RETRY_CODES.has(job.webgpuError)
+      && (job.webgpuAttempts || 0) < WEBGPU_MAX_ATTEMPTS;
+    if (retryable) {
+      log.warn(`WebGPU 失敗（${job.webgpuError}）track=${job.trackId}，${WEBGPU_RETRY_DELAY_MS}ms 後重試 WebGPU（第 ${(job.webgpuAttempts || 0) + 1}/${WEBGPU_MAX_ATTEMPTS} 次）`);
+      emitProgress(job, 'fallback-webgpu', 0);
+      job.retryTimer = setTimeout(() => {
+        job.retryTimer = null;
+        // 這段等待期間 job 可能已被取消或被佇列裡的下一首取代
+        if (job.cancelled || !activeJob || activeJob.publicJobId !== job.publicJobId) return;
+        if (!tryStartWebgpu(job)) startCpu(job); // 引擎這時剛好不在（視窗還沒重連）就只好退 CPU
+      }, WEBGPU_RETRY_DELAY_MS);
+      job.retryTimer.unref?.();
+      return;
+    }
+    log.warn(`WebGPU 失敗（${job.webgpuError}）track=${job.trackId}，改用 CPU`);
+    startCpu(job);
   });
 
   reconcileOrphanedProcessing();
@@ -269,4 +461,4 @@ function _resetForTests() {
   activeJob = null;
 }
 
-module.exports = { wireDependencies, startJobForTrack, getActiveJobs, _resetForTests };
+module.exports = { wireDependencies, startJobForTrack, cancelJobForTrack, getActiveJobs, _resetForTests };

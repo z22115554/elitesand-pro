@@ -23,7 +23,8 @@ const DAILY_PAYLOAD_SCHEMA_VERSION = 2;
 // 日彙總的欄位要到這一版 EULA 才被揭露。使用者同意的版本低於此值時，
 // record()／flushPending() 一律空轉——「還沒揭露就不可能被蒐集」因此是
 // 程式層的保證，而不是靠流程紀律。改欄位登錄表時記得同步這個版本。
-const DAILY_DISCLOSED_EULA_VERSION = '1.6.0';
+// 1.6.0：§7.9 首次揭露。1.8.0：§7.9(f) 增列「是否曾在同一後端重試」布林（ai.retried）。
+const DAILY_DISCLOSED_EULA_VERSION = '1.8.0';
 
 /** 只比較點分數字，非數字段落一律視為 0（EULA 版本行的格式是 x.y.z） */
 function versionAtLeast(actual, required) {
@@ -471,12 +472,22 @@ function createUsageTelemetry(options = {}) {
   /** AI 分離：硬體資訊一律分桶，絕不送精確型號或秒數 */
   function recordAiSeparation(info) {
     const data = info || {};
-    if (fields.AI_BACKENDS.includes(data.backend)) record('ai.backend.' + data.backend, 1, true);
+    // 一次分離可能試過多個引擎（Python CUDA → WebGPU → CPU）。每個試過的後端都記一個
+    // 當日布林，這樣「WebGPU 有沒有被嘗試過、成功還是退回 CPU」在彙總層看得出來。
+    // 不影響 attempt/ok/fail 計數（那個只在下方 recordOutcome 記一次）。
+    const backends = Array.isArray(data.attemptedBackends) && data.attemptedBackends.length
+      ? data.attemptedBackends
+      : (data.backend ? [data.backend] : []);
+    for (const b of backends) {
+      if (fields.AI_BACKENDS.includes(b)) record('ai.backend.' + b, 1, true);
+    }
     if (fields.GPU_VENDORS.includes(data.gpuVendor)) record('ai.gpu.' + data.gpuVendor, 1, true);
     if (data.vramMb !== undefined) record('ai.vram.' + fields.vramBucket(data.vramMb), 1, true);
     if (data.realtimeFactor !== undefined) record('ai.rtf.' + fields.realtimeFactorBucket(data.realtimeFactor), 1, true);
     if (data.audioSeconds !== undefined) record('ai.duration.' + fields.durationBucket(data.audioSeconds), 1, true);
     if (data.fellBackToCpu) record('ai.fallback_to_cpu', 1, true);
+    // 「曾在同一後端重試後才完成」——EULA §7.9(f) 從 1.8.0 起揭露；只送布林、不送次數。
+    if (data.retried) record('ai.retried', 1, true);
     const recorded = recordOutcome('ai', data.ok, data.code, true);
     flushSoon();
     return recorded;

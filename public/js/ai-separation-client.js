@@ -23,12 +23,19 @@
     if (stage === 'download-audio' || stage === 'decode') return 'aiJob.preparingAudio';
     if (stage === 'done') return 'aiJob.done';
     if (stage === 'error') return 'aiJob.error';
+    if (stage === 'cancelled') return 'aiJob.cancelled';
     return 'aiJob.separating';
   }
 
   function ingest(payload) {
     if (!payload || payload.trackId === undefined || payload.trackId === null) return null;
     const trackId = String(payload.trackId);
+    // 取消：清掉即時狀態，讓按鈕翻回「製作 AI 伴奏」，並通知訂閱者重畫。
+    if (payload.stage === 'cancelled') {
+      states.delete(trackId);
+      subscribers.forEach((subscriber) => subscriber({ trackId, stage: 'cancelled', percent: 0 }));
+      return null;
+    }
     const state = {
       trackId,
       jobId: payload.jobId || states.get(trackId)?.jobId || null,
@@ -245,6 +252,22 @@
     }
   }
 
+  // 進行中／排隊中的分離取消。server 會廣播 stage:'cancelled'（ingest 會清狀態、
+  // 通知訂閱者重畫）；這裡回傳成功與否讓呼叫端決定要不要提示。
+  async function cancel(trackId) {
+    const id = String(trackId);
+    try {
+      const res = await PinAuth.fetchWithPin(
+        `/api/library/${encodeURIComponent(id)}/separate/cancel`,
+        { method: 'POST' },
+      );
+      const body = await res.json().catch(() => ({}));
+      return !!(res.ok && body.ok);
+    } catch (_) {
+      return false;
+    }
+  }
+
   // 初次載入即把 server 仍在跑的工作灌進同一份快取；畫面晚開或重繪時可立即回放。
   getBundleStatus().catch(() => {});
 
@@ -252,6 +275,7 @@
     ensureReady,
     getBundleStatus,
     subscribe,
+    cancel,
     get: (trackId) => states.get(String(trackId)) || null,
     ingest,
     label: (state) => t(state?.labelKey || 'aiJob.preparing', { position: state?.queuePosition || 1 }),

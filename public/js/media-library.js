@@ -117,6 +117,8 @@
       row.querySelector('.lib-remove').addEventListener('click', () => removeItem(item.id));
       const separateBtn = row.querySelector('.lib-separate');
       if (separateBtn) separateBtn.addEventListener('click', () => startSeparation(item, row));
+      const separateCancelBtn = row.querySelector('.lib-separate-cancel');
+      if (separateCancelBtn) separateCancelBtn.addEventListener('click', () => cancelSeparation(item, row));
       const previewBtn = row.querySelector('.lib-separate-preview');
       if (previewBtn) previewBtn.addEventListener('click', () => togglePreview(item, row));
       listEl.appendChild(row);
@@ -149,7 +151,10 @@
       const percent = liveState?.percent ?? 0;
       const label = liveState ? window.AiSeparation.label(liveState) : tr('製作伴奏中…');
       return `<div class="lib-separate-wrap">
-        <button class="btn btn-sm lib-separate" type="button" disabled>${label}${percent ? ` ${percent}%` : ''}</button>
+        <div class="lib-separate-row">
+          <button class="btn btn-sm lib-separate" type="button" disabled>${label}${percent ? ` ${percent}%` : ''}</button>
+          <button class="btn btn-sm btn-ghost lib-separate-cancel" type="button" title="${tx('aiJob.cancelAction')}" aria-label="${tx('aiJob.cancelAction')}">✕</button>
+        </div>
         <div class="lib-separate-progress"><span style="--work-progress:${percent}%"></span></div>
       </div>`;
     }
@@ -317,6 +322,18 @@
     }
   }
 
+  async function cancelSeparation(item, row) {
+    const btn = row.querySelector('.lib-separate-cancel');
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const ok = await window.AiSeparation.cancel(item.id);
+    if (!ok) {
+      // 多半是工作剛好在按下的瞬間完成了；恢復按鈕，等 done/error 廣播翻面。
+      toast(tr('取消失敗，工作可能已經結束'), 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '✕'; }
+    }
+    // 成功時 server 廣播 stage:'cancelled'，下面的 subscriber 會把狀態改回 none 並重畫。
+  }
+
   // SocketClient 跟 PinAuth 一樣是頂層 const 宣告，不會掛在 window 上（見上面
   // fetchWithPin 那個 bug 的教訓）；直接用裸變數，不要再用 window.SocketClient 判斷，
   // 那個判斷式恆假，等於整段訂閱從沒真的執行過。
@@ -342,6 +359,11 @@
         btn.textContent = tx('aiJob.retryAction');
       }
       toast(tr(`人聲分離失敗：${data.errorMessage || data.error || ''}`), 'error');
+    } else if (data.stage === 'cancelled') {
+      // 取消：狀態回到可再點的 none，重畫整列（按鈕從「✕/進度條」翻回「製作 AI 伴奏」）。
+      if (cached) cached.separationStatus = 'none';
+      toast(tr('已取消人聲分離'), 'success');
+      applyView();
     } else if (data.stage === 'queued') {
       // GPU/CPU 一次只分離一首（鐵則 #12 同一套理由），2026-08-23 起第二首以後不再直接
       // 被拒絕，而是排隊等前一首完成——按鈕文字要能看出「還沒開始跑」，不是卡住。

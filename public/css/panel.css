@@ -1426,6 +1426,9 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 /* AI 人聲分離：分離中的進度條跟 nav.js/app-youtube-import.js 的 .work-item-progress 同一套
    「細長進度條 + --work-progress CSS 變數」寫法，不是另外發明的元件。 */
 .lib-separate-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+.lib-separate-row { display: flex; align-items: stretch; gap: 4px; }
+.lib-separate-row .lib-separate { flex: 1; min-width: 0; }
+.lib-separate-cancel { flex-shrink: 0; padding: 0 8px; }
 .lib-separate-progress { width: 100%; height: 3px; overflow: hidden; border-radius: 2px; background: var(--bg-hover); }
 .lib-separate-progress > span { display: block; width: var(--work-progress, 0%); height: 100%; background: var(--accent); transition: width .15s linear; }
 .lib-separate-preview-panel { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 14px; }

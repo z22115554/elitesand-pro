@@ -2,7 +2,7 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 1.7.0
+Version: 1.8.0
 Effective Date / 生效日期：2026-08-19
 
 IMPORTANT INFORMATION / 重要資訊
@@ -287,8 +287,9 @@ Public License v2.1 或其後版本（LGPL）授權，第四條第 4 項的還�
    (f) 若你當天使用 AI 人聲分離：使用的運算後端類型（例如 CUDA、WebGPU、
        DirectML 或 CPU）、顯示卡廠牌與粗略架構世代、顯示卡記憶體所屬區間
        （例如小於 4GB、4 至 6GB、6 至 8GB、8GB 以上）、處理速度所屬區間、
-       原始音訊長度所屬區間、是否曾自動切換回 CPU 運算——以上均為區間或
-       分類形式，不含精確顯示卡型號、精確秒數或精確處理時間。
+       原始音訊長度所屬區間、是否曾在同一個運算後端上重試後才完成（例如
+       顯示卡短暫失效後重跑）、是否曾自動切換回 CPU 運算——以上均為區間或
+       分類形式，不含重試次數、精確顯示卡型號、精確秒數或精確處理時間。
 
    接收端不會收到固定安裝識別碼，亦不會收到或儲存姓名、電子郵件、電腦
    名稱、精確顯示卡型號或其他可識別特定裝置的精確硬體資訊、歌名、歌詞
@@ -728,9 +729,11 @@ categorized or bucketed counts are added:
     (for example CUDA, WebGPU, DirectML, or CPU), GPU vendor and a coarse
     architecture generation, a VRAM range (for example under 4GB, 4-6GB,
     6-8GB, 8GB+), a processing-speed range, a range for the source audio's
-    length, and whether it automatically fell back to CPU -- all as ranges
-    or categories, never an exact GPU model, exact seconds, or exact
-    processing time.
+    length, whether it had to retry on the same compute backend before
+    finishing (for example after the GPU briefly dropped out), and whether
+    it automatically fell back to CPU -- all as ranges or categories, never
+    a retry count, an exact GPU model, exact seconds, or exact processing
+    time.
 
 The receiver does not obtain a permanent installation identifier and does
 not receive or store names, email addresses, computer names, exact GPU

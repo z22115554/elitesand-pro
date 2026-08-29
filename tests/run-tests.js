@@ -4227,6 +4227,167 @@ test('AI 伴奏工作：Python GPU → WebGPU → CPU 共用單一工作與進�
   ok(youtube.includes('window.AiSeparation.subscribe(onProgress, { replay: false })'));
   ok(!library.includes("SocketClient.on('separation:progress'"));
 });
+
+test('AI 分離遙測：三條引擎的終態統一由協調器記一次，帶 fallback 軌跡', () => {
+  const jobs = fs.readFileSync(path.join(__dirname, '../server/services/ai-separation-jobs.js'), 'utf8');
+  const webgpu = fs.readFileSync(path.join(__dirname, '../server/services/webgpu-separation-jobs.js'), 'utf8');
+  // 遙測入口只有協調器一處：webgpu-separation-jobs.js 不得再自己送遙測（以前只有它在送，
+  // Python CUDA/CPU 兩條路完全沒記，於是 fellBackToCpu 永遠 false、CPU 成功蓋掉 WebGPU 失敗）。
+  ok(!webgpu.includes("require('./usage-telemetry')"), 'WebGPU 這層不得再直接送遙測: ');
+  ok(jobs.includes("require('./usage-telemetry')") && jobs.includes('function recordJobTelemetry'));
+  ok(jobs.includes('attemptedBackends') && jobs.includes('fellBackToCpu'), '要記「試過哪些引擎 + 有沒有退回 CPU」: ');
+  ok(jobs.includes("job.attempts.includes(backend)") && jobs.includes("job.attempts.includes('webgpu')"), '每個引擎記進 attempts（重試不重複記）: ');
+  // 三個終態都要記：Python 成功、WebGPU 成功、統一失敗漏斗 finalizeError
+  eq((jobs.match(/recordJobTelemetry\(/g) || []).length, 4, 'helper 定義 + Python成功 + WebGPU成功 + finalizeError 共 4 處: ');
+  ok(jobs.includes("finalBackend: attempt.mode === 'cpu' ? 'cpu' : 'cuda'"), 'Python 成功要分辨 CUDA/CPU: ');
+  ok(jobs.includes("finalBackend: 'webgpu'"), 'WebGPU 成功要記 webgpu: ');
+  ok(jobs.includes('recordJobTelemetry(job, { ok: false, code, finalBackend })'), 'finalizeError 是統一失敗漏斗: ');
+  // 使用者主動取消不計入失敗率
+  ok(jobs.includes("if (error.code !== 'CANCELLED')"), '取消不記遙測，否則灌水分母: ');
+  // 接收端支援多後端布林（一次分離試過多個引擎），但 attempt 仍只加一次
+  const tele = fs.readFileSync(path.join(__dirname, '../server/services/usage-telemetry.js'), 'utf8');
+  ok(tele.includes('data.attemptedBackends') && tele.includes('for (const b of backends)'));
+  // 精確重試「次數」（CUDA×n / WebGPU×n）只進本機 log；匿名遙測只送「有沒有重試過」布林
+  ok(jobs.includes('嘗試次數: CUDA×') && jobs.includes('WebGPU×'), '精確次數要寫進 log 供診斷包/問題回報: ');
+  ok(jobs.includes('retried,') && jobs.includes('job.cudaAttempts) || 0) > 1'), 'retried 布林由 cuda/webgpu 嘗試次數推導: ');
+  ok(tele.includes("record('ai.retried', 1, true)"), 'ai.retried 布林要進日彙總: ');
+});
+
+test('EULA 1.8.0：AI 分離「是否重試過」欄位揭露與遙測 gate 一致', () => {
+  const eula = fs.readFileSync(path.join(__dirname, '../EULA.txt'), 'utf8');
+  const tele = fs.readFileSync(path.join(__dirname, '../server/services/usage-telemetry.js'), 'utf8');
+  const flds = fs.readFileSync(path.join(__dirname, '../server/services/telemetry-fields.js'), 'utf8');
+  ok(/^Version:\s*1\.8\.0\s*$/m.test(eula), 'EULA 版本行必須是 1.8.0: ');
+  ok(eula.includes('retry on the same compute backend') && eula.includes('同一個運算後端上重試'), 'EULA 中英文都要揭露「同後端重試」: ');
+  ok(/never\s+a retry count/.test(eula) && eula.includes('不含重試次數'), 'EULA 要明講不送重試「次數」: ');
+  ok(tele.includes("DAILY_DISCLOSED_EULA_VERSION = '1.8.0'"), '日彙總 gate 要同步到 1.8.0: ');
+  ok(flds.includes("keys.push('ai.retried')"), 'ai.retried 要在欄位登錄表: ');
+  ok(/ai\.fallback_to_cpu' \|\| key === 'ai\.retried'/.test(flds), 'ai.retried 要被當成當日布林（不累加次數）: ');
+});
+
+test('AI 分離取消：進行中／排隊中都能停，狀態回 none 不算失敗', () => {
+  const jobs = fs.readFileSync(path.join(__dirname, '../server/services/ai-separation-jobs.js'), 'utf8');
+  const webgpu = fs.readFileSync(path.join(__dirname, '../server/services/webgpu-separation-jobs.js'), 'utf8');
+  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const client = fs.readFileSync(path.join(__dirname, '../public/js/ai-separation-client.js'), 'utf8');
+  const library = fs.readFileSync(path.join(__dirname, '../public/js/media-library.js'), 'utf8');
+  const youtube = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+  const i18n = require('../public/js/i18n');
+
+  // 協調器：對外一個 cancelJobForTrack；進行中依 mode 砍 Python / 中止 WebGPU；排隊中 splice
+  ok(jobs.includes('function cancelJobForTrack') && jobs.includes('cancelJobForTrack,'), 'cancelJobForTrack 要匯出: ');
+  ok(jobs.includes('supervisor.cancel(job.currentAttemptId)') && jobs.includes('webgpuJobs.cancelJob(job.publicJobId)'));
+  ok(jobs.includes('queue.splice(idx, 1)'), '排隊中的要能從佇列移除: ');
+  ok(jobs.includes("separationStatus: 'none'") && jobs.includes("emitProgress(job, 'cancelled'"), '取消回到可再點的 none、不是 failed: ');
+  // 取消要能擋掉待重試的計時器與 probing 階段
+  ok(jobs.includes('clearTimeout(job.retryTimer)') && jobs.includes('job.retryTimer = setTimeout'));
+  ok(jobs.includes('job.cancelled || !activeJob'), '重試計時器與 dispatch 都要看 job.cancelled: ');
+  ok(jobs.includes('|| job.cancelled) return job.publicJobId'), 'probing 階段被取消要中止，不 spawn worker: ');
+  // 取消不記遙測
+  const cancelFn = jobs.slice(jobs.indexOf('function finalizeCancelled'), jobs.indexOf('function cancelJobForTrack'));
+  ok(!cancelFn.includes('recordJobTelemetry'), '取消不進遙測（不灌失敗率）: ');
+
+  // WebGPU 層：cancelJob 只讓引擎收手，不 emit events（收尾由協調器做）
+  ok(webgpu.includes('function cancelJob') && webgpu.includes('cancelJob,'));
+  const wgCancel = webgpu.slice(webgpu.indexOf('function cancelJob'), webgpu.indexOf('function cancelJob') + 500);
+  ok(wgCancel.includes("emit('webgpu:job:cancel'") && !wgCancel.includes("events.emit"), 'cancelJob 不得 events.emit（會誤觸 fallback）: ');
+
+  // 路由：掛 requirePin（會動到正在跑的 GPU/CPU 工作）
+  ok(api.includes("router.post('/library/:id/separate/cancel', requirePin"), '取消路由要掛 requirePin: ');
+  ok(api.includes('aiSeparationJobs.cancelJobForTrack(req.params.id)'));
+
+  // 前端：AiSeparation.cancel + ingest 處理 cancelled + 兩個 UI 都有取消入口
+  ok(client.includes('async function cancel(trackId)') && client.includes('/separate/cancel') && client.includes('cancel,'), 'AiSeparation 要匯出 cancel(): ');
+  ok(client.includes("payload.stage === 'cancelled'") && client.includes('states.delete(trackId)'), 'ingest 收到 cancelled 要清狀態讓按鈕翻回: ');
+  ok(library.includes('lib-separate-cancel') && library.includes('function cancelSeparation') && library.includes('window.AiSeparation.cancel(item.id)'));
+  ok(library.includes("data.stage === 'cancelled'") && library.includes("cached.separationStatus = 'none'"), '媒體庫收到 cancelled 廣播要重畫: ');
+  ok(youtube.includes("data.stage === 'cancelled'") && youtube.includes("code = 'SEPARATION_CANCELLED'"), '匯入流程：取消分離不當成匯入失敗: ');
+  ok(youtube.includes("workAction === 'cancel-separation'") && youtube.includes('window.AiSeparation?.cancel(job.separationTrackId)'));
+
+  // i18n：新字串五語齊全
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    for (const key of ['aiJob.cancelled', 'aiJob.cancelAction', 'import.separation.cancelled']) {
+      ok(i18n.catalogs?.[locale]?.[key], `${locale} 缺少 ${key}: `);
+    }
+  }
+});
+
+test('AI 分離 hang watchdog：WebGPU 收不到進度心跳逾時 → 切 CPU', () => {
+  const webgpu = fs.readFileSync(path.join(__dirname, '../server/services/webgpu-separation-jobs.js'), 'utf8');
+  ok(webgpu.includes('PROGRESS_TIMEOUT_MS') && webgpu.includes('function checkWatchdog'));
+  ok(webgpu.includes('armWatchdog()') && webgpu.includes('disarmWatchdog()'));
+  ok(webgpu.includes('lastProgressAt = Date.now()'), 'handleProgress 要餵心跳: ');
+  // 逾時走 events 'error' code 'timeout'——協調器的 webgpuJobs.events.on(error) 已接 startCpu
+  ok(webgpu.includes("events.emit('error', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, code: 'timeout' })"));
+  ok(webgpu.includes("engineSocket?.emit('webgpu:job:cancel'"), '最佳努力叫引擎在下個 chunk 前收手: ');
+  ok(webgpu.includes('watchdogTimer.unref'), '計時器不得擋住 process 結束: ');
+});
+
+test('AI 分離：卡死／崩潰的隱藏引擎視窗會被重開', () => {
+  const jobs = fs.readFileSync(path.join(__dirname, '../server/services/webgpu-separation-jobs.js'), 'utf8');
+  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const win = fs.readFileSync(path.join(__dirname, '../electron/webgpu-engine-window.js'), 'utf8');
+  const shell = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
+
+  // server 端：watchdog 逾時 + job 進行中斷線都記一個重開時間戳，新引擎連上就清掉
+  ok(jobs.includes("requestEngineRestart('watchdog-timeout')") && jobs.includes("requestEngineRestart('disconnect-mid-job')"));
+  ok(jobs.includes('restartRequestedAt = 0') && jobs.includes('function getRestartRequestedAt'), '新引擎連上要撤銷重開請求: ');
+  ok(api.includes('engineRestartRequestedAt: webgpuSeparationJobs.getRestartRequestedAt()'), 'runtime-status 要把訊號帶給 Electron: ');
+
+  // 隱藏視窗：render-process-gone / unresponsive 自我修復，且有頻率上限、有 restart()
+  ok(win.includes("'render-process-gone'") && win.includes("'unresponsive'") && win.includes('scheduleSelfHeal'));
+  ok(win.includes('SELF_HEAL_MAX_IN_WINDOW') && win.includes('selfHealBudgetLeft'), '崩太頻繁要停手，不空轉: ');
+  ok(/restart\b/.test(win) && win.includes('start, stop, restart'), '要對外暴露 restart(): ');
+  ok(win.includes('disposed') , '有意 stop() 之後不得再自我修復: ');
+
+  // Electron 主程序：輪詢 runtime-status，讀到新的重開時間戳或連續離線就 restart()
+  ok(shell.includes('fetchWebgpuEngineHealth') && shell.includes('engineRestartRequestedAt'));
+  ok(shell.includes('webgpuLastHandledRestartAt') && shell.includes('webgpuEngineWindow.restart()'));
+  ok(shell.includes('WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART'), '連續離線幾次才動手，給正常啟動留餘裕: ');
+  ok(shell.includes('startWebgpuEngineHealthLoop()') && shell.includes('stopWebgpuEngineHealthLoop()'));
+  ok(shell.slice(shell.indexOf('stopWebgpuEngineWindow')).includes('stopWebgpuEngineHealthLoop()'), '關視窗要一併停輪詢: ');
+});
+
+test('AI 分離：CUDA / WebGPU 失敗都先在同一引擎重算幾次，CPU 是最後手段', () => {
+  const jobs = fs.readFileSync(path.join(__dirname, '../server/services/ai-separation-jobs.js'), 'utf8');
+
+  // CUDA：失敗先重試 CUDA（不是馬上換 WebGPU），到上限才往下一關
+  ok(jobs.includes('CUDA_MAX_ATTEMPTS') && jobs.includes('job.cudaAttempts'), 'CUDA 要有重試次數上限與計數: ');
+  const pyHandler = jobs.slice(jobs.indexOf("supervisor.emitter.on('error'"), jobs.indexOf("webgpuJobs.events.on('result'"));
+  ok(pyHandler.includes('startPython(job, { forceCpu: false })') && pyHandler.includes('CUDA_RETRY_DELAY_MS'), 'CUDA 重試分支要重跑 CUDA: ');
+  ok(pyHandler.includes('if (!tryStartWebgpu(job)) startCpu(job)'), 'CUDA 重試用完才換 WebGPU，撐不住才 CPU: ');
+  ok(jobs.includes("CUDA_NO_RETRY_CODES = new Set(['RUNTIME_MISSING', 'MODEL_MISSING', 'PROVIDER_UNAVAILABLE', 'GPU_OOM'])"));
+  ok(pyHandler.includes("error.code === 'CANCELLED' || error.code === 'INPUT_UNREADABLE'"), '取消 / 壞輸入不重試也不 fallback: ');
+
+  // WebGPU：失敗先重試 WebGPU（不是馬上退 CPU），到上限才 CPU
+  ok(jobs.includes('WEBGPU_MAX_ATTEMPTS') && jobs.includes('job.webgpuAttempts'), 'WebGPU 要有重試次數上限與計數: ');
+  const wgHandler = jobs.slice(jobs.indexOf("webgpuJobs.events.on('error'"), jobs.indexOf("reconcileOrphanedProcessing()"));
+  ok(wgHandler.includes('if (!tryStartWebgpu(job)) startCpu(job)'), 'WebGPU 重試要再試 WebGPU，撐不住才 CPU: ');
+  ok(wgHandler.includes('retryable'), '要依錯誤類型決定能不能重試: ');
+  ok(jobs.includes("WEBGPU_NO_RETRY_CODES = new Set(['unsupported_gpu', 'timeout'])"));
+  // 重試前都要等一下再重派
+  eq((jobs.match(/setTimeout\(/g) || []).length, 2, 'CUDA 與 WebGPU 各一個延遲重試: ');
+});
+
+test('WebGPU 引擎：adapter 偵測 / ORT 推論 / device.lost 對到同一顆 GPUDevice', () => {
+  const w = fs.readFileSync(path.join(__dirname, '../public/js/webgpu-separation-worker.mjs'), 'utf8');
+  // 只有一處真的建裝置（acquireGpu 內），不再有三處各自 requestAdapter/requestDevice
+  eq((w.match(/navigator\.gpu\.requestAdapter\(/g) || []).length, 1, 'requestAdapter 只能呼叫一次（acquireGpu）: ');
+  eq((w.match(/\.requestDevice\(/g) || []).length, 1, 'requestDevice 只能呼叫一次: ');
+  ok(w.includes('ort.env.webgpu.device = gpu.device'), 'ORT 必須用預先建立好的那顆 device: ');
+  ok(w.includes('device.lost.then(handleDeviceLost)') && !w.includes('attachDeviceLostWatcher'));
+  ok(w.includes("info && info.reason === 'destroyed'"), '正常 teardown 不當故障回報: ');
+  // shader-f16 硬性前提要擋
+  ok(w.includes('shader-f16') && w.includes("code: 'unsupported_gpu'") && w.includes('gpu.info.shaderF16'));
+  // 輸出 NaN/Inf 健檢：每個 chunk 跨步掃 + 最終成品全掃
+  ok(w.includes('function assertFinite') && w.includes('Number.isFinite'));
+  ok(w.includes("assertFinite(masksPacked, '模型輸出遮罩', 101)"));
+  ok(w.includes("assertFinite(vocals, '人聲輸出')") && w.includes("assertFinite(instrumental, '伴奏輸出')"));
+  ok(w.includes("assertFinite(out?.data || [], 'canary 輸出'"), 'canary 也要驗有限性: ');
+  // watchdog 逾時後引擎能在下個 chunk 前收手
+  ok(w.includes("SocketClient.on('webgpu:job:cancel'") && w.includes('cancelRequested'));
+});
+
 const { classifyImportError, toImportTelemetryCode } = require('../server/utils/import-error');
 
 test('normalizeText：全形空白→半形、壓縮空白、去頭尾', () => {

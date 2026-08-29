@@ -148,6 +148,7 @@ function buildAllowedKeys() {
   for (const bucket of RTF_BUCKETS) keys.push(`ai.rtf.${bucket}`);
   for (const bucket of DURATION_BUCKETS) keys.push(`ai.duration.${bucket}`);
   keys.push('ai.fallback_to_cpu');
+  keys.push('ai.retried'); // EULA §7.9(f)（1.8.0 起）：曾在同一後端重試後才完成
   return Object.freeze(keys.slice().sort());
 }
 
@@ -174,7 +175,7 @@ function isDailyBooleanKey(key) {
   if (key === 'update.ok' || key === 'update.failed') return true;
   if (key === 'lyrics.auto_result_edited') return true;
   if (/^ai\.(backend|gpu|vram|rtf|duration)\./.test(key)) return true;
-  if (key === 'ai.fallback_to_cpu') return true;
+  if (key === 'ai.fallback_to_cpu' || key === 'ai.retried') return true;
   return false;
 }
 

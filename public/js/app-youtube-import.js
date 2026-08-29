@@ -633,6 +633,13 @@
         cancel.textContent = job.status === 'cancelling' ? t('import.job.cancelling') : t('import.job.cancel');
         cancel.disabled = job.status === 'cancelling';
         actions.appendChild(cancel);
+      } else if (job.status === 'separating' && job.separationTrackId != null) {
+        // 分離是匯入後的可選後處理；歌已經進清單了，這個取消只停分離、不影響匯入結果。
+        const cancelSep = document.createElement('button');
+        cancelSep.type = 'button'; cancelSep.className = 'btn btn-sm btn-ghost';
+        cancelSep.dataset.workAction = 'cancel-separation';
+        cancelSep.textContent = t('import.job.cancel');
+        actions.appendChild(cancelSep);
       } else if (job.status === 'failed' || job.status === 'cancelled') {
         const retry = document.createElement('button');
         retry.type = 'button'; retry.className = 'btn btn-sm btn-ghost'; retry.dataset.workAction = 'retry'; retry.textContent = t('import.job.retry');
@@ -713,6 +720,10 @@
     const job = row && ytImportJobs.find((item) => item.id === row.dataset.jobId);
     if (!button || !job) return;
     if (button.dataset.workAction === 'cancel') cancelImportJob(job);
+    if (button.dataset.workAction === 'cancel-separation' && job.separationTrackId != null) {
+      button.disabled = true;
+      window.AiSeparation?.cancel(job.separationTrackId);
+    }
     if (button.dataset.workAction === 'retry') {
       queueYouTubeImport(job.url, {
         source: job.source,
@@ -756,7 +767,7 @@
       throw new Error(t('import.separation.notEnabled'));
     }
     updateJob(job, {
-      status: 'separating', stage: '', percent: 0,
+      status: 'separating', stage: '', percent: 0, separationTrackId: track.id,
       postActionKey: 'import.separation.starting', postActionVars: {},
     });
     let finished = false;
@@ -777,6 +788,14 @@
       if (data.stage === 'error') {
         finished = true;
         rejectCompletion(new Error(data.errorMessage || data.error || t('import.separation.unknownFailure')));
+        return;
+      }
+      if (data.stage === 'cancelled') {
+        // 使用者取消了分離——歌曲本身已經匯入成功，不當成匯入失敗。
+        finished = true;
+        const cancelledError = new Error(t('import.separation.cancelled'));
+        cancelledError.code = 'SEPARATION_CANCELLED';
+        rejectCompletion(cancelledError);
         return;
       }
       if (data.stage === 'queued') {
@@ -929,11 +948,15 @@
                 postActionKey: 'import.separation.completed', postActionVars: { title: data.track.title },
               });
             } catch (separationError) {
-              AppShared.showToast(t('import.separation.failedAfterImport', { message: separationError.message }), 'warning');
+              const cancelled = separationError.code === 'SEPARATION_CANCELLED';
+              if (!cancelled) {
+                AppShared.showToast(t('import.separation.failedAfterImport', { message: separationError.message }), 'warning');
+              }
               updateJob(job, {
                 status: 'completed', stage: '已完成', completedPlacement: placementKey,
                 completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '',
-                postActionKey: 'import.separation.failedAfterImport', postActionVars: { message: separationError.message },
+                postActionKey: cancelled ? 'import.separation.cancelled' : 'import.separation.failedAfterImport',
+                postActionVars: cancelled ? {} : { message: separationError.message },
               });
             }
           } else {

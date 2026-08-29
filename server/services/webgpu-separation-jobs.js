@@ -23,10 +23,35 @@ const { EventEmitter } = require('events');
 const { createLogger } = require('../utils/logger');
 const libraryStore = require('./library-store');
 const { emitToControlClients } = require('../utils/socket-broadcast');
-const usageTelemetry = require('./usage-telemetry');
 const { downloadsDir } = require('../utils/app-paths');
 
 const log = createLogger('WebgpuSeparationJobs');
+
+// 分離遙測不在這一層送——三條引擎（Python CUDA／WebGPU／Python CPU）的終態統一由
+// `ai-separation-jobs.js` 這個協調器記一次，才記得到「試過哪些引擎、誰成功、有沒有
+// fallback」。這裡只負責把 gpuVendor／peakBufferMb 等欄位塞進 events 事件往上帶。
+
+// hang watchdog：session.create / s.run 若整個 wedge（不丟例外、不觸發 device.lost），
+// 這個 job 會永遠掛著。收不到進度心跳超過這個時間就當它逾時，送 events 'error'（code
+// 'timeout'），讓協調器切到 CPU；同時最佳努力叫引擎在下個 chunk 前收手。
+const PROGRESS_TIMEOUT_MS = Number(process.env.ELITESAND_WEBGPU_PROGRESS_TIMEOUT_MS) || 120000;
+const WATCHDOG_TICK_MS = 15000;
+let watchdogTimer = null;
+let lastProgressAt = 0;
+
+// server 跟 Electron 主程序是「兩個不同的 process」（Electron 用 child_process 跑
+// server），沒有共用的 EventEmitter。所以「引擎卡死／崩了，請把隱藏視窗重開」這個
+// 訊號只能靠 Electron 來輪詢：watchdog 逾時或 job 進行中斷線時記一個時間戳，塞進
+// /api/webgpu-separation/runtime-status 的回應，Electron 那邊（shell.js 的健康輪詢）
+// 讀到比上次新的時間戳就 restart() 那個 BrowserWindow。新的引擎一連上就清掉。
+let restartRequestedAt = 0;
+function requestEngineRestart(reason) {
+  restartRequestedAt = Date.now();
+  log.warn(`已要求重開 WebGPU 引擎視窗（原因：${reason}）`);
+}
+function getRestartRequestedAt() {
+  return restartRequestedAt;
+}
 
 // 引擎跑在瀏覽器頁面裡，沒有檔案系統存取權——分離結果只能用 socket 送二進位資料
 // 回來，實際寫檔案（決定檔名、存進 downloadsDir）要在這裡（Node 端）做，跟 CUDA
@@ -88,22 +113,41 @@ function applyResult(trackId, patch) {
   emitToControlClients(deps.io, 'library:list', libraryStore.getLibrary());
 }
 
-/** 遙測欄位完全對齊 EULA §7.9 已揭露的清單，不多送任何欄位（不用動 EULA 版本）。 */
-function recordTelemetry({ ok, code, gpuVendor, vramMb, realtimeFactor, audioSeconds, fellBackToCpu }) {
-  try {
-    usageTelemetry.recordAiSeparation({
-      backend: 'webgpu',
-      gpuVendor: gpuVendor || 'unknown',
-      vramMb: vramMb === undefined ? 'unknown' : vramMb,
-      realtimeFactor,
-      audioSeconds,
-      fellBackToCpu: !!fellBackToCpu,
-      ok,
-      code,
-    });
-  } catch (e) {
-    log.warn(`遙測記錄失敗（不影響分離本身）：${e.message}`);
+function armWatchdog() {
+  lastProgressAt = Date.now();
+  if (watchdogTimer) return;
+  watchdogTimer = setInterval(checkWatchdog, WATCHDOG_TICK_MS);
+  watchdogTimer.unref?.(); // 別讓這個計時器擋住 process 結束
+}
+
+function disarmWatchdog() {
+  if (watchdogTimer) {
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
   }
+}
+
+function checkWatchdog() {
+  if (!activeJob) {
+    disarmWatchdog();
+    return;
+  }
+  if (Date.now() - lastProgressAt <= PROGRESS_TIMEOUT_MS) return;
+  const job = activeJob;
+  activeJob = null;
+  disarmWatchdog();
+  log.warn(`WebGPU 分離逾時無進度（>${PROGRESS_TIMEOUT_MS}ms）track=${job.trackId}，視為失敗、切 CPU`);
+  try { engineSocket?.emit('webgpu:job:cancel', { jobId: job.jobId }); } catch (_) { /* 最佳努力 */ }
+  // 逾時＝引擎很可能整個 wedge 在 s.run 裡，光靠 job:cancel 收不回來——請 Electron 重開視窗。
+  requestEngineRestart('watchdog-timeout');
+  if (!job.deferFailure) {
+    applyResult(job.trackId, { separationStatus: 'failed' });
+    deps?.io.emit('separation:progress', {
+      trackId: job.trackId, jobId: job.publicJobId || job.jobId, stage: 'error', progress: 0,
+      error: 'TIMEOUT', errorMessage: null,
+    });
+  }
+  events.emit('error', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, code: 'timeout' });
 }
 
 function wireDependencies({ io, playState, persistState, broadcastState, updateLibraryMeta = () => {} }) {
@@ -115,6 +159,7 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
 /** socket-handler.js 在 webgpu-engine client 連線時呼叫。 */
 function handleEngineConnected(socket) {
   engineSocket = socket;
+  restartRequestedAt = 0; // 新引擎連上了，撤銷先前的重開請求
   log.info(`WebGPU engine 已連線: ${socket.id}`);
 }
 
@@ -127,6 +172,9 @@ function handleEngineDisconnected(socketId) {
     // 引擎斷線時若有進行中的工作，視為失敗，不留一個永遠卡在 processing 的假狀態。
     const job = activeJob;
     activeJob = null;
+    disarmWatchdog();
+    // job 進行中斷線＝視窗多半崩了（不是使用者關設定——那條走 stop()，不會有 activeJob）。
+    requestEngineRestart('disconnect-mid-job');
     if (!job.deferFailure) {
       applyResult(job.trackId, { separationStatus: 'failed' });
       deps?.io.emit('separation:progress', {
@@ -134,8 +182,7 @@ function handleEngineDisconnected(socketId) {
         error: 'ENGINE_DISCONNECTED', errorMessage: null,
       });
     }
-    events.emit('error', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, code: 'ENGINE_DISCONNECTED' });
-    recordTelemetry({ ok: false, code: 'engine_disconnected' });
+    events.emit('error', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, code: 'engine_disconnected' });
   }
 }
 
@@ -163,6 +210,7 @@ function startJobForTrack(trackId, params, { deferFailure = false, publicJobId =
     jobId, trackId,
     audioUrl: `/audio/${encodeURIComponent(params.sourceFilename)}`,
   });
+  armWatchdog();
   return jobId;
 }
 
@@ -173,6 +221,7 @@ function startJobForTrack(trackId, params, { deferFailure = false, publicJobId =
 function handleProgress(socket, payload) {
   if (!engineSocket || socket.id !== engineSocket.id || !activeJob) return;
   if (!payload || payload.jobId !== activeJob.jobId) return;
+  lastProgressAt = Date.now(); // 心跳，餵飽 watchdog
   deps?.io.emit('separation:progress', {
     trackId: activeJob.trackId, jobId: activeJob.publicJobId || activeJob.jobId, stage: payload.stage, progress: payload.progress,
   });
@@ -199,6 +248,8 @@ function finishJobWithResult(jobId, { vocalsBuffer, instrumentalBuffer, gpuVendo
   }
   const job = activeJob;
   activeJob = null;
+  disarmWatchdog();
+  const hw = { gpuVendor, peakBufferMb, realtimeFactor, audioSeconds };
   let written;
   try {
     written = writeResultFiles(job.trackId, job.params?.sourceFilename, { vocalsBuffer, instrumentalBuffer });
@@ -213,9 +264,8 @@ function finishJobWithResult(jobId, { vocalsBuffer, instrumentalBuffer, gpuVendo
     }
     events.emit('error', {
       trackId: job.trackId, jobId: job.publicJobId || job.jobId,
-      code: 'WRITE_FAILED', message: err.message,
+      code: 'write_failed', message: err.message, ...hw,
     });
-    recordTelemetry({ ok: false, code: 'write_failed', gpuVendor, audioSeconds });
     return { ok: false, code: 'WRITE_FAILED' };
   }
   const ok = !!(written.vocalsFile || written.instrumentalFile);
@@ -227,8 +277,7 @@ function finishJobWithResult(jobId, { vocalsBuffer, instrumentalBuffer, gpuVendo
         error: 'NO_OUTPUT', errorMessage: null,
       });
     }
-    events.emit('error', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, code: 'NO_OUTPUT' });
-    recordTelemetry({ ok: false, code: 'no_output', gpuVendor, audioSeconds });
+    events.emit('error', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, code: 'no_output', ...hw });
     return { ok: false, code: 'NO_OUTPUT' };
   }
   applyResult(job.trackId, {
@@ -237,13 +286,8 @@ function finishJobWithResult(jobId, { vocalsBuffer, instrumentalBuffer, gpuVendo
     separationStatus: 'done',
   });
   deps?.io.emit('separation:progress', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, stage: 'done', progress: 100 });
-  events.emit('result', { trackId: job.trackId, jobId: job.publicJobId || job.jobId });
-  recordTelemetry({
-    ok, code: ok ? null : 'no_output',
-    gpuVendor, vramMb: peakBufferMb,
-    realtimeFactor, audioSeconds,
-    fellBackToCpu: false,
-  });
+  // 遙測由協調器（ai-separation-jobs.js）記——這裡只把硬體/效能欄位往上帶。
+  events.emit('result', { trackId: job.trackId, jobId: job.publicJobId || job.jobId, ...hw });
   return { ok: true };
 }
 
@@ -252,6 +296,7 @@ function handleError(socket, payload) {
   if (!payload || payload.jobId !== activeJob.jobId) return;
   const job = activeJob;
   activeJob = null;
+  disarmWatchdog();
   log.warn(`WebGPU 分離失敗 track=${job.trackId}: ${payload.message || payload.code}`);
   if (!job.deferFailure) {
     applyResult(job.trackId, { separationStatus: 'failed' });
@@ -262,10 +307,7 @@ function handleError(socket, payload) {
   }
   events.emit('error', {
     trackId: job.trackId, jobId: job.publicJobId || job.jobId,
-    code: payload.code || 'UNKNOWN', message: payload.message || null,
-  });
-  recordTelemetry({
-    ok: false, code: payload.code || 'unknown',
+    code: payload.code || 'unknown', message: payload.message || null,
     gpuVendor: payload.gpuVendor, audioSeconds: payload.audioSeconds,
   });
 }
@@ -275,11 +317,28 @@ function handleDeviceLost(socket, payload) {
   handleError(socket, { ...payload, code: 'device_lost' });
 }
 
+/**
+ * 協調器（ai-separation-jobs.js）發起的取消：讓引擎在下個 chunk 前收手、清掉自己的
+ * activeJob 與 watchdog。**不**發 events 'error'／'result'——收尾（狀態、進度事件、
+ * 佇列推進）全由協調器做，這裡只負責讓 WebGPU 這條路停下來。
+ */
+function cancelJob(publicJobId) {
+  if (!activeJob || (activeJob.publicJobId || activeJob.jobId) !== publicJobId) return { ok: false };
+  const job = activeJob;
+  activeJob = null;
+  disarmWatchdog();
+  try { engineSocket?.emit('webgpu:job:cancel', { jobId: job.jobId }); } catch (_) { /* 最佳努力 */ }
+  log.info(`WebGPU 分離已被取消 track=${job.trackId}`);
+  return { ok: true };
+}
+
 function _resetForTests() {
   deps = null;
   wired = false;
   engineSocket = null;
   activeJob = null;
+  restartRequestedAt = 0;
+  disarmWatchdog();
 }
 
 module.exports = {
@@ -287,11 +346,13 @@ module.exports = {
   startJobForTrack,
   events,
   isEngineAvailable,
+  getRestartRequestedAt,
   handleEngineConnected,
   handleEngineDisconnected,
   handleProgress,
   finishJobWithResult,
   handleError,
   handleDeviceLost,
+  cancelJob,
   _resetForTests,
 };

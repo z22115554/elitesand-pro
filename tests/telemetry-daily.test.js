@@ -33,7 +33,7 @@ Module._load = originalLoad;
 const DAY_MS = 86400000;
 
 // 預設用已揭露日彙總的 EULA 版本；閘門測試會把它調低
-const eulaVersion = { value: '1.6.0' };
+const eulaVersion = { value: '1.8.0' };
 
 function makeTelemetry(dir, requests, clock) {
   return createUsageTelemetry({
@@ -249,6 +249,61 @@ async function testAggregation() {
 }
 
 /**
+ * AI 分離的 fallback 鏈遙測必須連貫：一次分離試過 Python CUDA → WebGPU → CPU，
+ * 最後在 CPU 成功，接收端要看得到「三個後端都試過、有 fallback、整體成功」，
+ * 而且 attempt 只加一次（不是三次，否則成功率分母會被灌水）。
+ * 迴歸的是修好前的 bug：只有 WebGPU 那條路在送遙測、`fellBackToCpu` 永遠是 false。
+ */
+async function testAiSeparationFallbackTrace() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-daily-ai-trace-'));
+  const requests = [];
+  const clock = { value: new Date('2026-08-27T09:00:00.000Z') };
+  const telemetry = makeTelemetry(dir, requests, clock);
+
+  // 情境 A：CUDA 失敗 → WebGPU 失敗 → CPU 成功（協調器 recordJobTelemetry 的一次呼叫）
+  telemetry.recordAiSeparation({
+    attemptedBackends: ['cuda', 'webgpu', 'cpu'],
+    backend: 'cpu',
+    gpuVendor: 'unknown',
+    ok: true,
+    fellBackToCpu: true,
+    retried: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await telemetry.flushPending({ force: true });
+  let counters = requests[requests.length - 1].payload.counters;
+  assert.strictEqual(counters['ai.backend.cuda'], 1, 'CUDA 有被嘗試過');
+  assert.strictEqual(counters['ai.backend.webgpu'], 1, 'WebGPU 有被嘗試過');
+  assert.strictEqual(counters['ai.backend.cpu'], 1, 'CPU 有被嘗試過');
+  assert.strictEqual(counters['ai.fallback_to_cpu'], 1, '有 fallback 到 CPU');
+  assert.strictEqual(counters['ai.retried'], 1, '曾在同一後端重試（EULA §7.9(f) 1.8.0）');
+  assert.strictEqual(counters['ai.ok'], 1, '整體算成功');
+  assert.strictEqual(counters['ai.attempt'], 1, '一次分離只加一次 attempt，不是三次');
+  assert.ok(!Object.keys(counters).some((k) => k.startsWith('ai.fail.')), '成功的分離不得留下任何 ai.fail.*');
+
+  // 情境 B（同一天）：WebGPU 單獨終態失敗——attempt 累加到 2、多一筆 device_lost 失敗
+  clock.value = new Date('2026-08-27T09:20:00.000Z');
+  telemetry.recordAiSeparation({
+    attemptedBackends: ['webgpu'],
+    backend: 'webgpu',
+    gpuVendor: 'amd',
+    ok: false,
+    code: 'device_lost',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await telemetry.flushPending({ force: true });
+  counters = requests[requests.length - 1].payload.counters;
+  assert.strictEqual(counters['ai.attempt'], 2, '第二次分離讓 attempt 變 2');
+  assert.strictEqual(counters['ai.fail.device_lost'], 1, 'device lost 記進封閉錯誤分類');
+  assert.strictEqual(counters['ai.gpu.amd'], 1, 'GPU 廠牌照分桶記');
+  assert.strictEqual(counters['ai.backend.webgpu'], 1, '當日布林維持 1，不因再次記錄而累加');
+  // 這次沒帶 retried，且 ai.retried 是當日布林——維持在情境 A 設下的 1，不會再累加
+  assert.strictEqual(counters['ai.retried'], 1, 'ai.retried 是當日布林，維持 1');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+/**
  * socket 重連次數的語意是「今天累計到目前為止落在哪一桶」，不是「這個桶
  * 發生了幾次」——累計數跨過門檻時，舊桶必須被清掉，同一天不能有兩個桶
  * 同時是真的（那樣會無法判讀「今天到底重連了多嚴重」）。
@@ -329,25 +384,28 @@ async function testTamperedStateIsSanitised() {
  * 使用者同意的 EULA 版本低於揭露版本時，一個位元組都不該送出。
  */
 async function testUndisclosedEulaCollectsNothing() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-daily-gate-'));
-  const requests = [];
   const clock = { value: new Date('2026-08-19T12:00:00.000Z') };
-  eulaVersion.value = '1.5.0';
-  try {
-    const telemetry = makeTelemetry(dir, requests, clock);
-    assert.strictEqual(telemetry.dailyDisclosed(), false);
-    assert.strictEqual(telemetry.recordIncident('player_error'), false);
-    assert.strictEqual(telemetry.recordFeature('media_library'), false);
-    telemetry.recordAiSeparation({ backend: 'cuda', ok: true });
-    await telemetry.flushPending({ force: true });
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.strictEqual(requests.length, 0, 'EULA 尚未揭露時不得送出任何日彙總');
-
-    const persisted = JSON.parse(fs.readFileSync(path.join(dir, 'usage-telemetry.json'), 'utf8'));
-    assert.deepStrictEqual(persisted.pending, {}, '也不該把資料累積在本機等日後補送');
-  } finally {
-    eulaVersion.value = '1.6.0';
-    fs.rmSync(dir, { recursive: true, force: true });
+  // 1.7.0：§7.10 更新服務已揭露，但 §7.9 日彙總的 (f) 欄位在 1.8.0 才擴充，
+  // 所以整個日彙總在 1.7.0 仍一律空轉——「還沒揭露就不可能被蒐集」是程式層保證。
+  for (const undisclosed of ['1.5.0', '1.7.0']) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-daily-gate-'));
+    const requests = [];
+    eulaVersion.value = undisclosed;
+    try {
+      const telemetry = makeTelemetry(dir, requests, clock);
+      assert.strictEqual(telemetry.dailyDisclosed(), false, `${undisclosed} 不得視為已揭露`);
+      assert.strictEqual(telemetry.recordIncident('player_error'), false);
+      assert.strictEqual(telemetry.recordFeature('media_library'), false);
+      telemetry.recordAiSeparation({ backend: 'cuda', ok: true, retried: true });
+      await telemetry.flushPending({ force: true });
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.strictEqual(requests.length, 0, `EULA ${undisclosed} 時不得送出任何日彙總`);
+      const persisted = JSON.parse(fs.readFileSync(path.join(dir, 'usage-telemetry.json'), 'utf8'));
+      assert.deepStrictEqual(persisted.pending, {}, '也不該把資料累積在本機等日後補送');
+    } finally {
+      eulaVersion.value = '1.8.0';
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   }
 }
 
@@ -357,6 +415,7 @@ async function run() {
   testWorkerWhitelistMatches();
   testLyricSourcesMatchEngine();
   await testAggregation();
+  await testAiSeparationFallbackTrace();
   await testSocketReconnectBucketSwitching();
   await testTamperedStateIsSanitised();
   console.log('telemetry-daily tests passed');
