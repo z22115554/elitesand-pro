@@ -37,7 +37,7 @@ const { isLoopbackAddress } = require('../utils/pin-setup-policy');
 const stateStore = require('../services/state-store');
 const defaultRuntimeEvidence = require('../services/runtime-evidence');
 const defaultUsageTelemetry = require('../services/usage-telemetry');
-const { CONTROL_ROOM, READ_ONLY_ROOM } = require('../utils/socket-broadcast');
+const { CONTROL_ROOM, READ_ONLY_ROOM, emitToControlClients } = require('../utils/socket-broadcast');
 
 const log = createLogger('Socket');
 
@@ -55,7 +55,11 @@ const CLIENT_TYPES = new Set(['controller', 'remote', 'prompter', ...PIN_EXEMPT_
 const READ_ONLY_EVENTS = new Set([
   'client:type', 'client:build', 'state:request', 'setlist:get',
   'webgpu:job:progress', 'webgpu:job:error', 'webgpu:job:device-lost',
+  // OBS 顯示端的字型解析探針回報：純診斷轉送給面板，不寫 state、不持久化、不 broadcast。
+  'font-probe:report',
 ]);
+// font-probe:report 每個 socket 的最小間隔（防 PIN-exempt 的 display 灌事件）。
+const FONT_PROBE_REPORT_MIN_INTERVAL_MS = 5000;
 const CORE_USAGE_EVENTS = new Set([
   'play:track', 'play:toggle', 'play:seek', 'play:prev', 'play:next', 'play:stop',
   'playlist:update', 'playlist:add', 'playlist:insert-next', 'playlist:remove', 'playlist:reorder', 'playlist:import',
@@ -442,6 +446,20 @@ module.exports = function socketHandler(io, {
     socket.on('webgpu:job:progress', (payload) => webgpuSeparationJobs.handleProgress(socket, payload));
     socket.on('webgpu:job:error', (payload) => webgpuSeparationJobs.handleError(socket, payload));
     socket.on('webgpu:job:device-lost', (payload) => webgpuSeparationJobs.handleDeviceLost(socket, payload));
+
+    // ─── OBS 顯示端字型解析探針回報（診斷用，heuristic）───
+    // display 端量測「設定的字型名稱有沒有被系統解析到」，探不到就送這個事件。
+    // 這裡只做：驗 payload 形狀 → per-socket rate limit → 原樣轉送給控制端顯示提示。
+    // 不寫 state、不持久化、不呼叫 broadcastState()、不接任何控制 handler。
+    socket.on('font-probe:report', (payload) => {
+      if (socket.clientType !== 'display') return; // preview / spout / setlist 不回報
+      if (!payload || typeof payload !== 'object') return;
+      const now = Date.now();
+      if (now - (socket._fontProbeReportAt || 0) < FONT_PROBE_REPORT_MIN_INTERVAL_MS) return;
+      socket._fontProbeReportAt = now;
+      const name = typeof payload.name === 'string' ? payload.name.slice(0, 80) : '';
+      emitToControlClients(io, 'font-probe:warning', { name, ts: now });
+    });
 
     // ─── 各領域事件：只有通過控制權限的 controller/remote 才掛寫入 handler ───
     // 只看事件名稱，不讀取歌曲、歌詞或其他 payload；同一 UTC 日最多嘗試傳送一次。

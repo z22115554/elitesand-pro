@@ -612,11 +612,12 @@ router.post('/youtube/cancel', requirePin, (req, res) => {
 // ─── YouTube 關鍵字搜尋：只讀扁平 metadata，不下載音訊 ───
 router.post('/youtube/search', requirePin, async (req, res) => {
   try {
-    const results = await AudioProcessor.searchYouTube(req.body?.query, {
+    const { results, hasMore } = await AudioProcessor.searchYouTube(req.body?.query, {
       limit: req.body?.limit,
+      offset: req.body?.offset,
       requestId: req.body?.requestId,
     });
-    res.json({ success: true, results });
+    res.json({ success: true, results, hasMore: !!hasMore });
   } catch (err) {
     if (err.code === 'YOUTUBE_SEARCH_INVALID_QUERY') {
       return res.status(400).json({ success: false, code: err.code, error: err.message });
@@ -950,11 +951,17 @@ router.get('/fonts/assets/:assetId', requireLocalFontAsset, async (req, res) => 
       'Cross-Origin-Resource-Policy': 'same-origin',
       'X-Content-Type-Options': 'nosniff',
     });
+    // 集合字型（.ttc/.otc）不以 FontFace 遞送（font-scanner.js 說明）；只留單體 face。
+    // 全部都是集合字型時直接 404，讓客戶端走系統字型名稱堆疊 fallback。
+    const deliverableFaces = asset.faces.filter((face) => !face.isCollection);
+    if (!deliverableFaces.length) {
+      return res.status(404).json({ success: false, error: '此字型為集合字型，將以系統字型名稱套用' });
+    }
     res.json({
       success: true,
       id: asset.id,
       family: `ElitesandLocalFont-${asset.id}`,
-      faces: asset.faces.map((face) => ({
+      faces: deliverableFaces.map((face) => ({
         id: face.id,
         weight: face.weight,
         style: face.style,
@@ -978,7 +985,7 @@ router.get('/fonts/assets/:assetId/:faceId', requireLocalFontAsset, async (req, 
     const { resolveFontAssetFace } = require('../services/font-scanner');
     const face = await resolveFontAssetFace(req.params.assetId, req.params.faceId);
     if (!face) return res.status(404).json({ success: false, error: '字型資源已不存在，請重新選擇' });
-    const mime = face.format === 'opentype' ? 'font/otf' : face.format === 'truetype' ? 'font/ttf' : 'font/collection';
+    const mime = face.format === 'opentype' ? 'font/otf' : 'font/ttf';
     res.set({
       'Cache-Control': 'private, max-age=300',
       'Cross-Origin-Resource-Policy': 'same-origin',

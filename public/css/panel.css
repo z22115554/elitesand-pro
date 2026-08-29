@@ -167,6 +167,18 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .lb-line-now { font-size: 15px; font-weight: 650; color: var(--text); line-height: 1.4; overflow-wrap: anywhere; }
 .lb-line-next { font-size: 12px; color: var(--text-faint); line-height: 1.4; overflow-wrap: anywhere; min-height: 1em; }
 .lb-lyric-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+/* 逐字對時：目前這行改成一字一格，帶時間戳的字底下有一顆對時點（其餘留空位對齊）。
+   播到哪亮到哪（已唱＝實心、正在唱＝放大高亮），點一下該點就跳到那個字。 */
+.lb-line-now.has-word-marks { display: flex; flex-wrap: wrap; align-items: flex-start; row-gap: 2px; }
+.lb-ch { display: inline-flex; flex-direction: column; align-items: center; }
+.lb-ch.is-prefix { color: var(--text-faint); }
+.lb-ch-t { line-height: 1.25; }
+.lb-ch-d { width: 6px; height: 6px; margin-top: 3px; border: 1px solid transparent; border-radius: 50%; background: transparent; box-sizing: border-box; }
+.lb-ch-d.is-anchor { border-color: var(--border-strong); cursor: pointer; transition: background-color 0.1s, transform 0.1s, border-color 0.1s; }
+.lb-ch-d.is-anchor:hover { border-color: var(--accent); transform: scale(1.35); }
+.lb-ch-d.is-sung { background: var(--text-faint); border-color: var(--text-faint); }
+.lb-ch-d.is-active { background: var(--accent); border-color: var(--accent); transform: scale(1.5); }
+@media (prefers-reduced-motion: reduce) { .lb-ch-d.is-anchor { transition: none; } }
 /* 倒數對齊：直接佔用歌詞站右側空白，本身就是倒數顯示。點一下 → 從第一句前 10 秒開始播放並倒數。 */
 .countdown-box {
   flex: 1; min-height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
@@ -646,6 +658,10 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .youtube-mode-btn.active { background: var(--bg-raised); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.18); }
 .youtube-mode-panel[hidden] { display: none !important; }
 .youtube-search-controls { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px; }
+.youtube-search-statusbar { display: flex; align-items: center; gap: 8px; min-height: 22px; margin-top: 4px; }
+.youtube-search-statusbar .youtube-search-status { margin: 0; flex: 1; min-width: 0; }
+.youtube-search-statusbar #youtube-search-clear { flex-shrink: 0; }
+.youtube-search-statusbar #youtube-search-clear[hidden] { display: none; }
 .youtube-search-status { min-height: 18px; margin: 4px 0 0; color: var(--text-faint); font-size: 11px; line-height: 1.5; }
 .youtube-search-results { display: grid; gap: 7px; margin-top: 8px; }
 .youtube-search-results:not(:empty) { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
@@ -656,6 +672,10 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .youtube-search-title { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: var(--text); font-size: 11px; font-weight: 650; line-height: 1.35; }
 .youtube-search-meta { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-size: 10px; }
 .youtube-search-badge { display: inline-flex; margin-top: 5px; padding: 2px 5px; border-radius: 999px; background: color-mix(in srgb, var(--warning, #d59b36) 13%, transparent); color: var(--warning, #d59b36); font-size: 9px; font-weight: 700; }
+/* 合輯只是被降到後面，不是錯誤——用中性灰、不搶眼 */
+.youtube-search-badge.is-compilation { background: var(--bg-hover); color: var(--text-faint); }
+.youtube-search-more { width: 100%; margin-top: 8px; }
+.youtube-search-more[hidden] { display: none; }
 .youtube-search-result .btn { white-space: nowrap; }
 .youtube-auto-separate { display: flex; align-items: flex-start; gap: 9px; margin-top: 11px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent) 5%, transparent); cursor: pointer; }
 .youtube-auto-separate input { margin-top: 2px; }

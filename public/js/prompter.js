@@ -140,7 +140,10 @@
       window.ElitesandFontAssets.load(assetId).then((asset) => {
         if (version === fontAssetApplyVersion) r.setProperty('--pt-font', `'${asset.family}', ${fallbackStack}`);
       }).catch(() => {
-        if (version === fontAssetApplyVersion) setFontStatus('prompter.fontUnavailable');
+        // 「某個字型資源檔載入失敗」不等於「讀不到系統字體」——不要覆寫 loadSystemFonts()
+        // 設好的狀態去誤報「無法讀取本機字體」。--pt-font 已先設成含家族名稱的 fallback
+        // 堆疊，CEF 認得就照樣渲染（使用者實測「辰宇落雁體 2.0」等就是走這條）。
+        if (version === fontAssetApplyVersion) console.warn('[prompter] 字型資源載入失敗，改用 CSS fallback:', assetId);
       });
     }
     r.setProperty('--pt-size', `${appearance.size}px`);
@@ -266,15 +269,12 @@
   dom.setFont.addEventListener('change', async () => {
     const nextFont = dom.setFont.value;
     const family = localFontFamily(nextFont);
-    const assetId = localFontAssets[family]?.id || '';
+    let assetId = localFontAssets[family]?.id || '';
     if (assetId && window.ElitesandFontAssets?.isAssetId?.(assetId)) {
-      try {
-        await window.ElitesandFontAssets.load(assetId);
-      } catch (_) {
-        setFontStatus('prompter.fontUnavailable');
-        syncAppearanceInputs();
-        return;
-      }
+      // 盡量先把資源檔載進 document.fonts（CEF 有些「為目前使用者安裝」的字體只認這條）；
+      // 載不動就不擋選字、不記 assetId（避免每次 applyAppearance() 重試失敗），改讓
+      // --pt-font 的 fallback 堆疊（含家族名稱與英文別名）由 CSS 接手渲染。
+      try { await window.ElitesandFontAssets.load(assetId); } catch (_) { assetId = ''; }
     }
     updateAppearance({ font: nextFont, fontAssetId: assetId });
   });

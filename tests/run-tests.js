@@ -4133,6 +4133,17 @@ test('YouTube 搜尋：只回白名單欄位、去重並拒絕非官方縮圖', 
   ok(!Object.prototype.hasOwnProperty.call(results[0], 'description'));
   ok(!Object.prototype.hasOwnProperty.call(results[0], 'cookies'));
   eq(results[1].unavailable, true);
+
+  // 合輯／串燒／超長 mix 不丟掉，但穩定排序沉到最後，不佔前排。
+  const demoted = AudioProcessor._sanitizeYouTubeSearchPayloadForTest({ entries: [
+    { id: 'compxxxxxxx', title: '周杰倫 金曲串燒【精選50首】Playlist', duration: 6000 },
+    { id: 'songaaaaaaa', title: '周杰倫 - 稻香', duration: 223 },
+    { id: 'longbbbbbbb', title: '周杰倫 演唱會 完整版', duration: 7200 },
+    { id: 'songccccccc', title: '周杰倫 - 晴天', duration: 269 },
+  ] }, 10);
+  eq(demoted.map((r) => r.videoId).join(','), 'songaaaaaaa,songccccccc,compxxxxxxx,longbbbbbbb');
+  eq(demoted[0].isCompilation, false);
+  eq(demoted[2].isCompilation, true);
 });
 
 test('YouTube 搜尋 API 掛 PIN，且 server 端搜尋走既有 yt-dlp 共用佇列', () => {
@@ -4147,13 +4158,20 @@ test('YouTube 搜尋 API 掛 PIN，且 server 端搜尋走既有 yt-dlp 共用�
   ok(block.includes('execFileAsync'));
   ok(!block.includes('processYouTube('));
   ok(!block.includes('error?.message'), '搜尋服務不得把 yt-dlp 原始錯誤送回 renderer: ');
+  ok(block.includes('music.youtube.com/search'), 'YT 搜尋必須優先 YouTube Music 來源排序: ');
+  ok(block.includes('_youtubeSearchArgs'), '仍用一般 ytsearch 參數補齊卡片 metadata: ');
+  ok(block.includes('_runYouTubeMusicSearchIds'), 'YT Music 偏好排序要有獨立取 id 的步驟: ');
 });
 
 test('YouTube 搜尋 UI：選取結果只能回到 queueYouTubeImport，受保護請求使用 PinAuth', () => {
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const frontend = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
-  ['youtube-mode-search', 'youtube-search-query', 'youtube-search-submit', 'youtube-search-results', 'youtube-auto-separate']
+  ['youtube-mode-search', 'youtube-search-query', 'youtube-search-submit', 'youtube-search-results', 'youtube-auto-separate', 'youtube-search-clear']
     .forEach((id) => ok(html.includes(`id="${id}"`), `缺少搜尋 UI #${id}: `));
+  ok(frontend.includes('clearYouTubeSearchResults') && frontend.includes("youtubeSearchUi = { key: '', vars: {}, results: [], hasMore: false }"),
+    '搜尋結果必須可清除（收掉整塊結果與狀態）: ');
+  ok(html.includes('id="youtube-search-more"') && frontend.includes('function loadMoreYouTubeSearch') && frontend.includes("offset, requestId }"),
+    '結果底部要有「找更多」往下翻頁（帶 offset 給既有搜尋 API）: ');
   ok(frontend.includes("PinAuth.fetchWithPin('/api/youtube/search'"));
   ok(frontend.includes('queueYouTubeImport(result.url'));
   ok(frontend.includes("data?.code === 'YOUTUBE_SEARCH_RUNTIME_MISSING'"));
@@ -4728,12 +4746,77 @@ test('受控本機字型資產以 FontFace 載入，且只允許 loopback 讀取
     '字型資源回應必須禁止跨來源取用與 MIME 猜測: ');
   ok(loader.includes('new FontFace(asset.family') && loader.includes('document.fonts.add(font)'),
     '前端必須實際載入 FontFace 後才宣稱本機字型可用: ');
-  ok(display.includes('applyLocalFontAssets') && display.includes('保留備援字型'),
-    'OBS 顯示端字型載入失敗時必須留在 fallback，不能輸出空白文字: ');
+  ok(display.includes('applyLocalFontAssets')
+    && display.includes("setProperty('--display-font-family', settings.fontFamily || fallbackStack)"),
+    'OBS 顯示端字型載入失敗時必須退到 CSS 字型堆疊（含在地名＋英文別名）或 Noto fallback，不能輸出空白文字: ');
   ok(lyricExtras.includes('fontAssetId') && lyricExtras.includes('verifyFontAsset'),
     '歌詞設定必須先驗證本機字型資產並持久化 opaque ID: ');
   [displayHtml, panelHtml, prompterHtml].forEach((html) => ok(html.includes('/js/font-assets.js'),
     '歌詞顯示、面板與跟唱視圖都必須載入受控字型載入器: '));
+  // 集合字型（.ttc/.otc，如微軟正黑體 msjh.ttc、細明體 mingliu.ttc）：抽單體 face 的舊路
+  // 已移除（實測會渲染缺字/錯 face）。這類字型不送 FontFace blob，改由客戶端用系統字型
+  // 名稱堆疊叫出；資源路由要 404 讓既有 CSS fallback 生效。
+  ok(scanner.includes('if (face.isCollection) return null;'),
+    '集合字型不得再以 FontFace blob 遞送（避免抽取後缺字/錯 face）: ');
+  ok(!scanner.includes('extractSfntFromCollection') && !scanner.includes('extractCollectionFace'),
+    '有問題的 .ttc 抽取實作必須整段移除，不留死碼: ');
+  ok(api.includes('face.isCollection') && api.includes('此字型為集合字型'),
+    'metadata 路由要濾掉集合 face，全為集合字型時 404 觸發系統字型名稱 fallback: ');
+});
+
+test('字型解析探針只做診斷提示，不參與載入決策也不改 state', () => {
+  const root = path.join(__dirname, '..');
+  const probe = fs.readFileSync(path.join(root, 'public/js/font-probe.js'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(root, 'public/js/lyric-extras.js'), 'utf8');
+  const display = fs.readFileSync(path.join(root, 'public/js/display.js'), 'utf8');
+  const sock = fs.readFileSync(path.join(root, 'server/routes/socket-handler.js'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const displayHtml = fs.readFileSync(path.join(root, 'public/display.html'), 'utf8');
+
+  // 探針本體：三個 generic 各測一組 + canvas ink count + fonts.ready→rAF
+  ok(probe.includes('window.ElitesandFontProbe'), 'font-probe.js 必須掛 window.ElitesandFontProbe: ');
+  ok(probe.includes("['serif', 'sans-serif', 'monospace']"),
+    '探針必須同時比 serif／sans-serif／monospace，避免「選到剛好等於某個 generic 的字型」誤判: ');
+  ok(probe.includes('document.fonts.ready') && probe.includes('requestAnimationFrame'),
+    '探針量測前必須等 document.fonts.ready 再等一個 rAF: ');
+  ok(probe.includes('getImageData') && /ink\s*\+=\s*1/.test(probe),
+    '探針必須用 canvas alpha ink count（不只 measureText 寬度）: ');
+  ok(probe.includes('measureText') && probe.includes('actualBoundingBox'),
+    '探針必須併用 measureText 寬度與 bounding box: ');
+
+  // 面板：選字後 debounce 探針，只在沒有 asset 時探；文案是「無法確認」軟提示
+  ok(lyricExtras.includes('scheduleFontProbe') && /if \(!assetId\) scheduleFontProbe/.test(lyricExtras),
+    '面板必須在沒有 FontFace asset（含 .ttc 走系統名稱）時才跑探針: ');
+  ok(/clearTimeout\(fontProbeTimer\)/.test(lyricExtras) && lyricExtras.includes('}, 300);'),
+    '面板探針必須 debounce（約 300ms）: ');
+  ok(lyricExtras.includes('無法確認') && lyricExtras.includes('可能會使用備援字型'),
+    '探針提示必須是「無法確認…可能使用備援字型」的軟文案，不可寫死「找不到字型」: ');
+  ok(lyricExtras.includes("SocketClient.on('font-probe:warning'"),
+    '面板必須接顯示端回報的 font-probe:warning 並提示操作者: ');
+
+  // 顯示端：只送 diagnostic-only 事件，preview／spout 不送；不得改 state 或 broadcast
+  ok(display.includes('scheduleDisplayFontProbe') && display.includes("SocketClient.send('font-probe:report'"),
+    '顯示端探針只能送 font-probe:report 這個診斷事件: ');
+  ok(/isSpoutOutput \|\| isPreviewClient/.test(display),
+    '顯示端探針必須排除 Spout 輸出與面板內 preview iframe: ');
+  const probeBlock = display.slice(display.indexOf('function scheduleDisplayFontProbe'),
+    display.indexOf('function scheduleDisplayFontProbe') + 900);
+  ok(!/broadcast|state\s*=|persist/i.test(probeBlock),
+    '顯示端探針區塊不得改 state／持久化／broadcast: ');
+
+  // Server：font-probe:report 在唯讀白名單、per-socket rate limit、只轉送不動 state
+  ok(sock.includes("'font-probe:report'") && sock.includes('FONT_PROBE_REPORT_MIN_INTERVAL_MS'),
+    'font-probe:report 必須進 READ_ONLY_EVENTS 並有 per-socket rate limit: ');
+  const sockHandler = sock.slice(sock.indexOf("socket.on('font-probe:report'"),
+    sock.indexOf("socket.on('font-probe:report'") + 800);
+  ok(sockHandler.includes("socket.clientType !== 'display'") && sockHandler.includes('_fontProbeReportAt'),
+    'font-probe:report handler 必須限 display 且做時間間隔節流: ');
+  ok(sockHandler.includes("emitToControlClients(io, 'font-probe:warning'")
+    && !/broadcastState|stateStore|persist/i.test(sockHandler),
+    'font-probe:report 只能轉送給控制端，不得寫 state／持久化／broadcastState: ');
+
+  [panelHtml, displayHtml].forEach((html) => ok(html.includes('/js/font-probe.js'),
+    '面板與顯示端都必須載入 font-probe.js: '));
 });
 
 test('媒體庫連續加入採逐首佇列與伺服器確認，避免完整歌詞併發堆積', () => {
@@ -6467,6 +6550,30 @@ test('首頁重構後歌詞預覽只在設定頁完整呈現；首頁 Live Bar �
   ok(styleSync.includes('copyObsUrlSettingsPreview.addEventListener'));
   ok(panelCss.includes('.settings-preview-head'));
   ok(panelCss.includes('.settings-preview-controls'));
+});
+
+test('首頁 Live Bar 逐字對時：對時點掛在每個字底下，只有帶時間戳的字有點，照實反映逐字顆粒度', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const playback = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
+  const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
+  const shared = fs.readFileSync(path.join(__dirname, '../public/js/app-shared.js'), 'utf8');
+  // 舊的「另一列點」寫法要整個換掉：點不再獨立成列，而是每字一格、點在字底下
+  ok(!indexHtml.includes('id="lyric-word-dots"'), '不可再有獨立的 #lyric-word-dots 點列（字點分離看不出對應）：');
+  ok(!panelCss.includes('.lb-word-dot'), '舊的 .lb-word-dot 樣式必須移除：');
+  ok(!shared.includes('lyricWordDots'), 'app-shared 不應再保留 lyricWordDots DOM 參照：');
+  ok(playback.includes('function renderNowLineWithMarks') && playback.includes('function buildCharAnchors'),
+    '目前句必須以「一字一格＋字元對詞錨點」重繪：');
+  ok(playback.includes("t.className = 'lb-ch-t'") && playback.includes("d.className = 'lb-ch-d'"),
+    '每個字要有文字格 .lb-ch-t 與對時點格 .lb-ch-d：');
+  ok(/anchors\[p\] === -1\) anchors\[p\] = wi/.test(playback),
+    '只有 word 的起點字才設錨點（其餘字底下留空位對齊）：');
+  ok(playback.includes("d.classList.add('is-anchor')") && playback.includes("closest?.('.lb-ch-d.is-anchor')"),
+    '只有帶時間戳的字（.is-anchor）可點擊 seek：');
+  ok(playback.includes("(tr && tr.lyricsType === 'krc' && Array.isArray(line.words))")
+    && playback.includes('if (!words.length || !text)') && playback.includes("host.textContent = prefix + text"),
+    '沒有逐字資料時退成純文字、不畫任何點：');
+  ok(panelCss.includes('.lb-line-now.has-word-marks') && panelCss.includes('.lb-ch-d.is-active'),
+    'CSS 要有一字一格容器與 播放中/已唱 點狀態：');
 });
 
 const socketOrigin = require('../server/utils/socket-origin');

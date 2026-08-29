@@ -1129,16 +1129,130 @@
       : [];
     if (!lines.length) {
       dom.lyricNowLine.textContent = tr ? '這首歌詞沒有時間軸' : '尚無歌詞';
+      dom.lyricNowLine.classList.remove('has-word-marks');
       if (dom.lyricNextLine) dom.lyricNextLine.textContent = '';
+      nowLineKey = '';
+      nowLineWordEls = [];
       return;
     }
     const adjusted = lastPlayTimeMs + currentOffsetMs;
     let idx = -1;
     for (let i = 0; i < lines.length; i++) { if (lines[i].time <= adjusted) idx = i; else break; }
-    dom.lyricNowLine.textContent = idx >= 0 ? lines[idx].text : ('♪ ' + lines[0].text);
+    const line = idx >= 0 ? lines[idx] : lines[0];
+    renderNowLineWithMarks(tr, line, idx >= 0 ? idx : 0, adjusted, idx >= 0 ? '' : '♪ ');
     if (dom.lyricNextLine) dom.lyricNextLine.textContent = lines[idx + 1] ? lines[idx + 1].text : '';
   }
   AppShared.renderHomeLyricNow = renderHomeLyricNow;
+
+  // 逐字對時：目前這行「每個字下面」放一個對時點，只有真的帶時間戳的字（word 的起點字）
+  // 才有點，其餘的字底下留空位對齊——照實反映歌詞的逐字顆粒度：
+  //   真逐字 → 每個字都有點；以詞為單位 → 只有每個詞的第一個字有點；沒有逐字 → 純文字沒有點。
+  // word.start 是相對行首的毫秒（見 karaoke.js updateWords）。整行重建只在換行時做，不是每 tick。
+  let nowLineKey = '';
+  let nowLineWordEls = []; // wi -> 該詞第一個字底下的點元素
+
+  // 把 words 依序對到 line.text 的字元位置，回傳長度 = text.length 的陣列，
+  // anchors[i] = 對應的 word index（該字是某個 word 的起點），沒有則 -1。
+  function buildCharAnchors(text, words) {
+    const anchors = new Array(text.length).fill(-1);
+    let cursor = 0;
+    for (let wi = 0; wi < words.length; wi++) {
+      const wt = String(words[wi].text || '');
+      if (!wt) continue;
+      let p = text.indexOf(wt, cursor);
+      if (p < 0) { // 文字對不上（KRC 偶有），退而求其次錨在游標處、跳過前導空白
+        p = cursor;
+        while (p < text.length && /\s/.test(text[p])) p += 1;
+      }
+      if (p >= 0 && p < text.length && anchors[p] === -1) anchors[p] = wi;
+      cursor = Math.min(text.length, Math.max(cursor, (p < 0 ? cursor : p) + wt.length));
+    }
+    return anchors;
+  }
+
+  function renderNowLineWithMarks(tr, line, lineIndex, adjusted, prefix) {
+    const host = dom.lyricNowLine;
+    if (!host) return;
+    const text = String(line.text || '');
+    const words = (tr && tr.lyricsType === 'krc' && Array.isArray(line.words))
+      ? line.words.filter((w) => w && typeof w.start === 'number' && String(w.text || '').trim())
+      : [];
+    if (!words.length || !text) {
+      host.classList.remove('has-word-marks');
+      host.textContent = prefix + text;
+      nowLineKey = '';
+      nowLineWordEls = [];
+      return;
+    }
+    const key = `${currentTrackId() || ''}|${lineIndex}|${text.length}|${words.length}|${prefix}`;
+    if (key !== nowLineKey) {
+      nowLineKey = key;
+      nowLineWordEls = new Array(words.length).fill(null);
+      const anchors = buildCharAnchors(text, words);
+      const frag = document.createDocumentFragment();
+      if (prefix) {
+        const pre = document.createElement('span');
+        pre.className = 'lb-ch is-prefix';
+        pre.textContent = prefix;
+        frag.appendChild(pre);
+      }
+      for (let i = 0; i < text.length; i++) {
+        const cell = document.createElement('span');
+        cell.className = 'lb-ch';
+        const t = document.createElement('span');
+        t.className = 'lb-ch-t';
+        t.textContent = text[i];
+        const d = document.createElement('span');
+        d.className = 'lb-ch-d';
+        const wi = anchors[i];
+        if (wi >= 0) {
+          d.classList.add('is-anchor');
+          d.dataset.wi = String(wi);
+          d.setAttribute('role', 'button');
+          d.title = `跳到「${String(words[wi].text).trim()}」`;
+          nowLineWordEls[wi] = d;
+        }
+        cell.appendChild(t);
+        cell.appendChild(d);
+        frag.appendChild(cell);
+      }
+      host.textContent = '';
+      host.appendChild(frag);
+      host.classList.add('has-word-marks');
+    }
+    const base = line.time;
+    let activeIdx = -1;
+    for (let i = 0; i < words.length; i++) { if (adjusted >= base + words[i].start) activeIdx = i; else break; }
+    for (let wi = 0; wi < nowLineWordEls.length; wi++) {
+      const el = nowLineWordEls[wi];
+      if (!el) continue;
+      el.classList.toggle('is-sung', wi < activeIdx);
+      el.classList.toggle('is-active', wi === activeIdx);
+    }
+  }
+
+  // 點某個字底下的點 → seek 到那個字該出現的音訊位置（顯示端：word 出現於 audioTime + offset
+  // >= line.time + word.start，所以 audioTime = line.time + word.start - offset），方便逐字細調。
+  if (dom.lyricNowLine) {
+    dom.lyricNowLine.addEventListener('click', (event) => {
+      const dot = event.target.closest?.('.lb-ch-d.is-anchor');
+      if (!dot) return;
+      const wi = Number(dot.dataset.wi);
+      const tr = state.playlist[state.currentTrackIndex];
+      const lines = tr && Array.isArray(tr.parsedLyrics)
+        ? tr.parsedLyrics.filter((l) => l && typeof l.time === 'number' && l.text)
+        : [];
+      if (!lines.length) return;
+      const adjusted = lastPlayTimeMs + currentOffsetMs;
+      let idx = -1;
+      for (let i = 0; i < lines.length; i++) { if (lines[i].time <= adjusted) idx = i; else break; }
+      const line = lines[idx >= 0 ? idx : 0];
+      const w = line && Array.isArray(line.words) ? line.words[wi] : null;
+      if (!w || typeof w.start !== 'number') return;
+      seekLoadedTrack(Math.max(0, (line.time + w.start - currentOffsetMs) / 1000));
+      renderHomeLyricNow(true);
+    });
+  }
 
   // 倒數對齊：從第一句前約 5 秒開始播放並倒數，把「聽到第一個字」這一刻交回給使用者手動按
   // 「對齊第一句」——不自動改 offset，因為解析出來的時間軸常常本來就是歪的。

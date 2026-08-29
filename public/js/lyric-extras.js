@@ -534,14 +534,44 @@
     try {
       assetId = await verifyFontAsset(trimmed);
     } catch (err) {
-      if (version === fontSelectionVersion) showToast(`無法載入「${trimmed}」字型檔，未套用設定`);
-      return;
+      // 字型『資源檔』載不進 FontFace（.ttc collection、CEF 對某些格式的既有毛病，
+      // 微軟正黑體 msjh.ttc 就是這樣）不代表這款字不能用——quotedFontStack 已經把英文
+      // 別名（Microsoft JhengHei 等，見 font-scanner.js aliasGroup）也放進 font-family
+      // 堆疊，CEF 從 CSS 認得就照樣渲染。所以 asset 載不動就當沒 asset，照樣套用設定。
+      assetId = '';
     }
     if (version !== fontSelectionVersion) return;
     settings.fontFamily = quotedFontStack(trimmed);
     settings.fontAssetId = assetId;
     pushSettings();
     if (assetId) showToast(`已驗證並套用「${trimmed}」本機字型`);
+    // asset 有成功載入代表 FontFace 這條路通了，不用再探；沒 asset（含 .ttc 走系統名稱
+    // 解析）才用 heuristic 探針確認名稱有沒有被系統認得，探不到就軟提示。
+    if (!assetId) scheduleFontProbe(trimmed);
+  }
+
+  // ── 字型解析探針（診斷用；見 public/js/font-probe.js）─────────────────────
+  // .ttc 等集合字型改走系統名稱解析後，名稱比不到時是「靜默用備援字」沒有錯誤訊號。
+  // 選字後 debounce 300ms 跑一次探針，探不到就跳「無法確認」軟提示。純提示，不影響載入。
+  let fontProbeTimer = null;
+  function scheduleFontProbe(name) {
+    const probe = window.ElitesandFontProbe;
+    if (!probe || typeof probe.check !== 'function') return;
+    const trimmed = (name || '').trim();
+    clearTimeout(fontProbeTimer);
+    if (!trimmed) return;
+    const version = fontSelectionVersion;
+    fontProbeTimer = setTimeout(async () => {
+      if (version !== fontSelectionVersion) return; // 又選了別的字，作廢
+      const candidates = (Array.isArray(fontAliases[trimmed]) && fontAliases[trimmed].length)
+        ? fontAliases[trimmed] : [trimmed];
+      let result;
+      try { result = await probe.check(candidates); } catch (_) { return; }
+      if (version !== fontSelectionVersion) return;
+      if (result && result.resolved === false && result.reason !== 'no-candidates') {
+        showToast(`無法確認「${trimmed}」是否在這台電腦成功解析，OBS 顯示端可能會使用備援字型`);
+      }
+    }, 300);
   }
 
   // 依目前 settings.fontFamily 還原字體下拉與自訂區塊的顯示狀態
@@ -1570,10 +1600,22 @@
   window.LyricPicker = { open: openPicker };
 
   // ─── 啟動 ───
+  let lastDisplayFontWarnAt = 0;
   function init() {
     initSettingsPanel();
     initPicker();
     window.addEventListener('i18n:change', syncTemplateButtons);
+    // OBS 顯示端回報「字型名稱可能沒解析到」（診斷用，見 socket-handler.js font-probe:report）。
+    // 純提示：不改任何 state。面板端再 debounce 一層，避免多個顯示端同時回報洗版。
+    SocketClient.on('font-probe:warning', (payload) => {
+      const now = Date.now();
+      if (now - lastDisplayFontWarnAt < 8000) return;
+      lastDisplayFontWarnAt = now;
+      const fontName = (payload && typeof payload.name === 'string') ? payload.name.slice(0, 80) : '';
+      showToast(fontName
+        ? `OBS 顯示端回報：無法確認字型「${fontName}」已解析，畫面可能使用備援字型`
+        : 'OBS 顯示端回報：目前字型可能未成功解析，畫面可能使用備援字型');
+    });
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

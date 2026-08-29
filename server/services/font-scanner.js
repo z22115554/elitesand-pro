@@ -64,6 +64,11 @@ async function readAt(fd, offset, length) {
   return bytesRead === length ? buf : buf.subarray(0, bytesRead);
 }
 
+// .ttc/.otc（Collection）不再抽成單體字型送 FontFace。先前的抽取實作雖能通過
+// FontFace.load()，實測（細明體 mingliu.ttc、微軟正黑體 msjh.ttc）卻渲染出缺字或
+// 錯 face 的結果，比乾脆失敗更糟。集合字型改由客戶端用系統字型「名稱堆疊」（在地名
+// ＋英文別名，見 aliasGroup）直接叫出——OBS 瀏覽器來源與面板同機時 CEF 認得系統名。
+
 // name table 語言優先序（Windows platform 3）：繁中 > 簡中 > 英文
 const LANG_PRIORITY = { 0x0404: 0, 0x0c04: 1, 0x0804: 2, 0x0409: 3 };
 
@@ -86,6 +91,7 @@ async function parseSfntNames(fd, base) {
   try {
     const head = await readAt(fd, base, 12);
     if (head.length < 12) return null;
+    const sfntFormat = head.readUInt32BE(0) === 0x4F54544F ? 'opentype' : 'truetype'; // 'OTTO' = CFF/OpenType
     const numTables = head.readUInt16BE(4);
     if (numTables === 0 || numTables > 512) return null;
     const dir = await readAt(fd, base + 12, numTables * 16);
@@ -161,7 +167,7 @@ async function parseSfntNames(fd, base) {
       const headTable = await readAt(fd, headOff + 44, 2);
       if (headTable.length === 2 && (headTable.readUInt16BE(0) & 0x0002)) style = 'italic';
     }
-    return { displayNames: displayNames.filter(Boolean), aliasGroup, weight, style };
+    return { displayNames: displayNames.filter(Boolean), aliasGroup, weight, style, sfntFormat };
   } catch (_) {
     return null;
   }
@@ -226,13 +232,17 @@ async function listSystemFonts(refresh = false) {
     for (let i = 0; i < files.length; i += 16) {
       const batch = files.slice(i, i + 16);
       const results = await Promise.all(batch.map(parseFontFile));
-      results.forEach((entries, batchIndex) => entries.forEach(({ displayNames, aliasGroup, faceIndex, weight, style }) => {
+      results.forEach((entries, batchIndex) => entries.forEach(({ displayNames, aliasGroup, faceIndex, weight, style, sfntFormat }) => {
         const file = batch[batchIndex];
+        const isCollection = fontFormat(file) === 'collection';
         const face = {
           id: opaqueId([path.resolve(file).toLowerCase(), String(faceIndex)]),
           file,
           faceIndex,
-          format: fontFormat(file),
+          isCollection,
+          // 對外沿用真正的 sfnt 格式標記；集合字型不會走 FontFace 遞送（resolveFontAssetFace
+          // 對 isCollection 直接回 null），瀏覽器端不會看到 'collection'。
+          format: isCollection ? (sfntFormat || 'truetype') : fontFormat(file),
           weight,
           style,
         };
@@ -285,6 +295,10 @@ async function resolveFontAssetFace(assetId, faceId) {
   const asset = await getFontAsset(assetId);
   const face = asset && asset.faces.find((entry) => entry.id === faceId);
   if (!face) return null;
+  // 集合字型（.ttc/.otc）不以 FontFace blob 遞送——見檔案上方註解。客戶端會改用
+  // 系統字型名稱堆疊（quotedFontStack）。這裡直接 404，讓 font-assets.js 的 load()
+  // reject，觸發面板/顯示端既有的 CSS fallback 路徑。
+  if (face.isCollection) return null;
   try {
     const [realFile, roots] = await Promise.all([
       fsp.realpath(face.file),

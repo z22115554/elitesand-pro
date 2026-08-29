@@ -366,6 +366,8 @@
                首頁不再放完整 OBS iframe；完整所見即所得預覽在「歌詞設定」頁。 -->
           <div class="lb-lyric">
             <p class="lb-lyric-k" data-i18n="home.lyricNow.label">目前歌詞（對時用）</p>
+            <!-- 逐字對時：帶時間戳的字，字下面會有一個對時點（播到哪亮哪、點一下跳到那個字）。
+                 以詞為單位的歌詞只有每個詞的第一個字有點；沒有逐字資料時就是純文字。見 app-playback.js renderNowLineWithMarks。 -->
             <div id="lyric-now-line" class="lb-line-now" data-i18n="home.lyricNow.empty">尚無歌詞</div>
             <div id="lyric-next-line" class="lb-line-next"></div>
             <div class="lb-lyric-actions">
@@ -467,8 +469,12 @@
                     <button id="youtube-search-submit" class="btn btn-primary" type="button" data-i18n="youtubeSearch.submit">搜尋</button>
                   </div>
                 </div>
-                <p id="youtube-search-status" class="youtube-search-status" role="status" aria-live="polite"></p>
+                <div class="youtube-search-statusbar">
+                  <p id="youtube-search-status" class="youtube-search-status" role="status" aria-live="polite"></p>
+                  <button id="youtube-search-clear" class="btn btn-sm btn-ghost" type="button" data-i18n="youtubeSearch.clear" hidden>清除結果</button>
+                </div>
                 <div id="youtube-search-results" class="youtube-search-results" aria-live="polite"></div>
+                <button id="youtube-search-more" class="btn btn-sm btn-ghost youtube-search-more" type="button" data-i18n="youtubeSearch.loadMore" hidden>找更多結果</button>
               </div>
               <label class="youtube-auto-separate">
                 <input id="youtube-auto-separate" type="checkbox">
@@ -2828,6 +2834,7 @@
   <script src="/js/app.js"></script>
   <script src="/js/app-spout-output.js"></script>
   <script src="/js/font-assets.js"></script>
+  <script src="/js/font-probe.js"></script>
   <script src="/js/lyric-extras.js"></script>
   <script src="/js/media-library.js"></script>
   <script src="/js/style-tuner.js"></script>

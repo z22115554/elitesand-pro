@@ -667,9 +667,36 @@
     } catch (err) {
       if (version !== fontAssetApplyVersion) return;
       // display 是透明 OBS 輸出頁，不顯示錯誤遮罩；面板在選取前已會把錯誤提示給操作者。
-      console.warn('[Elitesand] 本機字型載入失敗，保留備援字型：', err?.message || err);
-      document.documentElement.style.setProperty('--display-font-family', fallbackStack);
+      // 資源檔載不進來時，仍優先用 settings.fontFamily（含在地名＋英文別名的候選堆疊），
+      // CEF 從 CSS 認得任何一個就照樣渲染；真的都不行才退到 Noto fallback。
+      console.warn('[Elitesand] 本機字型載入失敗，改用 CSS 字型堆疊：', err?.message || err);
+      document.documentElement.style.setProperty('--display-font-family', settings.fontFamily || fallbackStack);
     }
+  }
+
+  // 字型解析探針（診斷用，見 public/js/font-probe.js）。.ttc 等集合字型改走系統名稱
+  // 解析後，名稱比不到時是「靜默用備援字」沒有錯誤訊號。這裡在顯示端量一次，探不到就
+  // 送一個 diagnostic-only socket 事件給面板提示操作者——不改 state、不持久化、不 broadcast。
+  let displayFontProbeTimer = null;
+  function scheduleDisplayFontProbe(settings) {
+    const probe = window.ElitesandFontProbe;
+    // 只有正式 OBS display 來源回報；面板內的 preview iframe 與 Spout 輸出不回報（避免重複／洗版）。
+    if (!probe || typeof probe.check !== 'function' || isSpoutOutput || isPreviewClient) return;
+    const raw = (settings && typeof settings.fontFamily === 'string') ? settings.fontFamily : '';
+    const names = raw.split(',').map((n) => n.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+    if (!names.length) return;
+    clearTimeout(displayFontProbeTimer);
+    displayFontProbeTimer = setTimeout(async () => {
+      let result;
+      try { result = await probe.check(names); } catch (_) { return; }
+      if (!result || result.resolved !== false || result.reason === 'no-candidates') return;
+      try {
+        SocketClient.send('font-probe:report', {
+          name: String(names[0] || '').slice(0, 80),
+          ts: Date.now(),
+        });
+      } catch (_) { /* 診斷用，送不出去就算了 */ }
+    }, 450);
   }
 
   // ─── 歌詞外觀/位置設定（從控制面板即時推送，寫入 CSS 變數）───
@@ -737,6 +764,7 @@
       root.setProperty('--display-font-family', fallbackFontStack);
     }
     applyLocalFontAssets(s, fallbackFontStack);
+    scheduleDisplayFontProbe(s);
     // 保留句數
     if (typeof s.historyLines === 'number') {
       KaraokeEngine.setMaxHistoryLines(s.historyLines);

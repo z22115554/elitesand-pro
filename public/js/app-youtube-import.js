@@ -162,7 +162,9 @@
 
   let youtubeSearchGeneration = 0;
   let activeSearchRequestId = '';
-  let youtubeSearchUi = { key: '', vars: {}, results: [] };
+  let loadingMoreYouTube = false;
+  let lastYouTubeSearchQuery = '';
+  let youtubeSearchUi = { key: '', vars: {}, results: [], hasMore: false };
 
   function setYouTubeMode(mode) {
     const searchMode = mode === 'search';
@@ -178,6 +180,15 @@
   function renderYouTubeSearch() {
     if (!dom.youtubeSearchStatus || !dom.youtubeSearchResults) return;
     dom.youtubeSearchStatus.textContent = youtubeSearchUi.key ? t(youtubeSearchUi.key, youtubeSearchUi.vars) : '';
+    // 有結果或有狀態訊息（含搜尋中）就給一個「清除結果」，讓使用者收掉這一大塊。
+    if (dom.youtubeSearchClear) {
+      dom.youtubeSearchClear.hidden = !(youtubeSearchUi.results.length || youtubeSearchUi.key);
+    }
+    if (dom.youtubeSearchMore) {
+      dom.youtubeSearchMore.hidden = !(youtubeSearchUi.hasMore && youtubeSearchUi.results.length);
+      dom.youtubeSearchMore.disabled = loadingMoreYouTube;
+      dom.youtubeSearchMore.textContent = loadingMoreYouTube ? t('youtubeSearch.loadingMore') : t('youtubeSearch.loadMore');
+    }
     dom.youtubeSearchResults.textContent = '';
     for (const result of youtubeSearchUi.results) {
       const row = document.createElement('article');
@@ -205,14 +216,17 @@
       if (Number.isFinite(result.viewCount)) metaParts.push(t('youtubeSearch.views', { count: formatNumber(result.viewCount) }));
       meta.textContent = metaParts.join(' · ');
       copy.append(title, meta);
-      if (result.unavailable || result.isShort) {
+      if (result.unavailable || result.isShort || result.isCompilation) {
         const badge = document.createElement('span');
-        badge.className = 'youtube-search-badge';
+        const isComp = !result.unavailable && !result.isShort && result.isCompilation;
+        badge.className = isComp ? 'youtube-search-badge is-compilation' : 'youtube-search-badge';
         badge.textContent = result.liveStatus === 'is_live'
           ? t('youtubeSearch.live')
           : result.liveStatus === 'is_upcoming'
             ? t('youtubeSearch.upcoming')
-            : t('youtubeSearch.short');
+            : result.isShort
+              ? t('youtubeSearch.short')
+              : t('youtubeSearch.compilation');
         copy.appendChild(badge);
       }
 
@@ -263,10 +277,12 @@
       return;
     }
     cancelActiveYouTubeSearch();
+    loadingMoreYouTube = false;
     const generation = ++youtubeSearchGeneration;
     const requestId = `yt-search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     activeSearchRequestId = requestId;
-    youtubeSearchUi = { key: 'youtubeSearch.searching', vars: {}, results: [] };
+    lastYouTubeSearchQuery = query;
+    youtubeSearchUi = { key: 'youtubeSearch.searching', vars: {}, results: [], hasMore: false };
     renderYouTubeSearch();
     if (dom.youtubeSearchSubmit) dom.youtubeSearchSubmit.disabled = true;
     try {
@@ -283,12 +299,12 @@
       }
       const results = Array.isArray(data.results) ? data.results : [];
       youtubeSearchUi = results.length
-        ? { key: 'youtubeSearch.resultCount', vars: { count: formatNumber(results.length) }, results }
-        : { key: 'youtubeSearch.empty', vars: {}, results: [] };
+        ? { key: 'youtubeSearch.resultCount', vars: { count: formatNumber(results.length) }, results, hasMore: !!data.hasMore }
+        : { key: 'youtubeSearch.empty', vars: {}, results: [], hasMore: false };
       renderYouTubeSearch();
     } catch (error) {
       if (generation !== youtubeSearchGeneration || error?.code === 'IMPORT_CANCELLED') return;
-      youtubeSearchUi = { key: 'youtubeSearch.failed', vars: { message: error.message }, results: [] };
+      youtubeSearchUi = { key: 'youtubeSearch.failed', vars: { message: error.message }, results: [], hasMore: false };
       renderYouTubeSearch();
     } finally {
       if (generation === youtubeSearchGeneration) {
@@ -298,9 +314,60 @@
     }
   }
 
+  // 「找更多結果」：往一般 ytsearch 更深處翻一頁，接在現有清單後面（去重）。
+  async function loadMoreYouTubeSearch() {
+    if (loadingMoreYouTube || !youtubeSearchUi.hasMore || !lastYouTubeSearchQuery) return;
+    if (!youtubeSearchUi.results.length) return;
+    loadingMoreYouTube = true;
+    const generation = youtubeSearchGeneration;
+    const offset = youtubeSearchUi.results.length;
+    const requestId = `yt-search-more-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    activeSearchRequestId = requestId;
+    renderYouTubeSearch();
+    try {
+      const response = await PinAuth.fetchWithPin('/api/youtube/search', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: lastYouTubeSearchQuery, limit: 10, offset, requestId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (generation !== youtubeSearchGeneration) return;
+      if (!response.ok || !data.success) return; // 找更多失敗就靜默停在目前結果
+      const more = Array.isArray(data.results) ? data.results : [];
+      const seen = new Set(youtubeSearchUi.results.map((r) => r.videoId));
+      const merged = youtubeSearchUi.results.concat(more.filter((r) => r && !seen.has(r.videoId)));
+      youtubeSearchUi = {
+        key: 'youtubeSearch.resultCount',
+        vars: { count: formatNumber(merged.length) },
+        results: merged,
+        hasMore: !!data.hasMore && merged.length > offset,
+      };
+    } catch (_) {
+      /* 靜默：保留已載入的結果 */
+    } finally {
+      if (generation === youtubeSearchGeneration) {
+        loadingMoreYouTube = false;
+        activeSearchRequestId = '';
+        renderYouTubeSearch();
+      }
+    }
+  }
+
+  // 「清除結果」：收掉整塊搜尋結果與狀態列，保留輸入框內容方便微調再搜。
+  function clearYouTubeSearchResults() {
+    youtubeSearchGeneration += 1; // 作廢仍在飛的回應
+    cancelActiveYouTubeSearch();
+    loadingMoreYouTube = false;
+    youtubeSearchUi = { key: '', vars: {}, results: [], hasMore: false };
+    renderYouTubeSearch();
+    if (dom.youtubeSearchSubmit) dom.youtubeSearchSubmit.disabled = false;
+    dom.youtubeSearchQuery?.focus();
+  }
+
   dom.youtubeModeLink?.addEventListener('click', () => setYouTubeMode('link'));
   dom.youtubeModeSearch?.addEventListener('click', () => setYouTubeMode('search'));
   dom.youtubeSearchSubmit?.addEventListener('click', searchYouTube);
+  dom.youtubeSearchClear?.addEventListener('click', clearYouTubeSearchResults);
+  dom.youtubeSearchMore?.addEventListener('click', loadMoreYouTubeSearch);
   dom.youtubeSearchQuery?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') searchYouTube();
   });
