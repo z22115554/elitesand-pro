@@ -10419,6 +10419,58 @@ console.log('\n🌐 17. M6.1 介面語系層');
     );
   });
 
+  test('AI 分離：sidecar 腳本路徑優先吃 ELITESAND_AI_SCRIPT_DIR（打包版 python 讀不到 app.asar）', () => {
+    const { resolveAiScriptDir } = require('../server/services/ai-separation');
+    const original = process.env.ELITESAND_AI_SCRIPT_DIR;
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-ai-scripts-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'supervisor.py'), '# fake');
+      process.env.ELITESAND_AI_SCRIPT_DIR = tmpDir;
+      eq(resolveAiScriptDir(), tmpDir, '打包版要用 shell 傳進來的 resources/tools/ai：');
+
+      const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-ai-empty-'));
+      process.env.ELITESAND_AI_SCRIPT_DIR = emptyDir;
+      ok(
+        resolveAiScriptDir() !== emptyDir && fs.existsSync(path.join(resolveAiScriptDir(), 'supervisor.py')),
+        '指到沒有 supervisor.py 的目錄時要退回專案自己的 ai/，不可回傳空目錄：',
+      );
+      fs.rmSync(emptyDir, { recursive: true, force: true });
+
+      delete process.env.ELITESAND_AI_SCRIPT_DIR;
+      eq(resolveAiScriptDir(), path.join(path.resolve(__dirname, '..'), 'ai'), '開發環境走 repo 的 ai/：');
+    } finally {
+      if (original === undefined) delete process.env.ELITESAND_AI_SCRIPT_DIR;
+      else process.env.ELITESAND_AI_SCRIPT_DIR = original;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('打包：ai/ 必須以真實檔案進 installer，且不可只留在 app.asar 裡', () => {
+    const portable = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-portable.ps1'), 'utf8');
+    const installer = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
+    const verify = fs.readFileSync(path.join(__dirname, '..', 'tools', 'verify-electron-package.js'), 'utf8');
+    const builderFiles = require('../package.json').build.files;
+
+    ok(/\$DirsToCopy = @\("server", "public", "ai"\)/.test(portable), 'portable staging 要複製 ai/（2026-08-30 打包版就是漏了它）：');
+    ok(/Copy-Item.*AiSidecarSource.*tools.ai/.test(installer), 'installer 要把 sidecar 複製到 resources/tools/ai：');
+    ok(/tools.ai.supervisor\.py/.test(installer), 'installer 產物檢查要把 supervisor.py 列為必要檔案：');
+    ok(builderFiles.includes('!ai/**'), 'ai/ 不可進 app.asar，避免出現 python 讀不到的假路徑：');
+    ok(/resources\/tools\/ai\/\$\{script\}/.test(verify) || /tools', 'ai', script/.test(verify), '打包驗證要確認 sidecar 真的在 resources/tools/ai：');
+    ok(/file\.endsWith\('\.py'\)/.test(verify), '打包驗證要擋住 .py 又被塞回 app.asar：');
+  });
+
+  test('AI 分離：Python 引擎起不來時要收成明確失敗，不可謊稱「改用 CPU」', () => {
+    const jobs = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'ai-separation-jobs.js'), 'utf8');
+    const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'ai-separation-client.js'), 'utf8');
+    ok(/engineUp = false/.test(jobs), 'probe 丟例外要記成「引擎不可用」，不是單純沒有 CUDA：');
+    ok(
+      /if \(!engineUp\) \{[\s\S]{0,400}ENGINE_UNAVAILABLE/.test(jobs),
+      'CPU 備援跟 GPU 是同一個 supervisor，引擎掛掉時必須直接失敗（否則永遠停在 0%）：',
+    );
+    ok(/probe\?\.error/.test(jobs), 'python 端回傳的 probe 錯誤字串不可再被吞掉：');
+    ok(/ENGINE_UNAVAILABLE' \? 'aiJob\.engineUnavailable'/.test(client), '前端要把「引擎起不來」跟「這首失敗」分開顯示：');
+  });
+
   test('FFmpeg 供應：available 必須要求 ffmpeg 與 ffprobe 都能真的執行，不可只看檔案存在', () => {
     const calls = [];
     const validation = ffmpegProvider.validateFfmpegPair(

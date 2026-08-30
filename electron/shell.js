@@ -634,6 +634,10 @@ function createElectronShell({
       ELITESAND_DOWNLOADS_DIR: runtimePaths.downloadsDir,
       ELITESAND_LOGS_DIR: runtimePaths.logsDir,
       ELITESAND_MEDIA_STORAGE_MODE: mediaRuntime.mode,
+      // Python sidecar（ai/supervisor.py）在打包版不在 app.asar 裡——python.exe 讀不到
+      // asar，所以那份腳本跟 yt-dlp 一樣放 resources/tools/ 下。server 是 fork 出去的
+      // 子行程，算不出 resourcesPath，這裡直接把目錄交給它。
+      ...(packagedTools ? { ELITESAND_AI_SCRIPT_DIR: path.join(packagedTools, 'ai') } : {}),
     };
   }
 

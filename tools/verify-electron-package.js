@@ -58,6 +58,17 @@ async function verify(unpackedRoot) {
   if (files.some((file) => /^public\/js\/lyric-template-[^/]+\.js$/i.test(file))) {
     throw new Error('Plain lyric template source was included in app.asar.');
   }
+  // The AI separation sidecar is launched by python.exe, which cannot read anything
+  // inside app.asar. It ships as a real file under resources/tools/ (integrity-hashed
+  // like yt-dlp), and must not also linger inside the archive as a decoy copy.
+  for (const script of ['supervisor.py', 'worker.py']) {
+    if (!fs.existsSync(path.join(resources, 'tools', 'ai', script))) {
+      throw new Error(`resources/tools/ai/${script} is missing; packaged AI separation cannot start.`);
+    }
+  }
+  if (files.some((file) => file.endsWith('.py'))) {
+    throw new Error('Python sidecar scripts must not live inside app.asar; python.exe cannot read them there.');
+  }
 
   const expectedHeaderHash = crypto.createHash('sha256').update(Buffer.from(header.headerString, 'utf8')).digest('hex');
   const integrityEntries = readWindowsAsarIntegrity(executablePath);

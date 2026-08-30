@@ -138,6 +138,18 @@ try {
     Copy-Item -LiteralPath $source -Destination (Join-Path $Resources $(if ($name -eq "app") { "app" } else { $name })) -Recurse -Force
   }
 
+  # Python sidecar 腳本必須是磁碟上的真實檔案。2026-08-30 實機證據：打包版的
+  # supervisor spawn 出來後 python 立刻回
+  # `can't open file '...\resources\app.asar\ai\supervisor.py': [Errno 2]`（exit 2），
+  # 於是 probe 失敗 → CUDA 被判為不可用 → CPU 備援用同一個 supervisor 一起垮，
+  # 打包版的 AI 分離 100% 不能用。放在 resources\tools\ 之下，就跟 yt-dlp.exe 一樣
+  # 自動被 write-packaged-resource-integrity.js 的雜湊清單涵蓋。
+  $AiSidecarSource = Join-Path $PortableStage "app\ai"
+  if (-not (Test-Path -LiteralPath $AiSidecarSource)) {
+    throw "Portable staging is missing app\ai; the AI separation sidecar would be absent from the installer."
+  }
+  Copy-Item -LiteralPath $AiSidecarSource -Destination (Join-Path $Resources "tools\ai") -Recurse -Force
+
   # A dedicated Node runtime executes updater-v2 outside the Electron process.
   # It is integrity-protected as a resources/tools file and remains immutable
   # across incremental updates; changing it forces the next full Installer.
@@ -235,7 +247,7 @@ try {
 
   $UnpackedRoot = Join-Path $InstallerOutput "win-unpacked"
   $UnpackedResources = Join-Path $InstallerOutput "win-unpacked\resources"
-  foreach ($required in @("app.asar", "tools\yt-dlp.exe", "tools\updater-node.exe")) {
+  foreach ($required in @("app.asar", "tools\yt-dlp.exe", "tools\updater-node.exe", "tools\ai\supervisor.py", "tools\ai\worker.py")) {
     if (-not (Test-Path -LiteralPath (Join-Path $UnpackedResources $required))) {
       throw "Installer output is missing $required; the built installer would be broken on user machines."
     }

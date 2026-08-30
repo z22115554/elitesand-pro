@@ -118,7 +118,10 @@ function Reset-PackagedRuntimeData {
   }
 }
 
-$DirsToCopy = @("server", "public")
+# ai/：Python sidecar（supervisor.py / worker.py）。Node 版直接從 app 根目錄執行它們；
+# Electron installer 另外把同一份複製到 resources\tools\ai（見 build-installer.ps1），
+# 因為 python.exe 讀不到 app.asar 裡的檔案。
+$DirsToCopy = @("server", "public", "ai")
 foreach ($dir in $DirsToCopy) {
   $src = Join-Path $Root $dir
   if (-not (Test-Path $src)) {

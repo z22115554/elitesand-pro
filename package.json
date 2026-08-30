@@ -92,7 +92,8 @@
     "forceCodeSigning": false,
     "files": [
       "**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "!ai/**"
     ],
     "extraResources": [
       {

@@ -10,6 +10,7 @@
  * 鐵則 #3：spawn 一律帶 PYTHONUTF8，避免中文路徑/歌名在管線裡變亂碼。
  */
 const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { createLogger } = require('../utils/logger');
@@ -18,7 +19,22 @@ const { withFfmpegOnPath } = require('./ffmpeg-provider');
 
 const log = createLogger('AISeparation');
 
-const SUPERVISOR_PATH = path.join(projectRoot, 'ai', 'supervisor.py');
+/**
+ * sidecar 腳本（supervisor.py／worker.py）的所在目錄。
+ *
+ * 打包版由 Electron shell 傳 `ELITESAND_AI_SCRIPT_DIR`，指向 resources/tools/ai。
+ * 這兩支 .py **不可以**只存在於 app.asar 裡：asar 是 Electron 的虛擬檔案系統，只有被
+ * patch 過的 Node fs 讀得到，外部的 python.exe 讀不到。2026-08-30 實機日誌：
+ * `python.exe: can't open file '.../resources/app.asar/ai/supervisor.py': [Errno 2]`
+ * → supervisor exit 2 → probe 失敗 → CUDA 被判為不可用 → CPU 備援用同一個 supervisor
+ * 一起垮，打包版的 AI 分離 100% 不能用（開發環境從 repo 跑永遠重現不出來）。
+ * 開發／Node 版沒有這個變數，走 app 根目錄下的 ai/。
+ */
+function resolveAiScriptDir() {
+  const override = process.env.ELITESAND_AI_SCRIPT_DIR;
+  if (override && fs.existsSync(path.join(override, 'supervisor.py'))) return override;
+  return path.join(projectRoot, 'ai');
+}
 // 每次 start() 才算，不是模組載入時算死：ffmpeg 可能是使用者在同一次執行中途才按下載的，
 // 而 withFfmpegOnPath 是依當下解析結果補 PATH（見 ffmpeg-provider.js 的說明）。
 // supervisor 再 spawn worker 時是繼承 os.environ，所以 worker 端的 Separator() 也跟著吃得到。
@@ -43,7 +59,14 @@ class AISeparationSupervisor {
   start() {
     if (this.isRunning()) return;
 
-    this.proc = spawn(this.pythonExecutable, [SUPERVISOR_PATH], {
+    const supervisorPath = path.join(resolveAiScriptDir(), 'supervisor.py');
+    // python.exe 對著不存在的腳本只會回一行 stderr 然後 exit 2，呼叫端只看得到
+    // 「supervisor exited before responding」。這裡先講清楚缺的是什麼。
+    if (!fs.existsSync(supervisorPath)) {
+      throw Object.assign(new Error(`AI 分離的 Python sidecar 不存在：${supervisorPath}`), { code: 'ENGINE_UNAVAILABLE' });
+    }
+
+    this.proc = spawn(this.pythonExecutable, [supervisorPath], {
       env: supervisorEnv(),
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -247,4 +270,4 @@ class AISeparationSupervisor {
 const aiRuntimeProvider = require('./ai-runtime-provider');
 const supervisor = new AISeparationSupervisor(aiRuntimeProvider.PYTHON_EXE);
 
-module.exports = { AISeparationSupervisor, supervisor };
+module.exports = { AISeparationSupervisor, supervisor, resolveAiScriptDir };

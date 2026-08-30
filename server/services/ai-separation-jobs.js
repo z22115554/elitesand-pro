@@ -142,7 +142,12 @@ function startPython(job, { forceCpu }) {
 
 function startCpu(job) {
   emitProgress(job, 'fallback-cpu', 0);
-  startPython(job, { forceCpu: true });
+  try {
+    startPython(job, { forceCpu: true });
+  } catch (error) {
+    // CPU 備援跟 Python GPU 是同一個 supervisor：它起不來的話這裡也起不來。
+    finalizeError(job, { code: error.code || 'ENGINE_UNAVAILABLE', message: error.message });
+  }
 }
 
 function tryStartWebgpu(job) {
@@ -177,17 +182,35 @@ async function dispatch(trackId, params, publicJobId = null) {
   emitProgress(job, 'preparing', 0);
 
   let cudaAvailable = false;
+  let engineUp = true;
+  let engineError = null;
   try {
     const probe = await supervisor.probe();
     cudaAvailable = probe?.cudaAvailable === true;
+    // python 端探測不到 CUDA 時回的是 {cudaAvailable:false, error}，不是丟例外。那個
+    // error 字串以前被整包吞掉，畫面上「這台沒有 GPU」與「torch 裝壞了」長得一模一樣。
+    if (cudaAvailable) log.info(`Python GPU 可用：${probe?.deviceName || 'unknown device'}`);
+    else log.warn(`Python GPU 不可用${probe?.error ? `：${probe.error}` : '（torch 回報沒有可用的 CUDA 裝置）'}`);
   } catch (error) {
-    log.warn(`Python GPU 探測失敗，改走備援：${error.message}`);
+    // supervisor 完全沒回應＝Python 引擎整條不可用，CPU 備援走的也是它。
+    engineUp = false;
+    engineError = error;
+    log.warn(`Python 引擎無法啟動或無回應：${error.message}`);
   }
 
   if (!activeJob || activeJob.publicJobId !== job.publicJobId || job.cancelled) return job.publicJobId;
   if (cudaAvailable) {
     startPython(job, { forceCpu: false });
   } else if (!tryStartWebgpu(job)) {
+    if (!engineUp) {
+      // 引擎起不來時絕不能顯示「正在改用 CPU」——CPU 是同一個 supervisor，工作只會
+      // 永遠停在 0%。直接收成明確的失敗（2026-08-30 打包版少了 sidecar 腳本時的實況）。
+      finalizeError(job, {
+        code: 'ENGINE_UNAVAILABLE',
+        message: engineError?.message || 'AI 引擎無法啟動',
+      });
+      return job.publicJobId;
+    }
     startCpu(job);
   }
   return job.publicJobId;

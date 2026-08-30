@@ -14,7 +14,7 @@
     return Math.round(Math.max(0, Math.min(100, number <= 1 ? number * 100 : number)));
   }
 
-  function labelKey(stage) {
+  function labelKey(stage, error) {
     if (stage === 'queued') return 'aiJob.queued';
     if (stage === 'preparing' || stage === 'load') return 'aiJob.preparing';
     if (stage === 'fallback-webgpu' || stage === 'canary') return 'aiJob.webgpuFallback';
@@ -22,7 +22,9 @@
     if (stage === 'download-model') return 'aiJob.preparingModel';
     if (stage === 'download-audio' || stage === 'decode') return 'aiJob.preparingAudio';
     if (stage === 'done') return 'aiJob.done';
-    if (stage === 'error') return 'aiJob.error';
+    // 引擎根本起不來（例如打包版缺了 Python sidecar）跟「這首歌分離失敗」是兩件事，
+    // 使用者要能分辨「重試沒有意義、該重裝」。
+    if (stage === 'error') return error === 'ENGINE_UNAVAILABLE' ? 'aiJob.engineUnavailable' : 'aiJob.error';
     if (stage === 'cancelled') return 'aiJob.cancelled';
     return 'aiJob.separating';
   }
@@ -46,7 +48,7 @@
       errorMessage: payload.errorMessage || null,
       updatedAt: Date.now(),
     };
-    state.labelKey = labelKey(state.stage);
+    state.labelKey = labelKey(state.stage, state.error);
     states.set(trackId, state);
     subscribers.forEach((subscriber) => subscriber(state));
     return state;
