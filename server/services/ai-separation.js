@@ -153,6 +153,10 @@ class AISeparationSupervisor {
         clearTimeout(pending.timeoutHandle);
         this.pendingRequests.delete(msg.id);
         pending.reject(Object.assign(new Error(msg.error.message || msg.error.code), { code: msg.error.code, retryable: !!msg.error.retryable }));
+      } else {
+        // 沒有對應的 pending request——例如 supervisor 回報「這行請求我讀不懂」（id 不明）。
+        // 這種訊息本來會靜靜消失，只留下呼叫端一個沒頭沒尾的逾時。
+        log.warn(`supervisor error without a matching request: ${msg.error?.code || 'UNKNOWN'} ${msg.error?.message || ''}`.trim());
       }
       this.emitter.emit('error', msg);
       return;

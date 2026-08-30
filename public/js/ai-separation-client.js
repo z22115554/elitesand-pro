@@ -179,6 +179,9 @@
           const status = await getBundleStatus();
           paint(status);
           if (status.available && !status.active) {
+            // WebGPU 備援模型下載失敗不擋安裝（server 的 downloadBundle 會照常完成），
+            // 但也不能悄悄帶過——使用者要知道少了哪條路、以及還能重試。
+            if (status.webgpuUnavailable) window.AppShared?.showToast?.(t('aiInstall.webgpuSkipped'), 'info');
             await enableWebgpuFallback();
             close(true);
           } else if (status.stage === 'error') {

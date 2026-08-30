@@ -10471,6 +10471,53 @@ console.log('\n🌐 17. M6.1 介面語系層');
     ok(/ENGINE_UNAVAILABLE' \? 'aiJob\.engineUnavailable'/.test(client), '前端要把「引擎起不來」跟「這首失敗」分開顯示：');
   });
 
+  test('AI 伴奏：WebGPU 備援模型缺席不可讓整個功能停擺（缺 FFmpeg 仍必須擋）', () => {
+    const bundle = require('../server/services/ai-separation-bundle');
+    const aiRuntime = require('../server/services/ai-runtime-provider');
+    const webgpu = require('../server/services/webgpu-runtime-provider');
+    const ffmpeg = require('../server/services/ffmpeg-provider');
+    const original = {
+      runtime: aiRuntime.isAvailable,
+      model: aiRuntime.isModelAvailable,
+      webgpu: webgpu.isAvailable,
+      ffmpeg: ffmpeg.resolveFfmpegPaths,
+    };
+    try {
+      aiRuntime.isAvailable = () => true;
+      aiRuntime.isModelAvailable = () => true;
+      ffmpeg.resolveFfmpegPaths = () => ({ source: 'test', ffmpeg: 'ffmpeg.exe', ffprobe: 'ffprobe.exe' });
+      webgpu.isAvailable = () => false;
+      eq(bundle.isAvailable(), true, 'Python 引擎＋主模型就緒就該能分離，WebGPU 只是備援的備援：');
+      eq(bundle.getStatus().components.webgpu, false, '狀態仍要照實回報 WebGPU 沒就緒：');
+
+      ffmpeg.resolveFfmpegPaths = () => null;
+      eq(bundle.isAvailable(), false, '缺 FFmpeg 一定要擋：audio-separator 在 Separator() 建構子就會炸：');
+    } finally {
+      aiRuntime.isAvailable = original.runtime;
+      aiRuntime.isModelAvailable = original.model;
+      webgpu.isAvailable = original.webgpu;
+      ffmpeg.resolveFfmpegPaths = original.ffmpeg;
+    }
+  });
+
+  test('AI sidecar：讀不懂的 stdin 行不可靜默丟棄（呼叫端只會等到 15 秒逾時）', () => {
+    const supervisorSource = fs.readFileSync(path.join(__dirname, '..', 'ai', 'supervisor.py'), 'utf8');
+    const nodeSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'ai-separation.js'), 'utf8');
+    ok(supervisorSource.includes('lstrip("' + String.fromCharCode(92) + 'ufeff")'), 'BOM 要先剝掉（PowerShell 的 -Encoding utf8 就會寫出來）：');
+    ok(
+      /except json\.JSONDecodeError as exc:[\s\S]{0,600}BAD_REQUEST/.test(supervisorSource),
+      '解析失敗要回一個 BAD_REQUEST 並寫 stderr，不可 silent continue：',
+    );
+    ok(
+      /isinstance\(request, dict\)/.test(supervisorSource),
+      '合法 JSON 但不是物件時要擋下來——否則下一行 .get() 拋的例外在迴圈外，整個 supervisor 收攤：',
+    );
+    ok(
+      /supervisor error without a matching request/.test(nodeSource),
+      'Node 端收到沒有對應 pending request 的錯誤行也要留日誌：',
+    );
+  });
+
   test('FFmpeg 供應：available 必須要求 ffmpeg 與 ffprobe 都能真的執行，不可只看檔案存在', () => {
     const calls = [];
     const validation = ffmpegProvider.validateFfmpegPair(

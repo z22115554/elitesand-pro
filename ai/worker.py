@@ -54,8 +54,11 @@ def _watch_stdin_for_cancel():
         if not line:
             continue
         try:
-            msg = json.loads(line)
-        except json.JSONDecodeError:
+            msg = json.loads(line.lstrip("\ufeff"))
+        except json.JSONDecodeError as exc:
+            # 這條通道只有 supervisor 會寫，收到讀不懂的東西代表協定壞了。忽略沒關係
+            # （worker 照樣跑完這個 job），但不能一聲不響——取消訊號漏掉會很難查。
+            print(f"[worker] ignored unparseable stdin line: {exc}", file=sys.stderr, flush=True)
             continue
         if msg.get("method") == "cancel":
             _cancel_requested.set()

@@ -194,13 +194,25 @@ def _shutdown():
 
 def main():
     try:
-        for line in sys.stdin:
-            line = line.strip()
+        for raw_line in sys.stdin:
+            # 有些工具會在第一行前面塞 UTF-8 BOM（PowerShell 的 -Encoding utf8 就是），
+            # 那會讓 json.loads 直接失敗。先剝掉再判斷。
+            line = raw_line.lstrip("\ufeff").strip()
             if not line:
                 continue
             try:
                 request = json.loads(line)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
+                # 以前這裡是 silent continue：呼叫端只會等到 15 秒逾時，兩邊日誌都沒有
+                # 任何線索。id 不明，喚不醒對應的 pending request，但至少要留下證據。
+                _emit({"id": None, "error": {"code": "BAD_REQUEST", "retryable": False, "message": f"could not parse request line: {exc}"}})
+                print(f"[supervisor] dropped unparseable stdin line: {exc}", file=sys.stderr, flush=True)
+                continue
+            if not isinstance(request, dict):
+                # 合法 JSON 但不是物件（例如一行 `5`）。以前會在下一行 .get() 拋
+                # AttributeError，而那個例外在迴圈外面，整個 supervisor 直接收攤。
+                _emit({"id": None, "error": {"code": "BAD_REQUEST", "retryable": False, "message": "request must be a JSON object"}})
+                print("[supervisor] dropped non-object stdin request", file=sys.stderr, flush=True)
                 continue
             handler = HANDLERS.get(request.get("method"))
             if handler is None:

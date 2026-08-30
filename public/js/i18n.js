@@ -670,6 +670,7 @@
     'aiInstall.stagePrimaryModel': ['下載主分離模型…', 'Downloading primary separation model…', 'メイン分離モデルをダウンロード中…', '기본 분리 모델 다운로드 중…', '正在下载主分离模型…'],
     'aiInstall.stageWebgpu': ['下載 WebGPU 備援模型…', 'Downloading WebGPU fallback model…', 'WebGPU フォールバックモデルをダウンロード中…', 'WebGPU 대체 모델 다운로드 중…', '正在下载 WebGPU 备用模型…'],
     'aiInstall.stageDone': ['完整元件已就緒', 'Complete package is ready', '完全なコンポーネントの準備が完了しました', '전체 구성 요소 준비 완료', '完整组件已就绪'],
+    'aiInstall.webgpuSkipped': ['WebGPU 備援模型沒下載成功，不影響製作伴奏；之後可在設定裡重試。', 'The WebGPU fallback model did not download. Instrumental creation still works; you can retry it later in settings.', 'WebGPU フォールバックモデルをダウンロードできませんでした。伴奏の作成は可能です。設定から後で再試行できます。', 'WebGPU 대체 모델을 다운로드하지 못했습니다. 반주 제작은 가능하며, 나중에 설정에서 다시 시도할 수 있습니다.', 'WebGPU 备用模型没有下载成功，不影响制作伴奏；之后可在设置里重试。'],
     'aiInstall.step.ffmpeg': ['下載音訊轉檔元件 FFmpeg…', 'Downloading FFmpeg audio converter…', '音声変換コンポーネント FFmpeg をダウンロード中…', '오디오 변환 구성 요소 FFmpeg 다운로드 중…', '下载音频转换组件 FFmpeg…'],
     'aiInstall.ffmpegFailed': ['FFmpeg 下載失敗，AI 伴奏製作需要它才能讀取音檔', 'FFmpeg download failed; AI instrumental creation needs it to read audio', 'FFmpeg のダウンロードに失敗しました。AI 伴奏作成には音声の読み込みに必要です', 'FFmpeg 다운로드 실패. AI 반주 제작에는 오디오를 읽기 위해 FFmpeg가 필요합니다', 'FFmpeg 下载失败，AI 伴奏制作需要它才能读取音频'],
     'aiInstall.step.pythonPrep': ['準備 Python 執行環境…', 'Preparing Python runtime…', 'Python ランタイムを準備中…', 'Python 런타임 준비 중…', '准备 Python 运行环境…'],

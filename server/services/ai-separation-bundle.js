@@ -45,6 +45,7 @@ let installStatus = {
   stage: 'idle', // 粗字串，保留給日誌／舊前端
   percent: 0, // = overallPercent，保留欄名相容
   error: null,
+  webgpuUnavailable: null, // WebGPU 備援模型這次沒裝成的原因（不影響 available）
   updatedAt: null,
 };
 
@@ -66,7 +67,11 @@ function isAvailable() {
   const value = components();
   // ffmpeg 也算在內：三條引擎的 Python 端（audio-separator）在 Separator() 建構子就會
   // 檢查它，缺了它「元件齊全」是假的——會一路放行到分離途中才炸。
-  return value.ffmpeg && value.python && value.primaryModel && value.webgpu;
+  // 但 WebGPU 模型刻意**不**算在內：它是備援的備援（Python GPU → WebGPU → CPU），
+  // Python GPU 與 CPU 都不需要它。2026-08-30 上游把模型換掉害下載 404 時，把它列進
+  // 這個條件讓「Python 引擎與 870MB 主模型都已就緒」的機器一首歌都不能分離——
+  // 少一條備援路不該等於整個功能停擺。
+  return value.ffmpeg && value.python && value.primaryModel;
 }
 
 function lerp(band, fraction) {
@@ -165,6 +170,7 @@ async function downloadBundle() {
         throw new Error('AI 伴奏製作需要 FFmpeg。請先到設定裡下載 FFmpeg，再回來啟用這個功能。');
       }
 
+      setStatus({ webgpuUnavailable: null });
       const before = components();
       const requiredNow = !before.python
         ? REQUIRED_FREE_BYTES
@@ -189,17 +195,26 @@ async function downloadBundle() {
         });
       }
 
+      let webgpuUnavailable = null;
       if (!webgpuRuntimeProvider.isAvailable()) {
         markPhase('webgpu-model', 'model-download', BANDS['webgpu-model'][0]);
-        await webgpuRuntimeProvider.downloadModel({
-          onProgress: (s) => ingestProviderStatus('webgpu-model', s),
-        });
+        try {
+          await webgpuRuntimeProvider.downloadModel({
+            onProgress: (s) => ingestProviderStatus('webgpu-model', s),
+          });
+        } catch (error) {
+          // 這一段失敗不擋安裝（見 isAvailable 的說明）。使用者之後可以用
+          // /api/webgpu-separation/runtime/download 重試，或下次打開開關時自動補。
+          webgpuUnavailable = error.message;
+          log.warn(`WebGPU 備援模型未能下載，其餘元件照常完成：${error.message}`);
+        }
       }
 
       setStatus({
         active: false, phase: 'done', step: 'done', detail: null,
         downloadedBytes: null, totalBytes: null,
         overallPercent: 100, percent: 100, stage: 'done', error: null,
+        webgpuUnavailable,
       });
       return { ok: true, alreadyAvailable: false };
     } catch (error) {
@@ -220,7 +235,7 @@ function resetForTests() {
   installStatus = {
     active: false, phase: 'idle', step: 'idle', detail: null,
     downloadedBytes: null, totalBytes: null, overallPercent: 0,
-    stage: 'idle', percent: 0, error: null, updatedAt: null,
+    stage: 'idle', percent: 0, error: null, webgpuUnavailable: null, updatedAt: null,
   };
 }
 
