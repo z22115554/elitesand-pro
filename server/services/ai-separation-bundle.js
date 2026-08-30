@@ -17,6 +17,7 @@ const webgpuRuntimeProvider = require('./webgpu-runtime-provider');
 const { createLogger } = require('../utils/logger');
 const { inspectDiskSpace } = require('./disk-space');
 const { dataDir } = require('../utils/app-paths');
+const ffmpegProvider = require('./ffmpeg-provider');
 
 const log = createLogger('AISeparationBundle');
 
@@ -49,6 +50,11 @@ let installStatus = {
 
 function components() {
   return {
+    // 這裡刻意用「解析得到路徑」這種存在性檢查（跟其他三項同級），不用 isAvailable()：
+    // 安裝進度每 500ms 就輪詢一次 getStatus()，而 isAvailable() 每次都會 spawn
+    // ffmpeg -version + ffprobe -version。真正要求「能執行」的完整驗證留在
+    // downloadBundle() 的前置關卡，那裡一輪只跑一次。
+    ffmpeg: !!ffmpegProvider.resolveFfmpegPaths(),
     python: aiRuntimeProvider.isAvailable(),
     primaryModel: aiRuntimeProvider.isModelAvailable(),
     webgpu: webgpuRuntimeProvider.isAvailable(),
@@ -58,7 +64,9 @@ function components() {
 
 function isAvailable() {
   const value = components();
-  return value.python && value.primaryModel && value.webgpu;
+  // ffmpeg 也算在內：三條引擎的 Python 端（audio-separator）在 Separator() 建構子就會
+  // 檢查它，缺了它「元件齊全」是假的——會一路放行到分離途中才炸。
+  return value.ffmpeg && value.python && value.primaryModel && value.webgpu;
 }
 
 function lerp(band, fraction) {
@@ -150,6 +158,13 @@ async function downloadBundle() {
 
   installInFlight = (async () => {
     try {
+      // FFmpeg 先擋在門口：Python 引擎的 audio-separator 在 Separator() 建構子就會檢查
+      // ffmpeg，沒有的話連「只下載模型」都會失敗。與其讓使用者跑完 5GB 下載才吃一段
+      // Python traceback，不如一秒內講清楚要先做什麼。
+      if (!ffmpegProvider.isAvailable()) {
+        throw new Error('AI 伴奏製作需要 FFmpeg。請先到設定裡下載 FFmpeg，再回來啟用這個功能。');
+      }
+
       const before = components();
       const requiredNow = !before.python
         ? REQUIRED_FREE_BYTES

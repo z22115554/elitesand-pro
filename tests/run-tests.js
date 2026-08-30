@@ -4199,6 +4199,28 @@ test('YouTube 搜尋 UI：自動分離只會在下載成功取得 track 後啟�
   }
 });
 
+test('AI 伴奏首次啟用：缺 FFmpeg 時擋在門口，並在同一個安裝流程裡補齊', () => {
+  // 2026-08-30 實機：使用者按下「下載並啟用」，跑到第 3 步（主模型下載）才被
+  // audio-separator 的 ffmpeg 檢查擋死。PATH 修法見上面兩個 withFfmpegOnPath 測試，
+  // 這裡守的是「沒有 ffmpeg 時使用者看到什麼」。
+  const bundle = fs.readFileSync(path.join(__dirname, '../server/services/ai-separation-bundle.js'), 'utf8');
+  const client = fs.readFileSync(path.join(__dirname, '../public/js/ai-separation-client.js'), 'utf8');
+  ok(bundle.includes('value.ffmpeg && value.python'), 'FFmpeg 必須算進「元件是否齊全」，否則分離會放行到一半才炸: ');
+  ok(bundle.includes('if (!ffmpegProvider.isAvailable())'), '安裝流程必須先擋 FFmpeg，不能讓使用者下載完 5GB 才吃 Python traceback: ');
+  ok(!bundle.includes('ffmpeg: ffmpegProvider.isAvailable()'), 'components() 每 500ms 被輪詢一次，不可每次都 spawn ffmpeg -version: ');
+  const startFn = client.indexOf('const start = async () => {');
+  const ensureCall = client.indexOf('await ensureFfmpeg();', startFn);
+  const bundlePost = client.indexOf("'/api/ai-separation/bundle/download'", startFn);
+  ok(startFn >= 0 && ensureCall > startFn && bundlePost > ensureCall, '安裝按鈕必須先補 FFmpeg 再下載 bundle: ');
+  ok(client.includes("new CustomEvent('elitesand:ffmpeg-invalidated')"), '補完 FFmpeg 要讓設定頁的就緒狀態立刻更新: ');
+  const i18n = require('../public/js/i18n');
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    for (const key of ['aiInstall.step.ffmpeg', 'aiInstall.ffmpegFailed']) {
+      ok(i18n.catalogs?.[locale]?.[key], `${locale} 缺少 ${key}: `);
+    }
+  }
+});
+
 test('AI 伴奏首次啟用：只呈現一個完整下載入口並清楚揭露空間', () => {
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
@@ -10337,6 +10359,46 @@ console.log('\n🌐 17. M6.1 介面語系層');
   test('FFmpeg 供應：commandExistsOnPath 對已知存在／不存在的指令行為正確', () => {
     ok(ffmpegProvider.commandExistsOnPath('node'), 'node 本身一定在 PATH 上（測試就是這樣跑起來的）：');
     ok(!ffmpegProvider.commandExistsOnPath('this-command-definitely-does-not-exist-xyz123'), '不存在的指令應回傳 false：');
+  });
+
+  test('FFmpeg 供應：withFfmpegOnPath 把我們這份 ffmpeg 的目錄補進 PATH（沿用原本的鍵，不新增重複鍵）', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-ffmpeg-path-'));
+    const fakeFfmpeg = path.join(tmpDir, 'ffmpeg.exe');
+    fs.writeFileSync(fakeFfmpeg, 'fake');
+    const original = loadConfig.ffmpegPath;
+    try {
+      loadConfig.ffmpegPath = fakeFfmpeg;
+      const env = ffmpegProvider.withFfmpegOnPath({ Path: 'C:/existing-tools', PYTHONUTF8: '1' });
+      const pathKeys = Object.keys(env).filter((k) => k.toUpperCase() === 'PATH');
+      eq(pathKeys.length, 1, 'Windows env 名稱大小寫不敏感，不可同時出現 Path 與 PATH：');
+      eq(pathKeys[0], 'Path', '要沿用呼叫端原本的鍵名：');
+      ok(env.Path.startsWith(tmpDir), 'ffmpeg 目錄要排在最前面，優先於系統上的其他 ffmpeg：');
+      ok(env.Path.includes('C:/existing-tools'), '原本的 PATH 內容不可被蓋掉：');
+      eq(env.PYTHONUTF8, '1', '其他環境變數要原樣保留（鐵則 #3 的 UTF-8 設定就在裡面）：');
+
+      const twice = ffmpegProvider.withFfmpegOnPath(env);
+      eq(twice.Path, env.Path, '重複呼叫不可一直往 PATH 前面疊同一個目錄：');
+    } finally {
+      loadConfig.ffmpegPath = original;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('AI 分離：spawn python 的 env 一律要經過 withFfmpegOnPath（audio-separator 只認 PATH 上的 ffmpeg）', () => {
+    const runtimeSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'ai-runtime-provider.js'), 'utf8');
+    const separationSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'ai-separation.js'), 'utf8');
+    ok(
+      /env:\s*withFfmpegOnPath\(/.test(runtimeSource),
+      'runtime provider 的 python 步驟（含 --download_model_only）少了這層就會 WinError 2：',
+    );
+    ok(
+      /env:\s*supervisorEnv\(\)/.test(separationSource) && /function supervisorEnv\(\)[\s\S]{0,200}withFfmpegOnPath\(/.test(separationSource),
+      'supervisor 的 env 必須在 start() 當下計算：ffmpeg 可能是同一次執行中途才下載的：',
+    );
+    ok(
+      !/const SUPERVISOR_ENV\s*=/.test(separationSource),
+      '不可回退成模組載入時算死的 env 常數：',
+    );
   });
 
   test('FFmpeg 供應：available 必須要求 ffmpeg 與 ffprobe 都能真的執行，不可只看檔案存在', () => {

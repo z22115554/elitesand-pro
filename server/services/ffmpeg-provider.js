@@ -142,6 +142,37 @@ function getFfprobePath() {
   return resolveFfmpegPaths()?.ffprobe || 'ffprobe';
 }
 
+/** 目前這份 ffmpeg 所在的目錄；來源是系統 PATH（已經找得到）或完全找不到時回傳 null。 */
+function getFfmpegDir() {
+  const resolved = resolveFfmpegPaths();
+  if (!resolved || resolved.source === 'system') return null;
+  return path.dirname(resolved.ffmpeg);
+}
+
+/**
+ * 給「子行程自己會去找 ffmpeg」的 spawn 用：把我們這份 ffmpeg 的目錄補進 PATH。
+ *
+ * 本專案的 Node 端一律用絕對路徑呼叫 ffmpeg，所以 dataDir/bin 從來不需要在 PATH 上
+ * （D-1 決策：不動 machine-wide PATH）。但第三方元件不吃絕對路徑——audio-separator
+ * 的 Separator.__init__ 會無條件 `subprocess.check_output(["ffmpeg", "-version"])`，
+ * 只認 PATH；使用者用程式內按鈕下載好的 ffmpeg 對它等於不存在，直接 WinError 2。
+ * 凡是 spawn 這類元件的地方，env 都要走這裡包一層。
+ */
+function withFfmpegOnPath(env = process.env) {
+  const next = { ...env };
+  const dir = getFfmpegDir();
+  if (!dir) return next;
+  // Windows 的環境變數名稱大小寫不敏感（實際多半是 Path）；直接寫 next.PATH 會多出一個
+  // 重複鍵，子行程拿到哪個不可靠。沿用原本存在的那個鍵。
+  const key = Object.keys(next).find((k) => k.toUpperCase() === 'PATH') || 'PATH';
+  const separator = isWindows() ? ';' : ':';
+  const current = next[key];
+  const already = (current || '').split(separator)
+    .some((entry) => entry && path.resolve(entry) === path.resolve(dir));
+  if (!already) next[key] = current ? `${dir}${separator}${current}` : dir;
+  return next;
+}
+
 function isAvailable() {
   const resolved = resolveFfmpegPaths();
   return !!resolved && validateFfmpegPair(resolved).ok;
@@ -656,6 +687,8 @@ module.exports = {
   resolveFfmpegPaths,
   getFfmpegPath,
   getFfprobePath,
+  getFfmpegDir,
+  withFfmpegOnPath,
   isAvailable,
   hasDownloadedPair,
   downloadFfmpeg,

@@ -106,6 +106,7 @@
 
     if (phase === 'done') return t('aiInstall.stageDone');
     if (phase === 'error') return s.error || t('aiInstall.failed');
+    if (phase === 'ffmpeg') return t('aiInstall.step.ffmpeg');
     if (phase === 'python') {
       if (step === 'pip-download') return t('aiInstall.step.pipDownload', { detail });
       if (step === 'pip-install') return t('aiInstall.step.pipInstall');
@@ -188,12 +189,42 @@
           }
         } catch (_) { /* 下一輪輪詢再試；真正失敗會由 POST 回應顯示 */ }
       };
+      // FFmpeg 不在那 7.3 GB 裡，但 Python 引擎的 audio-separator 在 Separator() 建構子
+      // 就會檢查它，缺了它連「只下載模型」都會失敗（server/services/ai-runtime-provider.js）。
+      // 伺服器端 downloadBundle() 有硬性前置關卡；這裡在同一個流程裡先補齊，讓使用者
+      // 不必中斷安裝跑去設定頁找「下載 FFmpeg」。
+      const ensureFfmpeg = async () => {
+        const status = await getBundleStatus().catch(() => null);
+        if (status?.components?.ffmpeg !== false) return;
+        const paintFfmpeg = (s) => {
+          const percent = Math.max(0, Math.min(100, Math.round(Number(s?.percent) || 0)));
+          stageEl.textContent = installStageText({ phase: 'ffmpeg' });
+          percentEl.textContent = `${percent}%`;
+          fill.style.setProperty('--work-progress', `${percent}%`);
+        };
+        paintFfmpeg(null);
+        const ffmpegPolling = setInterval(() => {
+          fetch('/api/ffmpeg/download/status', { cache: 'no-store' })
+            .then((r) => r.json()).then(paintFfmpeg).catch(() => {});
+        }, 500);
+        try {
+          const response = await PinAuth.fetchWithPin('/api/ffmpeg/download', { method: 'POST' });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.ok) throw new Error(result.reason || t('aiInstall.ffmpegFailed'));
+          // 設定頁／導覽列的 FFmpeg 就緒狀態立刻跟著更新（沿用既有事件）。
+          window.dispatchEvent(new CustomEvent('elitesand:ffmpeg-invalidated'));
+        } finally {
+          clearInterval(ffmpegPolling);
+        }
+      };
       const start = async () => {
         if (started) return;
         setDownloading();
         paint(initialStatus || { stage: 'preparing', percent: 0 });
-        if (!polling) polling = setInterval(poll, 500);
         try {
+          // 先補 FFmpeg，再開始輪詢 bundle 進度——否則輪詢會把 FFmpeg 的階段文字蓋掉。
+          await ensureFfmpeg();
+          if (!polling) polling = setInterval(poll, 500);
           const response = await PinAuth.fetchWithPin('/api/ai-separation/bundle/download', { method: 'POST' });
           const result = await response.json().catch(() => ({}));
           if (!response.ok || !result.ok) throw new Error(result.reason || t('aiInstall.failed'));

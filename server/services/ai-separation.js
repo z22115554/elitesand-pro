@@ -14,11 +14,17 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { createLogger } = require('../utils/logger');
 const { projectRoot } = require('../utils/app-paths');
+const { withFfmpegOnPath } = require('./ffmpeg-provider');
 
 const log = createLogger('AISeparation');
 
 const SUPERVISOR_PATH = path.join(projectRoot, 'ai', 'supervisor.py');
-const SUPERVISOR_ENV = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
+// 每次 start() 才算，不是模組載入時算死：ffmpeg 可能是使用者在同一次執行中途才按下載的，
+// 而 withFfmpegOnPath 是依當下解析結果補 PATH（見 ffmpeg-provider.js 的說明）。
+// supervisor 再 spawn worker 時是繼承 os.environ，所以 worker 端的 Separator() 也跟著吃得到。
+function supervisorEnv() {
+  return withFfmpegOnPath({ ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' });
+}
 const REQUEST_TIMEOUT_MS = 15000; // hello/probe/cancel 這類短命令的逾時；separate 不套用（有自己的 progress 心跳）
 
 class AISeparationSupervisor {
@@ -38,7 +44,7 @@ class AISeparationSupervisor {
     if (this.isRunning()) return;
 
     this.proc = spawn(this.pythonExecutable, [SUPERVISOR_PATH], {
-      env: SUPERVISOR_ENV,
+      env: supervisorEnv(),
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     });

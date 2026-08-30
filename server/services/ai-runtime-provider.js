@@ -29,6 +29,7 @@ const AdmZip = require('adm-zip');
 const { dataDir } = require('../utils/app-paths');
 const { createLogger } = require('../utils/logger');
 const { inspectDiskSpace } = require('./disk-space');
+const { withFfmpegOnPath } = require('./ffmpeg-provider');
 
 const log = createLogger('AIRuntimeProvider');
 
@@ -247,7 +248,10 @@ function runPythonStep(args, { cwd, pythonExe = PYTHON_EXE, onOutput, spawnImpl 
     const proc = spawnImpl(pythonExe, args, {
       cwd,
       windowsHide: true,
-      env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
+      // withFfmpegOnPath：audio-separator 的 Separator.__init__ 無條件用裸指令檢查 ffmpeg，
+      // 只認 PATH。少了這層，連 --download_model_only 這種根本不用 ffmpeg 的步驟也會被
+      // FileNotFoundError 擋掉（使用者用程式內按鈕下載的 ffmpeg 在 dataDir/bin，不在 PATH 上）。
+      env: withFfmpegOnPath({ ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }),
     });
     let stderrTail = '';
     const timer = setTimeout(() => {
