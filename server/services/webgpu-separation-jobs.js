@@ -19,6 +19,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { createLogger } = require('../utils/logger');
 const libraryStore = require('./library-store');
@@ -91,6 +92,17 @@ function findTrack(playState, trackId) {
 
 function isEngineAvailable() {
   return !!(engineSocket && engineSocket.connected);
+}
+
+/**
+ * 目前 activeJob 的內部 jobId（沒有 job 時為 null）。
+ *
+ * 給結果上傳路由在「收下 multipart 內容之前」先比對用：finishJobWithResult() 本身也會
+ * 再比對一次（那是真正的授權關卡），但那時 multer 已經把最大 2×500MB 讀進記憶體了。
+ * 這個 getter 只回傳字串、不改任何狀態，讓路由能先擋掉不合法的請求。
+ */
+function getActiveJobId() {
+  return activeJob ? activeJob.jobId : null;
 }
 
 function applyResult(trackId, patch) {
@@ -204,7 +216,11 @@ function startJobForTrack(trackId, params, { deferFailure = false, publicJobId =
   if (activeJob) {
     throw Object.assign(new Error('WebGPU engine 目前忙碌中'), { code: 'WEBGPU_ENGINE_BUSY' });
   }
-  const jobId = `webgpu-${trackId}-${Date.now()}`;
+  // jobId 同時是結果回傳端點（POST /webgpu-separation/result/:jobId）的授權憑證，
+  // 所以不能是猜得到的值。舊格式 `webgpu-<trackId>-<Date.now()>` 的兩段都可推得：
+  // trackId 從沒掛保護的 GET /api/playlist 就讀得到，毫秒數在 job 進行中只有幾秒窗口，
+  // 猜中即可用自己的音檔頂替分離結果、直接播上直播。改用隨機值杜絕這條路。
+  const jobId = `webgpu-${crypto.randomUUID()}`;
   activeJob = { jobId, publicJobId, trackId, startedAt: Date.now(), params, deferFailure };
   engineSocket.emit('webgpu:job:start', {
     jobId, trackId,
@@ -344,6 +360,7 @@ function _resetForTests() {
 module.exports = {
   wireDependencies,
   startJobForTrack,
+  getActiveJobId,
   events,
   isEngineAvailable,
   getRestartRequestedAt,

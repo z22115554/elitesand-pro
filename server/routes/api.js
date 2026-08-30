@@ -1099,7 +1099,35 @@ const webgpuResultUpload = multer({
   limits: { fileSize: 500 * 1024 * 1024, files: 2 },
 });
 
-router.post('/webgpu-separation/result/:jobId', webgpuResultUpload.fields([
+/**
+ * 結果上傳的前置關卡。必須排在 multer 之前——這是重點，不是順手加的。
+ *
+ * 這條路由原本只靠 finishJobWithResult() 內部的 jobId 比對當授權，但那已經是
+ * multer 把最大 2×500MB 讀進記憶體之後的事：同網段任何裝置（非瀏覽器的 client
+ * 不帶 Sec-Fetch-Site，index.js 的跨站防護擋不到）連續丟大檔就能把行程灌爆，
+ * 直播中的歌詞疊加層會直接消失。實測過：從區網 IP 打這條回 409（已進 handler），
+ * 同條件打有保護的路由回 401。
+ *
+ * 兩道檢查：
+ * 1. 只收 loopback。引擎視窗永遠是 electron/webgpu-engine-window.js 用
+ *    `http://127.0.0.1:<port>/webgpu-separation-worker.html` 載入的，所以這道
+ *    限制對正常流程零影響（跟 requireLocalFontAsset 同一個先例與同一個理由：
+ *    不信任 X-Forwarded-For，只認 TCP 對端）。
+ * 2. jobId 先比對一次。finishJobWithResult() 仍會再比對（那才是真正的授權關卡，
+ *    也是唯一會消費掉 activeJob 的地方），這裡只是不讓不合法的請求先耗掉記憶體。
+ */
+function requireLocalEngineJob(req, res, next) {
+  if (!isDirectLoopback(req)) {
+    return res.status(403).json({ ok: false, error: '分離結果只接受本機引擎視窗回傳' });
+  }
+  const activeJobId = webgpuSeparationJobs.getActiveJobId();
+  if (!activeJobId || activeJobId !== req.params.jobId) {
+    return res.status(409).json({ ok: false, error: 'STALE_JOB' });
+  }
+  next();
+}
+
+router.post('/webgpu-separation/result/:jobId', requireLocalEngineJob, webgpuResultUpload.fields([
   { name: 'vocals', maxCount: 1 },
   { name: 'instrumental', maxCount: 1 },
 ]), (req, res) => {

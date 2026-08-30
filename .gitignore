@@ -88,3 +88,12 @@ ai-experiments/audio-routing-probe/drift-raw.json
 ai-experiments/audio-routing-probe/drift-summary.json
 ai-experiments/audio-routing-probe/obs-drift-test/obs-drift-result.json
 ai-experiments/audio-routing-probe/obs-drift-test/synthetic*.wav
+
+# AI 探索分支的整個工作區與工具暫存：先前只逐項封鎖子路徑（.venv／模型／output／.md），
+# 但 git add -A 仍會夾帶 97 個檔案——兩支 OBS 螢幕錄影（可能含桌面與私人資訊）、
+# 一整套打包好的 Electron 探針（含 ffmpeg.dll，正是本專案為了避開 GPLv3 才改成
+# 按需下載的東西）與測試 .wav。歷史一旦寫進去就難清（見 2026-07-15 的 AGPL 重建）。
+# 若日後真要把某支探索原始碼進版控，用 !ai-experiments/xxx.py 逐個開白名單。
+ai-experiments/
+.playwright-cli/
+.tmp/
