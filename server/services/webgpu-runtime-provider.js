@@ -29,11 +29,18 @@ const MARKER_FILE = path.join(MODEL_DIR, '.installed.json');
 
 const GRAPH_FILE = 'syhft_core_folded_fp16_webgpu.onnx';
 const WEIGHTS_FILE = 'syhft_core_folded_fp16_webgpu.onnx.data';
-const BASE_URL = 'https://huggingface.co/musetric/vocal-separation-roformer-onnx/resolve/main';
+// 釘死上游 commit，不可用 `main`：2026-08-29 作者把 core 換成 T=1100 的 query-blocked
+// export，順手改了檔名（`syhft_core_t1100.onnx`），`main` 上的舊檔直接消失 → 使用者安裝
+// 到最後一步吃 HTTP 404（實機回報）。而且就算檔名沒變也不能跟著 main 走：
+// webgpu-separation-worker.mjs 的 FRAMES／輸入張量是 [1, 2050, 1101, 2]，T=1100 的新圖
+// 形狀對不上。要升級新模型是一次獨立、要重測的工作，不是讓上游隨時替換我們的模型。
+// 這個 revision 的兩個檔案 2026-08-30 重新對過：size 與 X-Linked-ETag 都跟下面 pin 的值一致。
+const MODEL_REVISION = '7272c4abd85495c110d161df1083631e8bcd9cdb'; // "Re-tree Split/Concat to <=8-wide"（2026-07-17）
+const BASE_URL = `https://huggingface.co/musetric/vocal-separation-roformer-onnx/resolve/${MODEL_REVISION}`;
 
 // 2026-08-18 W0 探針階段下載驗證過：跟 musetric model card 公布值完全一致（檔案大小
 // 5,312,568 / 741,190,540 bytes）。SHA-256 是 HuggingFace LFS 的 X-Linked-ETag，
-// 2026-08-24 重新對過一次確認未變。
+// 2026-08-24 與 2026-08-30 各重新對過一次（8-30 是對釘死的 revision，確認上游換 core 之後舊檔仍在）。
 const FILES = [
   { name: GRAPH_FILE, url: `${BASE_URL}/${GRAPH_FILE}`, sha256: 'e22f33a2895f8cc244e28494197a7c77d7a65101d0aa00dbafc626ed16a0cbdb', size: 5312568 },
   { name: WEIGHTS_FILE, url: `${BASE_URL}/${WEIGHTS_FILE}`, sha256: 'b08cfc80905e3560a4dd5d30f641299a47dd96d309ebbe9524d9d6c9d2a0356f', size: 741190540 },
@@ -171,6 +178,7 @@ module.exports = {
   MODEL_DIR,
   MARKER_FILE,
   FILES,
+  MODEL_REVISION,
   REQUIRED_DISK_BYTES,
   _resetForTests: resetForTests,
 };

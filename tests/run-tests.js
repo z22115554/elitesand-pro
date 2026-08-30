@@ -10401,6 +10401,24 @@ console.log('\n🌐 17. M6.1 介面語系層');
     );
   });
 
+  test('WebGPU 模型：下載網址必須釘死上游 commit，不可跟著 main 走', () => {
+    const webgpuRuntimeProvider = require('../server/services/webgpu-runtime-provider');
+    ok(/^[0-9a-f]{40}$/.test(webgpuRuntimeProvider.MODEL_REVISION), 'MODEL_REVISION 要是完整的 40 位 commit SHA：');
+    for (const file of webgpuRuntimeProvider.FILES) {
+      ok(
+        file.url.includes(`/resolve/${webgpuRuntimeProvider.MODEL_REVISION}/`),
+        `${file.name} 的網址要指向釘死的 revision（2026-08-29 上游換 core 改檔名，main 上的舊檔直接 404）：`,
+      );
+      ok(!/\/resolve\/(main|master)\//.test(file.url), `${file.name} 不可用浮動分支：`);
+      ok(/^[0-9a-f]{64}$/.test(file.sha256) && file.size > 0, `${file.name} 要有釘死的 SHA-256 與大小：`);
+    }
+    const workerSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'webgpu-separation-worker.mjs'), 'utf8');
+    ok(
+      /const FRAMES = 1101;/.test(workerSource),
+      'worker 的 FRAMES 與模型 window 綁在一起（輸入張量 [1, 2050, 1101, 2]）：換上游模型必須連 worker 一起改，不能只換網址：',
+    );
+  });
+
   test('FFmpeg 供應：available 必須要求 ffmpeg 與 ffprobe 都能真的執行，不可只看檔案存在', () => {
     const calls = [];
     const validation = ffmpegProvider.validateFfmpegPair(
