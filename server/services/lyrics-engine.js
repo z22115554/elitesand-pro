@@ -12,6 +12,7 @@ const { krcDecode } = require('./krc-decoder');
 const { parseTTML, cleanQuery } = require('./ttml-parser');
 const { parseLrc, parseTimestampToMs, msToLrcTime } = require('./lrc-parser');
 const { cleanLyrics } = require('./lyrics-cleaner');
+const { annotateSingerParts } = require('./singer-parts');
 const { fetchWithTimeout } = require('../utils/helpers');
 const { romanize, addRomanization, needsRomanization } = require('./romanizer');
 const { createLogger } = require('../utils/logger');
@@ -55,7 +56,9 @@ const LYRICS_SOURCE_PRIORITY = Object.freeze([
 // v6：v5 版把詞間空白黏在「下一個詞開頭」，跟 lyric-motion-kernel.js 的既有慣例（空白黏
 // 前一詞尾）方向相反，導致 v5 動畫模板的 buildSemanticGroups 把整句英文詞誤併成一個
 // displayWord（逐字動畫完全失效、整句一起彈出）。改黏前一詞尾後升版強制重新查詢。
-const LYRICS_CACHE_VERSION = 'v6-ttml-trailing-space';
+// v7：新增合唱聲部（酷狗/網易雲 男：女：文字前綴、Apple TTML ttm:agent）解析，
+// parsedLyrics 每行可帶 singer / singerLabel。舊快取沒有這些欄位，升版強制重查。
+const LYRICS_CACHE_VERSION = 'v7-singer-parts';
 
 // ─── 歌詞快取（記憶體 + 磁碟持久化）───
 const path = require('path');
@@ -1170,7 +1173,7 @@ class LyricsEngine {
   static parseLrc(lrcText) {
     const { lines, offset } = parseLrc(lrcText);
     let decoded = lines.map(p => ({ ...p, text: he.decode(p.text) }));
-    decoded = stripCreditLines(decoded);
+    decoded = annotateSingerParts(stripCreditLines(decoded));
     // Store offset for this track (caller should check and apply)
     if (offset && offset !== 0 && decoded._lrcOffset === undefined) {
       decoded._lrcOffset = offset;
@@ -1190,7 +1193,16 @@ class LyricsEngine {
 
       const lineTime = parseTimestampToMs(lineMatch[1]);
       const lineDuration = parseInt(lineMatch[2], 10);
-      const remaining = line.substring(line.indexOf('>') + 1);
+      let remaining = line.substring(line.indexOf('>') + 1);
+
+      // ttml-parser 對含 <ttm:agent> 的逐字歌詞，會在行首時間標記後夾一段 代號
+      // （a/b/c/d 或 both）標示聲部。這裡剝掉並轉成結構化 line.singer。
+      let lineSinger = null;
+      const singerMark = remaining.match(/^([a-d]|both)/);
+      if (singerMark) {
+        lineSinger = singerMark[1];
+        remaining = remaining.slice(singerMark[0].length);
+      }
 
       const words = [];
       const wordRegex = /([^<\[\]]+)(?:<(\d+),(\d+)>)/g;
@@ -1212,12 +1224,16 @@ class LyricsEngine {
       }
 
       if (words.length > 0) {
-        parsed.push({ time: lineTime, duration: lineDuration, text: fullText, words, phonetic: '' });
+        const entry = { time: lineTime, duration: lineDuration, text: fullText, words, phonetic: '' };
+        // TTML ttm:agent 只有代號、沒有聲部字 → 只設 singer（供上色），不設 singerLabel
+        // （不標「男：/女：」）。明確寫了聲部字的歌走文字前綴那條，由 annotateSingerParts 設 label。
+        if (lineSinger) entry.singer = lineSinger;
+        parsed.push(entry);
       }
     }
 
     parsed.sort((a, b) => a.time - b.time);
-    return stripCreditLines(parsed);
+    return annotateSingerParts(stripCreditLines(parsed));
   }
 
   static clearCache() {

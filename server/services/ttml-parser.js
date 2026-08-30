@@ -27,13 +27,45 @@ function parseTTML(ttmlText) {
     const offsetMatch = ttmlText.match(/lyricOffset="(-?\d+)"/);
     if (offsetMatch) globalOffsetMs = parseInt(offsetMatch[1], 10);
 
-    // 解析 agent 映射（對唱標記）
-    const agentMap = {};
-    const agentRegex = /<ttm:agent\s+type="[^"]*"\s+xml:id="([^"]+)"/g;
-    let agentMatch;
-    while ((agentMatch = agentRegex.exec(ttmlText)) !== null) {
-      agentMap[agentMatch[1]] = true;
+    // 解析 <ttm:agent> 定義（Apple / AMLL 逐字 TTML 的對唱／合唱標記）。
+    // type="person" → 個別演唱者，依出現順序給代號 a / b / c / d；
+    // type="group" | "other" → 合唱/齊唱 → both。
+    // <p> 上的 ttm:agent="vN" 對應到這裡的 id；下游 parseKrc 會把代號轉成 line.singer。
+    const agentType = {};
+    const agentDefRegex = /<ttm:agent\b([^>]*?)\/?>/g;
+    let agentDefMatch;
+    while ((agentDefMatch = agentDefRegex.exec(ttmlText)) !== null) {
+      const a = agentDefMatch[1];
+      const id = (a.match(/xml:id="([^"]+)"/) || [])[1];
+      if (!id) continue;
+      agentType[id] = (a.match(/\btype="([^"]+)"/) || [])[1] || 'person';
     }
+    const personOrder = [];
+    const singerCodeForAgent = (id) => {
+      if (!id) return '';
+      const type = agentType[id];
+      if (type === 'group' || type === 'other') return 'both';
+      // type 未定義時也當個別演唱者處理（部分來源省略 <ttm:agent> 定義）
+      let i = personOrder.indexOf(id);
+      if (i < 0) { i = personOrder.length; personOrder.push(id); }
+      return ['a', 'b', 'c', 'd'][i] || '';
+    };
+
+    // <p> 位置 → 所屬 <div> 的 ttm:agent（Apple 常把 agent 掛在 <div> 上、<p> 繼承）。
+    const divSpans = [];
+    const divRegex = /<div\b([^>]*)>([\s\S]*?)<\/div>/g;
+    let divMatch;
+    while ((divMatch = divRegex.exec(ttmlText)) !== null) {
+      divSpans.push({
+        start: divMatch.index,
+        end: divRegex.lastIndex,
+        agent: getAttr(divMatch[1], 'ttm:agent') || getAttr(divMatch[1], 'agent'),
+      });
+    }
+    const divAgentAt = (pos) => {
+      const d = divSpans.find((s) => pos >= s.start && pos < s.end);
+      return d ? d.agent : '';
+    };
 
     // 找出所有 <p> 段落
     const pRegex = /<p\s+([^>]*)>([\s\S]*?)<\/p>/g;
@@ -41,7 +73,10 @@ function parseTTML(ttmlText) {
 
     while ((pMatch = pRegex.exec(ttmlText)) !== null) {
       const attrs = pMatch[1];
-      const content = pMatch[2];
+      // 背景和聲 / 翻譯 / 羅馬拼音的整行 <p>：跳過，不混進主歌詞。
+      if (/\bttm:role="x-(?:bg|translation|roman|anti)"/i.test(attrs)) continue;
+      // span 級的背景和聲 / 翻譯 / 羅馬拼音：整段剝掉再解析（含一層巢狀逐字 <span>）。
+      const content = stripRoleSpans(pMatch[2], 'x-bg|x-translation|x-roman|x-anti');
 
       // 注意：Apple/boidu 的 TTML 有些 <p> 只在子 <span> 上有 begin/end、行級不帶時間。
       // 若硬用 <p> 的 begin/end，這些行會算出 pDuration<=0 而被整行丟掉（實測 アイドル 74→49 行）。
@@ -128,11 +163,20 @@ function parseTTML(ttmlText) {
         for (const word of words) {
           krcLine += `${word.text}<${word.start},${word.duration}>`;
         }
-        lines.push(krcLine);
+        const agentId = getAttr(attrs, 'ttm:agent') || getAttr(attrs, 'agent') || divAgentAt(pMatch.index);
+        lines.push({ krc: krcLine, singer: singerCodeForAgent(agentId) });
       }
     }
 
-    return lines.length > 0 ? lines.join('\n') : null;
+    if (lines.length === 0) return null;
+    // 只有整首出現 ≥2 種聲部代號時才輸出標記（solo 歌每行都掛同一個 agent，不算對唱）。
+    const distinctSingers = new Set(lines.map((l) => l.singer).filter(Boolean));
+    const emitSingers = distinctSingers.size >= 2;
+    return lines
+      .map((l) => (emitSingers && l.singer
+        ? l.krc.replace(/^(\[[^\]]+\]<\d+>)/, `$1${l.singer}`)
+        : l.krc))
+      .join('\n');
   } catch (err) {
     console.error('[TTML] 解析失敗:', err.message);
     return null;
@@ -184,6 +228,35 @@ function getAttr(attrStr, name) {
 
 function stripTags(html) {
   return html.replace(/<[^>]*>/g, '');
+}
+
+/**
+ * 剝掉整段 <span ttm:role="x-bg|x-translation|x-roman|..."> ... </span>
+ * （Apple 的背景和聲是「外層 role span 包一層逐字 span」的巢狀結構，用深度計數配對收尾）。
+ */
+function stripRoleSpans(html, rolePattern) {
+  let out = String(html || '');
+  const opener = new RegExp(`<span\\b[^>]*\\bttm:role="(?:${rolePattern})"[^>]*>`, 'i');
+  const tag = /<\/?span\b[^>]*>/gi;
+  for (let guard = 0; guard < 200; guard += 1) {
+    const m = opener.exec(out);
+    if (!m) return out;
+    if (/\/\s*>$/.test(m[0])) { // 自閉合的 role span，直接刪
+      out = out.slice(0, m.index) + out.slice(m.index + m[0].length);
+      continue;
+    }
+    let depth = 1;
+    let cut = -1;
+    tag.lastIndex = m.index + m[0].length;
+    let t;
+    while ((t = tag.exec(out)) !== null) {
+      if (t[0][1] === '/') depth -= 1;
+      else if (!/\/\s*>$/.test(t[0])) depth += 1;
+      if (depth === 0) { cut = tag.lastIndex; break; }
+    }
+    out = cut < 0 ? out.slice(0, m.index) : out.slice(0, m.index) + out.slice(cut);
+  }
+  return out;
 }
 
 /**

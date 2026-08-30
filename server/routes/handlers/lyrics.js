@@ -79,11 +79,35 @@ function sanitizeLyricPresets(value) {
  * @param {import('socket.io').Socket} socket
  * @param {ReturnType<import('../../state/app-state').createAppState>} ctx
  */
+const KNOWN_LYRIC_SOURCES = ['betterlyrics', 'paxsenix', 'kugou', 'qqmusic', 'lrclib', 'netease', 'manual'];
+const normLyricSource = (value) => (KNOWN_LYRIC_SOURCES.includes(value) ? value : 'manual');
+
 function registerLyricsHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, manualLyricsCache,
     persistState,
   } = ctx;
+
+  // 目前播放中或清單裡對應 trackId 的所有 track 物件（currentTrack 與 playlist 項可能不同參照）。
+  const tracksById = (trackId) => {
+    const list = [];
+    if (playState.currentTrack && playState.currentTrack.id === trackId) list.push(playState.currentTrack);
+    for (const t of (Array.isArray(playState.playlist) ? playState.playlist : [])) {
+      if (t && t.id === trackId && !list.includes(t)) list.push(t);
+    }
+    return list;
+  };
+  const lyricsSourceOf = (trackId) => {
+    const t = tracksById(trackId)[0];
+    return (t && t.lyricsSource) || '';
+  };
+  // 把某個偏移值記進「該 track × 該來源」的桶子（換來源後切回來時可還原）。
+  const rememberOffsetForSource = (trackId, source, ms) => {
+    if (!source) return;
+    for (const t of tracksById(trackId)) {
+      t.lyricsOffsetsBySource = { ...(t.lyricsOffsetsBySource || {}), [source]: ms };
+    }
+  };
 
   // ─── 時間偏移控制 ───
 
@@ -111,6 +135,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (playState.currentTrack && playState.currentTrack.id === trackId) {
       playState.currentOffset = newOffset;
     }
+
+    rememberOffsetForSource(trackId, lyricsSourceOf(trackId), newOffset);
 
     log.info(`Offset 調整: ${trackId}: ${currentOffset}ms → ${newOffset}ms (Δ${delta}ms)`);
 
@@ -142,6 +168,8 @@ function registerLyricsHandlers(io, socket, ctx) {
       playState.currentOffset = clampedOffset;
     }
 
+    rememberOffsetForSource(trackId, lyricsSourceOf(trackId), clampedOffset);
+
     log.info(`Offset 設定: ${trackId}: ${clampedOffset}ms`);
 
     io.emit('offset:update', { trackId, offset: clampedOffset });
@@ -154,6 +182,7 @@ function registerLyricsHandlers(io, socket, ctx) {
 
     trackOffsets.delete(trackId);
     cancelLyricOffsetSync(ctx, trackId);
+    rememberOffsetForSource(trackId, lyricsSourceOf(trackId), 0);
 
     if (playState.currentTrack && playState.currentTrack.id === trackId) {
       playState.currentOffset = 0;
@@ -224,6 +253,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (!data || typeof data !== 'object') return;
     const { trackId, lyrics, lyricsType } = data;
     let parsedLyrics = data.parsedLyrics;
+    const newSource = normLyricSource(data.source);
 
     // 驗證 trackId 為字串
     if (!trackId || typeof trackId !== 'string') {
@@ -260,7 +290,7 @@ function registerLyricsHandlers(io, socket, ctx) {
       lyrics,
       lyricsType: lyricsType || 'lrc',
       parsedLyrics: parsedLyrics || null,
-      source: 'manual',
+      source: newSource,
       timestamp: Date.now(),
     });
 
@@ -269,6 +299,20 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 同步更新 playState.playlist 裡對應的項目（不限目前播放中的那首）。
     // P2 的清單摘要雖不再送 lyrics／parsedLyrics，仍從這份原始資料推導 hasLyrics／lyricsType；
     // 若不回寫，下一次 broadcastState() 仍會把面板剛套用好的歌詞準備度覆蓋掉。
+    // 換歌詞來源時的時間偏移記憶：把目前偏移存進「舊來源」桶子，載入「新來源」的
+    // （沒調過就是 0）。這樣 Apple→QQ→Apple 來回切不用每次重調。
+    const oldSource = lyricsSourceOf(trackId);
+    if (oldSource && oldSource !== newSource) {
+      rememberOffsetForSource(trackId, oldSource, trackOffsets.get(trackId) || 0);
+      const bucket = (tracksById(trackId)[0] || {}).lyricsOffsetsBySource || {};
+      const restored = Number.isFinite(bucket[newSource]) ? bucket[newSource] : 0;
+      trackOffsets.set(trackId, restored);
+      if (playState.currentTrack && playState.currentTrack.id === trackId) playState.currentOffset = restored;
+      io.emit('offset:update', { trackId, offset: restored });
+      log.info(`歌詞來源 ${oldSource}→${newSource}：偏移切換為 ${restored}ms`);
+    }
+    for (const t of tracksById(trackId)) t.lyricsSource = newSource;
+
     const plTrack = playState.playlist.find((t) => t && t.id === trackId);
     if (plTrack) {
       plTrack.lyrics = lyrics;
@@ -288,7 +332,7 @@ function registerLyricsHandlers(io, socket, ctx) {
         lyrics,
         lyricsType: lyricsType || 'lrc',
         parsedLyrics,
-        source: 'manual',
+        source: newSource,
       });
     }
 

@@ -39,6 +39,10 @@
     return null;
   }
 
+  // 簡轉繁只影響對時編輯器的顯示，不動 ltWorkingLines 的原文。共用 AppShared.lyricS2T（懶載 opencc）。
+  const ensureS2T = () => AppShared.lyricS2T.ensure();
+  const s2tText = (str) => AppShared.lyricS2T.convert(str);
+
   function renderLyricsTimelineRows() {
     dom.ltRows.innerHTML = ltWorkingLines.map((l, i) => `
       <div class="lt-row" data-idx="${i}">
@@ -48,7 +52,7 @@
           <button class="btn btn-sm" data-lt-nudge="100" data-idx="${i}" type="button" title="${escapeHtml(tr('往後 0.1 秒'))}">+0.1s</button>
           <button class="btn btn-sm btn-primary" data-lt-tap="${i}" type="button" title="${escapeHtml(tr('用目前播放位置設定這一行'))}">${escapeHtml(tr('設為目前時間'))}</button>
         </div>
-        <div class="lt-text">${escapeHtml(l.text || tr('（空行）'))}</div>
+        <div class="lt-text">${escapeHtml(s2tText(l.text) || tr('（空行）'))}</div>
       </div>`).join('');
   }
 
@@ -65,11 +69,26 @@
       // 深拷貝：取消時不影響目前正在播放的歌詞
       ltWorkingLines = track.parsedLyrics.map((l) => ({ ...l }));
       renderLyricsTimelineRows();
+      // 簡轉繁字典載好後重繪一次（維持跟 OBS 顯示一致）
+      ensureS2T().then(() => {
+        if (!dom.ltModal.hidden && ltWorkingLines) renderLyricsTimelineRows();
+      });
     }
     dom.ltTrackTitle.textContent = `· ${track.title}`;
     dom.ltModal.hidden = false;
   }
   function closeLyricsTimeline() { dom.ltModal.hidden = true; ltWorkingLines = null; }
+
+  // 對時工具開著時切換簡轉繁設定，字表同步跟著重繪。
+  if (typeof SocketClient !== 'undefined' && SocketClient.on) {
+    SocketClient.on('lyric-settings:update', () => {
+      if (dom.ltModal && !dom.ltModal.hidden && ltWorkingLines) {
+        ensureS2T().then(() => {
+          if (!dom.ltModal.hidden && ltWorkingLines) renderLyricsTimelineRows();
+        });
+      }
+    });
+  }
 
   if (dom.btnLyricsTimeline) dom.btnLyricsTimeline.addEventListener('click', openLyricsTimeline);
   if (dom.ltCancel) dom.ltCancel.addEventListener('click', closeLyricsTimeline);
@@ -114,7 +133,8 @@
       // 順序錯亂會导致跳字/卡住，套用前排序保險。
       const sorted = [...ltWorkingLines].sort((a, b) => a.time - b.time);
       if (window.VKState && window.VKState.applyManualLyrics) {
-        window.VKState.applyManualLyrics(track.id, track.lyrics, track.lyricsType, sorted);
+        // 逐行時間軸只是微調同一份歌詞，來源不變，不觸發偏移切換。
+        window.VKState.applyManualLyrics(track.id, track.lyrics, track.lyricsType, sorted, undefined, track.lyricsSource);
       }
       AppShared.showToast(tr('已套用逐行時間軸'));
       closeLyricsTimeline();
@@ -257,7 +277,7 @@
     });
   }
 
-  function applyManualLyrics(trackId, lyrics, lyricsType, parsedLyrics, lrcOffset) {
+  function applyManualLyrics(trackId, lyrics, lyricsType, parsedLyrics, lrcOffset, source) {
     // 更新本地 playlist
     const track = state.playlist.find(t => t.id === trackId);
     if (track) {
@@ -265,6 +285,7 @@
       track.lyricsType = lyricsType;
       track.parsedLyrics = parsedLyrics;
       track.manualLyrics = true;
+      if (source) track.lyricsSource = source;
       if (lrcOffset) {
         track.lrcOffset = lrcOffset;
         if (state.playlist[state.currentTrackIndex] && state.playlist[state.currentTrackIndex].id === trackId) {
@@ -279,12 +300,13 @@
       AppShared.renderLyricsPreview(lyrics);
     }
 
-    // 通知後端暫存
+    // 通知後端暫存（帶上歌詞來源，讓伺服器切換各來源記住的時間偏移）
     SocketClient.send('lyrics:manual', {
       trackId,
       lyrics,
       lyricsType,
       parsedLyrics,
+      source: source || (track && track.lyricsSource) || 'manual',
     });
 
     AppShared.renderPlaylist();

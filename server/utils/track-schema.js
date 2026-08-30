@@ -74,8 +74,26 @@ function sanitizeParsedLyrics(value) {
     if (Array.isArray(line.words)) {
       out.words = line.words.slice(0, MAX_WORDS_PER_LINE).map(sanitizeWord).filter(Boolean);
     }
+    // 合唱聲部（singer-parts / TTML ttm:agent）：只放行已知代號，label 限短字串。
+    if (['a', 'b', 'c', 'd', 'both'].includes(line.singer)) {
+      out.singer = line.singer;
+      const label = text(line.singerLabel, 12);
+      if (label) out.singerLabel = label;
+    }
     return out;
   }).filter(Boolean);
+}
+
+// 每個歌詞來源各自記住的時間偏移（換來源不用重調）：{ kugou: 0, betterlyrics: 3000, ... }
+function sanitizeOffsetsBySource(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const out = {};
+  for (const [key, ms] of Object.entries(value)) {
+    if (typeof key !== 'string' || !key || key.length > 40) continue;
+    if (!Number.isFinite(Number(ms))) continue;
+    out[key] = finite(ms, 0, -MAX_OFFSET_MS, MAX_OFFSET_MS);
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 function sanitizeManualLyrics(value) {
@@ -124,6 +142,10 @@ function sanitizeTrack(value) {
     source: text(value.source, 40),
     lyrics: typeof value.lyrics === 'string' ? text(value.lyrics, MAX_LYRICS_LENGTH) : null,
     lyricsType,
+    // 目前套用的歌詞來源（betterlyrics/paxsenix/kugou/qqmusic/lrclib/netease/manual）＋
+    // 每個來源各自記住的時間偏移，換來源時自動切換，不用重調。
+    lyricsSource: text(value.lyricsSource, 40) || null,
+    lyricsOffsetsBySource: sanitizeOffsetsBySource(value.lyricsOffsetsBySource),
     parsedLyrics: sanitizeParsedLyrics(value.parsedLyrics),
     // 匯入/回填時由 ffmpeg ebur128 量出的整曲響度（LUFS），null＝尚未量測。
     // 只接受合理範圍內的數字；null 不可落進 finite()（Number(null)=0 會被誤當有效值）。
@@ -192,6 +214,7 @@ module.exports = {
   sanitizeParsedLyrics,
   sanitizeFurigana,
   sanitizeManualLyrics,
+  sanitizeOffsetsBySource,
   safeUrl,
   sanitizeJsonObject,
   assignFreshEntryIds,

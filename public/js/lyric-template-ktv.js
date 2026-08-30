@@ -63,6 +63,21 @@
     colorsCache.fill = getCssVar('--lyric-color-active', '#2e63f7');
   }
 
+  // 合唱聲部（singer-parts 產生的 line.singer）：男藍 / 女紅 / 合綠。
+  // 顏色可用 CSS 變數覆寫；未定義時用這裡的預設。c/d（具名歌手）維持一般掃色。
+  function singerFillColor(code) {
+    if (code === 'a') return getCssVar('--lyric-singer-a', '#3f8cff');
+    if (code === 'b') return getCssVar('--lyric-singer-b', '#ff4d6d');
+    if (code === 'both') return getCssVar('--lyric-singer-both', '#37c871');
+    return null;
+  }
+  // 句首聲部標記文字：只有歌詞來源「明確寫了」聲部字（男/女/合…，即 line.singerLabel
+  // 有值）才標；照抄來源原字串。Apple 的 ttm:agent 只有代號沒有字 → 只上色、不標字。
+  function singerPrefixText(label) {
+    const raw = typeof label === 'string' ? label.trim() : '';
+    return raw ? `${raw}：` : '';
+  }
+
   function fontPxFromSettings() {
     const userPx = parseFloat(getCssVar('--display-font-size', '42')) || 42;
     const userScale = userPx / 42;
@@ -173,6 +188,7 @@
   function buildAllUnits(lines, fontPx, availableWidth) {
     const family = getCssVar('--display-font-family', 'sans-serif');
     const units = [];
+    let prevSinger = null;
     for (let li = 0; li < lines.length; li += 1) {
       const line = lines[li];
       if (!line || !line.text) continue;
@@ -182,6 +198,21 @@
         for (const g of LyricMotion.buildGraphemeTimings(w)) chars.push(g);
       }
       if (chars.length === 0) continue;
+
+      // 合唱聲部標記：只在「該聲部第一次出現」或「換人」時標一次（同聲部連唱不重複標），
+      // 且僅在來源明確寫了聲部字（line.singerLabel 有值）時才標。顏色仍每句都套。
+      // 標記插在整行字首、切段之前，長句折行時只出現在第一段。
+      const singer = line.singer || null;
+      const singerLabel = typeof line.singerLabel === 'string' ? line.singerLabel : '';
+      const showLabel = !!singer && singer !== prevSinger && !!singerLabel;
+      prevSinger = singer;
+      const prefixText = showLabel ? singerPrefixText(singerLabel) : '';
+      if (prefixText) {
+        const t0 = chars[0].startMs;
+        for (const ch of Array.from(prefixText).reverse()) {
+          chars.unshift({ char: ch, startMs: t0, endMs: t0 });
+        }
+      }
 
       const text = chars.map((c) => c.char).join('');
       const offsets = LyricMotion.measureCharOffsets(text, `900 ${fontPx}px ${family}`);
@@ -198,6 +229,7 @@
       for (const seg of segments) {
         units.push({
           lineIndex: li,
+          singer,
           text: seg.chars.map((c) => c.char).join(''),
           chars: seg.chars,
           offsets: seg.offsets,
@@ -210,6 +242,42 @@
       }
     }
     units.forEach((u, i) => { u.globalIndex = i; });
+    tagConcurrentPairs(units);
+    return units;
+  }
+
+  // ── 同時雙聲部偵測 ──
+  // KRC/LRC 是單一歌詞軌，兩個人同時唱不同詞只能寫成相鄰兩句。這裡把「相鄰、
+  // 不同聲部、時間上其實同時」的兩句配成一組，讓 KTV 上下兩排同時掃色。
+  const CONCURRENT_OVERLAP_MS = 150;        // B 在 A 結束前這麼多毫秒就起唱 → 明確重疊
+  const CONCURRENT_ONSET_MS = 600;          // A、B 起點相差在此內 → 同時起唱
+  const COUNTERPOINT_GAP_MS = 500;          // B 緊接 A（含些微重疊）
+  const COUNTERPOINT_MS_PER_CHAR = 130;     // 且 B 每字時長低於此 → 對位句被隨手塞的壞時間
+
+  function tagConcurrentPairs(units) {
+    for (let i = 0; i + 1 < units.length; i += 1) {
+      const a = units[i];
+      const b = units[i + 1];
+      if (a.concurrentPrev != null) continue;      // a 已是前一組的 B
+      if (a.lineIndex === b.lineIndex) continue;   // 同一句折行，不算
+      const sa = a.singer;
+      const sb = b.singer;
+      if (!sa || !sb || sa === sb || sa === 'both' || sb === 'both') continue;
+
+      const overlap = b.startMs < a.endMs - CONCURRENT_OVERLAP_MS;
+      const coOnset = Math.abs(b.startMs - a.startMs) <= CONCURRENT_ONSET_MS;
+      const gap = b.startMs - a.endMs;
+      const bMsPerChar = (b.endMs - b.startMs) / Math.max(1, b.chars.length);
+      const counterpoint = gap >= -CONCURRENT_OVERLAP_MS && gap <= COUNTERPOINT_GAP_MS
+        && bMsPerChar < COUNTERPOINT_MS_PER_CHAR;
+      if (!overlap && !coOnset && !counterpoint) continue;
+
+      a.concurrentNext = i + 1;
+      b.concurrentPrev = i;
+      // B 沒有可用的自身時間（對位句壞時間）→ 掃色跟著 A 的時鐘走。
+      b.pairSweepFollowsPrev = counterpoint && !overlap && !coOnset;
+      i += 1; // 跳過 b，不讓它成為下一組的 A
+    }
     return units;
   }
 
@@ -322,7 +390,7 @@
     slot.el.style.fontSize = `${prep.fontPx.toFixed(1)}px`;
     slot.base.textContent = prep.text;
     slot.fill.textContent = prep.text;
-    slot.fill.style.color = colorsCache.fill;
+    slot.fill.style.color = (prep && singerFillColor(prep.singer)) || colorsCache.fill;
     slot.base.style.color = colorsCache.base;
     slot.lastFill = '';
     slot.maxFillPx = 0;
@@ -387,6 +455,14 @@
     applyFill(slot, fillPixels(unit, timeMs), seeking);
   }
 
+  // 同時雙聲部裡「壞時間」的那一句：掃色進度跟隨主句（lead）的時鐘。
+  function showPairFollower(slot, unit, leadUnit, timeMs, seeking) {
+    setSlotContent(slot, `u${unit.globalIndex}`, unit);
+    const span = Math.max(1, leadUnit.endMs - leadUnit.startMs);
+    const frac = clamp((timeMs - leadUnit.startMs) / span, 0, 1);
+    applyFill(slot, (slot.prep ? slot.prep.width : unit.width) * frac, seeking);
+  }
+
   function showHeldFull(slot, unit) {
     setSlotContent(slot, `u${unit.globalIndex}`, unit);
     applyFill(slot, slot.prep ? slot.prep.width : unit.width);
@@ -432,6 +508,37 @@
 
     const idx = findUnitIndexAtOrBefore(units, timeMs);
     const curUnit = idx >= 0 ? units[idx] : null;
+
+    // ── 同時雙聲部：配成一組的 A、B 兩句同時上、各自掃色（上下排各一句）──
+    if (curUnit) {
+      let aIdx = -1;
+      let bIdx = -1;
+      if (curUnit.concurrentNext != null) { aIdx = idx; bIdx = curUnit.concurrentNext; }
+      else if (curUnit.concurrentPrev != null) { aIdx = curUnit.concurrentPrev; bIdx = idx; }
+      if (aIdx >= 0) {
+        const a = units[aIdx];
+        const b = units[bIdx];
+        const bEnd = b.pairSweepFollowsPrev ? a.endMs : b.endMs;
+        const pairEnd = Math.max(a.endMs, bEnd) + SWAP_MIN_HOLD_MS;
+        if (timeMs <= pairEnd) {
+          const aSlot = slots[slotKeyForUnit(aIdx)];
+          const bSlot = slots[slotKeyForUnit(bIdx)];
+          if (timeMs <= a.endMs) showActiveScan(aSlot, a, timeMs, seeking);
+          else showHeldFull(aSlot, a);
+          if (b.pairSweepFollowsPrev) {
+            showPairFollower(bSlot, b, a, timeMs, seeking);
+          } else if (timeMs < b.startMs) {
+            showPreview(bSlot, b);
+          } else if (timeMs <= b.endMs) {
+            showActiveScan(bSlot, b, timeMs, seeking);
+          } else {
+            showHeldFull(bSlot, b);
+          }
+          return;
+        }
+      }
+    }
+
     const nextIdx = idx >= 0 ? (idx + 1 < units.length ? idx + 1 : -1) : (units.length > 0 ? 0 : -1);
     const nextUnit = nextIdx >= 0 ? units[nextIdx] : null;
 

@@ -1555,13 +1555,14 @@
     // 透過 app.js 的 applyManualLyrics 套用（會同步更新本地播放清單顯示——歌詞狀態 dot
     // 立即翻色，不限於當前播放中的那首——並照舊持久化到伺服器/自動羅馬化/記憶）。
     if (window.VKState && window.VKState.applyManualLyrics) {
-      window.VKState.applyManualLyrics(pickerCurrentTrack.id, candidate.lyrics, candidate.type, null);
+      window.VKState.applyManualLyrics(pickerCurrentTrack.id, candidate.lyrics, candidate.type, null, undefined, candidate.source);
     } else {
       SocketClient.send('lyrics:manual', {
         trackId: pickerCurrentTrack.id,
         lyrics: candidate.lyrics,
         lyricsType: candidate.type,
         parsedLyrics: null, // 由顯示端解析
+        source: candidate.source, // 讓伺服器切換此來源記住的時間偏移
       });
     }
     showToast(`已套用 ${candidate.sourceLabel} 的歌詞`);

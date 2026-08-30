@@ -195,5 +195,43 @@ window.AppShared = (function () {
   // 讀寫 AppShared.state.playlist 時，實際上讀寫的就是 app.js 那個變數本體。
   const state = {};
 
-  return { dom, state };
+  // ─── 簡轉繁（面板側，跟 OBS 顯示端同一個 opencc cn→tw converter）───
+  // opencc-cn2t.js 有 1MB，index.html 不預載；第一個需要它的地方（對時視圖）才動態載入。
+  // convert() 在字典載好前回傳原文，呼叫端載好後自行重繪一次。開關讀 lyricSettings.convertTraditional（預設開）。
+  const lyricS2T = (() => {
+    let conv = null;
+    let promise = null;
+    const build = () => {
+      try {
+        if (typeof OpenCC !== 'undefined' && OpenCC.Converter) conv = OpenCC.Converter({ from: 'cn', to: 'tw' });
+      } catch (_) { conv = null; }
+      return conv;
+    };
+    return {
+      ready: () => !!conv,
+      enabled: () => {
+        const s = state && state.lyricSettings;
+        return !s || s.convertTraditional !== false;
+      },
+      ensure() {
+        if (conv) return Promise.resolve(conv);
+        if (promise) return promise;
+        promise = new Promise((resolve) => {
+          if (typeof OpenCC !== 'undefined' && OpenCC.Converter) { resolve(build()); return; }
+          const sc = document.createElement('script');
+          sc.src = '/vendor/opencc-cn2t.js';
+          sc.onload = () => resolve(build());
+          sc.onerror = () => resolve(null);
+          document.head.appendChild(sc);
+        });
+        return promise;
+      },
+      convert(str) {
+        if (!str || !conv || !this.enabled()) return str;
+        try { return conv(str); } catch (_) { return str; }
+      },
+    };
+  })();
+
+  return { dom, state, lyricS2T };
 })();

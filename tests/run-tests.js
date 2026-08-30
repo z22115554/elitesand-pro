@@ -2602,6 +2602,78 @@ test('自動歌詞來源優先序符合設定', () => {
   eq(LYRICS_SOURCE_PRIORITY.join('>'), 'betterlyrics>paxsenix>kugou>qqmusic>lrclib>netease');
 });
 
+test('TTML ttm:agent：對唱歌曲的逐字歌詞帶出 line.singer（a/b/both）', () => {
+  const { parseTTML } = require('../server/services/ttml-parser');
+  const ttml = `<?xml version="1.0"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+<head><metadata>
+<ttm:agent type="person" xml:id="v1"/>
+<ttm:agent type="person" xml:id="v2"/>
+<ttm:agent type="group" xml:id="v3"/>
+</metadata></head>
+<body><div>
+<p begin="1.000" end="3.000" ttm:agent="v1"><span begin="1.000" end="2.000">You</span><span begin="2.000" end="3.000">say</span></p>
+<p begin="3.000" end="5.000" ttm:agent="v2"><span begin="3.000" end="4.000">I</span><span begin="4.000" end="5.000">stay</span></p>
+<p begin="5.000" end="7.000" ttm:agent="v1"><span begin="5.000" end="6.000">we</span><span begin="6.000" end="7.000">go</span></p>
+<p begin="7.000" end="9.000" ttm:agent="v3"><span begin="7.000" end="8.000">to</span><span begin="8.000" end="9.000">gether</span></p>
+</div></body></tt>`;
+  const krc = parseTTML(ttml);
+  ok(krc && krc.includes(''), 'KRC 字串含聲部標記 sentinel');
+  const parsed = LyricsEngine.parseKrc(krc);
+  eq(parsed.length, 4);
+  eq(parsed[0].singer, 'a');
+  eq(parsed[1].singer, 'b');
+  eq(parsed[2].singer, 'a');
+  eq(parsed[3].singer, 'both');
+  ok(parsed.every((l) => !('singerLabel' in l)), 'TTML 路徑不帶 singerLabel（KTV 只上色不標男女）');
+  ok(!parsed[0].text.includes(''), '文字不殘留 sentinel');
+  eq(parsed[0].text, 'Yousay');
+});
+
+test('TTML ttm:agent：agent 掛在 <div> 上時 <p> 繼承', () => {
+  const { parseTTML } = require('../server/services/ttml-parser');
+  const ttml = `<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+<head><metadata><ttm:agent type="person" xml:id="v1"/><ttm:agent type="person" xml:id="v2"/></metadata></head>
+<body>
+<div ttm:agent="v1"><p begin="1.0" end="2.0"><span begin="1.0" end="2.0">alpha</span></p></div>
+<div ttm:agent="v2"><p begin="2.0" end="3.0"><span begin="2.0" end="3.0">beta</span></p></div>
+<div ttm:agent="v1"><p begin="3.0" end="4.0" ttm:agent="v2"><span begin="3.0" end="4.0">gamma</span></p></div>
+</body></tt>`;
+  const parsed = LyricsEngine.parseKrc(parseTTML(ttml));
+  eq(parsed.length, 3);
+  eq(parsed[0].singer, 'a', '繼承 <div> 的 v1');
+  eq(parsed[1].singer, 'b', '繼承 <div> 的 v2');
+  eq(parsed[2].singer, 'b', '<p> 自己的 agent 優先於 <div>');
+});
+
+test('TTML：背景和聲 (ttm:role=x-bg) 與翻譯行不混進主歌詞', () => {
+  const { parseTTML } = require('../server/services/ttml-parser');
+  const ttml = `<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+<head><metadata><ttm:agent type="person" xml:id="v1"/></metadata></head>
+<body><div>
+<p begin="1.0" end="4.0" ttm:agent="v1"><span begin="1.0" end="2.0">hold</span><span begin="2.0" end="3.0">on</span><span ttm:role="x-bg" begin="1.5" end="3.5"><span begin="1.5" end="2.0">(oh)</span><span begin="3.0" end="3.5">(yeah)</span></span><span begin="3.0" end="4.0">tight</span></p>
+<p begin="4.0" end="5.0" ttm:role="x-translation"><span begin="4.0" end="5.0">抓緊</span></p>
+</div></body></tt>`;
+  const parsed = LyricsEngine.parseKrc(parseTTML(ttml));
+  eq(parsed.length, 1, '翻譯整行 <p> 被跳過');
+  eq(parsed[0].text, 'holdontight', '背景和聲不混入主唱行');
+});
+
+test('TTML ttm:agent：solo 歌（只有一個 agent）不輸出聲部標記', () => {
+  const { parseTTML } = require('../server/services/ttml-parser');
+  const ttml = `<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+<head><metadata><ttm:agent type="person" xml:id="v1"/></metadata></head>
+<body><div>
+<p begin="1.000" end="2.000" ttm:agent="v1"><span begin="1.000" end="2.000">solo</span></p>
+<p begin="2.000" end="3.000" ttm:agent="v1"><span begin="2.000" end="3.000">line</span></p>
+<p begin="3.000" end="4.000" ttm:agent="v1"><span begin="3.000" end="4.000">only</span></p>
+</div></body></tt>`;
+  const krc = parseTTML(ttml);
+  ok(krc && !krc.includes(''), '單一 agent 不夾 sentinel');
+  const parsed = LyricsEngine.parseKrc(krc);
+  ok(parsed.every((l) => !('singer' in l)), '沒有 line.singer');
+});
+
 test('歌詞 negative cache 使用 24 小時、正常結果沿用一般 TTL', () => {
   const now = Date.now();
   ok(cacheEntryIsFresh({ result: null, negative: true, timestamp: now - 23 * 60 * 60 * 1000 }, now));
@@ -4068,7 +4140,107 @@ testAsync('Twitch 聊天回覆遇到 5xx 會退避重試', async () => {
 console.log('\n📦 10. 歌詞清洗 (lyrics-cleaner.js)');
 // ═══════════════════════════════════════════
 const { cleanLyrics, normalizeText } = require('../server/services/lyrics-cleaner');
+const { annotateSingerParts } = require('../server/services/singer-parts');
 const AudioProcessor = require('../server/services/audio-processor');
+
+test('合唱聲部：獨占標記行（男：/女：/合：）抽成 line.singer 並移除該行', () => {
+  const raw = [
+    { time: 1000, text: '男：', words: [{ text: '男', start: 0, duration: 100 }, { text: '：', start: 100, duration: 50 }] },
+    { time: 2000, text: '我還在尋找一個依靠' },
+    { time: 3000, text: '為我生氣為我鬧' },
+    { time: 4000, text: '女：' },
+    { time: 5000, text: '幸福開始有預兆' },
+    { time: 6000, text: '合：' },
+    { time: 7000, text: '小酒窩長睫毛' },
+    { time: 8000, text: '是你最美的記號' },
+  ];
+  const out = annotateSingerParts(raw);
+  eq(out.length, 5, '3 個獨占標記行被移除');
+  eq(out[0].text, '我還在尋找一個依靠');
+  eq(out[0].singer, 'a');
+  eq(out[0].singerLabel, '男');
+  eq(out[1].singer, 'a', '同一段後續行沿用聲部');
+  eq(out[2].text, '幸福開始有預兆');
+  eq(out[2].singer, 'b');
+  eq(out[3].singer, 'both', '合 → both');
+  eq(out[4].singer, 'both');
+});
+
+test('合唱聲部：同行前綴（女：天天都需要你愛）剝掉前綴、掛聲部、修正逐字 words', () => {
+  const raw = [
+    { time: 1000, text: '女：天天都需要你愛', words: [
+      { text: '女', start: 0, duration: 80 }, { text: '：', start: 80, duration: 40 },
+      { text: '天', start: 120, duration: 200 }, { text: '天', start: 320, duration: 200 },
+      { text: '都需要你愛', start: 520, duration: 600 },
+    ] },
+    { time: 2000, text: '我的心思由你猜' },
+    { time: 3000, text: '男：是我們感情豐富太慷慨' },
+    { time: 4000, text: '還是有上天安排' },
+    { time: 5000, text: '合：不得不愛' },
+  ];
+  const out = annotateSingerParts(raw);
+  eq(out.length, 5, '同行前綴不刪行');
+  eq(out[0].text, '天天都需要你愛');
+  eq(out[0].singer, 'b');
+  eq(out[0].words.length, 3, '前綴的「女」「：」兩個 word 單位被剝掉');
+  eq(out[0].words[0].text, '天');
+  eq(out[1].singer, 'b', '無標記行沿用前一個聲部');
+  eq(out[2].text, '是我們感情豐富太慷慨');
+  eq(out[2].singer, 'a');
+  eq(out[4].singer, 'both');
+});
+
+test('合唱聲部：一般歌詞（無標記）原封不動、不新增欄位', () => {
+  const raw = [
+    { time: 1000, text: '海平面遠方開始陰霾' },
+    { time: 2000, text: '悲傷要怎麼平靜純白' },
+    { time: 3000, text: '你用唇語說你要離開' },
+    { time: 4000, text: '不是浪而是淚海' },
+    { time: 5000, text: '轉身離開' },
+  ];
+  const out = annotateSingerParts(raw);
+  eq(out, raw, '回傳同一個陣列參考');
+  ok(out.every((l) => !('singer' in l)), '沒有任何 singer 欄位');
+});
+
+test('合唱聲部：單一泛用前綴（敘事「他說：」）不觸發，避免誤剝正文', () => {
+  const raw = [
+    { time: 1000, text: '他說：這是最後一次' },
+    { time: 2000, text: '風繼續吹' },
+    { time: 3000, text: '他說：我不會回頭' },
+    { time: 4000, text: '雨下整夜' },
+    { time: 5000, text: '他說：別再找我' },
+    { time: 6000, text: '天亮之前' },
+  ];
+  const out = annotateSingerParts(raw);
+  eq(out, raw, '只有單一種非聲部前綴 → 不啟用');
+  ok(out.every((l) => !('singer' in l)));
+});
+
+test('合唱聲部：英文段落標籤（Chorus:/Verse:）不被當演唱者', () => {
+  const raw = [
+    { time: 1000, text: 'Verse: I was scared of dentists and the dark' },
+    { time: 2000, text: 'I was scared of pretty girls and starting conversations' },
+    { time: 3000, text: 'Chorus: Naked as we came' },
+    { time: 4000, text: 'One will spread our ashes round the yard' },
+    { time: 5000, text: 'Bridge: She feels no need' },
+  ];
+  const out = annotateSingerParts(raw);
+  eq(out, raw, 'Verse/Chorus/Bridge 命中段落標籤白名單 → 不視為標記');
+});
+
+test('合唱聲部：標記過少（< 3）不啟用', () => {
+  const raw = [
+    { time: 1000, text: '男：只有一句對唱' },
+    { time: 2000, text: '其餘都是一般歌詞' },
+    { time: 3000, text: '第三行' },
+    { time: 4000, text: '第四行' },
+    { time: 5000, text: '第五行' },
+  ];
+  const out = annotateSingerParts(raw);
+  eq(out, raw);
+});
+
 const { assessYouTubeImport } = require('../server/utils/youtube-import-risk');
 const { LOW_DISK_WARNING_BYTES, inspectDiskSpace, appendDiskSpaceWarning } = require('../server/services/disk-space');
 
@@ -6353,6 +6525,37 @@ testAsync('日文振假名保留原漢字、只標可靠讀音，跟唱視圖可
 
   const sanitized = sanitizeParsedLyrics([{ time: 0, text: '今日', furigana: analyzed.furigana.filter((segment) => segment.text === '今日') }]);
   eq(sanitized[0].furigana[0].reading, 'きょう', '振假名必須能通過歌詞資料的安全清理與同步：');
+});
+
+test('歌詞安全清理：lyricsSource 與 lyricsOffsetsBySource 通過、範圍/型別把關', () => {
+  const { sanitizeTrack, sanitizeOffsetsBySource } = require('../server/utils/track-schema');
+  const t = sanitizeTrack({
+    id: 't1', title: 'x',
+    lyricsSource: 'kugou',
+    lyricsOffsetsBySource: { kugou: 0, betterlyrics: 3000, qqmusic: '-500', bad: 'nope', evil: 9e9 },
+  });
+  eq(t.lyricsSource, 'kugou');
+  eq(t.lyricsOffsetsBySource.kugou, 0);
+  eq(t.lyricsOffsetsBySource.betterlyrics, 3000);
+  eq(t.lyricsOffsetsBySource.qqmusic, -500, '數字字串會轉回數字');
+  ok(!('bad' in t.lyricsOffsetsBySource), '非數字值剔除');
+  eq(t.lyricsOffsetsBySource.evil, 300000, '超範圍夾到 ±MAX_OFFSET_MS');
+  eq(sanitizeOffsetsBySource({}), null, '空物件回 null');
+  eq(sanitizeOffsetsBySource('nope'), null);
+});
+
+test('歌詞安全清理：合唱聲部 singer / singerLabel 必須通過（自動套用不會弄丟紅藍）', () => {
+  const { sanitizeParsedLyrics } = require('../server/utils/track-schema');
+  const out = sanitizeParsedLyrics([
+    { time: 0, text: 'A', singer: 'a', singerLabel: '男' },
+    { time: 1000, text: 'B', singer: 'b' },
+    { time: 2000, text: 'C', singer: 'both', singerLabel: '合' },
+    { time: 3000, text: 'D', singer: 'x', singerLabel: '亂碼' },
+  ]);
+  eq(out[0].singer, 'a'); eq(out[0].singerLabel, '男');
+  eq(out[1].singer, 'b'); ok(!('singerLabel' in out[1]), 'label 沒給就不憑空生');
+  eq(out[2].singer, 'both'); eq(out[2].singerLabel, '合');
+  ok(!('singer' in out[3]) && !('singerLabel' in out[3]), '未知代號整組不放行');
 });
 
 test('跟唱視圖歌詞套用簡轉繁設定，跟歌詞顯示頁／歌單頁同一套規則', () => {

@@ -535,6 +535,7 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
           if (lyricsResult.parsedLyrics) {
             track.parsedLyrics = lyricsResult.parsedLyrics;
           }
+          if (lyricsResult.source) track.lyricsSource = lyricsResult.source;
         }
       } catch (e) {
         log.warn(`歌詞搜尋失敗 (${track.artist} - ${track.title}): ${e.message}`);

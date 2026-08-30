@@ -1118,8 +1118,14 @@
   // Live Bar「目前歌詞」對時視圖：顯示端判斷式 adjustedTime = audioTime + offset，
   // 某行在 adjustedTime >= line.time 時出現 → 目前句 = 最後一個 time <= lastPlayTimeMs + currentOffsetMs 的行。
   let lastLyricNowPaint = 0;
+  let s2tKicked = false;
   function renderHomeLyricNow(force) {
     if (!dom.lyricNowLine) return;
+    // 簡轉繁字典懶載：第一次要顯示歌詞時載入，載好重繪一次（之後同步轉換）。
+    if (!s2tKicked && AppShared.lyricS2T && AppShared.lyricS2T.enabled()) {
+      s2tKicked = true;
+      AppShared.lyricS2T.ensure().then(() => renderHomeLyricNow(true));
+    }
     const now = Date.now();
     if (!force && now - lastLyricNowPaint < 150) return;
     lastLyricNowPaint = now;
@@ -1140,7 +1146,9 @@
     for (let i = 0; i < lines.length; i++) { if (lines[i].time <= adjusted) idx = i; else break; }
     const line = idx >= 0 ? lines[idx] : lines[0];
     renderNowLineWithMarks(tr, line, idx >= 0 ? idx : 0, adjusted, idx >= 0 ? '' : '♪ ');
-    if (dom.lyricNextLine) dom.lyricNextLine.textContent = lines[idx + 1] ? lines[idx + 1].text : '';
+    if (dom.lyricNextLine) {
+      dom.lyricNextLine.textContent = lines[idx + 1] ? AppShared.lyricS2T.convert(lines[idx + 1].text) : '';
+    }
   }
   AppShared.renderHomeLyricNow = renderHomeLyricNow;
 
@@ -1173,10 +1181,13 @@
   function renderNowLineWithMarks(tr, line, lineIndex, adjusted, prefix) {
     const host = dom.lyricNowLine;
     if (!host) return;
-    const text = String(line.text || '');
-    const words = (tr && tr.lyricsType === 'krc' && Array.isArray(line.words))
+    // 簡轉繁只轉顯示；opencc cn→tw 逐字 1:1、不改長度，所以逐字對時點的位置不受影響。
+    const text = AppShared.lyricS2T.convert(String(line.text || ''));
+    const s2tTag = AppShared.lyricS2T.ready() && AppShared.lyricS2T.enabled() ? 't' : 's';
+    const rawWords = (tr && tr.lyricsType === 'krc' && Array.isArray(line.words))
       ? line.words.filter((w) => w && typeof w.start === 'number' && String(w.text || '').trim())
       : [];
+    const words = rawWords.map((w) => ({ ...w, text: AppShared.lyricS2T.convert(String(w.text || '')) }));
     if (!words.length || !text) {
       host.classList.remove('has-word-marks');
       host.textContent = prefix + text;
@@ -1184,7 +1195,7 @@
       nowLineWordEls = [];
       return;
     }
-    const key = `${currentTrackId() || ''}|${lineIndex}|${text.length}|${words.length}|${prefix}`;
+    const key = `${currentTrackId() || ''}|${lineIndex}|${text.length}|${words.length}|${prefix}|${s2tTag}`;
     if (key !== nowLineKey) {
       nowLineKey = key;
       nowLineWordEls = new Array(words.length).fill(null);
