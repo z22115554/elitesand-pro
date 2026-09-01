@@ -4,6 +4,10 @@
   const states = new Map();
   const subscribers = new Set();
   let ensurePromise = null;
+  // WebGPU 隱藏引擎預熱一次就好：以前每個呼叫端（含每 500ms 的安裝輪詢）都各起一輪
+  // 20 次的連線等待，setEnabled() 若卡住就整批堆疊、把 /api/webgpu-separation/settings
+  // 打爆，安裝視窗也因為 await 卡在預熱前而永遠關不掉。
+  let webgpuWarmInFlight = null;
 
   const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
 
@@ -70,25 +74,35 @@
     return status;
   }
 
-  async function enableWebgpuFallback() {
-    if (!window.ElitesandShell?.webgpuEngine) return;
-    try {
-      await PinAuth.fetchWithPin('/api/webgpu-separation/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: true }),
-      });
-      await window.ElitesandShell.webgpuEngine.setEnabled(true);
-      // BrowserWindow.loadURL() 完成不代表 Socket.io 握手也已完成；短暫等到 server
-      // 看見引擎，避免使用者確認後立刻開始第一首時直接略過 WebGPU 備援。
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        const status = await getBundleStatus();
-        if (status.webgpuEngineConnected) break;
-        await new Promise((resolve) => setTimeout(resolve, 250));
+  function enableWebgpuFallback() {
+    if (webgpuWarmInFlight) return webgpuWarmInFlight;
+    if (!window.ElitesandShell?.webgpuEngine) return Promise.resolve();
+    webgpuWarmInFlight = (async () => {
+      try {
+        await PinAuth.fetchWithPin('/api/webgpu-separation/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: true }),
+        });
+        // setEnabled() 偶爾會很久才 resolve（隱藏視窗冷啟）；給它硬性上限，別無限等。
+        await Promise.race([
+          window.ElitesandShell.webgpuEngine.setEnabled(true),
+          new Promise((resolve) => setTimeout(resolve, 8000)),
+        ]);
+        // Socket.io 握手可能還沒完成；短暫等 server 看見引擎（總計 ≤5s），逾時就交給
+        // 協調器——它偵測到未連線會安全落到 CPU，不阻擋主要動作。
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          const status = await getBundleStatus().catch(() => null);
+          if (status && status.webgpuEngineConnected) break;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      } catch (_) {
+        // WebGPU 是中間備援；啟動失敗時協調器仍會安全走最後的 CPU。
+      } finally {
+        webgpuWarmInFlight = null;
       }
-    } catch (_) {
-      // WebGPU 是中間備援；啟動失敗時協調器仍會安全走最後的 CPU，不阻擋主要動作。
-    }
+    })();
+    return webgpuWarmInFlight;
   }
 
   function fmtBytes(b) {
@@ -142,6 +156,9 @@
       let polling = null;
       let started = !!initialStatus?.active;
       let settled = false;
+      // 伺服器端這輪安裝已經跑完（成功／失敗／完成但元件不齊都算）。一旦為真，
+      // 就算 started 也一定要讓使用者能關掉視窗——背景 state 不會因為關視窗而丟。
+      let runSettled = false;
       // pip 解壓 torch（~2.5 GB）沒有位元組訊號，是整條流程最容易看起來「卡住」的一段。
       // 伺服器把它固定回報在 python band 的尾端；這裡讓顯示值隨時間輕微往上爬（不超過該
       // band 上限 76%），一旦下個相位真的推進就交還給真實進度。
@@ -170,29 +187,52 @@
       const setDownloading = () => {
         started = true;
         progress.hidden = false;
-        cancel.disabled = true;
+        // 這輪一旦結算過（含「完成但不齊」），重試期間也保留一個出口，別再把使用者關死。
+        cancel.disabled = !runSettled;
         confirm.disabled = true;
         confirm.textContent = t('aiInstall.downloading');
       };
+      let pollBusy = false;
       const poll = async () => {
+        if (pollBusy) return; // 輪詢每 500ms 觸發一次；上一輪還沒跑完就跳過，避免堆疊
+        pollBusy = true;
         try {
           const status = await getBundleStatus();
           paint(status);
+          const runOver = !status.active
+            && (status.phase === 'done' || status.stage === 'done'
+              || Number(status.overallPercent ?? status.percent) >= 100);
           if (status.available && !status.active) {
             // WebGPU 備援模型下載失敗不擋安裝（server 的 downloadBundle 會照常完成），
             // 但也不能悄悄帶過——使用者要知道少了哪條路、以及還能重試。
             if (status.webgpuUnavailable) window.AppShared?.showToast?.(t('aiInstall.webgpuSkipped'), 'info');
-            await enableWebgpuFallback();
+            // 先關視窗再背景預熱 WebGPU：預熱動輒十幾秒、偶爾會卡住，await 在 close 前面
+            // 會讓「元件其實都好了」的視窗永遠關不掉（實測 test2 就是卡在這）。
             close(true);
+            enableWebgpuFallback();
+            return;
           } else if (status.stage === 'error') {
             if (polling) { clearInterval(polling); polling = null; }
+            runSettled = true;
             started = false;
             cancel.disabled = false;
             confirm.disabled = false;
             confirm.textContent = t('aiInstall.retry');
             stageEl.textContent = status.error || t('aiInstall.failed');
+          } else if (runOver && !status.available) {
+            // 下載整條跑完了，但 isAvailable() 仍為 false（實測最常見：FFmpeg 不在
+            // 這個行程的 PATH 上、也沒下載到 dataDir\bin）。不能無限輪詢把使用者關在
+            // 這個視窗裡——停掉輪詢、放開取消／重試，把缺的講清楚。
+            if (polling) { clearInterval(polling); polling = null; }
+            runSettled = true;
+            started = false;
+            cancel.disabled = false;
+            confirm.disabled = false;
+            confirm.textContent = t('aiInstall.retry');
+            stageEl.textContent = t('aiInstall.incomplete');
           }
         } catch (_) { /* 下一輪輪詢再試；真正失敗會由 POST 回應顯示 */ }
+        finally { pollBusy = false; }
       };
       // FFmpeg 不在那 7.3 GB 裡，但 Python 引擎的 audio-separator 在 Separator() 建構子
       // 就會檢查它，缺了它連「只下載模型」都會失敗（server/services/ai-runtime-provider.js）。
@@ -200,7 +240,10 @@
       // 不必中斷安裝跑去設定頁找「下載 FFmpeg」。
       const ensureFfmpeg = async () => {
         const status = await getBundleStatus().catch(() => null);
-        if (status?.components?.ffmpeg !== false) return;
+        // 只有「明確查到 ffmpeg 在」才略過。狀態讀失敗（null）或回應裡沒有 components
+        // 都當成「不確定」→ 照樣跑一次下載：POST /api/ffmpeg/download 對已存在的 ffmpeg
+        // 會直接回 ok（冪等），代價小；漏跑的代價是整個 bundle 裝完仍缺 ffmpeg → 卡住。
+        if (status && status.components && status.components.ffmpeg === true) return;
         const paintFfmpeg = (s) => {
           const percent = Math.max(0, Math.min(100, Math.round(Number(s?.percent) || 0)));
           stageEl.textContent = installStageText({ phase: 'ffmpeg' });
@@ -232,10 +275,13 @@
           if (!polling) polling = setInterval(poll, 500);
           const response = await PinAuth.fetchWithPin('/api/ai-separation/bundle/download', { method: 'POST' });
           const result = await response.json().catch(() => ({}));
+          // POST 回來就代表這輪伺服器工作已結束（無論成敗）——視窗從這一刻起一定可關。
+          runSettled = true;
           if (!response.ok || !result.ok) throw new Error(result.reason || t('aiInstall.failed'));
           await poll();
         } catch (error) {
           if (polling) { clearInterval(polling); polling = null; }
+          runSettled = true;
           started = false;
           cancel.disabled = false;
           confirm.disabled = false;
@@ -243,9 +289,11 @@
           stageEl.textContent = error.message;
         }
       };
-      const onCancel = () => { if (!started) close(false); };
-      const onBackdrop = (event) => { if (event.target === modal && !started) close(false); };
-      const onKeydown = (event) => { if (event.key === 'Escape' && !started) close(false); };
+      // started 之後仍可關：伺服器這輪已結束（runSettled），或使用者就是想收掉視窗——
+      // downloadBundle() 在背景會自己跑完並寫 state，關視窗不會遺失進度，下次開會接回。
+      const onCancel = () => { if (!started || runSettled) close(false); };
+      const onBackdrop = (event) => { if (event.target === modal && (!started || runSettled)) close(false); };
+      const onKeydown = (event) => { if (event.key === 'Escape' && (!started || runSettled)) close(false); };
 
       cancel.onclick = onCancel;
       confirm.onclick = start;

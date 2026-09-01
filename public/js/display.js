@@ -51,6 +51,7 @@
   const metronomeDot = document.getElementById('metronome-dot');
   const metronomeCountdown = document.getElementById('metronome-countdown');
   const obsProgressFill = document.getElementById('obs-progress-fill');
+  const obsProgressBar = document.getElementById('obs-progress-bar');
   const audioPlayer = new Audio();
   // OBS 顯示端為「純視覺」來源：音訊一律靜音。
   // 音訊由控制面板輸出（面板有使用者互動，才能啟動 Web Audio 做變調）；
@@ -413,6 +414,7 @@
   SocketClient.on('play:track', (track) => {
     console.log('[Display] 收到播放指令:', track.title);
     currentTrackData = track;
+    syncTrackMetaDataset(currentTrackData);
     audioErrorCount = 0; // 重置錯誤計數
     audioDuration = 0;
 
@@ -699,6 +701,15 @@
     }, 450);
   }
 
+  // 曲名／演出者給模板用（燈牌的下緣銘牌、間奏跑馬）。走 body.dataset 沿用既有慣例，
+  // 模板不必自己去接 socket；沒有曲目時清掉，銘牌會整條隱藏。
+  function syncTrackMetaDataset(track) {
+    const title = track && typeof track.title === 'string' ? track.title.slice(0, 80) : '';
+    const artist = track && typeof track.artist === 'string' ? track.artist.slice(0, 60) : '';
+    if (title) document.body.dataset.lbTitle = title; else delete document.body.dataset.lbTitle;
+    if (artist) document.body.dataset.lbArtist = artist; else delete document.body.dataset.lbArtist;
+  }
+
   // ─── 歌詞外觀/位置設定（從控制面板即時推送，寫入 CSS 變數）───
   function applyLyricSettings(s) {
     if (!s || typeof s !== 'object') return;
@@ -709,6 +720,9 @@
       fontWeight: ['--display-font-weight', v => String(v)],
       color: ['--lyric-color', v => v],
       activeColor: ['--lyric-color-active', v => v],
+      // 打字機模板：左右對話泡泡底色（其他模板不吃這兩個變數）
+      twBubbleRight: ['--tw-bubble-right', v => v],
+      twBubbleLeft: ['--tw-bubble-left', v => v],
       strokeWidth: ['--lyric-stroke-width', v => `${v}px`],
       strokeColor: ['--lyric-stroke-color', v => v],
       shadow: ['--lyric-shadow', v => v],
@@ -746,6 +760,8 @@
     }
     if (typeof s.offsetX === 'number') lyricOffsetTargetX = s.offsetX;
     if (typeof s.offsetY === 'number') lyricOffsetTargetY = s.offsetY;
+    // 底部極細進度條開關（預設開；OBS 不想要可在面板「歌詞顯示模式」關掉）
+    if (obsProgressBar) obsProgressBar.style.display = (s.showProgressBar === false) ? 'none' : '';
     ensureLyricOffsetObserver();
     reclampLyricOffset();
     // KTV 伴唱是底部雙行絕對定位，原本 paddingY 的 0..300px 幅度對「上下位置」
@@ -801,6 +817,31 @@
       delete document.body.dataset.columnflowSafeMargin;
       document.body.classList.remove('cf-show-safe-zone');
     }
+    // 燈牌／詩頁／Migiwa：模板專屬設定走 body.dataset（同 columnflow 慣例），模板端逐幀讀取
+    if (s.template === 'lightboard') {
+      document.body.dataset.lightboardFont = ['cubic11', 'boutique9x9'].includes(s.lightboardFont) ? s.lightboardFont : 'cubic11';
+      document.body.dataset.lightboardPan = s.lightboardPan === false ? '0' : '1';
+      document.body.dataset.lightboardIdle = s.lightboardIdleMarquee === false ? '0' : '1';
+      document.body.dataset.lightboardSlide = s.lightboardSlideIn ? '1' : '0';
+    } else {
+      delete document.body.dataset.lightboardFont;
+      delete document.body.dataset.lightboardPan;
+      delete document.body.dataset.lightboardIdle;
+      delete document.body.dataset.lightboardSlide;
+    }
+    if (s.template === 'stanza') {
+      document.body.dataset.stanzaMode = s.stanzaMode === 'page' ? 'page' : 'scroll';
+    } else {
+      delete document.body.dataset.stanzaMode;
+    }
+    if (s.template === 'migiwa') {
+      document.body.dataset.migiwaShift = s.migiwaShift === false ? '0' : '1';
+      const migiwaSafe = Math.round(Number(s.stageSafeMargin));
+      document.body.dataset.stageSafeMargin = String(Number.isFinite(migiwaSafe) ? Math.max(2, Math.min(25, migiwaSafe)) : 13);
+    } else {
+      delete document.body.dataset.migiwaShift;
+    }
+
     // 舞台模板（Pulse/Facet/Drift/Aura）共用同一套「左右分散」機制與中央安全距離。
     if (['pulse', 'facet', 'drift', 'aura'].includes(s.template)) {
       const stageSafeMargin = Math.round(Number(s.stageSafeMargin));
@@ -1053,6 +1094,7 @@
     // 同步當前歌曲（僅在沒有歌詞時恢復）
     if (state.currentTrack) {
       currentTrackData = state.currentTrack;
+      syncTrackMetaDataset(currentTrackData);
 
       if (typeof state.currentTrack.offset === 'number') {
         currentOffsetMs = state.currentTrack.offset;
@@ -1137,6 +1179,7 @@
     // 當前歌曲 + 歌詞
     if (state.currentTrack) {
       currentTrackData = state.currentTrack;
+      syncTrackMetaDataset(currentTrackData);
 
       if (typeof state.currentTrack.offset === 'number') {
         currentOffsetMs = state.currentTrack.offset;

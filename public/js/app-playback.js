@@ -134,15 +134,17 @@
     });
   }
 
-  // ── 雙路音訊路由（實驗性，docs/AI-SEPARATION-PLAN.md §14 路線 A）：觀眾/OBS 裝置只聽
-  // 伴奏、主播耳機聽伴奏+人聲。刻意不搬探索分支的獨立 DualAudioEngine 模組——這裡要的
-  // 只是把「已經同步好的伴奏/人聲雙 SoundTouchEngine 輸出」分別送到兩個實體裝置，是下游
-  // 的路由/扇出問題，不是要不要疊加變調的問題，直接在 stGain/vocalsGain（兩個引擎各自
-  // 的最終輸出節點，平常直接接 stCtx.destination）後面插入 DelayNode 路由層即可，完全
-  // 複用已驗證的雙 SoundTouch 架構，不必重做 pause/seek/變調。
+  // ── 雙路音訊路由（實驗性，docs/AI-SEPARATION-PLAN.md §14 路線 A）：本地監聽（耳機）
+  // 與對外（OBS 擷取）分別送到兩個實體裝置、各自獨立音量，對所有歌曲生效；額外疊加的
+  // 導唱（觀眾只聽伴奏、主播耳機多聽原唱）才需要這首歌已分離人聲。刻意不搬探索分支的
+  // 獨立 DualAudioEngine 模組——這裡要的只是把「已經同步好的伴奏/人聲雙 SoundTouchEngine
+  // 輸出」分別送到兩個實體裝置，是下游的路由/扇出問題，不是要不要疊加變調的問題，直接在
+  // stGain/vocalsGain（兩個引擎各自的最終輸出節點，平常直接接 stCtx.destination）後面
+  // 插入 DelayNode+GainNode 路由層即可，完全複用已驗證的雙 SoundTouch 架構，不必重做
+  // pause/seek/變調。
   let dualAudioModeEnabled = false;
   try { dualAudioModeEnabled = localStorage.getItem('vk-dual-audio-mode') === '1'; } catch (e) { /* 靜默 */ }
-  let dualAudioActive = false; // 目前這首歌是否「實際」在用雙路路由（需要 trackSupportsSeparation()）
+  let dualAudioActive = false; // 目前這首歌是否「實際」在用雙路路由（等同 dualAudioModeEnabled，獨立追蹤方便其他地方判斷）
   let dualStreamDeviceId = '', dualHeadphoneDeviceId = '';
   try { dualStreamDeviceId = localStorage.getItem('vk-dual-audio-stream-device') || ''; } catch (e) { /* 靜默 */ }
   try { dualHeadphoneDeviceId = localStorage.getItem('vk-dual-audio-headphone-device') || ''; } catch (e) { /* 靜默 */ }
@@ -151,7 +153,18 @@
     const savedOffset = parseFloat(localStorage.getItem('vk-dual-audio-sync-offset-ms'));
     if (Number.isFinite(savedOffset)) dualSyncOffsetMs = Math.max(-1000, Math.min(1000, savedOffset));
   } catch (e) { /* 靜默 */ }
-  let dualStreamDelay = null, dualHeadphoneDelay = null, dualStreamGain = null;
+  // 本地監聽／對外各自的音量，疊加在主音量（stGain）之上；一次設定好、很少再動，
+  // 所以跟裝置選擇/同步偏移一樣存 localStorage，重開面板不用重調。
+  let dualHeadphoneVolume = 1.0, dualStreamVolume = 1.0;
+  try {
+    const savedHp = parseFloat(localStorage.getItem('vk-dual-audio-headphone-volume'));
+    if (Number.isFinite(savedHp)) dualHeadphoneVolume = Math.max(0, Math.min(3.0, savedHp));
+  } catch (e) { /* 靜默 */ }
+  try {
+    const savedStream = parseFloat(localStorage.getItem('vk-dual-audio-stream-volume'));
+    if (Number.isFinite(savedStream)) dualStreamVolume = Math.max(0, Math.min(3.0, savedStream));
+  } catch (e) { /* 靜默 */ }
+  let dualStreamDelay = null, dualHeadphoneDelay = null, dualStreamGain = null, dualHeadphoneGain = null;
   let dualStreamMediaDest = null, dualStreamAudioEl = null;
   let dualRoutingWired = false; // stGain/vocalsGain 目前是接到雙路節點還是直接接 stCtx.destination
 
@@ -162,12 +175,16 @@
     dualStreamDelay = stCtx.createDelay(1); // 上限 1000ms，跟文件量到的基準偏移（150-180ms 等級）留足餘裕
     dualHeadphoneDelay = stCtx.createDelay(1);
     dualStreamGain = stCtx.createGain();
+    dualStreamGain.gain.value = dualStreamVolume;
+    dualHeadphoneGain = stCtx.createGain();
+    dualHeadphoneGain.gain.value = dualHeadphoneVolume;
     dualStreamDelay.connect(dualStreamGain);
     dualStreamMediaDest = stCtx.createMediaStreamDestination();
     dualStreamGain.connect(dualStreamMediaDest);
     dualStreamAudioEl = new Audio();
     dualStreamAudioEl.srcObject = dualStreamMediaDest.stream;
-    dualHeadphoneDelay.connect(stCtx.destination);
+    dualHeadphoneDelay.connect(dualHeadphoneGain);
+    dualHeadphoneGain.connect(stCtx.destination);
     applyDualSyncOffset(dualSyncOffsetMs);
   }
 
@@ -252,11 +269,24 @@
     applyDualSyncOffset(ms);
     try { localStorage.setItem('vk-dual-audio-sync-offset-ms', String(dualSyncOffsetMs)); } catch (e) { /* 靜默 */ }
   }
+  /** 本地監聽音量（耳機路）；疊加在主音量之上，不影響對外那路。 */
+  function setDualAudioHeadphoneVolume(vol) {
+    dualHeadphoneVolume = Math.max(0, Math.min(3.0, Number(vol) || 0));
+    if (dualHeadphoneGain) { try { dualHeadphoneGain.gain.value = dualHeadphoneVolume; } catch (e) { /* 靜默 */ } }
+    try { localStorage.setItem('vk-dual-audio-headphone-volume', String(dualHeadphoneVolume)); } catch (e) { /* 靜默 */ }
+  }
+  /** 對外音量（OBS 擷取那路）；疊加在主音量之上，不影響本地監聽那路。 */
+  function setDualAudioStreamVolume(vol) {
+    dualStreamVolume = Math.max(0, Math.min(3.0, Number(vol) || 0));
+    if (dualStreamGain) { try { dualStreamGain.gain.value = dualStreamVolume; } catch (e) { /* 靜默 */ } }
+    try { localStorage.setItem('vk-dual-audio-stream-volume', String(dualStreamVolume)); } catch (e) { /* 靜默 */ }
+  }
   function getDualAudioState() {
     return {
       enabled: dualAudioModeEnabled, active: dualAudioActive,
       streamDeviceId: dualStreamDeviceId, headphoneDeviceId: dualHeadphoneDeviceId,
       syncOffsetMs: dualSyncOffsetMs,
+      headphoneVolume: dualHeadphoneVolume, streamVolume: dualStreamVolume,
     };
   }
 
@@ -516,10 +546,10 @@
 
     // AI 分離播放模式：toggle 開著且這首歌真的分離過，才實際生效——toggle 開但這首沒分離時
     // 仍走原始音軌（不是硬性要求，是刻意的自動降級，見計畫書）。
-    // 雙路音訊路由開著時自動連帶載入雙 stem（不用使用者再另外開一次「分離播放模式」）——
-    // 沒有雙 stem 就沒有東西可以分開送到兩個裝置，這兩個開關在「要不要載入分離結果」
-    // 這件事上是 OR 的關係，但 dualAudioActive 仍獨立追蹤（決定要不要接雙路路由節點）。
-    const wantDualAudio = dualAudioModeEnabled && trackSupportsSeparation(track);
+    // 雙路路由（兩個裝置＋各自音量）不要求分離：toggle 開就對所有歌曲生效。分離過的歌
+    // 額外自動連帶載入雙 stem，讓耳機那路多疊一份原唱當導唱（不用使用者再另外開一次
+    // 「分離播放模式」）；wantSeparation 因此仍需要 trackSupportsSeparation()。
+    const wantDualAudio = dualAudioModeEnabled;
     const wantSeparation = (separationModeEnabled || wantDualAudio) && trackSupportsSeparation(track);
     separationActive = wantSeparation;
     dualAudioActive = wantDualAudio;
@@ -1527,5 +1557,7 @@
   AppShared.setDualAudioMode = setDualAudioMode;
   AppShared.setDualAudioDevices = setDualAudioDevices;
   AppShared.setDualAudioSyncOffset = setDualAudioSyncOffset;
+  AppShared.setDualAudioHeadphoneVolume = setDualAudioHeadphoneVolume;
+  AppShared.setDualAudioStreamVolume = setDualAudioStreamVolume;
   AppShared.getDualAudioState = getDualAudioState;
 })();

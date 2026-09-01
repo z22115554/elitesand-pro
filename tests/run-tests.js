@@ -4393,6 +4393,34 @@ test('AI 伴奏首次啟用：缺 FFmpeg 時擋在門口，並在同一個安裝
   }
 });
 
+test('AI 伴奏首次啟用：下載跑完但元件仍不齊時，安裝視窗不可卡死（可取消、可重試）', () => {
+  // 2026-09-01 實機：使用者刪掉元件後重新下載，三個 provider 都裝完、進度條 100%、
+  // 顯示「完整元件已就緒」，但 isAvailable() 因為這個 GUI 行程 PATH 上沒有 ffmpeg 而
+  // 一直是 false → poll() 兩個分支都不進，每 500ms 空轉，取消鍵 disabled、視窗關不掉。
+  const client = fs.readFileSync(path.join(__dirname, '../public/js/ai-separation-client.js'), 'utf8');
+  const modalFn = client.slice(client.indexOf('function openInstallModal'), client.indexOf('async function ensureReady'));
+  ok(/runOver\s*=\s*!status\.active/.test(modalFn) && modalFn.includes('runOver && !status.available'),
+    'poll() 必須處理「跑完但 isAvailable() 仍 false」的終局，不能無限輪詢: ');
+  ok(modalFn.includes("t('aiInstall.incomplete')"), '終局要給使用者看得懂的訊息（多半是缺 FFmpeg）: ');
+  ok(/onCancel = \(\) => \{ if \(!started \|\| runSettled\)/.test(modalFn)
+    && /Escape.*!started \|\| runSettled/.test(modalFn),
+    '伺服器這輪結算後（runSettled），取消／Esc 一定要能關掉視窗: ');
+  ok(modalFn.includes('cancel.disabled = !runSettled'),
+    '重試期間也要保留一個出口，不可再把取消鍵完全鎖死: ');
+  ok(modalFn.includes('status.components.ffmpeg === true'),
+    'ensureFfmpeg 只有「明確查到 ffmpeg 在」才略過；狀態讀失敗不可當成已安裝: ');
+  // 元件都好了時：先關視窗，WebGPU 預熱丟背景——不可 await 在 close 前面（預熱會卡十幾秒）
+  const donePath = modalFn.slice(modalFn.indexOf('status.available && !status.active'), modalFn.indexOf("status.stage === 'error'"));
+  ok(donePath.includes('close(true)') && !/await\s+enableWebgpuFallback\(\)/.test(donePath),
+    '元件就緒後必須先 close(true) 再背景預熱 WebGPU，不能 await 卡在關視窗前面: ');
+  ok(/webgpuWarmInFlight/.test(client) && /let pollBusy = false/.test(modalFn),
+    'WebGPU 預熱要單例、輪詢要有重入鎖，避免每 500ms 堆疊把 settings 端點打爆: ');
+  const i18n = require('../public/js/i18n');
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    ok(i18n.catalogs?.[locale]?.['aiInstall.incomplete'], `${locale} 缺少 aiInstall.incomplete: `);
+  }
+});
+
 test('AI 伴奏首次啟用：只呈現一個完整下載入口並清楚揭露空間', () => {
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
@@ -5762,6 +5790,30 @@ test('高頻播放控制只送細粒度事件，不重複廣播完整 state:sync
   playbackEvents.get('speed:change')(1.1);
   playbackEvents.get('metronome:toggle')(false);
   ok(['offset:update', 'style:override', 'pitch:update', 'speed:update', 'metronome:update'].every((event) => emitted.some((item) => item.event === event)));
+});
+
+test('lyric-settings:update 清空本機字型資源 ID：切回內建字體必須真的寫掉舊 ID，不能被 delete 掉保留舊值', () => {
+  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
+  const events = new Map();
+  const ctx = {
+    playState: {
+      // 使用者先前選過一個本機字型，state 裡留著它的 opaque ID
+      lyricSettings: { fontFamily: "'標楷體', sans-serif", fontAssetId: 'AbC123_dEf456-GhIj', fontFamilyLatinAssetId: 'ZZZ999_aaa111-bbb2' },
+    },
+    trackOffsets: new Map(), manualLyricsCache: new Map(), lyricOffsetSyncTimers: new Map(),
+    persistState() {}, broadcastState() {},
+  };
+  registerLyricsHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);
+
+  // 切回內建 Noto：前端送 fontAssetId:'' 表示「清除」
+  events.get('lyric-settings:update')({ fontFamily: "'Noto Sans SC', sans-serif", fontAssetId: '', fontFamilyLatinAssetId: '' });
+  eq(ctx.playState.lyricSettings.fontAssetId, '', '空字串必須被當成明確清除、寫回 state（否則顯示端每次重連都把舊字型疊回最前面）: ');
+  eq(ctx.playState.lyricSettings.fontFamilyLatinAssetId, '', '英文字型資源 ID 同樣要能被清空: ');
+
+  // 但格式不對的垃圾值仍要忽略（保留原值，不落地）
+  ctx.playState.lyricSettings.fontAssetId = 'GoodId_1234567890ab';
+  events.get('lyric-settings:update')({ fontAssetId: '../../etc/passwd' });
+  eq(ctx.playState.lyricSettings.fontAssetId, 'GoodId_1234567890ab', '非法格式的 ID 必須被忽略、不覆寫既有值: ');
 });
 
 test('offset:set 會立即持久化，歌曲移出清單後重開程式仍可恢復', () => {
@@ -8032,14 +8084,16 @@ test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', ()
   const controllerJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const controllerCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'controller-new.css'), 'utf8');
-  ['pulse', 'facet', 'aura', 'paperstrip', 'mirror'].forEach((template) => {
+  ['pulse', 'facet', 'aura', 'paperstrip', 'mirror', 'typewriter'].forEach((template) => {
     ok(controllerHtml.includes(`class="ctrl-template-btn" data-template="${template}"`), `${template} 必須出現在手機模板選項: `);
   });
   const panelDrift = /<button[^>]*data-template="drift"[^>]*>/.exec(panelHtml)?.[0] || '';
   const controllerDrift = /<button[^>]*data-template="drift"[^>]*>/.exec(controllerHtml)?.[0] || '';
   ok(panelDrift.includes('hidden') && controllerDrift.includes('hidden'), '斜拍告白必須從桌面與手機模板選擇器隱藏: ');
   ok(!controllerHtml.includes('ctrl-template-legacy-notice'), '手機不應保留舊模板的相容性介面: ');
-  ok(controllerJs.includes("const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror'];"), '遙控器必須使用新的模板 ID: ');
+  const ctrlIds = (controllerJs.match(/const TEMPLATE_IDS = \[([^\]]*)\]/) || [])[1] || '';
+  ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'migiwa']
+    .forEach((id) => ok(ctrlIds.includes(`'${id}'`), `遙控器的 TEMPLATE_IDS 必須包含 ${id}: `));
   ok(controllerJs.includes('if (!TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換必須接受所有現行模板: ');
   ok(controllerJs.includes("nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS"), '舊 state 從手機首次切到 paperstrip 時必須套用黑字預設，避免白底白字: ');
   ok(controllerJs.includes("nextTemplate === 'mirror' ? MIRROR_DEFAULTS") && controllerJs.includes("if (nextTemplate === 'mirror') next.lyricPosition = 'split';"), '手機首次切到 mirror 必須套用雙側預設並鎖定 split: ');
@@ -8080,7 +8134,8 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(templateJs.includes('constrainRowWidth') && displayCss.includes('body.lyric-pos-left #paperstrip-root .ps-group') && displayCss.includes('width: min(100%, 760px);'), '紙帶逐字偏左／偏右必須有單邊寬度上限，超長句在首次顯示前縮放: ');
   ok(!displayCss.includes('@keyframes ps-row-enter'), '紙帶逐字不可在每句重播整列進場動畫造成閃爍: ');
   ok(motionKernel.includes('function stageSafeMarginPercent()') && motionKernel.includes('function mountStageSafeZoneGuide(rootEl)'), '主線舞台安全框核心必須移植到共用 LyricMotion: ');
-  ok(lyricExtras.includes("const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'];") && panelHtml.includes('id="stage-safe-margin-field"'), 'Paper Strip 必須接入舞台安全距離設定 UI: ');
+  const stagePosIds = (lyricExtras.match(/const STAGE_POSITION_TEMPLATES = \[([^\]]*)\]/) || [])[1] || '';
+  ok(["'paperstrip'", "'mirror'", "'pulse'"].every((id) => stagePosIds.includes(id)) && panelHtml.includes('id="stage-safe-margin-field"'), 'Paper Strip 必須接入舞台安全距離設定 UI: ');
   ok(displayJs.includes("['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)") && displayJs.includes("setProperty('--stage-safe-margin'"), 'display 必須把 Paper Strip 的安全距離同步成共用 dataset/CSS 變數: ');
   ok(templateJs.includes('LyricMotion.mountStageSafeZoneGuide(rootEl)') && templateJs.includes('onSettings()') && displayCss.includes('.stage-safe-zone-band'), 'Paper Strip 必須掛共用安全框並在設定變更時即時同步: ');
   ok(displayCss.includes('width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);') && displayCss.includes('overflow: visible;') && templateJs.includes('entry.groupEl.clientWidth - indent - 2') && templateJs.includes('Math.max(0.22'), 'Paper Strip 安全框必須作為排版寬度而不是裁切遮罩；超長句要先計入縮排並縮到完整可見: ');
@@ -8140,6 +8195,154 @@ test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic g
   ok(displayCss.includes('#mirror-root {') && displayCss.slice(displayCss.indexOf('#mirror-root {'), displayCss.indexOf('}', displayCss.indexOf('#mirror-root {'))).includes('transform: translateY(var(--lyric-offset-y, 0px));'), '鏡像必須直接在 #mirror-root 消費全域 --lyric-offset-y 位移，不能透過 #lyrics-container（position:fixed 的 containing block 限制）: ');
   ok(displayCss.includes('#paperstrip-root {') && displayCss.slice(displayCss.indexOf('#paperstrip-root {'), displayCss.indexOf('}', displayCss.indexOf('#paperstrip-root {'))).includes('transform: translateY(var(--lyric-offset-y, 0px));'), '紙帶逐字必須在 #paperstrip-root 消費全域 --lyric-offset-y 位移: ');
   ok(lyricExtras.includes('const isPaperstrip = ') && lyricExtras.includes('const isYOnlyOffset = isKtv || isPaperstrip || isMirror') && lyricExtras.includes("(settings.lyricPosition !== 'split' || isMirror || isPaperstrip)"), '紙帶逐字／鏡像的位置微調必須只開放 Y，且鏡像固定 split 時仍要能調整 Y: ');
+});
+
+test('打字機模板：registry 時間驅動、完整接入設定／伺服器白名單／i18n', () => {
+  const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const controllerHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'controller.html'), 'utf8');
+  const templateJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-typewriter.js'), 'utf8');
+  const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
+  const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  const i18n = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
+  const displayJsSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'display.js'), 'utf8');
+
+  ok(displayHtml.includes('/js/lyric-template-typewriter.js'), 'display 必須載入打字機模板腳本: ');
+  ok(templateJs.includes("id: 'typewriter'") && templateJs.includes('onFrame(timeMs, ctx)') && templateJs.includes('onSeek(timeMs, ctx)'), '打字機必須透過 registry 並完全時間驅動: ');
+  ok(templateJs.includes('ensureWordTimings') && templateJs.includes('buildGraphemeTimings') && templateJs.includes('per = (next - start)'), '打字機必須沿用逐字時間、缺時退回整句線性: ');
+  ok(templateJs.includes("classList.toggle('on', i < n)") && templateJs.includes("classList.toggle('tw-done'"), '打字機必須逐字揭露且整句打完會標記 tw-done（收游標）: ');
+  ok(displayCss.includes('#typewriter-root {') && displayCss.includes('.tw-caret {') && displayCss.includes('.tw-bubble.tw-done .tw-caret { display: none; }'), 'display.css 必須有打字機泡泡與游標樣式，打完收游標: ');
+  const transformNoneGroup = (displayCss.match(/([^}]*)\{\s*transform:\s*none;\s*\}/) || [])[1] || '';
+  ok(transformNoneGroup.includes('body.template-typewriter #lyrics-container'),
+    '打字機是固定構圖模板，#lyrics-container 必須列入 transform: none: ');
+  ok(lyricExtras.includes("typewriter: { label: '打字機'") && lyricExtras.includes("template: 'typewriter'"), '桌面設定必須提供打字機能力與獨立預設: ');
+  ok(lyricsHandler.includes("'mirror', 'typewriter'"), 'server 模板白名單必須接受 typewriter: ');
+  ok(appState.includes("typewriter: { template: 'typewriter'"), 'server 預設 lyricTemplateSettings 必須包含 typewriter: ');
+  ok(i18n.includes("'template.typewriter':"), '打字機模板名稱必須有五語 i18n key: ');
+  ok(panelHtml.includes('data-template="typewriter"') && controllerHtml.includes('class="ctrl-template-btn" data-template="typewriter"'), '桌面與手機模板選擇器都要有打字機卡片: ');
+  // 聊天室：已唱不消失、往上疊（不再逐顆淡出移除）
+  ok(templateJs.includes("id = 'typewriter-root'") && templateJs.includes('KEEP = 16') && !templateJs.includes('GONE_REMOVE_MS'), '打字機必須是往上疊的聊天室（保留多顆泡泡、不逐顆移除）: ');
+  // 靠邊：1–5 句一段隨機；合唱歌曲一邊代表一個聲部
+  ok(templateJs.includes('RUN_MIN = 1') && templateJs.includes('RUN_SPAN = 5'), '打字機左右分散必須是 1–5 句一段: ');
+  ok(templateJs.includes("return 'duet'") && templateJs.includes("s !== 'both'") && templateJs.includes('duetMap'), '合唱歌曲必須一邊固定代表一個聲部: ');
+  ok(templateJs.includes('dataset.lyricPos'), '非合唱必須吃面板「歌詞位置」決定全左／全右／左右分散: ');
+  // 面板可調：泡泡底色、邊距、靠邊方式
+  ok(displayCss.includes('var(--tw-bubble-right') && displayCss.includes('var(--tw-bubble-left') && displayCss.includes('var(--lyric-padding-x'), 'display.css 泡泡底色與左右邊距必須吃 CSS 變數: ');
+  ok(displayJsSrc.includes("'--tw-bubble-right'") && displayJsSrc.includes("'--tw-bubble-left'"), 'display.js 必須把泡泡底色寫成 CSS 變數: ');
+  ok(lyricExtras.includes("key: 'twBubbleRight'") && lyricExtras.includes("key: 'twBubbleLeft'") && lyricExtras.includes("twBubbleRight: '#0b93f6'"), '桌面設定必須提供左右泡泡底色控制與預設: ');
+  ok(lyricExtras.includes('typewriter-colors-field') && lyricExtras.includes('!isTypewriter'), '泡泡底色欄位必須只在打字機時顯示: ');
+  ok(panelHtml.includes('id="typewriter-colors-field"') && panelHtml.includes('id="ls-tw-bubble-right"') && panelHtml.includes('id="ls-tw-bubble-left"'), 'index.html 必須有打字機泡泡底色欄位: ');
+  ok(appState.includes("lyricPosition: 'split'") && /typewriter: \{ template: 'typewriter'[^}]*twBubbleRight/.test(appState), 'server 預設必須含打字機靠邊與泡泡底色: ');
+  // 左右邊距挪到「歌詞位置」下面、且打字機沒有「置中」靠邊
+  ok(panelHtml.includes('id="typewriter-padding-field"') && panelHtml.includes('id="ls-tw-padding-x"'), '打字機的左右邊距必須拉到主設定頁「歌詞位置」下面: ');
+  ok(panelHtml.includes('id="padding-x-field"') && lyricExtras.includes("getElementById('padding-x-field')") && lyricExtras.includes('modalPaddingXField.hidden = isTypewriter'), '打字機時詳細設定裡的左右邊距必須收起（挪走不是複製）: ');
+  ok(lyricExtras.includes('data-lyric-pos="center"]') && lyricExtras.includes('posCenterBtn.hidden = isTypewriter'), '打字機的靠邊選擇不可有「置中」: ');
+  ok(lyricExtras.includes("out.typewriter.lyricPosition === 'center'") && lyricExtras.includes("settings.template === 'typewriter' && settings.lyricPosition === 'center'"), '舊快照存了 center 必須被歸成 split: ');
+  // 向內（往中央）可調範圍放寬 — 所有舞台模板一起
+  ok(lyricExtras.includes('STAGE_OFFSET_X_INWARD = 700'), '舞台模板向內位移範圍必須放寬到 700: ');
+  // 底部進度條開關（放在「歌詞顯示模式」）
+  ok(lyricExtras.includes('showProgressBar: true') && lyricExtras.includes("key: 'showProgressBar'"), '底部進度條必須有設定鍵與控制項: ');
+  ok(panelHtml.includes('id="ls-progress-bar"') && panelHtml.includes('底部進度條'), 'index.html「歌詞顯示模式」必須有底部進度條開關: ');
+  ok(displayJsSrc.includes("obsProgressBar") && displayJsSrc.includes("s.showProgressBar === false"), 'display.js 必須依 showProgressBar 顯示／隱藏底部進度條: ');
+});
+
+test('燈牌／詩頁／Migiwa：三個模板都以 registry 時間驅動並完整接入設定與伺服器白名單', () => {
+  const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const controllerHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'controller.html'), 'utf8');
+  const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
+  const displayJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'display.js'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
+  const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  const i18n = require('../public/js/i18n');
+
+  const mods = {
+    lightboard: fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-lightboard.js'), 'utf8'),
+    stanza: fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-stanza.js'), 'utf8'),
+    migiwa: fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-migiwa.js'), 'utf8'),
+  };
+
+  for (const [id, src] of Object.entries(mods)) {
+    ok(displayHtml.includes('/js/lyric-template-' + id + '.js'), 'display 必須載入 ' + id + ' 模板腳本: ');
+    ok(src.includes("id: '" + id + "'") && src.includes('onFrame(timeMs, ctx)') && src.includes('onSeek(timeMs, ctx)'),
+      id + ' 必須透過 registry 並完全時間驅動: ');
+    ok(src.includes('ensureWordTimings') && src.includes('buildGraphemeTimings'),
+      id + ' 必須沿用逐字時間核心（缺時退回整句線性）: ');
+    ok(!/setInterval\(/.test(src),
+      id + ' 不可自己開 setInterval 迴圈，時間一律由 onFrame 帶進來: ');
+    ok(lyricsHandler.includes("'" + id + "'"), 'server 模板白名單必須接受 ' + id + ': ');
+    ok(appState.includes(id + ": { template: '" + id + "'"), 'server 預設 lyricTemplateSettings 必須包含 ' + id + ': ');
+    ok(panelHtml.includes('data-template="' + id + '"') && controllerHtml.includes('data-template="' + id + '"'),
+      '桌面與手機模板選擇器都要有 ' + id + ': ');
+    for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+      ok(i18n.catalogs?.[locale]?.['template.' + id], locale + ' 缺少 template.' + id + ': ');
+    }
+  }
+
+  // ── 燈牌：只吃兩款真點陣字型、字級掛在機殼上（框跟著字級走）、字級吸附到設計格數 ──
+  ok(fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'fonts', 'cubic11', 'Cubic_11.woff2')),
+    'Cubic 11 必須隨程式打包（使用者的電腦不會有）: ');
+  ok(fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'fonts', 'cubic11', 'OFL.txt')),
+    '打包的字型必須附授權檔: ');
+  ok(displayCss.includes("font-family: 'Cubic 11'") && displayCss.includes('/assets/fonts/cubic11/Cubic_11.woff2'),
+    'display.css 必須以 @font-face 載入打包的 Cubic 11: ');
+  ok(mods.lightboard.includes('function snapSize') && mods.lightboard.includes('Math.round(px / grid)'),
+    '燈牌字級必須吸附到設計格數的整數倍（四捨五入，不是無條件捨去）: ');
+  ok(mods.lightboard.includes("boxEl.style.fontSize = size + 'px'"),
+    '字級要掛在機殼上，整台機器才會跟著字級等比縮放: ');
+  ok(/\.lb-box\s*\{[^}]*width:\s*[\d.]+em/.test(displayCss),
+    '燈箱寬度必須是 em（框跟著字級走）: ');
+  ok(lyricExtras.includes("lightboardFont: 'cubic11'") && panelHtml.includes('id="lightboard-font-field"'),
+    '燈牌必須有自己的字型二選一設定: ');
+  ok(lyricExtras.includes('if (fontFamilyFields) fontFamilyFields.hidden = isLightboard;')
+    && panelHtml.includes('id="font-family-fields"'),
+    '選燈牌時一般字體選單必須整塊收起（不支援其他字體）: ');
+  ok(lyricsHandler.includes("['cubic11', 'boutique9x9'].includes(settings.lightboardFont)"),
+    'server 必須把燈牌字型限制在兩款點陣字型: ');
+  ok(lyricExtras.includes('lightboardPan: true') && lyricExtras.includes('lightboardIdleMarquee: true')
+    && lyricExtras.includes('lightboardSlideIn: false'),
+    '燈牌捲動預設：長句平移開、間奏跑馬開、進場滑入關: ');
+  ok(mods.lightboard.includes('HEAD_RATIO') && mods.lightboard.includes('state.textW - boxW'),
+    '長句平移必須夾在兩端之間，且讓正在唱的字留在燈箱內: ');
+  ok(mods.lightboard.includes('IDLE_MIN_GAP_MS') && mods.lightboard.includes("segEl.textContent = 'INTERLUDE'"),
+    '間奏跑馬只在夠長的空檔跑，並切換讀數: ');
+
+  // ── 詩頁：字不移動、讀字頭、連續進度軌、捲動為預設 ──
+  ok(mods.stanza.includes("document.body.dataset.stanzaMode === 'page' ? 'page' : 'scroll'"),
+    '詩頁預設是捲動（換頁需要段落邊界，一般歌詞沒有可靠標記）: ');
+  ok(displayCss.includes('.st-ln.cur .st-ch.now'), '詩頁必須有讀字頭（正在唱的那個字最亮）: ');
+  ok(mods.stanza.includes('progress(r.times, t)') && displayCss.includes('.st-rail'),
+    '詩頁的進度軌必須吃連續進度（不是整數字數）: ');
+  ok(/\.st-tr\s*\{[^}]*height:\s*[\d.]+em/.test(displayCss),
+    '翻譯行必須永遠佔位，切換時版面才不會跳: ');
+  ok(lyricsHandler.includes("['scroll', 'page'].includes(settings.stanzaMode)"),
+    'server 必須驗證詩頁的推進方式: ');
+
+  // ── Migiwa：一句一側、直排、中央安全距離、長句縮字不換欄 ──
+  ok(mods.migiwa.includes("idx % 2 === 0 ? 'right' : 'left'"), 'Migiwa 必須一句一側、下一句換對側: ');
+  ok(displayCss.includes('writing-mode: vertical-rl') && displayCss.includes('.mg-col'),
+    'Migiwa 必須是直排: ');
+  ok(mods.migiwa.includes('MIN_SCALE') && mods.migiwa.includes("g.style.setProperty('--mg-scale'"),
+    'Migiwa 長句採整體縮字（有下限），不換欄: ');
+  ok(mods.migiwa.includes('function safeMargin') && displayCss.includes('var(--mg-safe'),
+    'Migiwa 必須吃中央安全距離，把中間留給主播: ');
+  ok(lyricExtras.includes("settings.template === 'migiwa'") && lyricExtras.includes('migiwa-shift-field'),
+    'Migiwa 必須接入安全距離與落字微移的設定 UI: ');
+
+  // 三個模板都是固定構圖：#lyrics-container 不吃九宮格 transform
+  const transformNone = (displayCss.match(/([^}]*)\{\s*transform:\s*none;\s*\}/) || [])[1] || '';
+  ['lightboard', 'stanza', 'migiwa'].forEach((id) => {
+    ok(transformNone.includes('body.template-' + id + ' #lyrics-container'), id + ' 必須列入 transform: none: ');
+  });
+  // 模板專屬設定一律走 body.dataset（沿用 columnflow 慣例，不另開 ctx 通道）
+  ok(displayJs.includes('document.body.dataset.lightboardFont') && displayJs.includes('document.body.dataset.stanzaMode')
+    && displayJs.includes('document.body.dataset.migiwaShift'),
+    '模板專屬設定必須由 display.js 寫進 body.dataset: ');
+  ok(displayJs.includes('function syncTrackMetaDataset') && mods.lightboard.includes('dataset.lbTitle'),
+    '燈牌銘牌／間奏跑馬要用的曲名必須由 display.js 同步進 dataset: ');
 });
 
 test('v2 將既有模板設定與預設快照遷移到新 ID', () => {

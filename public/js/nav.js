@@ -486,14 +486,24 @@
       const toggle = document.getElementById('dual-audio-mode-toggle');
       const offsetSlider = document.getElementById('dual-audio-sync-offset');
       const offsetVal = document.getElementById('dual-audio-sync-offset-val');
+      const headphoneVolumeSlider = document.getElementById('dual-audio-headphone-volume');
+      const headphoneVolumeVal = document.getElementById('dual-audio-headphone-volume-val');
+      const streamVolumeSlider = document.getElementById('dual-audio-stream-volume');
+      const streamVolumeVal = document.getElementById('dual-audio-stream-volume-val');
 
-      // 還原上次選過的偏移／開關狀態（裝置下拉選單的還原值要等 populateDevices() 建好
+      // 還原上次選過的偏移／開關／音量狀態（裝置下拉選單的還原值要等 populateDevices() 建好
       // 選項後才套得上，見下面 fillSelect 的 savedId 參數）。
       const initialState = (typeof AppShared.getDualAudioState === 'function') ? AppShared.getDualAudioState() : null;
       if (initialState) {
         toggle.checked = initialState.enabled;
         offsetSlider.value = initialState.syncOffsetMs;
         offsetVal.textContent = `${initialState.syncOffsetMs}ms`;
+        const hpPct = Math.round((initialState.headphoneVolume ?? 1) * 100);
+        const streamPct = Math.round((initialState.streamVolume ?? 1) * 100);
+        headphoneVolumeSlider.value = hpPct;
+        headphoneVolumeVal.textContent = `${hpPct}%`;
+        streamVolumeSlider.value = streamPct;
+        streamVolumeVal.textContent = `${streamPct}%`;
       }
 
       // 過濾 default/communications 這兩個「別名」，避免同一顆實體裝置在清單裡重複出現
@@ -568,6 +578,19 @@
         const ms = parseInt(offsetSlider.value, 10) || 0;
         offsetVal.textContent = `${ms}ms`;
         if (typeof AppShared.setDualAudioSyncOffset === 'function') AppShared.setDualAudioSyncOffset(ms);
+      });
+
+      // 本地監聽／對外各自的音量：疊加在主音量之上，互不影響（這就是「調大聲、OBS
+      // 端也跟著大聲」問題的解法——兩路各自一顆，設定一次很少再動）。
+      headphoneVolumeSlider.addEventListener('input', () => {
+        const pct = parseInt(headphoneVolumeSlider.value, 10) || 0;
+        headphoneVolumeVal.textContent = `${pct}%`;
+        if (typeof AppShared.setDualAudioHeadphoneVolume === 'function') AppShared.setDualAudioHeadphoneVolume(pct / 100);
+      });
+      streamVolumeSlider.addEventListener('input', () => {
+        const pct = parseInt(streamVolumeSlider.value, 10) || 0;
+        streamVolumeVal.textContent = `${pct}%`;
+        if (typeof AppShared.setDualAudioStreamVolume === 'function') AppShared.setDualAudioStreamVolume(pct / 100);
       });
     })();
 

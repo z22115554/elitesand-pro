@@ -36,7 +36,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'migiwa'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;
@@ -229,10 +229,23 @@ function registerLyricsHandlers(io, socket, ctx) {
       && (!Number.isInteger(settings.columnflowMaxLines) || settings.columnflowMaxLines < 1 || settings.columnflowMaxLines > 6)) {
       delete settings.columnflowMaxLines;
     }
+    // 燈牌只吃兩款真點陣字型；未知值不落地（顯示端會退回 cubic11，但別讓髒值進 state）
+    if (settings.lightboardFont && !['cubic11', 'boutique9x9'].includes(settings.lightboardFont)) {
+      delete settings.lightboardFont;
+    }
+    // 詩頁的推進方式白名單
+    if (settings.stanzaMode && !['scroll', 'page'].includes(settings.stanzaMode)) {
+      delete settings.stanzaMode;
+    }
     // 本機字型資源只接受掃描器產生的 opaque ID。實際檔案路徑從不進 state，也不接受
     // 客戶端拼出的 URL；顯示端仍會由 API 再做一次 ID/realpath 驗證。
+    // 空字串／null 是「明確清除」：切回內建字體堆疊時，必須把舊的本機字型資源 ID 一起寫掉，
+    // 否則 delete 掉這個鍵 → 合併時保留舊值 → 顯示端每次重連都把舊字型 FontFace 疊回堆疊最前面
+    // （使用者實測：選過本機字型後怎麼換都換不掉、連內建 Noto 都被蓋住）。
     for (const key of ['fontAssetId', 'fontFamilyLatinAssetId']) {
-      if (settings[key] !== undefined && (typeof settings[key] !== 'string' || !/^[A-Za-z0-9_-]{16,32}$/.test(settings[key]))) {
+      if (settings[key] === undefined) continue;
+      if (settings[key] === '' || settings[key] === null) { settings[key] = ''; continue; }
+      if (typeof settings[key] !== 'string' || !/^[A-Za-z0-9_-]{16,32}$/.test(settings[key])) {
         delete settings[key];
       }
     }

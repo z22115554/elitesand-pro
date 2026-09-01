@@ -677,7 +677,11 @@ body.template-drift #lyrics-container,
 body.template-aura #lyrics-container,
 body.template-columnflow #lyrics-container,
 body.template-paperstrip #lyrics-container,
-body.template-mirror #lyrics-container {
+body.template-mirror #lyrics-container,
+body.template-typewriter #lyrics-container,
+body.template-lightboard #lyrics-container,
+body.template-stanza #lyrics-container,
+body.template-migiwa #lyrics-container {
   min-height: 70vh;
   justify-content: center;
 }
@@ -690,7 +694,11 @@ body.template-aura #lyrics-container,
 body.template-ktv #lyrics-container,
 body.template-columnflow #lyrics-container,
 body.template-paperstrip #lyrics-container,
-body.template-mirror #lyrics-container {
+body.template-mirror #lyrics-container,
+body.template-typewriter #lyrics-container,
+body.template-lightboard #lyrics-container,
+body.template-stanza #lyrics-container,
+body.template-migiwa #lyrics-container {
   align-items: center;
 }
 
@@ -700,8 +708,83 @@ body.template-mirror #lyrics-container {
    見設定面板「位置微調」與 display.js 的 reclampLyricOffset 自動夾限。 */
 body.template-columnflow #lyrics-container,
 body.template-paperstrip #lyrics-container,
-body.template-mirror #lyrics-container {
+body.template-mirror #lyrics-container,
+body.template-typewriter #lyrics-container,
+body.template-lightboard #lyrics-container,
+body.template-stanza #lyrics-container,
+body.template-migiwa #lyrics-container {
   transform: none;
+}
+
+/* ─── 打字機：仿 iMessage 聊天室，逐字打出、已唱不消失、往上疊 ─── */
+#typewriter-root {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 25%;                 /* 最新一句大約落在畫面下方 1/4 處 */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;   /* 新句貼底、舊句往上頂 */
+  align-items: stretch;
+  gap: 0.4em;
+  padding: 0 var(--lyric-padding-x, 96px);   /* 面板「左右邊距」即時套用 */
+  pointer-events: none;
+  overflow: hidden;            /* 頂出畫面的舊泡泡淡出裁掉 */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 15%, #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 15%, #000 100%);
+  font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
+}
+.tw-bubble {
+  position: relative;
+  align-self: flex-start;
+  max-width: 66%;
+  width: -moz-fit-content;
+  width: fit-content;
+  padding: 0.36em 0.7em 0.4em;
+  border-radius: 1.15em;
+  color: var(--lyric-color, #f4f7fa);
+  font-size: calc(var(--display-font-size, 42px) * 0.8);
+  font-weight: var(--lyric-font-weight, 600);
+  line-height: 1.42;
+  letter-spacing: var(--lyric-letter-spacing, 0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transform: translateY(0.6em) scale(0.96);
+  transform-origin: bottom left;
+  transition: opacity 0.3s ease, transform 0.34s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.tw-bubble.tw-in { opacity: 1; transform: none; }
+.tw-bubble.tw-left {
+  align-self: flex-start;
+  background: var(--tw-bubble-left, #3b3b3d);   /* iMessage 深色收訊灰；面板可調 */
+  border-bottom-left-radius: 0.32em;       /* 尖角朝左下 */
+  transform-origin: bottom left;
+}
+.tw-bubble.tw-right {
+  align-self: flex-end;
+  background: var(--tw-bubble-right, #0b93f6);  /* iMessage 藍；面板可調 */
+  border-bottom-right-radius: 0.32em;      /* 尖角朝右下 */
+  transform-origin: bottom right;
+}
+.tw-body { white-space: pre-wrap; word-break: break-word; }
+.tw-ch { display: none; }                  /* 還沒打到的字不佔位，泡泡隨打字長大 */
+.tw-ch.on { display: inline; }
+.tw-caret {                                /* 一律是最後一個子節點 → 貼著剛打出的字閃爍 */
+  display: inline-block;
+  width: 0.06em;
+  height: 1.02em;
+  margin-left: 0.03em;
+  vertical-align: -0.16em;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.92);
+  animation: twCaretBlink 1s steps(1) infinite;
+}
+.tw-bubble.tw-done .tw-caret { display: none; }
+@keyframes twCaretBlink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .tw-bubble { transition: none; opacity: 1; transform: none; }
+  .tw-caret { animation: none; }
 }
 
 /* ─── 鏡像 P0：固定左右雙側、中央人物安全區、glyph 級靜態排版 ─── */
@@ -1515,4 +1598,343 @@ body.template-ktv #lyrics-container {
 
 @media (prefers-reduced-motion: reduce) {
   .ms-tide-rings > i { animation: none; opacity: 0.32; }
+}
+
+/* ═══════════════════════════════════════════
+   燈牌（Lightboard）：一塊會發光的 LED 燈牌
+   機殼所有尺寸都是 em ⇒ 字級一變，整台機器等比縮放（模板 JS 把字級寫在 .lb-box 上）。
+   ═══════════════════════════════════════════ */
+@font-face {
+  font-family: 'Cubic 11';
+  src: url('/assets/fonts/cubic11/Cubic_11.woff2') format('woff2');
+  font-display: block;
+}
+
+#lightboard-root {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(9% + var(--lyric-offset-y, 0px));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.lb-box {
+  position: relative;
+  width: 14.5em;
+  max-width: 94%;
+  padding: 0.46em 0.6em 0.46em;
+  border-radius: 0.2em;
+  /* 金屬機殼：頂緣倒角高光 + 往外的微弱光溢（燈箱是個會發光的實體） */
+  background: linear-gradient(180deg, #2b2219 0%, #1a140e 9%, #0d0a07 24%, #0b0907 100%);
+  border: 1px solid rgba(255, 176, 60, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 214, 158, 0.16),
+              inset 0 0 0.6em rgba(255, 140, 20, 0.07),
+              0 0.18em 0.6em rgba(0, 0, 0, 0.62),
+              0 0 1em rgba(255, 140, 30, 0.09);
+  font-size: 44px; /* 由模板 JS 依「字級」設定覆寫；這裡只是還沒掛載前的保底 */
+}
+/* 四顆機殼螺絲 */
+.lb-screw {
+  position: absolute;
+  width: 0.16em;
+  height: 0.16em;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #6d5c47, #241d15 72%);
+  box-shadow: 0 1px 0 rgba(255, 220, 170, 0.10), inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+.lb-screw::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 45%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.6);
+}
+.lb-screw.tl { left: 0.14em; top: 0.14em; }
+.lb-screw.tr { right: 0.14em; top: 0.14em; }
+.lb-screw.bl { left: 0.14em; bottom: 0.14em; }
+.lb-screw.br { right: 0.14em; bottom: 0.14em; }
+/* 上緣狀態列：指示燈＋標籤＋讀數同屬一條 flex，
+   字級／字距／亮度一律由父層繼承——分開寫兩份就會一個 9px 一個 11px、基線還對不齊。 */
+.lb-top {
+  position: absolute;
+  left: 0.46em;
+  right: 0.46em;
+  top: 0.16em;
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+  font-family: var(--display-font-family, sans-serif);
+  font-size: 0.22em;
+  letter-spacing: 0.2em;
+  line-height: 1;
+  color: rgba(255, 176, 60, 0.58);
+}
+.lb-ind { display: flex; gap: 0.55em; align-items: center; }
+.lb-ind i { width: 0.6em; height: 0.6em; border-radius: 50%; display: block; }
+.lb-ind i.pwr { background: #5ee08a; box-shadow: 0 0 0.7em rgba(94, 224, 138, 0.75); }
+.lb-ind i.act { background: #ff7a4a; box-shadow: 0 0 0.7em rgba(255, 122, 74, 0.7); }
+.lb-seg { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* 顯示面板本身 */
+.lb-inner {
+  position: relative;
+  overflow: hidden;
+  margin-top: 0.34em;
+  height: 1.55em;
+  line-height: 1.55em;
+  font-size: 1em;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-rendering: geometricPrecision;
+}
+.lb-inner.is-pan { text-align: left; }  /* 長句平移時改成靠左起算（置中會讓位移基準跑掉） */
+.lb-font-cubic11 .lb-inner { font-family: 'Cubic 11', monospace; }
+.lb-font-boutique9x9 .lb-inner {
+  font-family: 'BoutiqueBitmap9x9 1.9', '精品點陣體9×9 1.9', 'BoutiqueBitmap9x9 1.9 R', 'Cubic 11', monospace;
+}
+/* 熄滅的燈泡陣列：點距＝字型一個像素（模板 JS 依字級算），相位對齊文字左緣，
+   否則背景燈格與字的像素格會是兩套節奏疊在一起、產生干涉紋。 */
+.lb-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 50% 50%, rgba(255, 176, 60, 0.13) 41%, transparent 46%);
+  background-size: var(--lb-pitch, 4px) var(--lb-pitch, 4px);
+  background-position: var(--lb-phase, 0) 0;
+}
+.lb-slide { display: block; }
+.lb-text { position: relative; white-space: nowrap; display: inline-block; }
+.lb-ch { display: inline-block; color: var(--lyric-color, rgba(255, 176, 60, 0.5)); }
+.lb-ch.on {
+  color: var(--lyric-color-active, #ffce8a);
+  text-shadow: 0 0 2px rgba(255, 190, 110, 0.85); /* 燈泡只有很小的 bloom；大暈光會蓋過鄰字的縫 */
+}
+.lb-scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
+}
+/* 進場滑入：動作只發生在「換句的空檔」，唱的時候是靜止的（預設關） */
+.lb-slide.lb-enter { animation: lbEnter 0.42s cubic-bezier(0.2, 0.8, 0.25, 1) both; }
+@keyframes lbEnter {
+  from { transform: translateX(34%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+/* 間奏跑馬：只在沒人在唱的時候跑，所以不跟跟唱搶注意力 */
+.lb-idle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  color: var(--lyric-color, rgba(255, 176, 60, 0.5));
+}
+/* 壓克力面板的斜向反光 */
+.lb-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.2em;
+  pointer-events: none;
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0.055) 0 20%, transparent 40%);
+}
+/* 銘牌：鉚在機殼下緣，蝕刻感（暗底亮字，上下各一條 1px 高光模擬凹刻） */
+.lb-plate {
+  position: absolute;
+  left: 50%;
+  bottom: -0.23em;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 0.2em;
+  white-space: nowrap;
+  max-width: 86%;
+  overflow: hidden;
+  padding: 0.06em 0.36em;
+  border-radius: 0.07em;
+  font-family: var(--display-font-family, sans-serif);
+  background: linear-gradient(180deg, #3c3126 0%, #2a2118 55%, #1d1710 100%);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 226, 184, 0.20), inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+              0 2px 5px rgba(0, 0, 0, 0.55);
+}
+.lb-plate::before,
+.lb-plate::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 0.07em;
+  height: 0.07em;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background: radial-gradient(circle at 34% 28%, #9c8a70, #2a2118);
+}
+.lb-plate::before { left: 0.11em; }
+.lb-plate::after { right: 0.11em; }
+.lb-plate .t {
+  font-size: 0.24em;
+  letter-spacing: 0.16em;
+  color: rgba(255, 226, 186, 0.86);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lb-plate .a {
+  font-size: 0.2em;
+  letter-spacing: 0.12em;
+  color: rgba(255, 204, 158, 0.44);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lb-box.lb-no-plate .lb-plate { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .lb-slide.lb-enter { animation: none; }
+}
+
+/* ═══════════════════════════════════════════
+   詩頁（Stanza）：整段預先排好，字本身從不移動
+   ═══════════════════════════════════════════ */
+#stanza-root {
+  position: fixed;
+  left: 5.5%;
+  top: 15%;
+  width: 28%;
+  height: 64%;
+  pointer-events: none;
+  text-align: left;   /* 詩頁是整段左貼的版面，不吃 --lyric-text-align 的置中 */
+  font-family: var(--display-font-family, sans-serif);
+}
+.st-rule { position: absolute; left: -14px; top: 0; bottom: 0; width: 1px; background: rgba(169, 207, 229, 0.24); }
+.st-rule i {
+  position: absolute;
+  left: -1px;
+  width: 3px;
+  background: var(--lyric-color-active, #a9cfe5);
+  border-radius: 2px;
+  transition: top 0.34s cubic-bezier(0.4, 0, 0.2, 1), height 0.34s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* 捲動模式要一個有上下漸隱的視窗；換頁模式共用同一個容器，只是不位移 */
+.st-win {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 13%, #000 84%, transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, #000 13%, #000 84%, transparent 100%);
+}
+.st-body { position: relative; transition: transform 0.42s cubic-bezier(0.35, 0, 0.15, 1), opacity 0.5s ease; }
+.st-ln { position: relative; margin-bottom: 0.1em; }
+.st-main {
+  position: relative;
+  font-size: calc(var(--display-font-size, 42px) * 0.55);
+  font-weight: var(--display-font-weight, 700);
+  line-height: 1.42;
+  letter-spacing: var(--lyric-letter-spacing, 0);
+  text-shadow: var(--lyric-shadow, 0 1px 4px rgba(0, 0, 0, 0.72));
+}
+.st-ch { display: inline-block; color: rgba(244, 247, 250, 0.17); transition: color 0.17s ease, text-shadow 0.17s ease; }
+.st-ln.cur .st-ch { color: rgba(244, 247, 250, 0.28); }
+.st-ln.cur .st-ch.on { color: var(--lyric-color, #f4f7fa); }
+/* 讀字頭：正在唱的那一個字最亮＋暈開，逐字訊號才夠強；純光學，不動版面 */
+.st-ln.cur .st-ch.now {
+  color: #fff;
+  text-shadow: 0 0 12px var(--lyric-color-active, rgba(169, 207, 229, 0.75)), 0 1px 4px rgba(0, 0, 0, 0.72);
+}
+.st-ln.done .st-ch { color: rgba(244, 247, 250, 0.42); }
+/* 目前句底下的細軌：吃連續進度，絕對定位＝不推版面 */
+.st-rail {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  width: 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(169, 207, 229, 0.2), var(--lyric-color-active, #a9cfe5));
+  opacity: 0;
+}
+.st-ln.cur .st-rail { opacity: 1; }
+/* 翻譯行永遠佔位（就算是空的），切換時版面才不會跳 */
+.st-tr {
+  height: 1.35em;
+  font-size: calc(var(--display-font-size, 42px) * 0.28);
+  font-weight: 600;
+  color: var(--lyric-romaji-color, rgba(169, 207, 229, 0.62));
+  opacity: 0;
+}
+.st-ln.cur .st-tr { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .st-body { transition: none; }
+  .st-rule i { transition: none; }
+}
+
+/* ═══════════════════════════════════════════
+   Migiwa（極簡直排）：一句一側、貼邊直排，中央永遠留給主播
+   ═══════════════════════════════════════════ */
+#migiwa-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--display-font-family, sans-serif);
+}
+.mg-g {
+  position: absolute;
+  top: 19%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.32em;
+  font-size: calc(var(--display-font-size, 42px) * var(--mg-scale, 1));
+  /* 預設就是可見：進場本來就由「逐字落定」負責，群組不再做一次整體淡入。
+     這也讓「動畫沒跑＝看不見」不可能發生（背景分頁的 rAF／animation 會被凍結）。 */
+  opacity: 1;
+}
+.mg-g.is-gone { opacity: 0; transition: opacity 0.42s ease; }
+/* 貼畫面外緣；中央安全區由 --mg-safe 保留給主播 */
+/* DOM 順序是 次要行→進度軌→主行；靠右時反轉，兩側才都是「外緣＝軌與譯，內側＝主行」 */
+.mg-right { right: 5%; left: auto; flex-direction: row-reverse; max-width: calc(45% - var(--mg-safe, 11%)); }
+.mg-left { left: 5%; right: auto; flex-direction: row; max-width: calc(45% - var(--mg-safe, 11%)); }
+.mg-col {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  max-height: 62vh;
+  font-weight: var(--display-font-weight, 700);
+  line-height: 1.06;
+  letter-spacing: var(--lyric-letter-spacing, 0.04em);
+  text-shadow: var(--lyric-shadow, 0 1px 3px rgba(0, 0, 0, 0.6));
+}
+.mg-ch {
+  color: var(--lyric-color, #f4f7fa);
+  opacity: 0;
+  transition: opacity 0.26s ease-out, transform 0.26s ease-out;
+}
+.mg-g.mg-shift .mg-ch { transform: translateX(3px); }   /* 落字微移：3px，無 overshoot */
+.mg-ch.on { opacity: 1; transform: none; }
+/* 進度軌：主行外緣一條細線，隨唱到的字往下長 */
+.mg-rail { position: relative; width: 2px; height: 62vh; max-height: 62vh; background: rgba(255, 255, 255, 0.12); border-radius: 2px; }
+.mg-rail i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 0;
+  border-radius: 2px;
+  background: var(--lyric-color-active, #a9cfe5);
+}
+/* 次要行（拼音）：外側一條細瘦欄，字小、半淡 */
+.mg-sub {
+  writing-mode: vertical-rl;
+  max-height: 62vh;
+  font-size: var(--lyric-romaji-size, 0.5em);
+  color: var(--lyric-romaji-color, rgba(255, 255, 255, 0.5));
+  letter-spacing: 0.02em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mg-g.is-gone { transition: none; }
+  .mg-ch { transition: none; }
 }

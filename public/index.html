@@ -718,6 +718,10 @@
               <div><div class="label">簡轉繁</div><div class="sub">把簡體歌詞顯示成繁體（只轉原文，拼音/諧音不變）。網易雲/QQ 多為簡體時好用</div></div>
               <label class="switch"><input id="ls-traditional" data-ls-control="convertTraditional" type="checkbox" checked><span class="track"></span></label>
             </div>
+            <div class="switch-row">
+              <div><div class="label">底部進度條</div><div class="sub">畫面最下緣 2px 的歌曲進度條；OBS 不想要可以關掉</div></div>
+              <label class="switch"><input id="ls-progress-bar" data-ls-control="showProgressBar" type="checkbox" checked><span class="track"></span></label>
+            </div>
           </section>
 
           <!-- ═══ 卡片：動畫風格 ═══ -->
@@ -755,6 +759,18 @@
                 </button>
                 <button class="lyric-template-card" data-template="mirror" type="button" role="radio" aria-checked="false" title="鏡像：固定左右雙側，左實心原文、右描邊鏡像字，中央保留人物安全區">
                   <span class="style-thumb-preview style-thumb-mirror" aria-hidden="true"><i>歌</i><b></b><i>歌</i></span><strong data-i18n="template.mirror">鏡像</strong><span>雙側排版、中央留白</span>
+                </button>
+                <button class="lyric-template-card" data-template="typewriter" type="button" role="radio" aria-checked="false" title="打字機：當前句在對話泡泡裡逐字打出、字後帶游標，換句時泡泡交替左右">
+                  <span class="style-thumb-preview style-thumb-typewriter" aria-hidden="true"><span class="style-thumb-char">打</span><i class="style-thumb-caret"></i></span><strong data-i18n="template.typewriter">打字機</strong><span>對話泡泡、逐字打出</span>
+                </button>
+                <button class="lyric-template-card" data-template="lightboard" type="button" role="radio" aria-checked="false" title="燈牌：LED 點陣燈牌，唱過的燈亮、沒唱到的是熄滅的暗點">
+                  <span class="style-thumb-preview style-thumb-lightboard" aria-hidden="true"><span class="style-thumb-char">牌</span></span><strong data-i18n="template.lightboard">燈牌</strong><span>LED 點陣、機台質感</span>
+                </button>
+                <button class="lyric-template-card" data-template="stanza" type="button" role="radio" aria-checked="false" title="詩頁：整段一次排好、字不移動，唱到哪句哪句上墨">
+                  <span class="style-thumb-preview style-thumb-stanza" aria-hidden="true"><span class="style-thumb-char">頁</span></span><strong data-i18n="template.stanza">詩頁</strong><span>整段排好、零動態</span>
+                </button>
+                <button class="lyric-template-card" data-template="migiwa" type="button" role="radio" aria-checked="false" title="Migiwa：一句一側、直排貼邊，中央留給主播">
+                  <span class="style-thumb-preview style-thumb-migiwa" aria-hidden="true"><span class="style-thumb-char">汀</span></span><strong data-i18n="template.migiwa">Migiwa 直排</strong><span>貼邊直排、極簡</span>
                 </button>
               </div>
               <p class="field-hint" id="template-desc">完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。</p>
@@ -832,6 +848,41 @@
                     <div id="ls-offset-x-row" class="slider-row"><span class="sl-label">水平 X</span><input id="ls-offset-x" data-ls-control="offsetX" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-x-val" class="val">0px</span></div>
                     <div id="ls-offset-y-row" class="slider-row"><span class="sl-label">垂直 Y</span><input id="ls-offset-y" data-ls-control="offsetY" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-y-val" class="val">0px</span></div>
                   </div>
+                </div>
+              </div>
+              <!-- 打字機專用：左右邊距挪到「歌詞位置」正下面（其他模板的邊距在詳細設定裡） -->
+              <div class="field" id="typewriter-padding-field" hidden>
+                <label>左右邊距 <span id="ls-tw-padding-x-val" class="val">96px</span></label>
+                <input id="ls-tw-padding-x" data-ls-control="paddingX" type="range" min="0" max="480" step="8" value="96">
+                <p class="field-hint">對話泡泡離畫面左右邊緣的距離。</p>
+              </div>
+              <div class="field" id="lightboard-scroll-field" hidden>
+                <label>燈牌捲動</label>
+                <div class="switch-row">
+                  <div><div class="label">長句平移</div><div class="sub">整句塞不下時才平移，而且只移到「正在唱的字剛好留在燈箱裡」。<b>關掉的話字級要遷就最長的一句，整首歌會小一截。</b></div></div>
+                  <label class="switch"><input id="ls-lightboard-pan" data-ls-control="lightboardPan" type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="switch-row">
+                  <div><div class="label">間奏跑馬</div><div class="sub">只在沒有人在唱的間奏跑曲名，右上讀數同時切成 INTERLUDE。不影響跟唱。</div></div>
+                  <label class="switch"><input id="ls-lightboard-idle" data-ls-control="lightboardIdleMarquee" type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="switch-row">
+                  <div><div class="label">進場滑入</div><div class="sub">每句從右側滑入。動作只發生在換句的空檔，但每句都動、累積起來會有點吵，預設關。</div></div>
+                  <label class="switch"><input id="ls-lightboard-slide" data-ls-control="lightboardSlideIn" type="checkbox"><span class="track"></span></label>
+                </div>
+              </div>
+              <div class="field" id="stanza-mode-field" hidden>
+                <label for="ls-stanza-mode">詩頁推進方式</label>
+                <select id="ls-stanza-mode" data-ls-control="stanzaMode" class="input">
+                  <option value="scroll">捲動（目前句固定高度，整條往上走）</option>
+                  <option value="page">換頁（段內完全靜止，四句換一次）</option>
+                </select>
+                <p class="field-hint">換頁的段內完全零動態最極致，但需要「段落邊界」——LRC/KRC 沒有可靠的段落標記，硬切每四句會把副歌腰斬。捲動不必判斷段落，一般歌詞比較好接。</p>
+              </div>
+              <div class="field" id="migiwa-shift-field" hidden>
+                <div class="switch-row">
+                  <div><div class="label">落字微移</div><div class="sub">字落定時帶 3px 的位移，無 overshoot、無殘影。關掉就只有淡入。</div></div>
+                  <label class="switch"><input id="ls-migiwa-shift" data-ls-control="migiwaShift" type="checkbox" checked><span class="track"></span></label>
                 </div>
               </div>
               <div class="field" id="stage-safe-margin-field" hidden>
@@ -919,6 +970,11 @@
               <div class="flex-grow"><label>「正在唱那一行」的顏色</label><input id="ls-active-color" data-ls-control="activeColor" type="color" value="#ffd6a5"></div>
             </div>
             <p class="field-hint">逐字 KTV 模式下「唱到的字」也是用右邊「正在唱那一行的顏色」；發光效果則在下面「進階效果」裡的「額外發光」統一設定，兩種模式共用。</p>
+            <div class="field field--inline-spacious" id="typewriter-colors-field" hidden>
+              <div class="flex-grow"><label>對話泡泡（右／藍側）</label><input id="ls-tw-bubble-right" data-ls-control="twBubbleRight" type="color" value="#0b93f6"></div>
+              <div class="flex-grow"><label>對話泡泡（左／灰側）</label><input id="ls-tw-bubble-left" data-ls-control="twBubbleLeft" type="color" value="#3b3b3d"></div>
+            </div>
+            <div id="font-family-fields">
             <div class="field">
               <label for="ls-fontfamily">字體</label>
               <select id="ls-fontfamily" data-ls-control="fontFamily" class="input">
@@ -945,6 +1001,16 @@
               </div>
               <input id="ls-font-latin-custom" class="input" type="text" placeholder="或手動輸入英文字體名稱，例如：Montserrat" class="mt-8">
               <p class="field-hint">讓英文字母和數字永遠用另一套字體（例如中文用圓體、英文用 Montserrat）。中日韓文字不受影響，仍用上面的主字體。</p>
+            </div>
+            </div>
+            <!-- 燈牌專用：只給兩款真點陣字型。一般字體被圓點網切開後筆畫會糊成一團，所以不開放。 -->
+            <div class="field" id="lightboard-font-field" hidden>
+              <label for="ls-lightboard-font">燈牌字型</label>
+              <select id="ls-lightboard-font" data-ls-control="lightboardFont" class="input">
+                <option value="cubic11">Cubic 11（11×11，內建）</option>
+                <option value="boutique9x9">精品點陣體 9×9（需本機已安裝）</option>
+              </select>
+              <p class="field-hint">燈牌只吃真點陣字型：一般字體被圓點網遮罩切開後，筆畫之間的縫小於一個燈距就會糊成一團。Cubic 11 內建；精品點陣體要你自己的電腦裝過才會生效，沒裝會自動退回 Cubic 11。</p>
             </div>
             <div class="field">
               <label for="ls-fontweight">字重</label>
@@ -1038,7 +1104,7 @@
             <details class="collapse">
               <summary>邊距 · 最大寬度</summary>
               <div class="collapse-body">
-                <div class="field"><label>左右邊距 <span id="ls-padding-x-val" class="val">60px</span></label><input id="ls-padding-x" data-ls-control="paddingX" type="range" min="0" max="300" step="10" value="60"></div>
+                <div class="field" id="padding-x-field"><label>左右邊距 <span id="ls-padding-x-val" class="val">60px</span></label><input id="ls-padding-x" data-ls-control="paddingX" type="range" min="0" max="300" step="10" value="60"></div>
                 <div class="field"><label>上下邊距 <span id="ls-padding-y-val" class="val">48px</span></label><input id="ls-padding-y" data-ls-control="paddingY" type="range" min="0" max="300" step="10" value="48"></div>
                 <div class="field"><label>歌詞區最大寬度 <span id="ls-max-width-val" class="val">90%</span></label><input id="ls-max-width" data-ls-control="maxWidth" type="range" min="40" max="100" step="5" value="90"></div>
               </div>
@@ -1375,12 +1441,14 @@
           </details>
 
           <!-- ═══ 卡片：雙路音訊路由（實驗性）═══
-               觀眾/OBS 裝置只聽伴奏、主播耳機聽伴奏+人聲。只對已分離人聲的歌曲生效
-               （見媒體庫的「分離人聲」）。docs/AI-SEPARATION-PLAN.md §14 路線 A。 -->
+               把播放的聲音分別送到兩個獨立輸出裝置：本地監聽（耳機）與對外（OBS 擷取），
+               各自的音量互不影響。導唱（觀眾只聽伴奏、主播另外聽得到原唱）仍只對已分離
+               人聲的歌曲生效（見媒體庫的「分離人聲」），但路由＋雙音量本身對所有歌曲生效。
+               docs/AI-SEPARATION-PLAN.md §14 路線 A。 -->
           <details class="card card-collapse" id="dual-audio-card">
             <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15v-6a8 8 0 0 1 16 0v6"/><path d="M4 15a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H4z"/><path d="M20 15a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/></svg>雙路音訊路由（實驗性）</summary>
             <div class="card-collapse-body">
-              <p class="sub section-intro">觀眾/OBS 只聽得到伴奏、主播耳機聽伴奏+人聲當導唱。只對已在媒體庫分離過人聲的歌曲生效。需要電腦有至少兩個獨立的音訊輸出裝置（例如虛擬音訊線＋耳機）。<strong>務必把 OBS 與 Windows 音效裝置的取樣率都設成 44100Hz</strong>，這是消除長時間播放漂移最重要的免費設定。</p>
+              <p class="sub section-intro">把播放的聲音分別送到兩個獨立的音訊輸出裝置，本地監聽音量與對外（OBS 擷取）音量可以各自調整、互不影響，對所有歌曲都生效。想要「觀眾只聽伴奏、自己聽得到原唱當導唱」，還要另外在媒體庫分離過這首歌的人聲。需要電腦有至少兩個獨立的音訊輸出裝置（例如虛擬音訊線＋耳機）。<strong>務必把 OBS 與 Windows 音效裝置的取樣率都設成 44100Hz</strong>，這是消除長時間播放漂移最重要的免費設定。</p>
               <button id="dual-audio-refresh-devices" class="btn btn-sm" type="button">重新整理裝置清單</button>
               <p id="dual-audio-device-warning" class="val val--danger mt-8" hidden>偵測到少於兩個獨立的音訊輸出裝置，這個功能目前無法使用。</p>
               <div class="field mt-8">
@@ -1392,9 +1460,20 @@
                 <select id="dual-audio-headphone-device" class="input" disabled><option value="">（先按上面「重新整理裝置清單」）</option></select>
               </div>
               <div class="switch-row switch-row--separated">
-                <div><div class="label">雙路音訊路由</div><div class="sub" id="dual-audio-status-hint">只對已分離人聲的歌曲生效</div></div>
+                <div><div class="label">雙路音訊路由</div><div class="sub" id="dual-audio-status-hint">開啟後對所有歌曲生效；歌曲已分離人聲時，主播耳機還會多聽到原唱當導唱</div></div>
                 <label class="switch"><input id="dual-audio-mode-toggle" type="checkbox" disabled><span class="track"></span></label>
               </div>
+              <div class="field mt-8">
+                <label>本地監聽音量</label>
+                <input id="dual-audio-headphone-volume" type="range" min="0" max="300" value="100">
+                <span id="dual-audio-headphone-volume-val" class="val">100%</span>
+              </div>
+              <div class="field">
+                <label>對外音量（OBS 擷取）</label>
+                <input id="dual-audio-stream-volume" type="range" min="0" max="300" value="100">
+                <span id="dual-audio-stream-volume-val" class="val">100%</span>
+              </div>
+              <p class="field-hint">這兩顆疊加在主音量之上，通常設定一次就好——耳機想聽大聲一點不會動到觀眾/OBS 聽到的音量，反之亦然。拉到 150% 以上是把訊號硬放大，原始音檔太小聲時可能會爆音／破音，調高後建議實際聽一下有沒有失真。</p>
               <div class="field mt-8">
                 <label>同步偏移</label>
                 <input id="dual-audio-sync-offset" type="range" min="-1000" max="1000" step="5" value="0">

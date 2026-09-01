@@ -617,12 +617,17 @@ input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(-
 #template-buttons [data-template="mirror"] .style-thumb-mirror i { font-style: normal; font-size: 20px; font-weight: 900; line-height: 1; color: #fff; transform: rotate(-4deg); }
 #template-buttons [data-template="mirror"] .style-thumb-mirror i:last-child { justify-self: end; color: transparent; -webkit-text-stroke: 1px #fff; transform: rotate(4deg); opacity: .78; }
 #template-buttons [data-template="mirror"] .style-thumb-mirror b { display: block; width: 1px; height: 68%; justify-self: center; background: repeating-linear-gradient(180deg, rgba(255,90,110,.75) 0 3px, transparent 3px 6px); opacity: .55; }
+#template-buttons [data-template="typewriter"] .style-thumb-typewriter { background: #12161c; gap: 2px; }
+#template-buttons [data-template="typewriter"] .style-thumb-typewriter .style-thumb-char { font-size: 18px; font-weight: 700; color: #f4f7fa; }
+#template-buttons [data-template="typewriter"] .style-thumb-typewriter .style-thumb-caret { display: block; width: 2px; height: 18px; background: #a9cfe5; animation: tpl-typewriter-caret 1s steps(1) infinite; }
+@keyframes tpl-typewriter-caret { 50% { opacity: 0; } }
+
 #template-buttons [data-template="columnflow"] .style-thumb-char,
 #columnflow-variant-buttons .style-thumb-char { writing-mode: vertical-rl; text-orientation: upright; font-family: Georgia, 'Noto Serif TC', serif; line-height: .9; letter-spacing: .04em; }
 #columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-preview { background: #eee5d4; border-color: #bcae96; }
 #columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-char { color: #2a2118; }
 @media (prefers-reduced-motion: reduce) {
-  .style-thumb-char, #template-buttons [data-template="columnflow"] .style-thumb-column, #template-buttons [data-template="paperstrip"] .style-thumb-paperstrip i { animation: none !important; }
+  .style-thumb-char, #template-buttons [data-template="columnflow"] .style-thumb-column, #template-buttons [data-template="paperstrip"] .style-thumb-paperstrip i, #template-buttons [data-template="typewriter"] .style-thumb-caret { animation: none !important; }
   #template-buttons [data-template="columnflow"] .style-thumb-column { opacity: .88; transform: none; }
 }
 details.collapse { border-top: 1px solid var(--border); margin-top: 6px; }
@@ -1451,3 +1456,24 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .lib-separate-preview-volumes { display: flex; gap: 20px; flex-wrap: wrap; }
 .lib-separate-preview-vol-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
 .lib-separate-preview-vol-row input[type="range"] { width: 120px; }
+
+/* 燈牌／詩頁／Migiwa 的模板縮圖（純靜態，不做動畫） */
+#template-buttons [data-template="lightboard"] .style-thumb-lightboard {
+  background: linear-gradient(180deg, #1a140e, #0b0907);
+  border: 1px solid rgba(255, 176, 60, 0.3);
+  background-image: radial-gradient(circle at 50% 50%, rgba(255, 176, 60, 0.22) 40%, transparent 45%);
+  background-size: 4px 4px;
+  color: #ffce8a;
+  text-shadow: 0 0 4px rgba(255, 150, 40, 0.7);
+}
+#template-buttons [data-template="stanza"] .style-thumb-stanza {
+  background: linear-gradient(100deg, #12161c 0%, #171d26 100%);
+  border-left: 2px solid #a9cfe5;
+  color: #f4f7fa;
+}
+#template-buttons [data-template="migiwa"] .style-thumb-migiwa {
+  background: linear-gradient(180deg, #141a22, #0e1218);
+  border-right: 2px solid #a9cfe5;
+  color: #f4f7fa;
+  writing-mode: vertical-rl;
+}
