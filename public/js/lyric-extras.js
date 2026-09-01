@@ -139,6 +139,7 @@
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
+  const STANZA_ORIENTS = ['horizontal', 'vertical'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
   const COLUMNFLOW_MIN_SAFE_MARGIN = 5;
@@ -210,6 +211,7 @@
           if (id === 'mirror') out[id].lyricPosition = 'split';
           // 打字機沒有「置中」選項：舊快照若存了 center，一律當「左右分散」
           if (id === 'typewriter' && out[id].lyricPosition === 'center') out[id].lyricPosition = 'split';
+          if (id === 'stanza' && !STANZA_ORIENTS.includes(out[id].stanzaOrient)) out[id].stanzaOrient = 'horizontal';
         }
       });
     }
@@ -379,7 +381,6 @@
     { id: 'ls-lightboard-pan', key: 'lightboardPan' },
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
     { id: 'ls-lightboard-slide', key: 'lightboardSlideIn' },
-    { id: 'ls-stanza-orient', key: 'stanzaOrient' },
     { id: 'ls-stanza-altsides', key: 'stanzaAltSides' },
     { id: 'ls-max-width', key: 'maxWidth', valId: 'ls-max-width-val', fmt: v => v + '%' },
     { id: 'ls-offset-x', key: 'offsetX', valId: 'ls-offset-x-val', fmt: v => v + 'px' },
@@ -858,6 +859,9 @@
     if (lbScrollField) lbScrollField.hidden = !isLightboard;
     const stanzaOrientField = document.getElementById('stanza-orient-field');
     if (stanzaOrientField) stanzaOrientField.hidden = !isStanza;
+    document.querySelectorAll('#stanza-orient-buttons .style-thumb').forEach((b) => {
+      b.classList.toggle('active', b.dataset.stanzaOrient === (settings.stanzaOrient || 'horizontal'));
+    });
     const stanzaAltRow = document.getElementById('stanza-altsides-row');
     if (stanzaAltRow) stanzaAltRow.hidden = !(isStanza && settings.stanzaOrient === 'vertical');
     // 安全距離只有「舞台位置」模板（Pulse/Facet/Aura；Drift 共用同一套排版機制，
@@ -1042,6 +1046,7 @@
       if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
       if (settings.template === 'mirror') settings.lyricPosition = 'split';
       if (settings.template === 'typewriter' && settings.lyricPosition === 'center') settings.lyricPosition = 'split';
+      if (settings.template === 'stanza' && !STANZA_ORIENTS.includes(settings.stanzaOrient)) settings.stanzaOrient = 'horizontal';
       if (settings.template === 'columnflow') {
         if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
         if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
@@ -1092,6 +1097,15 @@
         const placement = btn.dataset.columnflowPlacement;
         if (settings.template !== 'columnflow' || !COLUMNFLOW_PLACEMENTS.includes(placement)) return;
         settings.columnflowPlacement = placement;
+        syncTemplateButtons();
+        pushSettings();
+      });
+    });
+    document.querySelectorAll('#stanza-orient-buttons .style-thumb').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const orient = btn.dataset.stanzaOrient;
+        if (settings.template !== 'stanza' || !STANZA_ORIENTS.includes(orient)) return;
+        settings.stanzaOrient = orient;
         syncTemplateButtons();
         pushSettings();
       });
@@ -1344,6 +1358,7 @@
         if (!TEMPLATE_IDS.includes(settings.template)) settings.template = 'classic';
         if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
         if (settings.template === 'typewriter' && settings.lyricPosition === 'center') settings.lyricPosition = 'split';
+        if (settings.template === 'stanza' && !STANZA_ORIENTS.includes(settings.stanzaOrient)) settings.stanzaOrient = 'horizontal';
         if (settings.template === 'columnflow') {
           if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
           if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';

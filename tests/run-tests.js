@@ -8342,8 +8342,15 @@ test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入�
     '詩頁直排長句必須整體縮欄（有下限）: ');
   ok(mods.stanza.includes('function safeMarginPct') && displayCss.includes('var(--st-safe'),
     '詩頁直排必須吃中央安全距離: ');
-  ok(panelHtml.includes('id="stanza-orient-field"') && lyricExtras.includes("{ id: 'ls-stanza-orient', key: 'stanzaOrient' }"),
-    '詩頁必須有排向設定 UI: ');
+  // 排向用跟直書句流一樣的分段按鈕（style-thumb），不是下拉選單
+  ok(panelHtml.includes('id="stanza-orient-buttons"')
+    && panelHtml.includes('data-stanza-orient="horizontal"')
+    && panelHtml.includes('data-stanza-orient="vertical"')
+    && !panelHtml.includes('id="ls-stanza-orient"'),
+    '詩頁排向必須是 style-thumb 分段按鈕、不是 select: ');
+  ok(lyricExtras.includes("#stanza-orient-buttons .style-thumb")
+    && lyricExtras.includes('settings.stanzaOrient = orient'),
+    '詩頁排向按鈕必須有 click 綁定寫回 stanzaOrient: ');
 
   // 兩個模板都是固定構圖：#lyrics-container 不吃九宮格 transform
   const transformNone = (displayCss.match(/([^}]*)\{\s*transform:\s*none;\s*\}/) || [])[1] || '';

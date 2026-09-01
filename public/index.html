@@ -869,11 +869,12 @@
                 </div>
               </div>
               <div class="field" id="stanza-orient-field" hidden>
-                <label for="ls-stanza-orient">詩頁排向</label>
-                <select id="ls-stanza-orient" data-ls-control="stanzaOrient" class="input">
-                  <option value="horizontal">橫排捲動（整段左貼，看得到上下文與下一句）</option>
-                  <option value="vertical">直排貼邊（一句一直欄、貼畫面外緣，中央留給主播）</option>
-                </select>
+                <label>詩頁排向</label>
+                <div class="style-thumb-row" id="stanza-orient-buttons">
+                  <button class="style-thumb active" data-stanza-orient="horizontal" type="button" title="橫排捲動：整段左貼，看得到上下文與下一句"><span class="style-thumb-preview"><span class="style-thumb-char">橫</span></span><span class="style-thumb-label">橫排捲動</span></button>
+                  <button class="style-thumb" data-stanza-orient="vertical" type="button" title="直排貼邊：一句一直欄、貼畫面外緣，中央留給主播"><span class="style-thumb-preview"><span class="style-thumb-char">直</span></span><span class="style-thumb-label">直排貼邊</span></button>
+                </div>
+                <p class="field-hint">橫排整段左貼、逐字上墨；直排一句一直欄貼畫面外緣，中央留給主播。</p>
                 <div class="switch-row" id="stanza-altsides-row">
                   <div><div class="label">直排一句一側交替</div><div class="sub">下一句換到對側（右→左→右…）。只在直排時有作用。</div></div>
                   <label class="switch"><input id="ls-stanza-altsides" data-ls-control="stanzaAltSides" type="checkbox" checked><span class="track"></span></label>
