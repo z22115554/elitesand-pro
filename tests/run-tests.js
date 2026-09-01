@@ -8230,6 +8230,10 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   ok(templateJs.includes('dataset.lyricPos'), '非合唱必須吃面板「歌詞位置」決定全左／全右／左右分散: ');
   // 面板可調：泡泡底色、邊距、靠邊方式
   ok(displayCss.includes('var(--tw-bubble-right') && displayCss.includes('var(--tw-bubble-left') && displayCss.includes('var(--lyric-padding-x'), 'display.css 泡泡底色與左右邊距必須吃 CSS 變數: ');
+  // 換行時泡泡內文要貼齊自己那一側；預設會繼承 --lyric-text-align 的置中，很醜
+  ok(/\.tw-bubble\.tw-left\s*\{[^}]*text-align:\s*left/.test(displayCss)
+    && /\.tw-bubble\.tw-right\s*\{[^}]*text-align:\s*right/.test(displayCss),
+    '打字機泡泡換行時必須左側置左、右側置右，不可置中: ');
   ok(displayJsSrc.includes("'--tw-bubble-right'") && displayJsSrc.includes("'--tw-bubble-left'"), 'display.js 必須把泡泡底色寫成 CSS 變數: ');
   ok(lyricExtras.includes("key: 'twBubbleRight'") && lyricExtras.includes("key: 'twBubbleLeft'") && lyricExtras.includes("twBubbleRight: '#0b93f6'"), '桌面設定必須提供左右泡泡底色控制與預設: ');
   ok(lyricExtras.includes('typewriter-colors-field') && lyricExtras.includes('!isTypewriter'), '泡泡底色欄位必須只在打字機時顯示: ');

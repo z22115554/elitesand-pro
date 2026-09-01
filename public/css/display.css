@@ -757,12 +757,14 @@ body.template-migiwa #lyrics-container {
 .tw-bubble.tw-in { opacity: 1; transform: none; }
 .tw-bubble.tw-left {
   align-self: flex-start;
+  text-align: left;        /* 換行時貼齊自己那一側；繼承 --lyric-text-align 的置中會很醜 */
   background: var(--tw-bubble-left, #3b3b3d);   /* iMessage 深色收訊灰；面板可調 */
   border-bottom-left-radius: 0.32em;       /* 尖角朝左下 */
   transform-origin: bottom left;
 }
 .tw-bubble.tw-right {
   align-self: flex-end;
+  text-align: right;
   background: var(--tw-bubble-right, #0b93f6);  /* iMessage 藍；面板可調 */
   border-bottom-right-radius: 0.32em;      /* 尖角朝右下 */
   transform-origin: bottom right;
