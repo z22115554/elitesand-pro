@@ -680,8 +680,7 @@ body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
 body.template-lightboard #lyrics-container,
-body.template-stanza #lyrics-container,
-body.template-migiwa #lyrics-container {
+body.template-stanza #lyrics-container {
   min-height: 70vh;
   justify-content: center;
 }
@@ -697,8 +696,7 @@ body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
 body.template-lightboard #lyrics-container,
-body.template-stanza #lyrics-container,
-body.template-migiwa #lyrics-container {
+body.template-stanza #lyrics-container {
   align-items: center;
 }
 
@@ -711,8 +709,7 @@ body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
 body.template-lightboard #lyrics-container,
-body.template-stanza #lyrics-container,
-body.template-migiwa #lyrics-container {
+body.template-stanza #lyrics-container {
   transform: none;
 }
 
@@ -1801,142 +1798,169 @@ body.template-ktv #lyrics-container {
 }
 
 /* ═══════════════════════════════════════════
-   詩頁（Stanza）：整段預先排好，字本身從不移動
+   詩頁（Stanza）：安靜地讀一頁詩，逐字上墨，字本身幾乎不移動
+   migiwa 已併入，成為 #stanza-root.st-vertical
    ═══════════════════════════════════════════ */
 #stanza-root {
   position: fixed;
   left: 5.5%;
   top: 15%;
   width: 28%;
-  height: 64%;
+  height: 66%;
   pointer-events: none;
-  text-align: left;   /* 詩頁是整段左貼的版面，不吃 --lyric-text-align 的置中 */
+  text-align: left;   /* 整段左貼，不吃 --lyric-text-align 的置中 */
   font-family: var(--display-font-family, sans-serif);
+  /* 未沁墨的字色 vs 沁滿的字色；讀字頭再往白偏一點 */
+  --st-dim: color-mix(in oklab, var(--lyric-color, #f4f7fa) 16%, transparent);
+  --st-full: var(--lyric-color, #f4f7fa);
+  --st-nib: color-mix(in oklab, var(--lyric-color-active, #cfe3ef) 40%, #ffffff);
 }
-.st-rule { position: absolute; left: -14px; top: 0; bottom: 0; width: 1px; background: rgba(169, 207, 229, 0.24); }
+.st-rule { position: absolute; left: -14px; top: 0; bottom: 0; width: 1px; background: color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 24%, transparent); }
 .st-rule i {
   position: absolute;
   left: -1px;
   width: 3px;
   background: var(--lyric-color-active, #a9cfe5);
   border-radius: 2px;
-  transition: top 0.34s cubic-bezier(0.4, 0, 0.2, 1), height 0.34s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: top 0.34s cubic-bezier(0.22, 1, 0.3, 1), height 0.34s cubic-bezier(0.22, 1, 0.3, 1), opacity 0.3s ease;
 }
-/* 捲動模式要一個有上下漸隱的視窗；換頁模式共用同一個容器，只是不位移 */
 .st-win {
   position: relative;
   height: 100%;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 13%, #000 84%, transparent 100%);
-          mask-image: linear-gradient(180deg, transparent 0, #000 13%, #000 84%, transparent 100%);
+  /* 上下漸隱：目前句永遠在視窗內，出入視窗的行自然淡掉 */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 82%, transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 82%, transparent 100%);
 }
-.st-body { position: relative; transition: transform 0.42s cubic-bezier(0.35, 0, 0.15, 1), opacity 0.5s ease; }
-.st-ln { position: relative; margin-bottom: 0.1em; }
+/* 換句時整條平滑捲一格。out-expo 曲線：起步快、長尾收住，讀起來穩，不 overshoot */
+.st-body { position: relative; transition: transform 0.52s cubic-bezier(0.16, 1, 0.3, 1); }
+
+.st-ln { position: relative; margin-bottom: 0.14em; --dry: 0; }
 .st-main {
   position: relative;
-  font-size: calc(var(--display-font-size, 42px) * 0.55);
+  display: inline-block;
+  font-size: calc(var(--display-font-size, 42px) * 0.56);
   font-weight: var(--display-font-weight, 700);
-  line-height: 1.42;
+  line-height: 1.4;
   letter-spacing: var(--lyric-letter-spacing, 0);
-  text-shadow: var(--lyric-shadow, 0 1px 4px rgba(0, 0, 0, 0.72));
 }
-.st-ch { display: inline-block; color: rgba(244, 247, 250, 0.17); transition: color 0.17s ease, text-shadow 0.17s ease; }
-.st-ln.cur .st-ch { color: rgba(244, 247, 250, 0.28); }
-.st-ln.cur .st-ch.on { color: var(--lyric-color, #f4f7fa); }
-/* 讀字頭：正在唱的那一個字最亮＋暈開，逐字訊號才夠強；純光學，不動版面 */
-.st-ln.cur .st-ch.now {
-  color: #fff;
-  text-shadow: 0 0 12px var(--lyric-color-active, rgba(169, 207, 229, 0.75)), 0 1px 4px rgba(0, 0, 0, 0.72);
+/* 逐字上墨：--ink（0→1，由 JS 每幀 ease 逼近）驅動 顏色濃度＋極輕的墨暈＋落定位移。
+   位移用 translate 屬性（不影響 layout box），呼吸另外加在 --breathe。*/
+.st-ch {
+  display: inline-block;
+  --breathe: 0px;
+  color: color-mix(in oklab, var(--st-full) calc(var(--ink, 0) * 100%), var(--st-dim));
+  text-shadow:
+    0 0 calc(var(--ink, 0) * 0.12em) color-mix(in oklab, var(--st-full) 34%, transparent),
+    var(--lyric-shadow, 0 1px 4px rgba(0, 0, 0, 0.72));
+  translate: 0 calc((1 - var(--ink, 0)) * var(--st-settle, 2px) + var(--breathe));
 }
-.st-ln.done .st-ch { color: rgba(244, 247, 250, 0.42); }
-/* 目前句底下的細軌：吃連續進度，絕對定位＝不推版面 */
+/* 讀字頭：正在唱的那一個字往白偏、加一圈很緊的高光。不是大光斑——大暈會糊掉鄰字 */
+.st-ch.now {
+  color: var(--st-nib);
+  text-shadow:
+    0 0 0.06em color-mix(in oklab, var(--lyric-color-active, #cfe3ef) 70%, transparent),
+    0 0 0.02em rgba(255, 255, 255, 0.65),
+    var(--lyric-shadow, 0 1px 4px rgba(0, 0, 0, 0.72));
+}
+/* 乾墨：句唱完後 --dry（0→1）把整句往「乾掉的淡痕」退，不再是飽和的白 */
+.st-ln.done .st-main { opacity: calc(1 - var(--dry) * 0.52); }
+.st-ln.future .st-main { opacity: 0.9; }
+
+/* 進度軌：目前句底下，吃連續進度。track 是 .st-rail，填色是 ::after，用 --p 驅動 */
 .st-rail {
   position: absolute;
   left: 0;
-  bottom: -1px;
+  bottom: -0.14em;
+  width: 100%;
   height: 2px;
-  width: 0;
   border-radius: 2px;
-  background: linear-gradient(90deg, rgba(169, 207, 229, 0.2), var(--lyric-color-active, #a9cfe5));
+  background: color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 12%, transparent);
   opacity: 0;
+  transition: opacity 0.3s ease;
 }
-.st-ln.cur .st-rail { opacity: 1; }
-/* 翻譯行永遠佔位（就算是空的），切換時版面才不會跳 */
-.st-tr {
-  height: 1.35em;
-  font-size: calc(var(--display-font-size, 42px) * 0.28);
-  font-weight: 600;
-  color: var(--lyric-romaji-color, rgba(169, 207, 229, 0.62));
-  opacity: 0;
-}
-.st-ln.cur .st-tr { opacity: 1; }
-@media (prefers-reduced-motion: reduce) {
-  .st-body { transition: none; }
-  .st-rule i { transition: none; }
-}
-
-/* ═══════════════════════════════════════════
-   Migiwa（極簡直排）：一句一側、貼邊直排，中央永遠留給主播
-   ═══════════════════════════════════════════ */
-#migiwa-root {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  font-family: var(--display-font-family, sans-serif);
-}
-.mg-g {
-  position: absolute;
-  top: 19%;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.32em;
-  font-size: calc(var(--display-font-size, 42px) * var(--mg-scale, 1));
-  /* 預設就是可見：進場本來就由「逐字落定」負責，群組不再做一次整體淡入。
-     這也讓「動畫沒跑＝看不見」不可能發生（背景分頁的 rAF／animation 會被凍結）。 */
-  opacity: 1;
-}
-.mg-g.is-gone { opacity: 0; transition: opacity 0.42s ease; }
-/* 貼畫面外緣；中央安全區由 --mg-safe 保留給主播 */
-/* DOM 順序是 次要行→進度軌→主行；靠右時反轉，兩側才都是「外緣＝軌與譯，內側＝主行」 */
-.mg-right { right: 5%; left: auto; flex-direction: row-reverse; max-width: calc(45% - var(--mg-safe, 11%)); }
-.mg-left { left: 5%; right: auto; flex-direction: row; max-width: calc(45% - var(--mg-safe, 11%)); }
-.mg-col {
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  max-height: 62vh;
-  font-weight: var(--display-font-weight, 700);
-  line-height: 1.06;
-  letter-spacing: var(--lyric-letter-spacing, 0.04em);
-  text-shadow: var(--lyric-shadow, 0 1px 3px rgba(0, 0, 0, 0.6));
-}
-.mg-ch {
-  color: var(--lyric-color, #f4f7fa);
-  opacity: 0;
-  transition: opacity 0.26s ease-out, transform 0.26s ease-out;
-}
-.mg-g.mg-shift .mg-ch { transform: translateX(3px); }   /* 落字微移：3px，無 overshoot */
-.mg-ch.on { opacity: 1; transform: none; }
-/* 進度軌：主行外緣一條細線，隨唱到的字往下長 */
-.mg-rail { position: relative; width: 2px; height: 62vh; max-height: 62vh; background: rgba(255, 255, 255, 0.12); border-radius: 2px; }
-.mg-rail i {
+.st-rail::after {
+  content: "";
   position: absolute;
   left: 0;
   top: 0;
-  width: 100%;
-  height: 0;
+  bottom: 0;
+  width: var(--p, 0%);
   border-radius: 2px;
-  background: var(--lyric-color-active, #a9cfe5);
+  background: linear-gradient(90deg, color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 25%, transparent), var(--lyric-color-active, #a9cfe5));
 }
-/* 次要行（拼音）：外側一條細瘦欄，字小、半淡 */
-.mg-sub {
+.st-ln.cur .st-rail { opacity: 1; }
+
+/* 翻譯行永遠佔位（就算是空的），切換時版面才不會跳 */
+.st-tr {
+  height: 1.4em;
+  margin-top: 0.1em;
+  font-size: calc(var(--display-font-size, 42px) * 0.26);
+  font-weight: 600;
+  color: var(--lyric-romaji-color, color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 60%, transparent));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.st-ln.cur .st-tr { opacity: 1; }
+
+/* ─── 直排（原 migiwa）：一句一直欄、貼畫面外緣，中央留給主播 ─── */
+#stanza-root.st-vertical { left: 0; right: 0; top: 0; width: auto; height: 100%; }
+#stanza-root.st-vertical .st-rule { display: none; }
+#stanza-root.st-vertical .st-win { overflow: visible; -webkit-mask-image: none; mask-image: none; }
+#stanza-root.st-vertical .st-body { transition: none; transform: none; }
+.st-ln.st-v {
+  position: absolute;
+  top: 18%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.42em;
+  margin: 0;
+  font-size: calc(var(--display-font-size, 42px) * var(--st-vscale, 1));
+  opacity: 1;
+  transition: opacity 0.42s ease, translate 0.42s ease;
+}
+.st-ln.st-v.is-gone { opacity: 0; }
+/* DOM 外→內：翻譯欄 → 軌欄 → 主欄。靠右那側反轉 flex 方向，兩側才都是「外緣＝軌與譯」 */
+.st-ln.st-v-right { right: 5%; left: auto; flex-direction: row-reverse; max-width: calc(45% - var(--st-safe, 12%)); }
+.st-ln.st-v-right.is-gone { translate: 1.2em 0; }
+.st-ln.st-v-left { left: 5%; right: auto; flex-direction: row; max-width: calc(45% - var(--st-safe, 12%)); }
+.st-ln.st-v-left.is-gone { translate: -1.2em 0; }
+.st-ln.st-v .st-main {
+  display: block;
   writing-mode: vertical-rl;
-  max-height: 62vh;
-  font-size: var(--lyric-romaji-size, 0.5em);
-  color: var(--lyric-romaji-color, rgba(255, 255, 255, 0.5));
-  letter-spacing: 0.02em;
+  text-orientation: upright;
+  max-height: 66vh;
+  line-height: 1.08;
+  letter-spacing: var(--lyric-letter-spacing, 0.04em);
+  font-size: 1em;
 }
+.st-ln.st-v .st-ch {
+  /* 直排的落定微移改成水平方向 */
+  translate: calc((1 - var(--ink, 0)) * var(--st-settle, 2px) + var(--breathe)) 0;
+}
+.st-ln.st-v .st-railwrap { position: relative; width: 2px; height: 66vh; }
+.st-ln.st-v .st-rail {
+  position: absolute;
+  inset: 0;
+  width: 2px;
+  height: 100%;
+  bottom: auto;
+  opacity: 1;
+}
+.st-ln.st-v .st-rail::after { left: 0; top: 0; right: 0; bottom: auto; width: 100%; height: var(--p, 0%); background: linear-gradient(180deg, color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 25%, transparent), var(--lyric-color-active, #a9cfe5)); }
+.st-ln.st-v .st-tr {
+  writing-mode: vertical-rl;
+  height: auto;
+  max-height: 66vh;
+  margin: 0;
+  opacity: 1;
+  font-size: var(--lyric-romaji-size, 0.5em);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .mg-g.is-gone { transition: none; }
-  .mg-ch { transition: none; }
+  .st-body,
+  .st-rule i,
+  .st-ln.st-v,
+  .st-rail,
+  .st-tr { transition: none; }
 }

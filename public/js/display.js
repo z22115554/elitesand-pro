@@ -830,16 +830,15 @@
       delete document.body.dataset.lightboardSlide;
     }
     if (s.template === 'stanza') {
-      document.body.dataset.stanzaMode = s.stanzaMode === 'page' ? 'page' : 'scroll';
+      document.body.dataset.stanzaOrient = s.stanzaOrient === 'vertical' ? 'vertical' : 'horizontal';
+      document.body.dataset.stanzaAltSides = s.stanzaAltSides === false ? '0' : '1';
+      if (s.stanzaOrient === 'vertical') {
+        const stanzaSafe = Math.round(Number(s.stageSafeMargin));
+        document.body.dataset.stageSafeMargin = String(Number.isFinite(stanzaSafe) ? Math.max(2, Math.min(25, stanzaSafe)) : 12);
+      }
     } else {
-      delete document.body.dataset.stanzaMode;
-    }
-    if (s.template === 'migiwa') {
-      document.body.dataset.migiwaShift = s.migiwaShift === false ? '0' : '1';
-      const migiwaSafe = Math.round(Number(s.stageSafeMargin));
-      document.body.dataset.stageSafeMargin = String(Number.isFinite(migiwaSafe) ? Math.max(2, Math.min(25, migiwaSafe)) : 13);
-    } else {
-      delete document.body.dataset.migiwaShift;
+      delete document.body.dataset.stanzaOrient;
+      delete document.body.dataset.stanzaAltSides;
     }
 
     // 舞台模板（Pulse/Facet/Drift/Aura）共用同一套「左右分散」機制與中央安全距離。

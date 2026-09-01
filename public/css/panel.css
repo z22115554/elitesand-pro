@@ -1471,9 +1471,3 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
   border-left: 2px solid #a9cfe5;
   color: #f4f7fa;
 }
-#template-buttons [data-template="migiwa"] .style-thumb-migiwa {
-  background: linear-gradient(180deg, #141a22, #0e1218);
-  border-right: 2px solid #a9cfe5;
-  color: #f4f7fa;
-  writing-mode: vertical-rl;
-}

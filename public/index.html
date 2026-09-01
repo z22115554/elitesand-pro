@@ -769,9 +769,6 @@
                 <button class="lyric-template-card" data-template="stanza" type="button" role="radio" aria-checked="false" title="詩頁：整段一次排好、字不移動，唱到哪句哪句上墨">
                   <span class="style-thumb-preview style-thumb-stanza" aria-hidden="true"><span class="style-thumb-char">頁</span></span><strong data-i18n="template.stanza">詩頁</strong><span>整段排好、零動態</span>
                 </button>
-                <button class="lyric-template-card" data-template="migiwa" type="button" role="radio" aria-checked="false" title="Migiwa：一句一側、直排貼邊，中央留給主播">
-                  <span class="style-thumb-preview style-thumb-migiwa" aria-hidden="true"><span class="style-thumb-char">汀</span></span><strong data-i18n="template.migiwa">Migiwa 直排</strong><span>貼邊直排、極簡</span>
-                </button>
               </div>
               <p class="field-hint" id="template-desc">完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。</p>
               <p class="lyric-template-scope" id="lyric-template-scope" role="status">可調：九宮格位置、歷史行、拼音／諧音、經典動畫風格與進階文字效果。</p>
@@ -871,18 +868,15 @@
                   <label class="switch"><input id="ls-lightboard-slide" data-ls-control="lightboardSlideIn" type="checkbox"><span class="track"></span></label>
                 </div>
               </div>
-              <div class="field" id="stanza-mode-field" hidden>
-                <label for="ls-stanza-mode">詩頁推進方式</label>
-                <select id="ls-stanza-mode" data-ls-control="stanzaMode" class="input">
-                  <option value="scroll">捲動（目前句固定高度，整條往上走）</option>
-                  <option value="page">換頁（段內完全靜止，四句換一次）</option>
+              <div class="field" id="stanza-orient-field" hidden>
+                <label for="ls-stanza-orient">詩頁排向</label>
+                <select id="ls-stanza-orient" data-ls-control="stanzaOrient" class="input">
+                  <option value="horizontal">橫排捲動（整段左貼，看得到上下文與下一句）</option>
+                  <option value="vertical">直排貼邊（一句一直欄、貼畫面外緣，中央留給主播）</option>
                 </select>
-                <p class="field-hint">換頁的段內完全零動態最極致，但需要「段落邊界」——LRC/KRC 沒有可靠的段落標記，硬切每四句會把副歌腰斬。捲動不必判斷段落，一般歌詞比較好接。</p>
-              </div>
-              <div class="field" id="migiwa-shift-field" hidden>
-                <div class="switch-row">
-                  <div><div class="label">落字微移</div><div class="sub">字落定時帶 3px 的位移，無 overshoot、無殘影。關掉就只有淡入。</div></div>
-                  <label class="switch"><input id="ls-migiwa-shift" data-ls-control="migiwaShift" type="checkbox" checked><span class="track"></span></label>
+                <div class="switch-row" id="stanza-altsides-row">
+                  <div><div class="label">直排一句一側交替</div><div class="sub">下一句換到對側（右→左→右…）。只在直排時有作用。</div></div>
+                  <label class="switch"><input id="ls-stanza-altsides" data-ls-control="stanzaAltSides" type="checkbox" checked><span class="track"></span></label>
                 </div>
               </div>
               <div class="field" id="stage-safe-margin-field" hidden>

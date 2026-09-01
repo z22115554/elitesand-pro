@@ -64,9 +64,8 @@
     lightboardIdleMarquee: true,     // 間奏跑馬：只在沒人唱時跑，零成本
     lightboardSlideIn: false,        // 進場滑入：每句都動會累積成吵，預設關
     // ── 詩頁：'scroll'（不必判斷段落邊界，一般歌詞好接）｜'page'（段內全靜止但有斷點）──
-    stanzaMode: 'scroll',
-    // ── Migiwa：落字時的 3px 微移 ──
-    migiwaShift: true,
+    stanzaOrient: 'horizontal',   // 'horizontal' 橫排捲動 ｜ 'vertical' 直排貼邊
+    stanzaAltSides: true,          // 直排：下一句換到對側
     // ── 文字排版細項 ──
     lineHeight: 1.3,      // 行高（active 與 history 共用）
     letterSpacing: 0,     // 字距 px
@@ -102,7 +101,7 @@
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'migiwa'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -116,8 +115,7 @@
     paperstrip: { label: '紙帶逐字', description: '白色紙帶先展開，再依歌詞時間逐字填入；每頁會依句長、總字數與節奏穩定選擇 2～4 句，小／中／大尺寸在進場前一次決定。', scope: '可調：舞台位置、中央安全距離、字型、文字色與背景；白色紙帶為模板固定視覺。偏左／偏右與左右分散都會限制可用寬度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: false, supportsClassicControls: false },
     mirror: { label: '鏡像', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     lightboard: { label: '燈牌', description: '一塊會發光的 LED 點陣燈牌：唱過的燈亮、沒唱到的是熄滅的暗點，所以整句一直都看得見，不需要另外做進場。機殼（螺絲、指示燈、走時讀數、壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。', scope: '可調：字級（整台機器等比縮放）、燈色、燈牌字型（Cubic 11／精品點陣體 9×9）、三段捲動。<b>不吃一般字體</b>——被圓點網切開後筆畫會糊成一團。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    stanza: { label: '詩頁', description: '整段歌詞一次排好貼在左側，字本身從不移動——沒有推擠、沒有淡入、沒有重排。唱到哪句哪句上墨，觀眾看得到下一句，跟唱門檻最低。逐字靠三段墨色＋讀字頭＋句底連續進度軌，全部是光學變化。', scope: '可調：字級、墨色、推進方式（捲動／換頁）。開了拼音時會顯示在每句下方（永遠佔位，切換不跳版面）。構圖固定在畫面左側。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    migiwa: { label: 'Migiwa 直排', description: '一句一側，直排釘在畫面外緣，下一句換到對側；同時只有一句。逐字沿欄落定：淡入＋可選 3px 微移，無 overshoot、無殘影、無裝飾，跟讀交給外緣那條進度軌。中央永遠留給主播。', scope: '可調：字級、文字色、中央安全距離、落字微移。長句採整體縮字而非換欄（直排的換欄方向會讓左右兩側閱讀順序不一致）。開了拼音會在外側加一條細瘦欄。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
+    stanza: { label: '詩頁', description: '安靜地讀一頁詩：逐字上墨，字本身幾乎不移動。唱過的墨乾成較淡的痕，正在唱的那一個字是筆尖所在。每個字有由亂數種子決定的微幅落定與呼吸，不像試算表同拍淡入。橫排看得到上下文與下一句，直排則一句一直欄、貼畫面外緣把中央留給主播。', scope: '可調：字級、墨色、排向（橫排捲動／直排貼邊）、直排一句一側交替、（直排時）中央安全距離。開了拼音會顯示在每句旁（永遠佔位，切換不跳版面）。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     typewriter: { label: '打字機', description: '仿 iMessage 聊天室：每句歌詞在對話泡泡裡逐字打出、游標貼著剛打出的字閃爍。已唱不消失、往上疊。合唱歌曲一邊固定代表一個聲部；非合唱時可選全左／全右／左右分散（分散＝1–5 句一段隨機交替）。適合 lo-fi／臥室流行的氛圍。', scope: '可調：字型、文字色、左右對話泡泡底色、左右邊距、靠邊方式（全左／全右／左右分散）。上下位置與堆疊構圖固定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
   };
 
@@ -136,8 +134,7 @@
     paperstrip: { ...DEFAULT_SETTINGS, template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1 },
     mirror: { ...DEFAULT_SETTINGS, template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
     lightboard: { ...DEFAULT_SETTINGS, template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardSlideIn: false },
-    stanza: { ...DEFAULT_SETTINGS, template: 'stanza', fontSize: 56, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'left', stanzaMode: 'scroll' },
-    migiwa: { ...DEFAULT_SETTINGS, template: 'migiwa', fontSize: 46, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: '0 1px 3px rgba(0,0,0,.6)', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, migiwaShift: true },
+    stanza: { ...DEFAULT_SETTINGS, template: 'stanza', fontSize: 56, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'left', stanzaOrient: 'horizontal', stanzaAltSides: true, stageSafeMargin: 12 },
     typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d' },
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
@@ -147,7 +144,7 @@
   const COLUMNFLOW_MIN_SAFE_MARGIN = 5;
   const COLUMNFLOW_MAX_SAFE_MARGIN = 25;
   // paperstrip／mirror 跟 Pulse/Facet/Drift/Aura 共用同一組 stageSafeMargin（不是 columnflow 那組獨立值）。
-  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror', 'migiwa'];
+  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'];
   const STAGE_MIN_SAFE_MARGIN = 2;
   const STAGE_MAX_SAFE_MARGIN = 25;
   // 位置微調（X/Y）滑桿刻度：實際套用時 display.js 還會依當下內容再收緊一次（reclampLyricOffset），
@@ -382,8 +379,8 @@
     { id: 'ls-lightboard-pan', key: 'lightboardPan' },
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
     { id: 'ls-lightboard-slide', key: 'lightboardSlideIn' },
-    { id: 'ls-stanza-mode', key: 'stanzaMode' },
-    { id: 'ls-migiwa-shift', key: 'migiwaShift' },
+    { id: 'ls-stanza-orient', key: 'stanzaOrient' },
+    { id: 'ls-stanza-altsides', key: 'stanzaAltSides' },
     { id: 'ls-max-width', key: 'maxWidth', valId: 'ls-max-width-val', fmt: v => v + '%' },
     { id: 'ls-offset-x', key: 'offsetX', valId: 'ls-offset-x-val', fmt: v => v + 'px' },
     { id: 'ls-offset-y', key: 'offsetY', valId: 'ls-offset-y-val', fmt: v => v + 'px' },
@@ -852,7 +849,6 @@
     const isTypewriter = settings.template === 'typewriter';
     const isLightboard = settings.template === 'lightboard';
     const isStanza = settings.template === 'stanza';
-    const isMigiwa = settings.template === 'migiwa';
     // 燈牌只吃真點陣字型：一般字體選單整塊收起來，換成自己的兩選一
     const fontFamilyFields = document.getElementById('font-family-fields');
     if (fontFamilyFields) fontFamilyFields.hidden = isLightboard;
@@ -860,16 +856,16 @@
     if (lbFontField) lbFontField.hidden = !isLightboard;
     const lbScrollField = document.getElementById('lightboard-scroll-field');
     if (lbScrollField) lbScrollField.hidden = !isLightboard;
-    const stanzaModeField = document.getElementById('stanza-mode-field');
-    if (stanzaModeField) stanzaModeField.hidden = !isStanza;
-    const migiwaShiftField = document.getElementById('migiwa-shift-field');
-    if (migiwaShiftField) migiwaShiftField.hidden = !isMigiwa;
+    const stanzaOrientField = document.getElementById('stanza-orient-field');
+    if (stanzaOrientField) stanzaOrientField.hidden = !isStanza;
+    const stanzaAltRow = document.getElementById('stanza-altsides-row');
+    if (stanzaAltRow) stanzaAltRow.hidden = !(isStanza && settings.stanzaOrient === 'vertical');
     // 安全距離只有「舞台位置」模板（Pulse/Facet/Aura；Drift 共用同一套排版機制，
     // 但這次只開放這三個的設定 UI）在「左右分散」時才有意義——其他位置模式沒有中央保留區可調。
     // 紙帶逐字／鏡像的排版本身就仰賴這條安全距離（鏡像甚至永遠固定 split），必須一起開放。
-    // Migiwa 永遠是左右貼邊構圖，中央安全距離直接決定它貼多深，所以不看 lyricPosition
+    // 詩頁直排永遠是左右貼邊構圖，中央安全距離直接決定它貼多深，所以不看 lyricPosition
     const STAGE_SAFE_MARGIN_UI_TEMPLATES = ['pulse', 'facet', 'aura', 'paperstrip', 'mirror'];
-    const isStageSplit = settings.template === 'migiwa'
+    const isStageSplit = (settings.template === 'stanza' && settings.stanzaOrient === 'vertical')
       || (STAGE_SAFE_MARGIN_UI_TEMPLATES.includes(settings.template) && settings.lyricPosition === 'split');
 
     const templateLabel = document.getElementById('lyric-template-label');

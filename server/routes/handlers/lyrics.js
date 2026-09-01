@@ -36,7 +36,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'migiwa'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;
@@ -233,9 +233,9 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (settings.lightboardFont && !['cubic11', 'boutique9x9'].includes(settings.lightboardFont)) {
       delete settings.lightboardFont;
     }
-    // 詩頁的推進方式白名單
-    if (settings.stanzaMode && !['scroll', 'page'].includes(settings.stanzaMode)) {
-      delete settings.stanzaMode;
+    // 詩頁排向白名單
+    if (settings.stanzaOrient && !['horizontal', 'vertical'].includes(settings.stanzaOrient)) {
+      delete settings.stanzaOrient;
     }
     // 本機字型資源只接受掃描器產生的 opaque ID。實際檔案路徑從不進 state，也不接受
     // 客戶端拼出的 URL；顯示端仍會由 API 再做一次 ID/realpath 驗證。

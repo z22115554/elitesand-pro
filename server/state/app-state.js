@@ -51,8 +51,7 @@ function getDefaultLyricSettings() {
       paperstrip: { template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1 },
       mirror: { template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
       lightboard: { template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardSlideIn: false },
-      stanza: { template: 'stanza', fontSize: 56, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'left', stanzaMode: 'scroll' },
-      migiwa: { template: 'migiwa', fontSize: 46, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: '0 1px 3px rgba(0,0,0,.6)', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, migiwaShift: true },
+      stanza: { template: 'stanza', fontSize: 56, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'left', stanzaOrient: 'horizontal', stanzaAltSides: true, stageSafeMargin: 12 },
       typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d' },
     },
   };

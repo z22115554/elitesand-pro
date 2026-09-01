@@ -8092,7 +8092,7 @@ test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', ()
   ok(panelDrift.includes('hidden') && controllerDrift.includes('hidden'), '斜拍告白必須從桌面與手機模板選擇器隱藏: ');
   ok(!controllerHtml.includes('ctrl-template-legacy-notice'), '手機不應保留舊模板的相容性介面: ');
   const ctrlIds = (controllerJs.match(/const TEMPLATE_IDS = \[([^\]]*)\]/) || [])[1] || '';
-  ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'migiwa']
+  ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza']
     .forEach((id) => ok(ctrlIds.includes(`'${id}'`), `遙控器的 TEMPLATE_IDS 必須包含 ${id}: `));
   ok(controllerJs.includes('if (!TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換必須接受所有現行模板: ');
   ok(controllerJs.includes("nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS"), '舊 state 從手機首次切到 paperstrip 時必須套用黑字預設，避免白底白字: ');
@@ -8252,7 +8252,7 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   ok(displayJsSrc.includes("obsProgressBar") && displayJsSrc.includes("s.showProgressBar === false"), 'display.js 必須依 showProgressBar 顯示／隱藏底部進度條: ');
 });
 
-test('燈牌／詩頁／Migiwa：三個模板都以 registry 時間驅動並完整接入設定與伺服器白名單', () => {
+test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入設定與伺服器白名單', () => {
   const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const controllerHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'controller.html'), 'utf8');
@@ -8266,8 +8266,9 @@ test('燈牌／詩頁／Migiwa：三個模板都以 registry 時間驅動並完�
   const mods = {
     lightboard: fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-lightboard.js'), 'utf8'),
     stanza: fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-stanza.js'), 'utf8'),
-    migiwa: fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-migiwa.js'), 'utf8'),
   };
+  ok(!fs.existsSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-migiwa.js')),
+    'migiwa 已併進詩頁，獨立檔案不應再存在: ');
 
   for (const [id, src] of Object.entries(mods)) {
     ok(displayHtml.includes('/js/lyric-template-' + id + '.js'), 'display 必須載入 ' + id + ' 模板腳本: ');
@@ -8314,36 +8315,43 @@ test('燈牌／詩頁／Migiwa：三個模板都以 registry 時間驅動並完�
   ok(mods.lightboard.includes('IDLE_MIN_GAP_MS') && mods.lightboard.includes("segEl.textContent = 'INTERLUDE'"),
     '間奏跑馬只在夠長的空檔跑，並切換讀數: ');
 
-  // ── 詩頁：字不移動、讀字頭、連續進度軌、捲動為預設 ──
-  ok(mods.stanza.includes("document.body.dataset.stanzaMode === 'page' ? 'page' : 'scroll'"),
-    '詩頁預設是捲動（換頁需要段落邊界，一般歌詞沒有可靠標記）: ');
-  ok(displayCss.includes('.st-ln.cur .st-ch.now'), '詩頁必須有讀字頭（正在唱的那個字最亮）: ');
-  ok(mods.stanza.includes('progress(r.times, t)') && displayCss.includes('.st-rail'),
+  // ── 詩頁：逐字上墨是連續狀態（不是 class 硬切）、有讀字頭、進度軌吃連續進度、橫排為預設 ──
+  ok(mods.stanza.includes("document.body.dataset.stanzaOrient === 'vertical' ? 'vertical' : 'horizontal'"),
+    '詩頁預設是橫排捲動: ');
+  ok(mods.stanza.includes('cell.ink += (target - cell.ink) * INK_LERP') && mods.stanza.includes('function inkTarget'),
+    '逐字上墨必須是每幀逼近目標的連續狀態，不可是 class 硬切: ');
+  ok(mods.stanza.includes('hashNoise(seed'),
+    '每個字的落定／呼吸抖動必須由 hashNoise 種子決定（同一行同一組）: ');
+  ok(mods.stanza.includes('Math.sin(timeSec * BREATHE_HZ') && mods.stanza.includes('roleIsCur'),
+    '靜止時目前句必須有 JS 呼吸（背景分頁也不會凍）: ');
+  ok(mods.stanza.includes('easeOutQuint') && mods.stanza.includes('easeOutQuad'),
+    '進出／上墨必須用實際 easing，不是全場一個 cubic-bezier: ');
+  ok(displayCss.includes('.st-ch.now'), '詩頁必須有讀字頭（正在唱的那個字最亮）: ');
+  ok(mods.stanza.includes('progress(row.times, t)') && displayCss.includes('.st-rail'),
     '詩頁的進度軌必須吃連續進度（不是整數字數）: ');
   ok(/\.st-tr\s*\{[^}]*height:\s*[\d.]+em/.test(displayCss),
     '翻譯行必須永遠佔位，切換時版面才不會跳: ');
-  ok(lyricsHandler.includes("['scroll', 'page'].includes(settings.stanzaMode)"),
-    'server 必須驗證詩頁的推進方式: ');
+  ok(lyricsHandler.includes("['horizontal', 'vertical'].includes(settings.stanzaOrient)"),
+    'server 必須驗證詩頁排向: ');
+  // 直排（原 migiwa）：一句一側交替、直排、中央安全距離、長句整體縮欄
+  ok(mods.stanza.includes("idx % 2 === 0 ? 'right' : 'left'") && mods.stanza.includes('altSides()'),
+    '詩頁直排必須支援一句一側交替: ');
+  ok(displayCss.includes('writing-mode: vertical-rl') && displayCss.includes('.st-vertical'),
+    '詩頁直排必須是 vertical-rl: ');
+  ok(mods.stanza.includes('V_MIN_SCALE') && mods.stanza.includes("ln.style.setProperty('--st-vscale'"),
+    '詩頁直排長句必須整體縮欄（有下限）: ');
+  ok(mods.stanza.includes('function safeMarginPct') && displayCss.includes('var(--st-safe'),
+    '詩頁直排必須吃中央安全距離: ');
+  ok(panelHtml.includes('id="stanza-orient-field"') && lyricExtras.includes("{ id: 'ls-stanza-orient', key: 'stanzaOrient' }"),
+    '詩頁必須有排向設定 UI: ');
 
-  // ── Migiwa：一句一側、直排、中央安全距離、長句縮字不換欄 ──
-  ok(mods.migiwa.includes("idx % 2 === 0 ? 'right' : 'left'"), 'Migiwa 必須一句一側、下一句換對側: ');
-  ok(displayCss.includes('writing-mode: vertical-rl') && displayCss.includes('.mg-col'),
-    'Migiwa 必須是直排: ');
-  ok(mods.migiwa.includes('MIN_SCALE') && mods.migiwa.includes("g.style.setProperty('--mg-scale'"),
-    'Migiwa 長句採整體縮字（有下限），不換欄: ');
-  ok(mods.migiwa.includes('function safeMargin') && displayCss.includes('var(--mg-safe'),
-    'Migiwa 必須吃中央安全距離，把中間留給主播: ');
-  ok(lyricExtras.includes("settings.template === 'migiwa'") && lyricExtras.includes('migiwa-shift-field'),
-    'Migiwa 必須接入安全距離與落字微移的設定 UI: ');
-
-  // 三個模板都是固定構圖：#lyrics-container 不吃九宮格 transform
+  // 兩個模板都是固定構圖：#lyrics-container 不吃九宮格 transform
   const transformNone = (displayCss.match(/([^}]*)\{\s*transform:\s*none;\s*\}/) || [])[1] || '';
-  ['lightboard', 'stanza', 'migiwa'].forEach((id) => {
+  ['lightboard', 'stanza'].forEach((id) => {
     ok(transformNone.includes('body.template-' + id + ' #lyrics-container'), id + ' 必須列入 transform: none: ');
   });
   // 模板專屬設定一律走 body.dataset（沿用 columnflow 慣例，不另開 ctx 通道）
-  ok(displayJs.includes('document.body.dataset.lightboardFont') && displayJs.includes('document.body.dataset.stanzaMode')
-    && displayJs.includes('document.body.dataset.migiwaShift'),
+  ok(displayJs.includes('document.body.dataset.lightboardFont') && displayJs.includes('document.body.dataset.stanzaOrient'),
     '模板專屬設定必須由 display.js 寫進 body.dataset: ');
   ok(displayJs.includes('function syncTrackMetaDataset') && mods.lightboard.includes('dataset.lbTitle'),
     '燈牌銘牌／間奏跑馬要用的曲名必須由 display.js 同步進 dataset: ');

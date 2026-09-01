@@ -942,7 +942,6 @@
     'template.typewriter': ['打字機', 'Typewriter', 'タイプライター', '타자기', '打字机'],
     'template.lightboard': ['燈牌', 'Light Board', 'ライトボード', '라이트보드', '灯牌'],
     'template.stanza': ['詩頁', 'Stanza', 'スタンザ', '스탠자', '诗页'],
-    'template.migiwa': ['Migiwa 直排', 'Migiwa Vertical', 'Migiwa 縦書き', 'Migiwa 세로쓰기', 'Migiwa 直排'],
     'template.columnSen': ['素筆直書', 'Plain Brush Vertical', '素筆の縦書き', '담백한 세로쓰기', '素笔竖排'],
     'template.columnFuda': ['字札直書', 'Card Vertical', '字札の縦書き', '글패 세로쓰기', '字札竖排'],
     'guide.ffmpegDownload': ['下載 FFmpeg', 'Download FFmpeg', 'FFmpeg をダウンロード', 'FFmpeg 다운로드', '下载 FFmpeg'],
