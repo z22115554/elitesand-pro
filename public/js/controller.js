@@ -108,7 +108,7 @@
     return currentTrackIndex;
   }
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'wordscape'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
@@ -137,20 +137,8 @@
     letterSpacing: 1,
     animationIntensity: 'normal',
   };
-  const WORDSCAPE_DEFAULTS = {
-    fontWeight: 900,
-    fontSize: 56,
-    color: '#0c0e12',
-    activeColor: '#ed3153',
-    shadow: 'none',
-    verticalPosition: 'center',
-    lyricPosition: 'center',
-    letterSpacing: 1,
-    animationIntensity: 'normal',
-  };
-
   function templateSupportsIntensity(template) {
-    return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'wordscape', 'columnflow'].includes(template);
+    return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'columnflow'].includes(template);
   }
 
   function normalizeColumnflowMaxLines(value) {
@@ -173,7 +161,7 @@
     const isColumnflow = template === 'columnflow';
     const isClassic = template === 'classic';
     const isMirror = template === 'mirror';
-    const isFixedPosition = template === 'ktv' || isColumnflow || isMirror || template === 'wordscape';
+    const isFixedPosition = template === 'ktv' || isColumnflow || isMirror;
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
     document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowVariant === (lyricSettings.columnflowVariant || 'sen')));
     document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowPlacement === (lyricSettings.columnflowPlacement || 'split')));
@@ -236,7 +224,6 @@
           ...settingSnapshot(lyricSettings),
           ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
           ...(nextTemplate === 'mirror' ? MIRROR_DEFAULTS : {}),
-          ...(nextTemplate === 'wordscape' ? WORDSCAPE_DEFAULTS : {}),
           template: nextTemplate,
         };
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';

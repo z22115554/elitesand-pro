@@ -52,7 +52,6 @@ function getDefaultLyricSettings() {
       mirror: { template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
       lightboard: { template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
       typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
-      wordscape: { template: 'wordscape', fontWeight: 900, fontSize: 56, color: '#0c0e12', activeColor: '#ed3153', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, animationIntensity: 'normal' },
     },
   };
 }

@@ -107,7 +107,7 @@
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'wordscape'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -122,7 +122,6 @@
     mirror: { label: '虛實鏡書', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     lightboard: { label: '跑馬燈牌', description: '一塊會發光的 LED 點陣燈牌：唱過的燈亮、沒唱到的是熄滅的暗點，所以整句一直都看得見，不需要另外做進場。機殼（螺絲、指示燈、走時讀數、壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。', scope: '可調：字級（整台機器等比縮放）、燈色、燈牌字型（Cubic 11／精品點陣體 9×9）、三段捲動。<b>不吃一般字體</b>——被圓點網切開後筆畫會糊成一團。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     typewriter: { label: '對話氣泡', description: '仿 iMessage 聊天室：每句歌詞在對話泡泡裡逐字打出、游標貼著剛打出的字閃爍。已唱不消失、往上疊。合唱歌曲一邊固定代表一個聲部；非合唱時可選全左／全右／左右分散（分散＝1–5 句一段隨機交替）。長間奏會像聊天室冷場一樣跳一張貼圖（可上傳自己的，支援透明 PNG／GIF）。', scope: '可調：字型、文字色、左右對話泡泡底色、左右邊距、靠邊方式（全左／全右／左右分散）、長間奏貼圖（開關／門檻／自訂圖庫）。上下位置與堆疊構圖固定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    wordscape: { label: '字界巡航', description: '整首歌都在同一個文字世界裡前進：每個字依時間軸逐字出場，鏡頭持續滑行並保留錯落、呼吸與殘影；只有長停頓才硬清場。', scope: '可調：字型、字級、文字色、主唱色與動畫強度。整句不會被切成一幕一幕，換歌也會依各句時間與字數自動重排；不支援拼音／諧音。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
   };
 
   function getTemplateUI(template) {
@@ -141,7 +140,6 @@
     mirror: { ...DEFAULT_SETTINGS, template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
     lightboard: { ...DEFAULT_SETTINGS, template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
     typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
-    wordscape: { ...DEFAULT_SETTINGS, template: 'wordscape', fontWeight: 900, fontSize: 56, color: '#0c0e12', activeColor: '#ed3153', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, animationIntensity: 'normal' },
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];

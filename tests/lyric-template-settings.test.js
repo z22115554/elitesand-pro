@@ -168,7 +168,7 @@ function register({ test, eq, ok }) {
     });
   });
 
-  test('LyricTemplateSettings：沒有 settings 的模板（如 classic / wordscape）不寫任何東西、也清掉全部', () => {
+  test('LyricTemplateSettings：沒有 settings 的模板（如 classic）不寫任何東西、也清掉全部', () => {
     withRegistry(templates, () => {
       const doc = makeDoc();
       LyricTemplateSettings.apply({ template: 'pulse', stageSafeMargin: 12 }, doc);

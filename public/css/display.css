@@ -679,8 +679,7 @@ body.template-columnflow #lyrics-container,
 body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
-body.template-lightboard #lyrics-container,
-body.template-wordscape #lyrics-container {
+body.template-lightboard #lyrics-container {
   min-height: 70vh;
   justify-content: center;
 }
@@ -695,8 +694,7 @@ body.template-columnflow #lyrics-container,
 body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
-body.template-lightboard #lyrics-container,
-body.template-wordscape #lyrics-container {
+body.template-lightboard #lyrics-container {
   align-items: center;
 }
 
@@ -708,46 +706,8 @@ body.template-columnflow #lyrics-container,
 body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
-body.template-lightboard #lyrics-container,
-body.template-wordscape #lyrics-container {
+body.template-lightboard #lyrics-container {
   transform: none;
-}
-
-/* ─── 字界巡航：整個透明舞台交給連續鏡頭與逐字 canvas ─── */
-body.template-wordscape #karaoke-display {
-  padding: 0;
-  align-items: stretch;
-  justify-content: stretch;
-}
-
-body.template-wordscape #lyrics-container {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  transform: none;
-}
-
-#wordscape-root {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  pointer-events: none;
-  background: transparent;
-}
-
-.wordscape-stage {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: transparent;
 }
 
 /* ─── 打字機：仿 iMessage 聊天室，逐字打出、已唱不消失、往上疊 ─── */

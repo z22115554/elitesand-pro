@@ -4578,18 +4578,22 @@ test('AI 分離：CUDA / WebGPU 失敗都先在同一引擎重算幾次，CPU �
   ok(jobs.includes('CUDA_MAX_ATTEMPTS') && jobs.includes('job.cudaAttempts'), 'CUDA 要有重試次數上限與計數: ');
   const pyHandler = jobs.slice(jobs.indexOf("supervisor.emitter.on('error'"), jobs.indexOf("webgpuJobs.events.on('result'"));
   ok(pyHandler.includes('startPython(job, { forceCpu: false })') && pyHandler.includes('CUDA_RETRY_DELAY_MS'), 'CUDA 重試分支要重跑 CUDA: ');
-  ok(pyHandler.includes('if (!tryStartWebgpu(job)) startCpu(job)'), 'CUDA 重試用完才換 WebGPU，撐不住才 CPU: ');
+  // tryStartWebgpu 現在是 async（要反應式等隱藏視窗冷啟，見該函式開頭註解），
+  // 呼叫端因此包了一層 IIFE 才能 await；比對時不管中間那層 wrapper 怎麼寫。
+  ok(pyHandler.includes('await tryStartWebgpu(job)') && pyHandler.includes('startCpu(job)'), 'CUDA 重試用完才換 WebGPU，撐不住才 CPU: ');
   ok(jobs.includes("CUDA_NO_RETRY_CODES = new Set(['RUNTIME_MISSING', 'MODEL_MISSING', 'PROVIDER_UNAVAILABLE', 'GPU_OOM'])"));
   ok(pyHandler.includes("error.code === 'CANCELLED' || error.code === 'INPUT_UNREADABLE'"), '取消 / 壞輸入不重試也不 fallback: ');
 
   // WebGPU：失敗先重試 WebGPU（不是馬上退 CPU），到上限才 CPU
   ok(jobs.includes('WEBGPU_MAX_ATTEMPTS') && jobs.includes('job.webgpuAttempts'), 'WebGPU 要有重試次數上限與計數: ');
   const wgHandler = jobs.slice(jobs.indexOf("webgpuJobs.events.on('error'"), jobs.indexOf("reconcileOrphanedProcessing()"));
-  ok(wgHandler.includes('if (!tryStartWebgpu(job)) startCpu(job)'), 'WebGPU 重試要再試 WebGPU，撐不住才 CPU: ');
+  ok(wgHandler.includes('await tryStartWebgpu(job)') && wgHandler.includes('startCpu(job)'), 'WebGPU 重試要再試 WebGPU，撐不住才 CPU: ');
   ok(wgHandler.includes('retryable'), '要依錯誤類型決定能不能重試: ');
   ok(jobs.includes("WEBGPU_NO_RETRY_CODES = new Set(['unsupported_gpu', 'timeout'])"));
   // 重試前都要等一下再重派
-  eq((jobs.match(/setTimeout\(/g) || []).length, 2, 'CUDA 與 WebGPU 各一個延遲重試: ');
+  // CUDA／WebGPU 各一個延遲重試，另一個是 waitForWebgpuEngine() 內部輪詢用的
+  // delay()（等隱藏視窗反應式冷啟，見 tryStartWebgpu 開頭註解），不是第三個重試分支。
+  eq((jobs.match(/setTimeout\(/g) || []).length, 3, 'CUDA／WebGPU 各一個延遲重試，加上引擎冷啟輪詢用的 delay(): ');
 });
 
 test('WebGPU 引擎：adapter 偵測 / ORT 推論 / device.lost 對到同一顆 GPUDevice', () => {
@@ -8147,9 +8151,10 @@ test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', ()
   ok(panelDrift.includes('hidden') && controllerDrift.includes('hidden'), '斜拍告白必須從桌面與手機模板選擇器隱藏: ');
   ok(!controllerHtml.includes('ctrl-template-legacy-notice'), '手機不應保留舊模板的相容性介面: ');
   const ctrlIds = (controllerJs.match(/const TEMPLATE_IDS = \[([^\]]*)\]/) || [])[1] || '';
-  ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'wordscape']
+  ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard']
     .forEach((id) => ok(ctrlIds.includes(`'${id}'`), `遙控器的 TEMPLATE_IDS 必須包含 ${id}: `));
-  ok(!ctrlIds.includes("'stanza'"), '逐字詩箋已移除，遙控器 TEMPLATE_IDS 不可再有 stanza: ');
+  ok(!ctrlIds.includes("'stanza'") && !ctrlIds.includes("'wordscape'"),
+    '逐字詩箋／字界巡航已移除，遙控器 TEMPLATE_IDS 不可再有它們: ');
   ok(controllerJs.includes('if (!TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換必須接受所有現行模板: ');
   ok(controllerJs.includes("nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS"), '舊 state 從手機首次切到 paperstrip 時必須套用黑字預設，避免白底白字: ');
   ok(controllerJs.includes("nextTemplate === 'mirror' ? MIRROR_DEFAULTS") && controllerJs.includes("if (nextTemplate === 'mirror') next.lyricPosition = 'split';"), '手機首次切到 mirror 必須套用雙側預設並鎖定 split: ');
@@ -8542,49 +8547,33 @@ test('直書句流「漂字」進場：四相漂入 + 動畫強度（取代原�
     '手機遙控的動畫強度也要只在漂字 variant 顯示: ');
 });
 
-test('字界巡航模板：正式端點、選擇器、設定白名單與連續鏡頭契約', () => {
+test('字界巡航（wordscape）已整包移除：無鏡頭效果就完全不成立，2026-09-04 取消', () => {
   const root = path.join(__dirname, '..');
   const displayHtml = fs.readFileSync(path.join(root, 'public', 'display.html'), 'utf8');
   const panelHtml = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
   const controllerHtml = fs.readFileSync(path.join(root, 'public', 'controller.html'), 'utf8');
   const controllerJs = fs.readFileSync(path.join(root, 'public', 'js', 'controller.js'), 'utf8');
-  const templateJs = fs.readFileSync(path.join(root, 'public', 'js', 'lyric-template-wordscape.js'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(root, 'public', 'js', 'lyric-extras.js'), 'utf8');
   const appState = fs.readFileSync(path.join(root, 'server', 'state', 'app-state.js'), 'utf8');
   const lyricsHandler = fs.readFileSync(path.join(root, 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const displayCss = fs.readFileSync(path.join(root, 'public', 'css', 'display.css'), 'utf8');
   const i18n = require('../public/js/i18n');
 
-  ok(displayHtml.includes('/js/lyric-template-wordscape.js'),
-    'display 必須載入字界巡航模板腳本: ');
-  ok(panelHtml.includes('data-template="wordscape"')
-    && controllerHtml.includes('class="ctrl-template-btn" data-template="wordscape"'),
-    '桌面與手機模板選擇器都要有字界巡航: ');
-  ok(controllerJs.includes("'wordscape'") && controllerJs.includes('templateSupportsIntensity'),
-    '手機遙控器必須認得字界巡航並保留動態強度能力: ');
-  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
-    ok(i18n.catalogs?.[locale]?.['template.wordscape'],
-      `${locale} 缺少 template.wordscape: `);
-  }
-  ok(appState.includes("wordscape: { template: 'wordscape'"),
-    'server 預設 lyricTemplateSettings 必須包含 wordscape: ');
-  ok(/const LYRIC_TEMPLATES = \[[^\]]*'wordscape'[^\]]*\]/.test(lyricsHandler),
-    'server 歌詞設定 allowlist 必須接受 wordscape: ');
-
-  ok(templateJs.includes("id: 'wordscape'")
-    && templateJs.includes('LyricTemplates.register(template)'),
-    '字界巡航必須以 registry 註冊正式 ID: ');
-  ok(templateJs.includes('mount') && templateJs.includes('destroy')
-    && templateJs.includes('onLyricsLoaded') && templateJs.includes('onLineChange')
-    && templateJs.includes('onFrame(timeMs, context)')
-    && templateJs.includes('onSeek(timeMs, context')
-    && templateJs.includes('onSettings(nextSettings, context)'),
-    '字界巡航必須完整接上 mount／destroy／歌詞載入／逐幀／seek／設定 lifecycle: ');
-  ok(templateJs.includes('getLyrics?.()') && templateJs.includes('getCurrentTimeMs?.()'),
-    '字界巡航必須讀取 host 歌詞與絕對播放時間，不能自己維護另一份歌詞狀態: ');
-  ok(templateJs.includes('10.3.2')
-    && templateJs.includes('continuous-target + constant-jerk body + analytic breathing'),
-    '正式模板必須保留驗收過的 V10.3.2 連續鏡頭模型: ');
-  ok(!templateJs.includes('requestAnimationFrame'),
-    '字界巡航不可自行開 requestAnimationFrame，時間必須由 display host 驅動: ');
+  ok(!fs.existsSync(path.join(root, 'public', 'js', 'lyric-template-wordscape.js')),
+    'lyric-template-wordscape.js 必須刪除: ');
+  ok(!displayHtml.includes('wordscape'), 'display.html 不可再載入 wordscape 腳本: ');
+  ok(!panelHtml.includes('data-template="wordscape"') && !controllerHtml.includes('data-template="wordscape"'),
+    '桌面／手機模板選擇器不可再有字界巡航: ');
+  ok(!lyricExtras.includes('wordscape') && !controllerJs.includes('wordscape')
+    && !controllerJs.includes('WORDSCAPE_DEFAULTS'),
+    'lyric-extras／controller.js 不可再有 wordscape: ');
+  ok(!appState.includes("wordscape: { template") && !lyricsHandler.includes("'wordscape'"),
+    'server（app-state／lyrics allowlist）不可再有 wordscape: ');
+  ok(!i18n.catalogs?.['zh-TW']?.['template.wordscape'], 'template.wordscape i18n key 必須移除: ');
+  ok(!displayCss.includes('wordscape') && !displayCss.includes('字界巡航'),
+    'display.css 的 #wordscape-root／.wordscape-stage／body.template-wordscape 樣式必須全部移除: ');
+  ok(!fs.existsSync(path.join(root, 'tests', 'visual', '__snapshots__', 'wordscape-line-1.png')),
+    '字界巡航的視覺回歸基準也要一起刪: ');
 });
 
 test('v2 將既有模板設定與預設快照遷移到新 ID', () => {

@@ -36,7 +36,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'wordscape'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;

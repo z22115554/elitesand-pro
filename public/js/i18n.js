@@ -944,7 +944,6 @@
     'template.mirror': ['虛實鏡書', 'Mirror', 'ミラー', '미러', '虚实镜书'],
     'template.typewriter': ['對話氣泡', 'Typewriter', 'タイプライター', '타자기', '对话气泡'],
     'template.lightboard': ['跑馬燈牌', 'Light Board', 'ライトボード', '라이트보드', '跑马灯牌'],
-    'template.wordscape': ['字界巡航', 'Wordscape', '文字世界クルーズ', '글자 세계 항해', '字界巡航'],
     'template.columnSen': ['素筆直書', 'Plain Brush Vertical', '素筆の縦書き', '담백한 세로쓰기', '素笔竖排'],
     'template.columnFuda': ['字札直書', 'Card Vertical', '字札の縦書き', '글패 세로쓰기', '字札竖排'],
     'template.columnDrift': ['漂字直書', 'Drift Vertical', '漂う字の縦書き', '떠도는 글자 세로쓰기', '漂字竖排'],
