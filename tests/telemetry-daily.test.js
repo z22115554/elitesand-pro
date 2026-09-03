@@ -86,7 +86,13 @@ function testRegistry() {
 }
 
 function testWorkerWhitelistMatches() {
-  const workerPath = path.join(__dirname, '..', 'cloudflare', 'usage-worker', 'src', 'index.ts');
+  // 2026-09 反灌水重構把純驗證邏輯（ALLOWED_COUNTER_KEYS／MAX_COUNTER_VALUE
+  // 等）從 index.ts 拆到 validation.ts，理由是 wrangler entry module
+  // （wrangler.jsonc 的 "main"）只能有 default handler 具名匯出，其餘具名
+  // 匯出會讓 tsc 對著 worker-configuration.d.ts 的 ExportedHandler 型別報錯；
+  // validation.ts 不是 entry module，可以自由 export 供這裡與單元測試讀取。
+  // 這裡唯一改的是「去哪個檔案找常數」，白名單漂移的守衛邏輯本身不變。
+  const workerPath = path.join(__dirname, '..', 'cloudflare', 'usage-worker', 'src', 'validation.ts');
   const source = fs.readFileSync(workerPath, 'utf8');
   const match = source.match(/ALLOWED_COUNTER_KEYS[^=]*=\s*new Set\(\s*(\[[\s\S]*?\])\s*\)/);
   assert.ok(match, '在 worker 找不到 ALLOWED_COUNTER_KEYS');

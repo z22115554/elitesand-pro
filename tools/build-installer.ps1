@@ -1,8 +1,31 @@
 ﻿param(
-  [string]$OutputRoot = ""
+  [string]$OutputRoot = "",
+  [switch]$Release
 )
 
 $ErrorActionPreference = "Stop"
+
+# -Release＝這份成品要對外發布，必須帶有效的 Authenticode 簽章。
+#
+# 內部 updater 的 Ed25519 簽章保護的是「Elitesand 自己送出的更新內容」，跟作業系統
+# 認不認這個 Installer 是兩回事。Installer 沒簽章時 Windows 會顯示未知發行者、
+# SmartScreen 信任度低、使用者無從分辨官方檔案與被替換的仿冒檔。
+#
+# 開發／測試 build 不帶這個開關，維持原本行為（會印警告，提醒成品不可外流）。
+function Assert-AuthenticodeValid {
+  param(
+    [Parameter(Mandatory = $true)][string]$LiteralPath,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  if (-not (Test-Path -LiteralPath $LiteralPath)) {
+    throw "Cannot verify signature; missing $Label at $LiteralPath"
+  }
+  $signature = Get-AuthenticodeSignature -LiteralPath $LiteralPath
+  if ($signature.Status -ne 'Valid') {
+    throw "$Label is not validly signed (status: $($signature.Status)). Refusing to publish an unsigned release artifact."
+  }
+  Write-Host "Authenticode OK - $Label signed by: $($signature.SignerCertificate.Subject)"
+}
 
 function Get-Sha256Hex {
   param([Parameter(Mandatory = $true)][string]$LiteralPath)
@@ -234,9 +257,22 @@ try {
   & $NodeCommand.Source (Join-Path $Root "tools\write-packaged-resource-integrity.js") $AppStage (Join-Path $Resources "tools")
   if ($LASTEXITCODE -ne 0) { throw "Packaged external-resource integrity manifest generation failed." }
 
+  if ($Release) {
+    # 先擋在建置之前：跑完整包再發現沒憑證，等於白等十幾分鐘。
+    if ([string]::IsNullOrWhiteSpace($env:CSC_LINK) -and [string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) {
+      throw "-Release requires a code signing certificate. Set CSC_LINK (or WIN_CSC_LINK) and CSC_KEY_PASSWORD before building a release installer."
+    }
+  }
+
   Push-Location $Root
   try {
-    & (Join-Path $Root "node_modules\.bin\electron-builder.cmd") --win nsis
+    $BuilderArgs = @("--win", "nsis")
+    if ($Release) {
+      # package.json 的 forceCodeSigning 維持 false，讓開發機不用憑證也能打包測試；
+      # 對外發布時用 CLI override 打開，簽不出來就讓 electron-builder 直接失敗。
+      $BuilderArgs += "-c.forceCodeSigning=true"
+    }
+    & (Join-Path $Root "node_modules\.bin\electron-builder.cmd") @BuilderArgs
     if ($LASTEXITCODE -ne 0) { throw "electron-builder failed." }
   } finally {
     Pop-Location
@@ -267,6 +303,17 @@ try {
   [System.IO.File]::WriteAllText($InstallerHashPath, $InstallerHash, [System.Text.Encoding]::ASCII)
   if ((Get-Content -LiteralPath $InstallerHashPath -Raw -Encoding ASCII) -notmatch '^[a-f0-9]{64}$') {
     throw "Installer SHA-256 file is not exactly 64 hexadecimal characters."
+  }
+
+  # 簽章驗收。electron-builder 的 forceCodeSigning 只保證「簽章步驟沒被跳過」，不保證
+  # 產出的成品在使用者機器上驗得過（憑證過期、鏈不完整都會過建置但裝不起來），所以這裡
+  # 用 OS 自己的驗證器再確認一次。Installer 與解包後的主程式都要驗——只簽外層的話，
+  # 使用者安裝完之後執行的那個 exe 仍然是未知發行者。
+  if ($Release) {
+    Assert-AuthenticodeValid -LiteralPath $InstallerPath -Label "Installer"
+    Assert-AuthenticodeValid -LiteralPath (Join-Path $UnpackedRoot "Elitesand Pro.exe") -Label "Application executable"
+  } else {
+    Write-Warning "Unsigned build (no -Release switch). This artifact is for local testing only and must not be distributed."
   }
 
   Test-InstallerBootOutsideRepo -UnpackedResources $UnpackedResources

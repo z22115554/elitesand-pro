@@ -21,13 +21,13 @@ function createLinkedPorts() {
   return { child, parentPort };
 }
 
-function createFakeProvider({ plan = null, acceptOk = true } = {}) {
+function createFakeProvider({ plan = null, acceptOk = true, checkKind = 'none' } = {}) {
   const calls = [];
   return {
     calls,
     async check() {
       calls.push('check');
-      return plan ? { kind: 'plan', plan } : { kind: 'none' };
+      return plan ? { kind: 'plan', plan } : { kind: checkKind };
     },
     async acceptIncremental(p) { calls.push(`accept-incremental:${p.planId}`); return { ok: acceptOk }; },
     async openRequiredInstaller(p) { calls.push(`open-required-installer:${p.planId}`); return { ok: acceptOk }; },
@@ -147,6 +147,28 @@ test('acceptTimeoutMs below the base timeoutMs is rejected at construction', () 
   const silentChild = new EventEmitter();
   silentChild.postMessage = () => {};
   assert.throws(() => createManualUpdateRequester({ child: silentChild, timeoutMs: 1000, acceptTimeoutMs: 500 }), /between the base timeout/);
+});
+
+test('a provider "unavailable" result is passed through as-is, not folded into "none"', async () => {
+  const { child, parentPort } = createLinkedPorts();
+  const provider = createFakeProvider({ checkKind: 'unavailable' });
+  attachManualUpdateCheckCoordinator({ parentPort, provider });
+  const requester = createManualUpdateRequester({ child });
+
+  const result = await requester.request({ action: 'check' });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.kind, 'unavailable');
+});
+
+test('a real provider "none" result (server explicitly said no update) still reports "none"', async () => {
+  const { child, parentPort } = createLinkedPorts();
+  const provider = createFakeProvider({ checkKind: 'none' });
+  attachManualUpdateCheckCoordinator({ parentPort, provider });
+  const requester = createManualUpdateRequester({ child });
+
+  const result = await requester.request({ action: 'check' });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.kind, 'none');
 });
 
 test('no parentPort: coordinator does not attach or touch the provider', () => {

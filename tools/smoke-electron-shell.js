@@ -71,7 +71,13 @@ async function main() {
     env: {
       ...process.env,
       ELITESAND_SHELL_HEADLESS: '1',
-      ELITESAND_SHELL_QUIT_AFTER_READY_MS: '10000',
+      // 只是「殼萬一卡住也會自己收掉」的保險絲，不是被測行為——這支 smoke 在檢查做完
+      // 之後本來就會自己 child.kill()（見下方 exited/kill 那段）。原本設 10 秒，但同一段
+      // 時間內還要跑完 1000 筆帶 log 的 /api/twitch/status 壓力請求：機器稍慢或 Electron
+      // 啟動久一點，殼就會在迴圈跑到一半自己退出，表現成 `Timeout: /api/twitch/status`
+      // 的假失敗（已確認在未修改的 b439e10 上同樣重現，與任何功能改動無關）。放寬保險絲
+      // 不會放過任何斷言，只是不讓計時賽跑決定測試結果。
+      ELITESAND_SHELL_QUIT_AFTER_READY_MS: '90000',
       ELITESAND_SHELL_PORT: String(port),
       ELITESAND_SHELL_USER_DATA_DIR: userDataDir,
     },

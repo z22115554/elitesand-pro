@@ -225,8 +225,8 @@
 
   <!-- PIN 保護：伺服器設定 PIN 後，連線被拒會跳出這個要求輸入的視窗（見 public/js/pin-auth.js） -->
   <div id="pin-required-modal" class="modal" hidden>
-    <div class="modal-card modal-card--compact">
-      <div class="modal-head"><h3 data-i18n="pin.required">需要 PIN</h3></div>
+    <div class="modal-card modal-card--compact" role="dialog" aria-modal="true" aria-labelledby="pin-required-title">
+      <div class="modal-head"><h3 id="pin-required-title" data-i18n="pin.required">需要 PIN</h3></div>
       <div class="modal-body">
         <p class="field-hint modal-form-hint" data-i18n="pin.deviceHint">這台裝置需要輸入 PIN 才能操作 Elitesand Pro。</p>
         <input id="pin-required-input" class="input modal-form-input" type="password" inputmode="numeric" autocomplete="off" placeholder="輸入 PIN" data-i18n-placeholder="pin.placeholder">

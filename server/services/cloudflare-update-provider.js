@@ -28,8 +28,12 @@ function defaultChannel(env = process.env, version = APP_VERSION) {
 }
 
 function isEnabled(env = process.env, version = APP_VERSION) {
-  if (env.ELITESAND_ENABLE_CLOUDFLARE_UPDATES === '0') return false;
-  return env.ELITESAND_ENABLE_CLOUDFLARE_UPDATES === '1' || isBetaBuildVersion(version);
+  // Stable defaults to enabled: the only explicit off-switch is the '0' env
+  // flag. `version` is accepted for backward-compatible call signatures and
+  // beta-vs-stable channel selection continues to use isBetaBuildVersion()
+  // separately in defaultChannel() — it is intentionally not consulted here.
+  void version;
+  return env.ELITESAND_ENABLE_CLOUDFLARE_UPDATES !== '0';
 }
 
 function normalizeChannel(value) {
@@ -78,16 +82,22 @@ async function fetchPlanJson(url, { fetchImpl = globalThis.fetch, connectTimeout
       headers: { Accept: 'application/json', 'User-Agent': appUserAgent('update-policy') },
     });
     clearTimeout(connectTimer);
+    // 204 is the server explicitly saying "no update" — a real answer, so it
+    // maps to `none`. Everything else abnormal here (bad status, wrong
+    // content-type, malformed length, unparsable body) means we never got a
+    // usable answer at all, so it maps to `unavailable` and lets the caller
+    // fall back (e.g. to the GitHub release check) instead of being told
+    // "you're up to date" on what was actually a failure to ask.
     if (response.status === 204) return { kind: 'none' };
-    if (response.status !== 200) return { kind: 'none' };
+    if (response.status !== 200) return { kind: 'unavailable' };
     const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
-    if (!contentType.startsWith('application/json')) return { kind: 'none' };
+    if (!contentType.startsWith('application/json')) return { kind: 'unavailable' };
     const length = Number.parseInt(response.headers?.get?.('content-length') || '', 10);
-    if (Number.isInteger(length) && (length < 1 || length > MAX_PLAN_BYTES)) return { kind: 'none' };
+    if (Number.isInteger(length) && (length < 1 || length > MAX_PLAN_BYTES)) return { kind: 'unavailable' };
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (!bytes.length || bytes.length > MAX_PLAN_BYTES) return { kind: 'none' };
+    if (!bytes.length || bytes.length > MAX_PLAN_BYTES) return { kind: 'unavailable' };
     let plan;
-    try { plan = JSON.parse(bytes.toString('utf8')); } catch (_) { return { kind: 'none' }; }
+    try { plan = JSON.parse(bytes.toString('utf8')); } catch (_) { return { kind: 'unavailable' }; }
     return { kind: 'plan', plan };
   } finally {
     clearTimeout(connectTimer);
@@ -120,15 +130,22 @@ function createCloudflareUpdateProvider({
   });
 
   async function check() {
-    if (!canCheck) return { kind: 'none' };
+    // `unavailable` = the provider could not get an answer at all this time
+    // (disabled/misconfigured, fingerprinting failed, network/HTTP failure,
+    // malformed response) — the caller should fall back to another source.
+    // `none` = we got a real answer and it was "no update" (204, or a
+    // response that fails plan verification, including a security rejection
+    // like a bad signature/replay/fingerprint mismatch — those must never be
+    // softened into `unavailable`, they stay a hard "no").
+    if (!canCheck) return { kind: 'unavailable' };
     let installedRuntimeFingerprint;
     try {
       installedRuntimeFingerprint = await runtimeFingerprint({ version: currentVersion, platform, arch, channel: selectedChannel });
     } catch (_) {
-      return { kind: 'none' };
+      return { kind: 'unavailable' };
     }
     const fingerprint = createRequestFingerprint({ version: currentVersion, platform, arch, channel: selectedChannel, runtimeFingerprint: installedRuntimeFingerprint });
-    if (!fingerprint) return { kind: 'none' };
+    if (!fingerprint) return { kind: 'unavailable' };
     const url = new URL(base.href);
     url.search = new URLSearchParams({
       version: currentVersion,
@@ -137,9 +154,16 @@ function createCloudflareUpdateProvider({
       channel: selectedChannel,
       fingerprint,
     }).toString();
+    let result;
     try {
-      const result = await fetchPlanJson(url, { fetchImpl, connectTimeoutMs, totalTimeoutMs });
-      if (result.kind !== 'plan') return { kind: 'none' };
+      result = await fetchPlanJson(url, { fetchImpl, connectTimeoutMs, totalTimeoutMs });
+    } catch (_) {
+      // Network/transport failure: we never got a response to evaluate.
+      return { kind: 'unavailable' };
+    }
+    if (result.kind === 'unavailable') return result;
+    if (result.kind !== 'plan') return { kind: 'none' };
+    try {
       const verified = verifyUpdatePlan(result.plan, {
         currentVersion,
         channel: selectedChannel,
@@ -151,6 +175,10 @@ function createCloudflareUpdateProvider({
       });
       return verified.ok ? { kind: 'plan', plan: verified.plan } : { kind: 'none' };
     } catch (_) {
+      // verifyUpdatePlan/replayGuard threw (e.g. a corrupt local replay
+      // store) — this is a fail-closed security rejection, same family as a
+      // bad signature or a blocked replay, so it must stay `none` and never
+      // relax into `unavailable`'s GitHub-fallback path.
       return { kind: 'none' };
     }
   }

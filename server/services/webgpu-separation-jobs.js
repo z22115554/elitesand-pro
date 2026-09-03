@@ -54,8 +54,8 @@ function getRestartRequestedAt() {
   return restartRequestedAt;
 }
 
-// 引擎跑在瀏覽器頁面裡，沒有檔案系統存取權——分離結果只能用 socket 送二進位資料
-// 回來，實際寫檔案（決定檔名、存進 downloadsDir）要在這裡（Node 端）做，跟 CUDA
+// 引擎跑在瀏覽器頁面裡，沒有檔案系統存取權——分離結果只能用 HTTP multipart 送二進位
+// 資料回來，實際落地（決定檔名、存進 downloadsDir）要在這裡（Node 端）做，跟 CUDA
 // 路徑「worker.py 自己決定輸出路徑、Node 端只取 basename」的分工不同：這裡反過來，
 // 檔名由 Node 端決定，瀏覽器端只送資料。
 function sanitizeStem(filename) {
@@ -63,19 +63,63 @@ function sanitizeStem(filename) {
   return stem.replace(/[\\/:*?"<>|]/g, '_').slice(0, 200) || 'track';
 }
 
-function writeResultFiles(trackId, sourceFilename, result) {
+// WAV 檔頭只要前 12 bytes（'RIFF'+size+'WAVE'）就能判斷是不是合法容器，用
+// fileHandle.read() 指定 offset/length 讀，不必把整個檔案（可能幾百 MB）讀進記憶體。
+async function looksLikeWav(filePath) {
+  const fh = await fs.promises.open(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(12);
+    const { bytesRead } = await fh.read(buf, 0, 12, 0);
+    return bytesRead === 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WAVE';
+  } finally {
+    await fh.close();
+  }
+}
+
+/**
+ * 驗證 multer 已經落在 downloads/.tmp 底下的暫存檔，通過後 rename 到 downloadsDir
+ * 根層的正式檔名。用 rename 而不是 copy+delete——同一個磁碟分割上是原子操作，不會有
+ * 「寫到一半被別的請求讀到半成品」的窗口，也比整檔複製快、不佔額外磁碟。
+ */
+async function validateAndMoveStem(tempPath, destPath) {
+  const stat = await fs.promises.stat(tempPath);
+  if (!stat.isFile() || stat.size <= 0) {
+    throw new Error(`分離結果檔案是空的：${path.basename(tempPath)}`);
+  }
+  if (!(await looksLikeWav(tempPath))) {
+    throw new Error(`分離結果不是合法的 WAV 檔：${path.basename(tempPath)}`);
+  }
+  await fs.promises.rename(tempPath, destPath);
+  return path.basename(destPath);
+}
+
+// 改成 async／收檔案路徑而非整包 Buffer：webgpuResultUpload 現在是 disk-backed
+// multer（見 api.js），一首長歌兩個 WAV 加起來很容易上看 1GB，同步 writeFileSync
+// 會整個卡住 event loop（OBS/Socket.io/面板全部一起停）。這裡改用 async rename，
+// 事件迴圈不被單一大檔案的 I/O 綁住。任一個 stem 驗證/搬移失敗就整個丟出去給呼叫端
+// （finishJobWithResult）處理成失敗——不要求兩個 stem 都要有，但有給的都要合法。
+async function writeResultFiles(trackId, sourceFilename, result) {
   const stem = sanitizeStem(sourceFilename);
   const suffix = `webgpu-${Date.now()}`;
   const out = {};
-  if (result.vocalsBuffer) {
-    const name = `${stem}.${suffix}.vocals.wav`;
-    fs.writeFileSync(path.join(downloadsDir, name), Buffer.from(result.vocalsBuffer));
-    out.vocalsFile = name;
-  }
-  if (result.instrumentalBuffer) {
-    const name = `${stem}.${suffix}.instrumental.wav`;
-    fs.writeFileSync(path.join(downloadsDir, name), Buffer.from(result.instrumentalBuffer));
-    out.instrumentalFile = name;
+  // 已經 rename 到 downloadsDir 根層的檔案要自己記著：呼叫端的 finally 只認得 .tmp
+  // 底下的暫存路徑，搬走之後它就刪不到了。第一個 stem 成功、第二個失敗時若不回收，
+  // 使用者的媒體庫資料夾會留下一個沒有任何紀錄指向它的半套 .vocals.wav。
+  const moved = [];
+  try {
+    if (result.vocalsPath) {
+      const dest = path.join(downloadsDir, `${stem}.${suffix}.vocals.wav`);
+      out.vocalsFile = await validateAndMoveStem(result.vocalsPath, dest);
+      moved.push(dest);
+    }
+    if (result.instrumentalPath) {
+      const dest = path.join(downloadsDir, `${stem}.${suffix}.instrumental.wav`);
+      out.instrumentalFile = await validateAndMoveStem(result.instrumentalPath, dest);
+      moved.push(dest);
+    }
+  } catch (err) {
+    await Promise.all(moved.map((p) => fs.promises.unlink(p).catch(() => {})));
+    throw err;
   }
   return out;
 }
@@ -257,8 +301,13 @@ function handleProgress(socket, payload) {
  * 對得上 activeJob.jobId」是同一等級的信任模型，只是換了傳輸層。這支端點也刻意不掛
  * requirePin：呼叫者是沒有 PIN 內容的隱藏視窗頁面，跟 `webgpu-engine` clientType
  * 在 PIN_EXEMPT_CLIENT_TYPES 裡被豁免的理由完全一樣（鐵則 14 的 HTTP 版本）。
+ *
+ * 收檔案路徑（multer diskStorage 已經把內容落在 downloads/.tmp）而不是整包 Buffer，
+ * 且是 async——呼叫端（api.js 的路由 handler）要 await 這個函式。暫存檔的清理是
+ * 呼叫端的責任（無論這裡回傳成功或失敗，甚至丟例外，呼叫端都會在 finally 補刪），
+ * 這裡只在「驗證/搬移成功」時把暫存檔 rename 走，rename 之後那個路徑本來就不存在了。
  */
-function finishJobWithResult(jobId, { vocalsBuffer, instrumentalBuffer, gpuVendor, peakBufferMb, realtimeFactor, audioSeconds }) {
+async function finishJobWithResult(jobId, { vocalsPath, instrumentalPath, gpuVendor, peakBufferMb, realtimeFactor, audioSeconds }) {
   if (!activeJob || activeJob.jobId !== jobId) {
     return { ok: false, code: 'UNKNOWN_JOB' };
   }
@@ -268,7 +317,7 @@ function finishJobWithResult(jobId, { vocalsBuffer, instrumentalBuffer, gpuVendo
   const hw = { gpuVendor, peakBufferMb, realtimeFactor, audioSeconds };
   let written;
   try {
-    written = writeResultFiles(job.trackId, job.params?.sourceFilename, { vocalsBuffer, instrumentalBuffer });
+    written = await writeResultFiles(job.trackId, job.params?.sourceFilename, { vocalsPath, instrumentalPath });
   } catch (err) {
     log.error(`寫入 WebGPU 分離結果檔案失敗 track=${job.trackId}`, err);
     if (!job.deferFailure) {

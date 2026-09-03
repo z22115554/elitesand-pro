@@ -1,25 +1,31 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { test, expect } = require('@playwright/test');
 const { visualLyrics, visualFrames } = require('../fixtures/visual-lyrics.fixture');
 
-const CUSTOM_TEMPLATE_IDS = [
-  'pulse',
-  'facet',
-  'drift',
-  'aura',
-  'ktv',
-  'columnflow',
-  'paperstrip',
-  'mirror',
-];
+// 單一來源：從 public/js/ 底下的 lyric-template-*.js 檔名推導模板 id 清單，
+// 不再手寫第二份清單。排除 registry/settings 這類非模板檔。
+const TEMPLATE_DIR = path.join(__dirname, '..', '..', 'public', 'js');
+const NON_TEMPLATE_FILES = new Set(['lyric-template-registry.js', 'lyric-template-settings.js']);
+
+const CUSTOM_TEMPLATE_IDS = fs.readdirSync(TEMPLATE_DIR)
+  .filter((name) => name.startsWith('lyric-template-') && name.endsWith('.js'))
+  .filter((name) => !NON_TEMPLATE_FILES.has(name))
+  .map((name) => name.slice('lyric-template-'.length, -'.js'.length))
+  .sort();
 
 async function waitForTemplateRuntime(page) {
+  // 等 runtime registry 載入完成且與檔案系統推導出的清單一致。用 toEqual 比對
+  // 排序後的兩份清單，而不是硬寫一份跟 runtime 分開維護、容易漂移的陣列——
+  // 這樣漏掉註冊的模板檔仍會被抓到（清單不一致），但清單本身只有一個來源。
   await expect.poll(async () => page.evaluate(() => {
     if (typeof LyricTemplates === 'undefined' || typeof KaraokeEngine === 'undefined') return null;
     return LyricTemplates.list()
       .map((template) => template.id)
-      .filter((id) => id !== 'classic');
+      .filter((id) => id !== 'classic')
+      .sort();
   })).toEqual(CUSTOM_TEMPLATE_IDS);
 }
 

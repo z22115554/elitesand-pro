@@ -38,6 +38,57 @@ const PinAuth = (() => {
     return fetch(url, Object.assign({}, opts, { headers: h }));
   }
 
+  // ─── modal 開關共用工具 ───
+  // controller-new.css 對 `.controller .modal` 訂了 `display:none`（特異度 0,2,0），
+  // 蓋過 base.css 的 `.modal { display:flex }`（特異度 0,1,0）；controller.html 另一半
+  // modal（lyrics-paste-modal）本來就是靠 `.active` 類顯示，完全不看 hidden 屬性。
+  // 所以「顯示」必須同時清 hidden 與補上 .active，兩邊頁面才都吃得到；面板頁
+  // panel.css 沒有定義 `.modal.active`，多加這個 class 不影響任何規則。
+  function getFocusable(el) {
+    return Array.from(el.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )).filter((n) => !n.disabled && n.offsetParent !== null);
+  }
+  function showModal(el, opts) {
+    if (!el) return;
+    opts = opts || {};
+    el.hidden = false;
+    el.classList.add('active');
+    el._pinAuthReturnFocus = 'returnFocusTo' in opts ? opts.returnFocusTo : document.activeElement;
+    el._pinAuthEscapable = opts.escapable !== false;
+  }
+  function hideModal(el) {
+    if (!el) return;
+    el.classList.remove('active');
+    el.hidden = true;
+    const back = el._pinAuthReturnFocus;
+    el._pinAuthReturnFocus = null;
+    try {
+      if (back && typeof back.focus === 'function' && document.contains(back)) back.focus();
+      else document.body.focus();
+    } catch (e) { /* focus 只是加分，失敗不影響關閉 */ }
+  }
+  // 強制性 modal（pin-required-modal：連線被拒才出現，關掉也沒用）Escape 不應該關；
+  // 使用者自己開的 modal（pin-manage-modal 等）Escape 可以關。用 showModal 的
+  // escapable 參數區分，這裡只認上層目前開著哪個。
+  document.addEventListener('keydown', (e) => {
+    const open = Array.from(document.querySelectorAll('.modal.active'));
+    if (!open.length) return;
+    const top = open[open.length - 1];
+    if (e.key === 'Escape') {
+      if (top._pinAuthEscapable) { e.preventDefault(); hideModal(top); }
+      return;
+    }
+    if (e.key === 'Tab') {
+      const focusables = getFocusable(top);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+
   // ─── 登入 modal（PIN 錯誤/未提供時擋住操作）───
   function wireRequiredModal() {
     const modal = document.getElementById('pin-required-modal');
@@ -67,7 +118,7 @@ const PinAuth = (() => {
         const data = await res.json();
         if (data.ok) {
           hideError();
-          modal.hidden = true;
+          hideModal(modal);
           input.value = '';
           if (typeof SocketClient !== 'undefined') SocketClient.reauth(pin);
         } else {
@@ -85,10 +136,11 @@ const PinAuth = (() => {
 
     if (typeof SocketClient !== 'undefined') {
       SocketClient.on('auth:required', () => {
-        modal.hidden = false;
+        // 強制性：連線被拒才會跳出，關掉也解決不了問題，Escape 不可關閉。
+        showModal(modal, { escapable: false });
         setTimeout(() => input.focus(), 50);
       });
-      SocketClient.on('auth:ok', () => { modal.hidden = true; });
+      SocketClient.on('auth:ok', () => { hideModal(modal); });
     }
   }
 
@@ -131,14 +183,14 @@ const PinAuth = (() => {
         if (data.hasPin && card.tagName === 'DETAILS') card.open = true;
         let onboardingSeen = true;
         try { onboardingSeen = !!localStorage.getItem(ONBOARDING_KEY); } catch (_) { onboardingSeen = false; }
-        if (!data.hasPin && onboardingModal && !onboardingSeen) onboardingModal.hidden = false;
+        if (!data.hasPin && onboardingModal && !onboardingSeen) showModal(onboardingModal);
       }).catch(() => { /* 讀不到就維持現狀，不阻擋介面 */ });
     }
 
     function showError(msg) { errEl.textContent = msg; errEl.classList.add('is-visible'); }
     function hideError() { errEl.classList.remove('is-visible'); }
 
-    function openModal(m) {
+    function openManageModal(m, triggerEl) {
       mode = m;
       hideError();
       currentInput.value = ''; newInput.value = ''; confirmInput.value = '';
@@ -155,10 +207,11 @@ const PinAuth = (() => {
         currentWrap.hidden = false; newWrap.hidden = true; confirmWrap.hidden = true;
         submitBtn.textContent = '停用';
       }
-      modal.hidden = false;
+      // 使用者自己點按鈕開的 modal：Escape 可關閉，關閉後 focus 還給觸發按鈕。
+      showModal(modal, { escapable: true, returnFocusTo: triggerEl || document.activeElement });
       setTimeout(() => (mode === 'disable' ? currentInput : (mode === 'change' ? currentInput : newInput)).focus(), 50);
     }
-    function closeModal() { modal.hidden = true; }
+    function closeManageModal() { hideModal(modal); }
 
     async function submit() {
       hideError();
@@ -176,7 +229,7 @@ const PinAuth = (() => {
           const data = await res.json();
           if (data.ok) {
             clear();
-            closeModal();
+            closeManageModal();
             refreshStatus();
           } else {
             // 401/403 回的是 { error, code }（沒有 message），只讀 message 會讓
@@ -209,7 +262,7 @@ const PinAuth = (() => {
         if (data.ok) {
           set(newPin); // 這台裝置自己也記住新 PIN，設定完不用馬上重輸一次
           if (typeof SocketClient !== 'undefined') SocketClient.reauth(newPin);
-          closeModal();
+          closeManageModal();
           refreshStatus();
         } else {
           showError(data.message || data.error || '設定失敗');
@@ -221,19 +274,19 @@ const PinAuth = (() => {
       }
     }
 
-    enableBtn.addEventListener('click', () => openModal('set'));
-    changeBtn.addEventListener('click', () => openModal('change'));
-    disableBtn.addEventListener('click', () => openModal('disable'));
-    cancelBtn.addEventListener('click', closeModal);
+    enableBtn.addEventListener('click', (e) => openManageModal('set', e.currentTarget));
+    changeBtn.addEventListener('click', (e) => openManageModal('change', e.currentTarget));
+    disableBtn.addEventListener('click', (e) => openManageModal('disable', e.currentTarget));
+    cancelBtn.addEventListener('click', closeManageModal);
     submitBtn.addEventListener('click', submit);
-    if (onboardingSet) onboardingSet.addEventListener('click', () => {
+    if (onboardingSet) onboardingSet.addEventListener('click', (e) => {
       try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* next launch may ask again */ }
-      onboardingModal.hidden = true;
-      openModal('set');
+      hideModal(onboardingModal);
+      openManageModal('set', e.currentTarget);
     });
     if (onboardingSkip) onboardingSkip.addEventListener('click', () => {
       try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* next launch may ask again */ }
-      onboardingModal.hidden = true;
+      hideModal(onboardingModal);
     });
 
     refreshStatus();

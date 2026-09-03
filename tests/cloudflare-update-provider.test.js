@@ -121,21 +121,69 @@ test('Cloudflare provider only makes one exact cold-start Worker request and acc
   assert.strictEqual(observedUrl.searchParams.get('fingerprint'), createRequestFingerprint({ version: '0.9.9.7', channel: 'stable', runtimeFingerprint: TEST_RUNTIME_FINGERPRINT }));
 });
 
-test('stable builds default off and an untrusted endpoint cannot trigger a fetch', async () => {
+test('stable builds default to enabled; an explicit "0" disable flag and an untrusted endpoint both fail closed as "unavailable"', async () => {
   let calls = 0;
   let runtimeCalls = 0;
-  const disabled = createCloudflareUpdateProvider({ currentVersion: '0.9.9.8', fetchImpl: async () => { calls += 1; return response({}); }, runtimeFingerprint: async () => { runtimeCalls += 1; return TEST_RUNTIME_FINGERPRINT; } });
-  assert.strictEqual((await disabled.check()).kind, 'none');
+  // Stable version, no override passed: relies on isEnabled()'s new default.
+  assert.strictEqual(isEnabled({}, '0.9.9.8'), true);
+  const disabled = createCloudflareUpdateProvider({
+    currentVersion: '0.9.9.8',
+    enabled: isEnabled({ ELITESAND_ENABLE_CLOUDFLARE_UPDATES: '0' }, '0.9.9.8'),
+    fetchImpl: async () => { calls += 1; return response({}); },
+    runtimeFingerprint: async () => { runtimeCalls += 1; return TEST_RUNTIME_FINGERPRINT; },
+  });
+  assert.strictEqual((await disabled.check()).kind, 'unavailable');
   const hostile = createCloudflareUpdateProvider({ currentVersion: '0.9.9.8', enabled: true, endpoint: 'https://evil.example/v1/plan', fetchImpl: async () => { calls += 1; return response({}); } });
-  assert.strictEqual((await hostile.check()).kind, 'none');
+  assert.strictEqual((await hostile.check()).kind, 'unavailable');
   assert.strictEqual(calls, 0);
   assert.strictEqual(runtimeCalls, 0);
+});
+
+test('stable build defaults to enabled and actually issues the Worker request; a real 1.0.0 -> 1.0.1 signed plan is accepted', async () => {
+  let calls = 0;
+  const provider = createCloudflareUpdateProvider({
+    currentVersion: '1.0.0',
+    enabled: isEnabled({}, '1.0.0'),
+    channel: 'stable',
+    publicKeys: TEST_PUBLIC_KEYS,
+    nowMs: () => NOW_MS,
+    runtimeFingerprint: async () => TEST_RUNTIME_FINGERPRINT,
+    // Isolated in-memory replay guard: the provider's default replay store
+    // persists to the real userData file, which other tests in this file
+    // also write "stable/win32/x64" entries into — sharing it here would
+    // make this test's outcome depend on run order.
+    replayGuard: policy.createInMemoryReplayGuard(),
+    fetchImpl: async () => {
+      calls += 1;
+      return response(signedPlan({
+        planId: 'stable-win32-x64-1.0.0-1.0.1-p1',
+        fromVersion: '1.0.0',
+        targetVersion: '1.0.1',
+        artifact: {
+          url: 'https://updates.elitesand.pro/artifacts/stable/1.0.0/1.0.1/update.zip',
+          sha256: 'a'.repeat(64),
+          size: 1234,
+        },
+      }));
+    },
+  });
+  const result = await provider.check();
+  assert.strictEqual(result.kind, 'plan');
+  assert.strictEqual(result.plan.targetVersion, '1.0.1');
+  assert.strictEqual(calls, 1);
+});
+
+test('server explicitly saying "no update" (HTTP 204) reports kind: none, not unavailable', async () => {
+  const provider = providerWith(null, { fetchImpl: async () => ({ status: 204, headers: { get: () => null }, arrayBuffer: async () => Buffer.alloc(0) }) });
+  assert.strictEqual((await provider.check()).kind, 'none');
 });
 
 test('beta build only selects the isolated beta Worker and beta channel can never fall back to the stable endpoint', async () => {
   assert.strictEqual(defaultChannel({}, '0.9.9.8-beta.1'), 'beta');
   assert.strictEqual(isEnabled({}, '0.9.9.8-beta.1'), true);
-  assert.strictEqual(isEnabled({}, '0.9.9.8'), false);
+  assert.strictEqual(isEnabled({}, '0.9.9.8'), true);
+  assert.strictEqual(isEnabled({ ELITESAND_ENABLE_CLOUDFLARE_UPDATES: '0' }, '0.9.9.8-beta.1'), false);
+  assert.strictEqual(isEnabled({ ELITESAND_ENABLE_CLOUDFLARE_UPDATES: '0' }, '0.9.9.8'), false);
   let observedUrl;
   const beta = createCloudflareUpdateProvider({
     currentVersion: '0.9.9.7',
@@ -157,32 +205,53 @@ test('beta build only selects the isolated beta Worker and beta channel can neve
     runtimeFingerprint: async () => TEST_RUNTIME_FINGERPRINT,
     fetchImpl: async () => { calls += 1; return response(signedBetaPlan()); },
   });
-  assert.strictEqual((await crossChannel.check()).kind, 'none');
+  // An endpoint mismatched to the requested channel makes controlEndpoint()
+  // refuse to resolve a base URL at all, so canCheck is false before any
+  // fetch — that is a "couldn't get an answer" case, i.e. unavailable, not a
+  // real "no update" answer from the (never contacted) stable endpoint.
+  assert.strictEqual((await crossChannel.check()).kind, 'unavailable');
   assert.strictEqual(calls, 0);
 });
 
-test('missing installed runtime fingerprint fails closed before a Worker request', async () => {
+test('missing installed runtime fingerprint fails closed as unavailable before a Worker request', async () => {
   let calls = 0;
   const provider = providerWith(signedPlan(), {
     runtimeFingerprint: async () => null,
     fetchImpl: async () => { calls += 1; return response(signedPlan()); },
   });
-  assert.strictEqual((await provider.check()).kind, 'none');
+  assert.strictEqual((await provider.check()).kind, 'unavailable');
   assert.strictEqual(calls, 0);
 });
 
-test('invalid plan, missing production public key, HTTP failure and timeout all fail closed without an update', async () => {
+test('a tampered plan or missing production public key is a security rejection: it stays "none", never softened to "unavailable"', async () => {
   const tampered = signedPlan();
   tampered.targetVersion = '0.9.9.9';
   assert.strictEqual((await providerWith(tampered).check()).kind, 'none');
   assert.strictEqual((await providerWith(signedPlan(), { publicKeys: {} }).check()).kind, 'none');
-  assert.strictEqual((await providerWith(signedPlan(), { fetchImpl: async () => response('', { status: 404, contentType: 'text/plain' }) }).check()).kind, 'none');
+});
+
+test('HTTP failure and timeout could not get an answer, so they report "unavailable" (letting the caller fall back to GitHub)', async () => {
+  assert.strictEqual((await providerWith(signedPlan(), { fetchImpl: async () => response('', { status: 404, contentType: 'text/plain' }) }).check()).kind, 'unavailable');
   const timeout = providerWith(signedPlan(), {
     fetchImpl: async (_url, options) => new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted')))),
     connectTimeoutMs: 100,
     totalTimeoutMs: 120,
   });
-  assert.strictEqual((await timeout.check()).kind, 'none');
+  assert.strictEqual((await timeout.check()).kind, 'unavailable');
+});
+
+test('an explicit ELITESAND_ENABLE_CLOUDFLARE_UPDATES=0 disables checking and reports "unavailable", not "none"', async () => {
+  let calls = 0;
+  const provider = createCloudflareUpdateProvider({
+    currentVersion: '1.0.0',
+    enabled: isEnabled({ ELITESAND_ENABLE_CLOUDFLARE_UPDATES: '0' }, '1.0.0'),
+    channel: 'stable',
+    publicKeys: TEST_PUBLIC_KEYS,
+    fetchImpl: async () => { calls += 1; return response(signedPlan()); },
+    runtimeFingerprint: async () => TEST_RUNTIME_FINGERPRINT,
+  });
+  assert.strictEqual((await provider.check()).kind, 'unavailable');
+  assert.strictEqual(calls, 0);
 });
 
 test('replay guard persists monotonic accepted plan state and blocks an older signed plan', async () => {

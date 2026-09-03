@@ -85,7 +85,11 @@ function attachManualUpdateCheckCoordinator({
         const result = await provider.check();
         if (!result || result.kind !== 'plan' || !result.plan || typeof result.plan !== 'object') {
           pendingPlan = null;
-          reply(message, { ok: true, kind: 'none' });
+          // `unavailable` (provider couldn't get an answer) is passed through
+          // as-is rather than folded into `none` (a real "no update" answer)
+          // — the Electron side needs to tell them apart to fall back to the
+          // GitHub release check instead of reporting "up to date".
+          reply(message, { ok: true, kind: result && result.kind === 'unavailable' ? 'unavailable' : 'none' });
           return true;
         }
         pendingPlan = result.plan;

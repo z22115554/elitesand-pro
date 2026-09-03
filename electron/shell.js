@@ -806,6 +806,7 @@ function createElectronShell({
           const checked = await manualUpdateRequester.request({ action: 'check' });
           logManualUpdateDebug(`check response: ${JSON.stringify(checked)}`);
           if (!checked?.ok) return { status: 'failed' };
+          if (checked.kind === 'unavailable') return { status: 'unavailable' };
           if (checked.kind !== 'plan' || !checked.plan) return { status: 'up-to-date' };
           const plan = checked.plan;
           const choice = plan.urgency === 'required'

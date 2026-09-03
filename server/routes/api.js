@@ -10,6 +10,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const crypto = require('crypto');
 const { sanitizeTrack } = require('../utils/track-schema');
 const { getLanIp } = require('../utils/lan-info');
 const ytdlpUpdater = require('../services/ytdlp-updater');
@@ -1308,8 +1309,30 @@ router.get('/webgpu-separation/runtime-status', (req, res) => {
 // 的 8MB 封包上限，真機首測就是在送結果時炸掉，誤報成分離失敗）。故意不掛
 // requirePin：呼叫者是沒有 PIN 內容的隱藏引擎視窗，授權改用「jobId 對得上目前
 // activeJob」這個等同於 socket 版本 payload.jobId 檢查的門檻。
+// disk-backed，不用 memoryStorage：合法引擎跑完一首長歌時兩個 WAV 加起來很容易上看
+// 1GB，整包讀進記憶體 + 同步寫檔會卡住 event loop（Express/Socket.io/面板/OBS state
+// sync 全部一起停），直播中會表現成歌詞疊加層卡死。落在 downloadsDir 底下的 .tmp
+// 子目錄（不是系統 temp）——同一個磁碟分割，finishJobWithResult() 才能用 rename
+// （原子操作）搬到正式檔名，不用跨磁碟複製。這個子目錄只是暫存區，最終檔案一定會被
+// rename 回 downloadsDir 根層（/audio/:filename 只認根層檔名，見下面的路由註解）。
+const webgpuTmpDir = path.join(downloadsDir, '.tmp');
+function ensureWebgpuTmpDir(cb) {
+  fs.mkdir(webgpuTmpDir, { recursive: true }, cb);
+}
+
+const webgpuResultStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    ensureWebgpuTmpDir((err) => cb(err, webgpuTmpDir));
+  },
+  filename: (req, file, cb) => {
+    // 這只是暫存識別碼，不是最終檔名——最終檔名由 writeResultFiles() 依 sanitizeStem()
+    // 決定（歌名 + jobId 尾碼），瀏覽器端送資料、Node 端決定檔名的分工見該檔開頭註解。
+    cb(null, `${req.params.jobId}-${file.fieldname}-${crypto.randomUUID()}.tmp`);
+  },
+});
+
 const webgpuResultUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: webgpuResultStorage,
   limits: { fileSize: 500 * 1024 * 1024, files: 2 },
 });
 
@@ -1344,17 +1367,27 @@ function requireLocalEngineJob(req, res, next) {
 router.post('/webgpu-separation/result/:jobId', requireLocalEngineJob, webgpuResultUpload.fields([
   { name: 'vocals', maxCount: 1 },
   { name: 'instrumental', maxCount: 1 },
-]), (req, res) => {
-  const result = webgpuSeparationJobs.finishJobWithResult(req.params.jobId, {
-    vocalsBuffer: req.files?.vocals?.[0]?.buffer,
-    instrumentalBuffer: req.files?.instrumental?.[0]?.buffer,
-    gpuVendor: req.body?.gpuVendor,
-    peakBufferMb: req.body?.peakBufferMb ? Number(req.body.peakBufferMb) : undefined,
-    realtimeFactor: req.body?.realtimeFactor ? Number(req.body.realtimeFactor) : undefined,
-    audioSeconds: req.body?.audioSeconds ? Number(req.body.audioSeconds) : undefined,
-  });
-  if (!result.ok) return res.status(409).json({ ok: false, error: result.code });
-  res.json({ ok: true });
+]), async (req, res) => {
+  // finishJobWithResult() 成功時會把這些暫存檔 rename 到 downloadsDir 根層（rename
+  // 之後原路徑就不存在了）；不管成功、驗證失敗、還是 activeJob 在上傳期間被 watchdog
+  // 逾時／引擎斷線／使用者取消清掉（此時 jobId 對不上、finishJobWithResult 直接回
+  // UNKNOWN_JOB、完全不碰檔案），這裡都要補刪暫存檔，才不會在 downloads/.tmp 留孤兒
+  // 檔案。unlink 對已經被 rename 走的路徑會是 ENOENT，用 catch 吞掉即可。
+  const tempPaths = [req.files?.vocals?.[0]?.path, req.files?.instrumental?.[0]?.path].filter(Boolean);
+  try {
+    const result = await webgpuSeparationJobs.finishJobWithResult(req.params.jobId, {
+      vocalsPath: req.files?.vocals?.[0]?.path,
+      instrumentalPath: req.files?.instrumental?.[0]?.path,
+      gpuVendor: req.body?.gpuVendor,
+      peakBufferMb: req.body?.peakBufferMb ? Number(req.body.peakBufferMb) : undefined,
+      realtimeFactor: req.body?.realtimeFactor ? Number(req.body.realtimeFactor) : undefined,
+      audioSeconds: req.body?.audioSeconds ? Number(req.body.audioSeconds) : undefined,
+    });
+    if (!result.ok) return res.status(409).json({ ok: false, error: result.code });
+    res.json({ ok: true });
+  } finally {
+    await Promise.all(tempPaths.map((p) => fs.promises.unlink(p).catch(() => {})));
+  }
 });
 
 router.post('/webgpu-separation/runtime/download', requirePin, async (req, res) => {

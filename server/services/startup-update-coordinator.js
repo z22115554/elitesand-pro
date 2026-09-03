@@ -82,7 +82,11 @@ function attachStartupUpdateCoordinator({
       phase = 'CHECKING';
       try {
         const result = await provider.check();
-        if (!result || result.kind === 'none') {
+        // Boot has no fallback path (there is no GitHub-check UI this early):
+        // `unavailable` (provider couldn't get an answer this time) is
+        // treated the same as a real `none` here, same as before this
+        // coordinator's provider distinguished the two kinds.
+        if (!result || result.kind === 'none' || result.kind === 'unavailable') {
           phase = 'TERMINAL';
           reply(message, { ok: true, kind: 'none' });
           return true;
