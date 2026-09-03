@@ -363,6 +363,21 @@ app.get('/background/:filename', (req, res) => {
   });
 });
 
+// ─── 對話氣泡模板：使用者自訂間奏貼圖（唯讀，不掛 PIN，同 /background 先例）───
+app.get('/typewriter-sticker/:filename', (req, res) => {
+  const safeName = path.basename(req.params.filename);
+  const stickersDir = path.join(dataDir, 'typewriter-stickers');
+  const stickerPath = path.resolve(stickersDir, safeName);
+  if (!stickerPath.startsWith(stickersDir + path.sep)) {
+    return res.status(400).json({ error: '無效的檔案名稱' });
+  }
+  res.sendFile(stickerPath, (err) => {
+    if (err) {
+      if (!res.headersSent) res.status(404).json({ error: '貼圖不存在' });
+    }
+  });
+});
+
 // ─── Socket.io 即時通訊 ───
 const socketHandler = require('./routes/socket-handler');
 const usageTelemetry = require('./services/usage-telemetry');

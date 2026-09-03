@@ -33,6 +33,30 @@
   let dirty = false;
   let lastT = 0;
 
+  // ── 長間奏貼圖：像聊天室在冷場時發張貼圖 ──
+  const STICKER_LEAD_MS = 1200;      // 這句大約唱完後多久跳第一張
+  const STICKER_TAIL_MS = 500;       // 下一句前多久停止跳新貼圖
+  let stickerPool = [];              // [url, ...]（內建 + 使用者上傳）
+  let stickerPlaced = new Set();     // 已跳過的間奏 key，避免 prune 後又補回
+  function stickerEnabled() { return document.body.dataset.twStickerEnabled !== '0'; }
+  function stickerGapMs() {
+    const v = parseInt(document.body.dataset.twStickerGapMs, 10);
+    return Number.isFinite(v) ? Math.max(3000, v) : 6000;
+  }
+  function refreshStickerPool() {
+    try {
+      fetch('/api/typewriter-stickers').then((r) => (r.ok ? r.json() : null)).then((d) => {
+        if (!d) return;
+        stickerPool = [].concat(d.builtin || [], (d.custom || []).map((c) => c && c.url))
+          .filter((u) => typeof u === 'string' && u);
+      }).catch(() => {});
+    } catch (_) { /* 沒有伺服器就沒有貼圖，靜默 */ }
+  }
+  function lineEndEstMs(lines, i) {
+    const n = Array.from(String(lines[i] && lines[i].text || '')).length || 1;
+    return lines[i].time + Math.min(n * 280, 6000);
+  }
+
   function visibleLines(ctx) {
     const list = ctx && typeof ctx.getLyrics === 'function' ? ctx.getLyrics() : [];
     return Array.isArray(list) ? list.filter((l) => l && typeof l.time === 'number' && l.text) : [];
@@ -104,7 +128,9 @@
   }
 
   // 回傳「目前句每個字元的絕對起始毫秒」。有逐字時間就用；對不上就整句線性平分。
-  function charStartsFor(line, lines, idx, kernel) {
+  // endHint：整句唱到什麼時候（同時雙聲部時傳「整組結束」，不然第一句會被夥伴句的
+  //          起點壓成 150ms 打完）。
+  function charStartsFor(line, lines, idx, kernel, endHint) {
     const chars = Array.from(String(line.text || ''));
     if (kernel && typeof kernel.ensureWordTimings === 'function') {
       const out = [];
@@ -119,12 +145,13 @@
       if (out.length === chars.length) return out;
     }
     const start = line.time;
-    const next = lines[idx + 1] && lines[idx + 1].time > start ? lines[idx + 1].time : start + FALLBACK_LINE_MS;
+    const auto = lines[idx + 1] && lines[idx + 1].time > start ? lines[idx + 1].time : start + FALLBACK_LINE_MS;
+    const next = Number.isFinite(endHint) && endHint > start ? endHint : auto;
     const per = (next - start) / Math.max(1, chars.length);
     return chars.map((_, i) => start + per * i);
   }
 
-  function buildBubble(line, lines, idx, kernel, instant) {
+  function buildBubble(line, lines, idx, kernel, instant, endHint) {
     const side = sideForLine(line, idx);
     const bubble = document.createElement('div');
     bubble.className = `tw-bubble tw-${side}${instant ? ' tw-in' : ''}`;
@@ -156,9 +183,17 @@
       side,
       bubble,
       charEls,
-      charStartMs: charStartsFor(line, lines, idx, kernel),
+      charStartMs: charStartsFor(line, lines, idx, kernel, endHint),
       shown: -1,
     };
+  }
+
+  // 同時雙聲部：整組唱到什麼時候（用組內第二句的下一句起點，沒有就估）
+  function pairEndMs(lines, secondIdx) {
+    const after = lines[secondIdx + 1];
+    return after && after.time > lines[secondIdx].time
+      ? after.time
+      : lines[secondIdx].time + FALLBACK_LINE_MS;
   }
 
   // 逐字揭露：只切「已打字數」的差集 class；打完整句標記 tw-done（收游標）。
@@ -183,6 +218,36 @@
     e.shown = e.charEls.length;
   }
 
+  // 收尾最新那顆泡泡；若它是「同時雙聲部」的一員，另一半也一起收尾
+  function sealTail() {
+    if (!entries.length) return;
+    const last = entries[entries.length - 1];
+    finishEntry(last);
+    if (last.pairMate && entries.includes(last.pairMate)) finishEntry(last.pairMate);
+  }
+
+  // 這一句大約唱到什麼時候（沒有可靠 end 時用「下一句起點」或字數估）
+  const CONCURRENT_ONSET_MS = 700;   // 兩句起點相差在此內 → 視為同時起唱
+  function lineEndEst(lines, i) {
+    const n = Array.from(String(lines[i] && lines[i].text || '')).length || 1;
+    const est = lines[i].time + Math.min(n * 300, 6000);
+    const next = lines[i + 1];
+    return next && next.time > lines[i].time ? Math.min(next.time, est) : est;
+  }
+  // [i, i+1] 是不是「兩個聲部同時唱」的一組（相鄰、不同真聲部、時間上同時／重疊）
+  function concurrentNext(lines, i) {
+    const a = lines[i];
+    const b = lines[i + 1];
+    if (!a || !b) return -1;
+    const sa = a.singer;
+    const sb = b.singer;
+    if (!sa || !sb || sa === sb || sa === 'both' || sb === 'both') return -1;
+    if (!SINGER_CODES.includes(sa) || !SINGER_CODES.includes(sb)) return -1;
+    const coOnset = Math.abs(b.time - a.time) <= CONCURRENT_ONSET_MS;
+    const overlap = b.time < lineEndEst(lines, i);
+    return (coOnset || overlap) ? i + 1 : -1;
+  }
+
   function prune() {
     while (entries.length > KEEP) {
       const e = entries.shift();
@@ -193,18 +258,80 @@
   function clearAll() {
     for (const e of entries) { if (e.bubble && e.bubble.parentNode) e.bubble.remove(); }
     entries = [];
+    stickerPlaced = new Set();
   }
 
-  function topIdx() { return entries.length ? entries[entries.length - 1].idx : -1; }
+  // 目前 DOM 裡最新的「真句」索引（略過貼圖）
+  function topIdx() {
+    for (let i = entries.length - 1; i >= 0; i -= 1) if (!entries[i].isSticker) return entries[i].idx;
+    return -1;
+  }
+
+  // 一張間奏貼圖：無底框、沿用 tw-in 彈入與 tw-left／tw-right 靠邊
+  function buildSticker(lines, li, url, key) {
+    const side = sideForLine(lines[li] || {}, li);
+    const bubble = document.createElement('div');
+    bubble.className = `tw-bubble tw-sticker tw-${side}`;
+    const img = document.createElement('img');
+    img.className = 'tw-sticker-img';
+    img.src = url;
+    img.alt = '';
+    img.setAttribute('aria-hidden', 'true');
+    bubble.appendChild(img);
+    rootEl.appendChild(bubble);
+    const b = bubble;
+    const kick = window.requestAnimationFrame || window.setTimeout;
+    kick(() => { if (b.isConnected) b.classList.add('tw-in'); });
+    return { idx: li, isSticker: true, side, bubble, charEls: [], charStartMs: [], shown: 0, gapKey: key };
+  }
+
+  // 冷場偵測：最新那句大約唱完 → 下一句還很久，就在泡泡串塞貼圖。長間奏塞第二張。
+  function maybePlaceStickers(lines, t) {
+    if (!stickerEnabled() || !stickerPool.length) return;
+    const li = topIdx();
+    if (li < 0 || li >= lines.length - 1) return;
+    const endEst = lineEndEstMs(lines, li);
+    const gap = lines[li + 1].time - endEst;
+    const gapMs = stickerGapMs();
+    if (gap < gapMs) return;
+    if (t >= lines[li + 1].time - STICKER_TAIL_MS) return;
+    const slots = gap >= Math.max(12000, gapMs * 2) ? 2 : 1;
+    const pick0 = hash32(li * 131 + 977) % stickerPool.length;
+    // 第二張避開第一張（圖庫只有一張時只好重複）
+    const pick1 = stickerPool.length > 1
+      ? (pick0 + 1 + hash32(li * 17 + 53) % (stickerPool.length - 1)) % stickerPool.length
+      : pick0;
+    for (let k = 0; k < slots; k += 1) {
+      const key = `g${li}.${k}`;
+      if (stickerPlaced.has(key)) continue;
+      const appearAt = k === 0
+        ? endEst + STICKER_LEAD_MS
+        : endEst + STICKER_LEAD_MS + Math.min(gap * 0.42, 7000);
+      if (t < appearAt) continue;
+      stickerPlaced.add(key);
+      entries.push(buildSticker(lines, li, stickerPool[k === 0 ? pick0 : pick1], key));
+    }
+    prune();
+  }
 
   // 整段重建：倒帶／大跳轉／換靠邊模式／文字被改（簡繁切換）時用；只鋪目前句之前的 KEEP 顆。
   function rebuild(lines, idx, kernel, t) {
     clearAll();
     const lo = Math.max(0, idx - (KEEP - 1));
+    // 尾端若是「同時雙聲部」的一組（idx-1 與 idx），兩顆都留著逐字、不先收尾其中一顆
+    const tailPair = concurrentNext(lines, idx - 1) === idx ? idx - 1 : -1;
+    const tailEnd = tailPair >= 0 ? pairEndMs(lines, idx) : undefined;
     for (let i = lo; i <= idx; i += 1) {
-      const e = buildBubble(lines[i], lines, i, kernel, true);
+      const inTailPair = tailPair >= 0 && (i === tailPair || i === idx);
+      const e = buildBubble(lines[i], lines, i, kernel, true, inTailPair ? tailEnd : undefined);
       entries.push(e);
-      if (i < idx) finishEntry(e);
+      if (!(i === idx || inTailPair)) finishEntry(e);
+    }
+    if (tailPair >= 0 && entries.length >= 2) {
+      const b = entries[entries.length - 1];
+      const a = entries[entries.length - 2];
+      a.pairMate = b; b.pairMate = a;
+      paintEntry(a, t);
     }
     if (entries.length) paintEntry(entries[entries.length - 1], t);
   }
@@ -222,26 +349,43 @@
     if (mode !== sideMode) { sideMode = mode; runCache = []; force = true; }
     if (dirty) { dirty = false; force = true; }
     if (!force && entries.length) {
-      const match = entries.find((e) => e.idx === idx);
+      const match = entries.find((e) => !e.isSticker && e.idx === idx);
       if (match && lines[idx] && match.text !== lines[idx].text) force = true;
     }
 
-    if (force || idx < topIdx()) { rebuild(lines, idx, kernel, t); return; }
+    if (force || idx < topIdx()) { rebuild(lines, idx, kernel, t); maybePlaceStickers(lines, t); return; }
 
     let cur = topIdx();
     while (cur < idx) {
       cur += 1;
-      // 換句：剛才那顆泡泡就地定案（整句打完、收游標），不再逐幀重繪
-      if (entries.length) finishEntry(entries[entries.length - 1]);
-      entries.push(buildBubble(lines[cur], lines, cur, kernel, cur !== idx));
+      // 換句：把前一組泡泡就地定案（整句打完、收游標），不再逐幀重繪
+      sealTail();
+      // 同時雙聲部：夥伴句也已起唱 → 兩顆一起上、各自從真正的整組唱段內逐字（KTV 式雙排同時掃）
+      const mate = concurrentNext(lines, cur);
+      if (mate > 0 && mate <= idx) {
+        const end = pairEndMs(lines, mate);
+        const first = buildBubble(lines[cur], lines, cur, kernel, cur !== idx, end);
+        const second = buildBubble(lines[mate], lines, mate, kernel, true, end);
+        first.pairMate = second; second.pairMate = first;
+        entries.push(first, second);
+        cur = mate;
+      } else {
+        entries.push(buildBubble(lines[cur], lines, cur, kernel, cur !== idx));
+      }
     }
     prune();
-    if (entries.length) paintEntry(entries[entries.length - 1], t);
+    // 收尾那顆＋（若成組）它的夥伴，一起逐幀逐字
+    if (entries.length) {
+      const last = entries[entries.length - 1];
+      if (last.pairMate && entries.includes(last.pairMate)) paintEntry(last.pairMate, t);
+      paintEntry(last, t);
+    }
+    maybePlaceStickers(lines, t);
   }
 
   LyricTemplates.register({
     id: 'typewriter',
-    label: '打字機',
+    label: '對話氣泡',
 
     mount(container) {
       rootEl = document.createElement('div');
@@ -252,6 +396,7 @@
       sideMode = 'split';
       duetMap = null;
       dirty = false;
+      refreshStickerPool();
     },
 
     destroy() {
@@ -261,6 +406,8 @@
       runCache = [];
       duetMap = null;
       dirty = false;
+      stickerPool = [];
+      stickerPlaced = new Set();
     },
 
     onLyricsLoaded() {
@@ -273,6 +420,7 @@
 
     onSettings(_settings, ctx) {
       dirty = true;
+      refreshStickerPool(); // 使用者可能剛上傳／刪貼圖
       if (ctx) render(ctx, lastT, true); // 暫停時也讓「換靠邊 / 換色」立即反映
     },
     onSeek(timeMs, ctx) { render(ctx, timeMs, true); },

@@ -37,6 +37,9 @@ function createSoundTouchEngine() {
   let playing = false;
   let ready = false;             // 當前歌的 buffer 是否已送進 worklet
   let lastPositionSec = 0;       // worklet 最近回報的原曲秒數
+  let lastPositionWallMs = 0;    // 上一次收到 position 回報時的 wall clock（給 getProjectedTime 推算用）
+  let lastPositionFrame = 0;     // SYNCDIAG：該次回報時的 AudioContext currentFrame
+  let stallCount = 0, stallMaxGap = 0; // SYNCDIAG：worklet 累計的音訊執行緒卡頓
 
   let timer = null;
   let loadToken = 0;             // 載入世代：晚到的舊載入會被作廢，避免孤兒節點繼續播放
@@ -87,10 +90,14 @@ function createSoundTouchEngine() {
     node = null;
   }
 
+  function _nowMs() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
+
   function _onNodeMessage(msg) {
     if (!msg) return;
     if (msg.type === 'position') {
-      if (typeof msg.position === 'number') lastPositionSec = msg.position / sampleRate;
+      if (typeof msg.position === 'number') { lastPositionSec = msg.position / sampleRate; lastPositionWallMs = _nowMs(); }
+      if (typeof msg.frame === 'number') lastPositionFrame = msg.frame;            // SYNCDIAG
+      if (typeof msg.stallCount === 'number') { stallCount = msg.stallCount; stallMaxGap = msg.stallMaxGap || 0; } // SYNCDIAG
     } else if (msg.type === 'ended') {
       playing = false;
       lastPositionSec = durationSec;
@@ -155,12 +162,42 @@ function createSoundTouchEngine() {
   }
 
   function _post(msg) { if (node) { try { node.port.postMessage(msg); } catch (e) {} } }
+  function _withFrame(msg, atFrame) { if (Number.isFinite(atFrame)) msg.applyAtFrame = atFrame; return msg; }
 
-  function play(offsetSec) {
+  // 目前 AudioContext 時間換算成 sample frame。分離播放時，主執行緒用「主引擎算出的
+  // 一個 frame」同時發給伴奏/人聲兩個引擎（見 app-playback.js sepSharedFrame），
+  // 兩軌的 play/seek/pitch/tempo 就會在同一個 render quantum 生效。
+  function scheduleFrame(lookaheadSec) {
+    if (!ctx) return NaN;
+    return Math.ceil((ctx.currentTime + (lookaheadSec || 0)) * sampleRate);
+  }
+  function frameNow() { return ctx ? Math.round(ctx.currentTime * sampleRate) : 0; }
+
+  // worklet 每 ~23ms 才回報一次位置；播放中要「現在到底播到哪」時用線性推算補足。
+  // 位置以原曲秒數計，播放中每 wall 秒前進約 tempoRate（變調不影響原曲時間軸推進速率）。
+  function getProjectedTime() {
+    if (!playing || !lastPositionWallMs) return lastPositionSec;
+    const dt = Math.max(0, _nowMs() - lastPositionWallMs) / 1000;
+    return Math.max(0, Math.min(durationSec, lastPositionSec + dt * (tempoRate || 1)));
+  }
+  function projectedTimeAt(lookaheadSec) {
+    return Math.max(0, Math.min(durationSec, getProjectedTime() + (lookaheadSec || 0) * (tempoRate || 1)));
+  }
+
+  // SYNCDIAG：給主執行緒算「兩軌 sample 級真 Δ」用。position/frame 皆以 sample 計；
+  // 兩引擎同 context ⇒ frame 同步遞增，(position − frame×rate) 在 rate 不變時每軌為常數、
+  // 同步時兩軌相等。免受 23ms 回報抖動影響。
+  function getSyncSample() {
+    return { position: Math.round(lastPositionSec * sampleRate), frame: lastPositionFrame, rate: tempoRate || 1 };
+  }
+  function getStallStats() { return { count: stallCount, maxGapFrames: stallMaxGap }; }
+
+  function play(offsetSec, atFrame) {
     if (!ready || !node) return false;
     const sec = (offsetSec != null) ? offsetSec : lastPositionSec;
     lastPositionSec = Math.max(0, Math.min(sec, durationSec));
-    _post({ type: 'play', position: Math.round(lastPositionSec * sampleRate) });
+    lastPositionWallMs = _nowMs();
+    _post(_withFrame({ type: 'play', position: Math.round(lastPositionSec * sampleRate) }, atFrame));
     playing = true;
     _startTimer();
     return true;
@@ -192,10 +229,11 @@ function createSoundTouchEngine() {
     lastPositionSec = 0;
   }
 
-  function seek(sec) {
+  function seek(sec, atFrame) {
     const target = Math.max(0, Math.min(sec, durationSec));
     lastPositionSec = target;
-    _post({ type: 'seek', position: Math.round(target * sampleRate) });
+    lastPositionWallMs = _nowMs();
+    _post(_withFrame({ type: 'seek', position: Math.round(target * sampleRate) }, atFrame));
   }
 
   function getTime() { return lastPositionSec; }
@@ -203,17 +241,17 @@ function createSoundTouchEngine() {
   function isPlaying() { return playing; }
   function isReady() { return ready; }
 
-  function setPitch(semitones) {
+  function setPitch(semitones, atFrame) {
     const v = Math.max(-12, Math.min(12, semitones));
     if (v === pitchSemis) return;
     pitchSemis = v;
-    _post({ type: 'pitch', value: v });   // 即時生效，無重算等待
+    _post(_withFrame({ type: 'pitch', value: v }, atFrame));   // 即時生效，無重算等待
   }
-  function setTempo(rate) {
+  function setTempo(rate, atFrame) {
     const v = Math.max(0.5, Math.min(1.5, rate));
     if (v === tempoRate) return;
     tempoRate = v;
-    _post({ type: 'tempo', value: v });
+    _post(_withFrame({ type: 'tempo', value: v }, atFrame));
   }
   function onTime(cb) { onTimeCb = cb; }
   function onEnded(cb) { onEndedCb = cb; }
@@ -221,6 +259,8 @@ function createSoundTouchEngine() {
   const api = {
     ensureModule, attach, load, play, pause, stop, dispose, seek,
     getTime, getDuration, isPlaying, isReady, setPitch, setTempo, onTime, onEnded,
+    scheduleFrame, frameNow, getProjectedTime, projectedTimeAt,
+    getSyncSample, getStallStats,
   };
   return api;
 }

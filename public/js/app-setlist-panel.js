@@ -362,7 +362,7 @@
 
   // 版型類別：用於只顯示真正會作用的控制項；外觀值本身每個模板各自保存。
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
-  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager'];
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note', 'film'];
   const SETLIST_LAYOUT_UI = {
     classic: { name: '經典資訊', hint: '現在、未唱、已唱一次看懂，最完整的常駐歌單。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     cards: { name: '卡片清單', hint: '緊湊的卡片清單，已唱／未唱各自分群，可勾選要保留哪一段。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
@@ -378,6 +378,9 @@
     glow: { name: '夜間霓虹', hint: '等寬字體、細框發光，適合夜唱或科技主題。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     round: { name: '圓角氣泡', hint: '每首歌一顆膠囊，正在播放放大加亮。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     pager: { name: '復古字卡', hint: '模擬 LCD 呼叫器，等寬字＋掃描線。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    note: { name: '手帳頁', hint: '橫線筆記本側欄，單一清單，已唱蓋章；適合聊天型歌回。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    flap: { name: '發車看板', hint: '貼齊來源底部的發車標橫帶，正在播放置中、以它為中心捲動路線。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    film: { name: '底片邊條', hint: '全幅場景；貼邊 35mm 底片，正在播放的那格框在片門裡。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
   };
   // 暫停提供的場景模板仍留在 renderer／server 驗證清單，讓已保存的 OBS 畫面不會被自動改版。
   // 它們只從「新選擇」入口與設定面板隱藏，使用者選到其他現行模板後才會真正切換。
@@ -385,7 +388,8 @@
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
   // 清單型模板＝來源即畫布；場景型維持原本的全幅舞台語意。
   const SETLIST_SKIN_LAYOUTS = ['label', 'glow', 'round', 'pager'];
-  const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', ...SETLIST_SKIN_LAYOUTS];
+  const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'flap', 'note', ...SETLIST_SKIN_LAYOUTS];
+  // flap／note 走填滿；film 是全幅場景。四者暫歸 'list' 類，共用既有清單型調整項。
 
   // 清單型：填滿來源、有已唱／未唱區塊。單點式：填滿來源但版位固定、只呈現現在播放。
   const SETLIST_SECTIONED_LAYOUTS = ['classic', 'cards', 'terminal', 'billboard', 'index', ...SETLIST_SKIN_LAYOUTS];

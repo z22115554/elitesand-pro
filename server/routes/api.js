@@ -17,7 +17,7 @@ const announcements = require('../services/announcement-service');
 const eulaStore = require('../services/eula-store');
 const QRCode = require('qrcode');
 const path = require('path');
-const { dataDir, downloadsDir } = require('../utils/app-paths');
+const { dataDir, downloadsDir, logsDir } = require('../utils/app-paths');
 const stateStore = require('../services/state-store');
 const fs = require('fs');
 const { APP_VERSION } = require('../utils/app-version');
@@ -121,6 +121,10 @@ const lyricsUpload = multer({
 
 // ─── Multer 設定（Phase 4：OBS 顯示端自訂背景圖）───
 const BACKGROUNDS_DIR = path.join(dataDir, 'backgrounds');
+const STICKERS_DIR = path.join(dataDir, 'typewriter-stickers');
+const STICKER_EXT = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+const STICKER_MAX = 24; // 自訂貼圖數量上限（不含內建三張）
+const BUILTIN_STICKERS_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'typewriter-stickers');
 const bgStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     if (!fs.existsSync(BACKGROUNDS_DIR)) fs.mkdirSync(BACKGROUNDS_DIR, { recursive: true });
@@ -147,6 +151,46 @@ const bgUpload = multer({
   },
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB 上限
 });
+
+// 對話氣泡間奏貼圖：透明 PNG／GIF 直接用（不做去背），每張 8MB、一次最多 24 張
+const stickerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (!fs.existsSync(STICKERS_DIR)) fs.mkdirSync(STICKERS_DIR, { recursive: true });
+    cb(null, STICKERS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${STICKER_EXT.includes(ext) ? ext : '.png'}`);
+  },
+});
+const stickerUpload = multer({
+  storage: stickerStorage,
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (STICKER_EXT.includes(ext)) return cb(null, true);
+    const err = new Error(`不支援的貼圖格式: ${ext}，僅支援 ${STICKER_EXT.join(', ')}`);
+    err.status = 400;
+    cb(err);
+  },
+  limits: { fileSize: 8 * 1024 * 1024, files: STICKER_MAX },
+});
+
+function listBuiltinStickers() {
+  try {
+    return fs.readdirSync(BUILTIN_STICKERS_DIR)
+      .filter((n) => STICKER_EXT.includes(path.extname(n).toLowerCase()))
+      .sort()
+      .map((n) => `/assets/typewriter-stickers/${n}`);
+  } catch (_) { return []; }
+}
+function listCustomStickers() {
+  try {
+    return fs.readdirSync(STICKERS_DIR)
+      .filter((n) => STICKER_EXT.includes(path.extname(n).toLowerCase()))
+      .sort()
+      .map((n) => ({ id: n, url: `/typewriter-sticker/${n}` }));
+  } catch (_) { return []; }
+}
 
 // ─── 健康檢查 ───
 router.get('/health', (req, res) => {
@@ -240,6 +284,135 @@ router.get('/diagnostics/export', requirePin, async (req, res) => {
 // stream is currently in progress on this LAN device.
 router.post('/diagnostics/reliability/reset', requirePin, (req, res) => {
   res.json({ ok: true, evidence: runtimeEvidence.reset() });
+});
+
+// ─── 暫時性：分離播放人聲/伴奏時鐘差診斷（2026-09-02，確認修法後連同 client 一起移除）───
+// 只是把面板 console 的 [SyncDiag] 行也落到 logsDir/sync-diag.log，讓打包版使用者不必開
+// DevTools，直播完回傳這個檔即可。不觸發任何下載/處理，只 append 純文字並自我截斷。
+const SYNC_DIAG_LOG_PATH = path.join(logsDir, 'sync-diag.log');
+const SYNC_DIAG_LOG_MAX = 5 * 1024 * 1024;
+router.post('/diag/sync-log', requireControlAccess, (req, res) => {
+  try {
+    const lines = Array.isArray(req.body && req.body.lines) ? req.body.lines : [];
+    if (lines.length) {
+      const text = lines.map((l) => String(l).replace(/[\r\n]+/g, ' ').slice(0, 500)).join('\n') + '\n';
+      try { fs.mkdirSync(logsDir, { recursive: true }); } catch (e) { /* 已存在 */ }
+      fs.appendFileSync(SYNC_DIAG_LOG_PATH, text, 'utf8');
+      try {
+        if (fs.statSync(SYNC_DIAG_LOG_PATH).size > SYNC_DIAG_LOG_MAX) {
+          const kept = fs.readFileSync(SYNC_DIAG_LOG_PATH, 'utf8').slice(-2 * 1024 * 1024);
+          fs.writeFileSync(SYNC_DIAG_LOG_PATH, kept, 'utf8');
+        }
+      } catch (e) { /* 截斷失敗不影響主功能 */ }
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(200).json({ ok: false });
+  }
+});
+
+// ─── 暫時性：SYNCDIAG 環境快照（2026-09-03，確認問題後連同 client 一起移除）───
+// 重活（ffprobe / tasklist / nvidia-smi）都在這裡的 server 子行程跑、有 tight timeout，
+// 不在 renderer、不在音訊執行緒。結果 append 進同一個 sync-diag.log。
+const { execFile: _diagExecFile } = require('child_process');
+const _diagExecFileAsync = require('util').promisify(_diagExecFile);
+function _diagAppend(kind, obj) {
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.appendFileSync(
+      SYNC_DIAG_LOG_PATH,
+      new Date().toISOString() + ` [SyncDiag] ${kind} ` + JSON.stringify(obj).slice(0, 6000) + '\n',
+      'utf8',
+    );
+  } catch (e) { /* 靜默 */ }
+}
+async function _diagFfprobe(filename) {
+  const base = path.basename(String(filename || ''));
+  if (!base) return null;
+  try {
+    const ff = require('../services/ffmpeg-provider');
+    const p = path.join(downloadsDir, base);
+    if (!fs.existsSync(p)) return { file: base, missing: true };
+    const args = ['-v', 'error', '-show_entries',
+      'stream=codec_name,sample_rate,channels,start_time,duration,duration_ts,bit_rate:format=duration,size,format_name',
+      '-of', 'json', p];
+    const env = ff.withFfmpegOnPath ? ff.withFfmpegOnPath({ ...process.env }) : process.env;
+    const { stdout } = await _diagExecFileAsync(ff.getFfprobePath(), args, { timeout: 8000, windowsHide: true, env });
+    const j = JSON.parse(stdout);
+    const s = (j.streams || [])[0] || {};
+    return {
+      file: base, codec: s.codec_name, sampleRate: s.sample_rate, channels: s.channels,
+      startTime: s.start_time, duration: s.duration, durationTs: s.duration_ts, bitRate: s.bit_rate,
+      formatDuration: j.format && j.format.duration, sizeBytes: j.format && j.format.size,
+      format: j.format && j.format.format_name,
+    };
+  } catch (e) { return { file: base, probeError: String((e && e.message) || e).slice(0, 200) }; }
+}
+async function _diagProcAndGpu() {
+  const out = {};
+  try {
+    if (process.platform === 'win32') {
+      const { stdout } = await _diagExecFileAsync('tasklist', ['/fo', 'csv', '/nh'],
+        { timeout: 6000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+      const rows = stdout.split(/\r?\n/).filter(Boolean).map((l) => l.split('","').map((x) => x.replace(/^"|"$/g, '')));
+      const names = rows.map((r) => (r[0] || '').toLowerCase());
+      out.obs = names.some((n) => n.startsWith('obs'));
+      out.streamApp = names.find((n) => /streamlabs|xsplit|nvidia broadcast|voicemeeter|vb-?cable|vbanaudio|discord/.test(n)) || null;
+      out.procCount = rows.length;
+      out.topMem = rows
+        .map((r) => ({ n: r[0], kb: parseInt((r[4] || '0').replace(/[^\d]/g, ''), 10) || 0 }))
+        .sort((a, b) => b.kb - a.kb).slice(0, 6);
+    }
+  } catch (e) { out.procError = String((e && e.message) || e).slice(0, 150); }
+  try {
+    const { stdout } = await _diagExecFileAsync('nvidia-smi',
+      ['--query-gpu=utilization.gpu,utilization.encoder,memory.used,memory.total', '--format=csv,noheader,nounits'],
+      { timeout: 5000, windowsHide: true });
+    out.nvidia = stdout.trim();
+  } catch (e) { /* 沒 nvidia-smi 就算了 */ }
+  return out;
+}
+router.post('/diag/collect', requireControlAccess, async (req, res) => {
+  const kind = String((req.body && req.body.kind) || '');
+  const session = String((req.body && req.body.session) || '').slice(0, 16);
+  try {
+    if (kind === 'server-header') {
+      const os = require('os');
+      _diagAppend('SERVER-HEADER', {
+        session,
+        platform: os.platform(), release: os.release(),
+        osVersion: (typeof os.version === 'function' ? os.version() : '') || '',
+        arch: os.arch(),
+        cpu: ((os.cpus() || [])[0] || {}).model, cpuCount: (os.cpus() || []).length,
+        totalMemGB: +(os.totalmem() / 2 ** 30).toFixed(1), freeMemGB: +(os.freemem() / 2 ** 30).toFixed(1),
+        uptimeH: +(os.uptime() / 3600).toFixed(1),
+        node: process.versions.node, electron: process.versions.electron || null, chrome: process.versions.chrome || null,
+        appVersion: APP_VERSION,
+        shell: process.env.ELITESAND_SHELL === '1',
+        packaged: process.env.ELITESAND_SHELL_DEVELOPMENT === '0',
+        ai: {
+          scriptDirSet: !!process.env.ELITESAND_AI_SCRIPT_DIR,
+          python: process.env.ELITESAND_AI_PYTHON || null,
+          cudaDisabled: process.env.CUDA_VISIBLE_DEVICES === '-1',
+        },
+      });
+    } else if (kind === 'env-sample') {
+      _diagAppend('ENV-SAMPLE', {
+        session, freeMemGB: +(require('os').freemem() / 2 ** 30).toFixed(1), ...(await _diagProcAndGpu()),
+      });
+    } else if (kind === 'track-probe') {
+      const b = req.body || {};
+      _diagAppend('TRACK-PROBE', {
+        session,
+        instrumental: await _diagFfprobe(b.instrumentalFile),
+        vocals: await _diagFfprobe(b.vocalsFile),
+        original: await _diagFfprobe(b.originalFile),
+      });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(200).json({ ok: false, error: String((error && error.message) || error).slice(0, 200) });
+  }
 });
 
 // ─── 匿名活躍統計 ───
@@ -886,6 +1059,46 @@ router.post('/background', requirePin, bgUpload.single('background'), (req, res)
   } catch (err) {
     log.error('背景圖清理舊檔失敗', err);
     res.status(500).json({ error: '背景圖處理失敗' });
+  }
+});
+
+// ─── 對話氣泡間奏貼圖 ───
+router.get('/typewriter-stickers', (req, res) => {
+  res.json({ success: true, builtin: listBuiltinStickers(), custom: listCustomStickers() });
+});
+
+router.post('/typewriter-stickers', requirePin, stickerUpload.array('stickers', STICKER_MAX), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: '未收到貼圖檔案' });
+  }
+  try {
+    // 超過上限時砍最舊的自訂貼圖
+    let files = fs.readdirSync(STICKERS_DIR)
+      .filter((n) => STICKER_EXT.includes(path.extname(n).toLowerCase()))
+      .sort();
+    while (files.length > STICKER_MAX) {
+      const drop = files.shift();
+      try { fs.unlinkSync(path.join(STICKERS_DIR, drop)); } catch (e) { /* 靜默 */ }
+    }
+    res.json({ success: true, builtin: listBuiltinStickers(), custom: listCustomStickers() });
+  } catch (err) {
+    log.error('間奏貼圖處理失敗', err);
+    res.status(500).json({ error: '貼圖處理失敗' });
+  }
+});
+
+router.delete('/typewriter-stickers/:id', requirePin, (req, res) => {
+  const safeName = path.basename(req.params.id || '');
+  const target = path.resolve(STICKERS_DIR, safeName);
+  if (!safeName || !target.startsWith(STICKERS_DIR + path.sep)) {
+    return res.status(400).json({ error: '無效的貼圖名稱' });
+  }
+  try {
+    if (fs.existsSync(target)) fs.unlinkSync(target);
+    res.json({ success: true, builtin: listBuiltinStickers(), custom: listCustomStickers() });
+  } catch (err) {
+    log.error('間奏貼圖刪除失敗', err);
+    res.status(500).json({ error: '貼圖刪除失敗' });
   }
 });
 

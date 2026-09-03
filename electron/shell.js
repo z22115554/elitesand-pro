@@ -924,6 +924,11 @@ function createElectronShell({
     }
     window.once('ready-to-show', () => {
       if (!headless) window.show();
+      // 除錯：主選單被 removeMenu() 拿掉後 F12 也一起失效。設 ELITESAND_SHELL_DEVTOOLS=1
+      // 就在啟動時開一個獨立的 DevTools 視窗（看 Console 用），關閉時預設不開。
+      if (processObject.env.ELITESAND_SHELL_DEVTOOLS === '1') {
+        try { window.webContents.openDevTools({ mode: 'detach' }); } catch (_) { /* best-effort */ }
+      }
     });
     window.on('close', (event) => hideWindowToTray(event, window));
     window.on('maximize', () => window.webContents.send?.('elitesand:window-maximized', true));

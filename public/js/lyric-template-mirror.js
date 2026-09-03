@@ -742,7 +742,7 @@
 
   LyricTemplates.register({
     id: 'mirror',
-    label: '鏡像',
+    label: '虛實鏡書',
 
     mount(container) {
       rootEl = document.createElement('div');

@@ -6076,13 +6076,39 @@ test('OBS 顯示端／跟唱視圖／遙控器都要接 play:stop 才能清空�
   const controllerSource = fs.readFileSync(path.join(__dirname, '../public/js/controller.js'), 'utf8');
   const playbackSource = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
 
-  ok(displaySource.includes("SocketClient.on('play:stop', () => {") && displaySource.includes('KaraokeEngine.clearDisplay();'),
-    'OBS 顯示端必須監聽 play:stop 並清空歌詞畫面：');
+  ok(displaySource.includes("SocketClient.on('play:stop', () => {") && displaySource.includes('KaraokeEngine.clearDisplay({ hard: true })'),
+    'OBS 顯示端必須監聽 play:stop 並 hard 清空歌詞畫面（連歌詞來源一起清、停時鐘）：');
+
+  // hard 清空：整首播完時 clearDisplay 必須把 parsedLyrics 清空並停時鐘，
+  // 否則殘留的一幀 onFrame 會用 ctx.getLyrics() 把最後一頁重畫回來（KTV／紙帶／鏡像／燈牌／詩箋…）。
+  const karaokeSource = fs.readFileSync(path.join(__dirname, '../public/js/karaoke.js'), 'utf8');
+  const clearBody = karaokeSource.slice(karaokeSource.indexOf('function clearDisplay('), karaokeSource.indexOf('function clearDisplay(') + 900);
+  ok(/function clearDisplay\(opts\)/.test(karaokeSource) && clearBody.includes('opts && opts.hard')
+    && clearBody.includes('parsedLyrics = []') && clearBody.includes('isRunning = false'),
+    'clearDisplay 必須支援 hard 模式：清空 parsedLyrics + 停時鐘，供「整首播完」使用：');
   ok(prompterSource.includes("SocketClient.on('play:stop', () => {") && prompterSource.includes('resetToEmpty();'),
     '跟唱視圖必須監聽 play:stop 並重置回空狀態：');
   ok(controllerSource.includes("SocketClient.on('play:stop', () => {"), '手機遙控器也要監聽 play:stop，不能只有 OBS/跟唱視圖清空、遙控器還停在最後一首：');
   ok(playbackSource.includes("SocketClient.on('play:stop', (payload) => {"),
     '面板自己也要監聽 play:stop：另一個已連線的面板分頁播完清單時，這個分頁才會跟著清空：');
+
+  // 歌曲播完 → clearDisplay() → 每個 registry 模板的 onLyricsLoaded([]) 都必須真的把畫面清乾淨
+  // （播完後 onFrame 不會再跑，模板不能靠下一幀自己清）。
+  const clearFnByTpl = {
+    pulse: 'clearAll', facet: 'clearAll', drift: 'clearAll',
+    aura: 'retireCurrentLine(true)', ktv: 'clearSlot(slots.top)',
+    columnflow: 'clearAllColumns', paperstrip: 'clearPageViews',
+    mirror: 'clearPanels', typewriter: 'clearAll', stanza: 'clearRows',
+  };
+  for (const [tpl, marker] of Object.entries(clearFnByTpl)) {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', `lyric-template-${tpl}.js`), 'utf8');
+    const body = src.slice(src.indexOf('onLyricsLoaded'), src.indexOf('onLyricsLoaded') + 320);
+    ok(body.includes(marker), `${tpl} 的 onLyricsLoaded 必須實際清空畫面（歌曲播完不能留最後一句）: `);
+  }
+  const lbSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-lightboard.js'), 'utf8');
+  const lbBody = lbSrc.slice(lbSrc.indexOf('onLyricsLoaded'), lbSrc.indexOf('onLyricsLoaded') + 420);
+  ok(lbBody.includes("textEl.textContent = ''") && lbBody.includes('idleEl.hidden = true'),
+    '燈牌 onLyricsLoaded 必須把點陣文字清掉（原本只 reset state、不清 DOM，歌曲播完燈板會留字）: ');
 });
 
 test('playlist:insert-next uses canonical playback state and appends only when idle', () => {
@@ -6814,13 +6840,41 @@ test('歌單經典資訊重排與兩個原創模板都走共用樣式，既有�
   ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation'];"), '新模板必須共用既有樣式資料，不得改成獨立場景資料');
 });
 
+test('三個新歌單版型 flap／note／film 完整接進 registry（2026-09-03 進 1.0 邊界）', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  const { SETLIST_LAYOUTS } = require('../server/state/app-state');
+  ['flap', 'note', 'film'].forEach((layout) => {
+    ok(SETLIST_LAYOUTS.includes(layout), `${layout} 必須在 server 端 SETLIST_LAYOUTS allowlist`);
+    ok(indexHtml.includes(`<option value="${layout}">`), `${layout} 必須可由歌單面板選取`);
+    ok(indexHtml.includes(`data-setlist-layout="${layout}"`), `${layout} 必須有可見模板卡片`);
+    ok(setlistPanel.includes(`${layout}: { name:`), `${layout} 必須有面板名稱與說明`);
+    ok(setlistSource.includes(`const ${layout} = {`), `${layout} 必須有獨立 renderer`);
+    ok(new RegExp(`const LAYOUTS = \\{[^}]*\\b${layout}\\b`).test(setlistSource), `${layout} 必須註冊進 LAYOUTS`);
+    ok(setlistCss.includes(`[data-layout="${layout}"]`) || setlistCss.includes(`.${layout}-`), `${layout} 必須有隔離樣式`);
+  });
+  // flap／note 是填滿型：各自要有填滿版面規則
+  ['flap', 'note'].forEach((layout) => {
+    ok(setlistCss.includes(`html[data-sl-fit="fill"][data-layout="${layout}"]`), `${layout} 必須有自己的填滿版面規則`);
+  });
+  // film 是全幅場景：跟 timeline 等一樣走 fixed inset:0
+  ok(setlistCss.includes('[data-layout="film"] #setlist-root'), 'film 必須以全幅場景掛載');
+  // flap 路線條、note 清單都必須以「正在播放」為中心保留可見：flap 取視窗、note 給 active 讓 trimToFit 保護
+  ok(setlistSource.includes('const FLAP_WIN') && setlistSource.includes('anchor - (FLAP_WIN >> 1)'), 'flap 路線條必須以正在播放為中心取視窗，不可整場擠在一起');
+  ok(setlistSource.includes("note-it--${st}${st === 'now' ? ' active' : ''}"), 'note 正在播放列必須加 active，讓 trimToFit 保護不被裁掉');
+  // 移除舊 vinyl 版型後不得殘留
+  ok(!SETLIST_LAYOUTS.includes('vinyl') && !setlistSource.includes('const vinyl = {') && !indexHtml.includes('data-setlist-layout="vinyl"'), 'vinyl 版型已移除，不得殘留');
+});
+
 test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行為', () => {
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
   const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const schema = require('../public/js/setlist-style-schema');
-  const fillLayouts = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager'];
+  const fillLayouts = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note'];
   const sceneLayouts = ['timeline', 'diagonal', 'constellation'];
 
   // 只能有一種輸出：不可再回到「小元件 / 全畫布」兩種模式或 URL 開關。
@@ -6829,8 +6883,8 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   ok(setlistPanel.includes("const url = new URL('/setlist', window.location.origin);") && !setlistPanel.includes("set('mode'"),
     'OBS 網址必須固定，尺寸改由 OBS Browser Source 決定');
 
-  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager']);"),
-    '十一個清單型模板必須集中列在同一份填滿白名單');
+  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note']);"),
+    '十三個清單型模板必須集中列在同一份填滿白名單');
   ok(setlistSource.includes('const FIT_REF_W = 460, FIT_REF_H = 320, FIT_MIN = 0.85, FIT_MAX = 3.2;') && setlistSource.includes('Math.min(w / FIT_REF_W, h / FIT_REF_H)'),
     '縮放係數必須同時依來源寬與高計算，且基準要維持實機校準過的可讀字級');
   ok(setlistSource.includes("dataset.slFit = isFillLayout() ? 'fill' : 'scene'"), 'CSS 必須能分辨填滿與場景兩種語意');
@@ -8138,7 +8192,31 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(["'paperstrip'", "'mirror'", "'pulse'"].every((id) => stagePosIds.includes(id)) && panelHtml.includes('id="stage-safe-margin-field"'), 'Paper Strip 必須接入舞台安全距離設定 UI: ');
   ok(displayJs.includes("['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)") && displayJs.includes("setProperty('--stage-safe-margin'"), 'display 必須把 Paper Strip 的安全距離同步成共用 dataset/CSS 變數: ');
   ok(templateJs.includes('LyricMotion.mountStageSafeZoneGuide(rootEl)') && templateJs.includes('onSettings()') && displayCss.includes('.stage-safe-zone-band'), 'Paper Strip 必須掛共用安全框並在設定變更時即時同步: ');
-  ok(displayCss.includes('width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);') && displayCss.includes('overflow: visible;') && templateJs.includes('entry.groupEl.clientWidth - indent - 2') && templateJs.includes('Math.max(0.22'), 'Paper Strip 安全框必須作為排版寬度而不是裁切遮罩；超長句要先計入縮排並縮到完整可見: ');
+  ok(displayCss.includes('width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);') && displayCss.includes('overflow: visible;') && templateJs.includes('entry.groupEl.clientHeight : entry.groupEl.clientWidth) - indent - 2') && templateJs.includes('Math.max(0.22'), 'Paper Strip 安全框必須作為排版寬度而不是裁切遮罩；超長句要先計入縮排並縮到完整可見: ');
+  // 直式紙帶：出場／逐字／分頁邏輯不變，只換軸；紙條顏色可調；排向與色彩預設接上
+  ok(templateJs.includes('function isVertical') && templateJs.includes("classList.toggle('ps-vertical'")
+    && templateJs.includes('entry.plate.scrollHeight : entry.plate.scrollWidth'),
+    '直式紙帶必須沿用同一套機制、只換量測軸（scrollHeight）: ');
+  ok(/#paperstrip-root\.ps-vertical[^{]*\{[^}]*writing-mode: vertical-rl/.test(displayCss.replace(/\n/g, ' '))
+    && /\.ps-vertical .ps-plate::before\s*\{[^}]*inset\(0 0 var\(--ps-clip-right/.test(displayCss),
+    '直式紙帶必須是 vertical-rl，且紙帶改由上往下展開（clip 從底部收）: ');
+  ok(displayCss.includes('background: var(--ps-strip-color') && displayJs.includes("paperstripColor: ['--ps-strip-color'")
+    && panelHtml.includes('id="ls-paperstrip-color"'),
+    '紙條顏色必須可調並接上 --ps-strip-color: ');
+  ok(panelHtml.includes('id="paperstrip-orient-buttons"')
+    && panelHtml.includes('data-paperstrip-orient="vertical"')
+    && lyricExtras.includes("settings.paperstripOrient = orient")
+    && lyricExtras.includes('PAPERSTRIP_ORIENT_PRESET')
+    && lyricsHandler.includes("['horizontal', 'vertical'].includes(settings.paperstripOrient)"),
+    '紙帶排向必須有分段按鈕、切換帶色彩預設、server 白名單: ');
+  ok(appState.includes("paperstripOrient: 'horizontal', paperstripColor: '#ffffff'"),
+    '紙帶預設橫式仍是原本的白條: ');
+  // 動畫強度是逐字詩箋直排在用，紙帶不吃（2026-09-03 使用者更正：之前做錯模板）
+  ok(/paperstrip:[^}]*supportsIntensity: false/.test(lyricExtras)
+    && !templateJs.includes('applyIntensityClass') && !templateJs.includes('PS_INTENSITY')
+    && !/\.ps-vertical\.ps-int-/.test(displayCss)
+    && !/paperstrip:[^}]*animationIntensity/.test(appState),
+    '紙帶不再有動畫強度（已移到逐字詩箋直排）: ');
   ok(lyricExtras.includes("paperstrip: { label: '紙帶逐字'") && lyricExtras.includes("template: 'paperstrip'"), '桌面設定必須提供紙帶逐字能力與獨立預設: ');
   ok(lyricsHandler.includes("'columnflow', 'paperstrip'"), 'server 模板白名單必須接受 paperstrip: ');
   ok(appState.includes("paperstrip: { template: 'paperstrip'"), 'server 預設 lyricTemplateSettings 必須包含 paperstrip: ');
@@ -8180,13 +8258,13 @@ test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic g
   ok(templateJs.includes('function easeOutBack') && templateJs.includes('rotationProgress') && templateJs.includes('const idleStartMs') && templateJs.includes('motion.idle.periodMs') && displayCss.includes('--mirror-idle-rotation') && displayCss.includes('--mirror-idle-scale'), 'Mirror P1-C 必須讓逐字旋轉入場、落點回彈，並在就位後保持 deterministic 微動: ');
   ok(templateJs.includes('if (japanese && isHanGlyph(char)) scale *= 1.56') && templateJs.includes('scale *= 1.19') && templateJs.includes("entry.line.style.setProperty('--mirror-fit-scale', next.toFixed(3))") && displayCss.includes('font-size: clamp(8px, calc(var(--display-font-size, 60px) * var(--mirror-line-scale) * var(--mirror-fit-scale))') && displayCss.includes('scale(var(--mirror-glyph-scale, 1))'), 'Mirror P1 漢字主副層級必須有明顯比例；安全縮放只能等比縮整行，不能覆寫 glyph emphasis: ');
   const mirrorControllerSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');
-  ok(templateJs.includes('const MIRROR_MOTION_PROFILES') && templateJs.includes('function syncMotionIntensity') && templateJs.includes("normal: {") && templateJs.includes('moveOvershoot: 1.32') && templateJs.includes('rotationOvershoot: 1.86') && templateJs.includes('scaleOvershoot: 1.52') && templateJs.includes('pulse: 0.62') && templateJs.includes('pulse: 1.28') && templateJs.includes('pulse: 2.35') && templateJs.includes('amplitude: (side === \'echo\' ? 0.14 : 0.17) * profile.pulse') && lyricExtras.includes("mirror: { label: '鏡像'") && lyricExtras.includes("supportsIntensity: true") && mirrorControllerSource.includes("['pulse', 'facet', 'drift', 'aura', 'mirror']") && mirrorControllerSource.includes("animationIntensity: 'normal'"), 'Mirror P1-F 必須接上既有沉穩／標準／狂放控制；唱詞逐字彈跳在不動其他動態層的前提下分級加強: ');
+  ok(templateJs.includes('const MIRROR_MOTION_PROFILES') && templateJs.includes('function syncMotionIntensity') && templateJs.includes("normal: {") && templateJs.includes('moveOvershoot: 1.32') && templateJs.includes('rotationOvershoot: 1.86') && templateJs.includes('scaleOvershoot: 1.52') && templateJs.includes('pulse: 0.62') && templateJs.includes('pulse: 1.28') && templateJs.includes('pulse: 2.35') && templateJs.includes('amplitude: (side === \'echo\' ? 0.14 : 0.17) * profile.pulse') && lyricExtras.includes("mirror: { label: '虛實鏡書'") && lyricExtras.includes("supportsIntensity: true") && /function templateSupportsIntensity[\s\S]{0,200}'mirror'/.test(mirrorControllerSource) && mirrorControllerSource.includes("animationIntensity: 'normal'"), 'Mirror P1-F 必須接上既有沉穩／標準／狂放控制；唱詞逐字彈跳在不動其他動態層的前提下分級加強: ');
   ok(templateJs.includes('LyricMotion.ensureWordTimings(line, lines, index)') && templateJs.includes('LyricMotion.buildGraphemeTimings(word)') && templateJs.includes('glyphTimings: timingMatchesText ? sourceGlyphs : fallbackGlyphs') && templateJs.includes("timingSource: hasNativeWordTimings && timingMatchesText ? 'source' : 'fallback'") && templateJs.includes('function glyphSingingPulsePlan') && templateJs.includes('const singingStartMs') && !templateJs.includes('lineLandedOffset') && displayCss.includes('--mirror-sung-scale'), 'Mirror P1-D 必須優先讀取來源逐字時間，讓每個非標點 glyph 在自己的時間點放大後回到原尺寸；普通 LRC 才可等分降級: ');
   const mirrorRenderBatch = templateJs.slice(templateJs.indexOf('function renderBatch'), templateJs.indexOf('function syncLayout'));
   const mirrorConstrainIdx = mirrorRenderBatch.indexOf('renderedEntries.forEach(constrainLine);');
   const mirrorUpdateAssemblyIdx = mirrorRenderBatch.indexOf('updateAssembly(timeMs);');
   ok(mirrorConstrainIdx >= 0 && mirrorUpdateAssemblyIdx >= 0 && mirrorConstrainIdx < mirrorUpdateAssemblyIdx, 'Mirror P1 先以最散布狀態限縮，倒退 seek 不會把 glyph 推出安全側: ');
-  ok(lyricExtras.includes("mirror: { label: '鏡像'") && lyricExtras.includes("template: 'mirror'") && lyricExtras.includes("lyricPosition: 'split'") && lyricExtras.includes('stageSafeMargin: 13'), '桌面設定必須提供 Mirror P0 獨立預設並鎖定 split: ');
+  ok(lyricExtras.includes("mirror: { label: '虛實鏡書'") && lyricExtras.includes("template: 'mirror'") && lyricExtras.includes("lyricPosition: 'split'") && lyricExtras.includes('stageSafeMargin: 13'), '桌面設定必須提供 Mirror P0 獨立預設並鎖定 split: ');
   ok(panelHtml.includes('data-template="mirror"') && panelHtml.includes('style-thumb-mirror'), '桌面模板選擇器必須有 Mirror P0 卡片: ');
   ok(!/data-template="mirror"[^>]*\bhidden\b/.test(panelHtml), 'Mirror 模板已正式公開，桌面模板卡片不可再帶 hidden: ');
   ok(lyricsHandler.includes("'paperstrip', 'mirror'"), 'server 模板白名單必須接受 mirror: ');
@@ -8217,7 +8295,7 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   const transformNoneGroup = (displayCss.match(/([^}]*)\{\s*transform:\s*none;\s*\}/) || [])[1] || '';
   ok(transformNoneGroup.includes('body.template-typewriter #lyrics-container'),
     '打字機是固定構圖模板，#lyrics-container 必須列入 transform: none: ');
-  ok(lyricExtras.includes("typewriter: { label: '打字機'") && lyricExtras.includes("template: 'typewriter'"), '桌面設定必須提供打字機能力與獨立預設: ');
+  ok(lyricExtras.includes("typewriter: { label: '對話氣泡'") && lyricExtras.includes("template: 'typewriter'"), '桌面設定必須提供打字機能力與獨立預設: ');
   ok(lyricsHandler.includes("'mirror', 'typewriter'"), 'server 模板白名單必須接受 typewriter: ');
   ok(appState.includes("typewriter: { template: 'typewriter'"), 'server 預設 lyricTemplateSettings 必須包含 typewriter: ');
   ok(i18n.includes("'template.typewriter':"), '打字機模板名稱必須有五語 i18n key: ');
@@ -8227,6 +8305,13 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   // 靠邊：1–5 句一段隨機；合唱歌曲一邊代表一個聲部
   ok(templateJs.includes('RUN_MIN = 1') && templateJs.includes('RUN_SPAN = 5'), '打字機左右分散必須是 1–5 句一段: ');
   ok(templateJs.includes("return 'duet'") && templateJs.includes("s !== 'both'") && templateJs.includes('duetMap'), '合唱歌曲必須一邊固定代表一個聲部: ');
+  // 同時唱的兩句（不同聲部、時間重疊／同時起唱）→ 兩顆泡泡同時上、各自逐字（KTV 式雙排同時掃）
+  ok(templateJs.includes('function concurrentNext') && templateJs.includes('CONCURRENT_ONSET_MS')
+    && templateJs.includes('pairMate') && templateJs.includes('function sealTail')
+    && templateJs.includes('function pairEndMs'),
+    '對話氣泡：同時唱的兩句必須配成一組、同時出現、各自逐字（不先打完一句再打下一句）: ');
+  ok(/paintEntry\(last\.pairMate, t\)/.test(templateJs) && templateJs.includes('endHint'),
+    '同組兩句每幀都要一起逐字，且第一句的字距要攤在整組唱段內（不被夥伴句起點壓縮）: ');
   ok(templateJs.includes('dataset.lyricPos'), '非合唱必須吃面板「歌詞位置」決定全左／全右／左右分散: ');
   // 面板可調：泡泡底色、邊距、靠邊方式
   ok(displayCss.includes('var(--tw-bubble-right') && displayCss.includes('var(--tw-bubble-left') && displayCss.includes('var(--lyric-padding-x'), 'display.css 泡泡底色與左右邊距必須吃 CSS 變數: ');
@@ -8250,6 +8335,42 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   ok(lyricExtras.includes('showProgressBar: true') && lyricExtras.includes("key: 'showProgressBar'"), '底部進度條必須有設定鍵與控制項: ');
   ok(panelHtml.includes('id="ls-progress-bar"') && panelHtml.includes('底部進度條'), 'index.html「歌詞顯示模式」必須有底部進度條開關: ');
   ok(displayJsSrc.includes("obsProgressBar") && displayJsSrc.includes("s.showProgressBar === false"), 'display.js 必須依 showProgressBar 顯示／隱藏底部進度條: ');
+
+  // ── 對話氣泡：長間奏跳貼圖（支援透明 PNG／GIF；內建三張；可上傳／刪除）──
+  ok(templateJs.includes('function maybePlaceStickers') && templateJs.includes('function buildSticker')
+    && templateJs.includes('function refreshStickerPool') && templateJs.includes("fetch('/api/typewriter-stickers')"),
+    '對話氣泡必須有長間奏貼圖：偵測冷場、抓圖庫、塞無底框貼圖: ');
+  ok(templateJs.includes('stickerGapMs()') && templateJs.includes('lineEndEstMs(lines, li)')
+    && templateJs.includes("gap >= Math.max(12000, gapMs * 2) ? 2 : 1"),
+    '貼圖必須依「下一句時間 − 這句估計唱完」判斷長間奏，很長的間奏跳兩張: ');
+  ok(templateJs.includes('isSticker: true') && templateJs.includes('stickerPlaced')
+    && templateJs.includes('hash32(li * 131 + 977) % stickerPool.length')
+    && templateJs.includes('第二張避開第一張'),
+    '貼圖必須併進 entries 一起往上疊／prune，依間奏序穩定抽（seek 一致），第二張避開第一張: ');
+  ok(/\.tw-bubble\.tw-sticker\s*\{[^}]*background:\s*none/.test(displayCss)
+    && displayCss.includes('.tw-sticker-img'),
+    '間奏貼圖必須無底框、只顯示圖本身（透明直接透出）: ');
+  ok(fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'typewriter-stickers', 'sticker-01.gif'))
+    && fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'typewriter-stickers', 'sticker-03.gif')),
+    '內建三張間奏貼圖必須隨程式打包: ');
+  const apiSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+  ok(apiSrc.includes("router.post('/typewriter-stickers'") && apiSrc.includes("router.delete('/typewriter-stickers/:id'")
+    && apiSrc.includes('stickerUpload') && /fileSize:\s*8\s*\*\s*1024\s*\*\s*1024/.test(apiSrc),
+    'server 必須有貼圖上傳（8MB 上限、requirePin）與刪除端點: ');
+  const indexSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8');
+  ok(indexSrc.includes("app.get('/typewriter-sticker/:filename'") && indexSrc.includes('startsWith(stickersDir + path.sep)'),
+    'server 必須靜態送出自訂貼圖並擋路徑穿越: ');
+  ok(lyricExtras.includes("twStickerEnabled: true") && lyricExtras.includes("twStickerGapMs: 6000")
+    && lyricExtras.includes("key: 'twStickerEnabled'") && lyricExtras.includes('function initTypewriterStickerControls'),
+    '桌面設定必須有貼圖開關／門檻／圖庫管理: ');
+  ok(panelHtml.includes('id="tw-sticker-field"') && panelHtml.includes('id="tw-sticker-gallery"')
+    && panelHtml.includes('id="ls-tw-sticker-gap"'),
+    'index.html 必須有對話氣泡的貼圖欄位（開關／門檻／圖庫）: ');
+  ok(displayJsSrc.includes('document.body.dataset.twStickerEnabled') && displayJsSrc.includes('document.body.dataset.twStickerGapMs'),
+    'display.js 必須把貼圖開關／門檻寫進 body.dataset: ');
+  ok(lyricsHandler.includes('settings.twStickerEnabled = !!settings.twStickerEnabled')
+    && lyricsHandler.includes('Math.max(3000, Math.min(20000'),
+    'server 必須把貼圖開關布林化、門檻夾在 3–20 秒: ');
 });
 
 test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入設定與伺服器白名單', () => {
@@ -8314,6 +8435,11 @@ test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入�
     '長句平移必須夾在兩端之間，且讓正在唱的字留在燈箱內: ');
   ok(mods.lightboard.includes('IDLE_MIN_GAP_MS') && mods.lightboard.includes("segEl.textContent = 'INTERLUDE'"),
     '間奏跑馬只在夠長的空檔跑，並切換讀數: ');
+  // 間奏跑馬位移必須用真實時鐘(performance.now)自行累加、不吃會抖的歌詞時間軸，否則會「跑一下停一下」
+  ok(mods.lightboard.includes('idlePhasePx') && mods.lightboard.includes('performance.now()')
+    && mods.lightboard.includes('idlePhasePx += dt * IDLE_SPEED_PX_MS')
+    && !/\(\(\(t - end\) \* IDLE_SPEED_PX_MS\)/.test(mods.lightboard),
+    '間奏跑馬必須用真實時鐘勻速累加，不可再用 (t - end) 直接算位移: ');
 
   // ── 詩頁：逐字上墨是連續狀態（不是 class 硬切）、有讀字頭、進度軌吃連續進度、橫排為預設 ──
   ok(mods.stanza.includes("document.body.dataset.stanzaOrient === 'vertical' ? 'vertical' : 'horizontal'"),
@@ -8333,15 +8459,65 @@ test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入�
     '翻譯行必須永遠佔位，切換時版面才不會跳: ');
   ok(lyricsHandler.includes("['horizontal', 'vertical'].includes(settings.stanzaOrient)"),
     'server 必須驗證詩頁排向: ');
-  // 直排（原 migiwa）：一句一側交替、直排、中央安全距離、長句整體縮欄
-  ok(mods.stanza.includes("idx % 2 === 0 ? 'right' : 'left'") && mods.stanza.includes('altSides()'),
-    '詩頁直排必須支援一句一側交替: ');
-  ok(displayCss.includes('writing-mode: vertical-rl') && displayCss.includes('.st-vertical'),
-    '詩頁直排必須是 vertical-rl: ');
-  ok(mods.stanza.includes('V_MIN_SCALE') && mods.stanza.includes("ln.style.setProperty('--st-vscale'"),
-    '詩頁直排長句必須整體縮欄（有下限）: ');
-  ok(mods.stanza.includes('function safeMarginPct') && displayCss.includes('var(--st-safe'),
-    '詩頁直排必須吃中央安全距離: ');
+  // 直排＝四相漂字：切批次（單邊 1–4 句，seed 一致）、四角輪替漂入、入場後靜止、舊批模糊淡出
+  ok(!mods.stanza.includes('altSides(') && !mods.stanza.includes('stanzaAltSides'),
+    '詩頁直排已改四相漂字，一句一側交替（stanzaAltSides）不應再存在: ');
+  ok(mods.stanza.includes('function driftBatches') && mods.stanza.includes('hashNoise(BATCH_SEED')
+    && mods.stanza.includes('BATCH_SPAN'),
+    '詩頁直排必須把整段切成單邊 1–4 句的批次，句數由 hashNoise(批次序) 決定（seek 一致）: ');
+  ok(/DIRS:\s*\[\[/.test(mods.stanza) && /DRIFT\.DIRS\[\w+\.gi % 4\]/.test(mods.stanza),
+    '詩頁直排必須有四相入場方向，且逐字輪替: ');
+  ok(mods.stanza.includes('easeOutCubic') && mods.stanza.includes('CHAR_DUR_MS')
+    && mods.stanza.includes('g.dx * q') && mods.stanza.includes("g.el.style.filter = 'none'"),
+    '詩頁直排每字必須帶弧度漂入、ease-out 收到定點後完全靜止: ');
+  // 動畫強度（沉穩／標準／狂放）只作用在詩頁直排漂字，吃 lyricIntensity，面板只在直排顯示
+  ok(mods.stanza.includes('DRIFT_INTENSITY') && mods.stanza.includes('function driftProfile')
+    && mods.stanza.includes('document.body.dataset.lyricIntensity')
+    && mods.stanza.includes('prof.dist') && mods.stanza.includes('prof.durMs'),
+    '詩頁直排必須吃 lyricIntensity 分沉穩／標準／狂放（縮放漂移距離、弧度、模糊、時長）: ');
+  ok(/stanza:[^}]*supportsIntensity: true/.test(lyricExtras)
+    && lyricExtras.includes("settings.template === 'stanza' && settings.stanzaOrient !== 'vertical'"),
+    '逐字詩箋必須支援動畫強度，且只在直排顯示強度選項: ');
+  ok(appState.includes("maxWidth: 32, animationIntensity: 'normal'"),
+    '詩頁 server 預設必須帶 animationIntensity: ');
+  // 逐字出場跟歌曲時間軸（用逐字時間核心），不是整批同時出
+  ok(mods.stanza.includes('charTimes(line, lines, idx, ctx && ctx.kernel)')
+    && mods.stanza.includes('function mountDriftColumn')
+    && mods.stanza.includes('lines[idx].time - DRIFT.LEAD_MS'),
+    '詩頁直排必須逐句依時間 mount、每字依逐字時間漂入（不是整批同時出）: ');
+  // 描邊：橫排 .st-ch 與直排 .st-g 都吃詳細設定的 --lyric-stroke-*
+  ok(/\.st-ch\s*\{[^}]*-webkit-text-stroke:[^}]*--lyric-stroke-width/.test(displayCss)
+    && /\.st-g\s*\{[^}]*-webkit-text-stroke:[^}]*--lyric-stroke-width/.test(displayCss),
+    '橫排／直排的字都必須接上詳細設定的描邊（--lyric-stroke-*）: ');
+  ok(/strokeWidth:\s*[0-9.]+/.test(lyricExtras.split("stanza: { ...DEFAULT_SETTINGS")[1].split('}')[0])
+    && appState.includes("stanzaOrient: 'horizontal', stageSafeMargin: 12, strokeWidth"),
+    '詩頁預設必須帶描邊寬度: ');
+  // 邊距 · 最大寬度：詳細設定的三個控制必須真的接到詩頁（橫排走 CSS，直排走 layoutBatch）
+  ok(/#stanza-root\s*\{[^}]*--lyric-padding-x/.test(displayCss)
+    && /#stanza-root\s*\{[^}]*--lyric-max-width/.test(displayCss)
+    && /#stanza-root\s*\{[^}]*--lyric-padding-y/.test(displayCss),
+    '詩頁橫排的左右邊距／上下邊距／最大寬度必須吃 --lyric-padding-*／--lyric-max-width: ');
+  ok(mods.stanza.includes("cssNum('--lyric-padding-x'")
+    && mods.stanza.includes("cssNum('--lyric-padding-y'")
+    && mods.stanza.includes("cssNum('--lyric-max-width'"),
+    '詩頁直排的邊距／密度必須吃詳細設定的 --lyric-padding-*／--lyric-max-width: ');
+  // 裝飾：直排批次外緣髮絲欄線、橫排邊界線端點收筆
+  ok(mods.stanza.includes('st-deco') && displayCss.includes('.st-deco-rule')
+    && /\.st-rule::before/.test(displayCss),
+    '詩頁必須有裝飾（直排欄線／橫排邊界收筆）: ');
+  ok(displayCss.includes('.st-col') && displayCss.includes('.st-g')
+    && displayCss.includes('writing-mode: vertical-rl') && displayCss.includes('.st-vertical'),
+    '詩頁直排必須是 vertical-rl 的 .st-col／.st-g: ');
+  ok(mods.stanza.includes('is-out') && displayCss.includes('.st-col.is-out')
+    && /\.st-col\.is-out\s*\{[^}]*blur/.test(displayCss),
+    '舊批退場必須是整批模糊淡出: ');
+  ok(mods.stanza.includes('DRIFT.MIN_SCALE') && mods.stanza.includes("col.style.setProperty('--sc'"),
+    '詩頁直排長欄必須整體縮小（有下限）: ');
+  ok(mods.stanza.includes('function lyricPos') && mods.stanza.includes("=== 0) ? 'right' : 'left'"),
+    '詩頁直排靠左／靠右／左右分散必須沿用 lyricPosition，分散時偶數批靠右: ');
+  ok(!lyricExtras.includes('stanzaAltSides') && !panelHtml.includes('stanza-altsides-row')
+    && !appState.includes('stanzaAltSides'),
+    'stanzaAltSides 設定必須全部移除: ');
   // 排向用跟直書句流一樣的分段按鈕（style-thumb），不是下拉選單
   ok(panelHtml.includes('id="stanza-orient-buttons"')
     && panelHtml.includes('data-stanza-orient="horizontal"')
@@ -8362,6 +8538,51 @@ test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入�
     '模板專屬設定必須由 display.js 寫進 body.dataset: ');
   ok(displayJs.includes('function syncTrackMetaDataset') && mods.lightboard.includes('dataset.lbTitle'),
     '燈牌銘牌／間奏跑馬要用的曲名必須由 display.js 同步進 dataset: ');
+});
+
+test('字界巡航模板：正式端點、選擇器、設定白名單與連續鏡頭契約', () => {
+  const root = path.join(__dirname, '..');
+  const displayHtml = fs.readFileSync(path.join(root, 'public', 'display.html'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
+  const controllerHtml = fs.readFileSync(path.join(root, 'public', 'controller.html'), 'utf8');
+  const controllerJs = fs.readFileSync(path.join(root, 'public', 'js', 'controller.js'), 'utf8');
+  const templateJs = fs.readFileSync(path.join(root, 'public', 'js', 'lyric-template-wordscape.js'), 'utf8');
+  const appState = fs.readFileSync(path.join(root, 'server', 'state', 'app-state.js'), 'utf8');
+  const lyricsHandler = fs.readFileSync(path.join(root, 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const i18n = require('../public/js/i18n');
+
+  ok(displayHtml.includes('/js/lyric-template-wordscape.js'),
+    'display 必須載入字界巡航模板腳本: ');
+  ok(panelHtml.includes('data-template="wordscape"')
+    && controllerHtml.includes('class="ctrl-template-btn" data-template="wordscape"'),
+    '桌面與手機模板選擇器都要有字界巡航: ');
+  ok(controllerJs.includes("'wordscape'") && controllerJs.includes('templateSupportsIntensity'),
+    '手機遙控器必須認得字界巡航並保留動態強度能力: ');
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    ok(i18n.catalogs?.[locale]?.['template.wordscape'],
+      `${locale} 缺少 template.wordscape: `);
+  }
+  ok(appState.includes("wordscape: { template: 'wordscape'"),
+    'server 預設 lyricTemplateSettings 必須包含 wordscape: ');
+  ok(/const LYRIC_TEMPLATES = \[[^\]]*'wordscape'[^\]]*\]/.test(lyricsHandler),
+    'server 歌詞設定 allowlist 必須接受 wordscape: ');
+
+  ok(templateJs.includes("id: 'wordscape'")
+    && templateJs.includes('LyricTemplates.register(template)'),
+    '字界巡航必須以 registry 註冊正式 ID: ');
+  ok(templateJs.includes('mount') && templateJs.includes('destroy')
+    && templateJs.includes('onLyricsLoaded') && templateJs.includes('onLineChange')
+    && templateJs.includes('onFrame(timeMs, context)')
+    && templateJs.includes('onSeek(timeMs, context')
+    && templateJs.includes('onSettings(nextSettings, context)'),
+    '字界巡航必須完整接上 mount／destroy／歌詞載入／逐幀／seek／設定 lifecycle: ');
+  ok(templateJs.includes('getLyrics?.()') && templateJs.includes('getCurrentTimeMs?.()'),
+    '字界巡航必須讀取 host 歌詞與絕對播放時間，不能自己維護另一份歌詞狀態: ');
+  ok(templateJs.includes('10.3.2')
+    && templateJs.includes('continuous-target + constant-jerk body + analytic breathing'),
+    '正式模板必須保留驗收過的 V10.3.2 連續鏡頭模型: ');
+  ok(!templateJs.includes('requestAnimationFrame'),
+    '字界巡航不可自行開 requestAnimationFrame，時間必須由 display host 驅動: ');
 });
 
 test('v2 將既有模板設定與預設快照遷移到新 ID', () => {

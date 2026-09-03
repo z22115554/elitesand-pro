@@ -757,17 +757,20 @@
                 <button class="lyric-template-card" data-template="paperstrip" type="button" role="radio" aria-checked="false" title="紙帶逐字：白色紙帶先展開，再依句長、總字數與節奏分成 2～4 句一頁，尺寸進場前就決定">
                   <span class="style-thumb-preview style-thumb-paperstrip" aria-hidden="true"><i></i><i></i><i></i></span><strong data-i18n="template.paperstrip">紙帶逐字</strong><span>白底展開、逐字填入</span>
                 </button>
-                <button class="lyric-template-card" data-template="mirror" type="button" role="radio" aria-checked="false" title="鏡像：固定左右雙側，左實心原文、右描邊鏡像字，中央保留人物安全區">
-                  <span class="style-thumb-preview style-thumb-mirror" aria-hidden="true"><i>歌</i><b></b><i>歌</i></span><strong data-i18n="template.mirror">鏡像</strong><span>雙側排版、中央留白</span>
+                <button class="lyric-template-card" data-template="mirror" type="button" role="radio" aria-checked="false" title="虛實鏡書：固定左右雙側，左實心原文、右描邊鏡像字，中央保留人物安全區">
+                  <span class="style-thumb-preview style-thumb-mirror" aria-hidden="true"><i>歌</i><b></b><i>歌</i></span><strong data-i18n="template.mirror">虛實鏡書</strong><span>雙側排版、中央留白</span>
                 </button>
-                <button class="lyric-template-card" data-template="typewriter" type="button" role="radio" aria-checked="false" title="打字機：當前句在對話泡泡裡逐字打出、字後帶游標，換句時泡泡交替左右">
-                  <span class="style-thumb-preview style-thumb-typewriter" aria-hidden="true"><span class="style-thumb-char">打</span><i class="style-thumb-caret"></i></span><strong data-i18n="template.typewriter">打字機</strong><span>對話泡泡、逐字打出</span>
+                <button class="lyric-template-card" data-template="typewriter" type="button" role="radio" aria-checked="false" title="對話氣泡：當前句在對話泡泡裡逐字打出、字後帶游標，換句時泡泡交替左右">
+                  <span class="style-thumb-preview style-thumb-typewriter" aria-hidden="true"><span class="style-thumb-char">氣</span><i class="style-thumb-caret"></i></span><strong data-i18n="template.typewriter">對話氣泡</strong><span>對話泡泡、逐字打出</span>
                 </button>
-                <button class="lyric-template-card" data-template="lightboard" type="button" role="radio" aria-checked="false" title="燈牌：LED 點陣燈牌，唱過的燈亮、沒唱到的是熄滅的暗點">
-                  <span class="style-thumb-preview style-thumb-lightboard" aria-hidden="true"><span class="style-thumb-char">牌</span></span><strong data-i18n="template.lightboard">燈牌</strong><span>LED 點陣、機台質感</span>
+                <button class="lyric-template-card" data-template="lightboard" type="button" role="radio" aria-checked="false" title="跑馬燈牌：LED 點陣燈牌，唱過的燈亮、沒唱到的是熄滅的暗點">
+                  <span class="style-thumb-preview style-thumb-lightboard" aria-hidden="true"><span class="style-thumb-char">牌</span></span><strong data-i18n="template.lightboard">跑馬燈牌</strong><span>LED 點陣、機台質感</span>
                 </button>
-                <button class="lyric-template-card" data-template="stanza" type="button" role="radio" aria-checked="false" title="詩頁：整段一次排好、字不移動，唱到哪句哪句上墨">
-                  <span class="style-thumb-preview style-thumb-stanza" aria-hidden="true"><span class="style-thumb-char">頁</span></span><strong data-i18n="template.stanza">詩頁</strong><span>整段排好、零動態</span>
+                <button class="lyric-template-card" data-template="stanza" type="button" role="radio" aria-checked="false" title="逐字詩箋：整段一次排好、字不移動，唱到哪句哪句上墨">
+                  <span class="style-thumb-preview style-thumb-stanza" aria-hidden="true"><span class="style-thumb-char">箋</span></span><strong data-i18n="template.stanza">逐字詩箋</strong><span>整段排好、零動態</span>
+                </button>
+                <button class="lyric-template-card" data-template="wordscape" type="button" role="radio" aria-checked="false" title="字界巡航：整首歌在同一個文字世界裡逐字前進，鏡頭持續滑行，只有長停頓才硬清場">
+                  <span class="style-thumb-preview style-thumb-wordscape" aria-hidden="true"><span class="style-thumb-char">巡</span></span><strong data-i18n="template.wordscape">字界巡航</strong><span>逐字鏡頭、連續錯落</span>
                 </button>
               </div>
               <p class="field-hint" id="template-desc">完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。</p>
@@ -874,11 +877,27 @@
                   <button class="style-thumb active" data-stanza-orient="horizontal" type="button" title="橫排捲動：整段左貼，看得到上下文與下一句"><span class="style-thumb-preview"><span class="style-thumb-char">橫</span></span><span class="style-thumb-label">橫排捲動</span></button>
                   <button class="style-thumb" data-stanza-orient="vertical" type="button" title="直排貼邊：一句一直欄、貼畫面外緣，中央留給主播"><span class="style-thumb-preview"><span class="style-thumb-char">直</span></span><span class="style-thumb-label">直排貼邊</span></button>
                 </div>
-                <p class="field-hint">橫排整段左貼、逐字上墨；直排一句一直欄貼畫面外緣，中央留給主播。</p>
-                <div class="switch-row" id="stanza-altsides-row">
-                  <div><div class="label">直排一句一側交替</div><div class="sub">下一句換到對側（右→左→右…）。只在直排時有作用。</div></div>
-                  <label class="switch"><input id="ls-stanza-altsides" data-ls-control="stanzaAltSides" type="checkbox" checked><span class="track"></span></label>
+                <p class="field-hint">橫排：整段左貼、逐字上墨。直排：四相漂字——每字從四角漂入定點、入場後靜止；靠左／靠右／左右分散用下面的「歌詞位置」，單邊隨機 1–4 句，舊批模糊淡出。</p>
+              </div>
+              <div class="field" id="paperstrip-orient-field" hidden>
+                <label>紙帶排向</label>
+                <div class="style-thumb-row" id="paperstrip-orient-buttons">
+                  <button class="style-thumb active" data-paperstrip-orient="horizontal" type="button" title="橫式：紙帶由左往右展開、字左到右填入（預設白條黑字）"><span class="style-thumb-preview"><span class="style-thumb-char">橫</span></span><span class="style-thumb-label">橫式紙帶</span></button>
+                  <button class="style-thumb" data-paperstrip-orient="vertical" type="button" title="直式：紙帶由上往下展開、字沿直欄填入（預設黑條白字）"><span class="style-thumb-preview"><span class="style-thumb-char">直</span></span><span class="style-thumb-label">直式紙帶</span></button>
                 </div>
+                <p class="field-hint">出場、逐字、分頁、尺寸邏輯完全一樣，只是整個轉 90°。切排向會一併套用色彩預設（橫式白條黑字／直式黑條白字），之後可再各自調。</p>
+              </div>
+              <div class="field" id="paperstrip-color-field" hidden>
+                <label for="ls-paperstrip-color">紙條顏色</label>
+                <input id="ls-paperstrip-color" data-ls-control="paperstripColor" type="color" value="#ffffff">
+                <p class="field-hint">紙帶本身的顏色。文字色在上面的「文字色」調。</p>
+              </div>
+              <div class="field" id="ktv-text-field" hidden>
+                <label for="ls-ktv-interlude">長間奏字樣</label>
+                <input id="ls-ktv-interlude" data-ls-control="ktvInterludeText" class="input" type="text" maxlength="40" placeholder="留空＝依顯示語言（英「Instrumental」、日「間奏」、韓「간주」…）">
+                <label for="ls-ktv-ending" class="mt-8">全曲結尾字樣</label>
+                <input id="ls-ktv-ending" data-ls-control="ktvEndingText" class="input" type="text" maxlength="40" placeholder="留空＝依顯示語言（英「Thanks for listening」…）">
+                <p class="field-hint">長間奏與唱完整首時，畫面中間會顯示的字。留空時依觀眾看到的顯示語言自動帶入；繁體中文維持原本的三則輪播文案。填了就完全照你打的字（語言請自己顧）。</p>
               </div>
               <div class="field" id="stage-safe-margin-field" hidden>
                 <label>中央安全距離 <span id="ls-stage-safe-margin-val" class="val">2%</span></label>
@@ -968,6 +987,21 @@
             <div class="field field--inline-spacious" id="typewriter-colors-field" hidden>
               <div class="flex-grow"><label>對話泡泡（右／藍側）</label><input id="ls-tw-bubble-right" data-ls-control="twBubbleRight" type="color" value="#0b93f6"></div>
               <div class="flex-grow"><label>對話泡泡（左／灰側）</label><input id="ls-tw-bubble-left" data-ls-control="twBubbleLeft" type="color" value="#3b3b3d"></div>
+            </div>
+            <div class="field" id="tw-sticker-field" hidden>
+              <div class="switch-row">
+                <div><div class="label">長間奏跳貼圖</div><div class="sub">冷場時像聊天室發張貼圖。清單空或關掉就沿用純打字。</div></div>
+                <label class="switch"><input id="ls-tw-sticker-enabled" data-ls-control="twStickerEnabled" type="checkbox" checked><span class="track"></span></label>
+              </div>
+              <label class="mt-8">長間奏門檻 <span id="ls-tw-sticker-gap-val" class="val">6.0s</span></label>
+              <input id="ls-tw-sticker-gap" data-ls-control="twStickerGapMs" type="range" min="3000" max="20000" step="500" value="6000">
+              <label class="mt-8">間奏貼圖圖庫</label>
+              <div id="tw-sticker-gallery" class="tw-sticker-gallery"></div>
+              <div class="btn-row mt-8">
+                <button id="tw-sticker-upload-btn" class="btn btn-sm" type="button">上傳貼圖</button>
+                <input id="tw-sticker-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+              </div>
+              <p class="field-hint">支援透明 PNG／GIF（動圖自動播放）。單張 8MB、最多 24 張。內建三張不能刪。長間奏會依間奏序穩定抽一張（很長的間奏會跳兩張）。</p>
             </div>
             <div id="font-family-fields">
             <div class="field">
@@ -1100,8 +1134,8 @@
               <summary>邊距 · 最大寬度</summary>
               <div class="collapse-body">
                 <div class="field" id="padding-x-field"><label>左右邊距 <span id="ls-padding-x-val" class="val">60px</span></label><input id="ls-padding-x" data-ls-control="paddingX" type="range" min="0" max="300" step="10" value="60"></div>
-                <div class="field"><label>上下邊距 <span id="ls-padding-y-val" class="val">48px</span></label><input id="ls-padding-y" data-ls-control="paddingY" type="range" min="0" max="300" step="10" value="48"></div>
-                <div class="field"><label>歌詞區最大寬度 <span id="ls-max-width-val" class="val">90%</span></label><input id="ls-max-width" data-ls-control="maxWidth" type="range" min="40" max="100" step="5" value="90"></div>
+                <div class="field" id="padding-y-field"><label>上下邊距 <span id="ls-padding-y-val" class="val">48px</span></label><input id="ls-padding-y" data-ls-control="paddingY" type="range" min="0" max="300" step="10" value="48"></div>
+                <div class="field" id="max-width-field"><label>歌詞區最大寬度 <span id="ls-max-width-val" class="val">90%</span></label><input id="ls-max-width" data-ls-control="maxWidth" type="range" min="40" max="100" step="5" value="90"></div>
               </div>
             </details>
             </div>
@@ -1474,7 +1508,12 @@
                 <input id="dual-audio-sync-offset" type="range" min="-1000" max="1000" step="5" value="0">
                 <span id="dual-audio-sync-offset-val" class="val">0ms</span>
               </div>
-              <p class="field-hint">主播路與觀眾路實際上會經過不同的音訊管線，天生會有固定偏移，不是 bug。戴耳機播放一首歌，邊聽邊調這條滑桿，直到兩邊的節奏聽起來對上為止；正值＝延遲主播路，負值＝延遲觀眾路。調好後長時間有效，不用每次開播都重調。</p>
+              <p class="field-hint">主播路與觀眾路實際上會經過不同的音訊管線，天生會有固定偏移，不是 bug。戴耳機播放一首歌，邊聽邊調這條滑桿，直到兩邊的節奏聽起來對上為止；正值＝延遲主播路，負值＝延遲觀眾路。長時間播放若兩邊又跑掉，用下面的「點擊對時測試」重新校正。</p>
+              <div class="field mt-8">
+                <label>點擊對時測試</label>
+                <button id="dual-audio-click-test" class="btn btn-sm" type="button" disabled>開始對時測試</button>
+              </div>
+              <p class="field-hint">按下後會對「主播耳機」和「觀眾／OBS」兩路同時送出每秒一下的「嗒」聲。把兩路都放到聽得到的地方（例如 OBS 開「監聽並輸出」），邊聽邊調上面的「同步偏移」，直到兩下「嗒」完全重疊成一下。讓它一直跑，過十幾二十分鐘再聽一次，就知道有沒有漂移、往哪個方向漂。測完記得按「停止」。</p>
             </div>
           </details>
           </div>
@@ -1706,7 +1745,7 @@
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span data-i18n="settings.setlist.templateTitle">歌單模板</span></p>
             <div class="field setlist-layout-field">
               <div class="setlist-layout-heading"><label id="setlist-layout-label" for="setlist-layout">選擇歌單模板</label><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
-              <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option><option value="label">紙牌標籤</option><option value="glow">夜間霓虹</option><option value="round">圓角氣泡</option><option value="pager">復古字卡</option></select>
+              <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option><option value="label">紙牌標籤</option><option value="glow">夜間霓虹</option><option value="round">圓角氣泡</option><option value="pager">復古字卡</option><option value="note">手帳頁</option><option value="flap">發車看板</option><option value="film">底片邊條</option></select>
               <p class="setlist-layout-group-title">清單型 — 跟著來源尺寸重排</p>
               <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
                 <button class="setlist-layout-card" type="button" data-setlist-layout="classic" role="radio" aria-checked="true"><strong>經典資訊</strong><span>現在、未唱、已唱一次看懂</span></button>
@@ -1718,11 +1757,17 @@
                 <button class="setlist-layout-card" type="button" data-setlist-layout="glow" role="radio" aria-checked="false"><strong>夜間霓虹</strong><span>細框發光，適合夜唱</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="round" role="radio" aria-checked="false"><strong>圓角氣泡</strong><span>膠囊清單，正播放大</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="pager" role="radio" aria-checked="false"><strong>復古字卡</strong><span>LCD 呼叫器質感</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="note" role="radio" aria-checked="false"><strong>手帳頁</strong><span>橫線筆記本，已唱蓋章</span></button>
               </div>
               <p class="setlist-layout-group-title">固定版位 — 只呈現現在播放</p>
               <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
                 <button class="setlist-layout-card" type="button" data-setlist-layout="signal" role="radio" aria-checked="false"><strong>舞台訊號</strong><span>貼齊底部的導播資訊條</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="simple" role="radio" aria-checked="false"><strong>極簡兩排</strong><span>置中卡片，只留現在與下一首</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="flap" role="radio" aria-checked="false"><strong>發車看板</strong><span>貼底發車標，曲目排成路線</span></button>
+              </div>
+              <p class="setlist-layout-group-title">全幅場景 — 建議來源設 16:9</p>
+              <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
+                <button class="setlist-layout-card" type="button" data-setlist-layout="film" role="radio" aria-checked="false"><strong>底片邊條</strong><span>貼邊 35mm 底片，正在播放框在片門</span></button>
               </div>
               <p class="setlist-layout-hint setlist-sizing-hint" id="setlist-sizing-hint" role="status">大小與顯示首數跟著你在 OBS 拉的 Browser Source 寬高變化。</p>
               <p class="field-hint setlist-legacy-layout-notice" id="setlist-legacy-layout-notice" role="status" hidden>這個模板已暫停提供。你目前的 OBS 畫面與已保存設定不會自動改變；選擇其他模板後才會切換。</p>
@@ -2961,6 +3006,8 @@
   <script src="/js/app-twitch.js"></script>
   <script src="/js/app-playlist.js"></script>
   <script src="/js/playback-sequence.js"></script>
+  <!-- SYNCDIAG（暫時性，2026-09-03）：分離播放人聲/伴奏延遲診斷；確認問題後連同 sync-diag.js 一起移除 -->
+  <script src="/js/sync-diag.js"></script>
   <script src="/js/app-playback.js"></script>
   <script src="/js/app-lyrics-timeline.js"></script>
   <script src="/js/app-setlist-panel.js"></script>

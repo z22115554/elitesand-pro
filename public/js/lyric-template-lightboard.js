@@ -34,6 +34,11 @@
   let rootEl = null, boxEl = null, innerEl = null, slideEl = null;
   let textEl = null, idleEl = null, segEl = null, plateT = null, plateA = null;
   let state = null;
+  // 間奏跑馬的位移用「真實時鐘(performance.now)」自行累加，不吃歌詞時間軸——
+  // lyrics:sync 會週期性把歌詞時鐘重設到音訊回報位置，那個值會抖／偶爾倒退，
+  // 直接拿它算 translateX 會變成「跑一下停一下」。真實時鐘單調遞增，跑馬才會勻速。
+  let idlePhasePx = 0;
+  let idleLastNow = 0;
 
   // 設定與曲目資訊都走 body.dataset（display.js 套設定時寫入），沿用 columnflow 那套慣例，
   // 不另外開一條 ctx 通道。逐幀讀 dataset 的成本可忽略。
@@ -214,6 +219,7 @@
       textEl.textContent = ''; state.spans = []; state.li = -1;
       idleEl.hidden = true; slideEl.style.visibility = '';
       segEl.textContent = '';
+      idlePhasePx = 0; idleLastNow = 0;
       return;
     }
     if (!state.fitted || force) { applyFontClass(); fit(ctx); }
@@ -235,17 +241,24 @@
         if (idleEl.hidden || idleEl.dataset.label !== label) {
           idleEl.hidden = false; idleEl.dataset.label = label; idleEl.textContent = label;
           slideEl.style.visibility = 'hidden';
+          idlePhasePx = 0; idleLastNow = 0;         // 這段跑馬重新開始，位移歸零
         }
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        if (!idleLastNow) idleLastNow = now;
+        // dt 夾在 100ms 內：OBS 背景節流 rAF 後追幀時不要讓跑馬瞬間跳一大段
+        const dt = Math.min(100, Math.max(0, now - idleLastNow));
+        idleLastNow = now;
+        idlePhasePx += dt * IDLE_SPEED_PX_MS;
         const boxW = innerEl.clientWidth;
         const w = idleEl.scrollWidth || idleEl.getBoundingClientRect().width;
         const span = boxW + w;
-        const x = boxW - ((((t - end) * IDLE_SPEED_PX_MS) % span) + span) % span;
+        const x = boxW - ((idlePhasePx % span) + span) % span;
         idleEl.style.transform = 'translateX(' + x.toFixed(1) + 'px)';
         segEl.textContent = 'INTERLUDE';
         return;
       }
     }
-    if (!idleEl.hidden) { idleEl.hidden = true; slideEl.style.visibility = ''; }
+    if (!idleEl.hidden) { idleEl.hidden = true; slideEl.style.visibility = ''; idleLastNow = 0; }
 
     if (force || idx !== state.li) { state.li = idx; buildLine(L, lines, idx, ctx); }
     paint(t);
@@ -254,7 +267,7 @@
 
   LyricTemplates.register({
     id: 'lightboard',
-    label: '燈牌',
+    label: '跑馬燈牌',
 
     mount(container, ctx) {
       rootEl = document.createElement('div');
@@ -304,6 +317,13 @@
       if (!state) return;
       state.fitted = false;
       state.li = -1;
+      // 歌曲播完／清空歌詞時 onFrame 不會再被呼叫——直接把燈板點熄，別讓最後一句留著
+      if (textEl) { textEl.textContent = ''; textEl.style.transform = ''; }
+      state.spans = [];
+      if (idleEl) idleEl.hidden = true;
+      if (slideEl) slideEl.style.visibility = '';
+      if (segEl) segEl.textContent = '';
+      idlePhasePx = 0; idleLastNow = 0;
       syncPlate();
     },
 

@@ -36,7 +36,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'wordscape'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;
@@ -236,6 +236,24 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 詩頁排向白名單
     if (settings.stanzaOrient && !['horizontal', 'vertical'].includes(settings.stanzaOrient)) {
       delete settings.stanzaOrient;
+    }
+    // 紙帶逐字排向白名單
+    if (settings.paperstripOrient && !['horizontal', 'vertical'].includes(settings.paperstripOrient)) {
+      delete settings.paperstripOrient;
+    }
+    // KTV 間奏／結尾自訂字樣：字串、去頭尾空白、限長 40；非字串直接丟掉
+    for (const key of ['ktvInterludeText', 'ktvEndingText']) {
+      if (settings[key] === undefined) continue;
+      if (typeof settings[key] !== 'string') { delete settings[key]; continue; }
+      settings[key] = settings[key].replace(/[\r\n\t]+/g, ' ').trim().slice(0, 40);
+    }
+    // 對話氣泡長間奏貼圖：開關布林化、門檻夾在 3–20 秒
+    if (settings.twStickerEnabled !== undefined) {
+      settings.twStickerEnabled = !!settings.twStickerEnabled;
+    }
+    if (settings.twStickerGapMs !== undefined) {
+      const g = Math.round(Number(settings.twStickerGapMs));
+      settings.twStickerGapMs = Number.isFinite(g) ? Math.max(3000, Math.min(20000, g)) : 6000;
     }
     // 本機字型資源只接受掃描器產生的 opaque ID。實際檔案路徑從不進 state，也不接受
     // 客戶端拼出的 URL；顯示端仍會由 API 再做一次 ID/realpath 驗證。

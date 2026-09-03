@@ -66,8 +66,15 @@
   let safeZoneGuide = null;
   let plans = [];
   let plansForLines = null;
+  let lastOrient = null;
   // split 模式可同時保留前後頁；非 split 任一時間只渲染一頁。
   const pageViews = new Map();
+
+  // 直式＝把整個機制轉 90°：紙帶由上往下展開、字沿直欄由上往下浮現、頁內各句由右往左並排。
+  // 出場／逐字／分頁／尺寸邏輯全部沿用橫式，只是量測與 clip 換軸。
+  function isVertical() {
+    return document.body.dataset.paperstripOrient === 'vertical';
+  }
 
   function clamp01(value) {
     return Math.max(0, Math.min(1, value));
@@ -427,15 +434,17 @@
 
   function constrainRowWidth(entry) {
     if (!entry?.row || !entry?.plate || !entry?.groupEl) return;
+    const vertical = isVertical();
     const style = window.getComputedStyle(entry.row);
-    const indent = Number.parseFloat(style.marginLeft) || 0;
-    const available = Math.max(1, entry.groupEl.clientWidth - indent - 2);
+    // 直式：紙帶沿高度延伸，縮排改吃 margin-top，可用空間改看 groupEl 高度。
+    const indent = Number.parseFloat(vertical ? style.marginTop : style.marginLeft) || 0;
+    const available = Math.max(1, (vertical ? entry.groupEl.clientHeight : entry.groupEl.clientWidth) - indent - 2);
 
     // nowrap 紙帶不能靠 overflow:hidden「假裝有遵守安全框」；那會直接裁掉歌詞。
-    // 反覆量測實際 scrollWidth 並縮字，直到整條紙帶（含每列縮排）真的落在可用寬度內。
+    // 反覆量測實際尺寸並縮字，直到整條紙帶（含每列縮排）真的落在可用空間內。
     // 最低允許比舊版更小，寧可讓極端長句縮小，也不可把字切掉。
     for (let pass = 0; pass < 3; pass += 1) {
-      const measured = entry.plate.scrollWidth;
+      const measured = vertical ? entry.plate.scrollHeight : entry.plate.scrollWidth;
       if (!Number.isFinite(measured) || measured <= available + 0.5) return;
       const currentScale = Number.parseFloat(entry.row.style.getPropertyValue('--ps-font-scale')) || 0.76;
       const nextScale = Math.max(0.22, currentScale * (available / measured) * 0.965);
@@ -447,13 +456,16 @@
 
   function measureGlyphSpatialGates(entry) {
     if (!entry?.plate || !entry?.glyphEls?.length) return;
+    const vertical = isVertical();
     const plateRect = entry.plate.getBoundingClientRect();
-    const width = Math.max(1, plateRect.width);
+    const extent = Math.max(1, vertical ? plateRect.height : plateRect.width);
     entry.glyphEls.forEach((glyph) => {
       const rect = glyph.el.getBoundingClientRect();
-      const center = rect.left - plateRect.left + rect.width * 0.5;
+      const center = vertical
+        ? rect.top - plateRect.top + rect.height * 0.5
+        : rect.left - plateRect.left + rect.width * 0.5;
       // 14% 約對應目前 speed-ramp 的前 90～110ms，第一字不會和白條同幀硬跳出。
-      glyph.spatialGate = Math.max(0.14, Math.min(0.985, center / width));
+      glyph.spatialGate = Math.max(0.14, Math.min(0.985, center / extent));
     });
   }
 
@@ -599,6 +611,13 @@
 
   function computeAndRender(timeMs, lines) {
     if (!rootEl) return;
+    const vertical = isVertical();
+    if (vertical !== lastOrient) {
+      // 排向切換：清掉整批頁面，讓新軸重新量測、重建
+      clearPageViews();
+      rootEl.classList.toggle('ps-vertical', vertical);
+      lastOrient = vertical;
+    }
     ensurePlans(lines);
     if (plans.length === 0) {
       clearPageViews();
@@ -649,9 +668,11 @@
     mount(container) {
       rootEl = document.createElement('div');
       rootEl.id = 'paperstrip-root';
+      rootEl.classList.toggle('ps-vertical', isVertical());
       container.appendChild(rootEl);
       safeZoneGuide = LyricMotion.mountStageSafeZoneGuide(rootEl);
       plansForLines = null;
+      lastOrient = isVertical();
       clearPageViews();
     },
 
@@ -662,6 +683,7 @@
       rootEl = null;
       plans = [];
       plansForLines = null;
+      lastOrient = null;
     },
 
     onLyricsLoaded() {

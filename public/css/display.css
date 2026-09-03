@@ -680,7 +680,8 @@ body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
 body.template-lightboard #lyrics-container,
-body.template-stanza #lyrics-container {
+body.template-stanza #lyrics-container,
+body.template-wordscape #lyrics-container {
   min-height: 70vh;
   justify-content: center;
 }
@@ -696,7 +697,8 @@ body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
 body.template-lightboard #lyrics-container,
-body.template-stanza #lyrics-container {
+body.template-stanza #lyrics-container,
+body.template-wordscape #lyrics-container {
   align-items: center;
 }
 
@@ -709,8 +711,46 @@ body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
 body.template-typewriter #lyrics-container,
 body.template-lightboard #lyrics-container,
-body.template-stanza #lyrics-container {
+body.template-stanza #lyrics-container,
+body.template-wordscape #lyrics-container {
   transform: none;
+}
+
+/* ─── 字界巡航：整個透明舞台交給連續鏡頭與逐字 canvas ─── */
+body.template-wordscape #karaoke-display {
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+body.template-wordscape #lyrics-container {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  transform: none;
+}
+
+#wordscape-root {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  background: transparent;
+}
+
+.wordscape-stage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: transparent;
 }
 
 /* ─── 打字機：仿 iMessage 聊天室，逐字打出、已唱不消失、往上疊 ─── */
@@ -765,6 +805,21 @@ body.template-stanza #lyrics-container {
   background: var(--tw-bubble-right, #0b93f6);  /* iMessage 藍；面板可調 */
   border-bottom-right-radius: 0.32em;      /* 尖角朝右下 */
   transform-origin: bottom right;
+}
+/* 間奏貼圖：像聊天室發貼圖——無底框、無陰影，只有圖本身（透明 PNG／GIF 直接顯示、GIF 自播）。
+   沿用 .tw-in 的彈入、沿用 tw-left／tw-right 的靠邊。 */
+.tw-bubble.tw-sticker {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+  max-width: none;
+}
+.tw-sticker-img {
+  display: block;
+  width: clamp(76px, calc(var(--display-font-size, 42px) * 3), 168px);
+  height: auto;
+  image-rendering: auto;
 }
 .tw-body { white-space: pre-wrap; word-break: break-word; }
 .tw-ch { display: none; }                  /* 還沒打到的字不佔位，泡泡隨打字長大 */
@@ -1039,8 +1094,9 @@ body.lyric-pos-right #paperstrip-root .ps-group {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: rgba(255, 255, 255, .97);
-  border: 1px solid rgba(15, 15, 15, .12);
+  /* 紙條顏色可調（詳細設定「紙條顏色」→ --ps-strip-color）。橫式預設白、直式預設黑。 */
+  background: var(--ps-strip-color, rgba(255, 255, 255, .97));
+  border: 1px solid color-mix(in srgb, var(--ps-strip-color, #ffffff) 62%, rgba(128, 128, 128, .5));
   box-shadow: 0 .08em .34em rgba(0, 0, 0, .16);
   /* 不縮放白條本體，而是固定左邊界、只收右側遮罩：白條從左往右展開，
      同時避免 scaleX 把邊框與陰影一起壓扁。未收到第一幀狀態前預設完全收起，避免首幀閃白。 */
@@ -1078,6 +1134,61 @@ body.lyric-pos-right #paperstrip-root .ps-group {
 @media (prefers-reduced-motion: reduce) {
   .ps-glyph { transition-duration: .01ms !important; }
 }
+
+/* ─── 紙帶逐字・直式：整個機制轉 90°。出場／逐字／分頁邏輯不變，只換軸。 ─── */
+/* 頁內各句由右往左並排（第一句在最右），每句是一條由上往下展開的直紙帶。 */
+#paperstrip-root.ps-vertical .ps-group {
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  width: auto;
+  max-width: min(94vw, 1180px);
+  height: min(74vh, 780px);
+  gap: clamp(8px, 1.4vw, 20px);
+}
+#paperstrip-root.ps-vertical .ps-group[data-side="left"],
+#paperstrip-root.ps-vertical .ps-group[data-side="right"] {
+  width: auto;
+  max-width: min(46vw, 620px);
+}
+body.lyric-pos-left #paperstrip-root.ps-vertical .ps-group,
+body.lyric-pos-right #paperstrip-root.ps-vertical .ps-group {
+  width: auto;
+  max-width: min(46vw, 620px);
+}
+/* 縮排：直式改成把每句往下錯開（對應橫式的 margin-left） */
+#paperstrip-root.ps-vertical .ps-row { transform-origin: top center; }
+#paperstrip-root.ps-vertical .ps-row--slot-0 { margin-left: 0; margin-top: 0.3em; }
+#paperstrip-root.ps-vertical .ps-row--slot-1 { margin-left: 0; margin-top: 0.7em; }
+#paperstrip-root.ps-vertical .ps-row--slot-2 { margin-left: 0; margin-top: 1.2em; }
+#paperstrip-root.ps-vertical .ps-row--slot-3 { margin-left: 0; margin-top: 0.55em; }
+/* 直排文字：字沿直欄由上往下 */
+#paperstrip-root.ps-vertical .ps-plate,
+#paperstrip-root.ps-vertical .ps-text {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+}
+#paperstrip-root.ps-vertical .ps-plate { padding: .34em .15em .34em .13em; }
+/* 紙帶由上往下展開：把「收起的比例」從右側 inset 換到底部 inset */
+#paperstrip-root.ps-vertical .ps-plate::before {
+  clip-path: inset(0 0 var(--ps-clip-right, 100%) 0);
+}
+/* 逐字浮現：字從上方一點點滑入（對應橫式的從左方） */
+#paperstrip-root.ps-vertical .ps-glyph {
+  transform: translate3d(.04em, -.16em, 0) scale(.97);
+}
+#paperstrip-root.ps-vertical .ps-glyph.is-on {
+  transform: translate3d(0, 0, 0) scale(1);
+}
+#paperstrip-root.ps-vertical .ps-glyph.is-current {
+  transform: translate3d(-.06em, 0, 0) scale(1.035);
+}
+/* 每頁的亂數位移：直式改用水平方向（沿用同一個 --ps-y-shift 值） */
+#paperstrip-root.ps-vertical .ps-group {
+  left: calc(50% + var(--ps-y-shift));
+  top: 50%;
+}
+#paperstrip-root.ps-vertical .ps-group[data-side="left"] { left: 2%; }
+#paperstrip-root.ps-vertical .ps-group[data-side="right"] { left: auto; right: 2%; }
 
 /* ─── 直書句流：每頁四句亂數錯落、逐字填入、殘影淡出 ─── */
 body.template-columnflow #lyrics-container {
@@ -1803,9 +1914,10 @@ body.template-ktv #lyrics-container {
    ═══════════════════════════════════════════ */
 #stanza-root {
   position: fixed;
-  left: 5.5%;
-  top: 15%;
-  width: 28%;
+  /* 橫排：左右邊距＝詳細設定的「左右邊距」；上下邊距在基準 15% 上加減；寬度＝「歌詞區最大寬度」（夾住上限） */
+  left: var(--lyric-padding-x, 60px);
+  top: calc(15% + var(--lyric-padding-y, 48px) - 48px);
+  width: clamp(160px, var(--lyric-max-width, 32%), 52%);
   height: 66%;
   pointer-events: none;
   text-align: left;   /* 整段左貼，不吃 --lyric-text-align 的置中 */
@@ -1816,6 +1928,13 @@ body.template-ktv #lyrics-container {
   --st-nib: color-mix(in oklab, var(--lyric-color-active, #cfe3ef) 40%, #ffffff);
 }
 .st-rule { position: absolute; left: -14px; top: 0; bottom: 0; width: 1px; background: color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 24%, transparent); }
+/* 裝飾：邊界細線的上下端各一小截橫向收筆，像詩頁的欄線端點 */
+.st-rule::before, .st-rule::after {
+  content: ""; position: absolute; left: -3px; width: 8px; height: 1px;
+  background: color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 40%, transparent);
+}
+.st-rule::before { top: 8%; }
+.st-rule::after { bottom: 8%; }
 .st-rule i {
   position: absolute;
   left: -1px;
@@ -1824,6 +1943,13 @@ body.template-ktv #lyrics-container {
   border-radius: 2px;
   transition: top 0.34s cubic-bezier(0.22, 1, 0.3, 1), height 0.34s cubic-bezier(0.22, 1, 0.3, 1), opacity 0.3s ease;
 }
+/* 讀字頭上下端的小翼：讓筆尖標記不是一根光禿的長方形 */
+.st-rule i::before, .st-rule i::after {
+  content: ""; position: absolute; left: -2px; width: 7px; height: 1px;
+  background: color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 70%, transparent);
+}
+.st-rule i::before { top: 0; }
+.st-rule i::after { bottom: 0; }
 .st-win {
   position: relative;
   height: 100%;
@@ -1853,6 +1979,9 @@ body.template-ktv #lyrics-container {
   text-shadow:
     0 0 calc(var(--ink, 0) * 0.12em) color-mix(in oklab, var(--st-full) 34%, transparent),
     var(--lyric-shadow, 0 1px 4px rgba(0, 0, 0, 0.72));
+  /* 描邊：吃詳細設定的「文字描邊寬度／顏色」（--lyric-stroke-*）。描邊隨上墨淡入。 */
+  -webkit-text-stroke: calc(var(--lyric-stroke-width, 0px) * var(--ink, 0)) var(--lyric-stroke-color, rgba(0, 0, 0, 0.8));
+  paint-order: stroke fill;
   translate: 0 calc((1 - var(--ink, 0)) * var(--st-settle, 2px) + var(--breathe));
 }
 /* 讀字頭：正在唱的那一個字往白偏、加一圈很緊的高光。不是大光斑——大暈會糊掉鄰字 */
@@ -1903,64 +2032,83 @@ body.template-ktv #lyrics-container {
 }
 .st-ln.cur .st-tr { opacity: 1; }
 
-/* ─── 直排（原 migiwa）：一句一直欄、貼畫面外緣，中央留給主播 ─── */
+/* ─── 直排＝四相漂字：批次直欄貼畫面外緣，每字從四角漂入定點、入場後靜止 ─── */
 #stanza-root.st-vertical { left: 0; right: 0; top: 0; width: auto; height: 100%; }
 #stanza-root.st-vertical .st-rule { display: none; }
 #stanza-root.st-vertical .st-win { overflow: visible; -webkit-mask-image: none; mask-image: none; }
 #stanza-root.st-vertical .st-body { transition: none; transform: none; }
-.st-ln.st-v {
+
+/* 一條直欄＝一句。字自然沿 vertical-rl 由上往下排（不絕對定位，欄會自撐大小）。
+   位置（left/right/top）與整欄縮放由模板端逐幀寫 inline style。 */
+.st-col {
   position: absolute;
-  top: 18%;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.42em;
-  margin: 0;
-  font-size: calc(var(--display-font-size, 42px) * var(--st-vscale, 1));
-  opacity: 1;
-  transition: opacity 0.42s ease, translate 0.42s ease;
-}
-.st-ln.st-v.is-gone { opacity: 0; }
-/* DOM 外→內：翻譯欄 → 軌欄 → 主欄。靠右那側反轉 flex 方向，兩側才都是「外緣＝軌與譯」 */
-.st-ln.st-v-right { right: 5%; left: auto; flex-direction: row-reverse; max-width: calc(45% - var(--st-safe, 12%)); }
-.st-ln.st-v-right.is-gone { translate: 1.2em 0; }
-.st-ln.st-v-left { left: 5%; right: auto; flex-direction: row; max-width: calc(45% - var(--st-safe, 12%)); }
-.st-ln.st-v-left.is-gone { translate: -1.2em 0; }
-.st-ln.st-v .st-main {
-  display: block;
+  top: 0;
   writing-mode: vertical-rl;
   text-orientation: upright;
-  max-height: 66vh;
-  line-height: 1.08;
+  font-size: var(--display-font-size, 42px);
+  font-weight: var(--display-font-weight, 600);
+  line-height: 1.18;
   letter-spacing: var(--lyric-letter-spacing, 0.04em);
-  font-size: 1em;
+  white-space: nowrap;   /* 直排時避免整欄折成第二欄 */
+  color: var(--lyric-color, #f4f7fa);
+  text-shadow: 0 0 0.5em rgba(210, 225, 255, 0.18), var(--lyric-shadow, 0 1px 4px rgba(0, 0, 0, 0.72));
+  transform: scale(var(--sc, 1));
+  transform-origin: top center;
+  will-change: filter, opacity;
 }
-.st-ln.st-v .st-ch {
-  /* 直排的落定微移改成水平方向 */
-  translate: calc((1 - var(--ink, 0)) * var(--st-settle, 2px) + var(--breathe)) 0;
+/* 舊批退場：整批模糊淡出、往外緣飄一點 */
+.st-col.is-out {
+  opacity: 0;
+  filter: blur(0.16em);
+  transition: opacity 0.6s ease, filter 0.6s ease, transform 0.6s ease;
 }
-.st-ln.st-v .st-railwrap { position: relative; width: 2px; height: 66vh; }
-.st-ln.st-v .st-rail {
+.st-col.st-col-right.is-out { transform: scale(var(--sc, 1)) translateX(1.4em); }
+.st-col.st-col-left.is-out { transform: scale(var(--sc, 1)) translateX(-1.4em); }
+
+/* 一個字。沿 vertical-rl 的 inline 軸（由上往下）自然排；transform／opacity／filter 逐幀寫。 */
+.st-g {
+  display: inline-block;
+  opacity: 0;
+  transform-origin: 50% 55%;
+  /* 描邊：吃詳細設定的 --lyric-stroke-*（跟橫排 .st-ch 同一組變數） */
+  -webkit-text-stroke: var(--lyric-stroke-width, 0px) var(--lyric-stroke-color, rgba(0, 0, 0, 0.8));
+  paint-order: stroke fill;
+  will-change: transform, opacity, filter;
+}
+
+/* 裝飾：一批直欄外緣的細髮絲欄線 + 頂端一小截起筆橫線 */
+.st-deco {
   position: absolute;
-  inset: 0;
-  width: 2px;
-  height: 100%;
-  bottom: auto;
+  z-index: 1;
+  font-size: var(--display-font-size, 42px);
   opacity: 1;
+  transition: opacity 0.5s ease;
 }
-.st-ln.st-v .st-rail::after { left: 0; top: 0; right: 0; bottom: auto; width: 100%; height: var(--p, 0%); background: linear-gradient(180deg, color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 25%, transparent), var(--lyric-color-active, #a9cfe5)); }
-.st-ln.st-v .st-tr {
-  writing-mode: vertical-rl;
-  height: auto;
-  max-height: 66vh;
-  margin: 0;
-  opacity: 1;
-  font-size: var(--lyric-romaji-size, 0.5em);
+.st-deco.is-out { opacity: 0; transition: opacity 0.6s ease; }
+.st-deco-rule {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 60vh;
+  background: linear-gradient(180deg,
+    transparent,
+    color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 30%, transparent) 10%,
+    color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 20%, transparent) 76%,
+    transparent);
 }
+.st-deco-tick {
+  position: absolute;
+  top: 0;
+  width: 0.5em;
+  height: 1px;
+  background: color-mix(in oklab, var(--lyric-color-active, #a9cfe5) 55%, transparent);
+}
+.st-deco-right .st-deco-rule, .st-deco-right .st-deco-tick { right: 0; }
+.st-deco-left .st-deco-rule, .st-deco-left .st-deco-tick { left: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .st-body,
   .st-rule i,
-  .st-ln.st-v,
-  .st-rail,
-  .st-tr { transition: none; }
+  .st-col,
+  .st-deco { transition: none; }
 }

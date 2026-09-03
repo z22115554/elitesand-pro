@@ -46,20 +46,21 @@ function getDefaultLyricSettings() {
       facet: { template: 'facet', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
       drift: { template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
       aura: { template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
-      ktv: { template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center' },
+      ktv: { template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center', ktvInterludeText: '', ktvEndingText: '' },
       columnflow: { template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4 },
-      paperstrip: { template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1 },
+      paperstrip: { template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
       mirror: { template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
       lightboard: { template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardSlideIn: false },
-      stanza: { template: 'stanza', fontSize: 56, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'left', stanzaOrient: 'horizontal', stanzaAltSides: true, stageSafeMargin: 12 },
-      typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d' },
+      stanza: { template: 'stanza', fontSize: 56, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'left', stanzaOrient: 'horizontal', stageSafeMargin: 12, strokeWidth: 1.5, strokeColor: '#0d1a26', paddingX: 60, paddingY: 48, maxWidth: 32, animationIntensity: 'normal' },
+      typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
+      wordscape: { template: 'wordscape', fontWeight: 900, fontSize: 56, color: '#0c0e12', activeColor: '#ed3153', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, animationIntensity: 'normal' },
     },
   };
 }
 
 // 所有歌單模板都各自持有一份外觀設定。舊 state 的 shared/scene 資料在載入時遷移。
 const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
-const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager'];
+const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note', 'film'];
 
 /**
  * 建立狀態容器

@@ -25,7 +25,7 @@
   // OBS Browser Source 的實際寬高就是歌單的版面框：來源拉多大，歌單就排多大。
   // 沒有第二種輸出模式，也沒有 URL 參數——同一個 /setlist 網址在任何來源尺寸都成立。
   // 場景版（timeline / diagonal / constellation）不走這條，維持原本的全幅舞台行為。
-  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager']);
+  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note']);
   // 長歌單只在有直向清單的模板循環捲動。卡片／索引／排行榜／終端機維持裁列；
   // simple 與 signal 是固定版位，只顯示現在與下一首，沒有可捲動的直向隊列。
   const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager']);
@@ -496,7 +496,7 @@
     if (usesAutoScrollQueues()) return;
     trimToFit(rootEl.querySelector('#cl-up'), 'start');
     trimToFit(rootEl.querySelector('#cl-past'), 'end');
-    ['#term-list', '#bb-list', '#cards-list', '#ix-list']
+    ['#term-list', '#bb-list', '#cards-list', '#ix-list', '#nt-list']
       .forEach((sel) => trimToFit(rootEl.querySelector(sel), 'start'));
     // 四款皮膚：未唱靠近正播（裁遠端）、已唱保留最新（裁最舊）——跟 classic 的 cl-up/cl-past 邏輯一致。
     SKIN_LAYOUT_IDS.forEach((id) => {
@@ -947,7 +947,123 @@
   const skinLayouts = {};
   SKIN_LAYOUT_IDS.forEach((id) => { skinLayouts[id] = makeSkinLayout(id); });
 
-  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index, ...skinLayouts };
+  // ═══════════════════════════════════════════
+  // flap：貼底發車標橫帶 —— 現在＋整場曲目排成一條路線（過站點）
+  // ═══════════════════════════════════════════
+  const flap = {
+    mount(root) {
+      root.innerHTML =
+        '<div class="lay-stage flap-stage"><div class="flap-board">' +
+          '<div class="flap-top"><span class="flap-run" id="fp-run"></span><span class="flap-live">● LIVE</span></div>' +
+          '<div class="flap-now"><span class="flap-tag" id="fp-tag">▶ Now Playing</span>' +
+            '<span class="flap-dest setlist-title" id="fp-dest"></span>' +
+            '<span class="flap-by setlist-artist" id="fp-by"></span></div>' +
+          '<div class="flap-strip" id="fp-strip"></div>' +
+        '</div></div>';
+    },
+    render(root) {
+      const { arr } = flat();
+      const total = arr.length;
+      const hasCurrent = !!model.current;
+      const now = model.current || model.upcoming[0] || null;
+      const ordinal = now ? model.past.length + 1 : 0;
+      root.querySelector('#fp-run').textContent = ordinal
+        ? `${t('setlist.performanceList')}　${String(ordinal).padStart(2, '0')} / ${String(total).padStart(2, '0')}`
+        : t('setlist.performanceList');
+      root.querySelector('#fp-tag').textContent = hasCurrent ? lastLabels.nowPlaying : t('setlist.startingSoon');
+      root.querySelector('#fp-dest').textContent = now ? now.title : t('setlist.notStarted');
+      const by = root.querySelector('#fp-by');
+      by.textContent = now ? now.artist : '';
+      by.hidden = !now || !now.artist;
+      // 路線條只顯示以「正在播放」為中心的一段視窗：歌單再長也保持等距、目前歌居中，
+      // 逼近尾端時視窗停住、目前歌才逐漸移到最右。
+      const FLAP_WIN = 15;
+      const centerIdx = arr.findIndex((it) => it.state === 'now');
+      const anchor = centerIdx >= 0 ? centerIdx : Math.min(model.past.length, Math.max(0, total - 1));
+      const start = total > FLAP_WIN
+        ? Math.max(0, Math.min(total - FLAP_WIN, anchor - (FLAP_WIN >> 1)))
+        : 0;
+      const windowStops = arr.slice(start, start + FLAP_WIN);
+      const strip = root.querySelector('#fp-strip');
+      strip.innerHTML = '<div class="flap-rail"></div>' + (total
+        ? windowStops.map((it) => {
+          const st = it.state === 'now' ? 'here' : it.state === 'done' ? 'passed' : 'ahead';
+          return `<div class="flap-stop flap-stop--${st}"><span class="flap-dot"></span><span class="flap-lb">${escapeHtml(it.title)}</span></div>`;
+        }).join('')
+        : `<div class="flap-stop flap-stop--ahead"><span class="flap-dot"></span><span class="flap-lb">${escapeHtml(model.active ? t('setlist.startingSoon') : t('setlist.notStarted'))}</span></div>`);
+    },
+  };
+
+  // ═══════════════════════════════════════════
+  // note：手帳頁 —— 橫線筆記本側欄，單一清單，已唱蓋章
+  // ═══════════════════════════════════════════
+  const note = {
+    mount(root) {
+      root.innerHTML =
+        '<div class="lay-stage note-stage"><aside class="note-sheet">' +
+          `<h2 class="note-title">${escapeHtml(t('setlist.performanceList'))}</h2>` +
+          '<div class="note-list" id="nt-list"></div>' +
+          '<div class="note-foot" id="nt-foot"></div>' +
+        '</aside></div>';
+    },
+    render(root) {
+      const list = windowList();
+      const done = model.past.length;
+      const total = done + (model.current ? 1 : 0) + model.upcoming.length;
+      root.querySelector('#nt-foot').textContent = total
+        ? `${String(done).padStart(2, '0')} / ${String(total).padStart(2, '0')}` : '';
+      const box = root.querySelector('#nt-list');
+      if (!list.length && model.active) {
+        box.innerHTML = `<div class="note-empty">${escapeHtml(t('setlist.startingSoon'))}</div>`;
+        return;
+      }
+      box.innerHTML = list.map((s, i) => {
+        const st = s.state === 'active' ? 'now' : s.state === 'done' ? 'done' : 'wait';
+        const num = String(list.start + i + 1).padStart(2, '0');
+        const stamp = st === 'done' ? `<span class="note-stamp">${escapeHtml(lastLabels.done)}</span>` : '';
+        // active：trimToFit 會保護這一列不被裁掉、並以它為中心裁遠端 —— 歌單再長、來源再小，正在演唱那首一定看得到
+        return `<div class="note-it note-it--${st}${st === 'now' ? ' active' : ''}"><span class="note-nm-no">${num}</span><span class="note-bx"></span>` +
+          `<span class="note-tx"><span class="note-nm setlist-title">${escapeHtml(s.title)}</span>` +
+          `${s.artist ? `<span class="note-ar setlist-artist">${escapeHtml(s.artist)}</span>` : ''}</span>${stamp}</div>`;
+      }).join('');
+    },
+  };
+
+  // ═══════════════════════════════════════════
+  // film：フィルム —— 貼邊 35mm 直條，正在播放框在 gate 裡
+  // ═══════════════════════════════════════════
+  const film = {
+    mount(root) {
+      root.innerHTML =
+        '<div class="lay-stage film-stage"><div class="film-strip">' +
+          '<div class="film-perf film-perf--l"></div><div class="film-perf film-perf--r"></div>' +
+          '<div class="film-frames" id="fm-frames"></div>' +
+          '<div class="film-gate"></div>' +
+        '</div></div>';
+    },
+    render(root) {
+      const arr = flat().arr;
+      const FH = 96;
+      const frames = root.querySelector('#fm-frames');
+      if (!arr.length) {
+        frames.innerHTML = `<div class="film-empty">${escapeHtml(model.active ? t('setlist.startingSoon') : t('setlist.notStarted'))}</div>`;
+        frames.style.transform = '';
+        return;
+      }
+      const nowIdx = arr.findIndex((it) => it.state === 'now');
+      const center = nowIdx >= 0 ? nowIdx : Math.min(model.past.length, Math.max(0, arr.length - 1));
+      frames.innerHTML = arr.map((it, i) => {
+        const st = it.state === 'now' ? 'now' : it.state === 'done' ? 'done' : 'up';
+        return `<div class="film-frame film-frame--${st}"><div class="film-num">SC-${String(i + 1).padStart(2, '0')}</div>` +
+          `<div class="film-t setlist-title">${escapeHtml(it.title)}</div>` +
+          `<div class="film-a setlist-artist">${escapeHtml(it.artist || '')}</div></div>`;
+      }).join('');
+      // .film-frames 的 top:50% 對齊來源中線，再往上移到正在播放那格置中（片門在同一條線上）
+      frames.style.transform = `translateY(calc(-${FH / 2}px - ${center * FH}px))`;
+    },
+  };
+
+  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index, flap, note, film, ...skinLayouts };
 
   // ─── 版型掛載/切換 ───
   function setLayout(id) {
@@ -1008,7 +1124,7 @@
   } catch (e) { /* 退回下面的 resize 監聽 */ }
   window.addEventListener('resize', scheduleFit);
 
-  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager'];
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note', 'film'];
   const effTarget = (l) => (SETLIST_LAYOUTS.includes(l) ? l : 'classic');
   // 取某版型生效的設定；舊 payload 仍可讀，避免 OBS 快取中的舊頁面在更新過渡時失去外觀。
   function effStyleFrom(data, layout) {

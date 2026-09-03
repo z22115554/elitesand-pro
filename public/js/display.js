@@ -478,7 +478,8 @@
     isControllerPlaying = false;
     audioPlayer.pause();
     localAudioReady = false;
-    KaraokeEngine.clearDisplay();
+    // hard：整首播完，連歌詞來源一起清掉並停時鐘，殘留的一幀 onFrame 也不會把最後一句畫回來
+    KaraokeEngine.clearDisplay({ hard: true });
     hideMetronome();
   });
 
@@ -723,6 +724,8 @@
       // 打字機模板：左右對話泡泡底色（其他模板不吃這兩個變數）
       twBubbleRight: ['--tw-bubble-right', v => v],
       twBubbleLeft: ['--tw-bubble-left', v => v],
+      // 紙帶逐字：紙條顏色（其他模板不吃）
+      paperstripColor: ['--ps-strip-color', v => v],
       strokeWidth: ['--lyric-stroke-width', v => `${v}px`],
       strokeColor: ['--lyric-stroke-color', v => v],
       shadow: ['--lyric-shadow', v => v],
@@ -829,16 +832,45 @@
       delete document.body.dataset.lightboardIdle;
       delete document.body.dataset.lightboardSlide;
     }
+    if (s.template === 'paperstrip') {
+      document.body.dataset.paperstripOrient = s.paperstripOrient === 'vertical' ? 'vertical' : 'horizontal';
+    } else {
+      delete document.body.dataset.paperstripOrient;
+    }
+    if (s.template === 'typewriter') {
+      document.body.dataset.twStickerEnabled = s.twStickerEnabled === false ? '0' : '1';
+      const g = Math.round(Number(s.twStickerGapMs));
+      document.body.dataset.twStickerGapMs = String(Number.isFinite(g) ? Math.max(3000, Math.min(20000, g)) : 6000);
+    } else {
+      delete document.body.dataset.twStickerEnabled;
+      delete document.body.dataset.twStickerGapMs;
+    }
+    if (s.template === 'ktv') {
+      // 間奏／結尾自訂字樣：空字串＝依顯示語言帶預設（模板端處理）
+      if (typeof s.ktvInterludeText === 'string' && s.ktvInterludeText.trim()) {
+        document.body.dataset.ktvInterludeText = s.ktvInterludeText.trim();
+      } else {
+        delete document.body.dataset.ktvInterludeText;
+      }
+      if (typeof s.ktvEndingText === 'string' && s.ktvEndingText.trim()) {
+        document.body.dataset.ktvEndingText = s.ktvEndingText.trim();
+      } else {
+        delete document.body.dataset.ktvEndingText;
+      }
+    } else {
+      delete document.body.dataset.ktvInterludeText;
+      delete document.body.dataset.ktvEndingText;
+    }
     if (s.template === 'stanza') {
       document.body.dataset.stanzaOrient = s.stanzaOrient === 'vertical' ? 'vertical' : 'horizontal';
-      document.body.dataset.stanzaAltSides = s.stanzaAltSides === false ? '0' : '1';
       if (s.stanzaOrient === 'vertical') {
+        // 直排（四相漂字）：靠左／靠右／左右分散沿用 lyricPosition（下方 lyricPos dataset 帶出）；
+        // 左右分散時中央留白吃 stageSafeMargin
         const stanzaSafe = Math.round(Number(s.stageSafeMargin));
         document.body.dataset.stageSafeMargin = String(Number.isFinite(stanzaSafe) ? Math.max(2, Math.min(25, stanzaSafe)) : 12);
       }
     } else {
       delete document.body.dataset.stanzaOrient;
-      delete document.body.dataset.stanzaAltSides;
     }
 
     // 舞台模板（Pulse/Facet/Drift/Aura）共用同一套「左右分散」機制與中央安全距離。

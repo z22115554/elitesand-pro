@@ -29,14 +29,40 @@
   const SWAP_MIN_HOLD_MS = 1200;   // 剛唱完的行至少全填色停留這麼久，才可能被間奏文字取代
   const FILLER_FULL_HOLD_MS = 2000; // 間奏文案在倒數前兩秒掃完，完整停留後才讓位
   const ENDING_DELAY_MS = 1500;    // 全曲最後一段唱完、停留多久後才換成「來賓請掌聲鼓勵」
-  const FILLER_MESSAGES = [
+  // 繁中維持原本的三則輪播文案；其他語言用單一在地化詞（見 i18n ktv.interlude/ktv.ending）。
+  // 使用者可在面板自訂「間奏字樣／結尾字樣」，填了就完全照他的字（語言自負）。
+  const LEGACY_FILLER_MESSAGES = [
     '《Elitesand Pro伴唱歡樂無限》',
     '《間奏請稍後》',
     '《下一段即將開始》',
   ];
+  const LEGACY_ENDING_MESSAGE = '《來賓請掌聲鼓勵》';
   const COUNTDOWN_GLYPHS = ['★', '●'];
   const COUNTDOWN_ICON_COUNT = 5;
-  const ENDING_MESSAGE = '《來賓請掌聲鼓勵》';
+
+  function ktvLocale() {
+    return (typeof window !== 'undefined' && window.I18n && typeof window.I18n.current === 'function')
+      ? window.I18n.current() : 'zh-TW';
+  }
+  function i18nText(key, fallback) {
+    if (typeof window !== 'undefined' && window.I18n && typeof window.I18n.t === 'function') {
+      const v = window.I18n.t(key);
+      if (v && v !== key) return v;
+    }
+    return fallback;
+  }
+  function fillerMessages() {
+    const override = ((document.body && document.body.dataset && document.body.dataset.ktvInterludeText) || '').trim();
+    if (override) return [override];
+    if (ktvLocale() === 'zh-TW') return LEGACY_FILLER_MESSAGES;
+    return [i18nText('ktv.interlude', 'Instrumental')];
+  }
+  function endingMessage() {
+    const override = ((document.body && document.body.dataset && document.body.dataset.ktvEndingText) || '').trim();
+    if (override) return override;
+    if (ktvLocale() === 'zh-TW') return LEGACY_ENDING_MESSAGE;
+    return i18nText('ktv.ending', 'Thanks for listening');
+  }
 
   let rootEl = null;
   let slots = null;   // { top: slotState, bottom: slotState }
@@ -481,10 +507,11 @@
 
   function showFiller(slot, occurrenceKey, timeMs, sweepStartMs, sweepEndMs, seeking) {
     // 依歌詞中的出現順序輪替，長歌不會剛好一直抽到同一則文案。
+    const messages = fillerMessages();
     const messageIndex = occurrenceKey === 'intro'
       ? 0
-      : Math.abs(occurrenceKey) % FILLER_MESSAGES.length;
-    const text = FILLER_MESSAGES[messageIndex];
+      : Math.abs(occurrenceKey) % messages.length;
+    const text = messages[messageIndex];
     const prep = buildStaticPrep(text);
     setSlotContent(slot, `f${occurrenceKey}`, prep);
     // 間奏文字有自己的穩定掃色，掃完後停留完整內容；倒數另起一個階段。
@@ -494,7 +521,7 @@
   }
 
   function showEnding(slot) {
-    const prep = buildStaticPrep(ENDING_MESSAGE);
+    const prep = buildStaticPrep(endingMessage());
     setSlotContent(slot, 'ending', prep);
     applyFill(slot, prep.width);
   }
@@ -631,6 +658,15 @@
     onLyricsLoaded(lines, ctx) {
       unitsBuiltForLines = null; // 強制重建（新歌／字級可能不同）
       if (slots) { clearSlot(slots.top); clearSlot(slots.bottom); }
+    },
+
+    onSettings(_settings, ctx) {
+      // 間奏／結尾字樣（或語言）可能改了——bump generation 讓 slot key 失效、下一幀用新字重繪
+      unitsGeneration += 1;
+      if (slots) { clearSlot(slots.top); clearSlot(slots.bottom); }
+      if (ctx && typeof ctx.getCurrentTimeMs === 'function') {
+        computeAndRender(ctx.getCurrentTimeMs(), ctx.getLyrics(), true);
+      }
     },
 
     onSeek(timeMs, ctx) {

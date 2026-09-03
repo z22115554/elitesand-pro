@@ -541,6 +541,7 @@
           warningEl.hidden = enough;
           [streamSel, headphoneSel, toggle].forEach((el) => { el.disabled = !enough; });
           if (!enough) toggle.checked = false;
+          if (typeof syncClickTestBtn === 'function') syncClickTestBtn(); // test7：裝置狀態變了同步按鈕可用性
           // 開頁面時的安靜自動列舉（見下方 Permissions API 那段）不彈 toast——只有使用者
           // 自己按「重新整理」才需要這個確認回饋，安靜載入跳出來反而像沒來由的通知。
           if (!silent) AppShared.showToast(`已偵測到 ${outputs.length} 個獨立音訊輸出裝置`, enough ? 'success' : 'info');
@@ -592,6 +593,36 @@
         streamVolumeVal.textContent = `${pct}%`;
         if (typeof AppShared.setDualAudioStreamVolume === 'function') AppShared.setDualAudioStreamVolume(pct / 100);
       });
+
+      // ─── 點擊對時測試（test7）───
+      const clickTestBtn = document.getElementById('dual-audio-click-test');
+      function syncClickTestBtn() {
+        if (!clickTestBtn) return;
+        const running = typeof AppShared.isDualAudioClickTestRunning === 'function' && AppShared.isDualAudioClickTestRunning();
+        clickTestBtn.textContent = running ? '停止對時測試' : '開始對時測試';
+        // 只有雙路路由真的開著才有意義（toggle 打勾 + 至少兩個輸出裝置）
+        clickTestBtn.disabled = !toggle.checked || toggle.disabled;
+      }
+      if (clickTestBtn) {
+        clickTestBtn.addEventListener('click', () => {
+          const running = typeof AppShared.isDualAudioClickTestRunning === 'function' && AppShared.isDualAudioClickTestRunning();
+          if (running) {
+            if (typeof AppShared.stopDualAudioClickTest === 'function') AppShared.stopDualAudioClickTest();
+          } else if (typeof AppShared.startDualAudioClickTest === 'function') {
+            const ok = AppShared.startDualAudioClickTest();
+            if (!ok) AppShared.showToast('請先開啟「雙路音訊路由」並播放一首歌，讓路由生效後再測試', 'info');
+          }
+          syncClickTestBtn();
+        });
+        toggle.addEventListener('change', syncClickTestBtn);
+        document.addEventListener('view:change', (e) => {
+          if (e.detail && e.detail.view !== 'general' && typeof AppShared.stopDualAudioClickTest === 'function') {
+            AppShared.stopDualAudioClickTest();
+            syncClickTestBtn();
+          }
+        });
+        syncClickTestBtn();
+      }
     })();
 
     // 兩顆下載按鈕（新手教學／連線與系統）共用同一組文字更新函式；換語言時要一起重畫。
