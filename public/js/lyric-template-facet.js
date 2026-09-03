@@ -313,6 +313,7 @@
   LyricTemplates.register({
     id: 'facet',
     label: '折光階梯',
+    settings: [...LyricTemplateSettings.STAGE_SAFE],
 
     mount(container, ctx) {
       rootEl = document.createElement('div');

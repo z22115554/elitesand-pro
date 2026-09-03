@@ -325,6 +325,7 @@
   LyricTemplates.register({
     id: 'drift',
     label: '斜拍告白',
+    settings: [...LyricTemplateSettings.STAGE_SAFE],
 
     mount(container, ctx) {
       rootEl = document.createElement('div');

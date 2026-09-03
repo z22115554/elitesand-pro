@@ -798,111 +798,11 @@
     if (typeof s.animationIntensity === 'string') {
       document.body.dataset.lyricIntensity = s.animationIntensity;
     }
-    // 直書句流的兩種外觀共用同一個時間線；先寫入 dataset，讓首次 mount 就取得正確外觀。
-    if (s.template === 'columnflow') {
-      document.body.dataset.columnflowVariant = s.columnflowVariant === 'fuda' ? 'fuda' : 'sen';
-      document.body.dataset.columnflowPlacement = ['left', 'right', 'split'].includes(s.columnflowPlacement) ? s.columnflowPlacement : 'split';
-      const columnflowMaxLines = Math.round(Number(s.columnflowMaxLines));
-      document.body.dataset.columnflowMaxLines = String(Number.isFinite(columnflowMaxLines)
-        ? Math.max(1, Math.min(6, columnflowMaxLines))
-        : 4);
-      // 中央安全距離：畫面正中保留給主播真人／人物模型的區域，兩側直行不得跨入。
-      const columnflowSafeMargin = Math.round(Number(s.columnflowSafeMargin));
-      document.body.dataset.columnflowSafeMargin = String(Number.isFinite(columnflowSafeMargin)
-        ? Math.max(5, Math.min(25, columnflowSafeMargin))
-        : 11);
-      // 安全距離引導線預設只有面板預覽看得到；使用者明確打開才會疊在真正的 OBS 來源上。
-      document.body.classList.toggle('cf-show-safe-zone', !!s.columnflowShowSafeZoneOnObs);
-    } else {
-      delete document.body.dataset.columnflowVariant;
-      delete document.body.dataset.columnflowPlacement;
-      delete document.body.dataset.columnflowMaxLines;
-      delete document.body.dataset.columnflowSafeMargin;
-      document.body.classList.remove('cf-show-safe-zone');
-    }
-    // 燈牌／詩頁／Migiwa：模板專屬設定走 body.dataset（同 columnflow 慣例），模板端逐幀讀取
-    if (s.template === 'lightboard') {
-      document.body.dataset.lightboardFont = ['cubic11', 'boutique9x9'].includes(s.lightboardFont) ? s.lightboardFont : 'cubic11';
-      document.body.dataset.lightboardPan = s.lightboardPan === false ? '0' : '1';
-      document.body.dataset.lightboardIdle = s.lightboardIdleMarquee === false ? '0' : '1';
-      document.body.dataset.lightboardSlide = s.lightboardSlideIn ? '1' : '0';
-    } else {
-      delete document.body.dataset.lightboardFont;
-      delete document.body.dataset.lightboardPan;
-      delete document.body.dataset.lightboardIdle;
-      delete document.body.dataset.lightboardSlide;
-    }
-    if (s.template === 'paperstrip') {
-      document.body.dataset.paperstripOrient = s.paperstripOrient === 'vertical' ? 'vertical' : 'horizontal';
-    } else {
-      delete document.body.dataset.paperstripOrient;
-    }
-    if (s.template === 'typewriter') {
-      document.body.dataset.twStickerEnabled = s.twStickerEnabled === false ? '0' : '1';
-      const g = Math.round(Number(s.twStickerGapMs));
-      document.body.dataset.twStickerGapMs = String(Number.isFinite(g) ? Math.max(3000, Math.min(20000, g)) : 6000);
-    } else {
-      delete document.body.dataset.twStickerEnabled;
-      delete document.body.dataset.twStickerGapMs;
-    }
-    if (s.template === 'ktv') {
-      // 間奏／結尾自訂字樣：空字串＝依顯示語言帶預設（模板端處理）
-      if (typeof s.ktvInterludeText === 'string' && s.ktvInterludeText.trim()) {
-        document.body.dataset.ktvInterludeText = s.ktvInterludeText.trim();
-      } else {
-        delete document.body.dataset.ktvInterludeText;
-      }
-      if (typeof s.ktvEndingText === 'string' && s.ktvEndingText.trim()) {
-        document.body.dataset.ktvEndingText = s.ktvEndingText.trim();
-      } else {
-        delete document.body.dataset.ktvEndingText;
-      }
-    } else {
-      delete document.body.dataset.ktvInterludeText;
-      delete document.body.dataset.ktvEndingText;
-    }
-    if (s.template === 'stanza') {
-      document.body.dataset.stanzaOrient = s.stanzaOrient === 'vertical' ? 'vertical' : 'horizontal';
-      if (s.stanzaOrient === 'vertical') {
-        // 直排（四相漂字）：靠左／靠右／左右分散沿用 lyricPosition（下方 lyricPos dataset 帶出）；
-        // 左右分散時中央留白吃 stageSafeMargin
-        const stanzaSafe = Math.round(Number(s.stageSafeMargin));
-        document.body.dataset.stageSafeMargin = String(Number.isFinite(stanzaSafe) ? Math.max(2, Math.min(25, stanzaSafe)) : 12);
-      }
-    } else {
-      delete document.body.dataset.stanzaOrient;
-    }
-
-    // 舞台模板（Pulse/Facet/Drift/Aura）共用同一套「左右分散」機制與中央安全距離。
-    if (['pulse', 'facet', 'drift', 'aura'].includes(s.template)) {
-      const stageSafeMargin = Math.round(Number(s.stageSafeMargin));
-      const clampedStageSafeMargin = Number.isFinite(stageSafeMargin)
-        ? Math.max(2, Math.min(25, stageSafeMargin))
-        : 2;
-      document.body.dataset.stageSafeMargin = String(clampedStageSafeMargin);
-      // CSS 的 .pos-left/.pos-right 邊界讀的是 CSS 自訂屬性（var()），不是 dataset——
-      // 兩者是不同機制，只寫 dataset 的話排版邊界會一直吃 CSS 裡的預設值，量不到使用者真正調的數字。
-      document.body.style.setProperty('--stage-safe-margin', String(clampedStageSafeMargin));
-      document.body.classList.toggle('stage-show-safe-zone', !!s.stageShowSafeZoneOnObs);
-    } else {
-      delete document.body.dataset.stageSafeMargin;
-      document.body.style.removeProperty('--stage-safe-margin');
-      document.body.classList.remove('stage-show-safe-zone');
-    }
-    // 舞台模板共用中央安全距離。paperstrip / mirror 也吃同一套，讓中央人物區真的留白。
-    if (['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)) {
-      const stageSafeMargin = Math.round(Number(s.stageSafeMargin));
-      const clampedStageSafeMargin = Number.isFinite(stageSafeMargin)
-        ? Math.max(2, Math.min(25, stageSafeMargin))
-        : 2;
-      document.body.dataset.stageSafeMargin = String(clampedStageSafeMargin);
-      document.body.style.setProperty('--stage-safe-margin', String(clampedStageSafeMargin));
-      document.body.classList.toggle('stage-show-safe-zone', !!s.stageShowSafeZoneOnObs);
-    } else {
-      delete document.body.dataset.stageSafeMargin;
-      document.body.style.removeProperty('--stage-safe-margin');
-      document.body.classList.remove('stage-show-safe-zone');
-    }
+    // 排版模板專屬設定（直書句流的排向、燈牌的燈色/字型、KTV 間奏字樣、舞台系中央安全距離…）：
+    // 由各模板在 register({ settings:[...] }) 自行宣告，LyricTemplateSettings 統一寫進
+    // body.dataset / body.style / class，並清掉切走的模板殘留的同類 key。
+    // 先於 setTemplate() 呼叫，dataset 才會在模板 mount 前就位。
+    if (window.LyricTemplateSettings) window.LyricTemplateSettings.apply(s);
     // 歌詞水平位置：CSS 靠 body class 縮排容器；split 的逐行交替由各模板讀 dataset 處理。
     // 經典疊層完全不支援這個機制（面板已改用九宮格當它的位置控制、對應的四鍵整批隱藏），
     // 但 settings.lyricPosition 的值本身仍會保留使用者在動畫模板下的偏好（不強制清空），

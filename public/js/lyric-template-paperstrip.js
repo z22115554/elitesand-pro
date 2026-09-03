@@ -665,6 +665,12 @@
     id: 'paperstrip',
     label: '紙帶逐字',
 
+    // 排向 + 舞台系共用的中央安全距離（STAGE_SAFE）。
+    settings: [
+      { key: 'paperstripOrient', type: 'enum', values: ['horizontal', 'vertical'], default: 'horizontal', target: 'data:paperstripOrient' },
+      ...LyricTemplateSettings.STAGE_SAFE,
+    ],
+
     mount(container) {
       rootEl = document.createElement('div');
       rootEl.id = 'paperstrip-root';

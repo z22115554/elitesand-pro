@@ -269,6 +269,15 @@
     id: 'lightboard',
     label: '跑馬燈牌',
 
+    // 專屬設定：面板 key → body.dataset（模板端 flag()/fontKey() 逐幀讀）。
+    // 注意 lightboardIdleMarquee 這個面板 key 對應的 dataset 名是 lightboardIdle。
+    settings: [
+      { key: 'lightboardFont', type: 'enum', values: ['cubic11', 'boutique9x9'], default: 'cubic11', target: 'data:lightboardFont' },
+      { key: 'lightboardPan', type: 'bool01', default: true, target: 'data:lightboardPan' },
+      { key: 'lightboardIdleMarquee', type: 'bool01', default: true, target: 'data:lightboardIdle' },
+      { key: 'lightboardSlideIn', type: 'bool01', default: false, target: 'data:lightboardSlide' },
+    ],
+
     mount(container, ctx) {
       rootEl = document.createElement('div');
       rootEl.id = 'lightboard-root';

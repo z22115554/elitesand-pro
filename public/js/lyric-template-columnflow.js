@@ -399,6 +399,16 @@
     id: 'columnflow',
     label: '直書句流',
 
+    // 專屬設定：由 LyricTemplateSettings.apply() 統一寫進 body.dataset / class，
+    // 切走此模板時同一批 key 會被自動清掉（取代 display.js 舊的 else-delete）。
+    settings: [
+      { key: 'columnflowVariant', type: 'enum', values: ['sen', 'fuda'], default: 'sen', target: 'data:columnflowVariant' },
+      { key: 'columnflowPlacement', type: 'enum', values: ['left', 'right', 'split'], default: 'split', target: 'data:columnflowPlacement' },
+      { key: 'columnflowMaxLines', type: 'int', min: 1, max: 6, default: 4, target: 'data:columnflowMaxLines' },
+      { key: 'columnflowSafeMargin', type: 'int', min: 5, max: 25, default: 11, target: 'data:columnflowSafeMargin' },
+      { key: 'columnflowShowSafeZoneOnObs', type: 'flag', className: 'cf-show-safe-zone' },
+    ],
+
     mount(container, ctx) {
       rootEl = document.createElement('div');
       rootEl.id = 'columnflow-root';

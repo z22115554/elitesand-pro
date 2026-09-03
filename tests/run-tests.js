@@ -72,6 +72,7 @@ require('./spout-output-controller.test').register({ test, testAsync, eq, ok });
 require('./spout-display-output.test').register({ test, testAsync, eq, ok });
 require('./spout-settings.test').register({ test, testAsync, eq, ok });
 require('./spout-issue-diagnostics.test').register({ test, testAsync, eq, ok });
+require('./lyric-template-settings.test').register({ test, testAsync, eq, ok });
 
 test('Spout CP05/CP07 keeps the native controls Electron-only and exposes bounded performance evidence', () => {
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
@@ -8160,6 +8161,7 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const templateJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-paperstrip.js'), 'utf8');
+  const templateSettings = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-settings.js'), 'utf8');
   const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
   const displayJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'display.js'), 'utf8');
   const motionKernel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-motion-kernel.js'), 'utf8');
@@ -8190,7 +8192,7 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   ok(motionKernel.includes('function stageSafeMarginPercent()') && motionKernel.includes('function mountStageSafeZoneGuide(rootEl)'), '主線舞台安全框核心必須移植到共用 LyricMotion: ');
   const stagePosIds = (lyricExtras.match(/const STAGE_POSITION_TEMPLATES = \[([^\]]*)\]/) || [])[1] || '';
   ok(["'paperstrip'", "'mirror'", "'pulse'"].every((id) => stagePosIds.includes(id)) && panelHtml.includes('id="stage-safe-margin-field"'), 'Paper Strip 必須接入舞台安全距離設定 UI: ');
-  ok(displayJs.includes("['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'].includes(s.template)") && displayJs.includes("setProperty('--stage-safe-margin'"), 'display 必須把 Paper Strip 的安全距離同步成共用 dataset/CSS 變數: ');
+  ok(templateJs.includes('...LyricTemplateSettings.STAGE_SAFE') && templateSettings.includes("targets: ['data:stageSafeMargin', 'cssvar:--stage-safe-margin']") && templateSettings.includes("body.style.setProperty(name, value)"), 'Paper Strip 的安全距離必須經共用 STAGE_SAFE schema 同步成 dataset + CSS 變數: ');
   ok(templateJs.includes('LyricMotion.mountStageSafeZoneGuide(rootEl)') && templateJs.includes('onSettings()') && displayCss.includes('.stage-safe-zone-band'), 'Paper Strip 必須掛共用安全框並在設定變更時即時同步: ');
   ok(displayCss.includes('width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);') && displayCss.includes('overflow: visible;') && templateJs.includes('entry.groupEl.clientHeight : entry.groupEl.clientWidth) - indent - 2') && templateJs.includes('Math.max(0.22'), 'Paper Strip 安全框必須作為排版寬度而不是裁切遮罩；超長句要先計入縮排並縮到完整可見: ');
   // 直式紙帶：出場／逐字／分頁邏輯不變，只換軸；紙條顏色可調；排向與色彩預設接上
@@ -8366,8 +8368,10 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   ok(panelHtml.includes('id="tw-sticker-field"') && panelHtml.includes('id="tw-sticker-gallery"')
     && panelHtml.includes('id="ls-tw-sticker-gap"'),
     'index.html 必須有對話氣泡的貼圖欄位（開關／門檻／圖庫）: ');
-  ok(displayJsSrc.includes('document.body.dataset.twStickerEnabled') && displayJsSrc.includes('document.body.dataset.twStickerGapMs'),
-    'display.js 必須把貼圖開關／門檻寫進 body.dataset: ');
+  ok(templateJs.includes("key: 'twStickerEnabled'") && templateJs.includes("target: 'data:twStickerEnabled'")
+    && templateJs.includes("key: 'twStickerGapMs'") && templateJs.includes("target: 'data:twStickerGapMs'")
+    && displayJsSrc.includes('LyricTemplateSettings.apply(s)'),
+    '貼圖開關／門檻必須由 typewriter 的 settings schema 宣告，經 LyricTemplateSettings 寫進 body.dataset: ');
   ok(lyricsHandler.includes('settings.twStickerEnabled = !!settings.twStickerEnabled')
     && lyricsHandler.includes('Math.max(3000, Math.min(20000'),
     'server 必須把貼圖開關布林化、門檻夾在 3–20 秒: ');
@@ -8533,9 +8537,12 @@ test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入�
   ['lightboard', 'stanza'].forEach((id) => {
     ok(transformNone.includes('body.template-' + id + ' #lyrics-container'), id + ' 必須列入 transform: none: ');
   });
-  // 模板專屬設定一律走 body.dataset（沿用 columnflow 慣例，不另開 ctx 通道）
-  ok(displayJs.includes('document.body.dataset.lightboardFont') && displayJs.includes('document.body.dataset.stanzaOrient'),
-    '模板專屬設定必須由 display.js 寫進 body.dataset: ');
+  // 模板專屬設定走「模板宣告 settings schema → LyricTemplateSettings 統一寫 body.dataset」
+  ok(displayJs.includes('LyricTemplateSettings.apply(s)') && displayHtml.includes('/js/lyric-template-settings.js'),
+    'display 必須透過 LyricTemplateSettings 橋接器套用模板專屬設定: ');
+  ok(mods.lightboard.includes("key: 'lightboardFont'") && mods.lightboard.includes("target: 'data:lightboardFont'")
+    && mods.stanza.includes("key: 'stanzaOrient'") && mods.stanza.includes("target: 'data:stanzaOrient'"),
+    '模板專屬設定必須在各自 register({ settings }) 內宣告 key 與 dataset target: ');
   ok(displayJs.includes('function syncTrackMetaDataset') && mods.lightboard.includes('dataset.lbTitle'),
     '燈牌銘牌／間奏跑馬要用的曲名必須由 display.js 同步進 dataset: ');
 });

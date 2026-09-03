@@ -218,6 +218,7 @@
   LyricTemplates.register({
     id: 'pulse',
     label: '星砂流光',
+    settings: [...LyricTemplateSettings.STAGE_SAFE],
 
     mount(container, ctx) {
       rootEl = document.createElement('div');

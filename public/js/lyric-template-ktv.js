@@ -640,6 +640,12 @@
     id: 'ktv',
     label: '霓彩伴唱',
 
+    // 長間奏／全曲結尾的自訂字樣。空字串 → 移除該 dataset，模板端依顯示語言帶預設。
+    settings: [
+      { key: 'ktvInterludeText', type: 'text', target: 'data:ktvInterludeText' },
+      { key: 'ktvEndingText', type: 'text', target: 'data:ktvEndingText' },
+    ],
+
     mount(container, ctx) {
       refreshColors();
       rootEl = document.createElement('div');

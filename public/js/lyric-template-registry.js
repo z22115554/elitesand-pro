@@ -51,3 +51,8 @@ const LyricTemplates = (() => {
     DEFAULT: DEFAULT_ID,
   };
 })();
+
+// 顯式掛上 global：同頁其他 classic script 靠共用 script scope 就能拿到 bare
+// LyricTemplates，但 lyric-template-settings.js 需要在自己的 IIFE 內用 globalThis
+// 取用（也讓 Node 端測試能注入假註冊表）。
+if (typeof globalThis !== 'undefined') globalThis.LyricTemplates = LyricTemplates;

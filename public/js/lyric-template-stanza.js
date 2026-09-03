@@ -519,6 +519,15 @@
     id: 'stanza',
     label: '逐字詩箋',
 
+    // 排向（橫排捲動／直排四相漂字）。
+    // ⚠ 已知問題（沿用重構前行為）：直排的「中央安全距離」slider 目前無效——
+    // 舊 display.js 會在非舞台系模板一律 delete body.dataset.stageSafeMargin，
+    // 直排 safeMarginPct() 因此永遠吃自己的 fallback 12。若要修，改成把
+    // ...LyricTemplateSettings.STAGE_SAFE 併進來即可，但那會改變直排版面，需真 OBS 驗證。
+    settings: [
+      { key: 'stanzaOrient', type: 'enum', values: ['horizontal', 'vertical'], default: 'horizontal', target: 'data:stanzaOrient' },
+    ],
+
     mount(container) {
       rootEl = document.createElement('div');
       rootEl.id = 'stanza-root';

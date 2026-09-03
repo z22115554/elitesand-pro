@@ -743,6 +743,7 @@
   LyricTemplates.register({
     id: 'mirror',
     label: '虛實鏡書',
+    settings: [...LyricTemplateSettings.STAGE_SAFE],
 
     mount(container) {
       rootEl = document.createElement('div');

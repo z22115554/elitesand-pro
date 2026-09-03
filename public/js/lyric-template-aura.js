@@ -594,6 +594,7 @@
   LyricTemplates.register({
     id: 'aura',
     label: '潮汐心景',
+    settings: [...LyricTemplateSettings.STAGE_SAFE],
 
     mount(container, ctx) {
       rootEl = document.createElement('div');

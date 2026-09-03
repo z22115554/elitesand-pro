@@ -387,6 +387,12 @@
     id: 'typewriter',
     label: '對話氣泡',
 
+    // 長間奏貼圖：開關 + 觸發門檻（毫秒）。
+    settings: [
+      { key: 'twStickerEnabled', type: 'bool01', default: true, target: 'data:twStickerEnabled' },
+      { key: 'twStickerGapMs', type: 'int', min: 3000, max: 20000, default: 6000, target: 'data:twStickerGapMs' },
+    ],
+
     mount(container) {
       rootEl = document.createElement('div');
       rootEl.id = 'typewriter-root';
