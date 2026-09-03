@@ -6081,7 +6081,7 @@ test('OBS 顯示端／跟唱視圖／遙控器都要接 play:stop 才能清空�
     'OBS 顯示端必須監聽 play:stop 並 hard 清空歌詞畫面（連歌詞來源一起清、停時鐘）：');
 
   // hard 清空：整首播完時 clearDisplay 必須把 parsedLyrics 清空並停時鐘，
-  // 否則殘留的一幀 onFrame 會用 ctx.getLyrics() 把最後一頁重畫回來（KTV／紙帶／鏡像／燈牌／詩箋…）。
+  // 否則殘留的一幀 onFrame 會用 ctx.getLyrics() 把最後一頁重畫回來（KTV／紙帶／鏡像／燈牌…）。
   const karaokeSource = fs.readFileSync(path.join(__dirname, '../public/js/karaoke.js'), 'utf8');
   const clearBody = karaokeSource.slice(karaokeSource.indexOf('function clearDisplay('), karaokeSource.indexOf('function clearDisplay(') + 900);
   ok(/function clearDisplay\(opts\)/.test(karaokeSource) && clearBody.includes('opts && opts.hard')
@@ -6099,7 +6099,7 @@ test('OBS 顯示端／跟唱視圖／遙控器都要接 play:stop 才能清空�
     pulse: 'clearAll', facet: 'clearAll', drift: 'clearAll',
     aura: 'retireCurrentLine(true)', ktv: 'clearSlot(slots.top)',
     columnflow: 'clearAllColumns', paperstrip: 'clearPageViews',
-    mirror: 'clearPanels', typewriter: 'clearAll', stanza: 'clearRows',
+    mirror: 'clearPanels', typewriter: 'clearAll',
   };
   for (const [tpl, marker] of Object.entries(clearFnByTpl)) {
     const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', `lyric-template-${tpl}.js`), 'utf8');
@@ -8147,12 +8147,13 @@ test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', ()
   ok(panelDrift.includes('hidden') && controllerDrift.includes('hidden'), '斜拍告白必須從桌面與手機模板選擇器隱藏: ');
   ok(!controllerHtml.includes('ctrl-template-legacy-notice'), '手機不應保留舊模板的相容性介面: ');
   const ctrlIds = (controllerJs.match(/const TEMPLATE_IDS = \[([^\]]*)\]/) || [])[1] || '';
-  ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza']
+  ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'wordscape']
     .forEach((id) => ok(ctrlIds.includes(`'${id}'`), `遙控器的 TEMPLATE_IDS 必須包含 ${id}: `));
+  ok(!ctrlIds.includes("'stanza'"), '逐字詩箋已移除，遙控器 TEMPLATE_IDS 不可再有 stanza: ');
   ok(controllerJs.includes('if (!TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換必須接受所有現行模板: ');
   ok(controllerJs.includes("nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS"), '舊 state 從手機首次切到 paperstrip 時必須套用黑字預設，避免白底白字: ');
   ok(controllerJs.includes("nextTemplate === 'mirror' ? MIRROR_DEFAULTS") && controllerJs.includes("if (nextTemplate === 'mirror') next.lyricPosition = 'split';"), '手機首次切到 mirror 必須套用雙側預設並鎖定 split: ');
-  ok(controllerHtml.includes('id="ctrl-intensity-group"') && controllerJs.includes('intensityGroup.hidden = !templateSupportsIntensity(template);'), '手機動態強度必須與桌面模板能力同步: ');
+  ok(controllerHtml.includes('id="ctrl-intensity-group"') && controllerJs.includes('intensityGroup.hidden = !templateSupportsIntensity(template) || columnflowHidesIntensity;'), '手機動態強度必須與桌面模板能力同步: ');
   ok(controllerHtml.includes('id="ctrl-classic-style-group"') && controllerJs.includes('classicStyleGroup.hidden = !isClassic;'), '配色風格必須只在經典疊層顯示: ');
   ok(controllerCss.includes('#ctrl-intensity-group[hidden]') && controllerCss.includes('#ctrl-classic-style-group[hidden]'), '手機模板設定的 hidden 狀態不得被 CSS 蓋掉: ');
 });
@@ -8213,12 +8214,12 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
     '紙帶排向必須有分段按鈕、切換帶色彩預設、server 白名單: ');
   ok(appState.includes("paperstripOrient: 'horizontal', paperstripColor: '#ffffff'"),
     '紙帶預設橫式仍是原本的白條: ');
-  // 動畫強度是逐字詩箋直排在用，紙帶不吃（2026-09-03 使用者更正：之前做錯模板）
+  // 動畫強度是直書句流「漂字」進場在用，紙帶不吃
   ok(/paperstrip:[^}]*supportsIntensity: false/.test(lyricExtras)
     && !templateJs.includes('applyIntensityClass') && !templateJs.includes('PS_INTENSITY')
     && !/\.ps-vertical\.ps-int-/.test(displayCss)
     && !/paperstrip:[^}]*animationIntensity/.test(appState),
-    '紙帶不再有動畫強度（已移到逐字詩箋直排）: ');
+    '紙帶不再有動畫強度（已移到直書句流的漂字 variant）: ');
   ok(lyricExtras.includes("paperstrip: { label: '紙帶逐字'") && lyricExtras.includes("template: 'paperstrip'"), '桌面設定必須提供紙帶逐字能力與獨立預設: ');
   ok(lyricsHandler.includes("'columnflow', 'paperstrip'"), 'server 模板白名單必須接受 paperstrip: ');
   ok(appState.includes("paperstrip: { template: 'paperstrip'"), 'server 預設 lyricTemplateSettings 必須包含 paperstrip: ');
@@ -8359,6 +8360,19 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   ok(apiSrc.includes("router.post('/typewriter-stickers'") && apiSrc.includes("router.delete('/typewriter-stickers/:id'")
     && apiSrc.includes('stickerUpload') && /fileSize:\s*8\s*\*\s*1024\s*\*\s*1024/.test(apiSrc),
     'server 必須有貼圖上傳（8MB 上限、requirePin）與刪除端點: ');
+  // 內建貼圖可個別隱藏（不刪檔，記在 dataDir 的 hidden 清單）＋ reset 端點全部找回
+  ok(apiSrc.includes('typewriter-stickers-hidden.json') && apiSrc.includes('readHiddenBuiltinStickers')
+    && apiSrc.includes("router.post('/typewriter-stickers/reset-builtin'")
+    && apiSrc.includes('builtinStickerFilenames().includes(safeName)'),
+    'DELETE 內建貼圖只加進 hidden 清單、reset-builtin 端點清空清單找回: ');
+  ok(apiSrc.includes('builtinHiddenCount') && /listBuiltinStickers[\s\S]{0,200}id:\s*n/.test(apiSrc),
+    'GET 回傳的 builtin 改成 {id,url} 並帶 builtinHiddenCount，供面板顯示「還原」鈕: ');
+  ok(lyricExtras.includes("'/api/typewriter-stickers/reset-builtin'") && lyricExtras.includes('tw-sticker-reset')
+    && lyricExtras.includes('data.builtinHiddenCount > 0'),
+    '面板必須能拿掉內建貼圖並在有隱藏時顯示「還原內建貼圖」鈕: ');
+  ok(panelHtml.includes('id="tw-sticker-reset"'), 'index.html 必須有「還原內建貼圖」按鈕: ');
+  ok(!/is-builtin \.tw-sticker-del\s*\{\s*display:\s*none/.test(fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8')),
+    '內建貼圖的 ✕ 鈕不可再被 CSS 藏起來: ');
   const indexSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8');
   ok(indexSrc.includes("app.get('/typewriter-sticker/:filename'") && indexSrc.includes('startsWith(stickersDir + path.sep)'),
     'server 必須靜態送出自訂貼圖並擋路徑穿越: ');
@@ -8377,7 +8391,7 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
     'server 必須把貼圖開關布林化、門檻夾在 3–20 秒: ');
 });
 
-test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入設定與伺服器白名單', () => {
+test('燈牌：以 registry 時間驅動並完整接入設定與伺服器白名單', () => {
   const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const controllerHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'controller.html'), 'utf8');
@@ -8387,29 +8401,26 @@ test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入�
   const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
   const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
   const i18n = require('../public/js/i18n');
+  const lightboard = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-lightboard.js'), 'utf8');
 
-  const mods = {
-    lightboard: fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-lightboard.js'), 'utf8'),
-    stanza: fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-stanza.js'), 'utf8'),
-  };
   ok(!fs.existsSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-migiwa.js')),
-    'migiwa 已併進詩頁，獨立檔案不應再存在: ');
+    'migiwa 獨立檔案不應再存在: ');
+  ok(!fs.existsSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-stanza.js')),
+    '逐字詩箋已解散（橫向砍掉、直排漂字併進直書句流），獨立檔案不應再存在: ');
 
-  for (const [id, src] of Object.entries(mods)) {
-    ok(displayHtml.includes('/js/lyric-template-' + id + '.js'), 'display 必須載入 ' + id + ' 模板腳本: ');
-    ok(src.includes("id: '" + id + "'") && src.includes('onFrame(timeMs, ctx)') && src.includes('onSeek(timeMs, ctx)'),
-      id + ' 必須透過 registry 並完全時間驅動: ');
-    ok(src.includes('ensureWordTimings') && src.includes('buildGraphemeTimings'),
-      id + ' 必須沿用逐字時間核心（缺時退回整句線性）: ');
-    ok(!/setInterval\(/.test(src),
-      id + ' 不可自己開 setInterval 迴圈，時間一律由 onFrame 帶進來: ');
-    ok(lyricsHandler.includes("'" + id + "'"), 'server 模板白名單必須接受 ' + id + ': ');
-    ok(appState.includes(id + ": { template: '" + id + "'"), 'server 預設 lyricTemplateSettings 必須包含 ' + id + ': ');
-    ok(panelHtml.includes('data-template="' + id + '"') && controllerHtml.includes('data-template="' + id + '"'),
-      '桌面與手機模板選擇器都要有 ' + id + ': ');
-    for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
-      ok(i18n.catalogs?.[locale]?.['template.' + id], locale + ' 缺少 template.' + id + ': ');
-    }
+  ok(displayHtml.includes('/js/lyric-template-lightboard.js'), 'display 必須載入燈牌模板腳本: ');
+  ok(lightboard.includes("id: 'lightboard'") && lightboard.includes('onFrame(timeMs, ctx)') && lightboard.includes('onSeek(timeMs, ctx)'),
+    '燈牌必須透過 registry 並完全時間驅動: ');
+  ok(lightboard.includes('ensureWordTimings') && lightboard.includes('buildGraphemeTimings'),
+    '燈牌必須沿用逐字時間核心（缺時退回整句線性）: ');
+  ok(!/setInterval\(/.test(lightboard),
+    '燈牌不可自己開 setInterval 迴圈，時間一律由 onFrame 帶進來: ');
+  ok(lyricsHandler.includes("'lightboard'"), 'server 模板白名單必須接受 lightboard: ');
+  ok(appState.includes("lightboard: { template: 'lightboard'"), 'server 預設 lyricTemplateSettings 必須包含 lightboard: ');
+  ok(panelHtml.includes('data-template="lightboard"') && controllerHtml.includes('data-template="lightboard"'),
+    '桌面與手機模板選擇器都要有 lightboard: ');
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    ok(i18n.catalogs?.[locale]?.['template.lightboard'], locale + ' 缺少 template.lightboard: ');
   }
 
   // ── 燈牌：只吃兩款真點陣字型、字級掛在機殼上（框跟著字級走）、字級吸附到設計格數 ──
@@ -8419,9 +8430,20 @@ test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入�
     '打包的字型必須附授權檔: ');
   ok(displayCss.includes("font-family: 'Cubic 11'") && displayCss.includes('/assets/fonts/cubic11/Cubic_11.woff2'),
     'display.css 必須以 @font-face 載入打包的 Cubic 11: ');
-  ok(mods.lightboard.includes('function snapSize') && mods.lightboard.includes('Math.round(px / grid)'),
+  // 精品點陣體 9×9（BoutiqueBitmap9x9，SIL OFL）也隨程式打包——不再需要使用者本機安裝
+  ok(fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'fonts', 'boutique9x9', 'BoutiqueBitmap9x9_1.93.ttf'))
+    && fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'fonts', 'boutique9x9', 'OFL.txt'))
+    && fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'fonts', 'boutique9x9', 'NOTICE.txt')),
+    '精品點陣體 9×9 必須隨程式打包並附 OFL.txt／NOTICE.txt: ');
+  ok(/@font-face\s*\{[^}]*font-family:\s*'BoutiqueBitmap9x9'[^}]*boutique9x9\/BoutiqueBitmap9x9_1\.93\.ttf/.test(displayCss.replace(/\n/g, ' '))
+    && /\.lb-font-boutique9x9 \.lb-inner\s*\{[^}]*'BoutiqueBitmap9x9'/.test(displayCss),
+    'display.css 必須以 @font-face 載入打包的精品點陣體，且燈牌 boutique9x9 樣式優先用它: ');
+  ok(!panelHtml.includes('需本機已安裝') && !panelHtml.includes('要你自己的電腦裝過')
+    && !fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-lightboard.js'), 'utf8').includes('需本機安裝'),
+    '面板／模板不可再說精品點陣體需要本機安裝: ');
+  ok(lightboard.includes('function snapSize') && lightboard.includes('Math.round(px / grid)'),
     '燈牌字級必須吸附到設計格數的整數倍（四捨五入，不是無條件捨去）: ');
-  ok(mods.lightboard.includes("boxEl.style.fontSize = size + 'px'"),
+  ok(lightboard.includes("boxEl.style.fontSize = size + 'px'"),
     '字級要掛在機殼上，整台機器才會跟著字級等比縮放: ');
   ok(/\.lb-box\s*\{[^}]*width:\s*[\d.]+em/.test(displayCss),
     '燈箱寬度必須是 em（框跟著字級走）: ');
@@ -8435,116 +8457,89 @@ test('燈牌／詩頁：兩個模板都以 registry 時間驅動並完整接入�
   ok(lyricExtras.includes('lightboardPan: true') && lyricExtras.includes('lightboardIdleMarquee: true')
     && lyricExtras.includes('lightboardSlideIn: false'),
     '燈牌捲動預設：長句平移開、間奏跑馬開、進場滑入關: ');
-  ok(mods.lightboard.includes('HEAD_RATIO') && mods.lightboard.includes('state.textW - boxW'),
+  ok(lightboard.includes('HEAD_RATIO') && lightboard.includes('state.textW - boxW'),
     '長句平移必須夾在兩端之間，且讓正在唱的字留在燈箱內: ');
-  ok(mods.lightboard.includes('IDLE_MIN_GAP_MS') && mods.lightboard.includes("segEl.textContent = 'INTERLUDE'"),
-    '間奏跑馬只在夠長的空檔跑，並切換讀數: ');
+  ok(lightboard.includes('function idleGapMs') && lightboard.includes("(nextT - end) > idleGapMs()")
+    && lightboard.includes("segEl.textContent = 'INTERLUDE'"),
+    '間奏跑馬只在夠長的空檔跑（門檻可由面板調），並切換讀數: ');
+  // 長間奏門檻可調（比照對話氣泡）：schema 宣告 int 1.5–20s、面板滑桿、server 夾限、預設 2500
+  ok(lightboard.includes("key: 'lightboardIdleGapMs'") && lightboard.includes("target: 'data:lightboardIdleGapMs'")
+    && lyricExtras.includes("lightboardIdleGapMs: 2500") && lyricExtras.includes("key: 'lightboardIdleGapMs'")
+    && panelHtml.includes('id="ls-lightboard-idle-gap"')
+    && lyricsHandler.includes('settings.lightboardIdleGapMs = Number.isFinite(g)')
+    && appState.includes('lightboardIdleGapMs: 2500'),
+    '燈牌長間奏門檻必須可調（schema／面板滑桿／server 夾 1.5–20s／app-state 預設）: ');
   // 間奏跑馬位移必須用真實時鐘(performance.now)自行累加、不吃會抖的歌詞時間軸，否則會「跑一下停一下」
-  ok(mods.lightboard.includes('idlePhasePx') && mods.lightboard.includes('performance.now()')
-    && mods.lightboard.includes('idlePhasePx += dt * IDLE_SPEED_PX_MS')
-    && !/\(\(\(t - end\) \* IDLE_SPEED_PX_MS\)/.test(mods.lightboard),
+  ok(lightboard.includes('idlePhasePx') && lightboard.includes('performance.now()')
+    && lightboard.includes('idlePhasePx += dt * IDLE_SPEED_PX_MS')
+    && !/\(\(\(t - end\) \* IDLE_SPEED_PX_MS\)/.test(lightboard),
     '間奏跑馬必須用真實時鐘勻速累加，不可再用 (t - end) 直接算位移: ');
 
-  // ── 詩頁：逐字上墨是連續狀態（不是 class 硬切）、有讀字頭、進度軌吃連續進度、橫排為預設 ──
-  ok(mods.stanza.includes("document.body.dataset.stanzaOrient === 'vertical' ? 'vertical' : 'horizontal'"),
-    '詩頁預設是橫排捲動: ');
-  ok(mods.stanza.includes('cell.ink += (target - cell.ink) * INK_LERP') && mods.stanza.includes('function inkTarget'),
-    '逐字上墨必須是每幀逼近目標的連續狀態，不可是 class 硬切: ');
-  ok(mods.stanza.includes('hashNoise(seed'),
-    '每個字的落定／呼吸抖動必須由 hashNoise 種子決定（同一行同一組）: ');
-  ok(mods.stanza.includes('Math.sin(timeSec * BREATHE_HZ') && mods.stanza.includes('roleIsCur'),
-    '靜止時目前句必須有 JS 呼吸（背景分頁也不會凍）: ');
-  ok(mods.stanza.includes('easeOutQuint') && mods.stanza.includes('easeOutQuad'),
-    '進出／上墨必須用實際 easing，不是全場一個 cubic-bezier: ');
-  ok(displayCss.includes('.st-ch.now'), '詩頁必須有讀字頭（正在唱的那個字最亮）: ');
-  ok(mods.stanza.includes('progress(row.times, t)') && displayCss.includes('.st-rail'),
-    '詩頁的進度軌必須吃連續進度（不是整數字數）: ');
-  ok(/\.st-tr\s*\{[^}]*height:\s*[\d.]+em/.test(displayCss),
-    '翻譯行必須永遠佔位，切換時版面才不會跳: ');
-  ok(lyricsHandler.includes("['horizontal', 'vertical'].includes(settings.stanzaOrient)"),
-    'server 必須驗證詩頁排向: ');
-  // 直排＝四相漂字：切批次（單邊 1–4 句，seed 一致）、四角輪替漂入、入場後靜止、舊批模糊淡出
-  ok(!mods.stanza.includes('altSides(') && !mods.stanza.includes('stanzaAltSides'),
-    '詩頁直排已改四相漂字，一句一側交替（stanzaAltSides）不應再存在: ');
-  ok(mods.stanza.includes('function driftBatches') && mods.stanza.includes('hashNoise(BATCH_SEED')
-    && mods.stanza.includes('BATCH_SPAN'),
-    '詩頁直排必須把整段切成單邊 1–4 句的批次，句數由 hashNoise(批次序) 決定（seek 一致）: ');
-  ok(/DIRS:\s*\[\[/.test(mods.stanza) && /DRIFT\.DIRS\[\w+\.gi % 4\]/.test(mods.stanza),
-    '詩頁直排必須有四相入場方向，且逐字輪替: ');
-  ok(mods.stanza.includes('easeOutCubic') && mods.stanza.includes('CHAR_DUR_MS')
-    && mods.stanza.includes('g.dx * q') && mods.stanza.includes("g.el.style.filter = 'none'"),
-    '詩頁直排每字必須帶弧度漂入、ease-out 收到定點後完全靜止: ');
-  // 動畫強度（沉穩／標準／狂放）只作用在詩頁直排漂字，吃 lyricIntensity，面板只在直排顯示
-  ok(mods.stanza.includes('DRIFT_INTENSITY') && mods.stanza.includes('function driftProfile')
-    && mods.stanza.includes('document.body.dataset.lyricIntensity')
-    && mods.stanza.includes('prof.dist') && mods.stanza.includes('prof.durMs'),
-    '詩頁直排必須吃 lyricIntensity 分沉穩／標準／狂放（縮放漂移距離、弧度、模糊、時長）: ');
-  ok(/stanza:[^}]*supportsIntensity: true/.test(lyricExtras)
-    && lyricExtras.includes("settings.template === 'stanza' && settings.stanzaOrient !== 'vertical'"),
-    '逐字詩箋必須支援動畫強度，且只在直排顯示強度選項: ');
-  ok(appState.includes("maxWidth: 32, animationIntensity: 'normal'"),
-    '詩頁 server 預設必須帶 animationIntensity: ');
-  // 逐字出場跟歌曲時間軸（用逐字時間核心），不是整批同時出
-  ok(mods.stanza.includes('charTimes(line, lines, idx, ctx && ctx.kernel)')
-    && mods.stanza.includes('function mountDriftColumn')
-    && mods.stanza.includes('lines[idx].time - DRIFT.LEAD_MS'),
-    '詩頁直排必須逐句依時間 mount、每字依逐字時間漂入（不是整批同時出）: ');
-  // 描邊：橫排 .st-ch 與直排 .st-g 都吃詳細設定的 --lyric-stroke-*
-  ok(/\.st-ch\s*\{[^}]*-webkit-text-stroke:[^}]*--lyric-stroke-width/.test(displayCss)
-    && /\.st-g\s*\{[^}]*-webkit-text-stroke:[^}]*--lyric-stroke-width/.test(displayCss),
-    '橫排／直排的字都必須接上詳細設定的描邊（--lyric-stroke-*）: ');
-  ok(/strokeWidth:\s*[0-9.]+/.test(lyricExtras.split("stanza: { ...DEFAULT_SETTINGS")[1].split('}')[0])
-    && appState.includes("stanzaOrient: 'horizontal', stageSafeMargin: 12, strokeWidth"),
-    '詩頁預設必須帶描邊寬度: ');
-  // 邊距 · 最大寬度：詳細設定的三個控制必須真的接到詩頁（橫排走 CSS，直排走 layoutBatch）
-  ok(/#stanza-root\s*\{[^}]*--lyric-padding-x/.test(displayCss)
-    && /#stanza-root\s*\{[^}]*--lyric-max-width/.test(displayCss)
-    && /#stanza-root\s*\{[^}]*--lyric-padding-y/.test(displayCss),
-    '詩頁橫排的左右邊距／上下邊距／最大寬度必須吃 --lyric-padding-*／--lyric-max-width: ');
-  ok(mods.stanza.includes("cssNum('--lyric-padding-x'")
-    && mods.stanza.includes("cssNum('--lyric-padding-y'")
-    && mods.stanza.includes("cssNum('--lyric-max-width'"),
-    '詩頁直排的邊距／密度必須吃詳細設定的 --lyric-padding-*／--lyric-max-width: ');
-  // 裝飾：直排批次外緣髮絲欄線、橫排邊界線端點收筆
-  ok(mods.stanza.includes('st-deco') && displayCss.includes('.st-deco-rule')
-    && /\.st-rule::before/.test(displayCss),
-    '詩頁必須有裝飾（直排欄線／橫排邊界收筆）: ');
-  ok(displayCss.includes('.st-col') && displayCss.includes('.st-g')
-    && displayCss.includes('writing-mode: vertical-rl') && displayCss.includes('.st-vertical'),
-    '詩頁直排必須是 vertical-rl 的 .st-col／.st-g: ');
-  ok(mods.stanza.includes('is-out') && displayCss.includes('.st-col.is-out')
-    && /\.st-col\.is-out\s*\{[^}]*blur/.test(displayCss),
-    '舊批退場必須是整批模糊淡出: ');
-  ok(mods.stanza.includes('DRIFT.MIN_SCALE') && mods.stanza.includes("col.style.setProperty('--sc'"),
-    '詩頁直排長欄必須整體縮小（有下限）: ');
-  ok(mods.stanza.includes('function lyricPos') && mods.stanza.includes("=== 0) ? 'right' : 'left'"),
-    '詩頁直排靠左／靠右／左右分散必須沿用 lyricPosition，分散時偶數批靠右: ');
-  ok(!lyricExtras.includes('stanzaAltSides') && !panelHtml.includes('stanza-altsides-row')
-    && !appState.includes('stanzaAltSides'),
-    'stanzaAltSides 設定必須全部移除: ');
-  // 排向用跟直書句流一樣的分段按鈕（style-thumb），不是下拉選單
-  ok(panelHtml.includes('id="stanza-orient-buttons"')
-    && panelHtml.includes('data-stanza-orient="horizontal"')
-    && panelHtml.includes('data-stanza-orient="vertical"')
-    && !panelHtml.includes('id="ls-stanza-orient"'),
-    '詩頁排向必須是 style-thumb 分段按鈕、不是 select: ');
-  ok(lyricExtras.includes("#stanza-orient-buttons .style-thumb")
-    && lyricExtras.includes('settings.stanzaOrient = orient'),
-    '詩頁排向按鈕必須有 click 綁定寫回 stanzaOrient: ');
-
-  // 兩個模板都是固定構圖：#lyrics-container 不吃九宮格 transform
+  // 燈牌是固定構圖：#lyrics-container 不吃九宮格 transform
   const transformNone = (displayCss.match(/([^}]*)\{\s*transform:\s*none;\s*\}/) || [])[1] || '';
-  ['lightboard', 'stanza'].forEach((id) => {
-    ok(transformNone.includes('body.template-' + id + ' #lyrics-container'), id + ' 必須列入 transform: none: ');
-  });
+  ok(transformNone.includes('body.template-lightboard #lyrics-container'), 'lightboard 必須列入 transform: none: ');
   // 模板專屬設定走「模板宣告 settings schema → LyricTemplateSettings 統一寫 body.dataset」
   ok(displayJs.includes('LyricTemplateSettings.apply(s)') && displayHtml.includes('/js/lyric-template-settings.js'),
     'display 必須透過 LyricTemplateSettings 橋接器套用模板專屬設定: ');
-  ok(mods.lightboard.includes("key: 'lightboardFont'") && mods.lightboard.includes("target: 'data:lightboardFont'")
-    && mods.stanza.includes("key: 'stanzaOrient'") && mods.stanza.includes("target: 'data:stanzaOrient'"),
-    '模板專屬設定必須在各自 register({ settings }) 內宣告 key 與 dataset target: ');
-  ok(displayJs.includes('function syncTrackMetaDataset') && mods.lightboard.includes('dataset.lbTitle'),
+  ok(displayJs.includes('function syncTrackMetaDataset') && lightboard.includes('dataset.lbTitle'),
     '燈牌銘牌／間奏跑馬要用的曲名必須由 display.js 同步進 dataset: ');
+});
+
+test('直書句流「漂字」進場：四相漂入 + 動畫強度（取代原本的逐字詩箋）', () => {
+  const cf = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-columnflow.js'), 'utf8');
+  const displayCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'display.css'), 'utf8');
+  const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
+  const lyricsHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const controllerHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'controller.html'), 'utf8');
+  const controllerJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');
+  const i18n = require('../public/js/i18n');
+  const cssFlat = displayCss.replace(/\n/g, ' ');
+
+  // 逐字詩箋整包移除：檔案、面板卡片、i18n、server 白名單、app-state 預設、stanzaOrient 驗證
+  ok(!lyricExtras.includes("template: 'stanza'") && !lyricExtras.includes('stanzaOrient') && !lyricExtras.includes('STANZA_ORIENTS'),
+    'lyric-extras 不可再有 stanza/stanzaOrient: ');
+  ok(!appState.includes("stanza: { template") && !lyricsHandler.includes("'stanza'") && !lyricsHandler.includes('stanzaOrient'),
+    'server（app-state／lyrics handler）不可再有 stanza: ');
+  ok(!panelHtml.includes('data-template="stanza"') && !controllerHtml.includes('data-template="stanza"')
+    && !panelHtml.includes('id="stanza-orient-buttons"'),
+    '模板選擇器與排向按鈕不可再有 stanza: ');
+  ok(!i18n.catalogs?.['zh-TW']?.['template.stanza'], 'template.stanza i18n key 必須移除: ');
+  ok(!/\.st-col\b/.test(displayCss) && !displayCss.includes('#stanza-root'),
+    'display.css 的 #stanza-root／.st-* 樣式必須全部移除: ');
+
+  // drift 是 columnflow 的第三個進場 variant
+  ok(cf.includes("VARIANTS = ['sen', 'fuda', 'drift']") && cf.includes("classList.toggle('cf-drift'"),
+    '漂字必須是 columnflow 的第三個 variant（cf-drift class）: ');
+  ok(cf.includes('DRIFT_DIRS') && /DRIFT_DIRS\[\w+ % 4\]/.test(cf) && cf.includes('--cf-qx') && cf.includes('--cf-qy'),
+    '漂字必須四角輪替方向、逐字寫入 --cf-qx/--cf-qy: ');
+  ok(displayCss.includes('@keyframes cf-quad-drift')
+    && /#columnflow-root\.cf-drift \.cf-g\.cf-on\s*\{[^}]*animation:\s*cf-quad-drift/.test(cssFlat),
+    '漂字進場必須是純 CSS 的 cf-quad-drift keyframe（沿用 columnflow 的 class 切換模型）: ');
+
+  // 動畫強度：只有 drift variant 吃，透過 lyricIntensity → cf-int-*
+  ok(cf.includes('CF_INTENSITY') && cf.includes('function syncIntensity')
+    && cf.includes('document.body.dataset.lyricIntensity') && cf.includes('cf-int-'),
+    'columnflow 必須讀 lyricIntensity 切 cf-int-* class: ');
+  ok(/#columnflow-root\.cf-int-calm/.test(displayCss) && /#columnflow-root\.cf-int-chaotic/.test(displayCss)
+    && displayCss.includes('--cf-drift-dist') && displayCss.includes('--cf-drift-blur'),
+    'display.css 必須有沉穩／狂放的漂入距離／模糊／旋轉變體: ');
+  ok(/columnflow:[^}]*supportsIntensity: true/.test(lyricExtras)
+    && lyricExtras.includes("settings.template === 'columnflow' && settings.columnflowVariant !== 'drift'"),
+    '直書句流必須支援動畫強度，且只在漂字 variant 顯示強度選項: ');
+  ok(appState.includes("columnflowMaxLines: 4, animationIntensity: 'normal'"),
+    'columnflow server 預設必須帶 animationIntensity: ');
+  ok(lyricsHandler.includes("['sen', 'fuda', 'drift'].includes(settings.columnflowVariant)"),
+    'server 的 columnflowVariant 白名單必須含 drift: ');
+  ok(panelHtml.includes('data-columnflow-variant="drift"') && controllerHtml.includes('data-columnflow-variant="drift"'),
+    '桌面與手機的「直書句流樣式」選擇器都要有漂字: ');
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    ok(i18n.catalogs?.[locale]?.['template.columnDrift'], locale + ' 缺少 template.columnDrift: ');
+  }
+  ok(/function templateSupportsIntensity[\s\S]{0,160}'columnflow'/.test(controllerJs)
+    && controllerJs.includes("(lyricSettings.columnflowVariant || 'sen') !== 'drift'"),
+    '手機遙控的動畫強度也要只在漂字 variant 顯示: ');
 });
 
 test('字界巡航模板：正式端點、選擇器、設定白名單與連續鏡頭契約', () => {

@@ -766,9 +766,6 @@
                 <button class="lyric-template-card" data-template="lightboard" type="button" role="radio" aria-checked="false" title="跑馬燈牌：LED 點陣燈牌，唱過的燈亮、沒唱到的是熄滅的暗點">
                   <span class="style-thumb-preview style-thumb-lightboard" aria-hidden="true"><span class="style-thumb-char">牌</span></span><strong data-i18n="template.lightboard">跑馬燈牌</strong><span>LED 點陣、機台質感</span>
                 </button>
-                <button class="lyric-template-card" data-template="stanza" type="button" role="radio" aria-checked="false" title="逐字詩箋：整段一次排好、字不移動，唱到哪句哪句上墨">
-                  <span class="style-thumb-preview style-thumb-stanza" aria-hidden="true"><span class="style-thumb-char">箋</span></span><strong data-i18n="template.stanza">逐字詩箋</strong><span>整段排好、零動態</span>
-                </button>
                 <button class="lyric-template-card" data-template="wordscape" type="button" role="radio" aria-checked="false" title="字界巡航：整首歌在同一個文字世界裡逐字前進，鏡頭持續滑行，只有長停頓才硬清場">
                   <span class="style-thumb-preview style-thumb-wordscape" aria-hidden="true"><span class="style-thumb-char">巡</span></span><strong data-i18n="template.wordscape">字界巡航</strong><span>逐字鏡頭、連續錯落</span>
                 </button>
@@ -780,8 +777,9 @@
                 <div class="style-thumb-row" id="columnflow-variant-buttons">
                   <button class="style-thumb active" data-columnflow-variant="sen" type="button" title="素筆直書：細緻文字在畫面中錯落填入，保留主播主視覺"><span class="style-thumb-preview"><span class="style-thumb-char">素筆</span></span><span class="style-thumb-label">素筆直書</span></button>
                   <button class="style-thumb" data-columnflow-variant="fuda" type="button" title="字札直書：每個字像一張小紙札，保有不規則手感"><span class="style-thumb-preview"><span class="style-thumb-char">字札</span></span><span class="style-thumb-label">字札直書</span></button>
+                  <button class="style-thumb" data-columnflow-variant="drift" type="button" title="漂字直書：每個字從四角帶弧度漂入定點、入場後完全靜止；可調動畫強度"><span class="style-thumb-preview"><span class="style-thumb-char">漂字</span></span><span class="style-thumb-label">漂字直書</span></button>
                 </div>
-                <p class="field-hint">素筆是乾淨的文字殘影；字札則讓每個字帶有小紙片的手感。</p>
+                <p class="field-hint">素筆是乾淨的文字殘影；字札讓每個字帶小紙片手感；漂字則讓字從四角漂入定點後靜止（可調強度）。</p>
               </div>
               <div class="field" id="columnflow-placement-field" hidden>
                 <label>直書位置</label>
@@ -866,18 +864,13 @@
                   <div><div class="label">間奏跑馬</div><div class="sub">只在沒有人在唱的間奏跑曲名，右上讀數同時切成 INTERLUDE。不影響跟唱。</div></div>
                   <label class="switch"><input id="ls-lightboard-idle" data-ls-control="lightboardIdleMarquee" type="checkbox" checked><span class="track"></span></label>
                 </div>
+                <label class="mt-8">長間奏門檻 <span id="ls-lightboard-idle-gap-val" class="val">2.5s</span></label>
+                <input id="ls-lightboard-idle-gap" data-ls-control="lightboardIdleGapMs" type="range" min="1500" max="20000" step="500" value="2500">
+                <p class="field-hint">間奏長過這個秒數才開始跑馬——調高＝只有夠久的間奏才跑，短空檔不閃。</p>
                 <div class="switch-row">
                   <div><div class="label">進場滑入</div><div class="sub">每句從右側滑入。動作只發生在換句的空檔，但每句都動、累積起來會有點吵，預設關。</div></div>
                   <label class="switch"><input id="ls-lightboard-slide" data-ls-control="lightboardSlideIn" type="checkbox"><span class="track"></span></label>
                 </div>
-              </div>
-              <div class="field" id="stanza-orient-field" hidden>
-                <label>詩頁排向</label>
-                <div class="style-thumb-row" id="stanza-orient-buttons">
-                  <button class="style-thumb active" data-stanza-orient="horizontal" type="button" title="橫排捲動：整段左貼，看得到上下文與下一句"><span class="style-thumb-preview"><span class="style-thumb-char">橫</span></span><span class="style-thumb-label">橫排捲動</span></button>
-                  <button class="style-thumb" data-stanza-orient="vertical" type="button" title="直排貼邊：一句一直欄、貼畫面外緣，中央留給主播"><span class="style-thumb-preview"><span class="style-thumb-char">直</span></span><span class="style-thumb-label">直排貼邊</span></button>
-                </div>
-                <p class="field-hint">橫排：整段左貼、逐字上墨。直排：四相漂字——每字從四角漂入定點、入場後靜止；靠左／靠右／左右分散用下面的「歌詞位置」，單邊隨機 1–4 句，舊批模糊淡出。</p>
               </div>
               <div class="field" id="paperstrip-orient-field" hidden>
                 <label>紙帶排向</label>
@@ -999,9 +992,10 @@
               <div id="tw-sticker-gallery" class="tw-sticker-gallery"></div>
               <div class="btn-row mt-8">
                 <button id="tw-sticker-upload-btn" class="btn btn-sm" type="button">上傳貼圖</button>
+                <button id="tw-sticker-reset" class="btn btn-sm" type="button" hidden>還原內建貼圖</button>
                 <input id="tw-sticker-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
               </div>
-              <p class="field-hint">支援透明 PNG／GIF（動圖自動播放）。單張 8MB、最多 24 張。內建三張不能刪。長間奏會依間奏序穩定抽一張（很長的間奏會跳兩張）。</p>
+              <p class="field-hint">支援透明 PNG／GIF（動圖自動播放）。單張 8MB、自訂最多 24 張。內建貼圖也能按 ✕ 拿掉，之後按「還原內建貼圖」找回。長間奏會依間奏序穩定抽一張（很長的間奏會跳兩張）。</p>
             </div>
             <div id="font-family-fields">
             <div class="field">
@@ -1037,9 +1031,9 @@
               <label for="ls-lightboard-font">燈牌字型</label>
               <select id="ls-lightboard-font" data-ls-control="lightboardFont" class="input">
                 <option value="cubic11">Cubic 11（11×11，內建）</option>
-                <option value="boutique9x9">精品點陣體 9×9（需本機已安裝）</option>
+                <option value="boutique9x9">精品點陣體 9×9（9×9，內建）</option>
               </select>
-              <p class="field-hint">燈牌只吃真點陣字型：一般字體被圓點網遮罩切開後，筆畫之間的縫小於一個燈距就會糊成一團。Cubic 11 內建；精品點陣體要你自己的電腦裝過才會生效，沒裝會自動退回 Cubic 11。</p>
+              <p class="field-hint">燈牌只吃真點陣字型：一般字體被圓點網遮罩切開後，筆畫之間的縫小於一個燈距就會糊成一團。兩款都隨程式打包（皆為 SIL OFL 授權），選了就生效。</p>
             </div>
             <div class="field">
               <label for="ls-fontweight">字重</label>

@@ -1036,7 +1036,7 @@ const KaraokeEngine = (() => {
 
   function clearDisplay(opts) {
     // hard＝歌曲整首播完（play:stop reason:'ended'）。除了清當下畫面，還要把歌詞來源本身
-    // 清空並停掉時鐘：onFrame 系模板（KTV／直書句流／紙帶／鏡像／對話氣泡／燈牌／詩箋）每幀
+    // 清空並停掉時鐘：onFrame 系模板（KTV／直書句流／紙帶／鏡像／對話氣泡／燈牌）每幀
     // 都用 ctx.getLyrics() 重算，只呼叫一次 onLyricsLoaded([]) 之後若還有任何一幀 onFrame（殘留
     // 的 lyrics:sync／state 事件）就會把最後一頁重新畫回來。清空 parsedLyrics 後那一幀會拿到
     // 空陣列 → 各模板的「無歌詞」分支自然把畫面清乾淨。往回跳轉重置畫面時 hard 為 false，行為不變。

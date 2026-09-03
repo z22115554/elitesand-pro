@@ -126,7 +126,7 @@
   // ── 多個模板共用的 schema 片段 ─────────────────────────────────────────
   // 舞台系（Pulse / Facet / Drift / Aura）與 paperstrip / mirror 共用同一套
   // 「中央安全距離」：dataset 給 JS 佈局讀、CSS var 給 .pos-left/.pos-right 邊界讀，
-  // 兩個目標同一個值。stanza 直排「刻意不含」——見 STATUS 的已知問題。
+  // 兩個目標同一個值。
   const STAGE_SAFE = Object.freeze([
     Object.freeze({
       key: 'stageSafeMargin', type: 'int', min: 2, max: 25, default: 2,

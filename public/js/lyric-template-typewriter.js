@@ -47,7 +47,9 @@
     try {
       fetch('/api/typewriter-stickers').then((r) => (r.ok ? r.json() : null)).then((d) => {
         if (!d) return;
-        stickerPool = [].concat(d.builtin || [], (d.custom || []).map((c) => c && c.url))
+        // builtin 從「URL 字串陣列」改成「{id,url} 陣列」（內建貼圖現在可個別隱藏／reset）
+        const builtinUrls = (d.builtin || []).map((b) => (typeof b === 'string' ? b : (b && b.url)));
+        stickerPool = [].concat(builtinUrls, (d.custom || []).map((c) => c && c.url))
           .filter((u) => typeof u === 'string' && u);
       }).catch(() => {});
     } catch (_) { /* 沒有伺服器就沒有貼圖，靜默 */ }

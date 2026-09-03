@@ -8,9 +8,11 @@
  * - 固定保留最近四句；新句補上時，最舊的一句才淡出，落點由亂數種子決定
  * - 超長句子依可用高度切成多個延續直行，往左自然續接（傳統直書換行方向）
  *
- * 兩種外觀（同一模板、同一機制）：
+ * 三種外觀（同一模板、同一機制）：
  * - sen（素筆）：細明朝素字，逐字浮現＋輕微下沉入定
  * - fuda（字札）：每字一格白色字札，歪斜掉入再擺正（傾角由亂數種子決定）
+ * - drift（漂字）：素字，每個字輪流從左上／右上／左下／右下帶弧度漂入定點，入場後完全靜止；
+ *   漂入距離／模糊／旋轉／時長吃「動畫強度」（沉穩／標準／狂放，body.dataset.lyricIntensity）。
  * 外觀由 body.dataset.columnflowVariant 驅動（display.js 套設定時寫入），逐幀比對字串成本可忽略。
  *
  * 完全時間驅動（同 KTV 模板）：onFrame/onSeek 都只吃 timeMs 自算，不依賴行索引事件，
@@ -105,9 +107,27 @@
     return Math.max(1, vh * 0.86);
   }
 
+  const VARIANTS = ['sen', 'fuda', 'drift'];
   function currentVariant() {
     const value = document.body.dataset.columnflowVariant;
-    return ['sen', 'fuda'].includes(value) ? value : 'sen';
+    return VARIANTS.includes(value) ? value : 'sen';
+  }
+
+  // 漂字（drift）進場：四角輪替方向 + 依動畫強度縮放的距離／模糊／旋轉／時長。
+  // 純 CSS keyframe 驅動（.cf-g.cf-on 觸發），沿用本模板「class 切換 + CSS」的作法。
+  const DRIFT_DIRS = [[-1.2, -1.0], [1.15, -1.0], [-1.1, 1.1], [1.2, 0.95]]; // 左上→右上→左下→右下（em）
+  const CF_INTENSITY = ['calm', 'normal', 'chaotic'];
+  let intensityApplied = '';
+  function currentIntensity() {
+    const v = document.body.dataset.lyricIntensity;
+    return CF_INTENSITY.includes(v) ? v : 'normal';
+  }
+  function syncIntensity() {
+    if (!rootEl) return;
+    const v = currentIntensity();
+    if (v === intensityApplied) return;
+    intensityApplied = v;
+    CF_INTENSITY.forEach((n) => rootEl.classList.toggle(`cf-int-${n}`, n === v));
   }
 
   function currentPlacement() {
@@ -266,6 +286,8 @@
     el.style.top = '0px';
     el.style.fontSize = `${fontPx}px`;
 
+    const isDrift = currentVariant() === 'drift';
+    let driftIdx = 0;
     const glyphEls = [];
     plan.segments.forEach((segment) => {
       const sub = document.createElement('div');
@@ -283,6 +305,14 @@
         span.style.setProperty('--cf-rotate-rest', `${restRotation.toFixed(1)}deg`);
         span.style.setProperty('--cf-entry-x', `${(0.12 + hashNoise(gSeed, 6) * 0.16).toFixed(2)}em`);
         span.style.setProperty('--cf-entry-y', `${(0.05 + hashNoise(gSeed, 7) * 0.14).toFixed(2)}em`);
+        if (isDrift) {
+          // 四角輪替方向；每字自己的旋轉正負由亂數種子決定
+          const dir = DRIFT_DIRS[driftIdx % 4];
+          driftIdx += 1;
+          span.style.setProperty('--cf-qx', `${dir[0].toFixed(2)}em`);
+          span.style.setProperty('--cf-qy', `${dir[1].toFixed(2)}em`);
+          span.style.setProperty('--cf-qr', `${(dir[0] > 0 ? -7 : 7) * (1 + (gi % 3) * 0.14) >> 0}deg`);
+        }
         sub.appendChild(span);
         glyphEls.push({ el: span, startMs: g.startMs });
       });
@@ -347,7 +377,8 @@
     variantApplied = v;
     rootEl.classList.toggle('cf-sen', v === 'sen');
     rootEl.classList.toggle('cf-fuda', v === 'fuda');
-    // 外觀切換影響殘影位移公式，強制下一幀重套
+    rootEl.classList.toggle('cf-drift', v === 'drift');
+    // 外觀切換影響殘影位移公式；plansKey 也含 variant，ensurePlans 會接著重建欄位
     cols.forEach((item) => { item.age = -1; });
   }
 
@@ -356,6 +387,7 @@
   function computeAndRender(timeMs, lines) {
     if (!rootEl) return;
     syncVariant();
+    syncIntensity();
     ensurePlans(lines);
     if (plans.length === 0) { clearAllColumns(true); return; }
 
@@ -402,7 +434,7 @@
     // 專屬設定：由 LyricTemplateSettings.apply() 統一寫進 body.dataset / class，
     // 切走此模板時同一批 key 會被自動清掉（取代 display.js 舊的 else-delete）。
     settings: [
-      { key: 'columnflowVariant', type: 'enum', values: ['sen', 'fuda'], default: 'sen', target: 'data:columnflowVariant' },
+      { key: 'columnflowVariant', type: 'enum', values: ['sen', 'fuda', 'drift'], default: 'sen', target: 'data:columnflowVariant' },
       { key: 'columnflowPlacement', type: 'enum', values: ['left', 'right', 'split'], default: 'split', target: 'data:columnflowPlacement' },
       { key: 'columnflowMaxLines', type: 'int', min: 1, max: 6, default: 4, target: 'data:columnflowMaxLines' },
       { key: 'columnflowSafeMargin', type: 'int', min: 5, max: 25, default: 11, target: 'data:columnflowSafeMargin' },
@@ -416,9 +448,11 @@
       cols = new Map();
       plansForLines = null;
       variantApplied = '';
+      intensityApplied = '';
       guideEl = null;
       guideMargin = null;
       syncVariant();
+      syncIntensity();
       syncSafeZoneGuide(currentSafeMargin());
     },
 
@@ -426,7 +460,13 @@
     // （暫停或還沒開始播放時，karaoke.js 根本不會再呼叫 onFrame）。karaoke.js 在套用
     // 設定時會直接同步呼叫這裡，使用者拖曳滑桿就能立刻在預覽看到引導線跟著動。
     onSettings(settings, ctx) {
+      syncVariant();
+      syncIntensity();
       syncSafeZoneGuide(currentSafeMargin());
+      // 外觀／強度切換時，暫停中也要立刻在預覽重排
+      if (ctx && typeof ctx.getCurrentTimeMs === 'function' && typeof ctx.getLyrics === 'function') {
+        computeAndRender(ctx.getCurrentTimeMs(), ctx.getLyrics());
+      }
     },
 
     destroy() {

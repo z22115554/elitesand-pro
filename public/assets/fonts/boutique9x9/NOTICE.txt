@@ -1,0 +1,9 @@
+精品點陣體9×9（BoutiqueBitmap9x9）1.93 R
+作者：《字言字語》Cen-cyun Liu / Luke Liu（fontspeech.blogspot.com）
+來源：https://github.com/scott0107000/BoutiqueBitmap9x9（BoutiqueBitmap9x9_1.93.ttf，原始未修改版）
+授權：SIL Open Font License 1.1（見同目錄 OFL.txt）
+      「任何人可以無償使用此字型，包含商用……可自由傳送、分享此字型，或與其他軟體
+       綑綁發行、銷售。捆包中必須同時包含授權文件檔（OFL.txt）。禁止單獨出售字型檔。」
+保留名稱：BoutiqueBitmap、精品點陣體、精品点阵体（衍生品不得使用）。
+用途：燈牌（lightboard）模板可選的點陣字型（另一款是內建的 Cubic 11）；一般字體選單不使用這份字型檔。
+基底：本字型改作自 M+ BITMAP FONTS（COZ, 2002-2004）與ベストテン（BestTen-DOT），兩者皆為自由字型。

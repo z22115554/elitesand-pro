@@ -61,12 +61,11 @@
     convertTraditional: true, // 簡轉繁（簡體歌詞顯示成繁體；只轉原文 Han 字，不動拼音/諧音）；預設開啟
     showProgressBar: true,     // 顯示端底部極細歌曲進度條；預設開，OBS 不想要可在「歌詞顯示模式」關掉
     // ── 燈牌：只吃兩款真點陣字型；三段捲動各自獨立 ──
-    lightboardFont: 'cubic11',       // 'cubic11'（內建）｜'boutique9x9'（需本機安裝）
+    lightboardFont: 'cubic11',       // 'cubic11'（11×11）｜'boutique9x9'（9×9）；兩款都隨程式打包（SIL OFL）
     lightboardPan: true,             // 長句平移：功能不是裝飾，關掉會讓整首歌遷就最長句而縮小字級
     lightboardIdleMarquee: true,     // 間奏跑馬：只在沒人唱時跑，零成本
+    lightboardIdleGapMs: 2500,       // 間奏跑馬門檻：間奏要長過這個秒數才開始跑（1.5–20s）
     lightboardSlideIn: false,        // 進場滑入：每句都動會累積成吵，預設關
-    // ── 詩頁排向：'horizontal' 橫排捲動逐字上墨 ｜ 'vertical' 直排四相漂字（靠邊＝lyricPosition）──
-    stanzaOrient: 'horizontal',
     // ── 紙帶逐字：排向（橫式白條／直式黑條）＋紙條顏色 ──
     paperstripOrient: 'horizontal',
     paperstripColor: '#ffffff',
@@ -95,7 +94,7 @@
     template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura' | 'ktv' | 'columnflow' | 'paperstrip' | 'mirror'
     animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
     lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
-    columnflowVariant: 'sen', // 直書句流：'sen' | 'fuda'
+    columnflowVariant: 'sen', // 直書句流：'sen' 素筆 | 'fuda' 字札 | 'drift' 漂字（四相漂入，吃動畫強度）
     columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
     columnflowMaxLines: 4, // 直書句流：同時保留 1–6 句
     columnflowSafeMargin: 11, // 直書句流：中央安全距離（%，5–25），兩側直行不會跨入
@@ -108,7 +107,7 @@
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'wordscape'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'wordscape'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -118,11 +117,10 @@
     drift: { label: 'Drift', description: '斜向節拍與逐字律動，適合節奏鮮明的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     aura: { label: 'Aura', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     ktv: { label: '霓彩伴唱', description: '固定雙行演唱畫面，適合逐字或跟唱情境。長間奏與全曲結尾會顯示畫面字樣，可自訂；留空時依顯示語言帶預設（繁中維持原本文案）。', scope: '可調：字型、配色、背景、詳細邊距、長間奏／結尾字樣；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，逐字浮現，唱過的句子留下淡淡殘影。', scope: '可調：直書樣式、左右配置、保留句數、字型、配色與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
+    columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，唱過的句子留下淡淡殘影。三種進場：素筆（逐字浮現）、字札（每字一格紙札歪斜掉入）、漂字（每字從四角帶弧度漂入定點、入場後靜止，可調沉穩／標準／狂放強度）。', scope: '可調：進場樣式（素筆／字札／漂字）、左右配置、保留句數、中央安全距離、字型、配色與背景；選漂字時可調動畫強度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     paperstrip: { label: '紙帶逐字', description: '紙帶先展開，再依歌詞時間逐字填入；每頁會依句長、總字數與節奏穩定選擇 2～4 句，小／中／大尺寸在進場前一次決定。排向可選橫式（紙帶由左往右展開，預設白條黑字）或直式（紙帶由上往下展開、字沿直欄，預設黑條白字）。', scope: '可調：排向（橫式／直式）、紙條顏色、舞台位置、中央安全距離、字型、文字色。偏左／偏右與左右分散都會限制可用寬度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: false, supportsClassicControls: false },
     mirror: { label: '虛實鏡書', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     lightboard: { label: '跑馬燈牌', description: '一塊會發光的 LED 點陣燈牌：唱過的燈亮、沒唱到的是熄滅的暗點，所以整句一直都看得見，不需要另外做進場。機殼（螺絲、指示燈、走時讀數、壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。', scope: '可調：字級（整台機器等比縮放）、燈色、燈牌字型（Cubic 11／精品點陣體 9×9）、三段捲動。<b>不吃一般字體</b>——被圓點網切開後筆畫會糊成一團。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    stanza: { label: '逐字詩箋', description: '兩種排向。橫排：整段左貼、逐字上墨，唱過的墨乾成較淡的痕，正在唱的那個字是筆尖所在，字本身幾乎不移動。直排：四相漂字——整段切成單邊 1–4 句的批次，每個字輪流從左上／右上／左下／右下帶弧度漂入定點、入場後完全靜止，下一批上場時舊批模糊淡出。直排可調沉穩／標準／狂放的漂入動畫強度。', scope: '可調：字級、文字色、排向（橫排捲動／直排四相漂字）、（直排）沉穩／標準／狂放漂入動畫強度。直排靠左／靠右／左右分散沿用「歌詞位置」，左右分散時可調中央安全距離。橫排開了拼音會顯示在每句旁；直排是純文字，不支援拼音／諧音／翻譯。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     typewriter: { label: '對話氣泡', description: '仿 iMessage 聊天室：每句歌詞在對話泡泡裡逐字打出、游標貼著剛打出的字閃爍。已唱不消失、往上疊。合唱歌曲一邊固定代表一個聲部；非合唱時可選全左／全右／左右分散（分散＝1–5 句一段隨機交替）。長間奏會像聊天室冷場一樣跳一張貼圖（可上傳自己的，支援透明 PNG／GIF）。', scope: '可調：字型、文字色、左右對話泡泡底色、左右邊距、靠邊方式（全左／全右／左右分散）、長間奏貼圖（開關／門檻／自訂圖庫）。上下位置與堆疊構圖固定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     wordscape: { label: '字界巡航', description: '整首歌都在同一個文字世界裡前進：每個字依時間軸逐字出場，鏡頭持續滑行並保留錯落、呼吸與殘影；只有長停頓才硬清場。', scope: '可調：字型、字級、文字色、主唱色與動畫強度。整句不會被切成一幕一幕，換歌也會依各句時間與字數自動重排；不支援拼音／諧音。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
   };
@@ -138,17 +136,15 @@
     drift: { ...DEFAULT_SETTINGS, template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
     aura: { ...DEFAULT_SETTINGS, template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
     ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center', ktvInterludeText: '', ktvEndingText: '' },
-    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4, columnflowSafeMargin: 11, columnflowShowSafeZoneOnObs: false },
+    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4, columnflowSafeMargin: 11, columnflowShowSafeZoneOnObs: false, animationIntensity: 'normal' },
     paperstrip: { ...DEFAULT_SETTINGS, template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
     mirror: { ...DEFAULT_SETTINGS, template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
-    lightboard: { ...DEFAULT_SETTINGS, template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardSlideIn: false },
-    stanza: { ...DEFAULT_SETTINGS, template: 'stanza', fontSize: 56, fontWeight: 700, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'left', stanzaOrient: 'horizontal', stageSafeMargin: 12, strokeWidth: 1.5, strokeColor: '#0d1a26', paddingX: 60, paddingY: 48, maxWidth: 32 },
+    lightboard: { ...DEFAULT_SETTINGS, template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
     typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
     wordscape: { ...DEFAULT_SETTINGS, template: 'wordscape', fontWeight: 900, fontSize: 56, color: '#0c0e12', activeColor: '#ed3153', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, animationIntensity: 'normal' },
   };
-  const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
+  const COLUMNFLOW_VARIANTS = ['sen', 'fuda', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
-  const STANZA_ORIENTS = ['horizontal', 'vertical'];
   const PAPERSTRIP_ORIENTS = ['horizontal', 'vertical'];
   // 排向切換時一併帶入的色彩預設：橫式＝白條黑字（原預設）、直式＝黑條白字
   const PAPERSTRIP_ORIENT_PRESET = {
@@ -226,7 +222,6 @@
           if (id === 'mirror') out[id].lyricPosition = 'split';
           // 打字機沒有「置中」選項：舊快照若存了 center，一律當「左右分散」
           if (id === 'typewriter' && out[id].lyricPosition === 'center') out[id].lyricPosition = 'split';
-          if (id === 'stanza' && !STANZA_ORIENTS.includes(out[id].stanzaOrient)) out[id].stanzaOrient = 'horizontal';
           if (id === 'paperstrip' && !PAPERSTRIP_ORIENTS.includes(out[id].paperstripOrient)) out[id].paperstripOrient = 'horizontal';
         }
       });
@@ -378,6 +373,7 @@
     { id: 'ls-tw-bubble-left', key: 'twBubbleLeft' },
     { id: 'ls-tw-sticker-enabled', key: 'twStickerEnabled' },
     { id: 'ls-tw-sticker-gap', key: 'twStickerGapMs', valId: 'ls-tw-sticker-gap-val', fmt: v => (Number(v) / 1000).toFixed(1) + 's' },
+    { id: 'ls-lightboard-idle-gap', key: 'lightboardIdleGapMs', valId: 'ls-lightboard-idle-gap-val', fmt: v => (Number(v) / 1000).toFixed(1) + 's' },
     { id: 'ls-stroke-width', key: 'strokeWidth', valId: 'ls-stroke-width-val', fmt: v => v + 'px' },
     { id: 'ls-stroke-color', key: 'strokeColor' },
     { id: 'ls-history-lines', key: 'historyLines', valId: 'ls-history-lines-val' },
@@ -869,7 +865,6 @@
     // 打字機是固定構圖模板，但「歌詞位置」仍有意義（全左／全右／左右分散＝靠邊方式），所以特例放行位置選擇列
     const isTypewriter = settings.template === 'typewriter';
     const isLightboard = settings.template === 'lightboard';
-    const isStanza = settings.template === 'stanza';
     // 燈牌只吃真點陣字型：一般字體選單整塊收起來，換成自己的兩選一
     const fontFamilyFields = document.getElementById('font-family-fields');
     if (fontFamilyFields) fontFamilyFields.hidden = isLightboard;
@@ -877,11 +872,6 @@
     if (lbFontField) lbFontField.hidden = !isLightboard;
     const lbScrollField = document.getElementById('lightboard-scroll-field');
     if (lbScrollField) lbScrollField.hidden = !isLightboard;
-    const stanzaOrientField = document.getElementById('stanza-orient-field');
-    if (stanzaOrientField) stanzaOrientField.hidden = !isStanza;
-    document.querySelectorAll('#stanza-orient-buttons .style-thumb').forEach((b) => {
-      b.classList.toggle('active', b.dataset.stanzaOrient === (settings.stanzaOrient || 'horizontal'));
-    });
     // 紙帶逐字：排向（橫式／直式）＋紙條顏色
     const isPaperstripTpl = settings.template === 'paperstrip';
     const psOrientField = document.getElementById('paperstrip-orient-field');
@@ -894,16 +884,11 @@
     // KTV：長間奏／結尾字樣（留空＝依語言）
     const ktvTextField = document.getElementById('ktv-text-field');
     if (ktvTextField) ktvTextField.hidden = settings.template !== 'ktv';
-    // 詩頁直排（四相漂字）：靠左／靠右／左右分散沿用 lyricPosition，沒有「置中」
-    const isStanzaVertical = isStanza && settings.stanzaOrient === 'vertical';
-    if (isStanzaVertical && settings.lyricPosition === 'center') { settings.lyricPosition = 'left'; }
     // 安全距離只有「舞台位置」模板（Pulse/Facet/Aura；Drift 共用同一套排版機制，
     // 但這次只開放這三個的設定 UI）在「左右分散」時才有意義——其他位置模式沒有中央保留區可調。
     // 紙帶逐字／鏡像的排版本身就仰賴這條安全距離（鏡像甚至永遠固定 split），必須一起開放。
-    // 詩頁直排只有「左右分散」時中央才有保留區可調。
     const STAGE_SAFE_MARGIN_UI_TEMPLATES = ['pulse', 'facet', 'aura', 'paperstrip', 'mirror'];
-    const isStageSplit = (isStanzaVertical && settings.lyricPosition === 'split')
-      || (STAGE_SAFE_MARGIN_UI_TEMPLATES.includes(settings.template) && settings.lyricPosition === 'split');
+    const isStageSplit = STAGE_SAFE_MARGIN_UI_TEMPLATES.includes(settings.template) && settings.lyricPosition === 'split';
 
     const templateLabel = document.getElementById('lyric-template-label');
     const templateStatus = document.getElementById('lyric-template-status');
@@ -919,9 +904,9 @@
     if (templateScope) templateScope.textContent = window.I18n ? window.I18n.translate(ui.scope) : ui.scope;
 
     const intensityField = document.getElementById('intensity-field');
-    // 逐字詩箋只有「直排（四相漂字）」才吃動畫強度；橫排是逐字上墨、字幾乎不動
-    const stanzaHidesIntensity = settings.template === 'stanza' && settings.stanzaOrient !== 'vertical';
-    if (intensityField) intensityField.hidden = !ui.supportsIntensity || stanzaHidesIntensity;
+    // 直書句流只有「漂字」進場才吃動畫強度；素筆／字札不吃
+    const columnflowHidesIntensity = settings.template === 'columnflow' && settings.columnflowVariant !== 'drift';
+    if (intensityField) intensityField.hidden = !ui.supportsIntensity || columnflowHidesIntensity;
     document.querySelectorAll('#intensity-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.intensity === (settings.animationIntensity || 'normal'));
     });
@@ -940,7 +925,7 @@
     const fineHint = document.getElementById('lyric-pos-fine-hint');
     if (gridWrap) gridWrap.hidden = !isClassic;
     if (posGrid) posGrid.hidden = !isClassic;
-    if (quadRow) quadRow.hidden = isClassic || (ui.positionMode === 'fixed' && !isTypewriter && !isStanzaVertical) || isColumnflow;
+    if (quadRow) quadRow.hidden = isClassic || (ui.positionMode === 'fixed' && !isTypewriter) || isColumnflow;
     const twColorsField = document.getElementById('typewriter-colors-field');
     if (twColorsField) twColorsField.hidden = !isTypewriter;
     const twStickerField = document.getElementById('tw-sticker-field');
@@ -951,7 +936,7 @@
     }
     // 打字機：沒有「置中」靠邊方式；左右邊距從詳細設定挪到「歌詞位置」正下面
     const posCenterBtn = document.querySelector('#lyric-pos-buttons .style-thumb[data-lyric-pos="center"]');
-    if (posCenterBtn) posCenterBtn.hidden = isTypewriter || isStanzaVertical;
+    if (posCenterBtn) posCenterBtn.hidden = isTypewriter;
     const twPaddingField = document.getElementById('typewriter-padding-field');
     if (twPaddingField) twPaddingField.hidden = !isTypewriter;
     const modalPaddingXField = document.getElementById('padding-x-field');
@@ -1088,7 +1073,6 @@
       if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
       if (settings.template === 'mirror') settings.lyricPosition = 'split';
       if (settings.template === 'typewriter' && settings.lyricPosition === 'center') settings.lyricPosition = 'split';
-      if (settings.template === 'stanza' && !STANZA_ORIENTS.includes(settings.stanzaOrient)) settings.stanzaOrient = 'horizontal';
       if (settings.template === 'paperstrip' && !PAPERSTRIP_ORIENTS.includes(settings.paperstripOrient)) settings.paperstripOrient = 'horizontal';
       if (settings.template === 'columnflow') {
         if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
@@ -1132,6 +1116,7 @@
         if (settings.template !== 'columnflow' || !COLUMNFLOW_VARIANTS.includes(variant)) return;
         settings.columnflowVariant = variant;
         syncTemplateButtons();
+        refreshControls(); // 切到／離開「漂字」時，動畫強度欄要即時顯示／隱藏
         pushSettings();
       });
     });
@@ -1140,15 +1125,6 @@
         const placement = btn.dataset.columnflowPlacement;
         if (settings.template !== 'columnflow' || !COLUMNFLOW_PLACEMENTS.includes(placement)) return;
         settings.columnflowPlacement = placement;
-        syncTemplateButtons();
-        pushSettings();
-      });
-    });
-    document.querySelectorAll('#stanza-orient-buttons .style-thumb').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const orient = btn.dataset.stanzaOrient;
-        if (settings.template !== 'stanza' || !STANZA_ORIENTS.includes(orient)) return;
-        settings.stanzaOrient = orient;
         syncTemplateButtons();
         pushSettings();
       });
@@ -1244,8 +1220,30 @@
     if (fitEl) fitEl.value = settings.displayBgFit || 'cover';
   }
 
-  // ── 對話氣泡：間奏貼圖圖庫（上傳／刪除，內建三張唯讀）──
+  // ── 對話氣泡：間奏貼圖圖庫（上傳／刪除；內建貼圖可個別隱藏，reset 一次找回）──
   let twStickerListCache = null;
+  async function deleteSticker(id) {
+    try {
+      const res = await PinAuth.fetchWithPin(`/api/typewriter-stickers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (!res.ok || !d.success) throw new Error(d.error || '刪除未確認');
+      renderStickerGallery(d);
+      pushSettings(); // 觸發 onSettings → 模板重抓圖庫
+    } catch (e) { showToast(`貼圖刪除失敗：${e.message}`); }
+  }
+  function makeStickerCell(url, id, isBuiltin) {
+    const cell = document.createElement('div');
+    cell.className = isBuiltin ? 'tw-sticker-cell is-builtin' : 'tw-sticker-cell';
+    const img = document.createElement('img');
+    img.src = url; img.alt = ''; img.loading = 'lazy';
+    cell.appendChild(img);
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'tw-sticker-del'; del.textContent = '✕';
+    del.title = isBuiltin ? '拿掉這張內建貼圖（可按「還原內建貼圖」找回）' : '刪除這張貼圖';
+    del.addEventListener('click', () => deleteSticker(id));
+    cell.appendChild(del);
+    return cell;
+  }
   function renderStickerGallery(list) {
     const wrap = document.getElementById('tw-sticker-gallery');
     if (!wrap) return;
@@ -1253,35 +1251,16 @@
     const data = twStickerListCache;
     if (!data) { wrap.textContent = ''; return; }
     wrap.textContent = '';
-    (data.builtin || []).forEach((url) => {
-      const cell = document.createElement('div');
-      cell.className = 'tw-sticker-cell is-builtin';
-      const img = document.createElement('img');
-      img.src = url; img.alt = ''; img.loading = 'lazy';
-      cell.appendChild(img);
-      wrap.appendChild(cell);
+    (data.builtin || []).forEach((b) => {
+      const url = typeof b === 'string' ? b : (b && b.url);
+      const id = typeof b === 'string' ? b.split('/').pop() : (b && b.id);
+      if (url && id) wrap.appendChild(makeStickerCell(url, id, true));
     });
     (data.custom || []).forEach((s) => {
-      const cell = document.createElement('div');
-      cell.className = 'tw-sticker-cell';
-      const img = document.createElement('img');
-      img.src = s.url; img.alt = ''; img.loading = 'lazy';
-      cell.appendChild(img);
-      const del = document.createElement('button');
-      del.type = 'button'; del.className = 'tw-sticker-del'; del.textContent = '✕';
-      del.title = '刪除這張貼圖';
-      del.addEventListener('click', async () => {
-        try {
-          const res = await PinAuth.fetchWithPin(`/api/typewriter-stickers/${encodeURIComponent(s.id)}`, { method: 'DELETE' });
-          const d = await res.json();
-          if (!res.ok || !d.success) throw new Error(d.error || '刪除未確認');
-          renderStickerGallery(d);
-          pushSettings(); // 觸發 onSettings → 模板重抓圖庫
-        } catch (e) { showToast(`貼圖刪除失敗：${e.message}`); }
-      });
-      cell.appendChild(del);
-      wrap.appendChild(cell);
+      if (s && s.url && s.id) wrap.appendChild(makeStickerCell(s.url, s.id, false));
     });
+    const resetBtn = document.getElementById('tw-sticker-reset');
+    if (resetBtn) resetBtn.hidden = !(data.builtinHiddenCount > 0);
   }
   function refreshStickerGallery() {
     fetch('/api/typewriter-stickers').then((r) => (r.ok ? r.json() : null)).then((d) => {
@@ -1310,6 +1289,19 @@
         } finally {
           input.value = '';
         }
+      });
+    }
+    const resetBtn = document.getElementById('tw-sticker-reset');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', async () => {
+        try {
+          const res = await PinAuth.fetchWithPin('/api/typewriter-stickers/reset-builtin', { method: 'POST' });
+          const d = await res.json();
+          if (!res.ok || !d.success) { showToast(d.error || '還原失敗'); return; }
+          renderStickerGallery(d);
+          pushSettings();
+          showToast('內建貼圖已還原');
+        } catch (e) { showToast('還原失敗'); }
       });
     }
     refreshStickerGallery();
@@ -1485,7 +1477,6 @@
         if (!TEMPLATE_IDS.includes(settings.template)) settings.template = 'classic';
         if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
         if (settings.template === 'typewriter' && settings.lyricPosition === 'center') settings.lyricPosition = 'split';
-        if (settings.template === 'stanza' && !STANZA_ORIENTS.includes(settings.stanzaOrient)) settings.stanzaOrient = 'horizontal';
         if (settings.template === 'paperstrip' && !PAPERSTRIP_ORIENTS.includes(settings.paperstripOrient)) settings.paperstripOrient = 'horizontal';
         if (settings.template === 'columnflow') {
           if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';

@@ -123,6 +123,7 @@ const lyricsUpload = multer({
 // ─── Multer 設定（Phase 4：OBS 顯示端自訂背景圖）───
 const BACKGROUNDS_DIR = path.join(dataDir, 'backgrounds');
 const STICKERS_DIR = path.join(dataDir, 'typewriter-stickers');
+const STICKERS_HIDDEN_FILE = path.join(dataDir, 'typewriter-stickers-hidden.json');
 const STICKER_EXT = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
 const STICKER_MAX = 24; // 自訂貼圖數量上限（不含內建三張）
 const BUILTIN_STICKERS_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'typewriter-stickers');
@@ -176,13 +177,35 @@ const stickerUpload = multer({
   limits: { fileSize: 8 * 1024 * 1024, files: STICKER_MAX },
 });
 
-function listBuiltinStickers() {
+// 內建貼圖不能真的刪（檔案在 repo assets 裡），改記一份「已隱藏」清單在 dataDir，
+// reset 就是清空這份清單。清單只存內建檔名。
+function builtinStickerFilenames() {
   try {
     return fs.readdirSync(BUILTIN_STICKERS_DIR)
       .filter((n) => STICKER_EXT.includes(path.extname(n).toLowerCase()))
-      .sort()
-      .map((n) => `/assets/typewriter-stickers/${n}`);
+      .sort();
   } catch (_) { return []; }
+}
+function readHiddenBuiltinStickers() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(STICKERS_HIDDEN_FILE, 'utf8'));
+    return Array.isArray(raw) ? raw.filter((n) => typeof n === 'string') : [];
+  } catch (_) { return []; }
+}
+function writeHiddenBuiltinStickers(list) {
+  const valid = builtinStickerFilenames();
+  const clean = [...new Set((list || []).filter((n) => valid.includes(n)))];
+  try {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(STICKERS_HIDDEN_FILE, JSON.stringify(clean), 'utf8');
+  } catch (err) { log.error('隱藏內建貼圖清單寫入失敗', err); }
+  return clean;
+}
+function listBuiltinStickers() {
+  const hidden = new Set(readHiddenBuiltinStickers());
+  return builtinStickerFilenames()
+    .filter((n) => !hidden.has(n))
+    .map((n) => ({ id: n, url: `/assets/typewriter-stickers/${n}`, builtin: true }));
 }
 function listCustomStickers() {
   try {
@@ -191,6 +214,16 @@ function listCustomStickers() {
       .sort()
       .map((n) => ({ id: n, url: `/typewriter-sticker/${n}` }));
   } catch (_) { return []; }
+}
+function stickerListPayload() {
+  const hiddenCount = readHiddenBuiltinStickers().length;
+  return {
+    success: true,
+    builtin: listBuiltinStickers(),
+    custom: listCustomStickers(),
+    builtinTotal: builtinStickerFilenames().length,
+    builtinHiddenCount: hiddenCount,
+  };
 }
 
 // ─── 健康檢查 ───
@@ -1065,7 +1098,7 @@ router.post('/background', requirePin, bgUpload.single('background'), (req, res)
 
 // ─── 對話氣泡間奏貼圖 ───
 router.get('/typewriter-stickers', (req, res) => {
-  res.json({ success: true, builtin: listBuiltinStickers(), custom: listCustomStickers() });
+  res.json(stickerListPayload());
 });
 
 router.post('/typewriter-stickers', requirePin, stickerUpload.array('stickers', STICKER_MAX), (req, res) => {
@@ -1081,22 +1114,46 @@ router.post('/typewriter-stickers', requirePin, stickerUpload.array('stickers', 
       const drop = files.shift();
       try { fs.unlinkSync(path.join(STICKERS_DIR, drop)); } catch (e) { /* 靜默 */ }
     }
-    res.json({ success: true, builtin: listBuiltinStickers(), custom: listCustomStickers() });
+    res.json(stickerListPayload());
   } catch (err) {
     log.error('間奏貼圖處理失敗', err);
     res.status(500).json({ error: '貼圖處理失敗' });
   }
 });
 
+// 把被隱藏的內建貼圖全部找回來（reset）
+router.post('/typewriter-stickers/reset-builtin', requirePin, (req, res) => {
+  try {
+    writeHiddenBuiltinStickers([]);
+    res.json(stickerListPayload());
+  } catch (err) {
+    log.error('內建貼圖 reset 失敗', err);
+    res.status(500).json({ error: '內建貼圖 reset 失敗' });
+  }
+});
+
 router.delete('/typewriter-stickers/:id', requirePin, (req, res) => {
   const safeName = path.basename(req.params.id || '');
+  if (!safeName) return res.status(400).json({ error: '無效的貼圖名稱' });
+
+  // 內建貼圖：不刪檔案，只加進「已隱藏」清單（reset-builtin 可全部找回）
+  if (builtinStickerFilenames().includes(safeName)) {
+    try {
+      writeHiddenBuiltinStickers([...readHiddenBuiltinStickers(), safeName]);
+      return res.json(stickerListPayload());
+    } catch (err) {
+      log.error('內建貼圖隱藏失敗', err);
+      return res.status(500).json({ error: '內建貼圖隱藏失敗' });
+    }
+  }
+
   const target = path.resolve(STICKERS_DIR, safeName);
-  if (!safeName || !target.startsWith(STICKERS_DIR + path.sep)) {
+  if (!target.startsWith(STICKERS_DIR + path.sep)) {
     return res.status(400).json({ error: '無效的貼圖名稱' });
   }
   try {
     if (fs.existsSync(target)) fs.unlinkSync(target);
-    res.json({ success: true, builtin: listBuiltinStickers(), custom: listCustomStickers() });
+    res.json(stickerListPayload());
   } catch (err) {
     log.error('間奏貼圖刪除失敗', err);
     res.status(500).json({ error: '貼圖刪除失敗' });

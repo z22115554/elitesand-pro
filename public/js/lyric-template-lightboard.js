@@ -5,7 +5,7 @@
  * 「暗點也是資訊」，所以不需要另外做進場。機殼裝飾（螺絲、指示燈、走時讀數、
  * 壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。
  *
- * 字型只給兩款真點陣字型（Cubic 11 內建、精品點陣體 9×9 需本機安裝），不吃一般字體：
+ * 字型只給兩款真點陣字型（Cubic 11 11×11、精品點陣體 9×9；皆隨程式打包、SIL OFL），不吃一般字體：
  * 一般字體被圓點網遮罩切開後，筆畫之間的縫小於一個燈距就會糊成一團（14 畫的字尤其明顯）。
  * 點陣字型每個字都是手工排進格子的，永遠不糊。代價是字級必須是「設計格數」的整數倍
  * （Cubic 11 → 11、精品 → 9），否則像素會被壓成不等寬——見 snapSize()。
@@ -26,7 +26,7 @@
     cubic11: { grid: 11, cls: 'lb-font-cubic11' },
     boutique9x9: { grid: 9, cls: 'lb-font-boutique9x9' },
   };
-  const IDLE_MIN_GAP_MS = 2500;   // 間奏要夠長才跑馬，否則句間空檔會一直閃
+  const IDLE_MIN_GAP_DEFAULT_MS = 2500;  // 間奏跑馬的預設門檻（可由面板調 1.5–20s）
   const IDLE_ENTER_MS = 900;      // 句尾過了這麼久才開始跑，避免尾音還沒收就切走
   const IDLE_SPEED_PX_MS = 0.11;
   const HEAD_RATIO = 0.42;        // 長句平移時，正在唱的字停在燈箱的這個位置
@@ -49,6 +49,11 @@
   function fontKey() {
     const v = String(document.body.dataset.lightboardFont || 'cubic11');
     return FONTS[v] ? v : 'cubic11';
+  }
+  // 間奏跑馬門檻：面板可調（body.dataset.lightboardIdleGapMs），夾在 1.5–20 秒
+  function idleGapMs() {
+    const v = Math.round(Number(document.body.dataset.lightboardIdleGapMs));
+    return Number.isFinite(v) ? Math.max(1500, Math.min(20000, v)) : IDLE_MIN_GAP_DEFAULT_MS;
   }
 
   function visibleLines(ctx) {
@@ -231,7 +236,7 @@
 
     // 間奏跑馬：只在沒有人在唱的空檔跑
     const nextT = lines[idx + 1] ? lines[idx + 1].time : Infinity;
-    const inGap = t > end + IDLE_ENTER_MS && (nextT - end) > IDLE_MIN_GAP_MS;
+    const inGap = t > end + IDLE_ENTER_MS && (nextT - end) > idleGapMs();
     if (flag('lightboardIdle', true) && inGap) {
       const song = songLabel();
       const label = song.title
@@ -275,6 +280,7 @@
       { key: 'lightboardFont', type: 'enum', values: ['cubic11', 'boutique9x9'], default: 'cubic11', target: 'data:lightboardFont' },
       { key: 'lightboardPan', type: 'bool01', default: true, target: 'data:lightboardPan' },
       { key: 'lightboardIdleMarquee', type: 'bool01', default: true, target: 'data:lightboardIdle' },
+      { key: 'lightboardIdleGapMs', type: 'int', min: 1500, max: 20000, default: 2500, target: 'data:lightboardIdleGapMs' },
       { key: 'lightboardSlideIn', type: 'bool01', default: false, target: 'data:lightboardSlide' },
     ],
 

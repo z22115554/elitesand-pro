@@ -108,8 +108,8 @@
     return currentTrackIndex;
   }
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'wordscape'];
-  const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'wordscape'];
+  const COLUMNFLOW_VARIANTS = ['sen', 'fuda', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
@@ -150,7 +150,7 @@
   };
 
   function templateSupportsIntensity(template) {
-    return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'wordscape', 'stanza'].includes(template);
+    return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'wordscape', 'columnflow'].includes(template);
   }
 
   function normalizeColumnflowMaxLines(value) {
@@ -191,7 +191,9 @@
     if (columnflowGroup) columnflowGroup.hidden = !isColumnflow;
     if (columnflowPlacementGroup) columnflowPlacementGroup.hidden = !isColumnflow;
     if (columnflowMaxLinesGroup) columnflowMaxLinesGroup.hidden = !isColumnflow;
-    if (intensityGroup) intensityGroup.hidden = !templateSupportsIntensity(template);
+    // 直書句流只有「漂字」進場吃動畫強度；素筆／字札不吃
+    const columnflowHidesIntensity = isColumnflow && (lyricSettings.columnflowVariant || 'sen') !== 'drift';
+    if (intensityGroup) intensityGroup.hidden = !templateSupportsIntensity(template) || columnflowHidesIntensity;
     if (classicStyleGroup) classicStyleGroup.hidden = !isClassic;
 
     if (dom.lyricPreset) {

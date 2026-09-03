@@ -36,7 +36,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'stanza', 'wordscape'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'wordscape'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;
@@ -46,7 +46,7 @@ function sanitizeLyricTemplateSettings(value) {
       out[id] = { ...value[id], template: id };
       delete out[id].lyricTemplateSettings;
       delete out[id].lyricPresets;
-      if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda'].includes(out[id].columnflowVariant)) {
+      if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda', 'drift'].includes(out[id].columnflowVariant)) {
         delete out[id].columnflowVariant;
       }
       if (id === 'columnflow' && out[id].columnflowPlacement && !['left', 'right', 'split'].includes(out[id].columnflowPlacement)) {
@@ -219,7 +219,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (settings.lyricPosition && !['center', 'left', 'right', 'split'].includes(settings.lyricPosition)) {
       delete settings.lyricPosition;
     }
-    if (settings.columnflowVariant && !['sen', 'fuda'].includes(settings.columnflowVariant)) {
+    if (settings.columnflowVariant && !['sen', 'fuda', 'drift'].includes(settings.columnflowVariant)) {
       delete settings.columnflowVariant;
     }
     if (settings.columnflowPlacement && !['left', 'right', 'split'].includes(settings.columnflowPlacement)) {
@@ -233,9 +233,10 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (settings.lightboardFont && !['cubic11', 'boutique9x9'].includes(settings.lightboardFont)) {
       delete settings.lightboardFont;
     }
-    // 詩頁排向白名單
-    if (settings.stanzaOrient && !['horizontal', 'vertical'].includes(settings.stanzaOrient)) {
-      delete settings.stanzaOrient;
+    // 燈牌間奏跑馬門檻：夾在 1.5–20 秒
+    if (settings.lightboardIdleGapMs !== undefined) {
+      const g = Math.round(Number(settings.lightboardIdleGapMs));
+      settings.lightboardIdleGapMs = Number.isFinite(g) ? Math.max(1500, Math.min(20000, g)) : 2500;
     }
     // 紙帶逐字排向白名單
     if (settings.paperstripOrient && !['horizontal', 'vertical'].includes(settings.paperstripOrient)) {
