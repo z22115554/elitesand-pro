@@ -1883,40 +1883,40 @@
                   <p class="field-hint" data-sl-scope="classic list">數字越大越清楚。開著保護時已唱至少 52%、未唱至少 70%。</p>
                 </div>
 
-                <div class="field-group-title" data-sl-layout="round">圓角氣泡專屬</div>
+                <div class="field-group-title" data-sl-layout="round" data-i18n="setlist.roundOnlyTitle">圓角氣泡專屬</div>
                 <div class="switch-row" data-sl-layout="round">
-                  <div><div class="label">顯示背景球體與圓環裝飾</div><div class="sub">純裝飾用的莓果球體與薄荷圓環，預設關閉讓畫面更乾淨</div></div>
+                  <div><div class="label" data-i18n="setlist.roundDecorLabel">顯示背景球體與圓環裝飾</div><div class="sub" data-i18n="setlist.roundDecorHint">純裝飾用的莓果球體與薄荷圓環，預設關閉讓畫面更乾淨</div></div>
                   <label class="switch"><input id="sls-round-decor" type="checkbox"><span class="track"></span></label>
                 </div>
 
-                <div class="field-group-title" data-sl-layout="glow">夜間霓虹專屬</div>
+                <div class="field-group-title" data-sl-layout="glow" data-i18n="setlist.glowOnlyTitle">夜間霓虹專屬</div>
                 <div class="field" data-sl-layout="glow">
-                  <label>左上角看板文字</label>
+                  <label data-i18n="setlist.glowHeaderLabel">左上角看板文字</label>
                   <input id="sls-glow-header" type="text" class="input" value="Elitesand Pro // LIVE SETLIST">
                 </div>
 
                 <!-- ══ 風格預設與儲存：保留功能，但不再擠在每次選模板的第一屏 ══ -->
                 <details class="setlist-quick-presets" data-sl-scope="classic list">
-                  <summary>風格預設與儲存（選用）</summary>
+                  <summary data-i18n="setlist.presetsSummary">風格預設與儲存（選用）</summary>
                   <div class="setlist-quick-presets__body">
-                    <p class="field-group-desc">套用到目前選擇的設定範圍；每個預設都會保留亮色背景可讀性。</p>
+                    <p class="field-group-desc" data-i18n="setlist.presetsDesc">套用到目前選擇的設定範圍；每個預設都會保留亮色背景可讀性。</p>
                     <div class="setlist-template-status-row">
-                      <p class="sub setlist-template-status-note">可隨時回到出廠設定</p>
-                      <button id="sls-reset" class="btn btn-sm btn-ghost" type="button" title="把目前版型的所有外觀設定還原成出廠預設值">重置此版型的設定</button>
+                      <p class="sub setlist-template-status-note" data-i18n="setlist.presetsResetNote">可隨時回到出廠設定</p>
+                      <button id="sls-reset" class="btn btn-sm btn-ghost" type="button" data-i18n-title="setlist.presetsResetTitle" title="把目前版型的所有外觀設定還原成出廠預設值" data-i18n="setlist.presetsResetBtn">重置此版型的設定</button>
                     </div>
                     <div class="preset-thumb-row" id="sls-presets">
-                      <button class="preset-thumb active" data-preset="sand" type="button" title="Sand（沙金）"><span class="preset-swatch"></span><span class="preset-label">沙金</span></button>
-                      <button class="preset-thumb" data-preset="glass" type="button" title="Glass（毛玻璃）"><span class="preset-swatch"></span><span class="preset-label">毛玻璃</span></button>
-                      <button class="preset-thumb" data-preset="neon" type="button" title="Neon（霓虹）"><span class="preset-swatch"></span><span class="preset-label">霓虹</span></button>
-                      <button class="preset-thumb" data-preset="minimal" type="button" title="Minimal（極簡）"><span class="preset-swatch"></span><span class="preset-label">極簡</span></button>
-                      <button class="preset-thumb" data-preset="dark" type="button" title="Dark（深色）"><span class="preset-swatch"></span><span class="preset-label">深色</span></button>
-                      <button class="preset-thumb" data-preset="light" type="button" title="Light（淺色）"><span class="preset-swatch"></span><span class="preset-label">淺色</span></button>
+                      <button class="preset-thumb active" data-preset="sand" type="button" title="Sand（沙金）"><span class="preset-swatch"></span><span class="preset-label" data-i18n="setlist.presetSand">沙金</span></button>
+                      <button class="preset-thumb" data-preset="glass" type="button" title="Glass（毛玻璃）"><span class="preset-swatch"></span><span class="preset-label" data-i18n="setlist.presetGlass">毛玻璃</span></button>
+                      <button class="preset-thumb" data-preset="neon" type="button" title="Neon（霓虹）"><span class="preset-swatch"></span><span class="preset-label" data-i18n="setlist.presetNeon">霓虹</span></button>
+                      <button class="preset-thumb" data-preset="minimal" type="button" title="Minimal（極簡）"><span class="preset-swatch"></span><span class="preset-label" data-i18n="setlist.presetMinimal">極簡</span></button>
+                      <button class="preset-thumb" data-preset="dark" type="button" title="Dark（深色）"><span class="preset-swatch"></span><span class="preset-label" data-i18n="setlist.presetDark">深色</span></button>
+                      <button class="preset-thumb" data-preset="light" type="button" title="Light（淺色）"><span class="preset-swatch"></span><span class="preset-label" data-i18n="setlist.presetLight">淺色</span></button>
                     </div>
                     <div class="setlist-preset-save-row">
-                      <input id="sls-save-name" type="text" class="input" placeholder="幫這組風格取個名字…">
-                      <button id="sls-save-btn" class="btn btn-sm" type="button">＋ 儲存目前設定為新風格</button>
+                      <input id="sls-save-name" type="text" class="input" data-i18n-placeholder="setlist.presetSavePlaceholder" placeholder="幫這組風格取個名字…">
+                      <button id="sls-save-btn" class="btn btn-sm" type="button" data-i18n="setlist.presetSaveBtn">＋ 儲存目前設定為新風格</button>
                     </div>
-                    <p class="field-hint">存在這台電腦的瀏覽器裡（不會同步到別台裝置），可存多組，方便切換不同直播企劃的風格。</p>
+                    <p class="field-hint" data-i18n="setlist.presetSaveHint">存在這台電腦的瀏覽器裡（不會同步到別台裝置），可存多組，方便切換不同直播企劃的風格。</p>
                     <div id="sls-custom-list" class="sls-custom-list"></div>
                   </div>
                 </details>
