@@ -828,6 +828,13 @@ test('版本號比對：正式版高於同 core prerelease', () => {
   eq(compareVersions('1.0.0+build.2', '1.0.0+build.1'), 0);
 });
 
+test('版本號比對：不含分隔符的雙位數 prerelease 不可輸給個位數（test10 > test9）', () => {
+  ok(isNewerVersion('1.0.0-test10', '1.0.0-test9'), 'test10 必須新於 test9');
+  ok(!isNewerVersion('1.0.0-test9', '1.0.0-test10'));
+  eq(compareVersions('1.0.0-test19', '1.0.0-test20'), -1);
+  eq(compareVersions('1.0.0-test99', '1.0.0-test100'), -1);
+});
+
 const { selectLatestRelease } = require('../server/services/update-checker');
 const appUpdater = require('../server/services/app-updater');
 const { findVerifiedUpdateAssets } = appUpdater;

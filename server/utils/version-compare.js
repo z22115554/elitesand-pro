@@ -25,6 +25,34 @@ function parsePrerelease(version) {
   return separator === -1 ? [] : cleaned.slice(separator + 1).split('.').filter(Boolean);
 }
 
+/**
+ * 兩個都不是純數字的 identifier（例如 "test9" 對 "test10"）用純字串比較會讓
+ * "test10" < "test9"（單、雙位數交界的經典錯誤）。改成把字母／數字分段後逐段比較，
+ * 數字段落用數值比、其餘段落維持字串比，數字段落之間仍照 semver 規則排在字母段落之後。
+ */
+function naturalCompare(a, b) {
+  const runs = (value) => value.match(/\d+|\D+/g) || [];
+  const partsA = runs(a);
+  const partsB = runs(b);
+  const len = Math.max(partsA.length, partsB.length);
+  for (let i = 0; i < len; i++) {
+    const partA = partsA[i];
+    const partB = partsB[i];
+    if (partA === undefined) return -1;
+    if (partB === undefined) return 1;
+    if (partA === partB) continue;
+    const numA = /^\d+$/.test(partA);
+    const numB = /^\d+$/.test(partB);
+    if (numA && numB) {
+      const diff = Number(partA) - Number(partB);
+      if (diff !== 0) return diff > 0 ? 1 : -1;
+      continue;
+    }
+    return partA > partB ? 1 : -1;
+  }
+  return 0;
+}
+
 function comparePrereleaseIdentifier(a, b) {
   const aNumeric = /^\d+$/.test(a);
   const bNumeric = /^\d+$/.test(b);
@@ -34,7 +62,7 @@ function comparePrereleaseIdentifier(a, b) {
     return na === nb ? 0 : (na > nb ? 1 : -1);
   }
   if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;
-  return a === b ? 0 : (a > b ? 1 : -1);
+  return a === b ? 0 : naturalCompare(a, b);
 }
 
 /**
