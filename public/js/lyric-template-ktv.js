@@ -277,8 +277,9 @@
   // 不同聲部、時間上其實同時」的兩句配成一組，讓 KTV 上下兩排同時掃色。
   const CONCURRENT_OVERLAP_MS = 150;        // B 在 A 結束前這麼多毫秒就起唱 → 明確重疊
   const CONCURRENT_ONSET_MS = 600;          // A、B 起點相差在此內 → 同時起唱
-  const COUNTERPOINT_GAP_MS = 500;          // B 緊接 A（含些微重疊）
-  const COUNTERPOINT_MS_PER_CHAR = 130;     // 且 B 每字時長低於此 → 對位句被隨手塞的壞時間
+  const COUNTERPOINT_GAP_MS = 500;          // B 緊接在 A（估計）結束後這麼多毫秒內起唱 → 對唱接棒
+  const COUNTERPOINT_MS_PER_CHAR = 130;     // B 每字時長低於此 → 對位句被隨手塞的壞時間，掃色改跟 A 的時鐘走
+  const EST_MS_PER_CHAR = 220;              // a.endMs 被標得過短（LRC 只有行起點／KRC dur 偏短）時的下限節奏
 
   function tagConcurrentPairs(units) {
     for (let i = 0; i + 1 < units.length; i += 1) {
@@ -290,13 +291,17 @@
       const sb = b.singer;
       if (!sa || !sb || sa === sb || sa === 'both' || sb === 'both') continue;
 
-      const overlap = b.startMs < a.endMs - CONCURRENT_OVERLAP_MS;
+      // 對唱／call-response 常見：來源只給下一句的起點，a.endMs 因此被標得比實際唱完早
+      // （LRC 沒有逐字時間、或 KRC 的 dur 偏短），導致 overlap 判斷永遠抓不到「上一句其實
+      // 還沒唱完」。用逐字節奏推一個下限，避免這種交疊被誤判成「已經唱完、換下一句」。
+      const aEndEst = Math.max(a.endMs, a.startMs + a.chars.length * EST_MS_PER_CHAR);
+      const overlap = b.startMs < aEndEst - CONCURRENT_OVERLAP_MS;
       const coOnset = Math.abs(b.startMs - a.startMs) <= CONCURRENT_ONSET_MS;
-      const gap = b.startMs - a.endMs;
+      const gap = b.startMs - aEndEst;
       const bMsPerChar = (b.endMs - b.startMs) / Math.max(1, b.chars.length);
-      const counterpoint = gap >= -CONCURRENT_OVERLAP_MS && gap <= COUNTERPOINT_GAP_MS
-        && bMsPerChar < COUNTERPOINT_MS_PER_CHAR;
-      if (!overlap && !coOnset && !counterpoint) continue;
+      const nearTail = gap >= -CONCURRENT_OVERLAP_MS && gap <= COUNTERPOINT_GAP_MS;
+      const counterpoint = nearTail && bMsPerChar < COUNTERPOINT_MS_PER_CHAR;
+      if (!overlap && !coOnset && !nearTail) continue;
 
       a.concurrentNext = i + 1;
       b.concurrentPrev = i;

@@ -1259,15 +1259,16 @@ body.cf-show-safe-zone .cf-safe-zone-guide {
 .cf-fuda .cf-g.cf-on { color: #211a13; }
 .cf-fuda .cf-g.cf-cur { color: #3d240d; box-shadow: .08em .11em .24em rgba(0, 0, 0, .28), 0 0 .48em color-mix(in srgb, var(--lyric-color-active, #f0c978) 65%, transparent); }
 
-/* 漂字：素字（無字札），每個字從四角帶弧度漂入定點、入場後完全靜止。
-   方向 --cf-qx/--cf-qy/--cf-qr 由 JS 逐字輪替寫入；距離／模糊／旋轉／時長吃動畫強度。 */
+/* 漂字進場（逐字效果，可疊在素筆或字札外觀上）：每個字從四角帶弧度漂入定點、入場後完全靜止。
+   方向 --cf-qx/--cf-qy/--cf-qr 由 JS 逐字輪替寫入；距離／模糊／旋轉／時長吃動畫強度。
+   選擇器帶 .cf-ent-drift（進場），不再綁外觀 class，所以 sen／fuda 都能套。 */
 #columnflow-root.cf-int-calm    { --cf-drift-dist: .6;   --cf-drift-blur: .5;  --cf-drift-rot: .35; --cf-drift-dur: 360ms; }
 #columnflow-root.cf-int-chaotic { --cf-drift-dist: 1.55; --cf-drift-blur: 1.6; --cf-drift-rot: 1.9; --cf-drift-dur: 500ms; }
-#columnflow-root.cf-drift .cf-g {
+#columnflow-root.cf-ent-drift .cf-g {
   transform: none;
   transition: opacity 120ms ease-out, color 150ms ease-out, text-shadow 150ms ease-out;
 }
-#columnflow-root.cf-drift .cf-g.cf-on {
+#columnflow-root.cf-ent-drift .cf-g.cf-on {
   opacity: 1;
   animation: cf-quad-drift var(--cf-drift-dur, 440ms) cubic-bezier(.22, .61, .36, 1) both;
 }
@@ -1293,7 +1294,7 @@ body.cf-show-safe-zone .cf-safe-zone-guide {
 
 @media (prefers-reduced-motion: reduce) {
   .cf-col, .cf-g { transition-duration: .01ms !important; }
-  #columnflow-root.cf-drift .cf-g.cf-on { animation-duration: .01ms !important; }
+  #columnflow-root.cf-ent-drift .cf-g.cf-on { animation-duration: .01ms !important; }
 }
 
 /* ─── Aura 心象 ─── */

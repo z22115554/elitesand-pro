@@ -228,13 +228,15 @@
     if (last.pairMate && entries.includes(last.pairMate)) finishEntry(last.pairMate);
   }
 
-  // 這一句大約唱到什麼時候（沒有可靠 end 時用「下一句起點」或字數估）
+  // 這一句大約唱／打到什麼時候（用來判斷下一句換聲部時，這句是否其實還沒跑完）。
+  // 不可夾「下一句起點」——在 concurrentNext 裡下一句正是要比對的夥伴句，夾了會讓 overlap 永遠為 false
+  // （這是「上一句還沒跑完，下一句一出現就直接被清掉」的真因：對唱／call-response 常常沒有可靠的
+  // 逐字結束時間，來源只給下一句的起點，於是舊版把上一句的估計結束時間夾成跟下一句起點一樣早）。
   const CONCURRENT_ONSET_MS = 700;   // 兩句起點相差在此內 → 視為同時起唱
-  function lineEndEst(lines, i) {
+  const EST_MS_PER_CHAR = 260;       // 沒有逐字時間可用時，用這個節奏估這句大概唱／打多久
+  function lineSpanEst(lines, i) {
     const n = Array.from(String(lines[i] && lines[i].text || '')).length || 1;
-    const est = lines[i].time + Math.min(n * 300, 6000);
-    const next = lines[i + 1];
-    return next && next.time > lines[i].time ? Math.min(next.time, est) : est;
+    return lines[i].time + Math.min(Math.max(n * EST_MS_PER_CHAR, 900), 6000);
   }
   // [i, i+1] 是不是「兩個聲部同時唱」的一組（相鄰、不同真聲部、時間上同時／重疊）
   function concurrentNext(lines, i) {
@@ -246,7 +248,7 @@
     if (!sa || !sb || sa === sb || sa === 'both' || sb === 'both') return -1;
     if (!SINGER_CODES.includes(sa) || !SINGER_CODES.includes(sb)) return -1;
     const coOnset = Math.abs(b.time - a.time) <= CONCURRENT_ONSET_MS;
-    const overlap = b.time < lineEndEst(lines, i);
+    const overlap = b.time >= a.time && b.time < lineSpanEst(lines, i);
     return (coOnset || overlap) ? i + 1 : -1;
   }
 
@@ -360,6 +362,22 @@
     let cur = topIdx();
     while (cur < idx) {
       cur += 1;
+      // 補配：上一顆泡泡（cur-1）跟這句其實是「同時雙聲部」，只是補上一顆時這句還沒到
+      // （mate > idx 那時還不成立），沒能一次配成對。這裡發現了就補：不收尾上一顆，
+      // 重算它的逐字時間到「整組結束」為界，兩顆一起逐字（不然上一句就會被下面的 sealTail()
+      // 直接打完收尾，看起來像「還沒唱完就被清掉」）。
+      const prevEntry = entries.length ? entries[entries.length - 1] : null;
+      if (prevEntry && !prevEntry.isSticker && prevEntry.idx === cur - 1
+        && !prevEntry.pairMate && concurrentNext(lines, cur - 1) === cur) {
+        const end = pairEndMs(lines, cur);
+        prevEntry.charStartMs = charStartsFor(lines[cur - 1], lines, cur - 1, kernel, end);
+        prevEntry.shown = -1;
+        prevEntry.bubble.classList.remove('tw-done');
+        const second = buildBubble(lines[cur], lines, cur, kernel, true, end);
+        prevEntry.pairMate = second; second.pairMate = prevEntry;
+        entries.push(second);
+        continue;
+      }
       // 換句：把前一組泡泡就地定案（整句打完、收游標），不再逐幀重繪
       sealTail();
       // 同時雙聲部：夥伴句也已起唱 → 兩顆一起上、各自從真正的整組唱段內逐字（KTV 式雙排同時掃）

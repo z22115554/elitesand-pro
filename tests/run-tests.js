@@ -8514,16 +8514,20 @@ test('直書句流「漂字」進場：四相漂入 + 動畫強度（取代原�
   ok(!/\.st-col\b/.test(displayCss) && !displayCss.includes('#stanza-root'),
     'display.css 的 #stanza-root／.st-* 樣式必須全部移除: ');
 
-  // drift 是 columnflow 的第三個進場 variant
-  ok(cf.includes("VARIANTS = ['sen', 'fuda', 'drift']") && cf.includes("classList.toggle('cf-drift'"),
-    '漂字必須是 columnflow 的第三個 variant（cf-drift class）: ');
-  ok(cf.includes('DRIFT_DIRS') && /DRIFT_DIRS\[\w+ % 4\]/.test(cf) && cf.includes('--cf-qx') && cf.includes('--cf-qy'),
-    '漂字必須四角輪替方向、逐字寫入 --cf-qx/--cf-qy: ');
+  // 漂字不再是 columnflow 的第三個外觀 variant，改成獨立一欄「逐字進場」（可疊在 sen／fuda 上）
+  ok(cf.includes("VARIANTS = ['sen', 'fuda']") && !cf.includes("'sen', 'fuda', 'drift'"),
+    'columnflowVariant 只能有 sen／fuda 兩個外觀: ');
+  ok(cf.includes("ENTRANCES = ['native', 'drift']") && cf.includes("classList.toggle('cf-ent-drift'"),
+    '逐字進場必須是獨立的 columnflowEntrance（cf-ent-drift class）: ');
+  ok(cf.includes('DRIFT_DIRS') && /DRIFT_DIRS\[\w+ % 4\]/.test(cf) && cf.includes('--cf-qx') && cf.includes('--cf-qy')
+    && cf.includes("currentEntrance() === 'drift'"),
+    '漂字必須四角輪替方向、逐字寫入 --cf-qx/--cf-qy，且由 columnflowEntrance 判斷: ');
   ok(displayCss.includes('@keyframes cf-quad-drift')
-    && /#columnflow-root\.cf-drift \.cf-g\.cf-on\s*\{[^}]*animation:\s*cf-quad-drift/.test(cssFlat),
-    '漂字進場必須是純 CSS 的 cf-quad-drift keyframe（沿用 columnflow 的 class 切換模型）: ');
+    && /#columnflow-root\.cf-ent-drift \.cf-g\.cf-on\s*\{[^}]*animation:\s*cf-quad-drift/.test(cssFlat),
+    '漂字進場必須是純 CSS 的 cf-quad-drift keyframe，選擇器要用 cf-ent-drift（不綁外觀 class，sen／fuda 都能套）: ');
+  ok(!/#columnflow-root\.cf-drift\b/.test(displayCss), 'display.css 不可再有舊的 #columnflow-root.cf-drift 選擇器: ');
 
-  // 動畫強度：只有 drift variant 吃，透過 lyricIntensity → cf-int-*
+  // 動畫強度：只有 columnflowEntrance === 'drift' 吃，透過 lyricIntensity → cf-int-*
   ok(cf.includes('CF_INTENSITY') && cf.includes('function syncIntensity')
     && cf.includes('document.body.dataset.lyricIntensity') && cf.includes('cf-int-'),
     'columnflow 必須讀 lyricIntensity 切 cf-int-* class: ');
@@ -8531,20 +8535,24 @@ test('直書句流「漂字」進場：四相漂入 + 動畫強度（取代原�
     && displayCss.includes('--cf-drift-dist') && displayCss.includes('--cf-drift-blur'),
     'display.css 必須有沉穩／狂放的漂入距離／模糊／旋轉變體: ');
   ok(/columnflow:[^}]*supportsIntensity: true/.test(lyricExtras)
-    && lyricExtras.includes("settings.template === 'columnflow' && settings.columnflowVariant !== 'drift'"),
-    '直書句流必須支援動畫強度，且只在漂字 variant 顯示強度選項: ');
-  ok(appState.includes("columnflowMaxLines: 4, animationIntensity: 'normal'"),
-    'columnflow server 預設必須帶 animationIntensity: ');
-  ok(lyricsHandler.includes("['sen', 'fuda', 'drift'].includes(settings.columnflowVariant)"),
-    'server 的 columnflowVariant 白名單必須含 drift: ');
-  ok(panelHtml.includes('data-columnflow-variant="drift"') && controllerHtml.includes('data-columnflow-variant="drift"'),
-    '桌面與手機的「直書句流樣式」選擇器都要有漂字: ');
+    && lyricExtras.includes("settings.template === 'columnflow' && settings.columnflowEntrance !== 'drift'"),
+    '直書句流必須支援動畫強度，且只在「四相漂字」逐字進場顯示強度選項: ');
+  ok(appState.includes("columnflowEntrance: 'native'") && appState.includes("columnflowMaxLines: 4, animationIntensity: 'normal'"),
+    'columnflow server 預設必須帶 columnflowEntrance 與 animationIntensity: ');
+  ok(lyricsHandler.includes("['sen', 'fuda'].includes(settings.columnflowVariant)")
+    && lyricsHandler.includes("['native', 'drift'].includes(settings.columnflowEntrance)"),
+    'server 的 columnflowVariant 白名單只能是 sen／fuda，columnflowEntrance 白名單要含 native／drift: ');
+  ok(!lyricsHandler.includes("['sen', 'fuda', 'drift'].includes(settings.columnflowVariant)"),
+    'server 不可再把 drift 當成 columnflowVariant 的合法值: ');
+  ok(panelHtml.includes('data-columnflow-entrance="drift"') && controllerHtml.includes('data-columnflow-entrance="drift"')
+    && !panelHtml.includes('data-columnflow-variant="drift"') && !controllerHtml.includes('data-columnflow-variant="drift"'),
+    '桌面與手機都要有「逐字進場：四相漂字」選擇器，且不可再有 columnflowVariant="drift"（外觀只剩 sen／fuda）: ');
   for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
-    ok(i18n.catalogs?.[locale]?.['template.columnDrift'], locale + ' 缺少 template.columnDrift: ');
+    ok(i18n.catalogs?.[locale]?.['template.columnEntranceDrift'], locale + ' 缺少 template.columnEntranceDrift: ');
   }
   ok(/function templateSupportsIntensity[\s\S]{0,160}'columnflow'/.test(controllerJs)
-    && controllerJs.includes("(lyricSettings.columnflowVariant || 'sen') !== 'drift'"),
-    '手機遙控的動畫強度也要只在漂字 variant 顯示: ');
+    && controllerJs.includes("(lyricSettings.columnflowEntrance || 'native') !== 'drift'"),
+    '手機遙控的動畫強度也要只在「四相漂字」逐字進場顯示: ');
 });
 
 test('字界巡航（wordscape）已整包移除：無鏡頭效果就完全不成立，2026-09-04 取消', () => {

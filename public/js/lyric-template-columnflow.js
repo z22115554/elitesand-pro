@@ -8,12 +8,16 @@
  * - 固定保留最近四句；新句補上時，最舊的一句才淡出，落點由亂數種子決定
  * - 超長句子依可用高度切成多個延續直行，往左自然續接（傳統直書換行方向）
  *
- * 三種外觀（同一模板、同一機制）：
+ * 兩種外觀（同一模板、同一機制）：
  * - sen（素筆）：細明朝素字，逐字浮現＋輕微下沉入定
  * - fuda（字札）：每字一格白色字札，歪斜掉入再擺正（傾角由亂數種子決定）
- * - drift（漂字）：素字，每個字輪流從左上／右上／左下／右下帶弧度漂入定點，入場後完全靜止；
- *   漂入距離／模糊／旋轉／時長吃「動畫強度」（沉穩／標準／狂放，body.dataset.lyricIntensity）。
  * 外觀由 body.dataset.columnflowVariant 驅動（display.js 套設定時寫入），逐幀比對字串成本可忽略。
+ *
+ * 逐字進場效果（columnflowEntrance，獨立一欄、可疊在任一外觀上）：
+ * - native（原樣）：吃 sen／fuda 各自的浮現／掉入
+ * - drift（漂字）：每個字輪流從左上／右上／左下／右下帶弧度漂入定點，入場後完全靜止；
+ *   漂入距離／模糊／旋轉／時長吃「動畫強度」（沉穩／標準／狂放，body.dataset.lyricIntensity）。
+ *   之後要再擴充逐字效果，就是多一個 enum 值 + 一段 CSS keyframe（見 memory wordscape-glyph-effects）。
  *
  * 完全時間驅動（同 KTV 模板）：onFrame/onSeek 都只吃 timeMs 自算，不依賴行索引事件，
  * 倒帶/大跳轉天然正確。逐幀成本：二分搜尋＋單一活躍行的字素線性掃描（<40 字）。
@@ -107,14 +111,22 @@
     return Math.max(1, vh * 0.86);
   }
 
-  const VARIANTS = ['sen', 'fuda', 'drift'];
+  const VARIANTS = ['sen', 'fuda'];
   function currentVariant() {
     const value = document.body.dataset.columnflowVariant;
     return VARIANTS.includes(value) ? value : 'sen';
   }
 
+  // 逐字進場效果：獨立一欄，可疊在 sen／fuda 任一外觀上。
+  const ENTRANCES = ['native', 'drift'];
+  function currentEntrance() {
+    const value = document.body.dataset.columnflowEntrance;
+    return ENTRANCES.includes(value) ? value : 'native';
+  }
+  let entranceApplied = '';
+
   // 漂字（drift）進場：四角輪替方向 + 依動畫強度縮放的距離／模糊／旋轉／時長。
-  // 純 CSS keyframe 驅動（.cf-g.cf-on 觸發），沿用本模板「class 切換 + CSS」的作法。
+  // 純 CSS keyframe 驅動（.cf-ent-drift .cf-g.cf-on 觸發），沿用本模板「class 切換 + CSS」的作法。
   const DRIFT_DIRS = [[-1.2, -1.0], [1.15, -1.0], [-1.1, 1.1], [1.2, 0.95]]; // 左上→右上→左下→右下（em）
   const CF_INTENSITY = ['calm', 'normal', 'chaotic'];
   let intensityApplied = '';
@@ -197,7 +209,7 @@
     const maxLines = currentMaxLines();
     const safeMargin = currentSafeMargin();
     syncSafeZoneGuide(safeMargin);
-    const key = `${currentVariant()}|${currentPlacement()}|${maxLines}|${fontPx.toFixed(1)}|${Math.round(availableColumnHeight())}|${safeMargin}`;
+    const key = `${currentVariant()}|${currentEntrance()}|${currentPlacement()}|${maxLines}|${fontPx.toFixed(1)}|${Math.round(availableColumnHeight())}|${safeMargin}`;
     if (plansForLines === lines && plansKey === key) return plans;
     plans = buildPlans(lines, fontPx, maxLines);
     plansForLines = lines;
@@ -286,7 +298,7 @@
     el.style.top = '0px';
     el.style.fontSize = `${fontPx}px`;
 
-    const isDrift = currentVariant() === 'drift';
+    const isDrift = currentEntrance() === 'drift';
     let driftIdx = 0;
     const glyphEls = [];
     plan.segments.forEach((segment) => {
@@ -377,9 +389,17 @@
     variantApplied = v;
     rootEl.classList.toggle('cf-sen', v === 'sen');
     rootEl.classList.toggle('cf-fuda', v === 'fuda');
-    rootEl.classList.toggle('cf-drift', v === 'drift');
     // 外觀切換影響殘影位移公式；plansKey 也含 variant，ensurePlans 會接著重建欄位
     cols.forEach((item) => { item.age = -1; });
+  }
+
+  // 逐字進場效果：只切一個 class；plansKey 也含 entrance，ensurePlans 會重建欄位（drift 需逐字寫方向變數）
+  function syncEntrance() {
+    if (!rootEl) return;
+    const e = currentEntrance();
+    if (e === entranceApplied) return;
+    entranceApplied = e;
+    rootEl.classList.toggle('cf-ent-drift', e === 'drift');
   }
 
   // ─── 逐幀主邏輯 ───
@@ -387,6 +407,7 @@
   function computeAndRender(timeMs, lines) {
     if (!rootEl) return;
     syncVariant();
+    syncEntrance();
     syncIntensity();
     ensurePlans(lines);
     if (plans.length === 0) { clearAllColumns(true); return; }
@@ -434,7 +455,8 @@
     // 專屬設定：由 LyricTemplateSettings.apply() 統一寫進 body.dataset / class，
     // 切走此模板時同一批 key 會被自動清掉（取代 display.js 舊的 else-delete）。
     settings: [
-      { key: 'columnflowVariant', type: 'enum', values: ['sen', 'fuda', 'drift'], default: 'sen', target: 'data:columnflowVariant' },
+      { key: 'columnflowVariant', type: 'enum', values: ['sen', 'fuda'], default: 'sen', target: 'data:columnflowVariant' },
+      { key: 'columnflowEntrance', type: 'enum', values: ['native', 'drift'], default: 'native', target: 'data:columnflowEntrance' },
       { key: 'columnflowPlacement', type: 'enum', values: ['left', 'right', 'split'], default: 'split', target: 'data:columnflowPlacement' },
       { key: 'columnflowMaxLines', type: 'int', min: 1, max: 6, default: 4, target: 'data:columnflowMaxLines' },
       { key: 'columnflowSafeMargin', type: 'int', min: 5, max: 25, default: 11, target: 'data:columnflowSafeMargin' },
@@ -448,10 +470,12 @@
       cols = new Map();
       plansForLines = null;
       variantApplied = '';
+      entranceApplied = '';
       intensityApplied = '';
       guideEl = null;
       guideMargin = null;
       syncVariant();
+      syncEntrance();
       syncIntensity();
       syncSafeZoneGuide(currentSafeMargin());
     },
@@ -461,6 +485,7 @@
     // 設定時會直接同步呼叫這裡，使用者拖曳滑桿就能立刻在預覽看到引導線跟著動。
     onSettings(settings, ctx) {
       syncVariant();
+      syncEntrance();
       syncIntensity();
       syncSafeZoneGuide(currentSafeMargin());
       // 外觀／強度切換時，暫停中也要立刻在預覽重排

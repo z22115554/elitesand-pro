@@ -94,7 +94,8 @@
     template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura' | 'ktv' | 'columnflow' | 'paperstrip' | 'mirror'
     animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
     lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
-    columnflowVariant: 'sen', // 直書句流：'sen' 素筆 | 'fuda' 字札 | 'drift' 漂字（四相漂入，吃動畫強度）
+    columnflowVariant: 'sen', // 直書句流外觀：'sen' 素筆 | 'fuda' 字札
+    columnflowEntrance: 'native', // 直書句流逐字進場：'native' 原樣 | 'drift' 四相漂字（吃動畫強度）；可疊在任一外觀上
     columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
     columnflowMaxLines: 4, // 直書句流：同時保留 1–6 句
     columnflowSafeMargin: 11, // 直書句流：中央安全距離（%，5–25），兩側直行不會跨入
@@ -117,7 +118,7 @@
     drift: { label: 'Drift', description: '斜向節拍與逐字律動，適合節奏鮮明的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     aura: { label: 'Aura', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     ktv: { label: '霓彩伴唱', description: '固定雙行演唱畫面，適合逐字或跟唱情境。長間奏與全曲結尾會顯示畫面字樣，可自訂；留空時依顯示語言帶預設（繁中維持原本文案）。', scope: '可調：字型、配色、背景、詳細邊距、長間奏／結尾字樣；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，唱過的句子留下淡淡殘影。三種進場：素筆（逐字浮現）、字札（每字一格紙札歪斜掉入）、漂字（每字從四角帶弧度漂入定點、入場後靜止，可調沉穩／標準／狂放強度）。', scope: '可調：進場樣式（素筆／字札／漂字）、左右配置、保留句數、中央安全距離、字型、配色與背景；選漂字時可調動畫強度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
+    columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，唱過的句子留下淡淡殘影。外觀：素筆（逐字浮現）或字札（每字一格紙札歪斜掉入）。逐字進場另設一欄：原樣，或四相漂字（每字從四角帶弧度漂入定點、入場後靜止，可調沉穩／標準／狂放強度）。', scope: '可調：外觀（素筆／字札）、逐字進場（原樣／四相漂字）、左右配置、保留句數、中央安全距離、字型、配色與背景；選四相漂字時可調動畫強度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     paperstrip: { label: '紙帶逐字', description: '紙帶先展開，再依歌詞時間逐字填入；每頁會依句長、總字數與節奏穩定選擇 2～4 句，小／中／大尺寸在進場前一次決定。排向可選橫式（紙帶由左往右展開，預設白條黑字）或直式（紙帶由上往下展開、字沿直欄，預設黑條白字）。', scope: '可調：排向（橫式／直式）、紙條顏色、舞台位置、中央安全距離、字型、文字色。偏左／偏右與左右分散都會限制可用寬度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: false, supportsClassicControls: false },
     mirror: { label: '虛實鏡書', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     lightboard: { label: '跑馬燈牌', description: '一塊會發光的 LED 點陣燈牌：唱過的燈亮、沒唱到的是熄滅的暗點，所以整句一直都看得見，不需要另外做進場。機殼（螺絲、指示燈、走時讀數、壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。', scope: '可調：字級（整台機器等比縮放）、燈色、燈牌字型（Cubic 11／精品點陣體 9×9）、三段捲動。<b>不吃一般字體</b>——被圓點網切開後筆畫會糊成一團。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
@@ -135,13 +136,14 @@
     drift: { ...DEFAULT_SETTINGS, template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
     aura: { ...DEFAULT_SETTINGS, template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
     ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center', ktvInterludeText: '', ktvEndingText: '' },
-    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowPlacement: 'split', columnflowMaxLines: 4, columnflowSafeMargin: 11, columnflowShowSafeZoneOnObs: false, animationIntensity: 'normal' },
+    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowEntrance: 'native', columnflowPlacement: 'split', columnflowMaxLines: 4, columnflowSafeMargin: 11, columnflowShowSafeZoneOnObs: false, animationIntensity: 'normal' },
     paperstrip: { ...DEFAULT_SETTINGS, template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
     mirror: { ...DEFAULT_SETTINGS, template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
     lightboard: { ...DEFAULT_SETTINGS, template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
     typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
   };
-  const COLUMNFLOW_VARIANTS = ['sen', 'fuda', 'drift'];
+  const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
+  const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const PAPERSTRIP_ORIENTS = ['horizontal', 'vertical'];
   // 排向切換時一併帶入的色彩預設：橫式＝白條黑字（原預設）、直式＝黑條白字
@@ -208,6 +210,7 @@
           out[id] = { ...templateDefaults(id), ...cleanSettingSnapshot(src[id]), template: id };
           if (id === 'columnflow') {
             if (!COLUMNFLOW_VARIANTS.includes(out[id].columnflowVariant)) out[id].columnflowVariant = 'sen';
+            if (!COLUMNFLOW_ENTRANCES.includes(out[id].columnflowEntrance)) out[id].columnflowEntrance = 'native';
             if (!COLUMNFLOW_PLACEMENTS.includes(out[id].columnflowPlacement)) out[id].columnflowPlacement = 'split';
             out[id].columnflowMaxLines = normalizeColumnflowMaxLines(out[id].columnflowMaxLines);
             out[id].columnflowSafeMargin = normalizeColumnflowSafeMargin(out[id].columnflowSafeMargin);
@@ -902,8 +905,8 @@
     if (templateScope) templateScope.textContent = window.I18n ? window.I18n.translate(ui.scope) : ui.scope;
 
     const intensityField = document.getElementById('intensity-field');
-    // 直書句流只有「漂字」進場才吃動畫強度；素筆／字札不吃
-    const columnflowHidesIntensity = settings.template === 'columnflow' && settings.columnflowVariant !== 'drift';
+    // 直書句流只有「四相漂字」逐字進場才吃動畫強度；原樣進場不吃
+    const columnflowHidesIntensity = settings.template === 'columnflow' && settings.columnflowEntrance !== 'drift';
     if (intensityField) intensityField.hidden = !ui.supportsIntensity || columnflowHidesIntensity;
     document.querySelectorAll('#intensity-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.intensity === (settings.animationIntensity || 'normal'));
@@ -991,15 +994,20 @@
     // KTV／燈牌 是固定構圖、沒有「歌詞位置」概念——整欄收起，不要留一個只有標題和說明的空欄
     if (lyricPosField) lyricPosField.hidden = isColumnflow || isMirror || isKtv || isLightboard;
     const columnflowVariantField = document.getElementById('columnflow-variant-field');
+    const columnflowEntranceField = document.getElementById('columnflow-entrance-field');
     const columnflowPlacementField = document.getElementById('columnflow-placement-field');
     const columnflowMaxLinesField = document.getElementById('columnflow-max-lines-field');
     const columnflowSafeMarginField = document.getElementById('columnflow-safe-margin-field');
     if (columnflowVariantField) columnflowVariantField.hidden = !isColumnflow;
+    if (columnflowEntranceField) columnflowEntranceField.hidden = !isColumnflow;
     if (columnflowPlacementField) columnflowPlacementField.hidden = !isColumnflow;
     if (columnflowMaxLinesField) columnflowMaxLinesField.hidden = !isColumnflow;
     if (columnflowSafeMarginField) columnflowSafeMarginField.hidden = !isColumnflow;
     document.querySelectorAll('#columnflow-variant-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.columnflowVariant === (settings.columnflowVariant || 'sen'));
+    });
+    document.querySelectorAll('#columnflow-entrance-buttons .style-thumb').forEach((b) => {
+      b.classList.toggle('active', b.dataset.columnflowEntrance === (settings.columnflowEntrance || 'native'));
     });
     document.querySelectorAll('#columnflow-placement-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.columnflowPlacement === (settings.columnflowPlacement || 'split'));
@@ -1074,6 +1082,7 @@
       if (settings.template === 'paperstrip' && !PAPERSTRIP_ORIENTS.includes(settings.paperstripOrient)) settings.paperstripOrient = 'horizontal';
       if (settings.template === 'columnflow') {
         if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
+        if (!COLUMNFLOW_ENTRANCES.includes(settings.columnflowEntrance)) settings.columnflowEntrance = 'native';
         if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
         settings.columnflowMaxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
         settings.columnflowSafeMargin = normalizeColumnflowSafeMargin(settings.columnflowSafeMargin);
@@ -1114,7 +1123,16 @@
         if (settings.template !== 'columnflow' || !COLUMNFLOW_VARIANTS.includes(variant)) return;
         settings.columnflowVariant = variant;
         syncTemplateButtons();
-        refreshControls(); // 切到／離開「漂字」時，動畫強度欄要即時顯示／隱藏
+        pushSettings();
+      });
+    });
+    document.querySelectorAll('#columnflow-entrance-buttons .style-thumb').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const entrance = btn.dataset.columnflowEntrance;
+        if (settings.template !== 'columnflow' || !COLUMNFLOW_ENTRANCES.includes(entrance)) return;
+        settings.columnflowEntrance = entrance;
+        syncTemplateButtons();
+        refreshControls(); // 切到／離開「四相漂字」時，動畫強度欄要即時顯示／隱藏
         pushSettings();
       });
     });
@@ -1478,6 +1496,7 @@
         if (settings.template === 'paperstrip' && !PAPERSTRIP_ORIENTS.includes(settings.paperstripOrient)) settings.paperstripOrient = 'horizontal';
         if (settings.template === 'columnflow') {
           if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
+          if (!COLUMNFLOW_ENTRANCES.includes(settings.columnflowEntrance)) settings.columnflowEntrance = 'native';
           if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
           settings.columnflowMaxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
         }

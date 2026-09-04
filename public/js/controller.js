@@ -109,7 +109,8 @@
   }
 
   const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard'];
-  const COLUMNFLOW_VARIANTS = ['sen', 'fuda', 'drift'];
+  const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
+  const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
@@ -164,6 +165,7 @@
     const isFixedPosition = template === 'ktv' || isColumnflow || isMirror;
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
     document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowVariant === (lyricSettings.columnflowVariant || 'sen')));
+    document.querySelectorAll('.ctrl-columnflow-entrance-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowEntrance === (lyricSettings.columnflowEntrance || 'native')));
     document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowPlacement === (lyricSettings.columnflowPlacement || 'split')));
     const columnflowMaxLines = normalizeColumnflowMaxLines(lyricSettings.columnflowMaxLines);
     document.querySelectorAll('.ctrl-columnflow-max-lines-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.columnflowMaxLines) === columnflowMaxLines));
@@ -171,16 +173,18 @@
     document.querySelectorAll('.ctrl-intensity-btn').forEach((b) => b.classList.toggle('active', b.dataset.intensity === (lyricSettings.animationIntensity || 'normal')));
     const positionGroup = document.getElementById('ctrl-lyric-position-group');
     const columnflowGroup = document.getElementById('ctrl-columnflow-variant-group');
+    const columnflowEntranceGroup = document.getElementById('ctrl-columnflow-entrance-group');
     const columnflowPlacementGroup = document.getElementById('ctrl-columnflow-placement-group');
     const columnflowMaxLinesGroup = document.getElementById('ctrl-columnflow-max-lines-group');
     const intensityGroup = document.getElementById('ctrl-intensity-group');
     const classicStyleGroup = document.getElementById('ctrl-classic-style-group');
     if (positionGroup) positionGroup.hidden = isFixedPosition;
     if (columnflowGroup) columnflowGroup.hidden = !isColumnflow;
+    if (columnflowEntranceGroup) columnflowEntranceGroup.hidden = !isColumnflow;
     if (columnflowPlacementGroup) columnflowPlacementGroup.hidden = !isColumnflow;
     if (columnflowMaxLinesGroup) columnflowMaxLinesGroup.hidden = !isColumnflow;
-    // 直書句流只有「漂字」進場吃動畫強度；素筆／字札不吃
-    const columnflowHidesIntensity = isColumnflow && (lyricSettings.columnflowVariant || 'sen') !== 'drift';
+    // 直書句流只有「四相漂字」逐字進場吃動畫強度；原樣進場不吃
+    const columnflowHidesIntensity = isColumnflow && (lyricSettings.columnflowEntrance || 'native') !== 'drift';
     if (intensityGroup) intensityGroup.hidden = !templateSupportsIntensity(template) || columnflowHidesIntensity;
     if (classicStyleGroup) classicStyleGroup.hidden = !isClassic;
 
@@ -229,6 +233,7 @@
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       if (nextTemplate === 'mirror') next.lyricPosition = 'split';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
+      if (nextTemplate === 'columnflow' && !COLUMNFLOW_ENTRANCES.includes(next.columnflowEntrance)) next.columnflowEntrance = 'native';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
       if (nextTemplate === 'columnflow') next.columnflowMaxLines = normalizeColumnflowMaxLines(next.columnflowMaxLines);
       stores[nextTemplate] = { ...next };
@@ -265,6 +270,14 @@
     });
   });
 
+  document.querySelectorAll('.ctrl-columnflow-entrance-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const entrance = btn.dataset.columnflowEntrance;
+      if (lyricSettings.template !== 'columnflow' || !COLUMNFLOW_ENTRANCES.includes(entrance)) return;
+      pushLyricPatch({ columnflowEntrance: entrance });
+    });
+  });
+
   document.querySelectorAll('.ctrl-columnflow-placement-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const placement = btn.dataset.columnflowPlacement;
@@ -289,6 +302,7 @@
       const next = { ...settingSnapshot(preset.settings) };
       if (!TEMPLATE_IDS.includes(next.template)) next.template = 'classic';
       if (next.template === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
+      if (next.template === 'columnflow' && !COLUMNFLOW_ENTRANCES.includes(next.columnflowEntrance)) next.columnflowEntrance = 'native';
       if (next.template === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
       if (next.template === 'columnflow') next.columnflowMaxLines = normalizeColumnflowMaxLines(next.columnflowMaxLines);
       if ((next.template === 'classic' || next.template === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';

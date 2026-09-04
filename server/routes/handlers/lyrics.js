@@ -46,8 +46,11 @@ function sanitizeLyricTemplateSettings(value) {
       out[id] = { ...value[id], template: id };
       delete out[id].lyricTemplateSettings;
       delete out[id].lyricPresets;
-      if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda', 'drift'].includes(out[id].columnflowVariant)) {
+      if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda'].includes(out[id].columnflowVariant)) {
         delete out[id].columnflowVariant;
+      }
+      if (id === 'columnflow' && out[id].columnflowEntrance && !['native', 'drift'].includes(out[id].columnflowEntrance)) {
+        delete out[id].columnflowEntrance;
       }
       if (id === 'columnflow' && out[id].columnflowPlacement && !['left', 'right', 'split'].includes(out[id].columnflowPlacement)) {
         delete out[id].columnflowPlacement;
@@ -219,8 +222,11 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (settings.lyricPosition && !['center', 'left', 'right', 'split'].includes(settings.lyricPosition)) {
       delete settings.lyricPosition;
     }
-    if (settings.columnflowVariant && !['sen', 'fuda', 'drift'].includes(settings.columnflowVariant)) {
+    if (settings.columnflowVariant && !['sen', 'fuda'].includes(settings.columnflowVariant)) {
       delete settings.columnflowVariant;
+    }
+    if (settings.columnflowEntrance && !['native', 'drift'].includes(settings.columnflowEntrance)) {
+      delete settings.columnflowEntrance;
     }
     if (settings.columnflowPlacement && !['left', 'right', 'split'].includes(settings.columnflowPlacement)) {
       delete settings.columnflowPlacement;
