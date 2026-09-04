@@ -1545,7 +1545,7 @@
           <details class="card card-collapse" id="twitch-card" open>
             <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3h16v12a4 4 0 0 1-4 4h-3l-4 3v-3H8a4 4 0 0 1-4-4V3z"/><path d="M9 7v4M15 7v4"/></svg>Twitch 開台／聊天室點歌</summary>
             <div class="card-collapse-body">
-              <p class="sub section-intro"><span data-i18n="system.twitchHintBefore">連接後會以 Twitch 的實際</span> <code>stream.online</code> <span data-i18n="system.twitchHintMiddle">時間自動開始直播歌單；聊天室輸入</span> <code>!點歌 YouTube連結</code> <span data-i18n="system.twitchHintAfter">會走既有單一下載佇列，完成後才在聊天室回覆成功。</span></p>
+              <p class="sub section-intro"><span data-i18n="system.twitchHintBefore">連接後會以 Twitch 的實際</span> <code>stream.online</code> <span data-i18n="system.twitchHintMiddle">時間自動開始直播歌單；聊天室輸入</span> <code>!點歌 <span data-i18n="system.twitchHintLinkPlaceholder">YouTube連結</span></code> <span data-i18n="system.twitchHintAfter">會走既有單一下載佇列，完成後才在聊天室回覆成功。</span></p>
               <p id="twitch-status" class="val twitch-status">讀取 Twitch 狀態中…</p>
               <button id="twitch-connect" class="btn btn-primary" type="button">連接 Twitch</button>
               <a id="twitch-device-link" class="btn btn-sm ml-8" href="#" target="_blank" rel="noopener" hidden>前往 Twitch 輸入代碼</a>
@@ -1962,52 +1962,52 @@
                     <div class="mw-settings"><div class="setlist-settings-search"><label for="setlist-settings-search" data-i18n="settings.workspace.findSettings">找設定</label><input id="setlist-settings-search" class="input" type="search" placeholder="例如：字體、寬度、已唱、陰影、場景" data-i18n-placeholder="settings.setlist.searchPlaceholder" autocomplete="off"><p id="setlist-settings-search-status" class="field-hint" role="status" aria-live="polite" data-i18n="settings.setlist.searchHint">可直接搜尋設定名稱或用途。</p></div>
 
                     <details class="card card-collapse" data-settings-workspace-group="readability" open>
-                      <summary>文字細節（次要文字）</summary>
+                      <summary data-i18n="setlist.textDetailTitle">文字細節（次要文字）</summary>
                       <div class="card-collapse-body">
-                      <p class="field-group-desc">主要文字色已在快速調整；這裡只保留需要細調的次要文字層次。</p>
+                      <p class="field-group-desc" data-i18n="setlist.textDetailDesc">主要文字色已在快速調整；這裡只保留需要細調的次要文字層次。</p>
                       <div class="field field-row">
-                        <div class="flex-grow"><label>歌手名的透明度 <span id="sls-text-sec-val" class="val">70%</span></label><input id="sls-text-sec" type="range" min="0" max="100" value="70"></div>
-                        <div class="flex-grow"><label>已唱歌名的透明度 <span id="sls-text-done-val" class="val">52%</span></label><input id="sls-text-done" type="range" min="0" max="100" value="52"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.artistOpacityLabel">歌手名的透明度 <span id="sls-text-sec-val" class="val">70%</span></label><input id="sls-text-sec" type="range" min="0" max="100" value="70"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.doneNameOpacityLabel">已唱歌名的透明度 <span id="sls-text-done-val" class="val">52%</span></label><input id="sls-text-done" type="range" min="0" max="100" value="52"></div>
                       </div>
-                      <p class="field-hint">這兩個都是以「主要文字色」為基礎調整深淺，數字越小越淡。開著可讀性保護時會保留安全下限；想做極淡效果再關閉保護。</p>
+                      <p class="field-hint" data-i18n="setlist.textDetailHint">這兩個都是以「主要文字色」為基礎調整深淺，數字越小越淡。開著可讀性保護時會保留安全下限；想做極淡效果再關閉保護。</p>
                       <div class="field">
-                        <label>編號／時間文字的透明度 <span id="sls-text-meta-val" class="val">62%</span></label>
+                        <label data-i18n="setlist.metaOpacityLabel">編號／時間文字的透明度 <span id="sls-text-meta-val" class="val">62%</span></label>
                         <input id="sls-text-meta" type="range" min="0" max="100" value="62">
-                        <p class="field-hint">影響：清單前面的數字編號、已唱歌曲旁邊的時間戳記、區塊小標籤。</p>
+                        <p class="field-hint" data-i18n="setlist.metaOpacityHint">影響：清單前面的數字編號、已唱歌曲旁邊的時間戳記、區塊小標籤。</p>
                       </div>
                       </div>
                     </details>
 
                     <details class="card card-collapse" data-settings-workspace-group="appearance" data-sl-scope="classic list">
-                      <summary>卡片邊框（經典／清單版）</summary>
+                      <summary data-i18n="setlist.cardBorderTitle">卡片邊框（經典／清單版）</summary>
                       <div class="card-collapse-body">
-                      <p class="field-group-desc">主要文字與可讀性襯底已移到快速調整；這裡只保留不常改的邊框細節。</p>
+                      <p class="field-group-desc" data-i18n="setlist.cardBorderDesc">主要文字與可讀性襯底已移到快速調整；這裡只保留不常改的邊框細節。</p>
                       <div class="field field-row">
                         <div>
-                          <label>邊框顏色</label>
+                          <label data-i18n="setlist.borderColorLabel">邊框顏色</label>
                           <input id="sls-border-color" type="color" value="#f0ead8">
                         </div>
-                        <div class="flex-grow"><label>邊框透明度 <span id="sls-border-opacity-val" class="val">9%</span></label><input id="sls-border-opacity" type="range" min="0" max="100" value="9"></div>
-                        <div class="flex-grow"><label>邊框粗細 <span id="sls-border-width-val" class="val">1px</span></label><input id="sls-border-width" type="range" min="0" max="5" step="0.5" value="1"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.borderOpacityLabel">邊框透明度 <span id="sls-border-opacity-val" class="val">9%</span></label><input id="sls-border-opacity" type="range" min="0" max="100" value="9"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.borderWidthLabel">邊框粗細 <span id="sls-border-width-val" class="val">1px</span></label><input id="sls-border-width" type="range" min="0" max="5" step="0.5" value="1"></div>
                       </div>
-                      <p class="field-hint">影響：已唱／未唱每一行外圍的細框線（經典版型的「正在播放」外框也用這組顏色與粗細）。</p>
+                      <p class="field-hint" data-i18n="setlist.cardBorderHint">影響：已唱／未唱每一行外圍的細框線（經典版型的「正在播放」外框也用這組顏色與粗細）。</p>
                       </div>
                     </details>
 
                     <details class="card card-collapse" data-settings-workspace-group="readability">
-                      <summary>字體與字級</summary>
+                      <summary data-i18n="setlist.fontSizeTitle">字體與字級</summary>
                       <div class="card-collapse-body">
-                      <p class="field-group-desc">字體分三種用途：場景版的大標題、一般內文、還有編號/標籤這種等寬數字。</p>
+                      <p class="field-group-desc" data-i18n="setlist.fontSizeDesc">字體分三種用途：場景版的大標題、一般內文、還有編號/標籤這種等寬數字。</p>
                       <div class="field">
-                        <label>標題字體（場景版的大標題）</label>
+                        <label data-i18n="setlist.fontDisplayLabel">標題字體（場景版的大標題）</label>
                         <select id="sls-font-display" class="input">
-                          <option value="Fraunces">Fraunces（預設，襯線體）</option>
-                          <option value="DM Serif Display">DM Serif Display（襯線體）</option>
-                          <option value="Noto Serif TC">思源宋體（中文襯線）</option>
-                          <option value="Georgia">Georgia（襯線體）</option>
-                          <option value="__custom__">自訂／系統字體…</option>
+                          <option value="Fraunces" data-i18n="setlist.fontFraunces">Fraunces（預設，襯線體）</option>
+                          <option value="DM Serif Display" data-i18n="setlist.fontDmSerif">DM Serif Display（襯線體）</option>
+                          <option value="Noto Serif TC" data-i18n="setlist.fontNotoSerifTc">思源宋體（中文襯線）</option>
+                          <option value="Georgia" data-i18n="setlist.fontGeorgia">Georgia（襯線體）</option>
+                          <option value="__custom__" data-i18n="setlist.fontCustomOption">自訂／系統字體…</option>
                         </select>
-                        <p class="field-hint">用在 Timeline／Diagonal／Constellation 的大標題，以及經典版與四款皮膚的「正在播放」歌名。</p>
+                        <p class="field-hint" data-i18n="setlist.fontDisplayHint">用在 Timeline／Diagonal／Constellation 的大標題，以及經典版與四款皮膚的「正在播放」歌名。</p>
                         <div id="sls-font-display-custom-wrap" hidden class="mt-8">
                           <div class="field-row">
                             <select id="sls-font-display-system" class="input flex-grow"><option value="">點右側「瀏覽系統字體」載入清單…</option></select>
@@ -2018,12 +2018,12 @@
                         </div>
                       </div>
                       <div class="field">
-                        <label>內文字體（歌名、歌手名等一般文字）</label>
+                        <label data-i18n="setlist.fontBodyLabel">內文字體（歌名、歌手名等一般文字）</label>
                         <select id="sls-font-body" class="input">
-                          <option value="Manrope">Manrope（預設，無襯線）</option>
-                          <option value="Inter">Inter（無襯線）</option>
-                          <option value="Noto Sans TC">思源黑體（中文無襯線）</option>
-                          <option value="__custom__">自訂／系統字體…</option>
+                          <option value="Manrope" data-i18n="setlist.fontManrope">Manrope（預設，無襯線）</option>
+                          <option value="Inter" data-i18n="setlist.fontInter">Inter（無襯線）</option>
+                          <option value="Noto Sans TC" data-i18n="setlist.fontNotoSansTc">思源黑體（中文無襯線）</option>
+                          <option value="__custom__" data-i18n="setlist.fontCustomOption">自訂／系統字體…</option>
                         </select>
                         <div id="sls-font-body-custom-wrap" hidden class="mt-8">
                           <div class="field-row">
@@ -2034,12 +2034,12 @@
                         </div>
                       </div>
                       <div class="field">
-                        <label>等寬字體（編號、時間戳記）</label>
+                        <label data-i18n="setlist.fontMonoLabel">等寬字體（編號、時間戳記）</label>
                         <select id="sls-font-mono" class="input">
-                          <option value="JetBrains Mono">JetBrains Mono（預設）</option>
+                          <option value="JetBrains Mono" data-i18n="setlist.fontJetBrainsMono">JetBrains Mono（預設）</option>
                           <option value="Space Mono">Space Mono</option>
                           <option value="Courier New">Courier New</option>
-                          <option value="__custom__">自訂／系統字體…</option>
+                          <option value="__custom__" data-i18n="setlist.fontCustomOption">自訂／系統字體…</option>
                         </select>
                         <div id="sls-font-mono-custom-wrap" hidden class="mt-8">
                           <div class="field-row">
@@ -2048,77 +2048,77 @@
                           </div>
                           <input id="sls-font-mono-custom" class="input mt-8" type="text" placeholder="或手動輸入字體名稱，例如：微軟正黑體">
                         </div>
-                        <p class="field-hint">影響：清單編號（01、02…）與已唱歌曲的時間戳記，等寬字體數字比較整齊好讀。</p>
+                        <p class="field-hint" data-i18n="setlist.fontMonoHint">影響：清單編號（01、02…）與已唱歌曲的時間戳記，等寬字體數字比較整齊好讀。</p>
                       </div>
                       <div data-sl-scope="classic list skin">
                         <div class="field field-row">
-                          <div class="flex-grow"><label>清單列表字級 <span id="sls-size-list-val" class="val">13px</span></label><input id="sls-size-list" type="range" min="8" max="24" value="13"></div>
-                          <div class="flex-grow"><label>歌手名字級 <span id="sls-size-artist-val" class="val">11px</span></label><input id="sls-size-artist" type="range" min="7" max="18" value="11"></div>
+                          <div class="flex-grow"><label data-i18n="setlist.listFontSizeLabel">清單列表字級 <span id="sls-size-list-val" class="val">13px</span></label><input id="sls-size-list" type="range" min="8" max="24" value="13"></div>
+                          <div class="flex-grow"><label data-i18n="setlist.artistFontSizeLabel">歌手名字級 <span id="sls-size-artist-val" class="val">11px</span></label><input id="sls-size-artist" type="range" min="7" max="18" value="11"></div>
                         </div>
                         <div class="field">
-                          <label>編號／標籤字級 <span id="sls-size-meta-val" class="val">10px</span></label>
+                          <label data-i18n="setlist.metaFontSizeLabel">編號／標籤字級 <span id="sls-size-meta-val" class="val">10px</span></label>
                           <input id="sls-size-meta" type="range" min="7" max="14" value="10">
                         </div>
                         <div class="field field-row">
-                          <div class="flex-grow"><label>「正在播放」文字粗細</label><select id="sls-fw-active" class="input"><option value="300">細（300）</option><option value="400">正常（400）</option><option value="500">中等（500）</option><option value="600">半粗（600）</option><option value="700" selected>粗體（700，預設）</option></select></div>
-                          <div class="flex-grow"><label>清單列表文字粗細</label><select id="sls-fw-list" class="input"><option value="300">細（300）</option><option value="400" selected>正常（400，預設）</option><option value="500">中等（500）</option><option value="600">半粗（600）</option></select></div>
+                          <div class="flex-grow"><label data-i18n="setlist.activeWeightLabel">「正在播放」文字粗細</label><select id="sls-fw-active" class="input"><option value="300" data-i18n="setlist.weightLight">細（300）</option><option value="400" data-i18n="setlist.weightNormal">正常（400）</option><option value="500" data-i18n="setlist.weightMedium">中等（500）</option><option value="600" data-i18n="setlist.weightSemibold">半粗（600）</option><option value="700" selected data-i18n="setlist.weightBoldDefault">粗體（700，預設）</option></select></div>
+                          <div class="flex-grow"><label data-i18n="setlist.listWeightLabel">清單列表文字粗細</label><select id="sls-fw-list" class="input"><option value="300" data-i18n="setlist.weightLight">細（300）</option><option value="400" selected data-i18n="setlist.weightNormalDefault">正常（400，預設）</option><option value="500" data-i18n="setlist.weightMedium">中等（500）</option><option value="600" data-i18n="setlist.weightSemibold">半粗（600）</option></select></div>
                         </div>
                       </div>
-                      <p class="field-hint" data-sl-scope="scene">場景版的正在播放歌曲文字大小可個別調整；整體大小用場景版設定裡的「整體縮放」。</p>
+                      <p class="field-hint" data-sl-scope="scene" data-i18n="setlist.sceneFontSizeHint">場景版的正在播放歌曲文字大小可個別調整；整體大小用場景版設定裡的「整體縮放」。</p>
                       </div>
                     </details>
 
                     <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="classic list skin">
-                      <summary>版面尺寸 — 寬度／圓角／內距</summary>
+                      <summary data-i18n="setlist.layoutSizeTitle">版面尺寸 — 寬度／圓角／內距</summary>
                       <div class="card-collapse-body">
-                      <p class="field-hint">清單型模板的寬度由 OBS Browser Source 決定，這裡不再提供固定像素寬度；要更寬就把來源拉寬，字級與間距會一起等比調整。整體大小倍率已移到快速調整的「大小」。</p>
+                      <p class="field-hint" data-i18n="setlist.layoutSizeDesc">清單型模板的寬度由 OBS Browser Source 決定，這裡不再提供固定像素寬度；要更寬就把來源拉寬，字級與間距會一起等比調整。整體大小倍率已移到快速調整的「大小」。</p>
                       <div class="field" data-sl-scope="classic list">
-                        <label>卡片圓角 <span id="sls-radius-val" class="val">14px</span></label>
+                        <label data-i18n="setlist.radiusLabel">卡片圓角 <span id="sls-radius-val" class="val">14px</span></label>
                         <input id="sls-radius" type="range" min="0" max="32" value="14">
-                        <p class="field-hint">「正在播放」大卡用這個值；已唱／未唱每列自動略小一點（−6px）比較協調。</p>
+                        <p class="field-hint" data-i18n="setlist.radiusHint">「正在播放」大卡用這個值；已唱／未唱每列自動略小一點（−6px）比較協調。</p>
                       </div>
                       <div class="field field-row">
-                        <div class="flex-grow"><label>「正在播放」上下內距 <span id="sls-padding-v-val" class="val">10px</span></label><input id="sls-padding-v" type="range" min="2" max="24" value="10"></div>
-                        <div class="flex-grow"><label>「正在播放」左右內距 <span id="sls-padding-h-val" class="val">14px</span></label><input id="sls-padding-h" type="range" min="6" max="36" value="14"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.paddingVLabel">「正在播放」上下內距 <span id="sls-padding-v-val" class="val">10px</span></label><input id="sls-padding-v" type="range" min="2" max="24" value="10"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.paddingHLabel">「正在播放」左右內距 <span id="sls-padding-h-val" class="val">14px</span></label><input id="sls-padding-h" type="range" min="6" max="36" value="14"></div>
                       </div>
                       <div class="field">
-                        <label>歌曲項目之間的間距 <span id="sls-item-gap-val" class="val">2px</span></label>
+                        <label data-i18n="setlist.itemGapLabel">歌曲項目之間的間距 <span id="sls-item-gap-val" class="val">2px</span></label>
                         <input id="sls-item-gap" type="range" min="0" max="16" value="2">
                       </div>
                       </div>
                     </details>
 
                     <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="classic list skin">
-                      <summary>排版與動畫</summary>
+                      <summary data-i18n="setlist.layoutAnimTitle">排版與動畫</summary>
                       <div class="card-collapse-body">
                       <div class="field">
-                        <label>文字行高 <span id="sls-line-height-val" class="val">1.40</span></label>
+                        <label data-i18n="setlist.lineHeightLabel">文字行高 <span id="sls-line-height-val" class="val">1.40</span></label>
                         <input id="sls-line-height" type="range" min="1" max="2.4" step="0.05" value="1.4">
-                        <p class="field-hint">數字越大，多行文字之間的垂直間距越寬鬆。</p>
+                        <p class="field-hint" data-i18n="setlist.lineHeightHint">數字越大，多行文字之間的垂直間距越寬鬆。</p>
                       </div>
                       <div class="field field-row">
-                        <div class="flex-grow"><label>整體外邊距（上下）<span id="sls-margin-v-val" class="val">0px</span></label><input id="sls-margin-v" type="range" min="0" max="80" value="0"></div>
-                        <div class="flex-grow"><label>整體外邊距（左右）<span id="sls-margin-h-val" class="val">0px</span></label><input id="sls-margin-h" type="range" min="0" max="80" value="0"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.marginVLabel">整體外邊距（上下）<span id="sls-margin-v-val" class="val">0px</span></label><input id="sls-margin-v" type="range" min="0" max="80" value="0"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.marginHLabel">整體外邊距（左右）<span id="sls-margin-h-val" class="val">0px</span></label><input id="sls-margin-h" type="range" min="0" max="80" value="0"></div>
                       </div>
-                      <p class="field-hint">讓整組歌單離畫面邊緣遠一點，避免被 OBS 場景的其他元素擋住。</p>
+                      <p class="field-hint" data-i18n="setlist.marginHint">讓整組歌單離畫面邊緣遠一點，避免被 OBS 場景的其他元素擋住。</p>
                       <div data-sl-scope="classic">
                         <div class="field">
-                          <label>新歌曲進場動畫</label>
+                          <label data-i18n="setlist.rowAnimLabel">新歌曲進場動畫</label>
                           <select id="sls-row-anim" class="input">
-                            <option value="fade">淡入（預設）</option>
-                            <option value="none">無動畫</option>
-                            <option value="slide-up">由下往上滑入</option>
-                            <option value="slide-side">由側邊滑入</option>
+                            <option value="fade" data-i18n="setlist.animFade">淡入（預設）</option>
+                            <option value="none" data-i18n="setlist.animNone">無動畫</option>
+                            <option value="slide-up" data-i18n="setlist.animSlideUp">由下往上滑入</option>
+                            <option value="slide-side" data-i18n="setlist.animSlideSide">由側邊滑入</option>
                           </select>
                         </div>
                         <div class="field">
-                          <label>已唱時間的顯示格式</label>
+                          <label data-i18n="setlist.timeFormatLabel">已唱時間的顯示格式</label>
                           <select id="sls-time-format" class="input">
-                            <option value="mmss">分:秒（例如 03:45，預設）</option>
-                            <option value="hmmss">時:分:秒（例如 1:03:45）</option>
-                            <option value="none">不顯示時間</option>
+                            <option value="mmss" data-i18n="setlist.timeFormatMmss">分:秒（例如 03:45，預設）</option>
+                            <option value="hmmss" data-i18n="setlist.timeFormatHmmss">時:分:秒（例如 1:03:45）</option>
+                            <option value="none" data-i18n="setlist.timeFormatNone">不顯示時間</option>
                           </select>
-                          <p class="field-hint">直播超過一小時建議選「時:分:秒」，比較好對照真實時間。</p>
+                          <p class="field-hint" data-i18n="setlist.timeFormatHint">直播超過一小時建議選「時:分:秒」，比較好對照真實時間。</p>
                         </div>
                       </div>
                       <div class="field field-row" data-sl-scope="classic skin">
@@ -2130,148 +2130,148 @@
                     </details>
 
                     <details class="card card-collapse" data-settings-workspace-group="appearance" data-sl-scope="classic list">
-                      <summary>特效（毛玻璃／外框發光）</summary>
+                      <summary data-i18n="setlist.fxTitle">特效（毛玻璃／外框發光）</summary>
                       <div class="card-collapse-body">
                       <div class="field">
-                        <label>毛玻璃模糊程度 <span id="sls-blur-val" class="val">12px</span></label>
+                        <label><span data-i18n="setlist.blurLabel">毛玻璃模糊程度</span> <span id="sls-blur-val" class="val">12px</span></label>
                         <input id="sls-blur" type="range" min="0" max="48" value="12">
-                        <p class="field-hint">注意：在 OBS 裡只能模糊「歌單疊加層自己內部」的內容——疊加層背後的遊戲／鏡頭畫面模糊不到，這是 OBS 瀏覽器來源的限制（左邊預覽窗有底圖所以看得到效果）。想在 OBS 看出毛玻璃感，請搭配「半透明的歌曲列底色」使用。</p>
+                        <p class="field-hint" data-i18n="setlist.blurHint">注意：在 OBS 裡只能模糊「歌單疊加層自己內部」的內容——疊加層背後的遊戲／鏡頭畫面模糊不到，這是 OBS 瀏覽器來源的限制（左邊預覽窗有底圖所以看得到效果）。想在 OBS 看出毛玻璃感，請搭配「半透明的歌曲列底色」使用。</p>
                       </div>
                       <div class="switch-row">
-                        <div><div class="label">啟用卡片外框發光</div><div class="sub">用「主色」讓卡片外圍發出柔光，不是文字陰影</div></div>
+                        <div><div class="label" data-i18n="setlist.cardGlowLabel">啟用卡片外框發光</div><div class="sub" data-i18n="setlist.cardGlowSub">用「主色」讓卡片外圍發出柔光，不是文字陰影</div></div>
                         <label class="switch"><input id="sls-shadow-enabled" type="checkbox"><span class="track"></span></label>
                       </div>
                       <div class="field field-row">
-                        <div class="flex-grow"><label>外框發光模糊範圍 <span id="sls-shadow-blur-val" class="val">20px</span></label><input id="sls-shadow-blur" type="range" min="0" max="60" value="20"></div>
-                        <div class="flex-grow"><label>外框發光強度 <span id="sls-shadow-opacity-val" class="val">0%</span></label><input id="sls-shadow-opacity" type="range" min="0" max="100" value="0"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.cardGlowBlurLabel">外框發光模糊範圍</span> <span id="sls-shadow-blur-val" class="val">20px</span></label><input id="sls-shadow-blur" type="range" min="0" max="60" value="20"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.cardGlowStrengthLabel">外框發光強度</span> <span id="sls-shadow-opacity-val" class="val">0%</span></label><input id="sls-shadow-opacity" type="range" min="0" max="100" value="0"></div>
                       </div>
-                      <p class="field-hint">這兩項只有上面「啟用卡片外框發光」打開時才看得出效果。（已唱／未唱的淡化程度移到上面「常用外觀」區，與已唱成對。）</p>
+                      <p class="field-hint" data-i18n="setlist.cardGlowHint">這兩項只有上面「啟用卡片外框發光」打開時才看得出效果。（已唱／未唱的淡化程度移到上面「常用外觀」區，與已唱成對。）</p>
                       </div>
                     </details>
 
                     <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager">
-                      <summary>顯示項目</summary>
+                      <summary data-i18n="setlist.displayItemsTitle">顯示項目</summary>
                       <div class="card-collapse-body">
                       <div class="switch-row">
-                        <div><div class="label">顯示歌曲編號</div><div class="sub">在每首歌前面加上 01、02… 的編號（經典版本來就沒有編號，故不適用）</div></div>
+                        <div><div class="label" data-i18n="setlist.showNumberLabel">顯示歌曲編號</div><div class="sub" data-i18n="setlist.showNumberSub">在每首歌前面加上 01、02… 的編號（經典版本來就沒有編號，故不適用）</div></div>
                         <label class="switch"><input id="sls-show-number" type="checkbox" checked><span class="track"></span></label>
                       </div>
                       </div>
                     </details>
                     <details class="card card-collapse" data-settings-workspace-group="advanced" data-sl-layout="classic simple timeline diagonal index label glow round pager">
-                      <summary>自訂文字標籤</summary>
+                      <summary data-i18n="setlist.customLabelsTitle">自訂文字標籤</summary>
                       <div class="card-collapse-body">
-                      <p class="field-group-desc">畫面上固定顯示的文字，可以換成中文或你喜歡的用語。</p>
+                      <p class="field-group-desc" data-i18n="setlist.customLabelsDesc">畫面上固定顯示的文字，可以換成中文或你喜歡的用語。</p>
                       <div class="field">
-                        <label>「正在播放」的顯示文字</label>
+                        <label data-i18n="setlist.labelNowLabel">「正在播放」的顯示文字</label>
                         <input id="sls-label-now" type="text" class="input" value="▶ Now Playing">
                       </div>
                       <div class="field row-gap-10" data-sl-layout="classic simple">
-                        <div class="flex-grow"><label>「已唱」區塊標題</label><input id="sls-label-done" type="text" class="input" value="已唱"></div>
-                        <div class="flex-grow"><label>「未唱」區塊標題</label><input id="sls-label-wait" type="text" class="input" value="未唱"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.labelDoneLabel">「已唱」區塊標題</label><input id="sls-label-done" type="text" class="input" value="已唱"></div>
+                        <div class="flex-grow"><label data-i18n="setlist.labelWaitLabel">「未唱」區塊標題</label><input id="sls-label-wait" type="text" class="input" value="未唱"></div>
                       </div>
                       </div>
                     </details>
 
                     <!-- ══ 場景版設定：只在 Timeline/Diagonal/Constellation 顯示，各版型互相獨立 ══ -->
                     <details class="card card-collapse" data-settings-workspace-group="layout advanced" data-sl-scope="scene" open>
-                      <summary>場景版設定（目前版型專屬）</summary>
+                      <summary data-i18n="setlist.sceneSettingsTitle">場景版設定（目前版型專屬）</summary>
                       <div class="card-collapse-body">
-                      <p class="field-group-desc">場景版是全螢幕 16:9 舞台設計，背景透明可疊在角色身上；以下設定每個場景版型各自獨立，互不影響。</p>
+                      <p class="field-group-desc" data-i18n="setlist.sceneSettingsDesc">場景版是全螢幕 16:9 舞台設計，背景透明可疊在角色身上；以下設定每個場景版型各自獨立，互不影響。</p>
                       <div class="field field-row field-row--spacious">
-                        <div class="flex-grow"><label>內容水平位置 <span id="sls-scene-x-val" class="val">0%</span></label><input id="sls-scene-x" type="range" min="-50" max="50" value="0"></div>
-                        <div class="flex-grow"><label>內容垂直位置 <span id="sls-scene-y-val" class="val">0%</span></label><input id="sls-scene-y" type="range" min="-50" max="50" value="0"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.sceneXLabel">內容水平位置</span> <span id="sls-scene-x-val" class="val">0%</span></label><input id="sls-scene-x" type="range" min="-50" max="50" value="0"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.sceneYLabel">內容垂直位置</span> <span id="sls-scene-y-val" class="val">0%</span></label><input id="sls-scene-y" type="range" min="-50" max="50" value="0"></div>
                       </div>
                       <div class="field">
-                        <label>整體縮放 <span id="sls-scene-scale-val" class="val">100%</span></label>
+                        <label><span data-i18n="setlist.sceneScaleLabel">整體縮放</span> <span id="sls-scene-scale-val" class="val">100%</span></label>
                         <input id="sls-scene-scale" type="range" min="0.5" max="2" step="0.05" value="1">
-                        <p class="field-hint">把歌單內容整體平移、縮放，避免擋住角色站位；位置/縮放對目前選擇的場景版型各自獨立生效。</p>
+                        <p class="field-hint" data-i18n="setlist.sceneScaleHint">把歌單內容整體平移、縮放，避免擋住角色站位；位置/縮放對目前選擇的場景版型各自獨立生效。</p>
                       </div>
                       <div class="field">
-                        <label>「正在播放」歌手名字級 <span id="sls-scene-artist-size-val" class="val">11px</span></label>
+                        <label><span data-i18n="setlist.sceneArtistSizeLabel">「正在播放」歌手名字級</span> <span id="sls-scene-artist-size-val" class="val">11px</span></label>
                         <input id="sls-scene-artist-size" type="range" min="7" max="80" value="11">
-                        <p class="field-hint">場景版大標題下方那行歌手名的字級（Timeline／Diagonal／Constellation 通用）。</p>
+                        <p class="field-hint" data-i18n="setlist.sceneArtistSizeHint">場景版大標題下方那行歌手名的字級（Timeline／Diagonal／Constellation 通用）。</p>
                       </div>
 
                       <div data-sl-layout="timeline">
-                        <p class="field-group-title">Timeline 時間軸</p>
-                        <div class="field"><label>中央時間軸的垂直位置 <span id="sls-tl-axis-val" class="val">38%</span></label><input id="sls-tl-axis" type="range" min="20" max="70" value="38"></div>
+                        <p class="field-group-title" data-i18n="setlist.tlTitle">Timeline 時間軸</p>
+                        <div class="field"><label><span data-i18n="setlist.tlAxisLabel">中央時間軸的垂直位置</span> <span id="sls-tl-axis-val" class="val">38%</span></label><input id="sls-tl-axis" type="range" min="20" max="70" value="38"></div>
                         <div class="field field-row">
-                          <div class="flex-grow"><label>軸線粗細 <span id="sls-tl-axis-width-val" class="val">1px</span></label><input id="sls-tl-axis-width" type="range" min="1" max="6" step="1" value="1"></div>
-                          <div><label>軸線顏色</label><input id="sls-tl-axis-color" type="color" value="#d9a25c"></div>
+                          <div class="flex-grow"><label><span data-i18n="setlist.tlAxisWidthLabel">軸線粗細</span> <span id="sls-tl-axis-width-val" class="val">1px</span></label><input id="sls-tl-axis-width" type="range" min="1" max="6" step="1" value="1"></div>
+                          <div><label data-i18n="setlist.tlAxisColorLabel">軸線顏色</label><input id="sls-tl-axis-color" type="color" value="#d9a25c"></div>
                         </div>
                         <div class="field field-row">
-                          <div class="flex-grow"><label>「正在播放」節點大小 <span id="sls-tl-dot-size-val" class="val">14px</span></label><input id="sls-tl-dot-size" type="range" min="8" max="28" value="14"></div>
-                          <div><label>節點顏色</label><input id="sls-tl-dot-color" type="color" value="#d9a25c"></div>
+                          <div class="flex-grow"><label><span data-i18n="setlist.tlDotSizeLabel">「正在播放」節點大小</span> <span id="sls-tl-dot-size-val" class="val">14px</span></label><input id="sls-tl-dot-size" type="range" min="8" max="28" value="14"></div>
+                          <div><label data-i18n="setlist.tlDotColorLabel">節點顏色</label><input id="sls-tl-dot-color" type="color" value="#d9a25c"></div>
                         </div>
-                        <p class="field-hint">節點＝軸線上的圓點；「正在播放」的節點會放大並發光（發光跟著節點顏色走）。</p>
-                        <div class="field"><label>節點之間的間距 <span id="sls-tl-item-gap-val" class="val">128px</span></label><input id="sls-tl-item-gap" type="range" min="70" max="260" step="2" value="128"></div>
-                        <p class="field-group-title">Timeline 歌名與文字</p>
+                        <p class="field-hint" data-i18n="setlist.tlDotHint">節點＝軸線上的圓點；「正在播放」的節點會放大並發光（發光跟著節點顏色走）。</p>
+                        <div class="field"><label><span data-i18n="setlist.tlItemGapLabel">節點之間的間距</span> <span id="sls-tl-item-gap-val" class="val">128px</span></label><input id="sls-tl-item-gap" type="range" min="70" max="260" step="2" value="128"></div>
+                        <p class="field-group-title" data-i18n="setlist.tlTextTitle">Timeline 歌名與文字</p>
                         <div class="field">
-                          <label>歌名相對軸線的位置</label>
+                          <label data-i18n="setlist.tlNamePosLabel">歌名相對軸線的位置</label>
                           <select id="sls-tl-name-pos" class="input">
-                            <option value="below">軸線下方（預設）</option>
-                            <option value="on">貼齊軸線</option>
-                            <option value="above">軸線上方</option>
+                            <option value="below" data-i18n="setlist.tlNamePosBelow">軸線下方（預設）</option>
+                            <option value="on" data-i18n="setlist.tlNamePosOn">貼齊軸線</option>
+                            <option value="above" data-i18n="setlist.tlNamePosAbove">軸線上方</option>
                           </select>
                         </div>
                         <div class="field field-row">
-                          <div class="flex-grow"><label>軸線與歌名的間距 <span id="sls-tl-name-gap-val" class="val">22px</span></label><input id="sls-tl-name-gap" type="range" min="6" max="60" value="22"></div>
-                          <div class="flex-grow"><label>歌名字級 <span id="sls-tl-name-size-val" class="val">11px</span></label><input id="sls-tl-name-size" type="range" min="8" max="80" value="11"></div>
+                          <div class="flex-grow"><label><span data-i18n="setlist.tlNameGapLabel">軸線與歌名的間距</span> <span id="sls-tl-name-gap-val" class="val">22px</span></label><input id="sls-tl-name-gap" type="range" min="6" max="60" value="22"></div>
+                          <div class="flex-grow"><label><span data-i18n="setlist.tlNameSizeLabel">歌名字級</span> <span id="sls-tl-name-size-val" class="val">11px</span></label><input id="sls-tl-name-size" type="range" min="8" max="80" value="11"></div>
                         </div>
                         <div class="field">
-                          <label>「正在播放」大標題的垂直位置 <span id="sls-tl-now-pos-val" class="val">52%</span></label>
+                          <label><span data-i18n="setlist.tlNowPosLabel">「正在播放」大標題的垂直位置</span> <span id="sls-tl-now-pos-val" class="val">52%</span></label>
                           <input id="sls-tl-now-pos" type="range" min="30" max="85" value="52">
-                          <p class="field-hint">畫面中央那組大字（Now Playing＋歌名＋歌手）離畫面頂端的距離。</p>
+                          <p class="field-hint" data-i18n="setlist.tlNowPosHint">畫面中央那組大字（Now Playing＋歌名＋歌手）離畫面頂端的距離。</p>
                         </div>
                       </div>
 
                       <div data-sl-layout="diagonal">
-                        <p class="field-group-title">Diagonal 斜線</p>
+                        <p class="field-group-title" data-i18n="setlist.dgTitle">Diagonal 斜線</p>
                         <div class="field">
-                          <label>分隔線傾斜角度 <span id="sls-dg-angle-val" class="val">32°</span></label>
+                          <label><span data-i18n="setlist.dgAngleLabel">分隔線傾斜角度</span> <span id="sls-dg-angle-val" class="val">32°</span></label>
                           <input id="sls-dg-angle" type="range" min="0" max="60" value="32">
-                          <p class="field-hint">畫面中央那條把歌單與角色分開的斜線角度。</p>
+                          <p class="field-hint" data-i18n="setlist.dgAngleHint">畫面中央那條把歌單與角色分開的斜線角度。</p>
                         </div>
                         <div class="field">
-                          <label>分隔線水平位置 <span id="sls-dg-line-pos-val" class="val">33%</span></label>
+                          <label><span data-i18n="setlist.dgLinePosLabel">分隔線水平位置</span> <span id="sls-dg-line-pos-val" class="val">33%</span></label>
                           <input id="sls-dg-line-pos" type="range" min="15" max="70" value="33">
                         </div>
                         <div class="field field-row">
-                          <div class="flex-grow"><label>分隔線粗細 <span id="sls-dg-line-width-val" class="val">1px</span></label><input id="sls-dg-line-width" type="range" min="1" max="6" step="1" value="1"></div>
-                          <div><label>分隔線顏色</label><input id="sls-dg-line-color" type="color" value="#f0ead8"></div>
+                          <div class="flex-grow"><label><span data-i18n="setlist.dgLineWidthLabel">分隔線粗細</span> <span id="sls-dg-line-width-val" class="val">1px</span></label><input id="sls-dg-line-width" type="range" min="1" max="6" step="1" value="1"></div>
+                          <div><label data-i18n="setlist.dgLineColorLabel">分隔線顏色</label><input id="sls-dg-line-color" type="color" value="#f0ead8"></div>
                         </div>
                         <div class="field">
-                          <label>未唱／已唱歌曲字級 <span id="sls-dg-wait-size-val" class="val">11px</span></label>
+                          <label><span data-i18n="setlist.dgWaitSizeLabel">未唱／已唱歌曲字級</span> <span id="sls-dg-wait-size-val" class="val">11px</span></label>
                           <input id="sls-dg-wait-size" type="range" min="7" max="80" value="11">
-                          <p class="field-hint">畫面兩側那排小字歌名（已唱斜體較淡、未唱附編號）的字級。</p>
+                          <p class="field-hint" data-i18n="setlist.dgWaitSizeHint">畫面兩側那排小字歌名（已唱斜體較淡、未唱附編號）的字級。</p>
                         </div>
                         <div class="field">
-                          <label>「正在播放」與未唱歌曲的距離 <span id="sls-dg-wait-top-val" class="val">68%</span></label>
+                          <label><span data-i18n="setlist.dgWaitTopLabel">「正在播放」與未唱歌曲的距離</span> <span id="sls-dg-wait-top-val" class="val">68%</span></label>
                           <input id="sls-dg-wait-top" type="range" min="40" max="90" value="68">
-                          <p class="field-hint">數字越大，未唱清單離「正在播放」的大標題越遠（往畫面下方移動）。</p>
+                          <p class="field-hint" data-i18n="setlist.dgWaitTopHint">數字越大，未唱清單離「正在播放」的大標題越遠（往畫面下方移動）。</p>
                         </div>
                       </div>
 
                       <div data-sl-layout="constellation">
-                        <p class="field-group-title">Constellation 星座</p>
+                        <p class="field-group-title" data-i18n="setlist.cnTitle">Constellation 星座</p>
                         <div class="field">
-                          <label>星座節點的疏密程度 <span id="sls-cn-spread-val" class="val">100%</span></label>
+                          <label><span data-i18n="setlist.cnSpreadLabel">星座節點的疏密程度</span> <span id="sls-cn-spread-val" class="val">100%</span></label>
                           <input id="sls-cn-spread" type="range" min="0.6" max="1.5" step="0.05" value="1">
-                          <p class="field-hint">數字越大，代表每首歌的星星節點之間拉得越開（越疏）。</p>
+                          <p class="field-hint" data-i18n="setlist.cnSpreadHint">數字越大，代表每首歌的星星節點之間拉得越開（越疏）。</p>
                         </div>
                         <div class="field field-row">
-                          <div class="flex-grow"><label>星點顏色</label><input id="sls-cn-dot-color" type="color" value="#ffffff"></div>
-                          <div class="flex-grow"><label>「正在播放」星點的光暈色</label><input id="sls-cn-glow-color" type="color" value="#d9a25c"></div>
+                          <div class="flex-grow"><label data-i18n="setlist.cnDotColorLabel">星點顏色</label><input id="sls-cn-dot-color" type="color" value="#ffffff"></div>
+                          <div class="flex-grow"><label data-i18n="setlist.cnGlowColorLabel">「正在播放」星點的光暈色</label><input id="sls-cn-glow-color" type="color" value="#d9a25c"></div>
                         </div>
                         <div class="switch-row">
-                          <div><div class="label">顯示背景星塵</div><div class="sub">散落在畫面上的細小星點裝飾，關閉＝更乾淨</div></div>
+                          <div><div class="label" data-i18n="setlist.cnDustLabel">顯示背景星塵</div><div class="sub" data-i18n="setlist.cnDustSub">散落在畫面上的細小星點裝飾，關閉＝更乾淨</div></div>
                           <label class="switch"><input id="sls-cn-dust" type="checkbox" checked><span class="track"></span></label>
                         </div>
                         <div class="field">
-                          <label>未唱／已唱歌曲字級 <span id="sls-cn-wait-size-val" class="val">11px</span></label>
+                          <label><span data-i18n="setlist.cnWaitSizeLabel">未唱／已唱歌曲字級</span> <span id="sls-cn-wait-size-val" class="val">11px</span></label>
                           <input id="sls-cn-wait-size" type="range" min="7" max="80" value="11">
-                          <p class="field-hint">星座節點旁邊的小字歌名字級（「正在播放」的大標題不受影響）。</p>
+                          <p class="field-hint" data-i18n="setlist.cnWaitSizeHint">星座節點旁邊的小字歌名字級（「正在播放」的大標題不受影響）。</p>
                         </div>
                       </div>
                       </div>
@@ -2279,36 +2279,36 @@
 
                     <!-- ══ 經典版型專屬效果：注意「文字陰影/發光」跟「卡片外框發光」是不同的兩種效果 ══ -->
                     <details class="card card-collapse" data-settings-workspace-group="appearance advanced" data-sl-scope="classic">
-                      <summary>經典版專屬效果（整體背板／文字陰影／發光／描邊）</summary>
+                      <summary data-i18n="setlist.classicFxTitle">經典版專屬效果（整體背板／文字陰影／發光／描邊）</summary>
                       <div class="card-collapse-body">
                       <!-- 整體背板從快速調整移來：它會鋪滿整塊來源，屬於低頻但影響很大的設定 -->
                       <div class="field field-row field-row--spacious field-row--top" data-sl-scope="classic list scene">
                         <div>
-                          <label>整體背板顏色</label>
+                          <label data-i18n="setlist.bgColorLabel">整體背板顏色</label>
                           <input id="sls-bg-color" type="color" value="#000000">
                         </div>
                         <div class="flex-grow">
-                          <label>整體背板不透明度 <span id="sls-bg-opacity-val" class="val">透明</span></label>
+                          <label><span data-i18n="setlist.bgOpacityLabel">整體背板不透明度</span> <span id="sls-bg-opacity-val" class="val" data-i18n="setlist.bgOpacityTransparent">透明</span></label>
                           <input id="sls-bg-opacity" type="range" min="0" max="100" value="0">
                         </div>
                       </div>
-                      <p class="field-hint" data-sl-scope="classic list scene">0＝完全不鋪，這是預設。清單型模板會<strong>鋪滿整個 OBS 來源範圍</strong>，所以要先把 Browser Source 縮成你要的框再開不透明度，否則會蓋掉那塊區域內的直播畫面。這和「可讀性襯底」是不同層：襯底只墊在文字後面，背板是整塊來源的底色。</p>
+                      <p class="field-hint" data-sl-scope="classic list scene"><span data-i18n="setlist.bgOpacityHintMain">0＝完全不鋪，這是預設。清單型模板會</span><strong data-i18n="setlist.bgOpacityHintBold">鋪滿整個 OBS 來源範圍</strong><span data-i18n="setlist.bgOpacityHintTail">，所以要先把 Browser Source 縮成你要的框再開不透明度，否則會蓋掉那塊區域內的直播畫面。這和「可讀性襯底」是不同層：襯底只墊在文字後面，背板是整塊來源的底色。</span></p>
                       <!-- 文字顏色覆蓋已搬到快速調整的「顏色」區塊（所有模板共用同一組控制項）。 -->
                       <div class="field field-row field-row--spacious">
-                        <div class="flex-grow"><label>文字陰影深度 <span id="sls-shadow-val" class="val">關</span></label><input id="sls-shadow" type="range" min="0" max="20" step="1" value="0"></div>
-                        <div><label>陰影顏色</label><input id="sls-shadow-color" type="color" value="#000000"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.textShadowLabel">文字陰影深度</span> <span id="sls-shadow-val" class="val" data-i18n="common.off">關</span></label><input id="sls-shadow" type="range" min="0" max="20" step="1" value="0"></div>
+                        <div><label data-i18n="setlist.textShadowColorLabel">陰影顏色</label><input id="sls-shadow-color" type="color" value="#000000"></div>
                       </div>
-                      <p class="field-hint">這是加在「文字」後面的陰影，讓字有立體感，跟「特效」區的卡片外框發光是不同東西。</p>
+                      <p class="field-hint" data-i18n="setlist.textShadowHint">這是加在「文字」後面的陰影，讓字有立體感，跟「特效」區的卡片外框發光是不同東西。</p>
                       <div class="field field-row field-row--spacious">
-                        <div class="flex-grow"><label>文字發光強度 <span id="sls-glow-strength-val" class="val">關</span></label><input id="sls-glow-strength" type="range" min="0" max="30" step="1" value="0"></div>
-                        <div><label>發光顏色</label><input id="sls-glow-color" type="color" value="#ffd6a5"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.textGlowLabel">文字發光強度</span> <span id="sls-glow-strength-val" class="val" data-i18n="common.off">關</span></label><input id="sls-glow-strength" type="range" min="0" max="30" step="1" value="0"></div>
+                        <div><label data-i18n="setlist.textGlowColorLabel">發光顏色</label><input id="sls-glow-color" type="color" value="#ffd6a5"></div>
                       </div>
-                      <p class="field-hint">讓文字周圍暈開柔光，適合霓虹／夜店風格；跟卡片外框發光是分開的兩層效果。</p>
+                      <p class="field-hint" data-i18n="setlist.textGlowHint">讓文字周圍暈開柔光，適合霓虹／夜店風格；跟卡片外框發光是分開的兩層效果。</p>
                       <div class="field field-row field-row--spacious">
-                        <div class="flex-grow"><label>文字描邊寬度 <span id="sls-stroke-val" class="val">關</span></label><input id="sls-stroke" type="range" min="0" max="4" step="0.5" value="0"></div>
-                        <div><label>描邊顏色</label><input id="sls-stroke-color" type="color" value="#000000"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.textStrokeLabel">文字描邊寬度</span> <span id="sls-stroke-val" class="val" data-i18n="common.off">關</span></label><input id="sls-stroke" type="range" min="0" max="4" step="0.5" value="0"></div>
+                        <div><label data-i18n="setlist.textStrokeColorLabel">描邊顏色</label><input id="sls-stroke-color" type="color" value="#000000"></div>
                       </div>
-                      <p class="field-hint">在文字外圍加一層實色邊框，在複雜背景上能提高文字可讀性。</p>
+                      <p class="field-hint" data-i18n="setlist.textStrokeHint">在文字外圍加一層實色邊框，在複雜背景上能提高文字可讀性。</p>
                       </div>
                     </details>
 
