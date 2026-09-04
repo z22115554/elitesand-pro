@@ -43,13 +43,17 @@ function createStartupIncrementalUpdateExecutor({
     }
 
     try {
-      // The download itself (real artifacts run to the hundreds of MB) has no
-      // byte-level progress today, but at minimum surface that it has started
-      // so a caller polling getProgress() never sees stale/idle state for the
-      // whole download — this used to be the single longest silent stretch of
-      // the whole accept flow.
-      updater.setProgress?.('downloading-artifact', '正在下載更新套件（依網路速度可能需要數分鐘，請勿關閉程式）');
-      const artifact = await downloadArtifact(verified.plan);
+      updater.setProgress?.('downloading-artifact', '正在下載更新套件（依網路速度可能需要數分鐘，請勿關閉程式）', {
+        percent: 0, loadedBytes: 0, totalBytes: verified.plan.artifact.size,
+      });
+      const artifact = await downloadArtifact(verified.plan, {
+        onProgress: (loadedBytes, totalBytes) => {
+          const percent = totalBytes > 0 ? Math.floor((loadedBytes / totalBytes) * 100) : 0;
+          updater.setProgress?.('downloading-artifact', '正在下載更新套件（依網路速度可能需要數分鐘，請勿關閉程式）', {
+            percent, loadedBytes, totalBytes,
+          });
+        },
+      });
       if (!artifact || !Buffer.isBuffer(artifact.buffer) || artifact.size !== verified.plan.artifact.size || artifact.sha256 !== verified.plan.artifact.sha256) {
         updater.setProgress?.('failed', '更新套件下載驗證失敗，程式仍可正常使用', { error: 'artifact-mismatch' });
         return { ok: false, reason: 'signed artifact verification did not produce the expected bytes' };

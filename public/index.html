@@ -2420,6 +2420,24 @@
     </div>
   </div>
 
+  <!-- ═══ Modal：更新下載進度（#app-update-progress-modal）═══
+       接受更新後到重啟前，這段可能要好幾分鐘；沒有明顯畫面使用者容易以為當機、
+       跑去做別的事，結果被突然重啟打斷。這段刻意不給關閉/取消按鈕——已經接受的
+       更新不能半途安全中止，跟 AI 分離安裝進度視窗（#ai-separation-install-modal）
+       同一套視覺語言，方便使用者一眼認出「這是背景在跑東西，不是壞了」。 -->
+  <div id="app-update-progress-modal" class="modal" hidden>
+    <div class="modal-card modal-card--small ai-separation-install-card" role="dialog" aria-modal="true" aria-labelledby="app-update-progress-title" aria-describedby="app-update-progress-summary">
+      <div class="modal-head"><h3 id="app-update-progress-title" data-i18n="appUpdate.progressTitle">正在更新程式</h3></div>
+      <div class="modal-body">
+        <p id="app-update-progress-summary" class="ai-install-summary" data-i18n="appUpdate.progressSummary">下載與驗證完成後會自動重新啟動。請保持程式開啟、不要關閉電腦或斷線，直播中請先確認可以中斷再接受更新。</p>
+        <div class="ai-install-progress" aria-live="polite">
+          <div class="ai-install-progress-copy"><span id="app-update-progress-stage" data-i18n="appUpdate.progressPreparing">準備中…</span><strong id="app-update-progress-percent">0%</strong></div>
+          <div class="ai-install-progress-track"><span id="app-update-progress-fill"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Modal：修改歌名／歌手（#track-edit-modal）═══ -->
   <div id="track-edit-modal" class="modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="track-edit-title-heading">

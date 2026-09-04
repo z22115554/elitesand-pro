@@ -54,6 +54,29 @@ test('signed incremental artifact downloads exactly one policy-bound stream and 
   assert.strictEqual(call.options.redirect, 'error');
 });
 
+test('onProgress reports monotonically increasing bytes and always ends at the full size', async () => {
+  const bytes = Buffer.from('zip payload big enough to span multiple chunks for progress reporting');
+  const calls = [];
+  await downloadSignedIncrementalArtifact(makePlan(bytes), {
+    fetchImpl: async () => response(bytes),
+    onProgress: (loaded, total) => calls.push([loaded, total]),
+  });
+  assert.ok(calls.length >= 2, '至少要回報中間一次跟結束一次: ');
+  for (let i = 1; i < calls.length; i += 1) assert.ok(calls[i][0] >= calls[i - 1][0], '回報的 loaded 必須單調遞增: ');
+  const [lastLoaded, lastTotal] = calls[calls.length - 1];
+  assert.strictEqual(lastLoaded, bytes.length, '最後一次回報必須是完整位元組數: ');
+  assert.strictEqual(lastTotal, bytes.length);
+});
+
+test('a throwing onProgress callback never aborts the download', async () => {
+  const bytes = Buffer.from('zip payload from trusted signed policy, progress callback throws');
+  const artifact = await downloadSignedIncrementalArtifact(makePlan(bytes), {
+    fetchImpl: async () => response(bytes),
+    onProgress: () => { throw new Error('boom'); },
+  });
+  assert.strictEqual(artifact.buffer.compare(bytes), 0);
+});
+
 test('artifact transport fails closed on origin, status, length, truncation, or hash mismatch', async () => {
   const bytes = Buffer.from('signed bytes');
   const goodPlan = makePlan(bytes);

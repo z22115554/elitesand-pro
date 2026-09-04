@@ -8,6 +8,14 @@
   const statusElement = document.getElementById('app-update-status');
   if (!checkButton || !restartButton || !downloadButton || !currentVersionElement || !statusElement) return;
 
+  // 接受更新後到重啟前這段可能要好幾分鐘：沒有明顯畫面容易被使用者當成當機，
+  // 跑去做別的事後被突然重啟打斷。這個 modal 沒有關閉/取消按鈕——已經接受的
+  // 更新中途沒有安全的退出點，故意做成擋著、逼你看到「正在跑」這件事。
+  const progressModal = document.getElementById('app-update-progress-modal');
+  const progressStageEl = document.getElementById('app-update-progress-stage');
+  const progressPercentEl = document.getElementById('app-update-progress-percent');
+  const progressFillEl = document.getElementById('app-update-progress-fill');
+
   const openReleasePage = window.ElitesandShell?.openGithubReleasePage;
   const cloudflareCheck = window.ElitesandShell?.cloudflareUpdateCheck;
   const onCloudflareProgress = window.ElitesandShell?.onCloudflareUpdateProgress;
@@ -30,6 +38,28 @@
     if (!version) return translate('appUpdate.currentUnknown');
     const value = String(version).trim();
     return /^v/i.test(value) ? value : `v${value}`;
+  }
+
+  function showProgressModal() {
+    if (!progressModal || !progressModal.hidden) return;
+    progressModal.hidden = false;
+  }
+
+  function hideProgressModal() {
+    if (!progressModal) return;
+    progressModal.hidden = true;
+  }
+
+  // progress 是 server 端 getProgress() 的原始快照，message 目前固定中文（跟舊版行為
+  // 一致，這裡不新增翻譯層）；percent/loadedBytes/totalBytes 是這次新增的位元組進度，
+  // 舊版 server（還沒重新打包的舊安裝）不會帶這三個欄位，缺了就退回不確定進度樣式。
+  function paintProgress(progress) {
+    if (!progressStageEl || !progressPercentEl || !progressFillEl) return;
+    progressStageEl.textContent = progress?.message || translate('appUpdate.progressPreparing');
+    const hasPercent = Number.isFinite(progress?.percent);
+    const percent = hasPercent ? Math.max(0, Math.min(100, Math.round(progress.percent))) : null;
+    progressPercentEl.textContent = percent === null ? '' : `${percent}%`;
+    progressFillEl.style.setProperty('--work-progress', `${percent === null ? 0 : percent}%`);
   }
 
   function render() {
@@ -136,11 +166,14 @@
           else if (cf.status === 'restarting') state = 'restarting';
           else if (cf.status === 'failed') state = 'failed';
           else state = 'latest'; // up-to-date
+          hideProgressModal();
           render();
           return;
         }
       } catch (error) {
         console.warn('[AppUpdate] Cloudflare 檢查失敗，改用 GitHub Release 顯示:', error);
+      } finally {
+        hideProgressModal();
       }
     }
 
@@ -161,6 +194,10 @@
     onCloudflareProgress((progress) => {
       if (state !== 'checking' || !progress?.message) return;
       cloudflareProgressMessage = progress.message;
+      // 只有真的進到下載/驗證/套用這段（server 開始回報進度）才擋畫面；check() 本身
+      // 很快，不用為了那幾百毫秒也彈一個滿版 modal。
+      showProgressModal();
+      paintProgress(progress);
       render();
     });
   }
