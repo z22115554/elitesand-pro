@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
   restartForUpdateCheck() {
     return ipcRenderer.invoke('elitesand:restart-for-update-check');
   },
+  openGithubReleasePage(url) {
+    return ipcRenderer.invoke('elitesand:open-github-release-page', url);
+  },
   cloudflareUpdateCheck() {
     return ipcRenderer.invoke('elitesand:cloudflare-update-check');
   },

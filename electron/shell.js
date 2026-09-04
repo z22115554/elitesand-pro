@@ -6,7 +6,18 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
-const { validateUpdatePlanShape } = require('../server/services/update-policy');
+const { validateUpdatePlanShape, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPOSITORY } = require('../server/services/update-policy');
+
+// GitHub fallback（未簽章、僅供顯示）點「前往下載頁」時要開的外部連結：只信任官方
+// repo 底下的網址，renderer 傳來的字串一律先驗證過才准 shell.openExternal，避免被拿去
+//當成任意開啟外部網址的通用後門。
+function isTrustedGithubReleaseUrl(value) {
+  if (typeof value !== 'string') return false;
+  let url;
+  try { url = new URL(value); } catch (_) { return false; }
+  if (url.protocol !== 'https:' || url.hostname !== 'github.com') return false;
+  return url.pathname.startsWith(`/${OFFICIAL_GITHUB_OWNER}/${OFFICIAL_GITHUB_REPOSITORY}/`);
+}
 
 const DEFAULT_PORT = 3000;
 const START_TIMEOUT_MS = 15000;
@@ -785,6 +796,12 @@ function createElectronShell({
         // Let before-quit own the server shutdown. A renderer can only ask for
         // this after the native confirmation above; it cannot start a check.
         app.quit?.();
+        return true;
+      });
+      ipcMain.handle('elitesand:open-github-release-page', (event, url) => {
+        if (event?.sender !== window.webContents) return false;
+        if (!isTrustedGithubReleaseUrl(url)) return false;
+        shell.openExternal(url);
         return true;
       });
       function logManualUpdateDebug(message) {

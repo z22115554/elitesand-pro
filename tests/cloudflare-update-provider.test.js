@@ -39,7 +39,7 @@ function signedPlan(overrides = {}) {
     expiresAt: '2026-08-24T00:00:00.000Z',
     releaseNotesUrl: 'https://github.com/z22115554/elitesand-pro/releases/tag/v0.9.9.8',
     artifact: {
-      url: 'https://updates.elitesand.pro/artifacts/stable/0.9.9.7/0.9.9.8/update.zip',
+      url: `${policy.UPDATE_ARTIFACT_ORIGIN}/artifacts/stable/0.9.9.7/0.9.9.8/update.zip`,
       sha256: 'a'.repeat(64),
       size: 1234,
     },
@@ -70,7 +70,7 @@ function signedBetaPlan(overrides = {}) {
     planId: 'beta-win32-x64-0.9.9.7-0.9.9.8-p5',
     channel: 'beta',
     artifact: {
-      url: 'https://elitesand-update-artifacts.elitesand.workers.dev/artifacts/beta/0.9.9.7/0.9.9.8/update.zip',
+      url: `${policy.BETA_UPDATE_ARTIFACT_ORIGIN}/artifacts/beta/0.9.9.7/0.9.9.8/update.zip`,
       sha256: 'a'.repeat(64),
       size: 1234,
     },
@@ -160,7 +160,7 @@ test('stable build defaults to enabled and actually issues the Worker request; a
         fromVersion: '1.0.0',
         targetVersion: '1.0.1',
         artifact: {
-          url: 'https://updates.elitesand.pro/artifacts/stable/1.0.0/1.0.1/update.zip',
+          url: `${policy.UPDATE_ARTIFACT_ORIGIN}/artifacts/stable/1.0.0/1.0.1/update.zip`,
           sha256: 'a'.repeat(64),
           size: 1234,
         },
@@ -178,7 +178,7 @@ test('server explicitly saying "no update" (HTTP 204) reports kind: none, not un
   assert.strictEqual((await provider.check()).kind, 'none');
 });
 
-test('beta build only selects the isolated beta Worker and beta channel can never fall back to the stable endpoint', async () => {
+test('beta channel selects the beta channel param and a beta-signed plan verifies; a stable-signed plan served to a beta request is rejected by channel mismatch', async () => {
   assert.strictEqual(defaultChannel({}, '0.9.9.8-beta.1'), 'beta');
   assert.strictEqual(isEnabled({}, '0.9.9.8-beta.1'), true);
   assert.strictEqual(isEnabled({}, '0.9.9.8'), true);
@@ -195,22 +195,26 @@ test('beta build only selects the isolated beta Worker and beta channel can neve
     fetchImpl: async (url) => { observedUrl = new URL(url); return response(signedBetaPlan()); },
   });
   assert.strictEqual((await beta.check()).kind, 'plan');
+  // stable/beta 目前共用同一個 workers.dev 來源（沒有自訂網域前的暫時做法，見
+  // cloudflare-update-provider.js 開頭註解）；真正的頻道隔離不是靠不同 origin，
+  // 是靠這裡送出的 channel query param + 下面驗證的 plan.channel 必須一致。
   assert.strictEqual(observedUrl.origin, BETA_UPDATE_CONTROL_ORIGIN);
+  assert.strictEqual(observedUrl.origin, UPDATE_CONTROL_ORIGIN);
   assert.strictEqual(observedUrl.searchParams.get('channel'), 'beta');
 
+  // 就算 Worker（設定錯或被駭）對一個 beta channel 請求回傳了簽章合法的 stable
+  // plan，verifyUpdatePlan 的 plan.channel !== options.channel 檢查仍必須擋下來——
+  // 這才是真正的頻道隔離邊界，不依賴 origin 字串不同。
   let calls = 0;
   const crossChannel = createCloudflareUpdateProvider({
     currentVersion: '0.9.9.7', channel: 'beta', enabled: true,
-    endpoint: `${UPDATE_CONTROL_ORIGIN}/v1/plan`,
+    publicKeys: TEST_PUBLIC_KEYS,
+    nowMs: () => NOW_MS,
     runtimeFingerprint: async () => TEST_RUNTIME_FINGERPRINT,
-    fetchImpl: async () => { calls += 1; return response(signedBetaPlan()); },
+    fetchImpl: async () => { calls += 1; return response(signedPlan()); },
   });
-  // An endpoint mismatched to the requested channel makes controlEndpoint()
-  // refuse to resolve a base URL at all, so canCheck is false before any
-  // fetch — that is a "couldn't get an answer" case, i.e. unavailable, not a
-  // real "no update" answer from the (never contacted) stable endpoint.
-  assert.strictEqual((await crossChannel.check()).kind, 'unavailable');
-  assert.strictEqual(calls, 0);
+  assert.strictEqual((await crossChannel.check()).kind, 'none');
+  assert.strictEqual(calls, 1);
 });
 
 test('missing installed runtime fingerprint fails closed as unavailable before a Worker request', async () => {

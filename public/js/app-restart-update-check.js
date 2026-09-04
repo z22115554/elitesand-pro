@@ -3,11 +3,12 @@
 
   const checkButton = document.getElementById('app-update-check-btn');
   const restartButton = document.getElementById('app-update-restart-btn');
+  const downloadButton = document.getElementById('app-update-download-btn');
   const currentVersionElement = document.getElementById('app-version-current');
   const statusElement = document.getElementById('app-update-status');
-  if (!checkButton || !restartButton || !currentVersionElement || !statusElement) return;
+  if (!checkButton || !restartButton || !downloadButton || !currentVersionElement || !statusElement) return;
 
-  const restart = window.ElitesandShell?.restartForUpdateCheck;
+  const openReleasePage = window.ElitesandShell?.openGithubReleasePage;
   const cloudflareCheck = window.ElitesandShell?.cloudflareUpdateCheck;
   const onCloudflareProgress = window.ElitesandShell?.onCloudflareUpdateProgress;
 
@@ -16,6 +17,9 @@
   let state = 'notChecked';
   let cloudflareTargetVersion = null;
   let cloudflareProgressMessage = null;
+  // GitHub fallback（未簽章、僅顯示）查到的版本才會有這個：沒有經過 Cloudflare 簽章
+  // plan 驗證，所以永遠不能走「重新啟動並套用」，只能開瀏覽器讓使用者自己下載。
+  let githubReleaseUrl = null;
 
   function translate(key, vars) {
     if (window.I18n && typeof window.I18n.t === 'function') return window.I18n.t(key, vars);
@@ -58,8 +62,14 @@
       statusElement.textContent = translate('appUpdate.latest');
     }
 
+    // 'available' 只會由下面的 checkViaGitHubFallback() 設定（Cloudflare 那條路自己在
+    // cloudflareCheck() 內部處理完 accept/apply 才回來，永遠不會落到這個 state）——沒有
+    // 簽章過的 plan 可以套用，「重新啟動並更新」在這裡按了不會真的更新到新版，只能開
+    // 瀏覽器讓使用者自己去下載頁拿安裝檔。
     restartButton.textContent = translate('appUpdate.restart');
-    restartButton.hidden = typeof restart !== 'function' || state !== 'available' || !result?.hasUpdate;
+    restartButton.hidden = true;
+    downloadButton.textContent = translate('appUpdate.openReleasePage');
+    downloadButton.hidden = typeof openReleasePage !== 'function' || state !== 'available' || !result?.hasUpdate || !githubReleaseUrl;
   }
 
   async function loadCurrentVersion() {
@@ -81,12 +91,14 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       result = await response.json();
       currentVersion = result.currentVersion || currentVersion;
+      githubReleaseUrl = result.releaseUrl || result.downloadUrl || null;
       if (result.enabled === false) state = 'notConfigured';
       else if (result.error) state = 'failed';
       else if (result.hasUpdate) state = 'available';
       else state = 'latest';
     } catch (error) {
       result = null;
+      githubReleaseUrl = null;
       state = 'failed';
       console.warn('[AppUpdate] 檢查更新失敗:', error);
     }
@@ -135,17 +147,13 @@
     await checkViaGitHubFallback();
   }
 
-  async function restartForUpdate() {
-    if (state !== 'available' || !result?.hasUpdate || typeof restart !== 'function') return;
-    const accepted = await restart();
-    if (accepted) {
-      state = 'restarting';
-      render();
-    }
+  async function openReleasePageForUpdate() {
+    if (state !== 'available' || !result?.hasUpdate || !githubReleaseUrl || typeof openReleasePage !== 'function') return;
+    await openReleasePage(githubReleaseUrl);
   }
 
   checkButton.addEventListener('click', () => { void checkForUpdate(); });
-  restartButton.addEventListener('click', () => { void restartForUpdate(); });
+  downloadButton.addEventListener('click', () => { void openReleasePageForUpdate(); });
   if (typeof window.addEventListener === 'function') {
     window.addEventListener('i18n:change', render);
   }

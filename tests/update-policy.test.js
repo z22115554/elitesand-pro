@@ -45,7 +45,7 @@ function unsignedPlan(overrides = {}) {
     expiresAt: '2026-08-30T00:00:00.000Z',
     releaseNotesUrl: 'https://github.com/z22115554/elitesand-pro/releases/tag/v1.0.0',
     artifact: {
-      url: 'https://updates.elitesand.pro/artifacts/stable/0.9.9.7/1.0.0/update.zip',
+      url: `${policy.UPDATE_ARTIFACT_ORIGIN}/artifacts/stable/0.9.9.7/1.0.0/update.zip`,
       sha256: 'a'.repeat(64),
       size: 1024,
     },
@@ -99,7 +99,7 @@ test('版本、時間、枚舉、hash、size 與 host 全部有明確拒絕條�
   assert.match(verify(signedPlan({
     fromVersion: '0.9.9.6',
     artifact: {
-      url: 'https://updates.elitesand.pro/artifacts/stable/0.9.9.6/1.0.0/update.zip',
+      url: `${policy.UPDATE_ARTIFACT_ORIGIN}/artifacts/stable/0.9.9.6/1.0.0/update.zip`,
       sha256: 'a'.repeat(64),
       size: 1024,
     },
@@ -126,12 +126,15 @@ test('版本、時間、枚舉、hash、size 與 host 全部有明確拒絕條�
   assert.throws(() => policy.signUpdatePlan(badSize, TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /size/);
 });
 
-test('stable 與 beta artifact host 是雙向隔離，beta 不能偷用未來 stable 網域', () => {
+test('stable 與 beta artifact 是雙向隔離：2026-09-05 起沒有自訂網域，兩個頻道共用同一個 workers.dev 來源，隔離改成靠 URL path 一定要含 plan.channel，不是靠不同 host', () => {
+  assert.equal(policy.UPDATE_ARTIFACT_ORIGIN, policy.BETA_UPDATE_ARTIFACT_ORIGIN,
+    '這個測試的前提：兩個頻道現在確實共用同一個 origin（等之後真的申請到網域、兩者分開，這條斷言會先炸，提醒回來把下面的隔離斷言換回 host 版本）');
+
   const beta = unsignedPlan({
     planId: 'beta-win32-x64-0.9.9.7-1.0.0-20260823t000000z',
     channel: 'beta',
     artifact: {
-      url: 'https://elitesand-update-artifacts.elitesand.workers.dev/artifacts/beta/0.9.9.7/1.0.0/update.zip',
+      url: `${policy.BETA_UPDATE_ARTIFACT_ORIGIN}/artifacts/beta/0.9.9.7/1.0.0/update.zip`,
       sha256: 'a'.repeat(64),
       size: 1024,
     },
@@ -141,13 +144,30 @@ test('stable 與 beta artifact host 是雙向隔離，beta 不能偷用未來 st
     currentVersion: '0.9.9.7', channel: 'beta', platform: 'win32', arch: 'x64', publicKeys: TEST_KEYS, nowMs: NOW_MS,
   }).ok, true);
 
-  assert.throws(() => policy.signUpdatePlan(unsignedPlan({
-    artifact: { ...beta.artifact, url: beta.artifact.url.replace('/artifacts/beta/', '/artifacts/stable/') },
-  }), TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /artifact URL/);
+  // channel: 'beta' 的 plan，artifact URL 的 path 卻寫 /artifacts/stable/...（host 對、path 跟
+  // plan.channel 不符）→ 簽章階段就要擋下來。
   assert.throws(() => policy.signUpdatePlan({
     ...beta,
-    artifact: { ...beta.artifact, url: 'https://updates.elitesand.pro/artifacts/beta/0.9.9.7/1.0.0/update.zip' },
+    artifact: { ...beta.artifact, url: beta.artifact.url.replace('/artifacts/beta/', '/artifacts/stable/') },
   }, TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /artifact URL/);
+
+  // channel: 'stable' 的 plan，artifact URL 卻指到 /artifacts/beta/...（path 跟 plan.channel
+  // 不符，即使 host 是合法的共用 origin）→ 一樣要擋下來。
+  assert.throws(() => policy.signUpdatePlan(unsignedPlan({
+    artifact: { url: `${policy.UPDATE_ARTIFACT_ORIGIN}/artifacts/beta/0.9.9.7/1.0.0/update.zip`, sha256: 'a'.repeat(64), size: 1024 },
+  }), TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /artifact URL/);
+
+  // 完全不受信任的 host，不管 path 寫什麼一律拒絕。
+  assert.throws(() => policy.signUpdatePlan(unsignedPlan({
+    artifact: { url: 'https://evil.example/artifacts/stable/0.9.9.7/1.0.0/update.zip', sha256: 'a'.repeat(64), size: 1024 },
+  }), TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /artifact URL/);
+
+  // 真正的頻道隔離邊界：即使 host/path 都合法指向一個 beta artifact，一個
+  // channel:'stable' 的 plan 拿它來驗證仍必須用 stable 的 context 驗證失敗
+  // （這裡直接驗證跨頻道的 verify，而不是簽章期）。
+  assert.equal(policy.verifyUpdatePlan(signedBeta, {
+    currentVersion: '0.9.9.7', channel: 'stable', platform: 'win32', arch: 'x64', publicKeys: TEST_KEYS, nowMs: NOW_MS,
+  }).ok, false);
 });
 
 test('required delivery 只允許簽署的 major-release Installer 或 owner-forced，且舊版本 policy 不會套到新版', () => {

@@ -7,6 +7,7 @@ const {
   assertIncrementalArtifactPlan,
   downloadSignedIncrementalArtifact,
 } = require('../server/services/signed-update-artifact');
+const { UPDATE_ARTIFACT_ORIGIN } = require('../server/services/update-policy');
 
 function makePlan(bytes, overrides = {}) {
   return {
@@ -15,7 +16,7 @@ function makePlan(bytes, overrides = {}) {
     targetVersion: '0.9.9.8',
     delivery: 'incremental',
     artifact: {
-      url: 'https://updates.elitesand.pro/artifacts/stable/0.9.9.7/0.9.9.8/update.zip',
+      url: `${UPDATE_ARTIFACT_ORIGIN}/artifacts/stable/0.9.9.7/0.9.9.8/update.zip`,
       sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
       size: bytes.length,
     },
@@ -48,7 +49,7 @@ test('signed incremental artifact downloads exactly one policy-bound stream and 
   });
   assert.strictEqual(artifact.buffer.compare(bytes), 0);
   assert.strictEqual(artifact.size, bytes.length);
-  assert.strictEqual(call.url, 'https://updates.elitesand.pro/artifacts/stable/0.9.9.7/0.9.9.8/update.zip');
+  assert.strictEqual(call.url, `${UPDATE_ARTIFACT_ORIGIN}/artifacts/stable/0.9.9.7/0.9.9.8/update.zip`);
   assert.strictEqual(call.options.method, 'GET');
   assert.strictEqual(call.options.redirect, 'error');
 });

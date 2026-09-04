@@ -9,8 +9,16 @@ const { createPersistentReplayGuard } = require('./update-policy-replay-store');
 const { createStartupIncrementalUpdateExecutor } = require('./startup-incremental-update');
 const { getInstalledRuntimeFingerprint } = require('./update-runtime-fingerprint');
 
-const UPDATE_CONTROL_ORIGIN = 'https://updates.elitesand.pro';
-const BETA_UPDATE_CONTROL_ORIGIN = 'https://elitesand-update-control.elitesand.workers.dev';
+// 2026-09-05：使用者目前沒有自訂網域，stable 沒有真正網域可綁，之前指向
+// updates.elitesand.pro 等於指向一個沒人接聽的網址（DNS 直接 NXDOMAIN，已用
+// nslookup/curl 實測確認）。Worker 本身早就是 channel-aware（依 query 的
+// channel 決定要讀 R2 的 control/stable/... 還是 control/beta/...），所以
+// stable/beta 先共用同一個已部署的 workers.dev 來源即可，不必等網域。
+// 之後真的申請到網域，只要把這個常數換成 https://updates.elitesand.pro，
+// 其他程式碼、測試都不用動。
+const WORKERS_DEV_UPDATE_CONTROL_ORIGIN = 'https://elitesand-update-control.elitesand.workers.dev';
+const UPDATE_CONTROL_ORIGIN = WORKERS_DEV_UPDATE_CONTROL_ORIGIN;
+const BETA_UPDATE_CONTROL_ORIGIN = WORKERS_DEV_UPDATE_CONTROL_ORIGIN;
 const UPDATE_CONTROL_PATH = '/v1/plan';
 const CONNECT_TIMEOUT_MS = 1500;
 const TOTAL_TIMEOUT_MS = 4500;

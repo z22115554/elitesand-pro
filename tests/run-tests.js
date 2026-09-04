@@ -1495,9 +1495,15 @@ test('首頁必須手動檢查更新，只有確認有新版本後才能重新�
   ok(!toastSource.includes('/api/app-update/') && !toastSource.includes('fetch('), '首頁不可查詢更新計畫: ');
   ok(!indexHtml.includes('update-banner') && indexHtml.includes('id="app-update-check-btn"'), '首頁必須保留手動檢查更新按鈕: ');
   ok(indexHtml.includes('id="app-version-current"') && indexHtml.includes('id="app-update-status"'), '首頁必須顯示目前版本與檢查結果: ');
-  ok(indexHtml.includes('id="app-update-restart-btn"'), '首頁必須保留確認後的重新啟動入口: ');
+  ok(indexHtml.includes('id="app-update-restart-btn"') && indexHtml.includes('id="app-update-download-btn"'),
+    '首頁必須保留重新啟動入口，以及沒有簽章驗證的 GitHub fallback 專用的前往下載頁入口: ');
   ok(restartSource.includes("fetch('/api/health'") && restartSource.includes("fetch('/api/update-check?force=1'"), '更新檢查必須由使用者手動觸發: ');
-  ok(!restartSource.includes('/api/app-update/') && restartSource.includes('restartForUpdateCheck'), '前端不可自行下載或套用更新: ');
+  ok(!restartSource.includes('/api/app-update/') && restartSource.includes('openGithubReleasePage'), '前端不可自行下載或套用更新: ');
+  // GitHub fallback 沒有 Cloudflare 簽章驗證：「重新啟動並更新」按了不會真的更新到新版
+  // （沒有已驗證的 plan 可套用），只能開瀏覽器讓使用者自己去下載頁——這裡鎖死這條契約，
+  // 避免以後又不小心把 restartButton 接回這個沒有驗證過的流程。
+  ok(!restartSource.includes('restartForUpdateCheck') && /restartButton\.hidden\s*=\s*true/.test(restartSource),
+    'GitHub fallback（未簽章）永遠不可觸發重新啟動並套用，只能開下載頁: ');
   ok(!fs.existsSync(path.join(__dirname, '../public/js/app-update-check.js')), '舊的前端更新模組必須移除: ');
 });
 

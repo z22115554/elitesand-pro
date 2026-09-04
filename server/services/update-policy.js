@@ -31,8 +31,13 @@ const ALLOWED_CHANNELS = new Set(['stable', 'beta']);
 const ALLOWED_DELIVERIES = new Set(['incremental', 'installer']);
 const ALLOWED_URGENCIES = new Set(['optional', 'required']);
 const ALLOWED_REASON_CODES = new Set(['hotfix', 'major-release', 'owner-forced', 'security']);
-const UPDATE_ARTIFACT_ORIGIN = 'https://updates.elitesand.pro';
-const BETA_UPDATE_ARTIFACT_ORIGIN = 'https://elitesand-update-artifacts.elitesand.workers.dev';
+// 2026-09-05：同 cloudflare-update-provider.js 的理由——沒有自訂網域前，stable／beta
+// 先共用同一個已部署的 workers.dev artifact worker。隔離靠的是 URL path 一定要含
+// plan.channel（見下方 isExactIncrementalArtifactUrl 的 expectedPath），不是靠不同
+// host，所以共用 host 不會讓 stable/beta 的 artifact 互相冒充。
+const WORKERS_DEV_UPDATE_ARTIFACT_ORIGIN = 'https://elitesand-update-artifacts.elitesand.workers.dev';
+const UPDATE_ARTIFACT_ORIGIN = WORKERS_DEV_UPDATE_ARTIFACT_ORIGIN;
+const BETA_UPDATE_ARTIFACT_ORIGIN = WORKERS_DEV_UPDATE_ARTIFACT_ORIGIN;
 const OFFICIAL_GITHUB_OWNER = 'z22115554';
 const OFFICIAL_GITHUB_REPOSITORY = 'elitesand-pro';
 const INSTALLER_NAME_RE = /^Elitesand[ .]Pro[ .]Setup[ .]\d+(?:\.\d+){2,3}(?:[-.][^/]+)?\.exe$/i;
@@ -266,6 +271,8 @@ module.exports = {
   UPDATE_POLICY_PUBLIC_KEYS,
   UPDATE_ARTIFACT_ORIGIN,
   BETA_UPDATE_ARTIFACT_ORIGIN,
+  OFFICIAL_GITHUB_OWNER,
+  OFFICIAL_GITHUB_REPOSITORY,
   MAX_UPDATE_ZIP_BYTES,
   MAX_CLOCK_FUTURE_MS,
   MAX_PLAN_LIFETIME_MS,

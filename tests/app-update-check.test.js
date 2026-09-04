@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-r
 function element(id) {
   return {
     id,
-    hidden: id === 'app-update-restart-btn',
+    hidden: id === 'app-update-restart-btn' || id === 'app-update-download-btn',
     disabled: false,
     textContent: '',
     listeners: {},
@@ -34,11 +34,12 @@ async function createScenario(updateResult) {
   const elements = Object.fromEntries([
     'app-update-check-btn',
     'app-update-restart-btn',
+    'app-update-download-btn',
     'app-version-current',
     'app-update-status',
   ].map((id) => [id, element(id)]));
   const calls = [];
-  let restartCalls = 0;
+  let openReleasePageCalls = [];
   const listeners = {};
 
   const context = {
@@ -51,7 +52,8 @@ async function createScenario(updateResult) {
     },
     window: {
       ElitesandShell: {
-        async restartForUpdateCheck() { restartCalls += 1; return true; },
+        async restartForUpdateCheck() { throw new Error('restartForUpdateCheck 不該再被這個未簽章的 GitHub fallback 流程呼叫'); },
+        async openGithubReleasePage(url) { openReleasePageCalls.push(url); return true; },
       },
       I18n: {
         t(key, vars) {
@@ -63,6 +65,7 @@ async function createScenario(updateResult) {
             'appUpdate.latest': '已是最新版本。',
             'appUpdate.available': '發現新版本 {version}。',
             'appUpdate.restart': '重新啟動並更新',
+            'appUpdate.openReleasePage': '前往下載頁',
             'appUpdate.restarting': '正在重新啟動並準備更新…',
             'appUpdate.checkFailed': '暫時無法檢查更新，請稍後再試。',
             'appUpdate.notConfigured': '更新來源尚未設定。',
@@ -77,7 +80,7 @@ async function createScenario(updateResult) {
   vm.createContext(context);
   vm.runInContext(source, context);
   await flush();
-  return { elements, calls, listeners, get restartCalls() { return restartCalls; } };
+  return { elements, calls, listeners, get openReleasePageCalls() { return openReleasePageCalls; } };
 }
 
 (async () => {
@@ -86,6 +89,7 @@ async function createScenario(updateResult) {
     currentVersion: '1.0.0',
     hasUpdate: true,
     latestVersion: '1.0.1',
+    releaseUrl: 'https://github.com/z22115554/elitesand-pro/releases/tag/v1.0.1',
     error: null,
   });
 
@@ -93,16 +97,20 @@ async function createScenario(updateResult) {
   assert.strictEqual(scenario.elements['app-version-current'].textContent, 'v1.0.0');
   assert.strictEqual(scenario.elements['app-update-status'].textContent, '尚未檢查。');
   assert.strictEqual(scenario.elements['app-update-restart-btn'].hidden, true, '尚未檢查時不可顯示重新啟動');
+  assert.strictEqual(scenario.elements['app-update-download-btn'].hidden, true, '尚未檢查時不可顯示前往下載頁');
 
   await scenario.elements['app-update-check-btn'].listeners.click();
   await flush();
   assert.strictEqual(scenario.calls[1].url, '/api/update-check?force=1');
-  assert.strictEqual(scenario.elements['app-update-restart-btn'].hidden, false, '查到新版本後才顯示重新啟動更新');
+  // GitHub fallback 查到的版本沒有 Cloudflare 簽章驗證，「重新啟動並更新」不能顯示——
+  // 顯示了會誤導使用者以為按下去真的會更新，實際上只是單純重啟成同一個版本。
+  assert.strictEqual(scenario.elements['app-update-restart-btn'].hidden, true, 'GitHub fallback 永遠不可顯示重新啟動（沒有簽章 plan 可套用）');
+  assert.strictEqual(scenario.elements['app-update-download-btn'].hidden, false, '查到新版本後要顯示前往下載頁');
   assert.match(scenario.elements['app-update-status'].textContent, /v1\.0\.1/);
 
-  await scenario.elements['app-update-restart-btn'].listeners.click();
+  await scenario.elements['app-update-download-btn'].listeners.click();
   await flush();
-  assert.strictEqual(scenario.restartCalls, 1, '重新啟動必須由使用者再次點擊後才呼叫 Electron');
+  assert.deepStrictEqual(scenario.openReleasePageCalls, ['https://github.com/z22115554/elitesand-pro/releases/tag/v1.0.1'], '按前往下載頁必須真的開啟該版本的 GitHub release 頁面');
 
   const latest = await createScenario({
     enabled: true,
@@ -114,6 +122,7 @@ async function createScenario(updateResult) {
   await latest.elements['app-update-check-btn'].listeners.click();
   await flush();
   assert.strictEqual(latest.elements['app-update-restart-btn'].hidden, true, '已是最新版時不可顯示重新啟動');
+  assert.strictEqual(latest.elements['app-update-download-btn'].hidden, true, '已是最新版時不可顯示前往下載頁');
   assert.strictEqual(latest.elements['app-update-status'].textContent, '已是最新版本。');
 
   console.log('app-update-check: all tests passed');
