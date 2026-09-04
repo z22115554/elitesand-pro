@@ -599,7 +599,8 @@
       function syncClickTestBtn() {
         if (!clickTestBtn) return;
         const running = typeof AppShared.isDualAudioClickTestRunning === 'function' && AppShared.isDualAudioClickTestRunning();
-        clickTestBtn.textContent = running ? '停止對時測試' : '開始對時測試';
+        const key = running ? 'dualAudio.clickTestStop' : 'dualAudio.clickTestStart';
+        clickTestBtn.textContent = window.I18n ? window.I18n.t(key) : (running ? '停止對時測試' : '開始對時測試');
         // 只有雙路路由真的開著才有意義（toggle 打勾 + 至少兩個輸出裝置）
         clickTestBtn.disabled = !toggle.checked || toggle.disabled;
       }
