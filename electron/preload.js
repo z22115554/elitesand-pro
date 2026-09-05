@@ -40,6 +40,11 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
   cloudflareUpdateCheck() {
     return ipcRenderer.invoke('elitesand:cloudflare-update-check');
   },
+  // The plan the cold-start gate already found (and the user deferred), so the
+  // running panel can show "an update is available" without a second check.
+  pendingUpdate() {
+    return ipcRenderer.invoke('elitesand:pending-update');
+  },
   onCloudflareUpdateProgress(callback) {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, progress) => callback(progress);

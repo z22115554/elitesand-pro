@@ -327,6 +327,7 @@ function createElectronShell({
   let manualUpdateRequester = null;
   let startupUpdateProgressWindow = null;
   let startupUpdateProgressPoll = null;
+  let pendingUpdatePlan = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
   // WebGPU 人聲分離引擎（實驗性，§13 musetric 路線）：只在使用者已經開啟設定時才建立，
   // 不是每次啟動都硬開一個吃資源的隱藏視窗（跟 Spout 的 env-var autostart 不同，
@@ -764,7 +765,22 @@ function createElectronShell({
     startupUpdateProgressWindow = null;
   }
 
+  // Summary of an update the gate has already found and the user has not yet
+  // applied. The running panel reads it via IPC so it can show "an update is
+  // available" (and a sidebar dot) without a redundant second check. Cleared
+  // only when a later check comes back "up to date"; an accept exits the app.
+  function rememberPendingUpdate(plan) {
+    pendingUpdatePlan = plan && plan.targetVersion
+      ? {
+        targetVersion: String(plan.targetVersion),
+        urgency: plan.urgency === 'required' ? 'required' : 'optional',
+        delivery: plan.delivery === 'installer' ? 'installer' : 'incremental',
+      }
+      : pendingUpdatePlan;
+  }
+
   async function promptOptionalUpdate(plan) {
+    rememberPendingUpdate(plan);
     const text = getNativeUpdateCatalog();
     const result = await showNativeUpdateDialog({
       type: 'info',
@@ -784,6 +800,7 @@ function createElectronShell({
   }
 
   async function promptRequiredUpdate(plan, { openFailed = false } = {}) {
+    rememberPendingUpdate(plan);
     const text = getNativeUpdateCatalog();
     const isInstaller = plan.delivery === 'installer';
     const result = await showNativeUpdateDialog({
@@ -905,6 +922,10 @@ function createElectronShell({
           fsImpl.appendFileSync(file, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
         } catch (_) { /* best-effort diagnostic only */ }
       }
+      ipcMain.handle('elitesand:pending-update', (event) => {
+        if (event?.sender !== window.webContents) return null;
+        return pendingUpdatePlan;
+      });
       ipcMain.handle('elitesand:cloudflare-update-check', async (event) => {
         if (event?.sender !== window.webContents) return { status: 'unavailable' };
         const eligible = app.isPackaged && ownsServer && !isSpoutExperiment;
@@ -915,7 +936,12 @@ function createElectronShell({
           logManualUpdateDebug(`check response: ${JSON.stringify(checked)}`);
           if (!checked?.ok) return { status: 'failed' };
           if (checked.kind === 'unavailable') return { status: 'unavailable' };
-          if (checked.kind !== 'plan' || !checked.plan) return { status: 'up-to-date' };
+          if (checked.kind !== 'plan' || !checked.plan) {
+            // A real "no update" answer clears any pending marker from an
+            // earlier cold-start check so the panel dot goes away.
+            pendingUpdatePlan = null;
+            return { status: 'up-to-date' };
+          }
           const plan = checked.plan;
           const choice = plan.urgency === 'required'
             ? (await promptRequiredUpdate(plan)) === 'open' ? 'accept' : 'defer'

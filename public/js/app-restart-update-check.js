@@ -19,12 +19,22 @@
   const openReleasePage = window.ElitesandShell?.openGithubReleasePage;
   const cloudflareCheck = window.ElitesandShell?.cloudflareUpdateCheck;
   const onCloudflareProgress = window.ElitesandShell?.onCloudflareUpdateProgress;
+  const getPendingUpdate = window.ElitesandShell?.pendingUpdate;
+  const systemNavBadge = document.getElementById('system-nav-badge');
 
   let currentVersion = null;
   let result = null;
   let state = 'notChecked';
   let cloudflareTargetVersion = null;
   let cloudflareProgressMessage = null;
+  // The plan the cold-start gate already found (and the user deferred). Set on
+  // load so the panel shows "an update is available" and a sidebar dot without
+  // making the user press "Check for updates" a second time.
+  let pendingUpdate = null;
+
+  function setNavBadge(on) {
+    if (systemNavBadge) systemNavBadge.hidden = !on;
+  }
   // GitHub fallback（未簽章、僅顯示）查到的版本才會有這個：沒有經過 Cloudflare 簽章
   // plan 驗證，所以永遠不能走「重新啟動並套用」，只能開瀏覽器讓使用者自己下載。
   let githubReleaseUrl = null;
@@ -64,7 +74,7 @@
 
   function render() {
     currentVersionElement.textContent = displayVersion(result?.currentVersion || currentVersion);
-    checkButton.textContent = translate('appUpdate.check');
+    checkButton.textContent = translate(state === 'pendingAvailable' ? 'appUpdate.updateNow' : 'appUpdate.check');
     checkButton.disabled = state === 'checking';
 
     if (state === 'checking') {
@@ -81,6 +91,10 @@
     } else if (state === 'available' && result?.latestVersion) {
       statusElement.textContent = translate('appUpdate.available', {
         version: displayVersion(result.latestVersion),
+      });
+    } else if (state === 'pendingAvailable' && pendingUpdate?.targetVersion) {
+      statusElement.textContent = translate('appUpdate.pendingFound', {
+        version: displayVersion(pendingUpdate.targetVersion),
       });
     } else if (state === 'restarting') {
       statusElement.textContent = translate('appUpdate.restarting');
@@ -152,7 +166,13 @@
         const cf = await cloudflareCheck();
         if (cf?.status && cf.status !== 'unavailable') {
           cloudflareTargetVersion = cf.targetVersion || null;
-          if (cf.status === 'declined') state = 'cfDeclined';
+          if (cf.status === 'declined') {
+            state = 'cfDeclined';
+            // The user chose "Later" — the update still exists, so keep the
+            // sidebar dot and remember the version for the pending state.
+            pendingUpdate = cf.targetVersion ? { targetVersion: cf.targetVersion } : pendingUpdate;
+            setNavBadge(!!pendingUpdate);
+          }
           else if (cf.status === 'accept-failed') {
             state = 'cfAcceptFailed';
             // 這次真的下載/驗證/套用失敗了（不是使用者自己按延後）：問一次要不要
@@ -165,7 +185,12 @@
           }
           else if (cf.status === 'restarting') state = 'restarting';
           else if (cf.status === 'failed') state = 'failed';
-          else state = 'latest'; // up-to-date
+          else {
+            state = 'latest'; // up-to-date
+            // A real "no update" answer retires any earlier cold-start marker.
+            pendingUpdate = null;
+            setNavBadge(false);
+          }
           hideProgressModal();
           render();
           return;
@@ -183,6 +208,21 @@
   async function openReleasePageForUpdate() {
     if (state !== 'available' || !result?.hasUpdate || !githubReleaseUrl || typeof openReleasePage !== 'function') return;
     await openReleasePage(githubReleaseUrl);
+  }
+
+  // The cold-start gate already checked and, if it found an update the user
+  // deferred, that plan is still remembered in the main process. Reflect it
+  // here so entering the panel does not mean checking a second time.
+  async function loadPendingUpdate() {
+    if (typeof getPendingUpdate !== 'function') return;
+    try {
+      const plan = await getPendingUpdate();
+      if (!plan || !plan.targetVersion) return;
+      pendingUpdate = plan;
+      setNavBadge(true);
+      if (state === 'notChecked') state = 'pendingAvailable';
+      render();
+    } catch (_) { /* no cold-start result available: leave the manual button */ }
   }
 
   checkButton.addEventListener('click', () => { void checkForUpdate(); });
@@ -204,4 +244,5 @@
 
   render();
   void loadCurrentVersion();
+  void loadPendingUpdate();
 })();

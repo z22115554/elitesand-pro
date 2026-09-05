@@ -1512,6 +1512,21 @@ test('首頁必須手動檢查更新，只有確認有新版本後才能重新�
   ok(!restartSource.includes('restartForUpdateCheck') && /restartButton\.hidden\s*=\s*true/.test(restartSource),
     'GitHub fallback（未簽章）永遠不可觸發重新啟動並套用，只能開下載頁: ');
   ok(!fs.existsSync(path.join(__dirname, '../public/js/app-update-check.js')), '舊的前端更新模組必須移除: ');
+
+  // 冷啟動 gate 已檢查過的結果要能帶進執行中的面板：面板讀 main process 記住的
+  // pending plan（不是再打一次網路檢查），有更新時側欄亮點、卡片直接顯示「現在更新」。
+  const i18n = require('../public/js/i18n');
+  const preloadSource = fs.readFileSync(path.join(__dirname, '../electron/preload.js'), 'utf8');
+  const shellSource = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
+  ok(preloadSource.includes("ipcRenderer.invoke('elitesand:pending-update')"), 'preload 必須橋接 pending-update 查詢: ');
+  ok(shellSource.includes("ipcMain.handle('elitesand:pending-update'") && shellSource.includes('rememberPendingUpdate'),
+    'shell 必須在冷啟動 prompt 時記住 plan，並用唯讀 IPC 回傳: ');
+  ok(indexHtml.includes('id="system-nav-badge"'), '側欄「連線與系統」必須有可更新指示點: ');
+  ok(restartSource.includes('loadPendingUpdate') && restartSource.includes("'pendingAvailable'"),
+    '面板載入時要反映冷啟動已知的可更新狀態，不需再手動檢查一次: ');
+  ['appUpdate.updateNow', 'appUpdate.pendingFound', 'appUpdate.navBadgeTitle'].forEach((key) => {
+    i18n.LOCALES.forEach((locale) => ok(String(i18n.catalogs[locale][key] || '').trim(), `${locale}.${key} 不得為空: `));
+  });
 });
 
 test('更新檢查會納入 prerelease、排除 draft，並挑最高版本', () => {
