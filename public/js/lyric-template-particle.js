@@ -17,8 +17,8 @@ let entrance='auto';
 // Typography + composition knobs, pulled from the shared lyric settings in settings().
 // stroke/shadow come from the shared classic 描邊·陰影 controls (--lyric-stroke-*/--lyric-shadow).
 const FONT_DEFAULT=font,SANS_DEFAULT=sans;
-let typo={family:'',weight:0,sizeScale:1,letterSpacing:0,hpos:'center',vjustify:'center',orient:'horizontal',padX:60,padY:48,safeMargin:2,
-  shadow:{on:true,color:'rgba(8,5,13,0.94)',blur:7,dy:1.3},stroke:{w:0,color:'#000000'}};
+let typo={family:'',weight:0,sizeScale:1,letterSpacing:0,hpos:'center',vjustify:'center',orient:'horizontal',padX:60,padY:48,safeMargin:2,offX:0,offY:0,
+  shadow:{on:true,color:'rgba(8,5,13,0.94)',blur:7,dy:1.3}};
 let palette={ink:'#f6f0e5',a:'#e97855',inkOpacity:1,aOpacity:1};
 const roleFont=isLead=>typo.family||(isLead?SANS_DEFAULT:FONT_DEFAULT);
 const bodyWeight=()=>typo.weight||400,heroWeight=()=>Math.min(900,(typo.weight||400)+100);
@@ -165,8 +165,6 @@ function glyph(g,x,y,size,color,alpha,_legacy=false,shadow=false,family=font,wei
  if(shadow&&typo.shadow.on){ctx.shadowColor=typo.shadow.color;ctx.shadowBlur=Math.min(typo.shadow.blur*1.6,size*.28);ctx.shadowOffsetY=typo.shadow.dy}
  ctx.fillText(g,x,y);
  if(shadow){ctx.shadowBlur=0;ctx.shadowOffsetY=0}
- // 描邊：字填好後在外緣描一圈（只對已聚攏的實心字有意義）。
- if(typo.stroke.w>0){ctx.lineWidth=typo.stroke.w*(size/56);ctx.strokeStyle=typo.stroke.color;ctx.lineJoin='round';ctx.miterLimit=2;ctx.strokeText(g,x,y)}
 }
 function print(g,color,alpha,dx=0,dy=0,scale=1,stroke=false){glyph(g.g,g.x+dx-(scale-1)*g.w*.5,g.y+dy,g.size*scale,color,alpha,false,!stroke,g.family,g.weight)}
 function maskFor(g){
@@ -269,7 +267,7 @@ function revealInk(g,L,model,progress,color,alpha,outgoing=false){
  for(const cell of layer.cells){const coverage=outgoing?1-smooth(clamp((progress-cell.rank*.24)/.70)/.20):inkAmount(progress,cell.arrival);data[cell.i+3]=Math.round(cell.alpha*coverage)}
  layer.m.putImageData(layer.pixels,0,0);
  const dx0=g.x-24/160*g.size,dy0=g.y-188/160*g.size,dw=290/160*g.size,dh=238/160*g.size;
- // 陰影／描邊跟著聚攏進度淡入，不是等字完成才「啪」地出現。
+ // 陰影跟著聚攏進度淡入，不是等字完成才「啪」地出現。
  const fx=outgoing?clamp(1-smooth(progress)):smooth(clamp((progress-.35)/.5));
  ctx.save();
  if(typo.shadow.on&&fx>.02){
@@ -279,11 +277,6 @@ function revealInk(g,L,model,progress,color,alpha,outgoing=false){
   ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
  }
  ctx.globalAlpha=alpha;ctx.drawImage(layer.c,dx0,dy0,dw,dh);
- if(typo.stroke.w>0&&fx>.02){
-  ctx.globalAlpha=alpha*fx;setFont(g.size,g.family,g.weight);
-  ctx.strokeStyle=typo.stroke.color;ctx.lineWidth=typo.stroke.w*(g.size/56);ctx.lineJoin='round';ctx.miterLimit=2;
-  ctx.strokeText(g.g,g.x,g.y);
- }
  ctx.restore();
 }
 function drawMotes(g,L,state,p,opacity){
@@ -351,6 +344,7 @@ function renderLine(line,L,time,p,opacity=1){
 function draw(time){
  t=Number.isFinite(time)?time:0;
  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);particleCount=0;
+ if(typo.offX||typo.offY)ctx.translate(typo.offX,typo.offY);// 水平／垂直微調：整塊平移
  let lo=0,hi=lines.length-1,index=-1;
  while(lo<=hi){const mid=(lo+hi)>>1;if(lines[mid].start<=t){index=mid;lo=mid+1}else hi=mid-1}
  const active=index>=0&&t<lines[index].end?index:-1;
@@ -385,9 +379,7 @@ function settings(){
  const w=parseInt(cv('--display-font-weight'),10);typo.weight=Number.isFinite(w)&&w>=100&&w<=900?w:0;
  const fs=parseFloat(cv('--display-font-size'));typo.sizeScale=Number.isFinite(fs)&&fs>0?clamp(fs/64,.5,2):1;
  const lsp=parseFloat(cv('--lyric-letter-spacing'));typo.letterSpacing=Number.isFinite(lsp)?lsp:0;
- // 描邊／陰影：吃共用的經典「描邊·陰影」控制。
- const strokeW=parseFloat(cv('--lyric-stroke-width'));
- typo.stroke={w:Number.isFinite(strokeW)?clamp(strokeW,0,8):0,color:cv('--lyric-stroke-color')||'#000000'};
+ // 陰影：吃共用的經典「陰影」控制（--lyric-shadow：預設樣式＋顏色組成的 CSS 字串）。
  const shRaw=cv('--lyric-shadow');
  const shOn=!!shRaw&&!/^none\b/i.test(shRaw)&&!/^0px?\s+0px?\s+0px?\s+transparent/i.test(shRaw);
  const shCol=shRaw.match(/rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}/);
@@ -400,6 +392,10 @@ function settings(){
  const px=parseFloat(cv('--lyric-padding-x')),py=parseFloat(cv('--lyric-padding-y'));
  typo.padX=Number.isFinite(px)?px:60;typo.padY=Number.isFinite(py)?py:48;
  const sm=parseFloat(data.stageSafeMargin);typo.safeMargin=Number.isFinite(sm)?clamp(sm,0,25):2;
+ // 水平／垂直微調：跟星沙／流光等舞台模板同一組 offsetX/offsetY，這裡自己夾在邊距框內。
+ const ox=parseFloat(data.particleOffsetX),oy=parseFloat(data.particleOffsetY);
+ typo.offX=Number.isFinite(ox)?clamp(ox,-W*.4,W*.4):0;
+ typo.offY=Number.isFinite(oy)?clamp(oy,-H*.4,H*.4):0;
  // Entrance is always auto (rotates stream/rain/vortex/twin per line); no user knob.
  entrance='auto';
  intensity={calm:.55,normal:1,chaotic:1.35}[data.lyricIntensity]||1;
@@ -455,6 +451,9 @@ LyricTemplates.register({
  id:'particle',label:'風息成字',
  settings:[
   {key:'particleOrient',type:'enum',values:['horizontal','vertical'],default:'vertical',target:'data:particleOrient'},
+  // 水平／垂直微調：沿用共用的 offsetX/offsetY，寫進 body.dataset 讓 canvas 自己讀（reclamp 對滿版容器無效）。
+  {key:'offsetX',type:'int',min:-960,max:960,default:0,target:'data:particleOffsetX'},
+  {key:'offsetY',type:'int',min:-540,max:540,default:0,target:'data:particleOffsetY'},
   // 中央安全距離＋引導線：跟鏡像／紙帶完全共用同一套（stageSafeMargin / stage-show-safe-zone / mountStageSafeZoneGuide）。
   ...LyricTemplateSettings.STAGE_SAFE
  ],

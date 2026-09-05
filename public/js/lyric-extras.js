@@ -124,7 +124,7 @@
     mirror: { label: '虛實鏡書', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     lightboard: { label: '跑馬燈牌', description: '一塊會發光的 LED 點陣燈牌：唱過的燈亮、沒唱到的是熄滅的暗點，所以整句一直都看得見，不需要另外做進場。機殼（螺絲、指示燈、走時讀數、壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。', scope: '可調：字級（整台機器等比縮放）、燈色、燈牌字型（Cubic 11／精品點陣體 9×9）、三段捲動。不吃一般字體——被圓點網切開後筆畫會糊成一團。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     typewriter: { label: '對話氣泡', description: '仿 iMessage 聊天室：每句歌詞在對話泡泡裡逐字打出、游標貼著剛打出的字閃爍。已唱不消失、往上疊。合唱歌曲一邊固定代表一個聲部；非合唱時可選全左／全右／左右分散（分散＝1–5 句一段隨機交替）。長間奏會像聊天室冷場一樣跳一張貼圖（可上傳自己的，支援透明 PNG／GIF）。', scope: '可調：字型、文字色、左右對話泡泡底色、左右邊距、靠邊方式（全左／全右／左右分散）、長間奏貼圖（開關／門檻／自訂圖庫）。上下位置與堆疊構圖固定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    particle: { label: '風息成字', description: '粒子隨風散開，再聚成正在唱的文字。字級走一般字幕尺度、留安全邊距，進出場是粒子聚散。', scope: '可調：安全區、動畫強度、字型／字級／字重、陰影、左右位置（左右分散＝整句交替左右）、上下位置、直書、左右／上下邊距、左右分散時的中央安全距離。粒子進場方向固定為自動。不支援拼音／諧音／翻譯。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
+    particle: { label: '風息成字', description: '粒子隨風散開，再聚成正在唱的文字。字級走一般字幕尺度、留安全邊距，進出場是粒子聚散。', scope: '可調：動畫強度、字型／字級／字重、陰影、左右位置（左右分散＝整句交替左右）、上下位置、水平／垂直微調、直書、左右／上下邊距、左右分散時的中央安全距離。粒子進場方向固定為自動。不支援拼音／諧音／翻譯。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
   };
 
   function getTemplateUI(template) {
@@ -401,8 +401,6 @@
     { id: 'ls-lightboard-pan', key: 'lightboardPan' },
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
     { id: 'ls-lightboard-slide', key: 'lightboardSlideIn' },
-    { id: 'ls-particle-stroke-width', key: 'strokeWidth', valId: 'ls-particle-stroke-width-val', fmt: v => v + 'px' },
-    { id: 'ls-particle-stroke-color', key: 'strokeColor' },
     { id: 'ls-paperstrip-color', key: 'paperstripColor' },
     { id: 'ls-ktv-interlude', key: 'ktvInterludeText' },
     { id: 'ls-ktv-ending', key: 'ktvEndingText' },
@@ -976,7 +974,7 @@
     const isKtv = settings.template === 'ktv';
     const isPaperstrip = settings.template === 'paperstrip';
     const isYOnlyOffset = isKtv || isPaperstrip || isMirror;
-    const supportsOffsetFineTune = (isClassic || ui.positionMode === 'stage' || isYOnlyOffset)
+    const supportsOffsetFineTune = (isClassic || ui.positionMode === 'stage' || isYOnlyOffset || isParticle)
       && (settings.lyricPosition !== 'split' || isMirror || isPaperstrip);
     if (fineWrap) fineWrap.hidden = !supportsOffsetFineTune;
     if (offsetXRow) offsetXRow.hidden = !supportsOffsetFineTune || isYOnlyOffset;
