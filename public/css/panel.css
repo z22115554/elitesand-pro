@@ -627,8 +627,12 @@ input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(-
 #columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-preview { background: #eee5d4; border-color: #bcae96; }
 #columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-char { color: #2a2118; }
 @media (prefers-reduced-motion: reduce) {
-  .style-thumb-char, #template-buttons [data-template="columnflow"] .style-thumb-column, #template-buttons [data-template="paperstrip"] .style-thumb-paperstrip i, #template-buttons [data-template="typewriter"] .style-thumb-caret { animation: none !important; }
+  .style-thumb-char, #template-buttons [data-template="columnflow"] .style-thumb-column, #template-buttons [data-template="paperstrip"] .style-thumb-paperstrip i, #template-buttons [data-template="typewriter"] .style-thumb-caret,
+  #template-buttons [data-template="particle"] .style-thumb-particle::before, #template-buttons [data-template="particle"] .style-thumb-particle::after { animation: none !important; }
   #template-buttons [data-template="columnflow"] .style-thumb-column { opacity: .88; transform: none; }
+  #template-buttons [data-template="particle"] .style-thumb-particle::before, #template-buttons [data-template="particle"] .style-thumb-particle::after { opacity: 0; }
+  #template-buttons [data-template="particle"] .style-thumb-char { opacity: 1; filter: none; letter-spacing: 0; transform: none; }
+  #template-buttons [data-template="lightboard"] .style-thumb-char { opacity: 1; }
 }
 details.collapse { border-top: 1px solid var(--border); margin-top: 6px; }
 details.collapse > summary { list-style: none; cursor: pointer; padding: 16px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-dim); display: flex; align-items: center; gap: 7px; }
@@ -1457,7 +1461,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .lib-separate-preview-vol-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
 .lib-separate-preview-vol-row input[type="range"] { width: 120px; }
 
-/* 燈牌的模板縮圖（純靜態，不做動畫） */
+/* 燈牌的模板縮圖：LED 點陣底 + 偶爾閃一下（不頻繁，約 5 秒一次快閃兩下） */
 #template-buttons [data-template="lightboard"] .style-thumb-lightboard {
   background: linear-gradient(180deg, #1a140e, #0b0907);
   border: 1px solid rgba(255, 176, 60, 0.3);
@@ -1465,6 +1469,46 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
   background-size: 4px 4px;
   color: #ffce8a;
   text-shadow: 0 0 4px rgba(255, 150, 40, 0.7);
+}
+#template-buttons [data-template="lightboard"] .style-thumb-char {
+  animation: tpl-lightboard 5s ease-in-out infinite;
+}
+@keyframes tpl-lightboard {
+  0%, 87%, 100% { opacity: 1; text-shadow: 0 0 4px rgba(255, 150, 40, 0.7); }
+  89.5% { opacity: 0.18; text-shadow: none; }
+  91.5% { opacity: 0.9; text-shadow: 0 0 4px rgba(255, 150, 40, 0.7); }
+  93.5% { opacity: 0.32; text-shadow: 0 0 2px rgba(255, 150, 40, 0.35); }
+  95.5% { opacity: 1; text-shadow: 0 0 4px rgba(255, 150, 40, 0.7); }
+}
+
+/* 風息成字的模板縮圖：字從散開的粒子聚攏成形、停一下、再散掉（貼近實際進出場） */
+#template-buttons [data-template="particle"] .style-thumb-particle {
+  position: relative;
+  background: radial-gradient(120% 140% at 50% 45%, #241b16 0%, #14100d 70%);
+  overflow: hidden;
+}
+#template-buttons [data-template="particle"] .style-thumb-char {
+  color: #f6f0e5;
+  animation: tpl-particle 2.8s ease-out infinite;
+}
+#template-buttons [data-template="particle"] .style-thumb-particle::before,
+#template-buttons [data-template="particle"] .style-thumb-particle::after {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 3px; height: 3px; border-radius: 50%; background: #e97855;
+  animation: tpl-particle-dot 2.8s ease-out infinite;
+}
+#template-buttons [data-template="particle"] .style-thumb-particle::after { animation-delay: -1.1s; background: #f6f0e5; }
+@keyframes tpl-particle {
+  0% { opacity: 0; filter: blur(3.5px); letter-spacing: 0.32em; transform: translateX(0.12em) scale(0.9); }
+  38% { opacity: 1; filter: blur(0); letter-spacing: 0; transform: none; }
+  80% { opacity: 1; filter: blur(0); }
+  100% { opacity: 0; filter: blur(2.5px); letter-spacing: 0.2em; transform: translateX(-0.1em) scale(0.94); }
+}
+@keyframes tpl-particle-dot {
+  0% { opacity: 0; transform: translate(-14px, 8px) scale(1); }
+  30% { opacity: 0.9; }
+  55% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  100% { opacity: 0; transform: translate(0, 0) scale(0.4); }
 }
 
 /* 對話氣泡：間奏貼圖圖庫 */

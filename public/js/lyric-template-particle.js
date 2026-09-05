@@ -454,7 +454,7 @@ function refresh(context){
 LyricTemplates.register({
  id:'particle',label:'風息成字',
  settings:[
-  {key:'particleOrient',type:'enum',values:['horizontal','vertical'],default:'horizontal',target:'data:particleOrient'},
+  {key:'particleOrient',type:'enum',values:['horizontal','vertical'],default:'vertical',target:'data:particleOrient'},
   // 中央安全距離＋引導線：跟鏡像／紙帶完全共用同一套（stageSafeMargin / stage-show-safe-zone / mountStageSafeZoneGuide）。
   ...LyricTemplateSettings.STAGE_SAFE
  ],

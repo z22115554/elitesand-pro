@@ -102,7 +102,7 @@
     columnflowShowSafeZoneOnObs: false, // 直書句流：安全距離引導線是否也疊在真正的 OBS 來源上（預設只有面板預覽看得到）
     stageSafeMargin: 2, // Pulse/Facet/Drift/Aura/紙帶逐字/鏡像：左右分散時的中央安全距離（%，2–25），預設對應原本寫死的 48/52%
     stageShowSafeZoneOnObs: false, // 同上：安全距離引導線是否也疊在真正的 OBS 來源上
-    particleOrient: 'horizontal', // 風息成字：'horizontal' 橫排 | 'vertical' 直書（1–2 直欄）
+    particleOrient: 'vertical', // 風息成字：'vertical' 直書（1–2 直欄，預設）| 'horizontal' 橫排
     // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
     displayBgImage: '',   // 檔名（'' = 無背景，維持透明）
     displayBgOpacity: 1,
@@ -145,7 +145,7 @@
     typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
     // fontFamily 留空＝用內建 Sans/Serif 配對（Demo 黑明體外觀）；fontSize 64＝倍率 1.0；
     // shadow 非 'none' 讓 renderer 畫它內建的描邊陰影（與初版一致）。
-    particle: { ...DEFAULT_SETTINGS, template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', verticalPosition: 'center', lyricPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'horizontal', animationIntensity: 'normal' },
+    particle: { ...DEFAULT_SETTINGS, template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', verticalPosition: 'center', lyricPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', animationIntensity: 'normal' },
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
@@ -954,7 +954,7 @@
     }
     document.querySelectorAll('#particle-orient-field, #particle-effects-field').forEach((el) => { el.hidden = !isParticle; });
     document.querySelectorAll('#particle-orient-buttons [data-particle-orient]').forEach((b) => {
-      b.classList.toggle('active', b.dataset.particleOrient === (settings.particleOrient || 'horizontal'));
+      b.classList.toggle('active', b.dataset.particleOrient === (settings.particleOrient || 'vertical'));
     });
     // 打字機：沒有「置中」靠邊方式；左右邊距從詳細設定挪到「歌詞位置」正下面
     const posCenterBtn = document.querySelector('#lyric-pos-buttons .style-thumb[data-lyric-pos="center"]');

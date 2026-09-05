@@ -173,7 +173,7 @@
     document.querySelectorAll('.ctrl-columnflow-max-lines-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.columnflowMaxLines) === columnflowMaxLines));
     document.querySelectorAll('.ctrl-position-btn').forEach((b) => b.classList.toggle('active', b.dataset.position === (lyricSettings.lyricPosition || 'center')));
     document.querySelectorAll('.ctrl-intensity-btn').forEach((b) => b.classList.toggle('active', b.dataset.intensity === (lyricSettings.animationIntensity || 'normal')));
-    document.querySelectorAll('.ctrl-particle-orient-btn').forEach((b) => b.classList.toggle('active', b.dataset.particleOrient === (lyricSettings.particleOrient || 'horizontal')));
+    document.querySelectorAll('.ctrl-particle-orient-btn').forEach((b) => b.classList.toggle('active', b.dataset.particleOrient === (lyricSettings.particleOrient || 'vertical')));
     const positionGroup = document.getElementById('ctrl-lyric-position-group');
     const columnflowGroup = document.getElementById('ctrl-columnflow-variant-group');
     const columnflowEntranceGroup = document.getElementById('ctrl-columnflow-entrance-group');
@@ -233,7 +233,7 @@
           ...settingSnapshot(lyricSettings),
           ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
           ...(nextTemplate === 'mirror' ? MIRROR_DEFAULTS : {}),
-          ...(nextTemplate === 'particle' ? { particleOrient: 'horizontal', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
+          ...(nextTemplate === 'particle' ? { particleOrient: 'vertical', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
           template: nextTemplate,
         };
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
