@@ -8,23 +8,6 @@
   // 20 次的連線等待，setEnabled() 若卡住就整批堆疊、把 /api/webgpu-separation/settings
   // 打爆，安裝視窗也因為 await 卡在預熱前而永遠關不掉。
   let webgpuWarmInFlight = null;
-  // 這台有沒有 CUDA 只探測一次就夠（硬體不會在同一次執行中變動）。true 就完全不預熱
-  // WebGPU——CUDA 能用時預熱只是白白讓隱藏視窗（含一整顆 WebGPU 推論 runtime）跟著
-  // App 整場閒置待命；沒有 CUDA 才提早暖機，讓真正需要它的人不用乾等冷啟。
-  let cudaAvailableCache = null;
-  async function isCudaAvailable() {
-    if (cudaAvailableCache !== null) return cudaAvailableCache;
-    try {
-      const response = await fetch('/api/ai-separation/cuda-status', { cache: 'no-store' });
-      const data = await response.json();
-      cudaAvailableCache = data?.cudaAvailable === true;
-    } catch (_) {
-      // 探測不到就當作「不確定」，寧可預熱（維持舊行為）也不要讓真的沒有 CUDA
-      // 的人因為這支端點打不到而永遠拿不到 WebGPU 暖機。
-      cudaAvailableCache = false;
-    }
-    return cudaAvailableCache;
-  }
 
   const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
 
@@ -96,12 +79,6 @@
     if (!window.ElitesandShell?.webgpuEngine) return Promise.resolve();
     webgpuWarmInFlight = (async () => {
       try {
-        if (await isCudaAvailable()) {
-          // CUDA 可用就不預熱：真的分離時如果 CUDA 意外失敗，server 端
-          // ai-separation-jobs.js 的 tryStartWebgpu() 會反應式請 Electron 現在才開
-          // 隱藏視窗、等它連上（見該檔開頭註解），不會因為沒預熱就直接跳過 WebGPU。
-          return;
-        }
         await PinAuth.fetchWithPin('/api/webgpu-separation/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

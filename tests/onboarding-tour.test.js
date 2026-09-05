@@ -58,10 +58,10 @@ test('core tour remains exactly seven focused steps', () => {
 
 test('advanced tour is split into independent lyrics, OBS, and live-operations chapters', () => {
   eq(tour.ADVANCED_LYRICS_STEPS.length, 4);
-  eq(tour.ADVANCED_OBS_STEPS.length, 7);
+  eq(tour.ADVANCED_OBS_STEPS.length, 6);
   eq(tour.ADVANCED_LIVE_STEPS.length, 4);
   eq(tour.ADVANCED_LYRICS_STEPS.map((step) => step.id).join(','), 'lyrics-source,lyrics-align,lyrics-nudge,lyrics-timeline');
-  eq(tour.ADVANCED_OBS_STEPS.map((step) => step.id).join(','), 'obs-copy,obs-add,obs-status,obs-websocket,obs-create,obs-ai-separation,obs-dual-audio');
+  eq(tour.ADVANCED_OBS_STEPS.map((step) => step.id).join(','), 'obs-copy,obs-add,obs-status,obs-websocket,obs-create,obs-dual-audio');
   eq(tour.ADVANCED_LIVE_STEPS.map((step) => step.id).join(','), 'live-setlist,live-delete-played,live-session,live-twitch');
   ok(page.includes('id="guide-start-lyrics"'), 'Lyrics chapter entry missing');
   ok(page.includes('id="guide-start-obs"'), 'OBS chapter entry missing');

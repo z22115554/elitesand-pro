@@ -91,7 +91,7 @@
     xieyinColor: '#ffd6a5',
     xieyinSize: 0.92,     // 相對主字級的倍率（em）
     // ── 排版模板（v4/v5）──
-    template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura' | 'ktv' | 'columnflow' | 'paperstrip' | 'mirror'
+    template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura' | 'ktv' | 'columnflow' | 'paperstrip' | 'mirror' | 'particle'
     animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
     lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
     columnflowVariant: 'sen', // 直書句流外觀：'sen' 素筆 | 'fuda' 字札
@@ -102,13 +102,14 @@
     columnflowShowSafeZoneOnObs: false, // 直書句流：安全距離引導線是否也疊在真正的 OBS 來源上（預設只有面板預覽看得到）
     stageSafeMargin: 2, // Pulse/Facet/Drift/Aura/紙帶逐字/鏡像：左右分散時的中央安全距離（%，2–25），預設對應原本寫死的 48/52%
     stageShowSafeZoneOnObs: false, // 同上：安全距離引導線是否也疊在真正的 OBS 來源上
+    particleOrient: 'horizontal', // 風息成字：'horizontal' 橫排 | 'vertical' 直書（1–2 直欄）
     // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
     displayBgImage: '',   // 檔名（'' = 無背景，維持透明）
     displayBgOpacity: 1,
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -123,6 +124,7 @@
     mirror: { label: '虛實鏡書', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     lightboard: { label: '跑馬燈牌', description: '一塊會發光的 LED 點陣燈牌：唱過的燈亮、沒唱到的是熄滅的暗點，所以整句一直都看得見，不需要另外做進場。機殼（螺絲、指示燈、走時讀數、壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。', scope: '可調：字級（整台機器等比縮放）、燈色、燈牌字型（Cubic 11／精品點陣體 9×9）、三段捲動。不吃一般字體——被圓點網切開後筆畫會糊成一團。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     typewriter: { label: '對話氣泡', description: '仿 iMessage 聊天室：每句歌詞在對話泡泡裡逐字打出、游標貼著剛打出的字閃爍。已唱不消失、往上疊。合唱歌曲一邊固定代表一個聲部；非合唱時可選全左／全右／左右分散（分散＝1–5 句一段隨機交替）。長間奏會像聊天室冷場一樣跳一張貼圖（可上傳自己的，支援透明 PNG／GIF）。', scope: '可調：字型、文字色、左右對話泡泡底色、左右邊距、靠邊方式（全左／全右／左右分散）、長間奏貼圖（開關／門檻／自訂圖庫）。上下位置與堆疊構圖固定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
+    particle: { label: '風息成字', description: '粒子隨風散開，再聚成正在唱的文字。字級走一般字幕尺度、留安全邊距，進出場是粒子聚散。', scope: '可調：安全區、動畫強度、字型／字級／字重、陰影、左右位置（左右分散＝整句交替左右）、上下位置、直書、左右／上下邊距、左右分散時的中央安全距離。粒子進場方向固定為自動。不支援拼音／諧音／翻譯。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
   };
 
   function getTemplateUI(template) {
@@ -141,6 +143,9 @@
     mirror: { ...DEFAULT_SETTINGS, template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
     lightboard: { ...DEFAULT_SETTINGS, template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
     typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
+    // fontFamily 留空＝用內建 Sans/Serif 配對（Demo 黑明體外觀）；fontSize 64＝倍率 1.0；
+    // shadow 非 'none' 讓 renderer 畫它內建的描邊陰影（與初版一致）。
+    particle: { ...DEFAULT_SETTINGS, template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', verticalPosition: 'center', lyricPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'horizontal', animationIntensity: 'normal' },
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
@@ -156,7 +161,7 @@
   const COLUMNFLOW_MIN_SAFE_MARGIN = 5;
   const COLUMNFLOW_MAX_SAFE_MARGIN = 25;
   // paperstrip／mirror 跟 Pulse/Facet/Drift/Aura 共用同一組 stageSafeMargin（不是 columnflow 那組獨立值）。
-  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror'];
+  const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror', 'particle'];
   const STAGE_MIN_SAFE_MARGIN = 2;
   const STAGE_MAX_SAFE_MARGIN = 25;
   // 位置微調（X/Y）滑桿刻度：實際套用時 display.js 還會依當下內容再收緊一次（reclampLyricOffset），
@@ -396,6 +401,8 @@
     { id: 'ls-lightboard-pan', key: 'lightboardPan' },
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
     { id: 'ls-lightboard-slide', key: 'lightboardSlideIn' },
+    { id: 'ls-particle-stroke-width', key: 'strokeWidth', valId: 'ls-particle-stroke-width-val', fmt: v => v + 'px' },
+    { id: 'ls-particle-stroke-color', key: 'strokeColor' },
     { id: 'ls-paperstrip-color', key: 'paperstripColor' },
     { id: 'ls-ktv-interlude', key: 'ktvInterludeText' },
     { id: 'ls-ktv-ending', key: 'ktvEndingText' },
@@ -415,10 +422,14 @@
       const valEl = c.valId ? document.getElementById(c.valId) : null;
       if (valEl) valEl.textContent = c.fmt ? c.fmt(settings[c.key]) : settings[c.key];
     });
-    const shadowSel = document.getElementById('ls-shadow');
-    if (shadowSel) shadowSel.value = settings.shadowPreset || 'soft';
-    const shadowColorEl = document.getElementById('ls-shadow-color');
-    if (shadowColorEl) shadowColorEl.value = settings.shadowColor || '#000000';
+    ['ls-shadow', 'ls-particle-shadow-sel'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = settings.shadowPreset || 'soft';
+    });
+    ['ls-shadow-color', 'ls-particle-shadow-color'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = settings.shadowColor || '#000000';
+    });
     // 高亮發光（色+強度）與背景框（色+透明度）：原子值單獨綁定，這裡同步 UI
     const glowColorEl = document.getElementById('ls-glow-color');
     if (glowColorEl) glowColorEl.value = settings.glowColor || '#ffd6a5';
@@ -866,9 +877,15 @@
     // 打字機是固定構圖模板，但「歌詞位置」仍有意義（全左／全右／左右分散＝靠邊方式），所以特例放行位置選擇列
     const isTypewriter = settings.template === 'typewriter';
     const isLightboard = settings.template === 'lightboard';
+    const isParticle = settings.template === 'particle';
     // 燈牌只吃真點陣字型：一般字體選單整塊收起來，換成自己的兩選一
     const fontFamilyFields = document.getElementById('font-family-fields');
     if (fontFamilyFields) fontFamilyFields.hidden = isLightboard;
+    // 風息成字：字體家族／字級／字重都開放（字級當「倍率」疊在自動排版上，見 renderer settings()）。
+    const particleFontSize = document.getElementById('particle-fontsize-field');
+    const particleFontWeight = document.getElementById('particle-fontweight-field');
+    if (particleFontSize) particleFontSize.hidden = false;
+    if (particleFontWeight) particleFontWeight.hidden = false;
     const lbFontField = document.getElementById('lightboard-font-field');
     if (lbFontField) lbFontField.hidden = !isLightboard;
     const lbScrollField = document.getElementById('lightboard-scroll-field');
@@ -888,7 +905,7 @@
     // 安全距離只有「舞台位置」模板（Pulse/Facet/Aura；Drift 共用同一套排版機制，
     // 但這次只開放這三個的設定 UI）在「左右分散」時才有意義——其他位置模式沒有中央保留區可調。
     // 紙帶逐字／鏡像的排版本身就仰賴這條安全距離（鏡像甚至永遠固定 split），必須一起開放。
-    const STAGE_SAFE_MARGIN_UI_TEMPLATES = ['pulse', 'facet', 'aura', 'paperstrip', 'mirror'];
+    const STAGE_SAFE_MARGIN_UI_TEMPLATES = ['pulse', 'facet', 'aura', 'paperstrip', 'mirror', 'particle'];
     const isStageSplit = STAGE_SAFE_MARGIN_UI_TEMPLATES.includes(settings.template) && settings.lyricPosition === 'split';
 
     const templateLabel = document.getElementById('lyric-template-label');
@@ -926,7 +943,7 @@
     const fineHint = document.getElementById('lyric-pos-fine-hint');
     if (gridWrap) gridWrap.hidden = !isClassic;
     if (posGrid) posGrid.hidden = !isClassic;
-    if (quadRow) quadRow.hidden = isClassic || (ui.positionMode === 'fixed' && !isTypewriter) || isColumnflow;
+    if (quadRow) quadRow.hidden = isClassic || (ui.positionMode === 'fixed' && !isTypewriter && !isParticle) || isColumnflow;
     const twColorsField = document.getElementById('typewriter-colors-field');
     if (twColorsField) twColorsField.hidden = !isTypewriter;
     const twStickerField = document.getElementById('tw-sticker-field');
@@ -935,6 +952,10 @@
       twStickerField.hidden = !isTypewriter;
       if (wasHidden && isTypewriter && typeof refreshStickerGallery === 'function') refreshStickerGallery();
     }
+    document.querySelectorAll('#particle-orient-field, #particle-effects-field').forEach((el) => { el.hidden = !isParticle; });
+    document.querySelectorAll('#particle-orient-buttons [data-particle-orient]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.particleOrient === (settings.particleOrient || 'horizontal'));
+    });
     // 打字機：沒有「置中」靠邊方式；左右邊距從詳細設定挪到「歌詞位置」正下面
     const posCenterBtn = document.querySelector('#lyric-pos-buttons .style-thumb[data-lyric-pos="center"]');
     if (posCenterBtn) posCenterBtn.hidden = isTypewriter;
@@ -1058,7 +1079,7 @@
     });
     // 「左右分散」是逐行交替左右——經典疊層（歷史行堆疊）與 KTV（自帶雙行位構圖）不支援
     const splitBtn = document.querySelector('#lyric-pos-buttons .style-thumb[data-lyric-pos="split"]');
-    if (splitBtn) splitBtn.disabled = isClassic || (ui.positionMode === 'fixed' && !isTypewriter) || isColumnflow;
+    if (splitBtn) splitBtn.disabled = isClassic || (ui.positionMode === 'fixed' && !isTypewriter && !isParticle) || isColumnflow;
 
     // 經典疊層專用設定區塊：整批顯示/隱藏
     CLASSIC_ONLY_FIELD_IDS.forEach((id) => {
@@ -1114,6 +1135,15 @@
       btn.addEventListener('click', () => {
         settings.animationIntensity = btn.dataset.intensity;
         syncTemplateButtons();
+        pushSettings();
+      });
+    });
+    document.querySelectorAll('#particle-orient-buttons [data-particle-orient]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const orient = btn.dataset.particleOrient;
+        if (settings.template !== 'particle' || !['horizontal', 'vertical'].includes(orient)) return;
+        settings.particleOrient = orient;
+        refreshControls();
         pushSettings();
       });
     });
@@ -1531,26 +1561,30 @@
   function initSettingsPanel() {
     CONTROLS.forEach((c) => bindControl(c.id, c.key, c));
 
-    // 陰影：預設樣式 + 顏色 → 組成 CSS 字串
+    // 陰影：預設樣式 + 顏色 → 組成 CSS 字串。經典疊層與風息成字共用同一組（不同 id、同一份 state）。
     const applyShadow = () => { settings.shadow = buildShadow(settings.shadowPreset, settings.shadowColor); };
-    const shadowSel = document.getElementById('ls-shadow');
-    if (shadowSel) {
-      shadowSel.value = settings.shadowPreset || 'soft';
-      shadowSel.addEventListener('change', () => {
-        settings.shadowPreset = shadowSel.value;
+    ['ls-shadow', 'ls-particle-shadow-sel'].forEach((id) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      sel.value = settings.shadowPreset || 'soft';
+      sel.addEventListener('change', () => {
+        settings.shadowPreset = sel.value;
         applyShadow();
+        refreshControls();
         pushSettings();
       });
-    }
-    const shadowColorEl = document.getElementById('ls-shadow-color');
-    if (shadowColorEl) {
-      shadowColorEl.value = settings.shadowColor || '#000000';
-      shadowColorEl.addEventListener('input', () => {
-        settings.shadowColor = shadowColorEl.value;
+    });
+    ['ls-shadow-color', 'ls-particle-shadow-color'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = settings.shadowColor || '#000000';
+      el.addEventListener('input', () => {
+        settings.shadowColor = el.value;
         applyShadow();
+        refreshControls();
         pushSettings();
       });
-    }
+    });
 
     // 高亮發光：顏色 + 強度（原子值 → 合成 settings.glow）
     const glowColorEl = document.getElementById('ls-glow-color');
