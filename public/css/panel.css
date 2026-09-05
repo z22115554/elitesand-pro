@@ -94,6 +94,13 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
   width: 4px; height: 24px; border-radius: 0 4px 4px 0; background: var(--accent);
 }
 .nav-item[hidden] { display: none; }
+.nav-item .nav-dot {
+  position: absolute; top: 7px; right: 13px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-base, #16181d);
+}
+.nav-item .nav-dot[hidden] { display: none; }
 
 /* ═══ 主內容區 ═══ */
 .main { display: flex; flex-direction: column; overflow: hidden; background: transparent; }
