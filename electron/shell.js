@@ -735,10 +735,11 @@ function createElectronShell({
         locale: resolveUpdateLocale(app.getLocale?.() || 'zh-TW'),
         version: String(plan?.targetVersion || ''),
       }).toString();
-      startupUpdateProgressWindow.loadFile(
-        path.join(shellRoot, 'electron', 'startup-update-progress.html'),
-        { search },
-      );
+      // Served by the local server the shell already started, not loadFile: a
+      // file:// page renders blank under the packaged app's hardened fuses
+      // (grantFileProtocolExtraPrivileges:false). Same http://127.0.0.1
+      // pattern the main panel and WebGPU worker windows use.
+      startupUpdateProgressWindow.loadURL(`http://127.0.0.1:${port}/startup-update-progress.html?${search}`);
       startupUpdateProgressPoll = setInterval(() => {
         startupUpdateRequester?.request({ action: 'progress', phase: 'OPTIONAL_PROMPT' })
           .then((res) => {
