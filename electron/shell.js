@@ -444,6 +444,7 @@ function createElectronShell({
             resolve({
               engineConnected: !!payload?.engineConnected,
               engineRestartRequestedAt: Number(payload?.engineRestartRequestedAt) || 0,
+              jobActive: !!payload?.jobActive,
             });
           } catch (_) { resolve(null); }
         });
@@ -456,8 +457,13 @@ function createElectronShell({
   let webgpuHealthTimer = null;
   let webgpuLastHandledRestartAt = 0;
   let webgpuOfflineStrikes = 0;
+  let webgpuIdleSinceMs = 0;
   const WEBGPU_HEALTH_TICK_MS = 20000;
   const WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART = 3; // ~1 分鐘沒連上才動手，給正常啟動留餘裕
+  // 隱藏視窗閒置太久（沒有任何分離工作在跑）就自己關掉——它背後掛著整套 WebGPU 推論
+  // runtime，實測待命時就會持續吃掉將近一顆 CPU 核心＋數百 MB RAM，不能讓它陪一整場
+  // 直播空燒。真的需要時（面板重新預熱，或 server 端反應式請求）下一次會重新冷啟。
+  const WEBGPU_IDLE_TIMEOUT_MS = Number(processObject.env.ELITESAND_WEBGPU_IDLE_TIMEOUT_MS) || 10 * 60 * 1000;
 
   async function runWebgpuHealthCheck() {
     if (!webgpuEngineWindow) return;
@@ -467,6 +473,7 @@ function createElectronShell({
     if (health.engineRestartRequestedAt > webgpuLastHandledRestartAt) {
       webgpuLastHandledRestartAt = health.engineRestartRequestedAt;
       webgpuOfflineStrikes = 0;
+      webgpuIdleSinceMs = Date.now();
       console.warn?.('[WebGPU Engine] server 要求重開引擎視窗，執行 restart()');
       await webgpuEngineWindow.restart().catch((e) => console.error?.('[WebGPU Engine] restart 失敗:', e.message));
       return;
@@ -476,8 +483,19 @@ function createElectronShell({
       webgpuOfflineStrikes = 0;
     } else if (++webgpuOfflineStrikes >= WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART) {
       webgpuOfflineStrikes = 0;
+      webgpuIdleSinceMs = Date.now();
       console.warn?.(`[WebGPU Engine] 連續 ${WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART} 次未連上 server，執行 restart()`);
       await webgpuEngineWindow.restart().catch((e) => console.error?.('[WebGPU Engine] restart 失敗:', e.message));
+      return;
+    }
+    // 3) 閒置逾時：有在跑 job 就把時鐘撥回現在；沒有 job 且超過門檻就關掉整個隱藏視窗。
+    if (health.jobActive) {
+      webgpuIdleSinceMs = Date.now();
+      return;
+    }
+    if (Date.now() - webgpuIdleSinceMs >= WEBGPU_IDLE_TIMEOUT_MS) {
+      console.warn?.(`[WebGPU Engine] 閒置超過 ${Math.round(WEBGPU_IDLE_TIMEOUT_MS / 60000)} 分鐘沒有分離工作，關閉隱藏視窗`);
+      await stopWebgpuEngineWindow();
     }
   }
 
@@ -505,6 +523,7 @@ function createElectronShell({
         webgpuEngineWindow = createWebgpuEngineWindow({ BrowserWindow, port });
       }
       await webgpuEngineWindow.start();
+      webgpuIdleSinceMs = Date.now();
       startWebgpuEngineHealthLoop();
     } else if (webgpuEngineWindow) {
       stopWebgpuEngineHealthLoop();
@@ -1199,6 +1218,19 @@ function createElectronShell({
       startupExitCode = code;
       if (serverProcess === child) serverProcess = null;
       void handleUnexpectedServerExit(code);
+    });
+    // 反應式 WebGPU 引擎啟動：面板端只在探測到沒有 CUDA 時才會提早預熱隱藏視窗
+    // （見 ai-separation-client.js），所以「CUDA 顯卡在但真的跑不動」這種情況下，
+    // server 端 ai-separation-jobs.js 的 tryStartWebgpu() 會用這支 one-way 訊息現在
+    // 才請我們把視窗開起來，然後它自己輪詢 server 的 isEngineAvailable() 等連上
+    // ——這裡不用回訊息，只有「這個 server 是我自己啟動、擁有的」才會裝這支監聽器，
+    // 換成別的 Electron 視窗重用別人的 server 時完全沒有這條通道，那邊會自然逾時
+    // 落回 CPU（跟 update 檢查的 ownsServer 限制是同一個既有取捨）。
+    child.on('message', (message) => {
+      if (message?.type !== 'elitesand:webgpu-engine-start-request') return;
+      syncWebgpuEngineWindow(true).catch((error) => {
+        console.error?.('[WebGPU Engine] 反應式啟動失敗:', error.message);
+      });
     });
     return child;
   }

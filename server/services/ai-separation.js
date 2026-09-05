@@ -274,4 +274,21 @@ class AISeparationSupervisor {
 const aiRuntimeProvider = require('./ai-runtime-provider');
 const supervisor = new AISeparationSupervisor(aiRuntimeProvider.PYTHON_EXE);
 
-module.exports = { AISeparationSupervisor, supervisor, resolveAiScriptDir };
+// 面板端要在「開啟 AI 分離功能」的當下就知道這台有沒有 CUDA，才能決定要不要預熱
+// WebGPU 備援（見 ai-separation-jobs.js 開頭的引擎選擇註解）。這裡快取一次結果：
+// 硬體在同一次執行中不會變，重複探測只會白白多打幾次 supervisor 的 NDJSON 往返。
+// 真正 dispatch 一個 job 時仍然呼叫 supervisor.probe() 拿新鮮結果，不用這個快取
+// ——那邊要的是「這一刻」的真相，這裡要的只是「大概要不要預熱」的粗略提示。
+let cachedCudaAvailable = null;
+async function getCachedCudaAvailable() {
+  if (cachedCudaAvailable !== null) return cachedCudaAvailable;
+  try {
+    const probe = await supervisor.probe();
+    cachedCudaAvailable = probe?.cudaAvailable === true;
+  } catch (_) {
+    cachedCudaAvailable = false;
+  }
+  return cachedCudaAvailable;
+}
+
+module.exports = { AISeparationSupervisor, supervisor, resolveAiScriptDir, getCachedCudaAvailable };
