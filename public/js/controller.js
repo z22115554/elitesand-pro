@@ -108,7 +108,7 @@
     return currentTrackIndex;
   }
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
@@ -139,7 +139,7 @@
     animationIntensity: 'normal',
   };
   function templateSupportsIntensity(template) {
-    return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'columnflow', 'particle'].includes(template);
+    return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'columnflow'].includes(template);
   }
 
   function normalizeColumnflowMaxLines(value) {
@@ -162,8 +162,6 @@
     const isColumnflow = template === 'columnflow';
     const isClassic = template === 'classic';
     const isMirror = template === 'mirror';
-    const isParticle = template === 'particle';
-    // 風息成字自己處理左右／分散位置（renderer 讀 data-lyric-pos），所以位置列要放行。
     const isFixedPosition = template === 'ktv' || isColumnflow || isMirror;
     document.querySelectorAll('.ctrl-template-btn').forEach((b) => b.classList.toggle('active', b.dataset.template === template));
     document.querySelectorAll('.ctrl-columnflow-variant-btn').forEach((b) => b.classList.toggle('active', b.dataset.columnflowVariant === (lyricSettings.columnflowVariant || 'sen')));
@@ -173,14 +171,12 @@
     document.querySelectorAll('.ctrl-columnflow-max-lines-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.columnflowMaxLines) === columnflowMaxLines));
     document.querySelectorAll('.ctrl-position-btn').forEach((b) => b.classList.toggle('active', b.dataset.position === (lyricSettings.lyricPosition || 'center')));
     document.querySelectorAll('.ctrl-intensity-btn').forEach((b) => b.classList.toggle('active', b.dataset.intensity === (lyricSettings.animationIntensity || 'normal')));
-    document.querySelectorAll('.ctrl-particle-orient-btn').forEach((b) => b.classList.toggle('active', b.dataset.particleOrient === (lyricSettings.particleOrient || 'vertical')));
     const positionGroup = document.getElementById('ctrl-lyric-position-group');
     const columnflowGroup = document.getElementById('ctrl-columnflow-variant-group');
     const columnflowEntranceGroup = document.getElementById('ctrl-columnflow-entrance-group');
     const columnflowPlacementGroup = document.getElementById('ctrl-columnflow-placement-group');
     const columnflowMaxLinesGroup = document.getElementById('ctrl-columnflow-max-lines-group');
     const intensityGroup = document.getElementById('ctrl-intensity-group');
-    const particleOptionsGroup = document.getElementById('ctrl-particle-options-group');
     const classicStyleGroup = document.getElementById('ctrl-classic-style-group');
     if (positionGroup) positionGroup.hidden = isFixedPosition;
     if (columnflowGroup) columnflowGroup.hidden = !isColumnflow;
@@ -190,7 +186,6 @@
     // 直書句流只有「四相漂字」逐字進場吃動畫強度；原樣進場不吃
     const columnflowHidesIntensity = isColumnflow && (lyricSettings.columnflowEntrance || 'native') !== 'drift';
     if (intensityGroup) intensityGroup.hidden = !templateSupportsIntensity(template) || columnflowHidesIntensity;
-    if (particleOptionsGroup) particleOptionsGroup.hidden = !isParticle;
     if (classicStyleGroup) classicStyleGroup.hidden = !isClassic;
 
     if (dom.lyricPreset) {
@@ -233,7 +228,6 @@
           ...settingSnapshot(lyricSettings),
           ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
           ...(nextTemplate === 'mirror' ? MIRROR_DEFAULTS : {}),
-          ...(nextTemplate === 'particle' ? { particleOrient: 'vertical', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
           template: nextTemplate,
         };
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
@@ -265,13 +259,6 @@
     btn.addEventListener('click', () => {
       if (!templateSupportsIntensity(lyricSettings.template)) return;
       pushLyricPatch({ animationIntensity: btn.dataset.intensity });
-    });
-  });
-
-  document.querySelectorAll('.ctrl-particle-orient-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (lyricSettings.template !== 'particle' || !['horizontal', 'vertical'].includes(btn.dataset.particleOrient)) return;
-      pushLyricPatch({ particleOrient: btn.dataset.particleOrient });
     });
   });
 

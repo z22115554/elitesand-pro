@@ -190,6 +190,36 @@ async function main() {
     assert.strictEqual(res.payload.error, 'STALE_JOB');
   });
 
+  // ── (1b) runtime-status 帶 jobActive 給 shell.js 的閒置逾時判斷 ──
+  // shell.js runWebgpuHealthCheck() 讀這個欄位：有 job 在跑就把閒置時鐘撥回現在、
+  // 不關隱藏視窗。少了它 → 恆 false → 視窗會在分離跑到一半被閒置逾時關掉。
+  // 刻意跟 getDownloadStatus() 的 active（模型下載中）分開命名，且放在 spread 之後
+  // 不被它蓋掉——這正是這條回歸測試要鎖住的兩件事。
+  await test('GET /webgpu-separation/runtime-status 的 jobActive 反映目前有沒有 WebGPU 分離 job', async () => {
+    const statusLayer = apiRouter.stack.find(
+      (l) => l.route && l.route.path === '/webgpu-separation/runtime-status' && l.route.methods.get
+    );
+    assert.ok(statusLayer, '找不到 GET /webgpu-separation/runtime-status route');
+    const statusHandler = statusLayer.route.stack[statusLayer.route.stack.length - 1].handle;
+    const callStatus = () => new Promise((resolve) => {
+      statusHandler({}, { set() { return this; }, json(payload) { resolve(payload); return this; } });
+    });
+
+    webgpuSeparationJobs._resetForTests();
+    const idle = await callStatus();
+    assert.strictEqual(idle.jobActive, false, '沒有 job 時 jobActive 應為 false');
+    assert.notStrictEqual(idle.jobActive, undefined, 'jobActive 欄位必須存在（shell.js 讀它）');
+    assert.ok('engineConnected' in idle && 'engineRestartRequestedAt' in idle, '既有欄位不可回歸');
+    assert.ok('active' in idle, 'getDownloadStatus() 的 active（模型下載中）仍要在，不能被覆蓋掉');
+
+    const ctx = makeCtx({ id: 't-active', title: 'X' });
+    startJob(ctx, 't-active', 'x.mp3');
+    const running = await callStatus();
+    assert.strictEqual(running.jobActive, true, '有 activeJob 時 jobActive 應為 true');
+
+    webgpuSeparationJobs._resetForTests();
+  });
+
   // ── (2) 非 loopback 來源被擋下 ──
   await test('非 loopback 來源（LAN IP）被 requireLocalEngineJob 擋下，回 403，且先於 jobId 檢查', async () => {
     const ctx = makeCtx({ id: 't-lan', title: 'X' });

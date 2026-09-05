@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Elitesand Pro</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #12131a;
+    color: #f2f3f5;
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    overflow: hidden;
+  }
+  .wrap {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 14px;
+    padding: 28px 30px;
+  }
+  .head { display: flex; align-items: baseline; gap: 8px; }
+  .app-name { font-size: 13px; font-weight: 800; letter-spacing: .3px; color: rgba(255,255,255,.55); }
+  .stage { font-size: 17px; font-weight: 800; }
+  .sub { font-size: 12.5px; line-height: 1.55; color: rgba(255,255,255,.6); }
+  .bar {
+    position: relative;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 99px;
+    background: rgba(255,255,255,.10);
+    overflow: hidden;
+  }
+  .head, .row, .stage { flex: 0 0 auto; }
+  .fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #7c6cff, #9d8bff);
+    transition: width .3s ease;
+  }
+  .bar.indeterminate .fill {
+    width: 38%;
+    transition: none;
+    animation: slide 1.3s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0% { transform: translateX(-110%); }
+    100% { transform: translateX(305%); }
+  }
+  .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: rgba(255,255,255,.55); }
+  .pct { font-variant-numeric: tabular-nums; font-weight: 700; color: rgba(255,255,255,.8); }
+  .wrap.failed .stage { color: #ff8f8f; }
+  .wrap.failed .fill { background: #ff8f8f; }
+  @media (prefers-reduced-motion: reduce) {
+    .fill { transition: none; }
+    .bar.indeterminate .fill { animation: none; left: 0; width: 100% !important; opacity: .5; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap" id="wrap">
+    <div class="head">
+      <span class="app-name">ELITESAND PRO</span>
+    </div>
+    <div class="stage" id="stage">準備更新…</div>
+    <div class="bar indeterminate" id="bar"><div class="fill" id="fill"></div></div>
+    <div class="row">
+      <span id="detail"></span>
+      <span class="pct" id="pct"></span>
+    </div>
+    <div class="sub" id="reassure">程式會自動下載並安裝，完成後重新啟動。請勿關閉電腦。</div>
+  </div>
+  <script src="/js/startup-update-progress.js"></script>
+</body>
+</html>

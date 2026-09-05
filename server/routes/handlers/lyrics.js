@@ -36,15 +36,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle'];
-
-function sanitizeParticleSettings(settings) {
-  if (settings.particleOrient !== undefined && !['horizontal', 'vertical'].includes(settings.particleOrient)) delete settings.particleOrient;
-  // 已移除的旋鈕：進場永遠自動；動態只吃系統偏好；安全區與陰影開關改用共用機制（邊距／描邊陰影）。
-  for (const k of ['particleEntrance', 'particleReduced', 'particleSafe', 'particleShadow']) {
-    if (settings[k] !== undefined) delete settings[k];
-  }
-}
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard'];
 
 function sanitizeLyricTemplateSettings(value) {
   if (!value || typeof value !== 'object') return undefined;
@@ -52,7 +44,6 @@ function sanitizeLyricTemplateSettings(value) {
   LYRIC_TEMPLATES.forEach((id) => {
     if (value[id] && typeof value[id] === 'object') {
       out[id] = { ...value[id], template: id };
-      sanitizeParticleSettings(out[id]);
       delete out[id].lyricTemplateSettings;
       delete out[id].lyricPresets;
       if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda'].includes(out[id].columnflowVariant)) {
@@ -218,7 +209,6 @@ function registerLyricsHandlers(io, socket, ctx) {
       delete settings.template;
     }
     const templateSettings = sanitizeLyricTemplateSettings(settings.lyricTemplateSettings);
-    sanitizeParticleSettings(settings);
     if (templateSettings) settings.lyricTemplateSettings = templateSettings;
     else delete settings.lyricTemplateSettings;
     const lyricPresets = sanitizeLyricPresets(settings.lyricPresets);
