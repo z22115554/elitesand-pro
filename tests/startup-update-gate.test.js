@@ -171,6 +171,36 @@ test('private parentPort protocol handles one request sequence and rejects wrong
   coordinator.detach();
 });
 
+test('progress is a read-only passthrough that shares the bound capability and never calls the provider', async () => {
+  const { child, parentPort } = createLinkedPorts();
+  const provider = createFakeStartupUpdateProvider({ plan: optionalPlan });
+  const snapshot = { active: true, phase: 'downloading-artifact', message: '正在下載更新套件', percent: 42, loadedBytes: 8, totalBytes: 19 };
+  const coordinator = attachStartupUpdateCoordinator({ parentPort, provider, getProgress: () => snapshot });
+  let nonce = 0;
+  const requester = createStartupUpdateRequester({ child, randomBytes: (size) => Buffer.alloc(size, ++nonce) });
+
+  // A progress request before any check has no bound capability yet: it must
+  // be ignored (no reply, so the requester times out) and must not bind one.
+  await assert.rejects(
+    createStartupUpdateRequester({ child, randomBytes: (size) => Buffer.alloc(size, 200 + (++nonce)), timeoutMs: 150 })
+      .request({ action: 'progress', phase: 'OPTIONAL_PROMPT' }),
+    /timed out/,
+  );
+
+  const checked = await requester.request({ action: 'check', phase: 'BOOT' });
+  assert.strictEqual(checked.kind, 'plan');
+
+  const progress = await requester.request({ action: 'progress', phase: 'OPTIONAL_PROMPT' });
+  assert.strictEqual(progress.ok, true);
+  assert.deepStrictEqual(progress.progress, snapshot);
+  // Provider was only ever asked to check; progress touches nothing.
+  assert.deepStrictEqual(provider.calls, ['check']);
+  assert.strictEqual(coordinator.getState().phase, 'OPTIONAL_PROMPT');
+
+  requester.close();
+  coordinator.detach();
+});
+
 test('accept-incremental/open-required-installer use a long timeout; check/defer stay fast', async () => {
   // The server only replies to an accept once it has fully downloaded and
   // verified the real signed artifact (hundreds of MB) and staged/spawned the

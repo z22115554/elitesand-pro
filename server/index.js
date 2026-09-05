@@ -381,7 +381,7 @@ app.get('/typewriter-sticker/:filename', (req, res) => {
 // ─── Socket.io 即時通訊 ───
 const socketHandler = require('./routes/socket-handler');
 const usageTelemetry = require('./services/usage-telemetry');
-const { consumeUpdateResultMarker } = require('./services/app-updater-v2');
+const { consumeUpdateResultMarker, getProgress: getUpdateProgress } = require('./services/app-updater-v2');
 const socketApi = socketHandler(io);
 
 // ─── Twitch：本機 Device Code Flow + EventSub WebSocket ───
@@ -469,6 +469,10 @@ attachParentShutdown({
 // offline fake until the later, separately-gated Cloudflare wiring phase.
 attachStartupUpdateCoordinator({
   provider: createCloudflareUpdateProvider(),
+  // Read-only: lets the Electron host poll a cold-start progress window while
+  // 'accept-incremental' blocks on the download. Same snapshot the running
+  // panel's manual update modal already reads.
+  getProgress: () => { try { return getUpdateProgress(); } catch (_) { return null; } },
   onError: (err) => log.error(`Startup update coordinator failed: ${err.message}`, err),
 });
 // Independent channel for the running panel's manual "check for update"

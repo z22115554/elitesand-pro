@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const { REQUEST_TYPE, RESPONSE_TYPE } = require('../server/services/startup-update-coordinator');
 
-const ACTIONS = new Set(['check', 'defer', 'accept-incremental', 'open-required-installer']);
+const ACTIONS = new Set(['check', 'defer', 'accept-incremental', 'open-required-installer', 'progress']);
 const PHASES = new Set(['BOOT', 'OPTIONAL_PROMPT', 'REQUIRED_GATE']);
 
 function makeToken(randomBytes, bytes) {

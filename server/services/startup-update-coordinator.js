@@ -5,7 +5,13 @@
 // update action to HTTP or Socket.io.
 const REQUEST_TYPE = 'elitesand:startup-update-request';
 const RESPONSE_TYPE = 'elitesand:startup-update-response';
-const ACTIONS = new Set(['check', 'defer', 'accept-incremental', 'open-required-installer']);
+// 'progress' is a read-only passthrough of the v2 updater's progress snapshot
+// (injected as getProgress by server/index.js), added so the Electron host can
+// show a cold-start progress window while 'accept-incremental' blocks for the
+// whole download+verify+stage. It calls no provider method, never advances the
+// phase state machine, and shares the same capability the gate already bound
+// with its BOOT 'check'.
+const ACTIONS = new Set(['check', 'defer', 'accept-incremental', 'open-required-installer', 'progress']);
 const PHASES = new Set(['BOOT', 'OPTIONAL_PROMPT', 'REQUIRED_GATE']);
 
 function isToken(value, bytes) {
@@ -41,6 +47,11 @@ function createFakeStartupUpdateProvider({ plan = null, error = null } = {}) {
 function attachStartupUpdateCoordinator({
   parentPort = process.parentPort,
   provider = createFakeStartupUpdateProvider(),
+  // Injected by server/index.js from the v2 signed-incremental updater's
+  // progress snapshot. Defaults to "no progress" so this file never has to
+  // reference the updater directly (the cold-start gate must stay clear of
+  // the legacy updater — see tests/run-tests.js).
+  getProgress = () => null,
   onError = () => {},
 } = {}) {
   if (!parentPort || typeof parentPort.on !== 'function' || typeof parentPort.postMessage !== 'function') {
@@ -76,6 +87,12 @@ function attachStartupUpdateCoordinator({
       return false;
     }
     seenRequestIds.add(message.requestId);
+
+    if (message.action === 'progress') {
+      try { reply(message, { ok: true, progress: getProgress() }); }
+      catch (error) { onError(error); reply(message, { ok: false, code: 'PROGRESS_FAILED' }); }
+      return true;
+    }
 
     if (message.action === 'check') {
       if (phase !== 'BOOT' || message.phase !== 'BOOT') return false;

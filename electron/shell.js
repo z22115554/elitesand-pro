@@ -301,7 +301,7 @@ function createElectronShell({
   const { createStartupUpdateRequester } = require('./startup-update-requester');
   const { createManualUpdateRequester } = require('./manual-update-requester');
   const { createStartupUpdateDeferStore } = require('./startup-update-defer-store');
-  const { format: formatUpdateText, getCatalog: getUpdateCatalog } = require('./startup-update-i18n');
+  const { format: formatUpdateText, getCatalog: getUpdateCatalog, resolveLocale: resolveUpdateLocale } = require('./startup-update-i18n');
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
   const preload = path.join(shellRoot, 'electron', 'preload.js');
   const isSpoutExperiment = processObject.env.ELITESAND_SPOUT_EXPERIMENT === '1';
@@ -325,6 +325,8 @@ function createElectronShell({
   let startupUpdateGate = null;
   let startupUpdateRequester = null;
   let manualUpdateRequester = null;
+  let startupUpdateProgressWindow = null;
+  let startupUpdateProgressPoll = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
   // WebGPU 人聲分離引擎（實驗性，§13 musetric 路線）：只在使用者已經開啟設定時才建立，
   // 不是每次啟動都硬開一個吃資源的隱藏視窗（跟 Spout 的 env-var autostart 不同，
@@ -691,6 +693,77 @@ function createElectronShell({
     return { response: options.cancelId ?? options.defaultId ?? 0 };
   }
 
+  // Cold-start updates block for minutes (download + verify + stage a
+  // hundreds-of-MB artifact) with no panel yet to show a spinner. Once the
+  // user has accepted at the native dialog, put a small always-on-top window
+  // on screen and poll the server's own progress state into it, so "I clicked
+  // update and nothing happened" becomes a visible progress bar. It is closed
+  // in runStartupUpdateGate's finally and again in shutdown().
+  function openStartupUpdateProgressWindow(plan) {
+    if (startupUpdateProgressWindow || mainWindow) return;
+    // The poll below reuses the startup requester (its capability is already
+    // bound by the gate's BOOT check); without it there is nothing to read.
+    if (!serverProcess || !startupUpdateRequester) return;
+    try {
+      const text = getNativeUpdateCatalog();
+      startupUpdateProgressWindow = new BrowserWindow({
+        width: 460,
+        height: 232,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        alwaysOnTop: true,
+        show: false,
+        title: text.title,
+        backgroundColor: '#12131a',
+        webPreferences: {
+          preload: path.join(shellRoot, 'electron', 'startup-update-progress-preload.js'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          backgroundThrottling: false,
+        },
+      });
+      startupUpdateProgressWindow.removeMenu?.();
+      startupUpdateProgressWindow.once('ready-to-show', () => {
+        if (startupUpdateProgressWindow && !startupUpdateProgressWindow.isDestroyed()) startupUpdateProgressWindow.show();
+      });
+      startupUpdateProgressWindow.on('closed', () => { startupUpdateProgressWindow = null; });
+      const search = new URLSearchParams({
+        locale: resolveUpdateLocale(app.getLocale?.() || 'zh-TW'),
+        version: String(plan?.targetVersion || ''),
+      }).toString();
+      startupUpdateProgressWindow.loadFile(
+        path.join(shellRoot, 'electron', 'startup-update-progress.html'),
+        { search },
+      );
+      startupUpdateProgressPoll = setInterval(() => {
+        startupUpdateRequester?.request({ action: 'progress', phase: 'OPTIONAL_PROMPT' })
+          .then((res) => {
+            if (res?.ok && startupUpdateProgressWindow && !startupUpdateProgressWindow.isDestroyed()) {
+              startupUpdateProgressWindow.webContents.send('startup-update:progress', res.progress);
+            }
+          })
+          .catch(() => { /* best-effort; the window just keeps its last state */ });
+      }, 1000);
+    } catch (error) {
+      console.error?.('[StartupUpdate] progress window failed to open (non-fatal):', error?.message || error);
+      closeStartupUpdateProgressWindow();
+    }
+  }
+
+  function closeStartupUpdateProgressWindow() {
+    if (startupUpdateProgressPoll) {
+      clearInterval(startupUpdateProgressPoll);
+      startupUpdateProgressPoll = null;
+    }
+    if (startupUpdateProgressWindow && !startupUpdateProgressWindow.isDestroyed()) {
+      startupUpdateProgressWindow.destroy();
+    }
+    startupUpdateProgressWindow = null;
+  }
+
   async function promptOptionalUpdate(plan) {
     const text = getNativeUpdateCatalog();
     const result = await showNativeUpdateDialog({
@@ -703,7 +776,11 @@ function createElectronShell({
       cancelId: 1,
       noLink: true,
     });
-    return result?.response === 0 ? 'accept' : 'defer';
+    if (result?.response === 0) {
+      openStartupUpdateProgressWindow(plan);
+      return 'accept';
+    }
+    return 'defer';
   }
 
   async function promptRequiredUpdate(plan, { openFailed = false } = {}) {
@@ -719,7 +796,14 @@ function createElectronShell({
       cancelId: 1,
       noLink: true,
     });
-    return result?.response === 0 ? 'open' : 'exit';
+    if (result?.response === 0) {
+      // An installer-delivery required update only opens a browser page, so
+      // there is nothing to show progress for; an incremental one downloads
+      // and stages exactly like the optional path.
+      if (!isInstaller) openStartupUpdateProgressWindow(plan);
+      return 'open';
+    }
+    return 'exit';
   }
 
   async function runStartupUpdateGate() {
@@ -735,7 +819,14 @@ function createElectronShell({
       promptRequired: promptRequiredUpdate,
       deferStore: createStartupUpdateDeferStore(app.getPath('userData'), { fsImpl }),
     });
-    return startupUpdateGate.run({ eligible: true });
+    try {
+      return await startupUpdateGate.run({ eligible: true });
+    } finally {
+      // Accept → the gate returns EXIT_FOR_UPDATER and the caller exits the
+      // process immediately after; defer/failure → nothing more to show.
+      // Either way the progress window's job is done.
+      closeStartupUpdateProgressWindow();
+    }
   }
 
   async function createWindow() {
@@ -1108,6 +1199,7 @@ function createElectronShell({
   async function shutdown() {
     await stopSpoutDisplayOutput();
     await stopWebgpuEngineWindow();
+    closeStartupUpdateProgressWindow();
     startupUpdateRequester?.close?.();
     startupUpdateRequester = null;
     manualUpdateRequester?.close?.();
