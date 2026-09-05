@@ -978,6 +978,11 @@
     // KTV 長間奏／全曲結尾的畫面字樣（繁中維持模板內原本的三則輪播，不吃這個 key）
     'ktv.interlude': ['間奏', 'Instrumental', '間奏', '간주', '间奏'],
     'ktv.ending': ['感謝聆聽', 'Thanks for listening', 'ご清聴ありがとうございました', '감상해 주셔서 감사합니다', '感谢聆听'],
+    'ktv.interludeTextLabel': ['長間奏字樣', 'Long-interlude text', '長い間奏のテキスト', '긴 간주 문구', '长间奏文字'],
+    'ktv.interludeTextPlaceholder': ['留空＝依顯示語言（英「Instrumental」、日「間奏」、韓「간주」…）', 'Leave blank = follow the display language (EN "Instrumental", JA "間奏", KO "간주", …)', '空欄＝表示言語に従う（英「Instrumental」、日「間奏」、韓「간주」…）', '비워 두면 = 표시 언어를 따름(영어 "Instrumental", 일본어 "間奏", 한국어 "간주" …)', '留空＝按显示语言（英“Instrumental”、日“間奏”、韩“간주”…）'],
+    'ktv.endingTextLabel': ['全曲結尾字樣', 'Song-ending text', '曲の終わりのテキスト', '곡 종료 문구', '全曲结尾文字'],
+    'ktv.endingTextPlaceholder': ['留空＝依顯示語言（英「Thanks for listening」…）', 'Leave blank = follow the display language (EN "Thanks for listening", …)', '空欄＝表示言語に従う（英「Thanks for listening」…）', '비워 두면 = 표시 언어를 따름(영어 "Thanks for listening", …)', '留空＝按显示语言（英“Thanks for listening”…）'],
+    'ktv.customTextHint': ['長間奏與唱完整首時，畫面中間會顯示的字。留空時依觀眾看到的顯示語言自動帶入；繁體中文維持原本的三則輪播文案。填了就完全照你打的字（語言請自己顧）。', 'The text shown in the center of the screen during a long instrumental break and when a song finishes. Leave it blank and it follows the display language the viewer sees; Traditional Chinese keeps its original three-message rotation. Fill it in and it shows exactly what you type (you handle the language yourself).', '長い間奏中と曲が終わったときに画面中央に表示されるテキストです。空欄にすると視聴者が見ている表示言語に従います。繁体字中国語は元の3種類の巡回文をそのまま使います。入力するとそのまま表示されます（言語はご自身で調整してください）。', '긴 간주 중과 곡이 끝났을 때 화면 중앙에 표시되는 문구입니다. 비워 두면 시청자가 보는 표시 언어를 따르며, 번체 중국어는 원래의 세 가지 순환 문구를 유지합니다. 입력하면 입력한 그대로 표시됩니다(언어는 직접 관리하세요).', '长间奏与唱完整首时，画面中间会显示的字。留空时按观众看到的显示语言自动带入；繁体中文维持原本的三则轮播文案。填了就完全照你打的字（语言请自己顾）。'],
     'template.columnflow': ['直書句流', 'Vertical Verse Flow', '縦書き句流', '세로쓰기 문장 흐름', '竖排句流'],
     'template.paperstrip': ['紙帶逐字', 'Paper Strip', 'ペーパーストリップ', '페이퍼 스트립', '纸带逐字'],
     'template.mirror': ['虛實鏡書', 'Mirror', 'ミラー', '미러', '虚实镜书'],

@@ -795,12 +795,12 @@
                 <p class="field-hint" data-i18n="columnflow.placementHint">預設左右分散；新句補上時，最舊的一句才會淡出。</p>
               </div>
               <div class="field" id="columnflow-max-lines-field" hidden>
-                <label data-i18n="columnflow.maxLinesLabel">同時保留句數 <span id="ls-columnflow-max-lines-val" class="val">4 句</span></label>
+                <label><span data-i18n="columnflow.maxLinesLabel">同時保留句數</span> <span id="ls-columnflow-max-lines-val" class="val">4 句</span></label>
                 <input id="ls-columnflow-max-lines" data-ls-control="columnflowMaxLines" type="range" min="1" max="6" step="1" value="4">
                 <p class="field-hint" data-i18n="columnflow.maxLinesHint">偏左或偏右畫面較擠時，可把句數調低。</p>
               </div>
               <div class="field" id="columnflow-safe-margin-field" hidden>
-                <label data-i18n="columnflow.safeMarginLabel">中央安全距離 <span id="ls-columnflow-safe-margin-val" class="val">11%</span></label>
+                <label><span data-i18n="columnflow.safeMarginLabel">中央安全距離</span> <span id="ls-columnflow-safe-margin-val" class="val">11%</span></label>
                 <input id="ls-columnflow-safe-margin" data-ls-control="columnflowSafeMargin" type="range" min="5" max="25" step="1" value="11">
                 <p class="field-hint" data-i18n="columnflow.safeMarginHint">畫面正中保留給主播真人／人物模型的區域，直行不會跨入；拖曳時右側預覽會用紅色斜線標出目前的範圍，調到剛好蓋住人物即可放開。數字越大留白越寬。</p>
                 <div class="switch-row">
@@ -854,7 +854,7 @@
               </div>
               <!-- 打字機專用：左右邊距挪到「歌詞位置」正下面（其他模板的邊距在詳細設定裡） -->
               <div class="field" id="typewriter-padding-field" hidden>
-                <label data-i18n="typewriter.paddingLabel">左右邊距 <span id="ls-tw-padding-x-val" class="val">96px</span></label>
+                <label><span data-i18n="typewriter.paddingLabel">左右邊距</span> <span id="ls-tw-padding-x-val" class="val">96px</span></label>
                 <input id="ls-tw-padding-x" data-ls-control="paddingX" type="range" min="0" max="480" step="8" value="96">
                 <p class="field-hint" data-i18n="typewriter.paddingHint">對話泡泡離畫面左右邊緣的距離。</p>
               </div>
@@ -868,7 +868,7 @@
                   <div><div class="label" data-i18n="lightboard.idleLabel">間奏跑馬</div><div class="sub" data-i18n="lightboard.idleHint">只在沒有人在唱的間奏跑曲名，右上讀數同時切成 INTERLUDE。不影響跟唱。</div></div>
                   <label class="switch"><input id="ls-lightboard-idle" data-ls-control="lightboardIdleMarquee" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <label class="mt-8" data-i18n="lightboard.idleGapLabel">長間奏門檻 <span id="ls-lightboard-idle-gap-val" class="val">2.5s</span></label>
+                <label class="mt-8"><span data-i18n="lightboard.idleGapLabel">長間奏門檻</span> <span id="ls-lightboard-idle-gap-val" class="val">2.5s</span></label>
                 <input id="ls-lightboard-idle-gap" data-ls-control="lightboardIdleGapMs" type="range" min="1500" max="20000" step="500" value="2500">
                 <p class="field-hint" data-i18n="lightboard.idleGapHint">間奏長過這個秒數才開始跑馬——調高＝只有夠久的間奏才跑，短空檔不閃。</p>
                 <div class="switch-row">
@@ -890,27 +890,18 @@
                 <p class="field-hint" data-i18n="paperstrip.colorHint">紙帶本身的顏色。文字色在上面的「文字色」調。</p>
               </div>
               <div class="field" id="ktv-text-field" hidden>
-                <label for="ls-ktv-interlude">長間奏字樣</label>
-                <input id="ls-ktv-interlude" data-ls-control="ktvInterludeText" class="input" type="text" maxlength="40" placeholder="留空＝依顯示語言（英「Instrumental」、日「間奏」、韓「간주」…）">
-                <label for="ls-ktv-ending" class="mt-8">全曲結尾字樣</label>
-                <input id="ls-ktv-ending" data-ls-control="ktvEndingText" class="input" type="text" maxlength="40" placeholder="留空＝依顯示語言（英「Thanks for listening」…）">
-                <p class="field-hint">長間奏與唱完整首時，畫面中間會顯示的字。留空時依觀眾看到的顯示語言自動帶入；繁體中文維持原本的三則輪播文案。填了就完全照你打的字（語言請自己顧）。</p>
+                <label for="ls-ktv-interlude" data-i18n="ktv.interludeTextLabel">長間奏字樣</label>
+                <input id="ls-ktv-interlude" data-ls-control="ktvInterludeText" class="input" type="text" maxlength="40" placeholder="留空＝依顯示語言（英「Instrumental」、日「間奏」、韓「간주」…）" data-i18n-placeholder="ktv.interludeTextPlaceholder">
+                <label for="ls-ktv-ending" class="mt-8" data-i18n="ktv.endingTextLabel">全曲結尾字樣</label>
+                <input id="ls-ktv-ending" data-ls-control="ktvEndingText" class="input" type="text" maxlength="40" placeholder="留空＝依顯示語言（英「Thanks for listening」…）" data-i18n-placeholder="ktv.endingTextPlaceholder">
+                <p class="field-hint" data-i18n="ktv.customTextHint">長間奏與唱完整首時，畫面中間會顯示的字。留空時依觀眾看到的顯示語言自動帶入；繁體中文維持原本的三則輪播文案。填了就完全照你打的字（語言請自己顧）。</p>
               </div>
               <div class="field" id="stage-safe-margin-field" hidden>
-                <label>中央安全距離 <span id="ls-stage-safe-margin-val" class="val">2%</span></label>
+                <label><span data-i18n="columnflow.safeMarginLabel">中央安全距離</span> <span id="ls-stage-safe-margin-val" class="val">2%</span></label>
                 <input id="ls-stage-safe-margin" data-ls-control="stageSafeMargin" type="range" min="2" max="25" step="1" value="2">
                 <p class="field-hint">畫面正中保留給主播真人／人物模型的區域，歌詞最多只會貼齊安全框邊界，不會跨入。拖曳時右側預覽會用紅色斜線標出目前的範圍。數字越大留白越寬。</p>
                 <div class="switch-row">
-                  <div><div class="label">安全框也疊在 OBS 來源上</div><div class="sub">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。⚠️ 調完記得關掉，不然直播畫面會一直帶著這條線。</div></div>
-                  <label class="switch"><input id="ls-stage-show-safe-zone" data-ls-control="stageShowSafeZoneOnObs" type="checkbox"><span class="track"></span></label>
-                </div>
-              </div>
-              <div class="field" id="stage-safe-margin-field" hidden>
-                <label>中央安全距離 <span id="ls-stage-safe-margin-val" class="val">2%</span></label>
-                <input id="ls-stage-safe-margin" data-ls-control="stageSafeMargin" type="range" min="2" max="25" step="1" value="2">
-                <p class="field-hint">畫面正中保留給主播真人／人物模型的區域，歌詞最多只會貼齊安全框邊界，不會跨入。拖曳時右側預覽會用紅色斜線標出目前的範圍。數字越大留白越寬。</p>
-                <div class="switch-row">
-                  <div><div class="label">安全框也疊在 OBS 來源上</div><div class="sub">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。調完記得關掉，避免引導線留在直播畫面。</div></div>
+                  <div><div class="label" data-i18n="stage.safeZoneObsLabel">安全框也疊在 OBS 來源上</div><div class="sub" data-i18n="stage.safeZoneObsHint">預設只有這裡的預覽看得到引導線；打開後連 OBS 裡的真正歌詞來源也會疊出紅色框線，方便直接對著 OBS 畫面調整。⚠️ 調完記得關掉，不然直播畫面會一直帶著這條線。</div></div>
                   <label class="switch"><input id="ls-stage-show-safe-zone" data-ls-control="stageShowSafeZoneOnObs" type="checkbox"><span class="track"></span></label>
                 </div>
               </div>
@@ -990,7 +981,7 @@
                 <div><div class="label" data-i18n="typewriter.stickerLabel">長間奏跳貼圖</div><div class="sub" data-i18n="typewriter.stickerHint">冷場時像聊天室發張貼圖。清單空或關掉就沿用純打字。</div></div>
                 <label class="switch"><input id="ls-tw-sticker-enabled" data-ls-control="twStickerEnabled" type="checkbox" checked><span class="track"></span></label>
               </div>
-              <label class="mt-8" data-i18n="typewriter.stickerGapLabel">長間奏門檻 <span id="ls-tw-sticker-gap-val" class="val">6.0s</span></label>
+              <label class="mt-8"><span data-i18n="typewriter.stickerGapLabel">長間奏門檻</span> <span id="ls-tw-sticker-gap-val" class="val">6.0s</span></label>
               <input id="ls-tw-sticker-gap" data-ls-control="twStickerGapMs" type="range" min="3000" max="20000" step="500" value="6000">
               <label class="mt-8" data-i18n="typewriter.stickerGalleryLabel">間奏貼圖圖庫</label>
               <div id="tw-sticker-gallery" class="tw-sticker-gallery"></div>
@@ -1966,12 +1957,12 @@
                       <div class="card-collapse-body">
                       <p class="field-group-desc" data-i18n="setlist.textDetailDesc">主要文字色已在快速調整；這裡只保留需要細調的次要文字層次。</p>
                       <div class="field field-row">
-                        <div class="flex-grow"><label data-i18n="setlist.artistOpacityLabel">歌手名的透明度 <span id="sls-text-sec-val" class="val">70%</span></label><input id="sls-text-sec" type="range" min="0" max="100" value="70"></div>
-                        <div class="flex-grow"><label data-i18n="setlist.doneNameOpacityLabel">已唱歌名的透明度 <span id="sls-text-done-val" class="val">52%</span></label><input id="sls-text-done" type="range" min="0" max="100" value="52"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.artistOpacityLabel">歌手名的透明度</span> <span id="sls-text-sec-val" class="val">70%</span></label><input id="sls-text-sec" type="range" min="0" max="100" value="70"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.doneNameOpacityLabel">已唱歌名的透明度</span> <span id="sls-text-done-val" class="val">52%</span></label><input id="sls-text-done" type="range" min="0" max="100" value="52"></div>
                       </div>
                       <p class="field-hint" data-i18n="setlist.textDetailHint">這兩個都是以「主要文字色」為基礎調整深淺，數字越小越淡。開著可讀性保護時會保留安全下限；想做極淡效果再關閉保護。</p>
                       <div class="field">
-                        <label data-i18n="setlist.metaOpacityLabel">編號／時間文字的透明度 <span id="sls-text-meta-val" class="val">62%</span></label>
+                        <label><span data-i18n="setlist.metaOpacityLabel">編號／時間文字的透明度</span> <span id="sls-text-meta-val" class="val">62%</span></label>
                         <input id="sls-text-meta" type="range" min="0" max="100" value="62">
                         <p class="field-hint" data-i18n="setlist.metaOpacityHint">影響：清單前面的數字編號、已唱歌曲旁邊的時間戳記、區塊小標籤。</p>
                       </div>
@@ -1987,8 +1978,8 @@
                           <label data-i18n="setlist.borderColorLabel">邊框顏色</label>
                           <input id="sls-border-color" type="color" value="#f0ead8">
                         </div>
-                        <div class="flex-grow"><label data-i18n="setlist.borderOpacityLabel">邊框透明度 <span id="sls-border-opacity-val" class="val">9%</span></label><input id="sls-border-opacity" type="range" min="0" max="100" value="9"></div>
-                        <div class="flex-grow"><label data-i18n="setlist.borderWidthLabel">邊框粗細 <span id="sls-border-width-val" class="val">1px</span></label><input id="sls-border-width" type="range" min="0" max="5" step="0.5" value="1"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.borderOpacityLabel">邊框透明度</span> <span id="sls-border-opacity-val" class="val">9%</span></label><input id="sls-border-opacity" type="range" min="0" max="100" value="9"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.borderWidthLabel">邊框粗細</span> <span id="sls-border-width-val" class="val">1px</span></label><input id="sls-border-width" type="range" min="0" max="5" step="0.5" value="1"></div>
                       </div>
                       <p class="field-hint" data-i18n="setlist.cardBorderHint">影響：已唱／未唱每一行外圍的細框線（經典版型的「正在播放」外框也用這組顏色與粗細）。</p>
                       </div>
@@ -2052,11 +2043,11 @@
                       </div>
                       <div data-sl-scope="classic list skin">
                         <div class="field field-row">
-                          <div class="flex-grow"><label data-i18n="setlist.listFontSizeLabel">清單列表字級 <span id="sls-size-list-val" class="val">13px</span></label><input id="sls-size-list" type="range" min="8" max="24" value="13"></div>
-                          <div class="flex-grow"><label data-i18n="setlist.artistFontSizeLabel">歌手名字級 <span id="sls-size-artist-val" class="val">11px</span></label><input id="sls-size-artist" type="range" min="7" max="18" value="11"></div>
+                          <div class="flex-grow"><label><span data-i18n="setlist.listFontSizeLabel">清單列表字級</span> <span id="sls-size-list-val" class="val">13px</span></label><input id="sls-size-list" type="range" min="8" max="24" value="13"></div>
+                          <div class="flex-grow"><label><span data-i18n="setlist.artistFontSizeLabel">歌手名字級</span> <span id="sls-size-artist-val" class="val">11px</span></label><input id="sls-size-artist" type="range" min="7" max="18" value="11"></div>
                         </div>
                         <div class="field">
-                          <label data-i18n="setlist.metaFontSizeLabel">編號／標籤字級 <span id="sls-size-meta-val" class="val">10px</span></label>
+                          <label><span data-i18n="setlist.metaFontSizeLabel">編號／標籤字級</span> <span id="sls-size-meta-val" class="val">10px</span></label>
                           <input id="sls-size-meta" type="range" min="7" max="14" value="10">
                         </div>
                         <div class="field field-row">
@@ -2073,16 +2064,16 @@
                       <div class="card-collapse-body">
                       <p class="field-hint" data-i18n="setlist.layoutSizeDesc">清單型模板的寬度由 OBS Browser Source 決定，這裡不再提供固定像素寬度；要更寬就把來源拉寬，字級與間距會一起等比調整。整體大小倍率已移到快速調整的「大小」。</p>
                       <div class="field" data-sl-scope="classic list">
-                        <label data-i18n="setlist.radiusLabel">卡片圓角 <span id="sls-radius-val" class="val">14px</span></label>
+                        <label><span data-i18n="setlist.radiusLabel">卡片圓角</span> <span id="sls-radius-val" class="val">14px</span></label>
                         <input id="sls-radius" type="range" min="0" max="32" value="14">
                         <p class="field-hint" data-i18n="setlist.radiusHint">「正在播放」大卡用這個值；已唱／未唱每列自動略小一點（−6px）比較協調。</p>
                       </div>
                       <div class="field field-row">
-                        <div class="flex-grow"><label data-i18n="setlist.paddingVLabel">「正在播放」上下內距 <span id="sls-padding-v-val" class="val">10px</span></label><input id="sls-padding-v" type="range" min="2" max="24" value="10"></div>
-                        <div class="flex-grow"><label data-i18n="setlist.paddingHLabel">「正在播放」左右內距 <span id="sls-padding-h-val" class="val">14px</span></label><input id="sls-padding-h" type="range" min="6" max="36" value="14"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.paddingVLabel">「正在播放」上下內距</span> <span id="sls-padding-v-val" class="val">10px</span></label><input id="sls-padding-v" type="range" min="2" max="24" value="10"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.paddingHLabel">「正在播放」左右內距</span> <span id="sls-padding-h-val" class="val">14px</span></label><input id="sls-padding-h" type="range" min="6" max="36" value="14"></div>
                       </div>
                       <div class="field">
-                        <label data-i18n="setlist.itemGapLabel">歌曲項目之間的間距 <span id="sls-item-gap-val" class="val">2px</span></label>
+                        <label><span data-i18n="setlist.itemGapLabel">歌曲項目之間的間距</span> <span id="sls-item-gap-val" class="val">2px</span></label>
                         <input id="sls-item-gap" type="range" min="0" max="16" value="2">
                       </div>
                       </div>
@@ -2092,13 +2083,13 @@
                       <summary data-i18n="setlist.layoutAnimTitle">排版與動畫</summary>
                       <div class="card-collapse-body">
                       <div class="field">
-                        <label data-i18n="setlist.lineHeightLabel">文字行高 <span id="sls-line-height-val" class="val">1.40</span></label>
+                        <label><span data-i18n="setlist.lineHeightLabel">文字行高</span> <span id="sls-line-height-val" class="val">1.40</span></label>
                         <input id="sls-line-height" type="range" min="1" max="2.4" step="0.05" value="1.4">
                         <p class="field-hint" data-i18n="setlist.lineHeightHint">數字越大，多行文字之間的垂直間距越寬鬆。</p>
                       </div>
                       <div class="field field-row">
-                        <div class="flex-grow"><label data-i18n="setlist.marginVLabel">整體外邊距（上下）<span id="sls-margin-v-val" class="val">0px</span></label><input id="sls-margin-v" type="range" min="0" max="80" value="0"></div>
-                        <div class="flex-grow"><label data-i18n="setlist.marginHLabel">整體外邊距（左右）<span id="sls-margin-h-val" class="val">0px</span></label><input id="sls-margin-h" type="range" min="0" max="80" value="0"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.marginVLabel">整體外邊距（上下）</span> <span id="sls-margin-v-val" class="val">0px</span></label><input id="sls-margin-v" type="range" min="0" max="80" value="0"></div>
+                        <div class="flex-grow"><label><span data-i18n="setlist.marginHLabel">整體外邊距（左右）</span> <span id="sls-margin-h-val" class="val">0px</span></label><input id="sls-margin-h" type="range" min="0" max="80" value="0"></div>
                       </div>
                       <p class="field-hint" data-i18n="setlist.marginHint">讓整組歌單離畫面邊緣遠一點，避免被 OBS 場景的其他元素擋住。</p>
                       <div data-sl-scope="classic">
