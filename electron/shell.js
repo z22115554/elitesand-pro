@@ -327,7 +327,6 @@ function createElectronShell({
   let manualUpdateRequester = null;
   let startupUpdateProgressWindow = null;
   let startupUpdateProgressPoll = null;
-  let pendingUpdatePlan = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
   // WebGPU 人聲分離引擎（實驗性，§13 musetric 路線）：只在使用者已經開啟設定時才建立，
   // 不是每次啟動都硬開一個吃資源的隱藏視窗（跟 Spout 的 env-var autostart 不同，
@@ -444,7 +443,6 @@ function createElectronShell({
             resolve({
               engineConnected: !!payload?.engineConnected,
               engineRestartRequestedAt: Number(payload?.engineRestartRequestedAt) || 0,
-              jobActive: !!payload?.jobActive,
             });
           } catch (_) { resolve(null); }
         });
@@ -457,13 +455,8 @@ function createElectronShell({
   let webgpuHealthTimer = null;
   let webgpuLastHandledRestartAt = 0;
   let webgpuOfflineStrikes = 0;
-  let webgpuIdleSinceMs = 0;
   const WEBGPU_HEALTH_TICK_MS = 20000;
   const WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART = 3; // ~1 分鐘沒連上才動手，給正常啟動留餘裕
-  // 隱藏視窗閒置太久（沒有任何分離工作在跑）就自己關掉——它背後掛著整套 WebGPU 推論
-  // runtime，實測待命時就會持續吃掉將近一顆 CPU 核心＋數百 MB RAM，不能讓它陪一整場
-  // 直播空燒。真的需要時（面板重新預熱，或 server 端反應式請求）下一次會重新冷啟。
-  const WEBGPU_IDLE_TIMEOUT_MS = Number(processObject.env.ELITESAND_WEBGPU_IDLE_TIMEOUT_MS) || 10 * 60 * 1000;
 
   async function runWebgpuHealthCheck() {
     if (!webgpuEngineWindow) return;
@@ -473,7 +466,6 @@ function createElectronShell({
     if (health.engineRestartRequestedAt > webgpuLastHandledRestartAt) {
       webgpuLastHandledRestartAt = health.engineRestartRequestedAt;
       webgpuOfflineStrikes = 0;
-      webgpuIdleSinceMs = Date.now();
       console.warn?.('[WebGPU Engine] server 要求重開引擎視窗，執行 restart()');
       await webgpuEngineWindow.restart().catch((e) => console.error?.('[WebGPU Engine] restart 失敗:', e.message));
       return;
@@ -483,19 +475,8 @@ function createElectronShell({
       webgpuOfflineStrikes = 0;
     } else if (++webgpuOfflineStrikes >= WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART) {
       webgpuOfflineStrikes = 0;
-      webgpuIdleSinceMs = Date.now();
       console.warn?.(`[WebGPU Engine] 連續 ${WEBGPU_OFFLINE_STRIKES_BEFORE_RESTART} 次未連上 server，執行 restart()`);
       await webgpuEngineWindow.restart().catch((e) => console.error?.('[WebGPU Engine] restart 失敗:', e.message));
-      return;
-    }
-    // 3) 閒置逾時：有在跑 job 就把時鐘撥回現在；沒有 job 且超過門檻就關掉整個隱藏視窗。
-    if (health.jobActive) {
-      webgpuIdleSinceMs = Date.now();
-      return;
-    }
-    if (Date.now() - webgpuIdleSinceMs >= WEBGPU_IDLE_TIMEOUT_MS) {
-      console.warn?.(`[WebGPU Engine] 閒置超過 ${Math.round(WEBGPU_IDLE_TIMEOUT_MS / 60000)} 分鐘沒有分離工作，關閉隱藏視窗`);
-      await stopWebgpuEngineWindow();
     }
   }
 
@@ -523,7 +504,6 @@ function createElectronShell({
         webgpuEngineWindow = createWebgpuEngineWindow({ BrowserWindow, port });
       }
       await webgpuEngineWindow.start();
-      webgpuIdleSinceMs = Date.now();
       startWebgpuEngineHealthLoop();
     } else if (webgpuEngineWindow) {
       stopWebgpuEngineHealthLoop();
@@ -754,11 +734,10 @@ function createElectronShell({
         locale: resolveUpdateLocale(app.getLocale?.() || 'zh-TW'),
         version: String(plan?.targetVersion || ''),
       }).toString();
-      // Served by the local server the shell already started, not loadFile: a
-      // file:// page renders blank under the packaged app's hardened fuses
-      // (grantFileProtocolExtraPrivileges:false). Same http://127.0.0.1
-      // pattern the main panel and WebGPU worker windows use.
-      startupUpdateProgressWindow.loadURL(`http://127.0.0.1:${port}/startup-update-progress.html?${search}`);
+      startupUpdateProgressWindow.loadFile(
+        path.join(shellRoot, 'electron', 'startup-update-progress.html'),
+        { search },
+      );
       startupUpdateProgressPoll = setInterval(() => {
         startupUpdateRequester?.request({ action: 'progress', phase: 'OPTIONAL_PROMPT' })
           .then((res) => {
@@ -785,22 +764,7 @@ function createElectronShell({
     startupUpdateProgressWindow = null;
   }
 
-  // Summary of an update the gate has already found and the user has not yet
-  // applied. The running panel reads it via IPC so it can show "an update is
-  // available" (and a sidebar dot) without a redundant second check. Cleared
-  // only when a later check comes back "up to date"; an accept exits the app.
-  function rememberPendingUpdate(plan) {
-    pendingUpdatePlan = plan && plan.targetVersion
-      ? {
-        targetVersion: String(plan.targetVersion),
-        urgency: plan.urgency === 'required' ? 'required' : 'optional',
-        delivery: plan.delivery === 'installer' ? 'installer' : 'incremental',
-      }
-      : pendingUpdatePlan;
-  }
-
   async function promptOptionalUpdate(plan) {
-    rememberPendingUpdate(plan);
     const text = getNativeUpdateCatalog();
     const result = await showNativeUpdateDialog({
       type: 'info',
@@ -820,7 +784,6 @@ function createElectronShell({
   }
 
   async function promptRequiredUpdate(plan, { openFailed = false } = {}) {
-    rememberPendingUpdate(plan);
     const text = getNativeUpdateCatalog();
     const isInstaller = plan.delivery === 'installer';
     const result = await showNativeUpdateDialog({
@@ -942,10 +905,6 @@ function createElectronShell({
           fsImpl.appendFileSync(file, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
         } catch (_) { /* best-effort diagnostic only */ }
       }
-      ipcMain.handle('elitesand:pending-update', (event) => {
-        if (event?.sender !== window.webContents) return null;
-        return pendingUpdatePlan;
-      });
       ipcMain.handle('elitesand:cloudflare-update-check', async (event) => {
         if (event?.sender !== window.webContents) return { status: 'unavailable' };
         const eligible = app.isPackaged && ownsServer && !isSpoutExperiment;
@@ -956,12 +915,7 @@ function createElectronShell({
           logManualUpdateDebug(`check response: ${JSON.stringify(checked)}`);
           if (!checked?.ok) return { status: 'failed' };
           if (checked.kind === 'unavailable') return { status: 'unavailable' };
-          if (checked.kind !== 'plan' || !checked.plan) {
-            // A real "no update" answer clears any pending marker from an
-            // earlier cold-start check so the panel dot goes away.
-            pendingUpdatePlan = null;
-            return { status: 'up-to-date' };
-          }
+          if (checked.kind !== 'plan' || !checked.plan) return { status: 'up-to-date' };
           const plan = checked.plan;
           const choice = plan.urgency === 'required'
             ? (await promptRequiredUpdate(plan)) === 'open' ? 'accept' : 'defer'
@@ -1218,19 +1172,6 @@ function createElectronShell({
       startupExitCode = code;
       if (serverProcess === child) serverProcess = null;
       void handleUnexpectedServerExit(code);
-    });
-    // 反應式 WebGPU 引擎啟動：面板端只在探測到沒有 CUDA 時才會提早預熱隱藏視窗
-    // （見 ai-separation-client.js），所以「CUDA 顯卡在但真的跑不動」這種情況下，
-    // server 端 ai-separation-jobs.js 的 tryStartWebgpu() 會用這支 one-way 訊息現在
-    // 才請我們把視窗開起來，然後它自己輪詢 server 的 isEngineAvailable() 等連上
-    // ——這裡不用回訊息，只有「這個 server 是我自己啟動、擁有的」才會裝這支監聽器，
-    // 換成別的 Electron 視窗重用別人的 server 時完全沒有這條通道，那邊會自然逾時
-    // 落回 CPU（跟 update 檢查的 ownsServer 限制是同一個既有取捨）。
-    child.on('message', (message) => {
-      if (message?.type !== 'elitesand:webgpu-engine-start-request') return;
-      syncWebgpuEngineWindow(true).catch((error) => {
-        console.error?.('[WebGPU Engine] 反應式啟動失敗:', error.message);
-      });
     });
     return child;
   }

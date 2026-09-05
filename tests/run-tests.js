@@ -1512,21 +1512,6 @@ test('首頁必須手動檢查更新，只有確認有新版本後才能重新�
   ok(!restartSource.includes('restartForUpdateCheck') && /restartButton\.hidden\s*=\s*true/.test(restartSource),
     'GitHub fallback（未簽章）永遠不可觸發重新啟動並套用，只能開下載頁: ');
   ok(!fs.existsSync(path.join(__dirname, '../public/js/app-update-check.js')), '舊的前端更新模組必須移除: ');
-
-  // 冷啟動 gate 已檢查過的結果要能帶進執行中的面板：面板讀 main process 記住的
-  // pending plan（不是再打一次網路檢查），有更新時側欄亮點、卡片直接顯示「現在更新」。
-  const i18n = require('../public/js/i18n');
-  const preloadSource = fs.readFileSync(path.join(__dirname, '../electron/preload.js'), 'utf8');
-  const shellSource = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
-  ok(preloadSource.includes("ipcRenderer.invoke('elitesand:pending-update')"), 'preload 必須橋接 pending-update 查詢: ');
-  ok(shellSource.includes("ipcMain.handle('elitesand:pending-update'") && shellSource.includes('rememberPendingUpdate'),
-    'shell 必須在冷啟動 prompt 時記住 plan，並用唯讀 IPC 回傳: ');
-  ok(indexHtml.includes('id="system-nav-badge"'), '側欄「連線與系統」必須有可更新指示點: ');
-  ok(restartSource.includes('loadPendingUpdate') && restartSource.includes("'pendingAvailable'"),
-    '面板載入時要反映冷啟動已知的可更新狀態，不需再手動檢查一次: ');
-  ['appUpdate.updateNow', 'appUpdate.pendingFound', 'appUpdate.navBadgeTitle'].forEach((key) => {
-    i18n.LOCALES.forEach((locale) => ok(String(i18n.catalogs[locale][key] || '').trim(), `${locale}.${key} 不得為空: `));
-  });
 });
 
 test('更新檢查會納入 prerelease、排除 draft，並挑最高版本', () => {
@@ -8161,12 +8146,9 @@ test('歌詞模板使用 Elitesand Pro 自有名稱與新 ID', () => {
   ['Stardust Flow', 'Prism Steps', 'Diagonal Confession', 'Tidal Mindscape', 'Neon Duet'].forEach((retiredName) => {
     ok(!readme.includes(retiredName), `README 不可保留已退休的模板名稱 ${retiredName}: `);
   });
-  // drift（斜拍告白）從桌面與手機選擇器隱藏，README 不得把它列成可選模板。
-  // README 1.0.0 改成模板對照表，不再是單行清單，所以逐一檢查顯示名稱有沒有到位。
-  ['Classic Overlay', 'Pulse', 'Facet', 'Aura', 'KTV', 'Vertical Flow', 'Paper Strip', 'Mirror', 'Chat Bubble', 'Lightboard'].forEach((label) => {
-    ok(readme.includes(label), `README 必須列出模板顯示名稱 ${label}: `);
-  });
-  ok(!/Classic Overlay, Pulse, Facet, Drift/.test(readme) && !/Pulse ?\/ ?Facet ?\/ ?Drift/.test(readme), 'README 不可把隱藏中的 Drift 列為可選模板: ');
+  // drift（斜拍告白）目前從桌面與手機選擇器隱藏；Paper Strip 加入後 README 以七種為準。
+  ok(readme.includes('Classic Overlay, Pulse, Facet, Aura, KTV, Vertical Flow, and Paper Strip'));
+  ok(!/Classic Overlay, Pulse, Facet, Drift/.test(readme), 'README 不可把隱藏中的 Drift 列為可選模板: ');
 });
 
 test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', () => {
@@ -10047,6 +10029,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
       i18n.setLocale(locale, { persist: false, updateQuery: false });
       const source = i18n.t('home.session.sourceObs');
       eq(i18n.t('home.session.statusLive', { source, duration: '42:16', count: '8' }), expected, `${locale} 直播狀態：`);
+      ok(i18n.t('home.session.openRecord') !== catalogs['zh-TW']['home.session.openRecord'], `${locale} 本場紀錄入口不得沿用繁中：`);
       ok(i18n.t('settings.openDetails') !== catalogs['zh-TW']['settings.openDetails'], `${locale} 詳細設定入口不得沿用繁中：`);
     });
     i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
@@ -10072,6 +10055,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
       });
     });
     eq(catalogs.en['home.session.copySuccess'], '✓ Chapters copied', '複製多個章節時英文不得使用單數：');
+    ok(/history/i.test(catalogs.en['home.session.openRecord']), '英文「本場紀錄」不得誤解成錄影檔 record：');
     eq(catalogs.ko['settings.workspace.appearance'], '외관', '韓文 Appearance 應使用軟體介面的「외관」：');
     eq(catalogs.ko['settings.workspace.searchHint'], '현재 템플릿에서 사용할 수 있는 설정만 표시됩니다.', '韓文模板範圍助詞必須自然：');
     eq(catalogs.ko['home.session.confirmSummary'], '이번 방송에서 부른 곡과 YouTube 챕터가 삭제됩니다.', '韓文清除提示語序必須自然：');

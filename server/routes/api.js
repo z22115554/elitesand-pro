@@ -48,7 +48,6 @@ const ffmpegProvider = require('../services/ffmpeg-provider');
 const aiRuntimeProvider = require('../services/ai-runtime-provider');
 const aiSeparationBundle = require('../services/ai-separation-bundle');
 const aiSeparationJobs = require('../services/ai-separation-jobs');
-const { getCachedCudaAvailable } = require('../services/ai-separation');
 const webgpuRuntimeProvider = require('../services/webgpu-runtime-provider');
 const webgpuSeparationJobs = require('../services/webgpu-separation-jobs');
 const webgpuSeparationSettings = require('../services/webgpu-separation-settings');
@@ -1295,19 +1294,6 @@ router.get('/ai-separation/bundle-status', (req, res) => {
   });
 });
 
-// 面板端「開啟 AI 分離」時打這支，決定要不要提早預熱 WebGPU 備援：探測到沒有 CUDA
-// 就馬上預熱（反正一定要用它，不預熱只是讓使用者乾等冷啟），探測到有 CUDA 就完全
-// 不預熱，等真的分離時 CUDA 用不動才臨時暖機（見 ai-separation-jobs.js 的
-// requestWebgpuEngineStart）。唯讀能力查詢，不改動任何狀態，不用 PIN。
-router.get('/ai-separation/cuda-status', async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    res.json({ cudaAvailable: await getCachedCudaAvailable() });
-  } catch (_) {
-    res.json({ cudaAvailable: false });
-  }
-});
-
 router.post('/ai-separation/bundle/download', requirePin, async (req, res) => {
   try {
     const result = await aiSeparationBundle.downloadBundle();
@@ -1372,10 +1358,6 @@ router.get('/webgpu-separation/runtime-status', (req, res) => {
     // 請把隱藏 BrowserWindow 重開一次。0＝沒有待處理的重開請求。
     engineRestartRequestedAt: webgpuSeparationJobs.getRestartRequestedAt(),
     ...webgpuRuntimeProvider.getDownloadStatus(),
-    // 給 shell.js 的閒置逾時看：現在有 WebGPU 分離 job 在跑就別關隱藏視窗，不然會
-    // 直接殺掉進行中的那首歌。刻意跟 getDownloadStatus() 的 active（模型下載中）分開
-    // 命名，放在 spread 之後不被它蓋掉。
-    jobActive: !!webgpuSeparationJobs.getActiveJobId(),
   });
 });
 

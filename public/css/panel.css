@@ -94,13 +94,6 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
   width: 4px; height: 24px; border-radius: 0 4px 4px 0; background: var(--accent);
 }
 .nav-item[hidden] { display: none; }
-.nav-item .nav-dot {
-  position: absolute; top: 7px; right: 13px;
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--bg-base, #16181d);
-}
-.nav-item .nav-dot[hidden] { display: none; }
 
 /* ═══ 主內容區 ═══ */
 .main { display: flex; flex-direction: column; overflow: hidden; background: transparent; }
@@ -634,8 +627,12 @@ input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(-
 #columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-preview { background: #eee5d4; border-color: #bcae96; }
 #columnflow-variant-buttons .style-thumb[data-columnflow-variant="fuda"] .style-thumb-char { color: #2a2118; }
 @media (prefers-reduced-motion: reduce) {
-  .style-thumb-char, #template-buttons [data-template="columnflow"] .style-thumb-column, #template-buttons [data-template="paperstrip"] .style-thumb-paperstrip i, #template-buttons [data-template="typewriter"] .style-thumb-caret { animation: none !important; }
+  .style-thumb-char, #template-buttons [data-template="columnflow"] .style-thumb-column, #template-buttons [data-template="paperstrip"] .style-thumb-paperstrip i, #template-buttons [data-template="typewriter"] .style-thumb-caret,
+  #template-buttons [data-template="particle"] .style-thumb-particle::before, #template-buttons [data-template="particle"] .style-thumb-particle::after { animation: none !important; }
   #template-buttons [data-template="columnflow"] .style-thumb-column { opacity: .88; transform: none; }
+  #template-buttons [data-template="particle"] .style-thumb-particle::before, #template-buttons [data-template="particle"] .style-thumb-particle::after { opacity: 0; }
+  #template-buttons [data-template="particle"] .style-thumb-char { opacity: 1; filter: none; letter-spacing: 0; transform: none; }
+  #template-buttons [data-template="lightboard"] .style-thumb-char { opacity: 1; }
 }
 details.collapse { border-top: 1px solid var(--border); margin-top: 6px; }
 details.collapse > summary { list-style: none; cursor: pointer; padding: 16px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-dim); display: flex; align-items: center; gap: 7px; }
@@ -1464,7 +1461,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .lib-separate-preview-vol-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
 .lib-separate-preview-vol-row input[type="range"] { width: 120px; }
 
-/* 燈牌的模板縮圖（純靜態，不做動畫） */
+/* 燈牌的模板縮圖：LED 點陣底 + 偶爾閃一下（不頻繁，約 5 秒一次快閃兩下） */
 #template-buttons [data-template="lightboard"] .style-thumb-lightboard {
   background: linear-gradient(180deg, #1a140e, #0b0907);
   border: 1px solid rgba(255, 176, 60, 0.3);
@@ -1472,6 +1469,65 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
   background-size: 4px 4px;
   color: #ffce8a;
   text-shadow: 0 0 4px rgba(255, 150, 40, 0.7);
+}
+#template-buttons [data-template="lightboard"] .style-thumb-char {
+  animation: tpl-lightboard 5s ease-in-out infinite;
+}
+@keyframes tpl-lightboard {
+  0%, 87%, 100% { opacity: 1; text-shadow: 0 0 4px rgba(255, 150, 40, 0.7); }
+  89.5% { opacity: 0.18; text-shadow: none; }
+  91.5% { opacity: 0.9; text-shadow: 0 0 4px rgba(255, 150, 40, 0.7); }
+  93.5% { opacity: 0.32; text-shadow: 0 0 2px rgba(255, 150, 40, 0.35); }
+  95.5% { opacity: 1; text-shadow: 0 0 4px rgba(255, 150, 40, 0.7); }
+}
+
+/* 風息成字的模板縮圖：一團點狀的字從一側流入、聚攏並鎖成實心字，停一下，再碎成點散掉。
+   ::before 是「點狀的風」（radial-gradient 點紋裁進字形），char 是聚攏後的實心字。 */
+#template-buttons [data-template="particle"] .style-thumb-particle {
+  position: relative;
+  background: radial-gradient(130% 150% at 50% 45%, #241b16 0%, #14100d 72%);
+  overflow: hidden;
+}
+#template-buttons [data-template="particle"] .style-thumb-char {
+  color: #f6f0e5;
+  text-shadow: 0 1px 3px rgba(8, 5, 13, 0.9);
+  animation: tpl-particle-solid 3s ease-in-out infinite;
+}
+#template-buttons [data-template="particle"] .style-thumb-particle::before {
+  content: '風';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display, inherit); font-size: 18px; font-weight: 700;
+  color: transparent;
+  background: radial-gradient(circle at 50% 50%, #e97855 42%, transparent 46%) 0 0 / 3px 3px;
+  -webkit-background-clip: text; background-clip: text;
+  animation: tpl-particle-swarm 3s ease-in-out infinite;
+}
+#template-buttons [data-template="particle"] .style-thumb-particle::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 2px; height: 2px; border-radius: 50%; background: #f6f0e5;
+  box-shadow: -13px -7px 0 #f6f0e5, -8px 3px 0 #e97855, 5px -9px 0 #e97855, 11px 6px 0 #f6f0e5, -2px 10px 0 #f6f0e5;
+  animation: tpl-particle-loose 3s ease-in-out infinite;
+}
+@keyframes tpl-particle-solid {
+  0%, 22% { opacity: 0; transform: scale(0.96); }
+  38%, 74% { opacity: 1; transform: none; filter: none; }
+  92%, 100% { opacity: 0; transform: scale(0.97); filter: blur(1px); }
+}
+@keyframes tpl-particle-swarm {
+  0% { opacity: 0; transform: translate(14px, -9px); filter: blur(2px); }
+  14% { opacity: 1; }
+  34% { opacity: 1; transform: translate(0, 0); filter: blur(0); }
+  46%, 80% { opacity: 0; transform: translate(0, 0); }
+  92% { opacity: 0.9; transform: translate(-6px, 5px); filter: blur(0.5px); }
+  100% { opacity: 0; transform: translate(-16px, 12px); filter: blur(2px); }
+}
+@keyframes tpl-particle-loose {
+  0% { opacity: 0; transform: translate(7px, -4px) scale(1); }
+  20% { opacity: 0.8; }
+  40%, 82% { opacity: 0; transform: translate(0, 0) scale(0.3); }
+  92% { opacity: 0.7; transform: translate(-4px, 3px) scale(1); }
+  100% { opacity: 0; transform: translate(-14px, 10px) scale(1); }
 }
 
 /* 對話氣泡：間奏貼圖圖庫 */

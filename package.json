@@ -1,6 +1,6 @@
 {
   "name": "elitesand-pro",
-  "version": "1.0.0",
+  "version": "1.0.1-test10",
   "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
@@ -132,5 +132,5 @@
       "language": "1033"
     }
   },
-  "elitesandPublicVersion": "1.0.0"
+  "elitesandPublicVersion": "1.0.1-test10"
 }

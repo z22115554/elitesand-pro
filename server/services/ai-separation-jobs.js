@@ -150,48 +150,8 @@ function startCpu(job) {
   }
 }
 
-// 面板端只在「探測到沒有 CUDA」時才會提早預熱 WebGPU 隱藏視窗（見 api.js 的
-// /ai-separation/cuda-status 與 ai-separation-client.js）。探測到有 CUDA 的機器完全
-// 不預熱，所以這裡引擎多半還沒連上——不能再像以前那樣直接判定失敗、秒退 CPU，
-// 那樣等於讓「CUDA 顯卡在但故障」的人永遠拿不到 WebGPU 備援。改成：一支
-// one-way 訊息請 Electron 主程序（僅限這個 server 是它自己啟動、擁有的那個）現在
-// 就把隱藏視窗開起來，然後在這裡輪詢 isEngineAvailable() 等它連上，設一個上限
-// ——冷啟（開視窗＋載入 onnxruntime-web＋WebGPU EP 初始化）實測要十幾秒，等過這個
-// 上限才真的宣告 WebGPU 這條路也不行、退 CPU。
-const WEBGPU_ENGINE_COLD_START_TIMEOUT_MS = Number(process.env.ELITESAND_WEBGPU_COLDSTART_TIMEOUT_MS) || 15000;
-const WEBGPU_ENGINE_POLL_INTERVAL_MS = 300;
-
-function requestWebgpuEngineStart() {
-  try {
-    process.parentPort?.postMessage?.({ type: 'elitesand:webgpu-engine-start-request' });
-  } catch (_) {
-    // 沒有 parentPort（非 Electron 環境）或送不出去：下面的輪詢逾時就會安全落回 CPU。
-  }
-}
-
-function delay(ms) {
-  return new Promise((resolve) => { setTimeout(resolve, ms).unref?.(); });
-}
-
-async function waitForWebgpuEngine(timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (webgpuJobs.isEngineAvailable()) return true;
-    await delay(WEBGPU_ENGINE_POLL_INTERVAL_MS);
-  }
-  return webgpuJobs.isEngineAvailable();
-}
-
-async function tryStartWebgpu(job) {
-  if (!webgpuRuntimeProvider.isAvailable()) return false;
-  if (!webgpuJobs.isEngineAvailable()) {
-    requestWebgpuEngineStart();
-    const ready = await waitForWebgpuEngine(WEBGPU_ENGINE_COLD_START_TIMEOUT_MS);
-    // 等待期間這個 job 可能已經被取消或被新的一個取代，跟 dispatch() 開頭 probe 之後
-    // 的同一種再確認——不能拿一個過期 job 去派工。
-    if (!activeJob || activeJob.publicJobId !== job.publicJobId || job.cancelled) return false;
-    if (!ready) return false;
-  }
+function tryStartWebgpu(job) {
+  if (!webgpuRuntimeProvider.isAvailable() || !webgpuJobs.isEngineAvailable()) return false;
   try {
     emitProgress(job, 'fallback-webgpu', 0);
     webgpuJobs.startJobForTrack(job.trackId, {
@@ -241,7 +201,7 @@ async function dispatch(trackId, params, publicJobId = null) {
   if (!activeJob || activeJob.publicJobId !== job.publicJobId || job.cancelled) return job.publicJobId;
   if (cudaAvailable) {
     startPython(job, { forceCpu: false });
-  } else if (!(await tryStartWebgpu(job))) {
+  } else if (!tryStartWebgpu(job)) {
     if (!engineUp) {
       // 引擎起不來時絕不能顯示「正在改用 CPU」——CPU 是同一個 supervisor，工作只會
       // 永遠停在 0%。直接收成明確的失敗（2026-08-30 打包版少了 sidecar 腳本時的實況）。
@@ -408,7 +368,7 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
         return;
       }
       // CUDA 這關結束（重試用完或不值得重試）→ 換 WebGPU，撐不住才 CPU
-      (async () => { if (!(await tryStartWebgpu(job))) startCpu(job); })();
+      if (!tryStartWebgpu(job)) startCpu(job);
       return;
     }
 
@@ -446,11 +406,11 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
     if (retryable) {
       log.warn(`WebGPU 失敗（${job.webgpuError}）track=${job.trackId}，${WEBGPU_RETRY_DELAY_MS}ms 後重試 WebGPU（第 ${(job.webgpuAttempts || 0) + 1}/${WEBGPU_MAX_ATTEMPTS} 次）`);
       emitProgress(job, 'fallback-webgpu', 0);
-      job.retryTimer = setTimeout(async () => {
+      job.retryTimer = setTimeout(() => {
         job.retryTimer = null;
         // 這段等待期間 job 可能已被取消或被佇列裡的下一首取代
         if (job.cancelled || !activeJob || activeJob.publicJobId !== job.publicJobId) return;
-        if (!(await tryStartWebgpu(job))) startCpu(job); // 引擎這時剛好不在（視窗還沒重連）就只好退 CPU
+        if (!tryStartWebgpu(job)) startCpu(job); // 引擎這時剛好不在（視窗還沒重連）就只好退 CPU
       }, WEBGPU_RETRY_DELAY_MS);
       job.retryTimer.unref?.();
       return;
