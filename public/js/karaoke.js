@@ -32,8 +32,10 @@ const KaraokeEngine = (() => {
 
   // 逐字(KRC) KTV 模式：預設關閉（走逐句，拼音/諧音正確）。
   // 使用者可開啟：逐字以 1~2 字為單位，羅馬拼音缺上下文→諧音錯誤，故逐字模式不顯示拼音/諧音。
-  let wordByWord = false;
-  function setWordByWord(b) { wordByWord = !!b; }
+  // 經典疊層的逐字旗標。目前沒有任何路徑會把它打開（對外的 setWordByWord 已於
+  // 2026-09 死碼清理移除——全 repo 從未有人呼叫過），逐字 KTV 實際由 ktv 模板提供。
+  // 保留這個常駐 false 的旗標與 isWordMode()：它會傳進模板 ctx，是對外契約的一部分。
+  const wordByWord = false;
   function isWordMode() { return wordByWord && lyricsType === 'krc'; }
 
   // ─── 簡轉繁（opencc-js cn→tw，詞組級）。只轉「原文 Han 字」，不動拼音/諧音 ───
@@ -87,7 +89,6 @@ const KaraokeEngine = (() => {
   }
   let isRunning = false;
   let previousLineEl = null;
-  let activeEffects = [];
   // Phase 5: 時間偏移（毫秒），正數=歌詞提前，負數=歌詞延後
   let timeOffsetMs = 0;
 
@@ -116,10 +117,6 @@ const KaraokeEngine = (() => {
     }
     effectRegistry.set(effect.name, effect);
     console.log(`[Karaoke] 註冊效果: ${effect.name}`);
-  }
-
-  function getEffect(name) {
-    return effectRegistry.get(name);
   }
 
   // ═══════════════════════════════════════════
@@ -1085,14 +1082,7 @@ const KaraokeEngine = (() => {
   }
 
   function setMaxHistoryLines(count) { maxHistoryLines = count; }
-  function setWordModeAndRerender(b) {
-    setWordByWord(b);
-    if (currentLineIndex >= 0 && previousLineEl) previousLineEl = renderLine(currentLineIndex);
-  }
   function getLyrics() { return parsedLyrics; }
-  function getCurrentLineIndex() { return currentLineIndex; }
-  function stop() { isRunning = false; }
-
   /**
    * Phase 7: 取得第一句歌詞的開始時間（毫秒）
    * 用於前奏倒數提示（視覺節拍器）
@@ -1122,16 +1112,6 @@ const KaraokeEngine = (() => {
     }
     // 沒有 duration 資訊，估計最後一行持續 5 秒
     return lastLine.time + 5000;
-  }
-
-  function setEffects(names) {
-    const style = StylePresets.getParams();
-    if (!style.effects) style.effects = [];
-    style.effects = names.filter(n => effectRegistry.has(n));
-  }
-
-  function getAvailableEffects() {
-    return Array.from(effectRegistry.keys());
   }
 
   // ═══════════════════════════════════════════
@@ -1249,8 +1229,6 @@ const KaraokeEngine = (() => {
     }
   }
 
-  function getTemplate() { return templateId; }
-
   if (typeof LyricTemplates !== 'undefined') {
     // 純標記用：classic 走內建管線、不透過 registry 分派，這裡註冊只是讓它出現在 list() 裡。
     LyricTemplates.register({ id: 'classic', label: '經典疊層' });
@@ -1263,23 +1241,14 @@ const KaraokeEngine = (() => {
     clearDisplay,
     setRomanizationMode,
     setMaxHistoryLines,
-    setWordByWord: setWordModeAndRerender,
     setTraditional,
     setFastMode,
     getLyrics,
-    getCurrentLineIndex,
-    stop,
-    setEffects,
-    getAvailableEffects,
-    registerEffect,
-    getEffect,
     updateRomanization,
     setOffset,
-    getOffset,
     getFirstLineTime,
     getLyricsEndTime,
     setTemplate,
-    getTemplate,
     notifyTemplateSettings,
   };
 })();

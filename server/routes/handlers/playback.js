@@ -242,14 +242,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
 
   // ─── 歌詞同步管線（純轉播）───
 
-  socket.on('lyrics:line', (data) => {
-    io.emit('lyrics:line', data);
-  });
-
-  socket.on('lyrics:word', (data) => {
-    io.emit('lyrics:word', data);
-  });
-
   socket.on('lyrics:sync', (data) => {
     // 同 play:seek：trackId 對不上目前歌曲的舊訊息（快速切歌時殘留）整包丟棄，不落地也不轉播，
     // 否則顯示端會跟著跳到不屬於目前這首歌的秒數。
@@ -290,11 +282,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
 
   // ─── 顯示模式（拼音/諧音）───
 
-  socket.on('romanization:toggle', (enabled) => {
-    playState.showRomanization = enabled;
-    io.emit('romanization:toggle', enabled);
-  });
-
   socket.on('romanization:mode', (mode) => {
     const VALID_MODES = ['original', 'romanized', 'both', 'xieyin', 'full'];
     if (!VALID_MODES.includes(mode)) {
@@ -319,16 +306,6 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.emergencyHide = false;
     log.info('緊急隱藏: 停用');
     io.emit('emergency:show');
-  });
-
-  socket.on('emergency:toggle', () => {
-    playState.emergencyHide = !playState.emergencyHide;
-    log.info(`緊急隱藏切換: ${playState.emergencyHide ? '啟用' : '停用'}`);
-    if (playState.emergencyHide) {
-      io.emit('emergency:hide');
-    } else {
-      io.emit('emergency:show');
-    }
   });
 
   // ─── 音訊錯誤通知（轉播給所有端）───

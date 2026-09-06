@@ -203,14 +203,6 @@ function createLogger(moduleName) {
   };
 }
 
-function setLogLevel(level) {
-  const upper = (level || '').toUpperCase();
-  if (LOG_LEVELS[upper] !== undefined) {
-    currentLogLevel = LOG_LEVELS[upper];
-    writeLog(LOG_LEVELS.INFO, 'INFO', 'Logger', `Log level set to ${upper}`);
-  }
-}
-
 function shutdown() {
   writeLog(LOG_LEVELS.INFO, 'INFO', 'Logger', 'Logger shutting down');
   return new Promise((resolve) => {
@@ -232,7 +224,6 @@ process.on('exit', () => {
 
 module.exports = {
   createLogger,
-  setLogLevel,
   shutdown,
   LOG_LEVELS,
   LOG_DIR,

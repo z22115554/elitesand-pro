@@ -655,29 +655,6 @@ function romanize(text) {
   return text;
 }
 
-/**
- * 異步版本（含 kuromoji 形態素分析）
- * @param {string} text - 原文
- * @returns {Promise<string>} 羅馬拼音
- */
-async function romanizeAsync(text) {
-  if (!text) return '';
-
-  if (isKorean(text)) {
-    return koreanToRomaja(text);
-  }
-
-  if (isChinese(text)) {
-    return chineseToPinyin(text);
-  }
-
-  if (isJapanese(text)) {
-    return japaneseToRomajiWithKuromoji(text);
-  }
-
-  return text;
-}
-
 // ═══════════════════════════════════════════
 // 歌詞羅馬化（批量處理）
 // ═══════════════════════════════════════════
@@ -784,7 +761,6 @@ function needsFurigana(lyricsLines) {
 
 module.exports = {
   romanize,
-  romanizeAsync,
   addRomanization,
   addRomanizationSync,
   needsRomanization,

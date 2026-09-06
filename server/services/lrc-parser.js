@@ -68,59 +68,6 @@ function parseOffset(lrcText) {
 }
 
 /**
- * 解析增強 LRC (Enhanced LRC with word timing)
- * 格式: [mm:ss.xx] <mm:ss.xx> word1 <mm:ss.xx> word2 ...
- */
-function parseEnhancedLrc(lrcText) {
-  if (!lrcText) return { lines: [], offset: 0 };
-
-  const lines = lrcText.split('\n');
-  const parsed = [];
-  let offset = 0;
-
-  for (const line of lines) {
-    const offsetMatch = line.match(/^\[offset:(-?\d+)\]/i);
-    if (offsetMatch) {
-      offset = parseInt(offsetMatch[1], 10);
-      continue;
-    }
-
-    const lineMatch = line.match(/^\[(\d{2}:\d{2}(?:\.\d{2,3})?)\]\s*(.*)/);
-    if (!lineMatch) continue;
-
-    const lineTime = parseTimestampToMs(lineMatch[1]);
-    const content = lineMatch[2];
-
-    const wordRegex = /(?:<(\d{2}:\d{2}(?:\.\d{2,3})?)>)?([^<\[\]]+)/g;
-    const words = [];
-    let fullText = '';
-    let wordMatch;
-
-    while ((wordMatch = wordRegex.exec(content)) !== null) {
-      const wordTime = wordMatch[1] ? parseTimestampToMs(wordMatch[1]) : null;
-      const wordText = wordMatch[2].trim();
-      if (wordText) {
-        fullText += wordText;
-        words.push({ text: wordText, start: wordTime, phonetic: '' });
-      }
-    }
-
-    if (fullText.trim()) {
-      parsed.push({
-        time: lineTime,
-        text: fullText.trim(),
-        words: words.length > 0 ? words : null,
-        translation: '',
-        phonetic: '',
-      });
-    }
-  }
-
-  parsed.sort((a, b) => a.time - b.time);
-  return { lines: parsed, offset };
-}
-
-/**
  * 解析 SRT 格式字幕
  * @param {string} srtText - SRT 格式字幕
  * @returns {{ lines: Array, offset: number }}
@@ -169,19 +116,6 @@ function parseSrt(srtText) {
 }
 
 /**
- * 將結構化歌詞轉回 LRC 格式文字
- */
-function toLrcString(lines, offset = 0) {
-  if (!lines || lines.length === 0) return '';
-  let result = '';
-  if (offset !== 0) {
-    result += `[offset:${offset}]\n`;
-  }
-  result += lines.map((line) => `[${msToLrcTime(line.time)}]${line.text}`).join('\n');
-  return result;
-}
-
-/**
  * 自動偵測格式並解析歌詞
  * @param {string} text - 歌詞文字
  * @returns {{ lines: Array, offset: number, type: string }}
@@ -226,9 +160,6 @@ function autoParseLyrics(text) {
 module.exports = {
   parseLrc,
   parseOffset,
-  parseEnhancedLrc,
-  parseSrt,
-  toLrcString,
   autoParseLyrics,
   msToLrcTime,
   parseTimestampToMs,

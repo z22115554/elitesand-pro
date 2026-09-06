@@ -164,21 +164,4 @@ function decodeKrcEntities(text) {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
 }
 
-/**
- * 將 KRC 逐字格式轉換為 LRC 逐行格式
- */
-function krcToLrc(krcText) {
-  const lines = krcText.split('\n');
-  const lrcLines = [];
-
-  for (const line of lines) {
-    const match = line.match(/^\[(\d{2}:\d{2}\.\d{2,3})\]<\d+>(.*)/);
-    if (match) {
-      lrcLines.push(`[${match[1]}]${match[2].replace(/<\d+,\d+>/g, '')}`);
-    }
-  }
-
-  return lrcLines.join('\n');
-}
-
-module.exports = { krcDecode, krcToLrc };
+module.exports = { krcDecode };

@@ -217,7 +217,6 @@ function flowField(point,model,kind){
  const travel=.29+.12*(.5+.5*Math.sin(y*4.9-x*3.2+s));
  return{rank,arrival,travel,x,y};
 }
-function grainRank(point,model,kind){return flowField(point,model,kind).rank}
 function inkAmount(progress,arrival){return smooth((progress-arrival-.012)/.070)}
 const soft=v=>{v=clamp(v);return v*v*v*(v*(v*6-15)+10)};
 function motePosition(g,point,j,progress,outgoing,L){

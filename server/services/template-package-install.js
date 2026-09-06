@@ -106,10 +106,6 @@ function installTemplatePackage(packageDir, { engineVersion } = {}) {
   return installVerifiedTemplate(result.manifest, result.assetContents);
 }
 
-function listInstalledTemplates() {
-  return readManifest();
-}
-
 function isInstalled(id) {
   return Object.prototype.hasOwnProperty.call(readManifest(), id);
 }
@@ -137,7 +133,6 @@ function removeInstalledTemplate(id) {
 module.exports = {
   installTemplatePackage,
   installVerifiedTemplate,
-  listInstalledTemplates,
   isInstalled,
   getInstalledTemplateSource,
   removeInstalledTemplate,
