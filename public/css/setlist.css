@@ -1505,11 +1505,15 @@ html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; 
   background: rgba(194, 77, 58, .06);
 }
 /* 「已唱」以外的譯文（英/日/韓）多半 3～9 字，正圓形塞不下——改成護照章式的
-   橢圓長條：寬度隨文字自動撐開、單行不換行，字級也跟著縮小。 */
+   橢圓長條：寬度隨文字自動撐開、單行不換行，字級也跟著縮小。
+   旋轉角度必須比正圓形小很多：矩形轉 -14deg 的外接框高度會遠超過自身高度
+   （寬度越寬，斜著站起來的視覺高度就越誇張），實機截圖回報整顆章疊到下一列去，
+   改小到 -6deg 才會讓外接框高度貼近列高、不再互相重疊。 */
 .note-stamp--wide {
-  border-radius: calc(20px * var(--sl-fit)); width: auto; height: calc(20px * var(--sl-fit));
-  padding: 0 calc(8px * var(--sl-fit)); font-size: calc(8.5px * var(--sl-fit)); line-height: 1;
-  white-space: nowrap; letter-spacing: .04em; text-transform: uppercase;
+  border-radius: calc(20px * var(--sl-fit)); width: auto; height: calc(15px * var(--sl-fit));
+  padding: 0 calc(6px * var(--sl-fit)); font-size: calc(7px * var(--sl-fit)); line-height: 1;
+  white-space: nowrap; letter-spacing: .03em; text-transform: uppercase;
+  transform: rotate(-6deg);
 }
 .note-foot { margin-left: calc(34px * var(--sl-fit)); margin-top: calc(6px * var(--sl-fit)); font-size: calc(10px * var(--sl-fit)); color: #8a97a3; font-variant-numeric: tabular-nums; }
 .note-empty { margin-left: calc(34px * var(--sl-fit)); color: #8a97a3; font-size: calc(12px * var(--sl-fit)); }
