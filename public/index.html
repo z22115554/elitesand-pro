@@ -720,7 +720,7 @@
               <label class="switch"><input id="ls-traditional" data-ls-control="convertTraditional" type="checkbox" checked><span class="track"></span></label>
             </div>
             <div class="switch-row">
-              <div><div class="label">底部進度條</div><div class="sub">畫面最下緣 2px 的歌曲進度條；OBS 不想要可以關掉</div></div>
+              <div><div class="label" data-i18n="settings.lyrics.progressBar">底部進度條</div><div class="sub" data-i18n="settings.lyrics.progressBarHint">畫面最下緣 2px 的歌曲進度條；OBS 不想要可以關掉</div></div>
               <label class="switch"><input id="ls-progress-bar" data-ls-control="showProgressBar" type="checkbox" checked><span class="track"></span></label>
             </div>
           </section>
@@ -1548,8 +1548,8 @@
                   <button id="copy-lan-url" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button>
                 </div>
                 <div class="row-gap-10 mt-8">
-                  <button id="start-controller-pairing" class="btn btn-sm btn-primary" type="button">產生配對 QR Code</button>
-                  <button id="revoke-controller-pairings" class="btn btn-sm btn-ghost" type="button">撤銷所有手機</button>
+                  <button id="start-controller-pairing" class="btn btn-sm btn-primary" type="button" data-i18n="system.pairingGenerate">產生配對 QR Code</button>
+                  <button id="revoke-controller-pairings" class="btn btn-sm btn-ghost" type="button" data-i18n="system.pairingRevokeAll">撤銷所有手機</button>
                 </div>
                 <p id="controller-pairing-status" class="val mt-8" aria-live="polite">掃描前請先產生一次性配對 QR Code。</p>
                 <p class="val mt-8" data-i18n="system.remoteUrlHint">手機瀏覽器打開這個網址（不是 localhost），會自動轉到遙控器頁面。</p>
@@ -1903,6 +1903,13 @@
                 <div class="switch-row" data-sl-layout="round">
                   <div><div class="label" data-i18n="setlist.roundDecorLabel">顯示背景球體與圓環裝飾</div><div class="sub" data-i18n="setlist.roundDecorHint">純裝飾用的莓果球體與薄荷圓環，預設關閉讓畫面更乾淨</div></div>
                   <label class="switch"><input id="sls-round-decor" type="checkbox"><span class="track"></span></label>
+                </div>
+
+                <div class="field-group-title" data-sl-layout="flap" data-i18n="setlist.flapOnlyTitle">發車看板專屬</div>
+                <div class="field" data-sl-layout="flap">
+                  <label><span data-i18n="setlist.flapStopsLabel">路線條顯示幾首歌</span> <span id="sls-flap-stops-val" class="val">6</span></label>
+                  <input id="sls-flap-stops" type="range" min="4" max="12" step="1" value="6">
+                  <p class="field-hint" data-i18n="setlist.flapStopsHint">底部路線條一次顯示幾個站點（含目前這首）。站點等距排列，數量越多每格越窄、歌名越容易被擠掉；歌單比這個長時會以「正在播放」為中心自動捲動。</p>
                 </div>
 
                 <div class="field-group-title" data-sl-layout="glow" data-i18n="setlist.glowOnlyTitle">夜間霓虹專屬</div>
@@ -2381,10 +2388,10 @@
   <!-- ═══ Modal：貼上歌詞（#lyrics-paste-modal）═══ -->
   <div id="lyrics-paste-modal" class="modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lyrics-paste-title">
-      <div class="modal-head"><h3 id="lyrics-paste-title">貼上歌詞</h3><button id="lyrics-paste-cancel" class="btn btn-sm btn-ghost" type="button">取消</button></div>
+      <div class="modal-head"><h3 id="lyrics-paste-title" data-i18n="preview.pasteLyrics">貼上歌詞</h3><button id="lyrics-paste-cancel" class="btn btn-sm btn-ghost" type="button" data-i18n="common.cancel">取消</button></div>
       <div class="modal-body">
-        <textarea id="lyrics-paste-textarea" class="input modal-lyrics-textarea" placeholder="貼上 LRC 或純文字歌詞…" data-modal-initial-focus></textarea>
-        <button id="lyrics-paste-confirm" class="btn btn-primary modal-submit modal-submit--spaced" type="button">套用歌詞</button>
+        <textarea id="lyrics-paste-textarea" class="input modal-lyrics-textarea" placeholder="貼上 LRC 或純文字歌詞…" data-i18n-placeholder="controller.pastePlaceholder" data-modal-initial-focus></textarea>
+        <button id="lyrics-paste-confirm" class="btn btn-primary modal-submit modal-submit--spaced" type="button" data-i18n="controller.applyLyrics">套用歌詞</button>
       </div>
     </div>
   </div>

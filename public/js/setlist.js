@@ -510,7 +510,7 @@
     mount(root) {
       root.innerHTML =
         '<section class="classic-shell">' +
-          '<div class="now-singing classic-now" id="cl-now" hidden><div class="classic-now-meta"><span class="classic-status-dot"></span><div class="ns-label">♪ 現在正在唱</div><div class="classic-ordinal" id="cl-ordinal"></div></div><div class="ns-title" id="cl-t"></div><div class="ns-artist" id="cl-a"></div></div>' +
+          '<div class="now-singing classic-now" id="cl-now" hidden><div class="classic-now-meta"><span class="classic-status-dot"></span><div class="ns-label">' + escapeHtml(lastLabels.nowPlaying) + '</div><div class="classic-ordinal" id="cl-ordinal"></div></div><div class="ns-title" id="cl-t"></div><div class="ns-artist" id="cl-a"></div></div>' +
           '<div class="cl-cols">' +
             '<section class="cl-col cl-col-up"><div class="classic-section-head"><div class="setlist-section-label cl-lbl-up">未唱</div><div class="classic-section-count" id="cl-up-count"></div></div><div class="setlist-upcoming" id="cl-up"></div></section>' +
             '<section class="cl-col cl-col-done"><div class="classic-section-head"><div class="setlist-section-label cl-lbl-done">已唱</div><div class="classic-section-count" id="cl-done-count"></div></div><div class="setlist-past" id="cl-past"></div></section>' +
@@ -548,7 +548,7 @@
       // 全空時的提示
       const empty = !model.current && past.length === 0 && up.length === 0;
       if (empty && model.active) {
-        pastEl.innerHTML = '<div class="setlist-empty">直播中…等待第一首歌</div>';
+        pastEl.innerHTML = `<div class="setlist-empty">${escapeHtml(t('setlist.waitingFirstSong'))}</div>`;
         doneLabel.hidden = true;
       }
     },
@@ -576,9 +576,9 @@
       root.querySelector('#sm-wc').textContent = wait.length || '';
       const chip = (s, st) => `<div class="sm-chip ${st}"><span class="sm-chip-t">${escapeHtml(s.title)}</span></div>`;
       const dEl = root.querySelector('#sm-done');
-      dEl.innerHTML = done.length ? done.slice(-8).map((s) => chip(s, 'done')).join('') : '<span class="sm-empty">尚未唱任何歌曲</span>';
+      dEl.innerHTML = done.length ? done.slice(-8).map((s) => chip(s, 'done')).join('') : `<span class="sm-empty">${escapeHtml(t('setlist.noneSungYet'))}</span>`;
       const wEl = root.querySelector('#sm-wait');
-      wEl.innerHTML = wait.length ? wait.slice(0, 8).map((s) => chip(s, 'wait')).join('') : '<span class="sm-empty">已唱完所有歌曲</span>';
+      wEl.innerHTML = wait.length ? wait.slice(0, 8).map((s) => chip(s, 'wait')).join('') : `<span class="sm-empty">${escapeHtml(t('setlist.allSung'))}</span>`;
       dEl.scrollLeft = dEl.scrollWidth;
     },
   };
@@ -812,7 +812,7 @@
     mount(root) {
       root.innerHTML =
         '<div class="lay-stage signal-stage"><section class="signal-strip">' +
-          '<div class="signal-status"><span class="signal-status-dot"></span><span class="signal-eye" id="sg-eye">♪ 現在正在唱</span><span class="signal-ordinal" id="sg-ordinal"></span></div>' +
+          '<div class="signal-status"><span class="signal-status-dot"></span><span class="signal-eye" id="sg-eye">' + escapeHtml(lastLabels.nowPlaying) + '</span><span class="signal-ordinal" id="sg-ordinal"></span></div>' +
           '<div class="signal-now"><div class="signal-title setlist-title" id="sg-title"></div><div class="signal-artist setlist-artist" id="sg-artist"></div></div>' +
           '<div class="signal-next"><div class="signal-next-label" id="sg-next-label">未唱</div><div class="signal-next-list" id="sg-next"></div></div>' +
         '</section></div>';
@@ -855,7 +855,7 @@
       const row = (song) => {
         itemIndex += 1;
         const cls = song.state === 'active' ? 'active' : song.state === 'done' ? 'done' : 'wait';
-        const state = song.state === 'active' ? '<span class="ix-state">♪ 現在正在唱</span>' : '';
+        const state = song.state === 'active' ? `<span class="ix-state">${escapeHtml(lastLabels.nowPlaying)}</span>` : '';
         return `<div class="index-item ${cls}"><span class="index-number">${String(firstNumber + itemIndex).padStart(2, '0')}</span><span class="index-rail"></span><div class="index-info"><div class="index-title setlist-title">${escapeHtml(song.title)}</div>${song.artist ? `<div class="index-artist setlist-artist">${escapeHtml(song.artist)}</div>` : ''}</div>${state}</div>`;
       };
       const label = (text, kind) => `<div class="index-group" data-group-label data-group="${kind}">${escapeHtml(text)}</div>`;
@@ -977,7 +977,9 @@
       by.hidden = !now || !now.artist;
       // 路線條只顯示以「正在播放」為中心的一段視窗：歌單再長也保持等距、目前歌居中，
       // 逼近尾端時視窗停住、目前歌才逐漸移到最右。
-      const FLAP_WIN = 15;
+      // 顯示幾個站點由使用者設定（預設 6；4～12）。站點是等距橫排，數量越多每格越窄、
+      // 歌名越容易被擠掉，所以這個值直接決定看板擠不擠。
+      const FLAP_WIN = Math.max(4, Math.min(12, Number(curStyle.flapStops) || 6));
       const centerIdx = arr.findIndex((it) => it.state === 'now');
       const anchor = centerIdx >= 0 ? centerIdx : Math.min(model.past.length, Math.max(0, total - 1));
       const start = total > FLAP_WIN

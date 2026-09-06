@@ -66,25 +66,50 @@
   const isPreview = new URLSearchParams(location.search).get('preview') === '1';
   if (isPreview) document.body.classList.add('preview-mode');
 
+  const t = (key, vars) => (window.I18n && typeof window.I18n.t === 'function') ? window.I18n.t(key, vars) : key;
+  const SAMPLE_LINE1_WORDS_HANT = [
+    { text: '這', start: 0, duration: 260 }, { text: '是', start: 340, duration: 430 },
+    { text: '一', start: 830, duration: 180 }, { text: '句', start: 1060, duration: 610 },
+    { text: '示', start: 1740, duration: 220 }, { text: '範', start: 2030, duration: 430 },
+    { text: '用', start: 2520, duration: 180 }, { text: '的', start: 2770, duration: 340 },
+    { text: '歌詞 ', start: 3180, duration: 360 }, { text: 'This ', start: 3570, duration: 220 },
+    { text: 'is ', start: 3810, duration: 150 }, { text: 'an ', start: 3970, duration: 120 },
+    { text: 'example ', start: 4100, duration: 80 }, { text: 'lyric.', start: 4190, duration: 10 },
+  ];
+  const SAMPLE_LINE1_WORDS_HANS = SAMPLE_LINE1_WORDS_HANT.map((word) => ({
+    ...word,
+    text: word.text.replace(/這/g, '这').replace(/範/g, '范').replace(/歌詞/g, '歌词'),
+  }));
+
+  function previewSampleLines() {
+    const locale = (window.I18n && typeof window.I18n.current === 'function') ? window.I18n.current() : 'zh-TW';
+    const isZh = locale === 'zh-TW' || locale === 'zh-CN';
+    return [
+      // Deliberately uneven word timings make the Mirror preview prove that
+      // its sung-glyph pulse follows source time, rather than a fixed rhythm.
+      {
+        time: 0,
+        text: t('preview.sampleLine1'),
+        phonetic: isZh ? 'zhè shì yī jù shì fàn yòng de gē cí' : '',
+        xieyin: '',
+        words: locale === 'zh-CN' ? SAMPLE_LINE1_WORDS_HANS : (locale === 'zh-TW' ? SAMPLE_LINE1_WORDS_HANT : []),
+      },
+      {
+        time: 4200,
+        text: t('preview.sampleLine2'),
+        phonetic: isZh ? 'zì tǐ xiào guǒ cè shì' : '',
+        xieyin: '',
+        words: [],
+      },
+    ];
+  }
+
   // 預覽範例：只在控制台按「示範歌詞」時載入，避免一開程式就卡一行假歌詞。
   // 這走真正的 lyrics pipeline，讓經典疊層與自訂模板（KTV/Pulse/Aura...）都能測字體效果。
   function renderPreviewSample() {
     if (!isPreview) return;
     if (!document.body.className.match(/style-/)) document.body.classList.add('style-cute');
-    const sampleLines = [
-      // Deliberately uneven word timings make the Mirror preview prove that
-      // its sung-glyph pulse follows source time, rather than a fixed rhythm.
-      { time: 0, text: '這是一句示範用的歌詞 This is an example lyric.', phonetic: 'zhè shì yī jù shì fàn yòng de gē cí', xieyin: '', words: [
-        { text: '這', start: 0, duration: 260 }, { text: '是', start: 340, duration: 430 },
-        { text: '一', start: 830, duration: 180 }, { text: '句', start: 1060, duration: 610 },
-        { text: '示', start: 1740, duration: 220 }, { text: '範', start: 2030, duration: 430 },
-        { text: '用', start: 2520, duration: 180 }, { text: '的', start: 2770, duration: 340 },
-        { text: '歌詞 ', start: 3180, duration: 360 }, { text: 'This ', start: 3570, duration: 220 },
-        { text: 'is ', start: 3810, duration: 150 }, { text: 'an ', start: 3970, duration: 120 },
-        { text: 'example ', start: 4100, duration: 80 }, { text: 'lyric.', start: 4190, duration: 10 },
-      ] },
-      { time: 4200, text: '字體效果測試 Font preview sample.', phonetic: 'zì tǐ xiào guǒ cè shì', xieyin: '', words: [] },
-    ];
+    const sampleLines = previewSampleLines();
     previewSampleActive = true;
     KaraokeEngine.loadLyrics('', 'lrc', sampleLines);
     // Mirror is the only template whose core promise is a line-entry motion.
@@ -118,6 +143,9 @@
   let currentOffsetMs = 0; // Phase 5: 當前歌曲的時間偏移
   let previewSampleActive = false;
   let previewMotionTimer = null;
+  window.addEventListener('i18n:change', () => {
+    if (previewSampleActive) renderPreviewSample();
+  });
 
   // Phase 7: 變速狀態。顯示端沒有音訊，但 currentPlaybackRate 仍必須維護——
   // getCurrentTimeMs() 用它把「面板同步過來的時間」外推成歌詞時鐘，變速時歌詞

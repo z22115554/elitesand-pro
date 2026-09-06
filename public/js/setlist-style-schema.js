@@ -223,6 +223,10 @@
     // 故標 needsRerender，改動時才會立刻重算生效，不必等下一次換歌。
     { key: 'queueScrollDelay', type: 'number', default: 2.5, min: 0, max: 8, domId: 'sls-queue-scroll-delay', format: 'seconds', needsRerender: true },
     { key: 'queueScrollSpeed', type: 'number', default: 24, min: 6, max: 80, domId: 'sls-queue-scroll-speed', format: 'pxPerSec', needsRerender: true },
+    // 發車看板（flap）路線條一次顯示幾個站點。原本寫死 15，實機看起來過擠——
+    // 站點等距排在一條橫帶上，數量越多每格越窄、歌名越容易被擠掉。同樣沒有 CSS 變數，
+    // 由 setlist.js 的 flap.render() 在當下讀 curStyle 決定切幾個，故標 needsRerender。
+    { key: 'flapStops', type: 'number', default: 6, min: 4, max: 12, domId: 'sls-flap-stops', format: 'raw', needsRerender: true },
   ];
 
   const FIELD_BY_KEY = {};

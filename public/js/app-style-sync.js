@@ -183,10 +183,34 @@
   const pairingButton = document.getElementById('start-controller-pairing');
   const revokeButton = document.getElementById('revoke-controller-pairings');
   const pairingStatus = document.getElementById('controller-pairing-status');
+  let pairingStatusState = { kind: 'idle' };
+
+  function pairingStatusText() {
+    switch (pairingStatusState.kind) {
+      case 'creating':
+        return t('system.pairingCreating');
+      case 'created':
+        return t('system.pairingCreated', { minutes: pairingStatusState.minutes });
+      case 'revoked':
+        return t('system.pairingRevoked', { count: pairingStatusState.count });
+      case 'createFailed':
+        return pairingStatusState.message || t('system.pairingCreateFailed');
+      case 'revokeFailed':
+        return pairingStatusState.message || t('system.pairingRevokeFailed');
+      default:
+        return t('system.pairingIdle');
+    }
+  }
+
+  function renderPairingStatus() {
+    if (pairingStatus) pairingStatus.textContent = pairingStatusText();
+  }
+
   if (pairingButton) {
     pairingButton.addEventListener('click', async () => {
       pairingButton.disabled = true;
-      if (pairingStatus) pairingStatus.textContent = '正在建立一次性配對 QR Code…';
+      pairingStatusState = { kind: 'creating' };
+      renderPairingStatus();
       try {
         const request = typeof PinAuth !== 'undefined'
           ? PinAuth.fetchWithPin('/api/access/pairing/start', { method: 'POST' })
@@ -196,9 +220,14 @@
         if (!response.ok) throw new Error(data.error || 'Unable to start pairing');
         if (dom.lanInfoQr) dom.lanInfoQr.src = data.qrDataUrl;
         if (dom.lanInfoUrl) dom.lanInfoUrl.textContent = data.controllerUrl;
-        if (pairingStatus) pairingStatus.textContent = `QR Code 已建立，請在 ${Math.max(1, Math.ceil((data.expiresAt - Date.now()) / 60000))} 分鐘內掃描；每張只能配對一台手機。`;
+        pairingStatusState = {
+          kind: 'created',
+          minutes: Math.max(1, Math.ceil((data.expiresAt - Date.now()) / 60000)),
+        };
+        renderPairingStatus();
       } catch (error) {
-        if (pairingStatus) pairingStatus.textContent = error.message || '無法建立配對 QR Code。';
+        pairingStatusState = { kind: 'createFailed', message: error.message || '' };
+        renderPairingStatus();
       } finally {
         pairingButton.disabled = false;
       }
@@ -207,7 +236,12 @@
   if (revokeButton) {
     revokeButton.addEventListener('click', async () => {
       const accepted = typeof PanelConfirm !== 'undefined'
-        ? await PanelConfirm.request({ title: '撤銷所有手機', summary: '這會讓所有已配對的手機立即失效。', impact: '之後需要重新掃描 QR Code 才能控制。', confirmLabel: '撤銷' })
+        ? await PanelConfirm.request({
+          title: t('system.pairingRevokeAll'),
+          summary: t('system.pairingRevokeSummary'),
+          impact: t('system.pairingRevokeImpact'),
+          confirmLabel: t('system.pairingRevokeConfirm'),
+        })
         : false;
       if (!accepted) return;
       revokeButton.disabled = true;
@@ -218,14 +252,17 @@
         const response = await request;
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Unable to revoke controllers');
-        if (pairingStatus) pairingStatus.textContent = `已撤銷 ${data.revoked} 台手機；請重新產生 QR Code 進行配對。`;
+        pairingStatusState = { kind: 'revoked', count: data.revoked };
+        renderPairingStatus();
       } catch (error) {
-        if (pairingStatus) pairingStatus.textContent = error.message || '撤銷手機失敗。';
+        pairingStatusState = { kind: 'revokeFailed', message: error.message || '' };
+        renderPairingStatus();
       } finally {
         revokeButton.disabled = false;
       }
     });
   }
+  window.addEventListener('i18n:change', renderPairingStatus);
 
   // ═══════════════════════════════════════════
   // yt-dlp 版本檢查 / 更新

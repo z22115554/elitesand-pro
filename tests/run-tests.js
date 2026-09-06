@@ -10017,6 +10017,41 @@ console.log('\n🌐 17. M6.1 介面語系層');
     ok(/shut down cleanly/i.test(actual) && /closed manually/i.test(actual), '回報預填必須如實涵蓋手動關閉：');
   });
 
+  test('示範歌詞兩句只翻譯繁中前綴，後面英文原樣保留', () => {
+    const displaySource = fs.readFileSync(path.join(__dirname, '../public/js/display.js'), 'utf8');
+    ok(displaySource.includes("t('preview.sampleLine1')"), '示範歌詞第一句必須走具名 i18n key: ');
+    ok(displaySource.includes("t('preview.sampleLine2')"), '示範歌詞第二句必須走具名 i18n key: ');
+    ['en', 'ja', 'ko', 'zh-CN'].forEach((locale) => {
+      i18n.setLocale(locale, { persist: false, updateQuery: false });
+      ok(i18n.t('preview.sampleLine1').endsWith('This is an example lyric.'), `${locale} 第一句後面英文不可改：`);
+      ok(i18n.t('preview.sampleLine2').endsWith('Font preview sample.'), `${locale} 第二句後面英文不可改：`);
+    });
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    eq(i18n.translate('這是一句示範用的歌詞 This is an example lyric.'), i18n.t('preview.sampleLine1'), '第一句長尾與具名譯文必須一致：');
+    eq(i18n.translate('字體效果測試 Font preview sample.'), i18n.t('preview.sampleLine2'), '第二句長尾與具名譯文必須一致：');
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
+  test('手機配對狀態與撤銷對話框不殘留繁中', () => {
+    const styleSync = fs.readFileSync(path.join(__dirname, '../public/js/app-style-sync.js'), 'utf8');
+    ok(styleSync.includes("t('system.pairingCreated'"), '建立 QR 狀態必須走具名 i18n key: ');
+    ok(styleSync.includes("t('system.pairingRevoked'"), '撤銷狀態必須走具名 i18n key: ');
+    ok(styleSync.includes("t('system.pairingRevokeSummary')"), '撤銷確認摘要必須走具名 i18n key: ');
+    ok(styleSync.includes("addEventListener('i18n:change', renderPairingStatus)"), '切換語言時必須重繪配對狀態: ');
+    i18n.setLocale('en', { persist: false, updateQuery: false });
+    eq(i18n.t('system.pairingCreated', { minutes: 5 }), 'QR code created. Scan it within 5 minutes; each code pairs with only one phone.', '英文 QR 建立狀態：');
+    eq(i18n.t('system.pairingRevoked', { count: 0 }), 'Revoked 0 phone(s). Generate a new QR code to pair again.', '英文撤銷狀態：');
+    eq(i18n.t('system.pairingRevokeSummary'), 'This immediately invalidates every paired phone.', '英文撤銷摘要：');
+    eq(i18n.t('system.pairingRevokeImpact'), 'You will need to scan a QR code again before you can control playback.', '英文撤銷影響：');
+    eq(i18n.t('system.pairingRevokeConfirm'), 'Revoke', '英文撤銷按鈕：');
+    eq(
+      i18n.translate('QR Code 已建立，請在 5 分鐘內掃描；每張只能配對一台手機。'),
+      i18n.t('system.pairingCreated', { minutes: 5 }),
+      '長尾樣板與具名變數譯文必須一致：'
+    );
+    i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
+  });
+
   test('Twitch 授權更新失敗原因會先翻譯再插入重連狀態', () => {
     const twitchSource = fs.readFileSync(path.join(__dirname, '../public/js/app-twitch.js'), 'utf8');
     const expected = {
