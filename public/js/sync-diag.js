@@ -18,7 +18,19 @@
  *   - 環境輪詢 60 秒一次、且只在播放中；重活（tasklist/nvidia-smi/ffprobe）全在
  *     server 子行程，不在 renderer、不在音訊執行緒。
  *   - console + 批次 POST（4 秒一次），fire-and-forget，全程 try/catch。
+ *
+ * 閘門（2026-09-06）：預設不啟用。旗標沒設時本檔完全不建立 window.SyncDiag，
+ * app-playback 的呼叫點全部走既有的 `typeof SyncDiag === 'undefined'` 防呆變成
+ * no-op（不噴 console、不打 /api/diag/*、server 不 spawn tasklist/nvidia-smi/ffprobe）。
+ * 要蒐集診斷時，在桌面面板 console 執行：
+ *   localStorage.setItem('elitesand-syncdiag', '1')   // 再重新整理面板
+ * 停用：localStorage.removeItem('elitesand-syncdiag') // 再重新整理面板
  */
+(() => {
+try {
+  if (typeof localStorage === 'undefined' || localStorage.getItem('elitesand-syncdiag') !== '1') return;
+} catch (e) { return; }
+
 window.SyncDiag = (() => {
   const SESSION = Math.random().toString(36).slice(2, 10);
   const startedAtMs = Date.now();
@@ -169,4 +181,5 @@ window.SyncDiag = (() => {
   }
 
   return { start, tick, event, trackProbe, line, stopEnvPoll, SESSION };
+})();
 })();
