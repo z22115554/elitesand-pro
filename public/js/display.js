@@ -12,8 +12,6 @@
 (function () {
   'use strict';
 
-  const { getAudioErrorMessage } = SharedUtils;
-
   // ─── 初始化 ───
   // 面板內嵌的預覽 iframe（?preview=1）註冊成 display-preview：伺服器餵一樣的資料，
   // 但不計入「OBS 已連線」數——否則面板一開就自帶 3 個假 display，連線燈永遠亮。
@@ -52,22 +50,17 @@
   const metronomeCountdown = document.getElementById('metronome-countdown');
   const obsProgressFill = document.getElementById('obs-progress-fill');
   const obsProgressBar = document.getElementById('obs-progress-bar');
-  const audioPlayer = new Audio();
-  // OBS 顯示端為「純視覺」來源：音訊一律靜音。
-  // 音訊由控制面板輸出（面板有使用者互動，才能啟動 Web Audio 做變調）；
-  // 若顯示端也出聲，會與面板形成雙重聲音，且顯示端無法變調 → 一個原調一個變調。
-  audioPlayer.muted = true;
-  audioPlayer.volume = 0;
-  // 顯示端完全不載入/播放本地音訊：時間軸純粹靠面板的 lyrics:sync 驅動。
-  // 原本會載入並隨同步「跳轉」本地音訊，拖曳進度條時這些 seek 會讓顯示端卡住、需重整 OBS。
+  // OBS 顯示端是「純視覺」來源：這裡完全沒有音訊元素，時間軸純粹靠面板的
+  // lyrics:sync 驅動。音訊一律由控制面板輸出（面板有使用者互動才能啟動 Web Audio
+  // 做變調）；顯示端若也出聲會與面板形成雙重聲音，且無法變調 → 一個原調一個變調。
   //
-  // ⚠️ 想改回 true 的話，這條路徑另外還被兩層擋住，兩層都要一起處理，否則會靜默失效：
+  // ⚠️ 想讓顯示端重新出聲的話，另外還有兩層擋著，都要一起處理否則會靜默失效：
   //   1. app-state.js 的 READ_ONLY_TRACK_FIELDS 已把 filename／url 從送給疊加層的
-  //      payload 移除，所以 track.filename 永遠是 undefined（下方的守衛也就永遠為假）。
+  //      payload 移除，所以 track.filename 永遠是 undefined。
   //   2. socket-handler.js 的唯讀 middleware 只放行 READ_ONLY_EVENTS，
-  //      下方 handleAudioError() 送的 audio:error／audio:skip 會被伺服器拒絕並記 warn。
-  // 也就是說目前 handleAudioError() 與所有 audioPlayer 事件監聽器都是不可達的死碼。
-  const USE_LOCAL_AUDIO = false;
+  //      顯示端送的 audio:error／audio:skip 會被伺服器拒絕並記 warn。
+  // （2026-09 死碼清理：原本被 USE_LOCAL_AUDIO=false 永久關閉的 audioPlayer、
+  //   AudioProcessor 與音訊錯誤處理整批移除；歌詞時鐘與變速補償完全不受影響。）
   // 預覽模式（控制面板內嵌 /display?preview=1）：忽略緊急隱藏，讓主播在面板始終看得到歌詞，
   // 即使 OBS 已被緊急隱藏（避免發現歌詞錯誤、按下緊急隱藏後自己也看不到）。
   const isPreview = new URLSearchParams(location.search).get('preview') === '1';
@@ -121,20 +114,17 @@
   let syncTimeMs = 0;
   let lastSyncTimestamp = 0;
   let isControllerPlaying = false;
-  let localAudioReady = false;
   let currentTrackData = null;
   let currentOffsetMs = 0; // Phase 5: 當前歌曲的時間偏移
-  let audioErrorCount = 0; // Phase 5: 音訊錯誤計數
-  const MAX_AUDIO_ERRORS = 3; // 最大重試次數
   let previewSampleActive = false;
   let previewMotionTimer = null;
 
-  // Phase 7: 變調與變速狀態
-  let currentPitchShift = 0;    // 使用者音高偏移（半音），-12 ~ +12
+  // Phase 7: 變速狀態。顯示端沒有音訊，但 currentPlaybackRate 仍必須維護——
+  // getCurrentTimeMs() 用它把「面板同步過來的時間」外推成歌詞時鐘，變速時歌詞
+  // 才會跟著變快/變慢。變調（pitch）在純視覺端沒有任何效果，已於 2026-09 移除。
   let currentPlaybackRate = 1.0; // 播放速率，0.5 ~ 1.5
   let metronomeEnabled = true;   // 前奏倒數提示開關
-  let audioProcessorReady = false; // AudioProcessor 是否已初始化
-  let audioDuration = 0;         // 當前歌曲總時長（秒）
+  let audioDuration = 0;         // 當前歌曲總時長（秒），由面板 lyrics:sync 的 duration 驅動
 
   /**
    * Phase 7: 取得當前播放時間（毫秒）
@@ -172,39 +162,6 @@
     if (Math.abs(diff) > 300) smoothClockMs = target;
     else smoothClockMs += diff * 0.06;
     return smoothClockMs;
-  }
-
-  // ═══════════════════════════════════════════
-  // Phase 7: AudioProcessor 初始化
-  // ═══════════════════════════════════════════
-
-  function initAudioProcessorOnce() {
-    if (audioProcessorReady) return;
-    if (typeof AudioProcessor === 'undefined') {
-      console.warn('[Display] AudioProcessor 模組未載入，變調功能停用');
-      return;
-    }
-    const success = AudioProcessor.init(audioPlayer);
-    audioProcessorReady = success;
-    if (success) {
-      console.log('[Display] AudioProcessor 已初始化');
-    }
-  }
-
-  /**
-   * Phase 7: 套用變調與變速
-   */
-  function applyPitchAndSpeed() {
-    // 設定 playbackRate
-    audioPlayer.playbackRate = currentPlaybackRate;
-
-    // 設定 AudioProcessor 的 pitch 和 rate
-    if (audioProcessorReady && typeof AudioProcessor !== 'undefined') {
-      AudioProcessor.setPitch(currentPitchShift);
-      AudioProcessor.setRate(currentPlaybackRate);
-    }
-
-    console.log(`[Display] 變調=${currentPitchShift}半音, 變速=${currentPlaybackRate}x`);
   }
 
   // ─── 動畫更新迴圈 ───
@@ -344,70 +301,6 @@
     obsProgressFill.style.width = progress + '%';
   }
 
-  // ═══════════════════════════════════════════
-  // Phase 5: 音訊錯誤處理
-  // ═══════════════════════════════════════════
-
-  function handleAudioError(error, context) {
-    audioErrorCount++;
-    const trackTitle = currentTrackData ? currentTrackData.title : '未知歌曲';
-    const errorMsg = getAudioErrorMessage(error);
-
-    console.error(`[Display] 音訊錯誤 (${context}): ${errorMsg}`);
-
-    // 使用 ErrorHandler 記錄通知（僅在 OBS 端記錄，不顯示 toast 因為 OBS 不需要）
-    if (typeof ErrorHandler !== 'undefined') {
-      ErrorHandler.logError('Audio', `${trackTitle}: ${errorMsg}`, { context, error });
-    }
-
-    // 通知控制端音訊錯誤
-    SocketClient.send('audio:error', {
-      trackId: currentTrackData ? currentTrackData.id : null,
-      title: trackTitle,
-      message: errorMsg,
-      context: context,
-    });
-
-    // 如果錯誤次數超過上限，自動跳到下一首
-    if (audioErrorCount >= MAX_AUDIO_ERRORS) {
-      console.warn(`[Display] 音訊錯誤次數達上限 (${MAX_AUDIO_ERRORS})，自動跳過`);
-      SocketClient.send('audio:skip', {
-        trackId: currentTrackData ? currentTrackData.id : null,
-        reason: 'audio_decode_failed',
-      });
-      audioErrorCount = 0;
-    }
-  }
-
-  // 音訊事件監聽
-  audioPlayer.addEventListener('error', (e) => {
-    const error = audioPlayer.error;
-    handleAudioError(error, 'audio_element');
-    localAudioReady = false;
-  });
-
-  audioPlayer.addEventListener('stalled', () => {
-    console.warn('[Display] 音訊串流停滯');
-  });
-
-  audioPlayer.addEventListener('waiting', () => {
-    console.log('[Display] 音訊緩衝中...');
-  });
-
-  audioPlayer.addEventListener('canplay', () => {
-    audioErrorCount = 0; // 重置錯誤計數
-  });
-
-  audioPlayer.addEventListener('loadedmetadata', () => {
-    audioDuration = audioPlayer.duration || 0;
-  });
-
-  audioPlayer.addEventListener('durationchange', () => {
-    if (audioPlayer.duration && isFinite(audioPlayer.duration)) {
-      audioDuration = audioPlayer.duration;
-    }
-  });
-
   // ─── Socket 事件處理 ───
 
   // 播放歌曲
@@ -415,7 +308,6 @@
     console.log('[Display] 收到播放指令:', track.title);
     currentTrackData = track;
     syncTrackMetaDataset(currentTrackData);
-    audioErrorCount = 0; // 重置錯誤計數
     audioDuration = 0;
 
     // Phase 5: 套用 offset
@@ -436,23 +328,6 @@
       KaraokeEngine.clearDisplay();
     }
 
-    if (USE_LOCAL_AUDIO && track.filename) {
-      localAudioReady = false;
-      audioPlayer.src = `/audio/${encodeURIComponent(track.filename)}`;
-      audioPlayer.playbackRate = currentPlaybackRate;
-      audioPlayer.load();
-      audioPlayer.play().then(() => {
-        localAudioReady = true;
-        initAudioProcessorOnce();
-        if (audioProcessorReady) applyPitchAndSpeed();
-      }).catch((err) => {
-        console.warn('[Display] 本地播放失敗（不影響歌詞同步）:', err.message);
-        localAudioReady = false;
-      });
-    } else {
-      localAudioReady = false;
-    }
-
     // 尊重 autoplay：載入待命（autoplay=false）時不要讓歌詞自走，等使用者按播放
     isControllerPlaying = track.autoplay !== false;
     syncTimeMs = 0;
@@ -465,19 +340,12 @@
   // 播放/暫停
   SocketClient.on('play:toggle', ({ playing } = {}) => {
     isControllerPlaying = playing;
-    if (playing) {
-      if (localAudioReady) audioPlayer.play().catch(() => {});
-      lastSyncTimestamp = performance.now();
-    } else {
-      audioPlayer.pause();
-    }
+    if (playing) lastSyncTimestamp = performance.now();
   });
 
   // 播放清單播完最後一首、沒有下一首可接：清空歌詞，不能讓最後一句永遠卡在畫面上。
   SocketClient.on('play:stop', () => {
     isControllerPlaying = false;
-    audioPlayer.pause();
-    localAudioReady = false;
     // hard：整首播完，連歌詞來源一起清掉並停時鐘，殘留的一幀 onFrame 也不會把最後一句畫回來
     KaraokeEngine.clearDisplay({ hard: true });
     hideMetronome();
@@ -488,9 +356,6 @@
     if (typeof time !== 'number' || !isFinite(time)) return;
     syncTimeMs = Math.max(0, time) * 1000;
     lastSyncTimestamp = performance.now();
-    if (localAudioReady && audioPlayer.duration) {
-      audioPlayer.currentTime = Math.max(0, time);
-    }
     KaraokeEngine.update(syncTimeMs); // 立即重繪到新位置（含暫停時）
     hideMetronome();
   });
@@ -534,13 +399,6 @@
       lastSyncTimestamp = now;
       // 純視覺顯示端沒有本地音訊 → 用面板同步來的 duration 驅動 OBS 進度條
       if (typeof data.duration === 'number' && data.duration > 0) audioDuration = data.duration;
-
-      if (localAudioReady && !audioPlayer.paused) {
-        const diff = Math.abs(audioPlayer.currentTime - data.currentTime);
-        if (diff > 0.5) {
-          audioPlayer.currentTime = data.currentTime;
-        }
-      }
 
       if (isScrubbing) {
         // 明確 seek 立刻同步平滑時鐘，避免小幅跳轉被 6% 校正拖慢。
@@ -939,17 +797,10 @@
   });
 
   // ═══════════════════════════════════════════
-  // Phase 7: 變調更新
-  // ═══════════════════════════════════════════
-
-  SocketClient.on('pitch:update', (semitones) => {
-    if (typeof semitones !== 'number') return;
-    currentPitchShift = Math.max(-12, Math.min(12, semitones));
-    applyPitchAndSpeed();
-  });
-
-  // ═══════════════════════════════════════════
   // Phase 7: 變速更新
+  //
+  // 這裡刻意沒有 pitch:update 的監聽器：顯示端不出聲，變調在純視覺端沒有任何
+  // 效果（2026-09 死碼清理移除）。變速則相反——必須收，因為歌詞時鐘要跟著變。
   // ═══════════════════════════════════════════
 
   SocketClient.on('speed:update', (rate) => {
@@ -964,8 +815,6 @@
       syncTimeMs = getCurrentTimeMs();
       lastSyncTimestamp = performance.now();
     }
-
-    applyPitchAndSpeed();
   });
 
   // ═══════════════════════════════════════════
@@ -1006,10 +855,7 @@
       KaraokeEngine.setOffset(currentOffsetMs);
     }
 
-    // Phase 7: 套用 pitch/speed
-    if (typeof state.pitchShift === 'number') {
-      currentPitchShift = state.pitchShift;
-    }
+    // Phase 7: 套用 speed（pitch 在純視覺端沒有效果，不還原）
     if (typeof state.playbackRate === 'number') {
       currentPlaybackRate = state.playbackRate;
     }
@@ -1020,7 +866,6 @@
     if (state.lyricSettings && typeof state.lyricSettings === 'object') {
       applyLyricSettings(state.lyricSettings);
     }
-    applyPitchAndSpeed();
 
     // 同步當前歌曲（僅在沒有歌詞時恢復）
     if (state.currentTrack) {
@@ -1052,18 +897,7 @@
       syncTimeMs = compensatedTime * 1000;
       lastSyncTimestamp = performance.now();
 
-      // 同步音訊播放位置
-      if (localAudioReady && audioPlayer.duration) {
-        const clampedTime = Math.max(0, Math.min(compensatedTime, audioPlayer.duration));
-        if (Math.abs(audioPlayer.currentTime - clampedTime) > 1) {
-          audioPlayer.currentTime = clampedTime;
-        }
-        if (state.isPlaying && audioPlayer.paused) {
-          audioPlayer.play().catch(() => {});
-        }
-      }
-
-      console.log(`[Display] 狀態恢復: currentTime=${compensatedTime.toFixed(1)}s, offset=${currentOffsetMs}ms, pitch=${currentPitchShift}, speed=${currentPlaybackRate}x`);
+      console.log(`[Display] 狀態恢復: currentTime=${compensatedTime.toFixed(1)}s, offset=${currentOffsetMs}ms, speed=${currentPlaybackRate}x`);
     }
   });
 
@@ -1091,10 +925,7 @@
       KaraokeEngine.setOffset(currentOffsetMs);
     }
 
-    // Phase 7: 恢復 pitch/speed
-    if (typeof state.pitchShift === 'number') {
-      currentPitchShift = state.pitchShift;
-    }
+    // Phase 7: 恢復 speed（pitch 在純視覺端沒有效果，不還原）
     if (typeof state.playbackRate === 'number') {
       currentPlaybackRate = state.playbackRate;
     }
@@ -1127,13 +958,6 @@
         );
       }
 
-      // 載入音訊（純視覺顯示端不載入，見 USE_LOCAL_AUDIO 說明）
-      if (USE_LOCAL_AUDIO && state.currentTrack.filename) {
-        localAudioReady = false;
-        audioPlayer.src = `/audio/${encodeURIComponent(state.currentTrack.filename)}`;
-        audioPlayer.playbackRate = currentPlaybackRate;
-        audioPlayer.load();
-      }
     }
 
     // 播放狀態 + currentTime 補償
@@ -1152,32 +976,7 @@
       syncTimeMs = compensatedTime * 1000;
       lastSyncTimestamp = performance.now();
 
-      // 開始播放音訊（純視覺顯示端不播放本地音訊）
-      if (USE_LOCAL_AUDIO && state.isPlaying && state.currentTrack && state.currentTrack.filename) {
-        audioPlayer.addEventListener('canplay', function onCanPlay() {
-          audioPlayer.removeEventListener('canplay', onCanPlay);
-          if (audioPlayer.duration) {
-            audioDuration = audioPlayer.duration;
-            const clampedTime = Math.max(0, Math.min(compensatedTime, audioPlayer.duration));
-            audioPlayer.currentTime = clampedTime;
-            audioPlayer.playbackRate = currentPlaybackRate;
-            audioPlayer.play().then(() => {
-              localAudioReady = true;
-
-              // Phase 7: 初始化 AudioProcessor 並套用 pitch/speed
-              initAudioProcessorOnce();
-              applyPitchAndSpeed();
-
-              console.log(`[Display] 恢復播放: ${compensatedTime.toFixed(1)}s (rate=${currentPlaybackRate}x, pitch=${currentPitchShift})`);
-            }).catch((err) => {
-              console.warn('[Display] 恢復播放失敗:', err.message);
-              localAudioReady = false;
-            });
-          }
-        }, { once: true });
-      }
-
-      console.log(`[Display] 完整狀態恢復: time=${compensatedTime.toFixed(1)}s, playing=${state.isPlaying}, offset=${currentOffsetMs}ms, pitch=${currentPitchShift}, speed=${currentPlaybackRate}x`);
+      console.log(`[Display] 完整狀態恢復: time=${compensatedTime.toFixed(1)}s, playing=${state.isPlaying}, offset=${currentOffsetMs}ms, speed=${currentPlaybackRate}x`);
     }
   }
 
