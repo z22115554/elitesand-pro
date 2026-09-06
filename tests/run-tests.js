@@ -7027,6 +7027,15 @@ test('底片邊條歸類為場景版，「整體大小倍率」不再是死控�
   // data-sl-scope="scene" 這一層過濾、不能額外被 data-sl-layout 排除掉 film。
   const sceneScaleField = indexHtml.slice(indexHtml.indexOf('id="sls-scene-scale"') - 200, indexHtml.indexOf('id="sls-scene-scale"'));
   ok(!/data-sl-layout=/.test(sceneScaleField), '整體縮放（sceneScale）不可額外被 data-sl-layout 排除，film 也要吃得到：');
+
+  // transform-origin 必須是 film 專屬覆寫，不能跟 timeline/diagonal/constellation 共用
+  // center center：film 的內容貼在來源最右邊（.film-strip 是 right:0 的直條），用畫面
+  // 中心當縮放原點，放大時整條會被推出畫面外（實機拉過：1.3 倍就整個消失）。
+  ok(/\[data-layout="film"\]\s*\.lay-stage\s*\{\s*transform-origin:\s*right center;\s*\}/.test(setlistCss),
+    'film 的 .lay-stage 必須把縮放原點改到右側，否則放大會被推出畫面外：');
+  const sharedStageRule = /\[data-layout="timeline"\][\s\S]*?\[data-layout="film"\]\s*\.lay-stage\s*\{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
+  ok(sharedStageRule.includes('transform-origin: center center;'),
+    'timeline/diagonal/constellation 共用的縮放原點不可被這次的 film 專屬覆寫動到：');
 });
 
 test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行為', () => {

@@ -321,6 +321,11 @@ html, body {
   transform: translate(var(--sl-stage-x, 0px), var(--sl-stage-y, 0px)) scale(var(--sl-scene-scale, 1));
   transform-origin: center center;
 }
+/* film 的內容貼在來源最右邊（.film-strip 是 right:0 的直條），不是像 timeline/diagonal/
+   constellation 那樣站在畫面中央——用 center center 當縮放中心，放大時整條會被往右推出
+   畫面外（實機拉過：1.3 倍就整個消失，使用者回報「放大直接出框」）。原點改到右側，
+   縮放時右邊緣貼著不動、往左側長大/縮小，不會被推出可視範圍。 */
+[data-layout="film"] .lay-stage { transform-origin: right center; }
 /* 清單型版型：內容尺寸的小元件（像 classic），從 OBS 來源左上角開始。 */
 .sm-bg, .term-stage, .bb-stage, .cards-stage { display: inline-block; }
 [data-layout="simple"] #setlist-root { display: inline-block; min-width: 0; max-width: none; }
