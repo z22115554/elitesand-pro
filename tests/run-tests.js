@@ -6986,6 +6986,65 @@ test('三個新歌單版型 flap／note／film 完整接進 registry（2026-09-0
   ok(!SETLIST_LAYOUTS.includes('vinyl') && !setlistSource.includes('const vinyl = {') && !indexHtml.includes('data-setlist-layout="vinyl"'), 'vinyl 版型已移除，不得殘留');
 });
 
+test('手帳頁有自己的三顆狀態顏色，通用顏色欄位不再對它空轉', () => {
+  // 使用者回報「手帳頁的顏色設定很怪、改了沒反應」。根因：這個模板是米色紙上的深色墨，
+  // 整套配色寫死在 CSS，面板通用的主色/主要文字色/可讀性/淡化對它全都是死的；唯一會漏
+  // 進來的是主要文字色，它透過共用的 .setlist-title 套到未唱那行，預設值又是給深色疊層
+  // 用的米白 —— 等於在米色紙上寫米色字，只靠可讀性陰影勉強看得見。
+  const schema = require('../public/js/setlist-style-schema');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+
+  const NOTE_COLORS = {
+    noteWaitColor: { css: '--sl-note-wait', domId: 'sls-note-wait-color', default: '#26303a' },
+    noteNowColor: { css: '--sl-note-now', domId: 'sls-note-now-color', default: '#c24d3a' },
+    noteDoneColor: { css: '--sl-note-done', domId: 'sls-note-done-color', default: '#9aa6b0' },
+  };
+  Object.entries(NOTE_COLORS).forEach(([key, spec]) => {
+    const f = schema.FIELD_BY_KEY[key];
+    ok(f && f.type === 'color' && f.cssVar === spec.css && f.domId === spec.domId && f.default === spec.default,
+      `${key} 必須是綁到 ${spec.css} 的顏色欄位，預設維持原設計色：`);
+    ok(indexHtml.includes(`id="${spec.domId}"`), `${key} 必須有面板控制項：`);
+  });
+  // 三顆控制項只在手帳頁出現
+  const noteColorBlock = /<div class="field" data-sl-layout="note">[\s\S]*?<\/div>\s*<\/div>/.exec(indexHtml)?.[0] || '';
+  Object.values(NOTE_COLORS).forEach((spec) => {
+    ok(noteColorBlock.includes(`id="${spec.domId}"`), `${spec.domId} 必須放在 data-sl-layout="note" 的區塊裡：`);
+  });
+
+  // 三個狀態都要真的吃到變數（未唱那條權重必須壓過共用的 .setlist-title，否則又會變米色字）
+  ok(/\.note-it \.note-nm \{ color: var\(--sl-note-wait/.test(setlistCss),
+    '未唱歌名要用 .note-it 這一層（0,2,0）才蓋得過 .setlist-title：');
+  ok(/\.note-it--done \.note-nm \{ color: var\(--sl-note-done/.test(setlistCss), '已唱歌名要吃已唱色：');
+  ok(/\.note-it--now \.note-nm \{ color: var\(--sl-note-now/.test(setlistCss), '正在唱歌名要吃正在唱色：');
+  ok(/\.note-it--done \.note-bx \{ background: var\(--sl-note-done/.test(setlistCss), '打勾要跟著已唱色：');
+  ok(/\.note-stamp \{[\s\S]*?border: 2px solid var\(--sl-note-done/.test(setlistCss),
+    '蓋章是最顯眼的已唱標記，必須跟著已唱色（留紅色會再變成「改了沒反應」）：');
+  ok(/\.note-title \{[^}]*color: var\(--sl-note-now/.test(setlistCss), '頁首標題沿用正在唱色，換色時整張紙才一致：');
+  // 可讀性文字陰影是給深色疊層用的，淺底深字加上去只會糊掉（那條規則自己的註解也這麼寫）
+  ok(setlistCss.includes(':root[data-layout="note"]:not([data-sl-readable-off]) .note-nm { text-shadow: none; }'),
+    '手帳頁的歌名不可套可讀性文字陰影，且權重要壓得過那條 (0,3,0) 規則：');
+
+  // 對手帳頁沒有作用的通用欄位要藏起來，留著只會讓人以為改了會動
+  ['data-sl-scope="classic list scene" data-sl-layout-not="note"',
+    'data-sl-scope="classic list scene skin" data-sl-layout-not="note"',
+    'data-sl-scope="classic list" data-sl-layout-not="note"',
+    'class="field" data-sl-layout-not="note"'].forEach((marker) => {
+    ok(indexHtml.includes(marker), `面板必須用 ${marker} 對手帳頁隱藏無效控制項：`);
+  });
+
+  // 可見性必須一次算完：分成好幾輪互相覆蓋的話，只有 data-sl-layout-not 的元素被藏起來
+  // 之後沒有任何一輪會把它放回來（實際踩過：切到手帳頁藏掉「淡化程度」，切回經典版
+  // 它就再也不出現了）。
+  const syncFn = /function syncSetlistControlsForLayout\(\) \{([\s\S]*?)\n  \}/.exec(setlistPanel)?.[1] || '';
+  ok(syncFn.includes("querySelectorAll('[data-sl-scope],[data-sl-layout],[data-sl-layout-not]')"),
+    '三個屬性必須在同一輪算出最終可見性：');
+  ok((syncFn.match(/querySelectorAll/g) || []).length === 1, '不可再拆成多輪互相覆蓋：');
+  ok(/if \(not && not\.split\(\/\\s\+\/\)\.includes\(layout\)\) visible = false;/.test(syncFn),
+    'data-sl-layout-not 只做排除：');
+});
+
 test('底片邊條歸類為場景版，「整體大小倍率」不再是死控制項', () => {
   // 使用者實機回報：底片邊條的「整體大小倍率」滑桿調了沒反應。根因是 film 的 CSS
   // 早就跟 timeline/diagonal/constellation 共用 position:fixed 全幅掛載＋

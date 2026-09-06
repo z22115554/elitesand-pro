@@ -1495,27 +1495,42 @@ html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; 
   width: calc(110px * var(--sl-fit)); height: calc(28px * var(--sl-fit)); background: rgba(120, 180, 170, .6);
   box-shadow: 0 3px 8px rgba(0, 0, 0, .15);
 }
-.note-title { margin-left: calc(34px * var(--sl-fit)); padding-bottom: calc(6px * var(--sl-fit)); color: #c24d3a; font-weight: 700; font-size: calc(20px * var(--sl-fit)); }
+/* 三個狀態的字色由面板控制（schema: noteWaitColor/noteNowColor/noteDoneColor）。
+   紙張、膠帶、螢光筆、蓋章的紅印泥是這個模板的固定文具元素，不跟著換色。
+   頁首標題沿用「正在唱」的顏色——預設就是同一個紅，換色時整張紙才不會各說各話。 */
+.note-title { margin-left: calc(34px * var(--sl-fit)); padding-bottom: calc(6px * var(--sl-fit)); color: var(--sl-note-now, #c24d3a); font-weight: 700; font-size: calc(20px * var(--sl-fit)); }
 .note-list { margin-left: calc(34px * var(--sl-fit)); flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; }
 .note-it { display: flex; align-items: baseline; gap: calc(9px * var(--sl-fit)); height: calc(26px * var(--sl-fit)); position: relative; font-size: calc(14px * var(--sl-fit)); }
-.note-nm-no { flex: 0 0 auto; min-width: calc(18px * var(--sl-fit)); font-size: calc(10px * var(--sl-fit)); color: #7d8a97; }
-.note-bx { flex: 0 0 auto; width: calc(13px * var(--sl-fit)); height: calc(13px * var(--sl-fit)); border: 1.6px solid #5a6b7a; border-radius: 3px; translate: 0 2px; }
+/* 編號/歌手名是同一支筆的淡墨：用同一顆顏色降透明度，換色時不會只剩它們是舊色。 */
+.note-nm-no { flex: 0 0 auto; min-width: calc(18px * var(--sl-fit)); font-size: calc(10px * var(--sl-fit)); color: var(--sl-note-wait, #26303a); opacity: .62; }
+.note-bx { flex: 0 0 auto; width: calc(13px * var(--sl-fit)); height: calc(13px * var(--sl-fit)); border: 1.6px solid var(--sl-note-wait, #26303a); opacity: .72; border-radius: 3px; translate: 0 2px; }
 .note-tx { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: calc(6px * var(--sl-fit)); overflow: hidden; }
 .note-nm { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.note-ar { flex: 0 0 auto; font-size: calc(10px * var(--sl-fit)); color: #7d8a97; white-space: nowrap; }
-.note-it--done .note-nm { color: #9aa6b0; text-decoration: line-through; }
-.note-it--done .note-bx { background: #7fae9b; border-color: #7fae9b; }
+/* .note-it 這一層的權重（0,2,0）才蓋得過共用的 .setlist-title（0,1,0）——沒有它，
+   未唱歌名會吃到給深色疊層用的 --sl-txt（預設米白），變成米色紙上的米色字。 */
+.note-it .note-nm { color: var(--sl-note-wait, #26303a); }
+/* 同理，可讀性保護的文字陰影是為深色疊層設計的；淺底深字加上去只會糊掉
+   （那條規則自己的註解也是這麼寫的，只是手帳頁沿用了 .setlist-title 沒被排除）。
+   權重要比 :root:not([data-sl-readable-off]) .setlist-title（0,3,0）高，故寫成 0,4,0，
+   不靠「同權重比後寫」——那條規則在檔案上方，靠順序贏太脆弱。 */
+:root[data-layout="note"]:not([data-sl-readable-off]) .note-nm { text-shadow: none; }
+.note-ar { flex: 0 0 auto; font-size: calc(10px * var(--sl-fit)); color: var(--sl-note-wait, #26303a); opacity: .62; white-space: nowrap; }
+.note-it--done .note-nm { color: var(--sl-note-done, #9aa6b0); text-decoration: line-through; }
+.note-it--done .note-bx { background: var(--sl-note-done, #9aa6b0); border-color: var(--sl-note-done, #9aa6b0); opacity: 1; }
 .note-it--now { font-size: calc(15px * var(--sl-fit)); }
-.note-it--now .note-nm { color: #c24d3a; font-weight: 700; }
+.note-it--now .note-nm { color: var(--sl-note-now, #c24d3a); font-weight: 700; }
 .note-it--now::before {
   content: ''; position: absolute; left: calc(-8px * var(--sl-fit)); right: 0; top: 1px; bottom: 1px;
   background: rgba(255, 206, 92, .62); z-index: -1; border-radius: 3px; transform: skewX(-6deg);
 }
+/* 蓋章是整張紙上最顯眼的「已唱」標記，必須跟著已唱色走——留著自己的紅印泥的話，
+   使用者改了已唱色卻看到它不動，又會變成「改了沒反應」。 */
 .note-stamp {
-  margin-left: auto; flex: 0 0 auto; border: 2px solid #c24d3a; color: #c24d3a; font-weight: 800;
+  margin-left: auto; flex: 0 0 auto; border: 2px solid var(--sl-note-done, #9aa6b0); color: var(--sl-note-done, #9aa6b0); font-weight: 800;
   border-radius: 50%; width: calc(28px * var(--sl-fit)); height: calc(28px * var(--sl-fit));
   display: grid; place-items: center; font-size: calc(11px * var(--sl-fit)); transform: rotate(-14deg);
-  background: rgba(194, 77, 58, .06);
+  /* 底色是同一顆顏色的極淡版本；用 currentColor 才不必再拆一份 rgba 出來。 */
+  background: color-mix(in srgb, currentColor 8%, transparent);
 }
 /* 「已唱」以外的譯文（英/日/韓）多半 3～9 字，正圓形塞不下——改成護照章式的
    橢圓長條：寬度隨文字自動撐開、單行不換行，字級也跟著縮小。
@@ -1528,8 +1543,8 @@ html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; 
   white-space: nowrap; letter-spacing: .03em; text-transform: uppercase;
   transform: rotate(-6deg);
 }
-.note-foot { margin-left: calc(34px * var(--sl-fit)); margin-top: calc(6px * var(--sl-fit)); font-size: calc(10px * var(--sl-fit)); color: #8a97a3; font-variant-numeric: tabular-nums; }
-.note-empty { margin-left: calc(34px * var(--sl-fit)); color: #8a97a3; font-size: calc(12px * var(--sl-fit)); }
+.note-foot { margin-left: calc(34px * var(--sl-fit)); margin-top: calc(6px * var(--sl-fit)); font-size: calc(10px * var(--sl-fit)); color: var(--sl-note-wait, #26303a); opacity: .6; font-variant-numeric: tabular-nums; }
+.note-empty { margin-left: calc(34px * var(--sl-fit)); color: var(--sl-note-wait, #26303a); opacity: .6; font-size: calc(12px * var(--sl-fit)); }
 
 /* ═══════════════════════════════════════════════════════════════════
    film：35mm 底片邊條（場景型）

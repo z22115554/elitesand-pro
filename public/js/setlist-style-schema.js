@@ -227,6 +227,14 @@
     // 站點等距排在一條橫帶上，數量越多每格越窄、歌名越容易被擠掉。同樣沒有 CSS 變數，
     // 由 setlist.js 的 flap.render() 在當下讀 curStyle 決定切幾個，故標 needsRerender。
     { key: 'flapStops', type: 'number', default: 6, min: 4, max: 12, domId: 'sls-flap-stops', format: 'raw', needsRerender: true },
+    // 手帳頁（note）三個狀態的字色。這份模板是「米色紙上的深色墨」，整套配色原本寫死在
+    // CSS，面板那組通用顏色對它幾乎沒有作用——唯一會漏進來的是「主要文字色」，它透過
+    // .setlist-title 套到未唱那行，預設值又是給深色疊層用的米白，等於在米色紙上寫米色字
+    // （只靠可讀性陰影勉強看得見，使用者回報「顏色設定很怪、改了沒反應」）。
+    // 改成三顆語意明確的顏色，預設值就是原本設計的三個色，通用顏色欄位則對 note 隱藏。
+    { key: 'noteWaitColor', type: 'color', default: '#26303a', domId: 'sls-note-wait-color', cssVar: '--sl-note-wait' },
+    { key: 'noteNowColor', type: 'color', default: '#c24d3a', domId: 'sls-note-now-color', cssVar: '--sl-note-now' },
+    { key: 'noteDoneColor', type: 'color', default: '#9aa6b0', domId: 'sls-note-done-color', cssVar: '--sl-note-done' },
   ];
 
   const FIELD_BY_KEY = {};

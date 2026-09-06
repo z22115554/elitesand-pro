@@ -486,14 +486,22 @@
   function syncSetlistControlsForLayout() {
     const cat = setlistCategory();
     const layout = setlistLayoutSel ? setlistLayoutSel.value : 'classic';
-    document.querySelectorAll('[data-sl-scope]').forEach((el) => {
-      const scopes = el.getAttribute('data-sl-scope').split(/\s+/);
-      el.hidden = !scopes.includes(cat);
-    });
-    // 場景版專屬：只在對應 layout 顯示（timeline/diagonal/constellation 各自的版面設定）
-    document.querySelectorAll('[data-sl-layout]').forEach((el) => {
-      const layouts = el.getAttribute('data-sl-layout').split(/\s+/);
-      el.hidden = !layouts.includes(layout);
+    // 三個屬性一次算出最終可見性，不要分成好幾輪互相覆蓋：分輪寫的話，只有
+    // data-sl-layout-not 的元素被藏起來之後沒有任何一輪會把它放回來（實際踩過：
+    // 切到手帳頁藏掉「淡化程度」，切回經典版它就再也不出現了）。
+    //   data-sl-scope       ：這個版型「類別」（classic/list/scene/skin）適不適用
+    //   data-sl-layout      ：只在指定的幾個版型顯示；有指定就蓋過上面的類別判斷
+    //   data-sl-layout-not  ：指定的版型不顯示。用排除而不是把其餘版型列成白名單，
+    //                         白名單漏列新版型會靜默藏錯東西。
+    document.querySelectorAll('[data-sl-scope],[data-sl-layout],[data-sl-layout-not]').forEach((el) => {
+      const scope = el.getAttribute('data-sl-scope');
+      const only = el.getAttribute('data-sl-layout');
+      const not = el.getAttribute('data-sl-layout-not');
+      let visible = true;
+      if (scope) visible = scope.split(/\s+/).includes(cat);
+      if (only) visible = only.split(/\s+/).includes(layout);
+      if (not && not.split(/\s+/).includes(layout)) visible = false;
+      el.hidden = !visible;
     });
   }
 

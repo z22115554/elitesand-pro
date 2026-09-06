@@ -1862,7 +1862,9 @@
                 </div>
 
                 <div class="field-group-title" data-sl-scope="classic list scene">顏色</div>
-                <div class="field" data-sl-scope="classic list scene">
+                <!-- 手帳頁是「米色紙上的深色墨」，這組通用顏色對它沒有作用（它有自己的三顆
+                     狀態顏色，見下一塊），留著只會讓人以為改了會動——用 data-sl-layout-not 藏掉。 -->
+                <div class="field" data-sl-scope="classic list scene" data-sl-layout-not="note">
                   <div class="color-row">
                     <div class="color-item">
                       <label for="sls-accent">主色</label>
@@ -1881,18 +1883,41 @@
                     </div>
                   </div>
                 </div>
-                <div class="field field--inline-spacious-center" data-sl-scope="classic list scene skin">
+                <div class="field" data-sl-layout="note">
+                  <div class="color-row">
+                    <div class="color-item">
+                      <label for="sls-note-now-color" data-i18n="setlist.noteNowColorLabel">正在唱</label>
+                      <input id="sls-note-now-color" type="color" value="#c24d3a">
+                      <span class="color-note" data-i18n="setlist.noteNowColorNote">歌名與頁首標題</span>
+                    </div>
+                    <div class="color-item">
+                      <label for="sls-note-wait-color" data-i18n="setlist.noteWaitColorLabel">未唱</label>
+                      <input id="sls-note-wait-color" type="color" value="#26303a">
+                      <span class="color-note" data-i18n="setlist.noteWaitColorNote">歌名、編號與勾選框</span>
+                    </div>
+                    <div class="color-item">
+                      <label for="sls-note-done-color" data-i18n="setlist.noteDoneColorLabel">已唱</label>
+                      <input id="sls-note-done-color" type="color" value="#9aa6b0">
+                      <span class="color-note" data-i18n="setlist.noteDoneColorNote">刪除線歌名與打勾</span>
+                    </div>
+                  </div>
+                  <p class="field-hint" data-i18n="setlist.noteColorHint">手帳頁是米色紙上的手寫感設計，三個狀態各一個顏色就夠用。紙張、膠帶、螢光筆與蓋章的紅印泥是這個模板的固定文具元素，不跟著換色。</p>
+                </div>
+                <div class="field field--inline-spacious-center" data-sl-scope="classic list scene skin" data-sl-layout-not="note">
                   <div class="flex-grow"><label class="m-0">文字顏色覆蓋</label><p class="field-hint">勾選「用預設色」＝沿用上面的主要文字色（固定設計的模板則用它自己的預設墨色）；取消勾選才能自訂一個獨立的文字顏色。</p></div>
                   <label class="val val--inline-toggle"><input id="sls-text-theme" type="checkbox" checked>用預設色</label>
                   <input id="sls-text-color" type="color" value="#ffffff" disabled>
                 </div>
 
-                <div class="field-group-title" data-sl-scope="classic list">可讀性</div>
-                <div class="switch-row" data-sl-scope="classic list">
+                <!-- 可讀性保護是給「深色疊層壓在亮背景上」設計的：襯底與文字陰影套用的
+                     都是共用的 .setlist-row/.setlist-title 這類元件。手帳頁自己就是淺底
+                     深字、也不用那些元件，整組對它沒有作用（陰影反而會糊掉墨色）。 -->
+                <div class="field-group-title" data-sl-scope="classic list" data-sl-layout-not="note">可讀性</div>
+                <div class="switch-row" data-sl-scope="classic list" data-sl-layout-not="note">
                   <div><div class="label">亮色背景可讀性保護</div><div class="sub">替歌單文字加深襯底，不影響 OBS 背景；關閉＝完全透明</div></div>
                   <label class="switch"><input id="sls-readability-guard" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <div class="field" data-sl-scope="classic list">
+                <div class="field" data-sl-scope="classic list" data-sl-layout-not="note">
                   <div class="field-row field-row--spacious field-row--top">
                     <div>
                       <label>可讀性襯底色</label>
@@ -1905,7 +1930,9 @@
                   </div>
                 </div>
                 <div class="field-group-title" data-sl-scope="skin">已唱／未唱</div>
-                <div class="field">
+                <!-- 淡化程度是共用的 --sl-op-d/--sl-op-w，只套在 .setlist-row／.card／.sk-row
+                     這些共用元件上；手帳頁的已唱/未唱是自己的顏色與刪除線，吃不到這兩顆。 -->
+                <div class="field" data-sl-layout-not="note">
                   <div class="field-row field-row--spacious field-row--top">
                     <div class="flex-grow">
                       <label>已唱歌曲的淡化程度 <span id="sls-done-opacity-val" class="val">54%</span></label>
