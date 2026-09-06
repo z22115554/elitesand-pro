@@ -28,6 +28,8 @@ const registerLyricsHandlers = require('./handlers/lyrics');
 const registerPlaylistHandlers = require('./handlers/playlist');
 const registerLibraryHandlers = require('./handlers/library');
 const registerSetlistHandlers = require('./handlers/setlist');
+const registerObsLocaleHandlers = require('./handlers/obs-locale');
+const obsLocaleUtil = require('../utils/obs-locale');
 const registerTwitchHandlers = require('./handlers/twitch');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const authStore = require('../services/auth-store');
@@ -385,6 +387,18 @@ module.exports = function socketHandler(io, {
       // 不需要等它送出第一個指令才算——跟上面 display/setlist 的判斷邏輯一致。
       if (type === 'remote') usageTelemetry.recordFeature('remote_control');
 
+      // 疊加層一連上就先告訴它該用哪個語言：頁面自己只能解析 ?lang=／自己的
+      // localStorage，而 OBS 是另一個瀏覽器 profile，讀不到面板選的語言。
+      // 面板內的預覽 iframe 也要收，預覽才會跟正式來源顯示同一種語言。
+      // controller 也收：面板要用 mode 還原「OBS 顯示語言」選單的選項（不會動面板自己的語言）。
+      if (type === 'controller' || type === 'display' || type === 'display-spout' || type === 'display-preview'
+        || type === 'setlist' || type === 'setlist-preview') {
+        socket.emit('obs-locale:update', {
+          mode: ctx.playState.obsLocale,
+          panelLocale: ctx.playState.panelLocale,
+          locale: obsLocaleUtil.effectiveLocale(ctx.playState.obsLocale, ctx.playState.panelLocale),
+        });
+      }
       // 顯示端發送完整恢復狀態（含歌詞），而非基本狀態；預覽 iframe 吃跟正式來源一樣的資料
       if (type === 'display' || type === 'display-spout' || type === 'display-preview') {
         socket.emit('state:recovery', ctx.getReadOnlyState());
@@ -477,6 +491,7 @@ module.exports = function socketHandler(io, {
       registerPlaylistHandlers(io, socket, ctx);
       registerLibraryHandlers(io, socket, ctx);
       registerSetlistHandlers(io, socket, ctx);
+      registerObsLocaleHandlers(io, socket, ctx);
       registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });
     }
 

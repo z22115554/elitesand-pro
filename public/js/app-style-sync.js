@@ -88,14 +88,14 @@
     setTimeout(() => { button.textContent = original; }, 2000);
   }
 
+  // 網址刻意不帶 ?lang=：帶了就等於把貼進 OBS 的那一刻的語言釘死，之後在面板換語言
+  // 疊加層不會跟著變（OBS 是另一個瀏覽器 profile，看不到面板的語言偏好）。改由
+  // 「OBS 顯示語言」設定經 obs-locale:update 即時推給疊加層。?lang= 保留給想手動
+  // 釘死語言的進階用法，obs-locale-follow.js 看到它就不理會廣播。
   function buildObsUrl({ preview = false, relative = false } = {}) {
     const url = new URL('/display', window.location.origin);
     if (preview) url.searchParams.set('preview', '1');
     if (!preview && typeof AccessAuth !== 'undefined' && AccessAuth.sourceToken()) url.searchParams.set('source', AccessAuth.sourceToken());
-    if (window.I18n) {
-      const localized = new URL(window.I18n.localizeUrl(url.toString()));
-      url.search = localized.search;
-    }
     return relative ? `${url.pathname}${url.search}` : url.toString();
   }
 
@@ -144,6 +144,45 @@
   if (dom.copyObsUrlTop) dom.copyObsUrlTop.addEventListener('click', () => copyObsUrl(dom.copyObsUrlTop));
   if (dom.copyObsUrl) dom.copyObsUrl.addEventListener('click', () => copyObsUrl(dom.copyObsUrl));
   if (dom.copyObsUrlSettingsPreview) dom.copyObsUrlSettingsPreview.addEventListener('click', () => copyObsUrl(dom.copyObsUrlSettingsPreview));
+
+  // ═══════════════════════════════════════════
+  // OBS 顯示語言
+  // ═══════════════════════════════════════════
+  //
+  // 疊加層的語言不能靠網址帶：/display 與 /setlist 在 OBS 裡是獨立的瀏覽器 profile，
+  // 讀不到面板的語言偏好，也不會知道面板中途換了語言。所以語言存在伺服器 state，
+  // 由 obs-locale:update 專屬事件即時推給疊加層（不能走 broadcastState，鐵則 5）。
+  //
+  // 面板自己的介面語言仍然是純裝置端偏好（localStorage），這裡只是把「目前是哪個語言」
+  // 回報給伺服器，好讓選「跟隨面板語言」的疊加層跟得上。
+
+  const obsLocaleSel = document.getElementById('obs-locale');
+  let obsLocaleKnownPanelLocale = null;
+
+  function reportPanelLocale() {
+    if (!window.I18n) return;
+    const locale = window.I18n.current();
+    if (locale === obsLocaleKnownPanelLocale) return;
+    obsLocaleKnownPanelLocale = locale;
+    SocketClient.send('obs-locale:panel', { locale });
+  }
+
+  if (obsLocaleSel) {
+    obsLocaleSel.addEventListener('change', () => {
+      SocketClient.send('obs-locale:set', { mode: obsLocaleSel.value });
+    });
+  }
+
+  // 伺服器在面板完成 client:type 註冊後就會送一份現況過來，所以這裡同時當作
+  // 「連上線了」的訊號：把面板當下的語言回報上去，不必自己猜連線時機。
+  SocketClient.on('obs-locale:update', (payload) => {
+    if (!payload) return;
+    if (obsLocaleSel && payload.mode && obsLocaleSel.value !== payload.mode) obsLocaleSel.value = payload.mode;
+    obsLocaleKnownPanelLocale = payload.panelLocale || obsLocaleKnownPanelLocale;
+    reportPanelLocale();
+  });
+
+  window.addEventListener('i18n:change', reportPanelLocale);
 
   // ═══════════════════════════════════════════
   // 手機遙控器：區網 IP + QR code

@@ -16,6 +16,7 @@ const setlistStyleSchema = require('../../public/js/setlist-style-schema');
 const twitchReplySettings = require('../../public/js/twitch-reply-settings');
 const twitchRequestSettings = require('../../public/js/twitch-request-settings');
 const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
+const obsLocale = require('../utils/obs-locale');
 const { createLogger } = require('../utils/logger');
 const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
@@ -103,6 +104,12 @@ function createAppState(io) {
     metronomeEnabled: true, // 前奏倒數提示開關
     lyricSettings: getDefaultLyricSettings(), // 歌詞外觀/位置設定（由控制面板推送）
     styleOverrides: {},     // 動畫風格微調（速度/放大/光暈等，覆蓋當前 preset）
+    // OBS 疊加層（/display、/setlist）用哪個語言顯示。'follow' = 跟著面板當下的語言，
+    // 其餘為固定語言代碼（面板中文、疊加層英文給國際觀眾這種需求）。
+    // 面板語言本身是裝置端偏好（localStorage），OBS 是另一個瀏覽器 profile 拿不到，
+    // 所以 panelLocale 由面板推上來、存在這裡，重開只有 OBS 的情況才不會退回預設語言。
+    obsLocale: 'follow',
+    panelLocale: 'zh-TW',
     setlistTheme: 'glass',  // 直播歌單 OBS 外觀主題（glass/neon/minimal）
     setlistLayout: 'classic', // 直播歌單版型
     // 直播歌單 OBS 外觀細項：每個模板一份，預設值單一事實來源見 schema。
@@ -235,6 +242,8 @@ function createAppState(io) {
         session.songs = saved.session.songs.map((s) => (s && s.entryId ? s : { ...s, entryId: crypto.randomUUID() }));
       }
     }
+    if (typeof saved.obsLocale === 'string') playState.obsLocale = obsLocale.normalizeMode(saved.obsLocale);
+    if (typeof saved.panelLocale === 'string') playState.panelLocale = obsLocale.normalizeLocale(saved.panelLocale);
     if (typeof saved.setlistTheme === 'string') playState.setlistTheme = saved.setlistTheme;
     if (typeof saved.setlistLayout === 'string') playState.setlistLayout = saved.setlistLayout;
     // v1 相容：舊 shared 樣式先複製給每個模板，三個場景的獨立值再覆蓋。
@@ -351,6 +360,8 @@ function createAppState(io) {
         lastPlayedEntryId: playState.lastPlayedEntryId,
       },
       session: { active: session.active, startedAt: session.startedAt, source: session.source, songs: session.songs },
+      obsLocale: playState.obsLocale,
+      panelLocale: playState.panelLocale,
       setlistTheme: playState.setlistTheme,
       setlistLayout: playState.setlistLayout,
       setlistTemplateStyles: playState.setlistTemplateStyles,

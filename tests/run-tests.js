@@ -6211,6 +6211,90 @@ test('OBS 未推流只結束 OBS 或待確認的直播 Session，不會中斷 Tw
   eq(session.source, null);
 });
 
+test('OBS 顯示語言：選單與面板語言各自獨立，跟隨模式才會被面板語言帶動', () => {
+  // 這條線存在的理由：疊加層的語言是頁面載入當下解析一次的，OBS 又是獨立的瀏覽器
+  // profile，讀不到面板的 localStorage——沒有這個廣播，直播中途換語言 OBS 不會變。
+  const registerObsLocaleHandlers = require('../server/routes/handlers/obs-locale');
+  const events = new Map();
+  const emitted = [];
+  let persisted = 0;
+  const playState = { obsLocale: 'follow', panelLocale: 'zh-TW' };
+  registerObsLocaleHandlers(
+    { emit(event, payload) { emitted.push({ event, payload }); } },
+    { on(event, handler) { events.set(event, handler); } },
+    { playState, persistState() { persisted += 1; } },
+  );
+
+  // 跟隨模式：面板換英文 → 疊加層拿到英文
+  events.get('obs-locale:panel')({ locale: 'en' });
+  eq(playState.panelLocale, 'en');
+  eq(emitted[emitted.length - 1].event, 'obs-locale:update');
+  eq(emitted[emitted.length - 1].payload.locale, 'en');
+  eq(persisted, 1);
+
+  // 釘死日文：面板之後換什麼語言，疊加層都維持日文
+  events.get('obs-locale:set')({ mode: 'ja' });
+  eq(emitted[emitted.length - 1].payload.locale, 'ja');
+  const beforePanelChange = emitted.length;
+  events.get('obs-locale:panel')({ locale: 'ko' });
+  eq(emitted.length, beforePanelChange, '釘死語言時面板換語言不該打擾疊加層：');
+  eq(playState.panelLocale, 'ko', '但仍要記住面板語言，切回跟隨時才有正確的值：');
+
+  // 切回跟隨 → 立刻變成剛剛記下的面板語言
+  events.get('obs-locale:set')({ mode: 'follow' });
+  eq(emitted[emitted.length - 1].payload.locale, 'ko');
+
+  // 認不得的值退回 follow，不是退回中文（退回中文會蓋掉使用者的面板語言）
+  events.get('obs-locale:set')({ mode: 'klingon' });
+  eq(playState.obsLocale, 'follow');
+  events.get('obs-locale:panel')({ locale: 'klingon' });
+  eq(playState.panelLocale, 'zh-TW');
+});
+
+test('OBS 顯示語言只有控制端能改，且不走 broadcastState', () => {
+  const sockSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'socket-handler.js'), 'utf8');
+  // 唯讀端（display/setlist）送 obs-locale:* 必須被白名單擋掉——疊加層不能自己改語言。
+  const readOnlyBlock = sockSource.slice(sockSource.indexOf('const READ_ONLY_EVENTS'), sockSource.indexOf('FONT_PROBE_REPORT_MIN_INTERVAL_MS'));
+  ok(!readOnlyBlock.includes('obs-locale'), 'obs-locale:* 不可加進 READ_ONLY_EVENTS：');
+  // handler 必須註冊在 !socket.readOnly 區塊內
+  const controlBlock = sockSource.slice(sockSource.indexOf('if (!socket.readOnly) {'), sockSource.lastIndexOf('registerTwitchHandlers'));
+  ok(controlBlock.includes('registerObsLocaleHandlers'), 'obs-locale handler 必須只註冊給控制端：');
+  // 鐵則 5：整包 state:sync 會讓 OBS 重跑入場動畫，語言變更只能走專屬事件
+  const handlerSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'obs-locale.js'), 'utf8');
+  // 只看實際程式碼，註解裡本來就會提到 broadcastState（說明為什麼不能用）。
+  const handlerCode = handlerSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  ok(!handlerCode.includes('broadcastState'), '語言變更不可觸發 broadcastState：');
+  ok(handlerSource.includes("io.emit('obs-locale:update'"), '必須用專屬事件廣播：');
+});
+
+test('OBS 來源網址不再把語言釘進網址，改由設定即時推送', () => {
+  // 網址帶 ?lang= 等於把「複製當下的語言」釘死在 OBS 來源上，之後換語言不會變——
+  // 這正是使用者回報的問題。?lang= 只保留給手動釘死的進階用法。
+  const displaySource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-style-sync.js'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-setlist-panel.js'), 'utf8');
+  const buildObs = displaySource.slice(displaySource.indexOf('function buildObsUrl'), displaySource.indexOf('function refreshObsUrls'));
+  const buildSetlist = setlistSource.slice(setlistSource.indexOf('function buildSetlistUrl'));
+  ok(!buildObs.includes('localizeUrl'), '/display 網址不可再自動附加語言：');
+  ok(!buildSetlist.slice(0, buildSetlist.indexOf('}')).includes('localizeUrl'), '/setlist 網址不可再自動附加語言：');
+  ok(displaySource.includes("SocketClient.send('obs-locale:set'"), '面板要能設定 OBS 顯示語言：');
+  ok(displaySource.includes("SocketClient.send('obs-locale:panel'"), '面板要把自己的語言回報上去，跟隨模式才成立：');
+});
+
+test('兩個 OBS 疊加層都載入語言跟隨，且尊重網址上的 ?lang= 釘選', () => {
+  const follow = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'obs-locale-follow.js'), 'utf8');
+  ['display.html', 'setlist.html'].forEach((page) => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', page), 'utf8');
+    ok(html.includes('/js/obs-locale-follow.js'), `${page} 必須載入語言跟隨：`);
+  });
+  // 實際踩過：SocketClient 是 socket-client.js 頂層的 const，不在 window 上，
+  // 用 window.SocketClient 當守衛會 undefined → 整支靜默變死碼、疊加層不會換語言。
+  const followCode = follow.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  ok(!followCode.includes('window.SocketClient'), 'SocketClient 不在 window 上，不可用 window.SocketClient 取：');
+  ok(follow.includes("searchParams.get('lang')"), '?lang= 必須維持釘死語言（舊網址行為不變）：');
+  ok(/persist:\s*false/.test(follow), '疊加層不可把語言寫進自己的 localStorage：');
+  ok(/updateQuery:\s*false/.test(follow), '跟隨時不該改寫網址：');
+});
+
 test('已唱歌單可以單獨刪除一筆，用 entryId 定位，同一首唱兩次不會刪錯', () => {
   // 使用者實測回報：點錯歌被誤記進已唱、或切歌太快連點兩次，過去只能整場「清除全部」，
   // 沒辦法單獨修正。id 只是歌曲本身的 id，同一首歌在同一場唱兩次會有兩筆同 id 的記錄，

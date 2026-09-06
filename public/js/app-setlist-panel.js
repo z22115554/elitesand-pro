@@ -289,10 +289,7 @@
     const url = new URL('/setlist', window.location.origin);
     if (preview) url.searchParams.set('preview', '1');
     if (!preview && typeof AccessAuth !== 'undefined' && AccessAuth.sourceToken()) url.searchParams.set('source', AccessAuth.sourceToken());
-    if (window.I18n) {
-      const localized = new URL(window.I18n.localizeUrl(url.toString()));
-      url.search = localized.search;
-    }
+    // 語言同樣不寫進網址，理由見 app-style-sync.js 的 buildObsUrl()。
     return relative ? `${url.pathname}${url.search}` : url.toString();
   }
 

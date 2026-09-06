@@ -1460,6 +1460,18 @@
               <div><div class="label" data-i18n="system.setlistDisplay">歌單畫面</div><div class="url-field"><code id="setlist-url-general">http://localhost:3000/setlist</code><button id="copy-setlist-url-general" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button></div></div>
             </div>
             <p class="val mt-10" data-i18n="system.obsUrlHint">在 OBS 新增「瀏覽器」來源後貼上對應網址；或用下方 OBS 連動一次建立兩個來源。</p>
+            <div class="field mt-10">
+              <label for="obs-locale" data-i18n="system.obsLocaleLabel">OBS 顯示語言</label>
+              <select id="obs-locale" class="input">
+                <option value="follow" data-i18n="system.obsLocaleFollow">跟隨面板語言</option>
+                <option value="zh-TW">繁體中文</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="zh-CN">简体中文</option>
+              </select>
+              <p class="field-hint" data-i18n="system.obsLocaleHint">歌詞畫面與歌單畫面用哪個語言顯示，直播中途改也會立刻套用，不用重新複製網址。選「跟隨面板語言」時就跟著上方語言切換；想讓面板中文、OBS 英文就在這裡直接指定。（網址若自己帶了 ?lang=，那個網址會釘死語言、不受這裡影響。）</p>
+            </div>
           </section>
 
           <!-- ═══ 卡片：OBS 連動（WebSocket）═══
