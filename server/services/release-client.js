@@ -4,7 +4,6 @@ const { isNewerVersion } = require('../utils/version-compare');
 
 const UPDATE_ZIP_NAME = 'update.zip';
 const UPDATE_HASH_NAME = 'update.zip.sha256';
-const PORTABLE_ASSET_PATTERN = /^Elitesand-Pro-v?[0-9][^/]*-portable\.zip$/i;
 // Keep the download link compatible with both historical dotted release names
 // and the human-readable name emitted by the NSIS installer build.
 const INSTALLER_ASSET_PATTERN = /^Elitesand[ .]Pro[ .]Setup[ .]\d+(?:\.\d+){2,3}(?:[-.][^/]+)?\.exe$/i;
@@ -18,11 +17,6 @@ function selectLatestRelease(releases) {
     .reduce((latest, release) => (
       !latest || isNewerVersion(String(release.tag_name), String(latest.tag_name)) ? release : latest
     ), null);
-}
-
-function findPortableAsset(release) {
-  const assets = Array.isArray(release?.assets) ? release.assets : [];
-  return assets.find((asset) => PORTABLE_ASSET_PATTERN.test(asset?.name || '')) || null;
 }
 
 function findInstallerAsset(release) {
@@ -40,10 +34,8 @@ function findVerifiedUpdateAssets(release) {
 module.exports = {
   UPDATE_ZIP_NAME,
   UPDATE_HASH_NAME,
-  PORTABLE_ASSET_PATTERN,
   INSTALLER_ASSET_PATTERN,
   selectLatestRelease,
-  findPortableAsset,
   findInstallerAsset,
   findVerifiedUpdateAssets,
 };
