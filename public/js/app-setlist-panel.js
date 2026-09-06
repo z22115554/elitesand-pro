@@ -350,7 +350,10 @@
   window.addEventListener('access:source-token', refreshSetlistUrl);
 
   // 版型類別：用於只顯示真正會作用的控制項；外觀值本身每個模板各自保存。
-  const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
+  // film 跟這三個一樣是 position:fixed 全幅疊層（setlist.css 的 .lay-stage 用同一顆
+  // --sl-scene-scale/--sl-stage-x/y），漏列會讓它被歸成 list 類、顯示對它無效的
+  // 「整體大小倍率」，真正管用的「場景版設定」滑桿反而被藏起來（與 server 端同步）。
+  const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];
   const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note', 'film'];
   const SETLIST_LAYOUT_UI = {
     classic: { name: '經典資訊', hint: '現在、未唱、已唱一次看懂，最完整的常駐歌單。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },

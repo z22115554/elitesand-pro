@@ -6953,7 +6953,9 @@ test('歌單經典資訊重排與兩個原創模板都走共用樣式，既有�
     ok(!/background:[^;]*gradient/.test(block), '經典襯底不可使用漸層淡出，必須純色填滿');
   });
   ok(setlistCss.includes('.signal-strip') && setlistCss.includes('.index-sheet'), '兩個新模板必須有隔離的原創樣式');
-  ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation'];"), '新模板必須共用既有樣式資料，不得改成獨立場景資料');
+  // film（底片邊條）跟這三個一樣是 position:fixed 全幅疊層，2026-09-07 補進同一份
+  // sceneStyles 相容清單（否則面板會把它歸成 list 類，顯示對它無效的「整體大小倍率」）。
+  ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation', 'film'];"), '新模板必須共用既有樣式資料，不得改成獨立場景資料');
 });
 
 test('三個新歌單版型 flap／note／film 完整接進 registry（2026-09-03 進 1.0 邊界）', () => {
@@ -6982,6 +6984,49 @@ test('三個新歌單版型 flap／note／film 完整接進 registry（2026-09-0
   ok(setlistSource.includes("note-it--${st}${st === 'now' ? ' active' : ''}"), 'note 正在播放列必須加 active，讓 trimToFit 保護不被裁掉');
   // 移除舊 vinyl 版型後不得殘留
   ok(!SETLIST_LAYOUTS.includes('vinyl') && !setlistSource.includes('const vinyl = {') && !indexHtml.includes('data-setlist-layout="vinyl"'), 'vinyl 版型已移除，不得殘留');
+});
+
+test('底片邊條歸類為場景版，「整體大小倍率」不再是死控制項', () => {
+  // 使用者實機回報：底片邊條的「整體大小倍率」滑桿調了沒反應。根因是 film 的 CSS
+  // 早就跟 timeline/diagonal/constellation 共用 position:fixed 全幅掛載＋
+  // .lay-stage { transform: ... scale(var(--sl-scene-scale,1)) }（setlist.css），
+  // 但 SETLIST_SCENE 這份「場景類」清單三處各自維護的複本都漏了 film，導致面板把它
+  // 歸類成 list 類、顯示的是對它完全無效的 --sl-scale（該值被非 classic 版型的
+  // #setlist-root { transform: none } 重置規則清空）。
+  const appStateSource = fs.readFileSync(path.join(__dirname, '../server/state/app-state.js'), 'utf8');
+  const setlistPanel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+
+  ok(appStateSource.includes("const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];"),
+    'server 端場景清單必須含 film，否則 sceneStyles 相容快照漏掉這個版型');
+  ok(setlistPanel.includes("const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];"),
+    '面板端場景清單必須含 film，否則 setlistCategory() 把它誤判成 list 類');
+  ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation', 'film'];"),
+    'OBS 頁面端的舊版相容清單也必須含 film');
+
+  // film 的 .lay-stage 確實吃 --sl-scene-scale／--sl-stage-x／--sl-stage-y——歸進場景類
+  // 之後，面板的「場景版設定」滑桿才是真正能動它的控制項。
+  const filmStageRule = /\[data-layout="film"\]\s*\.lay-stage\s*\{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
+  ok(filmStageRule.includes('--sl-scene-scale') && filmStageRule.includes('--sl-stage-x') && filmStageRule.includes('--sl-stage-y'),
+    'film 的 .lay-stage 必須跟其他場景版一樣吃場景位置/縮放變數');
+  // film 完全沒有把 --sl-scale 或任何 classic/list 通用尺寸變數（--sl-fit 除外）接進
+  // 自己的 CSS——歸進 list 類顯示的那些控制項本來就對它沒有作用。
+  const filmBlockStart = setlistCss.indexOf('film：35mm 底片邊條');
+  const filmBlock = filmBlockStart >= 0 ? setlistCss.slice(filmBlockStart, setlistCss.indexOf('/* Keep the OBS setlist independent', filmBlockStart)) : '';
+  ok(filmBlock && !filmBlock.includes('--sl-scale') && !/--sl-scene-artist-size/.test(filmBlock),
+    'film 自己的樣式區塊不吃 --sl-scale 或 --sl-scene-artist-size，這兩顆控制項對它本來就沒作用');
+
+  // 「正在播放」歌手名字級只有 timeline/diagonal/constellation 真的接了 --sl-scene-artist-size，
+  // 面板必須額外用 data-sl-layout 排除 film，避免它跟著場景分類一起冒出一顆新的死控制項。
+  const artistSizeField = indexHtml.slice(indexHtml.indexOf('id="sls-scene-artist-size"') - 400, indexHtml.indexOf('id="sls-scene-artist-size"'));
+  ok(/data-sl-layout="timeline diagonal constellation"/.test(artistSizeField),
+    '「正在播放」歌手名字級必須排除 film（它的 CSS 沒有接這顆變數）：');
+  // 位置/縮放（sceneOffsetX/Y、sceneScale）則是這次要修的那兩顆，必須維持只靠
+  // data-sl-scope="scene" 這一層過濾、不能額外被 data-sl-layout 排除掉 film。
+  const sceneScaleField = indexHtml.slice(indexHtml.indexOf('id="sls-scene-scale"') - 200, indexHtml.indexOf('id="sls-scene-scale"'));
+  ok(!/data-sl-layout=/.test(sceneScaleField), '整體縮放（sceneScale）不可額外被 data-sl-layout 排除，film 也要吃得到：');
 });
 
 test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行為', () => {

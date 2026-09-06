@@ -2208,7 +2208,9 @@
                       </div>
                     </details>
 
-                    <!-- ══ 場景版設定：只在 Timeline/Diagonal/Constellation 顯示，各版型互相獨立 ══ -->
+                    <!-- ══ 場景版設定：Timeline/Diagonal/Constellation/底片邊條 都會顯示，各版型互相獨立；
+                         位置/縮放對這四個都有效，底下「歌手名字級」只有前三個吃得到（底片邊條沒有
+                         接這顆變數，見 data-sl-layout 排除） ══ -->
                     <details class="card card-collapse" data-settings-workspace-group="layout advanced" data-sl-scope="scene" open>
                       <summary data-i18n="setlist.sceneSettingsTitle">場景版設定（目前版型專屬）</summary>
                       <div class="card-collapse-body">
@@ -2222,7 +2224,7 @@
                         <input id="sls-scene-scale" type="range" min="0.5" max="2" step="0.05" value="1">
                         <p class="field-hint" data-i18n="setlist.sceneScaleHint">把歌單內容整體平移、縮放，避免擋住角色站位；位置/縮放對目前選擇的場景版型各自獨立生效。</p>
                       </div>
-                      <div class="field">
+                      <div class="field" data-sl-layout="timeline diagonal constellation">
                         <label><span data-i18n="setlist.sceneArtistSizeLabel">「正在播放」歌手名字級</span> <span id="sls-scene-artist-size-val" class="val">11px</span></label>
                         <input id="sls-scene-artist-size" type="range" min="7" max="80" value="11">
                         <p class="field-hint" data-i18n="setlist.sceneArtistSizeHint">場景版大標題下方那行歌手名的字級（Timeline／Diagonal／Constellation 通用）。</p>

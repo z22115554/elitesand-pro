@@ -1136,7 +1136,9 @@
   function effStyleFrom(data, layout) {
     if (!data) return null;
     if (data.styles && data.styles[layout]) return data.styles[layout];
-    const SCENE = ['timeline', 'diagonal', 'constellation'];
+    // 與 server/state/app-state.js、app-setlist-panel.js 的 SETLIST_SCENE 同步：
+    // film 也是 position:fixed 全幅疊層，跟這三個共用同一套 sceneStyles 相容欄位。
+    const SCENE = ['timeline', 'diagonal', 'constellation', 'film'];
     if (SCENE.includes(layout) && data.sceneStyles && data.sceneStyles[layout]) return data.sceneStyles[layout];
     return data.style || null;
   }

@@ -59,7 +59,12 @@ function getDefaultLyricSettings() {
 }
 
 // 所有歌單模板都各自持有一份外觀設定。舊 state 的 shared/scene 資料在載入時遷移。
-const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation'];
+// film（底片邊條）雖然不是 16:9 大標題舞台，但 CSS 把它跟這三個一樣歸類成
+// 「position:fixed 全幅疊層」（setlist.css [data-layout="film"] .lay-stage 用的也是
+// 同一顆 --sl-scene-scale/--sl-stage-x/y），漏列在這裡會讓面板把它歸成 list 類、
+// 顯示一個對它完全無效的「整體大小倍率」（--sl-scale 被 #setlist-root 的非 classic
+// 重置規則清空），使用者實測回報調了沒反應；真正能動它的「場景版設定」滑桿反而被藏起來。
+const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];
 const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note', 'film'];
 
 /**
