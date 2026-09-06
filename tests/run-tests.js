@@ -7025,10 +7025,18 @@ test('底片邊條歸類為場景版，「整體大小倍率」不再是死控�
   const artistSizeField = indexHtml.slice(indexHtml.indexOf('id="sls-scene-artist-size"') - 400, indexHtml.indexOf('id="sls-scene-artist-size"'));
   ok(/data-sl-layout="timeline diagonal constellation"/.test(artistSizeField),
     '「正在播放」歌手名字級必須排除 film（它的 CSS 沒有接這顆變數）：');
-  // 位置/縮放（sceneOffsetX/Y、sceneScale）則是這次要修的那兩顆，必須維持只靠
-  // data-sl-scope="scene" 這一層過濾、不能額外被 data-sl-layout 排除掉 film。
-  const sceneScaleField = indexHtml.slice(indexHtml.indexOf('id="sls-scene-scale"') - 200, indexHtml.indexOf('id="sls-scene-scale"'));
-  ok(!/data-sl-layout=/.test(sceneScaleField), '整體縮放（sceneScale）不可額外被 data-sl-layout 排除，film 也要吃得到：');
+  // 大小（sceneScale）必須跟清單版那顆並排放在快速調整的「大小」區，不能只躲在詳細設定
+  // 視窗裡：切到場景版時「大小」這個群組底下會一顆控制項都沒有（標題空懸），而真正能調
+  // 大小的滑桿要開兩層才找得到。只靠 data-sl-scope="scene" 過濾，不能再被 data-sl-layout
+  // 排除掉 film。
+  const quickSizeGroup = indexHtml.slice(indexHtml.indexOf('<div class="field-group-title">大小</div>'), indexHtml.indexOf('data-sl-scope="classic list scene">顏色'));
+  ok(quickSizeGroup.includes('id="sls-scene-scale"'), '場景版的大小控制項必須放在快速調整的「大小」區：');
+  ok(quickSizeGroup.includes('id="sls-scale"'), '清單版的大小控制項必須留在同一區：');
+  const sceneScaleField = /<div class="field" data-sl-scope="scene">[\s\S]*?id="sls-scene-scale"/.exec(quickSizeGroup)?.[0] || '';
+  ok(sceneScaleField, '場景版大小控制項必須用 data-sl-scope="scene" 過濾：');
+  ok(!/data-sl-layout=/.test(sceneScaleField), '大小（sceneScale）不可額外被 data-sl-layout 排除，film 也要吃得到：');
+  ok(!/id="sls-scene-scale"/.test(indexHtml.slice(indexHtml.indexOf('data-sl-scope="scene" open'))),
+    '搬走之後不可在詳細設定視窗裡留下第二顆同 id 的控制項：');
 
   // film 的「整體縮放」必須是自適應排版，不能用 transform 等比拉：這條是貼齊來源上下緣、
   // 靠右站的直條，transform 會連同它的邊界一起拉——放大整條溢出被裁、縮小離開邊緣留白

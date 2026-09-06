@@ -1848,6 +1848,14 @@
                   <input id="sls-scale" type="range" min="0.6" max="1.8" step="0.05" value="1">
                   <p class="field-hint">在 OBS 來源算出的大小之上再放大或縮小；放大後顯示首數會自動變少。</p>
                 </div>
+                <!-- 場景版（含底片邊條）的大小是另一個欄位（sceneScale），本來只放在「詳細設定」
+                     視窗裡，等於同一件事在兩個地方、其中一邊還要開兩層才找得到。放到這裡跟上面
+                     那顆並排、用 data-sl-scope 輪流顯示，不管切到哪個版型「大小」都在同一個位置。 -->
+                <div class="field" data-sl-scope="scene">
+                  <label><span data-i18n="setlist.sceneScaleLabel">整體大小倍率</span> <span id="sls-scene-scale-val" class="val">100%</span></label>
+                  <input id="sls-scene-scale" type="range" min="0.5" max="2" step="0.05" value="1">
+                  <p class="field-hint" data-i18n="setlist.sceneScaleHint">把歌單內容整體放大或縮小，每個版型各自獨立保存；底片邊條放大時每一格變大，看得到的首數會自動變少。</p>
+                </div>
                 <div class="field" data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager">
                   <label>正在播放歌曲文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
                   <input id="sls-size-now" type="range" min="12" max="48" value="16">
@@ -2099,7 +2107,7 @@
                           <div class="flex-grow"><label data-i18n="setlist.listWeightLabel">清單列表文字粗細</label><select id="sls-fw-list" class="input"><option value="300" data-i18n="setlist.weightLight">細（300）</option><option value="400" selected data-i18n="setlist.weightNormalDefault">正常（400，預設）</option><option value="500" data-i18n="setlist.weightMedium">中等（500）</option><option value="600" data-i18n="setlist.weightSemibold">半粗（600）</option></select></div>
                         </div>
                       </div>
-                      <p class="field-hint" data-sl-scope="scene" data-i18n="setlist.sceneFontSizeHint">場景版的正在播放歌曲文字大小可個別調整；整體大小用場景版設定裡的「整體縮放」。</p>
+                      <p class="field-hint" data-sl-scope="scene" data-i18n="setlist.sceneFontSizeHint">場景版的正在播放歌曲文字大小可個別調整；整體大小用上面「大小」區的「整體大小倍率」。</p>
                       </div>
                     </details>
 
@@ -2208,22 +2216,20 @@
                       </div>
                     </details>
 
-                    <!-- ══ 場景版設定：Timeline/Diagonal/Constellation/底片邊條 都會顯示，各版型互相獨立；
-                         位置/縮放對這四個都有效，底下「歌手名字級」只有前三個吃得到（底片邊條沒有
-                         接這顆變數，見 data-sl-layout 排除） ══ -->
+                    <!-- ══ 場景版設定：Timeline/Diagonal/Constellation/底片邊條 都會顯示，各版型互相獨立。
+                         「整體大小倍率」已移到快速調整的「大小」區（跟清單版那顆同一個位置輪流出現）；
+                         這裡只留位置，底下「歌手名字級」只有前三個吃得到（底片邊條沒有接這顆變數，
+                         見 data-sl-layout 排除） ══ -->
                     <details class="card card-collapse" data-settings-workspace-group="layout advanced" data-sl-scope="scene" open>
                       <summary data-i18n="setlist.sceneSettingsTitle">場景版設定（目前版型專屬）</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc" data-i18n="setlist.sceneSettingsDesc">場景版是全螢幕 16:9 舞台設計，背景透明可疊在角色身上；以下設定每個場景版型各自獨立，互不影響。</p>
+                      <!-- 「整體大小倍率」已移到上面快速調整的「大小」區，這裡只留位置。 -->
                       <div class="field field-row field-row--spacious">
                         <div class="flex-grow"><label><span data-i18n="setlist.sceneXLabel">內容水平位置</span> <span id="sls-scene-x-val" class="val">0%</span></label><input id="sls-scene-x" type="range" min="-50" max="50" value="0"></div>
                         <div class="flex-grow"><label><span data-i18n="setlist.sceneYLabel">內容垂直位置</span> <span id="sls-scene-y-val" class="val">0%</span></label><input id="sls-scene-y" type="range" min="-50" max="50" value="0"></div>
                       </div>
-                      <div class="field">
-                        <label><span data-i18n="setlist.sceneScaleLabel">整體縮放</span> <span id="sls-scene-scale-val" class="val">100%</span></label>
-                        <input id="sls-scene-scale" type="range" min="0.5" max="2" step="0.05" value="1">
-                        <p class="field-hint" data-i18n="setlist.sceneScaleHint">把歌單內容整體平移、縮放，避免擋住角色站位；位置/縮放對目前選擇的場景版型各自獨立生效。</p>
-                      </div>
+                      <p class="field-hint" data-i18n="setlist.scenePositionHint">把歌單內容整體平移，避免擋住角色站位；位置對目前選擇的場景版型各自獨立生效。</p>
                       <div class="field" data-sl-layout="timeline diagonal constellation">
                         <label><span data-i18n="setlist.sceneArtistSizeLabel">「正在播放」歌手名字級</span> <span id="sls-scene-artist-size-val" class="val">11px</span></label>
                         <input id="sls-scene-artist-size" type="range" min="7" max="80" value="11">
