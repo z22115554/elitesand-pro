@@ -321,11 +321,19 @@ html, body {
   transform: translate(var(--sl-stage-x, 0px), var(--sl-stage-y, 0px)) scale(var(--sl-scene-scale, 1));
   transform-origin: center center;
 }
-/* film 的內容貼在來源最右邊（.film-strip 是 right:0 的直條），不是像 timeline/diagonal/
-   constellation 那樣站在畫面中央——用 center center 當縮放中心，放大時整條會被往右推出
-   畫面外（實機拉過：1.3 倍就整個消失，使用者回報「放大直接出框」）。原點改到右側，
-   縮放時右邊緣貼著不動、往左側長大/縮小，不會被推出可視範圍。 */
-[data-layout="film"] .lay-stage { transform-origin: right center; }
+/* film 的「整體縮放」不能用 transform：這條是貼齊來源上下緣、靠右站的直條，
+   transform 是把「整個舞台連同它的邊界」一起等比拉——放大時上下左右一起溢出被裁掉、
+   縮小時整條離開邊緣在四周留一圈空白，兩種都不能看（實機都拉過）。
+   改成自適應排版：倍率只乘進「條寬／格高／字級／內距」這些自己的尺寸，
+   條子永遠 top:0 bottom:0 right:0 貼滿整個高度、貼齊右緣，倍率只決定每一格多大，
+   看得到幾格由來源高度自己算出來——放大就少幾格、縮小就多幾格，不會有溢出或留白。
+   （--film-fh 同時給 .film-frame／.film-gate 與捲動位置用，是格高的單一事實來源；
+   setlist.js 只送「要把第幾格對到片門」的序號 --film-center，捲動距離由 CSS 自己乘。） */
+[data-layout="film"] .lay-stage {
+  --film-s: var(--sl-scene-scale, 1);
+  --film-fh: calc(96px * var(--film-s));
+  transform: translate(var(--sl-stage-x, 0px), var(--sl-stage-y, 0px));
+}
 /* 清單型版型：內容尺寸的小元件（像 classic），從 OBS 來源左上角開始。 */
 .sm-bg, .term-stage, .bb-stage, .cards-stage { display: inline-block; }
 [data-layout="simple"] #setlist-root { display: inline-block; min-width: 0; max-width: none; }
@@ -1526,30 +1534,54 @@ html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; 
 /* ═══════════════════════════════════════════════════════════════════
    film：35mm 底片邊條（場景型）
    ═══════════════════════════════════════════════════════════════════ */
+/* 尺寸一律寫成「基準 px × --film-s」：--film-s 是使用者的整體縮放（預設 1），
+   在上面的 [data-layout="film"] .lay-stage 定義。條寬保留原本的 clamp（跟著來源寬度走），
+   再整包乘上倍率。 */
 .film-stage { display: block; }
 .film-strip {
-  position: absolute; top: 0; bottom: 0; right: 0; width: clamp(120px, 12cqw, 168px);
+  position: absolute; top: 0; bottom: 0; right: 0;
+  width: calc(clamp(120px, 12cqw, 168px) * var(--film-s, 1));
   background: linear-gradient(180deg, #20211c, #17170f); overflow: hidden;
   box-shadow: 0 0 50px rgba(0, 0, 0, .6); border-left: 1px solid #000;
   font-family: var(--es-sans);
 }
-.film-perf { position: absolute; top: 0; bottom: 0; width: 15px; z-index: 3; background: repeating-linear-gradient(180deg, transparent 0 9px, #080806 9px 19px, transparent 19px 28px); }
+.film-perf {
+  position: absolute; top: 0; bottom: 0; z-index: 3;
+  --film-perf-a: calc(9px * var(--film-s, 1));
+  --film-perf-b: calc(19px * var(--film-s, 1));
+  --film-perf-c: calc(28px * var(--film-s, 1));
+  width: calc(15px * var(--film-s, 1));
+  background: repeating-linear-gradient(180deg, transparent 0 var(--film-perf-a), #080806 var(--film-perf-a) var(--film-perf-b), transparent var(--film-perf-b) var(--film-perf-c));
+}
 .film-perf--l { left: 0; }
 .film-perf--r { right: 0; }
-.film-frames { position: absolute; left: 15px; right: 15px; top: 50%; transition: transform .45s cubic-bezier(.5, 0, .25, 1); }
-.film-frame { height: 96px; border-bottom: 2px solid #000; padding: 9px 9px 7px; display: flex; flex-direction: column; gap: 2px; background: #2a2a22; filter: brightness(.8) contrast(.9); }
-.film-num { font-size: 9px; color: #b9a06a; letter-spacing: .14em; }
-.film-t { font-size: 12.5px; font-weight: 700; color: #e8e4d6; line-height: 1.18; overflow: hidden; }
-.film-a { font-size: 9px; color: #8f8a78; margin-top: auto; }
+/* 捲動距離＝格高 × --film-shift（要往上捲幾格，由 setlist.js 寫入；空狀態是 0）。
+   乘法留在 CSS：拉「整體縮放」時格高一變，捲動位置自動跟著重算，不需要重繪。 */
+.film-frames {
+  position: absolute; left: calc(15px * var(--film-s, 1)); right: calc(15px * var(--film-s, 1)); top: 50%;
+  transform: translateY(calc(-1 * var(--film-fh, 96px) * var(--film-shift, 0)));
+  transition: transform .45s cubic-bezier(.5, 0, .25, 1);
+}
+.film-frame {
+  height: var(--film-fh, 96px); border-bottom: max(1px, calc(2px * var(--film-s, 1))) solid #000;
+  padding: calc(9px * var(--film-s, 1)) calc(9px * var(--film-s, 1)) calc(7px * var(--film-s, 1));
+  display: flex; flex-direction: column; gap: calc(2px * var(--film-s, 1));
+  background: #2a2a22; filter: brightness(.8) contrast(.9);
+}
+.film-num { font-size: calc(9px * var(--film-s, 1)); color: #b9a06a; letter-spacing: .14em; }
+.film-t { font-size: calc(12.5px * var(--film-s, 1)); font-weight: 700; color: #e8e4d6; line-height: 1.18; overflow: hidden; }
+.film-a { font-size: calc(9px * var(--film-s, 1)); color: #8f8a78; margin-top: auto; }
 .film-frame--done { filter: sepia(.4) brightness(.42); }
 .film-frame--now { filter: none; background: #3a3a2d; box-shadow: 0 0 0 2px #fff inset; animation: film-weave .2s steps(2) infinite; }
 @keyframes film-weave { 0% { transform: translateY(0); } 100% { transform: translateY(.6px); } }
 .film-gate {
-  position: absolute; left: 8px; right: 8px; height: 96px; top: 50%; transform: translateY(-50%);
-  border: 2px solid #fff; border-radius: 2px; pointer-events: none; z-index: 4;
-  box-shadow: 0 0 0 9999px rgba(8, 8, 6, .62), 0 0 14px rgba(255, 255, 255, .25);
+  position: absolute; left: calc(8px * var(--film-s, 1)); right: calc(8px * var(--film-s, 1));
+  height: var(--film-fh, 96px); top: 50%; transform: translateY(-50%);
+  border: max(1px, calc(2px * var(--film-s, 1))) solid #fff; border-radius: 2px; pointer-events: none; z-index: 4;
+  /* 9999px 那圈是壓暗整個畫面的遮罩，不跟著倍率變；只有片門本身的光暈要縮放。 */
+  box-shadow: 0 0 0 9999px rgba(8, 8, 6, .62), 0 0 calc(14px * var(--film-s, 1)) rgba(255, 255, 255, .25);
 }
-.film-empty { position: absolute; left: 15px; right: 15px; top: 50%; transform: translateY(-50%); text-align: center; color: #8f8a78; font-size: 11px; }
+.film-empty { position: absolute; left: calc(15px * var(--film-s, 1)); right: calc(15px * var(--film-s, 1)); top: 50%; transform: translateY(-50%); text-align: center; color: #8f8a78; font-size: calc(11px * var(--film-s, 1)); }
 
 /* Keep the OBS setlist independent from base.css while preserving the same
    semantic hidden-state contract as the panel and controller. */

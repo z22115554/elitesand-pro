@@ -1049,11 +1049,10 @@
     },
     render(root) {
       const arr = flat().arr;
-      const FH = 96;
       const frames = root.querySelector('#fm-frames');
       if (!arr.length) {
         frames.innerHTML = `<div class="film-empty">${escapeHtml(model.active ? t('setlist.startingSoon') : t('setlist.notStarted'))}</div>`;
-        frames.style.transform = '';
+        frames.style.setProperty('--film-shift', '0');
         return;
       }
       const nowIdx = arr.findIndex((it) => it.state === 'now');
@@ -1064,8 +1063,10 @@
           `<div class="film-t setlist-title">${escapeHtml(it.title)}</div>` +
           `<div class="film-a setlist-artist">${escapeHtml(it.artist || '')}</div></div>`;
       }).join('');
-      // .film-frames 的 top:50% 對齊來源中線，再往上移到正在播放那格置中（片門在同一條線上）
-      frames.style.transform = `translateY(calc(-${FH / 2}px - ${center * FH}px))`;
+      // .film-frames 的 top:50% 對齊來源中線，再往上捲到正在播放那格置中（片門在同一條線上）。
+      // 只送「往上捲幾格」，實際距離由 CSS 乘上格高 --film-fh——格高會跟著使用者的
+      // 「整體縮放」變，乘法留在 CSS 才不會在拉倍率時停在用舊格高算出來的位置。
+      frames.style.setProperty('--film-shift', String(center + 0.5));
     },
   };
 

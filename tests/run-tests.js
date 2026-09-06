@@ -7006,11 +7006,13 @@ test('底片邊條歸類為場景版，「整體大小倍率」不再是死控�
   ok(setlistSource.includes("const SCENE = ['timeline', 'diagonal', 'constellation', 'film'];"),
     'OBS 頁面端的舊版相容清單也必須含 film');
 
-  // film 的 .lay-stage 確實吃 --sl-scene-scale／--sl-stage-x／--sl-stage-y——歸進場景類
-  // 之後，面板的「場景版設定」滑桿才是真正能動它的控制項。
-  const filmStageRule = /\[data-layout="film"\]\s*\.lay-stage\s*\{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
-  ok(filmStageRule.includes('--sl-scene-scale') && filmStageRule.includes('--sl-stage-x') && filmStageRule.includes('--sl-stage-y'),
-    'film 的 .lay-stage 必須跟其他場景版一樣吃場景位置/縮放變數');
+  // 歸進場景類之後，面板「場景版設定」的位置/縮放才是真正能動 film 的控制項：
+  // 位置沿用共用的 --sl-stage-x/y，縮放則轉成 film 自己的排版倍率（見下面那段）。
+  const filmStageRules = [...setlistCss.matchAll(/\[data-layout="film"\]\s*\.lay-stage\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]);
+  ok(filmStageRules.some((body) => body.includes('--sl-stage-x') && body.includes('--sl-stage-y')),
+    'film 的 .lay-stage 必須吃場景位置變數');
+  ok(filmStageRules.some((body) => /--film-s:\s*var\(--sl-scene-scale, 1\)/.test(body)),
+    'film 的整體縮放必須接到面板的 sceneScale 欄位');
   // film 完全沒有把 --sl-scale 或任何 classic/list 通用尺寸變數（--sl-fit 除外）接進
   // 自己的 CSS——歸進 list 類顯示的那些控制項本來就對它沒有作用。
   const filmBlockStart = setlistCss.indexOf('film：35mm 底片邊條');
@@ -7028,14 +7030,35 @@ test('底片邊條歸類為場景版，「整體大小倍率」不再是死控�
   const sceneScaleField = indexHtml.slice(indexHtml.indexOf('id="sls-scene-scale"') - 200, indexHtml.indexOf('id="sls-scene-scale"'));
   ok(!/data-sl-layout=/.test(sceneScaleField), '整體縮放（sceneScale）不可額外被 data-sl-layout 排除，film 也要吃得到：');
 
-  // transform-origin 必須是 film 專屬覆寫，不能跟 timeline/diagonal/constellation 共用
-  // center center：film 的內容貼在來源最右邊（.film-strip 是 right:0 的直條），用畫面
-  // 中心當縮放原點，放大時整條會被推出畫面外（實機拉過：1.3 倍就整個消失）。
-  ok(/\[data-layout="film"\]\s*\.lay-stage\s*\{\s*transform-origin:\s*right center;\s*\}/.test(setlistCss),
-    'film 的 .lay-stage 必須把縮放原點改到右側，否則放大會被推出畫面外：');
+  // film 的「整體縮放」必須是自適應排版，不能用 transform 等比拉：這條是貼齊來源上下緣、
+  // 靠右站的直條，transform 會連同它的邊界一起拉——放大整條溢出被裁、縮小離開邊緣留白
+  // （兩種實機都拉過）。倍率只能乘進自己的尺寸，條子永遠貼滿整個高度。
+  const filmStageOverride = /\[data-layout="film"\]\s*\.lay-stage\s*\{([\s\S]*?)\n\}/g;
+  const overrides = [...setlistCss.matchAll(filmStageOverride)].map((m) => m[1]);
+  const filmOnlyRule = overrides.find((body) => body.includes('--film-s'));
+  ok(filmOnlyRule, 'film 必須有自己的 .lay-stage 規則來定義 --film-s（整體縮放倍率）：');
+  ok(!/scale\(/.test(filmOnlyRule), 'film 的 transform 不可再用 scale()，倍率要走排版：');
+  ok(/--film-fh:\s*calc\(96px \* var\(--film-s\)\)/.test(filmOnlyRule),
+    '格高必須是「基準 96px × 倍率」，且是 CSS 這邊的單一事實來源：');
+
+  // 條寬/格高/片門/字級都要吃倍率；條子本身維持 top:0 bottom:0 right:0（貼滿高度、貼齊右緣）。
+  ok(/\.film-strip\s*\{[\s\S]*?top: 0; bottom: 0; right: 0;[\s\S]*?width: calc\(clamp\(120px, 12cqw, 168px\) \* var\(--film-s, 1\)\)/.test(setlistCss),
+    '底片條必須貼滿來源高度並靠右，寬度隨倍率變（不是被 transform 拉走）：');
+  ok(/\.film-frame\s*\{[\s\S]*?height: var\(--film-fh, 96px\)/.test(setlistCss), '每一格的高度必須跟著倍率：');
+  ok(/\.film-gate\s*\{[\s\S]*?height: var\(--film-fh, 96px\)/.test(setlistCss), '片門高度必須跟每一格一致，否則對不準：');
+  ok(/\.film-t\s*\{\s*font-size: calc\(12\.5px \* var\(--film-s, 1\)\)/.test(setlistCss), '格內字級必須跟著倍率：');
+
+  // 捲動距離的乘法留在 CSS：JS 只送「往上捲幾格」，拉倍率時才不會停在用舊格高算出的位置。
+  ok(/transform: translateY\(calc\(-1 \* var\(--film-fh, 96px\) \* var\(--film-shift, 0\)\)\)/.test(setlistCss),
+    '捲動位置必須由 CSS 用當下的格高算出來：');
+  ok(setlistSource.includes("frames.style.setProperty('--film-shift', String(center + 0.5))"),
+    'setlist.js 只能送格數，不可自己換算像素：');
+  ok(!/const FH = 96/.test(setlistSource), 'JS 不可再寫死格高 96px（會跟 CSS 的倍率脫鉤）：');
+
+  // 其他三個場景版仍然走 transform 等比縮放（它們的內容站在畫面中央，那樣才對）。
   const sharedStageRule = /\[data-layout="timeline"\][\s\S]*?\[data-layout="film"\]\s*\.lay-stage\s*\{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
-  ok(sharedStageRule.includes('transform-origin: center center;'),
-    'timeline/diagonal/constellation 共用的縮放原點不可被這次的 film 專屬覆寫動到：');
+  ok(sharedStageRule.includes('scale(var(--sl-scene-scale, 1))') && sharedStageRule.includes('transform-origin: center center;'),
+    'timeline/diagonal/constellation 的等比縮放不可被 film 這次的改動動到：');
 });
 
 test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行為', () => {
