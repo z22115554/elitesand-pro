@@ -7019,8 +7019,16 @@ test('手帳頁有自己的三顆狀態顏色，通用顏色欄位不再對它�
   ok(/\.note-it--done \.note-nm \{ color: var\(--sl-note-done/.test(setlistCss), '已唱歌名要吃已唱色：');
   ok(/\.note-it--now \.note-nm \{ color: var\(--sl-note-now/.test(setlistCss), '正在唱歌名要吃正在唱色：');
   ok(/\.note-it--done \.note-bx \{ background: var\(--sl-note-done/.test(setlistCss), '打勾要跟著已唱色：');
-  ok(/\.note-stamp \{[\s\S]*?border: 2px solid var\(--sl-note-done/.test(setlistCss),
-    '蓋章是最顯眼的已唱標記，必須跟著已唱色（留紅色會再變成「改了沒反應」）：');
+  // 蓋章的紅印泥跟紙張／膠帶／螢光筆一樣是刻意固定的文具元素（使用者要求保留這個特色），
+  // 面板的說明文字也必須跟著這麼寫，才不會又變成「以為改得動卻沒反應」。
+  ok(/\.note-stamp \{[\s\S]*?border: 2px solid #c24d3a/.test(setlistCss), '蓋章維持紅印泥，不跟著已唱色：');
+  ok(/'setlist\.noteColorHint':\s*\['[^']*蓋章的紅印泥[^']*固定文具元素/.test(fs.readFileSync(path.join(__dirname, '../public/js/i18n.js'), 'utf8')),
+    '說明文字必須講明蓋章的紅色不跟著換：');
+  // 「正在唱」的螢光筆底色是 z-index:-1 的 ::before，紙張必須自己是一個堆疊環境，
+  // 它才會畫在紙上、文字下面；少了這行整條螢光筆會被紙張底色蓋掉（等於裝飾看不見）。
+  ok(/\.note-sheet \{[\s\S]*?position: relative; z-index: 0;/.test(setlistCss),
+    '手帳紙必須是堆疊環境，否則「正在唱」的螢光筆畫了也看不見：');
+  ok(/\.note-it--now::before \{[\s\S]*?z-index: -1;/.test(setlistCss), '螢光筆必須留在文字底下：');
   ok(/\.note-title \{[^}]*color: var\(--sl-note-now/.test(setlistCss), '頁首標題沿用正在唱色，換色時整張紙才一致：');
   // 可讀性文字陰影是給深色疊層用的，淺底深字加上去只會糊掉（那條規則自己的註解也這麼寫）
   ok(setlistCss.includes(':root[data-layout="note"]:not([data-sl-readable-off]) .note-nm { text-shadow: none; }'),

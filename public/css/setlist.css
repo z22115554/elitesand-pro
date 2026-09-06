@@ -1478,7 +1478,10 @@ html[data-sl-fit="fill"][data-layout="flap"] .flap-stage { align-items: flex-end
 .note-stage { display: flex; align-items: stretch; justify-content: flex-start; width: 100%; font-family: var(--es-serif); }
 html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; }
 .note-sheet {
-  position: relative;
+  /* z-index:0 讓這張紙成為一個堆疊環境，「正在唱」那條螢光筆（.note-it--now::before，
+     z-index:-1）才會畫在紙的背景「之上」、文字之下。少了這一行，負的 z-index 會一路
+     退到根堆疊環境，整條螢光筆被紙張底色蓋掉——等於這個裝飾一直都畫了但看不見。 */
+  position: relative; z-index: 0;
   flex: 0 0 auto; width: min(46%, calc(320px * var(--sl-fit))); min-width: calc(190px * var(--sl-fit));
   display: flex; flex-direction: column; gap: 2px;
   padding: calc(20px * var(--sl-fit)) calc(20px * var(--sl-fit)) calc(24px * var(--sl-fit));
@@ -1523,14 +1526,13 @@ html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; 
   content: ''; position: absolute; left: calc(-8px * var(--sl-fit)); right: 0; top: 1px; bottom: 1px;
   background: rgba(255, 206, 92, .62); z-index: -1; border-radius: 3px; transform: skewX(-6deg);
 }
-/* 蓋章是整張紙上最顯眼的「已唱」標記，必須跟著已唱色走——留著自己的紅印泥的話，
-   使用者改了已唱色卻看到它不動，又會變成「改了沒反應」。 */
+/* 蓋章的紅印泥跟紙張、膠帶、螢光筆一樣，是這個模板的固定文具元素，刻意不跟著
+   已唱色換——這抹紅是手帳頁的特色（面板的說明文字也是這樣寫的）。 */
 .note-stamp {
-  margin-left: auto; flex: 0 0 auto; border: 2px solid var(--sl-note-done, #9aa6b0); color: var(--sl-note-done, #9aa6b0); font-weight: 800;
+  margin-left: auto; flex: 0 0 auto; border: 2px solid #c24d3a; color: #c24d3a; font-weight: 800;
   border-radius: 50%; width: calc(28px * var(--sl-fit)); height: calc(28px * var(--sl-fit));
   display: grid; place-items: center; font-size: calc(11px * var(--sl-fit)); transform: rotate(-14deg);
-  /* 底色是同一顆顏色的極淡版本；用 currentColor 才不必再拆一份 rgba 出來。 */
-  background: color-mix(in srgb, currentColor 8%, transparent);
+  background: rgba(194, 77, 58, .06);
 }
 /* 「已唱」以外的譯文（英/日/韓）多半 3～9 字，正圓形塞不下——改成護照章式的
    橢圓長條：寬度隨文字自動撐開、單行不換行，字級也跟著縮小。
