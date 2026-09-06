@@ -361,9 +361,6 @@ body.lyric-pos-split.stage-show-safe-zone .stage-safe-zone-guide {
 
 /* ═══ 故障效果輔助 ═══ */
 
-.lyrics-active-line.glitch-active {
-  animation: glitchShake 0.1s infinite;
-}
 
 @keyframes glitchShake {
   0% { transform: translate(0); }

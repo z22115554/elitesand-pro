@@ -73,8 +73,6 @@
     const active = sessionState.active;
 
     // 按鈕狀態
-    if (dom.sessionStart) dom.sessionStart.disabled = active;
-    if (dom.sessionStop) dom.sessionStop.disabled = !active;
     if (dom.sessionReset) dom.sessionReset.disabled = active || songs.length === 0;
     if (sessionNewStart) sessionNewStart.disabled = active;
     if (dom.btnCopyChapters) dom.btnCopyChapters.disabled = songs.length === 0;
@@ -193,12 +191,6 @@
     if (dom.btnCopyChapters) copyText(lines.join('\n'), dom.btnCopyChapters, workspaceText('home.session.copySuccess', '✓ 已複製章節'));
   }
 
-  if (dom.sessionStart) {
-    dom.sessionStart.addEventListener('click', () => SocketClient.send('session:start'));
-  }
-  if (dom.sessionStop) {
-    dom.sessionStop.addEventListener('click', () => SocketClient.send('session:stop'));
-  }
   const sessionRefresh = document.getElementById('session-refresh');
   if (sessionRefresh) {
     sessionRefresh.addEventListener('click', () => {
@@ -418,14 +410,12 @@
       button.tabIndex = selected ? 0 : -1;
       button.classList.toggle('is-selected', selected);
     });
-    const hint = document.getElementById('setlist-layout-hint');
     const status = document.getElementById('setlist-layout-status');
     const workspaceStatus = document.getElementById('setlist-workspace-template-status');
     const scope = document.getElementById('setlist-style-scope');
     const legacyNotice = document.getElementById('setlist-legacy-layout-notice');
     const appearance = document.getElementById('setlist-appearance');
     const advancedButton = document.getElementById('btn-setlist-advanced');
-    if (hint) hint.textContent = translateText(isHiddenLayout ? '這個模板已暫停提供；選擇目前可用的模板後才會切換 OBS 輸出。' : info.hint);
     const localizedName = translateText(info.name);
     const layoutLabel = isHiddenLayout
       ? workspaceText('settings.workspace.pausedTemplate', `${localizedName}（暫停提供）`, { template: localizedName })

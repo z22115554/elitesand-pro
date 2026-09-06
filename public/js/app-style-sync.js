@@ -1,5 +1,8 @@
 /**
- * 風格/模板預設按鈕 + 羅馬拼音顯示模式 + 舊版動畫微調控制項。
+ * 風格/模板預設按鈕 + 羅馬拼音顯示模式 + OBS URL／區網配對。
+ *
+ * （2026-09 死碼清理：舊版「動畫微調」滑桿接線已移除——對應的 anim-speed／blur／
+ *   lines／fontsize 元素早就不在任何 HTML 裡，功能已由「歌詞外觀」面板取代。）
  *
  * 跟 lyric-extras.js 的歌詞外觀（lyricSettings，字體/顏色/位置 schema）是不同的關注點：
  * 這裡管的是經典疊層的風格預設（StylePresets）與羅馬拼音顯示模式，兩者職責不重疊，
@@ -74,51 +77,6 @@
   });
 
   // ═══════════════════════════════════════════
-  // 動畫微調（舊版控制項，新版已由「歌詞外觀」面板取代；
-  // 若 HTML 中不存在這些元件就跳過，避免空參考錯誤）
-  // ═══════════════════════════════════════════
-
-  if (dom.animSpeed) {
-    dom.animSpeed.addEventListener('input', () => {
-      const val = parseFloat(dom.animSpeed.value);
-      dom.animSpeedVal.textContent = val.toFixed(1) + 'x';
-      StylePresets.setOverrides({
-        animation: {
-          lineEnter: { duration: 0.6 / val },
-          wordActive: { duration: 0.15 / val },
-        },
-      });
-    });
-  }
-
-  if (dom.animBlur) {
-    dom.animBlur.addEventListener('input', () => {
-      const val = parseInt(dom.animBlur.value, 10);
-      dom.animBlurVal.textContent = val + 'px';
-      StylePresets.setOverrides({
-        animation: {
-          lineEnter: { blurFrom: val },
-        },
-      });
-    });
-  }
-
-  if (dom.animLines) {
-    dom.animLines.addEventListener('input', () => {
-      const val = parseInt(dom.animLines.value, 10);
-      dom.animLinesVal.textContent = val;
-    });
-  }
-
-  if (dom.animFontsize) {
-    dom.animFontsize.addEventListener('input', () => {
-      const val = parseInt(dom.animFontsize.value, 10);
-      dom.animFontsizeVal.textContent = val + 'px';
-      document.documentElement.style.setProperty('--display-font-size', val + 'px');
-    });
-  }
-
-  // ═══════════════════════════════════════════
   // OBS URL 複製
   // ═══════════════════════════════════════════
 
@@ -144,7 +102,6 @@
   function refreshObsUrls() {
     const url = buildObsUrl();
     if (dom.obsUrl) dom.obsUrl.textContent = url;
-    if (dom.lyricsPreviewObsUrl) dom.lyricsPreviewObsUrl.textContent = url;
     if (dom.settingsPreviewObsUrl) dom.settingsPreviewObsUrl.textContent = url;
     const previewUrl = buildObsUrl({ preview: true, relative: true });
     document.querySelectorAll('iframe.obs-preview').forEach((frame) => {
@@ -186,7 +143,6 @@
   window.addEventListener('i18n:change', refreshObsUrls);
   if (dom.copyObsUrlTop) dom.copyObsUrlTop.addEventListener('click', () => copyObsUrl(dom.copyObsUrlTop));
   if (dom.copyObsUrl) dom.copyObsUrl.addEventListener('click', () => copyObsUrl(dom.copyObsUrl));
-  if (dom.copyObsUrlPreview) dom.copyObsUrlPreview.addEventListener('click', () => copyObsUrl(dom.copyObsUrlPreview));
   if (dom.copyObsUrlSettingsPreview) dom.copyObsUrlSettingsPreview.addEventListener('click', () => copyObsUrl(dom.copyObsUrlSettingsPreview));
 
   // ═══════════════════════════════════════════

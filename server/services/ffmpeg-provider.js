@@ -62,7 +62,6 @@ const DOWNLOAD_SOURCES = [
   },
 ];
 const DOWNLOAD_URL = DOWNLOAD_SOURCES[0].url;
-const CHECKSUM_URL = DOWNLOAD_SOURCES[0].checksumUrl;
 const MAX_ZIP_BYTES = 300 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 const DOWNLOAD_TOTAL_TIMEOUT_MS = 10 * 60 * 1000;
@@ -700,7 +699,6 @@ module.exports = {
   parseExpectedHash,
   DOWNLOAD_SOURCES,
   DOWNLOAD_URL,
-  CHECKSUM_URL,
   BIN_DIR,
   FFMPEG_EXE,
   FFPROBE_EXE,

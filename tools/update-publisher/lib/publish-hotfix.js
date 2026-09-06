@@ -10,7 +10,6 @@ const CHANNELS = new Set(['stable', 'beta']);
 const VERSION_RE = /^\d+(?:\.\d+){2,3}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 // 這兩個常數只給 CLI 輸出/文件用途，實際發版路徑一律走 policy.artifactOriginForChannel()。
 // 沒有自訂網域前跟 update-policy.js 一樣共用同一個 workers.dev 來源，理由見該檔註解。
-const ARTIFACT_ORIGIN = policy.UPDATE_ARTIFACT_ORIGIN;
 const BETA_ARTIFACT_ORIGIN = policy.BETA_UPDATE_ARTIFACT_ORIGIN;
 const MAX_BETA_ARTIFACTS = 8;
 
@@ -237,7 +236,6 @@ function createPowerShellArtifactBuilder({ projectRoot, baselineDirectory, outpu
 
 module.exports = {
   ARCH,
-  ARTIFACT_ORIGIN,
   BETA_ARTIFACT_ORIGIN,
   MAX_BETA_ARTIFACTS,
   PLATFORM,

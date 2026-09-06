@@ -100,7 +100,7 @@ body.controller {
 #ctrl-lyric-position-group[hidden], #ctrl-columnflow-variant-group[hidden], #ctrl-columnflow-placement-group[hidden], #ctrl-columnflow-max-lines-group[hidden], #ctrl-intensity-group[hidden], #ctrl-classic-style-group[hidden] { display: none; }
 .ctrl-preset-row { display: flex; gap: 8px; margin-top: 14px; }
 .ctrl-preset-row .input { min-width: 0; flex: 1; }
-.ctrl-chip, .ctrl-style-btn, .ctrl-mode-btn, .ctrl-template-btn, .ctrl-position-btn, .ctrl-intensity-btn, .ctrl-columnflow-variant-btn, .ctrl-columnflow-placement-btn, .ctrl-columnflow-max-lines-btn {
+.ctrl-style-btn, .ctrl-mode-btn, .ctrl-template-btn, .ctrl-position-btn, .ctrl-intensity-btn, .ctrl-columnflow-variant-btn, .ctrl-columnflow-placement-btn, .ctrl-columnflow-max-lines-btn {
   min-height: 44px; padding: 0 16px;
   border: 1px solid var(--border-strong); background: var(--bg-raised); color: var(--text-dim);
   border-radius: var(--r-md); font-size: 13px; font-weight: 500; cursor: pointer; touch-action: manipulation;
@@ -109,10 +109,6 @@ body.controller {
 .ctrl-intensity-btn.active, .ctrl-columnflow-variant-btn.active, .ctrl-columnflow-placement-btn.active, .ctrl-columnflow-max-lines-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 
 /* 變調變速 */
-.ctrl-slider-row { display: grid; grid-template-columns: 48px 1fr 44px 36px; align-items: center; gap: 10px; margin-bottom: 12px; }
-.ctrl-slider-row .lbl { font-size: 13px; color: var(--text-dim); }
-.ctrl-slider-row .val { font-variant-numeric: tabular-nums; }
-.ctrl-slider-row button { height: 32px; }
 
 /* 開關行 */
 .ctrl-switch-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }

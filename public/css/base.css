@@ -217,7 +217,6 @@ select:focus-visible,
 .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
 
 .btn-sm { height: 30px; padding: 0 10px; font-size: 12px; }
-.btn-icon { width: 36px; padding: 0; }
 
 .btn-danger { color: var(--danger); border-color: transparent; background: transparent; }
 .btn-danger:hover { background: rgba(229,72,77,0.1); }
@@ -508,14 +507,11 @@ details.collapse.mt-10 { margin-top: 10px; }
 .switch-row.switch-row--separated { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
 .switch-row.switch-row--tight { margin-top: 2px; }
 .btn.btn--wide { width: 100%; }
-.btn.btn--mb-8 { margin-bottom: 8px; }
-.offset-align-hint { margin: 0 0 10px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
 .dropzone.dropzone--compact { margin-top: 12px; padding: 16px; }
 .sub.sub--fine-hint { color: var(--text-faint); font-size: 11px; }
 .sub.sub--fine-explainer { margin-top: 8px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
 .field.field--inline-spacious { display: flex; gap: 14px; }
 .font-family-hint { margin-top: 6px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
-.mt-12 { margin-top: 12px; }
 .val.val--fine-detail { margin-top: 4px; color: var(--text-faint); font-size: 11px; }
 .btn.btn--vertical-spaced { margin: 12px 0; }
 img.display-bg-preview { max-width: 100%; max-height: 120px; border-radius: 8px; display: block; margin-bottom: 8px; }
@@ -558,12 +554,10 @@ label.btn.btn--label { cursor: pointer; }
 .sls-custom-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2, rgba(127, 127, 127, .12)); border-radius: 8px; padding: 2px 4px 2px 8px; }
 .btn.btn-sm.btn-ghost.sls-custom-chip__apply { padding: 2px 4px; }
 .btn.btn-sm.btn-ghost.sls-custom-chip__delete { padding: 2px 6px; color: var(--danger, #e06); }
-.btn.btn--setlist-advanced { margin-top: 14px; width: 100%; }
 .setlist-template-controls { display: flex; gap: 6px; margin-bottom: 8px; }
 .field.field--inline-spacious-center { display: flex; gap: 14px; align-items: center; }
 .val.val--inline-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .setlist-layout-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.setlist-layout-actions__buttons { display: flex; gap: 6px; flex-shrink: 0; }
 .track-edit-hint { margin: 0 0 14px; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
 .btn.btn--track-edit-save { width: 100%; margin-top: 4px; }
 
