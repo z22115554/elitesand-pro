@@ -1022,7 +1022,11 @@
       box.innerHTML = list.map((s, i) => {
         const st = s.state === 'active' ? 'now' : s.state === 'done' ? 'done' : 'wait';
         const num = String(list.start + i + 1).padStart(2, '0');
-        const stamp = st === 'done' ? `<span class="note-stamp">${escapeHtml(lastLabels.done)}</span>` : '';
+        // 蓋章是照著「已唱」兩個字設計的正圓形，換成英/日/韓譯文常常 3～9 字，
+        // 硬塞進小圓圈裡會擠成三行、疊到邊框（實機截圖回報）。字數一長就換成
+        // 護照章那種橢圓長條，繁中/簡中兩字仍走原本的圓形，不用跟著改。
+        const stampWide = lastLabels.done.length > 2 ? ' note-stamp--wide' : '';
+        const stamp = st === 'done' ? `<span class="note-stamp${stampWide}">${escapeHtml(lastLabels.done)}</span>` : '';
         // active：trimToFit 會保護這一列不被裁掉、並以它為中心裁遠端 —— 歌單再長、來源再小，正在演唱那首一定看得到
         return `<div class="note-it note-it--${st}${st === 'now' ? ' active' : ''}"><span class="note-nm-no">${num}</span><span class="note-bx"></span>` +
           `<span class="note-tx"><span class="note-nm setlist-title">${escapeHtml(s.title)}</span>` +
@@ -1094,7 +1098,7 @@
   }
 
   // ── 長歌名跑馬燈：文字超出容器時來回滾動（不超出就維持靜態，不加動畫）──
-  const MARQUEE_SEL = '.ns-title, .setlist-title, .bb-name, .card-title, .t-line, .sk-title';
+  const MARQUEE_SEL = '.ns-title, .setlist-title, .bb-name, .card-title, .t-line, .sk-title, .flap-lb';
   function applyMarquees() {
     rootEl.querySelectorAll(MARQUEE_SEL).forEach((el) => {
       let span = el.querySelector(':scope > .sl-mq');
