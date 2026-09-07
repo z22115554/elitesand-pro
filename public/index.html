@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/panel.css">
   <link rel="stylesheet" href="/css/onboarding-tour.css">
+  <link rel="stylesheet" href="/css/font-picker.css">
 </head>
 <body data-i18n-auto>
   <header class="desktop-windowbar" aria-label="Elitesand Pro 控制面板">
@@ -1033,7 +1034,7 @@
                   <button id="ls-font-load" class="btn btn-sm" type="button">瀏覽系統字體</button>
                 </div>
                 <input id="ls-fontfamily-custom" class="input" type="text" placeholder="或手動輸入字體名稱，例如：微軟正黑體" class="mt-8">
-                <div id="ls-fontfamily-hint" class="sub font-family-hint">清單由本機字體目錄完整掃描（含只安裝給目前使用者的字體），每個字體以實際樣式顯示。OBS 與此控制台須在同一台電腦才生效；找不到時自動退回 Noto／系統字體。</div>
+                <div id="ls-fontfamily-hint" class="sub font-family-hint" data-i18n="fonts.hint">清單會記住，可搜尋名稱並預覽字型；安裝新字型後可按重新整理。OBS 與控制台須在同一台電腦；找不到時使用備援字型。</div>
               </div>
             </div>
             <div class="field">
@@ -3111,6 +3112,7 @@
   <script src="/js/app-spout-output.js"></script>
   <script src="/js/font-assets.js"></script>
   <script src="/js/font-probe.js"></script>
+  <script src="/js/font-picker.js"></script>
   <script src="/js/lyric-extras.js"></script>
   <script src="/js/media-library.js"></script>
   <script src="/js/style-tuner.js"></script>

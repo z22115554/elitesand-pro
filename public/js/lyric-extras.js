@@ -618,6 +618,7 @@
     if (version !== fontSelectionVersion) return;
     settings.fontFamily = quotedFontStack(trimmed);
     settings.fontAssetId = assetId;
+    fontPickers.get('ls-font-system')?.sync(trimmed);
     pushSettings();
     if (assetId) showToast(`已驗證並套用「${trimmed}」本機字型`);
     // asset 有成功載入代表 FontFace 這條路通了，不用再探；沒 asset（含 .ttc 走系統名稱
@@ -660,75 +661,27 @@
     sel.value = isPreset ? settings.fontFamily : CUSTOM_FONT_VALUE;
     if (wrap) wrap.hidden = isPreset;
     if (!isPreset && customInput) customInput.value = extractPrimaryFont(settings.fontFamily);
+    fontPickers.get('ls-font-system')?.sync(isPreset ? '' : extractPrimaryFont(settings.fontFamily));
+    fontPickers.get('ls-font-latin')?.sync(settings.fontFamilyLatin || '');
   }
 
-  // 列出本機字體，填進下拉選單（每個 option 用該字體顯示，像 Word）。
-  // 主要來源改為伺服器掃描（/api/fonts：直接讀字體目錄＋解析字型檔，涵蓋「只安裝給
-  // 目前使用者」的字體，數量不受瀏覽器 Font Access API 限制）；瀏覽器 queryLocalFonts
-  // 若可用則合併補充，兩邊取聯集。
-  let cachedFontList = null;
-  async function fetchAllFonts() {
-    if (cachedFontList) return cachedFontList;
-    const names = new Set();
-    try {
-      const r = await fetch('/api/fonts');
-      const data = await r.json();
-      if (data && data.success && Array.isArray(data.fonts)) data.fonts.forEach((f) => names.add(f));
-      if (data && data.aliases && typeof data.aliases === 'object') Object.assign(fontAliases, data.aliases);
-      if (data && data.assets && typeof data.assets === 'object') Object.assign(fontAssets, data.assets);
-    } catch (_) { /* 伺服器掃描失敗 → 退回瀏覽器 API */ }
-    if (typeof window.queryLocalFonts === 'function') {
-      try {
-        (await window.queryLocalFonts()).forEach((f) => names.add(f.family));
-      } catch (_) { /* 使用者拒絕授權時仍有伺服器來源 */ }
-    }
-    cachedFontList = [...names].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-    return cachedFontList;
+  // Cache the catalogue (including aliases/asset IDs), never the authoritative lyric settings.
+  const fontPickers = new Map();
+  function adoptFontCatalog(catalog) {
+    fontAliases = catalog.aliases;
+    fontAssets = catalog.assets;
+    for (const picker of fontPickers.values()) picker.setFonts(catalog.fonts);
   }
-  // 字體名稱可來自作業系統與 Font Access API；即使通常可信，也不把它拼進
-  // option 的 HTML/style 字串。textContent 保護文字與 value，CSSOM 僅設定單一
-  // font-family 屬性，特殊字元不可能跳出成為新的 attribute 或 HTML。
-  function setFontOptions(select, fams, placeholder) {
-    if (!select) return;
-    const fragment = document.createDocumentFragment();
-    const emptyOption = document.createElement('option');
-    emptyOption.value = '';
-    emptyOption.textContent = placeholder;
-    fragment.appendChild(emptyOption);
-    fams.forEach((family) => {
-      if (typeof family !== 'string' || !family) return;
-      const option = document.createElement('option');
-      option.value = family;
-      option.textContent = family;
-      option.style.fontFamily = family;
-      fragment.appendChild(option);
-    });
-    select.textContent = '';
-    select.appendChild(fragment);
-  }
-  async function loadSystemFonts() {
-    const sysSel = document.getElementById('ls-font-system');
-    const latinSel = document.getElementById('ls-font-latin');
-    const btn = document.getElementById('ls-font-load');
-    if (!sysSel) return;
+  async function loadSystemFonts(event) {
+    const id = event?.currentTarget?.id === 'ls-font-latin-load' ? 'ls-font-latin' : 'ls-font-system';
+    const picker = fontPickers.get(id);
+    if (!picker) return;
+    // Show cached choices before awaiting a background scan.
+    picker.show();
     try {
-      if (btn) { btn.disabled = true; btn.textContent = '載入中…'; }
-      const fams = await fetchAllFonts();
-      if (!fams.length) { showToast('讀取系統字體失敗，請改用手動輸入'); return; }
-      setFontOptions(sysSel, fams, '（選擇系統字體）');
-      const current = extractPrimaryFont(settings.fontFamily);
-      if (fams.includes(current)) sysSel.value = current;
-      // 英文（拉丁字母）字體下拉也用同一份清單
-      if (latinSel) {
-        setFontOptions(latinSel, fams, '（不指定：英文跟主字體）');
-        if (settings.fontFamilyLatin && fams.includes(settings.fontFamilyLatin)) latinSel.value = settings.fontFamilyLatin;
-      }
-      showToast(`已載入 ${fams.length} 個系統字體`);
-    } catch (e) {
-      showToast('讀取系統字體失敗，請改用手動輸入');
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '瀏覽系統字體'; }
-    }
+      adoptFontCatalog(await window.ElitesandFontPicker.get());
+      picker.sync(id === 'ls-font-latin' ? settings.fontFamilyLatin || '' : extractPrimaryFont(settings.fontFamily));
+    } catch (_) { showToast(I18n.t('fonts.failed')); }
   }
 
   function initCustomFont() {
@@ -740,6 +693,15 @@
     if (!sel) return;
 
     syncCustomFontUI();
+    if (window.ElitesandFontPicker) {
+      const refresh = async () => adoptFontCatalog(await window.ElitesandFontPicker.refresh(true));
+      for (const [id, placeholder] of [['ls-font-system', 'choose'], ['ls-font-latin', 'follow']]) {
+        const input = document.getElementById(id);
+        if (input) fontPickers.set(id, window.ElitesandFontPicker.attach(input, placeholder, refresh,
+          async () => adoptFontCatalog(await window.ElitesandFontPicker.get())));
+      }
+      window.ElitesandFontPicker.subscribe(adoptFontCatalog);
+    }
 
     sel.addEventListener('change', () => {
       if (sel.value === CUSTOM_FONT_VALUE) {
@@ -747,6 +709,7 @@
         if (customInput && customInput.value.trim()) applyCustomFont(customInput.value);
       } else {
         if (wrap) wrap.hidden = true;
+        ++fontSelectionVersion; // Cancel a previous custom-font load/probe.
         settings.fontFamily = sel.value;
         settings.fontAssetId = '';
         pushSettings();
@@ -766,17 +729,19 @@
     const latinSel = document.getElementById('ls-font-latin');
     const latinInput = document.getElementById('ls-font-latin-custom');
     const latinLoad = document.getElementById('ls-font-latin-load');
+    let latinSelectionVersion = 0;
     const setLatin = async (name) => {
       const trimmed = (name || '').trim();
-      const version = ++fontSelectionVersion;
+      const version = ++latinSelectionVersion;
       let assetId = '';
       try {
         assetId = await verifyFontAsset(trimmed);
       } catch (err) {
-        if (version === fontSelectionVersion) showToast(`無法載入「${trimmed}」字型檔，未套用設定`);
+        if (version === latinSelectionVersion) showToast(`無法載入「${trimmed}」字型檔，未套用設定`);
         return;
       }
-      if (version !== fontSelectionVersion) return;
+      if (version !== latinSelectionVersion) return;
+      fontPickers.get('ls-font-latin')?.sync(trimmed);
       settings.fontFamilyLatin = trimmed;
       settings.fontFamilyLatinAssetId = assetId;
       pushSettings();

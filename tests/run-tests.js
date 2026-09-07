@@ -5136,9 +5136,10 @@ test('所有面板確認都留在程式內，不得跳瀏覽器原生對話框',
 
 test('系統字體選單不把字體名稱拼進 HTML 或 style 字串', () => {
   const lyricExtras = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
-  ok(lyricExtras.includes('function setFontOptions(select, fams, placeholder)'), '字體選項必須由獨立 DOM helper 建立: ');
-  ok(lyricExtras.includes('option.textContent = family') && lyricExtras.includes('option.value = family'), '字體名稱必須走文字節點與 value: ');
-  ok(lyricExtras.includes('option.style.fontFamily = family'), '字體預覽必須走 CSSOM 單一屬性: ');
+  const picker = fs.readFileSync(path.join(__dirname, '../public/js/font-picker.js'), 'utf8');
+  ok(lyricExtras.includes('ElitesandFontPicker.attach'), '字體選項必須由共用虛擬清單建立: ');
+  ok(picker.includes('option.textContent = family') && picker.includes('option.value = value'), '字體名稱必須走文字節點與 value: ');
+  ok(picker.includes('option.style.fontFamily ='), '字體預覽必須走 CSSOM 單一屬性: ');
   ok(!lyricExtras.includes('<option value="${safe}" style="font-family'), '字體名稱不可再拼進 option HTML/style 字串: ');
   ok(!lyricExtras.includes('fontOptionsHtml('), '舊的字串式字體選項 helper 必須移除: ');
 });

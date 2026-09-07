@@ -1,0 +1,12 @@
+.font-picker { position: relative; min-width: 0; }
+.font-picker-trigger { width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 26px; }
+.font-picker-trigger::after { content: '▾'; position: absolute; right: 10px; }
+.font-picker-popup { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: max(100%, 280px); max-width: calc(100vw - 48px); padding: 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--select-popup-bg); box-shadow: var(--shadow-lg); }
+.font-picker-toolbar { display: flex; gap: 6px; }
+.font-picker-toolbar .input { min-width: 0; flex: 1; }
+.font-picker-toolbar .btn { flex-shrink: 0; }
+.font-picker-list { height: 240px; overflow-y: auto; overscroll-behavior: contain; margin-top: 6px; }
+.font-picker-space { position: relative; }
+.font-picker-option { position: absolute; left: 0; right: 0; height: 40px; line-height: 40px; padding: 0 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; font-size: 17px; color: var(--text); }
+.font-picker-option:hover, .font-picker-option[aria-selected="true"] { background: var(--accent-soft); border-radius: 4px; }
+.font-picker-status { padding: 6px 4px 0; color: var(--text-dim); font-size: 12px; }

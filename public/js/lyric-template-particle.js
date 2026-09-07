@@ -402,13 +402,13 @@ function settings(){
  reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
  const ink=color(cv('--lyric-color'),'#f6f0e5'),accent=color(cv('--lyric-color-active'),'#e97855');
  palette={ink:ink.hex,a:accent.hex,inkOpacity:ink.alpha,aOpacity:accent.alpha};
- if(prev!==JSON.stringify([typo.family,typo.weight,typo.sizeScale,typo.letterSpacing,typo.hpos,typo.vjustify,typo.orient,typo.padX,typo.padY,typo.safeMargin]))build();
+ if(prev!==JSON.stringify([typo.family,typo.weight,typo.sizeScale,typo.letterSpacing,typo.hpos,typo.vjustify,typo.orient,typo.padX,typo.padY,typo.safeMargin])){maskCache.clear();build()}
  draw(t);
 }
 return {
  resize,settings,draw,
  load(input){lines=input;build();draw(t)},
- fonts(){maskCache.clear();build();draw(t)},
+ fonts(){maskCache.clear();build();settings()},
  destroy(){lines=[];layouts=[];maskCache.clear();modelCache.clear();canvas.width=canvas.height=1}
 };
 }

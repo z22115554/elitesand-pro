@@ -528,6 +528,7 @@
   }
 
   let fontAssetApplyVersion = 0;
+  let appliedFontAssets = null;
 
   function quoteLocalFontFamily(family) {
     return `'${String(family).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
@@ -541,18 +542,35 @@
     const mainId = settings.fontAssetId;
     const latinId = settings.fontFamilyLatinAssetId;
     const canLoad = loader && typeof loader.isAssetId === 'function' && typeof loader.load === 'function';
-    if (!canLoad || (!loader.isAssetId(mainId) && !loader.isAssetId(latinId))) return;
+    const key = JSON.stringify([mainId, latinId, settings.fontFamily, settings.fontFamilyLatin]);
+    if (appliedFontAssets?.key === key) {
+      document.documentElement.style.setProperty('--display-font-family', appliedFontAssets.stack);
+      return { version, mainLoaded: appliedFontAssets.mainLoaded };
+    }
+    if (!canLoad || (!loader.isAssetId(mainId) && !loader.isAssetId(latinId))) {
+      appliedFontAssets = null;
+      return { version, mainLoaded: false };
+    }
     try {
-      const [main, latin] = await Promise.all([
+      const results = await Promise.allSettled([
         loader.isAssetId(mainId) ? loader.load(mainId) : null,
         loader.isAssetId(latinId) ? loader.load(latinId) : null,
       ]);
       if (version !== fontAssetApplyVersion) return;
+      // A failed Latin face must not discard a successfully loaded CJK face (or vice versa).
+      const [main, latin] = results.map(result => result.status === 'fulfilled' ? result.value : null);
+      results.filter(result => result.status === 'rejected').forEach(result =>
+        console.warn('[Elitesand] 本機字型載入失敗，改用 CSS 字型堆疊：', result.reason?.message || result.reason));
       const mainStack = main ? `${quoteLocalFontFamily(main.family)}, ${settings.fontFamily || fallbackStack}` : (settings.fontFamily || fallbackStack);
       const finalStack = latin
         ? `${quoteLocalFontFamily(latin.family)}, ${mainStack}`
-        : mainStack;
+        : (settings.fontFamilyLatin ? `${quoteLocalFontFamily(settings.fontFamilyLatin)}, ${mainStack}` : mainStack);
       document.documentElement.style.setProperty('--display-font-family', finalStack);
+      // Cache only successful loads; a failed request must remain retryable.
+      appliedFontAssets = results.every(result => result.status === 'fulfilled')
+        ? { key, stack: finalStack, mainLoaded: !!main } : null;
+      KaraokeEngine.notifyTemplateSettings?.(settings);
+      return { version, mainLoaded: !!main };
     } catch (err) {
       if (version !== fontAssetApplyVersion) return;
       // display 是透明 OBS 輸出頁，不顯示錯誤遮罩；面板在選取前已會把錯誤提示給操作者。
@@ -560,6 +578,8 @@
       // CEF 從 CSS 認得任何一個就照樣渲染；真的都不行才退到 Noto fallback。
       console.warn('[Elitesand] 本機字型載入失敗，改用 CSS 字型堆疊：', err?.message || err);
       document.documentElement.style.setProperty('--display-font-family', settings.fontFamily || fallbackStack);
+      KaraokeEngine.notifyTemplateSettings?.(settings);
+      return { version, mainLoaded: false };
     }
   }
 
@@ -567,7 +587,11 @@
   // 解析後，名稱比不到時是「靜默用備援字」沒有錯誤訊號。這裡在顯示端量一次，探不到就
   // 送一個 diagnostic-only socket 事件給面板提示操作者——不改 state、不持久化、不 broadcast。
   let displayFontProbeTimer = null;
-  function scheduleDisplayFontProbe(settings) {
+  function scheduleDisplayFontProbe(settings, applied) {
+    clearTimeout(displayFontProbeTimer);
+    // A verified binary face uses its internal family, not the original OS name.
+    if (!applied || applied.version !== fontAssetApplyVersion || applied.mainLoaded) return;
+    const version = applied.version;
     const probe = window.ElitesandFontProbe;
     // 只有正式 OBS display 來源回報；面板內的 preview iframe 與 Spout 輸出不回報（避免重複／洗版）。
     if (!probe || typeof probe.check !== 'function' || isSpoutOutput || isPreviewClient) return;
@@ -577,7 +601,9 @@
     clearTimeout(displayFontProbeTimer);
     displayFontProbeTimer = setTimeout(async () => {
       let result;
+      if (version !== fontAssetApplyVersion) return;
       try { result = await probe.check(names); } catch (_) { return; }
+      if (version !== fontAssetApplyVersion) return;
       if (!result || result.resolved !== false || result.reason === 'no-candidates') return;
       try {
         SocketClient.send('font-probe:report', {
@@ -668,8 +694,10 @@
       fallbackFontStack = `${quoted}, ${s.fontFamily}`;
       root.setProperty('--display-font-family', fallbackFontStack);
     }
-    applyLocalFontAssets(s, fallbackFontStack);
-    scheduleDisplayFontProbe(s);
+    clearTimeout(displayFontProbeTimer);
+    applyLocalFontAssets(s, fallbackFontStack).then(applied => {
+      if (applied?.version === fontAssetApplyVersion) scheduleDisplayFontProbe(s, applied);
+    });
     // 保留句數
     if (typeof s.historyLines === 'number') {
       KaraokeEngine.setMaxHistoryLines(s.historyLines);
