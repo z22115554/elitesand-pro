@@ -6,14 +6,16 @@
  * - panelLocale：面板當下的介面語言。面板語言是裝置端偏好（localStorage），
  *   OBS 是另一個瀏覽器 profile 讀不到，所以由面板推上來存進 state。
  *
- * 語言清單直接取自 public/js/i18n.js，不在這裡再抄一份（抄了就會漂）。
+ * 語言清單刻意在這裡自己列一份，不 require('../../public/js/i18n')：
+ * 打包時面板的 <script> 會被合併進各頁 bundle、原始檔隨即刪除，只有
+ * build-production-bundles.js 的 SERVER_REQUIRED_PUBLIC_JS 白名單裡的同構模組會留下。
+ * i18n.js 是一整份翻譯表（上千條字串），為了 6 個語言代碼把它整份留在安裝目錄不划算；
+ * server 要的也只有代碼本身，不是譯文。兩邊的清單由 tests/run-tests.js 比對，會漂就紅。
  */
 
-const i18n = require('../../public/js/i18n');
-
 const FOLLOW = 'follow';
-const LOCALES = i18n.LOCALES.slice();
-const DEFAULT_LOCALE = i18n.DEFAULT_LOCALE;
+const LOCALES = ['zh-TW', 'en', 'ja', 'ko', 'zh-CN'];
+const DEFAULT_LOCALE = 'zh-TW';
 
 /** 使用者選的模式；認不得的一律退回 follow（不是退回中文——退回中文會蓋掉面板語言）。 */
 function normalizeMode(value) {

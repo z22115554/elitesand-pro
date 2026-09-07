@@ -6211,6 +6211,19 @@ test('OBS 未推流只結束 OBS 或待確認的直播 Session，不會中斷 Tw
   eq(session.source, null);
 });
 
+test('OBS 顯示語言：server 的語言清單不可跟面板的翻譯表漂掉', () => {
+  // server 端刻意不 require public/js/i18n.js（那是整份翻譯表，打包時會被併進頁面
+  // bundle 並刪掉原始檔；server 只需要語言代碼本身）。代價是清單有兩份，這裡比對。
+  const serverLocales = require('../server/utils/obs-locale');
+  const browserI18n = require('../public/js/i18n');
+  eq(serverLocales.LOCALES.join(','), browserI18n.LOCALES.join(','), 'server 與面板的語言清單必須一致：');
+  eq(serverLocales.DEFAULT_LOCALE, browserI18n.DEFAULT_LOCALE, '預設語言必須一致：');
+  const localeUtilCode = fs.readFileSync(path.join(__dirname, '../server/utils/obs-locale.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  ok(!localeUtilCode.includes("require('../../public/js/i18n')"),
+    'server 不可 require 面板的翻譯表（打包後那個檔案不存在，一啟動就 Cannot find module）：');
+});
+
 test('OBS 顯示語言：選單與面板語言各自獨立，跟隨模式才會被面板語言帶動', () => {
   // 這條線存在的理由：疊加層的語言是頁面載入當下解析一次的，OBS 又是獨立的瀏覽器
   // profile，讀不到面板的 localStorage——沒有這個廣播，直播中途換語言 OBS 不會變。
@@ -10866,6 +10879,42 @@ console.log('\n🌐 17. M6.1 介面語系層');
     eq(i18n.STORAGE_KEY, 'elitesand-ui-locale', '只使用獨立的裝置語系偏好鍵：');
   });
 }
+
+// ─── 打包契約：server 端 require 的 public/js 同構模組不可被 bundler 刪掉 ───
+test('server 端 require 的 public/js 檔案，必須全部在打包白名單裡', () => {
+  // 實際踩過（1.0.0 出貨前）：新增的 server/utils/obs-locale.js 去 require
+  // public/js/i18n.js，開發環境一切正常、npm test 全綠，但打包時面板的 <script>
+  // 會被合併進各頁 bundle、原始檔隨即刪除，只有這份白名單裡的檔案會留下——
+  // 裝起來的版本一啟動就 Cannot find module，整個 server 起不來。
+  // 那次是 build-portable 的 smoke 才攔到（跑一輪好幾分鐘），這裡用秒級的掃描守住。
+  const { SERVER_REQUIRED_PUBLIC_JS } = require('../tools/build-production-bundles');
+  const serverRoot = path.join(__dirname, '..', 'server');
+  const walkJs = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) return walkJs(full);
+    return e.isFile() && e.name.endsWith('.js') ? [full] : [];
+  });
+  // 只看實際程式碼：註解裡本來就會提到這些 require（例如 obs-locale.js 的檔頭就在
+  // 說明「為什麼不 require 面板的翻譯表」），掃到註解會變成假警報。
+  const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const required = new Map();
+  walkJs(serverRoot).forEach((file) => {
+    const src = stripComments(fs.readFileSync(file, 'utf8'));
+    for (const m of src.matchAll(/require\(\s*['"](?:\.\.\/)+public\/js\/([\w.-]+)['"]\s*\)/g)) {
+      const name = m[1].endsWith('.js') ? m[1] : `${m[1]}.js`;
+      if (!required.has(name)) required.set(name, path.relative(path.join(__dirname, '..'), file));
+    }
+  });
+  ok(required.size > 0, '掃描必須真的找得到同構模組（掃不到＝正規表示式壞了）：');
+  const missing = [...required].filter(([name]) => !SERVER_REQUIRED_PUBLIC_JS.includes(name));
+  eq(missing.length, 0,
+    `這些 public/js 檔案 server 端會 require()，但不在 SERVER_REQUIRED_PUBLIC_JS，打包後會被刪掉：`
+    + missing.map(([name, from]) => `
+    ${name}（被 ${from} require）`).join(''));
+  // 反向：白名單裡列了但其實沒人 require 的，留著只會讓安裝目錄多一份可讀原始碼
+  const stale = SERVER_REQUIRED_PUBLIC_JS.filter((name) => !required.has(name));
+  eq(stale.length, 0, `白名單有多餘項目（server 端已經沒有 require 了）：${stale.join('、')}`);
+});
 
 // ─── 閉源化批次 B-2：SoundTouch LGPL 不得混進專有 production bundle ───
 {

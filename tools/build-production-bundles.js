@@ -309,6 +309,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  SERVER_REQUIRED_PUBLIC_JS,
   scanForSoundTouchFingerprint,
   SOUNDTOUCH_FINGERPRINTS,
   minifyInPlace,
