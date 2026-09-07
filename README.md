@@ -156,6 +156,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand Pro Setup 1.0.0.exe"
 
 Elitesand Pro 會在**啟動時檢查更新**，也可在「連線與系統 → 檢查更新」手動檢查。相容時可直接在程式內套用增量更新（會顯示下載與安裝進度）；不相容時引導你到 GitHub Releases 下載完整 Installer。安裝完整版前請關閉 Elitesand Pro。
 
+**升級會保留你的歌曲庫、歌詞修改與設定**；不過升級前仍建議先備份重要資料。
+
 ### 隱私
 
 Elitesand Pro 以本機優先。兩項預設開啟、可在設定關閉的匿名回饋：**社群歌詞偏移分享**（幫助其他人少對一次時）與**每日用量彙總**。兩者皆不含歌單、媒體或個人識別資料，並於 [EULA](EULA.txt) 明列。其餘任何上傳都需要你明確開啟。
@@ -315,6 +317,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand Pro Setup 1.0.0.exe"
 ### Updates
 
 Elitesand Pro **checks for updates on startup** and on demand from **Connection & System → Check for updates**. When compatible it applies an incremental update in-app (with download and install progress); otherwise it points you to the full Installer on GitHub Releases. Close Elitesand Pro before running a full installer.
+
+**Upgrading keeps your song library, lyric edits, and settings.** Backing up important data before an upgrade is still recommended.
 
 ### Privacy
 
@@ -476,6 +480,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand Pro Setup 1.0.0.exe"
 
 Elitesand Pro は**起動時にアップデートを確認**し、「接続とシステム → アップデートを確認」から手動でも確認できます。互換がある場合はアプリ内で差分アップデートを適用（ダウンロードとインストールの進行状況を表示）、互換が無い場合は GitHub Releases の完全版 Installer へ案内します。完全版を実行する前に Elitesand Pro を終了してください。
 
+**アップグレードしても曲ライブラリ・歌詞の編集・設定は保持されます。** ただしアップグレード前に重要なデータをバックアップすることをおすすめします。
+
 ### プライバシー
 
 Elitesand Pro はローカル優先です。既定でオン・設定でオフにできる匿名の貢献が 2 つあります：**コミュニティ歌詞オフセット共有**（他の人の対時作業を減らす）と**日次使用量集計**。いずれもセットリスト・メディア・個人識別情報を含まず、[EULA](EULA.txt) に明記されています。その他のアップロードは明示的なオプトインが必要です。
@@ -636,6 +642,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand Pro Setup 1.0.0.exe"
 
 Elitesand Pro는 **시작할 때 업데이트를 확인**하며 "연결 및 시스템 → 업데이트 확인"에서 수동으로도 확인할 수 있습니다. 호환되면 앱 내에서 증분 업데이트를 적용하고(다운로드·설치 진행률 표시), 호환되지 않으면 GitHub Releases의 전체 Installer로 안내합니다. 전체 버전을 실행하기 전에 Elitesand Pro를 종료하세요.
 
+**업그레이드해도 곡 라이브러리, 가사 편집, 설정은 그대로 유지됩니다.** 다만 업그레이드 전에 중요한 데이터를 백업하는 것을 권장합니다.
+
 ### 개인정보
 
 Elitesand Pro는 로컬 우선입니다. 기본으로 켜져 있고 설정에서 끌 수 있는 익명 기여가 두 가지 있습니다: **커뮤니티 가사 오프셋 공유**(다른 사람의 싱크 작업을 줄임)와 **일일 사용량 집계**. 둘 다 세트리스트, 미디어, 개인 식별 정보를 포함하지 않으며 [EULA](EULA.txt)에 명시되어 있습니다. 그 밖의 업로드는 명시적 옵트인이 필요합니다.
@@ -795,6 +803,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand Pro Setup 1.0.0.exe"
 ### 更新
 
 Elitesand Pro 会在**启动时检查更新**，也可在「连接与系统 → 检查更新」手动检查。兼容时可直接在程序内应用增量更新（会显示下载与安装进度）；不兼容时引导你到 GitHub Releases 下载完整 Installer。安装完整版前请关闭 Elitesand Pro。
+
+**升级会保留你的歌曲库、歌词修改与设置**；不过升级前仍建议先备份重要数据。
 
 ### 隐私
 
