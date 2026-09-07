@@ -107,4 +107,13 @@ module.exports = [
   // 轉貼/合輯頻道常見的音質行銷字樣（無損音樂／FLAC／純享…），混進標題會同時污染顯示歌名跟
   // 歌詞搜尋 query（見 issue #9：使用者匯入這支影片，播放的卻是別首歌的歌詞）。
   { group: 'quality-tags', raw: '張宇 傘下 無損音樂FLAC 歌詞LYRICS 純享', title: '傘下', artist: '張宇' },
+  // 2026-08-30 清庫歸出的解析破口（memory `import-parse-failure-fingerprints` 第 2 類）。
+  // 指紋：歌名尾端留下落單的 ')' 或 ' 版)'（括號裡塞了兩個以上宣傳詞，逐詞規則只咬掉一個），
+  // 以及上傳者拿長得像斜線的字元（⧸ U+29F8、∕ U+2215、⁄ U+2044）繞過 YouTube 的檔名限制。
+  { group: 'bracket-cleanup', raw: 'Jeremy Zucker - I miss you more (中文字幕版)', title: 'I miss you more', artist: 'Jeremy Zucker' },
+  { group: 'bracket-cleanup', raw: '張學友 - 囚鳥 (Live版)', title: '囚鳥', artist: '張學友' },
+  { group: 'bracket-cleanup', raw: '張雨生 - 大海 (國)', title: '大海', artist: '張雨生' },
+  { group: 'bracket-cleanup', raw: '彭佳慧 - 囚鳥 (官方完整版MV)(Live版)', title: '囚鳥', artist: '彭佳慧' },
+  { group: 'fake-slash', raw: 'Rev. from DVL - Ref：rain (Eng⧸Rom⧸Han Lyrics)', title: 'Ref:rain', artist: 'Rev. from DVL' },
+  { group: 'fake-slash', raw: 'Aimer - 花の唄 M⧸V', title: '花の唄', artist: 'Aimer' },
 ];

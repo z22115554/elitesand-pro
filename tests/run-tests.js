@@ -4830,7 +4830,7 @@ test('本地音檔上傳：檔名先還原 UTF-8 再自動拆歌手/歌名，不
   eq(parsed.title, '稻香');
 });
 
-test('95 首真實／伴奏標題基準：歌名與歌手正確率皆至少 95%', () => {
+test('真實／伴奏標題基準：歌名與歌手正確率皆至少 95%', () => {
   const cases = require('./title-parser-cases');
   const normalizeIdentity = (value) => String(value || '')
     .normalize('NFKC')
@@ -4853,6 +4853,27 @@ test('95 首真實／伴奏標題基準：歌名與歌手正確率皆至少 95%'
   const artistRate = artistPassed / cases.length;
   ok(titleRate >= 0.95, `歌名正確率 ${(titleRate * 100).toFixed(1)}%，錯誤：${misses.join('；')}`);
   ok(artistRate >= 0.95, `歌手正確率 ${(artistRate * 100).toFixed(1)}%，錯誤：${misses.join('；')}`);
+});
+
+test('標題清理：噪音括號整組吃掉、假斜線正規化，且不動歌名本身的括號', () => {
+  // 2026-08-30 清庫的第 2 類指紋（memory `import-parse-failure-fingerprints`）：
+  // NOISE_PATTERNS 是逐個詞比對，一個括號裡塞兩個以上宣傳詞時只咬掉其中一個，
+  // 剩半組括號就變尾綴垃圾（'氧氣 版)'、'囚鳥 )'）；上傳者又會拿 ⧸ ∕ ⁄ 假冒 '/'
+  // 繞過 YouTube 檔名限制，NFKC 併不掉，'M⧸V' 就原封不動留在歌名裡。
+  const id = (raw) => AudioProcessor.resolveTrackIdentity({ title: raw });
+
+  eq(id('Jeremy Zucker - I miss you more (中文字幕版)').title, 'I miss you more', '括號被逐詞規則咬掉關鍵字後，落單的「版)」要一起清掉: ');
+  eq(id('彭佳慧 - 囚鳥 (官方完整版MV)(Live版)').title, '囚鳥', '連續兩組噪音括號都要清掉: ');
+  eq(id('張雨生 - 大海 (國)').title, '大海', '整組只有語言標記的括號要清掉: ');
+  eq(id('Aimer - 花の唄 M⧸V').artist, 'Aimer', "假斜線的 'M⧸V' 沒清掉會被當成分隔字元、把歌手切斷: ");
+  eq(id('Aimer - 花の唄 M⧸V').title, '花の唄', '假斜線正規化後的 M/V 要視為噪音: ');
+  eq(id('Rev. from DVL - Ref：rain (Eng⧸Rom⧸Han Lyrics)').title, 'Ref:rain', '括號整組是語言標記＋Lyrics，要整組清掉而不是留下半個左括號: ');
+
+  // 歌名本身帶的括號絕不能被清掉——這是刻意不把 Ver／Version 放進噪音詞的原因。
+  eq(id('《K歌之王 AIR (Day Version)》陳奕迅 Eason Chan with The Heritage Orchestra【Official MV】').title,
+    'K歌之王 AIR (Day Version)', '歌名自己的括號要保留: ');
+  // 括號是兩段之間唯一的分隔時，刪掉會把上傳者署名黏進歌手名。
+  eq(id('彩虹- 周杰倫（KTV、無人聲、伴奏）LukeForSong').artist, '周杰倫', '噪音括號當分隔用時，後面的頻道署名不可黏進歌手: ');
 });
 
 test('酷狗／QQ：緊湊標題行後的中英雙語製作名單整段移除', () => {

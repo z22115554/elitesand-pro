@@ -285,6 +285,9 @@ const NOISE_PATTERNS = [
   /\(?\s*官方(?:MV|音樂錄影帶|Music\s*Video)?\s*\)?/gi,
   /\(?\s*Official\s*\)?/gi,
   /\bMV\b/gi,
+  // 'M/V'（含上傳者用來繞過 YouTube 檔名限制的 ⧸ ∕ ⁄，正規化後都是 '/'）。要在這裡吃掉，
+  // 否則後面的 '/' 分隔規則會把 'Aimer - 花の唄 M/V' 切成歌手『…M』、歌名『V』。
+  /\(?\s*M\s*[/.]\s*V\s*\)?/gi,
   /\bPV\b/gi,
   // 畫質相關
   /\(?\s*(HD|4K|8K|UHD|HDR)\s*\)?/gi,
@@ -328,6 +331,45 @@ const NOISE_PATTERNS = [
   /\(\s*\)/g,
 ];
 
+// 括號組整組清除／修復：NOISE_PATTERNS 是「逐個詞」比對，一個括號裡塞兩個以上宣傳詞時
+// 只會咬掉其中一個，剩下半組括號就變成尾綴垃圾（'I miss you more 版)'、'(Eng/Rom/Han'
+// 都是 2026-08-30 清庫時實際撿到的指紋）。所以先把「整組都是噪音」的括號吃掉，最後再修
+// 不成對的括號。刻意不含 Ver／Version：'K歌之王 AIR (Day Version)' 的括號是歌名的一部分。
+const BRACKET_NOISE_WORD = /官方|完整版|精華版|精华版|首播|音樂錄影帶|音乐录影带|動態歌詞|动态歌词|歌詞|歌词|字幕|拼音|\bMV\b|\bPV\b|\bM\/V\b|Official|Lyrics?|Audio|Karaoke|卡拉\s*OK|伴奏|純音樂|纯音乐|去人聲|去人声|Live|\bHD\b|\b[48]K\b|\bUHD\b|\bHDR\b|Remaster(?:ed)?|中文|英文|日文|韓文|韩文|\bEng\b|\bRom\b|\bHan\b|國語|国语|粵語|粤语|台語|台语/i;
+// 只有「整組就是這幾個字」才算噪音（'(國)'、'(粵語版)'）；出現在別的字裡不算。
+const BRACKET_NOISE_EXACT = /^(?:版|(?:國|国|粵|粤|台|日|韓|英|中)(?:語|语)?版?)$/;
+
+function stripNoiseBracketGroups(value) {
+  const source = String(value || '');
+  return source.replace(/[（(]([^（）()]{0,24})[）)]/g, (whole, inner, offset) => {
+    const content = inner.trim();
+    const isNoise = !content || BRACKET_NOISE_EXACT.test(content) || BRACKET_NOISE_WORD.test(content);
+    if (!isNoise) return whole;
+    // 兩側都直接貼著字時，這組括號本身就是唯一的分隔（'周杰倫（KTV、伴奏）LukeForSong'
+    // ——上傳者把頻道署名黏在歌手後面）。刪成空字串會黏成一個詞，換成空白又會讓署名變成
+    // 歌手名的一部分；換成頓號才會走到 cleanIdentityPart() 既有的「已知歌手 + 頓號後截斷」。
+    const before = source[offset - 1];
+    const after = source[offset + whole.length];
+    const glued = before && after && !/\s/.test(before) && !/\s/.test(after);
+    return glued ? '、' : ' ';
+  });
+}
+
+/** 清完噪音後可能留下沒有配對的括號；成對的一律不動（歌名本來就可能帶括號）。 */
+function repairBrackets(value) {
+  const text = String(value || '');
+  const drop = new Set();
+  const stack = [];
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '(' || ch === '（') stack.push(i);
+    else if (ch === ')' || ch === '）') { if (stack.length) stack.pop(); else drop.add(i); }
+  }
+  stack.forEach((index) => drop.add(index));
+  if (!drop.size) return text;
+  return text.split('').filter((ch, index) => !drop.has(index)).join('');
+}
+
 const LEADING_NOISE_TAG = /^\s*(?:【\s*([^】]+)\s*】|\[\s*([^\]]+)\s*\]|「\s*([^」]+)\s*」|『\s*([^』]+)\s*』|《\s*([^》]+)\s*》|〈\s*([^〉]+)\s*〉)\s*/;
 const NOISE_TAG_TEXT = /(?:^|\b)(?:mv|pv|official|lyrics?|audio|video|ktv|karaoke)(?:\b|$)|動態歌詞|动态歌词|歌回剪輯|歌回剪辑|歌雜剪輯|歌杂剪辑|伴奏|純音樂|纯音乐|女版|男版|完整版|官方版|原版|\bch\.?\s*[-–—]/i;
 const PROMO_TAIL = /(?:全球網路大首播|全球网络大首播|網路大首播|网络大首播|首播|完整版|完整版本|官方版)+/gi;
@@ -341,6 +383,10 @@ function normalizeVideoText(value) {
   return compactSpaces(String(value || '')
     .normalize('NFKC')
     .replace(/[|｜]/g, '|')
+    // YouTube 標題不能有真的 '/'，上傳者改用長得很像的字元（⧸ U+29F8、∕ U+2215、⁄ U+2044）。
+    // NFKC 不會把它們併成 '/'，不先換掉的話 ' M⧸V'、'(Eng⧸Rom⧸Han Lyrics)' 這種噪音會躲過
+    // 所有規則、原封不動留在歌名裡（2026-08-30 清庫指紋之一）。
+    .replace(/[⧸∕⁄]/g, '/')
     .replace(/／/g, '/')
     .replace(/[–—−]/g, '-'));
 }
@@ -779,9 +825,9 @@ class AudioProcessor {
 
   static cleanTrackTitle(title) {
     if (!title || typeof title !== 'string') return '';
-    let cleaned = title;
+    let cleaned = stripNoiseBracketGroups(normalizeVideoText(title));
     for (const pattern of NOISE_PATTERNS) cleaned = cleaned.replace(pattern, '');
-    return cleanIdentityPart(cleaned.replace(/\s+/g, ' ').trim(), 'title');
+    return cleanIdentityPart(repairBrackets(cleaned).replace(/\s+/g, ' ').trim(), 'title');
   }
 
   /**
@@ -1459,9 +1505,9 @@ class AudioProcessor {
     if (!rawTitle) return { artist: '', title: '', confidence: 0, reason: 'empty' };
 
     const isLyricRepost = /動態歌詞|动态歌词|歌詞Lyrics|歌词Lyrics|歌詞拼音|歌词拼音|歌回剪輯|歌回剪辑/i.test(rawTitle);
-    let cleaned = stripLeadingNoiseTags(normalizeVideoText(rawTitle));
+    let cleaned = stripNoiseBracketGroups(stripLeadingNoiseTags(normalizeVideoText(rawTitle)));
     for (const pattern of NOISE_PATTERNS) cleaned = cleaned.replace(pattern, '');
-    cleaned = compactSpaces(cleaned.replace(PUBLISHER_TAIL, '').replace(PROMO_TAIL, ''));
+    cleaned = compactSpaces(repairBrackets(cleaned).replace(PUBLISHER_TAIL, '').replace(PROMO_TAIL, ''));
     cleaned = cleaned
       .replace(/(?:【\s*】|《\s*》|〈\s*〉|「\s*」|『\s*』)/g, '')
       .replace(/^\s*[+#-]?\s*\d+\s*\b/i, '')
