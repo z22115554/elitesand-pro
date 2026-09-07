@@ -811,16 +811,41 @@ class AudioProcessor {
   }
 
   /** yt-dlp 的 artist(s) 是音樂中繼資料；channel/uploader 只作最後退路。 */
+  /**
+   * yt-dlp 對合唱曲常常同時給 `artists: ['A','B']` 與 `artist: 'A, B'`（YouTube Music 來源
+   * 尤其明顯）。舊版逐字串比對去重，兩者字面不同都被留下 → 面板顯示「A & B & A, B」。
+   *
+   * 這裡改成「拆成單一藝人名只為了判斷重複」：某個值拆出來的每個名字都已經出現過，
+   * 整個值就是重複的、丟掉；否則整串原樣保留、不重排。刻意不把拆開後的名字重新
+   * 組合輸出——名字裡本來就可能有逗號（Tyler, The Creator）或 &（Simon & Garfunkel），
+   * 拆了再拼會把一個人拆成兩個。
+   */
+  static splitArtistNames(value) {
+    return String(value || '')
+      .split(/\s*(?:[,，、&＆/／×]|\b(?:feat|ft)\b\.?)\s*/i)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
   static getMetadataArtist(info = {}) {
     const values = [];
     if (Array.isArray(info.artists)) values.push(...info.artists);
     if (info.artist) values.push(info.artist);
     if (info.albumArtist) values.push(info.albumArtist);
     const seen = new Set();
-    return values
-      .map((value) => this.cleanArtistName(value))
-      .filter((value) => value && !seen.has(value.toLowerCase()) && seen.add(value.toLowerCase()))
-      .join(' & ');
+    const key = (text) => String(text || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+    const kept = [];
+    for (const value of values) {
+      const cleaned = this.cleanArtistName(value);
+      if (!cleaned || seen.has(key(cleaned))) continue;
+      const names = this.splitArtistNames(cleaned);
+      // 拆出來的名字全都收過了 ⇒ 這個值只是同一組人的另一種寫法，不再重複列一次。
+      if (names.length && names.every((name) => seen.has(key(name)))) continue;
+      kept.push(cleaned);
+      seen.add(key(cleaned));
+      names.forEach((name) => seen.add(key(name)));
+    }
+    return kept.join(' & ');
   }
 
   static cleanTrackTitle(title) {

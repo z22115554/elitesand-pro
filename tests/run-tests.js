@@ -4876,6 +4876,27 @@ test('標題清理：噪音括號整組吃掉、假斜線正規化，且不動�
   eq(id('彩虹- 周杰倫（KTV、無人聲、伴奏）LukeForSong').artist, '周杰倫', '噪音括號當分隔用時，後面的頻道署名不可黏進歌手: ');
 });
 
+test('合唱曲的結構化歌手欄位不重複列出同一組人', () => {
+  // 實測回報：YouTube Music 來源的合唱曲，面板顯示「陳慧琳 & 馮德倫 & 陳慧琳, 馮德倫」。
+  // yt-dlp 同時給 artists:['A','B'] 與 artist:'A, B'，舊版逐字串比對去重，兩者字面不同
+  // 都被留下。改成「拆成單一藝人名只為了判斷重複」：整個值的每個名字都收過就丟掉。
+  const artistOf = (info) => AudioProcessor.getMetadataArtist(info);
+
+  eq(artistOf({ artists: ['陳慧琳', '馮德倫'], artist: '陳慧琳, 馮德倫', albumArtist: '陳慧琳' }),
+    '陳慧琳 & 馮德倫', '同一組人的另一種寫法不可再列一次: ');
+  eq(artistOf({ artists: ['周華健', '李宗盛', '品冠'], artist: '周華健、李宗盛、品冠' }),
+    '周華健 & 李宗盛 & 品冠', '頓號寫法也算同一組人: ');
+  eq(artistOf({ artists: ['DAOKO', '米津玄師'], artist: 'DAOKO feat. 米津玄師' }),
+    'DAOKO & 米津玄師', 'feat./ft. 寫法也算同一組人: ');
+
+  // 拆開只為了比對，不可拿拆出來的名字重新拼——這兩個名字本身就含分隔符號。
+  eq(artistOf({ artist: 'Tyler, The Creator' }), 'Tyler, The Creator', '名字裡的逗號不可被當成分隔: ');
+  eq(artistOf({ artist: 'Simon & Garfunkel' }), 'Simon & Garfunkel', '名字裡的 & 不可被當成分隔: ');
+  // 真的是兩組不同的人時仍要都留著。
+  eq(artistOf({ artists: ['安溥'], artist: '張懸' }), '安溥 & 張懸', '不同名字不可被吞掉: ');
+  eq(artistOf({}), '', '沒有結構化欄位時回空字串: ');
+});
+
 test('酷狗／QQ：緊湊標題行後的中英雙語製作名單整段移除', () => {
   const lines = [
     { time: 0, text: '浪子的路-RPG/茄子蛋' },
