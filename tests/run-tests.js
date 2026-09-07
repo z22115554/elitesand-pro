@@ -8394,27 +8394,47 @@ test('R6-3 非經典模板會在可見範圍說明中交代拼音與諧音限制
   ok(lyricExtras.includes("classic: { label: '經典疊層'") && lyricExtras.includes('拼音與諧音'), '經典疊層必須持續明示為雙語可用模板: ');
 });
 
-test('歌詞模板使用 Elitesand Pro 自有名稱與新 ID', () => {
+test('歌詞模板名稱：程式、i18n 與 README 必須是同一套', () => {
+  // 2026-07-17 把三個模板改名成 Pulse/Facet/Aura 並加了這條守衛，但 7/27 補五語 i18n 時
+  // template.* 又把詩意舊名寫了回去；I18n.t() 優先於 label，於是使用者看到的一直是
+  // 「星砂流光／折光階梯／潮汐心景」，README 與這條測試卻還停在 Pulse/Facet/Aura——
+  // 三套名字各說各話十週沒被發現，因為當時的守衛是「再抄一份寫死清單」。
+  // 2026-09-07 使用者決定認回詩意名稱，這條改成從 i18n 推導，不再抄第二份。
   const lyricExtras = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-extras.js'), 'utf8');
   const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
-  const expectedLabels = {
-    pulse: 'Pulse',
-    facet: 'Facet',
-    drift: 'Drift',
-    aura: 'Aura',
+  const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const i18nCatalogs = require('../public/js/i18n').catalogs;
+
+  const ids = /const TEMPLATE_IDS = \[([^\]]*)\]/.exec(lyricExtras)[1]
+    .split(',').map((v) => v.trim().replace(/'/g, '')).filter(Boolean);
+  // 面板卡片掛 hidden 的是「暫停提供、只為舊設定保留」的模板，不該出現在 README
+  // 不用正則跳脫（樣板字串裡的 \s 會被吃掉變成字母 s，實際踩過）：直接取出那顆按鈕的
+  // 開頭標籤，看有沒有獨立的 hidden 屬性。
+  const cardTag = (id) => {
+    const at = indexHtml.indexOf(`data-template="${id}"`);
+    return at < 0 ? '' : indexHtml.slice(at, indexHtml.indexOf('>', at));
   };
-  Object.entries(expectedLabels).forEach(([template, label]) => {
-    ok(lyricExtras.includes(`${template}: { label: '${label}'`), `${template} 必須保留技術 ID 並更新顯示名稱: `);
+  const hidden = ids.filter((id) => / hidden[ =]/.test(`${cardTag(id)} `));
+  ok(hidden.includes('drift'), '斜拍告白（drift）應仍為隱藏模板：');
+
+  ids.forEach((id) => {
+    const zh = i18nCatalogs['zh-TW'][`template.${id}`];
+    const en = i18nCatalogs.en[`template.${id}`];
+    ok(zh && en, `${id} 必須有 template.${id} 的五語名稱：`);
+    // 程式碼內的 label 是 I18n 不可用時的退路，必須跟正式名稱一致
+    ok(lyricExtras.includes(`${id}: { label: '${zh}'`), `${id} 的 label 必須是正式名稱 ${zh}：`);
+    if (hidden.includes(id)) {
+      ok(!readme.includes(en), `${id} 已隱藏，README 不可把它列成可選模板（${en}）：`);
+    } else {
+      ok(readme.includes(zh), `README 繁中區必須用使用者看得到的名稱 ${zh}：`);
+      ok(readme.includes(en), `README 英文區必須用使用者看得到的名稱 ${en}：`);
+    }
   });
-  ['Stardust Flow', 'Prism Steps', 'Diagonal Confession', 'Tidal Mindscape', 'Neon Duet'].forEach((retiredName) => {
-    ok(!readme.includes(retiredName), `README 不可保留已退休的模板名稱 ${retiredName}: `);
+
+  // 真正退休、任何地方都不該再出現的舊名（改名前的第一版命名）
+  ['Stardust Flow', 'Diagonal Confession', 'Neon Duet'].forEach((retired) => {
+    ok(!readme.includes(retired), `README 不可保留已退休的模板名稱 ${retired}：`);
   });
-  // drift（斜拍告白）從桌面與手機選擇器隱藏，README 不得把它列成可選模板。
-  // README 1.0.0 改成模板對照表，不再是單行清單，所以逐一檢查顯示名稱有沒有到位。
-  ['Classic Overlay', 'Pulse', 'Facet', 'Aura', 'KTV', 'Vertical Flow', 'Paper Strip', 'Mirror', 'Chat Bubble', 'Lightboard', 'Windborne Particles'].forEach((label) => {
-    ok(readme.includes(label), `README 必須列出模板顯示名稱 ${label}: `);
-  });
-  ok(!/Classic Overlay, Pulse, Facet, Drift/.test(readme) && !/Pulse ?\/ ?Facet ?\/ ?Drift/.test(readme), 'README 不可把隱藏中的 Drift 列為可選模板: ');
 });
 
 test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', () => {

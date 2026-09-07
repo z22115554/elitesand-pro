@@ -66,7 +66,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 | 模板 | 一句話 |
 |---|---|
 | 經典疊層 | 完整歌詞畫面，支援歷史行、拼音與諧音 |
-| Pulse / Facet / Aura | 單句聚焦的三種節奏與氛圍 |
+| 星砂流光 / 折光階梯 / 潮汐心景 | 單句聚焦的三種節奏與氛圍 |
 | 霓彩伴唱 | 固定雙行伴唱畫面，間奏與結尾可自訂字樣 |
 | 直書句流 | 直行兩側錯落，唱過留殘影，可選四相漂字進場 |
 | 紙帶逐字 | 紙帶展開後逐字填入，橫式或直式 |
@@ -85,7 +85,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 
 - 已唱／正在唱／接下來，一目了然。
 - 自動記錄場次歌曲與時間戳，可複製成 YouTube 章節。
-- 十餘種版型（角落清單、時間軸、發車看板、手帳頁、膠卷…），依 OBS Browser Source 尺寸自動排版。
+- 十餘種版型（經典資訊、發車看板、手帳頁、底片邊條、夜間霓虹…），依 OBS Browser Source 尺寸自動排版。
 - 長歌名與長歌手名自動分配空間，重要資訊不被擠掉。
 - 可建立、保存與切換不同直播場次。
 
@@ -226,13 +226,13 @@ Eleven performance templates, each with independent style settings (font, size, 
 | Template | In one line |
 |---|---|
 | Classic Overlay | Full lyric view with history lines, pinyin, and phonetic hints |
-| Pulse / Facet / Aura | Three single-line moods and rhythms |
-| KTV | Fixed two-line karaoke view with custom interlude/ending text |
-| Vertical Flow | Staggered vertical columns, sung lines leave a fading trail |
+| Stardust Pulse / Prism Steps / Tidal Mindscape | Three single-line moods and rhythms |
+| Neon KTV | Fixed two-line karaoke view with custom interlude/ending text |
+| Vertical Verse Flow | Staggered vertical columns, sung lines leave a fading trail |
 | Paper Strip | Strip unrolls, then fills in character by character — horizontal or vertical |
 | Mirror | Solid original on the left, hollow mirrored text on the right, center kept clear |
-| Chat Bubble | iMessage-style typing, sticker drop during long interludes |
-| Lightboard | LED dot-matrix sign — sung dots lit, the rest dark |
+| Typewriter | iMessage-style typing, sticker drop during long interludes |
+| Light Board | LED dot-matrix sign — sung dots lit, the rest dark |
 | Windborne Particles | Particles scatter in the wind, then gather into the sung line; subtitle scale, vertical or split-sides |
 
 - Transparent Browser Sources with instant sync on setting changes.
@@ -245,7 +245,7 @@ Eleven performance templates, each with independent style settings (font, size, 
 
 - Sung / now playing / up next at a glance.
 - Automatic session logging with timestamps, exportable as YouTube chapters.
-- A dozen-plus layouts (corner list, timeline, departure board, notebook, film strip, …) that lay themselves out to the OBS Browser Source size.
+- A dozen-plus layouts (Classic Info, Departure Board, Notebook Page, Filmstrip, Night Neon, …) that lay themselves out to the OBS Browser Source size.
 - Long titles and artist names get their own space so key info isn't squeezed out.
 - Create, save, and switch between stream sessions.
 
@@ -386,12 +386,12 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 | テンプレート | ひとこと |
 |---|---|
 | クラシックオーバーレイ | 履歴行・ピンイン・発音ヒント対応の全体表示 |
-| Pulse / Facet / Aura | 単行フォーカスの 3 つの雰囲気 |
-| KTV | 固定 2 行のカラオケ表示、間奏・エンディング文言をカスタム可 |
-| 縦書きフロー | 左右に縦列が交錯、歌った行は残像を残す |
+| 星砂の流光 / 屈折の階段 / 潮汐の心景 | 単行フォーカスの 3 つの雰囲気 |
+| ネオン KTV | 固定 2 行のカラオケ表示、間奏・エンディング文言をカスタム可 |
+| 縦書き句流 | 左右に縦列が交錯、歌った行は残像を残す |
 | ペーパーストリップ | 紙帯が展開してから 1 文字ずつ埋める（横／縦） |
 | ミラー | 左に実体、右に中空の鏡像、中央は人物用に確保 |
-| チャットバブル | iMessage 風タイピング、長間奏にスタンプ |
+| タイプライター | iMessage 風タイピング、長間奏にスタンプ |
 | ライトボード | LED ドットマトリクス、歌った点は点灯、他は消灯 |
 | 風が文字を結ぶ | 風に散った粒子が歌っている行へ集まる。字幕サイズ、縦組みや左右振り分けが可能 |
 
@@ -405,7 +405,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 
 - 歌った曲／再生中／次の曲がひと目で分かる。
 - セッションを自動記録し、YouTube チャプターとして出力。
-- 十数種類のレイアウト（コーナーリスト、タイムライン、発車標、手帳、フィルム…）が OBS Browser Source のサイズに合わせて自動整形。
+- 十数種類のレイアウト（定番情報、発車看板、手帳ページ、フィルムストリップ、ナイトネオン…）が OBS Browser Source のサイズに合わせて自動整形。
 - 長い曲名・アーティスト名にも領域を確保。
 - セッションの作成・保存・切り替え。
 
@@ -546,12 +546,12 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 | 템플릿 | 한 줄 |
 |---|---|
 | 클래식 오버레이 | 기록 줄·병음·발음 힌트 지원 전체 표시 |
-| Pulse / Facet / Aura | 한 줄 집중형 세 가지 분위기 |
-| KTV | 고정 2줄 노래방 화면, 간주·엔딩 문구 커스텀 |
-| 세로 흐름 | 좌우 세로 열이 교차, 부른 줄은 잔상 |
+| 스타더스트 펄스 / 굴절 계단 / 조수 심상 | 한 줄 집중형 세 가지 분위기 |
+| 네온 KTV | 고정 2줄 노래방 화면, 간주·엔딩 문구 커스텀 |
+| 세로쓰기 문장 흐름 | 좌우 세로 열이 교차, 부른 줄은 잔상 |
 | 페이퍼 스트립 | 종이 띠가 펼쳐진 뒤 한 글자씩 채움(가로/세로) |
 | 미러 | 왼쪽은 실체, 오른쪽은 속 빈 거울상, 가운데는 인물용 |
-| 채팅 버블 | iMessage 스타일 타이핑, 긴 간주에 스티커 |
+| 타자기 | iMessage 스타일 타이핑, 긴 간주에 스티커 |
 | 라이트보드 | LED 도트 매트릭스, 부른 점은 켜지고 나머지는 꺼짐 |
 | 바람 입자 글자 | 바람에 흩어진 입자가 부르는 줄로 모임; 자막 크기, 세로쓰기 또는 좌우 분산 |
 
@@ -565,7 +565,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 
 - 부른 곡 / 재생 중 / 다음 곡을 한눈에.
 - 세션 자동 기록, YouTube 챕터로 내보내기.
-- 십여 가지 레이아웃(코너 목록, 타임라인, 행선 안내판, 수첩, 필름…)이 OBS Browser Source 크기에 맞춰 자동 배치.
+- 십여 가지 레이아웃(클래식 정보, 출발 안내판, 다이어리 페이지, 필름 스트립, 나이트 네온…)이 OBS Browser Source 크기에 맞춰 자동 배치.
 - 긴 제목·아티스트명에도 공간 확보.
 - 세션 생성·저장·전환.
 
@@ -706,7 +706,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 | 模板 | 一句话 |
 |---|---|
 | 经典叠层 | 完整歌词画面，支持历史行、拼音与谐音 |
-| Pulse / Facet / Aura | 单句聚焦的三种节奏与氛围 |
+| 星砂流光 / 折光阶梯 / 潮汐心景 | 单句聚焦的三种节奏与氛围 |
 | 霓彩伴唱 | 固定双行伴唱画面，间奏与结尾可自定义字样 |
 | 竖排句流 | 竖行两侧错落，唱过留残影，可选四相漂字进场 |
 | 纸带逐字 | 纸带展开后逐字填入，横式或竖式 |
@@ -725,7 +725,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 
 - 已唱／正在唱／接下来，一目了然。
 - 自动记录场次歌曲与时间戳，可复制成 YouTube 章节。
-- 十余种版型（角落列表、时间轴、发车看板、手账页、胶卷…），依 OBS Browser Source 尺寸自动排版。
+- 十余种版型（经典信息、发车看板、手账页、底片边条、夜间霓虹…），依 OBS Browser Source 尺寸自动排版。
 - 长歌名与长歌手名自动分配空间，重要信息不被挤掉。
 - 可创建、保存与切换不同直播场次。
 

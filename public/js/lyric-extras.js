@@ -114,10 +114,10 @@
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
     classic: { label: '經典疊層', description: '完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。', scope: '可調：九宮格位置、字型、歷史行、拼音與諧音、描邊與陰影。', positionMode: 'grid', supportsIntensity: false, supportsClassicControls: true },
-    pulse: { label: 'Pulse', description: '明亮聚焦的單句演出，適合主唱與節奏感明確的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
-    facet: { label: 'Facet', description: '段落感清楚、節奏分明的歌詞動畫。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
-    drift: { label: 'Drift', description: '斜向節拍與逐字律動，適合節奏鮮明的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
-    aura: { label: 'Aura', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    pulse: { label: '星砂流光', description: '明亮聚焦的單句演出，適合主唱與節奏感明確的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    facet: { label: '折光階梯', description: '段落感清楚、節奏分明的歌詞動畫。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    drift: { label: '斜拍告白', description: '斜向節拍與逐字律動，適合節奏鮮明的歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
+    aura: { label: '潮汐心景', description: '沉浸式的慢節奏氛圍，適合抒情與敘事歌曲。', scope: '可調：舞台位置、字型、配色、動畫強度與背景。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
     ktv: { label: '霓彩伴唱', description: '固定雙行演唱畫面，適合逐字或跟唱情境。長間奏與全曲結尾會顯示畫面字樣，可自訂；留空時依顯示語言帶預設（繁中維持原本文案）。', scope: '可調：字型、配色、背景、詳細邊距、長間奏／結尾字樣；雙行位置固定。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     columnflow: { label: '直書句流', description: '直行在畫面兩側自然錯落，唱過的句子留下淡淡殘影。外觀：素筆（逐字浮現）或字札（每字一格紙札歪斜掉入）。逐字進場另設一欄：原樣，或四相漂字（每字從四角帶弧度漂入定點、入場後靜止，可調沉穩／標準／狂放強度）。', scope: '可調：外觀（素筆／字札）、逐字進場（原樣／四相漂字）、左右配置、保留句數、中央安全距離、字型、配色與背景；選四相漂字時可調動畫強度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     paperstrip: { label: '紙帶逐字', description: '紙帶先展開，再依歌詞時間逐字填入；每頁會依句長、總字數與節奏穩定選擇 2～4 句，小／中／大尺寸在進場前一次決定。排向可選橫式（紙帶由左往右展開，預設白條黑字）或直式（紙帶由上往下展開、字沿直欄，預設黑條白字）。', scope: '可調：排向（橫式／直式）、紙條顏色、舞台位置、中央安全距離、字型、文字色。偏左／偏右與左右分散都會限制可用寬度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: false, supportsClassicControls: false },
