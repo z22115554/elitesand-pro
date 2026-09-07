@@ -10933,6 +10933,41 @@ test('EULA 閘門的層級必須高過新手導覽，導覽也要等同意完成
     'eula-gate.js 必須比 onboarding-tour.js 早載入：');
 });
 
+// ─── 對外檔案：README 連到的檔案都必須納入公開倉同步檢查 ───
+test('README 連到的本機檔案，都必須在對外同步檢查的清單裡', () => {
+  // 2026-09-08 發 1.0.0 時踩到兩次「兩個 repo 的對外檔案默默漂開」：公開倉 README
+  // 完全沒有 1.0.0 的內容、公開倉 EULA 還停在 1.3.0（程式強制同意的是 1.8.0）。
+  // 真正的比對要連網，放在 tools/check-public-files.js（PACKAGING §6 的發版前 gate）；
+  // 這條是它防不到的那半：有人新增對外檔案並從 README 連過去，卻忘了加進清單。
+  const { FILES } = require('../tools/check-public-files');
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+
+  // 取出所有 markdown 連結目標，不用正則（樣板/heredoc 對反斜線不友善，實際踩過）
+  const targets = new Set();
+  let cursor = 0;
+  for (;;) {
+    const open = readme.indexOf('](', cursor);
+    if (open < 0) break;
+    const close = readme.indexOf(')', open);
+    if (close < 0) break;
+    targets.add(readme.slice(open + 2, close).trim());
+    cursor = close + 1;
+  }
+  ok(targets.size > 0, 'README 應該有連結可供檢查（解析壞了？）：');
+
+  // 只看「連到 repo 內某個檔案」的相對連結：錨點、外部網址、上層相對路徑都不算
+  const localFiles = [...targets].filter((t) => (
+    t && !t.startsWith('#') && !t.includes('://') && !t.startsWith('../')
+      && fs.existsSync(path.join(__dirname, '..', t))
+  ));
+  ok(localFiles.length > 0, '應至少有一個指向 repo 內檔案的連結：');
+
+  const missing = localFiles.filter((f) => !FILES.includes(f));
+  eq(missing.length, 0,
+    `這些檔案 README 連得到、使用者會點，但不在對外同步清單裡（公開倉會漂掉）：${missing.join('、')}`);
+  ok(FILES.includes('README.md'), 'README.md 自己也必須在同步清單裡：');
+});
+
 // ─── 打包契約：server 端 require 的 public/js 同構模組不可被 bundler 刪掉 ───
 test('server 端 require 的 public/js 檔案，必須全部在打包白名單裡', () => {
   // 實際踩過（1.0.0 出貨前）：新增的 server/utils/obs-locale.js 去 require
