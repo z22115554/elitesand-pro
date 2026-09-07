@@ -97,3 +97,8 @@ ai-experiments/audio-routing-probe/obs-drift-test/synthetic*.wav
 ai-experiments/
 .playwright-cli/
 .tmp/
+# Playwright 每次跑完寫的執行結果暫存（只有 status/failedTests，沒有版控價值）
+test-results/
+# 更新控制平面的本機產物：發版時用 tools/update-publisher 產生／上傳到 R2，
+# repo 裡留著只會跟線上狀態不同步（現況是空計畫）。
+cloudflare/update-worker/control/
