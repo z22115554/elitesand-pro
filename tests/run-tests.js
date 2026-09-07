@@ -9087,6 +9087,26 @@ test('連點切歌不會讓 <audio> 與 SoundTouch 兩條鏈同時出聲', () =>
     '暫停必須兩條鏈都停，否則另一條仍會讓進度條繼續走：');
 });
 
+test('分離完成會把「目前載入中的那首歌」換成伴奏軌', () => {
+  // 實測回報：清單空的時候匯入一首歌（自動載入待命）→ 按分離 → 分離完成 → 按播放，
+  // 聽到的仍是原始混音，要回清單重點同一首才會換軌。原因是 state:sync 回來時
+  // restorePlaybackState() 看到 loadedTrackEntryId 沒變就早退，playTrack() 不會重跑，
+  // 主鏈還掛著匯入當下的 filename。重開程式正常，正是因為那條路徑會重新 playTrack()。
+  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8').replace(/\r\n/g, '\n');
+  ok(playback.includes('function reloadLoadedTrackForSeparation('), '缺少分離完成後的重載入口：');
+  ok(/SocketClient\.on\('separation:progress'[\s\S]{0,220}reloadLoadedTrackForSeparation\(/.test(playback),
+    'separation:progress 完成時必須觸發重載：');
+  ok(playback.includes("if (!separationModeEnabled && !dualAudioModeEnabled) return;"),
+    '兩個模式都沒開時不可自作主張換軌：');
+  ok(playback.includes('if (separationActive) return;'), '已經在用分離音軌就不該再重載：');
+  ok(playback.includes("if (!track || String(track.id) !== String(trackId)) return;"),
+    '只能對「目前載入的就是剛分離完的那首」重載：');
+  ok(/if \(!trackSupportsSeparation\(track\)\) \{[\s\S]{0,400}setTimeout\(\(\) => reloadLoadedTrackForSeparation\(trackId, attempt \+ 1\)/.test(playback),
+    'stem 檔名還沒隨 state:sync 回填時要重試，不可把完成事件丟掉：');
+  ok(playback.includes("playTrack(index, isPlaying, { notifyServer: false, startTime: lastPlayTimeMs / 1000 });"),
+    '重載要沿用「載入到目前播放位置」的既有寫法：');
+});
+
 test('Setlist keeps template and quick controls in two columns beside the preview', () => {
   const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const panelCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8');

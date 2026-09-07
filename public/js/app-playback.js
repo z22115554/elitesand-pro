@@ -134,6 +134,36 @@
     });
   }
 
+  // 分離完成時，「目前已載入的這首歌」載的還是原始混音——面板不會因為 state:sync
+  // 重跑 playTrack（restorePlaybackState 看到 loadedTrackEntryId 相同就早退），
+  // 使用者按下播放聽到的仍是原唱，得回清單重點一次同一首才會換成伴奏軌（實測回報）。
+  // 這裡在分離完成的當下自動重載一次，沿用 toggle 那招「重新載入到目前播放位置」。
+  let sepReloadTimer = null;
+  function reloadLoadedTrackForSeparation(trackId, attempt = 0) {
+    if (sepReloadTimer) { clearTimeout(sepReloadTimer); sepReloadTimer = null; }
+    if (!separationModeEnabled && !dualAudioModeEnabled) return; // 兩個模式都沒開就沒有換軌的必要
+    if (separationActive) return;                                // 已經在用分離音軌
+    const index = state.currentTrackIndex;
+    if (index < 0 || index >= state.playlist.length) return;
+    const track = state.playlist[index];
+    if (!track || String(track.id) !== String(trackId)) return;  // 分離的不是這首
+    if (!trackSupportsSeparation(track)) {
+      // separation:progress 與帶著 stem 檔名的 state:sync 是兩個事件、會競速；
+      // 檔名還沒回填就等一下再試，別把這次完成事件丟掉（最多等約 4 秒）。
+      if (attempt >= 10) return;
+      sepReloadTimer = setTimeout(() => reloadLoadedTrackForSeparation(trackId, attempt + 1), 400);
+      return;
+    }
+    playTrack(index, isPlaying, { notifyServer: false, startTime: lastPlayTimeMs / 1000 });
+    AppShared.showToast(`「${track.title}」分離完成，已改用伴奏軌播放`, 'success');
+  }
+
+  SocketClient.on('separation:progress', (payload) => {
+    if (!payload || payload.stage !== 'done') return;
+    if (payload.trackId === undefined || payload.trackId === null) return;
+    reloadLoadedTrackForSeparation(payload.trackId);
+  });
+
   if (dom.separationVocalsVolume) {
     dom.separationVocalsVolume.value = Math.round(vocalsVolume * 100);
     if (dom.separationVocalsVolumeVal) dom.separationVocalsVolumeVal.textContent = Math.round(vocalsVolume * 100) + '%';
