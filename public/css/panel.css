@@ -1107,7 +1107,12 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .danger-confirm-impact { margin: 0 0 16px; color: var(--text-dim); font-size: 12px; line-height: 1.65; }
 .danger-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .danger-confirm-submit { background: var(--danger); border-color: var(--danger); color: #fff; }
-.danger-confirm-submit:hover:not(:disabled) { filter: brightness(1.08); }
+/* 必須重申底色：共用的 .btn:hover（0,2,0）會蓋掉這顆在基礎規則（0,1,0）設的
+   background，而淺色主題的 --bg-hover 是 rgba(255,255,255,0.96)——幾乎純白，
+   配上留著的 color:#fff 就變成白底白字整顆消失（使用者實機回報）。
+   其他有底色的按鈕（btn-primary／btn-play／btn-ghost／btn-danger）hover 時都有重申，
+   只有這顆漏了。 */
+.danger-confirm-submit:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: #fff; filter: brightness(1.08); }
 .danger-confirm-submit:disabled { cursor: not-allowed; opacity: .45; }
 .danger-confirm-modal.is-neutral .modal-card { border-color: var(--border); }
 .danger-confirm-modal.is-neutral .danger-confirm-head h3 { color: var(--text); }
