@@ -86,13 +86,19 @@
     vocalsSTEngine = window.createSoundTouchEngine();
     vocalsGain = stCtx.createGain();
     vocalsGain.gain.value = vocalsVolume;
-    // 人聲鏈：vocalsGain → vocalsDelay →（下游由 wireDualRouting 決定：直接到 destination
-    // 或改接雙路耳機節點）。vocalsDelay 補的是「伴奏鏈那顆 limiter 的前視延遲」，人聲仍
+    // 人聲鏈：vocalsGain → vocalsDelay →（下游看雙路路由開了沒：直接到 destination
+    // 或接雙路耳機節點）。vocalsDelay 補的是「伴奏鏈那顆 limiter 的前視延遲」，人聲仍
     // 不經過 stTrackGain/limiter（不套響度標準化，維持既有決定）。
     vocalsDelay = stCtx.createDelay(1);
     vocalsDelay.delayTime.value = separationCompLatencySec;
     vocalsGain.connect(vocalsDelay);
-    vocalsDelay.connect(stCtx.destination);
+    // 這裡必須自己判斷下游，不能一律接 destination 等 wireDualRouting() 來改：雙路路由
+    // 已經接上時（前一首沒分離、人聲鏈那時還不存在），playTrack() 之後呼叫的
+    // wireDualRouting(true) 會因為「狀態沒變」直接 return，這條新的人聲鏈就永遠留在
+    // destination 上、繞過 dualHeadphoneDelay。伴奏有那顆延遲、人聲沒有，聽起來就是
+    // 「伴奏慢了同步偏移那麼多」，暫停時伴奏還會多播那一小段（實測回報）。
+    if (dualRoutingWired && dualHeadphoneDelay) vocalsDelay.connect(dualHeadphoneDelay);
+    else vocalsDelay.connect(stCtx.destination);
     vocalsSTEngine.attach(stCtx, vocalsGain);
   }
 

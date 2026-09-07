@@ -9107,6 +9107,20 @@ test('分離完成會把「目前載入中的那首歌」換成伴奏軌', () =>
     '重載要沿用「載入到目前播放位置」的既有寫法：');
 });
 
+test('雙路路由已接上時才建立的人聲鏈，不可繞過耳機路的同步偏移', () => {
+  // 實測回報：分離完成後改播伴奏軌，聽起來仍是「伴奏比人聲慢」，暫停時伴奏還會多播一小段。
+  // 根因是 wireDualRouting(true) 在「狀態沒變」時直接 return：前一首沒分離時人聲鏈還不存在，
+  // 換到分離歌才由 ensureVocalsChain() 建出來，那條新鏈就永遠留在 destination 上、繞過
+  // dualHeadphoneDelay（同步偏移就掛在它身上），伴奏有延遲、人聲沒有 = 兩軌差一個同步偏移。
+  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8').replace(/\r\n/g, '\n');
+  ok(playback.includes('if (dualRoutingWired && dualHeadphoneDelay) vocalsDelay.connect(dualHeadphoneDelay);'),
+    '雙路已接上時，人聲鏈必須自己接到耳機路節點：');
+  ok(playback.includes('else vocalsDelay.connect(stCtx.destination);'),
+    '沒接雙路時人聲鏈仍直接到 destination：');
+  ok(playback.includes('if (active === dualRoutingWired) return;'),
+    'wireDualRouting 的早退還在，這條測試才有意義（改掉早退時要一起重想這裡）：');
+});
+
 test('Setlist keeps template and quick controls in two columns beside the preview', () => {
   const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const panelCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'panel.css'), 'utf8');
