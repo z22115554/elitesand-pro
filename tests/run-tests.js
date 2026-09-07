@@ -10880,6 +10880,39 @@ console.log('\n🌐 17. M6.1 介面語系層');
   });
 }
 
+// ─── 首次啟動順序：EULA 同意閘門必須壓在所有歡迎類 UI 之上，且先於新手導覽 ───
+test('EULA 閘門的層級必須高過新手導覽，導覽也要等同意完成才啟動', () => {
+  // 實際踩過（1.0.0 出貨前）：閘門 z-index 12000、新手導覽 20000～20006，首次啟動時
+  // 導覽整個蓋在條款上，連「開始互動導覽」按鈕都按得下去——使用者可以完全沒看到條款
+  // 就開始用（命中測試確認過 elementFromPoint 落在導覽上）。
+  const gateSource = fs.readFileSync(path.join(__dirname, '../public/js/eula-gate.js'), 'utf8');
+  const tourCss = fs.readFileSync(path.join(__dirname, '../public/css/onboarding-tour.css'), 'utf8');
+  const tourSource = fs.readFileSync(path.join(__dirname, '../public/js/onboarding-tour.js'), 'utf8');
+
+  const gateZ = Number(/\.eula-gate \{[\s\S]*?z-index:\s*(\d+)/.exec(gateSource)?.[1]);
+  ok(Number.isFinite(gateZ), '找不到 .eula-gate 的 z-index：');
+  const tourZs = [...tourCss.matchAll(/z-index:\s*(\d+)/g)].map((m) => Number(m[1]));
+  ok(tourZs.length > 0, '找不到新手導覽的 z-index（選擇器改名了？）：');
+  const tourMax = Math.max(...tourZs);
+  ok(gateZ > tourMax, `EULA 閘門必須壓過新手導覽（閘門 ${gateZ}、導覽最高 ${tourMax}）：`);
+
+  // 光靠 z-index 不夠：導覽是全螢幕層，先出場即使被蓋住也會擋住條款的捲動與點擊，
+  // 所以順序也要保證——導覽必須等 window.EulaGate 的訊號。
+  ok(/window\.EulaGate\s*=/.test(gateSource), 'eula-gate.js 必須同步掛上 window.EulaGate 供後續腳本等待：');
+  ok(tourSource.includes('root.EulaGate'), '新手導覽必須等 EULA 閘門解除才啟動：');
+  ok(/whenCleared\.then\(init, init\)/.test(tourSource),
+    '等待必須 resolve/reject 都啟動，閘門查詢失敗時導覽不可永遠不出現：');
+
+  // 三條「不擋面板」的出口與同意成功都要解除訊號，否則導覽會被永久卡住
+  const clearCalls = (gateSource.match(/gateApi\.clear\(\)/g) || []).length;
+  ok(clearCalls >= 4, `閘門的每個放行出口都要解除訊號（目前 ${clearCalls} 處，需含 accept 成功）：`);
+
+  // 載入順序：eula-gate.js 必須排在 onboarding-tour.js 前面，window.EulaGate 才讀得到
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(indexHtml.indexOf('/js/eula-gate.js') < indexHtml.indexOf('/js/onboarding-tour.js'),
+    'eula-gate.js 必須比 onboarding-tour.js 早載入：');
+});
+
 // ─── 打包契約：server 端 require 的 public/js 同構模組不可被 bundler 刪掉 ───
 test('server 端 require 的 public/js 檔案，必須全部在打包白名單裡', () => {
   // 實際踩過（1.0.0 出貨前）：新增的 server/utils/obs-locale.js 去 require

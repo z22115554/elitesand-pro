@@ -1406,7 +1406,19 @@
   }
 
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
-    else init();
+    // 首次啟動要先過 EULA 同意閘門：導覽是全螢幕歡迎層，先冒出來會蓋掉條款
+    // （實測過：導覽的「開始互動導覽」按鈕壓在閘門之上而且按得下去，等於閘門形同虛設）。
+    // eula-gate.js 在本檔之前載入並同步掛上 window.EulaGate；沒有它（或它判定不需同意、
+    // 查詢失敗）就照舊立刻啟動，不讓導覽因為等不到訊號而永遠不出現。
+    const gate = root.EulaGate;
+    const startWhenAllowed = () => {
+      if (gate && !gate.cleared && gate.whenCleared && typeof gate.whenCleared.then === 'function') {
+        gate.whenCleared.then(init, init);
+        return;
+      }
+      init();
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startWhenAllowed, { once: true });
+    else startWhenAllowed();
   }
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -10,9 +10,24 @@
   'use strict';
   const t = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
 
+  // 首次啟動的順序：條款必須先被處理完，其他歡迎類 UI 才能出場（新手導覽會等這個）。
+  // 在此同步建立，載入順序在本檔之後的腳本一定讀得到；查詢失敗或不需同意都算「已解決」
+  // （閘門本身在那些情況也不擋面板，不能讓導覽因此永遠等下去）。
+  let markCleared;
+  const whenCleared = new Promise((resolve) => { markCleared = resolve; });
+  const gateApi = {
+    whenCleared,
+    cleared: false,
+    clear() { if (!gateApi.cleared) { gateApi.cleared = true; markCleared(); } },
+  };
+  window.EulaGate = gateApi;
+
   const STYLE = `
     .eula-gate {
-      position: fixed; inset: 0; z-index: 12000;
+      /* 必須壓過畫面上所有東西，含新手導覽（onboarding-tour.css 最高 20006）。
+         原本 12000 反而在導覽之下：首次啟動時導覽蓋在條款上、按鈕還按得下去，
+         等於同意閘門形同虛設（使用者回報，實測命中測試確認）。 */
+      position: fixed; inset: 0; z-index: 30000;
       display: flex; align-items: center; justify-content: center;
       padding: 24px;
       background: rgba(0, 0, 0, 0.62);
@@ -168,6 +183,7 @@
         document.removeEventListener('keydown', trapFocus, true);
         overlay.remove();
         style.remove();
+        gateApi.clear();
         if (previousFocus && document.contains(previousFocus)) requestAnimationFrame(() => previousFocus.focus());
       } catch (err) {
         acceptBtn.disabled = false;
@@ -181,12 +197,13 @@
     let status;
     try {
       const res = await fetch('/api/eula');
-      if (!res.ok) return;
+      if (!res.ok) { gateApi.clear(); return; }
       status = await res.json();
     } catch {
+      gateApi.clear();
       return; // 查詢失敗不鎖面板；下次載入會再檢查
     }
-    if (!status || !status.required || !status.text || !status.version) return;
+    if (!status || !status.required || !status.text || !status.version) { gateApi.clear(); return; }
     show(status);
   }
 
