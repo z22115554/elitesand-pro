@@ -1500,7 +1500,9 @@
                各自的音量互不影響。導唱（觀眾只聽伴奏、主播另外聽得到原唱）仍只對已分離
                人聲的歌曲生效（見媒體庫的「分離人聲」），但路由＋雙音量本身對所有歌曲生效。
                docs/AI-SEPARATION-PLAN.md §14 路線 A。 -->
-          <details class="card card-collapse" id="dual-audio-card">
+          <!-- 預設展開：這張卡要先選兩個輸出裝置才會生效，收起來的話使用者不會知道
+               自己還沒設定完（使用者回報）。 -->
+          <details class="card card-collapse" id="dual-audio-card" open>
             <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15v-6a8 8 0 0 1 16 0v6"/><path d="M4 15a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H4z"/><path d="M20 15a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/></svg><span data-i18n="dualAudio.title">雙路音訊路由（實驗性）</span></summary>
             <div class="card-collapse-body">
               <p class="sub section-intro"><span data-i18n="dualAudio.introMain">把播放的聲音分別送到兩個獨立的音訊輸出裝置，本地監聽音量與對外（OBS 擷取）音量可以各自調整、互不影響，對所有歌曲都生效。想要「觀眾只聽伴奏、自己聽得到原唱當導唱」，還要另外在媒體庫分離過這首歌的人聲。需要電腦有至少兩個獨立的音訊輸出裝置（例如虛擬音訊線＋耳機）。</span><strong data-i18n="dualAudio.introBold">務必把 OBS 與 Windows 音效裝置的取樣率都設成 44100Hz</strong><span data-i18n="dualAudio.introTail">，這是消除長時間播放漂移最重要的免費設定。</span></p>
