@@ -242,6 +242,16 @@ function createAppState(io) {
       if (typeof saved.session.active === 'boolean') session.active = saved.session.active;
       if (typeof saved.session.startedAt === 'number') session.startedAt = saved.session.startedAt;
       if (['obs', 'twitch', 'manual'].includes(saved.session.source)) session.source = saved.session.source;
+      // 殭屍 session 防護：直播不會連續開超過一天，還原到一個 age > 24h 的「開台中」
+      // 幾乎一定是上次沒收到收台事件（OBS/Twitch 斷線、EventSub 漏收 stream.offline、
+      // 當機）留下的殘影。降級成非開台，否則面板的「清除歌單 / 開始新場次」會被
+      // 永久鎖死（見 public/js/app-setlist-panel.js 的 disabled 判斷）。已唱歌單保留。
+      const STALE_ACTIVE_SESSION_MS = 24 * 60 * 60 * 1000;
+      if (session.active && (!session.startedAt || Date.now() - session.startedAt > STALE_ACTIVE_SESSION_MS)) {
+        log.warn(`偵測到殭屍直播 session（source=${session.source}, startedAt=${session.startedAt}），還原為非開台狀態`);
+        session.active = false;
+        session.source = null;
+      }
       // 舊資料可能沒有 entryId（單獨刪除功能加入前存的）——補齊，否則這些歌永遠刪不掉。
       if (Array.isArray(saved.session.songs)) {
         session.songs = saved.session.songs.map((s) => (s && s.entryId ? s : { ...s, entryId: crypto.randomUUID() }));

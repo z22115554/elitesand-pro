@@ -476,8 +476,23 @@ class TwitchService {
     if (!response.ok) throw new Error(`Twitch 開台狀態確認失敗（${response.status}）`);
     const data = await response.json().catch(() => ({}));
     const stream = Array.isArray(data.data) ? data.data[0] : null;
-    if (stream) this.startRequestSession(toTimestamp(stream.started_at));
-    else this.stopRequestSession();
+    // 這是「權威對帳」：EventSub 期間漏收的 stream.online / stream.offline
+    // （下播時 app 沒開、EventSub 斷線重連、token 過期）都要在這裡把歌單 session
+    //  拉回跟 Twitch 實際狀態一致，否則「開台中」會永久卡住、把面板的
+    // 「清除歌單 / 開始新場次」鎖死。startTwitchSession 對同一場是 idempotent，
+    //  不會清空已唱歌單；沒有 message id 傳 eventId:null 讓它照常執行。
+    if (stream) {
+      const startedAt = toTimestamp(stream.started_at);
+      this.startRequestSession(startedAt);
+      try { this.onStreamOnline?.({ startedAt, eventId: null }); } catch (err) {
+        log.warn(`refreshLiveState 同步開台狀態到歌單 session 失敗：${err.message}`);
+      }
+    } else {
+      this.stopRequestSession();
+      try { this.onStreamOffline?.({ eventId: null }); } catch (err) {
+        log.warn(`refreshLiveState 同步下播狀態到歌單 session 失敗：${err.message}`);
+      }
+    }
     return this.streamOnline;
   }
 

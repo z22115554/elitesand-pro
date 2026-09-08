@@ -707,6 +707,35 @@ test('next / prev 廣播事件', () => {
   ok(fakeIo.emitted.some(e => e.event === 'play:prev'));
 });
 
+test('startTwitchSession：同場重入（含 refreshLiveState 對帳路徑）維持 startedAt，真正的新場次才重置', () => {
+  const io = { on() {}, use() {}, emit() {} };
+  const api = socketHandler(io);
+  const first = 1_600_000_000_000;
+  api.startTwitchSession({ startedAt: first, eventId: 'evt-1' });
+  eq(api.getState().session.startedAt, first);
+  // refreshLiveState() 的權威對帳沒有 message id（eventId:null）；startedAt 在 60s 容差內
+  // → 必須被視為「同一場」，不可重設（否則每次 EventSub 重連都會清空已唱歌單）。
+  api.startTwitchSession({ startedAt: first + 5000, eventId: null });
+  eq(api.getState().session.startedAt, first, '容差內的重入不可改動 startedAt：');
+  eq(api.getState().session.active, true);
+  eq(api.getState().session.source, 'twitch');
+  // 隔了數小時的另一個 started_at ＝ 真的是新一場，要重設。
+  const second = first + 10 * 60 * 60 * 1000;
+  api.startTwitchSession({ startedAt: second, eventId: 'evt-2' });
+  eq(api.getState().session.startedAt, second, '真正的新場次要更新 startedAt：');
+});
+
+test('stopTwitchSession 對帳路徑（eventId:null）能收掉卡住的 Twitch 開台狀態', () => {
+  const io = { on() {}, use() {}, emit() {} };
+  const api = socketHandler(io);
+  api.startTwitchSession({ startedAt: Date.now() - 60 * 60 * 1000, eventId: 'evt-live' });
+  eq(api.getState().session.active, true);
+  // refreshLiveState() 查到 Twitch 其實沒在開台時會走這條（沒有 message id）。
+  api.stopTwitchSession({ eventId: null });
+  eq(api.getState().session.active, false, '權威對帳查到未開台就要把 session 收掉：');
+  eq(api.getState().session.source, null);
+});
+
 test('hide / show / hide-toggle', () => {
   ok(deckApi.command('hide').ok);
   eq(deckApi.command('hide').message, 'hidden');
@@ -8298,6 +8327,76 @@ test('舊 state 沒有播放恢復欄位時，會用既有 session 歌曲回填�
     const result = JSON.parse(child.stdout.slice(markerAt + '__BACKFILL__'.length).trim().split(/\r?\n/, 1)[0]);
     eq(result.played.sort().join(','), 'entry-a,entry-b');
     eq(result.upcoming.join(','), 'C');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('還原到 age > 24h 的「開台中」session 會降級成非開台，但保留已唱歌單', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-zombie-session-'));
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const staleStartedAt = Date.now() - 25 * 60 * 60 * 1000;
+    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({
+      schemaVersion: 3,
+      savedAt: 1,
+      session: {
+        active: true, startedAt: staleStartedAt, source: 'twitch',
+        songs: [{ id: 'a', entryId: 'session-a', title: 'A' }],
+      },
+    }), 'utf8');
+    const appStatePath = path.join(__dirname, '..', 'server', 'state', 'app-state.js');
+    const script = [
+      "const {createAppState}=require(process.argv[1]);",
+      "const restored=createAppState({emit(){}});",
+      "const s=restored.setlistPayload();",
+      "process.stdout.write('__ZOMBIE__'+JSON.stringify({active:s.active,source:s.source,songs:s.songs.length,startedAt:s.startedAt})+'\\n');",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, appStatePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `zombie session child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__ZOMBIE__');
+    ok(markerAt >= 0, `zombie session child 缺少結果：${child.stdout}`);
+    const result = JSON.parse(child.stdout.slice(markerAt + '__ZOMBIE__'.length).trim().split(/\r?\n/, 1)[0]);
+    eq(result.active, false, '一天前的「開台中」要被視為殭屍狀態、還原成非開台：');
+    eq(result.source, null, '殭屍 session 的 source 一併清掉：');
+    eq(result.songs, 1, '已唱歌單必須保留、不因降級被清空：');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('還原到最近才開始的「開台中」session 維持開台（不被殭屍防護誤殺）', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-live-session-'));
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({
+      schemaVersion: 3,
+      savedAt: 1,
+      session: {
+        active: true, startedAt: Date.now() - 90 * 60 * 1000, source: 'twitch',
+        songs: [{ id: 'a', entryId: 'session-a', title: 'A' }],
+      },
+    }), 'utf8');
+    const appStatePath = path.join(__dirname, '..', 'server', 'state', 'app-state.js');
+    const script = [
+      "const {createAppState}=require(process.argv[1]);",
+      "const restored=createAppState({emit(){}});",
+      "const s=restored.setlistPayload();",
+      "process.stdout.write('__LIVE__'+JSON.stringify({active:s.active,source:s.source})+'\\n');",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, appStatePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `live session child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__LIVE__');
+    ok(markerAt >= 0, `live session child 缺少結果：${child.stdout}`);
+    const result = JSON.parse(child.stdout.slice(markerAt + '__LIVE__'.length).trim().split(/\r?\n/, 1)[0]);
+    eq(result.active, true, '90 分鐘前開始的直播是正常狀態，必須維持開台：');
+    eq(result.source, 'twitch', 'source 維持不變：');
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }

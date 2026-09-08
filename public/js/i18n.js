@@ -277,6 +277,7 @@
     'home.session.statusPending': ['等待確認直播狀態 · {count} 首已記錄', 'Waiting to confirm stream status · {count} tracks recorded', '配信状態の確認待ち · {count} 曲を記録', '방송 상태 확인 대기 중 · {count}곡 기록됨', '等待确认直播状态 · 已记录 {count} 首'],
     'home.session.statusLive': ['{source} · {duration} · 已唱 {count} 首', '{source} · {duration} · {count} tracks performed', '{source} · {duration} · 歌唱済み {count} 曲', '{source} · {duration} · 부른 곡 {count}개', '{source} · {duration} · 已唱 {count} 首'],
     'home.session.statusEnded': ['已收台 · {count} 首已記錄', 'Stream ended · {count} tracks recorded', '配信終了 · {count} 曲を記録', '방송 종료 · {count}곡 기록됨', '已下播 · 已记录 {count} 首'],
+    'home.session.statusStale': ['直播狀態異常（可能已收台但未偵測到）· 可直接按「清除歌單」重設', 'Stream status looks stuck (the stream may have ended without being detected) · use “Clear setlist” to reset', '配信状態が異常です（配信終了を検出できなかった可能性）· 「セットリストを消去」で再設定できます', '방송 상태가 비정상입니다(방송 종료가 감지되지 않았을 수 있음) · “세트리스트 지우기”로 초기화하세요', '直播状态异常（可能已下播但未检测到）· 可直接按“清除歌单”重置'],
     'home.session.sourceObs': ['OBS 推流中', 'OBS streaming', 'OBS 配信中', 'OBS 송출 중', 'OBS 推流中'],
     'home.session.sourceTwitch': ['Twitch 開台中', 'Live on Twitch', 'Twitch で配信中', 'Twitch 방송 중', 'Twitch 开播中'],
     'home.session.sourceLive': ['直播中', 'Live', '配信中', '방송 중', '直播中'],
