@@ -1692,6 +1692,26 @@ class AudioProcessor {
       }
     }
 
+    // 三段以上的連字號（'如願 - 楊丞琳 - 而我將 愛你所愛的人間'）：上面的規則只切第一個
+    // 連字號，等於在猜第一段是歌手還是歌名，猜錯就把「歌手 - 附註」整串當成歌名。
+    // 這裡改用唯一的高信度訊號：剛好只有一段整段就是已知歌手，那一段才是歌手，
+    // 剩下的第一段是歌名，其餘（宣傳詞、歌詞引言、劇名）丟掉。
+    // 刻意用「完全相等」而不是 isKnownArtist() 的寬鬆子字串比對——寬鬆比對會讓好幾段
+    // 同時命中，就沒有「唯一」可言了。
+    if (!title) {
+      const segments = cleaned.split(/\s*-\s+/).map((part) => part.trim()).filter(Boolean);
+      if (segments.length >= 3) {
+        const hits = segments.filter((part) => KNOWN_ARTISTS.has(artistKey(part)));
+        if (hits.length === 1) {
+          const index = segments.indexOf(hits[0]);
+          artist = hits[0];
+          title = index === 0 ? segments[1] : segments[0];
+          confidence = 0.86;
+          reason = 'multi-dash-known-artist';
+        }
+      }
+    }
+
     // 連字號方向有歧義：中英並列藝名、feat./with 與已知歌手可提高判斷可信度。
     if (!title) {
       const dashMatch = cleaned.match(/^(.+?)\s*-\s+(.+)$/);

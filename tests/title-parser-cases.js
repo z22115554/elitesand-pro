@@ -119,4 +119,7 @@ module.exports = [
   // 第 1 類指紋：唱片公司／搬運頻道被當成歌手（memory `import-parse-failure-fingerprints`）。
   { group: 'label-head', raw: 'ForwardMusic 添翼 - 魏如萱 - 你啊你啊', title: '你啊你啊', artist: '魏如萱' },
   { group: 'label-head', raw: '滾石唱片 ROCK RECORDS - 五月天 - 志明與春嬌', title: '志明與春嬌', artist: '五月天' },
+  // 三段以上的連字號：靠「唯一的已知歌手」定方向，其餘段落（歌詞引言、劇名）丟掉。
+  { group: 'multi-dash', raw: '如願 - 楊丞琳 - 而我將 愛你所愛的人間', title: '如願', artist: '楊丞琳' },
+  { group: 'multi-dash', raw: '周杰倫 - 告白氣球 - 電影主題曲', title: '告白氣球', artist: '周杰倫' },
 ];

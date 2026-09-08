@@ -4922,6 +4922,24 @@ test('唱片公司／搬運頻道不會被當成原唱', () => {
   eq(id('Music Travel Love - Perfect').artist, 'Music Travel Love', '名字裡有 Music 不算廠牌: ');
 });
 
+test('三段以上的連字號標題靠「唯一的已知歌手」定方向', () => {
+  // 2026-08-30 清庫的第 1 類指紋（memory `import-parse-failure-fingerprints`）：
+  // '如願 - 楊丞琳 - 而我將…' 只切第一個連字號，等於在猜第一段是歌手還是歌名，
+  // 猜錯就把「歌手 - 附註」整串當歌名。三段以上時改用唯一的高信度訊號定方向。
+  const parse = (raw) => AudioProcessor.parseVideoTitle(raw);
+
+  const a = parse('如願 - 楊丞琳 - 而我將 愛你所愛的人間');
+  eq(a.artist, '楊丞琳', '中間那段才是歌手: ');
+  eq(a.title, '如願', '第一段是歌名，歌詞引言要丟掉: ');
+
+  const b = parse('周杰倫 - 告白氣球 - 電影主題曲');
+  eq(b.artist, '周杰倫', '歌手在第一段時方向不可反過來: ');
+  eq(b.title, '告白氣球', '第三段的附註不可黏進歌名: ');
+
+  // 沒有任何一段是已知歌手就不猜，維持原本的兩段式規則（寧可不動，也不要亂調方向）。
+  eq(parse('A - B - C').reason, 'artist-title-dash', '認不出歌手時不可套用這條規則: ');
+});
+
 test('酷狗／QQ：緊湊標題行後的中英雙語製作名單整段移除', () => {
   const lines = [
     { time: 0, text: '浪子的路-RPG/茄子蛋' },
