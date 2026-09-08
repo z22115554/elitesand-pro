@@ -4897,6 +4897,31 @@ test('合唱曲的結構化歌手欄位不重複列出同一組人', () => {
   eq(artistOf({}), '', '沒有結構化欄位時回空字串: ');
 });
 
+test('唱片公司／搬運頻道不會被當成原唱', () => {
+  // 2026-08-30 清庫的第 1 類指紋（memory `import-parse-failure-fingerprints`）：
+  // 「ForwardMusic 添翼」「滾石唱片 ROCK RECORDS」被寫成歌手。錯的歌手名不只顯示錯，
+  // 還會一路污染歌詞搜尋的 query，所以寧可留空讓面板顯示「原唱待確認」。
+  const id = (info) => AudioProcessor.resolveTrackIdentity(typeof info === 'string' ? { title: info } : info);
+
+  // 三段式「廠牌 - 歌手 - 歌名」：不先剝掉廠牌，切割器會把廠牌當歌手、後兩段整串當歌名。
+  eq(id('ForwardMusic 添翼 - 魏如萱 - 你啊你啊').artist, '魏如萱', '廠牌開頭要剝掉，真正的歌手才切得出來: ');
+  eq(id('ForwardMusic 添翼 - 魏如萱 - 你啊你啊').title, '你啊你啊', '剝掉廠牌後歌名不可還黏著歌手: ');
+  eq(id('滾石唱片 ROCK RECORDS - 五月天 - 志明與春嬌').artist, '五月天', '中英並列的廠牌名也要剝: ');
+
+  // 兩段式「廠牌 - 歌名」沒有真正的歌手可用，留空比塞廠牌好。
+  eq(id('Sony Music - 告白氣球').artist, '', '找不到真正的歌手時要留空（面板顯示「原唱待確認」）: ');
+  eq(id('Sony Music - 告白氣球').title, '告白氣球', '留空歌手不代表歌名也要壞掉: ');
+  // yt-dlp 的結構化欄位一樣可能填廠牌。
+  eq(id({ title: '魏如萱 - 你啊你啊', artist: 'ForwardMusic', track: '你啊你啊' }).artist, '',
+    '結構化欄位填的是廠牌時一樣不可採用: ');
+  // 頻道名出現在標題裡本來就會被當歌手兜底，廠牌頻道要排除。
+  eq(id({ title: '告白氣球', channel: 'Sony Music Taiwan' }).artist, '', '廠牌頻道不可當兜底歌手: ');
+
+  // 反向保護：名字裡剛好有 Record／Music 的真藝人不可被誤殺。
+  eq(id('Broken Record - Some Artist').artist, 'Broken Record', '單數 Record 不算廠牌: ');
+  eq(id('Music Travel Love - Perfect').artist, 'Music Travel Love', '名字裡有 Music 不算廠牌: ');
+});
+
 test('酷狗／QQ：緊湊標題行後的中英雙語製作名單整段移除', () => {
   const lines = [
     { time: 0, text: '浪子的路-RPG/茄子蛋' },

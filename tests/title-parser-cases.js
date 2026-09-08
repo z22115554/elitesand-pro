@@ -116,4 +116,7 @@ module.exports = [
   { group: 'bracket-cleanup', raw: '彭佳慧 - 囚鳥 (官方完整版MV)(Live版)', title: '囚鳥', artist: '彭佳慧' },
   { group: 'fake-slash', raw: 'Rev. from DVL - Ref：rain (Eng⧸Rom⧸Han Lyrics)', title: 'Ref:rain', artist: 'Rev. from DVL' },
   { group: 'fake-slash', raw: 'Aimer - 花の唄 M⧸V', title: '花の唄', artist: 'Aimer' },
+  // 第 1 類指紋：唱片公司／搬運頻道被當成歌手（memory `import-parse-failure-fingerprints`）。
+  { group: 'label-head', raw: 'ForwardMusic 添翼 - 魏如萱 - 你啊你啊', title: '你啊你啊', artist: '魏如萱' },
+  { group: 'label-head', raw: '滾石唱片 ROCK RECORDS - 五月天 - 志明與春嬌', title: '志明與春嬌', artist: '五月天' },
 ];

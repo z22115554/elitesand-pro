@@ -375,6 +375,22 @@ const NOISE_TAG_TEXT = /(?:^|\b)(?:mv|pv|official|lyrics?|audio|video|ktv|karaok
 const PROMO_TAIL = /(?:全球網路大首播|全球网络大首播|網路大首播|网络大首播|首播|完整版|完整版本|官方版)+/gi;
 const PUBLISHER_TAIL = /\s*[-–—]\s*(?:華納|华纳|索尼|Sony|滾石|滚石|相信音樂|相信音乐|環球|环球|ForwardMusic|avex)[^\n]*$/i;
 
+// ─── 廠牌／搬運頻道 ───
+// 2026-08-30 清庫的第 1 類指紋：唱片公司與搬運頻道被當成歌手寫進歌庫（`ForwardMusic 添翼`、
+// `滾石唱片 ROCK RECORDS`）。它們不是原唱，寧可讓歌手留空、面板顯示「原唱待確認」，
+// 也不要塞一個錯的名字進去——錯的名字還會污染歌詞搜尋的 query。
+const LABEL_NAME = /(?:華納|华纳|索尼|Sony\s*Music|滾石|滚石|相信音樂|相信音乐|環球|环球|ForwardMusic|添翼|福茂|種子音樂|种子音乐|杰威爾|杰威尔|avex|EMI|BMG|VEVO|Universal\s*Music|Warner\s*Music|唱片(?:公司)?|Records\b|Recordings\b|Entertainment\s*(?:Group|Inc)?\b)/i;
+// 標題開頭的「廠牌 - 」：`滾石唱片 ROCK RECORDS - 五月天 - 志明與春嬌` 這種三段式，
+// 不先把廠牌那段剝掉，切割器就會把廠牌當歌手、把「五月天 - 志明與春嬌」整串當歌名。
+const PUBLISHER_HEAD = /^\s*[^-–—|｜]{0,40}?(?:華納|华纳|索尼|Sony\s*Music|滾石|滚石|相信音樂|相信音乐|環球|环球|ForwardMusic|添翼|福茂|種子音樂|种子音乐|avex|VEVO|Universal\s*Music|Warner\s*Music|唱片|RECORDS\b)[^-–—]{0,40}?\s*[-–—]\s*/i;
+
+/** 這個名字是唱片公司／搬運頻道，不是原唱。 */
+function isLabelArtist(value) {
+  const text = compactSpaces(value);
+  if (!text) return false;
+  return LABEL_NAME.test(text);
+}
+
 function compactSpaces(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -870,12 +886,16 @@ class AudioProcessor {
       const channel = this.cleanArtistName(info.channel || info.uploader || '');
       const normalizedRaw = normalizeVideoText(info.title).toLowerCase().replace(/\s+/g, '');
       const normalizedChannel = normalizeVideoText(channel).toLowerCase().replace(/\s+/g, '');
-      if (normalizedChannel.length >= 2 && normalizedRaw.includes(normalizedChannel)) artist = channel;
+      // 頻道名出現在標題裡也不代表它是原唱——搬運／廠牌頻道本來就會把自己的名字寫進標題。
+      if (normalizedChannel.length >= 2 && normalizedRaw.includes(normalizedChannel) && !isLabelArtist(channel)) artist = channel;
     }
 
     // yt-dlp 的 track/artist 結構化欄位一樣是別人（唱片公司/上傳者）填的中繼資料，一樣可能填反
     // （例如樂團名「珂拉琪 Collage」被填進 track，歌名被填進 artist）。parseVideoTitle 的規則
     // 路徑已有這個兜底，這裡把它也套用到結構化欄位路徑，兩邊命中已知歌手清單時都會調正方向。
+    // 廠牌／搬運頻道則是相反：它不是原唱，寧可留空讓面板顯示「原唱待確認」，也不要塞一個
+    // 錯的名字——錯的歌手名會一路污染歌詞搜尋的 query。
+    if (isLabelArtist(artist)) artist = '';
     if (artist && title && isKnownArtist(title) && !isKnownArtist(artist)) {
       const swap = artist; artist = title; title = swap;
     }
@@ -1533,6 +1553,10 @@ class AudioProcessor {
     let cleaned = stripNoiseBracketGroups(stripLeadingNoiseTags(normalizeVideoText(rawTitle)));
     for (const pattern of NOISE_PATTERNS) cleaned = cleaned.replace(pattern, '');
     cleaned = compactSpaces(repairBrackets(cleaned).replace(PUBLISHER_TAIL, '').replace(PROMO_TAIL, ''));
+    // 廠牌那段剝掉之後如果什麼都不剩，代表整串就是廠牌名，那就別剝——寧可讓後面的規則
+    // 照常處理，也不要把標題清成空字串。
+    const withoutPublisherHead = compactSpaces(cleaned.replace(PUBLISHER_HEAD, ''));
+    if (withoutPublisherHead) cleaned = withoutPublisherHead;
     cleaned = cleaned
       .replace(/(?:【\s*】|《\s*》|〈\s*〉|「\s*」|『\s*』)/g, '')
       .replace(/^\s*[+#-]?\s*\d+\s*\b/i, '')
