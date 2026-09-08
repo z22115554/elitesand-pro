@@ -533,6 +533,24 @@ const KNOWN_ARTISTS_RAW = [
   '中島みゆき', '宇多田ヒカル', 'Hikaru Utada', '椎名林檎', '東京事変', 'YUKI', 'JUDY AND MARY',
   'L\'Arc～en～Ciel', 'GLAY', 'X JAPAN', 'flumpool', 'いきものがかり', 'ポルノグラフィティ',
   'Vaundy', 'Saucy Dog', 'マカロニえんぴつ', 'optical_frame', 'r-906', 'Misumi', 'koresawa',
+  // 華語老歌／經典對唱歌手（2026-09-08 對照實際曲庫補齊；這批多是 80-90 年代國語金曲，
+  // 標題常見「歌手A 歌手B 歌名」或「歌手A&歌手B-歌名」完全沒有分隔符，兩位歌手若都不在
+  // 清單裡，matchLeadingKnownArtist 從頭比對不到任何一個，直接整句落回 whole-title，
+  // 歌手就會是空的——見 memory `import-parse-failure-fingerprints`）。
+  '蔡琴', '潘安邦', '姜育恆', '李翊君', '徐若瑄', 'Vivian Hsu', '曹格', 'Gary Chaw',
+  '張克帆', '胡蓓蔚', '林凡', 'Freya Lim', '鄭仲基', '郭書瑤', '井柏然', 'Darren Wang',
+  '楊培安', '劉虹翎', '江美琪', 'Valen Chiang', '張智成', 'Tarcy Su', '王心凌', 'Cyndi Wang',
+  '呉克群', '吳克群', 'Kenji Wu', '信', 'Shin', '黃立行', 'Van Ness Wu', '羅美玲', 'Race Wong',
+  'ELLA', '陳嘉樺', 'Ella Chen', 'TANK', '郭采潔', 'Amber Kuo', 'Della', '丁噹', 'Della Ding',
+  '鼓鼓', 'Yang Chin Kang', 'Selina', '任家萱', 'Selina Jen', '田馥甄', 'Hebe Tien',
+  'melody', '范逸臣', '巫啟賢', 'Eric Moo', '方麗儀', '孫協志', 'Sunny Sun', '陳子鴻',
+  '許慧欣', 'Michelle Pan', '田中千繪', 'Chie Tanaka', '飛輪海', 'Fahrenheit', '劉力揚',
+  '炎亞綸', 'Aaron Yan', '朱俐靜', 'Miu Chu', '陳勢安', 'Andrew Tan', '陳彥允', 'Ian Chen',
+  '畢書盡', '陳曉東', 'Kelvin Chen', '林佳儀', 'Ella Lin', '于台煙', '梁弘志', '周秉鈞',
+  '楊海薇', '林淑容', '羅時豐', '劉家昌', '尤雅', '陳潔儀', '蘇永康', '孫耀威', 'Eric Suen',
+  '酒井法子', 'Noriko Sakai', '馬毓芬', '關正傑', '關菊英', '黃露儀', '李碧華', '羅吉鎮',
+  '陳淑樺', '羅大佑', '許茹芸', '孙楠', '竇智孔', 'Bobby Dou', '戴愛玲', 'Ailing Tai',
+  '张信哲', '范文芳', 'Fann Wong', 'Humming Urban Stereo', 'Risso', '徐若瑄', '李玖哲',
 ];
 // 連字號/空白視為同義字元：真實標題常把「A-Lin」寫成「A Lin」，反之亦然，
 // 一律歸一化掉才比對，否則名單裡明明有這個歌手卻因為標點不同而比對不到。
@@ -1737,21 +1755,25 @@ class AudioProcessor {
 
     if (!title) {
       // 少數官方頻道省略所有分隔符：「蕭煌奇 只能勇敢」。僅在命中完整歌手名時拆分。
-      // 名字後面必須接空白才算邊界完整（避免「周杰倫」誤吃到「周杰倫粉絲團」）。
+      // 名字後面必須接空白或明確的連接符號才算邊界完整（避免「周杰倫」誤吃到「周杰倫粉絲團」——
+      // 純 CJK 連著寫、沒有任何空白或符號時仍然不算）。& + _ - 涵蓋「歌手A&歌手B_歌名」
+      // 這種老歌 KTV/MTV 上傳常見的無空白對唱標題（2026-09-08 對照實際曲庫補齊）。
+      const CONNECTOR_RE = /^[\s&＆+_\-－]+/;
       const matchBoundaryPrefix = (text) => {
         const m = matchLeadingKnownArtist(text);
-        return m && /^\s/.test(text.slice(m.length)) ? m : null;
+        return m && CONNECTOR_RE.test(text.slice(m.length)) ? m : null;
       };
       const knownPrefix = matchBoundaryPrefix(cleaned);
       if (knownPrefix) {
         const artists = [cleaned.slice(0, knownPrefix.length).trim()];
-        let remainder = cleaned.slice(knownPrefix.length).trim();
+        // 連接符（& + _ -）只是邊界標記，不屬於下一段的一部分，剝掉才能繼續比對下一位歌手。
+        let remainder = cleaned.slice(knownPrefix.length).replace(CONNECTOR_RE, '');
         // 無分隔符的多人伴奏：「周杰倫 張惠妹 不該」。連續剝離已知歌手，最後才是歌名。
         while (remainder) {
           const next = matchBoundaryPrefix(remainder);
           if (!next) break;
           artists.push(remainder.slice(0, next.length).trim());
-          remainder = remainder.slice(next.length).trim();
+          remainder = remainder.slice(next.length).replace(CONNECTOR_RE, '');
         }
         artist = artists.join(' & ');
         title = remainder;

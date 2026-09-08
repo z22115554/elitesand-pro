@@ -4940,6 +4940,49 @@ test('三段以上的連字號標題靠「唯一的已知歌手」定方向', ()
   eq(parse('A - B - C').reason, 'artist-title-dash', '認不出歌手時不可套用這條規則: ');
 });
 
+test('播放清單匯入：單一影片抓不到 metadata 不會卡住整條批次佇列', () => {
+  // 實測回報：300 首播放清單匯入到一半，其中一支影片 yt-dlp 全部策略＋oEmbed 都失敗，
+  // /api/youtube/inspect 回 500；inspectImport() 原本一律把「抓不到 metadata」包成
+  // warning:true 的假風險評估，交給 confirmRiskAssessment() 跳出確認彈窗等使用者點——
+  // 播放清單匯入時沒有人一直盯著，整條佇列（後面還有幾百首）就安靜停住，6 分鐘沒有任何
+  // 進度。單首匯入（使用者就在螢幕前操作）仍要維持「問一下要不要仍然嘗試」。
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-youtube-import.js'), 'utf8')
+    .replace(/\r\n/g, '\n');
+
+  ok(source.includes('isBatch: true,'), '播放清單排進佇列的每個 job 都要標記為批次匯入：');
+  ok(source.includes('isBatch: options.isBatch === true,'), 'queueYouTubeImport 必須把旗標存到 job 上：');
+
+  const inspectFn = source.slice(source.indexOf('async function inspectImport'), source.indexOf('function jobLabelParts'));
+  ok(inspectFn.includes('if (job.isBatch) {'), 'inspectImport 要能分辨這是不是批次匯入：');
+  ok(/if \(job\.isBatch\) \{[\s\S]{0,300}unreachable\.code = 'IMPORT_METADATA_UNAVAILABLE';[\s\S]{0,100}throw unreachable;/.test(inspectFn),
+    '批次匯入時純技術性失敗要直接丟出去跳過這首，不能走進確認彈窗：');
+  // 單首匯入的分支必須還在 job.isBatch 判斷之後，維持原本行為不變。
+  const batchBranchEnd = inspectFn.indexOf('throw unreachable;') + 'throw unreachable;'.length;
+  const afterBatchBranch = inspectFn.slice(batchBranchEnd);
+  ok(afterBatchBranch.includes("warningTypes: ['metadata-unavailable']"), '單首匯入仍要走原本的確認彈窗流程：');
+});
+
+test('無分隔符對唱標題：連接符（&＋_-）也算邊界，老歌 KTV 上傳才切得出兩位歌手', () => {
+  // 2026-09-08 這批 256 首播放清單匯入的真實回歸：歌手是空的 19 筆裡，13 筆的根因是
+  // matchBoundaryPrefix() 只認空白當邊界，「歌手A&歌手B_歌名」「歌手A 歌手B 歌名」這種
+  // 老歌 KTV/MTV 上傳常見、完全沒有標準分隔符的標題，只要有一段落在空白以外的符號上
+  // 就整句落回 whole-title、歌手變空的。另一半根因是這批 80-90 年代對唱歌手完全不在
+  // KNOWN_ARTISTS_RAW 裡（清單本來就偏 J-pop/新生代/K-pop）。
+  const id = (raw) => AudioProcessor.resolveTrackIdentity({ title: raw });
+
+  eq(id('江美琪&張智成-愛情').artist, '江美琪 & 張智成', '歌手中間的裸 & 也要算邊界: ');
+  eq(id('江美琪&張智成-愛情').title, '愛情', '切完歌手後歌名不可再黏著連接符: ');
+  eq(id('[KTV]黃立行+劉若英-分開旅行(original name-black black heart)').artist, '黃立行 & 劉若英',
+    '裸 + 也要算邊界: ');
+  eq(id('姜育恆 李翊君 愛我你怕了嗎 KTV').artist, '姜育恆 & 李翊君', '純空白分隔的雙人合唱也要切得出來: ');
+  eq(id('羅美玲_不能說走就走 [美華].mpg').artist, '羅美玲', '單一歌手後面接底線也要算邊界: ');
+  eq(id('林凡  鄭仲基 想念你的愛').artist, '林凡 & 鄭仲基', '兩個空白也算邊界（不要求剛好一個）: ');
+
+  // 反向保護：邊界放寬後，純 CJK 連著寫、沒有任何空白或連接符時仍然不能誤吃。
+  eq(id('周杰倫粉絲團翻唱大賽精華').artist, '', '純 CJK 連著寫不可被當成有邊界: ');
+  eq(id('周杰倫忘記時間').artist, '', '沒有任何連接符時仍要維持既有的保守行為: ');
+});
+
 test('酷狗／QQ：緊湊標題行後的中英雙語製作名單整段移除', () => {
   const lines = [
     { time: 0, text: '浪子的路-RPG/茄子蛋' },
