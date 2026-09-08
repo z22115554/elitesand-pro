@@ -435,6 +435,10 @@
         labelKey: entry.title ? '' : 'import.playlist.itemFallbackLabel',
         labelVars: { index: index + 1 },
         autoSeparate: !!dom.youtubeAutoSeparate?.checked,
+        // 播放清單一次排幾十~幾百首，中間某首抓不到 metadata（下架/私人/地區限制）
+        // 是常態，不是需要使用者判斷的例外——inspectImport() 靠這個旗標決定要不要
+        // 為了純技術性失敗跳出確認視窗卡住後面所有還沒處理的歌。
+        isBatch: true,
       }));
       dom.ytFetchBtn.disabled = false;
       dom.ytFetchBtn.textContent = t('source.importAudio');
@@ -564,6 +568,17 @@
       const cancelled = new Error(data.error || t('import.stage.cancelled'));
       cancelled.code = 'IMPORT_CANCELLED';
       throw cancelled;
+    }
+    // 「根本抓不到 metadata」（私人/下架/地區限制，yt-dlp 全部策略＋oEmbed 都失敗）是純技術性
+    // 失敗，不是需要使用者判斷的內容風險。批次匯入（播放清單）沒有人一直盯著看，跳確認視窗
+    // 會讓整條佇列卡在這支壞影片前面，後面幾十~幾百首都不會處理（實測回報：一支影片抓不到
+    // 資料，300 首的匯入卡住 6 分鐘沒有任何進度）。批次時直接當這首失敗、跳到下一首；
+    // 單首匯入（使用者就在螢幕前）才維持原本「問一下要不要仍然嘗試下載」的行為。
+    if (job.isBatch) {
+      const unreachable = new Error(t('import.assessment.unavailableWithReason', { message: data.error || t('import.assessment.unknownReason') }));
+      unreachable.code = 'IMPORT_METADATA_UNAVAILABLE';
+      unreachable.retryable = false;
+      throw unreachable;
     }
     return {
       warning: true,
@@ -852,6 +867,7 @@
         placement: options.placement === 'next' ? 'next' : 'end',
         assessment: options.assessment || null,
         autoSeparate: options.autoSeparate === true,
+        isBatch: options.isBatch === true,
         status: 'queued', stage: '等待中', percent: 0, resolve, reject, createdAt: Date.now(),
       };
       ytImportQueue.push(job);
