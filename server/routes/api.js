@@ -782,7 +782,18 @@ router.post('/youtube', requirePin, async (req, res) => {
     }
 
     log.info(`處理 YouTube 連結: ${url}`);
-    const result = await AudioProcessor.processYouTube(url, { priority: 'interactive', requestId: req.body.requestId });
+    const result = await AudioProcessor.processYouTube(url, {
+      priority: 'interactive',
+      requestId: req.body.requestId,
+      isBatch: req.body.isBatch === true,
+      forceReplace: req.body.forceReplace === true,
+    });
+    // 落地前去重：伺服器發現這是「歌手+歌名」已存在的另一個 YouTube 上傳，交回客戶端問
+    // 使用者要取代還是略過（批次匯入不會走到這裡，見 audio-processor.js 的 findByIdentity）。
+    // 這不是失敗，用 200 回，不要走 classifyImportError 那條錯誤分類與遙測路徑。
+    if (result && result.duplicate) {
+      return res.json({ success: false, code: 'DUPLICATE_SONG', existing: result.existing });
+    }
     const duration = Date.now() - start;
     log.info(`YouTube 處理完成: ${result.title || result.id} (${duration}ms)`);
     log.perf('youtube', duration, { title: result.title });

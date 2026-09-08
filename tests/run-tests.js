@@ -4983,6 +4983,60 @@ test('無分隔符對唱標題：連接符（&＋_-）也算邊界，老歌 KTV 
   eq(id('周杰倫忘記時間').artist, '', '沒有任何連接符時仍要維持既有的保守行為: ');
 });
 
+test('落地前去重：找出「歌手+歌名」相符但 videoId 不同的既有記錄', () => {
+  // 2026-09-08 實測：「北極雪」被兩個不同 YouTube 上傳各匯入一次，videoId 不同，
+  // rememberImport() 原本用 id 當 key，完全不會發現。findByIdentity() 是第二層 key。
+  const libraryStore = require('../server/services/library-store');
+  try {
+    libraryStore.rememberImport({ id: 'dedup-old-id', title: '北極雪', artist: '馮德倫 & 陳慧琳', filename: 'a.mp3' });
+
+    const hit = libraryStore.findByIdentity('馮德倫 & 陳慧琳', '北極雪', 'dedup-new-id');
+    ok(hit, '歌手/歌名完全相符時必須找到既有記錄: ');
+    eq(hit.id, 'dedup-old-id');
+
+    // 全形/半形、有無空白只是寫法不同，NFKC 正規化後仍要算同一首。
+    const hitNormalized = libraryStore.findByIdentity('馮德倫  &  陳慧琳', '北極雪', 'dedup-new-id');
+    ok(hitNormalized, '多餘空白不可讓比對失效: ');
+
+    // 排除自己：同一個 id 不算撞到「別的」記錄。
+    eq(libraryStore.findByIdentity('馮德倫 & 陳慧琳', '北極雪', 'dedup-old-id'), null,
+      '排除自己這筆，不可以自己撞自己: ');
+
+    // 歌手或歌名不同就不算重複。
+    eq(libraryStore.findByIdentity('周杰倫', '北極雪', 'dedup-new-id'), null, '歌手不同不算重複: ');
+    eq(libraryStore.findByIdentity('馮德倫 & 陳慧琳', '晴天', 'dedup-new-id'), null, '歌名不同不算重複: ');
+  } finally {
+    libraryStore.remove('dedup-old-id');
+  }
+});
+
+test('落地前去重：批次匯入沿用既有版本，單首匯入交回去問使用者取代或略過', () => {
+  // 批次匯入（播放清單）沒有人一直盯著，跳確認視窗會卡住整條佇列——跟 metadata-unavailable
+  // 那次同一個教訓，寫進 STATUS 的 memory `import-parse-failure-fingerprints`。
+  const processor = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'audio-processor.js'), 'utf8').replace(/\r\n/g, '\n');
+  ok(processor.includes('libraryStore.findByIdentity(track.artist, track.title, track.id)'),
+    '落地前必須用歌手+歌名查重，不能只信 videoId: ');
+  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,200}if \(options\.isBatch\) \{[\s\S]{0,300}mergedFromDuplicate: true/.test(processor),
+    '批次匯入命中重複時要直接沿用既有版本，不建確認流程: ');
+  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,600}return \{\s*duplicate: true,/.test(processor),
+    '單首匯入命中重複時要回傳需要確認的訊號，交給呼叫端問使用者: ');
+  ok(processor.includes("libraryStore.remove(duplicate.id);"), '使用者選了取代才可以動到既有記錄: ');
+
+  const route = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8').replace(/\r\n/g, '\n');
+  ok(route.includes("isBatch: req.body.isBatch === true,"), 'API 必須把批次旗標從請求體傳給 processYouTube: ');
+  ok(route.includes("forceReplace: req.body.forceReplace === true,"), 'API 必須接受取代旗標: ');
+  ok(/if \(result && result\.duplicate\) \{[\s\S]{0,200}code: 'DUPLICATE_SONG'/.test(route),
+    '重複訊號要在 sanitizeTrack 之前攔下來，直接回 200 交給前端問使用者，不能被判成失敗: ');
+
+  const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-youtube-import.js'), 'utf8').replace(/\r\n/g, '\n');
+  ok(client.includes("body: JSON.stringify({ url: job.url, requestId, isBatch: job.isBatch })"),
+    '前端送出匯入請求時要帶上這個 job 是不是批次: ');
+  ok(/if \(!job\.isBatch && data && data\.code === 'DUPLICATE_SONG'\) \{/.test(client),
+    '只有單首匯入才彈確認視窗，批次不能等使用者: ');
+  ok(client.includes('body: JSON.stringify({ url: job.url, requestId, forceReplace: true })'),
+    '使用者選取代後要帶著 forceReplace 重新送一次: ');
+});
+
 test('酷狗／QQ：緊湊標題行後的中英雙語製作名單整段移除', () => {
   const lines = [
     { time: 0, text: '浪子的路-RPG/茄子蛋' },

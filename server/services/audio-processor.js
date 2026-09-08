@@ -821,7 +821,30 @@ class AudioProcessor {
       source: 'youtube',
       url,
     };
-    require('./library-store').rememberImport(track);
+
+    // 落地前去重：同一首歌被不同 YouTube 上傳各匯入一次，videoId 不同，上面的快取命中
+    // 完全擋不住（2026-09-08 實測：「北極雪」被兩個上傳各收一份）。這裡用「歌手+歌名」
+    // 當第二層 key。批次匯入（播放清單）沒有人一直盯著，直接沿用既有那份、不重複落地；
+    // 單首手動匯入交給呼叫端問使用者要「取代」還是「略過」，見 forceReplace。
+    const libraryStore = require('./library-store');
+    const duplicate = libraryStore.findByIdentity(track.artist, track.title, track.id);
+    if (duplicate && !options.forceReplace) {
+      if (options.isBatch) {
+        log.info(`批次匯入命中重複（歌手+歌名相符，videoId 不同）：沿用既有版本 "${duplicate.artist} - ${duplicate.title}"，不重複落地`);
+        return { ...duplicate, id: duplicate.id, cacheHit: true, mergedFromDuplicate: true };
+      }
+      return {
+        duplicate: true,
+        existing: { id: duplicate.id, artist: duplicate.artist, title: duplicate.title, cover: duplicate.cover },
+      };
+    }
+    if (duplicate && options.forceReplace) {
+      // 使用者選了「取代」：只移除媒體庫記錄，音檔清理交給既有的 cleanupAudio() 排程，
+      // 跟「音檔可清理、庫保留即可重抓」的既有設計一致，這裡不再另外實作刪檔。
+      libraryStore.remove(duplicate.id);
+    }
+
+    libraryStore.rememberImport(track);
     return track;
   }
 

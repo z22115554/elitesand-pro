@@ -904,12 +904,38 @@
         }
         updateJob(job, { status: 'active', stage: '準備下載', messageKey: 'import.stage.checkPassed' });
         activeRequestIds.add(requestId);
-        const res = await PinAuth.fetchWithPin('/api/youtube', {
+        let res = await PinAuth.fetchWithPin('/api/youtube', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: job.url, requestId }),
+          body: JSON.stringify({ url: job.url, requestId, isBatch: job.isBatch }),
         });
-        const data = await res.json();
+        let data = await res.json();
+        // 落地前去重：伺服器發現「歌手+歌名」跟既有一首歌相符（不同 YouTube 上傳的同一首歌）。
+        // 批次匯入時伺服器直接沿用既有版本，不會走到這裡；只有單首匯入才需要問使用者
+        // 「取代」還是「略過」——批次沒有人一直盯著，跳確認視窗會卡住整條佇列（同一個教訓
+        // 在 metadata-unavailable 那次已經踩過）。
+        if (!job.isBatch && data && data.code === 'DUPLICATE_SONG') {
+          const existing = data.existing || {};
+          const label = existing.artist ? `${existing.artist} - ${existing.title}` : (existing.title || job.label || job.url);
+          const replace = window.PanelConfirm
+            ? await window.PanelConfirm.request({
+              title: t('import.duplicate.title'),
+              summary: t('import.duplicate.summary', { label }),
+              impact: t('import.duplicate.impact'),
+              confirmLabel: t('import.duplicate.replace'),
+              tone: 'neutral',
+            })
+            : false;
+          if (!replace) {
+            const skipped = new Error(t('import.stage.skipped')); skipped.code = 'IMPORT_SKIPPED'; throw skipped;
+          }
+          res = await PinAuth.fetchWithPin('/api/youtube', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: job.url, requestId, forceReplace: true }),
+          });
+          data = await res.json();
+        }
         if (res.ok && data.success && data.track) {
           let placement = null;
           if (job.replaceTrackId) {

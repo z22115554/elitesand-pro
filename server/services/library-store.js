@@ -152,6 +152,35 @@ function getEntry(id) {
   return library[String(id)] || null;
 }
 
+// 同一首歌被不同 YouTube 上傳各匯入一次時，videoId 不同、rememberImport() 的 dedupe
+// 完全不會發現——2026-09-08 實測撞到（「北極雪」兩個上傳各收一份）。這裡改用「歌手+歌名」
+// 當第二層 key；NFKC 正規化＋去空白/標點，才擋得住全形/半形、有無空白這類差異。
+function normalizeIdentityPart(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function identityKey(artist, title) {
+  const t = normalizeIdentityPart(title);
+  if (!t) return null; // 沒有歌名就沒有比對意義，避免把一堆「歌手相同、歌名空白」的都判成重複
+  return `${normalizeIdentityPart(artist)}::${t}`;
+}
+
+/** 找出「歌手+歌名」跟給定值相同、但 id 不同的既有記錄；找不到回 null。 */
+function findByIdentity(artist, title, excludeId) {
+  const key = identityKey(artist, title);
+  if (!key) return null;
+  const exclude = excludeId != null ? String(excludeId) : null;
+  for (const id of Object.keys(library)) {
+    if (id === exclude) continue;
+    const entry = library[id];
+    if (identityKey(entry.artist, entry.title) === key) return entry;
+  }
+  return null;
+}
+
 /**
  * 回傳可重用的檔名存在查詢。這是播放清單同步專用的批次快照；播放
  * 前的安全檢查仍會走下方 audioExists() 的即時檔案檢查，避免快取造成誤播。
@@ -236,4 +265,4 @@ function cleanupAudio(keepFilenames = new Set()) {
 process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
 function setErrorReporter(fn) { _errorReporter = typeof fn === 'function' ? fn : null; }
-module.exports = { recordPlay, rememberImport, updateMeta, getEntry, audioExists, audioStatus, getAudioExistsLookup, resetAudioStatusCache, getLibrary, remove, clear, cleanupAudio, setErrorReporter, saveNow };
+module.exports = { recordPlay, rememberImport, updateMeta, getEntry, findByIdentity, audioExists, audioStatus, getAudioExistsLookup, resetAudioStatusCache, getLibrary, remove, clear, cleanupAudio, setErrorReporter, saveNow };
