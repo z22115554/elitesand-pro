@@ -2,8 +2,8 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 1.8.0
-Effective Date / 生效日期：2026-08-19
+Version: 2.0.0
+Effective Date / 生效日期：2026-09-10
 
 IMPORTANT INFORMATION / 重要資訊
 --------------------------------
@@ -102,16 +102,17 @@ exists.
 
 三、授權授予與輸出使用
 
-在你遵守本 EULA、LICENSE 及適用法律的前提下，權利人授予你全球、非專屬、
-不可轉讓、不可再授權且免權利金的權利，得以：
+本軟體原始碼的授權——包含使用、修改、散布與再散布的權利及其條件——依隨附的
+LICENSE（MPL-2.0）為準，本節不予縮減，也不另外附加條件。本節僅就「使用本
+軟體產生的輸出」與「你提供的回饋」做補充說明：
 
-1. 下載、安裝並執行未經修改的本軟體官方發佈版本；
-2. 為自己使用而調整本軟體明確提供的設定、偏好、版面選項及設定檔；
-3. 將本軟體產生的歌詞動畫、歌單及控制畫面，用於你自己的直播、錄影與演出，
-   包含商業直播、錄影與演出；
-4. 匯入你有權使用的音訊、歌詞、封面、背景及其他素材；以及
-5. 為你自己使用而修改本軟體，但不得將修改後版本、衍生版本或其任何部分
-   以散布、提供下載、代管或其他方式對外提供。
+1. 你可以把本軟體產生的歌詞動畫、歌單及控制畫面，用於你自己的直播、錄影
+   與演出，包含商業直播、錄影與演出。權利人不就這些輸出主張任何權利，
+   也不收取任何費用。
+2. 你可以匯入你有權使用的音訊、歌詞、封面、背景及其他素材；這些素材的權利
+   歸屬與你的責任見第五節。
+3. 為自己使用而調整本軟體提供的設定、偏好、版面選項及設定檔，不需要任何
+   額外授權；更進一步的修改與散布，依 MPL-2.0 辦理。
 
 你自願就本軟體提出的意見、建議或錯誤回報（不含你的歌曲、歌詞或其他創作
 內容），權利人得為改進本軟體而無償使用、修改及納入本軟體，無需另行通知
@@ -124,29 +125,32 @@ exists.
 
 四、限制行為
 
-除非 LICENSE、第三方元件授權、權利人另行書面同意或適用法律明確允許，
-你不得：
+本軟體的原始碼依隨附的 LICENSE（Mozilla Public License 2.0，以下稱 MPL-2.0）
+授權。散布本軟體、修改後散布、以代管或軟體即服務方式提供第三人使用、以及
+還原工程，都是 MPL-2.0 明確允許的行為，本 EULA 不加以限制。你行使這些權利
+時，遵守 MPL-2.0 的條件即可——主要是：修改過的 MPL 檔案必須以 MPL 提供其
+原始碼形式，並保留授權與著作權標示。
 
-1. 重新散布、上架、轉售、出租、再授權、公開提供本軟體，或將本軟體全部
-   或一部隨附於其他產品或服務；
-2. 修改、改作或翻譯本軟體的原創程式碼或原創資產後對外散布，或將其衍生
-   版本對外提供；但依第三條為自己使用所為、且未對外提供的調整或修改
-   不在此限；
-3. 將本軟體本身以代管、軟體即服務或其他方式提供第三人操作或使用；
-4. 反編譯、反組譯、還原工程或嘗試取得未公開的原始碼，但法律為互通性、
-   資安研究或其他強制目的明確允許的範圍除外；
-5. 移除或變更本軟體的名稱、著作權、授權或第三方權利標示；
-6. 迴避 PIN、存取控制、更新驗證、服務限制或其他安全機制；或
-7. 使用本軟體侵害著作權、隱私權、商標權、肖像權或其他權利，或違反法律、
+除 MPL-2.0、第三方元件授權或適用法律另有規定外，你不得：
+
+1. 移除或變更本軟體的名稱、著作權、授權或第三方權利標示（本項與 MPL-2.0
+   第 3.4 條的要求一致）；
+2. 對你未獲授權操作的他人執行個體，迴避其 PIN、存取控制或其他安全機制；
+   你要如何修改自己持有的副本，屬於 MPL-2.0 授予你的權利，不在此限；
+3. 規避更新驗證機制，以向他人散布偽造或竄改過的更新；或
+4. 使用本軟體侵害著作權、隱私權、商標權、肖像權或其他權利，或違反法律、
    平台規則或第三方服務條款。
 
-本條所定限制僅拘束依本 EULA 取得本軟體的使用者，不意圖縮減任何第三方
-開放原始碼授權或法律強制授予的權利。特別是：本軟體隨附的 SoundTouch
-（public/vendor/soundtouch.js、soundtouch-worklet.js）依 GNU Lesser General
-Public License v2.1 或其後版本（LGPL）授權，第四條第 4 項的還原工程限制
-不適用於 LGPL 依法或依其授權條款允許的修改、替換與除錯；你可以自行替換
-相容的 SoundTouch 元件，本軟體不會以簽章、雜湊或其他機制阻止替換後的
-版本啟動。LGPL 授權全文與對應原始碼位置見 THIRD-PARTY-NOTICES.txt。
+第 4 項請特別注意：本軟體可以驅動 yt-dlp 下載影音，並向多個歌詞來源查詢。
+你使用這些功能是否符合 YouTube 及各該服務當時有效的使用條款，由你自行判斷
+並負責；權利人不代你評估，也未授予你任何規避平台規則的權利。
+
+本條所定限制僅拘束依本 EULA 取得本軟體的使用者，不意圖縮減任何第三方開放
+原始碼授權或法律強制授予的權利。本軟體隨附的 SoundTouch
+（public/vendor/soundtouch-worklet.js）依 GNU Lesser General Public License
+v2.1 或其後版本（LGPL）授權；你可以自行替換相容的 SoundTouch 元件，本軟體
+不會以簽章、雜湊或其他機制阻止替換後的版本啟動。第三方元件的授權全文與
+對應原始碼位置見 THIRD-PARTY-NOTICES.txt。
 
 五、音訊、歌詞與使用者內容
 
@@ -482,22 +486,22 @@ rights held by third parties.
 
 3. LICENSE GRANT AND USE OF OUTPUT
 
-Subject to your compliance with this EULA, the LICENSE, and applicable law, the
-rights holder grants you a worldwide, non-exclusive, non-transferable,
-non-sublicensable, royalty-free right to:
+The license for the Software's source code — including the rights to use,
+modify, distribute, and redistribute it, and the conditions attached to those
+rights — is governed by the accompanying LICENSE (MPL-2.0). This section does
+not narrow it and attaches no additional conditions. This section only
+supplements it regarding use of the Software's output and your feedback:
 
-a. download, install, and run unmodified official releases of the Software;
-b. adjust settings, preferences, layout options, and configuration files that
-   the Software expressly makes available for your own use;
-c. use lyric animations, setlists, and control screens produced by the
+a. You may use lyric animations, setlists, and control screens produced by the
    Software in your own streams, recordings, and performances, including
-   commercial streams, recordings, and performances; and
-d. import audio, lyrics, artwork, backgrounds, and other material that you are
-   entitled to use; and
-
-e. modify the Software for your own use, provided that you do not distribute,
-   offer for download, host, or otherwise make available to others any
-   modified version, derivative version, or part thereof.
+   commercial ones. The rights holder claims no rights in that output and
+   charges nothing for it.
+b. You may import audio, lyrics, artwork, backgrounds, and other material that
+   you are entitled to use; ownership of that material and your responsibility
+   for it are covered in Section 5.
+c. Adjusting settings, preferences, layout options, and configuration files for
+   your own use requires no additional permission; modification and
+   distribution beyond that are governed by MPL-2.0.
 
 If you voluntarily submit feedback, suggestions, or bug reports about the
 Software (excluding your songs, lyrics, or other creative content), the rights
@@ -514,38 +518,43 @@ assets, trademarks, or third-party content.
 
 4. RESTRICTIONS
 
-Except where the LICENSE, a third-party license, separate written permission
-from the rights holder, or applicable law expressly allows it, you may not:
+The Software's source code is licensed under the accompanying LICENSE (Mozilla
+Public License 2.0, "MPL-2.0"). Distributing the Software, distributing
+modified versions, providing it to third parties as a hosted or
+software-as-a-service offering, and reverse engineering are all expressly
+permitted by MPL-2.0, and this EULA does not restrict them. When exercising
+those rights you need only comply with MPL-2.0 — principally: modified MPL
+files must be made available in Source Code Form under the MPL, and license and
+copyright notices must be preserved.
 
-a. redistribute, publish, resell, rent, sublicense, or make the Software
-   publicly available, or bundle all or part of it with another product or
-   service;
-b. modify, adapt, or translate original code or original assets of the Software
-   and distribute or otherwise provide the resulting derivative version,
-   except for adjustments or modifications made for your own use under
-   Section 3 that are not made available to others;
-c. provide the Software itself for third-party operation or use as a hosted,
-   software-as-a-service, or similar offering;
-d. decompile, disassemble, reverse engineer, or attempt to obtain non-public
-   source code, except where mandatory law expressly permits it for
-   interoperability, security research, or another compulsory purpose;
-e. remove or alter names, copyright, license, or third-party notices;
-f. bypass PINs, access controls, update verification, service limits, or other
-   security mechanisms; or
-g. use the Software to infringe copyright, privacy, trademark, publicity, or
+Except where MPL-2.0, a third-party license, or applicable law provides
+otherwise, you may not:
+
+a. remove or alter names, copyright, license, or third-party notices (this
+   mirrors the requirement in MPL-2.0 Section 3.4);
+b. bypass PINs, access controls, or other security mechanisms on instances
+   operated by others that you are not authorised to operate — how you modify
+   your own copy is a right MPL-2.0 grants you and is not restricted here;
+c. circumvent update verification in order to distribute forged or tampered
+   updates to others; or
+d. use the Software to infringe copyright, privacy, trademark, publicity, or
    other rights, or to violate law, platform rules, or third-party terms.
+
+Item (d) deserves particular attention: the Software can drive yt-dlp to
+download media and can query multiple lyrics sources. Whether your use of those
+features complies with the then-current terms of YouTube and each such service
+is for you to judge and for you to bear; the rights holder does not assess this
+on your behalf and grants you no right to circumvent platform rules.
 
 These restrictions bind users who receive the Software under this EULA. They
 are not intended to reduce rights granted by third-party open-source licenses
-or mandatory law. In particular: the bundled SoundTouch component
-(public/vendor/soundtouch.js, soundtouch-worklet.js) is licensed under the
-GNU Lesser General Public License v2.1 or later (LGPL). The reverse-engineering
-restriction in Section 4(d) does not apply to modification, replacement, or
-debugging that the LGPL lawfully permits; you may replace it with a compatible
+or mandatory law. The bundled SoundTouch component
+(public/vendor/soundtouch-worklet.js) is licensed under the GNU Lesser General
+Public License v2.1 or later (LGPL); you may replace it with a compatible
 SoundTouch component, and the Software does not use signatures, hashes, or
 other mechanisms to prevent a replaced component from loading. See
-THIRD-PARTY-NOTICES.txt for the full LGPL text and corresponding source
-location.
+THIRD-PARTY-NOTICES.txt for the full third-party license texts and
+corresponding source locations.
 
 5. AUDIO, LYRICS, AND USER CONTENT
 

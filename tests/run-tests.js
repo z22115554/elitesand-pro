@@ -4533,11 +4533,25 @@ test('AI 分離遙測：三條引擎的終態統一由協調器記一次，帶 f
   ok(tele.includes("record('ai.retried', 1, true)"), 'ai.retried 布林要進日彙總: ');
 });
 
-test('EULA 1.8.0：AI 分離「是否重試過」欄位揭露與遙測 gate 一致', () => {
+test('AI 分離「是否重試過」欄位揭露與遙測 gate 一致', () => {
   const eula = fs.readFileSync(path.join(__dirname, '../EULA.txt'), 'utf8');
   const tele = fs.readFileSync(path.join(__dirname, '../server/services/usage-telemetry.js'), 'utf8');
   const flds = fs.readFileSync(path.join(__dirname, '../server/services/telemetry-fields.js'), 'utf8');
-  ok(/^Version:\s*1\.8\.0\s*$/m.test(eula), 'EULA 版本行必須是 1.8.0: ');
+  // DAILY_DISCLOSED_EULA_VERSION 的語義是「這批欄位是在哪一版 EULA 被揭露的」，
+  // 不是「目前 EULA 版本」——沒有新增欄位就不該跟著 EULA 版本走（見 usage-telemetry.js
+  // 的註解：改欄位登錄表時才同步）。真正要守的不變量是：目前 EULA 版本 >= 揭露版本，
+  // 否則 gate 會把所有人擋掉。
+  const eulaVersion = (eula.match(/^Version:\s*([0-9]+(?:\.[0-9]+)*)\s*$/m) || [])[1];
+  ok(eulaVersion, 'EULA 必須有 x.y.z 版本行: ');
+  const cmp = (a, b) => {
+    const l = a.split('.'); const r = b.split('.');
+    for (let i = 0; i < Math.max(l.length, r.length); i += 1) {
+      const d = (Number.parseInt(l[i], 10) || 0) - (Number.parseInt(r[i], 10) || 0);
+      if (d) return d;
+    }
+    return 0;
+  };
+  ok(cmp(eulaVersion, '1.8.0') >= 0, `EULA 版本(${eulaVersion})不可低於日彙總揭露版本 1.8.0: `);
   ok(eula.includes('retry on the same compute backend') && eula.includes('同一個運算後端上重試'), 'EULA 中英文都要揭露「同後端重試」: ');
   ok(/never\s+a retry count/.test(eula) && eula.includes('不含重試次數'), 'EULA 要明講不送重試「次數」: ');
   ok(tele.includes("DAILY_DISCLOSED_EULA_VERSION = '1.8.0'"), '日彙總 gate 要同步到 1.8.0: ');

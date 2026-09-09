@@ -164,14 +164,16 @@ Elitesand Pro 以本機優先。兩項預設開啟、可在設定關閉的匿名
 
 ### 授權
 
-Elitesand Pro 是原始碼不公開的專有軟體（proprietary，非開源），採用 [Elitesand Pro 授權條款](LICENSE)：
+Elitesand Pro 是開源軟體，採用 **[Mozilla Public License 2.0](LICENSE)**（除另有標示的檔案外，本 repo 全部檔案適用）。
 
 - 可**免費**用於個人與商業直播／演出。
-- 允許私人、不對外散布的自用修改。
-- 未經書面同意，不得重新散布原版或修改版，也不得散布本專案自有的原始碼。
-- 官方發布一律只透過本頁的 GitHub Releases。
+- 可自由使用、修改、散布，也可以拿去做商業產品或代管服務。
+- 條件：**你修改過的 MPL 檔案，必須以 MPL 提供其原始碼形式**，並保留授權與著作權標示。MPL 是檔案級 copyleft——你自己新增的檔案不會被傳染。
+- MPL-2.0 沒有網路 copyleft：把它做成線上服務不會強制你公開你的伺服器程式碼。
 
-第三方元件（含 SoundTouch 等 LGPL 元件）依其原授權使用，不受上述限制拘束，詳見 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。歌曲、歌詞、封面及其他媒體的權利不包含在本專案授權內。
+Copyright (c) 2026 一粒沙。[EULA](EULA.txt) 另外規範使用風險、第三方服務與資料處理，與本授權並行。
+
+第三方元件（含 SoundTouch 等 LGPL 元件）依其原授權使用，詳見 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。**歌曲、歌詞、封面及其他媒體的權利不包含在本授權內**——你要為自己匯入、下載與播出的內容負責。
 
 ---
 
@@ -326,14 +328,16 @@ Elitesand Pro is local-first. Two anonymous, on-by-default contributions can be 
 
 ### License
 
-Elitesand Pro is proprietary, closed-source software (not open source), under the [Elitesand Pro License](LICENSE):
+Elitesand Pro is open source under the **[Mozilla Public License 2.0](LICENSE)** (every file in this repo unless a file states otherwise).
 
 - **Free** for personal and commercial streaming or performance.
-- Private, non-distributed modifications are allowed.
-- Redistributing the original or a modified build, or this project's own source code, requires written permission.
-- Official releases are published only through the GitHub Releases page above.
+- Free to use, modify, and distribute — including in commercial products or hosted services.
+- The condition: **MPL files you modify must be made available in Source Code Form under the MPL**, with license and copyright notices preserved. MPL is file-level copyleft — files you add yourself are not infected.
+- MPL-2.0 has no network copyleft: running it as an online service does not force you to publish your server code.
 
-Third-party components (including LGPL components such as SoundTouch) remain governed by their own licenses — see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Rights to songs, lyrics, cover art, and other media are not covered by this license.
+Copyright (c) 2026 一粒沙. The [EULA](EULA.txt) separately covers usage risk, third-party services, and data handling, and applies alongside this license.
+
+Third-party components (including LGPL components such as SoundTouch) remain governed by their own licenses — see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). **Rights to songs, lyrics, cover art, and other media are not covered by this license** — you are responsible for what you import, download, and broadcast.
 
 ---
 
@@ -488,14 +492,16 @@ Elitesand Pro はローカル優先です。既定でオン・設定でオフに
 
 ### ライセンス
 
-Elitesand Pro はソース非公開のプロプライエタリソフトウェア（非オープンソース）で、[Elitesand Pro ライセンス](LICENSE)に従います：
+Elitesand Pro はオープンソースで、**[Mozilla Public License 2.0](LICENSE)** に従います（個別に表示のあるファイルを除き、本 repo の全ファイルが対象）。
 
 - 個人・商用の配信／公演で**無料**。
-- 非公開・非配布の個人改変は可。
-- 原版または改変版、および本プロジェクト自身のソースコードの再配布には書面による許可が必要。
-- 公式配布は上記の GitHub Releases のみ。
+- 自由に使用・改変・再配布でき、商用製品やホスティングサービスへの利用も可能。
+- 条件：**改変した MPL ファイルは MPL のもとでソースコード形式を提供**し、ライセンスと著作権表示を保持すること。MPL はファイル単位の copyleft で、自分で追加したファイルには波及しません。
+- MPL-2.0 にネットワーク copyleft はありません。オンラインサービス化してもサーバーコードの公開は強制されません。
 
-サードパーティコンポーネント（SoundTouch などの LGPL を含む）は各自のライセンスに従います — [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) を参照。楽曲・歌詞・カバー等の権利は本ライセンスの対象外です。
+Copyright (c) 2026 一粒沙。[EULA](EULA.txt) は利用リスク・第三者サービス・データの取り扱いを別途定めており、本ライセンスと併存します。
+
+サードパーティコンポーネント（SoundTouch などの LGPL を含む）は各自のライセンスに従います — [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) を参照。**楽曲・歌詞・カバー等の権利は本ライセンスの対象外です**——取り込み・ダウンロード・配信する内容の責任はあなたにあります。
 
 ---
 
@@ -650,14 +656,16 @@ Elitesand Pro는 로컬 우선입니다. 기본으로 켜져 있고 설정에서
 
 ### 라이선스
 
-Elitesand Pro는 소스 비공개 독점 소프트웨어(비오픈소스)로 [Elitesand Pro 라이선스](LICENSE)를 따릅니다:
+Elitesand Pro는 오픈소스이며 **[Mozilla Public License 2.0](LICENSE)**을 따릅니다(별도 표시가 있는 파일을 제외한 이 repo의 모든 파일).
 
 - 개인 및 상업 방송·공연에 **무료**.
-- 비공개·비배포 개인 수정 허용.
-- 원본 또는 수정본, 그리고 이 프로젝트 자체의 소스 코드 재배포에는 서면 허가 필요.
-- 공식 배포는 위 GitHub Releases로만.
+- 자유롭게 사용·수정·배포할 수 있으며, 상업 제품이나 호스팅 서비스에도 사용 가능.
+- 조건: **수정한 MPL 파일은 MPL 하에 소스 코드 형태로 제공**하고 라이선스·저작권 고지를 유지해야 합니다. MPL은 파일 단위 copyleft이므로 직접 추가한 파일에는 전파되지 않습니다.
+- MPL-2.0에는 네트워크 copyleft가 없습니다. 온라인 서비스로 운영해도 서버 코드 공개가 강제되지 않습니다.
 
-서드파티 구성 요소(SoundTouch 등 LGPL 포함)는 각자의 라이선스를 따릅니다 — [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) 참고. 곡, 가사, 커버 등 미디어 권리는 이 라이선스에 포함되지 않습니다.
+Copyright (c) 2026 一粒沙. [EULA](EULA.txt)는 사용 위험, third-party 서비스, 데이터 처리를 별도로 규정하며 본 라이선스와 함께 적용됩니다.
+
+서드파티 구성 요소(SoundTouch 등 LGPL 포함)는 각자의 라이선스를 따릅니다 — [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) 참고. **곡, 가사, 커버 등 미디어 권리는 이 라이선스에 포함되지 않습니다** — 가져오고 다운로드하고 방송하는 콘텐츠는 본인 책임입니다.
 
 ---
 
@@ -812,11 +820,13 @@ Elitesand Pro 以本地优先。两项默认开启、可在设置关闭的匿名
 
 ### 授权
 
-Elitesand Pro 是源代码不公开的专有软件（proprietary，非开源），采用 [Elitesand Pro 授权条款](LICENSE)：
+Elitesand Pro 是开源软件，采用 **[Mozilla Public License 2.0](LICENSE)**（除另有标示的文件外，本 repo 全部文件适用）。
 
 - 可**免费**用于个人与商业直播／演出。
-- 允许私人、不对外分发的自用修改。
-- 未经书面同意，不得重新分发原版或修改版，也不得分发本项目自有的源代码。
-- 官方发布一律只通过本页的 GitHub Releases。
+- 可自由使用、修改、分发，也可以拿去做商业产品或托管服务。
+- 条件：**你修改过的 MPL 文件，必须以 MPL 提供其源代码形式**，并保留授权与著作权标示。MPL 是文件级 copyleft——你自己新增的文件不会被传染。
+- MPL-2.0 没有网络 copyleft：把它做成在线服务不会强制你公开你的服务器代码。
 
-第三方组件（含 SoundTouch 等 LGPL 组件）依其原授权使用，不受上述限制约束，详见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。歌曲、歌词、封面及其他媒体的权利不包含在本项目授权内。
+Copyright (c) 2026 一粒沙。[EULA](EULA.txt) 另外规范使用风险、第三方服务与数据处理，与本授权并行。
+
+第三方组件（含 SoundTouch 等 LGPL 组件）依其原授权使用，详见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。**歌曲、歌词、封面及其他媒体的权利不包含在本授权内**——你要为自己导入、下载与播出的内容负责。
