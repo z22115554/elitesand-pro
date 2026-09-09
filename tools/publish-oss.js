@@ -53,6 +53,17 @@ const ALLOW_FILES = [
   '.gitignore',
 ];
 
+// ─── 公開倉自己管理、絕不可被本腳本刪除的檔案 ───
+// 公開倉（z22115554/elitesand-pro）同時是發行倉：它上面有一些不來自本倉、
+// 由那邊直接維護的檔案。本腳本會刪除「目標倉有、白名單沒有」的檔案，若不特別
+// 保護，第一次同步就會把它們清掉。
+// announcement.json 是程式每 30 分鐘抓一次的公告來源
+// （raw.githubusercontent.com/.../main/announcement.json，見 config.example.js），
+// 刪掉等於讓所有現有使用者的程式內公告直接掛掉。
+const PRESERVE_IN_TARGET = [
+  'announcement.json',
+];
+
 // ─── 無論如何都不複製（第二道防線，就算 ALLOW 寫太寬也擋得住）───
 // 比對的是相對於 repo root 的 POSIX 路徑。
 const DENY_PATTERNS = [
@@ -147,7 +158,7 @@ function syncMode(args, target) {
     const tracked = targetTracked(target);
     const keep = new Set(files);
 
-    for (const f of tracked) if (!keep.has(f)) {
+    for (const f of tracked) if (!keep.has(f) && !PRESERVE_IN_TARGET.includes(f)) {
       const p = path.join(target, f);
       if (fs.existsSync(p)) fs.unlinkSync(p);
     }
@@ -228,7 +239,7 @@ function main() {
   const files = collect();
   const tracked = targetTracked(target);
   const keep = new Set(files);
-  const toDelete = tracked.filter((f) => !keep.has(f));
+  const toDelete = tracked.filter((f) => !keep.has(f) && !PRESERVE_IN_TARGET.includes(f));
 
   // 最後一道保險：任何一個要複製的檔案若命中 DENY，直接中止（理論上 collect 已擋掉）。
   const leaks = files.filter(denied);
