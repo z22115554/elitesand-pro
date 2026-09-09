@@ -148,9 +148,11 @@ process.on('exit', () => {
 
 loadCacheFromDisk();
 
-// ─── 製作資訊行過濾（參考 Metrolist KuGou.normalize）───
+// ─── 製作資訊行過濾 ───
 // 許多來源在歌詞開頭/結尾塞「作詞：xxx / 作曲：xxx / Producer: xxx」等非歌詞行，
 // 這些不該當成歌詞顯示。只在首尾各 8 行內、且符合製作資訊關鍵字時移除，避免誤砍正文。
+// 判定走關鍵字表＋人稱守衛（lyrics-cleaner.js 的 CREDIT_KEYWORDS_RE），不是「有冒號就砍」
+// 的泛用正則——後者會把「今天的天氣：真好」這種正文一起吃掉。
 // 清洗已集中到 lyrics-cleaner.cleanLyrics（製作資訊 + 純音樂提示 + 重複行 + 空白正規化）。
 function stripCreditLines(lines) {
   return cleanLyrics(lines);
@@ -723,7 +725,7 @@ class LyricsEngine {
 
   static async searchNetease(artist, title, duration) {
     const isCover = this.detectCover(artist, title);
-    // 搜尋字串先正規化（去括號/feat/官方影片字樣），命中率更高（參考 Metrolist）
+    // 搜尋字串先正規化（去括號/feat/官方影片字樣），命中率更高
     const q = `${cleanQuery(artist)} ${cleanQuery(title)}`.trim() || `${artist} ${title}`.trim();
 
     for (const endpoint of [
