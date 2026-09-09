@@ -229,6 +229,48 @@ function fetchToFile(url, filePath, {
 /** python311._pth 預設把 site-packages 註解掉（embeddable 版預設不吃 pip 裝的套件）；
  * 拿掉那行註解，pip 裝的東西才 import 得到。找不到就視為上游打包結構變了，直接報錯
  * 而不是靜默裝出一個 import 不到套件的半殘 runtime。 */
+/**
+ * 安全解壓（取代 adm-zip 的 extractAllTo）。
+ *
+ * GHSA-vwc7-r8mq-g2x9：adm-zip >= 0.5.9 的 extractAllTo 會跟隨目的地既有的
+ * symlink，可被用來把檔案寫到目標目錄外。0.6.0（目前最新）仍在範圍內，上游還
+ * 沒有修好的版本，而降版到 0.5.8 是 semver-major、會退掉八個版本的修正——
+ * 更新器與 FFmpeg 供應都依賴這個套件，不值得為此冒險。
+ *
+ * 本專案其他用到 adm-zip 的地方（app-updater / app-updater-v2 / ffmpeg-provider）
+ * 都是「讀 entry 資料再寫到程式自己決定的路徑」，zip 內的路徑不決定寫入位置，
+ * 結構上就免疫；只有這裡原本用 extractAllTo。所以修這一處就夠，不必動相依。
+ *
+ * 這個 zip 本身有釘死的 SHA-256 驗證（PYTHON_EMBED_SHA256），所以實際上要先
+ * 打破雜湊才談得上利用；以下是縱深防禦。
+ */
+function safeExtractAll(zip, targetDir) {
+  const root = path.resolve(targetDir);
+  for (const entry of zip.getEntries()) {
+    const name = String(entry.entryName || '');
+    if (!name || name.includes('\0')) throw new Error('壓縮檔含非法的項目名稱');
+
+    // zip 內一律以 / 分隔；正規化後必須仍落在 root 之內（擋絕對路徑與 .. 逃逸）
+    const dest = path.resolve(root, name.replace(/\\/g, '/'));
+    if (dest !== root && !dest.startsWith(root + path.sep)) {
+      throw new Error(`壓縮檔項目逃出目標目錄：${name}`);
+    }
+
+    if (entry.isDirectory) { fs.mkdirSync(dest, { recursive: true }); continue; }
+
+    // Unix symlink 在 zip 裡是 external attributes 高 16 位的 S_IFLNK(0xA000)
+    const unixMode = ((entry.header && entry.header.attr) || 0) >>> 16;
+    if ((unixMode & 0xF000) === 0xA000) throw new Error(`壓縮檔含符號連結：${name}`);
+
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    // 目的地若已是 symlink 就先移除，避免經由既有連結寫到別處（這正是該 CVE 的手法）
+    try {
+      if (fs.lstatSync(dest).isSymbolicLink()) fs.unlinkSync(dest);
+    } catch (_) { /* 不存在就直接寫 */ }
+    fs.writeFileSync(dest, entry.getData());
+  }
+}
+
 function enableSitePackages(pythonDir) {
   const pthFiles = fs.readdirSync(pythonDir).filter((f) => /^python3\d+\._pth$/.test(f));
   if (pthFiles.length !== 1) {
@@ -390,7 +432,7 @@ async function downloadRuntime({
 
       progress('extract');
       const zip = new AdmZip(tmpZip);
-      zip.extractAllTo(tmpPythonDir, true);
+      safeExtractAll(zip, tmpPythonDir);
       enableSitePackages(tmpPythonDir);
 
       progress('bootstrap-pip');
@@ -496,6 +538,7 @@ module.exports = {
   getDownloadStatus,
   parseToolProgress,
   enableSitePackages,
+  safeExtractAll, // 匯出供測試：audit:release 對 GHSA-vwc7-r8mq-g2x9 的豁免以它成立為前提
   fetchToFile,
   fetchToBuffer,
   RUNTIME_DIR,

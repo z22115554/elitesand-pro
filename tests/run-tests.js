@@ -1491,9 +1491,55 @@ test('問題回報端點受 PIN 保護，且中繼未設定時安全停用', () 
   ok(configExample.includes('feedbackEnabled'), '範本必須提供緊急停用開關: ');
 });
 
-test('發版稽核只檢查 production dependencies，且任何等級風險都會失敗', () => {
+test('發版稽核只檢查 production dependencies，且預設任何等級風險都會失敗', () => {
   const manifest = require('../package.json');
-  eq(manifest.scripts['audit:release'], 'npm audit --omit=dev --audit-level=low');
+  // 2026-09-10：從 `npm audit --omit=dev --audit-level=low` 換成自寫的閘門。
+  // 原因是出現了「advisory 對我們的用法不成立、但上游沒有修好的版本」的情況
+  // （adm-zip GHSA-vwc7-r8mq-g2x9）：調鬆 --audit-level 會連帶放行所有同等級的
+  // 真漏洞，讓閘門永遠紅則會被習慣性忽略，兩種都等於廢掉它。改成白名單例外，
+  // 預設仍是零容忍。本測試守的就是「不可以被偷偷放寬」。
+  eq(manifest.scripts['audit:release'], 'node tools/audit-release.js');
+
+  const gate = fs.readFileSync(path.join(__dirname, '../tools/audit-release.js'), 'utf8');
+  const auditCommand = (gate.match(/const AUDIT_COMMAND = '([^']+)'/) || [])[1] || '';
+  ok(/\bnpm audit\b/.test(auditCommand), '閘門必須真的跑 npm audit: ');
+  ok(auditCommand.includes('--omit=dev'), '仍必須只檢查 production dependencies: ');
+  // 註解裡解釋為什麼不用 --audit-level 是可以的；真正不能出現在實際命令裡
+  ok(!/--audit-level/.test(auditCommand), '實際命令不可以用 --audit-level 放寬整個等級: ');
+  // fail-closed：不在白名單上的一律擋下
+  ok(/if \(ACKNOWLEDGED\[id\]\) waived\.push\(entry\); else blocking\.push\(entry\)/.test(gate),
+    '未列入 ACKNOWLEDGED 的 advisory 必須進 blocking: ');
+  ok(/if \(blocking\.length\)[\s\S]{0,400}process\.exit\(1\)/.test(gate), 'blocking 非空時必須以非 0 結束: ');
+
+  // 每一筆豁免都要有理由與複查日，且過期就讓閘門失敗——避免例外變成永久免死金牌
+  const acknowledged = gate.slice(gate.indexOf('const ACKNOWLEDGED'), gate.indexOf('function main'));
+  const ids = acknowledged.match(/'GHSA-[a-z0-9-]+':/g) || [];
+  eq(ids.length, (acknowledged.match(/reviewOn:/g) || []).length, '每筆豁免都要有 reviewOn: ');
+  eq(ids.length, (acknowledged.match(/why:/g) || []).length, '每筆豁免都要有 why: ');
+  ok(/today > ack\.reviewOn[\s\S]{0,200}process\.exit\(1\)/.test(gate), '複查日過期必須讓閘門失敗: ');
+});
+
+test('adm-zip 豁免的前提還成立：全 repo 沒有 extractAllTo，safeExtractAll 有測試守著', () => {
+  // tools/audit-release.js 放行 GHSA-vwc7-r8mq-g2x9 的理由是「已經不用 extractAllTo」。
+  // 一旦有人把它加回來，那個豁免就失去正當性，這裡先擋下。
+  const dirs = ['server', 'electron', 'tools'];
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { if (entry.name !== 'node_modules') walk(full); continue; }
+      if (!entry.name.endsWith('.js')) continue;
+      const text = fs.readFileSync(full, 'utf8');
+      // 註解裡提到不算，實際呼叫才算
+      if (/\.extractAllTo\s*\(/.test(text)) offenders.push(full);
+    }
+  };
+  dirs.forEach((d) => walk(path.join(__dirname, '..', d)));
+  eq(offenders.length, 0, `不可再呼叫 extractAllTo（改用 safeExtractAll）：${offenders.join(', ')}: `);
+
+  const manifest = require('../package.json');
+  ok(manifest.scripts.test.includes('tests/safe-zip-extract.test.js'),
+    'safeExtractAll 的攻擊面測試必須掛進 npm test: ');
 });
 
 testAsync('legacy release metadata adapter remains read-only and is not wired to the cold-start gate', async () => {
