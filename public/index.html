@@ -893,6 +893,14 @@
                   <button class="style-thumb active" data-particle-orient="vertical" type="button" data-i18n-title="particle.orientVerticalTitle" title="直書：直欄由右往左"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">直</span></span><span class="style-thumb-label" data-i18n="particle.orientVertical">直書</span></button>
                 </div>
               </div>
+              <div class="field" id="particle-entrance-field" hidden>
+                <label data-i18n="particle.entranceLabel">逐字進場</label>
+                <div class="style-thumb-row" id="particle-entrance-buttons">
+                  <button class="style-thumb active" data-particle-entrance="auto" type="button" data-i18n-title="particle.entranceAutoTitle" title="原樣：風／雨／渦流／雙束四種聚散風格逐句輪替"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">原樣</span></span><span class="style-thumb-label" data-i18n="particle.entranceAuto">原樣</span></button>
+                  <button class="style-thumb" data-particle-entrance="quaddrift" type="button" data-i18n-title="particle.entranceQuaddriftTitle" title="四相漂字：每個字從四角帶弧度漂入定點、入場後完全靜止；可調動畫強度；退場仍是粒子散開"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">漂字</span></span><span class="style-thumb-label" data-i18n="particle.entranceQuaddrift">四相漂字</span></button>
+                </div>
+                <p class="field-hint" data-i18n="particle.entranceHint">原樣＝風／雨／渦流／雙束四種聚散風格逐句輪替；四相漂字＝改成每個字從四角漂入定點後靜止（可調沉穩／標準／狂放強度）。兩種選擇的退場都是原本的粒子散開，不會另外換退場效果。</p>
+              </div>
               <div class="field" id="particle-effects-field" hidden>
                 <div class="field-row field-row--spacious">
                   <div class="flex-grow"><label for="ls-particle-shadow-sel" data-i18n="particle.shadowLabel">文字陰影</label>
@@ -1000,7 +1008,7 @@
             </div>
             <div class="field field--inline-spacious">
               <div class="flex-grow"><label>歌詞文字顏色</label><input id="ls-color" data-ls-control="color" type="color" value="#ffffff"></div>
-              <div class="flex-grow"><label>「正在唱那一行」的顏色</label><input id="ls-active-color" data-ls-control="activeColor" type="color" value="#ffd6a5"></div>
+              <div class="flex-grow" id="ls-active-color-field"><label>「正在唱那一行」的顏色</label><input id="ls-active-color" data-ls-control="activeColor" type="color" value="#ffd6a5"></div>
             </div>
             <p class="field-hint">逐字 KTV 模式下「唱到的字」也是用右邊「正在唱那一行的顏色」；發光效果則在下面「進階效果」裡的「額外發光」統一設定，兩種模式共用。</p>
             <div class="field field--inline-spacious" id="typewriter-colors-field" hidden>

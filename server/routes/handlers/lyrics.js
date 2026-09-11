@@ -40,8 +40,12 @@ const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'c
 
 function sanitizeParticleSettings(settings) {
   if (settings.particleOrient !== undefined && !['horizontal', 'vertical'].includes(settings.particleOrient)) delete settings.particleOrient;
-  // 已移除的旋鈕：進場永遠自動；動態只吃系統偏好；安全區與陰影開關改用共用機制（邊距／描邊陰影）。
-  for (const k of ['particleEntrance', 'particleReduced', 'particleSafe', 'particleShadow']) {
+  // 2026-09-12：particleEntrance 重新開放——不是原本 demo 那個「逐一挑聚散風格」的旋鈕，
+  // 是新的二選一：'auto'（風／雨／渦流／雙束四種逐句輪替，預設）｜'quaddrift'（全部改用
+  // 從直書句流搬來的「四相漂字」整字進場，退場仍走原本的塵粒散開）。
+  if (settings.particleEntrance !== undefined && !['auto', 'quaddrift'].includes(settings.particleEntrance)) delete settings.particleEntrance;
+  // 其餘仍是已移除的舊旋鈕：動態只吃系統偏好；安全區與陰影開關改用共用機制（邊距／描邊陰影）。
+  for (const k of ['particleReduced', 'particleSafe', 'particleShadow']) {
     if (settings[k] !== undefined) delete settings[k];
   }
 }

@@ -26,6 +26,41 @@ const bodyWeight=()=>typo.weight||400,heroWeight=()=>Math.min(900,(typo.weight||
 const maskCache=new Map(),modelCache=new Map();let particleCount=0;
 const mix=(a,b,v)=>a+(b-a)*v;
 const hash=n=>{const v=Math.sin(n*127.1+311.7)*43758.5453;return v-Math.floor(v)};
+// 2026-09-12：從直書句流的「漂字」進場（lyric-template-columnflow.js #cf-quad-drift）
+// 視覺重現到這裡，當「逐字進場」設定裡可選的第二種風格（settings 的 particleEntrance，
+// 見 register() 與下面 settings() 讀 data.particleEntrance）——選了才會整首都用，
+// 不是混進 stream/rain/vortex/twin 的自動輪替：整字從四角（左上/右上/左下/右下）帶弧度
+// ＋輕微旋轉/模糊漂入定點、入場後完全靜止，不是逐字碎成塵粒，跟自動輪替那四種質感刻意
+// 不同。出場一律沿用既有的塵粒散開（drawMotes 的 outgoing 分支，entryKind 對不認得的
+// kind 字串本來就會落到預設散開樣式），不特別為這個進場另做退場效果。
+const QUAD_DIRS=[[-1.2,-1.0],[1.15,-1.0],[-1.1,1.1],[1.2,.95]]; // em：左上/右上/左下/右下，跟 columnflow 的 DRIFT_DIRS 相同
+const QUAD_PARAMS={calm:{dist:.6,blur:.5,rot:.35,dur:.36},normal:{dist:1,blur:1,rot:1,dur:.44},chaotic:{dist:1.55,blur:1.6,rot:1.9,dur:.50}};
+const quadEase=t=>{t=clamp(t);return 1-Math.pow(1-t,3)};
+function quadParams(){return QUAD_PARAMS[typo.intensityKey]||QUAD_PARAMS.normal}
+/** 對照 cf-quad-drift 的 0%/70%/100% 關鍵畫格：先漂入＋輕微回彈(70%)，再完全靜止(100%)。 */
+function quadDriftPose(g,time){
+ const p=quadParams(),dir=QUAD_DIRS[g.index%4];
+ const u=clamp((time-g.start)/Math.max(.05,p.dur));
+ const qx=dir[0]*g.size*p.dist,qy=dir[1]*g.size*p.dist;
+ const qr=(dir[0]>0?-7:7)*(1+(g.index%3)*.14)*p.rot;
+ let x,y,rot,scale,blur;
+ if(u>=1){x=0;y=0;rot=0;scale=1;blur=0}
+ else if(u<=.7){const t=quadEase(u/.7);x=mix(qx,qx*-.06,t);y=mix(qy,qy*-.06,t);rot=mix(qr,0,t);scale=mix(.9,1.008,t);blur=mix(2.4*p.blur,0,t)}
+ else{const t=quadEase((u-.7)/.3);x=mix(qx*-.06,0,t);y=mix(qy*-.06,0,t);rot=0;scale=mix(1.008,1,t);blur=0}
+ return{x,y,rot,scale,blur,alpha:u<=0?0:Math.min(1,u/.5)};
+}
+function drawQuadDriftGlyph(g,time,color,opacity){
+ const v=quadDriftPose(g,time),alpha=clamp(v.alpha*opacity);
+ if(alpha<.003||!g.g.trim())return;
+ ctx.save();
+ ctx.translate(g.x+g.w*.5+v.x,g.y-g.size*.39+v.y);
+ ctx.rotate(v.rot*Math.PI/180);ctx.scale(v.scale,v.scale);
+ if(v.blur>.03)ctx.filter=`blur(${v.blur}px)`;
+ setFont(g.size,g.family,g.weight);ctx.globalAlpha=alpha;ctx.fillStyle=color;
+ ctx.fillText(g.g,-g.w*.5,g.size*.39);
+ if(v.blur>.03)ctx.filter='none';
+ ctx.restore();
+}
 function setFont(size,family=font,weight=400,target=ctx){target.font=`${weight} ${size}px ${family}`;target.textBaseline='alphabetic'}
 function widthOf(gs,size,family=font,weight=400){setFont(size,family,weight);return Math.max(0,gs.reduce((sum,g)=>sum+ctx.measureText(g).width+size*.028,0)-size*.028)}
 function split(gs,size,maxWidth,family=font){const result=[];let row=[],width=0;setFont(size,family);for(const g of gs){const w=ctx.measureText(g).width+size*.028;if(row.length&&width+w>maxWidth){let cut=row.length;for(let j=row.length-1;j>row.length*.40;j--){if(/[\s，、,]/u.test(row[j])){cut=j+1;break}}result.push(row.slice(0,cut));row=row.slice(cut);width=widthOf(row,size,family)}row.push(g);width+=w}if(row.length)result.push(row);return result}
@@ -73,6 +108,11 @@ function makeLayout(line,number){
   for(let i=peak+1;i<gs.length&&i-peak<6&&!boundary(i)&&holds[i]>=floor;i++)heroSet.add(i);
   if(heroSet.size>cap){heroSet.clear();heroSet.add(peak)}
  }
+ // 2026-09-12 使用者回饋：放大／變色的 hero 字視覺上很醜，停用。保留上面的
+ // peak/hold 偵測邏輯（可能之後用在別處），但一律清空、不選字——下游所有
+ // isHero/g.hero 分支因此自然全部走「一般字」路徑，字級／字重／顏色／粒子量/
+ // 進場時長全體統一，不必逐一改各自的三元運算。
+ heroSet.clear();
  const heroIdx=[...heroSet].sort((a,b)=>a-b);
  const hero=heroIdx.length?{indices:heroIdx,text:heroIdx.map(i=>gs[i]).join('')}:null;
  const factor=units>19?1.85:2.22;
@@ -92,10 +132,16 @@ function makeLayout(line,number){
   const colGap=base*1.55,totalW=ranges.length*colGap-(colGap-base);
   const vGap=(typo.safeMargin/100)*W;// 跟鏡像／紙帶同語意：margin% 是「離中線的百分比」
   let blockX;
-  if(typo.hpos==='split'){
-   blockX=number%2===0?Math.min(mX+totalW*.5,W*.5-vGap-totalW*.5):Math.max(W-mX-totalW*.5,W*.5+vGap+totalW*.5);
+  // 靠左／靠右／左右分散一律往安全區內側靠（跟橫排同一套意圖）：兩個候選 x 是
+  // 貼外緣（mX± totalW/2）vs 貼安全區內側（W/2∓vGap∓totalW/2）；預設取離中心較近的
+  // 那個，只有欄位寬到會反過來蓋過外緣時才退回貼外緣（避免超出可用畫面）。
+  // 純左／純右跟 split 的判斷條件相同，因此共用同一組公式。
+  if(typo.hpos==='left'||(typo.hpos==='split'&&number%2===0)){
+   blockX=Math.max(mX+totalW*.5,W*.5-vGap-totalW*.5);
+  }else if(typo.hpos==='right'||(typo.hpos==='split'&&number%2!==0)){
+   blockX=Math.min(W-mX-totalW*.5,W*.5+vGap+totalW*.5);
   }else{
-   blockX=typo.hpos==='left'?mX+totalW*.5:typo.hpos==='right'?W-mX-totalW*.5:W*.5;
+   blockX=W*.5;
   }
   blockX=clamp(blockX,mX+totalW*.5,Math.max(mX+totalW*.5,W-mX-totalW*.5));
   const words=[],vgroups=[];let idx=0;
@@ -144,8 +190,15 @@ function makeLayout(line,number){
  if(vfit<1)groups.forEach(group=>{group.height*=vfit;group.width*=vfit;group.specs.forEach(g=>{g.size*=vfit;g.w*=vfit})});
  const totalH=groups.reduce((a,g)=>a+g.height,0)+lineGap*vfit*(groups.length-1);
  let y=typo.vjustify==='start'?box.t:typo.vjustify==='end'?box.b-totalH:box.t+(boxH-totalH)*.5,words=[];
- const alignRight=typo.hpos==='right'||(typo.hpos==='split'&&!leftSide);
- const alignLeft=typo.hpos==='left'||(typo.hpos==='split'&&leftSide);
+ // 靠左／靠右／左右分散，一律往安全區（欄位內側）靠，不往螢幕外緣靠：
+ // 左欄（純左，或 split 的 leftSide）＝ colL..colR 這段的內側是 colR → 靠右對齊；
+ // 右欄（純右，或 split 的另一側）＝ colL..colR 這段的內側是 colL → 靠左對齊。
+ // 跟上面判斷「這是左欄還是右欄」用的是同一個條件（isLeftCol/isRightCol），
+ // 純左右跟 split 因此走同一套，不再分開處理。
+ const isLeftCol=typo.hpos==='left'||(typo.hpos==='split'&&leftSide);
+ const isRightCol=typo.hpos==='right'||(typo.hpos==='split'&&!leftSide);
+ const alignRight=isLeftCol;
+ const alignLeft=isRightCol;
  groups.forEach((group,row)=>{
   y+=group.height;group.y=y;
   group.x=alignLeft?colL:alignRight?colR-group.width:colL+(colW-group.width)*.5;
@@ -334,8 +387,10 @@ function renderLine(line,L,time,p,opacity=1){
  for(const g of ordered){
   if(!g.g.trim())continue;const state=particlePhase(g,L,time);if(!state.visible)continue;
   if(reduced||intensity<=0){const v=letterPose(g,L,time);posedGlyph(g,{...v,x:0,y:0,sx:1,sy:1},g.hero?p.a:p.ink,v.alpha*opacity*(g.hero?p.aOpacity:p.inkOpacity));continue}
+  // quaddrift 只換「進場」的畫法（整字漂入，不是塵粒）；一旦進入 leaving（唱完退場）
+  // 一律落回 drawMotes 的塵粒散開，跟其他四種進場共用同一套出場。
+  if(entryKind(g,L)==='quaddrift'&&state.entering&&!state.leaving){drawQuadDriftGlyph(g,time,g.hero?p.a:p.ink,opacity*(g.hero?p.aOpacity:p.inkOpacity));continue}
   drawMotes(g,L,state,p,opacity);
-
  }
  ctx.restore();
 }
@@ -395,9 +450,12 @@ function settings(){
  const ox=parseFloat(data.particleOffsetX),oy=parseFloat(data.particleOffsetY);
  typo.offX=Number.isFinite(ox)?clamp(ox,-W*.4,W*.4):0;
  typo.offY=Number.isFinite(oy)?clamp(oy,-H*.4,H*.4):0;
- // Entrance is always auto (rotates stream/rain/vortex/twin per line); no user knob.
- entrance='auto';
+ // 進場二選一（2026-09-12 加回這顆旋鈕，語意跟舊版不同，見 server sanitizeParticleSettings
+ // 的說明）：'auto' 預設，逐句在 stream/rain/vortex/twin 四種聚散風格輪替；'quaddrift' 時
+ // 全部改用四相漂字整字進場（entryKind 對非 auto 值本來就會原樣回傳給每個字，不需要另外改）。
+ entrance=data.particleEntrance==='quaddrift'?'quaddrift':'auto';
  intensity={calm:.55,normal:1,chaotic:1.35}[data.lyricIntensity]||1;
+ typo.intensityKey=['calm','chaotic'].includes(data.lyricIntensity)?data.lyricIntensity:'normal';
  // Manual "reduce motion" knob removed — only the OS/browser preference collapses to fade-in.
  reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
  const ink=color(cv('--lyric-color'),'#f6f0e5'),accent=color(cv('--lyric-color-active'),'#e97855');
@@ -450,6 +508,7 @@ LyricTemplates.register({
  id:'particle',label:'風息成字',
  settings:[
   {key:'particleOrient',type:'enum',values:['horizontal','vertical'],default:'vertical',target:'data:particleOrient'},
+  {key:'particleEntrance',type:'enum',values:['auto','quaddrift'],default:'auto',target:'data:particleEntrance'},
   // 水平／垂直微調：沿用共用的 offsetX/offsetY，寫進 body.dataset 讓 canvas 自己讀（reclamp 對滿版容器無效）。
   {key:'offsetX',type:'int',min:-960,max:960,default:0,target:'data:particleOffsetX'},
   {key:'offsetY',type:'int',min:-540,max:540,default:0,target:'data:particleOffsetY'},

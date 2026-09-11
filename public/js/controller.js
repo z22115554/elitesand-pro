@@ -112,6 +112,7 @@
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
+  const PARTICLE_ENTRANCES = ['auto', 'quaddrift'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
@@ -174,6 +175,7 @@
     document.querySelectorAll('.ctrl-position-btn').forEach((b) => b.classList.toggle('active', b.dataset.position === (lyricSettings.lyricPosition || 'center')));
     document.querySelectorAll('.ctrl-intensity-btn').forEach((b) => b.classList.toggle('active', b.dataset.intensity === (lyricSettings.animationIntensity || 'normal')));
     document.querySelectorAll('.ctrl-particle-orient-btn').forEach((b) => b.classList.toggle('active', b.dataset.particleOrient === (lyricSettings.particleOrient || 'vertical')));
+    document.querySelectorAll('.ctrl-particle-entrance-btn').forEach((b) => b.classList.toggle('active', b.dataset.particleEntrance === (lyricSettings.particleEntrance || 'auto')));
     const positionGroup = document.getElementById('ctrl-lyric-position-group');
     const columnflowGroup = document.getElementById('ctrl-columnflow-variant-group');
     const columnflowEntranceGroup = document.getElementById('ctrl-columnflow-entrance-group');
@@ -233,11 +235,12 @@
           ...settingSnapshot(lyricSettings),
           ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
           ...(nextTemplate === 'mirror' ? MIRROR_DEFAULTS : {}),
-          ...(nextTemplate === 'particle' ? { particleOrient: 'vertical', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
+          ...(nextTemplate === 'particle' ? { particleOrient: 'vertical', particleEntrance: 'auto', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
           template: nextTemplate,
         };
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       if (nextTemplate === 'mirror') next.lyricPosition = 'split';
+      if (nextTemplate === 'particle' && !PARTICLE_ENTRANCES.includes(next.particleEntrance)) next.particleEntrance = 'auto';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_ENTRANCES.includes(next.columnflowEntrance)) next.columnflowEntrance = 'native';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
@@ -272,6 +275,14 @@
     btn.addEventListener('click', () => {
       if (lyricSettings.template !== 'particle' || !['horizontal', 'vertical'].includes(btn.dataset.particleOrient)) return;
       pushLyricPatch({ particleOrient: btn.dataset.particleOrient });
+    });
+  });
+
+  document.querySelectorAll('.ctrl-particle-entrance-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const entrance = btn.dataset.particleEntrance;
+      if (lyricSettings.template !== 'particle' || !PARTICLE_ENTRANCES.includes(entrance)) return;
+      pushLyricPatch({ particleEntrance: entrance });
     });
   });
 
@@ -318,6 +329,7 @@
       if (next.template === 'columnflow' && !COLUMNFLOW_ENTRANCES.includes(next.columnflowEntrance)) next.columnflowEntrance = 'native';
       if (next.template === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
       if (next.template === 'columnflow') next.columnflowMaxLines = normalizeColumnflowMaxLines(next.columnflowMaxLines);
+      if (next.template === 'particle' && !PARTICLE_ENTRANCES.includes(next.particleEntrance)) next.particleEntrance = 'auto';
       if ((next.template === 'classic' || next.template === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       const stores = { ...(lyricSettings[TEMPLATE_SETTING_KEY] || {}), [next.template]: { ...next } };
       const payload = { ...next, [TEMPLATE_SETTING_KEY]: stores, [PRESET_KEY]: presets };
