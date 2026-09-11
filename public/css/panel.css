@@ -494,6 +494,13 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; min-height:
 .field-hint:first-child { margin-top: 0; }
 .field-group-title { margin: 16px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--text-dim); }
 .field-group-title:first-child { margin-top: 4px; }
+
+/* 段落搭配（實驗性）：段落名稱 + 模板下拉，一行一個段落 */
+.section-map-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.section-map-row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); }
+.section-map-row .section-map-label { font-size: 13px; font-weight: 500; color: var(--text); }
+.section-map-row select { min-width: 180px; }
 .field-group-desc { margin: 0 0 10px; font-size: 11px; line-height: 1.5; color: var(--text-faint); }
 /* 滑桿：軌道用 --track-off（深淺色都看得清），滑塊加陰影避免融進淺色背景。
    軌道左側用 --range-fill（JS 算 (value-min)/(max-min) 設的百分比）填色，讓滑桿本身就看得出
