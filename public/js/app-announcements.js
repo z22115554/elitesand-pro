@@ -82,17 +82,23 @@
   function present(items) {
     const candidates = items.filter((item) => item.shouldPresent);
     const critical = candidates.find((item) => item.level === 'critical');
+    // notice 跟 critical 共用同一個強制彈窗（樣式中性、一定可關閉，見
+    // announcement-service.js 的 sanitizeAnnouncement）；critical 是真的出事了，
+    // 兩者同時存在時優先顯示 critical。
+    const notice = candidates.find((item) => item.level === 'notice');
     const warning = candidates.find((item) => item.level === 'warning');
     const info = candidates.find((item) => item.level === 'info');
+    const modalItem = critical || notice;
 
-    if (critical && criticalModal) {
-      criticalTitle.textContent = critical.title;
-      criticalMessage.textContent = critical.message;
-      setSafeLink(criticalLink, critical);
-      criticalClose.hidden = !critical.dismissible;
-      criticalClose.onclick = () => dismiss(critical, criticalModal);
+    if (modalItem && criticalModal) {
+      criticalTitle.textContent = modalItem.title;
+      criticalMessage.textContent = modalItem.message;
+      setSafeLink(criticalLink, modalItem);
+      criticalClose.hidden = !modalItem.dismissible;
+      criticalClose.onclick = () => dismiss(modalItem, criticalModal);
+      criticalModal.classList.toggle('is-notice', modalItem.level === 'notice');
       criticalModal.hidden = false;
-      markSeen(critical);
+      markSeen(modalItem);
     }
     if (warning && banner) {
       bannerTitle.textContent = warning.title;

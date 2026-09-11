@@ -14,7 +14,10 @@ const CACHE_FILE = path.join(dataDir, 'announcement-cache.json');
 const STATE_FILE = path.join(dataDir, 'announcement-state.json');
 const MAX_JSON_BYTES = 256 * 1024;
 const MAX_ANNOUNCEMENTS = 100;
-const LEVELS = new Set(['info', 'warning', 'critical']);
+// notice：跟 critical 共用「強制彈窗」呈現，但語意中性（不是警訊）且一律可關閉、
+// 不參與 ACTIONS（disableIncrementalUpdate 等只認 critical）——給版本更新內容這類
+// 「使用者該看一眼、但不是出事了」的長文字用；info 一閃即逝、warning 版面塞不下太多字。
+const LEVELS = new Set(['info', 'warning', 'critical', 'notice']);
 const ACTIONS = new Set(['disableIncrementalUpdate', 'showFullDownloadOnly']);
 // Development experiments can be intentionally isolated from production
 // update notices. This is opt-in only; normal and packaged launches retain
@@ -127,7 +130,9 @@ function sanitizeAnnouncement(input) {
     maxVersion: maxVersion || '',
     publishedAt,
     expiresAt,
-    dismissible: input.dismissible !== false,
+    // notice 存在的理由就是「一定關得掉的強制彈窗」；不像 critical 可以鎖死，
+    // 這裡忽略發布者傳的 dismissible，一律當作可關閉。
+    dismissible: input.level === 'notice' ? true : input.dismissible !== false,
     showOnce: input.showOnce === true,
     url,
     buttonText: buttonText || '',
