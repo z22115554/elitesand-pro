@@ -355,13 +355,12 @@
                   <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量" data-i18n-aria-label="home.volume">
                   <span id="volume-val" class="val">70%</span>
                 </div>
-                <!-- 只在分離播放模式對目前歌曲生效時顯示（見 app-playback.js 的
-                     updateSeparationUiForTrack）；跟上面的伴奏音量並排，避免使用者要捲到
-                     「時間與音訊微調」卡片才找得到人聲音量，兩顆調整音量的滑桿放一起。 -->
+                <!-- 已分離歌曲會自動用伴奏＋人聲雙軌播放；這列只在雙軌實際生效時顯示。
+                     新使用者的人聲預設 20%，可在這裡隨時調高、調低或拉到 0。 -->
                 <div class="np-volume" id="separation-vocals-row" hidden title="人聲音量">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V22h2v-2.06A9 9 0 0 0 21 11h-2z"/></svg>
-                  <input id="separation-vocals-volume" type="range" min="0" max="150" value="100">
-                  <span id="separation-vocals-volume-val" class="val">100%</span>
+                  <input id="separation-vocals-volume" type="range" min="0" max="150" value="20">
+                  <span id="separation-vocals-volume-val" class="val">20%</span>
                 </div>
               </div>
               <button id="btn-emergency" class="np-emergency" type="button" data-i18n="home.emergency">緊急隱藏</button>
@@ -571,12 +570,6 @@
                 <input id="speed-slider" type="range" min="0.5" max="1.5" step="0.05" value="1" hidden>
               </div>
             </div>
-            <!-- AI 人聲分離播放模式（實驗性）：只對已分離人聲的歌曲生效，見 CLAUDE.md 授權狀態說明。
-                 人聲音量滑桿已移到「正在播放」卡的音量區，跟伴奏音量並排（不要在這裡重複加）。 -->
-            <div class="switch-row switch-row--separated">
-              <div><div class="label">分離播放模式（實驗性）</div><div class="sub" id="separation-status-hint">只對已分離人聲的歌曲生效，其餘歌曲仍播放原始音軌</div></div>
-              <label class="switch"><input id="separation-mode-toggle" type="checkbox"><span class="track"></span></label>
-            </div>
             <div class="switch-row switch-row--separated">
               <div><div class="label">統一音量（響度標準化）</div><div class="sub">依每首歌的實測響度校正播放增益；關閉時保留原始音量</div></div>
               <label class="switch"><input id="normalization-toggle" type="checkbox" checked><span class="track"></span></label>
@@ -612,13 +605,12 @@
           <div class="prep-panel" data-prep-panel="ai" hidden>
           <section class="card" aria-labelledby="home-ai-title">
             <p id="home-ai-title" class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span data-i18n="home.tab.ai">AI 伴奏</span></p>
-            <p class="sub section-intro" data-i18n="home.ai.intro">用 AI 去掉人聲、留下純伴奏。想邊唱邊聽原唱當參考，開「分離播放模式」並照「雙路音訊」教學設定 OBS。</p>
+            <p class="sub section-intro" data-i18n="home.ai.intro">用 AI 把歌曲拆成人聲和伴奏。已分離歌曲播放時會自動使用伴奏＋人聲雙軌；新使用者的人聲預設 20%，可在播放區隨時調高或調低。</p>
             <div id="home-ai-engine" class="home-ai-engine val" role="status" aria-live="polite" data-i18n="home.ai.engineChecking">正在檢查 AI 伴奏元件…</div>
             <div class="inline-row inline-row--wrap">
               <button id="home-ai-install" class="btn btn-sm btn-primary" type="button" hidden data-i18n="home.ai.install">安裝 AI 伴奏元件</button>
               <button id="home-ai-make-all" class="btn btn-sm btn-primary" type="button" disabled data-i18n="home.ai.makeAll">未製作的全部排進佇列</button>
               <button id="home-ai-retry-failed" class="btn btn-sm" type="button" hidden data-i18n="home.ai.retryFailed">重試失敗的</button>
-              <button id="home-ai-open-audio" class="btn btn-sm btn-ghost" type="button" data-i18n="home.ai.openAudio">分離播放模式</button>
               <button id="home-ai-open-guide" class="btn btn-sm btn-ghost" type="button" data-i18n="home.ai.openGuide">雙路音訊教學</button>
             </div>
           </section>
@@ -2847,7 +2839,7 @@
               <li><strong>它在做什麼</strong>：把一首歌用 AI 分成「人聲」和「伴奏」兩軌，讓你可以只播伴奏、自己唱。首頁的「AI 伴奏」分頁會列出本場播放清單每一首的狀態（未製作／製作中／已分離／失敗）。</li>
               <li><strong>第一次要先安裝元件</strong>：第一次按「製作伴奏」會跳出下載視窗，把 AI 模型抓下來（只需一次）。沒有 NVIDIA 顯示卡也能跑，只是慢一些。</li>
               <li><strong>一次做整份清單</strong>：在「AI 伴奏」分頁按「未製作的全部排進佇列」，它會逐首排隊處理，不會一次全開把電腦壓垮。</li>
-              <li><strong>做好之後怎麼用</strong>：到「音訊」分頁打開「分離播放模式」。之後播到「已分離」的歌就會自動只放伴奏，其他沒分離的歌照原樣播。</li>
+              <li><strong>做好之後怎麼用</strong>：<span data-i18n="help.ai.afterReady">不用另外開模式。播到「已分離」歌曲時會自動使用伴奏＋人聲雙軌；新使用者的人聲預設 20%，正在播放區會出現人聲音量，可自行調高、調低或拉到 0。沒分離的歌照原樣播放。</span></li>
               <li><strong>只想先試聽</strong>：媒體庫每首歌旁邊有「試聽」，可以分別調人聲和伴奏的音量，確認分離品質再決定要不要用。</li>
               <li><strong>做到一半想停</strong>：按製作中那首旁邊的「✕」即可取消，這首會回到「未製作」，不算失敗，也不影響已經匯入的歌。</li>
             </ul>
@@ -2859,10 +2851,10 @@
           <div class="card-collapse-body">
             <ul class="help-list">
               <li><strong data-i18n="help.dualAudio.goalLabel">目標</strong>：<span data-i18n="help.dualAudio.goal">直播出去的聲音只有「伴奏 ＋ 你的歌聲」，但你自己的耳機裡還能聽到「原唱人聲」當導唱參考，而這個原唱不會被直播收進去。</span></li>
-              <li><strong data-i18n="help.dualAudio.appPartLabel">這程式負責哪一半</strong>：<span data-i18n="help.dualAudio.appPart">打開「分離播放模式」後，這程式播放的就是純伴奏。這條聲音正常被 OBS／直播收音，沒問題。</span></li>
-              <li><strong data-i18n="help.dualAudio.referenceRouteLabel">原唱參考要另外走一條</strong>：<span data-i18n="help.dualAudio.referenceRoute">用媒體庫的「試聽」單獨播原唱人聲軌，或用另一個播放器開 vocals 檔；把這個播放程式的聲音，在 Windows「音量混合器」指定到你的耳機裝置，不要進 OBS 的擷取來源。</span></li>
-              <li><strong data-i18n="help.dualAudio.obsWayLabel">用 OBS 做法（進階）</strong>：<span data-i18n="help.dualAudio.obsWay">把「原唱參考」放成 OBS 的一個獨立音訊來源，在「進階音訊內容」把它的「音訊監控」設成「僅監聽」，並取消它在直播／錄影軌道的勾選。這樣只有你戴耳機聽得到，觀眾聽不到。</span></li>
-              <li><strong data-i18n="help.dualAudio.simplestAlternativeLabel">最簡單的替代方案</strong>：<span data-i18n="help.dualAudio.simplestAlternative">不需要導唱就別開原唱那條——只播伴奏、看著首頁的逐字歌詞跟拍，一樣能唱，設定也最不容易出錯。</span></li>
+              <li><strong data-i18n="help.dualAudio.appPartLabel">這程式負責哪一半</strong>：<span data-i18n="help.dualAudio.appPart">已分離歌曲會自動以伴奏＋人聲雙軌播放；新使用者的人聲預設 20%，可在首頁「正在播放」區調整。要讓觀眾只聽伴奏、自己保留導唱，請使用「連線與系統」裡的「雙路音訊路由」。</span></li>
+              <li><strong data-i18n="help.dualAudio.referenceRouteLabel">雙路音訊怎麼接</strong>：<span data-i18n="help.dualAudio.referenceRoute">在「雙路音訊路由」卡先選「觀眾／OBS 裝置」和「主播耳機裝置」，再開啟路由。一般歌曲兩路都會播放；已分離歌曲的伴奏送兩路，人聲只留在主播耳機。</span></li>
+              <li><strong data-i18n="help.dualAudio.obsWayLabel">OBS 要收哪一路</strong>：<span data-i18n="help.dualAudio.obsWay">OBS 只擷取「觀眾／OBS 裝置」，不要再把「主播耳機裝置」同時收進直播。OBS 與 Windows 兩邊的取樣率都設成 44100Hz，可降低長時間播放漂移。</span></li>
+              <li><strong data-i18n="help.dualAudio.simplestAlternativeLabel">不需要分流時</strong>：<span data-i18n="help.dualAudio.simplestAlternative">可以不開雙路音訊路由；已分離歌曲仍會自動雙軌播放。若不想聽導唱，把首頁的人聲音量拉到 0% 即可。</span></li>
               <li><strong data-i18n="help.dualAudio.reminderLabel">提醒</strong>：<span data-i18n="help.dualAudio.reminder">務必先在錄一小段測試檔、或找一個人幫你聽直播，確認觀眾端「真的只有伴奏」再正式開唱。</span></li>
             </ul>
           </div>

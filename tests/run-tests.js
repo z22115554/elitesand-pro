@@ -7706,6 +7706,12 @@ test('首頁「AI 伴奏」分頁：只讀 state＋走既有分離路由，不�
     '首頁準備區要有第 5 個分頁 ai（tab＋panel）：');
   ok(indexHtml.includes('id="home-ai-track-list"') && indexHtml.includes('id="home-ai-make-all"'),
     'AI 伴奏分頁要有清單容器與「全部排進佇列」：');
+  ok(!indexHtml.includes('id="home-ai-open-audio"') && !indexHtml.includes('id="separation-mode-toggle"')
+    && !mod.includes('home-ai-open-audio') && !mod.includes('separation-mode-toggle'),
+    '已分離歌曲改成自動雙軌後，不可再保留「分離播放模式」入口或開關：');
+  ok(indexHtml.includes('id="separation-vocals-volume"') && indexHtml.includes('value="20"')
+    && indexHtml.includes('id="separation-vocals-volume-val"') && indexHtml.includes('>20%</span>'),
+    '播放區必須保留可調整的人聲音量，且新使用者靜態預設要顯示 20%：');
   ok(indexHtml.includes('/js/home-ai-separation-panel.js'), 'index.html 必須載入 AI 伴奏分頁腳本：');
   ok(mod.includes('AppShared.state') && mod.includes('window.AiSeparation.subscribe'),
     'AI 伴奏分頁只讀 state.playlist、訂閱既有 AiSeparation：');
@@ -7723,16 +7729,20 @@ test('新手教學：分頁化目標會先切分頁；雙路音訊／Spout／AI 
   const tour = fs.readFileSync(path.join(root, 'public/js/onboarding-tour.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   ok(/const TOUR_VERSION = 5;/.test(tour), '首頁重構後導覽版本要 bump（讓既有使用者重看新版）：');
-  ok(tour.includes("id: 'obs-dual-audio'") && tour.includes("prepTab: 'audio'"),
-    'OBS 連線那一章要加「雙路音訊」步驟（直播只送伴奏；指向分離播放模式）：');
+  ok(tour.includes('const ADVANCED_TOUR_VERSION = 4;'),
+    '自動雙軌／雙路音訊語意更新後進階導覽版本要 bump，讓看過舊版的使用者能收到新說明：');
+  ok(/id: 'obs-dual-audio',[\s\S]{0,180}view: 'general',[\s\S]{0,180}target: '#dual-audio-card'/.test(tour)
+    && !/id: 'obs-dual-audio',[\s\S]{0,220}prepTab: 'audio'/.test(tour),
+    'OBS 進階導覽的雙路音訊步驟要直接指向「連線與系統」的真實雙路音訊卡：');
   ok(tour.includes("prepTab: 'add'") && tour.includes("prepTab: 'sync'") && tour.includes("prepTab: 'session'"),
     '被移進準備分頁的導覽步驟要標 prepTab：');
   ok(tour.includes('root.HomePrepTabs.show(step.prepTab)'),
     'renderStep 聚光前要先把該步驟的準備分頁切出來（不然目標在收合分頁裡是 hidden）：');
   ['help-ai-instrumental', 'help-dual-audio', 'help-spout'].forEach((id) => ok(indexHtml.includes(`id="${id}"`),
     `新手教學要有 #${id} 說明章節：`));
-  ok(indexHtml.includes('僅監聽') && indexHtml.includes('音訊監控'),
-    '雙路音訊章節要講到 OBS「進階音訊內容 → 音訊監控 → 僅監聽」：');
+  ok(indexHtml.includes('id="dual-audio-stream-device"') && indexHtml.includes('id="dual-audio-headphone-device"')
+    && indexHtml.includes('id="dual-audio-mode-toggle"'),
+    '雙路音訊章節應保留內建雙裝置路由，而不是舊的外部播放器／OBS 僅監聽繞法：');
 });
 
 const socketOrigin = require('../server/utils/socket-origin');
@@ -9977,8 +9987,10 @@ test('分離完成會把「目前載入中的那首歌」換成伴奏軌', () =>
   ok(playback.includes('function reloadLoadedTrackForSeparation('), '缺少分離完成後的重載入口：');
   ok(/SocketClient\.on\('separation:progress'[\s\S]{0,220}reloadLoadedTrackForSeparation\(/.test(playback),
     'separation:progress 完成時必須觸發重載：');
-  ok(playback.includes("if (!separationModeEnabled && !dualAudioModeEnabled) return;"),
-    '兩個模式都沒開時不可自作主張換軌：');
+  ok(playback.includes('const wantSeparation = trackSupportsSeparation(track);')
+    && playback.includes('separationActive = wantSeparation;')
+    && playback.includes('const masterFilename = wantSeparation ? track.instrumentalFile : track.filename;'),
+    '已分離歌曲必須自動選雙 stem，不可再依賴已移除的「分離播放模式」開關：');
   ok(playback.includes('if (separationActive) return;'), '已經在用分離音軌就不該再重載：');
   ok(playback.includes("if (!track || String(track.id) !== String(trackId)) return;"),
     '只能對「目前載入的就是剛分離完的那首」重載：');
@@ -9986,6 +9998,21 @@ test('分離完成會把「目前載入中的那首歌」換成伴奏軌', () =>
     'stem 檔名還沒隨 state:sync 回填時要重試，不可把完成事件丟掉：');
   ok(playback.includes("playTrack(index, isPlaying, { notifyServer: false, startTime: lastPlayTimeMs / 1000 });"),
     '重載要沿用「載入到目前播放位置」的既有寫法：');
+});
+
+test('自動雙 stem 播放：新使用者人聲 20%，且播放區可自行調整並保存', () => {
+  const root = path.join(__dirname, '..');
+  const panel = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const playback = fs.readFileSync(path.join(root, 'public/js/app-playback.js'), 'utf8');
+  ok(!panel.includes('id="separation-mode-toggle"'), '不可再出現分離播放模式開關：');
+  ok(/id="separation-vocals-volume"[^>]+min="0"[^>]+max="150"[^>]+value="20"/.test(panel),
+    '人聲音量滑桿必須保留 0–150% 可調範圍，HTML 預設 20%：');
+  ok(playback.includes('let vocalsVolume = 0.2;')
+    && playback.includes("localStorage.getItem('vk-separation-vocals-volume')")
+    && playback.includes("localStorage.setItem('vk-separation-vocals-volume', String(vocalsVolume))"),
+    '新使用者要從 20% 開始，既有使用者設定仍要讀回，調整後也要保存：');
+  ok(playback.includes("dom.separationVocalsVolume.addEventListener('input'"),
+    '播放區的人聲音量滑桿必須仍可即時調高／調低：');
 });
 
 test('雙路路由已接上時才建立的人聲鏈，不可繞過耳機路的同步偏移', () => {

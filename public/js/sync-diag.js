@@ -112,7 +112,6 @@ window.SyncDiag = (() => {
     } catch (e) { h.audioDevices = 'enumerate-failed'; }
     try {
       h.settings = {
-        separationMode: localStorage.getItem('vk-separation-mode'),
         dualAudioMode: localStorage.getItem('vk-dual-audio-mode'),
         dualSyncOffsetMs: localStorage.getItem('vk-dual-audio-sync-offset-ms'),
         dualHeadphoneDevice: (localStorage.getItem('vk-dual-audio-headphone-device') || '').slice(0, 8),

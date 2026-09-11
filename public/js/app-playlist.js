@@ -353,7 +353,7 @@
       ? '<span class="pi-badge pi-badge--danger" title="音檔遺失，播放前需要重新下載">音檔遺失</span>'
       : '';
     const separatedBadge = track.separationStatus === 'done'
-      ? '<span class="pi-badge pi-badge--separated" title="已分離人聲，可用分離播放模式">🎤 已分離</span>'
+      ? `<span class="pi-badge pi-badge--separated" title="${escapeHtml(t('playlist.separatedAutoTitle'))}">🎤 已分離</span>`
       : '';
     // 歌詞是找到了，但沒有任何來源驗到官方時長吻合（可能是剪輯過的影片），時間軸可能對不上。
     // 可點擊：跟旁邊的歌詞狀態徽章共用同一個 data-lyrics-fix 開歌詞選擇器，讓使用者直接挑一個

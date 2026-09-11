@@ -14,7 +14,7 @@
   const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1'];
   const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2';
   const TOUR_VERSION = 5;
-  const ADVANCED_TOUR_VERSION = 3;
+  const ADVANCED_TOUR_VERSION = 4;
   const HOLE_PADDING = 9;
   const VIEWPORT_MARGIN = 10;
   const CARD_GAP = 30;
@@ -192,10 +192,9 @@
     },
     {
       id: 'obs-dual-audio',
-      view: 'karaoke',
-      prepTab: 'audio',
-      target: '#separation-mode-toggle',
-      mobileTarget: '#separation-mode-toggle',
+      view: 'general',
+      target: '#dual-audio-card',
+      mobileTarget: '#dual-audio-card',
       title: 'tour.advanced.step.obsDualAudio.title',
       body: 'tour.advanced.step.obsDualAudio.body',
       hint: 'tour.advanced.step.obsDualAudio.hint',

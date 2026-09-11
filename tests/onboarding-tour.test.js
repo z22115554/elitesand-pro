@@ -69,6 +69,18 @@ test('advanced tour is split into independent lyrics, OBS, and live-operations c
   ok(nav.includes("startAdvancedChapter('lyrics')") && nav.includes("startAdvancedChapter('obs')") && nav.includes("startAdvancedChapter('live')"), 'Chapter entries are not wired independently');
 });
 
+test('advanced OBS tour teaches automatic stems and points dual audio at the real routing card', () => {
+  eq(tour.ADVANCED_TOUR_VERSION, 4, 'Corrected automatic-stem guidance must bump the advanced tour version');
+  const dualAudio = tour.ADVANCED_OBS_STEPS.find((step) => step.id === 'obs-dual-audio');
+  ok(dualAudio, 'Dual-audio advanced step missing');
+  eq(dualAudio.view, 'general');
+  eq(dualAudio.target, '#dual-audio-card');
+  eq(dualAudio.mobileTarget, '#dual-audio-card');
+  ok(!Object.prototype.hasOwnProperty.call(dualAudio, 'prepTab'), 'Dual-audio routing is no longer a Home audio-tab toggle');
+  ok(!page.includes('id="separation-mode-toggle"'), 'Obsolete separated-playback toggle must not remain in the page');
+  ok(page.includes('id="dual-audio-card"'), 'Real dual-audio routing card must remain available');
+});
+
 test('completed users can replay the beginner tour from Help', () => {
   ok(page.includes('id="guide-start-interactive"'), 'Beginner replay button missing from Help');
   ok(nav.includes("tourCompleted ? 'tour.guide.review' : 'tour.welcome.start'"), 'Help entry does not switch to replay copy after completion');
