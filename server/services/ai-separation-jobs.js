@@ -110,7 +110,7 @@ function applyResult(trackId, patch) {
   updateLibraryMeta(trackId, patch);
   persistState();
   broadcastState();
-  emitToControlClients(deps.io, 'library:list', libraryStore.getLibrary());
+  emitToControlClients(deps.io, 'library:list', libraryStore.getLibrarySummary());
 }
 
 function emitProgress(job, stage, progress = 0, extra = {}) {

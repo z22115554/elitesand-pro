@@ -14,7 +14,7 @@ const { emitToControlClients } = require('../../utils/socket-broadcast');
  * @param {ReturnType<import('../../state/app-state').createAppState>} ctx
  */
 function registerLibraryHandlers(io, socket, ctx) {
-  const { playState } = ctx;
+  const { playState, persistState } = ctx;
 
   // Storage locations are a desktop-shell capability. A phone remote may use
   // normal library controls, but it must never select filesystem paths.
@@ -45,20 +45,24 @@ function registerLibraryHandlers(io, socket, ctx) {
   });
 
   socket.on('library:get', (_data, ack) => {
-    const list = libraryStore.getLibrary();
+    const list = libraryStore.getLibrarySummary();
     if (typeof ack === 'function') ack(list); else socket.emit('library:list', list);
   });
 
   socket.on('library:remove', (id, ack) => {
     const removed = libraryStore.remove(id);
-    emitToControlClients(io, 'library:list', libraryStore.getLibrary());
+    // playlist 可能仍引用這首歌。library 移除後立刻排程 state，讓它改存完整 fallback，
+    // 必須早於 library 的 2s debounce 真正把 entry 從磁碟移除。
+    if (removed) persistState();
+    emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     if (typeof ack === 'function') ack({ ok: removed, error: removed ? null : '找不到媒體庫項目' });
   });
 
   socket.on('library:clear', (_data, ack) => {
-    libraryStore.clear();
-    emitToControlClients(io, 'library:list', libraryStore.getLibrary());
-    if (typeof ack === 'function') ack({ ok: true });
+    const cleared = libraryStore.clear();
+    if (cleared) persistState();
+    emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
+    if (typeof ack === 'function') ack({ ok: cleared, error: cleared ? null : '無法安全保存目前播放清單，媒體庫未清空' });
   });
 
   // 從媒體庫即時還原一首歌：本機音檔還在就直接組 track 回傳（含記憶的歌詞/拼音/諧音/變調，
@@ -107,9 +111,13 @@ function registerLibraryHandlers(io, socket, ctx) {
   });
 
   socket.on('library:cleanupAudio', (_data, ack) => {
-    // 保留目前播放清單仍在用的音檔，其餘刪除（庫保留 YT 網址可重抓）
-    const keep = new Set(playState.playlist.map(t => t.filename).filter(Boolean));
+    // 一首歌可能同時引用原檔／人聲／伴奏三個實體資產。播放清單、待命/播放中的
+    // currentTrack，以及仍在分離中的來源都不可被 cleanup 刪掉。
+    const keep = libraryStore.getProcessingMediaFilenames();
+    for (const track of playState.playlist) libraryStore.collectMediaFilenames(track, keep);
+    libraryStore.collectMediaFilenames(playState.currentTrack, keep);
     const result = libraryStore.cleanupAudio(keep);
+    emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     if (typeof ack === 'function') ack({ ok: true, ...result });
   });
 }

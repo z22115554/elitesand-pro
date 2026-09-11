@@ -388,13 +388,21 @@ function saveNow() {
       }
     }
 
-    // 手動歌詞筆數保護：超量時保留最新的
+    // 手動歌詞筆數保護：播放清單正在引用的歌詞永遠保留；只有「歷史但不在目前清單」
+    // 的記憶維持 200 筆上限。否則 2000 首歌單中第 201 首之後的手動歌詞會在存檔時靜默消失。
     if (snapshot.manualLyrics) {
       const entries = Object.entries(snapshot.manualLyrics);
-      if (entries.length > MAX_MANUAL_LYRICS_ENTRIES) {
-        entries.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
-        snapshot.manualLyrics = Object.fromEntries(entries.slice(0, MAX_MANUAL_LYRICS_ENTRIES));
+      const activeIds = new Set((Array.isArray(snapshot.playlist) ? snapshot.playlist : [])
+        .map((track) => track?.id == null ? null : String(track.id)).filter(Boolean));
+      const active = [];
+      const history = [];
+      for (const entry of entries) {
+        (activeIds.has(String(entry[0])) ? active : history).push(entry);
       }
+      if (history.length > MAX_MANUAL_LYRICS_ENTRIES) {
+        history.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+      }
+      snapshot.manualLyrics = Object.fromEntries([...active, ...history.slice(0, MAX_MANUAL_LYRICS_ENTRIES)]);
     }
 
     const serialized = JSON.stringify(snapshot);

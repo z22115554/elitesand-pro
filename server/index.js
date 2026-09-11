@@ -420,6 +420,9 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
     try { require('./services/session-marker').markClean(reason); } catch (err) { log.warn(`關閉標記失敗：${err.message}`); }
     try { require('./services/state-store').saveNow(); } catch (err) { log.warn(`狀態 flush 失敗：${err.message}`); }
     try { require('./services/library-store').saveNow(); } catch (err) { log.warn(`媒體庫 flush 失敗：${err.message}`); }
+    // library 落盤後 durable entry 會讓 state 從 crash-safe full fallback 收斂成 compact reference；
+    // 關閉流程不可等 800ms debounce，這裡立即做第二次 state flush。
+    try { require('./services/state-store').saveNow(); } catch (err) { log.warn(`狀態二次 flush 失敗：${err.message}`); }
     try { twitch.stop(); } catch (err) { log.warn(`Twitch 關閉失敗：${err.message}`); }
 
     const forceTimer = setTimeout(() => {

@@ -48,24 +48,32 @@ function syncNamesToLibrary(tracks) {
   }
 }
 
-// 清單 UI／跨端排序只需要摘要；若把摘要直接寫回，原先已下載／解析的歌詞會被 null 覆蓋。
-// 目前沒有「透過 playlist:update 刪除歌詞」的產品流程，歌詞改動一律走 lyrics:manual，
-// 因此摘要回寫時保留同 id 的伺服器端歌詞是正確的資料契約。
-function preserveLyricsFromExisting(cleanPlaylist, previousPlaylist) {
+// playlist:update 是「排序＋面板允許的名稱編輯」契約，不是完整 Track PUT。
+// 2000 首同步已改成窄摘要，因此回寫時要以 server 完整 track 為基底，否則 sanitizeTrack()
+// 對摘要缺欄位補的 null/default 會洗掉音檔、AI stems、歌詞、LUFS 等權威資料。
+function mergePlaylistSummaryWithExisting(cleanPlaylist, previousPlaylist) {
+  const previousByEntryId = new Map();
   const previousById = new Map();
   for (const track of previousPlaylist) {
-    if (track && track.id && !previousById.has(track.id)) previousById.set(track.id, track);
+    if (!track) continue;
+    if (track.entryId) previousByEntryId.set(track.entryId, track);
+    if (track.id && !previousById.has(track.id)) previousById.set(track.id, track);
   }
   return cleanPlaylist.map((track) => {
-    const previous = previousById.get(track.id);
-    const incomingHasLyrics = typeof track.lyrics === 'string' && track.lyrics.length > 0;
-    const incomingHasParsedLyrics = Array.isArray(track.parsedLyrics) && track.parsedLyrics.length > 0;
-    if (!previous || incomingHasLyrics || incomingHasParsedLyrics || (!previous.lyrics && !previous.parsedLyrics)) return track;
+    const previous = (track.entryId && previousByEntryId.get(track.entryId)) || previousById.get(track.id);
+    if (!previous) return track;
+    const artistChanged = (track.artist || '') !== (previous.artist || '');
     return {
-      ...track,
-      lyrics: previous.lyrics,
-      lyricsType: track.lyricsType || previous.lyricsType,
-      parsedLyrics: previous.parsedLyrics,
+      ...previous,
+      // 這些是目前 UI 明確允許透過 playlist:update 改動的欄位。
+      entryId: track.entryId || previous.entryId,
+      title: track.title,
+      artist: track.artist,
+      performer: track.performer || '',
+      // sanitizeTrack() 對精簡摘要缺少的欄位會補預設值；單純拖曳排序時不可因此
+      // 把既有歌手判定的信心值洗回 0。只有使用者真的改了 artist 才重算這兩欄。
+      needsArtistConfirmation: artistChanged ? !track.artist : previous.needsArtistConfirmation,
+      artistConfidence: artistChanged ? (track.artist ? 1 : 0) : previous.artistConfidence,
     };
   });
 }
@@ -88,7 +96,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
   socket.on('playlist:update', (playlist, ack) => {
     const clean = sanitizePlaylist(playlist);
     if (!clean) { log.warn('playlist:update 收到非陣列資料'); if (typeof ack === 'function') ack({ ok: false, error: '播放清單格式無效' }); return; }
-    const preserved = ensureEntryIds(preserveLyricsFromExisting(clean, playState.playlist));
+    const preserved = ensureEntryIds(mergePlaylistSummaryWithExisting(clean, playState.playlist));
     playState.playlist = preserved;
     if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
     syncNamesToLibrary(preserved);

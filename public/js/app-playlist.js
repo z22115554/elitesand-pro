@@ -369,7 +369,7 @@
   function playlistItemMarkup(track, i, selectionKey, isActive, isSelected) {
     const coverUrl = safeHttpUrl(track.cover);
     const coverImg = coverUrl
-      ? `<img class="pi-cover" src="${escapeHtml(coverUrl)}" alt="">`
+      ? `<img class="pi-cover" src="${escapeHtml(coverUrl)}" alt="" loading="lazy" decoding="async">`
       : '<div class="pi-cover"></div>';
     const trackTitle = track.title || '這首歌';
     const selectionLabel = isActive
@@ -403,6 +403,14 @@
   }
   function updateMarquee(scopeEl) {
     (scopeEl || dom.playlist).querySelectorAll('.marquee-text').forEach(measureMarquee);
+  }
+  let playlistMarqueeFrame = 0;
+  function schedulePlaylistMarqueeUpdate() {
+    if (playlistMarqueeFrame) return;
+    playlistMarqueeFrame = requestAnimationFrame(() => {
+      playlistMarqueeFrame = 0;
+      updateMarquee(dom.playlist);
+    });
   }
   // 設定「現在播放」標題/歌手（頂部大字），文字過長時比照播放清單加跑馬燈滾動。
   function setMarqueeText(el, text) {
@@ -506,7 +514,7 @@
       dom.playlist.removeChild(dom.playlist.lastChild);
     }
     syncPlaylistTools(visibleCount);
-    requestAnimationFrame(() => updateMarquee(dom.playlist));
+    schedulePlaylistMarqueeUpdate();
   }
 
   async function removeTrack(index) {

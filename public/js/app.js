@@ -28,6 +28,16 @@
   let currentTrackIndex = -1;
   let playedEntryIds = new Set();
   let lastPlayedEntryId = null;
+  let syncedPlaylistRenderFrame = 0;
+
+  // playlist:update 與緊接的 state:sync 都要套用狀態，但同一 frame 只畫一次清單。
+  function scheduleSyncedPlaylistRender() {
+    if (syncedPlaylistRenderFrame) return;
+    syncedPlaylistRenderFrame = requestAnimationFrame(() => {
+      syncedPlaylistRenderFrame = 0;
+      AppShared.renderPlaylist();
+    });
+  }
 
   function applySyncedPlaylist(nextPlaylist, currentTrackId, currentTrack, currentEntryId) {
     // playlist:update 只帶摘要時，保留本機目前歌曲的完整歌詞；state:sync 則以
@@ -46,7 +56,7 @@
     const reconciled = PlaylistState.reconcilePlaylist(hydratedPlaylist, currentTrackId, currentEntryId);
     playlist = reconciled.playlist;
     currentTrackIndex = reconciled.currentTrackIndex;
-    AppShared.renderPlaylist();
+    scheduleSyncedPlaylistRender();
     // playTrack() 換歌當下，清單裡那一列還沒被這次 sync 帶來的完整歌詞 hydrate，「歌詞純文字」
     // 預覽框只能先樂觀顯示「此歌曲無歌詞」；hydrate 完成後這裡要補畫一次，不然框會卡在舊字樣，
     // 明明整首都有逐字歌詞（OBS 那邊靠 currentTrack 直接播動畫，不受這個框影響）也還是顯示沒有。

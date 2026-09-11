@@ -20,6 +20,7 @@ process.env.ELITESAND_DATA_DIR = dataDir;
 
 const RESULT_MARKER = '__STATE_SYNC_MATRIX__';
 const EVENT_TIMEOUT_MS = 8000;
+const FIXTURE_PLAYLIST_SIZE = 2000;
 
 function fail(message) {
   throw new Error(message);
@@ -48,7 +49,7 @@ function buildFixtureState() {
     const seconds = Math.floor(line.time / 1000);
     return `[${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}.00]${line.text}`;
   }).join('\n');
-  const playlist = Array.from({ length: 500 }, (_, index) => ({
+  const playlist = Array.from({ length: FIXTURE_PLAYLIST_SIZE }, (_, index) => ({
     id: `matrix-${index}`,
     title: `P2 matrix song ${index + 1}`,
     artist: 'Elitesand integration fixture',
@@ -197,7 +198,7 @@ const READ_ONLY_TRACK_FIELDS = ['filename', 'url', 'cover', 'originalName', 'aud
 
 function validatePublicState(payload, label, { readOnly = false } = {}) {
   assert(payload && typeof payload === 'object', `${label}: state payload is missing`);
-  assert(Array.isArray(payload.playlist) && payload.playlist.length === 500, `${label}: playlist must contain 500 tracks`);
+  assert(Array.isArray(payload.playlist) && payload.playlist.length === FIXTURE_PLAYLIST_SIZE, `${label}: playlist must contain ${FIXTURE_PLAYLIST_SIZE} tracks`);
   assert(payload.playlist.every((track) =>
     !Object.prototype.hasOwnProperty.call(track, 'lyrics') &&
     !Object.prototype.hasOwnProperty.call(track, 'parsedLyrics') &&
@@ -217,7 +218,7 @@ function validatePublicState(payload, label, { readOnly = false } = {}) {
 }
 
 function validatePlaylistUpdate(payload, label, { readOnly = false } = {}) {
-  assert(Array.isArray(payload) && payload.length === 500, `${label}: playlist update must contain 500 tracks`);
+  assert(Array.isArray(payload) && payload.length === FIXTURE_PLAYLIST_SIZE, `${label}: playlist update must contain ${FIXTURE_PLAYLIST_SIZE} tracks`);
   if (readOnly) {
     assert(payload.every((track) => READ_ONLY_TRACK_FIELDS.every((field) => !Object.prototype.hasOwnProperty.call(track, field))),
       `${label}: read-only playlist update must not expose media details`);
@@ -268,7 +269,7 @@ async function run() {
     assert(initialBytes.controller > initialBytes.display, 'read-only initial state must omit media details');
 
     // High-frequency visual settings use their explicit Socket contract rather
-    // than resending a 500-song state snapshot to every client.
+    // than resending a 2000-song state snapshot to every client.
     const styleCounts = Object.fromEntries(Object.entries(byType).map(([type, client]) => [type, client.eventCount('style:change')]));
     byType.controller.send('style:change', 'matrix');
     const styleUpdates = await Promise.all(Object.entries(byType).map(async ([type, client]) => [
@@ -316,7 +317,7 @@ async function run() {
     const setlistCount = byType.setlist.eventCount('setlist:update');
     byType.setlist.send('setlist:get', null);
     const setlist = await byType.setlist.waitFor('setlist:update', { after: setlistCount });
-    assert(Array.isArray(setlist?.upcoming) && setlist.upcoming.length === 500, 'setlist refresh must contain all queued songs');
+    assert(Array.isArray(setlist?.upcoming) && setlist.upcoming.length === FIXTURE_PLAYLIST_SIZE, 'setlist refresh must contain all queued songs');
 
     process.stdout.write(`${RESULT_MARKER}${JSON.stringify({
       ok: true,

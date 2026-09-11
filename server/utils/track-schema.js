@@ -3,7 +3,7 @@
 const path = require('path');
 const crypto = require('crypto');
 
-const MAX_PLAYLIST_SIZE = 500;
+const MAX_PLAYLIST_SIZE = 2000;
 const MAX_LYRIC_LINES = 5000;
 const MAX_WORDS_PER_LINE = 1000;
 const MAX_LYRICS_LENGTH = 1024 * 1024;

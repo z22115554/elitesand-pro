@@ -50,6 +50,21 @@
   let searchQuery = '';
   let sortBy = 'plays';
   let filterSeparatedOnly = false;
+  let viewCache = [];
+
+  // 媒體庫最多可能有 10k 首；不能把每一列都常駐 DOM。一般列由 46px 封面 +
+  // 10px 上下 padding + 1px border 撐成約 68px，再加既有 8px gap = 76px step。
+  // 這裡保留完整 viewCache（搜尋/排序仍對全量資料運算），DOM 只畫目前視窗附近。
+  const VIRTUAL_ROW_HEIGHT = 68;
+  const VIRTUAL_ROW_GAP = 8;
+  const VIRTUAL_ROW_STEP = VIRTUAL_ROW_HEIGHT + VIRTUAL_ROW_GAP;
+  const VIRTUAL_OVERSCAN_ROWS = 20;
+  const VIRTUAL_MAX_ROWS = 100;
+  let virtualStart = 0;
+  let virtualEnd = 0;
+  let virtualScrollRaf = 0;
+  let virtualForceRender = false;
+  const restorePendingIds = new Map();
 
   // 收到伺服器清單→存快取後套用目前的搜尋/排序再渲染
   function render(list) {
@@ -65,6 +80,116 @@
     return arr.sort(byPlays);
   }
 
+  function pausePreviewPanels() {
+    listEl.querySelectorAll('.lib-separate-preview-panel audio').forEach((audio) => audio.pause());
+  }
+
+  function virtualSpacer(rowCount) {
+    if (rowCount <= 0) return null;
+    const height = Math.max(0, rowCount * VIRTUAL_ROW_STEP - VIRTUAL_ROW_GAP);
+    const spacer = document.createElement('div');
+    spacer.className = 'lib-virtual-spacer';
+    spacer.setAttribute('aria-hidden', 'true');
+    spacer.style.height = `${height}px`;
+    spacer.style.flex = `0 0 ${height}px`;
+    return spacer;
+  }
+
+  function getVirtualRange() {
+    if (!viewCache.length) return { start: 0, end: 0, firstVisible: 0, lastVisible: 0 };
+    const rect = listEl.getBoundingClientRect();
+    const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 720);
+    const firstVisible = Math.max(0, Math.min(
+      viewCache.length - 1,
+      Math.floor(Math.max(0, -rect.top) / VIRTUAL_ROW_STEP),
+    ));
+    const visibleRows = Math.max(1, Math.ceil(viewportHeight / VIRTUAL_ROW_STEP) + 2);
+    const lastVisible = Math.min(viewCache.length, firstVisible + visibleRows);
+    const targetRows = Math.min(VIRTUAL_MAX_ROWS, visibleRows + VIRTUAL_OVERSCAN_ROWS * 2);
+    let start = Math.max(0, firstVisible - VIRTUAL_OVERSCAN_ROWS);
+    let end = Math.min(viewCache.length, start + targetRows);
+    if (end - start < targetRows) start = Math.max(0, end - targetRows);
+    return { start, end, firstVisible, lastVisible };
+  }
+
+  function renderLibraryRow(item) {
+    const row = document.createElement('div');
+    row.className = 'lib-row';
+    row.dataset.id = item.id;
+
+    const coverUrl = safeHttpUrl(item.cover);
+    const restoreLabel = restorePendingIds.get(String(item.id));
+
+    row.innerHTML = `
+      <div class="lib-cover">${coverUrl ? '' : '♪'}</div>
+      <div class="lib-meta">
+        <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+        <div class="lib-sub">${escapeHtml(item.artist || tr('未知歌手'))}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
+        <div class="lib-stats">▶ ${tr(`${item.playCount || 0} 次`)} · ${fmtDate(item.lastPlayed)}</div>
+      </div>
+      <div class="lib-actions">
+        <button class="btn btn-sm lib-reimport" type="button"${restoreLabel ? ' disabled' : ''}>${restoreLabel || tr('加入清單')}</button>
+        ${separationButtonHtml(item)}
+        <button class="btn btn-sm btn-ghost lib-remove" type="button" title="${tr('從媒體庫移除')}">✕</button>
+      </div>`;
+
+    // Do not interpolate external metadata into a style attribute. The URL
+    // has already passed the shared HTTP(S) allow-list before CSSOM receives it.
+    if (coverUrl) {
+      const cover = row.querySelector('.lib-cover');
+      if (cover) cover.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
+    }
+    return row;
+  }
+
+  function renderVirtualWindow(force = false) {
+    if (!viewCache.length) {
+      virtualStart = 0;
+      virtualEnd = 0;
+      if (listEl.childNodes.length) {
+        pausePreviewPanels();
+        listEl.innerHTML = '';
+      }
+      return;
+    }
+
+    const range = getVirtualRange();
+    // 只有可見範圍快碰到 overscan 邊界才換 window。除了減少 DOM churn，也避免使用者
+    // 正在操作試聽面板時，僅僅捲幾個像素就把 <audio> 節點重建掉。
+    const guard = Math.max(4, Math.floor(VIRTUAL_OVERSCAN_ROWS / 2));
+    const withinCurrentWindow = virtualEnd > virtualStart
+      && range.firstVisible >= virtualStart + guard
+      && range.lastVisible <= virtualEnd - guard;
+    if (!force && withinCurrentWindow) return;
+    if (!force && range.start === virtualStart && range.end === virtualEnd) return;
+
+    virtualStart = range.start;
+    virtualEnd = range.end;
+    pausePreviewPanels();
+    listEl.innerHTML = '';
+
+    const topSpacer = virtualSpacer(virtualStart);
+    if (topSpacer) listEl.appendChild(topSpacer);
+    for (let i = virtualStart; i < virtualEnd; i += 1) {
+      listEl.appendChild(renderLibraryRow(viewCache[i]));
+    }
+    const bottomSpacer = virtualSpacer(viewCache.length - virtualEnd);
+    if (bottomSpacer) listEl.appendChild(bottomSpacer);
+  }
+
+  function scheduleVirtualRender(force = false) {
+    if (force) virtualForceRender = true;
+    if (virtualScrollRaf) return;
+    virtualScrollRaf = requestAnimationFrame(() => {
+      virtualScrollRaf = 0;
+      const libraryView = listEl.closest('.view');
+      if (libraryView && !libraryView.classList.contains('is-active') && !virtualForceRender) return;
+      const shouldForce = virtualForceRender;
+      virtualForceRender = false;
+      renderVirtualWindow(shouldForce);
+    });
+  }
+
   // 套用搜尋過濾 + 排序 → 渲染
   function applyView() {
     const q = searchQuery.trim().toLowerCase();
@@ -72,10 +197,9 @@
       ? cache.filter((it) => (it.title || '').toLowerCase().includes(q) || (it.artist || '').toLowerCase().includes(q))
       : cache.slice();
     if (filterSeparatedOnly) view = view.filter((it) => it.separationStatus === 'done');
-    view = sortView(view);
-
-    listEl.innerHTML = '';
+    viewCache = sortView(view);
     if (!view.length) {
+      renderVirtualWindow(true);
       if (emptyEl) {
         emptyEl.hidden = false;
         emptyEl.textContent = cache.length
@@ -85,44 +209,7 @@
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
-
-    for (const item of view) {
-      const row = document.createElement('div');
-      row.className = 'lib-row';
-      row.dataset.id = item.id;
-
-      const coverUrl = safeHttpUrl(item.cover);
-
-      row.innerHTML = `
-        <div class="lib-cover">${coverUrl ? '' : '♪'}</div>
-        <div class="lib-meta">
-          <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
-          <div class="lib-sub">${escapeHtml(item.artist || tr('未知歌手'))}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
-          <div class="lib-stats">▶ ${tr(`${item.playCount || 0} 次`)} · ${fmtDate(item.lastPlayed)}</div>
-        </div>
-        <div class="lib-actions">
-          <button class="btn btn-sm lib-reimport" type="button">${tr('加入清單')}</button>
-          ${separationButtonHtml(item)}
-          <button class="btn btn-sm btn-ghost lib-remove" type="button" title="${tr('從媒體庫移除')}">✕</button>
-        </div>`;
-
-      // Do not interpolate external metadata into a style attribute. The URL
-      // has already passed the shared HTTP(S) allow-list before CSSOM receives it.
-      if (coverUrl) {
-        const cover = row.querySelector('.lib-cover');
-        if (cover) cover.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
-      }
-
-      row.querySelector('.lib-reimport').addEventListener('click', () => reimport(item, row));
-      row.querySelector('.lib-remove').addEventListener('click', () => removeItem(item.id));
-      const separateBtn = row.querySelector('.lib-separate');
-      if (separateBtn) separateBtn.addEventListener('click', () => startSeparation(item, row));
-      const separateCancelBtn = row.querySelector('.lib-separate-cancel');
-      if (separateCancelBtn) separateCancelBtn.addEventListener('click', () => cancelSeparation(item, row));
-      const previewBtn = row.querySelector('.lib-separate-preview');
-      if (previewBtn) previewBtn.addEventListener('click', () => togglePreview(item, row));
-      listEl.appendChild(row);
-    }
+    renderVirtualWindow(true);
   }
 
   // ─── AI 人聲分離（實驗性功能，見 CLAUDE.md）───
@@ -378,6 +465,37 @@
     }
   });
 
+  // 媒體庫列採事件代理：virtual window 換頁時只替換列 DOM，不需要替每個按鈕重新
+  // 綁 listener；10k 資料量下 listener 數量仍維持常數。
+  listEl.addEventListener('click', (event) => {
+    const row = event.target.closest('.lib-row');
+    if (!row || !listEl.contains(row)) return;
+    const item = cache.find((entry) => String(entry.id) === String(row.dataset.id));
+    if (!item) return;
+    if (event.target.closest('.lib-reimport')) {
+      reimport(item, row);
+      return;
+    }
+    if (event.target.closest('.lib-remove')) {
+      removeItem(item.id);
+      return;
+    }
+    if (event.target.closest('.lib-separate-cancel')) {
+      cancelSeparation(item, row);
+      return;
+    }
+    if (event.target.closest('.lib-separate-preview')) {
+      togglePreview(item, row);
+      return;
+    }
+    if (event.target.closest('.lib-separate')) startSeparation(item, row);
+  });
+
+  // scroll 不會 bubble，但 capture 可以接到視窗與內層可捲容器；用單一 RAF 合併同一幀
+  // 的多個 scroll 事件。resize 也只需重新算一次 window。
+  document.addEventListener('scroll', () => scheduleVirtualRender(), true);
+  window.addEventListener('resize', () => scheduleVirtualRender(true));
+
   function requestSocket(event, data) {
     return new Promise((resolve) => {
       SocketClient.sendWithCallback(event, data, (response) => resolve(response || null));
@@ -391,10 +509,23 @@
       while (restoreQueue.length) {
       const job = restoreQueue.shift();
       const { item, btn, originalLabel } = job;
-      if (btn) { btn.disabled = true; btn.textContent = tr('加入中…'); }
+      const itemKey = String(item.id);
+      restorePendingIds.set(itemKey, tr('加入中…'));
+      const visibleBtn = () => {
+        const visibleRow = listEl.querySelector(`.lib-row[data-id="${CSS.escape(itemKey)}"]`);
+        return visibleRow?.querySelector('.lib-reimport') || btn;
+      };
+      const setButton = (label, disabled) => {
+        const currentBtn = visibleBtn();
+        if (!currentBtn) return;
+        currentBtn.disabled = disabled;
+        currentBtn.textContent = label;
+      };
+      setButton(tr('加入中…'), true);
       const fail = (message) => {
         toast(message, 'error');
-        if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
+        restorePendingIds.delete(itemKey);
+        setButton(originalLabel, false);
       };
 
       const resp = await requestSocket('library:reimport', item.id);
@@ -402,16 +533,19 @@
         const result = await window.VKState.addLibraryTrack(resp.track);
         if (result?.ok) {
           toast(tr(`已加入清單：${item.title}`), 'success');
-          if (btn) btn.textContent = tr('已加入');
+          restorePendingIds.delete(itemKey);
+          setButton(tr('已加入'), true);
         } else {
           fail(tr(`加入播放清單失敗：${result?.error || tr('伺服器沒有確認')}`));
         }
       } else if (resp?.needsDownload && resp.url && window.VKState.importYouTubeUrl) {
-        if (btn) btn.textContent = tr('排隊下載中…');
+        restorePendingIds.set(itemKey, tr('排隊下載中…'));
+        setButton(tr('排隊下載中…'), true);
         try {
           await window.VKState.importYouTubeUrl(resp.url);
           toast(tr(`已加入清單：${item.title}`), 'success');
-          if (btn) btn.textContent = tr('已加入');
+          restorePendingIds.delete(itemKey);
+          setButton(tr('已加入'), true);
         } catch (err) {
           fail(tr(`重新匯入失敗：${err.message}`));
         }
@@ -440,7 +574,9 @@
     if (!btn || btn.disabled) return;
     const originalLabel = btn.textContent;
     btn.disabled = true;
-    btn.textContent = restoreQueueRunning ? tr('加入佇列中…') : tr('加入中…');
+    const pendingLabel = restoreQueueRunning ? tr('加入佇列中…') : tr('加入中…');
+    btn.textContent = pendingLabel;
+    restorePendingIds.set(String(item.id), pendingLabel);
     restoreQueue.push({ item, btn, originalLabel });
     runRestoreQueue();
   }
@@ -596,6 +732,7 @@
   // ─── 事件：切到媒體庫視圖時自動刷新；伺服器推播時更新 ───
   document.addEventListener('view:change', (e) => {
     if (e.detail && e.detail.view === 'library') {
+      scheduleVirtualRender(true);
       refresh();
       refreshStorage();
     }
