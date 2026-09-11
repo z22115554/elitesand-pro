@@ -22,8 +22,10 @@ const ffmpegProvider = require('./ffmpeg-provider');
 const importTempRegistry = require('./import-temp-registry');
 const { inspectDiskSpace, appendDiskSpaceWarning } = require('./disk-space');
 const { downloadsDir } = require('../utils/app-paths');
+const { getYtdlpCommand } = require('../utils/ytdlp-command');
 
 const execFileAsync = promisify(execFile);
+const YTDLP_COMMAND = getYtdlpCommand();
 
 // ─── yt-dlp 命令超時設定 ───
 const YTDLP_INFO_TIMEOUT = 45000;     // 取得影片資訊超時: 45s
@@ -841,7 +843,9 @@ class AudioProcessor {
     if (duplicate && options.forceReplace) {
       // 使用者選了「取代」：只移除媒體庫記錄，音檔清理交給既有的 cleanupAudio() 排程，
       // 跟「音檔可清理、庫保留即可重抓」的既有設計一致，這裡不再另外實作刪檔。
-      libraryStore.remove(duplicate.id);
+      if (!libraryStore.remove(duplicate.id)) {
+        throw new Error('無法安全保存舊歌曲資料，因此已取消取代；請稍後重試');
+      }
     }
 
     libraryStore.rememberImport(track);
@@ -1041,7 +1045,7 @@ class AudioProcessor {
     ];
     let stdout = '';
     try {
-      ({ stdout } = await execFileAsync('yt-dlp', args, {
+      ({ stdout } = await execFileAsync(YTDLP_COMMAND, args, {
         ...YTDLP_BASE_OPTS, timeout: YTDLP_SEARCH_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER, signal,
       }));
     } catch (error) {
@@ -1077,7 +1081,7 @@ class AudioProcessor {
     const args = ['--no-config', '--js-runtimes', 'node', '--dump-json', '--skip-download', '--no-warnings', ...urls];
     let stdout = '';
     try {
-      ({ stdout } = await execFileAsync('yt-dlp', args, {
+      ({ stdout } = await execFileAsync(YTDLP_COMMAND, args, {
         ...YTDLP_BASE_OPTS, timeout: 9000, maxBuffer: YTDLP_MAX_BUFFER, signal,
       }));
     } catch (error) {
@@ -1103,7 +1107,7 @@ class AudioProcessor {
     const args = this._youtubeSearchArgs(normalizedQuery, limit);
     let stdout = '';
     try {
-      ({ stdout } = await execFileAsync('yt-dlp', args, {
+      ({ stdout } = await execFileAsync(YTDLP_COMMAND, args, {
         ...YTDLP_BASE_OPTS,
         timeout: YTDLP_SEARCH_TIMEOUT,
         maxBuffer: YTDLP_MAX_BUFFER,
@@ -1154,7 +1158,7 @@ class AudioProcessor {
     const args = ['--flat-playlist', '--dump-json', '--no-warnings', '--playlist-end', String(limit), url];
     let stdout = '';
     try {
-      ({ stdout } = await execFileAsync('yt-dlp', args, { ...YTDLP_BASE_OPTS, timeout: YTDLP_INFO_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER }));
+      ({ stdout } = await execFileAsync(YTDLP_COMMAND, args, { ...YTDLP_BASE_OPTS, timeout: YTDLP_INFO_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER }));
     } catch (e) {
       // yt-dlp 對部分私人/失效項目會非零退出但仍有 stdout，盡量解析
       stdout = (e && e.stdout) ? e.stdout : '';
@@ -1193,7 +1197,7 @@ class AudioProcessor {
       const args = strategies[i];
       const strategyStart = Date.now();
       try {
-        const { stdout } = await execFileAsync('yt-dlp', [...args, url], {
+        const { stdout } = await execFileAsync(YTDLP_COMMAND, [...args, url], {
           ...YTDLP_BASE_OPTS,
           timeout: YTDLP_INFO_TIMEOUT,
           maxBuffer: YTDLP_MAX_BUFFER,
@@ -1327,7 +1331,7 @@ class AudioProcessor {
         '--print', YTDLP_SOURCE_FORMAT_PRINT,
         '--progress', '--newline', '--progress-template', 'download:__ES_PROGRESS__%(progress._percent_str)s', url];
       const started = Date.now();
-      const child = spawn('yt-dlp', args, { env: YTDLP_ENV, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(YTDLP_COMMAND, args, { env: YTDLP_ENV, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
       let stderr = '', rawPath = '', sourceFormat = '', timedOut = false;
       const onAbort = () => child.kill();
       signal?.addEventListener('abort', onAbort, { once: true });

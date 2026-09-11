@@ -6,10 +6,12 @@ const { APP_VERSION } = require('../utils/app-version');
 const ytdlpCompatibility = require('./ytdlp-compatibility');
 const ffmpegProvider = require('./ffmpeg-provider');
 const usageTelemetry = require('./usage-telemetry');
+const { getYtdlpCommand } = require('../utils/ytdlp-command');
 
 const execFileAsync = promisify(execFile);
 const TOOL_ENV = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
 const CACHE_MS = 60 * 1000;
+const YTDLP_COMMAND = getYtdlpCommand();
 let cache = null;
 
 async function toolStatus(command, args, options = {}) {
@@ -45,7 +47,7 @@ async function getSystemCheck(options = {}) {
 
   const resolvedFfmpeg = ffmpegProvider.resolveFfmpegPaths();
   const [ytdlp, ffmpeg] = await Promise.all([
-    toolStatus('yt-dlp', ['--version'], options),
+    toolStatus(YTDLP_COMMAND, ['--version'], options),
     toolStatus(resolvedFfmpeg?.ffmpeg || 'ffmpeg', ['-version'], options),
   ]);
   const payload = {

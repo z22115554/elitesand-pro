@@ -2144,6 +2144,21 @@ test('installer and portable builds run the full test gate before packaging', ()
   ok(portable.includes('npm.cmd') && portable.includes('--prefix $Root test'), 'portable build must run npm test before packaging');
 });
 
+test('Installer packaged E2E covers yt-dlp seed, approved runtime restart, tamper recovery, and immutable seed', () => {
+  const installer = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
+  [
+    'runtime-state.json',
+    'initial-seed',
+    'approved-runtime-restart',
+    'tamper-recovery',
+    'approved-runtime-e2e',
+    'unapproved-tamper-e2e',
+    'protected packaged seed changed',
+  ].forEach((required) => ok(installer.includes(required), `Installer yt-dlp packaged E2E 缺少 ${required}: `));
+  ok(installer.includes('Get-Sha256Hex -LiteralPath $runtimePath'), 'packaged E2E 必須用實際 runtime bytes 驗證 trust hash: ');
+  ok(installer.includes('Invoke-WebRequest -Uri "http://127.0.0.1:$Port/api/health"'), '每個 packaged restart phase 都必須真的啟動 app 並通過 health: ');
+});
+
 test('bilingual EULA is shipped with portable builds as a finalized agreement', () => {
   const root = path.join(__dirname, '..');
   const eulaPath = path.join(root, 'EULA.txt');
@@ -5109,7 +5124,9 @@ test('落地前去重：批次匯入沿用既有版本，單首匯入交回去�
     '批次匯入命中重複時要直接沿用既有版本，不建確認流程: ');
   ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,600}return \{\s*duplicate: true,/.test(processor),
     '單首匯入命中重複時要回傳需要確認的訊號，交給呼叫端問使用者: ');
-  ok(processor.includes("libraryStore.remove(duplicate.id);"), '使用者選了取代才可以動到既有記錄: ');
+  ok(processor.includes("libraryStore.remove(duplicate.id)"), '使用者選了取代才可以動到既有記錄: ');
+  ok(processor.includes("throw new Error('無法安全保存舊歌曲資料，因此已取消取代；請稍後重試')"),
+    '取代前若無法安全保存既有播放清單 fallback，必須取消而不是冒險刪資料: ');
 
   const route = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8').replace(/\r\n/g, '\n');
   ok(route.includes("isBatch: req.body.isBatch === true,"), 'API 必須把批次旗標從請求體傳給 processYouTube: ');
@@ -5529,6 +5546,7 @@ testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡�
       this.listeners = new Map();
       this.lookup = new Map();
       this.dataset = {};
+      this.style = {};
       this.classList = { contains: () => false, add() {}, remove() {} };
       this.disabled = false;
       this.hidden = false;
@@ -5548,8 +5566,14 @@ testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡�
       }
     }
     get innerHTML() { return this._innerHTML; }
+    get childNodes() { return this.children; }
     appendChild(child) { this.children.push(child); return child; }
     querySelector(selector) { return this.lookup.get(selector) || null; }
+    querySelectorAll() { return []; }
+    setAttribute() {}
+    contains(child) { return this.children.includes(child); }
+    closest() { return null; }
+    getBoundingClientRect() { return { top: 0, bottom: 0, height: 0 }; }
     addEventListener(type, handler) { this.listeners.set(type, handler); }
     click() { this.listeners.get('click')?.({ target: this }); }
   }
@@ -5577,6 +5601,7 @@ testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡�
       clearTimeout,
       Promise,
       console,
+      CSS: { escape: (value) => String(value) },
       document: {
         getElementById(id) { return elements[id] || null; },
         createElement() { return new FakeElement(); },
@@ -5595,6 +5620,8 @@ testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡�
         connected() { return true; },
       },
       window: {
+        innerHeight: 720,
+        addEventListener() {},
         confirm() { return true; },
         VKState: {
           isInPlaylist() { return false; },
@@ -5617,7 +5644,19 @@ testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡�
     socketEvents.get('library:list')(items);
     eq(list.children.length, 6, '媒體庫清單必須渲染六個加入按鈕: ');
     const buttons = list.children.map((row) => row.querySelector('.lib-reimport'));
-    buttons.forEach((button) => button.click());
+    const delegatedClick = list.listeners.get('click');
+    buttons.forEach((button, index) => {
+      const row = list.children[index];
+      delegatedClick({
+        target: {
+          closest(selector) {
+            if (selector === '.lib-row') return row;
+            if (selector === '.lib-reimport') return button;
+            return null;
+          },
+        },
+      });
+    });
     eq(pendingRestores.length, 1, '快速連點後只能先送出第一首還原: ');
     for (let index = 0; index < items.length; index += 1) {
       const pending = pendingRestores.shift();
@@ -5653,8 +5692,20 @@ testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡�
   eq(timedOut.buttons[1].textContent, '加入清單', '逾時的按鈕必須恢復原標籤: ');
 });
 
+test('10k 媒體庫前端使用有界 virtual window，不再建立 10000 個常駐 row/listener', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/media-library.js'), 'utf8');
+  ok(source.includes('const VIRTUAL_MAX_ROWS = 100'), 'virtual window 必須有明確 DOM row 上限: ');
+  ok(source.includes('const VIRTUAL_OVERSCAN_ROWS = 20'), 'virtual window 必須保留 overscan 降低捲動換頁抖動: ');
+  ok(source.includes('for (let i = virtualStart; i < virtualEnd; i += 1)'), '只能渲染目前 virtual window，不可遍歷整份 view 建 DOM: ');
+  ok(source.includes("listEl.addEventListener('click', (event) =>"), '媒體庫列操作必須事件代理，listener 數不可隨 10k rows 成長: ');
+  ok(source.includes("document.addEventListener('scroll', () => scheduleVirtualRender(), true)"), 'scroll 更新必須走共用排程器: ');
+  ok(source.includes('virtualScrollRaf = requestAnimationFrame'), 'scroll 必須 RAF coalesce: ');
+  ok(!source.includes('for (const item of view) {'), '不可退回對完整搜尋結果逐列建立 DOM: ');
+});
+
 test('playlist:add 會逐次確認加入並拒絕超過上限，供媒體庫佇列安全回滾', () => {
   const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
+  const { MAX_PLAYLIST_SIZE } = require('../server/utils/track-schema');
   const events = new Map();
   const state = { playlist: [] };
   let persisted = 0;
@@ -5672,12 +5723,12 @@ test('playlist:add 會逐次確認加入並拒絕超過上限，供媒體庫佇�
   eq(state.playlist.map((track) => track.id).join(','), 'library-one');
   eq(persisted, 1);
 
-  state.playlist = Array.from({ length: 500 }, (_, i) => ({ id: `full-${i}`, title: `已滿 ${i}` }));
+  state.playlist = Array.from({ length: MAX_PLAYLIST_SIZE }, (_, i) => ({ id: `full-${i}`, title: `已滿 ${i}` }));
   let fullAck;
   events.get('playlist:add')([{ id: 'over-limit', title: '不得加入' }], (result) => { fullAck = result; });
   eq(fullAck.ok, false);
-  ok(fullAck.error.includes('500'));
-  eq(state.playlist.length, 500);
+  ok(fullAck.error.includes(String(MAX_PLAYLIST_SIZE)));
+  eq(state.playlist.length, MAX_PLAYLIST_SIZE);
 });
 
 test('playlist:import 的 style／romanizationMode 驗證必須與 socket 事件一致', () => {
@@ -7681,7 +7732,8 @@ test('Track schema：移除未知欄位、危險 URL，並限制播放清單長�
   eq(clean.cover, null);
   eq(clean.filename, 'evil.mp3');
   ok(!('extraAdmin' in clean));
-  const many = Array.from({ length: 550 }, (_, i) => ({ id: String(i), title: `song-${i}` }));
+  eq(trackSchema.MAX_PLAYLIST_SIZE, 2000, '大型歌單安全上限應為 2000: ');
+  const many = Array.from({ length: trackSchema.MAX_PLAYLIST_SIZE + 50 }, (_, i) => ({ id: String(i), title: `song-${i}` }));
   eq(trackSchema.sanitizePlaylist(many).length, trackSchema.MAX_PLAYLIST_SIZE);
 });
 
@@ -7698,6 +7750,110 @@ test('音檔巡檢：缺少檔名或檔案時標記遺失，存在時標記可�
   ok(libraryStore.audioStatus({ id: 'none' }, () => true).audioMissing);
   ok(libraryStore.audioStatus({ filename: 'missing.mp3' }, () => false).audioMissing);
   ok(libraryStore.audioStatus({ filename: 'ready.mp3' }, (name) => name === 'ready.mp3').audioAvailable);
+});
+
+test('大型媒體庫摘要不傳歌詞／原始來源，但保留 AI 分離試聽狀態', () => {
+  const libraryStore = require('../server/services/library-store');
+  eq(libraryStore.MAX_ENTRIES, 10000, '媒體庫高安全上限應為 10000: ');
+  const summary = libraryStore.toLibrarySummary({
+    id: 'summary-track', title: '摘要歌曲', artist: '歌手', cover: 'https://example.test/cover.jpg',
+    duration: 245, playCount: 7, lastPlayed: 123,
+    filename: 'original.mp3', url: 'https://example.test/watch/1',
+    lyrics: '不應傳送'.repeat(1000), parsedLyrics: [{ time: 0, text: '不應傳送' }],
+    vocalsFile: 'track.vocals.wav', instrumentalFile: 'track.instrumental.wav', separationStatus: 'done',
+  });
+  eq(summary.id, 'summary-track');
+  eq(summary.vocalsFile, 'track.vocals.wav');
+  eq(summary.instrumentalFile, 'track.instrumental.wav');
+  eq(summary.separationStatus, 'done');
+  ok(!Object.prototype.hasOwnProperty.call(summary, 'lyrics'));
+  ok(!Object.prototype.hasOwnProperty.call(summary, 'parsedLyrics'));
+  ok(!Object.prototype.hasOwnProperty.call(summary, 'filename'));
+  ok(!Object.prototype.hasOwnProperty.call(summary, 'url'));
+});
+
+test('媒體庫超過 10000 首時優先保留播放清單與 currentTrack backing，淘汰未使用低順位項目', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-library-protected-eviction-'));
+  try {
+    const libraryPath = path.join(dataDir, 'library.json');
+    const entries = {};
+    for (let i = 0; i < 10000; i += 1) {
+      entries[`normal-${i}`] = {
+        id: `normal-${i}`, title: `Normal ${i}`, artist: '', playCount: i + 1, lastPlayed: i + 1,
+      };
+    }
+    entries['active-playlist'] = { id: 'active-playlist', title: 'Active playlist', artist: '', playCount: 0, lastPlayed: 0 };
+    entries['active-current'] = { id: 'active-current', title: 'Active current', artist: '', playCount: 0, lastPlayed: 0 };
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(libraryPath, JSON.stringify({ schemaVersion: 1, entries }), 'utf8');
+
+    const appStatePath = path.join(__dirname, '..', 'server', 'state', 'app-state.js');
+    const libraryStorePath = path.join(__dirname, '..', 'server', 'services', 'library-store.js');
+    const script = [
+      "const {createAppState}=require(process.argv[1]); const library=require(process.argv[2]);",
+      "const app=createAppState({emit(){}});",
+      "app.playState.playlist=[{id:'active-playlist',entryId:'dup-a'},{id:'active-playlist',entryId:'dup-b'}];",
+      "app.playState.currentTrack={id:'active-current',entryId:'current-only'};",
+      "if(!library.saveNow()) throw new Error('eviction save failed');",
+      "const list=library.getLibrary();",
+      "process.stdout.write('__PROTECTED_EVICTION__'+JSON.stringify({count:list.length,activePlaylist:!!library.getEntry('active-playlist'),activeCurrent:!!library.getEntry('active-current'),normal0:!!library.getEntry('normal-0'),normal1:!!library.getEntry('normal-1'),normal2:!!library.getEntry('normal-2')})+'\\n');",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, appStatePath, libraryStorePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `protected eviction child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__PROTECTED_EVICTION__');
+    ok(markerAt >= 0, `protected eviction child 缺少結果：${child.stdout}`);
+    const result = JSON.parse(child.stdout.slice(markerAt + '__PROTECTED_EVICTION__'.length).trim().split(/\r?\n/, 1)[0]);
+    eq(result.count, 10000);
+    eq(result.activePlaylist, true, '播放清單引用即使 playCount 最低也不得被 cap 淘汰: ');
+    eq(result.activeCurrent, true, 'currentTrack 即使不在播放清單也不得被 cap 淘汰: ');
+    eq(result.normal0, false, '應改淘汰最低順位的未使用項目: ');
+    eq(result.normal1, false, '超量兩筆時應淘汰兩個未使用低順位項目: ');
+    eq(result.normal2, true);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('媒體清理以歌曲資產群組處理：播放中三軌與分離中來源保留，孤兒 stem metadata 同步修復', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-asset-cleanup-'));
+  const downloadsDir = path.join(dataDir, 'downloads');
+  try {
+    const libraryStorePath = path.join(__dirname, '..', 'server', 'services', 'library-store.js');
+    const script = [
+      "const fs=require('fs'); const path=require('path'); const store=require(process.argv[1]);",
+      "const downloads=process.env.ELITESAND_DOWNLOADS_DIR; fs.mkdirSync(downloads,{recursive:true});",
+      "const active={id:'active',title:'Active',filename:'active.mp3',vocalsFile:'active.vocals.wav',instrumentalFile:'active.instrumental.wav',separationStatus:'done'};",
+      "const orphan={id:'orphan',title:'Orphan',filename:'orphan.mp3',vocalsFile:'orphan.vocals.wav',instrumentalFile:'orphan.instrumental.wav',separationStatus:'done',url:'https://example.test/orphan'};",
+      "const processing={id:'processing',title:'Processing',filename:'processing.mp3',separationStatus:'processing'};",
+      "for(const t of [active,orphan,processing]){ store.rememberImport(t); for(const f of [t.filename,t.vocalsFile,t.instrumentalFile].filter(Boolean)) fs.writeFileSync(path.join(downloads,f),'x'); }",
+      "store.saveNow();",
+      "const keep=store.getProcessingMediaFilenames(); store.collectMediaFilenames(active,keep);",
+      "const result=store.cleanupAudio(keep); store.saveNow();",
+      "const entry=store.getEntry('orphan');",
+      "const exists=(name)=>fs.existsSync(path.join(downloads,name));",
+      "process.stdout.write('__ASSET_CLEANUP__'+JSON.stringify({result,active:[exists('active.mp3'),exists('active.vocals.wav'),exists('active.instrumental.wav')],processing:exists('processing.mp3'),orphan:[exists('orphan.mp3'),exists('orphan.vocals.wav'),exists('orphan.instrumental.wav')],meta:{filename:entry.filename,vocalsFile:entry.vocalsFile,instrumentalFile:entry.instrumentalFile,separationStatus:entry.separationStatus}})+'\\n');",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, libraryStorePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir, ELITESAND_DOWNLOADS_DIR: downloadsDir },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `asset cleanup child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__ASSET_CLEANUP__');
+    ok(markerAt >= 0, `asset cleanup child 缺少結果：${child.stdout}`);
+    const result = JSON.parse(child.stdout.slice(markerAt + '__ASSET_CLEANUP__'.length).trim().split(/\r?\n/, 1)[0]);
+    ok(result.active.every(Boolean), '播放清單引用的原檔＋人聲＋伴奏都必須保留: ');
+    eq(result.processing, true, '分離中的來源音檔不可被 cleanup 刪除: ');
+    ok(result.orphan.every((value) => value === false), 'library-only 的實體音檔依既有 cleanup 語意可刪除: ');
+    eq(result.meta.filename, 'orphan.mp3', '原檔名稱保留供 URL 重抓流程辨識: ');
+    eq(result.meta.vocalsFile, null, '被刪掉的人聲 stem metadata 必須清掉: ');
+    eq(result.meta.instrumentalFile, null, '被刪掉的伴奏 stem metadata 必須清掉: ');
+    eq(result.meta.separationStatus, 'none', 'stem 不存在後不可繼續顯示已分離: ');
+    ok(result.result.repairedEntries >= 1);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
 test('播放清單同步以目錄快照避免每首歌重複同步檔案檢查', () => {
@@ -7764,15 +7920,18 @@ test('播放清單摘要選歌時以伺服器保存的完整歌曲資料為準',
   eq(error.title, '伺服器保存名稱', '應由伺服器保存的曲目資料進行播放前檢查: ');
 });
 
-test('清單摘要排序回寫不會洗掉伺服器保存的歌詞', () => {
+test('清單摘要排序回寫不會洗掉伺服器保存的歌詞／音訊／AI stems', () => {
   const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
   const events = new Map();
   const emitted = [];
   const socket = { on(event, handler) { events.set(event, handler); } };
   const state = {
     playlist: [{
-      id: 'keep-lyrics', title: '保留歌詞', filename: null,
+      id: 'keep-lyrics', entryId: 'keep-entry', title: '保留歌詞', artist: '原歌手', filename: 'keep.mp3',
       lyrics: '[00:01.00]不得遺失', lyricsType: 'lrc', parsedLyrics: [{ time: 1000, text: '不得遺失' }],
+      vocalsFile: 'keep.vocals.wav', instrumentalFile: 'keep.instrumental.wav', separationStatus: 'done',
+      loudnessLufs: -13.4, source: 'youtube', originalName: 'original.webm',
+      artistConfidence: 0.87, needsArtistConfirmation: false,
     }],
   };
   const ctx = {
@@ -7784,12 +7943,34 @@ test('清單摘要排序回寫不會洗掉伺服器保存的歌詞', () => {
   };
   registerPlaylistHandlers({ emit(event, data) { emitted.push({ event, data }); } }, socket, ctx);
   let acknowledgement;
-  events.get('playlist:update')([{ id: 'keep-lyrics', title: '重新排序後的名稱', lyricsType: 'lrc' }], (result) => { acknowledgement = result; });
+  events.get('playlist:update')([{ id: 'keep-lyrics', entryId: 'keep-entry', title: '重新排序後的名稱', artist: '原歌手', lyricsType: 'lrc' }], (result) => { acknowledgement = result; });
   eq(acknowledgement.ok, true);
   eq(state.playlist[0].lyrics, '[00:01.00]不得遺失');
   eq(state.playlist[0].parsedLyrics[0].text, '不得遺失');
+  eq(state.playlist[0].filename, 'keep.mp3');
+  eq(state.playlist[0].vocalsFile, 'keep.vocals.wav');
+  eq(state.playlist[0].instrumentalFile, 'keep.instrumental.wav');
+  eq(state.playlist[0].separationStatus, 'done');
+  eq(state.playlist[0].loudnessLufs, -13.4);
+  eq(state.playlist[0].originalName, 'original.webm');
+  eq(state.playlist[0].artistConfidence, 0.87, '單純排序不可把既有歌手可信度洗回 0: ');
   const publicUpdate = emitted.find((item) => item.event === 'playlist:update').data[0];
   eq(Object.prototype.hasOwnProperty.call(publicUpdate, 'lyrics'), false, '廣播清單仍應是摘要: ');
+});
+
+test('2000 首前端同步合併重繪、跑馬燈 RAF，封面採 lazy decode', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
+  const playlistSource = fs.readFileSync(path.join(__dirname, '../public/js/app-playlist.js'), 'utf8');
+  ok(appSource.includes('let syncedPlaylistRenderFrame = 0')
+    && appSource.includes('function scheduleSyncedPlaylistRender()')
+    && appSource.includes('scheduleSyncedPlaylistRender();'),
+  'Socket playlist:update + state:sync 應合併到單一待執行 RAF: ');
+  ok(playlistSource.includes('let playlistMarqueeFrame = 0')
+    && playlistSource.includes('function schedulePlaylistMarqueeUpdate()')
+    && playlistSource.includes('schedulePlaylistMarqueeUpdate();'),
+  '重複 render 不可堆疊多次全清單 marquee layout measurement: ');
+  ok(playlistSource.includes('loading="lazy" decoding="async"'),
+    '大量播放清單封面必須延遲載入並非同步解碼: ');
 });
 
 test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件', () => {
@@ -8494,7 +8675,7 @@ test('播放秒數不寫入 state.json，lyrics:sync 與拖曳 seek 也不觸發
     '不可保留每 5 秒存檔的計時／節流邏輯：');
 });
 
-test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷線紅線', () => {
+test('state:sync 清單不再攜帶歌詞，2000 首重歌詞清單維持緊湊', () => {
   const { createAppState } = require('../server/state/app-state');
   const emitted = [];
   const appState = createAppState({ emit: (event, payload) => emitted.push({ event, payload }) });
@@ -8509,7 +8690,7 @@ test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷
     const seconds = Math.floor(line.time / 1000);
     return `[${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}.00]${line.text}`;
   }).join('\n');
-  appState.playState.playlist = Array.from({ length: 500 }, (_, index) => ({
+  appState.playState.playlist = Array.from({ length: 2000 }, (_, index) => ({
     id: `heavy-${index}`, title: `重歌詞歌曲 ${index + 1}`, artist: '測試歌手', filename: null,
     duration: 240, lyrics, lyricsType: 'lrc', parsedLyrics,
   }));
@@ -8523,6 +8704,130 @@ test('state:sync 清單不再攜帶歌詞，500 首重歌詞清單避開 8MB 斷
   ok(metrics.lastEstimatedLegacyBytes > 8 * 1024 * 1024, '舊結構應跨過 8MB 風險線: ');
   ok(metrics.lastBytes < 1024 * 1024, '新 state:sync 應維持在 1MB 以下: ');
   ok(metrics.lastSavingsBytes > 8 * 1024 * 1024, '應量測到超過 8MB 的節省: ');
+});
+
+test('state.json 只瘦身已落盤媒體庫歌曲；local/未落盤歌曲保留完整 fallback，重開可還原 stems/重複 entryId/手動歌詞', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-slim-'));
+  const downloadsDir = path.join(dataDir, 'downloads');
+  try {
+    const appStatePath = path.join(__dirname, '..', 'server', 'state', 'app-state.js');
+    const stateStorePath = path.join(__dirname, '..', 'server', 'services', 'state-store.js');
+    const libraryStorePath = path.join(__dirname, '..', 'server', 'services', 'library-store.js');
+    const script = [
+      "const fs=require('fs'); const path=require('path');",
+      "const {createAppState}=require(process.argv[1]); const stateStore=require(process.argv[2]); const library=require(process.argv[3]);",
+      "const heavy='LIBRARY-LYRIC-'.repeat(2000); const parsed=[{time:0,text:heavy.slice(0,200)}];",
+      "const lib={id:'lib-track',title:'Library',artist:'Artist',filename:'lib.mp3',vocalsFile:'lib.vocals.wav',instrumentalFile:'lib.instrumental.wav',separationStatus:'done',lyrics:heavy,lyricsType:'lrc',parsedLyrics:parsed};",
+      "library.rememberImport(lib); if(!library.saveNow()) throw new Error('library durable save failed');",
+      "const dirty={id:'dirty-track',title:'Dirty',filename:'dirty.mp3',lyrics:'DIRTY-FALLBACK',lyricsType:'txt',parsedLyrics:[{time:0,text:'DIRTY-FALLBACK'}]}; library.rememberImport(dirty);",
+      "const local={id:'local-track',entryId:'entry-local',title:'Local',filename:'local.wav',lyrics:'LOCAL-FALLBACK',lyricsType:'lrc',parsedLyrics:[{time:0,text:'LOCAL-FALLBACK'}]};",
+      "const first=createAppState({emit(){}});",
+      "first.playState.playlist=[{...lib,entryId:'entry-lib-a'},{...lib,entryId:'entry-lib-b'},dirty,local];",
+      "first.playState.currentTrack=first.playState.playlist[1]; first.playState.currentTrackStarted=true; first.playState.playedEntryIds=new Set(['entry-lib-a','entry-lib-b']); first.playState.lastPlayedEntryId='entry-lib-b';",
+      "first.manualLyricsCache.set('lib-track',{lyrics:'MANUAL-LIB',lyricsType:'txt',parsedLyrics:[{time:0,text:'MANUAL-LIB'}]});",
+      "first.persistState(); stateStore.saveNow();",
+      "const disk=JSON.parse(fs.readFileSync(path.join(process.env.ELITESAND_DATA_DIR,'state.json'),'utf8'));",
+      "const compact=disk.playlist.slice(0,2).every((t)=>!Object.prototype.hasOwnProperty.call(t,'lyrics')&&!Object.prototype.hasOwnProperty.call(t,'parsedLyrics'));",
+      "const dirtyFallback=disk.playlist[2].lyrics; const localFallback=disk.playlist[3].lyrics; const manual=disk.manualLyrics['lib-track']&&disk.manualLyrics['lib-track'].lyrics;",
+      "library.remove('dirty-track');",
+      "const restored=createAppState({emit(){}}); const p=restored.playState.playlist; const restoredCount=p.length; const restoredEntryIds=p.map(t=>t.entryId);",
+      "const later={id:'later-track',entryId:'entry-later',title:'Later',filename:'later.mp3',lyrics:'LATER-FALLBACK',lyricsType:'txt',parsedLyrics:[{time:0,text:'LATER-FALLBACK'}]}; library.rememberImport(later); restored.playState.playlist.push(later); restored.persistState(); stateStore.saveNow();",
+      "const beforeDurable=JSON.parse(fs.readFileSync(path.join(process.env.ELITESAND_DATA_DIR,'state.json'),'utf8')).playlist.find(t=>t.id==='later-track');",
+      "library.saveNow(); stateStore.saveNow();",
+      "const afterDurable=JSON.parse(fs.readFileSync(path.join(process.env.ELITESAND_DATA_DIR,'state.json'),'utf8')).playlist.find(t=>t.id==='later-track');",
+      "process.stdout.write('__STATE_SLIM__'+JSON.stringify({compact,dirtyFallback,localFallback,manual,count:restoredCount,entryIds:restoredEntryIds,libLyrics:p[0].lyrics,dirtyLyrics:p[2].lyrics,localLyrics:p[3].lyrics,stems:[p[0].vocalsFile,p[0].instrumentalFile,p[0].separationStatus],currentEntryId:restored.playState.currentTrack&&restored.playState.currentTrack.entryId,played:[...restored.playState.playedEntryIds],laterBefore:beforeDurable&&beforeDurable.lyrics,laterCompacted:afterDurable&&!Object.prototype.hasOwnProperty.call(afterDurable,'lyrics')})+'\\n');",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, appStatePath, stateStorePath, libraryStorePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir, ELITESAND_DOWNLOADS_DIR: downloadsDir },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `state slim child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__STATE_SLIM__');
+    ok(markerAt >= 0, `state slim child 缺少結果：${child.stdout}`);
+    const result = JSON.parse(child.stdout.slice(markerAt + '__STATE_SLIM__'.length).trim().split(/\r?\n/, 1)[0]);
+    eq(result.compact, true, '已落盤 library track 不應在 state 重複完整歌詞: ');
+    eq(result.dirtyFallback, 'DIRTY-FALLBACK', 'library 尚未落盤時 state 必須保留完整 fallback: ');
+    eq(result.localFallback, 'LOCAL-FALLBACK', '非 library 本機歌必須保留完整 fallback: ');
+    eq(result.manual, 'MANUAL-LIB', '手動歌詞仍由獨立 manualLyrics 保存: ');
+    eq(result.count, 4);
+    eq(result.entryIds[0], 'entry-lib-a'); eq(result.entryIds[1], 'entry-lib-b');
+    eq(result.libLyrics, 'LIBRARY-LYRIC-'.repeat(2000), '重開時 library-backed 歌詞必須完整 rehydrate: ');
+    eq(result.dirtyLyrics, 'DIRTY-FALLBACK', '即使 library entry 消失，dirty fallback 仍可還原: ');
+    eq(result.localLyrics, 'LOCAL-FALLBACK');
+    eq(result.stems.join(','), 'lib.vocals.wav,lib.instrumental.wav,done');
+    eq(result.currentEntryId, 'entry-lib-b', '重複同 id 仍以 entryId 還原正確目前歌曲: ');
+    eq(result.played.sort().join(','), 'entry-lib-a,entry-lib-b');
+    eq(result.laterBefore, 'LATER-FALLBACK', 'library 落盤前仍要有 crash-safe fallback: ');
+    eq(result.laterCompacted, true, 'library 落盤成功後應自動排程 state 再瘦身，不等下一次使用者操作: ');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('媒體庫直接刪除前先同步保存播放清單完整 fallback，library.json 落盤後重開不丟歌詞', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-library-remove-barrier-'));
+  const downloadsDir = path.join(dataDir, 'downloads');
+  try {
+    const appStatePath = path.join(__dirname, '..', 'server', 'state', 'app-state.js');
+    const stateStorePath = path.join(__dirname, '..', 'server', 'services', 'state-store.js');
+    const libraryStorePath = path.join(__dirname, '..', 'server', 'services', 'library-store.js');
+    const script = [
+      "const fs=require('fs'); const path=require('path');",
+      "const {createAppState}=require(process.argv[1]); const stateStore=require(process.argv[2]); const library=require(process.argv[3]);",
+      "const track={id:'remove-me',entryId:'remove-entry',title:'Remove',filename:'remove.mp3',lyrics:'REMOVE-FALLBACK',lyricsType:'lrc',parsedLyrics:[{time:0,text:'REMOVE-FALLBACK'}],vocalsFile:'remove.vocals.wav',instrumentalFile:'remove.instrumental.wav',separationStatus:'done'};",
+      "library.rememberImport(track); if(!library.saveNow()) throw new Error('initial library save failed');",
+      "const first=createAppState({emit(){}}); first.playState.playlist=[track]; first.persistState(); stateStore.saveNow();",
+      "const before=JSON.parse(fs.readFileSync(path.join(process.env.ELITESAND_DATA_DIR,'state.json'),'utf8')).playlist[0];",
+      "const removed=library.remove(track.id); const afterBarrier=JSON.parse(fs.readFileSync(path.join(process.env.ELITESAND_DATA_DIR,'state.json'),'utf8')).playlist[0];",
+      "if(!library.saveNow()) throw new Error('library removal save failed'); stateStore.saveNow();",
+      "const restored=createAppState({emit(){}}).playState.playlist[0];",
+      "process.stdout.write('__REMOVE_BARRIER__'+JSON.stringify({removed,beforeHasLyrics:Object.prototype.hasOwnProperty.call(before,'lyrics'),barrierLyrics:afterBarrier.lyrics,restoredLyrics:restored.lyrics,stems:[restored.vocalsFile,restored.instrumentalFile,restored.separationStatus]})+'\\n');",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, appStatePath, stateStorePath, libraryStorePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir, ELITESAND_DOWNLOADS_DIR: downloadsDir },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `library remove barrier child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__REMOVE_BARRIER__');
+    ok(markerAt >= 0, `library remove barrier child 缺少結果：${child.stdout}`);
+    const result = JSON.parse(child.stdout.slice(markerAt + '__REMOVE_BARRIER__'.length).trim().split(/\r?\n/, 1)[0]);
+    eq(result.removed, true);
+    eq(result.beforeHasLyrics, false, 'durable library backing 時 state 原本應是 compact: ');
+    eq(result.barrierLyrics, 'REMOVE-FALLBACK', '刪 library 前必須同步寫入完整 state fallback: ');
+    eq(result.restoredLyrics, 'REMOVE-FALLBACK', 'library 真正刪除落盤後仍可從 state 還原: ');
+    eq(result.stems.join(','), 'remove.vocals.wav,remove.instrumental.wav,done');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('手動歌詞上限只裁歷史記憶：播放清單內超過 200 首仍全部保存', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-manual-lyrics-cap-'));
+  try {
+    const stateStorePath = path.join(__dirname, '..', 'server', 'services', 'state-store.js');
+    const script = [
+      "const fs=require('fs'); const path=require('path'); const store=require(process.argv[1]);",
+      "const playlist=Array.from({length:250},(_,i)=>({id:'active-'+i,entryId:'entry-'+i,title:'A'+i}));",
+      "const manual={}; for(let i=0;i<250;i++) manual['active-'+i]={lyrics:'ACTIVE-'+i,timestamp:i}; for(let i=0;i<250;i++) manual['history-'+i]={lyrics:'HISTORY-'+i,timestamp:1000+i};",
+      "store.scheduleSave(()=>({schemaVersion:store.CURRENT_STATE_SCHEMA_VERSION,savedAt:Date.now(),playlist,manualLyrics:manual})); store.saveNow();",
+      "const disk=JSON.parse(fs.readFileSync(path.join(process.env.ELITESAND_DATA_DIR,'state.json'),'utf8')); const keys=Object.keys(disk.manualLyrics||{});",
+      "process.stdout.write('__MANUAL_CAP__'+JSON.stringify({active:keys.filter(k=>k.startsWith('active-')).length,history:keys.filter(k=>k.startsWith('history-')).length,total:keys.length,oldestHistory:!!disk.manualLyrics['history-50'],newestHistory:!!disk.manualLyrics['history-249']})+'\\n');",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, stateStorePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `manual lyrics cap child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__MANUAL_CAP__');
+    ok(markerAt >= 0, `manual lyrics cap child 缺少結果：${child.stdout}`);
+    const result = JSON.parse(child.stdout.slice(markerAt + '__MANUAL_CAP__'.length).trim().split(/\r?\n/, 1)[0]);
+    eq(result.active, 250, '目前歌單引用的 250 筆手動歌詞必須全部保留: ');
+    eq(result.history, 200, '歷史手動歌詞仍維持 200 筆安全上限: ');
+    eq(result.total, 450);
+    eq(result.oldestHistory, true, '最新 200 筆歷史中 history-50 應保留: ');
+    eq(result.newestHistory, true);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
 test('state-store debounce has a bounded max wait during continuous edits', () => {
@@ -8553,7 +8858,7 @@ test('state:sync excludes setlist style snapshots while setlist:update retains t
   ok(panelSource.includes("SocketClient.on('setlist:update', applySetlistControls)"));
 });
 
-test('R2-2 500-song playlist stays compact across all real Socket roles including display-spout', () => {
+test('R2-2 2000-song playlist stays compact across all real Socket roles including display-spout', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-state-sync-matrix-'));
   try {
     const result = spawnStateStore(process.execPath, [
@@ -8573,7 +8878,7 @@ test('R2-2 500-song playlist stays compact across all real Socket roles includin
     const matrix = JSON.parse(line);
     eq(result.status, 0, `state-sync matrix failed: ${matrix.error || result.stderr}`);
     ok(matrix.ok, matrix.error || 'state-sync matrix should pass');
-    eq(matrix.playlistLength, 500);
+    eq(matrix.playlistLength, 2000);
     eq(matrix.roles.join(','), 'controller,remote,display,display-spout,setlist');
     const statePayloadBytes = [
       ...Object.values(matrix.initialBytes || {}),
@@ -9820,7 +10125,7 @@ test('Electron assisted installer stays per-user with an integrity-protected ASA
     'write-packaged-resource-integrity.js',
     '--electron-only', 'electron-builder.cmd', 'node_modules\\express\\package.json',
     'Test-InstallerBootOutsideRepo', 'win-unpacked\\resources', 'verify-electron-package.js',
-    'RedirectStandardOutput', 'RedirectStandardError',
+    'Invoke-PackagedBootPhase', '$phaseProcess.ExitCode',
     'EULA-installer.txt', '[System.Text.UTF8Encoding]::new($true)', 'NSIS installer EULA must be UTF-8 with a BOM',
     'NSIS installer EULA diverged from the approved EULA.txt'].forEach((required) =>
     ok(installerBuild.includes(required), `Installer build is missing ${required}`));
@@ -9875,6 +10180,223 @@ test('Packaged helper integrity rejects a changed external binary', () => {
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test('yt-dlp runtime 信任鏈：官方更新可續用、外部竄改會 reseed，Installer seed 只升不降', () => {
+  const shell = require('../electron/shell');
+  const { getYtdlpCommand } = require('../server/utils/ytdlp-command');
+  const { hashFileSync, readTrustState, writeTrustStateAtomic } = require('../server/utils/ytdlp-runtime-trust');
+  const fixtureRoot = fs.mkdtempSync(path.join(TEST_RUNTIME_ROOT, 'ytdlp-runtime-copy-'));
+  try {
+    const resources = path.join(fixtureRoot, 'resources');
+    const tools = path.join(resources, 'tools');
+    const userData = path.join(fixtureRoot, 'user-data');
+    fs.mkdirSync(tools, { recursive: true });
+    const seed = path.join(tools, 'yt-dlp.exe');
+    fs.writeFileSync(seed, 'trusted-seed-v1', 'utf8');
+    const crypto = require('crypto');
+    const seedHash = crypto.createHash('sha256').update('trusted-seed-v1').digest('hex');
+    const manifest = { files: { 'tools/yt-dlp.exe': seedHash } };
+    const versionByContents = (command) => {
+      const contents = fs.readFileSync(command, 'utf8');
+      if (contents === 'trusted-seed-v1') return '2026.09.01';
+      if (contents === 'trusted-seed-v2') return '2026.10.15';
+      if (contents === 'trusted-seed-v3') return '2027.01.15';
+      return null;
+    };
+
+    shell.verifyPackagedResourceIntegrity(resources, manifest);
+    const first = shell.prepareMutableYtdlp(resources, userData, {
+      expectedSeedHash: seedHash,
+      versionResolver: versionByContents,
+    });
+    eq(first.mutable, true);
+    eq(first.action, 'seeded-runtime-copy');
+    eq(fs.readFileSync(first.command, 'utf8'), 'trusted-seed-v1');
+    ok(path.resolve(first.command).startsWith(path.resolve(userData) + path.sep), '工作副本必須在 userData 下: ');
+    const firstTrust = readTrustState(first.statePath);
+    eq(firstTrust.runtimeHash, seedHash);
+    eq(firstTrust.runtimeVersion, '2026.09.01');
+    eq(firstTrust.provenance, 'seed');
+
+    // 模擬官方 updater 成功後：binary 改變，並且 mutation point 原子刷新 trusted hash/version。
+    fs.writeFileSync(first.command, 'official-updated-runtime-v2', 'utf8');
+    writeTrustStateAtomic(first.statePath, {
+      runtimeHash: hashFileSync(first.command), runtimeVersion: '2026.12.01',
+      seedHash, seedVersion: '2026.09.01', provenance: 'official-update',
+    });
+    eq(fs.readFileSync(seed, 'utf8'), 'trusted-seed-v1');
+    shell.verifyPackagedResourceIntegrity(resources, manifest);
+
+    // 重開程式不得用舊 seed 把已更新版本蓋回去。
+    const second = shell.prepareMutableYtdlp(resources, userData, {
+      expectedSeedHash: seedHash,
+      versionResolver: versionByContents,
+    });
+    eq(second.action, 'kept-runtime-copy');
+    eq(fs.readFileSync(second.command, 'utf8'), 'official-updated-runtime-v2');
+    eq(getYtdlpCommand({ ELITESAND_YTDLP_PATH: second.command }), path.normalize(second.command));
+    eq(getYtdlpCommand({ ELITESAND_YTDLP_PATH: 'relative\\yt-dlp.exe' }), 'yt-dlp', '相對 override 不可信，必須退回 PATH 命令: ');
+
+    // 外部只改 binary、沒有同步 app-owned trust state：下一次啟動不得執行，直接恢復已驗證 seed。
+    fs.writeFileSync(second.command, 'tampered-runtime', 'utf8');
+    const afterTamper = shell.prepareMutableYtdlp(resources, userData, {
+      expectedSeedHash: seedHash,
+      versionResolver: versionByContents,
+    });
+    eq(afterTamper.action, 'reseeded-untrusted-runtime');
+    eq(fs.readFileSync(afterTamper.command, 'utf8'), 'trusted-seed-v1');
+    eq(readTrustState(afterTamper.statePath).runtimeHash, seedHash);
+
+    // 先建立「runtime 比下一版 Installer seed 還新」的可信狀態；安裝新版不可倒退。
+    fs.writeFileSync(afterTamper.command, 'official-newer-runtime', 'utf8');
+    writeTrustStateAtomic(afterTamper.statePath, {
+      runtimeHash: hashFileSync(afterTamper.command), runtimeVersion: '2026.12.01',
+      seedHash, seedVersion: '2026.09.01', provenance: 'official-update',
+    });
+    fs.writeFileSync(seed, 'trusted-seed-v2', 'utf8');
+    const seedV2Hash = hashFileSync(seed);
+    const noDowngrade = shell.prepareMutableYtdlp(resources, userData, {
+      expectedSeedHash: seedV2Hash,
+      versionResolver: versionByContents,
+    });
+    eq(noDowngrade.action, 'kept-newer-runtime-copy');
+    eq(fs.readFileSync(noDowngrade.command, 'utf8'), 'official-newer-runtime');
+    eq(readTrustState(noDowngrade.statePath).seedHash, seedV2Hash, '跨 Installer 決策後 sidecar 應更新成目前 seed 身分: ');
+
+    // 再下一版 Installer seed 真正較新時，必須升級 runtime。
+    fs.writeFileSync(seed, 'trusted-seed-v3', 'utf8');
+    const seedV3Hash = hashFileSync(seed);
+    const upgraded = shell.prepareMutableYtdlp(resources, userData, {
+      expectedSeedHash: seedV3Hash,
+      versionResolver: versionByContents,
+    });
+    eq(upgraded.action, 'upgraded-runtime-from-seed');
+    eq(fs.readFileSync(upgraded.command, 'utf8'), 'trusted-seed-v3');
+    eq(readTrustState(upgraded.statePath).runtimeVersion, '2027.01.15');
+
+    // sidecar 損壞也不能只因 runtime 非空就接受。
+    fs.writeFileSync(upgraded.statePath, '{not-json', 'utf8');
+    fs.writeFileSync(upgraded.command, 'mystery-runtime', 'utf8');
+    const corruptState = shell.prepareMutableYtdlp(resources, userData, {
+      expectedSeedHash: seedV3Hash,
+      versionResolver: versionByContents,
+    });
+    eq(corruptState.action, 'reseeded-untrusted-runtime');
+    eq(fs.readFileSync(corruptState.command, 'utf8'), 'trusted-seed-v3');
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test('yt-dlp packaged updater 成功後直接寫入 runtime trust hash，且重新驗證 packaged seed', () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(TEST_RUNTIME_ROOT, 'ytdlp-updater-trust-'));
+  try {
+    const seed = path.join(fixtureRoot, 'seed-yt-dlp.exe');
+    const runtimeDir = path.join(fixtureRoot, 'runtime');
+    const runtime = path.join(runtimeDir, 'yt-dlp.exe');
+    const statePath = path.join(runtimeDir, 'runtime-state.json');
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.writeFileSync(seed, 'trusted-packaged-seed', 'utf8');
+    fs.writeFileSync(runtime, 'official-updated-runtime', 'utf8');
+    const crypto = require('crypto');
+    const seedHash = crypto.createHash('sha256').update(fs.readFileSync(seed)).digest('hex');
+    const runtimeHash = crypto.createHash('sha256').update(fs.readFileSync(runtime)).digest('hex');
+    const updaterPath = path.join(__dirname, '..', 'server', 'services', 'ytdlp-updater.js');
+    const script = [
+      "const updater=require(process.argv[1]);",
+      "updater.writeApprovedRuntimeTrust('2026.12.31');",
+      "const fs=require('fs'); process.stdout.write('__YTDLP_TRUST__'+fs.readFileSync(process.env.ELITESAND_YTDLP_STATE_PATH,'utf8'));",
+    ].join('\n');
+    const child = spawnStateStore(process.execPath, ['-e', script, updaterPath], {
+      env: {
+        ...process.env,
+        ELITESAND_PACKAGED: '1',
+        ELITESAND_YTDLP_MUTABLE: '1',
+        ELITESAND_YTDLP_PATH: runtime,
+        ELITESAND_YTDLP_STATE_PATH: statePath,
+        ELITESAND_YTDLP_SEED_PATH: seed,
+        ELITESAND_YTDLP_SEED_HASH: seedHash,
+        ELITESAND_YTDLP_SEED_VERSION: '2026.09.01',
+      },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `yt-dlp updater trust child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const markerAt = child.stdout.lastIndexOf('__YTDLP_TRUST__');
+    ok(markerAt >= 0, `yt-dlp updater trust child 缺少結果：${child.stdout}`);
+    const trust = JSON.parse(child.stdout.slice(markerAt + '__YTDLP_TRUST__'.length));
+    eq(trust.runtimeHash, runtimeHash);
+    eq(trust.runtimeVersion, '2026.12.31');
+    eq(trust.seedHash, seedHash);
+    eq(trust.seedVersion, '2026.09.01');
+    eq(trust.provenance, 'official-update');
+
+    fs.writeFileSync(seed, 'tampered-packaged-seed', 'utf8');
+    const tamperChild = spawnStateStore(process.execPath, ['-e', "require(process.argv[1]).writeApprovedRuntimeTrust('2027.01.01')", updaterPath], {
+      env: {
+        ...process.env,
+        ELITESAND_PACKAGED: '1',
+        ELITESAND_YTDLP_MUTABLE: '1',
+        ELITESAND_YTDLP_PATH: runtime,
+        ELITESAND_YTDLP_STATE_PATH: statePath,
+        ELITESAND_YTDLP_SEED_PATH: seed,
+        ELITESAND_YTDLP_SEED_HASH: seedHash,
+        ELITESAND_YTDLP_SEED_VERSION: '2026.09.01',
+      },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    ok(tamperChild.status !== 0, 'packaged seed hash 已變更時不得批准新的 runtime trust: ');
+    ok(/seed hash changed unexpectedly/i.test(`${tamperChild.stderr} ${tamperChild.stdout}`), '拒絕原因必須指向 packaged seed integrity: ');
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test('yt-dlp 工作副本不可寫時安全退回 seed，且 packaged updater 禁止原地修改 seed', () => {
+  const shell = require('../electron/shell');
+  const fixtureRoot = fs.mkdtempSync(path.join(TEST_RUNTIME_ROOT, 'ytdlp-runtime-fallback-'));
+  try {
+    const resources = path.join(fixtureRoot, 'resources');
+    const tools = path.join(resources, 'tools');
+    const userData = path.join(fixtureRoot, 'user-data');
+    fs.mkdirSync(tools, { recursive: true });
+    fs.writeFileSync(path.join(tools, 'yt-dlp.exe'), 'trusted-seed', 'utf8');
+    const failingFs = Object.create(fs);
+    failingFs.mkdirSync = () => { throw new Error('simulated read-only userData'); };
+    const result = shell.prepareMutableYtdlp(resources, userData, failingFs);
+    eq(result.mutable, false);
+    eq(result.action, 'readonly-seed-fallback');
+    eq(result.command, path.join(tools, 'yt-dlp.exe'));
+
+    const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/ytdlp-updater.js'), 'utf8');
+    ok(updaterSource.includes("process.env.ELITESAND_PACKAGED === '1' && process.env.ELITESAND_YTDLP_MUTABLE !== '1'"),
+      'Installer 若無 writable working copy，更新器必須 fail closed，不能修改 integrity-protected seed: ');
+    ok(updaterSource.includes("execFileAsync(YTDLP_COMMAND, ['-U']"), '更新器必須執行解析後的工作副本，不可硬編碼 PATH yt-dlp: ');
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test('所有 yt-dlp 執行入口共用明確工作副本路徑', () => {
+  const serviceFiles = [
+    'audio-processor.js',
+    'ytdlp-updater.js',
+    'ytdlp-compatibility.js',
+    'system-check.js',
+  ];
+  for (const name of serviceFiles) {
+    const source = fs.readFileSync(path.join(__dirname, '../server/services', name), 'utf8');
+    ok(source.includes('getYtdlpCommand'), `${name} 必須共用 ytdlp-command resolver: `);
+  }
+  const shellSource = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
+  ok(shellSource.includes('ELITESAND_YTDLP_PATH: packagedYtdlpRuntime.command'));
+  ok(shellSource.includes("ELITESAND_YTDLP_MUTABLE: packagedYtdlpRuntime.mutable ? '1' : '0'"));
+  ok(shellSource.includes('ELITESAND_YTDLP_STATE_PATH: packagedYtdlpRuntime.statePath'));
+  ok(shellSource.includes("expectedSeedHash: packagedResourceIntegrity?.files?.['tools/yt-dlp.exe']"));
+  ok(shellSource.includes('prepareMutableYtdlp('));
+  const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/ytdlp-updater.js'), 'utf8');
+  ok(updaterSource.includes('writeApprovedRuntimeTrust(currentVersion)'), '官方 -U 成功後必須刷新 runtime trusted hash: ');
+  ok(updaterSource.includes('runtimeMatchesRecordedTrust()'), '更新失敗不得無條件把較新的可信 runtime 降級成 seed: ');
 });
 
 test('Electron P1 smoke starts with a disposable Electron user-data directory', () => {

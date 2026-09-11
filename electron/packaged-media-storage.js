@@ -144,17 +144,25 @@ function copyVulnerableMedia(sourceDir, destinationDir, fsImpl = fs) {
   }
 
   ensureMarker(destinationDir, fsImpl);
-  for (const name of entries) {
-    fsImpl.cpSync(path.join(sourceDir, name), path.join(destinationDir, name), {
-      recursive: true,
-      errorOnExist: true,
-      force: false,
-    });
-  }
-  for (const name of entries) {
-    if (!verifyCopiedEntry(path.join(sourceDir, name), path.join(destinationDir, name), fsImpl)) {
-      throw new Error(`Media recovery verification failed for ${name}`);
+  try {
+    for (const name of entries) {
+      fsImpl.cpSync(path.join(sourceDir, name), path.join(destinationDir, name), {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
     }
+    for (const name of entries) {
+      if (!verifyCopiedEntry(path.join(sourceDir, name), path.join(destinationDir, name), fsImpl)) {
+        throw new Error(`Media recovery verification failed for ${name}`);
+      }
+    }
+  } catch (error) {
+    // destination 是本函式確認為空、並由 ensureMarker() 標記後才開始寫入的專用目錄。
+    // source 全程不動，因此失敗時清掉本次 partial copy 才能安全重試；否則每次重開
+    // 都會再挑 (2)/(3)... 複製一份，磁碟越來越滿，最後形成「怎麼點都打不開」。
+    try { fsImpl.rmSync?.(destinationDir, { recursive: true, force: true }); } catch (_) { /* source remains authoritative */ }
+    throw error;
   }
   return { copied: true, reason: null, entries: entries.length };
 }
@@ -163,7 +171,7 @@ function isUsableRecoveryDir(directory, fsImpl = fs) {
   return !!directory && fsImpl.existsSync(directory) && hasMarker(directory, fsImpl);
 }
 
-function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs } = {}) {
+function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs, onBeforeCopy = null } = {}) {
   if (typeof userDataPath !== 'string' || !path.isAbsolute(userDataPath)) {
     throw new TypeError('preparePackagedMediaStorage requires an absolute userDataPath');
   }
@@ -198,13 +206,40 @@ function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs
   // sibling directory, verify every file by size + SHA-256, update references,
   // and deliberately leave the original source untouched.
   if (fsImpl.existsSync(configuredMediaDir)) {
-    const destination = chooseEmptyMigrationDestination(executablePath, fsImpl);
-    const result = copyVulnerableMedia(configuredMediaDir, destination, fsImpl);
-    if (!result.copied) {
-      return { mediaDir: configuredMediaDir, action: 'vulnerable-copy-deferred', reason: result.reason };
+    try {
+      const destination = chooseEmptyMigrationDestination(executablePath, fsImpl);
+      if (typeof onBeforeCopy === 'function') {
+        onBeforeCopy({
+          sourceDir: configuredMediaDir,
+          destinationDir: destination,
+          entries: visibleEntries(configuredMediaDir, fsImpl).length,
+        });
+      }
+      const result = copyVulnerableMedia(configuredMediaDir, destination, fsImpl);
+      if (!result.copied) {
+        return { mediaDir: configuredMediaDir, action: 'vulnerable-copy-deferred', reason: result.reason };
+      }
+      try {
+        writeReferences(userDataPath, destination, fsImpl);
+      } catch (error) {
+        // 複製成功但「提交新路徑」失敗時，舊 source 與舊設定仍是權威。
+        // 清掉這次由本程序建立的 migration destination，避免下次啟動改挑 (2)/(3)
+        // 又完整複製一次。destination 在 copyVulnerableMedia 開始前已確認為空。
+        try { fsImpl.rmSync?.(destination, { recursive: true, force: true }); } catch (_) { /* source remains authoritative */ }
+        throw error;
+      }
+      return { mediaDir: destination, action: 'copied-from-install-dir', copiedEntries: result.entries };
+    } catch (error) {
+      // 搬移是資料安全修復，不是主程式啟動的必要條件。source 還存在時，即使磁碟
+      // 不足、防毒暫時鎖檔或單檔驗證失敗，也先沿用舊位置讓使用者能開程式；來源
+      // 全程未刪除，之後仍可重試。這避免「歌越多→搬移越久/越容易失敗→完全打不開」。
+      return {
+        mediaDir: configuredMediaDir,
+        action: 'vulnerable-copy-failed',
+        reason: error?.message || 'unknown media migration error',
+        code: error?.code || null,
+      };
     }
-    writeReferences(userDataPath, destination, fsImpl);
-    return { mediaDir: destination, action: 'copied-from-install-dir', copiedEntries: result.entries };
   }
 
   // A full Installer upgrade may have had to run the old uninstaller before the

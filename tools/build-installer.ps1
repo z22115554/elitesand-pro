@@ -95,45 +95,132 @@ function Test-InstallerBootOutsideRepo {
 
   $bootRoot = Join-Path $env:TEMP ("elitesand-installer-boot-" + [System.IO.Path]::GetRandomFileName())
   $bootUserData = Join-Path $bootRoot "user-data"
-  $bootStdout = Join-Path $bootRoot "electron.stdout.log"
-  $bootStderr = Join-Path $bootRoot "electron.stderr.log"
   $unpackedRoot = Split-Path -Parent $UnpackedResources
   $appExe = Join-Path $unpackedRoot "Elitesand Pro.exe"
-  $port = 39000 + (Get-Random -Maximum 1000)
-  $serverProcess = $null
+  $seedPath = Join-Path $UnpackedResources "tools\yt-dlp.exe"
+  $runtimePath = Join-Path $bootUserData "tools\yt-dlp\yt-dlp.exe"
+  $trustStatePath = Join-Path $bootUserData "tools\yt-dlp\runtime-state.json"
+  $basePort = 39000 + (Get-Random -Maximum 700)
+
+  function Invoke-PackagedBootPhase {
+    param(
+      [Parameter(Mandatory = $true)][string]$Label,
+      [Parameter(Mandatory = $true)][int]$Port
+    )
+    $safeLabel = $Label -replace '[^A-Za-z0-9_-]', '-'
+    Write-Host "Installer boot check [$Label]: launching packaged Electron outside the repo..."
+    $env:PORT = "$Port"
+    $env:ELITESAND_SHELL_PORT = "$Port"
+    # Give /api/health enough time to be observed, then exercise the normal
+    # Electron before-quit -> utilityProcess graceful-shutdown path instead of
+    # force-killing the server between restart phases.
+    $env:ELITESAND_SHELL_QUIT_AFTER_READY_MS = "2500"
+    $phaseProcess = $null
+    try {
+      # Windows PowerShell 5.1 has a Start-Process bug where combining -PassThru
+      # with redirected stdout/stderr can leave Process.ExitCode as $null even
+      # after WaitForExit(). Do not redirect this short-lived packaged E2E; the
+      # process exit code then remains reliable and is a stronger assertion than
+      # log scraping.
+      $phaseProcess = Start-Process -FilePath $appExe -ArgumentList @("--user-data-dir=$bootUserData") -PassThru -WindowStyle Hidden
+
+      $healthy = $false
+      for ($i = 0; $i -lt 60; $i++) {
+        if ($phaseProcess.HasExited) { break }
+        try {
+          $response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/api/health" -UseBasicParsing -TimeoutSec 2
+          if ($response.StatusCode -eq 200) { $healthy = $true; break }
+        } catch { Start-Sleep -Milliseconds 500 }
+      }
+      if (-not $healthy) {
+        $exitDetail = ""
+        if ($phaseProcess.HasExited) {
+          $phaseProcess.WaitForExit()
+          $phaseProcess.Refresh()
+          $exitDetail = " Electron exit code: $($phaseProcess.ExitCode)."
+        }
+        throw "Installer boot check [$Label] failed: packaged Electron app never became healthy on port $Port.$exitDetail"
+      }
+
+      for ($i = 0; $i -lt 80 -and -not $phaseProcess.HasExited; $i++) {
+        Start-Sleep -Milliseconds 250
+        $phaseProcess.Refresh()
+      }
+      if (-not $phaseProcess.HasExited) {
+        throw "Installer boot check [$Label] did not exit through the normal packaged shutdown path."
+      }
+      $phaseProcess.WaitForExit()
+      $phaseProcess.Refresh()
+      $phaseExitCode = $phaseProcess.ExitCode
+      if ($phaseExitCode -ne 0) {
+        throw "Installer boot check [$Label] exited with code $phaseExitCode."
+      }
+      Write-Host "Installer boot check [$Label] passed."
+    } finally {
+      if ($phaseProcess -and -not $phaseProcess.HasExited) {
+        try { Stop-Process -Id $phaseProcess.Id -Force -Confirm:$false } catch {}
+      }
+    }
+  }
+
   try {
     if (-not (Test-Path -LiteralPath $appExe)) { throw "Installer boot check cannot find $appExe" }
-    Write-Host "Installer boot check: launching the packaged Electron app outside the repo ($bootRoot)..."
+    if (-not (Test-Path -LiteralPath $seedPath)) { throw "Installer boot check cannot find protected yt-dlp seed $seedPath" }
     New-Item -ItemType Directory -Force -Path $bootRoot, $bootUserData | Out-Null
-    $env:PORT = "$port"
     $env:ELITESAND_SHELL_HEADLESS = "1"
-    $env:ELITESAND_SHELL_PORT = "$port"
     $env:ELITESAND_SHELL_USER_DATA_DIR = $bootUserData
-    $env:ELITESAND_SHELL_QUIT_AFTER_READY_MS = "0"
-    $serverProcess = Start-Process -FilePath $appExe -ArgumentList @("--user-data-dir=$bootUserData") -PassThru -WindowStyle Hidden -RedirectStandardOutput $bootStdout -RedirectStandardError $bootStderr
 
-    $healthy = $false
-    for ($i = 0; $i -lt 60; $i++) {
-      if ($serverProcess.HasExited) { break }
-      try {
-        $response = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/health" -UseBasicParsing -TimeoutSec 2
-        if ($response.StatusCode -eq 200) { $healthy = $true; break }
-      } catch { Start-Sleep -Milliseconds 500 }
+    # Phase 1: real app.asar + external-resource integrity verification must seed
+    # an isolated writable yt-dlp runtime and record the exact protected seed hash.
+    $seedHash = Get-Sha256Hex -LiteralPath $seedPath
+    Invoke-PackagedBootPhase -Label "initial-seed" -Port $basePort
+    if (-not (Test-Path -LiteralPath $runtimePath) -or -not (Test-Path -LiteralPath $trustStatePath)) {
+      throw "Installer yt-dlp lifecycle check did not create runtime copy + trust sidecar."
     }
-    if (-not $healthy) {
-      $exitDetail = if ($serverProcess.HasExited) { " Electron exit code: $($serverProcess.ExitCode)." } else { "" }
-      $lineBreak = [Environment]::NewLine
-      $diagnostic = @($bootStdout, $bootStderr) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object {
-        $content = Get-Content -LiteralPath $_ -Tail 80 -ErrorAction SilentlyContinue
-        if ($content) { "$lineBreak--- $(Split-Path -Leaf $_) ---$lineBreak$($content -join $lineBreak)" }
-      }
-      throw "Installer boot check failed: packaged Electron app never became healthy on port $port.$exitDetail$($diagnostic -join '')"
+    $runtimeHash = Get-Sha256Hex -LiteralPath $runtimePath
+    $trust = Get-Content -LiteralPath $trustStatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($runtimeHash -ne $seedHash -or [string]$trust.runtimeHash -ne $seedHash -or [string]$trust.seedHash -ne $seedHash) {
+      throw "Installer yt-dlp lifecycle check: initial runtime is not anchored to the protected packaged seed."
     }
-    Write-Host "Installer boot check passed: integrity-protected Electron app serves /api/health outside the repo."
+    if ([int]$trust.schemaVersion -ne 1 -or [string]$trust.provenance -ne 'seed') {
+      throw "Installer yt-dlp lifecycle check: initial trust sidecar has an unexpected schema/provenance."
+    }
+
+    # Phase 2: simulate the post-`yt-dlp -U` state that the packaged updater is
+    # allowed to approve. The runtime bytes change only in userData; the sidecar
+    # is updated atomically by production code after a successful real update.
+    [System.IO.File]::AppendAllText($runtimePath, "`napproved-runtime-e2e", [System.Text.UTF8Encoding]::new($false))
+    $approvedHash = Get-Sha256Hex -LiteralPath $runtimePath
+    $trust.runtimeHash = $approvedHash
+    $trust.runtimeVersion = '2099.01.01'
+    $trust.provenance = 'official-update'
+    $trust.updatedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    [System.IO.File]::WriteAllText($trustStatePath, ($trust | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+    Invoke-PackagedBootPhase -Label "approved-runtime-restart" -Port ($basePort + 1)
+    if ((Get-Sha256Hex -LiteralPath $runtimePath) -ne $approvedHash) {
+      throw "Installer yt-dlp lifecycle check: restart rejected an explicitly approved runtime copy."
+    }
+    if ((Get-Sha256Hex -LiteralPath $seedPath) -ne $seedHash) {
+      throw "Installer yt-dlp lifecycle check: approved runtime update mutated the protected packaged seed."
+    }
+
+    # Phase 3: mutate runtime without updating the app-owned trust record. Startup
+    # must fail closed on that copy, restore the verified seed, and still boot.
+    [System.IO.File]::AppendAllText($runtimePath, "`nunapproved-tamper-e2e", [System.Text.UTF8Encoding]::new($false))
+    if ((Get-Sha256Hex -LiteralPath $runtimePath) -eq $approvedHash) {
+      throw "Installer yt-dlp lifecycle check fixture failed to change the runtime hash."
+    }
+    Invoke-PackagedBootPhase -Label "tamper-recovery" -Port ($basePort + 2)
+    $recoveredHash = Get-Sha256Hex -LiteralPath $runtimePath
+    $recoveredTrust = Get-Content -LiteralPath $trustStatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($recoveredHash -ne $seedHash -or [string]$recoveredTrust.runtimeHash -ne $seedHash -or [string]$recoveredTrust.provenance -ne 'seed') {
+      throw "Installer yt-dlp lifecycle check: unapproved runtime mutation was not reseeded from the trusted package."
+    }
+    if ((Get-Sha256Hex -LiteralPath $seedPath) -ne $seedHash) {
+      throw "Installer yt-dlp lifecycle check: protected packaged seed changed during restart/tamper recovery."
+    }
+    Write-Host "Installer packaged yt-dlp lifecycle passed: seed -> approved runtime -> restart -> tamper reseed; packaged seed stayed immutable."
   } finally {
-    if ($serverProcess -and -not $serverProcess.HasExited) {
-      try { Stop-Process -Id $serverProcess.Id -Force -Confirm:$false } catch {}
-    }
     Remove-Item Env:PORT, Env:ELITESAND_SHELL_HEADLESS, Env:ELITESAND_SHELL_PORT, Env:ELITESAND_SHELL_USER_DATA_DIR, Env:ELITESAND_SHELL_QUIT_AFTER_READY_MS -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $bootRoot) {
       try { Remove-Item -LiteralPath $bootRoot -Recurse -Force } catch {}

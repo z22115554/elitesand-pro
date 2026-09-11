@@ -129,6 +129,57 @@ for (let round = 1; round <= 3; round++) runRound(round);
   assert.strictEqual(fs.readFileSync(path.join(untrusted, 'song.webm'), 'utf8'), 'not-marked');
 })();
 
+(function failedCopyDoesNotAccumulatePartialSibling() {
+  const fixture = makeFixture();
+  const legacy = writeLegacyLibrary(fixture);
+  const preferred = getPreferredSiblingMediaDir(fixture.executablePath);
+  let copies = 0;
+  const failingFs = new Proxy(fs, {
+    get(target, prop) {
+      if (prop === 'cpSync') {
+        return (...args) => {
+          copies += 1;
+          if (copies === 2) throw Object.assign(new Error('fixture copy failure'), { code: 'ENOSPC' });
+          return target.cpSync(...args);
+        };
+      }
+      const value = target[prop];
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const result = preparePackagedMediaStorage({ userDataPath: fixture.userData, executablePath: fixture.executablePath, fsImpl: failingFs });
+  assert.strictEqual(result.action, 'vulnerable-copy-failed');
+  assert.match(result.reason, /fixture copy failure/);
+  assert.strictEqual(result.code, 'ENOSPC');
+  assert.ok(fs.existsSync(path.join(legacy, 'song-a.webm')), 'copy failure must never remove the source library');
+  assert.ok(!fs.existsSync(preferred), 'failed migration must not leave a partial sibling that forces numbered retries');
+  assert.strictEqual(path.resolve(readConfiguredPath(fixture.userData)), path.resolve(legacy));
+})();
+
+(function failedReferenceCommitDoesNotAccumulateFullDuplicate() {
+  const fixture = makeFixture();
+  const legacy = writeLegacyLibrary(fixture);
+  const preferred = getPreferredSiblingMediaDir(fixture.executablePath);
+  const failingFs = new Proxy(fs, {
+    get(target, prop) {
+      if (prop === 'renameSync') {
+        return (from, to) => {
+          if (path.basename(to) === 'media-storage.json') throw new Error('fixture reference commit failure');
+          return target.renameSync(from, to);
+        };
+      }
+      const value = target[prop];
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const result = preparePackagedMediaStorage({ userDataPath: fixture.userData, executablePath: fixture.executablePath, fsImpl: failingFs });
+  assert.strictEqual(result.action, 'vulnerable-copy-failed');
+  assert.match(result.reason, /fixture reference commit failure/);
+  assert.ok(fs.existsSync(path.join(legacy, 'nested', 'song-b.m4a')), 'reference failure must keep the source library intact');
+  assert.ok(!fs.existsSync(preferred), 'uncommitted full copy must be removed so the next launch can retry the same destination');
+  assert.strictEqual(path.resolve(readConfiguredPath(fixture.userData)), path.resolve(legacy));
+})();
+
 function executableNsi(source) {
   return source
     .split(/\r?\n/)
@@ -139,8 +190,12 @@ function executableNsi(source) {
 (function releaseContracts() {
   const root = path.join(__dirname, '..');
   const mainSource = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
+  const shellSource = fs.readFileSync(path.join(root, 'electron', 'shell.js'), 'utf8');
   assert.ok(mainSource.includes('Reflect.get(target, prop, target)'));
   assert.ok(!mainSource.includes('Reflect.get(target, prop, receiver)'));
+  assert.ok(!mainSource.includes('preparePackagedMediaStorage('), 'bulk media migration must not run before the shell acquires the single-instance lock');
+  assert.ok(shellSource.indexOf('app.requestSingleInstanceLock()') < shellSource.indexOf('preparePackagedMediaStorage({'),
+    'single-instance lock must be acquired before any bulk legacy-media migration');
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.strictEqual(packageJson.build.nsis.include, 'electron/installer.nsh');

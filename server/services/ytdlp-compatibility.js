@@ -3,10 +3,12 @@
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { createLogger } = require('../utils/logger');
+const { getYtdlpCommand } = require('../utils/ytdlp-command');
 
 const execFileAsync = promisify(execFile);
 const log = createLogger('YtdlpCompatibility');
 const YTDLP_ENV = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
+const YTDLP_COMMAND = getYtdlpCommand();
 
 // A public, short video used only to read metadata. It is never downloaded.
 // The environment override lets a future maintenance release swap the probe
@@ -42,7 +44,7 @@ async function probe(options = {}) {
 
   inFlight = (async () => {
     try {
-      const { stdout } = await run('yt-dlp', PROBE_ARGS, {
+      const { stdout } = await run(YTDLP_COMMAND, PROBE_ARGS, {
         timeout: 15000,
         windowsHide: true,
         maxBuffer: 64 * 1024,
