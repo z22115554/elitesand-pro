@@ -8764,6 +8764,125 @@ test('state.json 只瘦身已落盤媒體庫歌曲；local/未落盤歌曲保留
   }
 });
 
+test('儲存歌單：建立／改名／加歌去重／移歌／刪除／上限，並原子落盤可重新載入', () => {
+  const savedPlaylists = require('../server/services/saved-playlists');
+  const before = savedPlaylists.list().map((p) => p.id);
+  try {
+    eq(savedPlaylists.create({ name: '   ' }).error, 'name_required', '空白名稱: ');
+    const created = savedPlaylists.create({ name: '  歌回 A  \n', trackIds: ['t1', 't2', 't1', '', null, 't3'] });
+    ok(created.ok, '建立: ');
+    eq(created.playlist.name, '歌回 A', '名稱去頭尾空白與換行: ');
+    eq(created.playlist.trackIds.join(','), 't1,t2,t3', '建立時去重並過濾空值: ');
+    const id = created.playlist.id;
+
+    const added = savedPlaylists.addTracks(id, ['t2', 't4']);
+    eq(added.added, 1, '已在歌單的 id 不重複加入: ');
+    eq(added.playlist.trackIds.join(','), 't1,t2,t3,t4', '附加到末端: ');
+    const removed = savedPlaylists.removeTracks(id, ['t1', 'nope']);
+    eq(removed.removed, 1);
+    eq(removed.playlist.trackIds.join(','), 't2,t3,t4', '移除保持順序: ');
+
+    eq(savedPlaylists.rename(id, '').error, 'name_required');
+    eq(savedPlaylists.rename('missing', 'x').error, 'not_found');
+    eq(savedPlaylists.rename(id, 'x'.repeat(200)).playlist.name.length, savedPlaylists.MAX_NAME_LENGTH, '名稱長度上限: ');
+
+    // 媒體庫刪歌後同步剪掉；null 代表清空媒體庫
+    eq(savedPlaylists.pruneTrackIds(['t3']), 1);
+    eq(savedPlaylists.get(id).trackIds.join(','), 't2,t4');
+    eq(savedPlaylists.pruneTrackIds(['not-in-any']), 0, '沒有命中就不觸發保存: ');
+
+    // 回傳的是副本，外部改動不可污染 store
+    savedPlaylists.get(id).trackIds.push('leak');
+    eq(savedPlaylists.get(id).trackIds.length, 2, 'get() 必須回傳副本: ');
+
+    ok(savedPlaylists.saveNow(), '落盤: ');
+    const file = path.join(process.env.ELITESAND_DATA_DIR, 'playlists.json');
+    const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    eq(onDisk.schemaVersion, 1);
+    ok(onDisk.playlists.some((p) => p.id === id && p.trackIds.join(',') === 't2,t4'), '磁碟內容: ');
+
+    eq(savedPlaylists.remove(id).ok, true);
+    eq(savedPlaylists.remove(id).error, 'not_found');
+  } finally {
+    for (const p of savedPlaylists.list()) if (!before.includes(p.id)) savedPlaylists.remove(p.id);
+    savedPlaylists.saveNow();
+  }
+});
+
+test('儲存歌單 socket：只收媒體庫存在的 id、變更才廣播給控制端、媒體庫刪歌／清空會同步剪歌單', () => {
+  const registerLibraryHandlers = require('../server/routes/handlers/library');
+  const libraryStore = require('../server/services/library-store');
+  const savedPlaylists = require('../server/services/saved-playlists');
+  const before = savedPlaylists.list().map((p) => p.id);
+  const originalRemove = libraryStore.remove;
+  const originalClear = libraryStore.clear;
+  const originalGetEntry = libraryStore.getEntry;
+  const events = new Map();
+  const broadcasts = [];
+  const io = { to() { return { emit(event, data) { broadcasts.push({ event, data }); } }; }, sockets: { sockets: new Map() } };
+  const socket = { id: 'sp-controller', clientType: 'controller', on(event, handler) { events.set(event, handler); }, emit() {} };
+  const persisted = [];
+  try {
+    const knownIds = new Set(['lib-a', 'lib-b']);
+    libraryStore.getEntry = (id) => (knownIds.has(String(id)) ? { id: String(id), title: id } : null);
+    libraryStore.remove = (id) => knownIds.delete(String(id));
+    libraryStore.clear = () => { knownIds.clear(); return true; };
+    registerLibraryHandlers(io, socket, { playState: { playlist: [], currentTrack: null }, persistState: () => persisted.push(1) });
+
+    let ack = null;
+    events.get('savedPlaylists:create')({ name: '直播 set', trackIds: [] }, (r) => { ack = r; });
+    ok(ack.ok, '建立: ');
+    const id = ack.playlist.id;
+    const listBroadcasts = () => broadcasts.filter((b) => b.event === 'savedPlaylists:list').length;
+    const afterCreate = listBroadcasts();
+    ok(afterCreate >= 1, '建立要廣播清單: ');
+
+    events.get('savedPlaylists:addTracks')({ id, trackIds: ['lib-a', 'ghost', 'lib-b'] }, (r) => { ack = r; });
+    eq(ack.added, 2, '不在媒體庫的 id 要被擋掉: ');
+    eq(ack.playlist.trackIds.join(','), 'lib-a,lib-b');
+    const afterAdd = listBroadcasts();
+    events.get('savedPlaylists:addTracks')({ id, trackIds: ['lib-a'] }, (r) => { ack = r; });
+    eq(ack.added, 0);
+    eq(listBroadcasts(), afterAdd, '沒有實際變更不可再廣播: ');
+
+    events.get('library:remove')('lib-a', (r) => { ack = r; });
+    ok(ack.ok);
+    eq(savedPlaylists.get(id).trackIds.join(','), 'lib-b', '媒體庫刪歌後歌單同步剪掉: ');
+    ok(listBroadcasts() > afterAdd, '剪掉後要廣播歌單: ');
+
+    events.get('library:clear')(null, (r) => { ack = r; });
+    ok(ack.ok);
+    eq(savedPlaylists.get(id).trackIds.length, 0, '清空媒體庫後歌單清空但保留歌單本身: ');
+    ok(savedPlaylists.get(id), '歌單本身不可被刪除: ');
+
+    events.get('savedPlaylists:rename')({ id, name: '' }, (r) => { ack = r; });
+    eq(ack.error, 'name_required');
+    events.get('savedPlaylists:delete')(id, (r) => { ack = r; });
+    ok(ack.ok);
+    eq(savedPlaylists.get(id), null);
+  } finally {
+    libraryStore.remove = originalRemove;
+    libraryStore.clear = originalClear;
+    libraryStore.getEntry = originalGetEntry;
+    for (const p of savedPlaylists.list()) if (!before.includes(p.id)) savedPlaylists.remove(p.id);
+    savedPlaylists.saveNow();
+  }
+});
+
+test('儲存歌單 UI：面板有 chip／建立／載入入口，載入走既有逐首還原佇列，且五語翻譯鍵齊全', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'media-library.js'), 'utf8');
+  const i18n = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
+  ['id="lib-playlist-chips"', 'id="lib-playlist-new"', 'id="lib-playlist-load"', 'id="lib-playlist-rename"', 'id="lib-playlist-delete"']
+    .forEach((needle) => ok(html.includes(needle), `面板缺少 ${needle}: `));
+  ok(js.includes("restoreQueue.push({ item, btn: null"), '整份載入必須重用逐首還原佇列，不可另開一條併發路徑: ');
+  ok(js.includes("SocketClient.on('savedPlaylists:list'"), '要接伺服器廣播: ');
+  ok(!js.includes('window.prompt('), '命名不可用瀏覽器原生 prompt: ');
+  for (const match of js.matchAll(/tx\('([^']+)'/g)) {
+    ok(i18n.includes(`'${match[1]}':`), `media-library.js 引用的翻譯鍵 ${match[1]} 不存在: `);
+  }
+});
+
 test('媒體庫直接刪除前先同步保存播放清單完整 fallback，library.json 落盤後重開不丟歌詞', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-library-remove-barrier-'));
   const downloadsDir = path.join(dataDir, 'downloads');

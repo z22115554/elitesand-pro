@@ -66,6 +66,11 @@
   let virtualForceRender = false;
   const restorePendingIds = new Map();
 
+  // 儲存歌單（伺服器 data/playlists.json；socket savedPlaylists:*）。
+  // 歌單只是媒體庫 id 的有序集合，選中某個歌單時清單依歌單順序顯示、排序選單停用。
+  let savedPlaylists = [];
+  let activePlaylistId = null;
+
   // 收到伺服器清單→存快取後套用目前的搜尋/排序再渲染
   function render(list) {
     cache = Array.isArray(list) ? list : [];
@@ -130,6 +135,7 @@
       <div class="lib-actions">
         <button class="btn btn-sm lib-reimport" type="button"${restoreLabel ? ' disabled' : ''}>${restoreLabel || tr('加入清單')}</button>
         ${separationButtonHtml(item)}
+        ${playlistButtonHtml()}
         <button class="btn btn-sm btn-ghost lib-remove" type="button" title="${tr('從媒體庫移除')}">✕</button>
       </div>`;
 
@@ -197,14 +203,25 @@
       ? cache.filter((it) => (it.title || '').toLowerCase().includes(q) || (it.artist || '').toLowerCase().includes(q))
       : cache.slice();
     if (filterSeparatedOnly) view = view.filter((it) => it.separationStatus === 'done');
-    viewCache = sortView(view);
+    const activePlaylist = getActivePlaylist();
+    if (activePlaylist) {
+      // 依歌單順序，不套排序選單；歌單裡已不在媒體庫的 id 自然被略過（摘要列會標出數量）
+      const byId = new Map(view.map((it) => [String(it.id), it]));
+      view = activePlaylist.trackIds.map((id) => byId.get(String(id))).filter(Boolean);
+      viewCache = view;
+    } else {
+      viewCache = sortView(view);
+    }
+    if (sortSelect) sortSelect.disabled = !!activePlaylist;
     if (!view.length) {
       renderVirtualWindow(true);
       if (emptyEl) {
         emptyEl.hidden = false;
-        emptyEl.textContent = cache.length
-          ? tr(filterSeparatedOnly ? '沒有已分離人聲的歌曲' : '找不到符合的歌曲')
-          : tr('尚無記錄，播放任一首歌後會自動加入。');
+        emptyEl.textContent = activePlaylist && !activePlaylist.trackIds.length
+          ? tx('library.playlists.empty')
+          : cache.length
+            ? tr(filterSeparatedOnly ? '沒有已分離人聲的歌曲' : '找不到符合的歌曲')
+            : tr('尚無記錄，播放任一首歌後會自動加入。');
       }
       return;
     }
@@ -480,6 +497,14 @@
       removeItem(item.id);
       return;
     }
+    if (event.target.closest('.lib-playlist-add')) {
+      openPlaylistPopover(item, event.target.closest('.lib-playlist-add'));
+      return;
+    }
+    if (event.target.closest('.lib-playlist-remove')) {
+      removeFromActivePlaylist(item);
+      return;
+    }
     if (event.target.closest('.lib-separate-cancel')) {
       cancelSeparation(item, row);
       return;
@@ -729,24 +754,291 @@
     });
   });
 
+  // ─── 儲存歌單 ───
+  const chipsEl = document.getElementById('lib-playlist-chips');
+  const newForm = document.getElementById('lib-playlist-new');
+  const newNameInput = document.getElementById('lib-playlist-new-name');
+  const newFromQueueBtn = document.getElementById('lib-playlist-new-from-queue');
+  const newCancelBtn = document.getElementById('lib-playlist-new-cancel');
+  const actionsEl = document.getElementById('lib-playlist-actions');
+  const summaryEl = document.getElementById('lib-playlist-summary');
+  const loadBtn = document.getElementById('lib-playlist-load');
+  const renameBtn = document.getElementById('lib-playlist-rename');
+  const deleteBtn = document.getElementById('lib-playlist-delete');
+  let playlistPopover = null;
+
+  function getActivePlaylist() {
+    return activePlaylistId ? savedPlaylists.find((p) => p.id === activePlaylistId) || null : null;
+  }
+
+  function playlistError(res) {
+    const code = res?.error;
+    const key = code ? `library.playlists.error.${code}` : null;
+    const text = key ? tx(key) : null;
+    return text && text !== key ? text : (code || tx('library.playlists.serverNoAck'));
+  }
+
+  function playlistButtonHtml() {
+    if (activePlaylistId) {
+      return `<button class="btn btn-sm btn-ghost lib-playlist-remove" type="button" title="${escapeHtml(tx('library.playlists.removeFrom'))}">−</button>`;
+    }
+    if (!savedPlaylists.length) return '';
+    return `<button class="btn btn-sm btn-ghost lib-playlist-add" type="button" title="${escapeHtml(tx('library.playlists.addTo'))}">＋</button>`;
+  }
+
+  function renderPlaylistChips() {
+    if (!chipsEl) return;
+    chipsEl.innerHTML = '';
+    const libraryIds = new Set(cache.map((it) => String(it.id)));
+    const mk = (label, id, active) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lib-playlist-chip' + (active ? ' active' : '');
+      b.dataset.playlistId = id || '';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
+      b.textContent = label;
+      return b;
+    };
+    chipsEl.appendChild(mk(tx('library.playlists.all'), '', !activePlaylistId));
+    for (const p of savedPlaylists) {
+      const present = p.trackIds.filter((id) => libraryIds.has(String(id))).length;
+      const chip = mk(`${p.name} · ${present}`, p.id, p.id === activePlaylistId);
+      chip.title = p.name;
+      chipsEl.appendChild(chip);
+    }
+    const add = mk(tx('library.playlists.new'), '', false);
+    add.classList.add('lib-playlist-chip-new');
+    add.dataset.action = 'new';
+    chipsEl.appendChild(add);
+
+    const active = getActivePlaylist();
+    if (actionsEl) actionsEl.hidden = !active;
+    if (active && summaryEl) {
+      const total = active.trackIds.length;
+      const missing = active.trackIds.filter((id) => !libraryIds.has(String(id))).length;
+      summaryEl.textContent = missing
+        ? tx('library.playlists.summaryMissing', { count: total, missing })
+        : tx('library.playlists.summary', { count: total });
+    }
+  }
+
+  function setActivePlaylist(id) {
+    activePlaylistId = id || null;
+    closePlaylistPopover();
+    renderPlaylistChips();
+    applyView();
+  }
+
+  function applySavedPlaylists(list) {
+    savedPlaylists = Array.isArray(list) ? list : [];
+    if (activePlaylistId && !savedPlaylists.some((p) => p.id === activePlaylistId)) activePlaylistId = null;
+    renderPlaylistChips();
+    applyView();
+  }
+
+  function refreshSavedPlaylists() {
+    if (!SocketClient.connected()) return;
+    SocketClient.sendWithCallback('savedPlaylists:get', null, (list) => applySavedPlaylists(list || []));
+  }
+
+  function showNewForm(show) {
+    if (!newForm) return;
+    newForm.hidden = !show;
+    if (show) { newNameInput.value = ''; requestAnimationFrame(() => newNameInput.focus()); }
+  }
+
+  function createPlaylist(fromQueue) {
+    const name = newNameInput?.value.trim();
+    if (!name) { toast(tx('library.playlists.error.name_required'), 'error'); newNameInput?.focus(); return; }
+    const trackIds = fromQueue ? (window.VKState?.getPlaylistIds?.() || []) : [];
+    if (fromQueue && !trackIds.length) { toast(tx('library.playlists.queueEmpty'), 'error'); return; }
+    SocketClient.sendWithCallback('savedPlaylists:create', { name, trackIds }, (res) => {
+      if (!res?.ok) return toast(playlistError(res), 'error');
+      showNewForm(false);
+      toast(fromQueue
+        ? tx('library.playlists.createdFromQueue', { name: res.playlist.name, count: res.playlist.trackIds.length })
+        : tx('library.playlists.created', { name: res.playlist.name }), 'success');
+      // 廣播會再送一次完整清單；先本地更新讓 chip 立刻出現並切過去
+      savedPlaylists = savedPlaylists.filter((p) => p.id !== res.playlist.id).concat([res.playlist]);
+      setActivePlaylist(res.playlist.id);
+    });
+  }
+
+  function renamePlaylist() {
+    const active = getActivePlaylist();
+    const chip = chipsEl?.querySelector(`.lib-playlist-chip[data-playlist-id="${CSS.escape(active?.id || '')}"]`);
+    if (!active || !chip) return;
+    // 就地改名：chip 換成輸入框，Enter 送出、Esc 取消、失焦視同送出
+    const input = document.createElement('input');
+    input.className = 'input lib-playlist-chip-input';
+    input.type = 'text';
+    input.maxLength = 60;
+    input.value = active.name;
+    chip.replaceWith(input);
+    let done = false;
+    const finish = (commit) => {
+      if (done) return; done = true;
+      const name = input.value.trim();
+      if (commit && name && name !== active.name) {
+        SocketClient.sendWithCallback('savedPlaylists:rename', { id: active.id, name }, (res) => {
+          if (!res?.ok) toast(playlistError(res), 'error');
+          else active.name = res.playlist.name;
+          renderPlaylistChips();
+        });
+      } else renderPlaylistChips();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.focus();
+    input.select();
+  }
+
+  async function deletePlaylist() {
+    const active = getActivePlaylist();
+    if (!active) return;
+    const confirmed = await window.PanelConfirm?.request({
+      title: tx('library.playlists.deleteTitle', { name: active.name }),
+      summary: tx('library.playlists.deleteSummary'),
+      impact: tx('library.playlists.deleteImpact'),
+      tone: 'danger',
+      confirmLabel: tx('library.playlists.delete'),
+    });
+    if (!confirmed) return;
+    SocketClient.sendWithCallback('savedPlaylists:delete', active.id, (res) => {
+      if (!res?.ok) return toast(playlistError(res), 'error');
+      savedPlaylists = savedPlaylists.filter((p) => p.id !== active.id);
+      setActivePlaylist(null);
+    });
+  }
+
+  async function loadActivePlaylist() {
+    const active = getActivePlaylist();
+    if (!active || !window.VKState) return;
+    const byId = new Map(cache.map((it) => [String(it.id), it]));
+    const items = active.trackIds.map((id) => byId.get(String(id))).filter(Boolean);
+    if (!items.length) { toast(tx('library.playlists.empty'), 'error'); return; }
+    const dup = items.filter((it) => window.VKState.isInPlaylist?.(it.id)).length;
+    const confirmed = await window.PanelConfirm?.request({
+      title: tx('library.playlists.loadTitle', { name: active.name }),
+      summary: tx('library.playlists.loadSummary', { count: items.length }),
+      impact: tx('library.playlists.loadImpact', { dup }),
+      confirmLabel: tx('library.playlists.loadConfirm'),
+    });
+    if (!confirmed) return;
+    // 走跟單首「加入清單」完全相同的逐首佇列：一次只還原一首，音檔不在的走 YouTube 匯入佇列
+    for (const item of items) {
+      const key = String(item.id);
+      if (restorePendingIds.has(key)) continue;
+      restorePendingIds.set(key, tr('加入佇列中…'));
+      restoreQueue.push({ item, btn: null, originalLabel: tr('加入清單') });
+    }
+    renderVirtualWindow(true);
+    toast(tx('library.playlists.loadQueued', { count: items.length }), 'info');
+    runRestoreQueue();
+  }
+
+  function removeFromActivePlaylist(item) {
+    const active = getActivePlaylist();
+    if (!active) return;
+    SocketClient.sendWithCallback('savedPlaylists:removeTracks', { id: active.id, trackIds: [item.id] }, (res) => {
+      if (!res?.ok) return toast(playlistError(res), 'error');
+      active.trackIds = res.playlist.trackIds;
+      renderPlaylistChips();
+      applyView();
+    });
+  }
+
+  // 「＋」小面板：列出所有歌單＋勾選框，勾／取消勾即時送出
+  function closePlaylistPopover() {
+    if (!playlistPopover) return;
+    playlistPopover.remove();
+    playlistPopover = null;
+  }
+
+  function openPlaylistPopover(item, anchor) {
+    closePlaylistPopover();
+    if (!savedPlaylists.length) { toast(tx('library.playlists.noneYet'), 'info'); return; }
+    const pop = document.createElement('div');
+    pop.className = 'lib-playlist-popover';
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', tx('library.playlists.addTo'));
+    const key = String(item.id);
+    for (const p of savedPlaylists) {
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = p.trackIds.some((id) => String(id) === key);
+      cb.addEventListener('change', () => {
+        cb.disabled = true;
+        const event = cb.checked ? 'savedPlaylists:addTracks' : 'savedPlaylists:removeTracks';
+        SocketClient.sendWithCallback(event, { id: p.id, trackIds: [item.id] }, (res) => {
+          cb.disabled = false;
+          if (!res?.ok) { cb.checked = !cb.checked; return toast(playlistError(res), 'error'); }
+          p.trackIds = res.playlist.trackIds;
+          renderPlaylistChips();
+        });
+      });
+      const text = document.createElement('span');
+      text.textContent = p.name;
+      label.appendChild(cb);
+      label.appendChild(text);
+      pop.appendChild(label);
+    }
+    // 定位在按鈕下方；用 fixed 讓 virtual window 重繪／捲動時直接關掉而不是漂走
+    const rect = anchor.getBoundingClientRect();
+    pop.style.top = `${Math.round(rect.bottom + 6)}px`;
+    pop.style.left = `${Math.round(Math.max(8, rect.right - 220))}px`;
+    document.body.appendChild(pop);
+    playlistPopover = pop;
+    requestAnimationFrame(() => pop.querySelector('input')?.focus());
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    if (playlistPopover && !playlistPopover.contains(e.target) && !e.target.closest('.lib-playlist-add')) closePlaylistPopover();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && playlistPopover) closePlaylistPopover(); });
+  document.addEventListener('scroll', () => closePlaylistPopover(), true);
+
+  if (chipsEl) chipsEl.addEventListener('click', (e) => {
+    const chip = e.target.closest('.lib-playlist-chip');
+    if (!chip) return;
+    if (chip.dataset.action === 'new') { showNewForm(newForm?.hidden !== false); return; }
+    setActivePlaylist(chip.dataset.playlistId || null);
+  });
+  if (newForm) newForm.addEventListener('submit', (e) => { e.preventDefault(); createPlaylist(false); });
+  if (newFromQueueBtn) newFromQueueBtn.addEventListener('click', () => createPlaylist(true));
+  if (newCancelBtn) newCancelBtn.addEventListener('click', () => showNewForm(false));
+  if (newNameInput) newNameInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') showNewForm(false); });
+  if (loadBtn) loadBtn.addEventListener('click', loadActivePlaylist);
+  if (renameBtn) renameBtn.addEventListener('click', renamePlaylist);
+  if (deleteBtn) deleteBtn.addEventListener('click', deletePlaylist);
+  SocketClient.on('savedPlaylists:list', applySavedPlaylists);
+  renderPlaylistChips();
+
   // ─── 事件：切到媒體庫視圖時自動刷新；伺服器推播時更新 ───
   document.addEventListener('view:change', (e) => {
     if (e.detail && e.detail.view === 'library') {
       scheduleVirtualRender(true);
       refresh();
       refreshStorage();
+      refreshSavedPlaylists();
     }
   });
-  SocketClient.on('library:list', (list) => render(list || []));
+  SocketClient.on('library:list', (list) => { render(list || []); renderPlaylistChips(); });
   // 語系切換時重繪：render() 只在收到伺服器資料才會跑，光切語言不會自動更新已經畫出來的列。
   if (typeof window.addEventListener === 'function') {
-    window.addEventListener('i18n:change', () => { if (cache.length) applyView(); });
+    window.addEventListener('i18n:change', () => { renderPlaylistChips(); if (cache.length) applyView(); });
   }
   SocketClient.on('connection-change', (ok) => { if (ok) { /* 連線後若正在媒體庫視圖則刷新 */
     const v = document.querySelector('.view[data-view="library"]');
     if (v && v.classList.contains('is-active')) {
       refresh();
       refreshStorage();
+      refreshSavedPlaylists();
     }
   } });
 })();

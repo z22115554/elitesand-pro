@@ -104,6 +104,8 @@
     isInPlaylist: (id) => playlist.some((t) => t.id === id),
     // 目前播放清單正在使用的本機檔名（給音檔清理參考；伺服器端亦自行計算）
     getPlaylistFilenames: () => playlist.map((t) => t.filename).filter(Boolean),
+    // 儲存歌單「用目前播放清單建立」：依清單順序取 id（重複曲只留第一次出現）
+    getPlaylistIds: () => Array.from(new Set(playlist.map((t) => t.id).filter(Boolean))),
     // 供歌詞選擇器（lyric-extras.js）套用候選歌詞給任一首歌（不限當前播放中的那首）：
     // 更新本地清單顯示（歌詞狀態 dot 立即翻色）＋通知伺服器暫存，函式本身已處理兩者。
     applyManualLyrics: (trackId, lyrics, lyricsType, parsedLyrics, lrcOffset, source) =>

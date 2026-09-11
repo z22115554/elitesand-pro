@@ -5,6 +5,7 @@
  */
 
 const libraryStore = require('../../services/library-store');
+const savedPlaylists = require('../../services/saved-playlists');
 const mediaStorage = require('../../services/media-storage');
 const { emitToControlClients } = require('../../utils/socket-broadcast');
 
@@ -53,14 +54,20 @@ function registerLibraryHandlers(io, socket, ctx) {
     const removed = libraryStore.remove(id);
     // playlist 可能仍引用這首歌。library 移除後立刻排程 state，讓它改存完整 fallback，
     // 必須早於 library 的 2s debounce 真正把 entry 從磁碟移除。
-    if (removed) persistState();
+    if (removed) {
+      persistState();
+      if (savedPlaylists.pruneTrackIds([id])) broadcastSavedPlaylists();
+    }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     if (typeof ack === 'function') ack({ ok: removed, error: removed ? null : '找不到媒體庫項目' });
   });
 
   socket.on('library:clear', (_data, ack) => {
     const cleared = libraryStore.clear();
-    if (cleared) persistState();
+    if (cleared) {
+      persistState();
+      if (savedPlaylists.pruneTrackIds(null)) broadcastSavedPlaylists();
+    }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     if (typeof ack === 'function') ack({ ok: cleared, error: cleared ? null : '無法安全保存目前播放清單，媒體庫未清空' });
   });
@@ -119,6 +126,51 @@ function registerLibraryHandlers(io, socket, ctx) {
     const result = libraryStore.cleanupAudio(keep);
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     if (typeof ack === 'function') ack({ ok: true, ...result });
+  });
+
+  // ─── 儲存歌單：媒體庫 id 的有序集合，一首歌可在多個歌單 ───
+  // 只在這裡（非唯讀 socket）註冊；顯示端／唯讀端沒有任何歌單事件。
+  function broadcastSavedPlaylists() {
+    emitToControlClients(io, 'savedPlaylists:list', savedPlaylists.list());
+  }
+  const reply = (ack, result) => { if (typeof ack === 'function') ack(result); };
+
+  socket.on('savedPlaylists:get', (_data, ack) => {
+    const list = savedPlaylists.list();
+    if (typeof ack === 'function') ack(list); else socket.emit('savedPlaylists:list', list);
+  });
+
+  socket.on('savedPlaylists:create', (data, ack) => {
+    const result = savedPlaylists.create({ name: data?.name, trackIds: data?.trackIds });
+    if (result.ok) broadcastSavedPlaylists();
+    reply(ack, result);
+  });
+
+  socket.on('savedPlaylists:rename', (data, ack) => {
+    const result = savedPlaylists.rename(data?.id, data?.name);
+    if (result.ok) broadcastSavedPlaylists();
+    reply(ack, result);
+  });
+
+  socket.on('savedPlaylists:delete', (id, ack) => {
+    const result = savedPlaylists.remove(id);
+    if (result.ok) broadcastSavedPlaylists();
+    reply(ack, result);
+  });
+
+  socket.on('savedPlaylists:addTracks', (data, ack) => {
+    // 只收媒體庫裡真的存在的 id，避免面板送來過期快取的 id 變成永遠載不出來的幽靈項目
+    const trackIds = (Array.isArray(data?.trackIds) ? data.trackIds : [])
+      .filter((id) => libraryStore.getEntry(id));
+    const result = savedPlaylists.addTracks(data?.id, trackIds);
+    if (result.ok && result.added) broadcastSavedPlaylists();
+    reply(ack, result);
+  });
+
+  socket.on('savedPlaylists:removeTracks', (data, ack) => {
+    const result = savedPlaylists.removeTracks(data?.id, data?.trackIds);
+    if (result.ok && result.removed) broadcastSavedPlaylists();
+    reply(ack, result);
   });
 }
 

@@ -1752,6 +1752,22 @@
               </div>
               <button id="library-storage-choose" class="btn btn-sm" type="button">選擇位置並搬遷</button>
             </div>
+            <!-- 收藏歌單（saved playlists）：媒體庫 id 的集合，一首歌可在多個歌單；載入走既有「加入清單」路徑 -->
+            <div class="lib-playlists" id="lib-playlists">
+              <div class="lib-playlist-chips" id="lib-playlist-chips" role="tablist" aria-label="收藏歌單" data-i18n-aria-label="library.playlists.ariaLabel"></div>
+              <form class="lib-playlist-new" id="lib-playlist-new" hidden>
+                <input id="lib-playlist-new-name" class="input" type="text" maxlength="60" autocomplete="off" placeholder="收藏歌單名稱" data-i18n-placeholder="library.playlists.namePlaceholder">
+                <button type="submit" class="btn btn-sm" data-i18n="library.playlists.createEmpty">建立</button>
+                <button type="button" class="btn btn-sm" id="lib-playlist-new-from-queue" data-i18n="library.playlists.createFromQueue">用目前播放清單建立</button>
+                <button type="button" class="btn btn-sm btn-ghost" id="lib-playlist-new-cancel" data-i18n="common.cancel">取消</button>
+              </form>
+              <div class="lib-playlist-actions" id="lib-playlist-actions" hidden>
+                <span class="lib-playlist-summary" id="lib-playlist-summary"></span>
+                <button type="button" class="btn btn-sm" id="lib-playlist-load" data-i18n="library.playlists.loadAll">全部載入播放清單</button>
+                <button type="button" class="btn btn-sm btn-ghost" id="lib-playlist-rename" data-i18n="library.playlists.rename">重新命名</button>
+                <button type="button" class="btn btn-sm btn-ghost" id="lib-playlist-delete" data-i18n="library.playlists.delete">刪除收藏歌單</button>
+              </div>
+            </div>
             <div class="library-toolbar">
               <input id="lib-search" class="input" type="text" placeholder="搜尋歌名 / 歌手…">
               <select id="lib-sort" class="input">
