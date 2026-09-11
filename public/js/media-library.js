@@ -124,8 +124,11 @@
 
     const coverUrl = safeHttpUrl(item.cover);
     const restoreLabel = restorePendingIds.get(String(item.id));
+    const reorderable = canReorderCollection();
+    if (reorderable) row.draggable = true;
 
     row.innerHTML = `
+      ${reorderable ? `<span class="lib-handle" title="${escapeHtml(tx('library.playlists.dragToReorder'))}" aria-hidden="true">⋮⋮</span>` : ''}
       <div class="lib-cover">${coverUrl ? '' : '♪'}</div>
       <div class="lib-meta">
         <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
@@ -948,6 +951,81 @@
       if (!res?.ok) return toast(playlistError(res), 'error');
       active.trackIds = res.playlist.trackIds;
       renderPlaylistChips();
+      applyView();
+    });
+  }
+
+  // ─── 收藏歌單內拖曳排序 ───
+  // 跟 app-playlist.js 的播放清單同一套 HTML5 DnD 寫法（把手才可拖、上下半判斷落點）。
+  // 搜尋／篩選中不可拖（看到的是子集合，順序語義不明確）；伺服器 setOrder 會把面板看不到的
+  // 「已不在媒體庫」id 依原順序補回末端，所以這裡只送目前可見全量的順序即可。
+  function canReorderCollection() {
+    return !!activePlaylistId && !searchQuery.trim() && !filterSeparatedOnly;
+  }
+  let dragFromId = null;
+  let dragArmed = false;
+  function clearDropMarkers() {
+    listEl.querySelectorAll('.drop-above, .drop-below').forEach((n) => n.classList.remove('drop-above', 'drop-below'));
+  }
+  listEl.addEventListener('pointerdown', (e) => { dragArmed = canReorderCollection() && !!e.target.closest('.lib-handle'); });
+  listEl.addEventListener('dragstart', (e) => {
+    const row = e.target.closest('.lib-row');
+    if (!row || !dragArmed || !canReorderCollection()) { e.preventDefault(); return; }
+    dragFromId = row.dataset.id;
+    row.classList.add('dragging');
+    closePlaylistPopover();
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dragFromId); } catch (_) { /* 某些瀏覽器不允許 */ }
+  });
+  listEl.addEventListener('dragover', (e) => {
+    if (dragFromId === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const row = e.target.closest('.lib-row');
+    clearDropMarkers();
+    if (!row || row.classList.contains('dragging')) return;
+    const rect = row.getBoundingClientRect();
+    row.classList.add(e.clientY < rect.top + rect.height / 2 ? 'drop-above' : 'drop-below');
+  });
+  listEl.addEventListener('drop', (e) => {
+    if (dragFromId === null) return;
+    e.preventDefault();
+    const row = e.target.closest('.lib-row');
+    const ids = viewCache.map((it) => String(it.id));
+    const from = ids.indexOf(String(dragFromId));
+    if (from === -1) return;
+    let to;
+    if (row) {
+      const rect = row.getBoundingClientRect();
+      to = ids.indexOf(String(row.dataset.id)) + (e.clientY < rect.top + rect.height / 2 ? 0 : 1);
+    } else {
+      to = ids.length;
+    }
+    let insertAt = to > from ? to - 1 : to;
+    insertAt = Math.max(0, Math.min(ids.length - 1, insertAt));
+    if (insertAt === from) return;
+    const [moved] = ids.splice(from, 1);
+    ids.splice(insertAt, 0, moved);
+    reorderActivePlaylist(ids);
+  });
+  listEl.addEventListener('dragend', () => {
+    dragFromId = null;
+    dragArmed = false;
+    clearDropMarkers();
+    listEl.querySelectorAll('.dragging').forEach((n) => n.classList.remove('dragging'));
+  });
+
+  function reorderActivePlaylist(orderedIds) {
+    const active = getActivePlaylist();
+    if (!active) return;
+    const previous = active.trackIds.slice();
+    // 先樂觀重排讓畫面立刻跟手，伺服器拒絕才回滾
+    const placed = new Set(orderedIds);
+    active.trackIds = orderedIds.concat(previous.filter((id) => !placed.has(String(id))));
+    applyView();
+    SocketClient.sendWithCallback('savedPlaylists:setOrder', { id: active.id, trackIds: orderedIds }, (res) => {
+      if (!res?.ok) { active.trackIds = previous; applyView(); toast(playlistError(res), 'error'); return; }
+      active.trackIds = res.playlist.trackIds;
       applyView();
     });
   }

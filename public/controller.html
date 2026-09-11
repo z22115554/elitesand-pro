@@ -211,6 +211,13 @@
     </div>
   </div>
 
+  <!-- 收藏歌單：只做「載入到播放清單」，建立／編輯留在桌面面板。兩段式點擊代替確認視窗（手機沒有 PanelConfirm）。 -->
+  <div class="ctrl-card" id="ctrl-collections-card" hidden>
+    <p class="eyebrow" data-i18n="library.playlists.ariaLabel">收藏歌單</p>
+    <div class="ctrl-chips" id="ctrl-collections"></div>
+    <p class="ctrl-collections-hint" data-i18n="controller.collectionsHint">點一下選擇、再點一次就依順序加到播放清單末端。音檔已不在的歌要回桌面面板重新下載。</p>
+  </div>
+
   <div class="ctrl-card">
     <button id="playlist-toggle" class="ctrl-playlist-toggle" type="button">
       <span data-i18n="controller.playlist">播放清單</span>

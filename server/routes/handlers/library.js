@@ -7,7 +7,43 @@
 const libraryStore = require('../../services/library-store');
 const savedPlaylists = require('../../services/saved-playlists');
 const mediaStorage = require('../../services/media-storage');
-const { emitToControlClients } = require('../../utils/socket-broadcast');
+const { emitToControlClients, emitToAccessRooms } = require('../../utils/socket-broadcast');
+const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds } = require('../../utils/track-schema');
+
+/**
+ * 從媒體庫紀錄組出可直接加入播放清單的 track（含記憶的歌詞/拼音/變調/AI stems）。
+ * 只在音檔還在時使用；音檔不在的要走 YouTube 重抓（面板 app.js 的匯入佇列）。
+ *
+ * 這裡是一份手動欄位白名單，跟 sanitizeTrack() 的白名單是分開的兩份——sanitizeTrack 加了
+ * 新欄位這裡沒同步，分離過的歌一經「加入清單」就會被這裡組出的 track 蓋掉，看起來像
+ * 「又變回沒分離」（媒體庫紀錄其實沒事，是 playState.playlist 那份被漏掉的欄位重置了）。
+ */
+function buildTrackFromEntry(entry) {
+  return {
+    id: entry.id,
+    title: entry.title,
+    artist: entry.artist || '',
+    performer: entry.performer || '',
+    uploader: entry.uploader || '',
+    isCover: entry.isCover === true,
+    artistConfidence: entry.artistConfidence || 0,
+    needsArtistConfirmation: entry.needsArtistConfirmation === true,
+    artistCandidates: entry.artistCandidates || [],
+    cover: entry.cover || null,
+    duration: entry.duration || 0,
+    filename: entry.filename,
+    url: entry.url || null,
+    source: entry.source || (entry.url ? 'youtube' : 'local'),
+    lyrics: entry.lyrics || null,
+    lyricsType: entry.lyricsType || 'lrc',
+    parsedLyrics: Array.isArray(entry.parsedLyrics) ? entry.parsedLyrics : null,
+    pitchShift: typeof entry.pitchShift === 'number' ? entry.pitchShift : 0,
+    playbackRate: typeof entry.playbackRate === 'number' ? entry.playbackRate : 1.0,
+    vocalsFile: entry.vocalsFile || null,
+    instrumentalFile: entry.instrumentalFile || null,
+    separationStatus: entry.separationStatus || 'none',
+  };
+}
 
 /**
  * @param {import('socket.io').Server} io
@@ -15,7 +51,11 @@ const { emitToControlClients } = require('../../utils/socket-broadcast');
  * @param {ReturnType<import('../../state/app-state').createAppState>} ctx
  */
 function registerLibraryHandlers(io, socket, ctx) {
-  const { playState, persistState } = ctx;
+  const {
+    playState, persistState,
+    emitSetlist = () => {}, broadcastState = () => {},
+    getPublicPlaylist = () => playState.playlist, getReadOnlyPlaylist = () => [],
+  } = ctx;
 
   // Storage locations are a desktop-shell capability. A phone remote may use
   // normal library controls, but it must never select filesystem paths.
@@ -80,35 +120,7 @@ function registerLibraryHandlers(io, socket, ctx) {
     if (!entry) { reply({ error: 'not_found' }); return; }
 
     if (entry.filename && libraryStore.audioExists(entry.filename)) {
-      const track = {
-        id: entry.id,
-        title: entry.title,
-        artist: entry.artist || '',
-        performer: entry.performer || '',
-        uploader: entry.uploader || '',
-        isCover: entry.isCover === true,
-        artistConfidence: entry.artistConfidence || 0,
-        needsArtistConfirmation: entry.needsArtistConfirmation === true,
-        artistCandidates: entry.artistCandidates || [],
-        cover: entry.cover || null,
-        duration: entry.duration || 0,
-        filename: entry.filename,
-        url: entry.url || null,
-        source: entry.source || (entry.url ? 'youtube' : 'local'),
-        lyrics: entry.lyrics || null,
-        lyricsType: entry.lyricsType || 'lrc',
-        parsedLyrics: Array.isArray(entry.parsedLyrics) ? entry.parsedLyrics : null,
-        pitchShift: typeof entry.pitchShift === 'number' ? entry.pitchShift : 0,
-        playbackRate: typeof entry.playbackRate === 'number' ? entry.playbackRate : 1.0,
-        // AI 人聲分離：這支 handler 手動列了一份自己的欄位白名單，跟
-        // sanitizeTrack() 的白名單是兩份分開的東西——只改 sanitizeTrack 那邊，
-        // 這裡沒同步加，分離過的歌一經過「加入清單」就會被這裡重新組出的 track
-        // 蓋掉，看起來像「又變回沒分離」（實際上是媒體庫紀錄沒事，前端顯示的
-        // playState.playlist 那份被這裡的白名單漏掉的欄位重置了）。
-        vocalsFile: entry.vocalsFile || null,
-        instrumentalFile: entry.instrumentalFile || null,
-        separationStatus: entry.separationStatus || 'none',
-      };
+      const track = buildTrackFromEntry(entry);
       reply({ track });
     } else if (entry.url) {
       reply({ needsDownload: true, url: entry.url });
@@ -171,6 +183,43 @@ function registerLibraryHandlers(io, socket, ctx) {
     const result = savedPlaylists.removeTracks(data?.id, data?.trackIds);
     if (result.ok && result.removed) broadcastSavedPlaylists();
     reply(ack, result);
+  });
+
+  socket.on('savedPlaylists:setOrder', (data, ack) => {
+    const result = savedPlaylists.setOrder(data?.id, data?.trackIds);
+    if (result.ok && result.changed) broadcastSavedPlaylists();
+    reply(ack, result);
+  });
+
+  // 伺服器端整份載入：音檔還在的歌一次組好、依歌單順序附加到播放清單末端（等同 playlist:add），
+  // 音檔不在的回給呼叫端自行決定要不要重抓——YouTube 下載一律只能走面板 app.js 的匯入佇列
+  // （鐵則 12），伺服器這裡絕不自己啟動下載。手機遙控器沒有匯入佇列，就只載入現成的。
+  socket.on('savedPlaylists:load', (data, ack) => {
+    const playlist = savedPlaylists.get(data?.id);
+    if (!playlist) { reply(ack, { ok: false, error: 'not_found' }); return; }
+    const exists = libraryStore.getAudioExistsLookup();
+    const ready = [];
+    const needsDownload = [];
+    let missing = 0;
+    for (const trackId of playlist.trackIds) {
+      const entry = libraryStore.getEntry(trackId);
+      if (!entry) { missing++; continue; }
+      if (entry.filename && exists(entry.filename)) ready.push(buildTrackFromEntry(entry));
+      else if (entry.url) needsDownload.push({ id: entry.id, title: entry.title || '', url: entry.url });
+      else missing++;
+    }
+    const clean = sanitizePlaylist(ready) || [];
+    const room = Math.max(0, MAX_PLAYLIST_SIZE - playState.playlist.length);
+    const added = assignFreshEntryIds(clean.slice(0, room));
+    const overflow = clean.length - added.length;
+    if (added.length) {
+      playState.playlist.push(...added);
+      emitToAccessRooms(io, 'playlist:update', getPublicPlaylist(), getReadOnlyPlaylist());
+      emitSetlist();
+      broadcastState();
+      persistState();
+    }
+    reply(ack, { ok: true, added: added.length, overflow, needsDownload, missing, total: playlist.trackIds.length });
   });
 }
 

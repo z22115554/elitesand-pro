@@ -1309,11 +1309,16 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .announcement-level.critical { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); }
 .announcement-level.warning { color: #f59e0b; border-color: rgba(245,158,11,.45); }
 .announcement-level.info { color: var(--accent); border-color: var(--accent-glow); }
+.announcement-level.notice { color: var(--accent); border-color: var(--accent-glow); }
 /* 強制更新公告是阻斷式：遮罩層必須攔截點擊（原本 pointer-events:none 會讓後面面板仍可按）。
    z-index 400 低於標題列(700)與關閉確認框(800)，所以 ✕ 與關閉框仍在公告之上、可操作。 */
 .announcement-critical-modal .modal-card { max-width: 540px; border-color: color-mix(in srgb, var(--danger) 62%, var(--border)); }
 .announcement-critical-head h3 { color: var(--danger); }
 .announcement-critical-message { margin: 0 0 16px; white-space: pre-wrap; color: var(--text-dim); font-size: 13px; line-height: 1.7; }
+/* notice：跟 critical 共用同一個強制彈窗骨架（見 app-announcements.js 的 present()），
+   但語意中性（例如版本更新內容）不是警訊，配色換成 accent，且一定可關閉。 */
+.announcement-critical-modal.is-notice .modal-card { border-color: var(--accent-glow); }
+.announcement-critical-modal.is-notice .announcement-critical-head h3 { color: var(--accent); }
 @media (max-width: 640px) { .announcement-banner { align-items: flex-start; flex-direction: column; } }
 
 .topbar .right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
@@ -1424,6 +1429,11 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .lib-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 .lib-actions .lib-remove { padding: 4px 9px; }
 .lib-actions .lib-playlist-add, .lib-actions .lib-playlist-remove { padding: 4px 9px; min-width: 30px; }
+.lib-row .lib-handle { display: flex; align-items: center; width: 16px; align-self: stretch; color: var(--text-faint); opacity: 0.45; cursor: grab; flex-shrink: 0; font-size: 12px; letter-spacing: -2px; user-select: none; touch-action: none; }
+.lib-row:hover .lib-handle { opacity: 0.9; }
+.lib-row.dragging { opacity: 0.4; }
+.lib-row.drop-above { box-shadow: 0 -2px 0 0 var(--accent); }
+.lib-row.drop-below { box-shadow: 0 2px 0 0 var(--accent); }
 
 /* 儲存歌單：chip 列（全部／各歌單／＋新歌單）＋ 選中歌單時的動作列。與 .segmented 同語彙但可換行、數量不定 */
 .lib-playlists { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }

@@ -1931,6 +1931,31 @@ test('showOnce、dismissed 與 critical 安全 action 只影響呈現/更新開�
   ok(!('run' in snapshot.announcements[0].actions));
 });
 
+test('notice 等級一律可關閉、且不會拿到 critical 專屬的 action', () => {
+  // notice 存在的理由就是「一定關得掉的強制彈窗」——就算發布者手滑傳 dismissible:false，
+  // 也要被忽略；也不可以像 critical 一樣夾帶 disableIncrementalUpdate 之類的動作。
+  const locked = announcementService.sanitizeAnnouncement(sampleAnnouncement({
+    id: 'notice-locked', level: 'notice', dismissible: false,
+    actions: { disableIncrementalUpdate: true },
+  }));
+  eq(locked.dismissible, true, 'notice 忽略 dismissible:false：');
+
+  announcementService._resetForTests({
+    cache: { schemaVersion: 1, fetchedAt: '2026-07-13T00:00:00Z', announcements: [locked] },
+    state: { dismissed: [], shownOnce: [], read: [] },
+  });
+  const snapshot = announcementService.getSnapshot({ now: Date.parse('2026-07-14T00:00:00+08:00'), currentVersion: '0.7.3' });
+  eq(snapshot.announcements[0].shouldPresent, true);
+  eq(Object.keys(snapshot.actions).length, 0, 'notice 不可觸發 critical 專屬的 action：');
+});
+
+test('前端把 notice 併進 critical 的強制彈窗（中性配色），critical 同時存在時優先顯示 critical', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-announcements.js'), 'utf8');
+  ok(source.includes("candidates.find((item) => item.level === 'notice')"), 'present() 要挑出 notice：');
+  ok(source.includes('const modalItem = critical || notice'), 'critical 存在時要優先於 notice：');
+  ok(source.includes("classList.toggle('is-notice'"), '要切換 is-notice 讓 CSS 換成中性配色：');
+});
+
 testAsync('來源樹 Electron shell 不讀取或套用遠端強制公告', async () => {
   const critical = announcementService.sanitizeAnnouncement(sampleAnnouncement({
     id: 'development-shell-notice', level: 'critical', dismissible: false,
@@ -8867,6 +8892,96 @@ test('儲存歌單 socket：只收媒體庫存在的 id、變更才廣播給控�
     for (const p of savedPlaylists.list()) if (!before.includes(p.id)) savedPlaylists.remove(p.id);
     savedPlaylists.saveNow();
   }
+});
+
+test('儲存歌單 setOrder：只接受既有 id 的排列，未列出的依原順序補回末端，沒變不落盤', () => {
+  const savedPlaylists = require('../server/services/saved-playlists');
+  const created = savedPlaylists.create({ name: 'order', trackIds: ['a', 'b', 'c', 'gone'] });
+  const id = created.playlist.id;
+  try {
+    let res = savedPlaylists.setOrder(id, ['c', 'a', 'b', 'stranger']);
+    ok(res.ok && res.changed);
+    eq(res.playlist.trackIds.join(','), 'c,a,b,gone', '面板看不到的 gone 要補回末端、stranger 丟掉: ');
+    res = savedPlaylists.setOrder(id, ['c', 'a', 'b']);
+    eq(res.changed, false, '同順序不可標為變更: ');
+    eq(savedPlaylists.setOrder('missing', []).error, 'not_found');
+  } finally {
+    savedPlaylists.remove(id);
+    savedPlaylists.saveNow();
+  }
+});
+
+test('savedPlaylists:load 伺服器端整份載入：音檔在的依序附加到播放清單，音檔不在的只回報、絕不自行下載', () => {
+  const registerLibraryHandlers = require('../server/routes/handlers/library');
+  const libraryStore = require('../server/services/library-store');
+  const savedPlaylists = require('../server/services/saved-playlists');
+  const { MAX_PLAYLIST_SIZE } = require('../server/utils/track-schema');
+  const originalGetEntry = libraryStore.getEntry;
+  const originalLookup = libraryStore.getAudioExistsLookup;
+  const events = new Map();
+  const rooms = [];
+  const io = { to(room) { return { emit(event, data) { rooms.push({ room, event, count: Array.isArray(data) ? data.length : null }); } }; } };
+  const socket = { id: 'sp-remote', clientType: 'remote', on(event, handler) { events.set(event, handler); }, emit() {} };
+  const playState = { playlist: [], currentTrack: null };
+  const calls = { persist: 0, setlist: 0, broadcast: 0 };
+  const entries = {
+    ready1: { id: 'ready1', title: 'Ready 1', filename: 'ready1.webm', url: 'https://youtu.be/r1', lyrics: '[00:01.00]hi', separationStatus: 'done', vocalsFile: 'ready1.vocals.wav', instrumentalFile: 'ready1.inst.wav' },
+    dl1: { id: 'dl1', title: 'Needs download', filename: 'gone.webm', url: 'https://youtu.be/d1' },
+    nourl: { id: 'nourl', title: 'Local gone', filename: 'local-gone.mp3' },
+    ready2: { id: 'ready2', title: 'Ready 2', filename: 'ready2.webm' },
+  };
+  const created = savedPlaylists.create({ name: 'load', trackIds: ['ready1', 'dl1', 'ghost', 'nourl', 'ready2'] });
+  try {
+    libraryStore.getEntry = (id) => entries[String(id)] || null;
+    libraryStore.getAudioExistsLookup = () => (name) => name === 'ready1.webm' || name === 'ready2.webm';
+    registerLibraryHandlers(io, socket, {
+      playState,
+      persistState: () => calls.persist++,
+      emitSetlist: () => calls.setlist++,
+      broadcastState: () => calls.broadcast++,
+      getPublicPlaylist: () => playState.playlist,
+      getReadOnlyPlaylist: () => playState.playlist.map((t) => ({ id: t.id })),
+    });
+    let ack = null;
+    events.get('savedPlaylists:load')({ id: created.playlist.id }, (r) => { ack = r; });
+    ok(ack.ok, '載入: ');
+    eq(ack.added, 2);
+    eq(ack.missing, 2, 'ghost（不在庫）與 nourl（無音檔也無網址）都算 missing: ');
+    eq(ack.needsDownload.length, 1);
+    eq(ack.needsDownload[0].id, 'dl1');
+    eq(ack.needsDownload[0].url, 'https://youtu.be/d1');
+    eq(playState.playlist.map((t) => t.id).join(','), 'ready1,ready2', '依歌單順序附加: ');
+    ok(playState.playlist.every((t) => t.entryId), '要有 entryId（等同 playlist:add）: ');
+    eq(playState.playlist[0].vocalsFile, 'ready1.vocals.wav', 'AI stems 欄位不可被組 track 時漏掉: ');
+    eq(playState.playlist[0].lyrics, '[00:01.00]hi');
+    ok(rooms.some((r) => r.event === 'playlist:update' && r.room === 'access:control' && r.count === 2), '控制端 playlist:update: ');
+    ok(rooms.some((r) => r.event === 'playlist:update' && r.room === 'access:read-only'), '唯讀端 playlist:update: ');
+    eq(calls.persist, 1); eq(calls.setlist, 1); eq(calls.broadcast, 1);
+
+    // 播放清單快滿時只加得下的部分
+    playState.playlist = Array.from({ length: MAX_PLAYLIST_SIZE - 1 }, (_, i) => ({ id: `fill-${i}`, title: 'x' }));
+    events.get('savedPlaylists:load')({ id: created.playlist.id }, (r) => { ack = r; });
+    eq(ack.added, 1); eq(ack.overflow, 1);
+    eq(playState.playlist.length, MAX_PLAYLIST_SIZE);
+
+    events.get('savedPlaylists:load')({ id: 'nope' }, (r) => { ack = r; });
+    eq(ack.error, 'not_found');
+  } finally {
+    libraryStore.getEntry = originalGetEntry;
+    libraryStore.getAudioExistsLookup = originalLookup;
+    savedPlaylists.remove(created.playlist.id);
+    savedPlaylists.saveNow();
+  }
+});
+
+test('手機遙控器收藏歌單：兩段式點擊載入、走伺服器端 savedPlaylists:load、不含建立／編輯入口', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'controller.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');
+  ok(html.includes('id="ctrl-collections"'), '遙控器要有收藏歌單區: ');
+  ok(js.includes("sendWithCallback('savedPlaylists:load'"), '遙控器載入必須走伺服器端整份載入: ');
+  ok(js.includes('armedCollectionId === item.id'), '要有兩段式點擊確認: ');
+  ['savedPlaylists:create', 'savedPlaylists:delete', 'savedPlaylists:rename', 'importYouTubeUrl'].forEach((needle) =>
+    ok(!js.includes(needle), `遙控器不可有 ${needle}: `));
 });
 
 test('儲存歌單 UI：面板有 chip／建立／載入入口，載入走既有逐首還原佇列，且五語翻譯鍵齊全', () => {

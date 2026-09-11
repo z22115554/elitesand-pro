@@ -178,6 +178,22 @@ function removeTracks(id, trackIds) {
   return { ok: true, removed, playlist: clone(item) };
 }
 
+/**
+ * 整份重排：只接受既有 id 的排列；不認識的 id 丟掉、漏掉的既有 id 依原順序補在末端。
+ * 面板拖曳時只看得到「還在媒體庫」的那些，已不在庫的 id 會經由這條補回去不遺失。
+ */
+function setOrder(id, trackIds) {
+  const item = playlists.find((entry) => entry.id === String(id || ''));
+  if (!item) return { ok: false, error: 'not_found' };
+  const existing = new Set(item.trackIds);
+  const ordered = cleanTrackIds(trackIds).filter((trackId) => existing.has(trackId));
+  const placed = new Set(ordered);
+  for (const trackId of item.trackIds) if (!placed.has(trackId)) ordered.push(trackId);
+  const changed = ordered.some((trackId, index) => item.trackIds[index] !== trackId);
+  if (changed) { item.trackIds = ordered; touch(item); }
+  return { ok: true, changed, playlist: clone(item) };
+}
+
 /** 媒體庫刪歌／清空後同步：把不再存在的 id 從所有歌單移除。傳 null 代表全部清掉。 */
 function pruneTrackIds(removedIds) {
   const drop = removedIds === null ? null : new Set(cleanTrackIds(removedIds));
@@ -196,7 +212,7 @@ process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { sav
 function setErrorReporter(fn) { _errorReporter = typeof fn === 'function' ? fn : null; }
 
 module.exports = {
-  list, get, create, rename, remove, addTracks, removeTracks, pruneTrackIds,
+  list, get, create, rename, remove, addTracks, removeTracks, setOrder, pruneTrackIds,
   saveNow, setErrorReporter,
   MAX_PLAYLISTS, MAX_NAME_LENGTH, MAX_TRACKS_PER_PLAYLIST,
 };

@@ -968,6 +968,87 @@
   }
 
   // ═══════════════════════════════════════════
+  // 收藏歌單：只做「載入到播放清單」。兩段式點擊（第一下選中、第二下送出）代替確認視窗。
+  // 載入走伺服器端 savedPlaylists:load：音檔在的一次附加；音檔不在的手機不能重抓（鐵則 12：
+  // YouTube 下載只能走桌面面板的匯入佇列），只提示數量。
+  // ═══════════════════════════════════════════
+  const collectionsCard = document.getElementById('ctrl-collections-card');
+  const collectionsEl = document.getElementById('ctrl-collections');
+  let collections = [];
+  let armedCollectionId = null;
+  let armedTimer = null;
+  let collectionLoading = false;
+
+  function disarmCollection() {
+    armedCollectionId = null;
+    if (armedTimer) { clearTimeout(armedTimer); armedTimer = null; }
+    renderCollections();
+  }
+
+  function renderCollections() {
+    if (!collectionsCard || !collectionsEl) return;
+    collectionsCard.hidden = collections.length === 0;
+    collectionsEl.innerHTML = '';
+    for (const item of collections) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ctrl-collection-btn' + (item.id === armedCollectionId ? ' armed' : '');
+      btn.dataset.collectionId = item.id;
+      btn.disabled = collectionLoading;
+      btn.textContent = item.id === armedCollectionId
+        ? t('controller.collectionArmed', { name: item.name })
+        : `${item.name} · ${item.trackIds.length}`;
+      collectionsEl.appendChild(btn);
+    }
+  }
+
+  function loadCollection(item) {
+    if (collectionLoading) return;
+    collectionLoading = true;
+    armedCollectionId = null;
+    if (armedTimer) { clearTimeout(armedTimer); armedTimer = null; }
+    renderCollections();
+    showToast(t('controller.collectionLoading'), 'info');
+    SocketClient.sendWithCallback('savedPlaylists:load', { id: item.id }, (res) => {
+      collectionLoading = false;
+      renderCollections();
+      if (!res?.ok) { showToast(res?.error || t('library.playlists.serverNoAck'), 'error'); return; }
+      const pending = (res.needsDownload || []).length;
+      if (!res.added && !pending) { showToast(t('controller.collectionNothing'), 'info'); return; }
+      showToast(pending
+        ? t('controller.collectionLoadedPartial', { added: res.added, pending })
+        : t('controller.collectionLoaded', { added: res.added }), pending ? 'warning' : 'success');
+      if (res.overflow) showToast(t('controller.collectionOverflow', { overflow: res.overflow }), 'warning');
+    });
+  }
+
+  if (collectionsEl) {
+    collectionsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ctrl-collection-btn');
+      if (!btn || collectionLoading) return;
+      const item = collections.find((c) => c.id === btn.dataset.collectionId);
+      if (!item) return;
+      if (armedCollectionId === item.id) { loadCollection(item); return; }
+      armedCollectionId = item.id;
+      if (armedTimer) clearTimeout(armedTimer);
+      armedTimer = setTimeout(disarmCollection, 4000);
+      renderCollections();
+    });
+    SocketClient.on('savedPlaylists:list', (list) => {
+      collections = Array.isArray(list) ? list : [];
+      if (armedCollectionId && !collections.some((c) => c.id === armedCollectionId)) armedCollectionId = null;
+      renderCollections();
+    });
+    SocketClient.on('connection-change', (connected) => {
+      if (connected) SocketClient.sendWithCallback('savedPlaylists:get', null, (list) => {
+        collections = Array.isArray(list) ? list : [];
+        renderCollections();
+      });
+    });
+    if (typeof window !== 'undefined') window.addEventListener('i18n:change', renderCollections);
+  }
+
+  // ═══════════════════════════════════════════
   // Toast 通知
   // ═══════════════════════════════════════════
 
