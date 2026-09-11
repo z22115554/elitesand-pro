@@ -26,40 +26,26 @@ const bodyWeight=()=>typo.weight||400,heroWeight=()=>Math.min(900,(typo.weight||
 const maskCache=new Map(),modelCache=new Map();let particleCount=0;
 const mix=(a,b,v)=>a+(b-a)*v;
 const hash=n=>{const v=Math.sin(n*127.1+311.7)*43758.5453;return v-Math.floor(v)};
-// 2026-09-12：從直書句流的「漂字」進場（lyric-template-columnflow.js #cf-quad-drift）
-// 視覺重現到這裡，當「逐字進場」設定裡可選的第二種風格（settings 的 particleEntrance，
-// 見 register() 與下面 settings() 讀 data.particleEntrance）——選了才會整首都用，
-// 不是混進 stream/rain/vortex/twin 的自動輪替：整字從四角（左上/右上/左下/右下）帶弧度
-// ＋輕微旋轉/模糊漂入定點、入場後完全靜止，不是逐字碎成塵粒，跟自動輪替那四種質感刻意
-// 不同。出場一律沿用既有的塵粒散開（drawMotes 的 outgoing 分支，entryKind 對不認得的
-// kind 字串本來就會落到預設散開樣式），不特別為這個進場另做退場效果。
-const QUAD_DIRS=[[-1.2,-1.0],[1.15,-1.0],[-1.1,1.1],[1.2,.95]]; // em：左上/右上/左下/右下，跟 columnflow 的 DRIFT_DIRS 相同
-const QUAD_PARAMS={calm:{dist:.6,blur:.5,rot:.35,dur:.36},normal:{dist:1,blur:1,rot:1,dur:.44},chaotic:{dist:1.55,blur:1.6,rot:1.9,dur:.50}};
-const quadEase=t=>{t=clamp(t);return 1-Math.pow(1-t,3)};
-function quadParams(){return QUAD_PARAMS[typo.intensityKey]||QUAD_PARAMS.normal}
-/** 對照 cf-quad-drift 的 0%/70%/100% 關鍵畫格：先漂入＋輕微回彈(70%)，再完全靜止(100%)。 */
-function quadDriftPose(g,time){
- const p=quadParams(),dir=QUAD_DIRS[g.index%4];
- const u=clamp((time-g.start)/Math.max(.05,p.dur));
- const qx=dir[0]*g.size*p.dist,qy=dir[1]*g.size*p.dist;
- const qr=(dir[0]>0?-7:7)*(1+(g.index%3)*.14)*p.rot;
- let x,y,rot,scale,blur;
- if(u>=1){x=0;y=0;rot=0;scale=1;blur=0}
- else if(u<=.7){const t=quadEase(u/.7);x=mix(qx,qx*-.06,t);y=mix(qy,qy*-.06,t);rot=mix(qr,0,t);scale=mix(.9,1.008,t);blur=mix(2.4*p.blur,0,t)}
- else{const t=quadEase((u-.7)/.3);x=mix(qx*-.06,0,t);y=mix(qy*-.06,0,t);rot=0;scale=mix(1.008,1,t);blur=0}
- return{x,y,rot,scale,blur,alpha:u<=0?0:Math.min(1,u/.5)};
-}
-function drawQuadDriftGlyph(g,time,color,opacity){
- const v=quadDriftPose(g,time),alpha=clamp(v.alpha*opacity);
- if(alpha<.003||!g.g.trim())return;
+// 「四相漂字」不再在 particle 內自己近似一份：直接吃 Motion Kernel 中與直書句流共用的
+// cf-quad-drift 規格。這裡只把相對位移套到 particle 已經算好的 g.x/g.y 定點，不碰版面。
+const QUAD_DRIFT=typeof LyricMotion!=='undefined'?LyricMotion.quadDrift:null;
+function drawQuadDriftGlyph(g,time,begin,color,opacity){
+ if(!QUAD_DRIFT)return false;
+ // 四相必須從 particlePhase 已經判定「可見／開始進場」的 begin 起算，而不是 g.start。
+ // 舊版用 g.start，會讓 begin→g.start 這段時間掉回 drawMotes，看起來像先粒子聚字再硬疊四相。
+ const elapsedMs=(time-begin)*1000;
+ const v=QUAD_DRIFT.pose(elapsedMs,g.index,typo.intensityKey,g.index);
+ const alpha=clamp(v.opacity*opacity);
+ if(alpha<.003||!g.g.trim())return true;
  ctx.save();
- ctx.translate(g.x+g.w*.5+v.x,g.y-g.size*.39+v.y);
- ctx.rotate(v.rot*Math.PI/180);ctx.scale(v.scale,v.scale);
- if(v.blur>.03)ctx.filter=`blur(${v.blur}px)`;
+ ctx.translate(g.x+g.w*.5+v.xEm*g.size,g.y-g.size*.39+v.yEm*g.size);
+ ctx.rotate(v.rotationDeg*Math.PI/180);ctx.scale(v.scale,v.scale);
+ if(v.blurPx>.03)ctx.filter=`blur(${v.blurPx}px)`;
  setFont(g.size,g.family,g.weight);ctx.globalAlpha=alpha;ctx.fillStyle=color;
  ctx.fillText(g.g,-g.w*.5,g.size*.39);
- if(v.blur>.03)ctx.filter='none';
+ if(v.blurPx>.03)ctx.filter='none';
  ctx.restore();
+ return true;
 }
 function setFont(size,family=font,weight=400,target=ctx){target.font=`${weight} ${size}px ${family}`;target.textBaseline='alphabetic'}
 function widthOf(gs,size,family=font,weight=400){setFont(size,family,weight);return Math.max(0,gs.reduce((sum,g)=>sum+ctx.measureText(g).width+size*.028,0)-size*.028)}
@@ -387,9 +373,14 @@ function renderLine(line,L,time,p,opacity=1){
  for(const g of ordered){
   if(!g.g.trim())continue;const state=particlePhase(g,L,time);if(!state.visible)continue;
   if(reduced||intensity<=0){const v=letterPose(g,L,time);posedGlyph(g,{...v,x:0,y:0,sx:1,sy:1},g.hero?p.a:p.ink,v.alpha*opacity*(g.hero?p.aOpacity:p.inkOpacity));continue}
-  // quaddrift 只換「進場」的畫法（整字漂入，不是塵粒）；一旦進入 leaving（唱完退場）
-  // 一律落回 drawMotes 的塵粒散開，跟其他四種進場共用同一套出場。
-  if(entryKind(g,L)==='quaddrift'&&state.entering&&!state.leaving){drawQuadDriftGlyph(g,time,g.hero?p.a:p.ink,opacity*(g.hero?p.aOpacity:p.inkOpacity));continue}
+  // quaddrift 的整個「非退場」生命週期完全繞過粒子聚字管線：
+  // state.begin 一到就由直書句流共用的四相漂字接管，動畫完成後 pose 自然停在定點。
+  // 只有唱完 leaving 才沿用風息成字原本的粒子散開退場；入場期間絕不呼叫 drawMotes。
+  if(entryKind(g,L)==='quaddrift'&&!state.leaving){
+   const color=g.hero?p.a:p.ink,alpha=opacity*(g.hero?p.aOpacity:p.inkOpacity);
+   if(!drawQuadDriftGlyph(g,time,state.begin,color,alpha))print(g,color,alpha);
+   continue;
+  }
   drawMotes(g,L,state,p,opacity);
  }
  ctx.restore();

@@ -127,7 +127,8 @@
 
   // 漂字（drift）進場：四角輪替方向 + 依動畫強度縮放的距離／模糊／旋轉／時長。
   // 純 CSS keyframe 驅動（.cf-ent-drift .cf-g.cf-on 觸發），沿用本模板「class 切換 + CSS」的作法。
-  const DRIFT_DIRS = [[-1.2, -1.0], [1.15, -1.0], [-1.1, 1.1], [1.2, 0.95]]; // 左上→右上→左下→右下（em）
+  const QUAD_DRIFT = LyricMotion.quadDrift || null;
+  const DRIFT_DIRS = QUAD_DRIFT ? QUAD_DRIFT.directions : [[-1.2, -1.0], [1.15, -1.0], [-1.1, 1.1], [1.2, 0.95]]; // 左上→右上→左下→右下（em）
   const CF_INTENSITY = ['calm', 'normal', 'chaotic'];
   let intensityApplied = '';
   function currentIntensity() {
@@ -140,6 +141,15 @@
     if (v === intensityApplied) return;
     intensityApplied = v;
     CF_INTENSITY.forEach((n) => rootEl.classList.toggle(`cf-int-${n}`, n === v));
+    // CSS 仍負責直書句流本身的動畫，但強度數值改讀 Motion Kernel 的同一份規格；
+    // particle 也讀這份規格，因此兩邊不會再各自漂出不同手感。
+    if (QUAD_DRIFT) {
+      const cfg = QUAD_DRIFT.intensity(v);
+      rootEl.style.setProperty('--cf-drift-dist', String(cfg.dist));
+      rootEl.style.setProperty('--cf-drift-blur', String(cfg.blur));
+      rootEl.style.setProperty('--cf-drift-rot', String(cfg.rot));
+      rootEl.style.setProperty('--cf-drift-dur', `${cfg.durMs}ms`);
+    }
   }
 
   function currentPlacement() {
@@ -319,11 +329,15 @@
         span.style.setProperty('--cf-entry-y', `${(0.05 + hashNoise(gSeed, 7) * 0.14).toFixed(2)}em`);
         if (isDrift) {
           // 四角輪替方向；每字自己的旋轉正負由亂數種子決定
-          const dir = DRIFT_DIRS[driftIdx % 4];
+          const driftSpec = QUAD_DRIFT ? QUAD_DRIFT.glyphSpec(driftIdx, gi) : null;
+          const dir = driftSpec ? driftSpec.direction : DRIFT_DIRS[driftIdx % 4];
           driftIdx += 1;
           span.style.setProperty('--cf-qx', `${dir[0].toFixed(2)}em`);
           span.style.setProperty('--cf-qy', `${dir[1].toFixed(2)}em`);
-          span.style.setProperty('--cf-qr', `${(dir[0] > 0 ? -7 : 7) * (1 + (gi % 3) * 0.14) >> 0}deg`);
+          const rotationDeg = driftSpec
+            ? driftSpec.rotationDeg
+            : ((dir[0] > 0 ? -7 : 7) * (1 + (gi % 3) * 0.14) >> 0);
+          span.style.setProperty('--cf-qr', `${rotationDeg}deg`);
         }
         sub.appendChild(span);
         glyphEls.push({ el: span, startMs: g.startMs });
