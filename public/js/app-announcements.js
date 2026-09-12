@@ -20,6 +20,14 @@
   const locale = () => window.I18n ? window.I18n.current() : 'zh-TW';
   let loaded = false;
 
+  // 走「強制彈窗」介面的公告等級，依顯示優先序排列（陣列前面的比較急，同時存在時優先顯示）。
+  // className 是額外疊上去的外觀 class（樣式中性、無需額外樣式就填 null）。之後要再讓一個
+  // 新等級走同一套彈窗，只需要在這裡加一筆，不用再改下面 present() 的選取／樣式邏輯。
+  const MODAL_LEVELS = [
+    { level: 'critical', className: null },
+    { level: 'notice', className: 'is-notice' },
+  ];
+
   function protectedPost(url) {
     return typeof PinAuth !== 'undefined'
       ? PinAuth.fetchWithPin(url, { method: 'POST' })
@@ -81,14 +89,17 @@
 
   function present(items) {
     const candidates = items.filter((item) => item.shouldPresent);
-    const critical = candidates.find((item) => item.level === 'critical');
-    // notice 跟 critical 共用同一個強制彈窗（樣式中性、一定可關閉，見
-    // announcement-service.js 的 sanitizeAnnouncement）；critical 是真的出事了，
-    // 兩者同時存在時優先顯示 critical。
-    const notice = candidates.find((item) => item.level === 'notice');
+    // MODAL_LEVELS 裡的等級共用同一個強制彈窗（可不可以關閉是資料驅動的
+    // announcement.dismissible，見 announcement-service.js 的 LEVEL_DISMISSIBLE_LOCK）；
+    // 陣列前面的等級優先顯示，例如 critical 是真的出事了，跟 notice 同時存在時優先顯示 critical。
+    let modalItem = null;
+    let modalClassName = null;
+    for (const entry of MODAL_LEVELS) {
+      const found = candidates.find((item) => item.level === entry.level);
+      if (found) { modalItem = found; modalClassName = entry.className; break; }
+    }
     const warning = candidates.find((item) => item.level === 'warning');
     const info = candidates.find((item) => item.level === 'info');
-    const modalItem = critical || notice;
 
     if (modalItem && criticalModal) {
       criticalTitle.textContent = modalItem.title;
@@ -96,7 +107,9 @@
       setSafeLink(criticalLink, modalItem);
       criticalClose.hidden = !modalItem.dismissible;
       criticalClose.onclick = () => dismiss(modalItem, criticalModal);
-      criticalModal.classList.toggle('is-notice', modalItem.level === 'notice');
+      MODAL_LEVELS.forEach((entry) => {
+        if (entry.className) criticalModal.classList.toggle(entry.className, entry.className === modalClassName);
+      });
       criticalModal.hidden = false;
       markSeen(modalItem);
     }

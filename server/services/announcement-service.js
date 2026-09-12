@@ -19,6 +19,10 @@ const MAX_ANNOUNCEMENTS = 100;
 // 「使用者該看一眼、但不是出事了」的長文字用；info 一閃即逝、warning 版面塞不下太多字。
 const LEVELS = new Set(['info', 'warning', 'critical', 'notice']);
 const ACTIONS = new Set(['disableIncrementalUpdate', 'showFullDownloadOnly']);
+// 哪些等級的「可不可以關閉」是被鎖死、不讓發布者自己決定的。目前只有 notice——它存在的
+// 理由就是「一定關得掉的強制彈窗」，不像 critical 可以鎖死不給關。之後要再加一個「一定
+// 可關閉」或「一定不可關閉」的等級，只需要在這裡多一筆，不用再改 sanitizeAnnouncement 本身。
+const LEVEL_DISMISSIBLE_LOCK = Object.freeze({ notice: true });
 // Development experiments can be intentionally isolated from production
 // update notices. This is opt-in only; normal and packaged launches retain
 // the official announcement service unchanged.
@@ -130,9 +134,10 @@ function sanitizeAnnouncement(input) {
     maxVersion: maxVersion || '',
     publishedAt,
     expiresAt,
-    // notice 存在的理由就是「一定關得掉的強制彈窗」；不像 critical 可以鎖死，
-    // 這裡忽略發布者傳的 dismissible，一律當作可關閉。
-    dismissible: input.level === 'notice' ? true : input.dismissible !== false,
+    // 鎖死的等級忽略發布者傳的 dismissible；沒鎖的等級才看發布者自己的設定（預設可關閉）。
+    dismissible: input.level in LEVEL_DISMISSIBLE_LOCK
+      ? LEVEL_DISMISSIBLE_LOCK[input.level]
+      : input.dismissible !== false,
     showOnce: input.showOnce === true,
     url,
     buttonText: buttonText || '',

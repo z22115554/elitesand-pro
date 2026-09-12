@@ -1951,9 +1951,13 @@ test('notice 等級一律可關閉、且不會拿到 critical 專屬的 action',
 
 test('前端把 notice 併進 critical 的強制彈窗（中性配色），critical 同時存在時優先顯示 critical', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-announcements.js'), 'utf8');
-  ok(source.includes("candidates.find((item) => item.level === 'notice')"), 'present() 要挑出 notice：');
-  ok(source.includes('const modalItem = critical || notice'), 'critical 存在時要優先於 notice：');
-  ok(source.includes("classList.toggle('is-notice'"), '要切換 is-notice 讓 CSS 換成中性配色：');
+  // 2026-09-12 重構：critical/notice 的選取與優先序改成走 MODAL_LEVELS 表（陣列順序＝優先序），
+  // 不再是寫死的 `critical || notice` 兩層判斷，之後加新等級只需要多一筆表項。
+  ok(source.includes("{ level: 'critical', className: null }") && source.includes("{ level: 'notice', className: 'is-notice' }"),
+    'MODAL_LEVELS 要含 critical（無額外樣式）跟 notice（is-notice）兩筆，且 critical 排在前面（優先顯示）：');
+  ok(source.includes('for (const entry of MODAL_LEVELS)') && source.includes("candidates.find((item) => item.level === entry.level)"),
+    'present() 要依 MODAL_LEVELS 表挑出對應等級的候選公告：');
+  ok(source.includes("entry.className === modalClassName"), '要依表項的 className 切換對應的中性配色 class（如 is-notice）：');
 });
 
 testAsync('來源樹 Electron shell 不讀取或套用遠端強制公告', async () => {
@@ -5633,7 +5637,7 @@ testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡�
         querySelector() { return null; },
         addEventListener() {},
       },
-      SharedUtils: { escapeHtml: (value) => String(value), safeHttpUrl: () => null },
+      SharedUtils: { escapeHtml: (value) => String(value), safeHttpUrl: () => null, attachRowDragReorder: () => {} },
       ErrorHandler: { showToast(message, type) { timeline.push(`toast:${type}:${message}`); } },
       SocketClient: {
         sendWithCallback(event, data, callback) {
@@ -9709,9 +9713,14 @@ test('直書句流「漂字」進場：四相漂入 + 動畫強度（取代原�
     'columnflowVariant 只能有 sen／fuda 兩個外觀: ');
   ok(cf.includes("ENTRANCES = ['native', 'drift']") && cf.includes("classList.toggle('cf-ent-drift'"),
     '逐字進場必須是獨立的 columnflowEntrance（cf-ent-drift class）: ');
-  ok(cf.includes('DRIFT_DIRS') && /DRIFT_DIRS\[\w+ % 4\]/.test(cf) && cf.includes('--cf-qx') && cf.includes('--cf-qy')
-    && cf.includes("currentEntrance() === 'drift'"),
-    '漂字必須四角輪替方向、逐字寫入 --cf-qx/--cf-qy，且由 columnflowEntrance 判斷: ');
+  // 2026-09-12 重構：四角方向不再由 columnflow 自己另外準備一份 DRIFT_DIRS 備援陣列
+  // （會跟 kernel 的同一份規格重複、有走鐘風險），改成 QUAD_DRIFT 不存在時 currentEntrance()
+  // 直接安全退回 native，isDrift 為真時保證 QUAD_DRIFT.glyphSpec() 可用。
+  ok(cf.includes('const QUAD_DRIFT = LyricMotion.quadDrift') && !cf.includes('DRIFT_DIRS')
+    && cf.includes("if (value === 'drift' && !QUAD_DRIFT) return 'native';")
+    && cf.includes('QUAD_DRIFT.glyphSpec(driftIdx, gi)') && cf.includes('--cf-qx') && cf.includes('--cf-qy')
+    && cf.includes("isDrift = currentEntrance() === 'drift'"),
+    '漂字必須靠共用的 LyricMotion.quadDrift 算四角方向（不可另外重複硬寫一份備援陣列）、逐字寫入 --cf-qx/--cf-qy，且由 columnflowEntrance 判斷: ');
   ok(displayCss.includes('@keyframes cf-quad-drift')
     && /#columnflow-root\.cf-ent-drift \.cf-g\.cf-on\s*\{[^}]*animation:\s*cf-quad-drift/.test(cssFlat),
     '漂字進場必須是純 CSS 的 cf-quad-drift keyframe，選擇器要用 cf-ent-drift（不綁外觀 class，sen／fuda 都能套）: ');

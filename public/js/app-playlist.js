@@ -202,50 +202,14 @@
 
   // ── 拖曳排序（HTML5 Drag & Drop）──
   // 只有從左側把手（.pi-handle）按下去才允許拖曳，避免與「點整列載入歌曲」互相干擾。
-  let dragFromIndex = -1;
-  let dragArmed = false;
-  dom.playlist.addEventListener('pointerdown', (e) => { dragArmed = !selectionMode && !!e.target.closest('.pi-handle'); });
-  dom.playlist.addEventListener('dragstart', (e) => {
-    const item = e.target.closest('.playlist-item');
-    if (!item || selectionMode || !dragArmed) { e.preventDefault(); return; }
-    dragFromIndex = parseInt(item.dataset.index, 10);
-    item.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    try { e.dataTransfer.setData('text/plain', String(dragFromIndex)); } catch (_) {}
-  });
-  function clearDropMarkers() {
-    dom.playlist.querySelectorAll('.drop-above, .drop-below').forEach((n) => n.classList.remove('drop-above', 'drop-below'));
-  }
-  dom.playlist.addEventListener('dragover', (e) => {
-    if (dragFromIndex < 0) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const item = e.target.closest('.playlist-item');
-    clearDropMarkers();
-    if (!item || item.classList.contains('dragging')) return;
-    const rect = item.getBoundingClientRect();
-    const before = e.clientY < rect.top + rect.height / 2;
-    item.classList.add(before ? 'drop-above' : 'drop-below');
-  });
-  dom.playlist.addEventListener('drop', (e) => {
-    if (dragFromIndex < 0) return;
-    e.preventDefault();
-    const item = e.target.closest('.playlist-item');
-    let to;
-    if (item) {
-      const rect = item.getBoundingClientRect();
-      const before = e.clientY < rect.top + rect.height / 2;
-      to = parseInt(item.dataset.index, 10) + (before ? 0 : 1);
-    } else {
-      to = state.playlist.length; // 拖到清單空白處＝移到最後
-    }
-    moveTrack(dragFromIndex, to);
-  });
-  dom.playlist.addEventListener('dragend', () => {
-    dragFromIndex = -1;
-    dragArmed = false;
-    clearDropMarkers();
-    dom.playlist.querySelectorAll('.dragging').forEach((n) => n.classList.remove('dragging'));
+  // 機制本身跟收藏歌單（media-library.js）共用 SharedUtils.attachRowDragReorder，
+  // 這裡只提供「這個模板長怎樣」跟「算出 from/to 之後怎麼套用」。
+  SharedUtils.attachRowDragReorder({
+    listEl: dom.playlist,
+    rowSelector: '.playlist-item',
+    handleSelector: '.pi-handle',
+    canReorder: () => !selectionMode,
+    onDrop: (from, to) => moveTrack(from, to),
   });
 
   // 把第 from 首移到「插入點 to」（to 為移除前的插入索引），並同步正在播放的索引與其他端

@@ -9,6 +9,10 @@ const savedPlaylists = require('../../services/saved-playlists');
 const mediaStorage = require('../../services/media-storage');
 const { emitToControlClients, emitToAccessRooms } = require('../../utils/socket-broadcast');
 const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds } = require('../../utils/track-schema');
+const { applyCommunityOffsetSuggestion } = require('./playlist');
+const { createLogger } = require('../../utils/logger');
+
+const log = createLogger('Socket');
 
 /**
  * 從媒體庫紀錄組出可直接加入播放清單的 track（含記憶的歌詞/拼音/變調/AI stems）。
@@ -220,6 +224,13 @@ function registerLibraryHandlers(io, socket, ctx) {
       persistState();
     }
     reply(ack, { ok: true, added: added.length, overflow, needsDownload, missing, total: playlist.trackIds.length });
+    // 跟 playlist:add／playlist:insert-next 同一套：新加進即時播放清單的歌，本機還沒有
+    // 校正記憶時去問一次社群建議偏移值。漏掉這步的話，同一首歌從收藏歌單載入會拿不到
+    // 別人已經校正過的歌詞偏移，跟從搜尋加入的體驗不一致。
+    added.forEach((track) => {
+      applyCommunityOffsetSuggestion(ctx, io, track)
+        .catch((error) => log.warn(`歌詞偏移建議值套用失敗：${error.message}`));
+    });
   });
 }
 

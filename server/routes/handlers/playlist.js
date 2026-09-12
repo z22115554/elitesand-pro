@@ -317,3 +317,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
 }
 
 module.exports = registerPlaylistHandlers;
+// 供其他 handler（如 library.js 的 savedPlaylists:load）重用：任何把新歌加進即時
+// playState.playlist 的路徑，都該套上同一份「有社群偏移建議就自動帶入」邏輯，
+// 不要各自重寫一份 push/broadcast/persist 而漏掉這一步。
+module.exports.applyCommunityOffsetSuggestion = applyCommunityOffsetSuggestion;
