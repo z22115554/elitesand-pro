@@ -190,7 +190,9 @@
           <span class="nav-label" data-i18n="nav.twitch">Twitch 點歌</span>
           <span id="twitch-nav-badge" class="pi-badge" hidden>0</span>
         </button>
-        <button class="nav-item" data-nav="sections" type="button" title="段落設計" data-i18n-title="nav.sections">
+        <!-- 2026-09-12 先收起來：段落資料只有一首手動測試曲，對真實使用者的歌完全沒作用，
+             正式使用者不該看到。要重新開放時比照 nav.js 開頭註解的既有慣例，拿掉這個 hidden 即可。 -->
+        <button class="nav-item" data-nav="sections" type="button" title="段落設計" data-i18n-title="nav.sections" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="10" height="4" rx="1"/></svg>
           <span class="nav-label" data-i18n="nav.sections">段落設計</span>
           <span class="pi-badge" data-i18n="sections.experimentalBadge">實驗性</span>
