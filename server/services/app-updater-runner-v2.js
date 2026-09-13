@@ -15,7 +15,11 @@ const { spawn } = require('child_process');
 
 const UPDATE_MODE = 'electron-asar-v1';
 const PROTECTED_UPDATER_RUNTIME = 'resources/tools/updater-node.exe';
-const FILE_LOCK_RETRY_MS = 10000;
+// Windows Defender / OBS browser processes can keep app.asar or the executable
+// open for longer than a few seconds after Electron begins shutting down. The
+// updater already fails closed; give transient locks a realistic bounded grace
+// period instead of turning a clean handoff into an unnecessary rollback.
+const FILE_LOCK_RETRY_MS = 30000;
 const FILE_LOCK_RETRY_INTERVAL_MS = 100;
 const RETRYABLE_FILE_CODES = new Set(['EACCES', 'EPERM', 'EBUSY']);
 
@@ -217,8 +221,26 @@ function isProcessAlive(pid) {
 async function waitForExit(pid, timeoutMs) {
   const started = Date.now();
   while (isProcessAlive(pid)) {
-    if (Date.now() - started > timeoutMs) throw new Error('Timed out waiting for the Electron host to exit; update was not installed.');
+    if (Date.now() - started > timeoutMs) throw new Error('Timed out waiting for an Elitesand Pro process to exit; update was not installed.');
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/**
+ * The updater is spawned by the Node server, not by the Electron host directly.
+ * Waiting only for ELITESAND_HOST_PID leaves a short race where the server still
+ * has app resources/logs open while replacement starts. In the real detached
+ * runner, process.ppid is that launching server PID. Tests/imported callers pass
+ * launcherPid=0 so they preserve the old deterministic behavior.
+ */
+async function waitForUpdateOwnersToExit(plan, { launcherPid = 0, waitForExitImpl = waitForExit } = {}) {
+  const timeoutMs = Number(plan.waitTimeoutMs) || 600000;
+  const hostPid = Number(plan.parentPid);
+  await waitForExitImpl(hostPid, timeoutMs);
+
+  const serverPid = Number(launcherPid);
+  if (Number.isInteger(serverPid) && serverPid > 0 && serverPid !== hostPid && serverPid !== process.pid) {
+    await waitForExitImpl(serverPid, timeoutMs);
   }
 }
 
@@ -335,12 +357,13 @@ async function applyStagedUpdate(plan, options = {}) {
   }
 }
 
-async function runFromPlanFile(planPath) {
+async function runFromPlanFile(planPath, options = {}) {
   const plan = validatePlan(JSON.parse(fs.readFileSync(planPath, 'utf8')));
-  appendLog(plan.logFile, `Updater-v2 ready; waiting for Electron host PID ${plan.parentPid}.`);
+  const launcherPid = Number(options.launcherPid || (require.main === module ? process.ppid : 0));
+  appendLog(plan.logFile, `Updater-v2 ready; waiting for Electron host PID ${plan.parentPid}${launcherPid > 0 ? ` and server PID ${launcherPid}` : ''}.`);
   fs.writeFileSync(plan.readyFile, String(process.pid), 'ascii');
-  await waitForExit(Number(plan.parentPid), Number(plan.waitTimeoutMs) || 600000);
-  appendLog(plan.logFile, 'Electron host fully exited; re-verifying immutable runtime.');
+  await waitForUpdateOwnersToExit(plan, { launcherPid });
+  appendLog(plan.logFile, 'Electron host and launching server fully exited; re-verifying immutable runtime.');
   const runtimeCheck = verifyImmutableRuntime(plan);
   if (!runtimeCheck.ok) {
     appendLog(plan.logFile, `Runtime baseline changed after handoff: ${runtimeCheck.reason}; update aborted.`);
@@ -372,6 +395,7 @@ module.exports = {
   verifyImmutableRuntime,
   validatePlan,
   waitForExit,
+  waitForUpdateOwnersToExit,
   withFileLockRetry,
   backupFiles,
   installFiles,
