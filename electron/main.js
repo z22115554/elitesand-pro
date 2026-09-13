@@ -45,7 +45,8 @@ if (updateBlocked) {
   app.exit(0);
 } else {
   const { BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, powerSaveBlocker, ipcMain } = electron;
-  const { createElectronShell } = require('./shell');
+  const { createElectronShell, probeHealth } = require('./shell');
+  const { createRecoveringHealthProbe } = require('./port-occupancy-recovery');
 
   const projectRoot = isPackaged
     ? app.getAppPath()
@@ -114,6 +115,18 @@ if (updateBlocked) {
     },
   };
 
+  // shell.start() acquires Electron's single-instance lock before it probes the
+  // server port. Once that lock is ours, another healthy desktop host cannot be
+  // the owner of a packaged Elitesand utility process. If an old crash/update left
+  // that utility process behind and it is still holding port 3000 without serving
+  // a valid health response, recover only that exact signed/product executable.
+  // Development node.exe processes and unrelated applications are never killed.
+  const recoveringHealthProbe = createRecoveringHealthProbe({
+    baseProbe: probeHealth,
+    isPackaged,
+    currentExecutablePath: app.getPath('exe'),
+  });
+
   const desktop = createElectronShell({
     app,
     BrowserWindow,
@@ -129,6 +142,7 @@ if (updateBlocked) {
     projectRoot,
     shellRoot,
     packagedResourceIntegrity,
+    probeHealthImpl: recoveringHealthProbe,
   });
 
   desktop.start().catch((error) => {
