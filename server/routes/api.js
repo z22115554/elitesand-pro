@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const { sanitizeTrack } = require('../utils/track-schema');
 const { getLanIp } = require('../utils/lan-info');
 const ytdlpUpdater = require('../services/ytdlp-updater');
+const obsLauncher = require('../services/obs-launcher');
 const announcements = require('../services/announcement-service');
 const eulaStore = require('../services/eula-store');
 const QRCode = require('qrcode');
@@ -229,7 +230,17 @@ function stickerListPayload() {
 
 // ─── 健康檢查 ───
 router.get('/health', (req, res) => {
+  // OBS 啟動頁（data/obs-sources/*.html）以 file:// 來源探測本機 port，瀏覽器送的 Origin 是
+  // null，必須放行 CORS 才讀得到回應。health 只有狀態／版本／時間戳，沒有任何機密或副作用。
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', 'no-store');
   res.json({ status: 'ok', version: APP_VERSION, timestamp: Date.now() });
+});
+
+// OBS 啟動頁的實體路徑：面板「拖到 OBS」與「複製路徑」用。只回路徑，不回內容。
+router.get('/obs-launcher', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(obsLauncher.describe({ port: req.socket?.localPort }));
 });
 
 router.get('/system-check', async (req, res) => {

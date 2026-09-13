@@ -1193,6 +1193,21 @@ function createElectronShell({
       });
     }
     if (ipcMain?.on) {
+      // OBS 啟動頁拖放（🔬 原型）：renderer 在 dragstart 裡 preventDefault 後叫這條，
+      // 主程序用 startDrag 把 data/obs-sources 的實體 HTML 檔拖出去，丟進 OBS 就是一個
+      // 「本機檔案」瀏覽器來源。kind 只認兩個固定值，檔名由主程序決定，renderer 不能指定路徑。
+      ipcMain.on('elitesand:obs-launcher-drag', (event, kind) => {
+        if (event?.sender !== window.webContents) return;
+        const file = kind === 'setlist' ? 'Elitesand-Pro-Setlist.html' : kind === 'lyrics' ? 'Elitesand-Pro-Lyrics.html' : null;
+        if (!file) return;
+        const target = path.join(getRuntimePaths(app.getPath('userData')).dataDir, 'obs-sources', file);
+        if (!fsImpl.existsSync(target)) return;
+        try {
+          event.sender.startDrag({ file: target, icon: nativeImage.createFromPath(path.join(projectRoot, 'public', 'img', 'logo-icon.png')) });
+        } catch (error) {
+          console.warn('[Elitesand Pro Electron] OBS launcher drag failed:', error?.message || error);
+        }
+      });
       ipcMain.on('elitesand:close-decision', (event, action) => {
         if (event?.sender !== window.webContents || !isCloseDecisionPending) return;
         if (action === 'cancel') {

@@ -63,6 +63,10 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
   // WebGPU 人聲分離引擎（實驗性）：設定頁開關切換時呼叫，讓隱藏視窗立刻反映新狀態，
   // 不用重啟整個 App。設定本身的持久化走既有 HTTP（/api/webgpu-separation/settings），
   // 這裡只負責讓 Electron 主程序知道「現在要不要讓那個隱藏視窗活著」。
+  // OBS 啟動頁拖放：只送固定 kind，路徑由主程序決定。
+  startObsLauncherDrag(kind) {
+    if (kind === 'lyrics' || kind === 'setlist') ipcRenderer.send('elitesand:obs-launcher-drag', kind);
+  },
   webgpuEngine: Object.freeze({
     setEnabled(enabled) { return ipcRenderer.invoke('elitesand:webgpu-engine-toggle', !!enabled); },
   }),

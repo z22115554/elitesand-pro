@@ -1429,6 +1429,16 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .lib-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 .lib-actions .lib-remove { padding: 4px 9px; }
 .lib-actions .lib-playlist-add, .lib-actions .lib-playlist-remove { padding: 4px 9px; min-width: 30px; }
+
+/* OBS 啟動頁（🔬）：可拖的方塊，拖進 OBS 建來源 */
+.obs-launcher { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.obs-launcher-chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 10px; }
+.obs-launcher-chip { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: var(--r-md); border: 1px dashed var(--border-strong); background: var(--bg-raised); color: var(--text); font-size: 13px; font-weight: 600; cursor: grab; user-select: none; transition: border-color 0.12s, background 0.12s; }
+.obs-launcher-chip svg { width: 16px; height: 16px; color: var(--text-dim); }
+.obs-launcher-chip:hover { border-color: var(--accent); background: var(--bg-hover); }
+.obs-launcher-chip:active, .obs-launcher-chip.dragging { cursor: grabbing; border-style: solid; border-color: var(--accent); }
+.obs-launcher-paths { display: flex; flex-direction: column; gap: 6px; }
+.obs-launcher-paths .url-field code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .lib-row .lib-handle { display: flex; align-items: center; width: 16px; align-self: stretch; color: var(--text-faint); opacity: 0.45; cursor: grab; flex-shrink: 0; font-size: 12px; letter-spacing: -2px; user-select: none; touch-action: none; }
 .lib-row:hover .lib-handle { opacity: 0.9; }
 .lib-row.dragging { opacity: 0.4; }

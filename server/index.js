@@ -567,6 +567,11 @@ server.listen(PORT, '0.0.0.0', () => {
   log.info(`║  OBS 歌詞: http://localhost:${PORT}/display    ║`);
   log.info(`║  OBS 歌單: http://localhost:${PORT}/setlist    ║`);
   ytdlpCompatibility.scheduleProbe();
+  // OBS 啟動頁：把「目前實際聽的 port」寫進 data/obs-sources/*.html，OBS 端從此不綁 port。
+  try {
+    const launchers = require('./services/obs-launcher').writeLaunchers({ port: server.address()?.port || PORT });
+    log.info(`OBS 啟動頁已就緒: ${launchers.dir}`);
+  } catch (error) { log.warn(`OBS 啟動頁產檔失敗：${error.message}`); }
   // 上一輪更新（若有）留在安裝目錄的結果標記檔，讀到就當場消費掉：可攜版／
   // 開發環境沒有 ELITESAND_INSTALL_ROOT 會直接跳過，不影響一般啟動。
   try { consumeUpdateResultMarker(); } catch (error) { log.warn(`更新結果標記讀取失敗：${error.message}`); }

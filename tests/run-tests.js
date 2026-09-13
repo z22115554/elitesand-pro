@@ -8206,6 +8206,22 @@ test('HTTP 安全回歸：標頭存在、版本標頭隱藏、過大 JSON 回 41
         const large = await request({ host: '127.0.0.1', port, path: '/api/auth/verify', method: 'POST',
           headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, body);
         if (large.statusCode !== 413) process.exitCode = 3;
+        // OBS 啟動頁（file:// 來源、Origin: null）要能讀 /api/health → 必須有 CORS 放行；
+        // 其他 API 不可跟著開（隨便挑一個唯讀端點驗證沒有 * 標頭）。
+        if (health.headers['access-control-allow-origin'] !== '*') process.exitCode = 10;
+        const lanInfo = await request({ host: '127.0.0.1', port, path: '/api/lan-info' });
+        if (lanInfo.headers['access-control-allow-origin']) process.exitCode = 11;
+        // 伺服器 listen 後必須把啟動頁寫到 data/obs-sources，且 /api/obs-launcher 回的路徑要真的存在
+        const launcherRes = await new Promise((resolve, reject) => {
+          http.get({ host: '127.0.0.1', port, path: '/api/obs-launcher' }, (res) => {
+            let raw = ''; res.on('data', (c) => { raw += c; }); res.on('end', () => resolve({ status: res.statusCode, body: raw }));
+          }).on('error', reject);
+        });
+        const launcher = JSON.parse(launcherRes.body);
+        const fs = require('fs');
+        if (launcherRes.status !== 200 || !fs.existsSync(launcher.files.lyrics) || !fs.existsSync(launcher.files.setlist)) process.exitCode = 12;
+        const lyricsHtml = fs.readFileSync(launcher.files.lyrics, 'utf8');
+        if (!lyricsHtml.includes('"/display"') || !lyricsHtml.includes('[' + port + ',') || !lyricsHtml.includes('/api/health')) process.exitCode = 13;
       } catch (_) { process.exitCode = 4; }
       server.close(() => process.exit(process.exitCode || 0));
     });
@@ -8215,6 +8231,55 @@ test('HTTP 安全回歸：標頭存在、版本標頭隱藏、過大 JSON 回 41
   });
   ok(!result.error || result.error.code !== 'ETIMEDOUT', 'HTTP 安全測試不應逾時: ');
   eq(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
+test('OBS 啟動頁（🔬）：透明、無可見內容、port 清單以目前 port 開頭、產檔原子且冪等', () => {
+  const launcher = require('../server/services/obs-launcher');
+  const html = launcher.buildLauncherHtml({ kind: 'lyrics', port: 3456 });
+  ok(html.includes('background:transparent!important'), '疊加層底色必須透明（鐵則 11）: ');
+  ok(!/<(div|p|h1|span|img)\b/i.test(html), '啟動頁不可有任何可見元素: ');
+  ok(!/<(script|link)[^>]+src=/i.test(html), '啟動頁不可引用外部資源，file:// 下要自足: ');
+  eq(launcher.candidatePortsFor(3456)[0], 3456, '產檔當下的 port 要排第一: ');
+  ok(launcher.candidatePortsFor(3000).length === launcher.CANDIDATE_PORTS.length, '預設 port 不可重複列: ');
+  ok(html.includes('window.location.replace(') && html.includes('window.location.search'), '要保留 OBS 端的查詢字串: ');
+  ok(html.includes("body.status === 'ok'"), '只認 Elitesand 的 health 回應: ');
+  eq(launcher.buildLauncherHtml({ kind: 'setlist', port: 1 }).includes('"/setlist"'), true);
+  let threw = false;
+  try { launcher.buildLauncherHtml({ kind: 'panel', port: 1 }); } catch (_) { threw = true; }
+  ok(threw, '不認識的 kind 必須拒絕: ');
+
+  const writes = [];
+  const store = new Map();
+  const fsImpl = {
+    mkdirSync() {},
+    readFileSync(file) { if (!store.has(file)) { const e = new Error('ENOENT'); e.code = 'ENOENT'; throw e; } return store.get(file); },
+    writeFileSync(file, content) { writes.push(file); store.set(file, content); },
+    renameSync(from, to) { store.set(to, store.get(from)); store.delete(from); },
+  };
+  const first = launcher.writeLaunchers({ port: 3456, fsImpl });
+  eq(Object.keys(first.files).length, 2);
+  ok(writes.every((file) => file.endsWith('.tmp')), '必須先寫 .tmp 再 rename（原子）: ');
+  const before = writes.length;
+  launcher.writeLaunchers({ port: 3456, fsImpl });
+  eq(writes.length, before, '內容相同不可重寫: ');
+  launcher.writeLaunchers({ port: 3457, fsImpl });
+  ok(writes.length > before, 'port 變了要更新檔案: ');
+});
+
+test('OBS 啟動頁拖放（🔬）：面板可拖方塊、桌面殼只認固定 kind 且檢查 sender、瀏覽器退回拖 URL', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-obs-launcher.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'electron', 'preload.js'), 'utf8');
+  const shell = fs.readFileSync(path.join(__dirname, '..', 'electron', 'shell.js'), 'utf8');
+  ok(html.includes('data-launcher="lyrics"') && html.includes('data-launcher="setlist"') && html.includes('draggable="true"'), '面板要有兩個可拖方塊: ');
+  ok(html.includes('/js/app-obs-launcher.js'), '面板要載入 app-obs-launcher.js: ');
+  ok(ui.includes("event.dataTransfer.setData('text/uri-list'"), '瀏覽器環境要退回拖 URL: ');
+  ok(ui.includes('event.preventDefault();') && ui.includes('shell.startObsLauncherDrag(kind)'), '桌面版要取消 HTML5 drag 改走 startDrag: ');
+  ok(preload.includes("if (kind === 'lyrics' || kind === 'setlist') ipcRenderer.send('elitesand:obs-launcher-drag', kind);"), 'preload 只放行兩個固定 kind: ');
+  const handler = shell.slice(shell.indexOf("ipcMain.on('elitesand:obs-launcher-drag'"));
+  ok(handler.includes('if (event?.sender !== window.webContents) return;'), '主程序必須檢查 IPC 來源: ');
+  ok(handler.includes("kind === 'setlist' ? 'Elitesand-Pro-Setlist.html' : kind === 'lyrics' ? 'Elitesand-Pro-Lyrics.html' : null"), '路徑由主程序決定，renderer 不可指定: ');
+  ok(handler.includes('event.sender.startDrag({ file: target'), '要用 startDrag 拖實體檔: ');
 });
 
 console.log('\n📦 12. YouTube 單次流程、翻唱辨識與佇列');
