@@ -27,7 +27,7 @@ const crypto = require('crypto');
 const https = require('https');
 const { Transform } = require('stream');
 const { pipeline } = require('stream/promises');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const AdmZip = require('adm-zip');
 const { dataDir } = require('../utils/app-paths');
 const config = require('../utils/load-config');
@@ -682,6 +682,128 @@ function resetForTests() {
   };
 }
 
+function createImportCancelledError() {
+  const error = new Error('匯入已取消');
+  error.name = 'ImportCancelledError';
+  error.code = 'IMPORT_CANCELLED';
+  return error;
+}
+
+function isIllegalByteSequenceError(error) {
+  return /illegal byte sequence/i.test(String(error?.message || error || ''));
+}
+
+/**
+ * Windows 上少數 FFmpeg build 仍會在含 CJK／特殊空白的路徑上回 EILSEQ，即使 Node
+ * 傳入的是正確 Unicode 路徑。這條 fallback 完全不把檔案路徑交給 FFmpeg：Node 用
+ * Unicode-safe fs 讀原檔送 stdin，FFmpeg 從 pipe:0 解碼並把 MP3 寫到 pipe:1，再由
+ * Node 寫回原目錄。只在一般路徑轉碼明確回 Illegal byte sequence 時啟用。
+ */
+function transcodeMp3ThroughPipes(inputPath, signal = null, {
+  spawnImpl = spawn,
+  timeoutMs = 300000,
+} = {}) {
+  if (signal?.aborted) return Promise.reject(createImportCancelledError());
+  const outputPath = path.join(path.dirname(inputPath), `${path.basename(inputPath, path.extname(inputPath))}.mp3`);
+  safeRemove(outputPath);
+
+  return new Promise((resolve, reject) => {
+    const child = spawnImpl(getFfmpegPath(), [
+      '-y', '-i', 'pipe:0', '-vn', '-codec:a', 'libmp3lame', '-b:a', '192k', '-f', 'mp3', 'pipe:1',
+    ], {
+      env: process.env,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const input = fs.createReadStream(inputPath);
+    const output = fs.createWriteStream(outputPath, { flags: 'w' });
+    let stderr = '';
+    let childClosed = false;
+    let childCode = null;
+    let outputFinished = false;
+    let settled = false;
+
+    const cleanupListeners = () => {
+      signal?.removeEventListener('abort', onAbort);
+      clearTimeout(timer);
+    };
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanupListeners();
+      try { input.destroy(); } catch (_) {}
+      try { output.destroy(); } catch (_) {}
+      try { child.kill(); } catch (_) {}
+      safeRemove(outputPath);
+      reject(error);
+    };
+    const maybeResolve = () => {
+      if (settled || !childClosed || !outputFinished) return;
+      if (signal?.aborted) return fail(createImportCancelledError());
+      if (childCode !== 0 || !fs.existsSync(outputPath)) {
+        return fail(new Error(`FFmpeg pipe 轉碼失敗: ${stderr.trim().split('\n').pop() || childCode}`));
+      }
+      settled = true;
+      cleanupListeners();
+      try { fs.unlinkSync(inputPath); } catch (_) { /* 轉碼成功優先，清理 best effort */ }
+      resolve(outputPath);
+    };
+    const onAbort = () => fail(createImportCancelledError());
+    const timer = setTimeout(() => fail(new Error('FFmpeg pipe 轉碼逾時')), timeoutMs);
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+    child.stderr.on('data', (chunk) => { stderr = (stderr + chunk.toString()).slice(-10 * 1024 * 1024); });
+    child.on('error', (error) => fail(error));
+    child.on('close', (code) => {
+      childClosed = true;
+      childCode = code;
+      maybeResolve();
+    });
+    input.on('error', (error) => fail(error));
+    output.on('error', (error) => fail(error));
+    output.on('finish', () => {
+      outputFinished = true;
+      maybeResolve();
+    });
+    // FFmpeg 失敗先關 stdin 時，readStream.pipe 可能產生 EPIPE；真正原因會從
+    // child close + stderr 回報，不要讓未處理的 stream error 讓 server 崩潰。
+    child.stdin.on('error', (error) => {
+      if (error?.code !== 'EPIPE') fail(error);
+    });
+
+    input.pipe(child.stdin);
+    child.stdout.pipe(output);
+  });
+}
+
+function installAudioProcessorUnicodePathFallback() {
+  // ffmpeg-provider 是 audio-processor 的相依；同步 require 回去會撞循環模組。
+  // 排到目前 require stack 結束後再包 static method，server 開始接 request 前一定完成。
+  queueMicrotask(() => {
+    try {
+      const AudioProcessor = require('./audio-processor');
+      if (!AudioProcessor || AudioProcessor.__unicodePathFallbackInstalled) return;
+      const originalConvert = AudioProcessor.convertToMp3;
+      if (typeof originalConvert !== 'function') return;
+
+      AudioProcessor.convertToMp3 = async function convertToMp3WithUnicodeFallback(inputPath, signal = null) {
+        try {
+          return await originalConvert.call(this, inputPath, signal);
+        } catch (error) {
+          if (!isIllegalByteSequenceError(error)) throw error;
+          log.warn(`FFmpeg 無法直接開啟路徑，改用 pipe fallback：${path.basename(inputPath)}`);
+          return transcodeMp3ThroughPipes(inputPath, signal);
+        }
+      };
+      Object.defineProperty(AudioProcessor, '__unicodePathFallbackInstalled', { value: true, configurable: false });
+    } catch (error) {
+      log.warn(`安裝 FFmpeg Unicode 路徑 fallback 失敗：${error.message}`);
+    }
+  });
+}
+
+installAudioProcessorUnicodePathFallback();
+
 module.exports = {
   resolveFfmpegPaths,
   getFfmpegPath,
@@ -697,6 +819,9 @@ module.exports = {
   findFfmpegEntries,
   getDownloadStatus,
   parseExpectedHash,
+  isIllegalByteSequenceError,
+  transcodeMp3ThroughPipes,
+  installAudioProcessorUnicodePathFallback,
   DOWNLOAD_SOURCES,
   DOWNLOAD_URL,
   BIN_DIR,
