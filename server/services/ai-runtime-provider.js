@@ -93,6 +93,31 @@ function safeRemove(targetPath) {
   } catch (_) { /* 本來就不存在或刪除失敗都當作 best effort，忽略 */ }
 }
 
+/**
+ * audio-separator 的模型下載不是我們自己控制的原子寫入；網路中斷時可能留下同名的
+ * 半成品，下一次 --download_model_only 又把「檔案已存在」當成完成，形成永久卡在 77%
+ * 的狀態。正式模型未達最低合理大小時一律視為不可用並刪除；同時清掉常見暫存尾碼，
+ * 讓下一次下載一定從乾淨狀態開始。完整模型絕不碰。
+ */
+function cleanupInvalidPrimaryModel() {
+  let removed = false;
+  try {
+    const stat = fs.statSync(MODEL_FILE);
+    if (!stat.isFile() || stat.size < MODEL_MIN_BYTES) {
+      safeRemove(MODEL_FILE);
+      removed = true;
+    }
+  } catch (_) { /* 沒有正式模型 */ }
+
+  for (const suffix of ['.part', '.tmp', '.download', '.crdownload']) {
+    const candidate = `${MODEL_FILE}${suffix}`;
+    if (!fs.existsSync(candidate)) continue;
+    safeRemove(candidate);
+    removed = true;
+  }
+  return removed;
+}
+
 // ─── 以下 fetchToBuffer/fetchToFile 跟 ffmpeg-provider.js 是同一套邏輯，
 // 兩邊都是自成一體的模組（不是共用 library），照專案慣例各自持有一份 ───
 
@@ -459,27 +484,40 @@ async function downloadPrimaryModel({ runPythonStepImpl = runPythonStep, onOutpu
   if (!isAvailable()) throw new Error('AI 分離 Python 元件尚未安裝。');
   if (isModelAvailable()) return { ok: true, alreadyAvailable: true, modelFile: MODEL_FILE };
   fs.mkdirSync(MODEL_DIR, { recursive: true });
+  const removedPartial = cleanupInvalidPrimaryModel();
+  if (removedPartial) log.warn('偵測到未完成的主分離模型，已清理後重新下載。');
   setDownloadStatus({ active: true, stage: 'primary-model', step: 'model-download', detail: MODEL_FILENAME, downloadedBytes: 0, totalBytes: MODEL_MIN_BYTES, error: null });
   onProgress?.(getDownloadStatus());
-  await runPythonStepImpl([
-    '-c', 'from audio_separator.utils.cli import main; main()',
-    '--model_file_dir', MODEL_DIR,
-    '--download_model_only',
-    '-m', MODEL_FILENAME,
-  ], {
-    cwd: RUNTIME_DIR,
-    pythonExe: PYTHON_EXE,
-    timeoutMs: 30 * 60 * 1000,
-    onOutput: (text) => {
-      onOutput?.(text);
-      const p = parseToolProgress(text);
-      if (Object.keys(p).length) {
-        setDownloadStatus({ active: true, stage: 'primary-model', step: 'model-download', detail: MODEL_FILENAME, error: null, ...p });
-        onProgress?.(getDownloadStatus());
-      }
-    },
-  });
-  if (!isModelAvailable()) throw new Error('主分離模型下載完成後仍找不到有效檔案。');
+  try {
+    await runPythonStepImpl([
+      '-c', 'from audio_separator.utils.cli import main; main()',
+      '--model_file_dir', MODEL_DIR,
+      '--download_model_only',
+      '-m', MODEL_FILENAME,
+    ], {
+      cwd: RUNTIME_DIR,
+      pythonExe: PYTHON_EXE,
+      timeoutMs: 30 * 60 * 1000,
+      onOutput: (text) => {
+        onOutput?.(text);
+        const p = parseToolProgress(text);
+        if (Object.keys(p).length) {
+          setDownloadStatus({ active: true, stage: 'primary-model', step: 'model-download', detail: MODEL_FILENAME, error: null, ...p });
+          onProgress?.(getDownloadStatus());
+        }
+      },
+    });
+  } catch (error) {
+    cleanupInvalidPrimaryModel();
+    setDownloadStatus({ active: false, stage: 'error', error: error.message });
+    throw error;
+  }
+  if (!isModelAvailable()) {
+    cleanupInvalidPrimaryModel();
+    const error = new Error('主分離模型下載完成後仍找不到有效檔案；已清除未完成檔案，可直接重新下載。');
+    setDownloadStatus({ active: false, stage: 'error', error: error.message });
+    throw error;
+  }
   return { ok: true, alreadyAvailable: false, modelFile: MODEL_FILE };
 }
 
@@ -493,6 +531,7 @@ module.exports = {
   isModelAvailable,
   downloadRuntime,
   downloadPrimaryModel,
+  cleanupInvalidPrimaryModel,
   getDownloadStatus,
   parseToolProgress,
   enableSitePackages,
@@ -505,6 +544,7 @@ module.exports = {
   MODEL_DIR,
   MODEL_FILENAME,
   MODEL_FILE,
+  MODEL_MIN_BYTES,
   PYTHON_EMBED_URL,
   PYTHON_EMBED_SHA256,
   REQUIRED_DISK_BYTES,
