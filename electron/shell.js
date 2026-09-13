@@ -823,6 +823,9 @@ function createElectronShell({
       // asar，所以那份腳本跟 yt-dlp 一樣放 resources/tools/ 下。server 是 fork 出去的
       // 子行程，算不出 resourcesPath，這裡直接把目錄交給它。
       ...(packagedTools ? { ELITESAND_AI_SCRIPT_DIR: path.join(packagedTools, 'ai') } : {}),
+      // 日文諧音 v2 的 Haqumei 是 installer 隨附的獨立 Python runtime；打包版不可
+      // 回退到使用者 PATH 上的 Python，否則不同機器會出現「有 sidecar、沒套件」的假可用。
+      ...(packagedTools ? { ELITESAND_G2P_PYTHON: path.join(packagedTools, 'g2p', 'python.exe') } : {}),
     };
   }
 

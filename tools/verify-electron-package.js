@@ -61,9 +61,20 @@ async function verify(unpackedRoot) {
   // The AI separation sidecar is launched by python.exe, which cannot read anything
   // inside app.asar. It ships as a real file under resources/tools/ (integrity-hashed
   // like yt-dlp), and must not also linger inside the archive as a decoy copy.
-  for (const script of ['supervisor.py', 'worker.py']) {
+  for (const script of ['supervisor.py', 'worker.py', 'haqumei_sidecar.py']) {
     if (!fs.existsSync(path.join(resources, 'tools', 'ai', script))) {
       throw new Error(`resources/tools/ai/${script} is missing; packaged AI separation cannot start.`);
+    }
+  }
+  for (const relative of [
+    'tools/g2p/python.exe',
+    'tools/g2p/python311.dll',
+    'tools/g2p/python311.zip',
+    'tools/g2p/python311._pth',
+    'tools/g2p/Lib/site-packages/haqumei/haqumei.pyd',
+  ]) {
+    if (!fs.existsSync(path.join(resources, ...relative.split('/')))) {
+      throw new Error(`${relative} is missing; bundled Japanese G2P cannot start.`);
     }
   }
   if (files.some((file) => file.endsWith('.py'))) {

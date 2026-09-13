@@ -9,12 +9,10 @@
  *
  * 鐵則 #3：spawn 一律帶 PYTHONUTF8，避免中文/日文在管線裡變亂碼。
  *
- * **這支 provider 目前只負責「跟 sidecar 講話」，不負責 sidecar 本身怎麼來**
- * （bundle 進 installer 還是像 FFmpeg／AI 分離一樣按需下載，是還沒做的
- * Phase 2 打包決策——haqumei 的 Python wheel 含內嵌辭典，實測安裝後約 51MB，
- * 比照 FFmpeg／AI 模型的「按需下載」慣例，不建議塞進基礎安裝檔逼所有使用者
- * 都下載）。`pythonExecutable` 開發環境預設吃系統 `python`，正式環境應該
- * 由呼叫端指到專用的 embeddable runtime，跟 AI 分離的 runtime 分開管理。
+ * Installer 會隨附獨立的 Python embeddable + Haqumei wheel（內嵌辭典），並由
+ * Electron shell 以 ELITESAND_G2P_PYTHON 指定它；這支 provider 仍只負責跟
+ * sidecar 講話。開發／Node 模式沒有這份發行 runtime 時，才回到環境變數或
+ * PATH 上的 `python`，方便離線單元測試與本機開發。
  */
 const { spawn } = require('child_process');
 const fs = require('fs');

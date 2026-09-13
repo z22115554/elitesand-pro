@@ -187,6 +187,14 @@ Reset-PackagedRuntimeData
 $LicensesDir = Join-Path $Stage "licenses"
 New-Item -ItemType Directory -Force -Path $LicensesDir | Out-Null
 
+# 日文諧音 v2 需要 Haqumei 的內嵌辭典；不能把責任丟給使用者的系統 Python。
+# 這個 runtime 只供 G2P 使用，與 GB 級的 AI 分離 Python runtime 分開，並在
+# installer build 時一併搬到 resources/tools/g2p。來源與 wheel 會先驗 SHA-256。
+& (Join-Path $PSScriptRoot "prepare-haqumei-runtime.ps1") `
+  -OutputRoot (Join-Path $Stage "runtime\g2p") `
+  -LicenseOutput (Join-Path $LicensesDir "haqumei")
+if ($LASTEXITCODE -ne 0) { throw "Haqumei runtime staging failed; portable build stopped." }
+
 # Nunito 字體的 OFL.txt 已經跟著 public/fonts/ 一起被複製進 app-root（滿足 OFL 授權要求
 # 「授權文字要跟字體放在一起」），這裡在 licenses/ 底下再放一份方便集中查閱。
 $NunitoLicenseSource = Join-Path $Root "public\fonts\OFL.txt"
@@ -383,6 +391,7 @@ cd /d "%~dp0app"
 set "PATH=%~dp0tools;%PATH%"
 set "PORT=3000"
 set "OPEN_BROWSER=1"
+set "ELITESAND_G2P_PYTHON=%~dp0runtime\g2p\python.exe"
 
 echo.
 echo ============================================================
@@ -457,6 +466,7 @@ $Readme = @"
 【注意事項】
 - 不需要安裝 Node.js、不需要打任何指令，所有東西都已內附。
 - 防毒軟體詢問時，請允許「Start Elitesand Pro.cmd」與 node.exe 執行。
+- 日文諧音 v2 使用的 Haqumei 與獨立 Python runtime 已內附，不需要另外安裝 Python。
 - yt-dlp 已內附；FFmpeg：$FfmpegStatusZh。
 - 歌曲、快取與設定存在 app\data、app\downloads、app\logs。
 - 如果 3000 埠被占用，先關掉占用的程式再重新啟動。
@@ -491,6 +501,7 @@ $Readme = @"
 [Notes]
 - You do NOT need to install Node.js or run any commands. Everything is included.
 - If your antivirus asks, allow "Start Elitesand Pro.cmd" / node.exe to run.
+- Japanese xieyin v2 includes its Haqumei engine and dedicated Python runtime; no separate Python installation is required.
 - yt-dlp is bundled; FFmpeg is $FfmpegStatusEn.
 - Songs, cache, and settings are saved inside app\data, app\downloads, app\logs.
 - If port 3000 is already in use, close the other app first, then try again.

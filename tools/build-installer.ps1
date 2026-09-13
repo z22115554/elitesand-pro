@@ -260,6 +260,16 @@ try {
   }
   Copy-Item -LiteralPath $AiSidecarSource -Destination (Join-Path $Resources "tools\ai") -Recurse -Force
 
+  # Japanese xieyin v2 uses the bundled Haqumei runtime instead of the user's
+  # system Python. Keep it outside app.asar so python.exe can load the native
+  # wheel and its embedded dictionary; the resource-integrity manifest covers
+  # every file under resources/tools.
+  $HaqumeiRuntimeSource = Join-Path $PortableStage "runtime\g2p"
+  if (-not (Test-Path -LiteralPath (Join-Path $HaqumeiRuntimeSource "python.exe"))) {
+    throw "Portable staging is missing runtime\g2p\python.exe; bundled Japanese G2P cannot start."
+  }
+  Copy-Item -LiteralPath $HaqumeiRuntimeSource -Destination (Join-Path $Resources "tools\g2p") -Recurse -Force
+
   # A dedicated Node runtime executes updater-v2 outside the Electron process.
   # It is integrity-protected as a resources/tools file and remains immutable
   # across incremental updates; changing it forces the next full Installer.
@@ -370,7 +380,7 @@ try {
 
   $UnpackedRoot = Join-Path $InstallerOutput "win-unpacked"
   $UnpackedResources = Join-Path $InstallerOutput "win-unpacked\resources"
-  foreach ($required in @("app.asar", "tools\yt-dlp.exe", "tools\updater-node.exe", "tools\ai\supervisor.py", "tools\ai\worker.py")) {
+  foreach ($required in @("app.asar", "tools\yt-dlp.exe", "tools\updater-node.exe", "tools\ai\supervisor.py", "tools\ai\worker.py", "tools\ai\haqumei_sidecar.py", "tools\g2p\python.exe", "tools\g2p\python311.dll", "tools\g2p\python311.zip", "tools\g2p\python311._pth", "tools\g2p\Lib\site-packages\haqumei\haqumei.pyd")) {
     if (-not (Test-Path -LiteralPath (Join-Path $UnpackedResources $required))) {
       throw "Installer output is missing $required; the built installer would be broken on user machines."
     }

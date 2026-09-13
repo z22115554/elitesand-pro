@@ -5,22 +5,18 @@
  * 「G2P helper 異常時自動 fallback」的前提是 provider 要能明確回報壞掉，
  * 而不是讓呼叫端無限期卡住）。
  *
- * 不含真的呼叫 haqumei 的整合測試：haqumei 尚未被打包進本專案任何一個
- * runtime（見 japanese-g2p-provider.js 開頭註解，這是還沒做的 Phase 2
- * 打包決策），npm test 維持離線、不假設開發機裝了額外的 Python 套件。
- * 2026-09-13 已用一支獨立 venv 手動驗證過 ai/haqumei_sidecar.py 的 NDJSON
- * 協定本身可以正常運作（見該次 session 紀錄），這裡只鎖「sidecar 不存在時
- * provider 的行為」這個正式環境一定會先踩到的路徑。
+ * npm test 維持離線，不假設開發機裝了額外的 Python 套件；installer build
+ * 另由 prepare-haqumei-runtime.ps1 下載固定雜湊的 Python／Haqumei，並在建置
+ * 階段做真實 import probe。這裡鎖 provider 的失敗與環境變數路徑行為。
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { JapaneseG2PProvider } = require('../server/services/japanese-g2p-provider');
 
-test('haqumei 套件未安裝時（目前所有環境都是如此——尚未打包/佈署），start() 明確拋出 ENGINE_UNAVAILABLE，不是無聲卡住', async () => {
-  // 這是本專案現在唯一會踩到的失敗模式：ai/haqumei_sidecar.py 本身一定存在
-  // （checked into repo），但系統 python 沒有裝 haqumei（Phase 2 打包決策
-  // 還沒做）。sidecar 會 import 失敗、送出 {ready:false,...} 後 exit(1)——
+test('haqumei 套件未安裝時，start() 明確拋出 ENGINE_UNAVAILABLE，不是無聲卡住', async () => {
+  // 開發模式仍可能只有 ai/haqumei_sidecar.py 而沒有系統 haqumei。sidecar
+  // 會 import 失敗、送出 {ready:false,...} 後 exit(1)——
   // provider 必須把這個狀態轉成明確的 rejected promise，呼叫端才有辦法照
   // 計畫書 Phase 5 的規矩 fallback 回舊版，而不是永遠等一個不會來的回應。
   const provider = new JapaneseG2PProvider('python');
@@ -28,6 +24,18 @@ test('haqumei 套件未安裝時（目前所有環境都是如此——尚未打
     assert.equal(err.code, 'ENGINE_UNAVAILABLE');
     return true;
   });
+});
+
+test('installer 提供的 ELITESAND_G2P_PYTHON 會優先於系統 python', () => {
+  const original = process.env.ELITESAND_G2P_PYTHON;
+  process.env.ELITESAND_G2P_PYTHON = 'C:\\Program Files\\Elitesand Pro\\resources\\tools\\g2p\\python.exe';
+  try {
+    const provider = new JapaneseG2PProvider();
+    assert.equal(provider.pythonExecutable, process.env.ELITESAND_G2P_PYTHON);
+  } finally {
+    if (original === undefined) delete process.env.ELITESAND_G2P_PYTHON;
+    else process.env.ELITESAND_G2P_PYTHON = original;
+  }
 });
 
 test('resolveScriptDir 對指向錯誤目錄的環境變數會安全退回專案內建路徑', () => {

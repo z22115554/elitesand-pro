@@ -10449,7 +10449,7 @@ test('Electron assisted installer stays per-user with an integrity-protected ASA
   ['app.isPackaged', "path.join(processObject.resourcesPath || process.resourcesPath, 'tools')", 'verifyPackagedResourceIntegrity',
     'showPortableDataMigrationNotice',
     'function needsPortableDataMigrationNotice', 'shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice()',
-    "Object.keys(processObject.env).find((key) => key.toUpperCase() === 'PATH')"].forEach((required) =>
+    "Object.keys(processObject.env).find((key) => key.toUpperCase() === 'PATH')", 'ELITESAND_G2P_PYTHON'].forEach((required) =>
     ok(shellSource.includes(required), `Electron packed runtime is missing ${required}`));
   const mainSource = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.js'), 'utf8');
   ok(mainSource.includes('app.getAppPath()'), 'Electron main must resolve the packaged app from app.asar');
@@ -12847,6 +12847,7 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
     const portable = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-portable.ps1'), 'utf8');
     const installer = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');
     const verify = fs.readFileSync(path.join(__dirname, '..', 'tools', 'verify-electron-package.js'), 'utf8');
+    const haqumeiBuild = fs.readFileSync(path.join(__dirname, '..', 'tools', 'prepare-haqumei-runtime.ps1'), 'utf8');
     const builderFiles = require('../package.json').build.files;
 
     ok(/\$DirsToCopy = @\("server", "public", "ai"\)/.test(portable), 'portable staging 要複製 ai/（2026-08-30 打包版就是漏了它）：');
@@ -12855,6 +12856,13 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
     ok(builderFiles.includes('!ai/**'), 'ai/ 不可進 app.asar，避免出現 python 讀不到的假路徑：');
     ok(/resources\/tools\/ai\/\$\{script\}/.test(verify) || /tools', 'ai', script/.test(verify), '打包驗證要確認 sidecar 真的在 resources/tools/ai：');
     ok(/file\.endsWith\('\.py'\)/.test(verify), '打包驗證要擋住 .py 又被塞回 app.asar：');
+    ok(/prepare-haqumei-runtime\.ps1/.test(portable), 'portable staging 必須建立隨附的 Haqumei runtime：');
+    ok(/runtime\\g2p/.test(portable) && /ELITESAND_G2P_PYTHON/.test(portable), 'portable launcher 必須指向隨附的 Haqumei Python：');
+    ok(/runtime\\g2p/.test(installer) && /tools\\g2p/.test(installer), 'installer 必須把 Haqumei runtime 搬到 resources/tools/g2p：');
+    ok(/haqumei_sidecar\.py/.test(installer) && /haqumei_sidecar\.py/.test(verify), 'installer 驗證必須包含日文 G2P sidecar：');
+    ok(/python311\.dll/.test(installer) && /haqumei\\haqumei\.pyd/.test(installer), 'installer 必須包含獨立 Python 與 Haqumei native wheel：');
+    ok(/python311\.dll/.test(verify) && /haqumei\.pyd/.test(verify), '打包驗證必須檢查 Haqumei runtime 核心檔案：');
+    ok(/HaqumeiSha256/.test(haqumeiBuild) && /PythonSha256/.test(haqumeiBuild), 'Haqumei 與 Python 來源必須固定 SHA-256：');
   });
 
   test('AI 分離：Python 引擎起不來時要收成明確失敗，不可謊稱「改用 CPU」', () => {
