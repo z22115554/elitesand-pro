@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "provider": "haqumei",
+  "providerVersion": "0.12.0",
+  "expectedStatus": "provisional-maintainer-candidate",
+  "purpose": "Phase 1 corpus for Japanese phoneme-to-zh-TW xieyin A/B review",
+  "cases": [
+    { "id": "basic-konnichiwa", "text": "こんにちは", "tags": ["basic", "particle"], "expectedKana": "コンニチワ", "expectedXieyin": "摳恩尼七哇" },
+    { "id": "particle-wa", "text": "今日は晴れです", "tags": ["kanji", "particle", "long-vowel"], "expectedKana": "キョーワハレデス", "expectedXieyin": "ki唷－哇哈勒爹斯" },
+    { "id": "particle-e", "text": "学校へ行く", "tags": ["kanji", "particle", "geminate", "long-vowel"], "expectedKana": "ガッコーエイク", "expectedXieyin": "嘎‧摳－欸伊庫" },
+    { "id": "particle-o", "text": "音楽を聴く", "tags": ["kanji", "particle", "nasal"], "expectedKana": "オンガクヲキク", "expectedXieyin": "歐嗯嘎庫歐ki庫" },
+    { "id": "geminate-gakkou", "text": "がっこう", "tags": ["basic", "geminate", "long-vowel"], "expectedKana": "ガッコー", "expectedXieyin": "嘎‧摳－" },
+    { "id": "geminate-chotto", "text": "ちょっと", "tags": ["geminate", "palatalized"], "expectedKana": "チョット", "expectedXieyin": "秋‧托" },
+    { "id": "long-vowel-oneesan", "text": "おねえさん", "tags": ["long-vowel", "nasal"], "expectedKana": "オネーサン", "expectedXieyin": "歐內－撒恩" },
+    { "id": "long-vowel-koohii", "text": "コーヒー", "tags": ["katakana", "long-vowel"], "expectedKana": "コーヒー", "expectedXieyin": "摳－希－" },
+    { "id": "nasal-bilabial", "text": "さんぽ", "tags": ["nasal"], "expectedKana": "サンポ", "expectedXieyin": "撒姆坡" },
+    { "id": "nasal-velar", "text": "げんき", "tags": ["nasal"], "expectedKana": "ゲンキ", "expectedXieyin": "葛嗯ki" },
+    { "id": "palatalized-kyou", "text": "きょう", "tags": ["palatalized", "long-vowel"], "expectedKana": "キョー", "expectedXieyin": "ki唷－" },
+    { "id": "foreign-love-you", "text": "ラブユー", "tags": ["katakana", "foreign"], "expectedKana": "ラブユー", "expectedXieyin": "啦布尤－" },
+    { "id": "foreign-v-violin", "text": "ヴァイオリン", "tags": ["katakana", "foreign", "nasal"], "expectedKana": "ヴァイオリン", "expectedXieyin": "哇伊歐理恩" },
+    { "id": "word-boundary-vowel", "text": "明日また会おう", "tags": ["kanji", "word-boundary", "long-vowel"], "expectedKana": "アシタマタアオー", "expectedXieyin": "阿西塔媽塔阿歐－" },
+    { "id": "word-boundary-no", "text": "君との思い出", "tags": ["kanji", "word-boundary", "long-vowel"], "expectedKana": "キミトノオモイデ", "expectedXieyin": "ki咪托諾歐摸伊爹" },
+    { "id": "foreign-tea-time", "text": "ティータイム", "tags": ["katakana", "foreign", "long-vowel"], "expectedKana": "ティータイム", "expectedXieyin": "提－塔伊姆" },
+    { "id": "foreign-fashion", "text": "ファッション", "tags": ["katakana", "foreign", "geminate", "nasal"], "expectedKana": "ファッション", "expectedXieyin": "法‧休恩" },
+    { "id": "punctuation", "text": "こんにちは！", "tags": ["punctuation"], "expectedKana": "コンニチワ！", "expectedXieyin": "摳恩尼七哇" },
+    { "id": "mixed-english", "text": "Hello world", "tags": ["mixed-english", "safety-gate"], "expectedKana": "ハローワールド", "expectedXieyin": null, "notes": "Production must preserve the English line instead of applying Japanese xieyin." },
+    { "id": "numeric", "text": "123", "tags": ["numeric", "safety-gate"], "expectedKana": "ヒャクニジューサン", "expectedXieyin": null, "notes": "Production must not treat a numeric-only line as Japanese xieyin." }
+  ]
+}

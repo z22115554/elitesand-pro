@@ -89,11 +89,48 @@ test('pau 停頓不會在開頭／結尾殘留標點，連續 pau 收斂成一�
   assert.equal(out, '阿，伊');
 });
 
+test('Haqumei 的 sp／標點 token 只當停頓，不會原樣污染諧音', () => {
+  assert.equal(phonemesToXieyinV2(['k', 'o', 'sp', 'N', 'n', 'i', '!']), '摳，恩尼');
+  assert.equal(phonemesToXieyinV2(['k', 'o', '！']), '摳');
+});
+
 test('groupIntoMorae：促音只影響緊接著的下一個輔音，不會漏標或多標', () => {
   const morae = groupIntoMorae(['a', 'cl', 't', 'a']);
   assert.equal(morae.length, 2);
   assert.equal(morae[0].geminate, false);
   assert.equal(morae[1].geminate, true);
+});
+
+test('詞界誤判成長音的迴歸測試：「明日また会おう」不能吞掉會的あ', () => {
+  // 2026-09-13 benchmark 實測抓到的真 bug：また 的た跟 会 的あ 剛好同母音，
+  // 純看「前後母音是否相同」會把兩個詞黏成一個長音、吃掉一整個音節。
+  // 修法是吃 g2p_prosody() 的 # 詞界標記，不是只吃 g2p() 的扁平陣列。
+  const prosody = ['^', 'a', '[', 'sh', 'I', 't', 'a', '#', 'm', 'a', '[', 't', 'a', '#', 'a', '[', 'o', ']', 'o', '$'];
+  const out = phonemesToXieyinV2(prosody);
+  assert.equal(out, '阿西塔媽塔阿歐－');
+});
+
+test('# 詞界不影響同一個詞內部真正的長音（きょう、コーヒー 這類）', () => {
+  const kyou = phonemesToXieyinV2(['^', 'ky', 'o', ']', 'o', '$']);
+  assert.equal(kyou, 'ki唷－');
+  const kohi = phonemesToXieyinV2(['^', 'k', 'o', '[', 'o', 'h', 'i', ']', 'i', '$']);
+  assert.equal(kohi, '摳－希－');
+});
+
+test('_ 次要韻律邊界不會原樣滲進輸出（逗號位置常見）', () => {
+  const out = phonemesToXieyinV2(['^', 'n', 'e', ']', 'e', '_', 'k', 'i', '[', 'i', 't', 'e', '$']);
+  assert.ok(!out.includes('_'), '_ 標記必須被濾掉，不能出現在最終諧音字串裡');
+});
+
+test('{ } 外來語標記不會原樣滲進輸出（ラブユー 這類）', () => {
+  const out = phonemesToXieyinV2(['^', '{', 'r', 'a', '[', 'b', 'u', ']', 'y', 'u', 'u', '}', '$']);
+  assert.ok(!out.includes('{') && !out.includes('}'), '{ } 標記必須被濾掉');
+});
+
+test('plain g2p() 陣列（沒有任何 prosody 標記）行為完全不變，向下相容', () => {
+  // annotateBoundaries 對沒有標記的輸入必須是 no-op，舊呼叫方式、舊測資都不該壞。
+  const out = phonemesToXieyinV2(['g', 'a', 'cl', 'k', 'o', 'o']);
+  assert.equal(out, '嘎‧摳－');
 });
 
 test('moraicNasalChar：邊界情況（undefined = 字尾ん）落在預設組', () => {

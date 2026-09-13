@@ -61,7 +61,12 @@ def main():
             results = []
             for text in texts:
                 results.append({
-                    "phonemes": engine.g2p(str(text)),
+                    # g2p_prosody（不是 g2p）：xieyin-v2-mapper.js 需要它夾帶的
+                    # #（詞界）標記才能分辨「同一個詞內部的長音」跟「兩個詞
+                    # 邊界剛好同母音」——只用 g2p() 的扁平陣列會把後者也誤判
+                    # 成長音，吞掉一個音節（2026-09-13 benchmark 實測到的
+                    # 案例：「明日また会おう」）。
+                    "phonemes": engine.g2p_prosody(str(text)),
                     "kana": engine.g2k(str(text)),
                 })
             _emit({"id": req_id, "results": results})

@@ -31,6 +31,7 @@ const registerSetlistHandlers = require('./handlers/setlist');
 const registerObsLocaleHandlers = require('./handlers/obs-locale');
 const obsLocaleUtil = require('../utils/obs-locale');
 const registerTwitchHandlers = require('./handlers/twitch');
+const registerPublicRequestHandlers = require('./handlers/public-request');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
@@ -176,6 +177,8 @@ module.exports = function socketHandler(io, {
   // 保持 Twitch service 不依賴 Socket.io 的細節，方便離線時完全不啟動它。
   let twitchService = null;
   let lastTwitchStreamEventId = null;
+  // 公開點歌頁中繼服務同樣在 index.js 建立（需要這裡的控制面板 bridge），建立後注入。
+  let songRequestRelayService = null;
 
   function getClientCounts() {
     // /display 的指紋必須隨目前 public/ 內容重算；固定 server 啟動當下的值會讓
@@ -284,6 +287,41 @@ module.exports = function socketHandler(io, {
       }
     }
     return false;
+  }
+
+  /** 跟 dispatchTwitchSongRequest 同一套 bounce 邏輯：只交給桌面控制面板決定要不要核准。 */
+  function dispatchPublicSongRequest(request) {
+    for (const id of [...clients.controllers].reverse()) {
+      const target = io.sockets.sockets.get(id);
+      if (target && target.connected) {
+        target.emit('public-request:new', request);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function syncPublicRequests(socket) {
+    if (socket && socket.clientType === 'controller' && songRequestRelayService) {
+      socket.emit('public-request:list', songRequestRelayService.getPendingRequests());
+      socket.emit('public-request:status', songRequestRelayService.getStatus());
+    }
+  }
+
+  function broadcastPublicRequests() {
+    if (!songRequestRelayService) return;
+    const requests = songRequestRelayService.getPendingRequests();
+    for (const id of clients.controllers) {
+      const target = io.sockets.sockets.get(id);
+      if (target && target.connected) target.emit('public-request:list', requests);
+    }
+  }
+
+  function broadcastPublicRequestStatus(status) {
+    for (const id of clients.controllers) {
+      const target = io.sockets.sockets.get(id);
+      if (target && target.connected) target.emit('public-request:status', status);
+    }
   }
 
   function syncTwitchRequests(socket) {
@@ -428,6 +466,7 @@ module.exports = function socketHandler(io, {
         if (startupAlert) socket.emit('server:alert', startupAlert);
       }
       syncTwitchRequests(socket);
+      syncPublicRequests(socket);
       const c = getClientCounts();
       emitClientCounts();
       log.info(`${socket.id} 註冊為 ${type} (controllers: ${c.controllers}, displays: ${c.displays}, remotes: ${c.remotes}, setlists: ${c.setlists})`);
@@ -497,11 +536,17 @@ module.exports = function socketHandler(io, {
     if (!socket.readOnly) {
       registerPlaybackHandlers(io, socket, ctx);
       registerLyricsHandlers(io, socket, ctx);
-      registerPlaylistHandlers(io, socket, ctx);
-      registerLibraryHandlers(io, socket, ctx);
+      registerPlaylistHandlers(io, socket, ctx, {
+        onPlaylistChanged: () => songRequestRelayService?.notifyCatalogMayHaveChanged(),
+      });
+      registerLibraryHandlers(io, socket, ctx, {
+        onSavedPlaylistsChanged: () => songRequestRelayService?.notifyCatalogMayHaveChanged(),
+        onLibraryChanged: () => songRequestRelayService?.notifyCatalogMayHaveChanged(),
+      });
       registerSetlistHandlers(io, socket, ctx);
       registerObsLocaleHandlers(io, socket, ctx);
       registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });
+      registerPublicRequestHandlers(io, socket, ctx, { getRelayService: () => songRequestRelayService });
     }
 
     // ─── 斷線處理 ───
@@ -562,6 +607,14 @@ module.exports = function socketHandler(io, {
     recordTwitchStatus(status) {
       runtimeEvidence.recordTwitchStatus(status);
       emitClientCounts();
+    },
+    dispatchPublicSongRequest,
+    broadcastPublicRequests,
+    setSongRequestRelayService(service) {
+      songRequestRelayService = service;
+    },
+    recordPublicRequestStatus(status) {
+      broadcastPublicRequestStatus(status);
     },
   };
 };

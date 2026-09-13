@@ -14,6 +14,7 @@
 
   const { formatTime, escapeHtml } = SharedUtils;
   const { dom } = AppShared;
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
 
   // ─── 初始化 Socket ───
   SocketClient.init('controller');
@@ -352,7 +353,7 @@
 
   function renderLyricsPreview(lrcText) {
     if (!lrcText) {
-      dom.lyricsPreview.innerHTML = '<div class="lyric-preview-empty">此歌曲無歌詞</div>';
+      dom.lyricsPreview.innerHTML = `<div class="lyric-preview-empty">${escapeHtml(t('prompter.noLyrics'))}</div>`;
       return;
     }
 

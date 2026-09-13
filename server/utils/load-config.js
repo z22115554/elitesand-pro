@@ -56,6 +56,12 @@ const DEFAULTS = {
   // 的 defaultState()；同意 EULA 條款七之 8 即取得揭露後的同意。
   lyricOffsetEndpoint: 'https://elitesand-pro-lyric-offset.elitesand.workers.dev/api/v1/offset',
   lyricOffsetSyncEnabled: true,
+
+  // 公開點歌頁中繼（Cloudflare Worker + Durable Object）。空字串＝完全停用，零外連。
+  // 預設允許面板開關啟用這項功能，但只有使用者在面板打開「公開點歌頁」後才會建立連線；
+  // 若想完全關掉這個功能、不讓面板建立外連，可在 server/config.js 設為 false。
+  songRequestRelayUrl: 'https://elitesand-pro-song-request.elitesand.workers.dev',
+  songRequestRelayEnabled: true,
 };
 
 function tryRequire(modulePath) {

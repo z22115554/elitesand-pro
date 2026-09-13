@@ -103,23 +103,75 @@ function normalizePhoneme(t) {
   return t;
 }
 
+// g2p_prosody() 會在音素之間插入這些標記：
+//   ^ / $  句首／句尾
+//   [ / ]  音調上升／下降（在同一個長音內部也會出現，跟母音是否重複無關）
+//   #      accent phrase（大致等於詞界）邊界
+//   _      次要韻律短語邊界（實測會出現在逗號的位置，比 # 弱一階）
+//   { / }  標記外來語／片假名詞的範圍（跟音調一樣純粹是詞源標記）
+//
+// 這一段是 2026-09-13 benchmark 抓到的真實 bug 的修正：只看「前後母音是否
+// 相同」來判斷長音，會把「また」的た跟緊接著「会おう」的あ（兩個詞邊界
+// 剛好都是 a）誤判成同一個長音，吞掉一整個音節（實測：「明日また会おう」
+// 少算了「あ」；同一批 benchmark 也測到「君との思い出」的の／お邊界是同一
+// 類問題）。用 g2p() 的扁平陣列做不到這個判斷——那個 API 完全不帶詞界資訊。
+// g2p_prosody() 的 # 標記正是缺的那塊：同一個詞內部的長音（きょう、
+// おかあさん、とおい、コーヒー）prosody 輸出裡兩個母音之間只有 [ ]，跨詞的
+// 情況（また＋あ）中間一定有 #。規則：# / _ / ^ / $ 之後的下一個母音永遠起
+// 新 mora，不管它跟前一個 mora 的母音是否相同；[ ] { } 純粹是標記，直接濾掉，
+// 不影響邊界判斷（也是 benchmark 實測到的：「ラブユー」整個詞被 { } 包住，
+// 沒濾掉的話會原樣滲進諧音輸出）。
+const ACCENT_MARKS = new Set(['[', ']', '{', '}']);
+const BOUNDARY_MARKS = new Set(['^', '#', '_', '$']);
+// Haqumei 會把空白／換行與部分標點保留成獨立 token。它們不是可轉成
+// 中文諧音的音素：句中視為停頓，句首／句尾最後由收斂邏輯移除。若漏掉
+// `sp`，英文混合句會把字面 "sp" 洩漏到顯示；若漏掉 `!`，標點也會污染
+// xieyin 欄位。
+const PAUSE_PHONEMES = new Set([
+  'pau', 'sil', 'sp', 'br',
+  ',', '.', '!', '?', ';', ':', '、', '。', '！', '？', '；', '：', '…', '〜', '~',
+]);
+
+/**
+ * 把 g2p_prosody() 風格的 token 陣列（可能夾雜 accent/boundary 標記）攤平成
+ * 「純音素 + 這個音素前面是否緊跟著一個詞界」的清單。輸入若是 g2p()
+ * 那種沒有任何標記的扁平陣列，這一步等同 no-op（boundaryBefore 全部是
+ * false），所以舊測資、舊呼叫方式不受影響。
+ *
+ * @param {string[]} tokens
+ * @returns {Array<{phoneme:string, boundaryBefore:boolean}>}
+ */
+function annotateBoundaries(tokens) {
+  const out = [];
+  let boundaryPending = false;
+  for (const raw of tokens) {
+    if (ACCENT_MARKS.has(raw)) continue;
+    if (BOUNDARY_MARKS.has(raw)) { boundaryPending = true; continue; }
+    out.push({ phoneme: normalizePhoneme(raw), boundaryBefore: boundaryPending });
+    boundaryPending = false;
+  }
+  return out;
+}
+
 function groupIntoMorae(phonemes) {
+  const items = annotateBoundaries(phonemes);
   const morae = [];
   let geminatePending = false;
   let i = 0;
-  while (i < phonemes.length) {
-    const t = normalizePhoneme(phonemes[i]);
-    if (t === 'pau' || t === 'sil') { morae.push({ type: 'pause' }); i += 1; continue; }
+  while (i < items.length) {
+    const { phoneme: t, boundaryBefore } = items[i];
+    if (PAUSE_PHONEMES.has(t)) { morae.push({ type: 'pause' }); i += 1; continue; }
     if (t === 'cl') { geminatePending = true; i += 1; continue; }
     if (t === 'N') {
-      const next = phonemes[i + 1];
+      const next = items[i + 1]?.phoneme;
       morae.push({ type: 'moraic_nasal', next });
       i += 1;
       continue;
     }
     if (VOWELS.has(t)) {
       const prev = morae[morae.length - 1];
-      if (prev && prev.type === 'cv' && prev.vowel === t) {
+      const canExtendPrev = !boundaryBefore && prev && prev.type === 'cv' && prev.vowel === t;
+      if (canExtendPrev) {
         morae.push({ type: 'long_extend' });
       } else {
         morae.push({ type: 'cv', consonant: null, vowel: t, geminate: geminatePending });
@@ -128,8 +180,10 @@ function groupIntoMorae(phonemes) {
       i += 1;
       continue;
     }
-    // 輔音：期待下一個 token 是母音
-    const next = normalizePhoneme(phonemes[i + 1]);
+    // 輔音：期待下一個 token 是母音（詞界標記依 Open JTalk 慣例只會出現在
+    // mora 之間，不會切進單一輔音＋母音的組合裡，所以這裡不需要另外處理
+    // boundaryBefore）。
+    const next = items[i + 1]?.phoneme;
     if (next && VOWELS.has(next)) {
       morae.push({ type: 'cv', consonant: t, vowel: next, geminate: geminatePending });
       geminatePending = false;
@@ -185,10 +239,12 @@ function phonemesToXieyinV2(phonemes) {
 module.exports = {
   phonemesToXieyinV2,
   groupIntoMorae,
+  annotateBoundaries,
   syllableKey,
   syllableChar,
   moraicNasalChar,
   GEMINATE_MARK,
   LONG_VOWEL_MARK,
   PAUSE_MARK,
+  PAUSE_PHONEMES,
 };

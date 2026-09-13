@@ -85,4 +85,11 @@ module.exports = {
   // 條款七之 8 即取得揭露後的同意。
   lyricOffsetEndpoint: 'https://elitesand-pro-lyric-offset.elitesand.workers.dev/api/v1/offset',
   lyricOffsetSyncEnabled: true,
+
+  // ─── 公開點歌頁（觀眾從外網點歌）───
+  // 讓觀眾打開一個公開網址，從你目前的歌單搜尋並送出點歌請求；請求會先進面板的
+  // 「待核准」清單，你按下「加入」才會真的排進播放清單。面板開關控制實際是否建立連線；
+  // 這裡預設允許面板啟用。若想整個關掉這個功能，設為 false；留空字串（''）也會完全停用。
+  songRequestRelayUrl: 'https://elitesand-pro-song-request.elitesand.workers.dev',
+  songRequestRelayEnabled: true,
 };

@@ -83,7 +83,7 @@ function mergePlaylistSummaryWithExisting(cleanPlaylist, previousPlaylist) {
  * @param {import('socket.io').Socket} socket
  * @param {ReturnType<import('../../state/app-state').createAppState>} ctx
  */
-function registerPlaylistHandlers(io, socket, ctx) {
+function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {} } = {}) {
   const {
     playState, trackOffsets, manualLyricsCache,
     persistState, emitSetlist, broadcastState, getPublicPlaylist, getReadOnlyPlaylist = () => [], reconcilePlaybackProgress,
@@ -91,6 +91,7 @@ function registerPlaylistHandlers(io, socket, ctx) {
 
   function emitPlaylistUpdate() {
     emitToAccessRooms(io, 'playlist:update', getPublicPlaylist(), getReadOnlyPlaylist());
+    onPlaylistChanged();
   }
 
   socket.on('playlist:update', (playlist, ack) => {
@@ -316,8 +317,55 @@ function registerPlaylistHandlers(io, socket, ctx) {
   });
 }
 
+/**
+ * 供其他 handler（如 public-request.js 核准觀眾點歌）重用的最小加入邏輯，跟
+ * `playlist:add`／`playlist:insert-next` 這兩個 socket handler 是同一套規則
+ * （容量上限、entryId 指派、廣播、持久化、社群偏移建議），只是不透過 socket 事件觸發。
+ * 不建立第二條寫入語義：這裡故意跟兩個既有 handler 各自維護一份邏輯，避免重構
+ * 已上線、已測試過的 socket handler 本體帶來回歸風險。
+ * @returns {{ok:true, tracks:object[], placement?:string}|{ok:false, error:string}}
+ */
+function insertTracksIntoPlaylist(ctx, io, tracks, { mode = 'add' } = {}) {
+  const { playState, persistState, emitSetlist, broadcastState, getPublicPlaylist, getReadOnlyPlaylist = () => [] } = ctx;
+  const clean = sanitizePlaylist(tracks);
+  if (!clean?.length) return { ok: false, error: mode === 'insert-next' ? '歌曲資料無效，無法插播' : '播放清單格式無效' };
+
+  function commit(resultTracks, placement) {
+    emitToAccessRooms(io, 'playlist:update', getPublicPlaylist(), getReadOnlyPlaylist());
+    emitSetlist();
+    broadcastState();
+    persistState();
+    resultTracks.forEach((track) => {
+      applyCommunityOffsetSuggestion(ctx, io, track)
+        .catch((error) => log.warn(`歌詞偏移建議值套用失敗：${error.message}`));
+    });
+    return { ok: true, tracks: resultTracks, ...(placement ? { placement } : {}) };
+  }
+
+  if (mode === 'insert-next') {
+    if (playState.playlist.length >= MAX_PLAYLIST_SIZE) return { ok: false, error: `播放清單已達 ${MAX_PLAYLIST_SIZE} 首上限` };
+    let currentIndex = playState.playlist.indexOf(playState.currentTrack);
+    if (currentIndex < 0 && playState.currentTrack?.entryId) {
+      currentIndex = playState.playlist.findIndex((item) => item.entryId === playState.currentTrack.entryId);
+    }
+    if (currentIndex < 0 && playState.currentTrack?.id) {
+      currentIndex = playState.playlist.findIndex((item) => item.id === playState.currentTrack.id);
+    }
+    const insertAt = currentIndex >= 0 ? currentIndex + 1 : playState.playlist.length;
+    const [insertedTrack] = assignFreshEntryIds(clean.slice(0, 1));
+    playState.playlist.splice(insertAt, 0, insertedTrack);
+    return commit([insertedTrack], currentIndex >= 0 ? 'next' : 'end');
+  }
+
+  const added = assignFreshEntryIds(clean.slice(0, Math.max(0, MAX_PLAYLIST_SIZE - playState.playlist.length)));
+  if (!added.length) return { ok: false, error: `播放清單已達 ${MAX_PLAYLIST_SIZE} 首上限` };
+  playState.playlist.push(...added);
+  return commit(added, 'end');
+}
+
 module.exports = registerPlaylistHandlers;
 // 供其他 handler（如 library.js 的 savedPlaylists:load）重用：任何把新歌加進即時
 // playState.playlist 的路徑，都該套上同一份「有社群偏移建議就自動帶入」邏輯，
 // 不要各自重寫一份 push/broadcast/persist 而漏掉這一步。
 module.exports.applyCommunityOffsetSuggestion = applyCommunityOffsetSuggestion;
+module.exports.insertTracksIntoPlaylist = insertTracksIntoPlaylist;

@@ -1486,6 +1486,10 @@
                 <div class="field">
                   <label for="public-request-catalog-select" data-i18n="publicRequest.catalogLabel">公開哪一份歌單</label>
                   <select id="public-request-catalog-select" class="input"></select>
+                  <div id="public-request-catalog-empty" class="public-request-catalog-empty" hidden>
+                    <p class="field-hint" data-i18n="publicRequest.catalogEmptyHint">尚未建立收藏歌單。可直接用目前播放清單建立一份，建立後就能選取。</p>
+                    <button id="public-request-create-catalog" class="btn btn-sm" type="button" data-i18n="publicRequest.createCatalogFromQueue">用目前播放清單建立公開歌單</button>
+                  </div>
                 </div>
                 <button id="public-request-rotate-link" class="btn btn-sm btn-ghost" type="button" data-i18n="publicRequest.rotateLink">重新產生連結（舊連結立即失效）</button>
               </div>
@@ -2723,7 +2727,7 @@
           <div class="onboard-task-list">
             <button id="guide-task-environment" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="ytdlp-card"><span class="onboard-task-mark">1</span><span><strong>環境可用</strong><span>控制連線、yt-dlp 與 FFmpeg 就緒</span></span></button>
             <button id="guide-task-song" class="onboard-task pending" type="button" data-guide-nav="karaoke" data-guide-target="music-source-card"><span class="onboard-task-mark">2</span><span><strong>加入第一首歌</strong><span>上傳本機音檔，或貼 YouTube 連結完成匯入</span></span></button>
-            <button id="guide-task-obs" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="obs-url-card"><span class="onboard-task-mark">3</span><span><strong>OBS 看見歌詞來源</strong><span><span data-i18n="guide.obsTaskBefore">把</span> <code>歌詞畫面</code> <span data-i18n="guide.obsTaskAfter">方塊拖進 OBS（或貼網址）</span></span></span></button>
+            <button id="guide-task-obs" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="obs-url-card"><span class="onboard-task-mark">3</span><span><strong>OBS 看見歌詞來源</strong><span><span data-i18n="guide.obsTaskBefore">把</span> <code data-i18n="system.obsLauncherLyrics">歌詞畫面</code> <span data-i18n="guide.obsTaskAfter">方塊拖進 OBS（或貼網址）</span></span></span></button>
             <button id="guide-task-websocket" class="onboard-task optional" type="button" data-guide-nav="general" data-guide-target="obs-ws-card"><span class="onboard-task-mark">選</span><span><strong>設定 OBS WebSocket（選配）</strong><span>連上後可一鍵建立歌詞與歌單來源</span></span></button>
             <button id="guide-task-twitch" class="onboard-task optional" type="button" data-guide-nav="general" data-guide-target="twitch-card"><span class="onboard-task-mark">選</span><span><strong>Twitch 連線（選配）</strong><span>需要聊天室點歌或自動開台紀錄時再設定</span></span></button>
           </div>
@@ -2896,7 +2900,7 @@
               <li><strong>Q：我不小心把播放清單清空了，歌會不見嗎？</strong> 歌曲本身不會不見，之前下載過的檔案都還留在媒體庫，可以從媒體庫直接加回播放清單，不用重新下載。</li>
               <li><strong>Q：把歌從播放清單移除後，再加回來，手動歌詞和時間偏移還在嗎？</strong> 同一首歌曲以相同 ID 加回時，手動歌詞和時間偏移會一起恢復；「移除播放清單」只移除這次排隊，不會刪除媒體庫檔案。</li>
               <li><strong>Q：Twitch 點歌下載失敗或我暫時不想處理，請求會消失嗎？</strong> 不會馬上消失。待確認點歌在逾時前會保留到你選擇拒絕，下載失敗的可重試請求也會留著；重開程式後，尚未處理的請求仍會回到「點歌」頁。</li>
-              <li><strong>Q：程式顯示有新版本時，應如何更新？</strong> 請從 GitHub Releases 下載完整 Windows Installer 並執行安裝程式。程式內增量更新已停用；安裝前請先關閉 Elitesand Pro，並避免同時開啟兩個程式視窗。</li>
+              <li><strong>Q：程式顯示有新版本時，應如何更新？</strong> 程式啟動時會自動檢查；也可以到「連線與系統 → 程式更新」按「檢查更新」，有新版時照畫面指示套用，程式會自己重開。若更新失敗，到 GitHub Releases 下載完整安裝程式覆蓋安裝即可，安裝前先關閉 Elitesand Pro。</li>
               <li><strong>Q：可以離線（沒有網路）使用嗎？</strong> 播放已經下載好的本機歌曲可以離線；但匯入新歌、自動搜尋歌詞、Twitch 點歌都需要網路連線。</li>
             </ul>
           </div>

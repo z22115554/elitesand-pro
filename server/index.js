@@ -407,6 +407,21 @@ app.use(require('./routes/twitch-auth')(twitch));
 twitch.start();
 process.on('exit', () => twitch.stop());
 
+// ─── 公開點歌頁：向外連到 Cloudflare 中繼（docs/PUBLIC-SONG-REQUEST-PLAN.md）───
+// 未在面板啟用，或 songRequestRelayUrl 空白／非 HTTPS 時保持閒置，零外連。
+const { SongRequestRelayService } = require('./services/song-request-relay-service');
+const { buildTrackFromEntry } = require('./routes/handlers/library');
+const songRequestRelay = new SongRequestRelayService({
+  config,
+  buildTrackFromEntry,
+  onSongRequest: (request) => socketApi.dispatchPublicSongRequest(request),
+  onPendingRequestsChanged: () => socketApi.broadcastPublicRequests(),
+  onStatusChange: (status) => socketApi.recordPublicRequestStatus(status),
+});
+socketApi.setSongRequestRelayService(songRequestRelay);
+songRequestRelay.start();
+process.on('exit', () => songRequestRelay.stop());
+
 // 公告抓取延後到伺服器啟動後背景執行；離線、逾時或格式錯誤都只記錄並沿用快取。
 require('./services/announcement-service').startBackgroundRefresh();
 
@@ -426,6 +441,7 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
     // 關閉流程不可等 800ms debounce，這裡立即做第二次 state flush。
     try { require('./services/state-store').saveNow(); } catch (err) { log.warn(`狀態二次 flush 失敗：${err.message}`); }
     try { twitch.stop(); } catch (err) { log.warn(`Twitch 關閉失敗：${err.message}`); }
+    try { songRequestRelay.stop(); } catch (err) { log.warn(`公開點歌頁中繼關閉失敗：${err.message}`); }
 
     const forceTimer = setTimeout(() => {
       log.warn('優雅關閉逾時，強制關閉剩餘連線');

@@ -875,6 +875,15 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-activity-row, .twitch-history-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-raised); }
 .twitch-history-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
+.public-request-share-row { display: flex; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.public-request-qr { flex: 0 0 auto; border-radius: var(--r-sm); border: 1px solid var(--border); background: #fff; }
+.public-request-share-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.public-request-share-input-row { display: flex; gap: 8px; }
+.public-request-share-input-row .input { flex: 1 1 auto; min-width: 0; }
+.public-request-catalog-empty { margin-top: 9px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--r-sm); background: var(--bg-raised); }
+.public-request-catalog-empty .field-hint { margin: 0 0 9px; }
+.field-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-dim); margin-bottom: 7px; }
+
 .twitch-management-modal .modal-card { width: 96vw; max-width: 1320px; height: 90vh; max-height: 90vh; }
 .twitch-management-head { flex: none; gap: 14px; }
 .twitch-management-head > div:first-child { min-width: 0; }

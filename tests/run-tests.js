@@ -11543,7 +11543,7 @@ console.log('\n🌐 17. M6.1 介面語系層');
 
   test('HTML 與動態 UI 引用的翻譯鍵都存在', () => {
     const htmlFiles = ['index.html', 'controller.html', 'display.html', 'setlist.html', 'prompter.html'];
-    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-youtube-import.js', 'app-diagnostics.js', 'error-handler.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js', 'prompter.js', 'lyric-extras.js', 'app.js'];
+    const jsFiles = ['theme.js', 'nav.js', 'app-style-sync.js', 'app-setlist-panel.js', 'app-toast-utils.js', 'app-playlist.js', 'app-twitch.js', 'app-youtube-import.js', 'app-diagnostics.js', 'error-handler.js', 'eula-gate.js', 'danger-confirm.js', 'controller.js', 'pin-auth.js', 'setlist.js', 'prompter.js', 'lyric-extras.js', 'app-playback.js', 'app.js'];
     const referenced = new Set();
     htmlFiles.forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '../public', file), 'utf8');
@@ -11555,6 +11555,14 @@ console.log('\n🌐 17. M6.1 介面語系層');
       for (const match of source.matchAll(/(?:I18n\.t|workspaceText|(?:^|[^\w])t)\(\s*['"]([^'"]+)['"]/gm)) referenced.add(match[1]);
     });
     referenced.forEach((key) => ok(baselineKeys.includes(key), `缺少翻譯鍵 ${key}：`));
+  });
+
+  test('播放狀態重繪不繞過 i18n', () => {
+    const appSource = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
+    const playbackSource = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
+    ok(appSource.includes("t('prompter.noLyrics')"), '歌詞預覽空狀態必須使用語系鍵：');
+    ok(playbackSource.includes("t('player.noTrack')"), '停止播放後的播放器空狀態必須使用語系鍵：');
+    ok(playbackSource.includes("t(tr ? 'home.lyricNow.noTimeline' : 'home.lyricNow.empty')"), '目前歌詞重繪不得寫死繁中：');
   });
 
   test('EULA 與桌面操作視窗維持 dialog 語意與鍵盤焦點管理', () => {

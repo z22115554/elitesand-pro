@@ -12,9 +12,10 @@
 (function () {
   'use strict';
 
-  const { formatTime, safeHttpUrl } = SharedUtils;
+  const { formatTime, safeHttpUrl, escapeHtml } = SharedUtils;
   const { dom } = AppShared;
   const state = AppShared.state;
+  const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
 
   const audioPlayer = document.getElementById('audio-player');
   let audioErrorCount = 0;
@@ -834,12 +835,12 @@
     updateSeparationUiForTrack();
     isPlaying = false;
     updatePlayButton();
-    AppShared.setMarqueeText(dom.trackTitle, '尚未播放');
+    AppShared.setMarqueeText(dom.trackTitle, t('player.noTrack'));
     AppShared.setMarqueeText(dom.trackArtist, '');
     updateMiniPlayerInfo('尚未播放', '', null);
     dom.albumArt.style.backgroundImage = '';
     dom.albumArt.classList.add('empty');
-    dom.lyricsPreview.innerHTML = '<div class="lyric-preview-empty">尚無歌詞</div>';
+    dom.lyricsPreview.innerHTML = `<div class="lyric-preview-empty">${escapeHtml(t('prompter.noLyrics'))}</div>`;
     currentOffsetMs = 0;
     updateOffsetDisplay();
   }
@@ -1348,7 +1349,7 @@
       ? tr.parsedLyrics.filter((l) => l && typeof l.time === 'number' && l.text)
       : [];
     if (!lines.length) {
-      dom.lyricNowLine.textContent = tr ? '這首歌詞沒有時間軸' : '尚無歌詞';
+      dom.lyricNowLine.textContent = t(tr ? 'home.lyricNow.noTimeline' : 'home.lyricNow.empty');
       dom.lyricNowLine.classList.remove('has-word-marks');
       if (dom.lyricNextLine) dom.lyricNextLine.textContent = '';
       nowLineKey = '';

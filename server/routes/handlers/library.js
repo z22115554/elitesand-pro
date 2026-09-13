@@ -54,7 +54,10 @@ function buildTrackFromEntry(entry) {
  * @param {import('socket.io').Socket} socket
  * @param {ReturnType<import('../../state/app-state').createAppState>} ctx
  */
-function registerLibraryHandlers(io, socket, ctx) {
+function registerLibraryHandlers(io, socket, ctx, {
+  onSavedPlaylistsChanged = () => {},
+  onLibraryChanged = () => {},
+} = {}) {
   const {
     playState, persistState,
     emitSetlist = () => {}, broadcastState = () => {},
@@ -101,6 +104,7 @@ function registerLibraryHandlers(io, socket, ctx) {
     if (removed) {
       persistState();
       if (savedPlaylists.pruneTrackIds([id])) broadcastSavedPlaylists();
+      onLibraryChanged();
     }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     if (typeof ack === 'function') ack({ ok: removed, error: removed ? null : '找不到媒體庫項目' });
@@ -111,6 +115,7 @@ function registerLibraryHandlers(io, socket, ctx) {
     if (cleared) {
       persistState();
       if (savedPlaylists.pruneTrackIds(null)) broadcastSavedPlaylists();
+      onLibraryChanged();
     }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     if (typeof ack === 'function') ack({ ok: cleared, error: cleared ? null : '無法安全保存目前播放清單，媒體庫未清空' });
@@ -141,6 +146,7 @@ function registerLibraryHandlers(io, socket, ctx) {
     libraryStore.collectMediaFilenames(playState.currentTrack, keep);
     const result = libraryStore.cleanupAudio(keep);
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
+    onLibraryChanged();
     if (typeof ack === 'function') ack({ ok: true, ...result });
   });
 
@@ -148,6 +154,9 @@ function registerLibraryHandlers(io, socket, ctx) {
   // 只在這裡（非唯讀 socket）註冊；顯示端／唯讀端沒有任何歌單事件。
   function broadcastSavedPlaylists() {
     emitToControlClients(io, 'savedPlaylists:list', savedPlaylists.list());
+    // 公開點歌頁可能正在公開其中一份歌單當觀眾目錄；內容變動要重推快照，
+    // 見 song-request-relay-service.js 的 notifyCatalogMayHaveChanged()。
+    onSavedPlaylistsChanged();
   }
   const reply = (ack, result) => { if (typeof ack === 'function') ack(result); };
 
@@ -235,3 +244,6 @@ function registerLibraryHandlers(io, socket, ctx) {
 }
 
 module.exports = registerLibraryHandlers;
+// 供 public-request.js 重用：核准觀眾點歌時，要用跟收藏歌單載入完全一樣的方式
+// 把媒體庫紀錄組成可加入播放清單的 track（含記憶的歌詞/拼音/變調/AI stems）。
+module.exports.buildTrackFromEntry = buildTrackFromEntry;
