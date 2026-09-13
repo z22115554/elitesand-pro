@@ -61,7 +61,7 @@ test('advanced tour is split into independent lyrics, OBS, and live-operations c
   eq(tour.ADVANCED_OBS_STEPS.length, 7);
   eq(tour.ADVANCED_LIVE_STEPS.length, 4);
   eq(tour.ADVANCED_LYRICS_STEPS.map((step) => step.id).join(','), 'lyrics-source,lyrics-align,lyrics-nudge,lyrics-timeline');
-  eq(tour.ADVANCED_OBS_STEPS.map((step) => step.id).join(','), 'obs-copy,obs-add,obs-status,obs-websocket,obs-create,obs-ai-separation,obs-dual-audio');
+  eq(tour.ADVANCED_OBS_STEPS.map((step) => step.id).join(','), 'obs-drag,obs-add,obs-status,obs-websocket,obs-create,obs-ai-separation,obs-dual-audio');
   eq(tour.ADVANCED_LIVE_STEPS.map((step) => step.id).join(','), 'live-setlist,live-delete-played,live-session,live-twitch');
   ok(page.includes('id="guide-start-lyrics"'), 'Lyrics chapter entry missing');
   ok(page.includes('id="guide-start-obs"'), 'OBS chapter entry missing');
@@ -70,7 +70,7 @@ test('advanced tour is split into independent lyrics, OBS, and live-operations c
 });
 
 test('advanced OBS tour teaches automatic stems and points dual audio at the real routing card', () => {
-  eq(tour.ADVANCED_TOUR_VERSION, 4, 'Corrected automatic-stem guidance must bump the advanced tour version');
+  eq(tour.ADVANCED_TOUR_VERSION, 5, 'OBS chapter now teaches drag-into-OBS; content changes must bump the advanced tour version');
   const dualAudio = tour.ADVANCED_OBS_STEPS.find((step) => step.id === 'obs-dual-audio');
   ok(dualAudio, 'Dual-audio advanced step missing');
   eq(dualAudio.view, 'general');

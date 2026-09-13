@@ -91,9 +91,21 @@
     });
   });
 
+  // 桌面殼因預設 port 被占而改用備援：每次開面板提示一次。用拖放建的 OBS 來源不受影響，
+  // 貼網址建的要改 port（或改用拖放）。
+  function noticePortFallback() {
+    fetch('/api/health', { cache: 'no-store' }).then((res) => (res.ok ? res.json() : null)).then((health) => {
+      if (!health || !health.portFallbackFrom || !health.port) return;
+      const key = `elitesand:port-fallback-noticed:${health.port}`;
+      try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch (_) { /* 無 storage 就每次提示 */ }
+      toast(t('system.portFallbackNotice', { from: health.portFallbackFrom, to: health.port }), 'warning');
+    }).catch(() => {});
+  }
+
   document.addEventListener('view:change', (event) => {
     if (event.detail && event.detail.view === 'general') refresh();
   });
   window.addEventListener('i18n:change', render);
   refresh();
+  noticePortFallback();
 })();

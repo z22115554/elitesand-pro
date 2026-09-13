@@ -14,7 +14,7 @@
   const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1'];
   const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2';
   const TOUR_VERSION = 5;
-  const ADVANCED_TOUR_VERSION = 4;
+  const ADVANCED_TOUR_VERSION = 5; // 5：OBS 章改教「拖到 OBS」，貼網址退為備案
   const HOLE_PADDING = 9;
   const VIEWPORT_MARGIN = 10;
   const CARD_GAP = 30;
@@ -84,12 +84,13 @@
     {
       id: 'obs',
       view: 'general',
-      target: '#obs-url-card',
+      // 桌面版教拖放（#obs-launcher 在 /api/obs-launcher 回來後才顯示；未顯示時 spotlight 退回整張卡）
+      target: '#obs-launcher',
+      fallbackTarget: '#obs-url-card',
       mobileTarget: '#copy-obs-url',
       title: 'tour.step.obs.title',
       body: 'tour.step.obs.body',
       hint: 'tour.step.obs.hint',
-      action: 'copyObs',
     },
   ];
 
@@ -136,13 +137,14 @@
 
   const ADVANCED_OBS_STEPS = [
     {
-      id: 'obs-copy',
+      id: 'obs-drag',
       view: 'general',
-      target: '#copy-obs-url',
+      target: '#obs-launcher',
+      fallbackTarget: '#obs-url-card',
       mobileTarget: '#copy-obs-url',
-      title: 'tour.advanced.step.obsCopy.title',
-      body: 'tour.advanced.step.obsCopy.body',
-      hint: 'tour.advanced.step.obsCopy.hint',
+      title: 'tour.advanced.step.obsDrag.title',
+      body: 'tour.advanced.step.obsDrag.body',
+      hint: 'tour.advanced.step.obsDrag.hint',
     },
     {
       id: 'obs-add',
@@ -569,8 +571,13 @@
   }
 
   async function resolveTarget(step) {
-    const selector = root.innerWidth <= 760 && step.mobileTarget ? step.mobileTarget : step.target;
+    const primary = root.innerWidth <= 760 && step.mobileTarget ? step.mobileTarget : step.target;
     for (let attempt = 0; attempt < 10; attempt++) {
+      // 主目標可能還沒顯示（例如 #obs-launcher 要等 /api/obs-launcher 回來）：前幾次等主目標，
+      // 之後退回 fallbackTarget（通常是包住它的整張卡），不要讓導覽卡在「找不到目標」。
+      const selector = step.fallbackTarget && attempt >= 5 && !document.querySelector(primary)?.getClientRects().length
+        ? step.fallbackTarget
+        : primary;
       const target = document.querySelector(selector);
       if (target) openAncestors(target);
       if (target && !target.hidden && target.getClientRects().length) {

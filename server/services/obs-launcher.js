@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { dataDir } = require('../utils/app-paths');
 const { APP_VERSION } = require('../utils/app-version');
+const { DEFAULT_PORT, probePortsFor } = require('../utils/port-candidates');
 
 const LAUNCHER_DIR = path.join(dataDir, 'obs-sources');
 // 檔名刻意用 ASCII：OBS 用檔名當來源名稱，且原型階段先排除任何編碼變數。
@@ -26,16 +27,11 @@ const LAUNCHERS = Object.freeze({
   lyrics: Object.freeze({ file: 'Elitesand-Pro-Lyrics.html', target: '/display', title: 'Elitesand Pro 歌詞' }),
   setlist: Object.freeze({ file: 'Elitesand-Pro-Setlist.html', target: '/setlist', title: 'Elitesand Pro 歌單' }),
 });
-// 預設 3000 被佔用時主程式可能改用的候選；未來若改預設 port，把新值加進來即可，
-// 舊使用者手上的啟動頁也還是找得到（清單寫死在檔案裡，重新產檔會更新）。
-const CANDIDATE_PORTS = Object.freeze([3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3010]);
+// 探測清單與桌面殼的 port 備援共用 server/utils/port-candidates.js，殼可能挑到的 port 啟動頁一定探得到。
+const CANDIDATE_PORTS = Object.freeze(probePortsFor(DEFAULT_PORT));
 
 function candidatePortsFor(port) {
-  const primary = Number(port);
-  const list = [];
-  if (Number.isInteger(primary) && primary > 0) list.push(primary);
-  for (const candidate of CANDIDATE_PORTS) if (!list.includes(candidate)) list.push(candidate);
-  return list;
+  return probePortsFor(port);
 }
 
 function buildLauncherHtml({ kind, port }) {

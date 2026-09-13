@@ -7733,7 +7733,7 @@ test('新手教學：分頁化目標會先切分頁；雙路音訊／Spout／AI 
   const tour = fs.readFileSync(path.join(root, 'public/js/onboarding-tour.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   ok(/const TOUR_VERSION = 5;/.test(tour), '首頁重構後導覽版本要 bump（讓既有使用者重看新版）：');
-  ok(tour.includes('const ADVANCED_TOUR_VERSION = 4;'),
+  ok(tour.includes('const ADVANCED_TOUR_VERSION = 5;'),
     '自動雙軌／雙路音訊語意更新後進階導覽版本要 bump，讓看過舊版的使用者能收到新說明：');
   ok(/id: 'obs-dual-audio',[\s\S]{0,180}view: 'general',[\s\S]{0,180}target: '#dual-audio-card'/.test(tour)
     && !/id: 'obs-dual-audio',[\s\S]{0,220}prepTab: 'audio'/.test(tour),
@@ -10777,6 +10777,81 @@ test('Electron shell chrome stays inside the Elitesand Pro design system', () =>
   ok(shellSource.includes("await window.loadURL(`http://127.0.0.1:${port}/panel?electronShell=1${localeQuery}`)"), '殼層開窗網址必須帶上語言參數：');
   ok(shellSource.includes('function consumeInstallerLocale'), '缺少讀取＋刪除 installer-locale marker 的邏輯：');
   ok(installerNsh.includes('installer-locale.txt'), 'NSIS 端必須把精靈語言寫進 marker 檔：');
+});
+
+testAsync('Electron 殼：預設 port 被別的程式占用時往後找空 port 啟動，健康的 Elitesand 一樣重用，全滿才報錯', async () => {
+  const { EventEmitter } = require('events');
+  const { createElectronShell } = require('../electron/shell');
+  const { fallbackPortsFor } = require('../server/utils/port-candidates');
+
+  function harness({ probeByPort, dialogs = [] }) {
+    const forks = [];
+    const child = new EventEmitter();
+    child.pid = 4321;
+    child.postMessage = () => {};
+    child.kill = () => {};
+    const app = new EventEmitter();
+    app.setName = () => {};
+    app.setAppUserModelId = () => {};
+    app.requestSingleInstanceLock = () => true;
+    app.whenReady = async () => {};
+    app.getPath = () => path.join(TEST_RUNTIME_ROOT, 'electron-port-fallback-unit');
+    app.quit = () => {};
+    app.exit = () => {};
+    class FakeWindow extends EventEmitter {
+      constructor() { super(); this.webContents = { setWindowOpenHandler: () => {}, on: () => {} }; }
+      async loadURL(url) { this.loadedUrl = url; this.emit('ready-to-show'); }
+      show() {} hide() {} focus() {} isMinimized() { return false; }
+    }
+    class FakeTray extends EventEmitter { setToolTip() {} setContextMenu() {} }
+    const desktop = createElectronShell({
+      app,
+      BrowserWindow: FakeWindow,
+      utilityProcess: { fork: (_entry, _args, options) => { forks.push(options); return child; } },
+      dialog: { showErrorBox: () => {}, showMessageBoxSync: (options) => { dialogs.push(options); return 0; } },
+      shell: { openExternal: () => {} },
+      Tray: FakeTray,
+      Menu: { buildFromTemplate: () => ({}) },
+      nativeImage: { createFromPath: () => ({}) },
+      clipboard: { writeText: () => {} },
+      powerSaveBlocker: { start: () => 1, stop: () => {} },
+      ipcMain: { handle: () => {}, on: () => {} },
+      processObject: { env: {}, platform: 'win32' },
+      fsImpl: { mkdirSync: () => {} },
+      probeHealthImpl: async (port) => probeByPort(port),
+      delay: async () => {},
+    });
+    return { desktop, forks };
+  }
+
+  // 3000 被別的程式占；3001 空 → 用 3001 啟動，env 帶 PORT=3001 與 ELITESAND_PORT_FALLBACK_FROM=3000
+  let started = false;
+  const free = harness({ probeByPort: (port) => {
+    if (port === 3000) return { state: 'occupied' };
+    if (port === 3001) { if (!started) { started = true; return { state: 'free' }; } return { state: 'healthy', payload: { status: 'ok' } }; }
+    return { state: 'occupied' };
+  } });
+  const result = await free.desktop.start();
+  eq(result.reused, false);
+  eq(free.forks[0].env.PORT, '3001', '備援 port 要交給 server: ');
+  eq(free.forks[0].env.ELITESAND_PORT_FALLBACK_FROM, '3000', '要讓 server／面板知道是備援: ');
+
+  // 3000 被占；3001 上已有健康的 Elitesand → 重用它，不 fork
+  const reuse = harness({ probeByPort: (port) => (port === 3001 ? { state: 'healthy', payload: { status: 'ok' } } : { state: 'occupied' }) });
+  const reused = await reuse.desktop.start();
+  eq(reused.reused, true);
+  eq(reuse.forks.length, 0, '重用既有 server 不可再 fork: ');
+
+  // 全部都被占 → 給一般使用者看的單鈕對話框，不提開發實例
+  const dialogs = [];
+  const full = harness({ probeByPort: () => ({ state: 'occupied' }), dialogs });
+  let failed = false;
+  try { await full.desktop.start(); } catch (_) { failed = true; }
+  ok(failed, '全滿必須失敗: ');
+  const last = fallbackPortsFor(3000).at(-1);
+  ok(dialogs.some((d) => d.message.includes(`3000～${last}`)), '對話框要講清楚試過哪些連接埠: ');
+  ok(!dialogs.some((d) => /npm start/.test(d.message + (d.detail || ''))), '不可再出現給開發者看的文案: ');
+  ok(dialogs.every((d) => d.buttons.length === 1), '只有「結束」一顆鈕: ');
 });
 
 testAsync('Media migration relaunches through Electron graceful quit', async () => {

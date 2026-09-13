@@ -234,7 +234,15 @@ router.get('/health', (req, res) => {
   // null，必須放行 CORS 才讀得到回應。health 只有狀態／版本／時間戳，沒有任何機密或副作用。
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Cache-Control', 'no-store');
-  res.json({ status: 'ok', version: APP_VERSION, timestamp: Date.now() });
+  const fallbackFrom = Number.parseInt(process.env.ELITESAND_PORT_FALLBACK_FROM || '', 10);
+  res.json({
+    status: 'ok',
+    version: APP_VERSION,
+    timestamp: Date.now(),
+    port: req.socket?.localPort || null,
+    // 桌面殼因預設 port 被占而改用備援時才有值；面板據此提示一次。
+    portFallbackFrom: Number.isInteger(fallbackFrom) && fallbackFrom > 0 ? fallbackFrom : null,
+  });
 });
 
 // OBS 啟動頁的實體路徑：面板「拖到 OBS」與「複製路徑」用。只回路徑，不回內容。

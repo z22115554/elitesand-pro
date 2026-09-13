@@ -190,6 +190,11 @@
           <span class="nav-label" data-i18n="nav.twitch">Twitch 點歌</span>
           <span id="twitch-nav-badge" class="pi-badge" hidden>0</span>
         </button>
+        <button class="nav-item" data-nav="public-request" type="button" title="公開點歌頁" data-i18n-title="nav.publicRequest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/></svg>
+          <span class="nav-label" data-i18n="nav.publicRequest">公開點歌頁</span>
+          <span id="public-request-nav-badge" class="pi-badge" hidden>0</span>
+        </button>
         <!-- 2026-09-12 先收起來：段落資料只有一首手動測試曲，對真實使用者的歌完全沒作用，
              正式使用者不該看到。要重新開放時比照 nav.js 開頭註解的既有慣例，拿掉這個 hidden 即可。 -->
         <button class="nav-item" data-nav="sections" type="button" title="段落設計" data-i18n-title="nav.sections" hidden>
@@ -1457,6 +1462,48 @@
           </div>
         </div><!-- /view twitch -->
 
+        <!-- ═══ 視圖：公開點歌頁（觀眾從外網搜尋現有歌單並送出點歌請求）═══ -->
+        <div class="view content-col" data-view="public-request">
+          <section class="card" aria-labelledby="public-request-status-title">
+            <div class="playlist-head">
+              <div>
+                <p id="public-request-status-title" class="eyebrow m-0" data-i18n="publicRequest.statusTitle">公開點歌頁</p>
+                <p class="sub" data-i18n="publicRequest.statusHint">開啟後，觀眾可從外網打開分享連結，搜尋你目前公開的歌單並送出點歌；請求會先進下方待核准清單，你按下「加入」才會真的排進播放清單。</p>
+              </div>
+              <label class="switch"><input id="public-request-enable-toggle" type="checkbox"><span class="track"></span></label>
+            </div>
+            <div class="twitch-status-chips" role="status" aria-live="polite">
+              <span id="public-request-status-connection" class="twitch-status-chip" data-state="muted" data-i18n="publicRequest.statusUnconfigured">尚未啟用</span>
+            </div>
+            <div id="public-request-share-row" class="public-request-share-row" hidden>
+              <img id="public-request-qr" class="public-request-qr" alt="公開點歌頁 QR Code" width="120" height="120">
+              <div class="public-request-share-col">
+                <label class="field-label" for="public-request-share-url" data-i18n="publicRequest.shareLinkLabel">分享連結</label>
+                <div class="public-request-share-input-row">
+                  <input id="public-request-share-url" class="input" type="text" readonly>
+                  <button id="public-request-copy-link" class="btn btn-sm" type="button" data-i18n="publicRequest.copyLink">複製連結</button>
+                </div>
+                <div class="field">
+                  <label for="public-request-catalog-select" data-i18n="publicRequest.catalogLabel">公開哪一份歌單</label>
+                  <select id="public-request-catalog-select" class="input"></select>
+                </div>
+                <button id="public-request-rotate-link" class="btn btn-sm btn-ghost" type="button" data-i18n="publicRequest.rotateLink">重新產生連結（舊連結立即失效）</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="public-request-pending" class="card twitch-requests-card">
+            <div class="playlist-head">
+              <div>
+                <p class="eyebrow m-0" data-i18n="publicRequest.pendingTitle">待核准點歌</p>
+                <p class="sub" data-i18n="publicRequest.pendingHint">觀眾的點歌會先排在這裡；你按「加入」才會真的排進播放清單，觀眾不會看到核准結果。</p>
+              </div>
+              <span id="public-request-pending-count" class="val">0</span>
+            </div>
+            <div id="public-request-pending-list" class="twitch-requests-list"></div>
+          </section>
+        </div><!-- /view public-request -->
+
         <!-- ═══ 視圖：一般設定（OBS 網址/連動、手機遙控、yt-dlp、PIN）═══ -->
         <div class="view content-col" data-view="general">
           <div class="general-settings-columns">
@@ -2676,7 +2723,7 @@
           <div class="onboard-task-list">
             <button id="guide-task-environment" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="ytdlp-card"><span class="onboard-task-mark">1</span><span><strong>環境可用</strong><span>控制連線、yt-dlp 與 FFmpeg 就緒</span></span></button>
             <button id="guide-task-song" class="onboard-task pending" type="button" data-guide-nav="karaoke" data-guide-target="music-source-card"><span class="onboard-task-mark">2</span><span><strong>加入第一首歌</strong><span>上傳本機音檔，或貼 YouTube 連結完成匯入</span></span></button>
-            <button id="guide-task-obs" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="obs-url-card"><span class="onboard-task-mark">3</span><span><strong>OBS 看見歌詞來源</strong><span><span data-i18n="guide.obsTaskBefore">複製</span> <code>/display</code> <span data-i18n="guide.obsTaskAfter">網址加入瀏覽器來源</span></span></span></button>
+            <button id="guide-task-obs" class="onboard-task pending" type="button" data-guide-nav="general" data-guide-target="obs-url-card"><span class="onboard-task-mark">3</span><span><strong>OBS 看見歌詞來源</strong><span><span data-i18n="guide.obsTaskBefore">把</span> <code>歌詞畫面</code> <span data-i18n="guide.obsTaskAfter">方塊拖進 OBS（或貼網址）</span></span></span></button>
             <button id="guide-task-websocket" class="onboard-task optional" type="button" data-guide-nav="general" data-guide-target="obs-ws-card"><span class="onboard-task-mark">選</span><span><strong>設定 OBS WebSocket（選配）</strong><span>連上後可一鍵建立歌詞與歌單來源</span></span></button>
             <button id="guide-task-twitch" class="onboard-task optional" type="button" data-guide-nav="general" data-guide-target="twitch-card"><span class="onboard-task-mark">選</span><span><strong>Twitch 連線（選配）</strong><span>需要聊天室點歌或自動開台紀錄時再設定</span></span></button>
           </div>
@@ -2710,7 +2757,7 @@
             <div class="help-step"><span class="help-step-num">2</span><div><strong>加一首歌</strong>：在「歌詞」頁的「音樂來源」貼上一個 YouTube 網址，或切到「本機檔案」把 mp3 拖進去。匯入完成後，這首歌會出現在左邊的播放清單裡。</div></div>
             <div class="help-step"><span class="help-step-num">3</span><div><strong>點這首歌，再按播放</strong>：點播放清單裡剛剛那首歌，確認上方播放器變成它，再按播放鍵。（提醒：媒體庫只是倉庫，不是現在要播的清單；真正要播的永遠是「播放清單」。）</div></div>
             <div class="help-step"><span class="help-step-num">4</span><div><strong>看右邊有沒有出現歌詞</strong>：右側「歌詞即時預覽」跑出字，就代表一切正常。如果沒有字，先看播放清單那首歌旁邊寫「無歌詞」還是別的，或按「選擇來源」自己挑一個。</div></div>
-            <div class="help-step"><span class="help-step-num">5</span><div><strong>最後才接 OBS</strong>：確認控制台這邊都正常之後，去歌詞設定頁複製「歌詞網址」，貼進 OBS 的「瀏覽器」來源。</div></div>
+            <div class="help-step"><span class="help-step-num">5</span><div><strong>最後才接 OBS</strong>：確認控制台這邊都正常之後，去「連線與系統」把「歌詞畫面」方塊拖進 OBS 的預覽畫面就完成了（拖不進去再用「複製檔案路徑」或貼網址）。</div></div>
           </div>
         </details>
 
@@ -2783,12 +2830,13 @@
         <details class="card card-collapse">
           <summary>⑧ 怎麼把歌詞畫面放進 OBS？</summary>
           <div class="card-collapse-body help-steps">
-            <div class="help-step"><span class="help-step-num">1</span><div>去「歌詞設定」頁，或直接在畫面右上角按「歌詞網址」，把網址複製起來。</div></div>
-            <div class="help-step"><span class="help-step-num">2</span><div>打開 OBS，在「來源」列表按「＋」，選「瀏覽器」。</div></div>
-            <div class="help-step"><span class="help-step-num">3</span><div>把剛剛複製的網址貼進去；寬高先設成跟你直播畫面一樣大，例如 1920×1080。</div></div>
-            <div class="help-step"><span class="help-step-num">4</span><div>底色本來就是透明的，可以直接疊在遊戲畫面、聊天室、角色模型上面，不用另外去背。</div></div>
-            <div class="help-step"><span class="help-step-num">5</span><div>回到控制台改字體、顏色、位置，OBS 畫面會自動跟著變。右上角出現「歌詞已連線」就代表這個 OBS 來源真的連上了。</div></div>
-            <div class="help-step"><span class="help-step-num">6</span><div>如果控制台這邊改了、OBS 畫面卻沒變：先在 OBS 那個瀏覽器來源上按右鍵、選「重新整理」。OBS 常常會卡住舊畫面，這是最常見的解法。</div></div>
+            <div class="help-step"><span class="help-step-num">1</span><div><strong>最簡單：拖進去</strong>。去「連線與系統」，把「拖到 OBS 直接建立來源」裡的「歌詞畫面」方塊，拖到 OBS 的預覽畫面上放開。OBS 會自動建好一個瀏覽器來源，尺寸就是你的畫布。</div></div>
+            <div class="help-step"><span class="help-step-num">2</span><div><strong>這種來源不綁連接埠</strong>：它指向一個本機檔案，那個檔案會自己找到 Elitesand Pro。之後就算程式改用別的連接埠，OBS 這邊完全不用動。</div></div>
+            <div class="help-step"><span class="help-step-num">3</span><div><strong>拖不進去？</strong>按方塊旁的「複製檔案路徑」，在 OBS「來源」按「＋」→「瀏覽器」→ 勾「本機檔案」→ 貼上路徑；寬高設成跟直播畫面一樣大，例如 1920×1080。</div></div>
+            <div class="help-step"><span class="help-step-num">4</span><div><strong>OBS 在另一台電腦？</strong>那才需要貼網址：按右上角「歌詞網址」複製，貼進瀏覽器來源的 URL 欄。這種做法會綁著連接埠，換了要改。</div></div>
+            <div class="help-step"><span class="help-step-num">5</span><div>底色本來就是透明的，可以直接疊在遊戲畫面、聊天室、角色模型上面，不用另外去背。</div></div>
+            <div class="help-step"><span class="help-step-num">6</span><div>回到控制台改字體、顏色、位置，OBS 畫面會自動跟著變。右上角出現「歌詞已連線」就代表這個 OBS 來源真的連上了。</div></div>
+            <div class="help-step"><span class="help-step-num">7</span><div>如果控制台這邊改了、OBS 畫面卻沒變：先在 OBS 那個瀏覽器來源上按右鍵、選「重新整理」。OBS 常常會卡住舊畫面，這是最常見的解法。</div></div>
           </div>
         </details>
 
@@ -3162,6 +3210,7 @@
   <script src="/js/twitch-reply-settings.js"></script>
   <script src="/js/settings-workspace.js"></script>
   <script src="/js/app-twitch.js"></script>
+  <script src="/js/app-public-requests.js"></script>
   <script src="/js/app-playlist.js"></script>
   <script src="/js/playback-sequence.js"></script>
   <!-- SYNCDIAG（暫時性，2026-09-03）：分離播放人聲/伴奏延遲診斷；確認問題後連同 sync-diag.js 一起移除 -->

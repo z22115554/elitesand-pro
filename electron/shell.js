@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { validateUpdatePlanShape, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPOSITORY } = require('../server/services/update-policy');
 const { preparePackagedMediaStorage } = require('./packaged-media-storage');
+const { fallbackPortsFor } = require('../server/utils/port-candidates');
 const {
   normalizeHash,
   normalizeVersion,
@@ -464,6 +465,9 @@ function createElectronShell({
   let startupUpdateProgressPoll = null;
   let pendingUpdatePlan = null;
   let packagedYtdlpRuntime = null;
+  // 預設 port 被非 Elitesand 程式佔用時改用的備援：{ from, to }。會經 env 交給 server，
+  // 面板讀 /api/health 顯示一次提示。OBS 端靠 data/obs-sources 啟動頁自行探測，換 port 對它不可見。
+  let portFallback = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
   // WebGPU 人聲分離引擎（實驗性，§13 musetric 路線）：只在使用者已經開啟設定時才建立，
   // 不是每次啟動都硬開一個吃資源的隱藏視窗（跟 Spout 的 env-var autostart 不同，
@@ -805,6 +809,7 @@ function createElectronShell({
         ...(packagedYtdlpRuntime.seedVersion ? { ELITESAND_YTDLP_SEED_VERSION: packagedYtdlpRuntime.seedVersion } : {}),
       } : {}),
       PORT: String(port),
+      ...(portFallback ? { ELITESAND_PORT_FALLBACK_FROM: String(portFallback.from) } : {}),
       OPEN_BROWSER: '0',
       ELITESAND_SHELL: '1',
       // Production-only remote announcements must never lock the source-tree
@@ -1397,13 +1402,31 @@ function createElectronShell({
     return child;
   }
 
+  // 預設 port 被別的程式佔住（孤兒回收已在 probe 裡試過）：往後找。健康的既有 Elitesand 一樣重用；
+  // 空的就拿來啟動。全部都被佔才放棄。候選清單與 OBS 啟動頁共用，殼挑得到的 port 啟動頁一定探得到。
+  async function findFallbackPort(preferred) {
+    for (const candidate of fallbackPortsFor(preferred)) {
+      const probe = await probeHealthImpl(candidate);
+      if (probe?.state === 'healthy') return { port: candidate, state: 'healthy', payload: probe.payload };
+      if (probe?.state === 'free') return { port: candidate, state: 'free' };
+    }
+    return null;
+  }
+
   async function startServerOrReuseExisting() {
     const existing = await probeHealthImpl(port);
     if (existing?.state === 'healthy') return { reused: true, health: existing.payload };
-    if (existing?.state === 'occupied') throw new Error(`Port ${port} is already occupied by another application`);
+    if (existing?.state === 'occupied') {
+      const fallback = await findFallbackPort(port);
+      if (!fallback) throw new Error(`Port ${port} is already occupied by another application`);
+      portFallback = { from: port, to: fallback.port };
+      port = fallback.port;
+      console.warn(`[Elitesand Pro Electron] Port ${portFallback.from} is occupied by another application; using ${port} instead.`);
+      if (fallback.state === 'healthy') return { reused: true, health: fallback.payload, portFallback };
+    }
     ownsServer = true;
     startServer();
-    return { reused: false, health: await waitForHealthyServer() };
+    return { reused: false, health: await waitForHealthyServer(), portFallback };
   }
 
   async function shutdownOwnedServer() {
@@ -1431,16 +1454,20 @@ function createElectronShell({
 
   function showStartupError(error) {
     if (/already occupied by another application/.test(error?.message || '')) {
-      const choice = dialog.showMessageBoxSync({
+      // 走到這裡代表預設 port 與所有備援都被別的程式占住（健康的 Elitesand 會被重用、
+      // 自家孤兒會被回收、空 port 會被拿來用，都不會到這）。文案給一般使用者看，不提開發實例。
+      const candidates = fallbackPortsFor(port);
+      const last = candidates.length ? candidates[candidates.length - 1] : port;
+      dialog.showMessageBoxSync({
         type: 'warning',
-        title: 'port 已被占用',
-        message: `port ${port} 已被占用——可能已有一份 Elitesand Pro 在執行（含 npm start 的開發實例）。`,
-        buttons: ['開啟既有面板', '結束'],
+        title: 'Elitesand Pro 無法啟動',
+        message: `連接埠 ${port}～${last} 都被其他程式占用，Elitesand Pro 無法啟動。`,
+        detail: '通常是背景還留著上一次沒關乾淨的程式。請先重新開機再試一次；若仍出現，請在「工作管理員」結束占用這些連接埠的程式，或匯出診斷記錄回報。',
+        buttons: ['結束'],
         defaultId: 0,
-        cancelId: 1,
+        cancelId: 0,
         noLink: true,
       });
-      if (choice === 0) shell.openExternal(`http://127.0.0.1:${port}/panel`);
       return;
     }
     dialog.showErrorBox(
