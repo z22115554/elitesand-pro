@@ -20,11 +20,19 @@ const log = createLogger('Socket');
 function registerSetlistHandlers(io, socket, ctx) {
   const {
     playState, session, effSetlistStore,
-    persistState, setlistPayload, emitSetlist, recordSessionSong, broadcastState,
+    persistState, setlistPayload, emitSetlist, recordSessionSong, markTrackPlayed, broadcastState,
   } = ctx;
 
   function normalizeSessionSource(source) {
     return ['obs', 'twitch', 'manual'].includes(source) ? source : 'manual';
+  }
+
+  function resetPlayedHistory({ preserveCurrent = false } = {}) {
+    playState.playedEntryIds.clear();
+    playState.lastPlayedEntryId = null;
+    if (preserveCurrent && playState.currentTrack && playState.currentTrackStarted) {
+      markTrackPlayed(playState.currentTrack);
+    }
   }
 
   function emitTemplateStyle(target) {
@@ -53,6 +61,10 @@ function registerSetlistHandlers(io, socket, ctx) {
     session.startedAt = effectiveStartedAt;
     session.source = sessionSource;
     session.songs = [];
+    // playedEntryIds 是 setlist「已唱／未唱」真正使用的持久化進度。只清 session.songs
+    // 會讓上一場甚至解除安裝前的已唱狀態在新直播繼續殘留。新場次必須一起歸零；若
+    // 開台前已經在播歌，保留目前這一首為 current/played，避免它又跑回 upcoming。
+    resetPlayedHistory({ preserveCurrent: true });
     log.info(fromObs ? 'OBS 推流：直播 session 自動開始' : '直播 session 開始');
     // 開台前若已在播放某首，立刻把它記為第一首（offset≈0）→ 不必重點一次歌。
     if (playState.isPlaying && playState.currentTrack) recordSessionSong();
@@ -84,7 +96,10 @@ function registerSetlistHandlers(io, socket, ctx) {
     session.startedAt = null;
     session.source = null;
     session.songs = [];
-    log.info('直播 session 重設');
+    // 「重設直播」就是使用者可預期的清除入口；同步清除 setlist 真正依賴的持久化
+    // 播放進度，否則畫面雖然 songs=[]，已唱欄位仍會從 playedEntryIds 立刻長回來。
+    resetPlayedHistory();
+    log.info('直播 session 重設（已清除已唱進度）');
     emitSetlist();
     broadcastState();
     persistState();

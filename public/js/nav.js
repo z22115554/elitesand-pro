@@ -30,7 +30,6 @@
     settings: 'nav.lyricsSettings',
     general: 'nav.system',
     twitch: 'nav.twitch',
-    sections: 'nav.sections',
   };
 
   const views = document.querySelectorAll('.view[data-view]');

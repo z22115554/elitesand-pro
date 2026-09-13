@@ -112,7 +112,6 @@
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
-  const PARTICLE_ENTRANCES = ['auto', 'quaddrift'];
   const COLUMNFLOW_MIN_LINES = 1;
   const COLUMNFLOW_MAX_LINES = 6;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
@@ -175,7 +174,6 @@
     document.querySelectorAll('.ctrl-position-btn').forEach((b) => b.classList.toggle('active', b.dataset.position === (lyricSettings.lyricPosition || 'center')));
     document.querySelectorAll('.ctrl-intensity-btn').forEach((b) => b.classList.toggle('active', b.dataset.intensity === (lyricSettings.animationIntensity || 'normal')));
     document.querySelectorAll('.ctrl-particle-orient-btn').forEach((b) => b.classList.toggle('active', b.dataset.particleOrient === (lyricSettings.particleOrient || 'vertical')));
-    document.querySelectorAll('.ctrl-particle-entrance-btn').forEach((b) => b.classList.toggle('active', b.dataset.particleEntrance === (lyricSettings.particleEntrance || 'auto')));
     const positionGroup = document.getElementById('ctrl-lyric-position-group');
     const columnflowGroup = document.getElementById('ctrl-columnflow-variant-group');
     const columnflowEntranceGroup = document.getElementById('ctrl-columnflow-entrance-group');
@@ -235,12 +233,11 @@
           ...settingSnapshot(lyricSettings),
           ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
           ...(nextTemplate === 'mirror' ? MIRROR_DEFAULTS : {}),
-          ...(nextTemplate === 'particle' ? { particleOrient: 'vertical', particleEntrance: 'auto', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
+          ...(nextTemplate === 'particle' ? { particleOrient: 'vertical', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
           template: nextTemplate,
         };
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       if (nextTemplate === 'mirror') next.lyricPosition = 'split';
-      if (nextTemplate === 'particle' && !PARTICLE_ENTRANCES.includes(next.particleEntrance)) next.particleEntrance = 'auto';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_VARIANTS.includes(next.columnflowVariant)) next.columnflowVariant = 'sen';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_ENTRANCES.includes(next.columnflowEntrance)) next.columnflowEntrance = 'native';
       if (nextTemplate === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
@@ -275,14 +272,6 @@
     btn.addEventListener('click', () => {
       if (lyricSettings.template !== 'particle' || !['horizontal', 'vertical'].includes(btn.dataset.particleOrient)) return;
       pushLyricPatch({ particleOrient: btn.dataset.particleOrient });
-    });
-  });
-
-  document.querySelectorAll('.ctrl-particle-entrance-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const entrance = btn.dataset.particleEntrance;
-      if (lyricSettings.template !== 'particle' || !PARTICLE_ENTRANCES.includes(entrance)) return;
-      pushLyricPatch({ particleEntrance: entrance });
     });
   });
 
@@ -329,7 +318,6 @@
       if (next.template === 'columnflow' && !COLUMNFLOW_ENTRANCES.includes(next.columnflowEntrance)) next.columnflowEntrance = 'native';
       if (next.template === 'columnflow' && !COLUMNFLOW_PLACEMENTS.includes(next.columnflowPlacement)) next.columnflowPlacement = 'split';
       if (next.template === 'columnflow') next.columnflowMaxLines = normalizeColumnflowMaxLines(next.columnflowMaxLines);
-      if (next.template === 'particle' && !PARTICLE_ENTRANCES.includes(next.particleEntrance)) next.particleEntrance = 'auto';
       if ((next.template === 'classic' || next.template === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       const stores = { ...(lyricSettings[TEMPLATE_SETTING_KEY] || {}), [next.template]: { ...next } };
       const payload = { ...next, [TEMPLATE_SETTING_KEY]: stores, [PRESET_KEY]: presets };
@@ -977,87 +965,6 @@
         SocketClient.send('play:track', playlist[index]);
       });
     });
-  }
-
-  // ═══════════════════════════════════════════
-  // 收藏歌單：只做「載入到播放清單」。兩段式點擊（第一下選中、第二下送出）代替確認視窗。
-  // 載入走伺服器端 savedPlaylists:load：音檔在的一次附加；音檔不在的手機不能重抓（鐵則 12：
-  // YouTube 下載只能走桌面面板的匯入佇列），只提示數量。
-  // ═══════════════════════════════════════════
-  const collectionsCard = document.getElementById('ctrl-collections-card');
-  const collectionsEl = document.getElementById('ctrl-collections');
-  let collections = [];
-  let armedCollectionId = null;
-  let armedTimer = null;
-  let collectionLoading = false;
-
-  function disarmCollection() {
-    armedCollectionId = null;
-    if (armedTimer) { clearTimeout(armedTimer); armedTimer = null; }
-    renderCollections();
-  }
-
-  function renderCollections() {
-    if (!collectionsCard || !collectionsEl) return;
-    collectionsCard.hidden = collections.length === 0;
-    collectionsEl.innerHTML = '';
-    for (const item of collections) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'ctrl-collection-btn' + (item.id === armedCollectionId ? ' armed' : '');
-      btn.dataset.collectionId = item.id;
-      btn.disabled = collectionLoading;
-      btn.textContent = item.id === armedCollectionId
-        ? t('controller.collectionArmed', { name: item.name })
-        : `${item.name} · ${item.trackIds.length}`;
-      collectionsEl.appendChild(btn);
-    }
-  }
-
-  function loadCollection(item) {
-    if (collectionLoading) return;
-    collectionLoading = true;
-    armedCollectionId = null;
-    if (armedTimer) { clearTimeout(armedTimer); armedTimer = null; }
-    renderCollections();
-    showToast(t('controller.collectionLoading'), 'info');
-    SocketClient.sendWithCallback('savedPlaylists:load', { id: item.id }, (res) => {
-      collectionLoading = false;
-      renderCollections();
-      if (!res?.ok) { showToast(res?.error || t('library.playlists.serverNoAck'), 'error'); return; }
-      const pending = (res.needsDownload || []).length;
-      if (!res.added && !pending) { showToast(t('controller.collectionNothing'), 'info'); return; }
-      showToast(pending
-        ? t('controller.collectionLoadedPartial', { added: res.added, pending })
-        : t('controller.collectionLoaded', { added: res.added }), pending ? 'warning' : 'success');
-      if (res.overflow) showToast(t('controller.collectionOverflow', { overflow: res.overflow }), 'warning');
-    });
-  }
-
-  if (collectionsEl) {
-    collectionsEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('.ctrl-collection-btn');
-      if (!btn || collectionLoading) return;
-      const item = collections.find((c) => c.id === btn.dataset.collectionId);
-      if (!item) return;
-      if (armedCollectionId === item.id) { loadCollection(item); return; }
-      armedCollectionId = item.id;
-      if (armedTimer) clearTimeout(armedTimer);
-      armedTimer = setTimeout(disarmCollection, 4000);
-      renderCollections();
-    });
-    SocketClient.on('savedPlaylists:list', (list) => {
-      collections = Array.isArray(list) ? list : [];
-      if (armedCollectionId && !collections.some((c) => c.id === armedCollectionId)) armedCollectionId = null;
-      renderCollections();
-    });
-    SocketClient.on('connection-change', (connected) => {
-      if (connected) SocketClient.sendWithCallback('savedPlaylists:get', null, (list) => {
-        collections = Array.isArray(list) ? list : [];
-        renderCollections();
-      });
-    });
-    if (typeof window !== 'undefined') window.addEventListener('i18n:change', renderCollections);
   }
 
   // ═══════════════════════════════════════════

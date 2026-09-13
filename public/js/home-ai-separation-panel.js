@@ -25,6 +25,7 @@
     install: panel.querySelector('#home-ai-install'),
     makeAll: panel.querySelector('#home-ai-make-all'),
     retryFailed: panel.querySelector('#home-ai-retry-failed'),
+    openAudio: panel.querySelector('#home-ai-open-audio'),
     openGuide: panel.querySelector('#home-ai-open-guide'),
     list: panel.querySelector('#home-ai-track-list'),
     coverage: panel.querySelector('#home-ai-coverage'),
@@ -225,6 +226,10 @@
   }
   els.makeAll.addEventListener('click', () => queueAll(false));
   els.retryFailed.addEventListener('click', () => queueAll(true));
+  els.openAudio.addEventListener('click', () => {
+    if (window.HomePrepTabs) window.HomePrepTabs.show('audio');
+    document.getElementById('separation-mode-toggle')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
   els.openGuide.addEventListener('click', () => {
     document.getElementById('btn-open-help')?.click();
     setTimeout(() => document.getElementById('help-dual-audio')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120);

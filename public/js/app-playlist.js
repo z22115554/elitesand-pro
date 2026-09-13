@@ -202,14 +202,50 @@
 
   // ── 拖曳排序（HTML5 Drag & Drop）──
   // 只有從左側把手（.pi-handle）按下去才允許拖曳，避免與「點整列載入歌曲」互相干擾。
-  // 機制本身跟收藏歌單（media-library.js）共用 SharedUtils.attachRowDragReorder，
-  // 這裡只提供「這個模板長怎樣」跟「算出 from/to 之後怎麼套用」。
-  SharedUtils.attachRowDragReorder({
-    listEl: dom.playlist,
-    rowSelector: '.playlist-item',
-    handleSelector: '.pi-handle',
-    canReorder: () => !selectionMode,
-    onDrop: (from, to) => moveTrack(from, to),
+  let dragFromIndex = -1;
+  let dragArmed = false;
+  dom.playlist.addEventListener('pointerdown', (e) => { dragArmed = !selectionMode && !!e.target.closest('.pi-handle'); });
+  dom.playlist.addEventListener('dragstart', (e) => {
+    const item = e.target.closest('.playlist-item');
+    if (!item || selectionMode || !dragArmed) { e.preventDefault(); return; }
+    dragFromIndex = parseInt(item.dataset.index, 10);
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(dragFromIndex)); } catch (_) {}
+  });
+  function clearDropMarkers() {
+    dom.playlist.querySelectorAll('.drop-above, .drop-below').forEach((n) => n.classList.remove('drop-above', 'drop-below'));
+  }
+  dom.playlist.addEventListener('dragover', (e) => {
+    if (dragFromIndex < 0) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const item = e.target.closest('.playlist-item');
+    clearDropMarkers();
+    if (!item || item.classList.contains('dragging')) return;
+    const rect = item.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    item.classList.add(before ? 'drop-above' : 'drop-below');
+  });
+  dom.playlist.addEventListener('drop', (e) => {
+    if (dragFromIndex < 0) return;
+    e.preventDefault();
+    const item = e.target.closest('.playlist-item');
+    let to;
+    if (item) {
+      const rect = item.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      to = parseInt(item.dataset.index, 10) + (before ? 0 : 1);
+    } else {
+      to = state.playlist.length; // 拖到清單空白處＝移到最後
+    }
+    moveTrack(dragFromIndex, to);
+  });
+  dom.playlist.addEventListener('dragend', () => {
+    dragFromIndex = -1;
+    dragArmed = false;
+    clearDropMarkers();
+    dom.playlist.querySelectorAll('.dragging').forEach((n) => n.classList.remove('dragging'));
   });
 
   // 把第 from 首移到「插入點 to」（to 為移除前的插入索引），並同步正在播放的索引與其他端
@@ -317,7 +353,7 @@
       ? '<span class="pi-badge pi-badge--danger" title="音檔遺失，播放前需要重新下載">音檔遺失</span>'
       : '';
     const separatedBadge = track.separationStatus === 'done'
-      ? `<span class="pi-badge pi-badge--separated" title="${escapeHtml(t('playlist.separatedAutoTitle'))}">🎤 已分離</span>`
+      ? '<span class="pi-badge pi-badge--separated" title="已分離人聲，可用分離播放模式">🎤 已分離</span>'
       : '';
     // 歌詞是找到了，但沒有任何來源驗到官方時長吻合（可能是剪輯過的影片），時間軸可能對不上。
     // 可點擊：跟旁邊的歌詞狀態徽章共用同一個 data-lyrics-fix 開歌詞選擇器，讓使用者直接挑一個
@@ -333,7 +369,7 @@
   function playlistItemMarkup(track, i, selectionKey, isActive, isSelected) {
     const coverUrl = safeHttpUrl(track.cover);
     const coverImg = coverUrl
-      ? `<img class="pi-cover" src="${escapeHtml(coverUrl)}" alt="" loading="lazy" decoding="async">`
+      ? `<img class="pi-cover" src="${escapeHtml(coverUrl)}" alt="">`
       : '<div class="pi-cover"></div>';
     const trackTitle = track.title || '這首歌';
     const selectionLabel = isActive
@@ -367,14 +403,6 @@
   }
   function updateMarquee(scopeEl) {
     (scopeEl || dom.playlist).querySelectorAll('.marquee-text').forEach(measureMarquee);
-  }
-  let playlistMarqueeFrame = 0;
-  function schedulePlaylistMarqueeUpdate() {
-    if (playlistMarqueeFrame) return;
-    playlistMarqueeFrame = requestAnimationFrame(() => {
-      playlistMarqueeFrame = 0;
-      updateMarquee(dom.playlist);
-    });
   }
   // 設定「現在播放」標題/歌手（頂部大字），文字過長時比照播放清單加跑馬燈滾動。
   function setMarqueeText(el, text) {
@@ -478,7 +506,7 @@
       dom.playlist.removeChild(dom.playlist.lastChild);
     }
     syncPlaylistTools(visibleCount);
-    schedulePlaylistMarqueeUpdate();
+    requestAnimationFrame(() => updateMarquee(dom.playlist));
   }
 
   async function removeTrack(index) {

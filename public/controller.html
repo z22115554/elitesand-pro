@@ -158,11 +158,6 @@
         <button class="ctrl-particle-orient-btn" data-particle-orient="horizontal" type="button" data-i18n="particle.orientHorizontal">橫排</button>
         <button class="ctrl-particle-orient-btn active" data-particle-orient="vertical" type="button" data-i18n="particle.orientVertical">直書</button>
       </div>
-      <p class="ctrl-sub-label" data-i18n="controller.columnEntrance">逐字進場</p>
-      <div class="ctrl-chips">
-        <button class="ctrl-particle-entrance-btn active" data-particle-entrance="auto" type="button" data-i18n="template.columnEntranceNative">原樣</button>
-        <button class="ctrl-particle-entrance-btn" data-particle-entrance="quaddrift" type="button" data-i18n="template.columnEntranceDrift">四相漂字</button>
-      </div>
     </div>
     <div class="ctrl-preset-row">
       <select id="ctrl-lyric-preset" class="input" aria-label="歌詞外觀預設" data-i18n-aria-label="controller.lyricPresetLabel"><option value="" data-i18n="controller.noPreset">尚未保存預設</option></select>
@@ -214,13 +209,6 @@
       <button id="btn-lyrics-drop" class="btn btn-ghost" type="button" data-i18n="controller.uploadFile">上傳檔案</button>
       <input id="lyrics-file-input" type="file" accept=".lrc,.srt,.txt" hidden>
     </div>
-  </div>
-
-  <!-- 收藏歌單：只做「載入到播放清單」，建立／編輯留在桌面面板。兩段式點擊代替確認視窗（手機沒有 PanelConfirm）。 -->
-  <div class="ctrl-card" id="ctrl-collections-card" hidden>
-    <p class="eyebrow" data-i18n="library.playlists.ariaLabel">收藏歌單</p>
-    <div class="ctrl-chips" id="ctrl-collections"></div>
-    <p class="ctrl-collections-hint" data-i18n="controller.collectionsHint">點一下選擇、再點一次就依順序加到播放清單末端。音檔已不在的歌要回桌面面板重新下載。</p>
   </div>
 
   <div class="ctrl-card">
