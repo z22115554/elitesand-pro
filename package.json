@@ -42,13 +42,13 @@
     "test:visual": "playwright test --config=playwright.config.js"
   },
   "dependencies": {
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "express": "^4.21.0",
     "fft.js": "^4.0.4",
     "he": "^1.2.0",
     "iconv-lite": "^0.6.3",
     "kuromoji": "^0.1.2",
-    "multer": "^2.2.0",
+    "multer": "^2.3.0",
     "music-metadata": "^11.13.0",
     "node-fetch": "^2.7.0",
     "onnxruntime-web": "^1.29.0-dev.20260724-ed98916356",
