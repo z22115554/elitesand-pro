@@ -260,8 +260,9 @@ function stripRoleSpans(html, rolePattern) {
 }
 
 /**
- * 清理歌詞標題/歌手名稱（參考 Metrolist/LRCLIB 的清理邏輯）
- * 移除 "(Official)", "(Remix)", "feat.", "ft.", 年份後綴等
+ * 清理歌詞標題/歌手名稱，提高各來源的搜尋命中率。
+ * 移除：關鍵字括號（Official／Remastered／Music Video…）、feat./ft. 之後的整段、
+ * 年份後綴、全形括號與書名號內容、"|" 之後的尾段，最後壓縮空白。
  */
 function cleanQuery(text) {
   if (!text) return '';

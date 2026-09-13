@@ -28,6 +28,16 @@
     return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
   }
 
+  // 「開台中」但 startedAt 已是一天前 → 幾乎一定是上次沒偵測到收台（OBS/Twitch 斷線、
+  // EventSub 漏收 stream.offline、當機）留下的殭屍狀態。伺服器端在還原與 Twitch 對帳時
+  // 會自動修掉，這裡是給「一直沒重開程式」的使用者一個手動出口：不鎖死清除按鈕。
+  const STALE_ACTIVE_SESSION_MS = 24 * 60 * 60 * 1000;
+  function sessionLooksStale() {
+    return !!sessionState.active
+      && !!sessionState.startedAt
+      && (Date.now() - sessionState.startedAt) > STALE_ACTIVE_SESSION_MS;
+  }
+
   // 只更新狀態列（含每秒計時器），不重建清單 DOM → 計時器可每秒跳動而不閃爍/不打斷捲動
   function updateSessionStatus() {
     if (!dom.sessionStatus && !sessionSummaryStatus) return;
@@ -42,7 +52,9 @@
         sessionSummaryStatus.classList.toggle('is-active', active);
       }
     };
-    if (sessionState.active && !sessionState.source) {
+    if (sessionState.active && sessionLooksStale()) {
+      applyStatus(workspaceText('home.session.statusStale', '直播狀態異常（可能已收台但未偵測到）· 可直接按「清除歌單」重設'), false);
+    } else if (sessionState.active && !sessionState.source) {
       const count = formatCount(songs.length);
       applyStatus(workspaceText('home.session.statusPending', `等待確認直播狀態 · ${count} 首已記錄`, { count }), false);
     } else if (sessionState.active) {
@@ -70,7 +82,8 @@
   function renderSetlistPanel(data) {
     sessionState = data || { active: false, startedAt: null, source: null, songs: [] };
     const songs = sessionState.songs || [];
-    const active = sessionState.active;
+    // 殭屍「開台中」不算真的在直播 → 不鎖死清除／開新場次，讓使用者自救。
+    const active = sessionState.active && !sessionLooksStale();
 
     // 按鈕狀態
     if (dom.sessionReset) dom.sessionReset.disabled = active || songs.length === 0;

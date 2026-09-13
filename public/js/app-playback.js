@@ -44,17 +44,16 @@
   let stLimiter = null;           // 統一音量提升小聲歌時的防爆音保險（高門檻，平常完全透明）
   let isPlaying = false;
 
-  // ── AI 分離播放模式（實驗性）：伴奏＝主 SoundTouchEngine（跟一般單軌播放共用同一份，
-  // 只是把它載入的檔案換成伴奏檔）；人聲＝第二份獨立的 SoundTouchEngine（同一個
+  // ── AI 分離雙軌播放：已完成分離且同時有伴奏／人聲 stem 的歌曲自動啟用。
+  // 伴奏＝主 SoundTouchEngine（跟一般單軌播放共用同一份，只是把它載入的檔案換成伴奏檔）；
+  // 人聲＝第二份獨立的 SoundTouchEngine（同一個
   // AudioContext、各自的 AudioWorkletNode），跟著伴奏同步 play/pause/seek/pitch/tempo。
   // 2026-08-23 研究過 soundtouch-worklet.js 的實際演算法：WSOLA 的相關性搜尋只影響混音
   // 品質，不影響每次迭代吃掉/吐出幾個 sample（那由 tempo/pitch 參數決定，跟音檔內容無關）；
   // 兩份 instance 只要同一個 AudioContext、同樣起始位置、同樣 tempo/pitch，理論上不會飄。
   // 這是這輪從「plain <audio> 影子軌、強制原速原調」升級成「雙引擎、支援變調變速」的取代
-  // 設計，變調/變速滑桿在分離播放模式下不再停用。──
-  let separationModeEnabled = false;
-  try { separationModeEnabled = localStorage.getItem('vk-separation-mode') === '1'; } catch (e) { /* 靜默 */ }
-  let separationActive = false; // 目前這首歌是否「實際」在用分離播放（toggle 開但這首沒分離過時仍是 false）
+  // 設計，變調/變速滑桿在分離雙軌播放下不再停用。──
+  let separationActive = false; // 目前這首歌是否實際使用伴奏＋人聲雙 stem
   let vocalsSTEngine = null, vocalsGain = null, vocalsDelay = null;
   // A1：伴奏鏈上有 stLimiter（DynamicsCompressor，Chromium 有 lookahead 前視延遲），人聲鏈
   // 沒有，導致分離播放時伴奏固定慢人聲幾 ms。人聲鏈補一個等長 DelayNode 補回來。
@@ -69,7 +68,8 @@
   // 這邊可能已經 ready 而直接開播，此時必須知道「人聲還在飛」才能等它、而不是
   // 誤判成「這首沒有人聲」直接放棄（見 requestPlayback 的 startST）。
   let vocalsLoadPromise = null;
-  let vocalsVolume = 1.0;
+  // 新使用者預設保留 20% 導唱；已有使用者沿用既有 localStorage 設定。
+  let vocalsVolume = 0.2;
   try {
     const saved = parseFloat(localStorage.getItem('vk-separation-vocals-volume'));
     if (Number.isFinite(saved)) vocalsVolume = Math.max(0, Math.min(1.5, saved));
@@ -111,43 +111,18 @@
     return vocalsLoadPromise;
   }
 
-  // 分離播放模式下的 UI 狀態（人聲音量滑桿顯示/隱藏、狀態提示文字）
+  // 已分離歌曲自動顯示人聲音量列；未分離歌曲維持單軌 UI。
   function updateSeparationUiForTrack() {
     if (dom.separationVocalsRow) dom.separationVocalsRow.hidden = !separationActive;
-    if (dom.separationStatusHint) {
-      if (!separationModeEnabled) {
-        dom.separationStatusHint.textContent = '只對已分離人聲的歌曲生效，其餘歌曲仍播放原始音軌';
-      } else if (separationActive) {
-        dom.separationStatusHint.textContent = '目前歌曲：使用分離音軌播放（人聲/伴奏獨立音量）';
-      } else {
-        dom.separationStatusHint.textContent = '目前歌曲尚未分離人聲，播放原始音軌';
-      }
-    }
-  }
-
-  if (dom.separationModeToggle) {
-    dom.separationModeToggle.checked = separationModeEnabled;
-    dom.separationModeToggle.addEventListener('change', () => {
-      separationModeEnabled = dom.separationModeToggle.checked;
-      try { localStorage.setItem('vk-separation-mode', separationModeEnabled ? '1' : '0'); } catch (e) { /* 靜默 */ }
-      if (state.currentTrackIndex !== -1) {
-        // 立刻用目前播放位置重新載入這首歌，讓新模式馬上生效（沿用 restorePlaybackState 的
-        // 「重新載入到指定位置」寫法，不另外發明一套換源邏輯）。
-        playTrack(state.currentTrackIndex, isPlaying, { notifyServer: false, startTime: lastPlayTimeMs / 1000 });
-      } else {
-        updateSeparationUiForTrack();
-      }
-    });
   }
 
   // 分離完成時，「目前已載入的這首歌」載的還是原始混音——面板不會因為 state:sync
   // 重跑 playTrack（restorePlaybackState 看到 loadedTrackEntryId 相同就早退），
   // 使用者按下播放聽到的仍是原唱，得回清單重點一次同一首才會換成伴奏軌（實測回報）。
-  // 這裡在分離完成的當下自動重載一次，沿用 toggle 那招「重新載入到目前播放位置」。
+  // 這裡在分離完成的當下自動重載一次，換成雙 stem 並維持目前播放位置。
   let sepReloadTimer = null;
   function reloadLoadedTrackForSeparation(trackId, attempt = 0) {
     if (sepReloadTimer) { clearTimeout(sepReloadTimer); sepReloadTimer = null; }
-    if (!separationModeEnabled && !dualAudioModeEnabled) return; // 兩個模式都沒開就沒有換軌的必要
     if (separationActive) return;                                // 已經在用分離音軌
     const index = state.currentTrackIndex;
     if (index < 0 || index >= state.playlist.length) return;
@@ -339,7 +314,7 @@
     dualAudioModeEnabled = !!enabled;
     try { localStorage.setItem('vk-dual-audio-mode', dualAudioModeEnabled ? '1' : '0'); } catch (e) { /* 靜默 */ }
     if (state.currentTrackIndex !== -1) {
-      // 沿用既有「重新載入到目前位置」的換模式寫法（跟分離播放模式的 toggle 同一招）。
+      // 切換輸出路由時沿用既有「重新載入到目前位置」流程，讓接線立即生效。
       playTrack(state.currentTrackIndex, isPlaying, { notifyServer: false, startTime: lastPlayTimeMs / 1000 });
     } else {
       wireDualRouting(false);
@@ -728,22 +703,17 @@
     // 統一音量：同樣要在啟動播放前套好這首的響度校正
     applyTrackLoudness(track);
 
-    // AI 分離播放模式：toggle 開著且這首歌真的分離過，才實際生效——toggle 開但這首沒分離時
-    // 仍走原始音軌（不是硬性要求，是刻意的自動降級，見計畫書）。
-    // 雙路路由（兩個裝置＋各自音量）不要求分離：toggle 開就對所有歌曲生效。分離過的歌
-    // 額外自動連帶載入雙 stem，讓耳機那路多疊一份原唱當導唱（不用使用者再另外開一次
-    // 「分離播放模式」）；wantSeparation 因此仍需要 trackSupportsSeparation()。
+    // 已完成分離且兩個 stem 都存在時，自動使用伴奏＋人聲雙軌；其餘歌曲維持原始音軌。
+    // 雙路路由（兩個裝置＋各自音量）是獨立功能：開關只決定輸出路由，不決定要不要用 stem。
     const wantDualAudio = dualAudioModeEnabled;
-    const wantSeparation = (separationModeEnabled || wantDualAudio) && trackSupportsSeparation(track);
+    const wantSeparation = trackSupportsSeparation(track);
     separationActive = wantSeparation;
     dualAudioActive = wantDualAudio;
     if (wantSeparation) ensureVocalsChain();
     wireDualRouting(wantDualAudio);
     updateSeparationUiForTrack();
-    // toggle 開著但這首「還沒」分離完成時，原本是靜默降級回原始音軌——使用者實測回報
-    // 「切到下一首突然沒分離」，體感像是壞掉，其實常是分離工作還在跑（CPU 分離可能要
-    // 好幾分鐘，比一首歌的播放時間還長）。這裡補一個提示，讓使用者知道原因、不用去猜。
-    if ((separationModeEnabled || dualAudioModeEnabled) && !wantSeparation && track.separationStatus === 'processing') {
+    // 分離仍在處理時先播放原始音軌；完成事件會在 metadata 準備好後自動重載成雙 stem。
+    if (!wantSeparation && track.separationStatus === 'processing') {
       AppShared.showToast(`「${track.title}」的人聲分離還在處理中，先播放原始音軌`, 'info');
     }
 
@@ -763,7 +733,7 @@
           // SoundTouch 路徑：等 buffer 好再播；<audio> 靜音待命當備援
           audioPlayer.muted = true;
           audioPlayer.pause(); // 走 SoundTouch 就不該有 <audio> 在跑：靜音的 <audio> 仍會發 timeupdate 搶進度條
-          // 分離播放模式：伴奏＋人聲要平行載入（不能先播伴奏、等它 ready 才去載人聲，
+          // 分離雙軌：伴奏＋人聲要平行載入（不能先播伴奏、等它 ready 才去載人聲，
           // 那樣人聲會晚個幾百 ms 才進來），載入完成才一起 play()，起頭才會對齊。
           const loadPromises = [stLoadCurrent(masterFilename)];
           if (wantSeparation) {
@@ -1001,7 +971,7 @@
       if (stReady) startST();
       else {
         const curTrack = state.playlist[state.currentTrackIndex];
-        // 分離播放模式下伴奏軌是 instrumentalFile，不是原始 filename——這裡跟 playTrack()
+        // 分離雙軌下伴奏軌是 instrumentalFile，不是原始 filename——這裡跟 playTrack()
         // 的 masterFilename 算法保持一致，否則重新載入時會播回帶人聲的原始混音，
         // 疊在獨立播放的人聲軌上面變成雙重人聲。
         const reloadFilename = curTrack && (separationActive ? curTrack.instrumentalFile : curTrack.filename);

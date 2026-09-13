@@ -23,15 +23,28 @@ FFmpeg (not bundled by default; downloaded on demand)
 ------------------------------------------------------
 Elitesand Pro does not bundle ffmpeg.exe/ffprobe.exe by default. The first
 time an FFmpeg-dependent feature (e.g. YouTube-to-MP3) is used, the app offers
-to download the official Windows "essentials" build from gyan.dev — the
-distribution gyan.dev's own build page and ffmpeg.org both point to for
-Windows — and verifies its SHA-256 against a checksum fetched from the same
-source before using it. The app never links FFmpeg into its own code; it is
-only ever invoked as a separate process. Because Elitesand Pro itself does not
-redistribute the GPLv3 binary, it carries no obligation to provide FFmpeg's
-corresponding source. Users who already have FFmpeg installed, or who set
-ffmpegPath in server/config.js, are not prompted to download anything.
+to download a prebuilt Windows binary and verifies its SHA-256 against a
+checksum fetched from the same release before using it.
+
+The primary download source is the BtbN FFmpeg-Builds "win64-lgpl" build,
+which is configured without GPL-only components and is distributed under the
+LGPL. If that source is unreachable the app falls back to the gyan.dev
+"essentials" build, which is a GPLv3 build; in either case the binary is
+fetched by the user's own machine directly from the upstream distributor.
+
+The app never links FFmpeg into its own code; it is only ever invoked as a
+separate process. Because Elitesand Pro itself does not redistribute the
+binary, it carries no obligation to provide FFmpeg's corresponding source.
+Users who already have FFmpeg installed, or who set ffmpegPath in
+server/config.js, are not prompted to download anything.
+
+An opt-in build flag (-BundleFfmpeg) exists for producing offline packages
+that do embed FFmpeg. When it is used the build fetches the source archive
+for the exact bundled commit plus COPYING.GPLv3 into licenses/ffmpeg/, and
+aborts rather than producing a package with incomplete license material.
+
 License guidance: https://ffmpeg.org/legal.html
+BtbN builds: https://github.com/BtbN/FFmpeg-Builds
 Gyan build information: https://www.gyan.dev/ffmpeg/builds/
 
 Nunito (font)
@@ -57,8 +70,39 @@ SoundTouch JS 0.3.0
 -------------------
 Copyright Olli Parviainen, Ryan Berdeen, Jakub Fiala, Steve Blades and
 contributors. GNU Lesser General Public License v2.1 or later. The license
-header is retained in public/vendor/soundtouch.js.
+header is retained in public/vendor/soundtouch-worklet.js.
 Source: https://github.com/cutterbl/SoundTouchJS
+
+AI vocal separation models (not bundled; downloaded on demand)
+--------------------------------------------------------------
+The optional, off-by-default AI vocal separation feature downloads model
+weights on first use. Nothing is bundled with the installer.
+
+WebGPU engine:
+  musetric/vocal-separation-roformer-onnx — MIT. An ONNX export of
+  SYH99999/MelBandRoformerBigSYHFTV1Fast (MIT), which is itself a fine-tune of
+  Mel-Band RoFormer weights.
+  Source: https://huggingface.co/musetric/vocal-separation-roformer-onnx
+
+CUDA / CPU engine (via python-audio-separator):
+  python-audio-separator — MIT.
+  Source: https://github.com/nomadkaraoke/python-audio-separator
+  Model "vocals_mel_band_roformer.ckpt" — Mel-Band RoFormer vocal weights by
+  Kimberley Jensen, MIT.
+  Source: https://huggingface.co/KimberleyJSN/melbandroformer
+
+Both model families implement the architecture described in:
+  Wang, Ju-Chiang; Lu, Wei-Tsung; Won, Minz. "Mel-Band RoFormer for Music
+  Source Separation." arXiv:2310.01809 (2023).
+
+Online lyrics sources
+---------------------
+Elitesand Pro queries third-party lyrics services at runtime (LRCLIB, the
+BetterLyrics API, Apple Music, QQ Music, KuGou and NetEase Cloud Music). No
+code from those services or their clients is included in this application;
+only their network interfaces are used. Lyrics returned by them remain the
+property of their respective rights holders, and no license granted here
+conveys any right to that content — see the closing paragraph below.
 
 OpenCC JS / OpenCC data
 -----------------------

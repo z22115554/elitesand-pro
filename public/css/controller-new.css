@@ -125,6 +125,10 @@ body.controller {
 .ctrl-playlist.visible { display: flex; }
 .ctrl-playlist-empty { text-align: center; color: var(--text-faint); padding: 20px 0; font-size: 13px; }
 .ctrl-playlist-empty .hint { font-size: 11px; }
+.ctrl-collection-btn { min-height: 44px; padding: 0 16px; border: 1px solid var(--border-strong); background: var(--bg-raised); color: var(--text-dim); border-radius: var(--r-md); font-size: 13px; font-weight: 500; cursor: pointer; touch-action: manipulation; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctrl-collection-btn.armed { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.ctrl-collection-btn:disabled { opacity: .6; }
+.ctrl-collections-hint { margin: 10px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-faint); }
 
 .ctrl-playlist-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--r-md); }
 .ctrl-playlist-item:active { background: var(--bg-hover); }

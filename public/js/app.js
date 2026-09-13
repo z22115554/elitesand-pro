@@ -28,6 +28,16 @@
   let currentTrackIndex = -1;
   let playedEntryIds = new Set();
   let lastPlayedEntryId = null;
+  let syncedPlaylistRenderFrame = 0;
+
+  // playlist:update 與緊接的 state:sync 都要套用狀態，但同一 frame 只畫一次清單。
+  function scheduleSyncedPlaylistRender() {
+    if (syncedPlaylistRenderFrame) return;
+    syncedPlaylistRenderFrame = requestAnimationFrame(() => {
+      syncedPlaylistRenderFrame = 0;
+      AppShared.renderPlaylist();
+    });
+  }
 
   function applySyncedPlaylist(nextPlaylist, currentTrackId, currentTrack, currentEntryId) {
     // playlist:update 只帶摘要時，保留本機目前歌曲的完整歌詞；state:sync 則以
@@ -46,7 +56,7 @@
     const reconciled = PlaylistState.reconcilePlaylist(hydratedPlaylist, currentTrackId, currentEntryId);
     playlist = reconciled.playlist;
     currentTrackIndex = reconciled.currentTrackIndex;
-    AppShared.renderPlaylist();
+    scheduleSyncedPlaylistRender();
     // playTrack() 換歌當下，清單裡那一列還沒被這次 sync 帶來的完整歌詞 hydrate，「歌詞純文字」
     // 預覽框只能先樂觀顯示「此歌曲無歌詞」；hydrate 完成後這裡要補畫一次，不然框會卡在舊字樣，
     // 明明整首都有逐字歌詞（OBS 那邊靠 currentTrack 直接播動畫，不受這個框影響）也還是顯示沒有。
@@ -94,6 +104,8 @@
     isInPlaylist: (id) => playlist.some((t) => t.id === id),
     // 目前播放清單正在使用的本機檔名（給音檔清理參考；伺服器端亦自行計算）
     getPlaylistFilenames: () => playlist.map((t) => t.filename).filter(Boolean),
+    // 儲存歌單「用目前播放清單建立」：依清單順序取 id（重複曲只留第一次出現）
+    getPlaylistIds: () => Array.from(new Set(playlist.map((t) => t.id).filter(Boolean))),
     // 供歌詞選擇器（lyric-extras.js）套用候選歌詞給任一首歌（不限當前播放中的那首）：
     // 更新本地清單顯示（歌詞狀態 dot 立即翻色）＋通知伺服器暫存，函式本身已處理兩者。
     applyManualLyrics: (trackId, lyrics, lyricsType, parsedLyrics, lrcOffset, source) =>

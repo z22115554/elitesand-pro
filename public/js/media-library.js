@@ -50,6 +50,26 @@
   let searchQuery = '';
   let sortBy = 'plays';
   let filterSeparatedOnly = false;
+  let viewCache = [];
+
+  // 媒體庫最多可能有 10k 首；不能把每一列都常駐 DOM。一般列由 46px 封面 +
+  // 10px 上下 padding + 1px border 撐成約 68px，再加既有 8px gap = 76px step。
+  // 這裡保留完整 viewCache（搜尋/排序仍對全量資料運算），DOM 只畫目前視窗附近。
+  const VIRTUAL_ROW_HEIGHT = 68;
+  const VIRTUAL_ROW_GAP = 8;
+  const VIRTUAL_ROW_STEP = VIRTUAL_ROW_HEIGHT + VIRTUAL_ROW_GAP;
+  const VIRTUAL_OVERSCAN_ROWS = 20;
+  const VIRTUAL_MAX_ROWS = 100;
+  let virtualStart = 0;
+  let virtualEnd = 0;
+  let virtualScrollRaf = 0;
+  let virtualForceRender = false;
+  const restorePendingIds = new Map();
+
+  // 儲存歌單（伺服器 data/playlists.json；socket savedPlaylists:*）。
+  // 歌單只是媒體庫 id 的有序集合，選中某個歌單時清單依歌單順序顯示、排序選單停用。
+  let savedPlaylists = [];
+  let activePlaylistId = null;
 
   // 收到伺服器清單→存快取後套用目前的搜尋/排序再渲染
   function render(list) {
@@ -65,6 +85,120 @@
     return arr.sort(byPlays);
   }
 
+  function pausePreviewPanels() {
+    listEl.querySelectorAll('.lib-separate-preview-panel audio').forEach((audio) => audio.pause());
+  }
+
+  function virtualSpacer(rowCount) {
+    if (rowCount <= 0) return null;
+    const height = Math.max(0, rowCount * VIRTUAL_ROW_STEP - VIRTUAL_ROW_GAP);
+    const spacer = document.createElement('div');
+    spacer.className = 'lib-virtual-spacer';
+    spacer.setAttribute('aria-hidden', 'true');
+    spacer.style.height = `${height}px`;
+    spacer.style.flex = `0 0 ${height}px`;
+    return spacer;
+  }
+
+  function getVirtualRange() {
+    if (!viewCache.length) return { start: 0, end: 0, firstVisible: 0, lastVisible: 0 };
+    const rect = listEl.getBoundingClientRect();
+    const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 720);
+    const firstVisible = Math.max(0, Math.min(
+      viewCache.length - 1,
+      Math.floor(Math.max(0, -rect.top) / VIRTUAL_ROW_STEP),
+    ));
+    const visibleRows = Math.max(1, Math.ceil(viewportHeight / VIRTUAL_ROW_STEP) + 2);
+    const lastVisible = Math.min(viewCache.length, firstVisible + visibleRows);
+    const targetRows = Math.min(VIRTUAL_MAX_ROWS, visibleRows + VIRTUAL_OVERSCAN_ROWS * 2);
+    let start = Math.max(0, firstVisible - VIRTUAL_OVERSCAN_ROWS);
+    let end = Math.min(viewCache.length, start + targetRows);
+    if (end - start < targetRows) start = Math.max(0, end - targetRows);
+    return { start, end, firstVisible, lastVisible };
+  }
+
+  function renderLibraryRow(item) {
+    const row = document.createElement('div');
+    row.className = 'lib-row';
+    row.dataset.id = item.id;
+
+    const coverUrl = safeHttpUrl(item.cover);
+    const restoreLabel = restorePendingIds.get(String(item.id));
+    const reorderable = canReorderCollection();
+    if (reorderable) row.draggable = true;
+
+    row.innerHTML = `
+      ${reorderable ? `<span class="lib-handle" title="${escapeHtml(tx('library.playlists.dragToReorder'))}" aria-hidden="true">⋮⋮</span>` : ''}
+      <div class="lib-cover">${coverUrl ? '' : '♪'}</div>
+      <div class="lib-meta">
+        <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+        <div class="lib-sub">${escapeHtml(item.artist || tr('未知歌手'))}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
+        <div class="lib-stats">▶ ${tr(`${item.playCount || 0} 次`)} · ${fmtDate(item.lastPlayed)}</div>
+      </div>
+      <div class="lib-actions">
+        <button class="btn btn-sm lib-reimport" type="button"${restoreLabel ? ' disabled' : ''}>${restoreLabel || tr('加入清單')}</button>
+        ${separationButtonHtml(item)}
+        ${playlistButtonHtml()}
+        <button class="btn btn-sm btn-ghost lib-remove" type="button" title="${tr('從媒體庫移除')}">✕</button>
+      </div>`;
+
+    // Do not interpolate external metadata into a style attribute. The URL
+    // has already passed the shared HTTP(S) allow-list before CSSOM receives it.
+    if (coverUrl) {
+      const cover = row.querySelector('.lib-cover');
+      if (cover) cover.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
+    }
+    return row;
+  }
+
+  function renderVirtualWindow(force = false) {
+    if (!viewCache.length) {
+      virtualStart = 0;
+      virtualEnd = 0;
+      if (listEl.childNodes.length) {
+        pausePreviewPanels();
+        listEl.innerHTML = '';
+      }
+      return;
+    }
+
+    const range = getVirtualRange();
+    // 只有可見範圍快碰到 overscan 邊界才換 window。除了減少 DOM churn，也避免使用者
+    // 正在操作試聽面板時，僅僅捲幾個像素就把 <audio> 節點重建掉。
+    const guard = Math.max(4, Math.floor(VIRTUAL_OVERSCAN_ROWS / 2));
+    const withinCurrentWindow = virtualEnd > virtualStart
+      && range.firstVisible >= virtualStart + guard
+      && range.lastVisible <= virtualEnd - guard;
+    if (!force && withinCurrentWindow) return;
+    if (!force && range.start === virtualStart && range.end === virtualEnd) return;
+
+    virtualStart = range.start;
+    virtualEnd = range.end;
+    pausePreviewPanels();
+    listEl.innerHTML = '';
+
+    const topSpacer = virtualSpacer(virtualStart);
+    if (topSpacer) listEl.appendChild(topSpacer);
+    for (let i = virtualStart; i < virtualEnd; i += 1) {
+      listEl.appendChild(renderLibraryRow(viewCache[i]));
+    }
+    const bottomSpacer = virtualSpacer(viewCache.length - virtualEnd);
+    if (bottomSpacer) listEl.appendChild(bottomSpacer);
+  }
+
+  function scheduleVirtualRender(force = false) {
+    if (force) virtualForceRender = true;
+    if (virtualScrollRaf) return;
+    virtualScrollRaf = requestAnimationFrame(() => {
+      virtualScrollRaf = 0;
+      const libraryView = listEl.closest('.view');
+      if (libraryView && !libraryView.classList.contains('is-active') && !virtualForceRender) return;
+      const shouldForce = virtualForceRender;
+      virtualForceRender = false;
+      renderVirtualWindow(shouldForce);
+    });
+  }
+
   // 套用搜尋過濾 + 排序 → 渲染
   function applyView() {
     const q = searchQuery.trim().toLowerCase();
@@ -72,57 +206,30 @@
       ? cache.filter((it) => (it.title || '').toLowerCase().includes(q) || (it.artist || '').toLowerCase().includes(q))
       : cache.slice();
     if (filterSeparatedOnly) view = view.filter((it) => it.separationStatus === 'done');
-    view = sortView(view);
-
-    listEl.innerHTML = '';
+    const activePlaylist = getActivePlaylist();
+    if (activePlaylist) {
+      // 依歌單順序，不套排序選單；歌單裡已不在媒體庫的 id 自然被略過（摘要列會標出數量）
+      const byId = new Map(view.map((it) => [String(it.id), it]));
+      view = activePlaylist.trackIds.map((id) => byId.get(String(id))).filter(Boolean);
+      viewCache = view;
+    } else {
+      viewCache = sortView(view);
+    }
+    if (sortSelect) sortSelect.disabled = !!activePlaylist;
     if (!view.length) {
+      renderVirtualWindow(true);
       if (emptyEl) {
         emptyEl.hidden = false;
-        emptyEl.textContent = cache.length
-          ? tr(filterSeparatedOnly ? '沒有已分離人聲的歌曲' : '找不到符合的歌曲')
-          : tr('尚無記錄，播放任一首歌後會自動加入。');
+        emptyEl.textContent = activePlaylist && !activePlaylist.trackIds.length
+          ? tx('library.playlists.empty')
+          : cache.length
+            ? tr(filterSeparatedOnly ? '沒有已分離人聲的歌曲' : '找不到符合的歌曲')
+            : tr('尚無記錄，播放任一首歌後會自動加入。');
       }
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
-
-    for (const item of view) {
-      const row = document.createElement('div');
-      row.className = 'lib-row';
-      row.dataset.id = item.id;
-
-      const coverUrl = safeHttpUrl(item.cover);
-
-      row.innerHTML = `
-        <div class="lib-cover">${coverUrl ? '' : '♪'}</div>
-        <div class="lib-meta">
-          <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
-          <div class="lib-sub">${escapeHtml(item.artist || tr('未知歌手'))}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
-          <div class="lib-stats">▶ ${tr(`${item.playCount || 0} 次`)} · ${fmtDate(item.lastPlayed)}</div>
-        </div>
-        <div class="lib-actions">
-          <button class="btn btn-sm lib-reimport" type="button">${tr('加入清單')}</button>
-          ${separationButtonHtml(item)}
-          <button class="btn btn-sm btn-ghost lib-remove" type="button" title="${tr('從媒體庫移除')}">✕</button>
-        </div>`;
-
-      // Do not interpolate external metadata into a style attribute. The URL
-      // has already passed the shared HTTP(S) allow-list before CSSOM receives it.
-      if (coverUrl) {
-        const cover = row.querySelector('.lib-cover');
-        if (cover) cover.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
-      }
-
-      row.querySelector('.lib-reimport').addEventListener('click', () => reimport(item, row));
-      row.querySelector('.lib-remove').addEventListener('click', () => removeItem(item.id));
-      const separateBtn = row.querySelector('.lib-separate');
-      if (separateBtn) separateBtn.addEventListener('click', () => startSeparation(item, row));
-      const separateCancelBtn = row.querySelector('.lib-separate-cancel');
-      if (separateCancelBtn) separateCancelBtn.addEventListener('click', () => cancelSeparation(item, row));
-      const previewBtn = row.querySelector('.lib-separate-preview');
-      if (previewBtn) previewBtn.addEventListener('click', () => togglePreview(item, row));
-      listEl.appendChild(row);
-    }
+    renderVirtualWindow(true);
   }
 
   // ─── AI 人聲分離（實驗性功能，見 CLAUDE.md）───
@@ -378,6 +485,45 @@
     }
   });
 
+  // 媒體庫列採事件代理：virtual window 換頁時只替換列 DOM，不需要替每個按鈕重新
+  // 綁 listener；10k 資料量下 listener 數量仍維持常數。
+  listEl.addEventListener('click', (event) => {
+    const row = event.target.closest('.lib-row');
+    if (!row || !listEl.contains(row)) return;
+    const item = cache.find((entry) => String(entry.id) === String(row.dataset.id));
+    if (!item) return;
+    if (event.target.closest('.lib-reimport')) {
+      reimport(item, row);
+      return;
+    }
+    if (event.target.closest('.lib-remove')) {
+      removeItem(item.id);
+      return;
+    }
+    if (event.target.closest('.lib-playlist-add')) {
+      openPlaylistPopover(item, event.target.closest('.lib-playlist-add'));
+      return;
+    }
+    if (event.target.closest('.lib-playlist-remove')) {
+      removeFromActivePlaylist(item);
+      return;
+    }
+    if (event.target.closest('.lib-separate-cancel')) {
+      cancelSeparation(item, row);
+      return;
+    }
+    if (event.target.closest('.lib-separate-preview')) {
+      togglePreview(item, row);
+      return;
+    }
+    if (event.target.closest('.lib-separate')) startSeparation(item, row);
+  });
+
+  // scroll 不會 bubble，但 capture 可以接到視窗與內層可捲容器；用單一 RAF 合併同一幀
+  // 的多個 scroll 事件。resize 也只需重新算一次 window。
+  document.addEventListener('scroll', () => scheduleVirtualRender(), true);
+  window.addEventListener('resize', () => scheduleVirtualRender(true));
+
   function requestSocket(event, data) {
     return new Promise((resolve) => {
       SocketClient.sendWithCallback(event, data, (response) => resolve(response || null));
@@ -391,10 +537,23 @@
       while (restoreQueue.length) {
       const job = restoreQueue.shift();
       const { item, btn, originalLabel } = job;
-      if (btn) { btn.disabled = true; btn.textContent = tr('加入中…'); }
+      const itemKey = String(item.id);
+      restorePendingIds.set(itemKey, tr('加入中…'));
+      const visibleBtn = () => {
+        const visibleRow = listEl.querySelector(`.lib-row[data-id="${CSS.escape(itemKey)}"]`);
+        return visibleRow?.querySelector('.lib-reimport') || btn;
+      };
+      const setButton = (label, disabled) => {
+        const currentBtn = visibleBtn();
+        if (!currentBtn) return;
+        currentBtn.disabled = disabled;
+        currentBtn.textContent = label;
+      };
+      setButton(tr('加入中…'), true);
       const fail = (message) => {
         toast(message, 'error');
-        if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
+        restorePendingIds.delete(itemKey);
+        setButton(originalLabel, false);
       };
 
       const resp = await requestSocket('library:reimport', item.id);
@@ -402,16 +561,19 @@
         const result = await window.VKState.addLibraryTrack(resp.track);
         if (result?.ok) {
           toast(tr(`已加入清單：${item.title}`), 'success');
-          if (btn) btn.textContent = tr('已加入');
+          restorePendingIds.delete(itemKey);
+          setButton(tr('已加入'), true);
         } else {
           fail(tr(`加入播放清單失敗：${result?.error || tr('伺服器沒有確認')}`));
         }
       } else if (resp?.needsDownload && resp.url && window.VKState.importYouTubeUrl) {
-        if (btn) btn.textContent = tr('排隊下載中…');
+        restorePendingIds.set(itemKey, tr('排隊下載中…'));
+        setButton(tr('排隊下載中…'), true);
         try {
           await window.VKState.importYouTubeUrl(resp.url);
           toast(tr(`已加入清單：${item.title}`), 'success');
-          if (btn) btn.textContent = tr('已加入');
+          restorePendingIds.delete(itemKey);
+          setButton(tr('已加入'), true);
         } catch (err) {
           fail(tr(`重新匯入失敗：${err.message}`));
         }
@@ -440,7 +602,9 @@
     if (!btn || btn.disabled) return;
     const originalLabel = btn.textContent;
     btn.disabled = true;
-    btn.textContent = restoreQueueRunning ? tr('加入佇列中…') : tr('加入中…');
+    const pendingLabel = restoreQueueRunning ? tr('加入佇列中…') : tr('加入中…');
+    btn.textContent = pendingLabel;
+    restorePendingIds.set(String(item.id), pendingLabel);
     restoreQueue.push({ item, btn, originalLabel });
     runRestoreQueue();
   }
@@ -593,23 +757,330 @@
     });
   });
 
+  // ─── 儲存歌單 ───
+  const chipsEl = document.getElementById('lib-playlist-chips');
+  const newForm = document.getElementById('lib-playlist-new');
+  const newNameInput = document.getElementById('lib-playlist-new-name');
+  const newFromQueueBtn = document.getElementById('lib-playlist-new-from-queue');
+  const newCancelBtn = document.getElementById('lib-playlist-new-cancel');
+  const actionsEl = document.getElementById('lib-playlist-actions');
+  const summaryEl = document.getElementById('lib-playlist-summary');
+  const loadBtn = document.getElementById('lib-playlist-load');
+  const renameBtn = document.getElementById('lib-playlist-rename');
+  const deleteBtn = document.getElementById('lib-playlist-delete');
+  let playlistPopover = null;
+
+  function getActivePlaylist() {
+    return activePlaylistId ? savedPlaylists.find((p) => p.id === activePlaylistId) || null : null;
+  }
+
+  function playlistError(res) {
+    const code = res?.error;
+    const key = code ? `library.playlists.error.${code}` : null;
+    const text = key ? tx(key) : null;
+    return text && text !== key ? text : (code || tx('library.playlists.serverNoAck'));
+  }
+
+  function playlistButtonHtml() {
+    if (activePlaylistId) {
+      return `<button class="btn btn-sm btn-ghost lib-playlist-remove" type="button" title="${escapeHtml(tx('library.playlists.removeFrom'))}">−</button>`;
+    }
+    if (!savedPlaylists.length) return '';
+    return `<button class="btn btn-sm btn-ghost lib-playlist-add" type="button" title="${escapeHtml(tx('library.playlists.addTo'))}">＋</button>`;
+  }
+
+  function renderPlaylistChips() {
+    if (!chipsEl) return;
+    chipsEl.innerHTML = '';
+    const libraryIds = new Set(cache.map((it) => String(it.id)));
+    const mk = (label, id, active) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lib-playlist-chip' + (active ? ' active' : '');
+      b.dataset.playlistId = id || '';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
+      b.textContent = label;
+      return b;
+    };
+    chipsEl.appendChild(mk(tx('library.playlists.all'), '', !activePlaylistId));
+    for (const p of savedPlaylists) {
+      const present = p.trackIds.filter((id) => libraryIds.has(String(id))).length;
+      const chip = mk(`${p.name} · ${present}`, p.id, p.id === activePlaylistId);
+      chip.title = p.name;
+      chipsEl.appendChild(chip);
+    }
+    const add = mk(tx('library.playlists.new'), '', false);
+    add.classList.add('lib-playlist-chip-new');
+    add.dataset.action = 'new';
+    chipsEl.appendChild(add);
+
+    const active = getActivePlaylist();
+    if (actionsEl) actionsEl.hidden = !active;
+    if (active && summaryEl) {
+      const total = active.trackIds.length;
+      const missing = active.trackIds.filter((id) => !libraryIds.has(String(id))).length;
+      summaryEl.textContent = missing
+        ? tx('library.playlists.summaryMissing', { count: total, missing })
+        : tx('library.playlists.summary', { count: total });
+    }
+  }
+
+  function setActivePlaylist(id) {
+    activePlaylistId = id || null;
+    closePlaylistPopover();
+    renderPlaylistChips();
+    applyView();
+  }
+
+  function applySavedPlaylists(list) {
+    savedPlaylists = Array.isArray(list) ? list : [];
+    if (activePlaylistId && !savedPlaylists.some((p) => p.id === activePlaylistId)) activePlaylistId = null;
+    renderPlaylistChips();
+    applyView();
+  }
+
+  function refreshSavedPlaylists() {
+    if (!SocketClient.connected()) return;
+    SocketClient.sendWithCallback('savedPlaylists:get', null, (list) => applySavedPlaylists(list || []));
+  }
+
+  function showNewForm(show) {
+    if (!newForm) return;
+    newForm.hidden = !show;
+    if (show) { newNameInput.value = ''; requestAnimationFrame(() => newNameInput.focus()); }
+  }
+
+  function createPlaylist(fromQueue) {
+    const name = newNameInput?.value.trim();
+    if (!name) { toast(tx('library.playlists.error.name_required'), 'error'); newNameInput?.focus(); return; }
+    const trackIds = fromQueue ? (window.VKState?.getPlaylistIds?.() || []) : [];
+    if (fromQueue && !trackIds.length) { toast(tx('library.playlists.queueEmpty'), 'error'); return; }
+    SocketClient.sendWithCallback('savedPlaylists:create', { name, trackIds }, (res) => {
+      if (!res?.ok) return toast(playlistError(res), 'error');
+      showNewForm(false);
+      toast(fromQueue
+        ? tx('library.playlists.createdFromQueue', { name: res.playlist.name, count: res.playlist.trackIds.length })
+        : tx('library.playlists.created', { name: res.playlist.name }), 'success');
+      // 廣播會再送一次完整清單；先本地更新讓 chip 立刻出現並切過去
+      savedPlaylists = savedPlaylists.filter((p) => p.id !== res.playlist.id).concat([res.playlist]);
+      setActivePlaylist(res.playlist.id);
+    });
+  }
+
+  function renamePlaylist() {
+    const active = getActivePlaylist();
+    const chip = chipsEl?.querySelector(`.lib-playlist-chip[data-playlist-id="${CSS.escape(active?.id || '')}"]`);
+    if (!active || !chip) return;
+    // 就地改名：chip 換成輸入框，Enter 送出、Esc 取消、失焦視同送出
+    const input = document.createElement('input');
+    input.className = 'input lib-playlist-chip-input';
+    input.type = 'text';
+    input.maxLength = 60;
+    input.value = active.name;
+    chip.replaceWith(input);
+    let done = false;
+    const finish = (commit) => {
+      if (done) return; done = true;
+      const name = input.value.trim();
+      if (commit && name && name !== active.name) {
+        SocketClient.sendWithCallback('savedPlaylists:rename', { id: active.id, name }, (res) => {
+          if (!res?.ok) toast(playlistError(res), 'error');
+          else active.name = res.playlist.name;
+          renderPlaylistChips();
+        });
+      } else renderPlaylistChips();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.focus();
+    input.select();
+  }
+
+  async function deletePlaylist() {
+    const active = getActivePlaylist();
+    if (!active) return;
+    const confirmed = await window.PanelConfirm?.request({
+      title: tx('library.playlists.deleteTitle', { name: active.name }),
+      summary: tx('library.playlists.deleteSummary'),
+      impact: tx('library.playlists.deleteImpact'),
+      tone: 'danger',
+      confirmLabel: tx('library.playlists.delete'),
+    });
+    if (!confirmed) return;
+    SocketClient.sendWithCallback('savedPlaylists:delete', active.id, (res) => {
+      if (!res?.ok) return toast(playlistError(res), 'error');
+      savedPlaylists = savedPlaylists.filter((p) => p.id !== active.id);
+      setActivePlaylist(null);
+    });
+  }
+
+  async function loadActivePlaylist() {
+    const active = getActivePlaylist();
+    if (!active || !window.VKState) return;
+    const byId = new Map(cache.map((it) => [String(it.id), it]));
+    const items = active.trackIds.map((id) => byId.get(String(id))).filter(Boolean);
+    if (!items.length) { toast(tx('library.playlists.empty'), 'error'); return; }
+    const dup = items.filter((it) => window.VKState.isInPlaylist?.(it.id)).length;
+    const confirmed = await window.PanelConfirm?.request({
+      title: tx('library.playlists.loadTitle', { name: active.name }),
+      summary: tx('library.playlists.loadSummary', { count: items.length }),
+      impact: tx('library.playlists.loadImpact', { dup }),
+      confirmLabel: tx('library.playlists.loadConfirm'),
+    });
+    if (!confirmed) return;
+    // 走跟單首「加入清單」完全相同的逐首佇列：一次只還原一首，音檔不在的走 YouTube 匯入佇列
+    for (const item of items) {
+      const key = String(item.id);
+      if (restorePendingIds.has(key)) continue;
+      restorePendingIds.set(key, tr('加入佇列中…'));
+      restoreQueue.push({ item, btn: null, originalLabel: tr('加入清單') });
+    }
+    renderVirtualWindow(true);
+    toast(tx('library.playlists.loadQueued', { count: items.length }), 'info');
+    runRestoreQueue();
+  }
+
+  function removeFromActivePlaylist(item) {
+    const active = getActivePlaylist();
+    if (!active) return;
+    SocketClient.sendWithCallback('savedPlaylists:removeTracks', { id: active.id, trackIds: [item.id] }, (res) => {
+      if (!res?.ok) return toast(playlistError(res), 'error');
+      active.trackIds = res.playlist.trackIds;
+      renderPlaylistChips();
+      applyView();
+    });
+  }
+
+  // ─── 收藏歌單內拖曳排序 ───
+  // 搜尋／篩選中不可拖（看到的是子集合，順序語義不明確）；伺服器 setOrder 會把面板看不到的
+  // 「已不在媒體庫」id 依原順序補回末端，所以這裡只送目前可見全量的順序即可。
+  // 機制本身跟播放清單（app-playlist.js）共用 SharedUtils.attachRowDragReorder。
+  function canReorderCollection() {
+    return !!activePlaylistId && !searchQuery.trim() && !filterSeparatedOnly;
+  }
+  SharedUtils.attachRowDragReorder({
+    listEl,
+    rowSelector: '.lib-row',
+    handleSelector: '.lib-handle',
+    canReorder: canReorderCollection,
+    onDragStart: () => closePlaylistPopover(),
+    onDrop: (from, to) => {
+      const ids = viewCache.map((it) => String(it.id));
+      let insertAt = to > from ? to - 1 : to;
+      insertAt = Math.max(0, Math.min(ids.length - 1, insertAt));
+      if (insertAt === from) return;
+      const [moved] = ids.splice(from, 1);
+      ids.splice(insertAt, 0, moved);
+      reorderActivePlaylist(ids);
+    },
+  });
+
+  function reorderActivePlaylist(orderedIds) {
+    const active = getActivePlaylist();
+    if (!active) return;
+    const previous = active.trackIds.slice();
+    // 先樂觀重排讓畫面立刻跟手，伺服器拒絕才回滾
+    const placed = new Set(orderedIds);
+    active.trackIds = orderedIds.concat(previous.filter((id) => !placed.has(String(id))));
+    applyView();
+    SocketClient.sendWithCallback('savedPlaylists:setOrder', { id: active.id, trackIds: orderedIds }, (res) => {
+      if (!res?.ok) { active.trackIds = previous; applyView(); toast(playlistError(res), 'error'); return; }
+      active.trackIds = res.playlist.trackIds;
+      applyView();
+    });
+  }
+
+  // 「＋」小面板：列出所有歌單＋勾選框，勾／取消勾即時送出
+  function closePlaylistPopover() {
+    if (!playlistPopover) return;
+    playlistPopover.remove();
+    playlistPopover = null;
+  }
+
+  function openPlaylistPopover(item, anchor) {
+    closePlaylistPopover();
+    if (!savedPlaylists.length) { toast(tx('library.playlists.noneYet'), 'info'); return; }
+    const pop = document.createElement('div');
+    pop.className = 'lib-playlist-popover';
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', tx('library.playlists.addTo'));
+    const key = String(item.id);
+    for (const p of savedPlaylists) {
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = p.trackIds.some((id) => String(id) === key);
+      cb.addEventListener('change', () => {
+        cb.disabled = true;
+        const event = cb.checked ? 'savedPlaylists:addTracks' : 'savedPlaylists:removeTracks';
+        SocketClient.sendWithCallback(event, { id: p.id, trackIds: [item.id] }, (res) => {
+          cb.disabled = false;
+          if (!res?.ok) { cb.checked = !cb.checked; return toast(playlistError(res), 'error'); }
+          p.trackIds = res.playlist.trackIds;
+          renderPlaylistChips();
+        });
+      });
+      const text = document.createElement('span');
+      text.textContent = p.name;
+      label.appendChild(cb);
+      label.appendChild(text);
+      pop.appendChild(label);
+    }
+    // 定位在按鈕下方；用 fixed 讓 virtual window 重繪／捲動時直接關掉而不是漂走
+    const rect = anchor.getBoundingClientRect();
+    pop.style.top = `${Math.round(rect.bottom + 6)}px`;
+    pop.style.left = `${Math.round(Math.max(8, rect.right - 220))}px`;
+    document.body.appendChild(pop);
+    playlistPopover = pop;
+    requestAnimationFrame(() => pop.querySelector('input')?.focus());
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    if (playlistPopover && !playlistPopover.contains(e.target) && !e.target.closest('.lib-playlist-add')) closePlaylistPopover();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && playlistPopover) closePlaylistPopover(); });
+  document.addEventListener('scroll', () => closePlaylistPopover(), true);
+
+  if (chipsEl) chipsEl.addEventListener('click', (e) => {
+    const chip = e.target.closest('.lib-playlist-chip');
+    if (!chip) return;
+    if (chip.dataset.action === 'new') { showNewForm(newForm?.hidden !== false); return; }
+    setActivePlaylist(chip.dataset.playlistId || null);
+  });
+  if (newForm) newForm.addEventListener('submit', (e) => { e.preventDefault(); createPlaylist(false); });
+  if (newFromQueueBtn) newFromQueueBtn.addEventListener('click', () => createPlaylist(true));
+  if (newCancelBtn) newCancelBtn.addEventListener('click', () => showNewForm(false));
+  if (newNameInput) newNameInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') showNewForm(false); });
+  if (loadBtn) loadBtn.addEventListener('click', loadActivePlaylist);
+  if (renameBtn) renameBtn.addEventListener('click', renamePlaylist);
+  if (deleteBtn) deleteBtn.addEventListener('click', deletePlaylist);
+  SocketClient.on('savedPlaylists:list', applySavedPlaylists);
+  renderPlaylistChips();
+
   // ─── 事件：切到媒體庫視圖時自動刷新；伺服器推播時更新 ───
   document.addEventListener('view:change', (e) => {
     if (e.detail && e.detail.view === 'library') {
+      scheduleVirtualRender(true);
       refresh();
       refreshStorage();
+      refreshSavedPlaylists();
     }
   });
-  SocketClient.on('library:list', (list) => render(list || []));
+  SocketClient.on('library:list', (list) => { render(list || []); renderPlaylistChips(); });
   // 語系切換時重繪：render() 只在收到伺服器資料才會跑，光切語言不會自動更新已經畫出來的列。
   if (typeof window.addEventListener === 'function') {
-    window.addEventListener('i18n:change', () => { if (cache.length) applyView(); });
+    window.addEventListener('i18n:change', () => { renderPlaylistChips(); if (cache.length) applyView(); });
   }
   SocketClient.on('connection-change', (ok) => { if (ok) { /* 連線後若正在媒體庫視圖則刷新 */
     const v = document.querySelector('.view[data-view="library"]');
     if (v && v.classList.contains('is-active')) {
       refresh();
       refreshStorage();
+      refreshSavedPlaylists();
     }
   } });
 })();

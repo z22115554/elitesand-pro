@@ -6,7 +6,17 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const { validateUpdatePlanShape, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPOSITORY } = require('../server/services/update-policy');
+const { preparePackagedMediaStorage } = require('./packaged-media-storage');
+const {
+  normalizeHash,
+  normalizeVersion,
+  compareVersions,
+  hashFileSync,
+  readTrustState,
+  writeTrustStateAtomic,
+} = require('../server/utils/ytdlp-runtime-trust');
 
 // GitHub fallback（未簽章、僅供顯示）點「前往下載頁」時要開的外部連結：只信任官方
 // repo 底下的網址，renderer 傳來的字串一律先驗證過才准 shell.openExternal，避免被拿去
@@ -31,6 +41,8 @@ function resolveShellPort(value) {
 
 const MEDIA_FOLDER_NAME = 'Elitesand Pro Media';
 const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
+const MUTABLE_YTDLP_DIR_NAME = 'yt-dlp';
+const MUTABLE_YTDLP_STATE_NAME = 'runtime-state.json';
 
 const INSTALLER_LOCALE_FILE = 'installer-locale.txt';
 // Keep the shell independent from renderer assets. The packaged Electron shell
@@ -263,6 +275,129 @@ function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
   }
 }
 
+/**
+ * Installer 內的 resources/tools/yt-dlp.exe 是完整性 manifest 保護的唯讀 seed。
+ * `yt-dlp -U` 不可以再直接改它，否則下一次啟動必然因 SHA-256 不符而被擋下。
+ *
+ * 實際執行／更新改用 userData/tools/yt-dlp/yt-dlp.exe。第一次啟動從已驗證 seed
+ * 原子複製；之後只有 binary SHA-256 符合 app-owned trust sidecar 才能續用。官方
+ * updater 成功後會刷新受信任 hash；Installer 帶來較新的 seed 時也會升級舊 runtime。
+ * userData 若暫時不可寫則安全降級成唯讀 seed，但會把 mutable=false 傳給 server，
+ * 讓更新 API 拒絕修改 seed，而不是重新引入完整性衝突。
+ */
+function readYtdlpVersionSync(command) {
+  try {
+    return normalizeVersion(execFileSync(command, ['--version'], {
+      encoding: 'utf8', timeout: 5000, windowsHide: true, maxBuffer: 64 * 1024,
+    }));
+  } catch (_) {
+    return null;
+  }
+}
+
+function prepareMutableYtdlp(resourcesPath, userDataPath, options = fs) {
+  const isOptions = options && (options.fsImpl || options.expectedSeedHash || options.versionResolver);
+  const fsImpl = isOptions ? (options.fsImpl || fs) : options;
+  const expectedSeedHash = normalizeHash(isOptions ? options.expectedSeedHash : null);
+  const versionResolver = isOptions && typeof options.versionResolver === 'function'
+    ? options.versionResolver
+    : readYtdlpVersionSync;
+  const packagedToolsDir = path.join(path.resolve(resourcesPath), 'tools');
+  const seed = path.join(packagedToolsDir, 'yt-dlp.exe');
+  const runtimeDir = path.join(path.resolve(userDataPath), 'tools', MUTABLE_YTDLP_DIR_NAME);
+  const target = path.join(runtimeDir, 'yt-dlp.exe');
+  const temporary = `${target}.seed.tmp`;
+  const statePath = path.join(runtimeDir, MUTABLE_YTDLP_STATE_NAME);
+
+  const seedHash = hashFileSync(seed, fsImpl);
+  if (expectedSeedHash && seedHash !== expectedSeedHash) {
+    throw new Error('yt-dlp packaged seed integrity mismatch');
+  }
+  const seedVersion = normalizeVersion(versionResolver(seed));
+
+  const seedRuntime = (action, reason = null) => {
+    fsImpl.mkdirSync(runtimeDir, { recursive: true });
+    try { fsImpl.unlinkSync(temporary); } catch (_) { /* stale staging is safe to replace */ }
+    try {
+      const stale = fsImpl.statSync(target);
+      if (!stale.isFile() || stale.size === 0) fsImpl.unlinkSync(target);
+    } catch (_) { /* absent is expected */ }
+    fsImpl.copyFileSync(seed, temporary);
+    const copied = fsImpl.statSync(temporary);
+    if (!copied.isFile() || copied.size === 0) throw new Error('yt-dlp seed copy is empty');
+    fsImpl.renameSync(temporary, target);
+    const runtimeHash = hashFileSync(target, fsImpl);
+    if (runtimeHash !== seedHash) throw new Error('yt-dlp seeded runtime hash mismatch');
+    writeTrustStateAtomic(statePath, {
+      runtimeHash,
+      runtimeVersion: seedVersion,
+      seedHash,
+      seedVersion,
+      provenance: 'seed',
+    }, fsImpl);
+    return {
+      command: target,
+      directory: runtimeDir,
+      mutable: true,
+      action,
+      ...(reason ? { reason } : {}),
+      statePath,
+      seed,
+      seedHash,
+      seedVersion,
+    };
+  };
+
+  try {
+    const existing = fsImpl.statSync(target);
+    if (existing.isFile() && existing.size > 0) {
+      const trust = readTrustState(statePath, fsImpl);
+      const runtimeHash = hashFileSync(target, fsImpl);
+      if (trust && runtimeHash === trust.runtimeHash) {
+        if (trust.seedHash === seedHash) {
+          return {
+            command: target, directory: runtimeDir, mutable: true, action: 'kept-runtime-copy',
+            statePath, seed, seedHash, seedVersion,
+          };
+        }
+        const versionOrder = compareVersions(seedVersion, trust.runtimeVersion);
+        if (versionOrder !== null && versionOrder <= 0) {
+          // 新 Installer 的 seed 不比已受信任的官方更新新：保留 runtime，但把「目前 seed」
+          // 身分寫進 sidecar，下一次啟動便不必再次做跨 seed 決策。
+          writeTrustStateAtomic(statePath, {
+            ...trust,
+            seedHash,
+            seedVersion,
+          }, fsImpl);
+          return {
+            command: target, directory: runtimeDir, mutable: true, action: 'kept-newer-runtime-copy',
+            statePath, seed, seedHash, seedVersion,
+          };
+        }
+        return seedRuntime('upgraded-runtime-from-seed', versionOrder === null ? 'version-unavailable' : 'newer-installer-seed');
+      }
+      return seedRuntime('reseeded-untrusted-runtime', trust ? 'runtime-hash-mismatch' : 'missing-or-invalid-trust-state');
+    }
+  } catch (_) { /* first launch / missing / unusable runtime copy */ }
+
+  try {
+    return seedRuntime('seeded-runtime-copy');
+  } catch (error) {
+    try { fsImpl.unlinkSync(temporary); } catch (_) { /* best effort */ }
+    return {
+      command: seed,
+      directory: packagedToolsDir,
+      mutable: false,
+      action: 'readonly-seed-fallback',
+      reason: error?.message || String(error),
+      statePath,
+      seed,
+      seedHash,
+      seedVersion,
+    };
+  }
+}
+
 function createElectronShell({
   app,
   BrowserWindow,
@@ -328,6 +463,7 @@ function createElectronShell({
   let startupUpdateProgressWindow = null;
   let startupUpdateProgressPoll = null;
   let pendingUpdatePlan = null;
+  let packagedYtdlpRuntime = null;
   const spoutIssueDiagnostics = createSpoutIssueDiagnostics();
   // WebGPU 人聲分離引擎（實驗性，§13 musetric 路線）：只在使用者已經開啟設定時才建立，
   // 不是每次啟動都硬開一個吃資源的隱藏視窗（跟 Spout 的 env-var autostart 不同，
@@ -654,9 +790,20 @@ function createElectronShell({
     // 前置的 tools 目錄可能整個失效（＝打包版 yt-dlp/ffmpeg 找不到、匯入直接壞）。
     const pathKey = Object.keys(processObject.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
     const inheritedPath = processObject.env[pathKey] || '';
+    const toolPathPrefix = app.isPackaged
+      ? [packagedYtdlpRuntime?.directory, packagedTools].filter(Boolean).join(path.delimiter)
+      : '';
     return {
       ...processObject.env,
-      ...(packagedTools ? { [pathKey]: `${packagedTools}${path.delimiter}${inheritedPath}` } : {}),
+      ...(toolPathPrefix ? { [pathKey]: `${toolPathPrefix}${path.delimiter}${inheritedPath}` } : {}),
+      ...(app.isPackaged && packagedYtdlpRuntime ? {
+        ELITESAND_YTDLP_PATH: packagedYtdlpRuntime.command,
+        ELITESAND_YTDLP_MUTABLE: packagedYtdlpRuntime.mutable ? '1' : '0',
+        ELITESAND_YTDLP_STATE_PATH: packagedYtdlpRuntime.statePath,
+        ELITESAND_YTDLP_SEED_PATH: packagedYtdlpRuntime.seed,
+        ELITESAND_YTDLP_SEED_HASH: packagedYtdlpRuntime.seedHash,
+        ...(packagedYtdlpRuntime.seedVersion ? { ELITESAND_YTDLP_SEED_VERSION: packagedYtdlpRuntime.seedVersion } : {}),
+      } : {}),
       PORT: String(port),
       OPEN_BROWSER: '0',
       ELITESAND_SHELL: '1',
@@ -1281,7 +1428,10 @@ function createElectronShell({
       if (choice === 0) shell.openExternal(`http://127.0.0.1:${port}/panel`);
       return;
     }
-    dialog.showErrorBox('Elitesand Pro 無法啟動', `${error.message}\n\n請確認 port ${port} 沒有被其他程式占用後再試。`);
+    dialog.showErrorBox(
+      'Elitesand Pro 無法啟動',
+      `${error.message}\n\n程式已安全停止，請重新開啟。若問題持續發生，請保留資料並匯出診斷記錄。`,
+    );
   }
 
   async function start() {
@@ -1315,20 +1465,68 @@ function createElectronShell({
         .then(shutdownOwnedServer)
         .finally(() => app.exit(0));
     });
-    await app.whenReady();
-    if (app.isPackaged) {
-      verifyPackagedResourceIntegrity(
-        processObject.resourcesPath || process.resourcesPath,
-        packagedResourceIntegrity,
-        fsImpl,
-      );
-    }
-    // Snapshot before the server creates its state files. Checking after the
-    // fork makes a genuinely first-run data directory look non-empty, so the
-    // portable-data handoff notice would never be shown.
-    shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice();
-    startPowerSaveBlocker();
     try {
+      await app.whenReady();
+      if (app.isPackaged) {
+        // v0.9.9.7 could keep downloaded media inside the install directory.
+        // Do this only after the single-instance lock above: with 100+ songs the
+        // copy can take long enough that a second click otherwise starts a second
+        // migration process and both copies race each other.
+        const mediaPreparation = preparePackagedMediaStorage({
+          userDataPath: app.getPath('userData'),
+          executablePath: app.getPath('exe'),
+          fsImpl,
+          onBeforeCopy: ({ entries }) => {
+            if (headless) return;
+            dialog.showMessageBoxSync({
+              type: 'info',
+              title: '正在準備舊版歌曲資料',
+              message: `偵測到舊版下載歌曲（${entries} 個檔案/資料夾），需要先搬到安全位置。`,
+              detail: '歌曲較多時可能需要一段時間。完成後 Elitesand Pro 會自動開啟，期間請不要重複啟動程式。',
+              buttons: ['開始'],
+              defaultId: 0,
+              noLink: true,
+            });
+          },
+        });
+        if (mediaPreparation.action === 'vulnerable-copy-deferred') {
+          console.warn('[Elitesand Pro Electron] Media recovery deferred:', mediaPreparation.reason || 'unknown');
+        } else if (mediaPreparation.action === 'vulnerable-copy-failed') {
+          console.warn('[Elitesand Pro Electron] Media recovery failed; continuing with legacy location:', mediaPreparation.reason || 'unknown');
+          if (!headless) {
+            dialog.showMessageBoxSync({
+              type: 'warning',
+              title: '舊版歌曲資料暫時無法搬移',
+              message: 'Elitesand Pro 會先沿用原本的歌曲位置並繼續啟動。',
+              detail: `搬移失敗原因：${mediaPreparation.reason || '未知錯誤'}\n\n原始歌曲沒有被刪除。建議確認磁碟空間或防毒軟體後，再重新開啟程式重試搬移。`,
+              buttons: ['繼續開啟'],
+              defaultId: 0,
+              noLink: true,
+            });
+          }
+        }
+        verifyPackagedResourceIntegrity(
+          processObject.resourcesPath || process.resourcesPath,
+          packagedResourceIntegrity,
+          fsImpl,
+        );
+        packagedYtdlpRuntime = prepareMutableYtdlp(
+          processObject.resourcesPath || process.resourcesPath,
+          app.getPath('userData'),
+          {
+            fsImpl,
+            expectedSeedHash: packagedResourceIntegrity?.files?.['tools/yt-dlp.exe'],
+          },
+        );
+        if (!packagedYtdlpRuntime.mutable) {
+          console.warn('[Elitesand Pro Electron] Writable yt-dlp runtime unavailable; self-update disabled:', packagedYtdlpRuntime.reason || 'unknown');
+        }
+      }
+      // Snapshot before the server creates its state files. Checking after the
+      // fork makes a genuinely first-run data directory look non-empty, so the
+      // portable-data handoff notice would never be shown.
+      shouldShowPortableDataMigrationNotice = needsPortableDataMigrationNotice();
+      startPowerSaveBlocker();
       const server = await startServerOrReuseExisting();
       const updateSession = await runStartupUpdateGate();
       if (updateSession.decision === 'required-installer-opened') {
@@ -1361,8 +1559,7 @@ function createElectronShell({
       return { started: true, ...server, updateSession };
     } catch (error) {
       showStartupError(error);
-      await shutdown();
-      app.exit(1);
+      try { await shutdown(); } finally { app.exit(1); }
       throw error;
     }
   }
@@ -1404,6 +1601,7 @@ module.exports = {
   probeHealth,
   waitForExit,
   verifyPackagedResourceIntegrity,
+  prepareMutableYtdlp,
   runRequiredInstallerHandoff,
   createElectronShell,
 };

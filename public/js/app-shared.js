@@ -158,9 +158,7 @@ window.AppShared = (function () {
     volumeRow: document.getElementById('volume-row'),
     normalizationToggle: document.getElementById('normalization-toggle'),
     metronomeToggle: document.getElementById('metronome-toggle'),
-    // AI 分離播放模式（實驗性）
-    separationModeToggle: document.getElementById('separation-mode-toggle'),
-    separationStatusHint: document.getElementById('separation-status-hint'),
+    // AI 分離雙軌：有完整 stems 的歌曲自動顯示人聲音量控制
     separationVocalsRow: document.getElementById('separation-vocals-row'),
     separationVocalsVolume: document.getElementById('separation-vocals-volume'),
     separationVocalsVolumeVal: document.getElementById('separation-vocals-volume-val'),

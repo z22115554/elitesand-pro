@@ -190,6 +190,13 @@
           <span class="nav-label" data-i18n="nav.twitch">Twitch 點歌</span>
           <span id="twitch-nav-badge" class="pi-badge" hidden>0</span>
         </button>
+        <!-- 2026-09-12 先收起來：段落資料只有一首手動測試曲，對真實使用者的歌完全沒作用，
+             正式使用者不該看到。要重新開放時比照 nav.js 開頭註解的既有慣例，拿掉這個 hidden 即可。 -->
+        <button class="nav-item" data-nav="sections" type="button" title="段落設計" data-i18n-title="nav.sections" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="10" height="4" rx="1"/></svg>
+          <span class="nav-label" data-i18n="nav.sections">段落設計</span>
+          <span class="pi-badge" data-i18n="sections.experimentalBadge">實驗性</span>
+        </button>
 
         <!-- ═══ 預留導覽項（之後上線商城/會員時，移除 hidden 即啟用）═══ -->
         <button class="nav-item" data-nav="templates" type="button" title="模板" hidden>
@@ -350,13 +357,12 @@
                   <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量" data-i18n-aria-label="home.volume">
                   <span id="volume-val" class="val">70%</span>
                 </div>
-                <!-- 只在分離播放模式對目前歌曲生效時顯示（見 app-playback.js 的
-                     updateSeparationUiForTrack）；跟上面的伴奏音量並排，避免使用者要捲到
-                     「時間與音訊微調」卡片才找得到人聲音量，兩顆調整音量的滑桿放一起。 -->
+                <!-- 已分離歌曲會自動用伴奏＋人聲雙軌播放；這列只在雙軌實際生效時顯示。
+                     新使用者的人聲預設 20%，可在這裡隨時調高、調低或拉到 0。 -->
                 <div class="np-volume" id="separation-vocals-row" hidden title="人聲音量">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V22h2v-2.06A9 9 0 0 0 21 11h-2z"/></svg>
-                  <input id="separation-vocals-volume" type="range" min="0" max="150" value="100">
-                  <span id="separation-vocals-volume-val" class="val">100%</span>
+                  <input id="separation-vocals-volume" type="range" min="0" max="150" value="20">
+                  <span id="separation-vocals-volume-val" class="val">20%</span>
                 </div>
               </div>
               <button id="btn-emergency" class="np-emergency" type="button" data-i18n="home.emergency">緊急隱藏</button>
@@ -566,12 +572,6 @@
                 <input id="speed-slider" type="range" min="0.5" max="1.5" step="0.05" value="1" hidden>
               </div>
             </div>
-            <!-- AI 人聲分離播放模式（實驗性）：只對已分離人聲的歌曲生效，見 CLAUDE.md 授權狀態說明。
-                 人聲音量滑桿已移到「正在播放」卡的音量區，跟伴奏音量並排（不要在這裡重複加）。 -->
-            <div class="switch-row switch-row--separated">
-              <div><div class="label">分離播放模式（實驗性）</div><div class="sub" id="separation-status-hint">只對已分離人聲的歌曲生效，其餘歌曲仍播放原始音軌</div></div>
-              <label class="switch"><input id="separation-mode-toggle" type="checkbox"><span class="track"></span></label>
-            </div>
             <div class="switch-row switch-row--separated">
               <div><div class="label">統一音量（響度標準化）</div><div class="sub">依每首歌的實測響度校正播放增益；關閉時保留原始音量</div></div>
               <label class="switch"><input id="normalization-toggle" type="checkbox" checked><span class="track"></span></label>
@@ -607,13 +607,12 @@
           <div class="prep-panel" data-prep-panel="ai" hidden>
           <section class="card" aria-labelledby="home-ai-title">
             <p id="home-ai-title" class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span data-i18n="home.tab.ai">AI 伴奏</span></p>
-            <p class="sub section-intro" data-i18n="home.ai.intro">用 AI 去掉人聲、留下純伴奏。想邊唱邊聽原唱當參考，開「分離播放模式」並照「雙路音訊」教學設定 OBS。</p>
+            <p class="sub section-intro" data-i18n="home.ai.intro">用 AI 把歌曲拆成人聲和伴奏。已分離歌曲播放時會自動使用伴奏＋人聲雙軌；新使用者的人聲預設 20%，可在播放區隨時調高或調低。</p>
             <div id="home-ai-engine" class="home-ai-engine val" role="status" aria-live="polite" data-i18n="home.ai.engineChecking">正在檢查 AI 伴奏元件…</div>
             <div class="inline-row inline-row--wrap">
               <button id="home-ai-install" class="btn btn-sm btn-primary" type="button" hidden data-i18n="home.ai.install">安裝 AI 伴奏元件</button>
               <button id="home-ai-make-all" class="btn btn-sm btn-primary" type="button" disabled data-i18n="home.ai.makeAll">未製作的全部排進佇列</button>
               <button id="home-ai-retry-failed" class="btn btn-sm" type="button" hidden data-i18n="home.ai.retryFailed">重試失敗的</button>
-              <button id="home-ai-open-audio" class="btn btn-sm btn-ghost" type="button" data-i18n="home.ai.openAudio">分離播放模式</button>
               <button id="home-ai-open-guide" class="btn btn-sm btn-ghost" type="button" data-i18n="home.ai.openGuide">雙路音訊教學</button>
             </div>
           </section>
@@ -888,6 +887,14 @@
                   <button class="style-thumb active" data-particle-orient="vertical" type="button" data-i18n-title="particle.orientVerticalTitle" title="直書：直欄由右往左"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">直</span></span><span class="style-thumb-label" data-i18n="particle.orientVertical">直書</span></button>
                 </div>
               </div>
+              <div class="field" id="particle-entrance-field" hidden>
+                <label data-i18n="particle.entranceLabel">逐字進場</label>
+                <div class="style-thumb-row" id="particle-entrance-buttons">
+                  <button class="style-thumb active" data-particle-entrance="auto" type="button" data-i18n-title="particle.entranceAutoTitle" title="原樣：風／雨／渦流／雙束四種聚散風格逐句輪替"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">原樣</span></span><span class="style-thumb-label" data-i18n="particle.entranceAuto">原樣</span></button>
+                  <button class="style-thumb" data-particle-entrance="quaddrift" type="button" data-i18n-title="particle.entranceQuaddriftTitle" title="四相漂字：每個字從四角帶弧度漂入定點、入場後完全靜止；可調動畫強度；退場仍是粒子散開"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">漂字</span></span><span class="style-thumb-label" data-i18n="particle.entranceQuaddrift">四相漂字</span></button>
+                </div>
+                <p class="field-hint" data-i18n="particle.entranceHint">原樣＝風／雨／渦流／雙束四種聚散風格逐句輪替；四相漂字＝改成每個字從四角漂入定點後靜止（可調沉穩／標準／狂放強度）。兩種選擇的退場都是原本的粒子散開，不會另外換退場效果。</p>
+              </div>
               <div class="field" id="particle-effects-field" hidden>
                 <div class="field-row field-row--spacious">
                   <div class="flex-grow"><label for="ls-particle-shadow-sel" data-i18n="particle.shadowLabel">文字陰影</label>
@@ -995,7 +1002,7 @@
             </div>
             <div class="field field--inline-spacious">
               <div class="flex-grow"><label>歌詞文字顏色</label><input id="ls-color" data-ls-control="color" type="color" value="#ffffff"></div>
-              <div class="flex-grow"><label>「正在唱那一行」的顏色</label><input id="ls-active-color" data-ls-control="activeColor" type="color" value="#ffd6a5"></div>
+              <div class="flex-grow" id="ls-active-color-field"><label>「正在唱那一行」的顏色</label><input id="ls-active-color" data-ls-control="activeColor" type="color" value="#ffd6a5"></div>
             </div>
             <p class="field-hint">逐字 KTV 模式下「唱到的字」也是用右邊「正在唱那一行的顏色」；發光效果則在下面「進階效果」裡的「額外發光」統一設定，兩種模式共用。</p>
             <div class="field field--inline-spacious" id="typewriter-colors-field" hidden>
@@ -1693,6 +1700,8 @@
             <p class="eyebrow" data-i18n="system.usageTitle">匿名活躍統計</p>
             <p class="sub diagnostic-description" data-i18n="system.usageDescription">協助了解實際使用人數。只傳送程式版本、啟動／核心功能使用事件，以及每日／每週／每月輪替的匿名代碼。</p>
             <p class="field-hint" data-i18n="system.usagePrivacy">不傳送固定安裝 ID、IP、電腦或硬體資訊、歌名、歌詞、歌單、Twitch 帳號或憑證；傳送失敗不影響程式，也不會補傳。</p>
+            <p class="field-hint"><span data-i18n="system.usageFieldsHint">會送出的每一個欄位都列在原始碼的封閉白名單裡，不在清單上的一律丟棄：</span>
+              <a id="usage-fields-link" href="https://github.com/z22115554/elitesand-pro/blob/main/server/services/telemetry-fields.js" target="_blank" rel="noopener noreferrer" data-i18n="system.usageFieldsLink">完整欄位清單</a></p>
             <div class="switch-row">
               <div>
                 <div class="label" data-i18n="system.usageToggle">允許匿名活躍統計</div>
@@ -1709,6 +1718,8 @@
             <p class="eyebrow" data-i18n="system.lyricOffsetSyncTitle">歌詞偏移社群回饋</p>
             <p class="sub diagnostic-description" data-i18n="system.lyricOffsetSyncDescription">分享你調整過的歌詞時間偏移，也取得其他人已校正過的建議值，讓同一支影片下次匯入時更準。</p>
             <p class="field-hint" data-i18n="system.lyricOffsetSyncPrivacy">會傳送 YouTube 影片 ID 與你調整過的偏移毫秒數，以及每日／每月輪替的匿名代碼；不傳送固定安裝 ID、歌名、歌詞內容、歌單或帳號。跟上方的匿名活躍統計是各自獨立的開關。</p>
+            <p class="field-hint"><span data-i18n="system.offsetFieldsHint">送出的內容與時機同樣寫死在原始碼裡，可以自己核對：</span>
+              <a id="offset-fields-link" href="https://github.com/z22115554/elitesand-pro/blob/main/server/services/lyric-offset-sync.js" target="_blank" rel="noopener noreferrer" data-i18n="system.usageFieldsLink">完整欄位清單</a></p>
             <div class="switch-row">
               <div>
                 <div class="label" data-i18n="system.lyricOffsetSyncToggle">允許歌詞偏移社群回饋</div>
@@ -1743,6 +1754,22 @@
               </div>
               <button id="library-storage-choose" class="btn btn-sm" type="button">選擇位置並搬遷</button>
             </div>
+            <!-- 收藏歌單（saved playlists）：媒體庫 id 的集合，一首歌可在多個歌單；載入走既有「加入清單」路徑 -->
+            <div class="lib-playlists" id="lib-playlists">
+              <div class="lib-playlist-chips" id="lib-playlist-chips" role="tablist" aria-label="收藏歌單" data-i18n-aria-label="library.playlists.ariaLabel"></div>
+              <form class="lib-playlist-new" id="lib-playlist-new" hidden>
+                <input id="lib-playlist-new-name" class="input" type="text" maxlength="60" autocomplete="off" placeholder="收藏歌單名稱" data-i18n-placeholder="library.playlists.namePlaceholder">
+                <button type="submit" class="btn btn-sm" data-i18n="library.playlists.createEmpty">建立</button>
+                <button type="button" class="btn btn-sm" id="lib-playlist-new-from-queue" data-i18n="library.playlists.createFromQueue">用目前播放清單建立</button>
+                <button type="button" class="btn btn-sm btn-ghost" id="lib-playlist-new-cancel" data-i18n="common.cancel">取消</button>
+              </form>
+              <div class="lib-playlist-actions" id="lib-playlist-actions" hidden>
+                <span class="lib-playlist-summary" id="lib-playlist-summary"></span>
+                <button type="button" class="btn btn-sm" id="lib-playlist-load" data-i18n="library.playlists.loadAll">全部載入播放清單</button>
+                <button type="button" class="btn btn-sm btn-ghost" id="lib-playlist-rename" data-i18n="library.playlists.rename">重新命名</button>
+                <button type="button" class="btn btn-sm btn-ghost" id="lib-playlist-delete" data-i18n="library.playlists.delete">刪除收藏歌單</button>
+              </div>
+            </div>
             <div class="library-toolbar">
               <input id="lib-search" class="input" type="text" placeholder="搜尋歌名 / 歌手…">
               <select id="lib-sort" class="input">
@@ -1761,6 +1788,27 @@
             </div>
             <div id="library-list" class="library-list"></div>
             <p id="library-empty" class="val library-empty">尚無記錄，播放任一首歌後會自動加入。</p>
+          </section>
+        </div>
+
+        <!-- ═══ 視圖：段落設計（實驗性分支）═══ -->
+        <div class="view content-col" data-view="sections">
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span data-i18n="sections.analysisTitle">段落分析</span></p>
+            <p class="sub section-intro" data-i18n="sections.analysisDesc">自動判斷主歌／副歌／間奏等段落的功能，目前還在獨立研究階段，尚未串接進正式資料流。</p>
+            <p class="val" data-i18n="sections.analysisPlaceholder">尚未串接，開發中。</p>
+          </section>
+
+          <section class="card">
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="10" height="4" rx="1"/></svg><span data-i18n="sections.pairingTitle">段落搭配</span></p>
+            <p class="sub section-intro" data-i18n="sections.pairingDesc">依段落切換不同的歌詞模板，例如副歌換一個比較有存在感的版面、主歌維持安靜。段落資料目前是手動測試用，還沒接上正式的段落分析結果。</p>
+            <label class="lib-filter-toggle">
+              <input id="section-aware-enable" type="checkbox">
+              <span data-i18n="sections.enableToggle">啟用段落搭配（測試中）</span>
+            </label>
+            <p class="field-hint" id="section-test-track-note" data-i18n="sections.testTrackNote">目前只掛了一首測試曲的段落資料（手動輸入，非正式分析結果），播放其他歌曲時這個功能不會有作用。</p>
+            <div id="section-template-map" class="section-map-list"></div>
+            <p class="field-hint" data-i18n="sections.viewHint">這裡不做即時預覽，效果請直接開 /display 分頁或 OBS 來源觀察。</p>
           </section>
         </div>
 
@@ -2793,7 +2841,7 @@
               <li><strong>它在做什麼</strong>：把一首歌用 AI 分成「人聲」和「伴奏」兩軌，讓你可以只播伴奏、自己唱。首頁的「AI 伴奏」分頁會列出本場播放清單每一首的狀態（未製作／製作中／已分離／失敗）。</li>
               <li><strong>第一次要先安裝元件</strong>：第一次按「製作伴奏」會跳出下載視窗，把 AI 模型抓下來（只需一次）。沒有 NVIDIA 顯示卡也能跑，只是慢一些。</li>
               <li><strong>一次做整份清單</strong>：在「AI 伴奏」分頁按「未製作的全部排進佇列」，它會逐首排隊處理，不會一次全開把電腦壓垮。</li>
-              <li><strong>做好之後怎麼用</strong>：到「音訊」分頁打開「分離播放模式」。之後播到「已分離」的歌就會自動只放伴奏，其他沒分離的歌照原樣播。</li>
+              <li><strong>做好之後怎麼用</strong>：<span data-i18n="help.ai.afterReady">不用另外開模式。播到「已分離」歌曲時會自動使用伴奏＋人聲雙軌；新使用者的人聲預設 20%，正在播放區會出現人聲音量，可自行調高、調低或拉到 0。沒分離的歌照原樣播放。</span></li>
               <li><strong>只想先試聽</strong>：媒體庫每首歌旁邊有「試聽」，可以分別調人聲和伴奏的音量，確認分離品質再決定要不要用。</li>
               <li><strong>做到一半想停</strong>：按製作中那首旁邊的「✕」即可取消，這首會回到「未製作」，不算失敗，也不影響已經匯入的歌。</li>
             </ul>
@@ -2805,10 +2853,10 @@
           <div class="card-collapse-body">
             <ul class="help-list">
               <li><strong data-i18n="help.dualAudio.goalLabel">目標</strong>：<span data-i18n="help.dualAudio.goal">直播出去的聲音只有「伴奏 ＋ 你的歌聲」，但你自己的耳機裡還能聽到「原唱人聲」當導唱參考，而這個原唱不會被直播收進去。</span></li>
-              <li><strong data-i18n="help.dualAudio.appPartLabel">這程式負責哪一半</strong>：<span data-i18n="help.dualAudio.appPart">打開「分離播放模式」後，這程式播放的就是純伴奏。這條聲音正常被 OBS／直播收音，沒問題。</span></li>
-              <li><strong data-i18n="help.dualAudio.referenceRouteLabel">原唱參考要另外走一條</strong>：<span data-i18n="help.dualAudio.referenceRoute">用媒體庫的「試聽」單獨播原唱人聲軌，或用另一個播放器開 vocals 檔；把這個播放程式的聲音，在 Windows「音量混合器」指定到你的耳機裝置，不要進 OBS 的擷取來源。</span></li>
-              <li><strong data-i18n="help.dualAudio.obsWayLabel">用 OBS 做法（進階）</strong>：<span data-i18n="help.dualAudio.obsWay">把「原唱參考」放成 OBS 的一個獨立音訊來源，在「進階音訊內容」把它的「音訊監控」設成「僅監聽」，並取消它在直播／錄影軌道的勾選。這樣只有你戴耳機聽得到，觀眾聽不到。</span></li>
-              <li><strong data-i18n="help.dualAudio.simplestAlternativeLabel">最簡單的替代方案</strong>：<span data-i18n="help.dualAudio.simplestAlternative">不需要導唱就別開原唱那條——只播伴奏、看著首頁的逐字歌詞跟拍，一樣能唱，設定也最不容易出錯。</span></li>
+              <li><strong data-i18n="help.dualAudio.appPartLabel">這程式負責哪一半</strong>：<span data-i18n="help.dualAudio.appPart">已分離歌曲會自動以伴奏＋人聲雙軌播放；新使用者的人聲預設 20%，可在首頁「正在播放」區調整。要讓觀眾只聽伴奏、自己保留導唱，請使用「連線與系統」裡的「雙路音訊路由」。</span></li>
+              <li><strong data-i18n="help.dualAudio.referenceRouteLabel">雙路音訊怎麼接</strong>：<span data-i18n="help.dualAudio.referenceRoute">在「雙路音訊路由」卡先選「觀眾／OBS 裝置」和「主播耳機裝置」，再開啟路由。一般歌曲兩路都會播放；已分離歌曲的伴奏送兩路，人聲只留在主播耳機。</span></li>
+              <li><strong data-i18n="help.dualAudio.obsWayLabel">OBS 要收哪一路</strong>：<span data-i18n="help.dualAudio.obsWay">OBS 只擷取「觀眾／OBS 裝置」，不要再把「主播耳機裝置」同時收進直播。OBS 與 Windows 兩邊的取樣率都設成 44100Hz，可降低長時間播放漂移。</span></li>
+              <li><strong data-i18n="help.dualAudio.simplestAlternativeLabel">不需要分流時</strong>：<span data-i18n="help.dualAudio.simplestAlternative">可以不開雙路音訊路由；已分離歌曲仍會自動雙軌播放。若不想聽導唱，把首頁的人聲音量拉到 0% 即可。</span></li>
               <li><strong data-i18n="help.dualAudio.reminderLabel">提醒</strong>：<span data-i18n="help.dualAudio.reminder">務必先在錄一小段測試檔、或找一個人幫你聽直播，確認觀眾端「真的只有伴奏」再正式開唱。</span></li>
             </ul>
           </div>
@@ -3099,6 +3147,7 @@
   <!-- SYNCDIAG（暫時性，2026-09-03）：分離播放人聲/伴奏延遲診斷；確認問題後連同 sync-diag.js 一起移除 -->
   <script src="/js/sync-diag.js"></script>
   <script src="/js/app-playback.js"></script>
+  <script src="/js/app-section-design.js"></script>
   <script src="/js/app-lyrics-timeline.js"></script>
   <script src="/js/app-setlist-panel.js"></script>
   <script src="/js/app-toast-utils.js"></script>

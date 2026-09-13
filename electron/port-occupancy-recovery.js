@@ -70,8 +70,13 @@ function normalizeExecutable(value) {
   try { return path.resolve(String(value)).replace(/\\/g, '/').toLowerCase(); } catch (_) { return ''; }
 }
 
-function isRecoverablePackagedUtility(processInfo, currentExecutablePath) {
+function isRecoverablePackagedUtility(processInfo, currentExecutablePath, { hostPid = process.pid } = {}) {
   if (!processInfo || !currentExecutablePath) return false;
+  // 自家剛 fork 的 server 跟孤兒長得一模一樣（同 exe、同 --type=utility 命令列）。
+  // waitForHealthyServer() 在 fork 之後也走這個 probe；慢機器上第一次 /api/health 超過
+  // 逾時就會被判成 occupied，沒有這條就會把自己的 server 殺掉。父程序是目前 host 的一律不碰。
+  if (Number.isInteger(Number(processInfo.parentPid)) && Number(processInfo.parentPid) > 0
+    && Number(processInfo.parentPid) === Number(hostPid)) return false;
   const ownerExecutable = normalizeExecutable(processInfo.executablePath);
   const currentExecutable = normalizeExecutable(currentExecutablePath);
   if (!ownerExecutable || ownerExecutable !== currentExecutable) return false;
@@ -96,6 +101,7 @@ function createRecoveringHealthProbe({
   retryDelayMs = 150,
   retryCount = 12,
   logger = console,
+  hostPid = process.pid,
 } = {}) {
   if (typeof baseProbe !== 'function') throw new TypeError('createRecoveringHealthProbe requires baseProbe');
   let recoveryAttempted = false;
@@ -111,7 +117,7 @@ function createRecoveringHealthProbe({
 
     let processInfo = null;
     try { processInfo = await readProcessInfoImpl(Number(ownerPid)); } catch (_) { return initial; }
-    if (!isRecoverablePackagedUtility(processInfo, currentExecutablePath)) return initial;
+    if (!isRecoverablePackagedUtility(processInfo, currentExecutablePath, { hostPid })) return initial;
 
     try {
       await terminateProcessImpl(Number(ownerPid));

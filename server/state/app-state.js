@@ -51,7 +51,7 @@ function getDefaultLyricSettings() {
       columnflow: { template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowEntrance: 'native', columnflowPlacement: 'split', columnflowMaxLines: 4, animationIntensity: 'normal' },
       paperstrip: { template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
       mirror: { template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
-      particle: { template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', animationIntensity: 'normal', lyricPosition: 'center', verticalPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical' },
+      particle: { template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', animationIntensity: 'normal', lyricPosition: 'center', verticalPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto' },
       lightboard: { template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
       typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
     },
@@ -201,11 +201,44 @@ function createAppState(io) {
   // 狀態還原與持久化
   // ═══════════════════════════════════════════
 
+  /**
+   * 新格式的 library-backed 播放清單會省略 lyrics / parsedLyrics，重開時從 library.json
+   * 補回；舊 v3 state 仍可能直接帶完整 track，spread 後會自然沿用舊值，保持向下相容。
+   * 非媒體庫歌曲（例如本機上傳但尚未進 library）則完全靠 state 自己的 fallback 還原。
+   */
+  function restorePersistedPlaylist(savedPlaylist) {
+    if (!Array.isArray(savedPlaylist)) return [];
+    const hydrated = savedPlaylist.map((savedTrack) => {
+      if (!savedTrack || typeof savedTrack !== 'object' || !savedTrack.id) return savedTrack;
+      const libraryEntry = libraryStore.getEntry(savedTrack.id);
+      return libraryEntry ? { ...libraryEntry, ...savedTrack } : savedTrack;
+    });
+    return sanitizePlaylist(hydrated) || [];
+  }
+
+  /**
+   * state.json 不再為每首「已安全存在 library.json」的歌曲重複保存整份歌詞。
+   * library entry 尚未落盤／寫入失敗／媒體庫超量待淘汰時，isEntryDurable() 會回 false，
+   * 此時保留完整 track 當 crash-safe fallback；本機非 library track 也永遠走完整 fallback。
+   */
+  function persistedPlaylistSnapshot() {
+    return playState.playlist.map((track) => {
+      if (!track || !libraryStore.isEntryDurable(track.id)) return track;
+      const {
+        lyrics: _lyrics,
+        parsedLyrics: _parsedLyrics,
+        manualLyrics: _manualLyrics,
+        ...compact
+      } = track;
+      return compact;
+    });
+  }
+
   (function restorePersistedState() {
     const saved = stateStore.loadState();
     if (!saved) return;
 
-    if (Array.isArray(saved.playlist)) playState.playlist = sanitizePlaylist(saved.playlist) || [];
+    if (Array.isArray(saved.playlist)) playState.playlist = restorePersistedPlaylist(saved.playlist);
     if (typeof saved.style === 'string') playState.style = saved.style;
     if (saved.styleOverrides && typeof saved.styleOverrides === 'object') playState.styleOverrides = saved.styleOverrides;
     if (typeof saved.romanizationMode === 'string' &&
@@ -242,6 +275,16 @@ function createAppState(io) {
       if (typeof saved.session.active === 'boolean') session.active = saved.session.active;
       if (typeof saved.session.startedAt === 'number') session.startedAt = saved.session.startedAt;
       if (['obs', 'twitch', 'manual'].includes(saved.session.source)) session.source = saved.session.source;
+      // 殭屍 session 防護：直播不會連續開超過一天，還原到一個 age > 24h 的「開台中」
+      // 幾乎一定是上次沒收到收台事件（OBS/Twitch 斷線、EventSub 漏收 stream.offline、
+      // 當機）留下的殘影。降級成非開台，否則面板的「清除歌單 / 開始新場次」會被
+      // 永久鎖死（見 public/js/app-setlist-panel.js 的 disabled 判斷）。已唱歌單保留。
+      const STALE_ACTIVE_SESSION_MS = 24 * 60 * 60 * 1000;
+      if (session.active && (!session.startedAt || Date.now() - session.startedAt > STALE_ACTIVE_SESSION_MS)) {
+        log.warn(`偵測到殭屍直播 session（source=${session.source}, startedAt=${session.startedAt}），還原為非開台狀態`);
+        session.active = false;
+        session.source = null;
+      }
       // 舊資料可能沒有 entryId（單獨刪除功能加入前存的）——補齊，否則這些歌永遠刪不掉。
       if (Array.isArray(saved.session.songs)) {
         session.songs = saved.session.songs.map((s) => (s && s.entryId ? s : { ...s, entryId: crypto.randomUUID() }));
@@ -346,7 +389,7 @@ function createAppState(io) {
     stateStore.scheduleSave(() => ({
       schemaVersion: stateStore.CURRENT_STATE_SCHEMA_VERSION,
       savedAt: Date.now(),
-      playlist: playState.playlist,
+      playlist: persistedPlaylistSnapshot(),
       style: playState.style,
       styleOverrides: playState.styleOverrides,
       romanizationMode: playState.romanizationMode,
@@ -375,6 +418,26 @@ function createAppState(io) {
       twitchRewardSettings: playState.twitchRewardSettings,
     }), callback);
   }
+
+  // library.json 的 debounce 比 state.json 長；新匯入期間 state 會為了 crash safety 暫時
+  // 保存完整歌詞 fallback。library 真正原子落盤後再排一次 state，才能自動收斂回精簡格式。
+  libraryStore.setProtectedEntryIdsProvider(() => {
+    const ids = new Set();
+    for (const track of playState.playlist) {
+      if (track?.id != null) ids.add(String(track.id));
+    }
+    if (playState.currentTrack?.id != null) ids.add(String(playState.currentTrack.id));
+    return ids;
+  });
+  libraryStore.setDurabilityListener(() => persistState());
+  libraryStore.setBeforeRemovalListener((ids) => {
+    const removing = new Set((Array.isArray(ids) ? ids : []).map(String));
+    if (!playState.playlist.some((track) => track?.id != null && removing.has(String(track.id)))) return true;
+    let saveResult = null;
+    persistState((result) => { saveResult = result; });
+    stateStore.saveNow();
+    return saveResult?.ok === true;
+  });
 
   // ═══════════════════════════════════════════
   // Setlist payload / session 記錄
@@ -478,13 +541,16 @@ function createAppState(io) {
     const payload = getPublicState(exists);
     const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
     const nextSample = stateSyncMetrics.samples + 1;
-    // 「舊結構」估算只在記錄點序列化，避免為了量測又在每次廣播重建一份大型 payload。
+    // 「舊結構」估算只在記錄點執行，而且只抽固定少量歌曲估算。
+    // 以前這裡會把整份舊 playlist（含每首完整 lyrics / parsedLyrics）真的重建再
+    // JSON.stringify；逐首匯入時 sample=100 剛好會突然建立數十 MB 的診斷字串，
+    // 讓「第 100 首」看起來像產品本身的硬門檻。診斷量測不可反過來影響正式流程。
     const shouldEstimateLegacy = nextSample === 1 || nextSample % STATE_SYNC_LOG_EVERY === 0;
     let estimatedLegacyBytes = stateSyncMetrics.lastEstimatedLegacyBytes;
     let savingsBytes = stateSyncMetrics.lastSavingsBytes;
     if (shouldEstimateLegacy) {
       const publicPlaylistBytes = Buffer.byteLength(JSON.stringify(payload.playlist), 'utf8');
-      const legacyPlaylistBytes = Buffer.byteLength(JSON.stringify(getLegacyPlaylist(exists)), 'utf8');
+      const legacyPlaylistBytes = estimateLegacyPlaylistBytes(exists);
       estimatedLegacyBytes = bytes - publicPlaylistBytes + legacyPlaylistBytes;
       savingsBytes = Math.max(0, estimatedLegacyBytes - bytes);
     }
@@ -522,15 +588,48 @@ function createAppState(io) {
     const effectiveLyrics = manual ? manual.lyrics : lyrics;
     const effectiveLyricsType = manual ? manual.lyricsType : track.lyricsType;
     const effectiveParsedLyrics = manual ? manual.parsedLyrics : parsedLyrics;
-    const payload = {
+    const effectiveOffset = typeof offset === 'number' ? offset : (trackOffsets.get(track.id) || 0);
+    const effectivePitch = trackPitch.has(track.id) ? trackPitch.get(track.id) : 0;
+    const effectiveRate = trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0;
+    const hasLyrics = !!effectiveLyrics || (Array.isArray(effectiveParsedLyrics) && effectiveParsedLyrics.length > 0);
+    const audio = libraryStore.audioStatus(track, exists);
+
+    // currentTrack 只有一首，可以保留完整 metadata 供歌詞編輯／播放；playlist 最多 2000 列，
+    // 必須是明確白名單，不能再用「除了歌詞以外全部 spread」的舊模式。playlist:update 在
+    // server 端會把這些摘要與既有完整 track 合併，因此排序不會反向洗掉被省略的 metadata。
+    const payload = includeLyrics ? {
       ...summary,
       lyricsType: effectiveLyricsType || null,
-      hasLyrics: !!effectiveLyrics || (Array.isArray(effectiveParsedLyrics) && effectiveParsedLyrics.length > 0),
-      offset: typeof offset === 'number' ? offset : (trackOffsets.get(track.id) || 0),
-      pitchShift: trackPitch.has(track.id) ? trackPitch.get(track.id) : 0,
-      playbackRate: trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0,
+      hasLyrics,
+      offset: effectiveOffset,
+      pitchShift: effectivePitch,
+      playbackRate: effectiveRate,
       manualLyrics: !!manual,
-      ...libraryStore.audioStatus(track, exists),
+      ...audio,
+    } : {
+      id: track.id,
+      ...(track.entryId ? { entryId: track.entryId } : {}),
+      title: track.title || '',
+      artist: track.artist || '',
+      ...(track.performer ? { performer: track.performer } : {}),
+      ...(track.needsArtistConfirmation ? { needsArtistConfirmation: true } : {}),
+      ...(Array.isArray(track.artistCandidates) && track.artistCandidates.length ? { artistCandidates: track.artistCandidates } : {}),
+      ...(track.lyricsDurationVerified === false ? { lyricsDurationVerified: false } : {}),
+      duration: track.duration || 0,
+      ...(track.cover ? { cover: track.cover } : {}),
+      ...(track.filename ? { filename: track.filename } : {}),
+      ...(track.url ? { url: track.url } : {}),
+      lyricsType: effectiveLyricsType || null,
+      hasLyrics,
+      ...(effectiveOffset ? { offset: effectiveOffset } : {}),
+      ...(effectivePitch ? { pitchShift: effectivePitch } : {}),
+      ...(effectiveRate !== 1 ? { playbackRate: effectiveRate } : {}),
+      ...(typeof track.loudnessLufs === 'number' ? { loudnessLufs: track.loudnessLufs } : {}),
+      ...(track.vocalsFile ? { vocalsFile: track.vocalsFile } : {}),
+      ...(track.instrumentalFile ? { instrumentalFile: track.instrumentalFile } : {}),
+      ...(track.separationStatus && track.separationStatus !== 'none' ? { separationStatus: track.separationStatus } : {}),
+      ...(manual ? { manualLyrics: true } : {}),
+      ...(audio.audioMissing ? { audioMissing: true } : {}),
     };
     if (includeLyrics) {
       payload.lyrics = effectiveLyrics == null ? null : effectiveLyrics;
@@ -549,8 +648,23 @@ function createAppState(io) {
   }
 
   // 僅供 P2 量測舊 payload 用，絕不可拿去 io.emit。
-  function getLegacyPlaylist(exists = libraryStore.getAudioExistsLookup()) {
-    return playState.playlist.map(track => getTrackPayload(track, { includeLyrics: true, exists }));
+  // 固定最多抽 8 首後按平均值放大，避免為了診斷而在 100/200/... 次廣播時
+  // 建立整份數十 MB 的舊 payload。這裡允許是估算值；正式 payload 大小仍是精確值。
+  function estimateLegacyPlaylistBytes(exists = libraryStore.getAudioExistsLookup()) {
+    const count = playState.playlist.length;
+    if (count === 0) return 2; // []
+    const sampleCount = Math.min(8, count);
+    let sampledBytes = 0;
+    for (let i = 0; i < sampleCount; i += 1) {
+      const index = sampleCount === 1
+        ? 0
+        : Math.round((i * (count - 1)) / (sampleCount - 1));
+      const track = getTrackPayload(playState.playlist[index], { includeLyrics: true, exists });
+      sampledBytes += Buffer.byteLength(JSON.stringify(track), 'utf8');
+    }
+    const averageTrackBytes = sampledBytes / sampleCount;
+    // JSON array 的中括號 + 項目間逗號。
+    return 2 + Math.round(averageTrackBytes * count) + Math.max(0, count - 1);
   }
 
   /** 取得可公開的播放狀態：清單是摘要，currentTrack 保留完整歌詞供播放／編輯／OBS 恢復。 */

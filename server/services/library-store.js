@@ -13,15 +13,23 @@ const { sanitizeTrack } = require('../utils/track-schema');
 
 const { dataDir: DATA_DIR, downloadsDir: DOWNLOADS_DIR } = require('../utils/app-paths');
 const LIBRARY_FILE = path.join(DATA_DIR, 'library.json');
-const MAX_ENTRIES = 1000; // 上限保護
+const MAX_ENTRIES = 10000; // 高安全上限；實際容量主要受媒體磁碟空間限制
 // state:sync 會在每次操作後重建整份播放清單。以目錄快照取代每首
-// fs.existsSync，可把 500 首歌的同步 I/O 壓成短暫快取期內至多一次 readdirSync。
+// fs.existsSync，可把 2000 首歌的同步 I/O 壓成短暫快取期內至多一次 readdirSync。
 const AUDIO_SNAPSHOT_TTL_MS = 1000;
 
 let library = {}; // { [id]: { id, url, title, artist, cover, duration, source, playCount, lastPlayed } }
+let _entryCount = 0;
 let _saveTimer = null;
 let _errorReporter = null;
+let _durabilityListener = null;
+let _beforeRemovalListener = null;
+let _protectedEntryIdsProvider = null;
 let _audioSnapshot = { checkedAt: 0, files: new Set() };
+// state.json 只在這筆媒體庫資料已安全落盤時才可省略重複歌詞。新匯入／更新到
+// library.json 寫入成功前都列為 dirty，避免 library 2s debounce 與 state 800ms
+// debounce 之間的斷電窗口讓播放清單只剩 reference、卻沒有可重建的完整資料。
+const _dirtyEntryIds = new Set();
 
 const libraryDiskStore = createJsonStore({
   file: LIBRARY_FILE,
@@ -37,7 +45,8 @@ const libraryDiskStore = createJsonStore({
 
 (function load() {
   library = libraryDiskStore.load() || {};
-  log.info(`媒體庫已載入: ${Object.keys(library).length} 首`);
+  _entryCount = Object.keys(library).length;
+  log.info(`媒體庫已載入: ${_entryCount} 首`);
 })();
 
 function scheduleSave() {
@@ -52,15 +61,89 @@ function saveNow() {
     let ids = Object.keys(library);
     if (ids.length > MAX_ENTRIES) {
       ids.sort((a, b) => (library[b].playCount - library[a].playCount) || (library[b].lastPlayed - library[a].lastPlayed));
+      const protectedIds = new Set();
+      if (_protectedEntryIdsProvider) {
+        try {
+          const provided = _protectedEntryIdsProvider();
+          if (provided && typeof provided[Symbol.iterator] === 'function') {
+            for (const id of provided) {
+              const normalized = String(id || '');
+              if (normalized && library[normalized]) protectedIds.add(normalized);
+            }
+          }
+        } catch (err) {
+          log.warn(`取得媒體庫保護清單失敗，改用原排名淘汰: ${err.message}`);
+        }
+      }
+
+      // 目前播放清單／currentTrack 是 in-use backing store，必須先佔保留名額；
+      // 其餘再沿用既有「播放次數高 → 最近播放」排名補到 MAX_ENTRIES。
+      const keepIds = [];
+      for (const id of protectedIds) {
+        if (keepIds.length >= MAX_ENTRIES) break;
+        keepIds.push(id);
+      }
+      if (keepIds.length < MAX_ENTRIES) {
+        for (const id of ids) {
+          if (protectedIds.has(id)) continue;
+          keepIds.push(id);
+          if (keepIds.length >= MAX_ENTRIES) break;
+        }
+      }
+      const keepIdSet = new Set(keepIds);
+      const evictedIds = ids.filter((id) => !keepIdSet.has(id));
+      const newlyDirty = evictedIds.filter((id) => !_dirtyEntryIds.has(id));
+      evictedIds.forEach((id) => _dirtyEntryIds.add(id));
+      // 10k cap 淘汰也屬於真正刪除 backing store。先讓 app-state 把仍在播放清單裡
+      // 的 entry 寫成完整 fallback，再准 library.json 原子落盤；避免兩個檔案中間 crash。
+      if (_beforeRemovalListener && evictedIds.length && _beforeRemovalListener(evictedIds) === false) {
+        newlyDirty.forEach((id) => _dirtyEntryIds.delete(id));
+        throw new Error('媒體庫淘汰前無法安全保存播放清單 fallback，已取消本次媒體庫寫入');
+      }
       const keep = {};
-      for (const id of ids.slice(0, MAX_ENTRIES)) keep[id] = library[id];
+      for (const id of keepIds) keep[id] = library[id];
       library = keep;
+      _entryCount = keepIds.length;
     }
-    libraryDiskStore.save(library);
+    const hadDirtyEntries = _dirtyEntryIds.size > 0;
+    const saved = libraryDiskStore.save(library);
+    if (saved) {
+      _dirtyEntryIds.clear();
+      // state 在 library 落盤前會刻意保留 full fallback。當 library 變 durable 後主動
+      // 排一次 state compact，否則「最後一次匯入」可能讓 state.json 永久停在肥版直到
+      // 下一次使用者操作，重開仍得 parse 幾十 MB。
+      if (hadDirtyEntries && _durabilityListener) {
+        try { _durabilityListener(); } catch (err) { log.warn(`媒體庫落盤後狀態壓縮排程失敗: ${err.message}`); }
+      }
+    }
+    return saved;
   } catch (err) {
     log.warn(`媒體庫寫入失敗: ${err.message}`);
     if (_errorReporter) _errorReporter({ area: '媒體庫保存', message: err.message });
+    return false;
   }
+}
+
+function markDirty(id) {
+  if (id !== undefined && id !== null) _dirtyEntryIds.add(String(id));
+}
+
+function isEntryDurable(id) {
+  if (!id || !library[String(id)] || _dirtyEntryIds.has(String(id))) return false;
+  // 超量尚未淘汰時，不知道哪筆會在下次 saveNow() 被移除，因此全部保守保留 state fallback。
+  return _entryCount <= MAX_ENTRIES;
+}
+
+function setDurabilityListener(fn) {
+  _durabilityListener = typeof fn === 'function' ? fn : null;
+}
+
+function setBeforeRemovalListener(fn) {
+  _beforeRemovalListener = typeof fn === 'function' ? fn : null;
+}
+
+function setProtectedEntryIdsProvider(fn) {
+  _protectedEntryIdsProvider = typeof fn === 'function' ? fn : null;
 }
 
 /** 記錄一次播放（被選為當前歌曲時呼叫）。連同歌詞/拼音/諧音/檔名/變調變速一起記住，
@@ -70,6 +153,7 @@ function recordPlay(track) {
   if (!track || !track.id) return;
   const id = String(track.id);
   const prev = library[id];
+  if (!prev) _entryCount++;
   const pick = (a, b) => (a !== undefined && a !== null && a !== '' ? a : b);
   library[id] = {
     id,
@@ -110,6 +194,7 @@ function recordPlay(track) {
     playCount: (prev ? prev.playCount : 0) + 1,
     lastPlayed: Date.now(),
   };
+  markDirty(id);
   scheduleSave();
 }
 
@@ -118,6 +203,7 @@ function rememberImport(track) {
   track = sanitizeTrack(track);
   if (!track || !track.id) return;
   const prev = library[String(track.id)] || {};
+  if (!library[String(track.id)]) _entryCount++;
   library[String(track.id)] = {
     ...prev,
     ...track,
@@ -131,6 +217,7 @@ function rememberImport(track) {
     separationStatus: (track.separationStatus && track.separationStatus !== 'none')
       ? track.separationStatus : (prev.separationStatus || 'none'),
   };
+  markDirty(track.id);
   // 匯入流程走到這裡代表音檔已完成落地；不必等下一次目錄掃描才讓 UI 顯示可播放。
   noteAudioSnapshot(track.filename, true);
   scheduleSave();
@@ -143,6 +230,7 @@ function updateMeta(id, partial) {
   const prev = library[id];
   if (!prev) return; // 只更新已存在的記錄（避免無中生有）
   library[id] = { ...prev, ...partial };
+  markDirty(id);
   scheduleSave();
 }
 
@@ -230,12 +318,83 @@ function getLibrary() {
   );
 }
 
+/**
+ * 媒體庫面板只需要可瀏覽／分離／試聽的摘要。歌詞與 parsedLyrics 可能讓 100 首
+ * 就變成數 MB；10k 媒體庫若把完整內容塞進 Socket 會完全失去擴充性。
+ * 單曲完整資料仍由 getEntry()/library:reimport 按需取得。
+ */
+function toLibrarySummary(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  return {
+    id: entry.id,
+    title: entry.title || '未知歌曲',
+    artist: entry.artist || '',
+    cover: entry.cover || null,
+    duration: entry.duration || 0,
+    playCount: entry.playCount || 0,
+    lastPlayed: entry.lastPlayed || 0,
+    separationStatus: entry.separationStatus || 'none',
+    vocalsFile: entry.vocalsFile || null,
+    instrumentalFile: entry.instrumentalFile || null,
+  };
+}
+
+function getLibrarySummary() {
+  return getLibrary().map(toLibrarySummary).filter(Boolean);
+}
+
+/** 一首邏輯歌曲可能有原音訊＋人聲＋伴奏三個實體資產。 */
+function collectMediaFilenames(track, target = new Set()) {
+  if (!track || typeof track !== 'object') return target;
+  for (const field of ['filename', 'vocalsFile', 'instrumentalFile']) {
+    const value = track[field];
+    if (typeof value === 'string' && value) target.add(path.basename(value));
+  }
+  return target;
+}
+
+/** 分離中的工作仍可能正在讀來源音檔；cleanup 不可把它從腳下刪掉。 */
+function getProcessingMediaFilenames() {
+  const keep = new Set();
+  for (const entry of Object.values(library)) {
+    if (entry?.separationStatus === 'processing') collectMediaFilenames(entry, keep);
+  }
+  return keep;
+}
+
 function remove(id) {
-  if (library[id]) { delete library[id]; scheduleSave(); return true; }
+  id = String(id || '');
+  if (library[id]) {
+    const wasDirty = _dirtyEntryIds.has(id);
+    _dirtyEntryIds.add(id); // listener 取 state snapshot 時，強制這首走完整 fallback。
+    if (_beforeRemovalListener && _beforeRemovalListener([id]) === false) {
+      if (!wasDirty) _dirtyEntryIds.delete(id);
+      return false;
+    }
+    delete library[id];
+    _entryCount = Math.max(0, _entryCount - 1);
+    _dirtyEntryIds.delete(id);
+    scheduleSave();
+    return true;
+  }
   return false;
 }
 
-function clear() { library = {}; scheduleSave(); }
+function clear() {
+  const ids = Object.keys(library);
+  const previouslyDirty = new Set(_dirtyEntryIds);
+  ids.forEach((id) => _dirtyEntryIds.add(id));
+  if (_beforeRemovalListener && ids.length && _beforeRemovalListener(ids) === false) {
+    _dirtyEntryIds.clear();
+    previouslyDirty.forEach((id) => _dirtyEntryIds.add(id));
+    return false;
+  }
+  library = {};
+  _entryCount = 0;
+  _dirtyEntryIds.clear();
+  scheduleSave();
+  return true;
+}
 
 /**
  * 清理已下載音檔：刪除 downloads/ 內「不在目前播放清單」的音檔。
@@ -245,6 +404,8 @@ function clear() { library = {}; scheduleSave(); }
  */
 function cleanupAudio(keepFilenames = new Set()) {
   let deleted = 0, freedBytes = 0;
+  const deletedNames = new Set();
+  let repairedEntries = 0;
   try {
     if (!fs.existsSync(DOWNLOADS_DIR)) return { deleted, freedBytes };
     for (const name of fs.readdirSync(DOWNLOADS_DIR)) {
@@ -252,17 +413,55 @@ function cleanupAudio(keepFilenames = new Set()) {
       const fp = path.join(DOWNLOADS_DIR, name);
       try {
         const st = fs.statSync(fp);
-        if (st.isFile()) { freedBytes += st.size; fs.unlinkSync(fp); noteAudioSnapshot(name, false); deleted++; }
+        if (st.isFile()) {
+          freedBytes += st.size;
+          fs.unlinkSync(fp);
+          deletedNames.add(name);
+          noteAudioSnapshot(name, false);
+          deleted++;
+        }
       } catch (e) { /* 略過單檔錯誤 */ }
+    }
+
+    // library-only 的分離 stem 可以依既有「清掉不在播放清單的音檔」語意被刪除，
+    // 但 metadata 不能繼續假裝檔案還在。原始 filename 刻意保留：reimport 本來就會
+    // 先 audioExists()，不存在時再用 URL 重抓；這份檔名仍有歷史／重新下載價值。
+    if (deletedNames.size) {
+      for (const entry of Object.values(library)) {
+        if (!entry) continue;
+        let repaired = false;
+        if (entry.vocalsFile && deletedNames.has(path.basename(entry.vocalsFile))) {
+          entry.vocalsFile = null;
+          repaired = true;
+        }
+        if (entry.instrumentalFile && deletedNames.has(path.basename(entry.instrumentalFile))) {
+          entry.instrumentalFile = null;
+          repaired = true;
+        }
+        if (repaired) {
+          if (entry.separationStatus === 'done') entry.separationStatus = 'none';
+          markDirty(entry.id);
+          repairedEntries++;
+        }
+      }
+      if (repairedEntries) scheduleSave();
     }
     log.info(`音檔清理: 刪除 ${deleted} 個檔、釋放 ${(freedBytes / 1048576).toFixed(1)}MB`);
   } catch (err) {
     log.warn(`音檔清理失敗: ${err.message}`);
   }
-  return { deleted, freedBytes };
+  return { deleted, freedBytes, repairedEntries };
 }
 
 process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
 function setErrorReporter(fn) { _errorReporter = typeof fn === 'function' ? fn : null; }
-module.exports = { recordPlay, rememberImport, updateMeta, getEntry, findByIdentity, audioExists, audioStatus, getAudioExistsLookup, resetAudioStatusCache, getLibrary, remove, clear, cleanupAudio, setErrorReporter, saveNow };
+module.exports = {
+  recordPlay, rememberImport, updateMeta, getEntry, findByIdentity,
+  audioExists, audioStatus, getAudioExistsLookup, resetAudioStatusCache,
+  getLibrary, getLibrarySummary, toLibrarySummary,
+  collectMediaFilenames, getProcessingMediaFilenames,
+  isEntryDurable, setDurabilityListener, setBeforeRemovalListener, setProtectedEntryIdsProvider,
+  remove, clear, cleanupAudio, setErrorReporter, saveNow,
+  MAX_ENTRIES,
+};

@@ -237,9 +237,18 @@ module.exports = function socketHandler(io, {
   function startTwitchSession({ startedAt, eventId } = {}) {
     // EventSub 會重送通知；相同 message id 只能重設歌單一次。
     if (eventId && eventId === lastTwitchStreamEventId) return;
+    const resolvedStartedAt = Number.isFinite(startedAt) ? startedAt : Date.now();
+    // 已經在「同一場」Twitch session 裡就不要重設——否則 EventSub 每次重連、
+    // 或 refreshLiveState() 的權威對帳（都會走到這裡，且沒有 message id）都會把
+    // 已唱歌單清空。Twitch 的 started_at 對同一場直播是固定值，給 60 秒容差即可。
+    if (ctx.session.active && ctx.session.source === 'twitch' && ctx.session.startedAt
+      && Math.abs(ctx.session.startedAt - resolvedStartedAt) < 60000) {
+      if (eventId) lastTwitchStreamEventId = eventId;
+      return;
+    }
     lastTwitchStreamEventId = eventId || null;
     ctx.session.active = true;
-    ctx.session.startedAt = Number.isFinite(startedAt) ? startedAt : Date.now();
+    ctx.session.startedAt = resolvedStartedAt;
     ctx.session.source = 'twitch';
     ctx.session.songs = [];
     if (ctx.playState.isPlaying && ctx.playState.currentTrack) ctx.recordSessionSong();

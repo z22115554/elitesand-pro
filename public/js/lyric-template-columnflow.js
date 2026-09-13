@@ -117,17 +117,21 @@
     return VARIANTS.includes(value) ? value : 'sen';
   }
 
+  // 漂字（drift）進場：四角輪替方向 + 依動畫強度縮放的距離／模糊／旋轉／時長，
+  // 全部讀共用的 LyricMotion.quadDrift（跟 particle 模板同一份規格，數字不重複硬寫）。
+  // 純 CSS keyframe 驅動（.cf-ent-drift .cf-g.cf-on 觸發），沿用本模板「class 切換 + CSS」的作法。
+  const QUAD_DRIFT = LyricMotion.quadDrift || null;
+
   // 逐字進場效果：獨立一欄，可疊在 sen／fuda 任一外觀上。
   const ENTRANCES = ['native', 'drift'];
   function currentEntrance() {
     const value = document.body.dataset.columnflowEntrance;
+    // kernel 是舊快取、還沒有 quadDrift 時，drift 沒有方向規格可用，安全退回 native——
+    // 不在這裡另外硬寫一份方向表當備援，否則兩份數字遲早會走鐘（就是這次重構要解決的事）。
+    if (value === 'drift' && !QUAD_DRIFT) return 'native';
     return ENTRANCES.includes(value) ? value : 'native';
   }
   let entranceApplied = '';
-
-  // 漂字（drift）進場：四角輪替方向 + 依動畫強度縮放的距離／模糊／旋轉／時長。
-  // 純 CSS keyframe 驅動（.cf-ent-drift .cf-g.cf-on 觸發），沿用本模板「class 切換 + CSS」的作法。
-  const DRIFT_DIRS = [[-1.2, -1.0], [1.15, -1.0], [-1.1, 1.1], [1.2, 0.95]]; // 左上→右上→左下→右下（em）
   const CF_INTENSITY = ['calm', 'normal', 'chaotic'];
   let intensityApplied = '';
   function currentIntensity() {
@@ -140,6 +144,15 @@
     if (v === intensityApplied) return;
     intensityApplied = v;
     CF_INTENSITY.forEach((n) => rootEl.classList.toggle(`cf-int-${n}`, n === v));
+    // CSS 仍負責直書句流本身的動畫，但強度數值改讀 Motion Kernel 的同一份規格；
+    // particle 也讀這份規格，因此兩邊不會再各自漂出不同手感。
+    if (QUAD_DRIFT) {
+      const cfg = QUAD_DRIFT.intensity(v);
+      rootEl.style.setProperty('--cf-drift-dist', String(cfg.dist));
+      rootEl.style.setProperty('--cf-drift-blur', String(cfg.blur));
+      rootEl.style.setProperty('--cf-drift-rot', String(cfg.rot));
+      rootEl.style.setProperty('--cf-drift-dur', `${cfg.durMs}ms`);
+    }
   }
 
   function currentPlacement() {
@@ -318,12 +331,14 @@
         span.style.setProperty('--cf-entry-x', `${(0.12 + hashNoise(gSeed, 6) * 0.16).toFixed(2)}em`);
         span.style.setProperty('--cf-entry-y', `${(0.05 + hashNoise(gSeed, 7) * 0.14).toFixed(2)}em`);
         if (isDrift) {
-          // 四角輪替方向；每字自己的旋轉正負由亂數種子決定
-          const dir = DRIFT_DIRS[driftIdx % 4];
+          // 四角輪替方向；每字自己的旋轉正負由亂數種子決定。
+          // isDrift 只有在 QUAD_DRIFT 存在時才會是 true（見 currentEntrance()），
+          // 這裡不需要再判斷一次或另外準備備援方向表。
+          const driftSpec = QUAD_DRIFT.glyphSpec(driftIdx, gi);
           driftIdx += 1;
-          span.style.setProperty('--cf-qx', `${dir[0].toFixed(2)}em`);
-          span.style.setProperty('--cf-qy', `${dir[1].toFixed(2)}em`);
-          span.style.setProperty('--cf-qr', `${(dir[0] > 0 ? -7 : 7) * (1 + (gi % 3) * 0.14) >> 0}deg`);
+          span.style.setProperty('--cf-qx', `${driftSpec.direction[0].toFixed(2)}em`);
+          span.style.setProperty('--cf-qy', `${driftSpec.direction[1].toFixed(2)}em`);
+          span.style.setProperty('--cf-qr', `${driftSpec.rotationDeg}deg`);
         }
         sub.appendChild(span);
         glyphEls.push({ el: span, startMs: g.startMs });

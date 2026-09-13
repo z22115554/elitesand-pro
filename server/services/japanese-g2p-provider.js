@@ -1,0 +1,188 @@
+'use strict';
+
+/**
+ * Japanese G2P sidecar 生命週期（docs/JAPANESE-XIEYIN-V2-PLAN.md Phase 2）。
+ *
+ * 跟 ai-separation.js 管 supervisor.py 是同一套精神（NDJSON、常駐 process、
+ * 逐行配對 id），差異在於這裡的工作是毫秒級同步查表，不需要 progress 事件、
+ * 不需要背景 worker，一個 sidecar process 從頭讀到尾就夠。
+ *
+ * 鐵則 #3：spawn 一律帶 PYTHONUTF8，避免中文/日文在管線裡變亂碼。
+ *
+ * **這支 provider 目前只負責「跟 sidecar 講話」，不負責 sidecar 本身怎麼來**
+ * （bundle 進 installer 還是像 FFmpeg／AI 分離一樣按需下載，是還沒做的
+ * Phase 2 打包決策——haqumei 的 Python wheel 含內嵌辭典，實測安裝後約 51MB，
+ * 比照 FFmpeg／AI 模型的「按需下載」慣例，不建議塞進基礎安裝檔逼所有使用者
+ * 都下載）。`pythonExecutable` 開發環境預設吃系統 `python`，正式環境應該
+ * 由呼叫端指到專用的 embeddable runtime，跟 AI 分離的 runtime 分開管理。
+ */
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { createLogger } = require('../utils/logger');
+const { projectRoot } = require('../utils/app-paths');
+
+const log = createLogger('JapaneseG2P');
+
+const REQUEST_TIMEOUT_MS = 5000;
+const READY_TIMEOUT_MS = 10000;
+
+function resolveScriptDir() {
+  const override = process.env.ELITESAND_AI_SCRIPT_DIR;
+  if (override && fs.existsSync(path.join(override, 'haqumei_sidecar.py'))) return override;
+  return path.join(projectRoot, 'ai');
+}
+
+function sidecarEnv() {
+  return { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
+}
+
+class JapaneseG2PProvider {
+  constructor(pythonExecutable = process.env.ELITESAND_G2P_PYTHON || 'python') {
+    this.pythonExecutable = pythonExecutable;
+    this.proc = null;
+    this.stdoutBuffer = '';
+    this.pendingRequests = new Map(); // id -> { resolve, reject, timeoutHandle }
+    this.readyPromise = null;
+    this.nextRequestId = 1;
+  }
+
+  isRunning() {
+    return this.proc !== null && this.proc.exitCode === null && !this.proc.killed;
+  }
+
+  /**
+   * 啟動 sidecar 並等它送出第一行 {ready:true}。sidecar import haqumei 失敗
+   * （沒裝、辭典缺失）會在這裡就抛出，呼叫端據此決定要不要 fallback 回舊版，
+   * 而不是等第一筆真實請求逾時才發現。
+   */
+  async start() {
+    if (this.isRunning()) return this.readyPromise;
+    if (this.readyPromise) return this.readyPromise;
+
+    const scriptPath = path.join(resolveScriptDir(), 'haqumei_sidecar.py');
+    if (!fs.existsSync(scriptPath)) {
+      throw Object.assign(new Error(`Japanese G2P sidecar 不存在：${scriptPath}`), { code: 'ENGINE_UNAVAILABLE' });
+    }
+
+    this.proc = spawn(this.pythonExecutable, [scriptPath], {
+      env: sidecarEnv(),
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    this.proc.stdout.setEncoding('utf8');
+    this.proc.stdout.on('data', (chunk) => this._onStdoutData(chunk));
+    this.proc.stderr.setEncoding('utf8');
+    this.proc.stderr.on('data', (chunk) => log.warn('sidecar stderr', chunk.trim()));
+
+    this.proc.on('exit', (code, signal) => {
+      log.info(`G2P sidecar exited (code=${code}, signal=${signal})`);
+      this._rejectAllPending(Object.assign(new Error(`G2P sidecar exited before responding (code=${code})`), { code: 'ENGINE_CRASHED' }));
+      this.proc = null;
+      this.readyPromise = null;
+    });
+    this.proc.on('error', (err) => {
+      log.error('failed to spawn G2P sidecar', err);
+      this._rejectAllPending(err);
+      this.proc = null;
+      this.readyPromise = null;
+    });
+
+    this.readyPromise = new Promise((resolve, reject) => {
+      this._resolveReady = resolve;
+      this._rejectReady = reject;
+      this._readyTimeoutHandle = setTimeout(() => {
+        reject(Object.assign(new Error('G2P sidecar 啟動逾時（沒有收到 ready）'), { code: 'ENGINE_TIMEOUT' }));
+      }, READY_TIMEOUT_MS);
+    });
+    return this.readyPromise;
+  }
+
+  async stop() {
+    if (!this.isRunning()) return;
+    const proc = this.proc;
+    this.proc = null;
+    this.readyPromise = null;
+    proc.stdin.end();
+    await new Promise((resolve) => {
+      const t = setTimeout(() => {
+        try { proc.kill(); } catch (_) { /* already gone */ }
+        resolve();
+      }, 3000);
+      proc.once('exit', () => { clearTimeout(t); resolve(); });
+    });
+  }
+
+  _onStdoutData(chunk) {
+    this.stdoutBuffer += chunk;
+    let newlineIndex;
+    // eslint-disable-next-line no-cond-assign
+    while ((newlineIndex = this.stdoutBuffer.indexOf('\n')) !== -1) {
+      const line = this.stdoutBuffer.slice(0, newlineIndex).trim();
+      this.stdoutBuffer = this.stdoutBuffer.slice(newlineIndex + 1);
+      if (line) this._onLine(line);
+    }
+  }
+
+  _onLine(line) {
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch (_) {
+      log.warn('non-JSON line from G2P sidecar, ignoring', line);
+      return;
+    }
+
+    if ('ready' in msg && !('id' in msg)) {
+      clearTimeout(this._readyTimeoutHandle);
+      if (msg.ready) this._resolveReady?.(msg);
+      else this._rejectReady?.(Object.assign(new Error(msg.error || 'G2P sidecar 回報 not ready'), { code: 'ENGINE_UNAVAILABLE' }));
+      return;
+    }
+
+    const pending = this.pendingRequests.get(msg.id);
+    if (!pending) {
+      log.warn('G2P sidecar 回應沒有對應的 pending request', msg.id);
+      return;
+    }
+    clearTimeout(pending.timeoutHandle);
+    this.pendingRequests.delete(msg.id);
+    if (msg.error) pending.reject(Object.assign(new Error(msg.error), { code: 'ENGINE_ERROR' }));
+    else pending.resolve(msg.results);
+  }
+
+  _rejectAllPending(err) {
+    for (const [, pending] of this.pendingRequests) {
+      clearTimeout(pending.timeoutHandle);
+      pending.reject(err);
+    }
+    this.pendingRequests.clear();
+  }
+
+  /**
+   * 整批送一首歌（或一段）的所有句子，一次 IPC 拿回全部結果——鐵則等級的
+   * 原則：不可每一字都 IPC 一次，優先整句或整首批次處理。
+   *
+   * @param {string[]} texts
+   * @param {{timeoutMs?: number}} [opts]
+   * @returns {Promise<Array<{phonemes:string[], kana:string}>>}
+   */
+  async g2pBatch(texts, { timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+    if (!Array.isArray(texts) || texts.length === 0) return [];
+    if (!this.isRunning()) await this.start();
+    await this.readyPromise;
+
+    const id = String(this.nextRequestId++);
+    return new Promise((resolve, reject) => {
+      const timeoutHandle = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(Object.assign(new Error('G2P sidecar 請求逾時'), { code: 'ENGINE_TIMEOUT' }));
+      }, timeoutMs);
+      this.pendingRequests.set(id, { resolve, reject, timeoutHandle });
+      this.proc.stdin.write(JSON.stringify({ id, texts }) + '\n');
+    });
+  }
+}
+
+module.exports = { JapaneseG2PProvider, resolveScriptDir };

@@ -166,7 +166,7 @@ function applyResult(trackId, patch) {
   broadcastState();
   // media-library.js 的媒體庫清單是獨立於 playState 的另一份前端快取，broadcastState
   // 不會更新到它——沿用 ai-separation-jobs.js／library.js 既有的 library:list 廣播慣例。
-  emitToControlClients(deps.io, 'library:list', libraryStore.getLibrary());
+  emitToControlClients(deps.io, 'library:list', libraryStore.getLibrarySummary());
 }
 
 function armWatchdog() {

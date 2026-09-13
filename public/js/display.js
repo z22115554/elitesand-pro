@@ -141,6 +141,59 @@
   let isControllerPlaying = false;
   let currentTrackData = null;
   let currentOffsetMs = 0; // Phase 5: 當前歌曲的時間偏移
+
+  // ── 段落感知模板切換：實驗性，2026-09-08 使用者要求「直接用現用模板，不同段落套不同
+  // 模板試看看」。只手動掛了一首測試曲（Ado - 唱，videoId pgXpM4l_MwI），不影響任何其他
+  // 歌曲——SECTION_TEST_DATA 只有這一筆 key，其餘歌曲完全不會進到這段邏輯。之後段落分析
+  // 走正式資料流時，只要把這個常數換成讀 track.sections 就好，setTemplate() 中途換模板
+  // 的能力本來就有，不用重寫。
+  const SECTION_TEST_DATA = {
+    'pgXpM4l_MwI': [
+      { start: 0, end: 0.23, label: 'start' },
+      { start: 0.23, end: 22.6, label: 'intro' },
+      { start: 22.6, end: 51.71, label: 'verse' },
+      { start: 51.71, end: 66.24, label: 'pre_chorus' },
+      { start: 66.24, end: 95.34, label: 'chorus' },
+      { start: 95.34, end: 126.24, label: 'verse' },
+      { start: 126.24, end: 140.79, label: 'bridge' },
+      { start: 140.79, end: 155.34, label: 'pre_chorus' },
+      { start: 155.34, end: 173.51, label: 'chorus' },
+      { start: 173.51, end: 188.08, label: 'post_chorus' },
+      { start: 188.08, end: 189.370354, label: 'end' },
+    ],
+  };
+  // 段落標籤正規化：start/end 是幾乎零長度的邊界標記，沒有獨立設計的必要，
+  // 併到最靠近的 intro/outro 語意上，面板的段落搭配頁只需要暴露 7 種可設定的段落。
+  const SECTION_LABEL_ALIAS = { start: 'intro', end: 'outro' };
+  let lastUserSelectedTemplateId = null; // 面板實際存的設定值，不是「目前掛載中」（可能被段落切換蓋掉）
+  let lastLyricSettings = null; // applyLyricSettings() 收到的最新一份，段落搭配要讀 sectionAwareEnabled/sectionTemplateMap
+  let sectionAwareBaseTemplateId = null;
+  let sectionAwareLastApplied = null;
+
+  function findSectionLabel(sections, tSec) {
+    for (const s of sections) if (tSec >= s.start && tSec < s.end) return s.label;
+    return sections.length ? sections[sections.length - 1].label : null;
+  }
+
+  function applySectionAwareTemplate(timeMs) {
+    const sections = currentTrackData && SECTION_TEST_DATA[currentTrackData.id];
+    const enabled = !!(lastLyricSettings && lastLyricSettings.sectionAwareEnabled);
+    if (!sections || !enabled || !KaraokeEngine.setTemplate) {
+      sectionAwareBaseTemplateId = null; sectionAwareLastApplied = null;
+      return;
+    }
+    if (sectionAwareBaseTemplateId === null) sectionAwareBaseTemplateId = lastUserSelectedTemplateId || 'classic';
+    const rawLabel = findSectionLabel(sections, timeMs / 1000);
+    const label = SECTION_LABEL_ALIAS[rawLabel] || rawLabel;
+    const map = (lastLyricSettings && lastLyricSettings.sectionTemplateMap) || {};
+    const chosen = map[label];
+    const target = (chosen && chosen !== '__follow__' && typeof LyricTemplates !== 'undefined' && LyricTemplates.has(chosen))
+      ? chosen : sectionAwareBaseTemplateId;
+    if (target !== sectionAwareLastApplied) {
+      KaraokeEngine.setTemplate(target);
+      sectionAwareLastApplied = target;
+    }
+  }
   let previewSampleActive = false;
   let previewMotionTimer = null;
   window.addEventListener('i18n:change', () => {
@@ -204,6 +257,7 @@
         const timeMs = getSmoothTimeMs();
         // 拖曳/連續跳轉期間，重繪交給節流的同步事件處理，rAF 這幾幀不重複 render（避免雙重工作）
         if (!seekDriving) KaraokeEngine.update(timeMs);
+        applySectionAwareTemplate(timeMs);
 
         // Phase 7: 更新前奏倒數視覺節拍器
         updateIntroMetronome(timeMs);
@@ -626,6 +680,7 @@
   // ─── 歌詞外觀/位置設定（從控制面板即時推送，寫入 CSS 變數）───
   function applyLyricSettings(s) {
     if (!s || typeof s !== 'object') return;
+    lastLyricSettings = s; // 段落搭配（applySectionAwareTemplate）要讀這份的 sectionAwareEnabled/sectionTemplateMap
     const root = document.documentElement.style;
     const map = {
       fontSize: ['--display-font-size', v => `${v}px`],
@@ -731,6 +786,8 @@
     }
     // 排版模板（v4）：setTemplate 內部已對同值早退，高頻重送設定不會反覆重建畫面
     if (typeof s.template === 'string' && KaraokeEngine.setTemplate) {
+      lastUserSelectedTemplateId = s.template; // 段落感知切換要記住「使用者實際選的」，不是目前掛載中的
+      sectionAwareBaseTemplateId = null; sectionAwareLastApplied = null; // 使用者手動換過模板，下一幀重新判斷基準
       KaraokeEngine.setTemplate(s.template);
     }
     // 通知目前模板「設定更新了」，讓純設定驅動、跟播放進度無關的畫面（例如直書句流的

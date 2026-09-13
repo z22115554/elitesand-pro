@@ -70,6 +70,124 @@ const LyricMotion = (() => {
     return Math.min(max, Math.max(min, value));
   }
 
+  // ─── 共用「四相漂字」進場核心 ───
+  // 來源是直書句流目前的 cf-quad-drift：四角輪替、0/50/70/100% 關鍵格，
+  // cubic-bezier(.22,.61,.36,1)，以及 calm/normal/chaotic 三組強度。
+  // 這裡只描述「單一字素相對於它自己的定點怎麼動」，完全不碰任何模板的排版、
+  // 安全區、字級、欄位位置或設定儲存；不同模板可以各自決定字最後要落在哪裡。
+  const QUAD_DRIFT_DIRECTIONS = Object.freeze([
+    Object.freeze([-1.2, -1.0]),
+    Object.freeze([1.15, -1.0]),
+    Object.freeze([-1.1, 1.1]),
+    Object.freeze([1.2, 0.95]),
+  ]);
+  const QUAD_DRIFT_INTENSITIES = Object.freeze({
+    calm: Object.freeze({ dist: 0.6, blur: 0.5, rot: 0.35, durMs: 360 }),
+    normal: Object.freeze({ dist: 1, blur: 1, rot: 1, durMs: 440 }),
+    chaotic: Object.freeze({ dist: 1.55, blur: 1.6, rot: 1.9, durMs: 500 }),
+  });
+
+  function cubicBezierCoord(t, p1, p2) {
+    const inv = 1 - t;
+    return 3 * inv * inv * t * p1 + 3 * inv * t * t * p2 + t * t * t;
+  }
+
+  function cubicBezierDerivative(t, p1, p2) {
+    const inv = 1 - t;
+    return 3 * inv * inv * p1 + 6 * inv * t * (p2 - p1) + 3 * t * t * (1 - p2);
+  }
+
+  /** 求 CSS cubic-bezier(.22,.61,.36,1) 在指定 x 的 y，讓 canvas 與 CSS 動畫手感一致。 */
+  function quadDriftEase(progress) {
+    const x = clamp(progress, 0, 1);
+    if (x === 0 || x === 1) return x;
+    const x1 = 0.22; const y1 = 0.61; const x2 = 0.36; const y2 = 1;
+    let t = x;
+    for (let i = 0; i < 6; i += 1) {
+      const estimate = cubicBezierCoord(t, x1, x2) - x;
+      const slope = cubicBezierDerivative(t, x1, x2);
+      if (Math.abs(estimate) < 1e-5 || Math.abs(slope) < 1e-6) break;
+      t = clamp(t - estimate / slope, 0, 1);
+    }
+    // Newton 在極端值若收斂得不夠準，用短二分補到穩定結果。
+    let lo = 0; let hi = 1;
+    for (let i = 0; i < 8; i += 1) {
+      const estimate = cubicBezierCoord(t, x1, x2);
+      if (Math.abs(estimate - x) < 1e-5) break;
+      if (estimate < x) lo = t; else hi = t;
+      t = (lo + hi) * 0.5;
+    }
+    return cubicBezierCoord(t, y1, y2);
+  }
+
+  function quadDriftIntensity(key) {
+    return QUAD_DRIFT_INTENSITIES[key] || QUAD_DRIFT_INTENSITIES.normal;
+  }
+
+  /**
+   * @param {number} sequenceIndex 四角方向輪替用的連續字序
+   * @param {number} [localIndex=sequenceIndex] 旋轉微差用的區段內字序；columnflow 保留既有 gi 語意
+   */
+  function quadDriftGlyphSpec(sequenceIndex, localIndex = sequenceIndex) {
+    const seq = Math.abs(Math.trunc(Number(sequenceIndex) || 0));
+    const local = Math.abs(Math.trunc(Number(localIndex) || 0));
+    const direction = QUAD_DRIFT_DIRECTIONS[seq % QUAD_DRIFT_DIRECTIONS.length];
+    const rotationDeg = Math.trunc((direction[0] > 0 ? -7 : 7) * (1 + (local % 3) * 0.14));
+    return {
+      direction,
+      xEm: direction[0],
+      yEm: direction[1],
+      rotationDeg,
+    };
+  }
+
+  /**
+   * 以直書句流 cf-quad-drift 的 CSS 關鍵格，計算任一時間點的相對姿態。
+   * 回傳值仍是相對量：xEm/yEm 乘模板自己的 fontSize 即可；不含任何絕對座標。
+   */
+  function quadDriftPose(elapsedMs, sequenceIndex, intensityKey = 'normal', localIndex = sequenceIndex) {
+    const cfg = quadDriftIntensity(intensityKey);
+    const glyph = quadDriftGlyphSpec(sequenceIndex, localIndex);
+    const elapsed = Number(elapsedMs) || 0;
+    const u = clamp(elapsed / cfg.durMs, 0, 1);
+    const startX = glyph.xEm * cfg.dist;
+    const startY = glyph.yEm * cfg.dist;
+    const overshootX = startX * -0.06;
+    const overshootY = startY * -0.06;
+    const startRot = glyph.rotationDeg * cfg.rot;
+    const startBlur = 2.4 * cfg.blur;
+    let xEm; let yEm; let rotationDeg; let scale; let blurPx;
+
+    if (u >= 1) {
+      xEm = 0; yEm = 0; rotationDeg = 0; scale = 1; blurPx = 0;
+    } else if (u <= 0.7) {
+      const k = quadDriftEase(u / 0.7);
+      xEm = startX + (overshootX - startX) * k;
+      yEm = startY + (overshootY - startY) * k;
+      rotationDeg = startRot * (1 - k);
+      scale = 0.9 + (1.008 - 0.9) * k;
+      blurPx = startBlur * (1 - k);
+    } else {
+      const k = quadDriftEase((u - 0.7) / 0.3);
+      xEm = overshootX * (1 - k);
+      yEm = overshootY * (1 - k);
+      rotationDeg = 0;
+      scale = 1.008 + (1 - 1.008) * k;
+      blurPx = 0;
+    }
+
+    const opacity = u >= 0.5 ? 1 : quadDriftEase(u / 0.5);
+    return { xEm, yEm, rotationDeg, scale, blurPx, opacity, durationMs: cfg.durMs };
+  }
+
+  const quadDrift = Object.freeze({
+    directions: QUAD_DRIFT_DIRECTIONS,
+    intensities: QUAD_DRIFT_INTENSITIES,
+    intensity: quadDriftIntensity,
+    glyphSpec: quadDriftGlyphSpec,
+    pose: quadDriftPose,
+  });
+
   // ─── 離線文字測量（canvas 2d，含 LRU 快取）───
   let measureCanvas = null;
   let measureCtx = null;
@@ -640,6 +758,7 @@ const LyricMotion = (() => {
     mountStageSafeZoneGuide,
     hashNoise,
     hashSpread,
+    quadDrift,
     measureCharOffsets,
     phaseOf,
     AFTERGLOW_MS,

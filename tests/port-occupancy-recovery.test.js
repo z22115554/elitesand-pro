@@ -76,6 +76,29 @@ test('recovering probe kills one stale packaged utility and retries until the po
   assert.deepEqual(calls, [['find', 3000], ['kill', 4321]]);
 });
 
+test('recovering probe never kills the server this host just forked (same exe, same utility command line)', async () => {
+  const executable = 'C:\Apps\Elitesand Pro.exe';
+  const utilityCommandLine = `"${executable}" --type=utility --utility-sub-type=node.mojom.NodeService`;
+  assert.equal(isRecoverablePackagedUtility({ executablePath: executable, commandLine: utilityCommandLine, parentPid: 777 }, executable, { hostPid: 777 }), false);
+  assert.equal(isRecoverablePackagedUtility({ executablePath: executable, commandLine: utilityCommandLine, parentPid: 1 }, executable, { hostPid: 777 }), true);
+  assert.equal(isRecoverablePackagedUtility({ executablePath: executable, commandLine: utilityCommandLine }, executable, { hostPid: 777 }), true, 'parentPid 讀不到時維持原判斷: ');
+
+  let killed = false;
+  const probe = createRecoveringHealthProbe({
+    baseProbe: async () => ({ state: 'occupied' }),
+    isPackaged: true,
+    platform: 'win32',
+    currentExecutablePath: executable,
+    hostPid: 777,
+    findListeningPidImpl: async () => 4321,
+    readProcessInfoImpl: async (pid) => ({ pid, parentPid: 777, executablePath: executable, commandLine: utilityCommandLine }),
+    terminateProcessImpl: async () => { killed = true; },
+    delay: async () => {},
+  });
+  assert.deepEqual(await probe(3000), { state: 'occupied' });
+  assert.equal(killed, false);
+});
+
 test('recovering probe never kills an unrelated process', async () => {
   let killed = false;
   const probe = createRecoveringHealthProbe({
