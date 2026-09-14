@@ -1031,21 +1031,25 @@
     const stageShowSafeZoneInput = document.getElementById('ls-stage-show-safe-zone');
     if (stageShowSafeZoneInput) stageShowSafeZoneInput.checked = !!settings.stageShowSafeZoneOnObs;
 
+    // 這幾句依模板切換的說明文字都是純文案、沒有變數，直接交給 translate() 用長尾表
+    // 查對應翻譯（跟 templateDesc／templateScope 同一套做法），不建立個別 curated key。
+    // 注意：不可命名為單字母 t，run-tests.js 的靜態掃描會把那個呼叫誤判成 curated key 引用。
+    const trAuto = (text) => (window.I18n ? window.I18n.translate(text) : text);
     if (posHint) {
       posHint.textContent = isClassic
-        ? '九宮格是整個歌詞區塊在畫面上的位置；細調 X/Y 可再微調偏移。'
+        ? trAuto('九宮格是整個歌詞區塊在畫面上的位置；細調 X/Y 可再微調偏移。')
         : (isKtv
-          ? 'KTV 伴唱固定雙行構圖，左右不可調；下面可微調整體上下位置。'
-          : '方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。');
+          ? trAuto('KTV 伴唱固定雙行構圖，左右不可調；下面可微調整體上下位置。')
+          : trAuto('方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。'));
     }
     if (fineHint) {
-      fineHint.textContent = '拖曳選格子，或用下面細調微調';
+      fineHint.textContent = trAuto('拖曳選格子，或用下面細調微調');
     }
     if (posHint && isTypewriter) {
-      posHint.textContent = '打字機的靠邊方式：全左／全右＝所有對話泡泡固定一側；左右分散＝以 1–5 句為一段隨機交替。合唱歌曲一律改成「一邊代表一個聲部」，不受此設定影響。';
+      posHint.textContent = trAuto('打字機的靠邊方式：全左／全右＝所有對話泡泡固定一側；左右分散＝以 1–5 句為一段隨機交替。合唱歌曲一律改成「一邊代表一個聲部」，不受此設定影響。');
     }
     if (posHint && isColumnflow) {
-      posHint.textContent = '直書句流會保留最近幾句，並避開彼此重疊；可用上方直書選項調整構圖。';
+      posHint.textContent = trAuto('直書句流會保留最近幾句，並避開彼此重疊；可用上方直書選項調整構圖。');
     }
     document.querySelectorAll('#lyric-pos-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.lyricPos === (settings.lyricPosition || 'center'));

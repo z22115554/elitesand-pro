@@ -352,7 +352,7 @@
                 </button>
               </div>
               <div class="np-volume-group">
-                <div class="np-volume" id="volume-row" title="伴奏音量" data-level="high">
+                <div class="np-volume" id="volume-row" title="伴奏音量" data-i18n-title="home.instrumentalVolume" data-level="high">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path fill="currentColor" stroke="none" d="M3 9v6h4l5 5V4L7 9H3z"/>
                     <path class="vol-wave vol-wave-1" d="M15.5 8.5a5 5 0 0 1 0 7"/>
@@ -364,7 +364,7 @@
                 </div>
                 <!-- 已分離歌曲會自動用伴奏＋人聲雙軌播放；這列只在雙軌實際生效時顯示。
                      新使用者的人聲預設 20%，可在這裡隨時調高、調低或拉到 0。 -->
-                <div class="np-volume" id="separation-vocals-row" hidden title="人聲音量">
+                <div class="np-volume" id="separation-vocals-row" hidden title="人聲音量" data-i18n-title="home.vocalsVolume">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V22h2v-2.06A9 9 0 0 0 21 11h-2z"/></svg>
                   <input id="separation-vocals-volume" type="range" min="0" max="150" value="20">
                   <span id="separation-vocals-volume-val" class="val">20%</span>
@@ -530,7 +530,7 @@
                 <span id="offset-display" class="offset-display">0.0s</span>
                 <button id="offset-plus01" class="btn btn-sm" type="button">+0.1s</button>
                 <button id="offset-plus05" class="btn btn-sm" type="button">+0.5s</button>
-                <button id="offset-reset" class="btn btn-sm btn-ghost" type="button">歸零</button>
+                <button id="offset-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="offset.resetToZero">歸零</button>
               </div>
               <button id="btn-lyrics-timeline" class="btn btn-sm btn--wide mt-8" type="button">逐行時間軸編輯…</button>
               <p class="field-hint mt-6">整首偏移只能一起挪動；如果中段某幾句慢慢跑掉，用逐行編輯每一行的時間點。</p>
@@ -555,30 +555,30 @@
           <section class="card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg><span data-i18n="home.tab.audio">音訊</span></p>
             <div class="field">
-              <label>變調 / 變速</label>
+              <label data-i18n="controller.pitchSpeed">變調 / 變速</label>
               <div class="stepper-row">
-                <span class="sl-label">變調</span>
+                <span class="sl-label" data-i18n="controller.pitch">變調</span>
                 <div class="stepper">
-                  <button id="pitch-down" class="stepper-btn" type="button" aria-label="降一個半音">−</button>
+                  <button id="pitch-down" class="stepper-btn" type="button" aria-label="降一個半音" data-i18n-aria-label="controller.pitchDown">−</button>
                   <span id="pitch-value" class="stepper-val">0</span>
-                  <button id="pitch-up" class="stepper-btn" type="button" aria-label="升一個半音">+</button>
+                  <button id="pitch-up" class="stepper-btn" type="button" aria-label="升一個半音" data-i18n-aria-label="controller.pitchUp">+</button>
                 </div>
-                <button id="pitch-reset" class="btn btn-sm btn-ghost" type="button">重置</button>
+                <button id="pitch-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="common.reset">重置</button>
                 <input id="pitch-slider" type="range" min="-12" max="12" step="1" value="0" hidden>
               </div>
               <div class="stepper-row">
-                <span class="sl-label">變速</span>
+                <span class="sl-label" data-i18n="controller.speed">變速</span>
                 <div class="stepper">
-                  <button id="speed-down" class="stepper-btn" type="button" aria-label="減速">−</button>
+                  <button id="speed-down" class="stepper-btn" type="button" aria-label="減速" data-i18n-aria-label="controller.slower">−</button>
                   <span id="speed-value" class="stepper-val">1.00x</span>
-                  <button id="speed-up" class="stepper-btn" type="button" aria-label="加速">+</button>
+                  <button id="speed-up" class="stepper-btn" type="button" aria-label="加速" data-i18n-aria-label="controller.faster">+</button>
                 </div>
-                <button id="speed-reset" class="btn btn-sm btn-ghost" type="button">重置</button>
+                <button id="speed-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="common.reset">重置</button>
                 <input id="speed-slider" type="range" min="0.5" max="1.5" step="0.05" value="1" hidden>
               </div>
             </div>
             <div class="switch-row switch-row--separated">
-              <div><div class="label">統一音量（響度標準化）</div><div class="sub">依每首歌的實測響度校正播放增益；關閉時保留原始音量</div></div>
+              <div><div class="label" data-i18n="home.unifiedVolume">統一音量（響度標準化）</div><div class="sub" data-i18n="home.unifiedVolumeHint">依每首歌的實測響度校正播放增益；關閉時保留原始音量</div></div>
               <label class="switch"><input id="normalization-toggle" type="checkbox" checked><span class="track"></span></label>
             </div>
           </section>
@@ -702,26 +702,26 @@
           <!-- 基礎 · 左欄：顯示行為 + 動畫 -->
           <div class="settings-col">
           <section class="card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>歌詞顯示模式</p>
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span data-i18n="settings.lyrics.displayModeTitle">歌詞顯示模式</span></p>
             <div id="classic-only-display-mode">
             <div class="field">
-              <label for="romanization-mode">語言顯示</label>
+              <label for="romanization-mode" data-i18n="settings.lyrics.languageDisplay">語言顯示</label>
               <select id="romanization-mode" class="input">
-                <option value="original">原文</option>
-                <option value="both" selected>原文 + 拼音</option>
-                <option value="xieyin">原文 + 諧音</option>
-                <option value="full">全部（原文＋拼音＋諧音）</option>
+                <option value="original" data-i18n="controller.original">原文</option>
+                <option value="both" selected data-i18n="controller.originalRomanized">原文 + 拼音</option>
+                <option value="xieyin" data-i18n="controller.originalPhonetic">原文 + 諧音</option>
+                <option value="full" data-i18n="settings.lyrics.allModes">全部（原文＋拼音＋諧音）</option>
               </select>
-              <p class="field-hint mt-6">諧音（中文近似音）只對日文／韓文有效；中文歌一律只顯示拼音（羅馬字）。</p>
+              <p class="field-hint mt-6" data-i18n="settings.lyrics.romanizationHint">諧音（中文近似音）只對日文／韓文有效；中文歌一律只顯示拼音（羅馬字）。</p>
             </div>
             <button id="btn-romanization" hidden></button>
             </div>
             <div class="switch-row">
-              <div><div class="label">前奏倒數提示</div><div class="sub">第一句歌詞前顯示脈動</div></div>
+              <div><div class="label" data-i18n="controller.introCountdown">前奏倒數提示</div><div class="sub" data-i18n="settings.lyrics.introCountdownHint">第一句歌詞前顯示脈動</div></div>
               <label class="switch"><input id="metronome-toggle" type="checkbox" checked><span class="track"></span></label>
             </div>
             <div class="switch-row">
-              <div><div class="label">簡轉繁</div><div class="sub">把簡體歌詞顯示成繁體（只轉原文，拼音/諧音不變）。網易雲/QQ 多為簡體時好用</div></div>
+              <div><div class="label" data-i18n="settings.lyrics.convertTraditional">簡轉繁</div><div class="sub" data-i18n="settings.lyrics.convertTraditionalHint">把簡體歌詞顯示成繁體（只轉原文，拼音/諧音不變）。網易雲/QQ 多為簡體時好用</div></div>
               <label class="switch"><input id="ls-traditional" data-ls-control="convertTraditional" type="checkbox" checked><span class="track"></span></label>
             </div>
             <div class="switch-row">
@@ -732,27 +732,27 @@
 
           <!-- ═══ 卡片：動畫風格 ═══ -->
           <section class="card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>動畫風格</p>
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span data-i18n="lyricStyle.title">動畫風格</span></p>
             <div class="field lyric-template-field">
               <div class="lyric-template-heading">
-                <div><label id="lyric-template-label">先選擇演出畫面</label><p class="field-hint">每個模板保留獨立外觀；切回來不會覆蓋先前調整。</p></div>
+                <div><label id="lyric-template-label" data-i18n="lyricStyle.pickPerformance">先選擇演出畫面</label><p class="field-hint" data-i18n="lyricStyle.pickPerformanceHint">每個模板保留獨立外觀；切回來不會覆蓋先前調整。</p></div>
                 <span class="lyric-template-status" id="lyric-template-status">目前：經典疊層</span>
               </div>
               <div class="lyric-template-picker" id="template-buttons" role="radiogroup" aria-labelledby="lyric-template-label">
-                <button class="lyric-template-card active" data-template="classic" type="button" role="radio" aria-checked="true" title="疊層顯示：歷史行淡出在上方，正在唱的一行在下方">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">層</span></span><strong>經典疊層</strong><span>完整歌詞與拼音／諧音</span>
+                <button class="lyric-template-card active" data-template="classic" type="button" role="radio" aria-checked="true" data-i18n-title="template.classicTitle" title="疊層顯示：歷史行淡出在上方，正在唱的一行在下方">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">層</span></span><strong data-i18n="template.classic">經典疊層</strong><span data-i18n="template.classicDesc">完整歌詞與拼音／諧音</span>
                 </button>
-                <button class="lyric-template-card" data-template="pulse" type="button" role="radio" aria-checked="false" title="星砂流光：以星砂軌跡串起漂浮文字">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">光</span></span><strong>星砂流光</strong><span>柔和流動、畫面中央</span>
+                <button class="lyric-template-card" data-template="pulse" type="button" role="radio" aria-checked="false" data-i18n-title="template.pulseTitle" title="星砂流光：以星砂軌跡串起漂浮文字">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">光</span></span><strong data-i18n="template.pulse">星砂流光</strong><span data-i18n="template.pulseDesc">柔和流動、畫面中央</span>
                 </button>
-                <button class="lyric-template-card" data-template="facet" type="button" role="radio" aria-checked="false" title="折光階梯：虛線光尺與切角節點分段進場">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">階</span></span><strong>折光階梯</strong><span>節點感強的舞台效果</span>
+                <button class="lyric-template-card" data-template="facet" type="button" role="radio" aria-checked="false" data-i18n-title="template.facetTitle" title="折光階梯：虛線光尺與切角節點分段進場">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">階</span></span><strong data-i18n="template.facet">折光階梯</strong><span data-i18n="template.facetDesc">節點感強的舞台效果</span>
                 </button>
-                <button class="lyric-template-card" data-template="drift" type="button" role="radio" aria-checked="false" title="斜拍告白：斜向節拍與逐字律動" hidden aria-hidden="true">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">斜</span></span><strong>斜拍告白</strong><span>斜向節拍、逐字律動</span>
+                <button class="lyric-template-card" data-template="drift" type="button" role="radio" aria-checked="false" data-i18n-title="template.driftTitle" title="斜拍告白：斜向節拍與逐字律動" hidden aria-hidden="true">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">斜</span></span><strong data-i18n="template.drift">斜拍告白</strong><span data-i18n="template.driftDesc">斜向節拍、逐字律動</span>
                 </button>
-                <button class="lyric-template-card" data-template="aura" type="button" role="radio" aria-checked="false" title="潮汐心景：呼吸光環中的空間文字">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">象</span></span><strong>潮汐心景</strong><span>大字留白、情緒演出</span>
+                <button class="lyric-template-card" data-template="aura" type="button" role="radio" aria-checked="false" data-i18n-title="template.auraTitle" title="潮汐心景：呼吸光環中的空間文字">
+                  <span class="style-thumb-preview"><span class="style-thumb-char">象</span></span><strong data-i18n="template.aura">潮汐心景</strong><span data-i18n="template.auraDesc">大字留白、情緒演出</span>
                 </button>
                 <button class="lyric-template-card" data-template="ktv" type="button" role="radio" aria-checked="false" data-i18n-title="template.ktvTitle" title="霓彩伴唱：雙行錯開、逐字掃色與原地倒數">
                   <span class="style-thumb-preview"><span class="style-thumb-char">唱</span></span><strong data-i18n="template.ktv">霓彩伴唱</strong><span data-i18n="template.ktvDesc">逐字伴唱、固定雙行</span>
@@ -818,46 +818,46 @@
                 </div>
               </div>
               <div class="field" id="lyric-pos-field">
-                <label>歌詞位置</label>
+                <label data-i18n="lyricStyle.lyricPosition">歌詞位置</label>
                 <!-- 經典疊層：九宮格全畫面定位＋X/Y 細調（從「詳細設定」移過來，同一份 DOM／同一套事件，不是複本）-->
                 <div id="lyric-pos-grid-wrap" hidden>
                   <div class="pos-head">
-                    <span id="lyric-pos-fine-hint" class="sub sub--fine-hint">拖曳選格子，或用下面細調微調</span>
-                    <button id="ls-pos-reset" class="btn btn-sm btn-ghost" type="button">重置位置</button>
+                    <span id="lyric-pos-fine-hint" class="sub sub--fine-hint" data-i18n="lyricStyle.dragGridHint">拖曳選格子，或用下面細調微調</span>
+                    <button id="ls-pos-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="lyricStyle.resetPosition">重置位置</button>
                   </div>
                   <div class="pos-row">
                     <div class="pos-grid" id="ls-pos-grid">
-                      <button type="button" data-v="flex-start" data-h="flex-start" aria-label="上 左"></button>
-                      <button type="button" data-v="flex-start" data-h="center" aria-label="上 中"></button>
-                      <button type="button" data-v="flex-start" data-h="flex-end" aria-label="上 右"></button>
-                      <button type="button" data-v="center" data-h="flex-start" aria-label="中 左"></button>
-                      <button type="button" data-v="center" data-h="center" aria-label="正中"></button>
-                      <button type="button" data-v="center" data-h="flex-end" aria-label="中 右"></button>
-                      <button type="button" data-v="flex-end" data-h="flex-start" aria-label="下 左"></button>
-                      <button type="button" data-v="flex-end" data-h="center" aria-label="下 中"></button>
-                      <button type="button" data-v="flex-end" data-h="flex-end" aria-label="下 右"></button>
+                      <button type="button" data-v="flex-start" data-h="flex-start" aria-label="上 左" data-i18n-aria-label="lyricStyle.posTopLeft"></button>
+                      <button type="button" data-v="flex-start" data-h="center" aria-label="上 中" data-i18n-aria-label="lyricStyle.posTopCenter"></button>
+                      <button type="button" data-v="flex-start" data-h="flex-end" aria-label="上 右" data-i18n-aria-label="lyricStyle.posTopRight"></button>
+                      <button type="button" data-v="center" data-h="flex-start" aria-label="中 左" data-i18n-aria-label="lyricStyle.posMidLeft"></button>
+                      <button type="button" data-v="center" data-h="center" aria-label="正中" data-i18n-aria-label="lyricStyle.posCenterCenter"></button>
+                      <button type="button" data-v="center" data-h="flex-end" aria-label="中 右" data-i18n-aria-label="lyricStyle.posMidRight"></button>
+                      <button type="button" data-v="flex-end" data-h="flex-start" aria-label="下 左" data-i18n-aria-label="lyricStyle.posBottomLeft"></button>
+                      <button type="button" data-v="flex-end" data-h="center" aria-label="下 中" data-i18n-aria-label="lyricStyle.posBottomCenter"></button>
+                      <button type="button" data-v="flex-end" data-h="flex-end" aria-label="下 右" data-i18n-aria-label="lyricStyle.posBottomRight"></button>
                     </div>
                   </div>
                 </div>
                 <!-- 動畫模板：置中/偏左/偏右/左右分散 -->
                 <div class="style-thumb-row" id="lyric-pos-buttons">
-                  <button class="style-thumb active" data-lyric-pos="center" type="button" title="置中：歌詞在畫面正中央（預設）"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label">置中</span></button>
-                  <button class="style-thumb" data-lyric-pos="left" type="button" title="偏左：歌詞集中在畫面左半，右邊留給人物"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label">偏左</span></button>
-                  <button class="style-thumb" data-lyric-pos="right" type="button" title="偏右：歌詞集中在畫面右半，左邊留給人物"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label">偏右</span></button>
-                  <button class="style-thumb" data-lyric-pos="split" type="button" title="左右分散：一句左、一句右交替出現，中間留給人物（經典疊層不支援）"><span class="style-thumb-preview"><span class="style-thumb-char">分</span></span><span class="style-thumb-label">左右分散</span></button>
+                  <button class="style-thumb active" data-lyric-pos="center" type="button" data-i18n-title="lyricStyle.posCenterTitle" title="置中：歌詞在畫面正中央（預設）"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="controller.center">置中</span></button>
+                  <button class="style-thumb" data-lyric-pos="left" type="button" data-i18n-title="lyricStyle.posLeftTitle" title="偏左：歌詞集中在畫面左半，右邊留給人物"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
+                  <button class="style-thumb" data-lyric-pos="right" type="button" data-i18n-title="lyricStyle.posRightTitle" title="偏右：歌詞集中在畫面右半，左邊留給人物"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
+                  <button class="style-thumb" data-lyric-pos="split" type="button" data-i18n-title="lyricStyle.posSplitTitle" title="左右分散：一句左、一句右交替出現，中間留給人物（經典疊層不支援）"><span class="style-thumb-preview"><span class="style-thumb-char">分</span></span><span class="style-thumb-label" data-i18n="controller.split">左右分散</span></button>
                 </div>
-                <p class="field-hint" id="lyric-pos-hint">方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。</p>
+                <p class="field-hint" id="lyric-pos-hint" data-i18n="lyricStyle.posHint">方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。</p>
                 <!-- 位置微調：置中/偏左/偏右都可再做小範圍位移；範圍會依目前內容自動收緊，
                      不會把歌詞推出畫面（見 display.js reclampLyricOffset）。左右分散不適用
                      （每行交替左右，微調沒有單一位置的意義；那個模式改調「中央安全距離」）。-->
                 <div id="lyric-pos-fine-wrap" hidden>
                   <div class="pos-head">
-                    <span class="sub sub--fine-hint">小範圍微調，超出安全範圍會自動收回</span>
-                    <button id="ls-offset-reset" class="btn btn-sm btn-ghost" type="button">重置微調</button>
+                    <span class="sub sub--fine-hint" data-i18n="lyricStyle.fineTuneHint">小範圍微調，超出安全範圍會自動收回</span>
+                    <button id="ls-offset-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="lyricStyle.resetFineTune">重置微調</button>
                   </div>
                   <div class="pos-fine">
-                    <div id="ls-offset-x-row" class="slider-row"><span class="sl-label">水平 X</span><input id="ls-offset-x" data-ls-control="offsetX" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-x-val" class="val">0px</span></div>
-                    <div id="ls-offset-y-row" class="slider-row"><span class="sl-label">垂直 Y</span><input id="ls-offset-y" data-ls-control="offsetY" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-y-val" class="val">0px</span></div>
+                    <div id="ls-offset-x-row" class="slider-row"><span class="sl-label" data-i18n="lyricStyle.horizontalX">水平 X</span><input id="ls-offset-x" data-ls-control="offsetX" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-x-val" class="val">0px</span></div>
+                    <div id="ls-offset-y-row" class="slider-row"><span class="sl-label" data-i18n="lyricStyle.verticalY">垂直 Y</span><input id="ls-offset-y" data-ls-control="offsetY" type="range" min="-400" max="400" step="5" value="0"><span id="ls-offset-y-val" class="val">0px</span></div>
                   </div>
                 </div>
               </div>
@@ -904,11 +904,11 @@
                 <div class="field-row field-row--spacious">
                   <div class="flex-grow"><label for="ls-particle-shadow-sel" data-i18n="particle.shadowLabel">文字陰影</label>
                     <select id="ls-particle-shadow-sel" class="input">
-                      <option value="none">無</option>
-                      <option value="soft" selected>柔和</option>
-                      <option value="hard">硬陰影</option>
-                      <option value="glow">發光</option>
-                      <option value="outline">外框</option>
+                      <option value="none" data-i18n="shadow.none">無</option>
+                      <option value="soft" selected data-i18n="shadow.soft">柔和</option>
+                      <option value="hard" data-i18n="shadow.hard">硬陰影</option>
+                      <option value="glow" data-i18n="shadow.glow">發光</option>
+                      <option value="outline" data-i18n="shadow.outline">外框</option>
                     </select></div>
                   <div><label data-i18n="particle.shadowColorLabel">陰影色</label><input id="ls-particle-shadow-color" type="color" value="#000000"></div>
                 </div>
@@ -944,51 +944,51 @@
                 </div>
               </div>
               <div class="field" id="intensity-field" hidden>
-                <label>動畫強度</label>
+                <label data-i18n="lyricStyle.intensityTitle">動畫強度</label>
                 <div class="style-thumb-row" id="intensity-buttons">
-                  <button class="style-thumb" data-intensity="calm" type="button" title="沉穩：置中排列、無散射旋轉"><span class="style-thumb-preview"><span class="style-thumb-char">靜</span></span><span class="style-thumb-label">沉穩</span></button>
-                  <button class="style-thumb active" data-intensity="normal" type="button" title="標準：適度散射與旋轉"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label">標準</span></button>
-                  <button class="style-thumb" data-intensity="chaotic" type="button" title="狂放：大幅散射、隨機對齊"><span class="style-thumb-preview"><span class="style-thumb-char">狂</span></span><span class="style-thumb-label">狂放</span></button>
+                  <button class="style-thumb" data-intensity="calm" type="button" data-i18n-title="lyricStyle.intensityCalmTitle" title="沉穩：置中排列、無散射旋轉"><span class="style-thumb-preview"><span class="style-thumb-char">靜</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityCalm">沉穩</span></button>
+                  <button class="style-thumb active" data-intensity="normal" type="button" data-i18n-title="lyricStyle.intensityNormalTitle" title="標準：適度散射與旋轉"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityNormal">標準</span></button>
+                  <button class="style-thumb" data-intensity="chaotic" type="button" data-i18n-title="lyricStyle.intensityChaoticTitle" title="狂放：大幅散射、隨機對齊"><span class="style-thumb-preview"><span class="style-thumb-char">狂</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityChaotic">狂放</span></button>
                 </div>
               </div>
             </div>
             <details class="collapse lyric-preset-section">
-              <summary>儲存外觀 <span>保存目前模板的字體、顏色與位置，快速套用到下一次演出</span></summary>
+              <summary><span data-i18n="lyricStyle.saveAppearance">儲存外觀</span> <span data-i18n="lyricStyle.saveAppearanceHint">保存目前模板的字體、顏色與位置，快速套用到下一次演出</span></summary>
               <div class="collapse-body">
-                <div class="lyric-preset-tools" aria-label="歌詞外觀預設">
-                  <select id="lyric-preset-select" class="input"><option value="">尚未保存預設</option></select>
-                  <button id="lyric-preset-save" class="btn btn-sm" type="button">保存預設</button>
-                  <button id="lyric-preset-load" class="btn btn-sm btn-ghost" type="button">套用</button>
-                  <button id="lyric-preset-delete" class="btn btn-sm btn-ghost" type="button">刪除</button>
+                <div class="lyric-preset-tools" aria-label="歌詞外觀預設" data-i18n-aria-label="lyricStyle.presetAriaLabel">
+                  <select id="lyric-preset-select" class="input"><option value="" data-i18n="lyricStyle.presetNone">尚未保存預設</option></select>
+                  <button id="lyric-preset-save" class="btn btn-sm" type="button" data-i18n="lyricStyle.presetSave">保存預設</button>
+                  <button id="lyric-preset-load" class="btn btn-sm btn-ghost" type="button" data-i18n="common.apply">套用</button>
+                  <button id="lyric-preset-delete" class="btn btn-sm btn-ghost" type="button" data-i18n="common.delete">刪除</button>
                 </div>
               </div>
             </details>
             <div class="field" id="style-preset-field">
               <div class="style-thumb-row" id="style-buttons">
-                <button class="style-thumb active" data-style="cute" type="button" title="Q 彈：字像果凍一樣跳進來，粉紅光暈＋粒子"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">可愛</span></button>
-                <button class="style-thumb" data-style="rock" type="button" title="砸落：整行猛力砸進畫面，紅色烈焰光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">搖滾</span></button>
-                <button class="style-thumb" data-style="ballad" type="button" title="漂浮：緩慢淡入、逐字如水波浮現，藍色月光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">抒情</span></button>
-                <button class="style-thumb" data-style="sparkle" type="button" title="綻放：字由小點綻放開來，金粉光暈＋粒子"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">夢幻</span></button>
-                <button class="style-thumb" data-style="dreamy" type="button" title="聚焦：從模糊鬼影慢慢聚焦成形，紫色柔光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">空靈</span></button>
-                <button class="style-thumb" data-style="minimal" type="button" title="字幕感：純淡入、零位移零光效，最安靜"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label">簡約</span></button>
+                <button class="style-thumb active" data-style="cute" type="button" data-i18n-title="lyricStyle.styleCuteTitle" title="Q 彈：字像果凍一樣跳進來，粉紅光暈＋粒子"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleCute">可愛</span></button>
+                <button class="style-thumb" data-style="rock" type="button" data-i18n-title="lyricStyle.styleRockTitle" title="砸落：整行猛力砸進畫面，紅色烈焰光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleRock">搖滾</span></button>
+                <button class="style-thumb" data-style="ballad" type="button" data-i18n-title="lyricStyle.styleBalladTitle" title="漂浮：緩慢淡入、逐字如水波浮現，藍色月光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleBallad">抒情</span></button>
+                <button class="style-thumb" data-style="sparkle" type="button" data-i18n-title="lyricStyle.styleSparkleTitle" title="綻放：字由小點綻放開來，金粉光暈＋粒子"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleSparkle">夢幻</span></button>
+                <button class="style-thumb" data-style="dreamy" type="button" data-i18n-title="lyricStyle.styleDreamyTitle" title="聚焦：從模糊鬼影慢慢聚焦成形，紫色柔光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleDreamy">空靈</span></button>
+                <button class="style-thumb" data-style="minimal" type="button" data-i18n-title="lyricStyle.styleMinimalTitle" title="字幕感：純淡入、零位移零光效，最安靜"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleMinimal">簡約</span></button>
               </div>
               <button id="btn-style" hidden></button>
-              <p class="field-hint" id="style-desc">每張縮圖的「字」會用該風格的高亮動態跑一次；滑鼠停在上面可看文字說明。</p>
+              <p class="field-hint" id="style-desc" data-i18n="lyricStyle.styleDescHint">每張縮圖的「字」會用該風格的高亮動態跑一次；滑鼠停在上面可看文字說明。</p>
             </div>
             <details class="collapse" id="style-tune-field">
-              <summary>風格微調</summary>
+              <summary data-i18n="lyricStyle.styleTuneSummary">風格微調</summary>
               <div class="collapse-body">
-                <div class="field"><label title="整體動畫快慢：小於 1 變慢、大於 1 變快">動畫速度 <span id="st-speed-val" class="val">1.0x</span></label><input id="st-speed" type="range" min="0.5" max="2" step="0.1" value="1"></div>
-                <div class="field"><label title="唱到的字被放大的倍率">高亮放大（唱到的字）<span id="st-scale-val" class="val">—</span></label><input id="st-scale" type="range" min="1" max="1.4" step="0.01" value="1.15"></div>
-                <div class="field"><label title="新的一行從多遠的下方進場，0＝原地淡入">入場位移（進場距離）<span id="st-yfrom-val" class="val">—</span></label><input id="st-yfrom" type="range" min="0" max="60" step="2" value="30"></div>
-                <div class="field"><label title="進場瞬間的模糊量，越大越夢幻">入場模糊 <span id="st-blur-val" class="val">—</span></label><input id="st-blur" type="range" min="0" max="12" step="1" value="4"></div>
-                <div class="field"><label title="一行裡每個字進場的時間差，0＝整行同時出現">字間錯落（逐字時間差）<span id="st-stagger-val" class="val">—</span></label><input id="st-stagger" type="range" min="0" max="0.12" step="0.005" value="0.03"></div>
+                <div class="field"><label title="整體動畫快慢：小於 1 變慢、大於 1 變快" data-i18n-title="lyricStyle.animSpeedTitle"><span data-i18n="lyricStyle.animSpeedLabel">動畫速度</span> <span id="st-speed-val" class="val">1.0x</span></label><input id="st-speed" type="range" min="0.5" max="2" step="0.1" value="1"></div>
+                <div class="field"><label title="唱到的字被放大的倍率" data-i18n-title="lyricStyle.highlightScaleTitle"><span data-i18n="lyricStyle.highlightScaleLabel">高亮放大（唱到的字）</span><span id="st-scale-val" class="val">—</span></label><input id="st-scale" type="range" min="1" max="1.4" step="0.01" value="1.15"></div>
+                <div class="field"><label title="新的一行從多遠的下方進場，0＝原地淡入" data-i18n-title="lyricStyle.entryOffsetTitle"><span data-i18n="lyricStyle.entryOffsetLabel">入場位移（進場距離）</span><span id="st-yfrom-val" class="val">—</span></label><input id="st-yfrom" type="range" min="0" max="60" step="2" value="30"></div>
+                <div class="field"><label title="進場瞬間的模糊量，越大越夢幻" data-i18n-title="lyricStyle.entryBlurTitle"><span data-i18n="lyricStyle.entryBlurLabel">入場模糊</span> <span id="st-blur-val" class="val">—</span></label><input id="st-blur" type="range" min="0" max="12" step="1" value="4"></div>
+                <div class="field"><label title="一行裡每個字進場的時間差，0＝整行同時出現" data-i18n-title="lyricStyle.staggerTitle"><span data-i18n="lyricStyle.staggerLabel">字間錯落（逐字時間差）</span><span id="st-stagger-val" class="val">—</span></label><input id="st-stagger" type="range" min="0" max="0.12" step="0.005" value="0.03"></div>
                 <div class="switch-row switch-row--tight">
-                  <div><div class="label">粒子效果</div><div class="sub">關閉可減輕負載／更乾淨</div></div>
+                  <div><div class="label" data-i18n="lyricStyle.particlesLabel">粒子效果</div><div class="sub" data-i18n="lyricStyle.particlesHint">關閉可減輕負載／更乾淨</div></div>
                   <label class="switch"><input id="st-particles" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <button id="st-reset" class="btn btn-sm btn-ghost" type="button">重置微調</button>
-                <p class="sub sub--fine-explainer">微調會即時套用到 OBS 並隨風格切換重置。</p>
+                <button id="st-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="lyricStyle.resetFineTune">重置微調</button>
+                <p class="sub sub--fine-explainer" data-i18n="lyricStyle.styleTuneNote">微調會即時套用到 OBS 並隨風格切換重置。</p>
               </div>
             </details>
           </section>
@@ -1000,16 +1000,16 @@
 
           <!-- ═══ 卡片：字體與顏色 ═══ -->
           <section class="card">
-            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>字體與顏色</p>
+            <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg><span data-i18n="lyricStyle.fontColorTitle">字體與顏色</span></p>
             <div class="field" id="particle-fontsize-field">
-              <label>字級 <span id="ls-fontsize-val" class="val">42px</span></label>
+              <label><span data-i18n="prompter.fontSize">字級</span> <span id="ls-fontsize-val" class="val">42px</span></label>
               <input id="ls-fontsize" data-ls-control="fontSize" type="range" min="20" max="96" step="1" value="42">
             </div>
             <div class="field field--inline-spacious">
-              <div class="flex-grow"><label>歌詞文字顏色</label><input id="ls-color" data-ls-control="color" type="color" value="#ffffff"></div>
-              <div class="flex-grow" id="ls-active-color-field"><label>「正在唱那一行」的顏色</label><input id="ls-active-color" data-ls-control="activeColor" type="color" value="#ffd6a5"></div>
+              <div class="flex-grow"><label data-i18n="lyricStyle.lyricColorLabel">歌詞文字顏色</label><input id="ls-color" data-ls-control="color" type="color" value="#ffffff"></div>
+              <div class="flex-grow" id="ls-active-color-field"><label data-i18n="lyricStyle.activeLineColorLabel">「正在唱那一行」的顏色</label><input id="ls-active-color" data-ls-control="activeColor" type="color" value="#ffd6a5"></div>
             </div>
-            <p class="field-hint">逐字 KTV 模式下「唱到的字」也是用右邊「正在唱那一行的顏色」；發光效果則在下面「進階效果」裡的「額外發光」統一設定，兩種模式共用。</p>
+            <p class="field-hint" data-i18n="lyricStyle.activeColorHint">逐字 KTV 模式下「唱到的字」也是用右邊「正在唱那一行的顏色」；發光效果則在下面「進階效果」裡的「額外發光」統一設定，兩種模式共用。</p>
             <div class="field field--inline-spacious" id="typewriter-colors-field" hidden>
               <div class="flex-grow"><label data-i18n="typewriter.bubbleRightLabel">對話泡泡（右／藍側）</label><input id="ls-tw-bubble-right" data-ls-control="twBubbleRight" type="color" value="#0b93f6"></div>
               <div class="flex-grow"><label data-i18n="typewriter.bubbleLeftLabel">對話泡泡（左／灰側）</label><input id="ls-tw-bubble-left" data-ls-control="twBubbleLeft" type="color" value="#3b3b3d"></div>
@@ -1032,31 +1032,31 @@
             </div>
             <div id="font-family-fields">
             <div class="field">
-              <label for="ls-fontfamily">字體</label>
+              <label for="ls-fontfamily" data-i18n="lyricStyle.fontFamilyLabel">字體</label>
               <select id="ls-fontfamily" data-ls-control="fontFamily" class="input">
-                <option value="'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif">Noto Sans（黑體）</option>
-                <option value="'Noto Serif SC', 'Noto Serif JP', serif">Noto Serif（明體）</option>
-                <option value="system-ui, sans-serif">系統字體</option>
-                <option value="ui-monospace, monospace">等寬字體</option>
-                <option value="__custom__">自訂／系統字體…</option>
+                <option value="'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif" data-i18n="font.notoSans">Noto Sans（黑體）</option>
+                <option value="'Noto Serif SC', 'Noto Serif JP', serif" data-i18n="font.notoSerif">Noto Serif（明體）</option>
+                <option value="system-ui, sans-serif" data-i18n="font.systemFont">系統字體</option>
+                <option value="ui-monospace, monospace" data-i18n="font.monospaceFont">等寬字體</option>
+                <option value="__custom__" data-i18n="font.customFont">自訂／系統字體…</option>
               </select>
               <div id="ls-font-custom-wrap" hidden class="mt-8">
                 <div class="inline-row">
-                  <select id="ls-font-system" class="input flex-grow"><option value="">點右側「瀏覽系統字體」載入清單…</option></select>
-                  <button id="ls-font-load" class="btn btn-sm" type="button">瀏覽系統字體</button>
+                  <select id="ls-font-system" class="input flex-grow"><option value="" data-i18n="font.loadSystemFontsPlaceholder">點右側「瀏覽系統字體」載入清單…</option></select>
+                  <button id="ls-font-load" class="btn btn-sm" type="button" data-i18n="font.browseSystemFonts">瀏覽系統字體</button>
                 </div>
-                <input id="ls-fontfamily-custom" class="input" type="text" placeholder="或手動輸入字體名稱，例如：微軟正黑體" class="mt-8">
+                <input id="ls-fontfamily-custom" class="input" type="text" placeholder="或手動輸入字體名稱，例如：微軟正黑體" data-i18n-placeholder="font.customFontPlaceholder" class="mt-8">
                 <div id="ls-fontfamily-hint" class="sub font-family-hint" data-i18n="fonts.hint">清單會記住，可搜尋名稱並預覽字型；安裝新字型後可按重新整理。OBS 與控制台須在同一台電腦；找不到時使用備援字型。</div>
               </div>
             </div>
             <div class="field">
-              <label for="ls-font-latin">英文／數字字體（選填）</label>
+              <label for="ls-font-latin" data-i18n="lyricStyle.latinFontLabel">英文／數字字體（選填）</label>
               <div class="inline-row">
-                <select id="ls-font-latin" class="input flex-grow"><option value="">（不指定：英文跟主字體）</option></select>
-                <button id="ls-font-latin-load" class="btn btn-sm" type="button">瀏覽系統字體</button>
+                <select id="ls-font-latin" class="input flex-grow"><option value="" data-i18n="font.latinFontNone">（不指定：英文跟主字體）</option></select>
+                <button id="ls-font-latin-load" class="btn btn-sm" type="button" data-i18n="font.browseSystemFonts">瀏覽系統字體</button>
               </div>
-              <input id="ls-font-latin-custom" class="input" type="text" placeholder="或手動輸入英文字體名稱，例如：Montserrat" class="mt-8">
-              <p class="field-hint">讓英文字母和數字永遠用另一套字體（例如中文用圓體、英文用 Montserrat）。中日韓文字不受影響，仍用上面的主字體。</p>
+              <input id="ls-font-latin-custom" class="input" type="text" placeholder="或手動輸入英文字體名稱，例如：Montserrat" data-i18n-placeholder="font.latinFontPlaceholder" class="mt-8">
+              <p class="field-hint" data-i18n="lyricStyle.latinFontHint">讓英文字母和數字永遠用另一套字體（例如中文用圓體、英文用 Montserrat）。中日韓文字不受影響，仍用上面的主字體。</p>
             </div>
             </div>
             <!-- 燈牌專用：只給兩款真點陣字型。一般字體被圓點網切開後筆畫會糊成一團，所以不開放。 -->
@@ -1069,11 +1069,11 @@
               <p class="field-hint" data-i18n="lightboard.fontHint">燈牌只吃真點陣字型：一般字體被圓點網遮罩切開後，筆畫之間的縫小於一個燈距就會糊成一團。兩款都隨程式打包（皆為 SIL OFL 授權），選了就生效。</p>
             </div>
             <div class="field" id="particle-fontweight-field">
-              <label for="ls-fontweight">字重</label>
+              <label for="ls-fontweight" data-i18n="font.weightLabel">字重</label>
               <select id="ls-fontweight" data-ls-control="fontWeight" class="input">
-                <option value="400">一般</option>
-                <option value="700">粗體</option>
-                <option value="900" selected>極粗</option>
+                <option value="400" data-i18n="font.weightNormal">一般</option>
+                <option value="700" data-i18n="font.weightBold">粗體</option>
+                <option value="900" selected data-i18n="font.weightBlack">極粗</option>
               </select>
             </div>
           </section>
@@ -1081,22 +1081,22 @@
           <!-- ═══ 卡片：羅馬字與諧音（經典疊層專用——其他模板不支援拼音/諧音顯示）═══
                只有開啟拼音/諧音顯示模式時才相關，預設收合降低資訊量 -->
           <details class="card card-collapse" id="romaji-xieyin-card">
-            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5h16v2M9 5v14M15 19h-6"/></svg>羅馬字與諧音</summary>
+            <summary class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5h16v2M9 5v14M15 19h-6"/></svg><span data-i18n="lyricStyle.romajiXieyinTitle">羅馬字與諧音</span></summary>
             <div class="card-collapse-body">
-            <p class="sub section-intro">調整拼音（羅馬字）與中文諧音行的顏色與大小。字級為相對主字級的比例。</p>
+            <p class="sub section-intro" data-i18n="lyricStyle.romajiXieyinIntro">調整拼音（羅馬字）與中文諧音行的顏色與大小。字級為相對主字級的比例。</p>
             <div class="field field-row field-row--spacious">
               <div class="flex-grow">
-                <label>羅馬字大小 <span id="ls-romaji-size-val" class="val">50%</span></label>
+                <label><span data-i18n="lyricStyle.romajiSizeLabel">羅馬字大小</span> <span id="ls-romaji-size-val" class="val">50%</span></label>
                 <input id="ls-romaji-size" data-ls-control="romajiSize" type="range" min="0.3" max="1" step="0.02" value="0.5">
               </div>
-              <div><label>羅馬字顏色</label><input id="ls-romaji-color" data-ls-control="romajiColor" type="color" value="#ffffff"></div>
+              <div><label data-i18n="lyricStyle.romajiColorLabel">羅馬字顏色</label><input id="ls-romaji-color" data-ls-control="romajiColor" type="color" value="#ffffff"></div>
             </div>
             <div class="field field-row field-row--spacious">
               <div class="flex-grow">
-                <label>諧音大小 <span id="ls-xieyin-size-val" class="val">92%</span></label>
+                <label><span data-i18n="lyricStyle.xieyinSizeLabel">諧音大小</span> <span id="ls-xieyin-size-val" class="val">92%</span></label>
                 <input id="ls-xieyin-size" data-ls-control="xieyinSize" type="range" min="0.4" max="1.2" step="0.02" value="0.92">
               </div>
-              <div><label>諧音顏色</label><input id="ls-xieyin-color" data-ls-control="xieyinColor" type="color" value="#ffd6a5"></div>
+              <div><label data-i18n="lyricStyle.xieyinColorLabel">諧音顏色</label><input id="ls-xieyin-color" data-ls-control="xieyinColor" type="color" value="#ffd6a5"></div>
             </div>
             </div>
           </details>
@@ -1138,31 +1138,31 @@
           </div>
           <!-- ═══ 位置與排版 ═══ -->
           <details class="card card-collapse" data-settings-workspace-group="layout" data-lyrics-search="位置 排版 對齊 邊距 寬度">
-            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="3"/></svg>位置與排版</summary>
+            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="3"/></svg><span data-i18n="display.layoutTitle">位置與排版</span></summary>
             <div class="card-collapse-body">
-            <p class="field-hint" id="lyric-pos-grid-moved-hint" class="mt-0">歌詞在畫面上的九宮格定位已搬到「顯示設定」首頁「動畫風格」卡片裡的「歌詞位置」，選經典疊層時會出現。</p>
+            <p class="field-hint" id="lyric-pos-grid-moved-hint" class="mt-0" data-i18n="display.layoutMovedHint">歌詞在畫面上的九宮格定位已搬到「顯示設定」首頁「動畫風格」卡片裡的「歌詞位置」，選經典疊層時會出現。</p>
             <div id="classic-only-typography">
             <div class="field">
-              <label for="ls-text-align">文字對齊</label>
+              <label for="ls-text-align" data-i18n="display.textAlignLabel">文字對齊</label>
               <select id="ls-text-align" data-ls-control="textAlign" class="input">
-                <option value="left">靠左</option><option value="center" selected>置中</option><option value="right">靠右</option>
+                <option value="left" data-i18n="align.left">靠左</option><option value="center" selected data-i18n="controller.center">置中</option><option value="right" data-i18n="align.right">靠右</option>
               </select>
             </div>
             <div class="field">
-              <label>行高 <span id="ls-line-height-val" class="val">1.30</span></label>
+              <label><span data-i18n="display.lineHeightLabel">行高</span> <span id="ls-line-height-val" class="val">1.30</span></label>
               <input id="ls-line-height" data-ls-control="lineHeight" type="range" min="1" max="2.4" step="0.05" value="1.3">
             </div>
             <div class="field">
-              <label>字距 <span id="ls-letter-spacing-val" class="val">0px</span></label>
+              <label><span data-i18n="display.letterSpacingLabel">字距</span> <span id="ls-letter-spacing-val" class="val">0px</span></label>
               <input id="ls-letter-spacing" data-ls-control="letterSpacing" type="range" min="-2" max="12" step="0.5" value="0">
             </div>
             </div>
             <details class="collapse">
-              <summary>邊距 · 最大寬度</summary>
+              <summary data-i18n="display.marginMaxWidthSummary">邊距 · 最大寬度</summary>
               <div class="collapse-body">
-                <div class="field" id="padding-x-field"><label>左右邊距 <span id="ls-padding-x-val" class="val">60px</span></label><input id="ls-padding-x" data-ls-control="paddingX" type="range" min="0" max="300" step="10" value="60"></div>
-                <div class="field" id="padding-y-field"><label>上下邊距 <span id="ls-padding-y-val" class="val">48px</span></label><input id="ls-padding-y" data-ls-control="paddingY" type="range" min="0" max="300" step="10" value="48"></div>
-                <div class="field" id="max-width-field"><label>歌詞區最大寬度 <span id="ls-max-width-val" class="val">90%</span></label><input id="ls-max-width" data-ls-control="maxWidth" type="range" min="40" max="100" step="5" value="90"></div>
+                <div class="field" id="padding-x-field"><label><span data-i18n="display.paddingXLabel">左右邊距</span> <span id="ls-padding-x-val" class="val">60px</span></label><input id="ls-padding-x" data-ls-control="paddingX" type="range" min="0" max="300" step="10" value="60"></div>
+                <div class="field" id="padding-y-field"><label><span data-i18n="display.paddingYLabel">上下邊距</span> <span id="ls-padding-y-val" class="val">48px</span></label><input id="ls-padding-y" data-ls-control="paddingY" type="range" min="0" max="300" step="10" value="48"></div>
+                <div class="field" id="max-width-field"><label><span data-i18n="display.maxWidthLabel">歌詞區最大寬度</span> <span id="ls-max-width-val" class="val">90%</span></label><input id="ls-max-width" data-ls-control="maxWidth" type="range" min="40" max="100" step="5" value="90"></div>
               </div>
             </details>
             </div>
@@ -1170,62 +1170,62 @@
 
           <!-- ═══ 進階效果 ═══ -->
           <details id="classic-only-advanced-effect-card" class="card card-collapse" data-settings-workspace-group="readability advanced" data-lyrics-search="效果 描邊 陰影 發光 背景框 歷史行">
-            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>進階效果</summary>
+            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span data-i18n="display.advancedEffectsTitle">進階效果</span></summary>
             <div class="card-collapse-body">
             <div id="classic-only-advanced-effects">
             <div class="field">
-              <label>當前行放大 <span id="ls-active-scale-val" class="val">1.00×</span></label>
+              <label><span data-i18n="display.activeScaleLabel">當前行放大</span> <span id="ls-active-scale-val" class="val">1.00×</span></label>
               <input id="ls-active-scale" data-ls-control="activeScale" type="range" min="1" max="1.8" step="0.05" value="1">
             </div>
             <div class="field">
-              <label>保留上一句行數 <span id="ls-history-lines-val" class="val">2</span></label>
+              <label><span data-i18n="display.historyLinesLabel">保留上一句行數</span> <span id="ls-history-lines-val" class="val">2</span></label>
               <input id="ls-history-lines" data-ls-control="historyLines" type="range" min="0" max="6" step="1" value="2">
             </div>
             <div class="field">
-              <label>歷史歌詞字級 <span id="ls-history-fontsize-val" class="val">自動</span></label>
+              <label><span data-i18n="display.historyFontSizeLabel">歷史歌詞字級</span> <span id="ls-history-fontsize-val" class="val">自動</span></label>
               <input id="ls-history-fontsize" data-ls-control="historyFontSize" type="range" min="0" max="72" step="1" value="0">
-              <p class="val val--fine-detail">拉到最左＝自動（主字級的 58%）；往右可獨立指定大小</p>
+              <p class="val val--fine-detail" data-i18n="display.historyFontSizeHint">拉到最左＝自動（主字級的 58%）；往右可獨立指定大小</p>
             </div>
             <div class="field">
-              <label>歷史歌詞透明度 <span id="ls-history-opacity-val" class="val">30%</span></label>
+              <label><span data-i18n="display.historyOpacityLabel">歷史歌詞透明度</span> <span id="ls-history-opacity-val" class="val">30%</span></label>
               <input id="ls-history-opacity" data-ls-control="historyOpacity" type="range" min="0" max="1" step="0.05" value="0.3">
             </div>
             <details class="collapse">
-              <summary>描邊 · 陰影 · 發光 · 背景</summary>
+              <summary data-i18n="display.strokeShadowGlowBgSummary">描邊 · 陰影 · 發光 · 背景</summary>
               <div class="collapse-body">
-                <p class="field-hint mt-0">這四種效果是獨立的四層，由上到下：描邊＝字的外框線、陰影＝字後面的影子、發光＝「正在唱那行」的光暈、背景框＝歌詞後面的色塊。另外「動畫風格」本身也自帶一層高亮光暈（那是風格的一部分，換風格會變）。</p>
+                <p class="field-hint mt-0" data-i18n="display.effectsLayersHint">這四種效果是獨立的四層，由上到下：描邊＝字的外框線、陰影＝字後面的影子、發光＝「正在唱那行」的光暈、背景框＝歌詞後面的色塊。另外「動畫風格」本身也自帶一層高亮光暈（那是風格的一部分，換風格會變）。</p>
                 <div class="field">
-                  <label>文字描邊寬度（所有歌詞行）<span id="ls-stroke-width-val" class="val">0px</span></label>
+                  <label><span data-i18n="display.strokeWidthLabel">文字描邊寬度（所有歌詞行）</span><span id="ls-stroke-width-val" class="val">0px</span></label>
                   <input id="ls-stroke-width" data-ls-control="strokeWidth" type="range" min="0" max="6" step="0.5" value="0">
                 </div>
-                <div class="field"><label>描邊顏色</label><input id="ls-stroke-color" data-ls-control="strokeColor" type="color" value="#000000"></div>
+                <div class="field"><label data-i18n="display.strokeColorLabel">描邊顏色</label><input id="ls-stroke-color" data-ls-control="strokeColor" type="color" value="#000000"></div>
                 <div class="field field-row field-row--spacious">
                   <div class="flex-grow">
-                    <label for="ls-shadow">文字陰影（所有歌詞行）</label>
+                    <label for="ls-shadow" data-i18n="display.shadowLabel">文字陰影（所有歌詞行）</label>
                     <select id="ls-shadow" class="input">
-                      <option value="none">無</option>
-                      <option value="soft" selected>柔和</option>
-                      <option value="hard">硬陰影</option>
-                      <option value="glow">發光</option>
-                      <option value="outline">外框</option>
+                      <option value="none" data-i18n="shadow.none">無</option>
+                      <option value="soft" selected data-i18n="shadow.soft">柔和</option>
+                      <option value="hard" data-i18n="shadow.hard">硬陰影</option>
+                      <option value="glow" data-i18n="shadow.glow">發光</option>
+                      <option value="outline" data-i18n="shadow.outline">外框</option>
                     </select>
                   </div>
-                  <div><label>陰影顏色</label><input id="ls-shadow-color" type="color" value="#000000"></div>
+                  <div><label data-i18n="display.shadowColorLabel">陰影顏色</label><input id="ls-shadow-color" type="color" value="#000000"></div>
                 </div>
                 <div class="field field-row field-row--spacious">
                   <div class="flex-grow">
-                    <label>「正在唱那一行」的額外發光 <span id="ls-glow-strength-val" class="val">關</span></label>
+                    <label><span data-i18n="display.glowStrengthLabel">「正在唱那一行」的額外發光</span> <span id="ls-glow-strength-val" class="val" data-i18n="common.off">關</span></label>
                     <input id="ls-glow-strength" type="range" min="0" max="40" step="1" value="0">
                   </div>
-                  <div><label>發光顏色</label><input id="ls-glow-color" type="color" value="#ffd6a5"></div>
+                  <div><label data-i18n="display.glowColorLabel">發光顏色</label><input id="ls-glow-color" type="color" value="#ffd6a5"></div>
                 </div>
-                <p class="field-hint">逐句與逐字 KTV 模式都吃這個設定；強度拉到 0（關）時，逐字模式才會改用「動畫風格」自帶的光暈色。</p>
+                <p class="field-hint" data-i18n="display.glowHint">逐句與逐字 KTV 模式都吃這個設定；強度拉到 0（關）時，逐字模式才會改用「動畫風格」自帶的光暈色。</p>
                 <div class="field field-row field-row--spacious">
                   <div class="flex-grow">
-                    <label>歌詞背景框（半透明色塊）<span id="ls-bg-opacity-val" class="val">關</span></label>
+                    <label><span data-i18n="display.bgOpacityFieldLabel">歌詞背景框（半透明色塊）</span><span id="ls-bg-opacity-val" class="val" data-i18n="common.off">關</span></label>
                     <input id="ls-bg-opacity" type="range" min="0" max="1" step="0.05" value="0">
                   </div>
-                  <div><label>背景顏色</label><input id="ls-bg-color" type="color" value="#000000"></div>
+                  <div><label data-i18n="display.bgColorLabel">背景顏色</label><input id="ls-bg-color" type="color" value="#000000"></div>
                 </div>
               </div>
             </details>
@@ -1236,29 +1236,29 @@
 
           <!-- ═══ 背景（Phase 4）═══ -->
           <details class="card card-collapse" data-settings-workspace-group="appearance advanced" data-lyrics-search="背景 圖片 透明度 填滿 裁切">
-            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>背景</summary>
+            <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><span data-i18n="display.backgroundTitle">背景</span></summary>
             <div class="card-collapse-body">
-              <p class="field-hint mt-0">背景會鋪滿整個 OBS 來源。維持無背景＝透明疊加（預設）。</p>
+              <p class="field-hint mt-0" data-i18n="display.backgroundHint">背景會鋪滿整個 OBS 來源。維持無背景＝透明疊加（預設）。</p>
               <div class="field" id="display-bg-preview-wrap" hidden>
-                <img id="display-bg-preview" class="display-bg-preview" alt="目前背景預覽">
+                <img id="display-bg-preview" class="display-bg-preview" alt="目前背景預覽" data-i18n-alt="display.currentBgPreviewAlt">
               </div>
               <div class="field inline-row inline-row--wrap">
-                <label class="btn btn-sm btn--label">
+                <label class="btn btn-sm btn--label" data-i18n="display.uploadBgImage">
                   上傳背景圖
                   <input id="display-bg-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
                 </label>
-                <button id="display-bg-remove" class="btn btn-sm btn-ghost" type="button">移除背景</button>
+                <button id="display-bg-remove" class="btn btn-sm btn-ghost" type="button" data-i18n="display.removeBackground">移除背景</button>
               </div>
               <div class="field">
-                <label>背景透明度 <span id="display-bg-opacity-val" class="val">100%</span></label>
+                <label><span data-i18n="display.bgOpacityLabel">背景透明度</span> <span id="display-bg-opacity-val" class="val">100%</span></label>
                 <input id="display-bg-opacity" type="range" min="0" max="1" step="0.05" value="1">
               </div>
               <div class="field">
-                <label for="display-bg-fit">顯示方式</label>
+                <label for="display-bg-fit" data-i18n="display.bgFitLabel">顯示方式</label>
                 <select id="display-bg-fit" class="input">
-                  <option value="cover" selected>填滿裁切</option>
-                  <option value="contain">完整顯示</option>
-                  <option value="fill">拉伸鋪滿</option>
+                  <option value="cover" selected data-i18n="bgFit.cover">填滿裁切</option>
+                  <option value="contain" data-i18n="bgFit.contain">完整顯示</option>
+                  <option value="fill" data-i18n="bgFit.fill">拉伸鋪滿</option>
                 </select>
               </div>
             </div>
@@ -1476,7 +1476,7 @@
               <span id="public-request-status-connection" class="twitch-status-chip" data-state="muted" data-i18n="publicRequest.statusUnconfigured">尚未啟用</span>
             </div>
             <div id="public-request-share-row" class="public-request-share-row" hidden>
-              <img id="public-request-qr" class="public-request-qr" alt="公開點歌頁 QR Code" width="120" height="120">
+              <img id="public-request-qr" class="public-request-qr" alt="公開點歌頁 QR Code" data-i18n-alt="publicRequest.qrAlt" width="120" height="120">
               <div class="public-request-share-col">
                 <label class="field-label" for="public-request-share-url" data-i18n="publicRequest.shareLinkLabel">分享連結</label>
                 <div class="public-request-share-input-row">
@@ -1514,6 +1514,11 @@
           <div class="general-settings-col">
           <section class="card" id="obs-url-card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span data-i18n="system.obsUrls">OBS 來源網址</span></p>
+            <!-- 持續顯示，不用 sessionStorage 蓋掉；只要 /api/health 回報仍在備援 port 就一直在，
+                 不能讓使用者以為「提示消失了代表恢復正常了」（docs/ELECTRON-SHELL-SPEC.md I1 修訂）。 -->
+            <div id="port-fallback-banner" class="banner banner-warning" role="status" hidden>
+              <span id="port-fallback-banner-text"></span>
+            </div>
             <div class="obs-url-list">
               <div><div class="label" data-i18n="system.lyricsDisplay">歌詞畫面</div><div class="url-field"><code id="obs-url">http://localhost:3000/display</code><button id="copy-obs-url" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button></div></div>
               <div><div class="label" data-i18n="system.setlistDisplay">歌單畫面</div><div class="url-field"><code id="setlist-url-general">http://localhost:3000/setlist</code><button id="copy-setlist-url-general" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button></div></div>

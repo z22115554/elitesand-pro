@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/css/controller-new.css">
 </head>
 <body class="controller">
-  <div id="controller-pairing-notice" class="ctrl-card" hidden>請在桌面版 Elitesand Pro 產生配對 QR Code，再用手機掃描。PIN 若已啟用，配對後仍需要輸入 PIN。</div>
+  <div id="controller-pairing-notice" class="ctrl-card" hidden data-i18n="controller.pairingNotice">請在桌面版 Elitesand Pro 產生配對 QR Code，再用手機掃描。PIN 若已啟用，配對後仍需要輸入 PIN。</div>
   <div id="connection-banner" class="connection-banner" data-i18n="status.reconnecting">與伺服器連線中斷，重新連線中…</div>
 
   <div class="ctrl-top">
@@ -20,7 +20,7 @@
         <span id="connection-status" class="status-dot disconnected"></span>
         <span id="connection-text" data-i18n="status.connecting">連線中</span>
       </span>
-      <select class="locale-select" data-i18n-locale aria-label="介面語言">
+      <select class="locale-select" data-i18n-locale data-i18n-skip aria-label="介面語言" data-i18n-aria-label="language.label">
         <option value="zh-TW">繁體中文</option>
         <option value="en">English</option>
         <option value="ja">日本語</option>
