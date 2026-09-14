@@ -362,14 +362,14 @@ function buildReport(input, options = {}) {
     ...formatLogBlock(diagnostics),
     '',
     ...(value.type === 'spout' && value.includeDiagnostics ? formatSpoutDiagnosticsBlock(value.spoutDiagnostics) : []),
-    '## 聯絡方式',
-    '',
-    value.contact || '（未留；此回報無法回覆）',
-    '',
   ];
 
   // 使用者填的文字也過一次清理：他們很可能直接把含 token 的錯誤訊息貼進說明欄。
-  const issueBody = redactDiagnosticText(bodyLines.join('\n'));
+  // 「聯絡方式」刻意排除在外——它唯一的內容就是使用者主動留的 email/帳號，讓這欄
+  // 也走 email regex 等於自己把回信管道刪掉（issue #15 的真因）。這欄已被
+  // LIMITS.contact.max 限制在 200 字內，不是可以塞診斷雜訊的自由文字欄。
+  const contactBlock = ['## 聯絡方式', '', value.contact || '（未留；此回報無法回覆）', ''].join('\n');
+  const issueBody = `${redactDiagnosticText(bodyLines.join('\n'))}\n${contactBlock}`;
   const issueTitle = redactDiagnosticText(`[${typeInfo.label}][${APP_VERSION}] ${value.title}`).slice(0, 200);
 
   return {

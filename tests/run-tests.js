@@ -1299,6 +1299,16 @@ test('問題回報 schema 拒絕不完整或超長的內容', () => {
   ok(spout.ok && spout.plainText.includes('## Spout 透明輸出紀錄'), 'Spout report must attach its bounded diagnostics: ');
   ok(spout.report.issueLabels.includes('type:spout'), 'Spout report must carry a dedicated issue label: ');
   ok(!spout.plainText.includes('Personal Sender Name') && !spout.plainText.includes('machine-unique-value'), 'Spout diagnostics must exclude sender and LUID: ');
+
+  // 回歸測試（GitHub issue #15）：使用者填的「聯絡方式」是唯一能回覆他們的管道，
+  // 不可以被同一份 email 遮蔽規則自己吃掉——那樣使用者等於白留了聯絡方式。
+  const withContact = feedbackReport.buildReport({ ...base, contact: 'muffin215 / email：streamer@example.com' });
+  ok(withContact.ok);
+  ok(withContact.plainText.includes('streamer@example.com'), '使用者主動留的聯絡 email 不可被遮蔽（issue #15）: ');
+  // 同時確認說明欄裡「不小心貼進去」的 email 仍然要被遮蔽——不是整支關掉 email 規則。
+  const leakyEmail = feedbackReport.buildReport({ ...base, description: '匯入失敗，已經寄信到 leaked@example.com 詢問過了' });
+  ok(leakyEmail.ok);
+  ok(!leakyEmail.plainText.includes('leaked@example.com'), '說明欄裡意外貼上的 email 仍必須遮蔽: ');
 });
 
 test('問題回報缺少外部工具或日誌時仍能產出報告', () => {
