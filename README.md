@@ -5,7 +5,7 @@
 **為 VTuber 歌回與直播演出打造的本機歌詞演出系統**
 *A local lyric-performance system for VTubers, singing streamers, and live performers*
 
-**最新版本 / Latest：`v1.0.0`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
+**最新版本 / Latest：`v1.0.4`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
 
 繁體中文 · [English](#english) · [日本語](#日本語) · [한국어](#한국어) · [简体中文](#简体中文)
 
@@ -46,6 +46,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 每首歌獨立保存 ±12 半音變調、0.5×–1.5× 變速與時間偏移，內建 SoundTouch／WSOLA 高品質處理。
 - 播放清單拖曳排序、歌曲資訊編輯、清單匯入／匯出。
 - 媒體庫自動記住用過的歌曲、播放次數、歌詞、對時與播放設定。
+- 收藏歌單：媒體庫破萬首後把常用的歌分組保存，一首歌可以放進多個收藏歌單，手機遙控器也能直接載入整份。
 - 可選「統一音量」：兩條播放鏈一起做響度標準化，切歌不忽大忽小。
 
 #### 歌詞
@@ -210,6 +211,7 @@ Everything runs on your own machine; OBS loads transparent lyrics and setlist ov
 - Per-song ±12-semitone transpose, 0.5×–1.5× tempo, and timing offset via built-in SoundTouch/WSOLA.
 - Playlist drag-reorder, song-info editing, list import/export.
 - Media library remembers used songs, play counts, lyrics, timing, and playback settings.
+- Saved collections: group frequently used songs once your media library grows large; a song can belong to multiple collections, and the mobile remote can load one directly.
 - Optional loudness normalization across both playback chains, so tracks don't jump in volume.
 
 #### Lyrics
@@ -374,6 +376,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - 曲ごとに ±12 半音のキー、0.5×–1.5× のテンポ、タイミングを保存（SoundTouch／WSOLA）。
 - プレイリストの並べ替え、曲情報編集、リストの入出力。
 - メディアライブラリが使用曲・再生回数・歌詞・タイミング・再生設定を記憶。
+- コレクション：曲が増えてもよく使う曲をグループ分けして保存。1 曲を複数のコレクションに入れられ、スマホリモコンからも直接読み込める。
 - 任意のラウドネス正規化（2 系統の再生チェーンを同時処理）。
 
 #### 歌詞
@@ -538,6 +541,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 곡별 ±12 반음 키, 0.5×–1.5× 속도, 타이밍 저장(SoundTouch/WSOLA).
 - 재생목록 정렬, 곡 정보 편집, 목록 가져오기/내보내기.
 - 미디어 라이브러리가 사용 곡, 재생 횟수, 가사, 타이밍, 재생 설정을 기억.
+- 컬렉션: 곡이 많아져도 자주 쓰는 곡을 그룹으로 저장. 한 곡을 여러 컬렉션에 넣을 수 있고, 모바일 리모컨에서도 바로 불러올 수 있음.
 - 선택형 라우드니스 정규화(두 재생 체인 동시 처리).
 
 #### 가사
@@ -702,6 +706,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 每首歌独立保存 ±12 半音变调、0.5×–1.5× 变速与时间偏移，内置 SoundTouch／WSOLA。
 - 播放列表拖拽排序、歌曲信息编辑、列表导入／导出。
 - 媒体库自动记住用过的歌曲、播放次数、歌词、对时与播放设置。
+- 收藏歌单：媒体库破万首后把常用的歌分组保存，一首歌可以放进多个收藏歌单，手机遥控器也能直接加载整份。
 - 可选「统一音量」：两条播放链一起做响度标准化。
 
 #### 歌词
