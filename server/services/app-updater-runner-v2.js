@@ -218,10 +218,39 @@ function isProcessAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
 }
 
+// PID 可能在原行程結束後被 Windows 回收給完全不相關的別的程式，尤其是等待期長達
+// 10 分鐘的更新流程；純粹 process.kill(pid,0) 判斷「還存在」在這種重複使用下會誤判成
+// 「還沒結束」，一路空等到逾時。用 tasklist 記下這個 PID 一開始對應的執行檔名稱，之後
+// 定期比對是否還是同一個名稱；tasklist 本身失敗（非 Windows、被系統管理原則停用）時
+// 傳回 null，呼叫端會直接退回純 PID 存活判斷，不因為拿不到名稱就誤判「已經換了程式」。
+function getProcessImageName(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  try {
+    // eslint-disable-next-line global-require
+    const { execFileSync } = require('child_process');
+    const output = execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8', timeout: 3000, windowsHide: true });
+    const firstLine = output.split(/\r?\n/).find((line) => line.trim());
+    const match = firstLine && firstLine.match(/^"([^"]+)"/);
+    return match ? match[1] : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+const IMAGE_IDENTITY_RECHECK_MS = 2000;
+
 async function waitForExit(pid, timeoutMs) {
   const started = Date.now();
+  const expectedImageName = getProcessImageName(pid);
+  let lastImageCheckAt = 0;
   while (isProcessAlive(pid)) {
-    if (Date.now() - started > timeoutMs) throw new Error('Timed out waiting for an Elitesand Pro process to exit; update was not installed.');
+    const now = Date.now();
+    if (expectedImageName && now - lastImageCheckAt >= IMAGE_IDENTITY_RECHECK_MS) {
+      lastImageCheckAt = now;
+      // 名稱變了代表這個 PID 已經被 Windows 回收給別的程式；原本要等的行程已經不在了。
+      if (getProcessImageName(pid) !== expectedImageName) return;
+    }
+    if (now - started > timeoutMs) throw new Error('Timed out waiting for an Elitesand Pro process to exit; update was not installed.');
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }

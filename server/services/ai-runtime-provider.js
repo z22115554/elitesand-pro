@@ -70,9 +70,31 @@ function isAvailable() {
   }
 }
 
+// PyTorch 的 torch.save() 自 1.6 起預設輸出 ZIP 容器（本體是 "PK\x03\x04" 開頭）。
+// 這裡刻意只讀開頭 4 bytes，不是完整雜湊驗證——沒有官方公布這個模型檔案的雜湊值可釘死
+// （不像 Python embeddable 有自己驗過的 PYTHON_EMBED_SHA256），所以只能擋「明顯不是
+// 這個格式」的損毀（例如下載中斷、被覆蓋成 HTML 錯誤頁），擋不住檔案中段位元翻轉這種
+// 大小與開頭都正常、內容卻壞掉的損毀。
+const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+function hasValidCheckpointHeader(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const header = Buffer.alloc(4);
+    const bytesRead = fs.readSync(fd, header, 0, 4, 0);
+    return bytesRead === 4 && header.equals(ZIP_MAGIC);
+  } catch (_) {
+    return false;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch (_) { /* best effort */ } }
+  }
+}
+
 function isModelAvailable() {
   try {
-    return fs.statSync(MODEL_FILE).size >= MODEL_MIN_BYTES;
+    const stat = fs.statSync(MODEL_FILE);
+    return stat.size >= MODEL_MIN_BYTES && hasValidCheckpointHeader(MODEL_FILE);
   } catch (_) {
     return false;
   }
@@ -103,7 +125,7 @@ function cleanupInvalidPrimaryModel() {
   let removed = false;
   try {
     const stat = fs.statSync(MODEL_FILE);
-    if (!stat.isFile() || stat.size < MODEL_MIN_BYTES) {
+    if (!stat.isFile() || stat.size < MODEL_MIN_BYTES || !hasValidCheckpointHeader(MODEL_FILE)) {
       safeRemove(MODEL_FILE);
       removed = true;
     }

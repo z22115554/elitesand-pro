@@ -91,21 +91,32 @@
     });
   });
 
-  // 桌面殼因預設 port 被占而改用備援：每次開面板提示一次。用拖放建的 OBS 來源不受影響，
-  // 貼網址建的要改 port（或改用拖放）。
-  function noticePortFallback() {
+  // 桌面殼因預設 port 被占而改用備援：持續顯示一個不會自動消失的橫幅（docs/
+  // ELECTRON-SHELL-SPEC.md I1 修訂），不是只在剛開面板時彈一次 toast——toast 會被錯過，
+  // 而且「提示消失了」不代表「port 恢復正常了」，只代表使用者沒看到而已。用拖放建的
+  // OBS 來源不受影響（自己找 port）；貼網址建的要改網址或改用拖放。
+  const portFallbackBanner = document.getElementById('port-fallback-banner');
+  const portFallbackBannerText = document.getElementById('port-fallback-banner-text');
+  let portFallbackPollTimer = null;
+
+  function checkPortFallback() {
     fetch('/api/health', { cache: 'no-store' }).then((res) => (res.ok ? res.json() : null)).then((health) => {
-      if (!health || !health.portFallbackFrom || !health.port) return;
-      const key = `elitesand:port-fallback-noticed:${health.port}`;
-      try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch (_) { /* 無 storage 就每次提示 */ }
-      toast(t('system.portFallbackNotice', { from: health.portFallbackFrom, to: health.port }), 'warning');
-    }).catch(() => {});
+      const active = !!(health && health.portFallbackFrom && health.port);
+      if (portFallbackBanner) portFallbackBanner.hidden = !active;
+      if (active && portFallbackBannerText) {
+        portFallbackBannerText.textContent = t('system.portFallbackNotice', { from: health.portFallbackFrom, to: health.port });
+      }
+    }).catch(() => { /* 探測失敗維持上一次已知狀態，不因單次網路波動就把橫幅收掉 */ });
   }
 
   document.addEventListener('view:change', (event) => {
-    if (event.detail && event.detail.view === 'general') refresh();
+    if (event.detail && event.detail.view === 'general') { refresh(); checkPortFallback(); }
   });
-  window.addEventListener('i18n:change', render);
+  window.addEventListener('i18n:change', () => { render(); checkPortFallback(); });
   refresh();
-  noticePortFallback();
+  checkPortFallback();
+  // 面板可能開著跨整場直播；定期重查，備援狀態消失（例如重開機後 3000 空出來了）
+  // 橫幅才會跟著收掉，不會一直顯示過期資訊。
+  portFallbackPollTimer = setInterval(checkPortFallback, 60000);
+  window.addEventListener('beforeunload', () => { if (portFallbackPollTimer) clearInterval(portFallbackPollTimer); });
 })();

@@ -875,6 +875,8 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .twitch-activity-row, .twitch-history-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-raised); }
 .twitch-history-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
+#port-fallback-banner { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border)); border-radius: var(--r-sm); background: color-mix(in srgb, var(--warning) 12%, var(--bg-raised)); font-size: 12.5px; line-height: 1.5; color: var(--text); }
+#port-fallback-banner[hidden] { display: none; }
 .public-request-share-row { display: flex; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .public-request-qr { flex: 0 0 auto; border-radius: var(--r-sm); border: 1px solid var(--border); background: #fff; }
 .public-request-share-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }

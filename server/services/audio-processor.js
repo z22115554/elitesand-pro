@@ -1522,7 +1522,15 @@ class AudioProcessor {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
         if (signal?.aborted) return reject(new ImportCancelledError());
-        if (code !== 0 || !fs.existsSync(outputPath)) return reject(new Error(`FFmpeg 轉碼失敗: ${stderr.trim().split('\n').pop() || code}`));
+        if (code !== 0 || !fs.existsSync(outputPath)) {
+          const failure = new Error(`FFmpeg 轉碼失敗: ${stderr.trim().split('\n').pop() || code}`);
+          // 訊息本身只留最後一行給使用者看；但「是不是 Illegal byte sequence」的判斷
+          // （ffmpeg-provider.js 的 isIllegalByteSequenceError，用來決定要不要切換成
+          // Unicode-safe 的 pipe fallback）要看完整 stderr，因為那個關鍵字不保證出現在
+          // 最後一行——只看最後一行會漏判，讓 CJK 路徑的原始 bug 又跑回來。
+          failure.ffmpegStderr = stderr;
+          return reject(failure);
+        }
         try { fs.unlinkSync(inputPath); } catch (_) { /* 轉碼已成功，不因清理失敗中斷 */ }
         log.perf('ffmpeg-convert', Date.now() - started, { outputPath }); resolve(outputPath);
       });
