@@ -417,6 +417,9 @@ const songRequestRelay = new SongRequestRelayService({
   onSongRequest: (request) => socketApi.dispatchPublicSongRequest(request),
   onPendingRequestsChanged: () => socketApi.broadcastPublicRequests(),
   onStatusChange: (status) => socketApi.recordPublicRequestStatus(status),
+  // code review 2026-09-15：待處理清單滿了會無聲丟棄觀眾的請求（觀眾端已經看到
+  // 「已送出」），至少讓主播在面板上看到一次警告，知道要去清一下待處理清單。
+  onQueueFull: () => reportStorageError({ area: '公開點歌', message: '待處理清單已滿，新的點歌請求已被忽略，請先處理現有請求' }),
 });
 socketApi.setSongRequestRelayService(songRequestRelay);
 songRequestRelay.start();

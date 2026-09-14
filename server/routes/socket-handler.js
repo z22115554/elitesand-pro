@@ -289,16 +289,21 @@ module.exports = function socketHandler(io, {
     return false;
   }
 
-  /** 跟 dispatchTwitchSongRequest 同一套 bounce 邏輯：只交給桌面控制面板決定要不要核准。 */
+  // code review 2026-09-15：原本比照 dispatchTwitchSongRequest 只交給「一個」控制面板
+  // ——那是因為 Twitch 匯入要保證只有一份 yt-dlp 佇列在處理，交給多個面板會重工。
+  // 公開點歌沒有這個限制（approve/reject 只是操作記憶體陣列），只交給一個面板反而讓
+  // 開了第二個分頁/視窗的主播漏掉新請求通知；跟同樣是「本場全部 controller 都要看到」
+  // 的 broadcastPublicRequests()／broadcastPublicRequestStatus() 對齊，一律廣播。
   function dispatchPublicSongRequest(request) {
-    for (const id of [...clients.controllers].reverse()) {
+    let delivered = false;
+    for (const id of clients.controllers) {
       const target = io.sockets.sockets.get(id);
       if (target && target.connected) {
         target.emit('public-request:new', request);
-        return true;
+        delivered = true;
       }
     }
-    return false;
+    return delivered;
   }
 
   function syncPublicRequests(socket) {

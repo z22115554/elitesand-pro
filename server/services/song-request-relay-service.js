@@ -20,30 +20,16 @@ const { createLogger } = require('../utils/logger');
 const defaultStore = require('./song-request-relay-store');
 const defaultSavedPlaylists = require('./saved-playlists');
 const defaultLibraryStore = require('./library-store');
+const { reconnectDelay, websocketCtor } = require('../utils/ws-reconnect');
 
 const log = createLogger('SongRequestRelay');
 
-const RECONNECT_BASE_MS = 3000;
-const RECONNECT_MAX_MS = 60000;
 const CONNECT_WATCHDOG_MS = 15000;
+const REGISTER_TIMEOUT_MS = 10000;
 const MAX_PENDING_REQUESTS = 20;
 const MAX_CATALOG_TRACKS = 2000; // 對齊 MAX_PLAYLIST_SIZE / saved-playlists 的既有上限
 const CATALOG_PUSH_DEBOUNCE_MS = 2000;
 const ALL_CATALOG_PLAYLIST_ID = '__all-library__';
-
-function reconnectDelay(attempt, random = Math.random) {
-  // 跟 twitch-service.js 的 reconnectDelay() 同一條公式：指數退避＋±20% 抖動。
-  const base = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** Math.max(0, attempt - 1)));
-  return Math.round(base * (0.8 + random() * 0.4));
-}
-
-function websocketCtor() {
-  // 跟 twitch-service.js 同一套退路：Node 22+ 原生 WebSocket，較舊版本用 socket.io
-  // 已安裝的 ws 相依套件；不對外開放，也不會把 ws 暴露給瀏覽器。
-  if (typeof globalThis.WebSocket === 'function') return globalThis.WebSocket;
-  // eslint-disable-next-line global-require
-  return require('ws');
-}
 
 function wsUrlFromHttp(httpUrl) {
   return String(httpUrl || '').replace(/^http/i, 'ws').replace(/\/+$/, '');
@@ -89,6 +75,7 @@ class SongRequestRelayService {
     onSongRequest = () => {},
     onStatusChange = () => {},
     onPendingRequestsChanged = () => {},
+    onQueueFull = () => {},
     timers = globalThis,
     random = Math.random,
     createWebSocket = websocketCtor,
@@ -102,12 +89,17 @@ class SongRequestRelayService {
     this.onSongRequest = onSongRequest;
     this.onStatusChange = onStatusChange;
     this.onPendingRequestsChanged = onPendingRequestsChanged;
+    this.onQueueFull = onQueueFull;
     this.timers = timers;
     this.random = random;
     this.createWebSocket = createWebSocket;
 
     this.state = store.load();
-    this.pendingRequests = [];
+    // code review 2026-09-15：原本永遠是空陣列，重開程式（更新、當機、手動重啟）會讓
+    // 所有還沒核准的觀眾請求悄悄消失，主播跟觀眾都不知道——跟 Twitch 那邊的待確認
+    // 點歌（有落地到 twitch-requests.json）不一致。用 typeof 判斷是因為現有測試傳的
+    // 假 store 只實作 load/save，沒有這兩個新方法，維持「沒提供就當沒有持久化」。
+    this.pendingRequests = typeof store.loadPending === 'function' ? store.loadPending() : [];
     this.ws = null;
     this.connected = false;
     this.connecting = false;
@@ -120,6 +112,7 @@ class SongRequestRelayService {
     this.stopped = true;
     this._qrDataUrl = '';
     this._qrForSlug = '';
+    this._registerInFlight = null;
   }
 
   // ─── 生命週期 ───
@@ -158,7 +151,12 @@ class SongRequestRelayService {
       return { ok: false, error: relayConfigError(this.config) };
     }
     if (!this.state.publicSlug || !this.state.secret) {
-      const registered = await this._register();
+      // code review 2026-09-15：兩個幾乎同時抵達的 enable()（雙擊、兩個面板分頁）
+      // 原本會各自呼叫 _register()，各自向中繼要一組全新 slug/secret，兩個房間都建了、
+      // 最後存檔的那組贏，另一組變成沒人知道的孤兒房間。让並行呼叫共用同一個
+      // 進行中的 _register() promise，只真的註冊一次。
+      this._registerInFlight = this._registerInFlight || this._register().finally(() => { this._registerInFlight = null; });
+      const registered = await this._registerInFlight;
       if (!registered.ok) return registered;
     }
     this.state.enabled = true;
@@ -268,8 +266,15 @@ class SongRequestRelayService {
     const request = this.pendingRequests[index];
     const entry = this.libraryStore.getEntry(request.catalogTrackId);
     if (!entry) return { ok: false, error: '這首歌已不在媒體庫裡，無法加入播放清單' };
+    // code review 2026-09-15：_buildCatalog() 公開曲目時會多驗一次音檔還在本機
+    // （entry.filename && exists(entry.filename)），這裡原本只查媒體庫紀錄還在，
+    // 沒有重驗音檔——請求送出後、核准前這段等待時間裡音檔被清掉（例如「清除未用
+    // 音檔」），會核准一首播放清單裡放不出聲音的歌。
+    const exists = this.libraryStore.getAudioExistsLookup ? this.libraryStore.getAudioExistsLookup() : () => true;
+    if (!entry.filename || !exists(entry.filename)) return { ok: false, error: '這首歌的音檔已不在本機，無法加入播放清單' };
     const track = this.buildTrackFromEntry(entry);
     this.pendingRequests.splice(index, 1);
+    this._persistPending();
     this.onPendingRequestsChanged();
     return { ok: true, track, request };
   }
@@ -280,6 +285,7 @@ class SongRequestRelayService {
     if (this.pendingRequests.some((item) => item.requestId === request.requestId)) return true;
     if (this.pendingRequests.length >= MAX_PENDING_REQUESTS) return false;
     this.pendingRequests.push({ ...request });
+    this._persistPending();
     this.onPendingRequestsChanged();
     return true;
   }
@@ -288,6 +294,7 @@ class SongRequestRelayService {
     const index = this.pendingRequests.findIndex((item) => item.requestId === requestId);
     if (index === -1) return { ok: false, error: '這筆點歌請求已不存在' };
     this.pendingRequests.splice(index, 1);
+    this._persistPending();
     this.onPendingRequestsChanged();
     return { ok: true };
   }
@@ -296,11 +303,25 @@ class SongRequestRelayService {
 
   async _register() {
     try {
-      const response = await this.fetchImpl(`${String(this.config.songRequestRelayUrl).replace(/\/+$/, '')}/api/register`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}',
-      });
+      // code review 2026-09-15：原本沒有 timeout，Worker／網路卡住（非明確錯誤）時
+      // 這個 await 永遠不會解開，enable()／rotateLink() 的 socket ack 就永遠不會回，
+      // 面板的開關會卡在 disabled 直到重開程式。做法比照 twitch-service.js 對外連線
+      // 一律加 timeout 的既有慣例，但透過 this.fetchImpl（不直接用 fetchWithTimeout）
+      // 才不會繞過既有測試注入的假 fetchImpl。
+      const controller = new AbortController();
+      const timer = this.timers.setTimeout(() => controller.abort(), REGISTER_TIMEOUT_MS);
+      if (typeof timer.unref === 'function') timer.unref();
+      let response;
+      try {
+        response = await this.fetchImpl(`${String(this.config.songRequestRelayUrl).replace(/\/+$/, '')}/api/register`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+          signal: controller.signal,
+        });
+      } finally {
+        this.timers.clearTimeout(timer);
+      }
       if (!response.ok) return { ok: false, error: `中繼註冊失敗（HTTP ${response.status}）` };
       const data = await response.json();
       if (!data || typeof data.publicSlug !== 'string' || typeof data.secret !== 'string' || !data.publicSlug || !data.secret) {
@@ -312,12 +333,17 @@ class SongRequestRelayService {
       return { ok: true };
     } catch (err) {
       log.warn(`公開點歌頁註冊失敗：${err.message}`);
-      return { ok: false, error: '無法連線到公開點歌頁中繼服務' };
+      return { ok: false, error: err.name === 'AbortError' ? '公開點歌頁中繼服務逾時未回應' : '無法連線到公開點歌頁中繼服務' };
     }
   }
 
   _persist() {
     try { this.store.save(this.state); } catch (err) { log.warn(`公開點歌頁設定寫入失敗：${err.message}`); }
+  }
+
+  _persistPending() {
+    if (typeof this.store.savePending !== 'function') return;
+    try { this.store.savePending(this.pendingRequests); } catch (err) { log.warn(`待處理點歌請求寫入失敗：${err.message}`); }
   }
 
   // ─── 內部：連線 ───
@@ -430,7 +456,11 @@ class SongRequestRelayService {
     const catalogTrackId = typeof raw?.catalogTrackId === 'string' ? raw.catalogTrackId.slice(0, 128) : '';
     if (!catalogTrackId) return;
     if (this.pendingRequests.length >= MAX_PENDING_REQUESTS) {
+      // code review 2026-09-15：房間端（room-do.js）在轉發訊息前就已經回 {ok:true}
+      // 給觀眾了（刻意不等桌面端結果），所以這裡丟棄前只能記 log、無法讓觀眾知道；
+      // 至少讓主播在面板上看到警告，而不是完全無聲地憑空消失一筆請求。
       log.warn('公開點歌頁待處理請求已達上限，忽略新請求');
+      this.onQueueFull();
       return;
     }
     // 中繼理論上已經比對過它快取的歌單快照，但那份快照可能落後（debounce、重新連線後
@@ -439,6 +469,14 @@ class SongRequestRelayService {
     // 任何一首歌，不只是主播選擇公開的那些。
     if (!this._buildCatalog().some((track) => track.id === catalogTrackId)) {
       log.warn('公開點歌頁收到不在目前公開歌單裡的曲目 id，已忽略');
+      return;
+    }
+    // code review 2026-09-15：中繼轉發過來的訊息不帶任何觀眾識別（room-do.js 刻意
+    // 不把 client/IP 雜湊送到桌面端），沒辦法分辨「同一人重複點」跟「不同觀眾點同一
+    // 首歌」；但至少同一首歌已經有一筆待處理時，沒必要再排第二筆佔掉待處理佇列的
+    // 名額——一首歌核准一次就好，主播想再排第二次可以直接從播放清單重複加入。
+    if (this.pendingRequests.some((item) => item.catalogTrackId === catalogTrackId)) {
+      log.info('公開點歌頁：這首歌已經有一筆待處理請求，忽略重複點歌');
       return;
     }
     const entry = this.libraryStore.getEntry(catalogTrackId);
@@ -452,6 +490,7 @@ class SongRequestRelayService {
       createdAt: Date.now(),
     };
     this.pendingRequests.push(request);
+    this._persistPending();
     this.onPendingRequestsChanged();
     this.onSongRequest(request);
   }

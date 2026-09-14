@@ -55,4 +55,48 @@ function save(state) {
   return diskStore.save(state);
 }
 
-module.exports = { load, save, emptyState, STORE_FILE };
+// code review 2026-09-15：待處理的觀眾點歌請求原本只存在記憶體，程式重開（更新、
+// 當機、手動重啟）就整批消失、主播跟觀眾都不會知道。跟 twitch-requests.json
+// （twitch-request-store.js）同一個模式，獨立一份檔案、只存陣列。
+const PENDING_STORE_FILE = path.join(DATA_DIR, 'song-request-relay-pending.json');
+const MAX_PERSISTED_PENDING = 50; // 遠高於服務層自己的 MAX_PENDING_REQUESTS（20），純防呆
+
+function sanitizePendingRequest(item) {
+  if (!item || typeof item !== 'object') return null;
+  const requestId = typeof item.requestId === 'string' ? item.requestId.slice(0, 64) : '';
+  const catalogTrackId = typeof item.catalogTrackId === 'string' ? item.catalogTrackId.slice(0, 128) : '';
+  if (!requestId || !catalogTrackId) return null;
+  return {
+    requestId,
+    catalogTrackId,
+    title: typeof item.title === 'string' ? item.title.slice(0, 200) : '',
+    artist: typeof item.artist === 'string' ? item.artist.slice(0, 200) : '',
+    displayName: typeof item.displayName === 'string' ? item.displayName.slice(0, 60) : '',
+    note: typeof item.note === 'string' ? item.note.slice(0, 140) : '',
+    createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
+  };
+}
+
+const pendingDiskStore = createJsonStore({
+  file: PENDING_STORE_FILE,
+  label: '公開點歌頁待處理請求',
+  defaultValue: () => [],
+  mode: 0o600,
+  migrations: new Map([[0, (legacy) => ({ schemaVersion: 1, requests: Array.isArray(legacy) ? legacy : [] })]]),
+  serialize: (requests) => ({ requests: requests.map(sanitizePendingRequest).filter(Boolean).slice(0, MAX_PERSISTED_PENDING) }),
+  deserialize: (document) => document.requests.map(sanitizePendingRequest).filter(Boolean),
+  validate: (document) => Array.isArray(document.requests),
+  logger: log,
+});
+
+function loadPending() {
+  return pendingDiskStore.load();
+}
+
+function savePending(requests) {
+  return pendingDiskStore.save(requests);
+}
+
+module.exports = {
+  load, save, emptyState, STORE_FILE, loadPending, savePending, PENDING_STORE_FILE,
+};

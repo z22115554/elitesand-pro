@@ -19,6 +19,7 @@ const TwitchRequestSettings = require('../../public/js/twitch-request-settings')
 const TwitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const { fetchWithTimeout } = require('../utils/helpers');
 const { createLogger } = require('../utils/logger');
+const { reconnectDelay, websocketCtor } = require('../utils/ws-reconnect');
 
 const log = createLogger('Twitch');
 const OAUTH_TOKEN = 'https://id.twitch.tv/oauth2/token';
@@ -30,8 +31,6 @@ const EVENTSUB_WS = 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=3
 const REQUIRED_SCOPES = Object.freeze(['user:read:chat', 'user:write:chat', 'channel:manage:redemptions']);
 const REDEMPTION_SCOPE = 'channel:manage:redemptions';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
-const RECONNECT_BASE_MS = 3000;
-const RECONNECT_MAX_MS = 60000;
 // A TCP/WebSocket handshake can stay open forever without the EventSub welcome.
 // Bound it so a stalled connection falls back to the existing exponential retry path.
 const CONNECT_WATCHDOG_MS = 20000;
@@ -56,11 +55,6 @@ function safeHistoryText(value, limit = 300) {
 function safeHistoryUrl(value) {
   const parsed = parseYouTubeUrl(String(value || ''));
   return parsed?.videoId ? `https://youtu.be/${parsed.videoId}` : '';
-}
-
-function reconnectDelay(attempt, random = Math.random) {
-  const base = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** Math.max(0, attempt - 1)));
-  return Math.round(base * (0.8 + random() * 0.4));
 }
 
 function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -120,14 +114,6 @@ function normalizeRequestSessionState(value) {
       sessionStartedAt: Number(item?.sessionStartedAt) || null,
     })).filter((item) => item.videoId && item.acceptedAt > 0).slice(-5000),
   };
-}
-
-function websocketCtor() {
-  // Node 22+ 原生支援 WebSocket；Node 18/20 則使用 Socket.io 已安裝的 ws 相依套件退路。
-  // 這裡不需要把 ws 暴露給瀏覽器，也不會開放外部 socket 入口。
-  if (typeof globalThis.WebSocket === 'function') return globalThis.WebSocket;
-  // eslint-disable-next-line global-require
-  return require('ws');
 }
 
 class TwitchService {

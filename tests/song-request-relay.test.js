@@ -190,6 +190,101 @@ test('approve()：媒體庫裡歌已不在時回傳錯誤，不會回傳假 trac
   assert.equal(service.getPendingRequests().length, 1, '媒體庫消失時請求應保留，之後可重新整理後再處理');
 });
 
+test('approve()：核准前音檔已從本機消失時回傳錯誤，不會核准放不出聲音的歌', () => {
+  // 請求進來當下音檔還在（否則會被 _buildCatalog 目錄驗證擋掉），核准前才消失
+  // ——用可變的 exists() 模擬「請求送出後、主播核准前，音檔被清除未用音檔之類的動作刪掉」。
+  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手', filename: 'track1.mp3' } };
+  let audioExists = true;
+  const libraryStore = makeFakeLibraryStore(entries);
+  libraryStore.getAudioExistsLookup = () => () => audioExists;
+  const service = makeService({ libraryStore });
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
+  service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
+  assert.equal(service.getPendingRequests().length, 1);
+  audioExists = false;
+  const [pending] = service.getPendingRequests();
+  const result = service.approve(pending.requestId);
+  assert.equal(result.ok, false);
+  assert.equal(service.getPendingRequests().length, 1, '音檔消失時請求應保留，不能默默核准掉：');
+});
+
+test('同一首歌已有一筆待處理請求時，第二筆點歌會被忽略（不占滿待處理佇列）', () => {
+  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手', filename: 'track1.mp3' } };
+  const received = [];
+  const service = makeService({
+    libraryStore: makeFakeLibraryStore(entries),
+    onSongRequest: (request) => received.push(request),
+  });
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
+  service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
+  service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
+  assert.equal(received.length, 1);
+  assert.equal(service.getPendingRequests().length, 1);
+});
+
+test('待處理清單滿了會呼叫 onQueueFull()，讓主播在面板上看得到警告', () => {
+  const entries = {};
+  for (let i = 0; i < 20; i += 1) entries[`t${i}`] = { id: `t${i}`, title: `t${i}`, artist: '', filename: `t${i}.mp3` };
+  let queueFullCalls = 0;
+  const service = makeService({
+    libraryStore: makeFakeLibraryStore(entries),
+    extra: { onQueueFull: () => { queueFullCalls += 1; } },
+  });
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
+  for (let i = 0; i < 20; i += 1) service._handleMessage({ type: 'song-request', request: { catalogTrackId: `t${i}` } });
+  assert.equal(service.getPendingRequests().length, 20);
+  assert.equal(queueFullCalls, 0);
+  service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'overflow' } });
+  assert.equal(service.getPendingRequests().length, 20, '滿了之後不能再塞進去：');
+  assert.equal(queueFullCalls, 1);
+});
+
+test('待處理請求會落地到 song-request-relay-store，重開服務（模擬程式重啟）後還在', () => {
+  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手', filename: 'track1.mp3' } };
+  const first = makeService({ libraryStore: makeFakeLibraryStore(entries), store: relayStore });
+  first.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
+  first._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1', displayName: '觀眾A' } });
+  assert.equal(first.getPendingRequests().length, 1);
+
+  // 模擬程式重啟：重新 new 一份 service，讀同一個（真的落地過的）store。
+  const restarted = makeService({ libraryStore: makeFakeLibraryStore(entries), store: relayStore });
+  assert.equal(restarted.getPendingRequests().length, 1, '重開程式後，待處理請求不應該消失：');
+  assert.equal(restarted.getPendingRequests()[0].displayName, '觀眾A');
+
+  assert.equal(restarted.reject(restarted.getPendingRequests()[0].requestId).ok, true);
+  const third = makeService({ libraryStore: makeFakeLibraryStore(entries), store: relayStore });
+  assert.equal(third.getPendingRequests().length, 0, 'reject() 之後也要落地，不能重開又復活：');
+});
+
+test('假 store 只實作 load/save（沒有 loadPending/savePending）時，待處理請求正常運作但不落地', () => {
+  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '', filename: 'track1.mp3' } };
+  const service = makeService({ libraryStore: makeFakeLibraryStore(entries) }); // makeService 預設的假 store 沒有 loadPending/savePending
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
+  service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
+  assert.equal(service.getPendingRequests().length, 1, '缺少持久化方法時仍要能正常運作，不能拋例外：');
+});
+
+test('enable()：兩個幾乎同時的呼叫在尚未註冊過時只會真的註冊一次', async () => {
+  let registerCalls = 0;
+  const fetchImpl = async () => {
+    registerCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return { ok: true, json: async () => ({ publicSlug: `slug-${registerCalls}`, secret: `secret-${registerCalls}` }) };
+  };
+  const saved = [];
+  const service = makeService({
+    store: { load: () => relayStore.emptyState(), save: (state) => { saved.push({ ...state }); return true; } },
+    fetchImpl,
+    createWebSocket: () => class { constructor() {} close() {} },
+  });
+  const [first, second] = await Promise.all([service.enable(), service.enable()]);
+  assert.equal(registerCalls, 1, '併發 enable() 應該共用同一個進行中的 _register()，不能各自各發一次：');
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(first.publicSlug, second.publicSlug);
+  service.stop();
+});
+
 test('restorePendingRequest()：最後一步加入播放清單失敗時可把請求放回佇列', () => {
   const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手', filename: 'track1.mp3' } };
   const service = makeService({ libraryStore: makeFakeLibraryStore(entries) });
