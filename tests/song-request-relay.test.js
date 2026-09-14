@@ -121,12 +121,13 @@ test('start()：不沿用上次的啟用狀態，重開後必須手動重新開�
 });
 
 test('收到 song-request 訊息會進入 pendingRequests 並觸發 onSongRequest', () => {
-  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手' } };
+  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手', filename: 'track1.mp3' } };
   const received = [];
   const service = makeService({
     libraryStore: makeFakeLibraryStore(entries),
     onSongRequest: (request) => received.push(request),
   });
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
   service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1', displayName: '觀眾A', note: '好聽' } });
   assert.equal(received.length, 1);
   assert.equal(received[0].title, '測試歌曲');
@@ -134,9 +135,32 @@ test('收到 song-request 訊息會進入 pendingRequests 並觸發 onSongReques
   assert.equal(service.getPendingRequests().length, 1);
 });
 
+test('中繼收到的 catalogTrackId 不在目前公開目錄裡時直接忽略，即使那首歌在媒體庫裡真的存在', () => {
+  // 這是防「被入侵或落後的中繼服務」的最後一道防線：只信任「現在真的公開的目錄」，
+  // 不是「媒體庫裡曾經存在過的任何一首歌」。track2 存在於媒體庫，但沒被公開。
+  const entries = {
+    track1: { id: 'track1', title: '公開的歌', artist: '', filename: 'track1.mp3' },
+    track2: { id: 'track2', title: '沒公開的歌', artist: '', filename: 'track2.mp3' },
+  };
+  const received = [];
+  const service = makeService({
+    savedPlaylists: makeFakeSavedPlaylists([{ id: 'pl1', trackIds: ['track1'] }]),
+    libraryStore: makeFakeLibraryStore(entries),
+    onSongRequest: (request) => received.push(request),
+  });
+  service.setCatalogPlaylistId('pl1');
+  service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track2' } });
+  assert.equal(received.length, 0);
+  assert.equal(service.getPendingRequests().length, 0);
+  // 公開目錄裡真的有的那首，行為不受影響。
+  service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
+  assert.equal(received.length, 1);
+});
+
 test('approve()：從待處理清單移除並解析成完整 track，不自己寫入播放清單', () => {
-  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手' } };
+  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手', filename: 'track1.mp3' } };
   const service = makeService({ libraryStore: makeFakeLibraryStore(entries) });
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
   service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
   const [pending] = service.getPendingRequests();
   const result = service.approve(pending.requestId);
@@ -152,8 +176,14 @@ test('approve()：找不到請求時回傳錯誤，不丟例外', () => {
 });
 
 test('approve()：媒體庫裡歌已不在時回傳錯誤，不會回傳假 track', () => {
-  const service = makeService({ libraryStore: makeFakeLibraryStore({}) });
+  // 請求進來當下這首歌還在公開目錄裡（否則會被新加的目錄驗證擋掉），核准前才從媒體庫消失
+  // ——用同一個 entries 物件讓 libraryStore／_buildCatalog 都讀得到，之後再刪掉那個 key
+  // 模擬「核准前歌被刪了」。
+  const entries = { gone: { id: 'gone', title: '測試歌曲', artist: '測試歌手', filename: 'gone.mp3' } };
+  const service = makeService({ libraryStore: makeFakeLibraryStore(entries) });
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
   service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'gone' } });
+  delete entries.gone;
   const [pending] = service.getPendingRequests();
   const result = service.approve(pending.requestId);
   assert.equal(result.ok, false);
@@ -161,8 +191,9 @@ test('approve()：媒體庫裡歌已不在時回傳錯誤，不會回傳假 trac
 });
 
 test('restorePendingRequest()：最後一步加入播放清單失敗時可把請求放回佇列', () => {
-  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手' } };
+  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '測試歌手', filename: 'track1.mp3' } };
   const service = makeService({ libraryStore: makeFakeLibraryStore(entries) });
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
   service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
   const [pending] = service.getPendingRequests();
   const approved = service.approve(pending.requestId);
@@ -173,8 +204,9 @@ test('restorePendingRequest()：最後一步加入播放清單失敗時可把請
 });
 
 test('reject()：從待處理清單移除', () => {
-  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '' } };
+  const entries = { track1: { id: 'track1', title: '測試歌曲', artist: '', filename: 'track1.mp3' } };
   const service = makeService({ libraryStore: makeFakeLibraryStore(entries) });
+  service.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
   service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
   const [pending] = service.getPendingRequests();
   assert.equal(service.reject(pending.requestId).ok, true);

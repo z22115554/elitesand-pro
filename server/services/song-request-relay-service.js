@@ -433,6 +433,14 @@ class SongRequestRelayService {
       log.warn('公開點歌頁待處理請求已達上限，忽略新請求');
       return;
     }
+    // 中繼理論上已經比對過它快取的歌單快照，但那份快照可能落後（debounce、重新連線後
+    // 還沒重推）或中繼本身被入侵；這裡是最後一道防線，只信任「這台桌面現在真的公開的
+    // 目錄」，不是「媒體庫裡曾經存在過的任何一首歌」——否則被入侵的中繼可以點媒體庫裡
+    // 任何一首歌，不只是主播選擇公開的那些。
+    if (!this._buildCatalog().some((track) => track.id === catalogTrackId)) {
+      log.warn('公開點歌頁收到不在目前公開歌單裡的曲目 id，已忽略');
+      return;
+    }
     const entry = this.libraryStore.getEntry(catalogTrackId);
     const request = {
       requestId: newRequestId(),
