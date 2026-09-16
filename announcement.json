@@ -57,6 +57,21 @@
         "showFullDownloadOnly": true
       },
       "enabled": true
+    },
+    {
+      "id": "release-v1.0.5",
+      "level": "notice",
+      "title": "Elitesand Pro v1.0.5 已推出",
+      "message": "這次新增 BGM 待機音樂：唱歌時自動淡出暫停、暫停或唱完後自動恢復；也補強公開點歌頁的安全性與穩定性。可從此處查看完整更新內容。",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.4",
+      "publishedAt": "2026-09-17T00:00:00+08:00",
+      "expiresAt": "2026-12-31T23:59:59+08:00",
+      "dismissible": true,
+      "showOnce": true,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.0.5",
+      "buttonText": "查看更新內容",
+      "enabled": true
     }
   ]
 }

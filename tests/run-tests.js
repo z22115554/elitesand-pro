@@ -2000,10 +2000,11 @@ test('正式公告會強制 0.9.9.5 與更舊版本改用完整 Installer', () =
   const document = announcementService.validateDocument(JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'announcement.json'), 'utf8'),
   ));
-  eq(document.announcements.length, 3);
+  eq(document.announcements.length, 4);
   const legacy = document.announcements.find((item) => item.id === 'installer-only-update-legacy');
   const electron = document.announcements.find((item) => item.id === 'installer-only-update-electron');
   const current = document.announcements.find((item) => item.id === 'installer-only-update-current');
+  const release105 = document.announcements.find((item) => item.id === 'release-v1.0.5');
   ok(legacy && electron && current);
   for (const notice of [legacy, electron, current]) {
     eq(notice.level, 'critical');
@@ -2014,6 +2015,13 @@ test('正式公告會強制 0.9.9.5 與更舊版本改用完整 Installer', () =
     ok(/Windows Installer/.test(notice.message));
     ok(!/portable/i.test(notice.message));
   }
+  ok(release105);
+  eq(release105.level, 'notice');
+  eq(release105.showOnce, true);
+  eq(release105.minVersion, '1.0.0');
+  eq(release105.maxVersion, '1.0.4');
+  ok(announcementService.versionMatches(release105, '1.0.4'));
+  ok(!announcementService.versionMatches(release105, '1.0.5'));
   ok(announcementService.versionMatches(legacy, '0.8.0'));
   ok(!announcementService.versionMatches(legacy, '0.8.1-pre.1'));
   ok(announcementService.versionMatches(electron, '0.8.1-pre.1'));
