@@ -61,6 +61,10 @@ function makeFakeLibraryStore(entries) {
   };
 }
 
+function makeFakeBgmPlaylist(ids) {
+  return { list: () => ids.slice() };
+}
+
 function fakeBuildTrackFromEntry(entry) {
   return { id: entry.id, title: entry.title, artist: entry.artist || '' };
 }
@@ -72,6 +76,7 @@ function makeService(overrides = {}) {
     store,
     savedPlaylists: overrides.savedPlaylists || makeFakeSavedPlaylists([]),
     libraryStore: overrides.libraryStore || makeFakeLibraryStore({}),
+    bgmPlaylist: overrides.bgmPlaylist || makeFakeBgmPlaylist([]),
     buildTrackFromEntry: fakeBuildTrackFromEntry,
     fetchImpl: overrides.fetchImpl,
     onSongRequest: overrides.onSongRequest || (() => {}),
@@ -155,6 +160,24 @@ test('中繼收到的 catalogTrackId 不在目前公開目錄裡時直接忽略�
   // 公開目錄裡真的有的那首，行為不受影響。
   service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'track1' } });
   assert.equal(received.length, 1);
+});
+
+test('中繼收到的 catalogTrackId 是 BGM 待機音樂時直接忽略，就算它技術上也在那份收藏歌單裡', () => {
+  const entries = {
+    track1: { id: 'track1', title: '公開的歌', artist: '', filename: 'track1.mp3' },
+    bgm1: { id: 'bgm1', title: '待機音樂', artist: '', filename: 'bgm1.mp3' },
+  };
+  const received = [];
+  const service = makeService({
+    savedPlaylists: makeFakeSavedPlaylists([{ id: 'pl1', trackIds: ['track1', 'bgm1'] }]),
+    libraryStore: makeFakeLibraryStore(entries),
+    bgmPlaylist: makeFakeBgmPlaylist(['bgm1']),
+    onSongRequest: (request) => received.push(request),
+  });
+  service.setCatalogPlaylistId('pl1');
+  service._handleMessage({ type: 'song-request', request: { catalogTrackId: 'bgm1' } });
+  assert.equal(received.length, 0, '觀眾不該有辦法點到 BGM 待機音樂: ');
+  assert.equal(service.getPendingRequests().length, 0);
 });
 
 test('approve()：從待處理清單移除並解析成完整 track，不自己寫入播放清單', () => {
@@ -343,6 +366,31 @@ test('_buildCatalog()：公開全部歌曲時讀取整個媒體庫，而非要�
     { id: 'a', title: '歌A', artist: '手A', duration: 120 },
     { id: 'b', title: '歌B', artist: '手B', duration: 90 },
   ]);
+});
+
+test('_buildCatalog()：BGM 待機音樂永遠不會出現在公開目錄裡，不管公開範圍是全部媒體庫還是特定收藏歌單', () => {
+  const entries = {
+    a: { id: 'a', title: '歌A', artist: '手A', duration: 120, filename: 'a.mp3' },
+    bgm1: { id: 'bgm1', title: '待機音樂', artist: '', duration: 200, filename: 'bgm1.mp3' },
+  };
+  const libraryStore = makeFakeLibraryStore(entries);
+  const bgmPlaylist = makeFakeBgmPlaylist(['bgm1']);
+
+  const allLibraryService = makeService({ libraryStore, bgmPlaylist });
+  allLibraryService.setCatalogPlaylistId(ALL_CATALOG_PLAYLIST_ID);
+  assert.deepEqual(allLibraryService._buildCatalog(), [{ id: 'a', title: '歌A', artist: '手A', duration: 120 }],
+    '公開全部媒體庫時，BGM 曲目要被排除: ');
+
+  // BGM 清單本身也可能被人手動加進某份收藏歌單（跟一般歌單同一套「只存 id」機制，
+  // 沒有東西技術上擋得住），排除規則不能只信任「來源是不是全部媒體庫」這個判斷。
+  const playlistService = makeService({
+    libraryStore,
+    bgmPlaylist,
+    savedPlaylists: makeFakeSavedPlaylists([{ id: 'pl1', trackIds: ['a', 'bgm1'] }]),
+  });
+  playlistService.setCatalogPlaylistId('pl1');
+  assert.deepEqual(playlistService._buildCatalog(), [{ id: 'a', title: '歌A', artist: '手A', duration: 120 }],
+    '公開特定收藏歌單時，就算 BGM 曲目混進那份歌單也要被排除: ');
 });
 
 test('WebSocket URL 不帶 secret，首包認證成功後才推送歌單快照', async () => {

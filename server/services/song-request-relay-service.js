@@ -20,6 +20,7 @@ const { createLogger } = require('../utils/logger');
 const defaultStore = require('./song-request-relay-store');
 const defaultSavedPlaylists = require('./saved-playlists');
 const defaultLibraryStore = require('./library-store');
+const defaultBgmPlaylist = require('./bgm-playlist');
 const { reconnectDelay, websocketCtor } = require('../utils/ws-reconnect');
 
 const log = createLogger('SongRequestRelay');
@@ -70,6 +71,7 @@ class SongRequestRelayService {
     store = defaultStore,
     savedPlaylists = defaultSavedPlaylists,
     libraryStore = defaultLibraryStore,
+    bgmPlaylist = defaultBgmPlaylist,
     buildTrackFromEntry,
     fetchImpl = fetch,
     onSongRequest = () => {},
@@ -84,6 +86,7 @@ class SongRequestRelayService {
     this.store = store;
     this.savedPlaylists = savedPlaylists;
     this.libraryStore = libraryStore;
+    this.bgmPlaylist = bgmPlaylist;
     this.buildTrackFromEntry = buildTrackFromEntry;
     this.fetchImpl = fetchImpl;
     this.onSongRequest = onSongRequest;
@@ -524,11 +527,19 @@ class SongRequestRelayService {
       : (playlist ? playlist.trackIds : []);
     if (!Array.isArray(source)) return [];
     const exists = this.libraryStore.getAudioExistsLookup ? this.libraryStore.getAudioExistsLookup() : () => true;
+    // BGM 待機音樂跟一般歌曲共用同一份媒體庫，但觀眾點歌絕對不該點到「主播開台前放的
+    // 背景音樂」——那不是可以唱的歌，被觀眾點到只會讓主播在直播中手忙腳亂處理一筆
+    // 莫名其妙的請求。用 Set 排除，不管來源是整個媒體庫還是特定收藏歌單都套用同一條規則
+    // （BGM 清單本身也可能被人手動加進某份收藏歌單，不能只靠「來源是全部媒體庫」判斷）。
+    const bgmIds = new Set(
+      typeof this.bgmPlaylist?.list === 'function' ? this.bgmPlaylist.list().map((id) => String(id)) : [],
+    );
     const tracks = [];
     for (const item of source) {
       if (tracks.length >= MAX_CATALOG_TRACKS) break;
       const entry = allLibrary ? item : this.libraryStore.getEntry(item);
       if (!entry) continue;
+      if (bgmIds.has(String(entry.id))) continue;
       // 只公開音檔還在本機、真的能立即排進佇列的歌，避免觀眾點到還要重新下載的項目。
       if (!entry.filename || !exists(entry.filename)) continue;
       tracks.push(sanitizeCatalogTrack(entry));
