@@ -20,7 +20,13 @@ function isLikelyVirtual(name) {
  * （例如伺服器只有 loopback，或所有介面都被防毒/VPN 軟體標成虛擬）。
  */
 function getLanIp() {
-  const interfaces = os.networkInterfaces();
+  let interfaces;
+  try {
+    interfaces = os.networkInterfaces() || {};
+  } catch (_) {
+    // 網卡列舉是輔助資訊，不應讓 /api/lan-info 或整個 server 因 OS 暫態失敗。
+    return null;
+  }
   let fallback = null;
   for (const [name, entries] of Object.entries(interfaces)) {
     for (const entry of entries || []) {

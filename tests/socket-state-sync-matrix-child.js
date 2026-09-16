@@ -233,7 +233,7 @@ async function run() {
   const authStore = require(path.join(root, 'server', 'services', 'auth-store'));
   const pin = 'matrix-test-pin';
   if (!authStore.setPin(pin).ok) fail('failed to seed matrix control PIN');
-  const { server, io, gracefulShutdown } = require(path.join(root, 'server', 'index'));
+  const { server, gracefulShutdown } = require(path.join(root, 'server', 'index'));
   const clients = [];
   let exitCode = 0;
   try {
@@ -332,9 +332,10 @@ async function run() {
     process.stdout.write(`${RESULT_MARKER}${JSON.stringify({ ok: false, error: error.message })}\n`);
   } finally {
     await Promise.all(clients.map((client) => client.close().catch(() => {})));
-    try { io.close(); } catch (_) { /* best effort */ }
     // index.js owns timers from Twitch/update services, so use its shutdown
-    // path instead of leaving this test child alive after the socket closes.
+    // path instead of leaving this test child alive after the socket closes。不可先自行
+    // io.close()：Socket.IO 已關閉後再次用 callback 形式 close，callback 在部分
+    // Windows runner 不會觸發，父測試就會在已輸出成功結果後仍等到 timeout。
     await wait(20);
     gracefulShutdown({ reason: 'state-sync-matrix-test', exitCode });
   }

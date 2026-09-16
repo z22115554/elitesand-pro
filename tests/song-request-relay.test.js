@@ -345,7 +345,7 @@ test('_buildCatalog()：公開全部歌曲時讀取整個媒體庫，而非要�
   ]);
 });
 
-test('連線成功後立即推送歌單快照，訊息裡不含檔名或網址', async () => {
+test('WebSocket URL 不帶 secret，首包認證成功後才推送歌單快照', async () => {
   const entries = { a: { id: 'a', title: '歌A', artist: '手A', duration: 60, filename: 'a.mp3' } };
   const sent = [];
   class FakeSocket {
@@ -362,10 +362,17 @@ test('連線成功後立即推送歌單快照，訊息裡不含檔名或網址',
   service.start();
   await service.enable();
   service.ws.onopen();
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].type, 'catalog');
-  assert.deepEqual(sent[0].tracks, [{ id: 'a', title: '歌A', artist: '手A', duration: 60 }]);
-  assert.ok(!JSON.stringify(sent[0]).includes('a.mp3'), '快照不可外洩本機檔名');
+  assert.equal(service.ws.url, 'wss://relay.example.com/api/relay-v2/slug1');
+  assert.ok(!service.ws.url.includes('secret'), '長效密鑰不可出現在 URL/query string');
+  assert.deepEqual(sent, [{ type: 'auth', secret: 'sec1' }]);
+  assert.equal(service.getStatus().connected, false, 'Worker 尚未確認認證前不可提早顯示已連線');
+
+  service.ws.onmessage({ data: JSON.stringify({ type: 'auth-ok' }) });
+  assert.equal(service.getStatus().connected, true);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1].type, 'catalog');
+  assert.deepEqual(sent[1].tracks, [{ id: 'a', title: '歌A', artist: '手A', duration: 60 }]);
+  assert.ok(!JSON.stringify(sent[1]).includes('a.mp3'), '快照不可外洩本機檔名');
   service.stop();
 });
 
@@ -382,10 +389,29 @@ test('連線被另一個桌面端接手時停止自動重連，避免兩個程�
   service.start();
   await service.enable();
   service.ws.onopen();
+  service.ws.onmessage({ data: JSON.stringify({ type: 'auth-ok' }) });
   service.ws.onclose({ code: 4001, reason: 'replaced by new connection' });
   assert.equal(service.getStatus().reconnectSuppressed, true);
   assert.equal(service.reconnectTimer, null);
   service.stop();
+});
+
+test('Worker v2 只在首包驗證成功後標記桌面連線，並隔離舊版 query 認證路徑', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../cloud/song-request-relay/src/room-do.js'), 'utf8');
+  const workerSource = fs.readFileSync(path.join(__dirname, '../cloud/song-request-relay/src/worker.js'), 'utf8');
+  assert.ok(workerSource.includes("protocolVersion === 2 ? '/relay-v2' : `/relay${url.search}`"),
+    'v2 轉送路徑不可帶 query；舊版 query 相容只能留在 v1 路徑');
+  assert.ok(source.includes('_handleLegacyRelayUpgrade(request, url)')
+    && source.includes("url.pathname === '/relay-v2'"),
+  '舊版 query 認證與新版首包認證必須使用不同路徑，才能平滑部署');
+  assert.ok(source.includes("payload?.type === 'auth'")
+    && source.includes('timingSafeEqualHex(providedHash, this.secretHash)')
+    && source.includes("ws.serializeAttachment({ authenticated: true })")
+    && source.includes("type: 'auth-ok'"),
+  'Worker 必須以首個 frame 驗證 secret，成功後才標記 authenticated 並回覆 auth-ok');
+  const verifyAt = source.indexOf('timingSafeEqualHex(providedHash, this.secretHash)');
+  const replaceCallAt = source.indexOf('this._replaceAuthenticatedDesktop(ws)', verifyAt);
+  assert.ok(verifyAt >= 0 && replaceCallAt > verifyAt, '未認證 socket 不可先踢掉目前桌面連線');
 });
 
 test('rotateLink()：重新註冊拿到新 slug/secret，沿用啟用狀態', async () => {

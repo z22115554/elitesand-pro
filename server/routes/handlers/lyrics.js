@@ -128,6 +128,10 @@ function registerLyricsHandlers(io, socket, ctx) {
   // ─── 時間偏移控制 ───
 
   socket.on('offset:adjust', (data) => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      log.warn('offset:adjust 收到無效 payload');
+      return;
+    }
     const { trackId, delta } = data;
 
     // 驗證 trackId 為字串
@@ -164,6 +168,10 @@ function registerLyricsHandlers(io, socket, ctx) {
   });
 
   socket.on('offset:set', (data) => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      log.warn('offset:set 收到無效 payload');
+      return;
+    }
     const { trackId, offset } = data;
 
     // 驗證 trackId 為字串

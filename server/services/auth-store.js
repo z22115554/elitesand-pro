@@ -92,8 +92,11 @@ function setPin(newPin, currentPin) {
   }
   const salt = crypto.randomBytes(SALT_BYTES).toString('hex');
   const hash = hashPin(newPin, salt);
-  cached = { hash, salt };
-  if (!authDiskStore.save(cached)) return { ok: false, message: 'PIN 資料寫入失敗，請檢查資料夾權限或版本。' };
+  const candidate = { hash, salt };
+  // 先持久化、成功後才切換記憶體狀態。否則磁碟滿／權限錯誤時 API 雖回失敗，
+  // 當前程序卻已接受新 PIN，重啟後又跳回舊 PIN，形成兩套互相矛盾的狀態。
+  if (!authDiskStore.save(candidate)) return { ok: false, message: 'PIN 資料寫入失敗，請檢查資料夾權限或版本。' };
+  cached = candidate;
   log.info('PIN 已設定/更新');
   return { ok: true };
 }

@@ -50,19 +50,12 @@ const ALLOW_FILES = [
   'LICENSE',
   'EULA.txt',
   'THIRD-PARTY-NOTICES.txt',
+  'announcement.json',
   '.gitignore',
 ];
 
-// ─── 公開倉自己管理、絕不可被本腳本刪除的檔案 ───
-// 公開倉（z22115554/elitesand-pro）同時是發行倉：它上面有一些不來自本倉、
-// 由那邊直接維護的檔案。本腳本會刪除「目標倉有、白名單沒有」的檔案，若不特別
-// 保護，第一次同步就會把它們清掉。
-// announcement.json 是程式每 30 分鐘抓一次的公告來源
-// （raw.githubusercontent.com/.../main/announcement.json，見 config.example.js），
-// 刪掉等於讓所有現有使用者的程式內公告直接掛掉。
-const PRESERVE_IN_TARGET = [
-  'announcement.json',
-];
+// 公告內容由私有倉當單一來源，跟版本一起同步，避免兩個 repo 各自維護後漂移。
+const PRESERVE_IN_TARGET = [];
 
 // ─── 無論如何都不複製（第二道防線，就算 ALLOW 寫太寬也擋得住）───
 // 比對的是相對於 repo root 的 POSIX 路徑。

@@ -358,7 +358,11 @@ class SongRequestRelayService {
     let socket;
     try {
       const WebSocketCtor = this.createWebSocket();
-      const url = `${wsUrlFromHttp(this.config.songRequestRelayUrl)}/api/relay/${this.state.publicSlug}?secret=${encodeURIComponent(this.state.secret)}`;
+      // 憑證不可放 URL：query string 可能被 Cloudflare／proxy／錯誤追蹤記錄。
+      // Upgrade 成功後以第一個 WebSocket frame 認證，Worker 回 auth-ok 前不視為已連線。
+      // v2 是首包認證協定；舊版桌面端仍可暫時走 /api/relay，避免 Worker 部署瞬間
+      // 讓已發佈版本全部斷線。新版本不再把 secret 放進 URL。
+      const url = `${wsUrlFromHttp(this.config.songRequestRelayUrl)}/api/relay-v2/${this.state.publicSlug}`;
       socket = new WebSocketCtor(url);
     } catch (err) {
       log.warn(`公開點歌頁連線建立失敗：${err.message}`);
@@ -376,18 +380,31 @@ class SongRequestRelayService {
     if (typeof this.connectWatchdog.unref === 'function') this.connectWatchdog.unref();
 
     socket.onopen = () => {
-      this._clearConnectWatchdog();
-      this.connecting = false;
-      this.connected = true;
-      this.reconnectAttempt = 0;
-      this._emitStatus();
-      this._pushCatalogNow();
-      log.info(`公開點歌頁中繼已連線（${this.state.publicSlug}）`);
+      try {
+        socket.send(JSON.stringify({ type: 'auth', secret: this.state.secret }));
+      } catch (err) {
+        log.warn(`公開點歌頁認證送出失敗：${err.message}`);
+        this._teardownSocket();
+        this._scheduleReconnect();
+      }
     };
 
     socket.onmessage = (event) => {
       let payload;
       try { payload = JSON.parse(String(event?.data ?? '')); } catch (_) { return; }
+      if (payload?.type === 'auth-ok') {
+        if (socket !== this.ws || this.connected) return;
+        this._clearConnectWatchdog();
+        this.connecting = false;
+        this.connected = true;
+        this.reconnectAttempt = 0;
+        this._emitStatus();
+        this._pushCatalogNow();
+        log.info(`公開點歌頁中繼已完成認證（${this.state.publicSlug}）`);
+        return;
+      }
+      // 未完成握手前不處理任何應用訊息。
+      if (!this.connected) return;
       this._handleMessage(payload);
     };
 

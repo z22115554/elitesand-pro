@@ -23,7 +23,16 @@ function localHostnames() {
     names.add(hostname);
     names.add(`${hostname}.local`);
   }
-  for (const entries of Object.values(os.networkInterfaces())) {
+  // 部分 VPN／防毒網路 filter、受限容器或 Windows 網卡切換期間，libuv 可能讓
+  // networkInterfaces() 直接拋出 ERR_SYSTEM_ERROR。這段在 server require 階段執行，
+  // 若不降級會讓整個程式連 loopback 模式都無法啟動。
+  let interfaces = {};
+  try {
+    interfaces = os.networkInterfaces() || {};
+  } catch (_) {
+    // 靜態的 localhost／loopback allowlist 已在上方加入；LAN 位址稍後恢復即可。
+  }
+  for (const entries of Object.values(interfaces)) {
     for (const entry of entries || []) {
       if (entry && entry.address) names.add(normalizeHost(entry.address));
     }

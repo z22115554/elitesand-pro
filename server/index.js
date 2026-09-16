@@ -144,6 +144,20 @@ const SIDE_EFFECT_GET_PREFIXES = [
   '/api/announcements',    // ?force=1 強制抓遠端公告
   '/api/update-check',     // ?force=1 強制外連
 ];
+const EXPENSIVE_GET_COOLDOWN_MS = 5000;
+const EXPENSIVE_GET_MAX_KEYS = 512;
+const expensiveGetLastSeen = new Map();
+
+function isForcedExpensiveGet(req) {
+  if (req.method !== 'GET') return false;
+  const force = req.query?.force === '1' || req.query?.force === 'true';
+  const refresh = req.query?.refresh === '1' || req.query?.refresh === 'true';
+  return (force && [
+    '/api/system-check', '/api/ytdlp/check', '/api/announcements', '/api/update-check',
+  ].some((prefix) => req.path.startsWith(prefix)))
+    || (refresh && req.path.startsWith('/api/fonts'));
+}
+
 app.use((req, res, next) => {
   const protectedRequest = req.path.startsWith('/api/')
     && (req.method !== 'GET' || SIDE_EFFECT_GET_PREFIXES.some((prefix) => req.path.startsWith(prefix)));
@@ -158,6 +172,29 @@ app.use((req, res, next) => {
     } catch (_) { return res.status(403).json({ error: '操作來源無效', code: 'INVALID_ORIGIN' }); }
   }
   next();
+});
+
+// 上面的 Origin/Sec-Fetch-Site 防線只約束瀏覽器；同 LAN 的 raw HTTP client 可以不帶
+// 這些 header。對真的會 spawn、外連或掃描全系統字體的強制刷新再加 per-client cooldown，
+// 避免一台裝置在直播期間反覆製造昂貴工作。正常讀 cache 的 GET 不受影響。
+app.use((req, res, next) => {
+  if (!isForcedExpensiveGet(req)) return next();
+  const now = Date.now();
+  const client = String(req.ip || req.socket?.remoteAddress || 'unknown');
+  const key = `${client}:${req.path}`;
+  const last = expensiveGetLastSeen.get(key) || 0;
+  if (now - last < EXPENSIVE_GET_COOLDOWN_MS) {
+    const retryAfter = Math.max(1, Math.ceil((EXPENSIVE_GET_COOLDOWN_MS - (now - last)) / 1000));
+    res.set('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: '操作過於頻繁，請稍後再試', code: 'RATE_LIMITED' });
+  }
+  expensiveGetLastSeen.delete(key);
+  expensiveGetLastSeen.set(key, now);
+  if (expensiveGetLastSeen.size > EXPENSIVE_GET_MAX_KEYS) {
+    const oldestKey = expensiveGetLastSeen.keys().next().value;
+    if (oldestKey) expensiveGetLastSeen.delete(oldestKey);
+  }
+  return next();
 });
 
 // ─── Request Logging Middleware ───

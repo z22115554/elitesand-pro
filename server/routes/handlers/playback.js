@@ -200,12 +200,18 @@ function registerPlaybackHandlers(io, socket, ctx) {
     // 面板送物件帶 trackId；deck-commands 等舊來源可能仍送純數字，兩者都接受。
     const time = (payload && typeof payload === 'object') ? payload.time : payload;
     const trackId = (payload && typeof payload === 'object') ? payload.trackId : undefined;
+    if (typeof time !== 'number' || !Number.isFinite(time)) {
+      log.warn(`play:seek 收到無效時間: ${time}`);
+      return;
+    }
     // 快速切歌時，拖曳中殘留的舊 seek 訊息可能晚到；trackId 對不上目前歌曲就丟棄，
     // 避免把舊歌的秒數蓋到新歌的 playState.currentTime 上（同「播放時補羅馬化」用的判斷）。
     if (trackId && playState.currentTrack && trackId !== playState.currentTrack.id) return;
-    playState.currentTime = time;
+    const duration = Number(playState.currentTrack?.duration);
+    const clampedTime = Math.max(0, Number.isFinite(duration) && duration > 0 ? Math.min(time, duration) : time);
+    playState.currentTime = clampedTime;
     playState.lastStateUpdateTimestamp = Date.now();
-    io.emit('play:seek', time);
+    io.emit('play:seek', clampedTime);
   });
 
   socket.on('play:prev', () => {
@@ -243,12 +249,18 @@ function registerPlaybackHandlers(io, socket, ctx) {
   // ─── 歌詞同步管線（純轉播）───
 
   socket.on('lyrics:sync', (data) => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)
+      || typeof data.currentTime !== 'number' || !Number.isFinite(data.currentTime)) {
+      log.warn('lyrics:sync 收到無效 payload');
+      return;
+    }
     // 同 play:seek：trackId 對不上目前歌曲的舊訊息（快速切歌時殘留）整包丟棄，不落地也不轉播，
     // 否則顯示端會跟著跳到不屬於目前這首歌的秒數。
     if (data?.trackId && playState.currentTrack && data.trackId !== playState.currentTrack.id) return;
-    playState.currentTime = data.currentTime;
+    const currentTime = Math.max(0, data.currentTime);
+    playState.currentTime = currentTime;
     playState.lastStateUpdateTimestamp = Date.now();
-    io.emit('lyrics:sync', data);
+    io.emit('lyrics:sync', currentTime === data.currentTime ? data : { ...data, currentTime });
   });
 
   // 羅馬化歌詞即時更新（來自 LyricsEngine 後台處理）

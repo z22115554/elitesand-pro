@@ -109,12 +109,18 @@ function sanitizeManualLyrics(value) {
   };
 }
 
+function safeMediaBasename(value) {
+  // persisted/imported state 可能來自另一個 OS；POSIX path.basename 不認反斜線，
+  // Windows path.basename 也不該被拿來解析 POSIX 絕對路徑。先統一分隔符再取檔名。
+  return path.posix.basename(text(value, 500).replace(/\\/g, '/'));
+}
+
 function sanitizeTrack(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const id = text(value.id, 200).trim();
   const title = text(value.title, 500).trim();
   if (!id || !title) return null;
-  const filename = value.filename ? path.basename(text(value.filename, 500)) : null;
+  const filename = value.filename ? safeMediaBasename(value.filename) : null;
   const lyricsType = ['lrc', 'krc', 'srt', 'txt'].includes(value.lyricsType) ? value.lyricsType : null;
   const out = {
     id,
@@ -160,8 +166,8 @@ function sanitizeTrack(value) {
     manualLyrics: sanitizeManualLyrics(value.manualLyrics),
     // AI 人聲分離（實驗性功能，見 CLAUDE.md「AI 人聲分離」）：分離完成後的伴奏/人聲檔名，
     // 跟 filename 同樣只存 basename，不信任路徑。null＝尚未分離或分離失敗。
-    vocalsFile: value.vocalsFile ? path.basename(text(value.vocalsFile, 500)) : null,
-    instrumentalFile: value.instrumentalFile ? path.basename(text(value.instrumentalFile, 500)) : null,
+    vocalsFile: value.vocalsFile ? safeMediaBasename(value.vocalsFile) : null,
+    instrumentalFile: value.instrumentalFile ? safeMediaBasename(value.instrumentalFile) : null,
     separationStatus: ['processing', 'done', 'failed'].includes(value.separationStatus)
       ? value.separationStatus : 'none',
   };

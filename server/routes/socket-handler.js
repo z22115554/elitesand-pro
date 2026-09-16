@@ -63,6 +63,9 @@ const READ_ONLY_EVENTS = new Set([
 ]);
 // font-probe:report 每個 socket 的最小間隔（防 PIN-exempt 的 display 灌事件）。
 const FONT_PROBE_REPORT_MIN_INTERVAL_MS = 5000;
+// Recovery payload 可接近 Socket.IO 的 1 MiB 上限；每個連線最多每秒取一次，
+// 正常重連不受影響，也避免壞 client 在 event loop 上反覆序列化 2000 首歌。
+const STATE_REQUEST_MIN_INTERVAL_MS = 1000;
 const CORE_USAGE_EVENTS = new Set([
   'play:track', 'play:toggle', 'play:seek', 'play:prev', 'play:next', 'play:stop',
   'playlist:update', 'playlist:add', 'playlist:insert-next', 'playlist:remove', 'playlist:reorder', 'playlist:import',
@@ -399,6 +402,7 @@ module.exports = function socketHandler(io, {
   io.on('connection', (socket) => {
     const counts = getClientCounts();
     log.info(`新連線: ${socket.id} (當前連線: ${counts.total})`);
+    let lastStateRequestAt = 0;
 
     // 疊加層可匿名收資料，但永遠只讀。即使攻擊者冒充 display，也無法呼叫任何寫入事件。
     if (socket.readOnly && typeof socket.use === 'function') {
@@ -499,6 +503,12 @@ module.exports = function socketHandler(io, {
 
     // ─── OBS 顯示頁面狀態恢復請求 ───
     socket.on('state:request', () => {
+      const now = Date.now();
+      if (now - lastStateRequestAt < STATE_REQUEST_MIN_INTERVAL_MS) {
+        log.warn(`狀態恢復請求過於頻繁，已忽略: ${socket.id}`);
+        return;
+      }
+      lastStateRequestAt = now;
       log.info(`狀態恢復請求: ${socket.id}`);
       socket.emit('state:recovery', socket.readOnly ? ctx.getReadOnlyState() : ctx.getFullRecoveryState());
     });

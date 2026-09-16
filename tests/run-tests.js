@@ -6236,6 +6236,10 @@ test('offset:adjust 一次到位的大偏移，跟分好幾次小幅微調的累
   };
   registerLyricsHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, ctx);
 
+  events.get('offset:adjust')(null);
+  events.get('offset:set')(null);
+  eq(trackOffsets.size, 0, '畸形 offset payload 不可拋例外或寫入狀態：');
+
   // 模擬「對齊第一句」：MV 前奏 33 秒，一次送出 -33000ms 的 delta。
   events.get('offset:adjust')({ trackId: 'mv-long-intro', delta: -33000 });
   eq(trackOffsets.get('mv-long-intro'), -33000, '單次大偏移不該被砍到只剩 10s: ');
@@ -6443,9 +6447,17 @@ test('播放秒數只留在記憶體，暫停時只保存目前歌曲狀態', ()
   eq(playState.currentTime, 12.8);
   eq(persisted, 0, '高頻歌詞同步只能留在記憶體，不可排程寫磁碟：');
 
+  events.get('lyrics:sync')(null);
+  events.get('lyrics:sync')({ currentTime: Infinity, trackId: 'recovery-song' });
+  eq(playState.currentTime, 12.8, '畸形 lyrics:sync 不可拋例外或污染播放時鐘：');
+
   events.get('play:seek')({ time: 88, trackId: 'recovery-song' });
   eq(playState.currentTime, 88);
   eq(persisted, 0, '使用者拖曳位置也不保存歌曲內秒數：');
+  events.get('play:seek')({ time: 'not-a-number', trackId: 'recovery-song' });
+  eq(playState.currentTime, 88, '字串 seek 必須忽略：');
+  events.get('play:seek')({ time: -20, trackId: 'recovery-song' });
+  eq(playState.currentTime, 0, '負數 seek 必須夾到 0：');
 
   events.get('play:toggle')(false);
   eq(persisted, 1, '暫停時只保存目前歌曲與已唱狀態，不保存秒數：');
@@ -7771,6 +7783,46 @@ test('Socket Origin：同源 localhost/私有 IP 通過，外部網站拒絕', (
   ok(socketOrigin.isAllowedSocketRequest({ headers: { host: 'localhost:3000' } }), 'OBS/CLI 無 Origin 應允許: ');
 });
 
+test('網卡列舉拋錯時仍可載入 Origin 防線，LAN 資訊安全降級為 null', () => {
+  const script = [
+    "const os=require('os');",
+    "os.networkInterfaces=()=>{throw Object.assign(new Error('fixture failure'),{code:'ERR_SYSTEM_ERROR'});};",
+    "const origin=require(process.argv[1]);",
+    "const lan=require(process.argv[2]);",
+    "process.stdout.write(JSON.stringify({loopback:origin.isTrustedHostname('127.0.0.1'),lan:lan.getLanIp()}));",
+  ].join('');
+  const result = require('child_process').spawnSync(process.execPath, [
+    '-e', script,
+    path.join(__dirname, '../server/utils/socket-origin.js'),
+    path.join(__dirname, '../server/utils/lan-info.js'),
+  ], { encoding: 'utf8' });
+  eq(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  eq(payload.loopback, true);
+  eq(payload.lan, null);
+});
+
+test('PIN 保存失敗時維持舊的記憶體憑證，不接受未落盤的新 PIN', () => {
+  const script = [
+    "const crypto=require('crypto');const Module=require('module');",
+    "const salt='00112233445566778899aabbccddeeff';",
+    "const old={salt,hash:crypto.scryptSync('old-pin',Buffer.from(salt,'hex'),32).toString('hex')};",
+    "const original=Module._load;Module._load=function(req,parent,isMain){",
+    "if(req==='./json-store'&&parent?.filename?.endsWith('auth-store.js'))return{createJsonStore:()=>({load:()=>old,save:()=>false,remove:()=>true})};",
+    "return original.apply(this,arguments);};",
+    "const auth=require(process.argv[1]);const result=auth.setPin('new-pin','old-pin');",
+    "process.stdout.write(JSON.stringify({result,old:auth.verifyPin('old-pin'),newPin:auth.verifyPin('new-pin')}));",
+  ].join('');
+  const result = require('child_process').spawnSync(process.execPath, [
+    '-e', script, path.join(__dirname, '../server/services/auth-store.js'),
+  ], { encoding: 'utf8' });
+  eq(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  eq(payload.result.ok, false);
+  eq(payload.old, true);
+  eq(payload.newPin, false);
+});
+
 test('Track schema：移除未知欄位、危險 URL，並限制播放清單長度', () => {
   const malicious = {
     id: 'x', title: '<img src=x onerror=alert(1)>', artist: '<script>x</script>',
@@ -8045,6 +8097,10 @@ test('Socket 角色：display 只掛唯讀事件，controller 才有寫入事件
   ok(overlay.events.has('state:request'));
   ok(!overlay.events.has('play:toggle'));
   ok(!overlay.events.has('library:clear'));
+  overlay.events.get('state:request')();
+  overlay.events.get('state:request')();
+  eq(overlay.emitted.filter((item) => item.event === 'state:recovery').length, 1,
+    '同一 socket 的大型 recovery state 必須有 cooldown：');
 
   const authStore = require('../server/services/auth-store');
   const testPin = 'role-test-pin';
@@ -8212,6 +8268,11 @@ test('HTTP 安全回歸：標頭存在、版本標頭隱藏、過大 JSON 回 41
         if (sameOrigin.statusCode !== 200) process.exitCode = 8;
         const noHeader = await request({ host: '127.0.0.1', port, path: '/api/deck/state' });
         if (noHeader.statusCode !== 200) process.exitCode = 9;
+        // 無 browser header 的 LAN/CLI client 仍可呼叫強制檢查，但不可無限連發昂貴工作。
+        const forcedCheck = await request({ host: '127.0.0.1', port, path: '/api/system-check?force=1' });
+        const repeatedCheck = await request({ host: '127.0.0.1', port, path: '/api/system-check?force=1' });
+        if (forcedCheck.statusCode !== 200 || repeatedCheck.statusCode !== 429
+          || !repeatedCheck.headers['retry-after']) process.exitCode = 14;
         const body = JSON.stringify({ value: 'x'.repeat(2.1 * 1024 * 1024) });
         const large = await request({ host: '127.0.0.1', port, path: '/api/auth/verify', method: 'POST',
           headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, body);
@@ -9191,7 +9252,10 @@ test('R2-2 2000-song playlist stays compact across all real Socket roles includi
     ], {
       cwd: path.join(__dirname, '..'),
       encoding: 'utf8',
-      timeout: 20000,
+      // Windows runner 需要把 2000 首 fixture 的 state/library 原子落盤後才會退出；
+      // 慢速磁碟上收尾曾超過 20 秒，但功能結果早已成功輸出。保留外層保底，僅把
+      // 它拉到高於 production graceful shutdown 與這份大型 fixture 的合理總時間。
+      timeout: 45000,
       windowsHide: true,
     });
     ok(!result.error || result.error.code !== 'ETIMEDOUT', `state-sync matrix timed out: ${result.stdout}\n${result.stderr}`);
@@ -12292,6 +12356,20 @@ test('README 連到的本機檔案，都必須在對外同步檢查的清單裡'
   eq(missing.length, 0,
     `這些檔案 README 連得到、使用者會點，但不在對外同步清單裡（公開倉會漂掉）：${missing.join('、')}`);
   ok(FILES.includes('README.md'), 'README.md 自己也必須在同步清單裡：');
+});
+
+test('announcement.json 由私有倉同步到公開倉，不可再由兩邊各自維護', () => {
+  const publishSource = fs.readFileSync(path.join(__dirname, '../tools/publish-oss.js'), 'utf8');
+  const allowBlock = publishSource.slice(
+    publishSource.indexOf('const ALLOW_FILES = ['),
+    publishSource.indexOf('];', publishSource.indexOf('const ALLOW_FILES = [')) + 2,
+  );
+  const preserveBlock = publishSource.slice(
+    publishSource.indexOf('const PRESERVE_IN_TARGET = ['),
+    publishSource.indexOf('];', publishSource.indexOf('const PRESERVE_IN_TARGET = [')) + 2,
+  );
+  ok(allowBlock.includes("'announcement.json'"), '公告必須列入公開同步白名單：');
+  ok(!preserveBlock.includes("'announcement.json'"), '公告不可再保留公開倉自己的版本：');
 });
 
 // ─── 打包契約：server 端 require 的 public/js 同構模組不可被 bundler 刪掉 ───
