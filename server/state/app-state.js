@@ -16,6 +16,7 @@ const setlistStyleSchema = require('../../public/js/setlist-style-schema');
 const twitchReplySettings = require('../../public/js/twitch-reply-settings');
 const twitchRequestSettings = require('../../public/js/twitch-request-settings');
 const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
+const bgmSettingsSchema = require('../services/bgm-settings');
 const obsLocale = require('../utils/obs-locale');
 const { createLogger } = require('../utils/logger');
 const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
@@ -123,6 +124,13 @@ function createAppState(io) {
     twitchReplySettings: twitchReplySettings.getDefaults(),
     twitchRequestSettings: twitchRequestSettings.getDefaults(),
     twitchRewardSettings: twitchRewardSettings.getDefaults(),
+    // BGM 待機音樂自動暫停/恢復（仿歌回救星雙軌切換）。enabled/volume/兩個延遲是使用者
+    // 設定、可持久化；playing 是面板實際播放狀態的唯讀回報，只給其他端顯示用，不持久化
+    // （重開程式時「上次是否在播」沒有意義，一律回到 false，見下方 restore／persist 兩處）。
+    // 兩個延遲：使用者實測「唱歌暫停/播完後 BGM 立刻接回來」太突兀，可能還在調整麥克風、
+    // 準備下一首；不知道競品（歌回救星）確切怎麼算這段空白，所以直接做成可調參數，
+    // 不是硬編碼一個猜測值。
+    bgmSettings: { enabled: false, playing: false, ...bgmSettingsSchema.DEFAULTS },
   };
 
   SETLIST_LAYOUTS.forEach((layout) => {
@@ -324,6 +332,14 @@ function createAppState(io) {
     if (saved.twitchRewardSettings && typeof saved.twitchRewardSettings === 'object') {
       playState.twitchRewardSettings = twitchRewardSettings.normalizeSettings(saved.twitchRewardSettings);
     }
+    if (saved.bgmSettings && typeof saved.bgmSettings === 'object') {
+      // playing 永遠回到 false：那是面板的即時回報，不是「上次結束時的狀態」。
+      playState.bgmSettings = {
+        enabled: saved.bgmSettings.enabled === true,
+        playing: false,
+        ...bgmSettingsSchema.clampSettings(saved.bgmSettings, bgmSettingsSchema.DEFAULTS),
+      };
+    }
 
     const savedPlayback = saved.playback && typeof saved.playback === 'object'
       ? saved.playback
@@ -416,6 +432,8 @@ function createAppState(io) {
       twitchReplySettings: playState.twitchReplySettings,
       twitchRequestSettings: playState.twitchRequestSettings,
       twitchRewardSettings: playState.twitchRewardSettings,
+      // 只存 enabled；playing 是即時狀態，見上方 restore 處的說明。
+      bgmSettings: { enabled: playState.bgmSettings.enabled, ...bgmSettingsSchema.clampSettings(playState.bgmSettings) },
     }), callback);
   }
 

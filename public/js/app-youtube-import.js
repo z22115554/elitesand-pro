@@ -868,6 +868,7 @@
         assessment: options.assessment || null,
         autoSeparate: options.autoSeparate === true,
         isBatch: options.isBatch === true,
+        skipPlaylistInsert: options.skipPlaylistInsert === true,
         status: 'queued', stage: '等待中', percent: 0, resolve, reject, createdAt: Date.now(),
       };
       ytImportQueue.push(job);
@@ -936,7 +937,16 @@
           });
           data = await res.json();
         }
-        if (res.ok && data.success && data.track) {
+        // BGM 匯入：只要下載進媒體庫、不進目前播放清單／不自動載入待命——BGM 是旁路
+        // 待機清單，跟正在唱的歌完全分開（鐵則：不可污染 playState.playlist）。
+        if (res.ok && data.success && data.track && job.skipPlaylistInsert) {
+          updateJob(job, {
+            status: 'completed', stage: '已完成', completedPlacement: 'import.placement.added',
+            completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '',
+          });
+          ok++;
+          job.resolve(data.track);
+        } else if (res.ok && data.success && data.track) {
           let placement = null;
           if (job.replaceTrackId) {
             const index = state.playlist.findIndex((track) => track.id === job.replaceTrackId);

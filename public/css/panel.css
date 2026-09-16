@@ -886,6 +886,17 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .public-request-catalog-empty .field-hint { margin: 0 0 9px; }
 .field-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-dim); margin-bottom: 7px; }
 
+.bgm-transport-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.bgm-now-playing { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 13px; }
+.bgm-transport-buttons { display: flex; gap: 8px; flex: 0 0 auto; }
+.bgm-import-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.bgm-import-row .input { flex: 1 1 auto; min-width: 0; }
+.bgm-track-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.bgm-track-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-raised); }
+.bgm-track-item.active { border-color: color-mix(in srgb, var(--accent) 70%, var(--border)); }
+.bgm-track-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bgm-track-empty { padding: 42px 16px; color: var(--text-faint); text-align: center; border: 1px dashed var(--border); border-radius: var(--r-md); list-style: none; }
+
 .twitch-management-modal .modal-card { width: 96vw; max-width: 1320px; height: 90vh; max-height: 90vh; }
 .twitch-management-head { flex: none; gap: 14px; }
 .twitch-management-head > div:first-child { min-width: 0; }
@@ -1472,6 +1483,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .lib-playlist-popover label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 13px; cursor: pointer; user-select: none; }
 .lib-playlist-popover label:hover { background: var(--bg-hover); }
 .lib-playlist-popover label span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-playlist-popover-divider { border: none; border-top: 1px solid var(--border); margin: 4px 2px; }
 
 /* AI 人聲分離：分離中的進度條跟 nav.js/app-youtube-import.js 的 .work-item-progress 同一套
    「細長進度條 + --work-progress CSS 變數」寫法，不是另外發明的元件。 */

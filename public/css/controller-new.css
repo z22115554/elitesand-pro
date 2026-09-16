@@ -113,6 +113,13 @@ body.controller {
 /* 開關行 */
 .ctrl-switch-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
 
+/* BGM 狀態小標籤（比照桌面面板 .twitch-status-chip 的樣式概念，這個檔案沒有共用 panel.css） */
+#ctrl-bgm-status { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--text-faint); }
+#ctrl-bgm-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+#ctrl-bgm-status[data-state="on"]::before { background: var(--success, #2ecc71); }
+#ctrl-bgm-status[data-state="off"]::before { background: var(--danger, #e74c3c); }
+#ctrl-bgm-status[data-state="muted"]::before { background: var(--warning, #f1c40f); }
+
 /* 播放清單摺疊 */
 .ctrl-playlist-toggle {
   width: 100%; display: flex; align-items: center; justify-content: space-between;

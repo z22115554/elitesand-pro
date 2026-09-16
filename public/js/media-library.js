@@ -69,6 +69,7 @@
   // 儲存歌單（伺服器 data/playlists.json；socket savedPlaylists:*）。
   // 歌單只是媒體庫 id 的有序集合，選中某個歌單時清單依歌單順序顯示、排序選單停用。
   let savedPlaylists = [];
+  let bgmTrackIds = []; // BGM 清單目前的完整成員（原始 id，跟 saved playlists 分開管理）
   let activePlaylistId = null;
 
   // 收到伺服器清單→存快取後套用目前的搜尋/排序再渲染
@@ -845,6 +846,15 @@
     SocketClient.sendWithCallback('savedPlaylists:get', null, (list) => applySavedPlaylists(list || []));
   }
 
+  // BGM 清單成員（見 app-bgm.js）：只在這裡讀成員關係決定「加入歌單」小面板的勾選狀態，
+  // 不碰實際播放——那完全是 app-bgm.js 自己的事。
+  function refreshBgmMembership() {
+    if (!SocketClient.connected()) return;
+    SocketClient.sendWithCallback('bgm:list', null, (result) => {
+      bgmTrackIds = Array.isArray(result?.trackIds) ? result.trackIds : [];
+    });
+  }
+
   function showNewForm(show) {
     if (!newForm) return;
     newForm.hidden = !show;
@@ -1003,12 +1013,17 @@
 
   function openPlaylistPopover(item, anchor) {
     closePlaylistPopover();
-    if (!savedPlaylists.length) { toast(tx('library.playlists.noneYet'), 'info'); return; }
     const pop = document.createElement('div');
     pop.className = 'lib-playlist-popover';
     pop.setAttribute('role', 'dialog');
     pop.setAttribute('aria-label', tx('library.playlists.addTo'));
     const key = String(item.id);
+    if (!savedPlaylists.length) {
+      const empty = document.createElement('p');
+      empty.className = 'field-hint m-0';
+      empty.textContent = tx('library.playlists.noneYet');
+      pop.appendChild(empty);
+    }
     for (const p of savedPlaylists) {
       const label = document.createElement('label');
       const cb = document.createElement('input');
@@ -1030,6 +1045,31 @@
       label.appendChild(text);
       pop.appendChild(label);
     }
+
+    // BGM 待機清單：跟收藏歌單分開管理，但共用同一個「加入歌單」入口——這是使用者
+    // 從媒體庫把已下載的歌重新加回 BGM 清單（例如刪掉又想加回來）唯一的路徑，
+    // 不需要重新匯入一次。
+    const divider = document.createElement('hr');
+    divider.className = 'lib-playlist-popover-divider';
+    pop.appendChild(divider);
+    const bgmLabel = document.createElement('label');
+    const bgmCb = document.createElement('input');
+    bgmCb.type = 'checkbox';
+    bgmCb.checked = bgmTrackIds.some((id) => String(id) === key);
+    bgmCb.addEventListener('change', () => {
+      bgmCb.disabled = true;
+      const event = bgmCb.checked ? 'bgm:addTracks' : 'bgm:removeTracks';
+      SocketClient.sendWithCallback(event, { trackIds: [item.id] }, (res) => {
+        bgmCb.disabled = false;
+        if (!res?.ok) { bgmCb.checked = !bgmCb.checked; return toast(playlistError(res), 'error'); }
+        if (Array.isArray(res.trackIds)) bgmTrackIds = res.trackIds;
+      });
+    });
+    const bgmText = document.createElement('span');
+    bgmText.textContent = tx('bgm.playlistTitle');
+    bgmLabel.appendChild(bgmCb);
+    bgmLabel.appendChild(bgmText);
+    pop.appendChild(bgmLabel);
     // 定位在按鈕下方；用 fixed 讓 virtual window 重繪／捲動時直接關掉而不是漂走
     const rect = anchor.getBoundingClientRect();
     pop.style.top = `${Math.round(rect.bottom + 6)}px`;
@@ -1059,6 +1099,9 @@
   if (renameBtn) renameBtn.addEventListener('click', renamePlaylist);
   if (deleteBtn) deleteBtn.addEventListener('click', deletePlaylist);
   SocketClient.on('savedPlaylists:list', applySavedPlaylists);
+  SocketClient.on('bgm:playlist', (payload) => {
+    if (Array.isArray(payload?.trackIds)) bgmTrackIds = payload.trackIds;
+  });
   renderPlaylistChips();
 
   // ─── 事件：切到媒體庫視圖時自動刷新；伺服器推播時更新 ───
@@ -1068,6 +1111,7 @@
       refresh();
       refreshStorage();
       refreshSavedPlaylists();
+      refreshBgmMembership();
     }
   });
   SocketClient.on('library:list', (list) => { render(list || []); renderPlaylistChips(); });
@@ -1081,6 +1125,7 @@
       refresh();
       refreshStorage();
       refreshSavedPlaylists();
+      refreshBgmMembership();
     }
   } });
 })();

@@ -1583,6 +1583,59 @@
     'publicRequest.catalogFailed': ['更新公開歌單失敗', 'Could not update the public playlist', '公開用プレイリストを更新できませんでした', '공개 재생목록을 업데이트하지 못했습니다', '更新公开歌单失败'],
     'publicRequest.newRequest': ['收到新的點歌：{title}', 'New request: {title}', '新しいリクエスト：{title}', '새 신청곡: {title}', '收到新的点歌：{title}'],
 
+    // ─── BGM 待機音樂（2026-09-16 新增，仿歌回救星雙軌切換）───
+    'nav.bgm': ['BGM', 'BGM', 'BGM', 'BGM', 'BGM'],
+    'bgm.title': ['BGM 待機音樂', 'BGM', 'BGM', 'BGM', 'BGM 待机音乐'],
+    'bgm.hint': [
+      '開啟後，唱歌時 BGM 會自動淡出暫停；暫停或唱完會自動淡入恢復播放，不用自己切換。',
+      'Once enabled, BGM automatically fades out and pauses while you sing, then fades back in when playback pauses or ends — no manual switching needed.',
+      '有効にすると、歌っている間は BGM が自動的にフェードアウトして一時停止し、一時停止または再生終了時に自動的にフェードインして再開します。手動での切り替えは不要です。',
+      '켜면 노래하는 동안 BGM이 자동으로 페이드아웃되어 일시정지되고, 재생이 일시정지되거나 끝나면 자동으로 페이드인되어 다시 시작됩니다. 직접 전환할 필요가 없습니다.',
+      '开启后，唱歌时 BGM 会自动淡出暂停；暂停或唱完会自动淡入恢复播放，不用自己切换。'
+    ],
+    'bgm.statusDisabled': ['尚未啟用', 'Disabled', '無効', '비활성화됨', '尚未启用'],
+    'bgm.statusPlaying': ['播放中', 'Playing', '再生中', '재생 중', '播放中'],
+    'bgm.statusPaused': ['已暫停', 'Paused', '一時停止中', '일시정지됨', '已暂停'],
+    'bgm.statusWaiting': ['即將恢復…', 'Resuming soon…', 'まもなく再開します…', '곧 다시 시작됩니다…', '即将恢复…'],
+    'bgm.nowPlayingEmpty': ['尚未播放', 'Nothing playing', '再生していません', '재생 중인 곡 없음', '尚未播放'],
+    'bgm.transportPlay': ['播放', 'Play', '再生', '재생', '播放'],
+    'bgm.transportPause': ['暫停', 'Pause', '一時停止', '일시정지', '暂停'],
+    'bgm.transportNext': ['下一首', 'Next', '次へ', '다음 곡', '下一首'],
+    'bgm.settingsTitle': ['音量與銜接時間', 'Volume & Transition Timing', '音量と切り替えタイミング', '볼륨 및 전환 타이밍', '音量与衔接时间'],
+    'bgm.volumeLabel': ['BGM 音量', 'BGM volume', 'BGM 音量', 'BGM 볼륨', 'BGM 音量'],
+    'bgm.pauseDelayLabel': ['暫停唱歌後，等多久恢復 BGM', 'Wait this long after pausing before BGM resumes', '歌唱を一時停止してから BGM が再開するまでの待ち時間', '노래를 일시정지한 후 BGM이 다시 시작되기까지의 대기 시간', '暂停唱歌后，等多久恢复 BGM'],
+    'bgm.pauseDelayHint': [
+      '給自己一點準備時間再接回 BGM，不用一暫停就馬上跳回去。',
+      'Gives you a moment before BGM cuts back in — it won’t snap back the instant you pause.',
+      '一時停止した瞬間に BGM がすぐ戻らないよう、少し準備時間を置きます。',
+      '일시정지하자마자 BGM이 바로 돌아오지 않도록 약간의 준비 시간을 둡니다.',
+      '给自己一点准备时间再接回 BGM，不用一暂停就马上跳回去。'
+    ],
+    'bgm.endDelayLabel': ['歌曲自然播完後，等多久恢復 BGM', 'Wait this long after a song finishes naturally before BGM resumes', '曲が自然に終わってから BGM が再開するまでの待ち時間', '곡이 자연스럽게 끝난 후 BGM이 다시 시작되기까지의 대기 시간', '歌曲自然播完后，等多久恢复 BGM'],
+    'bgm.endDelayHint': [
+      '不管是單曲播完（沒開連續播放）還是整份清單播完，只要是自然結束、不是手動暫停，都套用這段喘息時間。',
+      'Applies whenever a song ends on its own — whether it’s a single track (continuous play off) or the whole playlist — as opposed to a manual pause.',
+      '単曲再生（連続再生オフ）でもプレイリスト全体でも、自然に終わった場合（手動での一時停止ではない場合）はこの余韻が適用されます。',
+      '단곡 재생(연속 재생 꺼짐)이든 전체 재생목록이든, 수동 일시정지가 아니라 자연스럽게 끝난 경우에는 이 여유 시간이 적용됩니다.',
+      '不管是单曲播完（没开连续播放）还是整份列表播完，只要是自然结束、不是手动暂停，都套用这段喘息时间。'
+    ],
+    'bgm.delaySeconds': ['{seconds}s', '{seconds}s', '{seconds}秒', '{seconds}초', '{seconds}s'],
+    'bgm.playlistTitle': ['BGM 清單', 'BGM Playlist', 'BGM プレイリスト', 'BGM 재생목록', 'BGM 列表'],
+    'bgm.playlistHint': [
+      'YouTube 連結或本機音檔都可以；只會下載/加進媒體庫，不會加進目前播放清單，格式不需要另外轉換。',
+      'YouTube link or a local file both work. This only downloads/adds into your media library — it will not be added to the current playlist, and no format conversion is needed.',
+      'YouTube リンクでもローカルファイルでも構いません。メディアライブラリに追加されるだけで、現在の再生リストには追加されません。フォーマット変換も不要です。',
+      'YouTube 링크나 로컬 파일 모두 가능합니다. 미디어 라이브러리에만 추가되며 현재 재생목록에는 추가되지 않고, 별도의 형식 변환도 필요 없습니다.',
+      'YouTube 链接或本机音檔都可以；只会下载/加进媒体库，不会加进目前播放列表，格式不需要另外转换。'
+    ],
+    'bgm.importPlaceholder': ['https://www.youtube.com/watch?v=...', 'https://www.youtube.com/watch?v=...', 'https://www.youtube.com/watch?v=...', 'https://www.youtube.com/watch?v=...', 'https://www.youtube.com/watch?v=...'],
+    'bgm.importButton': ['匯入', 'Import', 'インポート', '가져오기', '导入'],
+    'bgm.uploadButton': ['上傳本機檔案', 'Upload local file', 'ローカルファイルをアップロード', '로컬 파일 업로드', '上传本机文件'],
+    'bgm.uploadFailed': ['BGM 上傳失敗：{message}', 'BGM upload failed: {message}', 'BGM のアップロードに失敗しました：{message}', 'BGM 업로드 실패: {message}', 'BGM 上传失败：{message}'],
+    'bgm.listEmpty': ['清單是空的，貼一個 YouTube 連結試試', 'The playlist is empty — try pasting a YouTube link', 'プレイリストは空です。YouTube リンクを貼り付けてみてください', '재생목록이 비어 있습니다. YouTube 링크를 붙여넣어 보세요', '列表是空的，粘贴一个 YouTube 链接试试'],
+    'bgm.importSource': ['BGM 匯入', 'BGM import', 'BGM インポート', 'BGM 가져오기', 'BGM 导入'],
+    'bgm.importFailed': ['BGM 匯入失敗：{message}', 'BGM import failed: {message}', 'BGM のインポートに失敗しました：{message}', 'BGM 가져오기 실패: {message}', 'BGM 导入失败：{message}'],
+
     // ─── 歌詞樣式卡（動畫風格/位置/特效/字型/羅馬拼音）i18n 補完（2026-09-14）───
     // 全部跟 i18n-auto.js 裡同一句 zh-TW 來源字串共用同一組翻譯，避免重複鍵翻譯不一致。
     'lyricStyle.title': ["動畫風格","Animation style","アニメーションスタイル","애니메이션 스타일","动画风格"],

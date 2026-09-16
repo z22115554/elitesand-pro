@@ -195,6 +195,10 @@
           <span class="nav-label" data-i18n="nav.publicRequest">公開點歌頁</span>
           <span id="public-request-nav-badge" class="pi-badge" hidden>0</span>
         </button>
+        <button class="nav-item" data-nav="bgm" type="button" title="BGM" data-i18n-title="nav.bgm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <span class="nav-label" data-i18n="nav.bgm">BGM</span>
+        </button>
         <!-- 2026-09-12 先收起來：段落資料只有一首手動測試曲，對真實使用者的歌完全沒作用，
              正式使用者不該看到。要重新開放時比照 nav.js 開頭註解的既有慣例，拿掉這個 hidden 即可。 -->
         <button class="nav-item" data-nav="sections" type="button" title="段落設計" data-i18n-title="nav.sections" hidden>
@@ -1507,6 +1511,63 @@
             <div id="public-request-pending-list" class="twitch-requests-list"></div>
           </section>
         </div><!-- /view public-request -->
+
+        <!-- ═══ 視圖：BGM 待機音樂（仿歌回救星雙軌切換：唱歌時自動暫停，唱完自動恢復）═══ -->
+        <div class="view content-col" data-view="bgm">
+          <section class="card" aria-labelledby="bgm-status-title">
+            <div class="playlist-head">
+              <div>
+                <p id="bgm-status-title" class="eyebrow m-0" data-i18n="bgm.title">BGM 待機音樂</p>
+                <p class="sub" data-i18n="bgm.hint">開啟後，唱歌時 BGM 會自動淡出暫停；暫停或唱完會自動淡入恢復播放，不用自己切換。</p>
+              </div>
+              <label class="switch"><input id="bgm-enable-toggle" type="checkbox"><span class="track"></span></label>
+            </div>
+            <div class="twitch-status-chips" role="status" aria-live="polite">
+              <span id="bgm-status-chip" class="twitch-status-chip" data-state="off" data-i18n="bgm.statusDisabled">尚未啟用</span>
+            </div>
+            <div class="bgm-transport-row">
+              <span id="bgm-now-playing" class="bgm-now-playing" data-i18n="bgm.nowPlayingEmpty">尚未播放</span>
+              <div class="bgm-transport-buttons">
+                <button id="bgm-transport-play" class="btn btn-sm" type="button" disabled data-i18n="bgm.transportPlay">播放</button>
+                <button id="bgm-transport-next" class="btn btn-sm btn-ghost" type="button" disabled data-i18n="bgm.transportNext">下一首</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <p class="eyebrow m-0" data-i18n="bgm.settingsTitle">音量與銜接時間</p>
+            <div class="field">
+              <label><span data-i18n="bgm.volumeLabel">BGM 音量</span> <span id="bgm-volume-val" class="val">70%</span></label>
+              <input id="bgm-volume-slider" type="range" min="0" max="100" step="1" value="70" aria-label="BGM 音量" data-i18n-aria-label="bgm.volumeLabel">
+            </div>
+            <div class="field">
+              <label><span data-i18n="bgm.pauseDelayLabel">暫停唱歌後，等多久恢復 BGM</span> <span id="bgm-pause-delay-val" class="val">3.0s</span></label>
+              <input id="bgm-pause-delay-slider" type="range" min="0" max="15" step="0.5" value="3" aria-label="暫停後恢復延遲" data-i18n-aria-label="bgm.pauseDelayLabel">
+              <p class="field-hint" data-i18n="bgm.pauseDelayHint">給自己一點準備時間再接回 BGM，不用一暫停就馬上跳回去。</p>
+            </div>
+            <div class="field">
+              <label><span data-i18n="bgm.endDelayLabel">播放清單播完後，等多久恢復 BGM</span> <span id="bgm-end-delay-val" class="val">5.0s</span></label>
+              <input id="bgm-end-delay-slider" type="range" min="0" max="15" step="0.5" value="5" aria-label="播完後恢復延遲" data-i18n-aria-label="bgm.endDelayLabel">
+              <p class="field-hint" data-i18n="bgm.endDelayHint">整份清單真的播完後，留一小段喘息時間再接回 BGM。</p>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="playlist-head">
+              <div>
+                <p class="eyebrow m-0" data-i18n="bgm.playlistTitle">BGM 清單</p>
+                <p class="sub" data-i18n="bgm.playlistHint">YouTube 連結或本機音檔都可以；只會下載/加進媒體庫，不會加進目前播放清單，格式不需要另外轉換。</p>
+              </div>
+            </div>
+            <div class="bgm-import-row">
+              <input id="bgm-import-url" class="input" type="text" placeholder="https://www.youtube.com/watch?v=..." data-i18n-placeholder="bgm.importPlaceholder">
+              <button id="bgm-import-button" class="btn btn-sm" type="button" data-i18n="bgm.importButton">匯入</button>
+              <button id="bgm-upload-button" class="btn btn-sm btn-ghost" type="button" data-i18n="bgm.uploadButton">上傳本機檔案</button>
+              <input id="bgm-upload-input" type="file" accept=".mp3,.flac,.wav,.m4a,.ogg,.aac,.wma" multiple hidden>
+            </div>
+            <ul id="bgm-track-list" class="bgm-track-list"></ul>
+          </section>
+        </div><!-- /view bgm -->
 
         <!-- ═══ 視圖：一般設定（OBS 網址/連動、手機遙控、yt-dlp、PIN）═══ -->
         <div class="view content-col" data-view="general">
@@ -3224,6 +3285,7 @@
   <script src="/js/playback-sequence.js"></script>
   <!-- SYNCDIAG（暫時性，2026-09-03）：分離播放人聲/伴奏延遲診斷；確認問題後連同 sync-diag.js 一起移除 -->
   <script src="/js/sync-diag.js"></script>
+  <script src="/js/app-bgm.js"></script>
   <script src="/js/app-playback.js"></script>
   <script src="/js/app-section-design.js"></script>
   <script src="/js/app-lyrics-timeline.js"></script>

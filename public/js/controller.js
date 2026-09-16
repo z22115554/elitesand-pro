@@ -644,6 +644,31 @@
     });
   }
 
+  // ═══════════════════════════════════════════
+  // BGM 待機音樂開關（實際播放引擎只在桌面面板；這裡只是開關與狀態顯示）
+  // ═══════════════════════════════════════════
+  const bgmToggle = document.getElementById('ctrl-bgm-toggle');
+  const bgmStatus = document.getElementById('ctrl-bgm-status');
+  function renderBgmStatus(settings) {
+    if (!settings) return;
+    if (bgmToggle) bgmToggle.checked = settings.enabled === true;
+    if (!bgmStatus) return;
+    if (!settings.enabled) { bgmStatus.dataset.state = 'off'; bgmStatus.setAttribute('data-i18n', 'bgm.statusDisabled'); }
+    else if (settings.playing) { bgmStatus.dataset.state = 'on'; bgmStatus.setAttribute('data-i18n', 'bgm.statusPlaying'); }
+    else { bgmStatus.dataset.state = 'muted'; bgmStatus.setAttribute('data-i18n', 'bgm.statusPaused'); }
+    if (window.I18n) window.I18n.apply(bgmStatus);
+  }
+  if (bgmToggle) {
+    bgmToggle.addEventListener('change', () => {
+      bgmToggle.disabled = true;
+      SocketClient.sendWithCallback(bgmToggle.checked ? 'bgm:enable' : 'bgm:disable', null, (result) => {
+        bgmToggle.disabled = false;
+        if (result?.settings) renderBgmStatus(result.settings);
+      });
+    });
+  }
+  SocketClient.on('bgm:settings:update', renderBgmStatus);
+
   // 視覺風格切換
   // ═══════════════════════════════════════════
 

@@ -6,6 +6,7 @@
 
 const libraryStore = require('../../services/library-store');
 const savedPlaylists = require('../../services/saved-playlists');
+const bgmPlaylist = require('../../services/bgm-playlist');
 const mediaStorage = require('../../services/media-storage');
 const { emitToControlClients, emitToAccessRooms } = require('../../utils/socket-broadcast');
 const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds } = require('../../utils/track-schema');
@@ -104,6 +105,7 @@ function registerLibraryHandlers(io, socket, ctx, {
     if (removed) {
       persistState();
       if (savedPlaylists.pruneTrackIds([id])) broadcastSavedPlaylists();
+      if (bgmPlaylist.pruneTrackIds([id])) emitToControlClients(io, 'bgm:playlist:pruned', null);
       onLibraryChanged();
     }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
@@ -115,6 +117,7 @@ function registerLibraryHandlers(io, socket, ctx, {
     if (cleared) {
       persistState();
       if (savedPlaylists.pruneTrackIds(null)) broadcastSavedPlaylists();
+      if (bgmPlaylist.pruneTrackIds(null)) emitToControlClients(io, 'bgm:playlist:pruned', null);
       onLibraryChanged();
     }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());

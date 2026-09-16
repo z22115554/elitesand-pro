@@ -32,6 +32,7 @@ const registerObsLocaleHandlers = require('./handlers/obs-locale');
 const obsLocaleUtil = require('../utils/obs-locale');
 const registerTwitchHandlers = require('./handlers/twitch');
 const registerPublicRequestHandlers = require('./handlers/public-request');
+const registerBgmHandlers = require('./handlers/bgm');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
@@ -332,6 +333,14 @@ module.exports = function socketHandler(io, {
     }
   }
 
+  // BGM 開關/狀態要讓手機遙控器也看得到（使用者明確要求，跟 Twitch/公開點歌只給桌面
+  // controller 不同），所以不比照上面兩個函式限 clientType === 'controller'。
+  function syncBgmSettings(socket) {
+    if (socket && (socket.clientType === 'controller' || socket.clientType === 'remote')) {
+      socket.emit('bgm:settings:update', { ...ctx.playState.bgmSettings });
+    }
+  }
+
   function syncTwitchRequests(socket) {
     if (socket && socket.clientType === 'controller' && twitchService) {
       socket.emit('twitch:requests', twitchService.getPendingRequests());
@@ -476,6 +485,7 @@ module.exports = function socketHandler(io, {
       }
       syncTwitchRequests(socket);
       syncPublicRequests(socket);
+      syncBgmSettings(socket);
       const c = getClientCounts();
       emitClientCounts();
       log.info(`${socket.id} 註冊為 ${type} (controllers: ${c.controllers}, displays: ${c.displays}, remotes: ${c.remotes}, setlists: ${c.setlists})`);
@@ -562,6 +572,7 @@ module.exports = function socketHandler(io, {
       registerObsLocaleHandlers(io, socket, ctx);
       registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });
       registerPublicRequestHandlers(io, socket, ctx, { getRelayService: () => songRequestRelayService });
+      registerBgmHandlers(io, socket, ctx);
     }
 
     // ─── 斷線處理 ───

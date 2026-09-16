@@ -9124,6 +9124,136 @@ test('savedPlaylists:load 伺服器端整份載入：音檔在的依序附加到
   }
 });
 
+test('BGM 待機清單：加歌去重／移歌／重排／刪歌同步／原子落盤可重新載入', () => {
+  const bgmPlaylist = require('../server/services/bgm-playlist');
+  const before = bgmPlaylist.list();
+  try {
+    const added = bgmPlaylist.addTracks(['b1', 'b2', 'b1', '', null, 'b3']);
+    eq(added.added, 3, '空值/重複要被過濾: ');
+    eq(bgmPlaylist.list().join(','), 'b1,b2,b3');
+    const addedAgain = bgmPlaylist.addTracks(['b2', 'b4']);
+    eq(addedAgain.added, 1, '已在清單的 id 不重複加入: ');
+    eq(bgmPlaylist.list().join(','), 'b1,b2,b3,b4');
+
+    const removed = bgmPlaylist.removeTracks(['b1', 'nope']);
+    eq(removed.removed, 1);
+    eq(bgmPlaylist.list().join(','), 'b2,b3,b4', '移除保持順序: ');
+
+    const ordered = bgmPlaylist.setOrder(['b4', 'b2', 'stranger']);
+    ok(ordered.changed);
+    eq(ordered.trackIds.join(','), 'b4,b2,b3', '面板看不到的 b3 補回末端、stranger 丟掉: ');
+    const same = bgmPlaylist.setOrder(['b4', 'b2', 'b3']);
+    eq(same.changed, false, '同順序不可標為變更: ');
+
+    eq(bgmPlaylist.pruneTrackIds(['b2']), true, '媒體庫刪歌後同步剪掉: ');
+    eq(bgmPlaylist.list().join(','), 'b4,b3');
+    eq(bgmPlaylist.pruneTrackIds(['not-in-any']), false, '沒有命中就不觸發保存: ');
+
+    ok(bgmPlaylist.saveNow(), '落盤: ');
+    const file = path.join(process.env.ELITESAND_DATA_DIR, 'bgm-playlist.json');
+    const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    eq(onDisk.trackIds.join(','), 'b4,b3', '磁碟內容: ');
+
+    eq(bgmPlaylist.pruneTrackIds(null), true, 'null 代表全部清空: ');
+    eq(bgmPlaylist.list().length, 0);
+  } finally {
+    // 試跑期間清單已被清空（pruneTrackIds(null)）；只需要把原本的 id 加回來。
+    for (const id of bgmPlaylist.list()) bgmPlaylist.removeTracks([id]);
+    for (const id of before) bgmPlaylist.addTracks([id]);
+    bgmPlaylist.saveNow();
+  }
+});
+
+test('BGM socket：開關走 io.emit 廣播給所有端（含手機遙控器），清單管理限桌面 controller', () => {
+  const registerBgmHandlers = require('../server/routes/handlers/bgm');
+  const bgmPlaylist = require('../server/services/bgm-playlist');
+  const libraryStore = require('../server/services/library-store');
+  const before = bgmPlaylist.list();
+  const originalGetEntry = libraryStore.getEntry;
+  const originalLookup = libraryStore.getAudioExistsLookup;
+  const broadcasts = [];
+  const io = { emit(event, data) { broadcasts.push({ event, data }); } };
+  const playState = { bgmSettings: { enabled: false, playing: false } };
+  const persisted = [];
+  const ctx = { playState, persistState: () => persisted.push(1) };
+  try {
+    libraryStore.getEntry = (id) => (id === 'lib-a' ? { id, title: 'A', filename: 'a.mp3' } : null);
+    libraryStore.getAudioExistsLookup = () => (() => true);
+
+    // 桌面面板：開關 + 清單管理都能用
+    const controllerEvents = new Map();
+    const controllerSocket = { clientType: 'controller', on(event, handler) { controllerEvents.set(event, handler); } };
+    registerBgmHandlers(io, controllerSocket, ctx);
+
+    let ack = null;
+    controllerEvents.get('bgm:enable')(null, (r) => { ack = r; });
+    ok(ack.ok && playState.bgmSettings.enabled, '啟用: ');
+    ok(broadcasts.some((b) => b.event === 'bgm:settings:update' && b.data.enabled === true), '開關要走 io.emit 廣播給所有端: ');
+    eq(persisted.length, 1, '啟用要持久化: ');
+
+    controllerEvents.get('bgm:addTracks')({ trackIds: ['lib-a', 'ghost'] }, (r) => { ack = r; });
+    eq(ack.added, 1, '不在媒體庫的 id 要被擋掉: ');
+    ok(broadcasts.some((b) => b.event === 'bgm:playlist'), '新增要廣播播放清單: ');
+
+    controllerEvents.get('bgm:list')(null, (r) => { ack = r; });
+    eq(ack.trackIds.join(','), 'lib-a', '媒體庫「加入 BGM」勾選框要靠 trackIds 判斷歸屬，不能只看 tracks/needsDownload: ');
+
+    controllerEvents.get('bgm:status')({ playing: true });
+    eq(playState.bgmSettings.playing, true, '面板回報播放狀態: ');
+    controllerEvents.get('bgm:status')({ playing: true });
+    const statusBroadcasts = broadcasts.filter((b) => b.event === 'bgm:settings:update').length;
+    controllerEvents.get('bgm:status')({ playing: true });
+    eq(broadcasts.filter((b) => b.event === 'bgm:settings:update').length, statusBroadcasts, '狀態沒變不可重複廣播: ');
+
+    // 手機遙控器：開關可以用，清單管理不掛（remote 沒有這幾個事件）
+    const remoteEvents = new Map();
+    const remoteSocket = { clientType: 'remote', on(event, handler) { remoteEvents.set(event, handler); } };
+    registerBgmHandlers(io, remoteSocket, ctx);
+    ok(remoteEvents.has('bgm:enable') && remoteEvents.has('bgm:disable') && remoteEvents.has('bgm:status'), '手機遙控器要能開關與回報狀態: ');
+    ok(!remoteEvents.has('bgm:addTracks') && !remoteEvents.has('bgm:removeTracks') && !remoteEvents.has('bgm:setOrder'), '清單管理不對手機遙控器開放: ');
+
+    remoteEvents.get('bgm:disable')(null, (r) => { ack = r; });
+    ok(ack.ok && !playState.bgmSettings.enabled && !playState.bgmSettings.playing, '手機遙控器可以關閉 BGM，且連帶清掉播放狀態: ');
+  } finally {
+    libraryStore.getEntry = originalGetEntry;
+    libraryStore.getAudioExistsLookup = originalLookup;
+    for (const id of bgmPlaylist.list()) bgmPlaylist.removeTracks([id]);
+    for (const id of before) bgmPlaylist.addTracks([id]);
+    bgmPlaylist.saveNow();
+  }
+});
+
+test('BGM 音量／恢復延遲：數值會夾在合法範圍、限桌面 controller、變更才廣播與持久化', () => {
+  const bgmSettingsSchema = require('../server/services/bgm-settings');
+  eq(bgmSettingsSchema.clampSettings({ volume: 999, pauseResumeDelayMs: -5, endResumeDelayMs: 999999 }).volume, 100, '音量超出上限要夾住: ');
+  eq(bgmSettingsSchema.clampSettings({ volume: -5 }).volume, 0, '音量低於下限要夾住: ');
+  eq(bgmSettingsSchema.clampSettings({ pauseResumeDelayMs: -5 }).pauseResumeDelayMs, 0, '延遲不可為負: ');
+  eq(bgmSettingsSchema.clampSettings({ endResumeDelayMs: 999999 }).endResumeDelayMs, bgmSettingsSchema.LIMITS.delayMsMax, '延遲要夾在上限: ');
+  eq(bgmSettingsSchema.clampSettings({ volume: 'nope' }, { volume: 42 }).volume, 42, '非數字要退回目前值，不是預設值: ');
+
+  const registerBgmHandlers = require('../server/routes/handlers/bgm');
+  const broadcasts = [];
+  const io = { emit(event, data) { broadcasts.push({ event, data }); } };
+  const playState = { bgmSettings: { enabled: true, playing: false, volume: 70, pauseResumeDelayMs: 3000, endResumeDelayMs: 5000 } };
+  const persisted = [];
+  const ctx = { playState, persistState: () => persisted.push(1) };
+  const controllerEvents = new Map();
+  registerBgmHandlers(io, { clientType: 'controller', on(event, handler) { controllerEvents.set(event, handler); } }, ctx);
+  const remoteEvents = new Map();
+  registerBgmHandlers(io, { clientType: 'remote', on(event, handler) { remoteEvents.set(event, handler); } }, ctx);
+
+  ok(!remoteEvents.has('bgm:settings:set'), '手機遙控器沒有音量/延遲調整入口: ');
+
+  let ack = null;
+  controllerEvents.get('bgm:settings:set')({ volume: 40, pauseResumeDelayMs: 1000, endResumeDelayMs: 2000 }, (r) => { ack = r; });
+  ok(ack.ok, '桌面 controller 可以調整: ');
+  eq(playState.bgmSettings.volume, 40);
+  eq(playState.bgmSettings.pauseResumeDelayMs, 1000);
+  eq(playState.bgmSettings.endResumeDelayMs, 2000);
+  ok(broadcasts.some((b) => b.event === 'bgm:settings:update' && b.data.volume === 40), '調整要廣播給所有端: ');
+  eq(persisted.length, 1, '調整要持久化: ');
+});
+
 test('手機遙控器收藏歌單：兩段式點擊載入、走伺服器端 savedPlaylists:load、不含建立／編輯入口', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'controller.html'), 'utf8');
   const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');

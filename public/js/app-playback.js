@@ -913,6 +913,7 @@
     // 若又收到一次回音/重複指令，上面的提早 return 擋不住（isPlaying 當下還是舊值），
     // 會讓 SoundTouch 被啟動兩次、雪崩式狂送 play:toggle（實測會看到播放/暫停瞬間狂跳）。
     isPlaying = shouldPlay;
+    if (window.AppBgm) window.AppBgm.syncWithPlayback(shouldPlay, 'pause');
     if (shouldPlay) markLocalTrackPlayed(state.playlist[state.currentTrackIndex]);
     if (!shouldPlay) {
       // 兩條鏈都停。只停「當前那條」的話，另一條若因載入競態還在跑，
@@ -1124,6 +1125,7 @@
     // 避免高品質變調路徑播完後漏送 play:stop，讓最後一句歌詞留在畫面上。
     markLocalTrackPlayed(endedTrack);
     stopPlayback();
+    if (window.AppBgm) window.AppBgm.syncWithPlayback(false, 'end');
     state.currentTrackIndex = -1;
     AppShared.renderPlaylist();
     SocketClient.send('play:stop', {
