@@ -592,7 +592,42 @@
     }
   }
 
+  // BGM 篩選畫面下的「加入清單」：這裡的「清單」指 BGM 待機清單，不是正在唱的播放清單。
+  // 這首歌本來就已經是 BGM 成員（不然不會出現在這個篩選畫面裡），會走到這條路純粹是
+  // 因為音檔不在本機——只需要重新下載/確認音檔，絕對不能呼叫共用的 runRestoreQueue()，
+  // 那條路唯一功能就是把歌塞進 playState.playlist（正在唱的清單），跟 BGM 完全是兩件事。
+  async function reimportForBgm(item, row) {
+    const btn = row.querySelector('.lib-reimport');
+    if (!btn || btn.disabled) return;
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = tr('加入中…');
+    try {
+      const resp = await requestSocket('library:reimport', item.id);
+      if (resp?.track) {
+        // 音檔其實已經在本機，只是 BGM 可播放清單快照還沒反映——重新整理一次即可。
+        toast(tr(`已加入 BGM 清單：${item.title}`), 'success');
+      } else if (resp?.needsDownload && resp.url && typeof AppShared.queueYouTubeImport === 'function') {
+        btn.textContent = tr('排隊下載中…');
+        await AppShared.queueYouTubeImport(resp.url, { skipPlaylistInsert: true, source: 'BGM', sourceKey: 'bgm.importSource' });
+        toast(tr(`已加入 BGM 清單：${item.title}`), 'success');
+      } else {
+        toast(tr('無法重新匯入：無本機音檔也無 YouTube 網址'), 'error');
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        return;
+      }
+      refreshBgmMembership();
+      btn.textContent = tr('已加入');
+    } catch (err) {
+      toast(tr(`重新匯入失敗：${err.message}`), 'error');
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+  }
+
   async function reimport(item, row) {
+    if (activePlaylistId === BGM_PLAYLIST_ID) return reimportForBgm(item, row);
     if (!window.VKState) { toast(tr('匯入功能未就緒'), 'error'); return; }
     // 重複加入警告：已在播放清單中就先問，確認後仍會再加一首到清單末端
     if (window.VKState.isInPlaylist && window.VKState.isInPlaylist(item.id)) {

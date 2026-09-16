@@ -9292,6 +9292,18 @@ test('媒體庫 BGM 假歌單：跟收藏歌單共用同一套 chip／篩選/拖
     'BGM 是系統內建固定清單，「全部載入播放清單」／改名／刪除都不該對它開放: ');
   ok(js.includes('activePlaylistId !== BGM_PLAYLIST_ID && !savedPlaylists.some'),
     '收藏歌單清單變動時的「歌單消失了」偵測，不可誤判 BGM 假歌單也消失並把使用者踢出篩選畫面: ');
+
+  // 迴歸：BGM 篩選畫面下，音檔不在本機的歌一樣會顯示「加入清單」（.lib-reimport）按鈕
+  // ——那顆按鈕的原本行為（reimport()）無條件把歌塞進 playState.playlist（正在唱的
+  // 清單），在 BGM 篩選畫面下按下去卻被塞進正在唱的清單而不是 BGM，是完全錯的行為
+  // （2026-09-17 使用者回報）。必須改成 BGM 篩選下只重新下載音檔、不碰播放清單。
+  ok(js.includes('async function reimportForBgm(item, row)'), '需要一條 BGM 專用的「加入清單」路徑: ');
+  ok(js.includes('if (activePlaylistId === BGM_PLAYLIST_ID) return reimportForBgm(item, row);'),
+    'reimport() 進入點要先判斷是不是在 BGM 篩選畫面: ');
+  const reimportForBgmBody = js.slice(js.indexOf('async function reimportForBgm'), js.indexOf('async function reimport(item, row)'));
+  ok(!reimportForBgmBody.includes('addLibraryTrack') && !reimportForBgmBody.includes('runRestoreQueue'),
+    'BGM 的「加入清單」絕不可呼叫會把歌塞進正在唱的播放清單的既有共用路徑: ');
+  ok(reimportForBgmBody.includes('skipPlaylistInsert: true'), 'BGM 重新下載一樣要走 skipPlaylistInsert，不進播放清單: ');
 });
 
 test('媒體庫直接刪除前先同步保存播放清單完整 fallback，library.json 落盤後重開不丟歌詞', () => {
