@@ -9278,6 +9278,22 @@ test('儲存歌單 UI：面板有 chip／建立／載入入口，載入走既有
   }
 });
 
+test('媒體庫 BGM 假歌單：跟收藏歌單共用同一套 chip／篩選/拖曳排序機制，但讀寫各自呼叫 bgm:*，且不受「沒有收藏歌單」影響', () => {
+  const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'media-library.js'), 'utf8');
+  // 迴歸：這顆「+」按鈕曾經在使用者一份收藏歌單都沒建立時完全不渲染，導致從主列表
+  // 完全點不到「加入 BGM」（2026-09-16 手動驗證時發現並修掉）。
+  ok(!/if \(!savedPlaylists\.length\) return '';/.test(js),
+    '「加入歌單」按鈕不可再因為沒有收藏歌單就整顆不顯示——BGM 一定存在，永遠至少有一個可選目標: ');
+  ok(js.includes("const BGM_PLAYLIST_ID = '__bgm__'"), '要有 BGM 假歌單 id 常數: ');
+  ['bgm:addTracks', 'bgm:removeTracks', 'bgm:setOrder', 'bgm:list'].forEach((needle) =>
+    ok(js.includes(`'${needle}'`), `媒體庫要能呼叫 ${needle}: `));
+  ok(js.includes('active.isBgm'), 'BGM 分支要用 isBgm 旗標區分，不能跟一般收藏歌單共用同一條寫入路徑: ');
+  ok(js.includes('loadBtn.hidden = isBgmActive') && js.includes('renameBtn.hidden = isBgmActive') && js.includes('deleteBtn.hidden = isBgmActive'),
+    'BGM 是系統內建固定清單，「全部載入播放清單」／改名／刪除都不該對它開放: ');
+  ok(js.includes('activePlaylistId !== BGM_PLAYLIST_ID && !savedPlaylists.some'),
+    '收藏歌單清單變動時的「歌單消失了」偵測，不可誤判 BGM 假歌單也消失並把使用者踢出篩選畫面: ');
+});
+
 test('媒體庫直接刪除前先同步保存播放清單完整 fallback，library.json 落盤後重開不丟歌詞', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-library-remove-barrier-'));
   const downloadsDir = path.join(dataDir, 'downloads');

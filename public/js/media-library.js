@@ -71,6 +71,11 @@
   let savedPlaylists = [];
   let bgmTrackIds = []; // BGM 清單目前的完整成員（原始 id，跟 saved playlists 分開管理）
   let activePlaylistId = null;
+  // BGM 待機清單當成一個「系統內建、不能改名/刪除」的假歌單塞進同一套 chip／篩選機制，
+  // 這樣使用者可以像切收藏歌單一樣切到「只看 BGM」的畫面，同一顆＋/−按鈕、同一套拖曳排序，
+  // 不用另外做一套 UI。真正的讀寫仍然各自呼叫 bgm:* / savedPlaylists:* 對應的事件，
+  // 兩者的資料完全分開，只是共用這層瀏覽介面。
+  const BGM_PLAYLIST_ID = '__bgm__';
 
   // 收到伺服器清單→存快取後套用目前的搜尋/排序再渲染
   function render(list) {
@@ -772,6 +777,7 @@
   let playlistPopover = null;
 
   function getActivePlaylist() {
+    if (activePlaylistId === BGM_PLAYLIST_ID) return { id: BGM_PLAYLIST_ID, name: tx('bgm.playlistTitle'), trackIds: bgmTrackIds, isBgm: true };
     return activePlaylistId ? savedPlaylists.find((p) => p.id === activePlaylistId) || null : null;
   }
 
@@ -786,7 +792,9 @@
     if (activePlaylistId) {
       return `<button class="btn btn-sm btn-ghost lib-playlist-remove" type="button" title="${escapeHtml(tx('library.playlists.removeFrom'))}">−</button>`;
     }
-    if (!savedPlaylists.length) return '';
+    // BGM 一定存在（系統內建），所以「加入歌單」小面板永遠至少有一個可選目標，
+    // 不能再比照舊邏輯「沒有收藏歌單就整顆按鈕都不顯示」——那樣會讓完全沒建過
+    // 收藏歌單的使用者（多數新使用者）從主列表完全點不到「加入 BGM」。
     return `<button class="btn btn-sm btn-ghost lib-playlist-add" type="button" title="${escapeHtml(tx('library.playlists.addTo'))}">＋</button>`;
   }
 
@@ -805,6 +813,10 @@
       return b;
     };
     chipsEl.appendChild(mk(tx('library.playlists.all'), '', !activePlaylistId));
+    const bgmPresent = bgmTrackIds.filter((id) => libraryIds.has(String(id))).length;
+    const bgmChip = mk(`${tx('bgm.playlistTitle')} · ${bgmPresent}`, BGM_PLAYLIST_ID, activePlaylistId === BGM_PLAYLIST_ID);
+    bgmChip.classList.add('lib-playlist-chip-bgm');
+    chipsEl.appendChild(bgmChip);
     for (const p of savedPlaylists) {
       const present = p.trackIds.filter((id) => libraryIds.has(String(id))).length;
       const chip = mk(`${p.name} · ${present}`, p.id, p.id === activePlaylistId);
@@ -817,7 +829,13 @@
     chipsEl.appendChild(add);
 
     const active = getActivePlaylist();
+    const isBgmActive = activePlaylistId === BGM_PLAYLIST_ID;
     if (actionsEl) actionsEl.hidden = !active;
+    // BGM 是系統內建的固定清單，不能改名/刪除，也絕不能整批「載入播放清單」——
+    // 那會違反 BGM 完全不進 playState.playlist 的鐵則，跟一般收藏歌單不是同一件事。
+    if (loadBtn) loadBtn.hidden = isBgmActive;
+    if (renameBtn) renameBtn.hidden = isBgmActive;
+    if (deleteBtn) deleteBtn.hidden = isBgmActive;
     if (active && summaryEl) {
       const total = active.trackIds.length;
       const missing = active.trackIds.filter((id) => !libraryIds.has(String(id))).length;
@@ -836,7 +854,11 @@
 
   function applySavedPlaylists(list) {
     savedPlaylists = Array.isArray(list) ? list : [];
-    if (activePlaylistId && !savedPlaylists.some((p) => p.id === activePlaylistId)) activePlaylistId = null;
+    // BGM 不是這份清單的成員，是另一套獨立資料——被判定「消失了」清掉目前篩選會把
+    // 使用者踢出正在看的 BGM 畫面，每次任何一份收藏歌單變動都會誤觸。
+    if (activePlaylistId && activePlaylistId !== BGM_PLAYLIST_ID && !savedPlaylists.some((p) => p.id === activePlaylistId)) {
+      activePlaylistId = null;
+    }
     renderPlaylistChips();
     applyView();
   }
@@ -846,12 +868,14 @@
     SocketClient.sendWithCallback('savedPlaylists:get', null, (list) => applySavedPlaylists(list || []));
   }
 
-  // BGM 清單成員（見 app-bgm.js）：只在這裡讀成員關係決定「加入歌單」小面板的勾選狀態，
-  // 不碰實際播放——那完全是 app-bgm.js 自己的事。
+  // BGM 清單成員（見 app-bgm.js）：這裡只讀成員關係——決定「加入歌單」小面板的勾選狀態、
+  // 「BGM」這個假歌單 chip 的篩選內容與人數。實際播放完全是 app-bgm.js 自己的事，不碰。
   function refreshBgmMembership() {
     if (!SocketClient.connected()) return;
     SocketClient.sendWithCallback('bgm:list', null, (result) => {
       bgmTrackIds = Array.isArray(result?.trackIds) ? result.trackIds : [];
+      renderPlaylistChips();
+      if (activePlaylistId === BGM_PLAYLIST_ID) applyView();
     });
   }
 
@@ -880,8 +904,9 @@
 
   function renamePlaylist() {
     const active = getActivePlaylist();
+    if (!active || active.isBgm) return;
     const chip = chipsEl?.querySelector(`.lib-playlist-chip[data-playlist-id="${CSS.escape(active?.id || '')}"]`);
-    if (!active || !chip) return;
+    if (!chip) return;
     // 就地改名：chip 換成輸入框，Enter 送出、Esc 取消、失焦視同送出
     const input = document.createElement('input');
     input.className = 'input lib-playlist-chip-input';
@@ -912,7 +937,7 @@
 
   async function deletePlaylist() {
     const active = getActivePlaylist();
-    if (!active) return;
+    if (!active || active.isBgm) return;
     const confirmed = await window.PanelConfirm?.request({
       title: tx('library.playlists.deleteTitle', { name: active.name }),
       summary: tx('library.playlists.deleteSummary'),
@@ -930,7 +955,7 @@
 
   async function loadActivePlaylist() {
     const active = getActivePlaylist();
-    if (!active || !window.VKState) return;
+    if (!active || active.isBgm || !window.VKState) return;
     const byId = new Map(cache.map((it) => [String(it.id), it]));
     const items = active.trackIds.map((id) => byId.get(String(id))).filter(Boolean);
     if (!items.length) { toast(tx('library.playlists.empty'), 'error'); return; }
@@ -957,6 +982,15 @@
   function removeFromActivePlaylist(item) {
     const active = getActivePlaylist();
     if (!active) return;
+    if (active.isBgm) {
+      SocketClient.sendWithCallback('bgm:removeTracks', { trackIds: [item.id] }, (res) => {
+        if (!res?.ok) return toast(playlistError(res), 'error');
+        bgmTrackIds = res.trackIds || bgmTrackIds;
+        renderPlaylistChips();
+        applyView();
+      });
+      return;
+    }
     SocketClient.sendWithCallback('savedPlaylists:removeTracks', { id: active.id, trackIds: [item.id] }, (res) => {
       if (!res?.ok) return toast(playlistError(res), 'error');
       active.trackIds = res.playlist.trackIds;
@@ -995,7 +1029,18 @@
     const previous = active.trackIds.slice();
     // 先樂觀重排讓畫面立刻跟手，伺服器拒絕才回滾
     const placed = new Set(orderedIds);
-    active.trackIds = orderedIds.concat(previous.filter((id) => !placed.has(String(id))));
+    const optimistic = orderedIds.concat(previous.filter((id) => !placed.has(String(id))));
+    if (active.isBgm) {
+      bgmTrackIds = optimistic;
+      applyView();
+      SocketClient.sendWithCallback('bgm:setOrder', { trackIds: orderedIds }, (res) => {
+        if (!res?.ok) { bgmTrackIds = previous; applyView(); toast(playlistError(res), 'error'); return; }
+        bgmTrackIds = res.trackIds || bgmTrackIds;
+        applyView();
+      });
+      return;
+    }
+    active.trackIds = optimistic;
     applyView();
     SocketClient.sendWithCallback('savedPlaylists:setOrder', { id: active.id, trackIds: orderedIds }, (res) => {
       if (!res?.ok) { active.trackIds = previous; applyView(); toast(playlistError(res), 'error'); return; }
@@ -1100,7 +1145,10 @@
   if (deleteBtn) deleteBtn.addEventListener('click', deletePlaylist);
   SocketClient.on('savedPlaylists:list', applySavedPlaylists);
   SocketClient.on('bgm:playlist', (payload) => {
-    if (Array.isArray(payload?.trackIds)) bgmTrackIds = payload.trackIds;
+    if (!Array.isArray(payload?.trackIds)) return;
+    bgmTrackIds = payload.trackIds;
+    renderPlaylistChips();
+    if (activePlaylistId === BGM_PLAYLIST_ID) applyView();
   });
   renderPlaylistChips();
 
