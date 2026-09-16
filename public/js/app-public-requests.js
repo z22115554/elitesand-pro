@@ -18,7 +18,7 @@
   const t = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : fallbackT(key, vars));
   const ALL_CATALOG_PLAYLIST_ID = '__all-library__';
 
-  let lastStatus = { configured: false, enabled: false, connected: false, connecting: false, publicSlug: '', shareUrl: '', publishedPlaylistId: '' };
+  let lastStatus = { configured: false, enabled: false, connected: false, connecting: false, publicSlug: '', shareUrl: '', publishedPlaylistId: '', isCustomSlug: false, customSlugAttemptsRemaining: 3 };
   let pendingRequests = [];
   let playlists = [];
   const busy = new Set();
@@ -68,6 +68,19 @@
       // 面板只負責顯示 data URL，不在瀏覽器端重新產生。
       if (qr && lastStatus.qrDataUrl) qr.src = lastStatus.qrDataUrl;
     }
+
+    // 已經是自訂網址時，「重新產生連結」（隨機亂碼）這顆按鈕就沒有意義了：使用者
+    // 要換網址直接打新的自訂字串即可，不需要兩個入口做同一件事。
+    const rotateBtn = el('public-request-rotate-link');
+    if (rotateBtn) rotateBtn.hidden = !!lastStatus.isCustomSlug;
+
+    const remaining = Number.isFinite(lastStatus.customSlugAttemptsRemaining) ? lastStatus.customSlugAttemptsRemaining : 3;
+    const remainingEl = el('public-request-slug-remaining');
+    if (remainingEl) remainingEl.textContent = remaining > 0 ? t('publicRequest.slugRemaining', { count: remaining }) : t('publicRequest.slugExhausted');
+    const slugInput = el('public-request-custom-slug');
+    const applyBtn = el('public-request-apply-slug');
+    if (slugInput) slugInput.disabled = remaining <= 0;
+    if (applyBtn) applyBtn.disabled = remaining <= 0;
 
     const select = el('public-request-catalog-select');
     if (select && select.value !== lastStatus.publishedPlaylistId) select.value = lastStatus.publishedPlaylistId || '';
@@ -184,6 +197,22 @@
       event.target.disabled = false;
       if (!result?.ok) AppShared.showToast(result?.error || t('publicRequest.rotateFailed'), 'error');
       else AppShared.showToast(t('publicRequest.rotated'), 'success');
+    });
+  });
+
+  el('public-request-apply-slug')?.addEventListener('click', (event) => {
+    const input = el('public-request-custom-slug');
+    const customSlug = (input?.value || '').trim();
+    if (!customSlug) return;
+    event.target.disabled = true;
+    SocketClient.sendWithCallback('public-request:rotate-link', { customSlug }, (result) => {
+      event.target.disabled = false;
+      if (!result?.ok) {
+        AppShared.showToast(result?.error || t('publicRequest.slugApplyFailed'), 'error');
+        return;
+      }
+      if (input) input.value = '';
+      AppShared.showToast(t('publicRequest.slugApplied'), 'success');
     });
   });
 

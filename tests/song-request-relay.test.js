@@ -44,9 +44,15 @@ test('relayEnabledByConfig：需同時打開上層開關且使用 https，空字
 });
 
 test('song-request-relay-store：save/load 往返，未知欄位不會混進來', () => {
-  relayStore.save({ enabled: true, publicSlug: 'abc123', secret: 's3cr3t', publishedPlaylistId: 'pl1', extra: 'nope' });
+  relayStore.save({
+    enabled: true, publicSlug: 'abc123', secret: 's3cr3t', publishedPlaylistId: 'pl1',
+    isCustomSlug: true, customSlugAttempts: 2, extra: 'nope',
+  });
   const loaded = relayStore.load();
-  assert.deepEqual(loaded, { enabled: true, publicSlug: 'abc123', secret: 's3cr3t', publishedPlaylistId: 'pl1' });
+  assert.deepEqual(loaded, {
+    enabled: true, publicSlug: 'abc123', secret: 's3cr3t', publishedPlaylistId: 'pl1',
+    isCustomSlug: true, customSlugAttempts: 2,
+  });
 });
 
 function makeFakeSavedPlaylists(playlists) {
@@ -462,6 +468,17 @@ test('Worker v2 只在首包驗證成功後標記桌面連線，並隔離舊版 
   assert.ok(verifyAt >= 0 && replaceCallAt > verifyAt, '未認證 socket 不可先踢掉目前桌面連線');
 });
 
+test('自訂網址（vanity slug）：格式驗證、先搶先贏交給既有 already_initialized 檢查，不另建查重表', () => {
+  // 2026-09-17 產品決定不做帳號/序號系統、全部免費開放（memory: commercial-direction-pivot），
+  // 所以這裡刻意不驗證「誰能用」，只驗證格式，並確認佔用判斷仍然只靠 room-do.js
+  // _handleInit 既有的 already_initialized（409），沒有另外引入一張會漂移的查重表。
+  const workerSource = fs.readFileSync(path.join(__dirname, '../cloud/song-request-relay/src/worker.js'), 'utf8');
+  assert.ok(workerSource.includes('body?.preferredSlug'), '/api/register 必須能接受使用者自訂的 preferredSlug');
+  assert.ok(workerSource.includes('!SLUG_PATTERN.test(preferredSlug)'), '自訂 slug 必須跟隨機 slug 同一套格式規則');
+  assert.ok(workerSource.includes("initResponse.status === 409") && workerSource.includes("'slug_taken'"),
+    '房間已存在時（already_initialized）要轉成 slug_taken，不能覆寫別人的房間');
+});
+
 test('rotateLink()：重新註冊拿到新 slug/secret，沿用啟用狀態', async () => {
   let registerCalls = 0;
   const saved = [];
@@ -486,6 +503,114 @@ test('rotateLink()：重新註冊拿到新 slug/secret，沿用啟用狀態', as
   assert.equal(result.publicSlug, 'slug-1');
   assert.equal(saved[saved.length - 1].publicSlug, 'slug-1');
   assert.equal(saved[saved.length - 1].enabled, true);
+});
+
+test('rotateLink(customSlug)：格式不對本機直接擋下，不打網路', async () => {
+  let registerCalls = 0;
+  const fetchImpl = async () => { registerCalls++; return { ok: true, json: async () => ({ publicSlug: 'x', secret: 'y' }) }; };
+  const service = makeService({
+    store: { load: () => ({ enabled: true, publicSlug: 'old-slug', secret: 'old-secret', publishedPlaylistId: '' }), save: () => true },
+    fetchImpl,
+  });
+  const tooShort = await service.rotateLink('short');
+  assert.equal(tooShort.ok, false);
+  const badChar = await service.rotateLink('bad slug!!');
+  assert.equal(badChar.ok, false);
+  assert.equal(registerCalls, 0, '格式驗證失敗不該打任何網路請求：');
+});
+
+test('rotateLink(customSlug)：合法格式會把 preferredSlug 帶進註冊請求 body', async () => {
+  let sentBody = null;
+  const fetchImpl = async (url, init) => {
+    sentBody = JSON.parse(init.body);
+    return { ok: true, json: async () => ({ publicSlug: sentBody.preferredSlug, secret: 'secret-1' }) };
+  };
+  const service = makeService({
+    store: { load: () => ({ enabled: true, publicSlug: 'old-slug', secret: 'old-secret', publishedPlaylistId: '' }), save: () => true },
+    fetchImpl,
+    createWebSocket: () => class { constructor() {} close() {} },
+  });
+  const result = await service.rotateLink('my-channel-name');
+  assert.equal(result.ok, true);
+  assert.equal(sentBody.preferredSlug, 'my-channel-name');
+  assert.equal(result.publicSlug, 'my-channel-name');
+});
+
+test('rotateLink(customSlug)：成功套用後 getStatus() 標記 isCustomSlug 且消耗一次機會', async () => {
+  const saved = [];
+  let callCount = 0;
+  const fetchImpl = async (url, init) => {
+    callCount++;
+    const body = JSON.parse(init.body);
+    return { ok: true, json: async () => ({ publicSlug: body.preferredSlug, secret: `secret-${callCount}` }) };
+  };
+  const service = makeService({
+    store: {
+      load: () => ({ enabled: true, publicSlug: 'old-slug', secret: 'old-secret', publishedPlaylistId: '', isCustomSlug: false, customSlugAttempts: 0 }),
+      save: (state) => { saved.push({ ...state }); return true; },
+    },
+    fetchImpl,
+    createWebSocket: () => class { constructor() {} close() {} },
+  });
+  assert.equal(service.getStatus().isCustomSlug, false);
+  assert.equal(service.getStatus().customSlugAttemptsRemaining, 3);
+  const result = await service.rotateLink('first-custom-name');
+  assert.equal(result.ok, true);
+  assert.equal(service.getStatus().isCustomSlug, true);
+  assert.equal(service.getStatus().customSlugAttemptsRemaining, 2);
+  assert.equal(saved.at(-1).isCustomSlug, true);
+  assert.equal(saved.at(-1).customSlugAttempts, 1);
+});
+
+test('rotateLink(customSlug)：用完 3 次機會後本機直接擋下，不再打網路', async () => {
+  let registerCalls = 0;
+  const fetchImpl = async (url, init) => {
+    registerCalls++;
+    const body = JSON.parse(init.body);
+    return { ok: true, json: async () => ({ publicSlug: body.preferredSlug, secret: `secret-${registerCalls}` }) };
+  };
+  const service = makeService({
+    store: { load: () => ({ enabled: true, publicSlug: 'old-slug', secret: 'old-secret', publishedPlaylistId: '', isCustomSlug: false, customSlugAttempts: 0 }), save: () => true },
+    fetchImpl,
+    createWebSocket: () => class { constructor() {} close() {} },
+  });
+  assert.equal((await service.rotateLink('custom-name-one')).ok, true);
+  assert.equal((await service.rotateLink('custom-name-two')).ok, true);
+  assert.equal((await service.rotateLink('custom-name-three')).ok, true);
+  assert.equal(registerCalls, 3);
+  assert.equal(service.getStatus().customSlugAttemptsRemaining, 0);
+  const fourth = await service.rotateLink('custom-name-four');
+  assert.equal(fourth.ok, false);
+  assert.equal(registerCalls, 3, '第 4 次要在本機被擋下，不能再打網路註冊：');
+});
+
+test('rotateLink()：不帶自訂字串的一般隨機重新產生，不消耗自訂機會、也會清掉 isCustomSlug', async () => {
+  const fetchImpl = async () => ({ ok: true, json: async () => ({ publicSlug: 'random-slug-1', secret: 'secret-1' }) });
+  const service = makeService({
+    store: { load: () => ({ enabled: true, publicSlug: 'my-custom-name', secret: 'old-secret', publishedPlaylistId: '', isCustomSlug: true, customSlugAttempts: 1 }), save: () => true },
+    fetchImpl,
+    createWebSocket: () => class { constructor() {} close() {} },
+  });
+  const result = await service.rotateLink();
+  assert.equal(result.ok, true);
+  assert.equal(service.getStatus().isCustomSlug, false);
+  assert.equal(service.getStatus().customSlugAttemptsRemaining, 2, '隨機重新產生不該退還或多扣自訂機會：');
+});
+
+test('rotateLink(customSlug)：Worker 回 409（已被別人用掉）轉成看得懂的錯誤，不動舊 slug', async () => {
+  const saved = [];
+  const fetchImpl = async () => ({ ok: false, status: 409 });
+  const service = makeService({
+    store: {
+      load: () => ({ enabled: true, publicSlug: 'old-slug', secret: 'old-secret', publishedPlaylistId: '' }),
+      save: (state) => { saved.push({ ...state }); return true; },
+    },
+    fetchImpl,
+  });
+  const result = await service.rotateLink('taken-name');
+  assert.equal(result.ok, false);
+  assert.ok(!/HTTP 409/.test(result.error), '要轉成人話，不是原始 HTTP 狀態碼：');
+  assert.equal(saved.length, 0, '註冊失敗不該覆寫已存的舊 slug/secret：');
 });
 
 test('入口防刷：有 Cloudflare IP 與 visitor cookie 時，同時使用兩層限流 key', async () => {

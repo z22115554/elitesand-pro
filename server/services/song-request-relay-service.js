@@ -31,6 +31,13 @@ const MAX_PENDING_REQUESTS = 20;
 const MAX_CATALOG_TRACKS = 2000; // 對齊 MAX_PLAYLIST_SIZE / saved-playlists 的既有上限
 const CATALOG_PUSH_DEBOUNCE_MS = 2000;
 const ALL_CATALOG_PLAYLIST_ID = '__all-library__';
+// 跟 cloud/song-request-relay/src/worker.js 的 SLUG_PATTERN 保持一致：格式錯誤先在本機擋掉，
+// 不用等一趟網路才知道。
+const CUSTOM_SLUG_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+// 2026-09-17：自訂網址沒有帳號系統可以事後收回（見 memory: commercial-direction-pivot），
+// 使用者手滑改來改去會永久佔用一堆沒人用的字串。一輩子（這台安裝）只給 3 次機會，
+// 逼使用者慎選，而不是無限重試。
+const MAX_CUSTOM_SLUG_ATTEMPTS = 3;
 
 function wsUrlFromHttp(httpUrl) {
   return String(httpUrl || '').replace(/^http/i, 'ws').replace(/\/+$/, '');
@@ -186,9 +193,18 @@ class SongRequestRelayService {
     return { ok: true, ...this.getStatus() };
   }
 
-  async rotateLink() {
+  async rotateLink(preferredSlug) {
     if (!relayEnabledByConfig(this.config)) {
       return { ok: false, error: relayConfigError(this.config) };
+    }
+    const trimmedSlug = typeof preferredSlug === 'string' ? preferredSlug.trim() : '';
+    if (trimmedSlug) {
+      if ((this.state.customSlugAttempts || 0) >= MAX_CUSTOM_SLUG_ATTEMPTS) {
+        return { ok: false, error: `自訂網址機會已用完（最多 ${MAX_CUSTOM_SLUG_ATTEMPTS} 次），無法再變更` };
+      }
+      if (!CUSTOM_SLUG_PATTERN.test(trimmedSlug)) {
+        return { ok: false, error: '網址只能是英文字母、數字、- 或 _，長度 8～64 個字元' };
+      }
     }
     const wasEnabled = this.state.enabled;
     this.reconnectSuppressed = false;
@@ -198,7 +214,7 @@ class SongRequestRelayService {
     }
     this.connected = false;
     this._clearReconnectTimer();
-    const registered = await this._register();
+    const registered = await this._register(trimmedSlug);
     if (!registered.ok) return registered;
     this.state.enabled = wasEnabled;
     this._persist();
@@ -250,6 +266,8 @@ class SongRequestRelayService {
       shareUrl: this.state.publicSlug && base ? `${base}/r/${this.state.publicSlug}` : '',
       publishedPlaylistId: this.state.publishedPlaylistId,
       qrDataUrl: this._qrDataUrl || '',
+      isCustomSlug: this.state.isCustomSlug === true,
+      customSlugAttemptsRemaining: Math.max(0, MAX_CUSTOM_SLUG_ATTEMPTS - (this.state.customSlugAttempts || 0)),
     };
   }
 
@@ -304,7 +322,7 @@ class SongRequestRelayService {
 
   // ─── 內部：註冊 ───
 
-  async _register() {
+  async _register(preferredSlug) {
     try {
       // code review 2026-09-15：原本沒有 timeout，Worker／網路卡住（非明確錯誤）時
       // 這個 await 永遠不會解開，enable()／rotateLink() 的 socket ack 就永遠不會回，
@@ -319,19 +337,32 @@ class SongRequestRelayService {
         response = await this.fetchImpl(`${String(this.config.songRequestRelayUrl).replace(/\/+$/, '')}/api/register`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: '{}',
+          body: JSON.stringify(preferredSlug ? { preferredSlug } : {}),
           signal: controller.signal,
         });
       } finally {
         this.timers.clearTimeout(timer);
       }
-      if (!response.ok) return { ok: false, error: `中繼註冊失敗（HTTP ${response.status}）` };
+      if (!response.ok) {
+        // 2026-09-17：自訂網址（vanity slug）先搶先贏，沒有帳號系統可以判斷「誰能用」，
+        // 產品決定全部開放（memory: commercial-direction-pivot）。這裡只需要把「已被別人用掉」
+        // 轉成看得懂的訊息，不做任何身份或權限檢查。
+        if (response.status === 409) return { ok: false, error: '這個網址已經被使用，換一個試試' };
+        if (response.status === 400) return { ok: false, error: '網址只能是英文字母、數字、- 或 _，長度 8～64 個字元' };
+        return { ok: false, error: `中繼註冊失敗（HTTP ${response.status}）` };
+      }
       const data = await response.json();
       if (!data || typeof data.publicSlug !== 'string' || typeof data.secret !== 'string' || !data.publicSlug || !data.secret) {
         return { ok: false, error: '中繼回應格式無效' };
       }
       this.state.publicSlug = data.publicSlug;
       this.state.secret = data.secret;
+      if (preferredSlug) {
+        this.state.isCustomSlug = true;
+        this.state.customSlugAttempts = (this.state.customSlugAttempts || 0) + 1;
+      } else {
+        this.state.isCustomSlug = false;
+      }
       this._persist();
       return { ok: true };
     } catch (err) {

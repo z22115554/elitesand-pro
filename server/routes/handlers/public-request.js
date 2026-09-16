@@ -38,8 +38,9 @@ function registerPublicRequestHandlers(io, socket, ctx, { getRelayService }) {
   socket.on('public-request:rotate-link', async (payload, ack) => {
     const service = getRelayService();
     if (!service) { if (typeof ack === 'function') ack({ ok: false, error: '公開點歌頁服務尚未啟動' }); return; }
+    const customSlug = typeof payload?.customSlug === 'string' ? payload.customSlug : '';
     try {
-      const result = await service.rotateLink();
+      const result = await service.rotateLink(customSlug);
       if (typeof ack === 'function') ack(result);
     } catch (err) {
       log.warn(`公開點歌頁重新產生連結失敗：${err.message}`);

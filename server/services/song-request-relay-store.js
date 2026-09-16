@@ -23,6 +23,8 @@ function emptyState() {
     publicSlug: '',
     secret: '',
     publishedPlaylistId: '',
+    isCustomSlug: false,
+    customSlugAttempts: 0,
   };
 }
 
@@ -33,6 +35,11 @@ function sanitize(value) {
     publicSlug: typeof source.publicSlug === 'string' ? source.publicSlug.slice(0, 128) : '',
     secret: typeof source.secret === 'string' ? source.secret.slice(0, 256) : '',
     publishedPlaylistId: typeof source.publishedPlaylistId === 'string' ? source.publishedPlaylistId.slice(0, 128) : '',
+    // 2026-09-17：目前 slug 是不是使用者自己選的（vanity slug），以及一共用掉幾次自訂
+    // 機會——上限見 song-request-relay-service.js 的 MAX_CUSTOM_SLUG_ATTEMPTS，避免使用者
+    // 手滑反覆改字串，永久佔用一堆沒人用的網址（沒有帳號系統，佔用了就收不回來）。
+    isCustomSlug: source.isCustomSlug === true,
+    customSlugAttempts: Number.isFinite(source.customSlugAttempts) ? Math.max(0, Math.floor(source.customSlugAttempts)) : 0,
   };
 }
 

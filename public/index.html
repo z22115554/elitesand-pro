@@ -1495,6 +1495,15 @@
                     <button id="public-request-create-catalog" class="btn btn-sm" type="button" data-i18n="publicRequest.createCatalogFromQueue">用目前播放清單建立公開歌單</button>
                   </div>
                 </div>
+                <div class="field">
+                  <label for="public-request-custom-slug" data-i18n="publicRequest.customSlugLabel">自訂網址（選填）</label>
+                  <div class="public-request-share-input-row">
+                    <input id="public-request-custom-slug" class="input" type="text" maxlength="64" data-i18n-placeholder="publicRequest.customSlugPlaceholder" placeholder="例如 my-channel-name" autocomplete="off">
+                    <button id="public-request-apply-slug" class="btn btn-sm" type="button" data-i18n="publicRequest.applySlug">套用</button>
+                  </div>
+                  <p class="field-hint" data-i18n="publicRequest.customSlugHint">只能是英文字母、數字、- 或 _，長度 8～64 個字元；套用後舊連結立即失效，且無法保證這個字串沒被別人搶先用掉。</p>
+                  <p class="field-hint" id="public-request-slug-remaining"></p>
+                </div>
                 <button id="public-request-rotate-link" class="btn btn-sm btn-ghost" type="button" data-i18n="publicRequest.rotateLink">重新產生連結（舊連結立即失效）</button>
               </div>
             </div>
