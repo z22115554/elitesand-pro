@@ -6263,6 +6263,52 @@ test('offset:adjust 一次到位的大偏移，跟分好幾次小幅微調的累
   eq(trackOffsets.get('mv-extreme-2'), MAX_OFFSET_MS);
 });
 
+testAsync('lyrics:manual（切換歌詞來源）不能因為 ctx 少帶一個欄位就整個 handler 崩潰', async () => {
+  // 2026-09 使用者實機回報：切換歌詞來源後羅馬拼音/諧音永遠不出現，要切歌
+  // 才會補回來。追到底是 registerLyricsHandlers 忘記把 broadcastState 從
+  // ctx 解構出來，導致 socket handler 真的呼叫 broadcastState() 時直接
+  // ReferenceError，把整個事件處理器中斷在羅馬化判斷式之前——不是羅馬化邏輯
+  // 本身有問題。既有測試全部只組出 mock ctx 卻沒有一個真的觸發
+  // lyrics:manual，這個洞才會一直沒被抓到。這裡直接呼叫它，鎖住「不會
+  // 拋例外、broadcastState 真的被呼叫到」。
+  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
+  const events = new Map();
+  const emitted = [];
+  let broadcastCalls = 0;
+  const ctx = {
+    playState: { currentTrack: { id: 'switch-source-track', title: '切換來源測試' }, playlist: [] },
+    trackOffsets: new Map(), manualLyricsCache: new Map(), lyricOffsetSyncTimers: new Map(),
+    persistState() {}, broadcastState() { broadcastCalls += 1; },
+  };
+  registerLyricsHandlers({ emit(event, data) { emitted.push({ event, data }); } }, { on(event, handler) { events.set(event, handler); } }, ctx);
+
+  let threw = null;
+  try {
+    events.get('lyrics:manual')({
+      trackId: 'switch-source-track',
+      lyrics: '[00:01.00]今日は晴れです',
+      lyricsType: 'lrc',
+      parsedLyrics: [{ time: 1000, text: '今日は晴れです' }],
+      source: 'qqmusic',
+    });
+  } catch (e) {
+    threw = e;
+  }
+  eq(threw, null, 'lyrics:manual 不可同步拋出例外（曾經是 broadcastState is not defined）: ');
+  eq(broadcastCalls, 1, '切換來源必須真的走到 broadcastState()，不能在那之前就中斷: ');
+
+  // 給非同步的 addRomanization().then() 機會跑完，確認崩潰真的沒有把後面的
+  // 羅馬化流程一起悶掉。開發機沒裝 haqumei 時，v2 那段會先嘗試 spawn 一個
+  // python 子行程才 fallback；跑在完整測試套件裡（同一行程裡還有大量其他
+  // 測試在跑）時，這個 spawn 實測可能被排擠到 20 秒以上才完成，不是卡住，
+  // 是 OS 行程排程壅塞——逾時抓寬一點，不要因為機器忙就假失敗。
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline && !emitted.some((item) => item.event === 'lyrics:romanized')) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  ok(emitted.some((item) => item.event === 'lyrics:romanized'), '崩潰修好後，羅馬化完成應該要能正常推播 lyrics:romanized: ');
+});
+
 test('同 id 歌曲重新加入後播放時，會套回保留的手動歌詞與 offset', () => {
   const registerPlaybackHandlers = require('../server/routes/handlers/playback');
   const libraryStore = require('../server/services/library-store');

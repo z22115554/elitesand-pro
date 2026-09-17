@@ -101,7 +101,7 @@ const normLyricSource = (value) => (KNOWN_LYRIC_SOURCES.includes(value) ? value 
 function registerLyricsHandlers(io, socket, ctx) {
   const {
     playState, trackOffsets, manualLyricsCache,
-    persistState,
+    persistState, broadcastState,
   } = ctx;
 
   // 目前播放中或清單裡對應 trackId 的所有 track 物件（currentTrack 與 playlist 項可能不同參照）。
