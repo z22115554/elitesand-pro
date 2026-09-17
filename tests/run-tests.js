@@ -9839,9 +9839,29 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   // 向內（往中央）可調範圍放寬 — 所有舞台模板一起
   ok(lyricExtras.includes('STAGE_OFFSET_X_INWARD = 700'), '舞台模板向內位移範圍必須放寬到 700: ');
   // 底部進度條開關（放在「歌詞顯示模式」）
-  ok(lyricExtras.includes('showProgressBar: true') && lyricExtras.includes("key: 'showProgressBar'"), '底部進度條必須有設定鍵與控制項: ');
+  ok(lyricExtras.includes('showProgressBar: true') && lyricExtras.includes("bindGlobalToggle('ls-progress-bar', 'showProgressBar')"), '底部進度條必須有設定鍵與控制項: ');
   ok(panelHtml.includes('id="ls-progress-bar"') && panelHtml.includes('底部進度條'), 'index.html「歌詞顯示模式」必須有底部進度條開關: ');
   ok(displayJsSrc.includes("obsProgressBar") && displayJsSrc.includes("s.showProgressBar === false"), 'display.js 必須依 showProgressBar 顯示／隱藏底部進度條: ');
+  // 2026-09-18 回報：切換歌詞動畫（模板）後簡轉繁／底部進度條會跟著變。根因是這兩個鍵混進
+  // per-template 的 DEFAULT_SETTINGS/CONTROLS，selectTemplate() 整包替換 settings 時被覆蓋。
+  // 修法：獨立成 globalDisplaySettings，不隨模板切換，也不進 templateSettings[tpl] 快照。
+  ok(!lyricExtras.includes("key: 'showProgressBar'") && !lyricExtras.includes("key: 'convertTraditional'"),
+    '簡轉繁／底部進度條不可再掛在 per-template 的 CONTROLS 陣列上（會被切模板覆蓋）: ');
+  ok(lyricExtras.includes('let globalDisplaySettings = { convertTraditional: true, showProgressBar: true }')
+    && lyricExtras.includes("function bindGlobalToggle(id, key)")
+    && lyricExtras.includes("bindGlobalToggle('ls-traditional', 'convertTraditional')"),
+    '簡轉繁／底部進度條必須是獨立於 per-template settings 的全域狀態: ');
+  {
+    const selectTemplateStart = lyricExtras.indexOf('const selectTemplate = (nextTemplate)');
+    const selectTemplateEnd = lyricExtras.indexOf('templateButtons.forEach', selectTemplateStart);
+    const selectTemplateSrc = selectTemplateStart >= 0 && selectTemplateEnd > selectTemplateStart
+      ? lyricExtras.slice(selectTemplateStart, selectTemplateEnd) : '';
+    ok(selectTemplateSrc.length > 0
+      && !selectTemplateSrc.includes('convertTraditional') && !selectTemplateSrc.includes('showProgressBar'),
+      'selectTemplate() 整包替換 settings 時不可牽動簡轉繁／底部進度條: ');
+  }
+  ok(lyricExtras.includes('const merged = { ...s, ...globalDisplaySettings };'),
+    '預覽 iframe 也要拿到通用設定，不能因為它們不在 per-template settings 裡就漏送: ');
 
   // ── 對話氣泡：長間奏跳貼圖（支援透明 PNG／GIF；內建三張；可上傳／刪除）──
   ok(templateJs.includes('function maybePlaceStickers') && templateJs.includes('function buildSticker')

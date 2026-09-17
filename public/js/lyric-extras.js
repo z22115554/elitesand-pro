@@ -58,8 +58,8 @@
     offsetX: 0,
     offsetY: 0,
     // 逐字 KTV 模式已移除（經典疊層一律逐句；逐字改用獨立的 KTV 伴唱模板）
-    convertTraditional: true, // 簡轉繁（簡體歌詞顯示成繁體；只轉原文 Han 字，不動拼音/諧音）；預設開啟
-    showProgressBar: true,     // 顯示端底部極細歌曲進度條；預設開，OBS 不想要可在「歌詞顯示模式」關掉
+    // 注意：convertTraditional／showProgressBar 不放在這裡——它們是「歌詞顯示模式」的通用設定，
+    // 不屬於任何一個模板的外觀，見下方 globalDisplaySettings（切模板不可連動跑掉，2026-09-18 回報）。
     // ── 燈牌：只吃兩款真點陣字型；三段捲動各自獨立 ──
     lightboardFont: 'cubic11',       // 'cubic11'（11×11）｜'boutique9x9'（9×9）；兩款都隨程式打包（SIL OFL）
     lightboardPan: true,             // 長句平移：功能不是裝飾，關掉會讓整首歌遷就最長句而縮小字級
@@ -178,6 +178,10 @@
   const PRESET_KEY = 'lyricPresets';
   let templateSettings = {};
   let lyricPresets = [];
+  // 「歌詞顯示模式」的通用設定：簡轉繁／底部進度條。跟 romanizationMode／metronomeEnabled 一樣
+  // 是全域偏好，不隨模板切換而變——不可放進 settings（per-template），也不可放進
+  // templateSettings[tpl]，否則 selectTemplate() 整包替換 settings 時會連帶跑掉。
+  let globalDisplaySettings = { convertTraditional: true, showProgressBar: true };
 
   function templateDefaults(template) {
     return { ...(TEMPLATE_DEFAULTS[template] || TEMPLATE_DEFAULTS.classic) };
@@ -258,7 +262,7 @@
 
   function buildSettingsPayload() {
     saveCurrentTemplateSnapshot();
-    return { ...cleanSettingSnapshot(settings), [TEMPLATE_SETTING_KEY]: templateSettings, [PRESET_KEY]: lyricPresets };
+    return { ...cleanSettingSnapshot(settings), ...globalDisplaySettings, [TEMPLATE_SETTING_KEY]: templateSettings, [PRESET_KEY]: lyricPresets };
   }
 
   let settings = loadSettings();
@@ -324,6 +328,8 @@
         const parsed = JSON.parse(raw);
         templateSettings = normalizeTemplateSettings(parsed[TEMPLATE_SETTING_KEY], parsed);
         lyricPresets = normalizePresets(parsed[PRESET_KEY]);
+        if (typeof parsed.convertTraditional === 'boolean') globalDisplaySettings.convertTraditional = parsed.convertTraditional;
+        if (typeof parsed.showProgressBar === 'boolean') globalDisplaySettings.showProgressBar = parsed.showProgressBar;
         return { ...templateDefaults('classic'), ...cleanSettingSnapshot(parsed) };
       }
     } catch (e) { /* 忽略 */ }
@@ -399,7 +405,6 @@
     { id: 'ls-padding-x', key: 'paddingX', valId: 'ls-padding-x-val', fmt: v => v + 'px' },
     { id: 'ls-tw-padding-x', key: 'paddingX', valId: 'ls-tw-padding-x-val', fmt: v => v + 'px' }, // 打字機專用：同一個 paddingX，位置在「歌詞位置」下面
     { id: 'ls-padding-y', key: 'paddingY', valId: 'ls-padding-y-val', fmt: v => v + 'px' },
-    { id: 'ls-progress-bar', key: 'showProgressBar' },
     { id: 'ls-lightboard-font', key: 'lightboardFont' },
     { id: 'ls-lightboard-pan', key: 'lightboardPan' },
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
@@ -410,7 +415,8 @@
     { id: 'ls-max-width', key: 'maxWidth', valId: 'ls-max-width-val', fmt: v => v + '%' },
     { id: 'ls-offset-x', key: 'offsetX', valId: 'ls-offset-x-val', fmt: v => v + 'px' },
     { id: 'ls-offset-y', key: 'offsetY', valId: 'ls-offset-y-val', fmt: v => v + 'px' },
-    { id: 'ls-traditional', key: 'convertTraditional' },
+    // ls-traditional／ls-progress-bar 不在這裡：它們讀寫 globalDisplaySettings，不隨模板切換，
+    // 見 bindGlobalToggle() 與 refreshControls() 裡的專屬同步。
   ];
 
   // 把目前 settings 套回所有 UI 控制項顯示（不觸發 pushSettings，用於採用伺服器設定 / 重置）
@@ -423,6 +429,11 @@
       const valEl = c.valId ? document.getElementById(c.valId) : null;
       if (valEl) valEl.textContent = c.fmt ? c.fmt(settings[c.key]) : settings[c.key];
     });
+    // 通用設定（不隨模板切換）：簡轉繁／底部進度條，讀 globalDisplaySettings 不讀 settings。
+    const traditionalEl = document.getElementById('ls-traditional');
+    if (traditionalEl) traditionalEl.checked = !!globalDisplaySettings.convertTraditional;
+    const progressBarEl = document.getElementById('ls-progress-bar');
+    if (progressBarEl) progressBarEl.checked = !!globalDisplaySettings.showProgressBar;
     ['ls-shadow', 'ls-particle-shadow-sel'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.value = settings.shadowPreset || 'soft';
@@ -457,6 +468,8 @@
   function applyServerSettings(srv) {
     if (!srv || typeof srv !== 'object' || Object.keys(srv).length === 0) return false;
     const clean = cleanSettingSnapshot(srv);
+    if (typeof srv.convertTraditional === 'boolean') globalDisplaySettings.convertTraditional = srv.convertTraditional;
+    if (typeof srv.showProgressBar === 'boolean') globalDisplaySettings.showProgressBar = srv.showProgressBar;
     templateSettings = normalizeTemplateSettings(srv[TEMPLATE_SETTING_KEY], clean);
     lyricPresets = normalizePresets(srv[PRESET_KEY]);
     const tpl = TEMPLATE_IDS.includes(clean.template) ? clean.template : 'classic';
@@ -487,10 +500,12 @@
   // 真正的 OBS 來源仍透過下方 debounce 的 socket 更新並持久化，兩條路徑套用同一份設定、互不衝突。
   function previewToIframe(s) {
     try {
-      // 同時送給所有內嵌預覽（歌詞分頁 + 設定分頁），兩邊都即時跟手
+      // 同時送給所有內嵌預覽（歌詞分頁 + 設定分頁），兩邊都即時跟手。
+      // convertTraditional/showProgressBar 是通用設定、不在 s（per-template settings）裡，補上去。
+      const merged = { ...s, ...globalDisplaySettings };
       document.querySelectorAll('iframe.obs-preview').forEach((frame) => {
         if (frame.contentWindow) {
-          frame.contentWindow.postMessage({ type: 'lyric-settings:preview', settings: s }, '*');
+          frame.contentWindow.postMessage({ type: 'lyric-settings:preview', settings: merged }, '*');
         }
       });
     } catch (e) { /* 靜默：預覽失敗不影響正式推送 */ }
@@ -560,6 +575,19 @@
       else v = el.value;
       settings[key] = v;
       if (valEl) valEl.textContent = opts.fmt ? opts.fmt(v) : v;
+      pushSettings();
+    });
+  }
+
+  // 「歌詞顯示模式」的通用開關（簡轉繁／底部進度條）：讀寫 globalDisplaySettings，不是
+  // per-template 的 settings，切換模板不會連動改變。其餘行為（change 事件、pushSettings）跟
+  // bindControl 一致。
+  function bindGlobalToggle(id, key) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.checked = !!globalDisplaySettings[key];
+    el.addEventListener('change', () => {
+      globalDisplaySettings[key] = el.checked;
       pushSettings();
     });
   }
@@ -1548,6 +1576,8 @@
 
   function initSettingsPanel() {
     CONTROLS.forEach((c) => bindControl(c.id, c.key, c));
+    bindGlobalToggle('ls-traditional', 'convertTraditional');
+    bindGlobalToggle('ls-progress-bar', 'showProgressBar');
 
     // 陰影：預設樣式 + 顏色 → 組成 CSS 字串。經典疊層與風息成字共用同一組（不同 id、同一份 state）。
     const applyShadow = () => { settings.shadow = buildShadow(settings.shadowPreset, settings.shadowColor); };
