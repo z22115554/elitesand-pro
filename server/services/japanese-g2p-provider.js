@@ -184,11 +184,18 @@ class JapaneseG2PProvider {
    * 整批送一首歌（或一段）的所有句子，一次 IPC 拿回全部結果——鐵則等級的
    * 原則：不可每一字都 IPC 一次，優先整句或整首批次處理。
    *
+   * `wordLengths`（可省略）：跟 `texts` 等長，每一項是該句 KRC 逐字模式每個
+   * word 的字元數陣列，或 null 表示這句不需要逐字拆分。有給的話，回傳的
+   * 對應項目會多一個 `words: string[][]`——整句只送一次給 Haqumei、依字元數
+   * 貪婪切回逐字（見 ai/haqumei_sidecar.py 的 `_bucket_by_krc_word_lengths`
+   * docstring），保留整句上下文（は／へ／を 這類助詞讀音），不是每個字各自
+   * 獨立呼叫。
+   *
    * @param {string[]} texts
-   * @param {{timeoutMs?: number}} [opts]
-   * @returns {Promise<Array<{phonemes:string[], kana:string}>>}
+   * @param {{timeoutMs?: number, wordLengths?: Array<number[]|null>}} [opts]
+   * @returns {Promise<Array<{phonemes:string[], kana:string, words?:string[][]}>>}
    */
-  async g2pBatch(texts, { timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  async g2pBatch(texts, { timeoutMs = REQUEST_TIMEOUT_MS, wordLengths } = {}) {
     if (!Array.isArray(texts) || texts.length === 0) return [];
     if (!this.isRunning()) await this.start();
     await this.readyPromise;
@@ -200,7 +207,9 @@ class JapaneseG2PProvider {
         reject(Object.assign(new Error('G2P sidecar 請求逾時'), { code: 'ENGINE_TIMEOUT' }));
       }, timeoutMs);
       this.pendingRequests.set(id, { resolve, reject, timeoutHandle });
-      this.proc.stdin.write(JSON.stringify({ id, texts }) + '\n');
+      const request = { id, texts };
+      if (Array.isArray(wordLengths)) request.wordLengths = wordLengths;
+      this.proc.stdin.write(JSON.stringify(request) + '\n');
     });
   }
 }
