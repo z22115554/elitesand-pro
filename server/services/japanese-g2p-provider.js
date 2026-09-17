@@ -77,12 +77,14 @@ class JapaneseG2PProvider {
     this.proc.on('exit', (code, signal) => {
       log.info(`G2P sidecar exited (code=${code}, signal=${signal})`);
       this._rejectAllPending(Object.assign(new Error(`G2P sidecar exited before responding (code=${code})`), { code: 'ENGINE_CRASHED' }));
+      this._failReadyIfPending(Object.assign(new Error(`G2P sidecar exited before ready (code=${code})`), { code: 'ENGINE_CRASHED' }));
       this.proc = null;
       this.readyPromise = null;
     });
     this.proc.on('error', (err) => {
       log.error('failed to spawn G2P sidecar', err);
       this._rejectAllPending(err);
+      this._failReadyIfPending(Object.assign(err, { code: err.code || 'ENGINE_UNAVAILABLE' }));
       this.proc = null;
       this.readyPromise = null;
     });
@@ -135,7 +137,9 @@ class JapaneseG2PProvider {
     if ('ready' in msg && !('id' in msg)) {
       clearTimeout(this._readyTimeoutHandle);
       if (msg.ready) this._resolveReady?.(msg);
-      else this._rejectReady?.(Object.assign(new Error(msg.error || 'G2P sidecar 回報 not ready'), { code: 'ENGINE_UNAVAILABLE' }));
+      else this._failReadyIfPending(Object.assign(new Error(msg.error || 'G2P sidecar 回報 not ready'), { code: 'ENGINE_UNAVAILABLE' }));
+      this._resolveReady = null;
+      this._rejectReady = null;
       return;
     }
 
@@ -148,6 +152,24 @@ class JapaneseG2PProvider {
     this.pendingRequests.delete(msg.id);
     if (msg.error) pending.reject(Object.assign(new Error(msg.error), { code: 'ENGINE_ERROR' }));
     else pending.resolve(msg.results);
+  }
+
+  /**
+   * 讓「還在等 ready」的那個 promise 立刻失敗，不要放著等 READY_TIMEOUT_MS
+   * 過期才失敗。少了這一步的話，python.exe 完全不存在（spawn ENOENT）或
+   * process 在送出任何一行輸出之前就先死掉這兩種情況，start() 會平白卡
+   * 10 秒才失敗——而且因為 provider 沒有記住「這次失敗了」，下一首歌再呼叫
+   * g2pBatch() 又會重新 spawn、重新卡 10 秒，同一個壞掉的 python 路徑會讓
+   * 每一首日文歌都多等 10 秒才 fallback 回舊版諧音（2026-09-18 使用者實測
+   * 回報：接上正式產線後歌詞完全沒有諧音，追下來就是這裡——不是「fallback
+   * 沒接上」，是「fallback要等 10 秒，而呼叫端等不到就已經把結果丟了」）。
+   */
+  _failReadyIfPending(err) {
+    if (!this._rejectReady) return;
+    clearTimeout(this._readyTimeoutHandle);
+    this._rejectReady(err);
+    this._resolveReady = null;
+    this._rejectReady = null;
   }
 
   _rejectAllPending(err) {

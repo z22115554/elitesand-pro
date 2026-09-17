@@ -26,6 +26,20 @@ test('haqumei 套件未安裝時，start() 明確拋出 ENGINE_UNAVAILABLE，不
   });
 });
 
+test('python 執行檔完全不存在（spawn ENOENT）時，start() 立刻失敗，不等滿 10 秒 READY_TIMEOUT', async () => {
+  // 2026-09-18 迴歸測試：exit／error 事件處理器過去只 reject 了
+  // pendingRequests，沒有連帶 reject 還在等 ready 的那個 promise，導致
+  // python 路徑整個錯誤（例如 ELITESAND_G2P_PYTHON 指到一個不存在的檔案）
+  // 時，start() 會卡好幾秒才用逾時失敗——而且因為沒有記住這次失敗，下一次
+  // g2pBatch() 又會重新卡一次。這裡鎖「立刻失敗」，不是鎖某個絕對秒數，
+  // 避免測試本身變成看 timing 臉色。
+  const provider = new JapaneseG2PProvider('E:\\this-python-does-not-exist-anywhere.exe');
+  const startedAt = Date.now();
+  await assert.rejects(() => provider.start());
+  const elapsedMs = Date.now() - startedAt;
+  assert.ok(elapsedMs < 3000, `start() 花了 ${elapsedMs}ms 才失敗，代表又退回去等 READY_TIMEOUT 了`);
+});
+
 test('installer 提供的 ELITESAND_G2P_PYTHON 會優先於系統 python', () => {
   const original = process.env.ELITESAND_G2P_PYTHON;
   process.env.ELITESAND_G2P_PYTHON = 'C:\\Program Files\\Elitesand Pro\\resources\\tools\\g2p\\python.exe';
