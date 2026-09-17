@@ -10329,6 +10329,27 @@ test('自動雙 stem 播放：新使用者人聲 20%，且播放區可自行調�
     '播放區的人聲音量滑桿必須仍可即時調高／調低：');
 });
 
+test('雙路輸出保持 warm，播放前等待 sink 就緒', () => {
+  const playback = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-playback.js'), 'utf8').replace(/\r\n/g, '\n');
+  ok(playback.includes('let dualSinkApplyChain = Promise.resolve(false);')
+    && playback.includes('function ensureDualAudioReady(options = {})'),
+  '雙路輸出要有可重用的 readiness gate 與序列化 sink queue：');
+  ok(playback.includes('const dualReadyPromise = wantDualAudio ? ensureDualAudioReady() : Promise.resolve(true);')
+    && playback.includes('Promise.all([masterLoadPromise, vocalsPromise, dualReadyPromise])'),
+  '新歌起播必須把 sink readiness 跟 decode 一起等待：');
+  ok(playback.includes('if (dualAudioModeEnabled) ensureDualAudioReady().then(startSTAfterOutputsReady);'),
+    '暫停後續播也必須等雙路輸出 ready：');
+  ok(/function stopPlayback\(\)[\s\S]{0,1800}if \(!dualAudioModeEnabled\) wireDualRouting\(false\);/.test(playback),
+    '一般歌曲停止不可拆掉仍啟用中的雙路 routing：');
+  ok(/function setDualAudioMode\(enabled\)[\s\S]{0,1000}if \(dualAudioModeEnabled\)[\s\S]{0,500}ensureDualAudioReady\(\)/.test(playback),
+    'idle 時開啟雙路模式要先 warm 兩個輸出：');
+  ok(/function setDualAudioDevices[\s\S]{0,1200}ensureDualAudioReady\(\{ force: true \}\)/.test(playback),
+    '換裝置時要強制排入最後一次 sink 設定：');
+  ok(playback.includes('const generation = ++dualSinkGeneration;')
+    && playback.includes('dualSinkApplyChain = tracked;'),
+  '快速換裝置必須序列化，避免較慢完成的舊 setSinkId 蓋回去：');
+});
+
 test('雙路路由已接上時才建立的人聲鏈，不可繞過耳機路的同步偏移', () => {
   // 實測回報：分離完成後改播伴奏軌，聽起來仍是「伴奏比人聲慢」，暫停時伴奏還會多播一小段。
   // 根因是 wireDualRouting(true) 在「狀態沒變」時直接 return：前一首沒分離時人聲鏈還不存在，
