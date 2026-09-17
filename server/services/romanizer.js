@@ -717,27 +717,52 @@ function getSharedG2PProvider() {
 
 /**
  * 日文諧音 v2（docs/JAPANESE-XIEYIN-V2-PLAN.md）：用 Haqumei G2P 取代羅馬字，
- * 只覆蓋 line.xieyin（不動 phonetic／furigana，那兩個仍是舊版羅馬化的職責）。
+ * 覆蓋 line.xieyin 跟 KRC 逐字模式的 word.xieyin（不動 phonetic／furigana，
+ * 那兩個仍是舊版羅馬化的職責）。
  *
  * 刻意設計成「失敗了就當沒發生過」：G2P sidecar 不存在／逾時／crash，或單一
  * 句子算不出結果，都只是保留上面 addXieyin() 已經算好的羅馬字諧音，不會
  * 讓歌詞載入失敗、也不會拋錯到呼叫端——這是計畫書 Phase 5 對 fallback 的
- * 硬性要求。目前只做 line 層級（KRC 逐字 word.xieyin 仍是舊版），批次一次
- * 送整首歌，不逐句 IPC。
+ * 硬性要求。整行文字跟所有逐字 word 文字合成同一批，一次 IPC 送完整首歌，
+ * 不逐字呼叫 sidecar。
+ *
+ * 逐字的已知取捨：每個 word 各自獨立丟進 G2P，沒有整行的上下文。KRC 的逐字
+ * 切法是排時間軸用的人工字塊（例如「満員電」／「車触んなって」），跟語言學
+ * 上的詞界本來就對不上，沒辦法直接拿 Haqumei 自己的分詞結果（g2p_per_word）
+ * 去對應——那是它按形態素切的，跟 KRC 檔案的字塊是兩套不同的切法。這代表
+ * 「は」「へ」「を」如果剛好單獨成一個 word，讀音修正在逐字這層會失效
+ * （助詞脫離了所在的整句）；但整行的 line.xieyin 不受影響，一樣是全文一次
+ * 送進 G2P。這個取捨舊版 addRomanization() 的逐字羅馬化本來就有（每個 word
+ * 也是各自呼叫 romanizeWithLang，沒有整行上下文），v2 只是沿用同一個既有
+ * 限制，不是新引入的問題。
  *
  * @param {Array} results - addRomanization 產出、已經跑過 addXieyin 的歌詞行
  */
 async function upgradeJapaneseXieyinWithV2(results) {
-  const targets = results.filter((line) => typeof line.text === 'string' && line.text.trim());
-  if (!targets.length) return;
+  const lineTargets = results.filter((line) => typeof line.text === 'string' && line.text.trim());
+  const wordTargets = [];
+  for (const line of results) {
+    if (!Array.isArray(line.words)) continue;
+    for (const word of line.words) {
+      if (typeof word.text === 'string' && word.text.trim()) wordTargets.push(word);
+    }
+  }
+  if (!lineTargets.length && !wordTargets.length) return;
   try {
     const provider = getSharedG2PProvider();
-    const g2pRows = await provider.g2pBatch(targets.map((line) => line.text), { timeoutMs: 15000 });
-    for (let i = 0; i < targets.length; i += 1) {
-      const row = g2pRows[i];
+    const allTexts = [...lineTargets.map((line) => line.text), ...wordTargets.map((word) => word.text)];
+    const allRows = await provider.g2pBatch(allTexts, { timeoutMs: 15000 });
+    for (let i = 0; i < lineTargets.length; i += 1) {
+      const row = allRows[i];
       if (!row || !Array.isArray(row.phonemes)) continue;
       const v2Xieyin = phonemesToXieyinV2(row.phonemes);
-      if (v2Xieyin) targets[i].xieyin = v2Xieyin;
+      if (v2Xieyin) lineTargets[i].xieyin = v2Xieyin;
+    }
+    for (let i = 0; i < wordTargets.length; i += 1) {
+      const row = allRows[lineTargets.length + i];
+      if (!row || !Array.isArray(row.phonemes)) continue;
+      const v2Xieyin = phonemesToXieyinV2(row.phonemes);
+      if (v2Xieyin) wordTargets[i].xieyin = v2Xieyin;
     }
   } catch (error) {
     log.warn(`日文諧音 v2 升級失敗（${error.code || error.message}），維持既有羅馬字諧音`);
