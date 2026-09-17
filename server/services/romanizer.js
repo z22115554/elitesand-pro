@@ -21,6 +21,8 @@ const path = require('path');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Romanizer');
 const { addXieyin } = require('./xieyin');
+const { JapaneseG2PProvider } = require('./japanese-g2p-provider');
+const { phonemesToXieyinV2 } = require('./xieyin-v2-mapper');
 
 // 中文漢語拼音（安全載入：套件缺失時降級，不讓伺服器崩潰）
 let pinyinPro = null;
@@ -697,10 +699,49 @@ async function addRomanization(lyricsLines) {
     results.push(result);
   }
 
-  // 諧音只對日文/韓文做（中文用拼音、不需諧音）
+  // 諧音只對日文/韓文做（中文用拼音、不需諧音）——先跑舊版，保證每一行
+  // 都有一個能用的 xieyin 當底線，再讓 v2 有機會的話去蓋掉日文行。
   if (lang === 'ja' || lang === 'ko') addXieyin(results);
+  if (lang === 'ja') await upgradeJapaneseXieyinWithV2(results);
 
   return results;
+}
+
+// 跟 ai-separation 的 supervisor 同一個道理：process 內只維持一個常駐
+// sidecar，不要每首歌、每次 addRomanization 都重新 spawn 一次 python.exe。
+let sharedG2PProvider = null;
+function getSharedG2PProvider() {
+  if (!sharedG2PProvider) sharedG2PProvider = new JapaneseG2PProvider();
+  return sharedG2PProvider;
+}
+
+/**
+ * 日文諧音 v2（docs/JAPANESE-XIEYIN-V2-PLAN.md）：用 Haqumei G2P 取代羅馬字，
+ * 只覆蓋 line.xieyin（不動 phonetic／furigana，那兩個仍是舊版羅馬化的職責）。
+ *
+ * 刻意設計成「失敗了就當沒發生過」：G2P sidecar 不存在／逾時／crash，或單一
+ * 句子算不出結果，都只是保留上面 addXieyin() 已經算好的羅馬字諧音，不會
+ * 讓歌詞載入失敗、也不會拋錯到呼叫端——這是計畫書 Phase 5 對 fallback 的
+ * 硬性要求。目前只做 line 層級（KRC 逐字 word.xieyin 仍是舊版），批次一次
+ * 送整首歌，不逐句 IPC。
+ *
+ * @param {Array} results - addRomanization 產出、已經跑過 addXieyin 的歌詞行
+ */
+async function upgradeJapaneseXieyinWithV2(results) {
+  const targets = results.filter((line) => typeof line.text === 'string' && line.text.trim());
+  if (!targets.length) return;
+  try {
+    const provider = getSharedG2PProvider();
+    const g2pRows = await provider.g2pBatch(targets.map((line) => line.text), { timeoutMs: 15000 });
+    for (let i = 0; i < targets.length; i += 1) {
+      const row = g2pRows[i];
+      if (!row || !Array.isArray(row.phonemes)) continue;
+      const v2Xieyin = phonemesToXieyinV2(row.phonemes);
+      if (v2Xieyin) targets[i].xieyin = v2Xieyin;
+    }
+  } catch (error) {
+    log.warn(`日文諧音 v2 升級失敗（${error.code || error.message}），維持既有羅馬字諧音`);
+  }
 }
 
 /**
@@ -772,4 +813,6 @@ module.exports = {
   furiganaSegmentsForToken,
   koreanToRomaja,
   getKuromojiTokenizer,
+  upgradeJapaneseXieyinWithV2,
+  getSharedG2PProvider,
 };
