@@ -401,6 +401,12 @@ function registerLyricsHandlers(io, socket, ctx) {
 
     // 手動歌詞也要羅馬化 + 諧音（非同步處理，不阻擋回應）
     // 修正：原本手動貼上的日文歌詞不會產生羅馬拼音與諧音行
+    //
+    // 2026-09 診斷：切換來源後羅馬拼音/諧音消失、且完全沒有後續 log 的回報——
+    // log.info('手動歌詞已暫存') 之後應該緊接著 needsRomanization 判斷式，但
+    // 連「✓ 手動歌詞羅馬化完成」跟「羅馬化失敗」都沒有印出來，代表這個 if
+    // 本身沒有進去。先印出判斷式吃到的實際值，不要再靠讀程式碼猜。
+    log.info(`lyrics:manual 羅馬化判斷：trackId=${trackId} isArray=${Array.isArray(parsedLyrics)} length=${Array.isArray(parsedLyrics) ? parsedLyrics.length : 'n/a'} needsRomanization=${Array.isArray(parsedLyrics) ? needsRomanization(parsedLyrics) : 'n/a'}`);
     if (parsedLyrics && Array.isArray(parsedLyrics) && needsRomanization(parsedLyrics)) {
       addRomanization(parsedLyrics)
         .then((romanized) => {
