@@ -315,6 +315,9 @@ function addXieyin(lyricsLines) {
   if (!lyricsLines || !Array.isArray(lyricsLines)) return [];
 
   for (const line of lyricsLines) {
+    // 使用者手動修正過的諧音（docs/JAPANESE-XIEYIN-V2-PLAN.md Phase 6）永遠優先，
+    // 不管是舊版羅馬字還是之後的 v2，重新產生時都不可以蓋掉使用者自己改過的字。
+    if (line.xieyinManual) continue;
     if (shouldXieyin(line)) {
       // 韓文：直接分解諺文原文（不經羅馬字再切，避免開頭子音被誤判→保留羅馬字）
       line.xieyin = isKoreanText(line.text) ? koreanToXieyin(line.text) : romajiToXieyin(line.phonetic);
@@ -322,6 +325,7 @@ function addXieyin(lyricsLines) {
     // KRC 逐字模式：每個 word 也加上 xieyin
     if (line.words && Array.isArray(line.words)) {
       for (const word of line.words) {
+        if (word.xieyinManual) continue; // \u540C\u4E0A\uFF0C\u4F7F\u7528\u8005\u6539\u904E\u7684\u55AE\u5B57\u8AE7\u97F3\u4E0D\u53EF\u88AB\u84CB\u6389
         if (word.text && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(word.text)) {
           word.xieyin = isKoreanText(word.text)
             ? koreanToXieyin(word.text)

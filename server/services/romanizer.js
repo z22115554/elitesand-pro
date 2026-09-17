@@ -755,12 +755,16 @@ async function upgradeJapaneseXieyinWithV2(results) {
     for (let i = 0; i < lineTargets.length; i += 1) {
       const row = rows[i];
       if (!row || !Array.isArray(row.phonemes)) continue;
+      // 使用者手動修正過的諧音永遠優先（docs/JAPANESE-XIEYIN-V2-PLAN.md Phase 6）：
+      // 整句還是要送進 Haqumei（同一行裡沒被改過的其他 word 仍要靠整句上下文才讀得對），
+      // 只是算完之後不能拿 v2 結果去蓋掉使用者自己改過的那一行/那個字。
       const v2Xieyin = phonemesToXieyinV2(row.phonemes);
-      if (v2Xieyin) lineTargets[i].xieyin = v2Xieyin;
+      if (v2Xieyin && !lineTargets[i].xieyinManual) lineTargets[i].xieyin = v2Xieyin;
 
       const words = lineTargets[i].words;
       if (Array.isArray(words) && Array.isArray(row.words)) {
         for (let j = 0; j < words.length && j < row.words.length; j += 1) {
+          if (words[j].xieyinManual) continue;
           const wordXieyin = phonemesToXieyinV2(row.words[j]);
           if (wordXieyin) words[j].xieyin = wordXieyin;
         }

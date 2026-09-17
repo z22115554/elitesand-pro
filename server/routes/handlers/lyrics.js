@@ -9,6 +9,9 @@ const { LyricsEngine } = require('../../services/lyrics-engine');
 const { addRomanization, needsRomanization } = require('../../services/romanizer');
 const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS } = require('../../utils/track-schema');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
+const libraryStore = require('../../services/library-store');
+
+const MAX_XIEYIN_OVERRIDE_LENGTH = 500;
 
 const log = createLogger('Socket');
 
@@ -429,6 +432,68 @@ function registerLyricsHandlers(io, socket, ctx) {
           log.warn(`手動歌詞羅馬化失敗（不影響顯示原文）: ${err.message}`);
         });
     }
+  });
+
+  // ─── 使用者手動修正單行諧音（docs/JAPANESE-XIEYIN-V2-PLAN.md Phase 6）───
+  //
+  // 諧音（不管舊版羅馬字還是 Haqumei v2）不存在唯一正解，自動結果算錯或
+  // 使用者聽感不喜歡時，讓他直接改。用 line.time 對應到哪一行（跟
+  // lyrics:romanized 的合併邏輯同一套規則，不能用索引——伺服器過濾製作
+  // 資訊行後行數可能跟前端不同）。改過的行標記 xieyinManual=true，
+  // xieyin.js 的 addXieyin() 與 romanizer.js 的 upgradeJapaneseXieyinWithV2()
+  // 都會跳過標記過的行/word，之後重新羅馬化（換來源、重新整理）不會覆蓋
+  // 使用者自己改過的字。
+  //
+  // 失效策略：覆寫直接寫在該行的物件上，不是另外存一份用 time 索引的表——
+  // 換歌詞來源會拿到全新的 parsedLyrics 陣列（不同物件、很可能時間戳也不同），
+  // 舊的手動修正自然就不會被套到不相干的新行上，不需要額外的比對/清除邏輯。
+  socket.on('xieyin:override', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const { trackId, lineTime, xieyin } = data;
+
+    if (!trackId || typeof trackId !== 'string') {
+      log.warn('xieyin:override 收到無效的 trackId');
+      return;
+    }
+    if (typeof lineTime !== 'number' || !isFinite(lineTime)) {
+      log.warn(`xieyin:override 收到無效的 lineTime: ${lineTime}`);
+      return;
+    }
+    if (typeof xieyin !== 'string') {
+      log.warn('xieyin:override 收到無效的 xieyin');
+      return;
+    }
+    const trimmed = xieyin.trim().slice(0, MAX_XIEYIN_OVERRIDE_LENGTH);
+
+    let applied = 0;
+    const applyTo = (parsedLyrics) => {
+      if (!Array.isArray(parsedLyrics)) return;
+      const line = parsedLyrics.find((l) => l && l.time === lineTime);
+      if (!line) return;
+      line.xieyin = trimmed;
+      line.xieyinManual = true;
+      applied += 1;
+    };
+
+    applyTo(manualLyricsCache.get(trackId)?.parsedLyrics);
+    for (const t of tracksById(trackId)) applyTo(t.parsedLyrics);
+
+    if (applied === 0) {
+      log.warn(`xieyin:override 找不到對應的歌詞行：trackId=${trackId} lineTime=${lineTime}`);
+      return;
+    }
+
+    // 媒體庫是下次重開/重新加入播放清單時的真實來源，不寫回去的話這次手動
+    // 修正只活在當前這次播放 session。
+    const libraryEntry = tracksById(trackId).find((t) => Array.isArray(t.parsedLyrics));
+    if (libraryEntry) {
+      try { libraryStore.updateMeta(trackId, { parsedLyrics: libraryEntry.parsedLyrics }); } catch (e) { /* 靜默：不影響當下顯示 */ }
+    }
+
+    log.info(`使用者手動修正諧音：trackId=${trackId} lineTime=${lineTime}`);
+    io.emit('xieyin:overridden', { trackId, lineTime, xieyin: trimmed });
+    broadcastState();
+    persistState();
   });
 }
 

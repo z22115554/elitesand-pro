@@ -402,7 +402,7 @@
       const romaji = appearance.showRomaji && line.phonetic
         ? `<div class="pt-line-romaji">${escapeHtml(line.phonetic)}</div>` : '';
       const xieyin = appearance.showXieyin && line.xieyin
-        ? `<div class="pt-line-xieyin">${escapeHtml(line.xieyin)}</div>` : '';
+        ? `<div class="pt-line-xieyin" data-line-time="${line.time}" title="${escapeHtml(t('prompter.xieyinEditHint'))}">${escapeHtml(line.xieyin)}</div>` : '';
       return `<div class="pt-line" data-index="${i}">
         <div class="pt-line-text">${appearance.showFurigana ? renderFurigana(line) : escapeHtml(s2t(line.text || ''))}</div>
         ${romaji}${xieyin}
@@ -446,7 +446,54 @@
   // line.time 是「音訊時間 + offset」的調整後時間軸（見 updateLyricsHighlight 的 adjustedMs、
   // 跟歌詞時間軸編輯器 app-lyrics-timeline.js 寫入 line.time 時的算法一致），所以要還原成
   // 音訊本身的秒數就得先扣掉 offset，否則歌詞/音訊有偏移時，點下去反而會跳到偏移過的位置。
+  // 點諧音那一行可以直接改（docs/JAPANESE-XIEYIN-V2-PLAN.md Phase 6）：諧音本來就
+  // 沒有唯一正解，算錯或不喜歡就讓使用者自己改，不用等程式修好。放在點擊歌詞跳轉的
+  // 同一個代理監聽器前面判斷，命中就直接處理完 return，不會再往下觸發跳轉那段。
+  function beginXieyinEdit(xieyinEl) {
+    const lineTime = Number(xieyinEl.dataset.lineTime);
+    if (!Number.isFinite(lineTime)) return;
+    const originalText = xieyinEl.textContent;
+    xieyinEl.classList.add('pt-line-xieyin-editing');
+    xieyinEl.textContent = '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'pt-line-xieyin-input';
+    input.value = originalText;
+    input.placeholder = t('prompter.xieyinEditPlaceholder');
+    input.maxLength = 500;
+    xieyinEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    let settled = false;
+    const finish = (save) => {
+      if (settled) return;
+      settled = true;
+      if (save) {
+        const newValue = input.value.trim();
+        if (newValue !== originalText && currentTrackId != null) {
+          SocketClient.send('xieyin:override', { trackId: currentTrackId, lineTime, xieyin: newValue });
+          // 樂觀更新：伺服器稍後回來的 xieyin:overridden 會是同一個值，不會抖動。
+          const line = parsedLines.find((l) => l.time === lineTime);
+          if (line) line.xieyin = newValue;
+        }
+      }
+      renderLyricsSkeleton();
+    };
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', (ev) => ev.stopPropagation());
+  }
+
   dom.lyrics.addEventListener('click', (e) => {
+    const xieyinEl = e.target.closest('.pt-line-xieyin');
+    if (xieyinEl && !xieyinEl.classList.contains('pt-line-xieyin-editing')) {
+      beginXieyinEdit(xieyinEl);
+      return;
+    }
     const lineEl = e.target.closest('.pt-line');
     if (!lineEl) return;
     const idx = parseInt(lineEl.dataset.index, 10);
@@ -600,6 +647,17 @@
       renderLyricsSkeleton();
       updateLyricsHighlight();
     }
+  });
+
+  // 使用者手動修正諧音（自己這邊已經樂觀更新過；這裡主要是同步「別的裝置也開著
+  // 跟唱視圖」或「伺服器重新推播」的情況，同一個值重複套用也不會有副作用）。
+  SocketClient.on('xieyin:overridden', (data) => {
+    if (!data || typeof data.lineTime !== 'number' || typeof data.xieyin !== 'string') return;
+    if (currentTrackId != null && data.trackId !== currentTrackId) return;
+    const line = parsedLines.find((l) => l.time === data.lineTime);
+    if (!line || line.xieyin === data.xieyin) return;
+    line.xieyin = data.xieyin;
+    if (appearance.showXieyin) renderLyricsSkeleton();
   });
 
   // 回到「尚未播放」的空狀態：state:sync 沒帶 currentTrack、以及播放清單播完最後一首

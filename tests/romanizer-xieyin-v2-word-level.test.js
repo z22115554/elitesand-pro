@@ -94,3 +94,26 @@ test('沒有任何日文行時完全不呼叫 g2pBatch', async (t) => {
   await upgradeJapaneseXieyinWithV2([{ text: '' }, { text: '   ' }]);
   assert.equal(called, false);
 });
+
+test('xieyinManual 標記過的行/word 不會被 v2 結果覆蓋（Phase 6 使用者手動修正）', async (t) => {
+  withFakeProvider(t, async (texts) => texts.map((text) => ({
+    phonemes: [`v2:${text}`],
+    kana: text,
+    words: text === 'アイウ' ? [['v2:ア'], ['v2:イウ']] : undefined,
+  })));
+
+  const results = [
+    {
+      text: 'アイウ', xieyin: '使用者改過的整行', xieyinManual: true,
+      words: [
+        { text: 'ア', xieyin: '使用者改過的字', xieyinManual: true },
+        { text: 'イウ', xieyin: '舊版自動諧音' }, // 沒被改過，v2 仍應正常覆蓋
+      ],
+    },
+  ];
+  await upgradeJapaneseXieyinWithV2(results);
+
+  assert.equal(results[0].xieyin, '使用者改過的整行', 'xieyinManual 的整行不可被 v2 結果覆蓋');
+  assert.equal(results[0].words[0].xieyin, '使用者改過的字', 'xieyinManual 的 word 不可被 v2 結果覆蓋');
+  assert.equal(results[0].words[1].xieyin, 'v2:イウ', '同一行裡沒被標記的 word 仍要正常吃到 v2 結果');
+});

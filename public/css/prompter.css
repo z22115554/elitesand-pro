@@ -171,6 +171,28 @@ body.prompter {
   color: var(--text-faint);
   margin-top: 2px;
 }
+/* 諧音沒有唯一正解，點一下可以直接改（docs/JAPANESE-XIEYIN-V2-PLAN.md Phase 6）。
+   跟父層 .pt-line 的 user-select:none 不同，這裡要能點但不能被當成「跳到那一句」。 */
+.pt-line-xieyin {
+  cursor: text;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: -4px;
+  transition: background-color .15s ease;
+}
+.pt-line-xieyin:hover {
+  background: var(--bg-hover);
+}
+.pt-line-xieyin-input {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-raised);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0 4px;
+  width: 100%;
+  max-width: 24em;
+}
 .pt-line.pt-line--active .pt-line-romaji,
 .pt-line.pt-line--active .pt-line-xieyin {
   font-size: calc(var(--pt-size) * .62);

@@ -219,6 +219,8 @@
     'prompter.progress': ['播放進度', 'Playback progress', '再生位置', '재생 진행률', '播放进度'],
     'prompter.playlistEmpty': ['尚無歌曲', 'No tracks yet', '曲がありません', '아직 곡이 없습니다', '暂无歌曲'],
     'prompter.noLyrics': ['此歌曲無歌詞', 'This song has no lyrics', 'この曲には歌詞がありません', '이 노래에는 가사가 없습니다', '此歌曲无歌词'],
+    'prompter.xieyinEditHint': ['點一下可以修改這行諧音', 'Click to edit this line\'s pronunciation guide', 'クリックしてこの行の読み仮名を編集', '클릭하여 이 줄의 발음 표기를 수정', '点一下可以修改这行谐音'],
+    'prompter.xieyinEditPlaceholder': ['輸入諧音，Enter 儲存、Esc 取消', 'Type pronunciation guide, Enter to save, Esc to cancel', '読み仮名を入力、Enterで保存、Escでキャンセル', '발음 표기 입력, Enter로 저장, Esc로 취소', '输入谐音，Enter 保存、Esc 取消'],
     'prompter.font': ['字體', 'Font', 'フォント', '글꼴', '字体'],
     'prompter.builtInFonts': ['內建字體', 'Built-in fonts', '内蔵フォント', '기본 글꼴', '内置字体'],
     'prompter.localFonts': ['本機字體', 'Installed fonts', 'インストール済みフォント', '설치된 글꼴', '本机字体'],

@@ -506,6 +506,23 @@ test('addXieyin：KRC 逐字模式', () => {
   eq(lines[0].words[1].xieyin, '諾');
 });
 
+test('addXieyin：xieyinManual 標記過的行/word 永遠不被自動結果覆蓋（Phase 6 使用者手動修正）', () => {
+  const lines = [
+    { time: 0, text: '君の中にあるもの', phonetic: 'kimi no naka ni aru mono', xieyin: '使用者自己改的字', xieyinManual: true },
+    {
+      time: 1000, text: '君の', phonetic: 'kimi no',
+      words: [
+        { text: '君', phonetic: 'kimi', xieyin: '使用者改的單字', xieyinManual: true },
+        { text: 'の', phonetic: 'no' }, // 這個字沒被改過，還是要正常算
+      ],
+    },
+  ];
+  xieyin.addXieyin(lines);
+  eq(lines[0].xieyin, '使用者自己改的字', '標記過 xieyinManual 的行不可被 addXieyin 蓋掉: ');
+  eq(lines[1].words[0].xieyin, '使用者改的單字', '標記過 xieyinManual 的 word 不可被蓋掉: ');
+  eq(lines[1].words[1].xieyin, '諾', '沒被標記的 word 仍要正常算出諧音，不能因為同一行有手動修正就整行跳過: ');
+});
+
 // ═══════════════════════════════════════════
 console.log('\n📦 2. 羅馬拼音引擎降級路徑 (romanizer.js, 無 kuromoji)');
 // ═══════════════════════════════════════════
@@ -6307,6 +6324,53 @@ testAsync('lyrics:manual（切換歌詞來源）不能因為 ctx 少帶一個欄
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   ok(emitted.some((item) => item.event === 'lyrics:romanized'), '崩潰修好後，羅馬化完成應該要能正常推播 lyrics:romanized: ');
+});
+
+test('xieyin:override：使用者手動修正單行諧音，標記 xieyinManual、廣播並寫回媒體庫', () => {
+  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
+  const libraryStore = require('../server/services/library-store');
+  const originalUpdateMeta = libraryStore.updateMeta;
+  const libraryWrites = [];
+  libraryStore.updateMeta = (id, partial) => libraryWrites.push({ id, partial });
+
+  const events = new Map();
+  const emitted = [];
+  let broadcastCalls = 0;
+  let persisted = 0;
+  const line0 = { time: 0, text: '君の中にあるもの', phonetic: 'kimi no naka ni aru mono', xieyin: '舊的自動諧音' };
+  const line1 = { time: 1000, text: '第二行', phonetic: 'daini gyou', xieyin: '第二行舊諧音' };
+  const track = { id: 'xieyin-override-track', title: '測試曲', parsedLyrics: [line0, line1] };
+  const ctx = {
+    playState: { currentTrack: track, playlist: [] },
+    trackOffsets: new Map(), manualLyricsCache: new Map(), lyricOffsetSyncTimers: new Map(),
+    persistState() { persisted += 1; }, broadcastState() { broadcastCalls += 1; },
+  };
+  try {
+    registerLyricsHandlers({ emit(event, data) { emitted.push({ event, data }); } }, { on(event, handler) { events.set(event, handler); } }, ctx);
+
+    events.get('xieyin:override')({ trackId: 'xieyin-override-track', lineTime: 0, xieyin: '使用者自己改過的諧音' });
+
+    eq(line0.xieyin, '使用者自己改過的諧音', '對應行的 xieyin 必須被改成使用者送來的值: ');
+    eq(line0.xieyinManual, true, '改過的行必須標記 xieyinManual，之後重新羅馬化才不會被蓋掉: ');
+    eq(line1.xieyin, '第二行舊諧音', '沒被指定的其他行不可被動到: ');
+    ok(!line1.xieyinManual, '沒被改的行不可被誤標記 xieyinManual: ');
+    eq(broadcastCalls, 1, '改完必須廣播讓其他端（跟唱視圖／經典疊層）同步: ');
+    eq(persisted, 1, '改完必須落地，重開程式不能遺失使用者的修正: ');
+    ok(emitted.some((item) => item.event === 'xieyin:overridden' && item.data.trackId === 'xieyin-override-track' && item.data.lineTime === 0 && item.data.xieyin === '使用者自己改過的諧音'), '必須推播 xieyin:overridden 讓所有端即時更新: ');
+    eq(libraryWrites.length, 1, '必須寫回媒體庫，不能只活在這次播放 session: ');
+    eq(libraryWrites[0].id, 'xieyin-override-track');
+
+    // 找不到對應時間戳的行：安全忽略，不拋例外、不誤觸廣播。
+    broadcastCalls = 0;
+    let threw = null;
+    try {
+      events.get('xieyin:override')({ trackId: 'xieyin-override-track', lineTime: 99999, xieyin: '不存在的行' });
+    } catch (e) { threw = e; }
+    eq(threw, null, '找不到對應行時不可拋出例外: ');
+    eq(broadcastCalls, 0, '找不到對應行時不可誤觸廣播: ');
+  } finally {
+    libraryStore.updateMeta = originalUpdateMeta;
+  }
 });
 
 test('同 id 歌曲重新加入後播放時，會套回保留的手動歌詞與 offset', () => {
