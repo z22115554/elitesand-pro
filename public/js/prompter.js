@@ -570,19 +570,32 @@
   // 可能跟本地不同，索引對齊會把拼音/諧音貼到錯的句子（跟 karaoke.js 同一套規則，見
   // memory lyrics-romanization-pipeline）。
   SocketClient.on('lyrics:romanized', (data) => {
+    // 2026-09 診斷：切換歌詞來源後拼音/諧音要切歌才會出現的回報，一直找不到
+    // 確切原因——這支處理器完全沒有任何 log，出問題時沒辦法分辨是「事件根本
+    // 沒收到」「收到了但 parsedLines 是空的」還是「byTime 對不起來」。跟
+    // display.js 的 [Display] 收到羅馬化更新 對齊，先把可觀測性補上。
+    console.log('[Prompter] 收到 lyrics:romanized', {
+      hasData: !!data,
+      incomingLines: data && Array.isArray(data.parsedLyrics) ? data.parsedLyrics.length : null,
+      localLines: parsedLines.length,
+      query: data && data.query,
+    });
     if (!data || !Array.isArray(data.parsedLyrics) || !parsedLines.length) return;
     const byTime = new Map();
     for (const rl of data.parsedLyrics) {
       if (rl && typeof rl.time === 'number') byTime.set(rl.time, rl);
     }
     let changed = false;
+    let matched = 0;
     for (const line of parsedLines) {
       const rl = byTime.get(line.time);
       if (!rl) continue;
+      matched += 1;
       if (rl.phonetic && rl.phonetic !== line.phonetic) { line.phonetic = rl.phonetic; changed = true; }
       if (rl.xieyin && rl.xieyin !== line.xieyin) { line.xieyin = rl.xieyin; changed = true; }
       if (Array.isArray(rl.furigana) && JSON.stringify(rl.furigana) !== JSON.stringify(line.furigana)) { line.furigana = rl.furigana; changed = true; }
     }
+    console.log(`[Prompter] lyrics:romanized 依時間對齊：${matched}/${parsedLines.length} 行命中，changed=${changed}`);
     if (changed && (appearance.showRomaji || appearance.showXieyin || appearance.showFurigana)) {
       renderLyricsSkeleton();
       updateLyricsHighlight();
