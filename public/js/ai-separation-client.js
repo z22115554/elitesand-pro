@@ -181,7 +181,9 @@
       if (step === 'bootstrap-pip') return t('aiInstall.step.bootstrapPip');
       return t('aiInstall.step.pythonPrep');
     }
-    if (phase === 'primary-model') return t('aiInstall.step.primaryModel', { detail });
+    if (phase === 'primary-model') {
+      return step === 'model-verify' ? t('aiInstall.step.verify') : t('aiInstall.step.primaryModel', { detail });
+    }
     if (phase === 'webgpu-model') {
       const n = (Number(s.fileIndex) || 0) + 1;
       const c = Number(s.fileCount) || 2;

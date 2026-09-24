@@ -31,6 +31,7 @@ const { createLogger } = require('../utils/logger');
 const { safeRemove } = require('../utils/safe-remove');
 const { inspectDiskSpace } = require('./disk-space');
 const { withFfmpegOnPath } = require('./ffmpeg-provider');
+const { MODEL: PRIMARY_MODEL, ensureSupportFiles, downloadPrimaryModelFile } = require('./primary-model-download');
 
 const log = createLogger('AIRuntimeProvider');
 
@@ -580,37 +581,31 @@ async function downloadRuntime({
 
 /**
  * 把 Python 主引擎實際會用到的 Kim 模型先下載完成。以前由第一首歌在 load_model()
- * 階段臨時下載，會讓「安裝完成」與「真的可以開始分離」變成兩種狀態；統一安裝流程
- * 改用 audio-separator 自己提供的 download_model_only 入口，沿用它的模型清單與驗證。
+ * 階段臨時下載，會讓「安裝完成」與「真的可以開始分離」變成兩種狀態，所以統一在安裝流程
+ * 下載。下載本身由 primary-model-download.js 負責（多來源、續傳、SHA-256），不再走
+ * audio-separator 內建、全部指向 GitHub 的 --download_model_only。
  */
-async function downloadPrimaryModel({ runPythonStepImpl = runPythonStep, onOutput, onProgress, abortSignal } = {}) {
+async function downloadPrimaryModel({ downloadImpl = downloadPrimaryModelFile, onProgress, abortSignal } = {}) {
   if (!isAvailable()) throw new Error('AI 分離 Python 元件尚未安裝。');
-  if (isModelAvailable()) return { ok: true, alreadyAvailable: true, modelFile: MODEL_FILE };
+  if (isModelAvailable()) {
+    ensureSupportFiles(MODEL_DIR);
+    return { ok: true, alreadyAvailable: true, modelFile: MODEL_FILE };
+  }
   fs.mkdirSync(MODEL_DIR, { recursive: true });
   const removedPartial = cleanupInvalidPrimaryModel();
   if (removedPartial) log.warn('偵測到未完成的主分離模型，已清理後重新下載。');
-  setDownloadStatus({ active: true, stage: 'primary-model', step: 'model-download', detail: MODEL_FILENAME, downloadedBytes: 0, totalBytes: MODEL_MIN_BYTES, error: null });
+  setDownloadStatus({ active: true, stage: 'primary-model', step: 'model-download', detail: MODEL_FILENAME, downloadedBytes: 0, totalBytes: PRIMARY_MODEL.size, error: null });
   onProgress?.(getDownloadStatus());
   try {
-    await runPythonStepImpl([
-      '-c', 'from audio_separator.utils.cli import main; main()',
-      '--model_file_dir', MODEL_DIR,
-      '--download_model_only',
-      '-m', MODEL_FILENAME,
-    ], {
-      cwd: RUNTIME_DIR,
-      pythonExe: PYTHON_EXE,
-      timeoutMs: 30 * 60 * 1000,
+    const { source } = await downloadImpl(MODEL_DIR, {
       abortSignal,
-      onOutput: (text) => {
-        onOutput?.(text);
-        const p = parseToolProgress(text);
-        if (Object.keys(p).length) {
-          setDownloadStatus({ active: true, stage: 'primary-model', step: 'model-download', detail: MODEL_FILENAME, error: null, ...p });
-          onProgress?.(getDownloadStatus());
-        }
+      log,
+      onProgress: (p) => {
+        setDownloadStatus({ active: true, stage: 'primary-model', error: null, ...p });
+        onProgress?.(getDownloadStatus());
       },
     });
+    log.info(`主分離模型下載完成（來源：${source}）`);
   } catch (error) {
     cleanupInvalidPrimaryModel();
     setDownloadStatus(error.code === 'CANCELLED'

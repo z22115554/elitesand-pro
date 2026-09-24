@@ -98,6 +98,8 @@ CUDA / CPU engine (via python-audio-separator):
   Model "vocals_mel_band_roformer.ckpt" — Mel-Band RoFormer vocal weights by
   Kimberley Jensen, MIT.
   Source: https://huggingface.co/KimberleyJSN/melbandroformer
+  Model config "vocals_mel_band_roformer.yaml" is bundled verbatim from the
+  python-audio-separator "model-configs" release (MIT, as above).
 
 Both model families implement the architecture described in:
   Wang, Ju-Chiang; Lu, Wei-Tsung; Won, Minz. "Mel-Band RoFormer for Music
