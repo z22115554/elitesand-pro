@@ -523,6 +523,7 @@ input[type="color"] { width: 40px; height: 40px; padding: 3px; background: var(-
 .switch input:checked + .track::before { transform: translateX(18px); }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
 .ffmpeg-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.section-analysis-actions { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
 .switch-row[hidden], .btn[hidden] { display: none !important; }
 .switch-row .label { font-size: 13px; color: var(--text); }
 .switch-row .sub { font-size: 11px; color: var(--text-faint); }

@@ -221,6 +221,15 @@ async function dispatch(trackId, params, publicJobId = null) {
   activeJob = job;
   emitProgress(job, 'preparing', 0);
 
+  // 反向的 GPU 互斥檢查（另一半在 section-analysis-jobs.js 的 dispatch()）：兩個功能
+  // 都是重度 GPU 推論，同時跑會互相 OOM。用函式參考延遲存取避免循環 require 在模組
+  // 載入當下就互相卡住——這裡只在真正 dispatch 時才呼叫，那時兩邊模組都已載入完成。
+  // eslint-disable-next-line global-require
+  if (require('./section-analysis-jobs').isGpuBusy()) {
+    finalizeError(job, { code: 'GPU_BUSY', message: '歌曲段落分析正在使用 GPU，請等它跑完再製作伴奏' });
+    return job.publicJobId;
+  }
+
   let cudaAvailable = false;
   let engineUp = true;
   let engineError = null;
@@ -503,6 +512,13 @@ async function startJobForTrack(trackId, params) {
   return dispatch(trackId, params, publicJobId);
 }
 
+// section-analysis-jobs.js（歌曲段落分析）在 dispatch 前呼叫這個，避免兩個不同的 GPU
+// 推論工作同時搶顯存互相 OOM——跟鐵則 #12（yt-dlp/ffmpeg 併發會 OOM）同一類風險，只是這次
+// 是兩個不同的 AI 功能互撞，不是同一個佇列內部的問題，所以用跨模組查詢而不是共用佇列。
+function isGpuBusy() {
+  return activeJob !== null;
+}
+
 function getActiveJobs() {
   const jobs = [];
   if (activeJob) jobs.push({
@@ -524,4 +540,4 @@ function _resetForTests() {
   activeJob = null;
 }
 
-module.exports = { wireDependencies, startJobForTrack, cancelJobForTrack, getActiveJobs, _resetForTests };
+module.exports = { wireDependencies, startJobForTrack, cancelJobForTrack, getActiveJobs, isGpuBusy, _resetForTests };

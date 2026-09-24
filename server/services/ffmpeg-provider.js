@@ -32,6 +32,7 @@ const AdmZip = require('adm-zip');
 const { dataDir } = require('../utils/app-paths');
 const config = require('../utils/load-config');
 const { createLogger } = require('../utils/logger');
+const { safeRemove } = require('../utils/safe-remove');
 
 const log = createLogger('FFmpegProvider');
 
@@ -386,17 +387,6 @@ function setDownloadStatus(patch) {
 
 function getDownloadStatus() {
   return { ...downloadStatus };
-}
-
-function safeRemove(filePath) {
-  // 不可用 { force: true }：在含中文字的路徑上，對不存在的檔案呼叫
-  // fs.rmSync(path, {force:true}) 會讓整個 Node process 無聲當掉（原生層級當機，
-  // try/catch 完全攔不到），這台機器的 Node 24.12.0 上百分之百重現。純 fs.rmSync(path)
-  // （沒有 force）在同樣情境下只會正常丟出可捕捉的 ENOENT，安全。這正是這個函式最常見
-  // 的呼叫情境（CJK 專案路徑下清除可能不存在的暫存/備份檔），不可以改回 force。
-  try {
-    fs.rmSync(filePath);
-  } catch (_) {}
 }
 
 function recoverStalePairBackups(backupFfmpeg, backupFfprobe) {

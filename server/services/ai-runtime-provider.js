@@ -28,6 +28,7 @@ const { spawn, spawnSync } = require('child_process');
 const AdmZip = require('adm-zip');
 const { dataDir } = require('../utils/app-paths');
 const { createLogger } = require('../utils/logger');
+const { safeRemove } = require('../utils/safe-remove');
 const { inspectDiskSpace } = require('./disk-space');
 const { withFfmpegOnPath } = require('./ffmpeg-provider');
 
@@ -98,21 +99,6 @@ function isModelAvailable() {
   } catch (_) {
     return false;
   }
-}
-
-// 注意：這裡刻意不用 fs.rmSync(path, {recursive:true, force:true}) 那個組合——
-// 2026-08-17 實測在這台機器（Node v24.12.0）對本專案含中文字元的路徑會卡死不回應
-// （existsSync／unlinkSync 對同一路徑完全正常，問題只在 rmSync 那個 flag 組合），
-// 先檢查存在與型別再呼叫對應的刪除方式可以繞開。
-function safeRemove(targetPath) {
-  try {
-    const stat = fs.statSync(targetPath);
-    if (stat.isDirectory()) {
-      fs.rmdirSync(targetPath, { recursive: true });
-    } else {
-      fs.unlinkSync(targetPath);
-    }
-  } catch (_) { /* 本來就不存在或刪除失敗都當作 best effort，忽略 */ }
 }
 
 /**
@@ -332,7 +318,7 @@ function enableSitePackages(pythonDir) {
   fs.writeFileSync(pthPath, patched, 'utf8');
 }
 
-function runPythonStep(args, { cwd, pythonExe = PYTHON_EXE, onOutput, spawnImpl = spawn, timeoutMs = 20 * 60 * 1000 } = {}) {
+function runPythonStep(args, { cwd, pythonExe = PYTHON_EXE, onOutput, spawnImpl = spawn, timeoutMs = 20 * 60 * 1000, env } = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawnImpl(pythonExe, args, {
       cwd,
@@ -340,7 +326,9 @@ function runPythonStep(args, { cwd, pythonExe = PYTHON_EXE, onOutput, spawnImpl 
       // withFfmpegOnPath：audio-separator 的 Separator.__init__ 無條件用裸指令檢查 ffmpeg，
       // 只認 PATH。少了這層，連 --download_model_only 這種根本不用 ffmpeg 的步驟也會被
       // FileNotFoundError 擋掉（使用者用程式內按鈕下載的 ffmpeg 在 dataDir/bin，不在 PATH 上）。
-      env: withFfmpegOnPath({ ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }),
+      // env 參數：其他呼叫端（例如 section-runtime-provider.js 需要另外設 HF_HOME/TORCH_HOME）
+      // 可以疊加自己的變數，預設值不變，不影響既有呼叫。
+      env: withFfmpegOnPath({ ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', ...env }),
     });
     let stderrTail = '';
     const timer = setTimeout(() => {
@@ -599,6 +587,8 @@ module.exports = {
   getDownloadStatus,
   parseToolProgress,
   enableSitePackages,
+  runPythonStep, // section-runtime-provider.js 重用這個跑 pip/get-pip 等步驟，不要漏掉
+
   safeExtractAll, // 匯出供測試：audit:release 對 GHSA-vwc7-r8mq-g2x9 的豁免以它成立為前提
   fetchToFile,
   fetchToBuffer,

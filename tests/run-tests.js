@@ -7980,15 +7980,111 @@ test('大型媒體庫摘要不傳歌詞／原始來源，但保留 AI 分離試�
     filename: 'original.mp3', url: 'https://example.test/watch/1',
     lyrics: '不應傳送'.repeat(1000), parsedLyrics: [{ time: 0, text: '不應傳送' }],
     vocalsFile: 'track.vocals.wav', instrumentalFile: 'track.instrumental.wav', separationStatus: 'done',
+    sections: [{ start: 0, end: 10, label: 'intro' }], sectionsStatus: 'done',
   });
   eq(summary.id, 'summary-track');
   eq(summary.vocalsFile, 'track.vocals.wav');
   eq(summary.instrumentalFile, 'track.instrumental.wav');
   eq(summary.separationStatus, 'done');
+  eq(summary.sectionsStatus, 'done', '媒體庫摘要要能顯示段落分析狀態（給按鈕/徽章用）: ');
+  ok(!Object.prototype.hasOwnProperty.call(summary, 'sections'), '摘要不傳完整段落陣列，只傳狀態，避免 1 萬首媒體庫爆量: ');
   ok(!Object.prototype.hasOwnProperty.call(summary, 'lyrics'));
   ok(!Object.prototype.hasOwnProperty.call(summary, 'parsedLyrics'));
   ok(!Object.prototype.hasOwnProperty.call(summary, 'filename'));
   ok(!Object.prototype.hasOwnProperty.call(summary, 'url'));
+});
+
+test('sanitizeTrack：段落分析結果 label 統一轉底線小寫，時間非法的段落整筆丟棄', () => {
+  const { sanitizeTrack } = require('../server/utils/track-schema');
+  const track = sanitizeTrack({
+    id: 't1', title: '測試曲',
+    sections: [
+      { start: 0, end: 10, label: 'Intro' },
+      { start: 10, end: 25.5, label: 'pre-chorus' },
+      { start: 25.5, end: 25.5, label: 'chorus' }, // end == start，非法
+      { start: 40, end: 30, label: 'bridge' }, // end < start，非法
+      { start: 60, end: 80 }, // 沒有 label，非法
+    ],
+    sectionsStatus: 'done',
+  });
+  eq(track.sections.length, 2, '只有兩筆合法段落應該留下: ');
+  eq(track.sections[0].label, 'intro', 'label 應轉小寫: ');
+  eq(track.sections[1].label, 'pre_chorus', '連字號應轉底線，才對得上段落搭配頁的鍵值: ');
+  eq(track.sectionsStatus, 'done');
+
+  const untouched = sanitizeTrack({ id: 't2', title: '未分析' });
+  eq(untouched.sections, null, '沒有 sections 欄位時應該是 null，不是空陣列（區分「沒分析過」跟「分析出零段」）: ');
+  eq(untouched.sectionsStatus, 'none');
+});
+
+test('library-store：play/import 重建 track 時保留既有段落分析結果，不會被沒帶欄位的 payload 洗掉', () => {
+  const libraryStore = require('../server/services/library-store');
+  const id = 'section-keep-' + Date.now();
+  libraryStore.rememberImport({
+    id, title: '段落測試曲', filename: `${id}.mp3`,
+    sections: [{ start: 0, end: 5, label: 'intro' }], sectionsStatus: 'done',
+  });
+  // 面板送來的 play:track payload 通常不帶這兩個欄位，recordPlay() 不可把它們重置成未分析。
+  libraryStore.recordPlay({ id, title: '段落測試曲', filename: `${id}.mp3` });
+  const entry = libraryStore.getEntry(id);
+  eq(entry.sectionsStatus, 'done', '播放一次不應該把已分析的段落重置成未分析: ');
+  eq(entry.sections.length, 1);
+});
+
+// 2026-09-22 使用者實測回報：段落分析按鈕永遠顯示「尚未載入歌曲」、點了沒反應。
+// 根因是 section-analysis-client.js 讀的是 window.AppShared.getCurrentTrack()，但目前
+// 歌曲其實只掛在 window.VKState（app.js 對外暴露當前歌曲用的舊代號全域，見該檔第 69 行
+// `window.VKState = { getCurrentTrack: ... }`）——AppShared 上根本沒有這個方法，永遠讀到
+// undefined。這個測試釘住正確的全域來源，不讓同一種錯誤悄悄回來。
+test('section-analysis-client.js 讀目前歌曲要用 window.VKState，不是 window.AppShared（後者沒有這個方法）', () => {
+  const client = fs.readFileSync(path.join(__dirname, '../public/js/section-analysis-client.js'), 'utf8');
+  ok(client.includes('window.VKState') && client.includes('window.VKState.getCurrentTrack'),
+    '必須讀 window.VKState.getCurrentTrack()：');
+  ok(!client.includes('window.AppShared.getCurrentTrack') && !client.includes('AppShared.getCurrentTrack'),
+    'AppShared 上沒有 getCurrentTrack，不可再誤用這個來源：');
+  const appJs = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
+  ok(appJs.includes('window.VKState') && appJs.includes('getCurrentTrack:'),
+    '基本假設檢查：目前歌曲真的是掛在 window.VKState 上（如果這行未來被搬走，上面兩個斷言要跟著改）：');
+});
+
+// 2026-09-22：`fs.rm*` 的同步 API 在含中文字元的路徑上，只要真的執行到刪除動作就會讓
+// 整個 Node process 無聲當掉（exit 127、無 stderr、無 stack、try/catch 攔不到）。
+// 這個測試刻意「真的刪」一棵中文路徑下的目錄樹：萬一 safeRemove 被改回 fs.rm*，
+// 測試行程會直接死在這裡，不會靜默通過。
+test('safeRemove 能在中文路徑上遞迴刪除，且不使用會讓行程無聲當掉的 fs.rm* 同步 API', () => {
+  const { safeRemove } = require('../server/utils/safe-remove');
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), '中文測試目錄-'));
+  const target = path.join(base, 'python.download');
+  fs.mkdirSync(path.join(target, 'Lib', 'site-packages'), { recursive: true });
+  fs.writeFileSync(path.join(target, 'python.exe'), 'x');
+  fs.writeFileSync(path.join(target, 'Lib', 'site-packages', 'a.py'), 'y');
+
+  eq(safeRemove(target), true, '中文路徑下的巢狀目錄要能整棵刪掉：');
+  eq(fs.existsSync(target), false, '刪完之後目標不該還在：');
+  eq(safeRemove(path.join(base, 'never-existed')), true, '目標本來就不存在要視為成功、不可丟例外：');
+  safeRemove(base);
+});
+
+test('生產程式碼不可使用在中文路徑上會讓行程無聲當掉的 fs.rm* 同步 API', () => {
+  const roots = ['../server', '../electron'];
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.name.endsWith('.js')) continue;
+      if (full.replace(/\\/g, '/').endsWith('server/utils/safe-remove.js')) continue; // 註解裡會提到這些 API
+      const src = fs.readFileSync(full, 'utf8');
+      src.split('\n').forEach((line, i) => {
+        if (/\brmSync\b/.test(line) || /\brmdirSync\s*\([^)]*recursive/.test(line)) {
+          offenders.push(`${path.relative(path.join(__dirname, '..'), full)}:${i + 1}`);
+        }
+      });
+    }
+  };
+  roots.forEach((r) => walk(path.join(__dirname, r)));
+  eq(offenders.length, 0,
+    `這些位置要改用 server/utils/safe-remove.js 的 safeRemove()（fs.rmSync／fs.rmdirSync(recursive) 在中文路徑上會殺掉整個伺服器）：${offenders.join(', ')} `);
 });
 
 test('媒體庫超過 10000 首時優先保留播放清單與 currentTrack backing，淘汰未使用低順位項目', () => {

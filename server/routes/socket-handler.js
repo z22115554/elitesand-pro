@@ -124,6 +124,16 @@ module.exports = function socketHandler(io, {
     updateLibraryMeta: libraryStore.updateMeta,
   });
 
+  // ─── 歌曲段落分析（SongFormer，實驗性）：V1 只有 CUDA，跟 AI 分離共用 GPU 互斥檢查
+  // （ai-separation-jobs.isGpuBusy() / section-analysis-jobs.isGpuBusy() 互相查詢）───
+  require('../services/section-analysis-jobs').wireDependencies({
+    io,
+    playState: ctx.playState,
+    persistState: ctx.persistState,
+    broadcastState: ctx.broadcastState,
+    updateLibraryMeta: libraryStore.updateMeta,
+  });
+
   // ─── WebGPU 人聲分離（實驗性，§13 musetric 路線）：跟上面 CUDA 路徑平行的另一個引擎，
   // 由 Electron 隱藏視窗以 webgpu-engine client 的身分連進來（見下面 io.on('connection')）。
   const webgpuSeparationJobs = require('../services/webgpu-separation-jobs');

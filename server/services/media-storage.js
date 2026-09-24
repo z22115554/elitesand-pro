@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { projectRoot, dataDir, downloadsDir } = require('../utils/app-paths');
+const { safeRemove } = require('../utils/safe-remove');
 
 const MEDIA_FOLDER_NAME = 'Elitesand Pro Media';
 const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
@@ -156,11 +157,13 @@ function migrateToParent(parentDir, sourceOverride = null) {
 
   let oldFilesRemoved = true;
   try {
-    for (const name of entries) fs.rmSync(path.join(sourceDir, name), { recursive: true, force: false });
+    for (const name of entries) {
+      if (!safeRemove(path.join(sourceDir, name))) oldFilesRemoved = false;
+    }
     // A prior managed external folder contains only our marker after a
     // zero-file/custom relocation. Remove that empty app-owned root as well.
     if (fs.existsSync(markerPath(sourceDir)) && visibleEntries(sourceDir).length === 0) {
-      fs.rmSync(sourceDir, { recursive: true, force: false });
+      if (!safeRemove(sourceDir)) oldFilesRemoved = false;
     }
   } catch (_) {
     oldFilesRemoved = false;

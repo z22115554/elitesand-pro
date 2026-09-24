@@ -380,7 +380,7 @@ try {
 
   $UnpackedRoot = Join-Path $InstallerOutput "win-unpacked"
   $UnpackedResources = Join-Path $InstallerOutput "win-unpacked\resources"
-  foreach ($required in @("app.asar", "tools\yt-dlp.exe", "tools\updater-node.exe", "tools\ai\supervisor.py", "tools\ai\worker.py", "tools\ai\haqumei_sidecar.py", "tools\g2p\python.exe", "tools\g2p\python311.dll", "tools\g2p\python311.zip", "tools\g2p\python311._pth", "tools\g2p\Lib\site-packages\haqumei\haqumei.pyd")) {
+  foreach ($required in @("app.asar", "tools\yt-dlp.exe", "tools\updater-node.exe", "tools\ai\supervisor.py", "tools\ai\worker.py", "tools\ai\haqumei_sidecar.py", "tools\ai\section_supervisor.py", "tools\ai\section_worker.py", "tools\g2p\python.exe", "tools\g2p\python311.dll", "tools\g2p\python311.zip", "tools\g2p\python311._pth", "tools\g2p\Lib\site-packages\haqumei\haqumei.pyd")) {
     if (-not (Test-Path -LiteralPath (Join-Path $UnpackedResources $required))) {
       throw "Installer output is missing $required; the built installer would be broken on user machines."
     }

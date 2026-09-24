@@ -49,6 +49,8 @@ const ffmpegProvider = require('../services/ffmpeg-provider');
 const aiRuntimeProvider = require('../services/ai-runtime-provider');
 const aiSeparationBundle = require('../services/ai-separation-bundle');
 const aiSeparationJobs = require('../services/ai-separation-jobs');
+const sectionRuntimeProvider = require('../services/section-runtime-provider');
+const sectionAnalysisJobs = require('../services/section-analysis-jobs');
 const { getCachedCudaAvailable } = require('../services/ai-separation');
 const webgpuRuntimeProvider = require('../services/webgpu-runtime-provider');
 const webgpuSeparationJobs = require('../services/webgpu-separation-jobs');
@@ -1551,6 +1553,68 @@ router.post('/library/:id/separate', requirePin, async (req, res) => {
 router.post('/library/:id/separate/cancel', requirePin, (req, res) => {
   const result = aiSeparationJobs.cancelJobForTrack(req.params.id);
   if (!result.ok) return res.status(404).json({ ok: false, error: 'NO_ACTIVE_SEPARATION' });
+  res.json({ ok: true, state: result.state });
+});
+
+// ─── 歌曲段落分析（SongFormer，實驗性功能）───
+// 定位見 song-section-songformer-primary 這份決策記錄：18 首人工回聽驗證後選定
+// SongFormer 為 pre-chorus 分類的主要模型。V1 只有 CUDA、沒有 WebGPU/CPU 降級鏈。
+
+// 只讀進度，前端下載期間輪詢它（同 /ai-separation/runtime-status 的理由）。
+router.get('/section-analysis/runtime-status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    available: sectionRuntimeProvider.isAvailable() && sectionRuntimeProvider.isWeightsAvailable(),
+    ...sectionRuntimeProvider.getDownloadStatus(),
+  });
+});
+
+// 觸發真正的網路下載（Python+torch、SongFormer/MuQ/MusicFM 原始碼與權重，約 2.7GB）
+// ＋寫入本機檔案，依鐵則 15 必須手動掛 requirePin。
+router.post('/section-analysis/runtime/download', requirePin, async (req, res) => {
+  if (sectionRuntimeProvider.isAvailable() && sectionRuntimeProvider.isWeightsAvailable()) {
+    return res.json({ ok: true, alreadyAvailable: true });
+  }
+  try {
+    await sectionRuntimeProvider.downloadRuntime({});
+    res.json({ ok: true, alreadyAvailable: false });
+  } catch (err) {
+    log.error('歌曲段落分析 runtime 下載失敗', err);
+    res.status(502).json({ ok: false, reason: err.message });
+  }
+});
+
+// 啟動一次段落分析 job。會觸發真正的 GPU 運算，依鐵則 15 必須手動掛 requirePin。
+// 只回傳 jobId；實際進度/完成走 Socket.io 的 sections:progress 事件。
+router.post('/library/:id/analyze-sections', requirePin, async (req, res) => {
+  const trackId = req.params.id;
+  const entry = libraryStore.getEntry(trackId);
+  if (!entry || !entry.filename) {
+    return res.status(404).json({ ok: false, error: '找不到這首歌的音檔' });
+  }
+  if (entry.sectionsStatus === 'processing') {
+    return res.status(409).json({ ok: false, error: 'ALREADY_PROCESSING' });
+  }
+  if (!sectionRuntimeProvider.isAvailable() || !sectionRuntimeProvider.isWeightsAvailable()) {
+    return res.status(409).json({ ok: false, error: 'RUNTIME_NOT_READY' });
+  }
+  try {
+    const jobId = await sectionAnalysisJobs.startJobForTrack(trackId, {
+      inputPath: path.join(downloadsDir, entry.filename),
+    });
+    // jobId 為 null 代表已經有另一首在跑，這首排進佇列了（見 section-analysis-jobs.js）
+    // ——不是失敗，前端靠 sections:progress 的 stage:'queued' 顯示排隊中。
+    res.json({ ok: true, jobId, queued: jobId === null });
+  } catch (err) {
+    log.error(`啟動歌曲段落分析失敗 track=${trackId}`, err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 使用者在分析進行中／排隊中按「取消」。掛 requirePin（鐵則 #15）。
+router.post('/library/:id/analyze-sections/cancel', requirePin, (req, res) => {
+  const result = sectionAnalysisJobs.cancelJobForTrack(req.params.id);
+  if (!result.ok) return res.status(404).json({ ok: false, error: 'NO_ACTIVE_ANALYSIS' });
   res.json({ ok: true, state: result.state });
 });
 

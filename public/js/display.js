@@ -143,9 +143,9 @@
   let currentOffsetMs = 0; // Phase 5: 當前歌曲的時間偏移
 
   // ── 段落感知模板切換：實驗性，2026-09-08 使用者要求「直接用現用模板，不同段落套不同
-  // 模板試看看」。只手動掛了一首測試曲（Ado - 唱，videoId pgXpM4l_MwI），不影響任何其他
-  // 歌曲——SECTION_TEST_DATA 只有這一筆 key，其餘歌曲完全不會進到這段邏輯。之後段落分析
-  // 走正式資料流時，只要把這個常數換成讀 track.sections 就好，setTemplate() 中途換模板
+  // 模板試看看」。2026-09-21 接上正式資料流（SongFormer，見 section-analysis-jobs.js）：
+  // 優先用 track.sections（真的分析過的歌），沒有的話退回 SECTION_TEST_DATA 那筆手動
+  // 測試曲（Ado - 唱，videoId pgXpM4l_MwI），不影響其他歌曲。setTemplate() 中途換模板
   // 的能力本來就有，不用重寫。
   const SECTION_TEST_DATA = {
     'pgXpM4l_MwI': [
@@ -176,7 +176,9 @@
   }
 
   function applySectionAwareTemplate(timeMs) {
-    const sections = currentTrackData && SECTION_TEST_DATA[currentTrackData.id];
+    const realSections = currentTrackData && Array.isArray(currentTrackData.sections) && currentTrackData.sections.length
+      ? currentTrackData.sections : null;
+    const sections = currentTrackData && (realSections || SECTION_TEST_DATA[currentTrackData.id]);
     const enabled = !!(lastLyricSettings && lastLyricSettings.sectionAwareEnabled);
     if (!sections || !enabled || !KaraokeEngine.setTemplate) {
       sectionAwareBaseTemplateId = null; sectionAwareLastApplied = null;

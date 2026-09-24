@@ -109,6 +109,28 @@ function sanitizeManualLyrics(value) {
   };
 }
 
+// 歌曲段落分析結果（SongFormer）：label 統一轉小寫、連字號轉底線（pre-chorus → pre_chorus），
+// 跟「段落搭配」設定頁（app-section-design.js）與 display.js 的 SECTION_LABEL_ALIAS 用同一套底線寫法，
+// 不然模型原始輸出的連字號會對不上使用者在段落搭配頁選的鍵值，永遠套用不到自訂模板。
+function sanitizeSections(value) {
+  if (!Array.isArray(value)) return null;
+  const out = [];
+  for (const s of value.slice(0, 500)) {
+    if (!s || typeof s !== 'object') continue;
+    const start = Number(s.start);
+    const end = Number(s.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    const label = text(s.label, 40).trim().toLowerCase().replace(/-/g, '_');
+    if (!label) continue;
+    out.push({
+      start: Math.max(0, Math.min(start, 24 * 60 * 60)),
+      end: Math.max(0, Math.min(end, 24 * 60 * 60)),
+      label,
+    });
+  }
+  return out;
+}
+
 function safeMediaBasename(value) {
   // persisted/imported state 可能來自另一個 OS；POSIX path.basename 不認反斜線，
   // Windows path.basename 也不該被拿來解析 POSIX 絕對路徑。先統一分隔符再取檔名。
@@ -170,6 +192,11 @@ function sanitizeTrack(value) {
     instrumentalFile: value.instrumentalFile ? safeMediaBasename(value.instrumentalFile) : null,
     separationStatus: ['processing', 'done', 'failed'].includes(value.separationStatus)
       ? value.separationStatus : 'none',
+    // 歌曲段落分析（SongFormer，見「段落設計」隱藏頁）：null＝尚未分析過；跟 vocalsFile 系列
+    // 不同的是它不依附音檔是否存在，音檔遺失清理時不需要跟著清空。
+    sections: sanitizeSections(value.sections),
+    sectionsStatus: ['processing', 'done', 'failed'].includes(value.sectionsStatus)
+      ? value.sectionsStatus : 'none',
   };
   return out;
 }
@@ -221,6 +248,7 @@ module.exports = {
   sanitizeFurigana,
   sanitizeManualLyrics,
   sanitizeOffsetsBySource,
+  sanitizeSections,
   safeUrl,
   sanitizeJsonObject,
   assignFreshEntryIds,

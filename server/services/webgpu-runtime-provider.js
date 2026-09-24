@@ -21,6 +21,7 @@ const { dataDir } = require('../utils/app-paths');
 const { createLogger } = require('../utils/logger');
 const { inspectDiskSpace } = require('./disk-space');
 const { fetchToFile } = require('./ai-runtime-provider');
+const { safeRemove } = require('../utils/safe-remove');
 
 const log = createLogger('WebgpuRuntimeProvider');
 
@@ -66,16 +67,6 @@ function modelPaths() {
     graphPath: path.join(MODEL_DIR, GRAPH_FILE),
     weightsPath: path.join(MODEL_DIR, WEIGHTS_FILE),
   };
-}
-
-// 同款「rmSync 對含中文字元路徑會卡死」的既有踩坑（見 ai-runtime-provider.js），
-// 這裡沿用同一個安全刪除寫法。
-function safeRemove(targetPath) {
-  try {
-    const stat = fs.statSync(targetPath);
-    if (stat.isDirectory()) fs.rmdirSync(targetPath, { recursive: true });
-    else fs.unlinkSync(targetPath);
-  } catch (_) { /* 本來就不存在或刪除失敗都當作 best effort，忽略 */ }
 }
 
 let downloadInFlight = null;

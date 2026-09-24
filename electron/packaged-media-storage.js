@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { safeRemove } = require('../server/utils/safe-remove');
 
 const MEDIA_FOLDER_NAME = 'Elitesand Pro Media';
 const MEDIA_MARKER_NAME = '.elitesand-pro-media-root';
@@ -161,7 +162,7 @@ function copyVulnerableMedia(sourceDir, destinationDir, fsImpl = fs) {
     // destination 是本函式確認為空、並由 ensureMarker() 標記後才開始寫入的專用目錄。
     // source 全程不動，因此失敗時清掉本次 partial copy 才能安全重試；否則每次重開
     // 都會再挑 (2)/(3)... 複製一份，磁碟越來越滿，最後形成「怎麼點都打不開」。
-    try { fsImpl.rmSync?.(destinationDir, { recursive: true, force: true }); } catch (_) { /* source remains authoritative */ }
+    safeRemove(destinationDir, { fsImpl });
     throw error;
   }
   return { copied: true, reason: null, entries: entries.length };
@@ -225,7 +226,7 @@ function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs
         // 複製成功但「提交新路徑」失敗時，舊 source 與舊設定仍是權威。
         // 清掉這次由本程序建立的 migration destination，避免下次啟動改挑 (2)/(3)
         // 又完整複製一次。destination 在 copyVulnerableMedia 開始前已確認為空。
-        try { fsImpl.rmSync?.(destination, { recursive: true, force: true }); } catch (_) { /* source remains authoritative */ }
+        safeRemove(destination, { fsImpl });
         throw error;
       }
       return { mediaDir: destination, action: 'copied-from-install-dir', copiedEntries: result.entries };

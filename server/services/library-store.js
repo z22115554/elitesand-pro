@@ -191,6 +191,12 @@ function recordPlay(track) {
     instrumentalFile: pick(track.instrumentalFile, prev && prev.instrumentalFile) || null,
     separationStatus: (track.separationStatus && track.separationStatus !== 'none')
       ? track.separationStatus : (prev && prev.separationStatus) || 'none',
+    // 歌曲段落分析：同一個坑，同一個修法——面板送來的 play:track payload 通常沒有這兩個
+    // 欄位，一律優先保留 prev 已經分析過的結果，不然播放一次就會被重置成「未分析」。
+    sections: (Array.isArray(track.sections) && track.sections.length)
+      ? track.sections : (prev && prev.sections) || null,
+    sectionsStatus: (track.sectionsStatus && track.sectionsStatus !== 'none')
+      ? track.sectionsStatus : (prev && prev.sectionsStatus) || 'none',
     playCount: (prev ? prev.playCount : 0) + 1,
     lastPlayed: Date.now(),
   };
@@ -216,6 +222,10 @@ function rememberImport(track) {
     instrumentalFile: track.instrumentalFile || prev.instrumentalFile || null,
     separationStatus: (track.separationStatus && track.separationStatus !== 'none')
       ? track.separationStatus : (prev.separationStatus || 'none'),
+    sections: (Array.isArray(track.sections) && track.sections.length)
+      ? track.sections : prev.sections || null,
+    sectionsStatus: (track.sectionsStatus && track.sectionsStatus !== 'none')
+      ? track.sectionsStatus : (prev.sectionsStatus || 'none'),
   };
   markDirty(track.id);
   // 匯入流程走到這裡代表音檔已完成落地；不必等下一次目錄掃描才讓 UI 顯示可播放。
@@ -336,6 +346,7 @@ function toLibrarySummary(entry) {
     separationStatus: entry.separationStatus || 'none',
     vocalsFile: entry.vocalsFile || null,
     instrumentalFile: entry.instrumentalFile || null,
+    sectionsStatus: entry.sectionsStatus || 'none',
   };
 }
 
@@ -353,11 +364,13 @@ function collectMediaFilenames(track, target = new Set()) {
   return target;
 }
 
-/** 分離中的工作仍可能正在讀來源音檔；cleanup 不可把它從腳下刪掉。 */
+/** 分離中／段落分析中的工作仍可能正在讀來源音檔；cleanup 不可把它從腳下刪掉。 */
 function getProcessingMediaFilenames() {
   const keep = new Set();
   for (const entry of Object.values(library)) {
-    if (entry?.separationStatus === 'processing') collectMediaFilenames(entry, keep);
+    if (entry?.separationStatus === 'processing' || entry?.sectionsStatus === 'processing') {
+      collectMediaFilenames(entry, keep);
+    }
   }
   return keep;
 }
