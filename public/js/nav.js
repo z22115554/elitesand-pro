@@ -61,6 +61,7 @@
 
   navItems.forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (btn.hidden) return;
       const nav = btn.dataset.nav;
 
       // 未來頁面（已註冊 render 函式）→ 呼叫之

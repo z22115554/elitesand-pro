@@ -54,17 +54,31 @@
     }
   }
 
+  function syncFeatureAvailability(now) {
+    const end = state.endAt ? Date.parse(state.endAt) : null;
+    const expired = state.expired === true || (Number.isFinite(end) && now >= end);
+    const nav = document.querySelector('.nav-item[data-nav="moon"]');
+    const view = document.querySelector('.view[data-view="moon"]');
+    if (!nav || !view) return;
+    nav.hidden = expired;
+    view.hidden = expired;
+    if (expired && (nav.classList.contains('active') || view.classList.contains('is-active'))) {
+      document.querySelector('.nav-item[data-nav="karaoke"]')?.click();
+    }
+  }
+
   function renderScheduleStatus() {
     clearTimeout(statusTimer);
     if (!state) return;
     const status = el('moon-schedule-status');
     const start = state.startAt ? Date.parse(state.startAt) : null;
     const end = state.endAt ? Date.parse(state.endAt) : null;
+    const now = (Number.isFinite(state.serverNow) ? state.serverNow : Date.now()) + performance.now() - receivedAt;
+    syncFeatureAvailability(now);
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       status.textContent = '目前不限時，OBS 持續顯示。';
       return;
     }
-    const now = (Number.isFinite(state.serverNow) ? state.serverNow : Date.now()) + performance.now() - receivedAt;
     let next;
     if (now < start) {
       status.textContent = `尚未開始，將於 ${new Date(start).toLocaleString('zh-TW')} 自動顯示。`;
@@ -216,6 +230,7 @@
   }
 
   SocketClient.on('moon:update', apply);
+  document.addEventListener('visibilitychange', renderScheduleStatus);
   SocketClient.on('connection-change', (connected) => {
     if (connected) SocketClient.sendWithCallback('moon:get', null, (result) => apply(result?.state));
   });

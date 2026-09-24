@@ -111,6 +111,14 @@ function scheduleSave() {
   _saveTimer = setTimeout(saveNow, 800);
 }
 
+function isExpired() {
+  return !!config.endAt && Date.now() >= Date.parse(config.endAt);
+}
+
+function expiredResult() {
+  return { ok: false, error: '中秋活動已結束' };
+}
+
 function snapshot(extra) {
   const raised = donations.reduce((sum, d) => sum + d.amount, 0);
   return {
@@ -119,11 +127,13 @@ function snapshot(extra) {
     total: config.base + raised,
     donations: donations.slice(),
     serverNow: Date.now(),
+    expired: isExpired(),
     ...extra,
   };
 }
 
 function setConfig(input) {
+  if (isExpired()) return expiredResult();
   if (Object.hasOwn(input || {}, 'startAt') || Object.hasOwn(input || {}, 'endAt')) {
     if (!cleanSchedule(input.startAt, input.endAt)) {
       return { ok: false, error: '請設定有效的活動開始與結束時間，結束須晚於開始' };
@@ -135,6 +145,7 @@ function setConfig(input) {
 }
 
 function addDonation(input) {
+  if (isExpired()) return expiredResult();
   const donation = cleanDonation({ name: input?.name, amount: input?.amount });
   if (!donation) return { ok: false, error: '請填寫名字與大於 0 的金額' };
   donations.push(donation);
@@ -144,6 +155,7 @@ function addDonation(input) {
 }
 
 function removeDonation(id) {
+  if (isExpired()) return expiredResult();
   const before = donations.length;
   donations = donations.filter((d) => d.id !== id);
   if (donations.length === before) return { ok: false, error: '找不到這筆斗內' };
@@ -152,6 +164,7 @@ function removeDonation(id) {
 }
 
 function clearDonations() {
+  if (isExpired()) return expiredResult();
   donations = [];
   scheduleSave();
   return { ok: true, state: snapshot() };
@@ -160,6 +173,6 @@ function clearDonations() {
 process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
 module.exports = {
-  snapshot, setConfig, addDonation, removeDonation, clearDonations, saveNow,
+  snapshot, setConfig, addDonation, removeDonation, clearDonations, saveNow, isExpired,
   MAX_NAME_LENGTH, MAX_TITLE_LENGTH,
 };

@@ -10,7 +10,7 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-moon-schedule-'
 process.env.ELITESAND_DATA_DIR = dataDir;
 const moon = require('../server/services/moon-event');
 
-test('activity schedule is validated, preserved by older config updates, and saved with donations', (t) => {
+test('activity schedule is validated, preserved by older config updates, and saved with donations', async (t) => {
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
   const startAt = new Date(Date.now() + 60000).toISOString();
   const endAt = new Date(Date.now() + 120000).toISOString();
@@ -32,6 +32,19 @@ test('activity schedule is validated, preserved by older config updates, and sav
   assert.equal(moon.setConfig({ startAt: null, endAt: null }).ok, true);
   assert.equal(moon.snapshot().startAt, null);
   assert.equal(moon.snapshot().endAt, null);
+  assert.equal(moon.snapshot().donations.length, 1);
+  assert.equal(moon.saveNow(), true);
+
+  const shortStart = new Date(Date.now() - 1000).toISOString();
+  const shortEnd = new Date(Date.now() + 80).toISOString();
+  assert.equal(moon.setConfig({ startAt: shortStart, endAt: shortEnd }).ok, true);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(moon.isExpired(), true);
+  assert.equal(moon.snapshot().expired, true);
+  assert.equal(moon.setConfig({ startAt: null, endAt: null }).ok, false);
+  assert.equal(moon.addDonation({ name: '太晚了', amount: 1 }).ok, false);
+  assert.equal(moon.removeDonation(moon.snapshot().donations[0].id).ok, false);
+  assert.equal(moon.clearDonations().ok, false);
   assert.equal(moon.snapshot().donations.length, 1);
   assert.equal(moon.saveNow(), true);
 });
