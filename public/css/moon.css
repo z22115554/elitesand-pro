@@ -20,6 +20,10 @@ html, body {
 
 body[data-part="moon"] .lantern-string,
 body[data-part="lanterns"] .moon-panel { display: none; }
+body[data-activity="pending"] .lantern-string,
+body[data-activity="pending"] .moon-panel,
+body[data-activity="hidden"] .lantern-string,
+body[data-activity="hidden"] .moon-panel { visibility: hidden; }
 
 /* ─── 月亮 ─── */
 .moon-panel {

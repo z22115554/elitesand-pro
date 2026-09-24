@@ -10,6 +10,8 @@
   const toast = (message, type) => window.AppShared?.showToast?.(message, type);
   let state = null;
   let configDirty = false;
+  let receivedAt = 0;
+  let statusTimer = 0;
 
   function moonUrl(suffix) {
     return `${location.origin}/moon${suffix || ''}`;
@@ -30,6 +32,50 @@
     el('moon-config-done-text').value = state.doneText;
     el('moon-config-goal').value = state.goal;
     el('moon-config-base').value = state.base;
+    el('moon-schedule-enabled').checked = !!(state.startAt && state.endAt);
+    el('moon-schedule-start').value = toLocalInput(state.startAt);
+    el('moon-schedule-end').value = toLocalInput(state.endAt);
+    syncScheduleInputs();
+  }
+
+  function toLocalInput(iso) {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (!Number.isFinite(date.getTime())) return '';
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  function syncScheduleInputs() {
+    const enabled = el('moon-schedule-enabled').checked;
+    for (const id of ['moon-schedule-start', 'moon-schedule-end']) {
+      el(id).disabled = !enabled;
+      el(id).required = enabled;
+    }
+  }
+
+  function renderScheduleStatus() {
+    clearTimeout(statusTimer);
+    if (!state) return;
+    const status = el('moon-schedule-status');
+    const start = state.startAt ? Date.parse(state.startAt) : null;
+    const end = state.endAt ? Date.parse(state.endAt) : null;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      status.textContent = '目前不限時，OBS 持續顯示。';
+      return;
+    }
+    const now = (Number.isFinite(state.serverNow) ? state.serverNow : Date.now()) + performance.now() - receivedAt;
+    let next;
+    if (now < start) {
+      status.textContent = `尚未開始，將於 ${new Date(start).toLocaleString('zh-TW')} 自動顯示。`;
+      next = start;
+    } else if (now < end) {
+      status.textContent = `活動進行中，將於 ${new Date(end).toLocaleString('zh-TW')} 自動隱藏。`;
+      next = end;
+    } else {
+      status.textContent = '活動已結束，OBS 已自動隱藏；斗內紀錄仍保留。';
+    }
+    if (next) statusTimer = setTimeout(renderScheduleStatus, Math.max(1, Math.min(next - now + 20, 60000)));
   }
 
   function renderList() {
@@ -69,8 +115,10 @@
   function apply(next) {
     if (!next) return;
     state = next;
+    receivedAt = performance.now();
     renderSummary();
     renderConfig();
+    renderScheduleStatus();
     renderList();
   }
 
@@ -115,15 +163,24 @@
     });
 
     const configForm = el('moon-config-form');
-    configForm.addEventListener('input', () => { configDirty = true; });
+    configForm.addEventListener('input', () => { configDirty = true; syncScheduleInputs(); });
     configForm.addEventListener('submit', (event) => {
       event.preventDefault();
+      const scheduled = el('moon-schedule-enabled').checked;
+      const start = scheduled ? new Date(el('moon-schedule-start').value) : null;
+      const end = scheduled ? new Date(el('moon-schedule-end').value) : null;
+      if (scheduled && (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start)) {
+        toast('請設定有效的開始與結束時間，結束須晚於開始', 'error');
+        return;
+      }
       configDirty = false;
       send('moon:config', {
         title: el('moon-config-title-input').value,
         doneText: el('moon-config-done-text').value,
         goal: Number(el('moon-config-goal').value),
         base: Number(el('moon-config-base').value),
+        startAt: scheduled ? start.toISOString() : null,
+        endAt: scheduled ? end.toISOString() : null,
       }, () => toast('活動設定已儲存', 'success'));
     });
 

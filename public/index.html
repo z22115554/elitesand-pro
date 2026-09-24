@@ -1658,6 +1658,24 @@
                 </div>
               </div>
               <p class="field-hint">起始金額＝活動開始前已經募到的錢（例如直播上顯示的募資進度），月亮會從這裡開始算。</p>
+              <div class="field mt-10">
+                <label class="moon-schedule-toggle" for="moon-schedule-enabled">
+                  <input id="moon-schedule-enabled" type="checkbox">
+                  限時顯示在 OBS
+                </label>
+              </div>
+              <div class="row-gap-10">
+                <div class="field flex-grow">
+                  <label for="moon-schedule-start">開始時間</label>
+                  <input id="moon-schedule-start" class="input" type="datetime-local" step="1">
+                </div>
+                <div class="field flex-grow">
+                  <label for="moon-schedule-end">結束時間</label>
+                  <input id="moon-schedule-end" class="input" type="datetime-local" step="1">
+                </div>
+              </div>
+              <p class="field-hint">依這台裝置的本地時間設定；開始前與結束後，OBS 上的月亮和燈籠會自動隱藏，斗內紀錄會保留。</p>
+              <p id="moon-schedule-status" class="field-hint" role="status"></p>
               <button class="btn btn-sm mt-10" type="submit">儲存設定</button>
             </form>
           </section>

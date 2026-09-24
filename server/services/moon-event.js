@@ -23,6 +23,8 @@ const DEFAULTS = Object.freeze({
   doneText: '月圓了，謝謝大家！',
   goal: 5000,
   base: 0,
+  startAt: null,
+  endAt: null,
 });
 
 let config = { ...DEFAULTS };
@@ -49,16 +51,31 @@ function cleanText(value, maxLength) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, maxLength);
 }
 
+function cleanSchedule(startAt, endAt) {
+  if (startAt == null && endAt == null) return { startAt: null, endAt: null };
+  if (typeof startAt !== 'string' || typeof endAt !== 'string') return null;
+  const start = Date.parse(startAt);
+  const end = Date.parse(endAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  if (new Date(start).toISOString() !== startAt || new Date(end).toISOString() !== endAt) return null;
+  return { startAt, endAt };
+}
+
 function cleanConfig(input, fallback) {
   const title = cleanText(input?.title, MAX_TITLE_LENGTH);
   const doneText = cleanText(input?.doneText, MAX_TITLE_LENGTH);
   const goal = cleanAmount(input?.goal, { min: 1 });
   const base = cleanAmount(input?.base);
+  const hasSchedule = Object.hasOwn(input || {}, 'startAt') || Object.hasOwn(input || {}, 'endAt');
+  const schedule = (hasSchedule ? cleanSchedule(input?.startAt, input?.endAt) : null)
+    || cleanSchedule(fallback.startAt, fallback.endAt)
+    || { startAt: null, endAt: null };
   return {
     title: title || fallback.title,
     doneText: doneText || fallback.doneText || DEFAULTS.doneText,
     goal: goal ?? fallback.goal,
     base: base ?? fallback.base,
+    ...schedule,
   };
 }
 
@@ -101,11 +118,17 @@ function snapshot(extra) {
     raised,
     total: config.base + raised,
     donations: donations.slice(),
+    serverNow: Date.now(),
     ...extra,
   };
 }
 
 function setConfig(input) {
+  if (Object.hasOwn(input || {}, 'startAt') || Object.hasOwn(input || {}, 'endAt')) {
+    if (!cleanSchedule(input.startAt, input.endAt)) {
+      return { ok: false, error: '請設定有效的活動開始與結束時間，結束須晚於開始' };
+    }
+  }
   config = cleanConfig(input, config);
   scheduleSave();
   return { ok: true, state: snapshot() };

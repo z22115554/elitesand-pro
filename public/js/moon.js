@@ -59,6 +59,30 @@
 
   let firstRender = true;
   let knownIds = new Set();
+  let schedule = null;
+  let scheduleTimer = 0;
+
+  function updateVisibility() {
+    clearTimeout(scheduleTimer);
+    if (!schedule) return;
+    const now = schedule.serverNow + performance.now() - schedule.receivedAt;
+    const { startAt, endAt } = schedule;
+    document.body.dataset.activity = (startAt === null || (now >= startAt && now < endAt)) ? 'open' : 'hidden';
+    const next = startAt !== null && now < startAt ? startAt : (endAt !== null && now < endAt ? endAt : null);
+    if (next !== null) scheduleTimer = setTimeout(updateVisibility, Math.max(1, Math.min(next - now + 20, 60000)));
+  }
+
+  function applySchedule(state) {
+    const startAt = state.startAt ? Date.parse(state.startAt) : null;
+    const endAt = state.endAt ? Date.parse(state.endAt) : null;
+    schedule = {
+      startAt: Number.isFinite(startAt) ? startAt : null,
+      endAt: Number.isFinite(endAt) ? endAt : null,
+      serverNow: Number.isFinite(state.serverNow) ? state.serverNow : Date.now(),
+      receivedAt: performance.now(),
+    };
+    updateVisibility();
+  }
 
   function buildLantern(donation, isNew) {
     const node = document.createElement('div');
@@ -92,6 +116,7 @@
 
   function render(state) {
     if (!state || typeof state !== 'object') return;
+    applySchedule(state);
     const goal = Math.max(Number(state.goal) || 1, 1);
     const total = Math.max(Number(state.total) || 0, 0);
     const progress = Math.min(total / goal, 1);
@@ -119,5 +144,6 @@
   }
 
   SocketClient.on('moon:update', render);
+  document.addEventListener('visibilitychange', updateVisibility);
   SocketClient.init('moon');
 })();
