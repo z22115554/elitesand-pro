@@ -198,7 +198,12 @@ const READ_ONLY_TRACK_FIELDS = ['filename', 'url', 'cover', 'originalName', 'aud
 
 function validatePublicState(payload, label, { readOnly = false } = {}) {
   assert(payload && typeof payload === 'object', `${label}: state payload is missing`);
-  assert(Array.isArray(payload.playlist) && payload.playlist.length === FIXTURE_PLAYLIST_SIZE, `${label}: playlist must contain ${FIXTURE_PLAYLIST_SIZE} tracks`);
+  if (readOnly) {
+    // OBS／預覽端不使用播放清單：2000 首時整份約 680KB，每次 state:sync 都送給每個 OBS 來源太浪費。
+    assert(Array.isArray(payload.playlist) && payload.playlist.length === 0, `${label}: read-only state must carry an empty playlist`);
+  } else {
+    assert(Array.isArray(payload.playlist) && payload.playlist.length === FIXTURE_PLAYLIST_SIZE, `${label}: playlist must contain ${FIXTURE_PLAYLIST_SIZE} tracks`);
+  }
   assert(payload.playlist.every((track) =>
     !Object.prototype.hasOwnProperty.call(track, 'lyrics') &&
     !Object.prototype.hasOwnProperty.call(track, 'parsedLyrics') &&
@@ -218,11 +223,10 @@ function validatePublicState(payload, label, { readOnly = false } = {}) {
 }
 
 function validatePlaylistUpdate(payload, label, { readOnly = false } = {}) {
-  assert(Array.isArray(payload) && payload.length === FIXTURE_PLAYLIST_SIZE, `${label}: playlist update must contain ${FIXTURE_PLAYLIST_SIZE} tracks`);
   if (readOnly) {
-    assert(payload.every((track) => READ_ONLY_TRACK_FIELDS.every((field) => !Object.prototype.hasOwnProperty.call(track, field))),
-      `${label}: read-only playlist update must not expose media details`);
+    assert(Array.isArray(payload) && payload.length === 0, `${label}: read-only playlist update must be empty`);
   } else {
+    assert(Array.isArray(payload) && payload.length === FIXTURE_PLAYLIST_SIZE, `${label}: playlist update must contain ${FIXTURE_PLAYLIST_SIZE} tracks`);
     assert(payload.every((track) => track.filename && track.url && track.cover),
       `${label}: control playlist update must retain media details`);
   }

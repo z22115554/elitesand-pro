@@ -208,6 +208,11 @@ test('P0：貼上歌詞可實際開啟，controller 重連後可對目前歌曲�
     addEventListener(type, handler) { this.listeners.set(type, handler); }
     focus() {}
     querySelectorAll() { return []; }
+    get children() { return this._children || (this._children = []); }
+    get firstElementChild() { return this.children[0] || null; }
+    appendChild(child) { this.children.push(child); child.parentNode = this; return child; }
+    removeChild(child) { const i = this.children.indexOf(child); if (i >= 0) this.children.splice(i, 1); child.parentNode = null; return child; }
+    get dataset() { return this._dataset || (this._dataset = {}); }
   }
 
   const desktopElements = {
@@ -250,6 +255,7 @@ test('P0：貼上歌詞可實際開啟，controller 重連後可對目前歌曲�
     document: {
       getElementById: elementFor,
       querySelectorAll() { return []; },
+      createElement() { return new FakeElement(); },
     },
   };
   vm.runInNewContext(
@@ -264,7 +270,12 @@ test('P0：貼上歌詞可實際開啟，controller 重連後可對目前歌曲�
   elementFor('btn-lyrics-paste').listeners.get('click')();
   ok(elementFor('lyrics-paste-modal').classList.contains('active'), 'controller 重連後貼歌詞必須指向目前歌曲而非誤報未選歌: ');
   ok(!controllerToasts.includes('請先選擇歌曲'), 'controller 重連後不應誤報未選歌曲: ');
-  ok(elementFor('playlist').innerHTML.includes('ctrl-playlist-item active'), 'controller 清單必須標示重連後的目前歌曲: ');
+  // 清單改成逐列更新（每列是獨立元素），active 標在列本身的 class 上。
+  const rows = elementFor('playlist').children;
+  eq(rows.length, 3, 'controller 清單要渲染出三列: ');
+  const hasActive = (row) => row.className.split(' ').includes('active');
+  ok(hasActive(rows[1]) && rows[1].innerHTML.includes('目前歌曲'), 'controller 清單必須標示重連後的目前歌曲: ');
+  ok(!hasActive(rows[0]) && !hasActive(rows[2]), '只有目前歌曲那列標 active: ');
 });
 
 test('預覽縮放不依賴可能在嵌入式 WebView 報錯的 ResizeObserver', () => {

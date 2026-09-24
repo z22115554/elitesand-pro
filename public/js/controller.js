@@ -946,33 +946,50 @@
   // 播放列表渲染
   // ═══════════════════════════════════════════
 
-  function renderPlaylist() {
-    if (playlist.length === 0) {
-      dom.playlist.innerHTML = `
-        <div class="ctrl-playlist-empty">
-          <p>${escapeHtml(t('controller.emptyPlaylist'))}</p>
-          <p class="hint">${escapeHtml(t('controller.addFromPanel'))}</p>
-        </div>`;
-      return;
+  // 逐列比對更新：offset:update（連點微調）、play:track、playlist:update 都會呼叫這裡，
+  // 以前每次都 innerHTML 整份重建，2000 首時手機明顯卡頓、封面也每次重新解碼。
+  // 現在只重畫內容真的變了的那幾列；點擊改用清單容器上的單一委派監聽。
+  let playlistRows = []; // [{ el, sig }]，順序與 playlist 對齊
+  let playlistClickBound = false;
+
+  function bindPlaylistClick() {
+    if (playlistClickBound || !dom.playlist) return;
+    playlistClickBound = true;
+    dom.playlist.addEventListener('click', (event) => {
+      const item = event.target.closest('.ctrl-playlist-item');
+      if (!item || !dom.playlist.contains(item)) return;
+      const index = parseInt(item.dataset.index, 10);
+      if (!Number.isInteger(index) || !playlist[index]) return;
+      currentTrackIndex = index;
+      SocketClient.send('play:track', playlist[index]);
+    });
+  }
+
+  function playlistRowSignature(track, isActive) {
+    // 翻譯字串也放進簽章：切換介面語言時，badge／「未知歌手」才會跟著重畫。
+    return JSON.stringify([
+      track.title || '', track.artist || '', track.cover || '', track.manualLyrics ? 1 : 0,
+      track.lyricsType || '', track.offset || 0, isActive ? 1 : 0,
+      t('controller.selected'), t('player.unknownArtist'),
+    ]);
+  }
+
+  function fillPlaylistRow(el, track, isActive) {
+    // Phase 5: Status badges
+    let statusBadge = '';
+    if (track.manualLyrics) {
+      statusBadge = `<span class="ctrl-status-badge manual">${escapeHtml(t('controller.selected'))}</span>`;
+    } else if (track.lyricsType) {
+      statusBadge = `<span class="ctrl-status-badge">${escapeHtml(track.lyricsType.toUpperCase())}</span>`;
     }
 
-    dom.playlist.innerHTML = playlist.map((track, i) => {
-      const isActive = i === currentTrackIndex;
-      // Phase 5: Status badges
-      let statusBadge = '';
-      if (track.manualLyrics) {
-        statusBadge = `<span class="ctrl-status-badge manual">${escapeHtml(t('controller.selected'))}</span>`;
-      } else if (track.lyricsType) {
-        statusBadge = `<span class="ctrl-status-badge">${escapeHtml(track.lyricsType.toUpperCase())}</span>`;
-      }
+    const offsetMs = track.offset || 0;
+    const offsetBadge = offsetMs !== 0
+      ? `<span class="ctrl-status-badge offset">${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toFixed(1)}s</span>`
+      : '';
 
-      const offsetMs = track.offset || 0;
-      const offsetBadge = offsetMs !== 0
-        ? `<span class="ctrl-status-badge offset">${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toFixed(1)}s</span>`
-        : '';
-
-      return `
-        <div class="ctrl-playlist-item ${isActive ? 'active' : ''}" data-index="${i}">
+    el.className = `ctrl-playlist-item ${isActive ? 'active' : ''}`;
+    el.innerHTML = `
           <div class="ctrl-playlist-item-cover"></div>
           <div class="ctrl-playlist-item-info">
             <div class="ctrl-playlist-item-title">${escapeHtml(track.title)}</div>
@@ -981,27 +998,48 @@
           <div class="ctrl-playlist-item-badges">
             ${statusBadge}
             ${offsetBadge}
-          </div>
-        </div>`;
-    }).join('');
+          </div>`;
 
     // 封面網址用 CSSOM 寫入，不把外部資料拼進 style HTML 屬性。
+    const coverUrl = track.cover ? safeHttpUrl(track.cover) : null;
+    if (coverUrl) el.firstElementChild.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
+  }
+
+  function renderPlaylist() {
+    bindPlaylistClick();
+    if (playlist.length === 0) {
+      playlistRows = [];
+      dom.playlist.innerHTML = `
+        <div class="ctrl-playlist-empty">
+          <p>${escapeHtml(t('controller.emptyPlaylist'))}</p>
+          <p class="hint">${escapeHtml(t('controller.addFromPanel'))}</p>
+        </div>`;
+      return;
+    }
+    if (playlistRows.length === 0) dom.playlist.innerHTML = ''; // 清掉空清單提示
+
     playlist.forEach((track, i) => {
-      if (!track || !track.cover) return;
-      const coverUrl = safeHttpUrl(track.cover);
-      if (!coverUrl) return;
-      const cover = dom.playlist.querySelector(`[data-index="${i}"] .ctrl-playlist-item-cover`);
-      if (cover) cover.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
+      if (!track) return;
+      const isActive = i === currentTrackIndex;
+      const sig = playlistRowSignature(track, isActive);
+      let row = playlistRows[i];
+      if (!row) {
+        const el = document.createElement('div');
+        dom.playlist.appendChild(el);
+        row = { el, sig: null };
+        playlistRows[i] = row;
+      }
+      row.el.dataset.index = String(i);
+      if (row.sig !== sig) {
+        fillPlaylistRow(row.el, track, isActive);
+        row.sig = sig;
+      }
     });
 
-    // 點擊播放
-    dom.playlist.querySelectorAll('.ctrl-playlist-item').forEach((item) => {
-      item.addEventListener('click', () => {
-        const index = parseInt(item.dataset.index, 10);
-        currentTrackIndex = index;
-        SocketClient.send('play:track', playlist[index]);
-      });
-    });
+    while (playlistRows.length > playlist.length) {
+      const row = playlistRows.pop();
+      if (row && row.el.parentNode) row.el.parentNode.removeChild(row.el);
+    }
   }
 
   // ═══════════════════════════════════════════

@@ -661,8 +661,10 @@ function createAppState(io) {
     return playState.playlist.map(track => getTrackPayload(track, { exists }));
   }
 
-  function getReadOnlyPlaylist(exists = libraryStore.getAudioExistsLookup()) {
-    return getPublicPlaylist(exists).map(redactTrackForReadOnly);
+  // 唯讀端不需要播放清單（見 getReadOnlyState 說明）；playlist:update 仍照舊送給唯讀房間，
+  // 只是內容為空，維持既有的事件契約。
+  function getReadOnlyPlaylist() {
+    return [];
   }
 
   // 僅供 P2 量測舊 payload 用，絕不可拿去 io.emit。
@@ -687,8 +689,10 @@ function createAppState(io) {
 
   /** 取得可公開的播放狀態：清單是摘要，currentTrack 保留完整歌詞供播放／編輯／OBS 恢復。 */
   function getPublicState(exists = libraryStore.getAudioExistsLookup()) {
-    const enrichedPlaylist = getPublicPlaylist(exists);
+    return buildStateSnapshot(getPublicPlaylist(exists), exists);
+  }
 
+  function buildStateSnapshot(enrichedPlaylist, exists) {
     return {
       currentTrack: playState.currentTrack
         ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset, exists })
@@ -723,14 +727,16 @@ function createAppState(io) {
     return getPublicState();
   }
 
-  /** Full lyrics remain available to OBS, but media path/source fields do not. */
+  /**
+   * Full lyrics remain available to OBS, but media path/source fields do not.
+   * 唯讀端（OBS 歌詞／歌單／Spout、面板內 5 個預覽 iframe）沒有任何程式讀 playlist：
+   * 歌單頁的「接下來」走 session.upcoming／setlist:update。2000 首時整份清單約 680KB，
+   * 每次 state:sync 都要送給每個 OBS 來源並在 CEF 主執行緒 parse，還得在 server 端為
+   * 唯讀版多算一次整份清單，所以只送空陣列（保留欄位，資料形狀不變）。
+   */
   function getReadOnlyState(exists = libraryStore.getAudioExistsLookup()) {
-    const publicState = getPublicState(exists);
-    return {
-      ...publicState,
-      currentTrack: redactTrackForReadOnly(publicState.currentTrack),
-      playlist: publicState.playlist.map(redactTrackForReadOnly),
-    };
+    const state = buildStateSnapshot(getReadOnlyPlaylist(), exists);
+    return { ...state, currentTrack: redactTrackForReadOnly(state.currentTrack) };
   }
 
   /** 取得 track 的有效歌詞（考慮手動覆蓋），無手動覆蓋時回 null */

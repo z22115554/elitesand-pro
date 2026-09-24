@@ -351,23 +351,53 @@
   // ═══════════════════════════════════════════
   // 播放清單
   // ═══════════════════════════════════════════
+  // 逐列比對更新（同 controller.js）：state:sync 幾乎每次狀態變化都會觸發這裡，
+  // 2000 首時整份 innerHTML 重建會讓跟唱視圖卡頓；只重畫內容有變的列，點擊用單一委派監聽。
+  let playlistRows = []; // [{ el, sig }]
+  let playlistClickBound = false;
+
   function renderPlaylist() {
+    if (!playlistClickBound) {
+      playlistClickBound = true;
+      dom.playlist.addEventListener('click', (event) => {
+        const item = event.target.closest('.pt-playlist-item');
+        if (!item || !dom.playlist.contains(item)) return;
+        const track = playlist[parseInt(item.dataset.index, 10)];
+        if (track) SocketClient.send('play:track', track);
+      });
+    }
     if (playlist.length === 0) {
+      playlistRows = [];
       dom.playlist.innerHTML = `<div class="pt-playlist-empty">${escapeHtml(t('prompter.playlistEmpty'))}</div>`;
       return;
     }
-    dom.playlist.innerHTML = playlist.map((track, i) => `
-      <div class="pt-playlist-item ${i === currentTrackIndex ? 'active' : ''}" data-index="${i}">
+    if (playlistRows.length === 0) dom.playlist.innerHTML = ''; // 清掉空清單提示
+
+    playlist.forEach((track, i) => {
+      if (!track) return;
+      const isActive = i === currentTrackIndex;
+      const sig = JSON.stringify([track.title || '', track.artist || '', isActive ? 1 : 0]);
+      let row = playlistRows[i];
+      if (!row) {
+        const el = document.createElement('div');
+        dom.playlist.appendChild(el);
+        row = { el, sig: null };
+        playlistRows[i] = row;
+      }
+      row.el.dataset.index = String(i);
+      if (row.sig !== sig) {
+        row.el.className = `pt-playlist-item ${isActive ? 'active' : ''}`;
+        row.el.innerHTML = `
         <div class="pt-playlist-item-title">${escapeHtml(track.title || '')}</div>
-        <div class="pt-playlist-item-artist">${escapeHtml(track.artist || '')}</div>
-      </div>`).join('');
-    dom.playlist.querySelectorAll('.pt-playlist-item').forEach((item) => {
-      item.addEventListener('click', () => {
-        const index = parseInt(item.dataset.index, 10);
-        const track = playlist[index];
-        if (track) SocketClient.send('play:track', track);
-      });
+        <div class="pt-playlist-item-artist">${escapeHtml(track.artist || '')}</div>`;
+        row.sig = sig;
+      }
     });
+
+    while (playlistRows.length > playlist.length) {
+      const row = playlistRows.pop();
+      if (row && row.el.parentNode) row.el.parentNode.removeChild(row.el);
+    }
   }
 
   // ═══════════════════════════════════════════
