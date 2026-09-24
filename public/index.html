@@ -199,6 +199,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
           <span class="nav-label" data-i18n="nav.bgm">BGM</span>
         </button>
+        <button class="nav-item" data-nav="moon" type="button" title="中秋活動">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <span class="nav-label">中秋活動</span>
+        </button>
         <!-- 2026-09-12 先收起來；2026-09-24 SongFormer 段落分析已接上正式資料流，但 STATUS.md
              「全面審查」A 區的已知問題（權重 MD5 同步讀檔卡 server、sidecar 當掉後 GPU 永久忙碌會連帶
              擋住 AI 人聲分離等）修完並實機驗收前，正式使用者不該看到。要重新開放時比照 nav.js 開頭
@@ -1591,6 +1595,74 @@
             <ul id="bgm-track-list" class="bgm-track-list"></ul>
           </section>
         </div><!-- /view bgm -->
+
+        <!-- ═══ 視圖：中秋募資活動（月亮進度條＋燈籠名牌；斗內手動輸入）═══ -->
+        <div class="view content-col" data-view="moon">
+          <section class="card" aria-labelledby="moon-add-title">
+            <p id="moon-add-title" class="eyebrow m-0">新增斗內</p>
+            <p class="sub">輸入後燈籠會立刻掛上 OBS 畫面，月亮往滿月前進一點。</p>
+            <form id="moon-add-form" class="moon-add-row" autocomplete="off">
+              <input id="moon-add-name" class="input" type="text" maxlength="24" placeholder="名字" aria-label="名字" required>
+              <input id="moon-add-amount" class="input moon-amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額（NT$）" required>
+              <button class="btn btn-sm" type="submit">掛上燈籠</button>
+            </form>
+            <div class="moon-summary" role="status" aria-live="polite">
+              <div class="moon-summary-bar"><span id="moon-summary-fill"></span></div>
+              <div class="moon-summary-text">
+                <span id="moon-summary-total">NT$0</span>
+                <span class="sub" id="moon-summary-goal">/ NT$5,000</span>
+                <span class="val" id="moon-summary-percent">0%</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="moon-preview-title">
+            <p id="moon-preview-title" class="eyebrow m-0">OBS 畫面預覽</p>
+            <div class="moon-preview-frame">
+              <iframe id="moon-preview-iframe" title="中秋活動預覽" loading="lazy"></iframe>
+            </div>
+            <div class="obs-url-list mt-10">
+              <div><div class="label">月亮＋燈籠（整個畫面）</div><div class="url-field"><code data-moon-url=""></code><button class="btn btn-sm" type="button" data-moon-copy="">複製</button></div></div>
+              <div><div class="label">只有月亮</div><div class="url-field"><code data-moon-url="?part=moon"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=moon">複製</button></div></div>
+              <div><div class="label">只有燈籠</div><div class="url-field"><code data-moon-url="?part=lanterns"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=lanterns">複製</button></div></div>
+            </div>
+            <p class="val mt-10">在 OBS 新增「瀏覽器」來源貼上網址，寬高設 1920×1080。想把月亮和燈籠分開擺，就各建一個來源。</p>
+          </section>
+
+          <section class="card" aria-labelledby="moon-config-title">
+            <p id="moon-config-title" class="eyebrow m-0">活動設定</p>
+            <form id="moon-config-form" autocomplete="off">
+              <div class="field">
+                <label for="moon-config-title-input">標題</label>
+                <input id="moon-config-title-input" class="input" type="text" maxlength="40">
+              </div>
+              <div class="field">
+                <label for="moon-config-done-text">達標後顯示的文字</label>
+                <input id="moon-config-done-text" class="input" type="text" maxlength="40">
+              </div>
+              <div class="row-gap-10">
+                <div class="field flex-grow">
+                  <label for="moon-config-goal">目標金額（NT$）</label>
+                  <input id="moon-config-goal" class="input" type="number" min="1" step="1" inputmode="numeric">
+                </div>
+                <div class="field flex-grow">
+                  <label for="moon-config-base">起始金額（NT$）</label>
+                  <input id="moon-config-base" class="input" type="number" min="0" step="1" inputmode="numeric">
+                </div>
+              </div>
+              <p class="field-hint">起始金額＝活動開始前已經募到的錢（例如直播上顯示的募資進度），月亮會從這裡開始算。</p>
+              <button class="btn btn-sm mt-10" type="submit">儲存設定</button>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="moon-list-title">
+            <div class="playlist-head">
+              <p id="moon-list-title" class="eyebrow m-0">斗內紀錄</p>
+              <button id="moon-clear" class="btn btn-sm btn-danger" type="button">全部清除</button>
+            </div>
+            <ul id="moon-donation-list" class="bgm-track-list"></ul>
+          </section>
+        </div><!-- /view moon -->
 
         <!-- ═══ 視圖：一般設定（OBS 網址/連動、手機遙控、yt-dlp、PIN）═══ -->
         <div class="view content-col" data-view="general">
@@ -3318,6 +3390,7 @@
   <!-- SYNCDIAG（暫時性，2026-09-03）：分離播放人聲/伴奏延遲診斷；確認問題後連同 sync-diag.js 一起移除 -->
   <script src="/js/sync-diag.js"></script>
   <script src="/js/app-bgm.js"></script>
+  <script src="/js/app-moon-event.js"></script>
   <script src="/js/app-playback.js"></script>
   <script src="/js/app-section-design.js"></script>
   <script src="/js/section-analysis-client.js"></script>

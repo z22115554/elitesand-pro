@@ -1,0 +1,196 @@
+/* 中秋活動疊加層：透明底，只動自家元素（鐵則 11）。 */
+:root {
+  --moon-gold: #ffe2a0;
+  --moon-ink: #fff9ec;
+  --lantern-red: #d8412f;
+  --lantern-red-deep: #9e2419;
+  --lantern-glow: rgba(255, 170, 90, 0.55);
+  --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 0 12px rgba(0, 0, 0, 0.35);
+}
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Noto Serif TC', 'Source Han Serif TC', 'PMingLiU', serif;
+  color: var(--moon-ink);
+}
+
+body[data-part="moon"] .lantern-string,
+body[data-part="lanterns"] .moon-panel { display: none; }
+
+/* ─── 月亮 ─── */
+.moon-panel {
+  position: absolute;
+  right: 48px;
+  bottom: 48px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+body[data-part="moon"] .moon-panel {
+  inset: 0;
+  justify-content: center;
+}
+
+.moon-wrap { position: relative; width: 190px; height: 190px; flex: none; }
+.moon-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 0 18px rgba(255, 214, 140, 0.45));
+  transition: filter 1.2s ease;
+}
+.moon-dark { fill: rgba(40, 44, 70, 0.55); }
+.moon-rim { fill: none; stroke: rgba(255, 230, 170, 0.45); stroke-width: 1.5; }
+.moon-crater { fill: rgba(214, 170, 90, 0.22); }
+.moon-text { text-shadow: var(--text-shadow); }
+.moon-title {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--moon-gold);
+}
+.moon-amount {
+  margin-top: 6px;
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.moon-currency { font-size: 0.7em; margin-right: 4px; opacity: 0.85; }
+.moon-sep { margin: 0 6px; opacity: 0.6; }
+#moon-goal { opacity: 0.75; }
+.moon-done {
+  margin-top: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--moon-gold);
+  letter-spacing: 0.08em;
+}
+.moon-done[hidden] { display: none; }
+
+.moon-panel.is-full .moon-svg {
+  animation: moon-bloom 3.2s ease-in-out infinite;
+}
+@keyframes moon-bloom {
+  0%, 100% { filter: drop-shadow(0 0 22px rgba(255, 214, 140, 0.6)); }
+  50% { filter: drop-shadow(0 0 48px rgba(255, 220, 150, 0.95)); }
+}
+
+.moon-panel.is-bump .moon-amount { animation: amount-bump 0.9s ease; }
+@keyframes amount-bump {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.12); color: var(--moon-gold); }
+  100% { transform: scale(1); }
+}
+
+/* ─── 燈籠 ─── */
+.lantern-string {
+  position: absolute;
+  top: 0;
+  left: 40px;
+  right: 40px;
+  height: 230px;
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  pointer-events: none;
+}
+.lantern-string::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 220, 160, 0.55) 8%, rgba(255, 220, 160, 0.55) 92%, transparent);
+}
+.lantern-string:empty::before { display: none; }
+
+.lantern {
+  position: relative;
+  flex: none;
+  width: 92px;
+  padding-top: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 18px;
+  animation: lantern-sway 5s ease-in-out infinite;
+}
+.lantern:nth-child(2n) { animation-duration: 6.2s; animation-delay: -1.3s; }
+.lantern:nth-child(3n) { animation-duration: 5.6s; animation-delay: -2.4s; }
+
+.lantern-cord { width: 2px; height: 22px; background: rgba(255, 220, 160, 0.7); }
+.lantern-cap {
+  width: 44px;
+  height: 9px;
+  border-radius: 3px;
+  background: linear-gradient(#e6b04e, #a8751f);
+}
+.lantern-body {
+  position: relative;
+  width: 92px;
+  min-height: 112px;
+  padding: 14px 8px;
+  box-sizing: border-box;
+  border-radius: 46% / 40%;
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.07) 0 2px, transparent 2px 15px),
+    radial-gradient(circle at 50% 42%, #ff8a55 0%, var(--lantern-red) 55%, var(--lantern-red-deep) 100%);
+  box-shadow: 0 0 26px var(--lantern-glow), inset 0 -8px 16px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+}
+.lantern-name {
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.2;
+  color: #fff4dc;
+  text-shadow: 0 1px 2px rgba(80, 10, 0, 0.6);
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lantern-amount {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffe0a3;
+  font-variant-numeric: tabular-nums;
+}
+.lantern-tassel {
+  width: 4px;
+  height: 26px;
+  margin-top: -1px;
+  background: linear-gradient(#e6b04e, rgba(230, 176, 78, 0));
+  border-radius: 0 0 2px 2px;
+}
+
+.lantern.is-new { animation: lantern-drop 1.4s cubic-bezier(.25, 1.4, .4, 1) both, lantern-sway 5s ease-in-out 1.4s infinite; }
+.lantern.is-new .lantern-body { animation: lantern-flare 2.4s ease-out; }
+@keyframes lantern-drop {
+  0% { transform: translateY(-240px) rotate(-8deg); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translateY(0) rotate(0deg); opacity: 1; }
+}
+@keyframes lantern-flare {
+  0%, 40% { box-shadow: 0 0 70px rgba(255, 190, 110, 0.95), inset 0 -8px 16px rgba(0, 0, 0, 0.18); }
+  100% { box-shadow: 0 0 26px var(--lantern-glow), inset 0 -8px 16px rgba(0, 0, 0, 0.18); }
+}
+@keyframes lantern-sway {
+  0%, 100% { transform: rotate(-2.5deg); }
+  50% { transform: rotate(2.5deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lantern, .lantern.is-new, .moon-panel.is-full .moon-svg { animation: none; }
+}

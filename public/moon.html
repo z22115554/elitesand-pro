@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>中秋活動</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/moon.css">
+</head>
+<body>
+  <!-- OBS 中秋活動疊加：透明背景。?part=moon 只顯示月亮、?part=lanterns 只顯示燈籠，預設兩者都顯示。 -->
+  <div id="lantern-string" class="lantern-string" aria-live="polite"></div>
+
+  <section id="moon-panel" class="moon-panel">
+    <div class="moon-wrap">
+      <svg id="moon-svg" class="moon-svg" viewBox="0 0 200 200" aria-hidden="true">
+        <defs>
+          <radialGradient id="moon-lit" cx="42%" cy="38%" r="70%">
+            <stop offset="0%" stop-color="#fff8e4"/>
+            <stop offset="55%" stop-color="#ffe7a8"/>
+            <stop offset="100%" stop-color="#f3c66b"/>
+          </radialGradient>
+          <clipPath id="moon-lit-clip"><path id="moon-lit-path" d=""/></clipPath>
+        </defs>
+        <circle class="moon-dark" cx="100" cy="100" r="90"/>
+        <g clip-path="url(#moon-lit-clip)">
+          <circle cx="100" cy="100" r="90" fill="url(#moon-lit)"/>
+          <circle class="moon-crater" cx="72" cy="78" r="14"/>
+          <circle class="moon-crater" cx="128" cy="62" r="8"/>
+          <circle class="moon-crater" cx="118" cy="128" r="18"/>
+          <circle class="moon-crater" cx="70" cy="136" r="7"/>
+          <circle class="moon-crater" cx="148" cy="100" r="6"/>
+        </g>
+        <circle class="moon-rim" cx="100" cy="100" r="90"/>
+      </svg>
+    </div>
+    <div class="moon-text">
+      <div id="moon-title" class="moon-title">中秋團圓夜</div>
+      <div class="moon-amount">
+        <span class="moon-currency">NT$</span><span id="moon-total">0</span>
+        <span class="moon-sep">/</span><span id="moon-goal">5,000</span>
+      </div>
+      <div id="moon-done" class="moon-done" hidden>月圓了，謝謝大家！</div>
+    </div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/access-auth.js"></script>
+  <script src="/js/socket-client.js"></script>
+  <script src="/js/moon.js"></script>
+</body>
+</html>

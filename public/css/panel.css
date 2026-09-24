@@ -1628,3 +1628,17 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
   font-size: 9px; padding: 0 3px; border-radius: 3px;
   background: rgba(0,0,0,.6); color: #cbd5e1;
 }
+
+/* 中秋募資活動 */
+.moon-add-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.moon-add-row .input { flex: 1 1 160px; min-width: 0; }
+.moon-add-row .moon-amount-input { flex: 0 1 140px; }
+.moon-summary { margin-top: 16px; }
+.moon-summary-bar { height: 8px; border-radius: 999px; background: var(--bg-raised); border: 1px solid var(--border); overflow: hidden; }
+.moon-summary-bar span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #f3c66b, #ffe7a8); transition: width 0.6s ease; }
+.moon-summary-text { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.moon-summary-text #moon-summary-total { font-size: 18px; font-weight: 600; }
+.moon-summary-text .val { margin-left: auto; }
+.moon-preview-frame { position: relative; margin-top: 12px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--r-md); border: 1px solid var(--border); background: radial-gradient(ellipse at 30% 20%, #3a3f63, #151827 70%); }
+.moon-preview-frame iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; background: transparent; }
+.moon-donation-meta { display: flex; align-items: center; gap: 10px; flex: none; font-variant-numeric: tabular-nums; }

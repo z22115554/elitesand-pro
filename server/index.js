@@ -364,6 +364,11 @@ app.get('/setlist', requireSourceAccess, (req, res) => {
   sendNoCache(res, 'setlist.html');
 });
 
+// 中秋募資活動疊加頁（透明背景 + 月亮進度條 + 燈籠名牌）
+app.get('/moon', requireSourceAccess, (req, res) => {
+  sendNoCache(res, 'moon.html');
+});
+
 // 跟唱視圖：給主播自己看的整句歌詞（不逐字），不是 OBS 疊加層，PIN 保護同控制面板/遙控器
 app.get('/prompter', (req, res) => {
   sendNoCache(res, 'prompter.html');

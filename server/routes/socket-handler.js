@@ -33,6 +33,8 @@ const obsLocaleUtil = require('../utils/obs-locale');
 const registerTwitchHandlers = require('./handlers/twitch');
 const registerPublicRequestHandlers = require('./handlers/public-request');
 const registerBgmHandlers = require('./handlers/bgm');
+const registerMoonEventHandlers = require('./handlers/moon-event');
+const moonEvent = require('../services/moon-event');
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
@@ -53,7 +55,7 @@ const log = createLogger('Socket');
 // musetric 路線），永遠是本機 loopback 連線、沒有使用者能輸入 PIN 的介面，比照 OBS
 // 疊加層豁免 PIN；但它不是「畫面唯讀」而是「引擎回報結果」，允許送的事件見下面
 // READ_ONLY_EVENTS 的 webgpu:job:* 那幾個，且每個 handler 都會再驗證真的是這個 socket。
-const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'display-spout', 'setlist', 'display-preview', 'setlist-preview', 'webgpu-engine']);
+const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'display-spout', 'setlist', 'display-preview', 'setlist-preview', 'webgpu-engine', 'moon']);
 // prompter（跟唱視圖）給主播自己看，不是唯讀的 OBS 疊加層——跟 remote 一樣要 PIN、也能送播放指令。
 const CLIENT_TYPES = new Set(['controller', 'remote', 'prompter', ...PIN_EXEMPT_CLIENT_TYPES]);
 const READ_ONLY_EVENTS = new Set([
@@ -482,6 +484,8 @@ module.exports = function socketHandler(io, {
         // 歌單頁也需要 lyricSettings（簡轉繁等）：setlist:update 只有清單資料沒有這塊，
         // 過去只能等某個無關操作觸發 broadcastState() 才會補到，OBS 剛載入來源時吃不到設定。
         socket.emit('state:sync', ctx.getReadOnlyState());
+      } else if (type === 'moon') {
+        socket.emit('moon:update', moonEvent.snapshot());
       } else if (type !== 'webgpu-engine') {
         // webgpu-engine 不需要完整 state（歌詞、播放清單等）——它只回應伺服器主動
         // 派發的 webgpu:job:start，不需要自己知道目前播放狀態，省一份無用的大 payload。
@@ -583,6 +587,7 @@ module.exports = function socketHandler(io, {
       registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });
       registerPublicRequestHandlers(io, socket, ctx, { getRelayService: () => songRequestRelayService });
       registerBgmHandlers(io, socket, ctx);
+      registerMoonEventHandlers(io, socket);
     }
 
     // ─── 斷線處理 ───
