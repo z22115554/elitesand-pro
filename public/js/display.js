@@ -677,6 +677,14 @@
     const artist = track && typeof track.artist === 'string' ? track.artist.slice(0, 60) : '';
     if (title) document.body.dataset.lbTitle = title; else delete document.body.dataset.lbTitle;
     if (artist) document.body.dataset.lbArtist = artist; else delete document.body.dataset.lbArtist;
+    if (KaraokeEngine.setTrackMeta) {
+      KaraokeEngine.setTrackMeta(track ? {
+        id: track.id != null ? String(track.id) : '',
+        title,
+        artist,
+        sections: Array.isArray(track.sections) ? track.sections : null,
+      } : null);
+    }
   }
 
   // ─── 歌詞外觀/位置設定（從控制面板即時推送，寫入 CSS 變數）───

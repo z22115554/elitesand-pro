@@ -39,7 +39,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura'];
 
 function sanitizeParticleSettings(settings) {
   if (settings.particleOrient !== undefined && !['horizontal', 'vertical'].includes(settings.particleOrient)) delete settings.particleOrient;
@@ -70,6 +70,9 @@ function sanitizeLyricTemplateSettings(value) {
       }
       if (id === 'columnflow' && out[id].columnflowPlacement && !['left', 'right', 'split'].includes(out[id].columnflowPlacement)) {
         delete out[id].columnflowPlacement;
+      }
+      if (id === 'jizura' && out[id].jizuraPlacement && !['right', 'left', 'full'].includes(out[id].jizuraPlacement)) {
+        delete out[id].jizuraPlacement;
       }
       if (id === 'columnflow' && out[id].columnflowMaxLines !== undefined) {
         if (!Number.isInteger(out[id].columnflowMaxLines) || out[id].columnflowMaxLines < 1 || out[id].columnflowMaxLines > 6) {

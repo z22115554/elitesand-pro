@@ -75,6 +75,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 | 對話氣泡 | iMessage 風逐字打字，長間奏跳貼圖 |
 | 跑馬燈牌 | LED 點陣燈牌，唱過的燈亮、沒唱的暗 |
 | 風息成字 | 粒子隨風散開，再聚成正在唱的字；字幕尺度，可直書或左右分散 |
+| 文字PV | 日系文字 PV 風格，依段落自動編排版面與動作，預設在側欄避開主播（實驗性；演出引擎 [JIZURA](https://github.com/852wa/JIZURA)，MIT） |
 
 - OBS 透明背景 Browser Source，改設定即時同步。
 - 逐字掃光、逐句切換、間奏倒數與時鐘同步。
@@ -240,6 +241,7 @@ Eleven performance templates, each with independent style settings (font, size, 
 | Typewriter | iMessage-style typing, sticker drop during long interludes |
 | Light Board | LED dot-matrix sign — sung dots lit, the rest dark |
 | Windborne Particles | Particles scatter in the wind, then gather into the sung line; subtitle scale, vertical or split-sides |
+| Lyric PV | Japanese lyric-video style that plans layouts and motion per song section; sits in a side column by default (experimental; engine: [JIZURA](https://github.com/852wa/JIZURA), MIT) |
 
 - Transparent Browser Sources with instant sync on setting changes.
 - Word highlighting, line transitions, interlude countdowns, and clock sync.

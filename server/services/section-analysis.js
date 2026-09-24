@@ -45,11 +45,7 @@ function supervisorEnv(sectionRuntimeProvider) {
     HF_HUB_DISABLE_TELEMETRY: '1',
   };
 }
-const REQUEST_TIMEOUT_MS = 15000; // hello/cancel 這類短命令；analyze 不套用（逾時看門狗在 section-analysis-jobs.js）
-// probe 是第一個會真的 spawn Python 並 import torch＋初始化 CUDA 的請求。冷啟動（開機後第一次、
-// 機械硬碟、防毒掃描 torch 的上千個 DLL）實測可以超過 15 秒，套短逾時會把「有 N 卡但還在載入」
-// 誤報成「偵測不到 CUDA」。
-const PROBE_TIMEOUT_MS = 120000;
+const REQUEST_TIMEOUT_MS = 15000; // hello/probe/cancel 這類短命令；analyze 不套用（有自己的 progress 心跳）
 
 class SectionAnalysisSupervisor {
   constructor(pythonExecutable, runtimeProvider) {
@@ -73,39 +69,33 @@ class SectionAnalysisSupervisor {
       throw Object.assign(new Error(`歌曲段落分析的 Python sidecar 不存在：${supervisorPath}`), { code: 'ENGINE_UNAVAILABLE' });
     }
 
-    const proc = spawn(this.pythonExecutable, [supervisorPath], {
+    this.proc = spawn(this.pythonExecutable, [supervisorPath], {
       env: supervisorEnv(this.runtimeProvider),
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    this.proc = proc;
-    this.stdoutBuffer = '';
 
-    proc.stdout.setEncoding('utf8');
-    proc.stdout.on('data', (chunk) => this._onStdoutData(chunk));
+    this.proc.stdout.setEncoding('utf8');
+    this.proc.stdout.on('data', (chunk) => this._onStdoutData(chunk));
 
-    proc.stderr.setEncoding('utf8');
-    proc.stderr.on('data', (chunk) => {
+    this.proc.stderr.setEncoding('utf8');
+    this.proc.stderr.on('data', (chunk) => {
       log.warn('section_supervisor stderr', chunk.trim());
     });
 
-    // 只收拾「自己這一代」的 process：kill()/stop() 之後可能已經 start() 出新的一代，
-    // 舊 process 遲到的 exit 不可以把新一代的 proc 清掉、或把新一代的請求一起 reject。
-    const onGone = (err) => {
-      if (this.proc === proc) this.proc = null;
-      if (this.proc === null) this._rejectAllPending(err);
-    };
-    proc.on('exit', (code, signal) => {
+    this.proc.on('exit', (code, signal) => {
       log.info(`section_supervisor exited (code=${code}, signal=${signal})`);
-      onGone(Object.assign(new Error(`section_supervisor exited before responding (code=${code})`), { code: 'ENGINE_CRASHED', retryable: true }));
+      this._rejectAllPending(new Error(`section_supervisor exited before responding (code=${code})`));
+      this.proc = null;
     });
 
-    proc.on('error', (err) => {
+    this.proc.on('error', (err) => {
       log.error('failed to spawn section_supervisor', err);
-      onGone(Object.assign(err, { code: 'ENGINE_UNAVAILABLE' }));
+      this._rejectAllPending(err);
+      this.proc = null;
     });
 
-    log.info(`section_supervisor started (pid=${proc.pid})`);
+    log.info(`section_supervisor started (pid=${this.proc.pid})`);
   }
 
   async stop() {
@@ -172,22 +162,12 @@ class SectionAnalysisSupervisor {
     }
   }
 
-  // supervisor 死掉時，analyze 的 promise 被 analyze() 自己吞掉了（終局事件本來走 'error'
-  // event）——所以這裡要替每個還掛著的 analyze 補發一次 'error' event，不然 jobs 層的
-  // activeJob 永遠等不到終局事件，歌曲卡在 processing、AI 人聲分離也永遠被 GPU 互斥擋住。
   _rejectAllPending(err) {
-    const pendings = [...this.pendingRequests];
-    this.pendingRequests.clear();
-    for (const [requestId, pending] of pendings) {
+    for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timeoutHandle);
       pending.reject(err);
-      if (pending.method === 'analyze') {
-        this.emitter.emit('error', {
-          id: requestId,
-          error: { code: err.code || 'ENGINE_CRASHED', retryable: true, message: err.message },
-        });
-      }
     }
+    this.pendingRequests.clear();
   }
 
   _send(method, params, { id, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
@@ -202,7 +182,7 @@ class SectionAnalysisSupervisor {
           reject(Object.assign(new Error('section_supervisor request timed out'), { code: 'TIMEOUT', retryable: true }));
         }, timeoutMs)
         : null;
-      this.pendingRequests.set(requestId, { method, resolve, reject, timeoutHandle });
+      this.pendingRequests.set(requestId, { resolve, reject, timeoutHandle });
       this.proc.stdin.write(JSON.stringify(request) + '\n');
     });
   }
@@ -212,7 +192,7 @@ class SectionAnalysisSupervisor {
   }
 
   probe() {
-    return this._send('probe', {}, { timeoutMs: PROBE_TIMEOUT_MS });
+    return this._send('probe', {});
   }
 
   // analyze() 不設逾時——模型載入＋推論總共約 15～25 秒，靠 'progress' 事件（load→
@@ -229,16 +209,9 @@ class SectionAnalysisSupervisor {
   cancel(jobId) {
     return this._send('cancel', { jobId });
   }
-
-  // 看門狗的最後手段：supervisor 本身卡死（連 cancel 都不回）時整個砍掉重來。
-  // 砍掉後 'exit' handler 會替還掛著的 analyze 補發 error event（見 _rejectAllPending）。
-  kill() {
-    if (!this.proc) return;
-    try { this.proc.kill(); } catch (_) { /* already gone */ }
-  }
 }
 
 const sectionRuntimeProvider = require('./section-runtime-provider');
 const supervisor = new SectionAnalysisSupervisor(sectionRuntimeProvider.PYTHON_EXE, sectionRuntimeProvider);
 
-module.exports = { SectionAnalysisSupervisor, supervisor, resolveSectionScriptDir, PROBE_TIMEOUT_MS };
+module.exports = { SectionAnalysisSupervisor, supervisor, resolveSectionScriptDir };

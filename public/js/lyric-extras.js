@@ -97,6 +97,7 @@
     columnflowVariant: 'sen', // 直書句流外觀：'sen' 素筆 | 'fuda' 字札
     columnflowEntrance: 'native', // 直書句流逐字進場：'native' 原樣 | 'drift' 四相漂字（吃動畫強度）；可疊在任一外觀上
     columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
+    jizuraPlacement: 'right',     // 文字PV：'right' 右側直欄 | 'left' 左側直欄 | 'full' 全畫面
     columnflowMaxLines: 4, // 直書句流：同時保留 1–6 句
     columnflowSafeMargin: 11, // 直書句流：中央安全距離（%，5–25），兩側直行不會跨入
     columnflowShowSafeZoneOnObs: false, // 直書句流：安全距離引導線是否也疊在真正的 OBS 來源上（預設只有面板預覽看得到）
@@ -110,7 +111,7 @@
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -125,6 +126,7 @@
     mirror: { label: '虛實鏡書', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     lightboard: { label: '跑馬燈牌', description: '一塊會發光的 LED 點陣燈牌：唱過的燈亮、沒唱到的是熄滅的暗點，所以整句一直都看得見，不需要另外做進場。機殼（螺絲、指示燈、走時讀數、壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。', scope: '可調：字級（整台機器等比縮放）、燈色、燈牌字型（Cubic 11／精品點陣體 9×9）、三段捲動。不吃一般字體——被圓點網切開後筆畫會糊成一團。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     typewriter: { label: '對話氣泡', description: '仿 iMessage 聊天室：每句歌詞在對話泡泡裡逐字打出、游標貼著剛打出的字閃爍。已唱不消失、往上疊。合唱歌曲一邊固定代表一個聲部；非合唱時可選全左／全右／左右分散（分散＝1–5 句一段隨機交替）。長間奏會像聊天室冷場一樣跳一張貼圖（可上傳自己的，支援透明 PNG／GIF）。', scope: '可調：字型、文字色、左右對話泡泡底色、左右邊距、靠邊方式（全左／全右／左右分散）、長間奏貼圖（開關／門檻／自訂圖庫）。上下位置與堆疊構圖固定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
+    jizura: { label: '文字PV', description: '日系文字 PV 風格：每句自動挑版面、進場、退場與小裝飾，整首歌預先規劃好。分析過段落的歌會依段落調整：主歌安靜、蓄力段加強、副歌最熱鬧（沒分析過的歌整首用中等強度）。為了不擋到主播，只用不會大面積蓋住畫面的版面，預設放在右側直欄。演出引擎：JIZURA（hakoniwa，MIT 授權）。實驗性。', scope: '可調：版位（右側／左側直欄、全畫面）、文字色、強調色、動畫強度。字型與字級由引擎依版面決定，不吃一般字型設定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     particle: { label: '風息成字', description: '粒子隨風散開，再聚成正在唱的文字。字級走一般字幕尺度、留安全邊距，進出場是粒子聚散。', scope: '可調：動畫強度、字型／字級／字重、陰影、左右位置（左右分散＝整句交替左右）、上下位置、水平／垂直微調、直書、左右／上下邊距、左右分散時的中央安全距離。粒子進場方向固定為自動。不支援拼音／諧音／翻譯。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
   };
 
@@ -146,11 +148,13 @@
     typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
     // fontFamily 留空＝用內建 Sans/Serif 配對（Demo 黑明體外觀）；fontSize 64＝倍率 1.0；
     // shadow 非 'none' 讓 renderer 畫它內建的描邊陰影（與初版一致）。
+    jizura: { ...DEFAULT_SETTINGS, template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'right' },
     particle: { ...DEFAULT_SETTINGS, template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', verticalPosition: 'center', lyricPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto', animationIntensity: 'normal' },
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
+  const JIZURA_PLACEMENTS = ['right', 'left', 'full'];
   const PARTICLE_ENTRANCES = ['auto', 'quaddrift'];
   const PAPERSTRIP_ORIENTS = ['horizontal', 'vertical'];
   // 排向切換時一併帶入的色彩預設：橫式＝白條黑字（原預設）、直式＝黑條白字
@@ -236,6 +240,7 @@
           if (id === 'typewriter' && out[id].lyricPosition === 'center') out[id].lyricPosition = 'split';
           if (id === 'paperstrip' && !PAPERSTRIP_ORIENTS.includes(out[id].paperstripOrient)) out[id].paperstripOrient = 'horizontal';
           if (id === 'particle' && !PARTICLE_ENTRANCES.includes(out[id].particleEntrance)) out[id].particleEntrance = 'auto';
+          if (id === 'jizura' && !JIZURA_PLACEMENTS.includes(out[id].jizuraPlacement)) out[id].jizuraPlacement = 'right';
         }
       });
     }
@@ -1023,6 +1028,11 @@
     if (columnflowVariantField) columnflowVariantField.hidden = !isColumnflow;
     if (columnflowEntranceField) columnflowEntranceField.hidden = !isColumnflow;
     if (columnflowPlacementField) columnflowPlacementField.hidden = !isColumnflow;
+    const jizuraPlacementField = document.getElementById('jizura-placement-field');
+    if (jizuraPlacementField) jizuraPlacementField.hidden = settings.template !== 'jizura';
+    document.querySelectorAll('#jizura-placement-buttons .style-thumb').forEach((b) => {
+      b.classList.toggle('active', b.dataset.jizuraPlacement === (settings.jizuraPlacement || 'right'));
+    });
     if (columnflowMaxLinesField) columnflowMaxLinesField.hidden = !isColumnflow;
     if (columnflowSafeMarginField) columnflowSafeMarginField.hidden = !isColumnflow;
     document.querySelectorAll('#columnflow-variant-buttons .style-thumb').forEach((b) => {
@@ -1186,6 +1196,15 @@
         const placement = btn.dataset.columnflowPlacement;
         if (settings.template !== 'columnflow' || !COLUMNFLOW_PLACEMENTS.includes(placement)) return;
         settings.columnflowPlacement = placement;
+        syncTemplateButtons();
+        pushSettings();
+      });
+    });
+    document.querySelectorAll('#jizura-placement-buttons .style-thumb').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const placement = btn.dataset.jizuraPlacement;
+        if (settings.template !== 'jizura' || !JIZURA_PLACEMENTS.includes(placement)) return;
+        settings.jizuraPlacement = placement;
         syncTemplateButtons();
         pushSettings();
       });

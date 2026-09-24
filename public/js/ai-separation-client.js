@@ -37,7 +37,6 @@
 
   function labelKey(stage, error) {
     if (stage === 'queued') return 'aiJob.queued';
-    if (stage === 'waiting-gpu') return 'aiJob.waitingGpu';
     if (stage === 'preparing' || stage === 'load') return 'aiJob.preparing';
     if (stage === 'fallback-webgpu' || stage === 'canary') return 'aiJob.webgpuFallback';
     if (stage === 'fallback-cpu') return 'aiJob.cpuFallback';

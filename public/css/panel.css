@@ -1536,6 +1536,23 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
   95.5% { opacity: 1; text-shadow: 0 0 4px rgba(255, 150, 40, 0.7); }
 }
 
+/* 文字PV 的模板縮圖：黑底、帶色偏殘影的粗體字＋一道斜切的強調色塊，
+   用靜態圖形暗示「文字 PV」的排印語言（色版錯位＋色塊），不做循環動畫。 */
+#template-buttons [data-template="jizura"] .style-thumb-jizura {
+  position: relative;
+  background: #111114;
+  overflow: hidden;
+}
+#template-buttons [data-template="jizura"] .style-thumb-jizura::before {
+  content: ''; position: absolute; left: -10%; right: -10%; top: 58%; height: 22%;
+  background: #ffd166; transform: rotate(-8deg);
+}
+#template-buttons [data-template="jizura"] .style-thumb-char {
+  position: relative;
+  color: #ffffff; font-weight: 900; letter-spacing: -0.04em;
+  text-shadow: -2px 0 0 rgba(255, 60, 110, 0.85), 2px 0 0 rgba(40, 220, 255, 0.85);
+}
+
 /* 風息成字的模板縮圖：一團點狀的字從一側流入、聚攏並鎖成實心字，停一下，再碎成點散掉。
    ::before 是「點狀的風」（radial-gradient 點紋裁進字形），char 是聚攏後的實心字。 */
 #template-buttons [data-template="particle"] .style-thumb-particle {

@@ -222,16 +222,12 @@ async function dispatch(trackId, params, publicJobId = null) {
   emitProgress(job, 'preparing', 0);
 
   // 反向的 GPU 互斥檢查（另一半在 section-analysis-jobs.js 的 dispatch()）：兩個功能
-  // 都是重度 GPU 推論，同時跑會互相 OOM。段落分析一首只要十幾秒（且有看門狗上限），
-  // 這邊等它跑完就好，不收成失敗——以前直接 GPU_BUSY，連 CPU/WebGPU 路線也被擋掉，
-  // 還被記成一次分離失敗遙測。用延遲 require 避免兩支模組循環 require 在載入當下互卡。
+  // 都是重度 GPU 推論，同時跑會互相 OOM。用函式參考延遲存取避免循環 require 在模組
+  // 載入當下就互相卡住——這裡只在真正 dispatch 時才呼叫，那時兩邊模組都已載入完成。
   // eslint-disable-next-line global-require
-  const sectionJobs = require('./section-analysis-jobs');
-  while (sectionJobs.isGpuBusy()) {
-    emitProgress(job, 'waiting-gpu', 0);
-    await sectionJobs.whenGpuIdle();
-    if (activeJob !== job || job.cancelled) return job.publicJobId;
-    emitProgress(job, 'preparing', 0);
+  if (require('./section-analysis-jobs').isGpuBusy()) {
+    finalizeError(job, { code: 'GPU_BUSY', message: '歌曲段落分析正在使用 GPU，請等它跑完再製作伴奏' });
+    return job.publicJobId;
   }
 
   let cudaAvailable = false;

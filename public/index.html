@@ -781,6 +781,9 @@
                 <button class="lyric-template-card" data-template="particle" type="button" role="radio" aria-checked="false" data-i18n-title="template.particleTitle" title="風息成字：粒子隨風聚成歌詞，字幕尺度、留安全邊距，可調直書與左右分散">
                   <span class="style-thumb-preview style-thumb-particle" aria-hidden="true"><span class="style-thumb-char">風</span></span><strong data-i18n="template.particle">風息成字</strong><span data-i18n="template.particleDesc">粒子聚字、字幕尺度</span>
                 </button>
+                <button class="lyric-template-card" data-template="jizura" type="button" role="radio" aria-checked="false" data-i18n-title="template.jizuraTitle" title="文字PV：日系文字 PV 風格，依段落自動編排版面與動作，預設放在側欄避開主播">
+                  <span class="style-thumb-preview style-thumb-jizura" aria-hidden="true"><span class="style-thumb-char">PV</span></span><strong data-i18n="template.jizura">文字PV</strong><span data-i18n="template.jizuraDesc">日系文字 PV、依段落編排</span>
+                </button>
               </div>
               <p class="field-hint" id="template-desc">完整歌詞畫面，適合需要看見歷史行、拼音或諧音的演出。</p>
               <p class="lyric-template-scope" id="lyric-template-scope" role="status">可調：九宮格位置、歷史行、拼音／諧音、經典動畫風格與進階文字效果。</p>
@@ -808,6 +811,15 @@
                   <button class="style-thumb active" data-columnflow-placement="split" type="button" data-i18n-title="columnflow.placementSplitTitle" title="左右分散：新句交錯補到左右兩側，畫面正中保持留白"><span class="style-thumb-preview"><span class="style-thumb-char">散</span></span><span class="style-thumb-label" data-i18n="controller.split">左右分散</span></button>
                 </div>
                 <p class="field-hint" data-i18n="columnflow.placementHint">預設左右分散；新句補上時，最舊的一句才會淡出。</p>
+              </div>
+              <div class="field" id="jizura-placement-field" hidden>
+                <label data-i18n="jizura.placementLabel">版位</label>
+                <div class="style-thumb-row" id="jizura-placement-buttons">
+                  <button class="style-thumb active" data-jizura-placement="right" type="button" data-i18n-title="jizura.placementRightTitle" title="右側直欄：直式構圖放在畫面右側，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
+                  <button class="style-thumb" data-jizura-placement="left" type="button" data-i18n-title="jizura.placementLeftTitle" title="左側直欄：直式構圖放在畫面左側，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
+                  <button class="style-thumb" data-jizura-placement="full" type="button" data-i18n-title="jizura.placementFullTitle" title="全畫面：橫式構圖鋪滿整個畫面，歌詞可能壓到主播"><span class="style-thumb-preview"><span class="style-thumb-char">全</span></span><span class="style-thumb-label" data-i18n="jizura.placementFull">全畫面</span></button>
+                </div>
+                <p class="field-hint" data-i18n="jizura.placementHint">預設右側直欄。全畫面的版面比較有 PV 感，但歌詞常落在畫面正中，會壓到主播，也比較吃效能。</p>
               </div>
               <div class="field" id="columnflow-max-lines-field" hidden>
                 <label><span data-i18n="columnflow.maxLinesLabel">同時保留句數</span> <span id="ls-columnflow-max-lines-val" class="val">4 句</span></label>
@@ -1958,12 +1970,12 @@
 
           <section class="card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="10" height="4" rx="1"/></svg><span data-i18n="sections.pairingTitle">段落搭配</span></p>
-            <p class="sub section-intro" data-i18n="sections.pairingDesc">依段落切換不同的歌詞模板，例如副歌換一個比較有存在感的版面、主歌維持安靜。</p>
+            <p class="sub section-intro" data-i18n="sections.pairingDesc">依段落切換不同的歌詞模板，例如副歌換一個比較有存在感的版面、主歌維持安靜。段落資料目前是手動測試用，還沒接上正式的段落分析結果。</p>
             <label class="lib-filter-toggle">
               <input id="section-aware-enable" type="checkbox">
               <span data-i18n="sections.enableToggle">啟用段落搭配（測試中）</span>
             </label>
-            <p class="field-hint" id="section-test-track-note" data-i18n="sections.testTrackNote">只對已經用上方「段落分析」分析過的歌曲有作用；沒分析過的歌照常使用目前模板。</p>
+            <p class="field-hint" id="section-test-track-note" data-i18n="sections.testTrackNote">目前只掛了一首測試曲的段落資料（手動輸入，非正式分析結果），播放其他歌曲時這個功能不會有作用。</p>
             <div id="section-template-map" class="section-map-list"></div>
             <p class="field-hint" data-i18n="sections.viewHint">這裡不做即時預覽，效果請直接開 /display 分頁或 OBS 來源觀察。</p>
           </section>

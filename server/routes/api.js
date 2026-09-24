@@ -1582,8 +1582,7 @@ router.get('/section-analysis/runtime-status', (req, res) => {
 // 觸發真正的網路下載（Python+torch、SongFormer/MuQ/MusicFM 原始碼與權重，約 2.7GB）
 // ＋寫入本機檔案，依鐵則 15 必須手動掛 requirePin。
 router.post('/section-analysis/runtime/download', requirePin, async (req, res) => {
-  // verifyWeights 是非同步串流驗證（只有指紋對不上時才真的算 MD5），不會卡 event loop。
-  if (sectionRuntimeProvider.isAvailable() && await sectionRuntimeProvider.verifyWeights()) {
+  if (sectionRuntimeProvider.isAvailable() && sectionRuntimeProvider.isWeightsAvailable()) {
     return res.json({ ok: true, alreadyAvailable: true });
   }
   try {
@@ -1606,7 +1605,7 @@ router.post('/library/:id/analyze-sections', requirePin, async (req, res) => {
   if (entry.sectionsStatus === 'processing') {
     return res.status(409).json({ ok: false, error: 'ALREADY_PROCESSING' });
   }
-  if (!sectionRuntimeProvider.isAvailable() || !(await sectionRuntimeProvider.verifyWeights())) {
+  if (!sectionRuntimeProvider.isAvailable() || !sectionRuntimeProvider.isWeightsAvailable()) {
     return res.status(409).json({ ok: false, error: 'RUNTIME_NOT_READY' });
   }
   try {

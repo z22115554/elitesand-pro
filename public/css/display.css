@@ -1908,3 +1908,12 @@ body.template-particle #lyrics-container {
   min-height: 0; padding: 0; transform: none;
 }
 #particle-root { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* 文字PV：跟風息成字一樣佔滿畫面、仍在共用的緊急隱藏層（#lyrics-container）裡；
+   canvas 的實際版位（側欄／全畫面）由 lyric-template-jizura.js 依 data-jizura-placement 計算。 */
+body.template-jizura #lyrics-container {
+  position: absolute; inset: 0; width: 100%; max-width: none; height: 100%;
+  min-height: 0; padding: 0; transform: none;
+}
+#jizura-root { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+#jizura-root .jizura-canvas { position: absolute; display: block; }

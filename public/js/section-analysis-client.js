@@ -29,10 +29,6 @@
   }
 
   let currentJob = null; // { trackId, stage, percent } — 目前這台面板自己觸發的那個 job
-  // runtime（~2.7GB）下載中。這段期間 state:sync／切分頁都不可以 renderIdle()——以前會把
-  // 「分析段落」按鈕重新啟用，使用者再按一次就多開一條輪詢、第二次請求還回 409。
-  let downloading = false;
-  const canRenderIdle = () => !currentJob && !downloading;
 
   function normalizePercent(value, stage) {
     if (stage === 'done') return 100;
@@ -96,7 +92,6 @@
   function ingest(payload) {
     if (!payload || payload.trackId === undefined || payload.trackId === null) return;
     const trackId = String(payload.trackId);
-    if (downloading) return;
     if (!currentJob || currentJob.trackId !== trackId) {
       // 不是這台面板剛觸發的那個 job（例如另一台面板、或重連後補的孤兒事件）——
       // 只要目前顯示的正是這首歌就更新畫面，不然忽略。
@@ -156,7 +151,6 @@
       if (!res.ok || !body.ok) {
         if (body.error === 'RUNTIME_NOT_READY') {
           dom.result.textContent = t('sections.preparing');
-          downloading = true;
           const stopPolling = pollRuntimeDownload();
           let downloadRes;
           let downloadBody;
@@ -165,7 +159,6 @@
             downloadBody = await downloadRes.json().catch(() => ({}));
           } finally {
             stopPolling();
-            downloading = false;
           }
           if (downloadRes.ok && downloadBody.ok) {
             return runAnalysis(); // runtime 裝好了，重新觸發一次分析
@@ -202,7 +195,7 @@
     dom.runBtn.addEventListener('click', runAnalysis);
     dom.cancelBtn.addEventListener('click', cancelAnalysis);
     document.addEventListener('view:change', (event) => {
-      if (event.detail?.view === 'sections' && canRenderIdle()) renderIdle();
+      if (event.detail?.view === 'sections' && !currentJob) renderIdle();
     });
     // 原本只在切到「段落設計」分頁時重畫一次——如果使用者先切過去（那時還沒載入歌），
     // 之後才在別的分頁載入/切歌，這裡的按鈕會停留在舊的 disabled 狀態，按了沒反應
@@ -213,35 +206,9 @@
       // app.js 前面，這裡會在 app.js 真正更新 playlist/currentTrackIndex 之前就先讀到
       // 舊值。延後一個 tick，保證同一輪 state:sync 的所有同步訂閱者（含 app.js）都跑完
       // 才讀 VKState.getCurrentTrack()。
-      SocketClient.on('state:sync', () => { setTimeout(() => { if (canRenderIdle()) renderIdle(); }, 0); });
+      SocketClient.on('state:sync', () => { if (!currentJob) setTimeout(renderIdle, 0); });
     }
-    if (canRenderIdle()) renderIdle();
-    resumeRuntimeDownloadWatch();
-  }
-
-  // 重新整理頁面／另一台面板觸發的下載還在背景跑：接回進度顯示，並把按鈕鎖住直到下載結束，
-  // 不然使用者看到可按的按鈕、按下去又觸發一次（server 端雖然會併進同一個下載，但畫面會亂）。
-  async function resumeRuntimeDownloadWatch() {
-    let status;
-    try {
-      const res = await fetch('/api/section-analysis/runtime-status', { cache: 'no-store' });
-      status = await res.json();
-    } catch (_) { return; }
-    if (!status || !status.active || downloading) return;
-    downloading = true;
-    dom.runBtn.disabled = true;
-    const stopPolling = pollRuntimeDownload();
-    const waitDone = setInterval(async () => {
-      try {
-        const res = await fetch('/api/section-analysis/runtime-status', { cache: 'no-store' });
-        const next = await res.json();
-        if (next.active) return;
-      } catch (_) { return; }
-      clearInterval(waitDone);
-      stopPolling();
-      downloading = false;
-      renderIdle();
-    }, 2000);
+    if (!currentJob) renderIdle();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

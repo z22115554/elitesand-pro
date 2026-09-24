@@ -124,93 +124,18 @@ function isAvailable() {
   }
 }
 
-function weightPath(rel) {
-  return path.join(SONGFORMER_DIR, 'src', 'SongFormer', rel);
-}
-
-// 串流算 MD5：權重檔單檔上 GB，絕不可 readFileSync 整份進記憶體、也不可同步卡住 event loop
-// （以前 runtime-status 輪詢每秒一次同步讀 1GB+，OBS 歌詞會跟著頓）。
 function fileMd5(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('md5');
-    fs.createReadStream(filePath)
-      .on('data', (chunk) => hash.update(chunk))
-      .on('error', reject)
-      .on('end', () => resolve(hash.digest('hex')));
-  });
+  return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
 }
 
-function statFingerprint(filePath) {
-  const stat = fs.statSync(filePath);
-  return { size: stat.size, mtimeMs: Math.round(stat.mtimeMs) };
-}
-
-// 驗過 MD5 的檔案，記下 size+mtime；之後只要這兩個沒變就視為同一份已驗證的檔案。
-// 記在記憶體（這個 process）＋ marker（跨重開）。
-const verifiedWeights = new Map(); // rel -> { size, mtimeMs }
-
-function readMarker() {
-  try { return JSON.parse(fs.readFileSync(MARKER_FILE, 'utf8')); } catch (_) { return null; }
-}
-
-function fingerprintMatches(rel, fp) {
-  if (!fp) return false;
+function isWeightsAvailable() {
   try {
-    const now = statFingerprint(weightPath(rel));
-    return now.size === fp.size && now.mtimeMs === fp.mtimeMs;
+    return Object.entries(WEIGHT_MD5).every(([rel, expected]) => {
+      const full = path.join(SONGFORMER_DIR, 'src', 'SongFormer', rel);
+      return fs.existsSync(full) && fileMd5(full) === expected;
+    });
   } catch (_) {
     return false;
-  }
-}
-
-/**
- * 便宜的同步判斷（只 stat，不讀內容）：每個權重檔都有「驗過 MD5 時的 size+mtime」而且
- * 目前檔案跟它一致才回 true。給輪詢／路由用。從沒驗過（例如舊版安裝沒有記指紋）回 false，
- * 由 verifyWeights() 在非同步路徑補驗一次。
- */
-function isWeightsAvailable() {
-  const marker = readMarker();
-  const persisted = (marker && marker.weights) || {};
-  return Object.keys(WEIGHT_MD5).every((rel) => fingerprintMatches(rel, verifiedWeights.get(rel) || persisted[rel]));
-}
-
-let verifyInFlight = null;
-
-/**
- * 非同步完整驗證：指紋對得上的直接過；對不上（或從沒驗過）的串流重算 MD5，
- * 通過就把新指紋寫進記憶體與 marker。同時只跑一份。
- */
-async function verifyWeights() {
-  if (isWeightsAvailable()) return true;
-  if (verifyInFlight) return verifyInFlight;
-  verifyInFlight = (async () => {
-    const fingerprints = {};
-    for (const [rel, expected] of Object.entries(WEIGHT_MD5)) {
-      const full = weightPath(rel);
-      if (!fs.existsSync(full)) return false;
-      const before = statFingerprint(full);
-      if (fingerprintMatches(rel, verifiedWeights.get(rel))) { fingerprints[rel] = before; continue; }
-      if ((await fileMd5(full)) !== expected) return false;
-      verifiedWeights.set(rel, before);
-      fingerprints[rel] = before;
-    }
-    const marker = readMarker();
-    if (marker) {
-      try {
-        fs.writeFileSync(MARKER_FILE, JSON.stringify({ ...marker, weights: fingerprints }, null, 2), 'utf8');
-      } catch (err) {
-        log.warn(`無法把權重指紋寫進 marker（下次重開會再驗一次 MD5）：${err.message}`);
-      }
-    }
-    return true;
-  })().catch((err) => {
-    log.warn(`權重驗證失敗：${err.message}`);
-    return false;
-  });
-  try {
-    return await verifyInFlight;
-  } finally {
-    verifyInFlight = null;
   }
 }
 
@@ -247,46 +172,10 @@ async function downloadAndExtractSource(archive, { onProgress } = {}) {
   safeRemove(tmpZip);
 
   const dest = archive.destRelative === '.' ? SONGFORMER_DIR : path.join(SONGFORMER_DIR, archive.destRelative);
-  // SongFormer 本體解到 SONGFORMER_DIR 會整個覆蓋掉，裡面的 src/SongFormer/ckpts/ 是上一次
-  // 已下載（可能已驗證）的權重。任何一步失敗重試都重下 ~1GB 太傷，先移到旁邊、解完搬回去；
-  // 權重內容是否正確仍由之後的 verify-weights 步驟用 MD5 把關。
-  const keptCkpts = archive.destRelative === '.' ? preserveCkpts() : null;
   safeRemove(dest);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.renameSync(path.join(extractRoot, topDir), dest);
   safeRemove(extractRoot);
-  if (keptCkpts) restoreCkpts(keptCkpts);
-}
-
-const CKPTS_KEEP_DIR = path.join(RUNTIME_DIR, 'ckpts.keep');
-
-function preserveCkpts() {
-  const ckpts = path.join(SONGFORMER_DIR, 'src', 'SongFormer', 'ckpts');
-  // 上一次在「搬走後、搬回前」中斷的話，ckpts.keep 還在、SongFormer 裡已經沒有 ckpts——沿用它。
-  if (fs.existsSync(CKPTS_KEEP_DIR)) return CKPTS_KEEP_DIR;
-  if (!fs.existsSync(ckpts)) return null;
-  fs.renameSync(ckpts, CKPTS_KEEP_DIR);
-  return CKPTS_KEEP_DIR;
-}
-
-function restoreCkpts(keptDir) {
-  const ckpts = path.join(SONGFORMER_DIR, 'src', 'SongFormer', 'ckpts');
-  // 原始碼壓縮檔本身可能帶一個 ckpts/（例如 md5sum.txt）；我們保留的權重優先，
-  // 壓縮檔裡有、保留目錄沒有的檔案補搬進來。
-  if (fs.existsSync(ckpts)) {
-    mergeMissing(ckpts, keptDir);
-    safeRemove(ckpts);
-  }
-  fs.renameSync(keptDir, ckpts);
-}
-
-function mergeMissing(fromDir, intoDir) {
-  for (const name of fs.readdirSync(fromDir)) {
-    const from = path.join(fromDir, name);
-    const into = path.join(intoDir, name);
-    if (!fs.existsSync(into)) fs.renameSync(from, into);
-    else if (fs.lstatSync(from).isDirectory() && fs.lstatSync(into).isDirectory()) mergeMissing(from, into);
-  }
 }
 
 /**
@@ -302,13 +191,6 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
   if (downloadInFlight) return downloadInFlight;
 
   downloadInFlight = (async () => {
-    // 已安裝、只是指紋還沒記（舊版安裝）或檔案 mtime 變了：非同步補驗一次 MD5 就好，
-    // 不要因為 isWeightsAvailable() 的便宜判斷回 false 就整包 2.7GB 重下。
-    if (isAvailable() && await verifyWeights()) {
-      setDownloadStatus({ active: false, stage: 'done', percent: 100, error: null });
-      return { ok: true, pythonExe: PYTHON_EXE, songformerDir: SONGFORMER_DIR };
-    }
-
     const tmpPythonDir = path.join(RUNTIME_DIR, 'python.download');
     let stage = 'start';
     const progress = (nextStage, extra = {}) => {
@@ -447,22 +329,18 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
       );
 
       progress('verify-weights');
-      const weightFingerprints = {};
       for (const [rel, expected] of Object.entries(WEIGHT_MD5)) {
-        const full = weightPath(rel);
-        if (!fs.existsSync(full) || (await fileMd5(full)) !== expected) {
+        const full = path.join(SONGFORMER_DIR, 'src', 'SongFormer', rel);
+        if (!fs.existsSync(full) || fileMd5(full) !== expected) {
           safeRemove(full); // 讓官方 download() 下次重跑時真的重下，而不是誤判已存在
           throw new Error(`權重檔驗證失敗：${rel}（MD5 對不上官方公布值，已刪除半成品）`);
         }
-        weightFingerprints[rel] = statFingerprint(full);
-        verifiedWeights.set(rel, weightFingerprints[rel]);
       }
 
       fs.writeFileSync(MARKER_FILE, JSON.stringify({
         pythonEmbedVersion: PYTHON_EMBED_VERSION,
         pipInstallDone: true,
         sourceReady: true,
-        weights: weightFingerprints,
         installedAt: new Date().toISOString(),
       }, null, 2), 'utf8');
 
@@ -488,15 +366,12 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
 
 function resetForTests() {
   downloadInFlight = null;
-  verifyInFlight = null;
-  verifiedWeights.clear();
   downloadStatus = { active: false, stage: 'idle', percent: null, error: null, updatedAt: null };
 }
 
 module.exports = {
   isAvailable,
   isWeightsAvailable,
-  verifyWeights,
   downloadRuntime,
   getDownloadStatus,
   RUNTIME_DIR,
@@ -509,8 +384,5 @@ module.exports = {
   SOURCE_ARCHIVES,
   WEIGHT_MD5,
   REQUIRED_DISK_BYTES,
-  CKPTS_KEEP_DIR,
-  _preserveCkpts: preserveCkpts,
-  _restoreCkpts: restoreCkpts,
   _resetForTests: resetForTests,
 };

@@ -56,6 +56,14 @@ public/fonts/OFL.txt (and a copy in licenses/nunito/OFL.txt in packaged
 builds).
 License: https://openfontlicense.org/
 
+JIZURA (lyric motion engine)
+----------------------------
+Copyright (c) 2026 hakoniwa. Licensed under the MIT License.
+Used for the "Lyric PV" lyric template. The planner and renderer sources are
+vendored unmodified in public/vendor/jizura/jizura-engine.js; the full license
+text ships next to it as public/vendor/jizura/LICENSE.
+Source: https://github.com/852wa/JIZURA
+
 GSAP 3.12.5
 -----------
 Copyright GreenSock / Webflow. Used under the GSAP Standard No Charge License.

@@ -10042,6 +10042,46 @@ test('R6-3 非經典模板會在可見範圍說明中交代拼音與諧音限制
   ok(lyricExtras.includes("classic: { label: '經典疊層'") && lyricExtras.includes('拼音與諧音'), '經典疊層必須持續明示為雙語可用模板: ');
 });
 
+test('文字PV（JIZURA）：MIT 授權表記隨引擎一起出貨，display 先載引擎再載模板', () => {
+  // JIZURA 是 MIT：可以用、可以改，但著作權與授權全文必須跟著程式走（作者已私訊確認）。
+  const root = path.join(__dirname, '..');
+  const engine = fs.readFileSync(path.join(root, 'public', 'vendor', 'jizura', 'jizura-engine.js'), 'utf8');
+  const license = fs.readFileSync(path.join(root, 'public', 'vendor', 'jizura', 'LICENSE'), 'utf8');
+  const notices = fs.readFileSync(path.join(root, 'THIRD-PARTY-NOTICES.txt'), 'utf8');
+  const displayHtml = fs.readFileSync(path.join(root, 'public', 'display.html'), 'utf8');
+  ok(/MIT License/.test(license) && license.includes('Copyright (c) 2026 hakoniwa'), 'vendor/jizura/LICENSE 必須是完整的 MIT 授權全文: ');
+  ok(engine.slice(0, 600).includes('Copyright (c) 2026 hakoniwa') && engine.slice(0, 600).includes('MIT'), '引擎檔頭必須保留著作權與授權表記: ');
+  ok(!engine.includes('src/12_ui.js ----') && !engine.includes('src/11_export.js ----'), '只收規劃＋繪製，不收上游 UI 與 MP4 匯出: ');
+  ok(notices.includes('JIZURA') && notices.includes('hakoniwa'), 'THIRD-PARTY-NOTICES 必須列出 JIZURA: ');
+  const engineAt = displayHtml.indexOf('/vendor/jizura/jizura-engine.js');
+  const tplAt = displayHtml.indexOf('/js/lyric-template-jizura.js');
+  ok(engineAt > 0 && tplAt > engineAt, 'display.html 必須先載入引擎、再載入文字PV 模板: ');
+});
+
+test('文字PV（JIZURA）：版面白名單不可收進會整面蓋住主播的 layout（鐵則 #11）', () => {
+  // 2026-09-24 逐一在透明模式畫一幀量出來、覆蓋率 >50% 的 layout，分橫式／直式兩份：
+  // 同一個 layout 在兩種比例的覆蓋率可能差很多（掛け軸橫式 OK、直式整面）。
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lyric-template-jizura.js'), 'utf8');
+  // 不用 new RegExp 字串拼接：字串裡的反斜線會被吃掉（run-tests 裡實際踩過），直接切出陣列字面值
+  const list = (name) => {
+    const at = src.indexOf(`${name} = [`);
+    const body = at < 0 ? '' : src.slice(at, src.indexOf('];', at));
+    return new Set((body.match(/'(\w+)'/g) || []).map((x) => x.slice(1, -1)));
+  };
+  const land = list('SAFE_LAYOUTS_LANDSCAPE');
+  const port = list('SAFE_LAYOUTS_PORTRAIT');
+  const quiet = list('QUIET_LAYOUTS');
+  const COVER_LANDSCAPE = ['tile', 'subtitleBar', 'splitScreen', 'filmstrip', 'keycaps', 'dotMatrix', 'magazine', 'ransom', 'newspaper', 'cassette', 'polaroid', 'stampSheet', 'postcard', 'letterPaper', 'stationSign', 'noren', 'omikuji', 'shoji', 'warningLabel', 'magnets', 'bulbs', 'crossword', 'wordSearch', 'puzzle', 'wall', 'zipper', 'glitchGrid', 'mosaicTiles', 'contour'];
+  const COVER_PORTRAIT = ['subtitleBar', 'splitScreen', 'filmstrip', 'magazine', 'newspaper', 'bookSpine', 'polaroid', 'stampSheet', 'postcard', 'letterPaper', 'calendar', 'noren', 'omikuji', 'kakejiku', 'shoji', 'stickyNotes', 'flipCards', 'magnets', 'wordSearch', 'wall', 'zipper', 'glitchGrid', 'contour'];
+  ok(land.size > 50 && port.size > 50, '兩份白名單都應該解析得到: ');
+  COVER_LANDSCAPE.forEach((k) => ok(!land.has(k), `橫式白名單不可有會蓋滿畫面的 ${k}: `));
+  COVER_PORTRAIT.forEach((k) => ok(!port.has(k), `直式白名單不可有會蓋滿畫面的 ${k}: `));
+  ok(!land.has('shadowPlay') && !port.has('shadowPlay'), '影絵是不透明幕布，兩份都要排除: ');
+  quiet.forEach((k) => ok(land.has(k) && port.has(k), `安靜段落的 ${k} 必須兩種比例都安全: `));
+  ok(/flash: false/.test(src) && /bgSwitch: 0/.test(src), '不可開全畫面閃白，也不可切換 scheme（淺底 scheme 會變深色字）: ');
+  ok(/transparent: true/.test(src) && /noTrans: true/.test(src), '必須用透明模式繪製、關掉整幀合成的轉場: ');
+});
+
 test('歌詞模板名稱：程式、i18n 與 README 必須是同一套', () => {
   // 2026-07-17 把三個模板改名成 Pulse/Facet/Aura 並加了這條守衛，但 7/27 補五語 i18n 時
   // template.* 又把詩意舊名寫了回去；I18n.t() 優先於 label，於是使用者看到的一直是

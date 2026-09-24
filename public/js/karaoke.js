@@ -1148,9 +1148,15 @@ const KaraokeEngine = (() => {
    * 提供給模板生命週期方法的唯讀上下文。模板不應直接碰 karaoke.js 的內部狀態，
    * 一律透過這裡的存取函式，維持 karaoke.js 對外的封裝邊界。
    */
+  // 目前歌曲的非歌詞資訊（id／歌名／歌手／段落分析結果），由 display.js 換歌或 state 同步時更新。
+  // 只給需要整首歌結構的模板用（文字PV 依段落規劃整首），其他模板不讀。
+  let trackMeta = null;
+  function setTrackMeta(meta) { trackMeta = meta || null; }
+
   function buildTemplateContext() {
     return {
       getLyrics: () => getTemplateLyrics(),
+      getTrackMeta: () => trackMeta,
       getLineIndex: () => currentLineIndex,
       // 目前播放到的時間（沿用 onSeek 落地時用的同一份數值）：onSettings 若要重建目前這一行，
       // 必須拿它去 snap 到正確相位，否則暫停時重建的行會停在「剛出生」的初始狀態
@@ -1250,5 +1256,6 @@ const KaraokeEngine = (() => {
     getLyricsEndTime,
     setTemplate,
     notifyTemplateSettings,
+    setTrackMeta,
   };
 })();
