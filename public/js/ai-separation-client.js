@@ -128,6 +128,21 @@
     return webgpuWarmInFlight;
   }
 
+  const PIP_INSTALL_SLOW_MS = 15 * 60 * 1000;
+
+  // 用伺服器回傳的 serverNow 算經過時間（手機等其他裝置的時鐘可能不準）。
+  function stepElapsedMs(status) {
+    const startedAt = Number(status && status.stepStartedAt);
+    const now = Number(status && status.serverNow);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(now) || startedAt <= 0) return 0;
+    return Math.max(0, now - startedAt);
+  }
+
+  function fmtElapsed(ms) {
+    const total = Math.floor(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  }
+
   function fmtBytes(b) {
     if (b == null || !Number.isFinite(b)) return '';
     return b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(b / 1e6))} MB`;
@@ -143,12 +158,21 @@
       : '';
     const detail = bytes || s.detail || '';
 
+    if (s.cancelling) return t('aiInstall.cancellingStage');
     if (phase === 'done') return t('aiInstall.stageDone');
     if (phase === 'error') return s.error || t('aiInstall.failed');
     if (phase === 'ffmpeg') return t('aiInstall.step.ffmpeg');
     if (phase === 'python') {
       if (step === 'pip-download') return t('aiInstall.step.pipDownload', { detail });
-      if (step === 'pip-install') return t('aiInstall.step.pipInstall');
+      if (step === 'pip-install') {
+        // 解壓安裝 PyTorch 沒有任何進度訊號，Win11＋Defender 即時掃描時可能要十幾分鐘。
+        // 顯示實際經過時間，超過平常範圍就明講可以取消（feedback #19：卡在 76% 以為當機）。
+        const elapsedMs = stepElapsedMs(s);
+        const elapsed = fmtElapsed(elapsedMs);
+        return elapsedMs >= PIP_INSTALL_SLOW_MS
+          ? t('aiInstall.step.pipInstallSlow', { elapsed })
+          : t('aiInstall.step.pipInstall', { elapsed });
+      }
       if (step === 'pip-resolve') return t('aiInstall.step.pipResolve');
       if (step === 'download-python') return t('aiInstall.step.downloadPython', { detail });
       if (step === 'extract') return t('aiInstall.step.extract');
@@ -186,13 +210,59 @@
       // 伺服器把它固定回報在 python band 的尾端；這裡讓顯示值隨時間輕微往上爬（不超過該
       // band 上限 76%），一旦下個相位真的推進就交還給真實進度。
       let pipCreepStart = 0;
+      // 伺服器端的 bundle 安裝正在跑（FFmpeg 前置下載期間還不算）：只有這段時間「取消」才代表
+      // 中止安裝；其他時候「取消」就是關視窗。取消要按兩下（第一下變成「確定取消？」），避免誤觸
+      // 把已經跑了十分鐘的安裝打掉。
+      let bundleRunning = false;
+      let cancelMode = 'close';
+      let cancelConfirmTimer = null;
+
+      const setCancelMode = (mode) => {
+        cancelMode = mode;
+        clearTimeout(cancelConfirmTimer);
+        cancel.disabled = mode === 'busy' || mode === 'cancelling';
+        cancel.textContent = mode === 'install' ? t('aiInstall.cancelInstall')
+          : mode === 'confirm' ? t('aiInstall.cancelConfirm')
+            : mode === 'cancelling' ? t('aiInstall.cancelling')
+              : t('common.cancel');
+        if (mode === 'confirm') {
+          cancelConfirmTimer = setTimeout(() => { if (cancelMode === 'confirm') setCancelMode('install'); }, 4000);
+        }
+      };
 
       const close = (value) => {
         if (settled) return;
         settled = true;
         if (polling) clearInterval(polling);
+        clearTimeout(cancelConfirmTimer);
         modal.hidden = true;
         resolve(value);
+      };
+      // 這輪安裝以「使用者取消」收尾：伺服器已中止 pip／下載並清掉半成品，視窗留著讓使用者決定
+      // 要重試還是關掉。
+      const showCancelled = () => {
+        if (polling) { clearInterval(polling); polling = null; }
+        runSettled = true;
+        started = false;
+        bundleRunning = false;
+        pipCreepStart = 0;
+        setCancelMode('close');
+        confirm.disabled = false;
+        confirm.textContent = t('aiInstall.retry');
+        stageEl.textContent = t('aiInstall.cancelled');
+        percentEl.textContent = '0%';
+        fill.style.setProperty('--work-progress', '0%');
+      };
+      const requestCancel = async () => {
+        setCancelMode('cancelling');
+        try {
+          const response = await PinAuth.fetchWithPin('/api/ai-separation/bundle/cancel', { method: 'POST' });
+          // 409＝伺服器這輪已經自己結束了（剛好完成或失敗），交給輪詢收尾即可。
+          if (!response.ok && response.status !== 409) throw new Error(String(response.status));
+        } catch (_) {
+          // 取消請求沒送到：恢復按鈕讓使用者再按一次，不能讓視窗停在「正在取消」卻沒人在取消。
+          if (!runSettled) setCancelMode('install');
+        }
       };
       const paint = (status) => {
         const s = status || {};
@@ -211,7 +281,8 @@
         started = true;
         progress.hidden = false;
         // 這輪一旦結算過（含「完成但不齊」），重試期間也保留一個出口，別再把使用者關死。
-        cancel.disabled = !runSettled;
+        // 伺服器端安裝一開始跑，「取消」就改成可以中止安裝（見 bundleRunning）。
+        setCancelMode(bundleRunning ? 'install' : (runSettled ? 'close' : 'busy'));
         confirm.disabled = true;
         confirm.textContent = t('aiInstall.downloading');
       };
@@ -234,11 +305,14 @@
             close(true);
             enableWebgpuFallback();
             return;
+          } else if (status.stage === 'cancelled' && !status.active) {
+            showCancelled();
           } else if (status.stage === 'error') {
             if (polling) { clearInterval(polling); polling = null; }
             runSettled = true;
             started = false;
-            cancel.disabled = false;
+            bundleRunning = false;
+            setCancelMode('close');
             confirm.disabled = false;
             confirm.textContent = t('aiInstall.retry');
             stageEl.textContent = status.error || t('aiInstall.failed');
@@ -249,7 +323,8 @@
             if (polling) { clearInterval(polling); polling = null; }
             runSettled = true;
             started = false;
-            cancel.disabled = false;
+            bundleRunning = false;
+            setCancelMode('close');
             confirm.disabled = false;
             confirm.textContent = t('aiInstall.retry');
             stageEl.textContent = t('aiInstall.incomplete');
@@ -296,17 +371,26 @@
           // 先補 FFmpeg，再開始輪詢 bundle 進度——否則輪詢會把 FFmpeg 的階段文字蓋掉。
           await ensureFfmpeg();
           if (!polling) polling = setInterval(poll, 500);
+          // 新一輪伺服器安裝開始：上一輪（重試前）留下的 runSettled 要清掉，否則「取消安裝」
+          // 會被 onCancel 當成「這輪已結束、直接關視窗」，安裝其實還在背景跑。
+          runSettled = false;
+          bundleRunning = true;
+          setCancelMode('install');
           const response = await PinAuth.fetchWithPin('/api/ai-separation/bundle/download', { method: 'POST' });
           const result = await response.json().catch(() => ({}));
           // POST 回來就代表這輪伺服器工作已結束（無論成敗）——視窗從這一刻起一定可關。
           runSettled = true;
+          bundleRunning = false;
+          if (result.cancelled) { showCancelled(); return; }
           if (!response.ok || !result.ok) throw new Error(result.reason || t('aiInstall.failed'));
+          setCancelMode('close');
           await poll();
         } catch (error) {
           if (polling) { clearInterval(polling); polling = null; }
           runSettled = true;
           started = false;
-          cancel.disabled = false;
+          bundleRunning = false;
+          setCancelMode('close');
           confirm.disabled = false;
           confirm.textContent = t('aiInstall.retry');
           stageEl.textContent = error.message;
@@ -314,7 +398,12 @@
       };
       // started 之後仍可關：伺服器這輪已結束（runSettled），或使用者就是想收掉視窗——
       // downloadBundle() 在背景會自己跑完並寫 state，關視窗不會遺失進度，下次開會接回。
-      const onCancel = () => { if (!started || runSettled) close(false); };
+      const onCancel = () => {
+        if (!started || runSettled) { close(false); return; }
+        if (!bundleRunning) return;
+        if (cancelMode === 'install') setCancelMode('confirm');
+        else if (cancelMode === 'confirm') requestCancel();
+      };
       const onBackdrop = (event) => { if (event.target === modal && (!started || runSettled)) close(false); };
       const onKeydown = (event) => { if (event.key === 'Escape' && (!started || runSettled)) close(false); };
 
@@ -324,7 +413,9 @@
       modal.onkeydown = onKeydown;
       modal.hidden = false;
       progress.hidden = !started;
-      cancel.disabled = started;
+      // 重新打開視窗時伺服器已經在裝（initialStatus.active）：直接給「取消安裝」。
+      bundleRunning = started;
+      setCancelMode(started ? 'install' : 'close');
       confirm.disabled = started;
       confirm.textContent = started ? t('aiInstall.downloading') : t('aiInstall.confirm');
       paint(initialStatus || { stage: 'preparing', percent: 0 });

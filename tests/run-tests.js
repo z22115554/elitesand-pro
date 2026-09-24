@@ -4597,10 +4597,12 @@ test('AI 伴奏首次啟用：下載跑完但元件仍不齊時，安裝視窗�
   ok(/runOver\s*=\s*!status\.active/.test(modalFn) && modalFn.includes('runOver && !status.available'),
     'poll() 必須處理「跑完但 isAvailable() 仍 false」的終局，不能無限輪詢: ');
   ok(modalFn.includes("t('aiInstall.incomplete')"), '終局要給使用者看得懂的訊息（多半是缺 FFmpeg）: ');
-  ok(/onCancel = \(\) => \{ if \(!started \|\| runSettled\)/.test(modalFn)
+  ok(/onCancel = \(\) => \{\s*if \(!started \|\| runSettled\) \{ close\(false\); return; \}/.test(modalFn)
     && /Escape.*!started \|\| runSettled/.test(modalFn),
     '伺服器這輪結算後（runSettled），取消／Esc 一定要能關掉視窗: ');
-  ok(modalFn.includes('cancel.disabled = !runSettled'),
+  // 2026-09-24（feedback #19）起取消鍵由 setCancelMode() 管：伺服器安裝中＝「取消安裝」，
+  // 這輪結算後＝關視窗，只有 FFmpeg 前置下載那一小段是 busy。
+  ok(modalFn.includes("setCancelMode(bundleRunning ? 'install' : (runSettled ? 'close' : 'busy'))"),
     '重試期間也要保留一個出口，不可再把取消鍵完全鎖死: ');
   ok(modalFn.includes('status.components.ffmpeg === true'),
     'ensureFfmpeg 只有「明確查到 ffmpeg 在」才略過；狀態讀失敗不可當成已安裝: ');
@@ -8159,6 +8161,115 @@ test('媒體庫超過 10000 首時優先保留播放清單與 currentTrack backi
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
+});
+
+testAsync('AI 伴奏安裝取消：pip 子行程被中止，等行程真的結束才回報 CANCELLED（feedback #19）', async () => {
+  const { EventEmitter } = require('events');
+  const aiRuntime = require('../server/services/ai-runtime-provider');
+  const events = [];
+  const fakeSpawn = () => {
+    const proc = new EventEmitter();
+    proc.kill = () => {
+      events.push('kill');
+      // 模擬 Windows 上行程稍後才真正結束：檔案鎖要等到 exit 才釋放。
+      setTimeout(() => { events.push('exit'); proc.emit('exit', null); }, 30);
+    };
+    return proc;
+  };
+  const controller = new AbortController();
+  const pending = aiRuntime.runPythonStep(['-m', 'pip', 'install', 'torch'], { spawnImpl: fakeSpawn, abortSignal: controller.signal, timeoutMs: 60000 });
+  setTimeout(() => controller.abort(), 10);
+  let error = null;
+  try { await pending; } catch (e) { error = e; events.push('rejected'); }
+  eq(error && error.code, 'CANCELLED', '取消要以 CANCELLED 收尾，不可被當成一般安裝失敗: ');
+  eq(events.join(','), 'kill,exit,rejected', '必須先殺行程、等它結束，才回報取消（否則清暫存檔時檔案還被鎖住）: ');
+
+  let spawned = false;
+  const already = new AbortController();
+  already.abort();
+  let early = null;
+  try { await aiRuntime.runPythonStep(['x'], { spawnImpl: () => { spawned = true; return new EventEmitter(); }, abortSignal: already.signal }); } catch (e) { early = e; }
+  eq(early && early.code, 'CANCELLED');
+  ok(!spawned, '已經取消時不可再啟動新的 python 行程: ');
+});
+
+testAsync('AI 伴奏安裝取消：runtime 下載途中取消會回報 cancelled，不是 error', async () => {
+  const aiRuntime = require('../server/services/ai-runtime-provider');
+  aiRuntime._resetForTests?.();
+  const controller = new AbortController();
+  const pending = aiRuntime.downloadRuntime({
+    platform: 'win32',
+    abortSignal: controller.signal,
+    inspectDiskSpaceImpl: () => ({ known: false }),
+    fetchFileImpl: (_url, _file, { abortSignal }) => new Promise((_resolve, reject) => {
+      abortSignal.addEventListener('abort', () => reject(Object.assign(new Error('下載已取消'), { code: 'CANCELLED' })), { once: true });
+    }),
+  });
+  setTimeout(() => controller.abort(), 10);
+  let error = null;
+  try { await pending; } catch (e) { error = e; }
+  eq(error && error.code, 'CANCELLED');
+  const status = aiRuntime.getDownloadStatus();
+  eq(status.stage, 'cancelled', '使用者取消要記成 cancelled，前端才不會顯示成「元件下載失敗」: ');
+  eq(status.active, false);
+  eq(status.error, null);
+});
+
+testAsync('AI 伴奏安裝取消：bundle 取消後狀態為 cancelled，並提供 step 經過時間給前端', async () => {
+  const bundle = require('../server/services/ai-separation-bundle');
+  const aiRuntime = require('../server/services/ai-runtime-provider');
+  const ffmpeg = require('../server/services/ffmpeg-provider');
+  const original = {
+    ffmpegAvailable: ffmpeg.isAvailable,
+    runtimeAvailable: aiRuntime.isAvailable,
+    downloadRuntime: aiRuntime.downloadRuntime,
+  };
+  bundle._resetForTests();
+  try {
+    ffmpeg.isAvailable = () => true;
+    aiRuntime.isAvailable = () => false;
+    let receivedSignal = null;
+    aiRuntime.downloadRuntime = ({ abortSignal, onProgress }) => {
+      receivedSignal = abortSignal;
+      onProgress({ stage: 'install-packages', step: 'pip-install' });
+      return new Promise((_resolve, reject) => {
+        abortSignal.addEventListener('abort', () => reject(Object.assign(new Error('安裝已取消'), { code: 'CANCELLED' })), { once: true });
+      });
+    };
+    eq(bundle.cancelBundle().ok, false, '沒有在安裝時取消要回 not-running: ');
+
+    const pending = bundle.downloadBundle();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const running = bundle.getStatus();
+    eq(running.step, 'pip-install');
+    ok(Number.isFinite(running.stepStartedAt) && Number.isFinite(running.serverNow), '狀態要帶 stepStartedAt／serverNow 讓前端顯示經過時間: ');
+    ok(running.serverNow >= running.stepStartedAt);
+    ok(receivedSignal && !receivedSignal.aborted, '中止訊號要一路傳到 downloadRuntime: ');
+
+    eq(bundle.cancelBundle().ok, true);
+    let error = null;
+    try { await pending; } catch (e) { error = e; }
+    eq(error && error.code, 'CANCELLED');
+    const after = bundle.getStatus();
+    eq(after.stage, 'cancelled');
+    eq(after.active, false);
+    eq(after.error, null, '取消不是錯誤，不可帶錯誤訊息: ');
+    eq(bundle.cancelBundle().ok, false, '這輪結束後再取消要回 not-running: ');
+  } finally {
+    ffmpeg.isAvailable = original.ffmpegAvailable;
+    aiRuntime.isAvailable = original.runtimeAvailable;
+    aiRuntime.downloadRuntime = original.downloadRuntime;
+    bundle._resetForTests();
+  }
+});
+
+test('AI 伴奏安裝取消：路由掛 requirePin、前端取消要按兩次且用 fetchWithPin', () => {
+  const api = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+  ok(api.includes("router.post('/ai-separation/bundle/cancel', requirePin,"), '取消路由必須手動掛 requirePin（鐵則 15）: ');
+  const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'ai-separation-client.js'), 'utf8');
+  ok(client.includes("PinAuth.fetchWithPin('/api/ai-separation/bundle/cancel'"), '取消請求要用 fetchWithPin（鐵則 16）: ');
+  ok(client.includes("if (cancelMode === 'install') setCancelMode('confirm');"), '取消要先進入確認狀態，避免誤觸打掉跑了十分鐘的安裝: ');
+  ok(client.includes("status.stage === 'cancelled'"), '輪詢要認得 cancelled 狀態並收尾: ');
 });
 
 test('媒體庫歌詞分檔：舊版內嵌歌詞搬到獨立檔，只改 key／播放次數不重寫歌詞，移除歌曲會清掉歌詞檔', () => {

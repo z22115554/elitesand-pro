@@ -143,8 +143,15 @@ async function downloadModel({
       return { ok: true, ...modelPaths() };
     } catch (err) {
       err.stage = err.stage || stage;
-      setDownloadStatus({ active: false, stage: 'error', error: err.message });
-      log.error(`WebGPU 模型安裝失敗（stage=${err.stage}）`, err);
+      if (err.code === 'CANCELLED') {
+        // 使用者取消：下載到一半的暫存檔（最大 ~700MB）現在就清掉，不留到下次重試才清。
+        for (const file of FILES) safeRemove(path.join(MODEL_DIR, `${file.name}.download`));
+        setDownloadStatus({ active: false, stage: 'cancelled', error: null });
+        log.info(`WebGPU 模型安裝已由使用者取消（stage=${err.stage}）`);
+      } else {
+        setDownloadStatus({ active: false, stage: 'error', error: err.message });
+        log.error(`WebGPU 模型安裝失敗（stage=${err.stage}）`, err);
+      }
       throw err;
     }
   })();

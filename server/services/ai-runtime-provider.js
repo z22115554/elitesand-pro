@@ -189,9 +189,15 @@ function fetchToFile(url, filePath, {
     };
 
     if (abortSignal) {
-      const onAbort = () => finish(reject, Object.assign(new Error('下載已取消'), { code: 'CANCELLED' }));
-      if (abortSignal.aborted) { onAbort(); return; }
-      abortSignal.addEventListener('abort', onAbort, { once: true });
+      const cancelled = () => Object.assign(new Error('下載已取消'), { code: 'CANCELLED' });
+      if (abortSignal.aborted) { finish(reject, cancelled()); return; }
+      // 取消時要真的斷線：只 reject 的話底下的串流會繼續寫檔，跟呼叫端的清暫存檔互搶。
+      abortSignal.addEventListener('abort', () => {
+        finish(reject, cancelled());
+        const error = cancelled();
+        response?.destroy(error);
+        request.destroy(error);
+      }, { once: true });
     }
 
     const request = https.get(url, { headers: { 'User-Agent': 'Elitesand-Pro-AIRuntime-Provider' } }, async (res) => {
@@ -318,8 +324,35 @@ function enableSitePackages(pythonDir) {
   fs.writeFileSync(pthPath, patched, 'utf8');
 }
 
-function runPythonStep(args, { cwd, pythonExe = PYTHON_EXE, onOutput, spawnImpl = spawn, timeoutMs = 20 * 60 * 1000, env } = {}) {
+function cancelledError() {
+  return Object.assign(new Error('安裝已取消'), { code: 'CANCELLED' });
+}
+
+// 取消時要連子行程一起收掉（pip 偶爾會再開子行程），Windows 上 proc.kill() 只殺得到最外層。
+function killProcessTree(proc) {
+  try { proc.kill(); } catch (_) { /* 已結束 */ }
+  if (process.platform === 'win32' && proc && proc.pid) {
+    try {
+      spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+        .on('error', () => { /* taskkill 不存在就只靠上面的 kill */ });
+    } catch (_) { /* best effort */ }
+  }
+}
+
+function runPythonStep(args, { cwd, pythonExe = PYTHON_EXE, onOutput, spawnImpl = spawn, timeoutMs = 20 * 60 * 1000, env, abortSignal } = {}) {
   return new Promise((resolve, reject) => {
+    if (abortSignal?.aborted) { reject(cancelledError()); return; }
+    let settled = false;
+    let cancelled = false;
+    let cancelFallback = null;
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(cancelFallback);
+      abortSignal?.removeEventListener('abort', onAbort);
+      fn(value);
+    };
     const proc = spawnImpl(pythonExe, args, {
       cwd,
       windowsHide: true,
@@ -332,20 +365,29 @@ function runPythonStep(args, { cwd, pythonExe = PYTHON_EXE, onOutput, spawnImpl 
     });
     let stderrTail = '';
     const timer = setTimeout(() => {
-      proc.kill();
-      reject(new Error(`指令逾時（${Math.round(timeoutMs / 1000)}s）：python ${args.join(' ')}`));
+      killProcessTree(proc);
+      settle(reject, new Error(`指令逾時（${Math.round(timeoutMs / 1000)}s）：python ${args.join(' ')}`));
     }, timeoutMs);
+    // 使用者取消：殺掉行程後等它真的結束才回報，呼叫端緊接著清半成品時檔案才不會還被鎖住。
+    // 萬一 exit 事件一直不來，5 秒後照樣回報取消，不讓取消本身卡住。
+    function onAbort() {
+      if (settled || cancelled) return;
+      cancelled = true;
+      killProcessTree(proc);
+      cancelFallback = setTimeout(() => settle(reject, cancelledError()), 5000);
+    }
+    abortSignal?.addEventListener('abort', onAbort, { once: true });
     proc.stdout?.on('data', (chunk) => onOutput?.(chunk.toString('utf8')));
     proc.stderr?.on('data', (chunk) => {
       const text = chunk.toString('utf8');
       stderrTail = (stderrTail + text).slice(-4000);
       onOutput?.(text);
     });
-    proc.on('error', (err) => { clearTimeout(timer); reject(err); });
+    proc.on('error', (err) => settle(reject, cancelled ? cancelledError() : err));
     proc.on('exit', (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve();
-      else reject(new Error(`指令失敗（exit ${code}）：python ${args.join(' ')}\n${stderrTail}`));
+      if (cancelled) settle(reject, cancelledError());
+      else if (code === 0) settle(resolve);
+      else settle(reject, new Error(`指令失敗（exit ${code}）：python ${args.join(' ')}\n${stderrTail}`));
     });
   });
 }
@@ -436,6 +478,9 @@ async function downloadRuntime({
     let stage = 'start';
 
     const progress = (nextStage, extra = {}) => {
+      // 每一步開始前檢查使用者是否按了取消；最後的「install」（rename 進正式路徑）一旦開始就不中斷，
+      // 避免取消在半途留下「正式目錄已刪、新目錄還沒搬進來」的狀態。
+      if (abortSignal?.aborted && nextStage !== 'done') throw cancelledError();
       stage = nextStage;
       setDownloadStatus({ active: nextStage !== 'done', stage: nextStage, error: null, ...extra });
       log.info(`AI runtime 安裝階段：${nextStage}`);
@@ -475,7 +520,7 @@ async function downloadRuntime({
       const getPipBuf = await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 });
       fs.writeFileSync(getPipPath, getPipBuf);
       const tmpPythonExe = path.join(tmpPythonDir, 'python.exe');
-      await runPythonStepImpl(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe });
+      await runPythonStepImpl(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe, abortSignal });
 
       progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
       await runPythonStepImpl(
@@ -484,6 +529,7 @@ async function downloadRuntime({
           cwd: tmpPythonDir,
           pythonExe: tmpPythonExe,
           timeoutMs: 30 * 60 * 1000,
+          abortSignal,
           onOutput: (text) => {
             const p = parseToolProgress(text);
             if (Object.keys(p).length) {
@@ -511,8 +557,13 @@ async function downloadRuntime({
       return { ok: true, pythonExe: PYTHON_EXE };
     } catch (err) {
       err.stage = err.stage || stage;
-      setDownloadStatus({ active: false, stage: 'error', error: err.message });
-      log.error(`AI runtime 安裝失敗（stage=${err.stage}）`, err);
+      if (err.code === 'CANCELLED') {
+        setDownloadStatus({ active: false, stage: 'cancelled', error: null });
+        log.info(`AI runtime 安裝已由使用者取消（stage=${err.stage}），清除暫存檔`);
+      } else {
+        setDownloadStatus({ active: false, stage: 'error', error: err.message });
+        log.error(`AI runtime 安裝失敗（stage=${err.stage}）`, err);
+      }
       throw err;
     } finally {
       safeRemove(tmpZip);
@@ -532,7 +583,7 @@ async function downloadRuntime({
  * 階段臨時下載，會讓「安裝完成」與「真的可以開始分離」變成兩種狀態；統一安裝流程
  * 改用 audio-separator 自己提供的 download_model_only 入口，沿用它的模型清單與驗證。
  */
-async function downloadPrimaryModel({ runPythonStepImpl = runPythonStep, onOutput, onProgress } = {}) {
+async function downloadPrimaryModel({ runPythonStepImpl = runPythonStep, onOutput, onProgress, abortSignal } = {}) {
   if (!isAvailable()) throw new Error('AI 分離 Python 元件尚未安裝。');
   if (isModelAvailable()) return { ok: true, alreadyAvailable: true, modelFile: MODEL_FILE };
   fs.mkdirSync(MODEL_DIR, { recursive: true });
@@ -550,6 +601,7 @@ async function downloadPrimaryModel({ runPythonStepImpl = runPythonStep, onOutpu
       cwd: RUNTIME_DIR,
       pythonExe: PYTHON_EXE,
       timeoutMs: 30 * 60 * 1000,
+      abortSignal,
       onOutput: (text) => {
         onOutput?.(text);
         const p = parseToolProgress(text);
@@ -561,7 +613,9 @@ async function downloadPrimaryModel({ runPythonStepImpl = runPythonStep, onOutpu
     });
   } catch (error) {
     cleanupInvalidPrimaryModel();
-    setDownloadStatus({ active: false, stage: 'error', error: error.message });
+    setDownloadStatus(error.code === 'CANCELLED'
+      ? { active: false, stage: 'cancelled', error: null }
+      : { active: false, stage: 'error', error: error.message });
     throw error;
   }
   if (!isModelAvailable()) {

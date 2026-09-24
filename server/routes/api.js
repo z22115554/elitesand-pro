@@ -1345,9 +1345,19 @@ router.post('/ai-separation/bundle/download', requirePin, async (req, res) => {
     const result = await aiSeparationBundle.downloadBundle();
     res.json(result);
   } catch (err) {
+    // 使用者自己按取消不是錯誤，不記 error log、也不回 5xx。
+    if (err.code === 'CANCELLED') return res.json({ ok: false, cancelled: true });
     log.error('AI 伴奏完整元件下載失敗', err);
     res.status(502).json({ ok: false, reason: err.message });
   }
+});
+
+// 安裝中途取消（feedback #19：pip 安裝 PyTorch 那一步可能跑十幾分鐘，以前沒有任何出口，
+// 使用者只能強制關程式）。會中止下載／pip 並清半成品，依鐵則 15 手動掛 requirePin。
+router.post('/ai-separation/bundle/cancel', requirePin, (req, res) => {
+  const result = aiSeparationBundle.cancelBundle();
+  if (!result.ok) return res.status(409).json(result);
+  res.json(result);
 });
 
 // 只讀進度，不含本機路徑，前端下載期間輪詢它（同 /ffmpeg/download/status 的理由）。

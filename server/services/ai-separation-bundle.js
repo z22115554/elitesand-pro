@@ -34,6 +34,7 @@ const BANDS = {
 };
 
 let installInFlight = null;
+let installAbort = null; // 目前這輪安裝的 AbortController；cancelBundle() 用它中止
 let installStatus = {
   active: false,
   phase: 'idle',
@@ -46,6 +47,10 @@ let installStatus = {
   percent: 0, // = overallPercent，保留欄名相容
   error: null,
   webgpuUnavailable: null, // WebGPU 備援模型這次沒裝成的原因（不影響 available）
+  // 目前這個 step 從什麼時候開始（伺服器時間）。pip 安裝 PyTorch 那一步沒有任何進度訊號，
+  // 前端用它顯示「已經過多久」，而不是讓使用者對著不動的百分比猜是不是當機（feedback #19）。
+  stepStartedAt: null,
+  cancelling: false,
   updatedAt: null,
 };
 
@@ -114,7 +119,14 @@ function phaseFraction(phase, s) {
 }
 
 function setStatus(patch) {
-  installStatus = { ...installStatus, ...patch, updatedAt: Date.now() };
+  const now = Date.now();
+  const stepChanged = Object.prototype.hasOwnProperty.call(patch, 'step') && patch.step !== installStatus.step;
+  installStatus = {
+    ...installStatus,
+    ...patch,
+    stepStartedAt: stepChanged ? now : installStatus.stepStartedAt,
+    updatedAt: now,
+  };
 }
 
 // provider 每次 onProgress 回來就重算一次面向前端的狀態
@@ -144,6 +156,8 @@ function getStatus() {
     expectedInstalledBytes: EXPECTED_INSTALLED_BYTES,
     requiredFreeBytes: REQUIRED_FREE_BYTES,
     ...installStatus,
+    // 前端用伺服器自己的時鐘算經過時間，不受瀏覽器（例如手機）時鐘誤差影響。
+    serverNow: Date.now(),
   };
 }
 
@@ -160,6 +174,10 @@ function markPhase(phase, step, overall) {
 async function downloadBundle() {
   if (installInFlight) return installInFlight;
   if (isAvailable()) return { ok: true, alreadyAvailable: true };
+
+  installAbort = new AbortController();
+  const abortSignal = installAbort.signal;
+  setStatus({ cancelling: false });
 
   installInFlight = (async () => {
     try {
@@ -184,6 +202,7 @@ async function downloadBundle() {
       if (!aiRuntimeProvider.isAvailable()) {
         markPhase('python', 'disk-check', 0);
         await aiRuntimeProvider.downloadRuntime({
+          abortSignal,
           onProgress: (s) => ingestProviderStatus('python', s),
         });
       }
@@ -191,6 +210,7 @@ async function downloadBundle() {
       if (!aiRuntimeProvider.isModelAvailable()) {
         markPhase('primary-model', 'model-download', BANDS['primary-model'][0]);
         await aiRuntimeProvider.downloadPrimaryModel({
+          abortSignal,
           onProgress: (s) => ingestProviderStatus('primary-model', s),
         });
       }
@@ -200,9 +220,12 @@ async function downloadBundle() {
         markPhase('webgpu-model', 'model-download', BANDS['webgpu-model'][0]);
         try {
           await webgpuRuntimeProvider.downloadModel({
+            abortSignal,
             onProgress: (s) => ingestProviderStatus('webgpu-model', s),
           });
         } catch (error) {
+          // 使用者取消不是「備援模型下載失敗」，要讓整輪安裝以取消收尾。
+          if (error.code === 'CANCELLED' || abortSignal.aborted) throw error;
           // 這一段失敗不擋安裝（見 isAvailable 的說明）。使用者之後可以用
           // /api/webgpu-separation/runtime/download 重試，或下次打開開關時自動補。
           webgpuUnavailable = error.message;
@@ -218,7 +241,17 @@ async function downloadBundle() {
       });
       return { ok: true, alreadyAvailable: false };
     } catch (error) {
-      setStatus({ active: false, phase: 'error', step: 'error', stage: 'error', error: error.message, overallPercent: 0, percent: 0 });
+      if (error.code === 'CANCELLED' || abortSignal.aborted) {
+        // 已完成的元件（例如 Python 已裝好、只有模型被取消）會保留，下次從缺的那一段繼續；
+        // 被中斷的那一段由各 provider 自己清掉半成品。
+        setStatus({
+          active: false, phase: 'cancelled', step: 'cancelled', stage: 'cancelled', error: null,
+          detail: null, downloadedBytes: null, totalBytes: null, overallPercent: 0, percent: 0, cancelling: false,
+        });
+        log.info('AI 伴奏元件安裝已由使用者取消');
+        throw Object.assign(error, { code: 'CANCELLED' });
+      }
+      setStatus({ active: false, phase: 'error', step: 'error', stage: 'error', error: error.message, overallPercent: 0, percent: 0, cancelling: false });
       throw error;
     }
   })();
@@ -227,7 +260,22 @@ async function downloadBundle() {
     return await installInFlight;
   } finally {
     installInFlight = null;
+    installAbort = null;
   }
+}
+
+/**
+ * 使用者在安裝視窗按「取消安裝」。只送出中止訊號，實際收尾（殺掉 pip、清暫存檔、狀態改成
+ * cancelled）由 downloadBundle() 的 catch 完成；前端輪詢看到 stage:'cancelled' 就收掉視窗。
+ */
+function cancelBundle() {
+  if (!installInFlight || !installAbort) return { ok: false, reason: 'not-running' };
+  if (!installAbort.signal.aborted) {
+    log.info('收到取消 AI 伴奏元件安裝的要求');
+    setStatus({ cancelling: true });
+    installAbort.abort();
+  }
+  return { ok: true };
 }
 
 function resetForTests() {
@@ -235,14 +283,16 @@ function resetForTests() {
   installStatus = {
     active: false, phase: 'idle', step: 'idle', detail: null,
     downloadedBytes: null, totalBytes: null, overallPercent: 0,
-    stage: 'idle', percent: 0, error: null, webgpuUnavailable: null, updatedAt: null,
+    stage: 'idle', percent: 0, error: null, webgpuUnavailable: null, stepStartedAt: null, cancelling: false, updatedAt: null,
   };
+  installAbort = null;
 }
 
 module.exports = {
   isAvailable,
   getStatus,
   downloadBundle,
+  cancelBundle,
   EXPECTED_INSTALLED_BYTES,
   REQUIRED_FREE_BYTES,
   _resetForTests: resetForTests,
