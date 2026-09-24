@@ -10076,6 +10076,13 @@ test('文字PV（JIZURA）：版面白名單不可收進會整面蓋住主播的
   COVER_LANDSCAPE.forEach((k) => ok(!land.has(k), `橫式白名單不可有會蓋滿畫面的 ${k}: `));
   ok(!land.has('shadowPlay'), '影絵是不透明幕布，要排除: ');
   quiet.forEach((k) => ok(land.has(k), `安靜段落的 ${k} 必須在白名單內: `));
+  // 2026-09-24 實機回報「字很多的（文字雲）會嚴重掉幀」與「想要靜一點的風格」
+  const heavy = list('HEAVY_LAYOUTS');
+  const busy = list('BUSY_LAYOUTS');
+  ['wordCloud', 'neon', 'tunnel', 'circleWords', 'wave'].forEach((k) => ok(heavy.has(k), `${k} 實測撐不住 30fps，必須列在 HEAVY_LAYOUTS: `));
+  quiet.forEach((k) => ok(!heavy.has(k) && !busy.has(k), `安靜清單不可有太重或太吵的版面 ${k}: `));
+  ok(src.includes('!heavy.has(k)'), '任何強度都必須排除 HEAVY_LAYOUTS: ');
+  ok(src.includes("mode === 'calm' ? PROFILES_CALM"), '「沉穩」強度要整首換成安靜的 profile，不能只調慢速度: ');
   ok(/flash: false/.test(src) && /bgSwitch: 0/.test(src), '不可開全畫面閃白，也不可切換 scheme（淺底 scheme 會變深色字）: ');
   ok(/transparent: true/.test(src) && /noTrans: true/.test(src), '必須用透明模式繪製、關掉整幀合成的轉場: ');
   // 2026-09-24 實機回報：縮成窄欄時裝飾碰到畫布邊緣會切出硬邊界 → 偏左／偏右改成全畫面畫布＋鏡頭位移

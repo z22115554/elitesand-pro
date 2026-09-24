@@ -41,10 +41,21 @@
     'numbered', 'poster', 'swissGrid', 'dictionary', 'routeMap', 'tanzaku', 'kakejiku', 'priceTag', 'cylinder',
     'ribbon', 'pendulum', 'balloons', 'fisheye', 'origami', 'sliceStack', 'maskReveal', 'stencil',
   ];
-  // 安靜段落（主歌／前奏／尾奏）只用這幾個：字小、動作少、沒有貼紙或圖形板。
-  // 縦倒し／大小縦組／大きな頭文字 實測字太大、太搶，不收。
+  // 太重的版面，任何強度都不用。2026-09-24 用實機回報的那句（12 個中文字）在 1080p、開殘影、
+  // 每幀重畫的條件下實測：波の軌跡／トンネル／同心円／円筒／ネオン 60 幀掉 50 幀以上（撐不住
+  // 30fps）；虹の弧／奥行き重ね／ワードクラウド／奥行き／魚眼／文字風船 掉 16–25 幀。實機回報
+  // 「字很多的那種會嚴重掉幀、肉眼看得出來」就是文字雲。瓶頸多在 GPU（一幀上百次文字繪製、
+  // 發光陰影），不是 JS——所以只看 JS 耗時會漏掉文字雲這種。
+  const HEAVY_LAYOUTS = ['wave', 'tunnel', 'circleWords', 'cylinder', 'neon',
+    'arcTop', 'depthStack', 'wordCloud', 'perspective', 'fisheye', 'balloons'];
+  // 很吵的版面：同一句重複畫滿半個畫面、字到處飛。覆蓋率不高（字與字之間是空的）所以過了白名單，
+  // 但觀感上幾乎佔滿畫面。只在「狂放」強度使用。
+  const BUSY_LAYOUTS = ['rain', 'stickerBomb', 'scatter', 'bubbles', 'marquee', 'sliceStack', 'mirror',
+    'typeSpecimen', 'credits'];
+  // 安靜段落（主歌／前奏／尾奏、以及「沉穩」強度的整首）只用這幾個：字小、動作少、沒有貼紙或圖形板。
+  // 縦倒し／大小縦組／大きな頭文字 字太大；書体見本／エンドロール 會把同一句重複好幾份，都不收。
   const QUIET_LAYOUTS = ['center', 'vcols', 'type', 'lowerThird', 'quote', 'footnote', 'headlineDeck',
-    'halfVertical', 'typeSpecimen', 'credits', 'genkou'];
+    'halfVertical', 'genkou'];
 
   // 段落標籤（track-schema 的 sanitizeSections 已轉小寫＋底線）→ profile
   const PROFILE_OF_SECTION = {
@@ -57,9 +68,16 @@
     build: { fx: { motion: 0.6, glitch: 0.2, chroma: 0.5, decor: 0.45, density: 0.5, koma: 12 } },
     loud: { fx: { motion: 0.95, glitch: 0.35, chroma: 0.7, decor: 0.75, density: 0.75, koma: 12 }, impactFirst: true },
   };
+  // 「沉穩」強度：整首只用安靜版面與溫和動作，段落差異只剩副歌放大、動作略強
+  const PROFILES_CALM = {
+    quiet: PROFILES.quiet,
+    build: { fx: { motion: 0.42, glitch: 0.06, chroma: 0.3, decor: 0.22, density: 0.35, koma: 12 }, quietOnly: true },
+    loud: { fx: { motion: 0.5, glitch: 0.08, chroma: 0.4, decor: 0.28, density: 0.4, koma: 12 }, quietOnly: true, impactFirst: true },
+  };
   // 沒有段落分析的歌：整首用中間強度
   const DEFAULT_PROFILE = 'build';
-  const INTENSITY_SCALE = { calm: 0.6, normal: 1, chaotic: 1.25 };
+  // 動畫強度（面板的沉穩／標準／狂放）：不只調速度，也決定能用哪些版面（見 buildPlan）
+  const INTENSITY_SCALE = { calm: 1, normal: 1, chaotic: 1.25 };
   const SMOOTH_KOMA = 30;
 
   let rootEl = null;
@@ -236,8 +254,12 @@
     return document.body.dataset.jizuraMotion === 'koma' ? 'koma' : 'smooth';
   }
 
+  function intensityMode() {
+    const v = document.body.dataset.lyricIntensity;
+    return v === 'calm' || v === 'chaotic' ? v : 'normal';
+  }
   function intensityScale() {
-    return INTENSITY_SCALE[document.body.dataset.lyricIntensity] || 1;
+    return INTENSITY_SCALE[intensityMode()] || 1;
   }
 
   // JIZURA 歌詞記法的保留字元（/ 切 cut、| 註解、* 強調、行尾 ! 衝擊、行首 # 註解）
@@ -286,7 +308,12 @@
 
   function buildPlan(lines, meta) {
     const aspect = '16:9';
-    const safe = new Set(SAFE_LAYOUTS_LANDSCAPE);
+    const mode = intensityMode();
+    const heavy = new Set(HEAVY_LAYOUTS);
+    const busy = new Set(BUSY_LAYOUTS);
+    // 標準：排除太重與太吵的；狂放：只排除太重的；沉穩：只用安靜清單（見下面 quietOnly）
+    const safe = new Set(SAFE_LAYOUTS_LANDSCAPE.filter((k) => !heavy.has(k) && (mode === 'chaotic' || !busy.has(k))));
+    const profiles = mode === 'calm' ? PROFILES_CALM : PROFILES;
     const koma = motionMode() === 'koma';
     const sections = meta && Array.isArray(meta.sections) && meta.sections.length ? meta.sections : null;
     const seed = hashString((meta && meta.id) || (lines[0] && lines[0].text) || 'elitesand');
@@ -313,7 +340,7 @@
     let base = null;
 
     for (const profileId of used) {
-      const prof = PROFILES[profileId];
+      const prof = profiles[profileId];
       const lrc = usable.map((line, i) => {
         // 高潮段落的第一句＝衝擊句（引擎會給大字、閃爍與震動）
         const impact = prof.impactFirst && lineProfile[i] === profileId && (i === 0 || lineProfile[i - 1] !== profileId);
