@@ -365,8 +365,27 @@
       el.style.setProperty('--marquee-duration', `${Math.max(4, overflow / 25)}s`);
     }
   }
+  // 整份清單一起量時不能逐一呼叫 measureMarquee：它「先改 class/樣式、再讀 scrollWidth」，
+  // 每讀一次都強迫瀏覽器把整份清單重新排版（layout thrashing）。清單 N 首＝2N 個元素×每次
+  // 排版 N 列，平方級成長：2026-09-24 實測 2000 首時一次連按偏移就卡 29 秒、socket ping timeout
+  // 斷線。改成三階段：全部重設 → 一次讀完所有寬度（只排版一次）→ 全部寫回，結果與逐一量相同。
   function updateMarquee(scopeEl) {
-    (scopeEl || dom.playlist).querySelectorAll('.marquee-text').forEach(measureMarquee);
+    const els = Array.from((scopeEl || dom.playlist).querySelectorAll('.marquee-text'));
+    const spans = els.map((el) => el.querySelector('span'));
+    els.forEach((el, i) => {
+      if (!spans[i]) return;
+      el.classList.remove('is-overflowing');
+      el.style.removeProperty('--marquee-dist');
+    });
+    const overflows = els.map((el, i) => (spans[i] ? spans[i].scrollWidth - el.clientWidth : 0));
+    els.forEach((el, i) => {
+      const overflow = overflows[i];
+      if (overflow > 4) {
+        el.classList.add('is-overflowing');
+        el.style.setProperty('--marquee-dist', `${-overflow}px`);
+        el.style.setProperty('--marquee-duration', `${Math.max(4, overflow / 25)}s`);
+      }
+    });
   }
   let playlistMarqueeFrame = 0;
   function schedulePlaylistMarqueeUpdate() {
