@@ -180,6 +180,54 @@ test('A9：safeRemove 刪得掉中文路徑上的目錄 junction，且不會刪�
   assert.equal(fs.readFileSync(path.join(target, '留著.txt'), 'utf8'), 'keep');
 });
 
+test('安裝進度條：整體百分比只往上走、torch 位元組內插、換階段不殘留位元組、重跑歸零', () => {
+  provider._resetForTests();
+  const set = provider._setDownloadStatus;
+  const pct = () => provider.getDownloadStatus().overallPercent;
+  set({ active: true, stage: 'disk-space-check' });
+  assert.equal(pct(), 0);
+  const s0 = provider.getDownloadStatus();
+  assert.ok(s0.stageStartedAt > 0 && s0.serverNow >= s0.stageStartedAt, '要回報階段開始時間與伺服器時間，前端才能算經過時間');
+
+  set({ stage: 'install-packages', step: 'pip-download', detail: 'torch', downloadedBytes: 1.25e9, totalBytes: 2.5e9 });
+  const [lo, hi] = provider.STAGE_BANDS['install-packages'];
+  const torchHalf = pct();
+  assert.ok(torchHalf > lo && torchHalf < hi, `torch 下載一半應落在 install-packages 段內：${torchHalf}`);
+  // 下一個小 wheel 的比例從 0 開始，整體進度不可倒退
+  set({ step: 'pip-download', detail: 'nvidia-cudnn', downloadedBytes: 1e6, totalBytes: 1e8 });
+  assert.equal(pct(), torchHalf);
+  set({ step: 'pip-install', downloadedBytes: null, totalBytes: null });
+  assert.ok(pct() > torchHalf && pct() < hi, 'pip 解壓時推到段尾附近');
+  const stepStart = provider.getDownloadStatus().stepStartedAt;
+  assert.ok(stepStart > 0);
+
+  set({ stage: 'download-source' });
+  const st = provider.getDownloadStatus();
+  assert.equal(st.downloadedBytes, null, '換階段要清掉上一階段的位元組');
+  assert.equal(st.step, null);
+  assert.equal(pct(), provider.STAGE_BANDS['download-source'][0]);
+
+  set({ stage: 'download-muq-backbone', downloadedBytes: 0.65e9, totalBytes: 1.3e9 });
+  const [blo, bhi] = provider.STAGE_BANDS['download-muq-backbone'];
+  assert.equal(pct(), (blo + bhi) / 2);
+  set({ stage: 'done', active: false, percent: 100 });
+  assert.equal(pct(), 100);
+
+  set({ active: true, stage: 'disk-space-check' });
+  assert.equal(pct(), 0, '重新安裝要從 0 開始');
+  provider._resetForTests();
+});
+
+test('段落分析前端：下載時用進度條顯示中文步驟，不再把原始步驟代號塞進說明文字', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../public/js/section-analysis-client.js'), 'utf8');
+  assert.ok(src.includes('renderDownload(status)'), '輪詢要畫進度條');
+  assert.ok(!src.includes("' — ' + step"), '不可再顯示 pip-install 這類原始代號');
+  const { catalogs } = require('../public/js/i18n');
+  for (const key of ['sections.install.pipInstall', 'sections.install.downloadBackbone', 'sections.stage.inference']) {
+    assert.ok(catalogs['zh-TW'][key] && catalogs.en[key], `缺少翻譯 ${key}`);
+  }
+});
+
 test.after(() => {
   jobs._resetForTests();
   safeRemove(ROOT);

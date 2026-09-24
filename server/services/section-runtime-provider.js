@@ -217,11 +217,63 @@ async function verifyWeights() {
 let downloadInFlight = null;
 let downloadStatus = { active: false, stage: 'idle', percent: null, error: null, updatedAt: null };
 
+// 整體進度條：每個安裝階段在 0–100 裡佔一段，份量照實際耗時／下載量配（PyTorch 那段 pip
+// 約 2.5GB 最大、MuQ 骨幹 1.3GB 次之）。有位元組訊號的階段在段內依下載比例內插；沒有訊號
+// 的階段（pip 解壓、pip 裝 MuQ）停在段頭，前端改顯示經過時間。整體值只會往上走——pip 會
+// 依序下載好幾個 wheel，每個 wheel 的比例都從 0 開始，不能讓進度條倒退。
+const STAGE_BANDS = {
+  'disk-space-check': [0, 1],
+  'download-python': [1, 3],
+  'extract-python': [3, 4],
+  'bootstrap-pip': [4, 6],
+  'install-packages': [6, 58],
+  'download-source': [58, 61],
+  'install-python': [61, 62],
+  'install-muq-package': [62, 66],
+  'download-muq-backbone': [66, 86],
+  'download-weights': [86, 97],
+  'verify-weights': [97, 99],
+  done: [100, 100],
+};
+// install-packages 裡只有 torch 的位元組足以代表整段（其他 wheel 相對很小）；pip 解壓
+// （pip-install）時把進度推到段尾附近，剩下的留給「完成」。
+const PIP_DOWNLOAD_SHARE = 0.85;
+
+function bandPercent(status) {
+  const band = STAGE_BANDS[status.stage];
+  if (!band) return null;
+  const [lo, hi] = band;
+  let frac = 0;
+  const hasBytes = status.totalBytes > 0 && status.downloadedBytes != null;
+  if (status.stage === 'install-packages') {
+    if (status.step === 'pip-install') frac = PIP_DOWNLOAD_SHARE;
+    else if (hasBytes && /^torch$/i.test(status.detail || '')) frac = PIP_DOWNLOAD_SHARE * (status.downloadedBytes / status.totalBytes);
+  } else if (hasBytes) {
+    frac = status.downloadedBytes / status.totalBytes;
+  }
+  return lo + (hi - lo) * Math.max(0, Math.min(1, frac));
+}
+
 function setDownloadStatus(patch) {
-  downloadStatus = { ...downloadStatus, ...patch, updatedAt: Date.now() };
+  const now = Date.now();
+  const prev = downloadStatus;
+  const next = { ...prev, ...patch, updatedAt: now };
+  // 新的一輪安裝（從 idle／error／done 回到第一個階段）：歸零整體進度
+  const restarted = patch.stage === 'disk-space-check' && prev.stage !== 'disk-space-check';
+  if (restarted) next.overallPercent = 0;
+  // 換階段時，上一階段的位元組／細步驟不可以沿用（例如 torch 的 2.5GB 會讓下一段直接跳到段尾）
+  if (next.stage !== prev.stage) {
+    for (const k of ['downloadedBytes', 'totalBytes', 'detail', 'step']) if (!(k in patch)) next[k] = null;
+  }
+  if (next.stage !== prev.stage || restarted) next.stageStartedAt = now;
+  if ((next.step || null) !== (prev.step || null) || next.stage !== prev.stage) next.stepStartedAt = now;
+  const p = bandPercent(next);
+  if (p != null) next.overallPercent = Math.max(restarted ? 0 : (prev.overallPercent || 0), Math.round(p * 10) / 10);
+  downloadStatus = next;
 }
 function getDownloadStatus() {
-  return { ...downloadStatus };
+  // serverNow：讓前端用伺服器時鐘算經過時間（手機等其他裝置時鐘可能不準，同 AI 伴奏安裝）
+  return { ...downloadStatus, serverNow: Date.now() };
 }
 
 async function downloadAndExtractSource(archive, { onProgress } = {}) {
@@ -510,6 +562,8 @@ module.exports = {
   WEIGHT_MD5,
   REQUIRED_DISK_BYTES,
   CKPTS_KEEP_DIR,
+  _setDownloadStatus: setDownloadStatus,
+  STAGE_BANDS,
   _preserveCkpts: preserveCkpts,
   _restoreCkpts: restoreCkpts,
   _resetForTests: resetForTests,

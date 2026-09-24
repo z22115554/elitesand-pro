@@ -43,9 +43,86 @@
   function stageText(stage) {
     if (stage === 'queued') return t('aiJob.queued');
     if (stage === 'preparing') return t('sections.preparing');
-    if (stage === 'load') return t('aiJob.preparing');
-    if (stage === 'inference') return t('sections.runButton');
+    if (stage === 'load') return t('sections.stage.load');
+    if (stage === 'inference') return t('sections.stage.inference');
     return t('sections.preparing');
+  }
+
+  // 分析本身（載入模型→推論）Python 端只回報「換階段」，沒有百分比。為了不讓進度條停在 0%，
+  // 各階段依經過時間緩慢往上爬（指數趨近、不會碰到上限），真的換階段時跳到下一段的起點。
+  // 實測（RTX 3060）：第一次載入模型約 30 秒、之後推論約 10 秒。
+  const JOB_BANDS = { queued: [0, 0, 1], preparing: [2, 8, 6], load: [8, 48, 20], inference: [50, 96, 10] };
+  function jobPercent(job) {
+    const band = JOB_BANDS[job.stage];
+    if (!band) return job.percent || 0;
+    const [lo, hi, tau] = band;
+    const elapsed = (performance.now() - job.stageAt) / 1000;
+    return Math.round(lo + (hi - lo) * (1 - Math.exp(-elapsed / tau)));
+  }
+  let creepTimer = null;
+  function syncCreep() {
+    const need = !!currentJob && !!JOB_BANDS[currentJob.stage];
+    if (need && !creepTimer) creepTimer = setInterval(() => { if (currentJob) renderProgress(currentJob); }, 500);
+    if (!need && creepTimer) { clearInterval(creepTimer); creepTimer = null; }
+  }
+
+  // ─── runtime 下載進度（約 2.7GB，只需一次）───
+
+  function fmtBytes(b) {
+    if (b == null || !Number.isFinite(b)) return '';
+    return b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : `${Math.max(1, Math.round(b / 1e6))} MB`;
+  }
+  function fmtElapsed(ms) {
+    const total = Math.floor(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  }
+  // 用伺服器時鐘算經過時間（手機等其他裝置的時鐘可能不準）
+  function stepElapsedMs(status) {
+    const startedAt = Number(status.stepStartedAt);
+    const now = Number(status.serverNow);
+    return Number.isFinite(startedAt) && Number.isFinite(now) && startedAt > 0 ? Math.max(0, now - startedAt) : 0;
+  }
+  // 沒有進度訊號的步驟超過這個時間就明講「可能很久、不是當機」（Win11＋防毒即時掃描時
+  // 解壓 PyTorch 可達十幾分鐘，AI 伴奏安裝的實機回報）
+  const SLOW_STEP_MS = 8 * 60 * 1000;
+
+  function downloadStageText(status) {
+    const s = status || {};
+    const bytes = (s.totalBytes > 0 && s.downloadedBytes != null)
+      ? `${fmtBytes(s.downloadedBytes)} / ${fmtBytes(s.totalBytes)}` : '';
+    const elapsedMs = stepElapsedMs(s);
+    const elapsed = fmtElapsed(elapsedMs);
+    switch (s.stage) {
+      case 'disk-space-check': return t('sections.install.diskCheck');
+      case 'download-python': return t('sections.install.downloadPython', { detail: bytes });
+      case 'extract-python': return t('sections.install.extractPython');
+      case 'bootstrap-pip': return t('sections.install.bootstrapPip');
+      case 'install-packages':
+        if (s.step === 'pip-download') return t('sections.install.pipDownload', { name: s.detail || '', detail: bytes });
+        if (s.step === 'pip-install') {
+          return t(elapsedMs >= SLOW_STEP_MS ? 'sections.install.pipInstallSlow' : 'sections.install.pipInstall', { elapsed });
+        }
+        return t('sections.install.pipResolve', { name: s.detail || '' });
+      case 'download-source': return t('sections.install.downloadSource', { name: s.detail || '', detail: bytes });
+      case 'install-python': return t('sections.install.installPython');
+      case 'install-muq-package': return t('sections.install.installMuq', { elapsed });
+      case 'download-muq-backbone': return t('sections.install.downloadBackbone', { detail: bytes || elapsed });
+      case 'download-weights': return t('sections.install.downloadWeights', { detail: bytes || elapsed });
+      case 'verify-weights': return t('sections.install.verifyWeights');
+      case 'done': return t('sections.install.done');
+      default: return t('sections.preparing');
+    }
+  }
+
+  function renderDownload(status) {
+    const pct = Math.max(0, Math.min(100, Math.round(Number(status && status.overallPercent) || 0)));
+    dom.progress.hidden = false;
+    dom.runBtn.hidden = true;
+    dom.cancelBtn.hidden = true; // 下載中沒有取消（伺服器端不支援中途停止這條安裝）
+    dom.stage.textContent = downloadStageText(status);
+    dom.percent.textContent = `${pct}%`;
+    if (dom.fill) dom.fill.style.setProperty('--work-progress', `${pct}%`);
+    dom.result.textContent = t('sections.install.note');
   }
 
   function getCurrentTrack() {
@@ -84,13 +161,13 @@
   }
 
   function renderProgress(state) {
+    const pct = jobPercent(state);
     dom.progress.hidden = false;
     dom.runBtn.hidden = true;
     dom.cancelBtn.hidden = false;
-    dom.cancelBtn.disabled = false;
     dom.stage.textContent = stageText(state.stage);
-    dom.percent.textContent = `${state.percent}%`;
-    if (dom.fill) dom.fill.style.setProperty('--work-progress', `${state.percent}%`);
+    dom.percent.textContent = `${pct}%`;
+    if (dom.fill) dom.fill.style.setProperty('--work-progress', `${pct}%`);
   }
 
   function ingest(payload) {
@@ -105,6 +182,7 @@
     }
     if (payload.stage === 'cancelled' || payload.stage === 'error') {
       currentJob = null;
+      syncCreep();
       if (payload.stage === 'error') {
         const code = payload.error;
         dom.result.textContent = code === 'PROVIDER_UNAVAILABLE' || code === 'ENGINE_UNAVAILABLE'
@@ -116,11 +194,20 @@
     }
     if (payload.stage === 'done') {
       currentJob = null;
+      syncCreep();
       renderIdle();
       return;
     }
-    currentJob = { trackId, stage: payload.stage, percent: normalizePercent(payload.progress, payload.stage) };
+    const sameStage = currentJob && currentJob.trackId === trackId && currentJob.stage === payload.stage;
+    currentJob = {
+      trackId,
+      stage: payload.stage,
+      percent: normalizePercent(payload.progress, payload.stage),
+      stageAt: sameStage ? currentJob.stageAt : performance.now(),
+    };
+    dom.cancelBtn.disabled = false;
     renderProgress(currentJob);
+    syncCreep();
   }
 
   SocketClient.on('sections:progress', ingest);
@@ -134,11 +221,9 @@
       try {
         const res = await fetch('/api/section-analysis/runtime-status', { cache: 'no-store' });
         const status = await res.json().catch(() => ({}));
-        if (status.error) { dom.result.textContent = status.error; return; }
-        const step = status.step || status.stage || '';
-        const bytes = (status.totalBytes && status.downloadedBytes != null)
-          ? ` ${Math.round(status.downloadedBytes / 1e6)}MB / ${Math.round(status.totalBytes / 1e6)}MB` : '';
-        dom.result.textContent = `${t('sections.preparing')}${step ? ' — ' + step : ''}${bytes}`;
+        // 失敗訊息交給 runAnalysis() 在下載請求回來時顯示；輪詢只負責畫進度
+        if (status.stage === 'error') return;
+        renderDownload(status);
       } catch (_) { /* 下一輪再試 */ }
     };
     timer = setInterval(poll, 1000);
@@ -155,8 +240,8 @@
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.ok) {
         if (body.error === 'RUNTIME_NOT_READY') {
-          dom.result.textContent = t('sections.preparing');
           downloading = true;
+          renderDownload({ stage: 'disk-space-check', overallPercent: 0 });
           const stopPolling = pollRuntimeDownload();
           let downloadRes;
           let downloadBody;
