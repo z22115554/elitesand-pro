@@ -15,7 +15,17 @@
   <div id="lantern-string" class="lantern-string" aria-live="polite"></div>
 
   <section id="moon-panel" class="moon-panel">
+   <div class="moon-cluster">
+    <div id="moon-thanks" class="moon-thanks" aria-live="polite"></div>
     <div class="moon-wrap">
+      <div class="moon-rabbit" aria-hidden="true">
+        <span class="rabbit-ear rabbit-ear--back"></span>
+        <span class="rabbit-ear"></span>
+        <span class="rabbit-body"></span>
+        <span class="rabbit-head"></span>
+        <span class="rabbit-tail"></span>
+      </div>
+      <div id="moon-burst" class="moon-burst" aria-hidden="true"></div>
       <svg id="moon-svg" class="moon-svg" viewBox="0 0 200 200" aria-hidden="true">
         <defs>
           <radialGradient id="moon-lit" cx="42%" cy="38%" r="70%">
@@ -45,6 +55,12 @@
       </div>
       <div id="moon-done" class="moon-done" hidden>月圓了，謝謝大家！</div>
     </div>
+   </div>
+  </section>
+
+  <!-- 謝幕名單：只在 ?part=credits 顯示，面板按「播放」才捲一次（?autoplay=1 載入即播） -->
+  <section id="moon-credits" class="moon-credits" aria-hidden="true">
+    <div id="moon-credits-roll" class="moon-credits-roll"></div>
   </section>
 
   <script src="/socket.io/socket.io.js"></script>

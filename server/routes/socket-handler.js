@@ -485,7 +485,8 @@ module.exports = function socketHandler(io, {
         // 過去只能等某個無關操作觸發 broadcastState() 才會補到，OBS 剛載入來源時吃不到設定。
         socket.emit('state:sync', ctx.getReadOnlyState());
       } else if (type === 'moon') {
-        socket.emit('moon:update', moonEvent.snapshot());
+        if (moonEvent.isActive()) socket.emit('moon:update', moonEvent.snapshot());
+        else socket.emit('moon:ended');
       } else if (type !== 'webgpu-engine') {
         // webgpu-engine 不需要完整 state（歌詞、播放清單等）——它只回應伺服器主動
         // 派發的 webgpu:job:start，不需要自己知道目前播放狀態，省一份無用的大 payload。

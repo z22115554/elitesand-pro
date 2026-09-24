@@ -27,6 +27,7 @@ const { requireSourceAccess } = require('./middleware/require-source-access');
 const deviceAccess = require('./services/device-access-store');
 const { renderDisplayRuntimePage } = require('./services/display-runtime-build');
 const templateDelivery = require('./services/template-delivery');
+const moonEvent = require('./services/moon-event');
 const ytdlpCompatibility = require('./services/ytdlp-compatibility');
 const PORT = process.env.PORT || config.port || 3000;
 deviceAccess.initialize();
@@ -366,6 +367,11 @@ app.get('/setlist', requireSourceAccess, (req, res) => {
 
 // 中秋募資活動疊加頁（透明背景 + 月亮進度條 + 燈籠名牌）
 app.get('/moon', requireSourceAccess, (req, res) => {
+  // 活動已結束（啟動時判斷）：OBS 來源若還留著，給一張完全透明的空白頁。
+  if (!moonEvent.isActive()) {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return res.type('html').send('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>html,body{margin:0;background:transparent}</style></head><body></body></html>');
+  }
   sendNoCache(res, 'moon.html');
 });
 

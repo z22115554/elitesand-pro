@@ -1611,6 +1611,14 @@
             <form id="moon-add-form" class="moon-add-row" autocomplete="off">
               <input id="moon-add-name" class="input" type="text" maxlength="24" placeholder="名字" aria-label="名字" required>
               <input id="moon-add-amount" class="input moon-amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額（NT$）" required>
+              <select id="moon-add-style" class="input moon-style-select" aria-label="燈籠樣式">
+                <option value="">依金額自動</option>
+                <option value="paper">紙燈籠</option>
+                <option value="red">紅燈籠</option>
+                <option value="pomelo">柚子燈</option>
+                <option value="palace">宮燈</option>
+                <option value="rabbit">月兔燈</option>
+              </select>
               <button class="btn btn-sm" type="submit">掛上燈籠</button>
             </form>
             <div class="moon-summary" role="status" aria-live="polite">
@@ -1624,7 +1632,15 @@
           </section>
 
           <section class="card" aria-labelledby="moon-preview-title">
-            <p id="moon-preview-title" class="eyebrow m-0">OBS 畫面預覽</p>
+            <div class="playlist-head">
+              <p id="moon-preview-title" class="eyebrow m-0">OBS 畫面預覽</p>
+              <select id="moon-preview-mode" class="input moon-preview-mode" aria-label="預覽內容">
+                <option value="">實際畫面</option>
+                <option value="?demo=1">五種燈籠示範</option>
+                <option value="?demo=celebrate">滿月慶祝示範</option>
+                <option value="?part=credits&amp;autoplay=1">謝幕名單</option>
+              </select>
+            </div>
             <div class="moon-preview-frame">
               <iframe id="moon-preview-iframe" title="中秋活動預覽" loading="lazy"></iframe>
             </div>
@@ -1632,6 +1648,7 @@
               <div><div class="label">月亮＋燈籠（整個畫面）</div><div class="url-field"><code data-moon-url=""></code><button class="btn btn-sm" type="button" data-moon-copy="">複製</button></div></div>
               <div><div class="label">只有月亮</div><div class="url-field"><code data-moon-url="?part=moon"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=moon">複製</button></div></div>
               <div><div class="label">只有燈籠</div><div class="url-field"><code data-moon-url="?part=lanterns"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=lanterns">複製</button></div></div>
+              <div><div class="label">謝幕名單（平常透明，按下方「播放謝幕名單」才出現）</div><div class="url-field"><code data-moon-url="?part=credits"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=credits">複製</button></div></div>
             </div>
             <p class="val mt-10">在 OBS 新增「瀏覽器」來源貼上網址，寬高設 1920×1080。想把月亮和燈籠分開擺，就各建一個來源。</p>
           </section>
@@ -1659,23 +1676,16 @@
               </div>
               <p class="field-hint">起始金額＝活動開始前已經募到的錢（例如直播上顯示的募資進度），月亮會從這裡開始算。</p>
               <div class="field mt-10">
-                <label class="moon-schedule-toggle" for="moon-schedule-enabled">
-                  <input id="moon-schedule-enabled" type="checkbox">
-                  限時顯示在 OBS
-                </label>
-              </div>
-              <div class="row-gap-10">
-                <div class="field flex-grow">
-                  <label for="moon-schedule-start">開始時間</label>
-                  <input id="moon-schedule-start" class="input" type="datetime-local" step="1">
+                <label>燈籠門檻（NT$ 起）</label>
+                <div class="moon-tier-grid">
+                  <label class="moon-tier"><span>紙燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="paper"></label>
+                  <label class="moon-tier"><span>紅燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="red"></label>
+                  <label class="moon-tier"><span>柚子燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="pomelo"></label>
+                  <label class="moon-tier"><span>宮燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="palace"></label>
+                  <label class="moon-tier"><span>月兔燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="rabbit"></label>
                 </div>
-                <div class="field flex-grow">
-                  <label for="moon-schedule-end">結束時間</label>
-                  <input id="moon-schedule-end" class="input" type="datetime-local" step="1">
-                </div>
+                <p class="field-hint">「依金額自動」時，斗內金額達到哪個門檻就掛哪一種；改門檻會立刻套用到所有自動的燈籠。</p>
               </div>
-              <p class="field-hint">依這台裝置的本地時間設定；結束後活動分頁會從程式內消失，OBS 畫面也會隱藏月亮與燈籠。斗內紀錄會保留。</p>
-              <p id="moon-schedule-status" class="field-hint" role="status"></p>
               <button class="btn btn-sm mt-10" type="submit">儲存設定</button>
             </form>
           </section>
@@ -1683,7 +1693,11 @@
           <section class="card" aria-labelledby="moon-list-title">
             <div class="playlist-head">
               <p id="moon-list-title" class="eyebrow m-0">斗內紀錄</p>
-              <button id="moon-clear" class="btn btn-sm btn-danger" type="button">全部清除</button>
+              <div class="moon-list-actions">
+                <button id="moon-play-celebrate" class="btn btn-sm" type="button" title="達標時會自動播放一次；這裡可以手動再放">播放滿月慶祝</button>
+                <button id="moon-play-credits" class="btn btn-sm" type="button">播放謝幕名單</button>
+                <button id="moon-clear" class="btn btn-sm btn-danger" type="button">全部清除</button>
+              </div>
             </div>
             <ul id="moon-donation-list" class="bgm-track-list"></ul>
           </section>

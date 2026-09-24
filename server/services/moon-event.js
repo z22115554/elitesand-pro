@@ -3,6 +3,9 @@
  *
  * 月亮進度條＋燈籠名牌疊加層（/moon）的資料來源。斗內金額由主播／管理員在面板手動輸入，
  * 不串任何金流。跟 bgm-playlist.js 同一套慣例：獨立檔案、debounce 寫入、不進 playState。
+ *
+ * 限時活動：只在伺服器啟動當下判斷一次是否已過 EVENT_END。程式開著時跨過截止時間照常運作
+ * （不在直播中途把功能拔掉），下次啟動才整個關閉；斗內紀錄檔保留不刪。
  */
 const path = require('path');
 const crypto = require('crypto');
@@ -18,13 +21,20 @@ const MAX_NAME_LENGTH = 24;
 const MAX_TITLE_LENGTH = 40;
 const MAX_AMOUNT = 10_000_000;
 
+const EVENT_END = Date.parse('2026-10-01T00:00:00+08:00');
+const isActiveAt = (now) => now < EVENT_END;
+const ACTIVE_AT_STARTUP = isActiveAt(Date.now());
+
+// 由便宜到貴排列；自動模式取「門檻 ≤ 金額」裡門檻最高的那一種。
+const LANTERN_STYLES = Object.freeze(['paper', 'red', 'pomelo', 'palace', 'rabbit']);
+const DEFAULT_TIERS = Object.freeze({ paper: 1, red: 100, pomelo: 300, palace: 500, rabbit: 1000 });
+
 const DEFAULTS = Object.freeze({
   title: '中秋團圓夜',
   doneText: '月圓了，謝謝大家！',
   goal: 5000,
   base: 0,
-  startAt: null,
-  endAt: null,
+  tiers: DEFAULT_TIERS,
 });
 
 let config = { ...DEFAULTS };
@@ -51,14 +61,27 @@ function cleanText(value, maxLength) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, maxLength);
 }
 
-function cleanSchedule(startAt, endAt) {
-  if (startAt == null && endAt == null) return { startAt: null, endAt: null };
-  if (typeof startAt !== 'string' || typeof endAt !== 'string') return null;
-  const start = Date.parse(startAt);
-  const end = Date.parse(endAt);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
-  if (new Date(start).toISOString() !== startAt || new Date(end).toISOString() !== endAt) return null;
-  return { startAt, endAt };
+function cleanTiers(input, fallback) {
+  const base = fallback && typeof fallback === 'object' ? fallback : DEFAULT_TIERS;
+  const tiers = {};
+  for (const style of LANTERN_STYLES) {
+    tiers[style] = cleanAmount(input?.[style], { min: 1 }) ?? cleanAmount(base[style], { min: 1 }) ?? DEFAULT_TIERS[style];
+  }
+  return tiers;
+}
+
+function autoStyle(amount) {
+  let picked = null;
+  for (const style of LANTERN_STYLES) {
+    const min = config.tiers[style];
+    if (amount >= min && (picked === null || min >= config.tiers[picked])) picked = style;
+  }
+  if (picked) return picked;
+  return LANTERN_STYLES.reduce((low, style) => (config.tiers[style] < config.tiers[low] ? style : low));
+}
+
+function cleanStyle(value) {
+  return LANTERN_STYLES.includes(value) ? value : null;
 }
 
 function cleanConfig(input, fallback) {
@@ -66,16 +89,12 @@ function cleanConfig(input, fallback) {
   const doneText = cleanText(input?.doneText, MAX_TITLE_LENGTH);
   const goal = cleanAmount(input?.goal, { min: 1 });
   const base = cleanAmount(input?.base);
-  const hasSchedule = Object.hasOwn(input || {}, 'startAt') || Object.hasOwn(input || {}, 'endAt');
-  const schedule = (hasSchedule ? cleanSchedule(input?.startAt, input?.endAt) : null)
-    || cleanSchedule(fallback.startAt, fallback.endAt)
-    || { startAt: null, endAt: null };
   return {
     title: title || fallback.title,
     doneText: doneText || fallback.doneText || DEFAULTS.doneText,
     goal: goal ?? fallback.goal,
     base: base ?? fallback.base,
-    ...schedule,
+    tiers: cleanTiers(input?.tiers, fallback.tiers),
   };
 }
 
@@ -85,7 +104,8 @@ function cleanDonation(raw) {
   if (!name || amount === null) return null;
   const id = typeof raw?.id === 'string' && /^[a-f0-9]{8,32}$/.test(raw.id) ? raw.id : crypto.randomBytes(6).toString('hex');
   const at = Number.isFinite(raw?.at) ? raw.at : Date.now();
-  return { id, name, amount, at };
+  const style = cleanStyle(raw?.style);
+  return style ? { id, name, amount, at, style } : { id, name, amount, at };
 }
 
 (function load() {
@@ -111,42 +131,25 @@ function scheduleSave() {
   _saveTimer = setTimeout(saveNow, 800);
 }
 
-function isExpired() {
-  return !!config.endAt && Date.now() >= Date.parse(config.endAt);
-}
-
-function expiredResult() {
-  return { ok: false, error: '中秋活動已結束' };
-}
-
 function snapshot(extra) {
   const raised = donations.reduce((sum, d) => sum + d.amount, 0);
   return {
     ...config,
     raised,
     total: config.base + raised,
-    donations: donations.slice(),
-    serverNow: Date.now(),
-    expired: isExpired(),
+    donations: donations.map((d) => ({ ...d, style: d.style || autoStyle(d.amount), styleAuto: !d.style })),
     ...extra,
   };
 }
 
 function setConfig(input) {
-  if (isExpired()) return expiredResult();
-  if (Object.hasOwn(input || {}, 'startAt') || Object.hasOwn(input || {}, 'endAt')) {
-    if (!cleanSchedule(input.startAt, input.endAt)) {
-      return { ok: false, error: '請設定有效的活動開始與結束時間，結束須晚於開始' };
-    }
-  }
   config = cleanConfig(input, config);
   scheduleSave();
   return { ok: true, state: snapshot() };
 }
 
 function addDonation(input) {
-  if (isExpired()) return expiredResult();
-  const donation = cleanDonation({ name: input?.name, amount: input?.amount });
+  const donation = cleanDonation({ name: input?.name, amount: input?.amount, style: input?.style });
   if (!donation) return { ok: false, error: '請填寫名字與大於 0 的金額' };
   donations.push(donation);
   if (donations.length > MAX_DONATIONS) donations = donations.slice(-MAX_DONATIONS);
@@ -155,7 +158,6 @@ function addDonation(input) {
 }
 
 function removeDonation(id) {
-  if (isExpired()) return expiredResult();
   const before = donations.length;
   donations = donations.filter((d) => d.id !== id);
   if (donations.length === before) return { ok: false, error: '找不到這筆斗內' };
@@ -164,7 +166,6 @@ function removeDonation(id) {
 }
 
 function clearDonations() {
-  if (isExpired()) return expiredResult();
   donations = [];
   scheduleSave();
   return { ok: true, state: snapshot() };
@@ -173,6 +174,7 @@ function clearDonations() {
 process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
 module.exports = {
-  snapshot, setConfig, addDonation, removeDonation, clearDonations, saveNow, isExpired,
-  MAX_NAME_LENGTH, MAX_TITLE_LENGTH,
+  snapshot, setConfig, addDonation, removeDonation, clearDonations, saveNow,
+  isActive: () => ACTIVE_AT_STARTUP, isActiveAt, EVENT_END,
+  MAX_NAME_LENGTH, MAX_TITLE_LENGTH, LANTERN_STYLES, DEFAULT_TIERS,
 };

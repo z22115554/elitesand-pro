@@ -1631,8 +1631,6 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 
 /* 中秋募資活動 */
 .moon-add-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
-.moon-schedule-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-.moon-schedule-toggle input { accent-color: var(--accent); }
 .moon-add-row .input { flex: 1 1 160px; min-width: 0; }
 .moon-add-row .moon-amount-input { flex: 0 1 140px; }
 .moon-summary { margin-top: 16px; }
@@ -1644,3 +1642,14 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .moon-preview-frame { position: relative; margin-top: 12px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--r-md); border: 1px solid var(--border); background: radial-gradient(ellipse at 30% 20%, #3a3f63, #151827 70%); }
 .moon-preview-frame iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; background: transparent; }
 .moon-donation-meta { display: flex; align-items: center; gap: 10px; flex: none; font-variant-numeric: tabular-nums; }
+.moon-add-row .moon-style-select { flex: 0 1 130px; }
+.moon-tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.moon-tier { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.moon-style-chip { padding: 2px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
+.moon-style-chip[data-style="paper"] { border-color: #c9a36a; color: #d9b67c; }
+.moon-style-chip[data-style="red"] { border-color: #d8412f; color: #ef6a55; }
+.moon-style-chip[data-style="pomelo"] { border-color: #9cc23a; color: #b5d65a; }
+.moon-style-chip[data-style="palace"] { border-color: #d9a441; color: #e8b85a; }
+.moon-style-chip[data-style="rabbit"] { border-color: #f0a8b4; color: #f5b8c2; }
+select.moon-preview-mode { width: auto; height: 32px; flex: none; }
+.moon-list-actions { display: flex; gap: 8px; }

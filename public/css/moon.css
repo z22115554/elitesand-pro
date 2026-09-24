@@ -18,12 +18,15 @@ html, body {
   color: var(--moon-ink);
 }
 
+body[data-part="credits"] .lantern-string,
+body[data-part="credits"] .moon-panel,
 body[data-part="moon"] .lantern-string,
 body[data-part="lanterns"] .moon-panel { display: none; }
 body[data-activity="pending"] .lantern-string,
 body[data-activity="pending"] .moon-panel,
 body[data-activity="hidden"] .lantern-string,
-body[data-activity="hidden"] .moon-panel { visibility: hidden; }
+body[data-activity="hidden"] .moon-panel,
+body[data-activity="hidden"] .moon-credits { visibility: hidden; }
 
 /* ─── 月亮 ─── */
 .moon-panel {
@@ -38,6 +41,7 @@ body[data-part="moon"] .moon-panel {
   inset: 0;
   justify-content: center;
 }
+.moon-cluster { position: relative; display: flex; align-items: center; gap: 22px; }
 
 .moon-wrap { position: relative; width: 190px; height: 190px; flex: none; }
 .moon-svg {
@@ -129,13 +133,15 @@ body[data-part="moon"] .moon-panel {
 .lantern:nth-child(3n) { animation-duration: 5.6s; animation-delay: -2.4s; }
 
 .lantern-cord { width: 2px; height: 22px; background: rgba(255, 220, 160, 0.7); }
-.lantern-cap {
+.lantern-top, .lantern-bottom {
   width: 44px;
   height: 9px;
   border-radius: 3px;
   background: linear-gradient(#e6b04e, #a8751f);
 }
 .lantern-body {
+  --glow: rgba(255, 170, 90, 0.55);
+  --inset: inset 0 -8px 16px rgba(0, 0, 0, 0.18);
   position: relative;
   width: 92px;
   min-height: 112px;
@@ -145,7 +151,7 @@ body[data-part="moon"] .moon-panel {
   background:
     repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.07) 0 2px, transparent 2px 15px),
     radial-gradient(circle at 50% 42%, #ff8a55 0%, var(--lantern-red) 55%, var(--lantern-red-deep) 100%);
-  box-shadow: 0 0 26px var(--lantern-glow), inset 0 -8px 16px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 0 26px var(--glow), var(--inset);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -172,12 +178,169 @@ body[data-part="moon"] .moon-panel {
   font-variant-numeric: tabular-nums;
 }
 .lantern-tassel {
+  position: relative;
   width: 4px;
   height: 26px;
   margin-top: -1px;
   background: linear-gradient(#e6b04e, rgba(230, 176, 78, 0));
   border-radius: 0 0 2px 2px;
 }
+
+/* 紙燈籠：米白和紙、橫向竹骨、深木色上下框 */
+.lantern--paper .lantern-top, .lantern--paper .lantern-bottom {
+  width: 58px;
+  height: 8px;
+  background: linear-gradient(#6b4528, #3f2716);
+}
+.lantern--paper .lantern-body {
+  --glow: rgba(255, 214, 150, 0.5);
+  --inset: inset 0 -10px 18px rgba(150, 95, 30, 0.2);
+  width: 86px;
+  min-height: 104px;
+  border-radius: 40% / 30%;
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 78, 30, 0.14) 0 1.5px, transparent 1.5px 12px),
+    radial-gradient(circle at 50% 45%, #fffaf0 0%, #fbe8c4 60%, #efcf95 100%);
+}
+.lantern--paper .lantern-name { color: #7a3b12; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
+.lantern--paper .lantern-amount { color: #a0622a; }
+.lantern--paper .lantern-tassel { background: linear-gradient(#b3261e, rgba(179, 38, 30, 0)); }
+
+/* 柚子燈：黃綠果皮、油胞點點、梗和葉子 */
+.lantern--pomelo .lantern-top {
+  position: relative;
+  width: 5px;
+  height: 12px;
+  border-radius: 2px;
+  background: #6b4a2a;
+}
+.lantern--pomelo .lantern-top::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: -2px;
+  width: 26px;
+  height: 12px;
+  border-radius: 0 100% 0 100%;
+  background: linear-gradient(135deg, #7cc242, #3f8a24);
+  transform: rotate(-18deg);
+  transform-origin: 0 50%;
+}
+.lantern--pomelo .lantern-body {
+  --glow: rgba(214, 240, 120, 0.5);
+  --inset: inset -6px -10px 18px rgba(70, 100, 10, 0.28);
+  width: 96px;
+  min-height: 100px;
+  margin-top: -2px;
+  border-radius: 50% 50% 47% 47% / 54% 54% 46% 46%;
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.2) 1px, transparent 1.6px) 0 0 / 7px 7px,
+    radial-gradient(circle at 38% 32%, #f7fbc4 0%, #d5e86a 42%, #9cc23a 80%, #76982a 100%);
+}
+.lantern--pomelo .lantern-name { color: #2f4610; text-shadow: 0 1px 0 rgba(255, 255, 240, 0.55); }
+.lantern--pomelo .lantern-amount { color: #4d6a19; }
+.lantern--pomelo .lantern-bottom { display: none; }
+.lantern--pomelo .lantern-tassel { height: 18px; margin-top: 2px; background: linear-gradient(#d8412f, rgba(216, 65, 47, 0)); }
+
+/* 宮燈：飛簷屋頂、金框紅綢、三條流蘇 */
+.lantern--palace .lantern-top {
+  width: 104px;
+  height: 18px;
+  border-radius: 0;
+  background: linear-gradient(#f1c35f, #a8751f);
+  clip-path: polygon(0 100%, 6% 55%, 24% 40%, 50% 0, 76% 40%, 94% 55%, 100% 100%);
+}
+.lantern--palace .lantern-body {
+  --glow: rgba(255, 160, 80, 0.6);
+  --inset: inset 0 0 0 3px #d9a441, inset 0 -10px 18px rgba(0, 0, 0, 0.25);
+  width: 84px;
+  min-height: 116px;
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, transparent 31%, rgba(217, 164, 65, 0.85) 31% 33%, transparent 33% 67%, rgba(217, 164, 65, 0.85) 67% 69%, transparent 69%),
+    radial-gradient(ellipse at 50% 45%, #ff7a4a 0%, #c9322a 60%, #86190f 100%);
+}
+.lantern--palace .lantern-name { color: #fff1cf; }
+.lantern--palace .lantern-bottom {
+  width: 96px;
+  height: 10px;
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 88% 100%, 12% 100%);
+}
+.lantern--palace .lantern-tassel { height: 30px; background: linear-gradient(#d8412f, rgba(216, 65, 47, 0)); }
+.lantern--palace .lantern-tassel::before,
+.lantern--palace .lantern-tassel::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  width: 4px;
+  height: 24px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(#d8412f, rgba(216, 65, 47, 0));
+}
+.lantern--palace .lantern-tassel::before { left: -32px; }
+.lantern--palace .lantern-tassel::after { left: 32px; }
+
+/* 月兔燈：白色圓身、長耳朵、紅眼睛、腮紅 */
+.lantern--rabbit .lantern-top {
+  position: relative;
+  width: 60px;
+  height: 36px;
+  margin-bottom: -10px;
+  background: none;
+  z-index: 0;
+}
+.lantern--rabbit .lantern-top::before,
+.lantern--rabbit .lantern-top::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 18px;
+  height: 46px;
+  border-radius: 50% 50% 45% 45% / 70% 70% 30% 30%;
+  background:
+    radial-gradient(ellipse 30% 60% at 50% 55%, #ffc0c8 0%, #ffc0c8 70%, transparent 72%),
+    linear-gradient(#ffffff, #f3eee6);
+  box-shadow: 0 0 10px rgba(255, 240, 225, 0.6);
+}
+.lantern--rabbit .lantern-top::before { left: 8px; transform: rotate(-14deg); transform-origin: 50% 100%; }
+.lantern--rabbit .lantern-top::after { right: 8px; transform: rotate(14deg); transform-origin: 50% 100%; }
+.lantern--rabbit .lantern-body {
+  --glow: rgba(255, 238, 215, 0.7);
+  --inset: inset 0 -10px 18px rgba(170, 140, 110, 0.22);
+  z-index: 1;
+  width: 94px;
+  min-height: 104px;
+  padding-top: 30px;
+  border-radius: 50% 50% 46% 46% / 52% 52% 48% 48%;
+  background: radial-gradient(circle at 45% 38%, #ffffff 0%, #fbf7f1 55%, #eadfd2 100%);
+}
+.lantern--rabbit .lantern-body::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 30px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d8323c;
+  box-shadow: 27px 0 0 #d8323c;
+}
+.lantern--rabbit .lantern-body::after {
+  content: '';
+  position: absolute;
+  top: 27px;
+  left: 20px;
+  width: 12px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 150, 160, 0.55);
+  box-shadow: 42px 0 0 rgba(255, 150, 160, 0.55);
+}
+.lantern--rabbit .lantern-name { color: #a63a36; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7); -webkit-line-clamp: 2; }
+.lantern--rabbit .lantern-amount { color: #c0605a; }
+.lantern--rabbit .lantern-bottom { display: none; }
+.lantern--rabbit .lantern-tassel { height: 18px; margin-top: 2px; background: linear-gradient(#ff9fb0, rgba(255, 159, 176, 0)); }
 
 .lantern.is-new { animation: lantern-drop 1.4s cubic-bezier(.25, 1.4, .4, 1) both, lantern-sway 5s ease-in-out 1.4s infinite; }
 .lantern.is-new .lantern-body { animation: lantern-flare 2.4s ease-out; }
@@ -187,14 +350,212 @@ body[data-part="moon"] .moon-panel {
   100% { transform: translateY(0) rotate(0deg); opacity: 1; }
 }
 @keyframes lantern-flare {
-  0%, 40% { box-shadow: 0 0 70px rgba(255, 190, 110, 0.95), inset 0 -8px 16px rgba(0, 0, 0, 0.18); }
-  100% { box-shadow: 0 0 26px var(--lantern-glow), inset 0 -8px 16px rgba(0, 0, 0, 0.18); }
+  0%, 40% { box-shadow: 0 0 70px var(--glow), 0 0 30px var(--glow), var(--inset); }
+  100% { box-shadow: 0 0 26px var(--glow), var(--inset); }
 }
+
+/* ─── 感謝提示 ─── */
+.moon-thanks {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 14px);
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(24, 20, 40, 0.55);
+  border: 1px solid rgba(255, 226, 160, 0.45);
+  color: var(--moon-ink);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow: var(--text-shadow);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.moon-thanks.is-shown { opacity: 1; transform: translateY(0); }
+.moon-thanks b { color: var(--moon-gold); font-weight: 900; }
+
 @keyframes lantern-sway {
   0%, 100% { transform: rotate(-2.5deg); }
   50% { transform: rotate(2.5deg); }
 }
 
+
+/* ─── 燈籠輪播換頁 ─── */
+.lantern-string { transition: opacity 0.6s ease; }
+.lantern-string.is-swapping { opacity: 0; }
+.lantern-page-dots {
+  position: absolute;
+  top: 222px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+.lantern-page-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 226, 160, 0.35); }
+.lantern-page-dots span.is-current { background: var(--moon-gold); }
+
+/* ─── 謝幕名單 ─── */
+.moon-credits { display: none; position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+body[data-part="credits"] .moon-credits { display: block; }
+.moon-credits-roll {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: min(760px, 90vw);
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7), 0 0 18px rgba(0, 0, 0, 0.45);
+  visibility: hidden;
+}
+.moon-credits-roll.is-rolling { visibility: visible; }
+.credits-heading { font-size: 22px; font-weight: 700; letter-spacing: 0.3em; color: rgba(255, 249, 236, 0.8); }
+.credits-title { margin-top: 10px; font-size: 48px; font-weight: 900; letter-spacing: 0.14em; color: var(--moon-gold); }
+.credits-group { margin-top: 72px; }
+.credits-group-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--credits-accent, var(--moon-gold));
+}
+.credits-group-label::before, .credits-group-label::after {
+  content: '';
+  width: 40px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.6;
+}
+.credits-names {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px 36px;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--moon-ink);
+}
+.credits-group[data-style="rabbit"] { --credits-accent: #ffd3da; }
+.credits-group[data-style="rabbit"] .credits-names { font-size: 40px; }
+.credits-group[data-style="palace"] { --credits-accent: #f0c46a; }
+.credits-group[data-style="palace"] .credits-names { font-size: 36px; }
+.credits-group[data-style="pomelo"] { --credits-accent: #cfe57a; }
+.credits-group[data-style="red"] { --credits-accent: #ff9a80; }
+.credits-group[data-style="paper"] { --credits-accent: #f3dcae; }
+.credits-closing { margin-top: 96px; font-size: 34px; font-weight: 900; letter-spacing: 0.12em; color: var(--moon-gold); }
+.credits-closing-sub { margin-top: 12px; font-size: 20px; color: rgba(255, 249, 236, 0.8); letter-spacing: 0.1em; }
+
+
+/* ─── 滿月慶祝 ─── */
+.moon-svg { position: relative; z-index: 1; }
+.moon-burst { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.moon-burst-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 190px;
+  height: 190px;
+  margin: -95px 0 0 -95px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 226, 160, 0.85);
+  box-shadow: 0 0 24px rgba(255, 220, 150, 0.7);
+}
+.moon-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: #fff3c4;
+  line-height: 1;
+  text-shadow: 0 0 8px rgba(255, 214, 120, 0.95);
+  transform: translate(-50%, -50%);
+}
+
+.moon-rabbit {
+  position: absolute;
+  left: 63px;
+  top: 67px;
+  width: 64px;
+  height: 56px;
+  z-index: 0;
+  opacity: 0;
+  filter: drop-shadow(0 0 8px rgba(255, 245, 225, 0.7));
+}
+.moon-rabbit span { position: absolute; display: block; }
+.rabbit-body {
+  left: 14px; top: 22px; width: 44px; height: 32px;
+  border-radius: 55% 50% 45% 45%;
+  background: radial-gradient(circle at 40% 35%, #ffffff, #efe7dc);
+}
+.rabbit-head {
+  left: 4px; top: 10px; width: 26px; height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffffff, #f1e9df);
+}
+.rabbit-head::before {
+  content: ''; position: absolute; left: 6px; top: 8px; width: 4px; height: 4px;
+  border-radius: 50%; background: #d8323c;
+}
+.rabbit-head::after {
+  content: ''; position: absolute; left: 3px; top: 14px; width: 7px; height: 4px;
+  border-radius: 50%; background: rgba(255, 150, 160, 0.6);
+}
+.rabbit-ear {
+  left: 11px; top: -14px; width: 9px; height: 28px;
+  border-radius: 50% 50% 40% 40% / 70% 70% 30% 30%;
+  background: radial-gradient(ellipse 30% 60% at 50% 55%, #ffc0c8 0 70%, transparent 72%), #ffffff;
+  transform: rotate(-12deg);
+  transform-origin: 50% 100%;
+}
+.rabbit-ear--back { left: 18px; background: #eee5da; transform: rotate(10deg); }
+.rabbit-tail {
+  right: 2px; top: 30px; width: 11px; height: 11px;
+  border-radius: 50%; background: #ffffff;
+}
+
+.moon-panel.is-celebrating .moon-rabbit { animation: rabbit-hop 6s ease-in-out both; }
+@keyframes rabbit-hop {
+  0% { opacity: 0; transform: translate(0, 0); }
+  6% { opacity: 1; }
+  14% { transform: translate(-12px, -176px) rotate(-8deg); animation-timing-function: ease-in; }
+  22% { transform: translate(0, -116px) rotate(0deg); }
+  26% { transform: translate(0, -128px); }
+  30%, 80% { transform: translate(0, -116px); }
+  88% { transform: translate(12px, -160px) rotate(8deg); opacity: 1; }
+  96% { opacity: 1; }
+  100% { opacity: 0; transform: translate(0, 0); }
+}
+
+.moon-panel.is-celebrating .moon-svg {
+  animation: moon-pop 1.2s cubic-bezier(.3, 1.6, .5, 1), moon-bloom 3.2s ease-in-out infinite;
+}
+@keyframes moon-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+.moon-panel.is-celebrating .moon-done { animation: done-pop 1.4s cubic-bezier(.3, 1.6, .5, 1) 0.5s both; }
+@keyframes done-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.lantern-string.is-celebrating .lantern-body {
+  animation: lantern-cheer 1.6s ease-out both;
+  animation-delay: var(--cheer-delay, 0ms);
+}
+@keyframes lantern-cheer {
+  0% { transform: translateY(0); box-shadow: 0 0 26px var(--glow), var(--inset); }
+  25% { transform: translateY(-12px); box-shadow: 0 0 80px var(--glow), 0 0 36px var(--glow), var(--inset); }
+  50% { transform: translateY(0); }
+  100% { transform: translateY(0); box-shadow: 0 0 26px var(--glow), var(--inset); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .lantern, .lantern.is-new, .moon-panel.is-full .moon-svg { animation: none; }
+  .lantern, .lantern.is-new, .lantern.is-new .lantern-body, .moon-panel.is-full .moon-svg { animation: none; }
+  .moon-thanks { transition: none; }
+  .moon-panel.is-celebrating .moon-rabbit, .moon-panel.is-celebrating .moon-svg, .moon-panel.is-celebrating .moon-done, .lantern-string.is-celebrating .lantern-body { animation: none; }
 }

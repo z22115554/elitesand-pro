@@ -8,10 +8,9 @@
   const el = (id) => document.getElementById(id);
   const nf = new Intl.NumberFormat('zh-TW');
   const toast = (message, type) => window.AppShared?.showToast?.(message, type);
+  const STYLE_LABELS = { paper: '紙燈籠', red: '紅燈籠', pomelo: '柚子燈', palace: '宮燈', rabbit: '月兔燈' };
   let state = null;
   let configDirty = false;
-  let receivedAt = 0;
-  let statusTimer = 0;
 
   function moonUrl(suffix) {
     return `${location.origin}/moon${suffix || ''}`;
@@ -32,64 +31,21 @@
     el('moon-config-done-text').value = state.doneText;
     el('moon-config-goal').value = state.goal;
     el('moon-config-base').value = state.base;
-    el('moon-schedule-enabled').checked = !!(state.startAt && state.endAt);
-    el('moon-schedule-start').value = toLocalInput(state.startAt);
-    el('moon-schedule-end').value = toLocalInput(state.endAt);
-    syncScheduleInputs();
+    document.querySelectorAll('[data-moon-tier]').forEach((input) => {
+      input.value = state.tiers?.[input.dataset.moonTier] ?? '';
+    });
   }
 
-  function toLocalInput(iso) {
-    if (!iso) return '';
-    const date = new Date(iso);
-    if (!Number.isFinite(date.getTime())) return '';
-    const pad = (value) => String(value).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  }
-
-  function syncScheduleInputs() {
-    const enabled = el('moon-schedule-enabled').checked;
-    for (const id of ['moon-schedule-start', 'moon-schedule-end']) {
-      el(id).disabled = !enabled;
-      el(id).required = enabled;
-    }
-  }
-
-  function syncFeatureAvailability(now) {
-    const end = state.endAt ? Date.parse(state.endAt) : null;
-    const expired = state.expired === true || (Number.isFinite(end) && now >= end);
+  // 活動是否結束由伺服器啟動時決定；結束後這次執行期間分頁不出現，進行中也不會中途消失。
+  function setAvailable(active) {
     const nav = document.querySelector('.nav-item[data-nav="moon"]');
     const view = document.querySelector('.view[data-view="moon"]');
     if (!nav || !view) return;
-    nav.hidden = expired;
-    view.hidden = expired;
-    if (expired && (nav.classList.contains('active') || view.classList.contains('is-active'))) {
+    nav.hidden = !active;
+    view.hidden = !active;
+    if (!active && (nav.classList.contains('active') || view.classList.contains('is-active'))) {
       document.querySelector('.nav-item[data-nav="karaoke"]')?.click();
     }
-  }
-
-  function renderScheduleStatus() {
-    clearTimeout(statusTimer);
-    if (!state) return;
-    const status = el('moon-schedule-status');
-    const start = state.startAt ? Date.parse(state.startAt) : null;
-    const end = state.endAt ? Date.parse(state.endAt) : null;
-    const now = (Number.isFinite(state.serverNow) ? state.serverNow : Date.now()) + performance.now() - receivedAt;
-    syncFeatureAvailability(now);
-    if (!Number.isFinite(start) || !Number.isFinite(end)) {
-      status.textContent = '目前不限時，OBS 持續顯示。';
-      return;
-    }
-    let next;
-    if (now < start) {
-      status.textContent = `尚未開始，將於 ${new Date(start).toLocaleString('zh-TW')} 自動顯示。`;
-      next = start;
-    } else if (now < end) {
-      status.textContent = `活動進行中，將於 ${new Date(end).toLocaleString('zh-TW')} 自動隱藏。`;
-      next = end;
-    } else {
-      status.textContent = '活動已結束，OBS 已自動隱藏；斗內紀錄仍保留。';
-    }
-    if (next) statusTimer = setTimeout(renderScheduleStatus, Math.max(1, Math.min(next - now + 20, 60000)));
   }
 
   function renderList() {
@@ -112,6 +68,11 @@
       meta.className = 'moon-donation-meta';
       const amount = document.createElement('span');
       amount.textContent = `NT$${nf.format(d.amount)}`;
+      const style = document.createElement('span');
+      style.className = 'moon-style-chip';
+      style.dataset.style = d.style;
+      style.textContent = STYLE_LABELS[d.style] || '';
+      style.title = d.styleAuto ? '依金額自動' : '手動指定';
       const time = document.createElement('span');
       time.className = 'sub';
       time.textContent = new Date(d.at).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
@@ -120,7 +81,7 @@
       remove.className = 'btn btn-sm btn-ghost';
       remove.textContent = '刪除';
       remove.addEventListener('click', () => removeDonation(d));
-      meta.append(amount, time, remove);
+      meta.append(style, amount, time, remove);
       li.append(label, meta);
       return li;
     }));
@@ -129,10 +90,8 @@
   function apply(next) {
     if (!next) return;
     state = next;
-    receivedAt = performance.now();
     renderSummary();
     renderConfig();
-    renderScheduleStatus();
     renderList();
   }
 
@@ -169,32 +128,26 @@
       const name = el('moon-add-name').value.trim();
       const amount = Number(el('moon-add-amount').value);
       if (!name || !(amount > 0)) { toast('請填寫名字與大於 0 的金額', 'error'); return; }
-      send('moon:donate', { name, amount }, () => {
+      send('moon:donate', { name, amount, style: el('moon-add-style').value || undefined }, () => {
         el('moon-add-name').value = '';
         el('moon-add-amount').value = '';
+        el('moon-add-style').value = '';
         el('moon-add-name').focus();
       });
     });
 
     const configForm = el('moon-config-form');
-    configForm.addEventListener('input', () => { configDirty = true; syncScheduleInputs(); });
+    configForm.addEventListener('input', () => { configDirty = true; });
     configForm.addEventListener('submit', (event) => {
       event.preventDefault();
-      const scheduled = el('moon-schedule-enabled').checked;
-      const start = scheduled ? new Date(el('moon-schedule-start').value) : null;
-      const end = scheduled ? new Date(el('moon-schedule-end').value) : null;
-      if (scheduled && (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start)) {
-        toast('請設定有效的開始與結束時間，結束須晚於開始', 'error');
-        return;
-      }
       configDirty = false;
       send('moon:config', {
         title: el('moon-config-title-input').value,
         doneText: el('moon-config-done-text').value,
         goal: Number(el('moon-config-goal').value),
         base: Number(el('moon-config-base').value),
-        startAt: scheduled ? start.toISOString() : null,
-        endAt: scheduled ? end.toISOString() : null,
+        tiers: Object.fromEntries([...document.querySelectorAll('[data-moon-tier]')]
+          .map((input) => [input.dataset.moonTier, Number(input.value)])),
       }, () => toast('活動設定已儲存', 'success'));
     });
 
@@ -225,14 +178,32 @@
       if (doc) doc.documentElement.style.colorScheme = getComputedStyle(document.documentElement).colorScheme || 'normal';
     });
     iframe.src = '/moon';
+    el('moon-preview-mode').addEventListener('change', (event) => {
+      iframe.src = `/moon${event.target.value}`;
+    });
+    el('moon-play-celebrate').addEventListener('click', () => {
+      SocketClient.sendWithCallback('moon:celebrate', null, (result) => {
+        if (result?.ok) toast('滿月慶祝播放中', 'success');
+      });
+    });
+    el('moon-play-credits').addEventListener('click', () => {
+      SocketClient.sendWithCallback('moon:credits', null, (result) => {
+        if (result?.ok) toast('謝幕名單開始播放', 'success');
+      });
+    });
     const frame = document.querySelector('.moon-preview-frame');
     if (frame && 'ResizeObserver' in window) new ResizeObserver(fitPreview).observe(frame);
   }
 
   SocketClient.on('moon:update', apply);
-  document.addEventListener('visibilitychange', renderScheduleStatus);
   SocketClient.on('connection-change', (connected) => {
-    if (connected) SocketClient.sendWithCallback('moon:get', null, (result) => apply(result?.state));
+    if (!connected) return;
+    SocketClient.sendWithCallback('moon:get', null, (result) => {
+      if (result?.inactive) { setAvailable(false); return; }
+      if (!result?.ok) return;
+      setAvailable(true);
+      apply(result.state);
+    });
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireUi);
