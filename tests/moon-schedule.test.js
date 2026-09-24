@@ -33,4 +33,5 @@ test('activity schedule is validated, preserved by older config updates, and sav
   assert.equal(moon.snapshot().startAt, null);
   assert.equal(moon.snapshot().endAt, null);
   assert.equal(moon.snapshot().donations.length, 1);
+  assert.equal(moon.saveNow(), true);
 });
