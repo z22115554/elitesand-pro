@@ -74,6 +74,9 @@ function sanitizeLyricTemplateSettings(value) {
       if (id === 'jizura' && out[id].jizuraPlacement && !['right', 'left', 'full'].includes(out[id].jizuraPlacement)) {
         delete out[id].jizuraPlacement;
       }
+      if (id === 'jizura' && out[id].jizuraMotion && !['smooth', 'koma'].includes(out[id].jizuraMotion)) {
+        delete out[id].jizuraMotion;
+      }
       if (id === 'columnflow' && out[id].columnflowMaxLines !== undefined) {
         if (!Number.isInteger(out[id].columnflowMaxLines) || out[id].columnflowMaxLines < 1 || out[id].columnflowMaxLines > 6) {
           delete out[id].columnflowMaxLines;

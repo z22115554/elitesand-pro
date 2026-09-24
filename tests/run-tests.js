@@ -10069,17 +10069,20 @@ test('文字PV（JIZURA）：版面白名單不可收進會整面蓋住主播的
     return new Set((body.match(/'(\w+)'/g) || []).map((x) => x.slice(1, -1)));
   };
   const land = list('SAFE_LAYOUTS_LANDSCAPE');
-  const port = list('SAFE_LAYOUTS_PORTRAIT');
   const quiet = list('QUIET_LAYOUTS');
   const COVER_LANDSCAPE = ['tile', 'subtitleBar', 'splitScreen', 'filmstrip', 'keycaps', 'dotMatrix', 'magazine', 'ransom', 'newspaper', 'cassette', 'polaroid', 'stampSheet', 'postcard', 'letterPaper', 'stationSign', 'noren', 'omikuji', 'shoji', 'warningLabel', 'magnets', 'bulbs', 'crossword', 'wordSearch', 'puzzle', 'wall', 'zipper', 'glitchGrid', 'mosaicTiles', 'contour'];
-  const COVER_PORTRAIT = ['subtitleBar', 'splitScreen', 'filmstrip', 'magazine', 'newspaper', 'bookSpine', 'polaroid', 'stampSheet', 'postcard', 'letterPaper', 'calendar', 'noren', 'omikuji', 'kakejiku', 'shoji', 'stickyNotes', 'flipCards', 'magnets', 'wordSearch', 'wall', 'zipper', 'glitchGrid', 'contour'];
-  ok(land.size > 50 && port.size > 50, '兩份白名單都應該解析得到: ');
+  ok(land.size > 50, '白名單應該解析得到: ');
+  ok(!src.includes('SAFE_LAYOUTS_PANEL') && !src.includes('SAFE_LAYOUTS_PORTRAIT'), '畫布一律全畫面 16:9，不可再有縮小畫布用的另一份白名單: ');
   COVER_LANDSCAPE.forEach((k) => ok(!land.has(k), `橫式白名單不可有會蓋滿畫面的 ${k}: `));
-  COVER_PORTRAIT.forEach((k) => ok(!port.has(k), `直式白名單不可有會蓋滿畫面的 ${k}: `));
-  ok(!land.has('shadowPlay') && !port.has('shadowPlay'), '影絵是不透明幕布，兩份都要排除: ');
-  quiet.forEach((k) => ok(land.has(k) && port.has(k), `安靜段落的 ${k} 必須兩種比例都安全: `));
+  ok(!land.has('shadowPlay'), '影絵是不透明幕布，要排除: ');
+  quiet.forEach((k) => ok(land.has(k), `安靜段落的 ${k} 必須在白名單內: `));
   ok(/flash: false/.test(src) && /bgSwitch: 0/.test(src), '不可開全畫面閃白，也不可切換 scheme（淺底 scheme 會變深色字）: ');
   ok(/transparent: true/.test(src) && /noTrans: true/.test(src), '必須用透明模式繪製、關掉整幀合成的轉場: ');
+  // 2026-09-24 實機回報：縮成窄欄時裝飾碰到畫布邊緣會切出硬邊界 → 偏左／偏右改成全畫面畫布＋鏡頭位移
+  ok(src.includes('function cutOffset') && src.includes('__jzOffset'), '偏左／偏右必須用逐 cut 的鏡頭位移，不可縮小畫布: ');
+  // 在播放幀裡量寬度，每換一個 cut 就頓一下 → 量測排在閒置時間
+  ok(src.includes('requestIdleCallback') && !src.includes('下一個 cut 的位移先量好'), '版面寬度量測必須排在閒置時間，不可在播放幀裡做: ');
+  ok(/const SMOOTH_KOMA = \d+;/.test(src) && src.includes("values: ['smooth', 'koma']"), '動作節奏要有流暢／作畫感兩種，流暢不可回到每幀全畫（實測掉幀）: ');
 });
 
 test('歌詞模板名稱：程式、i18n 與 README 必須是同一套', () => {

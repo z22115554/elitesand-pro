@@ -13,9 +13,11 @@
  * 直播疊加的限制（鐵則 #11、不可搶主播的戲）：
  *   - transparent 模式本來就不畫背景圖形（61 個 bg 自動排除）；HUD、轉場也關掉。
  *   - 只用白名單內的 layout：2026-09-24 逐一在透明模式畫一幀量不透明像素，覆蓋率
- *     ≤25% 才收（16:9 與 9:16 各量一次，數值不同）。字幕帯／障子／便箋這類會整面蓋住
- *     主播的版面一律不用。新增引擎版本時要重跑稽核再更新這兩份清單。
- *   - 預設放在右側直欄（9:16 構圖），避開站在畫面中間的 VTuber；可改左側或全畫面。
+ *     ≤25% 才收（全畫面 16:9 量）。字幕帯／障子／便箋這類會整面蓋住主播的版面一律不用。
+ *     新增引擎版本時要重跑稽核再更新清單。
+ *   - 預設偏右：畫布仍是全畫面（裝飾照常鋪滿），只把每個 cut 的內容往右推到不超出畫面為止，
+ *     避開站在畫面中間的 VTuber；可改偏左或置中（全畫面）。
+ *   - 動作預設每幀更新（流暢）；可改回引擎原本的 2 コマ打ち（每秒 12 張的作畫感）。
  *   - 文字色／強調色吃面板設定（--lyric-color／--lyric-color-active），並關掉引擎的
  *     scheme 切換——引擎的配色是「底色＋字色」一組，透明疊加時底色不存在，淺底 scheme
  *     會變成深色字壓在直播畫面上。
@@ -26,8 +28,8 @@
     return;
   }
 
-  // 覆蓋率 ≤25% 的 layout（見檔頭）。橫式＝全畫面 16:9，直式＝側欄 9:16。
-  // 影絵（shadowPlay）雖然過了覆蓋率門檻，本質是一塊不透明的深色幕布，縮進側欄後非常突兀，手動排除。
+  // 覆蓋率 ≤25% 的 layout（見檔頭）。畫布一律全畫面 16:9（偏左／偏右只移動歌詞本身，見 cutOffset）。
+  // 影絵（shadowPlay）雖然過了覆蓋率門檻，本質是一塊不透明的深色幕布，非常突兀，手動排除。
   const SAFE_LAYOUTS_LANDSCAPE = [
     'center', 'mixed', 'vcols', 'marquee', 'scatter', 'ring', 'wave', 'labels', 'condensed', 'type', 'diag',
     'circle', 'pill', 'lowerThird', 'corners', 'staircase', 'zigzag', 'arcTop', 'spiral', 'gridCells', 'dropCap',
@@ -38,18 +40,6 @@
     'halfVertical', 'curtain', 'equalizer', 'tape', 'headlineDeck', 'contents', 'footnote', 'proofread',
     'numbered', 'poster', 'swissGrid', 'dictionary', 'routeMap', 'tanzaku', 'kakejiku', 'priceTag', 'cylinder',
     'ribbon', 'pendulum', 'balloons', 'fisheye', 'origami', 'sliceStack', 'maskReveal', 'stencil',
-  ];
-  const SAFE_LAYOUTS_PORTRAIT = [
-    'center', 'mixed', 'vcols', 'marquee', 'scatter', 'ring', 'wave', 'huge', 'labels', 'condensed', 'type',
-    'diag', 'circle', 'stack', 'pill', 'lowerThird', 'corners', 'staircase', 'zigzag', 'arcTop', 'spiral',
-    'gridCells', 'dropCap', 'justified', 'frameBox', 'bubble', 'ticker', 'mirror', 'sideways', 'edgeFrame',
-    'perspective', 'hanko', 'genkou', 'quote', 'ruler', 'searchBar', 'chat', 'notification', 'ticket', 'rain',
-    'hanging', 'orbit', 'tunnel', 'wordCloud', 'bounceLine', 'elastic', 'crossBands', 'stickerBomb', 'neon',
-    'bubbles', 'flipBoard', 'credits', 'splitHalves', 'columnsBig', 'circleWords', 'depthStack', 'typeSpecimen',
-    'kanjiFocus', 'halfVertical', 'curtain', 'equalizer', 'headlineDeck', 'contents', 'footnote', 'proofread',
-    'numbered', 'poster', 'swissGrid', 'dictionary', 'chochin', 'routeMap', 'cylinder', 'accordion', 'flag',
-    'ribbon', 'pendulum', 'balloons', 'tiles', 'bulbs', 'ledScroll', 'puzzle', 'dominoes', 'burst',
-    'fisheye', 'origami', 'sliceStack', 'maskReveal', 'halftoneBig', 'stencil',
   ];
   // 安靜段落（主歌／前奏／尾奏）只用這幾個：字小、動作少、沒有貼紙或圖形板。
   // 縦倒し／大小縦組／大きな頭文字 實測字太大、太搶，不收。
@@ -70,6 +60,7 @@
   // 沒有段落分析的歌：整首用中間強度
   const DEFAULT_PROFILE = 'build';
   const INTENSITY_SCALE = { calm: 0.6, normal: 1, chaotic: 1.25 };
+  const SMOOTH_KOMA = 30;
 
   let rootEl = null;
   let canvas = null;
@@ -80,6 +71,8 @@
   let fontsReadyFor = '';
   let lastStepKey = '';
   let resizeHandler = null;
+  let lastDrawn = null; // 除錯用：最後一次實際畫的 cut
+  let lastDrawnT = 0;
 
   // ─── 小工具 ───
 
@@ -112,6 +105,135 @@
   function placement() {
     const v = document.body.dataset.jizuraPlacement;
     return v === 'left' || v === 'full' ? v : 'right';
+  }
+
+  // ─── 偏左／偏右：畫布維持全畫面，只把「這個 cut 的內容」整組往側邊推 ───
+  // 不縮小畫布：縮成窄欄時裝飾（光線、紙片、長線條）碰到畫布邊緣會被切出一條明顯的邊界
+  // （實機回報）。改用引擎的鏡頭位移（cam.x）把版面連同它附帶的框線／貼紙一起平移，
+  // 位移量逐 cut 決定：先在小畫布上畫一次量出內容實際的左右範圍，只推到不會超出畫面為止——
+  // 窄的版面推滿，橫跨整個畫面的版面（跑馬燈之類）少推或不推。
+  // 目標：內容中心對到畫面寬的 72%（偏右）／28%（偏左）。不是固定推 N%——版面本身可能就把字
+  // 放在另一側（例如靠左的印章版面），固定位移推完還在錯的那一邊。
+  const TARGET_CENTER = { 1: 0.72, '-1': 0.28 };
+  const EDGE_MARGIN = 0.03;      // 推完之後離畫面邊緣至少留 3%
+  let measuring = false;
+  let measureCtx = null;
+  let measureRenderer = null;
+
+  function sideSign() {
+    const m = placement();
+    return m === 'right' ? 1 : m === 'left' ? -1 : 0;
+  }
+
+  // 內容在設計座標裡的左右範圍與中心（取「進場完成後」與「cut 中段」兩個時間點）。
+  // 用每一欄的不透明像素量的分布來算（累積 3%～97% 當範圍、50% 當中心），不是最左／最右的
+  // 那個像素：吊牌版面的吊線、角落的小編號只佔很少像素，卻會把範圍撐成全寬、讓整句推不動。
+  function measureCutExtent(p, cut) {
+    if (!measureCtx) {
+      const c = document.createElement('canvas');
+      c.width = 192; c.height = 108;
+      measureCtx = c.getContext('2d', { willReadFrequently: true });
+      measureRenderer = new J.Renderer();
+    }
+    const scale = 192 / p.W;
+    // 進場完成後、還沒開始退場的那一刻量一次就夠（版面在停留期間不會大幅改變寬度）
+    const times = [cut.start + Math.min((cut.inDur || 0.3) + 0.2, cut.dur * 0.55)];
+    const mass = new Float64Array(192);
+    const savedFx = p.fx;
+    // 只量「版面＋歌詞」：裝飾常常橫跨大半個畫面，算進去幾乎每句都推不動。裝飾跟著鏡頭一起
+    // 平移，出了畫面邊緣就自然出畫——畫布是全畫面，不會有被切掉的硬邊界。
+    const savedDecor = cut.decor;
+    measuring = true;
+    try {
+      cut.decor = [];
+      if (cut.fx) p.fx = cut.fx;
+      for (const t of times) {
+        measureRenderer.frame(measureCtx, p, t, { scale, transparent: true, noHud: true, noTrans: true, noPost: true, noGhost: true, fast: true });
+        const d = measureCtx.getImageData(0, 0, 192, 108).data;
+        for (let x = 0; x < 192; x++) {
+          for (let y = 0; y < 108; y++) if (d[(y * 192 + x) * 4 + 3] > 30) mass[x] += 1;
+        }
+      }
+    } catch (e) {
+      return null;
+    } finally {
+      measuring = false;
+      p.fx = savedFx;
+      cut.decor = savedDecor;
+    }
+    let total = 0;
+    for (let x = 0; x < 192; x++) total += mass[x];
+    if (!total) return null;
+    const at = (q) => { let acc = 0; for (let x = 0; x < 192; x++) { acc += mass[x]; if (acc >= total * q) return x; } return 191; };
+    return { x0: at(0.03) / scale, x1: (at(0.97) + 1) / scale, center: (at(0.5) + 0.5) / scale };
+  }
+
+  function cutOffset(p, cut) {
+    const sign = sideSign();
+    if (!cut || !sign || measuring) return 0;
+    if (cut.__jzDx !== undefined) return cut.__jzDx;
+    const ext = measureCutExtent(p, cut);
+    let dx = 0;
+    if (ext) {
+      const center = ext.center;
+      const target = p.W * TARGET_CENTER[sign];
+      // 已經在目標那一側（比目標更靠邊）就不動，不往中間拉回
+      const alreadyThere = sign > 0 ? center >= target : center <= target;
+      if (!alreadyThere) {
+        const lo = p.W * EDGE_MARGIN - ext.x0;          // 左邊不可超出
+        const hi = p.W * (1 - EDGE_MARGIN) - ext.x1;    // 右邊不可超出
+        dx = Math.max(lo, Math.min(hi, target - center));
+        // 內容比可用寬度還寬時 lo > hi：往目標方向能推多少算多少，但不反向推
+        if (sign > 0) dx = Math.max(0, dx); else dx = Math.min(0, dx);
+      }
+    }
+    cut.__jzDx = dx;
+    return dx;
+  }
+
+  // 量測排在瀏覽器的閒置時間做，不佔播放中的幀（實測在播放幀裡量，每換一個 cut 就頓一下）：
+  // plan 建好就從目前播放位置開始，有空檔才量一個；播放追到還沒量的 cut 時才在當下補量。
+  let measureJob = 0;
+  function scheduleMeasure(p) {
+    const job = ++measureJob;
+    if (!sideSign() || !p) return;
+    const startIdx = Math.max(0, p.cuts.findIndex((c) => c.end > lastDrawnT));
+    const order = p.cuts.slice(startIdx).concat(p.cuts.slice(0, startIdx));
+    let i = 0;
+    const idle = (fn) => (typeof window.requestIdleCallback === 'function'
+      ? window.requestIdleCallback(fn, { timeout: 1000 })
+      : setTimeout(() => fn({ timeRemaining: () => 8, didTimeout: false }), 50));
+    const step = (deadline) => {
+      if (job !== measureJob || plan !== p) return;
+      let did = 0;
+      while (i < order.length && (did === 0 ? (deadline.didTimeout || deadline.timeRemaining() > 4) : deadline.timeRemaining() > 6)) {
+        const c = order[i++];
+        if (c.__jzDx === undefined) { cutOffset(p, c); did++; }
+      }
+      if (i < order.length) idle(step);
+    };
+    idle(step);
+  }
+
+  // 把位移接到引擎每個鏡頭的 get()（只包一次；只對帶 __jzOffset 的 plan 生效，引擎本身不改）
+  (function wrapCameras() {
+    for (const k of Object.keys(J.CAMERA)) {
+      const def = J.CAMERA[k];
+      if (!def || def.__jzWrapped) continue;
+      const orig = def.get;
+      def.get = function (env, P) {
+        const c = (orig ? orig.call(this, env, P) : null) || {};
+        const dx = env && env.plan && typeof env.plan.__jzOffset === 'function' ? env.plan.__jzOffset(env.cut) : 0;
+        return dx ? Object.assign({}, c, { x: (c.x || 0) + dx }) : c;
+      };
+      def.__jzWrapped = true;
+    }
+  }());
+
+  // 動作節奏：流暢＝每個顯示幀都更新動作；作畫感＝引擎原本的 2 コマ打ち（每秒 12 張），
+  // 日系文字 PV 刻意的頓挫。直播疊加預設流暢——實機回報「有點卡」就是這個頓挫。
+  function motionMode() {
+    return document.body.dataset.jizuraMotion === 'koma' ? 'koma' : 'smooth';
   }
 
   function intensityScale() {
@@ -163,8 +285,9 @@
   // ─── 規劃 ───
 
   function buildPlan(lines, meta) {
-    const portrait = placement() !== 'full';
-    const safe = new Set(portrait ? SAFE_LAYOUTS_PORTRAIT : SAFE_LAYOUTS_LANDSCAPE);
+    const aspect = '16:9';
+    const safe = new Set(SAFE_LAYOUTS_LANDSCAPE);
+    const koma = motionMode() === 'koma';
     const sections = meta && Array.isArray(meta.sections) && meta.sections.length ? meta.sections : null;
     const seed = hashString((meta && meta.id) || (lines[0] && lines[0].text) || 'elitesand');
     const style = pickStyle(seed);
@@ -206,10 +329,12 @@
         extra: true,
         wa: true,
         lang: 'auto',
-        aspect: portrait ? '9:16' : '16:9',
+        aspect,
         colors: { enabled: true, bg: '#101014', fg, accentOn: true, accent },
       });
       project.fx = Object.assign(J.defaultProject().fx, prof.fx, {
+        koma: koma ? (prof.fx.koma || 12) : SMOOTH_KOMA,
+        onTwos: koma && !!prof.fx.koma,
         motion: Math.min(1, prof.fx.motion * scale),
         glitch: Math.min(1, prof.fx.glitch * scale),
         decor: Math.min(1, prof.fx.decor * scale),
@@ -254,14 +379,16 @@
     cuts.sort((a, b) => a.start - b.start);
     cuts.forEach((c, i) => { c.index = i; });
     events.sort((a, b) => a.t - b.t);
-    return Object.assign({}, base, { cuts, events, hud: false, beats: [], energy: null });
+    const merged = Object.assign({}, base, { cuts, events, hud: false, beats: [], energy: null });
+    merged.__jzOffset = (cut) => cutOffset(merged, cut);
+    return merged;
   }
 
   function currentPlanKey(lines, meta) {
     const secs = meta && Array.isArray(meta.sections) ? meta.sections.length + ':' + (meta.sections[0] ? meta.sections[0].label : '') : '-';
     return [
       lines.length, lines[0] ? lines[0].time : 0, lines.length ? lines[lines.length - 1].time : 0,
-      meta ? meta.id : '', secs, placement(), document.body.dataset.lyricIntensity || '',
+      meta ? meta.id : '', secs, placement(), motionMode(), document.body.dataset.lyricIntensity || '',
       cssVar('--lyric-color', ''), cssVar('--lyric-color-active', ''),
     ].join('|');
   }
@@ -287,6 +414,7 @@
       console.warn('[文字PV] 規劃失敗:', e);
       plan = null;
     }
+    scheduleMeasure(plan);
     // 書體走 Google Fonts，只載入這首歌用到的字；載完重畫一次（載入前會先用系統字頂著）
     if (plan) {
       const text = lines.map((l) => l.text).join('') + ((meta && meta.title) || '') + '0123456789';
@@ -307,17 +435,11 @@
     const vw = rootEl.clientWidth || window.innerWidth || 1920;
     const vh = rootEl.clientHeight || window.innerHeight || 1080;
     const mode = placement();
-    let w; let h; let x; let y;
-    if (mode === 'full') {
-      w = Math.min(vw, vh * 16 / 9); h = w * 9 / 16;
-      x = (vw - w) / 2; y = (vh - h) / 2;
-    } else {
-      // 側欄：寬度不超過畫面 30%，高度不超過 94%，保持 9:16
-      w = Math.min(vw * 0.3, vh * 0.94 * 9 / 16); h = w * 16 / 9;
-      const margin = vw * 0.025;
-      x = mode === 'left' ? margin : vw - w - margin;
-      y = (vh - h) / 2;
-    }
+    // 畫布一律全畫面 16:9（偏左／偏右靠 cutOffset 移動內容，不縮畫布）
+    const w = Math.min(vw, vh * 16 / 9);
+    const h = w * 9 / 16;
+    const x = (vw - w) / 2;
+    const y = (vh - h) / 2;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.style.left = `${x}px`;
     canvas.style.top = `${y}px`;
@@ -348,6 +470,8 @@
     } catch (e) {
       console.warn('[文字PV] 繪製失敗:', e);
     }
+    lastDrawn = cut;
+    lastDrawnT = t;
   }
 
   LyricTemplates.register({
@@ -355,6 +479,7 @@
     label: '文字PV',
     settings: [
       { type: 'enum', key: 'jizuraPlacement', target: 'data:jizuraPlacement', values: ['right', 'left', 'full'], default: 'right' },
+      { type: 'enum', key: 'jizuraMotion', target: 'data:jizuraMotion', values: ['smooth', 'koma'], default: 'smooth' },
     ],
 
     mount(container, tctx) {
@@ -391,8 +516,15 @@
 
     // 除錯用（唯讀）：某時間點落在哪個 cut、用哪個 profile。開發時在 /display 的 console 呼叫
     // LyricTemplates.get('jizura').debugCutAt(秒)。
+    debugLastDrawn() {
+      const c = lastDrawn;
+      return c ? { layout: c.layout, enter: c.enter, exit: c.exit, hold: c.hold, treat: c.treat, cam: c.cam, decor: (c.decor || []).map((d) => d.id), start: c.start } : null;
+    },
+
     debugLayouts() {
-      return plan ? { placement: placement(), aspect: plan.W > plan.H ? '16:9' : '9:16', layouts: [...new Set(plan.cuts.map((c) => c.layout))] } : null;
+      if (!plan) return null;
+      const offs = plan.cuts.filter((c) => c.__jzDx !== undefined).map((c) => Math.round((c.__jzDx / plan.W) * 100));
+      return { placement: placement(), motion: motionMode(), W: plan.W, H: plan.H, layouts: [...new Set(plan.cuts.map((c) => c.layout))], offsetPercents: offs };
     },
 
     debugCutAt(tSec) {
@@ -402,6 +534,7 @@
       return {
         cuts: plan.cuts.length, text: c.text, layout: c.layout, enter: c.enter, exit: c.exit, treat: c.treat,
         start: +c.start.toFixed(2), end: +c.end.toFixed(2), motion: c.fx && c.fx.motion, koma: c.fx && c.fx.koma,
+        offsetPx: c.__jzDx === undefined ? null : Math.round(c.__jzDx),
       };
     },
 

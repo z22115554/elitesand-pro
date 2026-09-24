@@ -785,7 +785,7 @@
                 <button class="lyric-template-card" data-template="particle" type="button" role="radio" aria-checked="false" data-i18n-title="template.particleTitle" title="風息成字：粒子隨風聚成歌詞，字幕尺度、留安全邊距，可調直書與左右分散">
                   <span class="style-thumb-preview style-thumb-particle" aria-hidden="true"><span class="style-thumb-char">風</span></span><strong data-i18n="template.particle">風息成字</strong><span data-i18n="template.particleDesc">粒子聚字、字幕尺度</span>
                 </button>
-                <button class="lyric-template-card" data-template="jizura" type="button" role="radio" aria-checked="false" data-i18n-title="template.jizuraTitle" title="文字PV：日系文字 PV 風格，依段落自動編排版面與動作，預設放在側欄避開主播">
+                <button class="lyric-template-card" data-template="jizura" type="button" role="radio" aria-checked="false" data-i18n-title="template.jizuraTitle" title="文字PV：日系文字 PV 風格，依段落自動編排版面與動作，預設偏右避開主播">
                   <span class="style-thumb-preview style-thumb-jizura" aria-hidden="true"><span class="style-thumb-char">PV</span></span><strong data-i18n="template.jizura">文字PV</strong><span data-i18n="template.jizuraDesc">日系文字 PV、依段落編排</span>
                 </button>
               </div>
@@ -819,11 +819,19 @@
               <div class="field" id="jizura-placement-field" hidden>
                 <label data-i18n="jizura.placementLabel">版位</label>
                 <div class="style-thumb-row" id="jizura-placement-buttons">
-                  <button class="style-thumb active" data-jizura-placement="right" type="button" data-i18n-title="jizura.placementRightTitle" title="右側直欄：直式構圖放在畫面右側，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
-                  <button class="style-thumb" data-jizura-placement="left" type="button" data-i18n-title="jizura.placementLeftTitle" title="左側直欄：直式構圖放在畫面左側，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
-                  <button class="style-thumb" data-jizura-placement="full" type="button" data-i18n-title="jizura.placementFullTitle" title="全畫面：橫式構圖鋪滿整個畫面，歌詞可能壓到主播"><span class="style-thumb-preview"><span class="style-thumb-char">全</span></span><span class="style-thumb-label" data-i18n="jizura.placementFull">全畫面</span></button>
+                  <button class="style-thumb active" data-jizura-placement="right" type="button" data-i18n-title="jizura.placementRightTitle" title="偏右：裝飾維持全畫面，歌詞本身盡量往右放，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
+                  <button class="style-thumb" data-jizura-placement="left" type="button" data-i18n-title="jizura.placementLeftTitle" title="偏左：裝飾維持全畫面，歌詞本身盡量往左放，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
+                  <button class="style-thumb" data-jizura-placement="full" type="button" data-i18n-title="jizura.placementFullTitle" title="置中：歌詞照引擎原本的構圖放，常落在畫面正中、會壓到主播"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="jizura.placementFull">置中</span></button>
                 </div>
-                <p class="field-hint" data-i18n="jizura.placementHint">預設右側直欄。全畫面的版面比較有 PV 感，但歌詞常落在畫面正中，會壓到主播，也比較吃效能。</p>
+                <p class="field-hint" data-i18n="jizura.placementHint">預設偏右。裝飾效果一律鋪滿全畫面；歌詞會依每句版面的寬度盡量往側邊推，太寬的版面（例如跑馬燈）推不動就維持原位。</p>
+              </div>
+              <div class="field" id="jizura-motion-field" hidden>
+                <label data-i18n="jizura.motionLabel">動作節奏</label>
+                <div class="style-thumb-row" id="jizura-motion-buttons">
+                  <button class="style-thumb active" data-jizura-motion="smooth" type="button" data-i18n-title="jizura.motionSmoothTitle" title="流暢：每一幀都更新動作"><span class="style-thumb-preview"><span class="style-thumb-char">順</span></span><span class="style-thumb-label" data-i18n="jizura.motionSmooth">流暢</span></button>
+                  <button class="style-thumb" data-jizura-motion="koma" type="button" data-i18n-title="jizura.motionKomaTitle" title="作畫感：每秒 12 張的頓挫（日系文字 PV 常用的 2 コマ打ち）"><span class="style-thumb-preview"><span class="style-thumb-char">格</span></span><span class="style-thumb-label" data-i18n="jizura.motionKoma">作畫感</span></button>
+                </div>
+                <p class="field-hint" data-i18n="jizura.motionHint">作畫感是刻意的一格一格動（每秒 12 張），不是掉幀；想要滑順就選流暢。</p>
               </div>
               <div class="field" id="columnflow-max-lines-field" hidden>
                 <label><span data-i18n="columnflow.maxLinesLabel">同時保留句數</span> <span id="ls-columnflow-max-lines-val" class="val">4 句</span></label>
