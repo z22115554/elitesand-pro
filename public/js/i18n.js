@@ -1171,7 +1171,7 @@
     'template.jizura': ['文字PV', 'Lyric PV', '文字PV', '텍스트 PV', '文字PV'],
     'template.jizuraTitle': ['文字PV：日系文字 PV 風格，依段落自動編排版面與動作，預設偏右避開主播', 'Lyric PV: Japanese lyric-video style that plans layouts and motion per song section; sits to the right by default to keep clear of the streamer', '文字PV：日本の文字PV風に、セクションごとにレイアウトと動きを自動で組み立てます。既定では配信者を避けて右寄せで表示します', '텍스트 PV: 일본식 가사 PV 스타일로 섹션별 레이아웃과 동작을 자동 구성하며, 기본값은 스트리머를 피해 오른쪽에 표시합니다', '文字PV：日系文字 PV 风格，依段落自动编排版面与动作，默认偏右避开主播'],
     'template.jizuraDesc': ['日系文字 PV、依段落編排', 'Lyric-video style, section-aware', '文字PV風、セクション連動', '가사 PV 스타일, 섹션 연동', '日系文字 PV、依段落编排'],
-    'jizura.placementLabel': ['版位', 'Placement', '配置', '배치', '版位'],
+    'jizura.placementLabel': ['歌詞位置', 'Lyrics position', '歌詞の位置', '가사 위치', '歌词位置'],
     'jizura.placementRightTitle': ['偏右：裝飾維持全畫面，歌詞本身盡量往右放，避開站在中間的主播', 'Right: effects stay full-screen while the lyrics themselves shift right as far as they fit, clear of a streamer in the middle', '右寄せ：演出は全画面のまま、歌詞だけをできるだけ右へ寄せ、中央に立つ配信者を避けます', '오른쪽: 효과는 전체 화면 그대로, 가사만 최대한 오른쪽으로 옮겨 가운데 선 스트리머를 피합니다', '偏右：装饰维持全画面，歌词本身尽量往右放，避开站在中间的主播'],
     'jizura.placementLeftTitle': ['偏左：裝飾維持全畫面，歌詞本身盡量往左放，避開站在中間的主播', 'Left: effects stay full-screen while the lyrics themselves shift left as far as they fit, clear of a streamer in the middle', '左寄せ：演出は全画面のまま、歌詞だけをできるだけ左へ寄せ、中央に立つ配信者を避けます', '왼쪽: 효과는 전체 화면 그대로, 가사만 최대한 왼쪽으로 옮겨 가운데 선 스트리머를 피합니다', '偏左：装饰维持全画面，歌词本身尽量往左放，避开站在中间的主播'],
     'jizura.placementFullTitle': ['置中：歌詞照引擎原本的構圖放，常落在畫面正中、會壓到主播', 'Center: lyrics follow the original composition and often land mid-frame, over the streamer', '中央：歌詞は元の構図どおり配置され、画面中央に来て配信者に重なりがちです', '가운데: 가사가 원래 구도대로 배치되어 화면 가운데에 와서 스트리머를 가리기 쉽습니다', '居中：歌词照引擎原本的构图放，常落在画面正中、会压到主播'],
