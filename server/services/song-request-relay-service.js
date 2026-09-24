@@ -530,7 +530,7 @@ class SongRequestRelayService {
       log.info('公開點歌頁：這首歌已經有一筆待處理請求，忽略重複點歌');
       return;
     }
-    const entry = this.libraryStore.getEntry(catalogTrackId);
+    const entry = this._peekEntry(catalogTrackId);
     const request = {
       requestId: newRequestId(),
       catalogTrackId,
@@ -547,6 +547,14 @@ class SongRequestRelayService {
   }
 
   // ─── 內部：歌單快照 ───
+
+  // 目錄／點歌紀錄只用得到標題、歌手、長度、檔名；peekEntry 不讀歌詞檔，
+  // 公開整個媒體庫（最多數千首）時不會為了建目錄把每首歌詞都讀進來。
+  _peekEntry(id) {
+    return typeof this.libraryStore.peekEntry === 'function'
+      ? this.libraryStore.peekEntry(id)
+      : this.libraryStore.getEntry(id);
+  }
 
   _buildCatalog() {
     const allLibrary = this.state.publishedPlaylistId === ALL_CATALOG_PLAYLIST_ID;
@@ -568,7 +576,7 @@ class SongRequestRelayService {
     const tracks = [];
     for (const item of source) {
       if (tracks.length >= MAX_CATALOG_TRACKS) break;
-      const entry = allLibrary ? item : this.libraryStore.getEntry(item);
+      const entry = allLibrary ? item : this._peekEntry(item);
       if (!entry) continue;
       if (bgmIds.has(String(entry.id))) continue;
       // 只公開音檔還在本機、真的能立即排進佇列的歌，避免觀眾點到還要重新下載的項目。

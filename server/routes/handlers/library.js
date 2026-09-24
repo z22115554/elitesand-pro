@@ -189,7 +189,7 @@ function registerLibraryHandlers(io, socket, ctx, {
   socket.on('savedPlaylists:addTracks', (data, ack) => {
     // 只收媒體庫裡真的存在的 id，避免面板送來過期快取的 id 變成永遠載不出來的幽靈項目
     const trackIds = (Array.isArray(data?.trackIds) ? data.trackIds : [])
-      .filter((id) => libraryStore.getEntry(id));
+      .filter((id) => libraryStore.hasEntry(id));
     const result = savedPlaylists.addTracks(data?.id, trackIds);
     if (result.ok && result.added) broadcastSavedPlaylists();
     reply(ack, result);

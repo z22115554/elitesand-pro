@@ -2405,7 +2405,8 @@ test('八類資料檔：舊資料可載入且落盤後都有 schemaVersion', () 
     eq(result.twitchApi.refreshToken, 'fixture-refresh-token');
     eq(result.twitchRequests[0].requestId, 'fixture-request');
     eq(result.twitchHistory[0].requestCode, 'LEGACY1');
-    for (const [name, document] of Object.entries(result.files)) eq(document.schemaVersion, 1, `${name}: `);
+    // library.json 在 2026-09-23 升到 v2（歌詞分檔），其餘七類仍是 v1。
+    for (const [name, document] of Object.entries(result.files)) eq(document.schemaVersion, name === 'library.json' ? 2 : 1, `${name}: `);
     eq(result.files['library.json'].entries['legacy-track'].playCount, 2);
     ok(Array.isArray(result.files['lyrics-cache.json'].entries), '歌詞快取 entries 應保留: ');
     eq(result.files['announcement-state.json'].dismissed[0], 'fixture-announcement');
@@ -8131,6 +8132,101 @@ test('媒體庫超過 10000 首時優先保留播放清單與 currentTrack backi
   }
 });
 
+test('媒體庫歌詞分檔：舊版內嵌歌詞搬到獨立檔，只改 key／播放次數不重寫歌詞，移除歌曲會清掉歌詞檔', () => {
+  // 2026-09-23：2000 首時 library.json 約 42MB，每播一首／每調一次 key 就整份重寫、卡住
+  // server 約 0.5 秒。改成 library.json 只存中繼資料、歌詞每首一檔且內容有變才寫。
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-library-lyrics-split-'));
+  const libraryStorePath = path.join(__dirname, '..', 'server', 'services', 'library-store.js');
+  const runChild = (label, lines) => {
+    const child = spawnStateStore(process.execPath, ['-e', lines.join('\n'), libraryStorePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    eq(child.status, 0, `${label} child stderr=${child.stderr} stdout=${child.stdout}: `);
+    const marker = `__${label}__`;
+    const markerAt = child.stdout.lastIndexOf(marker);
+    ok(markerAt >= 0, `${label} child 缺少結果：${child.stdout}`);
+    return JSON.parse(child.stdout.slice(markerAt + marker.length).trim().split(/\r?\n/, 1)[0]);
+  };
+  const lyricsDir = path.join(dataDir, 'library-lyrics');
+  const lyricFiles = () => (fs.existsSync(lyricsDir) ? fs.readdirSync(lyricsDir).filter((n) => n.endsWith('.json')) : []);
+  try {
+    fs.writeFileSync(path.join(dataDir, 'library.json'), JSON.stringify({
+      schemaVersion: 1,
+      entries: {
+        a: { id: 'a', title: 'A', filename: 'a.mp3', playCount: 1, lastPlayed: 1, lyrics: '[00:01.00]甲', lyricsType: 'lrc', parsedLyrics: [{ time: 1000, text: '甲' }] },
+        b: { id: 'b', title: 'B', filename: 'b.mp3', playCount: 1, lastPlayed: 1, lyrics: '[00:02.00]乙', lyricsType: 'lrc', parsedLyrics: [{ time: 2000, text: '乙' }] },
+        c: { id: 'c', title: 'C', filename: 'c.mp3', playCount: 1, lastPlayed: 1 },
+      },
+    }), 'utf8');
+
+    // 第一次啟動：v1 → v2，內嵌歌詞搬出去。
+    const migrated = runChild('MIGRATE', [
+      "const store=require(process.argv[1]);",
+      "const a=store.getEntry('a'); const ok=store.saveNow();",
+      "process.stdout.write('__MIGRATE__'+JSON.stringify({ok,durable:store.isEntryDurable('a'),text:a.parsedLyrics[0].text})+'\\n');",
+    ]);
+    eq(migrated.ok, true, '遷移後的第一次存檔要成功: ');
+    eq(migrated.text, '甲');
+    eq(migrated.durable, true, '歌詞檔與精簡 library.json 都落盤後 entry 必須是 durable（state.json 才能省略歌詞）: ');
+    const slim = JSON.parse(fs.readFileSync(path.join(dataDir, 'library.json'), 'utf8'));
+    eq(slim.schemaVersion, 2);
+    for (const entry of Object.values(slim.entries)) {
+      ok(!('lyrics' in entry) && !('parsedLyrics' in entry), `library.json 不可再內嵌歌詞（${entry.id}）: `);
+    }
+    eq(slim.entries.a.lyricsType, 'lrc', 'lyricsType 等中繼資料要留在 library.json: ');
+    eq(lyricFiles().length, 2, '有歌詞的兩首各一個檔，沒歌詞的那首不建檔: ');
+    ok(fs.readdirSync(dataDir).some((n) => n.startsWith('library.json.pre-migration')), '內嵌歌詞的舊檔要保留成遷移前備份: ');
+
+    // 在歌詞檔裡塞一個記號：之後若被重寫，記號就會消失。
+    const stamp = () => {
+      for (const name of lyricFiles()) {
+        const file = path.join(lyricsDir, name);
+        const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+        doc.untouchedMarker = true;
+        fs.writeFileSync(file, JSON.stringify(doc), 'utf8');
+      }
+    };
+    const fileFor = (id) => lyricFiles().map((n) => JSON.parse(fs.readFileSync(path.join(lyricsDir, n), 'utf8'))).find((d) => d.id === id);
+    stamp();
+
+    // 第二次啟動：只改 key、再播一次（payload 沒帶歌詞）→ 歌詞檔一個字都不能動。
+    const meta = runChild('META', [
+      "const store=require(process.argv[1]);",
+      "store.updateMeta('a',{pitchShift:3});",
+      "store.recordPlay({id:'b',title:'B',filename:'b.mp3'});",
+      "const ok=store.saveNow();",
+      "const a=store.getEntry('a'); const b=store.getEntry('b');",
+      "process.stdout.write('__META__'+JSON.stringify({ok,pitch:a.pitchShift,aText:a.parsedLyrics&&a.parsedLyrics[0].text,bText:b.parsedLyrics&&b.parsedLyrics[0].text,bPlays:b.playCount})+'\\n');",
+    ]);
+    eq(meta.ok, true);
+    eq(meta.pitch, 3);
+    eq(meta.aText, '甲', '只改 key 之後重新讀取，歌詞仍要完整: ');
+    eq(meta.bText, '乙', 'play:track payload 沒帶歌詞時要沿用既有歌詞，不可被清空: ');
+    eq(meta.bPlays, 2);
+    eq(fileFor('a').untouchedMarker, true, '只改 key 不可重寫歌詞檔: ');
+    eq(fileFor('b').untouchedMarker, true, '歌詞沒變的重播不可重寫歌詞檔: ');
+
+    // 第三次啟動：歌詞真的變了才寫；移除歌曲要連歌詞檔一起清掉。
+    const change = runChild('CHANGE', [
+      "const store=require(process.argv[1]);",
+      "store.updateMeta('a',{parsedLyrics:[{time:1000,text:'甲改'}]});",
+      "store.remove('b');",
+      "const ok=store.saveNow();",
+      "const a=store.getEntry('a');",
+      "process.stdout.write('__CHANGE__'+JSON.stringify({ok,lyrics:a.lyrics,text:a.parsedLyrics[0].text,hasB:store.hasEntry('b')})+'\\n');",
+    ]);
+    eq(change.ok, true);
+    eq(change.text, '甲改');
+    eq(change.lyrics, '[00:01.00]甲', '只補 parsedLyrics 時，原本的 lyrics 字串不可遺失: ');
+    eq(change.hasB, false);
+    eq(fileFor('a').untouchedMarker, undefined, '歌詞內容變了必須重寫歌詞檔: ');
+    eq(fileFor('a').parsedLyrics[0].text, '甲改');
+    eq(fileFor('b'), undefined, '從媒體庫移除的歌，歌詞檔也要刪掉: ');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('媒體清理以歌曲資產群組處理：播放中三軌與分離中來源保留，孤兒 stem metadata 同步修復', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-asset-cleanup-'));
   const downloadsDir = path.join(dataDir, 'downloads');
@@ -9206,6 +9302,7 @@ test('儲存歌單 socket：只收媒體庫存在的 id、變更才廣播給控�
   const originalRemove = libraryStore.remove;
   const originalClear = libraryStore.clear;
   const originalGetEntry = libraryStore.getEntry;
+  const originalHasEntry = libraryStore.hasEntry;
   const events = new Map();
   const broadcasts = [];
   const io = { to() { return { emit(event, data) { broadcasts.push({ event, data }); } }; }, sockets: { sockets: new Map() } };
@@ -9214,6 +9311,7 @@ test('儲存歌單 socket：只收媒體庫存在的 id、變更才廣播給控�
   try {
     const knownIds = new Set(['lib-a', 'lib-b']);
     libraryStore.getEntry = (id) => (knownIds.has(String(id)) ? { id: String(id), title: id } : null);
+    libraryStore.hasEntry = (id) => knownIds.has(String(id));
     libraryStore.remove = (id) => knownIds.delete(String(id));
     libraryStore.clear = () => { knownIds.clear(); return true; };
     registerLibraryHandlers(io, socket, { playState: { playlist: [], currentTrack: null }, persistState: () => persisted.push(1) });
@@ -9253,6 +9351,7 @@ test('儲存歌單 socket：只收媒體庫存在的 id、變更才廣播給控�
     libraryStore.remove = originalRemove;
     libraryStore.clear = originalClear;
     libraryStore.getEntry = originalGetEntry;
+    libraryStore.hasEntry = originalHasEntry;
     for (const p of savedPlaylists.list()) if (!before.includes(p.id)) savedPlaylists.remove(p.id);
     savedPlaylists.saveNow();
   }
@@ -9384,6 +9483,7 @@ test('BGM socket：開關走 io.emit 廣播給所有端（含手機遙控器）�
   const libraryStore = require('../server/services/library-store');
   const before = bgmPlaylist.list();
   const originalGetEntry = libraryStore.getEntry;
+  const originalHasEntry = libraryStore.hasEntry;
   const originalLookup = libraryStore.getAudioExistsLookup;
   const broadcasts = [];
   const io = { emit(event, data) { broadcasts.push({ event, data }); } };
@@ -9392,6 +9492,7 @@ test('BGM socket：開關走 io.emit 廣播給所有端（含手機遙控器）�
   const ctx = { playState, persistState: () => persisted.push(1) };
   try {
     libraryStore.getEntry = (id) => (id === 'lib-a' ? { id, title: 'A', filename: 'a.mp3' } : null);
+    libraryStore.hasEntry = (id) => id === 'lib-a';
     libraryStore.getAudioExistsLookup = () => (() => true);
 
     // 桌面面板：開關 + 清單管理都能用
@@ -9430,6 +9531,7 @@ test('BGM socket：開關走 io.emit 廣播給所有端（含手機遙控器）�
     ok(ack.ok && !playState.bgmSettings.enabled && !playState.bgmSettings.playing, '手機遙控器可以關閉 BGM，且連帶清掉播放狀態: ');
   } finally {
     libraryStore.getEntry = originalGetEntry;
+    libraryStore.hasEntry = originalHasEntry;
     libraryStore.getAudioExistsLookup = originalLookup;
     for (const id of bgmPlaylist.list()) bgmPlaylist.removeTracks([id]);
     for (const id of before) bgmPlaylist.addTracks([id]);

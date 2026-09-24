@@ -1563,7 +1563,7 @@ class AudioProcessor {
       // 同一首歌重新匯入（原檔名就等於候選）不算碰撞，讓它就地更新同一筆。
       if (`${base}${ext}` === originalFilename) return false;
       if (fs.existsSync(path.join(outputDir, `${base}${ext}`))) return true;
-      if (libraryStore && libraryStore.getEntry && libraryStore.getEntry(base)) return true;
+      if (libraryStore && libraryStore.hasEntry && libraryStore.hasEntry(base)) return true;
       return false;
     };
 

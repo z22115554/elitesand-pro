@@ -38,7 +38,7 @@ async function applyCommunityOffsetSuggestion(ctx, io, track) {
 function syncNamesToLibrary(tracks) {
   for (const track of tracks) {
     if (!track || !track.id) continue;
-    const entry = libraryStore.getEntry(track.id);
+    const entry = libraryStore.peekEntry(track.id); // 只比對名稱，不必讀歌詞檔
     if (!entry) continue;
     const artist = track.artist || '';
     if (entry.title !== track.title || (entry.artist || '') !== artist || entry.performer !== track.performer) {

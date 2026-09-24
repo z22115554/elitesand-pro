@@ -8,6 +8,13 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
 
+// 同 run-tests.js：setlist handler 經由 app-state 會在載入時讀寫 library.json／state.json，
+// 必須在載入任一 server 模組前就指到隔離目錄，否則會改到開發機的正式 data/。
+const TEST_RUNTIME_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-issues-15-18-runtime-'));
+process.env.ELITESAND_DATA_DIR = path.join(TEST_RUNTIME_ROOT, 'data');
+process.env.ELITESAND_DOWNLOADS_DIR = path.join(TEST_RUNTIME_ROOT, 'downloads');
+process.env.ELITESAND_LOGS_DIR = path.join(TEST_RUNTIME_ROOT, 'logs');
+
 const ffmpegProvider = require('../server/services/ffmpeg-provider');
 const aiRuntimeProvider = require('../server/services/ai-runtime-provider');
 const updaterRunner = require('../server/services/app-updater-runner-v2');

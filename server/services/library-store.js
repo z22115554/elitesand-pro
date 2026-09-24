@@ -1,18 +1,35 @@
 /**
- * 媒體庫（歷史歌曲）持久化：data/library.json
+ * 媒體庫（歷史歌曲）持久化：data/library.json + data/library-lyrics/
  * - 記錄唱過的歌（以 track.id 為鍵）+ 播放次數 + 最後播放時間 + YouTube 網址
  * - 用 YT 網址重匯入比保留 MP3 省空間；音檔可清理，庫保留即可重抓
  * - 純檔案、debounce 寫入，任何錯誤都靜默降級不影響主流程
+ *
+ * 歌詞分檔（schema v2，2026-09-23）：歌詞（lyrics/parsedLyrics/manualLyrics）佔媒體庫
+ * 體積 97% 以上，平均每首約 21KB；2000 首時 library.json 約 42MB，而每播一首歌
+ * （recordPlay）、每調一次 key（updateMeta）都會在 2 秒後整份重寫，實測同步卡住
+ * server 約 0.5 秒。現在 library.json 只存中繼資料，歌詞改存 library-lyrics/ 下
+ * 每首一個檔，而且只有內容真的變了才寫。
+ *
+ * 記憶體中的 entry 形狀不變（呼叫端完全不用知道分檔這件事），差別只在歌詞是否已載入：
+ * - `_hydrated` 裡的 entry：記憶體中的歌詞欄位就是權威值，存檔時會比對後寫出。
+ * - 不在 `_hydrated` 的 entry：歌詞還在磁碟上沒讀進來，記憶體裡沒有歌詞欄位；
+ *   存檔時絕不能拿它的「空歌詞」去覆寫磁碟檔。
+ * 所有會改動 entry 的路徑（recordPlay/rememberImport/updateMeta）都先 hydrate 再改，
+ * getEntry() 也會 hydrate，所以呼叫端拿到的永遠是完整資料。只需要中繼資料的熱路徑
+ * （點歌目錄、存在性檢查）改用 peekEntry()/hasEntry()，避免無謂讀檔。
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { createLogger } = require('../utils/logger');
-const { createJsonStore } = require('./json-store');
+const { createJsonStore, atomicWrite } = require('./json-store');
 const log = createLogger('Library');
 const { sanitizeTrack } = require('../utils/track-schema');
 
 const { dataDir: DATA_DIR, downloadsDir: DOWNLOADS_DIR } = require('../utils/app-paths');
 const LIBRARY_FILE = path.join(DATA_DIR, 'library.json');
+const LYRICS_DIR = path.join(DATA_DIR, 'library-lyrics');
+const LYRIC_FIELDS = ['lyrics', 'parsedLyrics', 'manualLyrics'];
 const MAX_ENTRIES = 10000; // 高安全上限；實際容量主要受媒體磁碟空間限制
 // state:sync 會在每次操作後重建整份播放清單。以目錄快照取代每首
 // fs.existsSync，可把 2000 首歌的同步 I/O 壓成短暫快取期內至多一次 readdirSync。
@@ -30,13 +47,138 @@ let _audioSnapshot = { checkedAt: 0, files: new Set() };
 // library.json 寫入成功前都列為 dirty，避免 library 2s debounce 與 state 800ms
 // debounce 之間的斷電窗口讓播放清單只剩 reference、卻沒有可重建的完整資料。
 const _dirtyEntryIds = new Set();
+// 歌詞分檔狀態（見檔頭說明）
+const _hydrated = new Set();          // 記憶體歌詞欄位為權威值的 entry id
+const _lyricsCheck = new Set();       // 下次存檔要比對歌詞是否需要寫出的 entry id
+const _lyricsDigest = new Map();      // id → 磁碟上那份歌詞的雜湊（用來判斷「真的有變」）
+const _pendingLyricDeletes = new Set(); // 已從媒體庫移除、等 library.json 落盤後才刪歌詞檔的 id
+
+function stripLyrics(entry) {
+  if (!entry || typeof entry !== 'object') return entry;
+  const slim = { ...entry };
+  for (const field of LYRIC_FIELDS) delete slim[field];
+  return slim;
+}
+
+function hasInlineLyrics(entry) {
+  return !!entry && LYRIC_FIELDS.some((field) => entry[field] !== undefined && entry[field] !== null);
+}
+
+// id 可能含 Windows 檔名不允許的字元，一律雜湊成固定長度檔名。
+function lyricsFileFor(id) {
+  return path.join(LYRICS_DIR, `${crypto.createHash('sha256').update(String(id)).digest('hex').slice(0, 40)}.json`);
+}
+
+function lyricsBlob(entry) {
+  const blob = {};
+  for (const field of LYRIC_FIELDS) blob[field] = entry && entry[field] !== undefined ? entry[field] : null;
+  return blob;
+}
+
+function digestOf(blob) {
+  return crypto.createHash('sha1').update(JSON.stringify(blob)).digest('hex');
+}
+
+const EMPTY_LYRICS_DIGEST = digestOf(lyricsBlob(null));
+
+/** 把磁碟上的歌詞讀回記憶體 entry。讀不到（檔案損毀）就維持未 hydrate，存檔時不碰那個檔。 */
+function hydrate(id) {
+  id = String(id);
+  const entry = library[id];
+  if (!entry || _hydrated.has(id)) return;
+  const file = lyricsFileFor(id);
+  if (!fs.existsSync(file)) {
+    // 沒有歌詞檔＝這首本來就沒有歌詞（或是剛建立的新 entry），記憶體值即權威。
+    _hydrated.add(id);
+    _lyricsDigest.set(id, EMPTY_LYRICS_DIGEST);
+    return;
+  }
+  try {
+    const document = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!document || String(document.id) !== id) throw new Error('歌詞檔 id 不符');
+    const blob = lyricsBlob(document);
+    library[id] = { ...entry, ...blob };
+    _lyricsDigest.set(id, digestOf(blob));
+    _hydrated.add(id);
+  } catch (err) {
+    log.warn(`媒體庫歌詞檔讀取失敗（保留原檔，不覆寫）id=${id}: ${err.message}`);
+  }
+}
+
+/**
+ * 把有變動的歌詞寫到各自的檔案。必須在 library.json 落盤「之前」呼叫：
+ * library.json 一旦寫成精簡版，歌詞就只剩這些檔案，順序反過來會有斷電窗口。
+ * 寫完後把 entry 換成精簡版（換新物件、不改舊物件，呼叫端手上的舊參照仍完整），
+ * 下次有人需要時再 hydrate，讓 2000 首的歌詞不必一直常駐記憶體。
+ */
+function flushLyrics() {
+  const written = [];
+  for (const id of _lyricsCheck) {
+    const entry = library[id];
+    if (!entry || !_hydrated.has(id)) continue;
+    const blob = lyricsBlob(entry);
+    const digest = digestOf(blob);
+    if (_lyricsDigest.get(id) !== digest) {
+      const file = lyricsFileFor(id);
+      if (digest === EMPTY_LYRICS_DIGEST) {
+        try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (err) {
+          throw new Error(`無法移除空歌詞檔 id=${id}: ${err.message}`);
+        }
+      } else {
+        atomicWrite(file, { id, ...blob });
+      }
+      _lyricsDigest.set(id, digest);
+    }
+    written.push(id);
+  }
+  return written;
+}
+
+function dehydrate(ids) {
+  for (const id of ids) {
+    if (!library[id] || !_hydrated.has(id)) continue;
+    library[id] = stripLyrics(library[id]);
+    _hydrated.delete(id);
+  }
+}
+
+function deletePendingLyricFiles() {
+  for (const id of _pendingLyricDeletes) {
+    if (library[id]) continue; // 刪除後又被重新匯入，檔案屬於新 entry
+    try {
+      const file = lyricsFileFor(id);
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    } catch (err) {
+      log.warn(`媒體庫歌詞檔刪除失敗 id=${id}: ${err.message}`);
+    }
+    _lyricsDigest.delete(id);
+  }
+  _pendingLyricDeletes.clear();
+}
+
+function forgetLyricsState(id) {
+  _hydrated.delete(id);
+  _lyricsCheck.delete(id);
+  _pendingLyricDeletes.add(id);
+}
 
 const libraryDiskStore = createJsonStore({
   file: LIBRARY_FILE,
   label: '媒體庫',
+  schemaVersion: 2,
   defaultValue: () => ({}),
-  migrations: new Map([[0, (legacy) => ({ schemaVersion: 1, entries: legacy })]]),
-  serialize: (entries) => ({ entries }),
+  migrations: new Map([
+    [0, (legacy) => ({ schemaVersion: 1, entries: legacy })],
+    // v1→v2 只換版本號；內嵌在 entry 裡的歌詞由 load() 認出來、下一次存檔時搬進
+    // library-lyrics/。原本那份內嵌歌詞的 v1 檔由 json-store 保留成 .pre-migration 備份。
+    // 版本號要升：舊版程式讀到精簡版會以為歌曲都沒有歌詞，升版後舊版會拒絕寫入而不是誤用。
+    [1, (document) => ({ ...document, schemaVersion: 2 })],
+  ]),
+  serialize: (entries) => {
+    const slim = {};
+    for (const [id, entry] of Object.entries(entries)) slim[id] = stripLyrics(entry);
+    return { entries: slim };
+  },
   deserialize: (document) => document.entries,
   validate: (document) => document.entries && typeof document.entries === 'object' && !Array.isArray(document.entries),
   logger: log,
@@ -46,7 +188,20 @@ const libraryDiskStore = createJsonStore({
 (function load() {
   library = libraryDiskStore.load() || {};
   _entryCount = Object.keys(library).length;
+  // 舊版（v1）媒體庫的歌詞內嵌在 entry 裡：這些值就是權威值，標成已 hydrate 並排進
+  // 下一次存檔搬到分檔。搬完之前 library.json 仍保有內嵌歌詞，所以一直都是 durable。
+  let inline = 0;
+  for (const [id, entry] of Object.entries(library)) {
+    if (!hasInlineLyrics(entry)) continue;
+    _hydrated.add(id);
+    _lyricsCheck.add(id);
+    inline++;
+  }
   log.info(`媒體庫已載入: ${_entryCount} 首`);
+  if (inline) {
+    log.info(`媒體庫有 ${inline} 首內嵌歌詞，稍後搬到獨立歌詞檔`);
+    scheduleSave();
+  }
 })();
 
 function scheduleSave() {
@@ -104,10 +259,16 @@ function saveNow() {
       for (const id of keepIds) keep[id] = library[id];
       library = keep;
       _entryCount = keepIds.length;
+      evictedIds.forEach(forgetLyricsState);
     }
     const hadDirtyEntries = _dirtyEntryIds.size > 0;
+    // 歌詞檔先落盤，library.json（精簡版）後落盤；歌詞寫失敗就整次放棄、entry 維持 dirty。
+    const lyricIds = flushLyrics();
     const saved = libraryDiskStore.save(library);
     if (saved) {
+      _lyricsCheck.clear();
+      dehydrate(lyricIds);
+      deletePendingLyricFiles();
       _dirtyEntryIds.clear();
       // state 在 library 落盤前會刻意保留 full fallback。當 library 變 durable 後主動
       // 排一次 state compact，否則「最後一次匯入」可能讓 state.json 永久停在肥版直到
@@ -152,6 +313,7 @@ function recordPlay(track) {
   track = sanitizeTrack(track);
   if (!track || !track.id) return;
   const id = String(track.id);
+  hydrate(id); // 下面大量 fallback 到 prev 的歌詞，必須先確保 prev 是完整的
   const prev = library[id];
   if (!prev) _entryCount++;
   const pick = (a, b) => (a !== undefined && a !== null && a !== '' ? a : b);
@@ -200,14 +362,36 @@ function recordPlay(track) {
     playCount: (prev ? prev.playCount : 0) + 1,
     lastPlayed: Date.now(),
   };
+  markLyricsTouched(id);
   markDirty(id);
   scheduleSave();
+}
+
+// entry 已 hydrate 並被改寫：記憶體歌詞是權威值，存檔時比對雜湊決定要不要寫歌詞檔。
+// 只改 key/播放次數這類中繼資料時雜湊不變，就不會重寫歌詞檔。
+function markLyricsTouched(id) {
+  id = String(id);
+  if (_pendingLyricDeletes.has(id)) {
+    // 同一首在存檔前被移除又重新加入：磁碟上那份是舊 entry 的歌詞，新 entry 的記憶體值
+    // 才是權威。用不會跟任何內容相符的雜湊強迫下一次存檔覆寫（或刪掉）舊檔。
+    _pendingLyricDeletes.delete(id);
+    _lyricsDigest.set(id, 'stale');
+    _hydrated.add(id);
+    _lyricsCheck.add(id);
+    return;
+  }
+  // 唯一會走到「未 hydrate」的情況是歌詞檔損毀讀不到：這時若記憶體也沒有歌詞，
+  // 不能拿空值宣稱權威去覆蓋那個檔（留著還有機會手動救回）。
+  if (!_hydrated.has(id) && !hasInlineLyrics(library[id])) return;
+  _hydrated.add(id);
+  _lyricsCheck.add(id);
 }
 
 /** 匯入完成即保存 video ID 對應資料，讓尚未播放的重複匯入也能命中。 */
 function rememberImport(track) {
   track = sanitizeTrack(track);
   if (!track || !track.id) return;
+  hydrate(track.id);
   const prev = library[String(track.id)] || {};
   if (!library[String(track.id)]) _entryCount++;
   library[String(track.id)] = {
@@ -227,6 +411,7 @@ function rememberImport(track) {
     sectionsStatus: (track.sectionsStatus && track.sectionsStatus !== 'none')
       ? track.sectionsStatus : (prev.sectionsStatus || 'none'),
   };
+  markLyricsTouched(track.id);
   markDirty(track.id);
   // 匯入流程走到這裡代表音檔已完成落地；不必等下一次目錄掃描才讓 UI 顯示可播放。
   noteAudioSnapshot(track.filename, true);
@@ -237,17 +422,36 @@ function rememberImport(track) {
 function updateMeta(id, partial) {
   if (!id || !partial || typeof partial !== 'object') return;
   id = String(id);
-  const prev = library[id];
-  if (!prev) return; // 只更新已存在的記錄（避免無中生有）
-  library[id] = { ...prev, ...partial };
+  if (!library[id]) return; // 只更新已存在的記錄（避免無中生有）
+  // 只改中繼資料（調 key、改名）時不必讀歌詞檔：未 hydrate 的 entry 直接改，
+  // 存檔時不會碰它的歌詞檔。partial 若帶歌詞欄位（例如羅馬化補 parsedLyrics），
+  // 才先 hydrate，讓沒被 partial 蓋到的其他歌詞欄位保持完整。
+  const touchesLyrics = LYRIC_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(partial, field));
+  if (touchesLyrics) hydrate(id);
+  library[id] = { ...library[id], ...partial };
+  if (touchesLyrics || _hydrated.has(id)) markLyricsTouched(id);
   markDirty(id);
   scheduleSave();
 }
 
-/** 取得單筆記錄（含歌詞/檔名/變調），供從媒體庫即時還原。 */
+/** 取得單筆記錄（含歌詞/檔名/變調），供從媒體庫即時還原。需要時會從磁碟讀回歌詞。 */
 function getEntry(id) {
   if (!id) return null;
+  hydrate(id);
   return library[String(id)] || null;
+}
+
+/**
+ * 只取中繼資料（標題、檔名、網址、狀態…），不讀歌詞檔；歌詞欄位可能不存在。
+ * 給一次要掃很多首、又用不到歌詞的路徑用（點歌目錄、改名同步）。
+ */
+function peekEntry(id) {
+  if (!id) return null;
+  return library[String(id)] || null;
+}
+
+function hasEntry(id) {
+  return !!id && Object.prototype.hasOwnProperty.call(library, String(id));
 }
 
 // 同一首歌被不同 YouTube 上傳各匯入一次時，videoId 不同、rememberImport() 的 dedupe
@@ -385,6 +589,7 @@ function remove(id) {
       return false;
     }
     delete library[id];
+    forgetLyricsState(id);
     _entryCount = Math.max(0, _entryCount - 1);
     _dirtyEntryIds.delete(id);
     scheduleSave();
@@ -403,6 +608,7 @@ function clear() {
     return false;
   }
   library = {};
+  ids.forEach(forgetLyricsState);
   _entryCount = 0;
   _dirtyEntryIds.clear();
   scheduleSave();
@@ -470,7 +676,7 @@ process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { sav
 
 function setErrorReporter(fn) { _errorReporter = typeof fn === 'function' ? fn : null; }
 module.exports = {
-  recordPlay, rememberImport, updateMeta, getEntry, findByIdentity,
+  recordPlay, rememberImport, updateMeta, getEntry, peekEntry, hasEntry, findByIdentity,
   audioExists, audioStatus, getAudioExistsLookup, resetAudioStatusCache,
   getLibrary, getLibrarySummary, toLibrarySummary,
   collectMediaFilenames, getProcessingMediaFilenames,
