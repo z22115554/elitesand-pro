@@ -8,7 +8,8 @@
  * Vendored for Elitesand Pro's 文字PV lyric template. This file is the plain
  * concatenation of upstream src/*.js in filename order, EXCLUDING 11_export.js
  * (MP4/PNG export, needs mp4-muxer) and 12_ui.js (the upstream editor UI).
- * No upstream code is modified here; Elitesand-specific behaviour lives in
+ * Upstream code is unmodified except for performance-only changes marked
+ * "Elitesand Pro:"; Elitesand-specific behaviour lives in
  * public/js/lyric-template-jizura.js.
  */
 /* ---- src/01_util.js ---- */
@@ -251,6 +252,10 @@ J.fontCSS = (key, px) => {
   const f = J.faceOf ? J.faceOf(key) : (J.FONTS[key] || J.FONTS.gothic_bold);   // per-language face (02b_lang.js)
   return `${f.weight} ${px.toFixed(2)}px ${f.family},${f.fb}`;
 };
+/* Elitesand Pro: canvas re-resolves the whole font (fallback chain, glyph strike) for every px size it has not seen,
+   so a size animated frame by frame costs 3-8 ms per fillText (measured) against ~0.005 ms for a repeated size.
+   Draw calls snap the font to a 1/24-octave ladder (at most 1.5% off) and make up the rest with a scale transform. */
+J.fontPx = px => (px > 0 ? Math.pow(2, Math.round(Math.log2(px) * 24) / 24) : px);
 
 /* Google Fonts stylesheets are attached lazily, one family at a time, only for the faces a plan actually uses —
    adding faces to the catalogue therefore costs nothing until a style or setting picks them */
@@ -735,12 +740,13 @@ J.drawItem = (env, it) => {
   if (it.skew) ctx.transform(1, 0, Math.tan(it.skew * J.DEG), 1, 0, 0);
   if (it.blend) ctx.globalCompositeOperation = it.blend;
   if (it.blur > 0.4 && env.allowFilter) ctx.filter = `blur(${(it.blur * env.scale).toFixed(1)}px)`;
-  ctx.font = J.fontCSS(it.font, size);
+  const fq = J.fontPx(size), fk = size / fq;      // Elitesand Pro: snapped font size, fk = remaining scale
+  ctx.font = J.fontCSS(it.font, fq);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   let grad = null;
   if (!ghostPass && it.gradient && fill) {
     // gradient coordinates live in each glyph's local space (the fill happens after the per-glyph translate)
-    grad = ctx.createLinearGradient(0, -size * 0.5, 0, size * 0.5);
+    grad = ctx.createLinearGradient(0, -size * 0.5 / fk, 0, size * 0.5 / fk);
     if (it.gradient.length === 2) { grad.addColorStop(0, it.gradient[0]); grad.addColorStop(1, it.gradient[1]); }
     else it.gradient.forEach(([o, c]) => grad.addColorStop(o, c));      // [[offset, colour], ...] for hard splits
   }
@@ -778,10 +784,10 @@ J.drawItem = (env, it) => {
     ctx.translate(gx, gy);
     if (crot) ctx.rotate(crot * J.DEG);
     if (c && c.skew) ctx.transform(1, 0, Math.tan(c.skew * J.DEG), 1, 0, 0);
-    if (csx !== 1 || csy !== 1) ctx.scale(csx, csy);
+    if (csx * fk !== 1 || csy * fk !== 1) ctx.scale(csx * fk, csy * fk);
     if (c && (c.clipY || c.clipX)) {           // per-glyph mask, in fractions of the glyph box (centre = 0)
       const cy = c.clipY || [-0.7, 0.7], cx = c.clipX || [-0.7, 0.7];
-      ctx.beginPath(); ctx.rect(cx[0] * g.w, cy[0] * g.h, (cx[1] - cx[0]) * g.w, (cy[1] - cy[0]) * g.h); ctx.clip();
+      ctx.beginPath(); ctx.rect(cx[0] * g.w / fk, cy[0] * g.h / fk, (cx[1] - cx[0]) * g.w / fk, (cy[1] - cy[0]) * g.h / fk); ctx.clip();
     }
     if (c && c.blur > 0.4 && env.allowFilter) ctx.filter = `blur(${(c.blur * env.scale).toFixed(1)}px)`;
     ctx.globalAlpha = a;
@@ -789,17 +795,17 @@ J.drawItem = (env, it) => {
     if (ext && !outlineOnly) {
       ctx.fillStyle = ext.color || '#000';
       const ea = ext.a ?? 1;
-      for (let k = ext.n; k >= 1; k--) { ctx.globalAlpha = a * ea * (ext.fade ? 1 - (k - 1) / ext.n * 0.85 : 1); ctx.fillText(ch, ext.dx * k / ext.n / csx, ext.dy * k / ext.n / csy); }
+      for (let k = ext.n; k >= 1; k--) { ctx.globalAlpha = a * ea * (ext.fade ? 1 - (k - 1) / ext.n * 0.85 : 1); ctx.fillText(ch, ext.dx * k / ext.n / (csx * fk), ext.dy * k / ext.n / (csy * fk)); }
       ctx.globalAlpha = a;
     }
     if (fill && !outlineOnly && fillA > 0.002 && dash == null) { ctx.globalAlpha = a * fillA; ctx.fillStyle = grad || gcol; ctx.fillText(ch, 0, 0); ctx.globalAlpha = a; }
     if (it.stroke > 0 || outlineOnly || dash != null) {
       if (shadow && fill) { ctx.shadowColor = 'rgba(0,0,0,0)'; }
       ctx.lineJoin = 'round'; ctx.miterLimit = 2;
-      ctx.lineWidth = (it.stroke > 0 ? it.stroke : Math.max(1, size * 0.02)) / Math.sqrt(Math.abs(csx * csy));
+      ctx.lineWidth = (it.stroke > 0 ? it.stroke : Math.max(1, size * 0.02)) / (Math.sqrt(Math.abs(csx * csy)) * fk);
       ctx.strokeStyle = (!ghostPass && c && c.color) || sCol;
-      if (dash != null) { const L = size * 3.2; ctx.setLineDash([Math.max(0.01, L * dash), L]); ctx.lineDashOffset = 0; }
-      else if (it.strokeDash) ctx.setLineDash(it.strokeDash);
+      if (dash != null) { const L = size * 3.2 / fk; ctx.setLineDash([Math.max(0.01, L * dash), L]); ctx.lineDashOffset = 0; }
+      else if (it.strokeDash) ctx.setLineDash(fk === 1 ? it.strokeDash : it.strokeDash.map(v => v / fk));
       ctx.strokeText(ch, 0, 0);
       ctx.setLineDash([]);
       if (fill && !outlineOnly && (it.strokeUnder || (dash != null && fillA > 0.002))) { ctx.globalAlpha = a * (dash != null ? fillA : 1); ctx.fillStyle = grad || gcol; ctx.fillText(ch, 0, 0); }
@@ -3478,7 +3484,11 @@ class Renderer {
   post(ctx, plan, t, tq, step, sc, scale, opt, allowFilter) {
     const cw = ctx.canvas.width, ch = ctx.canvas.height;
     const fx = plan.fx, st = plan.style;
-    const active = plan.events.filter(ev => t >= ev.t && t < ev.t + Math.max(ev.dur, 1 / plan.fps));
+    // Elitesand Pro: chroma / shake are rendered in frame(), not here - skip them, otherwise the transparent-mode
+    // alpha guard below copies and re-masks the whole frame (3 full-canvas composites) for an effect that draws nothing
+    const POST_BUILTIN = ['slice', 'block', 'invert', 'flash', 'zoom', 'mosaic'];
+    const active = plan.events.filter(ev => t >= ev.t && t < ev.t + Math.max(ev.dur, 1 / plan.fps)
+      && (POST_BUILTIN.includes(ev.type) || (J.FXE[ev.type] && J.FXE[ev.type].draw)));
     const needScratch = active.some(ev => ['slice', 'block', 'zoom', 'mosaic'].includes(ev.type) || (J.FXE[ev.type] && J.FXE[ev.type].scratch)) || (!opt.fast && (st.glow || 0) > 0);
     const S = needScratch ? this.ensure(this.scratch, cw, ch) : null;
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -15412,9 +15422,10 @@ function fastRow(env, text, font, size, x, y, sp, color, alpha, align = 'left') 
   const ctx = env.ctx;
   if (!('letterSpacing' in ctx)) { env.draw({ text, font, size, x, y, align, track: sp / size, color, alpha, ghost: false }); return; }
   ctx.save();
-  ctx.font = J.fontCSS(font, size); ctx.letterSpacing = sp.toFixed(2) + 'px';
+  const fq = J.fontPx(size), fk = size / fq;      // Elitesand Pro: snapped font size (see J.fontPx)
+  ctx.font = J.fontCSS(font, fq); ctx.letterSpacing = (sp / fk).toFixed(2) + 'px';
   ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillStyle = color; ctx.globalAlpha = alpha;
-  ctx.fillText(text, x, y);
+  if (fk !== 1) { ctx.translate(x, y); ctx.scale(fk, fk); ctx.fillText(text, 0, 0); } else ctx.fillText(text, x, y);
   ctx.restore();
 }
 /* per-layout memo for expensive fitting searches (dropped when font metrics are reset after font loading) */
@@ -19288,9 +19299,10 @@ function fastRow(env, text, font, size, x, y, sp, color, alpha, align = 'left') 
   const ctx = env.ctx;
   if (!('letterSpacing' in ctx)) { env.draw({ text, font, size, x, y, align, track: sp / size, color, alpha, ghost: false }); return; }
   ctx.save();
-  ctx.font = J.fontCSS(font, size); ctx.letterSpacing = sp.toFixed(2) + 'px';
+  const fq = J.fontPx(size), fk = size / fq;      // Elitesand Pro: snapped font size (see J.fontPx)
+  ctx.font = J.fontCSS(font, fq); ctx.letterSpacing = (sp / fk).toFixed(2) + 'px';
   ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillStyle = color; ctx.globalAlpha = alpha;
-  ctx.fillText(text, x, y);
+  if (fk !== 1) { ctx.translate(x, y); ctx.scale(fk, fk); ctx.fillText(text, 0, 0); } else ctx.fillText(text, x, y);
   ctx.restore();
 }
 /* justified rows of real body copy (main pass only) */

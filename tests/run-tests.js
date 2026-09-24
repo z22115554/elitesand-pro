@@ -10052,6 +10052,10 @@ test('文字PV（JIZURA）：MIT 授權表記隨引擎一起出貨，display 先
   ok(/MIT License/.test(license) && license.includes('Copyright (c) 2026 hakoniwa'), 'vendor/jizura/LICENSE 必須是完整的 MIT 授權全文: ');
   ok(engine.slice(0, 600).includes('Copyright (c) 2026 hakoniwa') && engine.slice(0, 600).includes('MIT'), '引擎檔頭必須保留著作權與授權表記: ');
   ok(!engine.includes('src/12_ui.js ----') && !engine.includes('src/11_export.js ----'), '只收規劃＋繪製，不收上游 UI 與 MP4 匯出: ');
+  // 效能修改（2026-09-25 實測）：每幀換一個小數點字級，canvas 每次 fillText 要 3–8ms 重新解析字型；
+  // 色差／震動事件在透明模式下會白做三次整張複製，還把半透明的字與光暈 alpha 平方變暗
+  ok(engine.includes('J.fontPx = ') && engine.includes('ctx.font = J.fontCSS(it.font, fq)'), '引擎繪字必須用量化字級（J.fontPx）＋縮放補差，不可每幀換新字級: ');
+  ok(engine.includes('const POST_BUILTIN = ') && engine.includes('POST_BUILTIN.includes(ev.type)'), '後製只處理真的會畫的事件，色差／震動不可進透明模式的 alpha 遮罩: ');
   ok(notices.includes('JIZURA') && notices.includes('hakoniwa'), 'THIRD-PARTY-NOTICES 必須列出 JIZURA: ');
   const engineAt = displayHtml.indexOf('/vendor/jizura/jizura-engine.js');
   const tplAt = displayHtml.indexOf('/js/lyric-template-jizura.js');
@@ -10083,6 +10087,9 @@ test('文字PV（JIZURA）：版面白名單不可收進會整面蓋住主播的
   quiet.forEach((k) => ok(!heavy.has(k) && !busy.has(k), `安靜清單不可有太重或太吵的版面 ${k}: `));
   ok(src.includes('!heavy.has(k)'), '任何強度都必須排除 HEAVY_LAYOUTS: ');
   ok(src.includes("mode === 'calm' ? PROFILES_CALM"), '「沉穩」強度要整首換成安靜的 profile，不能只調慢速度: ');
+  // 逐字時間對齊：引擎只照字數比例切段，有逐字時間的歌要把段落邊界對到實際開唱的字
+  ok(src.includes('function alignCutsToWords') && src.includes('alignCutsToWords(cuts, events, usable)'), '規劃完必須用逐字時間校正段落邊界: ');
+  ok(src.includes('function findSeq'), '逐字比對必須在字元陣列上做（字串 indexOf 遇到 emoji 會跟時間表錯位）: ');
   ok(/flash: false/.test(src) && /bgSwitch: 0/.test(src), '不可開全畫面閃白，也不可切換 scheme（淺底 scheme 會變深色字）: ');
   ok(/transparent: true/.test(src) && /noTrans: true/.test(src), '必須用透明模式繪製、關掉整幀合成的轉場: ');
   // 2026-09-24 實機回報：縮成窄欄時裝飾碰到畫布邊緣會切出硬邊界 → 偏左／偏右改成全畫面畫布＋鏡頭位移

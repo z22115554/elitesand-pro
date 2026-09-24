@@ -304,6 +304,135 @@
     return pool[seed % pool.length];
   }
 
+  // ─── 逐字時間對齊 ───
+  // 引擎把一句切成幾段（cut）時只知道字數，段落邊界是照字數比例分的；有逐字時間的歌，
+  // 把每一段的開始時間改成「那一段第一個字真正開唱的時刻」，文字才會在唱到的當下出現。
+  // 引擎本身不改：規劃完再校正 cut 的 start/end，排在舊邊界上的特效事件一起搬過去。
+
+  // 比對用的正規化：去空白，並把 escapeLyricText 會換成全形的保留字元一律視為全形，
+  // 讓「引擎切出來的 cut 文字」跟「逐字資料拼回來的文字」能逐字對上。
+  const FULLWIDTH = { '/': '／', '|': '｜', '*': '＊', '!': '！', '#': '＃', '[': '［' };
+  function canonChars(text) {
+    return Array.from(String(text || '').replace(/\s+/g, '')).map((ch) => FULLWIDTH[ch] || ch);
+  }
+
+  // 一行的逐字時間表：每個字（去空白後）的開唱時刻（秒）。一個詞裡有多個字時在詞的時長內平均分。
+  // 逐字資料拼回來的文字跟這行的文字對不上（資料不完整、來源不同）就回 null，維持引擎原本的切法。
+  function charTimeline(line) {
+    if (!line.words || line.words.length < 2) return null;
+    const chars = []; const times = []; let end = 0;
+    for (const w of line.words) {
+      const cs = canonChars(w && w.text);
+      const start = Number(w && w.start); const dur = Math.max(0, Number(w && w.duration) || 0);
+      if (!cs.length || !Number.isFinite(start)) continue;
+      cs.forEach((ch, i) => { chars.push(ch); times.push((line.time + start + dur * (i / cs.length)) / 1000); });
+      end = Math.max(end, (line.time + start + dur) / 1000);
+    }
+    return chars.join('') === canonChars(line.text).join('') ? { chars, times, end } : null;
+  }
+
+  // 在字元陣列裡找子序列（不用字串 indexOf：emoji 之類佔兩個 UTF-16 碼元，索引會跟時間表錯開）
+  function findSeq(hay, needle, from) {
+    outer: for (let i = Math.max(0, from); i + needle.length <= hay.length; i++) {
+      for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer;
+      return i;
+    }
+    return -1;
+  }
+
+  const MIN_CUT = 0.22; // 跟引擎規劃時的最小段長一致
+  const SUNG_TAIL = 0.35; // 最後一個字唱完後，這句再多停留一下才收
+  const MIN_INTERLUDE = 1.0; // 間奏卡被往後推之後剩不到這麼久，就直接拿掉
+  function alignCutsToWords(cuts, events, usable) {
+    const byLine = new Map();
+    for (const c of cuts) {
+      if (c.line < 0 || c.layout === 'interlude' || c.layout === 'title') continue;
+      if (!byLine.has(c.line)) byLine.set(c.line, []);
+      byLine.get(c.line).push(c);
+    }
+    const moved = new Map(); // 舊開始時間 → 新開始時間（給事件用）
+    for (const [li, list] of byLine) {
+      const line = usable[li];
+      const tl = line && charTimeline(line);
+      if (!tl) continue;
+      // 引擎會把一句的顯示時間上限壓在約 3.6 秒（它不知道實際唱多久），長句後段還沒唱這句就收了。
+      // 有逐字時間就知道真正唱到哪：最後一段延長到最後一個字唱完，但不蓋到下一句；中間若排了
+      // 間奏卡就往後推，推完太短就拿掉。
+      const last = list[list.length - 1];
+      const sungEnd = tl.end + SUNG_TAIL;
+      if (sungEnd > last.end) {
+        const gi = cuts.indexOf(last);
+        const nextCut = cuts[gi + 1];
+        let limit = nextCut ? nextCut.start : Infinity;
+        if (nextCut && nextCut.layout === 'interlude') {
+          if (nextCut.end - sungEnd < MIN_INTERLUDE) { cuts.splice(gi + 1, 1); limit = nextCut.end; }
+          else limit = sungEnd;
+        }
+        const newEnd = Math.min(sungEnd, limit);
+        if (newEnd > last.end) {
+          last.end = newEnd;
+          const after = cuts[gi + 1];
+          if (after && after.layout === 'interlude' && after.start < newEnd) { after.start = newEnd; after.dur = after.end - after.start; }
+        }
+      }
+      const lineEnd = last.end;
+      const chunks = list.filter((c) => !c.recap);
+      const recap = list.find((c) => c.recap) || null;
+      // 一般段落：第一段維持引擎的開始時間（＝這行的 LRC 時間）；之後每段移到它第一個字的開唱時刻。
+      // 上界要替後面還沒排的段落（和整句回顧）各留最小段長，前面的段落才不會把後面擠爆。
+      let cursor = 0;
+      for (let k = 0; k < chunks.length; k++) {
+        const c = chunks[k];
+        const text = canonChars(c.text);
+        if (!text.length) continue;
+        const at = findSeq(tl.chars, text, cursor);
+        if (at < 0) continue;
+        cursor = at + text.length;
+        if (k === 0) continue;
+        const prev = chunks[k - 1];
+        const lo = prev.start + MIN_CUT;
+        const hi = lineEnd - MIN_CUT * (chunks.length - k + (recap ? 1 : 0));
+        if (hi <= lo) continue;
+        const target = Math.min(hi, Math.max(lo, tl.times[at]));
+        if (Math.abs(target - c.start) < 0.02) continue;
+        moved.set(c.start.toFixed(3), target);
+        c.start = target;
+      }
+      // 段落首尾相接
+      for (let k = 0; k < chunks.length - 1; k++) chunks[k].end = chunks[k + 1].start;
+      const lastChunk = chunks[chunks.length - 1];
+      // 整句回顧：等最後一個字唱完才出現，展示在句尾的空檔；空檔太短就不放，最後一段直接延續到句尾
+      if (recap) {
+        const recapStart = Math.max(lastChunk.start + MIN_CUT, Math.min(tl.end, lineEnd - MIN_CUT));
+        if (lineEnd - recapStart < 0.6) {
+          cuts.splice(cuts.indexOf(recap), 1);
+          list.splice(list.indexOf(recap), 1);
+          lastChunk.end = lineEnd;
+        } else {
+          if (Math.abs(recapStart - recap.start) >= 0.02) moved.set(recap.start.toFixed(3), recapStart);
+          lastChunk.end = recapStart;
+          recap.start = recapStart;
+          recap.end = lineEnd;
+        }
+      } else {
+        lastChunk.end = lineEnd;
+      }
+      for (const c of list) {
+        c.dur = c.end - c.start;
+        // 段長變了，進退場時間要跟著收，不然短段會整段都在進退場（跟引擎規劃時同一條規則）
+        if ((c.inDur || 0) + (c.outDur || 0) > c.dur * 0.92) {
+          const f = (c.dur * 0.92) / ((c.inDur || 0) + (c.outDur || 0));
+          c.inDur *= f; c.outDur *= f;
+        }
+      }
+    }
+    if (!moved.size) return;
+    for (const e of events) {
+      const to = moved.get(Number(e.t).toFixed(3));
+      if (to !== undefined) e.t = to;
+    }
+  }
+
   // ─── 規劃 ───
 
   function buildPlan(lines, meta) {
@@ -323,7 +452,7 @@
     const accent = toHex(cssVar('--lyric-color-active', '#ffd6a5'), '#ffd6a5');
 
     const usable = lines
-      .map((line) => ({ time: Number(line.time) || 0, text: escapeLyricText(line.text) }))
+      .map((line) => ({ time: Number(line.time) || 0, text: escapeLyricText(line.text), words: Array.isArray(line.words) ? line.words : null }))
       .filter((line) => !isInterludeText(line.text));
     if (!usable.length) return null;
 
@@ -403,6 +532,8 @@
       }
     }
 
+    cuts.sort((a, b) => a.start - b.start);
+    alignCutsToWords(cuts, events, usable);
     cuts.sort((a, b) => a.start - b.start);
     cuts.forEach((c, i) => { c.index = i; });
     events.sort((a, b) => a.t - b.t);
@@ -543,6 +674,10 @@
 
     // 除錯用（唯讀）：某時間點落在哪個 cut、用哪個 profile。開發時在 /display 的 console 呼叫
     // LyricTemplates.get('jizura').debugCutAt(秒)。
+    debugCuts() {
+      return plan ? plan.cuts.map((c) => ({ line: c.line, text: c.text, start: c.start, end: c.end, layout: c.layout, recap: !!c.recap })) : null;
+    },
+
     debugLastDrawn() {
       const c = lastDrawn;
       return c ? { layout: c.layout, enter: c.enter, exit: c.exit, hold: c.hold, treat: c.treat, cam: c.cam, decor: (c.decor || []).map((d) => d.id), start: c.start } : null;
