@@ -189,17 +189,6 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     persistState();
   });
 
-  socket.on('playlist:reorder', (playlist) => {
-    const clean = sanitizePlaylist(playlist);
-    if (!clean) return log.warn('playlist:reorder 收到非陣列資料');
-    playState.playlist = ensureEntryIds(preserveLyricsFromExisting(clean, playState.playlist));
-    if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
-    emitPlaylistUpdate();
-    emitSetlist();
-    broadcastState();
-    persistState();
-  });
-
   function buildExportData() {
     return {
       version: '5.0',

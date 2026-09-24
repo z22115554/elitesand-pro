@@ -69,7 +69,7 @@ const FONT_PROBE_REPORT_MIN_INTERVAL_MS = 5000;
 const STATE_REQUEST_MIN_INTERVAL_MS = 1000;
 const CORE_USAGE_EVENTS = new Set([
   'play:track', 'play:toggle', 'play:seek', 'play:prev', 'play:next', 'play:stop',
-  'playlist:update', 'playlist:add', 'playlist:insert-next', 'playlist:remove', 'playlist:reorder', 'playlist:import',
+  'playlist:update', 'playlist:add', 'playlist:insert-next', 'playlist:remove', 'playlist:import',
   'lyrics:manual', 'lyric-settings:update', 'offset:adjust', 'offset:set', 'offset:reset',
   'style:change', 'style:override', 'pitch:change', 'speed:change',
   'session:start', 'session:stop', 'session:reset', 'session:remove-song',

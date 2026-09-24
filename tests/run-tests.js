@@ -6133,6 +6133,24 @@ test('OBS display/setlist 意外斷線才記事故；正常關閉、面板/預�
   }
 });
 
+test('playlist:reorder 死 handler 已移除：不再註冊，排序只走 playlist:update', () => {
+  // 4d8d8e7 把 preserveLyricsFromExisting 改名成 mergePlaylistSummaryWithExisting 時漏改這個
+  // handler，送出就 ReferenceError；而面板／遙控器排序早就改走 playlist:update，沒有任何人送它。
+  const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
+  const events = new Map();
+  const state = { playlist: [] };
+  registerPlaylistHandlers({ emit() {} }, { on(event, handler) { events.set(event, handler); } }, {
+    playState: state, trackOffsets: new Map(), manualLyricsCache: new Map(),
+    persistState() {}, emitSetlist() {}, broadcastState() {}, getPublicPlaylist() { return state.playlist; },
+  });
+  ok(!events.has('playlist:reorder'), 'playlist:reorder 不可再註冊（原本的實作會直接 ReferenceError）: ');
+  ok(events.has('playlist:update'), '排序仍要能透過 playlist:update 完成: ');
+  const handlerSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'playlist.js'), 'utf8');
+  ok(!handlerSource.includes('preserveLyricsFromExisting'), '不可再呼叫已不存在的 preserveLyricsFromExisting: ');
+  const socketHandlerSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'socket-handler.js'), 'utf8');
+  ok(!socketHandlerSource.includes("'playlist:reorder'"), '使用統計事件清單也不可再列出不存在的事件: ');
+});
+
 test('面板以 playlist:update 移除歌曲時，同樣不會清掉歌曲記憶', () => {
   const registerPlaylistHandlers = require('../server/routes/handlers/playlist');
   const events = new Map();

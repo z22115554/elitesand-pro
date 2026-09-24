@@ -215,7 +215,7 @@ function assignFreshEntryIds(tracks) {
 }
 
 /**
- * playlist:update／playlist:reorder 這類「回寫既有清單」的操作用這個：保留客戶端
+ * playlist:update 這類「回寫既有清單」的操作用這個：保留客戶端
  * 帶回來的 entryId（本來就是從伺服器廣播拿到的），只在真的缺漏時（例如舊版客戶端
  * 還沒帶這個欄位）才補一個新的，避免清單裡出現沒有 entryId 的列。
  */
