@@ -10042,6 +10042,16 @@ test('R6-3 非經典模板會在可見範圍說明中交代拼音與諧音限制
   ok(lyricExtras.includes("classic: { label: '經典疊層'") && lyricExtras.includes('拼音與諧音'), '經典疊層必須持續明示為雙語可用模板: ');
 });
 
+test('README 顯示的版號必須跟 package.json 一致（改版號一律用 npm run version:set）', () => {
+  // 以前手動改 package.json、README「最新版本」常忘記改，公開倉首頁停在舊版號好幾版
+  const tool = require(path.join(__dirname, '..', 'tools', 'set-version.js'));
+  const { version, stale } = tool.check();
+  ok(stale.length === 0, `README 版號落後 package.json（${version}）：${stale.map((s) => s.rule + '=' + s.version).join('、')}；請跑 npm run version:set -- ${version}: `);
+  const sample = ['**最新版本 / Latest：`v1.0.4`**', 'Get-FileHash -Algorithm SHA256 "Elitesand Pro Setup 1.0.0.exe"'].join(' ');
+  const out = tool.setReadme(sample, '9.8.7');
+  ok(out.includes('Latest：`v9.8.7`') && out.includes('"Elitesand.Pro.Setup.9.8.7.exe"'), '改版號要同時改最新版本與 GitHub 資產實際檔名（空格變點）: ');
+});
+
 test('文字PV（JIZURA）：MIT 授權表記隨引擎一起出貨，display 先載引擎再載模板', () => {
   // JIZURA 是 MIT：可以用、可以改，但著作權與授權全文必須跟著程式走（作者已私訊確認）。
   const root = path.join(__dirname, '..');
