@@ -5,7 +5,7 @@
 **為 VTuber 歌回與直播演出打造的本機歌詞演出系統**
 *A local lyric-performance system for VTubers, singing streamers, and live performers*
 
-**最新版本 / Latest：`v1.0.8`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
+**最新版本 / Latest：`v1.0.9`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
 
 繁體中文 · [English](#english) · [日本語](#日本語) · [한국어](#한국어) · [简体中文](#简体中文)
 
@@ -137,7 +137,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 請只從官方 GitHub Releases 下載，並核對隨附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.8.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.9.exe"
 ```
 
 ### OBS 設定
@@ -303,7 +303,7 @@ The build is **currently unsigned**, so Windows SmartScreen shows a blue warning
 Download only from the official GitHub Releases page and verify the bundled `.sha256`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.8.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.9.exe"
 ```
 
 ### OBS setup
@@ -468,7 +468,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 配布元は公式 GitHub Releases のみ。同梱の `.sha256` を照合してください：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.8.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.9.exe"
 ```
 
 ### OBS 設定
@@ -633,7 +633,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 공식 GitHub Releases에서만 내려받고 동봉된 `.sha256`을 확인하세요:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.8.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.9.exe"
 ```
 
 ### OBS 설정
@@ -798,7 +798,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 请只从官方 GitHub Releases 下载，并核对随附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.8.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.0.9.exe"
 ```
 
 ### OBS 设置
