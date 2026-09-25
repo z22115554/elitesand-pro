@@ -137,6 +137,7 @@ function snapshot(extra) {
     ...config,
     raised,
     total: config.base + raised,
+    endsAt: new Date(EVENT_END).toISOString(),
     donations: donations.map((d) => ({ ...d, style: d.style || autoStyle(d.amount), styleAuto: !d.style })),
     ...extra,
   };

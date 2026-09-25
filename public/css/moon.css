@@ -281,61 +281,26 @@ body[data-part="moon"] .moon-panel {
 .lantern--palace .lantern-tassel::before { left: -32px; }
 .lantern--palace .lantern-tassel::after { left: 32px; }
 
-/* 月兔燈：白色圓身、長耳朵、紅眼睛、腮紅 */
+/* 月兔燈：插畫兔子頭（rabbit-face.webp）＋奶油色圓身，描邊色取自插畫 */
 .lantern--rabbit .lantern-top {
   position: relative;
-  width: 60px;
-  height: 36px;
-  margin-bottom: -10px;
-  background: none;
-  z-index: 0;
+  z-index: 2;
+  width: 72px;
+  height: 80px;
+  margin-bottom: -16px;
+  border-radius: 0;
+  background: url('/assets/moon/rabbit-face.webp') center bottom / contain no-repeat;
+  filter: drop-shadow(0 0 8px rgba(255, 238, 215, 0.6));
 }
-.lantern--rabbit .lantern-top::before,
-.lantern--rabbit .lantern-top::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  width: 18px;
-  height: 46px;
-  border-radius: 50% 50% 45% 45% / 70% 70% 30% 30%;
-  background:
-    radial-gradient(ellipse 30% 60% at 50% 55%, #ffc0c8 0%, #ffc0c8 70%, transparent 72%),
-    linear-gradient(#ffffff, #f3eee6);
-  box-shadow: 0 0 10px rgba(255, 240, 225, 0.6);
-}
-.lantern--rabbit .lantern-top::before { left: 8px; transform: rotate(-14deg); transform-origin: 50% 100%; }
-.lantern--rabbit .lantern-top::after { right: 8px; transform: rotate(14deg); transform-origin: 50% 100%; }
 .lantern--rabbit .lantern-body {
-  --glow: rgba(255, 238, 215, 0.7);
-  --inset: inset 0 -10px 18px rgba(170, 140, 110, 0.22);
+  --glow: rgba(255, 232, 200, 0.7);
+  --inset: inset 0 0 0 2px #dca15c, inset 0 -10px 18px rgba(200, 150, 90, 0.18);
   z-index: 1;
-  width: 94px;
-  min-height: 104px;
-  padding-top: 30px;
-  border-radius: 50% 50% 46% 46% / 52% 52% 48% 48%;
-  background: radial-gradient(circle at 45% 38%, #ffffff 0%, #fbf7f1 55%, #eadfd2 100%);
-}
-.lantern--rabbit .lantern-body::before {
-  content: '';
-  position: absolute;
-  top: 18px;
-  left: 30px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #d8323c;
-  box-shadow: 27px 0 0 #d8323c;
-}
-.lantern--rabbit .lantern-body::after {
-  content: '';
-  position: absolute;
-  top: 27px;
-  left: 20px;
-  width: 12px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(255, 150, 160, 0.55);
-  box-shadow: 42px 0 0 rgba(255, 150, 160, 0.55);
+  width: 88px;
+  min-height: 84px;
+  padding-top: 20px;
+  border-radius: 50% 50% 46% 46% / 44% 44% 56% 56%;
+  background: radial-gradient(circle at 45% 35%, #fffdf8 0%, #fff4e4 55%, #f5dfc2 100%);
 }
 .lantern--rabbit .lantern-name { color: #a63a36; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7); -webkit-line-clamp: 2; }
 .lantern--rabbit .lantern-amount { color: #c0605a; }
@@ -387,7 +352,7 @@ body[data-part="moon"] .moon-panel {
 .lantern-string.is-swapping { opacity: 0; }
 .lantern-page-dots {
   position: absolute;
-  top: 222px;
+  top: 246px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -476,58 +441,45 @@ body[data-part="credits"] .moon-credits { display: block; }
 
 .moon-rabbit {
   position: absolute;
-  left: 63px;
-  top: 67px;
-  width: 64px;
-  height: 56px;
+  left: 55px;
+  top: 43px;
+  width: 80px;
+  height: 80px;
   z-index: 0;
   opacity: 0;
-  filter: drop-shadow(0 0 8px rgba(255, 245, 225, 0.7));
+  filter: drop-shadow(0 0 6px rgba(255, 240, 215, 0.65));
 }
-.moon-rabbit span { position: absolute; display: block; }
-.rabbit-body {
-  left: 14px; top: 22px; width: 44px; height: 32px;
-  border-radius: 55% 50% 45% 45%;
-  background: radial-gradient(circle at 40% 35%, #ffffff, #efe7dc);
+.rabbit-pose {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
 }
-.rabbit-head {
-  left: 4px; top: 10px; width: 26px; height: 24px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #ffffff, #f1e9df);
-}
-.rabbit-head::before {
-  content: ''; position: absolute; left: 6px; top: 8px; width: 4px; height: 4px;
-  border-radius: 50%; background: #d8323c;
-}
-.rabbit-head::after {
-  content: ''; position: absolute; left: 3px; top: 14px; width: 7px; height: 4px;
-  border-radius: 50%; background: rgba(255, 150, 160, 0.6);
-}
-.rabbit-ear {
-  left: 11px; top: -14px; width: 9px; height: 28px;
-  border-radius: 50% 50% 40% 40% / 70% 70% 30% 30%;
-  background: radial-gradient(ellipse 30% 60% at 50% 55%, #ffc0c8 0 70%, transparent 72%), #ffffff;
-  transform: rotate(-12deg);
-  transform-origin: 50% 100%;
-}
-.rabbit-ear--back { left: 18px; background: #eee5da; transform: rotate(10deg); }
-.rabbit-tail {
-  right: 2px; top: 30px; width: 11px; height: 11px;
-  border-radius: 50%; background: #ffffff;
-}
+.rabbit-pose--sit { width: 52px; }
+.rabbit-pose--jump { width: 73px; }
+.rabbit-pose--land { width: 72px; }
 
+/* 路徑：從月亮後方跳出 → 落在月亮頂端 → 坐一會兒 → 轉身跳回去。三張姿勢依時段切換。 */
 .moon-panel.is-celebrating .moon-rabbit { animation: rabbit-hop 6s ease-in-out both; }
+.moon-panel.is-celebrating .rabbit-pose--jump { animation: rabbit-pose-jump 6s step-end both; }
+.moon-panel.is-celebrating .rabbit-pose--land { animation: rabbit-pose-land 6s step-end both; }
+.moon-panel.is-celebrating .rabbit-pose--sit { animation: rabbit-pose-sit 6s step-end both; }
 @keyframes rabbit-hop {
-  0% { opacity: 0; transform: translate(0, 0); }
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg) scaleX(1); }
   6% { opacity: 1; }
-  14% { transform: translate(-12px, -176px) rotate(-8deg); animation-timing-function: ease-in; }
-  22% { transform: translate(0, -116px) rotate(0deg); }
-  26% { transform: translate(0, -128px); }
-  30%, 80% { transform: translate(0, -116px); }
-  88% { transform: translate(12px, -160px) rotate(8deg); opacity: 1; }
+  14% { transform: translate(-12px, -176px) rotate(8deg) scaleX(1); animation-timing-function: ease-in; }
+  22% { transform: translate(0, -116px) rotate(0deg) scaleX(1); }
+  26% { transform: translate(0, -124px) rotate(0deg) scaleX(1); }
+  30%, 80% { transform: translate(0, -116px) rotate(0deg) scaleX(1); }
+  83% { transform: translate(2px, -122px) rotate(0deg) scaleX(-1); }
+  90% { transform: translate(14px, -164px) rotate(-8deg) scaleX(-1); opacity: 1; animation-timing-function: ease-in; }
   96% { opacity: 1; }
-  100% { opacity: 0; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(0, 0) rotate(0deg) scaleX(-1); }
 }
+@keyframes rabbit-pose-jump { 0% { opacity: 1; } 22% { opacity: 0; } 80% { opacity: 1; } 100% { opacity: 1; } }
+@keyframes rabbit-pose-land { 0% { opacity: 0; } 22% { opacity: 1; } 30% { opacity: 0; } 100% { opacity: 0; } }
+@keyframes rabbit-pose-sit { 0% { opacity: 0; } 30% { opacity: 1; } 80% { opacity: 0; } 100% { opacity: 0; } }
 
 .moon-panel.is-celebrating .moon-svg {
   animation: moon-pop 1.2s cubic-bezier(.3, 1.6, .5, 1), moon-bloom 3.2s ease-in-out infinite;
@@ -557,5 +509,5 @@ body[data-part="credits"] .moon-credits { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .lantern, .lantern.is-new, .lantern.is-new .lantern-body, .moon-panel.is-full .moon-svg { animation: none; }
   .moon-thanks { transition: none; }
-  .moon-panel.is-celebrating .moon-rabbit, .moon-panel.is-celebrating .moon-svg, .moon-panel.is-celebrating .moon-done, .lantern-string.is-celebrating .lantern-body { animation: none; }
+  .moon-panel.is-celebrating .moon-rabbit, .moon-panel.is-celebrating .rabbit-pose, .moon-panel.is-celebrating .moon-svg, .moon-panel.is-celebrating .moon-done, .lantern-string.is-celebrating .lantern-body { animation: none; }
 }

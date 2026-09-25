@@ -19,11 +19,9 @@
     <div id="moon-thanks" class="moon-thanks" aria-live="polite"></div>
     <div class="moon-wrap">
       <div class="moon-rabbit" aria-hidden="true">
-        <span class="rabbit-ear rabbit-ear--back"></span>
-        <span class="rabbit-ear"></span>
-        <span class="rabbit-body"></span>
-        <span class="rabbit-head"></span>
-        <span class="rabbit-tail"></span>
+        <img class="rabbit-pose rabbit-pose--jump" src="/assets/moon/rabbit-jump.webp" alt="">
+        <img class="rabbit-pose rabbit-pose--land" src="/assets/moon/rabbit-land.webp" alt="">
+        <img class="rabbit-pose rabbit-pose--sit" src="/assets/moon/rabbit-sit.webp" alt="">
       </div>
       <div id="moon-burst" class="moon-burst" aria-hidden="true"></div>
       <svg id="moon-svg" class="moon-svg" viewBox="0 0 200 200" aria-hidden="true">
@@ -64,8 +62,10 @@
   </section>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/i18n.js"></script>
   <script src="/js/access-auth.js"></script>
   <script src="/js/socket-client.js"></script>
+  <script src="/js/obs-locale-follow.js"></script>
   <script src="/js/moon.js"></script>
 </body>
 </html>

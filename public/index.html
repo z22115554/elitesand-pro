@@ -199,9 +199,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
           <span class="nav-label" data-i18n="nav.bgm">BGM</span>
         </button>
-        <button class="nav-item" data-nav="moon" type="button" title="中秋活動" hidden>
+        <button class="nav-item" data-nav="moon" type="button" title="中秋活動（限時開放）" data-i18n-title="nav.moonTitle" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-          <span class="nav-label">中秋活動</span>
+          <span class="nav-label" data-i18n="nav.moon">中秋活動</span>
+          <span class="nav-sub" data-i18n="nav.moonLimited">（限時開放）</span>
         </button>
         <!-- 2026-09-12 先收起來；2026-09-24 A 區已知問題已修（3238512）、下載進度條已補（34f259b），
              但還沒完成實機驗收（完整 2.7GB 下載、真歌分析→文字PV 端到端）。驗收完再開放：比照 nav.js
@@ -828,7 +829,7 @@
                 <label data-i18n="jizura.motionLabel">動作節奏</label>
                 <div class="style-thumb-row" id="jizura-motion-buttons">
                   <button class="style-thumb active" data-jizura-motion="smooth" type="button" data-i18n-title="jizura.motionSmoothTitle" title="流暢：每一幀都更新動作"><span class="style-thumb-preview"><span class="style-thumb-char">順</span></span><span class="style-thumb-label" data-i18n="jizura.motionSmooth">流暢</span></button>
-                  <button class="style-thumb" data-jizura-motion="koma" type="button" data-i18n-title="jizura.motionKomaTitle" title="作畫感：每秒 12 張的頓挫（日系文字 PV 常用的 2 コマ打ち）"><span class="style-thumb-preview"><span class="style-thumb-char">格</span></span><span class="style-thumb-label" data-i18n="jizura.motionKoma">作畫感</span></button>
+                  <button class="style-thumb" data-jizura-motion="koma" type="button" data-i18n-title="jizura.motionKomaTitle" title="作畫感：每秒 12 張的頓挫（日系文字 PV 常用的「一拍二」）"><span class="style-thumb-preview"><span class="style-thumb-char">格</span></span><span class="style-thumb-label" data-i18n="jizura.motionKoma">作畫感</span></button>
                 </div>
                 <p class="field-hint" data-i18n="jizura.motionHint">作畫感是刻意的一格一格動（每秒 12 張），不是掉幀；想要滑順就選流暢。</p>
               </div>
@@ -1605,21 +1606,23 @@
 
         <!-- ═══ 視圖：中秋募資活動（月亮進度條＋燈籠名牌；斗內手動輸入）═══ -->
         <div class="view content-col" data-view="moon" hidden>
+          <div id="moon-end-notice" class="moon-end-notice" role="note"></div>
+
           <section class="card" aria-labelledby="moon-add-title">
-            <p id="moon-add-title" class="eyebrow m-0">新增斗內</p>
-            <p class="sub">輸入後燈籠會立刻掛上 OBS 畫面，月亮往滿月前進一點。</p>
+            <p id="moon-add-title" class="eyebrow m-0" data-i18n="moon.addTitle">新增斗內</p>
+            <p class="sub" data-i18n="moon.addHint">輸入後燈籠會立刻掛上 OBS 畫面，月亮往滿月前進一點。</p>
             <form id="moon-add-form" class="moon-add-row" autocomplete="off">
-              <input id="moon-add-name" class="input" type="text" maxlength="24" placeholder="名字" aria-label="名字" required>
-              <input id="moon-add-amount" class="input moon-amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額（NT$）" required>
-              <select id="moon-add-style" class="input moon-style-select" aria-label="燈籠樣式">
-                <option value="">依金額自動</option>
-                <option value="paper">紙燈籠</option>
-                <option value="red">紅燈籠</option>
-                <option value="pomelo">柚子燈</option>
-                <option value="palace">宮燈</option>
-                <option value="rabbit">月兔燈</option>
+              <input id="moon-add-name" class="input" type="text" maxlength="24" placeholder="名字" aria-label="名字" data-i18n-placeholder="moon.name" data-i18n-aria-label="moon.name" required>
+              <input id="moon-add-amount" class="input moon-amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額（NT$）" data-i18n-placeholder="moon.amount" data-i18n-aria-label="moon.amountAria" required>
+              <select id="moon-add-style" class="input moon-style-select" aria-label="燈籠樣式" data-i18n-aria-label="moon.styleAria">
+                <option value="" data-i18n="moon.styleAuto">依金額自動</option>
+                <option value="paper" data-i18n="moon.style.paper">紙燈籠</option>
+                <option value="red" data-i18n="moon.style.red">紅燈籠</option>
+                <option value="pomelo" data-i18n="moon.style.pomelo">柚子燈</option>
+                <option value="palace" data-i18n="moon.style.palace">宮燈</option>
+                <option value="rabbit" data-i18n="moon.style.rabbit">月兔燈</option>
               </select>
-              <button class="btn btn-sm" type="submit">掛上燈籠</button>
+              <button class="btn btn-sm" type="submit" data-i18n="moon.hang">掛上燈籠</button>
             </form>
             <div class="moon-summary" role="status" aria-live="polite">
               <div class="moon-summary-bar"><span id="moon-summary-fill"></span></div>
@@ -1633,70 +1636,70 @@
 
           <section class="card" aria-labelledby="moon-preview-title">
             <div class="playlist-head">
-              <p id="moon-preview-title" class="eyebrow m-0">OBS 畫面預覽</p>
-              <select id="moon-preview-mode" class="input moon-preview-mode" aria-label="預覽內容">
-                <option value="">實際畫面</option>
-                <option value="?demo=1">五種燈籠示範</option>
-                <option value="?demo=celebrate">滿月慶祝示範</option>
-                <option value="?part=credits&amp;autoplay=1">謝幕名單</option>
+              <p id="moon-preview-title" class="eyebrow m-0" data-i18n="moon.previewTitle">OBS 畫面預覽</p>
+              <select id="moon-preview-mode" class="input moon-preview-mode" aria-label="預覽內容" data-i18n-aria-label="moon.previewAria">
+                <option value="" data-i18n="moon.previewLive">實際畫面</option>
+                <option value="?demo=1" data-i18n="moon.previewLanterns">五種燈籠示範</option>
+                <option value="?demo=celebrate" data-i18n="moon.previewCelebrate">滿月慶祝示範</option>
+                <option value="?part=credits&amp;autoplay=1" data-i18n="moon.previewCredits">謝幕名單</option>
               </select>
             </div>
             <div class="moon-preview-frame">
-              <iframe id="moon-preview-iframe" title="中秋活動預覽" loading="lazy"></iframe>
+              <iframe id="moon-preview-iframe" title="中秋活動預覽" data-i18n-title="moon.previewFrame" loading="lazy"></iframe>
             </div>
             <div class="obs-url-list mt-10">
-              <div><div class="label">月亮＋燈籠（整個畫面）</div><div class="url-field"><code data-moon-url=""></code><button class="btn btn-sm" type="button" data-moon-copy="">複製</button></div></div>
-              <div><div class="label">只有月亮</div><div class="url-field"><code data-moon-url="?part=moon"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=moon">複製</button></div></div>
-              <div><div class="label">只有燈籠</div><div class="url-field"><code data-moon-url="?part=lanterns"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=lanterns">複製</button></div></div>
-              <div><div class="label">謝幕名單（平常透明，按下方「播放謝幕名單」才出現）</div><div class="url-field"><code data-moon-url="?part=credits"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=credits">複製</button></div></div>
+              <div><div class="label" data-i18n="moon.urlAll">月亮＋燈籠（整個畫面）</div><div class="url-field"><code data-moon-url=""></code><button class="btn btn-sm" type="button" data-moon-copy="" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="moon.urlMoon">只有月亮</div><div class="url-field"><code data-moon-url="?part=moon"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=moon" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="moon.urlLanterns">只有燈籠</div><div class="url-field"><code data-moon-url="?part=lanterns"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=lanterns" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="moon.urlCredits">謝幕名單（平常透明，按下方「播放謝幕名單」才出現）</div><div class="url-field"><code data-moon-url="?part=credits"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=credits" data-i18n="common.copy">複製</button></div></div>
             </div>
-            <p class="val mt-10">在 OBS 新增「瀏覽器」來源貼上網址，寬高設 1920×1080。想把月亮和燈籠分開擺，就各建一個來源。</p>
+            <p class="val mt-10" data-i18n="moon.obsHint">在 OBS 新增「瀏覽器」來源貼上網址，寬高設 1920×1080。想把月亮和燈籠分開擺，就各建一個來源。</p>
           </section>
 
           <section class="card" aria-labelledby="moon-config-title">
-            <p id="moon-config-title" class="eyebrow m-0">活動設定</p>
+            <p id="moon-config-title" class="eyebrow m-0" data-i18n="moon.configTitle">活動設定</p>
             <form id="moon-config-form" autocomplete="off">
               <div class="field">
-                <label for="moon-config-title-input">標題</label>
+                <label for="moon-config-title-input" data-i18n="moon.titleLabel">標題</label>
                 <input id="moon-config-title-input" class="input" type="text" maxlength="40">
               </div>
               <div class="field">
-                <label for="moon-config-done-text">達標後顯示的文字</label>
+                <label for="moon-config-done-text" data-i18n="moon.doneTextLabel">達標後顯示的文字</label>
                 <input id="moon-config-done-text" class="input" type="text" maxlength="40">
               </div>
               <div class="row-gap-10">
                 <div class="field flex-grow">
-                  <label for="moon-config-goal">目標金額（NT$）</label>
+                  <label for="moon-config-goal" data-i18n="moon.goalLabel">目標金額（NT$）</label>
                   <input id="moon-config-goal" class="input" type="number" min="1" step="1" inputmode="numeric">
                 </div>
                 <div class="field flex-grow">
-                  <label for="moon-config-base">起始金額（NT$）</label>
+                  <label for="moon-config-base" data-i18n="moon.baseLabel">起始金額（NT$）</label>
                   <input id="moon-config-base" class="input" type="number" min="0" step="1" inputmode="numeric">
                 </div>
               </div>
-              <p class="field-hint">起始金額＝活動開始前已經募到的錢（例如直播上顯示的募資進度），月亮會從這裡開始算。</p>
+              <p class="field-hint" data-i18n="moon.baseHint">起始金額＝活動開始前已經募到的錢（例如直播上顯示的募資進度），月亮會從這裡開始算。</p>
               <div class="field mt-10">
-                <label>燈籠門檻（NT$ 起）</label>
+                <label data-i18n="moon.tiersLabel">燈籠門檻（NT$ 起）</label>
                 <div class="moon-tier-grid">
-                  <label class="moon-tier"><span>紙燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="paper"></label>
-                  <label class="moon-tier"><span>紅燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="red"></label>
-                  <label class="moon-tier"><span>柚子燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="pomelo"></label>
-                  <label class="moon-tier"><span>宮燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="palace"></label>
-                  <label class="moon-tier"><span>月兔燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="rabbit"></label>
+                  <label class="moon-tier"><span data-i18n="moon.style.paper">紙燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="paper"></label>
+                  <label class="moon-tier"><span data-i18n="moon.style.red">紅燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="red"></label>
+                  <label class="moon-tier"><span data-i18n="moon.style.pomelo">柚子燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="pomelo"></label>
+                  <label class="moon-tier"><span data-i18n="moon.style.palace">宮燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="palace"></label>
+                  <label class="moon-tier"><span data-i18n="moon.style.rabbit">月兔燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="rabbit"></label>
                 </div>
-                <p class="field-hint">「依金額自動」時，斗內金額達到哪個門檻就掛哪一種；改門檻會立刻套用到所有自動的燈籠。</p>
+                <p class="field-hint" data-i18n="moon.tiersHint">「依金額自動」時，斗內金額達到哪個門檻就掛哪一種；改門檻會立刻套用到所有自動的燈籠。</p>
               </div>
-              <button class="btn btn-sm mt-10" type="submit">儲存設定</button>
+              <button class="btn btn-sm mt-10" type="submit" data-i18n="moon.save">儲存設定</button>
             </form>
           </section>
 
           <section class="card" aria-labelledby="moon-list-title">
             <div class="playlist-head">
-              <p id="moon-list-title" class="eyebrow m-0">斗內紀錄</p>
+              <p id="moon-list-title" class="eyebrow m-0" data-i18n="moon.listTitle">斗內紀錄</p>
               <div class="moon-list-actions">
-                <button id="moon-play-celebrate" class="btn btn-sm" type="button" title="達標時會自動播放一次；這裡可以手動再放">播放滿月慶祝</button>
-                <button id="moon-play-credits" class="btn btn-sm" type="button">播放謝幕名單</button>
-                <button id="moon-clear" class="btn btn-sm btn-danger" type="button">全部清除</button>
+                <button id="moon-play-celebrate" class="btn btn-sm" type="button" title="達標時會自動播放一次；這裡可以手動再放" data-i18n-title="moon.playCelebrateHint" data-i18n="moon.playCelebrate">播放滿月慶祝</button>
+                <button id="moon-play-credits" class="btn btn-sm" type="button" data-i18n="moon.playCredits">播放謝幕名單</button>
+                <button id="moon-clear" class="btn btn-sm btn-danger" type="button" data-i18n="moon.clearAll">全部清除</button>
               </div>
             </div>
             <ul id="moon-donation-list" class="bgm-track-list"></ul>

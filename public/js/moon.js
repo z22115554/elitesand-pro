@@ -17,7 +17,9 @@
   const demoCelebrate = params.get('demo') === 'celebrate';
   const demo = params.get('demo') === '1' || demoCelebrate;
 
-  const STYLE_LABELS = { paper: '紙燈籠', red: '紅燈籠', pomelo: '柚子燈', palace: '宮燈', rabbit: '月兔燈' };
+  const LANTERN_STYLES = ['paper', 'red', 'pomelo', 'palace', 'rabbit'];
+  const t = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
+  const styleLabel = (style) => (LANTERN_STYLES.includes(style) ? t(`moon.style.${style}`) : t('moon.style.fallback'));
   const DEMO_DONATIONS = [
     { id: 'demo-paper', name: '湯圓', amount: 50, style: 'paper' },
     { id: 'demo-red', name: '月餅好好吃', amount: 100, style: 'red' },
@@ -83,7 +85,7 @@
   }
 
   function buildLantern(donation, isNew) {
-    const style = STYLE_LABELS[donation.style] ? donation.style : 'red';
+    const style = LANTERN_STYLES.includes(donation.style) ? donation.style : 'red';
     const node = div(`lantern lantern--${style}` + (isNew ? ' is-new' : ''));
     node.dataset.id = donation.id;
     const body = document.createElement('div');
@@ -222,7 +224,7 @@
       if (prev === undefined || (rank >= 0 && rank < prev)) byName.set(d.name, rank >= 0 ? rank : STYLE_RANK.length - 1);
     }
     const heading = div('credits-heading');
-    heading.textContent = '感 謝 名 單';
+    heading.textContent = t('moon.credits.heading');
     const title = div('credits-title');
     title.textContent = state.title || '';
     const blocks = [heading, title];
@@ -232,7 +234,7 @@
       const group = div('credits-group');
       group.dataset.style = style;
       const label = div('credits-group-label');
-      label.textContent = STYLE_LABELS[style];
+      label.textContent = styleLabel(style);
       const list = div('credits-names');
       for (const name of names) {
         const span = document.createElement('span');
@@ -243,9 +245,9 @@
       blocks.push(group);
     });
     const closing = div('credits-closing');
-    closing.textContent = '謝謝每一份心意';
+    closing.textContent = t('moon.credits.closing');
     const sub = div('credits-closing-sub');
-    sub.textContent = `NT$${nf.format(Math.max(Number(state.total) || 0, 0))}・${byName.size} 位`;
+    sub.textContent = t('moon.credits.summary', { total: nf.format(Math.max(Number(state.total) || 0, 0)), count: byName.size });
     blocks.push(closing, sub);
     creditsRoll.replaceChildren(...blocks);
   }
@@ -278,7 +280,8 @@
     thanksBusy = true;
     const who = document.createElement('b');
     who.textContent = donation.name;
-    thanksEl.replaceChildren('感謝 ', who, ` 點亮${STYLE_LABELS[donation.style] || '燈籠'}`);
+    const [before, after = ''] = t('moon.overlay.thanks', { style: styleLabel(donation.style) }).split('{name}');
+    thanksEl.replaceChildren(before, who, after);
     thanksEl.classList.add('is-shown');
     setTimeout(() => {
       thanksEl.classList.remove('is-shown');

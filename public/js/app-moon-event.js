@@ -6,9 +6,11 @@
   'use strict';
 
   const el = (id) => document.getElementById(id);
-  const nf = new Intl.NumberFormat('zh-TW');
+  const locale = () => (window.I18n ? window.I18n.current() : 'zh-TW');
+  const nf = { format: (n) => new Intl.NumberFormat(locale()).format(n) };
   const toast = (message, type) => window.AppShared?.showToast?.(message, type);
-  const STYLE_LABELS = { paper: '紙燈籠', red: '紅燈籠', pomelo: '柚子燈', palace: '宮燈', rabbit: '月兔燈' };
+  const t = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
+  const styleLabel = (style) => t(`moon.style.${style}`);
   let state = null;
   let configDirty = false;
 
@@ -23,6 +25,17 @@
     el('moon-summary-goal').textContent = `/ NT$${nf.format(goal)}`;
     el('moon-summary-percent').textContent = `${percent}%`;
     el('moon-summary-fill').style.width = `${Math.min(percent, 100)}%`;
+  }
+
+  function renderEndNotice() {
+    const end = new Date(state.endsAt);
+    const box = el('moon-end-notice');
+    if (!Number.isFinite(end.getTime())) { box.replaceChildren(); return; }
+    const date = end.toLocaleString(locale(), { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    const [before, after = ''] = t('moon.endNotice').split('{date}');
+    const strong = document.createElement('strong');
+    strong.textContent = date;
+    box.replaceChildren(before, strong, after);
   }
 
   function renderConfig() {
@@ -54,7 +67,7 @@
     if (!items.length) {
       const empty = document.createElement('li');
       empty.className = 'bgm-track-empty';
-      empty.textContent = '還沒有斗內紀錄';
+      empty.textContent = t('moon.empty');
       list.replaceChildren(empty);
       return;
     }
@@ -71,15 +84,15 @@
       const style = document.createElement('span');
       style.className = 'moon-style-chip';
       style.dataset.style = d.style;
-      style.textContent = STYLE_LABELS[d.style] || '';
-      style.title = d.styleAuto ? '依金額自動' : '手動指定';
+      style.textContent = styleLabel(d.style);
+      style.title = d.styleAuto ? t('moon.styleAuto') : t('moon.styleManual');
       const time = document.createElement('span');
       time.className = 'sub';
-      time.textContent = new Date(d.at).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      time.textContent = new Date(d.at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'btn btn-sm btn-ghost';
-      remove.textContent = '刪除';
+      remove.textContent = t('common.delete');
       remove.addEventListener('click', () => removeDonation(d));
       meta.append(style, amount, time, remove);
       li.append(label, meta);
@@ -91,6 +104,7 @@
     if (!next) return;
     state = next;
     renderSummary();
+    renderEndNotice();
     renderConfig();
     renderList();
   }
@@ -98,7 +112,7 @@
   function send(event, data, onOk) {
     SocketClient.sendWithCallback(event, data, (result) => {
       if (!result) return;
-      if (!result.ok) { toast(result.error || '操作失敗', 'error'); return; }
+      if (!result.ok) { toast(t(result.inactive ? 'moon.toast.ended' : 'moon.toast.failed'), 'error'); return; }
       apply(result.state);
       onOk?.();
     });
@@ -108,10 +122,10 @@
     window.DangerConfirm.request({
       requirePhrase: false,
       tone: 'neutral',
-      title: '刪除這筆斗內？',
+      title: t('moon.confirmDelete.title'),
       summary: `${d.name}　NT$${nf.format(d.amount)}`,
-      impact: '燈籠會從 OBS 畫面拿掉，月亮進度也會扣回去。',
-      confirmLabel: '刪除',
+      impact: t('moon.confirmDelete.impact'),
+      confirmLabel: t('common.delete'),
     }).then((ok) => { if (ok) send('moon:remove', { id: d.id }); });
   }
 
@@ -127,7 +141,7 @@
       event.preventDefault();
       const name = el('moon-add-name').value.trim();
       const amount = Number(el('moon-add-amount').value);
-      if (!name || !(amount > 0)) { toast('請填寫名字與大於 0 的金額', 'error'); return; }
+      if (!name || !(amount > 0)) { toast(t('moon.toast.invalid'), 'error'); return; }
       send('moon:donate', { name, amount, style: el('moon-add-style').value || undefined }, () => {
         el('moon-add-name').value = '';
         el('moon-add-amount').value = '';
@@ -148,15 +162,15 @@
         base: Number(el('moon-config-base').value),
         tiers: Object.fromEntries([...document.querySelectorAll('[data-moon-tier]')]
           .map((input) => [input.dataset.moonTier, Number(input.value)])),
-      }, () => toast('活動設定已儲存', 'success'));
+      }, () => toast(t('moon.toast.saved'), 'success'));
     });
 
     el('moon-clear').addEventListener('click', () => {
       window.DangerConfirm.request({
-        title: '清除全部斗內紀錄？',
-        summary: 'OBS 上的燈籠會全部拿掉，月亮回到起始金額。',
-        impact: '這個動作無法復原；活動設定（標題、目標、起始金額）會保留。',
-        phrase: '清除',
+        title: t('moon.confirmClear.title'),
+        summary: t('moon.confirmClear.summary'),
+        impact: t('moon.confirmClear.impact'),
+        phrase: t('moon.confirmClear.phrase'),
       }).then((ok) => { if (ok) send('moon:clear'); });
     });
 
@@ -166,8 +180,8 @@
     document.querySelectorAll('[data-moon-copy]').forEach((button) => {
       button.addEventListener('click', () => {
         navigator.clipboard.writeText(moonUrl(button.dataset.moonCopy))
-          .then(() => toast('已複製網址', 'success'))
-          .catch(() => toast('複製失敗，請手動選取網址', 'error'));
+          .then(() => toast(t('moon.toast.copied'), 'success'))
+          .catch(() => toast(t('moon.toast.copyFailed'), 'error'));
       });
     });
 
@@ -183,12 +197,12 @@
     });
     el('moon-play-celebrate').addEventListener('click', () => {
       SocketClient.sendWithCallback('moon:celebrate', null, (result) => {
-        if (result?.ok) toast('滿月慶祝播放中', 'success');
+        if (result?.ok) toast(t('moon.toast.celebrate'), 'success');
       });
     });
     el('moon-play-credits').addEventListener('click', () => {
       SocketClient.sendWithCallback('moon:credits', null, (result) => {
-        if (result?.ok) toast('謝幕名單開始播放', 'success');
+        if (result?.ok) toast(t('moon.toast.credits'), 'success');
       });
     });
     const frame = document.querySelector('.moon-preview-frame');
@@ -196,6 +210,7 @@
   }
 
   SocketClient.on('moon:update', apply);
+  window.addEventListener('i18n:change', () => { if (state) apply(state); });
   SocketClient.on('connection-change', (connected) => {
     if (!connected) return;
     SocketClient.sendWithCallback('moon:get', null, (result) => {

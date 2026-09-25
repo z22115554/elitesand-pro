@@ -87,6 +87,7 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
+.nav-item .nav-sub { margin-top: -2px; font-size: 9.5px; font-weight: 500; line-height: 1.1; color: var(--text-faint); white-space: nowrap; }
 .nav-item:hover { background: var(--bg-hover); color: var(--text); }
 .nav-item.active { background: var(--accent-soft); color: var(--accent); }
 .nav-item.active::before {
@@ -1642,7 +1643,7 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .moon-preview-frame { position: relative; margin-top: 12px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--r-md); border: 1px solid var(--border); background: radial-gradient(ellipse at 30% 20%, #3a3f63, #151827 70%); }
 .moon-preview-frame iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; background: transparent; }
 .moon-donation-meta { display: flex; align-items: center; gap: 10px; flex: none; font-variant-numeric: tabular-nums; }
-.moon-add-row .moon-style-select { flex: 0 1 130px; }
+select.moon-style-select { width: auto; flex: 0 1 auto; max-width: 100%; }
 .moon-tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
 .moon-tier { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
 .moon-style-chip { padding: 2px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
@@ -1653,3 +1654,6 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .moon-style-chip[data-style="rabbit"] { border-color: #f0a8b4; color: #f5b8c2; }
 select.moon-preview-mode { width: auto; height: 32px; flex: none; }
 .moon-list-actions { display: flex; gap: 8px; }
+.moon-end-notice { grid-column: 1 / -1; padding: 12px 16px; border-radius: var(--r-md); border: 1px solid color-mix(in srgb, var(--warning, #d59b36) 55%, var(--border)); background: color-mix(in srgb, var(--warning, #d59b36) 10%, var(--bg-raised)); font-size: 13px; line-height: 1.6; }
+.moon-end-notice strong { color: var(--warning, #d59b36); font-weight: 700; }
+.moon-end-notice:empty { display: none; }

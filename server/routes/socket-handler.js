@@ -469,7 +469,7 @@ module.exports = function socketHandler(io, {
       // 面板內的預覽 iframe 也要收，預覽才會跟正式來源顯示同一種語言。
       // controller 也收：面板要用 mode 還原「OBS 顯示語言」選單的選項（不會動面板自己的語言）。
       if (type === 'controller' || type === 'display' || type === 'display-spout' || type === 'display-preview'
-        || type === 'setlist' || type === 'setlist-preview') {
+        || type === 'setlist' || type === 'setlist-preview' || type === 'moon') {
         socket.emit('obs-locale:update', {
           mode: ctx.playState.obsLocale,
           panelLocale: ctx.playState.panelLocale,
