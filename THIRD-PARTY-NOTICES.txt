@@ -19,6 +19,23 @@ its SHA-256, and copies of LICENSE.txt and THIRD_PARTY_LICENSES.txt fetched
 from the matching upstream release tag at build time.
 Source and license: https://github.com/yt-dlp/yt-dlp
 
+bgutil-ytdlp-pot-provider 2.0.0 (preselected; not yet bundled)
+----------------------------------------------------------------
+Elitesand Pro has preselected bgutil-ytdlp-pot-provider 2.0.0 as its preferred
+external PO Token provider candidate for the YouTube mweb fallback path.
+
+The project is licensed under GNU GPL v3. The exact upstream GPLv3 text and
+source/provenance record are kept in
+third-party-licenses/bgutil-ytdlp-pot-provider/.
+
+Current status: the provider is not bundled and is not auto-installed.
+If a future release redistributes it, the release must include the GPLv3
+license and satisfy the corresponding-source requirements before that build
+is allowed to ship.
+
+Upstream: https://github.com/Brainicism/bgutil-ytdlp-pot-provider
+Selected tag: 2.0.0
+
 FFmpeg (not bundled by default; downloaded on demand)
 ------------------------------------------------------
 Elitesand Pro does not bundle ffmpeg.exe/ffprobe.exe by default. The first
