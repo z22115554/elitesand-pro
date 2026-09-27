@@ -109,11 +109,16 @@
       case 'download-muq-backbone': return t('sections.install.downloadBackbone', { detail: bytes || elapsed });
       case 'download-weights': return t('sections.install.downloadWeights', { detail: bytes || elapsed });
       case 'verify-weights': return t('sections.install.verifyWeights');
+      case 'repair-packages':
+        if (s.step === 'pip-download') return t('sections.install.pipDownload', { name: s.detail || '', detail: bytes });
+        return t('sections.install.repairPackages', { elapsed });
+      case 'verify-packages': return t('sections.install.verifyPackages');
       case 'done': return t('sections.install.done');
       default: return t('sections.preparing');
     }
   }
 
+  let repairRound = false;
   function renderDownload(status) {
     const pct = Math.max(0, Math.min(100, Math.round(Number(status && status.overallPercent) || 0)));
     dom.progress.hidden = false;
@@ -122,7 +127,11 @@
     dom.stage.textContent = downloadStageText(status);
     dom.percent.textContent = `${pct}%`;
     if (dom.fill) dom.fill.style.setProperty('--work-progress', `${pct}%`);
-    dom.result.textContent = t('sections.install.note');
+    // 只補套件的更新：不要再說「要下載 2.7GB」嚇人
+    // （完整安裝最後也有 verify-packages，所以記住「這一輪是不是從補裝開始的」）
+    if (status && status.stage === 'repair-packages') repairRound = true;
+    else if (status && status.stage === 'disk-space-check') repairRound = false;
+    dom.result.textContent = t(repairRound ? 'sections.install.repairNote' : 'sections.install.note');
   }
 
   function getCurrentTrack() {
@@ -135,6 +144,21 @@
 
   // preserveResult=true：只重置按鈕/進度條狀態，不動 dom.result 的文字——用在「呼叫端
   // 剛塞了一則明確的錯誤訊息進去，不想被這裡的預設邏輯蓋掉」的情境（見 runAnalysis()）。
+  // 每首歌最近一次分析的結果（成功／失敗／取消）。以前收到結果後呼叫 renderIdle() 重畫，
+  // 它看的是 track.sectionsStatus——那時 state:sync 常常還沒到，於是把剛寫上去的結果清成空白，
+  // 使用者按完只看到按鈕亮回來、完全不知道成功還是失敗（2026-09-25 實機回報）。
+  const outcomes = new Map(); // trackId -> 要顯示的文字
+
+  function errorText(code, message) {
+    if (code === 'PROVIDER_UNAVAILABLE' || code === 'ENGINE_UNAVAILABLE') return t('sections.needsCuda');
+    if (code === 'GPU_BUSY') return t('sections.gpuBusy');
+    if (code === 'GPU_OOM') return t('sections.failedOom');
+    if (code === 'TIMEOUT') return t('sections.failedTimeout');
+    if (code === 'INPUT_UNREADABLE') return t('sections.failedInput');
+    const reason = String(message || code || '').trim();
+    return reason ? t('sections.failed', { reason: reason.length > 160 ? `${reason.slice(0, 160)}…` : reason }) : t('sections.failedGeneric');
+  }
+
   function renderIdle(preserveResult) {
     const track = getCurrentTrack();
     dom.progress.hidden = true;
@@ -151,10 +175,14 @@
     const status = track.sectionsStatus;
     dom.runBtn.textContent = (status === 'done' || status === 'failed') ? t('sections.reanalyzeButton') : t('sections.runButton');
     if (preserveResult) return;
-    if (status === 'done' && Array.isArray(track.sections)) {
-      dom.result.textContent = t('sections.doneCount', { count: track.sections.length });
+    const outcome = outcomes.get(String(track.id));
+    if (outcome) {
+      dom.result.textContent = outcome;
+    } else if (status === 'done' && (Array.isArray(track.sections) || Number.isFinite(track.sectionCount))) {
+      // 播放清單摘要只帶 sectionCount（段落本身只跟著 currentTrack 送）
+      dom.result.textContent = t('sections.doneCount', { count: Array.isArray(track.sections) ? track.sections.length : track.sectionCount });
     } else if (status === 'failed') {
-      dom.result.textContent = t('aiJob.error');
+      dom.result.textContent = t('sections.failedGeneric');
     } else {
       dom.result.textContent = '';
     }
@@ -183,18 +211,18 @@
     if (payload.stage === 'cancelled' || payload.stage === 'error') {
       currentJob = null;
       syncCreep();
-      if (payload.stage === 'error') {
-        const code = payload.error;
-        dom.result.textContent = code === 'PROVIDER_UNAVAILABLE' || code === 'ENGINE_UNAVAILABLE'
-          ? t('sections.needsCuda')
-          : code === 'GPU_BUSY' ? t('sections.gpuBusy') : (payload.errorMessage || t('aiJob.error'));
-      }
+      outcomes.set(trackId, payload.stage === 'error'
+        ? errorText(payload.error, payload.errorMessage)
+        : t('sections.cancelled'));
       renderIdle();
       return;
     }
     if (payload.stage === 'done') {
       currentJob = null;
       syncCreep();
+      const count = Number.isFinite(payload.sectionCount) ? payload.sectionCount : null;
+      if (count != null) outcomes.set(trackId, t('sections.doneCount', { count }));
+      else outcomes.delete(trackId); // 舊版 server 沒帶段落數：交給 track.sections
       renderIdle();
       return;
     }
@@ -235,6 +263,8 @@
     const track = getCurrentTrack();
     if (!track) return;
     dom.runBtn.disabled = true;
+    outcomes.delete(String(track.id)); // 重新分析：上一次的結果不再適用
+    dom.result.textContent = '';
     try {
       const res = await PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(track.id)}/analyze-sections`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
@@ -257,18 +287,18 @@
           }
           // 下載本身失敗：顯示真正的原因（server 端 reason），不要留著上一輪的
           // RUNTIME_NOT_READY 字樣——那只是「還沒裝」，不是「裝失敗的原因」。
-          dom.result.textContent = downloadBody?.reason || t('aiJob.error');
+          dom.result.textContent = downloadBody?.reason || t('sections.failedGeneric');
           renderIdle(true);
           return;
         }
-        dom.result.textContent = body.error || t('aiJob.error');
+        dom.result.textContent = body.error ? errorText(body.error, body.message) : t('sections.failedGeneric');
         renderIdle(true);
         return;
       }
       currentJob = { trackId: String(track.id), stage: 'preparing', percent: 0 };
       renderProgress(currentJob);
     } catch (_) {
-      dom.result.textContent = t('aiJob.error');
+      dom.result.textContent = t('sections.failedGeneric');
       renderIdle(true);
     }
   }

@@ -12,6 +12,7 @@
 
 const crypto = require('crypto');
 const stateStore = require('../services/state-store');
+const { applyOneTimeFixes, ONE_TIME_FIX_NAMES } = require('../services/state-migrations');
 const setlistStyleSchema = require('../../public/js/setlist-style-schema');
 const twitchReplySettings = require('../../public/js/twitch-reply-settings');
 const twitchRequestSettings = require('../../public/js/twitch-request-settings');
@@ -53,7 +54,7 @@ function getDefaultLyricSettings() {
       paperstrip: { template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
       mirror: { template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
       particle: { template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', animationIntensity: 'normal', lyricPosition: 'center', verticalPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto' },
-      jizura: { template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'right', jizuraMotion: 'smooth' },
+      jizura: { template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth' },
       lightboard: { template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
       typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
     },
@@ -243,9 +244,22 @@ function createAppState(io) {
     });
   }
 
+  // 一次性設定修正做過哪些（見 state-migrations.js 的 ONE_TIME_FIXES），跟著 state.json 存
+  let oneTimeFixes = {};
+
   (function restorePersistedState() {
     const saved = stateStore.loadState();
-    if (!saved) return;
+    if (!saved) {
+      // 全新安裝：預設值本來就是新的，所有一次性修正都視為已做
+      oneTimeFixes = Object.fromEntries(ONE_TIME_FIX_NAMES.map((name) => [name, true]));
+      return;
+    }
+    const appliedFixes = applyOneTimeFixes(saved);
+    oneTimeFixes = saved.oneTimeFixes;
+    if (appliedFixes.length) {
+      log.info(`已套用一次性設定修正：${appliedFixes.join(', ')}`);
+      setImmediate(() => persistState());
+    }
 
     if (Array.isArray(saved.playlist)) playState.playlist = restorePersistedPlaylist(saved.playlist);
     if (typeof saved.style === 'string') playState.style = saved.style;
@@ -435,6 +449,7 @@ function createAppState(io) {
       twitchRewardSettings: playState.twitchRewardSettings,
       // 只存 enabled；playing 是即時狀態，見上方 restore 處的說明。
       bgmSettings: { enabled: playState.bgmSettings.enabled, ...bgmSettingsSchema.clampSettings(playState.bgmSettings) },
+      oneTimeFixes,
     }), callback);
   }
 
@@ -647,6 +662,10 @@ function createAppState(io) {
       ...(track.vocalsFile ? { vocalsFile: track.vocalsFile } : {}),
       ...(track.instrumentalFile ? { instrumentalFile: track.instrumentalFile } : {}),
       ...(track.separationStatus && track.separationStatus !== 'none' ? { separationStatus: track.separationStatus } : {}),
+      // 段落分析：清單只帶狀態與段落數（面板按鈕／結果文字用）；段落本身跟著 currentTrack 完整送。
+      // 以前白名單漏了這兩個，面板永遠看不到「已分析」（2026-09-25 實測）。
+      ...(track.sectionsStatus && track.sectionsStatus !== 'none' ? { sectionsStatus: track.sectionsStatus } : {}),
+      ...(Array.isArray(track.sections) && track.sections.length ? { sectionCount: track.sections.length } : {}),
       ...(manual ? { manualLyrics: true } : {}),
       ...(audio.audioMissing ? { audioMissing: true } : {}),
     };

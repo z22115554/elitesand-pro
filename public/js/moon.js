@@ -107,13 +107,21 @@
   let rotateTimer = 0;
   let swapTimer = 0;
 
+  // 放大燈籠時一排放不下 ?max= 盞，改以畫面實際放得下的數量分頁（每盞含間距約 118px）。
+  let lanternScale = 1;
+  function perPage() {
+    const fit = Math.floor((window.innerWidth - 80 * lanternScale) / (118 * lanternScale));
+    return Math.max(1, Math.min(maxLanterns, fit));
+  }
+
   function pageCount() {
-    return Math.max(1, Math.ceil(allLanterns.length / maxLanterns));
+    return Math.max(1, Math.ceil(allLanterns.length / perPage()));
   }
 
   function pageSlice(index) {
-    const end = allLanterns.length - index * maxLanterns;
-    return allLanterns.slice(Math.max(0, end - maxLanterns), end);
+    const size = perPage();
+    const end = allLanterns.length - index * size;
+    return allLanterns.slice(Math.max(0, end - size), end);
   }
 
   function drawPage(newIds) {
@@ -306,6 +314,9 @@
     const crossedGoal = !firstRender && lastProgress < 1 && progress >= 1;
     lastProgress = progress;
 
+    lanternScale = Number(state.lanternScale) || 1;
+    document.documentElement.style.setProperty('--lantern-scale', String(lanternScale));
+    document.documentElement.style.setProperty('--moon-scale', String(Number(state.moonScale) || 1));
     el('moon-title').textContent = state.title || '';
     el('moon-goal').textContent = nf.format(goal);
     el('moon-done').textContent = state.doneText || '';

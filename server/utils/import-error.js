@@ -13,8 +13,19 @@ function classifyImportError(error) {
   if (code === 'YOUTUBE_MUSIC_PREMIUM' || /only available to music premium members|music premium members/.test(text)) {
     return { code: 'YOUTUBE_MUSIC_PREMIUM', status: 422, message: '這首 YouTube Music 音樂僅限 Music Premium 播放，無法下載匯入。', recovery: '請改貼可公開播放的 YouTube 影片連結，或匯入本機音檔。', retryable: false, technical };
   }
-  if (/cookies?|sign in|login|required to view|confirm your age|authentication|認證|登入/.test(text)) {
-    return { code: 'YOUTUBE_AUTH_REQUIRED', status: 422, message: 'YouTube 要求登入或 cookies，這支影片目前無法直接下載。', recovery: '更新 yt-dlp；若仍失敗，改用可公開播放的影片或本機音檔。', retryable: false, technical };
+  if (code === 'YOUTUBE_RATE_LIMITED' || /(?:http\s*error|httperror)?\s*429\b|too many requests|rate.?limit|temporarily blocked|請求.*頻繁/.test(text)) {
+    return { code: 'YOUTUBE_RATE_LIMITED', status: 429, message: 'YouTube 暫時限制了這台電腦的請求。', recovery: '程式已停止連續重試；請稍後再匯入，避免持續觸發限制。', retryable: true, technical };
+  }
+  if (code === 'YOUTUBE_AUTH_REQUIRED' || /cookies?|sign in|login|required to view|confirm your age|authentication|members[- ]?only|認證|登入|會員/.test(text)) {
+    return {
+      code: 'YOUTUBE_AUTH_REQUIRED',
+      status: 422,
+      message: '匿名 YouTube 修復流程已嘗試完成，但 YouTube 仍要求登入驗證。',
+      recovery: '可選擇「使用瀏覽器登入狀態重試」作為最後手段；不使用帳號時請改用本機音檔或其他公開來源。',
+      retryable: true,
+      browserCookieFallback: true,
+      technical,
+    };
   }
   if (/not available in your country|not available in your region|geo.?restrict|country restriction|地區|區域限制/.test(text)) {
     return { code: 'REGION_RESTRICTED', status: 422, message: '這支影片在目前地區無法播放或下載。', recovery: '改用其他官方來源或匯入本機音檔。', retryable: false, technical };
@@ -45,6 +56,7 @@ const TELEMETRY_CODE_BY_IMPORT_CODE = {
   IMPORT_CANCELLED: null,
   DISK_FULL: 'disk_full',
   YOUTUBE_AUTH_REQUIRED: 'ytdlp_auth_required',
+  YOUTUBE_RATE_LIMITED: 'ytdlp_rate_limited',
   REGION_RESTRICTED: 'ytdlp_geo_blocked',
   VIDEO_UNAVAILABLE: 'ytdlp_private',
   IMPORT_TIMEOUT: 'ytdlp_timeout',

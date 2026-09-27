@@ -9,14 +9,21 @@
  *      可用部品是整首共用的，所以每種 profile 各規劃一次，再依「這句落在哪個段落」挑 cut
  *      合併成一份 plan；每個 cut 記著自己 profile 的 fx，繪製前換上。
  *   3. 每幀 J.Renderer#frame(ctx, plan, t, {transparent:true}) 畫進自己的 canvas。
+ *   4. 引擎的「統一感」（unify）與「文字整列」（typeset）一律開啟：同一段落固定用幾種版面與
+ *      動作、重複的句子（第二次副歌）用同樣方式呈現、段落首句變成キメ；假名字距、助詞縮小、
+ *      歌詞提早 0.2 秒出現、每個 cut 最多一個畫面特效。unify 的「段落」是看歌詞裡的空行，
+ *      所以把 SongFormer 的段落交界翻成 LRC 空行餵進去（見 buildPlan）。
  *
  * 直播疊加的限制（鐵則 #11、不可搶主播的戲）：
  *   - transparent 模式本來就不畫背景圖形（61 個 bg 自動排除）；HUD、轉場也關掉。
  *   - 只用白名單內的 layout：2026-09-24 逐一在透明模式畫一幀量不透明像素，覆蓋率
  *     ≤25% 才收（全畫面 16:9 量）。字幕帯／障子／便箋這類會整面蓋住主播的版面一律不用。
  *     新增引擎版本時要重跑稽核再更新清單。
- *   - 預設偏右：畫布仍是全畫面（裝飾照常鋪滿），只把每個 cut 的內容往右推到不超出畫面為止，
- *     避開站在畫面中間的 VTuber；可改偏左或置中（全畫面）。
+ *   - 偏右／偏左：畫布仍是全畫面（裝飾照常鋪滿），只把每個 cut 的內容往右推到不超出畫面為止，
+ *     避開站在畫面中間的 VTuber；也可選置中（全畫面）。
+ *   - 預設兩側（2026-09-26 起）：引擎的「中央を空ける」（centerFree）——每句拆成兩半放在左右兩側帶狀區，中間整片留給
+ *     主播。每個 cut 會多一個「另一半」的附屬 cut，繪製成本約翻倍，所以只用稽核過的輕量版面
+ *     （CENTER_FREE_LAYOUTS）；另一半在唱到它第一個字時才出現（見 syncCompanion）。
  *   - 動作預設每幀更新（流暢）；可改回引擎原本的 2 コマ打ち（每秒 12 張的作畫感）。
  *   - 文字色／強調色吃面板設定（--lyric-color／--lyric-color-active），並關掉引擎的
  *     scheme 切換——引擎的配色是「底色＋字色」一組，透明疊加時底色不存在，淺底 scheme
@@ -46,8 +53,18 @@
   // 30fps）；虹の弧／奥行き重ね／ワードクラウド／奥行き／魚眼／文字風船 掉 16–25 幀。實機回報
   // 「字很多的那種會嚴重掉幀、肉眼看得出來」就是文字雲。瓶頸多在 GPU（一幀上百次文字繪製、
   // 發光陰影），不是 JS——所以只看 JS 耗時會漏掉文字雲這種。
+  // 2026-09-25 引擎升級（8bd7abc）重跑 tools/audit-jizura-layouts.js：新舊版同一個版面的成本與覆蓋率
+  // 幾乎沒變；但 ring（円環）新舊版 p95 都約 28ms，上次實機稽核漏掉，補進來。
   const HEAVY_LAYOUTS = ['wave', 'tunnel', 'circleWords', 'cylinder', 'neon',
-    'arcTop', 'depthStack', 'wordCloud', 'perspective', 'fisheye', 'balloons'];
+    'arcTop', 'depthStack', 'wordCloud', 'perspective', 'fisheye', 'balloons', 'ring'];
+  // 「兩側」模式可用的版面：每句拆成兩個 cut 同時畫，成本約翻倍。2026-09-25 用 tools/audit-jizura-layouts.js
+  // --center-free 在 1080p 透明模式量：覆蓋率 ≤25% 且每幀 p95 ≤16.7ms（撐得住 60fps）才收，再跟上面的
+  // 可用清單取交集（連最基本的 center 在兩側模式下 p95 都有 34ms，不收）。引擎升級後要重跑再更新。
+  const CENTER_FREE_LAYOUTS = ['mixed', 'marquee', 'labels', 'type', 'diag', 'pill', 'lowerThird', 'staircase',
+    'gridCells', 'dropCap', 'justified', 'frameBox', 'bubble', 'ticker', 'genkou', 'quote', 'ruler', 'searchBar',
+    'chat', 'notification', 'ticket', 'hanging', 'elastic', 'stickerBomb', 'bubbles', 'slotMachine', 'flipBoard',
+    'credits', 'equalizer', 'tape', 'headlineDeck', 'contents', 'footnote', 'proofread', 'numbered', 'swissGrid',
+    'routeMap', 'tanzaku', 'pendulum', 'origami', 'stencil'];
   // 很吵的版面：同一句重複畫滿半個畫面、字到處飛。覆蓋率不高（字與字之間是空的）所以過了白名單，
   // 但觀感上幾乎佔滿畫面。只在「狂放」強度使用。
   const BUSY_LAYOUTS = ['rain', 'stickerBomb', 'scatter', 'bubbles', 'marquee', 'sliceStack', 'mirror',
@@ -122,7 +139,7 @@
 
   function placement() {
     const v = document.body.dataset.jizuraPlacement;
-    return v === 'left' || v === 'full' ? v : 'right';
+    return v === 'left' || v === 'right' || v === 'full' ? v : 'sides';
   }
 
   // ─── 偏左／偏右：畫布維持全畫面，只把「這個 cut 的內容」整組往側邊推 ───
@@ -285,6 +302,13 @@
     return !t || /^[\s.…·。♪〜~-]+$/.test(t);
   }
 
+  // 這個時間點落在第幾個段落（沒有段落資料時一律 0）；給 unify 切段用
+  function sectionIndexAt(sections, tSec) {
+    if (!sections || !sections.length) return 0;
+    for (let i = 0; i < sections.length; i++) if (tSec >= sections[i].start && tSec < sections[i].end) return i;
+    return tSec < sections[0].start ? 0 : sections.length - 1;
+  }
+
   function profileAt(sections, tSec) {
     if (!sections || !sections.length) return DEFAULT_PROFILE;
     let label = null;
@@ -425,12 +449,39 @@
           c.inDur *= f; c.outDur *= f;
         }
       }
+      // 兩側模式：另一半（右側）在唱到它第一個字時才出現
+      for (const c of list) syncCompanion(c, tl);
     }
+    // 沒有逐字時間的句子，另一半也要跟著主 cut 的新時間走
+    for (const c of cuts) if (c.companion && c.companion.__jzSynced !== c.start) syncCompanion(c, null);
     if (!moved.size) return;
     for (const e of events) {
       const to = moved.get(Number(e.t).toFixed(3));
       if (to !== undefined) e.t = to;
     }
+  }
+
+  // 兩側模式：引擎在規劃時把每個 cut 拆成兩半，右半是掛在 cut.companion 的附屬 cut，時間是當時複製的
+  // （開始晚 0.12 秒、結束相同）。對齊逐字時間會移動主 cut，附屬 cut 要跟著改，不然兩半對不上。
+  // 有逐字時間：右半在唱到它第一個字時出現；沒有：沿用引擎的固定延遲。
+  function syncCompanion(c, tl) {
+    const tw = c.companion;
+    if (!tw) return;
+    let start = c.start + Math.min(0.12, c.dur * 0.08);
+    if (tl) {
+      const head = canonChars(c.text);
+      const tail = canonChars(tw.text);
+      const at = head.length ? findSeq(tl.chars, head, 0) : -1;
+      const bt = at >= 0 && tail.length ? findSeq(tl.chars, tail, at + head.length) : -1;
+      if (bt >= 0) start = Math.max(start, Math.min(tl.times[bt], c.end - MIN_CUT));
+    }
+    tw.start = start;
+    tw.end = c.end;
+    tw.dur = tw.end - tw.start;
+    tw.inDur = Math.min(c.inDur || 0.3, tw.dur * 0.45);
+    tw.outDur = c.outDur;
+    tw.fx = c.fx;
+    tw.__jzSynced = c.start;
   }
 
   // ─── 規劃 ───
@@ -441,7 +492,10 @@
     const heavy = new Set(HEAVY_LAYOUTS);
     const busy = new Set(BUSY_LAYOUTS);
     // 標準：排除太重與太吵的；狂放：只排除太重的；沉穩：只用安靜清單（見下面 quietOnly）
-    const safe = new Set(SAFE_LAYOUTS_LANDSCAPE.filter((k) => !heavy.has(k) && (mode === 'chaotic' || !busy.has(k))));
+    const sides = placement() === 'sides';
+    const centerFreeOk = new Set(CENTER_FREE_LAYOUTS);
+    const safe = new Set(SAFE_LAYOUTS_LANDSCAPE.filter((k) => !heavy.has(k) && (mode === 'chaotic' || !busy.has(k))
+      && (!sides || centerFreeOk.has(k))));
     const profiles = mode === 'calm' ? PROFILES_CALM : PROFILES;
     const koma = motionMode() === 'koma';
     const sections = meta && Array.isArray(meta.sections) && meta.sections.length ? meta.sections : null;
@@ -463,6 +517,11 @@
       const probe = line.time + Math.min(1500, Math.max(0, next - line.time) / 2);
       return profileAt(sections, probe / 1000);
     });
+    // unify 靠空行切段：段落交界（SongFormer 的段落，不是 profile——主歌一和主歌二是不同段）前插一個空行
+    const lineSection = usable.map((line, i) => {
+      const next = usable[i + 1] ? usable[i + 1].time : line.time + 3000;
+      return sectionIndexAt(sections, (line.time + Math.min(1500, Math.max(0, next - line.time) / 2)) / 1000);
+    });
     const used = [...new Set(lineProfile)];
     const cuts = [];
     const events = [];
@@ -473,7 +532,8 @@
       const lrc = usable.map((line, i) => {
         // 高潮段落的第一句＝衝擊句（引擎會給大字、閃爍與震動）
         const impact = prof.impactFirst && lineProfile[i] === profileId && (i === 0 || lineProfile[i - 1] !== profileId);
-        return lrcTime(line.time) + line.text + (impact ? '!' : '');
+        const gap = i > 0 && lineSection[i] !== lineSection[i - 1] ? '\n' : '';
+        return gap + lrcTime(line.time) + line.text + (impact ? '!' : '');
       }).join('\n');
 
       const project = Object.assign(J.defaultProject(), {
@@ -486,6 +546,10 @@
         wa: true,
         lang: 'auto',
         aspect,
+        unify: true,
+        typeset: true,
+        centerFree: sides,
+        centerDir: 'lr',
         colors: { enabled: true, bg: '#101014', fg, accentOn: true, accent },
       });
       project.fx = Object.assign(J.defaultProject().fx, prof.fx, {
@@ -498,7 +562,9 @@
         flash: false,     // 全畫面閃白＝鐵則 #11 的全螢幕遮罩
         bgSwitch: 0,      // 不切 scheme：見檔頭「文字色」
       });
-      const layoutPool = prof.quietOnly ? QUIET_LAYOUTS.filter((k) => safe.has(k)) : [...safe];
+      // 兩側模式下安靜清單跟輕量清單的交集只剩少數幾個，不夠時退回全部輕量版面（動作仍只用 calm 部品）
+      const quietPool = QUIET_LAYOUTS.filter((k) => safe.has(k));
+      const layoutPool = prof.quietOnly && quietPool.length >= 3 ? quietPool : [...safe];
       // 安靜段的進場／退場／停留動作只用引擎標成「しっとり（calm）」的部品，文字特效全關
       const calmOnly = (group, always) => {
         const calm = new Set([...J.taggedWith(group, 'calm'), ...always]);
@@ -573,12 +639,14 @@
       plan = null;
     }
     scheduleMeasure(plan);
-    // 書體走 Google Fonts，只載入這首歌用到的字；載完重畫一次（載入前會先用系統字頂著）
+    // 書體走 Google Fonts，只載入這首歌用到的字、這份 plan 實際用到的字型（不是整個字型目錄）；
+    // 載完重畫一次（載入前會先用系統字頂著）
     if (plan) {
       const text = lines.map((l) => l.text).join('') + ((meta && meta.title) || '') + '0123456789';
       if (fontsReadyFor !== planKey) {
         const forKey = planKey;
-        J.ensureFonts(text, null).then(() => {
+        const keys = typeof J.fontsOfPlan === 'function' ? J.fontsOfPlan(plan) : null;
+        J.ensureFonts(text, keys).then(() => {
           if (planKey === forKey) { fontsReadyFor = forKey; lastStepKey = ''; }
         }).catch(() => {});
       }
@@ -624,7 +692,9 @@
     if (!force && stepKey === lastStepKey && J.komaOf(p.fx) > 0) return;
     lastStepKey = stepKey;
     try {
-      renderer.frame(ctx2d, p, t, { scale: canvas.width / p.W, transparent: true, noHud: true, noTrans: true });
+      // 兩側模式每幀要畫兩個 cut（左右兩半），再加上色偏殘影（每個 cut 畫三次）會掉幀：2026-09-25 在
+      // Electron offscreen 1080p 量副歌 12 秒，開殘影 53fps、5% 的幀超過 25ms。兩側模式關掉殘影。
+      renderer.frame(ctx2d, p, t, { scale: canvas.width / p.W, transparent: true, noHud: true, noTrans: true, noGhost: !!p.centerFree });
     } catch (e) {
       console.warn('[文字PV] 繪製失敗:', e);
     }
@@ -636,7 +706,7 @@
     id: 'jizura',
     label: '文字PV',
     settings: [
-      { type: 'enum', key: 'jizuraPlacement', target: 'data:jizuraPlacement', values: ['right', 'left', 'full'], default: 'right' },
+      { type: 'enum', key: 'jizuraPlacement', target: 'data:jizuraPlacement', values: ['right', 'left', 'sides', 'full'], default: 'sides' },
       { type: 'enum', key: 'jizuraMotion', target: 'data:jizuraMotion', values: ['smooth', 'koma'], default: 'smooth' },
     ],
 
@@ -675,7 +745,10 @@
     // 除錯用（唯讀）：某時間點落在哪個 cut、用哪個 profile。開發時在 /display 的 console 呼叫
     // LyricTemplates.get('jizura').debugCutAt(秒)。
     debugCuts() {
-      return plan ? plan.cuts.map((c) => ({ line: c.line, text: c.text, start: c.start, end: c.end, layout: c.layout, recap: !!c.recap })) : null;
+      return plan ? plan.cuts.map((c) => ({
+        line: c.line, text: c.text, start: c.start, end: c.end, layout: c.layout, recap: !!c.recap, kime: !!c.kime, morph: !!c.morph,
+        companion: c.companion ? { text: c.companion.text, start: c.companion.start, end: c.companion.end } : null,
+      })) : null;
     },
 
     debugLastDrawn() {
@@ -686,7 +759,8 @@
     debugLayouts() {
       if (!plan) return null;
       const offs = plan.cuts.filter((c) => c.__jzDx !== undefined).map((c) => Math.round((c.__jzDx / plan.W) * 100));
-      return { placement: placement(), motion: motionMode(), W: plan.W, H: plan.H, layouts: [...new Set(plan.cuts.map((c) => c.layout))], offsetPercents: offs };
+      return { placement: placement(), motion: motionMode(), W: plan.W, H: plan.H, lang: plan.lang, unify: !!plan.unify, typeset: !!plan.typeset,
+        centerFree: !!plan.centerFree, layouts: [...new Set(plan.cuts.map((c) => c.layout))], offsetPercents: offs };
     },
 
     debugCutAt(tSec) {

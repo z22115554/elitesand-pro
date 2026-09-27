@@ -11,10 +11,9 @@
  *   不合併成單一檔案——server 內部有多處靠 __dirname 相對路徑找同層檔案
  *   （Electron 直接 require server/utils/parent-shutdown.js、app-updater.js
  *   複製 app-updater-runner.js 當獨立子行程），合併會打斷這些路徑假設。
- * - public/js/*.js：依每個 HTML 頁面原本 <script src> 的順序，把該頁引用的
- *   本機腳本各自 minify 後串接成一個 bundle，取代原本一串 <script> 標籤。
- *   （HTML 頁面本身就是這些腳本共享全域作用域的唯一依賴來源，串接不改變執行順序，
- *   等於今天分開的 <script> 標籤本來就共享同一個全域環境。）
+ * - public/js/*.js：依每個 HTML 頁面原本 <script src> 的順序，把「連續的一段」
+ *   本機腳本各自 minify 後串接成 bundle。遇到 vendor、動態路由或 inline script
+ *   就切成下一段，保留原本跨來源的執行順序，避免依賴尚未載入就先執行。
  * - vendor/（gsap.min.js、soundtouch*.js、Tone.js、opencc-cn2t.js）完全不碰。
  */
 'use strict';
@@ -141,58 +140,129 @@ function minifyInPlace(files, { rootForRelPath, sourcemapOut }) {
   return count;
 }
 
-const LOCAL_SCRIPT_RE = /<script\s+src="(\/js\/([^"?#]+?\.js))"><\/script>\s*\n?/g;
+const SCRIPT_TAG_RE = /<script\b[^>]*>[\s\S]*?<\/script>\s*\n?/gi;
+const SCRIPT_SRC_RE = /\bsrc="([^"]+)"/i;
+const LOCAL_SCRIPT_SRC_RE = /^\/js\/([^"?#]+?\.js)(?:[?#].*)?$/;
 
 /**
- * 把一個 HTML 頁面裡「本機 /js/*.js」的 <script> 標籤依序抓出來、逐檔 minify、
- * 串接成一個 bundle，並改寫 HTML 換成單一 <script> 參照。
- * electron-shell-chrome.js 是唯一例外：它在 index.html 的 <head> 裡搶在 body 之前執行，
- * 跟其他頁面腳本不共享位置語意，保留原檔名獨立 minify、不併入 bundle。
+ * 把頁面中的本機 /js/*.js 依原始執行順序分段 bundle。
+ *
+ * 不能把整頁所有本機腳本一口氣搬到第一個 /js/ 標籤的位置：display.html 的
+ * JIZURA engine 在 /vendor/，index.html 也有 Tone.js。跨過這些邊界會讓後面的
+ * 本機腳本在依賴尚未載入前先執行。任何非 mergeable script（vendor、動態路由、
+ * inline script、skipMerge）都會切斷 segment。
  */
 function bundlePage(htmlFile, publicJsDir, { bundleName, sourcemapOut, skipMerge, consumed }) {
   const html = fs.readFileSync(htmlFile, 'utf8');
-  const matches = [];
+  const skip = new Set(skipMerge || []);
+  const scriptTags = [];
   let m;
-  const re = new RegExp(LOCAL_SCRIPT_RE.source, 'g');
+  const re = new RegExp(SCRIPT_TAG_RE.source, 'gi');
+
   while ((m = re.exec(html))) {
-    const name = m[2];
-    if (skipMerge && skipMerge.includes(name)) continue;
-    matches.push({ full: m[0], name });
-  }
-  if (matches.length === 0) return { html, mergedCount: 0 };
-
-  const chunks = [];
-  for (const { name } of matches) {
-    const file = path.join(publicJsDir, name);
-    const source = fs.readFileSync(file, 'utf8');
-    const relPath = `public/js/${name}`;
-    const result = esbuild.transformSync(source, {
-      loader: 'js',
-      minify: true,
-      legalComments: 'none',
-      sourcemap: sourcemapOut ? 'external' : false,
-      sourcefile: relPath,
+    const full = m[0];
+    const srcMatch = SCRIPT_SRC_RE.exec(full);
+    const src = srcMatch ? srcMatch[1] : '';
+    const localMatch = LOCAL_SCRIPT_SRC_RE.exec(src);
+    const name = localMatch ? localMatch[1] : null;
+    scriptTags.push({
+      start: m.index,
+      end: re.lastIndex,
+      name,
+      mergeable: !!name && !skip.has(name),
     });
-    if (sourcemapOut && result.map) saveSourcemap(sourcemapOut, relPath, result.map);
-    chunks.push(`// --- ${name} ---\n${result.code}`);
-    consumed.add(name);
   }
 
-  const bundleFileName = `${bundleName}.bundle.js`;
-  fs.writeFileSync(path.join(publicJsDir, bundleFileName), chunks.join('\n'));
-
-  let replaced = false;
-  let newHtml = html.replace(new RegExp(LOCAL_SCRIPT_RE.source, 'g'), (full, _srcAttr, name) => {
-    if (skipMerge && skipMerge.includes(name)) return full;
-    if (!replaced) {
-      replaced = true;
-      return `<script src="/js/${bundleFileName}"></script>\n`;
+  const segments = [];
+  let current = [];
+  for (const tag of scriptTags) {
+    if (tag.mergeable) {
+      current.push(tag);
+    } else if (current.length) {
+      segments.push(current);
+      current = [];
     }
-    return '';
+  }
+  if (current.length) segments.push(current);
+  if (segments.length === 0) return { html, mergedCount: 0 };
+
+  const replacements = [];
+  let mergedCount = 0;
+
+  segments.forEach((segment, segmentIndex) => {
+    const chunks = [];
+    for (const tag of segment) {
+      const file = path.join(publicJsDir, tag.name);
+      const source = fs.readFileSync(file, 'utf8');
+      const relPath = `public/js/${tag.name}`;
+      const result = esbuild.transformSync(source, {
+        loader: 'js',
+        minify: true,
+        legalComments: 'none',
+        sourcemap: sourcemapOut ? 'external' : false,
+        sourcefile: relPath,
+      });
+      if (sourcemapOut && result.map) saveSourcemap(sourcemapOut, relPath, result.map);
+      chunks.push(`// --- ${tag.name} ---\n${result.code}`);
+      consumed.add(tag.name);
+      mergedCount++;
+    }
+
+    const suffix = segmentIndex === 0 ? '' : `-${segmentIndex + 1}`;
+    const bundleFileName = `${bundleName}${suffix}.bundle.js`;
+    fs.writeFileSync(path.join(publicJsDir, bundleFileName), chunks.join('\n'));
+
+    segment.forEach((tag, index) => {
+      replacements.push({
+        start: tag.start,
+        end: tag.end,
+        text: index === 0 ? `<script src="/js/${bundleFileName}"></script>\n` : '',
+      });
+    });
   });
 
-  return { html: newHtml, mergedCount: matches.length };
+  // 由後往前改，避免前面的替換改變後面記錄好的字元位置。
+  let newHtml = html;
+  replacements.sort((a, b) => b.start - a.start);
+  for (const replacement of replacements) {
+    newHtml = newHtml.slice(0, replacement.start) + replacement.text + newHtml.slice(replacement.end);
+  }
+
+  return { html: newHtml, mergedCount };
 }
+
+function assertLocalScriptReferencesExist(publicDir, publicJsDir) {
+  const pages = fs.readdirSync(publicDir).filter((name) => name.endsWith('.html'));
+  const missing = [];
+
+  for (const page of pages) {
+    const html = fs.readFileSync(path.join(publicDir, page), 'utf8');
+    const re = new RegExp(SCRIPT_TAG_RE.source, 'gi');
+    let m;
+    while ((m = re.exec(html))) {
+      const srcMatch = SCRIPT_SRC_RE.exec(m[0]);
+      if (!srcMatch) continue;
+      const localMatch = LOCAL_SCRIPT_SRC_RE.exec(srcMatch[1]);
+      if (!localMatch) continue;
+      const name = localMatch[1];
+      if (!fs.existsSync(path.join(publicJsDir, name))) missing.push(`${page}: /js/${name}`);
+    }
+  }
+
+  if (missing.length) {
+    throw new Error(`Production HTML references missing local scripts:\n${missing.map((item) => `  ${item}`).join('\n')}`);
+  }
+}
+
+const PAGE_BUNDLES = [
+  { html: 'index.html', bundleName: 'panel', skipMerge: ['electron-shell-chrome.js'] },
+  { html: 'controller.html', bundleName: 'controller' },
+  { html: 'prompter.html', bundleName: 'prompter' },
+  { html: 'setlist.html', bundleName: 'setlist' },
+  { html: 'display.html', bundleName: 'display' },
+  { html: 'moon.html', bundleName: 'moon' },
+  { html: 'webgpu-separation-worker.html', bundleName: 'webgpu-separation-worker' },
+];
 
 function scanForSoundTouchFingerprint(files) {
   const hits = [];
@@ -235,17 +305,9 @@ function main() {
   console.log(`[production-bundles] server: ${serverCount} 檔逐一 minify（結構不變）`);
 
   // 2) public/*.html：合併每頁的本機 /js/*.js
-  const pages = [
-    { html: 'index.html', bundleName: 'panel', skipMerge: ['electron-shell-chrome.js'] },
-    { html: 'controller.html', bundleName: 'controller' },
-    { html: 'prompter.html', bundleName: 'prompter' },
-    { html: 'setlist.html', bundleName: 'setlist' },
-    { html: 'display.html', bundleName: 'display' },
-  ];
-
   const consumed = new Set();
   let totalMerged = 0;
-  for (const page of pages) {
+  for (const page of PAGE_BUNDLES) {
     const htmlFile = path.join(publicDir, page.html);
     if (!fs.existsSync(htmlFile)) throw new Error(`Missing staged page: ${htmlFile}`);
     const { html, mergedCount } = bundlePage(htmlFile, publicJsDir, {
@@ -288,6 +350,10 @@ function main() {
   const packedCount = packTemplates(stagingRoot, { sourcemapOut });
   console.log(`[production-bundles] 模板加密封裝：${packedCount} 個模板已封裝進 server/template-store/，原始檔已刪除`);
 
+  // 3.6) 最後再驗一次所有 HTML 的本機腳本引用。新增頁面忘記納入 bundler 時，
+  // 若共用腳本已被其他頁面消耗並刪除，這裡直接讓 release build 失敗，不能把 404 帶出去。
+  assertLocalScriptReferencesExist(publicDir, publicJsDir);
+
   // 4) SoundTouch LGPL 守衛：掃描所有輸出，不得出現在任何專有 bundle
   const outputFiles = [
     ...walk(serverDir),
@@ -301,7 +367,7 @@ function main() {
   }
   console.log(`[production-bundles] SoundTouch 守衛通過：掃描 ${outputFiles.length} 個輸出檔，無 LGPL 特徵字串`);
 
-  console.log(`[production-bundles] 完成。server ${serverCount} 檔 minify，前端 ${totalMerged} 個腳本併入 ${pages.length} 個頁面 bundle，${packedCount} 個模板加密封裝。`);
+  console.log(`[production-bundles] 完成。server ${serverCount} 檔 minify，前端 ${totalMerged} 個腳本併入 ${PAGE_BUNDLES.length} 個頁面 bundle，${packedCount} 個模板加密封裝。`);
 }
 
 if (require.main === module) {
@@ -314,6 +380,8 @@ module.exports = {
   SOUNDTOUCH_FINGERPRINTS,
   minifyInPlace,
   bundlePage,
+  assertLocalScriptReferencesExist,
+  PAGE_BUNDLES,
   packTemplates,
   TEMPLATE_IDS,
 };

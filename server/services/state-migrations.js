@@ -113,6 +113,44 @@ const MIGRATIONS = new Map([
   })],
 ]);
 
+// 一次性設定修正（不升 schemaVersion）：升 schemaVersion 會讓退回舊版的程式因為
+// STATE_SCHEMA_TOO_NEW 讀不了 state.json，所以這類「改預設值」的修正改用 state.oneTimeFixes
+// 記錄做過沒有。舊版存檔會丟掉這個欄位，退版再升回來時會重做一次，這是可接受的代價。
+//
+// jizuraSidesDefault（2026-09-26）：文字PV 預設版位從偏右改成兩側。舊存檔幾乎都把預設的
+// 'right' 寫進了 lyricSettings 本身、每個模板的快照與預設組合，全部換成 'sides'。
+const ONE_TIME_FIXES = Object.freeze({
+  jizuraSidesDefault(state) {
+    let changed = 0;
+    (function walk(value) {
+      if (!value || typeof value !== 'object') return;
+      if (Array.isArray(value)) { value.forEach(walk); return; }
+      if (value.jizuraPlacement === 'right') { value.jizuraPlacement = 'sides'; changed++; }
+      Object.values(value).forEach(walk);
+    })(state.lyricSettings);
+    return changed;
+  },
+});
+
+/**
+ * 對已讀入、已過 schema 遷移的狀態套用還沒做過的一次性修正（直接改傳入的物件）。
+ * 回傳這次實際做了哪些修正，呼叫端據此決定要不要立刻存檔。
+ */
+function applyOneTimeFixes(state) {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return [];
+  const done = state.oneTimeFixes && typeof state.oneTimeFixes === 'object' && !Array.isArray(state.oneTimeFixes)
+    ? state.oneTimeFixes : {};
+  const applied = [];
+  for (const [name, fix] of Object.entries(ONE_TIME_FIXES)) {
+    if (done[name] === true) continue;
+    fix(state);
+    done[name] = true;
+    applied.push(name);
+  }
+  state.oneTimeFixes = done;
+  return applied;
+}
+
 function migrateState(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new StateSchemaError('state.json 內容不是有效的狀態物件');
@@ -150,4 +188,6 @@ module.exports = {
   UnsupportedStateSchemaError,
   schemaVersionOf,
   migrateState,
+  applyOneTimeFixes,
+  ONE_TIME_FIX_NAMES: Object.keys(ONE_TIME_FIXES),
 };

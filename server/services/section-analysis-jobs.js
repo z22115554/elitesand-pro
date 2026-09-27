@@ -129,9 +129,16 @@ function finalizeError(job, error = {}) {
   retire(job);
 }
 
+// 取消只是「這一次不跑了」：這首歌之前分析過的段落還在（OBS 也還在用），狀態要回到 done，
+// 不能變成「沒分析過」。
+function statusAfterCancel(trackId) {
+  const track = deps && findTrack(deps.playState, trackId);
+  return track && Array.isArray(track.sections) && track.sections.length ? 'done' : 'none';
+}
+
 function finalizeCancelled(job) {
   if (job.retired) return;
-  applyResult(job.trackId, { sectionsStatus: 'none' });
+  applyResult(job.trackId, { sectionsStatus: statusAfterCancel(job.trackId) });
   emitProgress(job, 'cancelled', 0);
   retire(job);
 }
@@ -198,7 +205,7 @@ function cancelJobForTrack(trackId) {
   const idx = queue.findIndex((q) => String(q.trackId) === key);
   if (idx !== -1) {
     const [removed] = queue.splice(idx, 1);
-    applyResult(removed.trackId, { sectionsStatus: 'none' });
+    applyResult(removed.trackId, { sectionsStatus: statusAfterCancel(removed.trackId) });
     deps?.io.emit('sections:progress', { trackId: removed.trackId, jobId: removed.publicJobId, stage: 'cancelled', progress: 0 });
     return { ok: true, state: 'queued' };
   }
@@ -231,7 +238,8 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
       return;
     }
     applyResult(activeJob.trackId, { sections, sectionsStatus: 'done' });
-    emitProgress(activeJob, 'done', 100);
+    // 帶段落數：面板收到 done 當下就能說「分析出 N 個段落」，不必等 state:sync 帶回 sections
+    emitProgress(activeJob, 'done', 100, { sectionCount: sections.length });
     finishAndAdvance();
   });
 

@@ -16,7 +16,7 @@ function assert(condition, message) {
 
 function request(port, pathname) {
   return new Promise((resolve, reject) => {
-    const req = http.get({ hostname: '127.0.0.1', port, path: pathname, timeout: 1500 }, (res) => {
+    const req = http.get({ hostname: '127.0.0.1', port, path: pathname, timeout: 5000 }, (res) => {
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));

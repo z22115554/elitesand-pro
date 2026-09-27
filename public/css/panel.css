@@ -1657,3 +1657,6 @@ select.moon-preview-mode { width: auto; height: 32px; flex: none; }
 .moon-end-notice { grid-column: 1 / -1; padding: 12px 16px; border-radius: var(--r-md); border: 1px solid color-mix(in srgb, var(--warning, #d59b36) 55%, var(--border)); background: color-mix(in srgb, var(--warning, #d59b36) 10%, var(--bg-raised)); font-size: 13px; line-height: 1.6; }
 .moon-end-notice strong { color: var(--warning, #d59b36); font-weight: 700; }
 .moon-end-notice:empty { display: none; }
+.moon-scale-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.moon-scale-row .field { margin-bottom: 0; }
+.moon-scale-row input[type="range"] { width: 100%; }

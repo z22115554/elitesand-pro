@@ -41,6 +41,7 @@ const requirePin = require('../middleware/require-pin');
 // EULA 同意閘門專用：只要「本機桌面或已配對的遙控器」，不要 PIN——首次同意先於 PIN 設定。
 const { requireControlAccess } = require('../middleware/require-control-access');
 const { isYouTubeUrl } = require('../utils/youtube-url');
+const { getClientAddress, isLoopbackAddress } = require('../utils/pin-setup-policy');
 const { classifyImportError, toImportTelemetryCode } = require('../utils/import-error');
 const { decodeUploadedText } = require('../utils/decode-text');
 const ytdlpCompatibility = require('../services/ytdlp-compatibility');
@@ -791,6 +792,17 @@ router.post('/youtube', requirePin, async (req, res) => {
   const start = Date.now();
   try {
     const { url } = req.body;
+    const requestedCookieBrowser = String(req.body?.cookieBrowser || '').trim();
+    const cookieBrowser = AudioProcessor.normalizeCookieBrowser(requestedCookieBrowser);
+    if (requestedCookieBrowser && !cookieBrowser) {
+      return res.status(400).json({ error: '不支援的瀏覽器 Cookie 來源', code: 'INVALID_COOKIE_BROWSER' });
+    }
+    if (cookieBrowser && !isLoopbackAddress(getClientAddress(req))) {
+      return res.status(403).json({
+        error: '瀏覽器登入狀態只能由這台電腦上的 Elitesand Pro 面板使用。',
+        code: 'COOKIE_BROWSER_LOCAL_ONLY',
+      });
+    }
     if (!url) {
       log.warn('YouTube 請求缺少 URL');
       return res.status(400).json({ error: '請提供 YouTube 連結' });
@@ -808,6 +820,7 @@ router.post('/youtube', requirePin, async (req, res) => {
       requestId: req.body.requestId,
       isBatch: req.body.isBatch === true,
       forceReplace: req.body.forceReplace === true,
+      cookieBrowser,
     });
     // 落地前去重：伺服器發現這是「歌手+歌名」已存在的另一個 YouTube 上傳，交回客戶端問
     // 使用者要取代還是略過（批次匯入不會走到這裡，見 audio-processor.js 的 findByIdentity）。
@@ -840,6 +853,7 @@ router.post('/youtube', requirePin, async (req, res) => {
       code: classified.code,
       recovery: classified.recovery,
       retryable: classified.retryable,
+      browserCookieFallback: classified.browserCookieFallback === true && isLoopbackAddress(getClientAddress(req)),
       details: classified.technical,
     });
   }
@@ -877,7 +891,18 @@ router.post('/youtube/inspect', requirePin, async (req, res) => {
   try {
     const { url } = req.body || {};
     if (!url || !isYouTubeUrl(url)) return res.status(400).json({ error: '請提供有效的 YouTube 連結' });
-    const assessment = await AudioProcessor.inspectYouTube(url, { requestId: req.body.requestId });
+    const requestedCookieBrowser = String(req.body?.cookieBrowser || '').trim();
+    const cookieBrowser = AudioProcessor.normalizeCookieBrowser(requestedCookieBrowser);
+    if (requestedCookieBrowser && !cookieBrowser) {
+      return res.status(400).json({ error: '不支援的瀏覽器 Cookie 來源', code: 'INVALID_COOKIE_BROWSER' });
+    }
+    if (cookieBrowser && !isLoopbackAddress(getClientAddress(req))) {
+      return res.status(403).json({
+        error: '瀏覽器登入狀態只能由這台電腦上的 Elitesand Pro 面板使用。',
+        code: 'COOKIE_BROWSER_LOCAL_ONLY',
+      });
+    }
+    const assessment = await AudioProcessor.inspectYouTube(url, { requestId: req.body.requestId, cookieBrowser });
     res.json({ success: true, assessment });
   } catch (err) {
     const classified = classifyImportError(err);
@@ -886,6 +911,7 @@ router.post('/youtube/inspect', requirePin, async (req, res) => {
       code: classified.code,
       recovery: classified.recovery,
       retryable: classified.retryable,
+      browserCookieFallback: classified.browserCookieFallback === true && isLoopbackAddress(getClientAddress(req)),
     });
   }
 });

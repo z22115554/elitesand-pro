@@ -35,6 +35,8 @@ const DEFAULTS = Object.freeze({
   goal: 5000,
   base: 0,
   tiers: DEFAULT_TIERS,
+  lanternScale: 1,
+  moonScale: 1,
 });
 
 let config = { ...DEFAULTS };
@@ -84,6 +86,15 @@ function cleanStyle(value) {
   return LANTERN_STYLES.includes(value) ? value : null;
 }
 
+const SCALE_MIN = 0.6;
+const SCALE_MAX = 2.5;
+
+function cleanScale(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return Number.isFinite(fallback) ? fallback : 1;
+  return Math.round(Math.min(Math.max(n, SCALE_MIN), SCALE_MAX) * 100) / 100;
+}
+
 function cleanConfig(input, fallback) {
   const title = cleanText(input?.title, MAX_TITLE_LENGTH);
   const doneText = cleanText(input?.doneText, MAX_TITLE_LENGTH);
@@ -95,6 +106,8 @@ function cleanConfig(input, fallback) {
     goal: goal ?? fallback.goal,
     base: base ?? fallback.base,
     tiers: cleanTiers(input?.tiers, fallback.tiers),
+    lanternScale: cleanScale(input?.lanternScale, fallback.lanternScale),
+    moonScale: cleanScale(input?.moonScale, fallback.moonScale),
   };
 }
 

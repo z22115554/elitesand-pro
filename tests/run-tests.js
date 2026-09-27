@@ -73,6 +73,8 @@ require('./spout-display-output.test').register({ test, testAsync, eq, ok });
 require('./spout-settings.test').register({ test, testAsync, eq, ok });
 require('./spout-issue-diagnostics.test').register({ test, testAsync, eq, ok });
 require('./lyric-template-settings.test').register({ test, testAsync, eq, ok });
+require('./production-bundles.test').register({ test, testAsync, eq, ok });
+require('./spout-packaging.test').register({ test, testAsync, eq, ok });
 
 test('Spout CP05/CP07 keeps the native controls Electron-only and exposes bounded performance evidence', () => {
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
@@ -4834,6 +4836,7 @@ test('normalizeText：全形空白→半形、壓縮空白、去頭尾', () => {
 test('匯入錯誤分類：登入、Premium、地區、下架、逾時與磁碟滿都有可行下一步', () => {
   const cases = [
     [new Error('Sign in to confirm your age; cookies required'), 'YOUTUBE_AUTH_REQUIRED'],
+    [Object.assign(new Error('HTTP Error 429: Too Many Requests'), { code: 'YOUTUBE_RATE_LIMITED' }), 'YOUTUBE_RATE_LIMITED'],
     [Object.assign(new Error('This video is only available to Music Premium members'), { code: 'YOUTUBE_MUSIC_PREMIUM' }), 'YOUTUBE_MUSIC_PREMIUM'],
     [new Error('This video is not available in your country'), 'REGION_RESTRICTED'],
     [new Error('Private video'), 'VIDEO_UNAVAILABLE'],
@@ -4854,6 +4857,7 @@ test('匯入錯誤 → 遙測碼對照：取消不計入，其餘各碼對得上
     IMPORT_CANCELLED: null,
     DISK_FULL: 'disk_full',
     YOUTUBE_AUTH_REQUIRED: 'ytdlp_auth_required',
+    YOUTUBE_RATE_LIMITED: 'ytdlp_rate_limited',
     REGION_RESTRICTED: 'ytdlp_geo_blocked',
     VIDEO_UNAVAILABLE: 'ytdlp_private',
     IMPORT_TIMEOUT: 'ytdlp_timeout',
@@ -5213,11 +5217,13 @@ test('落地前去重：批次匯入沿用既有版本，單首匯入交回去�
     '重複訊號要在 sanitizeTrack 之前攔下來，直接回 200 交給前端問使用者，不能被判成失敗: ');
 
   const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-youtube-import.js'), 'utf8').replace(/\r\n/g, '\n');
-  ok(client.includes("body: JSON.stringify({ url: job.url, requestId, isBatch: job.isBatch })"),
-    '前端送出匯入請求時要帶上這個 job 是不是批次: ');
+  ok(/function youtubeRequestBody\(job, extra = \{\}\)[\s\S]{0,300}isBatch: job\.isBatch === true/.test(client),
+    '統一匯入 request body 必須帶上這個 job 是不是批次: ');
+  ok(client.includes('body: JSON.stringify(youtubeRequestBody(job))'),
+    '一般匯入與 inspect 必須走統一 request body: ');
   ok(/if \(!job\.isBatch && data && data\.code === 'DUPLICATE_SONG'\) \{/.test(client),
     '只有單首匯入才彈確認視窗，批次不能等使用者: ');
-  ok(client.includes('body: JSON.stringify({ url: job.url, requestId, forceReplace: true })'),
+  ok(client.includes("body: JSON.stringify(youtubeRequestBody(job, { forceReplace: true }))"),
     '使用者選取代後要帶著 forceReplace 重新送一次: ');
 });
 
@@ -6320,7 +6326,27 @@ testAsync('lyrics:manual（切換歌詞來源）不能因為 ctx 少帶一個欄
   // 本身有問題。既有測試全部只組出 mock ctx 卻沒有一個真的觸發
   // lyrics:manual，這個洞才會一直沒被抓到。這裡直接呼叫它，鎖住「不會
   // 拋例外、broadcastState 真的被呼叫到」。
-  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
+  // Keep this regression deterministic: the real Japanese G2P sidecar can take
+  // longer than the CI timeout under parallel package jobs. Load only this
+  // handler with a resolved romanizer, then restore the shared module cache.
+  const romanizer = require('../server/services/romanizer');
+  const handlerPath = require.resolve('../server/routes/handlers/lyrics');
+  const originalHandler = require.cache[handlerPath];
+  const originalAddRomanization = romanizer.addRomanization;
+  let romanizationCalls = 0;
+  let registerLyricsHandlers;
+  try {
+    romanizer.addRomanization = async (lines) => {
+      romanizationCalls += 1;
+      return lines.map((line) => ({ ...line, phonetic: 'kyou wa hare desu' }));
+    };
+    delete require.cache[handlerPath];
+    registerLyricsHandlers = require(handlerPath);
+  } finally {
+    romanizer.addRomanization = originalAddRomanization;
+    if (originalHandler) require.cache[handlerPath] = originalHandler;
+    else delete require.cache[handlerPath];
+  }
   const events = new Map();
   const emitted = [];
   let broadcastCalls = 0;
@@ -6346,15 +6372,8 @@ testAsync('lyrics:manual（切換歌詞來源）不能因為 ctx 少帶一個欄
   eq(threw, null, 'lyrics:manual 不可同步拋出例外（曾經是 broadcastState is not defined）: ');
   eq(broadcastCalls, 1, '切換來源必須真的走到 broadcastState()，不能在那之前就中斷: ');
 
-  // 給非同步的 addRomanization().then() 機會跑完，確認崩潰真的沒有把後面的
-  // 羅馬化流程一起悶掉。開發機沒裝 haqumei 時，v2 那段會先嘗試 spawn 一個
-  // python 子行程才 fallback；跑在完整測試套件裡（同一行程裡還有大量其他
-  // 測試在跑）時，這個 spawn 實測可能被排擠到 20 秒以上才完成，不是卡住，
-  // 是 OS 行程排程壅塞——逾時抓寬一點，不要因為機器忙就假失敗。
-  const deadline = Date.now() + 45000;
-  while (Date.now() < deadline && !emitted.some((item) => item.event === 'lyrics:romanized')) {
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
+  eq(romanizationCalls, 1, '切換來源後必須啟動羅馬化：');
+  await Promise.resolve();
   ok(emitted.some((item) => item.event === 'lyrics:romanized'), '崩潰修好後，羅馬化完成應該要能正常推播 lyrics:romanized: ');
 });
 
@@ -8817,6 +8836,176 @@ test('yt-dlp 403 fallback keeps the client until both HLS routes fail', () => {
   ok(plan.hls.every((strategy) => strategy.extractorArgs.join(',') === '--extractor-args,youtube:player_client=web_safari'), 'HLS recovery must use the HLS-capable web_safari client: ');
   eq(plan.clientFallbacks.map((strategy) => strategy.id).join(','), 'android-audio,ios-audio');
 });
+
+test('YouTube 安全救援鏈：預設匿名 → EJS → mweb PO slot，三層都不帶 Cookie', () => {
+  const plan = AudioProcessor._downloadStrategyPlanForTest();
+  eq(plan.primary.id, 'primary-audio');
+  eq(plan.ejs.id, 'ejs-audio');
+  ok(plan.ejs.extraArgs.join(' ').includes('ejs:github'), 'EJS fallback 必須只用 yt-dlp 官方 GitHub component: ');
+  eq(plan.potMweb.id, 'pot-mweb-audio');
+  ok(plan.potMweb.extractorArgs.join(' ').includes('player_client=mweb'), 'PO Token slot 必須使用 mweb client: ');
+  eq(plan.potMweb.providerCandidate, 'bgutil-ytdlp-pot-provider');
+  eq(plan.potMweb.providerVersion, '2.0.0');
+  eq(plan.potMweb.providerMode, 'http');
+  eq(plan.potMweb.providerEndpoint, 'http://127.0.0.1:4416');
+  for (const strategy of [plan.primary, plan.ejs, plan.potMweb, ...plan.hls, ...plan.clientFallbacks]) {
+    eq((strategy.cookieArgs || []).length, 0, `${strategy.id} 匿名鏈不可預先帶 Cookie: `);
+  }
+});
+
+test('YouTube PO Provider 預選：bgutil 2.0.0 僅列入候選，不自動下載或打包', () => {
+  const preferred = AudioProcessor._preferredPotProviderForTest();
+  eq(preferred.id, 'bgutil-ytdlp-pot-provider');
+  eq(preferred.version, '2.0.0');
+  eq(preferred.license, 'GPL-3.0-only');
+  eq(preferred.mode, 'http');
+  eq(preferred.host, '127.0.0.1');
+  eq(preferred.port, 4416);
+  eq(preferred.minNodeMajor, 20);
+  eq(preferred.client, 'mweb');
+  eq(preferred.tokenContext, 'gvs');
+  eq(preferred.status, 'preselected');
+  eq(preferred.autoInstall, false, '預選不等於匯入時自動下載第三方 provider: ');
+  eq(preferred.bundled, false, 'GPLv3 provider 在合規打包完成前不得直接隨主程式散布: ');
+});
+
+test('bgutil 2.0.0 預選必須附完整 GPLv3、來源與 sidecar 聲明，且打包流程會帶入 licenses/', () => {
+  const legalDir = path.join(__dirname, '..', 'third-party-licenses', 'bgutil-ytdlp-pot-provider');
+  const license = fs.readFileSync(path.join(legalDir, 'LICENSE.txt'), 'utf8');
+  const source = fs.readFileSync(path.join(legalDir, 'SOURCE.txt'), 'utf8');
+  const notice = fs.readFileSync(path.join(legalDir, 'NOTICE.txt'), 'utf8');
+  const thirdParty = fs.readFileSync(path.join(__dirname, '..', 'THIRD-PARTY-NOTICES.txt'), 'utf8');
+  const portable = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-portable.ps1'), 'utf8');
+
+  ok(license.includes('GNU GENERAL PUBLIC LICENSE') && license.includes('Version 3, 29 June 2007'), '必須保留 upstream 完整 GPLv3 文字: ');
+  ok(source.includes('Version selected by Elitesand Pro: 2.0.0'), '來源聲明必須固定精確版本: ');
+  ok(source.includes('37169ee2656e08c5c2e5dc9df4c598c0cb4c88a8'), '來源聲明必須固定 upstream tag commit: ');
+  ok(source.includes('archive/refs/tags/2.0.0.zip'), '必須提供精確版本的 Corresponding Source 取得位置: ');
+  ok(source.includes('PRESELECTED') && source.includes('not yet bundled'), '目前不可誤稱 provider 已隨程式散布: ');
+  ok(notice.includes('NOT BUNDLED / NOT AUTO-INSTALLED'), 'sidecar notice 必須標明目前未打包狀態: ');
+  ok(thirdParty.includes('bgutil-ytdlp-pot-provider 2.0.0') && thirdParty.includes('GNU GPL v3'), '總第三方聲明必須列出 bgutil 與 GPLv3: ');
+  ok(portable.includes('$BgutilLegalSource') && portable.includes('LICENSE.txt') && portable.includes('SOURCE.txt') && portable.includes('NOTICE.txt'), 'portable/installer 打包流程必須帶入 bgutil legal material 並 fail closed: ');
+});
+
+test('YouTube yt-dlp 呼叫固定 --no-config 並顯式指定目前 Node runtime，避免全域設定偷帶 Cookie', () => {
+  const args = AudioProcessor._ytdlpRuntimeArgsForTest();
+  ok(args.includes('--no-config'), '所有內建 YouTube 呼叫都應忽略使用者全域 yt-dlp.conf: ');
+  const index = args.indexOf('--js-runtimes');
+  ok(index >= 0 && /^node(?::.+)?$/i.test(String(args[index + 1] || '')), '必須顯式指定 Node JS runtime: ');
+});
+
+test('舊版 yt-dlp 不認得 --js-runtimes／--remote-components：依 --help 偵測，不支援就不帶', () => {
+  const ytdlpCaps = require('../server/utils/ytdlp-capabilities');
+  const modern = ytdlpCaps._parseHelpForTest('  --js-runtimes RUNTIME\n  --remote-components COMPONENT\n');
+  const legacy = ytdlpCaps._parseHelpForTest('  --no-config\n  --extractor-args KEY:ARGS\n');
+  eq(modern.jsRuntimes, true);
+  eq(modern.remoteComponents, true);
+  eq(legacy.jsRuntimes, false);
+  eq(legacy.remoteComponents, false);
+
+  const legacyArgs = AudioProcessor._ytdlpRuntimeArgsForTest(legacy);
+  ok(legacyArgs.includes('--no-config'), '舊版仍要忽略全域 yt-dlp.conf: ');
+  ok(!legacyArgs.includes('--js-runtimes'), '舊版不可帶 --js-runtimes，否則連匿名匯入都會失敗: ');
+  ok(AudioProcessor._ytdlpRuntimeArgsForTest(modern).includes('--js-runtimes'), '新版要顯式指定 JS runtime: ');
+
+  const withEjs = ['--remote-components', 'ejs:github', '--extractor-args', 'youtube:player_client=mweb'];
+  eq(ytdlpCaps.stripUnsupported(withEjs, legacy).join(' '), '--extractor-args youtube:player_client=mweb');
+  eq(ytdlpCaps.stripUnsupported(withEjs, modern).join(' '), withEjs.join(' '));
+});
+
+testAsync('相容性探針不連 GitHub（不帶 ejs:github），只在 yt-dlp 支援時才帶 --js-runtimes', async () => {
+  const runWith = (helpText) => async (command, args) => {
+    if (args.includes('--help')) return { stdout: helpText, stderr: '' };
+    runWith.lastArgs = args;
+    return { stdout: `${ytdlpCompatibility.PROBE_VIDEO_ID}\n`, stderr: '' };
+  };
+  ytdlpCompatibility._resetForTests();
+  await ytdlpCompatibility.probe({ execFileImpl: runWith('  --js-runtimes RUNTIME\n  --remote-components C\n') });
+  ok(runWith.lastArgs.includes('--js-runtimes'), '新版 yt-dlp 的探針要帶 JS runtime: ');
+  ok(!runWith.lastArgs.includes('--remote-components') && !runWith.lastArgs.includes('ejs:github'), '探針不可每次連 GitHub 抓 EJS: ');
+
+  ytdlpCompatibility._resetForTests();
+  await ytdlpCompatibility.probe({ execFileImpl: runWith('  --no-config\n') });
+  ok(!runWith.lastArgs.includes('--js-runtimes'), '舊版 yt-dlp 的探針不可帶未知參數: ');
+  ok(runWith.lastArgs.includes('--no-config'));
+  ytdlpCompatibility._resetForTests();
+});
+
+test('YouTube Cookie 最後手段只接受固定瀏覽器名稱，不接受任意 profile/path 注入', () => {
+  eq(AudioProcessor._normalizeCookieBrowserForTest('EDGE'), 'edge');
+  eq(AudioProcessor._normalizeCookieBrowserForTest('chrome'), 'chrome');
+  eq(AudioProcessor._normalizeCookieBrowserForTest('firefox'), 'firefox');
+  eq(AudioProcessor._normalizeCookieBrowserForTest('chrome:C:\\Users\\me'), '');
+  eq(AudioProcessor._normalizeCookieBrowserForTest('../../cookie.txt'), '');
+});
+
+test('YouTube 登入救援：API 僅接收瀏覽器名稱，前端必須明確詢問且工作結束即清掉', () => {
+  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const frontend = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(api.includes("AudioProcessor.normalizeCookieBrowser(requestedCookieBrowser)"), '後端要白名單驗證 cookieBrowser: ');
+  ok(api.includes("code: 'INVALID_COOKIE_BROWSER'"), '任意 cookie source 必須拒絕: ');
+  ok(api.includes("code: 'COOKIE_BROWSER_LOCAL_ONLY'"), '瀏覽器 Cookie fallback 必須拒絕 LAN/遠端控制端: ');
+  ok(api.includes('isLoopbackAddress(getClientAddress(req))'), 'Cookie fallback 與提示都必須綁定真實 socket loopback: ');
+  ok(api.includes('browserCookieFallback: classified.browserCookieFallback === true'), '只有明確 auth 分類才提示最後救援: ');
+  ok(html.includes('id="youtube-cookie-modal"') && html.includes('id="youtube-cookie-browser"'), '必須有獨立登入狀態確認視窗: ');
+  ok(frontend.includes('requestBrowserCookieRetry()'), '前端必須由使用者明確選擇後才重試: ');
+  ok(frontend.includes("&& !job.isBatch"), '播放清單批次不得逐首跳登入視窗: ');
+  ok(frontend.includes("job.cookieBrowser = '';"), '工作結束後不可把瀏覽器登入來源留在歷史 job: ');
+  ok(!frontend.includes('cookies.txt'), '前端不可要求或保存 cookies.txt: ');
+});
+
+test('YouTube nightly fallback 只允許 Installer 的可信可寫 yt-dlp 工作副本', () => {
+  const updater = fs.readFileSync(path.join(__dirname, '../server/services/ytdlp-updater.js'), 'utf8');
+  const shell = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
+  ok(updater.includes("process.env.ELITESAND_PACKAGED !== '1'"), 'portable/dev 不可被匯入流程自動改 yt-dlp: ');
+  ok(updater.includes("process.env.ELITESAND_YTDLP_MUTABLE !== '1'"), '唯讀 seed 不可被 nightly fallback 修改: ');
+  ok(updater.includes("['--update-to', 'nightly']"), '相容性救援必須使用 yt-dlp 官方 nightly channel: ');
+  ok(updater.includes('writeApprovedRuntimeTrust(currentVersion)'), 'nightly 成功後必須重新寫可信 runtime hash: ');
+  ok(shell.includes("ELITESAND_YTDLP_NODE_PATH: path.join(packagedTools, 'updater-node.exe')"), 'Installer 應把隨附 Node runtime 明確交給 yt-dlp EJS: ');
+  const portableBuild = fs.readFileSync(path.join(__dirname, '../tools/build-portable.ps1'), 'utf8');
+  ok(portableBuild.includes('Node.js 22 or newer is required for packaged yt-dlp EJS support'), '打包時必須拒絕 Node 21 以下，避免產出無法解 EJS 的 runtime: ');
+  const audio = fs.readFileSync(path.join(__dirname, '../server/services/audio-processor.js'), 'utf8');
+  ok(audio.includes('if (activeYtDlpJobs > 1)'), '另一個 yt-dlp 工作執行中時不可就地替換 runtime: ');
+});
+
+testAsync('yt-dlp 一律走 nightly：版本檢查看 nightly repo、更新與啟動切換都用 nightly，打包能處理 nightly 授權', async () => {
+  const updaterPath = path.join(__dirname, '../server/services/ytdlp-updater.js');
+  const updater = fs.readFileSync(updaterPath, 'utf8');
+  ok(updater.includes('repos/yt-dlp/yt-dlp-nightly-builds/releases/latest'), '版本檢查要比對 nightly，否則 nightly 永遠被當成比穩定版新: ');
+  ok(!updater.includes("['-U']"), '手動更新不可再用 -U（會停在穩定版）: ');
+  const ytdlpUpdater = require(updaterPath);
+  eq(ytdlpUpdater.isNightlyVersion('2026.09.16.232951'), true);
+  eq(ytdlpUpdater.isNightlyVersion('2026.08.19'), false);
+  eq(ytdlpUpdater.isNightlyVersion(''), false);
+  const prevPackaged = process.env.ELITESAND_PACKAGED;
+  delete process.env.ELITESAND_PACKAGED;
+  try {
+    const result = await ytdlpUpdater.ensureNightlyChannel();
+    eq(result.skipped, true, '開發環境／portable 啟動時不可自動改 yt-dlp: ');
+  } finally {
+    if (prevPackaged !== undefined) process.env.ELITESAND_PACKAGED = prevPackaged;
+  }
+  const server = fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8');
+  ok(server.includes('ensureNightlyChannel()'), '啟動時要把既有穩定版安裝換成 nightly: ');
+  const portableBuild = fs.readFileSync(path.join(__dirname, '../tools/build-portable.ps1'), 'utf8');
+  ok(portableBuild.includes('yt-dlp-nightly-builds/releases/tags/$YtdlpVersion') && portableBuild.includes('$YtdlpLicenseRef'),
+    'nightly 版號在主 repo 沒有 tag，打包必須改到上游 commit 取授權，否則 build 會失敗: ');
+});
+
+test('YouTube 登入救援對話框用白話，不出現內部技術名詞', () => {
+  const i18n = require('../public/js/i18n');
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(html.includes('data-i18n="youtubeAuth.browserHint"'), '要提示 Chrome／Edge 失敗時怎麼辦: ');
+  for (const locale of i18n.LOCALES) {
+    for (const key of ['youtubeAuth.title', 'youtubeAuth.summary', 'youtubeAuth.risk', 'youtubeAuth.browser', 'youtubeAuth.browserHint', 'youtubeAuth.cancel', 'youtubeAuth.retry']) {
+      const text = String(i18n.catalogs[locale][key] || '');
+      ok(text.trim(), `${locale}.${key} 不得為空: `);
+      ok(!/nightly|EJS|yt-dlp|Cookie|cookie/.test(text), `${locale}.${key} 不可出現技術名詞: `);
+    }
+  }
+});
+
 test('官方影片 Remaster 後綴不會讓歌手與歌名顛倒', () => {
   const x = AudioProcessor.resolveTrackIdentity({ title: 'Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)' });
   eq(x.artist, 'Rick Astley'); eq(x.title, 'Never Gonna Give You Up');
@@ -10052,6 +10241,54 @@ test('README 顯示的版號必須跟 package.json 一致（改版號一律用 n
   ok(out.includes('Latest：`v9.8.7`') && out.includes('"Elitesand.Pro.Setup.9.8.7.exe"'), '改版號要同時改最新版本與 GitHub 資產實際檔名（空格變點）: ');
 });
 
+test('文字PV（JIZURA）：統一感／文字整列吃真實段落，兩側模式只用稽核過的輕量版面', () => {
+  const root = path.join(__dirname, '..');
+  const tpl = fs.readFileSync(path.join(root, 'public', 'js', 'lyric-template-jizura.js'), 'utf8');
+  const listOf = (name) => {
+    const m = tpl.match(new RegExp('const ' + name + ' = (\\[[\\s\\S]*?\\]);'));
+    ok(m, `模板必須宣告 ${name}: `);
+    return vm.runInNewContext(m[1]);
+  };
+  const SAFE = listOf('SAFE_LAYOUTS_LANDSCAPE');
+  const HEAVY = listOf('HEAVY_LAYOUTS');
+  const CF = listOf('CENTER_FREE_LAYOUTS');
+  ok(CF.length >= 20, '兩側模式要有足夠多的版面可以輪: ');
+  const notSafe = CF.filter((k) => !SAFE.includes(k));
+  eq(notSafe.join(','), '', '兩側模式的版面必須是覆蓋率白名單裡的（鐵則 #11）: ');
+  const heavy = CF.filter((k) => HEAVY.includes(k));
+  eq(heavy.join(','), '', '兩側模式每句畫兩份，太重的版面一個都不能收: ');
+  ok(HEAVY.includes('ring'), '2026-09-25 稽核：ring 新舊版 p95 都約 28ms，要列為太重: ');
+
+  // 統一感／文字整列一律開；兩側＝centerFree；段落交界翻成空行讓 unify 切段
+  ok(/unify: true,/.test(tpl) && /typeset: true,/.test(tpl) && /centerFree: sides,/.test(tpl), 'plan 要開 unify／typeset，兩側模式開 centerFree: ');
+  ok(tpl.includes("lineSection[i] !== lineSection[i - 1] ? '\\n' : ''"), '段落交界要插空行（unify 靠空行切段）: ');
+  ok(/function sectionIndexAt\(/.test(tpl), '要用 SongFormer 的段落編號切段，不是 profile（主歌一、主歌二是不同段）: ');
+  // 兩側模式的另一半要跟著逐字對齊移動
+  ok(/function syncCompanion\(c, tl\)/.test(tpl) && tpl.includes('for (const c of list) syncCompanion(c, tl);'), '另一半（附屬 cut）要跟主 cut 一起對齊逐字時間: ');
+  // 字型只載這份 plan 用到的
+  ok(tpl.includes('J.fontsOfPlan(plan)') && !tpl.includes('J.ensureFonts(text, null)'), '字型只載入 plan 實際用到的，不可整個字型目錄都下載: ');
+
+  // 設定一路打通：模板 enum、面板正規化、伺服器驗證、按鈕、五語文案
+  ok(tpl.includes("values: ['right', 'left', 'sides', 'full']"), '模板設定要接受 sides: ');
+  const extras = fs.readFileSync(path.join(root, 'public', 'js', 'lyric-extras.js'), 'utf8');
+  ok(extras.includes("const JIZURA_PLACEMENTS = ['right', 'left', 'sides', 'full'];"), '面板正規化要接受 sides，否則存檔後被改回偏右: ');
+  const lyricsHandler = fs.readFileSync(path.join(root, 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  ok(lyricsHandler.includes("['right', 'left', 'sides', 'full'].includes(out[id].jizuraPlacement)"), '伺服器驗證要接受 sides，否則設定被丟掉: ');
+  const panel = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
+  ok(panel.includes('data-jizura-placement="sides"'), '面板要有「兩側」按鈕: ');
+
+  // 預設兩側：新安裝、壞值、display 還沒收到設定時都落在 sides，面板按鈕也預設亮兩側
+  ok(/\? v : 'sides';/.test(tpl) && tpl.includes("default: 'sides' }"), '模板預設（含未知值）要落在兩側: ');
+  ok(extras.includes("jizuraPlacement: 'sides', jizuraMotion") && extras.includes("out[id].jizuraPlacement = 'sides';"), '面板預設與壞值回退要是兩側: ');
+  const appStateSrc = fs.readFileSync(path.join(root, 'server', 'state', 'app-state.js'), 'utf8');
+  ok(appStateSrc.includes("jizuraPlacement: 'sides', jizuraMotion"), '伺服器預設要是兩側: ');
+  ok(panel.includes('class="style-thumb active" data-jizura-placement="sides"'), '面板預設要亮「兩側」按鈕: ');
+  const i18n = require('../public/js/i18n');
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    ok(i18n.catalogs?.[locale]?.['jizura.placementSides'] && i18n.catalogs?.[locale]?.['jizura.placementSidesTitle'], `${locale} 缺少「兩側」文案: `);
+  }
+});
+
 test('文字PV（JIZURA）：MIT 授權表記隨引擎一起出貨，display 先載引擎再載模板', () => {
   // JIZURA 是 MIT：可以用、可以改，但著作權與授權全文必須跟著程式走（作者已私訊確認）。
   const root = path.join(__dirname, '..');
@@ -10064,7 +10301,13 @@ test('文字PV（JIZURA）：MIT 授權表記隨引擎一起出貨，display 先
   ok(!engine.includes('src/12_ui.js ----') && !engine.includes('src/11_export.js ----'), '只收規劃＋繪製，不收上游 UI 與 MP4 匯出: ');
   // 效能修改（2026-09-25 實測）：每幀換一個小數點字級，canvas 每次 fillText 要 3–8ms 重新解析字型；
   // 色差／震動事件在透明模式下會白做三次整張複製，還把半透明的字與光暈 alpha 平方變暗
-  ok(engine.includes('J.fontPx = ') && engine.includes('ctx.font = J.fontCSS(it.font, fq)'), '引擎繪字必須用量化字級（J.fontPx）＋縮放補差，不可每幀換新字級: ');
+  // 2026-09-25 引擎升級後主繪字多了可變字重分支（統一感的「太さ」），兩條路都要吃量化字級；
+  // 引擎檔由 tools/vendor-jizura.js 產生並自動套上這些修補
+  ok(engine.includes('J.fontPx = ') && engine.includes('J.fontCSS(it.font, fq)') && engine.includes('J.varFontCSS(it.font, fq, wg)'),
+    '引擎繪字必須用量化字級（J.fontPx）＋縮放補差，不可每幀換新字級: ');
+  ok(engine.includes('font: ctx.font, px: fq,'), '變形（モーフ）記錄的字級要跟量化後的字型一致，重畫時大小才對: ');
+  ok(fs.existsSync(path.join(root, 'tools', 'vendor-jizura.js')) && fs.existsSync(path.join(root, 'tools', 'audit-jizura-layouts.js')),
+    '引擎升級要走 tools/vendor-jizura.js（自動套修補）＋ tools/audit-jizura-layouts.js（重跑版面稽核）: ');
   ok(engine.includes('const POST_BUILTIN = ') && engine.includes('POST_BUILTIN.includes(ev.type)'), '後製只處理真的會畫的事件，色差／震動不可進透明模式的 alpha 遮罩: ');
   ok(notices.includes('JIZURA') && notices.includes('hakoniwa'), 'THIRD-PARTY-NOTICES 必須列出 JIZURA: ');
   const engineAt = displayHtml.indexOf('/vendor/jizura/jizura-engine.js');
@@ -10698,6 +10941,35 @@ test('v3 遷移：既有播放清單的每一列補上 entryId，讓重複歌曲
   ok(result.state.playlist[2].entryId, '第三列應補上 entryId: ');
   ok(result.state.playlist[0].entryId !== result.state.playlist[2].entryId, '兩個同名 Superwoman 補上的 entryId 不可相同: ');
   eq(result.state.playlist[1].entryId, 'already-has-one', '已經有 entryId 的列不該被覆蓋: ');
+});
+
+test('一次性修正：文字PV 舊存檔的偏右改成兩側，只做一次、不升 schemaVersion', () => {
+  const { applyOneTimeFixes, CURRENT_STATE_SCHEMA_VERSION } = require('../server/services/state-migrations');
+  const state = {
+    schemaVersion: CURRENT_STATE_SCHEMA_VERSION,
+    lyricSettings: {
+      template: 'jizura', jizuraPlacement: 'right',
+      lyricTemplateSettings: { jizura: { jizuraPlacement: 'right' }, classic: { jizuraPlacement: 'left' } },
+      lyricPresets: [{ settings: { jizuraPlacement: 'right', lyricTemplateSettings: { jizura: { jizuraPlacement: 'full' } } } }],
+    },
+  };
+  eq(applyOneTimeFixes(state).join(','), 'jizuraSidesDefault');
+  eq(state.schemaVersion, CURRENT_STATE_SCHEMA_VERSION, '不可升 schemaVersion（退回舊版會讀不了 state.json）: ');
+  eq(state.lyricSettings.jizuraPlacement, 'sides');
+  eq(state.lyricSettings.lyricTemplateSettings.jizura.jizuraPlacement, 'sides');
+  eq(state.lyricSettings.lyricPresets[0].settings.jizuraPlacement, 'sides', '預設組合裡的偏右也要換: ');
+  eq(state.lyricSettings.lyricTemplateSettings.classic.jizuraPlacement, 'left', '偏左是使用者自己選的，不動: ');
+  eq(state.lyricSettings.lyricPresets[0].settings.lyricTemplateSettings.jizura.jizuraPlacement, 'full', '置中不動: ');
+  eq(state.oneTimeFixes.jizuraSidesDefault, true);
+
+  // 做過之後使用者再改回偏右，下次啟動不可再被改掉
+  state.lyricSettings.jizuraPlacement = 'right';
+  eq(applyOneTimeFixes(state).length, 0);
+  eq(state.lyricSettings.jizuraPlacement, 'right', '修正只做一次: ');
+
+  const appStateSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  ok(appStateSrc.includes('applyOneTimeFixes(saved)') && /\n\s+oneTimeFixes,\n\s+\}\), callback\);/.test(appStateSrc.replace(/\r\n/g, '\n')),
+    'app-state 要在還原時套用修正，並把 oneTimeFixes 存回 state.json（否則每次啟動都重做）: ');
 });
 
 test('統一音量：增益計算對齊 -14 LUFS 並夾在 ±12 dB', () => {
@@ -11502,7 +11774,7 @@ test('yt-dlp 工作副本不可寫時安全退回 seed，且 packaged updater �
     const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/ytdlp-updater.js'), 'utf8');
     ok(updaterSource.includes("process.env.ELITESAND_PACKAGED === '1' && process.env.ELITESAND_YTDLP_MUTABLE !== '1'"),
       'Installer 若無 writable working copy，更新器必須 fail closed，不能修改 integrity-protected seed: ');
-    ok(updaterSource.includes("execFileAsync(YTDLP_COMMAND, ['-U']"), '更新器必須執行解析後的工作副本，不可硬編碼 PATH yt-dlp: ');
+    ok(updaterSource.includes("execFileAsync(YTDLP_COMMAND, ['--update-to', 'nightly']"), '更新器必須執行解析後的工作副本，不可硬編碼 PATH yt-dlp: ');
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }

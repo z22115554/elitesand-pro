@@ -23,6 +23,8 @@ const { safeRemove } = require('../server/utils/safe-remove');
 const { SectionAnalysisSupervisor, supervisor, PROBE_TIMEOUT_MS } = require('../server/services/section-analysis');
 const provider = require('../server/services/section-runtime-provider');
 const jobs = require('../server/services/section-analysis-jobs');
+// wireFakeJobs() 會把 isAvailable 換成假的；runtime 判斷的測試要用原本那支
+const realIsAvailable = provider.isAvailable;
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -226,6 +228,57 @@ test('段落分析前端：下載時用進度條顯示中文步驟，不再把�
   for (const key of ['sections.install.pipInstall', 'sections.install.downloadBackbone', 'sections.stage.inference']) {
     assert.ok(catalogs['zh-TW'][key] && catalogs.en[key], `缺少翻譯 ${key}`);
   }
+});
+
+test('2026-09-25 實機：每首都失敗（No module named msaf／x_transformers、transformers 5.x）——推論鏈套件要齊、版本要鎖', () => {
+  const worker = fs.readFileSync(path.join(__dirname, '..', 'ai', 'section_worker.py'), 'utf8');
+  const loader = worker.slice(worker.indexOf('def _load_songformer_functions'), worker.indexOf('def _run_real_job'));
+  assert.ok(worker.includes('def _stub_msaf_eval'), 'msaf 只用在訓練評分，要放替身而不是要求安裝');
+  assert.ok(loader.indexOf('_stub_msaf_eval()') > -1 && loader.indexOf('_stub_msaf_eval()') < loader.indexOf('exec('), '替身要在執行 SongFormer 程式碼之前放好');
+  for (const pkg of ['x-transformers', 'loguru', 'transformers', 'torch']) assert.ok(provider.PIP_PACKAGES.includes(pkg), `缺 ${pkg}`);
+  const pinned = new Map(provider.PIP_CONSTRAINTS.map((c) => c.split('==')));
+  for (const pkg of provider.PIP_PACKAGES) assert.ok(pinned.has(pkg), `${pkg} 沒鎖版本（上游一出新版就可能整個壞掉）`);
+  assert.equal(pinned.get('transformers'), '4.51.1', 'SongFormer 是照 transformers 4.51 寫的，5.x 會在載入模型時失敗');
+});
+
+test('舊安裝（marker 沒有套件版本號）判定為只需補裝套件，不是整包 2.7GB 重下', () => {
+  fs.mkdirSync(provider.PYTHON_DIR, { recursive: true });
+  fs.mkdirSync(provider.SONGFORMER_DIR, { recursive: true });
+  fs.writeFileSync(provider.PYTHON_EXE, '');
+  const base = { pythonEmbedVersion: '3.11.9', pipInstallDone: true, sourceReady: true };
+  try {
+    fs.writeFileSync(provider.MARKER_FILE, JSON.stringify(base));
+    assert.equal(realIsAvailable(), false);
+    assert.equal(provider.needsPackageRepair(), true);
+    fs.writeFileSync(provider.MARKER_FILE, JSON.stringify({ ...base, packagesRevision: provider.PACKAGES_REVISION }));
+    assert.equal(realIsAvailable(), true);
+    assert.equal(provider.needsPackageRepair(), false);
+  } finally {
+    safeRemove(provider.RUNTIME_DIR);
+  }
+});
+
+test('面板要知道結果：done 帶段落數、取消重新分析不可把已分析的歌打回未分析、清單摘要帶段落狀態', async () => {
+  const { playState, progress } = wireFakeJobs();
+  await jobs.startJobForTrack('t1', { inputPath: 'a.mp3' });
+  supervisor.emitter.emit('result', { id: 'attempt-1', result: { sections: [{ start: 0, end: 5, label: 'intro' }, { start: 5, end: 9, label: 'verse' }] } });
+  await flush();
+  assert.equal(progress().find((p) => p.stage === 'done').sectionCount, 2);
+
+  await jobs.startJobForTrack('t1', { inputPath: 'a.mp3' }); // 重新分析，然後取消
+  jobs.cancelJobForTrack('t1');
+  await flush();
+  assert.equal(playState.playlist[0].sectionsStatus, 'done', '上一次的段落還在，狀態要維持 done');
+  supervisor.emitter.emit('error', { id: 'attempt-2', error: { code: 'CANCELLED' } });
+  await flush();
+
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  const summary = appState.slice(appState.indexOf('function getTrackPayload'), appState.indexOf('function getPublicPlaylist'));
+  assert.ok(summary.includes('sectionsStatus: track.sectionsStatus') && summary.includes('sectionCount: track.sections.length'), '播放清單摘要白名單要帶段落狀態與段落數');
+
+  const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'section-analysis-client.js'), 'utf8');
+  assert.ok(!client.includes("t('aiJob.error')"), '段落分析不可顯示「伴奏製作失敗」');
+  assert.ok(client.includes('outcomes.set(trackId'), '結果要記住，不可被接著的 renderIdle() 清掉');
 });
 
 test.after(() => {

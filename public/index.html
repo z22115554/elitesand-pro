@@ -204,9 +204,8 @@
           <span class="nav-label" data-i18n="nav.moon">中秋活動</span>
           <span class="nav-sub" data-i18n="nav.moonLimited">（限時開放）</span>
         </button>
-        <!-- 2026-09-12 先收起來；2026-09-24 A 區已知問題已修（3238512）、下載進度條已補（34f259b），
-             但還沒完成實機驗收（完整 2.7GB 下載、真歌分析→文字PV 端到端）。驗收完再開放：比照 nav.js
-             開頭註解的既有慣例，拿掉這個 hidden 即可。 -->
+        <!-- 2026-09-27 1.1.0 發版前先收起來（使用者指示）：2026-09-25 的修正（runtime 補裝套件／鎖版本／
+             面板保留結果）尚未完成實機驗收。要重新開放：比照 nav.js 開頭註解的慣例，拿掉這個 hidden 即可。 -->
         <button class="nav-item" data-nav="sections" type="button" title="段落設計" data-i18n-title="nav.sections" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="10" height="4" rx="1"/></svg>
           <span class="nav-label" data-i18n="nav.sections">段落設計</span>
@@ -820,10 +819,11 @@
                 <label data-i18n="jizura.placementLabel">歌詞位置</label>
                 <div class="style-thumb-row" id="jizura-placement-buttons">
                   <button class="style-thumb" data-jizura-placement="left" type="button" data-i18n-title="jizura.placementLeftTitle" title="偏左：裝飾維持全畫面，歌詞本身盡量往左放，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
-                  <button class="style-thumb active" data-jizura-placement="right" type="button" data-i18n-title="jizura.placementRightTitle" title="偏右：裝飾維持全畫面，歌詞本身盡量往右放，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
+                  <button class="style-thumb" data-jizura-placement="right" type="button" data-i18n-title="jizura.placementRightTitle" title="偏右：裝飾維持全畫面，歌詞本身盡量往右放，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
+                  <button class="style-thumb active" data-jizura-placement="sides" type="button" data-i18n-title="jizura.placementSidesTitle" title="兩側：每句拆成兩半放在左右兩側，中間整片留給主播"><span class="style-thumb-preview"><span class="style-thumb-char">兩</span></span><span class="style-thumb-label" data-i18n="jizura.placementSides">兩側</span></button>
                   <button class="style-thumb" data-jizura-placement="full" type="button" data-i18n-title="jizura.placementFullTitle" title="置中：歌詞照引擎原本的構圖放，常落在畫面正中、會壓到主播"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="jizura.placementFull">置中</span></button>
                 </div>
-                <p class="field-hint" data-i18n="jizura.placementHint">預設偏右。裝飾效果一律鋪滿全畫面；歌詞會依每句版面的寬度盡量往側邊推，太寬的版面（例如跑馬燈）推不動就維持原位。</p>
+                <p class="field-hint" data-i18n="jizura.placementHint">預設兩側：每句拆成左右兩半，中間整片留給主播，版面只用較輕、不佔畫面的那一組。偏左／偏右時裝飾一律鋪滿全畫面，歌詞依每句版面寬度盡量往側邊推，太寬的版面（例如跑馬燈）推不動就維持原位。</p>
               </div>
               <div class="field" id="jizura-motion-field" hidden>
                 <label data-i18n="jizura.motionLabel">動作節奏</label>
@@ -1647,6 +1647,17 @@
             <div class="moon-preview-frame">
               <iframe id="moon-preview-iframe" title="中秋活動預覽" data-i18n-title="moon.previewFrame" loading="lazy"></iframe>
             </div>
+            <div class="moon-scale-row">
+              <div class="field">
+                <label for="moon-lantern-scale"><span data-i18n="moon.lanternScale">燈籠大小</span> <span id="moon-lantern-scale-val" class="val">100%</span></label>
+                <input id="moon-lantern-scale" type="range" min="60" max="250" step="5" value="100">
+              </div>
+              <div class="field">
+                <label for="moon-moon-scale"><span data-i18n="moon.moonScale">月亮大小</span> <span id="moon-moon-scale-val" class="val">100%</span></label>
+                <input id="moon-moon-scale" type="range" min="60" max="250" step="5" value="100">
+              </div>
+            </div>
+            <p class="field-hint" data-i18n="moon.scaleHint">拖動後 OBS 畫面會立刻套用。燈籠放大後一排放不下的會自動分頁輪播。</p>
             <div class="obs-url-list mt-10">
               <div><div class="label" data-i18n="moon.urlAll">月亮＋燈籠（整個畫面）</div><div class="url-field"><code data-moon-url=""></code><button class="btn btn-sm" type="button" data-moon-copy="" data-i18n="common.copy">複製</button></div></div>
               <div><div class="label" data-i18n="moon.urlMoon">只有月亮</div><div class="url-field"><code data-moon-url="?part=moon"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=moon" data-i18n="common.copy">複製</button></div></div>
@@ -2795,6 +2806,31 @@
         <div class="youtube-risk-actions">
           <button id="youtube-risk-skip" class="btn btn-ghost" type="button">略過這支影片</button>
           <button id="youtube-risk-proceed" class="btn btn-primary" type="button">仍然匯入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Modal：YouTube 登入狀態最後救援（只在匿名鏈失敗後出現）═══ -->
+  <div id="youtube-cookie-modal" class="modal" hidden>
+    <div class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="youtube-cookie-heading" aria-describedby="youtube-cookie-summary">
+      <div class="modal-head"><h3 id="youtube-cookie-heading" data-i18n="youtubeAuth.title">這支影片需要登入 YouTube 才能下載</h3></div>
+      <div class="modal-body">
+        <p id="youtube-cookie-summary" data-i18n="youtubeAuth.summary">一般的下載方式都試過了，YouTube 還是要求登入（常見於會員限定、年齡限制，或 YouTube 暫時把這台電腦當成機器人）。</p>
+        <p class="sub" data-i18n="youtubeAuth.risk">可以借用這台電腦上瀏覽器已登入的 YouTube 帳號再試一次。Elitesand Pro 不會問你的 Google 密碼，也不會保存任何登入資料；這次下載會算在那個帳號上，請不要短時間內反覆重試。</p>
+        <div class="field">
+          <label for="youtube-cookie-browser" data-i18n="youtubeAuth.browser">你平常用哪個瀏覽器登入 YouTube？</label>
+          <select id="youtube-cookie-browser" class="input">
+            <option value="edge">Microsoft Edge</option>
+            <option value="chrome">Google Chrome</option>
+            <option value="firefox">Mozilla Firefox</option>
+            <option value="brave">Brave</option>
+          </select>
+          <p class="field-hint" data-i18n="youtubeAuth.browserHint">如果選 Chrome 或 Edge 失敗，先把那個瀏覽器完全關掉再試；還是不行的話，Firefox 通常比較容易成功。</p>
+        </div>
+        <div class="youtube-risk-actions">
+          <button id="youtube-cookie-cancel" class="btn btn-ghost" type="button" data-i18n="youtubeAuth.cancel">不用了</button>
+          <button id="youtube-cookie-retry" class="btn btn-primary" type="button" data-i18n="youtubeAuth.retry">用這個瀏覽器的登入再試一次</button>
         </div>
       </div>
     </div>

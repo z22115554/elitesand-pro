@@ -56,6 +56,12 @@ function Get-ReleaseDownload {
 }
 
 $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+# Spout is required in every distributable; fail before tests or staging changes.
+$SpoutAddonSource = Join-Path $Root ".local\spout-output-build\elitesand_spout_output.node"
+if (-not (Test-Path -LiteralPath $SpoutAddonSource -PathType Leaf) -or (Get-Item -LiteralPath $SpoutAddonSource).Length -eq 0) {
+  throw "Required Spout native addon is missing or empty: $SpoutAddonSource. Run tools/build-spout-native.ps1 before packaging."
+}
+$SpoutAddonHash = Get-Sha256Hex -LiteralPath $SpoutAddonSource
 $TestCommand = Get-Command npm.cmd -ErrorAction Stop
 Write-Host "Running required test gate before packaging..."
 & $TestCommand.Source --prefix $Root test
@@ -136,6 +142,13 @@ foreach ($dir in $DirsToCopy) {
 # Source map 另存到 dist/.source-maps/（不隨任何發布產物打包），供未來對照
 # production stack trace 用。
 $NodeCommandForBundling = Get-Command node -ErrorAction Stop
+$NodeVersionText = (& $NodeCommandForBundling.Source --version).Trim()
+if ($NodeVersionText -notmatch '^v(?<major>\d+)\.') {
+  throw "Unable to determine Node.js version from '$NodeVersionText'."
+}
+if ([int]$Matches['major'] -lt 22) {
+  throw "Node.js 22 or newer is required for packaged yt-dlp EJS support; found $NodeVersionText."
+}
 $SourceMapOut = Join-Path $Root "dist\.source-maps\v$Version"
 if (Test-Path $SourceMapOut) {
   Remove-Item -LiteralPath $SourceMapOut -Recurse -Force
@@ -186,6 +199,21 @@ Reset-PackagedRuntimeData
 
 $LicensesDir = Join-Path $Stage "licenses"
 New-Item -ItemType Directory -Force -Path $LicensesDir | Out-Null
+
+# bgutil PO Token provider is preselected but not bundled yet. Ship its legal
+# material now so every package documents the exact candidate/version, and so a
+# future provider-bundling change cannot land without an explicit compliance gate.
+$BgutilLegalSource = Join-Path $Root "third-party-licenses\bgutil-ytdlp-pot-provider"
+$BgutilLegalOut = Join-Path $LicensesDir "bgutil-ytdlp-pot-provider"
+foreach ($required in @("LICENSE.txt", "SOURCE.txt", "NOTICE.txt")) {
+  if (-not (Test-Path -LiteralPath (Join-Path $BgutilLegalSource $required))) {
+    throw "Missing bgutil legal material: $required"
+  }
+}
+New-Item -ItemType Directory -Force -Path $BgutilLegalOut | Out-Null
+foreach ($required in @("LICENSE.txt", "SOURCE.txt", "NOTICE.txt")) {
+  Copy-Item -LiteralPath (Join-Path $BgutilLegalSource $required) -Destination (Join-Path $BgutilLegalOut $required) -Force
+}
 
 # 日文諧音 v2 需要 Haqumei 的內嵌辭典；不能把責任丟給使用者的系統 Python。
 # 這個 runtime 只供 G2P 使用，與 GB 級的 AI 分離 Python runtime 分開，並在
@@ -269,8 +297,20 @@ foreach ($toolName in @("yt-dlp")) {
     New-Item -ItemType Directory -Force -Path $YtdlpLicenseOut | Out-Null
     $YtdlpVersion = (& $tool.Source --version 2>&1 | Select-Object -First 1).ToString().Trim()
     $YtdlpHash = Get-Sha256Hex -LiteralPath (Join-Path $Stage "tools\yt-dlp.exe")
-    Get-ReleaseDownload -Uri "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$YtdlpVersion/LICENSE" -OutFile (Join-Path $YtdlpLicenseOut "LICENSE.txt")
-    Get-ReleaseDownload -Uri "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$YtdlpVersion/THIRD_PARTY_LICENSES.txt" -OutFile (Join-Path $YtdlpLicenseOut "THIRD_PARTY_LICENSES.txt")
+    # 產品一律用 nightly。nightly 版號（YYYY.MM.DD.HHMMSS）只在 yt-dlp-nightly-builds 有 tag，
+    # 主 repo 沒有同名 tag；授權文件改到該 nightly release 標明的上游 commit 去取。
+    $YtdlpLicenseRef = $YtdlpVersion
+    $YtdlpUpstream = "https://github.com/yt-dlp/yt-dlp/releases/tag/$YtdlpVersion"
+    if ($YtdlpVersion -match '^\d{4}\.\d{2}\.\d{2}\.\d+$') {
+      $NightlyRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/tags/$YtdlpVersion" -Headers @{ 'User-Agent' = 'Elitesand-Pro-build' }
+      if ([string]$NightlyRelease.body -notmatch 'yt-dlp/yt-dlp/commit/(?<sha>[0-9a-f]{40})') {
+        throw "Cannot find the upstream commit for nightly yt-dlp $YtdlpVersion"
+      }
+      $YtdlpLicenseRef = $Matches['sha']
+      $YtdlpUpstream = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/tag/$YtdlpVersion (built from yt-dlp/yt-dlp@$YtdlpLicenseRef)"
+    }
+    Get-ReleaseDownload -Uri "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$YtdlpLicenseRef/LICENSE" -OutFile (Join-Path $YtdlpLicenseOut "LICENSE.txt")
+    Get-ReleaseDownload -Uri "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$YtdlpLicenseRef/THIRD_PARTY_LICENSES.txt" -OutFile (Join-Path $YtdlpLicenseOut "THIRD_PARTY_LICENSES.txt")
     $YtdlpInfo = @"
 yt-dlp binary provenance
 =========================
@@ -278,10 +318,10 @@ yt-dlp binary provenance
 Bundled version: $YtdlpVersion
 Source: $($tool.Source)
 SHA-256 of bundled tools\yt-dlp.exe: $YtdlpHash
-Upstream: https://github.com/yt-dlp/yt-dlp/releases/tag/$YtdlpVersion
+Upstream: $YtdlpUpstream
 License: LICENSE.txt (Unlicense/public domain) and THIRD_PARTY_LICENSES.txt
 (bundled dependency licenses) in this folder, fetched from the matching
-upstream tag at build time.
+upstream source ($YtdlpLicenseRef) at build time.
 "@
     Set-Content -LiteralPath (Join-Path $YtdlpLicenseOut "PROVENANCE.txt") -Value $YtdlpInfo -Encoding UTF8
     Write-Host "yt-dlp provenance recorded: $YtdlpVersion, sha256 $YtdlpHash"
@@ -290,20 +330,14 @@ upstream tag at build time.
   }
 }
 
-# Spout 透明輸出是實驗性功能；原生 addon 要靠 tools/build-spout-native.ps1 手動編譯到
-# .local/spout-output-build/，不是每台開發機或每次打包都有。有編譯好的就跟著 yt-dlp
-# 一樣塞進 resources/tools/spout/；沒有就跳過，讓這個版本乾脆不含 Spout（electron/
-# spout-display-output.js 的 loadSpoutAddon 在打包版找不到時會給清楚的錯誤訊息，
-# 不會再誤指到開發機專用、根本不會被打包的 .local 路徑)。
-$SpoutAddonSource = Join-Path $Root ".local\spout-output-build\elitesand_spout_output.node"
-if (Test-Path -LiteralPath $SpoutAddonSource) {
-  $SpoutToolsDir = Join-Path $Stage "tools\spout"
-  New-Item -ItemType Directory -Force -Path $SpoutToolsDir | Out-Null
-  Copy-Item -LiteralPath $SpoutAddonSource -Destination $SpoutToolsDir -Force
-  Write-Host "Bundled Spout native addon from $SpoutAddonSource"
-} else {
-  Write-Host "Spout native addon not built locally; this package will not include transparent Spout output."
+# Include the required native addon and verify the staged bytes.
+$SpoutToolsDir = Join-Path $Stage "tools\spout"
+New-Item -ItemType Directory -Force -Path $SpoutToolsDir | Out-Null
+Copy-Item -LiteralPath $SpoutAddonSource -Destination $SpoutToolsDir -Force
+if ((Get-Sha256Hex -LiteralPath (Join-Path $SpoutToolsDir "elitesand_spout_output.node")) -ne $SpoutAddonHash) {
+  throw "Staged Spout native addon does not match the verified source."
 }
+Write-Host "Bundled required Spout native addon: sha256 $SpoutAddonHash"
 
 # 批次 D-1（CLOSED_SOURCE_MIGRATION_PLAN.md）：預設不再內附 FFmpeg。
 # GPLv3 static build 的完整對應原始碼義務很重，改成程式內「按需下載＋SHA-256 驗證」

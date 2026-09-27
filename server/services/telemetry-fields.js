@@ -41,7 +41,7 @@ const OUTCOME_FAMILIES = Object.freeze(['import', 'lyrics', 'twitch', 'ai']);
 const ERROR_CODES = Object.freeze({
   import: Object.freeze([
     'ytdlp_missing', 'ytdlp_http_403', 'ytdlp_http_404', 'ytdlp_geo_blocked',
-    'ytdlp_private', 'ytdlp_auth_required', 'ytdlp_timeout', 'ytdlp_format_unavailable',
+    'ytdlp_private', 'ytdlp_auth_required', 'ytdlp_rate_limited', 'ytdlp_timeout', 'ytdlp_format_unavailable',
     'ffmpeg_missing', 'ffmpeg_failed', 'disk_full', 'network', 'other',
   ]),
   lyrics: Object.freeze(['no_match', 'source_error', 'timeout', 'network', 'other']),

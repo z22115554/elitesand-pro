@@ -118,6 +118,30 @@ def _enable_sdpa_patch():
     Wav2Vec2ConformerSelfAttention.forward = patched_forward
 
 
+def _stub_msaf_eval():
+    """官方 models/SongFormer.py 開頭就 `from msaf.eval import compute_results`，但它只在
+    cal_metrics（訓練時跟標準答案比對打分數）用到，推論完全不會呼叫。msaf 本身相依一串舊套件、
+    在 Python 3.11 上不好裝，執行期環境也從沒裝過它——少了這個替身，模型 import 就會
+    `No module named 'msaf'`，每一首歌都失敗（2026-09-24 實機日誌）。真的裝了 msaf 就用真的。
+    """
+    try:
+        import msaf.eval  # noqa: F401
+        return
+    except ImportError:
+        pass
+    import types
+
+    def compute_results(*_args, **_kwargs):
+        raise RuntimeError("msaf evaluation is not available in the section-analysis runtime (inference only)")
+
+    msaf = types.ModuleType("msaf")
+    msaf_eval = types.ModuleType("msaf.eval")
+    msaf_eval.compute_results = compute_results
+    msaf.eval = msaf_eval
+    sys.modules.setdefault("msaf", msaf)
+    sys.modules.setdefault("msaf.eval", msaf_eval)
+
+
 def _load_songformer_functions(songformer_dir):
     """從官方 app.py 用 ast 抽出 initialize_models/process_audio/format_as_segments
     這幾個推論用得到的函式（連同它們用到的 import/module-level assignment），
@@ -129,6 +153,7 @@ def _load_songformer_functions(songformer_dir):
     src_songformer = os.path.join(songformer_dir, "src", "SongFormer")
     sys.path.insert(0, os.path.join(songformer_dir, "src", "third_party"))
     sys.path.insert(0, src_songformer)
+    _stub_msaf_eval()
 
     app_py_path = os.path.join(songformer_dir, "app.py")
     source = open(app_py_path, "r", encoding="utf-8").read()

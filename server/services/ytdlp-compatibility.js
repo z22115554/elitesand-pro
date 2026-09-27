@@ -2,6 +2,7 @@
 
 const { execFile } = require('child_process');
 const { promisify } = require('util');
+const ytdlpCaps = require('../utils/ytdlp-capabilities');
 const { createLogger } = require('../utils/logger');
 const { getYtdlpCommand } = require('../utils/ytdlp-command');
 
@@ -20,7 +21,18 @@ const PROBE_URL = process.env.ELITESAND_YTDLP_PROBE_URL || DEFAULT_PROBE_URL;
 // override may intentionally point at another healthy public video, so only
 // require a non-empty id in that case.
 const EXPECTED_PROBE_VIDEO_ID = PROBE_URL === DEFAULT_PROBE_URL ? PROBE_VIDEO_ID : null;
-const PROBE_ARGS = ['--skip-download', '--no-playlist', '--no-warnings', '--socket-timeout', '8', '--print', '%(id)s', PROBE_URL];
+
+// 探針用的是匿名基本路徑：忽略全域設定（尤其是隱含的 Cookie/代理），yt-dlp 支援時
+// 顯式指定 JS runtime。刻意不加 --remote-components：那會讓每次探測都連 GitHub，
+// 連線到 GitHub 不穩的網路環境會被誤判成 yt-dlp 不相容。仍然只讀 metadata。
+function probeArgs(caps) {
+  return [
+    ...ytdlpCaps.commonArgs(caps),
+    '--skip-download', '--no-playlist', '--no-warnings',
+    '--socket-timeout', '8', '--print', '%(id)s', PROBE_URL,
+  ];
+}
+const PROBE_ARGS = probeArgs({ jsRuntimes: false, remoteComponents: false });
 
 let status = { state: 'not-run', ok: null, checkedAt: 0, durationMs: 0, message: '尚未驗證 YouTube 相容性' };
 let inFlight = null;
@@ -44,7 +56,8 @@ async function probe(options = {}) {
 
   inFlight = (async () => {
     try {
-      const { stdout } = await run(YTDLP_COMMAND, PROBE_ARGS, {
+      const caps = await ytdlpCaps.ensure(options.execFileImpl ? { run } : {});
+      const { stdout } = await run(YTDLP_COMMAND, probeArgs(caps), {
         timeout: 15000,
         windowsHide: true,
         maxBuffer: 64 * 1024,
@@ -88,6 +101,7 @@ module.exports = {
   PROBE_URL,
   EXPECTED_PROBE_VIDEO_ID,
   PROBE_ARGS,
+  probeArgs,
   getStatus,
   probe,
   scheduleProbe,

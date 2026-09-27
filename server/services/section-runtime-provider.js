@@ -66,12 +66,32 @@ const HF_HOME = path.join(RUNTIME_DIR, 'cache', 'huggingface');
 const TORCH_HOME = path.join(RUNTIME_DIR, 'cache', 'torch');
 
 const PYTHON_EMBED_VERSION = '3.11.9'; // 跟 ai-runtime-provider.js 用同一版，兩邊各自的 marker 各自記自己的
+// SongFormer 推論鏈實際 import 到的套件。2026-09-25 實機：之前漏了 x-transformers／loguru、
+// 又沒鎖版本（transformers 抓到 5.x、SongFormer 是照 4.51 寫的），每首歌都在載入模型時失敗。
+// msaf 不裝：它只用在訓練時的評分函式，section_worker.py 放了替身。
 const PIP_PACKAGES = [
-  'torch==2.6.0', 'torchaudio==2.6.0', // 跟 POC 驗證過的版本一致
-  'transformers', 'omegaconf', 'ema-pytorch', 'einops', 'einx',
-  'huggingface-hub', 'safetensors', 'librosa', 'jams', 'requests', 'tqdm',
+  'torch', 'torchaudio', 'transformers', 'omegaconf', 'ema-pytorch', 'einops', 'einx', 'x-transformers',
+  'loguru', 'win32-setctime', 'huggingface-hub', 'safetensors', 'librosa', 'jams', 'numpy', 'scipy',
+  'requests', 'tqdm',
 ];
+// 所有套件（含相依拉進來的）一律鎖成 POC 驗證過 18 首歌的版本
+// （E:/music-section-poc-20260908/candidate-results/requirements-lock.txt），以 pip constraints 套用，
+// 之後上游出新版也不會再悄悄換掉。只列推論鏈會碰到的，其他候選模型用的（madmom、dgl…）不列。
+const PIP_CONSTRAINTS = [
+  'torch==2.6.0', 'torchaudio==2.6.0', 'transformers==4.51.1', 'tokenizers==0.21.4', 'huggingface-hub==0.36.2',
+  'safetensors==0.8.0', 'numpy==1.26.4', 'scipy==1.15.2', 'librosa==0.11.0', 'numba==0.67.0', 'llvmlite==0.49.0',
+  'soundfile==0.14.0', 'soxr==1.1.0', 'audioread==3.1.0', 'jams==0.3.4', 'mir-eval==0.8.2', 'omegaconf==2.3.0',
+  'antlr4-python3-runtime==4.9.3', 'ema-pytorch==0.7.7', 'einops==0.8.1', 'einx==0.3.0', 'x-transformers==2.4.14',
+  'x-clip==0.14.4', 'nnaudio==0.3.3', 'easydict==1.13', 'loguru==0.7.3', 'win32-setctime==1.2.0', 'beartype==0.22.9',
+  'scikit-learn==1.9.0', 'joblib==1.6.0', 'threadpoolctl==3.6.0', 'pandas==3.0.5', 'regex==2026.9.3', 'ftfy==6.3.1',
+  'pyyaml==6.0.3', 'tqdm==4.70.0', 'requests==2.34.2', 'sympy==1.13.1', 'networkx==3.6.1', 'filelock==3.32.3',
+  'fsspec==2026.7.0', 'jinja2==3.1.6', 'typing-extensions==4.16.0',
+];
+// 套件組合的版本：改了 PIP_PACKAGES／PIP_CONSTRAINTS 就 +1。已安裝但版本號舊的，只重跑套件那一步
+// （幾分鐘），不重下 Python／原始碼／2.7GB 權重。
+const PACKAGES_REVISION = 2;
 const PIP_EXTRA_INDEX_URL = 'https://download.pytorch.org/whl/cu124';
+const CONSTRAINTS_FILE = path.join(RUNTIME_DIR, 'constraints.txt');
 const GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py';
 
 // Python embeddable + 完整 torch cu124 環境，比照 ai-runtime-provider.js 估計。
@@ -118,7 +138,22 @@ function isAvailable() {
     const marker = JSON.parse(fs.readFileSync(MARKER_FILE, 'utf8'));
     return marker.pythonEmbedVersion === PYTHON_EMBED_VERSION
       && marker.pipInstallDone === true
-      && marker.sourceReady === true;
+      && marker.sourceReady === true
+      && marker.packagesRevision === PACKAGES_REVISION;
+  } catch (_) {
+    return false;
+  }
+}
+
+// 裝好了、只是套件組合是舊版：可以只補套件，不必整包重下
+function needsPackageRepair() {
+  try {
+    if (!fs.existsSync(PYTHON_EXE) || !fs.existsSync(SONGFORMER_DIR)) return false;
+    const marker = JSON.parse(fs.readFileSync(MARKER_FILE, 'utf8'));
+    return marker.pythonEmbedVersion === PYTHON_EMBED_VERSION
+      && marker.pipInstallDone === true
+      && marker.sourceReady === true
+      && marker.packagesRevision !== PACKAGES_REVISION;
   } catch (_) {
     return false;
   }
@@ -232,7 +267,9 @@ const STAGE_BANDS = {
   'install-muq-package': [62, 66],
   'download-muq-backbone': [66, 86],
   'download-weights': [86, 97],
-  'verify-weights': [97, 99],
+  'verify-weights': [97, 98],
+  'verify-packages': [98, 99],
+  'repair-packages': [0, 90],
   done: [100, 100],
 };
 // install-packages 裡只有 torch 的位元組足以代表整段（其他 wheel 相對很小）；pip 解壓
@@ -259,7 +296,7 @@ function setDownloadStatus(patch) {
   const prev = downloadStatus;
   const next = { ...prev, ...patch, updatedAt: now };
   // 新的一輪安裝（從 idle／error／done 回到第一個階段）：歸零整體進度
-  const restarted = patch.stage === 'disk-space-check' && prev.stage !== 'disk-space-check';
+  const restarted = (patch.stage === 'disk-space-check' || patch.stage === 'repair-packages') && prev.stage !== patch.stage;
   if (restarted) next.overallPercent = 0;
   // 換階段時，上一階段的位元組／細步驟不可以沿用（例如 torch 的 2.5GB 會讓下一段直接跳到段尾）
   if (next.stage !== prev.stage) {
@@ -341,6 +378,60 @@ function mergeMissing(fromDir, intoDir) {
   }
 }
 
+function writeConstraints() {
+  fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+  fs.writeFileSync(CONSTRAINTS_FILE, `${PIP_CONSTRAINTS.join('\n')}\n`, 'utf8');
+}
+
+function pipProgressHandler(stage, onProgress) {
+  return (text) => {
+    const p = parseToolProgress(text);
+    if (Object.keys(p).length) {
+      setDownloadStatus({ active: true, stage, error: null, ...p });
+      onProgress?.(getDownloadStatus());
+    }
+  };
+}
+
+// PIP_PACKAGES，鎖在 PIP_CONSTRAINTS 的版本
+function installPipPackages({ pythonExe, cwd, stage, onProgress, abortSignal }) {
+  return runPythonStep(
+    ['-m', 'pip', 'install', '--progress-bar', 'on', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL,
+      '-c', CONSTRAINTS_FILE, ...PIP_PACKAGES],
+    { cwd, pythonExe, timeoutMs: 30 * 60 * 1000, abortSignal, onOutput: pipProgressHandler(stage, onProgress) },
+  );
+}
+
+// 2026-09-22 實機踩到的坑：`muq` 不是像 musicfm 那樣單純加 third_party 到 PYTHONPATH
+// 就能 import 的扁平模組——它自己有 setup.py（package_dir 指到 src/muq），必須真的
+// pip install 這個本機路徑才會出現在 site-packages。musicfm 沒有 setup.py，維持用
+// section_worker.py 的 PYTHONPATH 插入即可。這一步會順便裝 muq 自己宣告的相依
+// （x_clip 等），一樣套 constraints，不然它會把 transformers 之類升到最新版。
+function installMuqPackage({ stage, onProgress, abortSignal }) {
+  return runPythonStep(
+    ['-m', 'pip', 'install', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL,
+      '-c', CONSTRAINTS_FILE, path.join(SONGFORMER_DIR, 'src', 'third_party', 'MuQ')],
+    { cwd: RUNTIME_DIR, pythonExe: PYTHON_EXE, timeoutMs: 15 * 60 * 1000, abortSignal, onOutput: pipProgressHandler(stage, onProgress) },
+  );
+}
+
+// 裝完實際 import 一次推論鏈會碰到的模組，並核對 transformers 版本——以前只看 pip 有沒有成功，
+// 少裝一個套件要等使用者按下分析、模型載入到一半才爆（No module named …）。
+const TRANSFORMERS_VERSION = PIP_CONSTRAINTS.find((c) => c.startsWith('transformers==')).split('==')[1];
+const VERIFY_IMPORTS_PY = [
+  'import torch, torchaudio, transformers, x_transformers, loguru, ema_pytorch, einops, einx, omegaconf, librosa, muq',
+  `assert transformers.__version__ == "${TRANSFORMERS_VERSION}", transformers.__version__`,
+].join('; ');
+function verifyPackages({ abortSignal } = {}) {
+  return runPythonStep(['-c', VERIFY_IMPORTS_PY], {
+    cwd: path.join(SONGFORMER_DIR, 'src', 'SongFormer'),
+    pythonExe: PYTHON_EXE,
+    timeoutMs: 5 * 60 * 1000,
+    abortSignal,
+    env: { PYTHONPATH: path.join(SONGFORMER_DIR, 'src', 'third_party') },
+  });
+}
+
 /**
  * 下載並安裝歌曲段落分析 runtime：Python embeddable → SongFormer/MuQ/musicfm
  * 原始碼 → pip 套件 → MuQ 骨幹（huggingface_hub）→ MusicFM/SongFormer 權重
@@ -359,6 +450,35 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
     if (isAvailable() && await verifyWeights()) {
       setDownloadStatus({ active: false, stage: 'done', percent: 100, error: null });
       return { ok: true, pythonExe: PYTHON_EXE, songformerDir: SONGFORMER_DIR };
+    }
+
+    // 已安裝、只是套件組合是舊版（例如 2026-09-25 前漏裝 x-transformers、transformers 沒鎖版本）：
+    // 只重跑套件那一步。權重照樣驗 MD5；權重有問題才落到下面的完整安裝。
+    if (needsPackageRepair()) {
+      try {
+        setDownloadStatus({ active: true, stage: 'repair-packages', error: null, step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
+        log.info('歌曲段落分析 runtime：套件組合是舊版，只補裝套件');
+        onProgress?.(getDownloadStatus());
+        writeConstraints();
+        await installPipPackages({ pythonExe: PYTHON_EXE, cwd: RUNTIME_DIR, stage: 'repair-packages', onProgress, abortSignal });
+        await installMuqPackage({ stage: 'repair-packages', onProgress, abortSignal });
+        setDownloadStatus({ active: true, stage: 'verify-packages', error: null });
+        onProgress?.(getDownloadStatus());
+        await verifyPackages({ abortSignal });
+        if (await verifyWeights()) {
+          const marker = readMarker() || {};
+          fs.writeFileSync(MARKER_FILE, JSON.stringify({ ...marker, packagesRevision: PACKAGES_REVISION }, null, 2), 'utf8');
+          setDownloadStatus({ active: false, stage: 'done', percent: 100, error: null });
+          log.info('歌曲段落分析 runtime：套件補裝完成');
+          return { ok: true, pythonExe: PYTHON_EXE, songformerDir: SONGFORMER_DIR };
+        }
+        log.warn('歌曲段落分析 runtime：套件已補裝，但權重驗證沒過，改走完整安裝');
+      } catch (err) {
+        err.stage = err.stage || 'repair-packages';
+        setDownloadStatus({ active: false, stage: 'error', error: err.message });
+        log.error('歌曲段落分析 runtime 套件補裝失敗', err);
+        throw err;
+      }
     }
 
     const tmpPythonDir = path.join(RUNTIME_DIR, 'python.download');
@@ -407,21 +527,8 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
       await runPythonStep(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe });
 
       progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
-      await runPythonStep(
-        ['-m', 'pip', 'install', '--progress-bar', 'on', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL, ...PIP_PACKAGES],
-        {
-          cwd: tmpPythonDir,
-          pythonExe: tmpPythonExe,
-          timeoutMs: 30 * 60 * 1000,
-          onOutput: (text) => {
-            const p = parseToolProgress(text);
-            if (Object.keys(p).length) {
-              setDownloadStatus({ active: true, stage: 'install-packages', error: null, ...p });
-              onProgress?.(getDownloadStatus());
-            }
-          },
-        },
-      );
+      writeConstraints();
+      await installPipPackages({ pythonExe: tmpPythonExe, cwd: tmpPythonDir, stage: 'install-packages', onProgress, abortSignal });
 
       progress('download-source', { detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
       for (const archive of SOURCE_ARCHIVES) {
@@ -435,27 +542,7 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
       fs.renameSync(tmpPythonDir, PYTHON_DIR);
 
       progress('install-muq-package', { step: 'pip-install', detail: 'muq', downloadedBytes: null, totalBytes: null, percent: null });
-      // 2026-09-22 實機踩到的坑：`muq` 不是像 musicfm 那樣單純加 third_party 到 PYTHONPATH
-      // 就能 import 的扁平模組——它自己有 setup.py（package_dir 指到 src/muq），必須真的
-      // pip install 這個本機路徑才會出現在 site-packages。musicfm 沒有 setup.py，維持用
-      // section_worker.py 的 PYTHONPATH 插入即可，不用在這裡另外裝。這一步順便會裝好
-      // muq 自己宣告的相依（einops/librosa/nnAudio/easydict/x_clip 等），不用在
-      // PIP_PACKAGES 手動重複列一份。
-      await runPythonStep(
-        ['-m', 'pip', 'install', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL, path.join(SONGFORMER_DIR, 'src', 'third_party', 'MuQ')],
-        {
-          cwd: RUNTIME_DIR,
-          pythonExe: PYTHON_EXE,
-          timeoutMs: 15 * 60 * 1000,
-          onOutput: (text) => {
-            const p = parseToolProgress(text);
-            if (Object.keys(p).length) {
-              setDownloadStatus({ active: true, stage: 'install-muq-package', error: null, ...p });
-              onProgress?.(getDownloadStatus());
-            }
-          },
-        },
-      );
+      await installMuqPackage({ stage: 'install-muq-package', onProgress, abortSignal });
 
       progress('download-muq-backbone');
       // MuQ.from_pretrained() 走 huggingface_hub 自己的下載+完整性驗證，這裡不重造
@@ -510,10 +597,14 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
         verifiedWeights.set(rel, weightFingerprints[rel]);
       }
 
+      progress('verify-packages');
+      await verifyPackages({ abortSignal });
+
       fs.writeFileSync(MARKER_FILE, JSON.stringify({
         pythonEmbedVersion: PYTHON_EMBED_VERSION,
         pipInstallDone: true,
         sourceReady: true,
+        packagesRevision: PACKAGES_REVISION,
         weights: weightFingerprints,
         installedAt: new Date().toISOString(),
       }, null, 2), 'utf8');
@@ -547,6 +638,10 @@ function resetForTests() {
 
 module.exports = {
   isAvailable,
+  needsPackageRepair,
+  PACKAGES_REVISION,
+  PIP_PACKAGES,
+  PIP_CONSTRAINTS,
   isWeightsAvailable,
   verifyWeights,
   downloadRuntime,

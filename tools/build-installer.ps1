@@ -65,6 +65,12 @@ function Get-RelativeWorkspacePath {
 }
 
 $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+# Spout is required in every distributable; fail before tests or staging changes.
+$SpoutAddonSource = Join-Path $Root ".local\spout-output-build\elitesand_spout_output.node"
+if (-not (Test-Path -LiteralPath $SpoutAddonSource -PathType Leaf) -or (Get-Item -LiteralPath $SpoutAddonSource).Length -eq 0) {
+  throw "Required Spout native addon is missing or empty: $SpoutAddonSource. Run tools/build-spout-native.ps1 before packaging."
+}
+$SpoutAddonHash = Get-Sha256Hex -LiteralPath $SpoutAddonSource
 $TestCommand = Get-Command npm.cmd -ErrorAction Stop
 Write-Host "Running required test gate before packaging..."
 & $TestCommand.Source --prefix $Root test
@@ -380,11 +386,15 @@ try {
 
   $UnpackedRoot = Join-Path $InstallerOutput "win-unpacked"
   $UnpackedResources = Join-Path $InstallerOutput "win-unpacked\resources"
-  foreach ($required in @("app.asar", "tools\yt-dlp.exe", "tools\updater-node.exe", "tools\ai\supervisor.py", "tools\ai\worker.py", "tools\ai\haqumei_sidecar.py", "tools\ai\section_supervisor.py", "tools\ai\section_worker.py", "tools\g2p\python.exe", "tools\g2p\python311.dll", "tools\g2p\python311.zip", "tools\g2p\python311._pth", "tools\g2p\Lib\site-packages\haqumei\haqumei.pyd")) {
+  foreach ($required in @("app.asar", "tools\spout\elitesand_spout_output.node", "tools\yt-dlp.exe", "tools\updater-node.exe", "tools\ai\supervisor.py", "tools\ai\worker.py", "tools\ai\haqumei_sidecar.py", "tools\ai\section_supervisor.py", "tools\ai\section_worker.py", "tools\g2p\python.exe", "tools\g2p\python311.dll", "tools\g2p\python311.zip", "tools\g2p\python311._pth", "tools\g2p\Lib\site-packages\haqumei\haqumei.pyd")) {
     if (-not (Test-Path -LiteralPath (Join-Path $UnpackedResources $required))) {
       throw "Installer output is missing $required; the built installer would be broken on user machines."
     }
   }
+  if ((Get-Sha256Hex -LiteralPath (Join-Path $UnpackedResources "tools\spout\elitesand_spout_output.node")) -ne $SpoutAddonHash) {
+    throw "Installer Spout native addon does not match the verified source."
+  }
+  Write-Host "Installer Spout native addon verified: sha256 $SpoutAddonHash"
   if (Test-Path -LiteralPath (Join-Path $UnpackedResources "app")) {
     throw "Installer output still contains raw resources\app; refusing a bypassable ASAR build."
   }

@@ -806,6 +806,11 @@ function createElectronShell({
         ELITESAND_YTDLP_STATE_PATH: packagedYtdlpRuntime.statePath,
         ELITESAND_YTDLP_SEED_PATH: packagedYtdlpRuntime.seed,
         ELITESAND_YTDLP_SEED_HASH: packagedYtdlpRuntime.seedHash,
+        // yt-dlp 的 EJS challenge solver 需要真正的 Node runtime。Electron 主程式
+        // 關掉 runAsNode fuse，不能拿 Elitesand Pro.exe 冒充 node；Installer 已經
+        // 隨附完整、完整性保護的 updater-node.exe，直接把同一份 runtime 路徑交給
+        // server，後端會以 --js-runtimes node:<absolute-path> 顯式指定。
+        ELITESAND_YTDLP_NODE_PATH: path.join(packagedTools, 'updater-node.exe'),
         ...(packagedYtdlpRuntime.seedVersion ? { ELITESAND_YTDLP_SEED_VERSION: packagedYtdlpRuntime.seedVersion } : {}),
       } : {}),
       PORT: String(port),

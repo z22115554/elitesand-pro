@@ -42,6 +42,12 @@ test('lantern style follows amount tiers, honors manual picks, and survives old 
   assert.equal(moon.setConfig({ title: '只改標題' }).ok, true);
   assert.equal(moon.snapshot().tiers.rabbit, 50);
 
+  assert.equal(moon.snapshot().lanternScale, 1);
+  assert.equal(moon.setConfig({ lanternScale: 1.8 }).state.lanternScale, 1.8);
+  assert.equal(moon.setConfig({ moonScale: 9 }).state.moonScale, 2.5);
+  assert.equal(moon.setConfig({ moonScale: 0.1 }).state.moonScale, 0.6);
+  assert.equal(moon.setConfig({ lanternScale: 'x', title: '只改標題' }).state.lanternScale, 1.8);
+
   assert.equal(moon.saveNow(), true);
   const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'moon-event.json'), 'utf8'));
   assert.equal(saved.donations.find((d) => d.name === '舊資料').style, undefined);

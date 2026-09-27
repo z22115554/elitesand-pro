@@ -2,10 +2,12 @@
  * yt-dlp 版本檢查與自我更新
  *
  * yt-dlp 版本號是日期格式（YYYY.MM.DD[.build]），可直接字串比較新舊。
- * - checkUpdate()：讀本機 `yt-dlp --version`，比對 GitHub 最新 release tag，回報是否可更新。
+ * 一律走 nightly 通道：穩定版跟不上 YouTube 的改動，匯入失敗頻率太高（2026-09 使用者決定）。
+ * - checkUpdate()：讀本機 `yt-dlp --version`，比對 yt-dlp-nightly-builds 最新 release tag。
  *   純唯讀，任何失敗都靜默回 available:false / hasUpdate:false，不影響其他功能。
- * - runUpdate()：執行 `yt-dlp -U`（官方自我更新；binary 版直接就地更新，
+ * - runUpdate()：執行 `yt-dlp --update-to nightly`（官方自我更新，會核對官方檢查碼；
  *   pip 版會回訊息叫你用 pip）。會改動檔案，屬受保護操作，路由層須掛 requirePin。
+ * - ensureNightlyChannel()：啟動時若 Installer 的可寫副本還是穩定版，就換成 nightly 一次。
  */
 
 const { execFile } = require('child_process');
@@ -28,7 +30,7 @@ const {
 const log = createLogger('YtdlpUpdater');
 
 const YTDLP_ENV = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
-const LATEST_API = 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest';
+const LATEST_API = 'https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest';
 const YTDLP_COMMAND = getYtdlpCommand();
 
 let _cache = null; // { payload, at }
@@ -174,7 +176,7 @@ async function runUpdate() {
     return { ok: false, message: '目前無法建立可寫入的 yt-dlp 更新副本；已保留內建版本，不會修改受保護的程式檔案。' };
   }
   try {
-    const { stdout, stderr } = await execFileAsync(YTDLP_COMMAND, ['-U'], {
+    const { stdout, stderr } = await execFileAsync(YTDLP_COMMAND, ['--update-to', 'nightly'], {
       timeout: 60000, windowsHide: true, maxBuffer: 512 * 1024, env: YTDLP_ENV,
     });
     _cache = null;
@@ -200,9 +202,76 @@ async function runUpdate() {
   }
 }
 
+
+let _nightlyFallbackPromise = null;
+
+/**
+ * YouTube extractor 相容性救援：只有 Installer 打包版的「可寫工作副本」可以自動
+ * 切到 nightly。開發環境／portable 不碰使用者 PATH 或安裝目錄中的 yt-dlp，
+ * 避免一次匯入默默修改全域工具。
+ *
+ * 同一輪 app 只做一次，避免 YouTube 故障時每首歌都打 updater。
+ */
+async function runNightlyFallback() {
+  if (_nightlyFallbackPromise) return _nightlyFallbackPromise;
+  if (process.env.ELITESAND_PACKAGED !== '1') {
+    return { ok: false, skipped: true, message: '非 Installer 打包環境，不自動修改 yt-dlp。' };
+  }
+  if (process.env.ELITESAND_YTDLP_MUTABLE !== '1') {
+    return { ok: false, skipped: true, message: 'yt-dlp 工作副本不可寫，略過 nightly fallback。' };
+  }
+
+  _nightlyFallbackPromise = (async () => {
+    try {
+      const { stdout, stderr } = await execFileAsync(YTDLP_COMMAND, ['--update-to', 'nightly'], {
+        timeout: 60000, windowsHide: true, maxBuffer: 512 * 1024, env: YTDLP_ENV,
+      });
+      _cache = null;
+      const currentVersion = await localVersion();
+      writeApprovedRuntimeTrust(currentVersion);
+      const out = `${stdout || ''}${stderr || ''}`.trim();
+      const lastLines = out.split(/\r?\n/).filter(Boolean).slice(-4).join('\n');
+      log.info(`YouTube 相容性救援已切換/確認 nightly，版本 ${currentVersion}`);
+      return { ok: true, skipped: false, message: lastLines || 'nightly 已可用', currentVersion };
+    } catch (e) {
+      log.warn(`yt-dlp nightly fallback 失敗: ${e.message}`);
+      try {
+        if (!runtimeMatchesRecordedTrust() && restoreTrustedSeedRuntime()) {
+          log.warn('nightly fallback 後 runtime 驗證失敗；已恢復 Installer 內建可信 seed。');
+        }
+      } catch (restoreError) {
+        log.error(`nightly fallback 失敗且無法恢復可信 seed: ${restoreError.message}`);
+      }
+      return { ok: false, skipped: false, message: 'nightly fallback 失敗；保留既有可信 yt-dlp。' };
+    }
+  })();
+
+  return _nightlyFallbackPromise;
+}
+
+/** nightly 版號多一段建置編號（YYYY.MM.DD.HHMMSS），穩定版只有三段。 */
+function isNightlyVersion(version) {
+  return /^\d{4}\.\d{2}\.\d{2}\.\d+$/.test(String(version || '').trim());
+}
+
+/**
+ * 既有安裝還停在穩定版時，啟動後換成 nightly 一次。只動 Installer 的可信可寫副本
+ * （同 runNightlyFallback 的限制），開發環境／portable 不碰。背景執行，失敗不影響啟動。
+ */
+async function ensureNightlyChannel() {
+  if (process.env.ELITESAND_PACKAGED !== '1' || process.env.ELITESAND_YTDLP_MUTABLE !== '1') return { ok: false, skipped: true };
+  const current = await localVersion();
+  if (!current || isNightlyVersion(current)) return { ok: true, skipped: true, currentVersion: current };
+  log.info(`yt-dlp 目前是穩定版 ${current}，切換到 nightly`);
+  return runNightlyFallback();
+}
+
 module.exports = {
   checkUpdate,
+  ensureNightlyChannel,
+  isNightlyVersion,
   runUpdate,
+  runNightlyFallback,
   isNewer,
   parseVersion,
   packagedTrustEnvironment,

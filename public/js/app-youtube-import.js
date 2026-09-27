@@ -43,6 +43,7 @@
     '正在下載': 'import.stage.downloading',
     '正在轉換音訊': 'import.stage.convertingAudio',
     '正在搜尋歌詞': 'import.stage.searchingLyrics',
+    '正在使用瀏覽器登入狀態重試': 'import.stage.browserCookieRetry',
     '已完成': 'import.stage.completed',
     '已取消': 'import.stage.cancelled',
     '已略過': 'import.stage.skipped',
@@ -556,11 +557,76 @@
     });
   }
 
+  function requestBrowserCookieRetry() {
+    const modal = document.getElementById('youtube-cookie-modal');
+    const select = document.getElementById('youtube-cookie-browser');
+    const cancel = document.getElementById('youtube-cookie-cancel');
+    const retry = document.getElementById('youtube-cookie-retry');
+    if (!modal || !select || !cancel || !retry) return Promise.resolve('');
+
+    return new Promise((resolve) => {
+      modal.hidden = false;
+      const finish = (browser = '') => {
+        modal.hidden = true;
+        cancel.removeEventListener('click', onCancel);
+        retry.removeEventListener('click', onRetry);
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKeydown);
+        resolve(browser);
+      };
+      const onCancel = () => finish('');
+      const onRetry = () => finish(String(select.value || ''));
+      const onBackdrop = (event) => { if (event.target === modal) finish(''); };
+      const onKeydown = (event) => { if (event.key === 'Escape') finish(''); };
+      cancel.addEventListener('click', onCancel);
+      retry.addEventListener('click', onRetry);
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKeydown);
+      retry.focus();
+    });
+  }
+
+  function youtubeRequestBody(job, extra = {}) {
+    const body = {
+      url: job.url,
+      requestId: job.requestId,
+      isBatch: job.isBatch === true,
+      ...extra,
+    };
+    // Cookie 來源只活在「目前這一個 job」；不寫 localStorage、不進 playlist/state。
+    if (job.cookieBrowser) body.cookieBrowser = job.cookieBrowser;
+    return body;
+  }
+
+  async function inspectWithAuthFallback(job) {
+    try {
+      return await inspectImport(job);
+    } catch (error) {
+      const canOfferCookies = !job.isBatch
+        && !job.cookieBrowser
+        && error?.code === 'YOUTUBE_AUTH_REQUIRED'
+        && error?.browserCookieFallback === true;
+      if (!canOfferCookies) throw error;
+
+      const browser = await requestBrowserCookieRetry();
+      if (!browser) throw error;
+      job.cookieBrowser = browser;
+      job.assessment = null;
+      updateJob(job, {
+        status: 'active',
+        stage: '正在使用瀏覽器登入狀態重試',
+        messageKey: 'import.stage.browserCookieRetry',
+        messageVars: {},
+      });
+      return inspectImport(job);
+    }
+  }
+
   async function inspectImport(job) {
     if (job.assessment) return job.assessment;
     updateJob(job, { stage: '正在檢查影片', messageKey: 'import.stage.inspectDetails' });
     const response = await PinAuth.fetchWithPin('/api/youtube/inspect', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: job.url, requestId: job.requestId }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(youtubeRequestBody(job)),
     });
     const data = await response.json();
     if (response.ok && data.success && data.assessment) return data.assessment;
@@ -568,6 +634,13 @@
       const cancelled = new Error(data.error || t('import.stage.cancelled'));
       cancelled.code = 'IMPORT_CANCELLED';
       throw cancelled;
+    }
+    if (data.code === 'YOUTUBE_AUTH_REQUIRED' && data.browserCookieFallback === true) {
+      const auth = new Error([data.error, data.recovery].filter(Boolean).map(tr).join(' '));
+      auth.code = 'YOUTUBE_AUTH_REQUIRED';
+      auth.retryable = data.retryable !== false;
+      auth.browserCookieFallback = true;
+      throw auth;
     }
     // 「根本抓不到 metadata」（私人/下架/地區限制，yt-dlp 全部策略＋oEmbed 都失敗）是純技術性
     // 失敗，不是需要使用者判斷的內容風險。批次匯入（播放清單）沒有人一直盯著看，跳確認視窗
@@ -869,6 +942,7 @@
         autoSeparate: options.autoSeparate === true,
         isBatch: options.isBatch === true,
         skipPlaylistInsert: options.skipPlaylistInsert === true,
+        cookieBrowser: '',
         status: 'queued', stage: '等待中', percent: 0, resolve, reject, createdAt: Date.now(),
       };
       ytImportQueue.push(job);
@@ -896,7 +970,7 @@
       updateJob(job, { status: 'active', requestId, stage: '準備匯入', messageKey: 'import.stage.preparing', percent: 0, errorMessage: '', completedPlacement: '' });
       updateYtQueueProgress();
       try {
-        const assessment = await inspectImport(job);
+        const assessment = await inspectWithAuthFallback(job);
         if (job.cancelRequested) { const cancelled = new Error(t('import.stage.cancelled')); cancelled.code = 'IMPORT_CANCELLED'; throw cancelled; }
         if (assessment?.warning && !riskWarningsDisabled()) updateJob(job, { stage: '等待使用者確認', messageKey: 'import.stage.needsAssessment' });
         const allowed = await confirmRiskAssessment(assessment);
@@ -908,9 +982,34 @@
         let res = await PinAuth.fetchWithPin('/api/youtube', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: job.url, requestId, isBatch: job.isBatch }),
+          body: JSON.stringify(youtubeRequestBody(job)),
         });
         let data = await res.json();
+
+        // 匿名鏈真的跑完仍是 LOGIN_REQUIRED 才出現這個最後手段；批次匯入絕不逐首
+        // 跳帳號視窗。使用者選瀏覽器後只把名稱送給後端，Cookie 本身不經過前端。
+        if (!res.ok
+          && !job.isBatch
+          && !job.cookieBrowser
+          && data?.code === 'YOUTUBE_AUTH_REQUIRED'
+          && data?.browserCookieFallback === true) {
+          const browser = await requestBrowserCookieRetry();
+          if (browser) {
+            job.cookieBrowser = browser;
+            updateJob(job, {
+              status: 'active',
+              stage: '正在使用瀏覽器登入狀態重試',
+              messageKey: 'import.stage.browserCookieRetry',
+              messageVars: {},
+            });
+            res = await PinAuth.fetchWithPin('/api/youtube', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(youtubeRequestBody(job)),
+            });
+            data = await res.json();
+          }
+        }
         // 落地前去重：伺服器發現「歌手+歌名」跟既有一首歌相符（不同 YouTube 上傳的同一首歌）。
         // 批次匯入時伺服器直接沿用既有版本，不會走到這裡；只有單首匯入才需要問使用者
         // 「取代」還是「略過」——批次沒有人一直盯著，跳確認視窗會卡住整條佇列（同一個教訓
@@ -933,7 +1032,7 @@
           res = await PinAuth.fetchWithPin('/api/youtube', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: job.url, requestId, forceReplace: true }),
+            body: JSON.stringify(youtubeRequestBody(job, { forceReplace: true })),
           });
           data = await res.json();
         }
@@ -1047,6 +1146,7 @@
         job.reject(err);
       } finally {
         activeRequestIds.delete(requestId);
+        job.cookieBrowser = '';
         if (activeImportJob === job) activeImportJob = null;
       }
       ytImportDoneCount++;

@@ -23,6 +23,9 @@ const importTempRegistry = require('./import-temp-registry');
 const { inspectDiskSpace, appendDiskSpaceWarning } = require('./disk-space');
 const { downloadsDir } = require('../utils/app-paths');
 const { getYtdlpCommand } = require('../utils/ytdlp-command');
+const ytdlpUpdater = require('./ytdlp-updater');
+const { PREFERRED_POT_PROVIDER } = require('./ytdlp-pot-provider-candidates');
+const ytdlpCaps = require('../utils/ytdlp-capabilities');
 
 const execFileAsync = promisify(execFile);
 const YTDLP_COMMAND = getYtdlpCommand();
@@ -33,25 +36,51 @@ const YTDLP_SEARCH_TIMEOUT = 15000;   // 搜尋只讀扁平 metadata，逾時要
 const YTDLP_DOWNLOAD_TIMEOUT = 300000; // 下載音訊超時: 5min
 const YTDLP_MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 const YTDLP_METADATA_PRINT = 'before_dl:__ES_META__%()j';
-// 下載退路的原則是「不先用 client 交換音質」：首先維持預設 client 的最佳 audio-only
-// DASH/HTTPS 音訊。只有它因 HTTP 403 失敗時，才嘗試 HLS audio-only；
-// HLS 格式需由 web_safari client 才會暴露（預設 client 的 m3u8 manifest 不保證有可選格式），
-// 所以這是 HLS 退路專屬的 client。連 HLS audio-only 都不可用時，再將含音訊的 HLS 視訊視為救援；
-// Android/iOS 的一般 audio-only client 輪替仍放在最後，不會因為一次 403 就使用。
+// YouTube 匯入的安全退路：先維持匿名、預設 client 與最佳 audio-only。
+//
+// EJS fallback 只從 yt-dlp 官方的 yt-dlp/ejs GitHub component 來源取 challenge solver；
+// 不在第一擊就開 remote components。PO Token 階段只切 mweb，交給 yt-dlp 內建
+// provider framework 使用「已安裝」的 provider；Elitesand 不會在匯入途中靜默下載或
+// 執行第三方 provider。這樣第三方供應鏈仍由打包/授權流程獨立審核。
 const YTDLP_PRIMARY_DOWNLOAD_STRATEGY = {
   id: 'primary-audio',
+  extraArgs: [],
+  cookieArgs: [],
   extractorArgs: [],
   format: 'bestaudio/best',
   concurrentFragments: 4,
 };
+const YTDLP_EJS_DOWNLOAD_STRATEGY = {
+  id: 'ejs-audio',
+  extraArgs: ['--remote-components', 'ejs:github'],
+  cookieArgs: [],
+  extractorArgs: [],
+  format: 'bestaudio/best',
+  concurrentFragments: 4,
+};
+const YTDLP_PO_MWEB_DOWNLOAD_STRATEGY = {
+  id: 'pot-mweb-audio',
+  // 正式預選 Provider：bgutil-ytdlp-pot-provider 2.0.0。
+  // 目前只固定候選與介面，不在匯入時自動下載/執行；真正打包另走供應鏈與 GPLv3 審核。
+  providerCandidate: PREFERRED_POT_PROVIDER.id,
+  providerVersion: PREFERRED_POT_PROVIDER.version,
+  providerMode: PREFERRED_POT_PROVIDER.mode,
+  providerEndpoint: `http://${PREFERRED_POT_PROVIDER.host}:${PREFERRED_POT_PROVIDER.port}`,
+  extraArgs: ['--remote-components', 'ejs:github'],
+  cookieArgs: [],
+  extractorArgs: ['--extractor-args', 'youtube:player_client=mweb'],
+  format: 'bestaudio/best',
+  concurrentFragments: 4,
+};
+// DASH/HTTPS 仍遇到 403 時保留既有 HLS 救援；HLS 不做多片段併發，降低被限流機率。
 const YTDLP_HLS_DOWNLOAD_STRATEGIES = [
-  { id: 'hls-audio', extractorArgs: ['--extractor-args', 'youtube:player_client=web_safari'], format: 'bestaudio[protocol^=m3u8]', concurrentFragments: 1 },
-  { id: 'hls-combined', extractorArgs: ['--extractor-args', 'youtube:player_client=web_safari'], format: 'best[protocol^=m3u8]', concurrentFragments: 1 },
+  { id: 'hls-audio', extraArgs: [], cookieArgs: [], extractorArgs: ['--extractor-args', 'youtube:player_client=web_safari'], format: 'bestaudio[protocol^=m3u8]', concurrentFragments: 1 },
+  { id: 'hls-combined', extraArgs: [], cookieArgs: [], extractorArgs: ['--extractor-args', 'youtube:player_client=web_safari'], format: 'best[protocol^=m3u8]', concurrentFragments: 1 },
 ];
-// 若 HLS 也無法下載，最後才輪替 player client；每個 client 仍選它自己的最佳 audio-only。
+// 舊 client 僅保留給純 403 相容性救援，不用它們掩蓋真正的登入需求。
 const YTDLP_CLIENT_FALLBACK_STRATEGIES = [
-  { id: 'android-audio', extractorArgs: ['--extractor-args', 'youtube:player_client=android'], format: 'bestaudio/best', concurrentFragments: 4 },
-  { id: 'ios-audio', extractorArgs: ['--extractor-args', 'youtube:player_client=ios'], format: 'bestaudio/best', concurrentFragments: 4 },
+  { id: 'android-audio', extraArgs: [], cookieArgs: [], extractorArgs: ['--extractor-args', 'youtube:player_client=android'], format: 'bestaudio/best', concurrentFragments: 4 },
+  { id: 'ios-audio', extraArgs: [], cookieArgs: [], extractorArgs: ['--extractor-args', 'youtube:player_client=ios'], format: 'bestaudio/best', concurrentFragments: 4 },
 ];
 const YTDLP_SOURCE_FORMAT_PRINT = 'after_move:__ES_FORMAT__%(format_id)s|%(acodec)s|%(abr)s|%(protocol)s';
 
@@ -62,6 +91,8 @@ const YTDLP_SOURCE_FORMAT_PRINT = 'after_move:__ES_FORMAT__%(format_id)s|%(acode
 // 設 PYTHONIOENCODING/PYTHONUTF8 強制 yt-dlp 一律輸出 UTF-8，朋友機器 locale 不同也不亂碼。
 // （開發者自己的機器若已開「Beta: UTF-8」或 codepage 剛好，才會一直沒踩到這個坑。）
 const YTDLP_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
+
+const YTDLP_COOKIE_BROWSERS = new Set(['edge', 'chrome', 'firefox', 'brave', 'chromium', 'opera', 'vivaldi']);
 const YTDLP_BASE_OPTS = { encoding: 'utf8', env: YTDLP_ENV, windowsHide: true };
 const activeImports = new Map();
 const prefetchedInfo = new Map();
@@ -162,6 +193,87 @@ function isYouTubeMusicPremiumError(error) {
 
 function isYouTubeHttp403Error(error) {
   return /(?:http\s*error|httperror)\s*403\b|\b403\s*(?:forbidden)?\b/i.test(String(error?.message || error || ''));
+}
+
+function ytdlpErrorText(error) {
+  return String(error?.message || error || '').trim();
+}
+
+function isYouTubeAuthRequiredError(error) {
+  const text = ytdlpErrorText(error);
+  const code = String(error?.code || '').toUpperCase();
+  return code === 'YOUTUBE_AUTH_REQUIRED'
+    || /sign in|login required|cookies? required|required to view|confirm your age|members[- ]?only|會員|登入|認證/i.test(text);
+}
+
+function isYouTubeRateLimitError(error) {
+  return /(?:http\s*error|httperror)?\s*429\b|too many requests|rate.?limit|temporarily blocked|請求.*頻繁|稍後.*再試/i.test(ytdlpErrorText(error));
+}
+
+function isYtdlpCompatibilityError(error) {
+  if (isYouTubeRateLimitError(error)) return false;
+  const text = ytdlpErrorText(error);
+  return isYouTubeHttp403Error(error)
+    || /sign in to confirm you(?:'|’)?re not a bot|javascript|challenge|nsig|signature|sabr|po token|no video formats|requested format is not available|unable to extract|player response/i.test(text);
+}
+
+function normalizeCookieBrowser(value) {
+  const browser = String(value || '').trim().toLowerCase();
+  return YTDLP_COOKIE_BROWSERS.has(browser) ? browser : '';
+}
+
+function browserCookieArgs(value) {
+  const browser = normalizeCookieBrowser(value);
+  return browser ? ['--cookies-from-browser', browser] : [];
+}
+
+function delayWithSignal(ms, signal) {
+  throwIfCancelled(signal);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, Math.max(0, Number(ms) || 0));
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(new ImportCancelledError());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function createYouTubeAuthRequiredError(cause = null) {
+  const error = new Error('YouTube 仍要求登入驗證；匿名修復流程已完成。');
+  error.code = 'YOUTUBE_AUTH_REQUIRED';
+  if (cause) error.cause = cause;
+  return error;
+}
+
+function createYouTubeRateLimitedError(cause = null) {
+  const error = new Error('YouTube 暫時限制請求，已停止自動重試以避免持續觸發限制。');
+  error.code = 'YOUTUBE_RATE_LIMITED';
+  if (cause) error.cause = cause;
+  return error;
+}
+
+async function maybeRunNightlyFallback(error) {
+  if (!isYtdlpCompatibilityError(error)) return false;
+  // runQueued 允許最多兩個 yt-dlp 工作並行；不可在另一個 yt-dlp.exe 還活著時
+  // 就地替換可寫 runtime。若目前有第二個工作，這次略過 nightly，直接走後續匿名 fallback。
+  if (activeYtDlpJobs > 1) {
+    log.info('略過 yt-dlp nightly fallback：另一個 yt-dlp 工作仍在執行');
+    return false;
+  }
+  const result = await ytdlpUpdater.runNightlyFallback();
+  if (result?.ok) {
+    log.info(`yt-dlp nightly fallback 可用：${result.currentVersion || 'unknown'}`);
+    ytdlpCaps.invalidate();
+    await ytdlpCaps.ensure();
+    return true;
+  }
+  if (!result?.skipped) log.warn(`yt-dlp nightly fallback 未成功：${result?.message || 'unknown'}`);
+  return false;
 }
 
 function createYouTubeMusicPremiumError() {
@@ -616,17 +728,23 @@ class AudioProcessor {
   static _downloadStrategyPlanForTest() {
     return {
       primary: { ...YTDLP_PRIMARY_DOWNLOAD_STRATEGY },
+      ejs: { ...YTDLP_EJS_DOWNLOAD_STRATEGY },
+      potMweb: { ...YTDLP_PO_MWEB_DOWNLOAD_STRATEGY },
       hls: YTDLP_HLS_DOWNLOAD_STRATEGIES.map((strategy) => ({ ...strategy })),
       clientFallbacks: YTDLP_CLIENT_FALLBACK_STRATEGIES.map((strategy) => ({ ...strategy })),
     };
   }
+  static _ytdlpRuntimeArgsForTest(caps = { jsRuntimes: true, remoteComponents: true }) { return ytdlpCaps.commonArgs(caps); }
+  static normalizeCookieBrowser(value) { return normalizeCookieBrowser(value); }
+  static _normalizeCookieBrowserForTest(value) { return normalizeCookieBrowser(value); }
+  static _preferredPotProviderForTest() { return { ...PREFERRED_POT_PROVIDER }; }
   static _normalizeYouTubeSearchQueryForTest(value) { return normalizeYouTubeSearchQuery(value); }
   static _sanitizeYouTubeSearchPayloadForTest(payload, limit) { return sanitizeYouTubeSearchPayload(payload, limit); }
   // 一般 ytsearch 的 yt-dlp 參數（metadata-only）。YT Music 偏好排序另走
   // _runYouTubeMusicSearchIds（music.youtube.com/search URL）。
   static _youtubeSearchArgs(normalizedQuery, normalizedLimit) {
     return [
-      '--no-config', '--js-runtimes', 'node', '--flat-playlist', '--dump-single-json',
+      ...ytdlpCaps.commonArgs(), '--flat-playlist', '--dump-single-json',
       '--skip-download', '--no-warnings', '--playlist-end', String(normalizedLimit),
       `ytsearch${normalizedLimit}:${normalizedQuery}`,
     ];
@@ -695,7 +813,7 @@ class AudioProcessor {
     progress('正在取得影片資訊');
     const infoStart = Date.now();
     const prefetched = takePrefetchedInfo(url);
-    let downloadTask = this.downloadWithMetadata(url, progress, prefetched, options.signal);
+    let downloadTask = this.downloadWithMetadata(url, progress, prefetched, options.signal, { cookieBrowser: options.cookieBrowser });
     // completed 是即時建立、稍後才被 Promise.all await 的 promise；在 metadata → 歌詞校正
     // 之間若下載/轉碼先失敗，會在「還沒有 handler」的空窗觸發 unhandledRejection，前端也就
     // 收不到失敗通知而卡在「正在轉換音訊」。掛個 no-op 守衛，真正的錯誤仍由後面的 await 消費。
@@ -705,7 +823,7 @@ class AudioProcessor {
     catch (primaryError) {
       throwIfCancelled(options.signal);
       log.warn(`單次流程在 metadata 前失敗，啟用 client/oEmbed 降級: ${primaryError.message}`);
-      info = await this.getVideoInfo(url);
+      info = await this.getVideoInfo(url, options.signal, { cookieBrowser: options.cookieBrowser, allowNightly: false });
       if (!info) throw primaryError;
       // metadata 輸出格式不相容／解析失敗時，原本的 yt-dlp 下載仍在正常進行；沿用它可避免
       // 為同一支影片再跑一次 extractor。只有 yt-dlp 子程序本身失敗才重啟下載。
@@ -716,7 +834,7 @@ class AudioProcessor {
           completeTempImport: downloadTask.completeTempImport,
         };
       } else {
-        downloadTask = this.downloadWithMetadata(url, progress, info, options.signal);
+        downloadTask = this.downloadWithMetadata(url, progress, info, options.signal, { cookieBrowser: options.cookieBrowser });
         downloadTask.completed.catch(() => {});
       }
     }
@@ -1038,9 +1156,10 @@ class AudioProcessor {
   // 「青花瓷／晴天」塞進「周杰倫 稻香」的前排）。
   static async _runYouTubeMusicSearchIds(normalizedQuery, limit, signal) {
     throwIfCancelled(signal);
+    await ytdlpCaps.ensure();
     const url = `https://music.youtube.com/search?q=${encodeURIComponent(normalizedQuery)}#songs`;
     const args = [
-      '--no-config', '--js-runtimes', 'node', '--flat-playlist', '--dump-single-json',
+      ...ytdlpCaps.commonArgs(), '--flat-playlist', '--dump-single-json',
       '--skip-download', '--no-warnings', '--playlist-end', String(limit), url,
     ];
     let stdout = '';
@@ -1076,9 +1195,10 @@ class AudioProcessor {
   // 一次 yt-dlp 呼叫補齊多個已知 videoId 的卡片 metadata（--dump-json，逐行 JSON）。
   static async _enrichYouTubeIds(videoIds, signal) {
     throwIfCancelled(signal);
+    await ytdlpCaps.ensure();
     if (!videoIds.length) return [];
     const urls = videoIds.map((id) => `https://www.youtube.com/watch?v=${id}`);
-    const args = ['--no-config', '--js-runtimes', 'node', '--dump-json', '--skip-download', '--no-warnings', ...urls];
+    const args = [...ytdlpCaps.commonArgs(), '--dump-json', '--skip-download', '--no-warnings', ...urls];
     let stdout = '';
     try {
       ({ stdout } = await execFileAsync(YTDLP_COMMAND, args, {
@@ -1104,6 +1224,7 @@ class AudioProcessor {
   // 單次一般 ytsearch：只回原始 entries 陣列（含卡片需要的 metadata）。
   static async _runYoutubeSearch(normalizedQuery, limit, signal) {
     throwIfCancelled(signal);
+    await ytdlpCaps.ensure();
     const args = this._youtubeSearchArgs(normalizedQuery, limit);
     let stdout = '';
     try {
@@ -1155,7 +1276,8 @@ class AudioProcessor {
    * @returns {Promise<Array<{id,title,url,duration}>>}
    */
   static async getPlaylistEntries(url, limit = 300) {
-    const args = ['--flat-playlist', '--dump-json', '--no-warnings', '--playlist-end', String(limit), url];
+    await ytdlpCaps.ensure();
+    const args = [...ytdlpCaps.commonArgs(), '--flat-playlist', '--dump-json', '--no-warnings', '--playlist-end', String(limit), url];
     let stdout = '';
     try {
       ({ stdout } = await execFileAsync(YTDLP_COMMAND, args, { ...YTDLP_BASE_OPTS, timeout: YTDLP_INFO_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER }));
@@ -1184,63 +1306,106 @@ class AudioProcessor {
     return entries;
   }
 
-  static async getVideoInfo(url, signal = null) {
-    const strategies = [
-      ['--js-runtimes', 'node', '--dump-json', '--no-download', '--no-playlist'],
-      ['--js-runtimes', 'node', '--extractor-args', 'youtube:player_client=android', '--dump-json', '--no-download', '--no-playlist'],
-      ['--js-runtimes', 'node', '--extractor-args', 'youtube:player_client=ios', '--dump-json', '--no-download', '--no-playlist'],
-      ['--js-runtimes', 'node', '--extractor-args', 'youtube:player_client=tv', '--dump-json', '--no-download', '--no-playlist'],
-      ['--js-runtimes', 'node', '--extractor-args', 'youtube:player_client=mweb', '--dump-json', '--no-download', '--no-playlist'],
-    ];
+  static async getVideoInfo(url, signal = null, options = {}) {
+    await ytdlpCaps.ensure();
+    const cookieBrowser = normalizeCookieBrowser(options.cookieBrowser);
+    const infoTail = ['--dump-json', '--no-download', '--no-playlist'];
+    let lastError = null;
+    let sawAuthRequired = false;
 
-    for (let i = 0; i < strategies.length; i++) {
-      const args = strategies[i];
+    const toInfo = (data) => ({
+      id: data.id,
+      title: data.title,
+      duration: data.duration,
+      thumbnail: data.thumbnail,
+      album: data.album,
+      track: data.track || '',
+      artist: data.artist || '',
+      artists: Array.isArray(data.artists) ? data.artists : [],
+      albumArtist: data.album_artist || '',
+      channel: data.channel || '',
+      channelId: data.channel_id || data.uploader_id || '',
+      uploader: data.uploader || '',
+      description: data.description || '',
+      categories: Array.isArray(data.categories) ? data.categories : [],
+    });
+
+    const attempt = async (id, extraArgs = [], extractorArgs = [], cookieArgs = []) => {
+      if (id === 'ejs-github' && !ytdlpCaps.current().remoteComponents) return null;
       const strategyStart = Date.now();
       try {
-        const { stdout } = await execFileAsync(YTDLP_COMMAND, [...args, url], {
-          ...YTDLP_BASE_OPTS,
-          timeout: YTDLP_INFO_TIMEOUT,
-          maxBuffer: YTDLP_MAX_BUFFER,
-          signal,
-        });
-
+        const { stdout } = await execFileAsync(
+          YTDLP_COMMAND,
+          [...ytdlpCaps.commonArgs(), ...ytdlpCaps.stripUnsupported(extraArgs), ...cookieArgs, ...extractorArgs, ...infoTail, url],
+          { ...YTDLP_BASE_OPTS, timeout: YTDLP_INFO_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER, signal },
+        );
         const data = JSON.parse(stdout);
         const strategyDuration = Date.now() - strategyStart;
-        log.info(`yt-dlp 取得影片資訊成功 (策略 ${i + 1}, ${strategyDuration}ms)`);
-        log.perf('ytdlp-info', strategyDuration, { strategy: i + 1 });
-
-        return {
-          id: data.id,
-          title: data.title,
-          duration: data.duration,
-          thumbnail: data.thumbnail,
-          album: data.album,
-          track: data.track || '',
-          artist: data.artist || '',
-          artists: Array.isArray(data.artists) ? data.artists : [],
-          albumArtist: data.album_artist || '',
-          channel: data.channel || '',
-          channelId: data.channel_id || data.uploader_id || '',
-          uploader: data.uploader || '',
-          description: data.description || '',
-          categories: Array.isArray(data.categories) ? data.categories : [],
-        };
+        log.info(`yt-dlp 取得影片資訊成功 (${id}, ${strategyDuration}ms)`);
+        log.perf('ytdlp-info', strategyDuration, { strategy: id });
+        return toInfo(data);
       } catch (err) {
         if (signal?.aborted) throw new ImportCancelledError();
         if (isYouTubeMusicPremiumError(err)) throw createYouTubeMusicPremiumError();
-        const errMsg = err.message || '';
+        lastError = err;
+        if (isYouTubeAuthRequiredError(err)) sawAuthRequired = true;
         const strategyDuration = Date.now() - strategyStart;
-        if (errMsg.includes('Sign in to confirm')) {
-          log.info(`yt-dlp 策略 ${i + 1} 需要登入驗證，嘗試下一策略 (${strategyDuration}ms)`);
-          continue;
-        }
-        log.error('取得影片資訊失敗 (策略 ' + (i + 1) + ', ' + strategyDuration + 'ms): ' + errMsg.substring(0, 200));
-        continue;
+        log.warn(`yt-dlp 影片資訊失敗 (${id}, ${strategyDuration}ms): ${ytdlpErrorText(err).substring(0, 220)}`);
+        return null;
       }
+    };
+
+    // Cookie 模式永遠只在使用者已明確選擇瀏覽器後執行，而且只做一次。
+    // --no-config 仍保留，避免同時吃到使用者全域 yt-dlp.conf 裡其他 Cookie/代理設定。
+    if (cookieBrowser) {
+      const withCookies = await attempt(
+        `browser-cookie-${cookieBrowser}`,
+        ytdlpCaps.REMOTE_EJS_ARGS,
+        [],
+        browserCookieArgs(cookieBrowser),
+      );
+      if (withCookies) return withCookies;
+      if (sawAuthRequired) throw createYouTubeAuthRequiredError(lastError);
+      throw lastError || new Error('使用瀏覽器登入狀態後仍無法取得影片資訊');
     }
 
-    log.info('yt-dlp 全部策略失敗，嘗試 oEmbed API 降級...');
-    return await this.getVideoInfoOembed(url, signal);
+    let standard = await attempt('anonymous-default');
+    if (standard) return standard;
+
+    // metadata 路徑也遵守同一個 rate-limit 原則：遇到 429 不切 client、不跑 EJS，
+    // 只冷卻一次後重試同一條匿名路徑；仍受限就立即停止。
+    if (isYouTubeRateLimitError(lastError)) {
+      await delayWithSignal(5000, signal);
+      standard = await attempt('rate-limit-retry');
+      if (standard) return standard;
+      if (isYouTubeRateLimitError(lastError)) throw createYouTubeRateLimitedError(lastError);
+    }
+
+    // 自動改 nightly 只允許 Installer 的可信可寫工作副本；portable/dev 不會被匯入流程修改。
+    if (options.allowNightly !== false && await maybeRunNightlyFallback(lastError)) {
+      const nightly = await attempt('nightly-retry');
+      if (nightly) return nightly;
+    }
+
+    const ejs = await attempt('ejs-github', ytdlpCaps.REMOTE_EJS_ARGS);
+    if (ejs) return ejs;
+
+    // mweb 會透過 yt-dlp 的 provider framework 要求 GVS PO Token；若沒有已安裝 provider，
+    // 這次嘗試會安全失敗並往下走，不會由 Elitesand 自行抓第三方 plugin。
+    const pot = await attempt(
+      'pot-mweb',
+      ytdlpCaps.REMOTE_EJS_ARGS,
+      ['--extractor-args', 'youtube:player_client=mweb'],
+    );
+    if (pot) return pot;
+
+    // metadata 最後用 YouTube 公開 oEmbed 補基本資料；它不提供媒體 URL，也不算下載成功。
+    const oembed = await this.getVideoInfoOembed(url, signal);
+    if (oembed) return oembed;
+    if (sawAuthRequired) throw createYouTubeAuthRequiredError(lastError);
+    if (isYouTubeRateLimitError(lastError)) throw createYouTubeRateLimitedError(lastError);
+    if (lastError) throw lastError;
+    return null;
   }
 
   static async getVideoInfoOembed(url, signal = null) {
@@ -1288,7 +1453,7 @@ class AudioProcessor {
       // 必須與 processYouTube 共用 runQueued：Twitch 點歌不經過瀏覽器的
       // queueYouTubeImport()，若直接查 metadata 便會繞過全域 yt-dlp 併發上限。
       // runQueued 也會在尚未開始時正確移除已取消的 /youtube/inspect 工作。
-      const info = await runQueued(() => this.getVideoInfo(url, signal), options.priority, signal);
+      const info = await runQueued(() => this.getVideoInfo(url, signal, { cookieBrowser: options.cookieBrowser, allowNightly: !options.cookieBrowser }), options.priority, signal);
       if (!info) throw new Error('無法取得影片資訊');
       rememberPrefetchedInfo(url, info);
       const assessment = assessYouTubeImport(info);
@@ -1299,7 +1464,7 @@ class AudioProcessor {
     }
   }
 
-  static downloadWithMetadata(url, onProgress, fallbackInfo = null, signal = null) {
+  static downloadWithMetadata(url, onProgress, fallbackInfo = null, signal = null, options = {}) {
     throwIfCancelled(signal);
     const outputDir = downloadsDir;
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -1311,6 +1476,7 @@ class AudioProcessor {
     const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
     let resolveMeta, rejectMeta;
     const metadata = new Promise((resolve, reject) => { resolveMeta = resolve; rejectMeta = reject; });
+    let metadataTimedOut = false;
     let metaDone = !!fallbackInfo;
     if (fallbackInfo) resolveMeta(fallbackInfo);
     const rejectMetadata = (message) => {
@@ -1325,7 +1491,7 @@ class AudioProcessor {
     // （resolveMeta/rejectMeta/metaDone 皆在外層閉包），只要任一次嘗試印出 __ES_META__
     // 就會定案，之後的嘗試不會再改動它。
     const runAttempt = (strategy) => new Promise((resolve, reject) => {
-      const args = ['--js-runtimes', 'node', ...strategy.extractorArgs, '-f', strategy.format,
+      const args = [...ytdlpCaps.commonArgs(), ...ytdlpCaps.stripUnsupported(strategy.extraArgs), ...(strategy.cookieArgs || []), ...strategy.extractorArgs, '-f', strategy.format,
         '--concurrent-fragments', String(strategy.concurrentFragments), '--no-playlist',
         '-o', outputTemplate, '--print', YTDLP_METADATA_PRINT, '--print', 'after_move:__ES_FILE__%(filepath)s',
         '--print', YTDLP_SOURCE_FORMAT_PRINT,
@@ -1335,7 +1501,10 @@ class AudioProcessor {
       let stderr = '', rawPath = '', sourceFormat = '', timedOut = false;
       const onAbort = () => child.kill();
       signal?.addEventListener('abort', onAbort, { once: true });
-      const metadataTimer = metaDone ? null : setTimeout(() => rejectMetadata('yt-dlp 未在 15 秒內提供影片 metadata'), 15000);
+      const metadataTimer = metaDone ? null : setTimeout(() => {
+        metadataTimedOut = true;
+        rejectMetadata('yt-dlp 未在 15 秒內提供影片 metadata');
+      }, 15000);
       const lineBuffers = { stdout: '', stderr: '' };
       // 逐流 StringDecoder：yt-dlp 輸出的中文路徑（歌詞動畫專案…）多位元組字元可能被切在
       // chunk 邊界，若每個 chunk 各自 toString('utf8') 會產生 U+FFFD 亂碼，導致後續 ffmpeg
@@ -1395,16 +1564,26 @@ class AudioProcessor {
     });
 
     const completed = (async () => {
+      await ytdlpCaps.ensure();
       let lastError;
       let downloaded = null;
+      let sawAuthRequired = false;
+      const cookieBrowser = normalizeCookieBrowser(options.cookieBrowser);
+
       const tryStrategy = async (strategy, message) => {
         throwIfCancelled(signal);
+        if (strategy.id === 'ejs-audio' && !ytdlpCaps.current().remoteComponents) return false;
         try {
           downloaded = await runAttempt(strategy);
           return true;
         } catch (err) {
-          if (signal?.aborted || err instanceof ImportCancelledError) { cleanupTempImport(); rejectMetadata('匯入已取消'); throw new ImportCancelledError(); }
+          if (signal?.aborted || err instanceof ImportCancelledError) {
+            cleanupTempImport();
+            rejectMetadata('匯入已取消');
+            throw new ImportCancelledError();
+          }
           lastError = err;
+          if (isYouTubeAuthRequiredError(err)) sawAuthRequired = true;
           if (isYouTubeMusicPremiumError(err)) return false;
           log.warn(`yt-dlp ${strategy.id} 失敗，${message}: ${err.message}`);
           // 每次重試前清掉留下的半套檔案（.part/.webm…），避免和下一策略混淆。
@@ -1413,24 +1592,66 @@ class AudioProcessor {
         }
       };
 
-      const primarySucceeded = await tryStrategy(YTDLP_PRIMARY_DOWNLOAD_STRATEGY, '保留高品質格式結束此次匯入');
-      if (!primarySucceeded && isYouTubeHttp403Error(lastError)) {
-        // HTTP 403 才改走 HLS。格式 selector 的 / 只會處理「格式不存在」，不會在實際下載取得 403 後自動重選，因此必須是獨立嘗試。
-        for (const strategy of YTDLP_HLS_DOWNLOAD_STRATEGIES) {
-          if (await tryStrategy(strategy, '改用下一個 HLS 退路')) break;
+      if (cookieBrowser) {
+        // 最後手段：使用者明確授權後才讀瀏覽器 Cookie，而且只嘗試這一次，
+        // 不拿真實帳號去跑 client 輪替或暴力 retry。
+        await tryStrategy({
+          ...YTDLP_EJS_DOWNLOAD_STRATEGY,
+          id: `browser-cookie-${cookieBrowser}`,
+          cookieArgs: browserCookieArgs(cookieBrowser),
+        }, '使用瀏覽器登入狀態進行單次重試');
+      } else {
+        let primarySucceeded = await tryStrategy(YTDLP_PRIMARY_DOWNLOAD_STRATEGY, '匿名標準路徑');
+
+        // 429 / rate limit 不做 client shotgun：冷卻一次、同一路徑只重試一次；仍受限就停止。
+        if (!primarySucceeded && isYouTubeRateLimitError(lastError)) {
+          onProgress('YouTube 暫時限制請求，冷卻後重試');
+          await delayWithSignal(5000, signal);
+          primarySucceeded = await tryStrategy(
+            { ...YTDLP_PRIMARY_DOWNLOAD_STRATEGY, id: 'rate-limit-retry' },
+            '冷卻後單次重試',
+          );
+          if (!primarySucceeded && isYouTubeRateLimitError(lastError)) {
+            cleanupTempImport();
+            rejectMetadata('YouTube 暫時限制請求');
+            throw createYouTubeRateLimitedError(lastError);
+          }
+        }
+
+        if (!primarySucceeded && !metadataTimedOut && await maybeRunNightlyFallback(lastError)) {
+          primarySucceeded = await tryStrategy(
+            { ...YTDLP_PRIMARY_DOWNLOAD_STRATEGY, id: 'nightly-retry' },
+            '切換 nightly 後重試匿名標準路徑',
+          );
+        }
+
+        if (!downloaded && !isYouTubeMusicPremiumError(lastError)) {
+          await tryStrategy(YTDLP_EJS_DOWNLOAD_STRATEGY, '啟用官方 EJS challenge solver');
+        }
+
+        if (!downloaded && !isYouTubeMusicPremiumError(lastError)) {
+          await tryStrategy(YTDLP_PO_MWEB_DOWNLOAD_STRATEGY, `嘗試 mweb + 已安裝 PO Token provider（預選 ${PREFERRED_POT_PROVIDER.id} ${PREFERRED_POT_PROVIDER.version}）`);
+        }
+
+        // 純 403 才使用 HLS 與舊 client，避免把明確的 LOGIN_REQUIRED 洗成另一種錯誤。
+        if (!downloaded && isYouTubeHttp403Error(lastError) && !sawAuthRequired) {
+          for (const strategy of YTDLP_HLS_DOWNLOAD_STRATEGIES) {
+            if (await tryStrategy(strategy, '改用下一個 HLS 退路')) break;
+          }
+        }
+        if (!downloaded && isYouTubeHttp403Error(lastError) && !sawAuthRequired) {
+          for (const strategy of YTDLP_CLIENT_FALLBACK_STRATEGIES) {
+            if (await tryStrategy(strategy, '改用下一個 player client 重試')) break;
+          }
         }
       }
 
-      // 只有原本高品質路徑與 HLS 退路都沒成功，才改用其他 player client。
-      if (!downloaded && !isYouTubeMusicPremiumError(lastError)) {
-        for (const strategy of YTDLP_CLIENT_FALLBACK_STRATEGIES) {
-          if (await tryStrategy(strategy, '改用下一個 player client 重試')) break;
-        }
-      }
       if (!downloaded) {
         cleanupTempImport();
         rejectMetadata('yt-dlp 下載失敗且未提供影片 metadata');
-        throw lastError;
+        if (!cookieBrowser && sawAuthRequired) throw createYouTubeAuthRequiredError(lastError);
+        if (isYouTubeRateLimitError(lastError)) throw createYouTubeRateLimitedError(lastError);
+        throw lastError || new Error('yt-dlp 下載失敗');
       }
       rejectMetadata('yt-dlp 下載完成但未提供影片 metadata');
       try {

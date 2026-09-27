@@ -31,11 +31,23 @@
     const end = new Date(state.endsAt);
     const box = el('moon-end-notice');
     if (!Number.isFinite(end.getTime())) { box.replaceChildren(); return; }
-    const date = end.toLocaleString(locale(), { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    const date = end.toLocaleString(locale(), { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
     const [before, after = ''] = t('moon.endNotice').split('{date}');
     const strong = document.createElement('strong');
     strong.textContent = date;
     box.replaceChildren(before, strong, after);
+  }
+
+  const SCALE_FIELDS = [['moon-lantern-scale', 'lanternScale'], ['moon-moon-scale', 'moonScale']];
+  let scaleTimer = 0;
+  let scaleDragging = false;
+
+  function renderScales() {
+    for (const [id, key] of SCALE_FIELDS) {
+      const percent = Math.round((Number(state[key]) || 1) * 100);
+      if (!scaleDragging) el(id).value = percent;
+      el(`${id}-val`).textContent = `${scaleDragging ? el(id).value : percent}%`;
+    }
   }
 
   function renderConfig() {
@@ -105,6 +117,7 @@
     state = next;
     renderSummary();
     renderEndNotice();
+    renderScales();
     renderConfig();
     renderList();
   }
@@ -164,6 +177,18 @@
           .map((input) => [input.dataset.moonTier, Number(input.value)])),
       }, () => toast(t('moon.toast.saved'), 'success'));
     });
+
+    // 大小滑桿即時生效，不經過「儲存設定」；只送這兩個鍵，其他設定維持伺服器上的值。
+    for (const [id, key] of SCALE_FIELDS) {
+      const input = el(id);
+      input.addEventListener('input', () => {
+        scaleDragging = true;
+        el(`${id}-val`).textContent = `${input.value}%`;
+        clearTimeout(scaleTimer);
+        scaleTimer = setTimeout(() => send('moon:config', { [key]: Number(input.value) / 100 }), 120);
+      });
+      input.addEventListener('change', () => { scaleDragging = false; });
+    }
 
     el('moon-clear').addEventListener('click', () => {
       window.DangerConfirm.request({
