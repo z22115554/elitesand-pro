@@ -13,7 +13,7 @@
  * - 新版自定義: [startMs,durationMs]<wordStart,wordDuration,flag>word...
  */
 const zlib = require('zlib');
-const { msToKrcTime, parseTimestampToMs, msToSrtTime } = require('../utils/time-utils');
+const { msToKrcTime } = require('../utils/time-utils');
 
 // KRC XOR 加密金鑰（酷狗固定金鑰）
 const KRC_KEY = [

@@ -84,8 +84,8 @@ function getKuromojiTokenizer() {
   return _tokenizerPromise;
 }
 
-// 啟動時預先初始化（不阻擋）
-getKuromojiTokenizer().catch(() => {});
+// 首次處理含漢字的日文時才初始化；非同步呼叫會等待同一個 tokenizer promise。
+// 不在伺服器載入時解壓整份字典，避免爭用啟動 I/O／CPU 與常駐未使用的字典。
 
 // ═══════════════════════════════════════════
 // 日文假名 → 羅馬拼音對照表 (Hepburn 式)
@@ -673,25 +673,38 @@ async function addRomanization(lyricsLines) {
   const lang = detectSongLang(lyricsLines);
 
   const results = [];
+  // A song repeats chorus lines and KRC words. Reuse exact-text readings only
+  // within this invocation; subsequent songs retry unavailable language engines.
+  const readings = new Map();
+  const read = async (text) => {
+    if (!lang) return text || '';
+    if (readings.has(text)) return readings.get(text);
+    const reading = lang === 'ja'
+      ? await japaneseReadingAnalysis(text)
+      : await romanizeWithLang(text, lang);
+    readings.set(text, reading);
+    return reading;
+  };
 
   for (const line of lyricsLines) {
-    const japaneseAnalysis = lang === 'ja' ? await japaneseReadingAnalysis(line.text) : null;
-    const phonetic = japaneseAnalysis ? japaneseAnalysis.phonetic : await romanizeWithLang(line.text, lang);
+    const reading = await read(line.text);
 
     const result = {
       ...line,
-      phonetic,
+      phonetic: lang === 'ja' ? reading.phonetic : reading,
     };
-    if (japaneseAnalysis && japaneseAnalysis.furigana.length > 0) result.furigana = japaneseAnalysis.furigana;
+    if (lang === 'ja' && reading.furigana.length > 0) {
+      result.furigana = reading.furigana.map(segment => ({ ...segment }));
+    }
 
     // KRC 逐字模式：為每個 word 也加上 phonetic
     if (line.words && Array.isArray(line.words)) {
       result.words = [];
       for (const word of line.words) {
-        const wordPhonetic = await romanizeWithLang(word.text, lang);
+        const wordReading = await read(word.text);
         result.words.push({
           ...word,
-          phonetic: wordPhonetic,
+          phonetic: lang === 'ja' ? wordReading.phonetic : wordReading,
         });
       }
     }
@@ -782,12 +795,18 @@ function addRomanizationSync(lyricsLines) {
   if (!lyricsLines || !Array.isArray(lyricsLines)) return [];
 
   const lang = detectSongLang(lyricsLines);
-  const romanizeSync = (text) => {
+  const calculate = (text) => {
     if (!text) return '';
     if (lang === 'ko') return koreanToRomaja(text);
     if (lang === 'zh') return chineseToPinyin(text);
     if (lang === 'ja') return japaneseToRomaji(text);
     return text;
+  };
+  const readings = new Map();
+  const romanizeSync = (text) => {
+    if (!lang) return calculate(text);
+    if (!readings.has(text)) readings.set(text, calculate(text));
+    return readings.get(text);
   };
 
   const results = lyricsLines.map((line) => {

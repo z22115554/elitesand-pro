@@ -618,14 +618,12 @@ const LyricMotion = (() => {
       if (segmenter) {
         const mid = target.length / 2;
         let bestDist = Infinity;
-        let offset = 0;
         try {
           for (const seg of segmenter.segment(target)) {
             if (seg.index > 0 && seg.isWordLike) {
               const d = Math.abs(seg.index - mid);
               if (d < bestDist) { bestDist = d; splitPos = seg.index; }
             }
-            offset += seg.segment.length;
           }
         } catch (e) { splitPos = -1; }
       }

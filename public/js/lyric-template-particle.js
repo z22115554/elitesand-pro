@@ -24,7 +24,6 @@ const roleFont=isLead=>typo.family||(isLead?SANS_DEFAULT:FONT_DEFAULT);
 const bodyWeight=()=>typo.weight||400,heroWeight=()=>Math.min(900,(typo.weight||400)+100);
 // Composition and morphing engine. Typography is the geometry; no decorative particle emitter.
 const maskCache=new Map(),modelCache=new Map();let particleCount=0;
-const mix=(a,b,v)=>a+(b-a)*v;
 const hash=n=>{const v=Math.sin(n*127.1+311.7)*43758.5453;return v-Math.floor(v)};
 // 「四相漂字」不再在 particle 內自己近似一份：直接吃 Motion Kernel 中與直書句流共用的
 // cf-quad-drift 規格。這裡只把相對位移套到 particle 已經算好的 g.x/g.y 定點，不碰版面。
@@ -49,7 +48,6 @@ function drawQuadDriftGlyph(g,time,begin,color,opacity){
 }
 function setFont(size,family=font,weight=400,target=ctx){target.font=`${weight} ${size}px ${family}`;target.textBaseline='alphabetic'}
 function widthOf(gs,size,family=font,weight=400){setFont(size,family,weight);return Math.max(0,gs.reduce((sum,g)=>sum+ctx.measureText(g).width+size*.028,0)-size*.028)}
-function split(gs,size,maxWidth,family=font){const result=[];let row=[],width=0;setFont(size,family);for(const g of gs){const w=ctx.measureText(g).width+size*.028;if(row.length&&width+w>maxWidth){let cut=row.length;for(let j=row.length-1;j>row.length*.40;j--){if(/[\s，、,]/u.test(row[j])){cut=j+1;break}}result.push(row.slice(0,cut));row=row.slice(cut);width=widthOf(row,size,family)}row.push(g);width+=w}if(row.length)result.push(row);return result}
 function breakPhrase(gs){const target=Math.round(gs.length*.53);let cut=target,best=Infinity;for(let i=Math.ceil(gs.length*.26);i<gs.length*.76;i++){if(/[\s，、,:：—]/u.test(gs[i])){const score=Math.abs(i-target);if(score<best){best=score;cut=i+1}}}return [gs.slice(0,cut),gs.slice(cut)]}
 // 換行：空白＝硬斷行（整段拆開，空白 token 丟掉），段內再依寬度軟斷（回退到、，處）。
 // toks 是 {g,i}（i＝原字串位置，讓 heroSet／schedule 對得上），回傳 rows: {g,i}[][]。

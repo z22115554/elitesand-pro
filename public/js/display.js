@@ -46,7 +46,6 @@
 
   const lyricsContainer = document.getElementById('lyrics-container');
   const metronomeEl = document.getElementById('intro-metronome');
-  const metronomeDot = document.getElementById('metronome-dot');
   const metronomeCountdown = document.getElementById('metronome-countdown');
   const obsProgressFill = document.getElementById('obs-progress-fill');
   const obsProgressBar = document.getElementById('obs-progress-bar');
@@ -927,17 +926,20 @@
   // ═══════════════════════════════════════════
 
   SocketClient.on('speed:update', (rate) => {
-    if (typeof rate !== 'number') return;
+    if (!Number.isFinite(rate)) return;
     const oldRate = currentPlaybackRate;
-    currentPlaybackRate = Math.max(0.5, Math.min(1.5, rate));
+    const nextRate = Math.max(0.5, Math.min(1.5, rate));
 
     // 關鍵：速率變更時，必須重新校準 syncTimeMs
     // 因為 getCurrentTimeMs() 依賴 playbackRate 計算已過時間
     // 切換速率的瞬間，要將目前計算出的時間固定為新的 syncTimeMs
-    if (oldRate !== currentPlaybackRate) {
+    if (oldRate !== nextRate) {
+      // Capture elapsed music time at the OLD rate before changing the slope.
+      // Otherwise the whole interval since the last sync is rescaled, causing a jump.
       syncTimeMs = getCurrentTimeMs();
       lastSyncTimestamp = performance.now();
     }
+    currentPlaybackRate = nextRate;
   });
 
   // ═══════════════════════════════════════════

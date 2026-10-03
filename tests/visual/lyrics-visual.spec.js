@@ -44,6 +44,15 @@ async function renderVisualFrame(page, templateId, frame) {
     if (timeline) timeline.totalTime(2, false).pause();
   }, { id: templateId, timeMs: frame.timeMs, lyrics: visualLyrics });
 
+  if (templateId === 'jizura') {
+    // Its canvas fonts are requested only after planning the first frame.
+    // document.fonts.ready before loadLyrics cannot wait for those requests.
+    await page.evaluate(async () => {
+      await Promise.all(window.__visualFontJobs);
+      await document.fonts.ready;
+    });
+  }
+
   // A template switch can schedule its own preview frame.  Drive the fixture
   // time through two compositor frames so the snapshot cannot capture that
   // stale preview state or a half-applied transform.
@@ -97,6 +106,13 @@ test.describe('OBS lyric template visual regression', () => {
     await page.goto('/display?preview=1', { waitUntil: 'domcontentloaded' });
     await waitForTemplateRuntime(page);
     await page.evaluate(async () => {
+      window.__visualFontJobs = [];
+      const ensureFonts = J.ensureFonts;
+      J.ensureFonts = (...args) => {
+        const job = ensureFonts(...args);
+        window.__visualFontJobs.push(job);
+        return job;
+      };
       // display.js drives KaraokeEngine from its live playback loop.  During a
       // visual fixture that loop would race the explicit fixed time below, so
       // retain a private test driver and make incidental live ticks no-ops.

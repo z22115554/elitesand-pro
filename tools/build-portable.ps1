@@ -302,7 +302,9 @@ foreach ($toolName in @("yt-dlp")) {
     $YtdlpLicenseRef = $YtdlpVersion
     $YtdlpUpstream = "https://github.com/yt-dlp/yt-dlp/releases/tag/$YtdlpVersion"
     if ($YtdlpVersion -match '^\d{4}\.\d{2}\.\d{2}\.\d+$') {
-      $NightlyRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/tags/$YtdlpVersion" -Headers @{ 'User-Agent' = 'Elitesand-Pro-build' }
+      $NightlyHeaders = @{ 'User-Agent' = 'Elitesand-Pro-build' }
+      if ($env:GH_TOKEN) { $NightlyHeaders['Authorization'] = "Bearer $env:GH_TOKEN" }
+      $NightlyRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/tags/$YtdlpVersion" -Headers $NightlyHeaders
       if ([string]$NightlyRelease.body -notmatch 'yt-dlp/yt-dlp/commit/(?<sha>[0-9a-f]{40})') {
         throw "Cannot find the upstream commit for nightly yt-dlp $YtdlpVersion"
       }

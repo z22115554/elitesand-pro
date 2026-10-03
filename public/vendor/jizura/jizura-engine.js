@@ -314,7 +314,7 @@ J.ensureFonts = async (text, keys) => {
 const _mc = document.createElement('canvas').getContext('2d');
 J.metrics = {
   m: new Map(),
-  clear() { this.m.clear(); },
+  clear() { this.m.clear(); if (J.clearTextLayouts) J.clearTextLayouts(); }, // Elitesand Pro: invalidate text runs too
   adv(fontKey, ch) {               // advance in em
     const k = fontKey + '\u0000' + ch;
     let v = this.m.get(k);
@@ -662,6 +662,31 @@ J.typesetLine = (arr) => {
 };
 
 /* layout: glyph centres relative to the item origin, in unscaled item space */
+/* Elitesand Pro: reuse script classification and advance widths across frames. Returned layouts remain fresh.
+   Bound both entry and glyph counts; font/language changes invalidate through J.metrics.clear(). */
+const textRuns = new Map();
+let textRunGlyphs = 0;
+J.clearTextLayouts = () => { textRuns.clear(); textRunGlyphs = 0; };
+function textRunsOf(text, font, vertical) {
+  const key = JSON.stringify([text, font, !!J.TYPESET, vertical]);
+  const hit = textRuns.get(key);
+  if (hit) return hit;
+  const runs = text.split('\n').map(line => {
+    const arr = [...line], ts = J.typesetLine(arr);
+    arr.forEach((ch, i) => { ts[i].em = vertical && !/[A-Za-z0-9]/.test(ch) ? 1 : J.metrics.adv(font, ch); });
+    return { arr, ts };
+  });
+  const count = runs.reduce((n, r) => n + r.arr.length, 0);
+  if (count <= 512) {
+    while (textRuns.size >= 256 || textRunGlyphs + count > 8192) {
+      const oldest = textRuns.keys().next().value, removed = textRuns.get(oldest);
+      textRunGlyphs -= removed.reduce((n, r) => n + r.arr.length, 0);
+      textRuns.delete(oldest);
+    }
+    textRuns.set(key, runs); textRunGlyphs += count;
+  }
+  return runs;
+}
 J.layoutText = (it) => {
   const text = String(it.text ?? '');
   const size = it.size, track = it.track || 0, sx = it.sx || 1, sy = it.sy || 1;
@@ -671,10 +696,10 @@ J.layoutText = (it) => {
   const lead = (it.lead || 1.3) * size;
   let gi = 0;
   if (!vertical) {
-    const sets = lines.map(line => { const arr = [...line]; return { arr, ts: J.typesetLine(arr) }; });
+    const sets = textRunsOf(text, it.font, false);
     const widths = sets.map(({ arr, ts }) => {
       let w = 0;
-      arr.forEach((ch, i) => { w += (J.metrics.adv(it.font, ch) * ts[i].adv * ts[i].f + ts[i].gap) * size + (i < arr.length - 1 ? track * size : 0); });
+      arr.forEach((ch, i) => { w += (ts[i].em * ts[i].adv * ts[i].f + ts[i].gap) * size + (i < arr.length - 1 ? track * size : 0); });
       return w;
     });
     const maxW = Math.max(1, ...widths);
@@ -682,7 +707,7 @@ J.layoutText = (it) => {
       let x = it.align === 'left' ? 0 : it.align === 'right' ? -widths[li] : -widths[li] / 2;
       const y = (li - (lines.length - 1) / 2) * lead;
       arr.forEach((ch, ci) => {
-        const t = ts[ci], a = J.metrics.adv(it.font, ch) * size * t.adv * t.f;
+        const t = ts[ci], a = t.em * size * t.adv * t.f;
         x += t.gap * size;
         // smaller / larger glyphs keep the line's baseline
         out.push({ ch, i: gi++, li, ci, n: arr.length, x: x + a / 2, y: y + (1 - t.f) * size * 0.36, w: a, h: size * t.f, r90: false, vx: 0, vy: 0, fs: t.f });
@@ -691,14 +716,14 @@ J.layoutText = (it) => {
     });
     out.W = maxW; out.H = lines.length * lead - (lead - size);
   } else {
-    const sets = lines.map(line => { const arr = [...line]; return { arr, ts: J.typesetLine(arr) }; });
-    const heights = sets.map(({ arr, ts }) => arr.reduce((h, ch, i) => h + (vAdv(it.font, ch, size) * ts[i].adv * ts[i].f + ts[i].gap * size) + track * size, 0) - track * size);
+    const sets = textRunsOf(text, it.font, true);
+    const heights = sets.map(({ arr, ts }) => arr.reduce((h, ch, i) => h + (ts[i].em * size * ts[i].adv * ts[i].f + ts[i].gap * size) + track * size, 0) - track * size);
     const maxH = Math.max(1, ...heights);
     sets.forEach(({ arr, ts }, li) => {
       let y = it.align === 'left' ? 0 : -heights[li] / 2;         // 'left' == top-aligned for vertical
       const x = -(li - (lines.length - 1) / 2) * lead;
       arr.forEach((ch, ci) => {
-        const t = ts[ci], a = vAdv(it.font, ch, size) * t.adv * t.f;
+        const t = ts[ci], a = t.em * size * t.adv * t.f;
         y += t.gap * size;
         const r90 = J.VERT_ROTATE.includes(ch) || /[A-Za-z0-9]/.test(ch);
         let vx = 0, vy = 0;
@@ -713,7 +738,6 @@ J.layoutText = (it) => {
   out.N = gi;
   return out;
 };
-function vAdv(font, ch, size) { return /[A-Za-z0-9]/.test(ch) ? J.metrics.adv(font, ch) * size : size; }
 
 /* Blurred / glowing items are drawn ONCE into an offscreen layer and the blur / glow is applied to the whole
    layer — a filter or shadowBlur on every glyph (× 3 chromatic passes) is very slow on canvas. */
@@ -3501,6 +3525,32 @@ J.cutAt = (plan, t) => {
   return t < c.end ? c : null;
 };
 
+/* Elitesand Pro: plans are immutable while rendering. Index sorted events once, retaining long overlapping
+   effects and original draw order; rebuild for a replaced/resized event array or a changed frame rate. */
+const eventWindows = new WeakMap();
+function activeEvents(plan, t) {
+  const events = plan.events, fps = plan.fps;
+  let index = eventWindows.get(events);
+  if (!index || index.fps !== fps || index.ends.length !== events.length) {
+    const ends = new Float64Array(events.length);
+    let last = -Infinity, maxEnd = -Infinity, sorted = true;
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i];
+      if (!Number.isFinite(ev.t) || !Number.isFinite(ev.dur) || ev.t < last) sorted = false;
+      last = ev.t; maxEnd = Math.max(maxEnd, ev.t + Math.max(ev.dur, 1 / fps)); ends[i] = maxEnd;
+    }
+    index = { fps, ends, sorted }; eventWindows.set(events, index);
+  }
+  if (!index.sorted) return events.filter(ev => t >= ev.t && t < ev.t + Math.max(ev.dur, 1 / fps));
+  let lo = 0, hi = events.length;
+  while (lo < hi) { const m = (lo + hi) >>> 1; if (index.ends[m] <= t) lo = m + 1; else hi = m; }
+  const out = [];
+  for (let i = lo; i < events.length && events[i].t <= t; i++) {
+    const ev = events[i]; if (t < ev.t + Math.max(ev.dur, 1 / fps)) out.push(ev);
+  }
+  return out;
+}
+
 class Renderer {
   constructor() {
     this.scratch = mk(2, 2); this.small = mk(2, 2); this.tiny = mk(2, 2);
@@ -3581,7 +3631,10 @@ class Renderer {
     const u = H / 1080;
     const events = plan.events;
     let spike = 0, shake = 0, beatPulse = 0;
-    for (let i = 0; i < events.length; i++) {
+    // Elitesand Pro: expired camera impulses cannot contribute; seek directly into the time window.
+    let eventLo = 0, eventHi = events.length;
+    while (eventLo < eventHi) { const m = (eventLo + eventHi) >>> 1; if ((t - events[m].t) * 24 > 14) eventLo = m + 1; else eventHi = m; }
+    for (let i = eventLo; i < events.length; i++) {
       const ev = events[i]; if (ev.t > t) break; const dt = (t - ev.t) * 24;
       if (dt > 14) continue;
       if (ev.type === 'chroma') spike += ev.amp * Math.pow(0.55, dt);
@@ -3913,14 +3966,14 @@ class Renderer {
     // Elitesand Pro: chroma / shake are rendered in frame(), not here - skip them, otherwise the transparent-mode
     // alpha guard below copies and re-masks the whole frame (3 full-canvas composites) for an effect that draws nothing
     const POST_BUILTIN = ['slice', 'block', 'invert', 'flash', 'zoom', 'mosaic'];
-    const active = plan.events.filter(ev => t >= ev.t && t < ev.t + Math.max(ev.dur, 1 / plan.fps)
+    const active = activeEvents(plan, t).filter(ev => t >= ev.t && t < ev.t + Math.max(ev.dur, 1 / plan.fps)
       && (POST_BUILTIN.includes(ev.type) || (J.FXE[ev.type] && J.FXE[ev.type].draw)));
     const needScratch = active.some(ev => ['slice', 'block', 'zoom', 'mosaic'].includes(ev.type) || (J.FXE[ev.type] && J.FXE[ev.type].scratch)) || (!opt.fast && (st.glow || 0) > 0);
     const S = needScratch ? this.ensure(this.scratch, cw, ch) : null;
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
     const copy = () => { const sx = S.getContext('2d'); sx.globalCompositeOperation = 'copy'; sx.drawImage(ctx.canvas, 0, 0); sx.globalCompositeOperation = 'source-over'; };
     const clock24 = Math.floor(t * 24);           // glitch randomness changes at most 24 times a second at any output fps
-    const guard = opt.transparent ? this.alphaGuard(ctx, S, sc) : null;   // 透過: effects must not fill the empty background
+    const guard = opt.transparent && active.length ? this.alphaGuard(ctx, S, sc) : null; // Elitesand Pro: no masks for an empty effect window   // 透過: effects must not fill the empty background
     for (const ev of active) {
       // progress clamped to 0..1 (an event shorter than one output frame is still shown for that frame — k would pass 1)
       const k0 = (t - ev.t) / Math.max(ev.dur, 1e-3), k = Number.isFinite(k0) ? J.clamp(k0, 0, 1) : 0;

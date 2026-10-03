@@ -9,7 +9,7 @@
 (function () {
   'use strict';
 
-  const { formatTime, escapeHtml, safeHttpUrl } = SharedUtils;
+  const { formatTime, escapeHtml } = SharedUtils;
   const t = (key, values) => (
     typeof window !== 'undefined' && window.I18n ? window.I18n.t(key, values) : key
   );

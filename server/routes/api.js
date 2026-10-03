@@ -12,6 +12,7 @@ const router = express.Router();
 const multer = require('multer');
 const crypto = require('crypto');
 const { sanitizeTrack } = require('../utils/track-schema');
+const { mapConcurrent } = require('../utils/map-concurrent');
 const { getLanIp } = require('../utils/lan-info');
 const ytdlpUpdater = require('../services/ytdlp-updater');
 const obsLauncher = require('../services/obs-launcher');
@@ -699,13 +700,12 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
     }
 
     log.info(`開始處理 ${req.files.length} 個上傳檔案`);
-    const results = [];
-    const warnings = [];
-    for (const file of req.files) {
+    // At most two tracks hold metadata/cover buffers and search providers at once.
+    // FFmpeg retains its existing global single-job lock.
+    const processed = await mapConcurrent(req.files, 2, async file => {
+      const warnings = [];
       const filePath = file.path;
       const metadata = await parseMusicFile(filePath);
-      // 統一音量：本地上傳同樣量整曲響度（失敗回 null，不中斷上傳）
-      const loudnessLufs = await AudioProcessor.measureLoudnessQueued(filePath).catch(() => null);
 
       // file.originalname 由 busboy 以 latin1 解碼（把 UTF-8 位元組逐一當字元），中日文檔名會亂碼；
       // 落盤檔名（multer storage）已各自還原，這裡同樣先還原成 UTF-8 再用於歌名/歌手。
@@ -725,7 +725,7 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
         cover: null,
         lyrics: null,
         lyricsType: null,
-        loudnessLufs,
+        loudnessLufs: null,
       };
 
       // 檔案內嵌 ID3 標籤本身可能把歌手/歌名寫反（常見於歌詞網站下載的盜版聚合檔，
@@ -747,6 +747,8 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
         track.cover = `/api/cover/${coverFilename}`;
       }
 
+      // 本地上傳同樣量整曲響度（失敗回 null），與網路歌詞搜尋重疊等待時間。
+      const loudness = AudioProcessor.measureLoudnessQueued(filePath).catch(() => null);
       // 背景搜尋歌詞
       try {
         const lyricsResult = await LyricsEngine.search(track.artist, track.title, track.duration);
@@ -772,9 +774,11 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
         warnings.push(`${track.title}：音訊已匯入，但自動歌詞搜尋失敗`);
       }
 
-      const safeTrack = sanitizeTrack(track);
-      if (safeTrack) results.push(safeTrack);
-    }
+      track.loudnessLufs = await loudness;
+      return { track: sanitizeTrack(track), warnings };
+    });
+    const results = processed.map(result => result.track).filter(Boolean);
+    const warnings = processed.flatMap(result => result.warnings);
 
     const duration = Date.now() - start;
     log.info(`上傳處理完成: ${results.length} 首歌曲 (${duration}ms)`);
@@ -1025,7 +1029,6 @@ router.post('/lyrics/upload', requirePin, lyricsUpload.single('lyrics'), (req, r
 
     log.info(`處理歌詞上傳: ${req.file.originalname}`);
     const filePath = req.file.path;
-    const ext = path.extname(req.file.originalname).toLowerCase();
 
     // 猜編碼讀取；UI locale 只用於無 BOM 純 CJK UTF-16 的保守 fallback，不影響 legacy 編碼判定。
     const content = decodeUploadedText(fs.readFileSync(filePath), req.body?.locale);

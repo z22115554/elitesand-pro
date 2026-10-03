@@ -848,8 +848,28 @@ class AudioProcessor {
     // track / artist(s)，沒有才回退到影片標題規則。
     let identity = this.resolveTrackIdentity(info);
     const cover = this.detectCover(info);
-    // 官方時長：拿 Apple Music 目錄裡這首歌的官方時長，跟下載的影片時長比對，在搜歌詞之前
-    // 就先抓出「影片可能剪了額外片段」的情況（唱片公司頻道歌名抓得再準也可能踩到）。
+    // Downloaded audio can be scanned while network lookups are still running.
+    // Keep the original filename until FFmpeg exits: Windows locks open audio files.
+    const audioReady = downloadTask.completed.then(async downloaded => {
+      throwIfCancelled(options.signal);
+      const loudnessLufs = await this.measureLoudnessQueued(downloaded.filePath, options.signal);
+      return { downloaded, loudnessLufs };
+    });
+    audioReady.catch(() => {});
+    const startLyrics = (artist, title) => {
+      progress('正在搜尋歌詞');
+      const started = Date.now();
+      return LyricsEngine.search(artist, title, info.duration || 0)
+        .catch(e => { log.warn('歌詞搜尋失敗: ' + e.message); return null; })
+        .finally(() => log.perf('lyrics-search', Date.now() - started, { title }));
+    };
+    // The catalog only changes identities below 0.8 confidence. Confident original
+    // tracks can start lyrics now; uncertain titles and covers retain correction first.
+    let lyricsPromise = !cover && identity.artist && Number(identity.confidence) >= 0.8
+      ? startLyrics(identity.artist, identity.title)
+      : null;
+    // 官方時長：拿 Apple Music 目錄時長比對下載的影片，抓出額外片段。
+    // 身分信心不足時先校正歌手/歌名；已確定的歌曲則與歌詞查詢並行。
     // resolveAppleMusicMetadata 內部走斷路器，Apple 端被打爆時會自動跳過查詢直接回 null，
     // 不拋錯、不重試，確保匯入與歌詞照常完成。
     let officialDurationSec = null;
@@ -883,17 +903,13 @@ class AudioProcessor {
 
     log.info(`影片標題解析: "${info.title}" → 歌手: "${artist}", 歌名: "${title}"`);
 
-    // 並行執行歌詞搜尋和音訊下載
-    progress('正在搜尋歌詞');
-    const lyricsStart = Date.now();
+    // 並行執行歌詞搜尋、音訊下載與響度分析
     const artistLookup = (cover || !artist)
       ? LyricsEngine.resolveOriginalArtist(title, info.duration || 0).catch(() => null)
       : Promise.resolve(null);
-    const lyricsPromise = LyricsEngine.search(artist, title, info.duration || 0)
-      .catch(e => { log.warn('歌詞搜尋失敗: ' + e.message); return null; });
-    const [lyricsResult, downloaded, originalArtist] = await Promise.all([lyricsPromise, downloadTask.completed, artistLookup]);
+    if (!lyricsPromise) lyricsPromise = startLyrics(artist, title);
+    const [lyricsResult, { downloaded, loudnessLufs }, originalArtist] = await Promise.all([lyricsPromise, audioReady, artistLookup]);
     throwIfCancelled(options.signal);
-    log.perf('lyrics-search', Date.now() - lyricsStart, { title });
     if (originalArtist?.artist) artist = originalArtist.artist;
     const filename = this.renameToReadableFilename(downloaded.filePath, downloaded.outputDir, artist, title);
 
@@ -901,10 +917,6 @@ class AudioProcessor {
     // Once the file has a readable library filename it is no longer temporary.
     // Until then, a crash leaves a registry entry for the next startup to recover.
     downloadTask.completeTempImport?.();
-
-    // 統一音量：量出整曲響度讓播放端拉齊到 -14 LUFS。失敗回 null（僅取消會拋出）。
-    const loudnessLufs = await this.measureLoudnessQueued(path.join(downloaded.outputDir, filename), options.signal);
-    throwIfCancelled(options.signal);
 
     const totalDuration = Date.now() - processStart;
     log.info(`YouTube 處理完成: ${title} (${totalDuration}ms)`);

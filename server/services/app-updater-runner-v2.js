@@ -101,11 +101,9 @@ function sleepSync(ms) {
 
 function withFileLockRetry(operation, label, timeoutMs = FILE_LOCK_RETRY_MS) {
   const started = Date.now();
-  let lastError = null;
   for (;;) {
     try { return operation(); }
     catch (error) {
-      lastError = error;
       if (!RETRYABLE_FILE_CODES.has(error?.code) || Date.now() - started >= timeoutMs) {
         if (RETRYABLE_FILE_CODES.has(error?.code)) {
           const wrapped = new Error(`${label} remained locked for ${Date.now() - started}ms: ${error.message}`);

@@ -64,6 +64,8 @@ const LYRICS_CACHE_VERSION = 'v7-singer-parts';
 const path = require('path');
 
 const lyricsCache = new Map();
+const pendingSearches = new Map();
+let cacheGeneration = 0;
 const _config = require('../utils/load-config');
 const CACHE_TTL = (_config.cacheDays || 7) * 24 * 60 * 60 * 1000;
 const NEGATIVE_CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -173,6 +175,7 @@ function msToLabel(ms) {
 // ─── Apple Music Token 快取 ───
 let appleMusicToken = null;
 let appleMusicTokenExpiry = 0;
+let appleMusicTokenRefresh = null;
 
 // ─── Socket.io 實例（供羅馬化完成後推播用）───
 let _io = null;
@@ -214,6 +217,17 @@ class LyricsEngine {
       return cached.result;
     }
 
+    if (pendingSearches.has(cacheKey)) return pendingSearches.get(cacheKey);
+    const pending = this._searchUncached(artist, title, duration, autoRomanize, query, cacheKey, cacheGeneration);
+    pendingSearches.set(cacheKey, pending);
+    try {
+      return await pending;
+    } finally {
+      if (pendingSearches.get(cacheKey) === pending) pendingSearches.delete(cacheKey);
+    }
+  }
+
+  static async _searchUncached(artist, title, duration, autoRomanize, query, cacheKey, generation) {
     const searchStart = Date.now();
     log.info(`開始搜尋: "${query}" (時長: ${duration}s)`);
 
@@ -273,8 +287,10 @@ class LyricsEngine {
             this._asyncRomanize(parsedLyrics, result.type, query);
           }
 
-          lyricsCache.set(cacheKey, { result, timestamp: Date.now() });
-          scheduleCacheSave();
+          if (generation === cacheGeneration) {
+            lyricsCache.set(cacheKey, { result, timestamp: Date.now() });
+            scheduleCacheSave();
+          }
           for (const [name, hit] of sourceVerdicts) usageTelemetry.recordLyricSource(name, hit, true);
           usageTelemetry.recordOutcome('lyrics', true);
           return result;
@@ -293,7 +309,7 @@ class LyricsEngine {
     const totalDuration = Date.now() - searchStart;
     log.info(`✗ 所有來源均未找到歌詞 (${totalDuration}ms)`);
     log.perf('lyrics-total', totalDuration, { query, result: 'not_found' });
-    if (outcomes.length > 0 && outcomes.every(status => status === 'miss')) {
+    if (generation === cacheGeneration && outcomes.length > 0 && outcomes.every(status => status === 'miss')) {
       lyricsCache.set(cacheKey, { result: null, timestamp: Date.now(), negative: true });
       scheduleCacheSave();
     }
@@ -446,8 +462,9 @@ class LyricsEngine {
       },
     ];
     const tasks = (resolvers || defaults).slice(0, 3).map(fn => Promise.resolve().then(fn).catch(() => ''));
-    const timeout = new Promise(resolve => setTimeout(() => resolve(null), timeoutMs));
-    const values = await Promise.race([Promise.all(tasks), timeout]);
+    let timer;
+    const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); });
+    const values = await Promise.race([Promise.all(tasks), timeout]).finally(() => clearTimeout(timer));
     if (!values) return null;
     const normalize = v => String(v || "").normalize("NFKC").toLowerCase().replace(/[\s._-]+/g, "");
     const groups = new Map();
@@ -690,7 +707,7 @@ class LyricsEngine {
     strategies.push(`https://lrclib.net/api/search?q=${encodeURIComponent(`${cleanedArtist} ${cleanedTitle}`.trim())}`);
     strategies.push(`https://lrclib.net/api/search?q=${encodeURIComponent(cleanedTitle)}`);
 
-    for (const url of strategies) {
+    for (const url of new Set(strategies)) {
       try {
         const response = await fetchWithTimeout(url, {
           headers: { 'User-Agent': APP_USER_AGENT },
@@ -1080,6 +1097,17 @@ class LyricsEngine {
       return appleMusicToken;
     }
 
+    if (appleMusicTokenRefresh) return appleMusicTokenRefresh;
+    const pending = this._refreshAppleMusicToken();
+    appleMusicTokenRefresh = pending;
+    try {
+      return await pending;
+    } finally {
+      if (appleMusicTokenRefresh === pending) appleMusicTokenRefresh = null;
+    }
+  }
+
+  static async _refreshAppleMusicToken() {
     const tokenStart = Date.now();
     try {
       const pageRes = await fetchWithTimeout('https://beta.music.apple.com', {
@@ -1240,6 +1268,8 @@ class LyricsEngine {
 
   static clearCache() {
     lyricsCache.clear();
+    pendingSearches.clear();
+    cacheGeneration += 1;
   }
 
   static getProviderHealth() {

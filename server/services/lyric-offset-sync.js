@@ -26,7 +26,6 @@ const { APP_VERSION, appUserAgent } = require('../utils/app-version');
 const eulaStore = require('./eula-store');
 const { createLogger } = require('../utils/logger');
 
-const log = createLogger('LyricOffsetSync');
 
 const STATE_SCHEMA_VERSION = 1;
 const TIMEOUT_MS = 3500;

@@ -8,7 +8,7 @@
  * [mm:ss.xx]<duration>word<start,duration>word<start,duration>...
  */
 
-const { msToKrcTime, parseTimestampToMs } = require('../utils/time-utils');
+const { msToKrcTime } = require('../utils/time-utils');
 
 /**
  * 解析 TTML 歌詞為 KRC 逐字格式

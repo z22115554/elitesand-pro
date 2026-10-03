@@ -608,7 +608,9 @@ function createAppState(io) {
       log.warn(`state:sync payload 已達 ${bytes} bytes（playlist=${payload.playlist.length}），P2 應評估拆分同步事件`);
     }
 
-    emitToAccessRooms(io, 'state:sync', payload, getReadOnlyState(exists));
+    // Both access roles share the same instant of playback/session state.
+    // Redact the snapshot already built above instead of traversing the playlist twice.
+    emitToAccessRooms(io, 'state:sync', payload, getReadOnlyState(exists, payload));
   }
 
   function getStateSyncMetrics() {
@@ -618,7 +620,14 @@ function createAppState(io) {
   function getTrackPayload(track, { includeLyrics = false, offset, exists } = {}) {
     if (!track) return null;
     const manual = manualLyricsCache.get(track.id);
-    const { lyrics, parsedLyrics, manualLyrics: _storedManualLyrics, ...summary } = track;
+    const { lyrics, parsedLyrics } = track;
+    // A playlist summary uses an explicit whitelist below. Copying every other
+    // field first only creates a discarded object for each of up to 2000 tracks.
+    let summary;
+    if (includeLyrics) {
+      const { lyrics: _lyrics, parsedLyrics: _parsedLyrics, manualLyrics: _storedManualLyrics, ...metadata } = track;
+      summary = metadata;
+    }
     const effectiveLyrics = manual ? manual.lyrics : lyrics;
     const effectiveLyricsType = manual ? manual.lyricsType : track.lyricsType;
     const effectiveParsedLyrics = manual ? manual.parsedLyrics : parsedLyrics;
@@ -754,9 +763,9 @@ function createAppState(io) {
    * 每次 state:sync 都要送給每個 OBS 來源並在 CEF 主執行緒 parse，還得在 server 端為
    * 唯讀版多算一次整份清單，所以只送空陣列（保留欄位，資料形狀不變）。
    */
-  function getReadOnlyState(exists = libraryStore.getAudioExistsLookup()) {
-    const state = buildStateSnapshot(getReadOnlyPlaylist(), exists);
-    return { ...state, currentTrack: redactTrackForReadOnly(state.currentTrack) };
+  function getReadOnlyState(exists = libraryStore.getAudioExistsLookup(), sourceState) {
+    const state = sourceState || buildStateSnapshot(getReadOnlyPlaylist(), exists);
+    return { ...state, playlist: getReadOnlyPlaylist(), currentTrack: redactTrackForReadOnly(state.currentTrack) };
   }
 
   /** 取得 track 的有效歌詞（考慮手動覆蓋），無手動覆蓋時回 null */

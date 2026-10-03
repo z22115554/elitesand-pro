@@ -52,6 +52,10 @@ const _hydrated = new Set();          // 記憶體歌詞欄位為權威值的 en
 const _lyricsCheck = new Set();       // 下次存檔要比對歌詞是否需要寫出的 entry id
 const _lyricsDigest = new Map();      // id → 磁碟上那份歌詞的雜湊（用來判斷「真的有變」）
 const _pendingLyricDeletes = new Set(); // 已從媒體庫移除、等 library.json 落盤後才刪歌詞檔的 id
+// Entries are exposed by getEntry()/peekEntry(), so callers can mutate identity
+// fields directly. Compare their current strings before reusing a normalized key.
+// Weak keys release cached identities when removed/replaced entries are collected.
+const _identityKeys = new WeakMap();
 
 function stripLyrics(entry) {
   if (!entry || typeof entry !== 'object') return entry;
@@ -470,6 +474,21 @@ function identityKey(artist, title) {
   return `${normalizeIdentityPart(artist)}::${t}`;
 }
 
+function entryIdentityKey(entry) {
+  const artist = entry.artist;
+  const title = entry.title;
+  // Preserve existing coercion semantics for old or externally edited metadata.
+  if (typeof entry !== 'object' || typeof artist !== 'string' || typeof title !== 'string') {
+    return identityKey(artist, title);
+  }
+  let cached = _identityKeys.get(entry);
+  if (!cached || cached.artist !== artist || cached.title !== title) {
+    cached = { artist, title, key: identityKey(artist, title) };
+    _identityKeys.set(entry, cached);
+  }
+  return cached.key;
+}
+
 /** 找出「歌手+歌名」跟給定值相同、但 id 不同的既有記錄；找不到回 null。 */
 function findByIdentity(artist, title, excludeId) {
   const key = identityKey(artist, title);
@@ -478,7 +497,7 @@ function findByIdentity(artist, title, excludeId) {
   for (const id of Object.keys(library)) {
     if (id === exclude) continue;
     const entry = library[id];
-    if (identityKey(entry.artist, entry.title) === key) return entry;
+    if (entryIdentityKey(entry) === key) return entry;
   }
   return null;
 }

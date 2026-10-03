@@ -48,8 +48,7 @@
     return currentTrackIndex >= 0 && index < currentTrackIndex;
   }
 
-  function trackMatchesFilter(track, index, currentTrackIndex) {
-    const query = normalizeFilterText(playlistFilterQuery).trim();
+  function trackMatchesFilter(track, index, currentTrackIndex, query) {
     if (query) {
       const haystack = normalizeFilterText([
         track.title,
@@ -91,18 +90,14 @@
 
   function visibleSelectableTracks() {
     const currentTrackIndex = state.currentTrackIndex;
+    const query = normalizeFilterText(playlistFilterQuery).trim();
     return state.playlist.map((track, index) => ({ track, index, key: getSelectionKey(track) }))
-      .filter(({ track, index }) => index !== currentTrackIndex && trackMatchesFilter(track, index, currentTrackIndex));
+      .filter(({ track, index }) => index !== currentTrackIndex && trackMatchesFilter(track, index, currentTrackIndex, query));
   }
 
-  function syncPlaylistTools(visibleCount) {
+  function syncPlaylistTools(visibleCount, selectedCount = 0, selectableVisibleCount = 0, allVisibleSelected = false) {
     const playlist = state.playlist;
-    const selectedCount = selectedTracks().length;
     const activeFilter = isFilterActive();
-    const visibleSelectable = visibleSelectableTracks();
-    const selectableVisibleCount = visibleSelectable.length;
-    const allVisibleSelected = selectableVisibleCount > 0
-      && visibleSelectable.every(({ key }) => selectedTrackKeys.has(key));
 
     if (dom.playlist) {
       dom.playlist.classList.toggle('is-selecting', selectionMode);
@@ -412,6 +407,7 @@
   function renderPlaylist() {
     const playlist = state.playlist;
     const currentTrackIndex = state.currentTrackIndex;
+    const filterQuery = normalizeFilterText(playlistFilterQuery).trim();
     reconcileSelectedTracks();
     // 剩餘時間：目前歌曲加上所有尚未唱過的歌曲；自然播畢清空目前歌曲後也能正確延續。
     let remainingSec = 0;
@@ -440,13 +436,23 @@
     // 增的那幾列」，不會把已經在清單裡的歌全部重新蓋一次，避免 O(歌曲數²) 的重複解圖成本。
     const existing = Array.from(dom.playlist.children);
     let visibleCount = 0;
+    let selectedCount = 0;
+    let selectableVisibleCount = 0;
+    let allVisibleSelected = true;
     playlist.forEach((track, i) => {
       const isActive = i === currentTrackIndex;
       const isPlayed = !isActive && isTrackPlayed(track, i, currentTrackIndex);
       const selectionKey = getSelectionKey(track);
       const isSelected = selectedTrackKeys.has(selectionKey);
-      const isVisible = trackMatchesFilter(track, i, currentTrackIndex);
+      const isVisible = trackMatchesFilter(track, i, currentTrackIndex, filterQuery);
       if (isVisible) visibleCount += 1;
+      if (!isActive) {
+        if (isSelected) selectedCount += 1;
+        if (isVisible) {
+          selectableVisibleCount += 1;
+          if (!isSelected) allVisibleSelected = false;
+        }
+      }
       const key = track.id != null ? String(track.id) : `${track.title}|${track.artist}|${i}`;
       const node = existing[i];
       if (node && node.dataset.trackKey === key) {
@@ -496,7 +502,8 @@
     while (dom.playlist.children.length > playlist.length) {
       dom.playlist.removeChild(dom.playlist.lastChild);
     }
-    syncPlaylistTools(visibleCount);
+    syncPlaylistTools(visibleCount, selectedCount, selectableVisibleCount,
+      selectableVisibleCount > 0 && allVisibleSelected);
     schedulePlaylistMarqueeUpdate();
   }
 

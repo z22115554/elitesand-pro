@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const { formatTime, escapeHtml } = SharedUtils;
+  const { escapeHtml } = SharedUtils;
   const { dom } = AppShared;
   const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
 
@@ -351,7 +351,14 @@
   // 歌詞預覽渲染
   // ═══════════════════════════════════════════
 
+  let lastLyricsPreviewText;
+  let lastLyricsPreviewLocale;
   function renderLyricsPreview(lrcText) {
+    const textValue = lrcText || '';
+    const locale = window.I18n?.current?.();
+    if (textValue === lastLyricsPreviewText && locale === lastLyricsPreviewLocale) return;
+    lastLyricsPreviewText = textValue;
+    lastLyricsPreviewLocale = locale;
     if (!lrcText) {
       dom.lyricsPreview.innerHTML = `<div class="lyric-preview-empty">${escapeHtml(t('prompter.noLyrics'))}</div>`;
       return;
@@ -374,6 +381,12 @@
     dom.lyricsPreview.innerHTML = html || '<div class="lyric-preview-empty">無法解析歌詞</div>';
   }
 
+
+  window.addEventListener('i18n:change', () => {
+    lastLyricsPreviewLocale = undefined;
+    lastLyricsPreviewText = undefined;
+    renderLyricsPreview(playlist[currentTrackIndex]?.lyrics);
+  });
 
   // ═══════════════════════════════════════════
   // Socket 狀態同步

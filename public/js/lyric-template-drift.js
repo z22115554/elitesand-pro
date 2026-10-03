@@ -28,7 +28,6 @@
   let currentLineEl = null;
   let currentSegments = [];  // [{el, charEls:[{el,startMs,endMs,lastBucket}], startMs, visible}]
   let currentLineIndex = -1;
-  let currentTempo = null;
   let colorsCache = { base: '#ffffff', active: '#ffd6a5' };
 
   function getCssVar(name, fallback) {
@@ -118,7 +117,6 @@
 
     refreshColors();
     const tempo = LyricMotion.lineTempo(lines, lineIndex);
-    currentTempo = tempo;
 
     const words = LyricMotion.ensureWordTimings(line, lines, lineIndex);
     const chars = Array.from(line.text);
@@ -319,7 +317,6 @@
   function clearAll(ctx) {
     retireCurrentLine(ctx, true);
     currentLineIndex = -1;
-    currentTempo = null;
   }
 
   LyricTemplates.register({

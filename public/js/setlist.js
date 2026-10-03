@@ -1185,6 +1185,7 @@
   // 正確的簡轉繁設定，不必等某個無關操作觸發下一次 lyric-settings:update 才補上。
   SocketClient.on('state:sync', (state) => {
     if (state && state.lyricSettings && typeof state.lyricSettings.convertTraditional === 'boolean') {
+      if (s2tEnabled === state.lyricSettings.convertTraditional) return;
       s2tEnabled = state.lyricSettings.convertTraditional;
       if (lastRawData) { model = normalize(lastRawData); renderActive(); }
     }

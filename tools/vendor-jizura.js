@@ -34,9 +34,96 @@ const FONT_PX_DEF = `/* Elitesand Pro: canvas re-resolves the whole font (fallba
 J.fontPx = px => (px > 0 ? Math.pow(2, Math.round(Math.log2(px) * 24) / 24) : px);
 `;
 
+// Cache only immutable input runs, not the returned layout/glyph objects: animations may edit those.
+// Exact font metrics are retained; changing size, tracking or alignment still uses the original arithmetic.
+const TEXT_RUNS_DEF = `/* Elitesand Pro: reuse script classification and advance widths across frames. Returned layouts remain fresh.
+   Bound both entry and glyph counts; font/language changes invalidate through J.metrics.clear(). */
+const textRuns = new Map();
+let textRunGlyphs = 0;
+J.clearTextLayouts = () => { textRuns.clear(); textRunGlyphs = 0; };
+function textRunsOf(text, font, vertical) {
+  const key = JSON.stringify([text, font, !!J.TYPESET, vertical]);
+  const hit = textRuns.get(key);
+  if (hit) return hit;
+  const runs = text.split('\\n').map(line => {
+    const arr = [...line], ts = J.typesetLine(arr);
+    arr.forEach((ch, i) => { ts[i].em = vertical && !/[A-Za-z0-9]/.test(ch) ? 1 : J.metrics.adv(font, ch); });
+    return { arr, ts };
+  });
+  const count = runs.reduce((n, r) => n + r.arr.length, 0);
+  if (count <= 512) {
+    while (textRuns.size >= 256 || textRunGlyphs + count > 8192) {
+      const oldest = textRuns.keys().next().value, removed = textRuns.get(oldest);
+      textRunGlyphs -= removed.reduce((n, r) => n + r.arr.length, 0);
+      textRuns.delete(oldest);
+    }
+    textRuns.set(key, runs); textRunGlyphs += count;
+  }
+  return runs;
+}
+`;
+
+const EVENT_WINDOW_DEF = `/* Elitesand Pro: plans are immutable while rendering. Index sorted events once, retaining long overlapping
+   effects and original draw order; rebuild for a replaced/resized event array or a changed frame rate. */
+const eventWindows = new WeakMap();
+function activeEvents(plan, t) {
+  const events = plan.events, fps = plan.fps;
+  let index = eventWindows.get(events);
+  if (!index || index.fps !== fps || index.ends.length !== events.length) {
+    const ends = new Float64Array(events.length);
+    let last = -Infinity, maxEnd = -Infinity, sorted = true;
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i];
+      if (!Number.isFinite(ev.t) || !Number.isFinite(ev.dur) || ev.t < last) sorted = false;
+      last = ev.t; maxEnd = Math.max(maxEnd, ev.t + Math.max(ev.dur, 1 / fps)); ends[i] = maxEnd;
+    }
+    index = { fps, ends, sorted }; eventWindows.set(events, index);
+  }
+  if (!index.sorted) return events.filter(ev => t >= ev.t && t < ev.t + Math.max(ev.dur, 1 / fps));
+  let lo = 0, hi = events.length;
+  while (lo < hi) { const m = (lo + hi) >>> 1; if (index.ends[m] <= t) lo = m + 1; else hi = m; }
+  const out = [];
+  for (let i = lo; i < events.length && events[i].t <= t; i++) {
+    const ev = events[i]; if (t < ev.t + Math.max(ev.dur, 1 / fps)) out.push(ev);
+  }
+  return out;
+}
+`;
+
 const PATCHES = [
   // 02_fonts：J.fontPx 定義，接在 J.fontCSS 之後
   { file: '02_fonts.js', insertAfterBlock: 'J.fontCSS = (key, px) => {', text: FONT_PX_DEF },
+  {
+    file: '02_fonts.js',
+    find: '  clear() { this.m.clear(); },',
+    replace: '  clear() { this.m.clear(); if (J.clearTextLayouts) J.clearTextLayouts(); }, // Elitesand Pro: invalidate text runs too',
+  },
+
+  { file: '03_text.js', find: 'J.layoutText = (it) => {', replace: TEXT_RUNS_DEF + 'J.layoutText = (it) => {' },
+  ...[false, true].map((vertical) => ({
+    file: '03_text.js',
+    find: (vertical ? '  } else {\n' : '  if (!vertical) {\n')
+      + "    const sets = lines.map(line => { const arr = [...line]; return { arr, ts: J.typesetLine(arr) }; });",
+    replace: (vertical ? '  } else {\n' : '  if (!vertical) {\n')
+      + `    const sets = textRunsOf(text, it.font, ${vertical});`,
+  })),
+  ...[
+    ['J.metrics.adv(it.font, ch) * ts[i].adv', 'ts[i].em * ts[i].adv'],
+    ['J.metrics.adv(it.font, ch) * size * t.adv', 't.em * size * t.adv'],
+    ['vAdv(it.font, ch, size) * ts[i].adv', 'ts[i].em * size * ts[i].adv'],
+    ['vAdv(it.font, ch, size) * t.adv', 't.em * size * t.adv'],
+    ["function vAdv(font, ch, size) { return /[A-Za-z0-9]/.test(ch) ? J.metrics.adv(font, ch) * size : size; }\n", ''],
+  ].map(([find, replace]) => ({ file: '03_text.js', find, replace })),
+
+  { file: '09_render.js', find: 'class Renderer {', replace: EVENT_WINDOW_DEF + '\nclass Renderer {' },
+  {
+    file: '09_render.js',
+    find: '    for (let i = 0; i < events.length; i++) {\n      const ev = events[i]; if (ev.t > t) break; const dt = (t - ev.t) * 24;',
+    replace: '    // Elitesand Pro: expired camera impulses cannot contribute; seek directly into the time window.\n'
+      + '    let eventLo = 0, eventHi = events.length;\n'
+      + '    while (eventLo < eventHi) { const m = (eventLo + eventHi) >>> 1; if ((t - events[m].t) * 24 > 14) eventLo = m + 1; else eventHi = m; }\n'
+      + '    for (let i = eventLo; i < events.length; i++) {\n      const ev = events[i]; if (ev.t > t) break; const dt = (t - ev.t) * 24;',
+  },
 
   // 03_text：主繪字函式（drawItem）
   {
@@ -96,8 +183,13 @@ const PATCHES = [
     replace: '    // Elitesand Pro: chroma / shake are rendered in frame(), not here - skip them, otherwise the transparent-mode\n'
       + '    // alpha guard below copies and re-masks the whole frame (3 full-canvas composites) for an effect that draws nothing\n'
       + "    const POST_BUILTIN = ['slice', 'block', 'invert', 'flash', 'zoom', 'mosaic'];\n"
-      + '    const active = plan.events.filter(ev => t >= ev.t && t < ev.t + Math.max(ev.dur, 1 / plan.fps)\n'
+      + '    const active = activeEvents(plan, t).filter(ev => t >= ev.t && t < ev.t + Math.max(ev.dur, 1 / plan.fps)\n'
       + '      && (POST_BUILTIN.includes(ev.type) || (J.FXE[ev.type] && J.FXE[ev.type].draw)));',
+  },
+  {
+    file: '09_render.js',
+    find: '    const guard = opt.transparent ? this.alphaGuard(ctx, S, sc) : null;',
+    replace: '    const guard = opt.transparent && active.length ? this.alphaGuard(ctx, S, sc) : null; // Elitesand Pro: no masks for an empty effect window',
   },
 
   // 11p_layoutsA／C：兩個版面各自的小型畫字函式

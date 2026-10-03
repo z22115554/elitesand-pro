@@ -18,6 +18,20 @@
   // 個別調整時間戳（拖拍/搶拍常見於歌曲中段），改完整批送回 applyManualLyrics。
   // ═══════════════════════════════════════════
   let ltWorkingLines = null; // 編輯中的暫存陣列（未按套用前不影響實際播放）
+  let ltTrackId = null;
+  let ltLyricPayload = null;
+
+  function updateTimelineText() {
+    if (dom.ltModal.hidden || !ltWorkingLines) return;
+    dom.ltRows.querySelectorAll('.lt-text').forEach((element, i) => {
+      element.textContent = s2tText(ltWorkingLines[i].text) || tr('（空行）');
+    });
+  }
+
+  function updateTimelineTime(index) {
+    const input = dom.ltRows.querySelector(`[data-idx="${index}"] .lt-time`);
+    if (input) input.value = msToClock(ltWorkingLines[index].time);
+  }
 
   function msToClock(ms) {
     ms = Math.max(0, Math.round(ms));
@@ -59,6 +73,11 @@
   function openLyricsTimeline() {
     const track = state.playlist[state.currentTrackIndex];
     if (!track) { AppShared.showToast(tr('請先選一首歌')); return; }
+    ltTrackId = track.id;
+    // Non-current tracks become summaries after state:sync. Keep the source
+    // lyrics alongside the draft instead of rereading that summary on apply.
+    ltLyricPayload = { lyrics: track.lyrics, lyricsType: track.lyricsType, lyricsSource: track.lyricsSource };
+    ltWorkingLines = null;
     if (!Array.isArray(track.parsedLyrics) || track.parsedLyrics.length === 0) {
       dom.ltEmpty.hidden = false;
       dom.ltRows.innerHTML = '';
@@ -69,23 +88,19 @@
       // 深拷貝：取消時不影響目前正在播放的歌詞
       ltWorkingLines = track.parsedLyrics.map((l) => ({ ...l }));
       renderLyricsTimelineRows();
-      // 簡轉繁字典載好後重繪一次（維持跟 OBS 顯示一致）
-      ensureS2T().then(() => {
-        if (!dom.ltModal.hidden && ltWorkingLines) renderLyricsTimelineRows();
-      });
+      // 字典載好後只更新文字，不重建使用者正在輸入的時間欄位。
+      ensureS2T().then(updateTimelineText);
     }
     dom.ltTrackTitle.textContent = `· ${track.title}`;
     dom.ltModal.hidden = false;
   }
-  function closeLyricsTimeline() { dom.ltModal.hidden = true; ltWorkingLines = null; }
+  function closeLyricsTimeline() { dom.ltModal.hidden = true; ltWorkingLines = null; ltTrackId = null; ltLyricPayload = null; }
 
   // 對時工具開著時切換簡轉繁設定，字表同步跟著重繪。
   if (typeof SocketClient !== 'undefined' && SocketClient.on) {
     SocketClient.on('lyric-settings:update', () => {
       if (dom.ltModal && !dom.ltModal.hidden && ltWorkingLines) {
-        ensureS2T().then(() => {
-          if (!dom.ltModal.hidden && ltWorkingLines) renderLyricsTimelineRows();
-        });
+        ensureS2T().then(updateTimelineText);
       }
     });
   }
@@ -111,30 +126,35 @@
       if (nudgeBtn) {
         const idx = Number(nudgeBtn.dataset.idx);
         ltWorkingLines[idx].time = Math.max(0, ltWorkingLines[idx].time + Number(nudgeBtn.dataset.ltNudge));
-        renderLyricsTimelineRows();
+        updateTimelineTime(idx);
         return;
       }
       const tapBtn = e.target.closest('[data-lt-tap]');
       if (tapBtn) {
+        if (state.playlist[state.currentTrackIndex]?.id !== ltTrackId) {
+          const editingTrack = state.playlist.find((item) => item.id === ltTrackId);
+          AppShared.showToast(`${tr('請先選一首歌')}：${editingTrack?.title || ''}`);
+          return;
+        }
         const idx = Number(tapBtn.dataset.ltTap);
         // lastPlayTimeMs 是「播放器目前播放位置」，換算回歌詞原始時間軸要扣掉目前 offset
         // （顯示端判斷式是 adjustedTime = audioTime + offset，此處反推 audioTime + offset = 原始時間）
         ltWorkingLines[idx].time = Math.max(0, Math.round(state.lastPlayTimeMs + state.currentOffsetMs));
-        renderLyricsTimelineRows();
+        updateTimelineTime(idx);
       }
     });
   }
 
   if (dom.ltApply) {
     dom.ltApply.addEventListener('click', () => {
-      const track = state.playlist[state.currentTrackIndex];
+      const track = state.playlist.find((item) => item.id === ltTrackId);
       if (!track || !ltWorkingLines) { closeLyricsTimeline(); return; }
       // 依時間排序：使用者可能把某行調到比前一行晚，顯示端逐行比對「下一句時間」判斷換行，
       // 順序錯亂會导致跳字/卡住，套用前排序保險。
       const sorted = [...ltWorkingLines].sort((a, b) => a.time - b.time);
       if (window.VKState && window.VKState.applyManualLyrics) {
         // 逐行時間軸只是微調同一份歌詞，來源不變，不觸發偏移切換。
-        window.VKState.applyManualLyrics(track.id, track.lyrics, track.lyricsType, sorted, undefined, track.lyricsSource);
+        window.VKState.applyManualLyrics(track.id, ltLyricPayload.lyrics, ltLyricPayload.lyricsType, sorted, undefined, ltLyricPayload.lyricsSource);
       }
       AppShared.showToast(tr('已套用逐行時間軸'));
       closeLyricsTimeline();

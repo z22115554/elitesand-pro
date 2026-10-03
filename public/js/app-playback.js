@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const { formatTime, safeHttpUrl, escapeHtml } = SharedUtils;
+  const { formatTime, safeHttpUrl } = SharedUtils;
   const { dom } = AppShared;
   const state = AppShared.state;
   const t = (key, vars) => window.I18n ? window.I18n.t(key, vars) : key;
@@ -888,11 +888,7 @@
       }
     }
 
-    if (track.lyrics) {
-      AppShared.renderLyricsPreview(track.lyrics);
-    } else {
-      dom.lyricsPreview.innerHTML = '<div class="lyric-preview-empty">此歌曲無歌詞</div>';
-    }
+    AppShared.renderLyricsPreview(track.lyrics);
 
     // 帶上 autoplay：伺服器據此決定 isPlaying 與「是否記入已唱歌單」（待命載入不記錄）
     if (notifyServer) SocketClient.send('play:track', { ...track, autoplay });
@@ -930,7 +926,7 @@
     updateMiniPlayerInfo('尚未播放', '', null);
     dom.albumArt.style.backgroundImage = '';
     dom.albumArt.classList.add('empty');
-    dom.lyricsPreview.innerHTML = `<div class="lyric-preview-empty">${escapeHtml(t('prompter.noLyrics'))}</div>`;
+    AppShared.renderLyricsPreview(null);
     currentOffsetMs = 0;
     updateOffsetDisplay();
   }

@@ -86,8 +86,6 @@
   // ─── 狀態 ───
   let isPlaying = false;
   let isEmergencyHidden = false;
-  let currentStyle = 'cute';
-  let currentMode = 'original';
   let playlist = [];
   let currentTrackIndex = -1;
   let currentTrackId = null;
@@ -676,7 +674,6 @@
     btn.addEventListener('click', () => {
       if (lyricSettings.template !== 'classic') return;
       const style = btn.dataset.style;
-      currentStyle = style;
 
       document.querySelectorAll('.ctrl-style-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
@@ -692,7 +689,6 @@
   document.querySelectorAll('.ctrl-mode-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.mode;
-      currentMode = mode;
 
       document.querySelectorAll('.ctrl-mode-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
@@ -786,7 +782,6 @@
 
   // 風格切換同步
   SocketClient.on('style:change', (style) => {
-    currentStyle = style;
     document.querySelectorAll('.ctrl-style-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.style === style);
     });
@@ -794,7 +789,6 @@
 
   // 羅馬拼音模式同步
   SocketClient.on('romanization:mode', (mode) => {
-    currentMode = mode;
     document.querySelectorAll('.ctrl-mode-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.mode === mode);
     });
@@ -830,7 +824,6 @@
 
     // 風格
     if (state.style) {
-      currentStyle = state.style;
       document.querySelectorAll('.ctrl-style-btn').forEach((b) => {
         b.classList.toggle('active', b.dataset.style === state.style);
       });
@@ -838,7 +831,6 @@
 
     // 羅馬模式
     if (state.romanizationMode) {
-      currentMode = state.romanizationMode;
       document.querySelectorAll('.ctrl-mode-btn').forEach((b) => {
         b.classList.toggle('active', b.dataset.mode === state.romanizationMode);
       });

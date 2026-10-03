@@ -43,7 +43,6 @@ const {
   UPDATE_ZIP_NAME,
   UPDATE_HASH_NAME,
   selectLatestRelease,
-  findInstallerAsset,
   findVerifiedUpdateAssets,
 } = require('./release-client');
 const config = require('../utils/load-config');

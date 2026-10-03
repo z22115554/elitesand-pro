@@ -655,25 +655,34 @@ function createElectronShell({
 
   // 開啟：確保隱藏視窗活著；關閉：確保它不存在。啟動時呼叫一次，設定頁的開關切換時
   // 透過 IPC 再呼叫一次（見下方 elitesand:webgpu-engine-toggle），不用重啟整個 App。
+  let webgpuSyncRevision = 0;
   async function syncWebgpuEngineWindow(knownEnabled = null) {
+    const revision = ++webgpuSyncRevision;
     const enabled = knownEnabled === null ? await fetchWebgpuSeparationEnabled() : knownEnabled;
+    // A startup settings request must not resurrect an engine after quit or a
+    // newer explicit toggle. The panel no longer waits for this optional work.
+    if (isQuitting || revision !== webgpuSyncRevision) return false;
     if (enabled) {
       if (!webgpuEngineWindow) {
         const { createWebgpuEngineWindow } = require('./webgpu-engine-window');
         webgpuEngineWindow = createWebgpuEngineWindow({ BrowserWindow, port });
       }
-      await webgpuEngineWindow.start();
+      const output = webgpuEngineWindow;
+      await output.start();
+      if (isQuitting || revision !== webgpuSyncRevision || output !== webgpuEngineWindow) return false;
       webgpuIdleSinceMs = Date.now();
       startWebgpuEngineHealthLoop();
     } else if (webgpuEngineWindow) {
       stopWebgpuEngineHealthLoop();
-      await webgpuEngineWindow.stop();
+      const output = webgpuEngineWindow;
       webgpuEngineWindow = null;
+      await output.stop();
     }
     return enabled;
   }
 
   async function stopWebgpuEngineWindow() {
+    webgpuSyncRevision += 1;
     stopWebgpuEngineHealthLoop();
     const output = webgpuEngineWindow;
     webgpuEngineWindow = null;
@@ -1600,11 +1609,11 @@ function createElectronShell({
       showPortableDataMigrationNotice();
       createTray();
       await startExperimentalSpoutDisplayOutput();
-      // 失敗絕不能擋住主程式啟動——這是實驗性附加功能，不是核心播放/OBS 路徑。
-      try { await syncWebgpuEngineWindow(); } catch (error) {
-        console.error?.('[WebGPU Engine] 啟動時同步失敗（不影響主程式）:', error.message);
-      }
       await createWindow();
+      // Optional engine settings/loadURL must not delay the usable panel.
+      void syncWebgpuEngineWindow().catch((error) => {
+        console.error?.('[WebGPU Engine] 啟動時同步失敗（不影響主程式）:', error.message);
+      });
       if (autoQuitAfterReadyMs > 0) setTimeout(() => app.quit(), autoQuitAfterReadyMs).unref?.();
       return { started: true, ...server, updateSession };
     } catch (error) {

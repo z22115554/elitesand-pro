@@ -11300,43 +11300,47 @@ test('Electron P1 shell keeps runtime data isolated and locks down the renderer'
   eq(runtimePaths.dataDir, path.join(path.resolve(runtimeRoot), 'data'));
   eq(runtimePaths.downloadsDir, path.join(path.resolve(runtimeRoot), 'downloads'));
   eq(runtimePaths.logsDir, path.join(path.resolve(runtimeRoot), 'logs'));
+  // Use native absolute fixtures: a Windows drive literal is relative on Linux.
+  const installDir = path.resolve(runtimeRoot, 'installed app');
+  const externalMediaDir = path.resolve(runtimeRoot, 'external music', 'Elitesand Pro Media');
+  const missingMediaDir = path.resolve(runtimeRoot, 'missing music', 'Elitesand Pro Media');
   const freshMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
     isPackaged: true,
-    executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
+    executablePath: path.join(installDir, 'Elitesand Pro.exe'),
     fsImpl: { readdirSync: () => [], readFileSync: () => { throw new Error('no config'); } },
   });
   eq(freshMedia.mode, 'install-default');
-  eq(freshMedia.downloadsDir, path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro Media'));
+  eq(freshMedia.downloadsDir, path.join(installDir, 'Elitesand Pro Media'));
   const legacyMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
     isPackaged: true,
-    executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
+    executablePath: path.join(installDir, 'Elitesand Pro.exe'),
     fsImpl: { readdirSync: () => ['existing-song.mp3'], readFileSync: () => { throw new Error('no config'); } },
   });
   eq(legacyMedia.mode, 'legacy-migration-required');
   eq(legacyMedia.downloadsDir, path.join(path.resolve(runtimeRoot), 'downloads'));
   const configuredMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
     isPackaged: true,
-    executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
-    fsImpl: { existsSync: () => true, readdirSync: () => { throw new Error('must not inspect legacy'); }, readFileSync: () => JSON.stringify({ mediaDir: path.join('E:', 'Music', 'Elitesand Pro Media') }) },
+    executablePath: path.join(installDir, 'Elitesand Pro.exe'),
+    fsImpl: { existsSync: () => true, readdirSync: () => { throw new Error('must not inspect legacy'); }, readFileSync: () => JSON.stringify({ mediaDir: externalMediaDir }) },
   });
   eq(configuredMedia.mode, 'configured');
-  eq(configuredMedia.downloadsDir, path.join('E:', 'Music', 'Elitesand Pro Media'));
+  eq(configuredMedia.downloadsDir, externalMediaDir);
   const configuredDevelopmentMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
     isPackaged: false,
     fsImpl: {
       existsSync: () => true,
-      readFileSync: () => JSON.stringify({ mediaDir: path.join('E:', 'Music', 'Elitesand Pro Media') }),
+      readFileSync: () => JSON.stringify({ mediaDir: externalMediaDir }),
     },
   });
   eq(configuredDevelopmentMedia.mode, 'configured', 'development Electron must respect a completed media migration');
-  eq(configuredDevelopmentMedia.downloadsDir, path.join('E:', 'Music', 'Elitesand Pro Media'));
+  eq(configuredDevelopmentMedia.downloadsDir, externalMediaDir);
   const staleConfiguredMedia = electronShell.resolveMediaRuntime(runtimeRoot, {
     isPackaged: true,
-    executablePath: path.join('D:', 'Apps', 'Elitesand Pro', 'Elitesand Pro.exe'),
+    executablePath: path.join(installDir, 'Elitesand Pro.exe'),
     fsImpl: {
       existsSync: () => false,
       readdirSync: () => ['existing-song.mp3'],
-      readFileSync: () => JSON.stringify({ mediaDir: path.join('E:', 'Missing', 'Elitesand Pro Media') }),
+      readFileSync: () => JSON.stringify({ mediaDir: missingMediaDir }),
     },
   });
   eq(staleConfiguredMedia.mode, 'legacy-migration-required', 'stale media config must fall back to a usable legacy source');

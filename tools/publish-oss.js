@@ -18,7 +18,8 @@
  *
  *   把 main 上「還沒同步過」的 commit 一個一個重放到公開倉，訊息與作者日期照搬，
  *   commit 尾巴加一行 `Source: <sha>` 當同步位置的記號。下次執行時讀公開倉最新
- *   commit 的這行就知道從哪接下去——不需要額外的狀態檔。
+ *   first-parent 歷史裡最近的這行就知道從哪接下去——不需要額外的狀態檔。
+ *   既有公開倉若沒有記號，須以 --from <已核對的私人 commit> 指定起點。
  *
  *   注意：這不是 git push 鏡像。公開倉的樹是過濾過的（沒有 cloudflare/、
  *   config.js…），每個 commit 的 tree 都不同，hash 必然不同，所以只能重放。
@@ -81,7 +82,7 @@ function isForbiddenMarkdown(rel) {
 }
 
 function parseArgs(argv) {
-  const args = { target: null, dryRun: false, commit: false, sync: false, branch: 'main' };
+  const args = { target: null, dryRun: false, commit: false, sync: false, branch: 'main', from: null };
   for (let i = 2; i < argv.length; i += 1) {
     const v = argv[i];
     if (v === '--target') args.target = argv[++i];
@@ -89,6 +90,7 @@ function parseArgs(argv) {
     else if (v === '--commit') args.commit = true;
     else if (v === '--sync') args.sync = true;
     else if (v === '--branch') args.branch = argv[++i];
+    else if (v === '--from') args.from = argv[++i];
     else throw new Error(`Unknown argument: ${v}`);
   }
   if (!args.target) throw new Error('Usage: node tools/publish-oss.js --target <公開倉路徑> [--sync|--commit] [--dry-run] [--branch main]');
@@ -101,10 +103,10 @@ function git(cwd, gitArgs, opts = {}) {
   return execFileSync('git', ['-C', cwd, ...gitArgs], { encoding: 'utf8', ...opts });
 }
 
-/** 讀公開倉最新 commit 訊息裡的 `Source: <sha>`，作為上次同步到哪裡的記號。 */
+/** 找最近的同步記號；公開倉後續的註記 commit 不應抹掉同步位置。 */
 function lastSyncedSha(target) {
   try {
-    const msg = git(target, ['log', '-1', '--format=%B'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const msg = git(target, ['log', '--first-parent', '--format=%B%x00'], { stdio: ['ignore', 'pipe', 'ignore'] });
     const m = msg.match(new RegExp('^' + SOURCE_TRAILER + '([0-9a-f]{7,40})\\s*$', 'm'));
     return m ? m[1] : null;
   } catch (_) {
@@ -124,13 +126,27 @@ function filesAtCommit(sha) {
 }
 
 function syncMode(args, target) {
-  const branch = args.branch;
-  const from = lastSyncedSha(target);
+  const branch = git(ROOT, ['rev-parse', '--verify', '--end-of-options', `${args.branch}^{commit}`]).trim();
+  const marker = args.from || lastSyncedSha(target);
+  const from = marker ? git(ROOT, ['rev-parse', '--verify', '--end-of-options', `${marker}^{commit}`]).trim() : null;
+  const targetIsRepo = fs.existsSync(path.join(target, '.git'));
+  if (!targetIsRepo && fs.existsSync(target) && fs.readdirSync(target).length) {
+    throw new Error('同步目標不是 Git 倉且不是空目錄；請先保存既有檔案。');
+  }
+  const targetHasHistory = targetIsRepo && !!git(target, ['rev-list', '--all', '--max-count=1']).trim();
+  if (!from && targetHasHistory) {
+    throw new Error('公開倉已有歷史但沒有 Source 同步記號；請先核對兩邊檔案，再用 --from <已核對的私人 commit> 指定起點，避免從頭重放。');
+  }
+  if (from) git(ROOT, ['merge-base', '--is-ancestor', from, branch]);
+  if (targetIsRepo && git(target, ['status', '--porcelain']).trim()) {
+    throw new Error('公開倉有未提交的變更；請先保存變更，避免同步覆蓋工作目錄。');
+  }
   const range = from ? `${from}..${branch}` : branch;
-  const shas = git(ROOT, ['rev-list', '--reverse', '--no-merges', range], { stdio: ['ignore', 'pipe', 'ignore'] })
+  // Replay the mainline tree, including merge resolutions, without replaying side branches.
+  const shas = git(ROOT, ['rev-list', '--reverse', '--first-parent', range], { stdio: ['ignore', 'pipe', 'ignore'] })
     .split('\n').map((s) => s.trim()).filter(Boolean);
 
-  console.log(`來源分支 : ${branch}`);
+  console.log(`來源分支 : ${args.branch}`);
   console.log(`上次同步 : ${from || '(公開倉是空的，從頭開始)'}`);
   console.log(`待重放   : ${shas.length} 個 commit`);
   if (!shas.length) { console.log('\n已經是最新的，沒事可做。'); return; }
@@ -143,6 +159,7 @@ function syncMode(args, target) {
 
   if (args.dryRun) { console.log('\n--dry-run：沒有動任何東西。'); return; }
 
+  if (!targetIsRepo) git(target, ['init', '-b', 'main']);
   let replayed = 0;
   for (const sha of shas) {
     const files = filesAtCommit(sha);
@@ -275,4 +292,5 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+module.exports = { lastSyncedSha, parseArgs };
