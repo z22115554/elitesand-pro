@@ -468,7 +468,7 @@
     if (stReady && typeof SoundTouchEngine !== 'undefined') {
       const wf = (separationActive && vocalsSTEngine) ? sepSharedFrame(0.05) : undefined;
       SoundTouchEngine.seek(target, wf);
-      if (separationActive && vocalsSTEngine) { vocalsSTEngine.seek(target, wf); setTimeout(() => _syncDiagMark('跳轉後'), 200); }
+      if (separationActive && vocalsSTEngine) vocalsSTEngine.seek(target, wf);
     }
     const applyAudioSeek = () => {
       if (!Number.isFinite(audioPlayer.duration) || audioPlayer.duration <= 0) return;
@@ -557,83 +557,8 @@
     return Number.isFinite(f) ? f : undefined;
   }
 
-  // ─── SYNCDIAG（暫時性，2026-09-03；確認問題後連同 sync-diag.js 一起整批移除）───
-  // 追一個「開發機重現不出、只在使用者直播時出現」的分離播放人聲/伴奏延遲。
-  //   trueΔ = 兩軌 sample 級真差（getSyncSample 的 position−frame×rate）；>0 = 人聲超前
-  //   舊 Δ（getTime 相減）含 ±23ms 量化抖動，一併留著對照。
-  //   [mark] 標使用者動作、stall 是 worklet 累計的音訊執行緒卡頓。
-  // 詳細環境蒐集在 window.SyncDiag（sync-diag.js）。
-  let _syncDiagLastLogMs = 0, _syncDiagTrackStartMs = 0;
-  let _syncDiagFirstTrue = null, _syncDiagMinTrue = Infinity, _syncDiagMaxTrue = -Infinity;
-  function _syncDiagAvailable() {
-    return separationActive && vocalsSTEngine && typeof SoundTouchEngine !== 'undefined';
-  }
-  // sample 級真 Δ（ms）：不受 23ms 回報抖動影響。取不到時回 null。
-  function _trueDeltaMs() {
-    try {
-      if (!vocalsSTEngine || typeof SoundTouchEngine === 'undefined' || !SoundTouchEngine.getSyncSample) return null;
-      const a = SoundTouchEngine.getSyncSample();
-      const v = vocalsSTEngine.getSyncSample();
-      const sr = (stCtx && stCtx.sampleRate) ? stCtx.sampleRate : 48000;
-      const d = (v.position - v.frame * v.rate) - (a.position - a.frame * a.rate);
-      return d / sr * 1000;
-    } catch (e) { return null; }
-  }
-  function _syncDiagStalls() {
-    try {
-      const a = SoundTouchEngine.getStallStats ? SoundTouchEngine.getStallStats() : { count: 0, maxGapFrames: 0 };
-      const v = (vocalsSTEngine && vocalsSTEngine.getStallStats) ? vocalsSTEngine.getStallStats() : { count: 0, maxGapFrames: 0 };
-      return `stall 伴=${a.count}/${a.maxGapFrames} 人=${v.count}/${v.maxGapFrames}`;
-    } catch (e) { return 'stall ?'; }
-  }
-  function _syncDiagReset(tag) {
-    _syncDiagLastLogMs = 0;
-    _syncDiagTrackStartMs = Date.now();
-    _syncDiagFirstTrue = null; _syncDiagMinTrue = Infinity; _syncDiagMaxTrue = -Infinity;
-    if (typeof SyncDiag === 'undefined') return;
-    try { SyncDiag.start(stCtx); } catch (e) { /* 靜默 */ }
-    if (!tag) return;
-    const dm = (typeof SoundTouchEngine !== 'undefined') ? SoundTouchEngine.getDuration() : 0;
-    const dv = vocalsSTEngine ? vocalsSTEngine.getDuration() : 0;
-    SyncDiag.line(`[SyncDiag] ══ ${tag} ══ 伴奏長度=${dm.toFixed(3)}s 人聲長度=${dv.toFixed(3)}s 檔案差=${((dv - dm) * 1000).toFixed(0)}ms`);
-    const cur = state.playlist[state.currentTrackIndex] || {};
-    try { SyncDiag.trackProbe(cur.instrumentalFile, cur.vocalsFile, cur.filename, tag); } catch (e) { /* 靜默 */ }
-  }
-  function _syncDiagMark(label) {
-    if (!_syncDiagAvailable() || typeof SyncDiag === 'undefined') return;
-    const td = _trueDeltaMs();
-    const dv = (vocalsSTEngine.getTime() - SoundTouchEngine.getTime()) * 1000;
-    const el = (Date.now() - _syncDiagTrackStartMs) / 1000;
-    SyncDiag.event(label, `t=${el.toFixed(0)}s trueΔ=${td == null ? '?' : (td >= 0 ? '+' : '') + td.toFixed(1)}ms Δ=${dv >= 0 ? '+' : ''}${dv.toFixed(0)}ms ${_syncDiagStalls()}`);
-  }
-  function _syncDiagTick(masterT) {
-    if (!_syncDiagAvailable() || typeof SyncDiag === 'undefined') return;
-    const now = Date.now();
-    if (now - _syncDiagLastLogMs < 3000) return;
-    _syncDiagLastLogMs = now;
-    const vt = vocalsSTEngine.getTime();
-    const vp = vocalsSTEngine.isPlaying();
-    const delta = (vt - masterT) * 1000;                 // 舊：getTime 相減（抖）
-    const td = _trueDeltaMs();                            // 新：sample 級真差
-    if (vp && td != null) {
-      if (_syncDiagFirstTrue === null) _syncDiagFirstTrue = td;
-      if (td < _syncDiagMinTrue) _syncDiagMinTrue = td;
-      if (td > _syncDiagMaxTrue) _syncDiagMaxTrue = td;
-    }
-    const el = (now - _syncDiagTrackStartMs) / 1000;
-    const since = (_syncDiagFirstTrue === null || td == null) ? 0 : td - _syncDiagFirstTrue;
-    const range = (_syncDiagMinTrue === Infinity) ? '—' : `[${_syncDiagMinTrue.toFixed(1)},${_syncDiagMaxTrue.toFixed(1)}]`;
-    SyncDiag.tick(
-      `[SyncDiag] t=${el.toFixed(0)}s 伴奏=${masterT.toFixed(2)}s trueΔ=${td == null ? '?' : (td >= 0 ? '+' : '') + td.toFixed(1)}ms ` +
-      `起點以來=${since >= 0 ? '+' : ''}${since.toFixed(1)}ms 區間=${range}ms Δ舊=${delta >= 0 ? '+' : ''}${delta.toFixed(0)}ms ${_syncDiagStalls()}` +
-      (vp ? '' : ' ⚠人聲引擎沒在播'),
-      stCtx
-    );
-  }
-
   // SoundTouch 播放時的時間回呼：更新進度條 + 廣播 lyrics:sync（取代 audioPlayer 的 timeupdate）
   function stOnTime(t) {
-    _syncDiagTick(t);
     const dur = SoundTouchEngine.getDuration() || 0;
     if (!dur) return;
     setTotalTime(formatTime(dur));
@@ -688,7 +613,6 @@
       if (vocalsSTEngine) {
         vocalsSTEngine.setPitch(currentPitchShift, wf);
         vocalsSTEngine.setTempo(currentPlaybackRate, wf);
-        setTimeout(() => _syncDiagMark(`變調${currentPitchShift}/變速${currentPlaybackRate.toFixed(2)}`), 200);
       }
     }
   }
@@ -843,7 +767,6 @@
                 vocalsSTEngine.setPitch(currentPitchShift);
                 vocalsSTEngine.setTempo(currentPlaybackRate);
                 vocalsSTEngine.play(startTime, wf);
-                _syncDiagReset(`新歌 ${track.title || ''}`);
               }
               isPlaying = true; updatePlayButton();
             } else {
@@ -912,7 +835,6 @@
     if (vocalsSTEngine) { try { vocalsSTEngine.dispose(); } catch (e) {} }
     if (vocalsDelay) { try { vocalsDelay.disconnect(); } catch (e) {} }
     vocalsSTEngine = null; vocalsGain = null; vocalsDelay = null; vocalsLoadPromise = null; // 銷毀後要歸零，否則 ensureVocalsChain() 會早退、下一首分離歌拿到死引擎
-    if (typeof SyncDiag !== 'undefined') { try { SyncDiag.stopEnvPoll(); } catch (e) { /* 靜默 */ } } // SYNCDIAG
     stopDualAudioClickTest();
     // 歌曲結束只釋放歌曲 buffer；雙路模式仍開著時保留 routing/sink，避免下一首重新 cold-start。
     if (!dualAudioModeEnabled) wireDualRouting(false);
@@ -1004,7 +926,6 @@
     if (!shouldPlay) {
       // 兩條鏈都停。只停「當前那條」的話，另一條若因載入競態還在跑，
       // 暫停後 <audio> 的 timeupdate 會讓進度條繼續走、還繼續送 lyrics:sync。
-      _syncDiagMark('暫停前');
       if (useSoundTouch) { try { SoundTouchEngine.pause(); } catch (e) { /* 靜默 */ } }
       if (separationActive && vocalsSTEngine) { try { vocalsSTEngine.pause(); } catch (e) { /* 靜默 */ } }
       audioPlayer.pause();
@@ -1038,7 +959,6 @@
             ? sharedPos
             : (SoundTouchEngine.projectedTimeAt ? SoundTouchEngine.projectedTimeAt(0.06) : SoundTouchEngine.getTime());
           vocalsSTEngine.play(pos, wf);
-          setTimeout(() => _syncDiagMark('續播後'), 200);
         };
         if (vocalsSTEngine.isReady()) { startVocals(); return; }
         if (vocalsLoadPromise) vocalsLoadPromise.then(startVocals);
@@ -1190,7 +1110,7 @@
         {
           const wf = (separationActive && vocalsSTEngine) ? sepSharedFrame(0.05) : undefined;
           SoundTouchEngine.seek(target, wf);
-          if (separationActive && vocalsSTEngine) { vocalsSTEngine.seek(target, wf); setTimeout(() => _syncDiagMark('遙控跳轉後'), 200); }
+          if (separationActive && vocalsSTEngine) vocalsSTEngine.seek(target, wf);
         }
       }
       return;
@@ -1295,10 +1215,7 @@
     if (stActive()) {
       const wf = (separationActive && vocalsSTEngine) ? sepSharedFrame(0.05) : undefined;
       SoundTouchEngine.seek(t, wf);
-      if (separationActive && vocalsSTEngine) {
-        vocalsSTEngine.seek(t, wf);
-        if (finalize) setTimeout(() => _syncDiagMark('拖曳跳轉後'), 200);
-      }
+      if (separationActive && vocalsSTEngine) vocalsSTEngine.seek(t, wf);
     } else {
       audioPlayer.currentTime = t;
     }

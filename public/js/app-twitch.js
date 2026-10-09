@@ -1737,5 +1737,7 @@
     validateReplyEditor();
     updateReplyTestPreview();
   });
-  setInterval(refreshStatus, 10000);
+  // 面板縮小／分頁隱藏時沒人看得到狀態，不必每 10 秒打一次 API；回到前景立刻補一次。
+  setInterval(() => { if (!document.hidden) refreshStatus(); }, 10000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStatus(); });
 })();

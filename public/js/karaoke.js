@@ -757,39 +757,41 @@ const KaraokeEngine = (() => {
     const line = parsedLyrics[currentLineIndex];
     if (!line?.words) return;
 
-    const style = StylePresets.getParams();
     const lineStartTime = line.time;
-    const effects = getActiveEffects();
+    // 「開始時間一過就點亮並保持」而非只在 [start,end) 時間窗內才亮：
+    // 否則兩幀之間若整個跳過某字的時間窗（短字／掉幀／OBS 節流），那個字會永遠不亮。
+    // 已唱過的字本來就該維持高亮直到整行降為歷史，用 >= start 同時修好「跳過漏亮」與「保持」。
+    const started = (el) => {
+      const word = line.words[el.dataset.wordIndex];
+      return !!word && !(timeMs < lineStartTime + word.start);
+    };
 
-    line.words.forEach((word, wordIdx) => {
-      const wordStartTime = lineStartTime + word.start;
-      // 「開始時間一過就點亮並保持」而非只在 [start,end) 時間窗內才亮：
-      // 否則兩幀之間若整個跳過某字的時間窗（短字／掉幀／OBS 節流），那個字會永遠不亮。
-      // 已唱過的字本來就該維持高亮直到整行降為歷史，用 >= start 同時修好「跳過漏亮」與「保持」。
-      if (timeMs < wordStartTime) return;
-
-      const wordChars = activeEl.querySelectorAll(`.text-line .char[data-word-index="${wordIdx}"]`);
-      wordChars.forEach(charEl => {
-        if (charEl.classList.contains('active')) return;
-
-        charEl.classList.add('active');
-
-        for (const effect of effects) {
-          if (effect.onWordActive) {
-            try { effect.onWordActive(charEl, style); } catch (e) { console.warn(`[Karaoke] 效果 ${effect.name} onWordActive 錯誤:`, e); }
-          }
-        }
-      });
-
-      // 雙語 KTV：對應的羅馬拼音字元也標記為 active
-      if (romanizationMode !== 'original') {
-        const phoneticChars = activeEl.querySelectorAll(`.phonetic-line .phonetic-char[data-word-index="${wordIdx}"]`);
-        phoneticChars.forEach(phChar => {
-          if (phChar.classList.contains('active')) return;
-          phChar.classList.add('active');
-        });
+    // 每幀只查「還沒亮」的字一次：舊寫法對每個已開唱的詞各下一次屬性選擇器
+    // （開雙語再加倍），句尾每幀可達數十次 querySelectorAll；整句亮完後這裡是空集合。
+    const pendingChars = activeEl.querySelectorAll('.text-line .char[data-word-index]:not(.active)');
+    let style = null;
+    let effects = null;
+    for (const charEl of pendingChars) {
+      if (!started(charEl)) continue;
+      charEl.classList.add('active');
+      if (!effects) {
+        style = StylePresets.getParams();
+        effects = getActiveEffects();
       }
-    });
+      for (const effect of effects) {
+        if (effect.onWordActive) {
+          try { effect.onWordActive(charEl, style); } catch (e) { console.warn(`[Karaoke] 效果 ${effect.name} onWordActive 錯誤:`, e); }
+        }
+      }
+    }
+
+    // 雙語 KTV：對應的羅馬拼音字元也標記為 active
+    if (romanizationMode !== 'original') {
+      const pendingPhonetic = activeEl.querySelectorAll('.phonetic-line .phonetic-char[data-word-index]:not(.active)');
+      for (const phChar of pendingPhonetic) {
+        if (started(phChar)) phChar.classList.add('active');
+      }
+    }
   }
 
   function runFrameEffects(timeMs) {
@@ -1173,13 +1175,6 @@ const KaraokeEngine = (() => {
       StylePresets: (typeof StylePresets !== 'undefined') ? StylePresets : null,
       kernel: (typeof LyricMotion !== 'undefined') ? LyricMotion : null,
     };
-  }
-
-  /** 通知目前掛載模板設定已更新，讓安全框等純設定 UI 在暫停時也能立即同步。 */
-  function notifyTemplateSettings(settings) {
-    if (activeTemplateObj && activeTemplateObj.onSettings) {
-      try { activeTemplateObj.onSettings(settings, buildTemplateContext()); } catch (e) { console.warn(`[Karaoke] 模板 ${templateId} onSettings 錯誤:`, e); }
-    }
   }
 
   /**

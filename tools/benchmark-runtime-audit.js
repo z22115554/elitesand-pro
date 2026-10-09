@@ -2,7 +2,7 @@
 'use strict';
 // CPU microbenchmark of real state-sync code; excludes disk/network/GPU latency.
 const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict'),{performance}=require('perf_hooks');
-const {loadState,loadDisplay,loadPlaylist}=require('../tests/helpers/runtime-audit-fixtures');
+const {loadState,loadDisplay}=require('../tests/helpers/runtime-audit-fixtures');
 const root=require('path').resolve(__dirname,'..');process.chdir(root);
 const baseline=process.argv[2]||'fb49009ca9a2a70618734150454e5e9fc29fc813';
 const before=cp.execFileSync('git',['show',`${baseline}:server/state/app-state.js`],{encoding:'utf8'});

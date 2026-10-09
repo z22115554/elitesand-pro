@@ -65,7 +65,7 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1119.0",
     "@playwright/test": "^1.62.1",
-    "electron": "^43.1.1",
+    "electron": "^43.7.9",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1"
   },

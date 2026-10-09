@@ -130,10 +130,9 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
    讓內部 position:fixed 的詳細設定彈窗不會被困在 view 容器裡而變窄。 */
 @keyframes view-in { from { opacity: 0; } to { opacity: 1; } }
 .content-col { min-width: 0; }
-/* 橫幅、Now Playing 與本場直播摘要橫跨整列 */
+/* 橫幅與 Now Playing 橫跨整列 */
 .view > #onboard-hint,
-.view > .now-playing-hero,
-.view > #live-session-summary-card { grid-column: 1 / -1; }
+.view > .now-playing-hero { grid-column: 1 / -1; }
 
 /* 設定頁：固定兩欄，每欄 flex column，collapse 展開後推同欄下面的卡片 */
 [data-view="settings"].is-active { grid-template-columns: 1fr 1fr; }
@@ -361,16 +360,8 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 
 /* ═══ Spotify 式 Now Playing ═══ */
 .now-playing-hero { background: linear-gradient(135deg, var(--bg-raised), var(--bg-surface)); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; box-shadow: var(--shadow); }
-.live-session-summary-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: var(--gap); padding: 12px 16px; }
 .live-session-summary-status { margin: 5px 0 0; color: var(--text-dim); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .live-session-summary-status.is-active { color: var(--ok); }
-.session-record-modal .modal-card { max-width: 980px; }
-.session-record-modal .modal-head > div { min-width: 0; }
-.session-record-modal .modal-head .sub { margin-top: 5px; }
-@media (max-width: 760px) {
-  .live-session-summary-card { align-items: flex-start; flex-direction: column; }
-  .live-session-summary-card .btn { width: 100%; }
-}
 .np-top { display: flex; gap: 16px; align-items: center; margin-bottom: 14px; }
 .np-art { width: 96px; height: 96px; border-radius: var(--r-md); background: var(--bg-raised) center/cover no-repeat; flex-shrink: 0; box-shadow: var(--shadow); position: relative; overflow: hidden; }
 .np-art.empty::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 30% 30%, var(--accent-glow), transparent 60%), var(--bg-hover); }

@@ -86,7 +86,6 @@ function invalidate() { capsKey = null; }
 
 function jsRuntimeArgs(c = caps) { return c.jsRuntimes ? [...JS_RUNTIME_ARGS] : []; }
 function commonArgs(c = caps) { return ['--no-config', ...jsRuntimeArgs(c)]; }
-function remoteEjsArgs(c = caps) { return c.remoteComponents ? [...REMOTE_EJS_ARGS] : []; }
 
 /** 舊版 yt-dlp 不認得 --remote-components：把這組參數拿掉，其餘原樣保留。 */
 function stripUnsupported(args, c = caps) {
@@ -114,7 +113,6 @@ module.exports = {
   invalidate,
   jsRuntimeArgs,
   commonArgs,
-  remoteEjsArgs,
   stripUnsupported,
   _parseHelpForTest: parseHelp,
   _resetForTests: resetForTests,

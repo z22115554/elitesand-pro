@@ -412,12 +412,6 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     this._tempo = 1;
     this._interleaved = new Float32Array(128 * 2);
     this._posCounter = 0;
-    // SYNCDIAG（暫時性，2026-09-03）：音訊執行緒卡頓偵測。正常每個 render quantum 之間
-    // currentFrame 只 +128；被 OBS 編碼之類餓到時會一次跳更多。累計次數與最大跳距，搭
-    // position 訊息一起回主執行緒，不另外發訊息（零額外 IPC）。
-    this._lastProcFrame = -1;
-    this._stallCount = 0;
-    this._stallMaxGap = 0;
     // 排程佇列：帶 applyAtFrame 的 play/seek/pitch/tempo 會先進這裡，等音訊執行緒的
     // currentFrame 到點才真的套用。分離播放時兩軌各跑一份本 processor，主執行緒用「同一個
     // applyAtFrame」發給兩邊 → 兩軌保證在同一個 render quantum 生效，不會因訊息到達時機
@@ -511,18 +505,12 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     this._st = null;
     this._posCounter = 0;
     this._pending = [];
-    this._lastProcFrame = -1;   // SYNCDIAG：新歌重新計卡頓
-    this._stallCount = 0;       // SYNCDIAG
-    this._stallMaxGap = 0;      // SYNCDIAG
   }
 
   _postPosition() {
     this.port.postMessage({
       type: 'position',
       position: this._filter ? this._filter.sourcePosition : 0,
-      frame: currentFrame,                 // SYNCDIAG：讓主執行緒能算 sample 級的兩軌真 Δ
-      stallCount: this._stallCount,        // SYNCDIAG
-      stallMaxGap: this._stallMaxGap,      // SYNCDIAG
     });
   }
 
@@ -534,13 +522,6 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
 
     // 先處理排程到點的 play/seek/pitch/tempo（即使目前沒在播也要跑：排程的 'play' 就是靠這裡起播）
     this._drainPending();
-
-    // SYNCDIAG：卡頓偵測（一次減法一次比較，可忽略的成本）
-    if (this._lastProcFrame >= 0 && this._playing) {
-      const gap = currentFrame - this._lastProcFrame;
-      if (gap > 128) { this._stallCount += 1; if (gap > this._stallMaxGap) this._stallMaxGap = gap; }
-    }
-    this._lastProcFrame = currentFrame;
 
     if (!this._ready || !this._playing) {
       left.fill(0); if (output[1]) right.fill(0);

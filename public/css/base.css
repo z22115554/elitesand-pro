@@ -557,7 +557,6 @@ label.btn.btn--label { cursor: pointer; }
 .setlist-template-controls { display: flex; gap: 6px; margin-bottom: 8px; }
 .field.field--inline-spacious-center { display: flex; gap: 14px; align-items: center; }
 .val.val--inline-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.setlist-layout-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .track-edit-hint { margin: 0 0 14px; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
 .btn.btn--track-edit-save { width: 100%; margin-top: 4px; }
 

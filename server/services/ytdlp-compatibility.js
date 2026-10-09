@@ -32,7 +32,6 @@ function probeArgs(caps) {
     '--socket-timeout', '8', '--print', '%(id)s', PROBE_URL,
   ];
 }
-const PROBE_ARGS = probeArgs({ jsRuntimes: false, remoteComponents: false });
 
 let status = { state: 'not-run', ok: null, checkedAt: 0, durationMs: 0, message: '尚未驗證 YouTube 相容性' };
 let inFlight = null;
@@ -100,7 +99,6 @@ module.exports = {
   PROBE_VIDEO_ID,
   PROBE_URL,
   EXPECTED_PROBE_VIDEO_ID,
-  PROBE_ARGS,
   probeArgs,
   getStatus,
   probe,

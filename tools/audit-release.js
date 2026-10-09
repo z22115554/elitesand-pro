@@ -22,6 +22,14 @@ const { execSync } = require('child_process');
 // （參數不跳脫）。這裡沒有任何外來輸入拼進命令，用固定字串最單純。
 const AUDIT_COMMAND = 'npm audit --omit=dev --json';
 
+// electron 只因為 electron-builder 要求才放在 devDependencies，但它就是每個使用者實際
+// 執行的 runtime（Chromium + Node）。--omit=dev 會把它整個略過：2026-10 才發現打包的
+// 43.1.1 帶著四個 sandbox／跨來源讀取 advisory，閘門卻一直是綠的。所以另跑一次完整
+// audit，只挑「會被打包進產品的 dev 套件」併入同一套 fail-closed 判定；electron-builder
+// 等純建置工具的 advisory 不會出貨，不在這裡擋。
+const FULL_AUDIT_COMMAND = 'npm audit --json';
+const SHIPPED_DEV_PACKAGES = new Set(['electron']);
+
 /**
  * 已評估、確認對本專案不成立的 advisory。
  * key 是 GHSA 編號；每一筆都要有 package / why / reviewOn。
@@ -30,10 +38,10 @@ const ACKNOWLEDGED = {
   // 2026-09-13：adm-zip 升到 0.6.1 後 GHSA-vwc7-r8mq-g2x9 不再命中，該筆例外已刪。
 };
 
-function main() {
+function runAudit(command) {
   let raw;
   try {
-    raw = execSync(AUDIT_COMMAND, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+    raw = execSync(command, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
   } catch (error) {
     // 有漏洞時 npm audit 會以非 0 結束，但 stdout 仍是完整 JSON
     raw = error.stdout || '';
@@ -43,18 +51,24 @@ function main() {
     }
   }
 
-  let report;
   try {
-    report = JSON.parse(raw);
+    return JSON.parse(raw);
   } catch (error) {
     console.error('無法解析 npm audit 的 JSON 輸出：', error.message);
     process.exit(1);
   }
+}
+
+function main() {
+  const report = runAudit(AUDIT_COMMAND);
+  const shippedDev = Object.entries(runAudit(FULL_AUDIT_COMMAND).vulnerabilities || {})
+    .filter(([name]) => SHIPPED_DEV_PACKAGES.has(name));
+  const audited = [...Object.entries(report.vulnerabilities || {}), ...shippedDev];
 
   const blocking = [];
   const waived = [];
 
-  for (const [name, vuln] of Object.entries(report.vulnerabilities || {})) {
+  for (const [name, vuln] of audited) {
     const via = Array.isArray(vuln.via) ? vuln.via : [vuln.via];
     for (const item of via) {
       if (!item || typeof item !== 'object' || !item.url) continue; // 字串 = 間接相依，源頭會另外列出

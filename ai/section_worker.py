@@ -26,7 +26,6 @@ inference is ~10s, so this is an acceptable limitation, not a redesign target.
 """
 import ast
 import json
-import math
 import os
 import sys
 import threading

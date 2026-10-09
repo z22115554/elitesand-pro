@@ -1544,6 +1544,9 @@ test('發版稽核只檢查 production dependencies，且預設任何等級風�
   const auditCommand = (gate.match(/const AUDIT_COMMAND = '([^']+)'/) || [])[1] || '';
   ok(/\bnpm audit\b/.test(auditCommand), '閘門必須真的跑 npm audit: ');
   ok(auditCommand.includes('--omit=dev'), '仍必須只檢查 production dependencies: ');
+  // electron 放在 devDependencies，但它是出貨的 runtime：--omit=dev 會漏掉它，必須另外納入
+  ok(/SHIPPED_DEV_PACKAGES = new Set\(\[[^\]]*'electron'/.test(gate), '出貨的 electron runtime 也必須受閘門檢查: ');
+  ok(gate.includes('.filter(([name]) => SHIPPED_DEV_PACKAGES.has(name))'), '完整 audit 只可併入會出貨的 dev 套件: ');
   // 註解裡解釋為什麼不用 --audit-level 是可以的；真正不能出現在實際命令裡
   ok(!/--audit-level/.test(auditCommand), '實際命令不可以用 --audit-level 放寬整個等級: ');
   // fail-closed：不在白名單上的一律擋下
@@ -8683,7 +8686,7 @@ test('R13-1 modal 靜態樣式與錯誤顯示改走 class，不回退 inline sty
   ok(baseCss.includes('.theme-toggle.nav-item { width: 52px; height: 52px; }') && baseCss.includes('.switch-row.switch-row--separated') && baseCss.includes('.btn.btn--wide { width: 100%; }') && baseCss.includes('.dropzone.dropzone--compact'), 'component-qualified CSP classes must retain their old inline-style priority: ');
   ok(baseCss.includes('.field.field--inline-spacious { display: flex; gap: 14px; }') && baseCss.includes('.val.val--fine-detail') && baseCss.includes('img.display-bg-preview') && baseCss.includes('label.btn.btn--label'), 'lyrics settings CSP classes must retain their old static styles: ');
   ok(baseCss.includes('.lan-info-layout { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }') && baseCss.includes('.val.val--status-message') && baseCss.includes('.diagnostic-privacy-hint'), 'general settings CSP classes must retain their old static styles: ');
-  ok(baseCss.includes('#lib-search.input { flex: 1; min-width: 140px; width: auto; }') && baseCss.includes('.setlist-layout-actions') && baseCss.includes('.btn.btn--track-edit-save'), 'library, setlist, and track-edit CSP classes must retain their old static styles: ');
+  ok(baseCss.includes('#lib-search.input { flex: 1; min-width: 140px; width: auto; }') && baseCss.includes('.btn.btn--track-edit-save'), 'library, setlist, and track-edit CSP classes must retain their old static styles: ');
   for (const rawStyle of ['style="margin-left:6px"', 'style="width:100%"', 'style="margin-top:6px"', 'style="margin-top:10px"', 'style="display:flex;gap:10px"', 'style="margin-top:10px;white-space:pre-line"', 'style="margin-left:8px"', 'style="width:52px;height:52px"', 'style="display:flex;gap:6px"', 'style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px"', 'style="width:100%;margin-bottom:8px"', 'style="margin:0 0 10px;color:var(--text-faint);font-size:11px;line-height:1.6"', 'style="width:100%;margin-top:8px"', 'style="margin-top:12px;padding:16px"', 'style="margin-top:2px"', 'style="color:var(--text-faint);font-size:11px"', 'style="margin-top:8px;color:var(--text-faint);font-size:11px;line-height:1.6"', 'style="display:flex;gap:14px"', 'style="margin-top:6px;color:var(--text-faint);font-size:11px;line-height:1.6"', 'style="margin-top:12px"', 'style="margin-top:4px;color:var(--text-faint);font-size:11px"', 'style="margin:12px 0"', 'style="max-width:100%;max-height:120px;border-radius:8px;display:block;margin-bottom:8px"', 'style="cursor:pointer"', 'style="margin:6px 0 0;color:var(--text-faint);font-size:12px"', 'style="width:110px"', 'style="margin-top:4px"', 'style="width:100%;margin-top:10px"', 'style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"', 'style="border-radius:8px;background:#fff;padding:6px"', 'style="flex:1;min-width:180px"', 'style="color:var(--danger)"', 'style="margin:0 0 10px"', 'style="color:var(--accent,#7c9cff)"', 'style="margin:10px 0 0;white-space:pre-line"', 'style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"', 'style="margin:-4px 0 10px;color:var(--text-faint);font-size:12px;line-height:1.6"', 'style="display:flex;gap:8px;margin-top:10px"', 'style="margin:10px 0 0;color:var(--text-faint);font-size:11px;line-height:1.6"', 'style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px"', 'style="flex:1;min-width:140px;width:auto"', 'style="width:auto;flex:0 0 auto"', 'style="text-align:center;padding:24px 0;color:var(--text-faint)"', 'style="margin-top:10px;font-size:12px;color:var(--text-faint)"', 'style="min-height:60px"', 'style="margin-bottom:14px"', 'style="display:flex;align-items:center;justify-content:space-between;margin:0 0 8px"', 'style="margin:0;font-size:11px;color:var(--text-faint)"', 'style="display:flex;align-items:center;gap:6px;margin-bottom:2px"', 'style="flex:1;min-width:0"', 'style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px"', 'style="margin-top:14px;width:100%"', 'style="display:flex;gap:6px;margin-bottom:8px"', 'style="display:flex;gap:14px;align-items:center"', 'style="display:flex;align-items:center;gap:6px;font-size:12px"', 'style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap"', 'style="display:flex;gap:6px;flex-shrink:0"', 'style="margin:0 0 14px;color:var(--text-faint);font-size:12px;line-height:1.6"', 'style="width:100%;margin-top:4px"']) {
     ok(!panelMarkup.includes(rawStyle), `CSP static migration must not restore ${rawStyle}: `);
   }
@@ -11189,7 +11192,7 @@ test('Setlist keeps template and quick controls in two columns beside the previe
   ok(panelCss.includes('flex-direction:row;'));
   ok(panelCss.includes('border:0;'));
   ok(panelCss.includes('.field--setlist-sections .check-inline .check-text { order:1;'));
-  ok(panelCss.includes('.live-session-summary-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: var(--gap);'));
+  ok(panelCss.includes('.live-session-summary-status { margin: 5px 0 0;'));
 });
 
 test('Lyrics and setlist advanced settings stay modal with entries below right previews', () => {
@@ -11811,7 +11814,7 @@ test('Electron P1 smoke starts with a disposable Electron user-data directory', 
   const smoke = fs.readFileSync(path.join(__dirname, '..', 'tools', 'smoke-electron-shell.js'), 'utf8');
   eq(packageJson.scripts.shell, 'electron electron/main.js');
   eq(packageJson.scripts['smoke:electron'], 'node tools/smoke-electron-shell.js');
-  eq(packageJson.devDependencies.electron, '^43.1.1');
+  eq(packageJson.devDependencies.electron, '^43.7.9');
   ok(smoke.includes('ELITESAND_SHELL_USER_DATA_DIR'));
   ok(smoke.includes('ELITESAND_SHELL_HEADLESS'));
   ['STDIO_STRESS_REQUESTS', 'MIN_STRESS_LOG_BYTES', '/api/twitch/status', '/api/announcements?force=1', 'healthAfterStress']

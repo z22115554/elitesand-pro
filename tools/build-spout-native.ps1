@@ -11,7 +11,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $expectedSpoutCommit = 'f49e2f469f8cb25f559a6eaa61a3f5b8173fc100'
 
 if (-not $ElectronHeadersRoot) {
-  $ElectronHeadersRoot = Join-Path $projectRoot '.local\electron-headers\43.1.1'
+  $ElectronHeadersRoot = Join-Path $projectRoot '.local\electron-headers\43.7.9'
 }
 if (-not $BuildRoot) {
   $BuildRoot = Join-Path $projectRoot '.local\spout-output-build'

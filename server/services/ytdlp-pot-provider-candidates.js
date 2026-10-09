@@ -23,16 +23,6 @@ const PREFERRED_POT_PROVIDER = Object.freeze({
   status: 'preselected',
 });
 
-const POT_PROVIDER_CANDIDATES = Object.freeze([
-  PREFERRED_POT_PROVIDER,
-]);
-
-function getPreferredPotProvider() {
-  return { ...PREFERRED_POT_PROVIDER };
-}
-
 module.exports = {
   PREFERRED_POT_PROVIDER,
-  POT_PROVIDER_CANDIDATES,
-  getPreferredPotProvider,
 };

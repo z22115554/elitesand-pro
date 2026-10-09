@@ -255,7 +255,6 @@ function instrumentGpuMemory() {
 // ORT 內部自己再建一顆、device.lost 監聽器又建第三顆——在雙 GPU（例如 AMD
 // 內顯＋Intel、或獨顯＋內顯）機器上，這三顆可能不是同一張卡，於是 vendor 記錯、
 // device.lost 監聽到一顆跟推論無關的裝置。現在只建一次，全程共用。
-let gpuAdapter = null;
 let gpuDevice = null;
 let gpuInfo = null; // { vendor, architecture, shaderF16 }
 
@@ -277,7 +276,6 @@ async function acquireGpu() {
   const device = await adapter.requestDevice({ requiredFeatures: hasF16 ? ['shader-f16'] : [] }).catch(() => null);
   if (!device) return null;
   const raw = adapter.info || {};
-  gpuAdapter = adapter;
   gpuDevice = device;
   gpuInfo = { vendor: classifyVendor(raw.vendor), architecture: raw.architecture || '', shaderF16: hasF16 };
   // 這顆、也只有這顆，才是 ORT 待會拿去跑推論的裝置——把 device.lost 掛在它身上。
@@ -294,7 +292,6 @@ async function getAdapterInfo() {
 function handleDeviceLost(info) {
   // reason 'destroyed' 是正常 teardown，不是故障：清掉本地引用就好，不回報。
   const destroyed = info && info.reason === 'destroyed';
-  gpuAdapter = null;
   gpuDevice = null;
   gpuInfo = null;
   session = null;       // 裝置已死，下一個 job 要重建 session

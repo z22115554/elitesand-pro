@@ -43,35 +43,8 @@ function msToKrcTime(ms) {
   return msToLrcTime(ms);
 }
 
-/**
- * 毫秒 → SRT 時間戳 HH:MM:SS,mmm
- * @param {number} ms - 毫秒
- * @returns {string}
- */
-function msToSrtTime(ms) {
-  const hours = Math.floor(ms / 3600000);
-  const minutes = Math.floor((ms % 3600000) / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  const milliseconds = ms % 1000;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
-}
-
-/**
- * 秒數 → 顯示用時間字串 m:ss
- * @param {number} seconds
- * @returns {string}
- */
-function formatTime(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${String(secs).padStart(2, '0')}`;
-}
-
 module.exports = {
   parseTimestampToMs,
   msToLrcTime,
   msToKrcTime,
-  msToSrtTime,
-  formatTime,
 };

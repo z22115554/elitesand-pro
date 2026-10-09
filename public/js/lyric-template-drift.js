@@ -116,7 +116,6 @@
     if (!line || !line.text) return;
 
     refreshColors();
-    const tempo = LyricMotion.lineTempo(lines, lineIndex);
 
     const words = LyricMotion.ensureWordTimings(line, lines, lineIndex);
     const chars = Array.from(line.text);

@@ -242,7 +242,9 @@
     smoothClockMs += dt * currentPlaybackRate;
     const diff = target - smoothClockMs;
     if (Math.abs(diff) > 300) smoothClockMs = target;
-    else smoothClockMs += diff * 0.06;
+    // 6% 是以 60fps 一幀（16.67ms）為基準；按實際 dt 換算，OBS 30fps 來源與高更新率
+    // 螢幕的收斂時間才一致（固定每幀 6% 會讓 30fps 慢一倍、144Hz 快 2.4 倍）。
+    else smoothClockMs += diff * (1 - Math.pow(1 - 0.06, dt / (1000 / 60)));
     return smoothClockMs;
   }
 
