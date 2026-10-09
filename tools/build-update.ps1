@@ -3,7 +3,11 @@
   [string]$BaselineManifest = "",
   [string]$BaselineRoot = "",
   [string]$SigningKeyPath = "",
-  [switch]$SkipBaselineCheck
+  [switch]$SkipBaselineCheck,
+  # One package for every installed version whose Electron/updater runtime matches
+  # this build (manifest schema 3, no fromVersion). The publisher decides which
+  # installed versions receive it; no previous baseline is needed to build it.
+  [switch]$Shared
 )
 
 $ErrorActionPreference = "Stop"
@@ -118,6 +122,12 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
   $OutputRoot = Join-Path $Root "dist\releases\v$Version\update"
 }
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
+if ($Shared -and $SkipBaselineCheck) {
+  throw "-Shared builds a publishable package; it cannot be combined with -SkipBaselineCheck."
+}
+if ($Shared -and (-not [string]::IsNullOrWhiteSpace($BaselineManifest) -or -not [string]::IsNullOrWhiteSpace($BaselineRoot))) {
+  throw "-Shared builds one package for every compatible installed version; do not pass -BaselineManifest or -BaselineRoot."
+}
 $BuildRoot = Join-Path $Root "dist\.incremental-build\v$Version"
 $Stage = Join-Path $OutputRoot ".update-stage"
 $ZipPath = Join-Path $OutputRoot "update.zip"
@@ -159,7 +169,7 @@ foreach ($target in @($Stage, $ZipPath, $HashPath, $GeneratedBaselineManifest)) 
 Remove-TreeWithRetry -Path $BuildRoot
 
 $Baseline = $null
-if (-not $SkipBaselineCheck) {
+if (-not $SkipBaselineCheck -and -not $Shared) {
   if ([string]::IsNullOrWhiteSpace($BaselineManifest)) {
     if ([string]::IsNullOrWhiteSpace($BaselineRoot)) {
       throw "Secure Electron updates require -BaselineManifest from the previous Installer build (preferred), or -BaselineRoot pointing to its win-unpacked root."
@@ -211,7 +221,11 @@ $NewBaseline = Read-BaselineManifest -Path $NewBaselinePath
 $FromVersion = '0.0.0'
 $BaselineFingerprint = [string]$NewBaseline.immutableFingerprint
 $BaselineImmutableFiles = @($NewBaseline.immutableFiles)
-if (-not $SkipBaselineCheck) {
+if ($Shared) {
+  # The compatibility requirement is this build's own runtime. updater-v2 checks it
+  # file by file against the installation before it touches anything.
+  $FromVersion = ''
+} elseif (-not $SkipBaselineCheck) {
   $FromVersion = [string]$Baseline.version
   $BaselineFingerprint = [string]$Baseline.immutableFingerprint
   $BaselineImmutableFiles = @($Baseline.immutableFiles)
@@ -265,6 +279,10 @@ $Manifest = [ordered]@{
   baselineRuntimeFingerprint = $BaselineFingerprint
   baselineImmutableFiles = @($BaselineImmutableFiles)
   files = @($ManifestFiles)
+}
+if ($Shared) {
+  $Manifest.schemaVersion = 3
+  $Manifest.Remove('fromVersion')
 }
 $ManifestPath = Join-Path $Stage 'update-manifest.json'
 [System.IO.File]::WriteAllText(
@@ -327,7 +345,7 @@ Remove-TreeWithRetry -Path $BuildRoot -BestEffort
 if (Test-Path -LiteralPath $GeneratedBaselineManifest) { Remove-Item -LiteralPath $GeneratedBaselineManifest -Force }
 
 Write-Host "Secure Electron incremental update package ready:"
-Write-Host "  from : $FromVersion"
+Write-Host "  from : $(if ($Shared) { 'every installed version with the same runtime (shared)' } else { $FromVersion })"
 Write-Host "  to   : $Version"
 Write-Host "  zip  : $ZipPath"
 Write-Host "  sha  : $HashPath"

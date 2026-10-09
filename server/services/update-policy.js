@@ -98,11 +98,16 @@ function artifactOriginForChannel(channel) {
   return channel === 'beta' ? BETA_UPDATE_ARTIFACT_ORIGIN : UPDATE_ARTIFACT_ORIGIN;
 }
 
+// 兩種合法路徑：
+// - 舊格式（只給單一來源版本）：/artifacts/<channel>/<fromVersion>/<targetVersion>/update.zip
+// - 共用包（所有相容舊版共用一包）：/artifacts/<channel>/<targetVersion>/<targetVersion>/update.zip
+//   中間那段本來放來源版本，共用包放目標版本本身；artifact worker 的路徑規則不用改、不必重新部署。
 function isExactIncrementalArtifactUrl(value, plan) {
   const url = parseHttpsUrl(value);
   if (!url || url.origin !== artifactOriginForChannel(plan?.channel) || url.search) return false;
-  const expectedPath = `/artifacts/${plan.channel}/${plan.fromVersion}/${plan.targetVersion}/update.zip`;
-  return url.pathname === expectedPath;
+  const legacyPath = `/artifacts/${plan.channel}/${plan.fromVersion}/${plan.targetVersion}/update.zip`;
+  const sharedPath = `/artifacts/${plan.channel}/${plan.targetVersion}/${plan.targetVersion}/update.zip`;
+  return url.pathname === legacyPath || url.pathname === sharedPath;
 }
 
 function isExactInstallerUrl(value, plan) {
@@ -244,8 +249,10 @@ function verifyUpdatePlan(plan, options = {}) {
   const maxFutureMs = Number.isSafeInteger(options.maxFutureMs) ? options.maxFutureMs : MAX_CLOCK_FUTURE_MS;
   const maxLifetimeMs = Number.isSafeInteger(options.maxLifetimeMs) ? options.maxLifetimeMs : MAX_PLAN_LIFETIME_MS;
   if (issuedAtMs > nowMs + maxFutureMs) return { ok: false, reason: 'update plan issuedAt 過於未來' };
-  if (expiresAtMs <= nowMs) return { ok: false, reason: 'update plan 已過期' };
-  if (expiresAtMs <= issuedAtMs || expiresAtMs - issuedAtMs > maxLifetimeMs) return { ok: false, reason: 'update plan 有效期限不合法' };
+  // 過期要等驗完簽章才回報：只有「真的是官方簽的、只是太舊」才標成 expired，
+  // 偽造或竄改的計畫一律走下面的驗章失敗，不能假裝成過期。
+  const expired = expiresAtMs <= nowMs;
+  if (!expired && (expiresAtMs <= issuedAtMs || expiresAtMs - issuedAtMs > maxLifetimeMs)) return { ok: false, reason: 'update plan 有效期限不合法' };
 
   const publicKeys = options.publicKeys || UPDATE_POLICY_PUBLIC_KEYS;
   const publicKeyHex = getUpdatePolicyPublicKey(plan.keyId, publicKeys);
@@ -259,6 +266,8 @@ function verifyUpdatePlan(plan, options = {}) {
   } catch (error) {
     return { ok: false, reason: `update plan Ed25519 驗章失敗：${error.message}` };
   }
+  // 過期的計畫不可寫進 replay guard，否則之後重新簽發的計畫會被當成重放。
+  if (expired) return { ok: false, reason: 'update plan 已過期', code: 'expired' };
 
   const replayError = checkReplay(plan, options.replayGuard);
   if (replayError) return { ok: false, reason: replayError };

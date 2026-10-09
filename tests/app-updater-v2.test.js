@@ -181,6 +181,46 @@ test('wrong fromVersion fails closed to the full Installer after signature verif
   assert.equal(result.needsFull, true);
 });
 
+function makeSharedZip(options = {}) {
+  return makeV2Zip({
+    ...options,
+    mutateManifest(manifest, payload) {
+      manifest.schemaVersion = updater.SHARED_UPDATE_SCHEMA_VERSION;
+      delete manifest.fromVersion;
+      options.mutateManifest?.(manifest, payload);
+    },
+  });
+}
+
+test('shared package (schema 3) applies to any older installed version; compatibility is the runtime baseline, not a version', () => {
+  for (const currentVersion of ['0.9.9', pkg.version]) {
+    const result = inspectTestZip(makeSharedZip(), { currentVersion, expectedVersion: nextPatch(pkg.version) });
+    assert.equal(result.ok, true, currentVersion);
+    assert.equal(result.shared, true);
+    assert.equal(result.fromVersion, currentVersion, '更新 log 記錄實際的目前版本');
+    assert(result.baselineImmutableFiles.some((item) => item.path === 'resources/tools/updater-node.exe'));
+  }
+});
+
+test('shared package still refuses a downgrade, a re-added fromVersion, and an unsigned or tampered manifest', () => {
+  assert.throws(() => inspectTestZip(makeSharedZip({ version: '0.0.1' }), { currentVersion: pkg.version }), /沒有比目前版本新/);
+  assert.throws(() => inspectTestZip(makeSharedZip({
+    mutateManifest(manifest) { manifest.fromVersion = pkg.version; },
+  }), { currentVersion: pkg.version }), /共用更新包不可綁定來源版本/);
+  assert.throws(() => inspectTestZip(makeSharedZip({ skipSignature: true }), { currentVersion: pkg.version }), /官方簽章驗證失敗/);
+  assert.throws(() => inspectTestZip(makeSharedZip({
+    tamperAfterSign(manifest) { manifest.schemaVersion = 2; manifest.fromVersion = pkg.version; },
+  }), { currentVersion: pkg.version }), /官方簽章驗證失敗/, '把共用包改回舊格式也過不了簽章');
+});
+
+test('build-update -Shared builds one schema-3 package without a previous baseline and stays publishable-only', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-update.ps1'), 'utf8');
+  assert(/\[switch\]\$Shared/.test(source));
+  assert(source.includes('-Shared builds a publishable package; it cannot be combined with -SkipBaselineCheck.'));
+  assert(source.includes('if (-not $SkipBaselineCheck -and -not $Shared) {'), '-Shared 不需要上一版的基準檔');
+  assert(/if \(\$Shared\) \{\s+\$Manifest\.schemaVersion = 3\s+\$Manifest\.Remove\('fromVersion'\)/.test(source));
+});
+
 test('installed immutable runtime is verified before handoff', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-baseline-v2-'));
   fs.mkdirSync(path.join(root, 'resources', 'tools'), { recursive: true });

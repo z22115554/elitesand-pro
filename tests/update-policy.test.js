@@ -126,6 +126,22 @@ test('版本、時間、枚舉、hash、size 與 host 全部有明確拒絕條�
   assert.throws(() => policy.signUpdatePlan(badSize, TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /size/);
 });
 
+test('一版一包：計畫可以指向 <目標版>/<目標版> 的共用包，但不能指向別版的共用包或別的路徑', () => {
+  const shared = (url) => unsignedPlan({ artifact: { url, sha256: 'a'.repeat(64), size: 1024 } });
+  const origin = policy.UPDATE_ARTIFACT_ORIGIN;
+  const ok = signedPlan({ artifact: { url: `${origin}/artifacts/stable/1.0.0/1.0.0/update.zip`, sha256: 'a'.repeat(64), size: 1024 } });
+  assert.equal(verify(ok).ok, true, '0.9.9.7 的計畫指向 1.0.0 共用包');
+  for (const url of [
+    `${origin}/artifacts/stable/0.9.9.9/0.9.9.9/update.zip`, // 別版的共用包
+    `${origin}/artifacts/stable/1.0.1/1.0.1/update.zip`, // 比目標新的共用包
+    `${origin}/artifacts/stable/0.9.9.6/1.0.0/update.zip`, // 別的來源版本
+    `${origin}/artifacts/stable/1.0.0/update.zip`, // 少一段
+    `${origin}/artifacts/beta/1.0.0/1.0.0/update.zip`, // 錯頻道
+  ]) {
+    assert.throws(() => policy.signUpdatePlan(shared(url), TEST_PRIVATE_KEY, { keyId: TEST_KEY_ID }), /artifact URL/, url);
+  }
+});
+
 test('stable 與 beta artifact 是雙向隔離：2026-09-05 起沒有自訂網域，兩個頻道共用同一個 workers.dev 來源，隔離改成靠 URL path 一定要含 plan.channel，不是靠不同 host', () => {
   assert.equal(policy.UPDATE_ARTIFACT_ORIGIN, policy.BETA_UPDATE_ARTIFACT_ORIGIN,
     '這個測試的前提：兩個頻道現在確實共用同一個 origin（等之後真的申請到網域、兩者分開，這條斷言會先炸，提醒回來把下面的隔離斷言換回 host 版本）');

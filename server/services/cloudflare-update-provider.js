@@ -140,7 +140,8 @@ function createCloudflareUpdateProvider({
   async function check() {
     // `unavailable` = the provider could not get an answer at all this time
     // (disabled/misconfigured, fingerprinting failed, network/HTTP failure,
-    // malformed response) — the caller should fall back to another source.
+    // malformed response, or an officially signed plan that has merely
+    // expired) — the caller should fall back to another source.
     // `none` = we got a real answer and it was "no update" (204, or a
     // response that fails plan verification, including a security rejection
     // like a bad signature/replay/fingerprint mismatch — those must never be
@@ -181,7 +182,12 @@ function createCloudflareUpdateProvider({
         replayGuard,
         nowMs: nowMs(),
       });
-      return verified.ok ? { kind: 'plan', plan: verified.plan } : { kind: 'none' };
+      if (verified.ok) return { kind: 'plan', plan: verified.plan };
+      // 官方簽章正確、只是過期：發布端一陣子沒發新計畫，不是攻擊。當成「這次問不到答案」，
+      // 讓面板改問 GitHub 提示新版（只顯示、不會自動安裝）。以前這裡回 none，
+      // 發版一週後所有人都會看到「已是最新版本」，直到下一次發版。
+      if (verified.code === 'expired') return { kind: 'unavailable' };
+      return { kind: 'none' };
     } catch (_) {
       // verifyUpdatePlan/replayGuard threw (e.g. a corrupt local replay
       // store) — this is a fail-closed security rejection, same family as a

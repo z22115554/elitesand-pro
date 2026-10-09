@@ -1,25 +1,47 @@
 #!/usr/bin/env node
 'use strict';
 
+/**
+ * 發布程式內更新（一版一包）。每一版都跑一次，包括換了 Electron 的版本：
+ *
+ *   npm run release:hotfix -- --version x.y.z --publish
+ *
+ * - 只打包一次共用包，上傳到 R2：artifacts/<channel>/<x.y.z>/<x.y.z>/update.zip
+ *   （中間那段放目標版本本身，沿用現有 artifact worker 的路徑規則，不用重新部署）。
+ * - 從 R2 的登記表 registry/<channel>/win32-x64.json 找出 Electron runtime 相同、版本比較舊的
+ *   已發布版本，各簽一份小計畫指向這一包；再把這一版寫進登記表，下一版才會把它列進來。
+ * - 重建對照表 control/<channel>/win32-x64.json，切換後逐一向 Worker 驗證，失敗就還原。
+ * - 換了 Electron／updater-node 的版本：沒有舊版能一鍵更新，只登記、清空對照表；
+ *   使用者按「檢查更新」時改問 GitHub，提示下載安裝檔。下一版起恢復一鍵更新。
+ * - GitHub Release 只放 Setup .exe 與它的 .sha256，不放任何更新包。
+ *
+ * 一版一包上線前發的版本（1.1.0 以前）只認綁定單一來源版本的舊格式。第一次用新流程時，
+ * 可以用 --legacy-from 1.1.0（逗號分隔多個）替它們各打一包舊格式；每個都要本機有
+ * dist/releases/v<那一版>/installer/incremental-baseline.json，而且各要完整打包一次。
+ */
+
 const childProcess = require('child_process');
 const crypto = require('crypto');
 const path = require('path');
 const { APP_VERSION } = require('../../server/utils/app-version');
 const updater = require('../../server/services/app-updater-v2');
-const { createPowerShellArtifactBuilder, runHotfixRelease } = require('./lib/publish-hotfix');
+const { createPowerShellArtifactBuilder, createPowerShellSharedBuilder, runHotfixRelease } = require('./lib/publish-hotfix');
 const { createR2S3Store } = require('./lib/r2-s3-store');
 const { createRequestFingerprint, controlOriginForChannel } = require('../../server/services/cloudflare-update-provider');
 
 function parseArgs(argv) {
-  const parsed = { publish: false, from: '', version: '', channel: 'stable', notesUrl: '' };
+  const parsed = { publish: false, legacyFrom: '', version: '', channel: 'stable', notesUrl: '' };
+  const keys = { '--version': 'version', '--legacy-from': 'legacyFrom', '--channel': 'channel', '--notes-url': 'notesUrl' };
   for (let index = 0; index < argv.length; index++) {
     const value = argv[index];
     if (value === '--publish') parsed.publish = true;
     else if (value === '--dry-run') parsed.publish = false;
-    else if (value === '--version' || value === '--from' || value === '--channel' || value === '--notes-url') {
+    else if (value === '--from') {
+      throw new Error('--from is gone: every compatible installed version now gets one shared package automatically. Use --legacy-from only for versions released before the shared format.');
+    } else if (keys[value]) {
       const next = argv[++index];
       if (!next || next.startsWith('--')) throw new Error(`${value} requires a value`);
-      parsed[value === '--notes-url' ? 'notesUrl' : value.slice(2)] = next;
+      parsed[keys[value]] = next;
     } else throw new Error(`unknown argument: ${value}`);
   }
   return parsed;
@@ -74,14 +96,15 @@ async function probeWorker({ version, platform, arch, channel }) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const root = path.resolve(__dirname, '..', '..');
-  if (!args.version || !args.from) throw new Error('Usage: npm run release:hotfix -- --version <current-package-version> --from <v1> [--channel stable|beta] [--notes-url <HTTPS URL>] [--publish]');
+  if (!args.version) throw new Error('Usage: npm run release:hotfix -- --version <current-package-version> [--legacy-from <v1,v2>] [--channel stable|beta] [--notes-url <HTTPS URL>] [--publish]');
   if (args.version !== APP_VERSION) throw new Error(`--version ${args.version} does not match package version ${APP_VERSION}`);
-  const fromVersions = args.from.split(',').map((value) => value.trim()).filter(Boolean);
+  const legacyFromVersions = args.legacyFrom.split(',').map((value) => value.trim()).filter(Boolean);
   if (args.channel !== 'stable' && args.channel !== 'beta') throw new Error('--channel must be stable or beta');
   const releaseNotesUrl = args.notesUrl || (args.channel === 'stable' ? `https://github.com/z22115554/elitesand-pro/releases/tag/v${args.version}` : '');
   if (!/^https:\/\//.test(releaseNotesUrl)) throw new Error('--notes-url is required for a beta release and must be HTTPS');
   if (!args.publish) {
-    process.stdout.write(`Dry run accepted for ${args.channel} v${args.version} from ${fromVersions.join(', ')}. No build, credential read, R2 write, Worker call, or control switch was performed.\n`);
+    const legacy = legacyFromVersions.length ? `; legacy packages for ${legacyFromVersions.join(', ')}` : '';
+    process.stdout.write(`Dry run accepted for ${args.channel} v${args.version} (one shared package for every registered version with the same runtime${legacy}). No build, credential read, R2 write, Worker call, or control switch was performed.\n`);
     return;
   }
 
@@ -92,21 +115,25 @@ async function main() {
     accessKeyId: process.env.ELITESAND_R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.ELITESAND_R2_SECRET_ACCESS_KEY,
   });
-  const builder = createPowerShellArtifactBuilder({
+  const outputRoot = path.join(root, 'dist', 'releases', `v${args.version}`, 'hotfix');
+  const sharedBuilder = createPowerShellSharedBuilder({ projectRoot: root, outputRoot, spawnSyncImpl: childProcess.spawnSync });
+  const legacyBuilder = createPowerShellArtifactBuilder({
     projectRoot: root,
     baselineDirectory: path.join(root, 'dist', 'releases'),
-    outputRoot: path.join(root, 'dist', 'releases', `v${args.version}`, 'hotfix'),
+    outputRoot,
     spawnSyncImpl: childProcess.spawnSync,
   });
-  await runHotfixRelease({
+  const result = await runHotfixRelease({
     targetVersion: args.version,
-    fromVersions,
+    legacyFromVersions,
     channel: args.channel,
     privateKey: readPolicyPrivateKey(),
     keyId: policyKeyId,
     releaseNotesUrl,
-    artifactBuilder: builder,
-    inspectIncremental: async (zip, { fromVersion, targetVersion }) => updater.inspectUpdateZip(zip, { currentVersion: fromVersion, expectedVersion: targetVersion }),
+    sharedBuilder,
+    legacyBuilder,
+    // 共用包沒有來源版本，用 0.0.0 檢查（只要求目標版比它新）；套用前的 runtime 比對在使用者端做。
+    inspectIncremental: async (zip, { fromVersion, targetVersion }) => updater.inspectUpdateZip(zip, { currentVersion: fromVersion || '0.0.0', expectedVersion: targetVersion }),
     store,
     publicArtifactRead: readPublicArtifact,
     workerProbe: probeWorker,
@@ -117,10 +144,25 @@ async function main() {
       run('npm.cmd', ['run', 'audit:release'], root);
     },
   });
+  process.stdout.write(`${describeRelease(result)}\n`);
+}
+
+function describeRelease(result) {
+  const shared = result.plans.filter((entry) => entry.shared).map((entry) => entry.fromVersion);
+  const legacy = result.plans.filter((entry) => !entry.shared).map((entry) => entry.fromVersion);
+  const lines = [`v${result.targetVersion} (${result.channel}) published and registered.`];
+  if (shared.length) lines.push(`  In-app update (one shared package): ${shared.join(', ')}`);
+  if (legacy.length) lines.push(`  In-app update (legacy per-version packages): ${legacy.join(', ')}`);
+  if (!shared.length && !legacy.length) {
+    lines.push('  No installed version can update in-app to this release (first shared release, or the Electron runtime changed).');
+    lines.push('  Everyone is pointed to the full Installer on GitHub Releases.');
+  }
+  lines.push('  GitHub Release needs only the Setup .exe and its .sha256.');
+  return lines.join('\n');
 }
 
 if (require.main === module) {
   main().catch((error) => { process.stderr.write(`${error.stack || error.message}\n`); process.exitCode = 1; });
 }
 
-module.exports = { buildProcessInvocation, parseArgs };
+module.exports = { buildProcessInvocation, describeRelease, parseArgs };

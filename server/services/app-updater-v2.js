@@ -55,6 +55,11 @@ const { createGitHubReleaseProvider, assertNormalizedUpdatePlan } = require('./u
 
 const log = createLogger('AppUpdaterV2');
 const UPDATE_SCHEMA_VERSION = 2;
+// 共用更新包：一個版本只出一包，所有「Electron runtime 跟新版相同」的舊版都吃同一包。
+// 包裡本來就是整份替換（exe、app.asar、tools、licenses），跟從哪一版升上來無關；
+// 真正的相容條件是安裝目錄裡不歸更新包管的 runtime 檔，套用前由 verifyInstalledBaseline
+// 逐檔比對雜湊。所以 schema 3 不寫 fromVersion，schema 2（舊格式，綁定單一來源版本）照舊支援。
+const SHARED_UPDATE_SCHEMA_VERSION = 3;
 const UPDATE_MODE = 'electron-asar-v1';
 const PROTECTED_UPDATER_RUNTIME = 'resources/tools/updater-node.exe';
 const MAX_ZIP_BYTES = 384 * 1024 * 1024;
@@ -225,7 +230,8 @@ function inspectUpdateZip(buffer, options = {}) {
   const manifestEntry = fileEntries.get('update-manifest.json');
   if (!manifestEntry) throw new Error('更新包缺少 update-manifest.json');
   const manifest = readJsonEntry(manifestEntry, 'update-manifest.json');
-  if (manifest.schemaVersion !== UPDATE_SCHEMA_VERSION || manifest.mode !== UPDATE_MODE || !Array.isArray(manifest.files)) {
+  const shared = manifest.schemaVersion === SHARED_UPDATE_SCHEMA_VERSION;
+  if ((manifest.schemaVersion !== UPDATE_SCHEMA_VERSION && !shared) || manifest.mode !== UPDATE_MODE || !Array.isArray(manifest.files)) {
     return { ok: false, needsFull: true, reason: '此更新包屬於舊版增量格式，請改用完整 Windows Installer。' };
   }
 
@@ -234,12 +240,13 @@ function inspectUpdateZip(buffer, options = {}) {
     throw new Error(`更新 manifest 官方簽章驗證失敗：${signatureCheck.reason}`);
   }
 
-  if (!manifest.fromVersion || !manifest.version) throw new Error('更新 manifest 缺少版本資訊');
+  if (!manifest.version || (!shared && !manifest.fromVersion)) throw new Error('更新 manifest 缺少版本資訊');
+  if (shared && Object.prototype.hasOwnProperty.call(manifest, 'fromVersion')) throw new Error('共用更新包不可綁定來源版本');
   if (options.expectedVersion && String(manifest.version) !== String(options.expectedVersion)) {
     throw new Error('更新包版本與 GitHub Release 不一致');
   }
   const currentVersion = String(options.currentVersion || APP_VERSION);
-  if (String(manifest.fromVersion) !== currentVersion) {
+  if (!shared && String(manifest.fromVersion) !== currentVersion) {
     return {
       ok: false,
       needsFull: true,
@@ -285,7 +292,9 @@ function inspectUpdateZip(buffer, options = {}) {
     baselineImmutableFiles,
     baselineRuntimeFingerprint,
     version: String(manifest.version),
-    fromVersion: String(manifest.fromVersion),
+    // 共用包沒有來源版本；記錄（更新 log）用實際的目前版本。
+    fromVersion: shared ? currentVersion : String(manifest.fromVersion),
+    shared,
   };
 }
 
@@ -604,6 +613,7 @@ module.exports = {
   UPDATE_ZIP_NAME,
   UPDATE_HASH_NAME,
   UPDATE_SCHEMA_VERSION,
+  SHARED_UPDATE_SCHEMA_VERSION,
   UPDATE_MODE,
   PROTECTED_UPDATER_RUNTIME,
   INCREMENTAL_UPDATES_DISABLED,

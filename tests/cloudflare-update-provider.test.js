@@ -234,6 +234,34 @@ test('a tampered plan or missing production public key is a security rejection: 
   assert.strictEqual((await providerWith(signedPlan(), { publicKeys: {} }).check()).kind, 'none');
 });
 
+test('an officially signed plan that has only expired falls back to GitHub ("unavailable") instead of claiming "up to date"', async () => {
+  const later = () => NOW_MS + 2 * 24 * 60 * 60 * 1000; // 計畫 8/24 到期，現在是 8/25
+  assert.strictEqual((await providerWith(signedPlan(), { nowMs: later }).check()).kind, 'unavailable');
+
+  // 偽造或竄改的過期計畫不能借「過期」的名義放寬：照舊是 none。
+  const tampered = signedPlan();
+  tampered.targetVersion = '0.9.9.9';
+  assert.strictEqual((await providerWith(tampered, { nowMs: later }).check()).kind, 'none');
+  assert.strictEqual((await providerWith(signedPlan(), { nowMs: later, publicKeys: {} }).check()).kind, 'none');
+});
+
+test('an expired plan is never recorded by the replay guard, so a freshly signed plan for the same release still works', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-expired-replay-'));
+  try {
+    const replayGuard = createPersistentReplayGuard({ file: path.join(dir, 'replay.json') });
+    const later = () => NOW_MS + 2 * 24 * 60 * 60 * 1000;
+    assert.strictEqual((await providerWith(signedPlan(), { nowMs: later, replayGuard }).check()).kind, 'unavailable');
+    const refreshed = signedPlan({
+      planId: 'stable-win32-x64-0.9.9.7-0.9.9.8-refresh',
+      issuedAt: '2026-08-25T00:00:00.000Z',
+      expiresAt: '2026-09-01T00:00:00.000Z',
+    });
+    assert.strictEqual((await providerWith(refreshed, { nowMs: later, replayGuard }).check()).kind, 'plan');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('HTTP failure and timeout could not get an answer, so they report "unavailable" (letting the caller fall back to GitHub)', async () => {
   assert.strictEqual((await providerWith(signedPlan(), { fetchImpl: async () => response('', { status: 404, contentType: 'text/plain' }) }).check()).kind, 'unavailable');
   const timeout = providerWith(signedPlan(), {

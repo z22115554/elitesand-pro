@@ -41,6 +41,10 @@ function createFakeR2Endpoint({ controlKey, control = { schemaVersion: 1, disabl
       calls.push(['listPrefix', prefix]);
       return [...objects.keys()].filter((key) => key.startsWith(prefix)).sort();
     },
+    // 測試前置資料：直接放進去，不算一次寫入呼叫。
+    seed(key, body) {
+      save(key, body);
+    },
     object(key) {
       const value = objects.get(key);
       return value ? { body: Buffer.from(value.body), etag: value.etag } : null;
