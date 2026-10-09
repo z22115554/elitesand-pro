@@ -204,6 +204,11 @@
           <span class="nav-label" data-i18n="nav.moon">中秋活動</span>
           <span class="nav-sub" data-i18n="nav.moonLimited">（限時開放）</span>
         </button>
+        <button class="nav-item" data-nav="halloween" type="button" title="萬聖節活動（限時開放）" data-i18n-title="nav.halloweenTitle" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6c-1.5-2-1-3.5 1-4"/><path d="M12 6c4.8 0 8.5 3.2 8.5 7.5S16.8 21 12 21s-8.5-3.2-8.5-7.5S7.2 6 12 6z"/><path d="M8.5 12l1.5-1.6 1.5 1.6M12.5 12l1.5-1.6 1.5 1.6M8.5 16c2.2 1.4 4.8 1.4 7 0"/></svg>
+          <span class="nav-label" data-i18n="nav.halloween">萬聖節活動</span>
+          <span class="nav-sub" data-i18n="nav.halloweenLimited">（限時開放）</span>
+        </button>
         <!-- 2026-09-27 1.1.0 發版前先收起來（使用者指示）：2026-09-25 的修正（runtime 補裝套件／鎖版本／
              面板保留結果）尚未完成實機驗收。要重新開放：比照 nav.js 開頭註解的慣例，拿掉這個 hidden 即可。 -->
         <button class="nav-item" data-nav="sections" type="button" title="段落設計" data-i18n-title="nav.sections" hidden>
@@ -784,6 +789,9 @@
                 <button class="lyric-template-card" data-template="particle" type="button" role="radio" aria-checked="false" data-i18n-title="template.particleTitle" title="風息成字：粒子隨風聚成歌詞，字幕尺度、留安全邊距，可調直書與左右分散">
                   <span class="style-thumb-preview style-thumb-particle" aria-hidden="true"><span class="style-thumb-char">風</span></span><strong data-i18n="template.particle">風息成字</strong><span data-i18n="template.particleDesc">粒子聚字、字幕尺度</span>
                 </button>
+                <button class="lyric-template-card" data-template="halloween" type="button" role="radio" aria-checked="false" data-i18n-title="template.halloweenTitle" title="萬聖燭光：暗字被燭光點亮，唱完化成煙往上散">
+                  <span class="style-thumb-preview style-thumb-halloween" aria-hidden="true"><span class="style-thumb-char">燭</span></span><strong data-i18n="template.halloween">萬聖燭光</strong><span data-i18n="template.halloweenDesc">燭光點字、煙散退場</span>
+                </button>
                 <button class="lyric-template-card" data-template="jizura" type="button" role="radio" aria-checked="false" data-i18n-title="template.jizuraTitle" title="文字PV：日系文字 PV 風格，依段落自動編排版面與動作，預設偏右避開主播">
                   <span class="style-thumb-preview style-thumb-jizura" aria-hidden="true"><span class="style-thumb-char">PV</span></span><strong data-i18n="template.jizura">文字PV</strong><span data-i18n="template.jizuraDesc">日系文字 PV、依段落編排</span>
                 </button>
@@ -913,6 +921,26 @@
                 <div class="switch-row">
                   <div><div class="label" data-i18n="lightboard.slideLabel">進場滑入</div><div class="sub" data-i18n="lightboard.slideHint">每句從右側滑入。動作只發生在換句的空檔，但每句都動、累積起來會有點吵，預設關。</div></div>
                   <label class="switch"><input id="ls-lightboard-slide" data-ls-control="lightboardSlideIn" type="checkbox"><span class="track"></span></label>
+                </div>
+              </div>
+              <div class="field" id="halloween-lyric-field" hidden>
+                <label for="ls-halloween-position" data-i18n="halloweenLyric.positionLabel">歌詞位置</label>
+                <select id="ls-halloween-position" class="input" data-ls-control="halloweenPosition">
+                  <option value="bottom" data-i18n="halloweenLyric.positionBottom">下方</option>
+                  <option value="middle" data-i18n="halloweenLyric.positionMiddle">中央</option>
+                  <option value="top" data-i18n="halloweenLyric.positionTop">上方</option>
+                </select>
+                <div class="switch-row">
+                  <div><div class="label" data-i18n="halloweenLyric.flickerLabel">燭火閃爍</div><div class="sub" data-i18n="halloweenLyric.flickerHint">整句燭光輕輕晃動，像真的燭火。</div></div>
+                  <label class="switch"><input id="ls-halloween-flicker" data-ls-control="halloweenFlicker" type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="switch-row">
+                  <div><div class="label" data-i18n="halloweenLyric.embersLabel">火星</div><div class="sub" data-i18n="halloweenLyric.embersHint">字被點亮時偶爾迸出一顆往上飄的火星。</div></div>
+                  <label class="switch"><input id="ls-halloween-embers" data-ls-control="halloweenEmbers" type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="switch-row">
+                  <div><div class="label" data-i18n="halloweenLyric.interludeLabel">間奏小幽靈</div><div class="sub" data-i18n="halloweenLyric.interludeHint">長間奏時一隻小幽靈飄出來，下一句開始前回去。</div></div>
+                  <label class="switch"><input id="ls-halloween-interlude" data-ls-control="halloweenInterlude" type="checkbox" checked><span class="track"></span></label>
                 </div>
               </div>
               <div class="field" id="particle-orient-field" hidden>
@@ -1606,15 +1634,15 @@
 
         <!-- ═══ 視圖：中秋募資活動（月亮進度條＋燈籠名牌；斗內手動輸入）═══ -->
         <div class="view content-col" data-view="moon" hidden>
-          <div id="moon-end-notice" class="moon-end-notice" role="note"></div>
+          <div id="moon-end-notice" class="seasonal-end-notice" role="note"></div>
 
           <section class="card" aria-labelledby="moon-add-title">
             <p id="moon-add-title" class="eyebrow m-0" data-i18n="moon.addTitle">新增斗內</p>
             <p class="sub" data-i18n="moon.addHint">輸入後燈籠會立刻掛上 OBS 畫面，月亮往滿月前進一點。</p>
-            <form id="moon-add-form" class="moon-add-row" autocomplete="off">
+            <form id="moon-add-form" class="seasonal-add-row" autocomplete="off">
               <input id="moon-add-name" class="input" type="text" maxlength="24" placeholder="名字" aria-label="名字" data-i18n-placeholder="moon.name" data-i18n-aria-label="moon.name" required>
-              <input id="moon-add-amount" class="input moon-amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額（NT$）" data-i18n-placeholder="moon.amount" data-i18n-aria-label="moon.amountAria" required>
-              <select id="moon-add-style" class="input moon-style-select" aria-label="燈籠樣式" data-i18n-aria-label="moon.styleAria">
+              <input id="moon-add-amount" class="input seasonal-amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額（NT$）" data-i18n-placeholder="moon.amount" data-i18n-aria-label="moon.amountAria" required>
+              <select id="moon-add-style" class="input seasonal-style-select" aria-label="燈籠樣式" data-i18n-aria-label="moon.styleAria">
                 <option value="" data-i18n="moon.styleAuto">依金額自動</option>
                 <option value="paper" data-i18n="moon.style.paper">紙燈籠</option>
                 <option value="red" data-i18n="moon.style.red">紅燈籠</option>
@@ -1624,9 +1652,9 @@
               </select>
               <button class="btn btn-sm" type="submit" data-i18n="moon.hang">掛上燈籠</button>
             </form>
-            <div class="moon-summary" role="status" aria-live="polite">
-              <div class="moon-summary-bar"><span id="moon-summary-fill"></span></div>
-              <div class="moon-summary-text">
+            <div class="seasonal-summary" role="status" aria-live="polite">
+              <div class="seasonal-summary-bar"><span id="moon-summary-fill"></span></div>
+              <div class="seasonal-summary-text">
                 <span id="moon-summary-total">NT$0</span>
                 <span class="sub" id="moon-summary-goal">/ NT$5,000</span>
                 <span class="val" id="moon-summary-percent">0%</span>
@@ -1637,17 +1665,17 @@
           <section class="card" aria-labelledby="moon-preview-title">
             <div class="playlist-head">
               <p id="moon-preview-title" class="eyebrow m-0" data-i18n="moon.previewTitle">OBS 畫面預覽</p>
-              <select id="moon-preview-mode" class="input moon-preview-mode" aria-label="預覽內容" data-i18n-aria-label="moon.previewAria">
+              <select id="moon-preview-mode" class="input seasonal-preview-mode" aria-label="預覽內容" data-i18n-aria-label="moon.previewAria">
                 <option value="" data-i18n="moon.previewLive">實際畫面</option>
                 <option value="?demo=1" data-i18n="moon.previewLanterns">五種燈籠示範</option>
                 <option value="?demo=celebrate" data-i18n="moon.previewCelebrate">滿月慶祝示範</option>
                 <option value="?part=credits&amp;autoplay=1" data-i18n="moon.previewCredits">謝幕名單</option>
               </select>
             </div>
-            <div class="moon-preview-frame">
+            <div class="seasonal-preview-frame">
               <iframe id="moon-preview-iframe" title="中秋活動預覽" data-i18n-title="moon.previewFrame" loading="lazy"></iframe>
             </div>
-            <div class="moon-scale-row">
+            <div class="seasonal-scale-row">
               <div class="field">
                 <label for="moon-lantern-scale"><span data-i18n="moon.lanternScale">燈籠大小</span> <span id="moon-lantern-scale-val" class="val">100%</span></label>
                 <input id="moon-lantern-scale" type="range" min="60" max="250" step="5" value="100">
@@ -1659,10 +1687,10 @@
             </div>
             <p class="field-hint" data-i18n="moon.scaleHint">拖動後 OBS 畫面會立刻套用。燈籠放大後一排放不下的會自動分頁輪播。</p>
             <div class="obs-url-list mt-10">
-              <div><div class="label" data-i18n="moon.urlAll">月亮＋燈籠（整個畫面）</div><div class="url-field"><code data-moon-url=""></code><button class="btn btn-sm" type="button" data-moon-copy="" data-i18n="common.copy">複製</button></div></div>
-              <div><div class="label" data-i18n="moon.urlMoon">只有月亮</div><div class="url-field"><code data-moon-url="?part=moon"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=moon" data-i18n="common.copy">複製</button></div></div>
-              <div><div class="label" data-i18n="moon.urlLanterns">只有燈籠</div><div class="url-field"><code data-moon-url="?part=lanterns"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=lanterns" data-i18n="common.copy">複製</button></div></div>
-              <div><div class="label" data-i18n="moon.urlCredits">謝幕名單（平常透明，按下方「播放謝幕名單」才出現）</div><div class="url-field"><code data-moon-url="?part=credits"></code><button class="btn btn-sm" type="button" data-moon-copy="?part=credits" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="moon.urlAll">月亮＋燈籠（整個畫面）</div><div class="url-field"><code data-overlay-url=""></code><button class="btn btn-sm" type="button" data-overlay-copy="" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="moon.urlMoon">只有月亮</div><div class="url-field"><code data-overlay-url="?part=moon"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=moon" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="moon.urlLanterns">只有燈籠</div><div class="url-field"><code data-overlay-url="?part=lanterns"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=lanterns" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="moon.urlCredits">謝幕名單（平常透明，按下方「播放謝幕名單」才出現）</div><div class="url-field"><code data-overlay-url="?part=credits"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=credits" data-i18n="common.copy">複製</button></div></div>
             </div>
             <p class="val mt-10" data-i18n="moon.obsHint">在 OBS 新增「瀏覽器」來源貼上網址，寬高設 1920×1080。想把月亮和燈籠分開擺，就各建一個來源。</p>
           </section>
@@ -1691,12 +1719,12 @@
               <p class="field-hint" data-i18n="moon.baseHint">起始金額＝活動開始前已經募到的錢（例如直播上顯示的募資進度），月亮會從這裡開始算。</p>
               <div class="field mt-10">
                 <label data-i18n="moon.tiersLabel">燈籠門檻（NT$ 起）</label>
-                <div class="moon-tier-grid">
-                  <label class="moon-tier"><span data-i18n="moon.style.paper">紙燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="paper"></label>
-                  <label class="moon-tier"><span data-i18n="moon.style.red">紅燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="red"></label>
-                  <label class="moon-tier"><span data-i18n="moon.style.pomelo">柚子燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="pomelo"></label>
-                  <label class="moon-tier"><span data-i18n="moon.style.palace">宮燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="palace"></label>
-                  <label class="moon-tier"><span data-i18n="moon.style.rabbit">月兔燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-moon-tier="rabbit"></label>
+                <div class="seasonal-tier-grid">
+                  <label class="seasonal-tier"><span data-i18n="moon.style.paper">紙燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="paper"></label>
+                  <label class="seasonal-tier"><span data-i18n="moon.style.red">紅燈籠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="red"></label>
+                  <label class="seasonal-tier"><span data-i18n="moon.style.pomelo">柚子燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="pomelo"></label>
+                  <label class="seasonal-tier"><span data-i18n="moon.style.palace">宮燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="palace"></label>
+                  <label class="seasonal-tier"><span data-i18n="moon.style.rabbit">月兔燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="rabbit"></label>
                 </div>
                 <p class="field-hint" data-i18n="moon.tiersHint">「依金額自動」時，斗內金額達到哪個門檻就掛哪一種；改門檻會立刻套用到所有自動的燈籠。</p>
               </div>
@@ -1707,7 +1735,7 @@
           <section class="card" aria-labelledby="moon-list-title">
             <div class="playlist-head">
               <p id="moon-list-title" class="eyebrow m-0" data-i18n="moon.listTitle">斗內紀錄</p>
-              <div class="moon-list-actions">
+              <div class="seasonal-list-actions">
                 <button id="moon-play-celebrate" class="btn btn-sm" type="button" title="達標時會自動播放一次；這裡可以手動再放" data-i18n-title="moon.playCelebrateHint" data-i18n="moon.playCelebrate">播放滿月慶祝</button>
                 <button id="moon-play-credits" class="btn btn-sm" type="button" data-i18n="moon.playCredits">播放謝幕名單</button>
                 <button id="moon-clear" class="btn btn-sm btn-danger" type="button" data-i18n="moon.clearAll">全部清除</button>
@@ -1716,6 +1744,205 @@
             <ul id="moon-donation-list" class="bgm-track-list"></ul>
           </section>
         </div><!-- /view moon -->
+
+        <!-- ═══ 視圖：萬聖節募資活動（南瓜燈進度條＋萬聖節名牌；斗內手動輸入）═══ -->
+        <div class="view content-col" data-view="halloween" hidden>
+          <div id="halloween-end-notice" class="seasonal-end-notice" role="note"></div>
+          <div class="card seasonal-theme-row">
+            <div class="switch-row"><div><div class="label" data-i18n="halloween.panelTheme">面板萬聖節配色</div><div class="sub" data-i18n="halloween.panelThemeHint">活動期間面板換成南瓜橘，左上角的標誌戴上小南瓜；活動結束自動恢復。只影響這台電腦的面板，不影響 OBS 畫面。</div></div><label class="switch"><input id="halloween-season-theme" type="checkbox" checked><span class="track"></span></label></div>
+          </div>
+
+          <section class="card" aria-labelledby="halloween-add-title">
+            <p id="halloween-add-title" class="eyebrow m-0" data-i18n="halloween.addTitle">新增斗內</p>
+            <p class="sub" data-i18n="halloween.addHint">輸入後名牌會立刻掛上 OBS 畫面，南瓜燈的燭光往上亮一點。</p>
+            <form id="halloween-add-form" class="seasonal-add-row" autocomplete="off">
+              <input id="halloween-add-name" class="input" type="text" maxlength="24" placeholder="名字" aria-label="名字" data-i18n-placeholder="halloween.name" data-i18n-aria-label="halloween.name" required>
+              <input id="halloween-add-amount" class="input seasonal-amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額（NT$）" data-i18n-placeholder="halloween.amount" data-i18n-aria-label="halloween.amountAria" required>
+              <select id="halloween-add-style" class="input seasonal-style-select" aria-label="名牌樣式" data-i18n-aria-label="halloween.styleAria">
+                <option value="" data-i18n="halloween.styleAuto">依金額自動</option>
+                <option value="candy" data-i18n="halloween.style.candy">糖果</option>
+                <option value="ghost" data-i18n="halloween.style.ghost">小幽靈</option>
+                <option value="bat" data-i18n="halloween.style.bat">蝙蝠</option>
+                <option value="pumpkin" data-i18n="halloween.style.pumpkin">南瓜燈</option>
+                <option value="witch" data-i18n="halloween.style.witch">魔女帽黑貓</option>
+              </select>
+              <button class="btn btn-sm" type="submit" data-i18n="halloween.hang">掛上名牌</button>
+            </form>
+            <div class="seasonal-summary" role="status" aria-live="polite">
+              <div class="seasonal-summary-bar"><span id="halloween-summary-fill"></span></div>
+              <div class="seasonal-summary-text">
+                <span id="halloween-summary-total">NT$0</span>
+                <span class="sub" id="halloween-summary-goal">/ NT$5,000</span>
+                <span class="val" id="halloween-summary-percent">0%</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="halloween-preview-title">
+            <div class="playlist-head">
+              <p id="halloween-preview-title" class="eyebrow m-0" data-i18n="halloween.previewTitle">OBS 畫面預覽</p>
+              <select id="halloween-preview-mode" class="input seasonal-preview-mode" aria-label="預覽內容" data-i18n-aria-label="halloween.previewAria">
+                <option value="" data-i18n="halloween.previewLive">實際畫面</option>
+                <option value="?demo=1" data-i18n="halloween.previewTreats">五種名牌示範</option>
+                <option value="?demo=celebrate" data-i18n="halloween.previewCelebrate">南瓜燈全亮慶祝示範</option>
+                <option value="?demo=fx" data-i18n="halloween.previewFx">觀眾互動示範</option>
+                <option value="?part=credits&amp;autoplay=1" data-i18n="halloween.previewCredits">謝幕名單</option>
+              </select>
+            </div>
+            <div class="seasonal-preview-frame">
+              <iframe id="halloween-preview-iframe" title="萬聖節活動預覽" data-i18n-title="halloween.previewFrame" loading="lazy"></iframe>
+            </div>
+            <div class="seasonal-scale-row">
+              <div class="field">
+                <label for="halloween-treat-scale"><span data-i18n="halloween.treatScale">名牌大小</span> <span id="halloween-treat-scale-val" class="val">100%</span></label>
+                <input id="halloween-treat-scale" type="range" min="60" max="250" step="5" value="100">
+              </div>
+              <div class="field">
+                <label for="halloween-pumpkin-scale"><span data-i18n="halloween.pumpkinScale">南瓜燈大小</span> <span id="halloween-pumpkin-scale-val" class="val">100%</span></label>
+                <input id="halloween-pumpkin-scale" type="range" min="60" max="250" step="5" value="100">
+              </div>
+            </div>
+            <p class="field-hint" data-i18n="halloween.scaleHint">拖動後 OBS 畫面會立刻套用。名牌放大後一排放不下的會自動分頁輪播。</p>
+            <div class="obs-url-list mt-10">
+              <div><div class="label" data-i18n="halloween.urlAll">南瓜燈＋名牌（整個畫面）</div><div class="url-field"><code data-overlay-url=""></code><button class="btn btn-sm" type="button" data-overlay-copy="" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="halloween.urlPumpkin">只有南瓜燈</div><div class="url-field"><code data-overlay-url="?part=pumpkin"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=pumpkin" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="halloween.urlTreats">只有名牌</div><div class="url-field"><code data-overlay-url="?part=treats"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=treats" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="halloween.urlFx">只有觀眾互動特效（糖果、小幽靈、搗蛋幽靈、抽獎）</div><div class="url-field"><code data-overlay-url="?part=fx"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=fx" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="halloween.urlCredits">謝幕名單（平常透明，按下方「播放謝幕名單」才出現）</div><div class="url-field"><code data-overlay-url="?part=credits"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=credits" data-i18n="common.copy">複製</button></div></div>
+            </div>
+            <p class="val mt-10" data-i18n="halloween.obsHint">在 OBS 新增「瀏覽器」來源貼上網址，寬高設 1920×1080。想把南瓜燈和名牌分開擺，就各建一個來源。</p>
+          </section>
+
+          <section class="card" aria-labelledby="halloween-config-title">
+            <p id="halloween-config-title" class="eyebrow m-0" data-i18n="halloween.configTitle">活動設定</p>
+            <form id="halloween-config-form" autocomplete="off">
+              <div class="field">
+                <label for="halloween-config-title-input" data-i18n="halloween.titleLabel">標題</label>
+                <input id="halloween-config-title-input" class="input" type="text" maxlength="40">
+              </div>
+              <div class="field">
+                <label for="halloween-config-done-text" data-i18n="halloween.doneTextLabel">達標後顯示的文字</label>
+                <input id="halloween-config-done-text" class="input" type="text" maxlength="40">
+              </div>
+              <div class="row-gap-10">
+                <div class="field flex-grow">
+                  <label for="halloween-config-goal" data-i18n="halloween.goalLabel">目標金額（NT$）</label>
+                  <input id="halloween-config-goal" class="input" type="number" min="1" step="1" inputmode="numeric">
+                </div>
+                <div class="field flex-grow">
+                  <label for="halloween-config-base" data-i18n="halloween.baseLabel">起始金額（NT$）</label>
+                  <input id="halloween-config-base" class="input" type="number" min="0" step="1" inputmode="numeric">
+                </div>
+              </div>
+              <p class="field-hint" data-i18n="halloween.baseHint">起始金額＝活動開始前已經募到的錢（例如直播上顯示的募資進度），南瓜燈會從這裡開始算。</p>
+              <div class="field mt-10">
+                <label data-i18n="halloween.tiersLabel">名牌門檻（NT$ 起）</label>
+                <div class="seasonal-tier-grid">
+                  <label class="seasonal-tier"><span data-i18n="halloween.style.candy">糖果</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="candy"></label>
+                  <label class="seasonal-tier"><span data-i18n="halloween.style.ghost">小幽靈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="ghost"></label>
+                  <label class="seasonal-tier"><span data-i18n="halloween.style.bat">蝙蝠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="bat"></label>
+                  <label class="seasonal-tier"><span data-i18n="halloween.style.pumpkin">南瓜燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="pumpkin"></label>
+                  <label class="seasonal-tier"><span data-i18n="halloween.style.witch">魔女帽黑貓</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="witch"></label>
+                </div>
+                <p class="field-hint" data-i18n="halloween.tiersHint">「依金額自動」時，斗內金額達到哪個門檻就掛哪一種；改門檻會立刻套用到所有自動的名牌。</p>
+              </div>
+              <button class="btn btn-sm mt-10" type="submit" data-i18n="halloween.save">儲存設定</button>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="halloween-list-title">
+            <div class="playlist-head">
+              <p id="halloween-list-title" class="eyebrow m-0" data-i18n="halloween.listTitle">斗內紀錄</p>
+              <div class="seasonal-list-actions">
+                <button id="halloween-play-celebrate" class="btn btn-sm" type="button" title="達標時會自動播放一次；這裡可以手動再放" data-i18n-title="halloween.playCelebrateHint" data-i18n="halloween.playCelebrate">播放南瓜燈慶祝</button>
+                <button id="halloween-play-credits" class="btn btn-sm" type="button" data-i18n="halloween.playCredits">播放謝幕名單</button>
+                <button id="halloween-clear" class="btn btn-sm btn-danger" type="button" data-i18n="halloween.clearAll">全部清除</button>
+              </div>
+            </div>
+            <ul id="halloween-donation-list" class="bgm-track-list"></ul>
+          </section>
+          <section class="card" aria-labelledby="halloween-fx-title">
+            <p id="halloween-fx-title" class="eyebrow m-0" data-i18n="halloween.fx.title">觀眾互動</p>
+            <p class="sub" data-i18n="halloween.fx.hint">需要先在「Twitch 點歌」分頁連接 Twitch。聊天指令與搗蛋都不計入募資金額。</p>
+            <form id="halloween-fx-form" autocomplete="off">
+              <div class="switch-row switch-row--separated"><div><div class="label" data-i18n="halloween.fx.chatEnabled">開放聊天指令</div></div><label class="switch"><input id="halloween-fx-chat-enabled" type="checkbox"><span class="track"></span></label></div>
+              <div class="row-gap-10">
+                <div class="field flex-grow">
+                  <label for="halloween-fx-treat-command" data-i18n="halloween.fx.treatCommand">要糖果指令</label>
+                  <input id="halloween-fx-treat-command" class="input" type="text" maxlength="24" placeholder="!treat">
+                </div>
+                <div class="field flex-grow">
+                  <label for="halloween-fx-trick-command" data-i18n="halloween.fx.trickCommand">搗蛋指令</label>
+                  <input id="halloween-fx-trick-command" class="input" type="text" maxlength="24" placeholder="!trick">
+                </div>
+                <div class="field flex-grow">
+                  <label for="halloween-fx-cooldown" data-i18n="halloween.fx.cooldown">每人冷卻（秒）</label>
+                  <input id="halloween-fx-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric">
+                </div>
+              </div>
+              <p class="field-hint" data-i18n="halloween.fx.chatHint">觀眾打 !treat 畫面會飄過一顆糖果並記一顆到他身上；打 !trick 飄過一隻小幽靈。冷卻中的指令會被安靜忽略，不會回覆洗版。</p>
+              <div class="switch-row switch-row--separated mt-10"><div><div class="label" data-i18n="halloween.fx.prankEnabled">頻道點數「搗蛋」獎勵</div></div><label class="switch"><input id="halloween-fx-prank-enabled" type="checkbox"><span class="track"></span></label></div>
+              <div class="row-gap-10">
+                <div class="field flex-grow">
+                  <label for="halloween-fx-prank-title" data-i18n="halloween.fx.prankTitle">獎勵名稱</label>
+                  <input id="halloween-fx-prank-title" class="input" type="text" maxlength="45">
+                </div>
+                <div class="field flex-grow">
+                  <label for="halloween-fx-prank-cost" data-i18n="halloween.fx.prankCost">點數</label>
+                  <input id="halloween-fx-prank-cost" class="input" type="number" min="1" step="1" inputmode="numeric">
+                </div>
+                <div class="field flex-grow">
+                  <label for="halloween-fx-prank-cooldown" data-i18n="halloween.fx.prankCooldown">全頻道冷卻（秒）</label>
+                  <input id="halloween-fx-prank-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric">
+                </div>
+              </div>
+              <p class="field-hint" id="halloween-fx-prank-status" data-i18n="halloween.fx.prankHint">開啟後會在 Twitch 建立一個獎勵；觀眾兌換時畫面跳出幽靈嚇你一下。活動結束或關閉時兌換的點數會自動退回。</p>
+              <button class="btn btn-sm mt-10" type="submit" data-i18n="halloween.save">儲存設定</button>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="halloween-board-title">
+            <div class="playlist-head">
+              <p id="halloween-board-title" class="eyebrow m-0" data-i18n="halloween.board.title">糖果排行</p>
+              <button id="halloween-fx-reset" class="btn btn-sm btn-danger" type="button" data-i18n="halloween.board.reset">清除排行</button>
+            </div>
+            <p id="halloween-fx-stats" class="sub" role="status" aria-live="polite"></p>
+            <ol id="halloween-fx-board" class="seasonal-board"></ol>
+          </section>
+
+          <section class="card" aria-labelledby="halloween-raffle-title">
+            <p id="halloween-raffle-title" class="eyebrow m-0" data-i18n="halloween.raffle.title">萬聖節抽獎</p>
+            <div class="row-gap-10 mt-10">
+              <div class="field flex-grow">
+                <label for="halloween-raffle-pool" data-i18n="halloween.raffle.poolLabel">抽獎名單</label>
+                <select id="halloween-raffle-pool" class="input">
+                  <option value="all" data-i18n="halloween.raffle.poolAll">聊天參加者＋斗內者</option>
+                  <option value="chat" data-i18n="halloween.raffle.poolChat">只有聊天參加者（!treat／!trick／搗蛋）</option>
+                  <option value="donors" data-i18n="halloween.raffle.poolDonors">只有斗內者</option>
+                </select>
+              </div>
+            </div>
+            <div class="switch-row"><div><div class="label" data-i18n="halloween.raffle.weighted">依參加次數加權（糖果、搗蛋、斗內筆數越多，中獎機會越高）</div></div><label class="switch"><input id="halloween-raffle-weighted" type="checkbox"><span class="track"></span></label></div>
+            <div class="switch-row"><div><div class="label" data-i18n="halloween.raffle.exclude">已經中過的人不再抽</div></div><label class="switch"><input id="halloween-raffle-exclude" type="checkbox" checked><span class="track"></span></label></div>
+            <div class="switch-row"><div><div class="label" data-i18n="halloween.raffle.announce">在 OBS 畫面揭曉</div></div><label class="switch"><input id="halloween-raffle-announce" type="checkbox" checked><span class="track"></span></label></div>
+            <div class="seasonal-list-actions mt-10">
+              <button id="halloween-raffle-draw" class="btn btn-sm btn-primary" type="button" data-i18n="halloween.raffle.draw">抽一位</button>
+              <button id="halloween-raffle-clear" class="btn btn-sm btn-ghost" type="button" data-i18n="halloween.raffle.clear">清除中獎紀錄</button>
+            </div>
+            <p id="halloween-raffle-result" class="val mt-10" role="status" aria-live="polite"></p>
+            <ul id="halloween-raffle-winners" class="bgm-track-list"></ul>
+          </section>
+
+          <section class="card" aria-labelledby="halloween-recap-title">
+            <p id="halloween-recap-title" class="eyebrow m-0" data-i18n="halloween.recap.title">活動回顧卡</p>
+            <p class="sub" data-i18n="halloween.recap.hint">把這次萬聖節的總金額、支持者、糖果王與抽獎得主做成一張 1920×1080 圖片，方便發到社群。</p>
+            <div class="seasonal-list-actions mt-10">
+              <button id="halloween-recap-make" class="btn btn-sm" type="button" data-i18n="halloween.recap.make">產生回顧卡</button>
+              <button id="halloween-recap-download" class="btn btn-sm btn-primary" type="button" data-i18n="halloween.recap.download" hidden>下載 PNG</button>
+            </div>
+            <div class="seasonal-recap-frame mt-10" hidden><canvas id="halloween-recap-canvas" width="1920" height="1080"></canvas></div>
+          </section>
+        </div><!-- /view halloween -->
 
         <!-- ═══ 視圖：一般設定（OBS 網址/連動、手機遙控、yt-dlp、PIN）═══ -->
         <div class="view content-col" data-view="general">
@@ -2117,7 +2344,7 @@
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span data-i18n="settings.setlist.templateTitle">歌單模板</span></p>
             <div class="field setlist-layout-field">
               <div class="setlist-layout-heading"><label id="setlist-layout-label" for="setlist-layout">選擇歌單模板</label><span class="setlist-layout-status" id="setlist-layout-status">目前：經典資訊</span></div>
-              <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option><option value="label">紙牌標籤</option><option value="glow">夜間霓虹</option><option value="round">圓角氣泡</option><option value="pager">復古字卡</option><option value="note">手帳頁</option><option value="flap">發車看板</option><option value="film">底片邊條</option></select>
+              <select id="setlist-layout" class="input sr-only" aria-labelledby="setlist-layout-label"><option value="classic">經典資訊</option><option value="cards">卡片清單</option><option value="diagonal" hidden>斜線舞台（暫停提供）</option><option value="timeline" hidden>時間軸（暫停提供）</option><option value="simple">極簡兩排</option><option value="billboard">排行榜</option><option value="constellation" hidden>星座（暫停提供）</option><option value="terminal">終端機</option><option value="signal">舞台訊號</option><option value="index">章節索引</option><option value="label">紙牌標籤</option><option value="glow">夜間霓虹</option><option value="round">圓角氣泡</option><option value="pager">復古字卡</option><option value="haunt">萬聖夜</option><option value="note">手帳頁</option><option value="flap">發車看板</option><option value="film">底片邊條</option></select>
               <p class="setlist-layout-group-title">清單型 — 跟著來源尺寸重排</p>
               <div class="setlist-layout-picker" role="radiogroup" aria-labelledby="setlist-layout-label">
                 <button class="setlist-layout-card" type="button" data-setlist-layout="classic" role="radio" aria-checked="true"><strong>經典資訊</strong><span>現在、未唱、已唱一次看懂</span></button>
@@ -2129,6 +2356,7 @@
                 <button class="setlist-layout-card" type="button" data-setlist-layout="glow" role="radio" aria-checked="false"><strong>夜間霓虹</strong><span>細框發光，適合夜唱</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="round" role="radio" aria-checked="false"><strong>圓角氣泡</strong><span>膠囊清單，正播放大</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="pager" role="radio" aria-checked="false"><strong>復古字卡</strong><span>LCD 呼叫器質感</span></button>
+                <button class="setlist-layout-card" type="button" data-setlist-layout="haunt" role="radio" aria-checked="false"><strong>萬聖夜</strong><span>南瓜燭光、蛛網</span></button>
                 <button class="setlist-layout-card" type="button" data-setlist-layout="note" role="radio" aria-checked="false"><strong>手帳頁</strong><span>橫線筆記本，已唱蓋章</span></button>
               </div>
               <p class="setlist-layout-group-title">固定版位 — 只呈現現在播放</p>
@@ -2170,7 +2398,7 @@
                      低頻且會蓋住整塊來源的「整體背板」已移到詳細設定。 -->
 
                 <div class="field-group-title mt-0">版面</div>
-                <div class="field field--setlist-sections" data-sl-layout="classic cards terminal billboard index label glow round pager">
+                <div class="field field--setlist-sections" data-sl-layout="classic cards terminal billboard index label glow round pager haunt">
                   <label>要顯示哪些區塊</label>
                   <div class="check-row">
                     <label class="check-inline"><input id="sls-show-upcoming" type="checkbox" checked><span class="check-box" aria-hidden="true"></span><span class="check-text">未唱歌曲</span></label>
@@ -2178,11 +2406,11 @@
                   </div>
                   <p class="field-hint">「正在播放」永遠顯示。</p>
                 </div>
-                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index label glow round pager">
+                <div class="switch-row" data-sl-layout="classic simple timeline diagonal constellation billboard cards signal index label glow round pager haunt">
                   <div class="label">顯示歌手名字</div>
                   <label class="switch"><input id="sls-show-artist" type="checkbox" checked><span class="track"></span></label>
                 </div>
-                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards index label glow round pager">
+                <div class="switch-row" data-sl-layout="classic simple constellation billboard cards index label glow round pager haunt">
                   <div class="label">已唱歌曲加上刪除線</div>
                   <label class="switch"><input id="sls-strikethrough" type="checkbox"><span class="track"></span></label>
                 </div>
@@ -2201,7 +2429,7 @@
                   <input id="sls-scene-scale" type="range" min="0.5" max="2" step="0.05" value="1">
                   <p class="field-hint" data-i18n="setlist.sceneScaleHint">把歌單內容整體放大或縮小，每個版型各自獨立保存；底片邊條放大時每一格變大，看得到的首數會自動變少。</p>
                 </div>
-                <div class="field" data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager">
+                <div class="field" data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt">
                   <label>正在播放歌曲文字大小 <span id="sls-size-now-val" class="val">16px</span></label>
                   <input id="sls-size-now" type="range" min="12" max="48" value="16">
                 </div>
@@ -2564,7 +2792,7 @@
                       </div>
                     </details>
 
-                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager">
+                    <details class="card card-collapse" data-settings-workspace-group="layout" data-sl-scope="scene list" data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager haunt">
                       <summary data-i18n="setlist.displayItemsTitle">顯示項目</summary>
                       <div class="card-collapse-body">
                       <div class="switch-row">
@@ -2573,7 +2801,7 @@
                       </div>
                       </div>
                     </details>
-                    <details class="card card-collapse" data-settings-workspace-group="advanced" data-sl-layout="classic simple timeline diagonal index label glow round pager">
+                    <details class="card card-collapse" data-settings-workspace-group="advanced" data-sl-layout="classic simple timeline diagonal index label glow round pager haunt">
                       <summary data-i18n="setlist.customLabelsTitle">自訂文字標籤</summary>
                       <div class="card-collapse-body">
                       <p class="field-group-desc" data-i18n="setlist.customLabelsDesc">畫面上固定顯示的文字，可以換成中文或你喜歡的用語。</p>
@@ -3466,7 +3694,9 @@
   <script src="/js/app-playlist.js"></script>
   <script src="/js/playback-sequence.js"></script>
   <script src="/js/app-bgm.js"></script>
-  <script src="/js/app-moon-event.js"></script>
+  <script src="/js/app-seasonal-event.js"></script>
+  <script src="/js/halloween-art.js"></script>
+  <script src="/js/app-halloween-fx.js"></script>
   <script src="/js/app-playback.js"></script>
   <script src="/js/app-section-design.js"></script>
   <script src="/js/section-analysis-client.js"></script>

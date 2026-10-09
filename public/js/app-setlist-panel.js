@@ -367,7 +367,7 @@
   // --sl-scene-scale/--sl-stage-x/y），漏列會讓它被歸成 list 類、顯示對它無效的
   // 「整體大小倍率」，真正管用的「場景版設定」滑桿反而被藏起來（與 server 端同步）。
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];
-  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note', 'film'];
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film'];
   const SETLIST_LAYOUT_UI = {
     classic: { name: '經典資訊', hint: '現在、未唱、已唱一次看懂，最完整的常駐歌單。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     cards: { name: '卡片清單', hint: '緊湊的卡片清單，已唱／未唱各自分群，可勾選要保留哪一段。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
@@ -383,6 +383,7 @@
     glow: { name: '夜間霓虹', hint: '等寬字體、細框發光，適合夜唱或科技主題。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     round: { name: '圓角氣泡', hint: '每首歌一顆膠囊，正在播放放大加亮。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     pager: { name: '復古字卡', hint: '模擬 LCD 呼叫器，等寬字＋掃描線。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    haunt: { name: '萬聖夜', hint: '南瓜燭光、蛛網與魔女紫，萬聖節期間的歌單。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     note: { name: '手帳頁', hint: '橫線筆記本側欄，單一清單，已唱蓋章；適合聊天型歌回。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     flap: { name: '發車看板', hint: '貼齊來源底部的發車標橫帶，正在播放置中、以它為中心捲動路線。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     film: { name: '底片邊條', hint: '全幅場景；貼邊 35mm 底片，正在播放的那格框在片門裡。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
@@ -392,7 +393,7 @@
   const SETLIST_HIDDEN_LAYOUTS = ['diagonal', 'timeline', 'constellation'];
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
   // 清單型模板＝來源即畫布；場景型維持原本的全幅舞台語意。
-  const SETLIST_SKIN_LAYOUTS = ['label', 'glow', 'round', 'pager'];
+  const SETLIST_SKIN_LAYOUTS = ['label', 'glow', 'round', 'pager', 'haunt'];
   const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'flap', 'note', ...SETLIST_SKIN_LAYOUTS];
   // flap／note 走填滿；film 是全幅場景。四者暫歸 'list' 類，共用既有清單型調整項。
 

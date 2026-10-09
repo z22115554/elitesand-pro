@@ -178,6 +178,26 @@ class TwitchService {
     this.restorePendingRequests();
   }
 
+  // 節慶活動等外掛功能的攔截點：回傳 true 表示訊息／兌換已處理，不再進點歌流程。
+  // 攔截函式出錯只記錄，一律退回原本流程，外掛壞掉不能拖垮點歌。
+  setChatInterceptor(fn) {
+    this.chatInterceptor = typeof fn === 'function' ? fn : null;
+  }
+
+  setRedemptionInterceptor(fn) {
+    this.redemptionInterceptor = typeof fn === 'function' ? fn : null;
+  }
+
+  async runInterceptor(fn, label, ...args) {
+    if (!fn) return false;
+    try {
+      return (await fn(...args)) === true;
+    } catch (err) {
+      log.warn(`Twitch ${label}攔截失敗：${err.message}`);
+      return false;
+    }
+  }
+
   setReplySettings(settings) {
     this.replySettings = TwitchReplySettings.normalizeSettings(settings);
     return this.replySettings;
@@ -1509,6 +1529,7 @@ class TwitchService {
   }
 
   async handleChatMessage(event, fallbackId) {
+    if (await this.runInterceptor(this.chatInterceptor, '聊天', event)) return;
     const text = String(event.message && event.message.text || '').trim();
     const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
     const match = TwitchRequestSettings.matchCommand(text, rules);
@@ -1573,6 +1594,7 @@ class TwitchService {
   }
 
   async handleRewardRedemption(redemptionEvent, fallbackId) {
+    if (await this.runInterceptor(this.redemptionInterceptor, '兌換', redemptionEvent, fallbackId)) return;
     const settings = this.rewardSettings || TwitchRewardSettings.getDefaults();
     const reward = redemptionEvent?.reward || {};
     if (!settings.enabled || settings.paused || !settings.rewardId || String(reward.id || '') !== settings.rewardId) return;

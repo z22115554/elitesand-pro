@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>萬聖節活動</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Iansui&family=Noto+Sans+TC:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/halloween.css">
+</head>
+<body data-activity="pending">
+  <!-- OBS 萬聖節活動疊加：透明背景。?part=pumpkin 只顯示南瓜燈、?part=treats 只顯示名牌、?part=fx 只顯示觀眾互動特效，預設全部顯示。 -->
+  <div id="treat-string" class="treat-string" aria-live="polite"></div>
+
+  <section id="halloween-panel" class="pumpkin-panel">
+   <div class="pumpkin-cluster">
+    <div id="halloween-thanks" class="pumpkin-thanks" aria-live="polite"></div>
+    <div class="pumpkin-wrap">
+      <div id="halloween-burst" class="pumpkin-burst" aria-hidden="true"></div>
+      <!-- 美術素材插槽：pumpkin-unlit／pumpkin-lit 兩張都在時取代下面的 SVG，亮的那張由下往上露出。 -->
+      <div class="pumpkin-art pumpkin-art--unlit" aria-hidden="true"></div>
+      <div class="pumpkin-art pumpkin-art--lit" aria-hidden="true"></div>
+      <svg id="pumpkin-svg" class="pumpkin-svg" viewBox="0 0 200 200" aria-hidden="true">
+        <defs>
+          <linearGradient id="pumpkin-skin" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffab45"/>
+            <stop offset="60%" stop-color="#ec6f12"/>
+            <stop offset="100%" stop-color="#a9440a"/>
+          </linearGradient>
+          <radialGradient id="pumpkin-fire" cx="50%" cy="62%" r="60%">
+            <stop offset="0%" stop-color="#fffbe0"/>
+            <stop offset="45%" stop-color="#ffd85a"/>
+            <stop offset="100%" stop-color="#ff8a1c"/>
+          </radialGradient>
+          <path id="pumpkin-face" d="M60 96 L86 96 L73 72 Z M114 96 L140 96 L127 72 Z M93 118 L107 118 L100 105 Z M50 126 Q100 176 150 126 L139 133 L131 124 L120 140 L110 129 L100 145 L90 129 L80 140 L69 124 L61 133 Z"/>
+          <clipPath id="pumpkin-glow-clip"><rect id="pumpkin-glow-rect" x="0" y="160" width="200" height="0"/></clipPath>
+        </defs>
+        <path class="pumpkin-stem" d="M93 40 C91 26 97 14 110 10 L114 17 C106 20 104 28 107 40 Z"/>
+        <g class="pumpkin-body">
+          <ellipse cx="50" cy="114" rx="40" ry="62"/>
+          <ellipse cx="150" cy="114" rx="40" ry="62"/>
+          <ellipse cx="72" cy="112" rx="44" ry="68"/>
+          <ellipse cx="128" cy="112" rx="44" ry="68"/>
+          <ellipse cx="100" cy="112" rx="46" ry="72"/>
+        </g>
+        <use class="pumpkin-face-dark" href="#pumpkin-face"/>
+        <use class="pumpkin-face-lit" href="#pumpkin-face" clip-path="url(#pumpkin-glow-clip)"/>
+      </svg>
+    </div>
+    <div class="pumpkin-text">
+      <div id="halloween-title" class="pumpkin-title">萬聖節搗蛋夜</div>
+      <div class="pumpkin-amount">
+        <span class="pumpkin-currency">NT$</span><span id="halloween-total">0</span>
+        <span class="pumpkin-sep">/</span><span id="halloween-goal">5,000</span>
+      </div>
+      <div id="halloween-done" class="pumpkin-done" hidden>南瓜燈全亮了，謝謝大家！</div>
+    </div>
+   </div>
+  </section>
+
+  <!-- 觀眾互動特效：!treat／!trick 飄過的糖果與小幽靈、搗蛋獎勵的幽靈、抽獎揭曉。?part=fx 只顯示這層。 -->
+  <div id="halloween-fx" class="fx-layer" aria-live="polite"></div>
+
+  <!-- 謝幕名單：只在 ?part=credits 顯示，面板按「播放」才捲一次（?autoplay=1 載入即播） -->
+  <section class="pumpkin-credits" aria-hidden="true">
+    <div id="halloween-credits-roll" class="pumpkin-credits-roll"></div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/access-auth.js"></script>
+  <script src="/js/socket-client.js"></script>
+  <script src="/js/obs-locale-follow.js"></script>
+  <script src="/js/seasonal-overlay.js"></script>
+  <script src="/js/halloween-art.js"></script>
+  <script src="/js/halloween.js"></script>
+</body>
+</html>

@@ -39,7 +39,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'halloween'];
 
 function sanitizeParticleSettings(settings) {
   if (settings.particleOrient !== undefined && !['horizontal', 'vertical'].includes(settings.particleOrient)) delete settings.particleOrient;
@@ -274,6 +274,10 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (settings.lightboardIdleGapMs !== undefined) {
       const g = Math.round(Number(settings.lightboardIdleGapMs));
       settings.lightboardIdleGapMs = Number.isFinite(g) ? Math.max(1500, Math.min(20000, g)) : 2500;
+    }
+    // 萬聖燭光：歌詞位置白名單
+    if (settings.halloweenPosition && !['bottom', 'middle', 'top'].includes(settings.halloweenPosition)) {
+      delete settings.halloweenPosition;
     }
     // 紙帶逐字排向白名單
     if (settings.paperstripOrient && !['horizontal', 'vertical'].includes(settings.paperstripOrient)) {

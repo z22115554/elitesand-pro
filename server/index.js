@@ -10,6 +10,7 @@
  * /setlist     → OBS 直播歌單疊加（透明底）
  */
 const express = require('express');
+const fs = require('fs');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
@@ -28,6 +29,7 @@ const deviceAccess = require('./services/device-access-store');
 const { renderDisplayRuntimePage } = require('./services/display-runtime-build');
 const templateDelivery = require('./services/template-delivery');
 const moonEvent = require('./services/moon-event');
+const halloweenEvent = require('./services/halloween-event');
 const ytdlpCompatibility = require('./services/ytdlp-compatibility');
 const PORT = process.env.PORT || config.port || 3000;
 deviceAccess.initialize();
@@ -285,6 +287,16 @@ app.get('/webgpu-separation/model/:filename', (req, res) => {
   });
 });
 
+// 萬聖節美術素材清單：前端（halloween-art.js）只載入真的放了檔案的插槽。
+// 不先問清單就逐一探測的話，缺圖的插槽每開一次 OBS 來源就各打一次 404、各寫一行 WARN。
+const HALLOWEEN_ART_DIR = path.join(projectRoot, 'public', 'assets', 'halloween');
+app.get('/assets/halloween/manifest.json', (req, res) => {
+  fs.readdir(HALLOWEEN_ART_DIR, (err, names) => {
+    const slots = err ? [] : names.filter((n) => /^[a-z0-9-]+\.webp$/.test(n)).map((n) => n.slice(0, -5)).sort();
+    res.set('Cache-Control', 'no-cache').json({ slots });
+  });
+});
+
 // Mirror P0 本機 A/B 測試用：不把 Kongyuan Sans 字體提交進專案，
 // 只在工作區旁邊存在測試 clone 時提供固定唯讀路由；正式環境找不到就直接 404。
 app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
@@ -365,15 +377,17 @@ app.get('/setlist', requireSourceAccess, (req, res) => {
   sendNoCache(res, 'setlist.html');
 });
 
-// 中秋募資活動疊加頁（透明背景 + 月亮進度條 + 燈籠名牌）
-app.get('/moon', requireSourceAccess, (req, res) => {
-  // 活動已結束（啟動時判斷）：OBS 來源若還留著，給一張完全透明的空白頁。
-  if (!moonEvent.isActive()) {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    return res.type('html').send('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>html,body{margin:0;background:transparent}</style></head><body></body></html>');
-  }
-  sendNoCache(res, 'moon.html');
-});
+// 限時節慶活動疊加頁：/moon（月亮進度條＋燈籠名牌）、/halloween（南瓜燈＋萬聖節名牌）。
+// 活動已結束（啟動時判斷）：OBS 來源若還留著，給一張完全透明的空白頁。
+for (const [route, seasonal] of [['moon', moonEvent], ['halloween', halloweenEvent]]) {
+  app.get(`/${route}`, requireSourceAccess, (req, res) => {
+    if (!seasonal.isActive()) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.type('html').send('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>html,body{margin:0;background:transparent}</style></head><body></body></html>');
+    }
+    sendNoCache(res, `${route}.html`);
+  });
+}
 
 // 跟唱視圖：給主播自己看的整句歌詞（不逐字），不是 OBS 疊加層，PIN 保護同控制面板/遙控器
 app.get('/prompter', (req, res) => {
@@ -452,6 +466,16 @@ const twitch = new TwitchService({
   getPlaybackSnapshot: () => socketApi.getState(),
 });
 socketApi.setTwitchService(twitch);
+
+// ─── 萬聖節觀眾互動：掛在 Twitch 的聊天／兌換攔截點上，活動結束後自動不作用 ───
+const { createHalloweenInteractions } = require('./services/halloween-interactions');
+const halloweenInteractions = createHalloweenInteractions({
+  isActive: () => halloweenEvent.isActive(),
+  emit: (event, payload) => io.emit(event, payload),
+  getDonations: () => halloweenEvent.snapshot().donations,
+});
+halloweenInteractions.attachTwitch(twitch);
+socketApi.setHalloweenInteractions(halloweenInteractions);
 app.use(require('./routes/twitch-auth')(twitch));
 twitch.start();
 process.on('exit', () => twitch.stop());

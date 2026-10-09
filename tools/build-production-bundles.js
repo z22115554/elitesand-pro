@@ -261,6 +261,7 @@ const PAGE_BUNDLES = [
   { html: 'setlist.html', bundleName: 'setlist' },
   { html: 'display.html', bundleName: 'display' },
   { html: 'moon.html', bundleName: 'moon' },
+  { html: 'halloween.html', bundleName: 'halloween' },
   { html: 'webgpu-separation-worker.html', bundleName: 'webgpu-separation-worker' },
 ];
 

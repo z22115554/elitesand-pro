@@ -7020,8 +7020,8 @@ test('歌單亮色背景可讀性保護與模板有效設定守衛存在', () =>
   eq(schema.FIELD_BY_KEY.waitOpacity.default, 72, '新歌單預設不得把未唱文字淡到亮色背景看不見：');
   ok(indexHtml.includes('id="sls-readability-guard"'), '面板必須提供亮色背景可讀性保護開關');
   ok(indexHtml.includes('可讀性襯底色') && indexHtml.includes('可讀性襯底不透明度'), '主要文字與襯底色必須在快速調整可見');
-  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager"'), '正在播放字級必須在每個有 active 歌曲的模板顯示');
-  ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager"'), '歌曲編號設定不得在不支援的模板顯示');
+  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt"'), '正在播放字級必須在每個有 active 歌曲的模板顯示');
+  ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager haunt"'), '歌曲編號設定不得在不支援的模板顯示');
   ok(setlistPanel.includes('設定只套用並保存於這個模板；切換模板不會影響其他歌單。'), '模板說明必須明示設定會各模板獨立保存');
   ok(setlistCss.includes(':root:not([data-sl-readable-off]) .now-singing') && setlistCss.includes(':root:not([data-sl-readable-off]) .tl-now'), '經典與場景模板都必須有非全螢幕的可讀性襯底');
   ok(setlistSource.includes('const sameSideContrast = guarded') && setlistSource.includes('const readableCardColor'), '可讀性保護必須在文字與襯底同明度時自動轉成安全對比');
@@ -7063,7 +7063,7 @@ test('歌單每個模板保存獨立外觀，正在播放字級也套到 active 
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const schema = require('../public/js/setlist-style-schema');
-  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager"'),
+  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt"'),
     '所有有正在播放內容的模板都必須顯示正在播放字級設定');
   ['.term-item.active .t-line { font-size: var(--sl-sz-n)', '.bb-item.active .bb-name { font-size: var(--sl-sz-n)', '.card.active .card-title { font-size: var(--sl-sz-n)', '.index-item.active .index-title { font-size: var(--sl-sz-n)']
     .forEach((rule) => ok(setlistCss.includes(rule), `active row 必須吃正在播放字級：${rule}`));
@@ -7073,7 +7073,7 @@ test('歌單每個模板保存獨立外觀，正在播放字級也套到 active 
 test('setlist queue scrolling is limited to the intended vertical templates', () => {
   const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
-  ok(setlistSource.includes("const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager']);"),
+  ok(setlistSource.includes("const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager', 'haunt']);"),
     'Only classic and the four vertically queued skins should auto-scroll.');
   ok(setlistSource.includes('function applyQueueScrolls()') && setlistSource.includes("runway.appendChild(copy);"),
     'Overflowing queues should duplicate one complete track for a seamless loop.');
@@ -7701,7 +7701,7 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   const setlistSource = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const schema = require('../public/js/setlist-style-schema');
-  const fillLayouts = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note'];
+  const fillLayouts = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note'];
   const sceneLayouts = ['timeline', 'diagonal', 'constellation'];
 
   // 只能有一種輸出：不可再回到「小元件 / 全畫布」兩種模式或 URL 開關。
@@ -7710,8 +7710,8 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   ok(setlistPanel.includes("const url = new URL('/setlist', window.location.origin);") && !setlistPanel.includes("set('mode'"),
     'OBS 網址必須固定，尺寸改由 OBS Browser Source 決定');
 
-  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note']);"),
-    '十三個清單型模板必須集中列在同一份填滿白名單');
+  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note']);"),
+    '十四個清單型模板必須集中列在同一份填滿白名單');
   ok(setlistSource.includes('const FIT_REF_W = 460, FIT_REF_H = 320, FIT_MIN = 0.85, FIT_MAX = 3.2;') && setlistSource.includes('Math.min(w / FIT_REF_W, h / FIT_REF_H)'),
     '縮放係數必須同時依來源寬與高計算，且基準要維持實機校準過的可讀字級');
   ok(setlistSource.includes("dataset.slFit = isFillLayout() ? 'fill' : 'scene'"), 'CSS 必須能分辨填滿與場景兩種語意');
@@ -7737,7 +7737,7 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   const fillRootRule = /html\[data-sl-fit="fill"\]\[data-layout\] #setlist-root \{([\s\S]*?)\n\}/.exec(setlistCss)?.[1] || '';
   ok(fillRootRule.includes('inset: 0') && fillRootRule.includes('max-width: none') && fillRootRule.includes('transform: none'),
     '填滿模式的根節點必須貼齊來源、不留固定寬度、不用 transform 放大點陣');
-  const skinLayouts = ['label', 'glow', 'round', 'pager'];
+  const skinLayouts = ['label', 'glow', 'round', 'pager', 'haunt'];
   ok(setlistCss.includes('html[data-sl-fit="fill"][data-layout] .sk-shell'), '四款皮膚共用的填滿版面規則必須存在');
   fillLayouts.filter((layout) => !skinLayouts.includes(layout)).forEach((layout) => {
     ok(setlistCss.includes(`html[data-sl-fit="fill"][data-layout="${layout}"]`), `${layout} 必須有自己的填滿版面規則`);
@@ -7770,10 +7770,10 @@ test('清單型歌單有已唱／未唱區塊與勾選，單點式模板不吃�
   ok(done && done.domId === 'sls-show-done' && done.default === true && !done.special, '已唱區塊必須是一般布林欄位並綁到 checkbox');
   ok(indexHtml.includes('id="sls-show-upcoming"') && indexHtml.includes('id="sls-show-done"'), '面板必須提供兩個獨立勾選');
   ok(!indexHtml.includes('sls-classic-sections') && !setlistPanel.includes('sls-classic-sections'), '舊的三態下拉與其特例程式碼必須整組移除');
-  ok(indexHtml.includes('data-sl-layout="classic cards terminal billboard index label glow round pager"'), '勾選只對九個清單型模板顯示');
+  ok(indexHtml.includes('data-sl-layout="classic cards terminal billboard index label glow round pager haunt"'), '勾選只對十個清單型模板顯示');
 
   // renderer：九個清單型模板才吃這組設定；八個非經典模板要有區塊標籤。
-  ok(setlistSource.includes("const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index', 'label', 'glow', 'round', 'pager']);"),
+  ok(setlistSource.includes("const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index', 'label', 'glow', 'round', 'pager', 'haunt']);"),
     '清單型模板必須集中列在同一份白名單');
   ok(setlistSource.includes('function showDone()') && setlistSource.includes('function showWait()')
     && setlistSource.includes('const done = showDone() ?') && setlistSource.includes('const wait = showWait()'),

@@ -1,0 +1,685 @@
+/* 萬聖節活動疊加層：透明底，只動自家元素（鐵則 11）。 */
+:root {
+  --candle: #ffd85a;
+  --candle-soft: #ffe9a8;
+  --ember: #ff8a1c;
+  --violet: #a77bff;
+  --ink: #fff6e8;
+  --night: rgba(22, 14, 34, 0.62);
+  --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 12px rgba(0, 0, 0, 0.4);
+  --font: 'Iansui', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  --font-strong: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+}
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: var(--font);
+  color: var(--ink);
+}
+
+body[data-part="pumpkin"] .fx-layer,
+body[data-part="treats"] .fx-layer,
+body[data-part="credits"] .fx-layer,
+body[data-part="fx"] .treat-string,
+body[data-part="fx"] .pumpkin-panel,
+body[data-activity="pending"] .fx-layer,
+body[data-activity="hidden"] .fx-layer,
+body[data-part="credits"] .treat-string,
+body[data-part="credits"] .pumpkin-panel,
+body[data-part="pumpkin"] .treat-string,
+body[data-part="treats"] .pumpkin-panel { display: none; }
+body[data-activity="pending"] .treat-string,
+body[data-activity="pending"] .pumpkin-panel,
+body[data-activity="hidden"] .treat-string,
+body[data-activity="hidden"] .pumpkin-panel,
+body[data-activity="hidden"] .pumpkin-credits { visibility: hidden; }
+
+/* ─── 南瓜燈 ─── */
+.pumpkin-panel {
+  --lit: 0;
+  position: absolute;
+  right: 48px;
+  bottom: 48px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
+.pumpkin-cluster { position: relative; display: flex; align-items: center; gap: 22px; zoom: var(--pumpkin-scale, 1); }
+
+.pumpkin-wrap { position: relative; width: 190px; height: 190px; flex: none; }
+.pumpkin-svg {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* 燭光越滿，外圈光暈越大越亮。 */
+  filter: drop-shadow(0 0 calc(6px + 30px * var(--lit)) rgba(255, 140, 30, calc(0.25 + 0.55 * var(--lit))));
+}
+.pumpkin-stem { fill: #5f6b2c; stroke: #3d4519; stroke-width: 1.5; }
+.pumpkin-body ellipse { fill: url(#pumpkin-skin); stroke: rgba(110, 40, 4, 0.55); stroke-width: 2; }
+.pumpkin-face-dark { fill: #2a1206; }
+.pumpkin-face-lit { fill: url(#pumpkin-fire); }
+
+.pumpkin-text { text-shadow: var(--text-shadow); }
+.pumpkin-title {
+  font-size: 32px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--candle);
+}
+.pumpkin-amount {
+  margin-top: 6px;
+  font-family: var(--font-strong);
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pumpkin-currency { font-size: 0.7em; margin-right: 4px; opacity: 0.85; }
+.pumpkin-sep { margin: 0 6px; opacity: 0.6; }
+#halloween-goal { opacity: 0.75; }
+.pumpkin-done {
+  margin-top: 8px;
+  font-size: 22px;
+  color: var(--candle);
+  letter-spacing: 0.06em;
+}
+.pumpkin-done[hidden] { display: none; }
+
+/* 全亮後燭火會輕輕晃。 */
+.pumpkin-panel.is-full .pumpkin-face-lit { animation: candle-flicker 2.6s ease-in-out infinite; }
+@keyframes candle-flicker {
+  0%, 100% { opacity: 1; }
+  30% { opacity: 0.86; }
+  55% { opacity: 1; }
+  70% { opacity: 0.92; }
+}
+
+.pumpkin-panel.is-bump .pumpkin-amount { animation: amount-bump 0.9s ease; }
+@keyframes amount-bump {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.12); color: var(--candle); }
+  100% { transform: scale(1); }
+}
+
+/* ─── 感謝提示 ─── */
+.pumpkin-thanks {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 14px);
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--night);
+  border: 1px solid rgba(255, 170, 70, 0.5);
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow: var(--text-shadow);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.pumpkin-thanks.is-shown { opacity: 1; transform: translateY(0); }
+.pumpkin-thanks b { color: var(--candle); font-family: var(--font-strong); font-weight: 900; }
+
+/* ─── 名牌 ─── */
+.treat-string {
+  zoom: var(--treat-scale, 1);
+  position: absolute;
+  top: 0;
+  left: 40px;
+  right: 40px;
+  height: 240px;
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+/* 掛繩：一條帶結的蜘蛛絲。 */
+.treat-string::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(235, 225, 255, 0.5) 8%, rgba(235, 225, 255, 0.5) 92%, transparent);
+}
+.treat-string:empty::before { display: none; }
+.treat-string.is-swapping { opacity: 0; }
+
+.treat {
+  position: relative;
+  flex: none;
+  width: 92px;
+  padding-top: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 18px;
+  animation: treat-sway 5.4s ease-in-out infinite;
+}
+.treat:nth-child(2n) { animation-duration: 6.4s; animation-delay: -1.5s; }
+.treat:nth-child(3n) { animation-duration: 5.8s; animation-delay: -2.7s; }
+@keyframes treat-sway {
+  0%, 100% { transform: rotate(-2.5deg); }
+  50% { transform: rotate(2.5deg); }
+}
+
+.treat-cord { width: 2px; height: 24px; background: rgba(235, 225, 255, 0.6); }
+.treat-top { position: relative; width: 92px; height: 0; }
+.treat-bottom { position: relative; width: 92px; height: 0; }
+.treat-body {
+  --glow: rgba(255, 150, 60, 0.45);
+  position: relative;
+  width: 92px;
+  min-height: 104px;
+  padding: 14px 8px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  box-shadow: 0 0 22px var(--glow);
+}
+.treat-name {
+  position: relative;
+  z-index: 1;
+  font-size: 18px;
+  line-height: 1.2;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.treat-amount {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-strong);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 糖果：粉白斜紋的包裝，兩側扭轉的糖紙。 */
+.treat--candy .treat-body {
+  --glow: rgba(255, 140, 190, 0.45);
+  min-height: 64px;
+  margin: 18px 0;
+  border-radius: 32px;
+  background: repeating-linear-gradient(135deg, #ff7eb3 0 10px, #fff0f6 10px 20px);
+  border: 2px solid #ffd6e8;
+}
+.treat--candy .treat-body::before,
+.treat--candy .treat-body::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 38px;
+  margin-top: -19px;
+  background: #ffb3d1;
+}
+.treat--candy .treat-body::before { left: -18px; clip-path: polygon(100% 30%, 0 0, 18% 50%, 0 100%, 100% 70%); }
+.treat--candy .treat-body::after { right: -18px; clip-path: polygon(0 30%, 100% 0, 82% 50%, 100% 100%, 0 70%); }
+.treat--candy .treat-name,
+.treat--candy .treat-amount {
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #8a1f52;
+}
+
+/* 小幽靈：白色床單，下緣波浪。 */
+.treat--ghost .treat-body {
+  --glow: rgba(220, 230, 255, 0.55);
+  border-radius: 46px 46px 6px 6px;
+  background: radial-gradient(circle at 50% 30%, #ffffff, #e6e9ff 70%);
+  color: #3b2a5c;
+  padding-top: 26px;
+}
+.treat--ghost .treat-body::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  width: 30px;
+  height: 10px;
+  margin-left: -15px;
+  background:
+    radial-gradient(circle at 5px 5px, #2b1d45 4px, transparent 4.5px),
+    radial-gradient(circle at 25px 5px, #2b1d45 4px, transparent 4.5px);
+}
+.treat--ghost .treat-bottom {
+  height: 12px;
+  margin-top: -1px;
+  background: radial-gradient(circle at 9.2px 0, #e6e9ff 9px, transparent 9.5px) 0 0 / 18.4px 12px repeat-x;
+}
+.treat--ghost .treat-amount { color: #6b5a8e; }
+
+/* 蝙蝠：深紫身體，兩側鋸齒翅膀與耳朵。 */
+.treat--bat .treat-body {
+  --glow: rgba(167, 123, 255, 0.5);
+  border-radius: 40% / 34%;
+  background: radial-gradient(circle at 50% 35%, #5a3a86, #2c1b46 75%);
+  border: 1px solid rgba(200, 170, 255, 0.4);
+  color: #f1e6ff;
+}
+.treat--bat .treat-body::before,
+.treat--bat .treat-body::after {
+  content: '';
+  position: absolute;
+  top: 18px;
+  width: 30px;
+  height: 46px;
+  background: #3a2560;
+}
+.treat--bat .treat-body::before { left: -26px; clip-path: polygon(100% 0, 0 30%, 22% 52%, 0 74%, 40% 70%, 100% 100%); }
+.treat--bat .treat-body::after { right: -26px; clip-path: polygon(0 0, 100% 30%, 78% 52%, 100% 74%, 60% 70%, 0 100%); }
+.treat--bat .treat-top::before {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  width: 46px;
+  height: 14px;
+  margin-left: -23px;
+  background: #2c1b46;
+  clip-path: polygon(0 100%, 12% 0, 30% 100%, 70% 100%, 88% 0, 100% 100%);
+}
+.treat--bat .treat-amount { color: #cdb6ff; }
+
+/* 南瓜燈：橘色南瓜，縱向瓣紋與綠色蒂頭。 */
+.treat--pumpkin .treat-body {
+  --glow: rgba(255, 140, 30, 0.55);
+  border-radius: 46% / 42%;
+  background:
+    repeating-linear-gradient(90deg, rgba(120, 40, 0, 0.18) 0 2px, transparent 2px 18px),
+    radial-gradient(circle at 50% 40%, #ffb04a, #e96a0f 65%, #a8450b);
+  color: #fff8ea;
+  text-shadow: 0 1px 2px rgba(90, 30, 0, 0.7);
+}
+.treat--pumpkin .treat-top::before {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  width: 10px;
+  height: 14px;
+  margin-left: -5px;
+  border-radius: 3px 3px 0 0;
+  background: #5f6b2c;
+}
+.treat--pumpkin .treat-amount { color: #ffe3a6; }
+
+/* 魔女帽黑貓：黑貓臉加尖耳，頭上一頂紫色魔女帽。 */
+.treat--witch .treat-body {
+  --glow: rgba(190, 255, 120, 0.4);
+  border-radius: 44% / 40%;
+  background: radial-gradient(circle at 50% 35%, #2e2438, #120c18 75%);
+  border: 1px solid rgba(190, 255, 120, 0.35);
+  color: #d9ff9e;
+}
+.treat--witch .treat-top::before {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 70px;
+  height: 18px;
+  margin-left: -35px;
+  background: #120c18;
+  clip-path: polygon(0 100%, 10% 0, 32% 100%, 68% 100%, 90% 0, 100% 100%);
+}
+.treat--witch .treat-top::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 50px;
+  height: 32px;
+  margin-left: -25px;
+  background:
+    linear-gradient(#ffb02e, #ffb02e) 0 calc(100% - 7px) / 100% 5px no-repeat,
+    #5b2f94;
+  clip-path: polygon(0 100%, 38% 36%, 52% 0, 60% 30%, 64% 82%, 100% 100%);
+}
+.treat--witch .treat-amount { color: #b6e86e; }
+
+.treat.is-new { animation: treat-drop 1.4s cubic-bezier(.25, 1.4, .4, 1) both, treat-sway 5.4s ease-in-out 1.4s infinite; }
+.treat.is-new .treat-body { animation: treat-flare 2.4s ease-out; }
+@keyframes treat-drop {
+  0% { transform: translateY(-240px) rotate(-8deg); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translateY(0) rotate(0deg); opacity: 1; }
+}
+@keyframes treat-flare {
+  0%, 40% { box-shadow: 0 0 70px var(--glow), 0 0 30px var(--glow); }
+  100% { box-shadow: 0 0 22px var(--glow); }
+}
+
+.treat-page-dots {
+  position: absolute;
+  top: 252px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+.treat-page-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 216, 90, 0.35); }
+.treat-page-dots span.is-current { background: var(--candle); }
+
+/* ─── 謝幕名單 ─── */
+.pumpkin-credits { display: none; position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+body[data-part="credits"] .pumpkin-credits { display: block; }
+.pumpkin-credits-roll {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: min(760px, 90vw);
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.75), 0 0 18px rgba(0, 0, 0, 0.5);
+  visibility: hidden;
+}
+.pumpkin-credits-roll.is-rolling { visibility: visible; }
+.credits-heading { font-family: var(--font-strong); font-size: 22px; font-weight: 700; letter-spacing: 0.3em; color: rgba(255, 246, 232, 0.8); }
+.credits-title { margin-top: 10px; font-size: 52px; letter-spacing: 0.1em; color: var(--candle); }
+.credits-group { margin-top: 72px; }
+.credits-group-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+  letter-spacing: 0.16em;
+  color: var(--credits-accent, var(--candle));
+}
+.credits-group-label::before, .credits-group-label::after {
+  content: '';
+  width: 40px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.6;
+}
+.credits-names {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px 36px;
+  font-family: var(--font-strong);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.credits-group[data-style="witch"] { --credits-accent: #c6f27e; }
+.credits-group[data-style="witch"] .credits-names { font-size: 40px; }
+.credits-group[data-style="pumpkin"] { --credits-accent: #ffae4a; }
+.credits-group[data-style="pumpkin"] .credits-names { font-size: 36px; }
+.credits-group[data-style="bat"] { --credits-accent: #c9a8ff; }
+.credits-group[data-style="ghost"] { --credits-accent: #e8ecff; }
+.credits-group[data-style="candy"] { --credits-accent: #ff9ec7; }
+.credits-closing { margin-top: 96px; font-size: 38px; letter-spacing: 0.1em; color: var(--candle); }
+.credits-closing-sub { margin-top: 12px; font-family: var(--font-strong); font-size: 20px; color: rgba(255, 246, 232, 0.8); letter-spacing: 0.1em; }
+
+/* ─── 達標慶祝：南瓜一跳、蝙蝠飛散、橘紫火花 ─── */
+.pumpkin-burst { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.pumpkin-bat {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  background: #4a2d73;
+  clip-path: polygon(0 20%, 18% 0, 30% 30%, 42% 18%, 50% 34%, 58% 18%, 70% 30%, 82% 0, 100% 20%, 86% 60%, 70% 52%, 58% 100%, 50% 74%, 42% 100%, 30% 52%, 14% 60%);
+  filter: drop-shadow(0 0 3px rgba(225, 205, 255, 0.95)) drop-shadow(0 0 10px rgba(167, 123, 255, 0.9));
+}
+.pumpkin-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--candle);
+  box-shadow: 0 0 10px var(--ember);
+}
+.pumpkin-spark.is-violet { background: #d9c2ff; box-shadow: 0 0 10px var(--violet); }
+
+.pumpkin-panel.is-celebrating .pumpkin-svg { animation: pumpkin-pop 1.2s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes pumpkin-pop {
+  0% { transform: scale(1) rotate(0deg); }
+  30% { transform: scale(1.2) rotate(-4deg); }
+  60% { transform: scale(0.96) rotate(3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.pumpkin-panel.is-celebrating .pumpkin-done { animation: done-pop 1.4s cubic-bezier(.3, 1.6, .5, 1) 0.5s both; }
+@keyframes done-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.treat-string.is-celebrating .treat-body {
+  animation: treat-cheer 1.6s ease-out both;
+  animation-delay: var(--cheer-delay, 0ms);
+}
+@keyframes treat-cheer {
+  0% { transform: translateY(0); box-shadow: 0 0 22px var(--glow); }
+  25% { transform: translateY(-12px); box-shadow: 0 0 80px var(--glow), 0 0 36px var(--glow); }
+  50% { transform: translateY(0); }
+  100% { transform: translateY(0); box-shadow: 0 0 22px var(--glow); }
+}
+
+/* ─── 觀眾互動特效 ─── */
+.fx-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+
+/* !treat／!trick：從下緣往上飄的小圖示＋名字 */
+.fx-pop {
+  position: absolute;
+  z-index: 1;
+  bottom: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px 6px 8px;
+  border-radius: 999px;
+  background: var(--night);
+  border: 1px solid rgba(255, 216, 90, 0.35);
+  font-size: 22px;
+  white-space: nowrap;
+  text-shadow: var(--text-shadow);
+  transform: translate(-50%, 0);
+}
+.fx-pop b { font-family: var(--font-strong); font-weight: 900; color: var(--candle); }
+.fx-pop--trick { border-color: rgba(200, 170, 255, 0.45); }
+.fx-pop--trick b { color: #d9c2ff; }
+.fx-pop-icon { position: relative; flex: none; width: 34px; height: 34px; }
+.fx-pop--treat .fx-pop-icon {
+  width: 30px;
+  height: 18px;
+  margin: 0 8px;
+  border-radius: 10px;
+  background: repeating-linear-gradient(135deg, #ff7eb3 0 6px, #fff0f6 6px 12px);
+}
+.fx-pop--treat .fx-pop-icon::before,
+.fx-pop--treat .fx-pop-icon::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  width: 10px;
+  height: 16px;
+  background: #ffb3d1;
+}
+.fx-pop--treat .fx-pop-icon::before { left: -8px; clip-path: polygon(100% 30%, 0 0, 0 100%, 100% 70%); }
+.fx-pop--treat .fx-pop-icon::after { right: -8px; clip-path: polygon(0 30%, 100% 0, 100% 100%, 0 70%); }
+.fx-pop--trick .fx-pop-icon {
+  border-radius: 17px 17px 4px 4px;
+  background:
+    radial-gradient(circle at 11px 13px, #2b1d45 3px, transparent 3.5px),
+    radial-gradient(circle at 23px 13px, #2b1d45 3px, transparent 3.5px),
+    radial-gradient(circle at 50% 35%, #ffffff, #dfe3ff 75%);
+  filter: drop-shadow(0 0 6px rgba(220, 230, 255, 0.7));
+}
+
+/* 搗蛋獎勵：畫面中央的大幽靈 */
+.fx-prank {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  margin: -170px 0 0 -170px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.fx-prank-ghost {
+  position: relative;
+  width: 220px;
+  height: 250px;
+  border-radius: 110px 110px 18px 18px;
+  background:
+    radial-gradient(ellipse 18px 26px at 72px 100px, #1c1030 98%, transparent),
+    radial-gradient(ellipse 18px 26px at 148px 100px, #1c1030 98%, transparent),
+    radial-gradient(ellipse 30px 22px at 110px 168px, #1c1030 98%, transparent),
+    radial-gradient(circle at 50% 30%, #ffffff, #e2e6ff 72%);
+  filter: drop-shadow(0 0 28px rgba(220, 230, 255, 0.85));
+}
+.fx-prank-ghost::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -20px;
+  height: 22px;
+  background: radial-gradient(circle at 18.3px 0, #e2e6ff 18px, transparent 18.5px) 0 0 / 36.6px 22px repeat-x;
+}
+.fx-prank-boo {
+  margin-top: 6px;
+  font-family: var(--font-strong);
+  font-size: 72px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(167, 123, 255, 0.95), 0 4px 0 #5b2f94, 0 6px 14px rgba(0, 0, 0, 0.6);
+}
+.fx-prank-label {
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: var(--night);
+  border: 1px solid rgba(200, 170, 255, 0.5);
+  font-size: 26px;
+  white-space: nowrap;
+  text-shadow: var(--text-shadow);
+}
+.fx-prank-label b { font-family: var(--font-strong); font-weight: 900; color: #d9c2ff; }
+
+/* 抽獎揭曉：中央卡片，名字輪轉後停在得主 */
+.fx-raffle {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  min-width: 520px;
+  padding: 26px 40px 30px;
+  border-radius: 24px;
+  background: rgba(22, 14, 34, 0.86);
+  border: 2px solid rgba(255, 170, 70, 0.6);
+  box-shadow: 0 0 40px rgba(255, 140, 30, 0.35);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: raffle-in 0.6s cubic-bezier(.3, 1.4, .5, 1) both;
+}
+.fx-raffle.is-leaving { animation: raffle-out 0.7s ease both; }
+.fx-raffle-title { font-size: 30px; letter-spacing: 0.12em; color: var(--candle); }
+.fx-raffle-name {
+  margin-top: 14px;
+  min-height: 1.3em;
+  font-family: var(--font-strong);
+  font-size: 64px;
+  font-weight: 900;
+  color: var(--ink);
+  text-shadow: var(--text-shadow);
+}
+.fx-raffle.is-won .fx-raffle-name { color: var(--candle); animation: raffle-win 1.2s cubic-bezier(.3, 1.6, .5, 1); }
+.fx-raffle-sub { margin-top: 10px; font-size: 22px; color: rgba(255, 246, 232, 0.85); }
+@keyframes raffle-in { from { transform: translate(-50%, -50%) scale(0.7); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@keyframes raffle-out { to { transform: translate(-50%, -50%) scale(0.9); opacity: 0; } }
+@keyframes raffle-win {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.25); text-shadow: 0 0 30px rgba(255, 200, 80, 0.95), var(--text-shadow); }
+  100% { transform: scale(1); }
+}
+
+.credits-group[data-style="candy-king"] { --credits-accent: #ffd85a; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-raffle, .fx-raffle.is-leaving, .fx-raffle.is-won .fx-raffle-name { animation: none; }
+  .treat, .treat.is-new, .treat.is-new .treat-body, .pumpkin-panel.is-full .pumpkin-face-lit { animation: none; }
+  .pumpkin-thanks, .treat-string { transition: none; }
+  .pumpkin-panel.is-celebrating .pumpkin-svg, .pumpkin-panel.is-celebrating .pumpkin-done, .treat-string.is-celebrating .treat-body { animation: none; }
+}
+
+/* ═══ 美術素材插槽（public/assets/halloween/<slot>.webp）═══
+   halloween-art.js 探測到素材時會在 <html> 加 art-<slot> 並設 --art-<slot>；
+   沒有素材時下列規則都不生效，畫面維持上面的 CSS／SVG 保底版本。 */
+
+/* 南瓜燈：未點亮與點亮兩張要同尺寸同構圖；亮的那張依進度由下往上露出。 */
+.pumpkin-art { display: none; position: absolute; inset: -6%; z-index: 1; background: center / contain no-repeat; pointer-events: none; }
+html.art-pumpkin-unlit.art-pumpkin-lit .pumpkin-svg { visibility: hidden; }
+html.art-pumpkin-unlit.art-pumpkin-lit .pumpkin-art { display: block; }
+.pumpkin-art--unlit { background-image: var(--art-pumpkin-unlit); }
+.pumpkin-art--lit {
+  background-image: var(--art-pumpkin-lit);
+  clip-path: inset(calc((1 - var(--lit)) * 100%) 0 0 0);
+  filter: drop-shadow(0 0 calc(6px + 26px * var(--lit)) rgba(255, 140, 30, calc(0.2 + 0.5 * var(--lit))));
+}
+html.art-pumpkin-unlit.art-pumpkin-lit .pumpkin-panel.is-full .pumpkin-art--lit { animation: candle-flicker 2.6s ease-in-out infinite; }
+html.art-pumpkin-unlit.art-pumpkin-lit .pumpkin-panel.is-celebrating .pumpkin-art { animation: pumpkin-pop 1.2s cubic-bezier(.3, 1.6, .5, 1); }
+
+/* 名牌：圖片當底，名字與金額疊在圖片中央的留白區。 */
+html.art-tag-candy .treat--candy .treat-body,
+html.art-tag-ghost .treat--ghost .treat-body,
+html.art-tag-bat .treat--bat .treat-body,
+html.art-tag-pumpkin .treat--pumpkin .treat-body,
+html.art-tag-witch .treat--witch .treat-body {
+  width: 112px;
+  min-height: 136px;
+  margin: 0;
+  padding: 30px 14px 22px;
+  border: 0;
+  border-radius: 0;
+  background: center / contain no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 0 14px var(--glow));
+}
+html.art-tag-candy .treat--candy .treat-body { background-image: var(--art-tag-candy); }
+html.art-tag-ghost .treat--ghost .treat-body { background-image: var(--art-tag-ghost); }
+html.art-tag-bat .treat--bat .treat-body { background-image: var(--art-tag-bat); }
+html.art-tag-pumpkin .treat--pumpkin .treat-body { background-image: var(--art-tag-pumpkin); }
+html.art-tag-witch .treat--witch .treat-body { background-image: var(--art-tag-witch); }
+html.art-tag-candy .treat--candy .treat-body::before, html.art-tag-candy .treat--candy .treat-body::after,
+html.art-tag-ghost .treat--ghost .treat-body::before, html.art-tag-ghost .treat--ghost .treat-bottom,
+html.art-tag-bat .treat--bat .treat-body::before, html.art-tag-bat .treat--bat .treat-body::after, html.art-tag-bat .treat--bat .treat-top::before,
+html.art-tag-pumpkin .treat--pumpkin .treat-top::before,
+html.art-tag-witch .treat--witch .treat-top::before, html.art-tag-witch .treat--witch .treat-top::after { display: none; }
+html.art-tag-candy .treat--candy .treat-name, html.art-tag-candy .treat--candy .treat-amount { background: none; }
+html[class*="art-tag-"] .treat-string { gap: 22px; }
+html.art-tag-candy .treat.treat--candy .treat-body,
+html.art-tag-ghost .treat.treat--ghost .treat-body { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6); }
+
+/* 慶祝蝙蝠、搗蛋大幽靈、互動小圖示 */
+html.art-bat .pumpkin-bat { clip-path: none; background: var(--art-bat) center / contain no-repeat; filter: drop-shadow(0 0 6px rgba(167, 123, 255, 0.8)); }
+html.art-ghost-prank .fx-prank-ghost { width: 280px; height: 320px; border-radius: 0; background: var(--art-ghost-prank) center / contain no-repeat; }
+html.art-ghost-prank .fx-prank-ghost::after { display: none; }
+html.art-pop-candy .fx-pop--treat .fx-pop-icon { width: 34px; height: 34px; margin: 0; border-radius: 0; background: var(--art-pop-candy) center / contain no-repeat; }
+html.art-pop-candy .fx-pop--treat .fx-pop-icon::before, html.art-pop-candy .fx-pop--treat .fx-pop-icon::after { display: none; }
+html.art-pop-ghost .fx-pop--trick .fx-pop-icon { border-radius: 0; background: var(--art-pop-ghost) center / contain no-repeat; }

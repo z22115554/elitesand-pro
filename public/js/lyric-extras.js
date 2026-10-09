@@ -66,6 +66,11 @@
     lightboardIdleMarquee: true,     // 間奏跑馬：只在沒人唱時跑，零成本
     lightboardIdleGapMs: 2500,       // 間奏跑馬門檻：間奏要長過這個秒數才開始跑（1.5–20s）
     lightboardSlideIn: false,        // 進場滑入：每句都動會累積成吵，預設關
+    // ── 萬聖燭光：歌詞位置＋三個裝飾開關 ──
+    halloweenPosition: 'bottom',     // 'bottom'｜'middle'｜'top'
+    halloweenFlicker: true,          // 燭火閃爍（整句一層 opacity，不吃效能）
+    halloweenEmbers: true,           // 字被點亮時迸出火星
+    halloweenInterlude: true,        // 長間奏時小幽靈飄出來
     // ── 紙帶逐字：排向（橫式白條／直式黑條）＋紙條顏色 ──
     paperstripOrient: 'horizontal',
     paperstripColor: '#ffffff',
@@ -112,7 +117,7 @@
     displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
   };
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'halloween'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -129,6 +134,7 @@
     typewriter: { label: '對話氣泡', description: '仿 iMessage 聊天室：每句歌詞在對話泡泡裡逐字打出、游標貼著剛打出的字閃爍。已唱不消失、往上疊。合唱歌曲一邊固定代表一個聲部；非合唱時可選全左／全右／左右分散（分散＝1–5 句一段隨機交替）。長間奏會像聊天室冷場一樣跳一張貼圖（可上傳自己的，支援透明 PNG／GIF）。', scope: '可調：字型、文字色、左右對話泡泡底色、左右邊距、靠邊方式（全左／全右／左右分散）、長間奏貼圖（開關／門檻／自訂圖庫）。上下位置與堆疊構圖固定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     jizura: { label: '文字PV', description: '日系文字 PV 風格：每句自動挑版面、進場、退場與小裝飾，整首歌預先規劃好。分析過段落的歌會依段落調整：主歌安靜、蓄力段加強、副歌最熱鬧（沒分析過的歌整首用中等強度）。為了不擋到主播，只用不會大面積蓋住畫面的版面，預設偏右（裝飾仍鋪滿全畫面，只把歌詞盡量往右推、不超出畫面）。演出引擎：JIZURA（hakoniwa，MIT 授權）。實驗性。', scope: '可調：歌詞位置（偏左／偏右／兩側／置中）、動作節奏（流暢／作畫感）、文字色、強調色、動畫強度（沉穩＝整首只用安靜的版面與動作；標準＝依段落變化、不用滿版飛字；狂放＝連滿版飛字的版面都用）。字型與字級由引擎依版面決定，不吃一般字型設定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     particle: { label: '風息成字', description: '粒子隨風散開，再聚成正在唱的文字。字級走一般字幕尺度、留安全邊距，進出場是粒子聚散。', scope: '可調：動畫強度、字型／字級／字重、陰影、左右位置（左右分散＝整句交替左右）、上下位置、水平／垂直微調、直書、左右／上下邊距、左右分散時的中央安全距離。粒子進場方向固定為自動。不支援拼音／諧音／翻譯。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
+    halloween: { label: '萬聖燭光', description: '沒唱到的字像刻在南瓜上、還沒點燈的暗字；唱到的字從裡面亮起燭光，偶爾迸出往上飄的火星。唱完的句子像煙一樣往上散掉，長間奏時一隻小幽靈飄出來陪著等。', scope: '可調：歌詞位置（下方／中央／上方）、字型／字級／字重、暗字顏色（沒唱到）、燭光顏色（唱到）、燭火閃爍、火星、間奏小幽靈。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
   };
 
   function getTemplateUI(template) {
@@ -151,6 +157,7 @@
     // shadow 非 'none' 讓 renderer 畫它內建的描邊陰影（與初版一致）。
     jizura: { ...DEFAULT_SETTINGS, template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth' },
     particle: { ...DEFAULT_SETTINGS, template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', verticalPosition: 'center', lyricPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto', animationIntensity: 'normal' },
+    halloween: { ...DEFAULT_SETTINGS, template: 'halloween', fontSize: 52, fontWeight: 900, color: '#5d4a7e', activeColor: '#ffc560', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center' },
   };
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
@@ -417,6 +424,10 @@
     { id: 'ls-lightboard-pan', key: 'lightboardPan' },
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
     { id: 'ls-lightboard-slide', key: 'lightboardSlideIn' },
+    { id: 'ls-halloween-position', key: 'halloweenPosition' },
+    { id: 'ls-halloween-flicker', key: 'halloweenFlicker' },
+    { id: 'ls-halloween-embers', key: 'halloweenEmbers' },
+    { id: 'ls-halloween-interlude', key: 'halloweenInterlude' },
     { id: 'ls-paperstrip-color', key: 'paperstripColor' },
     { id: 'ls-ktv-interlude', key: 'ktvInterludeText' },
     { id: 'ls-ktv-ending', key: 'ktvEndingText' },
@@ -896,6 +907,8 @@
     if (lbFontField) lbFontField.hidden = !isLightboard;
     const lbScrollField = document.getElementById('lightboard-scroll-field');
     if (lbScrollField) lbScrollField.hidden = !isLightboard;
+    const hwField = document.getElementById('halloween-lyric-field');
+    if (hwField) hwField.hidden = settings.template !== 'halloween';
     // 紙帶逐字：排向（橫式／直式）＋紙條顏色
     const isPaperstripTpl = settings.template === 'paperstrip';
     const psOrientField = document.getElementById('paperstrip-orient-field');

@@ -31,6 +31,10 @@
     general: 'nav.system',
     twitch: 'nav.twitch',
     sections: 'nav.sections',
+    'public-request': 'nav.publicRequest',
+    bgm: 'nav.bgm',
+    moon: 'nav.moon',
+    halloween: 'nav.halloween',
   };
 
   const views = document.querySelectorAll('.view[data-view]');

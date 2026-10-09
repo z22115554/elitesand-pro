@@ -1917,3 +1917,104 @@ body.template-jizura #lyrics-container {
 }
 #jizura-root { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
 #jizura-root .jizura-canvas { position: absolute; display: block; }
+
+/* ─── 萬聖燭光：暗字被燭光點亮，唱完化成煙往上散；長間奏時小幽靈飄出來 ─── */
+/* 跟風息成字一樣佔滿畫面、仍在共用的緊急隱藏層裡；#lyrics-container 預設帶 transform，
+   不拿掉的話它會變成 fixed 的定位基準，整個舞台被縮在底部那條 200px 高的歌詞框裡。 */
+body.template-halloween #lyrics-container {
+  position: absolute; inset: 0; width: 100%; max-width: none; height: 100%;
+  min-height: 0; padding: 0; transform: none;
+}
+#halloween-root { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.hw-stage { position: absolute; inset: 0; }
+.hw-line {
+  position: absolute;
+  left: var(--lyric-padding-x, 60px);
+  right: var(--lyric-padding-x, 60px);
+  top: 78%;
+  transform: translateY(-50%);
+  text-align: center;
+  font-family: var(--display-font-family);
+  font-size: var(--display-font-size, 52px);
+  font-weight: var(--display-font-weight, 800);
+  letter-spacing: var(--lyric-letter-spacing, 1px);
+  line-height: 1.25;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transition: opacity 1s ease;
+}
+body[data-halloween-position="middle"] .hw-line { top: 52%; }
+body[data-halloween-position="top"] .hw-line { top: 20%; }
+.hw-ch {
+  display: inline-block;
+  color: var(--lyric-color, #5d4a7e);
+  /* 不用 -webkit-text-stroke：可變字型的重疊輪廓會在繁複漢字裡描出一條條接縫。 */
+  text-shadow: 0 .04em .06em rgba(0, 0, 0, .65), 0 0 .02em rgba(18, 6, 28, .8);
+  transition: color .2s ease, text-shadow .3s ease, transform .3s ease;
+}
+.hw-ch.is-lit {
+  color: var(--lyric-color-active, #ffc560);
+  text-shadow: 0 0 .1em #fff1b8, 0 0 .32em rgba(255, 150, 40, .95), 0 0 .8em rgba(255, 96, 16, .6);
+  transform: translateY(-.03em);
+}
+.hw-line.is-entering .hw-ch { animation: hw-enter .6s cubic-bezier(.2, .7, .3, 1) both; }
+@keyframes hw-enter {
+  from { opacity: 0; transform: translateY(.3em); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+/* 燭火閃爍：整句一層 opacity 動畫，不是每個字各一個 */
+.hw-line.is-flicker { animation: hw-flicker 2.6s ease-in-out infinite; }
+@keyframes hw-flicker {
+  0%, 100% { opacity: 1; }
+  35% { opacity: .9; }
+  55% { opacity: 1; }
+  72% { opacity: .94; }
+}
+.hw-line.is-resting { opacity: .32; }
+.hw-line.is-leaving { animation: hw-leave .9s ease-in both; }
+@keyframes hw-leave {
+  to { opacity: 0; transform: translateY(calc(-50% - .7em)); filter: blur(6px); }
+}
+.hw-ember {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffd27a;
+  box-shadow: 0 0 6px 2px rgba(255, 140, 30, .85);
+  pointer-events: none;
+}
+/* 長間奏小幽靈：預設在歌詞上方；歌詞在上方時改到下方 */
+.hw-ghost {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: 120px;
+  height: 140px;
+  opacity: 0;
+  transform: translate(-50%, 24px);
+  transition: opacity .8s ease, transform .8s ease;
+}
+body[data-halloween-position="middle"] .hw-ghost { top: 28%; }
+body[data-halloween-position="top"] .hw-ghost { top: 34%; }
+.hw-ghost.is-shown { opacity: .92; transform: translate(-50%, 0); }
+.hw-ghost i {
+  position: absolute;
+  inset: 0;
+  border-radius: 60px 60px 12px 12px;
+  background:
+    radial-gradient(ellipse 9px 13px at 40px 52px, #1c1030 98%, transparent),
+    radial-gradient(ellipse 9px 13px at 80px 52px, #1c1030 98%, transparent),
+    radial-gradient(ellipse 12px 9px at 60px 86px, #1c1030 98%, transparent),
+    radial-gradient(circle at 50% 30%, #ffffff, #e2e6ff 72%);
+  filter: drop-shadow(0 0 18px rgba(220, 230, 255, .75));
+  animation: hw-bob 3.2s ease-in-out infinite;
+}
+html.art-lyric-ghost .hw-ghost i { border-radius: 0; background: var(--art-lyric-ghost) center / contain no-repeat; }
+@keyframes hw-bob {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-14px) rotate(3deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hw-line.is-entering .hw-ch, .hw-line.is-flicker, .hw-line.is-leaving, .hw-ghost i { animation: none; }
+}

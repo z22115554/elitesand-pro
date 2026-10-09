@@ -34,7 +34,11 @@ const registerTwitchHandlers = require('./handlers/twitch');
 const registerPublicRequestHandlers = require('./handlers/public-request');
 const registerBgmHandlers = require('./handlers/bgm');
 const registerMoonEventHandlers = require('./handlers/moon-event');
+const registerHalloweenEventHandlers = require('./handlers/halloween-event');
 const moonEvent = require('../services/moon-event');
+const halloweenEvent = require('../services/halloween-event');
+// 限時節慶活動疊加層：clientType 同時是 socket 事件前綴（moon:update、halloween:update…）。
+const SEASONAL_OVERLAYS = new Map([['moon', moonEvent], ['halloween', halloweenEvent]]);
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
 const authStore = require('../services/auth-store');
 const authRateLimiter = require('../services/auth-rate-limiter');
@@ -55,7 +59,7 @@ const log = createLogger('Socket');
 // musetric 路線），永遠是本機 loopback 連線、沒有使用者能輸入 PIN 的介面，比照 OBS
 // 疊加層豁免 PIN；但它不是「畫面唯讀」而是「引擎回報結果」，允許送的事件見下面
 // READ_ONLY_EVENTS 的 webgpu:job:* 那幾個，且每個 handler 都會再驗證真的是這個 socket。
-const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'display-spout', 'setlist', 'display-preview', 'setlist-preview', 'webgpu-engine', 'moon']);
+const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'display-spout', 'setlist', 'display-preview', 'setlist-preview', 'webgpu-engine', ...SEASONAL_OVERLAYS.keys()]);
 // prompter（跟唱視圖）給主播自己看，不是唯讀的 OBS 疊加層——跟 remote 一樣要 PIN、也能送播放指令。
 const CLIENT_TYPES = new Set(['controller', 'remote', 'prompter', ...PIN_EXEMPT_CLIENT_TYPES]);
 const READ_ONLY_EVENTS = new Set([
@@ -195,6 +199,8 @@ module.exports = function socketHandler(io, {
   let lastTwitchStreamEventId = null;
   // 公開點歌頁中繼服務同樣在 index.js 建立（需要這裡的控制面板 bridge），建立後注入。
   let songRequestRelayService = null;
+  // 萬聖節觀眾互動（!trick／!treat、搗蛋獎勵、抽獎）同樣在 index.js 建立後注入。
+  let halloweenInteractions = null;
 
   function getClientCounts() {
     // /display 的指紋必須隨目前 public/ 內容重算；固定 server 啟動當下的值會讓
@@ -469,7 +475,7 @@ module.exports = function socketHandler(io, {
       // 面板內的預覽 iframe 也要收，預覽才會跟正式來源顯示同一種語言。
       // controller 也收：面板要用 mode 還原「OBS 顯示語言」選單的選項（不會動面板自己的語言）。
       if (type === 'controller' || type === 'display' || type === 'display-spout' || type === 'display-preview'
-        || type === 'setlist' || type === 'setlist-preview' || type === 'moon') {
+        || type === 'setlist' || type === 'setlist-preview' || SEASONAL_OVERLAYS.has(type)) {
         socket.emit('obs-locale:update', {
           mode: ctx.playState.obsLocale,
           panelLocale: ctx.playState.panelLocale,
@@ -484,9 +490,13 @@ module.exports = function socketHandler(io, {
         // 歌單頁也需要 lyricSettings（簡轉繁等）：setlist:update 只有清單資料沒有這塊，
         // 過去只能等某個無關操作觸發 broadcastState() 才會補到，OBS 剛載入來源時吃不到設定。
         socket.emit('state:sync', ctx.getReadOnlyState());
-      } else if (type === 'moon') {
-        if (moonEvent.isActive()) socket.emit('moon:update', moonEvent.snapshot());
-        else socket.emit('moon:ended');
+      } else if (SEASONAL_OVERLAYS.has(type)) {
+        const seasonal = SEASONAL_OVERLAYS.get(type);
+        if (seasonal.isActive()) {
+          // 謝幕名單的「糖果王」要用到排行，必須比 update 先到：?autoplay=1 收到第一份 update 就開始捲。
+          if (type === 'halloween' && halloweenInteractions) socket.emit('halloween:board', halloweenInteractions.board());
+          socket.emit(`${type}:update`, seasonal.snapshot());
+        } else socket.emit(`${type}:ended`);
       } else if (type !== 'webgpu-engine') {
         // webgpu-engine 不需要完整 state（歌詞、播放清單等）——它只回應伺服器主動
         // 派發的 webgpu:job:start，不需要自己知道目前播放狀態，省一份無用的大 payload。
@@ -589,6 +599,7 @@ module.exports = function socketHandler(io, {
       registerPublicRequestHandlers(io, socket, ctx, { getRelayService: () => songRequestRelayService });
       registerBgmHandlers(io, socket, ctx);
       registerMoonEventHandlers(io, socket);
+      registerHalloweenEventHandlers(io, socket, { getInteractions: () => halloweenInteractions });
     }
 
     // ─── 斷線處理 ───
@@ -639,6 +650,9 @@ module.exports = function socketHandler(io, {
     broadcastTwitchRequests,
     broadcastTwitchHistory,
     persistTwitchRequestSettingsFromService,
+    setHalloweenInteractions(service) {
+      halloweenInteractions = service;
+    },
     setTwitchService(service) {
       twitchService = service;
       if (service && typeof service.setReplySettings === 'function') service.setReplySettings(ctx.playState.twitchReplySettings);

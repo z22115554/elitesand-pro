@@ -1603,3 +1603,80 @@ html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; 
 /* Keep the OBS setlist independent from base.css while preserving the same
    semantic hidden-state contract as the panel and controller. */
 [hidden] { display: none !important; }
+
+/* ── haunt：萬聖夜（深紫夜色＋南瓜燭光；左上蛛網、正在播放旁一盞南瓜燈、右下一隻蝙蝠）──
+   裝飾有美術素材插槽（public/assets/halloween/setlist-*.webp），沒有時用下面的 CSS 保底畫法。 */
+[data-layout="haunt"] {
+  --hw-night: #1a1026;
+  --hw-night-2: #241536;
+  --hw-candle: #ffb547;
+  --hw-ember: #ff7a1a;
+  --hw-violet: #b892ff;
+  --hw-ivory: #fff3df;
+  --hw-dim: rgba(255, 243, 223, .62);
+}
+[data-layout="haunt"] .sk-shell {
+  padding: calc(18px * var(--sl-fit)) calc(18px * var(--sl-fit)) calc(16px * var(--sl-fit));
+  border-radius: calc(14px * var(--sl-fit));
+  background:
+    radial-gradient(120% 70% at 12% 0%, rgba(255, 140, 40, .22), transparent 60%),
+    radial-gradient(90% 60% at 100% 100%, rgba(150, 90, 230, .2), transparent 65%),
+    linear-gradient(160deg, var(--hw-night-2), var(--hw-night));
+  border: 1px solid rgba(255, 170, 70, .38);
+  box-shadow: 0 0 calc(24px * var(--sl-fit)) rgba(255, 120, 30, .18), inset 0 0 calc(40px * var(--sl-fit)) rgba(0, 0, 0, .35);
+  overflow: hidden;
+}
+/* 左上角蛛網 */
+[data-layout="haunt"] .sk-shell::before {
+  content: ''; position: absolute; left: 0; top: 0; width: calc(92px * var(--sl-fit)); height: calc(92px * var(--sl-fit));
+  background:
+    repeating-radial-gradient(circle at 0 0, transparent 0 calc(13px * var(--sl-fit)), rgba(235, 225, 255, .22) calc(13px * var(--sl-fit)) calc(14px * var(--sl-fit))),
+    conic-gradient(from 90deg at 0 0, rgba(235, 225, 255, .25) 0 1deg, transparent 1deg 22deg, rgba(235, 225, 255, .25) 22deg 23deg, transparent 23deg 45deg, rgba(235, 225, 255, .25) 45deg 46deg, transparent 46deg 67deg, rgba(235, 225, 255, .25) 67deg 68deg, transparent 68deg);
+  -webkit-mask: radial-gradient(circle at 0 0, #000 60%, transparent 72%);
+  mask: radial-gradient(circle at 0 0, #000 60%, transparent 72%);
+  pointer-events: none;
+}
+/* 右下角一隻蝙蝠 */
+[data-layout="haunt"] .sk-shell::after {
+  content: ''; position: absolute; right: calc(14px * var(--sl-fit)); bottom: calc(10px * var(--sl-fit));
+  width: calc(46px * var(--sl-fit)); height: calc(22px * var(--sl-fit));
+  background: rgba(184, 146, 255, .38);
+  clip-path: polygon(0 20%, 18% 0, 30% 30%, 42% 18%, 50% 34%, 58% 18%, 70% 30%, 82% 0, 100% 20%, 86% 60%, 70% 52%, 58% 100%, 50% 74%, 42% 100%, 30% 52%, 14% 60%);
+  pointer-events: none;
+}
+[data-layout="haunt"] .sk-now {
+  position: relative; z-index: 1;
+  padding: calc(14px * var(--sl-fit)) calc(70px * var(--sl-fit)) calc(14px * var(--sl-fit)) calc(16px * var(--sl-fit));
+  border-radius: calc(10px * var(--sl-fit));
+  background: linear-gradient(90deg, rgba(255, 140, 40, .16), rgba(255, 140, 40, .04));
+  border: 1px solid rgba(255, 181, 71, .35);
+}
+/* 正在播放旁的南瓜燈 */
+[data-layout="haunt"] .sk-now::after {
+  content: ''; position: absolute; right: calc(12px * var(--sl-fit)); top: 50%;
+  width: calc(46px * var(--sl-fit)); height: calc(46px * var(--sl-fit)); transform: translateY(-50%);
+  background: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M11.5 5c-.2-1.6.4-2.8 1.8-3.4l.5.9c-.9.4-1.2 1.2-1 2.5z' fill='%235f6b2c'/%3E%3Cellipse cx='7' cy='14' rx='5.5' ry='7.5' fill='%23e86a10'/%3E%3Cellipse cx='17' cy='14' rx='5.5' ry='7.5' fill='%23e86a10'/%3E%3Cellipse cx='12' cy='13.6' rx='6' ry='8.4' fill='%23ff8a24'/%3E%3Cpath d='M8 12.5l1.8-2.2 1.8 2.2zM12.4 12.5l1.8-2.2 1.8 2.2zM8 16c2.4 1.8 5.6 1.8 8 0l-1.2.4-.8-.8-1 1-1-1-1 1-1-1-.8.8z' fill='%23ffe08a'/%3E%3C/svg%3E") center / contain no-repeat;
+  filter: drop-shadow(0 0 calc(8px * var(--sl-fit)) rgba(255, 140, 30, .8));
+}
+[data-layout="haunt"] .sk-now-eye { color: var(--hw-violet); letter-spacing: .14em; font-weight: 800; }
+[data-layout="haunt"] .sk-now-ordinal { color: var(--hw-dim); }
+[data-layout="haunt"] .sk-now-title {
+  color: var(--sl-txt-ov, var(--hw-candle)); font-weight: 900;
+  text-shadow: 0 0 calc(10px * var(--sl-fit)) rgba(255, 122, 26, .65), 0 1px 0 rgba(0, 0, 0, .5);
+}
+[data-layout="haunt"] .sk-now-artist { color: var(--hw-dim); }
+[data-layout="haunt"] .sk-cols { position: relative; z-index: 1; margin-top: calc(14px * var(--sl-fit)); }
+[data-layout="haunt"] .sk-sec-title { color: var(--hw-candle); font-weight: 800; letter-spacing: .1em; }
+[data-layout="haunt"] .sk-sec-title::before { content: '✦ '; color: var(--hw-violet); }
+[data-layout="haunt"] .sk-count { color: var(--hw-dim); }
+[data-layout="haunt"] .sk-row { padding: calc(4px * var(--sl-fit)) 0; border-bottom: 1px dashed rgba(184, 146, 255, .22); }
+[data-layout="haunt"] .sk-num { color: var(--hw-ember); }
+[data-layout="haunt"] .sk-title { color: var(--sl-txt-ov, var(--hw-ivory)); }
+[data-layout="haunt"] .sk-artist { color: var(--hw-dim); }
+[data-layout="haunt"] .sk-row--done .sk-title { color: rgba(184, 146, 255, .72); text-decoration: line-through; text-decoration-color: rgba(255, 122, 26, .5); }
+[data-layout="haunt"] .sk-empty { color: var(--hw-dim); }
+
+/* 美術素材插槽 */
+html.art-setlist-web[data-layout="haunt"] .sk-shell::before { background: var(--art-setlist-web) left top / contain no-repeat; -webkit-mask: none; mask: none; width: calc(120px * var(--sl-fit)); height: calc(120px * var(--sl-fit)); }
+html.art-setlist-pumpkin[data-layout="haunt"] .sk-now::after { background: var(--art-setlist-pumpkin) center / contain no-repeat; width: calc(56px * var(--sl-fit)); height: calc(56px * var(--sl-fit)); }
+html.art-setlist-bat[data-layout="haunt"] .sk-shell::after { clip-path: none; background: var(--art-setlist-bat) center / contain no-repeat; width: calc(64px * var(--sl-fit)); height: calc(36px * var(--sl-fit)); }

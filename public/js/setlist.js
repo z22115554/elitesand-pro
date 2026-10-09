@@ -25,10 +25,10 @@
   // OBS Browser Source 的實際寬高就是歌單的版面框：來源拉多大，歌單就排多大。
   // 沒有第二種輸出模式，也沒有 URL 參數——同一個 /setlist 網址在任何來源尺寸都成立。
   // 場景版（timeline / diagonal / constellation）不走這條，維持原本的全幅舞台行為。
-  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note']);
+  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note']);
   // 長歌單只在有直向清單的模板循環捲動。卡片／索引／排行榜／終端機維持裁列；
   // simple 與 signal 是固定版位，只顯示現在與下一首，沒有可捲動的直向隊列。
-  const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager']);
+  const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager', 'haunt']);
   // 尺度基準：來源正好是 460×320 時 fit = 1，也就是設定裡的 px 數字＝實際像素；
   // 更大的來源等比放大字級與間距（原生字級，不是把小元件 transform 放大）。
   // 基準訂在這裡是實測校準過的：直播常用的 600×1080 直式來源會得到 fit ≈ 1.3
@@ -39,7 +39,7 @@
 
   // 清單型模板：有「已唱／未唱」兩個區塊，各自可由設定開關。
   // 單點式（signal 舞台訊號、simple 極簡兩排）版位固定、只呈現現在＋少量待播，不吃這組設定。
-  const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index', 'label', 'glow', 'round', 'pager']);
+  const SECTIONED_LAYOUTS = new Set(['classic', 'cards', 'terminal', 'billboard', 'index', 'label', 'glow', 'round', 'pager', 'haunt']);
 
   function isFillLayout() { return FILL_LAYOUTS.has(layoutId); }
   function isSectionedLayout() { return SECTIONED_LAYOUTS.has(layoutId); }
@@ -877,6 +877,7 @@
   const SKIN_ARRANGEMENT = {
     label: 'columns', glow: 'columns', round: 'columns',
     pager: 'stack',
+    haunt: 'columns',
   };
 
   function skinSectionHtml(id, kind) {
@@ -890,6 +891,8 @@
     const arrangement = SKIN_ARRANGEMENT[id];
     return {
       mount(root) {
+        // 萬聖夜：裝飾（南瓜燈、蛛網、蝙蝠）有美術素材就換圖，沒有就用 CSS 保底畫法。
+        if (id === 'haunt' && window.HalloweenArt) window.HalloweenArt.load(['setlist-pumpkin', 'setlist-web', 'setlist-bat']);
         const hero =
           '<div class="sk-now">' +
             '<div class="ns-label sk-now-eye">▶ Now Playing</div>' +
@@ -943,7 +946,7 @@
       },
     };
   }
-  const SKIN_LAYOUT_IDS = ['label', 'glow', 'round', 'pager'];
+  const SKIN_LAYOUT_IDS = ['label', 'glow', 'round', 'pager', 'haunt'];
   const skinLayouts = {};
   SKIN_LAYOUT_IDS.forEach((id) => { skinLayouts[id] = makeSkinLayout(id); });
 
@@ -1131,7 +1134,7 @@
   } catch (e) { /* 退回下面的 resize 監聽 */ }
   window.addEventListener('resize', scheduleFit);
 
-  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'flap', 'note', 'film'];
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film'];
   const effTarget = (l) => (SETLIST_LAYOUTS.includes(l) ? l : 'classic');
   // 取某版型生效的設定；舊 payload 仍可讀，避免 OBS 快取中的舊頁面在更新過渡時失去外觀。
   function effStyleFrom(data, layout) {

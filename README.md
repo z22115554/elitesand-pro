@@ -75,6 +75,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 | 對話氣泡 | iMessage 風逐字打字，長間奏跳貼圖 |
 | 跑馬燈牌 | LED 點陣燈牌，唱過的燈亮、沒唱的暗 |
 | 風息成字 | 粒子隨風散開，再聚成正在唱的字；字幕尺度，可直書或左右分散 |
+| 萬聖燭光 | 沒唱的字像刻在南瓜上的暗字，唱到的字亮起燭光、迸出火星；萬聖節限定 |
 | 文字PV | 日系文字 PV 風格，依段落自動編排版面與動作，預設在側欄避開主播（實驗性；演出引擎 [JIZURA](https://github.com/852wa/JIZURA)，MIT） |
 
 - OBS 透明背景 Browser Source，改設定即時同步。
@@ -241,6 +242,7 @@ Eleven performance templates, each with independent style settings (font, size, 
 | Typewriter | iMessage-style typing, sticker drop during long interludes |
 | Light Board | LED dot-matrix sign — sung dots lit, the rest dark |
 | Windborne Particles | Particles scatter in the wind, then gather into the sung line; subtitle scale, vertical or split-sides |
+| Halloween Candlelight | Letters not yet sung sit dark like carved pumpkins; sung letters light up with candle glow and embers; Halloween only |
 | Lyric PV | Japanese lyric-video style that plans layouts and motion per song section; sits in a side column by default (experimental; engine: [JIZURA](https://github.com/852wa/JIZURA), MIT) |
 
 - Transparent Browser Sources with instant sync on setting changes.
@@ -407,6 +409,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 | タイプライター | iMessage 風タイピング、長間奏にスタンプ |
 | ライトボード | LED ドットマトリクス、歌った点は点灯、他は消灯 |
 | 風が文字を結ぶ | 風に散った粒子が歌っている行へ集まる。字幕サイズ、縦組みや左右振り分けが可能 |
+| ハロウィンの灯 | まだ歌っていない文字はかぼちゃに彫った暗い文字、歌った文字はろうそくの灯りと火の粉で光る。ハロウィン限定 |
 
 - 透明背景の Browser Source、設定変更を即時同期。
 - 単語ハイライト、行切り替え、間奏カウントダウン、時計同期。
@@ -572,6 +575,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 | 타자기 | iMessage 스타일 타이핑, 긴 간주에 스티커 |
 | 라이트보드 | LED 도트 매트릭스, 부른 점은 켜지고 나머지는 꺼짐 |
 | 바람 입자 글자 | 바람에 흩어진 입자가 부르는 줄로 모임; 자막 크기, 세로쓰기 또는 좌우 분산 |
+| 핼러윈 촛불 | 아직 부르지 않은 글자는 호박에 새긴 어두운 글자, 부른 글자는 촛불과 불씨로 빛남; 핼러윈 한정 |
 
 - 투명 배경 Browser Source, 설정 변경 즉시 동기화.
 - 단어 하이라이트, 줄 전환, 간주 카운트다운, 시계 동기화.
@@ -737,6 +741,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 | 对话气泡 | iMessage 风逐字打字，长间奏跳贴图 |
 | 跑马灯牌 | LED 点阵灯牌，唱过的灯亮、没唱的暗 |
 | 风息成字 | 粒子随风散开，再聚成正在唱的字；字幕尺度，可竖排或左右分散 |
+| 万圣烛光 | 没唱的字像刻在南瓜上的暗字，唱到的字亮起烛光、迸出火星；万圣节限定 |
 
 - OBS 透明背景 Browser Source，改设置即时同步。
 - 逐字扫光、逐句切换、间奏倒计时与时钟同步。
