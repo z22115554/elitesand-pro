@@ -391,19 +391,45 @@
   }
 
   // ───────── 效果：符札 ─────────
+  // 順序是「舊符撕開 → 掉下去 → 新符貼上」：新符一定在下一句前 PASTE_LEAD 貼好（逐字時間優先），
+  // 所以撕的時間往前挪到新符貼上前，讓兩半已經掉開；但舊句最後一個字至少要亮 HOLD 才撕。
+  // 句子太密排不下時寧可讓撕跟貼重疊一點，也不延後新句的字。
+  const T_PASTE_LEAD = 6 * F, T_RIP = 4 * F, T_FALL_DELAY = 2 * F, T_FALL = 12 * F, T_HOLD = 6 * F, T_CLEAR = 12 * F;
+  function talismanTearAt(L) {
+    const late = L.end + 1.2;
+    if (!isFinite(L.next)) return late;
+    const want = L.next - T_PASTE_LEAD - T_CLEAR;
+    const lastChar = L.starts.length ? L.starts[L.starts.length - 1] : L.t;
+    return Math.min(late, Math.max(want, lastChar + T_HOLD));
+  }
   function drawTalisman(L, t, exiting) {
-    const lay = layout(L), S = lay.S, ta = L.t - 8 * F, tearT = exitAt(L, 0.15);
-    if (t < ta || t > tearT + 8 * F) return;
-    if (!!exiting !== (t >= tearT)) return;     // 退場中的符畫在新符上面
+    const lay = layout(L), S = lay.S, ta = L.t - T_PASTE_LEAD, tearT = talismanTearAt(L);
+    const gone = tearT + T_FALL_DELAY + T_FALL;
+    if (t < ta || t > gone) return;
+    if (!!exiting !== (t >= tearT)) return;     // 撕開中的符畫在新符上面
     const sw = lay.blockW, sh = S * 1.8, x0 = lay.blockX, y = lay.y;
-    const gw = 0.3 + 0.7 * eo(t, ta, 3 * F), drift = t - ta, rot = (-1.4 + 0.18 * drift) * Math.PI / 180, dy = -S * 0.07 * drift;
-    const tear = ei(t, tearT, 8 * F, 2.4);
+    // 貼上：從稍微大一點、略高的位置「啪」一下壓到定位，同時由左往右攤開
+    const paste = eo(t, ta, 1.4 * F);
+    const gw = 0.25 + 0.75 * paste, slap = 1 + 0.06 * (1 - paste);
+    const drift = Math.max(0, t - ta), rot = (-1.4 + 0.18 * drift) * Math.PI / 180;
+    const dy = -S * 0.07 * drift - S * 0.25 * (1 - paste);
+    // 撕開：先沿中縫裂開、中縫往下垂，再受重力加速往下掉、邊掉邊轉、最後淡掉
+    const rip = t >= tearT ? eo(t, tearT, T_RIP / 2.5) : 0;
+    const ft = Math.max(0, t - tearT - T_FALL_DELAY);
+    const fall = 0.5 * 180 * S * ft * ft;
+    const spin = ft / T_FALL;
+    const fade = 1 - ei(t, gone - 5 * F, 5 * F, 1);
     const halves = t >= tearT ? [0, 1] : [-1];
     const sealIdx = L.i % 4 === 3 ? lay.chars.length - 1 : -1;   // 每四句只蓋一次朱印
     for (const half of halves) {
       g.save(); g.translate(x0, y + dy); g.rotate(rot);
-      if (half >= 0) {
-        g.translate(half ? S * 0.6 * tear : -S * 0.45 * tear, S * 7.5 * tear); g.rotate((half ? 9 : -7) * tear * Math.PI / 180);
+      if (half < 0) {
+        g.translate(sw / 2, 0); g.scale(slap, slap); g.translate(-sw / 2, 0);
+      } else {
+        const dir = half ? 1 : -1, pivot = half ? sw : 0;
+        g.globalAlpha = fade;
+        g.translate(dir * (S * 0.22 * rip + S * 0.9 * spin), fall);
+        g.translate(pivot, -sh / 2); g.rotate(-dir * (5 * rip + 28 * spin * spin) * Math.PI / 180); g.translate(-pivot, sh / 2);
         const seam = sw * 0.52; g.beginPath();
         if (half === 0) { g.moveTo(-10, -sh); for (let k = 0; k <= 8; k++) g.lineTo(seam + (k % 2 ? 14 : -14), -sh / 2 + k * sh / 8); g.lineTo(-10, sh); }
         else { g.moveTo(sw + 10, -sh); for (let k = 0; k <= 8; k++) g.lineTo(seam + (k % 2 ? 14 : -14), -sh / 2 + k * sh / 8); g.lineTo(sw + 10, sh); }
@@ -419,7 +445,7 @@
         const ts = c.t - 3 * F; if (t < ts) return;
         const cx = c.cx - x0; if (cx > w - 20) return;
         const s = pop(t, ts, 1 + 0.22 * intensity());
-        drawChar(c.c, cx, S * 0.05, s, s, PAPER_INK, 1, { noOutline: true });
+        drawChar(c.c, cx, S * 0.05, s, s, PAPER_INK, half < 0 ? 1 : fade, { noOutline: true });
         if (j === sealIdx && t >= c.t + 2 * F) {
           const s2 = pop(t, c.t + 2 * F, 1.9, 1.4 * F), R = S * 0.5;
           g.save(); g.translate(cx + c.w / 2 + R * 0.9, -S * 0.42); g.rotate(-0.14); g.scale(s2, s2);
