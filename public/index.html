@@ -792,6 +792,9 @@
                 <button class="lyric-template-card" data-template="halloween" type="button" role="radio" aria-checked="false" data-i18n-title="template.halloweenTitle" title="萬聖燭光：暗字被燭光點亮，唱完化成煙往上散">
                   <span class="style-thumb-preview style-thumb-halloween" aria-hidden="true"><span class="style-thumb-char">燭</span></span><strong data-i18n="template.halloween">萬聖燭光</strong><span data-i18n="template.halloweenDesc">燭光點字、煙散退場</span>
                 </button>
+                <button class="lyric-template-card" data-template="spellbook" type="button" role="radio" aria-checked="false" data-i18n-title="template.spellbookTitle" title="萬聖咒字：七種萬聖節逐字效果，魔法陣、通靈板、蝙蝠、滴落、符札、月影、蛛絲">
+                  <span class="style-thumb-preview style-thumb-spellbook" aria-hidden="true"><span class="style-thumb-char">咒</span></span><strong data-i18n="template.spellbook">萬聖咒字</strong><span data-i18n="template.spellbookDesc">七種逐字效果任選</span>
+                </button>
                 <button class="lyric-template-card" data-template="jizura" type="button" role="radio" aria-checked="false" data-i18n-title="template.jizuraTitle" title="文字PV：日系文字 PV 風格，依段落自動編排版面與動作，預設偏右避開主播">
                   <span class="style-thumb-preview style-thumb-jizura" aria-hidden="true"><span class="style-thumb-char">PV</span></span><strong data-i18n="template.jizura">文字PV</strong><span data-i18n="template.jizuraDesc">日系文字 PV、依段落編排</span>
                 </button>
@@ -922,6 +925,26 @@
                   <div><div class="label" data-i18n="lightboard.slideLabel">進場滑入</div><div class="sub" data-i18n="lightboard.slideHint">每句從右側滑入。動作只發生在換句的空檔，但每句都動、累積起來會有點吵，預設關。</div></div>
                   <label class="switch"><input id="ls-lightboard-slide" data-ls-control="lightboardSlideIn" type="checkbox"><span class="track"></span></label>
                 </div>
+              </div>
+              <div class="field" id="spellbook-field" hidden>
+                <label for="ls-spellbook-effect" data-i18n="spellbook.effectLabel">逐字效果</label>
+                <select id="ls-spellbook-effect" class="input" data-ls-control="spellbookEffect">
+                  <option value="rune" data-i18n="spellbook.effect.rune">魔法陣</option>
+                  <option value="ouija" data-i18n="spellbook.effect.ouija">通靈板</option>
+                  <option value="bats" data-i18n="spellbook.effect.bats">蝙蝠聚字</option>
+                  <option value="drip" data-i18n="spellbook.effect.drip">滴落</option>
+                  <option value="talisman" data-i18n="spellbook.effect.talisman">符札</option>
+                  <option value="moon" data-i18n="spellbook.effect.moon">月影</option>
+                  <option value="thread" data-i18n="spellbook.effect.thread">蛛絲</option>
+                  <option value="cycle" data-i18n="spellbook.effect.cycle">每句輪替（七種輪流）</option>
+                </select>
+                <p class="field-hint" id="spellbook-effect-hint">每個字唱之前先展開一個小魔法陣，字在唱的那一格從陣中彈出；之後魔法陣縮小、變淡，但一直慢慢轉。</p>
+                <label for="ls-spellbook-position" class="mt-8" data-i18n="spellbook.positionLabel">上下位置</label>
+                <select id="ls-spellbook-position" class="input" data-ls-control="spellbookPosition">
+                  <option value="bottom" data-i18n="spellbook.positionBottom">下方</option>
+                  <option value="middle" data-i18n="spellbook.positionMiddle">中央</option>
+                  <option value="top" data-i18n="spellbook.positionTop">上方</option>
+                </select>
               </div>
               <div class="field" id="halloween-lyric-field" hidden>
                 <label for="ls-halloween-position" data-i18n="halloweenLyric.positionLabel">歌詞位置</label>

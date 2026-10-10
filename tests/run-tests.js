@@ -10676,6 +10676,53 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
     'server 必須把貼圖開關布林化、門檻夾在 3–20 秒: ');
 });
 
+test('萬聖咒字：七種逐字效果一個模板、時間驅動、吃通用設定並接齊面板／手機／伺服器', () => {
+  const root = path.join(__dirname, '..');
+  const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+  const tpl = read('public/js/lyric-template-spellbook.js');
+  const effects = ['rune', 'ouija', 'bats', 'drip', 'talisman', 'moon', 'thread', 'cycle'];
+  let registered = null;
+  require('vm').runInNewContext(tpl, { LyricTemplates: { register(o) { registered = o; } } });
+  ok(registered && registered.id === 'spellbook', '模板必須以 id spellbook 註冊: ');
+  ok(typeof registered.onFrame === 'function' && typeof registered.onSeek === 'function' && typeof registered.onSettings === 'function',
+    '必須完全時間驅動（onFrame／onSeek），並從 onSettings 讀通用位置設定: ');
+  const effectField = (registered.settings || []).find((f) => f.key === 'spellbookEffect');
+  const posField = (registered.settings || []).find((f) => f.key === 'spellbookPosition');
+  ok(effectField && JSON.stringify(effectField.values) === JSON.stringify(effects) && effectField.default === 'rune',
+    '逐字效果選項必須是七種＋每句輪替，預設魔法陣: ');
+  ok(posField && JSON.stringify(posField.values) === JSON.stringify(['bottom', 'middle', 'top']), '上下位置只收下方／中央／上方: ');
+  ok(tpl.includes('ensureWordTimings') && tpl.includes('buildGraphemeTimings'), '逐字時間必須沿用動態核心: ');
+  ok(!/setInterval\(|setTimeout\(/.test(tpl), '不可自己開計時器，畫面一律由 onFrame 的時間算出: ');
+  ['--display-font-family', '--display-font-size', '--display-font-weight', '--lyric-letter-spacing', '--lyric-color', '--lyric-color-active']
+    .forEach((v) => ok(tpl.includes(v), `必須吃通用外觀變數 ${v}: `));
+  ok(tpl.includes("p === 'split'") && tpl.includes('settings.offsetX') && tpl.includes('settings.paddingX') && tpl.includes('lyricIntensity'),
+    '必須吃通用的左右位置（含左右分散）、位置微調、左右邊距與動畫強度: ');
+
+  const lyricsHandler = read('server/routes/handlers/lyrics.js');
+  const appState = read('server/state/app-state.js');
+  const lyricExtras = read('public/js/lyric-extras.js');
+  const panelHtml = read('public/index.html');
+  const controllerHtml = read('public/controller.html');
+  const controllerJs = read('public/js/controller.js');
+  ok(read('public/display.html').includes('/js/lyric-template-spellbook.js'), 'display 必須載入萬聖咒字: ');
+  ok(lyricsHandler.includes("'spellbook'") && lyricsHandler.includes("['rune', 'ouija', 'bats', 'drip', 'talisman', 'moon', 'thread', 'cycle'].includes(settings.spellbookEffect)"),
+    '伺服器白名單必須接受 spellbook 並驗證逐字效果: ');
+  ok(appState.includes("spellbook: { template: 'spellbook'") && lyricExtras.includes("spellbook: { ...DEFAULT_SETTINGS, template: 'spellbook'"),
+    '伺服器與面板都要有 spellbook 預設值: ');
+  ok(/spellbook: \{ label: '萬聖咒字'[^\n]*positionMode: 'stage', supportsIntensity: true/.test(lyricExtras),
+    '面板必須把萬聖咒字當成舞台位置模板（置中／偏左／偏右／左右分散＋位置微調）並開放動畫強度: ');
+  effects.forEach((e) => ok(panelHtml.includes(`<option value="${e}" data-i18n="spellbook.effect.${e}">`), `面板逐字效果必須有 ${e}: `));
+  ok(panelHtml.includes('data-template="spellbook"') && controllerHtml.includes('data-template="spellbook"'), '桌面與手機都要能選萬聖咒字: ');
+  ok(controllerJs.includes("'particle', 'spellbook'].includes(template)") && controllerJs.includes("nextTemplate === 'spellbook' ? SPELLBOOK_DEFAULTS"),
+    '手機首次切到萬聖咒字要套預設、並顯示動畫強度: ');
+  const i18n = require('../public/js/i18n');
+  const keys = ['template.spellbook', 'template.spellbookTitle', 'template.spellbookDesc', 'spellbook.effectLabel', 'spellbook.positionLabel']
+    .concat(effects.map((e) => `spellbook.effect.${e}`), effects.map((e) => `spellbook.hint.${e}`));
+  for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
+    keys.forEach((k) => ok(i18n.catalogs?.[locale]?.[k], `${locale} 缺少 ${k}: `));
+  }
+});
+
 test('燈牌：以 registry 時間驅動並完整接入設定與伺服器白名單', () => {
   const displayHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');

@@ -106,7 +106,7 @@
     return currentTrackIndex;
   }
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'halloween'];
+  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'halloween', 'spellbook'];
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
@@ -137,8 +137,20 @@
     letterSpacing: 1,
     animationIntensity: 'normal',
   };
+  const SPELLBOOK_DEFAULTS = {
+    fontWeight: 900,
+    fontSize: 60,
+    color: '#f4ead6',
+    activeColor: '#ff9a3c',
+    shadow: 'none',
+    lyricPosition: 'center',
+    letterSpacing: 2,
+    animationIntensity: 'normal',
+    spellbookEffect: 'rune',
+    spellbookPosition: 'bottom',
+  };
   function templateSupportsIntensity(template) {
-    return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'columnflow', 'particle'].includes(template);
+    return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'columnflow', 'particle', 'spellbook'].includes(template);
   }
 
   function normalizeColumnflowMaxLines(value) {
@@ -233,6 +245,7 @@
           ...settingSnapshot(lyricSettings),
           ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
           ...(nextTemplate === 'mirror' ? MIRROR_DEFAULTS : {}),
+          ...(nextTemplate === 'spellbook' ? SPELLBOOK_DEFAULTS : {}),
           ...(nextTemplate === 'particle' ? { particleOrient: 'vertical', particleEntrance: 'auto', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
           template: nextTemplate,
         };

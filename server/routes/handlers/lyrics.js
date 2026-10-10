@@ -39,7 +39,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'halloween'];
+const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'halloween', 'spellbook'];
 
 function sanitizeParticleSettings(settings) {
   if (settings.particleOrient !== undefined && !['horizontal', 'vertical'].includes(settings.particleOrient)) delete settings.particleOrient;
@@ -278,6 +278,13 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 萬聖燭光：歌詞位置白名單
     if (settings.halloweenPosition && !['bottom', 'middle', 'top'].includes(settings.halloweenPosition)) {
       delete settings.halloweenPosition;
+    }
+    // 萬聖咒字：逐字效果／上下位置白名單
+    if (settings.spellbookEffect && !['rune', 'ouija', 'bats', 'drip', 'talisman', 'moon', 'thread', 'cycle'].includes(settings.spellbookEffect)) {
+      delete settings.spellbookEffect;
+    }
+    if (settings.spellbookPosition && !['bottom', 'middle', 'top'].includes(settings.spellbookPosition)) {
+      delete settings.spellbookPosition;
     }
     // 紙帶逐字排向白名單
     if (settings.paperstripOrient && !['horizontal', 'vertical'].includes(settings.paperstripOrient)) {

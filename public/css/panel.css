@@ -1696,6 +1696,12 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 }
 .seasonal-theme-row { grid-column: 1 / -1; padding-block: 8px; }
 
+#template-buttons [data-template="spellbook"] .style-thumb-spellbook {
+  background: radial-gradient(circle at 50% 55%, rgba(184, 146, 255, 0.35), transparent 62%), linear-gradient(180deg, #1d1530, #0e0a18);
+  border: 1px solid rgba(184, 146, 255, 0.4);
+  color: #fbf3ff;
+  text-shadow: 0 0 4px rgba(184, 146, 255, 0.9), 0 0 10px rgba(167, 123, 255, 0.8);
+}
 #template-buttons [data-template="halloween"] .style-thumb-halloween {
   background: radial-gradient(circle at 50% 70%, rgba(255, 140, 40, 0.35), transparent 60%), linear-gradient(180deg, #241536, #120a1f);
   border: 1px solid rgba(255, 170, 70, 0.35);
