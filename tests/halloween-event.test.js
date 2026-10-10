@@ -145,7 +145,7 @@ test('the panel tab has every element the controller needs and every string it s
 });
 
 test('every art slot the code uses is documented, and missing art is skipped through the manifest instead of 404-probing', () => {
-  const sources = ['public/js/halloween.js', 'public/js/app-halloween-fx.js', 'public/js/setlist.js', 'public/js/lyric-template-halloween.js',
+  const sources = ['public/js/halloween.js', 'public/js/app-halloween-fx.js', 'public/js/setlist.js',
     'public/css/halloween.css', 'public/css/setlist.css', 'public/css/display.css', 'public/css/panel.css'].map(read).join('\n');
   const slots = new Set([...sources.matchAll(/--art-([a-z0-9-]+)/g)].map((m) => m[1]));
   for (const m of sources.matchAll(/HalloweenArt\.(?:load|probe)\(([^)]*)\)/g)) {
@@ -155,7 +155,7 @@ test('every art slot the code uses is documented, and missing art is skipped thr
   slots.delete('tag-');
   const readme = read('public/assets/halloween/README.txt');
   const documented = new Set([...readme.matchAll(/^ {2}([a-z0-9-]+) +\d+×\d+/gm)].map((m) => m[1]));
-  assert.ok(slots.size >= 17, `應該找得到全部插槽（解析壞了？）：${[...slots]}`);
+  assert.ok(slots.size >= 16, `應該找得到全部插槽（解析壞了？）：${[...slots]}`);
   for (const slot of slots) assert.ok(documented.has(slot), `README.txt 缺少插槽 ${slot} 的尺寸說明`);
   for (const slot of documented) assert.ok(slots.has(slot), `README.txt 列了程式沒用到的插槽 ${slot}`);
 

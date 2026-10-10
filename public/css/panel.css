@@ -2002,12 +2002,28 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
   color: #fbf3ff;
   text-shadow: 0 0 4px rgba(184, 146, 255, 0.9), 0 0 10px rgba(167, 123, 255, 0.8);
 }
-#template-buttons [data-template="halloween"] .style-thumb-halloween {
-  background: radial-gradient(circle at 50% 70%, rgba(255, 140, 40, 0.35), transparent 60%), linear-gradient(180deg, #241536, #120a1f);
-  border: 1px solid rgba(255, 170, 70, 0.35);
-  color: #ffc560;
-  text-shadow: 0 0 4px #fff1b8, 0 0 10px rgba(255, 140, 40, 0.9);
-}
+
+/* 萬聖咒字：七種逐字效果直接攤成圖示格（不藏在下拉選單裡），下面一段說明＋「再播一次示範」 */
+#spellbook-field { display: flex; flex-direction: column; gap: 8px; }
+#spellbook-field[hidden] { display: none; }
+#spellbook-field.oslim-featured { padding: 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: var(--r-md); background: color-mix(in srgb, var(--accent) 6%, var(--bg-raised)); }
+.sb-effects-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sb-effects-title { font-size: 13px; font-weight: 650; color: var(--text); }
+.sb-effects-count { font-size: 11px; color: var(--text-faint); }
+.sb-effects-guide { margin: 0; font-size: 11px; line-height: 1.5; color: var(--text-dim); }
+.sb-effects { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.sb-effect { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; padding: 9px 4px 7px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--bg-raised); color: var(--text-dim); font-size: 11px; line-height: 1.2; cursor: pointer; transition: border-color .12s, background .12s, color .12s, transform .12s; }
+.sb-effect:hover { background: var(--bg-hover); color: var(--text); transform: translateY(-1px); }
+.sb-effect:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sb-effect svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.sb-effect span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-effect.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg-raised)); color: var(--accent-ink); font-weight: 600; box-shadow: 0 0 0 2px var(--accent-soft); }
+.sb-effect-desc { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--bg); }
+.sb-effect-desc p { margin: 0; font-size: 11px; line-height: 1.55; color: var(--text-dim); }
+#spellbook-field > label { margin-top: 2px; }
+.sb-effect[data-spellbook-effect="bats"] svg path { fill: currentColor; stroke: none; }
+.sb-replay { display: inline-flex; align-items: center; gap: 5px; }
+.sb-replay svg { width: 12px; height: 12px; fill: currentColor; }
 
 /* ═══ 畫面頁（2026-09-28 改版 P5）：歌詞畫面／歌單畫面同一套骨架 ═══
    左＝設定（上：樣式選擇，下：外觀；進階在「詳細設定」裡），右＝即時預覽＋OBS 來源網址＋詳細設定入口。

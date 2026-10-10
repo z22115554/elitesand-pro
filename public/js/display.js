@@ -114,23 +114,27 @@
     // Mirror is the only template whose core promise is a line-entry motion.
     // Let its sample replay that entry, then park on a settled frame
     // so the normal settings preview remains useful for typography checks.
+    // 萬聖咒字的七種效果全是逐字進場／退場，停在固定一格看不出差別：一樣從頭播，
+    // 播完第一句的退場、第二句進場後才停住（面板點效果時會再要求播一次）。
     const replayMirrorEntry = Boolean(document.getElementById('mirror-root'));
-    syncTimeMs = replayMirrorEntry ? 0 : 1800;
+    const replaySpellbook = Boolean(document.getElementById('spellbook-root'));
+    const replayMs = replayMirrorEntry ? 5100 : (replaySpellbook ? 6600 : 0);
+    syncTimeMs = replayMs ? 0 : 1800;
     lastSyncTimestamp = performance.now();
-    isControllerPlaying = replayMirrorEntry;
+    isControllerPlaying = replayMs > 0;
     KaraokeEngine.update(syncTimeMs);
     if (previewMotionTimer) window.clearTimeout(previewMotionTimer);
-    if (replayMirrorEntry) {
+    if (replayMs) {
       previewMotionTimer = window.setTimeout(() => {
         if (!previewSampleActive) return;
         // Let the intentionally distant second sample line become visible.
         // This proves the temporal batch split in the normal settings preview
         // instead of parking before the next group can replace the first one.
-        syncTimeMs = 5100;
+        syncTimeMs = replayMs;
         lastSyncTimestamp = performance.now();
         isControllerPlaying = false;
         KaraokeEngine.update(syncTimeMs);
-      }, 5100);
+      }, replayMs);
     }
   }
 
@@ -843,6 +847,8 @@
     if (d && d.type === 'lyric-settings:preview' && d.settings) {
       applyLyricSettings(d.settings);
     } else if (d && d.type === 'lyrics-preview:sample') {
+      // replay＝面板自動要求的示範（萬聖咒字選效果）；真的有歌在播時不能把歌詞換掉
+      if (d.replay && isControllerPlaying && !previewSampleActive) return;
       renderPreviewSample();
       // The interactive tour must unlock only after the real preview handled the sample.
       // Reply to the exact source window; no playback or server state is changed.

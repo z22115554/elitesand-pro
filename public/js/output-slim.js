@@ -149,6 +149,13 @@
       const hint = sum && sum.querySelector('[data-i18n="lyricStyle.saveAppearanceHint"]');
       if (hint) sum.title = hint.textContent.trim();
     }
+    // 萬聖咒字的七種效果是這個模板的主角，不能收在「哪裡不對？」裡讓人找不到：
+    // 直接放在樣式縮圖正下方（只有選到萬聖咒字時才出現，lyric-extras.js 照舊切 hidden）
+    const spellbookField = $('#spellbook-field');
+    if (spellbookField) {
+      spellbookField.classList.add('oslim-featured');
+      s1.sec.appendChild(spellbookField);
+    }
 
     // 2 快速調整
     [

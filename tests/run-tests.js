@@ -10836,16 +10836,46 @@ test('萬聖咒字：七種逐字效果一個模板、時間驅動、吃通用�
     '伺服器與面板都要有 spellbook 預設值: ');
   ok(/spellbook: \{ label: '萬聖咒字'[^\n]*positionMode: 'stage', supportsIntensity: true/.test(lyricExtras),
     '面板必須把萬聖咒字當成舞台位置模板（置中／偏左／偏右／左右分散＋位置微調）並開放動畫強度: ');
-  effects.forEach((e) => ok(panelHtml.includes(`<option value="${e}" data-i18n="spellbook.effect.${e}">`), `面板逐字效果必須有 ${e}: `));
+  // 2026-10-11 使用者回報：效果收在「哪裡不對？」的下拉選單裡沒人找得到 → 改成樣式縮圖正下方的圖示格＋說明＋自動示範
+  effects.forEach((e) => ok(panelHtml.includes(`<button class="sb-effect" data-spellbook-effect="${e}"`), `面板逐字效果圖示格必須有 ${e}: `));
+  ok(!panelHtml.includes('id="ls-spellbook-effect"'), '逐字效果不可再藏在下拉選單裡: ');
+  ok(panelHtml.includes('data-i18n="spellbook.effectGuide"') && panelHtml.includes('id="spellbook-demo-replay"'),
+    '效果格上方要有一句教學、下方要有「再播一次示範」: ');
+  ok(read('public/js/output-slim.js').includes("$('#spellbook-field')") && /spellbookField\.classList\.add\('oslim-featured'\);\s*s1\.sec\.appendChild\(spellbookField\)/.test(read('public/js/output-slim.js')),
+    '改版面板要把效果格放在「選一個樣子」裡，不能收進「哪裡不對？」: ');
+  ok(lyricExtras.includes("if (nextTemplate === 'spellbook') requestSpellbookDemo();") && lyricExtras.includes("type: 'lyrics-preview:sample', replay: true"),
+    '選到萬聖咒字或點效果時，預覽要自動用示範歌詞播一次: ');
+  const displayJs = read('public/js/display.js');
+  ok(displayJs.includes("document.getElementById('spellbook-root')") && displayJs.includes('if (d.replay && isControllerPlaying && !previewSampleActive) return;'),
+    '預覽端要真的播示範（不是停在一格），且真的有歌在播時不可被示範蓋掉: ');
   ok(panelHtml.includes('data-template="spellbook"') && controllerHtml.includes('data-template="spellbook"'), '桌面與手機都要能選萬聖咒字: ');
   ok(controllerJs.includes("'particle', 'spellbook'].includes(template)") && controllerJs.includes("nextTemplate === 'spellbook' ? SPELLBOOK_DEFAULTS"),
     '手機首次切到萬聖咒字要套預設、並顯示動畫強度: ');
   const i18n = require('../public/js/i18n');
-  const keys = ['template.spellbook', 'template.spellbookTitle', 'template.spellbookDesc', 'spellbook.effectLabel', 'spellbook.positionLabel']
+  const keys = ['template.spellbook', 'template.spellbookTitle', 'template.spellbookDesc', 'spellbook.effectLabel', 'spellbook.positionLabel',
+    'spellbook.effectCount', 'spellbook.effectGuide', 'spellbook.effect.cycleShort', 'spellbook.replayDemo']
     .concat(effects.map((e) => `spellbook.effect.${e}`), effects.map((e) => `spellbook.hint.${e}`));
   for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
     keys.forEach((k) => ok(i18n.catalogs?.[locale]?.[k], `${locale} 缺少 ${k}: `));
   }
+});
+
+test('萬聖燭光歌詞模板已移除（2026-10-11 使用者要求；萬聖節活動疊加層與歌單外觀不受影響）', () => {
+  const root = path.join(__dirname, '..');
+  const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+  ok(!fs.existsSync(path.join(root, 'public', 'js', 'lyric-template-halloween.js')), 'lyric-template-halloween.js 必須刪除: ');
+  ok(!read('public/display.html').includes('lyric-template-halloween'), 'display.html 不可再載入萬聖燭光: ');
+  ok(!read('public/index.html').includes('data-template="halloween"') && !read('public/controller.html').includes('data-template="halloween"')
+    && !read('public/index.html').includes('halloween-lyric-field'), '桌面與手機都不可再有萬聖燭光: ');
+  for (const rel of ['public/js/lyric-extras.js', 'public/js/controller.js', 'server/routes/handlers/lyrics.js', 'server/state/app-state.js']) {
+    ok(!read(rel).includes("'halloween'") && !read(rel).includes('halloweenPosition'), `${rel} 不可再有萬聖燭光模板: `);
+  }
+  const css = read('public/css/display.css');
+  ok(!css.includes('template-halloween') && !css.includes('.hw-') && css.includes('body.template-spellbook #lyrics-container'),
+    'display.css 只拿掉萬聖燭光，萬聖咒字的樣式要留著: ');
+  const i18n = require('../public/js/i18n');
+  ok(!i18n.catalogs?.['zh-TW']?.['template.halloween'] && !i18n.catalogs?.['zh-TW']?.['halloweenLyric.positionLabel'], '萬聖燭光的翻譯要一併移除: ');
+  ok(fs.existsSync(path.join(root, 'public', 'js', 'halloween.js')), '萬聖節活動疊加層（/halloween）不可被誤刪: ');
 });
 
 test('燈牌：以 registry 時間驅動並完整接入設定與伺服器白名單', () => {

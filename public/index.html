@@ -834,9 +834,6 @@
                 <button class="lyric-template-card" data-template="particle" type="button" role="radio" aria-checked="false" data-i18n-title="template.particleTitle" title="風息成字：粒子隨風聚成歌詞，字幕尺度、留安全邊距，可調直書與左右分散">
                   <span class="style-thumb-preview style-thumb-particle" aria-hidden="true"><span class="style-thumb-char">風</span></span><strong data-i18n="template.particle">風息成字</strong><span data-i18n="template.particleDesc">粒子聚字、字幕尺度</span>
                 </button>
-                <button class="lyric-template-card" data-template="halloween" type="button" role="radio" aria-checked="false" data-i18n-title="template.halloweenTitle" title="萬聖燭光：暗字被燭光點亮，唱完化成煙往上散">
-                  <span class="style-thumb-preview style-thumb-halloween" aria-hidden="true"><span class="style-thumb-char">燭</span></span><strong data-i18n="template.halloween">萬聖燭光</strong><span data-i18n="template.halloweenDesc">燭光點字、煙散退場</span>
-                </button>
                 <button class="lyric-template-card" data-template="spellbook" type="button" role="radio" aria-checked="false" data-i18n-title="template.spellbookTitle" title="萬聖咒字：七種萬聖節逐字效果，魔法陣、通靈板、蝙蝠、滴落、符札、月影、蛛絲">
                   <span class="style-thumb-preview style-thumb-spellbook" aria-hidden="true"><span class="style-thumb-char">咒</span></span><strong data-i18n="template.spellbook">萬聖咒字</strong><span data-i18n="template.spellbookDesc">七種逐字效果任選</span>
                 </button>
@@ -972,44 +969,25 @@
                 </div>
               </div>
               <div class="field" id="spellbook-field" hidden>
-                <label for="ls-spellbook-effect" data-i18n="spellbook.effectLabel">逐字效果</label>
-                <select id="ls-spellbook-effect" class="input" data-ls-control="spellbookEffect">
-                  <option value="rune" data-i18n="spellbook.effect.rune">魔法陣</option>
-                  <option value="ouija" data-i18n="spellbook.effect.ouija">通靈板</option>
-                  <option value="bats" data-i18n="spellbook.effect.bats">蝙蝠聚字</option>
-                  <option value="drip" data-i18n="spellbook.effect.drip">滴落</option>
-                  <option value="talisman" data-i18n="spellbook.effect.talisman">符札</option>
-                  <option value="moon" data-i18n="spellbook.effect.moon">月影</option>
-                  <option value="thread" data-i18n="spellbook.effect.thread">蛛絲</option>
-                  <option value="cycle" data-i18n="spellbook.effect.cycle">每句輪替（七種輪流）</option>
-                </select>
-                <p class="field-hint" id="spellbook-effect-hint">每個字唱之前先展開一個小魔法陣，字在唱的那一格從陣中彈出；之後魔法陣縮小、變淡，但一直慢慢轉。</p>
+                <div class="sb-effects-head"><span class="sb-effects-title" id="spellbook-effect-label" data-i18n="spellbook.effectLabel">逐字效果</span><span class="sb-effects-count" data-i18n="spellbook.effectCount">7 種，可每句輪替</span></div>
+                <p class="sb-effects-guide" data-i18n="spellbook.effectGuide">點一下就換效果，左邊預覽會用示範歌詞播一次給你看；直播中換也會立刻套用到 OBS。</p>
+                <div class="sb-effects" id="spellbook-effect-buttons" role="radiogroup" aria-labelledby="spellbook-effect-label">
+                  <button class="sb-effect" data-spellbook-effect="rune" type="button" role="radio" aria-checked="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="6.5" stroke-width="1"/><path d="M12 5.5l3.8 11.7-9.9-7.2h12.2l-9.9 7.2z" stroke-width="1.1"/></svg><span data-i18n="spellbook.effect.rune">魔法陣</span></button>
+                  <button class="sb-effect" data-spellbook-effect="ouija" type="button" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c4.6.6 6.2 7.3 0 18.5-6.2-11.2-4.6-17.9 0-18.5z"/><circle cx="12" cy="9.5" r="2.6"/></svg><span data-i18n="spellbook.effect.ouija">通靈板</span></button>
+                  <button class="sb-effect" data-spellbook-effect="bats" type="button" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17c-.7-1.6-1.6-2.4-2.7-2.1.1-1.5-1-2.6-2.7-2.3.3-1.6-.8-2.7-3.1-2.6C5 7 8 6 10.6 7.4c.1-1 .4-1.8.8-2.4l.6 1.1.6-1.1c.4.6.7 1.4.8 2.4C16 6 19 7 20.5 10c-2.3-.1-3.4 1-3.1 2.6-1.7-.3-2.8.8-2.7 2.3-1.1-.3-2 .5-2.7 2.1z"/></svg><span data-i18n="spellbook.effect.bats">蝙蝠聚字</span></button>
+                  <button class="sb-effect" data-spellbook-effect="drip" type="button" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v4.5c0 .8-.6 1.3-1.3 1.3-.7 0-1.2-.5-1.2-1.3V8H15v7.5a1.5 1.5 0 01-3 0V8h-1.5v4a1.3 1.3 0 01-2.6 0V8H6.5v2c0 .7-.6 1.2-1.2 1.2S4 10.7 4 10z"/></svg><span data-i18n="spellbook.effect.drip">滴落</span></button>
+                  <button class="sb-effect" data-spellbook-effect="talisman" type="button" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2.5h10v19H7z"/><path d="M10 6h4M10 9h4M10 12h4" stroke-width="1.2"/><rect x="10" y="15" width="4" height="4" fill="currentColor" stroke="none"/></svg><span data-i18n="spellbook.effect.talisman">符札</span></button>
+                  <button class="sb-effect" data-spellbook-effect="moon" type="button" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 3.5a8.5 8.5 0 107 12.2A7 7 0 0115.5 3.5z"/></svg><span data-i18n="spellbook.effect.moon">月影</span></button>
+                  <button class="sb-effect" data-spellbook-effect="thread" type="button" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5v8" stroke-dasharray="1.6 1.4"/><path d="M7 11.5h10v8H7z"/><path d="M9.5 15.5h5" stroke-width="1.2"/></svg><span data-i18n="spellbook.effect.thread">蛛絲</span></button>
+                  <button class="sb-effect" data-spellbook-effect="cycle" type="button" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 9A8 8 0 005 7.5M4.5 15A8 8 0 0019 16.5"/><path d="M5 3.5v4h4M19 20.5v-4h-4"/></svg><span data-i18n="spellbook.effect.cycleShort">每句輪替</span></button>
+                </div>
+                <div class="sb-effect-desc"><p id="spellbook-effect-hint">每個字唱之前先展開一個小魔法陣，字在唱的那一格從陣中彈出；之後魔法陣縮小、變淡，但一直慢慢轉。</p><button class="btn btn-sm sb-replay" id="spellbook-demo-replay" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5z"/></svg><span data-i18n="spellbook.replayDemo">再播一次示範</span></button></div>
                 <label for="ls-spellbook-position" class="mt-8" data-i18n="spellbook.positionLabel">上下位置</label>
                 <select id="ls-spellbook-position" class="input" data-ls-control="spellbookPosition">
                   <option value="bottom" data-i18n="spellbook.positionBottom">下方</option>
                   <option value="middle" data-i18n="spellbook.positionMiddle">中央</option>
                   <option value="top" data-i18n="spellbook.positionTop">上方</option>
                 </select>
-              </div>
-              <div class="field" id="halloween-lyric-field" hidden>
-                <label for="ls-halloween-position" data-i18n="halloweenLyric.positionLabel">歌詞位置</label>
-                <select id="ls-halloween-position" class="input" data-ls-control="halloweenPosition">
-                  <option value="bottom" data-i18n="halloweenLyric.positionBottom">下方</option>
-                  <option value="middle" data-i18n="halloweenLyric.positionMiddle">中央</option>
-                  <option value="top" data-i18n="halloweenLyric.positionTop">上方</option>
-                </select>
-                <div class="switch-row">
-                  <div><div class="label" data-i18n="halloweenLyric.flickerLabel">燭火閃爍</div><div class="sub" data-i18n="halloweenLyric.flickerHint">整句燭光輕輕晃動，像真的燭火。</div></div>
-                  <label class="switch"><input id="ls-halloween-flicker" data-ls-control="halloweenFlicker" type="checkbox" checked><span class="track"></span></label>
-                </div>
-                <div class="switch-row">
-                  <div><div class="label" data-i18n="halloweenLyric.embersLabel">火星</div><div class="sub" data-i18n="halloweenLyric.embersHint">字被點亮時偶爾迸出一顆往上飄的火星。</div></div>
-                  <label class="switch"><input id="ls-halloween-embers" data-ls-control="halloweenEmbers" type="checkbox" checked><span class="track"></span></label>
-                </div>
-                <div class="switch-row">
-                  <div><div class="label" data-i18n="halloweenLyric.interludeLabel">間奏小幽靈</div><div class="sub" data-i18n="halloweenLyric.interludeHint">長間奏時一隻小幽靈飄出來，下一句開始前回去。</div></div>
-                  <label class="switch"><input id="ls-halloween-interlude" data-ls-control="halloweenInterlude" type="checkbox" checked><span class="track"></span></label>
-                </div>
               </div>
               <div class="field" id="particle-orient-field" hidden>
                 <label data-i18n="particle.orientLabel">排向</label>

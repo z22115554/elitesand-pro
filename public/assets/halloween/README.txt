@@ -20,9 +20,6 @@ OBS 南瓜燈疊加層（/halloween）
   pop-candy       128×128   聊天 !treat 彈出的糖果小圖示。
   pop-ghost       128×128   聊天 !trick 彈出的幽靈小圖示。
 
-歌詞模板「萬聖燭光」（/display）
-  lyric-ghost     400×460   長間奏時飄出來的小幽靈。
-
 歌單外觀「萬聖夜」（/setlist）
   setlist-pumpkin 256×256   「正在播放」卡片右側的南瓜燈（亮著的）。
   setlist-web     360×360   左上角的蜘蛛網，網的起點在圖片左上角。會蓋在「正在播放」卡片上，線條請細、半透明。
