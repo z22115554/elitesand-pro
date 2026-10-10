@@ -22,51 +22,146 @@
   const navItems = document.querySelectorAll('.nav-item[data-nav]');
   const pageTitle = document.querySelector('.page-title');
 
+  // 頁面標題跟著「頂部分頁」走：次級頁面顯示所屬分頁的名稱（docs/UIUX-REDESIGN.md §3）
   const TITLE_KEYS = {
-    karaoke: 'nav.home',
-    playlist: 'nav.playlist',
-    setlist: 'nav.setlistTitle',
-    library: 'nav.library',
-    settings: 'nav.lyricsSettings',
-    general: 'nav.system',
-    twitch: 'nav.twitch',
-    sections: 'nav.sections',
-    'public-request': 'nav.publicRequest',
+    karaoke: 'nav.live',
+    library: 'nav.songLibrary',
+    sections: 'nav.songLibrary',
+    settings: 'nav.output',
+    setlist: 'nav.output',
+    moon: 'nav.output',
+    halloween: 'nav.output',
+    twitch: 'nav.requests',
+    'public-request': 'nav.requests',
+    general: 'nav.settingsTop',
     bgm: 'nav.bgm',
-    moon: 'nav.moon',
-    halloween: 'nav.halloween',
   };
 
   const views = document.querySelectorAll('.view[data-view]');
   const content = document.querySelector('.content');
+  const subnav = document.getElementById('subnav');
+
+  const navFor = (nav) => document.querySelector(`.nav-item[data-nav="${nav}"]`);
+  const groupOf = (nav) => navFor(nav)?.dataset.parent || nav;
+
+  // ─── 子分頁列 ───
+  // 次級 .nav-item（帶 data-parent）搬進 #subnav；每個有次級頁的頂部分頁在最前面補一顆
+  // 代表它自己的按鈕（例：畫面 → 「歌詞畫面」）。搬移不改變元素本身，既有的
+  // `.nav-item[data-nav=…]` 選擇器、點擊監聽與徽章都照常運作。
+  const subItems = Array.from(document.querySelectorAll('.nav-item[data-parent]'));
+  const proxies = new Map();
+  // 記住使用者在每個分組最後停在哪個子頁、每頁捲到哪裡（2026-09-28 使用者回報：
+  // 在「畫面 › 歌單畫面」調設定，回直播頁再點「畫面」會回到歌詞畫面、捲動也回頂端）
+  const lastInGroup = new Map();
+  const scrollOf = new Map();
+  let exactNext = false;
+  if (subnav) {
+    const parents = [...new Set(subItems.map((b) => b.dataset.parent))];
+    parents.forEach((parentNav) => {
+      const parent = navFor(parentNav);
+      if (!parent) return;
+      const proxy = document.createElement('button');
+      proxy.type = 'button';
+      proxy.className = 'nav-item nav-item--sub nav-item--proxy';
+      proxy.dataset.group = parentNav;
+      proxy.dataset.proxyFor = parentNav;
+      const key = parent.dataset.subI18n;
+      const label = document.createElement('span');
+      label.className = 'nav-label';
+      if (key) { label.dataset.i18n = key; label.textContent = window.I18n?.t?.(key) || key; }
+      proxy.appendChild(label);
+      // 子分頁列上的「歌詞畫面」這類代表鈕：一定要去母頁本身，不套用「回到上次的子頁」
+      proxy.addEventListener('click', () => { exactNext = true; parent.click(); });
+      subnav.appendChild(proxy);
+      proxies.set(parentNav, proxy);
+      subItems.filter((b) => b.dataset.parent === parentNav).forEach((b) => {
+        b.dataset.group = parentNav;
+        subnav.appendChild(b);
+      });
+    });
+  }
+
+  function renderSubnav(nav) {
+    if (!subnav) return;
+    const group = groupOf(nav);
+    let visible = 0;
+    subnav.querySelectorAll('.nav-item').forEach((b) => {
+      const inGroup = b.dataset.group === group;
+      b.classList.toggle('is-in-group', inGroup);
+      const current = b.dataset.proxyFor ? b.dataset.proxyFor === nav : b.dataset.nav === nav;
+      b.classList.toggle('active', current);
+      b.setAttribute('aria-selected', current ? 'true' : 'false');
+      b.setAttribute('role', 'tab');
+      if (inGroup && !b.hidden) visible += 1;
+    });
+    const hide = visible < 2;
+    if (subnav.hidden !== hide) subnav.hidden = hide;
+  }
 
   function setActive(nav) {
-    navItems.forEach((b) => b.classList.toggle('active', b.dataset.nav === nav));
+    const group = groupOf(nav);
+    navItems.forEach((b) => {
+      if (b.closest('#subnav')) return;
+      b.classList.toggle('active', b.dataset.nav === group);
+    });
+    renderSubnav(nav);
     if (pageTitle && TITLE_KEYS[nav]) pageTitle.textContent = window.I18n.t(TITLE_KEYS[nav]);
   }
 
   window.addEventListener('i18n:change', () => {
-    const active = document.querySelector('.nav-item.active[data-nav]');
-    if (active) setActive(active.dataset.nav);
+    const active = document.querySelector('.view.is-active[data-view]')?.dataset.view
+      || document.querySelector('.nav-item.active[data-nav]')?.dataset.nav;
+    if (active) setActive(active);
+    proxies.forEach((proxy) => {
+      const label = proxy.querySelector('[data-i18n]');
+      if (label) label.textContent = window.I18n.t(label.dataset.i18n);
+    });
   });
+
+  // 次級項目的 hidden 會被別的模組切換（例：中秋活動限時開放），要重算子分頁列
+  if (subnav && typeof MutationObserver === 'function') {
+    // 只看子項目自己的 hidden；#subnav 本身的 hidden 是 renderSubnav 設的，監聽它會無限迴圈
+    new MutationObserver((records) => {
+      if (!records.some((r) => r.target !== subnav)) return;
+      const active = document.querySelector('.view.is-active[data-view]')?.dataset.view;
+      if (active) renderSubnav(active);
+    }).observe(subnav, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  }
 
   // 真正切換視圖：顯示對應 data-view、隱藏其他
   function showView(nav) {
     let matched = false;
+    const previous = document.querySelector('.view.is-active[data-view]')?.dataset.view;
+    if (content && previous && previous !== nav) scrollOf.set(previous, content.scrollTop);
     views.forEach((v) => {
       const on = v.dataset.view === nav;
       v.classList.toggle('is-active', on);
       if (on) matched = true;
     });
-    if (content) content.scrollTop = 0;
+    if (matched) lastInGroup.set(groupOf(nav), nav);
+    if (content && previous !== nav) {
+      const top = scrollOf.get(nav) || 0;
+      content.scrollTop = top;
+      // 有些頁面（歌曲庫虛擬捲動）顯示後才長出高度：下一個 frame 再補一次
+      if (top) requestAnimationFrame(() => { if (content.scrollTop !== top) content.scrollTop = top; });
+    }
     if (matched) document.dispatchEvent(new CustomEvent('view:change', { detail: { view: nav } }));
     return matched;
   }
 
   navItems.forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (event) => {
       if (btn.hidden) return;
-      const nav = btn.dataset.nav;
+      let nav = btn.dataset.nav;
+      const exact = exactNext;
+      exactNext = false;
+      // 頂欄分組鈕（使用者親手點的）→ 回到這組上次停留的子頁；
+      // 程式觸發的 click（新手導覽、跳轉）要去指定的頁，不改道
+      if (!exact && event.isTrusted && !btn.closest('#subnav') && !btn.dataset.parent) {
+        const remembered = lastInGroup.get(nav);
+        const target = remembered && remembered !== nav ? navFor(remembered) : null;
+        if (target && !target.hidden) nav = remembered;
+      }
 
       // 未來頁面（已註冊 render 函式）→ 呼叫之
       if (FUTURE_VIEWS[nav]) {
@@ -79,6 +174,7 @@
       showView(nav);
     });
   });
+  setActive(document.querySelector('.view.is-active[data-view]')?.dataset.view || 'karaoke');
 
   // 對外暴露：之後啟用商城/會員時可呼叫 EliteNav.enableView('marketplace', renderFn)
   window.EliteNav = {
@@ -212,7 +308,7 @@
         confirm.disabled = !guideStartPath || guideFirstSuccess;
       }
       if (success) success.hidden = !guideFirstSuccess;
-      if (status) status.textContent = guideFirstSuccess ? '第一次成功完成' : (guideStartPath === 'sample' ? '確認右側出現示範文字' : guideStartPath === 'song' ? '匯入完成後回來確認' : '選一種開始方式');
+      if (status) status.textContent = guideFirstSuccess ? '第一次成功完成' : (guideStartPath === 'sample' ? (window.I18n ? window.I18n.t('help2.route.sampleStatus') : '確認直播頁準備區出現示範歌詞') : guideStartPath === 'song' ? '匯入完成後回來確認' : '選一種開始方式');
     };
     document.getElementById('guide-start-sample')?.addEventListener('click', () => {
       guideStartPath = 'sample';

@@ -175,17 +175,26 @@
       openTrackEditModal(parseInt(editBtn.dataset.edit, 10));
       return;
     }
+    const syncToggle = e.target.closest('[data-sync-toggle]');
+    if (syncToggle) {
+      e.stopPropagation();
+      const track = state.playlist[parseInt(syncToggle.dataset.syncToggle, 10)];
+      if (track && track.id) SocketClient.send('sync:confirm', { trackId: track.id, confirmed: !track.syncConfirmed });
+      return;
+    }
     const lyricsFixBtn = e.target.closest('[data-lyrics-fix]');
     if (lyricsFixBtn) {
       e.stopPropagation();
       const idx = parseInt(lyricsFixBtn.dataset.lyricsFix, 10);
       const track = state.playlist[idx];
+      if (track && window.LivePrep) window.LivePrep.select(track.id);
       if (track && window.LyricPicker) window.LyricPicker.open(track);
       return;
     }
     if (e.target.closest('.pi-handle')) return; // 點到拖曳把手不算選歌
     if (item) {
-      AppShared.playTrack(parseInt(item.dataset.index, 10), false); // 點清單只載入待命，不自動播放
+      // 2026-09-28 使用者決定：維持單擊＝載入待命（不自動播放）；直播頁準備區跟著目前載入的歌。
+      AppShared.playTrack(parseInt(item.dataset.index, 10), false);
     }
   });
 
@@ -299,8 +308,6 @@
     return { level: 'none', text: '無歌詞', label: '尚無歌詞。點擊搜尋或選擇歌詞' };
   }
 
-  // 歌詞狀態文字徽章 + 已選歌詞/offset 徽章：獨立成一段，好讓 renderPlaylist 的就地更新路徑
-  // 能整段重繪這裡（避免像過去只更新標題/歌手文字、徽章卻停留在舊值的問題）。
   function playlistExtrasMarkup(track, i) {
     const readiness = lyricsReadiness(track);
     const manualBadge = track.manualLyrics ? '<span class="pi-badge">已選歌詞</span>' : '';
@@ -312,7 +319,7 @@
       ? '<span class="pi-badge pi-badge--danger" title="音檔遺失，播放前需要重新下載">音檔遺失</span>'
       : '';
     const separatedBadge = track.separationStatus === 'done'
-      ? `<span class="pi-badge pi-badge--separated" title="${escapeHtml(t('playlist.separatedAutoTitle'))}">🎤 已分離</span>`
+      ? `<span class="pi-badge pi-badge--separated" title="${escapeHtml(t('playlist.separatedAutoTitle'))}">已分離</span>`
       : '';
     // 歌詞是找到了，但沒有任何來源驗到官方時長吻合（可能是剪輯過的影片），時間軸可能對不上。
     // 可點擊：跟旁邊的歌詞狀態徽章共用同一個 data-lyrics-fix 開歌詞選擇器，讓使用者直接挑一個
@@ -320,9 +327,13 @@
     // 一旦這首歌已經有非零 offset（不管是用「對齊第一句」還是手動微調出來的），就代表使用者已經
     // 處理過時間軸了，不該讓警示一直釘在那裡沒有消除的辦法——用 offset 當「已處理」的訊號。
     const durationWarningBadge = track.lyricsDurationVerified === false && offsetMs === 0
-      ? `<span class="pi-badge pi-badge--warning" data-lyrics-fix="${i}" role="button" tabindex="0" title="找到的歌詞沒有驗到官方時長吻合，影片可能含額外片段。點擊挑選時長更吻合的歌詞來源；如果就是目前播放中的這首，也可以到下方「歌詞時間偏移」手動校正起始點——校正後（offset 不為 0）這個警示會自動消失">⚠ 時長未驗證</span>`
+      ? `<span class="pi-badge pi-badge--warning" data-lyrics-fix="${i}" role="button" tabindex="0" title="找到的歌詞沒有驗到官方時長吻合，影片可能含額外片段。點擊挑選時長更吻合的歌詞來源；如果就是目前播放中的這首，也可以到下方「歌詞時間偏移」手動校正起始點——校正後（offset 不為 0）這個警示會自動消失">時長未驗證</span>`
       : '';
-    return `${audioBadge}<button class="pi-lyrics-status pi-lyrics-status--${readiness.level}" data-lyrics-fix="${i}" title="${escapeHtml(readiness.label)}" aria-label="${escapeHtml(readiness.label)}">${readiness.text}</button>${manualBadge}${offsetBadge}${durationWarningBadge}${separatedBadge}`;
+    // 已對時：直播頁準備區按「標記已對時」後才出現；點一下取消（伺服器 sync:confirm）
+    const syncBadge = track.syncConfirmed
+      ? `<button type="button" class="pi-badge pi-badge--synced" data-sync-toggle="${i}" title="${escapeHtml(t('ready.sync.ok'))}">${escapeHtml(t('ready.syncBadge'))}</button>`
+      : '';
+    return `${audioBadge}<button class="pi-lyrics-status pi-lyrics-status--${readiness.level}" data-lyrics-fix="${i}" title="${escapeHtml(readiness.label)}" aria-label="${escapeHtml(readiness.label)}">${readiness.text}</button>${manualBadge}${offsetBadge}${durationWarningBadge}${separatedBadge}${syncBadge}`;
   }
 
   function playlistItemMarkup(track, i, selectionKey, isActive, isSelected) {
@@ -505,6 +516,9 @@
     syncPlaylistTools(visibleCount, selectedCount, selectableVisibleCount,
       selectableVisibleCount > 0 && allVisibleSelected);
     schedulePlaylistMarqueeUpdate();
+    // 直播頁準備區（live-prep.js）要跟著清單的歌詞／偏移／伴奏狀態重畫
+    // 測試環境（tests/runtime-audit.test.js）沒有 CustomEvent
+    if (typeof CustomEvent === 'function') document.dispatchEvent(new CustomEvent('playlist:rendered'));
   }
 
   async function removeTrack(index) {

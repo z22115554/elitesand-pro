@@ -1,126 +1,164 @@
 /* ─── 自架字體（離線可用、直播零 CDN 依賴）───
-   Nunito 為可變字體，單一 latin woff2 涵蓋所有字重。
-   中文字元不在 latin 子集內，會自動逐字回退到 Noto Sans TC / 系統字。
-   （原 Kawaii 風的 Fredoka 展示字體已移除：極簡規範下標題與內文共用同一字族，
-     靠字重與字級做層級，不用裝飾性字體。）*/
+   IBM Plex Sans（介面 Latin）＋ IBM Plex Mono（數字／時間／狀態／小標），SIL OFL 1.1，授權見 /fonts/OFL-IBM-Plex.txt。
+   只帶 latin 子集；中文字元自動逐字回退到 Noto Sans TC／系統字。
+   （Nunito 檔案暫留在 /fonts，改版 P9 確認沒有頁面引用後再移除。）*/
 @font-face {
-  font-family: 'Nunito';
+  font-family: 'IBM Plex Sans';
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 400;
   font-display: swap;
-  src: url('/fonts/nunito-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  src: url('/fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-500-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Elitesand Pro 控制介面 — 極簡設計系統
-   風格參照：Linear / Vercel（大量留白、細線條、無 emoji、
-             單一強調色、克制的動態、單一字族靠字重分層）
+   Elitesand Pro 控制介面 — 「直播控台」設計系統（2026-09-26 起）
+   規格：docs/UIUX-REDESIGN.md §4（原型見該檔開頭連結）
+   原則：暖黑／米白純色底、細線分隔的面板（不用玻璃卡片與膠囊標籤）、
+         單一琥珀強調（主要動作＋選中）、紅只給 ON AIR／緊急、3px 圓角、
+         數字／時間／狀態／小標用等寬字、無 emoji
    套用範圍：/panel 控制面板、/controller 手機遙控
    不套用：/display /setlist（OBS 來源，觀眾向外觀由使用者自訂）
    ═══════════════════════════════════════════════════════════ */
 
-/* ─── 設計變數：深色（預設）─── 毛玻璃沉穩灰黑（參照 玻璃樣板v4）*/
+/* ─── 設計變數：深色（預設）─── 「直播控台」：暖黑、細線分隔、單一琥珀強調（docs/UIUX-REDESIGN.md §4）*/
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* 背景：帶方向性的灰→黑漸層（有明暗變化，玻璃才透得出來）*/
-  --bg-gradient:
-    radial-gradient(80% 60% at 20% 15%, #2a2d36 0%, transparent 60%),
-    radial-gradient(70% 60% at 85% 90%, #16181d 0%, transparent 55%),
-    linear-gradient(150deg, #20222a 0%, #121317 55%, #0a0b0e 100%);
-  --bg-base:    #121317;   /* 漸層底色（退路）*/
+  /* 背景：純色，不再用漸層＋毛玻璃（保留變數名，讓舊規則自動失效為純色）*/
+  --bg-gradient: none;
+  --bg-base:    #0F0F0E;   /* 頁面底 */
+  --bg-surface: #151513;   /* 面板 */
+  --bg-raised:  #1C1C19;   /* 按鈕、選中列 */
+  --bg-hover:   #23231F;
+  --bg-inset:   #0B0B0A;   /* 輸入框、波形底 */
+  --select-popup-bg: #1C1C19;
 
-  /* 玻璃材質：半透明 + backdrop blur（卡片/側欄底用這些）*/
-  --bg-surface: rgba(255,255,255,0.05);  /* 卡片底 */
-  --bg-raised:  rgba(255,255,255,0.08);  /* 凸起元件 */
-  --bg-hover:   rgba(255,255,255,0.13);
-  /* 原生下拉 <option> 清單底色：必須「不透明」，否則玻璃半透明展開時會疊成白底白字 */
-  --select-popup-bg: #23252e;
+  --border:        #2A2A26;
+  --border-strong: #3A3A34;
+  --track-off: #3A3A34;
 
-  /* 邊框（玻璃細邊）*/
-  --border:        rgba(255,255,255,0.12);
-  --border-strong: rgba(255,255,255,0.18);
+  --text:      #EDEBE4;
+  --text-dim:  #A8A59B;
+  --text-faint:#8C8981;    /* 在 surface／raised／inset／hover 四種底上都 ≥4.5:1 */
 
-  /* 控制項軌道（滑桿/開關關閉態）—— 與兩種主題對比一致 */
-  --track-off: rgba(255,255,255,0.22);
+  /* 強調色：琥珀（像導播台 tally 燈）。當底色時字用 --accent-text；當文字用 --accent-ink */
+  --accent:       #E9B949;
+  --accent-hover: #F2C85E;
+  --accent-2:     #F2C85E;
+  --accent-text:  #151309;
+  --accent-ink:   #E9B949;
+  --accent-soft:  rgba(233, 185, 73, 0.14);
+  --accent-glow:  rgba(233, 185, 73, 0.35);
 
-  /* 文字 */
-  --text:      #f2f3f5;
-  --text-dim:  rgba(255,255,255,0.62);
-  --text-faint:rgba(255,255,255,0.38);
-
-  /* 強調色：唯一彩色＝柔和紫（只給播放鍵/選中標籤）*/
-  --accent:       #7c6cff;
-  --accent-hover: #9d8bff;
-  --accent-2:     #9d8bff;
-  --accent-text:  #ffffff;
-  --accent-soft:  rgba(124, 108, 255, 0.18);
-  --accent-glow:  rgba(124, 108, 255, 0.45);
-
-  --danger: #fb7185;
-  --ok:     #6EE7B7;
-  --warn:   #FCD34D;
-  /* 別名：部分元件(如 Twitch 狀態指示器)用 --success/--warning 命名,對齊既有 token 避免未定義 */
+  /* 紅只給 ON AIR／緊急隱藏／刪除 */
+  --danger: #F0503C;
+  --live:   #F0503C;
+  --ok:     #8FCB9B;
+  --warn:   #E8836B;
   --success: var(--ok);
   --warning:  var(--warn);
 
-  /* 圓角（極簡：收緊，避免軟萌感）*/
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  /* 圓角：控台感，一律收小 */
+  --r-sm: 3px;
+  --r-md: 3px;
+  --r-lg: 4px;
 
-  --gap: 13px;
+  --gap: 12px;
 
-  /* 玻璃陰影：上緣亮高光 + 底部暗收邊 + 外投影，做出玻璃厚度 */
-  --glass-edge:     rgba(255,255,255,0.40);
-  --glass-edge-btm: rgba(0,0,0,0.25);
-  --shadow:    inset 0 1px 0 var(--glass-edge), inset 0 -1px 0 var(--glass-edge-btm), 0 8px 30px rgba(0,0,0,0.28);
-  --shadow-lg: inset 0 1px 0 var(--glass-edge), 0 24px 70px rgba(0,0,0,0.45);
+  /* 平面：面板不再有玻璃高光與投影；只有浮層（modal、toast、選單）保留投影 */
+  --glass-edge:     transparent;
+  --glass-edge-btm: transparent;
+  --shadow:    none;
+  --shadow-lg: 0 18px 48px rgba(0,0,0,0.55);
+  --glass-blur: 0px;
 
-  --glass-blur: 22px;
-
-  --font: 'Nunito', "Noto Sans TC", "Noto Sans SC", "Noto Sans JP",
-          system-ui, -apple-system, sans-serif;
-  /* 極簡：標題與內文同字族，層級靠字重/字級（--font-display 保留變數名以免全站改動）*/
+  --font: 'IBM Plex Sans', "Noto Sans TC", "Noto Sans SC", "Noto Sans JP",
+          "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* 標題與內文同字族，層級靠字重／字級（--font-display 保留變數名以免全站改動）*/
   --font-display: var(--font);
 }
 
-/* ─── 淺色 ─── */
+/* ─── 淺色 ─── 同一套結構只換色票；琥珀當文字時加深，白底才讀得到 */
 :root[data-theme="light"] {
   color-scheme: light;
-  /* 背景加深：淺灰到中灰，白玻璃卡片才跳得出來 */
-  --bg-gradient:
-    radial-gradient(75% 55% at 18% 10%, #f0f2f7 0%, transparent 58%),
-    radial-gradient(70% 60% at 88% 95%, #c4cad8 0%, transparent 55%),
-    linear-gradient(150deg, #dde1ea 0%, #ccd2df 55%, #bcc3d3 100%);
-  --bg-base:    #d3d8e3;
-  --bg-surface: rgba(255,255,255,0.78);
-  --bg-raised:  rgba(255,255,255,0.88);
-  --bg-hover:   rgba(255,255,255,0.96);
-  --select-popup-bg: #ffffff;
-  --border:        #ccd2e0;
-  --border-strong: #b6bed0;
-  --track-off: rgba(28,30,38,0.30);
-  --text:      #1c1e26;
-  --text-dim:  rgba(28,30,38,0.62);
-  --text-faint:rgba(28,30,38,0.40);
-  --accent:       #6357e8;
-  --accent-hover: #8174f0;
-  --accent-2:     #8174f0;
-  --accent-text:  #ffffff;
-  --accent-soft:  rgba(99, 87, 232, 0.12);
-  --accent-glow:  rgba(99, 87, 232, 0.30);
-  --danger: #E11D48;
-  --ok:     #0F9D6E;
-  --warn:   #C98200;
+  --bg-gradient: none;
+  --bg-base:    #F4F2EC;
+  --bg-surface: #FAF9F5;
+  --bg-raised:  #ECE9E0;
+  --bg-hover:   #E4E0D5;
+  --bg-inset:   #FFFFFF;
+  --select-popup-bg: #FFFFFF;
+  --border:        #DDD9CE;
+  --border-strong: #C9C4B7;
+  --track-off: #C9C4B7;
+  --text:      #1C1B18;
+  --text-dim:  #57544C;
+  --text-faint:#67635A;    /* 同上（2026-10-04 實測四種底） */
+  --accent:       #E9B949;
+  --accent-hover: #DDA935;
+  --accent-2:     #DDA935;
+  --accent-text:  #1C1B18;
+  --accent-ink:   #8A5E00;
+  --accent-soft:  rgba(233, 185, 73, 0.22);
+  --accent-glow:  rgba(233, 185, 73, 0.40);
+  --danger: #C8321E;
+  --live:   #C8321E;
+  --ok:     #2A6F3E;
+  --warn:   #B4442A;
   --success: var(--ok);
   --warning:  var(--warn);
-  --glass-edge:     rgba(255,255,255,1);
-  --glass-edge-btm: rgba(40,50,80,0.10);
-  --shadow:    inset 0 1px 0 var(--glass-edge), inset 0 -1px 0 var(--glass-edge-btm), 0 8px 18px rgba(40,50,80,0.10), 0 20px 44px rgba(40,50,80,0.12);
-  --shadow-lg: inset 0 1px 0 var(--glass-edge), 0 34px 86px rgba(40,50,80,0.16);
+  --shadow-lg: 0 18px 48px rgba(40,36,24,0.18);
 }
 
 * { box-sizing: border-box; }
@@ -162,8 +200,9 @@ select:focus-visible,
 /* ═══ 排版基元 ═══ */
 
 .eyebrow {
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -172,12 +211,9 @@ select:focus-visible,
 
 .card {
   background: var(--bg-surface);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  padding: 20px;
-  box-shadow: var(--shadow);
+  padding: 18px 20px;
 }
 
 /* ═══ 按鈕系統（文字標籤，無 emoji）═══ */
@@ -187,25 +223,25 @@ select:focus-visible,
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 36px;
+  height: 34px;
   padding: 0 14px;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
-  background: var(--bg-raised);
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  background: transparent;
   color: var(--text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   transition: background 0.12s, border-color 0.12s;
   white-space: nowrap;
 }
 .btn:hover { background: var(--bg-hover); }
-.btn:active { transform: translateY(0.5px); }
+.btn:active { background: var(--bg-raised); }
 
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+  font-weight: 700;
 }
 .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
@@ -219,7 +255,7 @@ select:focus-visible,
 .btn-sm { height: 30px; padding: 0 10px; font-size: 12px; }
 
 .btn-danger { color: var(--danger); border-color: transparent; background: transparent; }
-.btn-danger:hover { background: rgba(229,72,77,0.1); }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
 
 /* ═══ 表單元件 ═══ */
 
@@ -227,7 +263,7 @@ select:focus-visible,
   width: 100%;
   height: 36px;
   padding: 0 12px;
-  background: var(--bg-raised);
+  background: var(--bg-inset);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   color: var(--text);
@@ -315,16 +351,16 @@ input[type="range"] {
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px; height: 16px;
+  width: 12px; height: 18px;
   background: var(--accent);
-  border-radius: 50%;
+  border-radius: 2px;
   cursor: pointer;
   border: 2px solid var(--bg-surface);
 }
 input[type="range"]::-moz-range-thumb {
-  width: 16px; height: 16px;
+  width: 12px; height: 18px;
   background: var(--accent);
-  border-radius: 50%;
+  border-radius: 2px;
   cursor: pointer;
   border: 2px solid var(--bg-surface);
 }
@@ -344,18 +380,18 @@ input[type="color"] {
 .switch input { opacity: 0; width: 0; height: 0; }
 .switch .track {
   position: absolute; inset: 0;
-  background: var(--border-strong);
-  border-radius: 11px;
+  background: var(--track-off);
+  border-radius: 3px;
   transition: background 0.15s;
 }
 .switch .track::before {
   content: ''; position: absolute;
   width: 16px; height: 16px; left: 3px; top: 3px;
-  background: #fff; border-radius: 50%;
+  background: var(--text-dim); border-radius: 2px;
   transition: transform 0.15s;
 }
 .switch input:checked + .track { background: var(--accent); }
-.switch input:checked + .track::before { transform: translateX(16px); }
+.switch input:checked + .track::before { transform: translateX(16px); background: var(--accent-text); }
 
 .switch-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -367,7 +403,7 @@ input[type="color"] {
 /* 分段選擇（取代多個風格按鈕的雜亂）*/
 .segmented {
   display: inline-flex;
-  background: var(--bg-raised);
+  background: var(--bg-inset);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   padding: 2px;
@@ -377,11 +413,12 @@ input[type="color"] {
   border: none; background: transparent;
   color: var(--text-dim);
   height: 30px; padding: 0 12px;
-  border-radius: 6px;
-  font-size: 12px; font-weight: 500;
+  border-radius: 2px;
+  font-size: 12px; font-weight: 600;
   transition: background 0.12s, color 0.12s;
 }
-.segmented button.active { background: var(--accent); color: var(--accent-text); }
+.segmented button:hover { color: var(--text); }
+.segmented button.active { background: var(--accent); color: var(--accent-text); font-weight: 700; }
 .segmented.wrap { display: flex; flex-wrap: wrap; }
 
 /* 摺疊面板（進階設定）*/
@@ -412,7 +449,7 @@ details.collapse[open] > summary::before { transform: rotate(45deg); }
 details.collapse > .collapse-body { padding: 12px 0 4px; }
 
 /* 數值顯示 */
-.val { font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 12px; }
+.val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 12px; }
 
 /* 連線狀態點 */
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; }
@@ -514,13 +551,13 @@ details.collapse.mt-10 { margin-top: 10px; }
 .font-family-hint { margin-top: 6px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
 .val.val--fine-detail { margin-top: 4px; color: var(--text-faint); font-size: 11px; }
 .btn.btn--vertical-spaced { margin: 12px 0; }
-img.display-bg-preview { max-width: 100%; max-height: 120px; border-radius: 8px; display: block; margin-bottom: 8px; }
+img.display-bg-preview { max-width: 100%; max-height: 120px; border-radius: 3px; display: block; margin-bottom: 8px; }
 label.btn.btn--label { cursor: pointer; }
 .twitch-request-hint { margin: 6px 0 0; color: var(--text-faint); font-size: 12px; }
 .field.field--obs-port { width: 110px; }
 .switch-row.switch-row--spaced-4 { margin-top: 4px; }
 .lan-info-layout { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-.lan-info-qr { border-radius: 8px; background: #fff; padding: 6px; }
+.lan-info-qr { border-radius: 3px; background: #fff; padding: 6px; }
 .lan-info-copy { flex: 1; min-width: 180px; }
 .val.val--danger { color: var(--danger); }
 .twitch-status { margin: 0 0 10px; }
@@ -551,7 +588,7 @@ label.btn.btn--label { cursor: pointer; }
 #sls-save-name.input { flex: 1; min-width: 0; }
 .sls-custom-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
 .sls-custom-empty { color: var(--text-faint); font-size: 11px; }
-.sls-custom-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2, rgba(127, 127, 127, .12)); border-radius: 8px; padding: 2px 4px 2px 8px; }
+.sls-custom-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2, rgba(127, 127, 127, .12)); border-radius: 3px; padding: 2px 4px 2px 8px; }
 .btn.btn-sm.btn-ghost.sls-custom-chip__apply { padding: 2px 4px; }
 .btn.btn-sm.btn-ghost.sls-custom-chip__delete { padding: 2px 6px; color: var(--danger, #e06); }
 .setlist-template-controls { display: flex; gap: 6px; margin-bottom: 8px; }

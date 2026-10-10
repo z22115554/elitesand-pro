@@ -10,6 +10,7 @@ const { addRomanization, needsRomanization } = require('../../services/romanizer
 const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS } = require('../../utils/track-schema');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
 const libraryStore = require('../../services/library-store');
+const { emitToControlClients } = require('../../utils/socket-broadcast');
 
 const MAX_XIEYIN_OVERRIDE_LENGTH = 500;
 
@@ -210,6 +211,18 @@ function registerLyricsHandlers(io, socket, ctx) {
     scheduleLyricOffsetSync(ctx, trackId, clampedOffset);
   });
 
+  // 「這首已經對好時間」：只是給主播看的準備標記，不影響播放。只發給控制端（OBS 不需要）。
+  socket.on('sync:confirm', (data) => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+    const { trackId, confirmed } = data;
+    if (!trackId || typeof trackId !== 'string' || typeof confirmed !== 'boolean') return;
+    const set = ctx.trackSyncConfirmed;
+    if (!set) return;
+    if (confirmed) set.add(trackId); else set.delete(trackId);
+    emitToControlClients(io, 'sync:confirmed', { trackId, confirmed });
+    persistState();
+  });
+
   socket.on('offset:reset', (trackId) => {
     if (!trackId) return;
 
@@ -392,6 +405,10 @@ function registerLyricsHandlers(io, socket, ctx) {
       log.info(`歌詞來源 ${oldSource}→${newSource}：偏移切換為 ${restored}ms`);
     }
     for (const t of tracksById(trackId)) t.lyricsSource = newSource;
+    // 換了歌詞，之前的「已對時」不再成立
+    if (ctx.trackSyncConfirmed && ctx.trackSyncConfirmed.delete(trackId)) {
+      emitToControlClients(io, 'sync:confirmed', { trackId, confirmed: false });
+    }
 
     const plTrack = playState.playlist.find((t) => t && t.id === trackId);
     if (plTrack) {
@@ -419,6 +436,13 @@ function registerLyricsHandlers(io, socket, ctx) {
     broadcastState();
     persistState();
 
+    // 歌曲庫是下次重開／重新加入播放清單時的來源：選好的歌詞立刻寫回，不等下一次播放。
+    // 也讓歌曲庫頁（不在播放清單裡的歌）可以直接換歌詞（2026-09-28 使用者需求）。
+    try {
+      libraryStore.updateMeta(trackId, { lyrics, lyricsType: lyricsType || 'lrc', parsedLyrics: parsedLyrics || null });
+      io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: lyricsType || 'lrc' });
+    } catch (e) { log.warn(`手動歌詞寫回歌曲庫失敗（不影響顯示）: ${e.message}`); }
+
     // 手動歌詞也要羅馬化 + 諧音（非同步處理，不阻擋回應）
     // 修正：原本手動貼上的日文歌詞不會產生羅馬拼音與諧音行
     //
@@ -433,6 +457,7 @@ function registerLyricsHandlers(io, socket, ctx) {
           // 更新快取中的 parsedLyrics
           const cached = manualLyricsCache.get(trackId);
           if (cached) cached.parsedLyrics = romanized;
+          try { libraryStore.updateMeta(trackId, { parsedLyrics: romanized }); } catch (_) { /* 靜默 */ }
 
           // 若仍是當前歌曲，推播羅馬化結果給顯示端
           if (playState.currentTrack && playState.currentTrack.id === trackId) {

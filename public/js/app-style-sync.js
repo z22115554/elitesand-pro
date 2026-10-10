@@ -161,6 +161,9 @@
 
   function reportPanelLocale() {
     if (!window.I18n) return;
+    // 啟動時 I18n 初始化的 i18n:change 比連線早：還沒連上就先不報（連上後伺服器送來的
+    // obs-locale:update 會再呼叫一次）。否則 send 會跳「伺服器未連線，操作沒有送出」的錯誤提示。
+    if (typeof SocketClient.connected === 'function' && !SocketClient.connected()) return;
     const locale = window.I18n.current();
     if (locale === obsLocaleKnownPanelLocale) return;
     obsLocaleKnownPanelLocale = locale;

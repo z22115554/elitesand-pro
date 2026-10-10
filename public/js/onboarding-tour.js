@@ -13,14 +13,17 @@
   const ADVANCED_LIVE_STORAGE_KEY = 'elite-advanced-live-tour-v1';
   const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1'];
   const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2';
-  const TOUR_VERSION = 5;
-  const ADVANCED_TOUR_VERSION = 5; // 5：OBS 章改教「拖到 OBS」，貼網址退為備案
+  const TOUR_VERSION = 6; // 6：2026-10 面板改版，主線改走新版面（升級者會再看到一次歡迎）
+  const ADVANCED_TOUR_VERSION = 7; // 7：2026-10-09 教學加細（歌詞章 6 步）、AI 伴奏與雙路音訊移到第三章「伴奏與直播現場」
   const HOLE_PADDING = 9;
   const VIEWPORT_MARGIN = 10;
   const CARD_GAP = 30;
   const MIN_TOUR_VIEWPORT_WIDTH = 640;
   const MIN_TOUR_VIEWPORT_HEIGHT = 480;
 
+  // v6（2026-10-04 面板改版）：主線照「第一次開台」的實際動線——
+  // 頂欄 → 加歌框 → 清單準備徽章 → 準備區（換歌詞／對時）→ 播放列 → 畫面三層 → 拖進 OBS。
+  // 目標一律用 index.html 裡的靜態容器（瘦身腳本是把元素搬進新容器，id 不變）。
   const STEPS = [
     {
       id: 'navigation',
@@ -34,9 +37,8 @@
     {
       id: 'source',
       view: 'karaoke',
-      prepTab: 'add',
       target: '#music-source-card',
-      mobileTarget: '#tab-youtube',
+      mobileTarget: '#music-source-card',
       title: 'tour.step.source.title',
       body: 'tour.step.source.body',
       mobileBody: 'tour.step.source.mobileBody',
@@ -45,13 +47,22 @@
       requiresSource: true,
     },
     {
-      id: 'playlist',
+      id: 'readiness',
       view: 'karaoke',
-      target: '.playlist-head-actions',
-      mobileTarget: '.playlist-head-actions',
-      title: 'tour.step.playlist.title',
-      body: 'tour.step.playlist.body',
-      hint: 'tour.step.playlist.hint',
+      target: '#playlist',
+      mobileTarget: '#playlist',
+      title: 'tour.step.readiness.title',
+      body: 'tour.step.readiness.body',
+      hint: 'tour.step.readiness.hint',
+    },
+    {
+      id: 'prep',
+      view: 'karaoke',
+      target: '#live-prep',
+      mobileTarget: '.offset-row',
+      title: 'tour.step.prep.title',
+      body: 'tour.step.prep.body',
+      hint: 'tour.step.prep.hint',
     },
     {
       id: 'player',
@@ -61,15 +72,6 @@
       title: 'tour.step.player.title',
       body: 'tour.step.player.body',
       hint: 'tour.step.player.hint',
-    },
-    {
-      id: 'preview',
-      view: 'karaoke',
-      target: '.lb-lyric',
-      mobileTarget: '.lb-lyric-actions',
-      title: 'tour.step.preview.title',
-      body: 'tour.step.preview.body',
-      hint: 'tour.step.preview.hint',
     },
     {
       id: 'style',
@@ -105,6 +107,15 @@
       hint: 'tour.advanced.step.lyricsSource.hint',
     },
     {
+      id: 'lyrics-paste',
+      view: 'karaoke',
+      target: '#btn-paste-lyrics',
+      mobileTarget: '#btn-paste-lyrics',
+      title: 'tour.advanced.step.lyricsPaste.title',
+      body: 'tour.advanced.step.lyricsPaste.body',
+      hint: 'tour.advanced.step.lyricsPaste.hint',
+    },
+    {
       id: 'lyrics-align',
       view: 'karaoke',
       target: '#offset-align',
@@ -133,6 +144,15 @@
       body: 'tour.advanced.step.lyricsTimeline.body',
       hint: 'tour.advanced.step.lyricsTimeline.hint',
     },
+    {
+      id: 'lyrics-badges',
+      view: 'karaoke',
+      target: '#playlist',
+      mobileTarget: '#playlist',
+      title: 'tour.advanced.step.lyricsBadges.title',
+      body: 'tour.advanced.step.lyricsBadges.body',
+      hint: 'tour.advanced.step.lyricsBadges.hint',
+    },
   ];
 
   const ADVANCED_OBS_STEPS = [
@@ -149,7 +169,8 @@
     {
       id: 'obs-add',
       view: 'general',
-      target: '#obs-url-card',
+      // 整張卡片太高：1280×800 時導覽卡放不下，會變成「請把視窗拉大」。只聚光網址那一列
+      target: '#obs-url-row',
       mobileTarget: '#obs-url',
       title: 'tour.advanced.step.obsUrl.title',
       body: 'tour.advanced.step.obsUrl.body',
@@ -182,28 +203,29 @@
       body: 'tour.advanced.step.obsCreate.body',
       hint: 'tour.advanced.step.obsCreate.hint',
     },
+  ];
+
+  const ADVANCED_LIVE_STEPS = [
     {
-      id: 'obs-ai-separation',
+      id: 'live-ai-separation',
       view: 'karaoke',
       prepTab: 'ai',
       target: '#home-ai-make-all',
       mobileTarget: '#home-ai-make-all',
-      title: 'tour.advanced.step.obsAiSeparation.title',
-      body: 'tour.advanced.step.obsAiSeparation.body',
-      hint: 'tour.advanced.step.obsAiSeparation.hint',
+      title: 'tour.advanced.step.liveAiSeparation.title',
+      body: 'tour.advanced.step.liveAiSeparation.body',
+      hint: 'tour.advanced.step.liveAiSeparation.hint',
     },
     {
-      id: 'obs-dual-audio',
+      id: 'live-dual-audio',
       view: 'general',
-      target: '#dual-audio-card',
-      mobileTarget: '#dual-audio-card',
-      title: 'tour.advanced.step.obsDualAudio.title',
-      body: 'tour.advanced.step.obsDualAudio.body',
-      hint: 'tour.advanced.step.obsDualAudio.hint',
+      // 整張卡片太高（同 obs-add），聚光第一個要動的「重新整理裝置清單」
+      target: '#dual-audio-refresh-devices',
+      mobileTarget: '#dual-audio-refresh-devices',
+      title: 'tour.advanced.step.liveDualAudio.title',
+      body: 'tour.advanced.step.liveDualAudio.body',
+      hint: 'tour.advanced.step.liveDualAudio.hint',
     },
-  ];
-
-  const ADVANCED_LIVE_STEPS = [
     {
       id: 'live-setlist',
       view: 'setlist',
@@ -231,6 +253,16 @@
       title: 'tour.advanced.step.liveSession.title',
       body: 'tour.advanced.step.liveSession.body',
       hint: 'tour.advanced.step.liveSession.hint',
+    },
+    {
+      id: 'live-chapters',
+      view: 'karaoke',
+      prepTab: 'session',
+      target: '#btn-copy-chapters',
+      mobileTarget: '#btn-copy-chapters',
+      title: 'tour.advanced.step.liveChapters.title',
+      body: 'tour.advanced.step.liveChapters.body',
+      hint: 'tour.advanced.step.liveChapters.hint',
     },
     {
       id: 'live-twitch',
@@ -583,9 +615,15 @@
       if (target && !target.hidden && target.getClientRects().length) {
         const compact = root.innerWidth <= 760;
         const reduceMotion = !!root.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        // 目標左右都放不下導覽卡（很寬的卡片、設定頁的整列）時，置中會讓上下都只剩一半空間，
+        // 文字較長的導覽卡就放不下而跳出「請把視窗拉大」（2026-10-09 在 1280×812 實測）。
+        // 這種目標改捲到上方，把整個下半部留給導覽卡。
+        const box = target.getBoundingClientRect();
+        const sideRoom = Math.max(root.innerWidth - box.right, box.left);
+        const topAligned = compact || sideRoom < (dom.card?.getBoundingClientRect().width || 370) + 40;
         target.scrollIntoView({
           behavior: compact || reduceMotion ? 'auto' : 'smooth',
-          block: compact ? 'start' : 'center',
+          block: topAligned ? 'start' : 'center',
           inline: 'center',
         });
         await delay(attempt === 0 ? 220 : 60);
@@ -597,6 +635,8 @@
   }
 
   function openAncestors(target) {
+    // 改版後有些頁面一次只顯示一類設定（設定頁分類）：先請該頁把目標所在的分類切出來
+    document.dispatchEvent(new CustomEvent('ui:reveal', { detail: { target } }));
     let parent = target.parentElement;
     while (parent) {
       if (parent.tagName === 'DETAILS') parent.open = true;
@@ -664,18 +704,8 @@
         return;
       }
       dom.action.disabled = true;
-      // 首頁重構後預覽 iframe 只在「歌詞設定」頁；那裡沒被啟用時先切過去，等 iframe 載好。
-      let frames = await waitForPreviewFrames();
-      if (!frames.length) {
-        document.querySelector('.nav-item[data-nav="settings"]')?.click();
-        frames = await waitForPreviewFrames(4000);
-      }
-      if (!frames.length || !active || steps[state.currentStep]?.id !== 'source') {
-        dom.action.disabled = false;
-        showStatus(t('tour.status.sampleUnavailable'), 'error');
-        return;
-      }
-      const acknowledgment = waitForSampleAcknowledgment(frames);
+      // 2026-10 改版：示範歌詞直接顯示在直播頁準備區（不切到畫面頁）；等準備區真的出現示範文字才解鎖。
+      const acknowledgment = waitForPrepSample();
       try {
         button.click();
       } catch (_) {
@@ -747,6 +777,26 @@
       await delay(100);
     } while (Date.now() < deadline && active);
     return [];
+  }
+
+  // 準備區的「目前歌詞」真的換成示範文字（lyric-extras.js 發 sample-lyrics:shown）才算成功
+  function waitForPrepSample(timeoutMs = 2000) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        document.removeEventListener('sample-lyrics:shown', onShown);
+        root.clearTimeout(timer);
+        resolve(value);
+      };
+      const onShown = () => {
+        const line = document.getElementById('lyric-now-line');
+        finish(!!(line && line.dataset.sample === '1' && line.textContent.trim()));
+      };
+      const timer = root.setTimeout(() => finish(false), timeoutMs);
+      document.addEventListener('sample-lyrics:shown', onShown);
+    });
   }
 
   function waitForSampleAcknowledgment(frames, timeoutMs = 2000) {

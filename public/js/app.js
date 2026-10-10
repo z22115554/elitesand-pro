@@ -331,6 +331,16 @@
     }
   });
 
+  // 「已對時」標記（清單「對」格、準備區按鈕）。伺服器只發給控制端。
+  SocketClient.on('sync:confirmed', (data) => {
+    if (!data || !data.trackId) return;
+    const confirmed = !!data.confirmed;
+    playlist.forEach((track) => { if (track && track.id === data.trackId) track.syncConfirmed = confirmed; });
+    if (AppShared.state.currentTrack && AppShared.state.currentTrack.id === data.trackId) AppShared.state.currentTrack.syncConfirmed = confirmed;
+    AppShared.renderPlaylist();
+    document.dispatchEvent(new CustomEvent('sync:confirmed', { detail: { trackId: data.trackId, confirmed } }));
+  });
+
   // Socket offset 更新
   SocketClient.on('offset:update', (data) => {
     if (playlist[currentTrackIndex] && data.trackId === playlist[currentTrackIndex].id) {

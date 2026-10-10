@@ -148,6 +148,9 @@ function createAppState(io) {
 
   // ─── 每首歌的記憶（key: track.id）───
   const trackOffsets = new Map();       // offset in ms
+  // 使用者手動標記「這首已經對好時間」（面板清單的「對」格、準備區的「已對時」鈕）。
+  // 跟 offset 分開存：offset 為 0 也可能已經對好；換歌詞來源時清掉（新歌詞要重新確認）。
+  const trackSyncConfirmed = new Set();
   const trackPitch = new Map();         // semitones (-12 ~ 12)
   const trackSpeed = new Map();         // rate (0.5 ~ 1.5)
   const manualLyricsCache = new Map();  // { lyrics, lyricsType, parsedLyrics, source, timestamp }
@@ -280,6 +283,9 @@ function createAppState(io) {
       for (const [id, offset] of Object.entries(saved.trackOffsets)) {
         if (typeof offset === 'number') trackOffsets.set(id, offset);
       }
+    }
+    if (Array.isArray(saved.trackSyncConfirmed)) {
+      saved.trackSyncConfirmed.forEach((id) => { if (typeof id === 'string' && id) trackSyncConfirmed.add(id); });
     }
     if (saved.manualLyrics && typeof saved.manualLyrics === 'object') {
       for (const [id, entry] of Object.entries(saved.manualLyrics)) {
@@ -430,6 +436,7 @@ function createAppState(io) {
       metronomeEnabled: playState.metronomeEnabled,
       lyricSettings: playState.lyricSettings,
       trackOffsets: Object.fromEntries(trackOffsets),
+      trackSyncConfirmed: [...trackSyncConfirmed],
       manualLyrics: Object.fromEntries(manualLyricsCache),
       trackPitch: Object.fromEntries(trackPitch),
       trackSpeed: Object.fromEntries(trackSpeed),
@@ -647,6 +654,7 @@ function createAppState(io) {
       lyricsType: effectiveLyricsType || null,
       hasLyrics,
       offset: effectiveOffset,
+      ...(trackSyncConfirmed.has(track.id) ? { syncConfirmed: true } : {}),
       pitchShift: effectivePitch,
       playbackRate: effectiveRate,
       manualLyrics: !!manual,
@@ -667,6 +675,7 @@ function createAppState(io) {
       lyricsType: effectiveLyricsType || null,
       hasLyrics,
       ...(effectiveOffset ? { offset: effectiveOffset } : {}),
+      ...(trackSyncConfirmed.has(track.id) ? { syncConfirmed: true } : {}),
       ...(effectivePitch ? { pitchShift: effectivePitch } : {}),
       ...(effectiveRate !== 1 ? { playbackRate: effectiveRate } : {}),
       ...(typeof track.loudnessLufs === 'number' ? { loudnessLufs: track.loudnessLufs } : {}),
@@ -781,6 +790,7 @@ function createAppState(io) {
   return {
     playState,
     trackOffsets,
+    trackSyncConfirmed,
     trackPitch,
     trackSpeed,
     manualLyricsCache,

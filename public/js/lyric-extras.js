@@ -560,10 +560,28 @@
     return sent;
   }
 
-  // 首頁重構後，唯一的所見即所得預覽 iframe 在「歌詞設定」頁。首頁 Live Bar 的「示範歌詞」
-  // 鈕按下時如果當前頁沒有已載入的預覽 iframe，就先切到歌詞設定頁，等 iframe 載好再送。
+  // 直播頁準備區的「目前歌詞」兩行直接顯示示範歌詞（2026-10-05 使用者回報：在直播頁按示範歌詞
+  // 不該被切到畫面頁）。真的播放有歌詞的歌時，app-playback 的重繪會自然換回真正的歌詞。
+  function showSampleInPrep() {
+    const now = document.getElementById('lyric-now-line');
+    const next = document.getElementById('lyric-next-line');
+    if (!now) return false;
+    const tt = (key) => (window.I18n ? window.I18n.t(key) : key);
+    now.classList.remove('has-word-marks');
+    now.textContent = `♪ ${tt('preview.sampleLine1')}`;
+    now.dataset.sample = '1';
+    if (next) next.textContent = tt('preview.sampleLine2');
+    document.dispatchEvent(new CustomEvent('sample-lyrics:shown'));
+    return true;
+  }
+
+  // 「示範歌詞」：在直播頁就顯示在準備區、不切頁；已載入的畫面頁預覽也一併送（看字體效果用）。
+  // 只有在其他頁面、又沒有已載入的預覽時，才切到畫面頁等預覽載好再送。
   function showSampleLyricsInPreview() {
-    if (postSampleToPreviewFrames() > 0) return;
+    const onLive = document.querySelector('.view.is-active[data-view]')?.dataset.view === 'karaoke';
+    const sent = postSampleToPreviewFrames();
+    if (onLive && showSampleInPrep()) return;
+    if (sent > 0) return;
     const settingsNav = document.querySelector('.nav-item[data-nav="settings"]');
     if (!settingsNav) return;
     settingsNav.click();
@@ -1772,6 +1790,42 @@
     return `${track?.id || ''}\u0000${artist.trim()}\u0000${title.trim()}`;
   }
 
+  // 選擇器平常內嵌在直播頁準備區；從別的頁（例如歌曲庫）打開時，那一頁的 view 是 display:none，
+  // 所以暫時把它搬到 body 變成置中浮窗，關閉時再搬回原位。
+  let pickerHome = null;
+  let pickerBackdrop = null;
+  function pickerHostVisible(modal) {
+    const host = pickerHome ? pickerHome.parent : modal.parentNode;
+    const view = host && host.closest ? host.closest('.view') : null;
+    return !view || view.classList.contains('is-active');
+  }
+  function floatPicker(modal) {
+    if (pickerHome) return;
+    pickerHome = { parent: modal.parentNode, next: modal.nextSibling };
+    pickerBackdrop = document.createElement('div');
+    pickerBackdrop.className = 'prep-picker-backdrop';
+    pickerBackdrop.addEventListener('click', closePicker);
+    document.body.appendChild(pickerBackdrop);
+    document.body.appendChild(modal);
+    modal.classList.add('is-floating');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'lyrics-picker-title');
+  }
+  function dockPicker(modal) {
+    if (!pickerHome) return;
+    pickerHome.parent.insertBefore(modal, pickerHome.next);
+    pickerHome = null;
+    modal.classList.remove('is-floating');
+    modal.removeAttribute('role');
+    modal.removeAttribute('aria-modal');
+    modal.removeAttribute('aria-labelledby');
+    if (pickerBackdrop) { pickerBackdrop.remove(); pickerBackdrop = null; }
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && pickerHome) closePicker();
+  });
+
   function openPicker(track) {
     if (!track) {
       showToast('請先選擇一首歌曲');
@@ -1781,6 +1835,16 @@
     const modal = document.getElementById('lyrics-picker-modal');
     if (!modal) return;
     modal.hidden = false;
+    // 直播頁改版後選擇器內嵌在「準備區」（data-inline-picker），不是 modal：捲到看得見的位置；
+    // 所在的頁沒有顯示時（例如從歌曲庫開）改成浮窗
+    if (modal.hasAttribute('data-inline-picker')) {
+      if (pickerHome || !pickerHostVisible(modal)) {
+        floatPicker(modal);
+        requestAnimationFrame(() => document.getElementById('picker-title')?.focus());
+      } else {
+        requestAnimationFrame(() => modal.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+      }
+    }
 
     // 預填搜尋欄（使用者可改成正確的歌手/歌名再搜尋）
     const artistEl = document.getElementById('picker-artist');
@@ -1907,11 +1971,14 @@
     }
     showToast(`已套用 ${candidate.sourceLabel} 的歌詞`);
     setTimeout(closePicker, 600);
+    document.dispatchEvent(new CustomEvent('lyrics-picker:applied', { detail: { trackId: pickerCurrentTrack.id } }));
   }
 
   function closePicker() {
     const modal = document.getElementById('lyrics-picker-modal');
-    if (modal) modal.hidden = true;
+    if (!modal) return;
+    modal.hidden = true;
+    dockPicker(modal);
   }
 
   function initPicker() {
@@ -1921,14 +1988,15 @@
 
     if (openBtn) {
       openBtn.addEventListener('click', () => {
-        // 從全域取得當前歌曲（app.js 會把它掛在 window.VKState）
-        const track = (window.VKState && window.VKState.getCurrentTrack)
-          ? window.VKState.getCurrentTrack() : null;
+        // 直播頁「準備區」選中的那首優先（live-prep.js），否則用目前歌曲（app.js 掛在 window.VKState）
+        const prepIdx = window.AppShared && typeof AppShared.prepTargetIndex === 'function' ? AppShared.prepTargetIndex() : -1;
+        const track = (prepIdx >= 0 && AppShared.state.playlist[prepIdx])
+          || ((window.VKState && window.VKState.getCurrentTrack) ? window.VKState.getCurrentTrack() : null);
         openPicker(track);
       });
     }
     if (closeBtn) closeBtn.addEventListener('click', closePicker);
-    if (modal) {
+    if (modal && !modal.hasAttribute('data-inline-picker')) {
       modal.addEventListener('click', (e) => { if (e.target === modal) closePicker(); });
     }
 

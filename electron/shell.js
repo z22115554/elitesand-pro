@@ -399,6 +399,15 @@ function prepareMutableYtdlp(resourcesPath, userDataPath, options = fs) {
   }
 }
 
+// 主視窗第一次開啟的大小：依螢幕可用區域開到約 92%，上限 1680×1050、下限 1280×850
+// （2026-10-09 使用者回報：1280×850 時右側收件匣與播放列太擠）。螢幕比下限還小時就貼齊可用區域。
+function initialMainWindowSize(screen) {
+  const area = screen?.getPrimaryDisplay?.()?.workAreaSize;
+  if (!area || !area.width || !area.height) return { width: 1280, height: 850 };
+  const fit = (avail, min, max) => Math.min(avail, Math.max(min, Math.min(max, Math.round(avail * 0.92))));
+  return { width: fit(area.width, 1280, 1680), height: fit(area.height, 850, 1050) };
+}
+
 function createElectronShell({
   app,
   BrowserWindow,
@@ -411,6 +420,8 @@ function createElectronShell({
   clipboard,
   powerSaveBlocker,
   ipcMain = null,
+  screen = null,
+  globalShortcut = null,
   processObject = process,
   fsImpl = fs,
   probeHealthImpl = probeHealth,
@@ -442,6 +453,9 @@ function createElectronShell({
   const preload = path.join(shellRoot, 'electron', 'preload.js');
   const isSpoutExperiment = processObject.env.ELITESAND_SPOUT_EXPERIMENT === '1';
   const { createSpoutIssueDiagnostics } = require('./spout-issue-diagnostics');
+  const { createGlobalHotkeys } = require('./global-hotkeys');
+  // 全域快捷鍵：按下時把動作 id 送給面板執行（面板關在系統匣時也照樣收得到）。
+  let globalHotkeys = null;
   let mainWindow = null;
   // Keep the Tray instance in this closure. Electron will garbage-collect an
   // unreferenced tray icon, which would make a hidden window unrecoverable.
@@ -1037,8 +1051,8 @@ function createElectronShell({
 
   async function createWindow() {
     const window = new BrowserWindow({
-      width: 1280,
-      height: 850,
+      ...initialMainWindowSize(screen),
+      center: true,
       minWidth: 960,
       minHeight: 650,
       show: false,
@@ -1209,6 +1223,14 @@ function createElectronShell({
       // 設定本身的持久化（server 端 JSON）由呼叫端另外打 /api/webgpu-separation/settings，
       // 這裡只負責「視窗要不要活著」這件事，跟 §13 架構決策一致：electron/ 完全不碰
       // server/ 的業務邏輯，只做「開一個隱藏視窗指到某個 URL」。
+      ipcMain.handle('elitesand:hotkeys-get', (event) => {
+        if (event?.sender !== window.webContents) return null;
+        return globalHotkeys ? globalHotkeys.get() : { config: null, results: {}, available: false };
+      });
+      ipcMain.handle('elitesand:hotkeys-set', (event, payload) => {
+        if (event?.sender !== window.webContents || !globalHotkeys) return null;
+        return globalHotkeys.set(payload);
+      });
       ipcMain.handle('elitesand:webgpu-engine-toggle', async (event, enabled) => {
         if (event?.sender !== window.webContents) return null;
         return syncWebgpuEngineWindow(!!enabled);
@@ -1504,6 +1526,7 @@ function createElectronShell({
     app.on('second-instance', focusWindow);
     app.on('before-quit', (event) => {
       stopPowerSaveBlocker();
+      globalHotkeys?.stop();
       if (isQuitting) return;
       // 一旦決定結束就立刻標記，讓稍後 Electron 關窗序列裡的 window 'close'
       // 事件（hideWindowToTray）直接放行，而不是又 preventDefault 把整個 app.quit
@@ -1521,6 +1544,18 @@ function createElectronShell({
     });
     try {
       await app.whenReady();
+      // 測試用的無頭模式與 Spout 實驗版不搶系統的全域按鍵。
+      if (globalShortcut && !headless && !isSpoutExperiment) {
+        globalHotkeys = createGlobalHotkeys({
+          globalShortcut,
+          userDataPath: app.getPath('userData'),
+          fsImpl,
+          onTrigger: (action) => {
+            if (mainWindow && !mainWindow.isDestroyed?.()) mainWindow.webContents.send('elitesand:hotkey', action);
+          },
+        });
+        globalHotkeys.start();
+      }
       if (app.isPackaged) {
         // v0.9.9.7 could keep downloaded media inside the install directory.
         // Do this only after the single-instance lock above: with 100+ songs the

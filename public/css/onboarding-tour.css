@@ -14,7 +14,6 @@
   background:
     radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--accent) 17%, transparent), transparent 38%),
     rgba(5, 7, 13, .82);
-  backdrop-filter: blur(5px);
 }
 
 .tour-welcome-card {
@@ -23,7 +22,7 @@
   overflow: auto;
   padding: 30px;
   border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
-  border-radius: 20px;
+  border-radius: 4px;
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--bg-raised) 96%, var(--accent) 4%), var(--bg-raised));
   box-shadow: 0 28px 80px rgba(0, 0, 0, .46), 0 0 0 1px rgba(255, 255, 255, .025) inset;
@@ -35,9 +34,9 @@
   min-height: 26px;
   padding: 4px 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  border-radius: 999px;
+  border-radius: 3px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: .03em;
@@ -69,7 +68,7 @@
   position: relative;
   padding: 11px 14px 11px 38px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--bg) 58%, transparent);
   color: var(--text-dim);
   font-size: 13px;
@@ -105,7 +104,6 @@
   position: fixed;
   z-index: 20000;
   background: rgba(4, 6, 11, .77);
-  backdrop-filter: blur(1px);
   pointer-events: auto;
   transition: left .18s ease, top .18s ease, width .18s ease, height .18s ease;
 }
@@ -114,7 +112,7 @@
   position: fixed;
   z-index: 20001;
   border: 2px solid color-mix(in srgb, var(--accent) 88%, white 12%);
-  border-radius: 14px;
+  border-radius: 4px;
   box-shadow:
     0 0 0 5px color-mix(in srgb, var(--accent) 14%, transparent),
     0 0 32px color-mix(in srgb, var(--accent) 38%, transparent),
@@ -150,7 +148,7 @@
   overflow: auto;
   padding: 26px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
-  border-radius: 18px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--bg-raised) 97%, var(--accent) 3%);
   box-shadow: 0 28px 86px rgba(0, 0, 0, .58);
   color: var(--text);
@@ -174,9 +172,9 @@
   margin-top: 14px;
   padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 3px;
   background: color-mix(in srgb, var(--bg) 62%, transparent);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
@@ -194,7 +192,7 @@
   overflow: auto;
   padding: 18px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
-  border-radius: 16px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--bg-raised) 97%, var(--accent) 3%);
   box-shadow: 0 22px 60px rgba(0, 0, 0, .48), 0 0 0 1px rgba(255, 255, 255, .025) inset;
   color: var(--text);
@@ -209,7 +207,7 @@
 }
 
 .tour-progress {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 11px;
   font-weight: 750;
   letter-spacing: .04em;
@@ -219,7 +217,7 @@
   min-height: 30px;
   padding: 5px 9px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text-dim);
   font: inherit;
@@ -263,7 +261,7 @@
   margin-top: 10px;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--ok) 34%, var(--border));
-  border-radius: 9px;
+  border-radius: 3px;
   background: color-mix(in srgb, var(--ok) 8%, transparent);
   color: var(--ok);
   font-size: 12px;
@@ -300,7 +298,7 @@
   width: min(420px, calc(100vw - 32px));
   padding: 22px;
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  border-radius: 16px;
+  border-radius: 4px;
   background: var(--bg-raised);
   box-shadow: 0 30px 90px rgba(0, 0, 0, .58);
   color: var(--text);
@@ -358,14 +356,14 @@
 
 @media (max-width: 760px) {
   .tour-welcome-layer { padding: 12px; }
-  .tour-welcome-card { padding: 22px; border-radius: 16px; }
+  .tour-welcome-card { padding: 22px; border-radius: 4px; }
   .tour-welcome-actions { grid-template-columns: 1fr; }
   .tour-welcome-actions .btn:first-child { grid-column: auto; }
   .tour-card {
     width: calc(100vw - 20px);
     max-height: min(46vh, 430px);
     padding: 15px;
-    border-radius: 14px;
+    border-radius: 4px;
   }
   .tour-connector { display: none; }
 }

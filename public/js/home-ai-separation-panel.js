@@ -242,6 +242,18 @@
   }
   window.addEventListener('i18n:change', scheduleRender);
 
+  // 直播頁「準備區」（live-prep.js）顯示單首伴奏狀態、提供「製作伴奏」：共用這裡的判斷與安裝流程
+  window.HomeAiSeparation = {
+    statusOf(track) {
+      const index = AppShared.state.playlist.indexOf(track);
+      return statusOf(track, index);
+    },
+    make(track, btn) {
+      const index = AppShared.state.playlist.indexOf(track);
+      return makeOne(track, index, btn);
+    },
+  };
+
   refreshEngine();
   render();
 })();

@@ -1726,6 +1726,11 @@ class AudioProcessor {
     });
   }
 
+  /** 讓其他分析服務（例如 waveform-peaks.js）共用同一條 ffmpeg 佇列（鐵則 12）。 */
+  static runFfmpegQueued(job) {
+    return withFfmpegLock(job);
+  }
+
   /** 排進共用 ffmpeg 佇列的響度量測（鐵則 12：絕不與轉碼併發跑 ffmpeg）。 */
   static measureLoudnessQueued(filePath, signal = null) {
     return withFfmpegLock(() => this.measureLoudness(filePath, signal));

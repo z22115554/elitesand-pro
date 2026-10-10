@@ -58,6 +58,7 @@ const webgpuRuntimeProvider = require('../services/webgpu-runtime-provider');
 const webgpuSeparationJobs = require('../services/webgpu-separation-jobs');
 const webgpuSeparationSettings = require('../services/webgpu-separation-settings');
 const libraryStore = require('../services/library-store');
+const waveformPeaks = require('../services/waveform-peaks');
 const { createDiagnosticBundle } = require('../services/diagnostic-bundle');
 const runtimeEvidence = require('../services/runtime-evidence');
 const feedbackReport = require('../services/feedback-report');
@@ -1417,6 +1418,27 @@ router.post('/webgpu-separation/runtime/download', requirePin, async (req, res) 
   } catch (err) {
     log.error('WebGPU 分離模型下載失敗', err);
     res.status(502).json({ ok: false, reason: err.message });
+  }
+});
+
+// 直播頁準備區的波形（docs/UIUX-REDESIGN.md §5.1）。第一次會跑 ffmpeg 解碼並寫快取，
+// 屬於「會處理檔案」的路由，依鐵則 15 手動掛 requirePin；之後同一個檔案直接讀快取。
+router.get('/library/:id/waveform', requirePin, async (req, res) => {
+  const entry = libraryStore.getEntry(req.params.id);
+  if (!entry || !entry.filename) {
+    return res.status(404).json({ ok: false, error: 'NO_AUDIO' });
+  }
+  try {
+    const data = await waveformPeaks.getPeaks(path.join(downloadsDir, path.basename(entry.filename)), {
+      cacheDir: path.join(dataDir, 'waveforms'),
+      runQueued: (job) => AudioProcessor.runFfmpegQueued(job),
+    });
+    if (!data) return res.status(422).json({ ok: false, error: 'WAVEFORM_FAILED' });
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, rate: data.rate, duration: data.duration, peaks: data.peaks });
+  } catch (err) {
+    log.warn(`波形讀取失敗 track=${req.params.id}: ${err.message}`);
+    res.status(500).json({ ok: false, error: 'WAVEFORM_FAILED' });
   }
 });
 

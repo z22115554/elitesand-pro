@@ -6291,6 +6291,62 @@ test('offset:set 會立即持久化，歌曲移出清單後重開程式仍可恢
   eq(persisted, 1, 'offset:set 不可只留在記憶體: ');
 });
 
+test('sync:confirm「已對時」標記：寫入、持久化、只發給控制端；畸形 payload 不寫入', () => {
+  const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
+  const events = new Map();
+  const emitted = [];
+  const io = { emit() { emitted.push({ room: '*' }); }, to(room) { return { emit(event, payload) { emitted.push({ room, event, payload }); } }; } };
+  const trackSyncConfirmed = new Set();
+  let persisted = 0;
+  const ctx = {
+    playState: { currentTrack: null, playlist: [] }, trackOffsets: new Map(), trackSyncConfirmed,
+    manualLyricsCache: new Map(), lyricOffsetSyncTimers: new Map(),
+    persistState() { persisted += 1; }, broadcastState() {},
+  };
+  registerLyricsHandlers(io, { on(event, handler) { events.set(event, handler); } }, ctx);
+
+  events.get('sync:confirm')(null);
+  events.get('sync:confirm')({ trackId: 'a', confirmed: 'yes' });
+  events.get('sync:confirm')({ trackId: 42, confirmed: true });
+  eq(trackSyncConfirmed.size, 0, '畸形 sync:confirm 不可寫入：');
+  eq(persisted, 0);
+
+  events.get('sync:confirm')({ trackId: 'song-1', confirmed: true });
+  ok(trackSyncConfirmed.has('song-1'), '確認後要記住：');
+  eq(persisted, 1, 'sync:confirm 要落地 state.json：');
+  const last = emitted[emitted.length - 1];
+  eq(last.room, 'access:control', '已對時只是面板的準備標記，不可廣播給 OBS 疊加層：');
+  eq(last.event, 'sync:confirmed');
+
+  events.get('sync:confirm')({ trackId: 'song-1', confirmed: false });
+  ok(!trackSyncConfirmed.has('song-1'), '取消要真的移除：');
+});
+
+test('已對時：存進 state.json、重開還在，並跟著清單摘要送到面板', () => {
+  const { createAppState } = require('../server/state/app-state');
+  const appState = createAppState({ emit() {} });
+  ok(appState.trackSyncConfirmed instanceof Set, 'app-state 必須提供 trackSyncConfirmed：');
+  const track = { id: 'confirmed-track', title: '對好了', artist: 'x', duration: 100 };
+  const other = { id: 'other-track', title: '還沒', artist: 'y', duration: 100 };
+  appState.playState.playlist = [track, other];
+  appState.trackSyncConfirmed.add('confirmed-track');
+  const summary = appState.getPublicPlaylist(() => true);
+  eq(summary.find((t) => t.id === 'confirmed-track').syncConfirmed, true, '清單摘要要帶 syncConfirmed：');
+  eq(summary.find((t) => t.id === 'other-track').syncConfirmed, undefined, '沒確認的歌不帶欄位（清單最多 2000 列，省流量）：');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  ok(/trackSyncConfirmed:\s*\[\.\.\.trackSyncConfirmed\]/.test(source), '已對時要寫進持久化快照：');
+  ok(/saved\.trackSyncConfirmed/.test(source), '啟動時要從 state.json 讀回已對時：');
+});
+
+test('已對時：換歌詞來源時清除，不可沿用舊歌詞的確認', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const manual = source.slice(source.indexOf("socket.on('lyrics:manual'"));
+  ok(/trackSyncConfirmed\.delete\(trackId\)/.test(manual), 'lyrics:manual 套用新歌詞時要清掉已對時：');
+  const sockSource = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'socket-handler.js'), 'utf8');
+  const readOnlyBlock = sockSource.slice(sockSource.indexOf('const READ_ONLY_EVENTS'), sockSource.indexOf('FONT_PROBE_REPORT_MIN_INTERVAL_MS'));
+  ok(!readOnlyBlock.includes('sync:confirm'), 'OBS 唯讀端不可送 sync:confirm：');
+});
+
 test('offset:adjust 一次到位的大偏移，跟分好幾次小幅微調的累積結果一致（都不再被單次 delta 誤夾在 10s）', () => {
   const registerLyricsHandlers = require('../server/routes/handlers/lyrics');
   const { MAX_OFFSET_MS } = require('../server/utils/track-schema');
@@ -7895,13 +7951,37 @@ test('首頁 Live Bar 逐字對時：對時點掛在每個字底下，只有帶�
     'CSS 要有一字一格容器與 播放中/已唱 點狀態：');
 });
 
+test('直播準備區波形：峰值計算正確、路由掛 requirePin、走共用 ffmpeg 佇列', () => {
+  const root = path.join(__dirname, '..');
+  const { createPeakAccumulator, cachePathFor } = require('../server/services/waveform-peaks');
+  // 每 4 個樣本取一個峰值；刻意把一個 16-bit 樣本切在兩個 chunk 之間
+  const acc = createPeakAccumulator(4);
+  const samples = [100, -300, 50, 20, -1000, 10, 0, 5, 7];
+  const buf = Buffer.alloc(samples.length * 2);
+  samples.forEach((v, i) => buf.writeInt16LE(v, i * 2));
+  acc.push(buf.subarray(0, 5));
+  acc.push(buf.subarray(5));
+  eq(JSON.stringify(acc.finish()), JSON.stringify([77, 255, 2]), '峰值要取絕對值最大並以整首最大值正規化到 0–255：');
+  ok(cachePathFor('C:/cache', 'D:/a/song.mp3') !== cachePathFor('C:/cache', 'D:/a/other.mp3'), '不同音檔要有不同快取檔：');
+  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  ok(/router\.get\('\/library\/:id\/waveform', requirePin,/.test(api), '波形路由會跑 ffmpeg，必須掛 requirePin（鐵則 15）：');
+  ok(api.includes('AudioProcessor.runFfmpegQueued(job)'), '波形解碼要排進共用 ffmpeg 佇列（鐵則 12）：');
+  const livePrep = fs.readFileSync(path.join(root, 'public/js/live-prep.js'), 'utf8');
+  ok(livePrep.includes('PinAuth.fetchWithPin(`/api/library/'), '面板取波形要用 PinAuth.fetchWithPin（鐵則 16）：');
+});
+
 test('首頁「AI 伴奏」分頁：只讀 state＋走既有分離路由，不新增 socket/broadcast', () => {
   const root = path.join(__dirname, '..');
   const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   const mod = fs.readFileSync(path.join(root, 'public/js/home-ai-separation-panel.js'), 'utf8');
   const prepTabs = fs.readFileSync(path.join(root, 'public/js/home-prep-tabs.js'), 'utf8');
-  ok(indexHtml.includes('data-prep-tab="ai"') && indexHtml.includes('data-prep-panel="ai"'),
-    '首頁準備區要有第 5 個分頁 ai（tab＋panel）：');
+  // 2026-09-26 改版：首頁分頁改成直播工作台，AI 伴奏變成右欄的收合區塊（仍是 data-prep-panel="ai"），
+  // 新手導覽的 HomePrepTabs.show('ai') 改由 live-prep.js 展開該區塊。
+  const livePrep = fs.readFileSync(path.join(root, 'public/js/live-prep.js'), 'utf8');
+  ok(/<details class="live-side-section" data-prep-panel="ai">/.test(indexHtml),
+    '直播頁右欄要有 AI 伴奏收合區塊：');
+  ok(livePrep.includes('window.HomePrepTabs = {') && livePrep.includes('details.open = true'),
+    'HomePrepTabs.show 要能展開直播頁右欄的收合區塊：');
   ok(indexHtml.includes('id="home-ai-track-list"') && indexHtml.includes('id="home-ai-make-all"'),
     'AI 伴奏分頁要有清單容器與「全部排進佇列」：');
   ok(!indexHtml.includes('id="home-ai-open-audio"') && !indexHtml.includes('id="separation-mode-toggle"')
@@ -7919,20 +7999,21 @@ test('首頁「AI 伴奏」分頁：只讀 state＋走既有分離路由，不�
     '安裝流程與取消都走既有 AiSeparation（含 PinAuth）：');
   ok(!/broadcastState\s*\(|SocketClient\.send\s*\(|new WebSocket\s*\(/.test(mod),
     'AI 伴奏分頁不得自己發 socket 或呼叫 broadcastState：');
-  ok(prepTabs.includes("window.HomePrepTabs = { show: activate }"), 'HomePrepTabs.show 泛用切分頁仍可用：');
+  ok(prepTabs.includes("if (!root) return;"), '舊分頁腳本在沒有 .kara-prep 時必須安靜退出，不可覆蓋 live-prep.js 的 HomePrepTabs：');
 });
 
 test('新手教學：分頁化目標會先切分頁；雙路音訊／Spout／AI 伴奏有說明章節', () => {
   const root = path.join(__dirname, '..');
   const tour = fs.readFileSync(path.join(root, 'public/js/onboarding-tour.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
-  ok(/const TOUR_VERSION = 5;/.test(tour), '首頁重構後導覽版本要 bump（讓既有使用者重看新版）：');
-  ok(tour.includes('const ADVANCED_TOUR_VERSION = 5;'),
-    '自動雙軌／雙路音訊語意更新後進階導覽版本要 bump，讓看過舊版的使用者能收到新說明：');
-  ok(/id: 'obs-dual-audio',[\s\S]{0,180}view: 'general',[\s\S]{0,180}target: '#dual-audio-card'/.test(tour)
-    && !/id: 'obs-dual-audio',[\s\S]{0,220}prepTab: 'audio'/.test(tour),
-    'OBS 進階導覽的雙路音訊步驟要直接指向「連線與系統」的真實雙路音訊卡：');
-  ok(tour.includes("prepTab: 'add'") && tour.includes("prepTab: 'sync'") && tour.includes("prepTab: 'session'"),
+  ok(/const TOUR_VERSION = 6;/.test(tour), '2026-10 面板改版後導覽版本要 bump（讓既有使用者重看新版）：');
+  ok(tour.includes('const ADVANCED_TOUR_VERSION = 7;'),
+    '進階導覽章節重整後版本要 bump，讓看過舊版的使用者能收到新說明：');
+  ok(/id: 'live-dual-audio',[\s\S]{0,180}view: 'general',[\s\S]{0,180}target: '#dual-audio-refresh-devices'/.test(tour)
+    && !/id: 'live-dual-audio',[\s\S]{0,220}prepTab: 'audio'/.test(tour),
+    '進階導覽的雙路音訊步驟要直接指向設定裡真實的雙路音訊卡：');
+  // 2026-10 改版：加歌框常駐在直播頁左欄，不再需要 prepTab: 'add'；對時與場次仍標 prepTab
+  ok(tour.includes("prepTab: 'sync'") && tour.includes("prepTab: 'session'"),
     '被移進準備分頁的導覽步驟要標 prepTab：');
   ok(tour.includes('root.HomePrepTabs.show(step.prepTab)'),
     'renderStep 聚光前要先把該步驟的準備分頁切出來（不然目標在收合分頁裡是 hidden）：');
@@ -8041,6 +8122,10 @@ test('大型媒體庫摘要不傳歌詞／原始來源，但保留 AI 分離試�
   eq(summary.instrumentalFile, 'track.instrumental.wav');
   eq(summary.separationStatus, 'done');
   eq(summary.sectionsStatus, 'done', '媒體庫摘要要能顯示段落分析狀態（給按鈕/徽章用）: ');
+  eq(summary.hasLyrics, true, '歌曲庫要能篩出缺歌詞的歌：摘要帶 hasLyrics: ');
+  eq(summary.lyricsType, 'lrc', '摘要帶歌詞類型（逐字／逐句）: ');
+  ok(!('lyrics' in summary) && !('parsedLyrics' in summary), '摘要仍不可帶歌詞內容: ');
+  eq(libraryStore.toLibrarySummary({ id: 'no-lyrics', title: 'x', lyrics: '  ' }).hasLyrics, false, '空白歌詞視為沒有歌詞: ');
   ok(!Object.prototype.hasOwnProperty.call(summary, 'sections'), '摘要不傳完整段落陣列，只傳狀態，避免 1 萬首媒體庫爆量: ');
   ok(!Object.prototype.hasOwnProperty.call(summary, 'lyrics'));
   ok(!Object.prototype.hasOwnProperty.call(summary, 'parsedLyrics'));
@@ -8139,6 +8224,46 @@ test('生產程式碼不可使用在中文路徑上會讓行程無聲當掉的 f
   roots.forEach((r) => walk(path.join(__dirname, r)));
   eq(offenders.length, 0,
     `這些位置要改用 server/utils/safe-remove.js 的 safeRemove()（fs.rmSync／fs.rmdirSync(recursive) 在中文路徑上會殺掉整個伺服器）：${offenders.join(', ')} `);
+});
+
+test('歌曲庫摘要：歌詞還在分檔（未讀進記憶體）時仍判定為有歌詞', () => {
+  // 2026-09-28 實機回報：直播頁明明是逐字歌詞，歌曲庫卻標「無歌詞」——摘要只看記憶體欄位，
+  // 重開後沒被讀進來的歌全被當成沒歌詞。用兩個子程序模擬「存檔 → 重開」。
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-library-lyrics-summary-'));
+  try {
+    const libraryStorePath = path.join(__dirname, '..', 'server', 'services', 'library-store.js');
+    const run = (script) => spawnStateStore(process.execPath, ['-e', script, libraryStorePath], {
+      env: { ...process.env, ELITESAND_DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10000, windowsHide: true,
+    });
+    const write = run([
+      "const library=require(process.argv[1]);",
+      "library.rememberImport({id:'with-krc',title:'A',filename:'a.mp3',lyrics:'[00:01.00]x',lyricsType:'krc'});",
+      "library.rememberImport({id:'no-lyrics',title:'B',filename:'b.mp3'});",
+      "if(!library.saveNow()) throw new Error('save failed');",
+    ].join('\n'));
+    eq(write.status, 0, `write child stderr=${write.stderr}: `);
+    const read = run([
+      "const library=require(process.argv[1]);",
+      "const s=Object.fromEntries(library.getLibrarySummary().map(e=>[e.id,{has:e.hasLyrics,type:e.lyricsType}]));",
+      "process.stdout.write('__SUMMARY__'+JSON.stringify(s)+'\\n');",
+    ].join('\n'));
+    eq(read.status, 0, `read child stderr=${read.stderr}: `);
+    const at = read.stdout.lastIndexOf('__SUMMARY__');
+    const summary = JSON.parse(read.stdout.slice(at + '__SUMMARY__'.length).trim().split(/\r?\n/, 1)[0]);
+    eq(summary['with-krc'].has, true, '重開後歌詞仍在分檔的歌要判定為有歌詞: ');
+    eq(summary['with-krc'].type, 'krc', '歌詞類型要保留: ');
+    eq(summary['no-lyrics'].has, false, '真的沒歌詞的仍是沒有: ');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('換歌詞（lyrics:manual）會立刻寫回歌曲庫並通知歌曲庫頁', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  const i = src.indexOf("socket.on('lyrics:manual'");
+  const body = src.slice(i, src.indexOf("socket.on('xieyin:override'", i));
+  ok(/libraryStore\.updateMeta\(trackId, \{ lyrics, lyricsType/.test(body), 'lyrics:manual 要把歌詞寫回歌曲庫：');
+  ok(body.includes("io.emit('library:lyrics-updated'"), '寫回後要通知歌曲庫頁更新狀態：');
 });
 
 test('媒體庫超過 10000 首時優先保留播放清單與 currentTrack backing，淘汰未使用低順位項目', () => {
@@ -12694,7 +12819,6 @@ console.log('\n🌐 17. M6.1 介面語系層');
     const labels = {
       'lyrics-paste-modal': 'lyrics-paste-title',
       'track-edit-modal': 'track-edit-title-heading',
-      'lyrics-picker-modal': 'lyrics-picker-title',
       'lyrics-timeline-modal': 'lyrics-timeline-title',
       'help-modal': 'help-modal-title',
       'playlist-export-modal': 'playlist-export-title',
@@ -12703,6 +12827,14 @@ console.log('\n🌐 17. M6.1 介面語系層');
       'pin-required-modal': 'pin-required-title',
       'pin-manage-modal': 'pin-manage-title',
     };
+    // 2026-09-26 改版：歌詞選擇器改成內嵌在直播頁「準備區」的區塊，不再是 modal；
+    // 改為檢查它有群組語意與可存取名稱，且不會被誤標成 aria-modal。
+    {
+      const start = html.indexOf('id="lyrics-picker-modal"');
+      const section = html.slice(start, start + 600);
+      ok(start >= 0 && section.includes('data-inline-picker'), '歌詞選擇器應內嵌在準備區：');
+      ok(section.includes('role="group"') && section.includes('aria-labelledby="lyrics-picker-title"') && !section.includes('aria-modal'), '內嵌歌詞選擇器要有群組語意、可存取名稱且不是 modal：');
+    }
     Object.entries(labels).forEach(([modalId, labelId]) => {
       const start = html.indexOf(`id="${modalId}"`);
       const section = html.slice(start, start + 600);
@@ -13315,13 +13447,15 @@ console.log('\n🌐 17. M6.1 介面語系層');
     i18n.setLocale('zh-TW', { persist: false, updateQuery: false });
   });
 
-  test('側欄導覽標籤維持可讀字級並允許長語言換行', () => {
+  // 2026-09-26 改版：側欄改為頂部分頁（docs/UIUX-REDESIGN.md §3）。原意不變：
+  // 導覽標籤要可讀，長語言不能被截斷或省略號吃掉；窄螢幕靠整列橫向捲動而不是縮字。
+  test('頂部導覽標籤維持可讀字級且長語言不被截斷', () => {
     const panelCss = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
     const navLabelRule = panelCss.match(/\.nav-item \.nav-label\s*\{([\s\S]*?)\}/)?.[1] || '';
     const fontSize = Number(navLabelRule.match(/font-size:\s*([\d.]+)px/)?.[1]);
-    ok(fontSize >= 11, '側欄標籤至少 11px：');
-    ok(panelCss.includes('-webkit-line-clamp: 2'), '長語言導覽標籤應可顯示兩行：');
-    ok(!/\.nav-item \.nav-label\s*\{[^}]*white-space:\s*nowrap/.test(panelCss), '側欄標籤不可強制單行：');
+    ok(fontSize >= 13, '頂部分頁標籤至少 13px：');
+    ok(!/text-overflow:\s*ellipsis/.test(navLabelRule) && !/line-clamp/.test(navLabelRule), '頂部分頁標籤不可截斷：');
+    ok(/\.nav-group--primary\s*\{[^}]*overflow-x:\s*auto/.test(panelCss), '窄螢幕時頂部分頁整列要能橫向捲動：');
   });
 
   test('深色模式所有原生下拉選項都有不透明底色與可讀文字', () => {

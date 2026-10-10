@@ -67,6 +67,17 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
   startObsLauncherDrag(kind) {
     if (kind === 'lyrics' || kind === 'setlist') ipcRenderer.send('elitesand:obs-launcher-drag', kind);
   },
+  // 快捷鍵：讀／存整份設定（全域那份由主程序註冊），以及收到全域快捷鍵時要執行的動作 id。
+  hotkeys: Object.freeze({
+    get() { return ipcRenderer.invoke('elitesand:hotkeys-get'); },
+    set(payload) { return ipcRenderer.invoke('elitesand:hotkeys-set', payload); },
+    onTrigger(callback) {
+      if (typeof callback !== 'function') return () => {};
+      const listener = (_event, action) => { if (typeof action === 'string') callback(action); };
+      ipcRenderer.on('elitesand:hotkey', listener);
+      return () => ipcRenderer.removeListener('elitesand:hotkey', listener);
+    },
+  }),
   webgpuEngine: Object.freeze({
     setEnabled(enabled) { return ipcRenderer.invoke('elitesand:webgpu-engine-toggle', !!enabled); },
   }),

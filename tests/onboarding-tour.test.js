@@ -53,29 +53,30 @@ console.log('\n🧭 Interactive onboarding tour');
 
 test('core tour remains exactly seven focused steps', () => {
   eq(tour.STEPS.length, 7);
-  eq(tour.STEPS.map((step) => step.id).join(','), 'navigation,source,playlist,player,preview,style,obs');
+  eq(tour.STEPS.map((step) => step.id).join(','), 'navigation,source,readiness,prep,player,style,obs');
 });
 
 test('advanced tour is split into independent lyrics, OBS, and live-operations chapters', () => {
-  eq(tour.ADVANCED_LYRICS_STEPS.length, 4);
-  eq(tour.ADVANCED_OBS_STEPS.length, 7);
-  eq(tour.ADVANCED_LIVE_STEPS.length, 4);
-  eq(tour.ADVANCED_LYRICS_STEPS.map((step) => step.id).join(','), 'lyrics-source,lyrics-align,lyrics-nudge,lyrics-timeline');
-  eq(tour.ADVANCED_OBS_STEPS.map((step) => step.id).join(','), 'obs-drag,obs-add,obs-status,obs-websocket,obs-create,obs-ai-separation,obs-dual-audio');
-  eq(tour.ADVANCED_LIVE_STEPS.map((step) => step.id).join(','), 'live-setlist,live-delete-played,live-session,live-twitch');
+  eq(tour.ADVANCED_LYRICS_STEPS.length, 6);
+  eq(tour.ADVANCED_OBS_STEPS.length, 5);
+  eq(tour.ADVANCED_LIVE_STEPS.length, 7);
+  eq(tour.ADVANCED_LYRICS_STEPS.map((step) => step.id).join(','), 'lyrics-source,lyrics-paste,lyrics-align,lyrics-nudge,lyrics-timeline,lyrics-badges');
+  eq(tour.ADVANCED_OBS_STEPS.map((step) => step.id).join(','), 'obs-drag,obs-add,obs-status,obs-websocket,obs-create');
+  // 2026-10-09：AI 伴奏與雙路音訊不是 OBS 連線的事，移到第三章「伴奏與直播現場」
+  eq(tour.ADVANCED_LIVE_STEPS.map((step) => step.id).join(','), 'live-ai-separation,live-dual-audio,live-setlist,live-delete-played,live-session,live-chapters,live-twitch');
   ok(page.includes('id="guide-start-lyrics"'), 'Lyrics chapter entry missing');
   ok(page.includes('id="guide-start-obs"'), 'OBS chapter entry missing');
   ok(page.includes('id="guide-start-live"'), 'Live-operations chapter entry missing');
   ok(nav.includes("startAdvancedChapter('lyrics')") && nav.includes("startAdvancedChapter('obs')") && nav.includes("startAdvancedChapter('live')"), 'Chapter entries are not wired independently');
 });
 
-test('advanced OBS tour teaches automatic stems and points dual audio at the real routing card', () => {
-  eq(tour.ADVANCED_TOUR_VERSION, 5, 'OBS chapter now teaches drag-into-OBS; content changes must bump the advanced tour version');
-  const dualAudio = tour.ADVANCED_OBS_STEPS.find((step) => step.id === 'obs-dual-audio');
+test('advanced tour teaches automatic stems and points dual audio at the real routing card', () => {
+  eq(tour.ADVANCED_TOUR_VERSION, 7, '2026-10-09 chapters were reorganised; chapter changes must bump the advanced tour version');
+  const dualAudio = tour.ADVANCED_LIVE_STEPS.find((step) => step.id === 'live-dual-audio');
   ok(dualAudio, 'Dual-audio advanced step missing');
   eq(dualAudio.view, 'general');
-  eq(dualAudio.target, '#dual-audio-card');
-  eq(dualAudio.mobileTarget, '#dual-audio-card');
+  eq(dualAudio.target, '#dual-audio-refresh-devices');
+  eq(dualAudio.mobileTarget, '#dual-audio-refresh-devices');
   ok(!Object.prototype.hasOwnProperty.call(dualAudio, 'prepTab'), 'Dual-audio routing is no longer a Home audio-tab toggle');
   ok(!page.includes('id="separation-mode-toggle"'), 'Obsolete separated-playback toggle must not remain in the page');
   ok(page.includes('id="dual-audio-card"'), 'Real dual-audio routing card must remain available');
@@ -284,9 +285,15 @@ test('source step cannot advance until a song or sample lyrics are ready', () =>
   ok(source.includes("state.path === 'sample' || hasPlaylistTrack()"), 'Song/sample completion gate missing');
   ok(source.includes("dom.next.disabled = !sourceReady"), 'Next button is not connected to completion gate');
   ok(source.includes('if (!button || button.disabled)'), 'Missing or disabled sample action must not unlock the source gate');
-  ok(source.indexOf('await acknowledgment') < source.indexOf("state.path = 'sample'"), 'Sample path must unlock only after the preview acknowledges rendering');
-  ok(source.includes("event.data?.type !== 'lyrics-preview:sample-ready'"), 'Sample action needs a preview acknowledgment message');
-  if (display !== null) ok(display.includes("{ type: 'lyrics-preview:sample-ready' }"), 'The real preview must acknowledge rendered sample lyrics');
+  ok(source.indexOf('await acknowledgment') < source.indexOf("state.path = 'sample'"), 'Sample path must unlock only after the sample is visibly rendered');
+  // 2026-10：示範歌詞顯示在直播頁準備區，不可為了等預覽 iframe 把使用者切到畫面頁
+  ok(source.includes('const acknowledgment = waitForPrepSample()'), 'Sample action must wait for the Live prep area, not the Overlays preview');
+  ok(source.includes("line.dataset.sample === '1'"), 'Sample acknowledgment must check the prep lyric line really shows the sample');
+  const sampleAction = source.slice(source.indexOf("if (step.action === 'sample')"), source.indexOf("if (step.action === 'copyObs')"));
+  ok(!sampleAction.includes('data-nav="settings"'), 'Sample action must not switch to the Overlays page');
+  const extras = readNormalized(path.join(root, 'public/js/lyric-extras.js'));
+  ok(extras.includes("new CustomEvent('sample-lyrics:shown')") && extras.includes("dataset.sample = '1'"), 'Sample button must render into the prep area and announce it');
+  if (display !== null) ok(display.includes("{ type: 'lyrics-preview:sample-ready' }"), 'The real preview must still acknowledge rendered sample lyrics');
 });
 
 test('legacy guide state no longer blocks new users, and upgraders still see the new tour once', () => {
@@ -458,9 +465,9 @@ test('responsive and reduced-motion fallbacks are present', () => {
   ok(tour.STEPS[0].mobileTarget === '.nav-item[data-nav="karaoke"]', 'Mobile navigation spotlight must use a compact real target');
   ok(tour.STEPS.every((step) => step.mobileTarget), 'Every mobile step needs a compact spotlight target');
   ok(source.includes("behavior: compact || reduceMotion ? 'auto' : 'smooth'"), 'Compact viewports must settle immediately before measuring placement');
-  ok(source.includes("block: compact ? 'start' : 'center'"), 'Mobile targets should be scrolled toward the top to leave room for the guide card');
+  ok(source.includes("block: topAligned ? 'start' : 'center'") && source.includes('const topAligned = compact ||'), 'Mobile and full-width targets should be scrolled toward the top to leave room for the guide card');
   ok(source.includes("scrollIntoView({ block: 'nearest'"), 'Focused controls inside a short scrollable tour card must remain visible');
-  ok(tour.STEPS.find((step) => step.id === 'source').mobileTarget === '#tab-youtube', 'Mobile source spotlight must keep the URL input and import button interactive');
+  ok(tour.STEPS.find((step) => step.id === 'source').mobileTarget === '#music-source-card', 'Mobile source spotlight must keep the merged add-song input and button interactive');
   ok(tour.STEPS.find((step) => step.id === 'source').mobileBody === 'tour.step.source.mobileBody', 'Mobile source instructions must match the controls available inside the spotlight');
   ok(tour.STEPS.find((step) => step.id === 'style').mobileTarget === '.lyric-template-card.active', 'Mobile style spotlight must stay compact');
   ok(tour.STEPS.find((step) => step.id === 'style').action === 'cycleStyle', 'Compact mobile style step still needs a real style-changing action');

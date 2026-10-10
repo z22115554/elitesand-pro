@@ -85,6 +85,24 @@ function digestOf(blob) {
 
 const EMPTY_LYRICS_DIGEST = digestOf(lyricsBlob(null));
 
+// 歌曲庫摘要要知道「有沒有歌詞」，但未 hydrate 的 entry 記憶體裡沒有歌詞欄位（在分檔裡）。
+// 用歌詞檔是否存在判斷，並快取結果：寫檔／刪檔時同步更新，不必為了摘要把上萬首歌詞讀進來。
+const _lyricsFileExists = new Map(); // id -> boolean
+function lyricsFileExists(id) {
+  id = String(id);
+  if (!_lyricsFileExists.has(id)) {
+    let exists = false;
+    try { exists = fs.existsSync(lyricsFileFor(id)); } catch (_) { exists = false; }
+    _lyricsFileExists.set(id, exists);
+  }
+  return _lyricsFileExists.get(id);
+}
+function entryHasLyrics(id, entry) {
+  if (typeof entry.lyrics === 'string' && entry.lyrics.trim()) return true; // 已在記憶體（hydrate 或舊版內嵌）
+  if (_hydrated.has(String(id))) return false;                              // 記憶體值即權威：確實沒有
+  return lyricsFileExists(id);                                               // 還在分檔裡：看檔案在不在
+}
+
 /** 把磁碟上的歌詞讀回記憶體 entry。讀不到（檔案損毀）就維持未 hydrate，存檔時不碰那個檔。 */
 function hydrate(id) {
   id = String(id);
@@ -128,8 +146,10 @@ function flushLyrics() {
         try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (err) {
           throw new Error(`無法移除空歌詞檔 id=${id}: ${err.message}`);
         }
+        _lyricsFileExists.set(id, false);
       } else {
         atomicWrite(file, { id, ...blob });
+        _lyricsFileExists.set(id, true);
       }
       _lyricsDigest.set(id, digest);
     }
@@ -156,6 +176,7 @@ function deletePendingLyricFiles() {
       log.warn(`媒體庫歌詞檔刪除失敗 id=${id}: ${err.message}`);
     }
     _lyricsDigest.delete(id);
+    _lyricsFileExists.delete(id);
   }
   _pendingLyricDeletes.clear();
 }
@@ -570,6 +591,11 @@ function toLibrarySummary(entry) {
     vocalsFile: entry.vocalsFile || null,
     instrumentalFile: entry.instrumentalFile || null,
     sectionsStatus: entry.sectionsStatus || 'none',
+    // 歌曲庫的「缺歌詞」篩選與歌詞狀態欄只需要有沒有、哪一種；歌詞內容仍不送（見上方說明）。
+    // 未 hydrate 的 entry 記憶體裡沒有歌詞欄位，要看分檔在不在（2026-09-28：原本只看記憶體，
+    // 導致沒讀進來的歌全被標成「無歌詞」）。lyricsType 不屬於歌詞分檔，一直留在 entry 上。
+    hasLyrics: entryHasLyrics(entry.id, entry),
+    lyricsType: entryHasLyrics(entry.id, entry) ? (entry.lyricsType || 'lrc') : null,
   };
 }
 

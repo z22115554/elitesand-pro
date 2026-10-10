@@ -207,8 +207,16 @@
     });
   }
 
+  // 直播頁「準備區」選中的那首（live-prep.js）；沒有準備區時就是目前播放的歌
+  function prepTargetTrackId() {
+    const idx = typeof AppShared.prepTargetIndex === 'function' ? AppShared.prepTargetIndex() : -1;
+    const tr = state.playlist[idx >= 0 ? idx : state.currentTrackIndex];
+    return tr ? tr.id : null;
+  }
+  let pasteTargetId = null;
+
   async function uploadLyricsFile(file) {
-    const trackId = state.playlist[state.currentTrackIndex] ? state.playlist[state.currentTrackIndex].id : null;
+    const trackId = prepTargetTrackId();
     if (!trackId) {
       AppShared.showToast(tr('請先選擇一首歌曲'), 'error');
       return;
@@ -245,7 +253,8 @@
 
   if (dom.btnPasteLyrics) {
     dom.btnPasteLyrics.addEventListener('click', () => {
-      const trackId = state.playlist[state.currentTrackIndex] ? state.playlist[state.currentTrackIndex].id : null;
+      const trackId = prepTargetTrackId();
+      pasteTargetId = trackId;
       if (!trackId) {
         AppShared.showToast(tr('請先選擇一首歌曲'), 'error');
         return;
@@ -267,7 +276,8 @@
         return;
       }
 
-      const trackId = state.playlist[state.currentTrackIndex] ? state.playlist[state.currentTrackIndex].id : null;
+      // 用開啟對話框當下的目標，避免貼到一半切歌或換選取後套到別首
+      const trackId = pasteTargetId || prepTargetTrackId();
       if (!trackId) return;
 
       try {

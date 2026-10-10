@@ -43,7 +43,7 @@ const updateBlocked = isPackaged && inspectUpdateLock(app.getPath('exe')).active
 if (updateBlocked) {
   app.exit(0);
 } else {
-  const { BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, powerSaveBlocker, ipcMain } = electron;
+  const { BrowserWindow, utilityProcess, dialog, shell, Tray, Menu, nativeImage, clipboard, powerSaveBlocker, ipcMain, screen, globalShortcut } = electron;
   const { createElectronShell, probeHealth } = require('./shell');
   const { createRecoveringHealthProbe } = require('./port-occupancy-recovery');
 
@@ -126,6 +126,8 @@ if (updateBlocked) {
     clipboard,
     powerSaveBlocker,
     ipcMain,
+    screen,
+    globalShortcut,
     projectRoot,
     shellRoot,
     packagedResourceIntegrity,

@@ -96,7 +96,17 @@
     dom.fileInput.value = '';
   });
 
+  // 上傳中的檔案（名稱＋大小＋修改時間）：上傳要幾秒，使用者以為沒反應會再拖一次 → 同一批不重送
+  const uploadingKeys = new Set();
+  const fileKey = (file) => `${file.name}|${file.size}|${file.lastModified}`;
+
   async function uploadFiles(files) {
+    const fresh = files.filter((file) => !uploadingKeys.has(fileKey(file)));
+    if (!fresh.length) {
+      AppShared.showToast(t('import.alreadyUploading'), 'info');
+      return;
+    }
+    files = fresh;
     // 驗證檔案
     if (typeof ErrorHandler !== 'undefined') {
       for (const file of files) {
@@ -110,6 +120,10 @@
 
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
+    const keys = files.map(fileKey);
+    keys.forEach((key) => uploadingKeys.add(key));
+    // 讓畫面立刻有回應（直播頁在清單尾端顯示「正在加入」列）
+    document.dispatchEvent(new CustomEvent('upload:start', { detail: { names: files.map((file) => file.name) } }));
 
     try {
       dom.dropZone.innerHTML = `<div class="hint">${t('import.uploading')}</div>`;
@@ -138,6 +152,8 @@
       console.error('上傳失敗:', err);
       AppShared.showToast(t('import.uploadFailed', { message: err.message }), 'error');
     } finally {
+      keys.forEach((key) => uploadingKeys.delete(key));
+      document.dispatchEvent(new CustomEvent('upload:end', { detail: { names: files.map((file) => file.name) } }));
       dom.dropZone.innerHTML = `
         <div class="hint">${t('source.dropFiles')}</div>
         <div class="sub">${t('source.supportedFormats')}</div>
@@ -697,13 +713,15 @@
 
   function renderWorkCenter() {
     if (!workCenter || !workCenterList) return;
-    workCenter.hidden = ytImportJobs.length === 0;
+    // 已完成的歌已經在播放清單裡，不必再列；只剩已完成的工作時整塊收起
+    workCenter.hidden = !ytImportJobs.some((job) => job.status !== 'completed');
     workCenterList.textContent = '';
     const pending = ytImportQueue.filter((job) => job.status === 'queued');
     for (const job of ytImportJobs.slice(0, 20)) {
       const row = document.createElement('div');
       row.className = 'work-item';
       row.dataset.jobId = job.id;
+      row.dataset.status = job.status;
       const title = document.createElement('div');
       title.className = 'work-item-title';
       title.textContent = displayJobLabel(job);

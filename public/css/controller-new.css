@@ -29,7 +29,6 @@ body.controller {
   display: flex; align-items: center; gap: 14px;
   padding: 14px; margin-bottom: 14px;
   background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-lg);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2); backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
   box-shadow: var(--shadow);
 }
 .ctrl-np .cover {
@@ -70,7 +69,6 @@ body.controller {
 .ctrl-card {
   background: var(--bg-surface); border: 1px solid var(--border);
   border-radius: var(--r-lg); padding: 16px; margin-bottom: 14px;
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2); backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
   box-shadow: var(--shadow);
 }
 .ctrl-card .eyebrow { margin-bottom: 12px; }
@@ -91,7 +89,7 @@ body.controller {
   color: var(--text); border-radius: var(--r-md); font-size: 13px; font-weight: 500;
 }
 .ctrl-offset button:active { background: var(--bg-hover); }
-.ctrl-offset .disp { grid-column: span 5; text-align: center; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; padding: 4px 0; }
+.ctrl-offset .disp { grid-column: span 5; text-align: center; font-weight: 600; color: var(--accent-ink); font-variant-numeric: tabular-nums; padding: 4px 0; }
 
 /* 風格/模式按鈕 */
 .ctrl-chips { display: flex; flex-wrap: wrap; gap: 8px; }

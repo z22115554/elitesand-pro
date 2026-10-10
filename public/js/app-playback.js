@@ -1254,15 +1254,39 @@
   }
   bindSeekTrack(dom.progressTrack);
   bindSeekTrack(dom.miniProgressTrack);
+  // 直播頁準備區的波形也當成一條進度條用（live-prep.js）：同一套拖曳跳轉、播放中接著播、同步 OBS
+  AppShared.bindSeekTrack = bindSeekTrack;
+
+  // 快捷鍵用的相對跳轉：走跟拖進度條同一條路（applySeek），OBS/遙控會一起跟上。
+  function seekBy(deltaSeconds) {
+    const dur = stActive() ? SoundTouchEngine.getDuration() : audioPlayer.duration;
+    if (!dur || !Number.isFinite(dur)) return false;
+    const now = stActive() ? SoundTouchEngine.getTime() : audioPlayer.currentTime;
+    const target = Math.max(0, Math.min(dur, (Number(now) || 0) + deltaSeconds));
+    previewSeekUI(target / dur);
+    applySeek(target / dur, true);
+    return true;
+  }
 
   // ═══════════════════════════════════════════
   // Phase 5: 時間偏移控制
   // ═══════════════════════════════════════════
 
+  // 直播頁「準備區」可以選一首不是目前播放的歌（live-prep.js）：微調／歸零作用在那首，
+  // 顯示也跟著那首；對齊第一句、倒數對齊需要實際播放，仍只作用在目前這首。
+  function prepTargetIndex() {
+    const idx = typeof AppShared.prepTargetIndex === 'function' ? AppShared.prepTargetIndex() : -1;
+    return idx >= 0 && state.playlist[idx] ? idx : state.currentTrackIndex;
+  }
+
   function updateOffsetDisplay() {
     if (dom.offsetDisplay) {
-      const sign = currentOffsetMs >= 0 ? '+' : '';
-      dom.offsetDisplay.textContent = `${sign}${(currentOffsetMs / 1000).toFixed(1)}s`;
+      const targetIdx = prepTargetIndex();
+      const shown = targetIdx === state.currentTrackIndex
+        ? currentOffsetMs
+        : ((state.playlist[targetIdx] && state.playlist[targetIdx].offset) || 0);
+      const sign = shown >= 0 ? '+' : '';
+      dom.offsetDisplay.textContent = `${sign}${(shown / 1000).toFixed(1)}s`;
     }
     if (typeof renderHomeLyricNow === 'function') renderHomeLyricNow(true);
   }
@@ -1293,8 +1317,15 @@
 
   if (dom.offsetReset) {
     dom.offsetReset.addEventListener('click', () => {
-      const trackId = state.playlist[state.currentTrackIndex] ? state.playlist[state.currentTrackIndex].id : null;
+      const targetIdx = prepTargetIndex();
+      const trackId = state.playlist[targetIdx] ? state.playlist[targetIdx].id : null;
       if (!trackId) return;
+      if (targetIdx !== state.currentTrackIndex) {
+        state.playlist[targetIdx].offset = 0;
+        updateOffsetDisplay();
+        SocketClient.send('offset:reset', trackId);
+        return;
+      }
       currentOffsetMs = 0;
       updateOffsetDisplay();
       SocketClient.send('offset:reset', trackId);
@@ -1302,8 +1333,17 @@
   }
 
   function adjustOffset(deltaMs) {
-    const trackId = state.playlist[state.currentTrackIndex] ? state.playlist[state.currentTrackIndex].id : null;
+    const targetIdx = prepTargetIndex();
+    const trackId = state.playlist[targetIdx] ? state.playlist[targetIdx].id : null;
     if (!trackId) return;
+    if (targetIdx !== state.currentTrackIndex) {
+      // 伺服器會夾住總偏移並廣播 offset:update（app.js 會用權威值覆蓋這裡的樂觀值）
+      const tr = state.playlist[targetIdx];
+      tr.offset = (tr.offset || 0) + deltaMs;
+      updateOffsetDisplay();
+      SocketClient.send('offset:adjust', { trackId, delta: deltaMs });
+      return;
+    }
     currentOffsetMs += deltaMs;
     updateOffsetDisplay();
     SocketClient.send('offset:adjust', { trackId, delta: deltaMs });
@@ -1685,6 +1725,32 @@
     });
   }
 
+  // 快捷鍵用的音量調整：改滑桿再觸發 input，跟手動拖滑桿完全同一條路（含記住音量）。
+  let volumeBeforeMute = null;
+  function setVolumePercent(pct) {
+    if (!dom.volumeSlider) return null;
+    const value = Math.max(0, Math.min(100, Math.round(pct)));
+    dom.volumeSlider.value = String(value);
+    dom.volumeSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    return value;
+  }
+  function adjustVolume(deltaPercent) {
+    if (!dom.volumeSlider) return null;
+    volumeBeforeMute = null;
+    return setVolumePercent(parseInt(dom.volumeSlider.value, 10) + deltaPercent);
+  }
+  function toggleMute() {
+    if (!dom.volumeSlider) return null;
+    const current = parseInt(dom.volumeSlider.value, 10);
+    if (current > 0) {
+      volumeBeforeMute = current;
+      return setVolumePercent(0);
+    }
+    const restored = setVolumePercent(volumeBeforeMute || 70);
+    volumeBeforeMute = null;
+    return restored;
+  }
+
   if (dom.normalizationToggle) {
     if (typeof AudioProcessor !== 'undefined' && AudioProcessor.isNormalizationEnabled) {
       dom.normalizationToggle.checked = AudioProcessor.isNormalizationEnabled();
@@ -1747,9 +1813,13 @@
   AppShared.updatePlayButton = updatePlayButton;
   AppShared.updateMiniPlayerInfo = updateMiniPlayerInfo;
   AppShared.updateOffsetDisplay = updateOffsetDisplay;
+  AppShared.isPlaying = () => isPlaying;
   AppShared.applyPitchAndSpeed = applyPitchAndSpeed;
   AppShared.reapplyTrackLoudness = reapplyTrackLoudness;
   AppShared.advanceTrack = advanceTrack;
+  AppShared.seekBy = seekBy;
+  AppShared.adjustVolume = adjustVolume;
+  AppShared.toggleMute = toggleMute;
   AppShared.restorePlaybackState = restorePlaybackState;
   AppShared.setDualAudioMode = setDualAudioMode;
   AppShared.setDualAudioDevices = setDualAudioDevices;
