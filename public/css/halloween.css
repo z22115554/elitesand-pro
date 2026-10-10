@@ -672,6 +672,13 @@ html.art-tag-bat .treat--bat .treat-body::before, html.art-tag-bat .treat--bat .
 html.art-tag-pumpkin .treat--pumpkin .treat-top::before,
 html.art-tag-witch .treat--witch .treat-top::before, html.art-tag-witch .treat--witch .treat-top::after { display: none; }
 html.art-tag-candy .treat--candy .treat-name, html.art-tag-candy .treat--candy .treat-amount { background: none; }
+/* 美術名牌的臉／耳／帽子在上方約 1/3：文字從臉下方開始，最多兩行，長名字才不會壓到眼睛。 */
+html.art-tag-candy .treat--candy .treat-body, html.art-tag-ghost .treat--ghost .treat-body,
+html.art-tag-bat .treat--bat .treat-body, html.art-tag-pumpkin .treat--pumpkin .treat-body, html.art-tag-witch .treat--witch .treat-body { padding: 50px 16px 20px; }
+/* 黑貓的眼睛緊貼在帽簷下，比其他名牌的臉低。 */
+html.art-tag-witch .treat--witch .treat-body { padding: 64px 16px 14px; }
+html.art-tag-candy .treat--candy .treat-name, html.art-tag-ghost .treat--ghost .treat-name, html.art-tag-bat .treat--bat .treat-name,
+html.art-tag-pumpkin .treat--pumpkin .treat-name, html.art-tag-witch .treat--witch .treat-name { font-size: 15px; -webkit-line-clamp: 2; }
 html[class*="art-tag-"] .treat-string { gap: 22px; }
 html.art-tag-candy .treat.treat--candy .treat-body,
 html.art-tag-ghost .treat.treat--ghost .treat-body { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6); }
