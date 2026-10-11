@@ -7,6 +7,9 @@
   --ink: #fff6e8;
   --night: rgba(22, 14, 34, 0.62);
   --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 12px rgba(0, 0, 0, 0.4);
+  /* 物件陰影：不發光，只是一層短的深色陰影，讓扁平圖在亮背景上也有邊界。 */
+  --lift: drop-shadow(0 3px 4px rgba(20, 10, 32, 0.45));
+  --lift-box: 0 3px 6px rgba(20, 10, 32, 0.4);
   --font: 'Iansui', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
   --font-strong: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
 }
@@ -22,6 +25,7 @@ html, body {
 }
 
 body[data-part="pumpkin"] .fx-layer,
+body[data-part="cauldron"] .fx-layer,
 body[data-part="treats"] .fx-layer,
 body[data-part="credits"] .fx-layer,
 body[data-part="fx"] .treat-string,
@@ -31,6 +35,7 @@ body[data-activity="hidden"] .fx-layer,
 body[data-part="credits"] .treat-string,
 body[data-part="credits"] .pumpkin-panel,
 body[data-part="pumpkin"] .treat-string,
+body[data-part="cauldron"] .treat-string,
 body[data-part="treats"] .pumpkin-panel { display: none; }
 body[data-activity="pending"] .treat-string,
 body[data-activity="pending"] .pumpkin-panel,
@@ -38,7 +43,7 @@ body[data-activity="hidden"] .treat-string,
 body[data-activity="hidden"] .pumpkin-panel,
 body[data-activity="hidden"] .pumpkin-credits { visibility: hidden; }
 
-/* ─── 南瓜燈 ─── */
+/* ─── 進度區（大鍋；class 沿用南瓜燈時代的 pumpkin-*） ─── */
 .pumpkin-panel {
   --lit: 0;
   position: absolute;
@@ -48,23 +53,121 @@ body[data-activity="hidden"] .pumpkin-credits { visibility: hidden; }
   align-items: center;
   gap: 22px;
 }
-body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
+body[data-part="pumpkin"] .pumpkin-panel,
+body[data-part="cauldron"] .pumpkin-panel { inset: 0; justify-content: center; }
 .pumpkin-cluster { position: relative; display: flex; align-items: center; gap: 22px; zoom: var(--pumpkin-scale, 1); }
 
 .pumpkin-wrap { position: relative; width: 190px; height: 190px; flex: none; }
-.pumpkin-svg {
-  position: relative;
+/* 大鍋：液體 canvas 在最底層，鍋子（美術圖或保底 SVG）疊上去，液體只從挖空的鍋口透出來。
+   鍋口橢圓：中心 (50%, 21.9%)、半徑 31.88% × 6.93%，與 cauldron.webp 的開口一致；canvas 多留一點邊避免接縫。 */
+.cauldron-wrap { width: 240px; height: 240px; }
+.cauldron-body { position: absolute; inset: 0; transform-origin: 50% 90%; }
+.cauldron-liquid { position: absolute; left: 17.6%; top: 14.4%; width: 64.8%; height: 15%; z-index: 0; }
+.cauldron-art,
+.cauldron-svg {
+  position: absolute;
+  inset: 0;
   z-index: 1;
   width: 100%;
   height: 100%;
   overflow: visible;
-  /* 燭光越滿，外圈光暈越大越亮。 */
-  filter: drop-shadow(0 0 calc(6px + 30px * var(--lit)) rgba(255, 140, 30, calc(0.25 + 0.55 * var(--lit))));
+  filter: var(--lift);
 }
-.pumpkin-stem { fill: #5f6b2c; stroke: #3d4519; stroke-width: 1.5; }
-.pumpkin-body ellipse { fill: url(#pumpkin-skin); stroke: rgba(110, 40, 4, 0.55); stroke-width: 2; }
-.pumpkin-face-dark { fill: #2a1206; }
-.pumpkin-face-lit { fill: url(#pumpkin-fire); }
+.cauldron-art { display: none; background: var(--art-cauldron) center / contain no-repeat; }
+html.art-cauldron .cauldron-art { display: block; }
+html.art-cauldron .cauldron-svg { visibility: hidden; }
+.cauldron-svg-body { fill: #20152b; }
+.cauldron-svg-rim { fill: none; stroke: #6b3fa0; stroke-width: 22; }
+.cauldron-svg-legs { fill: #6b3fa0; }
+.cauldron-svg-fire path { fill: #f28a1e; stroke: #ffd45c; stroke-width: 6; }
+
+/* 熬煮中：鍋子抖動。 */
+.pumpkin-panel.is-brewing .cauldron-body { animation: cauldron-shake 0.35s ease-in-out infinite; }
+@keyframes cauldron-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(-3px, 1px) rotate(-1.2deg); }
+  75% { transform: translate(3px, -1px) rotate(1.2deg); }
+}
+
+/* 落料：一顆材料色的圓珠落進鍋口（點數兌換小顆、斗內大顆）。 */
+.cauldron-drop {
+  position: absolute;
+  top: 21.9%;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--drop-color);
+  border: 3px solid #20152b;
+  pointer-events: none;
+}
+.cauldron-drop.is-big { width: 26px; height: 26px; }
+.cauldron-float {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px + var(--stack, 0) * 38px);
+  z-index: 3;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--night);
+  border: 1px solid var(--drop-color);
+  font-size: 19px;
+  white-space: nowrap;
+  text-shadow: var(--text-shadow);
+  pointer-events: none;
+}
+.cauldron-smoke {
+  position: absolute;
+  left: 50%;
+  top: 20%;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: rgba(195, 174, 235, 0.55);
+  pointer-events: none;
+}
+
+/* 藥水揭曉：浮在鍋子上方，直到主播在面板按「收起」。 */
+.cauldron-potion { position: absolute; left: 50%; bottom: calc(100% - 8px); z-index: 4; display: none; transform: translateX(-50%); }
+.cauldron-potion.is-shown { display: block; }
+.potion-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px 12px 12px;
+  border-radius: 18px;
+  background: var(--night);
+  border: 1px solid rgba(195, 174, 235, 0.55);
+  white-space: nowrap;
+  text-shadow: var(--text-shadow);
+}
+.potion-card.is-bonus { border-color: var(--candle); border-width: 2px; }
+.potion-bottles { display: flex; gap: 4px; }
+.potion-bottle {
+  width: 66px;
+  height: 88px;
+  border-radius: 46% 46% 42% 42% / 38% 38% 62% 62%;
+  background: var(--potion-color);
+  border: 4px solid #20152b;
+  box-sizing: border-box;
+}
+.potion-card.is-bonus .potion-bottle { filter: var(--lift); }
+.potion-label { display: flex; flex-direction: column; gap: 2px; }
+.potion-bonus {
+  align-self: flex-start;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--candle);
+  color: #20152b;
+  font-family: var(--font-strong);
+  font-size: 13px;
+  font-weight: 900;
+  text-shadow: none;
+}
+.potion-name { font-size: 30px; color: var(--candle); letter-spacing: 0.06em; }
+.potion-reward { font-size: 19px; }
+.potion-reward--bonus { color: var(--candle-soft); }
+.potion-ranking { margin-top: 2px; font-family: var(--font-strong); font-size: 13px; opacity: 0.75; }
 
 .pumpkin-text { text-shadow: var(--text-shadow); }
 .pumpkin-title {
@@ -82,6 +185,11 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
   white-space: nowrap;
 }
 .pumpkin-currency { font-size: 0.7em; margin-right: 4px; opacity: 0.85; }
+.pumpkin-currency[hidden] { display: none; }
+.pumpkin-unit { font-size: 0.7em; margin-left: 4px; opacity: 0.85; }
+/* 前三名的比例：用文字顏色區分材料，沒有圖例方塊。 */
+.cauldron-top { margin-top: 4px; font-family: var(--font-strong); font-size: 17px; font-weight: 700; white-space: nowrap; }
+.cauldron-top:empty { display: none; }
 .pumpkin-sep { margin: 0 6px; opacity: 0.6; }
 #halloween-goal { opacity: 0.75; }
 .pumpkin-done {
@@ -91,15 +199,6 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
   letter-spacing: 0.06em;
 }
 .pumpkin-done[hidden] { display: none; }
-
-/* 全亮後燭火會輕輕晃。 */
-.pumpkin-panel.is-full .pumpkin-face-lit { animation: candle-flicker 2.6s ease-in-out infinite; }
-@keyframes candle-flicker {
-  0%, 100% { opacity: 1; }
-  30% { opacity: 0.86; }
-  55% { opacity: 1; }
-  70% { opacity: 0.92; }
-}
 
 .pumpkin-panel.is-bump .pumpkin-amount { animation: amount-bump 0.9s ease; }
 @keyframes amount-bump {
@@ -177,7 +276,6 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
 .treat-top { position: relative; width: 92px; height: 0; }
 .treat-bottom { position: relative; width: 92px; height: 0; }
 .treat-body {
-  --glow: rgba(255, 150, 60, 0.45);
   position: relative;
   width: 92px;
   min-height: 104px;
@@ -189,7 +287,7 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
   justify-content: center;
   gap: 4px;
   text-align: center;
-  box-shadow: 0 0 22px var(--glow);
+  box-shadow: var(--lift-box);
 }
 .treat-name {
   position: relative;
@@ -211,9 +309,18 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
   font-variant-numeric: tabular-nums;
 }
 
+/* 清水：沒選材料的斗內，淡紫水滴。 */
+.treat--water .treat-body {
+  min-height: 92px;
+  border-radius: 50% 50% 46% 46% / 30% 30% 70% 70%;
+  background: #c3aeeb;
+  border: 2px solid #ece4ff;
+  color: #2a1a40;
+}
+.treat--water .treat-amount { color: #4b2f7a; }
+
 /* 糖果：粉白斜紋的包裝，兩側扭轉的糖紙。 */
 .treat--candy .treat-body {
-  --glow: rgba(255, 140, 190, 0.45);
   min-height: 64px;
   margin: 18px 0;
   border-radius: 32px;
@@ -242,7 +349,6 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
 
 /* 小幽靈：白色床單，下緣波浪。 */
 .treat--ghost .treat-body {
-  --glow: rgba(220, 230, 255, 0.55);
   border-radius: 46px 46px 6px 6px;
   background: radial-gradient(circle at 50% 30%, #ffffff, #e6e9ff 70%);
   color: #3b2a5c;
@@ -269,7 +375,6 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
 
 /* 蝙蝠：深紫身體，兩側鋸齒翅膀與耳朵。 */
 .treat--bat .treat-body {
-  --glow: rgba(167, 123, 255, 0.5);
   border-radius: 40% / 34%;
   background: radial-gradient(circle at 50% 35%, #5a3a86, #2c1b46 75%);
   border: 1px solid rgba(200, 170, 255, 0.4);
@@ -301,7 +406,6 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
 
 /* 南瓜燈：橘色南瓜，縱向瓣紋與綠色蒂頭。 */
 .treat--pumpkin .treat-body {
-  --glow: rgba(255, 140, 30, 0.55);
   border-radius: 46% / 42%;
   background:
     repeating-linear-gradient(90deg, rgba(120, 40, 0, 0.18) 0 2px, transparent 2px 18px),
@@ -324,7 +428,6 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
 
 /* 魔女帽黑貓：黑貓臉加尖耳，頭上一頂紫色魔女帽。 */
 .treat--witch .treat-body {
-  --glow: rgba(190, 255, 120, 0.4);
   border-radius: 44% / 40%;
   background: radial-gradient(circle at 50% 35%, #2e2438, #120c18 75%);
   border: 1px solid rgba(190, 255, 120, 0.35);
@@ -364,8 +467,8 @@ body[data-part="pumpkin"] .pumpkin-panel { inset: 0; justify-content: center; }
   100% { transform: translateY(0) rotate(0deg); opacity: 1; }
 }
 @keyframes treat-flare {
-  0%, 40% { box-shadow: 0 0 70px var(--glow), 0 0 30px var(--glow); }
-  100% { box-shadow: 0 0 22px var(--glow); }
+  0% { transform: scale(1.08); }
+  100% { transform: scale(1); }
 }
 
 .treat-page-dots {
@@ -432,7 +535,7 @@ body[data-part="credits"] .pumpkin-credits { display: block; }
 .credits-closing { margin-top: 96px; font-size: 38px; letter-spacing: 0.1em; color: var(--candle); }
 .credits-closing-sub { margin-top: 12px; font-family: var(--font-strong); font-size: 20px; color: rgba(255, 246, 232, 0.8); letter-spacing: 0.1em; }
 
-/* ─── 達標慶祝：南瓜一跳、蝙蝠飛散、橘紫火花 ─── */
+/* ─── 達標慶祝：鍋子一跳、蝙蝠飛散、橘紫火花 ─── */
 .pumpkin-burst { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
 .pumpkin-bat {
   position: absolute;
@@ -440,7 +543,7 @@ body[data-part="credits"] .pumpkin-credits { display: block; }
   top: 45%;
   background: #4a2d73;
   clip-path: polygon(0 20%, 18% 0, 30% 30%, 42% 18%, 50% 34%, 58% 18%, 70% 30%, 82% 0, 100% 20%, 86% 60%, 70% 52%, 58% 100%, 50% 74%, 42% 100%, 30% 52%, 14% 60%);
-  filter: drop-shadow(0 0 3px rgba(225, 205, 255, 0.95)) drop-shadow(0 0 10px rgba(167, 123, 255, 0.9));
+  filter: var(--lift);
 }
 .pumpkin-spark {
   position: absolute;
@@ -450,11 +553,11 @@ body[data-part="credits"] .pumpkin-credits { display: block; }
   height: 9px;
   border-radius: 50%;
   background: var(--candle);
-  box-shadow: 0 0 10px var(--ember);
+  border: 2px solid #20152b;
 }
-.pumpkin-spark.is-violet { background: #d9c2ff; box-shadow: 0 0 10px var(--violet); }
+.pumpkin-spark.is-violet { background: #d9c2ff; }
 
-.pumpkin-panel.is-celebrating .pumpkin-svg { animation: pumpkin-pop 1.2s cubic-bezier(.3, 1.6, .5, 1); }
+.pumpkin-panel.is-celebrating .cauldron-body { animation: pumpkin-pop 1.2s cubic-bezier(.3, 1.6, .5, 1); }
 @keyframes pumpkin-pop {
   0% { transform: scale(1) rotate(0deg); }
   30% { transform: scale(1.2) rotate(-4deg); }
@@ -471,10 +574,10 @@ body[data-part="credits"] .pumpkin-credits { display: block; }
   animation-delay: var(--cheer-delay, 0ms);
 }
 @keyframes treat-cheer {
-  0% { transform: translateY(0); box-shadow: 0 0 22px var(--glow); }
-  25% { transform: translateY(-12px); box-shadow: 0 0 80px var(--glow), 0 0 36px var(--glow); }
+  0% { transform: translateY(0); }
+  25% { transform: translateY(-12px); }
   50% { transform: translateY(0); }
-  100% { transform: translateY(0); box-shadow: 0 0 22px var(--glow); }
+  100% { transform: translateY(0); }
 }
 
 /* ─── 觀眾互動特效 ─── */
@@ -525,7 +628,7 @@ body[data-part="credits"] .pumpkin-credits { display: block; }
     radial-gradient(circle at 11px 13px, #2b1d45 3px, transparent 3.5px),
     radial-gradient(circle at 23px 13px, #2b1d45 3px, transparent 3.5px),
     radial-gradient(circle at 50% 35%, #ffffff, #dfe3ff 75%);
-  filter: drop-shadow(0 0 6px rgba(220, 230, 255, 0.7));
+  filter: var(--lift);
 }
 
 /* 搗蛋獎勵：畫面中央的大幽靈 */
@@ -551,7 +654,7 @@ body[data-part="credits"] .pumpkin-credits { display: block; }
     radial-gradient(ellipse 18px 26px at 148px 100px, #1c1030 98%, transparent),
     radial-gradient(ellipse 30px 22px at 110px 168px, #1c1030 98%, transparent),
     radial-gradient(circle at 50% 30%, #ffffff, #e2e6ff 72%);
-  filter: drop-shadow(0 0 28px rgba(220, 230, 255, 0.85));
+  filter: var(--lift);
 }
 .fx-prank-ghost::after {
   content: '';
@@ -593,7 +696,7 @@ body[data-part="credits"] .pumpkin-credits { display: block; }
   border-radius: 24px;
   background: rgba(22, 14, 34, 0.86);
   border: 2px solid rgba(255, 170, 70, 0.6);
-  box-shadow: 0 0 40px rgba(255, 140, 30, 0.35);
+  box-shadow: var(--lift-box);
   text-align: center;
   transform: translate(-50%, -50%);
   animation: raffle-in 0.6s cubic-bezier(.3, 1.4, .5, 1) both;
@@ -620,47 +723,58 @@ body[data-part="credits"] .pumpkin-credits { display: block; }
 }
 
 .credits-group[data-style="candy-king"] { --credits-accent: #ffd85a; }
+.credits-group[data-style="water"] { --credits-accent: #c3aeeb; }
+.credits-group[data-style="brew"] { --credits-accent: #ffd85a; }
+.credits-group[data-style="brew"] .credits-names { font-size: 44px; }
+.credits-group[data-style="champions"] { --credits-accent: #c9a8ff; }
+.credits-group[data-style="voters"] { --credits-accent: rgba(255, 246, 232, 0.85); }
 
 @media (prefers-reduced-motion: reduce) {
   .fx-raffle, .fx-raffle.is-leaving, .fx-raffle.is-won .fx-raffle-name { animation: none; }
-  .treat, .treat.is-new, .treat.is-new .treat-body, .pumpkin-panel.is-full .pumpkin-face-lit { animation: none; }
+  .treat, .treat.is-new, .treat.is-new .treat-body { animation: none; }
   .pumpkin-thanks, .treat-string { transition: none; }
-  .pumpkin-panel.is-celebrating .pumpkin-svg, .pumpkin-panel.is-celebrating .pumpkin-done, .treat-string.is-celebrating .treat-body { animation: none; }
+  .pumpkin-panel.is-celebrating .cauldron-body, .pumpkin-panel.is-celebrating .pumpkin-done,
+  .pumpkin-panel.is-brewing .cauldron-body, .treat-string.is-celebrating .treat-body { animation: none; }
 }
 
 /* ═══ 美術素材插槽（public/assets/halloween/<slot>.webp）═══
    halloween-art.js 探測到素材時會在 <html> 加 art-<slot> 並設 --art-<slot>；
    沒有素材時下列規則都不生效，畫面維持上面的 CSS／SVG 保底版本。 */
 
-/* 南瓜燈：未點亮與點亮兩張要同尺寸同構圖；亮的那張依進度由下往上露出。 */
-.pumpkin-art { display: none; position: absolute; inset: -6%; z-index: 1; background: center / contain no-repeat; pointer-events: none; }
-html.art-pumpkin-unlit.art-pumpkin-lit .pumpkin-svg { visibility: hidden; }
-html.art-pumpkin-unlit.art-pumpkin-lit .pumpkin-art { display: block; }
-.pumpkin-art--unlit { background-image: var(--art-pumpkin-unlit); }
-.pumpkin-art--lit {
-  background-image: var(--art-pumpkin-lit);
-  clip-path: inset(calc((1 - var(--lit)) * 100%) 0 0 0);
-  filter: drop-shadow(0 0 calc(6px + 26px * var(--lit)) rgba(255, 140, 30, calc(0.2 + 0.5 * var(--lit))));
-}
-html.art-pumpkin-unlit.art-pumpkin-lit .pumpkin-panel.is-full .pumpkin-art--lit { animation: candle-flicker 2.6s ease-in-out infinite; }
-html.art-pumpkin-unlit.art-pumpkin-lit .pumpkin-panel.is-celebrating .pumpkin-art { animation: pumpkin-pop 1.2s cubic-bezier(.3, 1.6, .5, 1); }
+/* 藥水瓶：有美術圖就換圖，沒有就是 CSS 的圓肚瓶。 */
+html.art-potion-candy .potion-bottle--candy { background: var(--art-potion-candy) center / contain no-repeat; border: 0; border-radius: 0; }
+html.art-potion-ghost .potion-bottle--ghost { background: var(--art-potion-ghost) center / contain no-repeat; border: 0; border-radius: 0; }
+html.art-potion-bat .potion-bottle--bat { background: var(--art-potion-bat) center / contain no-repeat; border: 0; border-radius: 0; }
+html.art-potion-pumpkin .potion-bottle--pumpkin { background: var(--art-potion-pumpkin) center / contain no-repeat; border: 0; border-radius: 0; }
+html.art-potion-witch .potion-bottle--witch { background: var(--art-potion-witch) center / contain no-repeat; border: 0; border-radius: 0; }
 
-/* 名牌：圖片當底，名字與金額疊在圖片中央的留白區。 */
+/* 名牌：圖片當底，名字與金額疊在圖片中央的留白區。
+   每張圖寬度不同（糖果、蝙蝠、南瓜中段加寬過，一行放得下五個字），尺寸與內距由下面的變數決定；
+   --tag-hang＝掛環洞中心離圖頂的距離：名牌往上提這麼多，繩子就停在洞裡，看起來是穿過去的。 */
+html.art-tag-water .treat--water { --tag-w: 120px; --tag-pad-x: 16px; --tag-pad-top: 55px; --tag-hang: 16px; }
+html.art-tag-candy .treat--candy { --tag-w: 140px; --tag-pad-x: 29px; --tag-pad-top: 52px; --tag-hang: 20px; }
+html.art-tag-ghost .treat--ghost { --tag-w: 120px; --tag-pad-x: 18px; --tag-pad-top: 55px; --tag-hang: 16px; }
+html.art-tag-bat .treat--bat { --tag-w: 142px; --tag-pad-x: 30px; --tag-pad-top: 55px; --tag-hang: 21px; }
+html.art-tag-pumpkin .treat--pumpkin { --tag-w: 143px; --tag-pad-x: 31px; --tag-pad-top: 52px; --tag-hang: 10px; }
+html.art-tag-witch .treat--witch { --tag-w: 120px; --tag-pad-x: 14px; --tag-pad-top: 70px; --tag-hang: 12px; }
+html[class*="art-tag-"] .treat:is(.treat--water, .treat--candy, .treat--ghost, .treat--bat, .treat--pumpkin, .treat--witch) { width: auto; }
+html.art-tag-water .treat--water .treat-body,
 html.art-tag-candy .treat--candy .treat-body,
 html.art-tag-ghost .treat--ghost .treat-body,
 html.art-tag-bat .treat--bat .treat-body,
 html.art-tag-pumpkin .treat--pumpkin .treat-body,
 html.art-tag-witch .treat--witch .treat-body {
-  width: 112px;
-  min-height: 136px;
-  margin: 0;
-  padding: 30px 14px 22px;
+  width: var(--tag-w);
+  min-height: 150px;
+  margin: calc(-1 * var(--tag-hang)) 0 0;
+  padding: var(--tag-pad-top) var(--tag-pad-x) 22px;
   border: 0;
   border-radius: 0;
   background: center / contain no-repeat;
   box-shadow: none;
-  filter: drop-shadow(0 0 14px var(--glow));
+  filter: var(--lift);
 }
+html.art-tag-water .treat--water .treat-body { background-image: var(--art-tag-water); border: 0; border-radius: 0; }
 html.art-tag-candy .treat--candy .treat-body { background-image: var(--art-tag-candy); }
 html.art-tag-ghost .treat--ghost .treat-body { background-image: var(--art-tag-ghost); }
 html.art-tag-bat .treat--bat .treat-body { background-image: var(--art-tag-bat); }
@@ -671,20 +785,18 @@ html.art-tag-ghost .treat--ghost .treat-body::before, html.art-tag-ghost .treat-
 html.art-tag-bat .treat--bat .treat-body::before, html.art-tag-bat .treat--bat .treat-body::after, html.art-tag-bat .treat--bat .treat-top::before,
 html.art-tag-pumpkin .treat--pumpkin .treat-top::before,
 html.art-tag-witch .treat--witch .treat-top::before, html.art-tag-witch .treat--witch .treat-top::after { display: none; }
-html.art-tag-candy .treat--candy .treat-name, html.art-tag-candy .treat--candy .treat-amount { background: none; }
-/* 美術名牌的臉／耳／帽子在上方約 1/3：文字從臉下方開始，最多兩行，長名字才不會壓到眼睛。 */
-html.art-tag-candy .treat--candy .treat-body, html.art-tag-ghost .treat--ghost .treat-body,
-html.art-tag-bat .treat--bat .treat-body, html.art-tag-pumpkin .treat--pumpkin .treat-body, html.art-tag-witch .treat--witch .treat-body { padding: 50px 16px 20px; }
-/* 黑貓的眼睛緊貼在帽簷下，比其他名牌的臉低。 */
-html.art-tag-witch .treat--witch .treat-body { padding: 64px 16px 14px; }
-html.art-tag-candy .treat--candy .treat-name, html.art-tag-ghost .treat--ghost .treat-name, html.art-tag-bat .treat--bat .treat-name,
+/* 保底版糖果的名字有白底膠囊（含左右內距）；美術版拿掉，不然吃掉一行的寬度。 */
+html.art-tag-candy .treat--candy .treat-name, html.art-tag-candy .treat--candy .treat-amount { background: none; padding: 0; }
+/* 美術名牌的臉／耳／帽子在上方約 1/3：文字從臉下方開始（--tag-pad-top），最多兩行，長名字才不會壓到眼睛。 */
+html.art-tag-water .treat--water .treat-name, html.art-tag-candy .treat--candy .treat-name, html.art-tag-ghost .treat--ghost .treat-name, html.art-tag-bat .treat--bat .treat-name,
 html.art-tag-pumpkin .treat--pumpkin .treat-name, html.art-tag-witch .treat--witch .treat-name { font-size: 15px; -webkit-line-clamp: 2; }
 html[class*="art-tag-"] .treat-string { gap: 22px; }
+html.art-tag-water .treat.treat--water .treat-body,
 html.art-tag-candy .treat.treat--candy .treat-body,
 html.art-tag-ghost .treat.treat--ghost .treat-body { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6); }
 
 /* 慶祝蝙蝠、搗蛋大幽靈、互動小圖示 */
-html.art-bat .pumpkin-bat { clip-path: none; background: var(--art-bat) center / contain no-repeat; filter: drop-shadow(0 0 6px rgba(167, 123, 255, 0.8)); }
+html.art-bat .pumpkin-bat { clip-path: none; background: var(--art-bat) center / contain no-repeat; filter: var(--lift); }
 html.art-ghost-prank .fx-prank-ghost { width: 280px; height: 320px; border-radius: 0; background: var(--art-ghost-prank) center / contain no-repeat; }
 html.art-ghost-prank .fx-prank-ghost::after { display: none; }
 html.art-pop-candy .fx-pop--treat .fx-pop-icon { width: 34px; height: 34px; margin: 0; border-radius: 0; background: var(--art-pop-candy) center / contain no-repeat; }

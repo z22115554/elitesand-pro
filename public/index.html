@@ -1780,19 +1780,19 @@
 
           <section class="card" aria-labelledby="halloween-add-title">
             <p id="halloween-add-title" class="eyebrow m-0" data-i18n="halloween.addTitle">新增斗內</p>
-            <p class="sub" data-i18n="halloween.addHint">輸入後名牌會立刻掛上 OBS 畫面，南瓜燈的燭光往上亮一點。</p>
+            <p class="sub" data-i18n="halloween.addHint">觀眾留言寫了想丟的材料就選那一種；沒寫就選清水（只算總量、不投票）。</p>
             <form id="halloween-add-form" class="seasonal-add-row" autocomplete="off">
               <input id="halloween-add-name" class="input" type="text" maxlength="24" placeholder="名字" aria-label="名字" data-i18n-placeholder="halloween.name" data-i18n-aria-label="halloween.name" required>
               <input id="halloween-add-amount" class="input seasonal-amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額（NT$）" data-i18n-placeholder="halloween.amount" data-i18n-aria-label="halloween.amountAria" required>
-              <select id="halloween-add-style" class="input seasonal-style-select" aria-label="名牌樣式" data-i18n-aria-label="halloween.styleAria">
-                <option value="" data-i18n="halloween.styleAuto">依金額自動</option>
-                <option value="candy" data-i18n="halloween.style.candy">糖果</option>
-                <option value="ghost" data-i18n="halloween.style.ghost">小幽靈</option>
-                <option value="bat" data-i18n="halloween.style.bat">蝙蝠</option>
-                <option value="pumpkin" data-i18n="halloween.style.pumpkin">南瓜燈</option>
-                <option value="witch" data-i18n="halloween.style.witch">魔女帽黑貓</option>
+              <select id="halloween-add-style" class="input seasonal-style-select" aria-label="材料" data-i18n-aria-label="halloween.styleAria">
+                <option value="" data-i18n="halloween.styleWaterOption">清水（不投票）</option>
+                <option value="candy" data-i18n="halloween.style.candy">糖漿</option>
+                <option value="ghost" data-i18n="halloween.style.ghost">幽靈之魂</option>
+                <option value="bat" data-i18n="halloween.style.bat">蝙蝠翅膀</option>
+                <option value="pumpkin" data-i18n="halloween.style.pumpkin">南瓜泥</option>
+                <option value="witch" data-i18n="halloween.style.witch">黑貓的毛</option>
               </select>
-              <button class="btn btn-sm" type="submit" data-i18n="halloween.hang">掛上名牌</button>
+              <button class="btn btn-sm btn-primary" type="submit" data-i18n="halloween.hang">丟進大鍋</button>
             </form>
             <div class="seasonal-summary" role="status" aria-live="polite">
               <div class="seasonal-summary-bar"><span id="halloween-summary-fill"></span></div>
@@ -1804,13 +1804,35 @@
             </div>
           </section>
 
+          <section class="card" aria-labelledby="halloween-cauldron-title">
+            <div class="playlist-head">
+              <p id="halloween-cauldron-title" class="eyebrow m-0" data-i18n="halloween.cauldron.title">魔女的大鍋</p>
+              <div class="segmented" role="radiogroup" aria-label="材料怎麼來" data-i18n-aria-label="halloween.cauldron.modeAria">
+                <button id="halloween-cauldron-mode-points" type="button" role="radio" data-mode="points" data-i18n="halloween.cauldron.modePoints">頻道點數＋斗內</button>
+                <button id="halloween-cauldron-mode-donation" type="button" role="radio" data-mode="donation" data-i18n="halloween.cauldron.modeDonation">純斗內</button>
+              </div>
+            </div>
+            <p id="halloween-cauldron-mode-hint" class="sub"></p>
+            <p id="halloween-cauldron-reward-status" class="field-hint" role="status" aria-live="polite"></p>
+            <ul id="halloween-cauldron-shares" class="cauldron-share-list"></ul>
+            <p id="halloween-cauldron-totals" class="sub"></p>
+            <p id="halloween-cauldron-brewed" class="val" hidden></p>
+            <div class="seasonal-list-actions mt-10">
+              <button id="halloween-cauldron-brew" class="btn btn-sm btn-primary" type="button" data-i18n="halloween.cauldron.brew">熬煮</button>
+              <button id="halloween-cauldron-potion" class="btn btn-sm btn-primary" type="button" hidden data-i18n="halloween.cauldron.hidePotion">收起藥水</button>
+              <button id="halloween-cauldron-reset" class="btn btn-sm btn-ghost" type="button" hidden data-i18n="halloween.cauldron.reset">重新開鍋</button>
+            </div>
+          </section>
+
           <section class="card" aria-labelledby="halloween-preview-title">
             <div class="playlist-head">
               <p id="halloween-preview-title" class="eyebrow m-0" data-i18n="halloween.previewTitle">OBS 畫面預覽</p>
               <select id="halloween-preview-mode" class="input seasonal-preview-mode" aria-label="預覽內容" data-i18n-aria-label="halloween.previewAria">
                 <option value="" data-i18n="halloween.previewLive">實際畫面</option>
-                <option value="?demo=1" data-i18n="halloween.previewTreats">五種名牌示範</option>
-                <option value="?demo=celebrate" data-i18n="halloween.previewCelebrate">南瓜燈全亮慶祝示範</option>
+                <option value="?demo=cauldron" data-i18n="halloween.previewCauldron">模擬丟材料</option>
+                <option value="?demo=brew" data-i18n="halloween.previewBrew">熬煮動畫示範</option>
+                <option value="?demo=1" data-i18n="halloween.previewTreats">六種名牌示範</option>
+                <option value="?demo=celebrate" data-i18n="halloween.previewCelebrate">大鍋滿了的慶祝示範</option>
                 <option value="?demo=fx" data-i18n="halloween.previewFx">觀眾互動示範</option>
                 <option value="?part=credits&amp;autoplay=1" data-i18n="halloween.previewCredits">謝幕名單</option>
               </select>
@@ -1824,19 +1846,19 @@
                 <input id="halloween-treat-scale" type="range" min="60" max="250" step="5" value="100">
               </div>
               <div class="field">
-                <label for="halloween-pumpkin-scale"><span data-i18n="halloween.pumpkinScale">南瓜燈大小</span> <span id="halloween-pumpkin-scale-val" class="val">100%</span></label>
+                <label for="halloween-pumpkin-scale"><span data-i18n="halloween.pumpkinScale">大鍋大小</span> <span id="halloween-pumpkin-scale-val" class="val">100%</span></label>
                 <input id="halloween-pumpkin-scale" type="range" min="60" max="250" step="5" value="100">
               </div>
             </div>
             <p class="field-hint" data-i18n="halloween.scaleHint">拖動後 OBS 畫面會立刻套用。名牌放大後一排放不下的會自動分頁輪播。</p>
             <div class="obs-url-list mt-10">
-              <div><div class="label" data-i18n="halloween.urlAll">南瓜燈＋名牌（整個畫面）</div><div class="url-field"><code data-overlay-url=""></code><button class="btn btn-sm" type="button" data-overlay-copy="" data-i18n="common.copy">複製</button></div></div>
-              <div><div class="label" data-i18n="halloween.urlPumpkin">只有南瓜燈</div><div class="url-field"><code data-overlay-url="?part=pumpkin"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=pumpkin" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="halloween.urlAll">大鍋＋名牌（整個畫面）</div><div class="url-field"><code data-overlay-url=""></code><button class="btn btn-sm" type="button" data-overlay-copy="" data-i18n="common.copy">複製</button></div></div>
+              <div><div class="label" data-i18n="halloween.urlPumpkin">只有大鍋</div><div class="url-field"><code data-overlay-url="?part=cauldron"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=cauldron" data-i18n="common.copy">複製</button></div></div>
               <div><div class="label" data-i18n="halloween.urlTreats">只有名牌</div><div class="url-field"><code data-overlay-url="?part=treats"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=treats" data-i18n="common.copy">複製</button></div></div>
               <div><div class="label" data-i18n="halloween.urlFx">只有觀眾互動特效（糖果、小幽靈、搗蛋幽靈、抽獎）</div><div class="url-field"><code data-overlay-url="?part=fx"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=fx" data-i18n="common.copy">複製</button></div></div>
               <div><div class="label" data-i18n="halloween.urlCredits">謝幕名單（平常透明，按下方「播放謝幕名單」才出現）</div><div class="url-field"><code data-overlay-url="?part=credits"></code><button class="btn btn-sm" type="button" data-overlay-copy="?part=credits" data-i18n="common.copy">複製</button></div></div>
             </div>
-            <p class="val mt-10" data-i18n="halloween.obsHint">在 OBS 新增「瀏覽器」來源貼上網址，寬高設 1920×1080。想把南瓜燈和名牌分開擺，就各建一個來源。</p>
+            <p class="val mt-10" data-i18n="halloween.obsHint">在 OBS 新增「瀏覽器」來源貼上網址，寬高設 1920×1080。想把大鍋和名牌分開擺，就各建一個來源。</p>
           </section>
 
           <section class="card" aria-labelledby="halloween-config-title">
@@ -1852,7 +1874,7 @@
               </div>
               <div class="row-gap-10">
                 <div class="field flex-grow">
-                  <label for="halloween-config-goal" data-i18n="halloween.goalLabel">目標金額（NT$）</label>
+                  <label for="halloween-config-goal" data-i18n="halloween.goalLabel">目標金額（NT$，純斗內模式）</label>
                   <input id="halloween-config-goal" class="input" type="number" min="1" step="1" inputmode="numeric">
                 </div>
                 <div class="field flex-grow">
@@ -1860,19 +1882,71 @@
                   <input id="halloween-config-base" class="input" type="number" min="0" step="1" inputmode="numeric">
                 </div>
               </div>
-              <p class="field-hint" data-i18n="halloween.baseHint">起始金額＝活動開始前已經募到的錢（例如直播上顯示的募資進度），南瓜燈會從這裡開始算。</p>
-              <div class="field mt-10">
-                <label data-i18n="halloween.tiersLabel">名牌門檻（NT$ 起）</label>
-                <div class="seasonal-tier-grid">
-                  <label class="seasonal-tier"><span data-i18n="halloween.style.candy">糖果</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="candy"></label>
-                  <label class="seasonal-tier"><span data-i18n="halloween.style.ghost">小幽靈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="ghost"></label>
-                  <label class="seasonal-tier"><span data-i18n="halloween.style.bat">蝙蝠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="bat"></label>
-                  <label class="seasonal-tier"><span data-i18n="halloween.style.pumpkin">南瓜燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="pumpkin"></label>
-                  <label class="seasonal-tier"><span data-i18n="halloween.style.witch">魔女帽黑貓</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="witch"></label>
-                </div>
-                <p class="field-hint" data-i18n="halloween.tiersHint">「依金額自動」時，斗內金額達到哪個門檻就掛哪一種；改門檻會立刻套用到所有自動的名牌。</p>
-              </div>
+              <p class="field-hint" data-i18n="halloween.baseHint">起始金額＝活動開始前已經募到的錢；純斗內模式的大鍋會從這裡開始算。</p>
               <button class="btn btn-sm mt-10" type="submit" data-i18n="halloween.save">儲存設定</button>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="halloween-potions-title">
+            <p id="halloween-potions-title" class="eyebrow m-0" data-i18n="halloween.potions.title">藥水菜單</p>
+            <p class="sub" data-i18n="halloween.potions.hint">每種材料熬出的藥水和要兌現的企劃。內容會寫進 Twitch 兌換說明與熬煮結果。</p>
+            <form id="halloween-potions-form" autocomplete="off">
+              <fieldset class="potion-row" data-potion="candy">
+                <legend class="potion-row-head"><span class="potion-dot" data-ingredient="candy"></span><span data-i18n="halloween.style.candy">糖漿</span>
+                  <label class="switch" title="開放這種材料" data-i18n-title="halloween.potions.enabled"><input type="checkbox" data-field="enabled" aria-label="開放這種材料" data-i18n-aria-label="halloween.potions.enabled"><span class="track"></span></label></legend>
+                <div class="row-gap-10">
+                  <div class="field potion-name-field"><label data-i18n="halloween.potions.name">藥水名稱</label><input class="input" type="text" maxlength="20" data-field="name" placeholder="甜蜜藥水"></div>
+                  <div class="field flex-grow"><label data-i18n="halloween.potions.reward">藥水內容（企劃）</label><input class="input" type="text" maxlength="120" data-field="reward"></div>
+                </div>
+              </fieldset>
+              <fieldset class="potion-row" data-potion="ghost">
+                <legend class="potion-row-head"><span class="potion-dot" data-ingredient="ghost"></span><span data-i18n="halloween.style.ghost">幽靈之魂</span>
+                  <label class="switch" title="開放這種材料" data-i18n-title="halloween.potions.enabled"><input type="checkbox" data-field="enabled" aria-label="開放這種材料" data-i18n-aria-label="halloween.potions.enabled"><span class="track"></span></label></legend>
+                <div class="row-gap-10">
+                  <div class="field potion-name-field"><label data-i18n="halloween.potions.name">藥水名稱</label><input class="input" type="text" maxlength="20" data-field="name" placeholder="幽魂藥水"></div>
+                  <div class="field flex-grow"><label data-i18n="halloween.potions.reward">藥水內容（企劃）</label><input class="input" type="text" maxlength="120" data-field="reward"></div>
+                </div>
+              </fieldset>
+              <fieldset class="potion-row" data-potion="bat">
+                <legend class="potion-row-head"><span class="potion-dot" data-ingredient="bat"></span><span data-i18n="halloween.style.bat">蝙蝠翅膀</span>
+                  <label class="switch" title="開放這種材料" data-i18n-title="halloween.potions.enabled"><input type="checkbox" data-field="enabled" aria-label="開放這種材料" data-i18n-aria-label="halloween.potions.enabled"><span class="track"></span></label></legend>
+                <div class="row-gap-10">
+                  <div class="field potion-name-field"><label data-i18n="halloween.potions.name">藥水名稱</label><input class="input" type="text" maxlength="20" data-field="name" placeholder="夜宴藥水"></div>
+                  <div class="field flex-grow"><label data-i18n="halloween.potions.reward">藥水內容（企劃）</label><input class="input" type="text" maxlength="120" data-field="reward"></div>
+                </div>
+              </fieldset>
+              <fieldset class="potion-row" data-potion="pumpkin">
+                <legend class="potion-row-head"><span class="potion-dot" data-ingredient="pumpkin"></span><span data-i18n="halloween.style.pumpkin">南瓜泥</span>
+                  <label class="switch" title="開放這種材料" data-i18n-title="halloween.potions.enabled"><input type="checkbox" data-field="enabled" aria-label="開放這種材料" data-i18n-aria-label="halloween.potions.enabled"><span class="track"></span></label></legend>
+                <div class="row-gap-10">
+                  <div class="field potion-name-field"><label data-i18n="halloween.potions.name">藥水名稱</label><input class="input" type="text" maxlength="20" data-field="name" placeholder="豐收藥水"></div>
+                  <div class="field flex-grow"><label data-i18n="halloween.potions.reward">藥水內容（企劃）</label><input class="input" type="text" maxlength="120" data-field="reward"></div>
+                </div>
+              </fieldset>
+              <fieldset class="potion-row" data-potion="witch">
+                <legend class="potion-row-head"><span class="potion-dot" data-ingredient="witch"></span><span data-i18n="halloween.style.witch">黑貓的毛</span>
+                  <label class="switch" title="開放這種材料" data-i18n-title="halloween.potions.enabled"><input type="checkbox" data-field="enabled" aria-label="開放這種材料" data-i18n-aria-label="halloween.potions.enabled"><span class="track"></span></label></legend>
+                <div class="row-gap-10">
+                  <div class="field potion-name-field"><label data-i18n="halloween.potions.name">藥水名稱</label><input class="input" type="text" maxlength="20" data-field="name" placeholder="魔女藥水"></div>
+                  <div class="field flex-grow"><label data-i18n="halloween.potions.reward">藥水內容（企劃）</label><input class="input" type="text" maxlength="120" data-field="reward"></div>
+                </div>
+              </fieldset>
+              <div class="field"><label for="halloween-potions-bonus" data-i18n="halloween.potions.bonus">達標加碼（選填）</label><input id="halloween-potions-bonus" class="input" type="text" maxlength="120"></div>
+              <p class="eyebrow mt-10" data-i18n="halloween.potions.pointsTitle">頻道點數</p>
+              <div class="row-gap-10">
+                <div class="field flex-grow"><label for="halloween-potions-cost" data-i18n="halloween.potions.cost">每次點數</label><input id="halloween-potions-cost" class="input" type="number" min="1" step="1" inputmode="numeric"></div>
+                <div class="field flex-grow"><label for="halloween-potions-max" data-i18n="halloween.potions.maxPerStream">每人每場上限（0＝不限）</label><input id="halloween-potions-max" class="input" type="number" min="0" max="1000" step="1" inputmode="numeric"></div>
+                <div class="field flex-grow"><label for="halloween-potions-cooldown" data-i18n="halloween.potions.cooldown">全頻道冷卻（秒）</label><input id="halloween-potions-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric"></div>
+              </div>
+              <div class="row-gap-10">
+                <div class="field flex-grow"><label for="halloween-potions-per-share" data-i18n="halloween.potions.donationPerShare">斗內每幾元算 1 份</label><input id="halloween-potions-per-share" class="input" type="number" min="1" max="100" step="1" inputmode="numeric"></div>
+                <div class="field flex-grow"><label for="halloween-potions-goal" data-i18n="halloween.potions.goalShares">目標份數</label><input id="halloween-potions-goal" class="input" type="number" min="1" step="1" inputmode="numeric"></div>
+              </div>
+              <div class="seasonal-list-actions mt-10">
+                <button class="btn btn-sm" type="submit" data-i18n="halloween.save">儲存設定</button>
+                <button id="halloween-potions-clear-votes" class="btn btn-sm btn-ghost" type="button" data-i18n="halloween.potions.clearVotes">清除點數票</button>
+                <button id="halloween-potions-remove-rewards" class="btn btn-sm btn-ghost" type="button" data-i18n="halloween.potions.removeRewards">從 Twitch 移除兌換項目</button>
+              </div>
             </form>
           </section>
 
@@ -1946,6 +2020,14 @@
                   <option value="chat" data-i18n="halloween.raffle.poolChat">只有聊天參加者（!treat／!trick／搗蛋）</option>
                   <option value="donors" data-i18n="halloween.raffle.poolDonors">只有斗內者</option>
                 </select>
+              </div>
+              <div class="field">
+                <label for="halloween-raffle-spin" data-i18n="halloween.raffle.spinSeconds">名字輪轉（秒）</label>
+                <input id="halloween-raffle-spin" class="input" type="number" min="1" max="30" step="1" inputmode="numeric" value="3">
+              </div>
+              <div class="field">
+                <label for="halloween-raffle-hold" data-i18n="halloween.raffle.holdSeconds">得主停留（秒）</label>
+                <input id="halloween-raffle-hold" class="input" type="number" min="2" max="60" step="1" inputmode="numeric" value="7">
               </div>
             </div>
             <div class="switch-row"><div><div class="label" data-i18n="halloween.raffle.weighted">依參加次數加權（糖果、搗蛋、斗內筆數越多，中獎機會越高）</div></div><label class="switch"><input id="halloween-raffle-weighted" type="checkbox"><span class="track"></span></label></div>
@@ -3635,6 +3717,7 @@
   <script src="/js/app-seasonal-event.js"></script>
   <script src="/js/halloween-art.js"></script>
   <script src="/js/app-halloween-fx.js"></script>
+  <script src="/js/app-halloween-cauldron.js"></script>
   <script src="/js/app-playback.js"></script>
   <script src="/js/app-section-design.js"></script>
   <script src="/js/section-analysis-client.js"></script>

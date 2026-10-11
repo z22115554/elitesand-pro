@@ -202,7 +202,8 @@
       const closing = div('credits-closing');
       closing.textContent = t(`${prefix}.credits.closing`);
       const sub = div('credits-closing-sub');
-      sub.textContent = t(`${prefix}.credits.summary`, { total: nf.format(Math.max(Number(state.total) || 0, 0)), count: byName.size });
+      sub.textContent = theme.creditsSummary?.(state, byName.size)
+        || t(`${prefix}.credits.summary`, { total: nf.format(Math.max(Number(state.total) || 0, 0)), count: byName.size });
       blocks.push(closing, sub);
       creditsRoll.replaceChildren(...blocks);
     }
@@ -254,9 +255,11 @@
     // ─── 主渲染 ───
     let ended = false;
 
-    function render(state) {
-      if (!state || typeof state !== 'object') return;
+    function render(incoming) {
+      if (!incoming || typeof incoming !== 'object') return;
       if (ended) return;
+      // 主題可以在顯示前改寫快照（萬聖節示範模式換成假大鍋）。
+      const state = theme.transformState ? theme.transformState(incoming) : incoming;
       document.body.dataset.activity = 'open';
       const goal = Math.max(Number(state.goal) || 1, 1);
       const total = demoCelebrate ? goal : Math.max(Number(state.total) || 0, 0);
@@ -288,6 +291,8 @@
       renderTags(demo ? theme.demoDonations : donations, !firstRender && !!state.latestId);
       const autoplayCredits = firstRender && params.get('autoplay') === '1';
       creditsState = state;
+      // 主題自己的畫面（萬聖節大鍋）：在共用核心畫完之後才跑，拿到的是同一份快照。
+      theme.onRender?.(state, { firstRender });
       const startDemoLoop = firstRender && demoCelebrate;
       firstRender = false;
       if (autoplayCredits) playCredits();

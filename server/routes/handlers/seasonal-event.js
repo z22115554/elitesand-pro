@@ -4,7 +4,7 @@
  * 活動是否結束只在伺服器啟動時判斷一次（見 services/seasonal-event.js）。
  */
 function createSeasonalEventHandlers({ prefix, service, endedError }) {
-  const events = ['config', 'donate', 'remove', 'clear', 'credits', 'celebrate'].map((name) => `${prefix}:${name}`);
+  const events = ['config', 'donate', 'edit', 'remove', 'clear', 'credits', 'celebrate'].map((name) => `${prefix}:${name}`);
 
   return function registerSeasonalEventHandlers(io, socket) {
     if (socket.clientType !== 'controller') return;
@@ -31,6 +31,8 @@ function createSeasonalEventHandlers({ prefix, service, endedError }) {
     });
     socket.on(`${prefix}:config`, (data, ack) => reply(ack, service.setConfig(data)));
     socket.on(`${prefix}:donate`, (data, ack) => reply(ack, service.addDonation(data)));
+    // 事後改材料（只有帶材料的活動支援，例如萬聖節大鍋）。
+    socket.on(`${prefix}:edit`, (data, ack) => reply(ack, service.updateDonation(data)));
     socket.on(`${prefix}:remove`, (data, ack) => reply(ack, service.removeDonation(String(data?.id || ''))));
     socket.on(`${prefix}:clear`, (_data, ack) => reply(ack, service.clearDonations()));
     // 謝幕名單：純轉播觸發訊號，不寫 state、不持久化。

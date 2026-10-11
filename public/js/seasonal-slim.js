@@ -56,10 +56,11 @@
     // ── 分頁 ──
     const theme = view.querySelector('.seasonal-theme-row');
     const tabs = [
-      { id: 'live', key: 'seasonalSlim.tab.live', left: [card('add'), card('raffle')], right: [card('list')] },
+      // 萬聖節的大鍋卡（比例＋熬煮）放直播中、藥水菜單放活動設定；中秋沒有這兩張，filter 掉。
+      { id: 'live', key: 'seasonalSlim.tab.live', left: [card('add'), card('cauldron'), card('raffle')], right: [card('list')] },
       { id: 'obs', key: 'seasonalSlim.tab.obs', left: [card('preview')], right: [] },
       { id: 'fx', key: 'seasonalSlim.tab.fx', left: [card('fx')], right: [card('board')] },
-      { id: 'setup', key: 'seasonalSlim.tab.setup', left: [card('config')], right: [theme, card('recap')] },
+      { id: 'setup', key: 'seasonalSlim.tab.setup', left: [card('config'), card('potions')], right: [theme, card('recap')] },
     ].filter((tab) => [...tab.left, ...tab.right].some(Boolean));
 
     // OBS 頁：網址那半張卡獨立成右欄，預覽留左欄（同一張卡拆兩張，id 不變）

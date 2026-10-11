@@ -476,8 +476,22 @@ const halloweenInteractions = createHalloweenInteractions({
 });
 halloweenInteractions.attachTwitch(twitch);
 socketApi.setHalloweenInteractions(halloweenInteractions);
+
+// 魔女的大鍋：材料比例經 halloween-event 的快照裝飾進 halloween:update；頻道點數模式的五個兌換項目。
+const { createHalloweenCauldron } = require('./services/halloween-cauldron');
+const halloweenCauldron = createHalloweenCauldron({
+  event: halloweenEvent,
+  emit: (event, payload) => io.emit(event, payload),
+});
+halloweenCauldron.attachTwitch(twitch);
+socketApi.setHalloweenCauldron(halloweenCauldron);
+// 兌換攔截點只有一個：先問大鍋，不是大鍋的兌換項目才交給搗蛋幽靈，兩者都不是再回點歌流程。
+twitch.setRedemptionInterceptor(async (event, fallbackId) =>
+  (await halloweenCauldron.handleRedemption(event, fallbackId)) || halloweenInteractions.handleRedemption(event, fallbackId));
 app.use(require('./routes/twitch-auth')(twitch));
 twitch.start();
+// 活動已結束（啟動時判斷）：等 Twitch 連上後把大鍋的兌換項目暫停，觀眾不會再看到能兌換的項目。
+if (!halloweenEvent.isActive()) setTimeout(() => { halloweenCauldron.syncRewards().catch(() => {}); }, 20000).unref?.();
 process.on('exit', () => twitch.stop());
 
 // ─── 公開點歌頁：向外連到 Cloudflare 中繼（docs/PUBLIC-SONG-REQUEST-PLAN.md）───

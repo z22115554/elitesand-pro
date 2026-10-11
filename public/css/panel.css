@@ -61,8 +61,9 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
   background-repeat: no-repeat; background-size: contain; background-position: center;
   border: 1px solid var(--border);
 }
-.topnav-name { font-family: var(--font-mono); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
-.topnav-name-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+/* 品牌名與上方視窗列的「Elitesand Pro」同字族（原本是等寬字，兩處看起來像兩個品牌）。 */
+.topnav-name { font-family: var(--font); font-size: 13px; font-weight: 700; letter-spacing: 0.01em; color: var(--text); }
+.topnav-name-sub { font-family: var(--font); font-size: 11px; color: var(--text-faint); }
 
 .nav-group--primary { display: flex; align-items: stretch; }
 .nav-spacer { flex: 1; }
@@ -1949,6 +1950,33 @@ select.seasonal-style-select { width: auto; flex: 0 1 auto; max-width: 100%; }
 .seasonal-style-chip[data-style="bat"] { border-color: #9b72e6; color: #c3a6ff; }
 .seasonal-style-chip[data-style="pumpkin"] { border-color: #e97a1c; color: #ffa24d; }
 .seasonal-style-chip[data-style="witch"] { border-color: #8cc44a; color: #b6e86e; }
+.seasonal-style-chip[data-style="water"] { border-color: #a58fd6; color: #c3aeeb; }
+/* 萬聖節：斗內列表上直接改材料的小下拉，外觀沿用材料標籤。 */
+/* 材料下拉：字一律用一般文字色（淺色主題下粉、米、淡紫字看不清楚），只保留彩色邊框。 */
+select.seasonal-choice-select[data-style] { width: auto; height: 24px; padding: 0 6px; background: transparent; color: var(--text); }
+
+/* 萬聖節「魔女的大鍋」：各材料比例與藥水菜單（app-halloween-cauldron.js） */
+.potion-dot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--text-faint); }
+.potion-dot[data-ingredient="candy"], .cauldron-share-bar > span[data-ingredient="candy"] { background: #f5a3c0; }
+/* 骨白在淺色面板上看不見：面板用深一階的米色（OBS 疊加層仍是骨白）。 */
+.potion-dot[data-ingredient="ghost"], .cauldron-share-bar > span[data-ingredient="ghost"] { background: #c8bba2; }
+.potion-dot[data-ingredient="bat"], .cauldron-share-bar > span[data-ingredient="bat"] { background: #9b6be0; }
+.potion-dot[data-ingredient="pumpkin"], .cauldron-share-bar > span[data-ingredient="pumpkin"] { background: #f28a1e; }
+.potion-dot[data-ingredient="witch"], .cauldron-share-bar > span[data-ingredient="witch"] { background: #7fb03e; }
+.cauldron-share-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.cauldron-share-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(60px, 120px) auto; align-items: center; gap: 10px; font-size: 13px; }
+.cauldron-share-row.is-off { opacity: 0.45; }
+.cauldron-share-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cauldron-share-bar { height: 6px; border-radius: 999px; background: var(--bg-inset, var(--border)); overflow: hidden; }
+.cauldron-share-bar > span { display: block; height: 100%; border-radius: inherit; transition: width 0.4s ease; }
+.cauldron-share-row .val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#halloween-cauldron-reward-status.is-error { color: var(--danger); }
+#halloween-cauldron-reward-status:empty { display: none; }
+.potion-row { margin: 0; padding: 12px 0 4px; border: 0; border-top: 1px solid var(--border); }
+.potion-row-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; font-size: 13px; font-weight: 600; }
+.potion-row-head .switch { margin-left: auto; }
+.potion-row.is-off .row-gap-10 { opacity: 0.45; }
+.potion-name-field { flex: 0 0 180px; }
 select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 .seasonal-list-actions { display: flex; gap: 8px; }
 .seasonal-end-notice { grid-column: 1 / -1; padding: 12px 16px; border-radius: var(--r-md); border: 1px solid color-mix(in srgb, var(--warning, #d59b36) 55%, var(--border)); background: color-mix(in srgb, var(--warning, #d59b36) 10%, var(--bg-raised)); font-size: 13px; line-height: 1.6; }

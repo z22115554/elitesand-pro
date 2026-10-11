@@ -11,51 +11,43 @@
   <link rel="stylesheet" href="/css/halloween.css">
 </head>
 <body data-activity="pending">
-  <!-- OBS 萬聖節活動疊加：透明背景。?part=pumpkin 只顯示南瓜燈、?part=treats 只顯示名牌、?part=fx 只顯示觀眾互動特效，預設全部顯示。 -->
+  <!-- OBS 萬聖節活動疊加：透明背景。?part=cauldron（舊網址 ?part=pumpkin 也可）只顯示大鍋、?part=treats 只顯示名牌、
+       ?part=fx 只顯示觀眾互動特效，預設全部顯示。 -->
   <div id="treat-string" class="treat-string" aria-live="polite"></div>
 
+  <!-- 進度區（class 沿用南瓜燈時代的 pumpkin-*，版面、大小滑桿、感謝提示與慶祝共用） -->
   <section id="halloween-panel" class="pumpkin-panel">
    <div class="pumpkin-cluster">
     <div id="halloween-thanks" class="pumpkin-thanks" aria-live="polite"></div>
-    <div class="pumpkin-wrap">
+    <div id="cauldron-wrap" class="pumpkin-wrap cauldron-wrap">
       <div id="halloween-burst" class="pumpkin-burst" aria-hidden="true"></div>
-      <!-- 美術素材插槽：pumpkin-unlit／pumpkin-lit 兩張都在時取代下面的 SVG，亮的那張由下往上露出。 -->
-      <div class="pumpkin-art pumpkin-art--unlit" aria-hidden="true"></div>
-      <div class="pumpkin-art pumpkin-art--lit" aria-hidden="true"></div>
-      <svg id="pumpkin-svg" class="pumpkin-svg" viewBox="0 0 200 200" aria-hidden="true">
-        <defs>
-          <linearGradient id="pumpkin-skin" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#ffab45"/>
-            <stop offset="60%" stop-color="#ec6f12"/>
-            <stop offset="100%" stop-color="#a9440a"/>
-          </linearGradient>
-          <radialGradient id="pumpkin-fire" cx="50%" cy="62%" r="60%">
-            <stop offset="0%" stop-color="#fffbe0"/>
-            <stop offset="45%" stop-color="#ffd85a"/>
-            <stop offset="100%" stop-color="#ff8a1c"/>
-          </radialGradient>
-          <path id="pumpkin-face" d="M60 96 L86 96 L73 72 Z M114 96 L140 96 L127 72 Z M93 118 L107 118 L100 105 Z M50 126 Q100 176 150 126 L139 133 L131 124 L120 140 L110 129 L100 145 L90 129 L80 140 L69 124 L61 133 Z"/>
-          <clipPath id="pumpkin-glow-clip"><rect id="pumpkin-glow-rect" x="0" y="160" width="200" height="0"/></clipPath>
-        </defs>
-        <path class="pumpkin-stem" d="M93 40 C91 26 97 14 110 10 L114 17 C106 20 104 28 107 40 Z"/>
-        <g class="pumpkin-body">
-          <ellipse cx="50" cy="114" rx="40" ry="62"/>
-          <ellipse cx="150" cy="114" rx="40" ry="62"/>
-          <ellipse cx="72" cy="112" rx="44" ry="68"/>
-          <ellipse cx="128" cy="112" rx="44" ry="68"/>
-          <ellipse cx="100" cy="112" rx="46" ry="72"/>
-        </g>
-        <use class="pumpkin-face-dark" href="#pumpkin-face"/>
-        <use class="pumpkin-face-lit" href="#pumpkin-face" clip-path="url(#pumpkin-glow-clip)"/>
-      </svg>
+      <!-- 液體在最底層，鍋子（美術圖或保底 SVG）疊在上面，液體只從挖空的鍋口透出來。
+           兩者包在同一個 .cauldron-body 裡，抖動／彈跳時湯跟著鍋子一起動。 -->
+      <div class="cauldron-body">
+        <canvas id="cauldron-liquid" class="cauldron-liquid" aria-hidden="true"></canvas>
+        <div class="cauldron-art" aria-hidden="true"></div>
+        <svg class="cauldron-svg" viewBox="0 0 600 600" aria-hidden="true">
+          <!-- 保底大鍋：鍋口橢圓（300, 131.4, 191.3×41.6）與美術圖 cauldron.webp 的開口一致。 -->
+          <g class="cauldron-svg-fire">
+            <path d="M215 520 Q228 470 255 455 Q248 490 270 500 Q262 465 300 430 Q300 480 322 492 Q330 465 350 455 Q378 480 385 520 Z"/>
+          </g>
+          <path class="cauldron-svg-legs" d="M140 455 L120 520 L165 505 Z M460 455 L480 520 L435 505 Z"/>
+          <path class="cauldron-svg-body" fill-rule="evenodd"
+            d="M300 95 C430 95 520 118 520 150 C560 200 570 290 540 380 C510 470 410 500 300 500 C190 500 90 470 60 380 C30 290 40 200 80 150 C80 118 170 95 300 95 Z
+               M300 89.8 C194.4 89.8 108.7 108.4 108.7 131.4 C108.7 154.4 194.4 173 300 173 C405.6 173 491.3 154.4 491.3 131.4 C491.3 108.4 405.6 89.8 300 89.8 Z"/>
+          <ellipse class="cauldron-svg-rim" cx="300" cy="131.4" rx="203" ry="50"/>
+        </svg>
+      </div>
+      <div id="cauldron-potion" class="cauldron-potion" aria-live="polite"></div>
     </div>
     <div class="pumpkin-text">
-      <div id="halloween-title" class="pumpkin-title">萬聖節搗蛋夜</div>
+      <div id="halloween-title" class="pumpkin-title">魔女的大鍋</div>
       <div class="pumpkin-amount">
-        <span class="pumpkin-currency">NT$</span><span id="halloween-total">0</span>
-        <span class="pumpkin-sep">/</span><span id="halloween-goal">5,000</span>
+        <span id="halloween-currency" class="pumpkin-currency">NT$</span><span id="halloween-total">0</span>
+        <span class="pumpkin-sep">/</span><span id="halloween-goal">5,000</span><span id="halloween-unit" class="pumpkin-unit"></span>
       </div>
-      <div id="halloween-done" class="pumpkin-done" hidden>南瓜燈全亮了，謝謝大家！</div>
+      <div id="cauldron-top" class="cauldron-top"></div>
+      <div id="halloween-done" class="pumpkin-done" hidden>大鍋滿了，謝謝大家！</div>
     </div>
    </div>
   </section>

@@ -111,7 +111,44 @@
   }
 
   // ─── 回顧卡 ───
-  const PUMPKIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffab45"/><stop offset=".6" stop-color="#ec6f12"/><stop offset="1" stop-color="#a9440a"/></linearGradient><radialGradient id="f" cx="50%" cy="62%" r="60%"><stop offset="0" stop-color="#fffbe0"/><stop offset=".45" stop-color="#ffd85a"/><stop offset="1" stop-color="#ff8a1c"/></radialGradient></defs><path d="M93 40 C91 26 97 14 110 10 L114 17 C106 20 104 28 107 40 Z" fill="#5f6b2c"/><g fill="url(#s)" stroke="rgba(110,40,4,.55)" stroke-width="2"><ellipse cx="50" cy="114" rx="40" ry="62"/><ellipse cx="150" cy="114" rx="40" ry="62"/><ellipse cx="72" cy="112" rx="44" ry="68"/><ellipse cx="128" cy="112" rx="44" ry="68"/><ellipse cx="100" cy="112" rx="46" ry="72"/></g><path fill="url(#f)" d="M60 96 L86 96 L73 72 Z M114 96 L140 96 L127 72 Z M93 118 L107 118 L100 105 Z M50 126 Q100 176 150 126 L139 133 L131 124 L120 140 L110 129 L100 145 L90 129 L80 140 L69 124 L61 133 Z"/></svg>`;
+  // 保底大鍋（沒有 cauldron.webp 時）：鍋口位置與美術圖一致，液體從鍋口透出來。
+  const CAULDRON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600"><path fill="#f28a1e" stroke="#ffd45c" stroke-width="6" d="M215 520 Q228 470 255 455 Q248 490 270 500 Q262 465 300 430 Q300 480 322 492 Q330 465 350 455 Q378 480 385 520 Z"/><path fill="#6b3fa0" d="M140 455 L120 520 L165 505 Z M460 455 L480 520 L435 505 Z"/><path fill="#20152b" fill-rule="evenodd" d="M300 95 C430 95 520 118 520 150 C560 200 570 290 540 380 C510 470 410 500 300 500 C190 500 90 470 60 380 C30 290 40 200 80 150 C80 118 170 95 300 95 Z M300 89.8 C194.4 89.8 108.7 108.4 108.7 131.4 C108.7 154.4 194.4 173 300 173 C405.6 173 491.3 154.4 491.3 131.4 C491.3 108.4 405.6 89.8 300 89.8 Z"/><ellipse cx="300" cy="131.4" rx="203" ry="50" fill="none" stroke="#6b3fa0" stroke-width="22"/></svg>`;
+  // 鍋口橢圓（相對鍋子圖的比例）與液體顏色，跟 /halloween 疊加層一致。
+  const HOLE = { cx: 0.5, cy: 0.219, rx: 0.3188, ry: 0.0693 };
+  const LIQUID = { candy: '#F5A3C0', ghost: '#F7F1E6', bat: '#9B6BE0', pumpkin: '#F28A1E', witch: '#7FB03E', water: '#C3AEEB' };
+  const INGREDIENTS = ['candy', 'ghost', 'bat', 'pumpkin', 'witch'];
+
+  /** 鍋口裡的液體：熬過就是藥水的顏色，沒熬過就是目前比例分色。 */
+  function drawLiquid(ctx, cauldron, x, y, size) {
+    const cx = x + HOLE.cx * size;
+    const cy = y + HOLE.cy * size;
+    const rx = HOLE.rx * size + 4;
+    const ry = HOLE.ry * size + 4;
+    const brew = cauldron?.brew;
+    const parts = brew
+      ? (brew.tie || [brew.winner]).map((key) => [key, 1])
+      : INGREDIENTS.filter((key) => cauldron?.shares?.[key] > 0).map((key) => [key, cauldron.shares[key]]);
+    if (!parts.length) parts.push(['water', 1]);
+    const total = parts.reduce((sum, [, v]) => sum + v, 0);
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.translate(cx, cy);
+    ctx.scale(1, ry / rx);
+    let angle = -Math.PI / 2;
+    for (const [key, value] of parts) {
+      const sweep = (value / total) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, rx * 1.1, angle, angle + sweep);
+      ctx.closePath();
+      ctx.fillStyle = LIQUID[key];
+      ctx.fill();
+      angle += sweep;
+    }
+    ctx.restore();
+  }
 
   function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -136,8 +173,12 @@
     const H = canvas.height;
     const font = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 
-    // 美術素材插槽：recap-bg（1920×1080 背景）與 pumpkin-lit（點亮的南瓜燈）有就用，沒有就畫保底版。
-    const art = window.HalloweenArt ? await window.HalloweenArt.load(['recap-bg', 'pumpkin-lit']) : {};
+    // 美術素材插槽：recap-bg（1920×1080 背景）、cauldron（大鍋）、potion-*（熬出的藥水）有就用，沒有就畫保底版。
+    const cauldron = event.cauldron;
+    const winners = cauldron?.brew ? (cauldron.brew.tie || [cauldron.brew.winner]) : [];
+    const art = window.HalloweenArt
+      ? await window.HalloweenArt.load(['recap-bg', 'cauldron', ...winners.map((key) => `potion-${key}`)])
+      : {};
     if (art['recap-bg']) {
       ctx.drawImage(await loadImage(art['recap-bg']), 0, 0, W, H);
       // 壓暗右半邊，讓文字在任何背景上都讀得清楚。
@@ -160,28 +201,51 @@
       ctx.fillRect(0, 0, W, H);
     }
 
-    const pumpkin = await loadImage(art['pumpkin-lit'] || `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PUMPKIN_SVG)}`);
-    ctx.drawImage(pumpkin, 140, 360, 560, 560);
+    drawLiquid(ctx, cauldron, 140, 400, 560);
+    const pot = await loadImage(art.cauldron || `data:image/svg+xml;charset=utf-8,${encodeURIComponent(CAULDRON_SVG)}`);
+    ctx.drawImage(pot, 140, 400, 560, 560);
+    // 熬出的藥水：瓶子立在鍋子右上，名稱寫在右半邊標題下方。
+    const potions = winners.filter((key) => art[`potion-${key}`]);
+    for (const [i, key] of potions.entries()) {
+      ctx.drawImage(await loadImage(art[`potion-${key}`]), 540 + i * 120, 300, 180, 240);
+    }
+    if (winners.length) {
+      const names = winners.map((key) => cauldron.potions?.[key]?.name || t(`halloween.style.${key}`)).join(' × ');
+      ctx.fillStyle = 'rgba(255, 246, 232, 0.7)';
+      ctx.font = `600 28px ${font}`;
+      ctx.fillText(t('halloween.recap.brewed'), 784, 268);
+      ctx.fillStyle = '#ffd85a';
+      ctx.font = `900 48px ${font}`;
+      ctx.fillText(fitText(ctx, `${cauldron.brew.reachedGoal ? `${t('halloween.cauldron.bonus')} ` : ''}${names}`, 980), 784, 322);
+    }
 
     const goal = Math.max(Number(event.goal) || 1, 1);
     const total = Math.max(Number(event.total) || 0, 0);
     const percent = Math.round((total / goal) * 100);
+    const shares = event.unit === 'shares';
     const supporters = new Set((event.donations || []).map((d) => d.name)).size;
 
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#ffd85a';
+    // 標題放右半邊的暗區（左上是背景圖的月亮，壓上去讀不到）；仍描一圈深色邊，換背景也穩。
+    const outlined = (text, x, y, fill, width) => {
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = width;
+      ctx.strokeStyle = 'rgba(20, 10, 32, 0.85)';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = fill;
+      ctx.fillText(text, x, y);
+    };
     ctx.font = `900 76px ${font}`;
-    ctx.fillText(fitText(ctx, event.title || '', 1700), 120, 170);
-    ctx.fillStyle = 'rgba(255, 246, 232, 0.75)';
+    outlined(fitText(ctx, event.title || '', 1060), 780, 150, '#ffd85a', 12);
     ctx.font = `500 30px ${font}`;
-    ctx.fillText(t('halloween.recap.subtitle'), 124, 222);
+    outlined(t('halloween.recap.subtitle'), 784, 200, 'rgba(255, 246, 232, 0.85)', 8);
 
     ctx.fillStyle = '#fff6e8';
     ctx.font = `900 92px ${font}`;
-    ctx.fillText(`NT$${nf.format(total)}`, 780, 410);
+    ctx.fillText(shares ? `${nf.format(total)} ${t('halloween.cauldron.unit')}` : `NT$${nf.format(total)}`, 780, 410);
     ctx.fillStyle = 'rgba(255, 246, 232, 0.7)';
     ctx.font = `600 34px ${font}`;
-    ctx.fillText(t('halloween.recap.goalLine', { goal: nf.format(goal), percent }), 784, 466);
+    ctx.fillText(t(shares ? 'halloween.recap.goalLineShares' : 'halloween.recap.goalLine', { goal: nf.format(goal), percent }), 784, 466);
 
     // 進度條
     ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
@@ -210,15 +274,16 @@
     const column = (title, rows, x) => {
       ctx.fillStyle = '#ffae4a';
       ctx.font = `700 32px ${font}`;
-      ctx.fillText(title, x, 760);
+      ctx.fillText(title, x, 756);
       ctx.fillStyle = '#fff6e8';
       ctx.font = `700 34px ${font}`;
       if (!rows.length) {
         ctx.fillStyle = 'rgba(255, 246, 232, 0.5)';
-        ctx.fillText('—', x, 816);
+        ctx.fillText('—', x, 808);
         return;
       }
-      rows.slice(0, 5).forEach((row, i) => ctx.fillText(fitText(ctx, row, 300), x, 816 + i * 50));
+      // 最多 4 行，最後一行留在畫面底邊之上。
+      rows.slice(0, 4).forEach((row, i) => ctx.fillText(fitText(ctx, row, 300), x, 808 + i * 46));
     };
     const byName = new Map();
     for (const d of event.donations || []) byName.set(d.name, (byName.get(d.name) || 0) + d.amount);
@@ -291,6 +356,8 @@
         weighted: el('halloween-raffle-weighted').checked,
         excludeWinners: el('halloween-raffle-exclude').checked,
         announce: el('halloween-raffle-announce').checked,
+        spinSeconds: Number(el('halloween-raffle-spin').value),
+        holdSeconds: Number(el('halloween-raffle-hold').value),
       }, (result) => {
         el('halloween-raffle-result').textContent = t('halloween.raffle.winner', { name: result.winner.name });
       });

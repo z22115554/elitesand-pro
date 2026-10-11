@@ -5,6 +5,9 @@
  * 每個活動一個分頁（.view[data-view=<prefix>]），元素 id 都以 <prefix>- 開頭，翻譯鍵以
  * <prefix>. 開頭；門檻輸入、網址與複製按鈕用 data-tier／data-overlay-url／data-overlay-copy，
  * 只在自己的分頁裡找。
+ *
+ * choices：帶「材料」的活動（萬聖節大鍋）。新增斗內的下拉送 ingredient 而不是 style，
+ * 斗內列表的材料可以直接改（<prefix>:edit）；沒選材料＝choices.plain。
  */
 (function () {
   'use strict';
@@ -14,7 +17,7 @@
   const toast = (message, type) => window.AppShared?.showToast?.(message, type);
   const t = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
 
-  function createPanel({ prefix, scaleFields }) {
+  function createPanel({ prefix, scaleFields, choices = null }) {
     const el = (suffix) => document.getElementById(`${prefix}-${suffix}`);
     const view = () => document.querySelector(`.view[data-view="${prefix}"]`);
     const inView = (selector) => [...(view()?.querySelectorAll(selector) || [])];
@@ -28,8 +31,10 @@
     function renderSummary() {
       const goal = Math.max(state.goal || 1, 1);
       const percent = Math.min(Math.round((state.total / goal) * 100), 999);
-      el('summary-total').textContent = `NT$${nf.format(state.total)}`;
-      el('summary-goal').textContent = `/ NT$${nf.format(goal)}`;
+      // 大鍋的頻道點數模式：總量是「份」不是金額。
+      const amount = (n) => (state.unit === 'shares' ? `${nf.format(n)} ${t(`${prefix}.cauldron.unit`)}` : `NT$${nf.format(n)}`);
+      el('summary-total').textContent = amount(state.total);
+      el('summary-goal').textContent = `/ ${amount(goal)}`;
       el('summary-percent').textContent = `${percent}%`;
       el('summary-fill').style.width = `${Math.min(percent, 100)}%`;
     }
@@ -96,11 +101,13 @@
         meta.className = 'seasonal-donation-meta';
         const amount = document.createElement('span');
         amount.textContent = `NT$${nf.format(d.amount)}`;
-        const style = document.createElement('span');
-        style.className = 'seasonal-style-chip';
-        style.dataset.style = d.style;
-        style.textContent = styleLabel(d.style);
-        style.title = d.styleAuto ? t(`${prefix}.styleAuto`) : t(`${prefix}.styleManual`);
+        const style = choices ? choiceSelect(d) : document.createElement('span');
+        if (!choices) {
+          style.className = 'seasonal-style-chip';
+          style.dataset.style = d.style;
+          style.textContent = styleLabel(d.style);
+          style.title = d.styleAuto ? t(`${prefix}.styleAuto`) : t(`${prefix}.styleManual`);
+        }
         const time = document.createElement('span');
         time.className = 'sub';
         time.textContent = new Date(d.at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
@@ -113,6 +120,23 @@
         li.append(label, meta);
         return li;
       }));
+    }
+
+    // 記帳時忘了選材料：直接在列表上改。
+    function choiceSelect(d) {
+      const select = document.createElement('select');
+      select.className = 'input seasonal-style-chip seasonal-choice-select';
+      select.dataset.style = d.style;
+      select.setAttribute('aria-label', t(`${prefix}.styleAria`));
+      for (const value of ['', ...choices.values]) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value ? styleLabel(value) : t(`${prefix}.style.${choices.plain}`);
+        select.append(option);
+      }
+      select.value = d.ingredient || '';
+      select.addEventListener('change', () => send('edit', { id: d.id, ingredient: select.value || null }));
+      return select;
     }
 
     function apply(next) {
@@ -158,7 +182,8 @@
         const name = el('add-name').value.trim();
         const amount = Number(el('add-amount').value);
         if (!name || !(amount > 0)) { toast(t(`${prefix}.toast.invalid`), 'error'); return; }
-        send('donate', { name, amount, style: el('add-style').value || undefined }, () => {
+        const choice = el('add-style').value || undefined;
+        send('donate', { name, amount, [choices ? 'ingredient' : 'style']: choice }, () => {
           el('add-name').value = '';
           el('add-amount').value = '';
           el('add-style').value = '';
@@ -253,5 +278,9 @@
   }
 
   createPanel({ prefix: 'moon', scaleFields: [['lantern-scale', 'lanternScale'], ['moon-scale', 'moonScale']] });
-  createPanel({ prefix: 'halloween', scaleFields: [['treat-scale', 'treatScale'], ['pumpkin-scale', 'pumpkinScale']] });
+  createPanel({
+    prefix: 'halloween',
+    scaleFields: [['treat-scale', 'treatScale'], ['pumpkin-scale', 'pumpkinScale']],
+    choices: { values: ['candy', 'ghost', 'bat', 'pumpkin', 'witch'], plain: 'water' },
+  });
 })();

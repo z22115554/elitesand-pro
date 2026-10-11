@@ -201,6 +201,7 @@ module.exports = function socketHandler(io, {
   let songRequestRelayService = null;
   // 萬聖節觀眾互動（!trick／!treat、搗蛋獎勵、抽獎）同樣在 index.js 建立後注入。
   let halloweenInteractions = null;
+  let halloweenCauldron = null;
 
   function getClientCounts() {
     // /display 的指紋必須隨目前 public/ 內容重算；固定 server 啟動當下的值會讓
@@ -599,7 +600,7 @@ module.exports = function socketHandler(io, {
       registerPublicRequestHandlers(io, socket, ctx, { getRelayService: () => songRequestRelayService });
       registerBgmHandlers(io, socket, ctx);
       registerMoonEventHandlers(io, socket);
-      registerHalloweenEventHandlers(io, socket, { getInteractions: () => halloweenInteractions });
+      registerHalloweenEventHandlers(io, socket, { getInteractions: () => halloweenInteractions, getCauldron: () => halloweenCauldron });
     }
 
     // ─── 斷線處理 ───
@@ -652,6 +653,9 @@ module.exports = function socketHandler(io, {
     persistTwitchRequestSettingsFromService,
     setHalloweenInteractions(service) {
       halloweenInteractions = service;
+    },
+    setHalloweenCauldron(service) {
+      halloweenCauldron = service;
     },
     setTwitchService(service) {
       twitchService = service;

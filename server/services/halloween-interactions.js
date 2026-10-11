@@ -25,6 +25,9 @@ const MAX_COMMAND_LENGTH = 24;
 const MAX_REWARD_TITLE = 45;
 const MAX_NAME_LENGTH = 25;
 const RAFFLE_POOLS = Object.freeze(['chat', 'donors', 'all']);
+// 抽獎揭曉的時長（秒）：名字輪轉多久、得主停在畫面上多久。
+const RAFFLE_SPIN_SECONDS = Object.freeze({ min: 1, max: 30, fallback: 3 });
+const RAFFLE_HOLD_SECONDS = Object.freeze({ min: 2, max: 60, fallback: 7 });
 
 const DEFAULT_SETTINGS = Object.freeze({
   chatEnabled: true,
@@ -386,7 +389,12 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
     if (options.announce !== false) {
       // 給疊加層跑「名字輪轉」動畫用的候選名單（最多 30 個，一定包含得主）。
       const names = entries.map((e) => e.name).filter((n) => n !== picked.name).slice(0, 29);
-      emit('halloween:raffle', { winner: picked.name, poolSize: entries.length, names: [...names, picked.name], at: winner.at });
+      const spinSeconds = clampInt(options.spinSeconds, RAFFLE_SPIN_SECONDS.min, RAFFLE_SPIN_SECONDS.max, RAFFLE_SPIN_SECONDS.fallback);
+      const holdSeconds = clampInt(options.holdSeconds, RAFFLE_HOLD_SECONDS.min, RAFFLE_HOLD_SECONDS.max, RAFFLE_HOLD_SECONDS.fallback);
+      emit('halloween:raffle', {
+        winner: picked.name, poolSize: entries.length, names: [...names, picked.name], at: winner.at,
+        spinMs: spinSeconds * 1000, holdMs: holdSeconds * 1000,
+      });
     }
     return { ok: true, winner, state: snapshot() };
   }

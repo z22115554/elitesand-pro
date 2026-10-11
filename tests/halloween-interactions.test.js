@@ -184,3 +184,12 @@ test('TwitchService hands chat and redemptions to the interceptors first, and a 
   await service.handleRewardRedemption({ id: 'r2', reward: { id: 'x' } }, 'f');
   assert.equal(songFlowReached, 3, '兌換攔截出錯時退回點歌流程');
 });
+
+test('raffle reveal timing comes from the panel and is clamped (spin 1–30 s, hold 2–60 s; defaults 3 s / 7 s)', () => {
+  const { fx, emitted } = harness({ donations: [{ name: 'a', amount: 1 }, { name: 'b', amount: 1 }] });
+  fx.drawRaffle({ pool: 'donors', excludeWinners: false });
+  fx.drawRaffle({ pool: 'donors', excludeWinners: false, spinSeconds: 12, holdSeconds: 20 });
+  fx.drawRaffle({ pool: 'donors', excludeWinners: false, spinSeconds: 999, holdSeconds: 0 });
+  const timing = emitted.filter((e) => e.event === 'halloween:raffle').map((e) => [e.payload.spinMs, e.payload.holdMs]);
+  assert.deepEqual(timing, [[3000, 7000], [12000, 20000], [30000, 2000]]);
+});
