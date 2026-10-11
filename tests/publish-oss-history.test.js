@@ -117,3 +117,17 @@ for (const initializedDirectory of [false, true]) {
     if (initializedDirectory) assert.deepEqual(fs.readdirSync(target), []);
   });
 }
+
+test('a Source marker on the last line without a trailing newline is still the latest sync point', t => {
+  const f = fixture(t); f.seed();
+  fs.writeFileSync(path.join(f.source, 'README.md'), 'next\n');
+  const next = f.commit(f.source, 'next');
+  fs.writeFileSync(path.join(f.target, 'README.md'), 'next\n');
+  const msgFile = path.join(f.target, '..', 'msg.txt');
+  fs.writeFileSync(msgFile, `snapshot v2\n\nSource: ${next}`); // 刻意不加結尾換行（v1.1.0 快照就是這樣）
+  f.git(f.target, 'add', '-A');
+  f.git(f.target, 'commit', '--cleanup=verbatim', '-F', msgFile);
+  fs.writeFileSync(path.join(f.target, 'NOTE.txt'), 'manual fix\n');
+  f.commit(f.target, 'manual fix after snapshot');
+  assert.equal(lastSyncedSha(f.target), next);
+});

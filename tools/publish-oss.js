@@ -107,7 +107,9 @@ function git(cwd, gitArgs, opts = {}) {
 function lastSyncedSha(target) {
   try {
     const msg = git(target, ['log', '--first-parent', '--format=%B%x00'], { stdio: ['ignore', 'pipe', 'ignore'] });
-    const m = msg.match(new RegExp('^' + SOURCE_TRAILER + '([0-9a-f]{7,40})\\s*$', 'm'));
+    // 記號後面可能直接接 commit 分隔的 NUL：訊息最後沒有換行時（例如 v1.1.0 的快照 commit）
+    // 就是這樣，只認「行尾」會漏掉它、退回更舊的記號，把已同步的 commit 再重放一次。
+    const m = msg.match(new RegExp('^' + SOURCE_TRAILER + '([0-9a-f]{7,40})[ \\t\\r]*(?:\\n|\\x00|$)', 'm'));
     return m ? m[1] : null;
   } catch (_) {
     return null; // 空倉／還沒 git init
