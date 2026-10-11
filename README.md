@@ -174,7 +174,7 @@ Elitesand Pro 是開源軟體，採用 **[Mozilla Public License 2.0](LICENSE)**
 - 條件：**你修改過的 MPL 檔案，必須以 MPL 提供其原始碼形式**，並保留授權與著作權標示。MPL 是檔案級 copyleft——你自己新增的檔案不會被傳染。
 - MPL-2.0 沒有網路 copyleft：把它做成線上服務不會強制你公開你的伺服器程式碼。
 
-Copyright (c) 2026 一粒沙。[EULA](EULA.txt) 另外規範使用風險、第三方服務與資料處理，與本授權並行。
+Copyright (c) 2026 Elitesand Pro。[EULA](EULA.txt) 另外規範使用風險、第三方服務與資料處理，與本授權並行。
 
 第三方元件（含 SoundTouch 等 LGPL 元件）依其原授權使用，詳見 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。**歌曲、歌詞、封面及其他媒體的權利不包含在本授權內**——你要為自己匯入、下載與播出的內容負責。
 
@@ -341,7 +341,7 @@ Elitesand Pro is open source under the **[Mozilla Public License 2.0](LICENSE)**
 - The condition: **MPL files you modify must be made available in Source Code Form under the MPL**, with license and copyright notices preserved. MPL is file-level copyleft — files you add yourself are not infected.
 - MPL-2.0 has no network copyleft: running it as an online service does not force you to publish your server code.
 
-Copyright (c) 2026 一粒沙. The [EULA](EULA.txt) separately covers usage risk, third-party services, and data handling, and applies alongside this license.
+Copyright (c) 2026 Elitesand Pro. The [EULA](EULA.txt) separately covers usage risk, third-party services, and data handling, and applies alongside this license.
 
 Third-party components (including LGPL components such as SoundTouch) remain governed by their own licenses — see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). **Rights to songs, lyrics, cover art, and other media are not covered by this license** — you are responsible for what you import, download, and broadcast.
 
@@ -507,7 +507,7 @@ Elitesand Pro はオープンソースで、**[Mozilla Public License 2.0](LICEN
 - 条件：**改変した MPL ファイルは MPL のもとでソースコード形式を提供**し、ライセンスと著作権表示を保持すること。MPL はファイル単位の copyleft で、自分で追加したファイルには波及しません。
 - MPL-2.0 にネットワーク copyleft はありません。オンラインサービス化してもサーバーコードの公開は強制されません。
 
-Copyright (c) 2026 一粒沙。[EULA](EULA.txt) は利用リスク・第三者サービス・データの取り扱いを別途定めており、本ライセンスと併存します。
+Copyright (c) 2026 Elitesand Pro。[EULA](EULA.txt) は利用リスク・第三者サービス・データの取り扱いを別途定めており、本ライセンスと併存します。
 
 サードパーティコンポーネント（SoundTouch などの LGPL を含む）は各自のライセンスに従います — [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) を参照。**楽曲・歌詞・カバー等の権利は本ライセンスの対象外です**——取り込み・ダウンロード・配信する内容の責任はあなたにあります。
 
@@ -673,7 +673,7 @@ Elitesand Pro는 오픈소스이며 **[Mozilla Public License 2.0](LICENSE)**을
 - 조건: **수정한 MPL 파일은 MPL 하에 소스 코드 형태로 제공**하고 라이선스·저작권 고지를 유지해야 합니다. MPL은 파일 단위 copyleft이므로 직접 추가한 파일에는 전파되지 않습니다.
 - MPL-2.0에는 네트워크 copyleft가 없습니다. 온라인 서비스로 운영해도 서버 코드 공개가 강제되지 않습니다.
 
-Copyright (c) 2026 一粒沙. [EULA](EULA.txt)는 사용 위험, third-party 서비스, 데이터 처리를 별도로 규정하며 본 라이선스와 함께 적용됩니다.
+Copyright (c) 2026 Elitesand Pro. [EULA](EULA.txt)는 사용 위험, third-party 서비스, 데이터 처리를 별도로 규정하며 본 라이선스와 함께 적용됩니다.
 
 서드파티 구성 요소(SoundTouch 등 LGPL 포함)는 각자의 라이선스를 따릅니다 — [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) 참고. **곡, 가사, 커버 등 미디어 권리는 이 라이선스에 포함되지 않습니다** — 가져오고 다운로드하고 방송하는 콘텐츠는 본인 책임입니다.
 
@@ -839,6 +839,6 @@ Elitesand Pro 是开源软件，采用 **[Mozilla Public License 2.0](LICENSE)**
 - 条件：**你修改过的 MPL 文件，必须以 MPL 提供其源代码形式**，并保留授权与著作权标示。MPL 是文件级 copyleft——你自己新增的文件不会被传染。
 - MPL-2.0 没有网络 copyleft：把它做成在线服务不会强制你公开你的服务器代码。
 
-Copyright (c) 2026 一粒沙。[EULA](EULA.txt) 另外规范使用风险、第三方服务与数据处理，与本授权并行。
+Copyright (c) 2026 Elitesand Pro。[EULA](EULA.txt) 另外规范使用风险、第三方服务与数据处理，与本授权并行。
 
 第三方组件（含 SoundTouch 等 LGPL 组件）依其原授权使用，详见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。**歌曲、歌词、封面及其他媒体的权利不包含在本授权内**——你要为自己导入、下载与播出的内容负责。
