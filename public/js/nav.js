@@ -118,11 +118,25 @@
     });
   });
 
+  // 只提醒尚未看過本年度活動的裝置；活動入口關閉時一併收起。
+  const HALLOWEEN_SEEN_KEY = 'elitesand-halloween-2026-seen';
+  const halloweenNav = navFor('halloween');
+  const halloweenBadges = ['halloween-parent-new', 'halloween-nav-new']
+    .map((id) => document.getElementById(id)).filter(Boolean);
+  let halloweenSeen = false;
+  try { halloweenSeen = localStorage.getItem(HALLOWEEN_SEEN_KEY) === '1'; } catch (_) { /* 僅保留本次狀態 */ }
+  function syncHalloweenNotice() {
+    const hidden = !halloweenNav || halloweenNav.hidden || halloweenSeen;
+    halloweenBadges.forEach((badge) => { if (badge.hidden !== hidden) badge.hidden = hidden; });
+  }
+  syncHalloweenNotice();
+
   // 次級項目的 hidden 會被別的模組切換（例：中秋活動限時開放），要重算子分頁列
   if (subnav && typeof MutationObserver === 'function') {
     // 只看子項目自己的 hidden；#subnav 本身的 hidden 是 renderSubnav 設的，監聽它會無限迴圈
     new MutationObserver((records) => {
       if (!records.some((r) => r.target !== subnav)) return;
+      if (records.some((r) => r.target === halloweenNav)) syncHalloweenNotice();
       const active = document.querySelector('.view.is-active[data-view]')?.dataset.view;
       if (active) renderSubnav(active);
     }).observe(subnav, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
@@ -139,6 +153,11 @@
       if (on) matched = true;
     });
     if (matched) lastInGroup.set(groupOf(nav), nav);
+    if (matched && nav === 'halloween') {
+      halloweenSeen = true;
+      try { localStorage.setItem(HALLOWEEN_SEEN_KEY, '1'); } catch (_) { /* 僅保留本次狀態 */ }
+      syncHalloweenNotice();
+    }
     if (content && previous !== nav) {
       const top = scrollOf.get(nav) || 0;
       content.scrollTop = top;

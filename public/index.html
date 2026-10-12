@@ -170,9 +170,8 @@
          所有 .nav-item[data-nav] 都還在（其他 JS 與導覽靠它們切頁）；次級項目帶 data-parent，
          由 nav.js 在啟動時搬進下方的子分頁列。 -->
     <nav class="sidebar topnav" aria-label="主要導覽" data-i18n-aria-label="nav.primaryLabel">
-      <div class="topnav-brand" title="Elitesand Pro">
+      <div class="topnav-brand" title="Elitesand Pro" role="img" aria-label="Elitesand Pro">
         <span class="sidebar-logo" aria-hidden="true"></span>
-        <span class="topnav-name">ELITESAND</span><span class="topnav-name-sub">PRO</span>
       </div>
       <div class="nav-group nav-group--primary">
         <button class="nav-item active" data-nav="karaoke" type="button" data-sub-i18n="nav.live">
@@ -187,6 +186,7 @@
         </button>
         <button class="nav-item" data-nav="settings" type="button" data-sub-i18n="nav.sub.lyrics">
           <span class="nav-label" data-i18n="nav.output">畫面</span>
+          <span id="halloween-parent-new" class="nav-new-badge" hidden>NEW</span>
         </button>
         <button class="nav-item" data-nav="twitch" type="button" data-sub-i18n="nav.sub.twitch">
           <span class="nav-label" data-i18n="nav.requests">觀眾點歌</span>
@@ -212,6 +212,7 @@
         <!-- 萬聖節活動（限時）：跟中秋一樣放在「畫面」的子分頁；nav.js 依活動期間拿掉 hidden -->
         <button class="nav-item nav-item--sub" data-nav="halloween" data-parent="settings" type="button" title="萬聖節活動（限時開放）" data-i18n-title="nav.halloweenTitle" hidden>
           <span class="nav-label" data-i18n="nav.halloween">萬聖節活動</span>
+          <span id="halloween-nav-new" class="nav-new-badge" hidden>NEW</span>
           <span class="nav-sub" data-i18n="nav.halloweenLimited">（限時開放）</span>
         </button>
         <!-- 段落分析：改版期間只預留、不開放（docs/UIUX-REDESIGN.md §3.1）。
@@ -2390,8 +2391,8 @@
                   <option value="artist">歌手 A→Z</option>
                 </select>
                 <div id="lib-view-toggle" class="segmented lib-view-toggle" role="group" aria-label="顯示方式" data-i18n-aria-label="library.view.label">
-                  <button type="button" data-view-mode="list" class="active" aria-pressed="true" data-i18n="library.view.list">清單</button>
-                  <button type="button" data-view-mode="grid" aria-pressed="false" data-i18n="library.view.grid">格狀</button>
+                  <button type="button" data-view-mode="list" aria-pressed="false" data-i18n="library.view.list">清單</button>
+                  <button type="button" data-view-mode="grid" class="active" aria-pressed="true" data-i18n="library.view.grid">格狀</button>
                 </div>
                 <button id="lib-refresh" class="btn btn-sm" type="button">重新整理</button>
               </div>

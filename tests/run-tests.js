@@ -5633,7 +5633,7 @@ testAsync('媒體庫 UI 快速連點六首時逐首完成，失敗也不會卡�
       this.listeners = new Map();
       this.lookup = new Map();
       this.dataset = {};
-      this.style = {};
+      this.style = { setProperty(name, value) { this[name] = value; } };
       this.classList = { contains: () => false, add() {}, remove() {} };
       this.disabled = false;
       this.hidden = false;

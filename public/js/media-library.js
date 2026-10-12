@@ -67,8 +67,8 @@
   const GRID_GAP = 12;
   const GRID_MIN_CARD = 190;
   const VIEW_MODE_KEY = 'elite-library-view-mode';
-  let viewMode = 'list';
-  try { if (localStorage.getItem(VIEW_MODE_KEY) === 'grid') viewMode = 'grid'; } catch (_) { /* 靜默 */ }
+  let viewMode = 'grid';
+  try { if (localStorage.getItem(VIEW_MODE_KEY) === 'list') viewMode = 'list'; } catch (_) { /* 靜默 */ }
   let gridCols = 1;
   function layoutMetrics() {
     if (viewMode !== 'grid') return { cols: 1, step: VIRTUAL_ROW_STEP, gap: VIRTUAL_ROW_GAP };

@@ -61,10 +61,12 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
   background-repeat: no-repeat; background-size: contain; background-position: center;
   border: 1px solid var(--border);
 }
-/* 品牌名與上方視窗列的「Elitesand Pro」同字族（原本是等寬字，兩處看起來像兩個品牌）。 */
-.topnav-name { font-family: var(--font); font-size: 13px; font-weight: 700; letter-spacing: 0.01em; color: var(--text); }
-.topnav-name-sub { font-family: var(--font); font-size: 11px; color: var(--text-faint); }
 
+.nav-new-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  padding: 2px 5px; border-radius: 3px; background: #b42318; color: #fff;
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700; line-height: 1.2; letter-spacing: 0.04em;
+}
 .nav-group--primary { display: flex; align-items: stretch; }
 .nav-spacer { flex: 1; }
 .nav-item {
@@ -2003,11 +2005,12 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
   --accent-glow:  rgba(240, 120, 28, 0.45);
 }
 :root[data-season="halloween"][data-theme="light"] {
-  --accent:       #cf5a08;
-  --accent-hover: #e8731c;
+  --accent:       #f28a1e;
+  --accent-hover: #ef7d12;
   --accent-2:     #8a5cd6;
-  --accent-soft:  rgba(207, 90, 8, 0.12);
-  --accent-glow:  rgba(207, 90, 8, 0.30);
+  --accent-ink:   #974600;
+  --accent-soft:  rgba(242, 138, 30, 0.16);
+  --accent-glow:  rgba(242, 138, 30, 0.30);
 }
 :root[data-season="halloween"] .sidebar-logo { position: relative; overflow: visible; }
 :root[data-season="halloween"] .sidebar-logo::after {
