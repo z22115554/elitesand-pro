@@ -126,6 +126,9 @@ async function fixture(browser, file) {
       const count = observer.takeRecords().length; observer.disconnect(); return count;
     });
     assert.equal(previewMutations, 0);
+    // The UI redesign moved this preview into a collapsed section; inspect it open.
+    await page.locator('#lyrics-preview').evaluate((element) => { element.closest('details').open = true; });
+    assert.equal(await page.locator('#lyrics-preview').isVisible(), true);
     await page.evaluate(() => AppShared.renderLyricsPreview(null));
     assert.match(await page.locator('#lyrics-preview').innerText(), /zh-TW: no lyrics/);
     await page.evaluate(() => { AppShared.state.playlist = []; locale = 'en'; window.dispatchEvent(new Event('i18n:change')); });
