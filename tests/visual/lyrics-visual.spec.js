@@ -30,6 +30,18 @@ async function waitForTemplateRuntime(page) {
 }
 
 async function renderVisualFrame(page, templateId, frame) {
+  if (templateId === 'spellbook') {
+    // Canvas measurements request glyph fonts only when drawing. Load every
+    // fixture glyph before mounting so a slow runner cannot capture fallback text.
+    await page.evaluate(async (text) => {
+      const css = getComputedStyle(document.documentElement);
+      const family = css.getPropertyValue('--display-font-family').trim();
+      const weight = css.getPropertyValue('--display-font-weight').trim();
+      const size = css.getPropertyValue('--display-font-size').trim();
+      await document.fonts.load(`${weight} ${size} ${family}`, text);
+      await document.fonts.ready;
+    }, visualLyrics.map((line) => line.text).join(''));
+  }
   await page.evaluate(({ id, timeMs, lyrics }) => {
     const updateAt = window.__visualUpdateAt || KaraokeEngine.update;
     const timeline = typeof gsap !== 'undefined' ? gsap.globalTimeline : null;
