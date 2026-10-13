@@ -2,7 +2,7 @@
 
 const CATALOGS = Object.freeze({
   'zh-TW': Object.freeze({
-    title: 'Elitesand Pro 更新',
+    title: '聲嶼 Elitesand Pro 更新',
     optionalMessage: '有可用更新：v{version}',
     optionalDetail: '更新只會在重新啟動程式時處理，不會中斷正在進行的直播。',
     updateNow: '現在更新',

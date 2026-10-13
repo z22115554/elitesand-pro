@@ -1,7 +1,7 @@
 {
   "name": "elitesand-pro",
   "version": "1.1.1",
-  "description": "Elitesand Pro - VTuber 直播動態歌詞助手",
+  "description": "聲嶼 Elitesand Pro - VTuber 直播動態歌詞助手",
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
   "scripts": {

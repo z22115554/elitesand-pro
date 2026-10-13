@@ -1,6 +1,8 @@
 <div align="center">
 
-# Elitesand Pro
+# 聲嶼 Elitesand Pro
+
+中文正式名稱為「聲嶼」，英文名稱為 Elitesand Pro。
 
 **為 VTuber 歌回與直播演出打造的本機歌詞演出系統**
 *A local lyric-performance system for VTubers, singing streamers, and live performers*

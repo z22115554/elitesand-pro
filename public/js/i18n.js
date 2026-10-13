@@ -62,11 +62,12 @@
   // Each row is [繁中, English, 日本語, 한국어, 简中].
   // Keeping all five values together makes missing translations mechanically testable.
   const ROWS = {
-    'app.panelTitle': ['Elitesand Pro 控制面板', 'Elitesand Pro Control Panel', 'Elitesand Pro コントロールパネル', 'Elitesand Pro 제어판', 'Elitesand Pro 控制面板'],
-    'app.remoteTitle': ['Elitesand Pro 遙控器', 'Elitesand Pro Remote', 'Elitesand Pro リモコン', 'Elitesand Pro 리모컨', 'Elitesand Pro 遥控器'],
-    'app.displayTitle': ['Elitesand Pro 歌詞顯示', 'Elitesand Pro Lyrics Display', 'Elitesand Pro 歌詞表示', 'Elitesand Pro 가사 화면', 'Elitesand Pro 歌词显示'],
-    'app.setlistTitle': ['Elitesand Pro 歌單', 'Elitesand Pro Setlist', 'Elitesand Pro セットリスト', 'Elitesand Pro 세트리스트', 'Elitesand Pro 歌单'],
-    'app.prompterTitle': ['Elitesand Pro 跟唱視圖', 'Elitesand Pro Sing-Along View', 'Elitesand Pro 歌唱ビュー', 'Elitesand Pro 따라 부르기 화면', 'Elitesand Pro 跟唱视图'],
+    'app.brand': ['聲嶼 Elitesand Pro', 'Elitesand Pro', 'Elitesand Pro', 'Elitesand Pro', '聲嶼 Elitesand Pro'],
+    'app.panelTitle': ['聲嶼 Elitesand Pro 控制面板', 'Elitesand Pro Control Panel', 'Elitesand Pro コントロールパネル', 'Elitesand Pro 제어판', '聲嶼 Elitesand Pro 控制面板'],
+    'app.remoteTitle': ['聲嶼 Elitesand Pro 遙控器', 'Elitesand Pro Remote', 'Elitesand Pro リモコン', 'Elitesand Pro 리모컨', '聲嶼 Elitesand Pro 遥控器'],
+    'app.displayTitle': ['聲嶼 Elitesand Pro 歌詞顯示', 'Elitesand Pro Lyrics Display', 'Elitesand Pro 歌詞表示', 'Elitesand Pro 가사 화면', '聲嶼 Elitesand Pro 歌词显示'],
+    'app.setlistTitle': ['聲嶼 Elitesand Pro 歌單', 'Elitesand Pro Setlist', 'Elitesand Pro セットリスト', 'Elitesand Pro 세트리스트', '聲嶼 Elitesand Pro 歌单'],
+    'app.prompterTitle': ['聲嶼 Elitesand Pro 跟唱視圖', 'Elitesand Pro Sing-Along View', 'Elitesand Pro 歌唱ビュー', 'Elitesand Pro 따라 부르기 화면', '聲嶼 Elitesand Pro 跟唱视图'],
     'spout.eyebrow': ['外部透明輸出', 'External transparent output', '外部透過出力', '외부 투명 출력', '外部透明输出'],
     'spout.title': ['Spout 透明歌詞輸出', 'Spout transparent lyrics output', 'Spout 透過歌詞出力', 'Spout 투명 가사 출력', 'Spout 透明歌词输出'],
     'spout.description': ['讓 Shoost 或其他 Spout 接收軟體取得含 Alpha 的歌詞畫面，不需要色度鍵。', 'Send lyrics with alpha to Shoost or another Spout receiver without chroma key.', 'Shoost などの Spout 受信ソフトへ、クロマキーなしで Alpha 付き歌詞を送ります。', 'Shoost 등 Spout 수신 프로그램에 크로마 키 없이 알파가 포함된 가사를 보냅니다.', '让 Shoost 或其他 Spout 接收软件获取带 Alpha 的歌词画面，无需色度键。'],
