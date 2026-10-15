@@ -510,7 +510,7 @@ html, body {
 .card.active .card-num { color: var(--es-sand); }
 .card-info { flex: 1; min-width: 0; }
 .card-title { font-size: calc(var(--sl-sz-l, 13px) * 0.96); font-weight: 600; color: var(--sl-txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card.done .card-title { text-decoration: line-through; text-decoration-color: var(--sl-bc); color: var(--sl-readable-txt3, var(--sl-txt3)); }
+.card.done .card-title { color: var(--sl-readable-txt3, var(--sl-txt3)); }
 .card.active .card-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); color: var(--es-sand-b); }
 .card-artist { font-size: calc(var(--sl-sz-a, 11px) * 0.91); color: var(--sl-readable-txt2, var(--sl-txt2)); margin-top: 2px; }
 .card-status { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--sl-readable-txt4, var(--sl-txt4)); }
@@ -633,7 +633,7 @@ html, body {
 :root[data-strike] .bb-item.done .bb-name,
 :root[data-strike] .card.done .card-title,
 :root[data-strike] .cn-item.done .cn-title,
-:root[data-strike] .sk-row--done .sk-title { text-decoration: line-through; }
+:root[data-strike] .sk-row--done .sk-title { text-decoration: line-through; text-decoration-color: currentColor; }
 
 /* ══ 經典版：把顏色/邊框/底色接到統一設定變數（主題色→框色、textPrimary→字色都可動）══
    覆蓋上方主題色（theme）預設；textColor 覆蓋以 --sl-txt-ov 為準（空＝用 textPrimary）。 */
@@ -675,7 +675,9 @@ html, body {
 @keyframes sl-row-side { from { opacity: 0; transform: translateX(-14px); } }
 
 /* ══ 長歌名跑馬燈：文字溢出容器時來回滾動（setlist.js applyMarquees 量測後加 class）══ */
-.sl-mq { display: inline-block; white-space: nowrap; }
+/* An inline-block stops decoration propagation. Keep the actual title text
+   decorated after applyMarquees() wraps it, including short titles. */
+.sl-mq { display: inline-block; white-space: nowrap; text-decoration: inherit; }
 .sl-marquee { text-overflow: clip !important; }
 .sl-marquee > .sl-mq { animation: sl-mq var(--sl-mq-dur, 8s) ease-in-out infinite alternate; will-change: transform; }
 @keyframes sl-mq {
@@ -958,7 +960,7 @@ html[data-layout="classic"] #setlist-root {
 :root[data-hide-num] .signal-next-no,
 :root[data-hide-num] .index-number,
 :root[data-hide-num] .index-total { display: none !important; }
-:root[data-strike] .index-item.done .index-title { text-decoration: line-through; text-decoration-color: var(--sl-readable-border, var(--sl-bc)); }
+:root[data-strike] .index-item.done .index-title { text-decoration: line-through; text-decoration-color: currentColor; }
 
 @media (max-width: 560px) {
   .signal-strip { grid-template-columns: 1fr; gap: 8px; width: min(calc(var(--sl-w) * 1.12), calc(100vw - 24px)); }
@@ -1673,10 +1675,26 @@ html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; 
 [data-layout="haunt"] .sk-num { color: var(--hw-ember); }
 [data-layout="haunt"] .sk-title { color: var(--sl-txt-ov, var(--hw-ivory)); }
 [data-layout="haunt"] .sk-artist { color: var(--hw-dim); }
-[data-layout="haunt"] .sk-row--done .sk-title { color: rgba(184, 146, 255, .72); text-decoration: line-through; text-decoration-color: rgba(255, 122, 26, .5); }
+[data-layout="haunt"] .sk-row--done .sk-title { color: rgba(184, 146, 255, .72); }
 [data-layout="haunt"] .sk-empty { color: var(--hw-dim); }
 
 /* 美術素材插槽 */
 html.art-setlist-web[data-layout="haunt"] .sk-shell::before { background: var(--art-setlist-web) left top / contain no-repeat; -webkit-mask: none; mask: none; width: calc(120px * var(--sl-fit)); height: calc(120px * var(--sl-fit)); }
 html.art-setlist-pumpkin[data-layout="haunt"] .sk-now::after { background: var(--art-setlist-pumpkin) center / contain no-repeat; width: calc(56px * var(--sl-fit)); height: calc(56px * var(--sl-fit)); }
 html.art-setlist-bat[data-layout="haunt"] .sk-shell::after { clip-path: none; background: var(--art-setlist-bat) center / contain no-repeat; width: calc(64px * var(--sl-fit)); height: calc(36px * var(--sl-fit)); }
+
+/* User title weights take precedence over each template's decorative defaults.
+   Keep active and queued titles separate so the two controls stay independent. */
+:root .sm-now-t,
+:root .signal-title,
+:root .flap-dest,
+:root .note-it--now .note-nm,
+:root .sk-now-title { font-weight: var(--sl-fw-n); }
+
+.card:not(.active) .card-title,
+.bb-item:not(.active) .bb-name,
+.term-item:not(.active) .t-line,
+.sm-chip-t,
+.signal-next-title,
+.flap-lb,
+.note-it:not(.note-it--now) .note-nm { font-weight: var(--sl-fw-l); }

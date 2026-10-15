@@ -37,7 +37,9 @@
     let active = options.initial || tabs.find((tab) => tab.dataset.settingsWorkspaceDefault === 'true')?.dataset.settingsWorkspaceTab || tabs[0].dataset.settingsWorkspaceTab;
     let searching = false;
 
-    const isAvailable = (section) => !section.hidden && !section.classList.contains('is-search-hidden');
+    // The slim editor moves these controls out of the modal. Once moved, their
+    // new container owns visibility; the retired workspace must stop filtering.
+    const isAvailable = (section) => root.contains(section) && !section.hidden && !section.classList.contains('is-search-hidden');
     const sectionMatches = (section, group) => splitGroups(section.dataset.settingsWorkspaceGroup).includes(group);
 
     function update() {
@@ -67,6 +69,7 @@
       }
 
       sections.forEach((section) => {
+        if (!root.contains(section)) return;
         const groupMatch = sectionMatches(section, active);
         const searchMatch = isAvailable(section);
         const hidden = searching ? !searchMatch : !groupMatch;
