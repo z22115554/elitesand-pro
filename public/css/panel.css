@@ -1993,6 +1993,10 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 .seasonal-board li > * + * { margin-left: 10px; }
 .seasonal-board-name { font-weight: 600; overflow-wrap: anywhere; }
 .seasonal-board-empty { list-style: none; margin-left: -24px; color: var(--text-faint); }
+.seasonal-fx-group { min-width: 0; margin-inline: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-md); }
+.seasonal-fx-group legend { padding: 0 6px; font-weight: 600; }
+.seasonal-fx-group .row-gap-10 { flex-wrap: wrap; }
+.seasonal-fx-group .row-gap-10 > .field { min-width: 140px; }
 .seasonal-recap-frame { border-radius: var(--r-md); border: 1px solid var(--border); overflow: hidden; }
 .seasonal-recap-frame canvas { display: block; width: 100%; height: auto; }
 

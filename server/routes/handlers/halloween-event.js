@@ -58,7 +58,7 @@ function registerHalloweenEventHandlers(io, socket, { getInteractions, getCauldr
         else if (event === 'halloween:raffle:draw') result = service.drawRaffle(data || {});
         else result = service.clearWinners();
         // 設定、排行、得主變動要讓其他開著的面板一起更新。
-        if (result.ok && event !== 'halloween:fx:get') io.emit('halloween:fx:update', result.state);
+        if (result.state && event !== 'halloween:fx:get') io.emit('halloween:fx:update', result.state);
         respond(ack, result);
       } catch (err) {
         respond(ack, { ok: false, error: err.message || '操作失敗' });

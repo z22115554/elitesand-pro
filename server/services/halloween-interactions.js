@@ -1,8 +1,8 @@
 /**
  * 萬聖節觀眾互動：data/halloween-interactions.json
  *
- * - 聊天指令 !trick／!treat：畫面飄過小幽靈或糖果，記一顆到觀眾身上；每人有冷卻，不計入金額。
- * - 頻道點數「搗蛋」：觀眾兌換後畫面跳出幽靈嚇人；成功就完成兌換，活動已結束或功能關閉就退點數。
+ * - 要糖果、小幽靈、搗蛋嚇人各有聊天指令與頻道點數開關，共用排行／抽獎統計。
+ * - 聊天有每人冷卻；點數有各獎勵的全頻道冷卻，成功後完成兌換，活動結束或關閉時取消兌換退點數。
  * - 糖果排行：依 !treat 次數排名，謝幕名單會公布「糖果王」。
  * - 抽獎：從聊天參加者、斗內者或兩者合併的名單裡抽，可依糖果數加權、可排除已中獎者。
  *
@@ -31,10 +31,18 @@ const RAFFLE_HOLD_SECONDS = Object.freeze({ min: 2, max: 60, fallback: 7 });
 
 const DEFAULT_SETTINGS = Object.freeze({
   chatEnabled: true,
+  treatChatEnabled: true,
+  trickChatEnabled: true,
   trickCommand: '!trick',
   treatCommand: '!treat',
   userCooldownSeconds: 30,
+  rewards: Object.freeze({
+    treat: Object.freeze({ enabled: false, rewardId: '', title: '萬聖節要糖果', prompt: '讓糖果飄過畫面，累積糖果排行！', cost: 100, cooldownSeconds: 10 }),
+    trick: Object.freeze({ enabled: false, rewardId: '', title: '萬聖節小幽靈', prompt: '讓一隻小幽靈飄過畫面！', cost: 100, cooldownSeconds: 10 }),
+  }),
   prank: Object.freeze({
+    chatEnabled: false,
+    command: '!scare',
     enabled: false,
     rewardId: '',
     title: '萬聖節搗蛋',
@@ -66,10 +74,16 @@ function cleanSettings(input, fallback = DEFAULT_SETTINGS) {
   const prankBase = fallback.prank || DEFAULT_SETTINGS.prank;
   const settings = {
     chatEnabled: typeof input?.chatEnabled === 'boolean' ? input.chatEnabled : fallback.chatEnabled,
+    treatChatEnabled: typeof input?.treatChatEnabled === 'boolean' ? input.treatChatEnabled : fallback.treatChatEnabled,
+    trickChatEnabled: typeof input?.trickChatEnabled === 'boolean' ? input.trickChatEnabled : fallback.trickChatEnabled,
     trickCommand: cleanCommand(input?.trickCommand, fallback.trickCommand),
     treatCommand: cleanCommand(input?.treatCommand, fallback.treatCommand),
     userCooldownSeconds: clampInt(input?.userCooldownSeconds, 0, 3600, fallback.userCooldownSeconds),
+    rewards: Object.fromEntries(['treat', 'trick'].map((kind) => [kind,
+      cleanReward(input?.rewards?.[kind], fallback.rewards?.[kind] || DEFAULT_SETTINGS.rewards[kind])])),
     prank: {
+      chatEnabled: typeof prankIn.chatEnabled === 'boolean' ? prankIn.chatEnabled : prankBase.chatEnabled,
+      command: cleanCommand(prankIn.command, prankBase.command),
       enabled: typeof prankIn.enabled === 'boolean' ? prankIn.enabled : prankBase.enabled,
       rewardId: typeof prankIn.rewardId === 'string' && /^[a-z0-9-]{8,80}$/i.test(prankIn.rewardId) ? prankIn.rewardId
         : (prankIn.rewardId === '' ? '' : prankBase.rewardId),
@@ -83,7 +97,25 @@ function cleanSettings(input, fallback = DEFAULT_SETTINGS) {
     settings.trickCommand = fallback.trickCommand;
     settings.treatCommand = fallback.treatCommand;
   }
+  // 舊設定可能早已把 !scare 用作糖果／小幽靈指令；新增嚇人指令不可覆蓋舊指令。
+  const used = new Set([settings.trickCommand, settings.treatCommand].map((v) => v.toLocaleLowerCase()));
+  if (used.has(settings.prank.command.toLocaleLowerCase())) {
+    settings.prank.command = [prankBase.command, '!scare', '!scare2', '!scare3']
+      .find((command) => !used.has(command.toLocaleLowerCase()));
+  }
   return settings;
+}
+
+function cleanReward(input = {}, base) {
+  return {
+    enabled: typeof input?.enabled === 'boolean' ? input.enabled : base.enabled,
+    rewardId: typeof input?.rewardId === 'string' && /^[a-z0-9-]{8,80}$/i.test(input.rewardId) ? input.rewardId
+      : (input?.rewardId === '' ? '' : base.rewardId),
+    title: cleanText(input?.title, MAX_REWARD_TITLE) || base.title,
+    prompt: cleanText(input?.prompt, 200) || base.prompt,
+    cost: clampInt(input?.cost, 1, 1_000_000, base.cost),
+    cooldownSeconds: clampInt(input?.cooldownSeconds, 0, 3600, base.cooldownSeconds),
+  };
 }
 
 function cleanViewer(raw) {
@@ -110,7 +142,7 @@ function cleanWinner(raw) {
   };
 }
 
-function prankRewardBody(prank, includeEnabled = true) {
+function interactionRewardBody(prank, includeEnabled = true) {
   const body = {
     title: prank.title,
     prompt: prank.prompt,
@@ -140,6 +172,7 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
   let saveTimer = null;
   let boardTimer = null;
   let twitch = null;
+  let settingsQueue = Promise.resolve();
   const cooldowns = new Map();
   const seenRedemptions = new Map();
 
@@ -162,6 +195,7 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
   })();
 
   function saveNow() {
+    if (saveTimer) clearTimeout(saveTimer);
     saveTimer = null;
     try {
       return diskStore.save({ settings, viewers: Object.fromEntries(viewers), winners });
@@ -188,7 +222,7 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
       totalTreats += v.treats;
       totalTricks += v.tricks;
       totalPranks += v.pranks;
-      if (v.treats + v.tricks > 0) participants += 1;
+      if (v.treats + v.tricks + v.pranks > 0) participants += 1;
     }
     return {
       top: ranked.slice(0, BOARD_SIZE).map(({ name, treats, tricks }) => ({ name, treats, tricks })),
@@ -197,7 +231,8 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
   }
 
   function publicSettings() {
-    return { ...settings, prank: { ...settings.prank } };
+    return { ...settings, prank: { ...settings.prank }, rewards: Object.fromEntries(
+      Object.entries(settings.rewards).map(([kind, reward]) => [kind, { ...reward }])) };
   }
 
   function snapshot() {
@@ -233,8 +268,10 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
     const word = String(event?.message?.text || '').trim().split(/\s+/)[0]?.toLocaleLowerCase() || '';
     if (!word) return false;
     const kind = word === settings.treatCommand.toLocaleLowerCase() ? 'treat'
-      : word === settings.trickCommand.toLocaleLowerCase() ? 'trick' : null;
+      : word === settings.trickCommand.toLocaleLowerCase() ? 'trick'
+        : word === settings.prank.command.toLocaleLowerCase() ? 'prank' : null;
     if (!kind) return false;
+    if (kind === 'prank' ? !settings.prank.chatEnabled : !settings[`${kind}ChatEnabled`]) return false;
     const found = viewerFor(event);
     if (!found) return true;
     const at = now();
@@ -244,52 +281,61 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
     if (cooldowns.size > MAX_VIEWERS) {
       for (const [key, expires] of cooldowns) if (expires <= at) cooldowns.delete(key);
     }
-    if (kind === 'treat') found.viewer.treats += 1;
-    else found.viewer.tricks += 1;
+    recordInteraction(kind, found);
+    return true;
+  }
+
+  // 點數兌換使用 Twitch 獎勵的冷卻，不受免費聊天指令的冷卻影響。
+  function recordInteraction(kind, found) {
+    const at = now();
+    const field = kind === 'prank' ? 'pranks' : kind === 'treat' ? 'treats' : 'tricks';
+    found.viewer[field] += 1;
     found.viewer.lastAt = at;
     scheduleSave();
     scheduleBoard();
-    emit('halloween:pop', { kind, name: found.viewer.name, count: kind === 'treat' ? found.viewer.treats : found.viewer.tricks, at });
-    return true;
+    emit(kind === 'prank' ? 'halloween:prank' : 'halloween:pop',
+      { kind, name: found.viewer.name, count: found.viewer[field], at });
   }
 
   async function setRedemptionStatus(redemption, status) {
     try {
       await twitch?.updateRewardRedemptionStatus(redemption, status);
     } catch (err) {
-      log.warn(`搗蛋兌換狀態更新失敗（${status}）：${err.message}`);
+      log.warn(`萬聖節兌換狀態更新失敗（${status}）：${err.message}`);
     }
   }
 
-  /** 兌換攔截點：是本活動的「搗蛋」獎勵就回 true（不再交給點歌流程）。 */
+  /** 兌換攔截點：本活動三種獎勵皆在此處處理，其他獎勵交回點歌流程。 */
   async function handleRedemption(redemptionEvent, fallbackId) {
     const rewardId = String(redemptionEvent?.reward?.id || '');
-    if (!settings.prank.rewardId || rewardId !== settings.prank.rewardId) return false;
+    const kind = ['treat', 'trick', 'prank'].find((key) => {
+      const reward = key === 'prank' ? settings.prank : settings.rewards[key];
+      return reward.rewardId && rewardId === reward.rewardId;
+    });
+    if (!kind) return false;
+    const reward = kind === 'prank' ? settings.prank : settings.rewards[kind];
     if (redemptionEvent.status && !/^unfulfilled$/i.test(redemptionEvent.status)) return true;
     const id = String(redemptionEvent.id || fallbackId || '');
     if (!id || seenRedemptions.has(id)) return true;
     seenRedemptions.set(id, now());
     if (seenRedemptions.size > 500) seenRedemptions.delete(seenRedemptions.keys().next().value);
     const redemption = { id, rewardId };
-    if (!isActive() || !settings.prank.enabled) {
+    if (!isActive() || !reward.enabled) {
       await setRedemptionStatus(redemption, 'CANCELED');
       return true;
     }
     const found = viewerFor(redemptionEvent);
-    const name = found?.viewer.name || cleanText(redemptionEvent.user_name, MAX_NAME_LENGTH) || '?';
-    if (found) {
-      found.viewer.pranks += 1;
-      found.viewer.lastAt = now();
-      scheduleSave();
-      scheduleBoard();
+    if (!found) {
+      await setRedemptionStatus(redemption, 'CANCELED');
+      return true;
     }
-    emit('halloween:prank', { name, at: now() });
+    recordInteraction(kind, found);
     await setRedemptionStatus(redemption, 'FULFILLED');
     return true;
   }
 
-  /** 建立或更新 Twitch 上的「搗蛋」獎勵；關閉時保留獎勵但停用，下次打開沿用同一個。 */
-  async function syncPrankReward(prank) {
+  /** 建立或更新 Twitch 獎勵；關閉時保留 ID，下次打開沿用同一個。 */
+  async function syncInteractionReward(prank) {
     if (!twitch) throw new Error('Twitch 尚未啟用');
     await twitch.requireRedemptionAuthorization();
     const query = `broadcaster_id=${encodeURIComponent(twitch.auth.userId)}`;
@@ -297,13 +343,13 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
     let response = null;
     if (rewardId) {
       response = await twitch.helix(`/channel_points/custom_rewards?${query}&id=${encodeURIComponent(rewardId)}`, {
-        method: 'PATCH', body: prankRewardBody(prank),
+        method: 'PATCH', body: interactionRewardBody(prank),
       });
       if (response.status === 404) rewardId = '';
     }
     if (!rewardId) {
       if (!prank.enabled) return { ...prank, rewardId: '' };
-      response = await twitch.helix(`/channel_points/custom_rewards?${query}`, { method: 'POST', body: prankRewardBody(prank) });
+      response = await twitch.helix(`/channel_points/custom_rewards?${query}`, { method: 'POST', body: interactionRewardBody(prank) });
     }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -316,21 +362,43 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
     return { ...prank, rewardId: reward.id };
   }
 
-  async function setSettings(input) {
+  async function applySettings(input) {
+    const commands = [cleanCommand(input?.treatCommand, settings.treatCommand),
+      cleanCommand(input?.trickCommand, settings.trickCommand),
+      cleanCommand(input?.prank?.command, settings.prank.command)].map((command) => command.toLocaleLowerCase());
+    if (new Set(commands).size !== commands.length) {
+      return { ok: false, error: '三種互動請使用不同的聊天指令', state: snapshot() };
+    }
     const next = cleanSettings(input, settings);
     // rewardId 只能由同步結果寫入，面板送來的值一律忽略。
     next.prank.rewardId = settings.prank.rewardId;
-    const prankChanged = JSON.stringify(prankRewardBody(next.prank)) !== JSON.stringify(prankRewardBody(settings.prank));
-    if (prankChanged && (next.prank.enabled || settings.prank.rewardId)) {
+    for (const kind of ['treat', 'trick']) next.rewards[kind].rewardId = settings.rewards[kind].rewardId;
+    let synced = false;
+    for (const kind of ['prank', 'treat', 'trick']) {
+      const current = kind === 'prank' ? settings.prank : settings.rewards[kind];
+      const wanted = kind === 'prank' ? next.prank : next.rewards[kind];
+      const changed = JSON.stringify(interactionRewardBody(wanted)) !== JSON.stringify(interactionRewardBody(current));
+      if (!changed || (!wanted.enabled && !current.rewardId)) continue;
       try {
-        next.prank = await syncPrankReward(next.prank);
+        const updated = await syncInteractionReward(wanted);
+        if (kind === 'prank') settings.prank = next.prank = updated;
+        else settings.rewards[kind] = next.rewards[kind] = updated;
+        // 每個遠端獎勵成功後立即記下 ID；後續獎勵失敗，重試也不會重建已成功的獎勵。
+        synced = true;
+        saveNow();
       } catch (err) {
-        return { ok: false, error: err.message, state: snapshot() };
+        return { ok: false, error: `${synced ? '部分獎勵已同步，請重試其餘設定。' : ''}${err.message}`, state: snapshot() };
       }
     }
     settings = next;
     scheduleSave();
     return { ok: true, state: snapshot() };
+  }
+
+  function setSettings(input) {
+    const result = settingsQueue.then(() => applySettings(input));
+    settingsQueue = result.catch(() => {});
+    return result;
   }
 
   function resetBoard() {

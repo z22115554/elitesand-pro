@@ -13,21 +13,25 @@
   const t = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
   let state = null;
   let formDirty = false;
+  let saving = false;
 
   function renderForm() {
     if (formDirty || !state) return;
     const s = state.settings;
     el('halloween-fx-chat-enabled').checked = !!s.chatEnabled;
-    el('halloween-fx-treat-command').value = s.treatCommand;
-    el('halloween-fx-trick-command').value = s.trickCommand;
     el('halloween-fx-cooldown').value = s.userCooldownSeconds;
-    el('halloween-fx-prank-enabled').checked = !!s.prank.enabled;
-    el('halloween-fx-prank-title').value = s.prank.title;
-    el('halloween-fx-prank-cost').value = s.prank.cost;
-    el('halloween-fx-prank-cooldown').value = s.prank.cooldownSeconds;
-    el('halloween-fx-prank-status').textContent = s.prank.rewardId
-      ? t(s.prank.enabled ? 'halloween.fx.prankLive' : 'halloween.fx.prankPaused')
-      : t('halloween.fx.prankHint');
+    for (const kind of ['treat', 'trick', 'prank']) {
+      const reward = kind === 'prank' ? s.prank : s.rewards[kind];
+      const prefix = `halloween-fx-${kind}`;
+      el(`${prefix}-chat-enabled`).checked = kind === 'prank' ? !!s.prank.chatEnabled : !!s[`${kind}ChatEnabled`];
+      el(`${prefix}-command`).value = kind === 'prank' ? s.prank.command : s[`${kind}Command`];
+      el(`${prefix}-enabled`).checked = !!reward.enabled;
+      for (const field of ['title', 'cost', 'cooldown']) {
+        el(`${prefix}-${field}`).value = reward[field === 'cooldown' ? 'cooldownSeconds' : field];
+      }
+      el(`${prefix}-status`).textContent = t(reward.rewardId
+        ? (reward.enabled ? 'halloween.fx.rewardLive' : 'halloween.fx.rewardPaused') : 'halloween.fx.rewardHint');
+    }
   }
 
   function renderBoard(board) {
@@ -97,8 +101,9 @@
     renderWinners();
   }
 
-  function send(event, data, onOk) {
+  function send(event, data, onOk, onDone) {
     SocketClient.sendWithCallback(event, data, (result) => {
+      onDone?.();
       if (!result) return;
       if (!result.ok) {
         toast(result.inactive ? t('halloween.toast.ended') : (result.error || t('halloween.toast.failed')), 'error');
@@ -326,19 +331,34 @@
     form.addEventListener('input', () => { formDirty = true; });
     form.addEventListener('submit', (event) => {
       event.preventDefault();
+      if (saving) return;
+      saving = true;
+      const button = el('halloween-fx-save');
+      button.disabled = true;
+      const rewardInput = (kind) => ({
+        enabled: el(`halloween-fx-${kind}-enabled`).checked,
+        title: el(`halloween-fx-${kind}-title`).value,
+        cost: Number(el(`halloween-fx-${kind}-cost`).value),
+        cooldownSeconds: Number(el(`halloween-fx-${kind}-cooldown`).value),
+      });
       formDirty = false;
       send('halloween:fx:settings', {
         chatEnabled: el('halloween-fx-chat-enabled').checked,
+        treatChatEnabled: el('halloween-fx-treat-chat-enabled').checked,
+        trickChatEnabled: el('halloween-fx-trick-chat-enabled').checked,
         treatCommand: el('halloween-fx-treat-command').value,
         trickCommand: el('halloween-fx-trick-command').value,
         userCooldownSeconds: Number(el('halloween-fx-cooldown').value),
+        rewards: { treat: rewardInput('treat'), trick: rewardInput('trick') },
         prank: {
-          enabled: el('halloween-fx-prank-enabled').checked,
-          title: el('halloween-fx-prank-title').value,
-          cost: Number(el('halloween-fx-prank-cost').value),
-          cooldownSeconds: Number(el('halloween-fx-prank-cooldown').value),
+          ...rewardInput('prank'),
+          chatEnabled: el('halloween-fx-prank-chat-enabled').checked,
+          command: el('halloween-fx-prank-command').value,
         },
-      }, () => toast(t('halloween.toast.saved'), 'success'));
+      }, () => toast(t('halloween.toast.saved'), 'success'), () => {
+        saving = false;
+        button.disabled = false;
+      });
     });
 
     el('halloween-fx-reset').addEventListener('click', () => {

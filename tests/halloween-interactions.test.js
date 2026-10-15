@@ -15,15 +15,16 @@ test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
 function harness({ active = true, donations = [], random = () => 0 } = {}) {
   let clock = 1_000_000;
   const emitted = [];
+  const file = path.join(dataDir, `fx-${Math.random().toString(36).slice(2)}.json`);
   const fx = createHalloweenInteractions({
     isActive: () => active,
     emit: (event, payload) => emitted.push({ event, payload }),
     getDonations: () => donations,
-    file: path.join(dataDir, `fx-${Math.random().toString(36).slice(2)}.json`),
+    file,
     now: () => clock,
     randomInt: (max) => random(max),
   });
-  return { fx, emitted, tick: (ms) => { clock += ms; }, setActive: (v) => { active = v; } };
+  return { fx, file, emitted, tick: (ms) => { clock += ms; }, setActive: (v) => { active = v; } };
 }
 
 const chat = (id, name, text) => ({ chatter_user_id: id, chatter_user_name: name, message: { text } });
@@ -192,4 +193,129 @@ test('raffle reveal timing comes from the panel and is clamped (spin 1–30 s, h
   fx.drawRaffle({ pool: 'donors', excludeWinners: false, spinSeconds: 999, holdSeconds: 0 });
   const timing = emitted.filter((e) => e.event === 'halloween:raffle').map((e) => [e.payload.spinMs, e.payload.holdMs]);
   assert.deepEqual(timing, [[3000, 7000], [12000, 20000], [30000, 2000]]);
+});
+
+
+function pointsTwitch() {
+  const twitch = fakeTwitch();
+  let counter = 0;
+  twitch.helix = async (url, options) => {
+    twitch.calls.push({ url, ...options });
+    const id = options.method === 'POST' ? `points-reward-${++counter}` : new URLSearchParams(url.split('?')[1]).get('id');
+    return { ok: true, status: 200, json: async () => ({ data: [{ id }] }) };
+  };
+  return twitch;
+}
+const redemption = (id, rewardId, userId = '42') => ({ id, reward: { id: rewardId }, user_id: userId, user_name: '糖果熊', status: 'unfulfilled' });
+
+test('each effect supports independent chat and points; paid interactions bypass free-chat cooldown and enter the same raffle', async () => {
+  const h = harness();
+  const twitch = pointsTwitch(); h.fx.attachTwitch(twitch);
+  const result = await h.fx.setSettings({
+    treatChatEnabled: false,
+    rewards: { treat: { enabled: true, cost: 250 }, trick: { enabled: true, cost: 150 } },
+    prank: { enabled: true, chatEnabled: true, command: '!boo' },
+  });
+  assert.equal(result.ok, true);
+  const settings = result.state.settings;
+  assert.equal(new Set([settings.prank.rewardId, settings.rewards.treat.rewardId, settings.rewards.trick.rewardId]).size, 3);
+  assert.equal(h.fx.handleChat(chat('42', '糖果熊', '!treat')), false);
+  assert.equal(h.fx.handleChat(chat('42', '糖果熊', '!trick')), true);
+  assert.equal(await twitch.redeem(redemption('t1', settings.rewards.treat.rewardId)), true);
+  await twitch.redeem(redemption('t2', settings.rewards.treat.rewardId));
+  await twitch.redeem(redemption('g1', settings.rewards.trick.rewardId));
+  await Promise.all([twitch.redeem(redemption('p1', settings.prank.rewardId)), twitch.redeem(redemption('p1', settings.prank.rewardId))]);
+  await twitch.redeem(redemption('t1', settings.rewards.treat.rewardId));
+  await twitch.redeem({ ...redemption('completed', settings.rewards.treat.rewardId), status: 'fulfilled' });
+  assert.equal(await twitch.redeem(redemption('other', 'song-request')), false);
+  assert.deepEqual([h.fx.board().totalTreats, h.fx.board().totalTricks, h.fx.board().totalPranks, h.fx.board().participants], [2, 2, 1, 1]);
+  assert.equal(h.emitted.filter(e => e.event === 'halloween:pop').length, 4);
+  assert.equal(h.emitted.filter(e => e.event === 'halloween:prank').length, 1);
+  assert.equal(twitch.calls.filter(c => c.status === 'FULFILLED').length, 4);
+  assert.equal(h.fx.drawRaffle({ pool: 'chat', announce: false }).winner.name, '糖果熊');
+  h.tick(30_000);
+  h.fx.handleChat(chat('9', '嚇人鬼', '!BOO'));
+  assert.equal(h.fx.board().totalPranks, 2);
+  await h.fx.setSettings({ chatEnabled: false });
+  assert.equal(h.fx.handleChat(chat('10', '路人', '!boo')), false);
+  await twitch.redeem(redemption('still-paid', settings.prank.rewardId));
+  assert.equal(h.fx.board().totalPranks, 3, '關閉聊天不影響點數');
+});
+
+test('prank chat can run without Twitch or a points reward and all three command switches are independent', async () => {
+  const h = harness();
+  assert.equal(h.fx.handleChat(chat('1', '鬼', '!scare')), false, '新增免費指令預設關閉');
+  const result = await h.fx.setSettings({ prank: { chatEnabled: true }, trickChatEnabled: false });
+  assert.equal(result.ok, true);
+  assert.equal(h.fx.handleChat(chat('1', '鬼', '!scare')), true);
+  assert.equal(h.fx.handleChat(chat('2', '鬼二', '!trick')), false);
+  assert.equal(h.fx.handleChat(chat('2', '鬼二', '!treat')), true);
+  assert.equal(h.fx.board().participants, 2, '只用嚇人指令的人也計入參加人數');
+  assert.equal(h.fx.board().totalPranks, 1);
+  assert.equal(h.emitted.filter(e => e.event === 'halloween:prank').length, 1);
+  await h.fx.setSettings({ prank: { chatEnabled: false } });
+  h.tick(30_000);
+  assert.equal(h.fx.handleChat(chat('1', '鬼', '!scare')), false);
+  assert.equal((await h.fx.setSettings({ prank: { command: '!TREAT' } })).ok, false);
+});
+
+test('points rewards reuse IDs, ignore injected IDs, and cancel disabled, ended, or invalid redemptions', async () => {
+  const h = harness(); const twitch = pointsTwitch(); h.fx.attachTwitch(twitch);
+  const initial = await h.fx.setSettings({ rewards: { treat: { enabled: true, rewardId: 'attacker-id', cost: 220, cooldownSeconds: 0 }, trick: { enabled: true } } });
+  const { treat, trick } = initial.state.settings.rewards;
+  assert.notEqual(treat.rewardId, 'attacker-id');
+  assert.equal(twitch.calls[0].body.cost, 220);
+  assert.equal(twitch.calls[0].body.is_global_cooldown_enabled, false);
+  assert.equal(twitch.calls[0].body.should_redemptions_skip_request_queue, false);
+  await h.fx.setSettings({ rewards: { treat: { enabled: false }, trick: { cost: 400 } } });
+  await twitch.redeem(redemption('off', treat.rewardId));
+  await twitch.redeem({ id: 'invalid', reward: { id: trick.rewardId }, status: 'unfulfilled' });
+  h.setActive(false);
+  await twitch.redeem(redemption('ended', trick.rewardId));
+  assert.deepEqual(twitch.calls.filter(c => c.status === 'CANCELED').map(c => c.id), ['off', 'invalid', 'ended']);
+  assert.equal(h.fx.board().participants, 0);
+  assert.equal(h.emitted.length, 0);
+  await h.fx.setSettings({ rewards: { treat: { enabled: true } } });
+  assert.equal(h.fx.snapshot().settings.rewards.treat.rewardId, treat.rewardId);
+  assert.equal(twitch.calls.filter(c => c.method === 'POST').length, 2);
+});
+
+test('partial sync retains successful IDs on disk and retries only the remaining reward', async () => {
+  const h = harness(); const twitch = pointsTwitch(); const success = twitch.helix;
+  twitch.helix = async (url, options) => options.body.title === DEFAULT_SETTINGS.rewards.trick.title
+    ? { ok: false, status: 403, json: async () => ({}) } : success(url, options);
+  h.fx.attachTwitch(twitch);
+  const input = { rewards: { treat: { enabled: true }, trick: { enabled: true } } };
+  const failed = await h.fx.setSettings(input);
+  assert.equal(failed.ok, false);
+  assert.equal(failed.state.settings.rewards.treat.enabled, true);
+  assert.equal(failed.state.settings.rewards.trick.enabled, false);
+  const saved = JSON.parse(fs.readFileSync(h.file, 'utf8'));
+  assert.equal(saved.settings.rewards.treat.rewardId, failed.state.settings.rewards.treat.rewardId);
+  twitch.helix = success;
+  const retried = await h.fx.setSettings(input);
+  assert.equal(retried.ok, true);
+  assert.equal(retried.state.settings.rewards.treat.rewardId, saved.settings.rewards.treat.rewardId);
+  assert.equal(twitch.calls.filter(c => c.method === 'POST').length, 2);
+});
+
+test('concurrent saves do not create duplicate rewards, and snapshots cannot alter authoritative reward settings', async () => {
+  const h = harness(); const twitch = pointsTwitch(); h.fx.attachTwitch(twitch);
+  const input = { rewards: { treat: { enabled: true } } };
+  const results = await Promise.all([h.fx.setSettings(input), h.fx.setSettings(input)]);
+  assert.ok(results.every(r => r.ok));
+  assert.equal(twitch.calls.filter(c => c.method === 'POST').length, 1);
+  results[0].state.settings.rewards.treat.enabled = false;
+  assert.equal(h.fx.snapshot().settings.rewards.treat.enabled, true);
+  await twitch.redeem(redemption('persisted-treat', h.fx.snapshot().settings.rewards.treat.rewardId));
+  h.fx.saveNow();
+  const loaded = createHalloweenInteractions({ isActive: () => true, emit() {}, getDonations: () => [], file: h.file });
+  assert.equal(loaded.snapshot().settings.rewards.treat.rewardId, h.fx.snapshot().settings.rewards.treat.rewardId);
+  assert.equal(loaded.board().totalTreats, 1);
+  assert.equal(cleanSettings({ prank: { enabled: true, rewardId: 'legacy-prank-id' } }).prank.rewardId, 'legacy-prank-id');
+  assert.equal(cleanSettings({ prank: { enabled: true } }).rewards.treat.enabled, false);
+  const legacyCommands = cleanSettings({ treatCommand: '!scare', trickCommand: '!scare2' });
+  assert.equal(legacyCommands.treatCommand, '!scare');
+  assert.equal(legacyCommands.trickCommand, '!scare2');
+  assert.equal(legacyCommands.prank.command, '!scare3', '新增指令不可搶走既有指令');
 });

@@ -1966,39 +1966,46 @@
             <p id="halloween-fx-title" class="eyebrow m-0" data-i18n="halloween.fx.title">觀眾互動</p>
             <p class="sub" data-i18n="halloween.fx.hint">需要先在「Twitch 點歌」分頁連接 Twitch。聊天指令與搗蛋都不計入募資金額。</p>
             <form id="halloween-fx-form" autocomplete="off">
-              <div class="switch-row switch-row--separated"><div><div class="label" data-i18n="halloween.fx.chatEnabled">開放聊天指令</div></div><label class="switch"><input id="halloween-fx-chat-enabled" type="checkbox"><span class="track"></span></label></div>
-              <div class="row-gap-10">
-                <div class="field flex-grow">
-                  <label for="halloween-fx-treat-command" data-i18n="halloween.fx.treatCommand">要糖果指令</label>
-                  <input id="halloween-fx-treat-command" class="input" type="text" maxlength="24" placeholder="!treat">
+              <div class="switch-row switch-row--separated"><div><div class="label" data-i18n="halloween.fx.chatEnabled">開放聊天指令</div></div><label class="switch"><input id="halloween-fx-chat-enabled" type="checkbox" aria-label="開放聊天指令" data-i18n-aria-label="halloween.fx.chatEnabled"><span class="track"></span></label></div>
+              <div class="field mt-10"><label for="halloween-fx-cooldown" data-i18n="halloween.fx.cooldown">每人冷卻（秒）</label><input id="halloween-fx-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric"></div>
+              <p class="field-hint" data-i18n="halloween.fx.dualHint">聊天與點數可以分別開關。每人冷卻僅用於聊天指令；點數兌換使用各獎勵的全頻道冷卻。兩種方式都會計入排行與抽獎。</p>
+              <fieldset class="mt-10 seasonal-fx-group">
+                <legend data-i18n="halloween.fx.group.treat">要糖果（飄過糖果）</legend>
+                <div class="switch-row"><div class="label" data-i18n="halloween.fx.useChat">聊天指令</div><label class="switch"><input id="halloween-fx-treat-chat-enabled" type="checkbox" aria-label="要糖果（飄過糖果）：聊天指令" data-i18n-aria-label="halloween.fx.chat.treat"><span class="track"></span></label></div>
+                <div class="field"><label for="halloween-fx-treat-command" data-i18n="halloween.fx.command">指令</label><input id="halloween-fx-treat-command" class="input" type="text" maxlength="24" placeholder="!treat"></div>
+                <div class="switch-row switch-row--separated mt-10"><div class="label" data-i18n="halloween.fx.usePoints">頻道點數兌換</div><label class="switch"><input id="halloween-fx-treat-enabled" type="checkbox" aria-label="要糖果（飄過糖果）：頻道點數兌換" data-i18n-aria-label="halloween.fx.points.treat"><span class="track"></span></label></div>
+                <div class="row-gap-10">
+                  <div class="field flex-grow"><label for="halloween-fx-treat-title" data-i18n="halloween.fx.prankTitle">獎勵名稱</label><input id="halloween-fx-treat-title" class="input" type="text" maxlength="45"></div>
+                  <div class="field flex-grow"><label for="halloween-fx-treat-cost" data-i18n="halloween.fx.prankCost">點數</label><input id="halloween-fx-treat-cost" class="input" type="number" min="1" max="1000000" step="1" inputmode="numeric"></div>
+                  <div class="field flex-grow"><label for="halloween-fx-treat-cooldown" data-i18n="halloween.fx.prankCooldown">全頻道冷卻（秒）</label><input id="halloween-fx-treat-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric"></div>
                 </div>
-                <div class="field flex-grow">
-                  <label for="halloween-fx-trick-command" data-i18n="halloween.fx.trickCommand">搗蛋指令</label>
-                  <input id="halloween-fx-trick-command" class="input" type="text" maxlength="24" placeholder="!trick">
+                <p class="field-hint" id="halloween-fx-treat-status" role="status" aria-live="polite"></p>
+              </fieldset>
+              <fieldset class="mt-10 seasonal-fx-group">
+                <legend data-i18n="halloween.fx.group.trick">小幽靈（飄過幽靈）</legend>
+                <div class="switch-row"><div class="label" data-i18n="halloween.fx.useChat">聊天指令</div><label class="switch"><input id="halloween-fx-trick-chat-enabled" type="checkbox" aria-label="小幽靈（飄過幽靈）：聊天指令" data-i18n-aria-label="halloween.fx.chat.trick"><span class="track"></span></label></div>
+                <div class="field"><label for="halloween-fx-trick-command" data-i18n="halloween.fx.command">指令</label><input id="halloween-fx-trick-command" class="input" type="text" maxlength="24" placeholder="!trick"></div>
+                <div class="switch-row switch-row--separated mt-10"><div class="label" data-i18n="halloween.fx.usePoints">頻道點數兌換</div><label class="switch"><input id="halloween-fx-trick-enabled" type="checkbox" aria-label="小幽靈（飄過幽靈）：頻道點數兌換" data-i18n-aria-label="halloween.fx.points.trick"><span class="track"></span></label></div>
+                <div class="row-gap-10">
+                  <div class="field flex-grow"><label for="halloween-fx-trick-title" data-i18n="halloween.fx.prankTitle">獎勵名稱</label><input id="halloween-fx-trick-title" class="input" type="text" maxlength="45"></div>
+                  <div class="field flex-grow"><label for="halloween-fx-trick-cost" data-i18n="halloween.fx.prankCost">點數</label><input id="halloween-fx-trick-cost" class="input" type="number" min="1" max="1000000" step="1" inputmode="numeric"></div>
+                  <div class="field flex-grow"><label for="halloween-fx-trick-cooldown" data-i18n="halloween.fx.prankCooldown">全頻道冷卻（秒）</label><input id="halloween-fx-trick-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric"></div>
                 </div>
-                <div class="field flex-grow">
-                  <label for="halloween-fx-cooldown" data-i18n="halloween.fx.cooldown">每人冷卻（秒）</label>
-                  <input id="halloween-fx-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric">
+                <p class="field-hint" id="halloween-fx-trick-status" role="status" aria-live="polite"></p>
+              </fieldset>
+              <fieldset class="mt-10 seasonal-fx-group">
+                <legend data-i18n="halloween.fx.group.prank">搗蛋嚇人（跳出大幽靈）</legend>
+                <div class="switch-row"><div class="label" data-i18n="halloween.fx.useChat">聊天指令</div><label class="switch"><input id="halloween-fx-prank-chat-enabled" type="checkbox" aria-label="搗蛋嚇人（跳出大幽靈）：聊天指令" data-i18n-aria-label="halloween.fx.chat.prank"><span class="track"></span></label></div>
+                <div class="field"><label for="halloween-fx-prank-command" data-i18n="halloween.fx.command">指令</label><input id="halloween-fx-prank-command" class="input" type="text" maxlength="24" placeholder="!scare"></div>
+                <div class="switch-row switch-row--separated mt-10"><div class="label" data-i18n="halloween.fx.usePoints">頻道點數兌換</div><label class="switch"><input id="halloween-fx-prank-enabled" type="checkbox" aria-label="搗蛋嚇人（跳出大幽靈）：頻道點數兌換" data-i18n-aria-label="halloween.fx.points.prank"><span class="track"></span></label></div>
+                <div class="row-gap-10">
+                  <div class="field flex-grow"><label for="halloween-fx-prank-title" data-i18n="halloween.fx.prankTitle">獎勵名稱</label><input id="halloween-fx-prank-title" class="input" type="text" maxlength="45"></div>
+                  <div class="field flex-grow"><label for="halloween-fx-prank-cost" data-i18n="halloween.fx.prankCost">點數</label><input id="halloween-fx-prank-cost" class="input" type="number" min="1" max="1000000" step="1" inputmode="numeric"></div>
+                  <div class="field flex-grow"><label for="halloween-fx-prank-cooldown" data-i18n="halloween.fx.prankCooldown">全頻道冷卻（秒）</label><input id="halloween-fx-prank-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric"></div>
                 </div>
-              </div>
-              <p class="field-hint" data-i18n="halloween.fx.chatHint">觀眾打 !treat 畫面會飄過一顆糖果並記一顆到他身上；打 !trick 飄過一隻小幽靈。冷卻中的指令會被安靜忽略，不會回覆洗版。</p>
-              <div class="switch-row switch-row--separated mt-10"><div><div class="label" data-i18n="halloween.fx.prankEnabled">頻道點數「搗蛋」獎勵</div></div><label class="switch"><input id="halloween-fx-prank-enabled" type="checkbox"><span class="track"></span></label></div>
-              <div class="row-gap-10">
-                <div class="field flex-grow">
-                  <label for="halloween-fx-prank-title" data-i18n="halloween.fx.prankTitle">獎勵名稱</label>
-                  <input id="halloween-fx-prank-title" class="input" type="text" maxlength="45">
-                </div>
-                <div class="field flex-grow">
-                  <label for="halloween-fx-prank-cost" data-i18n="halloween.fx.prankCost">點數</label>
-                  <input id="halloween-fx-prank-cost" class="input" type="number" min="1" step="1" inputmode="numeric">
-                </div>
-                <div class="field flex-grow">
-                  <label for="halloween-fx-prank-cooldown" data-i18n="halloween.fx.prankCooldown">全頻道冷卻（秒）</label>
-                  <input id="halloween-fx-prank-cooldown" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric">
-                </div>
-              </div>
-              <p class="field-hint" id="halloween-fx-prank-status" data-i18n="halloween.fx.prankHint">開啟後會在 Twitch 建立一個獎勵；觀眾兌換時畫面跳出幽靈嚇你一下。活動結束或關閉時兌換的點數會自動退回。</p>
-              <button class="btn btn-sm mt-10" type="submit" data-i18n="halloween.save">儲存設定</button>
+                <p class="field-hint" id="halloween-fx-prank-status" role="status" aria-live="polite"></p>
+              </fieldset>
+              <button id="halloween-fx-save" class="btn btn-sm mt-10" type="submit" data-i18n="halloween.save">儲存設定</button>
             </form>
           </section>
 
@@ -2017,8 +2024,8 @@
               <div class="field flex-grow">
                 <label for="halloween-raffle-pool" data-i18n="halloween.raffle.poolLabel">抽獎名單</label>
                 <select id="halloween-raffle-pool" class="input">
-                  <option value="all" data-i18n="halloween.raffle.poolAll">聊天參加者＋斗內者</option>
-                  <option value="chat" data-i18n="halloween.raffle.poolChat">只有聊天參加者（!treat／!trick／搗蛋）</option>
+                  <option value="all" data-i18n="halloween.raffle.poolAll">互動參加者＋斗內者</option>
+                  <option value="chat" data-i18n="halloween.raffle.poolChat">只有互動參加者（聊天／點數）</option>
                   <option value="donors" data-i18n="halloween.raffle.poolDonors">只有斗內者</option>
                 </select>
               </div>
