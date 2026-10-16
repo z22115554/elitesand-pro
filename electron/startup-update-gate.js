@@ -1,5 +1,7 @@
 'use strict';
 
+const { REMIND_THREE_DAYS, recordUpdateReminder } = require('./update-reminder');
+
 // The update decision belongs to one Electron main-process lifetime.  It is
 // deliberately not a renderer feature, timer, or HTTP API: once the panel is
 // reachable, this gate has already locked and cannot be opened again.
@@ -20,8 +22,6 @@ const ACTIONS = Object.freeze({
   ACCEPT_INCREMENTAL: 'accept-incremental',
   OPEN_REQUIRED_INSTALLER: 'open-required-installer',
 });
-
-const DEFER_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function cloneSession(session) {
   return Object.freeze({
@@ -56,13 +56,11 @@ function createStartupUpdateGate({
   promptRequired = async () => 'exit',
   deferStore = null,
   now = () => Date.now(),
-  deferDurationMs = DEFER_DURATION_MS,
 } = {}) {
   if (typeof request !== 'function') throw new TypeError('createStartupUpdateGate requires a private request function');
   if (typeof promptOptional !== 'function' || typeof promptRequired !== 'function') {
     throw new TypeError('startup update prompts must be functions');
   }
-  if (!Number.isFinite(deferDurationMs) || deferDurationMs <= 0) throw new TypeError('deferDurationMs must be positive');
 
   const session = {
     phase: PHASES.BOOT,
@@ -92,17 +90,15 @@ function createStartupUpdateGate({
     return request({ action, phase, planId });
   }
 
-  async function defer(plan, decision = 'deferred') {
+  async function defer(plan, choice) {
     try {
       const response = await requestAction(ACTIONS.DEFER, PHASES.OPTIONAL_PROMPT, plan.planId);
       if (!response?.ok) return lock('defer-rejected');
     } catch (_) {
       return lock('defer-failed');
     }
-    if (deferStore && typeof deferStore.setDeferUntil === 'function') {
-      deferStore.setDeferUntil(plan.targetVersion, now() + deferDurationMs);
-    }
-    return lock(decision);
+    recordUpdateReminder({ choice, targetVersion: plan.targetVersion, deferStore, nowMs: now() });
+    return lock(choice === REMIND_THREE_DAYS ? 'remind-three-days' : 'deferred');
   }
 
   async function decideOptional(plan) {
@@ -113,7 +109,7 @@ function createStartupUpdateGate({
     session.phase = PHASES.OPTIONAL_PROMPT;
     let choice = 'defer';
     try { choice = await promptOptional(plan); } catch (_) { choice = 'defer'; }
-    if (choice !== 'accept') return defer(plan);
+    if (choice !== 'accept') return defer(plan, choice);
 
     session.phase = PHASES.PREPARING;
     try {
@@ -178,4 +174,4 @@ function createStartupUpdateGate({
   return Object.freeze({ run, lock, getSession: snapshot, getAcceptedPlan });
 }
 
-module.exports = { ACTIONS, DEFER_DURATION_MS, PHASES, createStartupUpdateGate, isPlan };
+module.exports = { ACTIONS, PHASES, createStartupUpdateGate, isPlan };

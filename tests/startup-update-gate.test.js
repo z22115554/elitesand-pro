@@ -18,7 +18,7 @@ function makeClock() {
 
 function makeMemoryDeferStore() {
   const values = new Map();
-  return { getDeferUntil: (key) => values.get(key) || null, setDeferUntil: (key, value) => values.set(key, value) };
+  return { getDeferUntil: (key) => values.get(key) || null, setDeferUntil: (key, value) => values.set(key, value), clearDefer: (key) => values.delete(key) };
 }
 
 test('每個 OS process 最多冷啟動檢查一次；running 後遠端變 required 無效', async () => {
@@ -34,7 +34,7 @@ test('每個 OS process 最多冷啟動檢查一次；running 後遠端變 requi
   assert.strictEqual(gate.getSession().decision, 'no-update');
 });
 
-test('optional 延後以 targetVersion 記錄，且 lock 後不能 accept 或重查', async () => {
+test('稍後只略過這次啟動，不寫入七天期限，且本次不能 accept 或重查', async () => {
   const calls = [];
   const defers = makeMemoryDeferStore();
   const gate = createStartupUpdateGate({
@@ -50,9 +50,42 @@ test('optional 延後以 targetVersion 記錄，且 lock 後不能 accept 或重
   assert.strictEqual(result.phase, PHASES.RUNNING_LOCKED);
   assert.strictEqual(result.decision, 'deferred');
   assert.deepStrictEqual(calls, ['check', 'defer']);
-  assert.ok(defers.getDeferUntil('1.0.1') > Date.parse('2026-08-23T00:00:00Z'));
+  assert.strictEqual(defers.getDeferUntil('1.0.1'), null);
   await gate.run();
   assert.deepStrictEqual(calls, ['check', 'defer']);
+});
+
+test('稍後在下次啟動再次提醒；三天後提醒精確暫停 72 小時且不擋新版本', async () => {
+  const { THREE_DAYS_MS, REMIND_THREE_DAYS } = require('../electron/update-reminder');
+  const defers = makeMemoryDeferStore();
+  let tick = Date.parse('2026-10-15T07:00:00.000Z');
+  let prompts = 0;
+  let plan = optionalPlan;
+  let choice = 'defer';
+  const start = () => createStartupUpdateGate({
+    request: async ({ action }) => action === 'check' ? { ok: true, kind: 'plan', plan } : { ok: true },
+    promptOptional: async () => { prompts++; return choice; },
+    deferStore: defers, now: () => tick,
+  }).run();
+  await start();
+  await start();
+  assert.strictEqual(prompts, 2, 'Later must prompt on the very next process launch');
+  choice = REMIND_THREE_DAYS;
+  await start();
+  const until = tick + THREE_DAYS_MS;
+  assert.strictEqual(defers.getDeferUntil('1.0.1'), until);
+  tick = until - 1;
+  assert.strictEqual((await start()).decision, 'deferred-target');
+  assert.strictEqual(prompts, 3);
+  plan = { ...optionalPlan, planId: 'different-target-plan', targetVersion: '1.0.2' };
+  choice = 'defer';
+  await start();
+  assert.strictEqual(prompts, 4, 'a new version bypasses a different target snooze');
+  plan = optionalPlan;
+  tick = until;
+  await start();
+  assert.strictEqual(prompts, 5, 'prompt must return at the exact three-day boundary');
+  assert.strictEqual(defers.getDeferUntil('1.0.1'), null);
 });
 
 test('source、Spout 或重用 server 都直接鎖定，完全不發 private request', async () => {

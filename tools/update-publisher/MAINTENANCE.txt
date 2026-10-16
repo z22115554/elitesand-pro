@@ -1,0 +1,94 @@
+Update plan maintenance
+
+Active update plans retain a seven-day Ed25519-signed lifetime. The private
+repository workflow `renew-update-plans.yml` runs daily at 09:17 Asia/Taipei
+and re-signs plans with three days or less remaining, including already expired
+plans still referenced by the current control pointer. It reuses each ZIP,
+source version, target version and download URL, so existing clients benefit
+without first upgrading. Desktop expiry, signature and replay checks remain on.
+
+Only currently referenced plans are renewed. Disabled channels are left alone;
+unreferenced or withdrawn releases are never scanned or revived. Writes use
+immutable plan objects, read-back checks, an ETag-conditional control switch and
+a Worker probe. Probe failures attempt an ETag-conditional rollback; a concurrent
+publish or disable operation is never overwritten.
+
+## Required deployment configuration
+
+Merging code does not provision secrets or renew Cloudflare immediately. Before
+using the scheduled workflow, configure these **Actions repository secrets in
+the private `z22115554/Elitesand-Pro-src` repository only**:
+
+| Secret | Value |
+| --- | --- |
+| `ELITESAND_R2_ENDPOINT` | Existing HTTPS account-level R2 S3 endpoint |
+| `ELITESAND_R2_BUCKET` | `elitesand-pro-updates` |
+| `ELITESAND_R2_ACCESS_KEY_ID` | Release R2 credential with bucket read/write access |
+| `ELITESAND_R2_SECRET_ACCESS_KEY` | Matching R2 secret |
+| `ELITESAND_UPDATE_POLICY_KEY_ID` | Existing embedded stable policy key ID |
+| `ELITESAND_UPDATE_POLICY_PRIVATE_KEY_B64` | Existing stable policy private PEM, encoded as base64 |
+| `ELITESAND_BETA_UPDATE_POLICY_KEY_ID` | Existing embedded beta policy key ID, if beta has active plans |
+| `ELITESAND_BETA_UPDATE_POLICY_PRIVATE_KEY_B64` | Existing beta policy private PEM, encoded as base64 |
+
+Actions maintenance is opt-in: also set the repository variable
+`ELITESAND_ENABLE_ACTIONS_PLAN_RENEWAL=1` after configuring the secrets. Leave
+this variable unset when maintaining R2 from the release machine instead.
+
+This deliberately extends the release signing environment to the private
+scheduled Actions job. Keep signing keys out of Workers, source files, logs,
+artifacts and the public mirror. Do not generate replacement keys: existing
+clients already trust the embedded public keys. The scheduled job cannot build
+or authorize a new payload; it verifies the existing signed plan before renewal.
+The policy key is separate from the ZIP manifest signing key.
+
+After merging and configuring secrets, manually run **Renew active update plans**
+once to recover currently expired active plans; check both matrix jobs. A missing
+beta pointer or an empty/disabled channel is reported as skipped. Missing signing
+secrets for an active channel cause a visible failure. Keep workflow failure
+notifications enabled. Maintenance must run at least once within the remaining
+three-day margin; prolonged Actions outages can still let plans expire, and the
+next successful run can renew them.
+
+For the existing release machine, the same maintenance can run with its current
+release environment variables, without moving the private key to Actions:
+
+```sh
+node tools/update-publisher/renew-cli.js --channel stable --dry-run
+node tools/update-publisher/renew-cli.js --channel stable --publish
+```
+
+The local wrapper can read the existing files in the current user's
+`.elitesand-pro/release-keys/` directory without putting secrets in command-line
+arguments or process-wide environment variables:
+
+```sh
+node tools/update-publisher/renew-local.js --channel stable --dry-run
+node tools/update-publisher/renew-local.js --channel stable --publish
+node tools/update-publisher/renew-local.js --channel beta --publish
+```
+
+It reads only the four R2 variables from `r2-beta-publisher.env` (the existing
+filename also serves stable), and chooses `update-policy-stable-2026-09.pem`
+or `update-policy-beta-2026-08.pem` for that channel. The renewal service checks
+the selected private key against the unchanged embedded public key before
+re-signing any active plan. Install the tools/update-publisher dependencies
+with `npm ci --ignore-scripts --prefix tools/update-publisher` first.
+
+Use `--channel beta` with the beta release key in the usual
+`ELITESAND_UPDATE_POLICY_KEY_ID` / `ELITESAND_UPDATE_POLICY_PRIVATE_KEY_B64`
+variables when running locally. Dry run is the default and never writes R2.
+
+## Desktop reminder choices
+
+- **Update**: confirm and run the existing verified update flow.
+- **Later** (including closing the dialog): skip this launch only; prompt on the
+  next launch. A manual Later choice clears any existing snooze for that target.
+- **Remind me in 3 days**: save a target-version-specific 72-hour deadline and
+  prompt on the first launch at or after it. Manual checks remain available;
+  a different new target version is not suppressed. No timer interrupts a live
+  session three days later.
+
+Old implicit seven-day Later entries use schema 1 and are ignored. New explicit
+three-day entries use schema 2. Reminder changes require a newly packaged desktop
+release; the publishing-side renewal can restore existing clients immediately
+after deployment.

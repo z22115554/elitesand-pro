@@ -448,6 +448,7 @@ function createElectronShell({
   const { createStartupUpdateRequester } = require('./startup-update-requester');
   const { createManualUpdateRequester } = require('./manual-update-requester');
   const { createStartupUpdateDeferStore } = require('./startup-update-defer-store');
+  const { optionalUpdateChoice, recordUpdateReminder } = require('./update-reminder');
   const { format: formatUpdateText, getCatalog: getUpdateCatalog, resolveLocale: resolveUpdateLocale } = require('./startup-update-i18n');
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
   const preload = path.join(shellRoot, 'electron', 'preload.js');
@@ -990,7 +991,7 @@ function createElectronShell({
       title: text.title,
       message: formatUpdateText(text.optionalMessage, { version: plan.targetVersion }),
       detail: text.optionalDetail,
-      buttons: [text.updateNow, text.defer],
+      buttons: [text.updateNow, text.defer, text.remindThreeDays],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
@@ -999,7 +1000,7 @@ function createElectronShell({
       openStartupUpdateProgressWindow(plan);
       return 'accept';
     }
-    return 'defer';
+    return optionalUpdateChoice(result?.response);
   }
 
   async function promptRequiredUpdate(plan, { openFailed = false } = {}) {
@@ -1149,7 +1150,15 @@ function createElectronShell({
           const choice = plan.urgency === 'required'
             ? (await promptRequiredUpdate(plan)) === 'open' ? 'accept' : 'defer'
             : await promptOptionalUpdate(plan);
-          if (choice !== 'accept') return { status: 'declined', targetVersion: plan.targetVersion };
+          if (choice !== 'accept') {
+            if (plan.urgency === 'optional') {
+              recordUpdateReminder({
+                choice, targetVersion: plan.targetVersion,
+                deferStore: createStartupUpdateDeferStore(app.getPath('userData'), { fsImpl }),
+              });
+            }
+            return { status: 'declined', targetVersion: plan.targetVersion };
+          }
           // Accepting can take minutes (download + verify + stage a real,
           // hundreds-of-MB artifact) before it replies at all. Poll the
           // server's own progress state and push it to the panel so the user

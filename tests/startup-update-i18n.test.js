@@ -7,7 +7,7 @@ const test = require('node:test');
 const { CATALOGS, format, getCatalog, resolveLocale } = require('../electron/startup-update-i18n');
 
 const root = path.join(__dirname, '..');
-const fields = ['title', 'optionalMessage', 'optionalDetail', 'updateNow', 'defer', 'requiredMessage', 'requiredDetail', 'requiredInstallerOpenFailed', 'openInstaller', 'exit', 'restartMessage', 'restartDetail', 'restart', 'cancel'];
+const fields = ['title', 'optionalMessage', 'optionalDetail', 'updateNow', 'defer', 'remindThreeDays', 'requiredMessage', 'requiredDetail', 'requiredInstallerOpenFailed', 'openInstaller', 'exit', 'restartMessage', 'restartDetail', 'restart', 'cancel'];
 
 test('native cold-start update dialogs have complete five-language catalogs', () => {
   assert.deepStrictEqual(Object.keys(CATALOGS).sort(), ['en', 'ja', 'ko', 'zh-CN', 'zh-TW']);
@@ -18,6 +18,7 @@ test('native cold-start update dialogs have complete five-language catalogs', ()
   assert.strictEqual(format(getCatalog('zh-TW').optionalMessage, { version: '1.0.1' }), '有可用更新：v1.0.1');
   assert.strictEqual(resolveLocale('zh_HK'), 'zh-TW');
   assert.strictEqual(resolveLocale('de-DE'), 'en');
+  assert.deepStrictEqual(['updateNow', 'defer', 'remindThreeDays'].map((key) => getCatalog('zh-TW')[key]), ['更新', '稍後', '三天後提醒我']);
 });
 
 test('renderer keeps update checking manual and only exposes restart after a positive result', () => {
