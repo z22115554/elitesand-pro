@@ -257,11 +257,12 @@ function responseFixture() {
 
 test('actual upload route overlaps loudness/lyrics for two tracks and returns ordered warnings and metadata', async () => {
   const lyricGates = [deferred(), deferred(), deferred()], loudnessGates = [deferred(), deferred(), deferred()];
-  const calls = [], covers = [];
+  const calls = [], covers = [], remembered = [];
   const handler = uploadHandler({
     parseMusicFile: async file => { const i = Number(path.basename(file, '.m4a')); calls.push(['metadata', i]); return { common: { title: `Song${i}`, artist: 'Artist', picture: [{ format: 'image/png', data: Buffer.from('cover') }] }, format: { duration: 120 } }; },
     AudioProcessor: { measureLoudnessQueued: file => { const i = Number(path.basename(file, '.m4a')); calls.push(['loudness', i]); return loudnessGates[i].promise; }, parseVideoTitle: name => ({ title: name }), isKnownArtistName: () => false },
     LyricsEngine: { search: (artist, title) => { const i = Number(title.slice(4)); calls.push(['lyrics', i]); return lyricGates[i].promise; } },
+    libraryStore: { rememberImport: track => remembered.push(track) },
     fs: { writeFileSync: file => covers.push(file) }, downloadsDir: '/tmp', parseOffset: () => 75, sanitizeTrack: track => track,
   });
   const files = [0, 1, 2].map(i => ({ path: `/tmp/${i}.m4a`, originalname: Buffer.from(`歌曲${i}.m4a`).toString('latin1') }));
@@ -273,6 +274,7 @@ test('actual upload route overlaps loudness/lyrics for two tracks and returns or
   lyricGates[0].reject(new Error('offline')); loudnessGates[0].reject(new Error('ffmpeg unavailable')); await pending;
   assert.equal(res.code, 200); assert.deepEqual(Array.from(res.body.tracks, t => t.title), ['Song0', 'Song1', 'Song2']);
   assert.deepEqual(Array.from(res.body.warnings), ['Song0：音訊已匯入，但自動歌詞搜尋失敗', 'Song1：音訊已匯入，但自動歌詞搜尋失敗']);
+  assert.deepEqual(remembered, Array.from(res.body.tracks), 'all uploads are available to library/BGM without being played');
   assert.equal(res.body.tracks[0].loudnessLufs, null); assert.equal(res.body.tracks[1].loudnessLufs, -19);
   assert.equal(res.body.tracks[2].lrcOffset, 75); assert.equal(res.body.tracks[2].lyricsSource, 'betterlyrics');
   assert.equal(res.body.tracks[2].originalName, '歌曲2.m4a'); assert.equal(covers.length, 3); assert.ok(covers.every(p => p.endsWith('.png')));

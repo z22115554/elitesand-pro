@@ -38,7 +38,6 @@ html.electron-shell .app {
   margin-top: var(--desktop-windowbar-height);
 }
 html.electron-shell .connection-banner { top: var(--desktop-windowbar-height); }
-html.electron-shell .announcement-banner { top: calc(var(--desktop-windowbar-height) + 12px); }
 html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height) + 16px); }
 
 .app { display: flex; flex-direction: column; height: 100vh; }
@@ -1499,15 +1498,15 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .banner[hidden] { display: none; }
 .connection-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 500; background: var(--danger); color: #fff; text-align: center; padding: 9px; font-size: 13px; transform: translateY(-100%); transition: transform 0.2s; }
 .connection-banner.visible { transform: translateY(0); }
-.announcement-banner { position: fixed; top: 12px; left: 50%; z-index: 450; transform: translateX(-50%); width: min(760px, calc(100vw - 32px)); display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 15px; border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--border)); border-radius: var(--r-md); background: color-mix(in srgb, var(--danger) 14%, var(--bg-surface)); color: var(--text); box-shadow: var(--shadow-lg); }
+.announcement-banner { position: static; align-self: center; flex-shrink: 0; margin: 8px 0; width: min(760px, calc(100vw - 32px)); display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 15px; border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--border)); border-radius: var(--r-md); background: color-mix(in srgb, var(--danger) 14%, var(--bg-surface)); color: var(--text); box-shadow: var(--shadow-lg); }
 .announcement-banner[hidden] { display: none; }
 .announcement-banner strong { display: block; margin-bottom: 3px; color: var(--danger); font-size: 13px; }
 .announcement-banner span { color: var(--text-dim); font-size: 12px; line-height: 1.55; }
 .announcement-actions { display: flex; gap: 7px; flex-shrink: 0; }
 /* 當機提示沿用公告 banner 的版面，但換成中性色：這是「要不要幫忙回報」，
-   不是安全警告，用紅色會讓使用者以為資料出事了。z-index 比公告低一階，
-   真的有重要公告時讓公告蓋在上面。 */
-.crash-banner { z-index: 440; border-color: var(--border-strong); background: var(--bg-surface); }
+   不是安全警告，用紅色會讓使用者以為資料出事了。與公告依序排列，
+   同時出現時仍可分別閱讀與操作。 */
+.crash-banner { border-color: var(--border-strong); background: var(--bg-surface); }
 .crash-banner strong { display: block; margin-bottom: 3px; color: var(--text); font-size: 13px; }
 .announcement-list { display: flex; flex-direction: column; gap: 8px; }
 .error-history-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }

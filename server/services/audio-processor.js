@@ -106,6 +106,39 @@ let ffmpegTail = Promise.resolve();
 const PREFETCH_TTL_MS = 10 * 60 * 1000;
 
 const YOUTUBE_SEARCH_LIMIT_MAX = 10;
+const YOUTUBE_MUSIC_SEARCH_GRACE_MS = 500;
+const YOUTUBE_SEARCH_CACHE_TTL_MS = 60000;
+const YOUTUBE_SEARCH_CACHE_MAX = 32;
+const youtubeSearchCache = new Map();
+
+function cloneYouTubeSearchResult(result) {
+  return { results: result.results.map(entry => ({ ...entry })), hasMore: result.hasMore };
+}
+
+function cachedYouTubeSearch(key) {
+  const cached = youtubeSearchCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    youtubeSearchCache.delete(key);
+    return null;
+  }
+  // Recently repeated queries remain available without keeping an unbounded
+  // history. Only sanitized, successful results live in memory for one minute.
+  youtubeSearchCache.delete(key);
+  youtubeSearchCache.set(key, cached);
+  return cloneYouTubeSearchResult(cached.result);
+}
+
+function cacheYouTubeSearch(key, result) {
+  if (!result.results.length) return;
+  youtubeSearchCache.delete(key);
+  youtubeSearchCache.set(key, {
+    result: cloneYouTubeSearchResult(result), expiresAt: Date.now() + YOUTUBE_SEARCH_CACHE_TTL_MS,
+  });
+  while (youtubeSearchCache.size > YOUTUBE_SEARCH_CACHE_MAX) {
+    youtubeSearchCache.delete(youtubeSearchCache.keys().next().value);
+  }
+}
 // 「找更多」往下翻的總筆數上限（只作用在一般 ytsearch 退路；YT Music 歌曲區塊本來就短）。
 const YOUTUBE_SEARCH_FETCH_MAX = 50;
 // 合輯／串燒／超長 mix：真的單曲幾乎不會這麼長，也不該擠在前排。標記後在 sanitize 裡
@@ -740,11 +773,12 @@ class AudioProcessor {
   static _preferredPotProviderForTest() { return { ...PREFERRED_POT_PROVIDER }; }
   static _normalizeYouTubeSearchQueryForTest(value) { return normalizeYouTubeSearchQuery(value); }
   static _sanitizeYouTubeSearchPayloadForTest(payload, limit) { return sanitizeYouTubeSearchPayload(payload, limit); }
+  static _clearYouTubeSearchCacheForTest() { youtubeSearchCache.clear(); }
   // 一般 ytsearch 的 yt-dlp 參數（metadata-only）。YT Music 偏好排序另走
   // _runYouTubeMusicSearchIds（music.youtube.com/search URL）。
   static _youtubeSearchArgs(normalizedQuery, normalizedLimit) {
     return [
-      ...ytdlpCaps.commonArgs(), '--flat-playlist', '--dump-single-json',
+      '--no-config', '--flat-playlist', '--dump-single-json',
       '--skip-download', '--no-warnings', '--playlist-end', String(normalizedLimit),
       `ytsearch${normalizedLimit}:${normalizedQuery}`,
     ];
@@ -1109,7 +1143,11 @@ class AudioProcessor {
     const controller = registerRequestController(requestId);
     const signal = controller?.signal || options.signal;
     try {
-      return await runQueued(async () => {
+      throwIfCancelled(signal);
+      const cacheKey = JSON.stringify([normalizedQuery, pageSize, offset]);
+      const cached = cachedYouTubeSearch(cacheKey);
+      if (cached) return cached;
+      const result = await runQueued(async () => {
         if (offset > 0) {
           let generalEntries = [];
           try {
@@ -1125,39 +1163,58 @@ class AudioProcessor {
             hasMore: generalEntries.length >= fetchCount && fetchCount < YOUTUBE_SEARCH_FETCH_MAX,
           };
         }
-        // 第一頁：YT Music 偏好排序（取 id → 補 metadata）與一般 ytsearch 退路是各自獨立
-        // 的 yt-dlp 呼叫，並行跑——兩者都是 --skip-download 的 metadata-only 輕量呼叫，
-        // 併發兩支不踩鐵則 12（那是講會動媒體的下載工作）。感知時間從「三支相加」降到
-        // 「max(music+enrich, ytsearch)」。enrich 只補前 4 筆（卡片首屏就這麼多），
-        // --dump-json 逐筆做完整抽取是最慢的一段，少幾筆差很多。
-        const [musicEntries, generalOutcome] = await Promise.all([
-          (async () => {
+        // 第一頁並行查一般 YouTube 與 music.youtube.com/search。Music 還要逐首
+        // 抽取完整 metadata，不能讓這個偏好排序拖住已經能顯示的一般結果。
+        // 有可用的一般結果後最多再等半秒；Music 及時完成就保留官方音源優先，
+        // 否則取消這條補充工作。一般搜尋失敗／沒有結果時仍完整等待 Music 退路。
+        const musicController = new AbortController();
+        const cancelMusic = () => musicController.abort();
+        signal?.addEventListener('abort', cancelMusic, { once: true });
+        if (signal?.aborted) cancelMusic();
+        let graceTimer;
+        try {
+          const musicPromise = (async () => {
             try {
-              const musicIds = await this._runYouTubeMusicSearchIds(normalizedQuery, pageSize, signal);
+              const musicIds = await this._runYouTubeMusicSearchIds(normalizedQuery, pageSize, musicController.signal);
               if (!musicIds.length) return [];
-              return await this._enrichYouTubeIds(musicIds.slice(0, Math.min(pageSize, 4)), signal);
-            } catch (error) {
-              if (signal?.aborted) throw new ImportCancelledError();
-              return []; // YT Music 這條失敗不擋主流程，退回純 ytsearch。
+              return await this._enrichYouTubeIds(musicIds.slice(0, Math.min(pageSize, 4)), musicController.signal);
+            } catch (_) {
+              return []; // 補充逾時／失敗不擋一般結果；使用者取消由下方統一處理。
             }
-          })(),
-          (async () => {
+          })();
+          const generalOutcome = await (async () => {
             try {
               return { entries: await this._runYoutubeSearch(normalizedQuery, pageSize, signal) };
             } catch (error) {
-              if (signal?.aborted) throw new ImportCancelledError();
               return { error };
             }
-          })(),
-        ]);
-        if (generalOutcome.error && !musicEntries.length) throw generalOutcome.error; // 兩條都拿不到才報錯
-        const generalEntries = generalOutcome.entries || [];
-        // YT Music 官方音檔在前；sanitize 會依 videoId 去重、把合輯沉底、截到 pageSize。
-        return {
-          results: sanitizeYouTubeSearchPayload({ entries: musicEntries.concat(generalEntries) }, pageSize),
-          hasMore: generalEntries.length >= pageSize,
-        };
+          })();
+          throwIfCancelled(signal);
+          const generalEntries = generalOutcome.entries || [];
+          const hasUsableGeneral = sanitizeYouTubeSearchPayload({ entries: generalEntries }, pageSize).length > 0;
+          const musicEntries = hasUsableGeneral
+            ? await Promise.race([
+              musicPromise,
+              new Promise(resolve => {
+                graceTimer = setTimeout(() => { cancelMusic(); resolve([]); }, YOUTUBE_MUSIC_SEARCH_GRACE_MS);
+              }),
+            ])
+            : await musicPromise;
+          throwIfCancelled(signal);
+          if (generalOutcome.error && !musicEntries.length) throw generalOutcome.error;
+          return {
+            results: sanitizeYouTubeSearchPayload({ entries: musicEntries.concat(generalEntries) }, pageSize),
+            hasMore: generalEntries.length >= pageSize,
+          };
+        } finally {
+          clearTimeout(graceTimer);
+          signal?.removeEventListener('abort', cancelMusic);
+          cancelMusic();
+        }
       }, 'batch', signal);
+      throwIfCancelled(signal);
+      cacheYouTubeSearch(cacheKey, result);
+      return result;
     } finally {
       clearRequestController(requestId, controller);
     }
@@ -1168,10 +1225,9 @@ class AudioProcessor {
   // 「青花瓷／晴天」塞進「周杰倫 稻香」的前排）。
   static async _runYouTubeMusicSearchIds(normalizedQuery, limit, signal) {
     throwIfCancelled(signal);
-    await ytdlpCaps.ensure();
     const url = `https://music.youtube.com/search?q=${encodeURIComponent(normalizedQuery)}#songs`;
     const args = [
-      ...ytdlpCaps.commonArgs(), '--flat-playlist', '--dump-single-json',
+      '--no-config', '--flat-playlist', '--dump-single-json',
       '--skip-download', '--no-warnings', '--playlist-end', String(limit), url,
     ];
     let stdout = '';
@@ -1236,7 +1292,9 @@ class AudioProcessor {
   // 單次一般 ytsearch：只回原始 entries 陣列（含卡片需要的 metadata）。
   static async _runYoutubeSearch(normalizedQuery, limit, signal) {
     throwIfCancelled(signal);
-    await ytdlpCaps.ensure();
+    // Flat search never extracts a video's player or audio formats. Avoid a
+    // separate --help process and JS-runtime negotiation before this request;
+    // full inspection/download/enrichment still perform capability detection.
     const args = this._youtubeSearchArgs(normalizedQuery, limit);
     let stdout = '';
     try {

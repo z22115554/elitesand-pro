@@ -652,6 +652,10 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
     const results = processed.map(result => result.track).filter(Boolean);
     const warnings = processed.flatMap(result => result.warnings);
 
+    // Library-only and BGM uploads never enter the main playlist or playback.
+    // Remember completed imports here so every upload entry point can use them.
+    results.forEach(track => libraryStore.rememberImport(track));
+
     const duration = Date.now() - start;
     log.info(`上傳處理完成: ${results.length} 首歌曲 (${duration}ms)`);
     log.perf('upload', duration, { trackCount: results.length });
