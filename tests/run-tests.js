@@ -3727,6 +3727,8 @@ testAsync('Twitch 全域點歌冷卻會擋一般觀眾，但不擋已設定豁�
 });
 
 testAsync('Twitch 自助指令只查詢目前狀態，不會觸發匯入或暴露本機網址', async () => {
+  // CI 註冊同步測試可能超過一分鐘；等註冊結束才建立有期限的點歌 fixture。
+  await new Promise((resolve) => setImmediate(resolve));
   const accepted = [];
   const replies = [];
   const now = Date.now();
@@ -3810,6 +3812,8 @@ testAsync('Twitch 各指令有獨立的每人與全域冷卻', async () => {
 });
 
 testAsync('Twitch 取消點歌只移除本人最新待確認項目，忠誠點數須退款成功才移除', async () => {
+  // 保留真實的到期判斷，避免 fixture 在同步測試註冊期間就已過期。
+  await new Promise((resolve) => setImmediate(resolve));
   const canceled = [];
   const replies = [];
   const now = Date.now();
