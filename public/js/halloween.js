@@ -22,16 +22,17 @@
     HalloweenArt.load([
       'cauldron', ...INGREDIENTS.map((key) => `potion-${key}`),
       ...TREAT_STYLES.map((style) => `tag-${style}`),
+      ...TREAT_STYLES.map((style) => `material-${style}`),
       'bat', 'ghost-prank', 'pop-candy', 'pop-ghost',
     ]);
   }
   const DEMO_DONATIONS = [
-    { id: 'demo-water', name: '路過的魔女', amount: 30, style: 'water' },
-    { id: 'demo-candy', name: '要糖不搗蛋', amount: 50, style: 'candy', ingredient: 'candy' },
-    { id: 'demo-ghost', name: '飄飄', amount: 100, style: 'ghost', ingredient: 'ghost' },
-    { id: 'demo-bat', name: '夜行蝙蝠', amount: 300, style: 'bat', ingredient: 'bat' },
-    { id: 'demo-pumpkin', name: '南瓜頭', amount: 500, style: 'pumpkin', ingredient: 'pumpkin' },
-    { id: 'demo-witch', name: '黑貓魔女', amount: 1000, style: 'witch', ingredient: 'witch' },
+    { id: 'demo-water', name: '路過的魔女', amount: 30, style: 'candy' },
+    { id: 'demo-candy', name: '要糖不搗蛋', amount: 50, style: 'candy', ingredient: 'witch' },
+    { id: 'demo-ghost', name: '飄飄', amount: 100, style: 'ghost', ingredient: 'candy' },
+    { id: 'demo-bat', name: '夜行蝙蝠', amount: 300, style: 'bat', ingredient: 'pumpkin' },
+    { id: 'demo-pumpkin', name: '南瓜頭', amount: 500, style: 'pumpkin', ingredient: 'ghost' },
+    { id: 'demo-witch', name: '黑貓魔女', amount: 1000, style: 'witch', ingredient: 'bat' },
   ];
 
   const params = new URLSearchParams(location.search);
@@ -462,6 +463,16 @@
     const amount = div('treat-amount');
     amount.textContent = money(donation.amount);
     body.append(name, amount);
+    const ingredient = INGREDIENTS.includes(donation.ingredient) ? donation.ingredient : 'water';
+    const badge = div('treat-ingredient');
+    badge.dataset.ingredient = ingredient;
+    badge.title = t('halloween.ingredientBadge', { ingredient: styleLabel(ingredient) });
+    badge.setAttribute('aria-label', badge.title);
+    const icon = div('treat-ingredient-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = { water: '💧', candy: '🍬', ghost: '👻', bat: '🦇', pumpkin: '🎃', witch: '🐈‍⬛' }[ingredient];
+    badge.append(icon);
+    body.append(badge);
     node.append(div('treat-cord'), div('treat-top'), body, div('treat-bottom'));
     return node;
   }
@@ -746,6 +757,7 @@
     prefix: 'halloween',
     parts: ['cauldron', 'pumpkin', 'treats', 'fx'],
     styles: TREAT_STYLES,
+    styleLabel: (style) => t(`halloween.tagStyle.${style}`),
     fallbackStyle: 'water',
     demoDonations: DEMO_DONATIONS,
     ids: {

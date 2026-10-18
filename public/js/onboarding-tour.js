@@ -11,6 +11,7 @@
   const ADVANCED_LYRICS_STORAGE_KEY = 'elite-advanced-lyrics-tour-v1';
   const ADVANCED_OBS_STORAGE_KEY = 'elite-advanced-obs-tour-v1';
   const ADVANCED_LIVE_STORAGE_KEY = 'elite-advanced-live-tour-v1';
+  const HALLOWEEN_STORAGE_KEY = 'elite-halloween-tour-2026-v1';
   const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1'];
   const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2';
   const TOUR_VERSION = 6; // 6：2026-10 面板改版，主線改走新版面（升級者會再看到一次歡迎）
@@ -275,6 +276,17 @@
     },
   ];
 
+  const HALLOWEEN_STEPS = [
+    ['mode', '.view[data-view="halloween"] [role="radiogroup"]'],
+    ['potions', '#halloween-potions-form .potion-row'],
+    ['tags', '#halloween-config-form .seasonal-tier-grid'],
+    ['donation', '#halloween-add-form'],
+    ['brew', '#halloween-cauldron-actions'],
+    ['obs', '.view[data-view="halloween"] .seasonal-preview-frame'],
+  ].map(([id, target]) => ({
+    id: `halloween-${id}`, view: 'halloween', target,
+    title: `halloween.tour.${id}.title`, body: `halloween.tour.${id}.body`, hint: 'halloween.tour.hint',
+  }));
   const ADVANCED_STEPS = [...ADVANCED_LYRICS_STEPS, ...ADVANCED_OBS_STEPS, ...ADVANCED_LIVE_STEPS];
 
   const dom = {};
@@ -282,6 +294,7 @@
   let advancedLyricsState = loadAdvancedLyricsState();
   let advancedObsState = loadAdvancedObsState();
   let advancedLiveState = loadAdvancedLiveState();
+  let halloweenState = loadStoredState(HALLOWEEN_STORAGE_KEY, 1, HALLOWEEN_STEPS);
   let state = basicState;
   let tourKind = 'basic';
   let activeTarget = null;
@@ -353,6 +366,7 @@
     lyrics: { steps: ADVANCED_LYRICS_STEPS, storageKey: ADVANCED_LYRICS_STORAGE_KEY },
     obs: { steps: ADVANCED_OBS_STEPS, storageKey: ADVANCED_OBS_STORAGE_KEY },
     live: { steps: ADVANCED_LIVE_STEPS, storageKey: ADVANCED_LIVE_STORAGE_KEY },
+    halloween: { steps: HALLOWEEN_STEPS, storageKey: HALLOWEEN_STORAGE_KEY, version: 1 },
   };
 
   function saveState() {
@@ -360,6 +374,7 @@
     if (tourKind === 'lyrics') advancedLyricsState = state;
     else if (tourKind === 'obs') advancedObsState = state;
     else if (tourKind === 'live') advancedLiveState = state;
+    else if (tourKind === 'halloween') halloweenState = state;
     else basicState = state;
     const key = ADVANCED_KINDS[tourKind]?.storageKey || STORAGE_KEY;
     try { root.localStorage.setItem(key, JSON.stringify(state)); } catch (_) { /* device-local best effort */ }
@@ -369,7 +384,7 @@
     tourKind = ADVANCED_KINDS[kind] ? kind : 'basic';
     state = tourKind === 'lyrics' ? advancedLyricsState
       : tourKind === 'obs' ? advancedObsState
-        : tourKind === 'live' ? advancedLiveState : basicState;
+        : tourKind === 'live' ? advancedLiveState : tourKind === 'halloween' ? halloweenState : basicState;
   }
 
   function currentSteps() {
@@ -430,6 +445,9 @@
     dom.viewportSkip?.addEventListener('click', next);
     dom.action?.addEventListener('click', runStepAction);
     dom.completeUse?.addEventListener('click', closeCompletion);
+    const halloweenStart = document.getElementById('halloween-start-tour');
+    halloweenStart?.addEventListener('click', () => start({ kind: 'halloween', force: true }));
+    if (halloweenStart) halloweenStart.disabled = false;
     dom.completeAdvanced?.addEventListener('click', () => {
       dom.complete.hidden = true;
       if (tourKind === 'lyrics') {
@@ -450,6 +468,7 @@
     root.addEventListener('i18n:change', refreshTranslation);
     document.addEventListener('view:change', () => {
       if (active) root.setTimeout(() => renderStep({ skipNavigation: true }), 0);
+      else root.setTimeout(maybeStartHalloween, 0);
     });
 
     const playlist = document.getElementById('playlist');
@@ -465,6 +484,7 @@
         attributeFilter: ['hidden', 'class', 'aria-hidden'],
       });
     }
+    maybeStartHalloween();
   }
 
   // Finishing or postponing the old blocking guide (elite-guide-*) must NOT
@@ -534,7 +554,7 @@
     const force = !!options.force;
     const resume = !!options.resume;
     if (force || !resume || state.status === 'completed' || state.status === 'postponed') {
-      state = { ...defaultState(tourKind === 'basic' ? TOUR_VERSION : ADVANCED_TOUR_VERSION), status: 'in_progress' };
+      state = { ...defaultState(tourKind === 'basic' ? TOUR_VERSION : (ADVANCED_KINDS[tourKind]?.version || ADVANCED_TOUR_VERSION)), status: 'in_progress' };
     } else {
       state.status = 'in_progress';
       state.currentStep = clampStep(state.currentStep);
@@ -558,6 +578,14 @@
   function startAdvanced(options = {}) {
     const kind = ADVANCED_KINDS[options.kind] ? options.kind : 'lyrics';
     return start({ ...options, kind });
+  }
+
+  function maybeStartHalloween() {
+    if (!initialized || active || halloweenState.status !== 'not_started') return;
+    if (!document.querySelector('.view.is-active[data-view="halloween"]')) return;
+    if (root.EulaGate?.cleared === false || !dom.welcome.hidden || !dom.complete.hidden || findBlockingModal()) return;
+    if (root.AudioComponentSetup?.startupSettled === false) return;
+    start({ kind: 'halloween' });
   }
 
   function clampStep(value, steps = currentSteps()) {
@@ -881,15 +909,17 @@
     const prefix = tourKind === 'lyrics'
       ? 'tour.advanced.lyricsComplete'
       : tourKind === 'obs' ? 'tour.advanced.obsComplete'
-        : tourKind === 'live' ? 'tour.advanced.liveComplete' : 'tour.complete';
+        : tourKind === 'live' ? 'tour.advanced.liveComplete'
+          : tourKind === 'halloween' ? 'halloween.tour.complete' : 'tour.complete';
     dom.completeKicker.textContent = t(`${prefix}.kicker`);
     dom.completeTitle.textContent = t(`${prefix}.title`);
     dom.completeBody.textContent = t(`${prefix}.body`);
     dom.completeUse.textContent = t('tour.complete.use');
     dom.completeHelp.textContent = t('tour.complete.fullGuide');
+    dom.completeHelp.hidden = tourKind === 'halloween';
     // Only the lyrics chapter chains into another chapter (OBS); OBS and Live
     // are both terminal, so they have no "next chapter" button to show.
-    dom.completeAdvanced.hidden = tourKind === 'obs' || tourKind === 'live';
+    dom.completeAdvanced.hidden = tourKind === 'obs' || tourKind === 'live' || tourKind === 'halloween';
     dom.completeAdvanced.textContent = t(tourKind === 'lyrics' ? 'tour.advanced.complete.nextObs' : 'tour.complete.advanced');
   }
 
@@ -1320,6 +1350,7 @@
   }
 
   function handleBlockingModalChange() {
+    maybeStartHalloween();
     if (!active) return;
     const blocker = findBlockingModal();
     if (blocker && !suspendedByModal) {
@@ -1408,7 +1439,7 @@
     selectTour(kind);
     debugBypassRequirements = options.bypassRequirements !== false;
     state = {
-      ...defaultState(kind === 'basic' ? TOUR_VERSION : ADVANCED_TOUR_VERSION),
+      ...defaultState(kind === 'basic' ? TOUR_VERSION : (ADVANCED_KINDS[kind]?.version || ADVANCED_TOUR_VERSION)),
       status: 'in_progress',
       currentStep: clampStep(step),
       path: options.sample === false ? null : 'sample',
@@ -1458,6 +1489,7 @@
       ADVANCED_OBS_STEPS: ADVANCED_OBS_STEPS.map((step) => ({ ...step })),
       ADVANCED_LIVE_STEPS: ADVANCED_LIVE_STEPS.map((step) => ({ ...step })),
       ADVANCED_STEPS: ADVANCED_STEPS.map((step) => ({ ...step })),
+      HALLOWEEN_STEPS: HALLOWEEN_STEPS.map((step) => ({ ...step })),
       clamp,
       clampStep,
       isViewportSafe,

@@ -309,7 +309,30 @@ html.art-cauldron .cauldron-svg { visibility: hidden; }
   font-variant-numeric: tabular-nums;
 }
 
-/* 清水：沒選材料的斗內，淡紫水滴。 */
+/* 材料徽章與金額名牌各自顯示；圖檔未載入時使用 emoji 保底。 */
+.treat-ingredient {
+  position: absolute;
+  z-index: 2;
+  right: -10px;
+  bottom: 8px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #d4bcf3;
+  background: #20152b;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+.treat-ingredient-icon { width: 24px; height: 24px; font-size: 19px; line-height: 24px; text-align: center; background: center / contain no-repeat; }
+html.art-material-water .treat-ingredient[data-ingredient="water"] .treat-ingredient-icon { font-size: 0; background-image: var(--art-material-water); }
+html.art-material-candy .treat-ingredient[data-ingredient="candy"] .treat-ingredient-icon { font-size: 0; background-image: var(--art-material-candy); }
+html.art-material-ghost .treat-ingredient[data-ingredient="ghost"] .treat-ingredient-icon { font-size: 0; background-image: var(--art-material-ghost); }
+html.art-material-bat .treat-ingredient[data-ingredient="bat"] .treat-ingredient-icon { font-size: 0; background-image: var(--art-material-bat); }
+html.art-material-pumpkin .treat-ingredient[data-ingredient="pumpkin"] .treat-ingredient-icon { font-size: 0; background-image: var(--art-material-pumpkin); }
+html.art-material-witch .treat-ingredient[data-ingredient="witch"] .treat-ingredient-icon { font-size: 0; background-image: var(--art-material-witch); }
+
+/* 清水：保留舊版水滴名牌的相容外觀。 */
 .treat--water .treat-body {
   min-height: 92px;
   border-radius: 50% 50% 46% 46% / 30% 30% 70% 70%;

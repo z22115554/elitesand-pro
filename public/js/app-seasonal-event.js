@@ -109,6 +109,13 @@
           style.title = d.styleAuto ? t(`${prefix}.styleAuto`) : t(`${prefix}.styleManual`);
         }
         const time = document.createElement('span');
+        if (choices) {
+          const tag = document.createElement('span');
+          tag.className = 'seasonal-style-chip';
+          tag.dataset.style = d.style;
+          tag.textContent = t(`${prefix}.tagStyle.${d.style}`);
+          meta.append(tag);
+        }
         time.className = 'sub';
         time.textContent = new Date(d.at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
         const remove = document.createElement('button');
@@ -126,7 +133,7 @@
     function choiceSelect(d) {
       const select = document.createElement('select');
       select.className = 'input seasonal-style-chip seasonal-choice-select';
-      select.dataset.style = d.style;
+      select.dataset.style = d.ingredient || choices.plain;
       select.setAttribute('aria-label', t(`${prefix}.styleAria`));
       for (const value of ['', ...choices.values]) {
         const option = document.createElement('option');

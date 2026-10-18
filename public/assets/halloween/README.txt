@@ -24,6 +24,12 @@ OBS 魔女大鍋疊加層（/halloween）
   tag-bat         323×340   蝙蝠翅膀名牌。同上。
   tag-pumpkin     324×340   南瓜泥名牌。同上。
   tag-witch       272×340   黑貓的毛名牌。同上。
+  material-candy  128×128   糖漿材料徽章：粉色糖漿瓶，透明底；獨立於金額名牌樣式。
+  material-ghost  128×128   幽靈之魂材料徽章：乳白幽靈。
+  material-bat    128×128   蝙蝠翅膀材料徽章：紫色單翼。
+  material-pumpkin 128×128  南瓜泥材料徽章：橘色南瓜。
+  material-witch  128×128   黑貓的毛材料徽章：深色貓掌、綠色肉球。
+  material-water  128×128   清水材料徽章：淡紫色水滴。
   bat             256×128   達標慶祝時從鍋子後面飛出的小蝙蝠，翅膀張開。
   ghost-prank     700×800   頻道點數「搗蛋」時衝過畫面的大幽靈。
   pop-candy       128×128   聊天 !treat 彈出的糖果小圖示。

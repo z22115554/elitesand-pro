@@ -38,7 +38,7 @@ test('Halloween runs through all of 2026-11-07 and closes at 11-08 00:00 Taiwan 
   assert.equal(out.endsAt, new Date(EVENT_END).toISOString());
 });
 
-test('tag style follows the cauldron ingredient (plain water when none), ingredients can be fixed later, sizes clamp, own file', () => {
+test('tag style follows amount independently of ingredients, ingredients can be fixed later, sizes clamp, own file', () => {
   const out = runIsolated(`
     const fs = require('fs');
     const path = require('path');
@@ -68,14 +68,15 @@ test('tag style follows the cauldron ingredient (plain water when none), ingredi
   assert.equal(out.defaults.treatScale, 1);
   assert.equal(out.defaults.pumpkinScale, 1);
   assert.equal('lanternScale' in out.defaults, false, '萬聖節不可帶中秋的大小欄位');
-  assert.deepEqual(out.picked, ['candy', 'ghost', 'bat', 'pumpkin', 'witch'], '名牌樣式＝材料');
-  assert.equal(out.plain.style, 'water', '沒選材料＝清水名牌，不再依金額分檔');
+  assert.deepEqual(out.picked, ['candy', 'candy', 'candy', 'candy', 'candy'], '相同金額的名牌不隨材料改變');
+  assert.equal(out.plain.style, 'witch', '沒選材料仍依金額顯示名牌');
+  assert.equal(out.plain.styleAuto, true);
   assert.equal('ingredient' in out.plain, false);
-  assert.equal(out.bogus.style, 'water', '中秋或亂打的材料名稱不可混進來');
-  assert.equal(out.styleIgnored, 'water', '萬聖節的名牌樣式只能由材料決定');
+  assert.equal(out.bogus.style, 'candy', '無效材料不影響金額分級');
+  assert.equal(out.styleIgnored, 'candy', '名牌以金額門檻為準');
   assert.equal(out.fixed.ingredient, 'bat');
-  assert.equal(out.fixed.style, 'bat');
-  assert.equal(out.cleared.style, 'water', '改成無效材料＝回到清水');
+  assert.equal(out.fixed.style, 'witch');
+  assert.equal(out.cleared.style, 'witch', '改材料不改名牌等級');
   assert.equal(out.missing, false);
   assert.equal(out.bigScale, 2.5);
   assert.equal(out.smallScale, 0.6);
@@ -85,6 +86,50 @@ test('tag style follows the cauldron ingredient (plain water when none), ingredi
   assert.equal(out.file.donations.length, 8);
   assert.equal(out.file.donations.some((d) => 'style' in d), false, '存檔只記材料，不記樣式');
   assert.equal(out.moonFileExists, false, '萬聖節存檔不可寫進中秋的檔案');
+});
+
+test('amount boundaries and threshold edits update tags without changing ingredients or totals, and survive reload', () => {
+  const out = runIsolated(`
+    let h = require('./server/services/halloween-event');
+    const amounts = [1, 99, 100, 299, 300, 499, 500, 999, 1000];
+    amounts.forEach((amount) => h.addDonation({name: 'x', amount, ingredient: 'pumpkin'}));
+    const before = h.snapshot();
+    h.setConfig({ tiers: { witch: 50, candy: 2000 } });
+    const after = h.snapshot();
+    h.saveNow();
+    delete require.cache[require.resolve('./server/services/halloween-event')];
+    h = require('./server/services/halloween-event');
+    process.stdout.write('__RESULT__' + JSON.stringify({before, after, reloaded: h.snapshot()}));
+  `, EVENT_END - 86400000);
+  assert.deepEqual(out.before.donations.map((d) => d.style), ['candy','candy','ghost','ghost','bat','bat','pumpkin','pumpkin','witch']);
+  assert.equal(out.after.donations[0].style, 'witch', '所有門檻都沒達到時，使用最低金額的名牌，不使用清水');
+  assert.equal(out.after.donations[1].style, 'witch');
+  assert.equal(out.after.total, out.before.total);
+  assert.ok(out.after.donations.every((d) => d.ingredient === 'pumpkin'));
+  assert.deepEqual(out.reloaded.tiers, out.after.tiers);
+  assert.deepEqual(out.reloaded.donations, out.after.donations);
+});
+
+test('legacy cauldron all-one tiers migrate once, while custom and new all-one tiers are retained', () => {
+  for (const scenario of ['legacy', 'custom', 'new']) {
+    const out = runIsolated(`
+      const fs = require('fs'), path = require('path');
+      const tiers = {water:1,candy:1,ghost:1,bat:1,pumpkin:1,witch:1};
+      if ('${scenario}' === 'custom') tiers.witch = 2500;
+      const config = {title:'原活動',goal:8000,base:25,tiers};
+      if ('${scenario}' === 'new') config.tagTiersVersion = 1;
+      fs.writeFileSync(path.join(process.env.ELITESAND_DATA_DIR, 'halloween-event.json'), JSON.stringify({schemaVersion:1,config, donations:[{id:'aaaaaaaa', name:'原贊助者', amount:1000, ingredient:'ghost', at:1}]}));
+      const h = require('./server/services/halloween-event');
+      process.stdout.write('__RESULT__' + JSON.stringify(h.snapshot()));
+    `, EVENT_END - 86400000);
+    assert.equal(out.title, '原活動');
+    assert.equal(out.base, 25);
+    assert.equal(out.donations.length, 1);
+    assert.equal(out.donations[0].ingredient, 'ghost');
+    assert.equal(out.tagTiersVersion, 1);
+    assert.equal(out.tiers.witch, scenario === 'legacy' ? 1000 : scenario === 'custom' ? 2500 : 1);
+    assert.equal(out.tiers.ghost, scenario === 'legacy' ? 100 : 1);
+  }
 });
 
 test('socket events use the halloween: prefix while active and refuse every write after the cutoff', () => {
@@ -147,7 +192,9 @@ test('the panel tab has every element the controller needs and every string it s
     assert.ok(html.includes(`id="halloween-${id}"`), `index.html 缺少 #halloween-${id}`);
   }
   const view = html.slice(html.indexOf('data-view="halloween"'), html.indexOf('</div>', html.indexOf('halloween-raffle-title')));
-  assert.doesNotMatch(view, /data-tier=/, '名牌跟著材料走，萬聖節不可再有依金額分檔的門檻');
+  for (const style of ['candy', 'ghost', 'bat', 'pumpkin', 'witch']) {
+    assert.ok(view.includes(`data-tier="${style}"`), `缺少 ${style} 名牌門檻`);
+  }
   for (const style of ['water', 'candy', 'ghost', 'bat', 'pumpkin', 'witch']) {
     assert.ok(i18n.includes(`'halloween.style.${style}':`), `缺少 ${style} 的翻譯`);
   }

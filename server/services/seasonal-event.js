@@ -48,10 +48,11 @@ function cleanScale(value, fallback) {
  * @param {{ title: string, doneText: string, goal: number, base: number }} options.defaults
  * @param {string[]} options.scaleKeys 可在面板調整大小的設定欄位（預設 1，範圍 0.6～2.5）
  * @param {string[]} [options.ingredients] 選用：每筆斗內可帶一種「材料」（萬聖節大鍋）。有給時名牌樣式
- *   改由材料決定（沒選材料＝options.plainStyle），不再依金額分檔。
+ *   預設由材料決定；styleByAmount 開啟時，材料與金額分級各自計算。
+ * @param {boolean} [options.styleByAmount] 材料活動的名牌仍依金額門檻判定
  * @param {string} [options.plainStyle] 沒選材料的斗內用的名牌樣式
  */
-function createSeasonalEvent({ fileName, label, logTag, endsAt, styles, defaultTiers, defaults, scaleKeys = [], ingredients = null, plainStyle = null }) {
+function createSeasonalEvent({ fileName, label, logTag, endsAt, styles, defaultTiers, defaults, scaleKeys = [], ingredients = null, plainStyle = null, styleByAmount = false }) {
   const log = createLogger(logTag);
   const FILE = path.join(DATA_DIR, fileName);
   const EVENT_END = Date.parse(endsAt);
@@ -60,6 +61,7 @@ function createSeasonalEvent({ fileName, label, logTag, endsAt, styles, defaultT
   const ACTIVE_AT_STARTUP = isActiveAt(Date.now());
 
   const STYLES = Object.freeze([...styles]);
+  const amountStyles = styleByAmount ? STYLES.filter((style) => style !== plainStyle) : STYLES;
   const DEFAULT_TIERS = Object.freeze({ ...defaultTiers });
   const DEFAULTS = Object.freeze({
     ...defaults,
@@ -97,12 +99,12 @@ function createSeasonalEvent({ fileName, label, logTag, endsAt, styles, defaultT
   // 自動模式取「門檻 ≤ 金額」裡門檻最高的那一種；都不到就用門檻最低的。
   function autoStyle(amount) {
     let picked = null;
-    for (const style of STYLES) {
+    for (const style of amountStyles) {
       const min = config.tiers[style];
       if (amount >= min && (picked === null || min >= config.tiers[picked])) picked = style;
     }
     if (picked) return picked;
-    return STYLES.reduce((low, style) => (config.tiers[style] < config.tiers[low] ? style : low));
+    return amountStyles.reduce((low, style) => (config.tiers[style] < config.tiers[low] ? style : low));
   }
 
   function cleanStyle(value) {
@@ -120,6 +122,7 @@ function createSeasonalEvent({ fileName, label, logTag, endsAt, styles, defaultT
       goal: goal ?? fallback.goal,
       base: base ?? fallback.base,
       tiers: cleanTiers(input?.tiers, fallback.tiers),
+      ...(styleByAmount ? { tagTiersVersion: 1 } : {}),
     };
     for (const key of scaleKeys) next[key] = cleanScale(input?.[key], fallback[key]);
     return next;
@@ -143,8 +146,9 @@ function createSeasonalEvent({ fileName, label, logTag, endsAt, styles, defaultT
     return INGREDIENTS && INGREDIENTS.includes(value) ? value : null;
   }
 
-  // 名牌樣式：有材料清單時跟著材料走，否則手動指定優先、其次依金額。
+  // 金額分級與材料獨立：改材料不會改掉贊助等級。
   function styleOf(d) {
+    if (styleByAmount) return { style: autoStyle(d.amount), styleAuto: true };
     if (INGREDIENTS) return { style: d.ingredient || plainStyle, styleAuto: false };
     return { style: d.style || autoStyle(d.amount), styleAuto: !d.style };
   }
@@ -152,6 +156,12 @@ function createSeasonalEvent({ fileName, label, logTag, endsAt, styles, defaultT
   (function load() {
     const loaded = diskStore.load();
     config = cleanConfig(loaded?.config, DEFAULTS);
+    // 大鍋舊版把所有門檻固定成 1；只在第一次恢復金額分級時換回預設。
+    // 已有自訂門檻保留；新版刻意設成全部 1 的設定也可正常重載。
+    if (styleByAmount && loaded?.config && loaded.config.tagTiersVersion !== 1
+      && amountStyles.every((style) => loaded.config.tiers?.[style] === 1)) {
+      config.tiers = { ...DEFAULT_TIERS };
+    }
     donations = (Array.isArray(loaded?.donations) ? loaded.donations : [])
       .map(cleanDonation).filter(Boolean).slice(-MAX_DONATIONS);
     log.info(`${label}已載入: ${donations.length} 筆斗內`);

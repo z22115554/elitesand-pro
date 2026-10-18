@@ -1776,6 +1776,7 @@
 
         <!-- ═══ 視圖：萬聖節募資活動（南瓜燈進度條＋萬聖節名牌；斗內手動輸入）═══ -->
         <div class="view content-col" data-view="halloween" hidden>
+          <div class="seasonal-list-actions"><button id="halloween-start-tour" class="btn btn-sm" type="button" data-i18n="halloween.tour.replay" disabled>重新看教學</button></div>
           <div id="halloween-end-notice" class="seasonal-end-notice" role="note"></div>
           <div class="card seasonal-theme-row">
             <div class="switch-row"><div><div class="label" data-i18n="halloween.panelTheme">面板萬聖節配色</div><div class="sub" data-i18n="halloween.panelThemeHint">活動期間面板換成南瓜橘，左上角的標誌戴上小南瓜；活動結束自動恢復。只影響這台電腦的面板，不影響 OBS 畫面。</div></div><label class="switch"><input id="halloween-season-theme" type="checkbox" checked><span class="track"></span></label></div>
@@ -1820,7 +1821,7 @@
             <ul id="halloween-cauldron-shares" class="cauldron-share-list"></ul>
             <p id="halloween-cauldron-totals" class="sub"></p>
             <p id="halloween-cauldron-brewed" class="val" hidden></p>
-            <div class="seasonal-list-actions mt-10">
+            <div id="halloween-cauldron-actions" class="seasonal-list-actions mt-10">
               <button id="halloween-cauldron-brew" class="btn btn-sm btn-primary" type="button" data-i18n="halloween.cauldron.brew">熬煮</button>
               <button id="halloween-cauldron-potion" class="btn btn-sm btn-primary" type="button" hidden data-i18n="halloween.cauldron.hidePotion">收起藥水</button>
               <button id="halloween-cauldron-reset" class="btn btn-sm btn-ghost" type="button" hidden data-i18n="halloween.cauldron.reset">重新開鍋</button>
@@ -1834,7 +1835,7 @@
                 <option value="" data-i18n="halloween.previewLive">實際畫面</option>
                 <option value="?demo=cauldron" data-i18n="halloween.previewCauldron">模擬丟材料</option>
                 <option value="?demo=brew" data-i18n="halloween.previewBrew">熬煮動畫示範</option>
-                <option value="?demo=1" data-i18n="halloween.previewTreats">六種名牌示範</option>
+                <option value="?demo=1" data-i18n="halloween.previewTreats">名牌與材料示範</option>
                 <option value="?demo=celebrate" data-i18n="halloween.previewCelebrate">大鍋滿了的慶祝示範</option>
                 <option value="?demo=fx" data-i18n="halloween.previewFx">觀眾互動示範</option>
                 <option value="?part=credits&amp;autoplay=1" data-i18n="halloween.previewCredits">謝幕名單</option>
@@ -1886,6 +1887,17 @@
                 </div>
               </div>
               <p class="field-hint" data-i18n="halloween.baseHint">起始金額＝活動開始前已經募到的錢；純斗內模式的大鍋會從這裡開始算。</p>
+              <div class="field mt-10">
+                <label data-i18n="halloween.tiersLabel">名牌門檻（NT$ 起）</label>
+                <div class="seasonal-tier-grid">
+                  <label class="seasonal-tier"><span data-i18n="halloween.tagStyle.candy">糖果</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="candy"></label>
+                  <label class="seasonal-tier"><span data-i18n="halloween.tagStyle.ghost">小幽靈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="ghost"></label>
+                  <label class="seasonal-tier"><span data-i18n="halloween.tagStyle.bat">蝙蝠</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="bat"></label>
+                  <label class="seasonal-tier"><span data-i18n="halloween.tagStyle.pumpkin">南瓜燈</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="pumpkin"></label>
+                  <label class="seasonal-tier"><span data-i18n="halloween.tagStyle.witch">魔女帽黑貓</span><input class="input" type="number" min="1" step="1" inputmode="numeric" data-tier="witch"></label>
+                </div>
+                <p class="field-hint" data-i18n="halloween.amountTagsHint">名牌依每筆斗內金額分級，旁邊的小圖示表示投入材料；改門檻會更新既有名牌，不影響材料投票。</p>
+              </div>
               <button class="btn btn-sm mt-10" type="submit" data-i18n="halloween.save">儲存設定</button>
             </form>
           </section>

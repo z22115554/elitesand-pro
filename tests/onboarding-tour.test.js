@@ -140,6 +140,9 @@ test('all advanced copy resolves in all five locales', () => {
     'tour.advanced.liveComplete.body',
     'tour.advanced.complete.nextObs',
     ...tour.ADVANCED_STEPS.flatMap((step) => [step.title, step.body, step.hint]),
+    ...tour.HALLOWEEN_STEPS.flatMap((step) => [step.title, step.body, step.hint]),
+    'halloween.tour.complete.kicker', 'halloween.tour.complete.title', 'halloween.tour.complete.body',
+    'halloween.tour.replay',
   ]);
   for (const locale of I18n.LOCALES) {
     I18n.setLocale(locale, { persist: false, updateQuery: false });

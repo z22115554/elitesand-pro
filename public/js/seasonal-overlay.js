@@ -24,7 +24,8 @@
     const demo = params.get('demo') === '1' || demoCelebrate;
 
     const t = (key, vars) => (root.I18n ? root.I18n.t(key, vars) : key);
-    const styleLabel = (style) => (styles.includes(style) ? t(`${prefix}.style.${style}`) : t(`${prefix}.style.fallback`));
+    const styleLabel = (style) => theme.styleLabel?.(style)
+      || (styles.includes(style) ? t(`${prefix}.style.${style}`) : t(`${prefix}.style.fallback`));
     const nf = new Intl.NumberFormat('zh-TW');
     const money = (amount) => `NT$${nf.format(amount)}`;
 
