@@ -72,6 +72,38 @@
       "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.0.5",
       "buttonText": "查看更新內容",
       "enabled": true
+    },
+    {
+      "id": "full-installer-v1.1.1",
+      "level": "warning",
+      "title": "聲嶼 Elitesand Pro 1.1.1 已推出",
+      "message": "本版需下載完整 Windows 安裝檔升級。請先結束直播、關閉程式並備份資料，再執行新版安裝檔；保留原有歌曲庫與設定。",
+      "minVersion": "1.0.5",
+      "maxVersion": "1.1.0",
+      "publishedAt": "2026-10-18T12:34:28.020Z",
+      "expiresAt": "2027-01-31T23:59:59+08:00",
+      "dismissible": true,
+      "showOnce": false,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.1.1",
+      "buttonText": "前往下載 1.1.1",
+      "enabled": true,
+      "actions": {}
+    },
+    {
+      "id": "release-v1.1.1",
+      "level": "notice",
+      "title": "聲嶼 Elitesand Pro 1.1.1：萬聖節一起開台",
+      "message": "中文正式名稱改為「聲嶼」。本次 UI／UX 大改，加入波形對時、萬聖節互動與專屬教學、金額名牌及材料徽章、常駐「萬聖咒字」模板與自訂快捷鍵，並改善 YouTube 搜尋及音訊元件補裝。限時活動開放至台灣時間 2026/11/07 結束，萬聖咒字長期保留。本版需下載完整安裝檔升級；請先結束直播、關閉程式並備份資料。",
+      "minVersion": "1.0.5",
+      "maxVersion": "1.1.0",
+      "publishedAt": "2026-10-18T12:34:28.020Z",
+      "expiresAt": "2027-01-31T23:59:59+08:00",
+      "dismissible": true,
+      "showOnce": true,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.1.1",
+      "buttonText": "前往下載 1.1.1",
+      "enabled": true,
+      "actions": {}
     }
   ]
 }
