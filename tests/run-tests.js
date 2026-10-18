@@ -8315,6 +8315,8 @@ test('媒體庫超過 10000 首時優先保留播放清單與 currentTrack backi
 });
 
 testAsync('AI 伴奏安裝取消：pip 子行程被中止，等行程真的結束才回報 CANCELLED（feedback #19）', async () => {
+  // 先讓同步測試註冊完成，避免取消與 timeout 計時器一起被阻塞到逾時。
+  await new Promise((resolve) => setImmediate(resolve));
   const { EventEmitter } = require('events');
   const aiRuntime = require('../server/services/ai-runtime-provider');
   const events = [];
