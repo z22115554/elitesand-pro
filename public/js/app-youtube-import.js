@@ -179,6 +179,7 @@
 
   let youtubeSearchGeneration = 0;
   let activeSearchRequestId = '';
+  let activeSearchAbortController = null;
   let loadingMoreYouTube = false;
   let lastYouTubeSearchQuery = '';
   let youtubeSearchUi = { key: '', vars: {}, results: [], hasMore: false };
@@ -203,11 +204,15 @@
     }
     if (dom.youtubeSearchMore) {
       dom.youtubeSearchMore.hidden = !(youtubeSearchUi.hasMore && youtubeSearchUi.results.length);
-      dom.youtubeSearchMore.disabled = loadingMoreYouTube;
+      dom.youtubeSearchMore.disabled = loadingMoreYouTube || !!activeSearchRequestId;
       dom.youtubeSearchMore.textContent = loadingMoreYouTube ? t('youtubeSearch.loadingMore') : t('youtubeSearch.loadMore');
     }
-    dom.youtubeSearchResults.textContent = '';
+    const visibleIds = new Set(youtubeSearchUi.results.map(result => result.videoId));
+    const existingRows = new Map([...dom.youtubeSearchResults.children].map(row => [row.dataset.videoId, row]));
+    for (const [id, row] of existingRows) if (!visibleIds.has(id)) row.remove();
     for (const result of youtubeSearchUi.results) {
+      const existing = existingRows.get(result.videoId);
+      if (existing) { updateSearchResultRow(existing, result); continue; }
       const row = document.createElement('article');
       row.className = 'youtube-search-result';
       row.dataset.videoId = result.videoId;
@@ -253,13 +258,16 @@
       choose.textContent = t('youtubeSearch.choose');
       choose.disabled = !!result.unavailable;
       choose.addEventListener('click', () => {
+        choose.dataset.queued = '1';
         choose.disabled = true;
         choose.textContent = t('youtubeSearch.queued');
+        const latest = youtubeSearchUi.results.find(row => row.videoId === result.videoId) || result;
         queueYouTubeImport(result.url, {
           sourceKey: 'source.youtubeModeSearch',
-          label: result.title,
+          label: latest.title,
           autoSeparate: !!dom.youtubeAutoSeparate?.checked,
         }).catch(() => {
+          delete choose.dataset.queued;
           choose.disabled = false;
           choose.textContent = t('youtubeSearch.choose');
         });
@@ -269,8 +277,33 @@
     }
   }
 
+  function updateSearchResultRow(row, result) {
+    const title = row.querySelector('.youtube-search-title');
+    title.textContent = result.title; title.title = result.title;
+    const meta = [result.channel || t('youtubeSearch.unknownChannel'), result.duration > 0 ? formatDuration(result.duration) : t('youtubeSearch.unknownDuration')];
+    if (Number.isFinite(result.viewCount)) meta.push(t('youtubeSearch.views', { count: formatNumber(result.viewCount) }));
+    row.querySelector('.youtube-search-meta').textContent = meta.join(' · ');
+    const image = row.querySelector('img');
+    if (image.getAttribute('src') !== result.thumbnail) {
+      if (result.thumbnail) image.src = result.thumbnail;
+      else image.removeAttribute('src');
+      image.hidden = !result.thumbnail;
+    }
+    let badge = row.querySelector('.youtube-search-badge');
+    if (result.unavailable || result.isShort || result.isCompilation) {
+      if (!badge) { badge = document.createElement('span'); row.querySelector('.youtube-search-copy').appendChild(badge); }
+      badge.className = 'youtube-search-badge' + (!result.unavailable && !result.isShort && result.isCompilation ? ' is-compilation' : '');
+      badge.textContent = t(result.liveStatus === 'is_live' ? 'youtubeSearch.live' : result.liveStatus === 'is_upcoming' ? 'youtubeSearch.upcoming' : result.isShort ? 'youtubeSearch.short' : 'youtubeSearch.compilation');
+    } else badge?.remove();
+    const choose = row.querySelector('button');
+    choose.disabled = choose.dataset.queued === '1' || !!result.unavailable;
+    choose.textContent = t(choose.dataset.queued === '1' ? 'youtubeSearch.queued' : 'youtubeSearch.choose');
+  }
+
   function cancelActiveYouTubeSearch() {
     const requestId = activeSearchRequestId;
+    activeSearchAbortController?.abort();
+    activeSearchAbortController = null;
     if (!requestId) return;
     activeSearchRequestId = '';
     PinAuth.fetchWithPin('/api/youtube/cancel', {
@@ -286,84 +319,122 @@
     return t('youtubeSearch.unavailable', { status: response?.status || 0 });
   }
 
+  async function requestYouTubeSearch(body, onResults, controller) {
+    const response = await PinAuth.fetchWithPin('/api/youtube/search', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, stream: true }),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
+    });
+    const accept = (data) => {
+      if (!response.ok || !data.success) {
+        const error = new Error(youtubeSearchErrorMessage(data, response));
+        error.code = data.code || 'YOUTUBE_SEARCH_FAILED'; throw error;
+      }
+      onResults(data);
+    };
+    if (!response.headers.get('content-type')?.includes('application/x-ndjson') || !response.body) {
+      accept({ ...(await response.json()), type: 'done' }); return;
+    }
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    let buffer = '', completed = false;
+    const line = (value) => {
+      if (!value.trim()) return;
+      const data = JSON.parse(value);
+      accept(data);
+      if (data.type === 'done') completed = true;
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+        if (buffer.length > 512 * 1024) throw new Error(t('youtubeSearch.unavailable', { status: response.status }));
+        let end;
+        while ((end = buffer.indexOf('\n')) >= 0) { line(buffer.slice(0, end)); buffer = buffer.slice(end + 1); }
+        if (done) { if (buffer.trim()) line(buffer); break; }
+      }
+      if (!completed) throw new Error(t('youtubeSearch.unavailable', { status: response.status }));
+    } finally { reader.releaseLock(); }
+  }
+
+  function applyYouTubeSearchUpdate(data, base = []) {
+    const rows = new Map(base.map(result => [result.videoId, result]));
+    for (const result of Array.isArray(data.results) ? data.results : []) {
+      if (result?.videoId && (rows.has(result.videoId) || rows.size < 50)) rows.set(result.videoId, result);
+    }
+    const results = [...rows.values()];
+    const key = data.type !== 'done' ? 'youtubeSearch.streamingResults'
+      : data.partial ? 'youtubeSearch.partialResults' : results.length ? 'youtubeSearch.resultCount' : 'youtubeSearch.empty';
+    youtubeSearchUi = {
+      key, vars: { count: formatNumber(results.length) }, results,
+      hasMore: !!data.hasMore && results.length < 50,
+      nextOffset: Number.isInteger(data.nextOffset) ? data.nextOffset : results.length,
+    };
+    renderYouTubeSearch();
+  }
+
+  function preserveYouTubeSearchFailure(error) {
+    youtubeSearchUi = youtubeSearchUi.results.length
+      ? { ...youtubeSearchUi, key: 'youtubeSearch.partialResults', vars: { count: formatNumber(youtubeSearchUi.results.length) } }
+      : { key: 'youtubeSearch.failed', vars: { message: error.message }, results: [], hasMore: false };
+    renderYouTubeSearch();
+  }
+
   async function searchYouTube() {
     const query = String(dom.youtubeSearchQuery?.value || '').replace(/\s+/g, ' ').trim();
     if (query.length < 2 || query.length > 100) {
-      youtubeSearchUi = { key: 'youtubeSearch.failed', vars: { message: t('validation.searchLength') }, results: [] };
-      renderYouTubeSearch();
-      return;
+      youtubeSearchUi = { key: 'youtubeSearch.failed', vars: { message: t('validation.searchLength') }, results: [], hasMore: false };
+      renderYouTubeSearch(); return;
     }
     cancelActiveYouTubeSearch();
     loadingMoreYouTube = false;
     const generation = ++youtubeSearchGeneration;
     const requestId = `yt-search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const controller = new AbortController();
+    activeSearchAbortController = controller;
     activeSearchRequestId = requestId;
     lastYouTubeSearchQuery = query;
-    youtubeSearchUi = { key: 'youtubeSearch.searching', vars: {}, results: [], hasMore: false };
+    youtubeSearchUi = { key: 'youtubeSearch.searching', vars: {}, results: [], hasMore: false, nextOffset: 0 };
     renderYouTubeSearch();
-    if (dom.youtubeSearchSubmit) dom.youtubeSearchSubmit.disabled = true;
+    // A new query can replace a pending search; Clear cancels it as well.
+    if (dom.youtubeSearchSubmit) dom.youtubeSearchSubmit.disabled = false;
     try {
-      const response = await PinAuth.fetchWithPin('/api/youtube/search', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit: 10, requestId }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (generation !== youtubeSearchGeneration) return;
-      if (!response.ok || !data.success) {
-        const error = new Error(youtubeSearchErrorMessage(data, response));
-        error.code = data.code || 'YOUTUBE_SEARCH_FAILED';
-        throw error;
-      }
-      const results = Array.isArray(data.results) ? data.results : [];
-      youtubeSearchUi = results.length
-        ? { key: 'youtubeSearch.resultCount', vars: { count: formatNumber(results.length) }, results, hasMore: !!data.hasMore }
-        : { key: 'youtubeSearch.empty', vars: {}, results: [], hasMore: false };
-      renderYouTubeSearch();
+      await requestYouTubeSearch({ query, limit: 10, requestId }, (data) => {
+        if (generation === youtubeSearchGeneration) applyYouTubeSearchUpdate(data);
+      }, controller);
     } catch (error) {
-      if (generation !== youtubeSearchGeneration || error?.code === 'IMPORT_CANCELLED') return;
-      youtubeSearchUi = { key: 'youtubeSearch.failed', vars: { message: error.message }, results: [], hasMore: false };
-      renderYouTubeSearch();
+      if (generation !== youtubeSearchGeneration || controller.signal.aborted || error?.code === 'IMPORT_CANCELLED') return;
+      preserveYouTubeSearchFailure(error);
     } finally {
       if (generation === youtubeSearchGeneration) {
-        activeSearchRequestId = '';
+        activeSearchRequestId = ''; activeSearchAbortController = null;
         if (dom.youtubeSearchSubmit) dom.youtubeSearchSubmit.disabled = false;
+        renderYouTubeSearch();
       }
     }
   }
 
-  // 「找更多結果」：往一般 ytsearch 更深處翻一頁，接在現有清單後面（去重）。
+  // Paging advances the general-source cursor, independently of Music extras
+  // and displayed de-duplicated row count. Partial pages can be continued too.
   async function loadMoreYouTubeSearch() {
-    if (loadingMoreYouTube || !youtubeSearchUi.hasMore || !lastYouTubeSearchQuery) return;
-    if (!youtubeSearchUi.results.length) return;
+    if (loadingMoreYouTube || activeSearchRequestId || !youtubeSearchUi.hasMore || !lastYouTubeSearchQuery || !youtubeSearchUi.results.length) return;
     loadingMoreYouTube = true;
     const generation = youtubeSearchGeneration;
-    const offset = youtubeSearchUi.results.length;
+    const base = youtubeSearchUi.results.slice();
+    const offset = youtubeSearchUi.nextOffset ?? base.length;
     const requestId = `yt-search-more-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const controller = new AbortController();
+    activeSearchAbortController = controller;
     activeSearchRequestId = requestId;
     renderYouTubeSearch();
     try {
-      const response = await PinAuth.fetchWithPin('/api/youtube/search', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: lastYouTubeSearchQuery, limit: 10, offset, requestId }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (generation !== youtubeSearchGeneration) return;
-      if (!response.ok || !data.success) return; // 找更多失敗就靜默停在目前結果
-      const more = Array.isArray(data.results) ? data.results : [];
-      const seen = new Set(youtubeSearchUi.results.map((r) => r.videoId));
-      const merged = youtubeSearchUi.results.concat(more.filter((r) => r && !seen.has(r.videoId)));
-      youtubeSearchUi = {
-        key: 'youtubeSearch.resultCount',
-        vars: { count: formatNumber(merged.length) },
-        results: merged,
-        hasMore: !!data.hasMore && merged.length > offset,
-      };
-    } catch (_) {
-      /* 靜默：保留已載入的結果 */
+      await requestYouTubeSearch({ query: lastYouTubeSearchQuery, limit: 10, more: true, offset, requestId }, (data) => {
+        if (generation === youtubeSearchGeneration) applyYouTubeSearchUpdate(data, base);
+      }, controller);
+    } catch (error) {
+      if (generation === youtubeSearchGeneration && !controller.signal.aborted) preserveYouTubeSearchFailure(error);
     } finally {
       if (generation === youtubeSearchGeneration) {
-        loadingMoreYouTube = false;
-        activeSearchRequestId = '';
+        loadingMoreYouTube = false; activeSearchRequestId = ''; activeSearchAbortController = null;
         renderYouTubeSearch();
       }
     }
@@ -799,6 +870,10 @@
     if (job.status === 'queued') { cancelQueuedJob(job); return; }
     if (job !== activeImportJob || !job.requestId) return;
     job.cancelRequested = true;
+    if (job.audioSetupController) {
+      job.audioSetupController.abort();
+      return;
+    }
     if (job.stage === '等待使用者確認') {
       updateJob(job, { status: 'cancelling', messageKey: 'import.job.skipping' });
       document.getElementById('youtube-risk-skip')?.click();
@@ -981,6 +1056,7 @@
     ytImportActive = true;
     ytImportDoneCount = 0;
     let ok = 0, fail = 0;
+    let audioSetupDeclined = false;
     while (ytImportQueue.length) {
       const job = ytImportQueue.shift();
       const requestId = `yt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -994,6 +1070,24 @@
         const allowed = await confirmRiskAssessment(assessment);
         if (!allowed) {
           const skipped = new Error(t('import.stage.skipped')); skipped.code = 'IMPORT_SKIPPED'; throw skipped;
+        }
+        if (window.AudioComponentSetup) {
+          updateJob(job, { stage: '準備音訊處理元件', messageKey: 'audioSetup.title' });
+          job.audioSetupController = new AbortController();
+          let audioReady = false;
+          try {
+            audioReady = !audioSetupDeclined && await window.AudioComponentSetup.ensureReady({
+              signal: job.audioSetupController.signal,
+            });
+          } finally {
+            job.audioSetupController = null;
+          }
+          if (!audioReady || job.cancelRequested) {
+            audioSetupDeclined = !job.cancelRequested;
+            const skipped = new Error(t('audioSetup.importSkipped'));
+            skipped.code = job.cancelRequested ? 'IMPORT_CANCELLED' : 'IMPORT_SKIPPED';
+            throw skipped;
+          }
         }
         updateJob(job, { status: 'active', stage: '準備下載', messageKey: 'import.stage.checkPassed' });
         activeRequestIds.add(requestId);

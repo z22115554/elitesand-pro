@@ -112,7 +112,7 @@ const YOUTUBE_SEARCH_CACHE_MAX = 32;
 const youtubeSearchCache = new Map();
 
 function cloneYouTubeSearchResult(result) {
-  return { results: result.results.map(entry => ({ ...entry })), hasMore: result.hasMore };
+  return { ...result, results: result.results.map(entry => ({ ...entry })) };
 }
 
 function cachedYouTubeSearch(key) {
@@ -1135,6 +1135,7 @@ class AudioProcessor {
   // 回傳 { results, hasMore }。offset > 0＝使用者按「找更多」往下翻，只深挖一般
   // ytsearch（YT Music 歌曲區塊本來就短），不再打 YT Music／enrich。
   static async searchYouTube(query, options = {}) {
+    if (typeof options.onUpdate === 'function') return this._searchYouTubeProgressive(query, options);
     const normalizedQuery = normalizeYouTubeSearchQuery(query);
     const pageSize = normalizeYouTubeSearchLimit(options.limit);
     const offset = Math.max(0, Math.min(YOUTUBE_SEARCH_FETCH_MAX - 1, Number.parseInt(options.offset, 10) || 0));
@@ -1218,6 +1219,166 @@ class AudioProcessor {
     } finally {
       clearRequestController(requestId, controller);
     }
+  }
+
+  // Streaming clients receive usable rows immediately. Unlike the legacy JSON
+  // request, a fast source never cancels a slower source after the 500ms grace.
+  static async _searchYouTubeProgressive(query, options = {}) {
+    const normalizedQuery = normalizeYouTubeSearchQuery(query);
+    const pageSize = normalizeYouTubeSearchLimit(options.limit);
+    const offset = Math.max(0, Math.min(YOUTUBE_SEARCH_FETCH_MAX - 1, Number.parseInt(options.offset, 10) || 0));
+    const fetchCount = Math.min(YOUTUBE_SEARCH_FETCH_MAX, offset + pageSize);
+    const includeMusic = offset === 0 && options.includeMusic !== false;
+    const requestId = options.requestId ? String(options.requestId) : '';
+    const controller = registerRequestController(requestId);
+    const userSignals = [controller?.signal, options.signal].filter(Boolean);
+    const userSignal = userSignals.length ? AbortSignal.any(userSignals) : null;
+    const deadline = new AbortController();
+    const signal = AbortSignal.any([deadline.signal, ...userSignals]);
+    // This also bounds time spent waiting in the shared import/search queue.
+    const timeoutMs = Math.max(1, Math.min(YTDLP_SEARCH_TIMEOUT, Number(options.timeoutMs) || YTDLP_SEARCH_TIMEOUT));
+    let timedOut = false, closed = false, cached = null;
+    const timer = setTimeout(() => { timedOut = true; deadline.abort(); }, timeoutMs);
+    const timeoutError = () => Object.assign(new Error('YouTube 搜尋逾時'), { code: 'YOUTUBE_SEARCH_TIMEOUT' });
+    try {
+      throwIfCancelled(userSignal);
+      const cacheKey = JSON.stringify([normalizedQuery, pageSize, offset, 'progressive', includeMusic]);
+      cached = cachedYouTubeSearch(cacheKey);
+      if (cached && !cached.partial) return cached;
+      if (cached) options.onUpdate(cached);
+      const result = await runQueued(async () => {
+        const rows = new Map((cached?.results || []).map(row => [row.videoId, row])), generalIds = new Map(), musicRows = new Set();
+        let generalDone = false, generalError = null, musicError = null;
+        let nextOffset = cached?.nextOffset ?? offset;
+        const snapshot = () => ({
+          results: [...rows.values()].map(row => ({ ...row })), nextOffset,
+          hasMore: nextOffset < YOUTUBE_SEARCH_FETCH_MAX && (!generalDone || !!generalError || generalIds.size >= fetchCount),
+          timedOut,
+          partial: timedOut || !!generalError || !!musicError,
+        });
+        const accept = (raw, general) => {
+          if (closed || signal.aborted) return;
+          const row = sanitizeYouTubeSearchPayload({ entries: [raw] }, 1)[0];
+          if (!row) return;
+          if (general) {
+            if (!generalIds.has(row.videoId)) generalIds.set(row.videoId, generalIds.size + 1);
+            nextOffset = Math.max(cached?.nextOffset || offset, Math.min(fetchCount, generalIds.size));
+            const rank = generalIds.get(row.videoId);
+            if (rank <= offset || rank > fetchCount) return;
+          }
+          if (!rows.has(row.videoId) && rows.size >= YOUTUBE_SEARCH_FETCH_MAX) return;
+          if (general && musicRows.has(row.videoId)) return;
+          if (!general) musicRows.add(row.videoId);
+          const previous = rows.get(row.videoId);
+          // Map insertion order is stable: late metadata updates the same row,
+          // and newly found songs append without moving an active Choose button.
+          if (previous && JSON.stringify(previous) === JSON.stringify(row)) return;
+          rows.set(row.videoId, row);
+          options.onUpdate(snapshot());
+        };
+        let onAbort;
+        const aborted = new Promise(resolve => {
+          onAbort = resolve;
+          if (signal.aborted) resolve();
+          else signal.addEventListener('abort', onAbort, { once: true });
+        });
+        const generalTask = (async () => {
+          try {
+            const entries = await this._runYoutubeSearchStream(normalizedQuery, fetchCount, signal, entry => accept(entry, true));
+            for (const entry of entries) accept(entry, true);
+          } catch (error) { generalError = error; }
+          finally { generalDone = true; }
+        })();
+        const musicTask = includeMusic ? (async () => {
+          try {
+            const ids = await this._runYouTubeMusicSearchIds(normalizedQuery, pageSize, signal);
+            throwIfCancelled(signal);
+            const entries = await this._enrichYouTubeIdsStream(ids.slice(0, Math.min(pageSize, 4)), signal, entry => accept(entry, false));
+            for (const entry of entries) accept(entry, false);
+          } catch (error) { musicError = error; }
+        })() : Promise.resolve();
+        try {
+          await Promise.race([Promise.all([generalTask, musicTask]), aborted]);
+          throwIfCancelled(userSignal);
+          const final = snapshot();
+          if (!final.results.length) {
+            if (timedOut) throw timeoutError();
+            if (generalError) throw generalError;
+          }
+          return final;
+        } finally { signal.removeEventListener('abort', onAbort); closed = true; }
+      }, 'batch', signal);
+      throwIfCancelled(userSignal);
+      // Partial cache entries seed the next display immediately, but never
+      // suppress a fresh attempt to finish their missing sources.
+      cacheYouTubeSearch(cacheKey, result);
+      return result;
+    } catch (error) {
+      if (userSignal?.aborted) throw new ImportCancelledError();
+      if (timedOut) {
+        if (cached?.results.length) return { ...cached, partial: true, timedOut: true };
+        throw timeoutError();
+      }
+      throw error;
+    } finally {
+      closed = true;
+      clearTimeout(timer);
+      deadline.abort();
+      clearRequestController(requestId, controller);
+    }
+  }
+
+  // yt-dlp --dump-json emits complete metadata records one per line. Keep UTF-8
+  // chunk boundaries intact, bound stdout, and publish each parsed record.
+  static async _readYouTubeSearchLines(args, signal, onEntry) {
+    throwIfCancelled(signal);
+    return new Promise((resolve, reject) => {
+      const entries = [], decoder = new StringDecoder('utf8');
+      let buffer = '';
+      const line = (value) => {
+        try {
+          const entry = JSON.parse(value);
+          if (entry?.id && entries.length < YOUTUBE_SEARCH_FETCH_MAX) {
+            entries.push(entry); onEntry(entry);
+          }
+        } catch (_) { /* Ignore non-JSON diagnostic lines. */ }
+      };
+      const child = execFile(YTDLP_COMMAND, args, {
+        ...YTDLP_BASE_OPTS, timeout: YTDLP_SEARCH_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER, signal,
+      }, (error) => {
+        buffer += decoder.end();
+        if (buffer.trim()) line(buffer.trim());
+        if (signal?.aborted) return reject(new ImportCancelledError());
+        if (error && !entries.length) {
+          const code = error.code === 'ENOENT' ? 'YOUTUBE_SEARCH_RUNTIME_MISSING'
+            : error.killed || error.code === 'ETIMEDOUT' ? 'YOUTUBE_SEARCH_TIMEOUT' : 'YOUTUBE_SEARCH_FAILED';
+          return reject(Object.assign(new Error(code === 'YOUTUBE_SEARCH_TIMEOUT' ? 'YouTube 搜尋逾時' : 'YouTube 搜尋服務暫時無法使用'), { code }));
+        }
+        resolve(entries);
+      });
+      child.stdout.on('data', (chunk) => {
+        buffer += typeof chunk === 'string' ? chunk : decoder.write(chunk);
+        let end;
+        while ((end = buffer.indexOf('\n')) >= 0) {
+          const value = buffer.slice(0, end).trim(); buffer = buffer.slice(end + 1);
+          if (value) line(value);
+        }
+      });
+    });
+  }
+
+  static _runYoutubeSearchStream(query, limit, signal, onEntry) {
+    const args = this._youtubeSearchArgs(query, limit).map(arg => arg === '--dump-single-json' ? '--dump-json' : arg);
+    return this._readYouTubeSearchLines(args, signal, onEntry);
+  }
+
+  static async _enrichYouTubeIdsStream(videoIds, signal, onEntry) {
+    if (!videoIds.length) return [];
+    throwIfCancelled(signal);
+    await ytdlpCaps.ensure();
+    throwIfCancelled(signal);
+    const urls = videoIds.map(id => `https://www.youtube.com/watch?v=${id}`);
+    return this._readYouTubeSearchLines([...ytdlpCaps.commonArgs(), '--dump-json', '--skip-download', '--no-warnings', ...urls], signal, onEntry);
   }
 
   // music.youtube.com/search 的「歌曲」區塊 → 依序的 videoId 陣列（只留真的單曲，且

@@ -746,14 +746,40 @@ router.post('/youtube/cancel', requirePin, (req, res) => {
 
 // ─── YouTube 關鍵字搜尋：只讀扁平 metadata，不下載音訊 ───
 router.post('/youtube/search', requirePin, async (req, res) => {
+  const streaming = req.body?.stream === true;
+  const requestId = typeof req.body?.requestId === 'string' && req.body.requestId.length > 0 && req.body.requestId.length <= 64
+    ? req.body.requestId : `yt-search-${crypto.randomUUID()}`;
+  const send = (message) => {
+    if (res.destroyed || res.writableEnded) return;
+    if (!res.headersSent) {
+      res.set({ 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+      res.flushHeaders();
+    }
+    res.write(JSON.stringify(message) + '\n');
+  };
+  const disconnected = () => {
+    if (!res.writableEnded) AudioProcessor.cancelImport(requestId);
+  };
+  if (streaming) res.on('close', disconnected);
   try {
-    const { results, hasMore } = await AudioProcessor.searchYouTube(req.body?.query, {
+    const result = await AudioProcessor.searchYouTube(req.body?.query, {
       limit: req.body?.limit,
       offset: req.body?.offset,
-      requestId: req.body?.requestId,
+      requestId,
+      includeMusic: req.body?.more !== true,
+      ...(streaming ? { onUpdate: (update) => send({ type: 'update', success: true, ...update }) } : {}),
     });
-    res.json({ success: true, results, hasMore: !!hasMore });
+    if (streaming) {
+      send({ type: 'done', success: true, ...result });
+      res.end();
+    } else res.json({ success: true, results: result.results, hasMore: !!result.hasMore });
   } catch (err) {
+    if (res.destroyed) return;
+    if (streaming && res.headersSent) {
+      send({ type: 'error', success: false, code: err.code || 'YOUTUBE_SEARCH_FAILED', error: err.message });
+      res.end();
+      return;
+    }
     if (err.code === 'YOUTUBE_SEARCH_INVALID_QUERY') {
       return res.status(400).json({ success: false, code: err.code, error: err.message });
     }
@@ -763,7 +789,7 @@ router.post('/youtube/search', requirePin, async (req, res) => {
     const status = err.code === 'YOUTUBE_SEARCH_TIMEOUT' ? 504 : 502;
     log.warn(`YouTube 搜尋失敗 (${err.code || 'YOUTUBE_SEARCH_FAILED'})`);
     res.status(status).json({ success: false, code: err.code || 'YOUTUBE_SEARCH_FAILED', error: err.message });
-  }
+  } finally { if (streaming) res.off('close', disconnected); }
 });
 
 // ─── YouTube 影片下載前檢查：只讀 metadata，不開始下載 ───

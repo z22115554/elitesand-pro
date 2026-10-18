@@ -38,8 +38,8 @@ Selected tag: 2.0.0
 
 FFmpeg (not bundled by default; downloaded on demand)
 ------------------------------------------------------
-Elitesand Pro does not bundle ffmpeg.exe/ffprobe.exe by default. The first
-time an FFmpeg-dependent feature (e.g. YouTube-to-MP3) is used, the app offers
+Elitesand Pro does not bundle ffmpeg.exe/ffprobe.exe by default. After the first-run terms are accepted, and before an FFmpeg-dependent
+import (e.g. YouTube-to-MP3), the app checks for both tools and offers
 to download a prebuilt Windows binary and verifies its SHA-256 against a
 checksum fetched from the same release before using it.
 

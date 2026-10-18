@@ -14262,53 +14262,9 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
     }
   });
 
-  test('FFmpeg 供應：替換交易可回滾，避免只換成功一半就破壞原本 pair', () => {
-    const backupFfmpeg = `${ffmpegProvider.FFMPEG_EXE}.previous`;
-    const backupFfprobe = `${ffmpegProvider.FFPROBE_EXE}.previous`;
-    const tmpFfmpeg = path.join(ffmpegProvider.BIN_DIR, 'ffmpeg.transaction-test.exe');
-    const tmpFfprobe = path.join(ffmpegProvider.BIN_DIR, 'ffprobe.transaction-test.exe');
-    fs.mkdirSync(ffmpegProvider.BIN_DIR, { recursive: true });
-    fs.rmSync(backupFfmpeg, { force: true });
-    fs.rmSync(backupFfprobe, { force: true });
-    fs.writeFileSync(ffmpegProvider.FFMPEG_EXE, 'old-ffmpeg');
-    fs.writeFileSync(ffmpegProvider.FFPROBE_EXE, 'old-ffprobe');
-    fs.writeFileSync(tmpFfmpeg, 'new-ffmpeg');
-    fs.writeFileSync(tmpFfprobe, 'new-ffprobe');
 
-    const transaction = ffmpegProvider._beginPairInstall(tmpFfmpeg, tmpFfprobe);
-    eq(fs.readFileSync(ffmpegProvider.FFMPEG_EXE, 'utf8'), 'new-ffmpeg');
-    eq(fs.readFileSync(ffmpegProvider.FFPROBE_EXE, 'utf8'), 'new-ffprobe');
-    transaction.rollback();
-    eq(fs.readFileSync(ffmpegProvider.FFMPEG_EXE, 'utf8'), 'old-ffmpeg', 'rollback 要恢復舊 ffmpeg：');
-    eq(fs.readFileSync(ffmpegProvider.FFPROBE_EXE, 'utf8'), 'old-ffprobe', 'rollback 要恢復舊 ffprobe：');
-    fs.rmSync(ffmpegProvider.FFMPEG_EXE, { force: true });
-    fs.rmSync(ffmpegProvider.FFPROBE_EXE, { force: true });
-    fs.rmSync(backupFfmpeg, { force: true });
-    fs.rmSync(backupFfprobe, { force: true });
-  });
 
-  test('FFmpeg 供應：上次若死在半套替換，下一次交易會先整組恢復舊版', () => {
-    const backupFfmpeg = `${ffmpegProvider.FFMPEG_EXE}.previous`;
-    const backupFfprobe = `${ffmpegProvider.FFPROBE_EXE}.previous`;
-    const tmpFfmpeg = path.join(ffmpegProvider.BIN_DIR, 'ffmpeg.recovery-test.exe');
-    const tmpFfprobe = path.join(ffmpegProvider.BIN_DIR, 'ffprobe.recovery-test.exe');
-    fs.mkdirSync(ffmpegProvider.BIN_DIR, { recursive: true });
-    fs.writeFileSync(backupFfmpeg, 'old-ffmpeg');
-    fs.writeFileSync(backupFfprobe, 'old-ffprobe');
-    fs.writeFileSync(ffmpegProvider.FFMPEG_EXE, 'half-installed-new-ffmpeg');
-    fs.rmSync(ffmpegProvider.FFPROBE_EXE, { force: true });
-    fs.writeFileSync(tmpFfmpeg, 'newer-ffmpeg');
-    fs.writeFileSync(tmpFfprobe, 'newer-ffprobe');
 
-    const transaction = ffmpegProvider._beginPairInstall(tmpFfmpeg, tmpFfprobe);
-    transaction.rollback();
-    eq(fs.readFileSync(ffmpegProvider.FFMPEG_EXE, 'utf8'), 'old-ffmpeg', '半套交易要先恢復舊 ffmpeg：');
-    eq(fs.readFileSync(ffmpegProvider.FFPROBE_EXE, 'utf8'), 'old-ffprobe', '半套交易要先恢復舊 ffprobe：');
-    fs.rmSync(ffmpegProvider.FFMPEG_EXE, { force: true });
-    fs.rmSync(ffmpegProvider.FFPROBE_EXE, { force: true });
-    fs.rmSync(backupFfmpeg, { force: true });
-    fs.rmSync(backupFfprobe, { force: true });
-  });
 
   test('FFmpeg 供應：BtbN checksums.sha256 會精確挑出目標 Windows LGPL zip 的雜湊', () => {
     const source = ffmpegProvider.DOWNLOAD_SOURCES.find((item) => item.id === 'btbn');

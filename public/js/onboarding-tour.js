@@ -477,6 +477,11 @@
   }
 
   function maybeShowWelcome(options = {}) {
+    const audioSetup = root.AudioComponentSetup;
+    if (audioSetup && !audioSetup.startupSettled) {
+      audioSetup.whenStartupSettled.then(() => maybeShowWelcome(options));
+      return false;
+    }
     init();
     if (active) return false;
     selectTour('basic');

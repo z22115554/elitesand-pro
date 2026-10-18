@@ -2296,3 +2296,13 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 .hotkeys-help-list dd { margin: 0; display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .hotkeys-help-list kbd { padding: 2px 8px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: var(--r-sm); background: var(--bg-raised); font: inherit; font-size: 12px; white-space: nowrap; }
 .hotkeys-help-foot { margin-top: 14px; }
+
+.audio-setup { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; overflow: auto; padding: 24px; border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: var(--bg-base); color: var(--text); box-shadow: var(--shadow-lg); }
+.audio-setup::backdrop { background: rgba(0, 0, 0, .55); }
+.audio-setup h2 { margin: 0 0 14px; font-size: 20px; }
+.audio-setup p { line-height: 1.65; }
+.audio-setup-sources { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; }
+.audio-setup-sources a { color: var(--accent); text-decoration: underline; }
+.audio-setup-error { color: var(--danger); overflow-wrap: anywhere; }
+.audio-setup progress { width: 100%; accent-color: var(--accent); }
+.audio-setup-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 24px; }

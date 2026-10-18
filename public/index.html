@@ -3692,6 +3692,21 @@
     </div>
   </div>
 
+  <dialog id="audio-setup-modal" class="audio-setup" aria-modal="true" aria-labelledby="audio-setup-title" aria-describedby="audio-setup-description">
+    <h2 id="audio-setup-title" data-i18n="audioSetup.title">準備音訊處理元件</h2>
+    <p id="audio-setup-description" data-i18n="audioSetup.description">YouTube 歌曲匯入與音訊處理需要 FFmpeg 和 ffprobe。按一次即可自動下載、安裝並驗證。</p>
+    <p class="sub" data-i18n="audioSetup.local">元件只存放在聲嶼自己的資料夾，不需要管理員權限，也不會修改系統設定。</p>
+    <p id="audio-setup-size" class="sub"></p>
+    <p class="sub" data-i18n="audioSetup.sources">下載來源（依可用性切換）：</p>
+    <div id="audio-setup-sources" class="audio-setup-sources"></div>
+    <p id="audio-setup-status" role="status" aria-live="polite"></p>
+    <progress id="audio-setup-progress" max="100" aria-label="FFmpeg" hidden></progress>
+    <div class="audio-setup-actions">
+      <button id="audio-setup-later" class="btn" type="button">稍後</button>
+      <button id="audio-setup-install" class="btn btn-primary" type="button">下載並安裝</button>
+    </div>
+  </dialog>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/shared-utils.js"></script>
   <script src="/js/i18n-auto.js"></script>
@@ -3708,6 +3723,7 @@
   <script src="/js/soundtouch-engine.js"></script>
   <script src="/js/error-handler.js"></script>
   <script src="/js/eula-gate.js"></script>
+  <script src="/js/audio-component-setup.js"></script>
   <script src="/js/app-shared.js"></script>
   <script src="/js/danger-confirm.js"></script>
   <script src="/js/modal-focus.js"></script>

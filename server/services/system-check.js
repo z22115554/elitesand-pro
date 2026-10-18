@@ -46,21 +46,26 @@ async function getSystemCheck(options = {}) {
   if (!cachedDownloadedPairStillExists) cache = null;
 
   const resolvedFfmpeg = ffmpegProvider.resolveFfmpegPaths();
-  const [ytdlp, ffmpeg] = await Promise.all([
+  const [ytdlp, ffmpeg, ffprobe] = await Promise.all([
     toolStatus(YTDLP_COMMAND, ['--version'], options),
     toolStatus(resolvedFfmpeg?.ffmpeg || 'ffmpeg', ['-version'], options),
+    toolStatus(resolvedFfmpeg?.ffprobe || 'ffprobe', ['-version'], options),
   ]);
+  const audioToolsAvailable = ffmpeg.available && ffprobe.available;
   const payload = {
     appVersion: APP_VERSION,
     updateRepo: 'z22115554/elitesand-pro',
     ytdlp,
     ytdlpCompatibility: compatibility.getStatus(),
-    ffmpeg: { ...ffmpeg, downloadable: !ffmpeg.available },
+    ffmpeg: {
+      ...ffmpeg, available: audioToolsAvailable, ffprobeAvailable: ffprobe.available,
+      downloadable: !audioToolsAvailable, download: ffmpegProvider.getDownloadInfo(),
+    },
   };
   // 只在真的重新探測時記錄（跳過快取命中），避免 60 秒內同一個結果被記很多次；
   // 布林語意本身已經冪等，這裡只是不必要地少做幾次函式呼叫。
   usageTelemetry.recordDependency('ytdlp', ytdlp.available);
-  usageTelemetry.recordDependency('ffmpeg', ffmpeg.available);
+  usageTelemetry.recordDependency('ffmpeg', audioToolsAvailable);
   cache = {
     checkedAt: nowMs,
     payload,

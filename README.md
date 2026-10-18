@@ -26,7 +26,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 ### 快速開始
 
 1. 從 [GitHub Releases](../../releases/latest) 下載 Windows Installer，關閉舊版後執行安裝。
-2. 啟動程式，依首次使用引導完成 yt-dlp、FFmpeg、網路與版本檢查。
+2. 啟動程式並同意條款後，程式會自動檢查音訊元件；若缺少 FFmpeg／ffprobe，按「下載並安裝」即可補齊。也可稍後準備，首次 YouTube 匯入時會再次引導，安裝完成後接續匯入。
 3. 貼上 YouTube 連結、播放清單或拖入本機音檔，確認歌名、歌手與歌詞來源。
 4. 選一個歌詞模板，調字體、顏色、位置、動畫與預設。
 5. 複製「歌詞網址」與「歌單網址」，分別貼進兩個 OBS Browser Source。
@@ -41,7 +41,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 #### 匯入與播放
 
 - YouTube 單曲與播放清單：自動下載音訊、辨識歌手／歌名、搜尋歌詞、抓封面。
-- 程式內 YouTube 搜尋，優先比對 YouTube Music。
+- 程式內 YouTube 搜尋：先顯示找到的歌曲，再補充較慢來源與 YouTube Music 資料；每次最多搜尋 15 秒，逾時保留已找到的結果，也可繼續找更多。
 - 本機音檔拖放匯入：MP3、FLAC、WAV、M4A、OGG。
 - 匯入前檢查時長、類型與重複項，降低誤抓非音樂內容的機率。
 - 單一下載佇列、批次工作、取消、重試與工作狀態管理。
@@ -193,7 +193,7 @@ Everything runs on your own machine; OBS loads transparent lyrics and setlist ov
 ### Quick start
 
 1. Download the Windows Installer from [GitHub Releases](../../releases/latest), close any old version, and run setup.
-2. Launch the app and complete the first-run checks for yt-dlp, FFmpeg, networking, and version status.
+2. Launch the app and accept the terms. Audio tools are checked automatically; if FFmpeg or ffprobe is missing, click “Download and install”. You can set up later; YouTube imports will prompt again and continue after setup.
 3. Paste a YouTube link or playlist, or drag in a local audio file, then confirm title, artist, and lyrics source.
 4. Pick a lyrics template and adjust fonts, colors, position, motion, and presets.
 5. Copy the **Lyrics URL** and **Setlist URL** into two separate OBS Browser Sources.
@@ -208,7 +208,7 @@ Everything runs on your own machine; OBS loads transparent lyrics and setlist ov
 #### Import & playback
 
 - YouTube single videos and playlists: audio download, artist/title detection, lyrics lookup, cover art.
-- In-app YouTube search, biased toward YouTube Music matches.
+- In-app YouTube search displays songs as they arrive and adds slower sources and YouTube Music metadata. Each search is limited to 15 seconds; partial results remain available and you can load more.
 - Local audio drag-and-drop: MP3, FLAC, WAV, M4A, OGG.
 - Pre-import checks for duration, type, and duplicates.
 - Single download queue, batch jobs, cancel, retry, and job-status management.
@@ -360,7 +360,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 ### クイックスタート
 
 1. [GitHub Releases](../../releases/latest) から Windows Installer をダウンロードし、旧版を終了してからインストールします。
-2. アプリを起動し、初回案内に従って yt-dlp・FFmpeg・ネットワーク・バージョンを確認します。
+2. アプリを起動して利用規約に同意すると、音声ツールを自動確認します。FFmpeg／ffprobe がない場合は「ダウンロードして設定」を押してください。後で準備することもでき、YouTube 取り込み時に再案内し、準備後に取り込みを続行します。
 3. YouTube リンクやプレイリストを貼り付ける、またはローカル音源をドラッグし、曲名・アーティスト・歌詞ソースを確認します。
 4. 歌詞テンプレートを選び、フォント・色・位置・動き・プリセットを調整します。
 5. 「歌詞 URL」と「セットリスト URL」を別々の OBS Browser Source に追加します。
@@ -375,7 +375,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 #### 取り込みと再生
 
 - YouTube 単曲・プレイリストの音源、曲情報、カバー、歌詞の自動取得。
-- アプリ内 YouTube 検索（YouTube Music を優先）。
+- アプリ内 YouTube 検索：見つかった曲から順に表示し、YouTube Music などの結果を追加します。検索は最大15秒で、時間切れでも取得済みの結果は保持し、追加表示できます。
 - ローカル音源のドラッグ取り込み：MP3・FLAC・WAV・M4A・OGG。
 - 取り込み前に長さ・種類・重複をチェック。
 - ダウンロードキュー、バッチ処理、キャンセル、再試行、ジョブ状態管理。
@@ -526,7 +526,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 ### 빠른 시작
 
 1. [GitHub Releases](../../releases/latest)에서 Windows Installer를 내려받고, 이전 버전을 종료한 뒤 설치합니다.
-2. 앱을 실행하고 첫 실행 안내에 따라 yt-dlp, FFmpeg, 네트워크, 버전을 확인합니다.
+2. 앱을 실행하고 약관에 동의하면 오디오 도구를 자동 확인합니다. FFmpeg／ffprobe가 없으면 “다운로드 및 설치”를 누르세요. 나중에 준비할 수도 있으며, YouTube 곡을 가져올 때 다시 안내하고 설치 후 가져오기를 계속합니다.
 3. YouTube 링크나 재생목록을 붙여넣거나 로컬 음원을 끌어다 놓고, 제목·아티스트·가사 소스를 확인합니다.
 4. 가사 템플릿을 고르고 글꼴·색상·위치·모션·프리셋을 조정합니다.
 5. **가사 URL**과 **세트리스트 URL**을 각각 별도의 OBS Browser Source에 추가합니다.
@@ -541,7 +541,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 #### 가져오기와 재생
 
 - YouTube 단일 영상·재생목록의 음원, 메타데이터, 커버, 가사 자동 가져오기.
-- 앱 내 YouTube 검색(YouTube Music 우선).
+- 앱 내 YouTube 검색: 찾은 곡부터 표시하고 YouTube Music 등 느린 출처의 결과를 추가합니다. 검색은 최대 15초이며, 시간 초과 시에도 찾은 결과를 유지하고 더 불러올 수 있습니다.
 - 로컬 음원 끌어다 놓기: MP3, FLAC, WAV, M4A, OGG.
 - 가져오기 전 길이·유형·중복 검사.
 - 다운로드 대기열, 배치 작업, 취소, 재시도, 작업 상태 관리.
@@ -692,7 +692,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 ### 快速开始
 
 1. 从 [GitHub Releases](../../releases/latest) 下载 Windows Installer，关闭旧版后运行安装。
-2. 启动程序，按首次使用引导完成 yt-dlp、FFmpeg、网络与版本检查。
+2. 启动程序并同意条款后，程序会自动检查音频组件；如果缺少 FFmpeg／ffprobe，点击“下载并安装”即可补齐。也可稍后准备，首次 YouTube 导入时会再次引导，安装完成后接续导入。
 3. 粘贴 YouTube 链接、播放列表或拖入本地音频，确认歌名、歌手与歌词来源。
 4. 选一个歌词模板，调字体、颜色、位置、动画与预设。
 5. 复制「歌词网址」与「歌单网址」，分别粘贴进两个 OBS Browser Source。
@@ -707,7 +707,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 #### 导入与播放
 
 - YouTube 单曲与播放列表：自动下载音频、识别歌手／歌名、搜索歌词、抓封面。
-- 程序内 YouTube 搜索，优先匹配 YouTube Music。
+- 程序内 YouTube 搜索：先显示找到的歌曲，再补充较慢来源与 YouTube Music 信息；每次最多搜索 15 秒，超时保留已找到的结果，也可继续加载更多。
 - 本地音频拖放导入：MP3、FLAC、WAV、M4A、OGG。
 - 导入前检查时长、类型与重复项。
 - 单一下载队列、批量作业、取消、重试与作业状态管理。

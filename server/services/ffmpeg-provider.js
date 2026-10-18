@@ -68,6 +68,17 @@ const MAX_REDIRECTS = 5;
 const DOWNLOAD_TOTAL_TIMEOUT_MS = 10 * 60 * 1000;
 const DOWNLOAD_IDLE_TIMEOUT_MS = 30 * 1000;
 
+function getDownloadInfo() {
+  return {
+    maxBytes: MAX_ZIP_BYTES,
+    sources: [
+      { label: 'BtbN / GitHub', url: 'https://github.com/BtbN/FFmpeg-Builds/releases' },
+      { label: 'Gyan / GitHub', url: 'https://github.com/GyanD/codexffmpeg/releases' },
+      { label: 'gyan.dev', url: 'https://www.gyan.dev/ffmpeg/builds/' },
+    ],
+  };
+}
+
 function isWindows() {
   return process.platform === 'win32';
 }
@@ -389,62 +400,93 @@ function getDownloadStatus() {
   return { ...downloadStatus };
 }
 
-function recoverStalePairBackups(backupFfmpeg, backupFfprobe) {
+// A just-executed Windows binary can remain locked briefly after -version
+// exits (including image scanning). Yield between bounded retries; never block
+// the server or redownload the archive for a transient file lock.
+async function retryFileOperation(operation) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await operation(); }
+    catch (error) {
+      if (!['EBUSY', 'EPERM', 'EACCES'].includes(error.code) || attempt >= 8) throw error;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(50 * (2 ** attempt), 500)));
+    }
+  }
+}
+const renameInstalledFile = (from, to) => retryFileOperation(() => fs.promises.rename(from, to));
+async function removeInstalledFile(file) {
+  try { await retryFileOperation(() => fs.promises.unlink(file)); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
+
+async function recoverStalePairBackups(backupFfmpeg, backupFfprobe) {
+  const committedMarker = path.join(BIN_DIR, '.ffmpeg-pair-committed');
+  if (fs.existsSync(committedMarker)) {
+    // Validation already committed the new pair; only garbage collection was
+    // interrupted. Never treat a partly removed backup as an uncommitted pair.
+    await removeInstalledFile(backupFfmpeg);
+    await removeInstalledFile(backupFfprobe);
+    await removeInstalledFile(committedMarker);
+    return;
+  }
   const hasFfmpegBackup = fs.existsSync(backupFfmpeg);
   const hasFfprobeBackup = fs.existsSync(backupFfprobe);
   if (!hasFfmpegBackup && !hasFfprobeBackup) return;
 
   // .previous 代表上一次替換交易沒有正常 commit。必須把「整組」恢復到交易前狀態；
   // 若某一邊沒有 backup，代表交易前本來就沒有那個檔案，因此移除可能留下的新半套檔。
-  safeRemove(FFMPEG_EXE);
-  safeRemove(FFPROBE_EXE);
-  if (hasFfmpegBackup) fs.renameSync(backupFfmpeg, FFMPEG_EXE);
-  if (hasFfprobeBackup) fs.renameSync(backupFfprobe, FFPROBE_EXE);
+  await removeInstalledFile(FFMPEG_EXE);
+  await removeInstalledFile(FFPROBE_EXE);
+  if (hasFfmpegBackup) await renameInstalledFile(backupFfmpeg, FFMPEG_EXE);
+  if (hasFfprobeBackup) await renameInstalledFile(backupFfprobe, FFPROBE_EXE);
 }
 
 /**
  * 把已驗證過的暫存 pair 換成正式檔案。舊檔先移到 .previous；呼叫端完成正式路徑
  * 的二次驗證後再 commit。若中途任何一步失敗，可 rollback 回原版本。
  */
-function beginPairInstall(tmpFfmpeg, tmpFfprobe) {
+async function beginPairInstall(tmpFfmpeg, tmpFfprobe) {
   const backupFfmpeg = `${FFMPEG_EXE}.previous`;
   const backupFfprobe = `${FFPROBE_EXE}.previous`;
-  recoverStalePairBackups(backupFfmpeg, backupFfprobe);
+  await recoverStalePairBackups(backupFfmpeg, backupFfprobe);
 
   const hadFfmpeg = fs.existsSync(FFMPEG_EXE);
   const hadFfprobe = fs.existsSync(FFPROBE_EXE);
   let installedFfmpeg = false;
   let installedFfprobe = false;
+  let committed = false;
 
-  const rollback = () => {
-    if (installedFfmpeg) safeRemove(FFMPEG_EXE);
-    if (installedFfprobe) safeRemove(FFPROBE_EXE);
+  const rollback = async () => {
+    if (committed) return;
+    if (installedFfmpeg) await removeInstalledFile(FFMPEG_EXE);
+    if (installedFfprobe) await removeInstalledFile(FFPROBE_EXE);
     if (hadFfmpeg && fs.existsSync(backupFfmpeg) && !fs.existsSync(FFMPEG_EXE)) {
-      fs.renameSync(backupFfmpeg, FFMPEG_EXE);
+      await renameInstalledFile(backupFfmpeg, FFMPEG_EXE);
     }
     if (hadFfprobe && fs.existsSync(backupFfprobe) && !fs.existsSync(FFPROBE_EXE)) {
-      fs.renameSync(backupFfprobe, FFPROBE_EXE);
+      await renameInstalledFile(backupFfprobe, FFPROBE_EXE);
     }
   };
 
   try {
-    if (hadFfmpeg) fs.renameSync(FFMPEG_EXE, backupFfmpeg);
-    if (hadFfprobe) fs.renameSync(FFPROBE_EXE, backupFfprobe);
-    fs.renameSync(tmpFfmpeg, FFMPEG_EXE);
+    if (hadFfmpeg) await renameInstalledFile(FFMPEG_EXE, backupFfmpeg);
+    if (hadFfprobe) await renameInstalledFile(FFPROBE_EXE, backupFfprobe);
+    await renameInstalledFile(tmpFfmpeg, FFMPEG_EXE);
     installedFfmpeg = true;
-    fs.renameSync(tmpFfprobe, FFPROBE_EXE);
+    await renameInstalledFile(tmpFfprobe, FFPROBE_EXE);
     installedFfprobe = true;
   } catch (err) {
-    try { rollback(); } catch (rollbackErr) {
+    try { await rollback(); } catch (rollbackErr) {
       log.error('FFmpeg 安裝失敗後回滾也失敗', rollbackErr);
     }
     throw err;
   }
 
   return {
-    commit() {
-      safeRemove(backupFfmpeg);
-      safeRemove(backupFfprobe);
+    async commit() {
+      fs.writeFileSync(path.join(BIN_DIR, '.ffmpeg-pair-committed'), 'committed\n');
+      committed = true;
+      try { await recoverStalePairBackups(backupFfmpeg, backupFfprobe); }
+      catch (error) { log.warn('FFmpeg 已安裝，舊檔清理稍後重試', error); }
     },
     rollback,
   };
@@ -608,7 +650,7 @@ async function downloadFfmpeg({
       }
 
       progress('install');
-      transaction = beginPairInstall(tmpFfmpeg, tmpFfprobe);
+      transaction = await beginPairInstall(tmpFfmpeg, tmpFfprobe);
 
       progress('validate-installed');
       const installedValidation = validateFfmpegPair(
@@ -616,12 +658,12 @@ async function downloadFfmpeg({
         { spawnSyncImpl },
       );
       if (!installedValidation.ok) {
-        transaction.rollback();
+        await transaction.rollback();
         transaction = null;
         throw new Error(`安裝後 FFmpeg 驗證失敗（ffmpeg=${installedValidation.ffmpegOk ? 'ok' : 'fail'}, ffprobe=${installedValidation.ffprobeOk ? 'ok' : 'fail'}），已還原原本檔案`);
       }
 
-      transaction.commit();
+      await transaction.commit();
       transaction = null;
       progress('done', {
         active: false,
@@ -644,7 +686,7 @@ async function downloadFfmpeg({
       throw err;
     } finally {
       if (transaction) {
-        try { transaction.rollback(); } catch (rollbackErr) {
+        try { await transaction.rollback(); } catch (rollbackErr) {
           log.error('FFmpeg 未完成交易回滾失敗', rollbackErr);
         }
       }
@@ -803,6 +845,7 @@ function installAudioProcessorUnicodePathFallback() {
 installAudioProcessorUnicodePathFallback();
 
 module.exports = {
+  getDownloadInfo,
   resolveFfmpegPaths,
   getFfmpegPath,
   getFfprobePath,
