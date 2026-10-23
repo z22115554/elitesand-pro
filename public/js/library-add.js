@@ -46,6 +46,26 @@
   box.append(row, status, results);
   head.insertAdjacentElement('afterend', box);
 
+  let searchRows = [], musicPending = false, searchActive = false, searchFinished = false;
+  const sourcePicker = AppShared.createYouTubeSourcePicker(results, renderSearch);
+  function renderSearch() {
+    sourcePicker.update(searchRows, musicPending, searchActive);
+    const existing = new Map([...results.children].map(row => [row.dataset.videoId, row]));
+    for (const result of searchRows) {
+      let item = existing.get(result.videoId);
+      if (!item) { item = resultRow(result); results.appendChild(item); }
+      item.hidden = !sourcePicker.matches(result);
+      item.querySelector('.youtube-search-title').textContent = result.title;
+      item.querySelector('.youtube-search-title').title = result.title;
+      item.querySelector('.youtube-search-meta').textContent = result.metadataPending ? T(searchFinished ? 'youtubeSearch.metadataIncomplete' : 'youtubeSearch.metadataPending') : result.channel || '';
+      const image = item.querySelector('img');
+      if (result.thumbnail && image.getAttribute('src') !== result.thumbnail) image.src = result.thumbnail;
+      image.style.visibility = result.thumbnail ? '' : 'hidden';
+      const pick = item.querySelector('button');
+      pick.disabled = pick.dataset.queued === '1' || !!result.unavailable;
+    }
+  }
+
   const verb = () => i18n(go, input.value.trim() && !looksLikeUrl(input.value) ? 'youtubeSearch.submit' : 'library.add.importVerb');
   input.addEventListener('input', verb);
   window.addEventListener('i18n:change', verb);
@@ -76,31 +96,40 @@
   }
 
   let searchSeq = 0;
+  let searchController;
   async function search(query) {
     const seq = ++searchSeq;
+    searchController?.abort();
+    const controller = new AbortController();
+    searchController = controller;
+    searchRows = []; musicPending = true; searchActive = true; searchFinished = false;
+    sourcePicker.reset();
     results.replaceChildren();
+    renderSearch();
     say('youtubeSearch.searching');
-    go.disabled = true;
     try {
-      const response = await PinAuth.fetchWithPin('/api/youtube/search', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit: 10, requestId: `lib-search-${Date.now()}` }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (seq !== searchSeq) return;
-      if (!response.ok || !data.success) throw new Error(data.error || T('youtubeSearch.unavailable', { status: response.status }));
-      const list = Array.isArray(data.results) ? data.results : [];
-      say(list.length ? 'youtubeSearch.resultCount' : 'youtubeSearch.empty', { count: list.length });
-      list.forEach((result) => results.appendChild(resultRow(result)));
+      await AppShared.requestYouTubeSearch({ query, limit: 10, requestId: `lib-search-${Date.now()}-${seq}` }, data => {
+        if (seq !== searchSeq) return;
+        searchRows = Array.isArray(data.results) ? data.results : [];
+        musicPending = data.type !== 'done' && !!data.musicPending;
+        searchFinished = data.type === 'done';
+        say(data.type !== 'done' ? 'youtubeSearch.streamingResults' : data.partial ? 'youtubeSearch.partialResults' : searchRows.length ? 'youtubeSearch.resultCount' : 'youtubeSearch.empty', { count: searchRows.length });
+        renderSearch();
+      }, controller);
     } catch (error) {
-      if (seq === searchSeq) say('youtubeSearch.failed', { message: error.message }, 'error');
+      if (seq === searchSeq && !controller.signal.aborted) {
+        musicPending = false; searchFinished = true;
+        say(searchRows.length ? 'youtubeSearch.partialResults' : 'youtubeSearch.failed', { count: searchRows.length, message: error.message }, 'error');
+        renderSearch();
+      }
     } finally {
-      if (seq === searchSeq) go.disabled = false;
+      if (seq === searchSeq) searchController = null;
     }
   }
 
   function resultRow(result) {
     const item = el('article', 'youtube-search-result');
+    item.dataset.videoId = result.videoId;
     const thumb = el('img', 'youtube-search-thumb', { alt: '', loading: 'lazy' });
     if (result.thumbnail) thumb.src = result.thumbnail; else thumb.style.visibility = 'hidden';
     const copy = el('div', 'youtube-search-copy');
@@ -114,9 +143,11 @@
     i18n(pick, 'library.add.importVerb');
     pick.disabled = !!result.unavailable;
     pick.addEventListener('click', () => {
+      pick.dataset.queued = '1';
       pick.disabled = true;
       i18n(pick, 'youtubeSearch.queued');
-      importUrl(result.url, result.title).catch(() => { pick.disabled = false; i18n(pick, 'library.add.importVerb'); });
+      const latest = searchRows.find(row => row.videoId === result.videoId) || result;
+      importUrl(result.url, latest.title).catch(() => { delete pick.dataset.queued; pick.disabled = false; i18n(pick, 'library.add.importVerb'); });
     });
     item.append(thumb, copy, pick);
     return item;
@@ -126,7 +157,10 @@
     const text = input.value.trim();
     if (!text) { input.focus(); return; }
     if (looksLikeUrl(text)) {
+      searchSeq++; searchController?.abort();
+      searchRows = []; musicPending = false; searchActive = false;
       results.replaceChildren();
+      renderSearch();
       input.value = '';
       verb();
       importUrl(text).catch(() => {});
@@ -136,6 +170,7 @@
     search(text);
   }
   go.addEventListener('click', submit);
+  window.addEventListener('i18n:change', renderSearch);
   input.addEventListener('keydown', (event) => { if (event.key === 'Enter') submit(); });
 
   // 本機檔案：上傳中同一批不重送（上傳要幾秒，使用者容易以為沒反應再按一次）

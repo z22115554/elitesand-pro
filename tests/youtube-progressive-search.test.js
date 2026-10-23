@@ -30,7 +30,7 @@ test('first rows arrive immediately and Music completing after 500ms is retained
   await new Promise(resolve => setTimeout(resolve, 550));
   assert.equal(musicSignal.aborted, false);
   release.resolve();
-  assert.deepEqual((await pending).results.map(row => row.videoId), [general.id, music.id]);
+  assert.deepEqual((await pending).results.map(row => row.videoId), [music.id, general.id]);
 });
 
 test('Music can publish before a stalled general source', async (t) => {
@@ -179,4 +179,96 @@ test('a repeated partial search displays cached rows immediately and still refre
   assert.equal(immediate[0].results[0].videoId, general.id);
   const result = await pending;
   assert.equal(result.results[0].videoId, general.id); assert.equal(calls, 2);
+});
+
+test('Music titles are selectable before metadata extraction finishes and stay first', async (t) => {
+  const started = defer(), release = defer(), updates = [];
+  t.mock.method(Audio, '_runYoutubeSearchStream', async (_q, _n, _s, onEntry) => { onEntry(general); return [general]; });
+  t.mock.method(Audio, '_runYouTubeMusicSearchIds', async (_q, _n, _s, onEntries) => {
+    onEntries([{ id: music.id, title: music.title }]); return [music.id];
+  });
+  t.mock.method(Audio, '_enrichYouTubeIdsStream', async (_ids, _s, onEntry) => { started.resolve(); await release.promise; onEntry(music); return [music]; });
+  const pending = Audio.searchYouTube('test song', { onUpdate: update => updates.push(update) });
+  await started.promise;
+  const flat = updates.at(-1);
+  assert.deepEqual(flat.results.map(row => row.videoId), [music.id, general.id]);
+  assert.equal(flat.results[0].source, 'youtube-music');
+  assert.equal(flat.results[0].metadataPending, true);
+  assert.equal(flat.results[0].unavailable, false);
+  assert.equal(flat.musicPending, false);
+  release.resolve();
+  const final = await pending;
+  assert.equal(final.results[0].metadataPending, false);
+  assert.equal(final.results[0].duration, music.duration);
+  assert.equal(flat.results[0].metadataPending, true, 'published snapshots remain independent');
+});
+
+test('Music discovery that times out preserves its titles and the general-source cursor', async (t) => {
+  t.mock.method(Audio, '_runYoutubeSearchStream', async () => [general]);
+  t.mock.method(Audio, '_runYouTubeMusicSearchIds', async (_q, _n, _s, onEntries) => {
+    onEntries([{ id: music.id, title: music.title }]); return [music.id];
+  });
+  t.mock.method(Audio, '_enrichYouTubeIdsStream', async (_ids, signal) => stall(signal));
+  const final = await Audio.searchYouTube('test song', { timeoutMs: 40, onUpdate() {} });
+  assert.equal(final.results[0].videoId, music.id);
+  assert.equal(final.results[0].metadataPending, true);
+  assert.equal(final.nextOffset, 1);
+  assert.equal(final.partial, true); assert.equal(final.timedOut, true);
+  assert.equal(final.musicPending, false);
+});
+
+test('a duplicate Music title never replaces already available full metadata with placeholders', async (t) => {
+  t.mock.method(Audio, '_runYoutubeSearchStream', async (_q, _n, _s, onEntry) => { onEntry(general); return [general]; });
+  t.mock.method(Audio, '_runYouTubeMusicSearchIds', async (_q, _n, _s, onEntries) => {
+    onEntries([{ id: general.id, title: 'Flat title' }]); return [general.id];
+  });
+  t.mock.method(Audio, '_enrichYouTubeIdsStream', async () => { throw Error('metadata unavailable'); });
+  const final = await Audio.searchYouTube('test song', { onUpdate() {} });
+  assert.equal(final.results.length, 1);
+  assert.equal(final.results[0].source, 'youtube-music');
+  assert.equal(final.results[0].duration, general.duration);
+  assert.equal(final.results[0].title, general.title);
+  assert.equal(final.results[0].metadataPending, false);
+  assert.equal(final.partial, true);
+});
+
+test('Music discovery is settled when no songs are found, including discovery errors', async (t) => {
+  t.mock.method(Audio, '_runYoutubeSearchStream', async () => [general]);
+  const discover = t.mock.method(Audio, '_runYouTubeMusicSearchIds', async () => []);
+  assert.equal((await Audio.searchYouTube('no music', { onUpdate() {} })).musicPending, false);
+  discover.mock.mockImplementation(async () => { throw Error('unavailable'); });
+  const failed = await Audio.searchYouTube('music failed', { onUpdate() {} });
+  assert.equal(failed.musicPending, false); assert.equal(failed.partial, true);
+  assert.equal(failed.results[0].source, 'youtube');
+});
+
+test('cancel after Music title discovery rejects and suppresses late enriched rows', async (t) => {
+  const started = defer(); let late, frames = 0;
+  t.mock.method(Audio, '_runYoutubeSearchStream', async () => [general]);
+  t.mock.method(Audio, '_runYouTubeMusicSearchIds', async (_q, _n, _s, onEntries) => {
+    onEntries([{ id: music.id, title: music.title }]); return [music.id];
+  });
+  t.mock.method(Audio, '_enrichYouTubeIdsStream', async (_ids, signal, onEntry) => { late = onEntry; started.resolve(); return stall(signal); });
+  const pending = Audio.searchYouTube('test song', { requestId: 'cancel-flat-music', onUpdate() { frames++; } });
+  await started.promise;
+  Audio.cancelImport('cancel-flat-music');
+  await assert.rejects(pending, { code: 'IMPORT_CANCELLED' });
+  const before = frames; late(music); assert.equal(frames, before);
+});
+
+test('partial-cache retries retain Music priority when the general source repeats that video', async (t) => {
+  let calls = 0;
+  t.mock.method(Audio, '_runYoutubeSearchStream', async (_q, _n, _s, onEntry) => { onEntry(calls === 0 ? general : music); return []; });
+  t.mock.method(Audio, '_runYouTubeMusicSearchIds', async (_q, _n, signal, onEntries) => {
+    if (calls++) return stall(signal);
+    onEntries([{ id: music.id, title: music.title }]); return [music.id];
+  });
+  t.mock.method(Audio, '_enrichYouTubeIdsStream', async (_ids, signal) => stall(signal));
+  await Audio.searchYouTube('test song', { timeoutMs: 35, onUpdate() {} });
+  const updates = [];
+  const result = await Audio.searchYouTube('test song', { timeoutMs: 35, onUpdate: row => updates.push(row) });
+  for (const frame of [...updates, result]) {
+    assert.equal(frame.results.find(row => row.videoId === music.id).source, 'youtube-music');
+    assert.equal(frame.results[0].videoId, music.id);
+  }
 });

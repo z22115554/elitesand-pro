@@ -184,6 +184,46 @@
   let lastYouTubeSearchQuery = '';
   let youtubeSearchUi = { key: '', vars: {}, results: [], hasMore: false };
 
+  // Explicit source selection keeps slow Music results preferred without
+  // inserting new cards above buttons the user is already pointing at.
+  function createYouTubeSourcePicker(resultsNode, onChange) {
+    const controls = document.createElement('div');
+    controls.className = 'youtube-search-sources';
+    controls.setAttribute('role', 'group');
+    const empty = document.createElement('p');
+    empty.className = 'youtube-search-status';
+    let source = 'youtube-music', chosen = false;
+    const buttons = ['youtube-music', 'youtube'].map(value => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'btn btn-sm btn-ghost';
+      button.dataset.source = value;
+      button.addEventListener('click', () => { source = value; chosen = true; onChange(); });
+      controls.appendChild(button); return button;
+    });
+    controls.hidden = true; empty.hidden = true;
+    resultsNode.before(controls, empty);
+    return {
+      reset() { source = 'youtube-music'; chosen = false; },
+      get source() { return source; },
+      matches(result) { return (result.source || 'youtube') === source; },
+      update(results, pending, active) {
+        const musicCount = results.filter(row => row.source === 'youtube-music').length;
+        if (!chosen && !pending) source = musicCount ? 'youtube-music' : 'youtube';
+        controls.hidden = !active;
+        controls.setAttribute('aria-label', t('youtubeSearch.sources'));
+        buttons.forEach((button, index) => {
+          button.textContent = t(index === 0 ? 'youtubeSearch.musicSource' : 'youtubeSearch.otherSource', { count: formatNumber(index === 0 ? musicCount : results.length - musicCount) });
+          button.setAttribute('aria-pressed', String(button.dataset.source === source));
+        });
+        empty.hidden = !active || source !== 'youtube-music' || musicCount > 0;
+        empty.textContent = t(pending ? 'youtubeSearch.musicWaiting' : 'youtubeSearch.musicEmpty');
+      },
+    };
+  }
+  AppShared.createYouTubeSourcePicker = createYouTubeSourcePicker;
+  const youtubeSourcePicker = dom.youtubeSearchResults
+    ? createYouTubeSourcePicker(dom.youtubeSearchResults, renderYouTubeSearch) : null;
+
   function setYouTubeMode(mode) {
     const searchMode = mode === 'search';
     dom.youtubeModeLink?.classList.toggle('active', !searchMode);
@@ -198,12 +238,13 @@
   function renderYouTubeSearch() {
     if (!dom.youtubeSearchStatus || !dom.youtubeSearchResults) return;
     dom.youtubeSearchStatus.textContent = youtubeSearchUi.key ? t(youtubeSearchUi.key, youtubeSearchUi.vars) : '';
+    youtubeSourcePicker?.update(youtubeSearchUi.results, !!youtubeSearchUi.musicPending, !!youtubeSearchUi.key);
     // 有結果或有狀態訊息（含搜尋中）就給一個「清除結果」，讓使用者收掉這一大塊。
     if (dom.youtubeSearchClear) {
       dom.youtubeSearchClear.hidden = !(youtubeSearchUi.results.length || youtubeSearchUi.key);
     }
     if (dom.youtubeSearchMore) {
-      dom.youtubeSearchMore.hidden = !(youtubeSearchUi.hasMore && youtubeSearchUi.results.length);
+      dom.youtubeSearchMore.hidden = !(youtubeSearchUi.hasMore && youtubeSearchUi.results.length && youtubeSourcePicker?.source === 'youtube');
       dom.youtubeSearchMore.disabled = loadingMoreYouTube || !!activeSearchRequestId;
       dom.youtubeSearchMore.textContent = loadingMoreYouTube ? t('youtubeSearch.loadingMore') : t('youtubeSearch.loadMore');
     }
@@ -212,10 +253,11 @@
     for (const [id, row] of existingRows) if (!visibleIds.has(id)) row.remove();
     for (const result of youtubeSearchUi.results) {
       const existing = existingRows.get(result.videoId);
-      if (existing) { updateSearchResultRow(existing, result); continue; }
+      if (existing) { existing.hidden = !youtubeSourcePicker.matches(result); updateSearchResultRow(existing, result); continue; }
       const row = document.createElement('article');
       row.className = 'youtube-search-result';
       row.dataset.videoId = result.videoId;
+      row.hidden = !youtubeSourcePicker.matches(result);
 
       const thumbnail = document.createElement('img');
       thumbnail.className = 'youtube-search-thumb';
@@ -236,7 +278,7 @@
       const metaParts = [result.channel || t('youtubeSearch.unknownChannel')];
       metaParts.push(result.duration > 0 ? formatDuration(result.duration) : t('youtubeSearch.unknownDuration'));
       if (Number.isFinite(result.viewCount)) metaParts.push(t('youtubeSearch.views', { count: formatNumber(result.viewCount) }));
-      meta.textContent = metaParts.join(' · ');
+      meta.textContent = result.metadataPending ? t(youtubeSearchUi.complete ? 'youtubeSearch.metadataIncomplete' : 'youtubeSearch.metadataPending') : metaParts.join(' · ');
       copy.append(title, meta);
       if (result.unavailable || result.isShort || result.isCompilation) {
         const badge = document.createElement('span');
@@ -282,7 +324,7 @@
     title.textContent = result.title; title.title = result.title;
     const meta = [result.channel || t('youtubeSearch.unknownChannel'), result.duration > 0 ? formatDuration(result.duration) : t('youtubeSearch.unknownDuration')];
     if (Number.isFinite(result.viewCount)) meta.push(t('youtubeSearch.views', { count: formatNumber(result.viewCount) }));
-    row.querySelector('.youtube-search-meta').textContent = meta.join(' · ');
+    row.querySelector('.youtube-search-meta').textContent = result.metadataPending ? t(youtubeSearchUi.complete ? 'youtubeSearch.metadataIncomplete' : 'youtubeSearch.metadataPending') : meta.join(' · ');
     const image = row.querySelector('img');
     if (image.getAttribute('src') !== result.thumbnail) {
       if (result.thumbnail) image.src = result.thumbnail;
@@ -355,6 +397,7 @@
       if (!completed) throw new Error(t('youtubeSearch.unavailable', { status: response.status }));
     } finally { reader.releaseLock(); }
   }
+  AppShared.requestYouTubeSearch = requestYouTubeSearch;
 
   function applyYouTubeSearchUpdate(data, base = []) {
     const rows = new Map(base.map(result => [result.videoId, result]));
@@ -368,13 +411,15 @@
       key, vars: { count: formatNumber(results.length) }, results,
       hasMore: !!data.hasMore && results.length < 50,
       nextOffset: Number.isInteger(data.nextOffset) ? data.nextOffset : results.length,
+      musicPending: data.type !== 'done' && !!data.musicPending,
+      complete: data.type === 'done',
     };
     renderYouTubeSearch();
   }
 
   function preserveYouTubeSearchFailure(error) {
     youtubeSearchUi = youtubeSearchUi.results.length
-      ? { ...youtubeSearchUi, key: 'youtubeSearch.partialResults', vars: { count: formatNumber(youtubeSearchUi.results.length) } }
+      ? { ...youtubeSearchUi, musicPending: false, complete: true, key: 'youtubeSearch.partialResults', vars: { count: formatNumber(youtubeSearchUi.results.length) } }
       : { key: 'youtubeSearch.failed', vars: { message: error.message }, results: [], hasMore: false };
     renderYouTubeSearch();
   }
@@ -393,7 +438,8 @@
     activeSearchAbortController = controller;
     activeSearchRequestId = requestId;
     lastYouTubeSearchQuery = query;
-    youtubeSearchUi = { key: 'youtubeSearch.searching', vars: {}, results: [], hasMore: false, nextOffset: 0 };
+    youtubeSourcePicker?.reset();
+    youtubeSearchUi = { key: 'youtubeSearch.searching', vars: {}, results: [], hasMore: false, nextOffset: 0, musicPending: true };
     renderYouTubeSearch();
     // A new query can replace a pending search; Clear cancels it as well.
     if (dom.youtubeSearchSubmit) dom.youtubeSearchSubmit.disabled = false;

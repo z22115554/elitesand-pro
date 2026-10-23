@@ -2033,7 +2033,9 @@ test('正式公告會強制 0.9.9.5 與更舊版本改用完整 Installer', () =
   const document = announcementService.validateDocument(JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'announcement.json'), 'utf8'),
   ));
-  eq(document.announcements.length, 4);
+  // New release notices may be appended; verify the required legacy notices
+  // and their version boundaries below instead of freezing the total count.
+  ok(document.announcements.length >= 4);
   const legacy = document.announcements.find((item) => item.id === 'installer-only-update-legacy');
   const electron = document.announcements.find((item) => item.id === 'installer-only-update-electron');
   const current = document.announcements.find((item) => item.id === 'installer-only-update-current');

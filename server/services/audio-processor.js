@@ -1247,16 +1247,18 @@ class AudioProcessor {
       if (cached && !cached.partial) return cached;
       if (cached) options.onUpdate(cached);
       const result = await runQueued(async () => {
-        const rows = new Map((cached?.results || []).map(row => [row.videoId, row])), generalIds = new Map(), musicRows = new Set();
-        let generalDone = false, generalError = null, musicError = null;
+        const rows = new Map((cached?.results || []).map(row => [row.videoId, row])), generalIds = new Map();
+        const musicRows = new Set((cached?.results || []).filter(row => row.source === 'youtube-music').map(row => row.videoId));
+        let generalDone = false, generalError = null, musicError = null, musicDiscoveryDone = !includeMusic;
         let nextOffset = cached?.nextOffset ?? offset;
         const snapshot = () => ({
-          results: [...rows.values()].map(row => ({ ...row })), nextOffset,
+          results: [...rows.values()].sort((a, b) => Number(b.source === 'youtube-music') - Number(a.source === 'youtube-music')).map(row => ({ ...row })), nextOffset,
+          musicPending: !musicDiscoveryDone && !timedOut,
           hasMore: nextOffset < YOUTUBE_SEARCH_FETCH_MAX && (!generalDone || !!generalError || generalIds.size >= fetchCount),
           timedOut,
           partial: timedOut || !!generalError || !!musicError,
         });
-        const accept = (raw, general) => {
+        const accept = (raw, general, metadataPending = false) => {
           if (closed || signal.aborted) return;
           const row = sanitizeYouTubeSearchPayload({ entries: [raw] }, 1)[0];
           if (!row) return;
@@ -1270,8 +1272,13 @@ class AudioProcessor {
           if (general && musicRows.has(row.videoId)) return;
           if (!general) musicRows.add(row.videoId);
           const previous = rows.get(row.videoId);
-          // Map insertion order is stable: late metadata updates the same row,
-          // and newly found songs append without moving an active Choose button.
+          row.source = general ? 'youtube' : 'youtube-music';
+          row.metadataPending = metadataPending;
+          // Discover Music titles before the slower per-video extraction. If
+          // the same video already has full metadata, keep that richer record.
+          if (metadataPending && previous && !previous.metadataPending) {
+            Object.assign(row, previous, { source: 'youtube-music' });
+          }
           if (previous && JSON.stringify(previous) === JSON.stringify(row)) return;
           rows.set(row.videoId, row);
           options.onUpdate(snapshot());
@@ -1291,11 +1298,21 @@ class AudioProcessor {
         })();
         const musicTask = includeMusic ? (async () => {
           try {
-            const ids = await this._runYouTubeMusicSearchIds(normalizedQuery, pageSize, signal);
+            const ids = await this._runYouTubeMusicSearchIds(normalizedQuery, pageSize, signal, (entries) => {
+              if (closed || signal.aborted) return;
+              musicDiscoveryDone = true;
+              for (const entry of entries.slice(0, Math.min(pageSize, 4))) accept(entry, false, true);
+            });
             throwIfCancelled(signal);
+            musicDiscoveryDone = true;
+            if (rows.size || !ids.length) options.onUpdate(snapshot());
             const entries = await this._enrichYouTubeIdsStream(ids.slice(0, Math.min(pageSize, 4)), signal, entry => accept(entry, false));
             for (const entry of entries) accept(entry, false);
           } catch (error) { musicError = error; }
+          finally {
+            musicDiscoveryDone = true;
+            if (!closed && !signal.aborted) options.onUpdate(snapshot());
+          }
         })() : Promise.resolve();
         try {
           await Promise.race([Promise.all([generalTask, musicTask]), aborted]);
@@ -1384,7 +1401,7 @@ class AudioProcessor {
   // music.youtube.com/search 的「歌曲」區塊 → 依序的 videoId 陣列（只留真的單曲，且
   // 標題要對得上查詢——YT Music 對「歌手＋歌名」常回整個歌手熱門清單，不加濾會把
   // 「青花瓷／晴天」塞進「周杰倫 稻香」的前排）。
-  static async _runYouTubeMusicSearchIds(normalizedQuery, limit, signal) {
+  static async _runYouTubeMusicSearchIds(normalizedQuery, limit, signal, onEntries) {
     throwIfCancelled(signal);
     const url = `https://music.youtube.com/search?q=${encodeURIComponent(normalizedQuery)}#songs`;
     const args = [
@@ -1412,13 +1429,17 @@ class AudioProcessor {
       if (entry?.ie_key && entry.ie_key !== 'Youtube') continue; // 略過 artist/browse 之類
       const videoId = String(entry?.id || '').trim();
       if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) continue;
-      if (matched.includes(videoId) || unmatched.includes(videoId)) continue;
+      if (matched.some(item => item.id === videoId) || unmatched.some(item => item.id === videoId)) continue;
       const title = String(entry?.title || '').toLowerCase();
-      if (!queryTokens.length || queryTokens.some((tok) => title.includes(tok))) matched.push(videoId);
-      else unmatched.push(videoId);
+      if (!title.trim()) continue;
+      const song = { ...entry, id: videoId };
+      if (!queryTokens.length || queryTokens.some((tok) => title.includes(tok))) matched.push(song);
+      else unmatched.push(song);
     }
     // 有對上的就只用對上的；一個都沒對上（例如查詢用了別名）才退回全部，交給後面 ytsearch 兜底。
-    return matched.length ? matched : unmatched;
+    const selected = matched.length ? matched : unmatched;
+    onEntries?.(selected);
+    return selected.map(entry => String(entry.id).trim());
   }
 
   // 一次 yt-dlp 呼叫補齊多個已知 videoId 的卡片 metadata（--dump-json，逐行 JSON）。
