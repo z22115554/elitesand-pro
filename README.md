@@ -41,7 +41,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 #### 匯入與播放
 
 - YouTube 單曲與播放清單：自動下載音訊、辨識歌手／歌名、搜尋歌詞、抓封面。
-- 程式內 YouTube 搜尋：預設優先顯示 YouTube Music 歌曲，歌名先出現、其他資訊逐步補齊；可切換查看其他 YouTube 版本；每次最多搜尋 15 秒，逾時保留已找到的結果，也可繼續找更多。
+- 程式內 YouTube 搜尋：預設優先顯示 YouTube Music 歌曲，歌名先出現、其他資訊逐步補齊；可切換查看其他 YouTube 版本；每次最多搜尋 30 秒，逾時保留已找到的結果，也可繼續找更多。
 - 本機音檔拖放匯入：MP3、FLAC、WAV、M4A、OGG。
 - 匯入前檢查時長、類型與重複項，降低誤抓非音樂內容的機率。
 - 單一下載佇列、批次工作、取消、重試與工作狀態管理。
@@ -208,7 +208,7 @@ Everything runs on your own machine; OBS loads transparent lyrics and setlist ov
 #### Import & playback
 
 - YouTube single videos and playlists: audio download, artist/title detection, lyrics lookup, cover art.
-- In-app search prefers YouTube Music songs, showing titles before the remaining details arrive. Switch to other YouTube versions anytime. Each search is limited to 15 seconds; partial results remain available and you can load more.
+- In-app search prefers YouTube Music songs, showing titles before the remaining details arrive. Switch to other YouTube versions anytime. Each search is limited to 30 seconds; partial results remain available and you can load more.
 - Local audio drag-and-drop: MP3, FLAC, WAV, M4A, OGG.
 - Pre-import checks for duration, type, and duplicates.
 - Single download queue, batch jobs, cancel, retry, and job-status management.
@@ -375,7 +375,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 #### 取り込みと再生
 
 - YouTube 単曲・プレイリストの音源、曲情報、カバー、歌詞の自動取得。
-- アプリ内 YouTube 検索：YouTube Music の曲を優先し、曲名から先に表示して情報を追加します。他の YouTube バージョンにも切り替えられます。検索は最大15秒で、時間切れでも取得済みの結果は保持し、追加表示できます。
+- アプリ内 YouTube 検索：YouTube Music の曲を優先し、曲名から先に表示して情報を追加します。他の YouTube バージョンにも切り替えられます。検索は最大30秒で、時間切れでも取得済みの結果は保持し、追加表示できます。
 - ローカル音源のドラッグ取り込み：MP3・FLAC・WAV・M4A・OGG。
 - 取り込み前に長さ・種類・重複をチェック。
 - ダウンロードキュー、バッチ処理、キャンセル、再試行、ジョブ状態管理。
@@ -541,7 +541,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 #### 가져오기와 재생
 
 - YouTube 단일 영상·재생목록의 음원, 메타데이터, 커버, 가사 자동 가져오기.
-- 앱 내 YouTube 검색: YouTube Music 곡을 우선 표시하고 곡명부터 보여 준 뒤 나머지 정보를 추가합니다. 다른 YouTube 버전도 확인할 수 있습니다. 검색은 최대 15초이며, 시간 초과 시에도 찾은 결과를 유지하고 더 불러올 수 있습니다.
+- 앱 내 YouTube 검색: YouTube Music 곡을 우선 표시하고 곡명부터 보여 준 뒤 나머지 정보를 추가합니다. 다른 YouTube 버전도 확인할 수 있습니다. 검색은 최대 30초이며, 시간 초과 시에도 찾은 결과를 유지하고 더 불러올 수 있습니다.
 - 로컬 음원 끌어다 놓기: MP3, FLAC, WAV, M4A, OGG.
 - 가져오기 전 길이·유형·중복 검사.
 - 다운로드 대기열, 배치 작업, 취소, 재시도, 작업 상태 관리.
@@ -707,7 +707,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 #### 导入与播放
 
 - YouTube 单曲与播放列表：自动下载音频、识别歌手／歌名、搜索歌词、抓封面。
-- 程序内 YouTube 搜索：默认优先显示 YouTube Music 歌曲，先显示歌名、其他信息逐步补齐；可切换查看其他 YouTube 版本；每次最多搜索 15 秒，超时保留已找到的结果，也可继续加载更多。
+- 程序内 YouTube 搜索：默认优先显示 YouTube Music 歌曲，先显示歌名、其他信息逐步补齐；可切换查看其他 YouTube 版本；每次最多搜索 30 秒，超时保留已找到的结果，也可继续加载更多。
 - 本地音频拖放导入：MP3、FLAC、WAV、M4A、OGG。
 - 导入前检查时长、类型与重复项。
 - 单一下载队列、批量作业、取消、重试与作业状态管理。

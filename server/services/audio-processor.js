@@ -33,6 +33,7 @@ const YTDLP_COMMAND = getYtdlpCommand();
 // ─── yt-dlp 命令超時設定 ───
 const YTDLP_INFO_TIMEOUT = 45000;     // 取得影片資訊超時: 45s
 const YTDLP_SEARCH_TIMEOUT = 15000;   // 搜尋只讀扁平 metadata，逾時要比單曲 inspect 短
+const YOUTUBE_MUSIC_SEARCH_TIMEOUT = 30000; // Music needs discovery plus per-song metadata; results stream while waiting.
 const YTDLP_DOWNLOAD_TIMEOUT = 300000; // 下載音訊超時: 5min
 const YTDLP_MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 const YTDLP_METADATA_PRINT = 'before_dl:__ES_META__%()j';
@@ -1236,7 +1237,8 @@ class AudioProcessor {
     const deadline = new AbortController();
     const signal = AbortSignal.any([deadline.signal, ...userSignals]);
     // This also bounds time spent waiting in the shared import/search queue.
-    const timeoutMs = Math.max(1, Math.min(YTDLP_SEARCH_TIMEOUT, Number(options.timeoutMs) || YTDLP_SEARCH_TIMEOUT));
+    const searchBudget = includeMusic ? YOUTUBE_MUSIC_SEARCH_TIMEOUT : YTDLP_SEARCH_TIMEOUT;
+    const timeoutMs = Math.max(1, Math.min(searchBudget, Number(options.timeoutMs) || searchBudget));
     let timedOut = false, closed = false, cached = null;
     const timer = setTimeout(() => { timedOut = true; deadline.abort(); }, timeoutMs);
     const timeoutError = () => Object.assign(new Error('YouTube 搜尋逾時'), { code: 'YOUTUBE_SEARCH_TIMEOUT' });
@@ -1301,12 +1303,12 @@ class AudioProcessor {
             const ids = await this._runYouTubeMusicSearchIds(normalizedQuery, pageSize, signal, (entries) => {
               if (closed || signal.aborted) return;
               musicDiscoveryDone = true;
-              for (const entry of entries.slice(0, Math.min(pageSize, 4))) accept(entry, false, true);
+              for (const entry of entries.slice(0, pageSize)) accept(entry, false, true);
             });
             throwIfCancelled(signal);
             musicDiscoveryDone = true;
             if (rows.size || !ids.length) options.onUpdate(snapshot());
-            const entries = await this._enrichYouTubeIdsStream(ids.slice(0, Math.min(pageSize, 4)), signal, entry => accept(entry, false));
+            const entries = await this._enrichYouTubeIdsStream(ids.slice(0, pageSize), signal, entry => accept(entry, false));
             for (const entry of entries) accept(entry, false);
           } catch (error) { musicError = error; }
           finally {
@@ -1347,7 +1349,7 @@ class AudioProcessor {
 
   // yt-dlp --dump-json emits complete metadata records one per line. Keep UTF-8
   // chunk boundaries intact, bound stdout, and publish each parsed record.
-  static async _readYouTubeSearchLines(args, signal, onEntry) {
+  static async _readYouTubeSearchLines(args, signal, onEntry, timeoutMs = YTDLP_SEARCH_TIMEOUT) {
     throwIfCancelled(signal);
     return new Promise((resolve, reject) => {
       const entries = [], decoder = new StringDecoder('utf8');
@@ -1361,7 +1363,7 @@ class AudioProcessor {
         } catch (_) { /* Ignore non-JSON diagnostic lines. */ }
       };
       const child = execFile(YTDLP_COMMAND, args, {
-        ...YTDLP_BASE_OPTS, timeout: YTDLP_SEARCH_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER, signal,
+        ...YTDLP_BASE_OPTS, timeout: timeoutMs, maxBuffer: YTDLP_MAX_BUFFER, signal,
       }, (error) => {
         buffer += decoder.end();
         if (buffer.trim()) line(buffer.trim());
@@ -1395,7 +1397,7 @@ class AudioProcessor {
     await ytdlpCaps.ensure();
     throwIfCancelled(signal);
     const urls = videoIds.map(id => `https://www.youtube.com/watch?v=${id}`);
-    return this._readYouTubeSearchLines([...ytdlpCaps.commonArgs(), '--dump-json', '--skip-download', '--no-warnings', ...urls], signal, onEntry);
+    return this._readYouTubeSearchLines([...ytdlpCaps.commonArgs(), '--dump-json', '--skip-download', '--no-warnings', ...urls], signal, onEntry, YOUTUBE_MUSIC_SEARCH_TIMEOUT);
   }
 
   // music.youtube.com/search 的「歌曲」區塊 → 依序的 videoId 陣列（只留真的單曲，且
@@ -1411,7 +1413,7 @@ class AudioProcessor {
     let stdout = '';
     try {
       ({ stdout } = await execFileAsync(YTDLP_COMMAND, args, {
-        ...YTDLP_BASE_OPTS, timeout: YTDLP_SEARCH_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER, signal,
+        ...YTDLP_BASE_OPTS, timeout: YOUTUBE_MUSIC_SEARCH_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER, signal,
       }));
     } catch (error) {
       if (signal?.aborted) throw new ImportCancelledError();

@@ -1108,7 +1108,7 @@
     'youtubeSearch.musicEmpty': ["這次沒有找到 YouTube Music 歌曲，可切換至其他版本。", "No YouTube Music songs found. Try other versions.", "YouTube Music の曲が見つかりませんでした。他のバージョンも確認できます。", "YouTube Music 곡을 찾지 못했습니다. 다른 버전을 확인하세요.", "这次没有找到 YouTube Music 歌曲，可切换至其他版本。"],
     'youtubeSearch.metadataIncomplete': ["歌曲資訊尚未完整，仍可選取匯入。", "Some song details are unavailable; you can still import it.", "曲の情報は一部未取得ですが、取り込みは可能です。", "일부 곡 정보가 없지만 가져올 수 있습니다.", "歌曲信息尚未完整，仍可选择导入。"],
     'youtubeSearch.metadataPending': ["正在補充歌曲資訊…", "Loading song details…", "曲の情報を取得中…", "곡 정보 불러오는 중…", "正在补充歌曲信息…"],
-    'youtubeSearch.streamingResults': ["已找到 {count} 筆，仍在補充結果…（搜尋最多 15 秒）", "Found {count}; still adding results… (15-second search limit)", "{count} 件表示中、結果を追加しています…（検索は最大15秒）", "{count}개 표시 중, 결과를 추가하고 있습니다… (최대 15초 검색)", "已找到 {count} 条，仍在补充结果…（搜索最多 15 秒）"],
+    'youtubeSearch.streamingResults': ["已找到 {count} 筆，仍在補充結果…（搜尋最多 30 秒）", "Found {count}; still adding results… (30-second search limit)", "{count} 件表示中、結果を追加しています…（検索は最大30秒）", "{count}개 표시 중, 결과를 추가하고 있습니다… (최대 30초 검색)", "已找到 {count} 条，仍在补充结果…（搜索最多 30 秒）"],
     'youtubeSearch.partialResults': ["已保留 {count} 筆結果；部分來源未完成，可重試搜尋或找更多。", "Kept {count} results. Some sources did not finish; retry or load more.", "{count} 件を保持しました。一部の検索元が未完了です。再検索または追加表示できます。", "결과 {count}개를 유지했습니다. 일부 출처가 완료되지 않았습니다. 다시 검색하거나 더 불러오세요.", "已保留 {count} 条结果；部分来源未完成，可重试搜索或加载更多。"],
     'youtubeSearch.empty': ['找不到符合的影片，請換一組歌手或歌名。', 'No matching videos. Try a different artist or title.', '一致する動画がありません。歌手名や曲名を変えてください。', '일치하는 동영상이 없습니다. 가수 또는 곡명을 바꿔 보세요.', '找不到符合的视频，请更换歌手或歌名。'],
     'youtubeSearch.failed': ['搜尋失敗：{message}', 'Search failed: {message}', '検索に失敗しました：{message}', '검색 실패: {message}', '搜索失败：{message}'],

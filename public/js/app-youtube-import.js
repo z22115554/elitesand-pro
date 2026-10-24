@@ -365,7 +365,7 @@
     const response = await PinAuth.fetchWithPin('/api/youtube/search', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...body, stream: true }),
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(35000)]),
     });
     const accept = (data) => {
       if (!response.ok || !data.success) {

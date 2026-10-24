@@ -272,3 +272,46 @@ test('partial-cache retries retain Music priority when the general source repeat
     assert.equal(frame.results[0].videoId, music.id);
   }
 });
+
+test('a Music search retains ten early songs beyond 15 seconds and stops at 30 seconds', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ready = defer(); let musicSignal;
+  const songs = Array.from({ length: 10 }, (_, i) => ({ id: `m${String(i).padStart(10, '0')}`, title: `Music ${i}` }));
+  t.mock.method(Audio, '_runYoutubeSearchStream', async () => [general]);
+  t.mock.method(Audio, '_runYouTubeMusicSearchIds', async (_q, limit, _signal, onEntries) => {
+    assert.equal(limit, 10); onEntries(songs); return songs.map(row => row.id);
+  });
+  t.mock.method(Audio, '_enrichYouTubeIdsStream', async (ids, signal) => {
+    assert.equal(ids.length, 10); musicSignal = signal; ready.resolve(); return stall(signal);
+  });
+  const pending = Audio.searchYouTube('ten Music songs', { onUpdate() {} });
+  await ready.promise;
+  t.mock.timers.tick(16000);
+  assert.equal(musicSignal.aborted, false, 'Music must not stop at the old 15-second budget');
+  t.mock.timers.tick(14000);
+  const final = await pending;
+  assert.equal(final.results.filter(row => row.source === 'youtube-music').length, 10);
+  assert.equal(final.nextOffset, 1, 'Music rows must not advance the general cursor');
+  assert.equal(final.partial, true); assert.equal(final.timedOut, true);
+  assert.equal(musicSignal.aborted, true);
+});
+
+test('a general-only page keeps its 15-second budget', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ready = defer();
+  t.mock.method(Audio, '_runYoutubeSearchStream', async (_q, _n, signal, onEntry) => { onEntry(general); ready.resolve(); return stall(signal); });
+  t.mock.method(Audio, '_runYouTubeMusicSearchIds', async () => assert.fail('Music is disabled'));
+  const pending = Audio.searchYouTube('general only', { includeMusic: false, onUpdate() {} });
+  await ready.promise; t.mock.timers.tick(15000);
+  const final = await pending;
+  assert.equal(final.timedOut, true); assert.equal(final.results[0].videoId, general.id);
+});
+
+test('the requested Music page size still limits discovery and metadata work', async (t) => {
+  const songs = Array.from({ length: 10 }, (_, i) => ({ id: `m${String(i).padStart(10, '0')}`, title: `Music ${i}` }));
+  t.mock.method(Audio, '_runYoutubeSearchStream', async () => []);
+  t.mock.method(Audio, '_runYouTubeMusicSearchIds', async (_q, _n, _s, onEntries) => { onEntries(songs); return songs.map(row => row.id); });
+  t.mock.method(Audio, '_enrichYouTubeIdsStream', async ids => { assert.equal(ids.length, 2); return []; });
+  const final = await Audio.searchYouTube('small page', { limit: 2, onUpdate() {} });
+  assert.equal(final.results.length, 2);
+});
