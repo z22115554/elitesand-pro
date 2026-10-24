@@ -12024,7 +12024,7 @@ test('Electron P1 smoke starts with a disposable Electron user-data directory', 
   const smoke = fs.readFileSync(path.join(__dirname, '..', 'tools', 'smoke-electron-shell.js'), 'utf8');
   eq(packageJson.scripts.shell, 'electron electron/main.js');
   eq(packageJson.scripts['smoke:electron'], 'node tools/smoke-electron-shell.js');
-  eq(packageJson.devDependencies.electron, '^43.7.9');
+  eq(packageJson.devDependencies.electron, '^43.8.1');
   ok(smoke.includes('ELITESAND_SHELL_USER_DATA_DIR'));
   ok(smoke.includes('ELITESAND_SHELL_HEADLESS'));
   ['STDIO_STRESS_REQUESTS', 'MIN_STRESS_LOG_BYTES', '/api/twitch/status', '/api/announcements?force=1', 'healthAfterStress']
