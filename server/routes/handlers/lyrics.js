@@ -8,9 +8,16 @@ const { createLogger } = require('../../utils/logger');
 const { LyricsEngine } = require('../../services/lyrics-engine');
 const { addRomanization, needsRomanization } = require('../../services/romanizer');
 const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS } = require('../../utils/track-schema');
+const path = require('path');
+const fs = require('fs');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
 const libraryStore = require('../../services/library-store');
+const autoSync = require('../../services/auto-sync');
 const { emitToControlClients } = require('../../utils/socket-broadcast');
+const { downloadsDir } = require('../../utils/app-paths');
+
+// 自動對時同一首只跑一次（連點、兩台遙控器同時按）；跨 socket 共用。
+const autoSyncRunning = new Set();
 
 const MAX_XIEYIN_OVERRIDE_LENGTH = 500;
 
@@ -195,20 +202,62 @@ function registerLyricsHandlers(io, socket, ctx) {
       return;
     }
 
+    const clampedOffset = setTrackOffset(trackId, offset);
+    log.info(`Offset 設定: ${trackId}: ${clampedOffset}ms`);
+    scheduleLyricOffsetSync(ctx, trackId, clampedOffset);
+  });
+
+  function setTrackOffset(trackId, offset) {
     const clampedOffset = Math.max(-MAX_OFFSET_MS, Math.min(MAX_OFFSET_MS, offset));
     trackOffsets.set(trackId, clampedOffset);
-
     if (playState.currentTrack && playState.currentTrack.id === trackId) {
       playState.currentOffset = clampedOffset;
     }
-
     rememberOffsetForSource(trackId, lyricsSourceOf(trackId), clampedOffset);
-
-    log.info(`Offset 設定: ${trackId}: ${clampedOffset}ms`);
-
     io.emit('offset:update', { trackId, offset: clampedOffset });
     persistState();
-    scheduleLyricOffsetSync(ctx, trackId, clampedOffset);
+    return clampedOffset;
+  }
+
+  // 自動對時：用 AI 分離出的人聲算整首偏移（services/auto-sync.js）。只有高信心才套用，
+  // 低信心時不動任何東西。人聲檔是前提——沒有就回 NEEDS_SEPARATION，由面板走既有的分離流程。
+  // 不送社群偏移回饋：這個值不是人聽過確認的。
+  socket.on('offset:auto', async (data, callback) => {
+    const reply = typeof callback === 'function' ? callback : () => {};
+    const trackId = data && typeof data === 'object' ? data.trackId : null;
+    if (!trackId || typeof trackId !== 'string') return reply({ ok: false, code: 'INVALID_TRACK' });
+    const track = tracksById(trackId)[0];
+    if (!track) return reply({ ok: false, code: 'TRACK_NOT_FOUND' });
+    const manual = manualLyricsCache.get(trackId);
+    let lines = manual?.parsedLyrics || track.parsedLyrics;
+    if (!Array.isArray(lines) || !lines.length) {
+      const raw = manual?.lyrics || track.lyrics || '';
+      const type = manual?.lyricsType || track.lyricsType;
+      lines = raw ? (type === 'krc' ? LyricsEngine.parseKrc(raw) : LyricsEngine.parseLrc(raw)) : [];
+    }
+    if (!lines.some((l) => l && l.time > 0)) return reply({ ok: false, code: 'NO_TIMESTAMPS' });
+    const vocalsFile = track.vocalsFile || libraryStore.getEntry(trackId)?.vocalsFile;
+    // 只接受 downloadsDir 底下的單純檔名（跟 /audio/:filename 同一條規則）
+    const vocalsPath = vocalsFile && path.basename(vocalsFile) === vocalsFile ? path.join(downloadsDir, vocalsFile) : null;
+    if (!vocalsPath || !fs.existsSync(vocalsPath)) return reply({ ok: false, code: 'NEEDS_SEPARATION' });
+    if (autoSyncRunning.has(trackId)) return reply({ ok: false, code: 'BUSY' });
+    autoSyncRunning.add(trackId);
+    try {
+      const result = await autoSync.analyzeVocals(vocalsPath, lines);
+      if (!result.accepted) {
+        log.info(`自動對時未套用: ${trackId}: ${result.reason}`);
+        return reply({ ok: true, applied: false, reason: result.reason });
+      }
+      const previousOffsetMs = trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null;
+      const offsetMs = setTrackOffset(trackId, result.offsetMs);
+      log.info(`自動對時: ${trackId}: ${previousOffsetMs ?? '無'} → ${offsetMs}ms (z=${result.peakZ.toFixed(1)}, k=${result.peakRatio.toFixed(2)})`);
+      reply({ ok: true, applied: true, offsetMs, previousOffsetMs });
+    } catch (err) {
+      log.warn(`自動對時失敗: ${trackId}: ${err.message}`);
+      reply({ ok: false, code: 'ANALYSIS_FAILED' });
+    } finally {
+      autoSyncRunning.delete(trackId);
+    }
   });
 
   // 「這首已經對好時間」：只是給主播看的準備標記，不影響播放。只發給控制端（OBS 不需要）。

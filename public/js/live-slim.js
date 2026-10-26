@@ -322,6 +322,8 @@
       // 上一列：對齊第一句＋⋯；下一列：−0.5 −0.1 偏移 +0.1 +0.5 歸零，靠左（窄視窗也不換行）
       const top = el('div', 'lslim-sync-top');
       if (align) top.append(align);
+      // 自動對時＋還原跟對齊第一句同一列（auto-sync.js 用 id 綁定，搬位置不影響）
+      for (const id of ['offset-auto', 'offset-auto-undo']) { const btn = byId(id); if (btn) top.append(btn); }
       top.append(el('span', 'lslim-spacer'));
       offsetRow.parentElement.insertBefore(top, offsetRow);
       // 「已對時」：給主播自己看的準備標記，清單上的「對」格跟著亮

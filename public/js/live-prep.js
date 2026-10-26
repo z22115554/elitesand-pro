@@ -306,6 +306,7 @@
     pinnedId = trackId;
     render();
     if (typeof AppShared.updateOffsetDisplay === 'function') AppShared.updateOffsetDisplay();
+    document.dispatchEvent(new CustomEvent('live-prep:target'));
     // 換了目標，內嵌的歌詞候選屬於上一首 → 收起
     const picker = $('lyrics-picker-modal');
     if (picker && picker.hasAttribute('data-inline-picker')) picker.hidden = true;

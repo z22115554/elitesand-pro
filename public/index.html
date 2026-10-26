@@ -569,6 +569,9 @@
             <div id="lyric-next-line" class="lb-line-next"></div>
             <div class="lb-lyric-actions">
               <button id="offset-align" class="btn btn-sm btn-primary" type="button">對齊第一句</button>
+              <!-- 自動對時：用 AI 分離的人聲算整首偏移，不必播放（auto-sync.js） -->
+              <button id="offset-auto" class="btn btn-sm" type="button">自動對時</button>
+              <button id="offset-auto-undo" class="btn btn-sm btn-ghost" type="button" hidden>還原</button>
             </div>
             <!-- 2026-09-28：有波形可以直接點跳轉，倒數對齊先隱藏（元素保留，app-playback.js 仍綁定它） -->
             <button id="countdown-align-box" class="countdown-box" type="button" aria-live="assertive" hidden>
@@ -3784,6 +3787,7 @@
   <script src="/js/home-prep-tabs.js"></script>
   <script src="/js/home-ai-separation-panel.js"></script>
   <script src="/js/live-prep.js"></script>
+  <script src="/js/auto-sync.js"></script>
   <script src="/js/output-slim.js"></script>
   <script src="/js/library-add.js"></script>
   <script src="/js/live-slim.js"></script>
