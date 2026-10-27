@@ -873,11 +873,12 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .youtube-search-more { width: 100%; margin-top: 8px; }
 .youtube-search-more[hidden] { display: none; }
 .youtube-search-result .btn { white-space: nowrap; }
-.youtube-auto-separate { display: flex; align-items: flex-start; gap: 9px; margin-top: 11px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent) 5%, transparent); cursor: pointer; }
-.youtube-auto-separate input { margin-top: 2px; }
-.youtube-auto-separate span, .youtube-auto-separate strong, .youtube-auto-separate small { display: block; }
-.youtube-auto-separate strong { color: var(--text); font-size: 11px; }
-.youtube-auto-separate small { margin-top: 2px; color: var(--text-faint); font-size: 10px; line-height: 1.4; }
+.youtube-auto-separate, .import-prefs-option { display: flex; align-items: flex-start; gap: 9px; margin-top: 11px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent) 5%, transparent); cursor: pointer; }
+.youtube-auto-separate input, .import-prefs-option input { margin-top: 2px; }
+.youtube-auto-separate span, .youtube-auto-separate strong, .youtube-auto-separate small,
+.import-prefs-option span, .import-prefs-option strong, .import-prefs-option small { display: block; }
+.youtube-auto-separate strong, .import-prefs-option strong { color: var(--text); font-size: 11px; }
+.youtube-auto-separate small, .import-prefs-option small { margin-top: 2px; color: var(--text-faint); font-size: 10px; line-height: 1.4; }
 @media (max-width: 560px) {
   .youtube-search-result { grid-template-columns: 80px minmax(0,1fr); }
   .youtube-search-thumb { width: 80px; }
@@ -2220,6 +2221,15 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 .lslim-add { display: flex; gap: 6px; align-items: center; }
 .lslim-add #yt-url { flex: 1; min-width: 0; }
 .lslim-add #yt-fetch-btn { flex-shrink: 0; }
+/* 匯入後偏好（import-prefs.js）：平常只是一行小字顯示目前設定，點開才是開關 */
+.import-prefs-quick { margin-top: 6px; font-size: 11px; }
+.import-prefs-quick > summary { display: inline-flex; align-items: center; gap: 4px; color: var(--text-dim); cursor: pointer; list-style: none; user-select: none; }
+.import-prefs-quick > summary::-webkit-details-marker { display: none; }
+.import-prefs-quick > summary::after { content: ''; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-1px) rotate(45deg); transition: transform 0.15s ease; }
+.import-prefs-quick[open] > summary::after { transform: translateY(1px) rotate(-135deg); }
+.import-prefs-quick > summary:hover, .import-prefs-quick > summary:focus-visible { color: var(--text); }
+.import-prefs-quick-body { display: grid; gap: 6px; margin-top: 6px; }
+.import-prefs-quick-body .import-prefs-option { margin-top: 0; padding: 7px 9px; }
 .live-queue.lslim-drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .lslim-upload-row { position: relative; display: flex; align-items: center; gap: 10px; margin: 6px 0; padding: 12px 12px 14px; border: 1px dashed var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; overflow: hidden; }
 .lslim-upload-row[hidden] { display: none; }

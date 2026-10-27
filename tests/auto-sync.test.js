@@ -109,6 +109,16 @@ function register({ test, eq, ok }) {
     ok(undo.includes('now !== undo.appliedOffsetMs'), '偏移之後被改過就不可還原');
   });
 
+  test('匯入後自動對時：一定跟著製作伴奏，並在分離完成後才對時', () => {
+    const importer = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-youtube-import.js'), 'utf8');
+    ok(importer.includes('autoSync: options.autoSeparate === true && options.autoSync === true'), '匯入工作的 autoSync 必須以 autoSeparate 為前提');
+    const afterSeparation = importer.indexOf('await separateImportedTrack(job, data.track);');
+    const sync = importer.indexOf('window.AutoSync.syncTrack(data.track.id)');
+    ok(afterSeparation > 0 && sync > afterSeparation, '自動對時要排在人聲分離之後');
+    const prefs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'import-prefs.js'), 'utf8');
+    ok(prefs.includes('sync: !!next.sync && !!wantsSeparation'), '偏好設定裡開自動對時要連帶開製作伴奏');
+  });
+
   test('自動對時：socket handler 契約（人聲檔只限 downloads 單純檔名、不送社群偏移、唯讀端擋得住）', () => {
     const lyrics = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
     const start = lyrics.indexOf("socket.on('offset:auto'");

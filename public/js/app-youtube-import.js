@@ -308,6 +308,7 @@
           sourceKey: 'source.youtubeModeSearch',
           label: latest.title,
           autoSeparate: !!dom.youtubeAutoSeparate?.checked,
+          autoSync: !!window.ImportPrefs?.get().sync,
         }).catch(() => {
           delete choose.dataset.queued;
           choose.disabled = false;
@@ -569,6 +570,7 @@
         labelKey: entry.title ? '' : 'import.playlist.itemFallbackLabel',
         labelVars: { index: index + 1 },
         autoSeparate: !!dom.youtubeAutoSeparate?.checked,
+        autoSync: !!window.ImportPrefs?.get().sync,
         // 播放清單一次排幾十~幾百首，中間某首抓不到 metadata（下架/私人/地區限制）
         // 是常態，不是需要使用者判斷的例外——inspectImport() 靠這個旗標決定要不要
         // 為了純技術性失敗跳出確認視窗卡住後面所有還沒處理的歌。
@@ -960,6 +962,7 @@
         labelKey: job.labelKey,
         labelVars: job.labelVars,
         autoSeparate: job.autoSeparate,
+        autoSync: job.autoSync,
       }).catch(() => {});
     }
   });
@@ -1079,6 +1082,8 @@
         placement: options.placement === 'next' ? 'next' : 'end',
         assessment: options.assessment || null,
         autoSeparate: options.autoSeparate === true,
+        // 匯入後自動對時要靠分離出的人聲，所以只跟著「製作伴奏」一起成立
+        autoSync: options.autoSeparate === true && options.autoSync === true,
         isBatch: options.isBatch === true,
         skipPlaylistInsert: options.skipPlaylistInsert === true,
         cookieBrowser: '',
@@ -1251,6 +1256,10 @@
           if (job.autoSeparate) {
             try {
               await separateImportedTrack(job, data.track);
+              if (job.autoSync && window.AutoSync) {
+                updateJob(job, { postActionKey: 'import.autoSync.running', postActionVars: {} });
+                await window.AutoSync.syncTrack(data.track.id);
+              }
               updateJob(job, {
                 status: 'completed', stage: '已完成', completedPlacement: placementKey,
                 completedTitle: data.track.title, percent: 100, messageKey: '', errorMessage: '',
@@ -1340,7 +1349,7 @@
 
     // 驗證通過＝知道要抓什麼了 → 立即清空欄位讓使用者能接著貼下一首；下載交給佇列。
     dom.ytUrl.value = '';
-    queueYouTubeImport(url, { autoSeparate: !!dom.youtubeAutoSeparate?.checked })
+    queueYouTubeImport(url, { autoSeparate: !!dom.youtubeAutoSeparate?.checked, autoSync: !!window.ImportPrefs?.get().sync })
       .catch(() => { /* 失敗已在佇列內 toast，這裡吞掉避免 unhandled */ });
   }
 
