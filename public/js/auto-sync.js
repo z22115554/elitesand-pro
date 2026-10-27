@@ -3,7 +3,8 @@
  *
  * 作用在準備區的目標歌曲（AppShared.prepTargetIndex），不需要先播放。
  * 流程：有人聲檔 → 伺服器 offset:auto 算偏移、高信心才套用；沒有 → 先走既有的 AI 分離
- * （沒裝元件會跳出原本的安裝視窗），分離完自動接著對時。套用後可以一鍵還原。
+ * （沒裝元件會跳出原本的安裝視窗），分離完自動接著對時。目前的歌詞對不上時，伺服器會搜其他來源
+ * （逐字優先）換成能對上的那份。套用後可以一鍵還原（換過歌詞也一起還原）。
  * 演算法與驗證見 server/services/auto-sync.js。
  */
 (function () {
@@ -19,7 +20,7 @@
   const toast = (msg, type) => AppShared.showToast?.(msg, type);
 
   let busyTrackId = null;
-  let lastApplied = null; // { trackId, offsetMs, previousOffsetMs }
+  let lastApplied = null; // { trackId, offsetMs }
   let unsubscribe = null;
 
   function targetTrack() {
@@ -41,9 +42,10 @@
 
   function requestAnalysis(trackId) {
     return new Promise((resolve) => {
+      // 搜歌詞來源可能要十幾秒，逾時放寬
       SocketClient.sendWithCallback('offset:auto', { trackId }, (result, error) => {
         resolve(result || { ok: false, code: error?.code || 'FAILED' });
-      });
+      }, { timeoutMs: 60000 });
     });
   }
 
@@ -95,12 +97,19 @@
         }
       }
       if (result.ok && result.applied) {
-        lastApplied = { trackId, offsetMs: result.offsetMs, previousOffsetMs: result.previousOffsetMs };
+        lastApplied = { trackId, offsetMs: result.offsetMs };
         const seconds = (result.offsetMs >= 0 ? '+' : '') + (result.offsetMs / 1000).toFixed(2);
-        toast(T('autoSync.applied', { seconds }), 'success');
+        if (result.switchedSource) {
+          const key = result.wordLevel ? 'autoSync.appliedSwitchedWord' : 'autoSync.appliedSwitched';
+          toast(T(key, { source: result.switchedSource, seconds }), 'success');
+        } else {
+          toast(T('autoSync.applied', { seconds }), 'success');
+        }
       } else if (result.ok) {
         if (result.reason === 'VERSION_MISMATCH') {
           toast(T('autoSync.versionMismatch', { seconds: (result.spreadMs / 1000).toFixed(1) }), 'info');
+        } else if (result.reason === 'NO_TIMESTAMPS') {
+          toast(T('autoSync.noTimestamps'), 'info');
         } else {
           toast(T('autoSync.uncertain'), 'info');
         }
@@ -117,14 +126,20 @@
   }
 
   button.addEventListener('click', run);
+  // 還原由伺服器做：它記得套用前的偏移與（換過來源時）原本的歌詞
   undo.addEventListener('click', () => {
     if (!lastApplied) return;
-    const { trackId, previousOffsetMs } = lastApplied;
-    if (previousOffsetMs == null) SocketClient.send('offset:reset', trackId);
-    else SocketClient.send('offset:set', { trackId, offset: previousOffsetMs });
+    const { trackId } = lastApplied;
     lastApplied = null;
     render();
-    toast(T('autoSync.undone'), 'info');
+    SocketClient.sendWithCallback('offset:auto-undo', { trackId }, (result) => {
+      if (result && result.ok) toast(T(result.restoredLyrics ? 'autoSync.undoneLyrics' : 'autoSync.undone'), 'info');
+      else toast(T('autoSync.undoUnavailable'), 'info');
+    });
+  });
+
+  SocketClient.on('offset:auto-progress', (data) => {
+    if (data && data.trackId === busyTrackId && data.stage === 'sources') setBusy(busyTrackId, T('autoSync.searchingSources'));
   });
 
   // 偏移被別的方式改掉（手動微調、別台遙控器）就不再提供還原

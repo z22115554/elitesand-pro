@@ -114,16 +114,16 @@ const SocketClient = (() => {
   }
 
   /**
-   * 發送事件（帶 callback，用於需要回應的請求）
+   * 發送事件（帶 callback，用於需要回應的請求）。timeoutMs 給本來就要跑比較久的請求（例如自動對時要搜歌詞來源）。
    */
-  function sendWithCallback(event, data, callback) {
+  function sendWithCallback(event, data, callback, { timeoutMs = 8000 } = {}) {
     if (socket && isConnected) {
       let done = false;
       const timer = setTimeout(() => {
         if (done) return; done = true;
         emit('operation:error', { event, message: '伺服器回應逾時，操作可能未完成' });
         if (callback) callback(null, { code: 'TIMEOUT' });
-      }, 8000);
+      }, timeoutMs);
       socket.emit(event, data, (...args) => {
         if (done) return; done = true; clearTimeout(timer);
         if (callback) callback(...args);

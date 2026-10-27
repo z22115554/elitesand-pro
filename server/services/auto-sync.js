@@ -262,10 +262,17 @@ function estimateOffset(samples, lines) {
   return { ...base, accepted: false, reason: 'LOW_CONFIDENCE', segments };
 }
 
+/** 逐字歌詞：超過一半的行有兩個以上帶時長的字（整句一個 word 的假逐字 KRC 不算）。 */
+function isWordLevel(lines) {
+  const list = (lines || []).filter((l) => l && String(l.text || '').trim());
+  const word = list.filter((l) => (l.words || []).filter((w) => w && w.duration).length >= 2).length;
+  return list.length > 0 && word > list.length * 0.5;
+}
+
 async function analyzeVocals(vocalsPath, lines, options) {
   const samples = await decodeMono(vocalsPath, options);
   if (samples.length < SAMPLE_RATE * 10) return { accepted: false, reason: 'AUDIO_TOO_SHORT' };
   return estimateOffset(samples, lines);
 }
 
-module.exports = { analyzeVocals, estimateOffset, decodeMono, MIN_PEAK_Z, MIN_PEAK_RATIO, SAMPLE_RATE };
+module.exports = { analyzeVocals, estimateOffset, decodeMono, isWordLevel, MIN_PEAK_Z, MIN_PEAK_RATIO, SAMPLE_RATE };

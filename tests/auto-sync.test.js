@@ -92,6 +92,23 @@ function register({ test, eq, ok }) {
     eq(autoSync.estimateOffset(makeVocals(flat, 0, 60, random), flat).reason, 'NOT_ENOUGH_LYRICS');
   });
 
+  test('自動對時：逐字歌詞判斷（整句一個字的假逐字 KRC 不算）', () => {
+    const word = [{ text: '甲乙', words: [{ text: '甲', start: 0, duration: 200 }, { text: '乙', start: 200, duration: 200 }] }];
+    const fake = [{ text: '甲乙', words: [{ text: '甲乙', start: 0, duration: 400 }] }];
+    eq(autoSync.isWordLevel([...word, ...word, ...fake]), true);
+    eq(autoSync.isWordLevel([...fake, ...fake, ...word]), false);
+    eq(autoSync.isWordLevel([]), false);
+  });
+
+  test('自動對時：換歌詞來源與還原走既有的歌詞套用流程', () => {
+    const lyrics = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+    ok(lyrics.includes('function findAlignedSource'), '應有搜尋其他來源的流程');
+    ok(lyrics.includes('Number(y.wordLevel) - Number(x.wordLevel)'), '候選排序要逐字歌詞優先');
+    const undo = lyrics.slice(lyrics.indexOf("socket.on('offset:auto-undo'"));
+    ok(undo.includes('applyManualLyrics('), '還原歌詞要走 applyManualLyrics（清單回寫、廣播、歌曲庫一起處理）');
+    ok(undo.includes('now !== undo.appliedOffsetMs'), '偏移之後被改過就不可還原');
+  });
+
   test('自動對時：socket handler 契約（人聲檔只限 downloads 單純檔名、不送社群偏移、唯讀端擋得住）', () => {
     const lyrics = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
     const start = lyrics.indexOf("socket.on('offset:auto'");

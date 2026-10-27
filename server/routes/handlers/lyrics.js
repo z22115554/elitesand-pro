@@ -18,6 +18,9 @@ const { downloadsDir } = require('../../utils/app-paths');
 
 // 自動對時同一首只跑一次（連點、兩台遙控器同時按）；跨 socket 共用。
 const autoSyncRunning = new Set();
+// 每首最近一次自動對時套用前的狀態，給「還原」用（記憶體內，重開就沒有）
+const autoSyncUndo = new Map();
+const AUTO_SYNC_SEARCH_TIMEOUT_MS = 25000;
 
 const MAX_XIEYIN_OVERRIDE_LENGTH = 500;
 
@@ -221,6 +224,7 @@ function registerLyricsHandlers(io, socket, ctx) {
 
   // 自動對時：用 AI 分離出的人聲算整首偏移（services/auto-sync.js）。只有高信心才套用，
   // 低信心時不動任何東西。人聲檔是前提——沒有就回 NEEDS_SEPARATION，由面板走既有的分離流程。
+  // 目前的歌詞對不上時，再搜其他歌詞來源（逐字歌詞優先），找到能可靠對上的才換過去。
   // 不送社群偏移回饋：這個值不是人聽過確認的。
   socket.on('offset:auto', async (data, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
@@ -235,7 +239,6 @@ function registerLyricsHandlers(io, socket, ctx) {
       const type = manual?.lyricsType || track.lyricsType;
       lines = raw ? (type === 'krc' ? LyricsEngine.parseKrc(raw) : LyricsEngine.parseLrc(raw)) : [];
     }
-    if (!lines.some((l) => l && l.time > 0)) return reply({ ok: false, code: 'NO_TIMESTAMPS' });
     const vocalsFile = track.vocalsFile || libraryStore.getEntry(trackId)?.vocalsFile;
     // 只接受 downloadsDir 底下的單純檔名（跟 /audio/:filename 同一條規則）
     const vocalsPath = vocalsFile && path.basename(vocalsFile) === vocalsFile ? path.join(downloadsDir, vocalsFile) : null;
@@ -243,21 +246,90 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (autoSyncRunning.has(trackId)) return reply({ ok: false, code: 'BUSY' });
     autoSyncRunning.add(trackId);
     try {
-      const result = await autoSync.analyzeVocals(vocalsPath, lines);
-      if (!result.accepted) {
-        log.info(`自動對時未套用: ${trackId}: ${result.reason}`);
-        return reply({ ok: true, applied: false, reason: result.reason, spreadMs: result.spreadMs ?? null });
-      }
+      const samples = await autoSync.decodeMono(vocalsPath);
+      const hasTimestamps = lines.some((l) => l && l.time > 0);
+      const current = hasTimestamps ? autoSync.estimateOffset(samples, lines) : { accepted: false, reason: 'NO_TIMESTAMPS' };
       const previousOffsetMs = trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null;
-      const offsetMs = setTrackOffset(trackId, result.offsetMs);
-      log.info(`自動對時: ${trackId}: ${previousOffsetMs ?? '無'} → ${offsetMs}ms (z=${result.peakZ.toFixed(1)}, k=${result.peakRatio.toFixed(2)}, ${result.method})`);
-      reply({ ok: true, applied: true, offsetMs, previousOffsetMs });
+      if (current.accepted) {
+        const offsetMs = setTrackOffset(trackId, current.offsetMs);
+        autoSyncUndo.set(trackId, { offsetMs: previousOffsetMs, appliedOffsetMs: offsetMs, lyrics: null });
+        log.info(`自動對時: ${trackId}: ${previousOffsetMs ?? '無'} → ${offsetMs}ms (z=${current.peakZ.toFixed(1)}, k=${current.peakRatio.toFixed(2)}, ${current.method})`);
+        return reply({ ok: true, applied: true, offsetMs });
+      }
+
+      socket.emit('offset:auto-progress', { trackId, stage: 'sources' });
+      const currentLyrics = manual?.lyrics || track.lyrics || '';
+      const candidate = await findAlignedSource(samples, track, currentLyrics);
+      if (candidate) {
+        const snapshot = {
+          lyrics: currentLyrics || null,
+          lyricsType: manual?.lyricsType || track.lyricsType || 'lrc',
+          parsedLyrics: lines,
+          source: manual?.source || lyricsSourceOf(trackId) || 'manual',
+        };
+        applyManualLyrics(trackId, candidate.lyrics, candidate.type, candidate.lines, normLyricSource(candidate.source));
+        const offsetMs = setTrackOffset(trackId, candidate.result.offsetMs);
+        autoSyncUndo.set(trackId, { offsetMs: previousOffsetMs, appliedOffsetMs: offsetMs, lyrics: snapshot.lyrics ? snapshot : null });
+        log.info(`自動對時換歌詞來源: ${trackId}: ${candidate.source}${candidate.wordLevel ? '（逐字）' : ''} → ${offsetMs}ms (z=${candidate.result.peakZ.toFixed(1)})`);
+        return reply({ ok: true, applied: true, offsetMs, switchedSource: candidate.sourceLabel || candidate.source, wordLevel: candidate.wordLevel });
+      }
+      log.info(`自動對時未套用: ${trackId}: ${current.reason}`);
+      reply({ ok: true, applied: false, reason: current.reason, spreadMs: current.spreadMs ?? null });
     } catch (err) {
       log.warn(`自動對時失敗: ${trackId}: ${err.message}`);
       reply({ ok: false, code: 'ANALYSIS_FAILED' });
     } finally {
       autoSyncRunning.delete(trackId);
     }
+  });
+
+  // 搜其他來源的歌詞，逐一用同一份人聲對時。可靠對上的候選裡逐字歌詞優先，其次看信心。
+  async function findAlignedSource(samples, track, currentLyrics) {
+    let rows = [];
+    try {
+      rows = await Promise.race([
+        LyricsEngine.searchAllSources(track.artist || '', track.title || '', track.duration || 0),
+        new Promise((resolve) => setTimeout(() => resolve([]), AUTO_SYNC_SEARCH_TIMEOUT_MS)),
+      ]);
+    } catch (err) {
+      log.warn(`自動對時搜尋歌詞來源失敗: ${err.message}`);
+      return null;
+    }
+    const accepted = [];
+    for (const c of rows || []) {
+      if (!c || !c.lyrics || c.lyrics === currentLyrics || !['lrc', 'krc', 'srt'].includes(c.type)) continue;
+      let parsed = Array.isArray(c.parsedLyrics) && c.parsedLyrics.length ? c.parsedLyrics
+        : (c.type === 'krc' ? LyricsEngine.parseKrc(c.lyrics) : LyricsEngine.parseLrc(c.lyrics));
+      parsed = sanitizeParsedLyrics(parsed) || [];
+      if (!parsed.some((l) => l.time > 0)) continue;
+      const result = autoSync.estimateOffset(samples, parsed);
+      if (result.accepted) accepted.push({ ...c, lines: parsed, result, wordLevel: autoSync.isWordLevel(parsed) });
+    }
+    accepted.sort((x, y) => Number(y.wordLevel) - Number(x.wordLevel) || y.result.peakZ - x.result.peakZ);
+    return accepted[0] || null;
+  }
+
+  // 還原上一次自動對時：偏移，以及換過來源時的原本歌詞。偏移已被手動改過就不還原。
+  socket.on('offset:auto-undo', (data, callback) => {
+    const reply = typeof callback === 'function' ? callback : () => {};
+    const trackId = data && typeof data === 'object' ? data.trackId : null;
+    const undo = trackId && autoSyncUndo.get(trackId);
+    if (!undo) return reply({ ok: false, code: 'NOTHING_TO_UNDO' });
+    const now = trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null;
+    if (now !== undo.appliedOffsetMs) { autoSyncUndo.delete(trackId); return reply({ ok: false, code: 'CHANGED' }); }
+    autoSyncUndo.delete(trackId);
+    if (undo.lyrics) applyManualLyrics(trackId, undo.lyrics.lyrics, undo.lyrics.lyricsType, undo.lyrics.parsedLyrics, normLyricSource(undo.lyrics.source));
+    if (undo.offsetMs == null) {
+      trackOffsets.delete(trackId);
+      rememberOffsetForSource(trackId, lyricsSourceOf(trackId), 0);
+      if (playState.currentTrack && playState.currentTrack.id === trackId) playState.currentOffset = 0;
+      io.emit('offset:update', { trackId, offset: 0 });
+      persistState();
+    } else {
+      setTrackOffset(trackId, undo.offsetMs);
+    }
+    log.info(`自動對時已還原: ${trackId}`);
+    reply({ ok: true, restoredLyrics: !!undo.lyrics });
   });
 
   // 「這首已經對好時間」：只是給主播看的準備標記，不影響播放。只發給控制端（OBS 不需要）。
@@ -424,6 +496,13 @@ function registerLyricsHandlers(io, socket, ctx) {
       }
     }
 
+    applyManualLyrics(trackId, lyrics, lyricsType, parsedLyrics, newSource);
+  });
+
+  // 套用一份歌詞到某首歌（手動貼上／歌詞選擇器／自動對時換來源共用）。
+  // parsedLyrics 已由呼叫端解析好；這裡負責快取、來源偏移桶、清單與目前歌曲回寫（鐵則 17）、
+  // 廣播、歌曲庫寫回與非同步羅馬化。
+  function applyManualLyrics(trackId, lyrics, lyricsType, parsedLyrics, newSource) {
     manualLyricsCache.set(trackId, {
       lyrics,
       lyricsType: lyricsType || 'lrc',
@@ -519,7 +598,7 @@ function registerLyricsHandlers(io, socket, ctx) {
           log.warn(`手動歌詞羅馬化失敗（不影響顯示原文）: ${err.message}`);
         });
     }
-  });
+  }
 
   // ─── 使用者手動修正單行諧音（docs/JAPANESE-XIEYIN-V2-PLAN.md Phase 6）───
   //
