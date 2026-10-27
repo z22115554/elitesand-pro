@@ -246,11 +246,11 @@ function registerLyricsHandlers(io, socket, ctx) {
       const result = await autoSync.analyzeVocals(vocalsPath, lines);
       if (!result.accepted) {
         log.info(`自動對時未套用: ${trackId}: ${result.reason}`);
-        return reply({ ok: true, applied: false, reason: result.reason });
+        return reply({ ok: true, applied: false, reason: result.reason, spreadMs: result.spreadMs ?? null });
       }
       const previousOffsetMs = trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null;
       const offsetMs = setTrackOffset(trackId, result.offsetMs);
-      log.info(`自動對時: ${trackId}: ${previousOffsetMs ?? '無'} → ${offsetMs}ms (z=${result.peakZ.toFixed(1)}, k=${result.peakRatio.toFixed(2)})`);
+      log.info(`自動對時: ${trackId}: ${previousOffsetMs ?? '無'} → ${offsetMs}ms (z=${result.peakZ.toFixed(1)}, k=${result.peakRatio.toFixed(2)}, ${result.method})`);
       reply({ ok: true, applied: true, offsetMs, previousOffsetMs });
     } catch (err) {
       log.warn(`自動對時失敗: ${trackId}: ${err.message}`);

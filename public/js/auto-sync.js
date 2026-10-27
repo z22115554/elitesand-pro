@@ -99,7 +99,11 @@
         const seconds = (result.offsetMs >= 0 ? '+' : '') + (result.offsetMs / 1000).toFixed(2);
         toast(T('autoSync.applied', { seconds }), 'success');
       } else if (result.ok) {
-        toast(T('autoSync.uncertain'), 'info');
+        if (result.reason === 'VERSION_MISMATCH') {
+          toast(T('autoSync.versionMismatch', { seconds: (result.spreadMs / 1000).toFixed(1) }), 'info');
+        } else {
+          toast(T('autoSync.uncertain'), 'info');
+        }
       } else {
         const key = { NO_TIMESTAMPS: 'autoSync.noTimestamps', NEEDS_SEPARATION: 'autoSync.noVocals', BUSY: 'autoSync.busy' }[result.code];
         toast(key ? T(key) : T('autoSync.failed', { code: result.code || '' }), 'error');

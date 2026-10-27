@@ -9,6 +9,7 @@
  * 2026-10-27 實驗（測試用資料夾/人聲互相關對時實驗-20261027）：100 首調參集 63 首過門檻、
  * 0 首錯超過 0.3 秒、14 首歌詞錯誤全擋；留出 30 首 19 首過門檻，使用者盲測 19/19 準。
  * 門檻（peakZ ≥ 8 且 peakRatio ≥ 1.3）是在那批資料定下的，改之前要重跑同一套驗證。
+ * 沒過門檻的再做分段驗證（4 段至少 3 段一致才救回），並區分「歌詞版本不同」與「對不起來」。
  *
  * 偏移語義與顯示端相同：adjustedTime = audioTime + offset。
  */
@@ -22,6 +23,15 @@ const MAX_LAG_SEC = 90;
 const MIN_PEAK_Z = 8;
 const MIN_PEAK_RATIO = 1.3;
 const MIN_LINES = 8;
+// 分段驗證（2026-10-27 加，同一套 130 首資料驗證：調參集 63→69、留出 19→20，仍 0 錯套）
+const SEGMENTS = 4;
+const MIN_SEGMENT_FRAMES = 200;
+const SEGMENT_AGREE_MS = 300;
+const SEGMENT_MIN_AGREE = 3;
+const SEGMENT_MIN_PEAK_Z = 6;
+// 版本不同的判斷：歌詞錯誤的 14 首沒有一首會被誤判成這個
+const VERSION_NEAR_MS = 3000;
+const VERSION_SPREAD_MS = 500;
 const MAX_DURATION_SEC = 15 * 60;
 const CREDIT_LINE = /作[詞词曲]|[編编]曲|[製制]作|監製|混音|lyrics\s*by|composed|arranged|^\s*(詞|曲)\s*[:：]/i;
 
@@ -175,6 +185,40 @@ function zScore(vals) {
   return Float64Array.from(vals, (v) => (v - mean) / sd);
 }
 
+function combinedPeak(vocalAct, vocalOnset, lyricAct, lyricStarts, maxLag) {
+  const activityCorr = crossCorrelate(vocalAct, lyricAct, maxLag);
+  const onsetCorr = crossCorrelate(vocalOnset, lyricStarts, maxLag);
+  const za = zScore(activityCorr), zo = zScore(onsetCorr);
+  const combined = Float64Array.from(za, (v, i) => v + 0.5 * zo[i]);
+  let best = 0;
+  for (let i = 1; i < combined.length; i++) if (combined[i] > combined[best]) best = i;
+  return { combined, onsetCorr, best };
+}
+
+/**
+ * 把有歌詞的時間範圍切成 SEGMENTS 段，每段只留那段的歌詞、各自在整個位移範圍找最佳偏移。
+ * 算對的話各段會指向同一個偏移；巧合撞到的峰值各段會各說各話。
+ * 段內唱的時間不到 2 秒就回 null（太短，找出來的不算數）。
+ */
+function segmentOffsets(vocalAct, vocalOnset, lyric, maxLag) {
+  const frames = lyric.activity.length;
+  let first = -1, last = -1;
+  for (let i = 0; i < frames; i++) if (lyric.activity[i] > 0) { if (first < 0) first = i; last = i; }
+  if (first < 0) return [];
+  const out = [];
+  for (let s = 0; s < SEGMENTS; s++) {
+    const a = Math.floor(first + (last + 1 - first) * s / SEGMENTS);
+    const b = Math.floor(first + (last + 1 - first) * (s + 1) / SEGMENTS);
+    const act = new Float64Array(frames), starts = new Float64Array(frames);
+    let sung = 0;
+    for (let i = a; i < b; i++) { act[i] = lyric.activity[i]; starts[i] = lyric.starts[i]; sung += act[i]; }
+    if (sung < MIN_SEGMENT_FRAMES) { out.push(null); continue; }
+    const { best } = combinedPeak(vocalAct, vocalOnset, act, starts, maxLag);
+    out.push(Math.round(-(best - maxLag) * HOP_SEC * 1000) || 0);
+  }
+  return out;
+}
+
 /** 純運算：人聲樣本＋歌詞行 → 偏移與信心。拆出來方便測試，不碰檔案。 */
 function estimateOffset(samples, lines) {
   const db = energyDb(samples);
@@ -184,12 +228,8 @@ function estimateOffset(samples, lines) {
     return { accepted: false, reason: 'NOT_ENOUGH_LYRICS', lineCount: lyric.lineCount };
   }
   const maxLag = Math.round(MAX_LAG_SEC / HOP_SEC);
-  const activityCorr = crossCorrelate(vocalActivity(db), lyric.activity, maxLag);
-  const onsetCorr = crossCorrelate(onsetStrength(db), lyric.starts, maxLag);
-  const za = zScore(activityCorr), zo = zScore(onsetCorr);
-  const combined = Float64Array.from(za, (v, i) => v + 0.5 * zo[i]);
-  let best = 0;
-  for (let i = 1; i < combined.length; i++) if (combined[i] > combined[best]) best = i;
+  const vocalAct = vocalActivity(db), vocalOnset = onsetStrength(db);
+  const { combined, onsetCorr, best } = combinedPeak(vocalAct, vocalOnset, lyric.activity, lyric.starts, maxLag);
   // 第二高峰：離最高峰 1.5 秒以外的最大值
   const exclude = Math.round(1.5 / HOP_SEC);
   let second = -Infinity;
@@ -202,9 +242,24 @@ function estimateOffset(samples, lines) {
   }
   const peakZ = combined[best];
   const peakRatio = peakZ / Math.max(second, 1e-6);
-  const offsetMs = Math.round(-(fineIdx - maxLag) * HOP_SEC * 1000);
-  const accepted = peakZ >= MIN_PEAK_Z && peakRatio >= MIN_PEAK_RATIO;
-  return { accepted, reason: accepted ? null : 'LOW_CONFIDENCE', offsetMs, peakZ, peakRatio, lineCount: lyric.lineCount };
+  const offsetMs = Math.round(-(fineIdx - maxLag) * HOP_SEC * 1000) || 0;
+  const base = { offsetMs, peakZ, peakRatio, lineCount: lyric.lineCount };
+  if (peakZ >= MIN_PEAK_Z && peakRatio >= MIN_PEAK_RATIO) return { ...base, accepted: true, reason: null, method: 'global' };
+
+  // 信心不夠時多驗一道：各段獨立找到的偏移大多一致，才救回來。
+  const segments = segmentOffsets(vocalAct, vocalOnset, lyric, maxLag);
+  const agreeing = segments.filter((v) => v != null && Math.abs(v - offsetMs) <= SEGMENT_AGREE_MS).length;
+  if (peakZ >= SEGMENT_MIN_PEAK_Z && agreeing >= SEGMENT_MIN_AGREE) {
+    return { ...base, accepted: true, reason: null, method: 'segments', segments };
+  }
+  // 失敗原因：各段都落在整首偏移附近、但彼此差很多 → 歌詞跟這個音檔的版本不同
+  // （間奏長度不一樣），套單一偏移一定有一段不準；否則就是人聲跟這份歌詞對不起來。
+  const near = segments.filter((v) => v != null && Math.abs(v - offsetMs) <= VERSION_NEAR_MS);
+  const spreadMs = near.length ? Math.max(...near) - Math.min(...near) : 0;
+  if (near.length >= 2 && spreadMs > VERSION_SPREAD_MS) {
+    return { ...base, accepted: false, reason: 'VERSION_MISMATCH', spreadMs, segments };
+  }
+  return { ...base, accepted: false, reason: 'LOW_CONFIDENCE', segments };
 }
 
 async function analyzeVocals(vocalsPath, lines, options) {

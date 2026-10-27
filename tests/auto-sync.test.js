@@ -33,13 +33,18 @@ function makeLines(count, random) {
 
 // 依歌詞「實際被唱」的位置（lyric 時間 + delayMs）產生人聲：唱的時候大聲、其他時間近乎靜音
 function makeVocals(lines, delayMs, totalSec, random) {
+  return makeVocalsBy(lines, () => delayMs, totalSec, random);
+}
+
+function makeVocalsBy(lines, delayOf, totalSec, random) {
   const samples = new Float32Array(SR * totalSec);
   for (let i = 0; i < samples.length; i++) samples[i] = (random() - 0.5) * 0.0005;
-  for (const line of lines) {
+  lines.forEach((line, k) => {
+    const delayMs = delayOf(k);
     const a = Math.floor((line.time + delayMs) / 1000 * SR);
     const b = Math.min(samples.length, Math.floor((line.time + line.duration + delayMs) / 1000 * SR));
     for (let i = Math.max(0, a); i < b; i++) samples[i] = Math.sin(i * 0.07) * 0.3 + (random() - 0.5) * 0.05;
-  }
+  });
   return samples;
 }
 
@@ -68,6 +73,15 @@ function register({ test, eq, ok }) {
     const result = autoSync.estimateOffset(makeVocals(other, 0, 150, random), lines);
     eq(result.accepted, false);
     eq(result.reason, 'LOW_CONFIDENCE');
+  });
+
+  test('自動對時：前後半段需要的偏移不同（歌詞是別的版本）→ 不套用並回報 VERSION_MISMATCH', () => {
+    const random = rng(7);
+    const lines = makeLines(32, random);
+    const result = autoSync.estimateOffset(makeVocalsBy(lines, (k) => (k < 16 ? 1000 : 3000), 160, random), lines);
+    eq(result.accepted, false);
+    eq(result.reason, 'VERSION_MISMATCH');
+    ok(Math.abs(result.spreadMs - 2000) <= 50, `前後段差應約 2000ms，實際 ${result.spreadMs}`);
   });
 
   test('自動對時：歌詞行太少或全部同一時間戳就不分析', () => {
