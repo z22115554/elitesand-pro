@@ -76,6 +76,7 @@ require('./lyric-template-settings.test').register({ test, testAsync, eq, ok });
 require('./production-bundles.test').register({ test, testAsync, eq, ok });
 require('./spout-packaging.test').register({ test, testAsync, eq, ok });
 require('./auto-sync.test').register({ test, testAsync, eq, ok });
+require('./session-end-marker.test').register({ test, testAsync, eq, ok });
 
 test('Spout CP05/CP07 keeps the native controls Electron-only and exposes bounded performance evidence', () => {
   const panelHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');

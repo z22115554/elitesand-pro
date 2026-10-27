@@ -572,6 +572,10 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
 app.set('gracefulShutdown', gracefulShutdown);
 process.on('SIGINT', () => { gracefulShutdown({ reason: 'SIGINT', exitCode: 0 }); });
 process.on('SIGTERM', () => { gracefulShutdown({ reason: 'SIGTERM', exitCode: 0 }); });
+// Windows 直接關掉命令列視窗（npm start）時 Node 收到的是 SIGHUP、Ctrl+Break 是 SIGBREAK；
+// 不接的話行程被直接結束，下次啟動會誤報「上次未正常關閉」。
+process.on('SIGHUP', () => { gracefulShutdown({ reason: 'SIGHUP', exitCode: 0 }); });
+if (process.platform === 'win32') process.on('SIGBREAK', () => { gracefulShutdown({ reason: 'SIGBREAK', exitCode: 0 }); });
 attachParentShutdown({
   onShutdown: () => gracefulShutdown({ reason: 'parent-message', exitCode: 0 }),
   onError: (err) => log.error(`Parent shutdown failed: ${err.message}`, err),

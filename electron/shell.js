@@ -249,6 +249,37 @@ function waitForExit(child, timeoutMs, delay = (ms) => new Promise((resolve) => 
   ]);
 }
 
+// Windows 關機／重開／登出時 Electron 不會觸發 before-quit（官方文件註明），自己啟動的伺服器會被
+// 直接終止，下次啟動就誤報「上次未正常關閉」。session-end 事件回傳後 Windows 隨時會結束整個行程，
+// 所以這裡同步等伺服器寫完乾淨標記（它收到關閉訊息後第一件事就是寫標記）；逾時就由殼代寫，原因標成
+// 系統結束工作階段——這不是當機，不該跳當機提示。標記格式與 server/services/session-marker.js 相同。
+function settleSessionMarkerSync(markerFile, {
+  fsImpl = fs,
+  timeoutMs = 2000,
+  now = Date.now,
+  sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+} = {}) {
+  const readClean = () => {
+    try { return JSON.parse(fsImpl.readFileSync(markerFile, 'utf8'))?.clean === true; } catch (_) { return false; }
+  };
+  const deadline = now() + timeoutMs;
+  while (!readClean()) {
+    if (now() >= deadline) {
+      try {
+        let previous = {};
+        try { previous = JSON.parse(fsImpl.readFileSync(markerFile, 'utf8')) || {}; } catch (_) { /* 沒有標記檔就只寫原因 */ }
+        fsImpl.writeFileSync(markerFile, `${JSON.stringify({ ...previous, clean: true, endedAt: now(), reason: 'os-session-end' }, null, 2)}
+`, 'utf8');
+        return 'shell';
+      } catch (_) {
+        return 'failed';
+      }
+    }
+    sleepSync(50);
+  }
+  return 'server';
+}
+
 function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
   const files = manifest?.files;
   if (!files || typeof files !== 'object' || Array.isArray(files) || Object.keys(files).length === 0) {
@@ -1296,6 +1327,9 @@ function createElectronShell({
       if (!headless) window.show();
     });
     window.on('close', (event) => hideWindowToTray(event, window));
+    // Windows 關機／重開／登出（見 handleSessionEnd）。系統匣隱藏中的視窗一樣收得到。
+    window.on('query-session-end', () => handleSessionEnd(false));
+    window.on('session-end', () => handleSessionEnd(true));
     window.on('maximize', () => window.webContents.send?.('elitesand:window-maximized', true));
     window.on('unmaximize', () => window.webContents.send?.('elitesand:window-maximized', false));
     window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
@@ -1481,6 +1515,24 @@ function createElectronShell({
       try { child.kill(); } catch (_) { /* Already gone or unavailable. */ }
     }
     if (serverProcess === child) serverProcess = null;
+  }
+
+  // 見 settleSessionMarkerSync 的說明。query-session-end 先請伺服器開始乾淨關閉（存檔＋寫標記），
+  // session-end 再同步等它完成；只處理自己啟動的伺服器，重用的既有伺服器不碰。
+  let sessionEnding = false;
+  function handleSessionEnd(final) {
+    isQuitting = true;
+    if (!sessionEnding) {
+      sessionEnding = true;
+      stopPowerSaveBlocker();
+      globalHotkeys?.stop();
+      if (ownsServer && serverProcess?.pid) {
+        try { serverProcess.postMessage({ type: SHUTDOWN_MESSAGE }); } catch (_) { /* 行程可能已經在結束 */ }
+      }
+    }
+    if (final && ownsServer) {
+      settleSessionMarkerSync(path.join(getRuntimePaths(app.getPath('userData')).dataDir, '.session-marker'), { fsImpl });
+    }
   }
 
   async function shutdown() {
@@ -1681,6 +1733,7 @@ function createElectronShell({
 
 module.exports = {
   DEFAULT_PORT,
+  settleSessionMarkerSync,
   START_TIMEOUT_MS,
   HEALTH_INTERVAL_MS,
   SHUTDOWN_TIMEOUT_MS,
