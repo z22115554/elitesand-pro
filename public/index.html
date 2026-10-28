@@ -717,15 +717,15 @@
                   <p id="practice-guide-status" class="practice-song-status" role="status">先在直播或歌曲庫載入一首歌。</p>
                 </div>
                 <div class="practice-bar-actions">
-                  <button id="practice-build" class="btn" type="button" hidden>建立練唱音軌</button>
-                  <button id="practice-cancel" class="btn btn-ghost" type="button" data-i18n="practice.cancel" hidden>取消分析</button>
-                  <div class="practice-stepper" role="group" aria-label="Key" data-i18n-aria-label="practice.key">
-                    <span class="practice-stepper-label">Key</span>
-                    <button id="practice-key-down" class="stepper-btn" type="button" aria-label="降一個半音" data-i18n-aria-label="controller.pitchDown">−</button>
-                    <output id="practice-key-value" class="stepper-val">0</output>
-                    <button id="practice-key-up" class="stepper-btn" type="button" aria-label="升一個半音" data-i18n-aria-label="controller.pitchUp">+</button>
+                  <button id="practice-build" class="btn btn-sm" type="button" hidden>建立練唱音軌</button>
+                  <button id="practice-cancel" class="btn btn-ghost btn-sm" type="button" data-i18n="practice.cancel" hidden>取消分析</button>
+                  <div class="practice-key" role="group" aria-label="Key" data-i18n-aria-label="practice.key">
+                    <span class="practice-key-label">Key</span>
+                    <button id="practice-key-down" class="practice-key-btn" type="button" aria-label="降一個半音" data-i18n-aria-label="controller.pitchDown">−</button>
+                    <output id="practice-key-value" class="practice-key-val">0</output>
+                    <button id="practice-key-up" class="practice-key-btn" type="button" aria-label="升一個半音" data-i18n-aria-label="controller.pitchUp">+</button>
                   </div>
-                  <button id="practice-obs-preview" class="btn btn-ghost" type="button" aria-pressed="false" data-i18n="practice.obsPreview">OBS 預覽</button>
+                  <button id="practice-obs-preview" class="btn btn-ghost btn-sm" type="button" aria-pressed="false" data-i18n="practice.obsPreview">OBS 預覽</button>
                 </div>
               </header>
               <div id="practice-stage" class="pstage">
@@ -754,20 +754,30 @@
 
             <aside class="practice-side" aria-label="練唱設定" data-i18n-aria-label="practice.sideLabel">
               <div class="practice-score-card">
-                <div class="practice-label" data-i18n="practice.score">分數</div>
-                <div id="practice-score" class="practice-score-num" data-ps-mirror="score">—</div>
-                <div class="practice-tiers">
-                  <div><b id="practice-tier-perfect">0</b><small>PERFECT</small></div>
-                  <div><b id="practice-tier-great">0</b><small>GREAT</small></div>
-                  <div><b id="practice-tier-good">0</b><small>GOOD</small></div>
-                  <div><b id="practice-tier-miss">0</b><small>MISS</small></div>
+                <div class="practice-score-head">
+                  <div>
+                    <div class="practice-label" data-i18n="practice.score">分數</div>
+                    <div id="practice-score" class="practice-score-num">—</div>
+                  </div>
+                  <div id="practice-tech" class="practice-tech"></div>
                 </div>
-                <div id="practice-tech" class="practice-tech"></div>
+                <div class="practice-tiers">
+                  <div class="is-perfect"><b id="practice-tier-perfect">0</b><small>PERFECT</small></div>
+                  <div class="is-great"><b id="practice-tier-great">0</b><small>GREAT</small></div>
+                  <div class="is-good"><b id="practice-tier-good">0</b><small>GOOD</small></div>
+                  <div class="is-miss"><b id="practice-tier-miss">0</b><small>MISS</small></div>
+                </div>
               </div>
 
-              <details class="practice-row" open>
-                <summary data-i18n="practice.input">輸入</summary>
-                <div class="practice-row-body">
+              <!-- 設定分三頁，一次只開一頁：整個練唱頁維持一屏、不用往下捲 -->
+              <div class="practice-panel">
+                <div class="practice-tabs" role="tablist" aria-label="練唱設定" data-i18n-aria-label="practice.sideLabel">
+                  <button id="practice-tab-input" class="practice-tab" type="button" role="tab" aria-selected="true" aria-controls="practice-pane-input" data-tab="input" data-i18n="practice.input">輸入</button>
+                  <button id="practice-tab-display" class="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-pane-display" data-tab="display" data-i18n="practice.display">顯示</button>
+                  <button id="practice-tab-obs" class="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-pane-obs" data-tab="obs" data-i18n="practice.obsLook">OBS 外觀</button>
+                </div>
+
+                <div id="practice-pane-input" class="practice-pane" role="tabpanel" aria-labelledby="practice-tab-input" data-pane="input">
                   <label class="practice-field"><span data-i18n="practice.source">來源</span>
                     <select id="practice-source">
                       <option value="off" data-i18n="practice.sourceOff">不偵測</option>
@@ -779,17 +789,18 @@
                     <select id="practice-device"></select>
                   </label>
                   <div class="practice-meter" aria-hidden="true"><i id="practice-level"></i></div>
-                  <label class="practice-field"><span><span data-i18n="practice.latency">延遲補償</span> <b class="mono" id="practice-latency-value">0 ms</b></span>
-                    <input type="range" id="practice-latency" min="0" max="400" step="10" value="120"></label>
-                  <button id="practice-calibrate" class="btn" type="button" data-i18n="practice.calibrate" disabled>校準延遲</button>
+                  <div class="practice-field">
+                    <div class="practice-field-head">
+                      <label for="practice-latency" data-i18n="practice.latency">延遲補償</label>
+                      <b class="mono" id="practice-latency-value">0 ms</b>
+                      <button id="practice-calibrate" class="btn btn-sm" type="button" data-i18n="practice.calibrate" disabled>校準延遲</button>
+                    </div>
+                    <input type="range" id="practice-latency" min="0" max="400" step="10" value="120">
+                  </div>
                   <p class="practice-note" data-i18n="practice.headphoneHint">建議戴耳機。這裡不錄音、不開耳返，聲音只在這台電腦分析。</p>
                 </div>
-              </details>
 
-              <details class="practice-row" open>
-                <summary data-i18n="practice.display">顯示</summary>
-                <div class="practice-row-body">
-                  <label class="practice-inline"><input type="checkbox" id="practice-octave" checked> <span data-i18n="practice.allowOctave">容許差一個八度</span></label>
+                <div id="practice-pane-display" class="practice-pane" role="tabpanel" aria-labelledby="practice-tab-display" data-pane="display" hidden>
                   <label class="practice-field"><span data-i18n="practice.trail">你的聲音</span>
                     <select id="practice-trail">
                       <option value="ribbon" data-i18n="practice.trailRibbon">緞帶：平滑＋吸附</option>
@@ -797,24 +808,26 @@
                       <option value="raw" data-i18n="practice.trailRaw">原始（未處理）</option>
                     </select>
                   </label>
-                  <label class="practice-inline"><input type="checkbox" id="practice-contour"> <span data-i18n="practice.showContour">顯示原唱音高曲線</span></label>
+                  <label class="practice-check"><input type="checkbox" id="practice-octave" checked> <span data-i18n="practice.allowOctave">容許差一個八度</span></label>
+                  <label class="practice-check"><input type="checkbox" id="practice-contour"> <span data-i18n="practice.showContour">顯示原唱音高曲線</span></label>
                   <div id="practice-model" class="practice-model" hidden>
                     <p class="practice-note" data-i18n="practice.modelHint">安裝高精度音高元件（約 90MB）後，原唱音高會更準。沒裝也能練唱。</p>
-                    <button id="practice-model-install" class="btn" type="button" data-i18n="practice.modelInstall">安裝高精度音高元件</button>
+                    <button id="practice-model-install" class="btn btn-sm" type="button" data-i18n="practice.modelInstall">安裝高精度音高元件</button>
                   </div>
                 </div>
-              </details>
 
-              <details class="practice-row">
-                <summary data-i18n="practice.obsLook">OBS 外觀</summary>
-                <div class="practice-row-body">
+                <div id="practice-pane-obs" class="practice-pane" role="tabpanel" aria-labelledby="practice-tab-obs" data-pane="obs" hidden>
                   <div class="practice-field"><span data-i18n="practice.obsUrl">OBS 瀏覽器來源網址（建議 1920 × 1080）</span>
-                    <div class="practice-inline"><code id="practice-obs-url" class="practice-obs-url mono"></code><button id="practice-obs-copy" class="btn" type="button" data-i18n="practice.copy">複製</button></div>
+                    <div class="practice-url-row"><code id="practice-obs-url" class="practice-obs-url mono"></code><button id="practice-obs-copy" class="btn btn-sm" type="button" data-i18n="practice.copy">複製</button></div>
                   </div>
                   <label class="practice-field"><span data-i18n="practice.fx">演出風格（音符、評等、結算一起換）</span><select id="practice-fx"></select></label>
-                  <label class="practice-inline"><input type="checkbox" id="practice-bg"> <span data-i18n="practice.bg">音軌底板</span></label>
-                  <label class="practice-field"><span><span data-i18n="practice.bgOpacity">底板透明度</span> <b class="mono" id="practice-bg-opacity-value"></b></span>
-                    <input type="range" id="practice-bg-opacity" min="0" max="100"></label>
+                  <div class="practice-field">
+                    <div class="practice-field-head">
+                      <label class="practice-check"><input type="checkbox" id="practice-bg"> <span data-i18n="practice.bg">音軌底板</span></label>
+                      <b class="mono" id="practice-bg-opacity-value"></b>
+                    </div>
+                    <input type="range" id="practice-bg-opacity" min="0" max="100" aria-label="底板透明度" data-i18n-aria-label="practice.bgOpacity">
+                  </div>
                   <div class="practice-swatches">
                     <label><input type="color" id="practice-color-bg"><span data-i18n="practice.colorBg">底板</span></label>
                     <label><input type="color" id="practice-color-note"><span data-i18n="practice.colorNote">音符</span></label>
@@ -822,24 +835,30 @@
                     <label><input type="color" id="practice-color-voice"><span data-i18n="practice.colorVoice">你的聲音</span></label>
                     <label><input type="color" id="practice-color-off"><span data-i18n="practice.colorOff">唱偏</span></label>
                   </div>
-                  <label class="practice-inline"><input type="checkbox" id="practice-edge"> <span data-i18n="practice.edge">深色描邊（適合亮背景）</span></label>
-                  <label class="practice-field"><span data-i18n="practice.position">位置</span>
-                    <select id="practice-pos"><option value="bottom" data-i18n="practice.posBottom">畫面下方</option><option value="top" data-i18n="practice.posTop">畫面上方</option></select>
-                  </label>
-                  <label class="practice-field"><span><span data-i18n="practice.laneHeight">音軌高度</span> <b class="mono" id="practice-lane-height-value"></b></span>
-                    <input type="range" id="practice-lane-height" min="20" max="60"></label>
-                  <label class="practice-inline"><input type="checkbox" id="practice-show-score"> <span data-i18n="practice.showScore">顯示分數</span></label>
-                  <label class="practice-inline"><input type="checkbox" id="practice-show-result"> <span data-i18n="practice.showResult">唱完顯示結算</span></label>
-                  <label class="practice-inline"><input type="checkbox" id="practice-show-lyrics"> <span data-i18n="practice.showLyrics">顯示歌詞</span></label>
+                  <div class="practice-pair">
+                    <label class="practice-field"><span data-i18n="practice.position">位置</span>
+                      <select id="practice-pos"><option value="bottom" data-i18n="practice.posBottom">畫面下方</option><option value="top" data-i18n="practice.posTop">畫面上方</option></select>
+                    </label>
+                    <div class="practice-field">
+                      <div class="practice-field-head"><label for="practice-lane-height" data-i18n="practice.laneHeight">音軌高度</label><b class="mono" id="practice-lane-height-value"></b></div>
+                      <input type="range" id="practice-lane-height" min="20" max="60">
+                    </div>
+                  </div>
+                  <div class="practice-checks">
+                    <label class="practice-check"><input type="checkbox" id="practice-show-score"> <span data-i18n="practice.showScore">顯示分數</span></label>
+                    <label class="practice-check"><input type="checkbox" id="practice-show-result"> <span data-i18n="practice.showResult">唱完顯示結算</span></label>
+                    <label class="practice-check"><input type="checkbox" id="practice-show-lyrics"> <span data-i18n="practice.showLyrics">顯示歌詞</span></label>
+                    <label class="practice-check"><input type="checkbox" id="practice-edge"> <span data-i18n="practice.edge">深色描邊（適合亮背景）</span></label>
+                  </div>
                   <p class="practice-note" data-i18n="practice.lyricsHint">歌詞建議關掉，改用歌詞來源的 KTV 模板疊在下面，兩個來源各自調位置。</p>
-                  <button id="practice-style-reset" class="btn btn-ghost" type="button" data-i18n="practice.styleReset">恢復預設外觀</button>
+                  <button id="practice-style-reset" class="btn btn-ghost btn-sm practice-reset" type="button" data-i18n="practice.styleReset">恢復預設外觀</button>
                 </div>
-              </details>
+              </div>
 
-              <details class="practice-row" open>
-                <summary data-i18n="practice.lines">逐句評等</summary>
-                <div class="practice-row-body"><ol id="practice-lines" class="practice-lines" data-i18n-skip></ol></div>
-              </details>
+              <section class="practice-lines-card" aria-labelledby="practice-lines-title">
+                <h3 id="practice-lines-title" class="practice-label" data-i18n="practice.lines">逐句評等</h3>
+                <ol id="practice-lines" class="practice-lines" data-i18n-skip></ol>
+              </section>
             </aside>
           </div>
 

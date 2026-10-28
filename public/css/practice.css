@@ -1,71 +1,109 @@
 /* ═══════════════════════════════════════════════════════════
    練唱分頁版面（面板）。音軌、評等、結算本身在 practice-stage.css（跟 OBS 練唱疊加層共用）。
-   左：歌名列＋音軌＋歌詞；右：分數與設定。窄螢幕改成上下排。
+   一屏不捲：左邊音軌吃滿剩下的高度；右邊分數卡＋設定分頁（一次一頁）＋逐句評等（只在自己裡面捲）。
+   窄螢幕（< 1100px）改回上下排、整頁捲動。
    ═══════════════════════════════════════════════════════════ */
 
-.view[data-view="practice"].is-active { display: block; min-width: 0; }
+.content:has(> [data-view="practice"].is-active) { overflow: hidden; display: flex; flex-direction: column; }
+.view[data-view="practice"].is-active { display: flex; flex-direction: column; align-items: stretch; flex: 1; min-height: 0; min-width: 0; max-width: none; }
 
-.practice-desk { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--gap); align-items: start; }
-.practice-main { min-width: 0; display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+.practice-desk { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--gap); }
+.practice-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
 
-.practice-bar { display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+/* ── 歌名列 ── */
+.practice-bar { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .practice-song { flex: 1; min-width: 0; }
-.practice-song-title { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.practice-song-status { margin: 3px 0 0; font-size: 12px; color: var(--text-dim); }
+.practice-song-title { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.practice-song-status { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .practice-bar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.practice-stepper { display: flex; align-items: center; gap: 4px; padding: 0 4px 0 10px; height: 32px; border: 1px solid var(--border); border-radius: var(--r-md); }
-.practice-stepper-label { font: 500 11px var(--font-mono); color: var(--text-faint); margin-right: 4px; }
-.practice-stepper .stepper-val { min-width: 26px; text-align: center; font: 500 13px var(--font-mono); }
 #practice-obs-preview[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 
-#practice-stage { min-height: 420px; }
+/* Key：標籤｜−｜數字｜+ 四格等高，分隔線都在框內 */
+.practice-key { display: inline-flex; align-items: stretch; height: 32px; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+.practice-key > * { display: flex; align-items: center; justify-content: center; margin: 0; }
+.practice-key-label { padding: 0 10px; font: 500 11px/1 var(--font-mono); color: var(--text-faint); border-right: 1px solid var(--border); }
+.practice-key-btn { width: 30px; padding: 0; border: 0; background: transparent; color: var(--text-dim); font-size: 15px; line-height: 1; cursor: pointer; transition: background .12s, color .12s; }
+.practice-key-btn:hover { background: var(--bg-hover); color: var(--text); }
+.practice-key-btn:active { background: var(--accent-soft); }
+.practice-key-val { min-width: 34px; padding: 0 4px; border-left: 1px solid var(--border); border-right: 1px solid var(--border); font: 600 13px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* ── 音軌 ── */
+#practice-stage { flex: 1; min-height: 0; }
 /* 音軌是演出畫面（畫布的格線、播放頭、粒子都以深底設計），淺色主題也維持深底，跟 OBS 上看到的一致 */
-#practice-stage .pstage-lane { min-height: 360px; background: #0F0F0E; }
+#practice-stage .pstage-lane { min-height: 200px; background: #0F0F0E; }
+#practice-stage .pstage-lyrics { flex-shrink: 0; padding: 12px 20px 14px; }
+#practice-stage .pstage-lyric-now { font-size: 22px; min-height: 32px; }
+#practice-stage .pstage-lyric-next { margin-top: 4px; min-height: 20px; font-size: 13px; }
 .practice-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; z-index: 3; background: #0F0F0E; }
 .practice-empty[hidden] { display: none; }
 .practice-empty p { margin: 0; max-width: 360px; color: #A8A59B; font-size: 13px; line-height: 1.6; }
 
-/* 面板裡的 OBS 預覽：棋盤格代表透明，看得出 OBS 上會蓋到哪裡 */
-#practice-stage.pstage--obs { height: 600px; padding-top: 56px; background-color: #1a1a18;
+/* 面板裡的 OBS 預覽：棋盤格代表透明，看得出 OBS 上會蓋到哪裡；音軌高度按 OBS 設定的比例 */
+#practice-stage.pstage--obs { height: auto; padding-top: 44px; background-color: #1a1a18;
   background-image: linear-gradient(45deg, #222220 25%, transparent 25%, transparent 75%, #222220 75%),
                     linear-gradient(45deg, #222220 25%, transparent 25%, transparent 75%, #222220 75%);
   background-size: 24px 24px; background-position: 0 0, 12px 12px; }
-#practice-stage.pstage--obs .pstage-lane { flex-basis: calc(600px * var(--pf-lane-ratio, .38)); min-height: 0; background: transparent; }
+#practice-stage.pstage--obs .pstage-lane { flex: 0 0 calc(var(--pf-lane-ratio, .38) * 100%); min-height: 0; background: transparent; }
 #practice-stage.pstage--obs .practice-empty { background: transparent; }
 
 /* ── 右欄 ── */
-.practice-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.practice-score-card, .practice-row { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
-.practice-score-card { padding: 16px 18px; }
-.practice-label { font-size: 11px; color: var(--text-faint); letter-spacing: .06em; }
-.practice-score-num { margin-top: 2px; font: 600 34px/1.1 var(--font-mono); }
-.practice-tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
-.practice-tiers div { display: grid; justify-items: center; gap: 2px; padding: 6px 0; border-radius: var(--r-sm); background: var(--bg-inset); }
-.practice-tiers b { font: 600 15px var(--font-mono); }
-.practice-tiers small { font: 500 9px var(--font-mono); letter-spacing: .08em; color: var(--text-faint); }
-.practice-tech { margin-top: 10px; min-height: 16px; font: 500 11px var(--font-mono); color: var(--accent); }
+.practice-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.practice-score-card, .practice-panel, .practice-lines-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.practice-label { margin: 0; font-size: 11px; font-weight: 500; color: var(--text-faint); letter-spacing: .06em; }
 
-.practice-row > summary { padding: 11px 16px; font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
-.practice-row > summary::-webkit-details-marker { display: none; }
-.practice-row > summary::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid var(--text-faint); border-bottom: 1.5px solid var(--text-faint); transform: rotate(-45deg); transition: transform .15s; }
-.practice-row[open] > summary::after { transform: rotate(45deg); }
-.practice-row-body { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 14px; }
+.practice-score-card { flex-shrink: 0; padding: 14px 16px; }
+.practice-score-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.practice-score-num { margin-top: 2px; font: 600 30px/1.1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.practice-tech { padding-top: 2px; text-align: right; font: 500 11px/1.5 var(--font-mono); color: var(--accent); }
+.practice-tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+.practice-tiers div { display: grid; justify-items: center; gap: 1px; padding: 6px 0 5px; border-radius: var(--r-sm); background: var(--bg-inset); }
+.practice-tiers b { font: 600 15px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
+.practice-tiers small { font: 500 9px/1.2 var(--font-mono); letter-spacing: .08em; color: var(--text-faint); }
+.practice-tiers .is-perfect b { color: var(--accent); }
+.practice-tiers .is-miss b { color: var(--warn); }
 
-.practice-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-dim); }
-.practice-field > span { display: flex; justify-content: space-between; align-items: baseline; }
-.practice-field select, .practice-field input[type="range"] { width: 100%; }
-.practice-inline { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); min-width: 0; }
+/* 設定分頁：高度跟內容走，太高時只在面板裡捲 */
+.practice-panel { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+/* 分段切換：凹下的軌道＋浮起的選中鈕。淺色主題的 inset／raised 明暗跟深色相反，所以分開指定 */
+.practice-tabs { --pt-track: var(--bg-inset); --pt-thumb: var(--bg-raised); flex-shrink: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin: 8px 8px 0; padding: 2px; border-radius: var(--r-md); background: var(--pt-track); }
+:root[data-theme="light"] .practice-tabs { --pt-track: var(--bg-raised); --pt-thumb: var(--bg-inset); }
+.practice-tab { height: 28px; padding: 0 8px; border: 0; border-radius: calc(var(--r-md) - 2px); background: transparent; color: var(--text-dim); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background .12s, color .12s; }
+.practice-tab:hover { color: var(--text); }
+.practice-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.practice-tab[aria-selected="true"] { background: var(--pt-thumb); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .18); }
+.practice-pane { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 14px; }
+.practice-pane[hidden] { display: none; }
+
+.practice-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; color: var(--text-dim); }
+.practice-field select, .practice-field input[type="range"] { width: 100%; margin: 0; }
+.practice-field-head { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.practice-field-head > label:first-child { flex: 1; min-width: 0; }
+.practice-field-head b { font-size: 12px; font-weight: 500; color: var(--text); }
+.practice-field-head .btn { margin-left: 4px; }
+.practice-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); cursor: pointer; min-width: 0; }
+.practice-check input { margin: 0; flex-shrink: 0; }
+.practice-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.practice-checks .practice-check:last-child { grid-column: 1 / -1; }
+.practice-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
 .practice-note { margin: 0; font-size: 11px; line-height: 1.55; color: var(--text-faint); }
-.practice-meter { height: 4px; border-radius: 2px; background: var(--bg-inset); overflow: hidden; }
+.practice-model { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+.practice-reset { align-self: flex-start; }
+.practice-meter { height: 3px; border-radius: 2px; background: var(--bg-inset); overflow: hidden; }
 .practice-meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .06s linear; }
-.practice-obs-url { flex: 1; min-width: 0; padding: 6px 8px; border-radius: var(--r-sm); background: var(--bg-inset); font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.practice-url-row { display: flex; align-items: center; gap: 8px; }
+.practice-obs-url { flex: 1; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 8px; line-height: 32px; border-radius: var(--r-sm); background: var(--bg-inset); font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .practice-swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-.practice-swatches label { display: grid; justify-items: center; gap: 4px; font-size: 10px; color: var(--text-faint); }
-.practice-swatches input[type="color"] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm); background: none; cursor: pointer; }
+.practice-swatches label { display: grid; justify-items: center; gap: 4px; font-size: 10px; color: var(--text-faint); cursor: pointer; }
+.practice-swatches input[type="color"] { width: 100%; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm); background: none; cursor: pointer; }
 
-.practice-lines { margin: 0; padding: 0; list-style: none; max-height: 320px; overflow-y: auto; counter-reset: pl; }
-.practice-lines li { display: flex; align-items: baseline; gap: 8px; padding: 5px 4px; border-radius: var(--r-sm); font-size: 12px; color: var(--text-dim); cursor: pointer; counter-increment: pl; }
+/* 逐句評等：填滿右欄剩下的高度，只在自己裡面捲 */
+.practice-lines-card { flex: 1 1 0; min-height: 88px; display: flex; flex-direction: column; overflow: hidden; }
+/* 調 OBS 外觀時用不到逐句評等：收起來，把高度讓給設定 */
+.practice-side:has(#practice-tab-obs[aria-selected="true"]) .practice-lines-card { display: none; }
+.practice-lines-card > .practice-label { flex-shrink: 0; padding: 12px 16px 6px; }
+.practice-lines { flex: 1; min-height: 0; margin: 0; padding: 0 8px 8px; list-style: none; overflow-y: auto; counter-reset: pl; }
+.practice-lines li { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-radius: var(--r-sm); font-size: 12px; color: var(--text-dim); cursor: pointer; counter-increment: pl; }
 .practice-lines li::before { content: counter(pl); min-width: 20px; font: 500 10px var(--font-mono); color: var(--text-faint); }
 .practice-lines li:hover { background: var(--bg-hover); color: var(--text); }
 .practice-line-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -82,6 +120,10 @@
 .practice-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 @media (max-width: 1100px) {
+  .content:has(> [data-view="practice"].is-active) { overflow-y: auto; display: block; }
+  .view[data-view="practice"].is-active { display: block; }
   .practice-desk { grid-template-columns: minmax(0, 1fr); }
+  #practice-stage { height: 460px; flex: none; }
+  .practice-lines-card { max-height: 360px; }
   .practice-bar { flex-wrap: wrap; }
 }

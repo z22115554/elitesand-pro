@@ -426,6 +426,31 @@
     ui.styleReset.addEventListener('click', () => applyStyle({ ...Fx.STYLE_DEFAULT }, { send: true }));
   }
 
+  // 右欄設定分三頁（輸入／顯示／OBS 外觀），一次一頁；記住這台電腦上次停在哪一頁
+  function bindTabs() {
+    const tabs = [...root.querySelectorAll('.practice-tab')];
+    const select = (id) => {
+      if (!tabs.some((tab) => tab.dataset.tab === id)) id = 'input';
+      for (const tab of tabs) {
+        const on = tab.dataset.tab === id;
+        tab.setAttribute('aria-selected', String(on));
+        tab.tabIndex = on ? 0 : -1;
+        const pane = root.querySelector(`[data-pane="${tab.dataset.tab}"]`);
+        if (pane) pane.hidden = !on;
+      }
+      if (prefs.tab !== id) { prefs.tab = id; writeJson(PREFS_KEY, prefs); }
+    };
+    tabs.forEach((tab, i) => {
+      tab.addEventListener('click', () => select(tab.dataset.tab));
+      tab.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+        select(next.dataset.tab); next.focus(); e.preventDefault();
+      });
+    });
+    select(prefs.tab);
+  }
+
   function renderFxMenu() {
     const current = ui.fx.value || engine.getStyle().fx;
     ui.fx.textContent = '';
@@ -520,6 +545,7 @@
     ui.obsUrl.textContent = obsUrl();
     renderGuideState();
     bindStyleInputs();
+    bindTabs();
 
     ui.build.addEventListener('click', buildGuide);
     ui.cancel.addEventListener('click', cancelGuide);
