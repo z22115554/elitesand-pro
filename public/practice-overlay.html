@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elitesand Pro · 練唱</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/practice-overlay.css">
+  <link rel="stylesheet" href="/css/practice-stage.css">
+</head>
+<body>
+  <!-- OBS 練唱疊加層：透明底，只畫音軌、評等與（可選的）分數、結算、歌詞。資料全部來自面板，這頁不碰麥克風也不出聲。 -->
+  <div id="practice-stage" class="pstage pstage--obs" data-i18n-skip>
+    <div class="pstage-lane">
+      <canvas class="pstage-canvas" data-ps="canvas" aria-hidden="true"></canvas>
+      <div class="pstage-ratings" data-ps="ratings"></div>
+      <div class="pstage-status" data-ps="status"></div>
+      <div class="pstage-score"><span>SCORE</span><b data-ps="score">—</b></div>
+      <div class="pstage-result" data-ps="result" hidden>
+        <div class="pstage-result-label" data-ps="resultLabel"></div>
+        <b class="pstage-result-score" data-ps="resultScore"></b>
+        <div class="pstage-result-tiers" data-ps="resultTiers"></div>
+        <div class="pstage-result-extra" data-ps="resultExtra"></div>
+        <p class="pstage-result-meta" data-ps="resultMeta"></p>
+      </div>
+    </div>
+    <div class="pstage-lyrics">
+      <div class="pstage-lyric-now" data-ps="lyricNow"></div>
+      <div class="pstage-lyric-next" data-ps="lyricNext"></div>
+    </div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/shared-utils.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/access-auth.js"></script>
+  <script src="/js/socket-client.js"></script>
+  <script src="/js/obs-locale-follow.js"></script>
+  <script src="/js/practice/practice-scoring.js"></script>
+  <script src="/js/practice/practice-fx.js"></script>
+  <script src="/js/practice/practice-engine.js"></script>
+  <script src="/js/practice-overlay.js"></script>
+</body>
+</html>

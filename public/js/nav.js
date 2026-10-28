@@ -25,6 +25,7 @@
   // 頁面標題跟著「頂部分頁」走：次級頁面顯示所屬分頁的名稱（docs/UIUX-REDESIGN.md §3）
   const TITLE_KEYS = {
     karaoke: 'nav.live',
+    practice: 'nav.practice',
     library: 'nav.songLibrary',
     sections: 'nav.songLibrary',
     settings: 'nav.output',

@@ -43,6 +43,10 @@ function createSoundTouchEngine() {
   let loadToken = 0;             // 載入世代：晚到的舊載入會被作廢，避免孤兒節點繼續播放
   let onTimeCb = null;
   let onEndedCb = null;
+  const playbackSubscribers = new Set();
+  let effectivePlayback = null;
+  let playbackGeneration = 0;
+  let workletGeneration = null;
 
   async function ensureModule() {
     if (moduleAdded) return true;
@@ -94,6 +98,19 @@ function createSoundTouchEngine() {
     if (!msg) return;
     if (msg.type === 'position') {
       if (typeof msg.position === 'number') { lastPositionSec = msg.position / sampleRate; lastPositionWallMs = _nowMs(); }
+      if (Number.isFinite(msg.contextTime) && Number.isFinite(msg.pitchSemitones) && Number.isFinite(msg.tempo)) {
+        if (workletGeneration === null || msg.generation !== workletGeneration) {
+          playbackGeneration++;
+          workletGeneration = msg.generation;
+        }
+        effectivePlayback = {
+          sourceTime: lastPositionSec, effectiveContextTime: msg.contextTime,
+          pitchShift: msg.pitchSemitones, playbackRate: msg.tempo,
+          playing: msg.playing === true, generation: playbackGeneration,
+          reason: msg.reason || 'position',
+        };
+        _notifyPlayback();
+      }
     } else if (msg.type === 'ended') {
       playing = false;
       lastPositionSec = durationSec;
@@ -114,6 +131,8 @@ function createSoundTouchEngine() {
       stop();
       _destroyNode();
       ready = false;
+      effectivePlayback = null;
+      workletGeneration = null;
 
       const res = await fetch(url);
       const arr = await res.arrayBuffer();
@@ -138,7 +157,7 @@ function createSoundTouchEngine() {
         _releaseNode(newNode);
         return false;
       }
-      newNode.port.onmessage = (e) => _onNodeMessage(e.data);
+      newNode.port.onmessage = (e) => { if (node === newNode) _onNodeMessage(e.data); };
       newNode.connect(outNode);
       // 把整首資料一次送進去（transfer，零複製到 worklet）+ 帶上目前 pitch/tempo
       newNode.port.postMessage(
@@ -173,6 +192,10 @@ function createSoundTouchEngine() {
   // 位置以原曲秒數計，播放中每 wall 秒前進約 tempoRate（變調不影響原曲時間軸推進速率）。
   function getProjectedTime() {
     if (!playing || !lastPositionWallMs) return lastPositionSec;
+    if (effectivePlayback && effectivePlayback.playing && ctx) {
+      const elapsed = Math.max(0, ctx.currentTime - effectivePlayback.effectiveContextTime);
+      return Math.max(0, Math.min(durationSec, effectivePlayback.sourceTime + elapsed * effectivePlayback.playbackRate));
+    }
     const dt = Math.max(0, _nowMs() - lastPositionWallMs) / 1000;
     return Math.max(0, Math.min(durationSec, lastPositionSec + dt * (tempoRate || 1)));
   }
@@ -185,7 +208,11 @@ function createSoundTouchEngine() {
     const sec = (offsetSec != null) ? offsetSec : lastPositionSec;
     lastPositionSec = Math.max(0, Math.min(sec, durationSec));
     lastPositionWallMs = _nowMs();
-    _post(_withFrame({ type: 'play', position: Math.round(lastPositionSec * sampleRate) }, atFrame));
+    const message = { type: 'play' };
+    // Resume without re-reading an old main-thread position acknowledgement.
+    // Explicit offsets still re-seed both stems at their common scheduled frame.
+    if (offsetSec != null) message.position = Math.round(lastPositionSec * sampleRate);
+    _post(_withFrame(message, atFrame));
     playing = true;
     _startTimer();
     return true;
@@ -215,6 +242,10 @@ function createSoundTouchEngine() {
     playing = false;
     durationSec = 0;
     lastPositionSec = 0;
+    effectivePlayback = null;
+    workletGeneration = null;
+    playbackGeneration++;
+    _notifyPlayback();
   }
 
   function seek(sec, atFrame) {
@@ -244,10 +275,39 @@ function createSoundTouchEngine() {
   function onTime(cb) { onTimeCb = cb; }
   function onEnded(cb) { onEndedCb = cb; }
 
+  // Acknowledged DSP state only. contextTime is the current shared context clock;
+  // sourceTime belongs to effectiveContextTime, the worklet's output anchor.
+  function getPlaybackSnapshot() {
+    return {
+      valid: !!(ready && effectivePlayback),
+      sourceTime: effectivePlayback ? effectivePlayback.sourceTime : 0,
+      contextTime: ctx ? ctx.currentTime : null,
+      effectiveContextTime: effectivePlayback ? effectivePlayback.effectiveContextTime : null,
+      contextSampleRate: ctx ? ctx.sampleRate : sampleRate,
+      audioContext: ctx,
+      playing: !!(ready && effectivePlayback && effectivePlayback.playing),
+      pitchShift: effectivePlayback ? effectivePlayback.pitchShift : null,
+      playbackRate: effectivePlayback ? effectivePlayback.playbackRate : null,
+      generation: effectivePlayback ? effectivePlayback.generation : playbackGeneration,
+      reason: effectivePlayback ? effectivePlayback.reason : 'unavailable',
+    };
+  }
+  function _notifyPlayback() {
+    if (!playbackSubscribers.size) return;
+    const snapshot = getPlaybackSnapshot();
+    for (const callback of playbackSubscribers) { try { callback(snapshot); } catch (e) {} }
+  }
+  function subscribePlayback(callback) {
+    if (typeof callback !== 'function') return () => {};
+    playbackSubscribers.add(callback);
+    return () => playbackSubscribers.delete(callback);
+  }
+
   const api = {
     ensureModule, attach, load, play, pause, stop, dispose, seek,
     getTime, getDuration, isPlaying, isReady, setPitch, setTempo, onTime, onEnded,
     scheduleFrame, frameNow, getProjectedTime, projectedTimeAt,
+    getPlaybackSnapshot, subscribePlayback,
   };
   return api;
 }

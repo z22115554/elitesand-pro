@@ -9,6 +9,8 @@
   <script src="/js/electron-shell-chrome.js"></script>
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/panel.css">
+  <link rel="stylesheet" href="/css/practice-stage.css">
+  <link rel="stylesheet" href="/css/practice.css">
   <link rel="stylesheet" href="/css/onboarding-tour.css">
   <link rel="stylesheet" href="/css/font-picker.css">
 </head>
@@ -139,6 +141,9 @@
       <div class="nav-group nav-group--primary">
         <button class="nav-item active" data-nav="karaoke" type="button" data-sub-i18n="nav.live">
           <span class="nav-label" data-i18n="nav.live">直播</span>
+        </button>
+        <button class="nav-item" data-nav="practice" type="button" data-new-feature="practice">
+          <span class="nav-label" data-i18n="nav.practice">練唱</span>
         </button>
         <button class="nav-item" data-nav="library" type="button">
           <span class="nav-label" data-i18n="nav.songLibrary">歌曲庫</span>
@@ -700,6 +705,156 @@
         </div>
 
         <!-- ═══ 視圖：顯示設定 ═══ -->
+        <!-- ═══ 視圖：練唱（頂層分頁）═══
+             播放、暫停、進度沿用上方的迷你播放列；Key／變速走直播頁同一條滑桿（AppShared.stepPitch）。
+             中間的 .pstage 與 OBS 練唱疊加層用同一套引擎（public/js/practice/practice-engine.js）。 -->
+        <section id="view-practice" class="view practice-view" data-view="practice" aria-labelledby="practice-heading">
+          <div class="practice-desk">
+            <div class="practice-main">
+              <header class="practice-bar">
+                <div class="practice-song">
+                  <h2 id="practice-heading" class="practice-song-title" data-i18n-skip>尚未載入歌曲</h2>
+                  <p id="practice-guide-status" class="practice-song-status" role="status">先在直播或歌曲庫載入一首歌。</p>
+                </div>
+                <div class="practice-bar-actions">
+                  <button id="practice-build" class="btn" type="button" hidden>建立練唱音軌</button>
+                  <button id="practice-cancel" class="btn btn-ghost" type="button" data-i18n="practice.cancel" hidden>取消分析</button>
+                  <div class="practice-stepper" role="group" aria-label="Key" data-i18n-aria-label="practice.key">
+                    <span class="practice-stepper-label">Key</span>
+                    <button id="practice-key-down" class="stepper-btn" type="button" aria-label="降一個半音" data-i18n-aria-label="controller.pitchDown">−</button>
+                    <output id="practice-key-value" class="stepper-val">0</output>
+                    <button id="practice-key-up" class="stepper-btn" type="button" aria-label="升一個半音" data-i18n-aria-label="controller.pitchUp">+</button>
+                  </div>
+                  <button id="practice-obs-preview" class="btn btn-ghost" type="button" aria-pressed="false" data-i18n="practice.obsPreview">OBS 預覽</button>
+                </div>
+              </header>
+              <div id="practice-stage" class="pstage">
+                <div class="pstage-lane">
+                  <canvas class="pstage-canvas" data-ps="canvas" aria-hidden="true"></canvas>
+                  <div class="pstage-ratings" data-ps="ratings" aria-live="polite"></div>
+                  <div class="pstage-status" data-ps="status"></div>
+                  <div class="pstage-score"><span>SCORE</span><b data-ps="score">—</b></div>
+                  <div class="pstage-result" data-ps="result" hidden>
+                    <div class="pstage-result-label" data-ps="resultLabel"></div>
+                    <b class="pstage-result-score" data-ps="resultScore"></b>
+                    <div class="pstage-result-tiers" data-ps="resultTiers"></div>
+                    <div class="pstage-result-extra" data-ps="resultExtra"></div>
+                    <p class="pstage-result-meta" data-ps="resultMeta"></p>
+                  </div>
+                  <div id="practice-empty" class="practice-empty">
+                    <p id="practice-empty-text">載入一首歌後，這裡會出現練唱音軌。</p>
+                  </div>
+                </div>
+                <div class="pstage-lyrics" data-i18n-skip>
+                  <div class="pstage-lyric-now" data-ps="lyricNow"></div>
+                  <div class="pstage-lyric-next" data-ps="lyricNext"></div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="practice-side" aria-label="練唱設定" data-i18n-aria-label="practice.sideLabel">
+              <div class="practice-score-card">
+                <div class="practice-label" data-i18n="practice.score">分數</div>
+                <div id="practice-score" class="practice-score-num" data-ps-mirror="score">—</div>
+                <div class="practice-tiers">
+                  <div><b id="practice-tier-perfect">0</b><small>PERFECT</small></div>
+                  <div><b id="practice-tier-great">0</b><small>GREAT</small></div>
+                  <div><b id="practice-tier-good">0</b><small>GOOD</small></div>
+                  <div><b id="practice-tier-miss">0</b><small>MISS</small></div>
+                </div>
+                <div id="practice-tech" class="practice-tech"></div>
+              </div>
+
+              <details class="practice-row" open>
+                <summary data-i18n="practice.input">輸入</summary>
+                <div class="practice-row-body">
+                  <label class="practice-field"><span data-i18n="practice.source">來源</span>
+                    <select id="practice-source">
+                      <option value="off" data-i18n="practice.sourceOff">不偵測</option>
+                      <option value="mic" data-i18n="practice.sourceMic">麥克風</option>
+                      <option value="demo" data-i18n="practice.sourceDemo">示範：偵測原唱人聲</option>
+                    </select>
+                  </label>
+                  <label class="practice-field" id="practice-device-field" hidden><span data-i18n="practice.device">麥克風裝置</span>
+                    <select id="practice-device"></select>
+                  </label>
+                  <div class="practice-meter" aria-hidden="true"><i id="practice-level"></i></div>
+                  <label class="practice-field"><span><span data-i18n="practice.latency">延遲補償</span> <b class="mono" id="practice-latency-value">0 ms</b></span>
+                    <input type="range" id="practice-latency" min="0" max="400" step="10" value="120"></label>
+                  <button id="practice-calibrate" class="btn" type="button" data-i18n="practice.calibrate" disabled>校準延遲</button>
+                  <p class="practice-note" data-i18n="practice.headphoneHint">建議戴耳機。這裡不錄音、不開耳返，聲音只在這台電腦分析。</p>
+                </div>
+              </details>
+
+              <details class="practice-row" open>
+                <summary data-i18n="practice.display">顯示</summary>
+                <div class="practice-row-body">
+                  <label class="practice-inline"><input type="checkbox" id="practice-octave" checked> <span data-i18n="practice.allowOctave">容許差一個八度</span></label>
+                  <label class="practice-field"><span data-i18n="practice.trail">你的聲音</span>
+                    <select id="practice-trail">
+                      <option value="ribbon" data-i18n="practice.trailRibbon">緞帶：平滑＋吸附</option>
+                      <option value="bars" data-i18n="practice.trailBars">方塊：吸附到音符</option>
+                      <option value="raw" data-i18n="practice.trailRaw">原始（未處理）</option>
+                    </select>
+                  </label>
+                  <label class="practice-inline"><input type="checkbox" id="practice-contour"> <span data-i18n="practice.showContour">顯示原唱音高曲線</span></label>
+                  <div id="practice-model" class="practice-model" hidden>
+                    <p class="practice-note" data-i18n="practice.modelHint">安裝高精度音高元件（約 90MB）後，原唱音高會更準。沒裝也能練唱。</p>
+                    <button id="practice-model-install" class="btn" type="button" data-i18n="practice.modelInstall">安裝高精度音高元件</button>
+                  </div>
+                </div>
+              </details>
+
+              <details class="practice-row">
+                <summary data-i18n="practice.obsLook">OBS 外觀</summary>
+                <div class="practice-row-body">
+                  <div class="practice-field"><span data-i18n="practice.obsUrl">OBS 瀏覽器來源網址（建議 1920 × 1080）</span>
+                    <div class="practice-inline"><code id="practice-obs-url" class="practice-obs-url mono"></code><button id="practice-obs-copy" class="btn" type="button" data-i18n="practice.copy">複製</button></div>
+                  </div>
+                  <label class="practice-field"><span data-i18n="practice.fx">演出風格（音符、評等、結算一起換）</span><select id="practice-fx"></select></label>
+                  <label class="practice-inline"><input type="checkbox" id="practice-bg"> <span data-i18n="practice.bg">音軌底板</span></label>
+                  <label class="practice-field"><span><span data-i18n="practice.bgOpacity">底板透明度</span> <b class="mono" id="practice-bg-opacity-value"></b></span>
+                    <input type="range" id="practice-bg-opacity" min="0" max="100"></label>
+                  <div class="practice-swatches">
+                    <label><input type="color" id="practice-color-bg"><span data-i18n="practice.colorBg">底板</span></label>
+                    <label><input type="color" id="practice-color-note"><span data-i18n="practice.colorNote">音符</span></label>
+                    <label><input type="color" id="practice-color-fill"><span data-i18n="practice.colorFill">唱對</span></label>
+                    <label><input type="color" id="practice-color-voice"><span data-i18n="practice.colorVoice">你的聲音</span></label>
+                    <label><input type="color" id="practice-color-off"><span data-i18n="practice.colorOff">唱偏</span></label>
+                  </div>
+                  <label class="practice-inline"><input type="checkbox" id="practice-edge"> <span data-i18n="practice.edge">深色描邊（適合亮背景）</span></label>
+                  <label class="practice-field"><span data-i18n="practice.position">位置</span>
+                    <select id="practice-pos"><option value="bottom" data-i18n="practice.posBottom">畫面下方</option><option value="top" data-i18n="practice.posTop">畫面上方</option></select>
+                  </label>
+                  <label class="practice-field"><span><span data-i18n="practice.laneHeight">音軌高度</span> <b class="mono" id="practice-lane-height-value"></b></span>
+                    <input type="range" id="practice-lane-height" min="20" max="60"></label>
+                  <label class="practice-inline"><input type="checkbox" id="practice-show-score"> <span data-i18n="practice.showScore">顯示分數</span></label>
+                  <label class="practice-inline"><input type="checkbox" id="practice-show-result"> <span data-i18n="practice.showResult">唱完顯示結算</span></label>
+                  <label class="practice-inline"><input type="checkbox" id="practice-show-lyrics"> <span data-i18n="practice.showLyrics">顯示歌詞</span></label>
+                  <p class="practice-note" data-i18n="practice.lyricsHint">歌詞建議關掉，改用歌詞來源的 KTV 模板疊在下面，兩個來源各自調位置。</p>
+                  <button id="practice-style-reset" class="btn btn-ghost" type="button" data-i18n="practice.styleReset">恢復預設外觀</button>
+                </div>
+              </details>
+
+              <details class="practice-row" open>
+                <summary data-i18n="practice.lines">逐句評等</summary>
+                <div class="practice-row-body"><ol id="practice-lines" class="practice-lines" data-i18n-skip></ol></div>
+              </details>
+            </aside>
+          </div>
+
+          <dialog id="practice-calibration" class="practice-dialog" aria-labelledby="practice-calibration-title">
+            <h2 id="practice-calibration-title" data-i18n="practice.calibrationTitle">校準麥克風延遲</h2>
+            <p data-i18n="practice.calibrationIntro">喇叭會播放 8 聲短音，請讓麥克風收得到，並保持安靜。戴耳機的話請用滑桿手動調整。</p>
+            <p id="practice-calibration-status" role="status"></p>
+            <div class="practice-dialog-actions">
+              <button id="practice-calibration-close" class="btn btn-ghost" type="button" data-i18n="common.close">關閉</button>
+              <button id="practice-calibration-start" class="btn btn-primary" type="button" data-i18n="practice.calibrationStart">開始測量</button>
+              <button id="practice-calibration-apply" class="btn btn-primary" type="button" data-i18n="practice.calibrationApply" hidden>套用</button>
+            </div>
+          </dialog>
+        </section>
+
         <div class="view" data-view="settings">
           <!-- 即時預覽（鏡像 OBS 輸出，調整下方設定時所見即所得；示範歌詞由歌詞頁按鈕手動載入）
                sticky 固定在設定頁頂部，往下捲設定時預覽不跟著走（見 .settings-preview-bar CSS） -->
@@ -3797,6 +3952,11 @@
   <script src="/js/seasonal-slim.js"></script>
   <script src="/js/onboarding-tour.js"></script>
   <script src="/js/nav.js"></script>
+  <script src="/js/practice-clock.js"></script>
+  <script src="/js/practice/practice-scoring.js"></script>
+  <script src="/js/practice/practice-fx.js"></script>
+  <script src="/js/practice/practice-engine.js"></script>
+  <script src="/js/app-practice.js"></script>
   <script src="/js/help-search.js"></script>
 </body>
 </html>

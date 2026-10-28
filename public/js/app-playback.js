@@ -56,6 +56,10 @@
   // 設計，變調/變速滑桿在分離雙軌播放下不再停用。──
   let separationActive = false; // 目前這首歌是否實際使用伴奏＋人聲雙 stem
   let vocalsSTEngine = null, vocalsGain = null, vocalsDelay = null;
+  // 練唱「示範」用的分接點：人聲引擎 → vocalsTap（增益 1，聽感不變）→ vocalsGain。
+  // 練唱頁從這裡接出原唱人聲做音高偵測，不受人聲音量（可能調到 0）影響。
+  let vocalsTap = null;
+  const practiceVocalTaps = new Set();
   // A1：伴奏鏈上有 stLimiter（DynamicsCompressor，Chromium 有 lookahead 前視延遲），人聲鏈
   // 沒有，導致分離播放時伴奏固定慢人聲幾 ms。人聲鏈補一個等長 DelayNode 補回來。
   // 實測基準約 6ms；留 localStorage 覆寫（vk-separation-comp-latency-ms）方便實機微調。
@@ -100,7 +104,21 @@
     // 「伴奏慢了同步偏移那麼多」，暫停時伴奏還會多播那一小段（實測回報）。
     if (dualRoutingWired && dualHeadphoneDelay) vocalsDelay.connect(dualHeadphoneDelay);
     else vocalsDelay.connect(stCtx.destination);
-    vocalsSTEngine.attach(stCtx, vocalsGain);
+    vocalsTap = stCtx.createGain();
+    vocalsTap.connect(vocalsGain);
+    for (const node of practiceVocalTaps) { try { vocalsTap.connect(node); } catch (e) {} }
+    vocalsSTEngine.attach(stCtx, vocalsTap);
+  }
+
+  /** 練唱示範：把原唱人聲（升降 Key 後、音量前）接到 node；回傳解除函式。換歌重建人聲鏈時會自動接回。 */
+  function connectPracticeVocalTap(node) {
+    if (!node) return () => {};
+    practiceVocalTaps.add(node);
+    if (vocalsTap) { try { vocalsTap.connect(node); } catch (e) {} }
+    return () => {
+      practiceVocalTaps.delete(node);
+      if (vocalsTap) { try { vocalsTap.disconnect(node); } catch (e) {} }
+    };
   }
 
   /** 載入這首歌的人聲，並把 promise 記在模組層——requestPlayback 按播放鍵時若伴奏已經
@@ -452,7 +470,81 @@
   let currentOffsetMs = 0; // Phase 5: 當前歌曲 offset
   let lastPlayTimeMs = 0;  // 最新播放位置（ms）；timeupdate 與 SoundTouch 回呼都更新，給「對齊第一句」用
   let loadedTrackEntryId = null;
+  let practiceSourceEntryId = null;
   let lastRecoverySignature = null;
+  const practicePlaybackSubscribers = new Set();
+  const practicePlaybackBoundaries = new Set();
+  let unsubscribePracticeEngine = null;
+
+  function getPracticePlaybackSnapshot() {
+    const engine = typeof SoundTouchEngine !== 'undefined' ? SoundTouchEngine : null;
+    const applied = engine && engine.getPlaybackSnapshot ? engine.getPlaybackSnapshot() : null;
+    const track = loadedTrackEntryId ? (state.playlist[state.currentTrackIndex] || null) : null;
+    const valid = !!(track && practiceSourceEntryId === loadedTrackEntryId && stReady && applied && applied.valid);
+    const outputLatency = stCtx ? Math.max(0, Number(stCtx.baseLatency) || 0) + Math.max(0, Number(stCtx.outputLatency) || 0) : 0;
+    const headphoneDelay = dualRoutingWired && dualHeadphoneDelay ? Math.max(0, dualHeadphoneDelay.delayTime.value || 0) : 0;
+    return {
+      track, valid, audioContext: stCtx,
+      sourceTime: valid ? applied.sourceTime : 0,
+      contextTime: valid ? applied.contextTime : null,
+      effectiveContextTime: valid ? applied.effectiveContextTime : null,
+      contextSampleRate: stCtx ? stCtx.sampleRate : null,
+      durationSeconds: valid && engine.getDuration ? engine.getDuration() : 0,
+      playing: !!(valid && applied.playing),
+      pitchShift: valid ? applied.pitchShift : null,
+      playbackRate: valid ? applied.playbackRate : null,
+      generation: applied ? applied.generation : 0,
+      outputLatencySeconds: outputLatency,
+      outputSignature: JSON.stringify([
+        stCtx && typeof stCtx.sinkId === 'string' ? stCtx.sinkId : '',
+        dualAudioModeEnabled, dualHeadphoneDeviceId, dualStreamDeviceId, headphoneDelay,
+      ]),
+      // WSOLA prefetch is already removed by the worklet output cursor. Only
+      // downstream compressor/routing latency remains for acoustic calibration.
+      dspLatencySeconds: separationCompLatencySec + headphoneDelay,
+      reason: applied ? applied.reason : 'unavailable',
+    };
+  }
+  function notifyPracticePlayback() {
+    if (!practicePlaybackSubscribers.size) return;
+    const snapshot = getPracticePlaybackSnapshot();
+    for (const callback of practicePlaybackSubscribers) { try { callback(snapshot); } catch (e) {} }
+  }
+  function subscribePracticePlayback(callback) {
+    if (typeof callback !== 'function') return () => {};
+    practicePlaybackSubscribers.add(callback);
+    if (!unsubscribePracticeEngine && typeof SoundTouchEngine !== 'undefined' && SoundTouchEngine.subscribePlayback) {
+      unsubscribePracticeEngine = SoundTouchEngine.subscribePlayback(notifyPracticePlayback);
+    }
+    try { callback(getPracticePlaybackSnapshot()); } catch (e) {}
+    return () => {
+      practicePlaybackSubscribers.delete(callback);
+      if (!practicePlaybackSubscribers.size && unsubscribePracticeEngine) {
+        unsubscribePracticeEngine(); unsubscribePracticeEngine = null;
+      }
+    };
+  }
+  function subscribePracticePlaybackBoundary(callback) {
+    if (typeof callback !== 'function') return () => {};
+    practicePlaybackBoundaries.add(callback);
+    return () => practicePlaybackBoundaries.delete(callback);
+  }
+
+  // Original song seconds, with no lyric-offset conversion and no played-history
+  // mutation. Both stems receive the same scheduled frame, including EOF replay.
+  function seekPracticeTo(seconds, options = {}) {
+    const snapshot = getPracticePlaybackSnapshot();
+    if (!snapshot.valid || !Number.isFinite(seconds) || seconds < 0 || seconds >= snapshot.durationSeconds) return false;
+    const resume = options.resume === true;
+    if (resume && !snapshot.playing && !isPlaying) return false;
+    const frame = separationActive && vocalsSTEngine ? sepSharedFrame(.05) : undefined;
+    seekLoadedTrack(seconds, { atFrame: frame });
+    if (resume) {
+      SoundTouchEngine.play(undefined, frame);
+      if (separationActive && vocalsSTEngine) vocalsSTEngine.play(undefined, frame);
+    }
+    return true;
+  }
 
   function markLocalTrackPlayed(track) {
     if (!track || !track.entryId) return;
@@ -461,12 +553,12 @@
     state.lastPlayedEntryId = track.entryId;
   }
 
-  function seekLoadedTrack(seconds) {
+  function seekLoadedTrack(seconds, options = {}) {
     const target = Number.isFinite(Number(seconds)) ? Math.max(0, Number(seconds)) : 0;
     lastPlayTimeMs = target * 1000;
     setCurrentTime(formatTime(target));
     if (stReady && typeof SoundTouchEngine !== 'undefined') {
-      const wf = (separationActive && vocalsSTEngine) ? sepSharedFrame(0.05) : undefined;
+      const wf = Number.isFinite(options.atFrame) ? options.atFrame : (separationActive && vocalsSTEngine) ? sepSharedFrame(0.05) : undefined;
       SoundTouchEngine.seek(target, wf);
       if (separationActive && vocalsSTEngine) vocalsSTEngine.seek(target, wf);
     }
@@ -538,6 +630,8 @@
     const ok = await SoundTouchEngine.load('/audio/' + encodeURIComponent(filename));
     if (myToken !== stLoadToken) return 'stale'; // 已有更新的載入發生 → 丟棄這次結果
     stReady = ok;
+    practiceSourceEntryId = ok ? loadedTrackEntryId : null;
+    notifyPracticePlayback();
     return 'ok';
   }
   // 快速切歌時，拖曳/timeupdate 殘留的舊訊息可能晚到；帶上 trackId 讓伺服器可以擋掉對不上目前歌曲的舊值
@@ -691,6 +785,8 @@
 
     state.currentTrackIndex = index;
     loadedTrackEntryId = track.entryId || track.id || null;
+    practiceSourceEntryId = null;
+    notifyPracticePlayback();
     if (autoplay) markLocalTrackPlayed(track);
 
     AppShared.setMarqueeText(dom.trackTitle, track.title);
@@ -825,6 +921,7 @@
     suppressNextAudioError = true;
     audioPlayer.src = '';
     loadedTrackEntryId = null;
+    practiceSourceEntryId = null;
     lastRecoverySignature = null;
     // 使用者完整停止/清空播放時，不需要保留 SoundTouch 的整首 PCM buffer 供續播。
     // 暫停仍只走 pause，維持立即續播；這裡才真正釋放記憶體。
@@ -834,7 +931,8 @@
     }
     if (vocalsSTEngine) { try { vocalsSTEngine.dispose(); } catch (e) {} }
     if (vocalsDelay) { try { vocalsDelay.disconnect(); } catch (e) {} }
-    vocalsSTEngine = null; vocalsGain = null; vocalsDelay = null; vocalsLoadPromise = null; // 銷毀後要歸零，否則 ensureVocalsChain() 會早退、下一首分離歌拿到死引擎
+    if (vocalsTap) { try { vocalsTap.disconnect(); } catch (e) {} }
+    vocalsSTEngine = null; vocalsGain = null; vocalsDelay = null; vocalsTap = null; vocalsLoadPromise = null; // 銷毀後要歸零，否則 ensureVocalsChain() 會早退、下一首分離歌拿到死引擎
     stopDualAudioClickTest();
     // 歌曲結束只釋放歌曲 buffer；雙路模式仍開著時保留 routing/sink，避免下一首重新 cold-start。
     if (!dualAudioModeEnabled) wireDualRouting(false);
@@ -1122,6 +1220,12 @@
   });
 
   function handlePlaybackEnded() {
+    if (practicePlaybackBoundaries.size) {
+      const snapshot = { ...getPracticePlaybackSnapshot(), boundary: 'ended', wasPlaying: isPlaying };
+      for (const callback of practicePlaybackBoundaries) {
+        try { if (callback(snapshot) === true) return; } catch (e) {}
+      }
+    }
     const playlist = state.playlist;
     const endedTrack = playlist[state.currentTrackIndex] || null;
     const next = PlaybackSequence.nextAfterEnded(
@@ -1814,6 +1918,17 @@
   AppShared.updateMiniPlayerInfo = updateMiniPlayerInfo;
   AppShared.updateOffsetDisplay = updateOffsetDisplay;
   AppShared.isPlaying = () => isPlaying;
+  AppShared.getPracticePlaybackSnapshot = getPracticePlaybackSnapshot;
+  AppShared.subscribePracticePlayback = subscribePracticePlayback;
+  AppShared.seekPracticeTo = seekPracticeTo;
+  AppShared.subscribePracticePlaybackBoundary = subscribePracticePlaybackBoundary;
+  AppShared.connectPracticeVocalTap = connectPracticeVocalTap;
+  // 練唱分頁的 Key／變速：走直播頁同一條滑桿與存檔路徑，不另開第二套
+  AppShared.stepPitch = (delta) => stepControl(dom.pitchSlider, delta);
+  AppShared.stepSpeed = (delta) => stepControl(dom.speedSlider, delta);
+  AppShared.getPitchShift = () => currentPitchShift;
+  AppShared.getPlaybackRate = () => currentPlaybackRate;
+  AppShared.isPracticeVocalAvailable = () => !!(separationActive && vocalsTap);
   AppShared.applyPitchAndSpeed = applyPitchAndSpeed;
   AppShared.reapplyTrackLoudness = reapplyTrackLoudness;
   AppShared.advanceTrack = advanceTrack;

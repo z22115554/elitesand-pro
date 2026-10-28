@@ -45,7 +45,8 @@
     "release:hotfix": "node tools/update-publisher/cli.js",
     "test:visual": "playwright test --config=playwright.config.js",
     "test:imports": "node --test tests/import-lyrics-pipeline.test.js",
-    "test:lyrics-library": "node --test tests/lyrics-library-perf.test.js"
+    "test:lyrics-library": "node --test tests/lyrics-library-perf.test.js",
+    "test:practice": "node tools/test-practice.js"
   },
   "dependencies": {
     "adm-zip": "^0.6.1",

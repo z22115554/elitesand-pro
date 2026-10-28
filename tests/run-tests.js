@@ -13615,7 +13615,7 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
   const required = new Map();
   walkJs(serverRoot).forEach((file) => {
     const src = stripComments(fs.readFileSync(file, 'utf8'));
-    for (const m of src.matchAll(/require\(\s*['"](?:\.\.\/)+public\/js\/([\w.-]+)['"]\s*\)/g)) {
+    for (const m of src.matchAll(/require\(\s*['"](?:\.\.\/)+public\/js\/([\w./-]+)['"]\s*\)/g)) {
       const name = m[1].endsWith('.js') ? m[1] : `${m[1]}.js`;
       if (!required.has(name)) required.set(name, path.relative(path.join(__dirname, '..'), file));
     }

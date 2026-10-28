@@ -14,6 +14,7 @@
   const FEATURES = {
     'auto-sync': '2026-10-28',     // 自動對時（對齊第一句旁、匯入後自動對時）
     'import-prefs': '2026-10-28',  // 加歌框下方「匯入後：…」設定
+    'practice': '2026-10-28',      // 頂層「練唱」分頁（音軌評分＋OBS 練唱疊加層）
   };
   const SHOW_DAYS = 60;
   const KEY = 'elitesand.newFeaturesSeen';

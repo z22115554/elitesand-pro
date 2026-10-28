@@ -9,7 +9,7 @@
  *   2) 改 pitch/tempo 只是 postMessage，即時生效 → 零重算等待。
  *
  * 整首音檔的 channel data 於建立時由主執行緒一次 transfer 進來，之後播放/暫停/seek/變調皆走 port 訊息。
- * 對外位置(position) 一律以「原曲 sample 數」回報(SimpleFilter.sourcePosition 即原曲讀取位置)，
+ * 對外位置(position) 一律以「原曲 sample 數」回報已輸出的游標，非 SimpleFilter 的預取位置，
  * 故變速時時間軸仍對齊原曲。
  */
 
@@ -394,7 +394,10 @@ class ArraySource {
       if (p < len) { target[i * 2] = left[p]; target[i * 2 + 1] = right[p]; }
       else { target[i * 2] = 0; target[i * 2 + 1] = 0; }
     }
-    return Math.min(numFrames, len - position);
+    // WSOLA processes full input batches. A bounded virtual silent tail flushes
+    // the final partial batch; the processor stops at the real output cursor.
+    // No extra song-sized PCM allocation, and never return a negative count.
+    return Math.max(0, Math.min(numFrames, len + 65536 - position));
   }
 }
 
@@ -412,6 +415,14 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     this._tempo = 1;
     this._interleaved = new Float32Array(128 * 2);
     this._posCounter = 0;
+    this._outputPosition = 0;
+    this._sourceLength = 0;
+    this._generation = 0;
+    this._stateDirty = false;
+    this._stateReason = 'load';
+    this._fadeRemaining = 0;
+    this._lastSampleL = 0; this._lastSampleR = 0;
+    this._fadeFromL = 0; this._fadeFromR = 0;
     // 排程佇列：帶 applyAtFrame 的 play/seek/pitch/tempo 會先進這裡，等音訊執行緒的
     // currentFrame 到點才真的套用。分離播放時兩軌各跑一份本 processor，主執行緒用「同一個
     // applyAtFrame」發給兩邊 → 兩軌保證在同一個 render quantum 生效，不會因訊息到達時機
@@ -433,6 +444,9 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     // （否則：排了一個未來的 play，使用者馬上按暫停，那個 play 到點又會把播放打開）
     if (msg.type === 'play' || msg.type === 'seek' || msg.type === 'pause') {
       this._pending = this._pending.filter((p) => p.type !== 'play' && p.type !== 'seek');
+    }
+    if (msg.type === 'pitch' || msg.type === 'tempo') {
+      this._pending = this._pending.filter((p) => p.type !== msg.type);
     }
     this._apply(msg);
   }
@@ -461,6 +475,9 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
         this._st.pitchSemitones = this._pitch;
         this._st.tempo = this._tempo;
         this._filter = new SimpleFilter(src, this._st);
+        this._sourceLength = src.length;
+        this._outputPosition = 0;
+        this._generation++;
         this._ready = true;
         this._ended = false;
         this._playing = false;
@@ -473,7 +490,12 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
         break;
       case 'play':
         if (!this._ready) break;
-        if (typeof msg.position === 'number') this._filter.sourcePosition = Math.max(0, msg.position);
+        if (typeof msg.position === 'number') {
+          const target = Math.max(0, Math.min(this._sourceLength, msg.position));
+          if (Math.abs(target - this._outputPosition) > 1) this._generation++;
+          this._outputPosition = target;
+          this._filter.sourcePosition = Math.round(target);
+        }
         this._ended = false;
         this._playing = true;
         break;
@@ -482,19 +504,38 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
         break;
       case 'seek':
         if (this._ready && typeof msg.position === 'number') {
-          this._filter.sourcePosition = Math.max(0, msg.position);
+          this._outputPosition = Math.max(0, Math.min(this._sourceLength, msg.position));
+          this._filter.sourcePosition = Math.round(this._outputPosition);
+          this._generation++;
           this._ended = false;
         }
         break;
       case 'pitch':
+        if (msg.value === this._pitch) break;
         this._pitch = msg.value;
-        if (this._st) this._st.pitchSemitones = msg.value; // 即時生效，無重算
+        if (this._st) {
+          // Buffered output was rendered with the previous key. Re-seed at the
+          // audible cursor so the acknowledgement describes the samples emitted
+          // from this render quantum, rather than a future prefetch position.
+          this._filter.sourcePosition = Math.round(this._outputPosition);
+          this._st.pitchSemitones = msg.value;
+          this._fadeRemaining = 64;
+          this._fadeFromL = this._lastSampleL; this._fadeFromR = this._lastSampleR;
+        }
         break;
       case 'tempo':
+        if (msg.value === this._tempo) break;
         this._tempo = msg.value;
-        if (this._st) this._st.tempo = msg.value;
+        if (this._st) {
+          this._filter.sourcePosition = Math.round(this._outputPosition);
+          this._st.tempo = msg.value;
+          this._fadeRemaining = 64;
+          this._fadeFromL = this._lastSampleL; this._fadeFromR = this._lastSampleR;
+        }
         break;
     }
+    this._stateDirty = true;
+    this._stateReason = msg.type;
   }
 
   _releaseSource() {
@@ -505,12 +546,20 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     this._st = null;
     this._posCounter = 0;
     this._pending = [];
+    this._outputPosition = 0;
+    this._sourceLength = 0;
+    this._lastSampleL = 0; this._lastSampleR = 0; this._fadeRemaining = 0;
   }
 
-  _postPosition() {
+  _postPosition(contextFrame = currentFrame) {
     this.port.postMessage({
       type: 'position',
-      position: this._filter ? this._filter.sourcePosition : 0,
+      position: this._outputPosition,
+      prefetchedPosition: this._filter ? this._filter.sourcePosition : 0,
+      contextFrame, contextTime: contextFrame / sampleRate,
+      pitchSemitones: this._pitch, tempo: this._tempo,
+      playing: this._playing, generation: this._generation,
+      reason: this._stateReason,
     });
   }
 
@@ -522,24 +571,39 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
 
     // 先處理排程到點的 play/seek/pitch/tempo（即使目前沒在播也要跑：排程的 'play' 就是靠這裡起播）
     this._drainPending();
+    if (this._stateDirty) {
+      this._stateDirty = false;
+      this._postPosition(currentFrame);
+    }
 
     if (!this._ready || !this._playing) {
       left.fill(0); if (output[1]) right.fill(0);
       return true;
     }
 
-    const extracted = this._filter.extract(this._interleaved, frames);
+    const remainingFrames = Math.max(0, Math.ceil((this._sourceLength - this._outputPosition) / this._tempo));
+    const extracted = this._filter.extract(this._interleaved, Math.min(frames, remainingFrames));
     let i = 0;
-    for (; i < extracted; i++) { left[i] = this._interleaved[i * 2]; right[i] = this._interleaved[i * 2 + 1]; }
+    for (; i < extracted; i++) {
+      const gain = this._fadeRemaining > 0 ? (64 - this._fadeRemaining--) / 64 : 1;
+      left[i] = this._interleaved[i * 2] * gain + this._fadeFromL * (1 - gain);
+      right[i] = this._interleaved[i * 2 + 1] * gain + this._fadeFromR * (1 - gain);
+    }
+    if (extracted > 0) { this._lastSampleL = left[extracted - 1]; this._lastSampleR = right[extracted - 1]; }
     for (; i < frames; i++) { left[i] = 0; right[i] = 0; }
 
+    this._outputPosition = Math.min(this._sourceLength, this._outputPosition + extracted * this._tempo);
+    const atEnd = this._outputPosition >= this._sourceLength || extracted === 0;
     this._posCounter += frames;
-    if (this._posCounter >= POSITION_REPORT_FRAMES) { this._posCounter = 0; this._postPosition(); }
+    if (this._posCounter >= POSITION_REPORT_FRAMES) {
+      this._posCounter = 0;
+      if (!atEnd) this._postPosition(currentFrame + frames);
+    }
 
-    if (extracted === 0 && !this._ended) {
+    if (atEnd && !this._ended) {
       this._ended = true;
       this._playing = false;
-      this._postPosition();
+      this._postPosition(currentFrame + extracted);
       this.port.postMessage({ type: 'ended' });
     }
     return true;

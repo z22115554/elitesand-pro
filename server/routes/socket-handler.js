@@ -48,6 +48,7 @@ const stateStore = require('../services/state-store');
 const defaultRuntimeEvidence = require('../services/runtime-evidence');
 const defaultUsageTelemetry = require('../services/usage-telemetry');
 const { CONTROL_ROOM, READ_ONLY_ROOM, emitToControlClients } = require('../utils/socket-broadcast');
+const { createPracticeOverlay } = require('../services/practice-overlay');
 
 const log = createLogger('Socket');
 
@@ -59,7 +60,8 @@ const log = createLogger('Socket');
 // musetric 路線），永遠是本機 loopback 連線、沒有使用者能輸入 PIN 的介面，比照 OBS
 // 疊加層豁免 PIN；但它不是「畫面唯讀」而是「引擎回報結果」，允許送的事件見下面
 // READ_ONLY_EVENTS 的 webgpu:job:* 那幾個，且每個 handler 都會再驗證真的是這個 socket。
-const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'display-spout', 'setlist', 'display-preview', 'setlist-preview', 'webgpu-engine', ...SEASONAL_OVERLAYS.keys()]);
+// practice-overlay：練唱 OBS 疊加層（音軌、評等、結算），同樣唯讀、豁免 PIN（鐵則 14）。
+const PIN_EXEMPT_CLIENT_TYPES = new Set(['display', 'display-spout', 'setlist', 'display-preview', 'setlist-preview', 'webgpu-engine', 'practice-overlay', ...SEASONAL_OVERLAYS.keys()]);
 // prompter（跟唱視圖）給主播自己看，不是唯讀的 OBS 疊加層——跟 remote 一樣要 PIN、也能送播放指令。
 const CLIENT_TYPES = new Set(['controller', 'remote', 'prompter', ...PIN_EXEMPT_CLIENT_TYPES]);
 const READ_ONLY_EVENTS = new Set([
@@ -108,6 +110,7 @@ module.exports = function socketHandler(io, {
 } = {}) {
   // ─── 全域狀態（單一事實來源，含 state.json 還原）───
   const ctx = createAppState(io);
+  const practiceOverlay = createPracticeOverlay();
 
   // ─── 統一音量：啟動後回填既有歌曲的響度（測試的隔離 downloads 為空 → 自動 no-op）───
   const libraryStore = require('../services/library-store');
@@ -489,7 +492,7 @@ module.exports = function socketHandler(io, {
       // 面板內的預覽 iframe 也要收，預覽才會跟正式來源顯示同一種語言。
       // controller 也收：面板要用 mode 還原「OBS 顯示語言」選單的選項（不會動面板自己的語言）。
       if (type === 'controller' || type === 'display' || type === 'display-spout' || type === 'display-preview'
-        || type === 'setlist' || type === 'setlist-preview' || SEASONAL_OVERLAYS.has(type)) {
+        || type === 'setlist' || type === 'setlist-preview' || type === 'practice-overlay' || SEASONAL_OVERLAYS.has(type)) {
         socket.emit('obs-locale:update', {
           mode: ctx.playState.obsLocale,
           panelLocale: ctx.playState.panelLocale,
@@ -511,6 +514,9 @@ module.exports = function socketHandler(io, {
           if (type === 'halloween' && halloweenInteractions) socket.emit('halloween:board', halloweenInteractions.board());
           socket.emit(`${type}:update`, seasonal.snapshot());
         } else socket.emit(`${type}:ended`);
+      } else if (type === 'practice-overlay') {
+        // 練唱疊加層不需要整份 state：只要目前的練唱歌曲、外觀與時鐘
+        practiceOverlay.greet(socket);
       } else if (type !== 'webgpu-engine') {
         // webgpu-engine 不需要完整 state（歌詞、播放清單等）——它只回應伺服器主動
         // 派發的 webgpu:job:start，不需要自己知道目前播放狀態，省一份無用的大 payload。
@@ -613,6 +619,11 @@ module.exports = function socketHandler(io, {
       registerPublicRequestHandlers(io, socket, ctx, { getRelayService: () => songRequestRelayService });
       registerBgmHandlers(io, socket, ctx);
       registerMoonEventHandlers(io, socket);
+      // 練唱 OBS 疊加層：只有桌面面板能送；伺服器驗證後只轉給 practice-overlay 房間（不廣播給 /display）
+      if (socket.clientType === 'controller') {
+        socket.on('practice:overlay', (message) => practiceOverlay.handle(io, socket, message));
+        socket.on('practice:style:get', (_data, ack) => { if (typeof ack === 'function') ack({ ok: true, style: practiceOverlay.getStyle() }); });
+      }
       registerHalloweenEventHandlers(io, socket, { getInteractions: () => halloweenInteractions, getCauldron: () => halloweenCauldron });
     }
 
@@ -626,6 +637,7 @@ module.exports = function socketHandler(io, {
       clients.prompters.delete(socket.id);
       forgetDisplayConnection(socket.id);
       webgpuSeparationJobs.handleEngineDisconnected(socket.id);
+      practiceOverlay.disconnect(io, socket.id);
       const c = getClientCounts();
       emitClientCounts();
       log.info(`斷線: ${socket.id} (${socket.clientType || 'unknown'}, 原因: ${reason}) (剩餘連線: ${c.total})`);
@@ -655,6 +667,14 @@ module.exports = function socketHandler(io, {
   return {
     command: createDeckCommands(io, ctx),
     getState: ctx.getPublicState,
+    // 練唱音高分析用：畫面上顯示的那份歌詞（手動覆蓋優先）＋這首歌的歌詞偏移。
+    getPracticeLyrics(trackId) {
+      const manual = ctx.getEffectiveLyrics(trackId);
+      const entry = manual ? null : require('../services/library-store').getEntry(trackId);
+      const lines = (manual && Array.isArray(manual.parsedLyrics) && manual.parsedLyrics)
+        || (entry && Array.isArray(entry.parsedLyrics) && entry.parsedLyrics) || [];
+      return { lines, offsetMs: ctx.trackOffsets.get(trackId) || 0 };
+    },
     startTwitchSession,
     stopTwitchSession,
     dispatchTwitchSongRequest,

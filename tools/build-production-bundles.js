@@ -27,11 +27,15 @@ const esbuild = require('esbuild');
 // 合併進頁面 bundle 之後絕對不能刪除原始檔，否則 server 啟動時 require 會直接炸掉。
 // 找到方式：grep server/ 底下 require('../../public/js/...') 的完整清單。
 const SERVER_REQUIRED_PUBLIC_JS = [
+  'practice/practice-fx.js', // server/services/practice-overlay.js 共用演出風格與 OBS 外觀預設
   'setlist-style-schema.js',
   'twitch-reply-settings.js',
   'twitch-request-settings.js',
   'twitch-reward-settings.js',
 ];
+
+// 練唱的 AudioWorklet（public/js/practice/pitch-detector-worklet.js）用 addModule 依網址載入、不在任何 <script>，
+// 不會被併入 bundle，所以不必列白名單。
 
 // 批次 C-1：自訂歌詞模板改成加密封裝，不再是安裝目錄裡具名可讀的 .js 檔。
 // 清單必須跟 server/services/template-delivery.js 的 TEMPLATE_IDS 一致。
@@ -263,6 +267,7 @@ const PAGE_BUNDLES = [
   { html: 'moon.html', bundleName: 'moon' },
   { html: 'halloween.html', bundleName: 'halloween' },
   { html: 'webgpu-separation-worker.html', bundleName: 'webgpu-separation-worker' },
+  { html: 'practice-overlay.html', bundleName: 'practice-overlay' },
 ];
 
 function scanForSoundTouchFingerprint(files) {

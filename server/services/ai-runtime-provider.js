@@ -52,6 +52,9 @@ const PYTHON_EMBED_SHA256 = '009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37
 const PIP_PACKAGES = ['audio-separator[gpu]', 'torch==2.6.0', 'torchaudio==2.6.0'];
 const PIP_EXTRA_INDEX_URL = 'https://download.pytorch.org/whl/cu124';
 const GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py';
+// 練唱的高精度原唱音高（torchcrepe tiny，約 90MB，內附權重）。--no-deps：它要的 librosa／scipy／torch
+// 都已由 audio-separator 裝好；讓 pip 自己解相依可能把 torch 換掉，弄壞人聲分離的 CUDA 版本。
+const PRACTICE_PITCH_PACKAGE = 'torchcrepe==0.0.24';
 
 // Python embeddable + 完整安裝的 site-packages（torch cu124 wheel 本身就 ~2.5GB）
 // 保守估計要留 6GB 才夠，不能只算 zip 大小。
@@ -61,6 +64,15 @@ const MAX_ZIP_BYTES = 50 * 1024 * 1024; // python embeddable 只有 ~11MB，超�
 const MAX_REDIRECTS = 5;
 const DOWNLOAD_TOTAL_TIMEOUT_MS = 10 * 60 * 1000;
 const DOWNLOAD_IDLE_TIMEOUT_MS = 30 * 1000;
+
+function practicePitchModelFile(pythonDir = PYTHON_DIR) {
+  return path.join(pythonDir, 'Lib', 'site-packages', 'torchcrepe', 'assets', 'tiny.pth');
+}
+
+/** 練唱的高精度音高元件是否可用（沒有時練唱仍可用，改走 YIN）。 */
+function isPracticePitchModelAvailable() {
+  try { return isAvailable() && fs.statSync(practicePitchModelFile()).size > 1e6; } catch (_) { return false; }
+}
 
 function isAvailable() {
   try {
@@ -541,6 +553,16 @@ async function downloadRuntime({
         },
       );
 
+      try {
+        await runPythonStepImpl(
+          ['-m', 'pip', 'install', '--no-deps', '--no-warn-script-location', '--disable-pip-version-check', PRACTICE_PITCH_PACKAGE],
+          { cwd: tmpPythonDir, pythonExe: tmpPythonExe, timeoutMs: 15 * 60 * 1000, abortSignal },
+        );
+      } catch (err) {
+        if (abortSignal?.aborted) throw err;
+        log.warn(`練唱音高元件安裝失敗（不影響人聲分離，練唱改用 YIN）：${err.message}`);
+      }
+
       progress('install');
       // 安裝路徑用「先裝到 .download、成功才 rename 進正式路徑」而不是直接解壓到
       // PYTHON_DIR：避免任何一步失敗時留下一個「檔案存在但半殘」的 runtime，讓
@@ -622,7 +644,25 @@ async function downloadPrimaryModel({ downloadImpl = downloadPrimaryModelFile, o
   return { ok: true, alreadyAvailable: false, modelFile: MODEL_FILE };
 }
 
+let practiceInstallInFlight = null;
+/** 已經裝好 AI 元件的使用者補裝練唱音高元件；同時間只跑一份。 */
+function installPracticePitchModel({ abortSignal, runPythonStepImpl = runPythonStep } = {}) {
+  if (!isAvailable()) return Promise.reject(Object.assign(new Error('請先安裝 AI 分離元件。'), { code: 'AI_RUNTIME_REQUIRED' }));
+  if (isPracticePitchModelAvailable()) return Promise.resolve({ ok: true, alreadyAvailable: true });
+  if (practiceInstallInFlight) return practiceInstallInFlight;
+  practiceInstallInFlight = runPythonStepImpl(
+    ['-m', 'pip', 'install', '--no-deps', '--no-warn-script-location', '--disable-pip-version-check', PRACTICE_PITCH_PACKAGE],
+    { timeoutMs: 15 * 60 * 1000, abortSignal },
+  ).then(() => {
+    if (!isPracticePitchModelAvailable()) throw Object.assign(new Error('練唱音高元件安裝後仍找不到模型檔。'), { code: 'PRACTICE_MODEL_MISSING' });
+    log.info('練唱音高元件（torchcrepe）安裝完成');
+    return { ok: true, alreadyAvailable: false };
+  }).finally(() => { practiceInstallInFlight = null; });
+  return practiceInstallInFlight;
+}
+
 function resetForTests() {
+  practiceInstallInFlight = null;
   downloadInFlight = null;
   downloadStatus = { active: false, stage: 'idle', percent: null, error: null, updatedAt: null };
 }
@@ -630,6 +670,10 @@ function resetForTests() {
 module.exports = {
   isAvailable,
   isModelAvailable,
+  isPracticePitchModelAvailable,
+  installPracticePitchModel,
+  practicePitchModelFile,
+  PRACTICE_PITCH_PACKAGE,
   downloadRuntime,
   downloadPrimaryModel,
   cleanupInvalidPrimaryModel,

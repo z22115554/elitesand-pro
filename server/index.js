@@ -111,7 +111,11 @@ app.use((req, res, next) => {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'SAMEORIGIN',
     'Referrer-Policy': 'no-referrer',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    // Only the control panel may request a microphone, after a user gesture.
+    // OBS and remote/read-only pages retain the explicit microphone denial.
+    'Permissions-Policy': ['/', '/panel', '/index.html'].includes(req.path.toLowerCase().replace(/\/+$/, '') || '/')
+      ? 'camera=(), microphone=(self), geolocation=()'
+      : 'camera=(), microphone=(), geolocation=()',
     // style/font 放行 Google Fonts：display.html / setlist.html 從 fonts.googleapis.com 載入
     // Noto Sans / Fraunces 等網頁字體，不放行的話 OBS 歌詞/歌單畫面會掉回系統字體。
     'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss:; worker-src 'self' blob:; frame-src 'self'",
@@ -303,6 +307,18 @@ app.get('/assets/halloween/manifest.json', (req, res) => {
 
 // Mirror P0 本機 A/B 測試用：不把 Kongyuan Sans 字體提交進專案，
 // 只在工作區旁邊存在測試 clone 時提供固定唯讀路由；正式環境找不到就直接 404。
+// Match static's one-time URL decoding and path normalization as well as the
+// canonical aliases, so encoded filenames cannot bypass the page guard.
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  let pathname;
+  try {
+    pathname = path.posix.normalize(decodeURIComponent(req.path).replace(/\\/g, '/'))
+      .toLowerCase().replace(/\/+$/, '');
+  } catch (_) { return next(); }
+  if (pathname !== '/practice-overlay' && pathname !== '/practice-overlay.html') return next();
+  return requireSourceAccess(req, res, () => sendNoCache(res, 'practice-overlay.html'));
+});
 app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
 
 // ─── Routes ───
@@ -310,6 +326,12 @@ app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
 // 「輸入 PIN 換取存取權」的流程。見 server/routes/auth.js。
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/access', require('./routes/device-access'));
+
+const { createPracticeGuideService } = require('./services/practice-guide-service');
+const { createPracticeRouter } = require('./routes/practice');
+// 歌詞在真的開始分析時才取（socketApi 在下面建立；分析不會在啟動期間發生）。
+const practiceGuideService = createPracticeGuideService({ getLyrics: (trackId) => socketApi.getPracticeLyrics(trackId) });
+app.use('/api/practice', createPracticeRouter({ service: practiceGuideService }));
 
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
@@ -537,6 +559,7 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
     try { require('./services/state-store').saveNow(); } catch (err) { log.warn(`狀態二次 flush 失敗：${err.message}`); }
     try { twitch.stop(); } catch (err) { log.warn(`Twitch 關閉失敗：${err.message}`); }
     try { songRequestRelay.stop(); } catch (err) { log.warn(`公開點歌頁中繼關閉失敗：${err.message}`); }
+    try { practiceGuideService.dispose(); } catch (err) { log.warn(`練唱分析關閉失敗：${err.message}`); }
 
     const forceTimer = setTimeout(() => {
       log.warn('優雅關閉逾時，強制關閉剩餘連線');

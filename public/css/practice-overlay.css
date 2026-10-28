@@ -1,0 +1,14 @@
+/* OBS 練唱疊加層：透明底（鐵則 11：只畫自家元素，不鋪滿版底色）。舞台本身的樣式在 practice-stage.css。 */
+:root {
+  color-scheme: dark;
+  --text: #EDEBE4; --text-dim: #A8A59B; --text-faint: #8C8981;
+  --accent: #E9B949; --warn: #E8836B;
+  --bg-inset: transparent; --bg-surface: transparent; --border: rgba(237, 235, 228, .14); --border-strong: rgba(237, 235, 228, .24);
+  --r-md: 6px; --r-lg: 10px;
+  --font: 'Manrope', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; color: var(--text); font-family: var(--font); }
+#practice-stage { position: fixed; inset: 0; }
+/* 還沒收到歌曲時整個舞台不顯示，OBS 畫面上什麼都不會留下 */
+#practice-stage:not(.has-song) { visibility: hidden; }
