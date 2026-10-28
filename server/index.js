@@ -704,9 +704,10 @@ server.listen(PORT, '0.0.0.0', () => {
   log.info(`║  手機遙控: http://localhost:${PORT}/controller ║`);
   log.info(`║  OBS 歌詞: http://localhost:${PORT}/display    ║`);
   log.info(`║  OBS 歌單: http://localhost:${PORT}/setlist    ║`);
-  // 既有安裝若還是穩定版 yt-dlp，背景換成 nightly（只限 Installer 的可寫副本）。
-  require('./services/ytdlp-updater').ensureNightlyChannel().catch((error) => log.warn(`yt-dlp nightly 切換失敗：${error.message}`));
-  ytdlpCompatibility.scheduleProbe();
+  // Installer 啟動後將過舊 yt-dlp 安全更新至 Nightly，完成後才啟動相容性探測。
+  require('./services/ytdlp-updater').ensureNightlyChannel()
+    .catch((error) => log.warn(`yt-dlp nightly 切換失敗：${error.message}`))
+    .finally(() => ytdlpCompatibility.scheduleProbe());
   // OBS 啟動頁：把「目前實際聽的 port」寫進 data/obs-sources/*.html，OBS 端從此不綁 port。
   try {
     const launchers = require('./services/obs-launcher').writeLaunchers({ port: server.address()?.port || PORT });

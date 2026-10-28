@@ -286,16 +286,30 @@ $NodeCommand = Get-Command node -ErrorAction Stop
 Copy-Item -LiteralPath $NodeCommand.Source -Destination (Join-Path $Stage "runtime\node.exe") -Force
 
 foreach ($toolName in @("yt-dlp")) {
-  $tool = Get-Command $toolName -ErrorAction SilentlyContinue
-  if ($tool -and (Test-Path $tool.Source)) {
-    Copy-Item -LiteralPath $tool.Source -Destination (Join-Path $Stage "tools") -Force
-    Write-Host "Bundled $toolName from $($tool.Source)"
+  # The build has no dependency on developer PATH yt-dlp. The official asset is mandatory.
+  if ($toolName -eq 'yt-dlp') {
+    # Fetch the official nightly instead of copying the potentially stale PATH exe.
+    $NightlyHeaders = @{ 'User-Agent' = 'Elitesand-Pro-build' }
+    if ($env:GH_TOKEN) { $NightlyHeaders['Authorization'] = "Bearer $env:GH_TOKEN" }
+    $LatestNightly = Invoke-RestMethod -Uri 'https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest' -Headers $NightlyHeaders
+    $ExpectedVersion = [string]$LatestNightly.tag_name
+    if ($ExpectedVersion -notmatch '^\d{4}\.\d{2}\.\d{2}\.\d+$') { throw "Invalid latest yt-dlp nightly version: $ExpectedVersion" }
+    $NightlyAsset = $LatestNightly.assets | Where-Object { $_.name -eq 'yt-dlp.exe' } | Select-Object -First 1
+    if (-not $NightlyAsset -or [string]$NightlyAsset.digest -notmatch '^sha256:([a-fA-F0-9]{64})$') { throw 'Official nightly executable has no SHA-256 digest.' }
+    $ExpectedHash = $Matches[1].ToLowerInvariant()
+    $ExpectedUrl = "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/$ExpectedVersion/yt-dlp.exe"
+    if ([string]$NightlyAsset.browser_download_url -ne $ExpectedUrl) { throw 'Unexpected official nightly asset URL.' }
+    $BundledYtdlp = Join-Path $Stage 'tools\yt-dlp.exe'
+    Get-ReleaseDownload -Uri $ExpectedUrl -OutFile $BundledYtdlp
+    if ((Get-Sha256Hex -LiteralPath $BundledYtdlp) -ne $ExpectedHash) { throw 'Official yt-dlp nightly executable checksum mismatch.' }
+    Write-Host "Bundled verified official nightly $ExpectedVersion"
 
     # 批次 D-2：不能只從 PATH 複製一個無法追溯版本的 exe——記錄實際版本與 SHA-256，
     # 並抓對應的授權文件。任何一步失敗就停止，不產生缺授權材料的公開包。
     $YtdlpLicenseOut = Join-Path $LicensesDir "yt-dlp"
     New-Item -ItemType Directory -Force -Path $YtdlpLicenseOut | Out-Null
-    $YtdlpVersion = (& $tool.Source --version 2>&1 | Select-Object -First 1).ToString().Trim()
+    $YtdlpVersion = (& $BundledYtdlp --version 2>&1 | Select-Object -First 1).ToString().Trim()
+    if ($LASTEXITCODE -ne 0 -or $YtdlpVersion -ne $ExpectedVersion) { throw 'Bundled yt-dlp version differs from official nightly release.' }
     $YtdlpHash = Get-Sha256Hex -LiteralPath (Join-Path $Stage "tools\yt-dlp.exe")
     # 產品一律用 nightly。nightly 版號（YYYY.MM.DD.HHMMSS）只在 yt-dlp-nightly-builds 有 tag，
     # 主 repo 沒有同名 tag；授權文件改到該 nightly release 標明的上游 commit 去取。
@@ -318,7 +332,7 @@ yt-dlp binary provenance
 =========================
 
 Bundled version: $YtdlpVersion
-Source: $($tool.Source)
+Source: $ExpectedUrl
 SHA-256 of bundled tools\yt-dlp.exe: $YtdlpHash
 Upstream: $YtdlpUpstream
 License: LICENSE.txt (Unlicense/public domain) and THIRD_PARTY_LICENSES.txt
@@ -327,8 +341,6 @@ upstream source ($YtdlpLicenseRef) at build time.
 "@
     Set-Content -LiteralPath (Join-Path $YtdlpLicenseOut "PROVENANCE.txt") -Value $YtdlpInfo -Encoding UTF8
     Write-Host "yt-dlp provenance recorded: $YtdlpVersion, sha256 $YtdlpHash"
-  } else {
-    Write-Warning "$toolName not found on PATH. YouTube import may be limited without it."
   }
 }
 

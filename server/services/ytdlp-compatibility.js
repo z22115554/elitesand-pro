@@ -21,6 +21,7 @@ const PROBE_URL = process.env.ELITESAND_YTDLP_PROBE_URL || DEFAULT_PROBE_URL;
 // override may intentionally point at another healthy public video, so only
 // require a non-empty id in that case.
 const EXPECTED_PROBE_VIDEO_ID = PROBE_URL === DEFAULT_PROBE_URL ? PROBE_VIDEO_ID : null;
+const DOWNLOAD_PROBE_URL = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
 
 // 探針用的是匿名基本路徑：忽略全域設定（尤其是隱含的 Cookie/代理），yt-dlp 支援時
 // 顯式指定 JS runtime。刻意不加 --remote-components：那會讓每次探測都連 GitHub，
@@ -84,6 +85,54 @@ async function probe(options = {}) {
   return inFlight;
 }
 
+/** Manual, PIN-gated download verification. yt-dlp --test retrieves only the
+ * first ~10 KiB of a public audio stream; -o - writes bytes to stdout, so no
+ * downloaded video, cookies or temporary media files are retained. Startup
+ * keeps the lightweight metadata-only probe above.
+ */
+async function probeDownload(options = {}) {
+  if (inFlight) await inFlight;
+  const run = options.execFileImpl || execFileAsync;
+  const now = options.now || (() => Date.now());
+  const startedAt = now();
+  status = { state: 'running', ok: null, checkedAt: startedAt, durationMs: 0, message: '正在測試 YouTube 音訊實際下載（不保存音檔）' };
+  inFlight = (async () => {
+    try {
+      const caps = await ytdlpCaps.ensure(options.execFileImpl ? { run } : {});
+      const runAudioProbe = (extra = []) => run(YTDLP_COMMAND, [
+        ...ytdlpCaps.commonArgs(caps), ...extra, '--quiet', '--no-warnings', '--no-progress',
+        '--test', '--no-playlist', '--socket-timeout', '8', '-f', 'bestaudio/best',
+        '-o', '-', DOWNLOAD_PROBE_URL,
+      ], { timeout: 45000, maxBuffer: 512 * 1024, encoding: 'buffer', windowsHide: true, env: YTDLP_ENV });
+      let stdout;
+      try {
+        ({ stdout } = await runAudioProbe());
+      } catch (primaryError) {
+        // Mirror the real import's primary-first behavior. Never retry a 429.
+        const errorText = String(primaryError?.stderr || primaryError?.message || '');
+        if (!caps.remoteComponents || /429|rate.?limit|too many requests/i.test(errorText)) throw primaryError;
+        ({ stdout } = await runAudioProbe(['--remote-components', 'ejs:github']));
+      }
+      const bytes = Buffer.isBuffer(stdout) ? stdout.length : Buffer.byteLength(String(stdout || ''));
+      if (bytes < 1024) throw new Error('download test did not return audio data');
+      status = { state: 'ok', ok: true, checkedAt: now(), durationMs: Math.max(0, now() - startedAt),
+        message: '已確認可以實際下載 YouTube 音訊測試片段（未保存音檔）。' };
+    } catch (error) {
+      const message = String(error?.stderr || error?.message || '');
+      const reason = /403|Forbidden/i.test(message) ? 'HTTP 403' :
+        /sign in|login|bot/i.test(message) ? 'YouTube 要求登入' :
+        /timed? ?out|ETIMEDOUT/i.test(message) ? '連線逾時' : '音訊下載失敗';
+      status = { state: 'failed', ok: false, checkedAt: now(), durationMs: Math.max(0, now() - startedAt),
+        message: `YouTube 音訊下載驗證失敗（${reason}）；讀取影片資訊成功不代表音訊可下載。` };
+      log.warn(`YouTube 音訊下載驗證失敗：${reason}`);
+    } finally {
+      inFlight = null;
+    }
+    return getStatus();
+  })();
+  return inFlight;
+}
+
 function scheduleProbe(delayMs = 250) {
   const timer = setTimeout(() => { probe().catch(() => {}); }, Math.max(0, Number(delayMs) || 0));
   timer.unref?.();
@@ -102,6 +151,7 @@ module.exports = {
   probeArgs,
   getStatus,
   probe,
+  probeDownload,
   scheduleProbe,
   _resetForTests: resetForTests,
 };

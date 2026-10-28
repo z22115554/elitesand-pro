@@ -20,6 +20,12 @@
     'yt-dlp 目前無法讀取 YouTube；請先檢查或更新 yt-dlp，再重試。': 'system.compatFailed',
     '正在驗證 YouTube 相容性（不會下載音檔）': 'system.compatRunning',
     '已確認 yt-dlp 可以讀取 YouTube（未下載任何音檔）。': 'system.compatOk',
+    '正在測試 YouTube 音訊實際下載（不保存音檔）': 'system.compatAudioRunning',
+    '已確認可以實際下載 YouTube 音訊測試片段（未保存音檔）。': 'system.compatAudioOk',
+    'YouTube 音訊下載驗證失敗（HTTP 403）；讀取影片資訊成功不代表音訊可下載。': 'system.compatAudio403',
+    'YouTube 音訊下載驗證失敗（YouTube 要求登入）；讀取影片資訊成功不代表音訊可下載。': 'system.compatAudioLogin',
+    'YouTube 音訊下載驗證失敗（連線逾時）；讀取影片資訊成功不代表音訊可下載。': 'system.compatAudioTimeout',
+    'YouTube 音訊下載驗證失敗（音訊下載失敗）；讀取影片資訊成功不代表音訊可下載。': 'system.compatAudioFailed',
     '無法讀取 YouTube 相容性狀態': 'system.compatReadFailed',
   };
   const compatibilityText = (message) => t(COMPATIBILITY_MESSAGE_KEYS[message] || 'system.compatNotRun');
@@ -343,7 +349,7 @@
     if (dom.ytdlpCompatibilityBtn) {
       dom.ytdlpCompatibilityBtn.addEventListener('click', async () => {
         dom.ytdlpCompatibilityBtn.disabled = true;
-        if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = t('system.compatRunning');
+        if (dom.ytdlpCompatibilityStatus) dom.ytdlpCompatibilityStatus.textContent = t('system.compatAudioRunning');
         try {
           const request = typeof PinAuth !== 'undefined'
             ? PinAuth.fetchWithPin('/api/ytdlp/compatibility', { method: 'POST' })
@@ -371,6 +377,11 @@
         return;
       }
       dom.ytdlpVersion.textContent = data.currentVersion || '未知';
+      if (data.checkError || !data.latestVersion) {
+        dom.ytdlpUpdateRow.hidden = true;
+        showMsg(data.checkError || '無法取得官方 Nightly 最新版本，請稍後重新檢查。');
+        return;
+      }
       if (data.hasUpdate && data.latestVersion) {
         dom.ytdlpLatest.textContent = `最新：${data.latestVersion}`;
         dom.ytdlpUpdateRow.hidden = false;
@@ -402,7 +413,8 @@
           if (data.ok) {
             if (data.currentVersion) dom.ytdlpVersion.textContent = data.currentVersion;
             dom.ytdlpUpdateRow.hidden = true;
-            AppShared.showToast('yt-dlp 已更新', 'success');
+            AppShared.showToast(data.downloadVerified === false ? '已更新，但音訊下載驗證失敗' : 'yt-dlp 已更新',
+              data.downloadVerified === false ? 'warning' : 'success');
             setTimeout(() => refreshCompatibility(), 300);
           } else {
             AppShared.showToast('yt-dlp 更新未成功', 'warning');

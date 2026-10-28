@@ -468,7 +468,13 @@ router.get('/ytdlp/check', async (req, res) => {
 router.post('/ytdlp/update', requirePin, async (req, res) => {
   try {
     const result = await ytdlpUpdater.runUpdate();
-    if (result.ok) ytdlpCompatibility.scheduleProbe(50);
+    if (result.ok) {
+      const verification = await ytdlpCompatibility.probeDownload();
+      result.downloadVerified = verification.ok === true;
+      result.message += result.downloadVerified
+        ? '；YouTube 音訊下載驗證通過'
+        : '；版本已更新，但 YouTube 音訊下載驗證未通過，請查看相容性狀態';
+    }
     res.status(result.ok ? 200 : 422).json(result);
   } catch (err) {
     log.error('yt-dlp 更新失敗', err);
@@ -481,7 +487,7 @@ router.get('/ytdlp/compatibility', (req, res) => {
 });
 
 router.post('/ytdlp/compatibility', requirePin, async (req, res) => {
-  res.json(await ytdlpCompatibility.probe());
+  res.json(await ytdlpCompatibility.probeDownload());
 });
 
 // ─── 遠端公告（固定 HTTPS JSON；本機快取與已讀狀態在 data/）───

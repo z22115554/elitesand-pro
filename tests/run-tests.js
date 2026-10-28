@@ -966,7 +966,7 @@ test('應用版本集中於 package.json，lockfile、健康檢查與產品 User
     'server/services/lyrics-engine.js',
     'server/services/system-check.js',
     'server/services/update-checker.js',
-    'server/services/ytdlp-updater.js',
+    'server/services/ytdlp-verified-release.js',
   ];
   versionConsumers.forEach((relativePath) => {
     const source = fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -9099,7 +9099,7 @@ test('YouTube nightly fallback 只允許 Installer 的可信可寫 yt-dlp 工作
   const shell = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
   ok(updater.includes("process.env.ELITESAND_PACKAGED !== '1'"), 'portable/dev 不可被匯入流程自動改 yt-dlp: ');
   ok(updater.includes("process.env.ELITESAND_YTDLP_MUTABLE !== '1'"), '唯讀 seed 不可被 nightly fallback 修改: ');
-  ok(updater.includes("['--update-to', 'nightly']"), '相容性救援必須使用 yt-dlp 官方 nightly channel: ');
+  ok(updater.includes("nightlyRelease.stageVerifiedRelease"), '相容性救援必須驗證官方 Nightly binary: ');
   ok(updater.includes('writeApprovedRuntimeTrust(currentVersion)'), 'nightly 成功後必須重新寫可信 runtime hash: ');
   ok(shell.includes("ELITESAND_YTDLP_NODE_PATH: path.join(packagedTools, 'updater-node.exe')"), 'Installer 應把隨附 Node runtime 明確交給 yt-dlp EJS: ');
   const portableBuild = fs.readFileSync(path.join(__dirname, '../tools/build-portable.ps1'), 'utf8');
@@ -9111,7 +9111,8 @@ test('YouTube nightly fallback 只允許 Installer 的可信可寫 yt-dlp 工作
 testAsync('yt-dlp 一律走 nightly：版本檢查看 nightly repo、更新與啟動切換都用 nightly，打包能處理 nightly 授權', async () => {
   const updaterPath = path.join(__dirname, '../server/services/ytdlp-updater.js');
   const updater = fs.readFileSync(updaterPath, 'utf8');
-  ok(updater.includes('repos/yt-dlp/yt-dlp-nightly-builds/releases/latest'), '版本檢查要比對 nightly，否則 nightly 永遠被當成比穩定版新: ');
+  const releaseSource = fs.readFileSync(path.join(__dirname, '../server/services/ytdlp-verified-release.js'), 'utf8');
+  ok(releaseSource.includes('repos/yt-dlp/yt-dlp-nightly-builds/releases/latest'), '版本檢查要比對 nightly，否則 nightly 永遠被當成比穩定版新: ');
   ok(!updater.includes("['-U']"), '手動更新不可再用 -U（會停在穩定版）: ');
   const ytdlpUpdater = require(updaterPath);
   eq(ytdlpUpdater.isNightlyVersion('2026.09.16.232951'), true);
@@ -11994,7 +11995,7 @@ test('yt-dlp 工作副本不可寫時安全退回 seed，且 packaged updater �
     const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/ytdlp-updater.js'), 'utf8');
     ok(updaterSource.includes("process.env.ELITESAND_PACKAGED === '1' && process.env.ELITESAND_YTDLP_MUTABLE !== '1'"),
       'Installer 若無 writable working copy，更新器必須 fail closed，不能修改 integrity-protected seed: ');
-    ok(updaterSource.includes("execFileAsync(YTDLP_COMMAND, ['--update-to', 'nightly']"), '更新器必須執行解析後的工作副本，不可硬編碼 PATH yt-dlp: ');
+    ok(updaterSource.includes('nightlyRelease.installStagedRelease(resolved, staging'), '更新器必須使用已驗證的工作副本，不可修改 seed: ');
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }
@@ -12018,7 +12019,7 @@ test('所有 yt-dlp 執行入口共用明確工作副本路徑', () => {
   ok(shellSource.includes("expectedSeedHash: packagedResourceIntegrity?.files?.['tools/yt-dlp.exe']"));
   ok(shellSource.includes('prepareMutableYtdlp('));
   const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/ytdlp-updater.js'), 'utf8');
-  ok(updaterSource.includes('writeApprovedRuntimeTrust(currentVersion)'), '官方 -U 成功後必須刷新 runtime trusted hash: ');
+  ok(updaterSource.includes('writeApprovedRuntimeTrust(release.version)'), '官方 Nightly 驗證後必須刷新 runtime trusted hash: ');
   ok(updaterSource.includes('runtimeMatchesRecordedTrust()'), '更新失敗不得無條件把較新的可信 runtime 降級成 seed: ');
 });
 

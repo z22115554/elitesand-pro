@@ -1,13 +1,13 @@
 /**
- * yt-dlp 版本檢查與自我更新
+ * yt-dlp 版本檢查與官方 Nightly 驗證更新
  *
  * yt-dlp 版本號是日期格式（YYYY.MM.DD[.build]），可直接字串比較新舊。
  * 一律走 nightly 通道：穩定版跟不上 YouTube 的改動，匯入失敗頻率太高（2026-09 使用者決定）。
  * - checkUpdate()：讀本機 `yt-dlp --version`，比對 yt-dlp-nightly-builds 最新 release tag。
  *   純唯讀，任何失敗都靜默回 available:false / hasUpdate:false，不影響其他功能。
- * - runUpdate()：執行 `yt-dlp --update-to nightly`（官方自我更新，會核對官方檢查碼；
- *   pip 版會回訊息叫你用 pip）。會改動檔案，屬受保護操作，路由層須掛 requirePin。
- * - ensureNightlyChannel()：啟動時若 Installer 的可寫副本還是穩定版，就換成 nightly 一次。
+ * - runUpdate()：使用 GitHub 官方 Nightly 資產的 SHA-256 驗證、版本驗證後才替換執行檔。
+ *   Installer 只更新 userData 可信副本，保持受保護 seed 不變；路由層須掛 requirePin。
+ * - ensureNightlyChannel()：Installer 啟動時檢查並更新過舊 Nightly 或穩定版。
  */
 
 const { execFile } = require('child_process');
@@ -15,10 +15,9 @@ const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
 const execFileAsync = promisify(execFile);
-const { fetchWithTimeout } = require('../utils/helpers');
 const { createLogger } = require('../utils/logger');
-const { githubJsonHeaders } = require('../utils/app-version');
 const { getYtdlpCommand } = require('../utils/ytdlp-command');
+const nightlyRelease = require('./ytdlp-verified-release');
 const {
   normalizeHash,
   normalizeVersion,
@@ -30,10 +29,10 @@ const {
 const log = createLogger('YtdlpUpdater');
 
 const YTDLP_ENV = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
-const LATEST_API = 'https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest';
 const YTDLP_COMMAND = getYtdlpCommand();
 
 let _cache = null; // { payload, at }
+let _inflightUpdate = null;
 
 /** 只取版本號本身（去掉可能的附註），yt-dlp --version 通常單行就是版本。 */
 function parseVersion(text) {
@@ -145,21 +144,18 @@ async function checkUpdate(force = false) {
     currentVersion,
     latestVersion: null,
     hasUpdate: false,
+    checkError: null,
     checkedAt: Date.now(),
   };
 
   if (currentVersion) {
     try {
-      const res = await fetchWithTimeout(LATEST_API, {
-        headers: githubJsonHeaders('yt-dlp-updater'),
-      }, 8000);
-      if (res.ok) {
-        const data = await res.json();
-        payload.latestVersion = parseVersion(data.tag_name) || null;
-        payload.hasUpdate = isNewer(payload.latestVersion, currentVersion);
-      }
+      const release = await nightlyRelease.latestRelease();
+      payload.latestVersion = release.version;
+      payload.hasUpdate = isNewer(release.version, currentVersion);
     } catch (e) {
       log.warn(`檢查 yt-dlp 最新版失敗: ${e.message}`);
+      payload.checkError = '無法連線取得官方 Nightly 版本，請檢查網路後重試。';
     }
   }
 
@@ -168,38 +164,49 @@ async function checkUpdate(force = false) {
 }
 
 /**
- * 執行 yt-dlp 自我更新。回傳 { ok, message, currentVersion }。
- * timeout 拉長到 60s（要下載新 binary）；成功後清掉檢查快取。
+ * 從 GitHub 官方 Nightly 下載並驗證再替換。回傳 { ok, message, currentVersion }。
+ * 更新期間不可修改 Installer seed，失敗要保留目前可信的執行檔。
  */
-async function runUpdate() {
+async function performVerifiedUpdate() {
   if (process.env.ELITESAND_PACKAGED === '1' && process.env.ELITESAND_YTDLP_MUTABLE !== '1') {
     return { ok: false, message: '目前無法建立可寫入的 yt-dlp 更新副本；已保留內建版本，不會修改受保護的程式檔案。' };
   }
   try {
-    const { stdout, stderr } = await execFileAsync(YTDLP_COMMAND, ['--update-to', 'nightly'], {
-      timeout: 60000, windowsHide: true, maxBuffer: 512 * 1024, env: YTDLP_ENV,
+    // A packaged build must never replace its protected seed or an untrusted runtime.
+    if (process.env.ELITESAND_PACKAGED === '1' && !runtimeMatchesRecordedTrust()) {
+      throw new Error('yt-dlp runtime trust state is invalid; restart to recover the packaged seed');
+    }
+    const resolved = path.isAbsolute(YTDLP_COMMAND) ? YTDLP_COMMAND :
+      String((await execFileAsync(process.platform === 'win32' ? 'where.exe' : 'which', ['yt-dlp'],
+        { timeout: 5000, windowsHide: true })).stdout).split(/\r?\n/).find(Boolean)?.trim();
+    if (!resolved || !path.isAbsolute(resolved) || !/^yt-dlp(?:\.exe)?$/i.test(path.basename(resolved))) {
+      throw new Error('yt-dlp executable update path could not be resolved');
+    }
+    const release = await nightlyRelease.latestRelease();
+    const current = await localVersion();
+    if (current === release.version) return { ok: true, message: '已是最新 Nightly 版本', currentVersion: current };
+    if (current && isNewer(current, release.version)) {
+      return { ok: true, message: '目前版本比官方最新 Nightly 更新，未進行降級', currentVersion: current };
+    }
+    const staging = await nightlyRelease.stageVerifiedRelease(resolved, release);
+    nightlyRelease.installStagedRelease(resolved, staging, () => {
+      if (process.env.ELITESAND_PACKAGED === '1') writeApprovedRuntimeTrust(release.version);
     });
     _cache = null;
-    const out = `${stdout || ''}${stderr || ''}`.trim();
-    // 擷取有意義的最後幾行給前端顯示（不含本機路徑細節）
-    const lastLines = out.split(/\r?\n/).filter(Boolean).slice(-4).join('\n');
     const currentVersion = await localVersion();
-    if (process.env.ELITESAND_PACKAGED === '1') writeApprovedRuntimeTrust(currentVersion);
-    log.info(`yt-dlp 自我更新完成，目前版本 ${currentVersion}`);
-    return { ok: true, message: lastLines || '已是最新版本', currentVersion };
+    if (currentVersion !== release.version) throw new Error('yt-dlp version mismatch after installation');
+    log.info(`yt-dlp 官方 Nightly 驗證更新完成，目前版本 ${currentVersion}`);
+    return { ok: true, message: `官方 Nightly ${currentVersion} 已完成 SHA-256 驗證並安裝`, currentVersion };
   } catch (e) {
-    log.warn(`yt-dlp 自我更新失敗: ${e.message}`);
-    if (process.env.ELITESAND_PACKAGED === '1' && process.env.ELITESAND_YTDLP_MUTABLE === '1') {
-      try {
-        if (!runtimeMatchesRecordedTrust() && restoreTrustedSeedRuntime()) {
-          log.warn('yt-dlp 更新後驗證失敗，且 runtime 已偏離可信 hash；已恢復 Installer 內建可信 seed。');
-        }
-      } catch (restoreError) {
-        log.error(`yt-dlp 更新失敗且無法恢復可信 seed: ${restoreError.message}`);
-      }
-    }
-    return { ok: false, message: '更新失敗：可能是以 pip 安裝（請改用 pip 更新），或沒有寫入權限。' };
+    log.warn(`yt-dlp 官方 Nightly 更新失敗: ${e.message}`);
+    return { ok: false, message: `更新失敗：${e.message}` };
   }
+}
+
+function runUpdate() {
+  if (_inflightUpdate) return _inflightUpdate;
+  _inflightUpdate = performVerifiedUpdate().finally(() => { _inflightUpdate = null; });
+  return _inflightUpdate;
 }
 
 
@@ -221,30 +228,13 @@ async function runNightlyFallback() {
     return { ok: false, skipped: true, message: 'yt-dlp 工作副本不可寫，略過 nightly fallback。' };
   }
 
-  _nightlyFallbackPromise = (async () => {
-    try {
-      const { stdout, stderr } = await execFileAsync(YTDLP_COMMAND, ['--update-to', 'nightly'], {
-        timeout: 60000, windowsHide: true, maxBuffer: 512 * 1024, env: YTDLP_ENV,
-      });
-      _cache = null;
-      const currentVersion = await localVersion();
-      writeApprovedRuntimeTrust(currentVersion);
-      const out = `${stdout || ''}${stderr || ''}`.trim();
-      const lastLines = out.split(/\r?\n/).filter(Boolean).slice(-4).join('\n');
-      log.info(`YouTube 相容性救援已切換/確認 nightly，版本 ${currentVersion}`);
-      return { ok: true, skipped: false, message: lastLines || 'nightly 已可用', currentVersion };
-    } catch (e) {
-      log.warn(`yt-dlp nightly fallback 失敗: ${e.message}`);
-      try {
-        if (!runtimeMatchesRecordedTrust() && restoreTrustedSeedRuntime()) {
-          log.warn('nightly fallback 後 runtime 驗證失敗；已恢復 Installer 內建可信 seed。');
-        }
-      } catch (restoreError) {
-        log.error(`nightly fallback 失敗且無法恢復可信 seed: ${restoreError.message}`);
-      }
-      return { ok: false, skipped: false, message: 'nightly fallback 失敗；保留既有可信 yt-dlp。' };
+  _nightlyFallbackPromise = runUpdate().then(result => {
+    if (!result.ok) {
+      // A failed network or permission attempt must not permanently disable recovery.
+      _nightlyFallbackPromise = null;
     }
-  })();
+    return { ...result, skipped: false };
+  });
 
   return _nightlyFallbackPromise;
 }
@@ -255,14 +245,16 @@ function isNightlyVersion(version) {
 }
 
 /**
- * 既有安裝還停在穩定版時，啟動後換成 nightly 一次。只動 Installer 的可信可寫副本
+ * Installer 啟動時確認 Nightly 最新版本（含已經是舊 Nightly）。只動可信可寫副本
  * （同 runNightlyFallback 的限制），開發環境／portable 不碰。背景執行，失敗不影響啟動。
  */
 async function ensureNightlyChannel() {
   if (process.env.ELITESAND_PACKAGED !== '1' || process.env.ELITESAND_YTDLP_MUTABLE !== '1') return { ok: false, skipped: true };
   const current = await localVersion();
-  if (!current || isNightlyVersion(current)) return { ok: true, skipped: true, currentVersion: current };
-  log.info(`yt-dlp 目前是穩定版 ${current}，切換到 nightly`);
+  const status = await checkUpdate();
+  if (!status.latestVersion) return { ok: false, skipped: true, message: '無法查詢官方 Nightly 版本' };
+  if (!current || !isNewer(status.latestVersion, current)) return { ok: true, skipped: true, currentVersion: current };
+  log.info(`yt-dlp ${current} 有更新的 Nightly ${status.latestVersion}，準備安全更新`);
   return runNightlyFallback();
 }
 
