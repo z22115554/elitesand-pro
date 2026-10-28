@@ -12,6 +12,7 @@ const { emitToControlClients, emitToAccessRooms } = require('../../utils/socket-
 const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds } = require('../../utils/track-schema');
 const { applyCommunityOffsetSuggestion } = require('./playlist');
 const { createLogger } = require('../../utils/logger');
+const { isLoopbackAddress } = require('../../utils/pin-setup-policy');
 
 const log = createLogger('Socket');
 
@@ -69,7 +70,7 @@ function registerLibraryHandlers(io, socket, ctx, {
   // normal library controls, but it must never select filesystem paths.
   socket.on('library:storage:get', (_data, ack) => {
     if (typeof ack !== 'function') return;
-    if (socket.clientType !== 'controller') {
+    if (socket.clientType !== 'controller' || !isLoopbackAddress(socket.handshake?.address)) {
       ack({ ok: false, error: 'desktop_only' });
       return;
     }
@@ -78,7 +79,7 @@ function registerLibraryHandlers(io, socket, ctx, {
 
   socket.on('library:storage:migrate', (data, ack) => {
     const reply = (result) => { if (typeof ack === 'function') ack(result); };
-    if (socket.clientType !== 'controller') {
+    if (socket.clientType !== 'controller' || !isLoopbackAddress(socket.handshake?.address)) {
       reply({ ok: false, error: 'desktop_only' });
       return;
     }

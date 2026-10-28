@@ -87,6 +87,14 @@ if (process.env.ELITESAND_SECURITY_FIXTURE_CHILD === '1') {
     assert.deepEqual(await response.json(), { ok: true });
   };
 
+  test('qs comma arrays tolerate non-callable own toString values (GHSA-6pq8-jhm2-2vcw)', () => {
+    const qs = require('qs');
+    for (const value of [null, false, 1, 'not callable', {}]) {
+      assert.doesNotThrow(() => qs.stringify({ items: [{ toString: value }] }, { arrayFormat: 'comma' }));
+    }
+    assert.equal(qs.stringify({ items: ['a', 'b'] }, { arrayFormat: 'comma' }), 'items=a%2Cb');
+  });
+
   test('valid JSON and form bodies still work, including compressed JSON', async () => {
     for (const [type, body] of [['application/json', '{"title":"歌曲"}'], ['application/x-www-form-urlencoded', 'title=song']]) {
       const response = await fetch(`${base}/parse`, { method: 'POST', headers: { 'Content-Type': type }, body });

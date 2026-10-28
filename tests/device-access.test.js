@@ -88,5 +88,36 @@ test('regenerating the device key invalidates all previously paired phones witho
   assert.strictEqual(store.verifySourceToken(sourceToken), true);
 });
 
+test('revocation notifies live sessions after invalidating tokens and supports unsubscribe', () => {
+  const token = store.redeemPairing(store.createPairing().code);
+  let called = 0;
+  const unsubscribe = store.onControllersRevoked(() => {
+    called++;
+    assert.strictEqual(store.verifyControllerToken(token), false);
+  });
+  store.revokeControllers();
+  assert.strictEqual(called, 1);
+  unsubscribe();
+  store.revokeControllers();
+  assert.strictEqual(called, 1);
+});
+
+test('failed revocation persistence does not create a memory-only credential reset', () => {
+  const token = store.redeemPairing(store.createPairing().code);
+  const version = store.getLocalStatus().deviceKeyVersion;
+  let notified = false;
+  const unsubscribe = store.onControllersRevoked(() => { notified = true; });
+  const rename = fs.renameSync;
+  fs.renameSync = (from, to) => {
+    if (to === path.join(root, 'data', 'device-access.json')) throw new Error('fixture disk failure');
+    return rename(from, to);
+  };
+  try { assert.throws(() => store.revokeControllers(), /Unable to save/); }
+  finally { fs.renameSync = rename; unsubscribe(); }
+  assert.strictEqual(store.verifyControllerToken(token), true);
+  assert.strictEqual(store.getLocalStatus().deviceKeyVersion, version);
+  assert.strictEqual(notified, false);
+});
+
 fs.rmSync(root, { recursive: true, force: true });
 if (failed) process.exitCode = 1;

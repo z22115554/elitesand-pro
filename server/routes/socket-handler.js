@@ -428,6 +428,19 @@ module.exports = function socketHandler(io, {
   }
 
   io.on('connection', (socket) => {
+    if (!socket.readOnly && !isLoopbackAddress(socket.handshake.address)) {
+      const disconnectRevoked = () => socket.disconnect(true);
+      const unsubscribe = deviceAccess.onControllersRevoked(disconnectRevoked);
+      socket.once('disconnect', unsubscribe);
+      // Also close the handshake-to-connection window and reject queued packets
+      // or tokens evicted by the paired-device limit.
+      const stillAuthorized = () => deviceAccess.verifyControllerToken(socket.handshake.auth?.controllerToken);
+      if (!stillAuthorized()) { unsubscribe(); disconnectRevoked(); return; }
+      socket.use((_packet, next) => {
+        if (!stillAuthorized()) { disconnectRevoked(); return; }
+        next();
+      });
+    }
     const counts = getClientCounts();
     log.info(`新連線: ${socket.id} (當前連線: ${counts.total})`);
     let lastStateRequestAt = 0;

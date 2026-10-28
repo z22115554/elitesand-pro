@@ -153,18 +153,22 @@ const EXPENSIVE_GET_MAX_KEYS = 512;
 const expensiveGetLastSeen = new Map();
 
 function isForcedExpensiveGet(req) {
-  if (req.method !== 'GET') return false;
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const requestPath = req.path.toLowerCase();
   const force = req.query?.force === '1' || req.query?.force === 'true';
   const refresh = req.query?.refresh === '1' || req.query?.refresh === 'true';
   return (force && [
     '/api/system-check', '/api/ytdlp/check', '/api/announcements', '/api/update-check',
-  ].some((prefix) => req.path.startsWith(prefix)))
-    || (refresh && req.path.startsWith('/api/fonts'));
+  ].some((prefix) => requestPath.startsWith(prefix)))
+    || (refresh && requestPath.startsWith('/api/fonts'));
 }
 
 app.use((req, res, next) => {
-  const protectedRequest = req.path.startsWith('/api/')
-    && (req.method !== 'GET' || SIDE_EFFECT_GET_PREFIXES.some((prefix) => req.path.startsWith(prefix)));
+  // Express routes are case-insensitive by default, so their security policy
+  // must recognize exactly the same spellings (including /API/... aliases).
+  const requestPath = req.path.toLowerCase();
+  const protectedRequest = requestPath.startsWith('/api/')
+    && (req.method !== 'GET' || SIDE_EFFECT_GET_PREFIXES.some((prefix) => requestPath.startsWith(prefix)));
   if (!protectedRequest) return next();
   const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
   if (fetchSite === 'cross-site') return res.status(403).json({ error: '已拒絕跨網站操作', code: 'CROSS_SITE_REQUEST' });
@@ -185,7 +189,7 @@ app.use((req, res, next) => {
   if (!isForcedExpensiveGet(req)) return next();
   const now = Date.now();
   const client = String(req.ip || req.socket?.remoteAddress || 'unknown');
-  const key = `${client}:${req.path}`;
+  const key = `${client}:${req.path.toLowerCase().replace(/\/+$/, '')}`;
   const last = expensiveGetLastSeen.get(key) || 0;
   if (now - last < EXPENSIVE_GET_COOLDOWN_MS) {
     const retryAfter = Math.max(1, Math.ceil((EXPENSIVE_GET_COOLDOWN_MS - (now - last)) / 1000));

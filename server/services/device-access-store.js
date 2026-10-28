@@ -36,6 +36,12 @@ const diskStore = createJsonStore({
 let credentials = null;
 let loaded = false;
 const pendingPairings = new Map();
+const controllerRevocationListeners = new Set();
+
+function onControllersRevoked(listener) {
+  controllerRevocationListeners.add(listener);
+  return () => controllerRevocationListeners.delete(listener);
+}
 
 function token(bytes = 32) {
   return crypto.randomBytes(bytes).toString('base64url');
@@ -142,11 +148,18 @@ function revokeControllers() {
   ensureLoaded();
   const revoked = credentials.controllers.length;
   // Regenerate the private device key as well as deleting every token hash.
-  credentials.deviceKey = token();
-  credentials.deviceKeyVersion += 1;
-  credentials.controllers = [];
+  const nextCredentials = {
+    ...credentials, deviceKey: token(),
+    deviceKeyVersion: credentials.deviceKeyVersion + 1, controllers: [],
+  };
+  if (!diskStore.save(nextCredentials)) throw new Error('Unable to save device access credentials');
+  credentials = nextCredentials;
   pendingPairings.clear();
-  persist();
+  // Handshake-only validation leaves already connected phones authorized.
+  // Notify synchronously so no further broadcasts/control events reach them.
+  for (const listener of [...controllerRevocationListeners]) {
+    try { listener(); } catch (error) { log.warn(`Unable to disconnect revoked controller: ${error.message}`); }
+  }
   log.info(`Revoked ${revoked} paired controller(s)`);
   return { revoked, deviceKeyVersion: credentials.deviceKeyVersion };
 }
@@ -169,6 +182,7 @@ module.exports = {
   verifyControllerToken,
   verifySourceToken,
   revokeControllers,
+  onControllersRevoked,
   getLocalStatus,
   _resetForTests() { credentials = null; loaded = false; pendingPairings.clear(); },
 };

@@ -1,6 +1,7 @@
 'use strict';
 
 const os = require('os');
+const { isIP } = require('net');
 
 function normalizeHost(value) {
   return String(value || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
@@ -9,10 +10,18 @@ function normalizeHost(value) {
 function isPrivateAddress(hostname) {
   const host = normalizeHost(hostname);
   if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
-  if (/^10\./.test(host) || /^192\.168\./.test(host)) return true;
-  const m = /^172\.(\d{1,3})\./.exec(host);
-  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
-  if (/^169\.254\./.test(host) || /^(?:fc|fd|fe8|fe9|fea|feb)/i.test(host)) return true;
+  // Prefixes alone also match attacker-controlled DNS names such as
+  // 10.attacker.example and fc-attacker.example. Validate the entire address
+  // before applying subnet rules; otherwise DNS rebinding bypasses all guards.
+  const family = isIP(host);
+  if (family === 4) {
+    const [first, second] = host.split('.').map(Number);
+    return first === 10 || first === 127
+      || (first === 192 && second === 168)
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 169 && second === 254);
+  }
+  if (family === 6) return /^(?:fc|fd|fe[89ab])/i.test(host);
   return false;
 }
 

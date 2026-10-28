@@ -52,7 +52,16 @@ function runAudit(command) {
   }
 
   try {
-    return JSON.parse(raw);
+    const report = JSON.parse(raw);
+    // npm also returns valid JSON for registry/network failures. An error object
+    // is not an empty vulnerability report and must never make the gate green.
+    if (!report || report.error || report.auditReportVersion !== 2
+      || !report.vulnerabilities || typeof report.vulnerabilities !== 'object'
+      || Array.isArray(report.vulnerabilities)
+      || !Number.isInteger(report.metadata?.vulnerabilities?.total)) {
+      throw new Error('npm audit 未完成或回傳了不支援的報告格式');
+    }
+    return report;
   } catch (error) {
     console.error('無法解析 npm audit 的 JSON 輸出：', error.message);
     process.exit(1);
