@@ -12,6 +12,7 @@
   const ADVANCED_OBS_STORAGE_KEY = 'elite-advanced-obs-tour-v1';
   const ADVANCED_LIVE_STORAGE_KEY = 'elite-advanced-live-tour-v1';
   const HALLOWEEN_STORAGE_KEY = 'elite-halloween-tour-2026-v1';
+  const PRACTICE_STORAGE_KEY = 'elite-practice-tour-v1';
   const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1'];
   const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2';
   const TOUR_VERSION = 6; // 6：2026-10 面板改版，主線改走新版面（升級者會再看到一次歡迎）
@@ -287,6 +288,20 @@
     id: `halloween-${id}`, view: 'halloween', target,
     title: `halloween.tour.${id}.title`, body: `halloween.tour.${id}.body`, hint: 'halloween.tour.hint',
   }));
+  // 練唱分頁：第一次點進去才開始；右欄設定的分頁由 ui:reveal 切到目標所在那一頁
+  const PRACTICE_STEPS = [
+    ['stage', '#practice-stage'],
+    ['source', '#practice-pane-input'],
+    ['key', '#view-practice .practice-key'],
+    ['score', '#view-practice .practice-score-card'],
+    ['display', '#practice-pane-display'],
+    ['obs', '#practice-pane-obs'],
+  ].map(([id, target]) => ({
+    id: `practice-${id}`, view: 'practice', target,
+    // 音軌幾乎佔滿畫面，外面放不下導覽卡：允許放進音軌裡的右下角
+    cardInside: id === 'stage',
+    title: `practice.tour.${id}.title`, body: `practice.tour.${id}.body`, hint: 'practice.tour.hint',
+  }));
   const ADVANCED_STEPS = [...ADVANCED_LYRICS_STEPS, ...ADVANCED_OBS_STEPS, ...ADVANCED_LIVE_STEPS];
 
   const dom = {};
@@ -295,9 +310,11 @@
   let advancedObsState = loadAdvancedObsState();
   let advancedLiveState = loadAdvancedLiveState();
   let halloweenState = loadStoredState(HALLOWEEN_STORAGE_KEY, 1, HALLOWEEN_STEPS);
+  let practiceState = loadStoredState(PRACTICE_STORAGE_KEY, 1, PRACTICE_STEPS);
   let state = basicState;
   let tourKind = 'basic';
   let activeTarget = null;
+  let allowCardInside = false;   // 這一步的目標很大時，導覽卡可以放進目標框裡（步驟設定 cardInside）
   let active = false;
   let viewportBlocked = false;
   let viewportBlockReason = null;
@@ -367,6 +384,13 @@
     obs: { steps: ADVANCED_OBS_STEPS, storageKey: ADVANCED_OBS_STORAGE_KEY },
     live: { steps: ADVANCED_LIVE_STEPS, storageKey: ADVANCED_LIVE_STORAGE_KEY },
     halloween: { steps: HALLOWEEN_STEPS, storageKey: HALLOWEEN_STORAGE_KEY, version: 1 },
+    practice: { steps: PRACTICE_STEPS, storageKey: PRACTICE_STORAGE_KEY, version: 1 },
+  };
+  // 頁面教學：第一次點進那一頁才自動開始，頁上的「重新看教學」可以再看；完成畫面用 <kind>.tour.complete.*。
+  // 之後別的頁面要加，只要在這裡加一筆、在 ADVANCED_KINDS 登記步驟、補翻譯即可。
+  const PAGE_TOURS = {
+    halloween: { view: 'halloween', replayButton: 'halloween-start-tour', getState: () => halloweenState },
+    practice: { view: 'practice', replayButton: 'practice-start-tour', getState: () => practiceState },
   };
 
   function saveState() {
@@ -375,6 +399,7 @@
     else if (tourKind === 'obs') advancedObsState = state;
     else if (tourKind === 'live') advancedLiveState = state;
     else if (tourKind === 'halloween') halloweenState = state;
+    else if (tourKind === 'practice') practiceState = state;
     else basicState = state;
     const key = ADVANCED_KINDS[tourKind]?.storageKey || STORAGE_KEY;
     try { root.localStorage.setItem(key, JSON.stringify(state)); } catch (_) { /* device-local best effort */ }
@@ -384,7 +409,7 @@
     tourKind = ADVANCED_KINDS[kind] ? kind : 'basic';
     state = tourKind === 'lyrics' ? advancedLyricsState
       : tourKind === 'obs' ? advancedObsState
-        : tourKind === 'live' ? advancedLiveState : tourKind === 'halloween' ? halloweenState : basicState;
+        : tourKind === 'live' ? advancedLiveState : PAGE_TOURS[tourKind] ? PAGE_TOURS[tourKind].getState() : basicState;
   }
 
   function currentSteps() {
@@ -445,9 +470,11 @@
     dom.viewportSkip?.addEventListener('click', next);
     dom.action?.addEventListener('click', runStepAction);
     dom.completeUse?.addEventListener('click', closeCompletion);
-    const halloweenStart = document.getElementById('halloween-start-tour');
-    halloweenStart?.addEventListener('click', () => start({ kind: 'halloween', force: true }));
-    if (halloweenStart) halloweenStart.disabled = false;
+    for (const [kind, page] of Object.entries(PAGE_TOURS)) {
+      const replay = document.getElementById(page.replayButton);
+      replay?.addEventListener('click', () => start({ kind, force: true }));
+      if (replay) replay.disabled = false;
+    }
     dom.completeAdvanced?.addEventListener('click', () => {
       dom.complete.hidden = true;
       if (tourKind === 'lyrics') {
@@ -468,7 +495,7 @@
     root.addEventListener('i18n:change', refreshTranslation);
     document.addEventListener('view:change', () => {
       if (active) root.setTimeout(() => renderStep({ skipNavigation: true }), 0);
-      else root.setTimeout(maybeStartHalloween, 0);
+      else root.setTimeout(maybeStartPageTour, 0);
     });
 
     const playlist = document.getElementById('playlist');
@@ -484,7 +511,7 @@
         attributeFilter: ['hidden', 'class', 'aria-hidden'],
       });
     }
-    maybeStartHalloween();
+    maybeStartPageTour();
   }
 
   // Finishing or postponing the old blocking guide (elite-guide-*) must NOT
@@ -580,12 +607,14 @@
     return start({ ...options, kind });
   }
 
-  function maybeStartHalloween() {
-    if (!initialized || active || halloweenState.status !== 'not_started') return;
-    if (!document.querySelector('.view.is-active[data-view="halloween"]')) return;
+  function maybeStartPageTour() {
+    if (!initialized || active) return;
+    const view = document.querySelector('.view.is-active[data-view]')?.dataset.view;
+    const kind = Object.keys(PAGE_TOURS).find((key) => PAGE_TOURS[key].view === view);
+    if (!kind || PAGE_TOURS[kind].getState().status !== 'not_started') return;
     if (root.EulaGate?.cleared === false || !dom.welcome.hidden || !dom.complete.hidden || findBlockingModal()) return;
     if (root.AudioComponentSetup?.startupSettled === false) return;
-    start({ kind: 'halloween' });
+    start({ kind });
   }
 
   function clampStep(value, steps = currentSteps()) {
@@ -612,6 +641,7 @@
     if (step.prepTab && root.HomePrepTabs && typeof root.HomePrepTabs.show === 'function') {
       root.HomePrepTabs.show(step.prepTab);
     }
+    allowCardInside = !!step.cardInside;
     const resolvedTarget = await resolveTarget(step);
     if (token !== renderToken || !active) return;
     activeTarget = resolvedTarget;
@@ -910,16 +940,16 @@
       ? 'tour.advanced.lyricsComplete'
       : tourKind === 'obs' ? 'tour.advanced.obsComplete'
         : tourKind === 'live' ? 'tour.advanced.liveComplete'
-          : tourKind === 'halloween' ? 'halloween.tour.complete' : 'tour.complete';
+          : PAGE_TOURS[tourKind] ? `${tourKind}.tour.complete` : 'tour.complete';
     dom.completeKicker.textContent = t(`${prefix}.kicker`);
     dom.completeTitle.textContent = t(`${prefix}.title`);
     dom.completeBody.textContent = t(`${prefix}.body`);
     dom.completeUse.textContent = t('tour.complete.use');
     dom.completeHelp.textContent = t('tour.complete.fullGuide');
-    dom.completeHelp.hidden = tourKind === 'halloween';
+    dom.completeHelp.hidden = !!PAGE_TOURS[tourKind];
     // Only the lyrics chapter chains into another chapter (OBS); OBS and Live
     // are both terminal, so they have no "next chapter" button to show.
-    dom.completeAdvanced.hidden = tourKind === 'obs' || tourKind === 'live' || tourKind === 'halloween';
+    dom.completeAdvanced.hidden = tourKind === 'obs' || tourKind === 'live' || !!PAGE_TOURS[tourKind];
     dom.completeAdvanced.textContent = t(tourKind === 'lyrics' ? 'tour.advanced.complete.nextObs' : 'tour.complete.advanced');
   }
 
@@ -1140,6 +1170,12 @@
     const cardWidth = cardRect.width || Math.min(370, viewportWidth - 24);
     const cardHeight = cardRect.height || 280;
     const placement = calculateCardPlacement(hole, viewportWidth, viewportHeight, cardWidth, cardHeight);
+    if (!placement.fits && allowCardInside && hole.width >= cardWidth + 48 && hole.height >= cardHeight + 48) {
+      dom.card.style.left = `${Math.round(hole.right - cardWidth - 24)}px`;
+      dom.card.style.top = `${Math.round(hole.bottom - cardHeight - 24)}px`;
+      dom.connector.hidden = true;
+      return true;
+    }
     if (!placement.fits) {
       showViewportWarning('placement');
       return false;
@@ -1350,7 +1386,7 @@
   }
 
   function handleBlockingModalChange() {
-    maybeStartHalloween();
+    maybeStartPageTour();
     if (!active) return;
     const blocker = findBlockingModal();
     if (blocker && !suspendedByModal) {

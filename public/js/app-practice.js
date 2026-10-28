@@ -554,6 +554,11 @@
       });
     });
     select(prefs.tab);
+    // 新手教學要指到某個設定時（ui:reveal），先切到它所在的那一頁
+    document.addEventListener('ui:reveal', (e) => {
+      const pane = e.detail && e.detail.target && e.detail.target.closest && e.detail.target.closest('[data-pane]');
+      if (pane && root.contains(pane)) select(pane.dataset.pane);
+    });
   }
 
   function renderFxMenu() {
