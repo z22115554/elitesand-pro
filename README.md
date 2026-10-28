@@ -7,7 +7,7 @@
 **為 VTuber 歌回與直播演出打造的本機歌詞演出系統**
 *A local lyric-performance system for VTubers, singing streamers, and live performers*
 
-**最新版本 / Latest：`v1.1.1`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
+**最新版本 / Latest：`v1.2.0`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
 
 繁體中文 · [English](#english) · [日本語](#日本語) · [한국어](#한국어) · [简体中文](#简体中文)
 
@@ -111,6 +111,8 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - NVIDIA 顯卡走 GPU 推論；非 NVIDIA 走 WebGPU 引擎；都不行時降級 CPU（較慢，但不會假裝很快）。
 - 首頁「AI 伴奏」分頁可一次把整份歌單做成純伴奏。
 - 雙路音訊：伴奏給 OBS、人聲留給自己監聽，或反過來。
+- 自動對時：用分離出的人聲比對歌詞，一鍵算出整首的時間偏移；可設定匯入後自動執行。
+- 練唱（測試版）：分析原唱音高，邊唱邊看自己的音準與逐句評等，支援升降 Key；另有 OBS 練唱疊加層 `/practice-overlay`。匯入後也可以自動建立練唱音軌。
 
 > 實驗性功能，不建議在正式直播前才第一次啟用。
 
@@ -140,7 +142,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 請只從官方 GitHub Releases 下載，並核對隨附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.1.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
 ```
 
 ### OBS 設定
@@ -166,6 +168,8 @@ Elitesand Pro 會在**啟動時檢查更新**，也可在「連線與系統 → 
 ### 隱私
 
 Elitesand Pro 以本機優先。兩項預設開啟、可在設定關閉的匿名回饋：**社群歌詞偏移分享**（幫助其他人少對一次時）與**每日用量彙總**。兩者皆不含歌單、媒體或個人識別資料，並於 [EULA](EULA.txt) 明列。其餘任何上傳都需要你明確開啟。
+
+練唱用到的麥克風聲音只在本機即時分析音高，不錄音、不上傳。
 
 ### 授權
 
@@ -278,6 +282,8 @@ Eleven performance templates, each with independent style settings (font, size, 
 - NVIDIA GPUs use GPU inference; other GPUs use a WebGPU engine; otherwise it falls back to CPU (slower, and honest about it).
 - The home "AI instrumental" tab can process a whole setlist at once.
 - Dual audio routing: instrumental to OBS, vocals to your monitor, or the reverse.
+- Auto sync: matches the separated vocal against the lyrics to find the whole-song timing offset in one click; can run automatically after import.
+- Practice (beta): analyzes the original vocal pitch so you can see your own pitch and per-line ratings as you sing, with key shifting, plus an OBS practice overlay at `/practice-overlay`. The practice track can also be built automatically after import.
 
 > Experimental — don't enable it for the first time right before a live stream.
 
@@ -307,7 +313,7 @@ The build is **currently unsigned**, so Windows SmartScreen shows a blue warning
 Download only from the official GitHub Releases page and verify the bundled `.sha256`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.1.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
 ```
 
 ### OBS setup
@@ -333,6 +339,8 @@ Elitesand Pro **checks for updates on startup** and on demand from **Connection 
 ### Privacy
 
 Elitesand Pro is local-first. Two anonymous, on-by-default contributions can be turned off in settings: **community lyric-offset sharing** (so others sync less often) and **daily usage aggregation**. Neither includes setlists, media, or personal identifiers, and both are disclosed in the [EULA](EULA.txt). Any other upload requires you to opt in explicitly.
+
+Microphone audio used by Practice is analyzed for pitch on your computer in real time; it is never recorded or uploaded.
 
 ### License
 
@@ -444,6 +452,8 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - NVIDIA GPU は GPU 推論、それ以外は WebGPU エンジン、いずれも不可なら CPU にフォールバック（遅いが正直に表示）。
 - ホームの「AI 伴奏」タブでセットリスト全体を一括処理。
 - デュアル音声：伴奏を OBS、ボーカルを自分のモニターへ（逆も可）。
+- 自動タイミング合わせ：分離したボーカルを歌詞と照合し、曲全体のずれをワンクリックで算出。インポート後に自動実行も可能。
+- 練習（ベータ版）：原曲ボーカルの音程を解析し、歌いながら自分の音程と 1 行ごとの評価を確認できます。キー変更対応、OBS 用の練習オーバーレイ `/practice-overlay` 付き。インポート後に練習トラックを自動作成することもできます。
 
 > 試験的機能です。本番配信の直前に初めて有効化しないでください。
 
@@ -473,7 +483,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 配布元は公式 GitHub Releases のみ。同梱の `.sha256` を照合してください：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.1.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
 ```
 
 ### OBS 設定
@@ -499,6 +509,8 @@ Elitesand Pro は**起動時にアップデートを確認**し、「接続と�
 ### プライバシー
 
 Elitesand Pro はローカル優先です。既定でオン・設定でオフにできる匿名の貢献が 2 つあります：**コミュニティ歌詞オフセット共有**（他の人の対時作業を減らす）と**日次使用量集計**。いずれもセットリスト・メディア・個人識別情報を含まず、[EULA](EULA.txt) に明記されています。その他のアップロードは明示的なオプトインが必要です。
+
+練習で使うマイク音声は、お使いの PC 上でリアルタイムに音程を解析するだけで、録音もアップロードもしません。
 
 ### ライセンス
 
@@ -610,6 +622,8 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - NVIDIA GPU는 GPU 추론, 그 외에는 WebGPU 엔진, 둘 다 안 되면 CPU로 폴백(느리지만 정직하게 표시).
 - 홈 "AI 반주" 탭에서 세트리스트 전체를 한 번에 처리.
 - 듀얼 오디오: 반주는 OBS로, 보컬은 내 모니터로(반대도 가능).
+- 자동 싱크: 분리된 보컬을 가사와 비교해 곡 전체의 시간 오차를 한 번에 계산합니다. 가져온 뒤 자동 실행도 가능합니다.
+- 연습(베타): 원곡 보컬의 음정을 분석해 부르면서 내 음정과 줄별 평가를 볼 수 있습니다. 키 변경을 지원하며 OBS 연습 오버레이 `/practice-overlay`도 제공합니다. 가져온 뒤 연습 트랙을 자동으로 만들 수도 있습니다.
 
 > 실험적 기능입니다. 실제 방송 직전에 처음 켜지 마세요.
 
@@ -639,7 +653,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 공식 GitHub Releases에서만 내려받고 동봉된 `.sha256`을 확인하세요:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.1.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
 ```
 
 ### OBS 설정
@@ -665,6 +679,8 @@ Elitesand Pro는 **시작할 때 업데이트를 확인**하며 "연결 및 시�
 ### 개인정보
 
 Elitesand Pro는 로컬 우선입니다. 기본으로 켜져 있고 설정에서 끌 수 있는 익명 기여가 두 가지 있습니다: **커뮤니티 가사 오프셋 공유**(다른 사람의 싱크 작업을 줄임)와 **일일 사용량 집계**. 둘 다 세트리스트, 미디어, 개인 식별 정보를 포함하지 않으며 [EULA](EULA.txt)에 명시되어 있습니다. 그 밖의 업로드는 명시적 옵트인이 필요합니다.
+
+연습에 쓰는 마이크 소리는 내 PC에서 실시간으로 음정만 분석하며, 녹음하거나 업로드하지 않습니다.
 
 ### 라이선스
 
@@ -776,6 +792,8 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - NVIDIA 显卡走 GPU 推理；非 NVIDIA 走 WebGPU 引擎；都不行时降级 CPU（较慢，但不会假装很快）。
 - 首页「AI 伴奏」分页可一次把整份歌单做成纯伴奏。
 - 双路音频：伴奏给 OBS、人声留给自己监听，或反过来。
+- 自动对时：用分离出的人声比对歌词，一键算出整首的时间偏移；可设置导入后自动执行。
+- 练唱（测试版）：分析原唱音高，边唱边看自己的音准与逐句评等，支持升降 Key；另有 OBS 练唱叠加层 `/practice-overlay`。导入后也可以自动建立练唱音轨。
 
 > 实验性功能，不建议在正式直播前才第一次启用。
 
@@ -805,7 +823,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 请只从官方 GitHub Releases 下载，并核对随附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.1.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
 ```
 
 ### OBS 设置
@@ -831,6 +849,8 @@ Elitesand Pro 会在**启动时检查更新**，也可在「连接与系统 → 
 ### 隐私
 
 Elitesand Pro 以本地优先。两项默认开启、可在设置关闭的匿名反馈：**社区歌词偏移分享**（帮助其他人少对一次时）与**每日用量汇总**。两者皆不含歌单、媒体或个人识别数据，并在 [EULA](EULA.txt) 明列。其余任何上传都需要你明确开启。
+
+练唱用到的麦克风声音只在本机实时分析音高，不录音、不上传。
 
 ### 授权
 
