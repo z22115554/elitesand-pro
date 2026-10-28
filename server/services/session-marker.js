@@ -72,9 +72,13 @@ function markStarted(options = {}) {
   }
 
   const previous = readMarker(dependencies, file);
+  // 版本變了＝上一輪是被安裝程式結束的（它先送 WM_CLOSE 被「關閉＝收到系統匣」攔下，再強制結束），不是當機
+  const upgraded = !!(previous && previous.clean !== true && previous.version && options.version
+    && previous.version !== options.version);
   startupState = previous
     ? {
-      wasClean: previous.clean === true,
+      wasClean: previous.clean === true || upgraded,
+      upgraded,
       previousStartedAt: previous.startedAt || null,
       previousReason: previous.reason || null,
       previousVersion: previous.version || null,

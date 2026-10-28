@@ -64,6 +64,21 @@ function register({ test, eq, ok }) {
     }
     sessionMarker._resetForTests();
   });
+
+  test('安裝新版時被安裝程式強制結束：版本變了就不當成當機，同版本才算', () => {
+    const left = JSON.stringify({ clean: false, startedAt: 5, version: '1.1.1' });
+    sessionMarker._resetForTests();
+    const upgraded = sessionMarker.markStarted({ fs: fakeFs({ [marker]: left }), file: marker, now: () => 9999, version: '1.2.0' });
+    sessionMarker._resetForTests();
+    const crashed = sessionMarker.markStarted({ fs: fakeFs({ [marker]: left }), file: marker, now: () => 9999, version: '1.1.1' });
+    sessionMarker._resetForTests();
+    if (!upgraded.disabled) {
+      eq(upgraded.wasClean, true);
+      eq(upgraded.upgraded, true);
+      eq(upgraded.previousVersion, '1.1.1');
+      eq(crashed.wasClean, false);
+    }
+  });
 }
 
 module.exports = { register };
