@@ -23,7 +23,7 @@
   } catch (_) { /* 讀不到就用預設（都關） */ }
 
   const controls = []; // { sep, sync } checkbox 組，每個出現的位置一組
-  let summary = null;
+  let summary = null; // 摘要文字的 span（summary 本身還要放 NEW 標記，不能整個覆寫）
 
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch (_) { /* 無痕或封鎖儲存時只在這次有效 */ }
@@ -81,6 +81,7 @@
   const originalLabel = original.closest('label');
   const settingsSync = option('importPrefs.autoSyncSetting', 'importPrefs.autoSyncHint', prefs.sync);
   settingsSync.input.addEventListener('change', () => set({ separate: prefs.separate, sync: settingsSync.input.checked }));
+  settingsSync.label.dataset.newFeature = 'auto-sync';
   originalLabel?.after(settingsSync.label);
   controls.push({ sep: original, sync: settingsSync.input });
 
@@ -89,7 +90,10 @@
   if (addRow) {
     const box = document.createElement('details');
     box.className = 'import-prefs-quick';
-    summary = document.createElement('summary');
+    const summaryEl = document.createElement('summary');
+    summaryEl.dataset.newFeature = 'import-prefs';
+    summary = document.createElement('span');
+    summaryEl.append(summary);
     const body = document.createElement('div');
     body.className = 'import-prefs-quick-body';
     const sep = option('importPrefs.separate', 'youtubeSearch.autoSeparateHint', prefs.separate, 'import-prefs-option');
@@ -97,7 +101,8 @@
     sep.input.addEventListener('change', () => set({ separate: sep.input.checked, sync: sep.input.checked && prefs.sync }));
     sync.input.addEventListener('change', () => set({ separate: prefs.separate, sync: sync.input.checked }));
     body.append(sep.label, sync.label);
-    box.append(summary, body);
+    sync.label.dataset.newFeature = 'auto-sync';
+    box.append(summaryEl, body);
     addRow.after(box);
     controls.push({ sep: sep.input, sync: sync.input });
   }

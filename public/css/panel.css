@@ -61,11 +61,12 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
   border: 1px solid var(--border);
 }
 
-.nav-new-badge {
+.nav-new-badge, .new-badge {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   padding: 2px 5px; border-radius: 3px; background: #b42318; color: #fff;
   font-family: var(--font-mono); font-size: 9px; font-weight: 700; line-height: 1.2; letter-spacing: 0.04em;
 }
+.new-badge { align-self: center; margin-left: 6px; }
 .nav-group--primary { display: flex; align-items: stretch; }
 .nav-spacer { flex: 1; }
 .nav-item {
