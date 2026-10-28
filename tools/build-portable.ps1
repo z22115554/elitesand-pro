@@ -308,8 +308,11 @@ foreach ($toolName in @("yt-dlp")) {
     # 並抓對應的授權文件。任何一步失敗就停止，不產生缺授權材料的公開包。
     $YtdlpLicenseOut = Join-Path $LicensesDir "yt-dlp"
     New-Item -ItemType Directory -Force -Path $YtdlpLicenseOut | Out-Null
-    $YtdlpVersion = (& $BundledYtdlp --version 2>&1 | Select-Object -First 1).ToString().Trim()
-    if ($LASTEXITCODE -ne 0 -or $YtdlpVersion -ne $ExpectedVersion) { throw 'Bundled yt-dlp version differs from official nightly release.' }
+    # 先收完整輸出再取第一行：管線接 Select-Object -First 1 會提早結束 yt-dlp，$LASTEXITCODE 變 -1
+    $YtdlpOutput = @(& $BundledYtdlp --version 2>&1)
+    $YtdlpExit = $LASTEXITCODE
+    $YtdlpVersion = ([string]$YtdlpOutput[0]).Trim()
+    if ($YtdlpExit -ne 0 -or $YtdlpVersion -ne $ExpectedVersion) { throw 'Bundled yt-dlp version differs from official nightly release.' }
     $YtdlpHash = Get-Sha256Hex -LiteralPath (Join-Path $Stage "tools\yt-dlp.exe")
     # 產品一律用 nightly。nightly 版號（YYYY.MM.DD.HHMMSS）只在 yt-dlp-nightly-builds 有 tag，
     # 主 repo 沒有同名 tag；授權文件改到該 nightly release 標明的上游 commit 去取。
