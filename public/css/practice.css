@@ -36,7 +36,14 @@
 #practice-stage .pstage-lyric-next { margin-top: 4px; min-height: 20px; font-size: 13px; }
 .practice-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; z-index: 3; background: #0F0F0E; }
 .practice-empty[hidden] { display: none; }
-.practice-empty p { margin: 0; max-width: 360px; color: #A8A59B; font-size: 13px; line-height: 1.6; }
+.practice-empty-body { display: flex; flex-direction: column; align-items: center; gap: 14px; width: min(420px, 100%); }
+.practice-empty p { margin: 0; max-width: 420px; color: #A8A59B; font-size: 13px; line-height: 1.6; }
+.practice-empty-actions { display: flex; gap: 8px; }
+.practice-empty-actions:not(:has(> :not([hidden]))) { display: none; }
+/* 製作伴奏／分析音高的進度：音軌永遠是深底，所以這裡用固定的深色系 */
+.practice-progress { width: 100%; height: 3px; border-radius: 2px; background: rgba(237, 235, 228, .1); overflow: hidden; }
+.practice-progress[hidden] { display: none; }
+.practice-progress i { display: block; height: 100%; width: 2%; background: var(--accent); border-radius: inherit; transition: width .4s ease; }
 
 /* 面板裡的 OBS 預覽：棋盤格代表透明，看得出 OBS 上會蓋到哪裡；音軌高度按 OBS 設定的比例 */
 #practice-stage.pstage--obs { height: auto; padding-top: 44px; background-color: #1a1a18;

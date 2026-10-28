@@ -963,6 +963,7 @@
         labelVars: job.labelVars,
         autoSeparate: job.autoSeparate,
         autoSync: job.autoSync,
+        practice: job.practice,
       }).catch(() => {});
     }
   });
@@ -1084,6 +1085,9 @@
         autoSeparate: options.autoSeparate === true,
         // 匯入後自動對時要靠分離出的人聲，所以只跟著「製作伴奏」一起成立
         autoSync: options.autoSeparate === true && options.autoSync === true,
+        // 練唱音高同樣要靠分離出的人聲；沒指定時跟著「匯入後」偏好（每個匯入入口都一致）
+        practice: options.autoSeparate === true
+          && (options.practice !== undefined ? options.practice === true : !!window.ImportPrefs?.get().practice),
         isBatch: options.isBatch === true,
         skipPlaylistInsert: options.skipPlaylistInsert === true,
         cookieBrowser: '',
@@ -1259,6 +1263,15 @@
               if (job.autoSync && window.AutoSync) {
                 updateJob(job, { postActionKey: 'import.autoSync.running', postActionVars: {} });
                 await window.AutoSync.syncTrack(data.track.id);
+              }
+              // 練唱音高放在對時之後：音符是照歌詞時間切的，先對好時間才不會一做完就過期
+              if (job.practice && window.PracticePrep) {
+                updateJob(job, { postActionKey: 'import.practice.running', postActionVars: {} });
+                try {
+                  await window.PracticePrep.prepare(data.track.id);
+                } catch (practiceError) {
+                  AppShared.showToast(t('import.practice.failed', { message: practiceError.message }), 'warning');
+                }
               }
               updateJob(job, {
                 status: 'completed', stage: '已完成', completedPlacement: placementKey,

@@ -30,6 +30,7 @@
   const ui = {
     stage: $('practice-stage'), heading: $('practice-heading'), status: $('practice-guide-status'),
     build: $('practice-build'), cancel: $('practice-cancel'), empty: $('practice-empty'), emptyText: $('practice-empty-text'),
+    progress: $('practice-progress'), progressBar: $('practice-progress-bar'),
     keyDown: $('practice-key-down'), keyUp: $('practice-key-up'), keyValue: $('practice-key-value'), obsPreview: $('practice-obs-preview'),
     score: $('practice-score'), tech: $('practice-tech'), lines: $('practice-lines'),
     source: $('practice-source'), deviceField: $('practice-device-field'), device: $('practice-device'), level: $('practice-level'),
@@ -138,6 +139,9 @@
     return body;
   }
 
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const GUIDE_ACTIVE = ['queued', 'processing', 'cancelling'];
+
   async function loadGuide(id, token) {
     clearTimeout(pollTimer);
     try {
@@ -146,7 +150,14 @@
       applyGuideResult(id, token, result);
     } catch (error) {
       if (token !== guideToken) return;
-      guideState = { status: error.status === 404 ? 'missing' : error.code === 'PRACTICE_VOCALS_REQUIRED' ? 'vocals' : 'failed', progress: 0, code: error.code };
+      if (error.code === 'PRACTICE_VOCALS_REQUIRED') {
+        // 還沒有人聲軌；如果這首歌正在製作伴奏（匯入後處理或其他頁面按的），直接顯示進度
+        const running = separationRunning(id);
+        if (running) { showSeparation(running); return; }
+        guideState = { status: 'vocals', progress: 0, code: error.code };
+      } else {
+        guideState = { status: error.status === 404 ? 'missing' : 'failed', progress: 0, code: error.code };
+      }
       renderGuideState();
     }
   }
@@ -162,7 +173,7 @@
         engine.setPlaying(true, clock ? clock.t : snapshot.sourceTime);
       }
       guideState = { status: 'ready', progress: 100, code: '', algorithm: result.guide.algorithm };
-    } else if (['queued', 'processing', 'cancelling'].includes(result.status)) {
+    } else if (GUIDE_ACTIVE.includes(result.status)) {
       guideState = { status: 'busy', progress: Math.round(Number(result.job && result.job.progress) || 0), code: '' };
       pollTimer = setTimeout(() => loadGuide(id, token), 1000);
     } else if (result.status === 'stale') {
@@ -175,14 +186,26 @@
     renderGuideState();
   }
 
+  /** 開始建立練唱音軌。人聲剛分離完時，歌曲資料可能還差一點點才寫進去，稍等重試幾次。 */
+  async function startGuide(id) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await request(`/guides/${encodeURIComponent(id)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ algorithm: 'auto' }) });
+      } catch (error) {
+        if (error.code !== 'PRACTICE_VOCALS_REQUIRED' || attempt >= 5) throw error;
+        await sleep(800);
+      }
+    }
+  }
+
   async function buildGuide() {
     if (!trackId || guideState.status === 'busy') return;
     const id = trackId, token = ++guideToken;
     guideState = { status: 'busy', progress: 0, code: '' };
     renderGuideState();
     try {
-      const result = await request(`/guides/${encodeURIComponent(id)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ algorithm: 'auto' }) });
+      const result = await startGuide(id);
       if (token === guideToken) applyGuideResult(id, token, result);
     } catch (error) {
       if (token !== guideToken) return;
@@ -191,14 +214,85 @@
     }
   }
 
-  async function cancelGuide() {
-    if (!trackId || guideState.status !== 'busy') return;
+  // ── 製作伴奏（人聲分離）：練唱要用原唱人聲，沒有的話就在這頁做，做完自動接著建立練唱音軌 ──
+  const SEPARATION_END = ['done', 'error', 'cancelled'];
+  function separationRunning(id) {
+    const st = window.AiSeparation && window.AiSeparation.get(id);
+    return st && !SEPARATION_END.includes(st.stage) ? st : null;
+  }
+
+  function showSeparation(st) {
+    guideState = { status: 'separating', progress: Number.isFinite(st.percent) ? Math.round(st.percent) : 0, code: '',
+      label: window.AiSeparation ? window.AiSeparation.label(st) : '' };
+    renderGuideState();
+  }
+
+  function onSeparation(st) {
+    if (!st || String(st.trackId) !== trackId) return;
+    const waiting = ['vocals', 'separating', 'loading', 'sepFailed'].includes(guideState.status);
+    if (!waiting) return;
+    if (st.stage === 'done') { buildGuide(); return; }
+    if (st.stage === 'error') {
+      guideState = { status: 'sepFailed', progress: 0, code: st.error || '', message: st.errorMessage || st.error || '' };
+      renderGuideState();
+      return;
+    }
+    if (st.stage === 'cancelled') { guideState = { status: 'vocals', progress: 0, code: '' }; renderGuideState(); return; }
+    showSeparation(st);
+  }
+
+  async function separateAndBuild() {
     const id = trackId;
+    if (!id || !window.AiSeparation) return;
+    // 沒裝分離元件會跳出原本的安裝視窗；取消就停在原地
+    if (!await window.AiSeparation.ensureReady() || id !== trackId) return;
+    guideState = { status: 'separating', progress: 0, code: '', label: t('practice.separationStarting') };
+    renderGuideState();
+    try {
+      const response = await PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(id)}/separate`, { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) {
+        if (data.error === 'ALREADY_PROCESSING') return;   // 已經在做：等進度事件就好
+        throw new Error(data.error === 'AI_RUNTIME_NOT_READY' ? t('practice.separationRuntimeMissing') : (data.error || `HTTP ${response.status}`));
+      }
+    } catch (error) {
+      if (id !== trackId) return;
+      guideState = { status: 'sepFailed', progress: 0, code: '', message: error.message };
+      renderGuideState();
+    }
+  }
+
+  async function cancelGuide() {
+    if (!trackId) return;
+    const id = trackId;
+    if (guideState.status === 'separating') {
+      if (window.AiSeparation) await window.AiSeparation.cancel(id);
+      return;   // 伺服器廣播取消後由 onSeparation 回到「需要人聲」
+    }
+    if (guideState.status !== 'busy') return;
     guideToken++; clearTimeout(pollTimer);
     guideState = { status: 'cancelled', progress: 0, code: '' };
     renderGuideState();
     try { await request(`/guides/${encodeURIComponent(id)}/cancel`, { method: 'POST' }); } catch (_) { /* 伺服器那邊可能已經做完 */ }
   }
+
+  /**
+   * 匯入後處理用：建立某首歌的練唱音軌並等它做完（練唱頁有沒有開都可以）。
+   * 做完回傳 true；失敗就丟出錯誤，由呼叫端決定要不要提示。
+   */
+  async function prepareGuideFor(id) {
+    id = String(id);
+    let result = await startGuide(id);
+    if (id === trackId) loadGuide(id, guideToken);   // 練唱頁正開著這首：一起顯示進度
+    while (GUIDE_ACTIVE.includes(result.status)) {
+      await sleep(1500);
+      result = await request(`/guides/${encodeURIComponent(id)}`);
+    }
+    if (id === trackId && guideState.status !== 'ready') loadGuide(id, guideToken);
+    if (result.status !== 'ready') throw new Error((result.job && result.job.error) || t('practice.guideFailed'));
+    return true;
+  }
+  window.PracticePrep = Object.freeze({ prepare: prepareGuideFor });
 
   function guideMessage() {
     const s = guideState;
@@ -206,6 +300,8 @@
       case 'none': return t('practice.chooseSong');
       case 'loading': return t('practice.guideLoading');
       case 'busy': return t('practice.guideBusy', { progress: s.progress });
+      case 'separating': return t('practice.separating', { state: s.label || '' });
+      case 'sepFailed': return t('practice.separationFailed', { message: s.message || '' });
       case 'missing': return t('practice.guideMissing');
       case 'stale': return t('practice.guideStale');
       case 'vocals': return t('practice.vocalsRequired');
@@ -215,16 +311,25 @@
     }
   }
 
+  // 中間那塊就是「下一步」：要做什麼、做到哪裡、能不能取消
+  const BUILD_LABEL = { vocals: 'practice.separateAndBuild', sepFailed: 'practice.separateAndBuild', missing: 'practice.buildGuide' };
   function renderGuideState() {
     const s = guideState.status;
     ui.status.textContent = guideMessage();
-    ui.build.hidden = !['missing', 'stale', 'failed', 'cancelled'].includes(s);
-    ui.build.textContent = s === 'missing' ? t('practice.buildGuide') : t('practice.rebuildGuide');
-    ui.cancel.hidden = s !== 'busy';
+    ui.build.hidden = !['vocals', 'sepFailed', 'missing', 'stale', 'failed', 'cancelled'].includes(s);
+    ui.build.textContent = t(BUILD_LABEL[s] || 'practice.rebuildGuide');
+    ui.cancel.hidden = s !== 'busy' && s !== 'separating';
+    ui.progress.hidden = s !== 'busy' && s !== 'separating';
+    ui.progressBar.style.width = `${Math.max(2, Math.min(100, guideState.progress || 0))}%`;
     ui.empty.hidden = s === 'ready';
     ui.emptyText.textContent = s === 'none' ? t('practice.emptyNoTrack') : guideMessage();
     ui.calibrate.disabled = detector.mode !== 'mic';
     renderStats();
+  }
+
+  function onBuildClick() {
+    if (guideState.status === 'vocals' || guideState.status === 'sepFailed') separateAndBuild();
+    else buildGuide();
   }
 
   // ── 偵測器：麥克風／示範 ────────────────────────────────────────────────
@@ -547,7 +652,7 @@
     bindStyleInputs();
     bindTabs();
 
-    ui.build.addEventListener('click', buildGuide);
+    ui.build.addEventListener('click', onBuildClick);
     ui.cancel.addEventListener('click', cancelGuide);
     ui.keyDown.addEventListener('click', () => { window.AppShared.stepPitch(-1); renderKey(); });
     ui.keyUp.addEventListener('click', () => { window.AppShared.stepPitch(1); renderKey(); });
@@ -604,6 +709,7 @@
       });
       if (SocketClient.connected()) loadStyle();
     }
+    if (window.AiSeparation) window.AiSeparation.subscribe(onSeparation, { replay: false });
     if (window.AppShared && window.AppShared.subscribePracticePlayback) {
       window.AppShared.subscribePracticePlayback(onPlayback);
       window.AppShared.subscribePracticePlaybackBoundary(onBoundary);

@@ -87,6 +87,7 @@
         guide.exclusions = guide.exclusions || [];
       }
       state.view = null; state.lyricLine = -1;
+      if (!guide) clearTake();
       restart(false);
       announce();
       emit('all');
@@ -101,6 +102,15 @@
       sync.lastT = -Infinity;
       for (const n of guide.notes) if (n.fills.length || n.seen) sync.dirty.add(n.i);
       syncFrame();
+    }
+
+    /** 換歌或卸下歌曲：上一首的分數、評等、結算、歌詞都不能留在畫面上。 */
+    function clearTake() {
+      Object.assign(state, { ratings: [], scoreTarget: null, scoreShown: 0, unscorable: false, result: null, lastLineDone: -1,
+        trail: [], tags: [], particles: [], rings: [], user: null, combo: 0, maxCombo: 0, techCount: freshTech(), tagLine: null,
+        refTime: 0, voicedTime: 0, playing: false });
+      for (const name of ['ratings', 'lyricNow', 'lyricNext', 'status']) { const node = el(name); if (node) node.textContent = ''; }
+      renderResult();
     }
 
     /** 從頭（或第一次載入）：所有音符與統計歸零。 */
@@ -346,7 +356,7 @@
       if (role !== 'source' || !m) return;
       if (m.type === 'style') { setStyle(m.style); return; }
       if (m.type === 'song') { setGuide(m.song ? { ...m.song, notes: m.song.notes.map((n) => ({ ...n })), exclusions: [] } : null); return; }
-      if (m.type === 'clear') { state.guide = null; state.result = null; renderResult(); clearCanvas(); return; }
+      if (m.type === 'clear') { state.guide = null; clearTake(); clearCanvas(); return; }
       if (!state.guide) return;
       if (m.type === 'seek') { resetFrom(m.offset); return; }
       if (m.type !== 'frame') return;

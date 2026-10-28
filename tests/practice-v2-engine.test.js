@@ -151,3 +151,25 @@ test('OBS engine only draws what it receives: style, song, frames, seek and clea
   engine.finish('mic');
   assert.equal(engine.getStats().result, null);
 });
+
+test('switching to a song without a practice track clears the previous score, ratings and result', () => {
+  const Engine = loadEngine();
+  let t = 0;
+  const root = fakeRoot();
+  const engine = Engine.createPracticeEngine({ role: 'panel', root, clock: () => ({ t, tempo: 1, playing: true }), onSync: () => {} });
+  engine.setGuide(guide());
+  engine.setPlaying(true, 0);
+  for (t = 0.9; t < 3.3; t += 0.01) sing(engine, t, t < 2 ? 60 : 62, 0);
+  t = 3.5; engine.syncFrame();
+  engine.finish('mic');
+  assert.ok(engine.getStats().ratings.length && engine.getStats().result);
+  root.querySelector('[data-ps="lyricNow"]').textContent = 'old lyric';
+  engine.setGuide(null);
+  const stats = engine.getStats();
+  assert.deepEqual(stats.ratings, []);
+  assert.equal(stats.scoreTarget, null);
+  assert.equal(stats.result, null);
+  assert.equal(stats.tiers.PERFECT, 0);
+  assert.equal(Object.values(stats.techCount).reduce((a, b) => a + b, 0), 0);
+  assert.equal(root.querySelector('[data-ps="lyricNow"]').textContent, '', 'the old lyric line is gone');
+});

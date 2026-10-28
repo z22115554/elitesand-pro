@@ -717,8 +717,6 @@
                   <p id="practice-guide-status" class="practice-song-status" role="status">先在直播或歌曲庫載入一首歌。</p>
                 </div>
                 <div class="practice-bar-actions">
-                  <button id="practice-build" class="btn btn-sm" type="button" hidden>建立練唱音軌</button>
-                  <button id="practice-cancel" class="btn btn-ghost btn-sm" type="button" data-i18n="practice.cancel" hidden>取消分析</button>
                   <div class="practice-key" role="group" aria-label="Key" data-i18n-aria-label="practice.key">
                     <span class="practice-key-label">Key</span>
                     <button id="practice-key-down" class="practice-key-btn" type="button" aria-label="降一個半音" data-i18n-aria-label="controller.pitchDown">−</button>
@@ -741,8 +739,16 @@
                     <div class="pstage-result-extra" data-ps="resultExtra"></div>
                     <p class="pstage-result-meta" data-ps="resultMeta"></p>
                   </div>
+                  <!-- 還不能唱的時候，下一步就在這裡做：製作伴奏、建立練唱音軌、看進度，不必切到別頁 -->
                   <div id="practice-empty" class="practice-empty">
-                    <p id="practice-empty-text">載入一首歌後，這裡會出現練唱音軌。</p>
+                    <div class="practice-empty-body">
+                      <p id="practice-empty-text">載入一首歌後，這裡會出現練唱音軌。</p>
+                      <div id="practice-progress" class="practice-progress" hidden><i id="practice-progress-bar"></i></div>
+                      <div class="practice-empty-actions">
+                        <button id="practice-build" class="btn btn-primary" type="button" hidden>建立練唱音軌</button>
+                        <button id="practice-cancel" class="btn btn-ghost" type="button" data-i18n="practice.cancel" hidden>取消</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="pstage-lyrics" data-i18n-skip>
