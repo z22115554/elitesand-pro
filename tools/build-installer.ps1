@@ -99,6 +99,8 @@ New-Item -ItemType Directory -Force -Path $Resources | Out-Null
 function Test-InstallerBootOutsideRepo {
   param([Parameter(Mandatory = $true)][string]$UnpackedResources)
 
+  . (Join-Path $PSScriptRoot 'ci/installer-runtime.ps1')
+
   $bootRoot = Join-Path $env:TEMP ("elitesand-installer-boot-" + [System.IO.Path]::GetRandomFileName())
   $bootUserData = Join-Path $bootRoot "user-data"
   $unpackedRoot = Split-Path -Parent $UnpackedResources
@@ -195,7 +197,7 @@ function Test-InstallerBootOutsideRepo {
     # Phase 2: simulate the post-`yt-dlp -U` state that the packaged updater is
     # allowed to approve. The runtime bytes change only in userData; the sidecar
     # is updated atomically by production code after a successful real update.
-    [System.IO.File]::AppendAllText($runtimePath, "`napproved-runtime-e2e", [System.Text.UTF8Encoding]::new($false))
+    Add-InstallerSmokeRuntimeMarker -LiteralPath $runtimePath -Marker "`napproved-runtime-e2e"
     $approvedHash = Get-Sha256Hex -LiteralPath $runtimePath
     $trust.runtimeHash = $approvedHash
     $trust.runtimeVersion = '2099.01.01'
@@ -212,7 +214,7 @@ function Test-InstallerBootOutsideRepo {
 
     # Phase 3: mutate runtime without updating the app-owned trust record. Startup
     # must fail closed on that copy, restore the verified seed, and still boot.
-    [System.IO.File]::AppendAllText($runtimePath, "`nunapproved-tamper-e2e", [System.Text.UTF8Encoding]::new($false))
+    Add-InstallerSmokeRuntimeMarker -LiteralPath $runtimePath -Marker "`nunapproved-tamper-e2e"
     if ((Get-Sha256Hex -LiteralPath $runtimePath) -eq $approvedHash) {
       throw "Installer yt-dlp lifecycle check fixture failed to change the runtime hash."
     }
@@ -369,7 +371,7 @@ try {
 
   Push-Location $Root
   try {
-    $BuilderArgs = @("--win", "nsis")
+    $BuilderArgs = @("--win", "nsis", "--publish", "never")
     if ($Release) {
       # package.json 的 forceCodeSigning 維持 false，讓開發機不用憑證也能打包測試；
       # 對外發布時用 CLI override 打開，簽不出來就讓 electron-builder 直接失敗。
@@ -440,3 +442,4 @@ try {
 } finally {
   if (Test-Path -LiteralPath $Resources) { Remove-Item -LiteralPath $Resources -Recurse -Force }
 }
+
