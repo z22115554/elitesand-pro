@@ -71,7 +71,7 @@
       "showOnce": true,
       "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.0.5",
       "buttonText": "查看更新內容",
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "full-installer-v1.1.1",
@@ -86,7 +86,7 @@
       "showOnce": false,
       "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.1.1",
       "buttonText": "前往下載 1.1.1",
-      "enabled": true,
+      "enabled": false,
       "actions": {}
     },
     {
@@ -102,6 +102,22 @@
       "showOnce": true,
       "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.1.1",
       "buttonText": "前往下載 1.1.1",
+      "enabled": false,
+      "actions": {}
+    },
+    {
+      "id": "release-v1.2.0",
+      "level": "notice",
+      "title": "聲嶼 Elitesand Pro 1.2.0 已推出",
+      "message": "新增「練唱」（測試版）：唱歌時即時看音準與逐句評等，也能放進 OBS；新增 AI 自動對時，一鍵對準整首歌詞；搜尋改為優先找 YouTube Music。本版需下載完整安裝檔升級，請先結束直播、關閉程式並備份資料；原有歌曲庫與設定會保留。練唱還在測試，歡迎用「回報問題」告訴我們使用感受。",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.1.1",
+      "publishedAt": "2026-10-29T15:35:32.032Z",
+      "expiresAt": "2027-03-31T23:59:59+08:00",
+      "dismissible": true,
+      "showOnce": true,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.2.0",
+      "buttonText": "前往下載 1.2.0",
       "enabled": true,
       "actions": {}
     }
