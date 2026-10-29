@@ -1260,7 +1260,8 @@
           if (job.autoSeparate) {
             try {
               await separateImportedTrack(job, data.track);
-              if (job.autoSync && window.AutoSync) {
+              // 練唱音軌照歌詞時間切音符，勾了練唱就一定先對時
+              if ((job.autoSync || job.practice) && window.AutoSync) {
                 updateJob(job, { postActionKey: 'import.autoSync.running', postActionVars: {} });
                 await window.AutoSync.syncTrack(data.track.id);
               }

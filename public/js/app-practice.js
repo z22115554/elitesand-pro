@@ -199,16 +199,30 @@
     }
   }
 
-  async function buildGuide() {
-    if (!trackId || guideState.status === 'busy') return;
-    const id = trackId, token = ++guideToken;
-    guideState = { status: 'busy', progress: 0, code: '' };
+  // 音符是照歌詞時間切的，第一次建立前先自動對時。重建（過期、失敗、取消）不再對：
+  // 過期多半是使用者自己改了時間，不能蓋掉；標成「已對時」的歌也不動。
+  const FIRST_BUILD = ['missing', 'vocals', 'separating', 'sepFailed'];
+  async function syncLyricsFirst(id, token) {
+    const track = window.AppShared && window.AppShared.state.playlist.find((item) => item && item.id === id);
+    if (!window.AutoSync || !track || track.syncConfirmed) return;
+    guideState = { status: 'syncing', progress: 0, code: '' };
     renderGuideState();
+    await window.AutoSync.syncTrack(id);   // 結果它自己會提示；對不上也照樣建音軌
+    if (token !== guideToken) throw Object.assign(new Error('superseded'), { superseded: true });
+  }
+
+  async function buildGuide() {
+    if (!trackId || guideState.status === 'busy' || guideState.status === 'syncing') return;
+    const id = trackId, token = ++guideToken;
+    const first = FIRST_BUILD.includes(guideState.status);
     try {
+      if (first) await syncLyricsFirst(id, token);
+      guideState = { status: 'busy', progress: 0, code: '' };
+      renderGuideState();
       const result = await startGuide(id);
       if (token === guideToken) applyGuideResult(id, token, result);
     } catch (error) {
-      if (token !== guideToken) return;
+      if (token !== guideToken || error.superseded) return;
       guideState = { status: error.code === 'PRACTICE_VOCALS_REQUIRED' ? 'vocals' : 'failed', progress: 0, code: error.code };
       renderGuideState();
     }
@@ -300,6 +314,7 @@
       case 'none': return t('practice.chooseSong');
       case 'loading': return t('practice.guideLoading');
       case 'busy': return t('practice.guideBusy', { progress: s.progress });
+      case 'syncing': return t('practice.syncing');
       case 'separating': return t('practice.separating', { state: s.label || '' });
       case 'sepFailed': return t('practice.separationFailed', { message: s.message || '' });
       case 'missing': return t('practice.guideMissing');
