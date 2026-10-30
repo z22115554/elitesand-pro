@@ -19,11 +19,13 @@
   const $ = (id) => document.getElementById(id);
   const t = (key, vars) => (window.I18n ? window.I18n.t(key, vars) : key);
   const Fx = window.PracticeFx;
-  const LATENCY_KEY = 'elitesand-practice-latency';
+  const Calibration = window.PracticeCalibration;
   const PREFS_KEY = 'elitesand-practice-prefs';
   const WORKLET_URL = '/js/practice/pitch-detector-worklet.js';
   const readJson = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (_) { return fallback; } };
   const writeJson = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* 只影響這台電腦的偏好 */ } };
+  const latencyProfiles = Calibration.createProfiles({ data: readJson(Calibration.STORAGE_KEY, null),
+    save: (data) => writeJson(Calibration.STORAGE_KEY, data) });
 
   // 只存這台電腦的偏好（麥克風延遲跟硬體有關；OBS 外觀則存在伺服器）
   const prefs = Object.assign({ allowOctave: true, showContour: false }, readJson(PREFS_KEY, {}));
@@ -34,7 +36,7 @@
     keyDown: $('practice-key-down'), keyUp: $('practice-key-up'), keyValue: $('practice-key-value'), obsPreview: $('practice-obs-preview'),
     score: $('practice-score'), tech: $('practice-tech'), lines: $('practice-lines'),
     source: $('practice-source'), deviceField: $('practice-device-field'), device: $('practice-device'), level: $('practice-level'),
-    latency: $('practice-latency'), latencyValue: $('practice-latency-value'), calibrate: $('practice-calibrate'),
+    latency: $('practice-latency'), latencyValue: $('practice-latency-value'), latencyStatus: $('practice-latency-status'), calibrate: $('practice-calibrate'),
     octave: $('practice-octave'), trail: $('practice-trail'), contour: $('practice-contour'),
     model: $('practice-model'), modelInstall: $('practice-model-install'),
     obsUrl: $('practice-obs-url'), obsCopy: $('practice-obs-copy'), fx: $('practice-fx'),
@@ -57,8 +59,13 @@
   let visible = false;
   let lastPlaying = false;
   // 偵測器跟播放器共用 AudioContext（換歌重建時也可能換新的 context）
-  const detector = { ctx: null, node: null, sink: null, stream: null, mic: null, untapDemo: null, mode: 'off', loading: null };
+  const detector = { ctx: null, node: null, sink: null, stream: null, mic: null, untapDemo: null, mode: 'off', loading: null,
+    request: 0, targetCtx: null, sourceRevision: 0 };
   let calibration = null;
+  let calibrationAttempt = 0;
+  let calibrationResult = null;
+  let availableDevices = [];
+  let deviceEnumeration = 0;
 
   // ── 引擎 ───────────────────────────────────────────────────────────────
   const engine = PracticeEngine.createPracticeEngine({
@@ -89,6 +96,7 @@
   function onPlayback(s) {
     const nextId = s && s.valid && s.track ? String(s.track.id) : '';
     snapshot = s;
+    syncLatencyProfile();
     // 播完、停止或載入中：播放器暫時沒有歌。只停止計分，畫面與結算留著；換成另一首歌才清掉
     if (!nextId) {
       if (lastPlaying) engine.setPlaying(false, engine.songTime());
@@ -101,7 +109,7 @@
       timeline.record({ audioTime: s.effectiveContextTime ?? s.contextTime, sourceTime: s.sourceTime, key: s.pitchShift,
         tempo: s.playbackRate, playing: s.playing, generation: s.generation, reason: s.playing ? 'playback' : 'pause' });
     }
-    if (detector.ctx !== s.audioContext && detector.mode !== 'off') attachDetector();
+    if (detector.ctx !== s.audioContext && detector.mode !== 'off') attachDetector().catch(detectorError);
     engine.setKey(s.pitchShift || 0);
     renderKey();
     // 跳轉（拖進度、手機遙控）由引擎自己從時鐘偵測，這裡只轉播放／暫停
@@ -348,20 +356,22 @@
   }
 
   // ── 偵測器：麥克風／示範 ────────────────────────────────────────────────
-  async function ensureDetector(ctx) {
+  async function ensureDetector(ctx, request) {
     if (detector.ctx === ctx && detector.node) return detector.node;
     releaseDetectorNode();
     await ctx.audioWorklet.addModule(WORKLET_URL);
+    if (request !== detector.request) return null;
     const node = new AudioWorkletNode(ctx, 'practice-pitch-detector');
     // 接到靜音的 gain 再到輸出，確保瀏覽器會一直跑它；聲音本身不會被聽到
     const sink = ctx.createGain(); sink.gain.value = 0;
     node.connect(sink).connect(ctx.destination);
-    node.port.onmessage = (e) => onPitch(e.data);
+    node.port.onmessage = (e) => { if (detector.node === node) onPitch(e.data); };
     Object.assign(detector, { ctx, node, sink });
     return node;
   }
 
   function releaseDetectorNode() {
+    engine.resetInput();
     if (detector.untapDemo) { detector.untapDemo(); detector.untapDemo = null; }
     if (detector.mic) { try { detector.mic.disconnect(); } catch (_) {} detector.mic = null; }
     if (detector.node) { detector.node.port.onmessage = null; try { detector.node.disconnect(); } catch (_) {} }
@@ -370,8 +380,9 @@
   }
 
   function stopMicStream() {
-    if (detector.stream) detector.stream.getTracks().forEach((track) => track.stop());
+    const stream = detector.stream;
     detector.stream = null;
+    if (stream) stream.getTracks().forEach((track) => track.stop());
   }
 
   /** 依目前的來源把偵測器接上（換歌時播放器可能換了 AudioContext，要重接）。 */
@@ -379,35 +390,56 @@
     const mode = detector.mode;
     const ctx = snapshot && snapshot.audioContext;
     if (mode === 'off' || !ctx) return;
+    if (detector.loading && detector.targetCtx === ctx) return detector.loading;
+    const request = ++detector.request;
+    detector.targetCtx = ctx;
     const job = (async () => {
-      const node = await ensureDetector(ctx);
-      if (detector.mode !== mode) return;
+      const node = await ensureDetector(ctx, request);
+      if (!node || request !== detector.request || detector.mode !== mode || snapshot.audioContext !== ctx) return;
       if (mode === 'mic') {
         if (!detector.stream || !detector.stream.active) {
           const deviceId = ui.device.value;
-          detector.stream = await navigator.mediaDevices.getUserMedia({ audio: {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: {
             deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+          if (request !== detector.request || detector.mode !== 'mic' || snapshot.audioContext !== ctx) { stream.getTracks().forEach((track) => track.stop()); return; }
+          detector.stream = stream;
+          for (const track of stream.getAudioTracks()) track.addEventListener('ended', () => {
+            if (detector.stream === stream && detector.mode === 'mic') setSource('mic');
+          });
           refreshDevices();
         }
-        if (detector.mode !== 'mic') { stopMicStream(); return; }
+        if (request !== detector.request || detector.mode !== 'mic') return;
         if (detector.mic) { try { detector.mic.disconnect(); } catch (_) {} }
         detector.mic = ctx.createMediaStreamSource(detector.stream);
         detector.mic.connect(node);
+        syncLatencyProfile();
       } else if (mode === 'demo') {
         if (!detector.untapDemo) detector.untapDemo = window.AppShared.connectPracticeVocalTap(node);
       }
-    })();
+    })().catch((error) => { if (request === detector.request) throw error; });
     detector.loading = job;
     try { await job; } finally { if (detector.loading === job) detector.loading = null; }
   }
 
+  function detectorError(error) {
+    if (detector.mode === 'off') return;
+    detector.request++;
+    releaseDetectorNode(); stopMicStream();
+    detector.mode = 'off'; ui.source.value = 'off'; ui.deviceField.hidden = true;
+    ui.latency.disabled = true; syncLatencyProfile(true);
+    engine.setPlaying(false, engine.songTime());
+    toast(t('practice.micFailed', { message: error.message || error.name }), 'error');
+  }
+
   async function setSource(mode) {
-    cancelCalibration();
+    const sourceRevision = ++detector.sourceRevision;
+    detector.request++; detector.loading = null;
+    cancelCalibration(true);
     releaseDetectorNode();
     stopMicStream();
     detector.mode = mode;
     ui.deviceField.hidden = mode !== 'mic';
-    ui.latency.value = mode === 'mic' ? readLatency() : 0;
+    syncLatencyProfile(true);
     ui.latency.disabled = mode !== 'mic';
     renderLatency();
     if (ui.level) ui.level.style.width = '0%';
@@ -417,15 +449,16 @@
       }
       await attachDetector();
     } catch (error) {
-      detector.mode = 'off'; ui.source.value = 'off'; ui.deviceField.hidden = true;
-      toast(t('practice.micFailed', { message: error.message || error.name }), 'error');
+      if (sourceRevision === detector.sourceRevision) detectorError(error);
     }
+    if (sourceRevision !== detector.sourceRevision) return;
     const clock = currentClock();
     engine.setPlaying(!!(snapshot && snapshot.playing) && detector.mode !== 'off', clock ? clock.t : 0);
     renderGuideState();
   }
 
   function onPitch(d) {
+    syncLatencyProfile();
     if (calibration) { calibrationFrame(d); return; }
     if (!timeline) { engine.pitch(d, null); return; }
     const demo = detector.mode === 'demo';
@@ -433,12 +466,16 @@
     const mapped = timeline.map(d.time, demo
       ? { inputLatencySec: 0, outputLatencySec: 0, dspLatencySec: 0, calibrationMs: 0 }
       : { inputLatencySec: 0, outputLatencySec: 0, dspLatencySec: snapshot && snapshot.dspLatencySeconds || 0, calibrationMs: Number(ui.latency.value) || 0 });
-    engine.pitch(d, mapped.valid ? { valid: true, t: mapped.sourceTime, key: mapped.key } : null);
+    engine.pitch(d, mapped.valid ? { valid: true, t: mapped.sourceTime, key: mapped.key, tempo: mapped.tempo,
+      generation: mapped.generation, playing: mapped.playing, audioTime: d.time } : null);
   }
 
   async function refreshDevices() {
+    const request = ++deviceEnumeration;
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
+      if (request !== deviceEnumeration) return;
+      availableDevices = devices;
       const selected = ui.device.value;
       ui.device.textContent = '';
       const add = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; ui.device.appendChild(o); };
@@ -446,36 +483,78 @@
       devices.filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default')
         .forEach((d, i) => add(d.deviceId, d.label || `${t('practice.sourceMic')} ${i + 1}`));
       ui.device.value = [...ui.device.options].some((o) => o.value === selected) ? selected : '';
-    } catch (_) { /* 列不出裝置就用預設 */ }
+      syncLatencyProfile();
+    } catch (_) {
+      if (request !== deviceEnumeration) return;
+      availableDevices = []; syncLatencyProfile();
+    }
   }
 
   // ── 延遲與校準 ─────────────────────────────────────────────────────────
-  function readLatency() {
-    const saved = readJson(LATENCY_KEY, null);
-    return Number.isFinite(saved) ? saved : 120;
+  function syncLatencyProfile(force) {
+    let settings = {};
+    const ctx = detector.ctx;
+    const stream = detector.stream;
+    const active = detector.mode === 'mic' && ctx && snapshot && snapshot.audioContext === ctx && stream && stream.active;
+    if (active) {
+      try { settings = stream.getAudioTracks()[0].getSettings(); } catch (_) { /* 無法辨識的裝置只在本次使用 */ }
+    }
+    const route = active ? snapshot.outputSignature : null;
+    const changed = latencyProfiles.select(active ? {
+      micId: settings.deviceId ? Calibration.resolveDeviceId(settings.deviceId, 'audioinput', availableDevices) : null,
+      outputId: Calibration.outputIdentity(route, availableDevices),
+      sampleRate: settings.sampleRate, contextSampleRate: ctx.sampleRate, route,
+    } : {}, force);
+    if (changed) {
+      engine.resetInput();
+      cancelCalibration(true);
+      ui.latency.value = detector.mode === 'mic' ? latencyProfiles.state().ms : 0;
+      renderLatency();
+    }
+    return changed;
   }
-  function renderLatency() { ui.latencyValue.textContent = `${ui.latency.value} ms`; }
+  function renderLatency() {
+    ui.latencyValue.textContent = `${ui.latency.value} ms`;
+    if (ui.latencyStatus) {
+      const state = latencyProfiles.state();
+      ui.latencyStatus.hidden = detector.mode !== 'mic';
+      ui.latencyStatus.textContent = t(!state.method ? 'practice.latencyUncalibrated'
+        : !state.persistent ? 'practice.latencySession' : state.method === 'acoustic' ? 'practice.latencyCalibrated' : 'practice.latencyManual');
+    }
+  }
 
-  function cancelCalibration() {
-    const c = calibration; if (!c) return;
+  function cancelCalibration(invalidateResult = false) {
+    calibrationAttempt++;
+    if (invalidateResult) {
+      const hadResult = calibration || calibrationResult || ui.calStart.disabled;
+      calibrationResult = null; ui.calApply.hidden = true;
+      delete ui.calApply.dataset.value;
+      if (hadResult && ui.dialog.open) ui.calStatus.textContent = t('practice.calibrationChanged');
+    }
+    const c = calibration;
+    ui.calStart.disabled = false;
+    if (!c) return;
     clearTimeout(c.timer);
     for (const tone of c.tones) { try { tone.stop(); } catch (_) {} tone.disconnect(); }
     for (const gain of c.gains) gain.disconnect();
     calibration = null;
-    ui.calStart.disabled = false;
   }
 
   // 聲學回路校準：從喇叭發出 8 聲 880Hz 短音，量麥克風多久之後收到；中位數取整到 10ms
   async function runCalibration() {
-    cancelCalibration();
+    syncLatencyProfile();
+    cancelCalibration(true);
+    const attempt = calibrationAttempt;
+    const token = latencyProfiles.token();
     ui.calApply.hidden = true; ui.calStart.disabled = true;
     ui.calStatus.textContent = t('practice.calibrationListening');
     try {
       const ctx = detector.ctx;
       if (detector.mode !== 'mic' || !ctx || !detector.stream || !detector.stream.active) throw new Error(t('practice.calibrationNeedMic'));
       await ctx.resume();
-      if (!ui.dialog.open) { ui.calStart.disabled = false; return; }
-      const c = { pulses: [], tones: [], gains: [], floor: [], timer: 0 };
+      syncLatencyProfile();
+      if (!ui.dialog.open || attempt !== calibrationAttempt || !latencyProfiles.isCurrent(token)) return;
+      const c = { pulses: [], tones: [], gains: [], floor: [], timer: 0, token };
       calibration = c;
       const now = ctx.currentTime;
       for (let i = 0; i < 8; i++) {
@@ -487,14 +566,17 @@
         c.pulses.push({ at, heard: null }); c.tones.push(tone); c.gains.push(gain);
       }
       c.timer = setTimeout(() => {
+        syncLatencyProfile();
         if (calibration !== c) return;
         const estimate = PracticeScoring.latencyEstimate(c.pulses.filter((p) => p.heard != null).map((p) => (p.heard - p.at) * 1000));
         cancelCalibration();
         if (estimate == null) { ui.calStatus.textContent = t('practice.calibrationFailed'); return; }
+        calibrationResult = { token: c.token, ms: estimate };
         ui.calApply.dataset.value = estimate; ui.calApply.hidden = false;
         ui.calStatus.textContent = t('practice.calibrationResult', { ms: estimate });
       }, 7000);
     } catch (error) {
+      if (attempt !== calibrationAttempt) return;
       cancelCalibration();
       ui.calStatus.textContent = error.message;
     }
@@ -502,6 +584,7 @@
 
   function calibrationFrame(d) {
     const c = calibration;
+    if (!c || !c.pulses.length) return;
     if (d.time < c.pulses[0].at - 0.1) { c.floor.push(d.rms); return; }
     const noise = c.floor.length ? c.floor.reduce((a, b) => a + b, 0) / c.floor.length : 0.003;
     if (d.rms < Math.max(0.004, noise * 4) || d.clarity < 0.85 || Math.abs(d.f0 - 880) > 35) return;
@@ -657,6 +740,7 @@
   function translate() {
     renderFxMenu();
     renderGuideState();
+    renderLatency();
     if (!trackId) ui.heading.textContent = t('practice.noTrack');
     if (ui.device.options.length) refreshDevices();
   }
@@ -683,8 +767,12 @@
       engine.setStyle({});   // 重算 OBS 專屬的顯示（結算卡等）
     });
     ui.source.addEventListener('change', () => setSource(ui.source.value));
-    ui.device.addEventListener('change', () => { if (detector.mode === 'mic') { stopMicStream(); setSource('mic'); } });
-    ui.latency.addEventListener('input', () => { renderLatency(); if (detector.mode === 'mic') writeJson(LATENCY_KEY, Number(ui.latency.value)); });
+    ui.device.addEventListener('change', () => { if (detector.mode === 'mic') setSource('mic'); });
+    ui.latency.addEventListener('input', () => {
+      if (detector.mode !== 'mic') return;
+      syncLatencyProfile(); cancelCalibration(true);
+      latencyProfiles.remember(Number(ui.latency.value), 'manual'); renderLatency();
+    });
     ui.octave.addEventListener('change', () => { prefs.allowOctave = ui.octave.checked; writeJson(PREFS_KEY, prefs); });
     ui.contour.addEventListener('change', () => { prefs.showContour = ui.contour.checked; writeJson(PREFS_KEY, prefs); });
     ui.modelInstall.addEventListener('click', installModel);
@@ -695,19 +783,30 @@
     });
 
     ui.calibrate.addEventListener('click', () => {
+      syncLatencyProfile(); cancelCalibration(true);
       ui.calStatus.textContent = detector.mode === 'mic' ? '' : t('practice.calibrationNeedMic');
       ui.calApply.hidden = true;
       ui.dialog.showModal();
     });
     ui.calStart.addEventListener('click', runCalibration);
     ui.calClose.addEventListener('click', () => ui.dialog.close());
-    ui.dialog.addEventListener('close', cancelCalibration);
+    ui.dialog.addEventListener('close', () => cancelCalibration(true));
     ui.calApply.addEventListener('click', () => {
-      ui.latency.value = ui.calApply.dataset.value; renderLatency();
-      writeJson(LATENCY_KEY, Number(ui.latency.value));
+      syncLatencyProfile();
+      const result = calibrationResult;
+      if (!result || !latencyProfiles.remember(result.ms, 'acoustic', result.token)) { cancelCalibration(true); return; }
+      ui.latency.value = result.ms; renderLatency();
       ui.dialog.close();
     });
-    window.addEventListener('pagehide', () => { cancelCalibration(); stopMicStream(); });
+    window.addEventListener('pagehide', () => {
+      detector.request++; detector.sourceRevision++; detector.loading = null;
+      cancelCalibration(true); releaseDetectorNode(); stopMicStream();
+    });
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => {
+      availableDevices = []; syncLatencyProfile(true);
+      refreshDevices();
+      if (detector.mode === 'mic') setSource('mic');
+    });
 
     document.addEventListener('view:change', (e) => {
       visible = e.detail && e.detail.view === 'practice';

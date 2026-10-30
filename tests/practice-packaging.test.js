@@ -13,7 +13,7 @@ const { PAGE_BUNDLES, TEMPLATE_IDS, assertLocalScriptReferencesExist } = require
 const repo = path.resolve(__dirname, '..');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const WORKLET = 'js/practice/pitch-detector-worklet.js';
-const PANEL_SCRIPTS = ['practice-clock.js', 'practice/practice-scoring.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'app-practice.js'];
+const PANEL_SCRIPTS = ['practice-clock.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'app-practice.js'];
 const OVERLAY_SCRIPTS = ['practice/practice-scoring.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'practice-overlay.js'];
 const practiceFiles = [
   ...new Set([...PANEL_SCRIPTS, ...OVERLAY_SCRIPTS].map(name => `public/js/${name}`)),
@@ -79,12 +79,13 @@ test('release build keeps the worklet URL and the server-required fx module, bun
   assert.equal(hash(path.join(publicDir, 'vendor/soundtouch-worklet.js')), vendorHash, 'LGPL vendor remains byte-for-byte separate');
   assert.ok(fs.existsSync(path.join(publicDir, WORKLET)), 'the worklet is loaded by URL (addModule) and must survive bundling');
   assert.ok(fs.existsSync(path.join(publicDir, 'js/practice/practice-fx.js')), 'server/services/practice-overlay.js requires practice-fx.js');
-  for (const name of ['practice-clock.js', 'app-practice.js', 'practice-overlay.js', 'practice/practice-engine.js', 'practice/practice-scoring.js']) {
+  for (const name of ['practice-clock.js', 'app-practice.js', 'practice-overlay.js', 'practice/practice-engine.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js']) {
     assert.equal(fs.existsSync(path.join(publicDir, 'js', name)), false, `${name} should be consumed into its page bundle`);
   }
   assertLocalScriptReferencesExist(publicDir, path.join(publicDir, 'js'));
   const panel = exerciseBundle(publicDir, 'index.html');
   assert.equal(typeof panel.PracticeClock.Timeline, 'function');
+  assert.equal(typeof panel.PracticeCalibration.createProfiles, 'function', 'device profiles survive release bundling');
   exerciseBundle(publicDir, 'practice-overlay.html');
   const panelBundle = pageScripts(publicDir, 'index.html').map(url => fs.readFileSync(path.join(publicDir, url.slice(1)), 'utf8')).join('\n');
   assert.ok(panelBundle.includes('/js/practice/pitch-detector-worklet.js'), 'the panel still points at the worklet URL');

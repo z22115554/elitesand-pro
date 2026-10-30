@@ -173,3 +173,70 @@ test('switching to a song without a practice track clears the previous score, ra
   assert.equal(Object.values(stats.techCount).reduce((a, b) => a + b, 0), 0);
   assert.equal(root.querySelector('[data-ps="lyricNow"]').textContent, '', 'the old lyric line is gone');
 });
+
+
+// 同一段原曲在不同實際播放速度下，應有相同得分；使用真實的 10ms 音訊格。
+function longTake({ tempo = () => 1, key = () => 0, pitch = () => 61.5, notes } = {}) {
+  const Engine = loadEngine();
+  let t = 0, audioTime = 0;
+  const engine = Engine.createPracticeEngine({ role: 'panel', root: fakeRoot(),
+    clock: () => ({ t, tempo: tempo(t), playing: true }), getOptions: () => ({ allowOctave: false }), onSync() {} });
+  engine.setGuide(Scoring.prepareGuide({ duration: 11, tuning: 0,
+    lines: [{ start: 0, end: 10, text: 'song', words: [{ start: 0, end: 10, text: 'song' }] }],
+    notes: notes || [{ start: 0, end: 10, midi: 60, line: 0, word: 0 }] }));
+  engine.setPlaying(true, 0);
+  let frame = 0;
+  while (t < 10) {
+    const speed = tempo(t), shift = key(t);
+    engine.pitch({ f0: hz(pitch(t) + shift), clarity: .95, rms: .05 },
+      { valid: true, playing: true, t, key: shift, tempo: speed, audioTime, generation: 1 });
+    if (++frame % 5 === 0) engine.syncFrame();
+    audioTime += .01; t += .01 * speed;
+  }
+  engine.finish('mic');
+  return engine;
+}
+
+test('partial pitch credit stays equal from 0.5x to 1.5x, including mid-song tempo and key changes', () => {
+  const scores = [.5, .75, 1, 1.25, 1.5].map((speed) => longTake({ tempo: () => speed }).getStats().result.score);
+  assert.ok(scores.every((s) => s > 78 && s < 81), `lenient partial credit preserved: ${scores}`);
+  assert.ok(Math.max(...scores) - Math.min(...scores) < .25, `tempo cannot inflate or deflate credit: ${scores}`);
+  const changed = longTake({ tempo: (t) => t < 5 ? .5 : 1.5, key: (t) => t < 3 ? -5 : t < 7 ? 3 : 0 });
+  assert.ok(Math.abs(changed.getStats().result.score - scores[2]) < .25);
+  for (const shift of [-12, -5, 0, 3, 12]) assert.equal(longTake({ key: () => shift, pitch: () => 60 }).getStats().result.score, 100);
+});
+
+test('strict octave scoring follows sustained octave leaps and suppresses isolated octave glitches', () => {
+  const notes = [60, 72, 60].map((midi, i) => ({ start: i * 3, end: (i + 1) * 3, midi, line: 0, word: 0 }));
+  const leap = longTake({ notes, pitch: (t) => t < 3 ? 60 : t < 6 ? 72 : 60 });
+  assert.equal(leap.getStats().result.score, 100, 'a real leap must not be permanently folded to the old note');
+  const glitch = longTake({ pitch: (t) => Math.round(t * 100) % 40 === 20 ? 72 : 60 });
+  assert.equal(glitch.getStats().result.score, 100, 'three-frame median still removes isolated detector errors');
+});
+
+test('duplicate, stale, paused and missing detector frames cannot earn extra singing time', () => {
+  const engine = longTake();
+  engine.restart(); engine.setPlaying(true, 0);
+  const send = (t, audioTime = t, generation = 1, playing = true, f0 = hz(60)) => engine.pitch(
+    { f0, clarity: .95, rms: .05 }, { valid: true, t, audioTime, generation, playing, tempo: 1, key: 0 });
+  send(.2); send(.21); send(.22);
+  const note = engine.getGuide().notes[0];
+  const before = note.hit;
+  for (let i = 0; i < 100; i++) { send(.22); send(.21); }
+  assert.equal(note.hit, before, 'no repeated credit for old frames');
+  send(5); send(5.01);
+  assert.ok(note.hit - before <= .021, 'a gap cannot be filled with unobserved singing');
+  const afterGap = note.hit;
+  send(5.02, 5.02, 1, false); send(5.03); // first resumed frame establishes a new interval
+  assert.equal(note.hit, afterGap);
+  send(5.04); send(5.05, 5.05, 2);
+  const newGeneration = note.hit;
+  send(5.06, 5.06, 1);
+  assert.equal(note.hit, newGeneration, 'an old generation cannot overwrite the new one');
+  send(5.07, 5.07, 2, true, 0); send(5.08, 5.08, 2, true, 0);
+  assert.equal(note.hit, newGeneration, 'silent frames never earn credit');
+  engine.setPlaying(false, 5.08); engine.setPlaying(true, 5.08);
+  const beforeResume = note.hit;
+  send(5.09, 6, 2); assert.equal(note.hit, beforeResume, 'pause resets the integration interval');
+  assert.ok(note.seen <= 10 - note.grace, 'credit is bounded by scorable note time');
+});

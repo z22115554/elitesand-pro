@@ -803,6 +803,7 @@
                       <button id="practice-calibrate" class="btn btn-sm" type="button" data-i18n="practice.calibrate" disabled>校準延遲</button>
                     </div>
                     <input type="range" id="practice-latency" min="0" max="400" step="10" value="120">
+                    <small id="practice-latency-status" role="status" hidden></small>
                   </div>
                   <p class="practice-note" data-i18n="practice.headphoneHint">建議戴耳機。這裡不錄音、不開耳返，聲音只在這台電腦分析。</p>
                 </div>
@@ -3980,6 +3981,7 @@
   <script src="/js/nav.js"></script>
   <script src="/js/practice-clock.js"></script>
   <script src="/js/practice/practice-scoring.js"></script>
+  <script src="/js/practice/practice-calibration.js"></script>
   <script src="/js/practice/practice-fx.js"></script>
   <script src="/js/practice/practice-engine.js"></script>
   <script src="/js/app-practice.js"></script>

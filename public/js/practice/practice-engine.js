@@ -37,7 +37,7 @@
       refTime: 0, voicedTime: 0, unscorable: false, scoreTarget: null, scoreShown: 0,
       result: null, resultKey: null, resultAnim: 0, lyricLine: -1,
       clock: { playing: false, t: 0, at: Date.now() },   // source 用：面板送來的時鐘
-      lastPanelT: 0,
+      lastPanelT: 0, pitchClock: null,
     };
     const sync = { lastT: -Infinity, dirty: new Set(), events: [], sentAt: 0 };
     let frameHandle = 0;
@@ -137,7 +137,7 @@
       state.lastLineDone = state.ratings.length ? state.ratings[state.ratings.length - 1].line : -1;
       state.refTime = state.guide.notes.reduce((sum, n) => sum + (!n.excluded && !n.skip ? n.seen : 0), 0);
       state.voicedTime = state.guide.notes.reduce((sum, n) => sum + (!n.excluded && !n.skip ? n.voiced : 0), 0);
-      state.voice.on = false; state.voice.prevMidi = 0;
+      resetInput();
       renderResult();
     }
 
@@ -158,6 +158,7 @@
       if (!playing && state.playing && state.guide) { checkLines(at); refreshScore(); }
       if (playing && state.result) seek(at);   // 唱完後再播：新的一輪
       else if (playing && !state.playing && Number.isFinite(at) && Math.abs(at - state.lastPanelT) > 0.25) seek(at);   // 暫停中拖過進度
+      if (state.playing !== !!playing) resetInput();
       state.playing = !!playing;
       if (Number.isFinite(at)) state.lastPanelT = at;
       syncFrame();
@@ -176,27 +177,44 @@
 
     function setKey(key) { state.key = Number.isFinite(key) ? key : 0; }
 
+    // 新音訊來源、校準或播放邊界不能接上上一段的積分／平滑歷史。
+    function resetInput() {
+      state.pitchClock = null; state.recent = []; state.euro = null;
+      state.voice.on = false; state.voice.prevMidi = 0;
+    }
+
     // ── 音高 → 評分（panel）─────────────────────────────────────────────────
     /** d：偵測器一格 {f0, clarity, rms}；mapped：播放時鐘換算 {valid, t（原曲秒數，已扣延遲）, key}。 */
     function pitch(d, mapped) {
       if (role !== 'panel' || !state.guide) return;
       options.onLevel && options.onLevel(d.rms);
-      if (!state.playing || !mapped || !mapped.valid) return;
+      if (!state.playing || !mapped || !mapped.valid || mapped.playing === false || !Number.isFinite(mapped.t) || mapped.t < 0) {
+        resetInput(); return;
+      }
       const time = mapped.t;
-      if (time < 0) return;
+      const tempo = Number.isFinite(mapped.tempo) && mapped.tempo > 0 ? mapped.tempo : 1;
+      const audioTime = Number.isFinite(mapped.audioTime) ? mapped.audioTime : null;
+      const previous = state.pitchClock;
+      // 重送、延遲到達的舊格不能重複給分，也不能倒退積分起點。
+      if (previous && (Number.isFinite(mapped.generation) && Number.isFinite(previous.generation) && mapped.generation < previous.generation
+        || audioTime != null && previous.audioTime != null && audioTime <= previous.audioTime)) return;
+      const boundary = previous && mapped.generation !== previous.generation;
+      if (previous && !boundary && time <= previous.t) return;
+      const delta = previous && !boundary ? time - previous.t : 0;
+      const elapsed = previous && audioTime != null && previous.audioTime != null ? audioTime - previous.audioTime : delta / tempo;
+      const gap = elapsed > 0.03 || delta > 0.06;
+      if (boundary || gap) resetInput();
+      state.pitchClock = { t: time, audioTime, generation: mapped.generation };
+      // 單位與音符一致：原曲秒數。漏格只算這一格，不能把整段空白當成持續唱中。
+      const dt = gap ? Math.min(delta, 0.01 * tempo) : delta;
       let midi = voicing(d);
       if (midi) midi -= (mapped.key || 0) + (state.guide.tuning || 0);   // 換回原調；原唱整體偏高／偏低時目標跟著原唱
-      // 八度重驗：跟最近 0.25 秒的中位數差 10～14 個半音，多半是偵測錯八度，折回來
-      const recent = state.recent.slice(-25).filter((v) => v > 0).sort((a, b) => a - b);
-      if (midi && recent.length >= 8) {
-        const dd = midi - recent[recent.length >> 1];
-        if (Math.abs(dd) >= 10 && Math.abs(dd) <= 14) midi -= 12 * Math.sign(dd);
-      }
+      // 只保留實測音高；把修正後的八度餵回歷史會讓真正跳八度永遠折回舊音。
       state.recent.push(midi); if (state.recent.length > 30) state.recent.shift();
       // 中值平滑 3 格（30ms），壓掉單點尖峰；音頭只要兩格就開始算
       const last3 = state.recent.slice(-3).filter((v) => v > 0).sort((a, b) => a - b);
       midi = midi > 0 && last3.length >= 2 ? last3[last3.length >> 1] : 0;
-      scoreFrame(time, midi, 0.01);
+      if (dt > 0) scoreFrame(time, midi, dt);
       pushTrail(time, midi, d.rms);
       // 同步跟著音訊執行緒的節奏送：面板在背景分頁時計時器會被限流，這條路不會
       if (performance.now() - sync.sentAt >= SYNC_INTERVAL_MS) syncFrame();
@@ -256,6 +274,8 @@
         if (midi > 0 && centsOff(midi, n.midi, allowOctave()) <= RULE.fullCents) addFill(n, time);
         return;
       }
+      dt = Math.max(0, Math.min(time, n.end) - Math.max(time - dt, n.start + n.grace));
+      if (!dt) return;
       n.seen += dt; state.refTime += dt; sync.dirty.add(n.i);
       if (!midi) return;
       state.voicedTime += dt; n.voiced += dt;
@@ -772,7 +792,7 @@
 
     const api = {
       setGuide, announce, setStyle, setKey, setPlaying, seek, restart, pitch, finish, receive, syncFrame, destroy,
-      songTime, refreshScore,
+      songTime, refreshScore, resetInput,
       getStyle: () => ({ ...state.style }),
       getGuide: () => state.guide,
       getStats: () => ({ ratings: state.ratings.slice(), techCount: { ...state.techCount }, scoreTarget: state.scoreTarget,
