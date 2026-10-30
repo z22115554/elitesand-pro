@@ -152,6 +152,7 @@
     'practice.sourceDemo': ['示範：偵測原唱人聲', 'Demo: follow the original vocal', 'デモ：原曲ボーカルを検出', '데모: 원곡 보컬 따라가기', '示范：检测原唱人声'],
     'practice.device': ['麥克風裝置', 'Microphone device', 'マイクデバイス', '마이크 장치', '麦克风设备'],
     'practice.defaultDevice': ['系統預設', 'System default', 'システムの既定', '시스템 기본값', '系统默认'],
+    'practice.micGain': ['麥克風增益', 'Mic gain', 'マイクゲイン', '마이크 게인', '麦克风增益'],
     'practice.latency': ['延遲補償', 'Latency compensation', '遅延補正', '지연 보정', '延迟补偿'],
     'practice.calibrate': ['校準延遲', 'Calibrate latency', '遅延を測定', '지연 보정 측정', '校准延迟'],
     'practice.headphoneHint': ['建議戴耳機。這裡不錄音、不開耳返，聲音只在這台電腦分析。', 'Headphones recommended. Nothing is recorded or monitored; audio is only analyzed on this computer.', 'ヘッドホン推奨。録音もモニターもせず、音声はこのパソコン内だけで解析します。', '헤드폰을 권장합니다. 녹음이나 모니터링 없이 이 컴퓨터에서만 분석합니다.', '建议戴耳机。这里不录音、不开耳返，声音只在这台电脑分析。'],

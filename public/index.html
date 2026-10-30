@@ -796,6 +796,13 @@
                     <select id="practice-device"></select>
                   </label>
                   <div class="practice-meter" aria-hidden="true"><i id="practice-level"></i></div>
+                  <div class="practice-field" id="practice-gain-field" hidden>
+                    <div class="practice-field-head">
+                      <label for="practice-gain" data-new-feature="practice-mic-gain"><span data-i18n="practice.micGain">麥克風增益</span></label>
+                      <b class="mono" id="practice-gain-value">+0 dB</b>
+                    </div>
+                    <input type="range" id="practice-gain" min="-12" max="24" step="1" value="0">
+                  </div>
                   <div class="practice-field">
                     <div class="practice-field-head">
                       <label for="practice-latency" data-i18n="practice.latency">延遲補償</label>

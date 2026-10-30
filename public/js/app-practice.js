@@ -36,6 +36,7 @@
     keyDown: $('practice-key-down'), keyUp: $('practice-key-up'), keyValue: $('practice-key-value'), obsPreview: $('practice-obs-preview'),
     score: $('practice-score'), tech: $('practice-tech'), lines: $('practice-lines'),
     source: $('practice-source'), deviceField: $('practice-device-field'), device: $('practice-device'), level: $('practice-level'),
+    gainField: $('practice-gain-field'), gain: $('practice-gain'), gainValue: $('practice-gain-value'),
     latency: $('practice-latency'), latencyValue: $('practice-latency-value'), latencyStatus: $('practice-latency-status'), calibrate: $('practice-calibrate'),
     octave: $('practice-octave'), trail: $('practice-trail'), contour: $('practice-contour'),
     model: $('practice-model'), modelInstall: $('practice-model-install'),
@@ -59,7 +60,7 @@
   let visible = false;
   let lastPlaying = false;
   // 偵測器跟播放器共用 AudioContext（換歌重建時也可能換新的 context）
-  const detector = { ctx: null, node: null, sink: null, stream: null, mic: null, untapDemo: null, mode: 'off', loading: null,
+  const detector = { ctx: null, node: null, sink: null, stream: null, mic: null, gain: null, untapDemo: null, mode: 'off', loading: null,
     request: 0, targetCtx: null, sourceRevision: 0 };
   let calibration = null;
   let calibrationAttempt = 0;
@@ -374,6 +375,7 @@
     engine.resetInput();
     if (detector.untapDemo) { detector.untapDemo(); detector.untapDemo = null; }
     if (detector.mic) { try { detector.mic.disconnect(); } catch (_) {} detector.mic = null; }
+    if (detector.gain) { try { detector.gain.disconnect(); } catch (_) {} detector.gain = null; }
     if (detector.node) { detector.node.port.onmessage = null; try { detector.node.disconnect(); } catch (_) {} }
     if (detector.sink) { try { detector.sink.disconnect(); } catch (_) {} }
     Object.assign(detector, { ctx: null, node: null, sink: null });
@@ -410,8 +412,12 @@
         }
         if (request !== detector.request || detector.mode !== 'mic') return;
         if (detector.mic) { try { detector.mic.disconnect(); } catch (_) {} }
+        if (detector.gain) { try { detector.gain.disconnect(); } catch (_) {} }
+        // 麥克風增益：音高判斷本身不看音量，放大只是讓小聲的麥克風過得了「有在唱」的音量門檻
         detector.mic = ctx.createMediaStreamSource(detector.stream);
-        detector.mic.connect(node);
+        detector.gain = ctx.createGain();
+        detector.gain.gain.value = gainLinear();
+        detector.mic.connect(detector.gain).connect(node);
         syncLatencyProfile();
       } else if (mode === 'demo') {
         if (!detector.untapDemo) detector.untapDemo = window.AppShared.connectPracticeVocalTap(node);
@@ -439,6 +445,7 @@
     stopMicStream();
     detector.mode = mode;
     ui.deviceField.hidden = mode !== 'mic';
+    ui.gainField.hidden = mode !== 'mic';
     syncLatencyProfile(true);
     ui.latency.disabled = mode !== 'mic';
     renderLatency();
@@ -513,6 +520,14 @@
     }
     return changed;
   }
+  const gainDb = () => Math.max(-12, Math.min(24, Math.round(Number(prefs.micGainDb) || 0)));
+  const gainLinear = () => Math.pow(10, gainDb() / 20);
+  function renderGain() {
+    const db = gainDb();
+    ui.gain.value = String(db);
+    ui.gainValue.textContent = `${db > 0 ? '+' : ''}${db} dB`;
+  }
+
   function renderLatency() {
     ui.latencyValue.textContent = `${ui.latency.value} ms`;
     if (ui.latencyStatus) {
@@ -768,6 +783,13 @@
     });
     ui.source.addEventListener('change', () => setSource(ui.source.value));
     ui.device.addEventListener('change', () => { if (detector.mode === 'mic') setSource('mic'); });
+    ui.gain.addEventListener('input', () => {
+      prefs.micGainDb = Number(ui.gain.value) || 0;
+      renderGain();
+      if (detector.gain) detector.gain.gain.setTargetAtTime(gainLinear(), detector.gain.context.currentTime, 0.02);
+    });
+    ui.gain.addEventListener('change', () => writeJson(PREFS_KEY, prefs));
+    renderGain();
     ui.latency.addEventListener('input', () => {
       if (detector.mode !== 'mic') return;
       syncLatencyProfile(); cancelCalibration(true);
