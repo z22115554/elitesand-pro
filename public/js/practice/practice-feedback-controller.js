@@ -243,7 +243,22 @@
       catch (_) { ui['challenge-status'].textContent = t('practice.challenge.failed'); }
     });
     render();
-    return { reset, refresh, render, finish, playback, boundary,
+    // 任意區段循環（練唱頁上方的 A–B 循環）；跟「重唱這句」同一套：等播放器確認跳轉後才開始新一輪
+    // 播放器只在播放／暫停／跳轉時送快照，平常播放中不會；循環的「到 B 點」要靠練唱頁用即時時鐘每 50ms 問一次
+    function tick(time) {
+      const s = getSnapshot();
+      if (!loop || pending || !s || !s.valid || !s.playing || !(time >= loop.end)) return false;
+      if (getSource() !== 'off') engine.finish(getSource(), { end: loop.end });
+      return seekLoop(true);
+    }
+    function loopRange(start, end, text = '') {
+      const guide = engine.getGuide();
+      if (!guide || !(end - start >= 0.5)) return false;
+      loop = { start: Math.max(0, start), end: Math.min(guide.duration, end), text };
+      engine.setRange(loop); clearGhost(); seekLoop(); render();
+      return true;
+    }
+    return { reset, refresh, render, finish, playback, boundary, loopRange, stopLoop, tick, isLooping: () => !!loop,
       acceptsPitch: mapped => !pending && (mapped.generation == null || !getSnapshot() || mapped.generation === getSnapshot().generation)
         && (!loop || mapped.t >= loop.start && mapped.t <= loop.end),
       cancel: () => { revision++; pending = null; loop = null; engine.setRange(null); clearRecap(); clearGhost(); render(); },

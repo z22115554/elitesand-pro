@@ -34,6 +34,7 @@
     build: $('practice-build'), cancel: $('practice-cancel'), empty: $('practice-empty'), emptyText: $('practice-empty-text'),
     progress: $('practice-progress'), progressBar: $('practice-progress-bar'),
     keyDown: $('practice-key-down'), keyUp: $('practice-key-up'), keyValue: $('practice-key-value'), obsPreview: $('practice-obs-preview'),
+    loop: $('practice-loop'), nextSection: $('practice-next-section'),
     score: $('practice-score'), tech: $('practice-tech'), lines: $('practice-lines'),
     source: $('practice-source'), deviceField: $('practice-device-field'), device: $('practice-device'), level: $('practice-level'),
     meter: $('practice-meter'), levelGate: $('practice-level-gate'),
@@ -107,6 +108,7 @@
     const nextId = s && s.valid && s.track ? String(s.track.id) : '';
     const previous = snapshot;
     snapshot = s;
+    Promise.resolve().then(renderLoopControls);   // 跳轉出循環範圍時控制器會自己停，按鈕字跟上
     syncLatencyProfile();
     // 播完、停止或載入中：播放器暫時沒有歌。只停止計分，畫面與結算留著；換成另一首歌才清掉
     if (!nextId) {
@@ -144,6 +146,7 @@
 
   function changeTrack(id, s) {
     trackId = id;
+    loopStart = null;
     timeline = null; lastPlaying = false;
     clearTimeout(pollTimer); guideToken++;
     engine.setGuide(null);
@@ -358,8 +361,59 @@
 
   // 中間那塊就是「下一步」：要做什麼、做到哪裡、能不能取消
   const BUILD_LABEL = { vocals: 'practice.separateAndBuild', sepFailed: 'practice.separateAndBuild', missing: 'practice.buildGuide' };
+  // ── A–B 循環與下一段（循環本身交給回饋控制器：等播放器確認跳轉才開始新一輪）──
+  // 一顆按鈕走三步：按一下記 A（目前位置）→ 再按一下記 B 並開始循環 → 循環中再按就停
+  let loopStart = null;
+  const playheadSeconds = () => { const c = currentClock(); return c ? c.t : (snapshot && snapshot.sourceTime) || 0; };
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  function renderLoopControls() {
+    const ready = guideState.status === 'ready';
+    if (!ui.loop || !ui.nextSection) return;
+    const looping = !!(feedback.isLooping && feedback.isLooping());
+    if (!ready && !looping) loopStart = null;
+    const label = (ui.loop.querySelector && ui.loop.querySelector('span')) || ui.loop;
+    label.textContent = looping ? t('practice.loop.stop') : loopStart != null ? t('practice.loop.setB', { a: mmss(loopStart) }) : t('practice.loop.start');
+    ui.loop.title = t('practice.loop.hint');
+    ui.loop.classList.toggle('is-active', looping || loopStart != null);
+    ui.loop.disabled = !ready && !looping;
+    ui.nextSection.textContent = t('practice.loop.next');
+    ui.nextSection.title = t('practice.loop.nextHint');
+    ui.nextSection.disabled = !ready;
+  }
+  function onLoopClick() {
+    if (feedback.isLooping && feedback.isLooping()) { feedback.stopLoop(); loopStart = null; renderLoopControls(); return; }
+    const now = playheadSeconds();
+    if (loopStart == null) { loopStart = now; renderLoopControls(); return; }
+    const a = Math.min(loopStart, now), b = Math.max(loopStart, now);
+    if (b - a < 0.5) { toast(t('practice.loop.tooShort'), 'info'); return; }
+    loopStart = null;
+    feedback.loopRange(a, b, `${mmss(a)}–${mmss(b)}`);
+    renderLoopControls();
+  }
+  // 下一段：歌詞句之間空 1 秒以上就算換段（主歌／副歌交界、前奏、間奏）；沒有歌詞時看音符空 3 秒以上。
+  // 跳到下一段開頭前 2 秒
+  function onNextSection() {
+    const guide = engine.getGuide();
+    if (!guide) return;
+    const at = playheadSeconds();
+    const spans = guide.lines && guide.lines.length
+      ? { items: guide.lines.slice().sort((x, y) => x.start - y.start), gap: 1 }
+      : { items: guide.notes.filter((n) => !n.excluded && n.midi > 0).sort((x, y) => x.start - y.start), gap: 3 };
+    let prevEnd = -Infinity, target = null;
+    for (const item of spans.items) {
+      if (item.start - prevEnd >= spans.gap && item.start > at + 2.5) { target = item.start; break; }
+      prevEnd = Math.max(prevEnd, item.end);
+    }
+    if (target == null) { toast(t('practice.loop.noNext'), 'info'); return; }
+    if (feedback.isLooping && feedback.isLooping()) feedback.stopLoop();
+    loopStart = null;
+    window.AppShared.seekPracticeTo(Math.max(0, target - 2), { resume: !!(snapshot && snapshot.playing) });
+    renderLoopControls();
+  }
+
   function renderGuideState() {
     const s = guideState.status;
+    renderLoopControls();
     ui.status.textContent = guideMessage();
     ui.build.hidden = !['vocals', 'sepFailed', 'missing', 'stale', 'failed', 'cancelled'].includes(s);
     ui.build.textContent = t(BUILD_LABEL[s] || 'practice.rebuildGuide');
@@ -811,6 +865,15 @@
     ui.cancel.addEventListener('click', cancelGuide);
     ui.keyDown.addEventListener('click', () => { window.AppShared.stepPitch(-1); renderKey(); });
     ui.keyUp.addEventListener('click', () => { window.AppShared.stepPitch(1); renderKey(); });
+    ui.loop.addEventListener('click', onLoopClick);
+    setInterval(() => {
+      if (!feedback.tick || !(feedback.isLooping && feedback.isLooping())) return;
+      const clock = currentClock();
+      if (clock && clock.playing) feedback.tick(clock.t);
+    }, 50);
+    // 回饋分頁的「重唱這句」「停止弱句循環」也會開關循環，按鈕字跟著換
+    document.getElementById('practice-pane-review')?.addEventListener('click', () => setTimeout(renderLoopControls, 0));
+    ui.nextSection.addEventListener('click', onNextSection);
     ui.obsPreview.addEventListener('click', () => {
       const on = !ui.stage.classList.contains('pstage--obs');
       ui.stage.classList.toggle('pstage--obs', on);

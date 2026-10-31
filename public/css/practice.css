@@ -163,3 +163,6 @@
   .practice-feedback-pane { max-height: none; overscroll-behavior: auto; }
   .practice-bar { flex-wrap: wrap; }
 }
+
+/* A–B 循環：記了 A 或循環中時用強調色提示目前狀態 */
+#practice-loop.is-active { color: var(--accent); }
