@@ -2,23 +2,23 @@
  * Elitesand Pro 排版模板：文字PV（引擎：JIZURA 字面，MIT，Copyright (c) 2026 hakoniwa）
  *
  * JIZURA 是整首歌「先規劃、再逐幀繪製」的文字 PV 引擎（public/vendor/jizura/）。這支檔案
- * 只做 Elitesand 這邊的轉接，不改引擎本身：
+ * 處理 Elitesand 這邊的轉接與搭配政策；可選的引擎規劃擴充由 tools/vendor-jizura.js 維護：
  *
  *   1. 歌詞 → LRC 文字 → J.plan()：整首歌一次規劃成一串 cut（版面／進場／退場／裝飾）。
  *   2. 段落分析（track.sections）→ 三種強度 profile（安靜／蓄力／高潮）。引擎的強度與
  *      可用部品是整首共用的，所以每種 profile 各規劃一次，再依「這句落在哪個段落」挑 cut
  *      合併成一份 plan；每個 cut 記著自己 profile 的 fx，繪製前換上。
  *   3. 每幀 J.Renderer#frame(ctx, plan, t, {transparent:true}) 畫進自己的 canvas。
- *   4. 引擎的「統一感」（unify）與「文字整列」（typeset）一律開啟：同一段落固定用幾種版面與
- *      動作、重複的句子（第二次副歌）用同樣方式呈現、段落首句變成キメ；假名字距、助詞縮小、
+ *   4. 「統一感」（unify）與「文字整列」（typeset）一律開啟：以 4～8 句為一組輪替版面與動作；
+ *      重複歌詞保留構圖、更新動作，真實段落首句仍有キメ；假名字距、助詞縮小、
  *      歌詞提早 0.2 秒出現、每個 cut 最多一個畫面特效。unify 的「段落」是看歌詞裡的空行，
  *      所以把 SongFormer 的段落交界翻成 LRC 空行餵進去（見 buildPlan）。
  *
  * 直播疊加的限制（鐵則 #11、不可搶主播的戲）：
  *   - transparent 模式本來就不畫背景圖形（61 個 bg 自動排除）；HUD、轉場也關掉。
- *   - 只用白名單內的 layout：2026-09-24 逐一在透明模式畫一幀量不透明像素，覆蓋率
- *     ≤25% 才收（全畫面 16:9 量）。字幕帯／障子／便箋這類會整面蓋住主播的版面一律不用。
- *     新增引擎版本時要重跑稽核再更新清單。
+ *   - 只用白名單內的 layout：初始清單採覆蓋率 ≤25%。2026-10-31 用中日英韓、中文短句／
+ *     長句及兩個 seed 複測，新增候選適度放寬至 ≤35%，受控繪製（含一般鏡頭）p95 ≤25ms，並目視確認。
+ *     全畫面與兩側分開核准；新增引擎版本時要重跑稽核再更新清單。
  *   - 偏右／偏左：畫布仍是全畫面（裝飾照常鋪滿），只把每個 cut 的內容往右推到不超出畫面為止，
  *     避開站在畫面中間的 VTuber；也可選置中（全畫面）。
  *   - 預設兩側（2026-09-26 起）：引擎的「中央を空ける」（centerFree）——每句拆成兩半放在左右兩側帶狀區，中間整片留給
@@ -35,7 +35,7 @@
     return;
   }
 
-  // 覆蓋率 ≤25% 的 layout（見檔頭）。畫布一律全畫面 16:9（偏左／偏右只移動歌詞本身，見 cutOffset）。
+  // 全畫面／偏左／偏右的白名單（新增候選覆蓋率 ≤35%，見檔頭）。偏左／偏右只移動歌詞本身。
   // 影絵（shadowPlay）雖然過了覆蓋率門檻，本質是一塊不透明的深色幕布，非常突兀，手動排除。
   const SAFE_LAYOUTS_LANDSCAPE = [
     'center', 'mixed', 'vcols', 'marquee', 'scatter', 'ring', 'wave', 'labels', 'condensed', 'type', 'diag',
@@ -47,6 +47,8 @@
     'halfVertical', 'curtain', 'equalizer', 'tape', 'headlineDeck', 'contents', 'footnote', 'proofread',
     'numbered', 'poster', 'swissGrid', 'dictionary', 'routeMap', 'tanzaku', 'kakejiku', 'priceTag', 'cylinder',
     'ribbon', 'pendulum', 'balloons', 'fisheye', 'origami', 'sliceStack', 'maskReveal', 'stencil',
+    // 2026-10-31：六組歌詞 × 兩個 seed、每組 90 幀：最大覆蓋率 32.4／24.5%，p95 15／23.8ms。
+    'accordion', 'blocks',
   ];
   // 太重的版面，任何強度都不用。2026-09-24 用實機回報的那句（12 個中文字）在 1080p、開殘影、
   // 每幀重畫的條件下實測：波の軌跡／トンネル／同心円／円筒／ネオン 60 幀掉 50 幀以上（撐不住
@@ -57,18 +59,24 @@
   // 幾乎沒變；但 ring（円環）新舊版 p95 都約 28ms，上次實機稽核漏掉，補進來。
   const HEAVY_LAYOUTS = ['wave', 'tunnel', 'circleWords', 'cylinder', 'neon',
     'arcTop', 'depthStack', 'wordCloud', 'perspective', 'fisheye', 'balloons', 'ring'];
-  // 「兩側」模式可用的版面：每句拆成兩個 cut 同時畫，成本約翻倍。2026-09-25 用 tools/audit-jizura-layouts.js
-  // --center-free 在 1080p 透明模式量：覆蓋率 ≤25% 且每幀 p95 ≤16.7ms（撐得住 60fps）才收，再跟上面的
-  // 可用清單取交集（連最基本的 center 在兩側模式下 p95 都有 34ms，不收）。引擎升級後要重跑再更新。
+  // 「兩側」模式的獨立白名單：每句拆成兩個 cut 同時畫，成本約翻倍。
+  // 2026-10-31 在離線 Chromium、1080p、Noto 字型下複測；新增版面最大覆蓋率 ≤35%、
+  // 中央保留區不透明比例 ≤2%、受控繪製 p95 ≤25ms。這不是 Windows／OBS 端到端 FPS 保證。
+  // 與全畫面清單分開，允許卡片／立方體在窄側欄使用，不會連帶在全畫面解禁。引擎升級後須重測。
   const CENTER_FREE_LAYOUTS = ['mixed', 'marquee', 'labels', 'type', 'diag', 'pill', 'lowerThird', 'staircase',
     'gridCells', 'dropCap', 'justified', 'frameBox', 'bubble', 'ticker', 'genkou', 'quote', 'ruler', 'searchBar',
     'chat', 'notification', 'ticket', 'hanging', 'elastic', 'stickerBomb', 'bubbles', 'slotMachine', 'flipBoard',
     'credits', 'equalizer', 'tape', 'headlineDeck', 'contents', 'footnote', 'proofread', 'numbered', 'swissGrid',
-    'routeMap', 'tanzaku', 'pendulum', 'origami', 'stencil'];
+    'routeMap', 'tanzaku', 'pendulum', 'origami', 'stencil',
+    // 2026-10-31 新增；每組六種歌詞、兩個 seed、90 幀複核通過。
+    'center', 'condensed', 'stack', 'corners', 'spiral', 'sideways', 'hanko', 'orbit',
+    'columnsBig', 'ema', 'ransom', 'clapper', 'warningLabel', 'cube', 'blocks', 'tiles',
+    'ledScroll', 'sliceStack',
+  ];
   // 很吵的版面：同一句重複畫滿半個畫面、字到處飛。覆蓋率不高（字與字之間是空的）所以過了白名單，
   // 但觀感上幾乎佔滿畫面。只在「狂放」強度使用。
   const BUSY_LAYOUTS = ['rain', 'stickerBomb', 'scatter', 'bubbles', 'marquee', 'sliceStack', 'mirror',
-    'typeSpecimen', 'credits'];
+    'typeSpecimen', 'credits', 'stack'];
   // 安靜段落（主歌／前奏／尾奏、以及「沉穩」強度的整首）只用這幾個：字小、動作少、沒有貼紙或圖形板。
   // 縦倒し／大小縦組／大きな頭文字 字太大；書体見本／エンドロール 會把同一句重複好幾份，都不收。
   const QUIET_LAYOUTS = ['center', 'vcols', 'type', 'lowerThird', 'quote', 'footnote', 'headlineDeck',
@@ -96,6 +104,53 @@
   // 動畫強度（面板的沉穩／標準／狂放）：不只調速度，也決定能用哪些版面（見 buildPlan）
   const INTENSITY_SCALE = { calm: 1, normal: 1, chaotic: 1.25 };
   const SMOOTH_KOMA = 30;
+
+  // 段落用相同配色／書體／強度維持風格；調色盤定期更新，沒有段落分析也不會鎖住整首。
+  const COMPOSITION_OPTIONS = {
+    quiet: { paletteSpan: 8, avoidAdjacent: true, repeatMotion: false,
+      layout: { size: 4, reuse: 0.45 }, enter: { size: 3, reuse: 0.45 }, exit: { size: 3, reuse: 0.45 },
+      hold: { size: 2, reuse: 0.6 }, cam: { size: 2, reuse: 0.6 }, decor: { size: 2, reuse: 0.6 } },
+    normal: { paletteSpan: 6, avoidAdjacent: true, repeatMotion: false,
+      layout: { size: 6, reuse: 0.25 }, enter: { size: 4, reuse: 0.35 }, exit: { size: 4, reuse: 0.35 },
+      hold: { size: 3, reuse: 0.4 }, cam: { size: 3, reuse: 0.4 }, treat: { size: 2, reuse: 0.5 }, decor: { size: 3, reuse: 0.45 } },
+    chaotic: { paletteSpan: 4, avoidAdjacent: true, repeatMotion: false,
+      layout: { size: 8, reuse: 0.1 }, enter: { size: 6, reuse: 0.2 }, exit: { size: 6, reuse: 0.25 },
+      hold: { size: 4, reuse: 0.25 }, cam: { size: 4, reuse: 0.2 }, treat: { size: 3, reuse: 0.3 }, decor: { size: 3, reuse: 0.3 } },
+  };
+  // 用輕量動作交叉搭配；碎裂、逐筆拆字、鏡頭失焦、大量陰影與全畫面後製不進入新搭配池。
+  const COMPONENT_POOLS = {
+    quiet: {
+      enter: ['cut', 'type', 'wipe', 'riseMask', 'slideL', 'slideR', 'trackIn', 'fadeStagger'],
+      exit: ['cut', 'wipe', 'shrink', 'sinkMask', 'riseOut', 'trackOutWide'],
+      hold: ['still', 'breathe', 'float', 'sway', 'drift', 'trackBreathe'],
+      cam: ['push', 'panL', 'panR', 'tiltUp', 'tiltDown', 'pullOut'], treat: ['none'], fx: ['chroma'],
+      decor: ['brackets', 'leaders', 'cropMarks', 'rulerEdge', 'dimension', 'indexNum', 'progressRing', 'waveLine', 'orbitDots', 'constellation'],
+    },
+    normal: {
+      enter: ['cut', 'type', 'wipe', 'riseMask', 'dropMask', 'slideL', 'slideR', 'trackIn', 'trackOut',
+        'fadeStagger', 'pop', 'drop', 'zoom', 'stamp', 'skewIn', 'diagWipe', 'flipX'],
+      exit: ['cut', 'wipe', 'shrink', 'sinkMask', 'riseOut', 'trackOutWide', 'slideOutL', 'slideOutR',
+        'flipOutX', 'flipOutY', 'diagWipeOut', 'zoomFar'],
+      hold: ['still', 'breathe', 'float', 'sway', 'drift', 'trackBreathe', 'pulse', 'rotateSlow', 'tilt'],
+      cam: ['push', 'panL', 'panR', 'tiltUp', 'tiltDown', 'pullOut', 'dollyIn', 'driftDiag'],
+      treat: ['none', 'underline', 'marker', 'splitColor', 'italic', 'bracketsQuote'], fx: ['chroma', 'shake'],
+      decor: ['brackets', 'leaders', 'cropMarks', 'rulerEdge', 'dimension', 'indexNum', 'progressRing', 'waveLine', 'orbitDots',
+        'constellation', 'dots', 'arrows', 'sparks', 'waveform', 'crosshair', 'beatRing', 'scribbleUnder', 'bracketsJP', 'twinkle', 'seal', 'musicNotes'],
+    },
+    chaotic: {
+      enter: ['cut', 'type', 'wipe', 'riseMask', 'dropMask', 'slideL', 'slideR', 'trackIn', 'trackOut',
+        'fadeStagger', 'pop', 'drop', 'zoom', 'stamp', 'skewIn', 'diagWipe', 'flipX', 'flipY', 'stretch', 'spin', 'rubber'],
+      exit: ['cut', 'wipe', 'shrink', 'sinkMask', 'riseOut', 'trackOutWide', 'slideOutL', 'slideOutR',
+        'flipOutX', 'flipOutY', 'diagWipeOut', 'zoomFar', 'stretch', 'spinOut', 'popOut'],
+      hold: ['still', 'breathe', 'float', 'sway', 'drift', 'trackBreathe', 'pulse', 'rotateSlow', 'tilt', 'jitter', 'wave', 'heartbeat'],
+      cam: ['push', 'panL', 'panR', 'tiltUp', 'tiltDown', 'pullOut', 'dollyIn', 'driftDiag', 'orbitDrift', 'pendulumSway', 'handheld', 'beatPunch'],
+      treat: ['none', 'underline', 'marker', 'splitColor', 'italic', 'bracketsQuote', 'outline', 'hardShadow', 'gradientV'],
+      fx: ['chroma', 'shake', 'slice', 'block', 'scanBar', 'bandInvert'],
+      decor: ['brackets', 'leaders', 'cropMarks', 'rulerEdge', 'dimension', 'indexNum', 'progressRing', 'waveLine', 'orbitDots',
+        'constellation', 'dots', 'arrows', 'sparks', 'waveform', 'crosshair', 'beatRing', 'scribbleUnder', 'bracketsJP', 'twinkle', 'seal', 'musicNotes',
+        'confetti', 'petals', 'snow', 'fireflies', 'sonarArcs', 'heartsStars'],
+    },
+  };
 
   let rootEl = null;
   let canvas = null;
@@ -480,6 +535,14 @@
     tw.dur = tw.end - tw.start;
     tw.inDur = Math.min(c.inDur || 0.3, tw.dur * 0.45);
     tw.outDur = c.outDur;
+    if (tw.inDur + tw.outDur > tw.dur * 0.92) {
+      const scale = tw.dur * 0.92 / (tw.inDur + tw.outDur);
+      tw.inDur *= scale; tw.outDur *= scale;
+    }
+    // 引擎在 typeset 限制裝飾前複製右半；同步限制，兩側都維持單一裝飾／文字處理。
+    tw.decor = c.decor;
+    tw.treat = c.treat;
+    tw.treatP = c.treatP;
     tw.fx = c.fx;
     tw.__jzSynced = c.start;
   }
@@ -493,9 +556,8 @@
     const busy = new Set(BUSY_LAYOUTS);
     // 標準：排除太重與太吵的；狂放：只排除太重的；沉穩：只用安靜清單（見下面 quietOnly）
     const sides = placement() === 'sides';
-    const centerFreeOk = new Set(CENTER_FREE_LAYOUTS);
-    const safe = new Set(SAFE_LAYOUTS_LANDSCAPE.filter((k) => !heavy.has(k) && (mode === 'chaotic' || !busy.has(k))
-      && (!sides || centerFreeOk.has(k))));
+    const layoutCandidates = sides ? CENTER_FREE_LAYOUTS : SAFE_LAYOUTS_LANDSCAPE;
+    const safe = new Set(layoutCandidates.filter((k) => !heavy.has(k) && (mode === 'chaotic' || !busy.has(k))));
     const profiles = mode === 'calm' ? PROFILES_CALM : PROFILES;
     const koma = motionMode() === 'koma';
     const sections = meta && Array.isArray(meta.sections) && meta.sections.length ? meta.sections : null;
@@ -529,6 +591,8 @@
 
     for (const profileId of used) {
       const prof = profiles[profileId];
+      const composition = prof.quietOnly ? 'quiet' : mode === 'chaotic' ? 'chaotic' : 'normal';
+      const components = COMPONENT_POOLS[composition];
       const lrc = usable.map((line, i) => {
         // 高潮段落的第一句＝衝擊句（引擎會給大字、閃爍與震動）
         const impact = prof.impactFirst && lineProfile[i] === profileId && (i === 0 || lineProfile[i - 1] !== profileId);
@@ -547,10 +611,11 @@
         lang: 'auto',
         aspect,
         unify: true,
+        unifyOptions: COMPOSITION_OPTIONS[composition],
         typeset: true,
         centerFree: sides,
         centerDir: 'lr',
-        colors: { enabled: true, bg: '#101014', fg, accentOn: true, accent },
+        colors: { enabled: true, lockSchemes: true, bg: '#101014', fg, accentOn: true, accent },
       });
       project.fx = Object.assign(J.defaultProject().fx, prof.fx, {
         koma: koma ? (prof.fx.koma || 12) : SMOOTH_KOMA,
@@ -565,20 +630,13 @@
       // 兩側模式下安靜清單跟輕量清單的交集只剩少數幾個，不夠時退回全部輕量版面（動作仍只用 calm 部品）
       const quietPool = QUIET_LAYOUTS.filter((k) => safe.has(k));
       const layoutPool = prof.quietOnly && quietPool.length >= 3 ? quietPool : [...safe];
-      // 安靜段的進場／退場／停留動作只用引擎標成「しっとり（calm）」的部品，文字特效全關
-      const calmOnly = (group, always) => {
-        const calm = new Set([...J.taggedWith(group, 'calm'), ...always]);
-        return Object.fromEntries(J.order(group).map((k) => [k, !prof.quietOnly || calm.has(k)]));
-      };
+      const componentPool = (group) => Object.fromEntries(J.order(group).map((k) => [k, components[group].includes(k)]));
       project.enabled = {
-        enter: calmOnly('enter', ['cut']),
-        exit: calmOnly('exit', ['cut']),
-        hold: calmOnly('hold', ['still']),
-        treat: Object.fromEntries(J.order('treat').map((k) => [k, !prof.quietOnly || k === 'none'])),
+        enter: componentPool('enter'), exit: componentPool('exit'), hold: componentPool('hold'),
+        treat: componentPool('treat'), cam: componentPool('cam'), fx: componentPool('fx'), decor: componentPool('decor'),
         layout: Object.fromEntries(J.order('layout').map((k) => [k, layoutPool.includes(k)])),
         bg: Object.fromEntries(J.order('bg').map((k) => [k, k === 'none'])),
         trans: Object.fromEntries(J.order('trans').map((k) => [k, false])),
-        cam: Object.fromEntries(J.order('cam').map((k) => [k, !(J.CAMERA[k] && J.CAMERA[k].strong)])),
       };
 
       const p = J.plan(project, null);
@@ -588,7 +646,21 @@
         // 歌詞 cut 看它那一句的段落；片頭歌名卡與間奏卡看 cut 開始時間
         const owner = c.line >= 0 && c.layout !== 'interlude' ? lineProfile[c.line] : profileAt(sections, c.start + 0.5);
         if (owner !== profileId) continue;
+        // 片頭／間奏卡由上游直接指定動作，也要遵守相同預算，避免繞過 enabled 使用模糊／碎裂。
+        if (c.line < 0 || c.layout === 'interlude') {
+          for (const [group, fallback] of [['enter', 'fadeStagger'], ['exit', 'wipe'], ['hold', 'still'], ['cam', 'push'], ['treat', 'none']]) {
+            if (!components[group].includes(c[group])) {
+              c[group] = fallback;
+              if (group === 'cam') c.camP = {};
+              if (group === 'treat') c.treatP = {};
+            }
+          }
+          c.inDur = Math.min(c.inDur || 0.3, c.dur * 0.45);
+          c.outDur = Math.min(c.outDur || 0, c.dur * 0.35);
+        }
         c.fx = fx;
+        // 色偏殘影會把整組文字再畫兩次；只留給非安靜段落的狂放全畫面模式。
+        c.__jzNoGhost = sides || prof.quietOnly || mode !== 'chaotic';
         cuts.push(c);
       }
       for (const e of p.events) {
@@ -692,9 +764,9 @@
     if (!force && stepKey === lastStepKey && J.komaOf(p.fx) > 0) return;
     lastStepKey = stepKey;
     try {
-      // 兩側模式每幀要畫兩個 cut（左右兩半），再加上色偏殘影（每個 cut 畫三次）會掉幀：2026-09-25 在
-      // Electron offscreen 1080p 量副歌 12 秒，開殘影 53fps、5% 的幀超過 25ms。兩側模式關掉殘影。
-      renderer.frame(ctx2d, p, t, { scale: canvas.width / p.W, transparent: true, noHud: true, noTrans: true, noGhost: !!p.centerFree });
+      // 兩側、安靜段與標準模式維持單次文字繪製；狂放全畫面的非安靜段才使用色偏殘影。
+      renderer.frame(ctx2d, p, t, { scale: canvas.width / p.W, transparent: true, noHud: true, noTrans: true,
+        noGhost: !!p.centerFree || !!(cut && cut.__jzNoGhost) });
     } catch (e) {
       console.warn('[文字PV] 繪製失敗:', e);
     }

@@ -78,6 +78,16 @@ async function adapterFrames(browser, engine) {
     document.body.innerHTML = '<div id="host"></div>';
     window.LyricTemplates = { register(t) { window.tpl = t; } };
     J.ensureFonts = () => Promise.resolve();
+    // This benchmark compares performance-only engine changes with identical frames.
+    // Exercise the legacy planner on both engines; opt-in composition is covered separately.
+    const plan = J.plan;
+    J.plan = (project, audio) => {
+      const legacy = Object.assign({}, project);
+      delete legacy.unifyOptions;
+      legacy.colors = Object.assign({}, project.colors);
+      delete legacy.colors.lockSchemes;
+      return plan(legacy, audio);
+    };
   });
   await page.addScriptTag({ path: path.join(__dirname, '../public/js/lyric-template-jizura.js') });
   const results = await page.evaluate(async () => {

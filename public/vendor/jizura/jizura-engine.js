@@ -8,8 +8,8 @@
  * Vendored for Elitesand Pro's 文字PV lyric template by tools/vendor-jizura.js. This file is the plain
  * concatenation of upstream src/*.js in filename order, EXCLUDING 11_export.js
  * (MP4/PNG export, needs mp4-muxer) and 12_ui.js (the upstream editor UI).
- * Upstream code is unmodified except for performance-only changes marked
- * "Elitesand Pro:"; Elitesand-specific behaviour lives in
+ * Upstream code is unmodified except for performance changes and opt-in planner hooks marked
+ * "Elitesand Pro:"; the composition policy lives in
  * public/js/lyric-template-jizura.js.
  */
 /* ---- src/01_util.js ---- */
@@ -1170,6 +1170,7 @@ J.resolveStyle = (project) => {
   const ov = project.colors || {};
   // base colours (background / text) replace the main scheme only
   if (ov.enabled) st.schemes[0] = Object.assign({}, st.schemes[0], pickDefined(ov, ['bg', 'fg', 'sub']));
+  if (ov.enabled && ov.lockSchemes === true) st.schemes = [st.schemes[0]]; // Elitesand Pro: opt-in fixed overlay colours
   // accent + chromatic ghost colours apply to every scheme; accent is re-lit per background for contrast
   if (ov.accentOn) {
     st.schemes = st.schemes.map(s => {
@@ -2880,7 +2881,7 @@ J.plan = (project, audio) => {
   }
 
   // 統一感: sections, repeated lines, キメ lines and the per-section palettes (see makeUnify below)
-  const U = plan.unify ? makeUnify(parsed.lines, { st, en, fx, history, lang: plan.lang, seed: project.seed }) : null;
+  const U = plan.unify ? makeUnify(parsed.lines, { st, en, fx, history, lang: plan.lang, seed: project.seed, options: project.unifyOptions }) : null; // Elitesand Pro: opt-in composition policy
   parsed.lines.forEach((ln, li) => {
     const s = tm.starts[li], e = tm.ends[li];
     const ov = (project.overrides || {})[li] || {};
@@ -2988,7 +2989,9 @@ J.plan = (project, audio) => {
       // 統一感: a line that comes back (サビ etc.) is shown exactly as the first time
       const again = UU ? UU.again(li, k, txt) : null;
       if (again) {
-        ({ layout, enter, exit, hold, params, decor, treat, treatP, cam, camP, weightGrow } = again);
+        // Elitesand Pro: repeats may keep their visual motif while receiving fresh motion.
+        if (project.unifyOptions && project.unifyOptions.repeatMotion === false) ({ layout, params } = again);
+        else ({ layout, enter, exit, hold, params, decor, treat, treatP, cam, camP, weightGrow } = again);
         sch = again.scheme; cutSeed = again.seed; LD = J.LAYOUTS[layout];
         if (again.bg && again.bg !== 'none') { bg = again.bg; lineBgP = again.bgP; lineBg = bg; }
         [inDur, outDur] = durs(enter, exit);
@@ -3105,13 +3108,45 @@ function makeUnify(lines, C) {
   lines.forEach((ln, i) => { if (ln.impact && !ln.interlude) kime.add(i); });
   if (!kime.size) lines.forEach((ln, i) => { if (starts.has(i) && !ln.interlude && (count.get(norm(ln.text)) || 0) >= 2) kime.add(i); });
   const ok = (g, k) => !!(k && en[g] && en[g][k] !== false && (g === 'layout' ? J.LAYOUTS[k] : g === 'enter' ? J.ENTER[k] : g === 'exit' ? J.EXIT[k] : g === 'hold' ? J.HOLD[k] : g === 'cam' ? J.CAMERA[k] : g === 'treat' ? J.TREAT[k] : g === 'trans' ? J.TRANS[k] : null));
+  // Elitesand Pro: optional palette rotation; real section starts still own kime accents.
+  const options = C.options && typeof C.options === 'object' ? C.options : {};
+  const rule = (g, size, reuse) => {
+    const r = options[g] || {};
+    return { size: Number.isFinite(r.size) ? J.clamp(Math.round(r.size), 1, 12) : size,
+      reuse: Number.isFinite(r.reuse) ? J.clamp(r.reuse) : reuse };
+  };
+  const span = Number.isFinite(options.paletteSpan) ? J.clamp(Math.floor(options.paletteSpan), 2, 32) : 0;
+  let part = -1, start = 0;
+  const paletteSections = span ? sec.map((s, i) => {
+    if (s !== part) { part = s; start = i; }
+    return s + ':' + Math.floor((i - start) / span);
+  }) : sec;
+  const previousPick = new Map();
   const pals = new Map(), last = new Map();
-  const pal = i => { const s2 = sec[i]; if (!pals.has(s2)) pals.set(s2, { layout: [], enter: [], exit: [], hold: [], cam: [], decor: [], treat: [], trans: [] }); return pals.get(s2); };
+  const pal = i => { const s2 = paletteSections[i]; if (!pals.has(s2)) pals.set(s2, { layout: [], enter: [], exit: [], hold: [], cam: [], decor: [], treat: [], trans: [] }); return pals.get(s2); };
   // keep up to max distinct picks per part; once full, mostly reuse them
   const sticky = (i, g, v, max, rng, fits = () => true, reuse = 0.85) => {
-    const P = pal(i)[g];
-    if (P.length >= max && rng.chance(reuse)) { const pool = P.filter(k => ok(g, k) && fits(k)); if (pool.length) return rng.pick(pool); }
-    if (!P.includes(v) && P.length < max) P.push(v);
+    const P = pal(i)[g], r = rule(g, max, reuse);
+    if (P.length >= r.size && rng.chance(r.reuse)) {
+      const pool = P.filter(k => ok(g, k) && fits(k));
+      if (pool.length) {
+        const pick = rng.pick(pool);
+        if (!options.avoidAdjacent) return pick; // Elitesand Pro: preserve the legacy early return/RNG
+        v = pick;
+      }
+    }
+    if (options.avoidAdjacent && (g === 'layout' || g === 'enter')) {
+      const key = sec[i] + ':' + g, prev = previousPick.get(key);
+      if (v === prev) {
+        const pool = J.order(g).filter(k => k !== prev && ok(g, k) && fits(k));
+        if (pool.length) v = rng.pick(pool);
+      }
+      previousPick.set(key, v);
+    }
+    if (!P.includes(v)) {
+      if (options.avoidAdjacent && P.length >= r.size) P.shift();
+      if (P.length < r.size) P.push(v);
+    }
     return v;
   };
   // alternate directions within a part
@@ -3160,8 +3195,9 @@ function makeUnify(lines, C) {
     decor(i, list, o) {
       if (o.kime) return [];
       const P = pal(i).decor;
-      if (P.length >= 2 && o.rng.chance(0.8)) { const id = o.rng.pick(P); return J.DECOR[id] ? [decorParams(o.rng, id)] : list; }
-      for (const d of list) if (!P.includes(d.id) && P.length < 2) P.push(d.id);
+      const r = rule('decor', 2, 0.8); // Elitesand Pro: rotate decoration motifs with the palette
+      if (P.length >= r.size && o.rng.chance(r.reuse)) { const id = o.rng.pick(P); return J.DECOR[id] ? [decorParams(o.rng, id)] : list; }
+      for (const d of list) if (!P.includes(d.id) && P.length < r.size) P.push(d.id);
       return list;
     },
     treat(i, v, o) { if (o.kime) return 'none'; return sticky(i, 'treat', v, 1, o.rng, () => true, 0.75); },

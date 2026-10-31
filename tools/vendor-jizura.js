@@ -7,7 +7,7 @@
  * 做的事：
  *   1. 依檔名順序串接上游 src/*.js，排除 11_export.js（MP4/PNG 匯出，需要 mp4-muxer）
  *      與 12_ui.js（上游編輯器 UI）——跟過去手動 vendor 的規則相同。
- *   2. 套上 Elitesand Pro 自己的效能修補（下面的 PATCHES，全部標記「Elitesand Pro:」）。
+ *   2. 套上 Elitesand Pro 自己的效能與可選規劃修補（下面的 PATCHES，全部標記「Elitesand Pro:」）。
  *      每個修補的原文必須在上游剛好出現一次；上游改寫了那一段就直接失敗，要人工重看，
  *      不會默默產出一份少了修補的引擎。
  *   3. 複製上游 LICENSE（MIT 要求跟著散布）。
@@ -24,7 +24,7 @@ const { execFileSync } = require('child_process');
 const EXCLUDE = new Set(['11_export.js', '12_ui.js']);
 const OUT_DIR = path.join(__dirname, '..', 'public', 'vendor', 'jizura');
 
-// ─── Elitesand Pro 的效能修補 ───
+// ─── Elitesand Pro 的效能與可選規劃修補 ───
 // 字級吸附：canvas 每遇到沒見過的 px 字級就要重新解析整組字型（fallback 鏈、字形快取），
 // 動畫中逐幀變化的字級每次 fillText 要 3–8ms（實測），重複字級只要 ~0.005ms。
 // 畫字時把字級吸附到 1/24 八度的階梯（誤差 ≤1.5%），剩下的差距用縮放補回來。
@@ -90,7 +90,80 @@ function activeEvents(plan, t) {
 }
 `;
 
+// Opt-in planner options; projects without them keep the upstream RNG sequence and behaviour.
+const UNIFY_OPTIONS_DEF = `  // Elitesand Pro: optional palette rotation; real section starts still own kime accents.
+  const options = C.options && typeof C.options === 'object' ? C.options : {};
+  const rule = (g, size, reuse) => {
+    const r = options[g] || {};
+    return { size: Number.isFinite(r.size) ? J.clamp(Math.round(r.size), 1, 12) : size,
+      reuse: Number.isFinite(r.reuse) ? J.clamp(r.reuse) : reuse };
+  };
+  const span = Number.isFinite(options.paletteSpan) ? J.clamp(Math.floor(options.paletteSpan), 2, 32) : 0;
+  let part = -1, start = 0;
+  const paletteSections = span ? sec.map((s, i) => {
+    if (s !== part) { part = s; start = i; }
+    return s + ':' + Math.floor((i - start) / span);
+  }) : sec;
+  const previousPick = new Map();
+`;
+const STICKY_BEFORE = `  const sticky = (i, g, v, max, rng, fits = () => true, reuse = 0.85) => {
+    const P = pal(i)[g];
+    if (P.length >= max && rng.chance(reuse)) { const pool = P.filter(k => ok(g, k) && fits(k)); if (pool.length) return rng.pick(pool); }
+    if (!P.includes(v) && P.length < max) P.push(v);
+    return v;
+  };`;
+const STICKY_AFTER = `  const sticky = (i, g, v, max, rng, fits = () => true, reuse = 0.85) => {
+    const P = pal(i)[g], r = rule(g, max, reuse);
+    if (P.length >= r.size && rng.chance(r.reuse)) {
+      const pool = P.filter(k => ok(g, k) && fits(k));
+      if (pool.length) {
+        const pick = rng.pick(pool);
+        if (!options.avoidAdjacent) return pick; // Elitesand Pro: preserve the legacy early return/RNG
+        v = pick;
+      }
+    }
+    if (options.avoidAdjacent && (g === 'layout' || g === 'enter')) {
+      const key = sec[i] + ':' + g, prev = previousPick.get(key);
+      if (v === prev) {
+        const pool = J.order(g).filter(k => k !== prev && ok(g, k) && fits(k));
+        if (pool.length) v = rng.pick(pool);
+      }
+      previousPick.set(key, v);
+    }
+    if (!P.includes(v)) {
+      if (options.avoidAdjacent && P.length >= r.size) P.shift();
+      if (P.length < r.size) P.push(v);
+    }
+    return v;
+  };`;
+
 const PATCHES = [
+  {
+    file: '08_planner.js',
+    find: 'lang: plan.lang, seed: project.seed }) : null;',
+    replace: 'lang: plan.lang, seed: project.seed, options: project.unifyOptions }) : null; // Elitesand Pro: opt-in composition policy',
+  },
+  { file: '08_planner.js', find: '  const pals = new Map(), last = new Map();', replace: UNIFY_OPTIONS_DEF + '  const pals = new Map(), last = new Map();' },
+  { file: '08_planner.js', find: 'const s2 = sec[i]; if (!pals.has(s2))', replace: 'const s2 = paletteSections[i]; if (!pals.has(s2))' },
+  { file: '08_planner.js', find: STICKY_BEFORE, replace: STICKY_AFTER },
+  {
+    file: '08_planner.js',
+    find: "      if (P.length >= 2 && o.rng.chance(0.8)) { const id = o.rng.pick(P); return J.DECOR[id] ? [decorParams(o.rng, id)] : list; }\n      for (const d of list) if (!P.includes(d.id) && P.length < 2) P.push(d.id);",
+    replace: "      const r = rule('decor', 2, 0.8); // Elitesand Pro: rotate decoration motifs with the palette\n      if (P.length >= r.size && o.rng.chance(r.reuse)) { const id = o.rng.pick(P); return J.DECOR[id] ? [decorParams(o.rng, id)] : list; }\n      for (const d of list) if (!P.includes(d.id) && P.length < r.size) P.push(d.id);",
+  },
+  {
+    file: '08_planner.js',
+    find: '        ({ layout, enter, exit, hold, params, decor, treat, treatP, cam, camP, weightGrow } = again);',
+    replace: '        // Elitesand Pro: repeats may keep their visual motif while receiving fresh motion.\n'
+      + '        if (project.unifyOptions && project.unifyOptions.repeatMotion === false) ({ layout, params } = again);\n'
+      + '        else ({ layout, enter, exit, hold, params, decor, treat, treatP, cam, camP, weightGrow } = again);',
+  },
+  {
+    file: '04_styles.js',
+    find: "  if (ov.enabled) st.schemes[0] = Object.assign({}, st.schemes[0], pickDefined(ov, ['bg', 'fg', 'sub']));",
+    replace: "  if (ov.enabled) st.schemes[0] = Object.assign({}, st.schemes[0], pickDefined(ov, ['bg', 'fg', 'sub']));\n"
+      + '  if (ov.enabled && ov.lockSchemes === true) st.schemes = [st.schemes[0]]; // Elitesand Pro: opt-in fixed overlay colours',
+  },
   // 02_fonts：J.fontPx 定義，接在 J.fontCSS 之後
   { file: '02_fonts.js', insertAfterBlock: 'J.fontCSS = (key, px) => {', text: FONT_PX_DEF },
   {
@@ -265,8 +338,8 @@ function main() {
  * Vendored for Elitesand Pro's 文字PV lyric template by tools/vendor-jizura.js. This file is the plain
  * concatenation of upstream src/*.js in filename order, EXCLUDING 11_export.js
  * (MP4/PNG export, needs mp4-muxer) and 12_ui.js (the upstream editor UI).
- * Upstream code is unmodified except for performance-only changes marked
- * "Elitesand Pro:"; Elitesand-specific behaviour lives in
+ * Upstream code is unmodified except for performance changes and opt-in planner hooks marked
+ * "Elitesand Pro:"; the composition policy lives in
  * public/js/lyric-template-jizura.js.
  */
 `;

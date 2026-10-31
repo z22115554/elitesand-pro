@@ -84,7 +84,11 @@ async function renderVisualFrame(page, templateId, frame) {
 
 
 test.describe('OBS lyric template visual regression', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    if (testInfo.title.startsWith('jizura ')) {
+      // JIZURA 的組合會換書體；像素基準固定使用已隨程式附帶、涵蓋中日韓的字型，避免遠端字型與 OS fallback 漂移。
+      await page.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\//, route => route.fulfill({ contentType: 'text/css', body: '' }));
+    }
     await page.route('**/socket.io/socket.io.js', (route) => route.fulfill({
       contentType: 'application/javascript',
       body: `window.io = () => ({
@@ -117,7 +121,15 @@ test.describe('OBS lyric template visual regression', () => {
 
     await page.goto('/display?preview=1', { waitUntil: 'domcontentloaded' });
     await waitForTemplateRuntime(page);
-    await page.evaluate(async () => {
+    await page.evaluate(async (pinJizuraFont) => {
+      if (pinJizuraFont) {
+        const font = new FontFace('JizuraVisualFixture', 'url(/assets/fonts/kongyuan/Kongyuan-Sans-L.otf)');
+        await font.load(); document.fonts.add(font);
+        const faceOf = J.faceOf;
+        J.faceOf = key => Object.assign({}, faceOf(key), { family: '"JizuraVisualFixture"', weight: 400, fb: 'sans-serif', gf: null });
+        J.ensureFonts = () => Promise.resolve();
+        J.metrics.clear();
+      }
       window.__visualFontJobs = [];
       const ensureFonts = J.ensureFonts;
       J.ensureFonts = (...args) => {
@@ -149,7 +161,7 @@ test.describe('OBS lyric template visual regression', () => {
         }
       `;
       document.head.appendChild(style);
-    });
+    }, testInfo.title.startsWith('jizura '));
   });
 
   for (const templateId of CUSTOM_TEMPLATE_IDS) {
