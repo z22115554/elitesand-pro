@@ -10393,8 +10393,12 @@ test('文字PV（JIZURA）：統一感／文字整列吃真實段落，兩側模
   const HEAVY = listOf('HEAVY_LAYOUTS');
   const CF = listOf('CENTER_FREE_LAYOUTS');
   ok(CF.length >= 20, '兩側模式要有足夠多的版面可以輪: ');
+  // 2026-10-31（PR #44）起兩側與全畫面分開核准：兩側只畫左右兩半，用 tools/audit-jizura-layouts.js --center-free
+  // 量「中央保留區不透明 ≤2%」與 p95 ≤25ms。下面這 8 個是只在兩側稽核通過、不在全畫面白名單的；
+  // 要再加兩側專用版面，必須重跑 --center-free 稽核並把結果寫進這張表，不能只改模板清單（鐵則 #11：不擋主播）。
+  const SIDE_ONLY_AUDITED = ['stack', 'ema', 'ransom', 'clapper', 'warningLabel', 'cube', 'tiles', 'ledScroll'];
   const notSafe = CF.filter((k) => !SAFE.includes(k));
-  eq(notSafe.join(','), '', '兩側模式的版面必須是覆蓋率白名單裡的（鐵則 #11）: ');
+  eq(notSafe.slice().sort().join(','), SIDE_ONLY_AUDITED.slice().sort().join(','), '兩側模式的版面必須在全畫面白名單或兩側稽核表裡（鐵則 #11）: ');
   const heavy = CF.filter((k) => HEAVY.includes(k));
   eq(heavy.join(','), '', '兩側模式每句畫兩份，太重的版面一個都不能收: ');
   ok(HEAVY.includes('ring'), '2026-09-25 稽核：ring 新舊版 p95 都約 28ms，要列為太重: ');
