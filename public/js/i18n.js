@@ -163,6 +163,8 @@
     'practice.history.deleteTitle': ['刪除這筆練唱紀錄？', 'Delete this practice record?', 'この練習記録を削除しますか？', '이 연습 기록을 삭제할까요?', '删除这笔练唱记录？'],
     'practice.history.deleteSummary': ['只刪除這一次的成績，不影響歌曲；之後的「上次」「最佳」比較會跟著改變。', 'Only this take is removed; the song is untouched. Later "previous" and "best" comparisons will change.', 'この回の成績だけを削除し、曲には影響しません。今後の「前回」「ベスト」との比較が変わります。', '이번 성적만 삭제되고 곡에는 영향이 없습니다. 이후 "지난번"·"최고" 비교가 바뀝니다.', '只删除这一次的成绩，不影响歌曲；之后的“上次”“最佳”比较会跟着改变。'],
     'practice.history.deleteConfirm': ['刪除', 'Delete', '削除', '삭제', '删除'],
+    'practice.echoCancel': ['沒戴耳機：開回音消除（試用）', 'No headphones: try echo cancellation', 'ヘッドホンなし：エコーキャンセルを試す', '헤드폰 없음: 에코 제거 사용해 보기', '没戴耳机：开回声消除（试用）'],
+    'practice.echoCancelChanged': ['回音消除會改變延遲，建議重新按一次「校準延遲」。', 'Echo cancellation changes the delay; run Calibrate latency again.', 'エコーキャンセルで遅延が変わります。もう一度「遅延を測定」してください。', '에코 제거는 지연을 바꿉니다. 지연 보정을 다시 실행하세요.', '回声消除会改变延迟，建议重新按一次“校准延迟”。'],
     'practice.micQuiet': ['麥克風收到的聲音偏小，判定容易失敗。可以把「麥克風增益」調高，或靠近麥克風一點。', 'Your microphone level is low, so notes may not register. Turn up Mic gain or move closer to the mic.', 'マイクの音量が小さく、判定されにくくなっています。「マイクゲイン」を上げるか、マイクに近づいてください。', '마이크 소리가 작아 판정이 잘 안 될 수 있습니다. 마이크 게인을 올리거나 마이크에 더 가까이 가 주세요.', '麦克风收到的声音偏小，判定容易失败。可以把“麦克风增益”调高，或靠近麦克风一点。'],
     'practice.micGain': ['麥克風增益', 'Mic gain', 'マイクゲイン', '마이크 게인', '麦克风增益'],
     'practice.latency': ['延遲補償', 'Latency compensation', '遅延補正', '지연 보정', '延迟补偿'],

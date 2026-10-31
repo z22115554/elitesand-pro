@@ -38,7 +38,7 @@
     score: $('practice-score'), tech: $('practice-tech'), lines: $('practice-lines'),
     source: $('practice-source'), deviceField: $('practice-device-field'), device: $('practice-device'), level: $('practice-level'),
     meter: $('practice-meter'), levelGate: $('practice-level-gate'),
-    gainField: $('practice-gain-field'), gain: $('practice-gain'), gainValue: $('practice-gain-value'),
+    gainField: $('practice-gain-field'), echoField: $('practice-echo-field'), echo: $('practice-echo'), gain: $('practice-gain'), gainValue: $('practice-gain-value'),
     latency: $('practice-latency'), latencyValue: $('practice-latency-value'), latencyStatus: $('practice-latency-status'), calibrate: $('practice-calibrate'),
     octave: $('practice-octave'), trail: $('practice-trail'), contour: $('practice-contour'),
     model: $('practice-model'), modelInstall: $('practice-model-install'),
@@ -477,7 +477,7 @@
         if (!detector.stream || !detector.stream.active) {
           const deviceId = ui.device.value;
           const stream = await navigator.mediaDevices.getUserMedia({ audio: {
-            deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+            deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: !!prefs.echoCancel, noiseSuppression: false, autoGainControl: false } });
           if (request !== detector.request || detector.mode !== 'mic' || snapshot.audioContext !== ctx) { stream.getTracks().forEach((track) => track.stop()); return; }
           detector.stream = stream;
           for (const track of stream.getAudioTracks()) track.addEventListener('ended', () => {
@@ -523,6 +523,7 @@
     detector.mode = mode;
     ui.deviceField.hidden = mode !== 'mic';
     ui.gainField.hidden = mode !== 'mic';
+    if (ui.echoField) ui.echoField.hidden = mode !== 'mic';
     syncLatencyProfile(true);
     ui.latency.disabled = mode !== 'mic';
     renderLatency();
@@ -888,6 +889,16 @@
       if (detector.gain) detector.gain.gain.setTargetAtTime(gainLinear(), detector.gain.context.currentTime, 0.02);
     });
     ui.gain.addEventListener('change', () => writeJson(PREFS_KEY, prefs));
+    // 沒戴耳機時喇叭放的原唱會被麥克風收進去；瀏覽器的回音消除可以扣掉自己播出去的聲音。
+    // 會多一點延遲、可能把歌聲也削弱，所以預設關、讓人自己試；切換要重開麥克風才生效
+    if (ui.echo) {
+      ui.echo.checked = !!prefs.echoCancel;
+      ui.echo.addEventListener('change', () => {
+        prefs.echoCancel = ui.echo.checked; writeJson(PREFS_KEY, prefs);
+        if (detector.mode === 'mic') { stopMicStream(); setSource('mic'); }
+        toast(t('practice.echoCancelChanged'), 'info');
+      });
+    }
     renderGain();
     ui.latency.addEventListener('input', () => {
       if (detector.mode !== 'mic') return;
