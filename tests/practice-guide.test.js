@@ -243,7 +243,9 @@ test('all guide routes use controller/PIN middleware, with injectable service an
   const routes = []; const protect = (_req, _res, next) => next();
   const router = { use(middleware) { routes.push({ method: 'use', handler: middleware }); },
     get(url, guard, handler) { routes.push({ method: 'get', url, guard, handler }); },
-    post(url, guard, handler) { routes.push({ method: 'post', url, guard, handler }); } };
+    post(url, guard, handler) { routes.push({ method: 'post', url, guard, handler }); },
+    delete(url, guard, handler) { routes.push({ method: 'delete', url, guard, handler }); },
+    patch(url, guard, handler) { routes.push({ method: 'patch', url, guard, handler }); } };
   const service = { get: async () => ({ status: 'ready', guide: { trackId: 'test' } }),
     start: async () => ({ status: 'queued', job: { jobId: 'job' } }), cancel: () => ({ cancelled: true }) };
   let installs = 0;
@@ -260,6 +262,9 @@ test('all guide routes use controller/PIN middleware, with injectable service an
   assert.deepEqual(endpoints.map((route) => [route.method, route.url]), [
     ['get', '/guides/:trackId'], ['post', '/guides/:trackId'], ['post', '/guides/:trackId/cancel'],
     ['get', '/pitch-model'], ['post', '/pitch-model/install'],
+    ['get', '/takes'], ['get', '/takes/:id'], ['post', '/takes'], ['delete', '/takes/:id'],
+    ['get', '/challenge-settings'], ['patch', '/challenge-settings'],
+    ['get', '/challenges'], ['post', '/challenges'], ['delete', '/challenges/:id'],
   ]);
   async function response(route) {
     const res = { status(value) { this.statusCode = value; return this; }, json(value) { this.body = value; return this; } };

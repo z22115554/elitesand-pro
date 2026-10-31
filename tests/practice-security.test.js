@@ -70,7 +70,12 @@ test('real HTTP guide and pitch-model routes require controller pairing and PIN;
   };
   const runtime = { isAvailable: () => true, isPracticePitchModelAvailable: () => false,
     async installPracticePitchModel() { calls.push(['install']); return { ok: true }; } };
-  app.use('/api/practice', createPracticeRouter({ express, service, runtime, requirePin: auth.pin }));
+  const historyService = { list() { calls.push(['takes']); return { takes: [] }; }, get() { calls.push(['take']); return { take: {} }; },
+    save() { calls.push(['save-take']); return { take: {} }; }, remove() { calls.push(['delete-take']); return { deleted: true }; },
+    getChallenge() { calls.push(['challenge']); return { challenge: null }; }, createChallenge() { calls.push(['new-challenge']); return { challenge: {} }; },
+    clearChallenge() { calls.push(['delete-challenge']); return { deleted: true }; }, getSettings() { calls.push(['settings']); return { viewerRequestsEnabled: false }; },
+    updateSettings() { calls.push(['settings-update']); return { viewerRequestsEnabled: true }; } };
+  app.use('/api/practice', createPracticeRouter({ express, service, runtime, historyService, requirePin: auth.pin }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); }));
@@ -80,7 +85,8 @@ test('real HTTP guide and pitch-model routes require controller pairing and PIN;
     headers: { ...headers, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  for (const [route, method] of [['/guides/song', 'GET'], ['/guides/song', 'POST'], ['/guides/song/cancel', 'POST'], ['/pitch-model', 'GET'], ['/pitch-model/install', 'POST']]) {
+  for (const [route, method] of [['/guides/song', 'GET'], ['/guides/song', 'POST'], ['/guides/song/cancel', 'POST'], ['/pitch-model', 'GET'], ['/pitch-model/install', 'POST'], ['/takes', 'GET'], ['/takes/id', 'GET'], ['/takes', 'POST'], ['/takes/id', 'DELETE'],
+    ['/challenges', 'GET'], ['/challenges', 'POST'], ['/challenges/id', 'DELETE'], ['/challenge-settings', 'GET'], ['/challenge-settings', 'PATCH']]) {
     const sourceOnly = await request(route + '?source=source-secret', method, { 'x-pin': '2468', 'x-forwarded-for': '127.0.0.1' });
     assert.equal(sourceOnly.status, 401); assert.equal((await sourceOnly.json()).code, 'CONTROLLER_PAIRING_REQUIRED');
     const noPin = await request(route, method, { 'x-elitesand-controller': 'controller-secret' });
@@ -93,4 +99,9 @@ test('real HTTP guide and pitch-model routes require controller pairing and PIN;
   assert.equal((await request('/guides/song', 'POST', controller, {})).status, 202);
   assert.equal((await request('/guides/song/cancel', 'POST', controller, {})).status, 200);
   assert.equal((await request('/pitch-model', 'GET', controller)).status, 200);
+  for (const [route, method] of [['/takes', 'GET'], ['/takes/id', 'GET'], ['/takes', 'POST'], ['/takes/id', 'DELETE'],
+    ['/challenges', 'GET'], ['/challenges', 'POST'], ['/challenges/id', 'DELETE'], ['/challenge-settings', 'GET'], ['/challenge-settings', 'PATCH']]) {
+    const response = await request(route, method, controller, method === 'POST' || method === 'PATCH' ? {} : undefined);
+    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  }
 });

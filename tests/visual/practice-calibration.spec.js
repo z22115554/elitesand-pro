@@ -41,7 +41,7 @@ async function openPanel(page) {
     ];
   }, fs.readFileSync(path.join(root, 'public/js/practice/pitch-detector-worklet.js'), 'utf8'));
   for (const name of ['i18n.js', 'practice-clock.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js',
-    'practice/practice-fx.js', 'practice/practice-engine.js', 'app-practice.js']) {
+    'practice/practice-fx.js', 'practice/practice-engine.js', 'practice/practice-showcase.js', 'practice/practice-feedback-controller.js', 'app-practice.js']) {
     await page.addScriptTag({ path: path.join(root, 'public/js', name) });
   }
   await page.evaluate(() => {

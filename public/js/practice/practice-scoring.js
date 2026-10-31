@@ -50,6 +50,7 @@
     note.grace = Math.min(RULE.graceMax, (note.end - note.start) * 0.25);
     note.hit = 0; note.seen = 0; note.voiced = 0; note.fills = [];
     note.skip = false; note.done = false; note.attempted = false;
+    note.signedCentsSum = 0; note.absoluteCentsSum = 0; note.onset = null;
     return note;
   }
 
@@ -121,6 +122,40 @@
     return null;
   }
 
+  const SCORE_VERSION = 'source-time-v2';
+
+  /** A take contains numbers and text only. Freeze a detached tree so another pass cannot edit it. */
+  function snapshot(value) {
+    if (Array.isArray(value)) return Object.freeze(value.map(snapshot));
+    if (value && typeof value === 'object') return Object.freeze(Object.fromEntries(Object.entries(value).map(([k, v]) => [k, snapshot(v)])));
+    return value;
+  }
+
+  function lineFeedback(guide) {
+    return guide.lines.map((line, i) => {
+      const notes = guide.notes.filter((n) => n.line === i && !n.excluded && !n.skip && (n.attempted || n.seen > 0));
+      const requiredSeconds = notes.reduce((a, n) => a + Math.max(0, n.end - n.start - n.grace), 0);
+      const observedSeconds = notes.reduce((a, n) => a + n.seen, 0);
+      const voicedSeconds = notes.reduce((a, n) => a + n.voiced, 0);
+      const sufficient = requiredSeconds >= 0.15 && observedSeconds >= Math.min(0.4, requiredSeconds * 0.6)
+        && observedSeconds / requiredSeconds >= 0.5 && voicedSeconds >= Math.min(0.2, requiredSeconds * 0.25);
+      const onsets = notes.filter((n) => n.onset != null && n.voiced >= 0.06).map((n) => n.onset * 1000).sort((a, b) => a - b);
+      return { line: i, start: notes.length ? Math.min(...notes.map((n) => n.start)) : line.start,
+        end: notes.length ? Math.max(...notes.map((n) => n.end)) : line.end, text: line.text || '',
+        score: sufficient ? Math.min(100, 100 * notes.reduce((a, n) => a + noteScore(n) * Math.max(0, n.end - n.start - n.grace), 0) / requiredSeconds) : null,
+        requiredSeconds, observedSeconds, voicedSeconds, sufficient,
+        signedCents: sufficient ? notes.reduce((a, n) => a + n.signedCentsSum, 0) / voicedSeconds : null,
+        absoluteCents: sufficient ? notes.reduce((a, n) => a + n.absoluteCentsSum, 0) / voicedSeconds : null,
+        onsetMs: sufficient && onsets.length ? onsets[onsets.length >> 1] : null };
+    }).filter((line) => line.requiredSeconds > 0);
+  }
+
+  /** Only supported observations are ranked; lack of microphone data is never a weak phrase. */
+  function weakestLines(lines, count = 3) {
+    return lines.filter((line) => line.sufficient && Number.isFinite(line.score))
+      .slice().sort((a, b) => a.score - b.score || b.absoluteCents - a.absoluteCents || a.start - b.start).slice(0, count);
+  }
+
   /** 喇叭回路校準：取中位數，散布太大就不給建議（回傳 null）。 */
   function latencyEstimate(samples) {
     const good = samples.filter(Number.isFinite).filter((v) => v >= 0 && v <= 400).sort((a, b) => a - b);
@@ -131,5 +166,5 @@
     return Math.round(median(kept) / 10) * 10;
   }
 
-  return { RULE, TIERS, credit, centsOff, foldToTarget, resetNote, noteScore, tierOf, prepareGuide, activeNote, latencyEstimate };
+  return { SCORE_VERSION, snapshot, lineFeedback, weakestLines, RULE, TIERS, credit, centsOff, foldToTarget, resetNote, noteScore, tierOf, prepareGuide, activeNote, latencyEstimate };
 });

@@ -117,7 +117,7 @@ function normalizeRequestSessionState(value) {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store, timers = globalThis }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, practiceHistoryService = null, getPracticeHistoryService = null, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store, timers = globalThis }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
@@ -130,6 +130,10 @@ class TwitchService {
     this.onPendingRequestsChanged = typeof onPendingRequestsChanged === 'function' ? onPendingRequestsChanged : null;
     this.onHistoryChanged = typeof onHistoryChanged === 'function' ? onHistoryChanged : null;
     this.getPlaybackSnapshot = typeof getPlaybackSnapshot === 'function' ? getPlaybackSnapshot : () => ({});
+    // Lazy lookup keeps ordinary requests independent of practice history storage.
+    this.getPracticeHistoryService = typeof getPracticeHistoryService === 'function'
+      ? getPracticeHistoryService
+      : () => practiceHistoryService || require('./practice-history').getPracticeHistoryService();
     this.deviceAuthorization = null;
     this.authStore = authStore;
     this.timers = (timers && typeof timers.setTimeout === 'function' && typeof timers.clearTimeout === 'function')
@@ -561,6 +565,9 @@ class TwitchService {
       requester: String(request.requester || '觀眾'),
       requesterId: String(request.requesterId || ''),
       source: request.source === 'channel-points' ? 'channel-points' : 'chat',
+      challenge: request.source !== 'channel-points' && typeof request.challenge?.targetScore === 'number'
+        && Number.isFinite(request.challenge.targetScore) && request.challenge.targetScore >= 0 && request.challenge.targetScore <= 100
+        ? { targetScore: request.challenge.targetScore } : null,
       rewardRedemption: request.rewardRedemption && typeof request.rewardRedemption === 'object' ? {
         id: String(request.rewardRedemption.id || ''),
         rewardId: String(request.rewardRedemption.rewardId || ''),
@@ -1532,8 +1539,23 @@ class TwitchService {
     if (await this.runInterceptor(this.chatInterceptor, '聊天', event)) return;
     const text = String(event.message && event.message.text || '').trim();
     const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
-    const match = TwitchRequestSettings.matchCommand(text, rules);
-    if (!match) return;
+    const challengeCommand = text.match(/^!(?:挑戰|challenge)(?:\s+([\s\S]*))?$/iu);
+    let input = text;
+    if (challengeCommand) {
+      try {
+        if (this.getPracticeHistoryService().getSettings().viewerRequestsEnabled !== true) return;
+      } catch (err) {
+        log.warn(`Twitch 練唱挑戰設定讀取失敗：${err.message}`);
+        return;
+      }
+      // Resolve the configured request command so enabled/permissions/cooldowns
+      // and every existing request rule remain shared with ordinary song requests.
+      const requestCommand = TwitchRequestSettings.getCommand(rules, 'request');
+      if (!requestCommand?.enabled) return;
+      input = `${requestCommand.command} ${challengeCommand[1] || ''}`.trim();
+    }
+    const match = TwitchRequestSettings.matchCommand(input, rules);
+    if (!match || (challengeCommand && match.key !== 'request')) return;
     const command = match.command;
     const commandSettings = match.settings;
     const cooldownKey = match.kind === 'custom' ? `custom:${match.key}` : match.key;
@@ -1589,7 +1611,21 @@ class TwitchService {
       return;
     }
     const requestId = event.message_id || fallbackId || crypto.randomUUID();
-    await this.handleSongRequestInput({ event, requestId, url: String(match.argument || '').trim(), command, source: 'chat' });
+    let url = String(match.argument || '').trim();
+    let challenge = null;
+    if (challengeCommand) {
+      const argument = url.match(/^(\d+(?:\.\d+)?)\s+(\S+)$/u);
+      const targetScore = argument ? Number(argument[1]) : NaN;
+      if (!Number.isFinite(targetScore) || targetScore < 0 || targetScore > 100) {
+        if (!fairnessExempt) this.recordCommandCooldown(match.key, commandSettings, event);
+        await this.rejectSongRequest({ event, key: 'invalidLink', values: { command },
+          reason: '挑戰格式：!挑戰 0～100 的目標分數 YouTube 單曲連結' });
+        return;
+      }
+      url = argument[2];
+      challenge = { targetScore };
+    }
+    await this.handleSongRequestInput({ event, requestId, url, command, source: 'chat', challenge });
     if (!fairnessExempt) this.recordCommandCooldown(match.key, commandSettings, event);
   }
 
@@ -1663,7 +1699,7 @@ class TwitchService {
     }
   }
 
-  async handleSongRequestInput({ event, requestId, url, command, source, redemption = null }) {
+  async handleSongRequestInput({ event, requestId, url, command, source, redemption = null, challenge = null }) {
     const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
     const history = this.historyContext({ event, source, url, redemption });
     const parsedUrl = parseYouTubeUrl(url);
@@ -1756,6 +1792,7 @@ class TwitchService {
       url,
       requester: event.chatter_user_name || event.chatter_user_login || '觀眾',
       requesterId: userKey,
+      challenge: source === 'chat' && !redemption ? challenge : null,
       source,
       rewardRedemption: redemption,
       title: metadata.title,
@@ -1824,6 +1861,21 @@ class TwitchService {
       this.updateRequestHistory(request, { result: 'retrying', reason: '下載或匯入暫時失敗，等待主播重試' });
       log.info(`Twitch 點歌匯入失敗，保留供重試：${requestId}`);
       return;
+    }
+    if (success && !rejected && request.challenge && request.source === 'chat' && !request.rewardRedemption) {
+      try {
+        await this.getPracticeHistoryService().createViewerChallenge({
+          trackId: request.videoId,
+          title: title || request.title,
+          targetScore: request.challenge.targetScore,
+          requester: request.requester,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        // A host may close viewer challenges while this request is pending.
+        // Practice persistence must not turn an already imported song into a failure.
+        log.warn(`Twitch 點歌已匯入，但練唱挑戰未建立：${err.message}`);
+      }
     }
     if (request.rewardRedemption) {
       const fulfilled = !!success && !rejected;

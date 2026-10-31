@@ -129,3 +129,77 @@ test('socket handler wires the overlay: PIN-exempt read-only type, controller-on
   const readOnly = source.match(/const READ_ONLY_EVENTS = new Set\(\[([\s\S]*?)\]\);/)[1];
   assert.doesNotMatch(readOnly, /practice:/);
 });
+
+const { sanitizeRecap } = require('../server/services/practice-overlay');
+const recap = { takeId: 'take-a', trackId: 'track-a', score: 91.2, personalBest: true, previousDelta: 2.1, bestScore: 91.2,
+  challenge: { challengeId: 'challenge-a', requester: '聽眾', targetScore: 90, achieved: true, rank: 2, participationCount: 3 } };
+
+test('public recaps only reach the overlay room from the active controller and matching track', (t) => {
+  const overlay = createPracticeOverlay({ file: tmpFile(t) }); const io = fakeIo(); const a = fakeSocket('a');
+  overlay.handle(io, a, { type: 'song', song: { ...song, trackId: 'track-a' } }); io.sent.length = 0;
+  for (const type of ['practice-overlay', 'remote', 'display', 'prompter']) {
+    assert.equal(overlay.handle(io, fakeSocket('a', type), { type: 'recap', recap }), null);
+  }
+  assert.equal(overlay.handle(io, fakeSocket('b'), { type: 'recap', recap }), null);
+  assert.equal(overlay.handle(io, a, { type: 'recap', recap: { ...recap, trackId: 'old-song' } }), null);
+  assert.ok(overlay.handle(io, a, { type: 'recap', recap }));
+  assert.deepEqual(io.sent.map((m) => [m.room, m.event, m.payload.type]), [[ROOM, EVENT, 'recap']]);
+});
+
+test('public recap sanitizer bounds values and never forwards trace, metadata or nonfinite fabricated scores', () => {
+  const out = sanitizeRecap({ ...recap, pitchTrace: [[1, 2]], score: Infinity, personalBest: 'true', previousDelta: -999, bestScore: NaN,
+    takeId: 't'.repeat(500), challenge: { targetScore: 999, requester: '<img>'.repeat(500), rank: -1, participationCount: 1e9, secret: 'private' } });
+  assert.equal(out.takeId.length, 128); assert.equal(out.score, null); assert.equal(out.personalBest, null);
+  assert.equal(out.previousDelta, -100); assert.equal(out.bestScore, null); assert.equal(out.pitchTrace, undefined);
+  assert.equal(out.challenge.targetScore, 100); assert.equal(out.challenge.requester.length, 80);
+  assert.equal(out.challenge.rank, null); assert.equal(out.challenge.participationCount, 1000000); assert.equal(out.challenge.secret, undefined);
+  assert.equal(sanitizeRecap({ takeId: {}, trackId: 'track-a' }), null);
+  assert.equal(sanitizeRecap({ takeId: 'a', trackId: 'b', challenge: { targetScore: '90' } }).challenge, null);
+});
+
+test('recap survives result frame ordering and reconnect, and song, seek, clear reset it', (t) => {
+  const overlay = createPracticeOverlay({ file: tmpFile(t) }); const io = fakeIo(); const a = fakeSocket('a');
+  overlay.handle(io, a, { type: 'song', song: { ...song, trackId: 'track-a' } });
+  overlay.handle(io, a, { type: 'recap', recap });
+  const final = { ...frame(200, false), score: { target: 91.2, result: { score: 91.2, at: 1 } } };
+  overlay.handle(io, a, final);
+  assert.equal(overlay.getSnapshot().recap.takeId, 'take-a', 'recap may precede result frame');
+  const obs = fakeSocket('obs', 'practice-overlay'); overlay.greet(obs);
+  assert.deepEqual(obs.emitted.map((m) => m.payload.type), ['style', 'song', 'frame', 'recap']);
+  assert.equal(obs.emitted[3].payload.recap.takeId, 'take-a');
+  overlay.handle(io, a, { type: 'seek', offset: 0 });
+  assert.equal(overlay.getSnapshot().recap, null); assert.equal(overlay.getSnapshot().score, null);
+  overlay.handle(io, a, { type: 'recap', recap });
+  overlay.handle(io, a, { type: 'song', song: { ...song, trackId: 'track-b' } });
+  assert.equal(overlay.getSnapshot().recap, null);
+  assert.equal(overlay.handle(io, a, { type: 'recap', recap }), null, 'late old-song response cannot contaminate new song');
+  overlay.handle(io, a, { type: 'recap', recap: { ...recap, trackId: 'track-b' } });
+  overlay.handle(io, a, { type: 'clear' });
+  assert.equal(overlay.getSnapshot().recap, null);
+  assert.equal(overlay.handle(io, a, { type: 'recap', recap }), null);
+});
+
+test('a queued old frame cannot restore a cleared or changed song result', async (t) => {
+  const overlay = createPracticeOverlay({ file: tmpFile(t) }); const io = fakeIo(); const a = fakeSocket('a');
+  overlay.handle(io, a, { type: 'song', song });
+  overlay.handle(io, a, frame(1)); overlay.handle(io, a, frame(2));
+  overlay.handle(io, a, { type: 'clear' });
+  const afterClear = io.sent.length;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(io.sent.length, afterClear); assert.equal(overlay.getSnapshot().score, null);
+  overlay.handle(io, a, { type: 'song', song });
+  overlay.handle(io, a, frame(3)); overlay.handle(io, a, frame(4));
+  overlay.handle(io, a, { type: 'song', song: { ...song, key: 'new' } });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(overlay.getSnapshot().score, null);
+});
+
+test('demo or unscorable final frames revoke recap claims and cannot be followed by a recap', (t) => {
+  const overlay = createPracticeOverlay({ file: tmpFile(t) }); const io = fakeIo(); const a = fakeSocket('a');
+  overlay.handle(io, a, { type: 'song', song: { ...song, trackId: 'track-a' } });
+  overlay.handle(io, a, { type: 'recap', recap });
+  overlay.handle(io, a, { ...frame(200, false), score: { target: null, unscorable: true, result: { source: 'demo', score: 95 } } });
+  assert.equal(overlay.getSnapshot().recap, null);
+  assert.equal(overlay.handle(io, a, { type: 'recap', recap }), null);
+  assert.ok(io.sent.some((m) => m.payload.type === 'recap' && m.payload.recap === null));
+});

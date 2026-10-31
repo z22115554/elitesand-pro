@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/panel.css">
   <link rel="stylesheet" href="/css/practice-stage.css">
   <link rel="stylesheet" href="/css/practice.css">
+  <link rel="stylesheet" href="/css/practice-showcase.css">
   <link rel="stylesheet" href="/css/onboarding-tour.css">
   <link rel="stylesheet" href="/css/font-picker.css">
 </head>
@@ -739,6 +740,7 @@
                     <div class="pstage-result-tiers" data-ps="resultTiers"></div>
                     <div class="pstage-result-extra" data-ps="resultExtra"></div>
                     <p class="pstage-result-meta" data-ps="resultMeta"></p>
+                    <div data-practice-showcase hidden></div>
                   </div>
                   <!-- 還不能唱的時候，下一步就在這裡做：製作伴奏、建立練唱音軌、看進度，不必切到別頁 -->
                   <div id="practice-empty" class="practice-empty">
@@ -776,12 +778,14 @@
                 </div>
               </div>
 
-              <!-- 設定分三頁，一次只開一頁：整個練唱頁維持一屏、不用往下捲 -->
+              <!-- 每次只開一個設定或回饋分頁；內容在右欄內捲動。 -->
               <div class="practice-panel">
                 <div class="practice-tabs" role="tablist" aria-label="練唱設定" data-i18n-aria-label="practice.sideLabel">
                   <button id="practice-tab-input" class="practice-tab" type="button" role="tab" aria-selected="true" aria-controls="practice-pane-input" data-tab="input" data-i18n="practice.input">輸入</button>
                   <button id="practice-tab-display" class="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-pane-display" data-tab="display" data-i18n="practice.display">顯示</button>
                   <button id="practice-tab-obs" class="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-pane-obs" data-tab="obs" data-i18n="practice.obsLook">OBS 外觀</button>
+                  <button id="practice-tab-review" class="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-pane-review" data-tab="review" data-i18n="practice.review.tab">回饋</button>
+                  <button id="practice-tab-challenge" class="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-pane-challenge" data-tab="challenge" data-i18n="practice.challenge.tab">挑戰</button>
                 </div>
 
                 <div id="practice-pane-input" class="practice-pane" role="tabpanel" aria-labelledby="practice-tab-input" data-pane="input">
@@ -867,6 +871,47 @@
                   </div>
                   <p class="practice-note" data-i18n="practice.lyricsHint">歌詞建議關掉，改用歌詞來源的 KTV 模板疊在下面，兩個來源各自調位置。</p>
                   <button id="practice-style-reset" class="btn btn-ghost btn-sm practice-reset" type="button" data-i18n="practice.styleReset">恢復預設外觀</button>
+                </div>
+                <div id="practice-pane-review" class="practice-pane practice-feedback-pane" role="tabpanel" aria-labelledby="practice-tab-review" data-pane="review" hidden>
+                  <p id="practice-review-status" class="practice-note practice-feedback-status" aria-live="polite" data-i18n-skip>唱完後會顯示最需要練習的三句。</p>
+                  <section class="practice-feedback-group" aria-labelledby="practice-weak-title">
+                    <h3 id="practice-weak-title" class="practice-label" data-i18n="practice.review.weakTitle">優先練這三句</h3>
+                    <ol id="practice-weak-lines" class="practice-feedback-list" data-i18n-skip></ol>
+                    <p id="practice-loop-status" class="practice-note" data-i18n-skip></p>
+                    <button id="practice-loop-stop" class="btn btn-ghost btn-sm practice-reset" type="button" data-i18n="practice.review.loopStop" disabled>停止弱句循環</button>
+                  </section>
+                  <section class="practice-feedback-group" aria-labelledby="practice-comparison-title">
+                    <h3 id="practice-comparison-title" class="practice-label" data-i18n="practice.review.comparisonTitle">與上次、最佳比較</h3>
+                    <p id="practice-comparison" class="practice-note" data-i18n-skip></p>
+                    <ol id="practice-improved-lines" class="practice-feedback-list" data-i18n-skip></ol>
+                    <p class="practice-note" data-i18n="practice.review.contextHint">只比較相同 Key、速度與模式；全曲和片段分開比較。</p>
+                    <label class="practice-check"><input type="checkbox" id="practice-ghost"> <span data-i18n="practice.review.ghost">顯示上次音高軌跡</span></label>
+                    <p class="practice-note" data-i18n="practice.review.ghostHint">軌跡僅在相同歌曲、Key、速度、模式與範圍時顯示。</p>
+                  </section>
+                  <section class="practice-feedback-group" aria-labelledby="practice-history-title">
+                    <label id="practice-history-title" class="practice-field" for="practice-history"><span data-i18n="practice.review.history">本機練唱紀錄</span>
+                      <select id="practice-history" data-i18n-skip><option value="">尚無練唱紀錄</option></select>
+                    </label>
+                    <button id="practice-history-delete" class="btn btn-ghost btn-sm practice-reset" type="button" data-i18n="practice.review.delete" disabled>刪除這次紀錄</button>
+                  </section>
+                </div>
+
+                <div id="practice-pane-challenge" class="practice-pane practice-feedback-pane" role="tabpanel" aria-labelledby="practice-tab-challenge" data-pane="challenge" hidden>
+                  <label class="practice-check"><input type="checkbox" id="practice-viewer-challenges"> <span data-i18n="practice.challenge.viewerEnabled">接受觀眾點歌挑戰</span></label>
+                  <p class="practice-note" data-i18n="practice.challenge.viewerHint">先啟用 Twitch 點歌，再讓觀眾輸入「!挑戰 90 YouTube網址」。目標可填 0–100 分。</p>
+                  <label class="practice-field" for="practice-challenge-target"><span data-i18n="practice.challenge.target">挑戰目標分數</span>
+                    <input id="practice-challenge-target" type="number" min="0" max="100" step="1" value="90" inputmode="numeric">
+                  </label>
+                  <div class="practice-feedback-actions">
+                    <button id="practice-challenge-create" class="btn btn-sm" type="button" data-i18n="practice.challenge.create">挑戰目前歌曲</button>
+                    <button id="practice-challenge-clear" class="btn btn-ghost btn-sm" type="button" data-i18n="practice.challenge.clear">清除挑戰</button>
+                  </div>
+                  <p id="practice-challenge-status" class="practice-note practice-feedback-status" aria-live="polite" data-i18n-skip>尚無進行中的挑戰。</p>
+                  <section class="practice-feedback-group" aria-labelledby="practice-challenge-ranking-title">
+                    <h3 id="practice-challenge-ranking-title" class="practice-label" data-i18n="practice.challenge.rankingTitle">本機挑戰排行榜</h3>
+                    <p class="practice-note" data-i18n="practice.challenge.rankingHint">僅記錄這台電腦的有效完整演唱；示範、訊號不足與片段練習不列入。</p>
+                    <ol id="practice-challenge-ranking" class="practice-feedback-list" data-i18n-skip></ol>
+                  </section>
                 </div>
               </div>
 
@@ -3992,6 +4037,8 @@
   <script src="/js/practice/practice-calibration.js"></script>
   <script src="/js/practice/practice-fx.js"></script>
   <script src="/js/practice/practice-engine.js"></script>
+  <script src="/js/practice/practice-showcase.js"></script>
+  <script src="/js/practice/practice-feedback-controller.js"></script>
   <script src="/js/app-practice.js"></script>
   <script src="/js/help-search.js"></script>
 </body>

@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/practice-overlay.css">
   <link rel="stylesheet" href="/css/practice-stage.css">
+  <link rel="stylesheet" href="/css/practice-showcase.css">
 </head>
 <body>
   <!-- OBS 練唱疊加層：透明底，只畫音軌、評等與（可選的）分數、結算、歌詞。資料全部來自面板，這頁不碰麥克風也不出聲。 -->
@@ -25,6 +26,7 @@
         <div class="pstage-result-tiers" data-ps="resultTiers"></div>
         <div class="pstage-result-extra" data-ps="resultExtra"></div>
         <p class="pstage-result-meta" data-ps="resultMeta"></p>
+        <div data-practice-showcase hidden></div>
       </div>
     </div>
     <div class="pstage-lyrics">
@@ -41,6 +43,7 @@
   <script src="/js/practice/practice-scoring.js"></script>
   <script src="/js/practice/practice-fx.js"></script>
   <script src="/js/practice/practice-engine.js"></script>
+  <script src="/js/practice/practice-showcase.js"></script>
   <script src="/js/practice-overlay.js"></script>
 </body>
 </html>

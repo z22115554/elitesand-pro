@@ -126,14 +126,16 @@ function panel(options = {}) {
   let onPlayback;
   const engine = { style: { ...Fx.STYLE_DEFAULT }, getStyle() { return this.style; }, setStyle(s) { Object.assign(this.style, s); },
     getStats: () => ({ unscorable: false, scoreTarget: null, tiers: {}, techCount: {}, ratings: [] }), getGuide: () => null,
-    setPlaying() {}, resetInput() {}, pitch() {}, songTime: () => 0 };
+    setPlaying() {}, resetInput() {}, startNewPass() {}, pitch() {}, songTime: () => 0 };
   Object.assign(win, { PracticeCalibration: Calibration, PracticeFx: Fx, location: { origin: 'https://example.invalid' },
     I18n: { t: (key) => key }, AppShared: { subscribePracticePlayback(fn) { onPlayback = fn; fn(playback); }, subscribePracticePlaybackBoundary() {} } });
   const scope = { window: win, navigator: { mediaDevices: media }, document: { getElementById: get, createElement: element, addEventListener() {} },
     localStorage: { getItem: (key) => store.get(key) || null, setItem: (key, value) => store.set(key, value) },
     PracticeScoring: Scoring, PracticeEngine: { createPracticeEngine: () => engine }, URL,
+    PracticeFeedback: { create: () => ({ cancel() {}, render() {}, playback() {}, reset() {}, refresh() {}, contextChanged() {} }) },
     AudioWorkletNode: class { constructor() { this.port = {}; nodes.push(this); } connect(next) { return next; } disconnect() {} },
     setTimeout(fn, delay) { const id = ++timerId; timers.set(id, { fn, delay }); return id; }, clearTimeout(id) { timers.delete(id); },
+    setInterval: () => 0, clearInterval() {},
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../public/js/app-practice.js'), 'utf8'), scope);
   return { get, store, requests, ctx, nodes, media, win,

@@ -75,7 +75,7 @@ function sanitizeSong(input) {
     .filter((n) => n && Number.isFinite(n.start) && Number.isFinite(n.end) && n.end > n.start && Number.isInteger(n.midi))
     .map((n) => ({ start: round(finite(n.start, 0, duration)), end: round(finite(n.end, 0, duration)), midi: Math.round(finite(n.midi, 1, 140)),
       line: Math.round(finite(n.line, 0, MAX_LINES)), word: Math.round(finite(n.word, 0, 400)), excluded: n.excluded ? String(n.excluded).slice(0, 40) : null }));
-  return { key: String(input.key || '').slice(0, 128), title: String(input.title || '').slice(0, 200), duration, lines, notes };
+  return { key: String(input.key || '').slice(0, 128), trackId: typeof input.trackId === 'string' ? input.trackId.slice(0, 128) : '', title: String(input.title || '').slice(0, 200), duration, lines, notes };
 }
 
 function sanitizeClock(input) {
@@ -97,6 +97,27 @@ function sanitizeResult(input) {
     seconds: round(finite(input.seconds, 0, 20 * 60), 1), excluded: round(finite(input.excluded, 0, 20 * 60), 1),
     lines: Math.round(finite(input.lines, 0, MAX_LINES)), maxCombo: Math.round(finite(input.maxCombo, 0, MAX_LINES)),
     at: Math.round(finite(input.at, 0, 8.64e15)), tiers, tech };
+}
+
+/** Public result summary only. Never forward take history, pitch traces or requester metadata. */
+function sanitizeRecap(input) {
+  if (!input || typeof input !== 'object') return null;
+  const text = (v, max) => typeof v === 'string' ? v.slice(0, max) : '';
+  const number = (v, lo, hi) => Number.isFinite(v) ? round(finite(v, lo, hi), 2) : null;
+  const count = (v) => Number.isInteger(v) && v > 0 ? Math.min(v, 1000000) : null;
+  const takeId = text(input.takeId, 128), trackId = text(input.trackId, 128);
+  const score = number(input.score, 0, 100);
+  if (!takeId || !trackId) return null;
+  let challenge = null;
+  const c = input.challenge;
+  if (c && typeof c === 'object' && Number.isFinite(c.targetScore)) {
+    challenge = { challengeId: text(c.challengeId, 128), requester: text(c.requester, 80),
+      targetScore: number(c.targetScore, 0, 100), achieved: score !== null && typeof c.achieved === 'boolean' ? c.achieved : null,
+      rank: count(c.rank), participationCount: count(c.participationCount) };
+  }
+  return { takeId, trackId, score,
+    personalBest: score !== null && typeof input.personalBest === 'boolean' ? input.personalBest : null,
+    previousDelta: number(input.previousDelta, -100, 100), bestScore: number(input.bestScore, 0, 100), challenge };
 }
 
 /** 兩格合成一格：增量（軌跡、音符、事件）接起來，狀態（時鐘、游標、分數）取新的。 */
@@ -135,7 +156,7 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
   let style = sanitizeStyle(store.load().style);
   let saveTimer = null;
   let activeSocketId = null;
-  const snapshot = { song: null, clock: null, score: null };
+  const snapshot = { song: null, clock: null, score: null, recap: null };
   const lastFrameAt = new Map();
   const pendingFrames = new Map();   // 面板 id → 還沒到送出間隔、先合併起來的那一格
 
@@ -149,6 +170,12 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
 
   function emit(io, message) {
     if (io && typeof io.to === 'function') io.to(ROOM).emit(EVENT, message);
+  }
+
+  // A queued final frame belongs to the previous song/attempt and must never survive a reset.
+  function resetPending() {
+    for (const entry of pendingFrames.values()) clearTimeout(entry.timer);
+    pendingFrames.clear();
   }
 
   /** 面板（controller）送來的一則訊息。回傳要轉給疊加層的內容（測試用），不合法就回 null。 */
@@ -167,18 +194,31 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
     if (message.type === 'song') {
       const song = sanitizeSong(message.song);
       if (!song) return null;
-      activeSocketId = id; snapshot.song = song; snapshot.clock = null; snapshot.score = null;
+      resetPending();
+      activeSocketId = id; snapshot.song = song; snapshot.clock = null; snapshot.score = null; snapshot.recap = null;
       const out = { type: 'song', song };
       emit(io, out);
       return out;
     }
+    if (message.type === 'recap') {
+      if (activeSocketId !== id || !snapshot.song) return null;
+      const recap = sanitizeRecap(message.recap);
+      if (!recap || recap.trackId !== (snapshot.song.trackId || snapshot.song.key)) return null;
+      if (snapshot.score && snapshot.score.result && (snapshot.score.unscorable || snapshot.score.result.source === 'demo')) return null;
+      snapshot.recap = recap;
+      const out = { type: 'recap', recap };
+      emit(io, out);
+      return out;
+    }
     if (message.type === 'seek') {
+      resetPending(); snapshot.recap = null; snapshot.score = null;
       activeSocketId = id;   // 跳轉一定是這個面板上的實際操作：直接接手
       const out = { type: 'seek', offset: round(finite(message.offset, 0, 1200)) };
       emit(io, out);
       return out;
     }
     if (message.type === 'frame') {
+      if (!snapshot.song) return null;
       const frame = sanitizeFrame(message);
       const playing = frame.clock && frame.clock.playing;
       if (activeSocketId && activeSocketId !== id && !playing) return null; // 閒置的其他面板不能把畫面拉回去
@@ -198,7 +238,8 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
     }
     if (message.type === 'clear') {
       if (activeSocketId !== id) return null;
-      snapshot.song = null; snapshot.clock = null; snapshot.score = null; activeSocketId = null;
+      resetPending();
+      snapshot.song = null; snapshot.clock = null; snapshot.score = null; snapshot.recap = null; activeSocketId = null;
       const out = { type: 'clear' };
       emit(io, out);
       return out;
@@ -207,9 +248,14 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
   }
 
   function sendFrame(io, id, frame) {
+    if (!snapshot.song || activeSocketId !== id) return null;
     lastFrameAt.set(id, Date.now());
     if (frame.clock) snapshot.clock = frame.clock;
     if (frame.score) snapshot.score = frame.score;
+    if (snapshot.recap && frame.score && frame.score.result && (frame.score.unscorable || frame.score.result.source === 'demo')) {
+      snapshot.recap = null;
+      emit(io, { type: 'recap', recap: null });
+    }
     emit(io, frame);
     return frame;
   }
@@ -220,6 +266,7 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
     socket.emit(EVENT, { type: 'style', style });
     if (snapshot.song) socket.emit(EVENT, { type: 'song', song: snapshot.song });
     if (snapshot.clock || snapshot.score) socket.emit(EVENT, { type: 'frame', clock: snapshot.clock, score: snapshot.score, trail: [], notes: [], events: [], user: null });
+    if (snapshot.recap) socket.emit(EVENT, { type: 'recap', recap: snapshot.recap });
   }
 
   /** 面板斷線：若它正在播放，OBS 停在當下的時間點，不要讓時鐘一直往前推。 */
@@ -239,4 +286,4 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
   return { handle, greet, disconnect, getStyle: () => style, getSnapshot: () => ({ ...snapshot, activeSocketId }), flush: () => { clearTimeout(saveTimer); store.save({ style }); } };
 }
 
-module.exports = { createPracticeOverlay, sanitizeStyle, sanitizeSong, sanitizeFrame, mergeFrames, STYLE_DEFAULT, ROOM, EVENT, FX_IDS };
+module.exports = { createPracticeOverlay, sanitizeStyle, sanitizeSong, sanitizeFrame, sanitizeRecap, mergeFrames, STYLE_DEFAULT, ROOM, EVENT, FX_IDS };

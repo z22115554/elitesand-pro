@@ -64,6 +64,8 @@
   const detector = { ctx: null, node: null, sink: null, stream: null, mic: null, gain: null, untapDemo: null, mode: 'off', loading: null,
     request: 0, targetCtx: null, sourceRevision: 0 };
   let calibration = null;
+  let feedback = null;
+  let feedbackPoll = 0;
   let calibrationAttempt = 0;
   let calibrationResult = null;
   let availableDevices = [];
@@ -75,10 +77,15 @@
     clock: currentClock,
     getOptions: () => prefs,
     onSync: sendOverlay,
+    onFinish: (take) => { if (feedback) feedback.finish(take); },
     onLevel: renderLevel,
     onHint: (kind) => { if (kind === 'quiet' && detector.mode === 'mic') toast(t('practice.micQuiet'), 'warning'); },
     onUpdate: (kind) => { if (kind !== 'score') renderStats(); else renderScore(); },
   });
+
+  feedback = PracticeFeedback.create({ engine, request, t, document,
+    getSnapshot: () => snapshot, getSource: () => detector.mode, getOptions: () => prefs,
+    seek: (seconds, options) => window.AppShared.seekPracticeTo(seconds, options), send: sendOverlay });
 
   /** 畫面用的時鐘：喇叭「現在」播出的原曲秒數（扣掉輸出延遲），跟 OBS 看到的同一條時間。 */
   function currentClock() {
@@ -98,6 +105,7 @@
   // ── 播放器 ─────────────────────────────────────────────────────────────
   function onPlayback(s) {
     const nextId = s && s.valid && s.track ? String(s.track.id) : '';
+    const previous = snapshot;
     snapshot = s;
     syncLatencyProfile();
     // 播完、停止或載入中：播放器暫時沒有歌。只停止計分，畫面與結算留著；換成另一首歌才清掉
@@ -114,7 +122,10 @@
     }
     if (detector.ctx !== s.audioContext && detector.mode !== 'off') attachDetector().catch(detectorError);
     engine.setKey(s.pitchShift || 0);
+    if (previous && previous.valid && String(previous.track.id) === nextId
+      && (previous.pitchShift !== s.pitchShift || previous.playbackRate !== s.playbackRate)) feedback.contextChanged();
     renderKey();
+    if (feedback.playback(s)) { lastPlaying = s.playing; return; }
     // 跳轉（拖進度、手機遙控）由引擎自己從時鐘偵測，這裡只轉播放／暫停
     if (s.playing !== lastPlaying) {
       lastPlaying = s.playing;
@@ -124,7 +135,11 @@
   }
 
   function onBoundary(s) {
-    if (s && s.boundary === 'ended' && detector.mode !== 'off' && engine.getGuide()) engine.finish(detector.mode);
+    if (s && s.boundary === 'ended' && detector.mode !== 'off' && engine.getGuide()) {
+      if (feedback.boundary(s)) return true;
+      engine.finish(detector.mode, { end: s.durationSeconds });
+    }
+    return false;
   }
 
   function changeTrack(id, s) {
@@ -132,6 +147,7 @@
     timeline = null; lastPlaying = false;
     clearTimeout(pollTimer); guideToken++;
     engine.setGuide(null);
+    feedback.reset(id);
     sendOverlay({ type: 'clear' });
     guideState = { status: id ? 'loading' : 'none', progress: 0, code: '' };
     const track = s && s.track;
@@ -177,6 +193,8 @@
     if (result.status === 'ready' && result.guide) {
       const guide = PracticeScoring.prepareGuide(result.guide);
       guide.title = ui.heading.textContent;
+      guide.trackId = id;
+      feedback.reset(id);
       engine.setGuide(guide);
       engine.setKey(snapshot && snapshot.pitchShift || 0);
       if (snapshot && snapshot.playing && detector.mode !== 'off') {
@@ -184,6 +202,7 @@
         engine.setPlaying(true, clock ? clock.t : snapshot.sourceTime);
       }
       guideState = { status: 'ready', progress: 100, code: '', algorithm: result.guide.algorithm };
+      feedback.refresh();
     } else if (GUIDE_ACTIVE.includes(result.status)) {
       guideState = { status: 'busy', progress: Math.round(Number(result.job && result.job.progress) || 0), code: '' };
       pollTimer = setTimeout(() => loadGuide(id, token), 1000);
@@ -440,6 +459,8 @@
   }
 
   async function setSource(mode) {
+    feedback.cancel();
+    engine.startNewPass();
     const sourceRevision = ++detector.sourceRevision;
     detector.request++; detector.loading = null;
     cancelCalibration(true);
@@ -475,8 +496,9 @@
     const mapped = timeline.map(d.time, demo
       ? { inputLatencySec: 0, outputLatencySec: 0, dspLatencySec: 0, calibrationMs: 0 }
       : { inputLatencySec: 0, outputLatencySec: 0, dspLatencySec: snapshot && snapshot.dspLatencySeconds || 0, calibrationMs: Number(ui.latency.value) || 0 });
-    engine.pitch(d, mapped.valid ? { valid: true, t: mapped.sourceTime, key: mapped.key, tempo: mapped.tempo,
-      generation: mapped.generation, playing: mapped.playing, audioTime: d.time } : null);
+    const frame = mapped.valid ? { valid: true, t: mapped.sourceTime, key: mapped.key, tempo: mapped.tempo, generation: mapped.generation, playing: mapped.playing, audioTime: d.time } : null;
+    if (frame && !feedback.acceptsPitch(frame)) return;
+    engine.pitch(d, frame);
   }
 
   async function refreshDevices() {
@@ -768,6 +790,7 @@
   function translate() {
     renderFxMenu();
     renderGuideState();
+    feedback.render();
     renderLatency();
     if (!trackId) ui.heading.textContent = t('practice.noTrack');
     if (ui.device.options.length) refreshDevices();
@@ -808,7 +831,7 @@
       syncLatencyProfile(); cancelCalibration(true);
       latencyProfiles.remember(Number(ui.latency.value), 'manual'); renderLatency();
     });
-    ui.octave.addEventListener('change', () => { prefs.allowOctave = ui.octave.checked; writeJson(PREFS_KEY, prefs); });
+    ui.octave.addEventListener('change', () => { prefs.allowOctave = ui.octave.checked; writeJson(PREFS_KEY, prefs); feedback.contextChanged(); });
     ui.contour.addEventListener('change', () => { prefs.showContour = ui.contour.checked; writeJson(PREFS_KEY, prefs); });
     ui.modelInstall.addEventListener('click', installModel);
     ui.obsCopy.addEventListener('click', () => {
@@ -848,6 +871,7 @@
       if (!visible) return;
       ui.obsUrl.textContent = obsUrl();
       renderKey();
+      feedback.refresh();
       checkModel();
       if (trackId && ['loading', 'none'].includes(guideState.status)) loadGuide(trackId, guideToken);
     });
@@ -860,6 +884,7 @@
         loadStyle();
         // 重新連線後把歌曲重送一次，OBS 那邊才接得上
         engine.announce();
+        feedback.reconnect();
       });
       if (SocketClient.connected()) loadStyle();
     }
@@ -870,6 +895,8 @@
     }
     visible = root.classList.contains('is-active');
     if (visible) checkModel();
+    feedbackPoll = setInterval(() => { if (visible && trackId) feedback.refresh(); }, 5000);
+    window.addEventListener('pagehide', () => clearInterval(feedbackPoll));
   }
 
   init();

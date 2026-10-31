@@ -42,6 +42,7 @@ function createPracticeRouter(options = {}) {
         error: status === 409 ? error.message : '練唱音高元件安裝失敗，請檢查網路後再試。' });
     }
   });
+  router.use(require('./practice-feedback').createPracticeFeedbackRouter(options));
   router.practiceService = service;
   return router;
 }

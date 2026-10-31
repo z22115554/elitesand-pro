@@ -1,0 +1,5 @@
+/* Shared result detail; parent result card owns visibility and animation. */
+[data-practice-showcase]:not([hidden]) { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; width: 100%; max-width: 420px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; line-height: 1.5; text-align: center; color: var(--text-dim); }
+.practice-showcase-item { overflow-wrap: anywhere; }
+.practice-showcase-item.is-record, .practice-showcase-item.is-success { color: var(--pf-fill, var(--accent)); font-weight: 600; }
+.practice-showcase-item.is-missed { color: var(--warn); }

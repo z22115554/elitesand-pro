@@ -37,7 +37,9 @@
       refTime: 0, voicedTime: 0, unscorable: false, scoreTarget: null, scoreShown: 0,
       result: null, resultKey: null, resultAnim: 0, lyricLine: -1,
       clock: { playing: false, t: 0, at: Date.now() },   // source 用：面板送來的時鐘
-      lastPanelT: 0, pitchClock: null,
+      lastPanelT: 0, pitchClock: null, baseGuide: null, range: null, take: null, finished: false,
+      pitchSample: null, pitchTrace: [], traceStep: 0.025, ghost: [], silence: 0,
+      passStart: 0, passEnd: 0, discontinuous: false, context: null, mixedContext: false,
     };
     const sync = { lastT: -Infinity, dirty: new Set(), events: [], sentAt: 0 };
     let frameHandle = 0;
@@ -79,6 +81,8 @@
     /** panel：PracticeScoring.prepareGuide() 整理過的音高資料；source：面板送來、已整理好的音符。 */
     function setGuide(guide) {
       state.guide = guide;
+      state.baseGuide = guide ? { ...guide, notes: guide.notes.map((n) => ({ ...n })) } : null;
+      state.range = null; state.take = null; state.ghost = [];
       if (guide && role === 'source') {
         let maxEnd = -Infinity;
         guide.notes.forEach((note, i) => { maxEnd = Math.max(maxEnd, note.end); note.prefixEnd = maxEnd; note.i = i; resetNote(note); });
@@ -97,7 +101,7 @@
     function announce() {
       const guide = state.guide;
       if (!guide || role !== 'panel' || !options.onSync) return;
-      options.onSync({ type: 'song', song: { key: guide.guideId || '', title: guide.title || '', duration: guide.duration,
+      options.onSync({ type: 'song', song: { key: guide.guideId || '', trackId: guide.trackId || '', title: guide.title || '', duration: guide.duration,
         lines: guide.lines, notes: guide.notes.map((n) => ({ start: n.start, end: n.end, midi: n.midi, line: n.line, word: n.word, excluded: n.excluded })) } });
       sync.lastT = -Infinity;
       for (const n of guide.notes) if (n.fills.length || n.seen) sync.dirty.add(n.i);
@@ -118,7 +122,7 @@
     function clearTake() {
       Object.assign(state, { ratings: [], scoreTarget: null, scoreShown: 0, unscorable: false, result: null, lastLineDone: -1,
         trail: [], tags: [], particles: [], rings: [], user: null, combo: 0, maxCombo: 0, techCount: freshTech(), tagLine: null,
-        refTime: 0, voicedTime: 0, playing: false });
+        refTime: 0, voicedTime: 0, playing: false, take: null, finished: false, pitchSample: null, pitchTrace: [], ghost: [] });
       Object.assign(state.voice, { quiet: 0, quietHinted: false });
       for (const name of ['ratings', 'lyricNow', 'lyricNext', 'status']) { const node = el(name); if (node) node.textContent = ''; }
       renderResult();
@@ -130,8 +134,11 @@
       for (const n of state.guide.notes) resetNote(n);
       state.ratings = []; state.scoreTarget = null; state.scoreShown = 0; state.lastLineDone = -1;
       state.refTime = 0; state.voicedTime = 0; state.unscorable = false; state.lyricLine = -1;
-      resetFrom(0);
-      if (notify && role === 'panel') { sync.lastT = -Infinity; sync.dirty.clear(); options.onSync && options.onSync({ type: 'seek', offset: 0 }); }
+      state.finished = false; state.pitchTrace = []; state.traceStep = 0.025; state.pitchSample = null;
+      state.context = null; state.mixedContext = false; state.discontinuous = false;
+      state.passStart = state.range ? state.range.start : 0; state.passEnd = state.passStart;
+      resetFrom(state.passStart);
+      if (notify && role === 'panel') { sync.lastT = -Infinity; sync.dirty.clear(); options.onSync && options.onSync({ type: 'seek', offset: state.passStart }); }
       emit('all');
     }
 
@@ -139,6 +146,7 @@
     function resetFrom(offset) {
       if (!state.guide) return;
       state.segmentStart = offset;
+      state.pitchSample = null; state.silence = 0;
       for (const n of state.guide.notes) if (n.end > offset) { resetNote(n); n.skip = n.start < offset; }
       state.trail = []; state.tags = []; state.euro = null; state.recent = []; state.combo = 0; state.tagLine = null;
       state.maxCombo = 0; state.techCount = freshTech();
@@ -154,6 +162,12 @@
 
     /** 面板：播放器跳轉了（拖進度條、手機遙控、換段落）。 */
     function seek(offset) {
+      if (!Number.isFinite(offset)) return;
+      if (state.finished) { restart(false); state.passStart = offset; }
+      else if (!state.pitchTrace.length && !state.guide.notes.some((n) => n.seen > 0)) state.passStart = offset;
+      else if (Math.abs(offset - state.passEnd) > 0.08) state.discontinuous = true;
+      state.pitchTrace = state.pitchTrace.filter((p) => p.t < offset);
+      state.passEnd = offset;
       resetFrom(offset);
       if (role === 'panel') {
         sync.lastT = -Infinity; sync.dirty.clear();
@@ -166,6 +180,7 @@
     /** 面板：暫停（先把已唱完的句子結算）；續唱不重置。 */
     function setPlaying(playing, at) {
       if (role !== 'panel') return;
+      if (!!playing !== state.playing) { state.pitchSample = null; state.silence = 0; }
       if (!playing && state.playing && state.guide) { checkLines(at); refreshScore(); }
       if (playing && state.result) seek(at);   // 唱完後再播：新的一輪
       else if (playing && !state.playing && Number.isFinite(at) && Math.abs(at - state.lastPanelT) > 0.25) seek(at);   // 暫停中拖過進度
@@ -190,7 +205,7 @@
 
     // 新音訊來源、校準或播放邊界不能接上上一段的積分／平滑歷史。
     function resetInput() {
-      state.pitchClock = null; state.recent = []; state.euro = null;
+      state.pitchClock = null; state.pitchSample = null; state.silence = 0; state.recent = []; state.euro = null;
       state.voice.on = false; state.voice.prevMidi = 0;
     }
 
@@ -203,6 +218,9 @@
         resetInput(); return;
       }
       const time = mapped.t;
+      const clock = options.clock ? options.clock() : null;
+      const context = { key: Number.isFinite(mapped.key) ? mapped.key : state.key,
+        tempo: Number.isFinite(mapped.tempo) ? mapped.tempo : clock && clock.tempo || 1, allowOctave: allowOctave() };
       const tempo = Number.isFinite(mapped.tempo) && mapped.tempo > 0 ? mapped.tempo : 1;
       const audioTime = Number.isFinite(mapped.audioTime) ? mapped.audioTime : null;
       const previous = state.pitchClock;
@@ -211,21 +229,48 @@
         || audioTime != null && previous.audioTime != null && audioTime <= previous.audioTime)) return;
       const boundary = previous && mapped.generation !== previous.generation;
       if (previous && !boundary && time <= previous.t) return;
+      const target = activeNote(state.guide.notes, time);
+      if (target && !target.skip) {
+        if (!state.context) state.context = context;
+        else if (context.key !== state.context.key || Math.abs(context.tempo - state.context.tempo) > 0.0001
+            || context.allowOctave !== state.context.allowOctave) state.mixedContext = true;
+      }
       const delta = previous && !boundary ? time - previous.t : 0;
       const elapsed = previous && audioTime != null && previous.audioTime != null ? audioTime - previous.audioTime : delta / tempo;
       const gap = elapsed > 0.03 || delta > 0.06;
+      if (boundary) state.discontinuous = true;
+      const sample = state.pitchSample;
       if (boundary || gap) resetInput();
       state.pitchClock = { t: time, audioTime, generation: mapped.generation };
-      // 單位與音符一致：原曲秒數。漏格只算這一格，不能把整段空白當成持續唱中。
-      const dt = gap ? Math.min(delta, 0.01 * tempo) : delta;
+      // 以原曲秒數積分；漏格先重建取樣邊界，不補算未觀察到的唱聲。
+      const dt = gap ? 0 : delta;
       let midi = voicing(d, time);
-      if (midi) midi -= (mapped.key || 0) + (state.guide.tuning || 0);   // 換回原調；原唱整體偏高／偏低時目標跟著原唱
+      if (midi) midi -= context.key + (state.guide.tuning || 0);   // 換回原調；原唱整體偏高／偏低時目標跟著原唱
       // 只保留實測音高；把修正後的八度餵回歷史會讓真正跳八度永遠折回舊音。
       state.recent.push(midi); if (state.recent.length > 30) state.recent.shift();
       // 中值平滑 3 格（30ms），壓掉單點尖峰；音頭只要兩格就開始算
       const last3 = state.recent.slice(-3).filter((v) => v > 0).sort((a, b) => a - b);
       midi = midi > 0 && last3.length >= 2 ? last3[last3.length >> 1] : 0;
-      if (dt > 0) scoreFrame(time, midi, dt);
+      if (sample && !boundary && !gap && dt > 0) {
+        scoreInterval(sample.t, time, sample.midi);
+        state.silence = sample.midi ? 0 : state.silence + delta;
+        if (midi && !sample.midi && state.silence >= 0.03) {
+          const candidate = state.guide.notes.find((n) => !n.excluded && !n.skip && n.onset == null
+            && time >= n.start - 0.25 && time <= n.start + 0.5 && centsOff(midi, n.midi, allowOctave()) < 300);
+          if (candidate) candidate.onset = time - candidate.start;
+        }
+      }
+      state.pitchSample = { t: time, midi, generation: mapped.generation };
+
+      const bounds = state.range || { start: 0, end: state.guide.duration };
+      if (time >= bounds.start && time <= bounds.end) {
+        state.passEnd = Math.max(state.passEnd, time);
+        const tail = state.pitchTrace[state.pitchTrace.length - 1];
+        if (!tail || time - tail.t >= state.traceStep || (!!midi !== !tail.gap)) {
+          state.pitchTrace.push(midi ? { t: time, midi } : { t: time, gap: true });
+          if (state.pitchTrace.length > 12000) { state.pitchTrace = state.pitchTrace.filter((_, i) => i % 2 === 0); state.traceStep *= 2; }
+        }
+      }
       pushTrail(time, midi, d.rms);
       // 同步跟著音訊執行緒的節奏送：面板在背景分頁時計時器會被限流，這條路不會
       if (performance.now() - sync.sentAt >= SYNC_INTERVAL_MS) syncFrame();
@@ -293,21 +338,25 @@
       state.user = { t: time, midi: ribbon };
     }
 
-    function scoreFrame(time, midi, dt) {
-      const n = activeNote(state.guide.notes, time);
-      if (!n || n.skip) return;
-      if (time < n.start + n.grace) { // 滑音寬容區：唱對照樣填色，但不計分
-        if (midi > 0 && centsOff(midi, n.midi, allowOctave()) <= RULE.fullCents) addFill(n, time);
-        return;
+    function scoreInterval(start, end, midi) {
+      // Split at note and grace boundaries. A frame crossing a note cannot credit the next note.
+      for (const n of state.guide.notes) {
+        if (n.start >= end) break;
+        if (n.end <= start || n.skip || n.excluded) continue;
+        const a = Math.max(start, n.start + n.grace), b = Math.min(end, n.end);
+        if (midi && end > n.start && start < n.start + n.grace
+            && centsOff(midi, n.midi, allowOctave()) <= RULE.fullCents) addFill(n, Math.min(end, n.end));
+        if (b <= a) continue;
+        const dt = b - a;
+        n.seen += dt; state.refTime += dt; n.attempted = true; sync.dirty.add(n.i);
+        if (!midi) continue;
+        state.voicedTime += dt; n.voiced += dt;
+        const signed = (foldToTarget(midi, n.midi, allowOctave()) - n.midi) * 100;
+        n.signedCentsSum += signed * dt; n.absoluteCentsSum += Math.abs(signed) * dt;
+        const k = credit(Math.abs(signed));
+        n.hit += dt * k;
+        if (k >= 0.4) { addFill(n, a); addFill(n, b); }
       }
-      dt = Math.max(0, Math.min(time, n.end) - Math.max(time - dt, n.start + n.grace));
-      if (!dt) return;
-      n.seen += dt; state.refTime += dt; sync.dirty.add(n.i);
-      if (!midi) return;
-      state.voicedTime += dt; n.voiced += dt;
-      const k = credit(centsOff(midi, n.midi, allowOctave()));
-      n.hit += dt * k;
-      if (k >= 0.4) addFill(n, time);
     }
 
     function addFill(n, time) {
@@ -327,11 +376,11 @@
       return ref > RULE.silentRef && state.voicedTime / ref < RULE.silentRatio;
     }
 
-    function checkLines(time) {
+    function checkLines(time, attemptedUntil = time) {
       if (!state.guide) return;
       for (const n of state.guide.notes) {
         if (n.start > time) break;
-        if (!n.skip && !n.excluded && n.start >= state.segmentStart && n.start + n.grace < time) n.attempted = true;
+        if (!n.skip && !n.excluded && n.start >= state.segmentStart && n.start + n.grace < attemptedUntil) n.attempted = true;
       }
       const lines = state.guide.lines;
       for (let i = state.lastLineDone + 1; i < lines.length && lines[i].end + 0.25 < time; i++) {
@@ -368,17 +417,59 @@
     }
 
     /** 唱完（播放器到了結尾）：結算並交給 OBS。 */
-    function finish(source) {
-      if (role !== 'panel' || !state.guide) return;
-      checkLines(state.guide.duration + 0.3); refreshScore();
-      state.playing = false;
-      const notes = state.guide.notes.filter((n) => !n.skip && !n.excluded && (n.attempted || n.seen > 0));
+    function finish(source, completion = {}) {
+      if (role !== 'panel' || !state.guide) return null;
+      if (state.finished) return state.take;
+      const bounds = state.range || { start: 0, end: state.guide.duration };
+      // The EOF event is an acknowledged source endpoint; the audible clock can still
+      // lag behind it because of output/routing latency. This extends required scope only.
+      const endpoint = completion && Number.isFinite(completion.end) ? completion.end : songTime();
+      const end = Math.min(bounds.end, Math.max(bounds.start, state.passEnd, endpoint));
+      checkLines(end + 0.3, end); refreshScore();
+      state.playing = false; state.pitchSample = null; state.finished = true;
+      const notes = state.guide.notes.filter((n) => !n.skip && !n.excluded && n.start < end && (n.attempted || n.seen > 0))
+        .map((n) => ({ ...n, end: Math.min(n.end, end) }));
       const seconds = notes.reduce((sum, n) => sum + Math.max(0, n.end - n.start - n.grace), 0);
-      const excluded = state.guide.exclusions.reduce((sum, r) => sum + r.end - r.start, 0);
-      state.result = { score: state.unscorable ? null : state.scoreTarget, source: source === 'demo' ? 'demo' : 'mic',
+      const excluded = state.guide.exclusions.reduce((sum, r) => sum + Math.max(0, Math.min(r.end, bounds.end) - Math.max(r.start, bounds.start)), 0);
+      const lineFeedback = Scoring.lineFeedback({ ...state.guide, notes });
+      const observedSeconds = notes.reduce((sum, n) => sum + n.seen, 0);
+      const voicedSeconds = notes.reduce((sum, n) => sum + n.voiced, 0);
+      const finalScore = seconds > 2 && observedSeconds > 0 && voicedSeconds > 0 && !state.unscorable
+        ? Math.min(100, 100 * notes.reduce((sum, n) => sum + noteScore(n) * Math.max(0, n.end - n.start - n.grace), 0) / seconds) : null;
+      state.scoreTarget = finalScore;
+      const context = state.context || { key: state.key, tempo: 1, allowOctave: allowOctave() };
+      const partial = state.discontinuous || state.passStart > bounds.start + 0.05 || end < bounds.end - 0.1;
+      state.take = Scoring.snapshot({ score: finalScore, source: source === 'demo' ? 'demo' : 'mic',
         seconds, excluded, lines: state.ratings.length, tech: { ...state.techCount }, maxCombo: state.maxCombo, at: Date.now(),
-        tiers: Object.fromEntries(Scoring.TIERS.map((k) => [k, state.ratings.filter((x) => x.tag === k).length])) };
+        tiers: Object.fromEntries(Scoring.TIERS.map((k) => [k, state.ratings.filter((x) => x.tag === k).length])),
+        scoreVersion: Scoring.SCORE_VERSION, guideId: state.guide.guideId || '',
+        scope: { type: partial ? 'partial' : state.range ? 'range' : 'full', start: state.passStart, end },
+        key: context.key, tempo: context.tempo, allowOctave: context.allowOctave, mixedContext: state.mixedContext,
+        requiredSeconds: seconds, observedSeconds, voicedSeconds,
+        lineFeedback, weakLines: Scoring.weakestLines(lineFeedback), pitchTrace: state.pitchTrace });
+      state.result = state.take;
       renderResult(); syncFrame(); emit('all');
+      if (options.onFinish) options.onFinish(state.take);
+      return state.take;
+    }
+
+    function setRange(range) {
+      if (!state.baseGuide) return;
+      if (range != null && (!Number.isFinite(range.start) || !Number.isFinite(range.end) || range.end <= range.start)) return;
+      state.range = range ? { start: Math.max(0, range.start), end: Math.min(state.baseGuide.duration, range.end) } : null;
+      if (state.range && state.range.end <= state.range.start) { state.range = null; return; }
+      const bounds = state.range || { start: 0, end: state.baseGuide.duration };
+      state.guide = { ...state.baseGuide, notes: state.baseGuide.notes.filter((n) => n.end > bounds.start && n.start < bounds.end)
+        .map((n) => ({ ...n, start: Math.max(n.start, bounds.start), end: Math.min(n.end, bounds.end) })) };
+      let maxEnd = -Infinity;
+      state.guide.notes.forEach((n, i) => { maxEnd = Math.max(maxEnd, n.end); n.prefixEnd = maxEnd; n.i = i; });
+      restart(); announce();
+    }
+
+    function setGhost(trace) {
+      state.ghost = (Array.isArray(trace) ? trace : []).slice(0, 12000).filter((p) => p && Number.isFinite(p.t)
+        && p.t >= 0 && state.guide && p.t <= state.guide.duration && (p.gap || Number.isFinite(p.midi)))
+        .map((p) => p.gap ? { t: p.t, gap: true } : { t: p.t, midi: p.midi }).sort((a, b) => a.t - b.t);
     }
 
     // ── 同步給 OBS（panel）─────────────────────────────────────────────────
@@ -631,6 +722,21 @@
         g2.stroke();
       }
 
+      // Previous take: source-time / original MIDI, deliberately independent of scoring.
+      if (state.ghost.length) {
+        g2.save(); g2.strokeStyle = rgba(C().voice, 0.38); g2.lineWidth = 1; g2.setLineDash([3, 3]); g2.beginPath();
+        let prev = null;
+        for (const p of state.ghost) {
+          if (p.t < time - RULE.window * RULE.playhead - 0.2) continue;
+          if (p.t > time + RULE.window) break;
+          if (p.gap) { prev = null; continue; }
+          if (prev && p.t - prev.t < 0.12 && Math.abs(p.midi - prev.midi) < 3) g2.lineTo(X(p.t), Y(p.midi) + rowH / 2);
+          else g2.moveTo(X(p.t), Y(p.midi) + rowH / 2);
+          prev = p;
+        }
+        g2.stroke(); g2.restore();
+      }
+
       // 音符方塊：暗底；唱對的時段由左往右填色；正在填的前緣有亮點
       const blockH = Math.max(6, rowH * fx.blockH);
       for (const n of guide.notes) {
@@ -808,7 +914,8 @@
     }
 
     const api = {
-      setGuide, announce, setStyle, setKey, setPlaying, seek, restart, pitch, finish, receive, syncFrame, destroy,
+      setGuide, announce, setStyle, setKey, setRange, setGhost, startNewPass: restart,
+      getRange: () => state.range ? { ...state.range } : null, getTake: () => state.take, setPlaying, seek, restart, pitch, finish, receive, syncFrame, destroy,
       songTime, refreshScore, resetInput, voiceGate,
       getStyle: () => ({ ...state.style }),
       getGuide: () => state.guide,

@@ -13,8 +13,8 @@ const { PAGE_BUNDLES, TEMPLATE_IDS, assertLocalScriptReferencesExist } = require
 const repo = path.resolve(__dirname, '..');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const WORKLET = 'js/practice/pitch-detector-worklet.js';
-const PANEL_SCRIPTS = ['practice-clock.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'app-practice.js'];
-const OVERLAY_SCRIPTS = ['practice/practice-scoring.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'practice-overlay.js'];
+const PANEL_SCRIPTS = ['practice-clock.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'practice/practice-showcase.js', 'practice/practice-feedback-controller.js', 'app-practice.js'];
+const OVERLAY_SCRIPTS = ['practice/practice-scoring.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'practice/practice-showcase.js', 'practice-overlay.js'];
 const practiceFiles = [
   ...new Set([...PANEL_SCRIPTS, ...OVERLAY_SCRIPTS].map(name => `public/js/${name}`)),
   `public/${WORKLET}`, 'public/vendor/soundtouch-worklet.js', 'server/services/practice-overlay.js',
@@ -57,6 +57,11 @@ function exerciseBundle(publicDir, html) {
   for (const url of pageScripts(publicDir, html)) vm.runInContext(fs.readFileSync(path.join(publicDir, url.slice(1)), 'utf8'), scope);
   assert.equal(typeof scope.PracticeEngine.createPracticeEngine, 'function', `${html}: engine`);
   assert.equal(typeof scope.PracticeScoring.prepareGuide, 'function', `${html}: scoring`);
+  assert.equal(typeof scope.PracticeShowcase.render, 'function', `${html}: result showcase`);
+  if (html === 'index.html') {
+    assert.equal(typeof scope.PracticeFeedback.create, 'function', `${html}: feedback controller`);
+    assert.equal(typeof scope.PracticeFeedback.sameContext, 'function', `${html}: comparison context`);
+  }
   assert.equal(JSON.stringify(scope.PracticeFx.FX_IDS), JSON.stringify(require('../public/js/practice/practice-fx').FX_IDS), `${html}: fx presets`);
   return scope;
 }
@@ -79,7 +84,7 @@ test('release build keeps the worklet URL and the server-required fx module, bun
   assert.equal(hash(path.join(publicDir, 'vendor/soundtouch-worklet.js')), vendorHash, 'LGPL vendor remains byte-for-byte separate');
   assert.ok(fs.existsSync(path.join(publicDir, WORKLET)), 'the worklet is loaded by URL (addModule) and must survive bundling');
   assert.ok(fs.existsSync(path.join(publicDir, 'js/practice/practice-fx.js')), 'server/services/practice-overlay.js requires practice-fx.js');
-  for (const name of ['practice-clock.js', 'app-practice.js', 'practice-overlay.js', 'practice/practice-engine.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js']) {
+  for (const name of ['practice-clock.js', 'app-practice.js', 'practice-overlay.js', 'practice/practice-engine.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js', 'practice/practice-showcase.js', 'practice/practice-feedback-controller.js']) {
     assert.equal(fs.existsSync(path.join(publicDir, 'js', name)), false, `${name} should be consumed into its page bundle`);
   }
   assertLocalScriptReferencesExist(publicDir, path.join(publicDir, 'js'));
