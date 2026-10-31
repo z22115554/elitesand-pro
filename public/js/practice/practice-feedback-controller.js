@@ -217,6 +217,10 @@
     });
     ui['history-delete'].addEventListener('click', async () => {
       const id = ui.history.value; if (!id) return;
+      // 刪掉就回不來（上次／最佳比較也會跟著變），先確認
+      const confirmer = ((doc && doc.defaultView) || globalThis).PanelConfirm;
+      if (confirmer && !await confirmer.request({ title: t('practice.history.deleteTitle'), summary: t('practice.history.deleteSummary'),
+        confirmLabel: t('practice.history.deleteConfirm'), tone: 'danger' })) return;
       try { await request(`/takes/${encodeURIComponent(id)}`, { method: 'DELETE' });
         ghostCache.delete(id);
         if (selected && selected.id === id) { selected = null; clearGhost(); }

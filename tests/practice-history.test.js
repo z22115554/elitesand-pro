@@ -167,17 +167,28 @@ test('song A can settle after a viewer imports song B; rounds survive restart, d
 });
 test('round retention is bounded and legacy single-challenge v1 documents load without losing the round', t => {
   const { file, service } = fixture(t);
+  // 挑戰分開存在 <紀錄檔>.challenges.json，練唱紀錄檔裡不會有挑戰
+  const challengeFile = file.replace(/(.json)?$/, '.challenges.json');
   const legacy = service.createChallenge({ trackId: 'legacy-song', targetScore: 70 }).challenge;
-  const document = JSON.parse(fs.readFileSync(file)); delete document.challenges;
-  fs.writeFileSync(file, JSON.stringify(document));
+  assert.equal(JSON.parse(fs.readFileSync(file)).challenges, undefined, 'challenges never land in the history file');
+  const document = JSON.parse(fs.readFileSync(challengeFile)); delete document.challenges;
+  fs.writeFileSync(challengeFile, JSON.stringify(document));
   const reloaded = createPracticeHistoryService({ file });
   assert.equal(reloaded.getChallenge('legacy-song').challenge.id, legacy.id);
   for (let i = 0; i < LIMITS.challenges; i++) reloaded.createChallenge({ trackId: `song-${i}`, targetScore: 70 });
   assert.equal(reloaded.getChallenge('legacy-song').challenge, null);
-  const stored = JSON.parse(fs.readFileSync(file));
+  const stored = JSON.parse(fs.readFileSync(challengeFile));
   assert.equal(stored.challenges.length, LIMITS.challenges);
   assert.equal(stored.challenge.id, stored.challenges.at(-1).id);
   assert.ok(fs.statSync(file).size <= LIMITS.bytes);
+});
+test('a corrupt challenge file does not take the practice history down with it', t => {
+  const { file, service } = fixture(t);
+  const saved = service.save(take());
+  service.createChallenge({ trackId: 'song', targetScore: 70 });
+  fs.writeFileSync(file.replace(/(.json)?$/, '.challenges.json'), '{ broken');
+  const reloaded = createPracticeHistoryService({ file });
+  assert.equal(reloaded.get(saved.take.id).take.id, saved.take.id);
 });
 test('retry receipts retain real previous/best score and remove references when that take is deleted', t => {
   const { file, service } = fixture(t);

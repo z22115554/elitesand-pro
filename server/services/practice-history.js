@@ -93,15 +93,27 @@ function comparisonFor(take, takes) {
     isPersonalBest: take.comparable && (!best || take.score > best.score), improvedLines, usualKey };
 }
 function createPracticeHistoryService(options = {}) {
-  const file = options.file || path.join(require('../utils/app-paths').dataDir, 'practice-history.json');
+  const dataDir = () => require('../utils/app-paths').dataDir;
+  const file = options.file || path.join(dataDir(), 'practice-history.json');
+  // 觀眾挑戰分開存：練唱紀錄是自己的，挑戰是直播互動；挑戰資料出問題不能連帶讓紀錄讀不到，也要能各自清掉
+  const challengeFile = options.challengeFile || (options.file
+    ? options.file.replace(/(\.json)?$/, '.challenges.json')
+    : path.join(dataDir(), 'practice-challenges.json'));
   const now = options.now || (() => new Date().toISOString());
   const store = createJsonStore({ file, schemaVersion: 1, mode: 0o600, logger: options.logger,
-    defaultValue: () => ({ schemaVersion: 1, takes: [], receipts: [], challenge: null, challenges: [], settings: { viewerRequestsEnabled: false }, challengeRequestIds: [] }),
+    defaultValue: () => ({ schemaVersion: 1, takes: [], receipts: [] }),
     deserialize: doc => ({ ...doc, takes: doc.takes.map(take => ({ ...sanitizeTake(take), id: take.id, createdAt: take.createdAt })) }),
     validate: doc => {
       try {
         if (!Array.isArray(doc.takes) || doc.takes.length > LIMITS.takes || !Array.isArray(doc.receipts) || doc.receipts.length > LIMITS.receipts || Buffer.byteLength(JSON.stringify(doc)) > LIMITS.bytes) return false;
         for (const take of doc.takes) { sanitizeTake(take); if (typeof take.id !== 'string' || !/^[a-f0-9-]{36}$/.test(take.id) || typeof take.createdAt !== 'string' || !Number.isFinite(Date.parse(take.createdAt))) return false; }
+        return true;
+      } catch (_) { return false; }
+    } });
+  const challengeStore = createJsonStore({ file: challengeFile, schemaVersion: 1, mode: 0o600, logger: options.logger,
+    defaultValue: () => ({ schemaVersion: 1, challenge: null, challenges: [], settings: { viewerRequestsEnabled: false }, challengeRequestIds: [] }),
+    validate: doc => {
+      try {
         if (doc.settings && typeof doc.settings.viewerRequestsEnabled !== 'boolean') return false;
         if (doc.challengeRequestIds && (!Array.isArray(doc.challengeRequestIds) || doc.challengeRequestIds.length > LIMITS.receipts || doc.challengeRequestIds.some(id => typeof id !== 'string' || id.length > 128))) return false;
         const challenges = doc.challenges || (doc.challenge ? [doc.challenge] : []);
@@ -113,7 +125,7 @@ function createPracticeHistoryService(options = {}) {
         return true;
       } catch (_) { return false; }
     } });
-  let state = store.load();
+  let state = { ...challengeStore.load(), ...store.load() };
   state.settings ||= { viewerRequestsEnabled: false };
   state.challengeRequestIds ||= [];
   // Existing schema-v1 files with a single active challenge are promoted on the
@@ -129,7 +141,9 @@ function createPracticeHistoryService(options = {}) {
       else if (next.challenges.length > 1) next.challenges.shift();
       else fail('TAKE_TOO_LARGE', '練唱資料超出大小上限。', 413);
     }
-    if (!store.save(next)) fail('PRACTICE_HISTORY_READ_ONLY', '無法安全保存練唱紀錄；請檢查資料版本與磁碟。', 503);
+    if (!store.save({ schemaVersion: 1, takes: next.takes, receipts: next.receipts })) fail('PRACTICE_HISTORY_READ_ONLY', '無法安全保存練唱紀錄；請檢查資料版本與磁碟。', 503);
+    if (!challengeStore.save({ schemaVersion: 1, challenge: next.challenge, challenges: next.challenges, settings: next.settings,
+      challengeRequestIds: next.challengeRequestIds })) fail('PRACTICE_HISTORY_READ_ONLY', '無法安全保存練唱挑戰；請檢查資料版本與磁碟。', 503);
     state = next;
   }
   const clone = value => JSON.parse(JSON.stringify(value));
