@@ -105,6 +105,16 @@
     }
 
     /** 換歌或卸下歌曲：上一首的分數、評等、結算、歌詞都不能留在畫面上。 */
+    // 整首的顯示音域：取第 2～98 百分位（一兩個偵測錯的極端音不會把整片壓扁），上下各留 3 個半音，至少 14 個半音
+    function songRange(guide) {
+      const pitches = guide.notes.filter((n) => !n.excluded && Number.isFinite(n.midi)).map((n) => n.midi).sort((a, b) => a - b);
+      if (!pitches.length) return { lo: 54, hi: 72 };
+      const at = (q) => pitches[Math.min(pitches.length - 1, Math.max(0, Math.round(q * (pitches.length - 1))))];
+      let lo = Math.floor(at(0.02)) - 3, hi = Math.ceil(at(0.98)) + 3;
+      if (hi - lo < 14) { const c = (lo + hi) / 2; lo = Math.floor(c - 7); hi = lo + 14; }
+      return { lo, hi };
+    }
+
     function clearTake() {
       Object.assign(state, { ratings: [], scoreTarget: null, scoreShown: 0, unscorable: false, result: null, lastLineDone: -1,
         trail: [], tags: [], particles: [], rings: [], user: null, combo: 0, maxCombo: 0, techCount: freshTech(), tagLine: null,
@@ -585,17 +595,8 @@
       if (role === 'panel' && state.playing) { follow(time); checkLines(time); }
       if (playing || state.lyricLine < 0) updateLyrics(time);
       tweenScore();
-      // 音域只取畫面上這 8 秒用到的音（上下各留 3 個半音，至少 12 個半音），換段落時平滑縮放
-      let vlo = Infinity, vhi = -Infinity;
-      for (const n of guide.notes) {
-        if (n.end < time - RULE.window * RULE.playhead) continue; if (n.start > time + RULE.window) break;
-        vlo = Math.min(vlo, n.midi); vhi = Math.max(vhi, n.midi);
-      }
-      if (vlo === Infinity) { vlo = state.view ? state.view.lo + 3 : guide.lo; vhi = state.view ? state.view.hi - 3 : guide.hi; }
-      let tlo = vlo - 3, thi = vhi + 3;
-      if (thi - tlo < 12) { const c = (tlo + thi) / 2; tlo = c - 6; thi = c + 6; }
-      if (!state.view) state.view = { lo: tlo, hi: thi };
-      state.view.lo += (tlo - state.view.lo) * 0.04; state.view.hi += (thi - state.view.hi) * 0.04;
+      // 音域整首固定：上下不跟著段落跑，眼睛才記得住「這個高度＝這個音」
+      if (!state.view) state.view = songRange(guide);
       const VH = state.view.hi, left = obs ? 6 : 44, padT = 14, padB = 14, rowH = (H - padT - padB) / (state.view.hi - state.view.lo + 1);
       const px = (W - left) / RULE.window, x0 = left + (W - left) * RULE.playhead;
       state.x0 = x0;
@@ -634,7 +635,7 @@
       const blockH = Math.max(6, rowH * fx.blockH);
       for (const n of guide.notes) {
         if (n.end < time - RULE.window * RULE.playhead - 0.2) continue; if (n.start > time + RULE.window) break;
-        const x = X(n.start), w = Math.max(3, X(n.end) - x - 2), y = Y(n.midi) + (rowH - blockH) / 2;
+        const x = X(n.start), w = Math.max(3, X(n.end) - x - 2), y = Y(Math.max(state.view.lo, Math.min(state.view.hi, n.midi))) + (rowH - blockH) / 2;   // 極端音貼邊畫，不消失
         const passed = n.end < time, current = n.start <= time && time <= n.end;
         if (obs) {
           g2.fillStyle = rgba(C().note, current ? 0.9 : passed ? 0.4 : 0.7);
