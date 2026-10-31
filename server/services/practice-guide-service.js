@@ -7,6 +7,9 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
+const { createLogger } = require('../utils/logger');
+
+const log = createLogger('PracticeGuide');
 
 const SCHEMA_VERSION = 2;
 const ALGORITHM_VERSION = 'practice-pitch-2';
@@ -117,6 +120,11 @@ function createPracticeGuideService(options = {}) {
   const getLyrics = options.getLyrics || (async () => ({ lines: [], offsetMs: 0 }));
   const getPython = options.getPython || (() => process.env.ELITESAND_AI_PYTHON || require('./ai-runtime-provider').PYTHON_EXE);
   const getFfmpeg = options.getFfmpeg || (() => require('./ffmpeg-provider').getFfmpegPath());
+  const ensurePitchModel = options.ensurePitchModel || (async () => {
+    if (options.getPython || process.env.ELITESAND_AI_PYTHON) return;   // 測試／開發指定的 Python 不動它
+    const runtime = require('./ai-runtime-provider');
+    if (runtime.isAvailable() && !runtime.isPracticePitchModelAvailable()) await runtime.installPracticePitchModel();
+  });
   // Resolve at dispatch time, using the same external resource path as the
   // separation supervisor. Importing/constructing this service starts no work.
   const getWorkerPath = () => path.resolve(options.scriptDir
@@ -313,6 +321,12 @@ function createPracticeGuideService(options = {}) {
         '-threads', '1', '-filter_threads', '1', '-filter_complex_threads', '1', '-i', source.filename,
         '-map', '0:a:0', '-t', String(MAX_DURATION_SECONDS + 0.25), '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', decodedPath], job, 'decode');
       checkCancelled(job);
+      // 已經裝了 AI 元件、但還沒有高精度音高元件的人（1.2.0 時要另外按）：第一次建音軌時順手補裝，失敗就用 YIN
+      if (job.algorithm === 'auto') {
+        job.stage = 'preparing'; emitJob(job);
+        try { await ensurePitchModel(); } catch (error) { log.warn(`練唱高精度音高元件未能補裝，這次用 YIN：${error.message}`); }
+        checkCancelled(job);
+      }
       job.stage = 'analyzing'; job.progress = 12; emitJob(job);
       const workerPath = getWorkerPath();
       if (!fs.existsSync(workerPath)) throw new PracticeGuideError('PRACTICE_RUNTIME_MISSING', '音高分析元件尚未安裝，請更新程式。', 503);

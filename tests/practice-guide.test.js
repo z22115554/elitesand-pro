@@ -294,3 +294,19 @@ test('packaged runtime resolves external AI script directory with spaces and Uni
   assert.equal(invocations[1].options.env.CUDA_VISIBLE_DEVICES, '');
   assert.ok(invocations[0].args.includes('-filter_threads'));
 });
+
+test('auto builds try to add the high-accuracy pitch model first, and a failed install still finishes with YIN', async (t) => {
+  const calls = [];
+  const { service, add } = await fixture(t, { ensurePitchModel: async () => { calls.push('ensure'); throw new Error('offline'); } });
+  await add('auto-fallback');
+  await service.start('auto-fallback', { algorithm: 'auto' });
+  const result = await terminal(service, 'auto-fallback');
+  assert.equal(result.status, 'ready', JSON.stringify(result));
+  assert.deepEqual(calls, ['ensure']);
+  assert.ok(result.guide.notes.length > 0);
+  // 指定 YIN 的不碰安裝
+  await add('yin-only');
+  await service.start('yin-only', { algorithm: 'yin' });
+  assert.equal((await terminal(service, 'yin-only')).status, 'ready');
+  assert.deepEqual(calls, ['ensure']);
+});

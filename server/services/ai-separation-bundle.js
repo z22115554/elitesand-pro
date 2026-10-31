@@ -239,6 +239,11 @@ async function downloadBundle() {
         overallPercent: 100, percent: 100, stage: 'done', error: null,
         webgpuUnavailable,
       });
+      // 練唱的高精度原唱音高跟著裝（實測有人聲的時間裡有音符的比例 71%→81%）；失敗不影響分離，練唱照樣用 YIN
+      try {
+        require('./ai-runtime-provider').installPracticePitchModel()
+          .catch((error) => log.warn(`練唱高精度音高元件未能安裝，練唱改用 YIN：${error.message}`));
+      } catch (error) { log.warn(`練唱高精度音高元件未能安裝：${error.message}`); }
       return { ok: true, alreadyAvailable: false };
     } catch (error) {
       if (error.code === 'CANCELLED' || abortSignal.aborted) {
