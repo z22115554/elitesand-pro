@@ -52,6 +52,7 @@
   // 歌曲庫篩選（2026-09-27 改版 P4）：all／no-lyrics／backing／no-backing
   let filterMode = 'all';
   const selectedIds = new Set(); // 多選批次：媒體庫 id（字串）
+  let practiceBatch = null;       // 批次建練唱音軌進行中：{ stop }
   let viewCache = [];
 
   // 媒體庫最多可能有 10k 首；不能把每一列都常駐 DOM。一般列由 46px 封面 +
@@ -305,6 +306,9 @@
       const btn = document.getElementById(id);
       if (btn) btn.disabled = n === 0;
     });
+    // 練唱音軌批次跑的時候選取已清掉，按鈕要留著讓人按「停止」
+    const practiceBtn = document.getElementById('lib-batch-practice');
+    if (practiceBtn) practiceBtn.disabled = n === 0 && !practiceBatch;
     bar.classList.toggle('has-selection', n > 0);
     const all = document.getElementById('lib-select-all');
     if (all) {
@@ -1040,6 +1044,46 @@
     }
     toast(tx(failed ? 'library.batch.backingPartial' : 'library.batch.backingStarted', { count: started, failed }), failed ? 'error' : 'success');
     clearSelection();
+    applyView();
+  });
+
+  // 建立練唱音軌：每首照單首的順序——沒有伴奏先做伴奏、自動對時（標成「已對時」的不動）、分析原唱音高。
+  // 一次一首（分離與音高分析在伺服器本來就排隊）；跑的時候再按一次＝做完這首就停。
+  document.getElementById('lib-batch-practice')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    const label = btn.querySelector('[data-i18n]') || btn;
+    if (practiceBatch) { practiceBatch.stop = true; label.textContent = tx('library.batch.practiceStopping'); return; }
+    if (!window.PracticePrep || !window.AutoSync || !window.AiSeparation) { toast(tx('library.batch.practiceUnavailable'), 'error'); return; }
+    const items = selectedItems();
+    if (!items.length) return;
+    // 都已經有伴奏（人聲）的話不需要分離元件；有缺的才先確認（沒裝會跳出原本的安裝視窗）
+    if (items.some((it) => !hasBacking(it))) {
+      try {
+        if (!await window.AiSeparation.ensureReady()) return;
+      } catch (error) {
+        toast(tr(`無法準備 AI 伴奏元件：${error.message}`), 'error');
+        return;
+      }
+    }
+    const run = practiceBatch = { stop: false };
+    clearSelection();
+    let done = 0; let failed = 0;
+    for (let i = 0; i < items.length && !run.stop; i++) {
+      label.textContent = tx('library.batch.practiceRunning', { done: i, total: items.length });
+      const id = String(items[i].id);
+      try {
+        await window.AutoSync.syncTrack(id, { quiet: true, skipConfirmed: true });
+        await window.PracticePrep.prepare(id);
+        done += 1;
+      } catch (_) {
+        failed += 1;
+      }
+    }
+    practiceBatch = null;
+    label.textContent = tx('library.batch.practice');
+    renderBatchBar();
+    const key = run.stop ? 'library.batch.practiceStopped' : failed ? 'library.batch.practicePartial' : 'library.batch.practiceDone';
+    toast(tx(key, { count: done, failed }), failed ? 'warning' : 'success');
     applyView();
   });
 

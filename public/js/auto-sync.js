@@ -41,10 +41,10 @@
     render();
   }
 
-  function requestAnalysis(trackId) {
+  function requestAnalysis(trackId, extra = {}) {
     return new Promise((resolve) => {
       // 搜歌詞來源可能要十幾秒，逾時放寬
-      SocketClient.sendWithCallback('offset:auto', { trackId }, (result, error) => {
+      SocketClient.sendWithCallback('offset:auto', { trackId, ...extra }, (result, error) => {
         resolve(result || { ok: false, code: error?.code || 'FAILED' });
       }, { timeoutMs: 60000 });
     });
@@ -93,15 +93,17 @@
   }
 
   // 對一首歌自動對時。withTitle：提示前面加歌名（匯入時可能一次好幾首）
-  async function syncTrack(trackId, { withTitle = false } = {}) {
+  // quiet：不跳提示（批次會自己彙總）；skipConfirmed：使用者標成「已對時」的歌不動
+  async function syncTrack(trackId, { withTitle = false, quiet = false, skipConfirmed = false } = {}) {
     if (!trackId || running.has(trackId)) return null;
     applied.delete(trackId);
     const title = state.playlist.find((t) => t && t.id === trackId)?.title || '';
-    const say = ([msg, type]) => toast(withTitle && title ? `${title}：${msg}` : msg, type);
+    const say = ([msg, type]) => { if (!quiet) toast(withTitle && title ? `${title}：${msg}` : msg, type); };
+    const extra = skipConfirmed ? { skipConfirmed: true } : {};
     let result = null;
     try {
       setStep(trackId, T('autoSync.analyzing'));
-      result = await requestAnalysis(trackId);
+      result = await requestAnalysis(trackId, extra);
       if (result.code === 'NEEDS_SEPARATION') {
         const separation = await separate(trackId);
         if (separation !== 'ready') {
@@ -109,11 +111,11 @@
           return result;
         }
         setStep(trackId, T('autoSync.analyzing'));
-        result = await requestAnalysis(trackId);
+        result = await requestAnalysis(trackId, extra);
         // 分離剛完成時人聲檔名可能還沒寫回清單，稍等再試一次
         if (result.code === 'NEEDS_SEPARATION') {
           await new Promise((r) => setTimeout(r, 1500));
-          result = await requestAnalysis(trackId);
+          result = await requestAnalysis(trackId, extra);
         }
       }
       if (result.ok && result.applied) applied.set(trackId, result.offsetMs);
@@ -158,5 +160,5 @@
   undo.textContent = T('autoSync.undo');
   render();
 
-  window.AutoSync = Object.freeze({ syncTrack: (trackId) => syncTrack(trackId, { withTitle: true }) });
+  window.AutoSync = Object.freeze({ syncTrack: (trackId, options = {}) => syncTrack(trackId, { withTitle: true, ...options }) });
 })();

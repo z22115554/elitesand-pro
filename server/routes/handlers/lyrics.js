@@ -230,8 +230,11 @@ function registerLyricsHandlers(io, socket, ctx) {
     const reply = typeof callback === 'function' ? callback : () => {};
     const trackId = data && typeof data === 'object' ? data.trackId : null;
     if (!trackId || typeof trackId !== 'string') return reply({ ok: false, code: 'INVALID_TRACK' });
-    const track = tracksById(trackId)[0];
+    // 不在播放清單裡的歌（歌曲庫批次建練唱音軌）就用歌曲庫的資料
+    const track = tracksById(trackId)[0] || libraryStore.getEntry(trackId);
     if (!track) return reply({ ok: false, code: 'TRACK_NOT_FOUND' });
+    // 批次（建練唱音軌）不動使用者標成「已對時」的歌；手動按自動對時則照做
+    if (data.skipConfirmed && ctx.trackSyncConfirmed && ctx.trackSyncConfirmed.has(trackId)) return reply({ ok: true, applied: false, reason: 'CONFIRMED' });
     const manual = manualLyricsCache.get(trackId);
     let lines = manual?.parsedLyrics || track.parsedLyrics;
     if (!Array.isArray(lines) || !lines.length) {
