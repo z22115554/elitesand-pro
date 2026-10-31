@@ -16,6 +16,8 @@
     'import-prefs': '2026-10-28',  // 加歌框下方「匯入後：…」設定
     'practice': '2026-10-28',      // 頂層「練唱」分頁（音軌評分＋OBS 練唱疊加層）
     'practice-loop': '2026-10-31', // 練唱 A–B 循環
+    'practice-review': '2026-10-31', // 練唱回饋（弱句、個人成績比較）
+    'practice-challenge': '2026-10-31', // 練唱觀眾挑戰
     'library-batch-practice': '2026-10-31', // 歌曲庫批次建立練唱音軌
     'practice-mic-gain': '2026-10-30', // 練唱麥克風增益
     'import-practice': '2026-10-29', // 匯入後「練唱音高」
