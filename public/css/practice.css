@@ -95,8 +95,12 @@
 .practice-note { margin: 0; font-size: 11px; line-height: 1.55; color: var(--text-faint); }
 .practice-model { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
 .practice-reset { align-self: flex-start; }
-.practice-meter { height: 3px; border-radius: 2px; background: var(--bg-inset); overflow: hidden; }
+.practice-meter { position: relative; height: 4px; border-radius: 2px; background: var(--bg-inset); overflow: hidden; }
 .practice-meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .06s linear; }
+/* 沒過「有在唱」的音量門檻時音量條變灰；細線是門檻位置 */
+.practice-meter.is-below i { background: var(--text-faint); }
+.practice-meter b { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text-dim); }
+.practice-meter b[hidden] { display: none; }
 .practice-url-row { display: flex; align-items: center; gap: 8px; }
 .practice-obs-url { flex: 1; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 8px; line-height: 32px; border-radius: var(--r-sm); background: var(--bg-inset); font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

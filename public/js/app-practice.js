@@ -36,6 +36,7 @@
     keyDown: $('practice-key-down'), keyUp: $('practice-key-up'), keyValue: $('practice-key-value'), obsPreview: $('practice-obs-preview'),
     score: $('practice-score'), tech: $('practice-tech'), lines: $('practice-lines'),
     source: $('practice-source'), deviceField: $('practice-device-field'), device: $('practice-device'), level: $('practice-level'),
+    meter: $('practice-meter'), levelGate: $('practice-level-gate'),
     gainField: $('practice-gain-field'), gain: $('practice-gain'), gainValue: $('practice-gain-value'),
     latency: $('practice-latency'), latencyValue: $('practice-latency-value'), latencyStatus: $('practice-latency-status'), calibrate: $('practice-calibrate'),
     octave: $('practice-octave'), trail: $('practice-trail'), contour: $('practice-contour'),
@@ -74,7 +75,8 @@
     clock: currentClock,
     getOptions: () => prefs,
     onSync: sendOverlay,
-    onLevel: (rms) => { if (ui.level) ui.level.style.width = `${Math.min(100, Math.sqrt(rms) * 260)}%`; },
+    onLevel: renderLevel,
+    onHint: (kind) => { if (kind === 'quiet' && detector.mode === 'mic') toast(t('practice.micQuiet'), 'warning'); },
     onUpdate: (kind) => { if (kind !== 'score') renderStats(); else renderScore(); },
   });
 
@@ -449,7 +451,7 @@
     syncLatencyProfile(true);
     ui.latency.disabled = mode !== 'mic';
     renderLatency();
-    if (ui.level) ui.level.style.width = '0%';
+    renderLevel(0, 0);
     try {
       if (mode === 'demo' && !(window.AppShared.isPracticeVocalAvailable && window.AppShared.isPracticeVocalAvailable())) {
         toast(t('practice.demoNeedsVocals'), 'warning');
@@ -522,6 +524,17 @@
   }
   const gainDb = () => Math.max(-12, Math.min(24, Math.round(Number(prefs.micGainDb) || 0)));
   const gainLinear = () => Math.pow(10, gainDb() / 20);
+  // 音量條跟「有在唱」的門檻畫在同一把尺上（平方根刻度，小聲時也看得出差多少）
+  const meterPct = (rms) => Math.min(100, Math.sqrt(Math.max(0, rms)) * 260);
+  function renderLevel(rms, gate) {
+    if (!ui.level) return;
+    ui.level.style.width = `${meterPct(rms)}%`;
+    const showGate = detector.mode === 'mic' && gate > 0;
+    ui.levelGate.hidden = !showGate;
+    if (showGate) ui.levelGate.style.left = `${meterPct(gate)}%`;
+    ui.meter.classList.toggle('is-below', showGate && rms <= gate);
+  }
+
   function renderGain() {
     const db = gainDb();
     ui.gain.value = String(db);

@@ -240,3 +240,54 @@ test('duplicate, stale, paused and missing detector frames cannot earn extra sin
   send(5.09, 6, 2); assert.equal(note.hit, beforeResume, 'pause resets the integration interval');
   assert.ok(note.seen <= 10 - note.grace, 'credit is bounded by scorable note time');
 });
+
+// 使用者回報：自己唱時常被判定「聲音太小」。收音小的麥克風人聲約 −50 dBFS（rms 0.003），
+// 以前門檻起點 0.009、被伴奏漏音墊高後可到 0.018，清楚的歌聲也判成沒唱。
+function takeAt({ voiceRms, bleedRms = 0 }) {
+  const Engine = loadEngine();
+  let t = 0;
+  const hints = [];
+  const engine = Engine.createPracticeEngine({ role: 'panel', root: fakeRoot(), clock: () => ({ t, tempo: 1, playing: true }),
+    onSync: () => {}, onHint: (kind) => hints.push(kind) });
+  engine.setGuide(guide());
+  engine.setPlaying(true, 0);
+  const frame = (f0, clarity, rms) => { engine.pitch({ f0, clarity, rms }, { valid: true, t, key: 0 }); if (++frames % 5 === 0) engine.syncFrame(); };
+  // 前奏：只有伴奏漏進麥克風（複音、清晰度低）
+  for (t = 0; t < 0.6; t += 0.01) frame(bleedRms ? 180 : 0, 0.3, bleedRms);
+  // 第一句：歌聲（清楚）＋同樣的伴奏漏音
+  const mix = Math.hypot(voiceRms, bleedRms);   // 歌聲和漏音疊在一起的實際音量
+  for (t = 0.9; t < 3.3; t += 0.01) frame(t < 1 || t > 3 ? 0 : hz(t < 2 ? 60 : 62), t < 1 || t > 3 ? 0.3 : 0.93, t < 1 || t > 3 ? bleedRms : mix);
+  t = 30.5; engine.syncFrame();
+  for (t = 30.5; t < 33.3; t += 0.01) frame(t < 31 || t > 33 ? 0 : hz(t < 32 ? 64 : 65), t < 31 || t > 33 ? 0.3 : 0.93, t < 31 || t > 33 ? bleedRms : mix);
+  engine.finish('mic');
+  return { stats: engine.getStats(), hints, gate: engine.voiceGate() };
+}
+
+test('a quiet but clear voice (about -50 dBFS) still scores, with or without accompaniment bleed', () => {
+  const quiet = takeAt({ voiceRms: 0.003 });
+  assert.equal(quiet.stats.unscorable, false);
+  assert.ok(quiet.stats.result.score > 80, `quiet clean take scores high (got ${quiet.stats.result.score})`);
+  // 沒戴耳機：伴奏漏音跟歌聲一樣大，噪音底不能因此被墊到蓋過歌聲
+  const bleed = takeAt({ voiceRms: 0.004, bleedRms: 0.004 });
+  assert.ok(bleed.stats.result.score > 80, `voice at the bleed level still scores (got ${bleed.stats.result.score})`);
+  assert.ok(bleed.gate <= 0.0073, `gate stays capped (got ${bleed.gate})`);
+  assert.deepEqual(quiet.hints, [], 'no "mic too quiet" hint when the voice registers');
+});
+
+test('clear pitch that never clears the gate raises a single "mic too quiet" hint', () => {
+  const tooQuiet = takeAt({ voiceRms: 0.0004 });
+  assert.deepEqual(tooQuiet.hints, ['quiet']);
+});
+
+test('a lower gate still ignores room noise and accompaniment bleed when nobody sings', () => {
+  const Engine = loadEngine();
+  let t = 0;
+  const engine = Engine.createPracticeEngine({ role: 'panel', root: fakeRoot(), clock: () => ({ t, tempo: 1, playing: true }), onSync: () => {} });
+  engine.setGuide(guide());
+  engine.setPlaying(true, 0);
+  // 只有噪音與伴奏：有時抓得到音高，但清晰度低（複音）
+  for (t = 0; t < 3.3; t += 0.01) { engine.pitch({ f0: 180 + (t * 37 % 40), clarity: 0.5 + (t * 13 % 0.2), rms: 0.004 }, { valid: true, t, key: 0 }); if (++frames % 5 === 0) engine.syncFrame(); }
+  engine.finish('mic');
+  const stats = engine.getStats();
+  assert.ok(stats.unscorable || stats.result.score < 10, `noise alone must not score (got ${stats.result && stats.result.score})`);
+});

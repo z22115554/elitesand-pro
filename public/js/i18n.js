@@ -152,6 +152,7 @@
     'practice.sourceDemo': ['示範：偵測原唱人聲', 'Demo: follow the original vocal', 'デモ：原曲ボーカルを検出', '데모: 원곡 보컬 따라가기', '示范：检测原唱人声'],
     'practice.device': ['麥克風裝置', 'Microphone device', 'マイクデバイス', '마이크 장치', '麦克风设备'],
     'practice.defaultDevice': ['系統預設', 'System default', 'システムの既定', '시스템 기본값', '系统默认'],
+    'practice.micQuiet': ['麥克風收到的聲音偏小，判定容易失敗。可以把「麥克風增益」調高，或靠近麥克風一點。', 'Your microphone level is low, so notes may not register. Turn up Mic gain or move closer to the mic.', 'マイクの音量が小さく、判定されにくくなっています。「マイクゲイン」を上げるか、マイクに近づいてください。', '마이크 소리가 작아 판정이 잘 안 될 수 있습니다. 마이크 게인을 올리거나 마이크에 더 가까이 가 주세요.', '麦克风收到的声音偏小，判定容易失败。可以把“麦克风增益”调高，或靠近麦克风一点。'],
     'practice.micGain': ['麥克風增益', 'Mic gain', 'マイクゲイン', '마이크 게인', '麦克风增益'],
     'practice.latency': ['延遲補償', 'Latency compensation', '遅延補正', '지연 보정', '延迟补偿'],
     'practice.calibrate': ['校準延遲', 'Calibrate latency', '遅延を測定', '지연 보정 측정', '校准延迟'],

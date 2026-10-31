@@ -33,7 +33,7 @@
       guide: null, style: { ...Fx.STYLE_DEFAULT }, playing: false, key: 0,
       trail: [], user: null, tags: [], particles: [], rings: [], ratings: [], combo: 0, maxCombo: 0,
       techCount: freshTech(), tagLine: null, lastLineDone: -1, segmentStart: 0, view: null, x0: 0,
-      voice: { on: false, floor: 0.003, prevMidi: 0 }, recent: [], euro: null,
+      voice: { on: false, floor: 0.0015, prevMidi: 0, quiet: 0, quietHinted: false }, recent: [], euro: null,
       refTime: 0, voicedTime: 0, unscorable: false, scoreTarget: null, scoreShown: 0,
       result: null, resultKey: null, resultAnim: 0, lyricLine: -1,
       clock: { playing: false, t: 0, at: Date.now() },   // source 用：面板送來的時鐘
@@ -109,6 +109,7 @@
       Object.assign(state, { ratings: [], scoreTarget: null, scoreShown: 0, unscorable: false, result: null, lastLineDone: -1,
         trail: [], tags: [], particles: [], rings: [], user: null, combo: 0, maxCombo: 0, techCount: freshTech(), tagLine: null,
         refTime: 0, voicedTime: 0, playing: false });
+      Object.assign(state.voice, { quiet: 0, quietHinted: false });
       for (const name of ['ratings', 'lyricNow', 'lyricNext', 'status']) { const node = el(name); if (node) node.textContent = ''; }
       renderResult();
     }
@@ -187,7 +188,7 @@
     /** d：偵測器一格 {f0, clarity, rms}；mapped：播放時鐘換算 {valid, t（原曲秒數，已扣延遲）, key}。 */
     function pitch(d, mapped) {
       if (role !== 'panel' || !state.guide) return;
-      options.onLevel && options.onLevel(d.rms);
+      options.onLevel && options.onLevel(d.rms, state.guide ? voiceGate() : 0);
       if (!state.playing || !mapped || !mapped.valid || mapped.playing === false || !Number.isFinite(mapped.t) || mapped.t < 0) {
         resetInput(); return;
       }
@@ -207,7 +208,7 @@
       state.pitchClock = { t: time, audioTime, generation: mapped.generation };
       // 單位與音符一致：原曲秒數。漏格只算這一格，不能把整段空白當成持續唱中。
       const dt = gap ? Math.min(delta, 0.01 * tempo) : delta;
-      let midi = voicing(d);
+      let midi = voicing(d, time);
       if (midi) midi -= (mapped.key || 0) + (state.guide.tuning || 0);   // 換回原調；原唱整體偏高／偏低時目標跟著原唱
       // 只保留實測音高；把修正後的八度餵回歷史會讓真正跳八度永遠折回舊音。
       state.recent.push(midi); if (state.recent.length > 30) state.recent.shift();
@@ -220,14 +221,29 @@
       if (performance.now() - sync.sentAt >= SYNC_INTERVAL_MS) syncFrame();
     }
 
-    // 有聲判定：自動追蹤環境噪音底；進入有聲要求嚴（清晰度高、連兩格音高接近），離開放寬，避免一句話中間閃斷
-    function voicing(d) {
+    // 有聲判定：主要看清晰度（跟音量無關）；音量只用來擋掉真正的安靜。
+    // 進入有聲要求嚴（清晰度高、連兩格音高接近），離開放寬，避免一句話中間閃斷。
+    const VOICE_MIN_RMS = 0.0006;     // 約 −64 dBFS：收音再小的麥克風，人聲也在這之上
+    const VOICE_FLOOR_MAX = 0.004;    // 噪音底封頂 → 門檻最高約 −43 dBFS
+    const VOICE_FLOOR_RATIO = 1.8;    // 高出噪音底約 5 dB 就算有聲
+    function voiceGate() { return Math.max(VOICE_MIN_RMS, state.voice.floor * VOICE_FLOOR_RATIO); }
+    function nearNote(time) {
+      const notes = state.guide.notes;
+      return !!(activeNote(notes, time) || activeNote(notes, time - 0.3) || activeNote(notes, time + 0.3));
+    }
+    function voicing(d, time) {
       const v = state.voice;
-      // 安靜時快速貼近實際噪音；唱歌時只極慢上修（每分鐘約 +13%）而且封頂，不會越唱門檻越高
-      if (d.rms < v.floor * 2) v.floor = Math.max(0.0005, v.floor * 0.98 + d.rms * 0.02);
-      else v.floor = Math.min(0.006, v.floor * 1.00002);
-      const loud = d.rms > Math.max(0.002, v.floor * 3);
+      const expecting = nearNote(time);
+      // 噪音底只在沒有音符的空檔學：唱歌聲、喇叭漏進來的原唱都不能把門檻墊高（以前沒戴耳機會越唱越難過門檻）
+      if (!expecting) v.floor = Math.min(VOICE_FLOOR_MAX, Math.max(VOICE_MIN_RMS / 2, v.floor * 0.98 + d.rms * 0.02));
+      // 音高非常清楚（單一人聲；伴奏是複音，清晰度上不來）時，只要高過噪音底就算，不再要求高出一截
+      const loud = d.rms > voiceGate() || (d.clarity > 0.88 && d.rms > Math.max(VOICE_MIN_RMS * 2, v.floor * 1.15));
       const m = d.f0 > 0 ? 69 + 12 * Math.log2(d.f0 / 440) : 0;
+      // 該唱的地方明明有清楚的音高，只是音量沒過門檻：累計起來提示麥克風太小聲
+      if (expecting && m && d.clarity > 0.8 && !loud) {
+        v.quiet += 0.01;
+        if (v.quiet >= 1.5 && !v.quietHinted) { v.quietHinted = true; options.onHint && options.onHint('quiet'); }
+      } else if (expecting && loud && m) v.quiet = Math.max(0, v.quiet - 0.02);
       if (!v.on) {
         const candidate = d.clarity > 0.75 && loud ? m : 0;
         const steady = candidate && ((v.prevMidi && Math.abs(candidate - v.prevMidi) < 1) || d.clarity > 0.88);
@@ -792,7 +808,7 @@
 
     const api = {
       setGuide, announce, setStyle, setKey, setPlaying, seek, restart, pitch, finish, receive, syncFrame, destroy,
-      songTime, refreshScore, resetInput,
+      songTime, refreshScore, resetInput, voiceGate,
       getStyle: () => ({ ...state.style }),
       getGuide: () => state.guide,
       getStats: () => ({ ratings: state.ratings.slice(), techCount: { ...state.techCount }, scoreTarget: state.scoreTarget,
