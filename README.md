@@ -7,7 +7,7 @@
 **為 VTuber 歌回與直播演出打造的本機歌詞演出系統**
 *A local lyric-performance system for VTubers, singing streamers, and live performers*
 
-**最新版本 / Latest：`v1.2.0`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
+**最新版本 / Latest：`v1.2.1`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
 
 繁體中文 · [English](#english) · [日本語](#日本語) · [한국어](#한국어) · [简体中文](#简体中文)
 
@@ -112,7 +112,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 首頁「AI 伴奏」分頁可一次把整份歌單做成純伴奏。
 - 雙路音訊：伴奏給 OBS、人聲留給自己監聽，或反過來。
 - 自動對時：用分離出的人聲比對歌詞，一鍵算出整首的時間偏移；可設定匯入後自動執行。
-- 練唱（測試版）：分析原唱音高，邊唱邊看自己的音準與逐句評等，支援升降 Key；另有 OBS 練唱疊加層 `/practice-overlay`。匯入後也可以自動建立練唱音軌。
+- 練唱（測試版）：分析原唱音高，邊唱邊看自己的音準與逐句評等，支援升降 Key、A–B 循環與跳到下一段；唱完列出最需要練的句子、跟上次與最佳成績比較，也能開放觀眾點歌挑戰（預設關閉）。另有 OBS 練唱疊加層 `/practice-overlay`。歌曲庫可以多選批次建立練唱音軌。
 
 > 實驗性功能，不建議在正式直播前才第一次啟用。
 
@@ -142,7 +142,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 請只從官方 GitHub Releases 下載，並核對隨附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
 ```
 
 ### OBS 設定
@@ -283,7 +283,7 @@ Eleven performance templates, each with independent style settings (font, size, 
 - The home "AI instrumental" tab can process a whole setlist at once.
 - Dual audio routing: instrumental to OBS, vocals to your monitor, or the reverse.
 - Auto sync: matches the separated vocal against the lyrics to find the whole-song timing offset in one click; can run automatically after import.
-- Practice (beta): analyzes the original vocal pitch so you can see your own pitch and per-line ratings as you sing, with key shifting, plus an OBS practice overlay at `/practice-overlay`. The practice track can also be built automatically after import.
+- Practice (beta): analyzes the original vocal pitch so you can see your own pitch and per-line ratings as you sing, with key shifting, A–B looping and skip-to-next-section. After a take it lists the lines to work on and compares with your previous and best scores; you can also open song challenges to viewers (off by default). Includes an OBS practice overlay at `/practice-overlay`, and practice tracks can be built in bulk from the library.
 
 > Experimental — don't enable it for the first time right before a live stream.
 
@@ -313,7 +313,7 @@ The build is **currently unsigned**, so Windows SmartScreen shows a blue warning
 Download only from the official GitHub Releases page and verify the bundled `.sha256`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
 ```
 
 ### OBS setup
@@ -453,7 +453,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - ホームの「AI 伴奏」タブでセットリスト全体を一括処理。
 - デュアル音声：伴奏を OBS、ボーカルを自分のモニターへ（逆も可）。
 - 自動タイミング合わせ：分離したボーカルを歌詞と照合し、曲全体のずれをワンクリックで算出。インポート後に自動実行も可能。
-- 練習（ベータ版）：原曲ボーカルの音程を解析し、歌いながら自分の音程と 1 行ごとの評価を確認できます。キー変更対応、OBS 用の練習オーバーレイ `/practice-overlay` 付き。インポート後に練習トラックを自動作成することもできます。
+- 練習（ベータ版）：原曲ボーカルの音程を解析し、歌いながら自分の音程と 1 行ごとの評価を確認できます。キー変更、A–B ループ、次のパートへ移動に対応。歌い終わると練習すべき行と前回・ベストとの比較を表示し、視聴者のリクエスト挑戦も受け付けられます（初期設定はオフ）。OBS 用の練習オーバーレイ `/practice-overlay` 付きで、ライブラリから練習トラックをまとめて作成できます。
 
 > 試験的機能です。本番配信の直前に初めて有効化しないでください。
 
@@ -483,7 +483,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 配布元は公式 GitHub Releases のみ。同梱の `.sha256` を照合してください：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
 ```
 
 ### OBS 設定
@@ -623,7 +623,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 홈 "AI 반주" 탭에서 세트리스트 전체를 한 번에 처리.
 - 듀얼 오디오: 반주는 OBS로, 보컬은 내 모니터로(반대도 가능).
 - 자동 싱크: 분리된 보컬을 가사와 비교해 곡 전체의 시간 오차를 한 번에 계산합니다. 가져온 뒤 자동 실행도 가능합니다.
-- 연습(베타): 원곡 보컬의 음정을 분석해 부르면서 내 음정과 줄별 평가를 볼 수 있습니다. 키 변경을 지원하며 OBS 연습 오버레이 `/practice-overlay`도 제공합니다. 가져온 뒤 연습 트랙을 자동으로 만들 수도 있습니다.
+- 연습(베타): 원곡 보컬의 음정을 분석해 부르면서 내 음정과 줄별 평가를 볼 수 있습니다. 키 변경, A–B 반복, 다음 구간 이동을 지원합니다. 다 부르면 연습할 줄과 지난번·최고 기록 비교를 보여 주고, 시청자 신청곡 도전도 열 수 있습니다(기본 꺼짐). OBS 연습 오버레이 `/practice-overlay`를 제공하며 라이브러리에서 연습 트랙을 한꺼번에 만들 수 있습니다.
 
 > 실험적 기능입니다. 실제 방송 직전에 처음 켜지 마세요.
 
@@ -653,7 +653,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 공식 GitHub Releases에서만 내려받고 동봉된 `.sha256`을 확인하세요:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
 ```
 
 ### OBS 설정
@@ -793,7 +793,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 首页「AI 伴奏」分页可一次把整份歌单做成纯伴奏。
 - 双路音频：伴奏给 OBS、人声留给自己监听，或反过来。
 - 自动对时：用分离出的人声比对歌词，一键算出整首的时间偏移；可设置导入后自动执行。
-- 练唱（测试版）：分析原唱音高，边唱边看自己的音准与逐句评等，支持升降 Key；另有 OBS 练唱叠加层 `/practice-overlay`。导入后也可以自动建立练唱音轨。
+- 练唱（测试版）：分析原唱音高，边唱边看自己的音准与逐句评等，支持升降 Key、A–B 循环与跳到下一段；唱完列出最需要练的句子、跟上次与最佳成绩比较，也能开放观众点歌挑战（默认关闭）。另有 OBS 练唱叠加层 `/practice-overlay`。歌曲库可以多选批量建立练唱音轨。
 
 > 实验性功能，不建议在正式直播前才第一次启用。
 
@@ -823,7 +823,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 请只从官方 GitHub Releases 下载，并核对随附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
 ```
 
 ### OBS 设置
