@@ -623,6 +623,12 @@ module.exports = function socketHandler(io, {
       if (socket.clientType === 'controller') {
         socket.on('practice:overlay', (message) => practiceOverlay.handle(io, socket, message));
         socket.on('practice:style:get', (_data, ack) => { if (typeof ack === 'function') ack({ ok: true, style: practiceOverlay.getStyle() }); });
+        // 練唱結算 → 匿名每日統計的分數區間（EULA §7.9(g)）。只取三個欄位，其餘一律忽略；
+        // 是否收、收哪一格由 usage-telemetry 判斷（關閉統計或尚未同意 2.1.0 時什麼都不記）。
+        socket.on('practice:scored', (data) => {
+          if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+          usageTelemetry.recordPracticeScore({ source: data.source, score: data.score, seconds: data.seconds });
+        });
       }
       registerHalloweenEventHandlers(io, socket, { getInteractions: () => halloweenInteractions, getCauldron: () => halloweenCauldron });
     }

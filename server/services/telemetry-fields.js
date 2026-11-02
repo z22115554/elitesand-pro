@@ -83,6 +83,34 @@ const VRAM_BUCKETS = Object.freeze(['lt4g', '4-6g', '6-8g', 'ge8g', 'unknown']);
 const RTF_BUCKETS = Object.freeze(['lt0.1x', '0.1-0.3x', '0.3-1x', 'ge1x']);
 const DURATION_BUCKETS = Object.freeze(['lt3m', '3-6m', '6-10m', 'ge10m']);
 
+/**
+ * 練唱分數分布（EULA §7.9(g)，2.1.0 起揭露）：只記「今天落在各分數區間的次數」，
+ * 不送單次精確分數、歌名或時間點。用來訂收藏卡的評級門檻與檢查評分是否偏高，
+ * 所以門檻附近（90 分以上）切得比較細。
+ */
+const PRACTICE_SCORE_BUCKETS = Object.freeze([
+  'lt50', '50-60', '60-70', '70-75', '75-80', '80-85',
+  '85-90', '90-93', '93-95', '95-97', '97-99', 'ge99',
+]);
+/** 計分不足這麼多秒（例如只唱幾句就停）不列入分布，避免零碎試唱把分布拉歪 */
+const PRACTICE_MIN_SCORED_SECONDS = 30;
+
+function practiceScoreBucket(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n) || n < 50) return 'lt50';
+  if (n < 60) return '50-60';
+  if (n < 70) return '60-70';
+  if (n < 75) return '70-75';
+  if (n < 80) return '75-80';
+  if (n < 85) return '80-85';
+  if (n < 90) return '85-90';
+  if (n < 93) return '90-93';
+  if (n < 95) return '93-95';
+  if (n < 97) return '95-97';
+  if (n < 99) return '97-99';
+  return 'ge99';
+}
+
 function countBucket(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return '0';
@@ -149,6 +177,7 @@ function buildAllowedKeys() {
   for (const bucket of DURATION_BUCKETS) keys.push(`ai.duration.${bucket}`);
   keys.push('ai.fallback_to_cpu');
   keys.push('ai.retried'); // EULA §7.9(f)（1.8.0 起）：曾在同一後端重試後才完成
+  for (const bucket of PRACTICE_SCORE_BUCKETS) keys.push(`practice.score.${bucket}`); // EULA §7.9(g)（2.1.0 起）
   return Object.freeze(keys.slice().sort());
 }
 
@@ -179,6 +208,20 @@ function isDailyBooleanKey(key) {
   return false;
 }
 
+/**
+ * 每個欄位最早是在哪一版 EULA 揭露的。日彙總整體的門檻（usage-telemetry.js 的
+ * DAILY_DISCLOSED_EULA_VERSION）之外，後來才加的欄位各自有更高的門檻：使用者
+ * 同意的版本還沒到，就算其他欄位照送，這些欄位也一個都不收。
+ */
+const KEY_DISCLOSED_SINCE = Object.freeze([
+  ['practice.', '2.1.0'],
+]);
+
+function disclosedSince(key) {
+  const hit = KEY_DISCLOSED_SINCE.find(([prefix]) => key.startsWith(prefix));
+  return hit ? hit[1] : null;
+}
+
 /** 單一計數上限：極端離群值本身就是識別特徵，而且對決策沒有幫助 */
 const MAX_COUNTER_VALUE = 10000;
 
@@ -199,6 +242,8 @@ module.exports = {
   VRAM_BUCKETS,
   RTF_BUCKETS,
   DURATION_BUCKETS,
+  PRACTICE_SCORE_BUCKETS,
+  PRACTICE_MIN_SCORED_SECONDS,
   ALLOWED_KEYS,
   MAX_COUNTER_VALUE,
   isAllowedKey,
@@ -208,4 +253,6 @@ module.exports = {
   vramBucket,
   realtimeFactorBucket,
   durationBucket,
+  practiceScoreBucket,
+  disclosedSince,
 };

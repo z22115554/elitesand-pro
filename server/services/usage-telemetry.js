@@ -24,6 +24,8 @@ const DAILY_PAYLOAD_SCHEMA_VERSION = 2;
 // record()／flushPending() 一律空轉——「還沒揭露就不可能被蒐集」因此是
 // 程式層的保證，而不是靠流程紀律。改欄位登錄表時記得同步這個版本。
 // 1.6.0：§7.9 首次揭露。1.8.0：§7.9(f) 增列「是否曾在同一後端重試」布林（ai.retried）。
+// 之後新增的欄位不再推高這個整體門檻，而是在 telemetry-fields.js 的 KEY_DISCLOSED_SINCE
+// 各自登記揭露版本（2.1.0：§7.9(g) 練唱分數分布），舊欄位不受新版 EULA 是否同意影響。
 const DAILY_DISCLOSED_EULA_VERSION = '1.8.0';
 
 /** 只比較點分數字，非數字段落一律視為 0（EULA 版本行的格式是 x.y.z） */
@@ -300,6 +302,8 @@ function createUsageTelemetry(options = {}) {
     if (!state.enabled || !dependencies.eulaAccepted() || !isAvailable()) return false;
     if (!dailyDisclosed()) return false;
     if (!fields.isAllowedKey(key)) return false;
+    const since = fields.disclosedSince(key);
+    if (since && !versionAtLeast(dependencies.eulaAcceptedVersion(), since)) return false;
     if (!Number.isFinite(step) || step <= 0) return false;
 
     const today = utcPeriods(dependencies.now()).day;
@@ -493,12 +497,26 @@ function createUsageTelemetry(options = {}) {
     return recorded;
   }
 
+  /**
+   * 練唱結算（EULA §7.9(g)）：只收麥克風、有分數、計分夠久的那幾次，而且只記分數區間。
+   * 示範模式、計分不到 PRACTICE_MIN_SCORED_SECONDS 秒、或分數無法計算時一律不記。
+   */
+  function recordPracticeScore(result) {
+    const data = result || {};
+    if (data.source !== 'mic') return false;
+    // 只收真的數字：Number(null) 會變成 0，無法計分的結算會被誤記成最低區間
+    const { score, seconds } = data;
+    if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 100) return false;
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < fields.PRACTICE_MIN_SCORED_SECONDS) return false;
+    return record('practice.score.' + fields.practiceScoreBucket(score));
+  }
+
   return {
     getSettings, setEnabled, start, markCoreUsed, isAvailable,
     flushPending, dailyDisclosed,
     recordFeature, recordOutcome, recordIncident, recordSocketReconnects,
     recordLyricSource, recordAutoResultEdited, recordDependency,
-    recordUpdateResult, recordAiSeparation,
+    recordUpdateResult, recordAiSeparation, recordPracticeScore,
   };
 }
 

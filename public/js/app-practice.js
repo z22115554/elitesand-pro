@@ -78,7 +78,7 @@
     clock: currentClock,
     getOptions: () => prefs,
     onSync: sendOverlay,
-    onFinish: (take) => { if (feedback) feedback.finish(take); },
+    onFinish: (take) => { if (feedback) feedback.finish(take); reportScore(take); },
     onLevel: renderLevel,
     onHint: (kind) => { if (kind === 'quiet' && detector.mode === 'mic') toast(t('practice.micQuiet'), 'warning'); },
     onUpdate: (kind) => { if (kind !== 'score') renderStats(); else renderScore(); },
@@ -134,6 +134,14 @@
       const clock = currentClock();
       engine.setPlaying(s.playing && detector.mode !== 'off', clock ? clock.t : s.sourceTime);
     }
+  }
+
+  // 整首唱完的分數區間進匿名每日統計（EULA §7.9(g)）。所有結算都會經過 onFinish，
+  // 但只送麥克風、整首（scope full）、有分數的那幾次；A–B 循環與中途跳過的區段不算。
+  // 只送來源、分數、計分秒數三個值，收不收、記哪一格由伺服器決定。
+  function reportScore(take) {
+    if (!take || take.source !== 'mic' || take.score == null || !take.scope || take.scope.type !== 'full') return;
+    SocketClient.send('practice:scored', { source: take.source, score: take.score, seconds: take.seconds });
   }
 
   function onBoundary(s) {

@@ -415,6 +415,65 @@ async function testUndisclosedEulaCollectsNothing() {
   }
 }
 
+// 練唱分數分布（EULA §7.9(g)）：2.1.0 才揭露，舊版同意者照送其他欄位、唯獨這個一格都不收；
+// 只收麥克風、有分數、計分 30 秒以上的結算，而且只送區間。
+async function testPracticeScoreGate() {
+  assert.strictEqual(fields.disclosedSince('practice.score.ge99'), '2.1.0');
+  assert.strictEqual(fields.disclosedSince('ai.ok'), null, '舊欄位不受新門檻影響');
+  assert.strictEqual(fields.practiceScoreBucket(94.99), '93-95');
+  assert.strictEqual(fields.practiceScoreBucket(95), '95-97');
+  assert.strictEqual(fields.practiceScoreBucket(99), 'ge99');
+  assert.strictEqual(fields.practiceScoreBucket(12), 'lt50');
+  assert.strictEqual(fields.isDailyBooleanKey('practice.score.85-90'), false, '分數區間是次數，不是當天布林');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'telemetry-practice-'));
+  const requests = [];
+  const clock = { value: new Date(Date.UTC(2026, 10, 2, 12)) };
+  try {
+    eulaVersion.value = '2.0.0';
+    let telemetry = makeTelemetry(dir, requests, clock);
+    assert.strictEqual(telemetry.recordPracticeScore({ source: 'mic', score: 91.2, seconds: 120 }), false, '2.0.0 同意者不可收練唱分數');
+    assert.strictEqual(telemetry.recordFeature('media_library'), true, '其他已揭露欄位照常');
+
+    eulaVersion.value = '2.1.0';
+    telemetry = makeTelemetry(dir, requests, clock);
+    assert.strictEqual(telemetry.recordPracticeScore({ source: 'demo', score: 98, seconds: 200 }), false, '示範模式不收');
+    assert.strictEqual(telemetry.recordPracticeScore({ source: 'mic', score: 98, seconds: 12 }), false, '計分太短不收');
+    assert.strictEqual(telemetry.recordPracticeScore({ source: 'mic', score: null, seconds: 200 }), false, '沒有分數不收');
+    assert.strictEqual(telemetry.recordPracticeScore({ source: 'mic', score: 101, seconds: 200 }), false, '超出範圍不收');
+    assert.strictEqual(telemetry.recordPracticeScore({ source: 'mic', score: 91.2, seconds: 120 }), true);
+    assert.strictEqual(telemetry.recordPracticeScore({ source: 'mic', score: 92.9, seconds: 95 }), true);
+    // 第一次 record 觸發的補送還在路上時，強制補送會被跳過（同時只送一次）；先等它送完
+    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
+    await telemetry.flushPending({ force: true });
+    await new Promise((resolve) => setImmediate(resolve));
+    // 每次 record 都可能各自觸發一次非同步補送，送達順序不固定：看當日累計的最大值
+    const daily = requests.filter((r) => r.payload && r.payload.counters).map((r) => r.payload.counters);
+    assert.strictEqual(Math.max(...daily.map((c) => c['practice.score.90-93'] || 0)), 2, '同一區間累加次數');
+    assert.ok(daily.every((c) => Object.keys(c).every((k) => fields.isAllowedKey(k))), '只能送登錄過的欄位，不可帶精確分數');
+  } finally {
+    eulaVersion.value = '1.8.0';
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  const eula = fs.readFileSync(path.join(__dirname, '..', 'EULA.txt'), 'utf8');
+  const version = (eula.match(/^Version:\s*([0-9.]+)\s*$/m) || [])[1];
+  const { versionAtLeast } = require('../server/services/usage-telemetry');
+  assert.ok(versionAtLeast(version, '2.1.0'), `EULA 版本（${version}）不可低於練唱分數的揭露版本 2.1.0`);
+  assert.ok(eula.includes('(g) 自本版（2.1.0）起') && eula.includes('(g) From this version (2.1.0)'), 'EULA 中英文都要揭露 §7.9(g)');
+  assert.ok(eula.includes('不含單次的') && /never\s+includes an exact individual score/.test(eula), 'EULA 要明講不送單次精確分數');
+
+  // 面板只送三個欄位；伺服器只接受桌面面板（controller）送來的結算
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-practice.js'), 'utf8');
+  assert.ok(panel.includes("SocketClient.send('practice:scored', { source: take.source, score: take.score, seconds: take.seconds })"), '面板只送來源、分數、計分秒數');
+  assert.ok(panel.includes("take.scope.type !== 'full'"), '只送整首唱完的結算，A–B 循環與中途跳過的區段不算');
+  assert.ok(panel.includes('reportScore(take); }'), '分數回報要掛在 onFinish，所有結算都經過那裡');
+  const socketHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'socket-handler.js'), 'utf8');
+  const gate = socketHandler.indexOf("if (socket.clientType === 'controller') {");
+  const scored = socketHandler.indexOf("socket.on('practice:scored'");
+  assert.ok(gate > 0 && scored > gate && scored - gate < 1200, 'practice:scored 只能在桌面面板的區塊內註冊');
+}
+
 async function run() {
   testRegistry();
   await testUndisclosedEulaCollectsNothing();
@@ -424,6 +483,7 @@ async function run() {
   await testAiSeparationFallbackTrace();
   await testSocketReconnectBucketSwitching();
   await testTamperedStateIsSanitised();
+  await testPracticeScoreGate();
   console.log('telemetry-daily tests passed');
 }
 

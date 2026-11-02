@@ -2,8 +2,8 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 2.0.0
-Effective Date / 生效日期：2026-09-10
+Version: 2.1.0
+Effective Date / 生效日期：2026-11-02
 
 IMPORTANT INFORMATION / 重要資訊
 --------------------------------
@@ -293,7 +293,12 @@ v2.1 或其後版本（LGPL）授權；你可以自行替換相容的 SoundTouch
        （例如小於 4GB、4 至 6GB、6 至 8GB、8GB 以上）、處理速度所屬區間、
        原始音訊長度所屬區間、是否曾在同一個運算後端上重試後才完成（例如
        顯示卡短暫失效後重跑）、是否曾自動切換回 CPU 運算——以上均為區間或
-       分類形式，不含重試次數、精確顯示卡型號、精確秒數或精確處理時間。
+       分類形式，不含重試次數、精確顯示卡型號、精確秒數或精確處理時間；
+   (g) 自本版（2.1.0）起：若你當天以麥克風完成「練唱」計分，各次總分落在
+       哪一個分數區間的次數（例如 85 至 90 分、95 至 97 分）；僅計入以麥克風
+       演唱且實際計分 30 秒以上的結算，示範模式與中途停止的不計。不含單次的
+       精確分數、歌名、歌詞、錄音或演唱的時間點。此項用於調整練唱評分與
+       評級的標準。
 
    接收端不會收到固定安裝識別碼，亦不會收到或儲存姓名、電子郵件、電腦
    名稱、精確顯示卡型號或其他可識別特定裝置的精確硬體資訊、歌名、歌詞
@@ -742,7 +747,15 @@ categorized or bucketed counts are added:
     finishing (for example after the GPU briefly dropped out), and whether
     it automatically fell back to CPU -- all as ranges or categories, never
     a retry count, an exact GPU model, exact seconds, or exact processing
-    time.
+    time;
+(g) From this version (2.1.0): if you complete a scored "practice" session
+    with a microphone that day, the number of sessions whose total score
+    fell into each score range (for example 85-90 or 95-97). Only
+    microphone sessions with at least 30 seconds of actual scoring are
+    counted; demo mode and sessions stopped early are not. This never
+    includes an exact individual score, song titles, lyrics, recordings, or
+    the time of a session. This item is used to tune practice scoring and
+    grading standards.
 
 The receiver does not obtain a permanent installation identifier and does
 not receive or store names, email addresses, computer names, exact GPU
