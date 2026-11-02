@@ -99,6 +99,9 @@
   --accent-ink:   #E9B949;
   --accent-soft:  rgba(233, 185, 73, 0.14);
   --accent-glow:  rgba(233, 185, 73, 0.35);
+  /* 一般（沒有底色的）按鈕外框：跟背景拉開，又不搶主按鈕 */
+  --btn-border:       rgba(233, 185, 73, 0.50);
+  --btn-border-hover: #E9B949;
 
   /* 紅只給 ON AIR／緊急隱藏／刪除 */
   --danger: #F0503C;
@@ -152,6 +155,8 @@
   --accent-ink:   #8A5E00;
   --accent-soft:  rgba(233, 185, 73, 0.22);
   --accent-glow:  rgba(233, 185, 73, 0.40);
+  --btn-border:       rgba(176, 124, 12, 0.55);
+  --btn-border-hover: #A87400;
   --danger: #C8321E;
   --live:   #C8321E;
   --ok:     #2A6F3E;
@@ -225,7 +230,7 @@ select:focus-visible,
   gap: 6px;
   height: 34px;
   padding: 0 14px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--btn-border);
   border-radius: var(--r-md);
   background: transparent;
   color: var(--text);
@@ -234,8 +239,9 @@ select:focus-visible,
   transition: background 0.12s, border-color 0.12s;
   white-space: nowrap;
 }
-.btn:hover { background: var(--bg-hover); }
+.btn:hover { background: var(--bg-hover); border-color: var(--btn-border-hover); }
 .btn:active { background: var(--bg-raised); }
+.btn:disabled:not(.btn-primary):not(.btn-ghost):not(.btn-danger) { border-color: var(--border-strong); }
 
 .btn-primary {
   background: var(--accent);
@@ -250,12 +256,12 @@ select:focus-visible,
   border-color: transparent;
   color: var(--text-dim);
 }
-.btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text); border-color: transparent; }
 
 .btn-sm { height: 30px; padding: 0 10px; font-size: 12px; }
 
 .btn-danger { color: var(--danger); border-color: transparent; background: transparent; }
-.btn-danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: transparent; }
 
 /* ═══ 表單元件 ═══ */
 
