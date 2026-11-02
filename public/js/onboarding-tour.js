@@ -51,6 +51,7 @@
     {
       id: 'readiness',
       view: 'karaoke',
+      cardInside: true,
       target: '#playlist',
       mobileTarget: '#playlist',
       title: 'tour.step.readiness.title',
@@ -60,6 +61,7 @@
     {
       id: 'prep',
       view: 'karaoke',
+      cardInside: true,
       target: '#live-prep',
       mobileTarget: '.offset-row',
       title: 'tour.step.prep.title',
@@ -1469,6 +1471,13 @@
     return basicState.status === 'completed';
   }
 
+  // 第一次使用的導覽已經處理完（開始過、完成或先跳過），而且現在沒有導覽自己的畫面在前面：
+  // 給 PIN 提示這類「之後再問也可以」的對話框判斷能不能出來，免得和歡迎畫面疊在一起
+  function firstRunSettled() {
+    if (active || (dom.welcome && !dom.welcome.hidden) || (dom.complete && !dom.complete.hidden)) return false;
+    return basicState.status !== 'not_started';
+  }
+
   // Used by automated visual QA. It does not persist bypass state.
   function debugStart(step = 0, options = {}) {
     const kind = ADVANCED_KINDS[options.kind] ? options.kind : 'basic';
@@ -1490,6 +1499,7 @@
     startAdvanced,
     maybeShowWelcome,
     isComplete,
+    firstRunSettled,
     openWelcome() {
       init();
       selectTour('basic');

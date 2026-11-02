@@ -985,11 +985,11 @@
   });
 
   function separationStartError(data) {
-    if (data?.error === 'AI_RUNTIME_NOT_READY') return tr('AI 分離元件尚未安裝，請先到「連線與系統」下載');
+    if (data?.error === 'AI_RUNTIME_NOT_READY') return tr('AI 分離元件尚未安裝，請先到「設定」下載');
     if (data?.error === 'ALREADY_PROCESSING') return tr('這首歌已經在分離中');
     if (data?.error === 'WEBGPU_ENGINE_OFFLINE') return tr('WebGPU 分離引擎離線，請確認桌面版已啟動');
     if (data?.error === 'WEBGPU_ENGINE_BUSY') return tr('WebGPU 分離引擎正在跑另一首歌，請稍後再試');
-    if (data?.error === 'WEBGPU_MODEL_NOT_READY') return tr('WebGPU 分離模型尚未下載，請先到「連線與系統」下載');
+    if (data?.error === 'WEBGPU_MODEL_NOT_READY') return tr('WebGPU 分離模型尚未下載，請先到「設定」下載');
     return tr(data?.error || t('import.error.serverUnconfirmed'));
   }
 

@@ -40,6 +40,7 @@
     albumArt: document.getElementById('album-art'),
     trackTitle: document.getElementById('track-title'),
     trackArtist: document.getElementById('track-artist'),
+    trackNext: document.getElementById('track-next'),
     timeCurrent: document.getElementById('time-current'),
     timeTotal: document.getElementById('time-total'),
     progressTrack: document.getElementById('progress-track'),
@@ -714,9 +715,20 @@
   // 緊急隱藏
   // ═══════════════════════════════════════════
 
+  // 只有顏色看不出現在藏住了沒（直播中很關鍵）：文字跟著換成「已隱藏・點此恢復」，報讀器也讀得到
+  function renderEmergencyButton() {
+    const btn = dom.btnEmergency;
+    if (!btn) return;
+    const key = isEmergencyHidden ? 'controller.emergencyActive' : 'controller.emergency';
+    btn.classList.toggle('active', isEmergencyHidden);
+    btn.setAttribute('aria-pressed', String(isEmergencyHidden));
+    btn.setAttribute('data-i18n', key);
+    btn.textContent = window.I18n ? window.I18n.t(key) : btn.textContent;
+  }
+
   dom.btnEmergency.addEventListener('click', () => {
     isEmergencyHidden = !isEmergencyHidden;
-    dom.btnEmergency.classList.toggle('active', isEmergencyHidden);
+    renderEmergencyButton();
 
     if (isEmergencyHidden) {
       SocketClient.send('emergency:hide');
@@ -812,12 +824,12 @@
   // 緊急隱藏同步
   SocketClient.on('emergency:hide', () => {
     isEmergencyHidden = true;
-    dom.btnEmergency.classList.add('active');
+    renderEmergencyButton();
   });
 
   SocketClient.on('emergency:show', () => {
     isEmergencyHidden = false;
-    dom.btnEmergency.classList.remove('active');
+    renderEmergencyButton();
   });
 
   // 播放列表更新
@@ -880,10 +892,12 @@
       dom.albumArt.style.backgroundImage = 'none';
     }
 
+    renderNextTrack();
+
     // 緊急隱藏
     if (state.emergencyHide !== undefined) {
       isEmergencyHidden = state.emergencyHide;
-      dom.btnEmergency.classList.toggle('active', isEmergencyHidden);
+      renderEmergencyButton();
     }
 
     // 播放列表
@@ -1010,7 +1024,16 @@
     if (coverUrl) el.firstElementChild.style.backgroundImage = `url(${JSON.stringify(coverUrl)})`;
   }
 
+  // 手機看不到電腦上的清單：在歌名下面直接寫下一首是什麼
+  function renderNextTrack() {
+    if (!dom.trackNext) return;
+    const next = playlist[currentTrackIndex + 1];
+    dom.trackNext.hidden = !next;
+    dom.trackNext.textContent = next ? t('controller.nextUp', { title: next.title || t('player.unknownTrack') }) : '';
+  }
+
   function renderPlaylist() {
+    renderNextTrack();
     bindPlaylistClick();
     if (playlist.length === 0) {
       playlistRows = [];

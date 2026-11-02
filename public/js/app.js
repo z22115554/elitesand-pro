@@ -320,9 +320,20 @@
   // 緊急隱藏
   // ═══════════════════════════════════════════
 
+  // 只有顏色看不出現在藏住了沒（直播中很關鍵）：文字跟著換成「已隱藏・點此恢復」，報讀器也讀得到
+  function renderEmergencyButton() {
+    const btn = dom.btnEmergency;
+    if (!btn) return;
+    const key = isEmergencyHidden ? 'home.emergencyActive' : 'home.emergency';
+    btn.classList.toggle('active', isEmergencyHidden);
+    btn.setAttribute('aria-pressed', String(isEmergencyHidden));
+    btn.setAttribute('data-i18n', key);
+    btn.textContent = window.I18n ? window.I18n.t(key) : btn.textContent;
+  }
+
   dom.btnEmergency.addEventListener('click', () => {
     isEmergencyHidden = !isEmergencyHidden;
-    dom.btnEmergency.classList.toggle('active', isEmergencyHidden);
+    renderEmergencyButton();
 
     if (isEmergencyHidden) {
       SocketClient.send('emergency:hide');
@@ -420,7 +431,7 @@
     }
     if (state.emergencyHide !== isEmergencyHidden) {
       isEmergencyHidden = state.emergencyHide;
-      dom.btnEmergency.classList.toggle('active', isEmergencyHidden);
+      renderEmergencyButton();
     }
     if (Array.isArray(state.playedEntryIds)) {
       playedEntryIds = new Set(state.playedEntryIds.filter((entryId) => typeof entryId === 'string' && entryId));

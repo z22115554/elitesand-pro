@@ -48,7 +48,8 @@
     { key: 'twitch', card: 'twitch-card', status: () => textOf('twitch-status'),
       state: () => (byId('twitch-status')?.classList.contains('ok') ? 'ok' : 'idle') },
     { key: 'ffmpeg', card: 'ytdlp-card', status: () => textOf('ffmpeg-status'),
-      state: () => (byId('ffmpeg-status')?.classList.contains('ok') ? 'ok' : 'todo') },
+      // 還在檢查中不算「需要處理」，檢查完確定缺了才算
+      state: () => { const st = byId('ffmpeg-status'); return st?.classList.contains('ok') ? 'ok' : st?.classList.contains('pending') ? 'idle' : 'todo'; } },
     { key: 'ai', card: 'ytdlp-card', status: () => textOf('ai-separation-status'),
       state: () => (byId('ai-separation-status')?.classList.contains('ok') ? 'ok' : 'idle') },
     { key: 'update', card: 'app-update-card', status: () => textOf('app-update-status'),

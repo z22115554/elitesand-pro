@@ -34,7 +34,7 @@
     build: $('practice-build'), cancel: $('practice-cancel'), empty: $('practice-empty'), emptyText: $('practice-empty-text'),
     progress: $('practice-progress'), progressBar: $('practice-progress-bar'),
     keyDown: $('practice-key-down'), keyUp: $('practice-key-up'), keyValue: $('practice-key-value'), obsPreview: $('practice-obs-preview'),
-    loop: $('practice-loop'), nextSection: $('practice-next-section'),
+    loop: $('practice-loop'), loopCancel: $('practice-loop-cancel'), nextSection: $('practice-next-section'),
     score: $('practice-score'), tech: $('practice-tech'), lines: $('practice-lines'),
     source: $('practice-source'), deviceField: $('practice-device-field'), device: $('practice-device'), level: $('practice-level'),
     meter: $('practice-meter'), levelGate: $('practice-level-gate'),
@@ -384,6 +384,7 @@
     ui.loop.title = t('practice.loop.hint');
     ui.loop.classList.toggle('is-active', looping || loopStart != null);
     ui.loop.disabled = !ready && !looping;
+    if (ui.loopCancel) ui.loopCancel.hidden = loopStart == null;   // 記了 A 還沒記 B：可以反悔
     ui.nextSection.textContent = t('practice.loop.next');
     ui.nextSection.title = t('practice.loop.nextHint');
     ui.nextSection.disabled = !ready;
@@ -423,6 +424,8 @@
     const s = guideState.status;
     renderLoopControls();
     ui.status.textContent = guideMessage();
+    // 還沒選來源時，這行提示本身就是捷徑：點了切到「輸入」並把焦點放在來源選單
+    ui.status.classList.toggle('is-action', s === 'ready' && detector.mode === 'off');
     ui.build.hidden = !['vocals', 'sepFailed', 'missing', 'stale', 'failed', 'cancelled'].includes(s);
     ui.build.textContent = t(BUILD_LABEL[s] || 'practice.rebuildGuide');
     ui.cancel.hidden = s !== 'busy' && s !== 'separating';
@@ -517,7 +520,18 @@
     detector.mode = 'off'; ui.source.value = 'off'; ui.deviceField.hidden = true;
     ui.latency.disabled = true; syncLatencyProfile(true);
     engine.setPlaying(false, engine.songTime());
-    toast(t('practice.micFailed', { message: error.message || error.name }), 'error');
+    toast(micErrorText(error), 'error');
+  }
+
+  // 瀏覽器丟回來的是英文技術訊息；常見的幾種換成白話＋下一步，其他才附原文
+  function micErrorText(error) {
+    const name = error && error.name || '';
+    const message = String(error && error.message || '');
+    if (name === 'NotAllowedError' || name === 'SecurityError') return t('practice.micDenied');
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') return t('practice.micNotFound');
+    if (name === 'NotReadableError' || name === 'AbortError' && /device|track/i.test(message)) return t('practice.micBusy');
+    if (/worklet|addModule/i.test(message)) return t('practice.micWorklet');
+    return t('practice.micFailed', { message: message || name });
   }
 
   async function setSource(mode) {
@@ -874,7 +888,17 @@
     ui.cancel.addEventListener('click', cancelGuide);
     ui.keyDown.addEventListener('click', () => { window.AppShared.stepPitch(-1); renderKey(); });
     ui.keyUp.addEventListener('click', () => { window.AppShared.stepPitch(1); renderKey(); });
+    ui.status.addEventListener('click', () => {
+      if (!ui.status.classList.contains('is-action')) return;
+      document.getElementById('practice-tab-input')?.click();
+      ui.source.focus();
+    });
     ui.loop.addEventListener('click', onLoopClick);
+    const cancelLoopStart = () => { if (loopStart == null) return false; loopStart = null; renderLoopControls(); return true; };
+    ui.loopCancel?.addEventListener('click', cancelLoopStart);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && document.querySelector('.view.is-active[data-view="practice"]') && cancelLoopStart()) event.preventDefault();
+    });
     setInterval(() => {
       if (!feedback.tick || !(feedback.isLooping && feedback.isLooping())) return;
       const clock = currentClock();

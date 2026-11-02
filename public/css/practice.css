@@ -65,7 +65,7 @@
 .practice-tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
 .practice-tiers div { display: grid; justify-items: center; gap: 1px; padding: 6px 0 5px; border-radius: var(--r-sm); background: var(--bg-inset); }
 .practice-tiers b { font: 600 15px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
-.practice-tiers small { font: 500 9px/1.2 var(--font-mono); letter-spacing: .08em; color: var(--text-faint); }
+.practice-tiers small { font: 500 11px/1.2 var(--font-mono); letter-spacing: .04em; color: var(--text-dim); }
 .practice-tiers .is-perfect b { color: var(--accent); }
 .practice-tiers .is-miss b { color: var(--warn); }
 
@@ -105,7 +105,7 @@
 .practice-obs-url { flex: 1; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 8px; line-height: 32px; border-radius: var(--r-sm); background: var(--bg-inset); font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .practice-swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-.practice-swatches label { display: grid; justify-items: center; gap: 4px; font-size: 10px; color: var(--text-faint); cursor: pointer; }
+.practice-swatches label { display: grid; justify-items: center; gap: 4px; font-size: 11px; color: var(--text-faint); cursor: pointer; }
 .practice-swatches input[type="color"] { width: 100%; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm); background: none; cursor: pointer; }
 
 /* 逐句評等：填滿右欄剩下的高度，只在自己裡面捲 */
@@ -139,7 +139,7 @@
 .practice-lines li::before { content: counter(pl); min-width: 20px; font: 500 10px var(--font-mono); color: var(--text-faint); }
 .practice-lines li:hover { background: var(--bg-hover); color: var(--text); }
 .practice-line-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.practice-line-tag { font-size: 10px; letter-spacing: .06em; }
+.practice-line-tag { font-size: 11px; letter-spacing: .06em; }
 .practice-lines li.is-perfect .practice-line-tag { color: var(--accent); }
 .practice-lines li.is-great .practice-line-tag { color: var(--text); }
 .practice-lines li.is-good .practice-line-tag { color: var(--text-dim); }
@@ -161,8 +161,17 @@
   .practice-panel { flex: none; }
   .practice-pane { flex: none; overflow: visible; }
   .practice-feedback-pane { max-height: none; overscroll-behavior: auto; }
-  .practice-bar { flex-wrap: wrap; }
+  /* 窄版整頁會捲動：操作列（變調、循環、下一段）固定在上面，捲到評等區也按得到。
+     外框那層 .practice-main 有 overflow:hidden，sticky 會失效，所以窄版把它拆掉（display: contents），
+     外框改由操作列與音軌各自畫 */
+  .practice-main { display: contents; }
+  .practice-bar { flex-wrap: wrap; position: sticky; top: 0; z-index: 5; background: var(--bg-surface);
+    border: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  #practice-stage { border: 1px solid var(--border); border-top: 0; border-radius: 0 0 var(--r-lg) var(--r-lg); overflow: hidden; margin-top: calc(-1 * var(--gap)); }
 }
 
 /* A–B 循環：記了 A 或循環中時用強調色提示目前狀態 */
 #practice-loop.is-active { color: var(--accent); }
+
+/* 「先選麥克風」提示可以點：切到輸入分頁並聚焦來源 */
+#practice-guide-status.is-action { cursor: pointer; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }

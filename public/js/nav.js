@@ -254,6 +254,12 @@
     if (openBtn) openBtn.addEventListener('click', openHelp);
     if (onboardOpenBtn) onboardOpenBtn.addEventListener('click', openHelp);
     if (closeBtn) closeBtn.addEventListener('click', () => closeHelp(false));
+    // Esc 關閉（鍵盤使用者原本只能 Tab 到「關閉」）；第一次使用必須看完的規則照舊由 closeHelp 擋
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || helpModal.hidden || event.defaultPrevented) return;
+      event.preventDefault();
+      closeHelp(false);
+    });
     document.addEventListener('onboarding:open-full-guide', openHelp);
     document.addEventListener('onboarding:open-advanced-guide', () => {
       openHelp();

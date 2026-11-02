@@ -980,6 +980,13 @@
     const pauseIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
     dom.btnPlay.innerHTML = isPlaying ? pauseIcon : playIcon;
     if (dom.miniBtnPlay) dom.miniBtnPlay.innerHTML = isPlaying ? pauseIcon : playIcon;
+    // 報讀器要知道按下去會怎樣：播放中念「暫停」、停著念「播放」（原本固定念「播放或暫停」）
+    const key = isPlaying ? 'player.pauseAction' : 'player.playAction';
+    for (const btn of [dom.btnPlay, dom.miniBtnPlay]) {
+      if (!btn) continue;
+      btn.setAttribute('data-i18n-aria-label', key);
+      btn.setAttribute('aria-label', window.I18n ? window.I18n.t(key) : key);
+    }
   }
 
   // 迷你播放器（切到媒體庫/設定/歌單頁時仍可切歌/播放/暫停，不必切回歌詞頁）。

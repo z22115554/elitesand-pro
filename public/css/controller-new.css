@@ -142,7 +142,7 @@ body.controller {
 .ctrl-playlist-item-info { flex: 1; min-width: 0; }
 .ctrl-playlist-item-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ctrl-playlist-item-artist { font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ctrl-status-badge { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: var(--bg-raised); color: var(--text-faint); border: 1px solid var(--border); }
+.ctrl-status-badge { font-size: 11px; padding: 1px 5px; border-radius: 4px; background: var(--bg-raised); color: var(--text-faint); border: 1px solid var(--border); }
 
 /* 歌詞按鈕列 */
 .ctrl-lyric-btns { display: flex; gap: 8px; }
@@ -182,3 +182,14 @@ body.controller {
   border-left: 1px solid var(--border); border-right: 1px solid var(--border);
   height: 44px; line-height: 44px;
 }
+
+/* 下一首提示 */
+.next-up { margin-top: 4px; font-size: 13px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.next-up[hidden] { display: none; }
+
+/* 手機觸控：按鈕至少 44px 高（重置、套用原本只有 30px，拇指容易按不到或按錯） */
+.btn, .btn-sm { min-height: 44px; min-width: 44px; }
+.theme-toggle { min-width: 44px; min-height: 44px; }
+.ctrl-playlist-toggle { min-height: 44px; }
+/* 頂部「已連線」不要被擠成兩行 */
+.conn { white-space: nowrap; flex-shrink: 0; }

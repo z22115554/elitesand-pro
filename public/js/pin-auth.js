@@ -183,8 +183,36 @@ const PinAuth = (() => {
         if (data.hasPin && card.tagName === 'DETAILS') card.open = true;
         let onboardingSeen = true;
         try { onboardingSeen = !!localStorage.getItem(ONBOARDING_KEY); } catch (_) { onboardingSeen = false; }
-        if (!data.hasPin && onboardingModal && !onboardingSeen) showModal(onboardingModal);
+        if (!data.hasPin && onboardingModal && !onboardingSeen) showPinOnboardingWhenFree();
       }).catch(() => { /* 讀不到就維持現狀，不阻擋介面 */ });
+    }
+
+    // 第一次打開的順序：使用條款 → 音訊元件 → 新手導覽 → 才問 PIN（本機直播不急著設，先讓人跑過一次基本流程）。
+    // 有其他對話框或導覽還沒處理完就先等；最多等 10 分鐘，之後照舊直接問。
+    let pinOnboardingWait = null;
+    function showPinOnboardingWhenFree() {
+      if (pinOnboardingWait) return;
+      // 讓其他「之後再出也可以」的提示（例如上次未正常關閉）排在 PIN 後面
+      document.documentElement.dataset.pinOnboarding = 'pending';
+      const startedAt = Date.now();
+      const otherModalOpen = () => Array.from(document.querySelectorAll('[aria-modal="true"]'))
+        .some((el) => el !== onboardingModal && !el.hidden && el.getClientRects().length);
+      const ready = () => {
+        const tour = window.OnboardingTour;
+        // 這支比 onboarding-tour.js 早載入：導覽還沒出現時先等（最多 10 秒），不然會搶在歡迎畫面前面
+        const tourSettled = !tour ? Date.now() - startedAt > 10000
+          : typeof tour.firstRunSettled !== 'function' || tour.firstRunSettled();
+        return (tourSettled && !otherModalOpen()) || Date.now() - startedAt > 10 * 60 * 1000;
+      };
+      const tick = () => {
+        if (!ready()) { pinOnboardingWait = setTimeout(tick, 1500); return; }
+        pinOnboardingWait = null;
+        let seen = false;
+        try { seen = !!localStorage.getItem(ONBOARDING_KEY); } catch (_) { /* 讀不到就照問 */ }
+        if (!seen) showModal(onboardingModal);
+        else delete document.documentElement.dataset.pinOnboarding;
+      };
+      tick();
     }
 
     function showError(msg) { errEl.textContent = msg; errEl.classList.add('is-visible'); }
@@ -282,11 +310,13 @@ const PinAuth = (() => {
     if (onboardingSet) onboardingSet.addEventListener('click', (e) => {
       try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* next launch may ask again */ }
       hideModal(onboardingModal);
+      delete document.documentElement.dataset.pinOnboarding;
       openManageModal('set', e.currentTarget);
     });
     if (onboardingSkip) onboardingSkip.addEventListener('click', () => {
       try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* next launch may ask again */ }
       hideModal(onboardingModal);
+      delete document.documentElement.dataset.pinOnboarding;
     });
 
     refreshStatus();

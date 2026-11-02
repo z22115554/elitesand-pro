@@ -41,7 +41,11 @@
       const host = hint.closest('.switch-row')?.querySelector('.label')
         || hint.closest('.field')?.querySelector('label')
         || hint.previousElementSibling;
-      if (host && !host.title) host.title = text;
+      if (!host || host.title) return;
+      host.title = text;
+      // 帶上翻譯 key，切換語言時 i18n 會跟著更新提示（只複製文字的話會一直停在載入當下的語言）
+      const key = hint.getAttribute('data-i18n');
+      if (key) host.setAttribute('data-i18n-title', key);
     });
   }
 
@@ -147,7 +151,7 @@
       // 摘要只留「儲存外觀」，長說明改滑鼠提示
       const sum = presets.querySelector('summary');
       const hint = sum && sum.querySelector('[data-i18n="lyricStyle.saveAppearanceHint"]');
-      if (hint) sum.title = hint.textContent.trim();
+      if (hint) { sum.title = hint.textContent.trim(); sum.setAttribute('data-i18n-title', 'lyricStyle.saveAppearanceHint'); }
     }
     // 萬聖咒字的七種效果是這個模板的主角，不能收在「哪裡不對？」裡讓人找不到：
     // 直接放在樣式縮圖正下方（只有選到萬聖咒字時才出現，lyric-extras.js 照舊切 hidden）

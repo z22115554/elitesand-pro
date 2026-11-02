@@ -202,6 +202,14 @@ select:focus-visible,
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* 琥珀底的按鈕配琥珀框看不出焦點：改用文字色的框，外面再一圈底色隔開 */
+.btn-primary:focus-visible,
+.btn.is-cue:focus-visible,
+.btn-play:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--bg-base);
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

@@ -194,7 +194,19 @@
     if (e.target.closest('.pi-handle')) return; // 點到拖曳把手不算選歌
     if (item) {
       // 2026-09-28 使用者決定：維持單擊＝載入待命（不自動播放）；直播頁準備區跟著目前載入的歌。
-      AppShared.playTrack(parseInt(item.dataset.index, 10), false);
+      // 2026-11-02：正在播放時點到別首會把現在唱的歌切掉，先確認（直播中誤觸）
+      const index = parseInt(item.dataset.index, 10);
+      if (AppShared.isPlaying && AppShared.isPlaying() && index !== state.currentTrackIndex && window.PanelConfirm) {
+        const next = state.playlist[index];
+        window.PanelConfirm.request({
+          title: t('playlist.switchConfirm.title'),
+          summary: t('playlist.switchConfirm.summary', { title: (next && next.title) || '' }),
+          confirmLabel: t('playlist.switchConfirm.confirm'),
+          tone: 'neutral',
+        }).then((ok) => { if (ok) AppShared.playTrack(index, false); });
+        return;
+      }
+      AppShared.playTrack(index, false);
     }
   });
 
@@ -341,10 +353,7 @@
     const coverImg = coverUrl
       ? `<img class="pi-cover" src="${escapeHtml(coverUrl)}" alt="" loading="lazy" decoding="async">`
       : '<div class="pi-cover"></div>';
-    const trackTitle = track.title || '這首歌';
-    const selectionLabel = isActive
-      ? `目前播放中，不能批次移除：${trackTitle}`
-      : `選取：${trackTitle}`;
+    const selectionLabel = t(isActive ? 'playlist.selectActiveRow' : 'playlist.selectRow', { title: track.title || '' });
     return `
         <input class="pi-select" type="checkbox" data-selection-key="${escapeHtml(selectionKey)}" aria-label="${escapeHtml(selectionLabel)}"${isActive ? ' disabled' : ''}${isSelected ? ' checked' : ''}>
         <span class="pi-handle" title="按住拖曳調整順序" aria-hidden="true"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></svg></span>
@@ -354,8 +363,8 @@
           <div class="pi-artist marquee-text"><span>${escapeHtml(track.artist || (track.needsArtistConfirmation ? '原唱待確認' : '未知歌手'))}${track.performer ? ` · 翻唱：${escapeHtml(track.performer)}` : ''}</span></div>
         </div>
         <span class="pi-extras">${playlistExtrasMarkup(track, i)}</span>
-        <button class="pi-edit" data-edit="${i}" title="修改歌名/歌手" aria-label="修改歌名/歌手">✎</button>
-        <button class="pi-remove" data-remove="${i}" title="移除" aria-label="移除">×</button>`;
+        <button class="pi-edit" data-edit="${i}" title="${escapeHtml(t('playlist.editRow', { title: track.title || '' }))}" aria-label="${escapeHtml(t('playlist.editRow', { title: track.title || '' }))}">✎</button>
+        <button class="pi-remove" data-remove="${i}" title="${escapeHtml(t('playlist.removeRow', { title: track.title || '' }))}" aria-label="${escapeHtml(t('playlist.removeRow', { title: track.title || '' }))}">×</button>`;
   }
 
   // 量測單一「歌名/歌手名跑馬燈」是否需要滾動（文字寬度是否超出容器），只在真的溢出時才動畫。
@@ -476,14 +485,17 @@
         if (removeBtn) removeBtn.dataset.remove = String(i);
         const editBtn = node.querySelector('.pi-edit');
         if (editBtn) editBtn.dataset.edit = String(i);
+        // 換語言或改歌名後提示要跟著變（這一列是就地重用，不會重建）
+        const titleVars = { title: track.title || '' };
+        for (const [btn, label] of [[removeBtn, t('playlist.removeRow', titleVars)], [editBtn, t('playlist.editRow', titleVars)]]) {
+          if (btn && btn.title !== label) { btn.title = label; btn.setAttribute('aria-label', label); }
+        }
         const selectInput = node.querySelector('.pi-select');
         if (selectInput) {
           selectInput.dataset.selectionKey = selectionKey;
           selectInput.checked = isSelected;
           selectInput.disabled = isActive;
-          selectInput.setAttribute('aria-label', isActive
-            ? `目前播放中，不能批次移除：${track.title || '這首歌'}`
-            : `選取：${track.title || '這首歌'}`);
+          selectInput.setAttribute('aria-label', t(isActive ? 'playlist.selectActiveRow' : 'playlist.selectRow', { title: track.title || '' }));
         }
         // 同 id 但文字可能變了（例如使用者手動修正歌名/歌手）：只更新文字節點，
         // 刻意不動 <img class="pi-cover">，避免每次 render 都重新解碼封面圖。

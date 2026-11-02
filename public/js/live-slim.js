@@ -97,8 +97,10 @@
 
     const btn = el('button', 'topnav-action lslim-obs', { type: 'button' });
     const dot = el('span', 'lslim-obs-dot');
-    btn.append(dot, document.createTextNode('OBS'));
-    i18n(btn, 'liveSlim.obsStatus', 'aria-label');
+    // 點的顏色之外再給文字狀態（色弱分不出灰／琥珀／綠）
+    const stateText = el('span', 'lslim-obs-state');
+    btn.append(dot, document.createTextNode('OBS'), stateText);
+    // aria-label 由下面的 sync() 帶完整狀態，不綁固定字串（切語言時會被蓋回去）
     const pop = el('div', 'lslim-pop lslim-obs-pop', { role: 'dialog' });
     i18n(pop, 'liveSlim.obsStatus', 'aria-label');
     const rows = [
@@ -123,7 +125,13 @@
       const on = pills.filter((p) => !p.classList.contains('disconnected')).length;
       const state = on === pills.length ? 'ok' : (on ? 'part' : 'off');
       if (dot.dataset.state !== state) dot.dataset.state = state;
+      const T = (k, v) => (window.I18n ? window.I18n.t(k, v) : k);
+      stateText.textContent = state === 'ok' ? T('liveSlim.obsStateOn') : state === 'part' ? `${on}/${pills.length}` : T('liveSlim.obsStateOff');
+      const full = T(state === 'ok' ? 'liveSlim.obsStateOnFull' : state === 'part' ? 'liveSlim.obsStatePartFull' : 'liveSlim.obsStateOffFull', { on, total: pills.length });
+      btn.title = full;
+      btn.setAttribute('aria-label', full);
     };
+    window.addEventListener('i18n:change', sync);
     pills.forEach((p) => new MutationObserver(sync).observe(p, { attributes: true, attributeFilter: ['class'] }));
     sync();
 
@@ -327,7 +335,7 @@
       top.append(el('span', 'lslim-spacer'));
       offsetRow.parentElement.insertBefore(top, offsetRow);
       // 「已對時」：給主播自己看的準備標記，清單上的「對」格跟著亮
-      const confirm = el('button', 'btn btn-sm lslim-sync-confirm', { type: 'button', 'aria-pressed': 'false' });
+      const confirm = el('button', 'btn btn-sm lslim-sync-confirm', { type: 'button', 'aria-pressed': 'false', 'data-i18n-title': 'liveSlim.syncConfirmHint' });
       top.append(confirm);
       const prepTrack = () => {
         const idx = typeof AppShared.prepTargetIndex === 'function' ? AppShared.prepTargetIndex() : -1;
@@ -338,6 +346,7 @@
         confirm.hidden = !track;
         const on = !!(track && track.syncConfirmed);
         i18n(confirm, on ? 'liveSlim.syncConfirmed' : 'liveSlim.syncConfirm');
+        if (window.I18n) confirm.title = window.I18n.t('liveSlim.syncConfirmHint');
         confirm.setAttribute('aria-pressed', String(on));
         confirm.classList.toggle('is-on', on);
       };

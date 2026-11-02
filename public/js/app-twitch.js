@@ -76,7 +76,9 @@
     setStatusChip('twitch-status-connection', connected
       ? t('twitch.connectedAs', { name: runtime.broadcasterLogin || 'Twitch' })
       : (authorized ? t('twitch.connecting') : t('twitch.notConnected')), connected ? 'on' : (authorized ? 'warn' : 'off'));
-    setStatusChip('twitch-status-request', requestSaved.enabled ? t('twitch.requestsOpen') : t('twitch.requestsPaused'), requestSaved.enabled ? 'on' : 'off');
+    // 「已開放」只是設定開著；沒連上 Twitch 其實收不到點歌，要講清楚（不然看起來跟「未連接」互相矛盾）
+    const requestText = !requestSaved.enabled ? t('twitch.requestsPaused') : connected ? t('twitch.requestsOpen') : t('twitch.requestsOpenOffline');
+    setStatusChip('twitch-status-request', requestText, !requestSaved.enabled ? 'off' : connected ? 'on' : 'warn');
     const rewardStatus = rewardSaved.enabled
       ? (rewardSaved.paused ? t('twitch.rewardsPaused') : t('twitch.rewardsEnabled'))
       : t('twitch.rewardsDisabled');

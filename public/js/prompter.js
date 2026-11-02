@@ -858,3 +858,9 @@
     setFontStatus(lastFontStatus.key, lastFontStatus.values);
   });
 })();
+
+// 跟唱視圖是從控制面板另開的視窗：「回控制面板」先試著關掉自己，瀏覽器不讓關就換回面板頁
+document.getElementById('pt-back-btn')?.addEventListener('click', () => {
+  window.close();
+  setTimeout(() => { if (!window.closed) window.location.href = '/'; }, 150);
+});

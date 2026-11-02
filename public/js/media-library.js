@@ -561,7 +561,7 @@
         // 變成中英夾雜；data.error 若是 ALREADY_PROCESSING 這種代碼，tr() 對到沒有的
         // 詞條會原樣傳回，不影響顯示。
         const reason = data.error === 'AI_RUNTIME_NOT_READY'
-          ? tr('AI 分離元件尚未安裝，請先到「連線與系統」下載')
+          ? tr('AI 分離元件尚未安裝，請先到「設定」下載')
           : data.error === 'ALREADY_PROCESSING'
             ? tr('這首歌已經在分離中')
             : data.error === 'WEBGPU_ENGINE_OFFLINE'
@@ -569,7 +569,7 @@
               : data.error === 'WEBGPU_ENGINE_BUSY'
                 ? tr('WebGPU 分離引擎正在跑另一首歌，請稍後再試')
                 : data.error === 'WEBGPU_MODEL_NOT_READY'
-                  ? tr('WebGPU 分離模型尚未下載，請先到「連線與系統」下載')
+                  ? tr('WebGPU 分離模型尚未下載，請先到「設定」下載')
                   : tr(data.error || '伺服器沒有確認');
         toast(tr(`啟動分離失敗：${reason}`), 'error');
         btn.disabled = false;

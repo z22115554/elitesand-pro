@@ -250,12 +250,12 @@
        這只是「要不要幫忙回報」，不該擋住使用者開台。絕不自動傳送任何資料。 -->
   <div id="crash-banner" class="announcement-banner crash-banner" role="status" hidden>
     <div>
-      <strong data-i18n="crash.title">Elitesand Pro 上次未正常關閉</strong>
-      <span data-i18n="crash.message">要傳送診斷資訊協助找出原因嗎？送出前你可以先看過完整內容。</span>
+      <strong data-i18n="crash.title">上次程式沒有正常關閉（資料都還在）</strong>
+      <span data-i18n="crash.message">常見原因是開著程式就關機或重開機，不用擔心。想幫忙找原因的話，可以把紀錄寄給開發者；不按就什麼都不會送出。</span>
     </div>
     <div class="announcement-actions">
-      <button id="crash-review" class="btn btn-sm btn-primary" type="button" data-i18n="crash.review">查看內容</button>
-      <button id="crash-dismiss" class="btn btn-sm btn-ghost" type="button" data-i18n="crash.dismiss">不用了</button>
+      <button id="crash-dismiss" class="btn btn-sm btn-primary" type="button" data-i18n="crash.dismiss">知道了</button>
+      <button id="crash-review" class="btn btn-sm btn-ghost" type="button" data-i18n="crash.review">看紀錄並寄出</button>
     </div>
   </div>
 
@@ -382,6 +382,7 @@
                     <path class="vol-wave vol-wave-2" d="M18.5 5.5a9 9 0 0 1 0 13"/>
                     <g class="vol-mute"><line x1="16" y1="9" x2="22" y2="15"/><line x1="22" y1="9" x2="16" y2="15"/></g>
                   </svg>
+                  <span class="sl-label np-vol-label" data-i18n="home.volume">音量</span>
                   <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量" data-i18n-aria-label="home.volume">
                   <span id="volume-val" class="val">70%</span>
                 </div>
@@ -389,7 +390,8 @@
                      新使用者的人聲預設 20%，可在這裡隨時調高、調低或拉到 0。 -->
                 <div class="np-volume" id="separation-vocals-row" hidden title="人聲音量" data-i18n-title="home.vocalsVolume">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V22h2v-2.06A9 9 0 0 0 21 11h-2z"/></svg>
-                  <input id="separation-vocals-volume" type="range" min="0" max="150" value="20">
+                  <span class="sl-label np-vol-label" data-i18n="home.vocalsShort">人聲</span>
+                  <input id="separation-vocals-volume" type="range" min="0" max="150" value="20" aria-label="人聲音量" data-i18n-aria-label="home.vocalsVolume">
                   <span id="separation-vocals-volume-val" class="val">20%</span>
                 </div>
               </div>
@@ -574,9 +576,9 @@
             <div id="lyric-now-line" class="lb-line-now" data-i18n="home.lyricNow.empty">尚無歌詞</div>
             <div id="lyric-next-line" class="lb-line-next"></div>
             <div class="lb-lyric-actions">
-              <button id="offset-align" class="btn btn-sm btn-primary" type="button">對齊第一句</button>
+              <button id="offset-align" class="btn btn-sm btn-primary" type="button" data-i18n-title="liveSlim.alignHint" title="手動：播放時聽到第一句開口的瞬間按下，整份歌詞會對到那個位置">對齊第一句</button>
               <!-- 自動對時：用 AI 分離的人聲算整首偏移，不必播放（auto-sync.js） -->
-              <button id="offset-auto" class="btn btn-sm" type="button" data-new-feature="auto-sync" data-new-placement="after">自動對時</button>
+              <button id="offset-auto" class="btn btn-sm" type="button" data-i18n-title="liveSlim.autoSyncHint" title="自動：用 AI 分離出的人聲比對歌詞，算出整首的時間偏移（可以還原）" data-new-feature="auto-sync" data-new-placement="after">自動對時</button>
               <button id="offset-auto-undo" class="btn btn-sm btn-ghost" type="button" hidden>還原</button>
             </div>
             <!-- 2026-09-28：有波形可以直接點跳轉，倒數對齊先隱藏（元素保留，app-playback.js 仍綁定它） -->
@@ -719,12 +721,13 @@
                 </div>
                 <div class="practice-bar-actions">
                   <div class="practice-key" role="group" aria-label="Key" data-i18n-aria-label="practice.key">
-                    <span class="practice-key-label">Key</span>
+                    <span class="practice-key-label" data-i18n="practice.key">變調</span>
                     <button id="practice-key-down" class="practice-key-btn" type="button" aria-label="降一個半音" data-i18n-aria-label="controller.pitchDown">−</button>
                     <output id="practice-key-value" class="practice-key-val">0</output>
                     <button id="practice-key-up" class="practice-key-btn" type="button" aria-label="升一個半音" data-i18n-aria-label="controller.pitchUp">+</button>
                   </div>
                   <button id="practice-loop" class="btn btn-ghost btn-sm" type="button" data-new-feature="practice-loop" disabled><span>A–B 循環</span></button>
+                  <button id="practice-loop-cancel" class="btn btn-ghost btn-sm" type="button" hidden data-i18n="practice.loop.cancel">取消</button>
                   <button id="practice-next-section" class="btn btn-ghost btn-sm" type="button" disabled>下一段</button>
                   <button id="practice-obs-preview" class="btn btn-ghost btn-sm" type="button" aria-pressed="false" data-i18n="practice.obsPreview">OBS 預覽</button>
                   <button id="practice-start-tour" class="btn btn-ghost btn-sm" type="button" data-i18n="practice.tour.replay" disabled>教學</button>
@@ -1042,22 +1045,22 @@
               </div>
               <div class="lyric-template-picker" id="template-buttons" role="radiogroup" aria-labelledby="lyric-template-label">
                 <button class="lyric-template-card active" data-template="classic" type="button" role="radio" aria-checked="true" data-i18n-title="template.classicTitle" title="疊層顯示：歷史行淡出在上方，正在唱的一行在下方">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">層</span></span><strong data-i18n="template.classic">經典疊層</strong><span data-i18n="template.classicDesc">完整歌詞與拼音／諧音</span>
+                  <span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">層</span></span><strong data-i18n="template.classic">經典疊層</strong><span data-i18n="template.classicDesc">完整歌詞與拼音／諧音</span>
                 </button>
                 <button class="lyric-template-card" data-template="pulse" type="button" role="radio" aria-checked="false" data-i18n-title="template.pulseTitle" title="星砂流光：以星砂軌跡串起漂浮文字">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">光</span></span><strong data-i18n="template.pulse">星砂流光</strong><span data-i18n="template.pulseDesc">柔和流動、畫面中央</span>
+                  <span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">光</span></span><strong data-i18n="template.pulse">星砂流光</strong><span data-i18n="template.pulseDesc">柔和流動、畫面中央</span>
                 </button>
                 <button class="lyric-template-card" data-template="facet" type="button" role="radio" aria-checked="false" data-i18n-title="template.facetTitle" title="折光階梯：虛線光尺與切角節點分段進場">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">階</span></span><strong data-i18n="template.facet">折光階梯</strong><span data-i18n="template.facetDesc">節點感強的舞台效果</span>
+                  <span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">階</span></span><strong data-i18n="template.facet">折光階梯</strong><span data-i18n="template.facetDesc">節點感強的舞台效果</span>
                 </button>
                 <button class="lyric-template-card" data-template="drift" type="button" role="radio" aria-checked="false" data-i18n-title="template.driftTitle" title="斜拍告白：斜向節拍與逐字律動" hidden aria-hidden="true">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">斜</span></span><strong data-i18n="template.drift">斜拍告白</strong><span data-i18n="template.driftDesc">斜向節拍、逐字律動</span>
+                  <span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">斜</span></span><strong data-i18n="template.drift">斜拍告白</strong><span data-i18n="template.driftDesc">斜向節拍、逐字律動</span>
                 </button>
                 <button class="lyric-template-card" data-template="aura" type="button" role="radio" aria-checked="false" data-i18n-title="template.auraTitle" title="潮汐心景：呼吸光環中的空間文字">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">象</span></span><strong data-i18n="template.aura">潮汐心景</strong><span data-i18n="template.auraDesc">大字留白、情緒演出</span>
+                  <span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">象</span></span><strong data-i18n="template.aura">潮汐心景</strong><span data-i18n="template.auraDesc">大字留白、情緒演出</span>
                 </button>
                 <button class="lyric-template-card" data-template="ktv" type="button" role="radio" aria-checked="false" data-i18n-title="template.ktvTitle" title="霓彩伴唱：雙行錯開、逐字掃色與原地倒數">
-                  <span class="style-thumb-preview"><span class="style-thumb-char">唱</span></span><strong data-i18n="template.ktv">霓彩伴唱</strong><span data-i18n="template.ktvDesc">逐字伴唱、固定雙行</span>
+                  <span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">唱</span></span><strong data-i18n="template.ktv">霓彩伴唱</strong><span data-i18n="template.ktvDesc">逐字伴唱、固定雙行</span>
                 </button>
                 <button class="lyric-template-card" data-template="columnflow" type="button" role="radio" aria-checked="false" data-i18n-title="template.columnflowTitle" title="直書句流：直行在畫面兩側錯落，逐字浮現，唱過的句子留下淡淡殘影">
                   <span class="style-thumb-preview style-thumb-columnflow" aria-hidden="true"><span class="style-thumb-column">句流</span><span class="style-thumb-column">歌詞</span><span class="style-thumb-column">餘韻</span></span><strong data-i18n="template.columnflow">直書句流</strong><span data-i18n="template.columnflowDesc">直書殘影、中央留白</span>
@@ -1089,43 +1092,43 @@
               <div class="field" id="columnflow-variant-field" hidden>
                 <label data-i18n="columnflow.variantLabel">直書句流樣式</label>
                 <div class="style-thumb-row" id="columnflow-variant-buttons">
-                  <button class="style-thumb active" data-columnflow-variant="sen" type="button" data-i18n-title="columnflow.senTitle" title="素筆直書：細緻文字在畫面中錯落填入，保留主播主視覺"><span class="style-thumb-preview"><span class="style-thumb-char">素筆</span></span><span class="style-thumb-label" data-i18n="template.columnSen">素筆直書</span></button>
-                  <button class="style-thumb" data-columnflow-variant="fuda" type="button" data-i18n-title="columnflow.fudaTitle" title="字札直書：每個字像一張小紙札，保有不規則手感"><span class="style-thumb-preview"><span class="style-thumb-char">字札</span></span><span class="style-thumb-label" data-i18n="template.columnFuda">字札直書</span></button>
+                  <button class="style-thumb active" data-columnflow-variant="sen" type="button" data-i18n-title="columnflow.senTitle" title="素筆直書：細緻文字在畫面中錯落填入，保留主播主視覺"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">素筆</span></span><span class="style-thumb-label" data-i18n="template.columnSen">素筆直書</span></button>
+                  <button class="style-thumb" data-columnflow-variant="fuda" type="button" data-i18n-title="columnflow.fudaTitle" title="字札直書：每個字像一張小紙札，保有不規則手感"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">字札</span></span><span class="style-thumb-label" data-i18n="template.columnFuda">字札直書</span></button>
                 </div>
                 <p class="field-hint" data-i18n="columnflow.variantHint">素筆是乾淨的文字殘影；字札讓每個字帶小紙片手感。</p>
               </div>
               <div class="field" id="columnflow-entrance-field" hidden>
                 <label data-i18n="columnflow.entranceLabel">逐字進場</label>
                 <div class="style-thumb-row" id="columnflow-entrance-buttons">
-                  <button class="style-thumb active" data-columnflow-entrance="native" type="button" data-i18n-title="columnflow.entranceNativeTitle" title="原樣：吃素筆／字札各自的浮現或掉入"><span class="style-thumb-preview"><span class="style-thumb-char">原樣</span></span><span class="style-thumb-label" data-i18n="template.columnEntranceNative">原樣</span></button>
-                  <button class="style-thumb" data-columnflow-entrance="drift" type="button" data-i18n-title="columnflow.entranceDriftTitle" title="四相漂字：每個字從四角帶弧度漂入定點、入場後完全靜止；可調動畫強度"><span class="style-thumb-preview"><span class="style-thumb-char">漂字</span></span><span class="style-thumb-label" data-i18n="template.columnEntranceDrift">四相漂字</span></button>
+                  <button class="style-thumb active" data-columnflow-entrance="native" type="button" data-i18n-title="columnflow.entranceNativeTitle" title="原樣：吃素筆／字札各自的浮現或掉入"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">原樣</span></span><span class="style-thumb-label" data-i18n="template.columnEntranceNative">原樣</span></button>
+                  <button class="style-thumb" data-columnflow-entrance="drift" type="button" data-i18n-title="columnflow.entranceDriftTitle" title="四相漂字：每個字從四角帶弧度漂入定點、入場後完全靜止；可調動畫強度"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">漂字</span></span><span class="style-thumb-label" data-i18n="template.columnEntranceDrift">四相漂字</span></button>
                 </div>
                 <p class="field-hint" data-i18n="columnflow.entranceHint">原樣＝該外觀本來的進場；四相漂字讓字從四角漂入定點後靜止（可調沉穩／標準／狂放強度），素筆、字札都能套。</p>
               </div>
               <div class="field" id="columnflow-placement-field" hidden>
                 <label data-i18n="columnflow.placementLabel">直書位置</label>
                 <div class="style-thumb-row" id="columnflow-placement-buttons">
-                  <button class="style-thumb" data-columnflow-placement="left" type="button" data-i18n-title="columnflow.placementLeftTitle" title="偏左：所有直行留在畫面左側，避開正中"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
-                  <button class="style-thumb" data-columnflow-placement="right" type="button" data-i18n-title="columnflow.placementRightTitle" title="偏右：所有直行留在畫面右側，避開正中"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
-                  <button class="style-thumb active" data-columnflow-placement="split" type="button" data-i18n-title="columnflow.placementSplitTitle" title="左右分散：新句交錯補到左右兩側，畫面正中保持留白"><span class="style-thumb-preview"><span class="style-thumb-char">散</span></span><span class="style-thumb-label" data-i18n="controller.split">左右分散</span></button>
+                  <button class="style-thumb" data-columnflow-placement="left" type="button" data-i18n-title="columnflow.placementLeftTitle" title="偏左：所有直行留在畫面左側，避開正中"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
+                  <button class="style-thumb" data-columnflow-placement="right" type="button" data-i18n-title="columnflow.placementRightTitle" title="偏右：所有直行留在畫面右側，避開正中"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
+                  <button class="style-thumb active" data-columnflow-placement="split" type="button" data-i18n-title="columnflow.placementSplitTitle" title="左右分散：新句交錯補到左右兩側，畫面正中保持留白"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">散</span></span><span class="style-thumb-label" data-i18n="controller.split">左右分散</span></button>
                 </div>
                 <p class="field-hint" data-i18n="columnflow.placementHint">預設左右分散；新句補上時，最舊的一句才會淡出。</p>
               </div>
               <div class="field" id="jizura-placement-field" hidden>
                 <label data-i18n="jizura.placementLabel">歌詞位置</label>
                 <div class="style-thumb-row" id="jizura-placement-buttons">
-                  <button class="style-thumb" data-jizura-placement="left" type="button" data-i18n-title="jizura.placementLeftTitle" title="偏左：裝飾維持全畫面，歌詞本身盡量往左放，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
-                  <button class="style-thumb" data-jizura-placement="right" type="button" data-i18n-title="jizura.placementRightTitle" title="偏右：裝飾維持全畫面，歌詞本身盡量往右放，避開站在中間的主播"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
-                  <button class="style-thumb active" data-jizura-placement="sides" type="button" data-i18n-title="jizura.placementSidesTitle" title="兩側：每句拆成兩半放在左右兩側，中間整片留給主播"><span class="style-thumb-preview"><span class="style-thumb-char">兩</span></span><span class="style-thumb-label" data-i18n="jizura.placementSides">兩側</span></button>
-                  <button class="style-thumb" data-jizura-placement="full" type="button" data-i18n-title="jizura.placementFullTitle" title="置中：歌詞照引擎原本的構圖放，常落在畫面正中、會壓到主播"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="jizura.placementFull">置中</span></button>
+                  <button class="style-thumb" data-jizura-placement="left" type="button" data-i18n-title="jizura.placementLeftTitle" title="偏左：裝飾維持全畫面，歌詞本身盡量往左放，避開站在中間的主播"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
+                  <button class="style-thumb" data-jizura-placement="right" type="button" data-i18n-title="jizura.placementRightTitle" title="偏右：裝飾維持全畫面，歌詞本身盡量往右放，避開站在中間的主播"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
+                  <button class="style-thumb active" data-jizura-placement="sides" type="button" data-i18n-title="jizura.placementSidesTitle" title="兩側：每句拆成兩半放在左右兩側，中間整片留給主播"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">兩</span></span><span class="style-thumb-label" data-i18n="jizura.placementSides">兩側</span></button>
+                  <button class="style-thumb" data-jizura-placement="full" type="button" data-i18n-title="jizura.placementFullTitle" title="置中：歌詞照引擎原本的構圖放，常落在畫面正中、會壓到主播"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="jizura.placementFull">置中</span></button>
                 </div>
                 <p class="field-hint" data-i18n="jizura.placementHint">預設兩側：每句拆成左右兩半，中間整片留給主播，版面只用較輕、不佔畫面的那一組。偏左／偏右時裝飾一律鋪滿全畫面，歌詞依每句版面寬度盡量往側邊推，太寬的版面（例如跑馬燈）推不動就維持原位。</p>
               </div>
               <div class="field" id="jizura-motion-field" hidden>
                 <label data-i18n="jizura.motionLabel">動作節奏</label>
                 <div class="style-thumb-row" id="jizura-motion-buttons">
-                  <button class="style-thumb active" data-jizura-motion="smooth" type="button" data-i18n-title="jizura.motionSmoothTitle" title="流暢：每一幀都更新動作"><span class="style-thumb-preview"><span class="style-thumb-char">順</span></span><span class="style-thumb-label" data-i18n="jizura.motionSmooth">流暢</span></button>
-                  <button class="style-thumb" data-jizura-motion="koma" type="button" data-i18n-title="jizura.motionKomaTitle" title="作畫感：每秒 12 張的頓挫（日系文字 PV 常用的「一拍二」）"><span class="style-thumb-preview"><span class="style-thumb-char">格</span></span><span class="style-thumb-label" data-i18n="jizura.motionKoma">作畫感</span></button>
+                  <button class="style-thumb active" data-jizura-motion="smooth" type="button" data-i18n-title="jizura.motionSmoothTitle" title="流暢：每一幀都更新動作"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">順</span></span><span class="style-thumb-label" data-i18n="jizura.motionSmooth">流暢</span></button>
+                  <button class="style-thumb" data-jizura-motion="koma" type="button" data-i18n-title="jizura.motionKomaTitle" title="作畫感：每秒 12 張的頓挫（日系文字 PV 常用的「一拍二」）"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">格</span></span><span class="style-thumb-label" data-i18n="jizura.motionKoma">作畫感</span></button>
                 </div>
                 <p class="field-hint" data-i18n="jizura.motionHint">作畫感是刻意的一格一格動（每秒 12 張），不是掉幀；想要滑順就選流暢。</p>
               </div>
@@ -1167,10 +1170,10 @@
                 </div>
                 <!-- 動畫模板：置中/偏左/偏右/左右分散 -->
                 <div class="style-thumb-row" id="lyric-pos-buttons">
-                  <button class="style-thumb active" data-lyric-pos="center" type="button" data-i18n-title="lyricStyle.posCenterTitle" title="置中：歌詞在畫面正中央（預設）"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="controller.center">置中</span></button>
-                  <button class="style-thumb" data-lyric-pos="left" type="button" data-i18n-title="lyricStyle.posLeftTitle" title="偏左：歌詞集中在畫面左半，右邊留給人物"><span class="style-thumb-preview"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
-                  <button class="style-thumb" data-lyric-pos="right" type="button" data-i18n-title="lyricStyle.posRightTitle" title="偏右：歌詞集中在畫面右半，左邊留給人物"><span class="style-thumb-preview"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
-                  <button class="style-thumb" data-lyric-pos="split" type="button" data-i18n-title="lyricStyle.posSplitTitle" title="左右分散：一句左、一句右交替出現，中間留給人物（經典疊層不支援）"><span class="style-thumb-preview"><span class="style-thumb-char">分</span></span><span class="style-thumb-label" data-i18n="controller.split">左右分散</span></button>
+                  <button class="style-thumb active" data-lyric-pos="center" type="button" data-i18n-title="lyricStyle.posCenterTitle" title="置中：歌詞在畫面正中央（預設）"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="controller.center">置中</span></button>
+                  <button class="style-thumb" data-lyric-pos="left" type="button" data-i18n-title="lyricStyle.posLeftTitle" title="偏左：歌詞集中在畫面左半，右邊留給人物"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">左</span></span><span class="style-thumb-label" data-i18n="controller.left">偏左</span></button>
+                  <button class="style-thumb" data-lyric-pos="right" type="button" data-i18n-title="lyricStyle.posRightTitle" title="偏右：歌詞集中在畫面右半，左邊留給人物"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">右</span></span><span class="style-thumb-label" data-i18n="controller.right">偏右</span></button>
+                  <button class="style-thumb" data-lyric-pos="split" type="button" data-i18n-title="lyricStyle.posSplitTitle" title="左右分散：一句左、一句右交替出現，中間留給人物（經典疊層不支援）"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">分</span></span><span class="style-thumb-label" data-i18n="controller.split">左右分散</span></button>
                 </div>
                 <p class="field-hint" id="lyric-pos-hint" data-i18n="lyricStyle.posHint">方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。</p>
                 <!-- 位置微調：置中/偏左/偏右都可再做小範圍位移；範圍會依目前內容自動收緊，
@@ -1264,8 +1267,8 @@
               <div class="field" id="paperstrip-orient-field" hidden>
                 <label data-i18n="paperstrip.orientLabel">紙帶排向</label>
                 <div class="style-thumb-row" id="paperstrip-orient-buttons">
-                  <button class="style-thumb active" data-paperstrip-orient="horizontal" type="button" data-i18n-title="paperstrip.horizontalTitle" title="橫式：紙帶由左往右展開、字左到右填入（預設白條黑字）"><span class="style-thumb-preview"><span class="style-thumb-char">橫</span></span><span class="style-thumb-label" data-i18n="paperstrip.horizontal">橫式紙帶</span></button>
-                  <button class="style-thumb" data-paperstrip-orient="vertical" type="button" data-i18n-title="paperstrip.verticalTitle" title="直式：紙帶由上往下展開、字沿直欄填入（預設黑條白字）"><span class="style-thumb-preview"><span class="style-thumb-char">直</span></span><span class="style-thumb-label" data-i18n="paperstrip.vertical">直式紙帶</span></button>
+                  <button class="style-thumb active" data-paperstrip-orient="horizontal" type="button" data-i18n-title="paperstrip.horizontalTitle" title="橫式：紙帶由左往右展開、字左到右填入（預設白條黑字）"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">橫</span></span><span class="style-thumb-label" data-i18n="paperstrip.horizontal">橫式紙帶</span></button>
+                  <button class="style-thumb" data-paperstrip-orient="vertical" type="button" data-i18n-title="paperstrip.verticalTitle" title="直式：紙帶由上往下展開、字沿直欄填入（預設黑條白字）"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">直</span></span><span class="style-thumb-label" data-i18n="paperstrip.vertical">直式紙帶</span></button>
                 </div>
                 <p class="field-hint" data-i18n="paperstrip.orientHint">出場、逐字、分頁、尺寸邏輯完全一樣，只是整個轉 90°。切排向會一併套用色彩預設（橫式白條黑字／直式黑條白字），之後可再各自調。</p>
               </div>
@@ -1293,9 +1296,9 @@
               <div class="field" id="intensity-field" hidden>
                 <label data-i18n="lyricStyle.intensityTitle">動畫強度</label>
                 <div class="style-thumb-row" id="intensity-buttons">
-                  <button class="style-thumb" data-intensity="calm" type="button" data-i18n-title="lyricStyle.intensityCalmTitle" title="沉穩：置中排列、無散射旋轉"><span class="style-thumb-preview"><span class="style-thumb-char">靜</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityCalm">沉穩</span></button>
-                  <button class="style-thumb active" data-intensity="normal" type="button" data-i18n-title="lyricStyle.intensityNormalTitle" title="標準：適度散射與旋轉"><span class="style-thumb-preview"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityNormal">標準</span></button>
-                  <button class="style-thumb" data-intensity="chaotic" type="button" data-i18n-title="lyricStyle.intensityChaoticTitle" title="狂放：大幅散射、隨機對齊"><span class="style-thumb-preview"><span class="style-thumb-char">狂</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityChaotic">狂放</span></button>
+                  <button class="style-thumb" data-intensity="calm" type="button" data-i18n-title="lyricStyle.intensityCalmTitle" title="沉穩：置中排列、無散射旋轉"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">靜</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityCalm">沉穩</span></button>
+                  <button class="style-thumb active" data-intensity="normal" type="button" data-i18n-title="lyricStyle.intensityNormalTitle" title="標準：適度散射與旋轉"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">中</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityNormal">標準</span></button>
+                  <button class="style-thumb" data-intensity="chaotic" type="button" data-i18n-title="lyricStyle.intensityChaoticTitle" title="狂放：大幅散射、隨機對齊"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">狂</span></span><span class="style-thumb-label" data-i18n="lyricStyle.intensityChaotic">狂放</span></button>
                 </div>
               </div>
             </div>
@@ -1312,12 +1315,12 @@
             </details>
             <div class="field" id="style-preset-field">
               <div class="style-thumb-row" id="style-buttons">
-                <button class="style-thumb active" data-style="cute" type="button" data-i18n-title="lyricStyle.styleCuteTitle" title="Q 彈：字像果凍一樣跳進來，粉紅光暈＋粒子"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleCute">可愛</span></button>
-                <button class="style-thumb" data-style="rock" type="button" data-i18n-title="lyricStyle.styleRockTitle" title="砸落：整行猛力砸進畫面，紅色烈焰光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleRock">搖滾</span></button>
-                <button class="style-thumb" data-style="ballad" type="button" data-i18n-title="lyricStyle.styleBalladTitle" title="漂浮：緩慢淡入、逐字如水波浮現，藍色月光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleBallad">抒情</span></button>
-                <button class="style-thumb" data-style="sparkle" type="button" data-i18n-title="lyricStyle.styleSparkleTitle" title="綻放：字由小點綻放開來，金粉光暈＋粒子"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleSparkle">夢幻</span></button>
-                <button class="style-thumb" data-style="dreamy" type="button" data-i18n-title="lyricStyle.styleDreamyTitle" title="聚焦：從模糊鬼影慢慢聚焦成形，紫色柔光"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleDreamy">空靈</span></button>
-                <button class="style-thumb" data-style="minimal" type="button" data-i18n-title="lyricStyle.styleMinimalTitle" title="字幕感：純淡入、零位移零光效，最安靜"><span class="style-thumb-preview"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleMinimal">簡約</span></button>
+                <button class="style-thumb active" data-style="cute" type="button" data-i18n-title="lyricStyle.styleCuteTitle" title="Q 彈：字像果凍一樣跳進來，粉紅光暈＋粒子"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleCute">可愛</span></button>
+                <button class="style-thumb" data-style="rock" type="button" data-i18n-title="lyricStyle.styleRockTitle" title="砸落：整行猛力砸進畫面，紅色烈焰光"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleRock">搖滾</span></button>
+                <button class="style-thumb" data-style="ballad" type="button" data-i18n-title="lyricStyle.styleBalladTitle" title="漂浮：緩慢淡入、逐字如水波浮現，藍色月光"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleBallad">抒情</span></button>
+                <button class="style-thumb" data-style="sparkle" type="button" data-i18n-title="lyricStyle.styleSparkleTitle" title="綻放：字由小點綻放開來，金粉光暈＋粒子"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleSparkle">夢幻</span></button>
+                <button class="style-thumb" data-style="dreamy" type="button" data-i18n-title="lyricStyle.styleDreamyTitle" title="聚焦：從模糊鬼影慢慢聚焦成形，紫色柔光"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleDreamy">空靈</span></button>
+                <button class="style-thumb" data-style="minimal" type="button" data-i18n-title="lyricStyle.styleMinimalTitle" title="字幕感：純淡入、零位移零光效，最安靜"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">字</span></span><span class="style-thumb-label" data-i18n="lyricStyle.styleMinimal">簡約</span></button>
               </div>
               <button id="btn-style" hidden></button>
               <p class="field-hint" id="style-desc" data-i18n="lyricStyle.styleDescHint">每張縮圖的「字」會用該風格的高亮動態跑一次；滑鼠停在上面可看文字說明。</p>
@@ -2325,6 +2328,11 @@
             <div id="port-fallback-banner" class="banner banner-warning" role="status" hidden>
               <span id="port-fallback-banner-text"></span>
             </div>
+            <ol class="obs-steps">
+              <li data-i18n="system.obsStep1">最簡單：把下方「歌詞畫面」方塊拖到 OBS 的預覽畫面放開，OBS 會自動建好來源。</li>
+              <li data-i18n="system.obsStep2">拖不進去：在 OBS「來源」按「＋」→「瀏覽器」（讓 OBS 顯示一個網頁），把下面「歌詞畫面」網址貼到 URL，寬 1920、高 1080。</li>
+              <li data-i18n="system.obsStep3">歌單畫面做法一樣。想一次建好兩個，用下方「OBS 連動」（要先在 OBS 的「工具 › WebSocket 伺服器設定」開啟）。</li>
+            </ol>
             <div class="obs-url-list">
               <div><div class="label" data-i18n="system.lyricsDisplay">歌詞畫面</div><div id="obs-url-row" class="url-field"><code id="obs-url">http://localhost:3000/display</code><button id="copy-obs-url" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button></div></div>
               <div><div class="label" data-i18n="system.setlistDisplay">歌單畫面</div><div class="url-field"><code id="setlist-url-general">http://localhost:3000/setlist</code><button id="copy-setlist-url-general" class="btn btn-sm" type="button" data-i18n="common.copy">複製</button></div></div>
@@ -2345,8 +2353,8 @@
                 </div>
               </div>
               <div class="obs-launcher-paths">
-                <div class="url-field"><code id="obs-launcher-path-lyrics"></code><button class="btn btn-sm" type="button" data-launcher-copy="lyrics" data-i18n="system.obsLauncherCopyPath">複製檔案路徑</button></div>
-                <div class="url-field"><code id="obs-launcher-path-setlist"></code><button class="btn btn-sm" type="button" data-launcher-copy="setlist" data-i18n="system.obsLauncherCopyPath">複製檔案路徑</button></div>
+                <div class="url-field"><code id="obs-launcher-path-lyrics"></code><button class="btn btn-sm" type="button" data-launcher-copy="lyrics" data-i18n="system.obsLauncherCopyLyrics">複製歌詞畫面檔案路徑</button></div>
+                <div class="url-field"><code id="obs-launcher-path-setlist"></code><button class="btn btn-sm" type="button" data-launcher-copy="setlist" data-i18n="system.obsLauncherCopySetlist">複製歌單畫面檔案路徑</button></div>
               </div>
               <p class="field-hint" id="obs-launcher-mode-hint" data-i18n="system.obsLauncherHintFile">拖不進去的話：在 OBS 新增「瀏覽器」來源 → 勾「本機檔案」→ 選上面這個檔案。</p>
             </div>
@@ -2444,6 +2452,7 @@
           <section class="card" id="hotkeys-card">
             <p class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6.01" y2="10"/><line x1="10" y1="10" x2="10.01" y2="10"/><line x1="14" y1="10" x2="14.01" y2="10"/><line x1="18" y1="10" x2="18.01" y2="10"/><line x1="7" y1="14" x2="17" y2="14"/></svg><span data-i18n="hotkeys.title">快捷鍵</span></p>
             <p class="sub section-intro" data-i18n="hotkeys.intro">「面板內」在面板視窗是目前視窗時有效；「全域」在切到 OBS 或遊戲時也有效（只有桌面版）。點一下按鍵欄位再按下新的組合鍵：Backspace 清除、Esc 取消。</p>
+            <p class="field-hint hotkeys-tip" data-i18n="hotkeys.emergencyTip">建議至少幫「緊急隱藏」設一個全域快捷鍵：直播中切到 OBS 或遊戲時，不用切回面板就能立刻藏起歌詞。選一個遊戲裡不會用到的組合（例如 Ctrl+Shift+H）。</p>
             <p id="hotkeys-global-note" class="field-hint" data-i18n="hotkeys.globalUnavailable" hidden>全域快捷鍵只有桌面版可用。</p>
             <table id="hotkeys-table" class="hotkeys-table">
               <thead><tr><th data-i18n="hotkeys.colAction">動作</th><th data-i18n="hotkeys.colInApp">面板內</th><th data-i18n="hotkeys.colGlobal">全域</th></tr></thead>
@@ -3690,7 +3699,7 @@
             <summary data-i18n="help2.dual.title">雙路音訊：觀眾只聽伴奏、你自己聽原唱</summary>
             <ul class="help-list">
               <li><strong data-i18n="help.dualAudio.goalLabel">目標</strong>：<span data-i18n="help.dualAudio.goal">直播出去的聲音只有「伴奏 ＋ 你的歌聲」，但你自己的耳機裡還能聽到「原唱人聲」當導唱參考，而這個原唱不會被直播收進去。</span></li>
-              <li><strong data-i18n="help.dualAudio.appPartLabel">這程式負責哪一半</strong>：<span data-i18n="help.dualAudio.appPart">已分離歌曲會自動以伴奏＋人聲雙軌播放；新使用者的人聲預設 20%，可在首頁「正在播放」區調整。要讓觀眾只聽伴奏、自己保留導唱，請使用「連線與系統」裡的「雙路音訊路由」。</span></li>
+              <li><strong data-i18n="help.dualAudio.appPartLabel">這程式負責哪一半</strong>：<span data-i18n="help.dualAudio.appPart">已分離歌曲會自動以伴奏＋人聲雙軌播放；新使用者的人聲預設 20%，可在首頁「正在播放」區調整。要讓觀眾只聽伴奏、自己保留導唱，請到「設定 › 音訊」的「雙路音訊路由」。</span></li>
               <li><strong data-i18n="help.dualAudio.referenceRouteLabel">雙路音訊怎麼接</strong>：<span data-i18n="help.dualAudio.referenceRoute">在「雙路音訊路由」卡先選「觀眾／OBS 裝置」和「主播耳機裝置」，再開啟路由。一般歌曲兩路都會播放；已分離歌曲的伴奏送兩路，人聲只留在主播耳機。</span></li>
               <li><strong data-i18n="help.dualAudio.obsWayLabel">OBS 要收哪一路</strong>：<span data-i18n="help.dualAudio.obsWay">OBS 只擷取「觀眾／OBS 裝置」，不要再把「主播耳機裝置」同時收進直播。OBS 與 Windows 兩邊的取樣率都設成 44100Hz，可降低長時間播放漂移。</span></li>
               <li><strong data-i18n="help.dualAudio.simplestAlternativeLabel">不需要分流時</strong>：<span data-i18n="help.dualAudio.simplestAlternative">可以不開雙路音訊路由；已分離歌曲仍會自動雙軌播放。若不想聽導唱，把首頁的人聲音量拉到 0% 即可。</span></li>

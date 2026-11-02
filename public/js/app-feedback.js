@@ -374,9 +374,27 @@
     dom.description.focus();
   }
 
+  // 提示條不是對話框，但跟使用條款、元件安裝、新手歡迎同時出現會讓第一次打開的人不知道先看哪個：
+  // 等畫面上沒有其他對話框（導覽歡迎畫面也算）再出來，最多等兩分鐘
+  function whenNoDialog(cb, startedAt = Date.now()) {
+    const tour = window.OnboardingTour;
+    // 這支比 onboarding-tour.js 早載入：導覽還沒出現時也要等它（最多 10 秒），不然第一輪檢查就直接放行了
+    const tourPending = !tour ? Date.now() - startedAt < 10000
+      : typeof tour.firstRunSettled === 'function' && !tour.firstRunSettled();
+    const pinPending = document.documentElement.dataset.pinOnboarding === 'pending';
+    const busy = tourPending || pinPending || Array.from(document.querySelectorAll('[aria-modal="true"]'))
+      .some((el) => !el.hidden && el.getClientRects().length);
+    if (busy && Date.now() - startedAt < 2 * 60 * 1000) { setTimeout(() => whenNoDialog(cb, startedAt), 1500); return; }
+    cb();
+  }
+
   function showCrashBanner(eventKey) {
     const banner = document.getElementById('crash-banner');
     if (!banner) return;
+    whenNoDialog(() => revealCrashBanner(banner, eventKey));
+  }
+
+  function revealCrashBanner(banner, eventKey) {
     banner.hidden = false;
     const finish = () => { banner.hidden = true; markCrashHandled(eventKey); };
     document.getElementById('crash-review')?.addEventListener('click', () => {
