@@ -118,6 +118,22 @@
       "showOnce": true,
       "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.2.0",
       "buttonText": "前往下載 1.2.0",
+      "enabled": false,
+      "actions": {}
+    },
+    {
+      "id": "release-v1.2.1",
+      "level": "notice",
+      "title": "聲嶼 Elitesand Pro 1.2.1 已推出",
+      "message": "練唱更準更好用：小聲的歌聲不再被判成沒唱、原唱音高改用高精度分析，新增麥克風增益、A–B 循環、唱完的弱句回饋與觀眾挑戰，歌曲庫也能批次建立練唱音軌。介面按鈕更好認、說明更清楚，第一次使用的提示不再疊在一起。1.2.0 可以在程式內直接更新；更早的版本請下載完整安裝檔。使用條款新增匿名的練唱分數區間統計，更新後會請你重新確認一次。",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.2.0",
+      "publishedAt": "2026-11-02T19:55:25.326Z",
+      "expiresAt": "2027-04-30T23:59:59+08:00",
+      "dismissible": true,
+      "showOnce": true,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.2.1",
+      "buttonText": "查看 1.2.1 更新內容",
       "enabled": true,
       "actions": {}
     }
