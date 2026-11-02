@@ -102,6 +102,9 @@
   /* 一般（沒有底色的）按鈕外框：跟背景拉開，又不搶主按鈕 */
   --btn-border:       rgba(233, 185, 73, 0.50);
   --btn-border-hover: #E9B949;
+  /* 文字型（ghost）按鈕：淡淡的框和底，不靠滑鼠移過去也看得出能按 */
+  --btn-ghost-border: rgba(237, 235, 228, 0.18);
+  --btn-ghost-bg:     rgba(237, 235, 228, 0.04);
 
   /* 紅只給 ON AIR／緊急隱藏／刪除 */
   --danger: #F0503C;
@@ -157,6 +160,8 @@
   --accent-glow:  rgba(233, 185, 73, 0.40);
   --btn-border:       rgba(176, 124, 12, 0.55);
   --btn-border-hover: #A87400;
+  --btn-ghost-border: rgba(28, 27, 24, 0.20);
+  --btn-ghost-bg:     rgba(28, 27, 24, 0.04);
   --danger: #C8321E;
   --live:   #C8321E;
   --ok:     #2A6F3E;
@@ -252,16 +257,16 @@ select:focus-visible,
 .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
 .btn-ghost {
-  background: transparent;
-  border-color: transparent;
+  background: var(--btn-ghost-bg);
+  border-color: var(--btn-ghost-border);
   color: var(--text-dim);
 }
-.btn-ghost:hover { background: var(--bg-hover); color: var(--text); border-color: transparent; }
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text); border-color: var(--btn-border); }
 
 .btn-sm { height: 30px; padding: 0 10px; font-size: 12px; }
 
-.btn-danger { color: var(--danger); border-color: transparent; background: transparent; }
-.btn-danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: transparent; }
+.btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: transparent; }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: var(--danger); }
 
 /* ═══ 表單元件 ═══ */
 
