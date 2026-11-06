@@ -4,6 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+const fs = require('fs');
 
 const Fx = require('../public/js/practice/practice-fx');
 const Scoring = require('../public/js/practice/practice-scoring');
@@ -290,4 +291,53 @@ test('a lower gate still ignores room noise and accompaniment bleed when nobody 
   engine.finish('mic');
   const stats = engine.getStats();
   assert.ok(stats.unscorable || stats.result.score < 10, `noise alone must not score (got ${stats.result && stats.result.score})`);
+});
+
+test('OBS follow clock never moves backwards when frames arrive late', () => {
+  const clock = loadEngine().createFollowClock(0.08);
+  const frames = [];
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // 面板每 50ms 送一次，到達延遲 0–30ms，每秒一次 120ms 卡頓
+  for (let i = 0; i < 200; i++) frames.push({ arrive: i * 0.05 + random() * 0.03 + (i % 20 === 19 ? 0.12 : 0), t: 10 + i * 0.05 });
+  frames.sort((a, b) => a.arrive - b.arrive);
+  clock.sync({ playing: true, t: 10, tempo: 1 }, 0);
+  let previous = clock.read(0), next = 0, sent = 0;
+  for (let now = 1 / 30; now < 10; now += 1 / 30) { // OBS 30fps
+    while (next < frames.length && frames[next].arrive <= now) {
+      clock.sync({ playing: true, t: frames[next].t, tempo: 1 }, frames[next].arrive); next++; sent++;
+    }
+    const value = clock.read(now);
+    assert.ok(value >= previous, `time went back at ${now}: ${previous} -> ${value}`);
+    previous = value;
+  }
+  assert.ok(sent > 100);
+  assert.ok(Math.abs(previous - (10 + 10 - 0.08)) < 0.06, `stays on the panel clock: ${previous}`);
+});
+
+test('OBS follow clock holds on pause, resumes without a jump and follows seeks', () => {
+  const clock = loadEngine().createFollowClock(0.08);
+  clock.sync({ playing: true, t: 20, tempo: 1 }, 0);
+  clock.read(0);
+  for (let now = 0.1; now <= 1; now += 0.1) { clock.sync({ playing: true, t: 20 + now, tempo: 1 }, now); clock.read(now); }
+  const before = clock.read(1);
+  clock.sync({ playing: false, t: 21, tempo: 1 }, 1.01);
+  assert.equal(clock.read(1.02), before, 'pause must not jump forward by the render delay');
+  clock.sync({ playing: true, t: 21, tempo: 1 }, 2);
+  const resumed = clock.read(2.02);
+  assert.ok(resumed >= before && resumed - before < 0.05, `resume: ${before} -> ${resumed}`);
+  clock.sync({ playing: true, t: 50, tempo: 1 }, 2.05);
+  assert.ok(clock.read(2.06) > 49.9, 'large jumps snap');
+  clock.reset();
+  clock.sync({ playing: true, t: 49.9, tempo: 1 }, 2.07);
+  assert.ok(clock.read(2.08) < 49.9, 'seek back snaps even when the jump is small');
+});
+
+test('settings lists the practice overlay browser source', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-practice.js'), 'utf8');
+  assert.match(html, /id="practice-url-general"/);
+  assert.match(html, /id="copy-practice-url-general"/);
+  assert.match(app, /\$\('practice-url-general'\)/);
+  assert.match(app, /\$\('copy-practice-url-general'\)/);
 });

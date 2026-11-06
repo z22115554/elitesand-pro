@@ -16,11 +16,42 @@
   const { RULE, credit, centsOff, foldToTarget, resetNote, noteScore, tierOf, activeNote } = Scoring;
   const RENDER_DELAY = 0.08;   // OBS 晚 80ms 畫：等面板的資料先到，畫面才不會一頓一頓
   const SYNC_INTERVAL_MS = 50;
+  const CLOCK_SNAP_SEC = 0.3;
+  const CLOCK_CORRECTION_PER_FRAME = 0.06; // 60fps 一幀校正的比例，跟 /display 的歌詞時鐘同一套
   const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const noteName = (m) => NAMES[((Math.round(m) % 12) + 12) % 12] + (Math.floor(Math.round(m) / 12) - 1);
   const rgba = (hex, a) => { const n = parseInt(String(hex).slice(1), 16) || 0; return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
   const freshTech = () => ({ VIBRATO: 0, 'LONG TONE': 0, SLIDE: 0 });
   const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+  /**
+   * OBS 端的播放時鐘。面板每 50ms 送一次時間，封包到達有快有慢；每包都直接重設基準的話，
+   * 晚到的那包會把畫面往回拉（回彈）。這裡自己往前走，只用封包慢慢校正，差太多（跳轉）才直接跳。
+   * 校正量按實際經過時間換算，一幀呼叫幾次、OBS 跑幾 fps 都一樣。
+   */
+  function createFollowClock(delay = RENDER_DELAY) {
+    let t = 0, wall = null, snap = true;
+    let anchor = { playing: false, t: 0, tempo: 1, at: 0 };
+    return {
+      sync(clock, now) { anchor = { playing: !!clock.playing, t: clock.t, tempo: clock.tempo || 1, at: now }; },
+      reset() { snap = true; },
+      read(now) {
+        const dt = wall === null ? 0 : Math.max(0, now - wall);
+        wall = now;
+        if (!anchor.playing) {
+          // 暫停停在原地（播放中本來就晚 delay 秒），恢復時才接得上；只有暫停中跳轉才動。
+          if (snap || Math.abs(anchor.t - t) > CLOCK_SNAP_SEC) { t = anchor.t; snap = false; }
+          return t;
+        }
+        const target = anchor.t + (now - anchor.at) * anchor.tempo - delay;
+        const free = t + dt * anchor.tempo;
+        const diff = target - free;
+        if (snap || Math.abs(diff) > CLOCK_SNAP_SEC) { t = target; snap = false; return t; }
+        t = Math.max(t, free + diff * (1 - Math.pow(1 - CLOCK_CORRECTION_PER_FRAME, dt * 60)));
+        return t;
+      },
+    };
+  }
 
   function createPracticeEngine(options) {
     const role = options.role === 'source' ? 'source' : 'panel';
@@ -42,6 +73,7 @@
       passStart: 0, passEnd: 0, discontinuous: false, context: null, mixedContext: false,
     };
     const sync = { lastT: -Infinity, dirty: new Set(), events: [], sentAt: 0 };
+    const followClock = createFollowClock();
     let frameHandle = 0;
     let destroyed = false;
 
@@ -53,10 +85,7 @@
 
     // ── 時間 ───────────────────────────────────────────────────────────────
     function songTime() {
-      if (role === 'source') {
-        const c = state.clock;
-        return c.playing ? c.t + ((Date.now() - c.at) / 1000) * (c.tempo || 1) - RENDER_DELAY : c.t;
-      }
+      if (role === 'source') return followClock.read(performance.now() / 1000);
       const clock = options.clock ? options.clock() : null;
       return clock && Number.isFinite(clock.t) ? clock.t : state.lastPanelT;
     }
@@ -492,12 +521,13 @@
     function receive(m) {
       if (role !== 'source' || !m) return;
       if (m.type === 'style') { setStyle(m.style); return; }
+      if (m.type === 'song' || m.type === 'clear' || m.type === 'seek') followClock.reset();
       if (m.type === 'song') { setGuide(m.song ? { ...m.song, notes: m.song.notes.map((n) => ({ ...n })), exclusions: [] } : null); return; }
       if (m.type === 'clear') { state.guide = null; clearTake(); clearCanvas(); return; }
       if (!state.guide) return;
       if (m.type === 'seek') { resetFrom(m.offset); return; }
       if (m.type !== 'frame') return;
-      if (m.clock) state.clock = { ...m.clock, at: Date.now() };
+      if (m.clock) { state.clock = { ...m.clock, at: Date.now() }; followClock.sync(m.clock, performance.now() / 1000); }
       if (m.trail) state.trail.push(...m.trail);
       for (const [i, fills, hit, seen, voiced] of m.notes || []) {
         const n = state.guide.notes[i]; if (n) Object.assign(n, { fills, hit, seen, voiced });
@@ -930,5 +960,5 @@
     return api;
   }
 
-  return { createPracticeEngine, RENDER_DELAY };
+  return { createPracticeEngine, createFollowClock, RENDER_DELAY };
 });

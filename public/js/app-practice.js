@@ -803,6 +803,13 @@
     return new URL(path, window.location.origin).href;
   }
 
+  function renderObsUrls() {
+    const url = obsUrl();
+    ui.obsUrl.textContent = url;
+    const general = $('practice-url-general');
+    if (general) general.textContent = url;
+  }
+
   // ── 側欄：分數、評等、逐句 ──────────────────────────────────────────────
   function renderScore() {
     const st = engine.getStats();
@@ -879,7 +886,7 @@
     ui.octave.checked = prefs.allowOctave !== false;
     ui.contour.checked = !!prefs.showContour;
     ui.latency.value = 0; ui.latency.disabled = true; renderLatency();
-    ui.obsUrl.textContent = obsUrl();
+    renderObsUrls();
     renderGuideState();
     bindStyleInputs();
     bindTabs();
@@ -940,11 +947,15 @@
     ui.octave.addEventListener('change', () => { prefs.allowOctave = ui.octave.checked; writeJson(PREFS_KEY, prefs); feedback.contextChanged(); });
     ui.contour.addEventListener('change', () => { prefs.showContour = ui.contour.checked; writeJson(PREFS_KEY, prefs); });
     ui.modelInstall.addEventListener('click', installModel);
-    ui.obsCopy.addEventListener('click', () => {
-      const url = obsUrl();
-      ui.obsUrl.textContent = url;
-      navigator.clipboard.writeText(url).then(() => toast(t('practice.copied'), 'success')).catch(() => toast(url, 'info'));
-    });
+    for (const button of [ui.obsCopy, $('copy-practice-url-general')]) {
+      if (!button) continue;
+      button.addEventListener('click', () => {
+        const url = obsUrl();
+        renderObsUrls();
+        if (window.NewBadges) window.NewBadges.markSeen('practice-obs-url');
+        navigator.clipboard.writeText(url).then(() => toast(t('practice.copied'), 'success')).catch(() => toast(url, 'info'));
+      });
+    }
 
     ui.calibrate.addEventListener('click', () => {
       syncLatencyProfile(); cancelCalibration(true);
@@ -974,8 +985,8 @@
 
     document.addEventListener('view:change', (e) => {
       visible = e.detail && e.detail.view === 'practice';
+      renderObsUrls(); // 設定頁也有這個網址
       if (!visible) return;
-      ui.obsUrl.textContent = obsUrl();
       renderKey();
       feedback.refresh();
       checkModel();

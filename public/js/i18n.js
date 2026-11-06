@@ -1771,6 +1771,7 @@
     'network.requestTimedOut': ['請求逾時，請檢查網路連線', 'Request timed out. Check your network connection.', 'リクエストがタイムアウトしました。ネットワーク接続を確認してください。', '요청 시간이 초과되었습니다. 네트워크 연결을 확인하세요.', '请求超时，请检查网络连接。'],
     'system.obsUrls': ['OBS 來源網址', 'OBS source URLs', 'OBS ソース URL', 'OBS 소스 URL', 'OBS 来源网址'],
     'system.lyricsDisplay': ['歌詞畫面', 'Lyrics display', '歌詞画面', '가사 화면', '歌词画面'],
+    'system.practiceDisplay': ['練唱畫面', 'Practice display', '練習画面', '연습 화면', '练唱画面'],
     'system.setlistDisplay': ['歌單畫面', 'Setlist display', 'セットリスト画面', '세트리스트 화면', '歌单画面'],
     'system.obsLocaleLabel': ['OBS 顯示語言', 'OBS display language', 'OBS 表示言語', 'OBS 표시 언어', 'OBS 显示语言'],
     'system.obsLocaleFollow': ['跟隨面板語言', 'Follow the panel language', 'パネルの言語に合わせる', '패널 언어를 따름', '跟随面板语言'],
