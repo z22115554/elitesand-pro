@@ -64,7 +64,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 
 #### OBS 動態歌詞
 
-十一種演出模板，各自獨立保存字體／字級／顏色／描邊／透明度、位置／間距／對齊／顯示範圍、動畫強度與具名預設：
+十種演出模板，各自獨立保存字體／字級／顏色／描邊／透明度、位置／間距／對齊／顯示範圍、動畫強度與具名預設：
 
 | 模板 | 一句話 |
 |---|---|
@@ -77,7 +77,6 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 | 對話氣泡 | iMessage 風逐字打字，長間奏跳貼圖 |
 | 跑馬燈牌 | LED 點陣燈牌，唱過的燈亮、沒唱的暗 |
 | 風息成字 | 粒子隨風散開，再聚成正在唱的字；字幕尺度，可直書或左右分散 |
-| 萬聖咒字 | 七種萬聖節逐字效果任選：魔法陣、通靈板、蝙蝠聚字、滴落、符札、月影、蛛絲，或每句輪流；可置中、偏左、偏右 |
 | 文字PV | 日系文字 PV 風格，依段落自動編排版面與動作，預設在側欄避開主播（實驗性；演出引擎 [JIZURA](https://github.com/852wa/JIZURA)，MIT） |
 
 - OBS 透明背景 Browser Source，改設定即時同步。
@@ -235,7 +234,7 @@ Everything runs on your own machine; OBS loads transparent lyrics and setlist ov
 
 #### Animated OBS lyrics
 
-Eleven performance templates, each with independent style settings (font, size, color, stroke, opacity, position, spacing, alignment, range, motion intensity) and named presets:
+Ten performance templates, each with independent style settings (font, size, color, stroke, opacity, position, spacing, alignment, range, motion intensity) and named presets:
 
 | Template | In one line |
 |---|---|
@@ -248,7 +247,6 @@ Eleven performance templates, each with independent style settings (font, size, 
 | Typewriter | iMessage-style typing, sticker drop during long interludes |
 | Light Board | LED dot-matrix sign — sung dots lit, the rest dark |
 | Windborne Particles | Particles scatter in the wind, then gather into the sung line; subtitle scale, vertical or split-sides |
-| Halloween Spellbook | Seven letter-by-letter Halloween effects to choose from (magic circle, Ouija board, bat swarm, slime drip, talisman, moonlight, spider thread) or rotate them every line; center, left or right |
 | Lyric PV | Japanese lyric-video style that plans layouts and motion per song section; sits in a side column by default (experimental; engine: [JIZURA](https://github.com/852wa/JIZURA), MIT) |
 
 - Transparent Browser Sources with instant sync on setting changes.
@@ -406,7 +404,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 
 #### OBS 動く歌詞
 
-11 種類のテンプレート。フォント・サイズ・色・縁取り・不透明度・位置・間隔・整列・表示範囲・動きの強さを個別に保存し、名前付きプリセットも作成できます。
+10 種類のテンプレート。フォント・サイズ・色・縁取り・不透明度・位置・間隔・整列・表示範囲・動きの強さを個別に保存し、名前付きプリセットも作成できます。
 
 | テンプレート | ひとこと |
 |---|---|
@@ -419,7 +417,6 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 | タイプライター | iMessage 風タイピング、長間奏にスタンプ |
 | ライトボード | LED ドットマトリクス、歌った点は点灯、他は消灯 |
 | 風が文字を結ぶ | 風に散った粒子が歌っている行へ集まる。字幕サイズ、縦組みや左右振り分けが可能 |
-| ハロウィンの呪文字 | 7 種類のハロウィン一文字演出から選択：魔法陣、ウィジャボード、コウモリ集字、しずく、お札、月影、クモの糸。1 行ごとに切り替えも可。中央・左寄せ・右寄せ |
 
 - 透明背景の Browser Source、設定変更を即時同期。
 - 単語ハイライト、行切り替え、間奏カウントダウン、時計同期。
@@ -576,7 +573,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 
 #### OBS 동적 가사
 
-11가지 템플릿. 글꼴·크기·색상·외곽선·불투명도·위치·간격·정렬·표시 범위·모션 강도를 개별 저장하고 이름 있는 프리셋도 만들 수 있습니다.
+10가지 템플릿. 글꼴·크기·색상·외곽선·불투명도·위치·간격·정렬·표시 범위·모션 강도를 개별 저장하고 이름 있는 프리셋도 만들 수 있습니다.
 
 | 템플릿 | 한 줄 |
 |---|---|
@@ -589,7 +586,6 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 | 타자기 | iMessage 스타일 타이핑, 긴 간주에 스티커 |
 | 라이트보드 | LED 도트 매트릭스, 부른 점은 켜지고 나머지는 꺼짐 |
 | 바람 입자 글자 | 바람에 흩어진 입자가 부르는 줄로 모임; 자막 크기, 세로쓰기 또는 좌우 분산 |
-| 핼러윈 주문 글자 | 핼러윈 글자별 효과 7종 중 선택: 마법진, 위자 보드, 박쥐 글자, 물방울, 부적, 달그림자, 거미줄. 줄마다 번갈아 쓰기도 가능; 가운데·왼쪽·오른쪽 |
 
 - 투명 배경 Browser Source, 설정 변경 즉시 동기화.
 - 단어 하이라이트, 줄 전환, 간주 카운트다운, 시계 동기화.
@@ -746,7 +742,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 
 #### OBS 动态歌词
 
-十一种演出模板，各自独立保存字体／字级／颜色／描边／透明度、位置／间距／对齐／显示范围、动画强度与具名预设：
+十种演出模板，各自独立保存字体／字级／颜色／描边／透明度、位置／间距／对齐／显示范围、动画强度与具名预设：
 
 | 模板 | 一句话 |
 |---|---|
@@ -759,7 +755,6 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 | 对话气泡 | iMessage 风逐字打字，长间奏跳贴图 |
 | 跑马灯牌 | LED 点阵灯牌，唱过的灯亮、没唱的暗 |
 | 风息成字 | 粒子随风散开，再聚成正在唱的字；字幕尺度，可竖排或左右分散 |
-| 万圣咒字 | 七种万圣节逐字效果任选：魔法阵、通灵板、蝙蝠聚字、滴落、符札、月影、蛛丝，或每句轮流；可居中、偏左、偏右 |
 
 - OBS 透明背景 Browser Source，改设置即时同步。
 - 逐字扫光、逐句切换、间奏倒计时与时钟同步。

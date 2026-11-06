@@ -23,6 +23,7 @@ const { createLogger } = require('../utils/logger');
 const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
 const { emitToAccessRooms } = require('../utils/socket-broadcast');
+const { isTemplateOff, resolveTemplateId } = require('../utils/seasonal-templates');
 
 const log = createLogger('State');
 const STATE_SYNC_WARN_BYTES = 512 * 1024;
@@ -276,6 +277,10 @@ function createAppState(io) {
     if (typeof saved.metronomeEnabled === 'boolean') playState.metronomeEnabled = saved.metronomeEnabled;
     if (saved.lyricSettings && typeof saved.lyricSettings === 'object') {
       playState.lyricSettings = sanitizeJsonObject(saved.lyricSettings) || {};
+      // 季節限定模板下架期間，舊存檔選到它就換回預設模板（模板自己的設定保留）
+      if (isTemplateOff(playState.lyricSettings.template)) {
+        playState.lyricSettings.template = resolveTemplateId(playState.lyricSettings.template);
+      }
     }
 
     if (saved.trackOffsets && typeof saved.trackOffsets === 'object') {

@@ -15,6 +15,7 @@ const libraryStore = require('../../services/library-store');
 const autoSync = require('../../services/auto-sync');
 const { emitToControlClients } = require('../../utils/socket-broadcast');
 const { downloadsDir } = require('../../utils/app-paths');
+const { isTemplateOff, resolveTemplateId } = require('../../utils/seasonal-templates');
 
 // 自動對時同一首只跑一次（連點、兩台遙控器同時按）；跨 socket 共用。
 const autoSyncRunning = new Set();
@@ -375,6 +376,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (settings.template && !LYRIC_TEMPLATES.includes(settings.template)) {
       delete settings.template;
     }
+    // 季節限定模板下架期間：套用預設或舊預設帶進來也不可選到它
+    if (isTemplateOff(settings.template)) settings.template = resolveTemplateId(settings.template);
     const templateSettings = sanitizeLyricTemplateSettings(settings.lyricTemplateSettings);
     sanitizeParticleSettings(settings);
     if (templateSettings) settings.lyricTemplateSettings = templateSettings;

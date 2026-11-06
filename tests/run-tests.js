@@ -10817,6 +10817,25 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
     'server 必須把貼圖開關布林化、門檻夾在 3–20 秒: ');
 });
 
+test('季節限定模板下架：選單藏起來、伺服器不接受、舊存檔換回預設、模板自己的設定保留', () => {
+  const root = path.join(__dirname, '..');
+  const seasonal = require('../server/utils/seasonal-templates');
+  ok(seasonal.isTemplateOff('spellbook'), '萬聖咒字目前必須在下架清單: ');
+  ok(!seasonal.isTemplateOff('classic') && !seasonal.isTemplateOff(undefined), '一般模板與空值不可被當成下架: ');
+  ok(seasonal.resolveTemplateId('spellbook') === 'classic' && seasonal.resolveTemplateId('pulse') === 'pulse',
+    '下架模板換回 classic，其他模板原樣: ');
+  const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  ok(read('server/routes/handlers/lyrics.js').includes('if (isTemplateOff(settings.template)) settings.template = resolveTemplateId(settings.template);'),
+    'lyric-settings:update 必須擋下架模板: ');
+  ok(read('server/state/app-state.js').includes('isTemplateOff(playState.lyricSettings.template)'),
+    '載入舊存檔時必須把下架模板換回預設: ');
+  ok(/data-template="spellbook" data-seasonal-off hidden/.test(read('public/index.html'))
+    && /data-template="spellbook" data-seasonal-off hidden/.test(read('public/controller.html')),
+    '面板與手機的萬聖咒字選項必須標 data-seasonal-off 並隱藏: ');
+  // 只換 template，不碰 lyricTemplateSettings.spellbook：明年重新開放時使用者的調整還在
+  ok(!read('server/state/app-state.js').includes('lyricTemplateSettings.spellbook'), '不可刪掉模板自己的設定: ');
+});
+
 test('萬聖咒字：七種逐字效果一個模板、時間驅動、吃通用設定並接齊面板／手機／伺服器', () => {
   const root = path.join(__dirname, '..');
   const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
