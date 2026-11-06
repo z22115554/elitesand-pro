@@ -35,15 +35,30 @@ const VERSION_SPREAD_MS = 500;
 const MAX_DURATION_SEC = 15 * 60;
 const CREDIT_LINE = /作[詞词曲]|[編编]曲|[製制]作|監製|混音|lyrics\s*by|composed|arranged|^\s*(詞|曲)\s*[:：]/i;
 
-function decodeMono(file, { ffmpeg = getFfmpegPath(), spawnImpl = spawn } = {}) {
+// ffmpeg 卡住（檔案被鎖、網路磁碟）時不能永遠等：這首會一直顯示「正在對時」，
+// 排在共用 ffmpeg 佇列後面的轉碼也會跟著卡死。15 分鐘的人聲解碼正常只要幾秒。
+const DECODE_TIMEOUT_MS = 120000;
+
+function decodeMono(file, { ffmpeg = getFfmpegPath(), spawnImpl = spawn, timeoutMs = DECODE_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawnImpl(ffmpeg, ['-v', 'error', '-nostdin', '-i', file, '-t', String(MAX_DURATION_SEC),
       '-ac', '1', '-ar', String(SAMPLE_RATE), '-f', 'f32le', 'pipe:1'], { windowsHide: true });
     const chunks = [];
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill(); } catch (_) { /* 已結束 */ }
+      reject(new Error('DECODE_TIMEOUT'));
+    }, timeoutMs);
+    if (timer.unref) timer.unref();
     child.stdout.on('data', (chunk) => chunks.push(chunk));
     child.stderr.on('data', () => {});
-    child.on('error', reject);
+    child.on('error', (error) => { if (settled) return; settled = true; clearTimeout(timer); reject(error); });
     child.on('close', (code) => {
+      clearTimeout(timer);
+      if (settled) return;
+      settled = true;
       if (code !== 0) return reject(new Error(`DECODE_FAILED`));
       const buf = Buffer.concat(chunks);
       // Buffer 的 byteOffset 不保證 4-byte 對齊，複製一份再當 Float32Array 讀。

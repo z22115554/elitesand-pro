@@ -212,7 +212,8 @@
 
     /** 面板：播放器跳轉了（拖進度條、手機遙控、換段落）。 */
     function seek(offset) {
-      if (!Number.isFinite(offset)) return;
+      // 還沒有導唱資料（載入中或這首沒有）時沒有東西可以重算；不擋的話 setPlaying(true) 會在這裡丟例外。
+      if (!Number.isFinite(offset) || !state.guide) return;
       if (state.finished) { restart(false); state.passStart = offset; }
       else if (!state.pitchTrace.length && !state.guide.notes.some((n) => n.seen > 0)) state.passStart = offset;
       else if (Math.abs(offset - state.passEnd) > 0.08) state.discontinuous = true;
@@ -600,6 +601,18 @@
         .map((p) => p.gap ? { t: p.t, gap: true } : { t: p.t, midi: p.midi }).sort((a, b) => a.t - b.t);
     }
 
+    // 練唱分頁被切走時畫面不會畫，技巧判定原本只在畫的時候做，顫音／長音／滑音會整段漏判。
+    // 這裡把唱過半秒以上、畫面還沒處理的音符補做判定（畫面在看時由 draw 先處理，粒子特效照常）；軌跡交給 trimTrail。
+    function settleHidden(now) {
+      const notes = state.guide.notes;
+      for (let i = firstAtOrAfter(notes, 'prefixEnd', now - 5); i < notes.length && notes[i].start <= now; i++) {
+        const n = notes[i];
+        if (n.done || n.end > now - 0.5) continue;
+        n.done = true;
+        if (!n.skip && n.seen > 0) detectTechnique(n);
+      }
+    }
+
     // ── 同步給 OBS（panel）─────────────────────────────────────────────────
     function syncFrame() {
       if (role !== 'panel' || !state.guide || !options.onSync) return;
@@ -608,8 +621,16 @@
       sync.sentAt = performance.now();
       const pts = state.trail.filter((p) => p.t > sync.lastT);
       if (pts.length) sync.lastT = pts[pts.length - 1].t;
-      const notes = [...sync.dirty].map((i) => { const n = state.guide.notes[i]; return [i, n.fills, n.hit, n.seen, n.voiced]; });
-      sync.dirty.clear();
+      if (state.playing) settleHidden(now);
+      // OBS 端每一幀只收 MAX_FRAME_NOTES（64）個音符；一次塞太多（例如重新連線後 announce 全部）
+      // 超過的會被丟掉。這裡每幀最多送 64 個，其餘留在 dirty 等下一幀。
+      const notes = [];
+      for (const i of sync.dirty) {
+        if (notes.length >= 64) break;
+        const n = state.guide.notes[i];
+        notes.push([i, n.fills, n.hit, n.seen, n.voiced]);
+        sync.dirty.delete(i);
+      }
       const clock = options.clock ? options.clock() : null;
       options.onSync({ type: 'frame', clock: { playing: state.playing, t: now, tempo: clock && clock.tempo || 1 }, trail: pts, notes,
         user: state.user, score: { target: state.scoreTarget, unscorable: state.unscorable, result: state.result }, events: sync.events.splice(0) });

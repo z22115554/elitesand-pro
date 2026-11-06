@@ -324,9 +324,13 @@ function createPracticeGuideService(options = {}) {
       const lyricsPath = path.join(stageDir, 'lyrics.json');
       await fs.promises.writeFile(lyricsPath, JSON.stringify(lyrics.payload));
       job.stage = 'decoding'; job.progress = 5; emitJob(job);
-      await runProcess(getFfmpeg(), ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-        '-threads', '1', '-filter_threads', '1', '-filter_complex_threads', '1', '-i', source.filename,
-        '-map', '0:a:0', '-t', String(MAX_DURATION_SECONDS + 0.25), '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', decodedPath], job, 'decode');
+      // 鐵則 12：ffmpeg 一律排進共用佇列，不跟匯入轉碼、自動對時同時跑。排隊期間被取消就不必再解碼。
+      await require('./audio-processor').runFfmpegQueued(() => {
+        checkCancelled(job);
+        return runProcess(getFfmpeg(), ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
+          '-threads', '1', '-filter_threads', '1', '-filter_complex_threads', '1', '-i', source.filename,
+          '-map', '0:a:0', '-t', String(MAX_DURATION_SECONDS + 0.25), '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', decodedPath], job, 'decode');
+      });
       checkCancelled(job);
       // 已經裝了 AI 元件、但還沒有高精度音高元件的人（1.2.0 時要另外按）：第一次建音軌時順手補裝，失敗就用 YIN
       if (job.algorithm === 'auto') {

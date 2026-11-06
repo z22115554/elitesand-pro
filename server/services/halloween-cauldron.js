@@ -302,7 +302,15 @@ function createHalloweenCauldron({ event, emit, file = path.join(DATA_DIR, 'hall
    * 讓 Twitch 上的五個兌換項目符合目前狀態：該開的建立／恢復、該停的暫停。
    * 純斗內模式且從沒建過就什麼都不做（不碰沒用點數的主播的頻道）。
    */
-  async function syncRewards() {
+  // 同步一律排隊：連點、兩個面板或重設時同時呼叫，會對 Twitch 重複建立同名獎勵（被拒）而顯示假錯誤。
+  let syncChain = Promise.resolve();
+  function syncRewards() {
+    const run = syncChain.then(doSyncRewards, doSyncRewards);
+    syncChain = run.catch(() => {});
+    return run;
+  }
+
+  async function doSyncRewards() {
     const wanted = settings.mode === 'points';
     const hasAny = INGREDIENTS.some((key) => rewardIds[key]);
     if (!wanted && !hasAny) { rewardStatus = { ok: null, error: '' }; return { ok: true }; }

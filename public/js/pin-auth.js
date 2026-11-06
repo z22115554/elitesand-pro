@@ -56,6 +56,7 @@ const PinAuth = (() => {
     el.classList.add('active');
     el._pinAuthReturnFocus = 'returnFocusTo' in opts ? opts.returnFocusTo : document.activeElement;
     el._pinAuthEscapable = opts.escapable !== false;
+    el._pinAuthOnEscape = typeof opts.onEscape === 'function' ? opts.onEscape : null;
   }
   function hideModal(el) {
     if (!el) return;
@@ -76,7 +77,12 @@ const PinAuth = (() => {
     if (!open.length) return;
     const top = open[open.length - 1];
     if (e.key === 'Escape') {
-      if (top._pinAuthEscapable) { e.preventDefault(); hideModal(top); }
+      if (top._pinAuthEscapable) {
+        e.preventDefault();
+        const onEscape = top._pinAuthOnEscape;
+        hideModal(top);
+        if (onEscape) onEscape();
+      }
       return;
     }
     if (e.key === 'Tab') {
@@ -190,6 +196,10 @@ const PinAuth = (() => {
     // 第一次打開的順序：使用條款 → 音訊元件 → 新手導覽 → 才問 PIN（本機直播不急著設，先讓人跑過一次基本流程）。
     // 有其他對話框或導覽還沒處理完就先等；最多等 10 分鐘，之後照舊直接問。
     let pinOnboardingWait = null;
+    function skipOnboarding() {
+      try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* next launch may ask again */ }
+      delete document.documentElement.dataset.pinOnboarding;
+    }
     function showPinOnboardingWhenFree() {
       if (pinOnboardingWait) return;
       // 讓其他「之後再出也可以」的提示（例如上次未正常關閉）排在 PIN 後面
@@ -209,7 +219,9 @@ const PinAuth = (() => {
         pinOnboardingWait = null;
         let seen = false;
         try { seen = !!localStorage.getItem(ONBOARDING_KEY); } catch (_) { /* 讀不到就照問 */ }
-        if (!seen) showModal(onboardingModal);
+        // Esc 等於按「略過」：要記住已看過、清掉等待旗標（app-feedback 的當機提示在等它），
+        // 不然提示會被擋 2 分鐘，下次 refreshStatus 又再問一次。
+        if (!seen) showModal(onboardingModal, { onEscape: skipOnboarding });
         else delete document.documentElement.dataset.pinOnboarding;
       };
       tick();
@@ -314,9 +326,8 @@ const PinAuth = (() => {
       openManageModal('set', e.currentTarget);
     });
     if (onboardingSkip) onboardingSkip.addEventListener('click', () => {
-      try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) { /* next launch may ask again */ }
       hideModal(onboardingModal);
-      delete document.documentElement.dataset.pinOnboarding;
+      skipOnboarding();
     });
 
     refreshStatus();

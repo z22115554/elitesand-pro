@@ -145,6 +145,10 @@ function sanitizeFrame(input) {
   return { type: 'frame', clock: sanitizeClock(input.clock), trail, notes, user, score: sanitizeScore(input.score), events };
 }
 
+// 全部實例共用一個 exit 掛鉤（測試會建很多個實例，每個各掛一個會觸發 MaxListeners 警告）。
+const PENDING_ON_EXIT = new Set();
+process.on('exit', () => { for (const flush of PENDING_ON_EXIT) flush(); });
+
 function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.json') } = {}) {
   const store = createJsonStore({
     file, label: '練唱 OBS 外觀',
@@ -163,10 +167,18 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
   function persistSoon() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
+      saveTimer = null;
       try { store.save({ style }); } catch (error) { log.warn(`練唱 OBS 外觀存檔失敗：${error.message}`); }
     }, 400);
     if (saveTimer.unref) saveTimer.unref();
   }
+  // 計時器是 unref 的：關程式前 400ms 內改的外觀，沒有這個就會遺失（同 halloween-cauldron 等服務的做法）。
+  PENDING_ON_EXIT.add(() => {
+    if (!saveTimer) return;
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    try { store.save({ style }); } catch (_) { /* 結束中，無法回報 */ }
+  });
 
   function emit(io, message) {
     if (io && typeof io.to === 'function') io.to(ROOM).emit(EVENT, message);

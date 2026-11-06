@@ -86,6 +86,7 @@
     if (result.ok) {
       if (result.reason === 'VERSION_MISMATCH') return [T('autoSync.versionMismatch', { seconds: (result.spreadMs / 1000).toFixed(1) }), 'info'];
       if (result.reason === 'NO_TIMESTAMPS') return [T('autoSync.noTimestamps'), 'info'];
+      if (result.reason === 'CHANGED') return [T('autoSync.changedMeanwhile'), 'info'];
       return [T('autoSync.uncertain'), 'info'];
     }
     const key = { NO_TIMESTAMPS: 'autoSync.noTimestamps', NEEDS_SEPARATION: 'autoSync.noVocals', BUSY: 'autoSync.busy' }[result.code];

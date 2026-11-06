@@ -40,7 +40,6 @@
   let linesRef = null, lines = [];
   let layoutCache = new Map();
   let styleGen = 0;
-  let lastT = 0;
   let resizeObs = null;
 
   // ───────── 小工具 ─────────
@@ -147,9 +146,12 @@
     return { cs, starts: cs.map((_, i) => line.time + per * i), end };
   }
   function ensureLines(ctx) {
+    // 用 getLyrics() 回傳的原始陣列判斷有沒有換歌詞：visibleLines() 每次都 filter 出新陣列，
+    // 拿它比對會每一幀都判定成「換了」，整首歌的逐字時間跟排版快取每幀重算（OBS 每秒 60 次）。
+    const raw = ctx && typeof ctx.getLyrics === 'function' ? ctx.getLyrics() : null;
+    if (raw && raw === linesRef) return;
     const src = visibleLines(ctx);
-    if (src === linesRef && lines.length === src.length) return;
-    linesRef = src;
+    linesRef = raw;
     const kernel = ctx && ctx.kernel;
     lines = src.map((L, i) => {
       const gt = graphemeTimes(L, src, i, kernel);
@@ -572,7 +574,6 @@
     if (!g || !style) return;
     ensureLines(ctx);
     const t = timeMs / 1000;
-    lastT = t;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, cssW, cssH);
     if (!lines.length) return;

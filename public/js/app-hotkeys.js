@@ -15,6 +15,8 @@
   if (!H || !shared) return;
 
   const shellApi = window.ElitesandShell && window.ElitesandShell.hotkeys;
+  // 桌面版但主程序沒有啟用全域快捷鍵（測試用無頭模式、Spout 實驗版）時，全域欄要跟瀏覽器一樣停用。
+  let globalAvailable = !!shellApi;
   const t = (key, vars) => (window.I18n && typeof window.I18n.t === 'function' ? window.I18n.t(key, vars) : key);
   const toast = (message, type) => { if (typeof shared.showToast === 'function') shared.showToast(message, type); };
   const dom = shared.dom || {};
@@ -121,6 +123,7 @@
     if (shellApi) {
       try {
         const state = await shellApi.get();
+        if (state && state.available === false) globalAvailable = false;
         if (state && state.config) {
           config = H.normalize(state.config);
           results = state.results || {};
@@ -172,7 +175,7 @@
     button.textContent = combo ? H.label(combo) : t('hotkeys.unset');
     button.classList.toggle('is-unset', !combo);
     if (scope === 'global') {
-      if (!shellApi || H.isInAppOnly(id)) button.disabled = true;
+      if (!globalAvailable || H.isInAppOnly(id)) button.disabled = true;
       if (H.isInAppOnly(id)) { button.textContent = '—'; button.title = t('hotkeys.inAppOnly'); }
       else if (combo && results[id] === 'taken') {
         button.classList.add('is-taken');
@@ -192,7 +195,7 @@
       name.textContent = t(`hotkeys.action.${id}`);
       for (const scope of H.SCOPES) row.insertCell().appendChild(keyButton(id, scope));
     }
-    if (globalNote) globalNote.hidden = !!shellApi;
+    if (globalNote) globalNote.hidden = globalAvailable;
   }
 
   function stopRecording() {

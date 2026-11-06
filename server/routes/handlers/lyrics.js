@@ -6,6 +6,7 @@
 
 const { createLogger } = require('../../utils/logger');
 const { LyricsEngine } = require('../../services/lyrics-engine');
+const AudioProcessor = require('../../services/audio-processor');
 const { addRomanization, needsRomanization } = require('../../services/romanizer');
 const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS } = require('../../utils/track-schema');
 const path = require('path');
@@ -250,7 +251,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (autoSyncRunning.has(trackId)) return reply({ ok: false, code: 'BUSY' });
     autoSyncRunning.add(trackId);
     try {
-      const samples = await autoSync.decodeMono(vocalsPath);
+      // 鐵則 12：ffmpeg 一律排進共用佇列，不跟匯入轉碼同時跑（兩邊各解一首 15 分鐘的音檔很吃記憶體）。
+      const samples = await AudioProcessor.runFfmpegQueued(() => autoSync.decodeMono(vocalsPath));
       const hasTimestamps = lines.some((l) => l && l.time > 0);
       const current = hasTimestamps ? autoSync.estimateOffset(samples, lines) : { accepted: false, reason: 'NO_TIMESTAMPS' };
       const previousOffsetMs = trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null;
@@ -264,6 +266,12 @@ function registerLyricsHandlers(io, socket, ctx) {
       socket.emit('offset:auto-progress', { trackId, stage: 'sources' });
       const currentLyrics = manual?.lyrics || track.lyrics || '';
       const candidate = await findAlignedSource(samples, track, currentLyrics);
+      // 搜尋其他來源最多要 25 秒：這段時間使用者若自己換了歌詞或調了偏移，不可再拿舊的判斷蓋掉。
+      const offsetNow = trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null;
+      if (candidate && (manualLyricsCache.get(trackId) !== manual || offsetNow !== previousOffsetMs)) {
+        log.info(`自動對時未套用: ${trackId}: 對時期間歌詞或偏移被改過`);
+        return reply({ ok: true, applied: false, reason: 'CHANGED' });
+      }
       if (candidate) {
         const snapshot = {
           lyrics: currentLyrics || null,
@@ -301,6 +309,9 @@ function registerLyricsHandlers(io, socket, ctx) {
     }
     const accepted = [];
     for (const c of rows || []) {
+      // 每個候選都要跑一次 FFT 對時（4 分鐘的歌約 0.3 秒）：中間讓出事件迴圈，
+      // 不然候選一多，直播中的歌詞同步、OBS、HTTP 會整個卡住好幾秒。
+      await new Promise((resolve) => setImmediate(resolve));
       if (!c || !c.lyrics || c.lyrics === currentLyrics || !['lrc', 'krc', 'srt'].includes(c.type)) continue;
       let parsed = Array.isArray(c.parsedLyrics) && c.parsedLyrics.length ? c.parsedLyrics
         : (c.type === 'krc' ? LyricsEngine.parseKrc(c.lyrics) : LyricsEngine.parseLrc(c.lyrics));

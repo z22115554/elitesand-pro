@@ -91,7 +91,11 @@ async function probe(options = {}) {
  * keeps the lightweight metadata-only probe above.
  */
 async function probeDownload(options = {}) {
-  if (inFlight) await inFlight;
+  if (inFlight) {
+    try { await inFlight; } catch (_) { /* 前一個檢查自己會記錄結果 */ }
+    // 同時有兩個呼叫者在等時，先醒來的那個已經開始新的下載測試：直接共用，不要並行跑兩次。
+    if (inFlight) return inFlight;
+  }
   const run = options.execFileImpl || execFileAsync;
   const now = options.now || (() => Date.now());
   const startedAt = now();

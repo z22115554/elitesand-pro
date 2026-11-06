@@ -39,10 +39,6 @@
 
   let pinnedId = null; // 使用者明確選的那首；null＝跟著目前播放
 
-  function currentTrack() {
-    return state.playlist[state.currentTrackIndex] || null;
-  }
-
   function targetIndex() {
     if (pinnedId != null) {
       const idx = state.playlist.findIndex((t) => t && t.id === pinnedId);
@@ -162,17 +158,22 @@
   // 每句歌詞的位置只畫在目前這首：只有它帶完整 parsedLyrics；其他歌的清單摘要不含歌詞內容。
   // 顯示端判斷式 adjustedTime = audioTime + offset → 某句在 audioTime = line.time − offset 出現。
   const waveEls = { canvas: $('live-prep-wave'), note: $('live-prep-wave-note'), wrap: $('live-prep-wave-wrap') };
-  const waveCache = new Map(); // trackId -> { status: 'loading'|'ok'|'none', data }
+  const waveCache = new Map(); // trackId -> { status: 'loading'|'ok'|'none', data, at }
+  // 失敗不永久記住：PIN 還沒輸入（401）、音檔還沒下載完、ffmpeg 還沒裝好都會失敗，
+  // 之後條件好了要能重試，不然那首歌一直顯示「沒有波形」直到重新整理頁面。
+  const WAVE_RETRY_MS = 30000;
 
   function requestWave(track) {
-    if (!track || waveCache.has(track.id) || typeof PinAuth === 'undefined') return;
+    if (!track || typeof PinAuth === 'undefined') return;
+    const cached = waveCache.get(track.id);
+    if (cached && !(cached.status === 'none' && Date.now() - cached.at > WAVE_RETRY_MS)) return;
     waveCache.set(track.id, { status: 'loading' });
     PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(track.id)}/waveform`)
       .then((r) => r.json().catch(() => ({})))
       .then((body) => {
-        waveCache.set(track.id, body && body.ok && Array.isArray(body.peaks) ? { status: 'ok', data: body } : { status: 'none' });
+        waveCache.set(track.id, body && body.ok && Array.isArray(body.peaks) ? { status: 'ok', data: body } : { status: 'none', at: Date.now() });
       })
-      .catch(() => waveCache.set(track.id, { status: 'none' }))
+      .catch(() => waveCache.set(track.id, { status: 'none', at: Date.now() }))
       .finally(() => { if (targetTrack() && targetTrack().id === track.id) drawWave(); });
   }
 
@@ -187,8 +188,8 @@
     const track = targetTrack();
     wrap.hidden = !track;
     if (!track) return;
+    requestWave(track); // 沒有快取、或上次失敗已超過重試間隔才會真的去抓
     const entry = waveCache.get(track.id);
-    if (!entry) { requestWave(track); }
     const status = entry ? entry.status : 'loading';
 
     // 直播頁不在畫面上時 canvas 寬度是 0：此時畫會變成 1px 寬再被拉滿，整塊變成文字色。
@@ -339,7 +340,13 @@
     SocketClient.on('offset:update', scheduleRender);
     SocketClient.on('state:sync', scheduleRender);
   }
-  if (window.AiSeparation) window.AiSeparation.subscribe(scheduleRender, { replay: false });
+  // AI 伴奏進度事件很密（模型下載時每秒幾十個），只有準備區這首的才需要重畫（含整條波形）。
+  if (window.AiSeparation) {
+    window.AiSeparation.subscribe((state) => {
+      const track = targetTrack();
+      if (!state || !track || String(track.id) === String(state.trackId)) scheduleRender();
+    }, { replay: false });
+  }
   // 播放／暫停會改變「播放中／已載入」與載入按鈕的提醒
   ['btn-play', 'mini-btn-play'].forEach((id) => $(id)?.addEventListener('click', () => setTimeout(scheduleRender, 50)));
 

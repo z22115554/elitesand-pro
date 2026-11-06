@@ -13,8 +13,10 @@
   const ADVANCED_LIVE_STORAGE_KEY = 'elite-advanced-live-tour-v1';
   const HALLOWEEN_STORAGE_KEY = 'elite-halloween-tour-2026-v1';
   const PRACTICE_STORAGE_KEY = 'elite-practice-tour-v1';
-  const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1'];
-  const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2';
+  // 舊版導覽的完成／延後紀錄：刻意不再讀取，留著是為了標明「這些 key 已經不會擋住新使用者」
+  // （tests/onboarding-tour.test.js 會檢查它們仍列在這裡）。
+  const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1']; // eslint-disable-line no-unused-vars
+  const LEGACY_POSTPONED_KEY = 'elite-guide-postponed-v2'; // eslint-disable-line no-unused-vars
   const TOUR_VERSION = 6; // 6：2026-10 面板改版，主線改走新版面（升級者會再看到一次歡迎）
   const ADVANCED_TOUR_VERSION = 7; // 7：2026-10-09 教學加細（歌詞章 6 步）、AI 伴奏與雙路音訊移到第三章「伴奏與直播現場」
   const HOLE_PADDING = 9;
@@ -831,19 +833,6 @@
     dom.status.classList.toggle('is-error', kind === 'error');
   }
 
-  async function waitForPreviewFrames(timeoutMs = 2500) {
-    const deadline = Date.now() + timeoutMs;
-    do {
-      const frames = Array.from(document.querySelectorAll('iframe.obs-preview')).filter((frame) => {
-        if (!frame.contentWindow || !frame.getAttribute('src')) return false;
-        try { return frame.contentDocument?.readyState === 'complete'; } catch (_) { return true; }
-      });
-      if (frames.length) return frames;
-      await delay(100);
-    } while (Date.now() < deadline && active);
-    return [];
-  }
-
   // 準備區的「目前歌詞」真的換成示範文字（lyric-extras.js 發 sample-lyrics:shown）才算成功
   function waitForPrepSample(timeoutMs = 2000) {
     return new Promise((resolve) => {
@@ -861,26 +850,6 @@
       };
       const timer = root.setTimeout(() => finish(false), timeoutMs);
       document.addEventListener('sample-lyrics:shown', onShown);
-    });
-  }
-
-  function waitForSampleAcknowledgment(frames, timeoutMs = 2000) {
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (value) => {
-        if (settled) return;
-        settled = true;
-        root.removeEventListener('message', onMessage);
-        root.clearTimeout(timer);
-        resolve(value);
-      };
-      const onMessage = (event) => {
-        if (event.data?.type !== 'lyrics-preview:sample-ready') return;
-        if (!frames.some((frame) => frame.contentWindow === event.source)) return;
-        finish(true);
-      };
-      const timer = root.setTimeout(() => finish(false), timeoutMs);
-      root.addEventListener('message', onMessage);
     });
   }
 

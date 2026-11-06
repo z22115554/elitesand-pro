@@ -292,14 +292,8 @@
     tools.appendChild(wrap);
     head.appendChild(tools);
 
-    // 清單每列的「伴」格要跟著 AI 伴奏進度變（製作中／完成／失敗）；進度事件很密，合併成一次重畫
-    if (window.AiSeparation && typeof window.AiSeparation.subscribe === 'function' && typeof AppShared.renderPlaylist === 'function') {
-      let timer = 0;
-      window.AiSeparation.subscribe(() => {
-        clearTimeout(timer);
-        timer = setTimeout(() => AppShared.renderPlaylist(), 400);
-      }, { replay: false });
-    }
+    // 清單每列的「伴」格只看 track.separationStatus，那是 library:list 帶來的（它本身就會重畫清單）。
+    // 這裡不必再訂閱 AI 進度：進度事件很密，以前每 400ms 就整份清單重畫一次，畫面卻沒有任何變化。
   }
 
   // ═══ 準備區 ═══

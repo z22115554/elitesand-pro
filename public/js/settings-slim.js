@@ -205,7 +205,9 @@
         overview.hidden = false;
         // 需要處理的排前面
         [...todo, ...rows.filter((r) => !todo.includes(r))].forEach((r) => overview.appendChild(r.node));
-        cardCat.forEach((_cat, card) => card.classList.add('sslim-off'));
+        // 用 toggle(…, true)：已經有這個 class 時不會改寫屬性。classList.add 每次都會寫，
+        // 觸發下面盯著 class 的 MutationObserver → 60ms 後又 render → 無限循環（面板閒置時也一直跑）。
+        cardCat.forEach((_cat, card) => card.classList.toggle('sslim-off', true));
       } else {
         heading.textContent = T(`settingsSlim.cat.${current}`);
         sub.textContent = '';
@@ -233,7 +235,9 @@
       return haystacks.get(card);
     };
     window.addEventListener('i18n:change', () => { haystacks = new Map(); });
-    search.addEventListener('input', () => { haystacks = new Map(); query = search.value; render(); });
+    // 卡片文字變了才清比對快取（換語言、或下面的 MutationObserver 看到卡片內容變動）；
+    // 不在每打一個字時清，否則五種語言的比對文字每按一鍵就全部重算。
+    search.addEventListener('input', () => { query = search.value; render(); });
 
     // 其他地方（導覽、跳轉連結）要指到某張卡片時：切到它的分類，清掉搜尋
     document.addEventListener('ui:reveal', (event) => {
@@ -249,7 +253,7 @@
 
     // 狀態文字由各卡片自己的程式更新：盯著卡片的文字與顯示狀態，重算總覽
     let timer = 0;
-    const schedule = () => { clearTimeout(timer); timer = setTimeout(render, 60); };
+    const schedule = () => { haystacks = new Map(); clearTimeout(timer); timer = setTimeout(render, 60); };
     new MutationObserver(schedule).observe(cardsBox, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });
     window.addEventListener('i18n:change', schedule);
     render();
