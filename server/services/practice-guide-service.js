@@ -12,7 +12,7 @@ const { createLogger } = require('../utils/logger');
 const log = createLogger('PracticeGuide');
 
 const SCHEMA_VERSION = 2;
-const ALGORITHM_VERSION = 'practice-pitch-2';
+const ALGORITHM_VERSION = 'practice-pitch-8';
 const MAX_LYRIC_LINES = 2000;
 const MAX_LYRIC_BYTES = 4 * 1024 * 1024;
 const MAX_DURATION_SECONDS = 20 * 60;
@@ -59,7 +59,7 @@ function validateGuide(guide, expected = {}) {
       || !Array.isArray(guide.contour) || guide.contour.length < 1 || guide.contour.length > MAX_FRAMES
       || !Array.isArray(guide.notes) || guide.notes.length > MAX_NOTES
       || !Array.isArray(guide.lines) || guide.lines.length > MAX_LYRIC_LINES
-      || !['yin-cpu', 'torchcrepe-tiny-cpu'].includes(guide.algorithm)) return false;
+      || !['yin-cpu', 'torchcrepe-tiny-cpu', 'torchcrepe-tiny-cuda'].includes(guide.algorithm)) return false;
   if (expected.sourceFingerprint && guide.sourceFingerprint !== expected.sourceFingerprint) return false;
   if (expected.lyricsKey && guide.lyricsKey !== expected.lyricsKey) return false;
   if (expected.trackId && guide.trackId !== expected.trackId) return false;
@@ -234,7 +234,7 @@ function createPracticeGuideService(options = {}) {
     return { status: 'missing' };
   }
 
-  function runProcess(command, args, job, stage, collectProgress = false) {
+  function runProcess(command, args, job, stage, collectProgress = false, { forceCpu = false } = {}) {
     return new Promise((resolve, reject) => {
       checkCancelled(job);
       let child; let stderr = ''; let stdout = ''; let failure = null; let settled = false; let killTimer;
@@ -256,9 +256,14 @@ function createPracticeGuideService(options = {}) {
         if (error) reject(error); else resolve();
       };
       try {
+        const env = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OMP_NUM_THREADS: '1',
+          MKL_NUM_THREADS: '1', OPENBLAS_NUM_THREADS: '1', NUMEXPR_NUM_THREADS: '1' };
+        if (forceCpu) env.ELITESAND_PRACTICE_DEVICE = 'cpu';
+        if (stage === 'decode' || job.algorithm === 'yin' || env.ELITESAND_PRACTICE_DEVICE?.trim().toLowerCase() === 'cpu') {
+          env.CUDA_VISIBLE_DEVICES = '';
+        }
         child = spawnImpl(command, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
-          env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OMP_NUM_THREADS: '1',
-            MKL_NUM_THREADS: '1', OPENBLAS_NUM_THREADS: '1', NUMEXPR_NUM_THREADS: '1', CUDA_VISIBLE_DEVICES: '' } });
+          env });
         job.child = child;
         controller.signal.addEventListener('abort', abort, { once: true });
         if (controller.signal.aborted) abort();
@@ -274,6 +279,8 @@ function createPracticeGuideService(options = {}) {
               const message = JSON.parse(line);
               if (message.type === 'progress' && !failure && !controller.signal.aborted) {
                 job.progress = Math.max(12, Math.min(94, 12 + (Number(message.progress) || 0) * 0.9)); emitJob(job);
+              } else if (message.type === 'device' && ['cpu', 'cuda'].includes(message.device)) {
+                job.analysisDevice = message.device;
               } else if (message.type === 'error') {
                 const known = ['GUIDE_TOO_LONG', 'PITCH_MODEL_UNAVAILABLE', 'GUIDE_ANALYSIS_FAILED'];
                 failure = new PracticeGuideError(known.includes(message.code) ? message.code : 'GUIDE_ANALYSIS_FAILED',
@@ -330,7 +337,18 @@ function createPracticeGuideService(options = {}) {
       job.stage = 'analyzing'; job.progress = 12; emitJob(job);
       const workerPath = getWorkerPath();
       if (!fs.existsSync(workerPath)) throw new PracticeGuideError('PRACTICE_RUNTIME_MISSING', '音高分析元件尚未安裝，請更新程式。', 503);
-      await runProcess(getPython(), [workerPath, '--input', decodedPath, '--output', outputPath, '--algorithm', job.algorithm, '--lyrics', lyricsPath], job, 'analysis', true);
+      const workerArgs = [workerPath, '--input', decodedPath, '--output', outputPath, '--algorithm', job.algorithm, '--lyrics', lyricsPath];
+      try {
+        await runProcess(getPython(), workerArgs, job, 'analysis', true);
+      } catch (error) {
+        checkCancelled(job);
+        if (job.analysisDevice !== 'cuda') throw error;
+        // A driver may terminate the worker before Python can catch the failure.
+        // Retry once in a fresh CPU-only process, within the original deadline.
+        log.warn('CUDA 音高程序失敗，改用 CPU 重試。');
+        job.analysisDevice = 'cpu';
+        await runProcess(getPython(), workerArgs, job, 'analysis', true, { forceCpu: true });
+      }
       checkCancelled(job);
       const stat = await fs.promises.stat(outputPath);
       if (stat.size <= 0 || stat.size > MAX_GUIDE_BYTES) throw new PracticeGuideError('GUIDE_INVALID_OUTPUT', '音高資料超過大小限制。', 422);
@@ -435,3 +453,4 @@ function createPracticeGuideService(options = {}) {
 
 module.exports = { createPracticeGuideService, PracticeGuideError, validateGuide, validTrackId, lyricsKeyFor, sanitizeLyrics,
   SCHEMA_VERSION, ALGORITHM_VERSION, MAX_DURATION_SECONDS };
+

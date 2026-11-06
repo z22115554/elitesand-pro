@@ -41,7 +41,7 @@ async function fixture(t) {
   } }));
   // 這首歌在媒體庫裡沒有歌詞、也沒有偏移：伺服器算出的歌詞指紋必須跟這份快取一致才會被採用
   const { lyricsKeyFor, sanitizeLyrics } = require(path.join(projectRoot, 'server/services/practice-guide-service'));
-  const guide = { schemaVersion: 2, algorithmVersion: 'practice-pitch-2', algorithm: 'yin-cpu',
+  const guide = { schemaVersion: 2, algorithmVersion: 'practice-pitch-8', algorithm: 'yin-cpu',
     requestedAlgorithm: 'auto', trackId, guideId, sourceFingerprint: fingerprint, lyricsKey: lyricsKeyFor(sanitizeLyrics({ lines: [], offsetMs: 0 })),
     duration: 2, hopSeconds: .01, contourSeconds: .02, sampleRate: 16000, tuning: 0, lyricOffsetMs: 0, voicedSeconds: 2,
     contour: Array.from({ length: 100 }, (_, i) => [Math.round(i * 2) / 100, 69]), lines: [],
@@ -131,3 +131,4 @@ test('complete server mounts controller guide routes with real guide validation 
   assert.equal((await request('/practice-overlay' + sourceQuery, { lan: true })).status, 200,
     'the OBS overlay must not become controller/PIN protected');
 });
+

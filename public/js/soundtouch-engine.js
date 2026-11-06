@@ -26,6 +26,7 @@ function createSoundTouchEngine() {
   let outNode = null;            // 呼叫端提供的接點（音量鏈入口）
   let moduleAdded = false;
   let moduleFailed = false;
+  let modulePending = null;
 
   let node = null;               // 當前的 AudioWorkletNode
   let durationSec = 0;
@@ -41,6 +42,7 @@ function createSoundTouchEngine() {
 
   let timer = null;
   let loadToken = 0;             // 載入世代：晚到的舊載入會被作廢，避免孤兒節點繼續播放
+  let loadAbort = null;
   let onTimeCb = null;
   let onEndedCb = null;
   const playbackSubscribers = new Set();
@@ -51,6 +53,12 @@ function createSoundTouchEngine() {
   async function ensureModule() {
     if (moduleAdded) return true;
     if (moduleFailed || !ctx || !ctx.audioWorklet) { moduleFailed = true; return false; }
+    if (modulePending) return modulePending;
+    modulePending = addModule();
+    return modulePending;
+  }
+
+  async function addModule() {
     try {
       await ctx.audioWorklet.addModule('/vendor/soundtouch-worklet.js');
       moduleAdded = true;
@@ -124,8 +132,10 @@ function createSoundTouchEngine() {
    */
   async function load(url) {
     if (!ctx || !outNode) return false;
-    if (!(await ensureModule())) return false;
     const myToken = ++loadToken; // 作廢任何更早、尚未完成的載入
+    if (loadAbort) loadAbort.abort();
+    const abort = new AbortController();
+    loadAbort = abort;
     try {
       // 立刻停掉並銷毀現有節點，確保切歌時舊聲音馬上停、不會變孤兒繼續播放
       stop();
@@ -134,8 +144,13 @@ function createSoundTouchEngine() {
       effectivePlayback = null;
       workletGeneration = null;
 
-      const res = await fetch(url);
+      if (!(await ensureModule()) || myToken !== loadToken) return false;
+      const res = await fetch(url, { signal: abort.signal });
+      if (myToken !== loadToken) return false;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const arr = await res.arrayBuffer();
+      // 舊請求在送進無法取消的 decodeAudioData 前就丟棄，避免連續切歌同時解碼整首 PCM。
+      if (myToken !== loadToken) return false;
       const audioBuf = await ctx.decodeAudioData(arr);
       // 解碼期間若有更新的 load 進來，這次就作廢（避免兩個節點都接上 → 舊歌停不掉）
       if (myToken !== loadToken) return false;
@@ -145,7 +160,8 @@ function createSoundTouchEngine() {
 
       // 複製出可 transfer 的 channel data（直接 transfer getChannelData 會破壞 AudioBuffer）。
       const left = audioBuf.getChannelData(0).slice();
-      const right = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1).slice() : left.slice();
+      // Worklet 的 ArraySource 只讀來源；單聲道兩側可共用同一份 PCM，輸出仍維持雙聲道。
+      const right = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1).slice() : left;
 
       const newNode = new AudioWorkletNode(ctx, 'soundtouch-processor', {
         numberOfInputs: 0,
@@ -162,7 +178,7 @@ function createSoundTouchEngine() {
       // 把整首資料一次送進去（transfer，零複製到 worklet）+ 帶上目前 pitch/tempo
       newNode.port.postMessage(
         { type: 'load', left, right, sampleRate, duration: durationSec, pitchSemitones: pitchSemis, tempo: tempoRate },
-        [left.buffer, right.buffer]
+        right === left ? [left.buffer] : [left.buffer, right.buffer]
       );
       node = newNode;
       ready = true;
@@ -170,9 +186,12 @@ function createSoundTouchEngine() {
       lastPositionSec = 0;
       return true;
     } catch (e) {
+      if (myToken !== loadToken || abort.signal.aborted) return false;
       console.warn('[SoundTouch] 載入失敗，降級:', e.message);
       if (myToken === loadToken) { _destroyNode(); ready = false; }
       return false;
+    } finally {
+      if (loadAbort === abort) loadAbort = null;
     }
   }
 
@@ -236,6 +255,7 @@ function createSoundTouchEngine() {
   // 釋放 worklet 內保存的完整 PCM buffer。
   function dispose() {
     ++loadToken;
+    if (loadAbort) { loadAbort.abort(); loadAbort = null; }
     _stopTimer();
     _destroyNode();
     ready = false;

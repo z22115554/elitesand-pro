@@ -26,13 +26,17 @@ async function openPanel(page) {
     const addModule = ctx.audioWorklet.addModule.bind(ctx.audioWorklet);
     ctx.audioWorklet.addModule = () => addModule(URL.createObjectURL(new Blob([workletSource], { type: 'application/javascript' })));
     window.testPlayback = { audioContext: ctx, valid: false, playing: false, outputSignature: '["speaker-a",false,"","",0]' };
+    window.testMicSettingsReads = 0;
     window.AppShared = {
       subscribePracticePlayback(fn) { window.testPlaybackChanged = fn; fn(testPlayback); },
       subscribePracticePlaybackBoundary() {}, showToast(message) { throw new Error(message); },
     };
     navigator.mediaDevices.getUserMedia = async () => {
       const stream = ctx.createMediaStreamDestination().stream;
-      stream.getAudioTracks()[0].getSettings = () => ({ deviceId: 'mic-a', sampleRate: ctx.sampleRate });
+      stream.getAudioTracks()[0].getSettings = () => {
+        window.testMicSettingsReads++;
+        return { deviceId: 'mic-a', sampleRate: ctx.sampleRate };
+      };
       return stream;
     };
     navigator.mediaDevices.enumerateDevices = async () => [
@@ -62,6 +66,8 @@ for (const width of [1440, 390]) {
     const slider = page.locator('#practice-latency');
     const status = page.locator('#practice-latency-status');
     await source.selectOption('mic');
+    // Source controls enable before the Worklet and hardware profile finish attaching.
+    await expect.poll(() => page.evaluate(() => window.testMicSettingsReads)).toBeGreaterThan(0);
     await expect(slider).toBeEnabled();
     await expect(status).toContainText('尚未校準');
     await expect(slider).toHaveValue('120');

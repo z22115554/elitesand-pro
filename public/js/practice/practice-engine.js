@@ -53,6 +53,16 @@
     };
   }
 
+  // notes 按 start 排序，但長音可能重疊；用既有的累積最大 end 索引，不能只搜尋 end。
+  function firstAtOrAfter(items, key, time) {
+    let lo = 0, hi = items.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (items[mid][key] < time) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+  }
+
   function createPracticeEngine(options) {
     const role = options.role === 'source' ? 'source' : 'panel';
     const host = options.root;
@@ -64,7 +74,9 @@
       guide: null, style: { ...Fx.STYLE_DEFAULT }, playing: false, key: 0,
       trail: [], user: null, tags: [], particles: [], rings: [], ratings: [], combo: 0, maxCombo: 0,
       techCount: freshTech(), tagLine: null, lastLineDone: -1, segmentStart: 0, view: null, x0: 0,
-      voice: { on: false, floor: 0.0015, prevMidi: 0, quiet: 0, quietHinted: false }, recent: [], euro: null,
+      voice: { on: false, floor: 0.0015, guardFloor: 0.0015, prevMidi: 0, quiet: 0, quietHinted: false,
+        noise: new Float32Array(32), noiseSort: new Float32Array(32), noiseCount: 0, noisePos: 0,
+        noiseAt: -Infinity, rawMidi: 0, periodicFrames: 0, localQuiet: 0 }, recent: [], euro: null,
       refTime: 0, voicedTime: 0, unscorable: false, scoreTarget: null, scoreShown: 0,
       result: null, resultKey: null, resultAnim: 0, lyricLine: -1,
       clock: { playing: false, t: 0, at: Date.now() },   // source 用：面板送來的時鐘
@@ -76,6 +88,10 @@
     const followClock = createFollowClock();
     let frameHandle = 0;
     let destroyed = false;
+    let renderDirty = true;
+    let blankPainted = false;
+    let lastPaint = null;
+    let attemptedThrough = -Infinity;
 
     const FX = () => Fx.resolveFx(state.style.fx);
     const C = () => state.style;
@@ -92,6 +108,7 @@
 
     // ── 外觀 ───────────────────────────────────────────────────────────────
     function setStyle(style) {
+      renderDirty = true;
       Object.assign(state.style, style || {});
       const s = state.style, cls = host.classList, rs = host.style;
       // 掛上整條繼承鏈（例：華麗 → fx-normal fx-warm fx-grand），新風格沒寫的動畫就沿用父風格
@@ -174,6 +191,7 @@
     /** 跳轉：之後的音符、評等與軌跡重算，之前的保留；跳進去時唱到一半的音不計。每次開始播放都是新的一輪。 */
     function resetFrom(offset) {
       if (!state.guide) return;
+      attemptedThrough = -Infinity;
       state.segmentStart = offset;
       state.pitchSample = null; state.silence = 0;
       for (const n of state.guide.notes) if (n.end > offset) { resetNote(n); n.skip = n.start < offset; }
@@ -230,19 +248,22 @@
       seek(time);
     }
 
-    function setKey(key) { state.key = Number.isFinite(key) ? key : 0; }
+    function setKey(key) { state.key = Number.isFinite(key) ? key : 0; renderDirty = true; }
 
     // 新音訊來源、校準或播放邊界不能接上上一段的積分／平滑歷史。
     function resetInput() {
       state.pitchClock = null; state.pitchSample = null; state.silence = 0; state.recent = []; state.euro = null;
       state.voice.on = false; state.voice.prevMidi = 0;
+      state.voice.noiseCount = 0; state.voice.noisePos = 0; state.voice.noiseAt = -Infinity;
+      state.voice.rawMidi = 0; state.voice.periodicFrames = 0;
+      state.voice.localQuiet = 0;
     }
 
     // ── 音高 → 評分（panel）─────────────────────────────────────────────────
     /** d：偵測器一格 {f0, clarity, rms}；mapped：播放時鐘換算 {valid, t（原曲秒數，已扣延遲）, key}。 */
     function pitch(d, mapped) {
       if (role !== 'panel' || !state.guide) return;
-      options.onLevel && options.onLevel(d.rms, state.guide ? voiceGate() : 0);
+      options.onLevel && options.onLevel(d.rms, state.guide ? voiceGate(d) : 0);
       if (!state.playing || !mapped || !mapped.valid || mapped.playing === false || !Number.isFinite(mapped.t) || mapped.t < 0) {
         resetInput(); return;
       }
@@ -273,13 +294,18 @@
       state.pitchClock = { t: time, audioTime, generation: mapped.generation };
       // 以原曲秒數積分；漏格先重建取樣邊界，不補算未觀察到的唱聲。
       const dt = gap ? 0 : delta;
-      let midi = voicing(d, time);
+      const onsetCandidate = !state.voice.on ? state.voice.prevMidi : 0;
+      let midi = voicing(d, time, audioTime);
+      const confirmedOnset = onsetCandidate && midi && Math.abs(midi - onsetCandidate) <= .25;
       if (midi) midi -= context.key + (state.guide.tuning || 0);   // 換回原調；原唱整體偏高／偏低時目標跟著原唱
       // 只保留實測音高；把修正後的八度餵回歷史會讓真正跳八度永遠折回舊音。
       state.recent.push(midi); if (state.recent.length > 30) state.recent.shift();
-      // 中值平滑 3 格（30ms），壓掉單點尖峰；音頭只要兩格就開始算
+      // 中值平滑 3 格。voicing 已確認兩格的音頭不必再次等候；
+      // 只有兩個不同音高時不能固定選較高者，也不能跨短暫失聲帶回舊高音。
       const last3 = state.recent.slice(-3).filter((v) => v > 0).sort((a, b) => a - b);
-      midi = midi > 0 && last3.length >= 2 ? last3[last3.length >> 1] : 0;
+      const supported = last3.length === 3 || last3.length === 2 && last3[1] - last3[0] < 1
+        || last3.length === 1 && confirmedOnset;
+      midi = midi > 0 && supported ? last3[last3.length >> 1] : 0;
       if (sample && !boundary && !gap && dt > 0) {
         scoreInterval(sample.t, time, sample.midi);
         state.silence = sample.midi ? 0 : state.silence + delta;
@@ -307,35 +333,73 @@
 
     // 有聲判定：主要看清晰度（跟音量無關）；音量只用來擋掉真正的安靜。
     // 進入有聲要求嚴（清晰度高、連兩格音高接近），離開放寬，避免一句話中間閃斷。
-    const VOICE_MIN_RMS = 0.0006;     // 約 −64 dBFS：收音再小的麥克風，人聲也在這之上
+    const VOICE_MIN_RMS = 0.0006;     // 最低可用能量；更小的收音仍需使用者調整增益
     const VOICE_FLOOR_MAX = 0.004;    // 噪音底封頂 → 門檻最高約 −43 dBFS
     const VOICE_FLOOR_RATIO = 1.8;    // 高出噪音底約 5 dB 就算有聲
-    function voiceGate() { return Math.max(VOICE_MIN_RMS, state.voice.floor * VOICE_FLOOR_RATIO); }
+    function localVoiceSupport(d) {
+      return d.clarity > .95 && d.localClarity > .85 || d.clarity > .88 && d.localClarity > .95;
+    }
+    function voiceGate(d) {
+      const floor = d && localVoiceSupport(d) ? state.voice.floor : state.voice.guardFloor;
+      return Math.max(VOICE_MIN_RMS, floor * VOICE_FLOOR_RATIO);
+    }
     function nearNote(time) {
       const notes = state.guide.notes;
       return !!(activeNote(notes, time) || activeNote(notes, time - 0.3) || activeNote(notes, time + 0.3));
     }
-    function voicing(d, time) {
+    function voicing(d, time, audioTime) {
       const v = state.voice;
+      const now = Number.isFinite(audioTime) ? audioTime : time;
       const expecting = nearNote(time);
-      // 噪音底只在沒有音符的空檔學：唱歌聲、喇叭漏進來的原唱都不能把門檻墊高（以前沒戴耳機會越唱越難過門檻）
-      if (!expecting) v.floor = Math.min(VOICE_FLOOR_MAX, Math.max(VOICE_MIN_RMS / 2, v.floor * 0.98 + d.rms * 0.02));
-      // 音高非常清楚（單一人聲；伴奏是複音，清晰度上不來）時，只要高過噪音底就算，不再要求高出一截
-      const loud = d.rms > voiceGate() || (d.clarity > 0.88 && d.rms > Math.max(VOICE_MIN_RMS * 2, v.floor * 1.15));
       const m = d.f0 > 0 ? 69 + 12 * Math.log2(d.f0 / 440) : 0;
+      // 參考軌可能漏音；符合既有進入／保持週期性條件的唱聲，不能被反過來學成噪音。
+      // 不限制前後音高差，避免快速轉音或真跳八度把下一段的小聲演唱擋掉。
+      const periodic = m && (v.on ? d.clarity >= 0.55 : d.clarity > 0.75);
+      // 保留原來的保守門檻；只有本格具備額外聲音證據時才採用抗瞬間干擾的背景估計。
+      if (!expecting && !periodic) v.guardFloor = Math.min(VOICE_FLOOR_MAX, Math.max(VOICE_MIN_RMS / 2, v.guardFloor * .98 + d.rms * .02));
+      if (!periodic && (!expecting || d.rms < v.floor) && now - v.noiseAt >= .05) {
+        v.noiseAt = now;
+        v.noise[v.noisePos] = d.rms;
+        v.noisePos = (v.noisePos + 1) % v.noise.length;
+        v.noiseCount = Math.min(v.noise.length, v.noiseCount + 1);
+        if (v.noiseCount >= 8) {
+          for (let i = 0; i < v.noiseCount; i++) v.noiseSort[i] = v.noise[i];
+          const samples = v.noiseSort.subarray(0, v.noiseCount); samples.sort();
+          const background = Math.max(VOICE_MIN_RMS / 2, Math.min(VOICE_FLOOR_MAX, samples[Math.floor((v.noiseCount - 1) * .25)]));
+          v.floor += (background - v.floor) * (background < v.floor ? .2 : .02);
+        }
+      }
+      const supportedWeak = localVoiceSupport(d);
+      const localClear = d.clarity > .75 || !Number.isFinite(d.localClarity) || d.localClarity >= .55;
+      v.periodicFrames = m && d.clarity > .88 && d.localClarity > .95
+        ? v.rawMidi && Math.abs(m - v.rawMidi) < 1 ? v.periodicFrames + 1 : 1 : 0;
+      v.rawMidi = m;
+      // 連續的局部週期性限制非週期噪音的上界，不將整個母音音量學成噪音底。
+      if (v.periodicFrames >= 3) v.floor = Math.min(v.floor,
+        Math.max(VOICE_MIN_RMS / 2, d.rms * Math.sqrt(Math.max(.01, 1 - d.localClarity))));
+      const floor = supportedWeak ? v.floor : v.guardFloor;
+      const loud = d.rms > Math.max(VOICE_MIN_RMS, floor * VOICE_FLOOR_RATIO)
+        || (d.clarity > 0.88 && d.rms > Math.max(VOICE_MIN_RMS * 2, floor * 1.15));
       // 該唱的地方明明有清楚的音高，只是音量沒過門檻：累計起來提示麥克風太小聲
       if (expecting && m && d.clarity > 0.8 && !loud) {
         v.quiet += 0.01;
         if (v.quiet >= 1.5 && !v.quietHinted) { v.quietHinted = true; options.onHint && options.onHint('quiet'); }
       } else if (expecting && loud && m) v.quiet = Math.max(0, v.quiet - 0.02);
       if (!v.on) {
-        const candidate = d.clarity > 0.75 && loud ? m : 0;
+        v.localQuiet = 0;
+        const candidate = d.clarity > 0.75 && localClear && loud ? m : 0;
         const steady = candidate && ((v.prevMidi && Math.abs(candidate - v.prevMidi) < 1) || d.clarity > 0.88);
         v.prevMidi = candidate;
         if (steady) v.on = true;
         return v.on ? m : 0;
       }
-      if (!m || d.clarity < 0.55 || !loud) { v.on = false; v.prevMidi = 0; return 0; }
+      if (!m || d.clarity < 0.55 || !loud) { v.on = false; v.prevMidi = 0; v.localQuiet = 0; return 0; }
+      // 局部不確定的格子不輸出音高；只保留一格進入狀態，避免下一個實測弱音重等音頭。
+      if (!localClear) {
+        if (++v.localQuiet >= 2) { v.on = false; v.prevMidi = 0; }
+        return 0;
+      }
+      v.localQuiet = 0;
       v.prevMidi = m;
       return m;
     }
@@ -369,7 +433,9 @@
 
     function scoreInterval(start, end, midi) {
       // Split at note and grace boundaries. A frame crossing a note cannot credit the next note.
-      for (const n of state.guide.notes) {
+      const notes = state.guide.notes;
+      for (let i = firstAtOrAfter(notes, 'prefixEnd', start); i < notes.length; i++) {
+        const n = notes[i];
         if (n.start >= end) break;
         if (n.end <= start || n.skip || n.excluded) continue;
         const a = Math.max(start, n.start + n.grace), b = Math.min(end, n.end);
@@ -407,10 +473,15 @@
 
     function checkLines(time, attemptedUntil = time) {
       if (!state.guide) return;
-      for (const n of state.guide.notes) {
+      // 舊音符已標記過；只重看上一輪仍在音頭寬容期內的音，以及這輪新開始的音。
+      // 保留最大寬容期，短音／長音交錯時也不會漏標；跳轉會重設這個游標。
+      const allNotes = state.guide.notes;
+      for (let i = firstAtOrAfter(allNotes, 'start', attemptedThrough - RULE.graceMax - 1e-9); i < allNotes.length; i++) {
+        const n = allNotes[i];
         if (n.start > time) break;
         if (!n.skip && !n.excluded && n.start >= state.segmentStart && n.start + n.grace < attemptedUntil) n.attempted = true;
       }
+      if (Number.isFinite(time) && Number.isFinite(attemptedUntil)) attemptedThrough = Math.max(attemptedThrough, Math.min(time, attemptedUntil));
       const lines = state.guide.lines;
       for (let i = state.lastLineDone + 1; i < lines.length && lines[i].end + 0.25 < time; i++) {
         const notes = state.guide.notes.filter((n) => n.line === i && !n.excluded && !n.skip);
@@ -496,6 +567,7 @@
     }
 
     function setGhost(trace) {
+      renderDirty = true;
       state.ghost = (Array.isArray(trace) ? trace : []).slice(0, 12000).filter((p) => p && Number.isFinite(p.t)
         && p.t >= 0 && state.guide && p.t <= state.guide.duration && (p.gap || Number.isFinite(p.midi)))
         .map((p) => p.gap ? { t: p.t, gap: true } : { t: p.t, midi: p.midi }).sort((a, b) => a.t - b.t);
@@ -514,12 +586,29 @@
       const clock = options.clock ? options.clock() : null;
       options.onSync({ type: 'frame', clock: { playing: state.playing, t: now, tempo: clock && clock.tempo || 1 }, trail: pts, notes,
         user: state.user, score: { target: state.scoreTarget, unscorable: state.unscorable, result: state.result }, events: sync.events.splice(0) });
+      trimTrail(now);
       emit('score');
+    }
+
+    // 切到其他分頁仍會收音、評分；不能把軌跡清理只綁在可見畫布的 drawTrail。
+    // 先送出未同步的點，再清掉畫面不再使用的歷史。尚未判定技巧的長音保留完整音頭。
+    function trimTrail(time) {
+      const cutoff = time - RULE.window * RULE.playhead - 0.2;
+      let keepFrom = cutoff;
+      if (role === 'panel' && state.guide) {
+        const notes = state.guide.notes;
+        for (let i = firstAtOrAfter(notes, 'prefixEnd', cutoff); i < notes.length && notes[i].start <= time; i++) {
+          const n = notes[i];
+          if (!n.done && !n.skip && !n.excluded && n.end >= cutoff) keepFrom = Math.min(keepFrom, n.start - 0.25);
+        }
+      }
+      state.trail = state.trail.filter((p) => p.t >= keepFrom);
     }
 
     // ── 接收（source）──────────────────────────────────────────────────────
     function receive(m) {
       if (role !== 'source' || !m) return;
+      renderDirty = true;
       if (m.type === 'style') { setStyle(m.style); return; }
       if (m.type === 'song' || m.type === 'clear' || m.type === 'seek') followClock.reset();
       if (m.type === 'song') { setGuide(m.song ? { ...m.song, notes: m.song.notes.map((n) => ({ ...n })), exclusions: [] } : null); return; }
@@ -538,6 +627,7 @@
         if (ev.k === 'rating') showRating(ev.tag, ev.combo);
         if (ev.k === 'tag') state.tags.push({ ...ev.g, born: songTime() });
       }
+      trimTrail(songTime());
     }
 
     // ── 評等演出：DOM 文字動畫＋畫布粒子 ─────────────────────────────────────
@@ -690,28 +780,45 @@
     function tweenScore() {
       const target = el('score');
       if (!target) return;
-      if (state.unscorable) { target.textContent = t('practice.unscorable'); return; }
-      if (state.scoreTarget == null) { target.textContent = '—'; state.scoreShown = 0; return; }
+      if (state.unscorable) { setText(target, t('practice.unscorable')); return; }
+      if (state.scoreTarget == null) { setText(target, '—'); state.scoreShown = 0; return; }
       if (!state.scoreShown) state.scoreShown = state.scoreTarget;
       state.scoreShown += (state.scoreTarget - state.scoreShown) * 0.12;
-      target.textContent = state.scoreShown.toFixed(1);
+      setText(target, state.scoreShown.toFixed(1));
     }
+
+    function setText(node, value) { if (node.textContent !== value) node.textContent = value; }
 
     function draw() {
       if (destroyed) return;
       frameHandle = requestAnimationFrame(draw);
       const guide = state.guide;
+      if (!guide) {
+        if (!blankPainted) { clearCanvas(); blankPainted = true; }
+        return;
+      }
+      blankPainted = false;
       const dpr = window.devicePixelRatio || 1, W = canvas.clientWidth, H = canvas.clientHeight;
       if (!W || !H) return;
+      const time = songTime(), styles = getComputedStyle(host);
+      const mono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+      const faint = styles.getPropertyValue('--text-faint').trim() || '#8C8981';
+      const text = styles.getPropertyValue('--text').trim() || '#EDEBE4';
+      const playing = role === 'panel' ? state.playing : state.clock.playing;
+      const settling = !state.unscorable && state.scoreTarget != null && Math.abs(state.scoreTarget - state.scoreShown) > 1e-7;
+      // 暫停後讓粒子和滾分自然結束；靜止時保留畫布，尺寸／主題／資料變更立即重畫。
+      if (!playing && !renderDirty && !settling && !state.particles.length && !state.rings.length && lastPaint
+          && time === lastPaint.time && W === lastPaint.W && H === lastPaint.H && dpr === lastPaint.dpr
+          && mono === lastPaint.mono && faint === lastPaint.faint && text === lastPaint.text) return;
+      renderDirty = false;
+      lastPaint = { time, W, H, dpr, mono, faint, text };
       if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); }
       g2.setTransform(dpr, 0, 0, dpr, 0, 0); g2.clearRect(0, 0, W, H);
-      if (!guide) return;
-      const obs = isObs(), fx = FX(), time = songTime();
-      const playing = role === 'panel' ? state.playing : state.clock.playing;
+      const obs = isObs(), fx = FX();
       const status = el('status');
       if (status) {
         const exclusion = guide.exclusions.find((r) => time >= r.start && time < r.end);
-        status.textContent = exclusion ? t('practice.excludedNow') : '';
+        setText(status, exclusion ? t('practice.excludedNow') : '');
       }
       if (role === 'panel' && state.playing) { follow(time); checkLines(time); }
       if (playing || state.lyricLine < 0) updateLyrics(time);
@@ -722,7 +829,7 @@
       const px = (W - left) / RULE.window, x0 = left + (W - left) * RULE.playhead;
       state.x0 = x0;
       const X = (s) => x0 + (s - time) * px, Y = (m) => padT + (VH - m) * rowH;
-      const accent = C().fill, mono = cssVar('--font-mono', 'monospace');
+      const accent = C().fill;
 
       // 半音列：C 列加深；音名跟著目前的 Key（畫面在原調空間，只有標籤加回 Key）
       g2.font = `10px ${mono}`; g2.textBaseline = 'middle';
@@ -733,7 +840,7 @@
           g2.fillRect(left, y, W - left, rowH);
         }
         const spc = ((shown % 12) + 12) % 12;
-        if (!obs && (spc === 0 || spc === 7)) { g2.fillStyle = cssVar('--text-faint', '#8C8981'); g2.fillText(noteName(shown), 8, y + rowH / 2); }
+        if (!obs && (spc === 0 || spc === 7)) { g2.fillStyle = faint; g2.fillText(noteName(shown), 8, y + rowH / 2); }
       }
 
       g2.save(); g2.beginPath(); g2.rect(left, 0, W - left, H); g2.clip();
@@ -742,7 +849,8 @@
       if (!obs && options.getOptions && options.getOptions().showContour && guide.contour) {
         g2.strokeStyle = 'rgba(168,165,155,.35)'; g2.lineWidth = 1; g2.beginPath();
         let prev = null;
-        for (const [ct, cm] of guide.contour) {
+        for (let i = firstAtOrAfter(guide.contour, 0, time - RULE.window * RULE.playhead - 0.2); i < guide.contour.length; i++) {
+          const [ct, cm] = guide.contour[i];
           if (ct < time - RULE.window * RULE.playhead - 0.2) continue; if (ct > time + RULE.window) break;
           if (!cm) { prev = null; continue; }
           const xx = X(ct), yy = Y(cm - (guide.tuning || 0)) + rowH / 2;
@@ -756,7 +864,8 @@
       if (state.ghost.length) {
         g2.save(); g2.strokeStyle = rgba(C().voice, 0.38); g2.lineWidth = 1; g2.setLineDash([3, 3]); g2.beginPath();
         let prev = null;
-        for (const p of state.ghost) {
+        for (let i = firstAtOrAfter(state.ghost, 't', time - RULE.window * RULE.playhead - 0.2); i < state.ghost.length; i++) {
+          const p = state.ghost[i];
           if (p.t < time - RULE.window * RULE.playhead - 0.2) continue;
           if (p.t > time + RULE.window) break;
           if (p.gap) { prev = null; continue; }
@@ -769,7 +878,8 @@
 
       // 音符方塊：暗底；唱對的時段由左往右填色；正在填的前緣有亮點
       const blockH = Math.max(6, rowH * fx.blockH);
-      for (const n of guide.notes) {
+      for (let i = firstAtOrAfter(guide.notes, 'prefixEnd', time - RULE.window * RULE.playhead - 0.2); i < guide.notes.length; i++) {
+        const n = guide.notes[i];
         if (n.end < time - RULE.window * RULE.playhead - 0.2) continue; if (n.start > time + RULE.window) break;
         const x = X(n.start), w = Math.max(3, X(n.end) - x - 2), y = Y(Math.max(state.view.lo, Math.min(state.view.hi, n.midi))) + (rowH - blockH) / 2;   // 極端音貼邊畫，不消失
         const passed = n.end < time, current = n.start <= time && time <= n.end;
@@ -789,7 +899,7 @@
           g2.shadowColor = '#0B0B0A'; g2.shadowBlur = 3; roundRect(x, y, w, blockH); g2.stroke(); g2.restore();
         }
         if (n.excluded) {
-          g2.save(); g2.strokeStyle = obs ? C().note : cssVar('--text-faint', '#8C8981'); g2.lineWidth = 1; g2.setLineDash([3, 3]);
+          g2.save(); g2.strokeStyle = obs ? C().note : faint; g2.lineWidth = 1; g2.setLineDash([3, 3]);
           roundRect(x, y, w, blockH); g2.stroke(); g2.restore();
           continue;
         }
@@ -835,7 +945,7 @@
       if (u && time - u.t < 0.15) {
         const n = activeNote(guide.notes, time), y = Y(u.midi) + rowH / 2;
         const ok = n && Math.abs(u.midi - n.midi) * 100 <= RULE.fullCents;
-        g2.fillStyle = ok ? accent : cssVar('--text', '#EDEBE4');
+        g2.fillStyle = ok ? accent : text;
         if (ok && fx.glow) { g2.shadowColor = accent; g2.shadowBlur = 10 * fx.glow; }
         g2.beginPath(); g2.moveTo(x0 + 10, y); g2.lineTo(x0 + 1, y - 6); g2.lineTo(x0 + 1, y + 6); g2.closePath(); g2.fill();
         g2.shadowBlur = 0;
@@ -935,7 +1045,7 @@
     }
 
     // ── 對外 ───────────────────────────────────────────────────────────────
-    function emit(kind) { if (options.onUpdate) options.onUpdate(kind, api); }
+    function emit(kind) { renderDirty = true; if (options.onUpdate) options.onUpdate(kind, api); }
 
     function destroy() {
       destroyed = true;

@@ -19,7 +19,7 @@ function detectorPipeline(rate = 48000) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/js/practice/pitch-detector-worklet.js'), 'utf8'), scope);
   const processor = new Processor();
   return { frames, render(at, channels) {
-    scope.currentTime = (at + channels[0].length) / rate;   // 跟瀏覽器一樣：currentTime 是這個區塊結束的時間
+    scope.currentTime = at / rate;   // AudioWorklet currentTime 是目前區塊的起點
     const output = new Float32Array(channels[0].length);
     const alive = processor.process([channels], [[output]]);
     assert.ok(output.every((v) => v === 0), 'the microphone must never be monitored to the audio output');

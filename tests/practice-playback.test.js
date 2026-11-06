@@ -33,8 +33,8 @@ function fixture() {
     }
     connect() {} disconnect() {}
   }
-  const main = vm.createContext({ window: {}, AudioWorkletNode: Node, console, performance,
-    fetch: async () => ({ arrayBuffer: async () => new ArrayBuffer(0) }),
+  const main = vm.createContext({ window: {}, AudioWorkletNode: Node, console, performance, AbortController,
+    fetch: async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) }),
     setInterval: () => 1, clearInterval() {},
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/js/soundtouch-engine.js'), 'utf8'), main);

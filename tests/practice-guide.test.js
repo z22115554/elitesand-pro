@@ -62,6 +62,8 @@ test('actual FFmpeg and Python extract original-key melody, cache and invalidate
   assert.equal(result.status, 'ready', JSON.stringify(result));
   const guide = result.guide;
   assert.ok(validateGuide(guide)); assert.equal(guide.algorithm, 'yin-cpu');
+  assert.equal(validateGuide({ ...guide, algorithm: 'torchcrepe-tiny-cuda' }), true);
+  assert.equal(validateGuide({ ...guide, algorithm: 'unknown-gpu' }), false);
   assert.equal(guide.duration, 2.4); assert.equal(guide.contour.length, 120);
   assert.ok(guide.voicedSeconds > 2);
   for (const [time, expected] of [[0.3, 69], [1.1, 72], [1.9, 76]]) {
@@ -73,6 +75,10 @@ test('actual FFmpeg and Python extract original-key melody, cache and invalidate
   assert.ok(guide.limitations.includes('no-lyrics'));
   const cached = await service.start('melody', { algorithm: 'yin' });
   assert.equal(cached.cacheHit, true); assert.equal(cached.guide.guideId, guide.guideId);
+  for (const version of ['practice-pitch-2', 'practice-pitch-3', 'practice-pitch-4', 'practice-pitch-5', 'practice-pitch-6', 'practice-pitch-7']) {
+    assert.equal(validateGuide({ ...guide, algorithmVersion: version }), false,
+      'old reference caches with octave corrections or targets across rests must be rebuilt');
+  }
   assert.equal((await fs.promises.readdir(cacheDir)).length, 1);
   await fs.promises.writeFile(path.join(downloadsDir, 'melody.wav'), wav(2.4, [220]));
   assert.equal((await service.get('melody')).status, 'missing');
@@ -315,3 +321,77 @@ test('auto builds try to add the high-accuracy pitch model first, and a failed i
   assert.equal((await terminal(service, 'yin-only')).status, 'ready');
   assert.deepEqual(calls, ['ensure']);
 });
+
+test('neural analysis inherits CUDA visibility while explicit CPU keeps it hidden', async (t) => {
+  const previousDevice = process.env.ELITESAND_PRACTICE_DEVICE, previousVisibility = process.env.CUDA_VISIBLE_DEVICES;
+  t.after(() => {
+    if (previousDevice === undefined) delete process.env.ELITESAND_PRACTICE_DEVICE; else process.env.ELITESAND_PRACTICE_DEVICE = previousDevice;
+    if (previousVisibility === undefined) delete process.env.CUDA_VISIBLE_DEVICES; else process.env.CUDA_VISIBLE_DEVICES = previousVisibility;
+  });
+  const invocations = [];
+  const { service, add } = await fixture(t, { spawn(command, args, options) {
+    invocations.push({ command, args, env: options.env }); return spawn(command, args, options);
+  } });
+  process.env.CUDA_VISIBLE_DEVICES = '0'; process.env.ELITESAND_PRACTICE_DEVICE = 'auto';
+  await add('visible'); await service.start('visible', { algorithm: 'auto' });
+  assert.equal((await terminal(service, 'visible')).status, 'ready');
+  assert.equal(invocations[0].env.CUDA_VISIBLE_DEVICES, '');
+  assert.equal(invocations[1].env.CUDA_VISIBLE_DEVICES, '0');
+  process.env.ELITESAND_PRACTICE_DEVICE = 'cpu';
+  await add('cpu'); await service.start('cpu', { algorithm: 'auto' });
+  assert.equal((await terminal(service, 'cpu')).status, 'ready');
+  assert.equal(invocations[3].env.CUDA_VISIBLE_DEVICES, '');
+});
+
+test('a crashed CUDA worker retries once in a fresh CPU process and keeps a valid cache', async (t) => {
+  const attempts = [];
+  const { service, add } = await fixture(t, { spawn(command, args, options) {
+    if (args[0]?.endsWith('pitch_guide_worker.py')) {
+      attempts.push(options.env);
+      if (attempts.length === 1) return spawn(process.execPath, ['-e', 'console.log(JSON.stringify({type:"device",device:"cuda"}));process.exitCode=17'], options);
+    }
+    return spawn(command, args, options);
+  } });
+  await add('crash'); await service.start('crash', { algorithm: 'auto' });
+  const result = await terminal(service, 'crash');
+  assert.equal(result.status, 'ready', JSON.stringify(result));
+  assert.equal(attempts.length, 2); assert.equal(attempts[1].ELITESAND_PRACTICE_DEVICE, 'cpu');
+  assert.equal(attempts[1].CUDA_VISIBLE_DEVICES, '');
+  assert.ok(result.guide.algorithm.endsWith('-cpu'));
+  assert.equal((await service.start('crash', { algorithm: 'auto' })).cacheHit, true);
+});
+
+test('cancelling an active CUDA worker never launches the CPU retry', async (t) => {
+  let analysisStarts = 0;
+  const { service, add } = await fixture(t, { spawn(command, args, options) {
+    if (args[0]?.endsWith('pitch_guide_worker.py')) {
+      analysisStarts++;
+      return spawn(process.execPath, ['-e', 'console.log(JSON.stringify({type:"device",device:"cuda"}));setInterval(()=>{},1000)'], options);
+    }
+    return spawn(command, args, options);
+  } });
+  await add('cancel-cuda'); await service.start('cancel-cuda', { algorithm: 'auto' });
+  const deadline = Date.now() + 5000;
+  while (analysisStarts === 0 && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(analysisStarts, 1);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  service.cancel('cancel-cuda');
+  assert.equal((await terminal(service, 'cancel-cuda')).status, 'cancelled');
+  assert.equal(analysisStarts, 1);
+});
+
+test('CUDA timeout does not start a second process beyond the original job deadline', async (t) => {
+  let analysisStarts = 0;
+  const { service, add } = await fixture(t, { timeoutMs: 1200, spawn(command, args, options) {
+    if (args[0]?.endsWith('pitch_guide_worker.py')) {
+      analysisStarts++;
+      return spawn(process.execPath, ['-e', 'console.log(JSON.stringify({type:"device",device:"cuda"}));setInterval(()=>{},1000)'], options);
+    }
+    return spawn(command, args, options);
+  } });
+  await add('timeout-cuda'); await service.start('timeout-cuda', { algorithm: 'auto' });
+  const result = await terminal(service, 'timeout-cuda');
+  assert.equal(result.status, 'failed'); assert.equal(result.job.code, 'GUIDE_TIMEOUT');
+  assert.equal(analysisStarts, 1); assert.equal(service.getActiveJobs().length, 0);
+});
+
