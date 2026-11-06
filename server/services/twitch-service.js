@@ -117,13 +117,14 @@ function normalizeRequestSessionState(value) {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, practiceHistoryService = null, getPracticeHistoryService = null, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store, timers = globalThis }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onSongRequestClosedExternally, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, practiceHistoryService = null, getPracticeHistoryService = null, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store, timers = globalThis }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
     this.onSongRequest = onSongRequest;
     this.onSongRequestExpired = onSongRequestExpired;
     this.onSongRequestCanceled = onSongRequestCanceled;
+    this.onSongRequestClosedExternally = onSongRequestClosedExternally;
     this.onStatusChange = typeof onStatusChange === 'function' ? onStatusChange : null;
     this.onRequestSettingsChange = typeof onRequestSettingsChange === 'function' ? onRequestSettingsChange : null;
     this.onPanelAction = typeof onPanelAction === 'function' ? onPanelAction : null;
@@ -1008,6 +1009,12 @@ class TwitchService {
             this.rewardSubscriptionReady = false;
             log.warn(`Twitch 忠誠點數兌換訂閱未啟用：${err.message}`);
           }
+          try {
+            await this.createSubscription('channel.channel_points_custom_reward_redemption.update', { broadcaster_user_id: this.auth.userId });
+          } catch (err) {
+            // 沒有這個訂閱時，後台處理過的兌換仍會在下次操作或到期時由狀態核對收掉。
+            log.warn(`Twitch 忠誠點數狀態更新訂閱未啟用：${err.message}`);
+          }
         }
         this.subscriptionState = 'ready';
         try {
@@ -1056,6 +1063,8 @@ class TwitchService {
       await this.handleChatMessage(event, message.metadata.message_id);
     } else if (subscription.type === 'channel.channel_points_custom_reward_redemption.add') {
       await this.handleRewardRedemption(event, message.metadata.message_id);
+    } else if (subscription.type === 'channel.channel_points_custom_reward_redemption.update') {
+      await this.handleRewardRedemptionUpdate(event);
     }
   }
 
@@ -1678,6 +1687,42 @@ class TwitchService {
     }
     await this.handleSongRequestInput({ event, requestId, url, command, source: 'chat', challenge });
     if (!fairnessExempt) this.recordCommandCooldown(match.key, commandSettings, event);
+  }
+
+  // 主播或管理員在 Twitch 後台直接處理兌換時，同步收掉待確認項目。
+  // 自己的 PATCH 也會觸發這個事件：結算中的交給結算流程，結算完已不在 pending，都不會往下走。
+  async handleRewardRedemptionUpdate(redemptionEvent) {
+    const status = String(redemptionEvent?.status || '').toUpperCase();
+    if (status !== 'CANCELED' && status !== 'FULFILLED') return;
+    const redemptionId = String(redemptionEvent.id || '');
+    const request = redemptionId
+      ? [...this.pendingRequests.values()].find((item) => item.rewardRedemption?.id === redemptionId) : null;
+    if (!request || this.settlingRequests.has(request.requestId)) return;
+    const { requestId } = request;
+    const imported = request.importResult?.success === true;
+    const refunded = status === 'CANCELED';
+    this.pendingRequests.delete(requestId);
+    this.clearRequestExpiry(requestId);
+    this.persistPendingRequests();
+    this.notifyPendingRequestsChanged();
+    const reason = refunded ? '已在 Twitch 後台退款' : '已在 Twitch 後台標記完成';
+    this.updateRequestHistory(request, {
+      result: imported ? 'imported' : 'canceled',
+      reason: imported && !refunded ? '' : reason,
+      reward: { status: refunded ? 'refunded' : 'fulfilled' },
+    });
+    if (typeof this.onSongRequestClosedExternally === 'function') {
+      this.onSongRequestClosedExternally({ requestId, status, title: request.title });
+    }
+    if (!refunded) return;
+    try {
+      await this.sendConfiguredReply(request.event, 'rewardRefunded', {
+        title: request.title, artist: request.author, url: request.url,
+        cost: request.rewardRedemption.cost, reason,
+      });
+    } catch (err) {
+      log.warn(`Twitch 兌換已在後台退款，但聊天室通知失敗：${err.message}`);
+    }
   }
 
   async handleRewardRedemption(redemptionEvent, fallbackId) {

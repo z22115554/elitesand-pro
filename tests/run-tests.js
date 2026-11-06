@@ -4017,8 +4017,9 @@ testAsync('Twitch EventSub 在新版授權下會訂閱忠誠點數兌換事件',
     metadata: { message_type: 'session_welcome' },
     payload: { session: { id: 'session-1' } },
   }));
-  eq(subscriptions.length, 4);
+  eq(subscriptions.length, 5);
   ok(subscriptions.some((item) => item.type === 'channel.channel_points_custom_reward_redemption.add'));
+  ok(subscriptions.some((item) => item.type === 'channel.channel_points_custom_reward_redemption.update'));
   eq(service.status().rewardSubscriptionReady, true);
   service.stop();
 });

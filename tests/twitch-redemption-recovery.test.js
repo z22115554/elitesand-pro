@@ -31,7 +31,7 @@ function response(status, body = {}) {
 
 function fixture() {
   let saved = [];
-  const calls = [], replies = [];
+  const calls = [], replies = [], closed = [];
   const pendingStore = {
     load: () => structuredClone(saved),
     save: value => { saved = structuredClone(value); return true; },
@@ -44,6 +44,7 @@ function fixture() {
     authStore: { load: () => ({ userId: 'broadcaster', accessToken: 'fake-token' }) },
     onPendingRequestsChanged: () => {},
     onHistoryChanged: () => {},
+    onSongRequestClosedExternally: (payload) => closed.push(payload),
   };
   function make() {
     const service = new TwitchService(options);
@@ -68,7 +69,7 @@ function fixture() {
   });
   service.persistPendingRequests();
   service.scheduleRequestExpiry(id);
-  return { service, make, id, calls, replies, saved: () => structuredClone(saved) };
+  return { service, make, id, calls, replies, closed, saved: () => structuredClone(saved) };
 }
 
 test('404 PATCH + GET CANCELED settles rejected request without refund retry', async () => {
@@ -194,13 +195,76 @@ test('expiry colliding with a settlement keeps automatic retry after that settle
   assert.ok(retryIn > 0 && retryIn <= 60000);
 });
 
+function redemptionUpdate(status, id = 'test-redemption') {
+  return JSON.stringify({
+    metadata: { message_type: 'notification', message_id: `update-${status}` },
+    payload: {
+      subscription: { type: 'channel.channel_points_custom_reward_redemption.update' },
+      event: { id, status, reward: { id: 'test-reward' } },
+    },
+  });
+}
+
+test('mod refund on Twitch closes the pending request immediately without calling Helix', async () => {
+  const f = fixture();
+  f.service.helix = async () => { f.calls.push('unexpected'); return response(200); };
+  await f.service.handleWebSocketMessage(redemptionUpdate('canceled'));
+  assert.equal(f.service.pendingRequests.size, 0);
+  assert.equal(f.saved().length, 0);
+  assert.equal(f.service.requestExpiryTimers.has(f.id), false);
+  assert.deepEqual(f.calls, []);
+  assert.deepEqual(f.replies, ['rewardRefunded']);
+  assert.deepEqual(f.closed, [{ requestId: f.id, status: 'CANCELED', title: 'Test Song' }]);
+  const last = f.service.getRequestHistory(1)[0];
+  assert.equal(last.result, 'canceled');
+  assert.equal(last.reward.status, 'refunded');
+});
+
+test('fulfilled on Twitch closes the request without telling the viewer about a refund', async () => {
+  const f = fixture();
+  await f.service.handleWebSocketMessage(redemptionUpdate('fulfilled'));
+  assert.equal(f.service.pendingRequests.size, 0);
+  assert.deepEqual(f.replies, []);
+  assert.equal(f.closed[0].status, 'FULFILLED');
+  assert.equal(f.service.getRequestHistory(1)[0].reward.status, 'fulfilled');
+});
+
+test('refund on Twitch after import keeps the imported result in history', async () => {
+  const f = fixture();
+  f.service.pendingRequests.get(f.id).importResult = { success: true, title: 'Imported' };
+  await f.service.handleWebSocketMessage(redemptionUpdate('canceled'));
+  assert.equal(f.service.pendingRequests.size, 0);
+  const last = f.service.getRequestHistory(1)[0];
+  assert.equal(last.result, 'imported');
+  assert.equal(last.reward.status, 'refunded');
+});
+
+test('update events from our own settlement and unrelated redemptions change nothing', async () => {
+  const f = fixture();
+  await f.service.handleWebSocketMessage(redemptionUpdate('canceled', 'someone-else'));
+  await f.service.handleWebSocketMessage(redemptionUpdate('unfulfilled'));
+  assert.equal(f.service.pendingRequests.size, 1);
+  let resume;
+  f.service.helix = () => new Promise(resolve => { resume = () => resolve(response(200)); });
+  const settling = f.service.completeSongRequest({ requestId: f.id, rejected: true });
+  for (let i = 0; i < 8 && !resume; i++) await Promise.resolve();
+  await f.service.handleWebSocketMessage(redemptionUpdate('canceled'));
+  assert.deepEqual(f.closed, [], 'settlement in progress owns the outcome');
+  resume();
+  await settling;
+  await f.service.handleWebSocketMessage(redemptionUpdate('canceled'));
+  assert.deepEqual(f.closed, []);
+  assert.deepEqual(f.replies, ['rewardRefunded'], 'viewer is told once');
+});
+
 test('recovery strings are translated in every language', () => {
   const ui = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-twitch.js'), 'utf8');
   const i18n = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
   const keys = ['syncRetry', 'retrySettlement', 'settlementDone', 'settlementFailed', 'settledMismatch', 'refundUnconfirmed',
-    'dismissLocal', 'dismissTitle', 'dismissSummary', 'dismissImpact', 'dismissConfirm', 'dismissFailed', 'dismissed'];
+    'dismissLocal', 'dismissTitle', 'dismissSummary', 'dismissImpact', 'dismissConfirm', 'dismissFailed', 'dismissed',
+    'closedRefunded', 'closedFulfilled', 'importedAfterClosed'];
   for (const key of keys) {
-    assert.ok(ui.includes(`t('twitch.request.${key}')`), key);
+    assert.ok(ui.includes(`'twitch.request.${key}'`), key);
     const row = i18n.match(new RegExp(`'twitch\\.request\\.${key}': \\[(.*)\\],`));
     assert.ok(row, key);
     assert.equal(row[1].split(/', '/).length, 5, key);

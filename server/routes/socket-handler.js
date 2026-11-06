@@ -423,6 +423,13 @@ module.exports = function socketHandler(io, {
     }
   }
 
+  function closeTwitchSongRequestExternally(payload) {
+    for (const id of clients.controllers) {
+      const target = io.sockets.sockets.get(id);
+      if (target && target.connected) target.emit('twitch:song-request:closed-externally', payload);
+    }
+  }
+
   function cancelTwitchSongRequest(requestId) {
     for (const id of clients.controllers) {
       const target = io.sockets.sockets.get(id);
@@ -687,6 +694,7 @@ module.exports = function socketHandler(io, {
     dispatchTwitchAdminAction,
     expireTwitchSongRequest,
     cancelTwitchSongRequest,
+    closeTwitchSongRequestExternally,
     broadcastTwitchRequests,
     broadcastTwitchHistory,
     persistTwitchRequestSettingsFromService,

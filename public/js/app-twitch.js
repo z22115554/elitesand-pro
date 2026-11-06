@@ -1644,6 +1644,11 @@
           placement,
         });
         imported = true;
+        // 下載途中這筆已結案（例如管理員在 Twitch 退款）：歌留著，不再回報結算。
+        if (!pending.has(requestId)) {
+          AppShared.showToast(t('twitch.request.importedAfterClosed', { title: track?.title || t('twitch.request.fallbackTrack') }), 'warning');
+          return;
+        }
         reportPayload = {
           requestId, success: true, title: track && (track.title || track.name),
           artist: track && track.artist,
@@ -1763,6 +1768,11 @@
   SocketClient.on('twitch:song-request:expired', ({ requestId } = {}) => {
     if (!requestId || !pending.delete(requestId)) return;
     busy.delete(requestId); renderRequests(); AppShared.showToast('有一筆 Twitch 點歌等待過久，已自動取消', 'info');
+  });
+  SocketClient.on('twitch:song-request:closed-externally', ({ requestId, status, title } = {}) => {
+    if (!requestId) return;
+    pending.delete(requestId); renderRequests();
+    AppShared.showToast(t(status === 'CANCELED' ? 'twitch.request.closedRefunded' : 'twitch.request.closedFulfilled', { title: title || t('twitch.request.fallbackTrack') }), 'info');
   });
   SocketClient.on('twitch:song-request:canceled', ({ requestId } = {}) => {
     if (!requestId || !pending.delete(requestId)) return;

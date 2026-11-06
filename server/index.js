@@ -484,6 +484,7 @@ const twitch = new TwitchService({
   onSongRequest: (request) => socketApi.dispatchTwitchSongRequest(request),
   onSongRequestExpired: (requestId) => socketApi.expireTwitchSongRequest(requestId),
   onSongRequestCanceled: (requestId) => socketApi.cancelTwitchSongRequest(requestId),
+  onSongRequestClosedExternally: (payload) => socketApi.closeTwitchSongRequestExternally(payload),
   onRequestSettingsChange: (settings) => socketApi.persistTwitchRequestSettingsFromService(settings),
   onPanelAction: (action) => socketApi.dispatchTwitchAdminAction(action),
   onPendingRequestsChanged: () => socketApi.broadcastTwitchRequests(),
