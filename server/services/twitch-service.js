@@ -2145,7 +2145,14 @@ class TwitchService {
   }
 
   async expireRequest(requestId, request = this.pendingRequests.get(requestId)) {
-    if (!request || this.settlingRequests.has(requestId)) return;
+    if (!request) return;
+    // 到期時撞上結算：這次計時器已用掉，要排下一次，否則結算失敗後就沒有自動重試了。
+    if (this.settlingRequests.has(requestId)) {
+      request.expiresAt = Date.now() + 60000;
+      this.persistPendingRequests();
+      this.scheduleRequestExpiry(requestId);
+      return;
+    }
     this.settlingRequests.add(requestId);
     try { return await this._expireRequest(requestId, request); }
     finally { this.settlingRequests.delete(requestId); }

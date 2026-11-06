@@ -1613,11 +1613,11 @@
       const warning = Array.isArray(req.assessment?.warnings) && req.assessment.warnings.length
         ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(req.assessment.warnings.join('；'))}</div>`
         : (req.durationWarning ? `<div class="pi-badge twitch-req-warning">⚠ ${escapeHtml(t('twitch.request.durationWarning'))}</div>` : '');
-      const nextLabel = imported ? '重試 Twitch 點數結算' : isBusy
+      const nextLabel = imported ? t('twitch.request.retrySettlement') : isBusy
         ? t(placement === 'next' ? 'twitch.request.downloadingNext' : 'twitch.request.downloading')
         : t('twitch.request.addNext');
       const rejectLabel = t(req.source === 'channel-points' ? 'twitch.request.rejectAndRefund' : 'twitch.request.reject');
-      row.innerHTML = `<div class="twitch-req-info">${thumbnail ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">${escapeHtml(t('twitch.request.missingThumbnail'))}</div>`}<div class="twitch-req-copy"><div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div><div class="twitch-req-author">${escapeHtml(author)}</div><div class="twitch-req-user">${escapeHtml(requesterLabel)}</div>${reward}${warning}<a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a></div></div><div class="twitch-req-actions"><button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${escapeHtml(nextLabel)}</button><button class="btn btn-sm btn-ghost" data-act="end"${isBusy || imported ? ' disabled' : ''}>${escapeHtml(t('twitch.request.addEnd'))}</button><button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy || imported ? ' disabled' : ''}>${escapeHtml(rejectLabel)}</button><button class="btn btn-sm btn-ghost" data-act="dismiss"${isBusy ? ' disabled' : ''}>本機移除（不退款）</button></div>`;
+      row.innerHTML = `<div class="twitch-req-info">${thumbnail ? `<img class="twitch-req-thumbnail" src="${escapeHtml(thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<div class="twitch-req-thumbnail twitch-req-thumbnail--empty">${escapeHtml(t('twitch.request.missingThumbnail'))}</div>`}<div class="twitch-req-copy"><div class="twitch-req-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div><div class="twitch-req-author">${escapeHtml(author)}</div><div class="twitch-req-user">${escapeHtml(requesterLabel)}</div>${reward}${warning}<a class="twitch-req-url" href="${escapeHtml(req.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(req.url)}</a></div></div><div class="twitch-req-actions"><button class="btn btn-sm btn-primary" data-act="next"${isBusy ? ' disabled' : ''}>${escapeHtml(nextLabel)}</button><button class="btn btn-sm btn-ghost" data-act="end"${isBusy || imported ? ' disabled' : ''}>${escapeHtml(t('twitch.request.addEnd'))}</button><button class="btn btn-sm btn-ghost btn-danger" data-act="reject"${isBusy || imported ? ' disabled' : ''}>${escapeHtml(rejectLabel)}</button><button class="btn btn-sm btn-ghost" data-act="dismiss"${isBusy ? ' disabled' : ''}>${escapeHtml(t('twitch.request.dismissLocal'))}</button></div>`;
       row.querySelector('[data-act="next"]').addEventListener('click', () => confirmRequest(req.requestId, 'next'));
       row.querySelector('[data-act="end"]').addEventListener('click', () => confirmRequest(req.requestId, 'end'));
       row.querySelector('[data-act="reject"]').addEventListener('click', () => rejectRequest(req.requestId));
@@ -1654,13 +1654,13 @@
         pending.set(requestId, { ...req, importResult: reportPayload });
       }
       const report = await new Promise(resolve => SocketClient.sendWithCallback('twitch:song-request:result', reportPayload, resolve));
-      if (!report?.ok) throw new Error(report?.error || 'Twitch 點數結算失敗');
+      if (!report?.ok) throw new Error(report?.error || t('twitch.request.syncRetry'));
       if (report.synced === false) {
-        AppShared.showToast('點歌已從本機結案，但 Twitch 點數狀態不一致，請到 Twitch 核對', 'warning');
+        AppShared.showToast(t('twitch.request.settledMismatch'), 'warning');
       } else if (track) {
         const key = placement === 'next' ? 'twitch.request.addedNext' : 'twitch.request.addedEnd';
         AppShared.showToast(t(key, { title: track?.title || t('twitch.request.fallbackTrack') }), 'success');
-      } else AppShared.showToast('Twitch 點數結算已完成', 'success');
+      } else AppShared.showToast(t('twitch.request.settlementDone'), 'success');
       pending.delete(requestId);
     } catch (err) {
       if (!imported) {
@@ -1669,7 +1669,7 @@
         }, () => {});
         AppShared.showToast('聊天室點歌下載失敗', 'error');
       } else {
-        AppShared.showToast('歌曲已匯入，但 Twitch 點數結算失敗；重試不會重新下載', 'error');
+        AppShared.showToast(t('twitch.request.settlementFailed'), 'error');
       }
     } finally { busy.delete(requestId); renderRequests(); }
   }
@@ -1680,10 +1680,10 @@
     busy.set(requestId, 'reject'); renderRequests();
     SocketClient.sendWithCallback('twitch:song-request:result', { requestId, success: false, rejected: true }, (result) => {
       busy.delete(requestId);
-      if (!result?.ok) { renderRequests(); AppShared.showToast(t('twitch.request.rejectFailed', { message: serverMessage(result?.error) }), 'error'); return; }
+      if (!result?.ok) { renderRequests(); AppShared.showToast(t('twitch.request.rejectFailed', { message: result?.error ? t('twitch.request.syncRetry') : t('twitch.error.noResponse') }), 'error'); return; }
       pending.delete(requestId); renderRequests();
       if (result.synced === false) {
-        AppShared.showToast('已從本機移除，但 Twitch 點數未確認退款，請到 Twitch 核對', 'warning');
+        AppShared.showToast(t('twitch.request.refundUnconfirmed'), 'warning');
       } else {
         AppShared.showToast(req.source === 'channel-points' ? '已拒絕並退還忠誠點數' : '已略過這首點歌', 'info');
       }
@@ -1694,21 +1694,21 @@
     const req = pending.get(requestId);
     if (!req || busy.has(requestId)) return;
     const confirmed = await window.PanelConfirm?.request({
-      title: '強制移除本機點歌',
-      summary: '此操作只會移除 Elitesand Pro 的待處理項目，不會取消或完成 Twitch 兌換，也不會退還觀眾點數。',
-      impact: '請先在 Twitch 兌換管理頁核對狀態，需要退款時請在 Twitch 手動取消。已匯入的歌曲仍留在歌單。',
+      title: t('twitch.request.dismissTitle'),
+      summary: t('twitch.request.dismissSummary'),
+      impact: t('twitch.request.dismissImpact'),
       tone: 'danger',
-      confirmLabel: '確認本機移除',
+      confirmLabel: t('twitch.request.dismissConfirm'),
     });
     if (!confirmed || !pending.has(requestId)) return;
     busy.set(requestId, 'dismiss'); renderRequests();
     SocketClient.sendWithCallback('twitch:song-request:dismiss', { requestId }, result => {
       busy.delete(requestId);
       if (!result?.ok) {
-        AppShared.showToast(`本機移除失敗：${serverMessage(result?.error)}`, 'error');
+        AppShared.showToast(t('twitch.request.dismissFailed'), 'error');
       } else {
         pending.delete(requestId);
-        AppShared.showToast('已移除本機紀錄；Twitch 點數狀態未變更', 'info');
+        AppShared.showToast(t('twitch.request.dismissed'), 'info');
       }
       renderRequests();
     });

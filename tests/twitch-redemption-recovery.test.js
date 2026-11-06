@@ -178,6 +178,36 @@ test('duplicate simultaneous settlements are blocked per request', async () => {
   assert.equal(f.service.pendingRequests.size, 0);
 });
 
+test('expiry colliding with a settlement keeps automatic retry after that settlement fails', async () => {
+  const f = fixture();
+  let resume;
+  f.service.helix = () => new Promise(resolve => { resume = () => resolve(response(503, { message: 'temporary outage' })); });
+  const settling = f.service.completeSongRequest({ requestId: f.id, rejected: true });
+  for (let i = 0; i < 8 && !resume; i++) await Promise.resolve();
+  f.service.clearRequestExpiry(f.id); // 模擬計時器已觸發
+  await f.service.expireRequest(f.id);
+  resume();
+  await assert.rejects(() => settling, /temporary outage/);
+  assert.equal(f.service.pendingRequests.has(f.id), true);
+  assert.equal(f.service.requestExpiryTimers.has(f.id), true);
+  const retryIn = f.service.pendingRequests.get(f.id).expiresAt - Date.now();
+  assert.ok(retryIn > 0 && retryIn <= 60000);
+});
+
+test('recovery strings are translated in every language', () => {
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-twitch.js'), 'utf8');
+  const i18n = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
+  const keys = ['syncRetry', 'retrySettlement', 'settlementDone', 'settlementFailed', 'settledMismatch', 'refundUnconfirmed',
+    'dismissLocal', 'dismissTitle', 'dismissSummary', 'dismissImpact', 'dismissConfirm', 'dismissFailed', 'dismissed'];
+  for (const key of keys) {
+    assert.ok(ui.includes(`t('twitch.request.${key}')`), key);
+    const row = i18n.match(new RegExp(`'twitch\\.request\\.${key}': \\[(.*)\\],`));
+    assert.ok(row, key);
+    assert.equal(row[1].split(/', '/).length, 5, key);
+  }
+  assert.doesNotMatch(ui, /本機移除|點數結算|未確認退款/);
+});
+
 test('control panel preserves import outcome when Twitch acknowledgement fails', () => {
   const ui = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-twitch.js'), 'utf8');
   const socket = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'twitch.js'), 'utf8');
