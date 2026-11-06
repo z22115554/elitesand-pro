@@ -121,7 +121,7 @@
       return cuts.slice(1).map((end, i) => {
         const start = cuts[i], mid = (start + end) / 2;
         const exclusion = exclusions.find((r) => mid >= r.start && mid < r.end);
-        return { ...note, start, end, excluded: exclusion ? exclusion.reasons.join('+') : null };
+        return { ...note, start, end, excluded: exclusion ? exclusion.reasons.join('+') : note.excluded || null };
       });
     }).sort((a, b) => a.start - b.start || a.end - b.end || a.line - b.line);
     let maxEnd = -Infinity;

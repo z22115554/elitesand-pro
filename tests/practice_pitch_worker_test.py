@@ -33,6 +33,44 @@ def word_lyrics(spans, offset=0):
 
 
 class PitchGuideWorkerTests(unittest.TestCase):
+    def test_held_note_past_the_lyric_timing_stays_a_note_but_never_enters_the_next_line(self):
+        voiced = np.zeros(1000, dtype=bool)
+        voiced[100:400] = True    # sung from 1s to 4s
+        voiced[450:600] = True    # next line
+        windows = [(0, 0, 1.0, 3.0), (1, 0, 4.5, 6.0)]
+        wide = worker.extend_windows(windows, voiced)
+        self.assertAlmostEqual(wide[0][3], 4.0, places=2, msg='the tail follows the voice')
+        self.assertAlmostEqual(wide[1][2], 4.5, places=2)
+        voiced[400:450] = True    # the voice never stops: the next lyric still owns its own time
+        wide = worker.extend_windows(windows, voiced)
+        self.assertLessEqual(wide[0][3], 4.5)
+        voiced[:] = True
+        wide = worker.extend_windows([(0, 0, 1.0, 2.0)], voiced)
+        self.assertAlmostEqual(wide[0][3], 2.0 + worker.MAX_TAIL_SECONDS, places=2, msg='bounded')
+        self.assertAlmostEqual(wide[0][2], 1.0 - worker.MAX_HEAD_SECONDS, places=2, msg='bounded')
+
+    def test_rest_after_a_line_is_not_bridged_into_a_tail(self):
+        voiced = np.zeros(1000, dtype=bool)
+        voiced[100:300] = True
+        voiced[320:400] = True    # a breath at 3.0-3.2s ends the run
+        wide = worker.extend_windows([(0, 0, 1.0, 3.0)], voiced)
+        self.assertAlmostEqual(wide[0][3], 3.0, places=2)
+
+    def test_voice_without_a_lyric_is_visible_but_not_scored(self):
+        midi = np.zeros(1000); voiced = np.zeros(1000, dtype=bool)
+        midi[100:300] = 60; voiced[100:300] = True    # hum before the first lyric
+        midi[500:520] = 60; voiced[500:520] = True    # too short to show
+        midi[600:800] = 62; voiced[600:800] = True    # the lyric
+        lines = [{'start': 6.0, 'end': 8.0}]
+        windows = [(0, 0, 6.0, 8.0)]
+        notes = worker.free_notes(midi, voiced, windows, 0.0, lines)
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0]['excluded'], 'no-lyric')
+        self.assertEqual(notes[0]['midi'], 60)
+        self.assertEqual(notes[0]['line'], 0)
+        self.assertAlmostEqual(notes[0]['start'], 1.0, places=2)
+        self.assertEqual(worker.free_notes(midi, voiced, windows, 0.0, []), [], 'songs without lyrics already use every voiced run')
+
     def test_neural_weak_tail_needs_local_waveform_and_a_frozen_strong_anchor(self):
         count = 190
         frequency = np.full(count, 440.)

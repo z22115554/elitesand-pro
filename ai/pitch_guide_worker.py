@@ -29,7 +29,7 @@ for _key in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUME
 import numpy as np
 
 SCHEMA_VERSION = 2
-ALGORITHM_VERSION = "practice-pitch-8"
+ALGORITHM_VERSION = "practice-pitch-9"
 SAMPLE_RATE = 16000
 HOP = 160                 # 10 ms
 HOP_SECONDS = HOP / SAMPLE_RATE
@@ -53,6 +53,9 @@ MIN_PIECE = 15            # only unstable pieces under 150 ms join their neighbo
 MAX_SPIKE_FRAMES = 4      # only <= 40 ms weak-confidence islands can be repaired
 MAX_DROPOUT_FRAMES = 4    # <= 40 ms, only with agreeing raw pitch and non-quiet audio
 TUNING_THRESHOLD = 0.10   # correct global tuning only beyond 10 cents
+MAX_TAIL_SECONDS = 3.0    # a held note may run past the lyric timing, up to here
+MAX_HEAD_SECONDS = 1.0    # the same for a phrase that starts before its timestamp
+MIN_FREE_RUN = 50         # 500 ms of voice with no lyric at all is shown, unscored
 
 
 def emit(value):
@@ -724,6 +727,54 @@ def cut_notes(midi, voiced, windows, tuning, confidence=None, min_confidence=0.0
     return merged
 
 
+def extend_windows(windows, voiced):
+    """Lyric timing often ends before the singer does. A window grows only along
+    one continuous voiced run, and never into a neighbouring window."""
+    n = len(voiced)
+    ordered = sorted(windows, key=lambda w: w[2])
+    result = []
+    previous_end = 0.0
+    for index, (line, word, start, end) in enumerate(ordered):
+        following = ordered[index + 1][2] if index + 1 < len(ordered) else n * HOP_SECONDS
+        a, b = int(round(start / HOP_SECONDS)), int(round(end / HOP_SECONDS))
+        tail_limit = int(min(following, end + MAX_TAIL_SECONDS) / HOP_SECONDS)
+        if 0 < b < n and voiced[b - 1]:
+            while b < min(tail_limit, n) and voiced[b]:
+                b += 1
+        head_limit = int(np.ceil(max(previous_end, start - MAX_HEAD_SECONDS) / HOP_SECONDS))
+        if 0 < a < n and voiced[a]:
+            while a > head_limit and voiced[a - 1]:
+                a -= 1
+        new_start, new_end = min(start, a * HOP_SECONDS), max(end, b * HOP_SECONDS)
+        result.append((line, word, new_start, new_end))
+        previous_end = new_end
+    return result
+
+
+def free_notes(midi, voiced, windows, tuning, lines):
+    """Voice outside every lyric (hums, ad-libs, backing vocals): visible so a singer
+    can follow it, but excluded from scoring because no lyric says it must be sung."""
+    if not lines:
+        return []
+    n = len(midi)
+    outside = voiced.copy()
+    for _, _, start, end in windows:
+        outside[int(round(start / HOP_SECONDS)):int(round(end / HOP_SECONDS))] = False
+    notes = []
+    for a, b in runs(outside):
+        if b - a < MIN_FREE_RUN:
+            continue
+        line = max((i for i, item in enumerate(lines) if item["start"] <= a * HOP_SECONDS), default=0)
+        for piece in pieces_in(midi, outside, a, b, tuning, None):
+            ids, raw = piece["ids"], piece["pitch"]
+            note_start, note_end = float(ids[0]) * HOP_SECONDS, min(n, float(ids[-1]) + 1) * HOP_SECONDS
+            if note_end - note_start + 1e-9 < MIN_VOICED_IN_WORD * HOP_SECONDS:
+                continue
+            notes.append({"start": round(note_start, 3), "end": round(note_end, 3), "midi": int(round(raw - tuning)),
+                          "raw": round(raw, 2), "line": line, "word": 0, "cont": False, "excluded": "no-lyric"})
+    return notes
+
+
 def make_guide(audio, algorithm="auto", lyrics=None, offset_ms=0.0, progress=True):
     started = time.monotonic()
     duration = len(audio) / SAMPLE_RATE
@@ -742,8 +793,17 @@ def make_guide(audio, algorithm="auto", lyrics=None, offset_ms=0.0, progress=Tru
     # YIN clarity and neural periodicity are not interchangeable confidence
     # scales. Only YIN's acoustic clarity currently calibrates short changes;
     # CREPE keeps the pitch/duration partition until independently calibrated.
+    if lines:
+        windows = extend_windows(windows, voiced)
     notes = cut_notes(midi, voiced, windows, tuning,
                       confidence if method == 'yin-cpu' else None, min_confidence)
+    # 行的範圍要包住延長後的音符，否則逐句評等會在拖長音唱完前就結算。
+    for note in notes:
+        if lines and note["line"] < len(lines):
+            line = lines[note["line"]]
+            line["start"] = min(line["start"], note["start"])
+            line["end"] = max(line["end"], note["end"])
+    notes = sorted(notes + free_notes(midi, voiced, windows, tuning, lines), key=lambda note: (note["start"], note["end"]))
     if fallback:
         limitations.append(fallback)
     contour = [[round(i * HOP_SECONDS, 2), round(float(midi[i]), 2) if voiced[i] else 0] for i in range(0, len(midi), CONTOUR_STEP)]

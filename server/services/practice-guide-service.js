@@ -12,7 +12,7 @@ const { createLogger } = require('../utils/logger');
 const log = createLogger('PracticeGuide');
 
 const SCHEMA_VERSION = 2;
-const ALGORITHM_VERSION = 'practice-pitch-8';
+const ALGORITHM_VERSION = 'practice-pitch-9';
 const MAX_LYRIC_LINES = 2000;
 const MAX_LYRIC_BYTES = 4 * 1024 * 1024;
 const MAX_DURATION_SECONDS = 20 * 60;

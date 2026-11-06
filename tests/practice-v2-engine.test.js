@@ -634,3 +634,23 @@ test('lyric display text follows the setting without touching timing, and OBS ge
   assert.equal(obs.getGuide().lines[0].text, '後來');
   assert.equal(obs.getGuide().lines[0].words[0].text, '後');
 });
+
+test('voice without a lyric is drawn but never scored', () => {
+  const guide = Scoring.prepareGuide({ duration: 10, lines: [{ start: 4, end: 8, text: 'x' }], notes: [
+    { start: 1, end: 3, midi: 60, line: 0, word: 0, excluded: 'no-lyric' }, { start: 4, end: 8, midi: 62, line: 0, word: 0 }] });
+  assert.equal(guide.notes[0].excluded, 'no-lyric');
+  assert.equal(guide.notes[1].excluded, null);
+  const Engine = loadEngine();
+  let t = 0;
+  const engine = Engine.createPracticeEngine({ role: 'panel', root: fakeRoot(), clock: () => ({ t, playing: true, tempo: 1 }), getOptions: () => ({ allowOctave: false }), onSync: () => {} });
+  engine.setGuide(guide); engine.setPlaying(true, 0);
+  for (let i = 0; i < 800; i++) {
+    t = i / 100;
+    const f0 = 440 * 2 ** ((62 - 69) / 12);
+    if (t < 4) engine.pitch({ time: t, f0: 0, clarity: 0, rms: 0.00005, localClarity: 0 }, { valid: true, t, audioTime: t, playing: true, tempo: 1, key: 0, generation: 1 });
+    else engine.pitch({ time: t, f0, clarity: 0.99, rms: 0.1, localClarity: 0.99 }, { valid: true, t, audioTime: t, playing: true, tempo: 1, key: 0, generation: 1 });
+  }
+  const take = engine.finish('mic', { end: 8 });
+  assert.ok(take.score > 90, 'silence during a hum costs nothing: ' + take.score);
+  assert.ok(Math.abs(take.seconds - 3.85) < 0.2, 'only the lyric counts: ' + take.seconds);
+});

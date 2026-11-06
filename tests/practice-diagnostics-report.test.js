@@ -17,7 +17,7 @@ const form = (extra) => ({ schemaVersion: 1, type: 'practice', title: '練唱判
   steps: ['唱副歌'], actual: '沒線', expected: '', contact: '', includeDiagnostics: true, locale: 'zh-TW', ...extra });
 const row = [12.34, 440.04, 0.991, 0.95, 0.01234, 0.00123, 69.01, 69.12];
 const data = { rows: [row], scoreMode: 'strict', allowOctave: true, key: 2, tuning: 0.12, score: 81.26, algorithm: 'torchcrepe-tiny-cuda',
-  algorithmVersion: 'practice-pitch-8', sampleRate: 48000, gainDb: 6, echoCancel: false, calibrationMs: 120 };
+  algorithmVersion: 'practice-pitch-9', sampleRate: 48000, gainDb: 6, echoCancel: false, calibrationMs: 120 };
 
 test('practice report carries rebuilt numeric rows', () => {
   const built = report.buildReport(form({ practiceDiagnostics: data }));
