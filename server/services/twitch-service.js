@@ -146,6 +146,8 @@ class TwitchService {
     this.historyStore = historyStore;
     this.pendingRequests = new Map();
     this.requestExpiryTimers = new Map();
+    // 排除面板重送、逾時與退款事件同時結算同一筆兌換。
+    this.settlingRequests = new Set();
     this.adminPanelActions = new Map();
     this.reconnectTimer = null;
     this.connectionWatchdogTimer = null;
@@ -600,6 +602,14 @@ class TwitchService {
         message_id: String(request.event?.message_id || ''),
       },
       retryableReplySent: !!request.retryableReplySent,
+      // 歌曲已匯入時先落盤：Twitch API 失敗或重開後只能重試結算，不可再下載歌曲。
+      importResult: request.importResult?.success === true ? {
+        success: true,
+        title: String(request.importResult.title || '').slice(0, 300),
+        artist: String(request.importResult.artist || '').slice(0, 200),
+        position: String(request.importResult.position || '').slice(0, 80),
+        queue: String(request.importResult.queue || '').slice(0, 80),
+      } : null,
     };
   }
 
@@ -1137,13 +1147,37 @@ class TwitchService {
       reward_id: redemption.rewardId,
       id: redemption.id,
     });
-    const response = await this.helix(`/channel_points/custom_rewards/redemptions?${query}`, {
-      method: 'PATCH', body: { status },
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
+    const endpoint = `/channel_points/custom_rewards/redemptions?${query}`;
+    const response = await this.helix(endpoint, { method: 'PATCH', body: { status } });
+    if (response.ok) return { status, confirmed: true };
+
+    const data = await response.json().catch(() => ({}));
+    if (response.status !== 404) {
       throw new Error(data.message || `Twitch 兌換狀態更新失敗（${response.status}）`);
     }
+    // Twitch 只允許修改 UNFULFILLED。若已由網頁、其它程式或上次執行結算，
+    // PATCH 會回 404；不能每分鐘永久重試，更不能假裝已退款。
+    const lookup = await this.helix(endpoint, { method: 'GET' });
+    if (lookup.ok) {
+      const body = await lookup.json().catch(() => ({}));
+      const found = Array.isArray(body.data)
+        ? body.data.find(item => String(item.id) === String(redemption.id)) : null;
+      const actual = String(found?.status || '').toUpperCase();
+      if (actual === 'FULFILLED' || actual === 'CANCELED') {
+        log.warn(`Twitch 兌換已在外部結案（預期 ${status}，實際 ${actual}）`);
+        return { status: actual, confirmed: true, alreadySettled: true };
+      }
+      if (actual === 'UNFULFILLED') throw new Error('Twitch 兌換仍待處理，但拒絕變更狀態，請稍後重試');
+      // GET 200 但缺少指定 id，不代表已退款。
+      log.warn(`Twitch 查無指定兌換（${redemption.id}），本機結案但點數狀態未確認`);
+      return { status: 'UNKNOWN', confirmed: false };
+    }
+    if (lookup.status === 404) {
+      log.warn(`Twitch 找不到兌換或獎勵（${redemption.id}），本機結案但點數狀態未確認`);
+      return { status: 'UNKNOWN', confirmed: false };
+    }
+    const failure = await lookup.json().catch(() => ({}));
+    throw new Error(failure.message || `Twitch 兌換狀態查詢失敗（${lookup.status}）`);
   }
 
   async fetchYouTubeMetadata(url) {
@@ -1246,9 +1280,19 @@ class TwitchService {
       await this.sendConfiguredReply(event, 'requestNotFound');
       return;
     }
+    // 已匯入的歌曲不可再因觀眾自助取消而誤退款；並與主播結算、逾時互斥。
+    if (request.importResult?.success || this.settlingRequests.has(request.requestId)) {
+      await this.sendConfiguredReply(event, 'requestCancelFailed', { title: request.title });
+      return;
+    }
+    this.settlingRequests.add(request.requestId);
+    try {
+    let canceledRedemption = null;
     try {
       if (request.rewardRedemption) {
-        await this.updateRewardRedemptionStatus(request.rewardRedemption, 'CANCELED');
+        canceledRedemption = await this.updateRewardRedemptionStatus(request.rewardRedemption, 'CANCELED');
+        // 舊版測試注入的 mock 成功時回傳 void；實際 API 一律會回傳確認結果。
+        if (!canceledRedemption) canceledRedemption = { status: 'CANCELED', confirmed: true };
       }
     } catch (err) {
       log.warn(`觀眾取消忠誠點數點歌退款失敗：${err.message}`);
@@ -1263,12 +1307,16 @@ class TwitchService {
     this.clearRequestExpiry(request.requestId);
     this.persistPendingRequests();
     this.notifyPendingRequestsChanged();
+    const refunded = canceledRedemption?.status === 'CANCELED';
     this.updateRequestHistory(request, {
-      result: 'canceled', reason: '觀眾自行取消待確認點歌',
-      reward: { status: request.rewardRedemption ? 'refunded' : 'not-applicable' },
+      result: 'canceled', reason: request.rewardRedemption && !refunded
+        ? '觀眾已取消本機點歌，但 Twitch 點數未確認退款，請主播核對' : '觀眾自行取消待確認點歌',
+      reward: { status: request.rewardRedemption ? (canceledRedemption?.status === 'FULFILLED' ? 'fulfilled' : refunded ? 'refunded' : 'refund-failed') : 'not-applicable' },
     });
     if (typeof this.onSongRequestCanceled === 'function') this.onSongRequestCanceled(request.requestId);
-    if (request.rewardRedemption) {
+    if (request.rewardRedemption && !refunded) {
+      await this.sendConfiguredReply(event, 'requestCancelFailed', { title: request.title });
+    } else if (request.rewardRedemption) {
       await this.sendConfiguredReply(event, 'rewardRefunded', {
         title: request.title,
         artist: request.author,
@@ -1277,6 +1325,9 @@ class TwitchService {
       });
     } else {
       await this.sendConfiguredReply(event, 'requestCanceled', { title: request.title, artist: request.author });
+    }
+    } finally {
+      this.settlingRequests.delete(request.requestId);
     }
   }
 
@@ -1843,8 +1894,22 @@ class TwitchService {
     return true;
   }
 
-  async completeSongRequest({ requestId, success, title, artist, rejected, retryable, position, queue } = {}) {
+  async completeSongRequest(payload = {}) {
+    const requestId = payload?.requestId;
+    if (this.settlingRequests.has(requestId)) throw new Error('這筆點歌正在同步 Twitch 狀態，請稍後重試');
+    this.settlingRequests.add(requestId);
+    try { return await this._completeSongRequest(payload); }
+    finally { this.settlingRequests.delete(requestId); }
+  }
+
+  async _completeSongRequest({ requestId, success, title, artist, rejected, retryable, position, queue } = {}) {
     const request = this.pendingRequests.get(requestId);
+    // 同步失敗後，即便面板重新啟動或傳來拒絕／下載失敗，也不可倒退為再次下載。
+    if (request?.importResult?.success) {
+      ({ success, title, artist, position, queue } = request.importResult);
+      rejected = false;
+      retryable = false;
+    }
     if (!request) throw new Error('這筆 Twitch 點歌已不存在或已逾時');
     // 匯入短暫失敗時讓面板保留「再試一次」；不可在此刪除 pending，否則重試成功無法回覆聊天室。
     if (retryable) {
@@ -1861,6 +1926,11 @@ class TwitchService {
       this.updateRequestHistory(request, { result: 'retrying', reason: '下載或匯入暫時失敗，等待主播重試' });
       log.info(`Twitch 點歌匯入失敗，保留供重試：${requestId}`);
       return;
+    }
+    if (success && !rejected && request.rewardRedemption && !request.importResult) {
+      request.importResult = { success: true, title, artist, position, queue };
+      this.persistPendingRequests();
+      this.notifyPendingRequestsChanged();
     }
     if (success && !rejected && request.challenge && request.source === 'chat' && !request.rewardRedemption) {
       try {
@@ -1880,39 +1950,55 @@ class TwitchService {
     if (request.rewardRedemption) {
       const fulfilled = !!success && !rejected;
       const reason = rejected ? '主播略過了這首歌' : '目前無法完成歌曲匯入';
+      let settled;
       try {
-        await this.updateRewardRedemptionStatus(request.rewardRedemption, fulfilled ? 'FULFILLED' : 'CANCELED');
+        settled = await this.updateRewardRedemptionStatus(request.rewardRedemption, fulfilled ? 'FULFILLED' : 'CANCELED');
+        if (!settled) settled = { status: fulfilled ? 'FULFILLED' : 'CANCELED', confirmed: true };
       } catch (err) {
         this.updateRequestHistory(request, {
           result: 'pending', reason: `忠誠點數狀態同步失敗：${err.message}`,
           reward: { status: fulfilled ? 'fulfillment-failed' : 'refund-failed' },
         });
+        // 匯入已完成：改成自動重試 Twitch 結算，不能在逾時時退款、也不能重複下載。
+        if (request.importResult?.success) {
+          request.expiresAt = Date.now() + 60000;
+          this.persistPendingRequests();
+          this.scheduleRequestExpiry(requestId);
+          this.notifyPendingRequestsChanged();
+        }
         throw err;
       }
-      try {
-        await this.sendConfiguredReply(request.event, fulfilled ? 'rewardFulfilled' : 'rewardRefunded', {
-          title: title || request.title || '已加入播放清單',
-          artist: artist || request.author,
-          url: request.url,
-          position: position || '播放清單',
-          queue: queue || '',
-          cost: request.rewardRedemption.cost,
-          reason,
-        });
-      } catch (err) {
-        log.warn(`忠誠點數兌換已${fulfilled ? '完成' : '退款'}，但聊天室通知失敗：${err.message}`);
+      const matchesIntent = settled.status === (fulfilled ? 'FULFILLED' : 'CANCELED');
+      if (matchesIntent) {
+        try {
+          await this.sendConfiguredReply(request.event, fulfilled ? 'rewardFulfilled' : 'rewardRefunded', {
+            title: title || request.title || '已加入播放清單',
+            artist: artist || request.author,
+            url: request.url,
+            position: position || '播放清單',
+            queue: queue || '',
+            cost: request.rewardRedemption.cost,
+            reason,
+          });
+        } catch (err) {
+          log.warn(`忠誠點數兌換已${fulfilled ? '完成' : '退款'}，但聊天室通知失敗：${err.message}`);
+        }
+      } else {
+        log.warn(`Twitch 點歌本機結案但兌換狀態不一致：${requestId}；預期 ${fulfilled ? 'FULFILLED' : 'CANCELED'}，實際 ${settled.status}`);
       }
       this.updateRequestHistory(request, {
         result: fulfilled ? 'imported' : (rejected ? 'rejected' : 'failed'),
-        reason: fulfilled ? '' : reason,
+        reason: matchesIntent ? (fulfilled ? '' : reason) : `Twitch 兌換狀態無法依預期變更（${settled.status}），請主播至 Twitch 核對點數`,
         video: { title: title || request.title, artist: artist || request.author },
-        reward: { status: fulfilled ? 'fulfilled' : 'refunded' },
+        reward: { status: settled.status === 'FULFILLED' ? 'fulfilled'
+          : settled.status === 'CANCELED' ? 'refunded'
+            : fulfilled ? 'fulfillment-failed' : 'refund-failed' },
       });
       this.pendingRequests.delete(requestId);
       this.clearRequestExpiry(requestId);
       this.persistPendingRequests();
       this.notifyPendingRequestsChanged();
-      return;
+      return { synced: matchesIntent, actualStatus: settled.status };
     }
     if (rejected) {
       await this.sendConfiguredReply(request.event, 'hostRejected', {
@@ -2059,10 +2145,21 @@ class TwitchService {
   }
 
   async expireRequest(requestId, request = this.pendingRequests.get(requestId)) {
-    if (!request) return;
+    if (!request || this.settlingRequests.has(requestId)) return;
+    this.settlingRequests.add(requestId);
+    try { return await this._expireRequest(requestId, request); }
+    finally { this.settlingRequests.delete(requestId); }
+  }
+
+  async _expireRequest(requestId, request) {
+    if (request.importResult?.success) {
+      return this._completeSongRequest({ requestId, ...request.importResult });
+    }
+    let settled = null;
     if (request.rewardRedemption) {
       try {
-        await this.updateRewardRedemptionStatus(request.rewardRedemption, 'CANCELED');
+        settled = await this.updateRewardRedemptionStatus(request.rewardRedemption, 'CANCELED');
+        if (!settled) settled = { status: 'CANCELED', confirmed: true };
       } catch (err) {
         request.expiresAt = Date.now() + 60000;
         this.persistPendingRequests();
@@ -2078,22 +2175,43 @@ class TwitchService {
     this.clearRequestExpiry(requestId);
     this.persistPendingRequests();
     this.notifyPendingRequestsChanged();
+    const refunded = settled?.status === 'CANCELED';
     this.updateRequestHistory(request, {
-      result: 'expired', reason: '等待主播確認超過 30 分鐘',
-      reward: { status: request.rewardRedemption ? 'refunded' : 'not-applicable' },
+      result: 'expired', reason: settled && !refunded
+        ? `等待逾時但 Twitch 點數未確認退款（${settled.status}）`
+        : '等待主播確認超過 30 分鐘',
+      reward: { status: request.rewardRedemption ? (settled?.status === 'FULFILLED' ? 'fulfilled' : refunded ? 'refunded' : 'refund-failed') : 'not-applicable' },
     });
     if (typeof this.onSongRequestExpired === 'function') this.onSongRequestExpired(requestId);
     try {
-      await this.sendConfiguredReply(request.event, request.rewardRedemption ? 'rewardRefunded' : 'requestExpired', {
+      await this.sendConfiguredReply(request.event, request.rewardRedemption && refunded ? 'rewardRefunded' : 'requestExpired', {
         title: request.title,
         artist: request.author,
         url: request.url,
         cost: request.rewardRedemption?.cost || '',
-        reason: request.rewardRedemption ? '等待主播確認超過 30 分鐘' : '',
+        reason: request.rewardRedemption && !refunded ? 'Twitch 點數未確認退款，請主播核對' : (request.rewardRedemption ? '等待主播確認超過 30 分鐘' : ''),
       });
     } catch (err) {
       log.warn(`Twitch 點歌已逾時結案，但聊天室通知失敗：${err.message}`);
     }
+  }
+
+  // 最後手段：只移除本機佇列，不宣稱 Twitch 退款成功。
+  dismissSongRequestLocally(requestId) {
+    if (this.settlingRequests.has(requestId)) throw new Error('點歌正在處理中，請稍後重試');
+    const request = this.pendingRequests.get(requestId);
+    if (!request) throw new Error('這筆點歌已不存在');
+    this.pendingRequests.delete(requestId);
+    this.clearRequestExpiry(requestId);
+    this.persistPendingRequests();
+    this.notifyPendingRequestsChanged();
+    this.updateRequestHistory(request, {
+      result: request.importResult?.success ? 'imported' : 'canceled',
+      reason: '主播手動移除本機點歌；未修改 Twitch 點數，請自行確認兌換狀態',
+      reward: { status: request.rewardRedemption ? (request.importResult?.success ? 'fulfillment-failed' : 'refund-failed') : 'not-applicable' },
+    });
+    if (typeof this.onSongRequestCanceled === 'function') this.onSongRequestCanceled(requestId);
+    return { ok: true };
   }
 
   stop() {

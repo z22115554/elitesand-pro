@@ -19,11 +19,27 @@ function registerTwitchHandlers(io, socket, ctx, { getTwitchService }) {
       return;
     }
     try {
-      await twitchService.completeSongRequest(result);
-      if (typeof ack === 'function') ack({ ok: true });
+      const settlement = await twitchService.completeSongRequest(result);
+      if (typeof ack === 'function') ack({ ok: true, ...(settlement || {}) });
     } catch (err) {
       log.error(`回報 Twitch 點歌結果失敗: ${err.message}`);
-      if (typeof ack === 'function') ack({ ok: false, error: '無法回覆 Twitch 聊天室，請稍後重試' });
+      if (typeof ack === 'function') ack({ ok: false, error: '無法同步 Twitch 點數或點歌結果，請稍後重試' });
+    }
+  });
+
+  // 只丟棄本機卡住的點歌，不呼叫 Twitch 退款 API，也不回報退款成功。
+  socket.on('twitch:song-request:dismiss', (payload, ack) => {
+    const twitchService = getTwitchService();
+    try {
+      if (!twitchService) throw new Error('Twitch 服務尚未啟用');
+      if (typeof payload?.requestId !== 'string' || !/^[A-Za-z0-9:_-]{1,160}$/.test(payload.requestId)) {
+        throw new Error('點歌識別碼無效');
+      }
+      twitchService.dismissSongRequestLocally(payload.requestId);
+      if (typeof ack === 'function') ack({ ok: true });
+    } catch (err) {
+      log.warn(`本機移除 Twitch 點歌失敗：${err.message}`);
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
     }
   });
 
