@@ -25,11 +25,19 @@
   });
   const TIERS = ['PERFECT', 'GREAT', 'GOOD', 'MISS'];
 
+  // 寬鬆是原本的規則，適合享受唱歌；嚴格拿來抓音準，對原唱實際音高而不是最近的半音。
+  const PROFILES = {
+    relaxed: Object.freeze({ fullCents: RULE.fullCents, zeroCents: RULE.zeroCents, coverage: RULE.coverage, useRaw: false }),
+    strict: Object.freeze({ fullCents: 20, zeroCents: 100, coverage: 0.85, useRaw: true }),
+  };
+  const profileOf = (mode) => (mode === 'strict' ? PROFILES.strict : PROFILES.relaxed);
+  const targetOf = (note, profile = PROFILES.relaxed) => (profile.useRaw && Number.isFinite(note.raw) ? note.raw : note.midi);
+
   /** 75 cents 內滿分，之後以 smoothstep 平滑降到 220 cents 為 0（不會一過門檻就斷崖）。 */
-  function credit(cents) {
-    if (cents <= RULE.fullCents) return 1;
-    if (cents >= RULE.zeroCents) return 0;
-    const x = (cents - RULE.fullCents) / (RULE.zeroCents - RULE.fullCents);
+  function credit(cents, profile = PROFILES.relaxed) {
+    if (cents <= profile.fullCents) return 1;
+    if (cents >= profile.zeroCents) return 0;
+    const x = (cents - profile.fullCents) / (profile.zeroCents - profile.fullCents);
     return 1 - x * x * (3 - 2 * x);
   }
 
@@ -55,9 +63,9 @@
   }
 
   /** 偵測器反應時間不算成沒唱；短音尤其吃虧。 */
-  function noteScore(note) {
+  function noteScore(note, profile = PROFILES.relaxed) {
     const len = Math.max(0.05, note.end - note.start - note.grace - RULE.detectLag);
-    return Math.min(1, note.hit / (len * RULE.coverage));
+    return Math.min(1, note.hit / (len * profile.coverage));
   }
 
   function tierOf(score) {
@@ -131,7 +139,7 @@
     return value;
   }
 
-  function lineFeedback(guide) {
+  function lineFeedback(guide, profile = PROFILES.relaxed) {
     return guide.lines.map((line, i) => {
       const notes = guide.notes.filter((n) => n.line === i && !n.excluded && !n.skip && (n.attempted || n.seen > 0));
       const requiredSeconds = notes.reduce((a, n) => a + Math.max(0, n.end - n.start - n.grace), 0);
@@ -142,7 +150,7 @@
       const onsets = notes.filter((n) => n.onset != null && n.voiced >= 0.06).map((n) => n.onset * 1000).sort((a, b) => a - b);
       return { line: i, start: notes.length ? Math.min(...notes.map((n) => n.start)) : line.start,
         end: notes.length ? Math.max(...notes.map((n) => n.end)) : line.end, text: line.text || '',
-        score: sufficient ? Math.min(100, 100 * notes.reduce((a, n) => a + noteScore(n) * Math.max(0, n.end - n.start - n.grace), 0) / requiredSeconds) : null,
+        score: sufficient ? Math.min(100, 100 * notes.reduce((a, n) => a + noteScore(n, profile) * Math.max(0, n.end - n.start - n.grace), 0) / requiredSeconds) : null,
         requiredSeconds, observedSeconds, voicedSeconds, sufficient,
         signedCents: sufficient ? notes.reduce((a, n) => a + n.signedCentsSum, 0) / voicedSeconds : null,
         absoluteCents: sufficient ? notes.reduce((a, n) => a + n.absoluteCentsSum, 0) / voicedSeconds : null,
@@ -166,5 +174,5 @@
     return Math.round(median(kept) / 10) * 10;
   }
 
-  return { SCORE_VERSION, snapshot, lineFeedback, weakestLines, RULE, TIERS, credit, centsOff, foldToTarget, resetNote, noteScore, tierOf, prepareGuide, activeNote, latencyEstimate };
+  return { PROFILES, profileOf, targetOf, SCORE_VERSION, snapshot, lineFeedback, weakestLines, RULE, TIERS, credit, centsOff, foldToTarget, resetNote, noteScore, tierOf, prepareGuide, activeNote, latencyEstimate };
 });

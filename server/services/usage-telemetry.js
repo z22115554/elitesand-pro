@@ -508,7 +508,16 @@ function createUsageTelemetry(options = {}) {
     const { score, seconds } = data;
     if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 100) return false;
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < fields.PRACTICE_MIN_SCORED_SECONDS) return false;
-    return record('practice.score.' + fields.practiceScoreBucket(score));
+    const prefix = data.scoreMode === 'strict' ? 'practice.strict.score.' : 'practice.score.';
+    return record(prefix + fields.practiceScoreBucket(score));
+  }
+
+  /** 唱完後使用者按的「準／不準」（EULA §7.9(h)）：只累計次數，不連到哪首歌或哪次分數。 */
+  function recordPracticeVerdict(input) {
+    const data = input || {};
+    if (!fields.PRACTICE_VERDICTS.includes(data.verdict)) return false;
+    const mode = data.scoreMode === 'strict' ? 'strict' : 'relaxed';
+    return record(`practice.verdict.${mode}.${data.verdict}`);
   }
 
   return {
@@ -516,7 +525,7 @@ function createUsageTelemetry(options = {}) {
     flushPending, dailyDisclosed,
     recordFeature, recordOutcome, recordIncident, recordSocketReconnects,
     recordLyricSource, recordAutoResultEdited, recordDependency,
-    recordUpdateResult, recordAiSeparation, recordPracticeScore,
+    recordUpdateResult, recordAiSeparation, recordPracticeScore, recordPracticeVerdict,
   };
 }
 

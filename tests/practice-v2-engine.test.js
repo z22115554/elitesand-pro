@@ -569,3 +569,38 @@ print(json.dumps(make_guide(audio, 'yin', lyrics, progress=False)))
   assert.ok(scores[1] <= 60, `An omitted phrase must still lose credit: ${scores[1]}`);
 });
 
+test('strict mode targets the original pitch and punishes a semitone; relaxed is unchanged', () => {
+  const { PROFILES, credit, noteScore, targetOf, profileOf } = Scoring;
+  assert.equal(profileOf('anything'), PROFILES.relaxed);
+  assert.equal(credit(75), 1);
+  assert.ok(credit(75, PROFILES.strict) < 0.3);
+  assert.equal(credit(100, PROFILES.strict), 0);
+  assert.equal(credit(20, PROFILES.strict), 1);
+  const note = { start: 0, end: 1, midi: 60, raw: 60.4, grace: 0.1, hit: 0.5 };
+  assert.equal(targetOf(note), 60, 'relaxed compares with the nearest semitone');
+  assert.equal(targetOf(note, PROFILES.strict), 60.4, 'strict compares with the original vocal');
+  assert.equal(targetOf({ ...note, raw: undefined }, PROFILES.strict), 60, 'older guides fall back');
+  assert.ok(noteScore(note, PROFILES.strict) < noteScore(note), 'strict needs more of the note');
+});
+
+test('a take records its scoring mode and diagnostics stay local until asked for', () => {
+  const Engine = loadEngine();
+  let t = 0;
+  const engine = Engine.createPracticeEngine({ role: 'panel', root: fakeRoot(), clock: () => ({ t, playing: true, tempo: 1 }),
+    getOptions: () => ({ allowOctave: true, scoreMode: 'strict' }), onSync: () => {} });
+  engine.setGuide(Scoring.prepareGuide({ duration: 8, lines: [{ start: 0, end: 7, text: 'x' }], notes: [{ start: 0, end: 7, midi: 69, raw: 69, line: 0, word: 0 }] }));
+  engine.setPlaying(true, 0);
+  assert.equal(engine.diagnosticSnapshot(), null);
+  for (let i = 0; i < 700; i++) {
+    t = i / 100;
+    engine.pitch({ time: t, f0: 440, clarity: 0.99, rms: 0.1, localClarity: 0.99 }, { valid: true, t, audioTime: t, playing: true, tempo: 1, key: 0, generation: 1 });
+  }
+  const take = engine.finish('mic', { end: 7 });
+  assert.equal(take.scoreMode, 'strict');
+  const data = engine.diagnosticSnapshot();
+  assert.equal(data.scoreMode, 'strict');
+  assert.ok(data.rows.length > 0 && data.rows.length <= 300);
+  assert.equal(data.rows[0].length, 8);
+  assert.equal(data.rows[0][7], 69);
+  assert.deepEqual(Object.keys(data).filter((k) => /title|track|lyric|audio/i.test(k)), []);
+});

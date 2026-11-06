@@ -2,8 +2,8 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 2.1.0
-Effective Date / 生效日期：2026-11-02
+Version: 2.2.0
+Effective Date / 生效日期：2026-11-07
 
 IMPORTANT INFORMATION / 重要資訊
 --------------------------------
@@ -215,6 +215,12 @@ v2.1 或其後版本（LGPL）授權；你可以自行替換相容的 SoundTouch
    遮蔽處理，移除 OAuth 權杖、Cookie、PIN、金鑰、電子郵件位址與 Windows
    家目錄路徑。日誌摘要仍可能包含歌曲或影片標題，故送出前的預覽為必要步驟。
 
+   自本版（2.2.0）起，若你把問題類型選為「練唱判定問題」且未取消附加診斷
+   資訊，並另附上你演唱時的偵測數值：音高、清晰度、音量、噪音估計、判定
+   結果、原唱目標音高與歌曲內的相對時間（最弱的兩句，各最多 6 秒），以及
+   評分模式、升降 Key、增益、延遲校準等設定。這些數值不是錄音、也無法還原
+   成你的聲音，但音高曲線可能看得出旋律。
+
    為限制濫用，本軟體於首次啟動時產生一組隨機安裝識別碼，儲存於本機資料
    目錄，並僅在你送出問題回報時一併傳送。該識別碼不含、也不衍生自任何硬體
    序號、網路卡位址或其他裝置指紋，重新安裝或刪除本機資料目錄即會重新產生。
@@ -298,7 +304,11 @@ v2.1 或其後版本（LGPL）授權；你可以自行替換相容的 SoundTouch
        哪一個分數區間的次數（例如 85 至 90 分、95 至 97 分）；僅計入以麥克風
        演唱且實際計分 30 秒以上的結算，示範模式與中途停止的不計。不含單次的
        精確分數、歌名、歌詞、錄音或演唱的時間點。此項用於調整練唱評分與
-       評級的標準。
+       評級的標準；
+   (h) 自本版（2.2.0）起：若你使用「嚴格」評分模式，上述分數區間會與「寬鬆」
+       模式分開計數；若你在唱完後回答判定是否準確，「寬鬆」與「嚴格」模式
+       各自的「準」與「不準」回答次數。不含單次的回答時間、歌名、歌詞或
+       錄音。此項用於判斷練唱判定是否需要改善。
 
    接收端不會收到固定安裝識別碼，亦不會收到或儲存姓名、電子郵件、電腦
    名稱、精確顯示卡型號或其他可識別特定裝置的精確硬體資訊、歌名、歌詞
@@ -640,6 +650,14 @@ availability, OBS/Twitch connection counts and durations, and a redacted log
 tail. Tokens, cookies, PINs, keys, email addresses, and Windows home-directory
 paths are redacted, but log excerpts may still mention song or video titles.
 
+From this version (2.2.0), if you choose the "practice judging problem" type and
+keep diagnostics attached, the report also includes detection values from your
+singing: pitch, clarity, volume, noise estimate, judged result, the original
+vocal's target pitch and time within the song (the two weakest lines, up to 6
+seconds each), plus settings such as scoring mode, key shift, gain, and latency
+calibration. These values are not a recording and cannot reconstruct your voice,
+but the pitch curve may reveal the melody.
+
 A random installation identifier is stored locally and sent only with a report
 to limit abuse. It is not derived from hardware or a device fingerprint and is
 not used for behavioral analytics. Reports are stored in a non-public issue
@@ -755,7 +773,13 @@ categorized or bucketed counts are added:
     counted; demo mode and sessions stopped early are not. This never
     includes an exact individual score, song titles, lyrics, recordings, or
     the time of a session. This item is used to tune practice scoring and
-    grading standards.
+    grading standards;
+(h) From this version (2.2.0): if you use the "strict" scoring mode, the
+    score ranges above are counted separately from "relaxed" mode; if you
+    answer whether the judging was accurate after singing, the number of
+    "accurate" and "not accurate" answers for each mode. This never includes
+    the time of an answer, song titles, lyrics, or recordings. This item is
+    used to decide whether practice judging needs improvement.
 
 The receiver does not obtain a permanent installation identifier and does
 not receive or store names, email addresses, computer names, exact GPU

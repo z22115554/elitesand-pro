@@ -781,6 +781,14 @@
                   <div class="is-good"><b id="practice-tier-good">0</b><small>GOOD</small></div>
                   <div class="is-miss"><b id="practice-tier-miss">0</b><small>MISS</small></div>
                 </div>
+                <div id="practice-verdict" class="practice-verdict" hidden>
+                  <div id="practice-verdict-ask" class="practice-verdict-ask">
+                    <span data-i18n="practice.verdict.question">這次的判定準嗎？</span>
+                    <button class="btn btn-sm" type="button" data-verdict="accurate" data-i18n="practice.verdict.accurate">準</button>
+                    <button class="btn btn-sm" type="button" data-verdict="inaccurate" data-i18n="practice.verdict.inaccurate">不準</button>
+                  </div>
+                  <button id="practice-verdict-report" class="btn btn-sm btn-ghost" type="button" data-i18n="practice.verdict.report" hidden>回報哪裡不準</button>
+                </div>
               </div>
 
               <!-- 每次只開一個設定或回饋分頁；內容在右欄內捲動。 -->
@@ -831,6 +839,12 @@
                       <option value="ribbon" data-i18n="practice.trailRibbon">緞帶：平滑＋吸附</option>
                       <option value="bars" data-i18n="practice.trailBars">方塊：吸附到音符</option>
                       <option value="raw" data-i18n="practice.trailRaw">原始（未處理）</option>
+                    </select>
+                  </label>
+                  <label class="practice-field"><span data-new-feature="practice-score-mode"><span data-i18n="practice.scoreMode">評分模式</span></span>
+                    <select id="practice-score-mode">
+                      <option value="relaxed" data-i18n="practice.scoreModeRelaxed">寬鬆：享受唱歌，差一點不扣分</option>
+                      <option value="strict" data-i18n="practice.scoreModeStrict">嚴格：抓音準，偏半音就會明顯扣分</option>
                     </select>
                   </label>
                   <label class="practice-check"><input type="checkbox" id="practice-octave" checked> <span data-i18n="practice.allowOctave">容許差一個八度</span></label>
@@ -3872,6 +3886,7 @@
               <option value="lyrics" data-i18n="feedback.typeLyrics">歌詞問題</option>
               <option value="obs" data-i18n="feedback.typeObs">OBS 顯示問題</option>
               <option value="spout" data-i18n="feedback.typeSpout">Spout 透明輸出問題</option>
+              <option value="practice" data-i18n="feedback.typePractice">練唱判定問題</option>
               <option value="twitch" data-i18n="feedback.typeTwitch">Twitch 點歌問題</option>
               <option value="ui-i18n" data-i18n="feedback.typeUiI18n">介面或翻譯問題</option>
               <option value="feature-request" data-i18n="feedback.typeFeature">功能建議</option>

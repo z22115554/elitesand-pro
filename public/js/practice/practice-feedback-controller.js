@@ -9,6 +9,7 @@
   function sameContext(a, b) {
     return !!(a && b && a.scope && b.scope && !a.mixedContext && !b.mixedContext && a.scope.type !== 'partial' && b.scope.type !== 'partial'
       && ['trackId', 'guideId', 'scoreVersion', 'allowOctave'].every(k => a[k] === b[k])
+      && (a.scoreMode || 'relaxed') === (b.scoreMode || 'relaxed')
       && ['key', 'tempo'].every(k => Math.round(a[k] * 1000) === Math.round(b[k] * 1000))
       && a.scope.type === b.scope.type && ['start', 'end'].every(k => Math.round(a.scope[k] * 1000) === Math.round(b.scope[k] * 1000)));
   }
@@ -40,7 +41,7 @@
       const s = getSnapshot(); const guide = engine.getGuide();
       const range = engine.getRange();
       return { trackId, guideId: guide && guide.guideId, scoreVersion: 'source-time-v2', key: s && s.pitchShift || 0,
-        tempo: s && s.playbackRate || 1, allowOctave: getOptions().allowOctave !== false, mixedContext: false,
+        tempo: s && s.playbackRate || 1, allowOctave: getOptions().allowOctave !== false, scoreMode: getOptions().scoreMode === 'strict' ? 'strict' : 'relaxed', mixedContext: false,
         scope: range ? { type: 'range', ...range } : { type: 'full', start: 0, end: guide && guide.duration || 0 } };
     }
     async function updateGhost() {

@@ -29,6 +29,7 @@ const REPORT_TYPES = Object.freeze({
   lyrics: { label: '歌詞問題', issueLabel: 'type:lyrics' },
   obs: { label: 'OBS 顯示問題', issueLabel: 'type:obs' },
   spout: { label: 'Spout 透明輸出問題', issueLabel: 'type:spout' },
+  practice: { label: '練唱判定問題', issueLabel: 'type:bug' },
   twitch: { label: 'Twitch 點歌問題', issueLabel: 'type:twitch' },
   'ui-i18n': { label: '介面或翻譯問題', issueLabel: 'type:i18n' },
   'feature-request': { label: '功能建議', issueLabel: 'type:feature' },
@@ -115,6 +116,54 @@ function sanitizeSpoutDiagnostics(input) {
  * 回傳 { ok, errors: [{ field, code }], value } —— errors 用代碼而非句子，
  * 讓面板可以用既有 i18n 顯示，不必在伺服器端翻譯五種語言。
  */
+// 練唱診斷：只收數字與封閉值，文字欄一律不進來。格式由這裡重組，用戶端送什麼都不會原樣進 issue。
+const PRACTICE_DIAGNOSTIC_MAX_ROWS = 300;
+const PRACTICE_ROW_RANGES = [[0, 3600, 2], [0, 4000, 1], [0, 1, 2], [0, 1, 2], [0, 2, 4], [0, 2, 4], [0, 140, 2], [0, 140, 2]];
+function sanitizePracticeDiagnostics(input) {
+  if (!input || typeof input !== 'object' || !Array.isArray(input.rows)) return null;
+  const rows = [];
+  for (const row of input.rows.slice(0, PRACTICE_DIAGNOSTIC_MAX_ROWS)) {
+    if (!Array.isArray(row) || row.length !== PRACTICE_ROW_RANGES.length) continue;
+    if (!row.every((value, i) => Number.isFinite(value) && value >= PRACTICE_ROW_RANGES[i][0] && value <= PRACTICE_ROW_RANGES[i][1])) continue;
+    rows.push(row.map((value, i) => Number(value.toFixed(PRACTICE_ROW_RANGES[i][2]))));
+  }
+  if (!rows.length) return null;
+  const tag = (value) => (typeof value === 'string' && /^[A-Za-z0-9._-]{1,40}$/.test(value) ? value : '');
+  return {
+    rows,
+    scoreMode: input.scoreMode === 'strict' ? 'strict' : 'relaxed',
+    allowOctave: input.allowOctave === true,
+    key: boundedNumber(input.key, -24, 24),
+    tuning: Number(boundedNumber(input.tuning, -1, 1).toFixed(3)),
+    score: Number.isFinite(input.score) ? Number(boundedNumber(input.score, 0, 100).toFixed(1)) : null,
+    algorithm: tag(input.algorithm),
+    algorithmVersion: tag(input.algorithmVersion),
+    sampleRate: boundedNumber(input.sampleRate, 0, 384000),
+    gainDb: boundedNumber(input.gainDb, -12, 24),
+    echoCancel: input.echoCancel === true,
+    calibrationMs: boundedNumber(input.calibrationMs, -2000, 2000),
+  };
+}
+
+function formatPracticeDiagnosticsBlock(data) {
+  if (!data) return ['## 練唱診斷資料', '', '（沒有可附上的麥克風演唱資料）', ''];
+  return [
+    '## 練唱診斷資料',
+    '',
+    `- 評分模式：${data.scoreMode}；容許八度：${data.allowOctave}；升降 Key：${data.key}；原唱微調：${data.tuning}`,
+    `- 分數：${data.score == null ? '無' : data.score}；音高基準：${data.algorithm || '未知'} ${data.algorithmVersion}`,
+    `- 取樣率：${data.sampleRate}；增益：${data.gainDb} dB；回音消除：${data.echoCancel}；延遲校準：${data.calibrationMs} ms`,
+    '',
+    '時間是歌曲內的秒數；目標是原唱音高（MIDI），輸出 0 代表判定沒唱。不含錄音、歌名或歌詞。',
+    '',
+    '```',
+    'time,f0,clarity,localClarity,rms,noiseFloor,output,target',
+    ...data.rows.map((row) => row.join(',')),
+    '```',
+    '',
+  ];
+}
+
 function validateReport(input) {
   const source = input && typeof input === 'object' ? input : {};
   const errors = [];
@@ -166,6 +215,9 @@ function validateReport(input) {
       locale: asText(source.locale) || 'zh-TW',
       spoutDiagnostics: type === 'spout' && source.includeDiagnostics !== false
         ? sanitizeSpoutDiagnostics(source.spoutDiagnostics)
+        : null,
+      practiceDiagnostics: type === 'practice' && source.includeDiagnostics !== false
+        ? sanitizePracticeDiagnostics(source.practiceDiagnostics)
         : null,
     },
   };
@@ -362,6 +414,7 @@ function buildReport(input, options = {}) {
     ...formatLogBlock(diagnostics),
     '',
     ...(value.type === 'spout' && value.includeDiagnostics ? formatSpoutDiagnosticsBlock(value.spoutDiagnostics) : []),
+    ...(value.type === 'practice' && value.includeDiagnostics ? formatPracticeDiagnosticsBlock(value.practiceDiagnostics) : []),
   ];
 
   // 使用者填的文字也過一次清理：他們很可能直接把含 token 的錯誤訊息貼進說明欄。
@@ -397,5 +450,6 @@ module.exports = {
   validateReport,
   collectDiagnostics,
   sanitizeSpoutDiagnostics,
+  sanitizePracticeDiagnostics,
   buildReport,
 };

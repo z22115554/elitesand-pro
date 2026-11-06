@@ -28,7 +28,7 @@
     save: (data) => writeJson(Calibration.STORAGE_KEY, data) });
 
   // 只存這台電腦的偏好（麥克風延遲跟硬體有關；OBS 外觀則存在伺服器）
-  const prefs = Object.assign({ allowOctave: true, showContour: false }, readJson(PREFS_KEY, {}));
+  const prefs = Object.assign({ allowOctave: true, showContour: false, scoreMode: 'relaxed' }, readJson(PREFS_KEY, {}));
   const ui = {
     stage: $('practice-stage'), heading: $('practice-heading'), status: $('practice-guide-status'),
     build: $('practice-build'), cancel: $('practice-cancel'), empty: $('practice-empty'), emptyText: $('practice-empty-text'),
@@ -40,7 +40,8 @@
     meter: $('practice-meter'), levelGate: $('practice-level-gate'),
     gainField: $('practice-gain-field'), echoField: $('practice-echo-field'), echo: $('practice-echo'), gain: $('practice-gain'), gainValue: $('practice-gain-value'),
     latency: $('practice-latency'), latencyValue: $('practice-latency-value'), latencyStatus: $('practice-latency-status'), calibrate: $('practice-calibrate'),
-    octave: $('practice-octave'), trail: $('practice-trail'), contour: $('practice-contour'),
+    octave: $('practice-octave'), scoreMode: $('practice-score-mode'), verdict: $('practice-verdict'), verdictAsk: $('practice-verdict-ask'),
+    verdictReport: $('practice-verdict-report'), trail: $('practice-trail'), contour: $('practice-contour'),
     model: $('practice-model'), modelInstall: $('practice-model-install'),
     obsUrl: $('practice-obs-url'), obsCopy: $('practice-obs-copy'), fx: $('practice-fx'),
     bg: $('practice-bg'), bgOpacity: $('practice-bg-opacity'), bgOpacityValue: $('practice-bg-opacity-value'),
@@ -61,6 +62,7 @@
   let pollTimer = 0;
   let visible = false;
   let lastPlaying = false;
+  let verdictTake = null;
   // 偵測器跟播放器共用 AudioContext（換歌重建時也可能換新的 context）
   const detector = { ctx: null, node: null, sink: null, stream: null, mic: null, gain: null, untapDemo: null, mode: 'off', loading: null,
     request: 0, targetCtx: null, sourceRevision: 0 };
@@ -132,6 +134,7 @@
     if (s.playing !== lastPlaying) {
       lastPlaying = s.playing;
       const clock = currentClock();
+      if (s.playing) hideVerdict();
       engine.setPlaying(s.playing && detector.mode !== 'off', clock ? clock.t : s.sourceTime);
     }
   }
@@ -141,7 +144,26 @@
   // 只送來源、分數、計分秒數三個值，收不收、記哪一格由伺服器決定。
   function reportScore(take) {
     if (!take || take.source !== 'mic' || take.score == null || !take.scope || take.scope.type !== 'full') return;
-    SocketClient.send('practice:scored', { source: take.source, score: take.score, seconds: take.seconds });
+    SocketClient.send('practice:scored', { source: take.source, score: take.score, seconds: take.seconds, scoreMode: take.scoreMode });
+    verdictTake = take;
+    ui.verdict.hidden = false;
+    ui.verdictAsk.hidden = false;
+    ui.verdictReport.hidden = true;
+  }
+
+  function hideVerdict() {
+    verdictTake = null;
+    ui.verdict.hidden = true;
+  }
+
+  // 麥克風演唱才有診斷資料；示範模式是原唱自己，對判定沒有參考價值。
+  function diagnosticSnapshot() {
+    const take = engine.getTake();
+    if (detector.mode !== 'mic' || (take && take.source !== 'mic')) return null;
+    const data = engine.diagnosticSnapshot();
+    if (!data) return null;
+    const ctx = detector.ctx;
+    return { ...data, sampleRate: ctx ? ctx.sampleRate : 0, gainDb: gainDb(), echoCancel: !!prefs.echoCancel, calibrationMs: Number(ui.latency.value) || 0 };
   }
 
   function onBoundary(s) {
@@ -884,6 +906,7 @@
     renderFxMenu();
     applyStyle(Fx.STYLE_DEFAULT);
     ui.octave.checked = prefs.allowOctave !== false;
+    ui.scoreMode.value = prefs.scoreMode === 'strict' ? 'strict' : 'relaxed';
     ui.contour.checked = !!prefs.showContour;
     ui.latency.value = 0; ui.latency.disabled = true; renderLatency();
     renderObsUrls();
@@ -945,6 +968,18 @@
       latencyProfiles.remember(Number(ui.latency.value), 'manual'); renderLatency();
     });
     ui.octave.addEventListener('change', () => { prefs.allowOctave = ui.octave.checked; writeJson(PREFS_KEY, prefs); feedback.contextChanged(); });
+    ui.scoreMode.addEventListener('change', () => { prefs.scoreMode = ui.scoreMode.value === 'strict' ? 'strict' : 'relaxed'; writeJson(PREFS_KEY, prefs); feedback.contextChanged(); engine.refreshScore(); renderScore(); });
+    ui.verdict.addEventListener('click', (e) => {
+      const button = e.target.closest('[data-verdict]');
+      if (!button || !verdictTake) return;
+      const verdict = button.dataset.verdict;
+      SocketClient.send('practice:verdict', { verdict, scoreMode: verdictTake.scoreMode });
+      verdictTake = null;
+      ui.verdictAsk.hidden = true;
+      ui.verdictReport.hidden = verdict !== 'inaccurate';
+    });
+    ui.verdictReport.addEventListener('click', () => { if (window.AppFeedback) window.AppFeedback.openPracticeReport(); });
+    window.PracticeDiagnostics = Object.freeze({ snapshot: diagnosticSnapshot });
     ui.contour.addEventListener('change', () => { prefs.showContour = ui.contour.checked; writeJson(PREFS_KEY, prefs); });
     ui.modelInstall.addEventListener('click', installModel);
     for (const button of [ui.obsCopy, $('copy-practice-url-general')]) {

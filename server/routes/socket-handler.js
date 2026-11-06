@@ -634,7 +634,11 @@ module.exports = function socketHandler(io, {
         // 是否收、收哪一格由 usage-telemetry 判斷（關閉統計或尚未同意 2.1.0 時什麼都不記）。
         socket.on('practice:scored', (data) => {
           if (!data || typeof data !== 'object' || Array.isArray(data)) return;
-          usageTelemetry.recordPracticeScore({ source: data.source, score: data.score, seconds: data.seconds });
+          usageTelemetry.recordPracticeScore({ source: data.source, score: data.score, seconds: data.seconds, scoreMode: data.scoreMode });
+        });
+        socket.on('practice:verdict', (data) => {
+          if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+          usageTelemetry.recordPracticeVerdict({ verdict: data.verdict, scoreMode: data.scoreMode });
         });
       }
       registerHalloweenEventHandlers(io, socket, { getInteractions: () => halloweenInteractions, getCauldron: () => halloweenCauldron });

@@ -48,6 +48,7 @@
   let submitting = false;
   let collecting = false;
   let previewSpoutDiagnostics = null;
+  let previewPracticeDiagnostics = null;
 
   function toast(message, type) {
     if (window.AppShared && window.AppShared.showToast) window.AppShared.showToast(message, type);
@@ -69,6 +70,11 @@
   }
 
   async function attachSpoutDiagnostics(report) {
+    if (report.type === 'practice' && report.includeDiagnostics) {
+      const diagnostics = window.PracticeDiagnostics && window.PracticeDiagnostics.snapshot();
+      if (diagnostics) report.practiceDiagnostics = diagnostics;
+      return report;
+    }
     if (report.type !== 'spout' || !report.includeDiagnostics) return report;
     try {
       const diagnostics = await window.ElitesandShell?.spout?.getIssueDiagnostics?.();
@@ -204,6 +210,7 @@
     try {
       const report = await attachSpoutDiagnostics(readForm());
       previewSpoutDiagnostics = report.spoutDiagnostics || null;
+      previewPracticeDiagnostics = report.practiceDiagnostics || null;
       const response = await PinAuth.fetchWithPin('/api/feedback/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -240,6 +247,10 @@
     if (!requestId) requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
       const report = readForm();
+      // 送出的要跟預覽看到的一模一樣，不能在預覽後重取一次。
+      if (report.type === 'practice' && report.includeDiagnostics && previewPracticeDiagnostics) {
+        report.practiceDiagnostics = previewPracticeDiagnostics;
+      }
       if (report.type === 'spout' && report.includeDiagnostics && previewSpoutDiagnostics) {
         report.spoutDiagnostics = previewSpoutDiagnostics;
       } else {
@@ -418,7 +429,8 @@
     document.getElementById('update-fail-dismiss')?.addEventListener('click', finish, { once: true });
   }
 
-  window.AppFeedback = Object.freeze({ showUpdateFailBanner });
+  window.AppFeedback = Object.freeze({ showUpdateFailBanner,
+    openPracticeReport: () => openPrefilled({ type: 'practice', title: t('feedback.practicePrefillTitle') }) });
 
   // 先問一次中繼狀態，讓「送出」按鈕在預覽前就決定好要不要出現。
   fetch('/api/feedback/status', { cache: 'no-store' })

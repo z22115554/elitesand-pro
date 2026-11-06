@@ -175,3 +175,7 @@
 
 /* 「先選麥克風」提示可以點：切到輸入分頁並聚焦來源 */
 #practice-guide-status.is-action { cursor: pointer; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+.practice-verdict { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.practice-verdict[hidden], .practice-verdict-ask[hidden] { display: none; }
+.practice-verdict-ask { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

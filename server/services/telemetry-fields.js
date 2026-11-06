@@ -92,6 +92,8 @@ const PRACTICE_SCORE_BUCKETS = Object.freeze([
   'lt50', '50-60', '60-70', '70-75', '75-80', '80-85',
   '85-90', '90-93', '93-95', '95-97', '97-99', 'ge99',
 ]);
+const PRACTICE_MODES = Object.freeze(['relaxed', 'strict']);
+const PRACTICE_VERDICTS = Object.freeze(['accurate', 'inaccurate']);
 /** 計分不足這麼多秒（例如只唱幾句就停）不列入分布，避免零碎試唱把分布拉歪 */
 const PRACTICE_MIN_SCORED_SECONDS = 30;
 
@@ -178,6 +180,8 @@ function buildAllowedKeys() {
   keys.push('ai.fallback_to_cpu');
   keys.push('ai.retried'); // EULA §7.9(f)（1.8.0 起）：曾在同一後端重試後才完成
   for (const bucket of PRACTICE_SCORE_BUCKETS) keys.push(`practice.score.${bucket}`); // EULA §7.9(g)（2.1.0 起）
+  for (const bucket of PRACTICE_SCORE_BUCKETS) keys.push(`practice.strict.score.${bucket}`); // EULA §7.9(h)（2.2.0 起）
+  for (const mode of PRACTICE_MODES) for (const verdict of PRACTICE_VERDICTS) keys.push(`practice.verdict.${mode}.${verdict}`); // EULA §7.9(h)
   return Object.freeze(keys.slice().sort());
 }
 
@@ -214,6 +218,8 @@ function isDailyBooleanKey(key) {
  * 同意的版本還沒到，就算其他欄位照送，這些欄位也一個都不收。
  */
 const KEY_DISCLOSED_SINCE = Object.freeze([
+  ['practice.strict.', '2.2.0'],
+  ['practice.verdict.', '2.2.0'],
   ['practice.', '2.1.0'],
 ]);
 
@@ -243,6 +249,8 @@ module.exports = {
   RTF_BUCKETS,
   DURATION_BUCKETS,
   PRACTICE_SCORE_BUCKETS,
+  PRACTICE_MODES,
+  PRACTICE_VERDICTS,
   PRACTICE_MIN_SCORED_SECONDS,
   ALLOWED_KEYS,
   MAX_COUNTER_VALUE,

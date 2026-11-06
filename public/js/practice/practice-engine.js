@@ -16,6 +16,7 @@
   const { RULE, credit, centsOff, foldToTarget, resetNote, noteScore, tierOf, activeNote } = Scoring;
   const RENDER_DELAY = 0.08;   // OBS 晚 80ms 畫：等面板的資料先到，畫面才不會一頓一頓
   const SYNC_INTERVAL_MS = 50;
+  const DIAG_MAX_ROWS = 12000; // 25 格／秒，約 8 分鐘
   const CLOCK_SNAP_SEC = 0.3;
   const CLOCK_CORRECTION_PER_FRAME = 0.06; // 60fps 一幀校正的比例，跟 /display 的歌詞時鐘同一套
   const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -82,7 +83,7 @@
       clock: { playing: false, t: 0, at: Date.now() },   // source 用：面板送來的時鐘
       lastPanelT: 0, pitchClock: null, baseGuide: null, range: null, take: null, finished: false,
       pitchSample: null, pitchTrace: [], traceStep: 0.025, ghost: [], silence: 0,
-      passStart: 0, passEnd: 0, discontinuous: false, context: null, mixedContext: false,
+      passStart: 0, passEnd: 0, discontinuous: false, context: null, mixedContext: false, diag: [], diagTick: 0,
     };
     const sync = { lastT: -Infinity, dirty: new Set(), events: [], sentAt: 0 };
     const followClock = createFollowClock();
@@ -98,6 +99,8 @@
     const isObs = () => host.classList.contains('pstage--obs');
     const cssVar = (name, fallback) => getComputedStyle(host).getPropertyValue(name).trim() || fallback;
     const allowOctave = () => (options.getOptions ? options.getOptions().allowOctave !== false : true);
+    const scoreMode = () => (options.getOptions && options.getOptions().scoreMode === 'strict' ? 'strict' : 'relaxed');
+    const profile = () => Scoring.profileOf(scoreMode());
 
     // ── 時間 ───────────────────────────────────────────────────────────────
     function songTime() {
@@ -181,7 +184,7 @@
       state.ratings = []; state.scoreTarget = null; state.scoreShown = 0; state.lastLineDone = -1;
       state.refTime = 0; state.voicedTime = 0; state.unscorable = false; state.lyricLine = -1;
       state.finished = false; state.pitchTrace = []; state.traceStep = 0.025; state.pitchSample = null;
-      state.context = null; state.mixedContext = false; state.discontinuous = false;
+      state.context = null; state.mixedContext = false; state.discontinuous = false; state.diag = []; state.diagTick = 0;
       state.passStart = state.range ? state.range.start : 0; state.passEnd = state.passStart;
       resetFrom(state.passStart);
       if (notify && role === 'panel') { sync.lastT = -Infinity; sync.dirty.clear(); options.onSync && options.onSync({ type: 'seek', offset: state.passStart }); }
@@ -270,7 +273,7 @@
       const time = mapped.t;
       const clock = options.clock ? options.clock() : null;
       const context = { key: Number.isFinite(mapped.key) ? mapped.key : state.key,
-        tempo: Number.isFinite(mapped.tempo) ? mapped.tempo : clock && clock.tempo || 1, allowOctave: allowOctave() };
+        tempo: Number.isFinite(mapped.tempo) ? mapped.tempo : clock && clock.tempo || 1, allowOctave: allowOctave(), scoreMode: scoreMode() };
       const tempo = Number.isFinite(mapped.tempo) && mapped.tempo > 0 ? mapped.tempo : 1;
       const audioTime = Number.isFinite(mapped.audioTime) ? mapped.audioTime : null;
       const previous = state.pitchClock;
@@ -283,7 +286,7 @@
       if (target && !target.skip) {
         if (!state.context) state.context = context;
         else if (context.key !== state.context.key || Math.abs(context.tempo - state.context.tempo) > 0.0001
-            || context.allowOctave !== state.context.allowOctave) state.mixedContext = true;
+            || context.allowOctave !== state.context.allowOctave || context.scoreMode !== state.context.scoreMode) state.mixedContext = true;
       }
       const delta = previous && !boundary ? time - previous.t : 0;
       const elapsed = previous && audioTime != null && previous.audioTime != null ? audioTime - previous.audioTime : delta / tempo;
@@ -327,6 +330,7 @@
         }
       }
       pushTrail(time, midi, d.rms);
+      recordDiagnostic(time, d, midi);
       // 同步跟著音訊執行緒的節奏送：面板在背景分頁時計時器會被限流，這條路不會
       if (performance.now() - sync.sentAt >= SYNC_INTERVAL_MS) syncFrame();
     }
@@ -417,13 +421,35 @@
       return nx;
     }
 
+    // 問題回報用：每 40ms 留一格偵測中間值，只在本機；使用者送出回報才會帶上其中幾句。沒有聲音本身。
+    function recordDiagnostic(time, d, midi) {
+      if (++state.diagTick % 4) return;
+      const n = activeNote(state.guide.notes, time);
+      state.diag.push([time, d.f0 || 0, d.clarity || 0, d.localClarity || 0, d.rms || 0, state.voice.floor || 0, midi || 0, n ? Scoring.targetOf(n, profile()) : 0]);
+      if (state.diag.length > DIAG_MAX_ROWS) state.diag.splice(0, 1000);
+    }
+
+    /** 最弱的兩句（各最多 6 秒）；沒有結算時給最後 12 秒。 */
+    function diagnosticSnapshot() {
+      if (!state.guide || !state.diag.length) return null;
+      const last = state.diag[state.diag.length - 1][0];
+      const weak = state.take && state.take.weakLines || [];
+      const windows = weak.length ? weak.slice(0, 2).map((l) => [l.start, Math.min(l.end, l.start + 6)]) : [[last - 12, last]];
+      const rows = state.diag.filter(([t]) => windows.some(([a, b]) => t >= a && t <= b)).slice(0, 300);
+      if (!rows.length) return null;
+      const take = state.take;
+      return { rows, scoreMode: take && take.scoreMode || scoreMode(), allowOctave: allowOctave(), key: state.key, tuning: state.guide.tuning || 0,
+        score: take && take.score != null ? take.score : null, algorithm: state.guide.algorithm || '', algorithmVersion: state.guide.algorithmVersion || '' };
+    }
+
     function pushTrail(time, midi, rms) {
       if (!midi) { state.trail.push({ t: time, gap: true }); state.user = null; return; }
       const n = activeNote(state.guide.notes, time), target = n ? n.midi : null;
       const folded = foldToTarget(midi, target, allowOctave());
       const smooth = oneEuro(folded, time);
-      const err = target == null ? Infinity : Math.abs(smooth - target) * 100;
-      const ok = err <= RULE.fullCents, near = err <= RULE.zeroCents;
+      const rule = profile();
+      const err = target == null ? Infinity : Math.abs(smooth - foldToTarget(Scoring.targetOf(n, rule), target, allowOctave())) * 100;
+      const ok = err <= rule.fullCents, near = err <= rule.zeroCents;
       // 吸附：唱在容許範圍內就往目標那一行拉（保留 25% 的真實起伏，看得出在唱）
       const ribbon = ok ? target + (smooth - target) * 0.25 : smooth;
       const q = Math.round(smooth), bar = target != null && Math.abs(q - target) <= 1 && ok ? target : q;
@@ -433,22 +459,23 @@
 
     function scoreInterval(start, end, midi) {
       // Split at note and grace boundaries. A frame crossing a note cannot credit the next note.
-      const notes = state.guide.notes;
+      const notes = state.guide.notes, rule = profile();
       for (let i = firstAtOrAfter(notes, 'prefixEnd', start); i < notes.length; i++) {
         const n = notes[i];
         if (n.start >= end) break;
         if (n.end <= start || n.skip || n.excluded) continue;
         const a = Math.max(start, n.start + n.grace), b = Math.min(end, n.end);
         if (midi && end > n.start && start < n.start + n.grace
-            && centsOff(midi, n.midi, allowOctave()) <= RULE.fullCents) addFill(n, Math.min(end, n.end));
+            && centsOff(midi, Scoring.targetOf(n, rule), allowOctave()) <= rule.fullCents) addFill(n, Math.min(end, n.end));
         if (b <= a) continue;
         const dt = b - a;
         n.seen += dt; state.refTime += dt; n.attempted = true; sync.dirty.add(n.i);
         if (!midi) continue;
         state.voicedTime += dt; n.voiced += dt;
-        const signed = (foldToTarget(midi, n.midi, allowOctave()) - n.midi) * 100;
+        const goal = Scoring.targetOf(n, rule);
+        const signed = (foldToTarget(midi, goal, allowOctave()) - goal) * 100;
         n.signedCentsSum += signed * dt; n.absoluteCentsSum += Math.abs(signed) * dt;
-        const k = credit(Math.abs(signed));
+        const k = credit(Math.abs(signed), rule);
         n.hit += dt * k;
         if (k >= 0.4) { addFill(n, a); addFill(n, b); }
       }
@@ -492,7 +519,7 @@
         const sung = notes.reduce((a, n) => a + n.voiced, 0), want = notes.reduce((a, n) => a + Math.max(0, n.end - n.start - n.grace), 0);
         if (want > 0 && sung / want < RULE.unsungLine) { state.combo = 0; continue; } // 整句幾乎沒唱：不跳評等，MISS 只給唱偏的句子
         let sum = 0, len = 0;
-        for (const n of notes) { const l = n.end - n.start - n.grace; if (l > 0) { sum += noteScore(n) * l; len += l; } }
+        for (const n of notes) { const l = n.end - n.start - n.grace; if (l > 0) { sum += noteScore(n, profile()) * l; len += l; } }
         const s = len ? sum / len : 0;
         const tag = tierOf(s);
         state.combo = tag === 'PERFECT' || tag === 'GREAT' ? state.combo + 1 : 0;
@@ -510,7 +537,7 @@
       for (const n of state.guide.notes) {
         if ((!n.attempted && n.seen <= 0) || n.skip || n.excluded) continue;
         const l = n.end - n.start - n.grace;
-        if (l > 0) { sum += noteScore(n) * l; len += l; }
+        if (l > 0) { sum += noteScore(n, profile()) * l; len += l; }
       }
       state.scoreTarget = len > 2 ? 100 * sum / len : null;
       state.unscorable = isSilent(songTime());
@@ -531,20 +558,20 @@
         .map((n) => ({ ...n, end: Math.min(n.end, end) }));
       const seconds = notes.reduce((sum, n) => sum + Math.max(0, n.end - n.start - n.grace), 0);
       const excluded = state.guide.exclusions.reduce((sum, r) => sum + Math.max(0, Math.min(r.end, bounds.end) - Math.max(r.start, bounds.start)), 0);
-      const lineFeedback = Scoring.lineFeedback({ ...state.guide, notes });
+      const lineFeedback = Scoring.lineFeedback({ ...state.guide, notes }, profile());
       const observedSeconds = notes.reduce((sum, n) => sum + n.seen, 0);
       const voicedSeconds = notes.reduce((sum, n) => sum + n.voiced, 0);
       const finalScore = seconds > 2 && observedSeconds > 0 && voicedSeconds > 0 && !state.unscorable
-        ? Math.min(100, 100 * notes.reduce((sum, n) => sum + noteScore(n) * Math.max(0, n.end - n.start - n.grace), 0) / seconds) : null;
+        ? Math.min(100, 100 * notes.reduce((sum, n) => sum + noteScore(n, profile()) * Math.max(0, n.end - n.start - n.grace), 0) / seconds) : null;
       state.scoreTarget = finalScore;
-      const context = state.context || { key: state.key, tempo: 1, allowOctave: allowOctave() };
+      const context = state.context || { key: state.key, tempo: 1, allowOctave: allowOctave(), scoreMode: scoreMode() };
       const partial = state.discontinuous || state.passStart > bounds.start + 0.05 || end < bounds.end - 0.1;
       state.take = Scoring.snapshot({ score: finalScore, source: source === 'demo' ? 'demo' : 'mic',
         seconds, excluded, lines: state.ratings.length, tech: { ...state.techCount }, maxCombo: state.maxCombo, at: Date.now(),
         tiers: Object.fromEntries(Scoring.TIERS.map((k) => [k, state.ratings.filter((x) => x.tag === k).length])),
         scoreVersion: Scoring.SCORE_VERSION, guideId: state.guide.guideId || '',
         scope: { type: partial ? 'partial' : state.range ? 'range' : 'full', start: state.passStart, end },
-        key: context.key, tempo: context.tempo, allowOctave: context.allowOctave, mixedContext: state.mixedContext,
+        key: context.key, tempo: context.tempo, allowOctave: context.allowOctave, scoreMode: context.scoreMode, mixedContext: state.mixedContext,
         requiredSeconds: seconds, observedSeconds, voicedSeconds,
         lineFeedback, weakLines: Scoring.weakestLines(lineFeedback), pitchTrace: state.pitchTrace });
       state.result = state.take;
@@ -923,9 +950,9 @@
         if (passed && !n.done) {
           n.done = true;
           if (role === 'panel' && !n.skip && n.seen > 0) detectTechnique(n);
-          if (fx.noteBurst && !n.skip && n.seen > 0 && noteScore(n) >= 0.85) burst(Math.min(X(n.end), x0), y + blockH / 2, 5, [accent, C().voice], 1.4);
+          if (fx.noteBurst && !n.skip && n.seen > 0 && noteScore(n, profile()) >= 0.85) burst(Math.min(X(n.end), x0), y + blockH / 2, 5, [accent, C().voice], 1.4);
         }
-        if (fx.perfectRing && passed && !n.skip && n.seen > 0 && noteScore(n) >= 0.85) {
+        if (fx.perfectRing && passed && !n.skip && n.seen > 0 && noteScore(n, profile()) >= 0.85) {
           g2.strokeStyle = accent; g2.lineWidth = 1; roundRect(x + 0.5, y + 0.5, w - 1, blockH - 1); g2.stroke();
         }
       }
@@ -1055,7 +1082,7 @@
 
     const api = {
       setGuide, announce, setStyle, setKey, setRange, setGhost, startNewPass: restart,
-      getRange: () => state.range ? { ...state.range } : null, getTake: () => state.take, setPlaying, seek, restart, pitch, finish, receive, syncFrame, destroy,
+      getRange: () => state.range ? { ...state.range } : null, getTake: () => state.take, diagnosticSnapshot, setPlaying, seek, restart, pitch, finish, receive, syncFrame, destroy,
       songTime, refreshScore, resetInput, voiceGate,
       getStyle: () => ({ ...state.style }),
       getGuide: () => state.guide,

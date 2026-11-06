@@ -123,7 +123,8 @@ function panel(options = {}) {
   media.getUserMedia = (constraints) => { const request = deferred(); requests.push({ ...request, constraints }); return request.promise; };
   const ctx = audioContext();
   let playback = { audioContext: ctx, valid: false, outputSignature: '["speaker-a",false,"","",0]', playing: false };
-  let onPlayback;
+  let onPlayback, engineOptions;
+  const sent = [];
   const engine = { style: { ...Fx.STYLE_DEFAULT }, getStyle() { return this.style; }, setStyle(s) { Object.assign(this.style, s); },
     getStats: () => ({ unscorable: false, scoreTarget: null, tiers: {}, techCount: {}, ratings: [] }), getGuide: () => null,
     setPlaying() {}, resetInput() {}, startNewPass() {}, pitch() {}, songTime: () => 0 };
@@ -131,14 +132,15 @@ function panel(options = {}) {
     I18n: { t: (key) => key }, AppShared: { subscribePracticePlayback(fn) { onPlayback = fn; fn(playback); }, subscribePracticePlaybackBoundary() {} } });
   const scope = { window: win, navigator: { mediaDevices: media }, document: { getElementById: get, createElement: element, addEventListener() {} },
     localStorage: { getItem: (key) => store.get(key) || null, setItem: (key, value) => store.set(key, value) },
-    PracticeScoring: Scoring, PracticeEngine: { createPracticeEngine: () => engine }, URL,
-    PracticeFeedback: { create: () => ({ cancel() {}, render() {}, playback() {}, reset() {}, refresh() {}, contextChanged() {} }) },
+    PracticeScoring: Scoring, PracticeEngine: { createPracticeEngine: (opts) => { engineOptions = opts; return engine; } }, URL,
+    SocketClient: { connected: () => true, on() {}, sendWithCallback() {}, send: (event, data) => sent.push({ event, data }) },
+    PracticeFeedback: { create: () => ({ finish() {}, cancel() {}, render() {}, playback() {}, reset() {}, refresh() {}, contextChanged() {} }) },
     AudioWorkletNode: class { constructor() { this.port = {}; nodes.push(this); } connect(next) { return next; } disconnect() {} },
     setTimeout(fn, delay) { const id = ++timerId; timers.set(id, { fn, delay }); return id; }, clearTimeout(id) { timers.delete(id); },
     setInterval: () => 0, clearInterval() {},
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../public/js/app-practice.js'), 'utf8'), scope);
-  return { get, store, requests, ctx, nodes, media, win,
+  return { get, store, requests, ctx, nodes, media, win, sent, finish: (take) => engineOptions.onFinish(take),
     async source(mode) { get('practice-source').value = mode; const p = get('practice-source').fire('change'); await flush(); return { done: p }; },
     playback(change) { playback = { ...playback, ...change }; onPlayback(playback); },
     pitch(data) { nodes.at(-1).port.onmessage({ data }); },
@@ -231,4 +233,28 @@ test('devicechange and closing while resume is pending cancel measurement and st
   await p.win.fire('pagehide');
   const stale = micStream('mic-b'); p.requests.at(-1).resolve(stale); await flush();
   assert.equal(stale.track.stopped, true);
+});
+
+test('only a finished full mic take asks whether the judging was accurate, and only once', async () => {
+  const p = panel();
+  const verdict = p.get('practice-verdict');
+  verdict.hidden = true;
+  const take = { source: 'mic', score: 90, seconds: 60, scoreMode: 'strict', scope: { type: 'full' } };
+  p.finish({ ...take, source: 'demo' });
+  assert.equal(verdict.hidden, true, 'the demo is the original vocal');
+  p.finish({ ...take, scope: { type: 'partial' } });
+  assert.equal(verdict.hidden, true, 'partial takes are not counted');
+  p.finish(take);
+  assert.equal(verdict.hidden, false);
+  assert.equal(JSON.stringify(p.sent.at(-1)), JSON.stringify({ event: 'practice:scored', data: { source: 'mic', score: 90, seconds: 60, scoreMode: 'strict' } }));
+  verdict.closest = () => ({ dataset: { verdict: 'inaccurate' } });
+  await verdict.fire('click');
+  assert.equal(JSON.stringify(p.sent.at(-1)), JSON.stringify({ event: 'practice:verdict', data: { verdict: 'inaccurate', scoreMode: 'strict' } }));
+  assert.equal(p.get('practice-verdict-ask').hidden, true);
+  assert.equal(p.get('practice-verdict-report').hidden, false, 'not accurate offers a report');
+  const count = p.sent.length;
+  await verdict.fire('click');
+  assert.equal(p.sent.length, count, 'one answer per take');
+  const panelSource = fs.readFileSync(path.join(__dirname, '../public/js/app-practice.js'), 'utf8');
+  assert.ok(panelSource.includes('if (s.playing) hideVerdict()'), 'singing again clears the question');
 });

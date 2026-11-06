@@ -465,7 +465,7 @@ async function testPracticeScoreGate() {
 
   // 面板只送三個欄位；伺服器只接受桌面面板（controller）送來的結算
   const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-practice.js'), 'utf8');
-  assert.ok(panel.includes("SocketClient.send('practice:scored', { source: take.source, score: take.score, seconds: take.seconds })"), '面板只送來源、分數、計分秒數');
+  assert.ok(panel.includes("SocketClient.send('practice:scored', { source: take.source, score: take.score, seconds: take.seconds, scoreMode: take.scoreMode })"), '面板只送來源、分數、計分秒數、評分模式');
   assert.ok(panel.includes("take.scope.type !== 'full'"), '只送整首唱完的結算，A–B 循環與中途跳過的區段不算');
   assert.ok(panel.includes('reportScore(take); }'), '分數回報要掛在 onFinish，所有結算都經過那裡');
   const socketHandler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'socket-handler.js'), 'utf8');

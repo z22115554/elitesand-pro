@@ -21,8 +21,10 @@ function identifier(value, label) {
   return value;
 }
 function contextFingerprint(take) {
+  // 寬鬆模式維持原本的欄位，舊紀錄的指紋才不會變。
   return crypto.createHash('sha256').update(JSON.stringify([take.trackId, take.guideId, take.scoreVersion,
-    take.key, take.tempo, take.allowOctave, take.scope.type, take.scope.start, take.scope.end])).digest('hex');
+    take.key, take.tempo, take.allowOctave, take.scope.type, take.scope.start, take.scope.end,
+    ...(take.scoreMode === 'strict' ? ['strict'] : [])])).digest('hex');
 }
 function sanitizeTake(raw) {
   if (!raw || raw.source !== 'mic' || raw.completed !== true || raw.valid !== true) fail('TAKE_NOT_ELIGIBLE', '只可保存已完成且有效的麥克風演唱。');
@@ -40,6 +42,7 @@ function sanitizeTake(raw) {
     guideId: identifier(raw.guideId, 'guideId'), scoreVersion: identifier(raw.scoreVersion, 'scoreVersion'),
     title: text(raw.title), source: 'mic', completed: true, valid: true,
     key: number(raw.key, -24, 24, 'key'), tempo: number(raw.tempo, 0.25, 4, 'tempo'), allowOctave: raw.allowOctave,
+    scoreMode: raw.scoreMode === 'strict' ? 'strict' : 'relaxed',
     mixedContext: raw.mixedContext, scope: { type: scope.type, start, end }, duration,
     score: number(raw.score, 0, 100, 'score'), requiredSeconds, observedSeconds, voicedSeconds,
     seconds: number(raw.seconds ?? observedSeconds, 0, duration + 0.1, 'seconds'),
