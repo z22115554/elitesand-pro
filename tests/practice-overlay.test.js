@@ -203,3 +203,20 @@ test('demo or unscorable final frames revoke recap claims and cannot be followed
   assert.equal(overlay.handle(io, a, { type: 'recap', recap }), null);
   assert.ok(io.sent.some((m) => m.payload.type === 'recap' && m.payload.recap === null));
 });
+
+test('lyric text updates relay only from the active panel and reach late OBS sources', (t) => {
+  const overlay = createPracticeOverlay({ file: tmpFile(t) }); const io = fakeIo();
+  const lyricSong = { duration: 60, key: 'k', trackId: 'x', title: 't', notes: [], lines: [{ start: 1, end: 2, text: '后来', words: [{ text: '后来', start: 1, end: 2 }] }] };
+  const lines = [{ text: '後來', words: ['後來'] }];
+  assert.equal(overlay.handle(io, fakeSocket('a'), { type: 'lyrics', lines }), null, 'no song yet');
+  overlay.handle(io, fakeSocket('a'), { type: 'song', song: lyricSong });
+  io.sent.length = 0;
+  assert.equal(overlay.handle(io, fakeSocket('b'), { type: 'lyrics', lines }), null, 'another panel cannot rewrite it');
+  assert.equal(overlay.handle(io, fakeSocket('x', 'display'), { type: 'lyrics', lines }), null);
+  assert.equal(io.sent.length, 0);
+  overlay.handle(io, fakeSocket('a'), { type: 'lyrics', lines: [{ text: '後來', words: ['後來', 'extra'] }, { text: 'extra' }] });
+  assert.equal(io.sent[0].payload.type, 'lyrics');
+  assert.equal(io.sent[0].payload.lines.length, 1);
+  assert.equal(overlay.getSnapshot().song.lines[0].text, '後來');
+  assert.equal(overlay.getSnapshot().song.lines[0].words[0].text, '後來');
+});

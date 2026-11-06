@@ -642,6 +642,16 @@
       if (m.type === 'clear') { state.guide = null; clearTake(); clearCanvas(); return; }
       if (!state.guide) return;
       if (m.type === 'seek') { resetFrom(m.offset); return; }
+      if (m.type === 'lyrics') {
+        (m.lines || []).forEach((line, i) => {
+          const target = state.guide.lines[i];
+          if (!target) return;
+          target.text = line.text;
+          (line.words || []).forEach((text, k) => { if (target.words && target.words[k]) target.words[k].text = text; });
+        });
+        state.lyricLine = -1; renderDirty = true;
+        return;
+      }
       if (m.type !== 'frame') return;
       if (m.clock) { state.clock = { ...m.clock, at: Date.now() }; followClock.sync(m.clock, performance.now() / 1000); }
       if (m.trail) state.trail.push(...m.trail);
@@ -788,6 +798,14 @@
     // ── 畫面 ───────────────────────────────────────────────────────────────
     function clearCanvas() { g2.setTransform(1, 0, 0, 1, 0, 0); g2.clearRect(0, 0, canvas.width, canvas.height); }
     function roundRect(x, y, w, h) { const r = Math.min(3, h / 2, w / 2); g2.beginPath(); g2.roundRect(x, y, w, h, r); }
+
+    /** 面板改了歌詞顯示文字：重畫，並只把文字送給 OBS（重送整首歌會清掉正在唱的進度）。 */
+    function refreshLyrics() {
+      if (role !== 'panel' || !state.guide) return;
+      state.lyricLine = -1; renderDirty = true;
+      if (options.onSync) options.onSync({ type: 'lyrics', lines: state.guide.lines.map((l) => ({ text: l.text, words: (l.words || []).map((w) => w.text) })) });
+      emit('all');
+    }
 
     function updateLyrics(time) {
       const now = el('lyricNow'), next = el('lyricNext');
@@ -1082,7 +1100,7 @@
 
     const api = {
       setGuide, announce, setStyle, setKey, setRange, setGhost, startNewPass: restart,
-      getRange: () => state.range ? { ...state.range } : null, getTake: () => state.take, diagnosticSnapshot, setPlaying, seek, restart, pitch, finish, receive, syncFrame, destroy,
+      getRange: () => state.range ? { ...state.range } : null, getTake: () => state.take, refreshLyrics, diagnosticSnapshot, setPlaying, seek, restart, pitch, finish, receive, syncFrame, destroy,
       songTime, refreshScore, resetInput, voiceGate,
       getStyle: () => ({ ...state.style }),
       getGuide: () => state.guide,

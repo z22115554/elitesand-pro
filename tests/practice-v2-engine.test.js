@@ -604,3 +604,33 @@ test('a take records its scoring mode and diagnostics stay local until asked for
   assert.equal(data.rows[0][7], 69);
   assert.deepEqual(Object.keys(data).filter((k) => /title|track|lyric|audio/i.test(k)), []);
 });
+
+test('lyric display text follows the setting without touching timing, and OBS gets only the text', () => {
+  const guide = { lines: [{ start: 1, end: 2, text: '后来', words: [{ text: '后', start: 1, end: 1.5 }, { text: '来', start: 1.5, end: 2 }] }] };
+  const toTraditional = (text) => text.replace('后', '後').replace('来', '來');
+  assert.equal(Scoring.applyLyricText(guide, toTraditional), true);
+  assert.equal(guide.lines[0].text, '後來');
+  assert.equal(guide.lines[0].words[1].text, '來');
+  assert.equal(guide.lines[0].words[0].start, 1);
+  assert.equal(Scoring.applyLyricText(guide, toTraditional), false, 'nothing changes the second time');
+  assert.equal(Scoring.applyLyricText(guide, (text) => text), true, 'turning it off restores the original');
+  assert.equal(guide.lines[0].text, '后来');
+
+  const Engine = loadEngine();
+  const sent = [];
+  const panel = Engine.createPracticeEngine({ role: 'panel', root: fakeRoot(), onSync: (m) => sent.push(m) });
+  panel.setGuide(Scoring.prepareGuide({ duration: 8, lines: guide.lines, notes: [{ start: 1, end: 2, midi: 69, line: 0, word: 0 }] }));
+  Scoring.applyLyricText(panel.getGuide(), toTraditional);
+  sent.length = 0;
+  panel.refreshLyrics();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].type, 'lyrics');
+  assert.equal(sent[0].lines[0].text, '後來');
+  assert.equal(sent[0].lines[0].words[0], '後');
+
+  const obs = Engine.createPracticeEngine({ role: 'source', root: fakeRoot() });
+  obs.receive({ type: 'song', song: { duration: 8, lines: [{ start: 1, end: 2, text: '后来', words: [{ text: '后', start: 1, end: 2 }] }], notes: [{ start: 1, end: 2, midi: 69, line: 0, word: 0 }] } });
+  obs.receive({ type: 'lyrics', lines: [{ text: '後來', words: ['後'] }] });
+  assert.equal(obs.getGuide().lines[0].text, '後來');
+  assert.equal(obs.getGuide().lines[0].words[0].text, '後');
+});

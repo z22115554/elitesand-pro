@@ -210,6 +210,22 @@ function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.js
       emit(io, out);
       return out;
     }
+    if (message.type === 'lyrics') {
+      if (activeSocketId !== id || !snapshot.song || !Array.isArray(message.lines)) return null;
+      const lines = message.lines.slice(0, snapshot.song.lines.length).map((line) => ({
+        text: String((line && line.text) || '').slice(0, 500),
+        words: (Array.isArray(line && line.words) ? line.words : []).slice(0, 400).map((w) => String(w || '').slice(0, 80)),
+      }));
+      // 記下來，之後才連上的 OBS 來源拿到的也是換過字的歌詞。
+      lines.forEach((line, i) => {
+        const target = snapshot.song.lines[i];
+        target.text = line.text;
+        line.words.forEach((text, k) => { if (target.words[k]) target.words[k].text = text; });
+      });
+      const out = { type: 'lyrics', lines };
+      io.to(ROOM).emit(EVENT, out);
+      return out;
+    }
     if (message.type === 'seek') {
       resetPending(); snapshot.recap = null; snapshot.score = null;
       activeSocketId = id;   // 跳轉一定是這個面板上的實際操作：直接接手

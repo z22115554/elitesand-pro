@@ -207,7 +207,7 @@
     try {
       const result = await request(`/guides/${encodeURIComponent(id)}`);
       if (token !== guideToken) return;
-      applyGuideResult(id, token, result);
+      await applyGuideResult(id, token, result);
     } catch (error) {
       if (token !== guideToken) return;
       if (error.code === 'PRACTICE_VOCALS_REQUIRED') {
@@ -222,9 +222,24 @@
     }
   }
 
-  function applyGuideResult(id, token, result) {
+  // 歌詞跟著歌詞設定的「簡轉繁」。字典 1MB 是動態載入，要等它好才交給引擎，OBS 第一次拿到的就是對的字。
+  const lyricText = (text) => AppShared.lyricS2T.convert(text);
+  function refreshLyricText() {
+    const guide = engine.getGuide();
+    if (!guide || !AppShared.lyricS2T) return;
+    AppShared.lyricS2T.ensure().then(() => {
+      if (engine.getGuide() === guide && PracticeScoring.applyLyricText(guide, lyricText)) engine.refreshLyrics();
+    });
+  }
+
+  async function applyGuideResult(id, token, result) {
     if (result.status === 'ready' && result.guide) {
+      if (AppShared.lyricS2T && AppShared.lyricS2T.enabled()) {
+        await AppShared.lyricS2T.ensure();
+        if (token !== guideToken) return;
+      }
       const guide = PracticeScoring.prepareGuide(result.guide);
+      if (AppShared.lyricS2T) PracticeScoring.applyLyricText(guide, lyricText);
       guide.title = ui.heading.textContent;
       guide.trackId = id;
       feedback.reset(id);
@@ -980,6 +995,8 @@
     });
     ui.verdictReport.addEventListener('click', () => { if (window.AppFeedback) window.AppFeedback.openPracticeReport(); });
     window.PracticeDiagnostics = Object.freeze({ snapshot: diagnosticSnapshot });
+    // 設定是全域狀態，等其他監聽者更新完再讀。
+    SocketClient.on('lyric-settings:update', () => setTimeout(refreshLyricText, 50));
     ui.contour.addEventListener('change', () => { prefs.showContour = ui.contour.checked; writeJson(PREFS_KEY, prefs); });
     ui.modelInstall.addEventListener('click', installModel);
     for (const button of [ui.obsCopy, $('copy-practice-url-general')]) {

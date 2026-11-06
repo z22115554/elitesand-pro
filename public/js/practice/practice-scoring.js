@@ -84,6 +84,18 @@
    * - 音符在排除區段的邊界切開，依開始時間排序，建立快速查找索引
    * - 每個音補上評分狀態欄位與編號 i
    */
+  /** 歌詞顯示文字（簡轉繁）：原文留著，開關切回來才還原得了；時間與音符不動。回傳有沒有變。 */
+  function applyLyricText(guide, convert) {
+    let changed = false;
+    const apply = (item) => {
+      if (item.sourceText === undefined) item.sourceText = item.text;
+      const next = convert(item.sourceText);
+      if (next !== item.text) { item.text = next; changed = true; }
+    };
+    for (const line of guide.lines || []) { apply(line); (line.words || []).forEach(apply); }
+    return changed;
+  }
+
   function prepareGuide(guide) {
     const ranges = (guide.exclusions || []).map((r) => ({ ...r }));
     const lines = guide.lines || [];
@@ -174,5 +186,5 @@
     return Math.round(median(kept) / 10) * 10;
   }
 
-  return { PROFILES, profileOf, targetOf, SCORE_VERSION, snapshot, lineFeedback, weakestLines, RULE, TIERS, credit, centsOff, foldToTarget, resetNote, noteScore, tierOf, prepareGuide, activeNote, latencyEstimate };
+  return { applyLyricText, PROFILES, profileOf, targetOf, SCORE_VERSION, snapshot, lineFeedback, weakestLines, RULE, TIERS, credit, centsOff, foldToTarget, resetNote, noteScore, tierOf, prepareGuide, activeNote, latencyEstimate };
 });
