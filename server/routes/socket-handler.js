@@ -111,6 +111,11 @@ module.exports = function socketHandler(io, {
   // ─── 全域狀態（單一事實來源，含 state.json 還原）───
   const ctx = createAppState(io);
   const practiceOverlay = createPracticeOverlay();
+  // 問題回報只需要「有沒有載入歌、有沒有在播」兩個布林值，不帶歌名。
+  runtimeEvidence.setPlaybackProbe?.(() => ({
+    trackLoaded: !!ctx.playState.currentTrack,
+    playing: !!ctx.playState.isPlaying,
+  }));
 
   // ─── 統一音量：啟動後回填既有歌曲的響度（測試的隔離 downloads 為空 → 自動 no-op）───
   const libraryStore = require('../services/library-store');

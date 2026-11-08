@@ -564,14 +564,16 @@ function createElectronShell({
       ...options,
       nativeAdapterPreference: processObject.env.ELITESAND_SPOUT_GPU_PREFERENCE || '',
     });
+    // 診斷紀錄只在記憶體、只在使用者送出 Spout 回報時附上，所以正式版也要收；
+    // 先開始取樣再啟動輸出，啟動失敗的那一刻才會被記到。
+    spoutIssueDiagnostics.start(getSpoutOutputStatus);
     await spoutDisplayOutput.start();
-    if (isSpoutExperiment) spoutIssueDiagnostics.start(getSpoutOutputStatus);
     return spoutDisplayOutput.getStatus();
   }
 
   async function stopSpoutDisplayOutput() {
     const output = spoutDisplayOutput;
-    if (isSpoutExperiment) spoutIssueDiagnostics.stop();
+    spoutIssueDiagnostics.stop();
     spoutDisplayOutput = null;
     if (output) await output.stop();
   }
@@ -1241,7 +1243,7 @@ function createElectronShell({
         return getSpoutOutputStatus();
       });
       ipcMain.handle('elitesand:spout-issue-diagnostics', (event) => {
-        if (!isSpoutExperiment || event?.sender !== window.webContents) return null;
+        if (event?.sender !== window.webContents) return null;
         return spoutIssueDiagnostics.getSnapshot();
       });
       ipcMain.handle('elitesand:spout-save-settings', (event, options) => {

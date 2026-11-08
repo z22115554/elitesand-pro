@@ -279,6 +279,15 @@ function collectDiagnostics(options = {}) {
     diagnostics.runtime = evidence ? redactValue({
       observedMs: evidence.observedMs || 0,
       obs: evidence.obs || null,
+      spoutPage: evidence.clients && evidence.clients['display-spout']
+        ? {
+          connections: evidence.clients['display-spout'].connections || 0,
+          activeConnections: evidence.clients['display-spout'].activeConnections || 0,
+        }
+        : null,
+      playback: evidence.playback
+        ? { trackLoaded: !!evidence.playback.trackLoaded, playing: !!evidence.playback.playing }
+        : null,
       twitch: evidence.twitch
         // 連線與否／次數對除錯有用，頻道名稱沒有，直接不取。
         ? {
@@ -324,6 +333,14 @@ function formatDiagnosticsBlock(diagnostics) {
     lines.push(`- 本場記錄時長：${formatEvidenceDuration(diagnostics.runtime.observedMs)}`);
     lines.push(`- OBS 兩來源曾同時連線：${obs.bothSourcesSeen ? '是' : '否'}（中斷 ${obs.interruptions || 0} 次）`);
     lines.push(`- Twitch：${twitch.configured ? (twitch.connected ? '已連線' : '已啟用但未連線') : '未啟用'}`);
+    const spoutPage = diagnostics.runtime.spoutPage;
+    if (spoutPage) {
+      lines.push(`- Spout 歌詞頁：${spoutPage.activeConnections > 0 ? '目前已連線' : '目前未連線'}（本場連線 ${spoutPage.connections} 次）`);
+    }
+    const playback = diagnostics.runtime.playback;
+    if (playback) {
+      lines.push(`- 送出當下播放狀態：${playback.trackLoaded ? (playback.playing ? '播放中' : '已載入歌曲但未播放') : '沒有載入歌曲'}`);
+    }
   } else {
     lines.push('- 連線觀測：取不到');
   }
@@ -352,7 +369,7 @@ function formatLogBlock(diagnostics) {
  */
 function formatSpoutDiagnosticsBlock(diagnostics) {
   if (!diagnostics || !diagnostics.samples.length) {
-    return ['## Spout 透明輸出紀錄', '', '沒有可附加的本機 Spout 紀錄；請重現問題後，從 Elitesand Pro 送出回報。', ''];
+    return ['## Spout 透明輸出紀錄', '', '沒有可附加的本機 Spout 紀錄：這次開啟 Elitesand Pro 後還沒啟動過 Spout 輸出。', ''];
   }
   const latest = diagnostics.samples.at(-1);
   const lines = diagnostics.samples.map((sample) => [

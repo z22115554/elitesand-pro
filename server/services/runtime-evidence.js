@@ -5,7 +5,10 @@
 // ids, credentials, or any other stream content.  A user may reset it before a
 // broadcast and choose to include the resulting summary in a diagnostic export.
 
-const TRACKED_CLIENT_TYPES = Object.freeze(['controller', 'remote', 'display', 'setlist']);
+// display-spout is the hidden /display page that feeds the Spout sender. Tracking
+// its connection lets a Spout problem report show whether the lyrics page was
+// actually loaded while output was running.
+const TRACKED_CLIENT_TYPES = Object.freeze(['controller', 'remote', 'display', 'setlist', 'display-spout']);
 const OBS_CLIENT_TYPES = new Set(['display', 'setlist']);
 
 function emptyRole() {
@@ -21,6 +24,9 @@ function emptyRole() {
 
 function createRuntimeEvidence({ now = () => Date.now() } = {}) {
   const sockets = new Map();
+  // Supplied by the socket handler. Only two booleans ever leave it: whether a
+  // track is loaded and whether it is playing — never which track.
+  let playbackProbe = null;
   let startedAt = now();
   let roles = Object.fromEntries(TRACKED_CLIENT_TYPES.map((type) => [type, emptyRole()]));
   let obs = {
@@ -138,6 +144,20 @@ function createRuntimeEvidence({ now = () => Date.now() } = {}) {
     };
   }
 
+  function setPlaybackProbe(probe) {
+    playbackProbe = typeof probe === 'function' ? probe : null;
+  }
+
+  function playbackSnapshot() {
+    if (!playbackProbe) return null;
+    try {
+      const value = playbackProbe() || {};
+      return { trackLoaded: !!value.trackLoaded, playing: !!value.playing };
+    } catch (_) {
+      return null;
+    }
+  }
+
   function getSnapshot(timestamp = now()) {
     const bothSourcesConnectedMs = obs.completedBothSourcesMs
       + (obs.bothSourcesConnectedAt == null ? 0 : Math.max(0, timestamp - obs.bothSourcesConnectedAt));
@@ -149,6 +169,7 @@ function createRuntimeEvidence({ now = () => Date.now() } = {}) {
       generatedAt: timestamp,
       observedMs: Math.max(0, timestamp - startedAt),
       privacy: 'memory-only connection timing and counts; no song, chat, address, credential, or socket-id data',
+      playback: playbackSnapshot(),
       clients: Object.fromEntries(TRACKED_CLIENT_TYPES.map((type) => [type, roleSnapshot(type, timestamp)])),
       obs: {
         displaySeen: obs.displaySeen,
@@ -213,7 +234,7 @@ function createRuntimeEvidence({ now = () => Date.now() } = {}) {
     return getSnapshot(timestamp);
   }
 
-  return { recordSocketConnected, recordSocketDisconnected, recordTwitchStatus, getSnapshot, reset };
+  return { recordSocketConnected, recordSocketDisconnected, recordTwitchStatus, setPlaybackProbe, getSnapshot, reset };
 }
 
 const runtimeEvidence = createRuntimeEvidence();
