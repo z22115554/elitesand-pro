@@ -99,12 +99,16 @@ test('Spout CP05/CP07 keeps the native controls Electron-only and exposes bounde
     && panelScript.includes('lastGpuSyncMs')
     && panelScript.includes('avgGpuSyncMs'),
   'the UI must retain status polling while output is live and render the GPU synchronization metrics: ');
+  ok(panelHtml.includes('id="spout-output-play-note"') && panelScript.includes('playNote.hidden = !running')
+    && panelHtml.includes('data-i18n="help2.spout.play"'),
+  'running Spout output without playback must explain why the receiver is blank: ');
   ['lastGpuSyncMs', 'avgGpuSyncMs', 'maxGpuSyncMs', 'gpuSyncTimeouts', 'adapterVendorId', 'adapterDeviceId', 'adapterLuid'].forEach((metric) => {
     ok(nativeAddon.includes(`\"${metric}\"`), `native status must publish ${metric}: `);
   });
   ['zh-TW', 'en', 'ja', 'ko', 'zh-CN'].forEach((locale) => {
     ok(i18n.catalogs?.[locale]?.['spout.runningPerfHint'] && i18n.catalogs?.[locale]?.['spout.metrics']
-      && i18n.catalogs?.[locale]?.['spout.fpsHint'] && i18n.catalogs?.[locale]?.['feedback.typeSpout'],
+      && i18n.catalogs?.[locale]?.['spout.fpsHint'] && i18n.catalogs?.[locale]?.['feedback.typeSpout']
+      && i18n.catalogs?.[locale]?.['spout.playNote'] && i18n.catalogs?.[locale]?.['help2.spout.play'],
     `${locale} must translate the live Spout performance and issue-report diagnostics: `);
   });
   ok(preload.includes("'elitesand:spout-status'") && preload.includes("'elitesand:spout-save-settings'")

@@ -1337,6 +1337,9 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .spout-output-grid .input { min-width: 0; }
 .spout-output-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .spout-output-metrics { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+/* 精簡版把 field-hint 收成滑鼠提示；這句一定要看得到，所以不用 field-hint。 */
+.spout-output-play-note { font-size: 12px; line-height: 1.5; color: var(--warning); }
+.spout-output-play-note[hidden] { display: none; }
 @media (max-width: 720px) { .spout-output-grid { grid-template-columns: 1fr; gap: 6px; } }
 
 /* 只用於清空大量資料：要求輸入動作名稱，避免直播中習慣性按確認造成誤刪。 */

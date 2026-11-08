@@ -17,6 +17,7 @@
   const status = document.getElementById('spout-output-status');
   const message = document.getElementById('spout-output-message');
   const metrics = document.getElementById('spout-output-metrics');
+  const playNote = document.getElementById('spout-output-play-note');
   const start = document.getElementById('spout-output-start');
   const stop = document.getElementById('spout-output-stop');
   let pending = false;
@@ -117,6 +118,8 @@
         })
         : '';
     }
+    // 輸出中但沒在播放時，接收端收到的是全透明畫面，最常被當成「有來源卻沒歌詞」。輸出中每秒會重畫一次。
+    if (playNote) playNote.hidden = !running || (typeof AppShared !== 'undefined' && AppShared.isPlaying && AppShared.isPlaying());
     if (!pending) {
       // Changing size or sender while frames are live would silently produce a
       // second sender. Stop first, edit, then start the selected output again.
