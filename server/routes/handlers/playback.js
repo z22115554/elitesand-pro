@@ -101,6 +101,9 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.emergencyHide = false;
     playState.lastStateUpdateTimestamp = Date.now();
     if (autoplay && typeof markTrackPlayed === 'function') markTrackPlayed(track);
+    // 互動演出：換歌一律先收掉上一首的明信片；真的開始播放才演這首登記過的明信片。
+    ctx.overlayShow?.onTrackChanged();
+    if (autoplay) ctx.overlayShow?.onTrackPlaying(track);
 
     log.info(`播放歌曲: ${track.title} (id: ${trackId}, offset: ${offset}ms, pitch: ${savedPitch}, speed: ${savedSpeed}x)`);
 
@@ -190,6 +193,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     });
     // 從待命「開始播放」這一刻才算唱這首 → 記入已唱歌單（去重避免暫停/續播重覆記錄）。
     if (playState.isPlaying) recordSessionSong();
+    if (playState.isPlaying && playState.currentTrack) ctx.overlayShow?.onTrackPlaying(playState.currentTrack);
     emitSetlist(); // 現在/未唱狀態（playing 旗標）同步
     broadcastState();
     // 只在歌曲狀態真的改變時保存「目前是哪一首／是否已開始」，不保存播放秒數。
@@ -236,6 +240,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     playState.isPlaying = false;
     playState.currentTime = 0;
     log.info('播放清單播畢，清空目前歌曲');
+    ctx.overlayShow?.onTrackChanged();
     io.emit('play:stop', {
       reason: payload && typeof payload.reason === 'string' ? payload.reason : 'stopped',
       lastPlayedEntryId: playState.lastPlayedEntryId || null,

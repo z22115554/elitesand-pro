@@ -22,6 +22,8 @@
   let pendingRequests = [];
   let playlists = [];
   const busy = new Set();
+  // 主播逐筆勾選「留言上畫面」；預設不勾，核准時才送給伺服器。
+  const postcardChecked = new Set();
 
   function currentPlaylistIds() {
     try {
@@ -132,6 +134,7 @@
             <div class="label">${escapeHtml(request.title)}</div>
             ${meta ? `<div class="sub">${meta}</div>` : ''}
             ${request.note ? `<div class="sub">${escapeHtml(request.note)}</div>` : ''}
+            ${request.note ? `<label class="field-hint"><input type="checkbox" data-postcard-toggle ${postcardChecked.has(request.requestId) ? 'checked' : ''}> ${escapeHtml(t('overlayShow.postcardToggle'))}</label>` : ''}
           </div>
           <div class="twitch-live-actions">
             <button class="btn btn-sm" type="button" data-action="reject" ${isBusy ? 'disabled' : ''}>${escapeHtml(t('publicRequest.reject'))}</button>
@@ -151,7 +154,8 @@
 
   function approve(requestId, placement) {
     withBusy(requestId, (done) => {
-      SocketClient.sendWithCallback('public-request:approve', { requestId, placement }, (result) => {
+      SocketClient.sendWithCallback('public-request:approve', { requestId, placement, postcard: postcardChecked.has(requestId) }, (result) => {
+        postcardChecked.delete(requestId);
         done();
         if (!result?.ok) AppShared.showToast(result?.error || t('publicRequest.approveFailed'), 'error');
         else AppShared.showToast(t('publicRequest.approved'), 'success');
@@ -167,6 +171,13 @@
       });
     });
   }
+
+  el('public-request-pending-list')?.addEventListener('change', (event) => {
+    const box = event.target.closest('[data-postcard-toggle]');
+    const row = event.target.closest('[data-request-id]');
+    if (!box || !row) return;
+    if (box.checked) postcardChecked.add(row.dataset.requestId); else postcardChecked.delete(row.dataset.requestId);
+  });
 
   el('public-request-pending-list')?.addEventListener('click', (event) => {
     const row = event.target.closest('[data-request-id]');

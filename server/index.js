@@ -477,10 +477,17 @@ const socketApi = socketHandler(io);
 // ─── Twitch：本機 Device Code Flow + EventSub WebSocket ───
 // 未填 twitchClientId 時 service 保持閒置，零外連；設定後才會在登入成功後建立 EventSub。
 const { TwitchService } = require('./services/twitch-service');
+// OBS 互動演出（點歌明信片、揪團感謝）：一次只演一個的佇列，純轉播給 /display，不進 state。
+const overlayShow = require('./services/overlay-show').createOverlayShow({
+  emit: (event, payload) => io.emit(event, payload),
+  onSettingsChange: (settings) => io.emit('overlay-show:settings', settings),
+});
+socketApi.setOverlayShow(overlayShow);
 const twitch = new TwitchService({
   config,
   onStreamOnline: (event) => socketApi.startTwitchSession(event),
   onStreamOffline: (event) => socketApi.stopTwitchSession(event),
+  onRaid: (event) => overlayShow.handleRaid(event),
   onSongRequest: (request) => socketApi.dispatchTwitchSongRequest(request),
   onSongRequestExpired: (requestId) => socketApi.expireTwitchSongRequest(requestId),
   onSongRequestCanceled: (requestId) => socketApi.cancelTwitchSongRequest(requestId),

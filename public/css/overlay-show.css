@@ -1,0 +1,89 @@
+/* OBS 互動演出：點歌明信片、揪團感謝。只畫自己的卡片，背景保持透明。 */
+#overlay-show-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  --os-margin: 3.2vmin;
+  --os-ink: #2b2118;
+  --os-paper: #fbf5e6;
+  --os-accent: #c8553d;
+}
+#overlay-show-root[data-anchor="top-left"] .os-card { position: absolute; top: var(--os-margin); left: var(--os-margin); }
+#overlay-show-root[data-anchor="top-right"] .os-card { position: absolute; top: var(--os-margin); right: var(--os-margin); }
+#overlay-show-root[data-anchor="bottom-left"] .os-card { position: absolute; bottom: var(--os-margin); left: var(--os-margin); }
+#overlay-show-root[data-anchor="bottom-right"] .os-card { position: absolute; bottom: var(--os-margin); right: var(--os-margin); }
+
+.os-card {
+  box-sizing: border-box;
+  max-width: min(34vw, 62vmin * 1.6);
+  min-width: 22vmin;
+  opacity: 0;
+  transform: translateY(-2.4vmin) rotate(-3deg) scale(0.96);
+  transition: opacity 360ms ease, transform 520ms cubic-bezier(0.2, 0.9, 0.2, 1);
+  font-family: "Noto Sans TC", "Noto Sans JP", "Microsoft JhengHei", system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+#overlay-show-root[data-anchor^="bottom"] .os-card { transform: translateY(2.4vmin) rotate(3deg) scale(0.96); }
+.os-card.is-in { opacity: 1; transform: rotate(-1.4deg) scale(1); }
+#overlay-show-root[data-anchor^="bottom"] .os-card.is-in { transform: rotate(1.4deg) scale(1); }
+.os-card.is-out { opacity: 0; transition: opacity 420ms ease, transform 420ms ease; }
+
+/* ─── 點歌明信片 ─── */
+.os-postcard {
+  padding: 2.2vmin 2.6vmin 2vmin;
+  color: var(--os-ink);
+  background: var(--os-paper);
+  border-radius: 0.6vmin;
+  box-shadow: 0 1.2vmin 3.2vmin rgba(0, 0, 0, 0.35), inset 0 0 0 0.35vmin rgba(43, 33, 24, 0.08);
+  border-top: 0.9vmin solid var(--os-accent);
+}
+.os-pc-stamp {
+  position: absolute;
+  top: 1.4vmin;
+  right: 1.8vmin;
+  padding: 0.3vmin 0.9vmin;
+  font-size: 1.5vmin;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: var(--os-accent);
+  border: 0.22vmin solid var(--os-accent);
+  border-radius: 0.4vmin;
+  opacity: 0.8;
+  transform: rotate(6deg);
+}
+.os-pc-song { padding-right: 8vmin; margin-bottom: 1.4vmin; }
+.os-pc-title { font-size: 2.6vmin; font-weight: 700; line-height: 1.25; }
+.os-pc-artist { margin-top: 0.3vmin; font-size: 1.8vmin; opacity: 0.65; }
+.os-pc-message {
+  margin: 0;
+  padding-top: 1.2vmin;
+  border-top: 0.2vmin dashed rgba(43, 33, 24, 0.3);
+  font-size: 2.3vmin;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.os-pc-from { margin-top: 1.2vmin; text-align: right; font-size: 1.8vmin; opacity: 0.7; }
+
+/* ─── 揪團感謝 ─── */
+.os-raid {
+  padding: 2vmin 3vmin 2.2vmin;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(120, 71, 214, 0.94), rgba(200, 85, 61, 0.94));
+  border-radius: 1vmin;
+  box-shadow: 0 1.2vmin 3.2vmin rgba(0, 0, 0, 0.4);
+  transform: translateY(-2.4vmin) scale(0.96);
+}
+#overlay-show-root[data-anchor^="bottom"] .os-raid { transform: translateY(2.4vmin) scale(0.96); }
+.os-raid.is-in, #overlay-show-root[data-anchor^="bottom"] .os-raid.is-in { transform: scale(1); }
+.os-raid-kicker { font-size: 1.5vmin; font-weight: 700; letter-spacing: 0.4em; opacity: 0.75; }
+.os-raid-title { margin-top: 0.6vmin; font-size: 3.4vmin; font-weight: 800; line-height: 1.2; text-wrap: balance; }
+.os-raid-count { margin-top: 0.8vmin; font-size: 2.2vmin; opacity: 0.92; }
+
+@media (prefers-reduced-motion: reduce) {
+  .os-card { transition: opacity 200ms ease; transform: none; }
+  .os-card.is-in, #overlay-show-root[data-anchor^="bottom"] .os-card.is-in { transform: none; }
+}

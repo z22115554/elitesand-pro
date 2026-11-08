@@ -1865,6 +1865,27 @@
             </div>
           </section>
 
+          <section id="overlay-show-card" class="card" aria-labelledby="overlay-show-title" data-new-feature="overlay-show">
+            <div class="playlist-head">
+              <div>
+                <p id="overlay-show-title" class="eyebrow m-0" data-i18n="overlayShow.title">觀眾演出</p>
+                <p class="sub" data-i18n="overlayShow.hint">點歌明信片與揪團感謝會顯示在 OBS 的歌詞來源（/display）上，一次只演一個。</p>
+              </div>
+            </div>
+            <div class="switch-row"><div><div class="label" data-i18n="overlayShow.raidEnabled">收到揪團時自動演出</div><div class="sub" data-i18n="overlayShow.raidNeedsTwitch">需要先連接 Twitch 才收得到揪團。</div></div><label class="switch"><input id="overlay-show-raid-enabled" type="checkbox"><span class="track"></span></label></div>
+            <div class="twitch-rule-grid">
+              <div class="field"><label for="overlay-show-raid-min" data-i18n="overlayShow.raidMin">揪團最低人數</label><input id="overlay-show-raid-min" class="input" type="number" min="1" max="10000" step="1" value="1" inputmode="numeric"></div>
+              <div class="field"><label for="overlay-show-raid-seconds" data-i18n="overlayShow.raidSeconds">揪團顯示秒數</label><input id="overlay-show-raid-seconds" class="input" type="number" min="4" max="15" step="1" value="7" inputmode="numeric"></div>
+              <div class="field"><label for="overlay-show-postcard-seconds" data-i18n="overlayShow.postcardSeconds">明信片顯示秒數</label><input id="overlay-show-postcard-seconds" class="input" type="number" min="6" max="20" step="1" value="10" inputmode="numeric"></div>
+              <div class="field"><label for="overlay-show-anchor" data-i18n="overlayShow.anchor">畫面位置</label><select id="overlay-show-anchor" class="input"><option value="top-right" data-i18n="overlayShow.anchorTopRight">右上</option><option value="top-left" data-i18n="overlayShow.anchorTopLeft">左上</option><option value="bottom-right" data-i18n="overlayShow.anchorBottomRight">右下</option><option value="bottom-left" data-i18n="overlayShow.anchorBottomLeft">左下</option></select></div>
+            </div>
+            <div class="twitch-live-actions">
+              <button id="overlay-show-test-postcard" class="btn btn-sm" type="button" data-i18n="overlayShow.testPostcard">試播明信片</button>
+              <button id="overlay-show-test-raid" class="btn btn-sm" type="button" data-i18n="overlayShow.testRaid">試播揪團感謝</button>
+              <button id="overlay-show-skip" class="btn btn-sm btn-ghost" type="button" data-i18n="overlayShow.skip">收掉目前演出</button>
+            </div>
+          </section>
+
         </div><!-- /view public-request -->
 
         <!-- ═══ 視圖：BGM 待機音樂（仿歌回救星雙軌切換：唱歌時自動暫停，唱完自動恢復）═══ -->
@@ -4023,6 +4044,7 @@
   <script src="/js/settings-workspace.js"></script>
   <script src="/js/app-twitch.js"></script>
   <script src="/js/app-public-requests.js"></script>
+  <script src="/js/app-overlay-show.js"></script>
   <script src="/js/app-playlist.js"></script>
   <script src="/js/playback-sequence.js"></script>
   <script src="/js/app-bgm.js"></script>

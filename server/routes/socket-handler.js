@@ -33,6 +33,7 @@ const obsLocaleUtil = require('../utils/obs-locale');
 const registerTwitchHandlers = require('./handlers/twitch');
 const registerPublicRequestHandlers = require('./handlers/public-request');
 const registerBgmHandlers = require('./handlers/bgm');
+const registerOverlayShowHandlers = require('./handlers/overlay-show');
 const registerMoonEventHandlers = require('./handlers/moon-event');
 const registerHalloweenEventHandlers = require('./handlers/halloween-event');
 const moonEvent = require('../services/moon-event');
@@ -210,6 +211,8 @@ module.exports = function socketHandler(io, {
   // 萬聖節觀眾互動（!trick／!treat、搗蛋獎勵、抽獎）同樣在 index.js 建立後注入。
   let halloweenInteractions = null;
   let halloweenCauldron = null;
+  // OBS 互動演出（點歌明信片、揪團感謝）同樣在 index.js 建立後注入。
+  let overlayShow = null;
 
   function getClientCounts() {
     // /display 的指紋必須隨目前 public/ 內容重算；固定 server 啟動當下的值會讓
@@ -630,6 +633,7 @@ module.exports = function socketHandler(io, {
       registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });
       registerPublicRequestHandlers(io, socket, ctx, { getRelayService: () => songRequestRelayService });
       registerBgmHandlers(io, socket, ctx);
+      registerOverlayShowHandlers(io, socket, { getOverlayShow: () => overlayShow });
       registerMoonEventHandlers(io, socket);
       // 練唱 OBS 疊加層：只有桌面面板能送；伺服器驗證後只轉給 practice-overlay 房間（不廣播給 /display）
       if (socket.clientType === 'controller') {
@@ -712,6 +716,10 @@ module.exports = function socketHandler(io, {
     },
     setHalloweenCauldron(service) {
       halloweenCauldron = service;
+    },
+    setOverlayShow(service) {
+      overlayShow = service;
+      ctx.overlayShow = service;
     },
     setTwitchService(service) {
       twitchService = service;

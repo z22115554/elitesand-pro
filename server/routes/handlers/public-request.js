@@ -73,6 +73,15 @@ function registerPublicRequestHandlers(io, socket, ctx, { getRelayService }) {
     if (!result.ok && typeof service.restorePendingRequest === 'function') {
       service.restorePendingRequest(approved.request);
     }
+    // 明信片：只有主播在核准當下明確勾了「留言上畫面」才登記，預設不上畫面。
+    if (result.ok && payload?.postcard === true && ctx.overlayShow && result.tracks?.[0]?.entryId) {
+      ctx.overlayShow.armPostcard(result.tracks[0].entryId, {
+        title: approved.track?.title || approved.request?.title,
+        artist: approved.track?.artist || approved.request?.artist,
+        name: approved.request?.displayName,
+        message: approved.request?.note,
+      });
+    }
     if (typeof ack === 'function') ack(result);
   });
 

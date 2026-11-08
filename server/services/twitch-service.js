@@ -117,10 +117,11 @@ function normalizeRequestSessionState(value) {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onSongRequestClosedExternally, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, practiceHistoryService = null, getPracticeHistoryService = null, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store, timers = globalThis }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onRaid, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onSongRequestClosedExternally, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, practiceHistoryService = null, getPracticeHistoryService = null, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store, timers = globalThis }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
+    this.onRaid = typeof onRaid === 'function' ? onRaid : null;
     this.onSongRequest = onSongRequest;
     this.onSongRequestExpired = onSongRequestExpired;
     this.onSongRequestCanceled = onSongRequestCanceled;
@@ -1001,6 +1002,12 @@ class TwitchService {
           this.createSubscription('stream.offline', { broadcaster_user_id: this.auth.userId }),
           this.createSubscription('channel.chat.message', { broadcaster_user_id: this.auth.userId, user_id: this.auth.userId }),
         ]);
+        try {
+          // 入站揪團：官方不需要額外授權範圍；失敗只代表看不到揪團感謝，不影響點歌與開台判斷。
+          await this.createSubscription('channel.raid', { to_broadcaster_user_id: this.auth.userId });
+        } catch (err) {
+          log.warn(`Twitch 揪團事件訂閱未啟用：${err.message}`);
+        }
         if (this.hasScope(REDEMPTION_SCOPE)) {
           try {
             await this.createSubscription('channel.channel_points_custom_reward_redemption.add', { broadcaster_user_id: this.auth.userId });
@@ -1059,6 +1066,16 @@ class TwitchService {
     } else if (subscription.type === 'stream.offline') {
       this.stopRequestSession();
       this.onStreamOffline({ eventId: message.metadata.message_id });
+    } else if (subscription.type === 'channel.raid') {
+      try {
+        this.onRaid?.({
+          eventId: String(message.metadata.message_id || ''),
+          fromName: String(event.from_broadcaster_user_name || event.from_broadcaster_user_login || ''),
+          viewers: Number(event.viewers) || 0,
+        });
+      } catch (err) {
+        log.warn(`Twitch 揪團事件處理失敗：${err.message}`);
+      }
     } else if (subscription.type === 'channel.chat.message') {
       await this.handleChatMessage(event, message.metadata.message_id);
     } else if (subscription.type === 'channel.channel_points_custom_reward_redemption.add') {

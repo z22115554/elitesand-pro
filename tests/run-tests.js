@@ -4021,7 +4021,10 @@ testAsync('Twitch EventSub 在新版授權下會訂閱忠誠點數兌換事件',
     metadata: { message_type: 'session_welcome' },
     payload: { session: { id: 'session-1' } },
   }));
-  eq(subscriptions.length, 5);
+  eq(subscriptions.length, 6);
+  const raidSubscription = subscriptions.find((item) => item.type === 'channel.raid');
+  ok(raidSubscription, '要訂閱入站揪團');
+  eq(raidSubscription.condition.to_broadcaster_user_id, 'broadcaster-1', '揪團是「到本頻道」的方向，不是 from');
   ok(subscriptions.some((item) => item.type === 'channel.channel_points_custom_reward_redemption.add'));
   ok(subscriptions.some((item) => item.type === 'channel.channel_points_custom_reward_redemption.update'));
   eq(service.status().rewardSubscriptionReady, true);
@@ -14679,6 +14682,138 @@ testAsync('Twitch rejected requests create cooldown and suppress repeat chat rep
   eq(replies.length, 1, 'cooldown repeat must not keep posting to chat');
   ok(service.commandUserCooldowns.has('request:spam-viewer'));
   service.stop();
+});
+
+// ─── 觀眾演出（點歌明信片、揪團感謝）───
+function makeOverlayShowHarness(initial) {
+  const { createOverlayShow } = require('../server/services/overlay-show');
+  const events = [];
+  const pending = [];
+  let saved = null;
+  const timers = {
+    setTimeout: (fn, ms) => { const timer = { fn, ms, cleared: false }; pending.push(timer); return timer; },
+    clearTimeout: (timer) => { if (timer) timer.cleared = true; },
+  };
+  const service = createOverlayShow({
+    emit: (event, payload) => events.push({ event, payload }),
+    store: { load: () => initial || null, save: (value) => { saved = value; } },
+    timers,
+  });
+  const fire = () => { const timer = pending.find((item) => !item.cleared); if (timer) { timer.cleared = true; timer.fn(); } };
+  return { service, events, fire, getSaved: () => saved };
+}
+
+test('觀眾演出：揪團預設關閉，開啟後依人數門檻與事件 id 去重', () => {
+  const h = makeOverlayShowHarness();
+  eq(h.service.getSettings().raid.enabled, false);
+  eq(h.service.handleRaid({ eventId: 'a', fromName: 'Friend', viewers: 10 }).reason, 'disabled');
+  h.service.updateSettings({ raid: { enabled: true, minViewers: 5 } });
+  eq(h.service.handleRaid({ eventId: 'b', fromName: 'Tiny', viewers: 3 }).reason, 'below-min');
+  ok(h.service.handleRaid({ eventId: 'c', fromName: 'Friend', viewers: 23 }).ok);
+  eq(h.service.handleRaid({ eventId: 'c', fromName: 'Friend', viewers: 23 }).reason, 'duplicate', '同一個 Twitch 事件 id 不可演兩次');
+  const play = h.events.find((e) => e.event === 'overlay-show:play');
+  eq(play.payload.kind, 'raid');
+  eq(play.payload.payload.name, 'Friend');
+  eq(play.payload.payload.viewers, 23);
+});
+
+test('觀眾演出：一次只演一個，前一個收場才輪到下一個，佇列有上限', () => {
+  const h = makeOverlayShowHarness();
+  h.service.updateSettings({ raid: { enabled: true } });
+  h.service.handleRaid({ eventId: '1', fromName: 'A', viewers: 5 });
+  h.service.handleRaid({ eventId: '2', fromName: 'B', viewers: 6 });
+  eq(h.events.filter((e) => e.event === 'overlay-show:play').length, 1);
+  h.fire();
+  const plays = h.events.filter((e) => e.event === 'overlay-show:play');
+  eq(plays.length, 2);
+  eq(plays[1].payload.payload.name, 'B');
+  const { MAX_QUEUE } = require('../server/services/overlay-show');
+  const h2 = makeOverlayShowHarness();
+  h2.service.updateSettings({ raid: { enabled: true } });
+  let rejected = 0;
+  for (let i = 0; i < MAX_QUEUE + 4; i += 1) {
+    if (h2.service.handleRaid({ eventId: `x${i}`, fromName: `N${i}`, viewers: 5 }).reason === 'queue-full') rejected += 1;
+  }
+  ok(rejected > 0, '佇列滿了要拒收而不是無限堆積');
+});
+
+test('觀眾演出：明信片只有登記過的歌開始播放才演，只演一次，換歌立即收掉', () => {
+  const h = makeOverlayShowHarness();
+  eq(h.service.onTrackPlaying({ entryId: 'e1', title: 'S' }), null, '沒登記的歌不演');
+  ok(h.service.armPostcard('e1', { title: 'Song', artist: 'Artist', name: 'Viewer', message: 'hello' }));
+  ok(h.service.onTrackPlaying({ entryId: 'e1' }));
+  const play = h.events.find((e) => e.event === 'overlay-show:play');
+  eq(play.payload.kind, 'postcard');
+  eq(play.payload.payload.message, 'hello');
+  eq(h.service.onTrackPlaying({ entryId: 'e1' }), null, '暫停再播不會重演');
+  h.service.onTrackChanged();
+  ok(h.events.some((e) => e.event === 'overlay-show:clear'), '換歌要送出 clear');
+  eq(h.service.snapshot().active, null);
+});
+
+test('觀眾演出：換歌時佇列裡等待中的明信片也一併清掉，揪團不受影響', () => {
+  const h = makeOverlayShowHarness();
+  h.service.updateSettings({ raid: { enabled: true } });
+  h.service.handleRaid({ eventId: 'r1', fromName: 'Raider', viewers: 9 });
+  h.service.armPostcard('e2', { message: 'queued card' });
+  h.service.onTrackPlaying({ entryId: 'e2' });
+  eq(h.service.snapshot().queued, 1);
+  h.service.onTrackChanged();
+  eq(h.service.snapshot().queued, 0);
+  eq(h.service.snapshot().active.kind, 'raid', '揪團感謝不該被換歌打斷');
+});
+
+test('觀眾演出：沒有留言就不登記，文字清掉控制字元並截長度，不信任 HTML', () => {
+  const { cleanText } = require('../server/services/overlay-show');
+  const h = makeOverlayShowHarness();
+  eq(h.service.armPostcard('e3', { message: '   ' }), false);
+  eq(cleanText('a\u0000b\nc‮d', 50), 'a b c d');
+  eq(cleanText('x'.repeat(500), 140).length, 140);
+  h.service.armPostcard('e4', { message: '<img src=x onerror=alert(1)>', name: '<b>n</b>' });
+  h.service.onTrackPlaying({ entryId: 'e4' });
+  const sent = h.events.find((e) => e.event === 'overlay-show:play').payload.payload;
+  eq(sent.message, '<img src=x onerror=alert(1)>', '伺服器不改寫內容，顯示端一律 textContent');
+  const display = fs.readFileSync(path.join(__dirname, '../public/js/overlay-show.js'), 'utf8');
+  ok(!/innerHTML|insertAdjacentHTML|outerHTML/.test(display), '顯示端不得用 innerHTML 類 API');
+});
+
+test('觀眾演出：設定夾在合法範圍、存檔，測試演出不看開關', () => {
+  const h = makeOverlayShowHarness();
+  const next = h.service.updateSettings({ anchor: 'nowhere', raid: { enabled: true, minViewers: -5, durationSec: 999 }, postcard: { durationSec: 1 } });
+  eq(next.anchor, 'top-right');
+  eq(next.raid.minViewers, 1);
+  eq(next.raid.durationSec, 15);
+  eq(next.postcard.durationSec, 6);
+  eq(h.getSaved().raid.durationSec, 15);
+  const h2 = makeOverlayShowHarness();
+  eq(h2.service.getSettings().raid.enabled, false);
+  ok(h2.service.test('raid'), '關閉狀態下試播仍要能演');
+  eq(h2.service.test('bogus'), null);
+});
+
+test('觀眾演出：Twitch 訂閱 channel.raid、事件交給 onRaid，且失敗不影響點歌訂閱', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../server/services/twitch-service.js'), 'utf8');
+  ok(source.includes("createSubscription('channel.raid', { to_broadcaster_user_id: this.auth.userId })"));
+  ok(/subscription\.type === 'channel\.raid'[\s\S]{0,400}this\.onRaid\?\.\(/.test(source));
+  ok(/channel\.raid[\s\S]{0,300}catch \(err\)[\s\S]{0,200}揪團事件訂閱未啟用/.test(source), '揪團訂閱失敗要被吞掉並記錄');
+  const index = fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8');
+  ok(index.includes('onRaid: (event) => overlayShow.handleRaid(event)'));
+  ok(index.includes('socketApi.setOverlayShow(overlayShow)'));
+});
+
+test('觀眾演出：只有桌面面板能改設定／試播，OBS 只收轉播，明信片要核准時明確勾選', () => {
+  const handler = fs.readFileSync(path.join(__dirname, '../server/routes/handlers/overlay-show.js'), 'utf8');
+  ok(handler.includes("if (socket.clientType !== 'controller') return;"));
+  const publicRequest = fs.readFileSync(path.join(__dirname, '../server/routes/handlers/public-request.js'), 'utf8');
+  ok(publicRequest.includes('payload?.postcard === true'), '預設不上畫面，必須明確傳 postcard:true');
+  const playback = fs.readFileSync(path.join(__dirname, '../server/routes/handlers/playback.js'), 'utf8');
+  ok(playback.includes('ctx.overlayShow?.onTrackChanged()') && playback.includes('ctx.overlayShow?.onTrackPlaying('));
+  const display = fs.readFileSync(path.join(__dirname, '../public/display.html'), 'utf8');
+  ok(display.includes('/js/overlay-show.js') && display.includes('/css/overlay-show.css'));
+  const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(/id="overlay-show-card"[^>]*data-new-feature="overlay-show"/.test(panel));
+  const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
+  ok(badges.includes("'overlay-show':"));
 });
 
 function finishTests(exitCode) {
