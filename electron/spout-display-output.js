@@ -61,8 +61,9 @@ function createSpoutDisplayOutput({
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw createError('INVALID_SPOUT_PORT', 'port must be a valid TCP port.');
 
   const options = validateOptions({ senderName, width, height, fps });
-  if (nativeAdapterPreference !== '' && nativeAdapterPreference !== 'low-power' && nativeAdapterPreference !== 'high-performance') {
-    throw createError('INVALID_SPOUT_ADAPTER_PREFERENCE', 'nativeAdapterPreference must be low-power, high-performance, or omitted.');
+  if (nativeAdapterPreference !== '' && nativeAdapterPreference !== 'low-power' && nativeAdapterPreference !== 'high-performance'
+    && !/^luid:[0-9a-f]{1,8}:[0-9a-f]{1,8}$/i.test(nativeAdapterPreference)) {
+    throw createError('INVALID_SPOUT_ADAPTER_PREFERENCE', 'nativeAdapterPreference must be low-power, high-performance, luid:HIGH:LOW, or omitted.');
   }
   let window = null;
   let state = 'idle';

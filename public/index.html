@@ -1006,6 +1006,11 @@
               <p class="field-hint m-0" data-i18n="spout.fpsHint">建議使用 30 FPS；60 FPS 仍可選擇，但需要足夠的 GPU 效能。</p>
               <p id="spout-output-message" class="field-hint m-0" aria-live="polite">預設不會自動啟動；開始後在 Shoost 的 Spout 捕捉選擇 Sender 名稱。</p>
               <p id="spout-output-metrics" class="field-hint m-0 spout-output-metrics" aria-live="polite" hidden></p>
+              <label class="spout-gpu-field" data-new-feature="spout-gpu">
+                <span data-i18n="spout.gpu">輸出用的顯示卡</span>
+                <select id="spout-gpu" class="input"></select>
+              </label>
+              <p id="spout-gpu-note" class="m-0 spout-gpu-note" aria-live="polite"></p>
               <p id="spout-output-play-note" class="m-0 spout-output-play-note" aria-live="polite" data-i18n="spout.playNote" hidden>目前沒有播放，接收端會是空白畫面；播放歌曲後才會出現歌詞。</p>
               <div class="spout-output-actions">
                 <button id="spout-output-start" class="btn btn-primary" type="button" data-i18n="spout.start">開始透明輸出</button>
@@ -3727,6 +3732,7 @@
             <ul class="help-list">
               <li><strong data-i18n="help2.spout.whenLabel">什麼時候需要</strong>：<span data-i18n="help2.spout.when">一般用 OBS 瀏覽器來源就夠了。只有直播畫面走 Shoost 這類 Spout 接收軟體時才需要。</span></li>
               <li><strong data-i18n="help2.spout.whereLabel">怎麼開</strong>：<span data-i18n="help2.spout.where">桌面版「畫面 › 歌詞畫面」預覽下方的「Spout 透明歌詞輸出」：填 Sender 名稱、寬高設成直播畫面大小、FPS 建議 30，按開始。</span></li>
+              <li><strong data-i18n="help2.spout.gpuLabel">有來源但空白</strong>：<span data-i18n="help2.spout.gpu">電腦有兩張以上顯示卡時（筆電常見），聲嶼和接收軟體要用同一張。聲嶼預設用效能最好的那張，可以在 Spout 設定指定；接收軟體請到 Windows「設定 › 系統 › 顯示器 › 圖形」設成同一張後重開。</span></li>
               <li><strong data-i18n="help2.spout.playLabel">看不到歌詞</strong>：<span data-i18n="help2.spout.play">畫面沒播歌時是全透明的，接收端看起來會是一片空白。先播放一首有歌詞的歌再確認。</span></li>
               <li><strong data-i18n="help2.spout.recvLabel">接收端</strong>：<span data-i18n="help2.spout.recv">在接收軟體新增 Spout 捕捉、選同名 Sender，自帶透明背景不需要去背；跟 OBS 來源可以並存，設定兩邊同步。顯示卡不夠力時別選 60 FPS。</span></li>
             </ul>

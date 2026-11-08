@@ -24,13 +24,6 @@ app.setAppUserModelId?.(isSpoutExperiment ? 'com.elitesand.pro.spout-lab' : 'com
 if (process.env.ELITESAND_SPOUT_DISPLAY_AUTOSTART === '1') {
   app.commandLine.appendSwitch('force-device-scale-factor', '1');
 }
-// CP07 mixed-GPU measurement only. This is never persisted or exposed in the
-// product UI; the native sender receives the matching preference separately.
-if (process.env.ELITESAND_SPOUT_GPU_PREFERENCE === 'low-power') {
-  app.commandLine.appendSwitch('force_low_power_gpu');
-} else if (process.env.ELITESAND_SPOUT_GPU_PREFERENCE === 'high-performance') {
-  app.commandLine.appendSwitch('force_high_performance_gpu');
-}
 
 const isPackaged = app.isPackaged;
 const updateBlocked = isPackaged && inspectUpdateLock(app.getPath('exe')).active;
@@ -67,6 +60,25 @@ if (updateBlocked) {
     // this manifest inside app.asar means the ASAR integrity check protects the
     // hashes for executable tools which must remain outside the archive.
     packagedResourceIntegrity = require('./packaged-resource-integrity.generated');
+  }
+
+  // 顯示卡只能在 Electron 啟動前決定。安裝版的原生模組先核對雜湊才載入，
+  // 核對不過或沒有 Spout 元件時，自動模式退回「高效能」。Spout 送出端拿同一個結果。
+  {
+    const gpuPreference = require('./gpu-preference');
+    const userDataDir = process.env.ELITESAND_SHELL_USER_DATA_DIR
+      ? path.resolve(process.env.ELITESAND_SHELL_USER_DATA_DIR)
+      : app.getPath('userData');
+    const adapters = gpuPreference.listAdapters({
+      isPackaged,
+      projectRoot,
+      resourcesPath: process.resourcesPath,
+      manifest: packagedResourceIntegrity,
+      addonPath: process.env.ELITESAND_SPOUT_NATIVE_ADDON || '',
+    });
+    const plan = gpuPreference.plan({ env: process.env, saved: gpuPreference.load(userDataDir), adapters });
+    if (plan.switch) app.commandLine.appendSwitch(...plan.switch);
+    process.env.ELITESAND_APPLIED_GPU = JSON.stringify({ key: plan.key, name: plan.name, native: plan.native });
   }
 
   // Exit code 42 is reserved for a server shutdown that happens only after the

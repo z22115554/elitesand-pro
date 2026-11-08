@@ -18,6 +18,8 @@
   const message = document.getElementById('spout-output-message');
   const metrics = document.getElementById('spout-output-metrics');
   const playNote = document.getElementById('spout-output-play-note');
+  const gpuSelect = document.getElementById('spout-gpu');
+  const gpuNote = document.getElementById('spout-gpu-note');
   const start = document.getElementById('spout-output-start');
   const stop = document.getElementById('spout-output-stop');
   let pending = false;
@@ -65,6 +67,27 @@
       }
     };
     void poll();
+  };
+  // 選單照這台電腦實際的顯示卡列出；名稱是驅動回報的型號，不翻譯。
+  let gpuOptionsSignature = '';
+  const renderGpuOptions = (gpu) => {
+    const signature = JSON.stringify([gpu.adapters.map((x) => x.key), window.I18n && window.I18n.current && window.I18n.current()]);
+    if (signature !== gpuOptionsSignature) {
+      gpuOptionsSignature = signature;
+      gpuSelect.textContent = '';
+      for (const adapter of gpu.adapters) {
+        const option = document.createElement('option');
+        option.value = adapter.key;
+        option.textContent = adapter.recommended ? t('spout.gpuRecommended', '{name}（建議）', { name: adapter.name }) : adapter.name;
+        gpuSelect.appendChild(option);
+      }
+      const system = document.createElement('option');
+      system.value = 'system';
+      system.textContent = t('spout.gpuSystem', '跟隨 Windows 設定');
+      gpuSelect.appendChild(system);
+    }
+    if (document.activeElement !== gpuSelect) gpuSelect.value = gpu.saved || 'system';
+    gpuSelect.disabled = !!gpu.forcedByEnvironment || !gpu.adapters.length;
   };
   const render = (snapshot) => {
     if (!snapshot) return;
@@ -118,6 +141,17 @@
         })
         : '';
     }
+    const gpu = snapshot.gpu;
+    if (gpuSelect && gpu) renderGpuOptions(gpu);
+    if (gpuNote && gpu) {
+      // 改了要重開才生效；輸出中時寫出實際在用的那張，方便跟接收端對照。
+      const current = gpu.adapters.find((x) => x.luid === String((output.native || {}).adapterLuid || ''));
+      gpuNote.textContent = gpu.saved !== gpu.applied && !gpu.forcedByEnvironment
+        ? t('spout.gpuRestart', '重新開啟聲嶼後才會換顯示卡。')
+        : running && current
+          ? t('spout.gpuInUse', '目前用「{name}」輸出；接收軟體要用同一張顯示卡才看得到畫面。', { name: current.name })
+          : t('spout.gpuHint', '接收軟體（Shoost、OBS）要跟聲嶼用同一張顯示卡，否則會收到空白畫面。');
+    }
     // 輸出中但沒在播放時，接收端收到的是全透明畫面，最常被當成「有來源卻沒歌詞」。輸出中每秒會重畫一次。
     if (playNote) playNote.hidden = !running || (typeof AppShared !== 'undefined' && AppShared.isPlaying && AppShared.isPlaying());
     if (!pending) {
@@ -139,6 +173,12 @@
     finally { setPending(false); render(latest); }
   };
 
+  if (gpuSelect) {
+    gpuSelect.addEventListener('change', async () => {
+      try { render(await api.saveGpuPreference(gpuSelect.value)); }
+      catch (error) { render({ ...(latest || {}), output: { state: 'error', lastError: error } }); }
+    });
+  }
   card.hidden = false;
   Promise.resolve(api.getStatus()).then((snapshot) => {
     render(snapshot);

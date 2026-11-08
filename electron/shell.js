@@ -562,7 +562,8 @@ function createElectronShell({
       addon,
       port,
       ...options,
-      nativeAdapterPreference: processObject.env.ELITESAND_SPOUT_GPU_PREFERENCE || '',
+      // 送出端要跟 Electron 算圖用同一張顯示卡，否則開不了它的共享畫面。
+      nativeAdapterPreference: nativeAdapterPreference(),
     });
     // 診斷紀錄只在記憶體、只在使用者送出 Spout 回報時附上，所以正式版也要收；
     // 先開始取樣再啟動輸出，啟動失敗的那一刻才會被記到。
@@ -578,9 +579,42 @@ function createElectronShell({
     if (output) await output.stop();
   }
 
+  function appliedGpu() {
+    try { return JSON.parse(processObject.env.ELITESAND_APPLIED_GPU || '{}') || {}; } catch (_) { return {}; }
+  }
+
+  function nativeAdapterPreference() {
+    return processObject.env.ELITESAND_SPOUT_GPU_PREFERENCE || appliedGpu().native || '';
+  }
+
+  let gpuAdapterCache = null;
+  function getGpuPreferenceStatus() {
+    const gpuPreference = require('./gpu-preference');
+    if (!gpuAdapterCache) {
+      gpuAdapterCache = gpuPreference.withOrdinals(gpuPreference.listAdapters({
+        isPackaged: app.isPackaged,
+        projectRoot,
+        resourcesPath: processObject.resourcesPath || process.resourcesPath,
+        manifest: packagedResourceIntegrity,
+        addonPath: processObject.env.ELITESAND_SPOUT_NATIVE_ADDON || '',
+      }, fsImpl) || []);
+    }
+    const saved = gpuPreference.load(app.getPath('userData'), fsImpl);
+    const best = gpuPreference.recommended(gpuAdapterCache);
+    const savedPick = gpuPreference.choose(gpuAdapterCache, saved);
+    return Object.freeze({
+      adapters: gpuAdapterCache.map((x) => ({ key: x.key, name: x.name, luid: x.luid, memoryMb: x.dedicatedMemoryMb, recommended: !!best && x.key === best.key })),
+      saved: saved.mode === 'system' ? 'system' : (savedPick ? savedPick.key : ''),
+      applied: appliedGpu().key || '',
+      appliedName: appliedGpu().name || '',
+      forcedByEnvironment: !!processObject.env.ELITESAND_SPOUT_GPU_PREFERENCE,
+    });
+  }
+
   function getSpoutOutputStatus() {
     return Object.freeze({
       available: true,
+      gpu: getGpuPreferenceStatus(),
       options: getSpoutOutputOptions(),
       output: spoutDisplayOutput?.getStatus?.() || { state: 'idle' },
     });
@@ -1250,6 +1284,16 @@ function createElectronShell({
         if (event?.sender !== window.webContents) return null;
         const saved = saveSpoutOutputOptions(options);
         return { ...getSpoutOutputStatus(), options: saved };
+      });
+      ipcMain.handle('elitesand:spout-save-gpu', (event, preference) => {
+        if (event?.sender !== window.webContents) return null;
+        const gpuPreference = require('./gpu-preference');
+        const picked = getGpuPreferenceStatus().adapters.find((x) => x.key === preference);
+        const adapter = picked && gpuAdapterCache.find((x) => x.key === picked.key);
+        gpuPreference.save(app.getPath('userData'), preference === 'system' ? { mode: 'system' }
+          : adapter ? { mode: 'adapter', adapter: { vendorId: adapter.vendorId, deviceId: adapter.deviceId, subSysId: adapter.subSysId, ordinal: adapter.ordinal, name: adapter.name } }
+            : { mode: 'auto' }, fsImpl);
+        return getSpoutOutputStatus();
       });
       ipcMain.handle('elitesand:spout-start', async (event, options) => {
         if (event?.sender !== window.webContents) return null;

@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('ElitesandShell', Object.freeze({
     getStatus() { return ipcRenderer.invoke('elitesand:spout-status'); },
     getIssueDiagnostics() { return ipcRenderer.invoke('elitesand:spout-issue-diagnostics'); },
     saveSettings(options) { return ipcRenderer.invoke('elitesand:spout-save-settings', options); },
+    saveGpuPreference(preference) { return ipcRenderer.invoke('elitesand:spout-save-gpu', preference); },
     start(options) { return ipcRenderer.invoke('elitesand:spout-start', options); },
     stop() { return ipcRenderer.invoke('elitesand:spout-stop'); },
   }),

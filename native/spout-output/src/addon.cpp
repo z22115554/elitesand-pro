@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -166,9 +167,42 @@ bool getOptionalAdapterPreference(napi_env env, napi_value object, std::string* 
   size_t copied = 0;
   if (napi_get_value_string_utf8(env, property, output.data(), length + 1, &copied) != napi_ok) return false;
   output.resize(copied);
-  if (output != "" && output != "low-power" && output != "high-performance") return false;
+  if (output != "" && output != "low-power" && output != "high-performance" && output.rfind("luid:", 0) != 0) return false;
   *value = output;
   return true;
+}
+
+// "luid:HIGH:LOW"（十六進位）。LUID 每次開機都會變，所以只在這次啟動內傳遞，不寫進設定檔。
+bool parseLuidPreference(const std::string& preference, LUID* luid) {
+  if (preference.rfind("luid:", 0) != 0) return false;
+  const size_t split = preference.find(':', 5);
+  if (split == std::string::npos) return false;
+  try {
+    size_t usedHigh = 0;
+    size_t usedLow = 0;
+    const std::string high = preference.substr(5, split - 5);
+    const std::string low = preference.substr(split + 1);
+    if (high.empty() || low.empty() || high.size() > 8 || low.size() > 8) return false;
+    luid->HighPart = static_cast<LONG>(std::stoul(high, &usedHigh, 16));
+    luid->LowPart = static_cast<DWORD>(std::stoul(low, &usedLow, 16));
+    return usedHigh == high.size() && usedLow == low.size();
+  } catch (...) {
+    return false;
+  }
+}
+
+std::string narrow(const wchar_t* text) {
+  const int size = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+  if (size <= 1) return std::string();
+  std::string output(static_cast<size_t>(size - 1), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, text, -1, output.data(), size, nullptr, nullptr);
+  return output;
+}
+
+std::string luidText(const LUID& luid) {
+  char buffer[32];
+  snprintf(buffer, sizeof(buffer), "%lx:%lx", static_cast<unsigned long>(static_cast<DWORD>(luid.HighPart)), static_cast<unsigned long>(luid.LowPart));
+  return buffer;
 }
 
 bool selectAdapter(const std::string& preference, ComPtr<IDXGIAdapter1>* selected) {
@@ -176,6 +210,20 @@ bool selectAdapter(const std::string& preference, ComPtr<IDXGIAdapter1>* selecte
   if (preference.empty()) return true;
   ComPtr<IDXGIFactory1> factory;
   if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) return false;
+  LUID wanted{};
+  if (parseLuidPreference(preference, &wanted)) {
+    for (UINT index = 0; ; ++index) {
+      ComPtr<IDXGIAdapter1> candidate;
+      if (factory->EnumAdapters1(index, &candidate) == DXGI_ERROR_NOT_FOUND) break;
+      DXGI_ADAPTER_DESC1 description{};
+      if (FAILED(candidate->GetDesc1(&description))) continue;
+      if (description.AdapterLuid.HighPart == wanted.HighPart && description.AdapterLuid.LowPart == wanted.LowPart) {
+        *selected = candidate;
+        return true;
+      }
+    }
+    return false;
+  }
   SIZE_T selectedMemory = preference == "low-power" ? static_cast<SIZE_T>(-1) : 0;
   bool hasCandidate = false;
   for (UINT index = 0; ; ++index) {
@@ -476,7 +524,13 @@ napi_value makeStatusLocked(napi_env env) {
   napi_value adapterLuid;
   napi_create_uint32(env, g_sender.adapterVendorId, &adapterVendorId);
   napi_create_uint32(env, g_sender.adapterDeviceId, &adapterDeviceId);
-  napi_create_double(env, static_cast<double>(g_sender.adapterLuid), &adapterLuid);
+  {
+    LUID current{};
+    current.LowPart = static_cast<DWORD>(g_sender.adapterLuid & 0xffffffffull);
+    current.HighPart = static_cast<LONG>(g_sender.adapterLuid >> 32);
+    const std::string text = luidText(current);
+    napi_create_string_utf8(env, text.c_str(), text.size(), &adapterLuid);
+  }
   napi_set_named_property(env, result, "adapterVendorId", adapterVendorId);
   napi_set_named_property(env, result, "adapterDeviceId", adapterDeviceId);
   napi_set_named_property(env, result, "adapterLuid", adapterLuid);
@@ -996,6 +1050,40 @@ void cleanup(void*) {
   stopWorkerAndReset();
 }
 
+// 列出這台電腦的實體顯示卡，給設定畫面顯示名稱、讓使用者指定 Spout 用哪一張。
+napi_value listAdapters(napi_env env, napi_callback_info) {
+  napi_value result;
+  napi_create_array(env, &result);
+  ComPtr<IDXGIFactory1> factory;
+  if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) return result;
+  uint32_t count = 0;
+  for (UINT index = 0; ; ++index) {
+    ComPtr<IDXGIAdapter1> candidate;
+    if (factory->EnumAdapters1(index, &candidate) == DXGI_ERROR_NOT_FOUND) break;
+    DXGI_ADAPTER_DESC1 description{};
+    if (FAILED(candidate->GetDesc1(&description)) || (description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) continue;
+    napi_value item;
+    napi_create_object(env, &item);
+    napi_value name, vendorId, deviceId, subSysId, memoryMb, luid;
+    const std::string text = narrow(description.Description);
+    napi_create_string_utf8(env, text.c_str(), text.size(), &name);
+    napi_create_uint32(env, description.VendorId, &vendorId);
+    napi_create_uint32(env, description.DeviceId, &deviceId);
+    napi_create_uint32(env, description.SubSysId, &subSysId);
+    napi_create_double(env, static_cast<double>(description.DedicatedVideoMemory / (1024 * 1024)), &memoryMb);
+    const std::string luidString = luidText(description.AdapterLuid);
+    napi_create_string_utf8(env, luidString.c_str(), luidString.size(), &luid);
+    napi_set_named_property(env, item, "name", name);
+    napi_set_named_property(env, item, "vendorId", vendorId);
+    napi_set_named_property(env, item, "deviceId", deviceId);
+    napi_set_named_property(env, item, "subSysId", subSysId);
+    napi_set_named_property(env, item, "dedicatedMemoryMb", memoryMb);
+    napi_set_named_property(env, item, "luid", luid);
+    napi_set_element(env, result, count++, item);
+  }
+  return result;
+}
+
 napi_value init(napi_env env, napi_value exports) {
   const napi_property_descriptor methods[] = {
     { "create", nullptr, createSender, nullptr, nullptr, nullptr, napi_default, nullptr },
@@ -1003,6 +1091,7 @@ napi_value init(napi_env env, napi_value exports) {
     { "waitForIdle", nullptr, waitForIdle, nullptr, nullptr, nullptr, napi_default, nullptr },
     { "getLastProbeSamples", nullptr, getLastProbeSamples, nullptr, nullptr, nullptr, napi_default, nullptr },
     { "stop", nullptr, stopSender, nullptr, nullptr, nullptr, napi_default, nullptr },
+    { "listAdapters", nullptr, listAdapters, nullptr, nullptr, nullptr, napi_default, nullptr },
     { "getStatus", nullptr, [](napi_env callbackEnv, napi_callback_info) { return makeStatus(callbackEnv); }, nullptr, nullptr, nullptr, napi_default, nullptr },
   };
   napi_define_properties(env, exports, ARRAYSIZE(methods), methods);
