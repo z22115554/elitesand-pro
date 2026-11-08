@@ -58,4 +58,5 @@ test('verdict and strict score keys need the 2.2.0 disclosure and match the EULA
   assert.match(eula, /^Version: 2\.2\.0/m);
   assert.ok(eula.includes('(h) 自本版（2.2.0）起') && eula.includes('(h) From this version (2.2.0)'));
   assert.ok(eula.includes('練唱判定問題') && eula.includes('practice judging problem'));
+  assert.ok(eula.includes('顯示卡的廠商與型號代碼') && eula.includes("graphics card's\nvendor and device ID"), 'Spout reports disclose the GPU IDs they carry');
 });

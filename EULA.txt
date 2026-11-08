@@ -221,6 +221,12 @@ v2.1 或其後版本（LGPL）授權；你可以自行替換相容的 SoundTouch
    評分模式、升降 Key、增益、延遲校準等設定。這些數值不是錄音、也無法還原
    成你的聲音，但音高曲線可能看得出旋律。
 
+   自本版（2.2.0）起，若你把問題類型選為「Spout 透明輸出問題」且未取消附加
+   診斷資訊，並另附上本次開啟後 Spout 輸出的運作紀錄（狀態、尺寸、畫面張數
+   與延遲統計）、顯示卡的廠商與型號代碼、Spout 歌詞頁是否連上，以及送出當下
+   是否載入或播放歌曲（不含歌名）。這些紀錄只存在記憶體，不送出就不會離開
+   你的電腦。
+
    為限制濫用，本軟體於首次啟動時產生一組隨機安裝識別碼，儲存於本機資料
    目錄，並僅在你送出問題回報時一併傳送。該識別碼不含、也不衍生自任何硬體
    序號、網路卡位址或其他裝置指紋，重新安裝或刪除本機資料目錄即會重新產生。
@@ -657,6 +663,13 @@ vocal's target pitch and time within the song (the two weakest lines, up to 6
 seconds each), plus settings such as scoring mode, key shift, gain, and latency
 calibration. These values are not a recording and cannot reconstruct your voice,
 but the pitch curve may reveal the melody.
+
+From this version (2.2.0), if you choose the "Spout transparent output problem"
+type and keep diagnostics attached, the report also includes this session's
+Spout output record (status, size, frame counts and timing), the graphics card's
+vendor and device ID, whether the Spout lyrics page was connected, and whether a
+song was loaded or playing when you sent it (never its title). The record stays
+in memory and never leaves your computer unless you send a report.
 
 A random installation identifier is stored locally and sent only with a report
 to limit abuse. It is not derived from hardware or a device fingerprint and is
