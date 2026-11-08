@@ -14715,6 +14715,7 @@ test('觀眾演出：揪團預設關閉，開啟後依人數門檻與事件 id �
   eq(play.payload.kind, 'raid');
   eq(play.payload.payload.name, 'Friend');
   eq(play.payload.payload.viewers, 23);
+  eq(play.payload.payload.style, 'gold', '揪團演出要帶外觀');
 });
 
 test('觀眾演出：一次只演一個，前一個收場才輪到下一個，佇列有上限', () => {
@@ -14783,6 +14784,9 @@ test('觀眾演出：設定夾在合法範圍、存檔，測試演出不看開�
   eq(next.anchor, 'top-right');
   eq(next.raid.minViewers, 1);
   eq(next.raid.durationSec, 15);
+  eq(next.raid.style, 'gold', '不認得的外觀要退回預設');
+  eq(h.service.updateSettings({ raid: { style: 'neon' } }).raid.style, 'neon');
+  eq(h.service.updateSettings({ raid: { style: 'nope' } }).raid.style, 'neon', '無效外觀保留原值');
   eq(next.postcard.durationSec, 6);
   eq(h.getSaved().raid.durationSec, 15);
   const h2 = makeOverlayShowHarness();
@@ -14813,7 +14817,9 @@ test('觀眾演出：只有桌面面板能改設定／試播，OBS 只收轉播�
   const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   ok(/id="overlay-show-card"[^>]*data-new-feature="overlay-show"/.test(panel));
   const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
-  ok(badges.includes("'overlay-show':"));
+  ok(badges.includes("'overlay-show':") && badges.includes("'raid-styles':"));
+  ok(/data-nav="public-request"[^>]*data-new-feature="overlay-show"/.test(panel), '入口導覽項目也要標 NEW，不然沒點進去看不到');
+  ok(/for="overlay-show-raid-style"[^>]*data-new-feature="raid-styles"/.test(panel));
 });
 
 function finishTests(exitCode) {

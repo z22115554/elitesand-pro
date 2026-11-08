@@ -14,6 +14,7 @@
     raidEnabled: el('overlay-show-raid-enabled'),
     raidMin: el('overlay-show-raid-min'),
     raidSeconds: el('overlay-show-raid-seconds'),
+    raidStyle: el('overlay-show-raid-style'),
     postcardSeconds: el('overlay-show-postcard-seconds'),
     anchor: el('overlay-show-anchor'),
   };
@@ -28,6 +29,7 @@
     if (fields.raidMin && document.activeElement !== fields.raidMin) fields.raidMin.value = settings.raid?.minViewers ?? 1;
     if (fields.raidSeconds && document.activeElement !== fields.raidSeconds) fields.raidSeconds.value = settings.raid?.durationSec ?? 7;
     if (fields.postcardSeconds && document.activeElement !== fields.postcardSeconds) fields.postcardSeconds.value = settings.postcard?.durationSec ?? 10;
+    if (fields.raidStyle) fields.raidStyle.value = settings.raid?.style || 'gold';
     if (fields.anchor) fields.anchor.value = settings.anchor || 'top-right';
   }
 
@@ -38,6 +40,7 @@
         enabled: !!fields.raidEnabled?.checked,
         minViewers: Number(fields.raidMin?.value),
         durationSec: Number(fields.raidSeconds?.value),
+        style: fields.raidStyle ? fields.raidStyle.value : undefined,
       },
       postcard: { durationSec: Number(fields.postcardSeconds?.value) },
     };

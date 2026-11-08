@@ -18,10 +18,12 @@ const KIND_POSTCARD = 'postcard';
 const KIND_RAID = 'raid';
 
 const ANCHORS = Object.freeze(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
+// 揪團感謝的外觀：classic 簡潔漸層、gold 金箔舞台、neon 霓虹、sakura 櫻花、stage 舞台彩帶。
+const RAID_STYLES = Object.freeze(['gold', 'neon', 'sakura', 'stage', 'classic']);
 
 const DEFAULTS = Object.freeze({
   anchor: 'top-right',
-  raid: Object.freeze({ enabled: false, minViewers: 1, durationSec: 7 }),
+  raid: Object.freeze({ enabled: false, minViewers: 1, durationSec: 8, style: 'gold' }),
   postcard: Object.freeze({ durationSec: 10 }),
 });
 
@@ -62,6 +64,7 @@ function normalizeSettings(input, current = DEFAULTS) {
       enabled: typeof raid.enabled === 'boolean' ? raid.enabled : !!current.raid.enabled,
       minViewers: clampInt(raid.minViewers, current.raid.minViewers, LIMITS.raidMinViewersMin, LIMITS.raidMinViewersMax),
       durationSec: clampInt(raid.durationSec, current.raid.durationSec, LIMITS.raidDurationMin, LIMITS.raidDurationMax),
+      style: RAID_STYLES.includes(raid.style) ? raid.style : (RAID_STYLES.includes(current.raid.style) ? current.raid.style : DEFAULTS.raid.style),
     },
     postcard: {
       durationSec: clampInt(postcard.durationSec, current.postcard.durationSec, LIMITS.postcardDurationMin, LIMITS.postcardDurationMax),
@@ -180,7 +183,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     const id = enqueue({
       kind: KIND_RAID,
       durationMs: settings.raid.durationSec * 1000,
-      payload: { name, viewers: count },
+      payload: { name, viewers: count, style: settings.raid.style },
     });
     return id ? { ok: true, id } : { ok: false, reason: 'queue-full' };
   }
@@ -254,7 +257,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
   /** 測試演出：不看啟用開關、不看人數門檻，也不進去重表。 */
   function test(kind) {
     if (kind === KIND_RAID) {
-      return enqueue({ kind: KIND_RAID, durationMs: settings.raid.durationSec * 1000, payload: { name: 'SampleChannel', viewers: 23 } });
+      return enqueue({ kind: KIND_RAID, durationMs: settings.raid.durationSec * 1000, payload: { name: 'SampleChannel', viewers: 23, style: settings.raid.style } });
     }
     if (kind === KIND_POSTCARD) {
       return enqueue({
@@ -279,5 +282,5 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
 
 module.exports = {
   createOverlayShow, normalizeSettings, cleanText,
-  DEFAULTS, LIMITS, ANCHORS, KIND_POSTCARD, KIND_RAID, MAX_QUEUE,
+  DEFAULTS, LIMITS, ANCHORS, RAID_STYLES, KIND_POSTCARD, KIND_RAID, MAX_QUEUE,
 };

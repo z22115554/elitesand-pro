@@ -48,11 +48,72 @@
     return card;
   }
 
-  function buildRaid(payload) {
-    const card = node('div', 'os-card os-raid');
-    card.appendChild(node('div', 'os-raid-kicker', 'RAID'));
-    card.appendChild(node('div', 'os-raid-title', t('overlayShow.raidThanks', { name: payload.name || '' })));
-    card.appendChild(node('div', 'os-raid-count', t('overlayShow.raidViewers', { count: payload.viewers || 0 })));
+  const RAID_STYLES = ['gold', 'neon', 'sakura', 'stage', 'classic'];
+  const RAID_KICKER = { gold: 'SPECIAL THANKS', neon: 'RAID INCOMING', sakura: 'THANK YOU', stage: 'THANKS FOR THE RAID', classic: 'RAID' };
+  // 裝飾粒子的數量與位置寫死（不用亂數），每次演出長一樣、截圖才好驗證。
+  const SPARKS = [[88, 22, 1], [94, 52, 1.5], [82, 74, 0.8], [6, 18, 0.7]];
+  const PETALS = [[8, 0, 1], [24, 1.4, 0.8], [42, 0.6, 1.1], [60, 2.1, 0.9], [78, 0.9, 1], [92, 1.8, 0.8]];
+  const CONFETTI = [[6, 0], [16, 0.7], [27, 0.2], [38, 1.1], [49, 0.4], [60, 1.3], [71, 0.1], [82, 0.9], [92, 0.5]];
+
+  function formatClock(totalSeconds) {
+    const s = Math.max(0, Math.ceil(totalSeconds));
+    return '00:' + String(s).padStart(2, '0');
+  }
+
+  function buildRaid(payload, durationMs) {
+    const style = RAID_STYLES.includes(payload.style) ? payload.style : 'gold';
+    const card = node('div', 'os-card os-raid os-rs-' + style);
+    card.style.setProperty('--os-dur', Math.max(1000, durationMs) + 'ms');
+
+    if (style === 'stage') {
+      card.appendChild(node('div', 'os-rs-beam os-rs-beam-a'));
+      card.appendChild(node('div', 'os-rs-beam os-rs-beam-b'));
+      CONFETTI.forEach(([left, delay], index) => {
+        const piece = node('span', 'os-rs-confetti os-rs-confetti-' + (index % 3));
+        piece.style.left = left + '%';
+        piece.style.animationDelay = delay + 's';
+        card.appendChild(piece);
+      });
+    } else if (style === 'sakura') {
+      PETALS.forEach(([left, delay, scale]) => {
+        const petal = node('span', 'os-rs-petal');
+        petal.style.left = left + '%';
+        petal.style.animationDelay = delay + 's';
+        petal.style.setProperty('--os-petal-scale', String(scale));
+        card.appendChild(petal);
+      });
+    } else {
+      SPARKS.forEach(([left, top, scale], index) => {
+        const spark = node('span', 'os-rs-spark');
+        spark.style.left = left + '%';
+        spark.style.top = top + '%';
+        spark.style.setProperty('--os-spark-scale', String(scale));
+        spark.style.animationDelay = (index * 0.35) + 's';
+        card.appendChild(spark);
+      });
+    }
+
+    const top = node('div', 'os-raid-top');
+    top.appendChild(node('span', 'os-raid-kicker', RAID_KICKER[style]));
+    const timer = node('span', 'os-raid-timer', formatClock(durationMs / 1000));
+    top.appendChild(timer);
+    card.appendChild(top);
+
+    const body = node('div', 'os-raid-body');
+    const meter = node('div', 'os-raid-meter');
+    for (let i = 0; i < 8; i += 1) {
+      const bar = node('span', 'os-raid-meter-bar');
+      bar.style.animationDelay = (i * 0.12) + 's';
+      meter.appendChild(bar);
+    }
+    body.appendChild(meter);
+    const text = node('div', 'os-raid-text');
+    text.appendChild(node('div', 'os-raid-title', t('overlayShow.raidThanks', { name: payload.name || '' })));
+    text.appendChild(node('div', 'os-raid-count', t('overlayShow.raidViewers', { count: payload.viewers || 0 })));
+    body.appendChild(text);
+    card.appendChild(body);
+    card.appendChild(node('div', 'os-raid-progress'));
+    card._timer = timer;
     return card;
   }
 
@@ -60,6 +121,7 @@
     if (!entry) return;
     clearTimeout(entry.exitTimer);
     clearTimeout(entry.killTimer);
+    clearInterval(entry.tick);
     if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
     if (current === entry) current = null;
   }
@@ -68,6 +130,7 @@
     if (!entry || entry.leaving) return;
     entry.leaving = true;
     clearTimeout(entry.exitTimer);
+    clearInterval(entry.tick);
     entry.el.classList.remove('is-in');
     entry.el.classList.add('is-out');
     entry.killTimer = setTimeout(() => remove(entry), EXIT_MS);
@@ -82,14 +145,21 @@
     if (current) remove(current);
     const host = ensureRoot();
     host.dataset.anchor = ANCHORS.includes(message.anchor) ? message.anchor : 'top-right';
-    const el = kind === 'postcard' ? buildPostcard(payload) : buildRaid(payload);
+    const durationMs = Math.max(1500, Number(message.durationMs) || 8000);
+    const el = kind === 'postcard' ? buildPostcard(payload) : buildRaid(payload, durationMs);
     host.appendChild(el);
-    const entry = { id: String(message.id || ''), el, exitTimer: null, killTimer: null, leaving: false };
+    const entry = { id: String(message.id || ''), el, exitTimer: null, killTimer: null, tick: null, leaving: false };
     current = entry;
     // 強制 reflow 後再加 is-in，入場動畫才會跑。
     void el.offsetWidth;
     el.classList.add('is-in');
-    const duration = Math.max(1500, Number(message.durationMs) || 8000);
+    const duration = durationMs;
+    if (el._timer) {
+      const startedAt = Date.now();
+      entry.tick = setInterval(() => {
+        el._timer.textContent = formatClock((duration - (Date.now() - startedAt)) / 1000);
+      }, 250);
+    }
     entry.exitTimer = setTimeout(() => leave(entry), duration);
     // 保底：任何原因沒收到 clear，也一定會自己收掉。
     entry.killTimer = setTimeout(() => remove(entry), duration + 2500);

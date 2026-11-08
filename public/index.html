@@ -174,7 +174,7 @@
           <span class="nav-label" data-i18n="nav.moon">中秋活動</span>
           <span class="nav-sub" data-i18n="nav.moonLimited">（限時開放）</span>
         </button>
-        <button class="nav-item nav-item--sub" data-nav="public-request" data-parent="twitch" type="button">
+        <button class="nav-item nav-item--sub" data-nav="public-request" data-parent="twitch" type="button" data-new-feature="overlay-show">
           <span class="nav-label" data-i18n="nav.publicRequest">公開點歌頁</span>
           <span id="public-request-nav-badge" class="pi-badge" hidden>0</span>
         </button>
@@ -1874,6 +1874,7 @@
             </div>
             <div class="switch-row"><div><div class="label" data-i18n="overlayShow.raidEnabled">收到揪團時自動演出</div><div class="sub" data-i18n="overlayShow.raidNeedsTwitch">需要先連接 Twitch 才收得到揪團。</div></div><label class="switch"><input id="overlay-show-raid-enabled" type="checkbox"><span class="track"></span></label></div>
             <div class="twitch-rule-grid">
+              <div class="field"><label for="overlay-show-raid-style" data-i18n="overlayShow.raidStyle" data-new-feature="raid-styles" data-new-placement="after">揪團感謝外觀</label><select id="overlay-show-raid-style" class="input"><option value="gold" data-i18n="overlayShow.styleGold">金箔</option><option value="neon" data-i18n="overlayShow.styleNeon">霓虹</option><option value="sakura" data-i18n="overlayShow.styleSakura">櫻花</option><option value="stage" data-i18n="overlayShow.styleStage">舞台</option><option value="classic" data-i18n="overlayShow.styleClassic">簡潔</option></select></div>
               <div class="field"><label for="overlay-show-raid-min" data-i18n="overlayShow.raidMin">揪團最低人數</label><input id="overlay-show-raid-min" class="input" type="number" min="1" max="10000" step="1" value="1" inputmode="numeric"></div>
               <div class="field"><label for="overlay-show-raid-seconds" data-i18n="overlayShow.raidSeconds">揪團顯示秒數</label><input id="overlay-show-raid-seconds" class="input" type="number" min="4" max="15" step="1" value="7" inputmode="numeric"></div>
               <div class="field"><label for="overlay-show-postcard-seconds" data-i18n="overlayShow.postcardSeconds">明信片顯示秒數</label><input id="overlay-show-postcard-seconds" class="input" type="number" min="6" max="20" step="1" value="10" inputmode="numeric"></div>
