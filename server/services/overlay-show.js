@@ -19,12 +19,14 @@ const KIND_RAID = 'raid';
 
 const ANCHORS = Object.freeze(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
 // 揪團感謝的外觀：classic 簡潔漸層、gold 金箔舞台、neon 霓虹、sakura 櫻花、stage 舞台彩帶。
+// 點歌明信片的外觀：paper 紙本、gold 金箔、polaroid 拍立得、neon 霓虹、sakura 櫻花。
+const POSTCARD_STYLES = Object.freeze(['paper', 'gold', 'polaroid', 'neon', 'sakura']);
 const RAID_STYLES = Object.freeze(['gold', 'neon', 'sakura', 'stage', 'classic']);
 
 const DEFAULTS = Object.freeze({
   anchor: 'top-right',
   raid: Object.freeze({ enabled: false, minViewers: 1, durationSec: 8, style: 'gold' }),
-  postcard: Object.freeze({ durationSec: 10 }),
+  postcard: Object.freeze({ durationSec: 10, style: 'paper' }),
 });
 
 const LIMITS = Object.freeze({
@@ -68,6 +70,7 @@ function normalizeSettings(input, current = DEFAULTS) {
     },
     postcard: {
       durationSec: clampInt(postcard.durationSec, current.postcard.durationSec, LIMITS.postcardDurationMin, LIMITS.postcardDurationMax),
+      style: POSTCARD_STYLES.includes(postcard.style) ? postcard.style : (POSTCARD_STYLES.includes(current.postcard.style) ? current.postcard.style : DEFAULTS.postcard.style),
     },
   };
 }
@@ -241,6 +244,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
         artist: card.artist || cleanText(track.artist, TEXT_LIMITS.artist),
         name: card.name,
         message: card.message,
+        style: settings.postcard.style,
       },
     });
   }
@@ -263,7 +267,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
       return enqueue({
         kind: KIND_POSTCARD,
         durationMs: settings.postcard.durationSec * 1000,
-        payload: { title: 'Sample Song', artist: 'Sample Artist', name: 'Sample', message: 'Thanks for the stream! Please sing this one for my friend.' },
+        payload: { title: 'Sample Song', artist: 'Sample Artist', name: 'Sample', message: 'Thanks for the stream! Please sing this one for my friend.', style: settings.postcard.style },
       });
     }
     return null;
@@ -282,5 +286,5 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
 
 module.exports = {
   createOverlayShow, normalizeSettings, cleanText,
-  DEFAULTS, LIMITS, ANCHORS, RAID_STYLES, KIND_POSTCARD, KIND_RAID, MAX_QUEUE,
+  DEFAULTS, LIMITS, ANCHORS, RAID_STYLES, POSTCARD_STYLES, KIND_POSTCARD, KIND_RAID, MAX_QUEUE,
 };

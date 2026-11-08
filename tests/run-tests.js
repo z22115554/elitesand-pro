@@ -14746,6 +14746,7 @@ test('觀眾演出：明信片只有登記過的歌開始播放才演，只演�
   const play = h.events.find((e) => e.event === 'overlay-show:play');
   eq(play.payload.kind, 'postcard');
   eq(play.payload.payload.message, 'hello');
+  eq(play.payload.payload.style, 'paper', '明信片演出要帶外觀');
   eq(h.service.onTrackPlaying({ entryId: 'e1' }), null, '暫停再播不會重演');
   h.service.onTrackChanged();
   ok(h.events.some((e) => e.event === 'overlay-show:clear'), '換歌要送出 clear');
@@ -14788,6 +14789,9 @@ test('觀眾演出：設定夾在合法範圍、存檔，測試演出不看開�
   eq(h.service.updateSettings({ raid: { style: 'neon' } }).raid.style, 'neon');
   eq(h.service.updateSettings({ raid: { style: 'nope' } }).raid.style, 'neon', '無效外觀保留原值');
   eq(next.postcard.durationSec, 6);
+  eq(next.postcard.style, 'paper', '不認得的明信片外觀要退回預設');
+  eq(h.service.updateSettings({ postcard: { style: 'polaroid' } }).postcard.style, 'polaroid');
+  eq(h.service.updateSettings({ postcard: { style: 'nope' } }).postcard.style, 'polaroid', '無效外觀保留原值');
   eq(h.getSaved().raid.durationSec, 15);
   const h2 = makeOverlayShowHarness();
   eq(h2.service.getSettings().raid.enabled, false);
@@ -14817,7 +14821,8 @@ test('觀眾演出：只有桌面面板能改設定／試播，OBS 只收轉播�
   const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   ok(/id="overlay-show-card"[^>]*data-new-feature="overlay-show"/.test(panel));
   const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
-  ok(badges.includes("'overlay-show':") && badges.includes("'raid-styles':"));
+  ok(badges.includes("'overlay-show':") && badges.includes("'raid-styles':") && badges.includes("'postcard-styles':"));
+  ok(/for="overlay-show-postcard-style"[^>]*data-new-feature="postcard-styles"/.test(panel));
   ok(/data-nav="public-request"[^>]*data-new-feature="overlay-show"/.test(panel), '入口導覽項目也要標 NEW，不然沒點進去看不到');
   ok(/for="overlay-show-raid-style"[^>]*data-new-feature="raid-styles"/.test(panel));
 });

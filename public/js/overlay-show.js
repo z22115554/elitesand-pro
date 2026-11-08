@@ -33,9 +33,33 @@
     return el;
   }
 
-  function buildPostcard(payload) {
-    const card = node('div', 'os-card os-postcard');
-    card.appendChild(node('div', 'os-pc-stamp', 'POST'));
+  const POSTCARD_STYLES = ['paper', 'gold', 'polaroid', 'neon', 'sakura'];
+  const POSTCARD_KICKER = { paper: 'POST', gold: 'REQUEST', neon: 'REQUEST', sakura: 'FOR YOU' };
+
+  function buildPostcard(payload, durationMs) {
+    const style = POSTCARD_STYLES.includes(payload.style) ? payload.style : 'paper';
+    const card = node('div', 'os-card os-postcard os-pc-' + style);
+    card.style.setProperty('--os-dur', Math.max(1000, durationMs) + 'ms');
+    if (style === 'gold' || style === 'neon') {
+      SPARKS.forEach(([left, top, scale], index) => {
+        const spark = node('span', 'os-pc-deco-spark');
+        spark.style.left = left + '%';
+        spark.style.top = top + '%';
+        spark.style.setProperty('--os-spark-scale', String(scale));
+        spark.style.animationDelay = (index * 0.35) + 's';
+        card.appendChild(spark);
+      });
+    } else if (style === 'sakura') {
+      PETALS.forEach(([left, delay]) => {
+        const petal = node('span', 'os-pc-deco-petal');
+        petal.style.left = left + '%';
+        petal.style.animationDelay = delay + 's';
+        card.appendChild(petal);
+      });
+    } else if (style === 'polaroid') {
+      card.appendChild(node('div', 'os-pc-tape'));
+    }
+    if (POSTCARD_KICKER[style]) card.appendChild(node('div', 'os-pc-stamp', POSTCARD_KICKER[style]));
     const song = node('div', 'os-pc-song');
     song.appendChild(node('div', 'os-pc-title', payload.title || ''));
     if (payload.artist) song.appendChild(node('div', 'os-pc-artist', payload.artist));
@@ -45,6 +69,7 @@
       ? t('overlayShow.postcardFrom', { name: payload.name })
       : t('overlayShow.postcardAnonymous');
     card.appendChild(node('div', 'os-pc-from', from));
+    card.appendChild(node('div', 'os-pc-progress'));
     return card;
   }
 
@@ -146,7 +171,7 @@
     const host = ensureRoot();
     host.dataset.anchor = ANCHORS.includes(message.anchor) ? message.anchor : 'top-right';
     const durationMs = Math.max(1500, Number(message.durationMs) || 8000);
-    const el = kind === 'postcard' ? buildPostcard(payload) : buildRaid(payload, durationMs);
+    const el = kind === 'postcard' ? buildPostcard(payload, durationMs) : buildRaid(payload, durationMs);
     host.appendChild(el);
     const entry = { id: String(message.id || ''), el, exitTimer: null, killTimer: null, tick: null, leaving: false };
     current = entry;

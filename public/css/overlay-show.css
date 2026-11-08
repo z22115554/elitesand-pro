@@ -27,16 +27,20 @@
 #overlay-show-root[data-anchor^="bottom"] .os-card { transform: translateY(2.4vmin) rotate(3deg) scale(0.96); }
 .os-card.is-in { opacity: 1; transform: rotate(-1.4deg) scale(1); }
 #overlay-show-root[data-anchor^="bottom"] .os-card.is-in { transform: rotate(1.4deg) scale(1); }
+.os-pc-polaroid.is-in, #overlay-show-root[data-anchor^="bottom"] .os-pc-polaroid.is-in { transform: rotate(-3deg) scale(1); }
 .os-card.is-out { opacity: 0; transition: opacity 420ms ease, transform 420ms ease; }
 
-/* ─── 點歌明信片 ─── */
+/* ─── 點歌明信片（五種外觀：.os-pc-<style> 換色與裝飾）─── */
 .os-postcard {
-  padding: 2.2vmin 2.6vmin 2vmin;
-  color: var(--os-ink);
-  background: var(--os-paper);
+  --pc-bg: #fbf5e6; --pc-ink: #2b2118; --pc-accent: #c8553d; --pc-line: rgba(43, 33, 24, 0.3);
+  position: relative;
+  padding: 2.2vmin 2.6vmin 2.4vmin;
+  color: var(--pc-ink);
+  background: var(--pc-bg);
   border-radius: 0.6vmin;
   box-shadow: 0 1.2vmin 3.2vmin rgba(0, 0, 0, 0.35), inset 0 0 0 0.35vmin rgba(43, 33, 24, 0.08);
-  border-top: 0.9vmin solid var(--os-accent);
+  border-top: 0.9vmin solid var(--pc-accent);
+  overflow: hidden;
 }
 .os-pc-stamp {
   position: absolute;
@@ -46,27 +50,90 @@
   font-size: 1.5vmin;
   font-weight: 700;
   letter-spacing: 0.3em;
-  color: var(--os-accent);
-  border: 0.22vmin solid var(--os-accent);
+  color: var(--pc-accent);
+  border: 0.22vmin solid var(--pc-accent);
   border-radius: 0.4vmin;
   opacity: 0.8;
   transform: rotate(6deg);
+  z-index: 2;
 }
-.os-pc-song { padding-right: 8vmin; margin-bottom: 1.4vmin; }
+.os-pc-song { padding-right: 8vmin; margin-bottom: 1.4vmin; position: relative; z-index: 2; }
 .os-pc-title { font-size: 2.6vmin; font-weight: 700; line-height: 1.25; }
 .os-pc-artist { margin-top: 0.3vmin; font-size: 1.8vmin; opacity: 0.65; }
 .os-pc-message {
   margin: 0;
   padding-top: 1.2vmin;
-  border-top: 0.2vmin dashed rgba(43, 33, 24, 0.3);
+  border-top: 0.2vmin dashed var(--pc-line);
   font-size: 2.3vmin;
   line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 6;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  position: relative;
+  z-index: 2;
 }
-.os-pc-from { margin-top: 1.2vmin; text-align: right; font-size: 1.8vmin; opacity: 0.7; }
+.os-pc-from { margin-top: 1.2vmin; text-align: right; font-size: 1.8vmin; opacity: 0.7; position: relative; z-index: 2; }
+.os-pc-progress { position: absolute; left: 0; bottom: 0; height: 0.45vmin; width: 100%; background: var(--pc-accent); opacity: 0.8; transform-origin: left center; animation: os-progress var(--os-dur, 10s) linear forwards; z-index: 3; }
+
+/* 紙本：奶油色明信片、紅色郵戳（原本的樣子） */
+.os-pc-paper { font-family: "Noto Sans TC", "Noto Sans JP", "Microsoft JhengHei", system-ui, sans-serif; }
+
+/* 金箔：深色玻璃、金色襯線、掃光與星光 */
+.os-pc-gold {
+  --pc-bg: linear-gradient(135deg, rgba(31, 24, 12, 0.92), rgba(14, 11, 7, 0.92)); --pc-ink: #fff4d6; --pc-accent: #f2d48a; --pc-line: rgba(242, 212, 138, 0.4);
+  font-family: "Noto Serif TC", "Noto Serif JP", "Songti TC", "PMingLiU", serif;
+  border-top-width: 0;
+  border: 0.2vmin solid rgba(242, 212, 138, 0.55);
+  border-radius: 1.2vmin;
+  box-shadow: 0 1.4vmin 3.6vmin rgba(0, 0, 0, 0.5), 0 0 3vmin rgba(242, 212, 138, 0.18);
+}
+.os-pc-gold .os-pc-title { background: linear-gradient(100deg, #fff4d6 0%, #f2d48a 40%, #fff9e6 55%, #f2d48a 70%, #d9a94c 100%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: os-shimmer 3.2s ease-in-out infinite; }
+.os-pc-gold::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(255, 240, 200, 0.14) 50%, transparent 65%); transform: translateX(-120%); animation: os-sweep 3.6s ease-in-out 0.6s infinite; pointer-events: none; z-index: 4; }
+.os-pc-deco-spark { position: absolute; width: 2vmin; height: 2vmin; background: var(--pc-accent); transform: scale(var(--os-spark-scale, 1)); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); animation: os-twinkle 2.2s ease-in-out infinite; z-index: 1; }
+
+/* 拍立得：白框、膠帶、微傾斜、手寫感 */
+.os-pc-polaroid {
+  --pc-bg: #fdfdfb; --pc-ink: #2f2a26; --pc-accent: #e0a458; --pc-line: rgba(47, 42, 38, 0.25);
+  font-family: "Kalam", "Segoe Print", "Comic Sans MS", "Noto Sans TC", "Microsoft JhengHei", cursive, sans-serif;
+  padding: 2.2vmin 2.4vmin 3vmin;
+  border-top: 0;
+  border-radius: 0.4vmin;
+  box-shadow: 0 1.4vmin 3.4vmin rgba(0, 0, 0, 0.4);
+  overflow: visible;
+}
+.os-pc-polaroid .os-pc-stamp { display: none; }
+.os-pc-polaroid .os-pc-song { padding-right: 0; padding: 1.6vmin 1.8vmin; margin-bottom: 1.6vmin; background: linear-gradient(135deg, #f2e7d4, #e6d6bd); border-radius: 0.3vmin; }
+.os-pc-polaroid .os-pc-message { border-top: 0; padding-top: 0; font-size: 2.4vmin; }
+.os-pc-polaroid .os-pc-progress { display: none; }
+.os-pc-tape { position: absolute; top: -1.6vmin; left: 50%; width: 9vmin; height: 3vmin; background: rgba(240, 214, 130, 0.78); transform: translateX(-50%) rotate(-4deg); box-shadow: 0 0.2vmin 0.6vmin rgba(0, 0, 0, 0.2); z-index: 3; }
+
+/* 霓虹：黑底、青／洋紅發光 */
+.os-pc-neon {
+  --pc-bg: rgba(6, 8, 20, 0.9); --pc-ink: #f2fdff; --pc-accent: #5ff3ff; --pc-line: rgba(95, 243, 255, 0.45);
+  font-family: "Noto Sans TC", "Noto Sans JP", system-ui, sans-serif;
+  border-top-width: 0;
+  border: 0.2vmin solid rgba(95, 243, 255, 0.9);
+  border-radius: 1.2vmin;
+  box-shadow: 0 0 1.2vmin rgba(95, 243, 255, 0.7), 0 0 3.4vmin rgba(255, 79, 216, 0.4), inset 0 0 2.2vmin rgba(95, 243, 255, 0.18);
+  animation: os-flicker 4.5s linear infinite;
+}
+.os-pc-neon .os-pc-title { text-shadow: 0 0 0.8vmin #5ff3ff, 0 0 2vmin rgba(255, 79, 216, 0.7); font-weight: 900; }
+.os-pc-neon .os-pc-stamp { text-shadow: 0 0 0.8vmin currentColor; }
+.os-pc-neon .os-pc-from { color: #ff9bea; opacity: 0.9; }
+.os-pc-neon .os-pc-progress { background: linear-gradient(90deg, #ff4fd8, #5ff3ff); }
+
+/* 櫻花：粉白卡片、花瓣飄落 */
+.os-pc-sakura {
+  --pc-bg: rgba(255, 246, 249, 0.96); --pc-ink: #5a2a3a; --pc-accent: #e0628f; --pc-line: rgba(224, 98, 143, 0.4);
+  font-family: "Noto Sans TC", "Noto Sans JP", system-ui, sans-serif;
+  border-top-width: 0;
+  border: 0.2vmin solid rgba(224, 98, 143, 0.55);
+  border-radius: 2vmin;
+  box-shadow: 0 1.2vmin 3vmin rgba(120, 40, 70, 0.28);
+}
+.os-pc-sakura .os-pc-title { color: #b9376a; }
+.os-pc-deco-petal { position: absolute; top: -3vmin; width: 1.5vmin; height: 1.1vmin; background: #f6a8c4; border-radius: 80% 0 80% 0; animation: os-petal 5.2s linear infinite; opacity: 0.9; z-index: 1; }
 
 /* ─── 揪團感謝（五種外觀共用骨架：.os-rs-<style> 換色與裝飾）─── */
 .os-raid {
@@ -145,7 +212,7 @@
 @keyframes os-beam-b { 0%, 100% { transform: rotate(14deg); } 50% { transform: rotate(-12deg); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .os-raid *, .os-raid::after { animation: none !important; }
+  .os-raid *, .os-raid::after, .os-postcard *, .os-postcard::after { animation: none !important; }
   .os-card { transition: opacity 200ms ease; transform: none; }
   .os-card.is-in, #overlay-show-root[data-anchor^="bottom"] .os-card.is-in { transform: none; }
 }
