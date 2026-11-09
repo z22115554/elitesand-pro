@@ -54,7 +54,8 @@ test('verdict and strict score keys need the 2.2.0 disclosure and match the EULA
   assert.equal(telemetry.disclosedSince('practice.score.85-90'), '2.1.0');
   for (const key of ['practice.verdict.relaxed.accurate', 'practice.verdict.strict.inaccurate', 'practice.strict.score.ge99']) assert.ok(telemetry.ALLOWED_KEYS.includes(key), key);
   assert.equal(telemetry.isDailyBooleanKey('practice.verdict.relaxed.accurate'), false);
-  const eula = fs.readFileSync(path.join(__dirname, '..', 'EULA.txt'), 'utf8');
+  // CI 的 Windows checkout 會把換行轉成 CRLF，先統一成 LF 再比對跨行字串
+  const eula = fs.readFileSync(path.join(__dirname, '..', 'EULA.txt'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(eula, /^Version: 2\.2\.0/m);
   assert.ok(eula.includes('(h) 自本版（2.2.0）起') && eula.includes('(h) From this version (2.2.0)'));
   assert.ok(eula.includes('練唱判定問題') && eula.includes('practice judging problem'));

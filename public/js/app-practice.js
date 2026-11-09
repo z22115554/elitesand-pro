@@ -144,7 +144,7 @@
   // 只送來源、分數、計分秒數三個值，收不收、記哪一格由伺服器決定。
   function reportScore(take) {
     if (!take || take.source !== 'mic' || take.score == null || !take.scope || take.scope.type !== 'full') return;
-    SocketClient.send('practice:scored', { source: take.source, score: take.score, seconds: take.seconds, scoreMode: take.scoreMode });
+    if (typeof SocketClient !== 'undefined') SocketClient.send('practice:scored', { source: take.source, score: take.score, seconds: take.seconds, scoreMode: take.scoreMode });
     verdictTake = take;
     ui.verdict.hidden = false;
     ui.verdictAsk.hidden = false;
@@ -988,7 +988,7 @@
       const button = e.target.closest('[data-verdict]');
       if (!button || !verdictTake) return;
       const verdict = button.dataset.verdict;
-      SocketClient.send('practice:verdict', { verdict, scoreMode: verdictTake.scoreMode });
+      if (typeof SocketClient !== 'undefined') SocketClient.send('practice:verdict', { verdict, scoreMode: verdictTake.scoreMode });
       verdictTake = null;
       ui.verdictAsk.hidden = true;
       ui.verdictReport.hidden = verdict !== 'inaccurate';
@@ -996,7 +996,8 @@
     ui.verdictReport.addEventListener('click', () => { if (window.AppFeedback) window.AppFeedback.openPracticeReport(); });
     window.PracticeDiagnostics = Object.freeze({ snapshot: diagnosticSnapshot });
     // 設定是全域狀態，等其他監聽者更新完再讀。
-    SocketClient.on('lyric-settings:update', () => setTimeout(refreshLyricText, 50));
+    // 沒有 socket（單獨載入的測試頁）時跳過；直接呼叫會拋錯，讓後面的初始化整段停掉
+    if (typeof SocketClient !== 'undefined') SocketClient.on('lyric-settings:update', () => setTimeout(refreshLyricText, 50));
     ui.contour.addEventListener('change', () => { prefs.showContour = ui.contour.checked; writeJson(PREFS_KEY, prefs); });
     ui.modelInstall.addEventListener('click', installModel);
     for (const button of [ui.obsCopy, $('copy-practice-url-general')]) {
