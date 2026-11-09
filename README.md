@@ -7,7 +7,7 @@
 **為 VTuber 歌回與直播演出打造的本機歌詞演出系統**
 *A local lyric-performance system for VTubers, singing streamers, and live performers*
 
-**最新版本 / Latest：`v1.2.1`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
+**最新版本 / Latest：`v1.2.2`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
 
 繁體中文 · [English](#english) · [日本語](#日本語) · [한국어](#한국어) · [简体中文](#简体中文)
 
@@ -50,6 +50,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 媒體庫自動記住用過的歌曲、播放次數、歌詞、對時與播放設定。
 - 收藏歌單：媒體庫破萬首後把常用的歌分組保存，一首歌可以放進多個收藏歌單，手機遙控器也能直接載入整份。
 - 可選「統一音量」：兩條播放鏈一起做響度標準化，切歌不忽大忽小。
+- 記住每首歌的音量：某首歌調過音量，下次播放自動回到那個音量；沒調過的歌用預設音量。
 
 #### 歌詞
 
@@ -103,6 +104,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 觀眾可自助查詢與取消，管理員可透過聊天室管理。
 - 自訂成功／失敗／等待／拒絕回覆。
 - 斷線重連、請求持久化、程式重啟後恢復。
+- 觀眾演出：點歌明信片（核准公開點歌時勾選，該首開始播放時在 OBS 顯示觀眾留言）與揪團感謝，各有五種外觀，位置可分別設定，一次只演一個。
 
 #### AI 人聲分離（實驗性，預設關閉）
 
@@ -111,7 +113,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 首頁「AI 伴奏」分頁可一次把整份歌單做成純伴奏。
 - 雙路音訊：伴奏給 OBS、人聲留給自己監聽，或反過來。
 - 自動對時：用分離出的人聲比對歌詞，一鍵算出整首的時間偏移；可設定匯入後自動執行。
-- 練唱（測試版）：分析原唱音高，邊唱邊看自己的音準與逐句評等，支援升降 Key、A–B 循環與跳到下一段；唱完列出最需要練的句子、跟上次與最佳成績比較，也能開放觀眾點歌挑戰（預設關閉）。另有 OBS 練唱疊加層 `/practice-overlay`。歌曲庫可以多選批次建立練唱音軌。
+- 練唱（測試版）：分析原唱音高，邊唱邊看自己的音準與逐句評等，支援升降 Key、A–B 循環與跳到下一段，評分有寬鬆／嚴格兩種模式；唱完列出最需要練的句子、跟上次與最佳成績比較，也能開放觀眾點歌挑戰（預設關閉）。另有 OBS 練唱疊加層 `/practice-overlay`。歌曲庫可以多選批次建立練唱音軌。
 
 > 實驗性功能，不建議在正式直播前才第一次啟用。
 
@@ -141,7 +143,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 請只從官方 GitHub Releases 下載，並核對隨附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
 ```
 
 ### OBS 設定
@@ -220,6 +222,7 @@ Everything runs on your own machine; OBS loads transparent lyrics and setlist ov
 - Media library remembers used songs, play counts, lyrics, timing, and playback settings.
 - Saved collections: group frequently used songs once your media library grows large; a song can belong to multiple collections, and the mobile remote can load one directly.
 - Optional loudness normalization across both playback chains, so tracks don't jump in volume.
+- Per-song volume memory: adjust the volume during a song and it comes back the next time that song plays; other songs use the default volume.
 
 #### Lyrics
 
@@ -273,6 +276,7 @@ Ten performance templates, each with independent style settings (font, size, col
 - Viewers self-query and self-cancel; moderators manage from chat.
 - Custom success / failure / waiting / rejection replies.
 - Reconnect, request persistence, and recovery across app restarts.
+- Viewer shows: request postcards (tick when approving a public request; the viewer's note appears on OBS when that song starts) and raid thank-yous, each with five styles and its own screen position, shown one at a time.
 
 #### AI vocal separation (experimental, off by default)
 
@@ -281,7 +285,7 @@ Ten performance templates, each with independent style settings (font, size, col
 - The home "AI instrumental" tab can process a whole setlist at once.
 - Dual audio routing: instrumental to OBS, vocals to your monitor, or the reverse.
 - Auto sync: matches the separated vocal against the lyrics to find the whole-song timing offset in one click; can run automatically after import.
-- Practice (beta): analyzes the original vocal pitch so you can see your own pitch and per-line ratings as you sing, with key shifting, A–B looping and skip-to-next-section. After a take it lists the lines to work on and compares with your previous and best scores; you can also open song challenges to viewers (off by default). Includes an OBS practice overlay at `/practice-overlay`, and practice tracks can be built in bulk from the library.
+- Practice (beta): analyzes the original vocal pitch so you can see your own pitch and per-line ratings as you sing, with key shifting, A–B looping, skip-to-next-section, and relaxed or strict scoring. After a take it lists the lines to work on and compares with your previous and best scores; you can also open song challenges to viewers (off by default). Includes an OBS practice overlay at `/practice-overlay`, and practice tracks can be built in bulk from the library.
 
 > Experimental — don't enable it for the first time right before a live stream.
 
@@ -311,7 +315,7 @@ The build is **currently unsigned**, so Windows SmartScreen shows a blue warning
 Download only from the official GitHub Releases page and verify the bundled `.sha256`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
 ```
 
 ### OBS setup
@@ -390,6 +394,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - メディアライブラリが使用曲・再生回数・歌詞・タイミング・再生設定を記憶。
 - コレクション：曲が増えてもよく使う曲をグループ分けして保存。1 曲を複数のコレクションに入れられ、スマホリモコンからも直接読み込める。
 - 任意のラウドネス正規化（2 系統の再生チェーンを同時処理）。
+- 曲ごとの音量を記憶：再生中に音量を変えた曲は、次回も同じ音量で再生。変えていない曲は既定の音量。
 
 #### 歌詞
 
@@ -442,6 +447,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - 視聴者は自分で照会・キャンセル可能、モデレーターはチャットから管理。
 - 成功／失敗／待機／拒否の返信をカスタム。
 - 再接続、リクエスト永続化、アプリ再起動後の復元。
+- 視聴者演出：リクエストはがき（公開リクエスト承認時に選ぶと、その曲の再生開始時に OBS へメッセージを表示）とレイド感謝。それぞれ 5 種類のデザインと個別の表示位置、1 つずつ表示。
 
 #### AI ボーカル分離（試験的・既定オフ）
 
@@ -450,7 +456,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - ホームの「AI 伴奏」タブでセットリスト全体を一括処理。
 - デュアル音声：伴奏を OBS、ボーカルを自分のモニターへ（逆も可）。
 - 自動タイミング合わせ：分離したボーカルを歌詞と照合し、曲全体のずれをワンクリックで算出。インポート後に自動実行も可能。
-- 練習（ベータ版）：原曲ボーカルの音程を解析し、歌いながら自分の音程と 1 行ごとの評価を確認できます。キー変更、A–B ループ、次のパートへ移動に対応。歌い終わると練習すべき行と前回・ベストとの比較を表示し、視聴者のリクエスト挑戦も受け付けられます（初期設定はオフ）。OBS 用の練習オーバーレイ `/practice-overlay` 付きで、ライブラリから練習トラックをまとめて作成できます。
+- 練習（ベータ版）：原曲ボーカルの音程を解析し、歌いながら自分の音程と 1 行ごとの評価を確認できます。キー変更、A–B ループ、次のパートへ移動、ゆるめ／厳しめの採点モードに対応。歌い終わると練習すべき行と前回・ベストとの比較を表示し、視聴者のリクエスト挑戦も受け付けられます（初期設定はオフ）。OBS 用の練習オーバーレイ `/practice-overlay` 付きで、ライブラリから練習トラックをまとめて作成できます。
 
 > 試験的機能です。本番配信の直前に初めて有効化しないでください。
 
@@ -480,7 +486,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 配布元は公式 GitHub Releases のみ。同梱の `.sha256` を照合してください：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
 ```
 
 ### OBS 設定
@@ -559,6 +565,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 미디어 라이브러리가 사용 곡, 재생 횟수, 가사, 타이밍, 재생 설정을 기억.
 - 컬렉션: 곡이 많아져도 자주 쓰는 곡을 그룹으로 저장. 한 곡을 여러 컬렉션에 넣을 수 있고, 모바일 리모컨에서도 바로 불러올 수 있음.
 - 선택형 라우드니스 정규화(두 재생 체인 동시 처리).
+- 곡별 음량 기억: 재생 중 음량을 바꾼 곡은 다음에도 같은 음량으로 재생, 바꾸지 않은 곡은 기본 음량.
 
 #### 가사
 
@@ -611,6 +618,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 시청자는 직접 조회·취소, 모더레이터는 채팅에서 관리.
 - 성공/실패/대기/거절 응답 커스텀.
 - 재연결, 신청 영속화, 앱 재시작 후 복구.
+- 시청자 연출: 신청곡 엽서(공개 신청 승인 시 선택하면 그 곡이 시작될 때 OBS에 메시지 표시)와 레이드 감사. 각각 5가지 디자인과 개별 위치, 한 번에 하나씩 표시.
 
 #### AI 보컬 분리(실험적, 기본 꺼짐)
 
@@ -619,7 +627,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 홈 "AI 반주" 탭에서 세트리스트 전체를 한 번에 처리.
 - 듀얼 오디오: 반주는 OBS로, 보컬은 내 모니터로(반대도 가능).
 - 자동 싱크: 분리된 보컬을 가사와 비교해 곡 전체의 시간 오차를 한 번에 계산합니다. 가져온 뒤 자동 실행도 가능합니다.
-- 연습(베타): 원곡 보컬의 음정을 분석해 부르면서 내 음정과 줄별 평가를 볼 수 있습니다. 키 변경, A–B 반복, 다음 구간 이동을 지원합니다. 다 부르면 연습할 줄과 지난번·최고 기록 비교를 보여 주고, 시청자 신청곡 도전도 열 수 있습니다(기본 꺼짐). OBS 연습 오버레이 `/practice-overlay`를 제공하며 라이브러리에서 연습 트랙을 한꺼번에 만들 수 있습니다.
+- 연습(베타): 원곡 보컬의 음정을 분석해 부르면서 내 음정과 줄별 평가를 볼 수 있습니다. 키 변경, A–B 반복, 다음 구간 이동, 느슨함/엄격함 채점 모드를 지원합니다. 다 부르면 연습할 줄과 지난번·최고 기록 비교를 보여 주고, 시청자 신청곡 도전도 열 수 있습니다(기본 꺼짐). OBS 연습 오버레이 `/practice-overlay`를 제공하며 라이브러리에서 연습 트랙을 한꺼번에 만들 수 있습니다.
 
 > 실험적 기능입니다. 실제 방송 직전에 처음 켜지 마세요.
 
@@ -649,7 +657,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 공식 GitHub Releases에서만 내려받고 동봉된 `.sha256`을 확인하세요:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
 ```
 
 ### OBS 설정
@@ -728,6 +736,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 媒体库自动记住用过的歌曲、播放次数、歌词、对时与播放设置。
 - 收藏歌单：媒体库破万首后把常用的歌分组保存，一首歌可以放进多个收藏歌单，手机遥控器也能直接加载整份。
 - 可选「统一音量」：两条播放链一起做响度标准化。
+- 记住每首歌的音量：某首歌调过音量，下次播放自动回到那个音量；没调过的歌用默认音量。
 
 #### 歌词
 
@@ -780,6 +789,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 观众可自助查询与取消，管理员可通过聊天室管理。
 - 自定义成功／失败／等待／拒绝回复。
 - 断线重连、请求持久化、程序重启后恢复。
+- 观众演出：点歌明信片（核准公开点歌时勾选，该首开始播放时在 OBS 显示观众留言）与揪团感谢，各有五种外观，位置可分别设置，一次只演一个。
 
 #### AI 人声分离（实验性，默认关闭）
 
@@ -788,7 +798,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 首页「AI 伴奏」分页可一次把整份歌单做成纯伴奏。
 - 双路音频：伴奏给 OBS、人声留给自己监听，或反过来。
 - 自动对时：用分离出的人声比对歌词，一键算出整首的时间偏移；可设置导入后自动执行。
-- 练唱（测试版）：分析原唱音高，边唱边看自己的音准与逐句评等，支持升降 Key、A–B 循环与跳到下一段；唱完列出最需要练的句子、跟上次与最佳成绩比较，也能开放观众点歌挑战（默认关闭）。另有 OBS 练唱叠加层 `/practice-overlay`。歌曲库可以多选批量建立练唱音轨。
+- 练唱（测试版）：分析原唱音高，边唱边看自己的音准与逐句评等，支持升降 Key、A–B 循环与跳到下一段，评分有宽松／严格两种模式；唱完列出最需要练的句子、跟上次与最佳成绩比较，也能开放观众点歌挑战（默认关闭）。另有 OBS 练唱叠加层 `/practice-overlay`。歌曲库可以多选批量建立练唱音轨。
 
 > 实验性功能，不建议在正式直播前才第一次启用。
 
@@ -818,7 +828,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 请只从官方 GitHub Releases 下载，并核对随附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.1.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
 ```
 
 ### OBS 设置

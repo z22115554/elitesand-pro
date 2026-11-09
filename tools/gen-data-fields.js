@@ -75,12 +75,12 @@ console.log(`已產生 ${target}（${f.ALLOWED_KEYS.length} 個欄位）`);
 
 // 順便把 worker 的封閉白名單也同步——這是唯一事實來源該做的事：
 // 改 telemetry-fields.js 之後跑這一個指令，docs 與 worker 就不會漂移。
-const workerPath = path.join(__dirname, '..', 'cloudflare', 'usage-worker', 'src', 'index.ts');
+const workerPath = path.join(__dirname, '..', 'cloudflare', 'usage-worker', 'src', 'validation.ts');
 let workerSource = fs.readFileSync(workerPath, 'utf8');
 const keyLiteral = f.ALLOWED_KEYS.map((k) => JSON.stringify(k)).join(',\n  ');
 const keysPattern = /(ALLOWED_COUNTER_KEYS[^=]*=\s*new Set\(\s*\[)[\s\S]*?(\]\s*\))/;
 if (!keysPattern.test(workerSource)) {
-  throw new Error('在 worker 找不到 ALLOWED_COUNTER_KEYS，無法同步——請確認 index.ts 結構沒變');
+  throw new Error('在 worker 找不到 ALLOWED_COUNTER_KEYS，無法同步——請確認 validation.ts 結構沒變');
 }
 workerSource = workerSource.replace(keysPattern, `$1\n  ${keyLiteral}\n$2`);
 workerSource = workerSource.replace(/MAX_COUNTER_VALUE = \d+;/, `MAX_COUNTER_VALUE = ${f.MAX_COUNTER_VALUE};`);
