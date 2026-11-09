@@ -1838,7 +1838,13 @@
   function renderTrackVolumeMemory() {
     const track = currentLoadedTrack();
     const remembered = perSongVolume && track && typeof track.volume === 'number';
-    if (trackVolumeReset) trackVolumeReset.hidden = !remembered;
+    if (trackVolumeReset) {
+      // 只切換可見度、不收掉位置：標記在拖滑桿途中出現時若擠動版面，滑桿會跑到游標下方，
+      // 音量瞬間跳到別的值（2026-11-09 使用者實測回報）。
+      trackVolumeReset.classList.toggle('is-off', !remembered);
+      trackVolumeReset.tabIndex = remembered ? 0 : -1;
+      trackVolumeReset.setAttribute('aria-hidden', remembered ? 'false' : 'true');
+    }
     if (defaultVolumeField) defaultVolumeField.hidden = !perSongVolume;
     if (defaultVolumeSlider) {
       defaultVolumeSlider.value = String(defaultVolumePercent());

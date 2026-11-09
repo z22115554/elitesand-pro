@@ -648,7 +648,7 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
   background: transparent; color: var(--text-dim); font-size: 11px; line-height: 1.4; cursor: pointer;
 }
 .track-volume-chip:hover { border-color: var(--accent); color: var(--text); }
-.track-volume-chip[hidden] { display: none; }
+.track-volume-chip.is-off { visibility: hidden; pointer-events: none; }
 .default-volume-row { display: flex; align-items: center; gap: 10px; padding: 2px 0 6px; }
 .default-volume-row[hidden] { display: none; }
 .default-volume-row .sl-label { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
