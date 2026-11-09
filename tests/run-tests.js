@@ -14780,9 +14780,22 @@ test('觀眾演出：沒有留言就不登記，文字清掉控制字元並截�
 });
 
 test('觀眾演出：設定夾在合法範圍、存檔，測試演出不看開關', () => {
+  const { normalizeSettings: normalizeOverlaySettings } = require('../server/services/overlay-show');
   const h = makeOverlayShowHarness();
-  const next = h.service.updateSettings({ anchor: 'nowhere', raid: { enabled: true, minViewers: -5, durationSec: 999 }, postcard: { durationSec: 1 } });
-  eq(next.anchor, 'top-right');
+  const next = h.service.updateSettings({ raid: { enabled: true, minViewers: -5, durationSec: 999, anchor: 'nowhere' }, postcard: { durationSec: 1 } });
+  eq(next.raid.anchor, 'top-right', '不認得的位置退回預設');
+  const split = h.service.updateSettings({ raid: { anchor: 'top-left' }, postcard: { anchor: 'bottom-right' } });
+  eq(split.raid.anchor, 'top-left');
+  eq(split.postcard.anchor, 'bottom-right', '兩種演出的位置要各自獨立');
+  h.service.test('postcard');
+  eq(h.events.filter((e) => e.event === 'overlay-show:play').pop().payload.anchor, 'bottom-right', '明信片用自己的位置');
+  h.service.skip();
+  h.service.test('raid');
+  eq(h.events.filter((e) => e.event === 'overlay-show:play').pop().payload.anchor, 'top-left', '揪團感謝用自己的位置');
+  h.service.skip();
+  const legacy = normalizeOverlaySettings({ anchor: 'bottom-left' });
+  eq(legacy.raid.anchor, 'bottom-left', '舊版共用位置要帶給兩邊');
+  eq(legacy.postcard.anchor, 'bottom-left');
   eq(next.raid.minViewers, 1);
   eq(next.raid.durationSec, 15);
   eq(next.raid.style, 'gold', '不認得的外觀要退回預設');
@@ -14820,11 +14833,12 @@ test('觀眾演出：只有桌面面板能改設定／試播，OBS 只收轉播�
   ok(display.includes('/js/overlay-show.js') && display.includes('/css/overlay-show.css'));
   const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   ok(/id="overlay-show-card"[^>]*data-new-feature="overlay-show"/.test(panel));
+  ok(/id="overlay-show-title"[^>]*>[^\n]{0,120}data-new-badge-slot/.test(panel), '卡片的 NEW 要放在標題旁，不是卡片最底下');
   const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
-  ok(badges.includes("'overlay-show':") && badges.includes("'raid-styles':") && badges.includes("'postcard-styles':"));
-  ok(/for="overlay-show-postcard-style"[^>]*data-new-feature="postcard-styles"/.test(panel));
-  ok(/data-nav="public-request"[^>]*data-new-feature="overlay-show"/.test(panel), '入口導覽項目也要標 NEW，不然沒點進去看不到');
-  ok(/for="overlay-show-raid-style"[^>]*data-new-feature="raid-styles"/.test(panel));
+  ok(badges.includes("'overlay-show':") && badges.includes("'overlay-show-nav':"));
+  ok(/data-nav="public-request"[^>]*data-new-feature="overlay-show-nav"/.test(panel), '入口導覽項目也要標 NEW，不然沒點進去看不到');
+  ok(panel.includes('id="overlay-show-raid-anchor"') && panel.includes('id="overlay-show-postcard-anchor"'), '揪團與明信片位置各自設定');
+  ok(badges.includes("addEventListener('change', seenNow)") && badges.includes(".closest('label')?.control"), '改了設定或用了 label 對應的選單，NEW 也要消失');
 });
 
 function finishTests(exitCode) {

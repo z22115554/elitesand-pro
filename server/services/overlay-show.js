@@ -23,11 +23,15 @@ const ANCHORS = Object.freeze(['top-left', 'top-right', 'bottom-left', 'bottom-r
 const POSTCARD_STYLES = Object.freeze(['paper', 'gold', 'polaroid', 'neon', 'sakura']);
 const RAID_STYLES = Object.freeze(['gold', 'neon', 'sakura', 'stage', 'classic']);
 
+// 位置各自設定：揪團感謝通常想放在醒目的上方，明信片常放在不擋臉的下方角落。
 const DEFAULTS = Object.freeze({
-  anchor: 'top-right',
-  raid: Object.freeze({ enabled: false, minViewers: 1, durationSec: 8, style: 'gold' }),
-  postcard: Object.freeze({ durationSec: 10, style: 'paper' }),
+  raid: Object.freeze({ enabled: false, minViewers: 1, durationSec: 8, style: 'gold', anchor: 'top-right' }),
+  postcard: Object.freeze({ durationSec: 10, style: 'paper', anchor: 'top-right' }),
 });
+
+function pickAnchor(...candidates) {
+  return candidates.find((value) => ANCHORS.includes(value)) || 'top-right';
+}
 
 const LIMITS = Object.freeze({
   raidMinViewersMin: 1, raidMinViewersMax: 10000,
@@ -60,17 +64,19 @@ function normalizeSettings(input, current = DEFAULTS) {
   const src = input && typeof input === 'object' ? input : {};
   const raid = src.raid && typeof src.raid === 'object' ? src.raid : {};
   const postcard = src.postcard && typeof src.postcard === 'object' ? src.postcard : {};
+  // 舊版只有一個共用的 src.anchor：沒有各自的值時兩邊都沿用它。
   return {
-    anchor: ANCHORS.includes(src.anchor) ? src.anchor : (ANCHORS.includes(current.anchor) ? current.anchor : DEFAULTS.anchor),
     raid: {
       enabled: typeof raid.enabled === 'boolean' ? raid.enabled : !!current.raid.enabled,
       minViewers: clampInt(raid.minViewers, current.raid.minViewers, LIMITS.raidMinViewersMin, LIMITS.raidMinViewersMax),
       durationSec: clampInt(raid.durationSec, current.raid.durationSec, LIMITS.raidDurationMin, LIMITS.raidDurationMax),
       style: RAID_STYLES.includes(raid.style) ? raid.style : (RAID_STYLES.includes(current.raid.style) ? current.raid.style : DEFAULTS.raid.style),
+      anchor: pickAnchor(raid.anchor, src.anchor, current.raid.anchor, current.anchor),
     },
     postcard: {
       durationSec: clampInt(postcard.durationSec, current.postcard.durationSec, LIMITS.postcardDurationMin, LIMITS.postcardDurationMax),
       style: POSTCARD_STYLES.includes(postcard.style) ? postcard.style : (POSTCARD_STYLES.includes(current.postcard.style) ? current.postcard.style : DEFAULTS.postcard.style),
+      anchor: pickAnchor(postcard.anchor, src.anchor, current.postcard.anchor, current.anchor),
     },
   };
 }
@@ -123,7 +129,6 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
 
   function getSettings() {
     return {
-      anchor: settings.anchor,
       raid: { ...settings.raid },
       postcard: { ...settings.postcard },
     };
@@ -151,7 +156,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
       id: active.id,
       kind: active.kind,
       durationMs: active.durationMs,
-      anchor: settings.anchor,
+      anchor: active.kind === KIND_RAID ? settings.raid.anchor : settings.postcard.anchor,
       payload: active.payload,
     });
     activeTimer = timers.setTimeout(finishActive, active.durationMs + 600); // 多留一點讓退場動畫跑完

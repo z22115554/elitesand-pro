@@ -17,7 +17,8 @@
     raidStyle: el('overlay-show-raid-style'),
     postcardSeconds: el('overlay-show-postcard-seconds'),
     postcardStyle: el('overlay-show-postcard-style'),
-    anchor: el('overlay-show-anchor'),
+    raidAnchor: el('overlay-show-raid-anchor'),
+    postcardAnchor: el('overlay-show-postcard-anchor'),
   };
 
   function toast(message, type) {
@@ -32,21 +33,23 @@
     if (fields.postcardSeconds && document.activeElement !== fields.postcardSeconds) fields.postcardSeconds.value = settings.postcard?.durationSec ?? 10;
     if (fields.postcardStyle) fields.postcardStyle.value = settings.postcard?.style || 'paper';
     if (fields.raidStyle) fields.raidStyle.value = settings.raid?.style || 'gold';
-    if (fields.anchor) fields.anchor.value = settings.anchor || 'top-right';
+    if (fields.raidAnchor) fields.raidAnchor.value = settings.raid?.anchor || 'top-right';
+    if (fields.postcardAnchor) fields.postcardAnchor.value = settings.postcard?.anchor || 'top-right';
   }
 
   function collect() {
     return {
-      anchor: fields.anchor ? fields.anchor.value : undefined,
       raid: {
         enabled: !!fields.raidEnabled?.checked,
         minViewers: Number(fields.raidMin?.value),
         durationSec: Number(fields.raidSeconds?.value),
         style: fields.raidStyle ? fields.raidStyle.value : undefined,
+        anchor: fields.raidAnchor ? fields.raidAnchor.value : undefined,
       },
       postcard: {
         durationSec: Number(fields.postcardSeconds?.value),
         style: fields.postcardStyle ? fields.postcardStyle.value : undefined,
+        anchor: fields.postcardAnchor ? fields.postcardAnchor.value : undefined,
       },
     };
   }
