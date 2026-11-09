@@ -385,6 +385,7 @@
                   <span class="sl-label np-vol-label" data-i18n="home.volume">音量</span>
                   <input id="volume-slider" type="range" min="0" max="100" value="70" aria-label="音量" data-i18n-aria-label="home.volume">
                   <span id="volume-val" class="val">70%</span>
+                  <button id="track-volume-reset" class="track-volume-chip" type="button" title="這首歌記住了音量，點一下改回預設音量" data-i18n="home.trackVolumeChip" data-i18n-title="home.trackVolumeReset" hidden>本首</button>
                 </div>
                 <!-- 已分離歌曲會自動用伴奏＋人聲雙軌播放；這列只在雙軌實際生效時顯示。
                      新使用者的人聲預設 20%，可在這裡隨時調高、調低或拉到 0。 -->
@@ -655,6 +656,15 @@
             <div class="switch-row switch-row--separated">
               <div><div class="label" data-i18n="home.unifiedVolume">統一音量（響度標準化）</div><div class="sub" data-i18n="home.unifiedVolumeHint">依每首歌的實測響度校正播放增益；關閉時保留原始音量</div></div>
               <label class="switch"><input id="normalization-toggle" type="checkbox" checked><span class="track"></span></label>
+            </div>
+            <div class="switch-row switch-row--separated">
+              <div><div class="label"><span data-new-feature="per-song-volume"><span data-i18n="home.perSongVolume">記住每首歌的音量</span></span></div><div class="sub" data-i18n="home.perSongVolumeHint">在某首歌調過音量，下次播這首會回到那個音量；沒調過的歌用預設音量。</div></div>
+              <label class="switch"><input id="per-song-volume-toggle" type="checkbox" checked><span class="track"></span></label>
+            </div>
+            <div id="default-volume-field" class="default-volume-row">
+              <label for="default-volume-slider" class="sl-label" data-i18n="home.defaultVolume">預設音量</label>
+              <input id="default-volume-slider" type="range" min="0" max="100" value="70">
+              <span id="default-volume-val" class="val">70%</span>
             </div>
           </section>
             </details>

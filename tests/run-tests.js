@@ -14841,6 +14841,57 @@ test('觀眾演出：只有桌面面板能改設定／試播，OBS 只收轉播�
   ok(badges.includes("addEventListener('change', seenNow)") && badges.includes(".closest('label')?.control"), '改了設定或用了 label 對應的選單，NEW 也要消失');
 });
 
+test('每首記憶的音量：存進 state、清單摘要帶 volume、清除後回預設', () => {
+  const { createAppState } = require('../server/state/app-state');
+  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
+  const appState = createAppState({ emit() {} });
+  ok(appState.trackVolume instanceof Map, 'app-state 要提供 trackVolume');
+  appState.playState.playlist = [{ id: 'loud', title: 'Loud', duration: 100 }, { id: 'quiet', title: 'Quiet', duration: 100 }];
+  appState.playState.currentTrack = { id: 'loud', title: 'Loud' };
+  const events = new Map();
+  const emitted = [];
+  const io = { emit() {}, to() { return { emit(event, data) { emitted.push({ event, data }); } }; } };
+  let persisted = 0;
+  registerPlaybackHandlers(io, { on(event, handler) { events.set(event, handler); }, id: 'fixture', clientType: 'controller' }, {
+    ...appState, persistState() { persisted += 1; }, emitSetlist() {}, recordSessionSong() {}, broadcastState() {}, getEffectiveLyrics() { return null; },
+  });
+  let reply = null;
+  events.get('track-volume:set')({ trackId: 'loud', volume: 142.6 }, (r) => { reply = r; });
+  eq(reply.volume, 100, '音量夾在 0~100');
+  events.get('track-volume:set')({ trackId: 'loud', volume: 45 }, (r) => { reply = r; });
+  eq(appState.trackVolume.get('loud'), 45);
+  eq(appState.playState.playlist[0].volume, 45, '鐵則 17：清單裡的同一首要回寫');
+  eq(appState.playState.currentTrack.volume, 45);
+  ok(persisted >= 2, '要寫進 state.json');
+  ok(emitted.some((e) => e.event === 'track-volume:update' && e.data.volume === 45), '通知其他面板');
+  const summary = appState.getPublicPlaylist(() => true);
+  eq(summary.find((t) => t.id === 'loud').volume, 45, '清單摘要帶記憶音量');
+  eq(summary.find((t) => t.id === 'quiet').volume, undefined, '沒調過的歌不帶欄位');
+  events.get('track-volume:set')({ trackId: 'loud', volume: 'x' }, (r) => { reply = r; });
+  eq(reply.ok, false, '無效值不接受');
+  events.get('track-volume:set')({ trackId: 'loud', volume: null }, (r) => { reply = r; });
+  eq(appState.trackVolume.has('loud'), false, 'null＝清除記憶');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  ok(source.includes('trackVolume: Object.fromEntries(trackVolume)') && source.includes('saved.trackVolume'), '重開後要讀回');
+});
+
+test('每首記憶的音量：面板調音量只記給這首、不改預設；靜音與換歌套用不寫記憶', () => {
+  const playback = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
+  ok(playback.includes('applyTrackVolume(track);'), '載入歌曲時要套用這首的記憶音量');
+  ok(playback.includes("AudioProcessor.setVolume(vol, { remember: !transientVolumeChange && !perSong })"), '每首調整不可改預設音量');
+  ok(/volumeBeforeMute = current;\s*return setVolumeTransient\(0\);/.test(playback), '靜音不可被記成這首的音量');
+  const processor = fs.readFileSync(path.join(__dirname, '../public/js/audio-processor.js'), 'utf8');
+  ok(processor.includes("if (options.remember === false) return;") && processor.includes('getDefaultVolume'));
+  const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(panel.includes('id="track-volume-reset"') && panel.includes('id="per-song-volume-toggle"') && panel.includes('id="default-volume-slider"'));
+  ok(panel.includes('data-new-feature="per-song-volume"'));
+  const handlers = fs.readFileSync(path.join(__dirname, '../server/routes/handlers/playback.js'), 'utf8');
+  ok(/socket\.on\('track-volume:set'/.test(handlers));
+  const socketHandler = fs.readFileSync(path.join(__dirname, '../server/routes/socket-handler.js'), 'utf8');
+  const readOnly = socketHandler.slice(socketHandler.indexOf('const READ_ONLY_EVENTS'), socketHandler.indexOf(']);', socketHandler.indexOf('const READ_ONLY_EVENTS')));
+  ok(!readOnly.includes('track-volume:set'), 'OBS／唯讀端不可改記憶音量');
+});
+
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }
   process.exit(exitCode);

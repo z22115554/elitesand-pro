@@ -152,6 +152,7 @@ function createAppState(io) {
   // 跟 offset 分開存：offset 為 0 也可能已經對好；換歌詞來源時清掉（新歌詞要重新確認）。
   const trackSyncConfirmed = new Set();
   const trackPitch = new Map();         // semitones (-12 ~ 12)
+  const trackVolume = new Map();        // 每首記憶的播放音量（0 ~ 100，面板音量滑桿的值）
   const trackSpeed = new Map();         // rate (0.5 ~ 1.5)
   const manualLyricsCache = new Map();  // { lyrics, lyricsType, parsedLyrics, source, timestamp }
   // trackId -> debounce Timeout；歌詞偏移社群回饋用，見 handlers/lyrics.js。放在這裡
@@ -301,6 +302,11 @@ function createAppState(io) {
         if (typeof v === 'number') trackPitch.set(id, v);
       }
     }
+    if (saved.trackVolume && typeof saved.trackVolume === 'object') {
+      for (const [id, v] of Object.entries(saved.trackVolume)) {
+        if (typeof v === 'number' && Number.isFinite(v)) trackVolume.set(id, Math.max(0, Math.min(100, Math.round(v))));
+      }
+    }
     if (saved.trackSpeed && typeof saved.trackSpeed === 'object') {
       for (const [id, v] of Object.entries(saved.trackSpeed)) {
         if (typeof v === 'number') trackSpeed.set(id, v);
@@ -444,6 +450,7 @@ function createAppState(io) {
       manualLyrics: Object.fromEntries(manualLyricsCache),
       trackPitch: Object.fromEntries(trackPitch),
       trackSpeed: Object.fromEntries(trackSpeed),
+      trackVolume: Object.fromEntries(trackVolume),
       playback: {
         currentEntryId: playlistEntryId(playState.currentTrack),
         currentTrackId: playState.currentTrack ? playState.currentTrack.id : null,
@@ -647,6 +654,7 @@ function createAppState(io) {
     const effectiveOffset = typeof offset === 'number' ? offset : (trackOffsets.get(track.id) || 0);
     const effectivePitch = trackPitch.has(track.id) ? trackPitch.get(track.id) : 0;
     const effectiveRate = trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0;
+    const effectiveVolume = trackVolume.has(track.id) ? trackVolume.get(track.id) : null;
     const hasLyrics = !!effectiveLyrics || (Array.isArray(effectiveParsedLyrics) && effectiveParsedLyrics.length > 0);
     const audio = libraryStore.audioStatus(track, exists);
 
@@ -661,6 +669,7 @@ function createAppState(io) {
       ...(trackSyncConfirmed.has(track.id) ? { syncConfirmed: true } : {}),
       pitchShift: effectivePitch,
       playbackRate: effectiveRate,
+      volume: effectiveVolume,
       manualLyrics: !!manual,
       ...audio,
     } : {
@@ -682,6 +691,7 @@ function createAppState(io) {
       ...(trackSyncConfirmed.has(track.id) ? { syncConfirmed: true } : {}),
       ...(effectivePitch ? { pitchShift: effectivePitch } : {}),
       ...(effectiveRate !== 1 ? { playbackRate: effectiveRate } : {}),
+      ...(effectiveVolume !== null ? { volume: effectiveVolume } : {}),
       ...(typeof track.loudnessLufs === 'number' ? { loudnessLufs: track.loudnessLufs } : {}),
       ...(track.vocalsFile ? { vocalsFile: track.vocalsFile } : {}),
       ...(track.instrumentalFile ? { instrumentalFile: track.instrumentalFile } : {}),
@@ -797,6 +807,7 @@ function createAppState(io) {
     trackSyncConfirmed,
     trackPitch,
     trackSpeed,
+    trackVolume,
     manualLyricsCache,
     lyricOffsetSyncTimers,
     session,

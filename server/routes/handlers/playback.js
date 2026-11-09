@@ -6,7 +6,7 @@
  */
 
 const { createLogger } = require('../../utils/logger');
-const { emitToAccessRooms } = require('../../utils/socket-broadcast');
+const { emitToAccessRooms, emitToControlClients } = require('../../utils/socket-broadcast');
 const libraryStore = require('../../services/library-store');
 const { addRomanization, needsRomanization, needsFurigana } = require('../../services/romanizer');
 const { sanitizeTrack, sanitizeJsonObject } = require('../../utils/track-schema');
@@ -21,7 +21,7 @@ const log = createLogger('Socket');
  */
 function registerPlaybackHandlers(io, socket, ctx) {
   const {
-    playState, trackOffsets, trackPitch, trackSpeed, manualLyricsCache,
+    playState, trackOffsets, trackPitch, trackSpeed, trackVolume = new Map(), manualLyricsCache,
     persistState, emitSetlist, recordSessionSong, broadcastState, getEffectiveLyrics,
     markTrackPlayed, redactTrackForReadOnly = (track) => track,
   } = ctx;
@@ -89,7 +89,9 @@ function registerPlaybackHandlers(io, socket, ctx) {
     const offset = trackOffsets.get(trackId) || 0;
     const savedPitch = trackPitch.has(trackId) ? trackPitch.get(trackId) : 0;
     const savedSpeed = trackSpeed.has(trackId) ? trackSpeed.get(trackId) : 1.0;
+    const savedVolume = trackVolume.has(trackId) ? trackVolume.get(trackId) : null;
     track.pitchShift = savedPitch;
+    track.volume = savedVolume;
     track.playbackRate = savedSpeed;
     playState.currentTrack = track;
     playState.isPlaying = autoplay;
@@ -115,6 +117,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
       offset,
       pitchShift: savedPitch,
       playbackRate: savedSpeed,
+      volume: savedVolume,
       manualLyrics: !!manualLyricsCache.has(trackId),
       // 面板據此判斷這是不是自己剛送出的回音（io.emit 會連寄件者自己也收到一份），
       // 不落地進 playState，純粹給面板的 play:track 監聽器做來源判斷用。
@@ -367,6 +370,31 @@ function registerPlaybackHandlers(io, socket, ctx) {
     }
     io.emit('pitch:update', playState.pitchShift);
     persistState();
+  });
+
+  // 每首記憶的音量：面板在某首歌調過音量就記下來，下次播這首自動回到那個音量。
+  // volume=null 表示清除記憶（回到預設音量）。音量本身只在面板播放，不影響 OBS。
+  socket.on('track-volume:set', (data, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const trackId = data && typeof data.trackId === 'string' ? data.trackId.slice(0, 200) : '';
+    if (!trackId) return reply({ ok: false, error: 'INVALID_TRACK' });
+    const raw = data.volume;
+    if (raw === null) {
+      trackVolume.delete(trackId);
+    } else if (typeof raw === 'number' && Number.isFinite(raw)) {
+      trackVolume.set(trackId, Math.max(0, Math.min(100, Math.round(raw))));
+    } else {
+      return reply({ ok: false, error: 'INVALID_VOLUME' });
+    }
+    const volume = trackVolume.has(trackId) ? trackVolume.get(trackId) : null;
+    if (playState.currentTrack && playState.currentTrack.id === trackId) playState.currentTrack.volume = volume;
+    // 鐵則 17：播放清單裡的同一首也要回寫，避免之後用舊快照覆蓋
+    for (const entry of playState.playlist || []) {
+      if (entry && entry.id === trackId) entry.volume = volume;
+    }
+    emitToControlClients(io, 'track-volume:update', { trackId, volume });
+    persistState();
+    reply({ ok: true, trackId, volume });
   });
 
   socket.on('speed:change', (rate) => {

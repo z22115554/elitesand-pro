@@ -814,6 +814,8 @@
     applyTrackPitchSpeed(track);
     // 統一音量：同樣要在啟動播放前套好這首的響度校正
     applyTrackLoudness(track);
+    // 每首記憶的音量：調過的歌回到上次的音量，沒調過的回預設音量
+    applyTrackVolume(track);
 
     // 已完成分離且兩個 stem 都存在時，自動使用伴奏＋人聲雙軌；其餘歌曲維持原始音軌。
     // 雙路路由（兩個裝置＋各自音量）是獨立功能：開關只決定輸出路由，不決定要不要用 stem。
@@ -1804,6 +1806,72 @@
     dom.volumeRow.dataset.level = pct <= 0 ? 'muted' : pct < 50 ? 'low' : 'high';
   }
 
+  // ─── 每首記憶的音量 ───
+  // 統一音量已經把各首拉到同一響度，但混音、編曲還是會讓有些歌聽起來偏大或偏小。
+  // 開啟時：在某首歌調音量＝記住這首（存伺服器 state），下次播這首自動回到那個音量；
+  // 沒調過的歌用「預設音量」。關閉時維持舊行為：滑桿就是全域音量。
+  const PER_SONG_VOLUME_KEY = 'vk-per-song-volume';
+  let perSongVolume = true;
+  try { perSongVolume = localStorage.getItem(PER_SONG_VOLUME_KEY) !== '0'; } catch (e) { /* 預設開啟 */ }
+  // 程式自己改滑桿（換歌套用、靜音）時為 true：只套用音量，不寫記憶也不改預設音量
+  let transientVolumeChange = false;
+  let trackVolumeSaveTimer = null;
+  const trackVolumeReset = document.getElementById('track-volume-reset');
+  const perSongVolumeToggle = document.getElementById('per-song-volume-toggle');
+  const defaultVolumeField = document.getElementById('default-volume-field');
+  const defaultVolumeSlider = document.getElementById('default-volume-slider');
+  const defaultVolumeVal = document.getElementById('default-volume-val');
+
+  function currentLoadedTrack() {
+    // 面板剛載入時 state:sync 還沒到，playlist 可能還不存在
+    const track = Array.isArray(state.playlist) ? state.playlist[state.currentTrackIndex] : null;
+    return track && (track.entryId || track.id) === loadedTrackEntryId ? track : null;
+  }
+  function defaultVolumePercent() {
+    const v = (typeof AudioProcessor !== 'undefined' && AudioProcessor.getDefaultVolume) ? AudioProcessor.getDefaultVolume() : 0.7;
+    return Math.round(v * 100);
+  }
+  function setVolumeTransient(pct) {
+    transientVolumeChange = true;
+    try { return setVolumePercent(pct); } finally { transientVolumeChange = false; }
+  }
+  function renderTrackVolumeMemory() {
+    const track = currentLoadedTrack();
+    const remembered = perSongVolume && track && typeof track.volume === 'number';
+    if (trackVolumeReset) trackVolumeReset.hidden = !remembered;
+    if (defaultVolumeField) defaultVolumeField.hidden = !perSongVolume;
+    if (defaultVolumeSlider) {
+      defaultVolumeSlider.value = String(defaultVolumePercent());
+      updateRangeFill(defaultVolumeSlider);
+    }
+    if (defaultVolumeVal) defaultVolumeVal.textContent = defaultVolumePercent() + '%';
+  }
+  function applyTrackVolume(track) {
+    if (perSongVolume && dom.volumeSlider) {
+      const target = track && typeof track.volume === 'number' ? track.volume : defaultVolumePercent();
+      // 靜音中換歌：維持靜音，只換掉取消靜音後要回到的音量
+      if (volumeBeforeMute !== null && parseInt(dom.volumeSlider.value, 10) === 0) volumeBeforeMute = target;
+      else setVolumeTransient(target);
+    }
+    renderTrackVolumeMemory();
+  }
+  function setTrackVolumeMemory(trackId, volume) {
+    (Array.isArray(state.playlist) ? state.playlist : []).forEach((entry) => { if (entry && entry.id === trackId) entry.volume = volume; });
+    renderTrackVolumeMemory();
+  }
+  function rememberTrackVolume(pct) {
+    const track = currentLoadedTrack();
+    if (!track || !track.id) return false;
+    setTrackVolumeMemory(track.id, pct);
+    clearTimeout(trackVolumeSaveTimer);
+    const trackId = track.id;
+    // 拖滑桿會連續觸發 input，停手後再存一次
+    trackVolumeSaveTimer = setTimeout(() => {
+      SocketClient.sendWithCallback('track-volume:set', { trackId, volume: pct }, () => {});
+    }, 400);
+    return true;
+  }
+
   if (dom.volumeSlider) {
     // 初始化：讀取 AudioProcessor 記住的音量（預設 70%）
     let initVol = 0.7;
@@ -1818,14 +1886,17 @@
     audioPlayer.volume = initVol;
 
     dom.volumeSlider.addEventListener('input', () => {
-      const vol = parseInt(dom.volumeSlider.value, 10) / 100;
+      const pct = parseInt(dom.volumeSlider.value, 10);
+      const vol = pct / 100;
       if (dom.volumeVal) dom.volumeVal.textContent = dom.volumeSlider.value + '%';
       updateRangeFill(dom.volumeSlider);
-      updateVolumeIconLevel(parseInt(dom.volumeSlider.value, 10));
+      updateVolumeIconLevel(pct);
+      // 每首記憶開啟且有載入歌曲時，這次調整只記給這首歌，不改預設音量
+      const perSong = !transientVolumeChange && perSongVolume && rememberTrackVolume(pct);
       // 不論降級鏈是否已初始化，都交給 AudioProcessor 記住音量；SoundTouch 常在
       // 它之前就可播放，若只在 ready 後呼叫會造成「這次聽得到、重開又回 70%」。
       if (typeof AudioProcessor !== 'undefined' && AudioProcessor.setVolume) {
-        AudioProcessor.setVolume(vol);
+        AudioProcessor.setVolume(vol, { remember: !transientVolumeChange && !perSong });
       }
       // AudioProcessor 尚未接管 audio 元素時，保留原生音量作為立即可用的後備。
       if (!audioProcessorReady) {
@@ -1853,11 +1924,12 @@
   function toggleMute() {
     if (!dom.volumeSlider) return null;
     const current = parseInt(dom.volumeSlider.value, 10);
+    // 靜音／取消靜音不算「調這首歌的音量」，不寫記憶
     if (current > 0) {
       volumeBeforeMute = current;
-      return setVolumePercent(0);
+      return setVolumeTransient(0);
     }
-    const restored = setVolumePercent(volumeBeforeMute || 70);
+    const restored = setVolumeTransient(volumeBeforeMute || 70);
     volumeBeforeMute = null;
     return restored;
   }
@@ -1893,6 +1965,46 @@
   }
 
   // Phase 7: 接收遠端 pitch/speed 變更
+  // 另一個面板分頁改了某首歌的記憶音量：只更新記憶，不搶這邊正在聽的音量
+  SocketClient.on('track-volume:update', (data) => {
+    if (!data || typeof data.trackId !== 'string') return;
+    setTrackVolumeMemory(data.trackId, typeof data.volume === 'number' ? data.volume : null);
+  });
+
+  if (trackVolumeReset) {
+    trackVolumeReset.addEventListener('click', () => {
+      const track = currentLoadedTrack();
+      if (!track || !track.id) return;
+      clearTimeout(trackVolumeSaveTimer);
+      setTrackVolumeMemory(track.id, null);
+      SocketClient.sendWithCallback('track-volume:set', { trackId: track.id, volume: null }, () => {});
+      setVolumeTransient(defaultVolumePercent());
+      renderTrackVolumeMemory();
+    });
+  }
+  if (perSongVolumeToggle) {
+    perSongVolumeToggle.checked = perSongVolume;
+    perSongVolumeToggle.addEventListener('change', () => {
+      perSongVolume = perSongVolumeToggle.checked;
+      try { localStorage.setItem(PER_SONG_VOLUME_KEY, perSongVolume ? '1' : '0'); } catch (e) { /* 只在這次有效 */ }
+      // 切換後立刻用新規則套用目前這首；關閉時回到預設音量
+      if (perSongVolume) applyTrackVolume(currentLoadedTrack());
+      else setVolumeTransient(defaultVolumePercent());
+      renderTrackVolumeMemory();
+    });
+  }
+  if (defaultVolumeSlider) {
+    defaultVolumeSlider.addEventListener('input', () => {
+      const pct = Math.max(0, Math.min(100, parseInt(defaultVolumeSlider.value, 10) || 0));
+      if (typeof AudioProcessor !== 'undefined' && AudioProcessor.setDefaultVolume) AudioProcessor.setDefaultVolume(pct / 100);
+      // 目前這首沒記憶音量時，跟著預設音量即時變化
+      const track = currentLoadedTrack();
+      if (!(track && typeof track.volume === 'number')) setVolumeTransient(pct);
+      renderTrackVolumeMemory();
+    });
+  }
+  renderTrackVolumeMemory();
+
   SocketClient.on('pitch:update', (semitones) => {
     if (typeof semitones !== 'number') return;
     currentPitchShift = semitones;

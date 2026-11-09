@@ -642,6 +642,18 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
    比例穩定、不被數字字數牽動。 */
 .np-volume input[type="range"] { flex: 0 0 130px; max-width: 130px; }
 .np-volume .val { min-width: 40px; text-align: right; flex-shrink: 0; }
+/* 每首記憶的音量：這首有記憶時才出現，點一下改回預設音量 */
+.track-volume-chip {
+  flex-shrink: 0; padding: 2px 7px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: transparent; color: var(--text-dim); font-size: 11px; line-height: 1.4; cursor: pointer;
+}
+.track-volume-chip:hover { border-color: var(--accent); color: var(--text); }
+.track-volume-chip[hidden] { display: none; }
+.default-volume-row { display: flex; align-items: center; gap: 10px; padding: 2px 0 6px; }
+.default-volume-row[hidden] { display: none; }
+.default-volume-row .sl-label { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+.default-volume-row input[type="range"] { flex: 1; min-width: 0; }
+.default-volume-row .val { min-width: 40px; text-align: right; flex-shrink: 0; }
 
 /* 伴奏音量圖示依目前音量顯示對應狀態（靜音/低/高），像 Windows 音量混音器一樣一眼看出
    有沒有聲音——原本的圖示固定只有喇叭外殼、沒有音波，使用者實測回報「看起來永遠像沒聲音」。

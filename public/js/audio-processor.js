@@ -38,6 +38,8 @@ const AudioProcessor = (() => {
       if (isFinite(v) && v >= 0 && v <= 1) volume = v;
     }
   } catch (e) { /* localStorage 不可用時維持預設 */ }
+  // 預設音量：沒記憶音量的歌用這個。每首記憶的音量只改 volume、不改這個。
+  let defaultVolume = volume;
   // 統一音量：當前歌曲的實測響度（LUFS）；null＝未量測 → 不調整
   let currentTrackLufs = null;
   // 響度標準化開關（預設開啟，可由 localStorage 記憶）
@@ -277,12 +279,21 @@ const AudioProcessor = (() => {
    * 設定音量
    * @param {number} value - 音量 0 ~ 1
    */
-  function setVolume(value) {
+  function setVolume(value, options = {}) {
     volume = Math.max(0, Math.min(1, value));
     if (gainNode) {
       gainNode.gain.value = volume;
     }
+    // remember:false＝只套用到這次播放（每首記憶的音量、靜音），不改預設音量
+    if (options.remember === false) return;
+    defaultVolume = volume;
     try { localStorage.setItem('vk-volume', String(volume)); } catch (e) { /* 靜默 */ }
+  }
+
+  function getDefaultVolume() { return defaultVolume; }
+  function setDefaultVolume(value) {
+    defaultVolume = Math.max(0, Math.min(1, value));
+    try { localStorage.setItem('vk-volume', String(defaultVolume)); } catch (e) { /* 靜默 */ }
   }
 
   /** 統一音量：目前這首歌要套用的增益（dB）。關閉標準化或沒有量測值＝0。 */
@@ -360,6 +371,8 @@ const AudioProcessor = (() => {
     setRate,
     setVolume,
     getVolume,
+    getDefaultVolume,
+    setDefaultVolume,
     setTrackLoudness,
     getTrackGainDb,
     setNormalization,
