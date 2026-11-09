@@ -155,6 +155,12 @@ function Test-InstallerBootOutsideRepo {
         $phaseProcess.Refresh()
       }
       if (-not $phaseProcess.HasExited) {
+        # 只看結束碼看不出卡在哪：把這次隔離 userData 裡 App 自己寫的日誌尾段印出來（CI 上才查得到原因）。
+        Get-ChildItem -LiteralPath $bootUserData -Recurse -File -Filter '*.log' -ErrorAction SilentlyContinue |
+          Sort-Object LastWriteTime | Select-Object -Last 3 | ForEach-Object {
+            Write-Host "----- $($_.FullName) (last 60 lines) -----"
+            Get-Content -LiteralPath $_.FullName -Tail 60 -Encoding UTF8 | ForEach-Object { Write-Host $_ }
+          }
         throw "Installer boot check [$Label] did not exit through the normal packaged shutdown path."
       }
       $phaseProcess.WaitForExit()
