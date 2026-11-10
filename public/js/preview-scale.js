@@ -34,6 +34,8 @@
     if (openModalFrame) return frame === openModalFrame;
     const view = frame.closest('.view[data-view]');
     if (view && !view.classList.contains('is-active')) return false;
+    // 收起來的區塊（直播頁的「歌詞預覽」）看不到，就不要載入
+    if (frame.closest('details:not([open])')) return false;
     return !frame.closest('[hidden]');
   }
 
@@ -62,6 +64,14 @@
   window.PreviewLifecycle = { refresh, setSource };
 
   refresh();
+  // 預覽放在可收合區塊裡時，展開才載入、收起就卸載（toggle 事件不會冒泡，要掛在 details 本身）
+  previewFrames.forEach((frame) => {
+    const details = frame.closest('details');
+    if (details && !details.dataset.previewToggleBound) {
+      details.dataset.previewToggleBound = '1';
+      details.addEventListener('toggle', () => setTimeout(refresh, 0));
+    }
+  });
   // 這些預覽的寬度只會跟著視窗／視圖切換變化。部分嵌入式 WebView 的
   // ResizeObserver 會在 observe() 當下報「參數不是 Node」並留下控制台錯誤；
   // resize 事件足以覆蓋實際情境，也能保證預覽功能不受 observer 實作差異影響。

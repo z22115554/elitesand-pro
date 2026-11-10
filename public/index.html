@@ -655,6 +655,20 @@
             </div>
           </section>
             </details>
+            <!-- 直播頁歌詞預覽：預設收起；收起時不載入預覽頁（preview-scale.js 只載入看得到的預覽），不佔效能 -->
+            <details class="live-side-section" data-prep-panel="preview">
+              <summary><span data-new-feature="live-preview"><span data-i18n="livePreview.title">歌詞預覽</span></span></summary>
+          <section class="card">
+            <div class="obs-preview-wrap live-preview-wrap">
+              <iframe class="obs-preview" data-preview-src="/display?preview=1" title="OBS 歌詞即時預覽" data-i18n-title="preview.obsTitle" scrolling="no"></iframe>
+              <div class="obs-preview-tag" data-i18n="livePreview.tag">預覽</div>
+            </div>
+            <div class="live-preview-actions">
+              <button class="btn btn-sm btn-preview-sample-lyrics" type="button" data-i18n="preview.sampleLyrics">示範歌詞</button>
+              <span class="field-hint" data-i18n="livePreview.hint">這裡只是預覽，不是 OBS 的連線狀態；收起時不會載入。</span>
+            </div>
+          </section>
+            </details>
             <details class="live-side-section" data-prep-panel="audio">
               <summary data-i18n="home.tab.audio">音訊</summary>
           <section class="card">

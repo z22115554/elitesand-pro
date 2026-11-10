@@ -383,6 +383,9 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .live-side-section[open] > summary { color: var(--text); border-bottom: 1px solid var(--border); }
 .live-side-section[open] > summary::after { content: '−'; }
 .live-side-section > .card:last-child { border-bottom: 0; }
+/* 直播頁歌詞預覽 */
+.live-preview-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.live-preview-actions .field-hint { margin: 0; }
 /* 快捷歌詞模板：收起時標題旁顯示目前模板；展開是 5 格編號按鈕 */
 .quick-template-current { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
 .live-side-section > summary .quick-template-current + * { margin-left: 0; }
