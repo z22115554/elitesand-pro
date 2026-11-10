@@ -1,0 +1,6490 @@
+{
+ "measuredAt": "2026-11-10T17:15:44.082Z",
+ "machine": "i5-13500 / RTX 3060 / Windows 10, Electron offscreen 1920x1080 transparent",
+ "limits": {
+  "parts": {
+   "enter": {
+    "cov": 0.2,
+    "p95": 12.5,
+    "central": 0,
+    "p95s": 22.4
+   },
+   "exit": {
+    "cov": 0.2,
+    "p95": 32.8,
+    "central": 0,
+    "p95s": 34.6
+   },
+   "hold": {
+    "cov": 0.2,
+    "p95": 10.8,
+    "central": 0,
+    "p95s": 9.9
+   },
+   "cam": {
+    "cov": 0.2,
+    "p95": 16.5,
+    "central": 0,
+    "p95s": 9
+   },
+   "treat": {
+    "cov": 0.2,
+    "p95": 14.9,
+    "central": 0,
+    "p95s": 51.1
+   },
+   "decor": {
+    "cov": 0.137,
+    "p95": 8.7,
+    "central": 0,
+    "p95s": 17.1
+   }
+  },
+  "layouts": {
+   "p95": 8.8,
+   "p95s": 8.4
+  },
+  "layoutCoverage": 0.25,
+  "centralCoverage": 0.02,
+  "calibratedOn": "local"
+ },
+ "evidence": [
+  {
+   "id": "enter.hrBlinkCreep",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 6.2,
+    "cov": 0.1491
+   },
+   "sides": {
+    "p95": 7,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hrJumpScare",
+   "needs": 6,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.8,
+    "cov": 0.2684
+   },
+   "sides": {
+    "p95": 8.3,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "enter.hrUneasy",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1498
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hrVhold",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1877
+   },
+   "sides": {
+    "p95": 5.8,
+    "cov": 0.1219,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.hrMirrorSnap",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.1749
+   },
+   "sides": {
+    "p95": 6.7,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hrManifest",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1491
+   },
+   "sides": {
+    "p95": 5.9,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.hrClawReveal",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.8,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.5,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.knWordSlam",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.2214
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.1325,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200",
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.knReplaceIn",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.3,
+    "cov": 0.1566
+   },
+   "sides": {
+    "p95": 5.6,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.knWordSpin",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.5,
+    "cov": 0.166
+   },
+   "sides": {
+    "p95": 8,
+    "cov": 0.1059,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.tyKeyFirst",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 6.8,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.tyLineWipe",
+   "needs": 1,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.5,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.6,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xfHolesMerge",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.7,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.5,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xfSpiral",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.1619
+   },
+   "sides": {
+    "p95": 6.1,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xfCrossOpen",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 3.1,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xfTwoFields",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.1589
+   },
+   "sides": {
+    "p95": 4.8,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xfStripSort",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.4,
+    "cov": 0.15
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xfEqualizer",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.2,
+    "cov": 0.1573
+   },
+   "sides": {
+    "p95": 3.4,
+    "cov": 0.1019,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xfDiagStrips",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.8,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 9.1,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xfRingDial",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.4,
+    "cov": 0.1625
+   },
+   "sides": {
+    "p95": 19.4,
+    "cov": 0.1116,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xgPushBar",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.1566
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xgWallHit",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.2029
+   },
+   "sides": {
+    "p95": 7.5,
+    "cov": 0.1134,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xgStampLift",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.7,
+    "cov": 0.2177
+   },
+   "sides": {
+    "p95": 20.3,
+    "cov": 0.1237,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xgPaperFall",
+   "needs": 1,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1491
+   },
+   "sides": {
+    "p95": 5.8,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xgComet",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.6,
+    "cov": 0.4578
+   },
+   "sides": {
+    "p95": 6.8,
+    "cov": 0.2397,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200",
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xgFillDock",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.8,
+    "cov": 0.194
+   },
+   "sides": {
+    "p95": 11.2,
+    "cov": 0.1187,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.xgBlockSink",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 7.2,
+    "cov": 0.3343
+   },
+   "sides": {
+    "p95": 13.2,
+    "cov": 0.1778,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200",
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.hzAlreadyThere",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.1501
+   },
+   "sides": {
+    "p95": 4.2,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hzUnwatched",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.1,
+    "cov": 0.1498
+   },
+   "sides": {
+    "p95": 3.6,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hzShakyHand",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.8,
+    "cov": 0.1719
+   },
+   "sides": {
+    "p95": 12.2,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hzFloorSeep",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1503
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hzTooClose",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1806
+   },
+   "sides": {
+    "p95": 6.6,
+    "cov": 0.113,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hzWrongGlyph",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.4,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hzFromScratch",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hzLateSnap",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.1491
+   },
+   "sides": {
+    "p95": 6.4,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.hzLampSweep",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.4,
+    "cov": 0.1491
+   },
+   "sides": {
+    "p95": 5.4,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "enter.kzPunchThrough",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.5,
+    "cov": 0.1558
+   },
+   "sides": {
+    "p95": 7,
+    "cov": 0.1068,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.kzTowerUnstack",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1491
+   },
+   "sides": {
+    "p95": 6.1,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.tzBaseAlign",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.157
+   },
+   "sides": {
+    "p95": 5.9,
+    "cov": 0.0998,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "enter.wzMisu",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.9,
+    "cov": 0.3586
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.2292,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "enter.wzSeigaiha",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 7.8,
+    "cov": 0.2281
+   },
+   "sides": {
+    "p95": 8.6,
+    "cov": 0.1516,
+    "central": 0
+   },
+   "pr": [
+    "p95>5"
+   ]
+  },
+  {
+   "id": "exit.hrPulledDown",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.4,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.1233,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hrLookBack",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.5,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.5,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hrTurnAway",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hrShiver",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hrFlickerDie",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.9,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hrDrain",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.4,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.1,
+    "cov": 0.0988,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.xiMothHoles",
+   "needs": 1,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 11.3,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 11.3,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "p95>7.4"
+   ]
+  },
+  {
+   "id": "exit.xiRedact",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.3464
+   },
+   "sides": {
+    "p95": 5.5,
+    "cov": 0.2378,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "exit.xjDoubleVision",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.9,
+    "cov": 0.4044
+   },
+   "sides": {
+    "p95": 9.4,
+    "cov": 0.2737,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "exit.hzOutOfLight",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 6.1,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hzTaken",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.9,
+    "cov": 0.1537
+   },
+   "sides": {
+    "p95": 5.8,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hzRetinal",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 10.2,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hzDragCorner",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 6.1,
+    "cov": 0.146
+   },
+   "sides": {
+    "p95": 7.3,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hzFlatline",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1568
+   },
+   "sides": {
+    "p95": 8,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hzShadowOff",
+   "needs": 6,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.2,
+    "cov": 0.2216
+   },
+   "sides": {
+    "p95": 8.9,
+    "cov": 0.145,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.hzBackAway",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.8,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.5,
+    "cov": 0.097,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "exit.tzSelectDelete",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.3362
+   },
+   "sides": {
+    "p95": 5.5,
+    "cov": 0.2686,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "exit.wzSumiNijimi",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.32
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.2219,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "hold.hrTwitch",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.1756
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "hold.hrStare",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.1543
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.1069,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "hold.hrLagOne",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1492
+   },
+   "sides": {
+    "p95": 6.4,
+    "cov": 0.0968,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "hold.hrFlickerLight",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "hold.xkHeatHaze",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.5,
+    "cov": 0.1507
+   },
+   "sides": {
+    "p95": 12.6,
+    "cov": 0.0981,
+    "central": 0
+   },
+   "pr": [
+    "p95>3"
+   ]
+  },
+  {
+   "id": "hold.xkLoudWeight",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.7,
+    "cov": 0.1992
+   },
+   "sides": {
+    "p95": 11.8,
+    "cov": 0.1357,
+    "central": 0
+   },
+   "pr": [
+    "p95>3"
+   ]
+  },
+  {
+   "id": "hold.xkCradle",
+   "needs": 1,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.5,
+    "cov": 0.1522
+   },
+   "sides": {
+    "p95": 6.5,
+    "cov": 0.0984,
+    "central": 0
+   },
+   "pr": [
+    "p95>3"
+   ]
+  },
+  {
+   "id": "hold.hzSlowBreath",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1554
+   },
+   "sides": {
+    "p95": 6.5,
+    "cov": 0.1028,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "hold.hzLoneTremor",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1504
+   },
+   "sides": {
+    "p95": 5.4,
+    "cov": 0.0962,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "hold.hzPassing",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.2,
+    "cov": 0.1506
+   },
+   "sides": {
+    "p95": 5.8,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "hold.hzPresence",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1488
+   },
+   "sides": {
+    "p95": 5.6,
+    "cov": 0.0975,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "hold.hzLoom",
+   "needs": 5,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.1989
+   },
+   "sides": {
+    "p95": 11.3,
+    "cov": 0.1521,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "cam.hrNervous",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1481
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.0986,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "cam.hzCreepFreeze",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.2,
+    "cov": 0.155
+   },
+   "sides": {
+    "p95": 6.6,
+    "cov": 0.1037,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "cam.hzGlanceBack",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.3,
+    "cov": 0.1509
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.1012,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "cam.hzHeldBreath",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.8,
+    "cov": 0.1185
+   },
+   "sides": {
+    "p95": 6.4,
+    "cov": 0.1001,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "cam.hzColdShiver",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.5,
+    "cov": 0.1491
+   },
+   "sides": {
+    "p95": 6.6,
+    "cov": 0.1017,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "treat.hrEroded",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.2,
+    "cov": 0.1491
+   },
+   "sides": {
+    "p95": 5,
+    "cov": 0.0913,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "treat.hrRedact",
+   "needs": 6,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.2,
+    "cov": 0.2292
+   },
+   "sides": {
+    "p95": 4.6,
+    "cov": 0.1824,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "treat.hrDoubleExp",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.1859
+   },
+   "sides": {
+    "p95": 8.4,
+    "cov": 0.1144,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "treat.tyHeadRules",
+   "needs": 1,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.1741
+   },
+   "sides": {
+    "p95": 4.6,
+    "cov": 0.1072,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.hzUneven",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.4,
+    "cov": 0.1459
+   },
+   "sides": {
+    "p95": 2.8,
+    "cov": 0.0854,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "treat.hzHairlines",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1597
+   },
+   "sides": {
+    "p95": 2.6,
+    "cov": 0.0998,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "treat.hzColdRim",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1644
+   },
+   "sides": {
+    "p95": 4.7,
+    "cov": 0.0948,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.hzHusk",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.2,
+    "cov": 0.162
+   },
+   "sides": {
+    "p95": 7.5,
+    "cov": 0.0945,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "treat.hzDragMarks",
+   "needs": 6,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 5,
+    "cov": 0.2265
+   },
+   "sides": {
+    "p95": 10.1,
+    "cov": 0.1474,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "coverage>0.200",
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.kzSpeedShadow",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 13,
+    "cov": 0.1513
+   },
+   "sides": {
+    "p95": 7.4,
+    "cov": 0.1031,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.kzOnionSkin",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 22.1,
+    "cov": 0.1629
+   },
+   "sides": {
+    "p95": 30.4,
+    "cov": 0.1158,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.kzStepShear",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 9.2,
+    "cov": 0.1087
+   },
+   "sides": {
+    "p95": 9.1,
+    "cov": 0.0859,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoGraphFill",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 22.1,
+    "cov": 0.1091
+   },
+   "sides": {
+    "p95": 20.3,
+    "cov": 0.0986,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoHalfScreen",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 10.5,
+    "cov": 0.1509
+   },
+   "sides": {
+    "p95": 20.4,
+    "cov": 0.0906,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoContour",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 6.5,
+    "cov": 0.2426
+   },
+   "sides": {
+    "p95": 26.6,
+    "cov": 0.1473,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200",
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoCutLine",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.6,
+    "cov": 0.2571
+   },
+   "sides": {
+    "p95": 21,
+    "cov": 0.1591,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200",
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoTwinOutline",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 14.3,
+    "cov": 0.1429
+   },
+   "sides": {
+    "p95": 13.5,
+    "cov": 0.104,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoBlobKnock",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 11.1,
+    "cov": 0.2611
+   },
+   "sides": {
+    "p95": 10.5,
+    "cov": 0.1856,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200",
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoBandExtrude",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 9.7,
+    "cov": 0.2321
+   },
+   "sides": {
+    "p95": 15.7,
+    "cov": 0.1417,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200",
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoFloorShadow",
+   "needs": 1,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 8.1,
+    "cov": 0.1125
+   },
+   "sides": {
+    "p95": 7.1,
+    "cov": 0.1166,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoHollowBlock",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 18,
+    "cov": 0.1788
+   },
+   "sides": {
+    "p95": 21.1,
+    "cov": 0.131,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoBlowUp",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.2592
+   },
+   "sides": {
+    "p95": 14,
+    "cov": 0.1333,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "treat.xoThread",
+   "needs": 1,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 11.6,
+    "cov": 0.1711
+   },
+   "sides": {
+    "p95": 13.3,
+    "cov": 0.124,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoHiliter",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.1,
+    "cov": 0.2382
+   },
+   "sides": {
+    "p95": 6.4,
+    "cov": 0.1584,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "treat.xoAltWeight",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.2,
+    "cov": 0.1757
+   },
+   "sides": {
+    "p95": 9.2,
+    "cov": 0.1008,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoMixedFills",
+   "needs": 1,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 18.1,
+    "cov": 0.1166
+   },
+   "sides": {
+    "p95": 19.9,
+    "cov": 0.09,
+    "central": 0
+   },
+   "pr": [
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "treat.xoHalfKnock",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.2345
+   },
+   "sides": {
+    "p95": 5.1,
+    "cov": 0.1556,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200"
+   ]
+  },
+  {
+   "id": "treat.xoOverlapKern",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.2,
+    "cov": 0.2287
+   },
+   "sides": {
+    "p95": 13.8,
+    "cov": 0.1243,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.200",
+    "p95>2.5"
+   ]
+  },
+  {
+   "id": "decor.hrScratches",
+   "needs": 6,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.6,
+    "cov": 0.1519
+   },
+   "sides": {
+    "p95": 8.1,
+    "cov": 0.115,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.hrSigil",
+   "needs": 6,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.1489
+   },
+   "sides": {
+    "p95": 7.5,
+    "cov": 0.1138,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.hrWatchEye",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.1349
+   },
+   "sides": {
+    "p95": 6.9,
+    "cov": 0.1013,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hrStaticPatch",
+   "needs": 7,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 29.2,
+    "cov": 0.1594
+   },
+   "sides": {
+    "p95": 30,
+    "cov": 0.1208,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.hrDustBeam",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.6,
+    "cov": 0.1322
+   },
+   "sides": {
+    "p95": 8.1,
+    "cov": 0.0982,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hrDrips",
+   "needs": 6,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.16
+   },
+   "sides": {
+    "p95": 5.1,
+    "cov": 0.129,
+    "central": 0
+   },
+   "pr": [
+    "horror",
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.hrCracks",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1366
+   },
+   "sides": {
+    "p95": 3.5,
+    "cov": 0.105,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.tyTextRule",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.6,
+    "cov": 0.1483
+   },
+   "sides": {
+    "p95": 7.2,
+    "cov": 0.1023,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137",
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.tyBigPunct",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1481
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.1151,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlGapFrame",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1537
+   },
+   "sides": {
+    "p95": 5.9,
+    "cov": 0.1135,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlSketchBox",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.1468
+   },
+   "sides": {
+    "p95": 5.2,
+    "cov": 0.1133,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlBubbleLine",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.148
+   },
+   "sides": {
+    "p95": 3.7,
+    "cov": 0.1165,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlDoubleRule",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1516
+   },
+   "sides": {
+    "p95": 3.5,
+    "cov": 0.1055,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlArrowRules",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.1446
+   },
+   "sides": {
+    "p95": 3,
+    "cov": 0.1048,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlSlur",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.1434
+   },
+   "sides": {
+    "p95": 3,
+    "cov": 0.1013,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlLadder",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.1464
+   },
+   "sides": {
+    "p95": 3.8,
+    "cov": 0.1001,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlCaliper",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.1458
+   },
+   "sides": {
+    "p95": 3.2,
+    "cov": 0.105,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xlSeam",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 4,
+    "cov": 0.1479
+   },
+   "sides": {
+    "p95": 3.4,
+    "cov": 0.1035,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmPendulum",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.1443
+   },
+   "sides": {
+    "p95": 3.2,
+    "cov": 0.1068,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmDominoes",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.1484
+   },
+   "sides": {
+    "p95": 4.1,
+    "cov": 0.0998,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmPong",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.1338
+   },
+   "sides": {
+    "p95": 2.9,
+    "cov": 0.0996,
+    "central": 0
+   },
+   "pr": [
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.xmConveyor",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.1531
+   },
+   "sides": {
+    "p95": 3.4,
+    "cov": 0.1037,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmStairs",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.1697
+   },
+   "sides": {
+    "p95": 3,
+    "cov": 0.1308,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmIsoCubes",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.1563
+   },
+   "sides": {
+    "p95": 3.1,
+    "cov": 0.1148,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmSlide",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.1478
+   },
+   "sides": {
+    "p95": 3.9,
+    "cov": 0.1117,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmGears",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.1428
+   },
+   "sides": {
+    "p95": 3.4,
+    "cov": 0.1074,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmSortBars",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1447
+   },
+   "sides": {
+    "p95": 2.9,
+    "cov": 0.1098,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmPie",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.1517
+   },
+   "sides": {
+    "p95": 3,
+    "cov": 0.1136,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmHatch",
+   "needs": 3,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 12,
+    "cov": 0.1655
+   },
+   "sides": {
+    "p95": 12.2,
+    "cov": 0.1187,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137",
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.xmPolyGrow",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.4,
+    "cov": 0.1455
+   },
+   "sides": {
+    "p95": 3.3,
+    "cov": 0.1062,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmTriLattice",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.1,
+    "cov": 0.1856
+   },
+   "sides": {
+    "p95": 4.3,
+    "cov": 0.1516,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmDotWave",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.149
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.1247,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmContour",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.1802
+   },
+   "sides": {
+    "p95": 5.9,
+    "cov": 0.1513,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137",
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.xmMoire",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 6.2,
+    "cov": 0.245
+   },
+   "sides": {
+    "p95": 8.3,
+    "cov": 0.1825,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137",
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.xmSpiro",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.1374
+   },
+   "sides": {
+    "p95": 3.9,
+    "cov": 0.1101,
+    "central": 0
+   },
+   "pr": [
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.xmIris",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.7,
+    "cov": 0.1607
+   },
+   "sides": {
+    "p95": 3.4,
+    "cov": 0.1142,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xmWhirl",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.9,
+    "cov": 0.1844
+   },
+   "sides": {
+    "p95": 4.2,
+    "cov": 0.1414,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137",
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.xmWaves",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.3291
+   },
+   "sides": {
+    "p95": 3.4,
+    "cov": 0.2417,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.xnMicroPara",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.6,
+    "cov": 0.1381
+   },
+   "sides": {
+    "p95": 7.6,
+    "cov": 0.1028,
+    "central": 0
+   },
+   "pr": [
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.xnAsciiGauge",
+   "needs": 1,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 5.2,
+    "cov": 0.1339
+   },
+   "sides": {
+    "p95": 6.5,
+    "cov": 0.0991,
+    "central": 0
+   },
+   "pr": [
+    "p95>3.8"
+   ]
+  },
+  {
+   "id": "decor.xnTicker",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 6,
+    "cov": 0.1531
+   },
+   "sides": {
+    "p95": 6.7,
+    "cov": 0.1071,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.hzPairEyes",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.1314
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.0989,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzPeeker",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.1314
+   },
+   "sides": {
+    "p95": 3.4,
+    "cov": 0.1105,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzFootprints",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.1331
+   },
+   "sides": {
+    "p95": 3.3,
+    "cov": 0.0998,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzStrayGlyph",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.1349
+   },
+   "sides": {
+    "p95": 6.5,
+    "cov": 0.1043,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzFingers",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.2,
+    "cov": 0.1362
+   },
+   "sides": {
+    "p95": 5.8,
+    "cov": 0.1189,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzHandprints",
+   "needs": 6,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 4,
+    "cov": 0.1371
+   },
+   "sides": {
+    "p95": 5.9,
+    "cov": 0.1158,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzBareBulb",
+   "needs": 6,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 4,
+    "cov": 0.1414
+   },
+   "sides": {
+    "p95": 3.9,
+    "cov": 0.1049,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzDoorAjar",
+   "needs": 4,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.1356
+   },
+   "sides": {
+    "p95": 2.9,
+    "cov": 0.1036,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzCobweb",
+   "needs": 4,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.1362
+   },
+   "sides": {
+    "p95": 3.3,
+    "cov": 0.1068,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.hzFilmDirt",
+   "needs": 4,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.1319
+   },
+   "sides": {
+    "p95": 3.1,
+    "cov": 0.0981,
+    "central": 0
+   },
+   "pr": [
+    "horror"
+   ]
+  },
+  {
+   "id": "decor.wzShippo",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.7,
+    "cov": 0.1712
+   },
+   "sides": {
+    "p95": 3.9,
+    "cov": 0.1237,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.wzYagasuri",
+   "needs": 2,
+   "tier": "n",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.148
+   },
+   "sides": {
+    "p95": 3.4,
+    "cov": 0.1473,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.wzUroko",
+   "needs": 2,
+   "tier": "c",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.187
+   },
+   "sides": {
+    "p95": 3.2,
+    "cov": 0.1217,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.wzMizuhiki",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.1438
+   },
+   "sides": {
+    "p95": 3.3,
+    "cov": 0.1103,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.wzYukiwa",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 4.1,
+    "cov": 0.1963
+   },
+   "sides": {
+    "p95": 4.1,
+    "cov": 0.1221,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.wzChidori",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.1426
+   },
+   "sides": {
+    "p95": 3.6,
+    "cov": 0.1034,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.wzTake",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 4,
+    "cov": 0.1714
+   },
+   "sides": {
+    "p95": 3.5,
+    "cov": 0.1573,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "decor.wzKazaguruma",
+   "needs": 2,
+   "tier": "q",
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.1503
+   },
+   "sides": {
+    "p95": 3.3,
+    "cov": 0.1132,
+    "central": 0
+   },
+   "pr": [
+    "coverage>0.137"
+   ]
+  },
+  {
+   "id": "layout.knSlamStack",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.3589,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7,
+    "cov": 0.1566,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.knSwapCenter",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.6,
+    "cov": 0.172,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.2,
+    "cov": 0.0934,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.knZoomDive",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.8,
+    "cov": 0.9274,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.4,
+    "cov": 0.4758,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.knFlowSnap",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.5,
+    "cov": 0.0995,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.2,
+    "cov": 0.1038,
+    "central": 0.0002,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.knTypeSlam",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.7,
+    "cov": 0.6376,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.1311,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.knRhythmCuts",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.2,
+    "cov": 0.3628,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.6,
+    "cov": 0.2998,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.knGearWords",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.6,
+    "cov": 0.5067,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.4,
+    "cov": 0.3727,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.knReflow",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3,
+    "cov": 0.0971,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.8,
+    "cov": 0.0747,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.knPadGrid",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.7,
+    "cov": 0.5203,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.9,
+    "cov": 0.4045,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.tyKeySplit",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.6,
+    "cov": 0.1378,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.2,
+    "cov": 0.124,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyCropGiant",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.1,
+    "cov": 0.2439,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.8,
+    "cov": 0.1403,
+    "central": 0.0043,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyCross",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.1,
+    "cov": 0.1157,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.0773,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyBandHide",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.9,
+    "cov": 0.2811,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.2132,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.tyRuby",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.9,
+    "cov": 0.0819,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.8,
+    "cov": 0.1099,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyJustify",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.1,
+    "cov": 0.1717,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.2,
+    "cov": 0.2164,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyIndexTable",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.0727,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.6,
+    "cov": 0.0864,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tySplitType",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.1578,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 11.3,
+    "cov": 0.1228,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyErode",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.8,
+    "cov": 0.1032,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4.9,
+    "cov": 0.0919,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyVRuler",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.2,
+    "cov": 0.0665,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.6,
+    "cov": 0.0836,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyFullTrack",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.0981,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5,
+    "cov": 0.0585,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyStatCount",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.6,
+    "cov": 0.1025,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.0971,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyMargin",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.014,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 2.8,
+    "cov": 0.0144,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tyRotBlock",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3,
+    "cov": 0.1962,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 3.7,
+    "cov": 0.128,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tySquare",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.2,
+    "cov": 0.1677,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 3.1,
+    "cov": 0.1234,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.kzConveyor",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.0853,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.0928,
+    "central": 0.0004,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.kzSwingKnock",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.0831,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.0743,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.kzReadLens",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.6,
+    "cov": 0.0868,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.0858,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.kzGateSwing",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.0884,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4.4,
+    "cov": 0.1065,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.kzSlingshot",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.0844,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.0794,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.kzTiltTray",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.0698,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.1,
+    "cov": 0.0655,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.kzRelay",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.1686,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.0899,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.kzInchworm",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.0664,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4,
+    "cov": 0.0284,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaPullQuote",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.2401,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7,
+    "cov": 0.2016,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaReceipt",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.1,
+    "cov": 0.4434,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.7,
+    "cov": 0.5548,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xaCatalogCard",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.2,
+    "cov": 0.66,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.8,
+    "cov": 0.4602,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xaTimetable",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.3,
+    "cov": 0.3783,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.1,
+    "cov": 0.2779,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xaThumbIndex",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.5,
+    "cov": 0.1782,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.5,
+    "cov": 0.1745,
+    "central": 0.005,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaColumns",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.2442,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4.5,
+    "cov": 0.2022,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaInitialPlate",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.2,
+    "cov": 0.2312,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.1687,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaHalfKnock",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5,
+    "cov": 0.5876,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.4,
+    "cov": 0.4236,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xaWaybill",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.2,
+    "cov": 0.5894,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.4,
+    "cov": 0.4449,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaTriBand",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.5,
+    "cov": 0.3277,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.5077,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaAirmail",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 11.9,
+    "cov": 0.6319,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.4,
+    "cov": 0.4239,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xaFigure",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.7,
+    "cov": 0.2749,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.7,
+    "cov": 0.3127,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xaLineNumbers",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.6,
+    "cov": 0.5615,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.3,
+    "cov": 0.3301,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xaPunchCard",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.8488,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.4,
+    "cov": 0.5346,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaBlockquote",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.5,
+    "cov": 0.1284,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4.2,
+    "cov": 0.1234,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaScreenplay",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3,
+    "cov": 0.0685,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.7,
+    "cov": 0.0689,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaTearTabs",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.7,
+    "cov": 0.4763,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 14.2,
+    "cov": 0.5283,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xaBrace",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.9,
+    "cov": 0.1311,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4.9,
+    "cov": 0.1058,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaNutrition",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.6,
+    "cov": 0.4819,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8,
+    "cov": 0.6119,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaDogEar",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.6111,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.8,
+    "cov": 0.5683,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaRuleSpecimen",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.1488,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.7,
+    "cov": 0.1196,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xaSwatchFan",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.4,
+    "cov": 0.3897,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.4,
+    "cov": 0.4522,
+    "central": 0.0022,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbHalfDisc",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.5828,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.3,
+    "cov": 0.4067,
+    "central": 0.0063,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbDiagSplit",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.5874,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.7,
+    "cov": 0.4399,
+    "central": 0.0074,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbChevronChain",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.3,
+    "cov": 0.3129,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.5,
+    "cov": 0.1786,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbTwistFrames",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 13.9,
+    "cov": 0.3178,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 13.5,
+    "cov": 0.3056,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbIsoStack",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.8,
+    "cov": 0.3846,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 11.2,
+    "cov": 0.3289,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbPolyTrack",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 9.9,
+    "cov": 0.1382,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 15.4,
+    "cov": 0.1038,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbPrimitives",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.8,
+    "cov": 0.2877,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.1,
+    "cov": 0.2961,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbArcPoster",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.1,
+    "cov": 0.1389,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.4,
+    "cov": 0.1891,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbZiggurat",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.6,
+    "cov": 0.4576,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.1,
+    "cov": 0.2201,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbHoneycomb",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.7,
+    "cov": 0.4814,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.3,
+    "cov": 0.173,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbShear",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.5,
+    "cov": 0.3378,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.4,
+    "cov": 0.248,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbPatternPanel",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.4158,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.4,
+    "cov": 0.2833,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbDiamond",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.1,
+    "cov": 0.4151,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8,
+    "cov": 0.2693,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbShapeLens",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.5,
+    "cov": 0.4474,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 12.7,
+    "cov": 0.2916,
+    "central": 0.0034,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbConstruct",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.2,
+    "cov": 0.3763,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.4,
+    "cov": 0.2367,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbGolden",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.2,
+    "cov": 0.3174,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.6,
+    "cov": 0.2739,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbVenn",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.6811,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 11.6,
+    "cov": 0.5154,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbSlitDisc",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.2813,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.9,
+    "cov": 0.2599,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbDial",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.0707,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.2,
+    "cov": 0.069,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbStripeDisc",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.2888,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.2,
+    "cov": 0.2011,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbWedge",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.2698,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.2,
+    "cov": 0.1158,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbGraph",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.5,
+    "cov": 0.2267,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.3,
+    "cov": 0.1781,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xbCircleFit",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.7,
+    "cov": 0.4145,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.3,
+    "cov": 0.3264,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xbTriangleSet",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.4,
+    "cov": 0.4921,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.9,
+    "cov": 0.3261,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcBrowser",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 8,
+    "cov": 0.7689,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 12,
+    "cov": 0.4608,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcPlayer",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.5819,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.4,
+    "cov": 0.512,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcLoading",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.5,
+    "cov": 0.4733,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.6,
+    "cov": 0.325,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcMapPin",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.5,
+    "cov": 0.4937,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.2,
+    "cov": 0.3494,
+    "central": 0.0017,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcVending",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.7504,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.3,
+    "cov": 0.4978,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcFolder",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.4916,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.9,
+    "cov": 0.3876,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcScoreboard",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6,
+    "cov": 0.6725,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.9,
+    "cov": 0.4391,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcWeather",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.9,
+    "cov": 0.6771,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 16,
+    "cov": 0.4826,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcBattery",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.479,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.2,
+    "cov": 0.2848,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcPopups",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.1,
+    "cov": 0.4678,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 11,
+    "cov": 0.2919,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcGauge",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.3,
+    "cov": 0.1,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.4,
+    "cov": 0.0915,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcChipCard",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.9,
+    "cov": 0.6677,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10,
+    "cov": 0.5384,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcPaperCup",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.5,
+    "cov": 0.31,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 11.5,
+    "cov": 0.3555,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcTshirt",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.2,
+    "cov": 0.3045,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.1,
+    "cov": 0.2405,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcHandheld",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.2,
+    "cov": 0.8033,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10,
+    "cov": 0.5874,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcBlackboard",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.723,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.6,
+    "cov": 0.4188,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcTruck",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.7,
+    "cov": 0.4724,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.9,
+    "cov": 0.2468,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcPlate",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.2,
+    "cov": 0.6591,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 13.7,
+    "cov": 0.3068,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcDropdown",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.5,
+    "cov": 0.6307,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 11.1,
+    "cov": 0.3779,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcSelect",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.3155,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 11.8,
+    "cov": 0.2599,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcRadio",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.2,
+    "cov": 0.6914,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.2,
+    "cov": 0.4557,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcFloppy",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.6,
+    "cov": 0.4327,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 11.9,
+    "cov": 0.3724,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcMegaphone",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.3,
+    "cov": 0.1978,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.7,
+    "cov": 0.1564,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcDrawers",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.6,
+    "cov": 0.688,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.9,
+    "cov": 0.5972,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xcPoll",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.5,
+    "cov": 0.8065,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.7,
+    "cov": 0.537,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xcAwning",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.3902,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7,
+    "cov": 0.2421,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdHelix",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.096,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.1,
+    "cov": 0.0761,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdConstellation",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.9,
+    "cov": 0.0787,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.4,
+    "cov": 0.0751,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdUpSide",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.1509,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 3.8,
+    "cov": 0.1488,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdPivotFan",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 24.3,
+    "cov": 0.2669,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 26.3,
+    "cov": 0.0537,
+    "central": 0,
+    "measured": "1/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xdSlowSpread",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.0824,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 13.1,
+    "cov": 0.0765,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdBentRoad",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.6,
+    "cov": 0.224,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.1833,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdStaff",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.091,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.0837,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdOverlap",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.1,
+    "cov": 0.252,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 3.5,
+    "cov": 0.2517,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xdKaraoke",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.2,
+    "cov": 0.1399,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.6,
+    "cov": 0.1284,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdPassing",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.1158,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 2.3,
+    "cov": 0.1268,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdChecker",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.1,
+    "cov": 0.3644,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.6,
+    "cov": 0.2174,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdSquareWave",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.7,
+    "cov": 0.069,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.7,
+    "cov": 0.0869,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdAxisAlt",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.4,
+    "cov": 0.1535,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.3,
+    "cov": 0.0938,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdSkewSweep",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.6,
+    "cov": 0.1347,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 42.6,
+    "cov": 0.1269,
+    "central": 0,
+    "measured": "3/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdStretchEcho",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 7,
+    "cov": 0.2817,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 64,
+    "cov": 0.2296,
+    "central": 0,
+    "measured": "3/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdRipple",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.4,
+    "cov": 0.1082,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 13.7,
+    "cov": 0.0965,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.xdTrace",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.7,
+    "cov": 0.2802,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 26.6,
+    "cov": 0.162,
+    "central": 0,
+    "measured": "5/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.xdTide",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.3,
+    "cov": 0.637,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 15,
+    "cov": 0.4704,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.tzWarichu",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.0887,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.7,
+    "cov": 0.06,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tzDetail",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4,
+    "cov": 0.3288,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 12.2,
+    "cov": 0.2653,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tzAxis",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.6,
+    "cov": 0.0902,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 15.2,
+    "cov": 0.0757,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tzSlash",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2,
+    "cov": 0.0944,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.3,
+    "cov": 0.1112,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tzHorizon",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.3,
+    "cov": 0.1075,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.1064,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tzFunnel",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.9,
+    "cov": 0.0666,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.1,
+    "cov": 0.081,
+    "central": 0,
+    "measured": "8/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tzZoomBox",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.5,
+    "cov": 0.1304,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.4,
+    "cov": 0.091,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tzPointSym",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 6.2,
+    "cov": 0.1055,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 14.5,
+    "cov": 0.1193,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.tzCanon",
+   "needs": 1,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.8,
+    "cov": 0.0766,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.7,
+    "cov": 0.0656,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.wzByobu",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3,
+    "cov": 0.6443,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.7,
+    "cov": 0.331,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.wzNobori",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4,
+    "cov": 0.3128,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4.8,
+    "cov": 0.2752,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.wzSenjafuda",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.4,
+    "cov": 0.3969,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.1,
+    "cov": 0.3279,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.wzAndon",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.8,
+    "cov": 0.6402,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.1,
+    "cov": 0.3314,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.wzShikishi",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.9,
+    "cov": 0.4607,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.8,
+    "cov": 0.3951,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.wzBanzuke",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.1,
+    "cov": 0.8386,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.2,
+    "cov": 0.553,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.wzTenugui",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.4,
+    "cov": 0.4718,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.264,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.wzChikkan",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.4,
+    "cov": 0.6683,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4.9,
+    "cov": 0.4454,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.wzShogi",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.3,
+    "cov": 0.6577,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.1,
+    "cov": 0.4097,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.wzNoshi",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 0.8001,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7,
+    "cov": 0.4418,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.wzGenjiGumo",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 0.3503,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.2916,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.wzTorii",
+   "needs": 2,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3,
+    "cov": 0.3757,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.2,
+    "cov": 0.239,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.wzUchiwa",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 10.8,
+    "cov": 0.3491,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.9,
+    "cov": 0.264,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25"
+   ]
+  },
+  {
+   "id": "layout.wzSudare",
+   "needs": 3,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.7,
+    "cov": 0.9902,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9,
+    "cov": 0.7208,
+    "central": 0.0008,
+    "measured": "10/12"
+   },
+   "pr": [
+    "coverage>0.25",
+    "p95>29.1"
+   ]
+  },
+  {
+   "id": "layout.hrFlashlight",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.6,
+    "cov": 0.999,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.9,
+    "cov": 0.7191,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrDoorGap",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.9,
+    "cov": 0.997,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.4,
+    "cov": 0.7089,
+    "central": 0.0148,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrWallScrawl",
+   "needs": 5,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 26.2,
+    "cov": 0.2019,
+    "measured": "5/12"
+   },
+   "sides": {
+    "p95": 11.9,
+    "cov": 0.1208,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrCctv",
+   "needs": 7,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.8,
+    "cov": 0.9778,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.2,
+    "cov": 0.7049,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrOuija",
+   "needs": 7,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 10.4,
+    "cov": 0.5318,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 18,
+    "cov": 0.3682,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrMissing",
+   "needs": 7,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 7.4,
+    "cov": 0.3906,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 17.8,
+    "cov": 0.6382,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrWrongOne",
+   "needs": 5,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.8,
+    "cov": 0.09,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.7,
+    "cov": 0.0966,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrRisingDark",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.2,
+    "cov": 0.4697,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.3,
+    "cov": 0.3624,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrRedacted",
+   "needs": 5,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 12.4,
+    "cov": 0.2332,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 12.3,
+    "cov": 0.2025,
+    "central": 0,
+    "measured": "12/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrStaticTv",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.3,
+    "cov": 0.5258,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.6,
+    "cov": 0.3019,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrSpiritPhoto",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.7,
+    "cov": 0.4079,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6,
+    "cov": 0.3157,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hrWrongShadow",
+   "needs": 7,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 2.6,
+    "cov": 0.9712,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.8,
+    "cov": 0.3917,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzKeyhole",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 7.2,
+    "cov": 0.9877,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.9,
+    "cov": 0.6374,
+    "central": 0.0148,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzEmptyRoom",
+   "needs": 4,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.8,
+    "cov": 0.0437,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 5.1,
+    "cov": 0.0398,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzWrongCopy",
+   "needs": 7,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5,
+    "cov": 0.3272,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 10.3,
+    "cov": 0.2051,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzHangSign",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.5,
+    "cov": 0.2982,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.8,
+    "cov": 0.2146,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzElevator",
+   "needs": 4,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 1.9,
+    "cov": 0.1173,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.1,
+    "cov": 0.122,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzReflection",
+   "needs": 7,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.1,
+    "cov": 0.5681,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 18.4,
+    "cov": 0.4375,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzFogWindow",
+   "needs": 7,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.5,
+    "cov": 1,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.7,
+    "cov": 0.7208,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzVoicemail",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.4,
+    "cov": 0.5863,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.3,
+    "cov": 0.4285,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzStreetLamp",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 7.7,
+    "cov": 1,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.9,
+    "cov": 0.7208,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzTornNote",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.4,
+    "cov": 0.5258,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 8.3,
+    "cov": 0.4821,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzUnderDoor",
+   "needs": 4,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.5,
+    "cov": 0.1713,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 4.9,
+    "cov": 0.1563,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzSlats",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.9,
+    "cov": 1,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 6.6,
+    "cov": 0.7097,
+    "central": 0.0003,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzStoppedClock",
+   "needs": 5,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 3.1,
+    "cov": 0.1272,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 13.2,
+    "cov": 0.1018,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzCloser",
+   "needs": 7,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 5.5,
+    "cov": 1,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 9.2,
+    "cov": 0.7208,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  },
+  {
+   "id": "layout.hzStairs",
+   "needs": 6,
+   "fullOk": true,
+   "sidesOk": true,
+   "full": {
+    "p95": 4.4,
+    "cov": 0.7501,
+    "measured": "12/12"
+   },
+   "sides": {
+    "p95": 7.2,
+    "cov": 0.5445,
+    "central": 0,
+    "measured": "10/12"
+   },
+   "pr": [
+    "horror(未量)"
+   ]
+  }
+ ],
+ "excluded": []
+}

@@ -107,18 +107,22 @@ app.disable('x-powered-by');
 // 讀取或控制同一台機器上的服務。Socket.io upgrade 則由 allowRequest 做相同檢查。
 app.use(hostGuard);
 app.use((req, res, next) => {
+  const isPanel = ['/', '/panel', '/index.html'].includes(req.path.toLowerCase().replace(/\/+$/, '') || '/');
+  // The panel's AudioWorklet compiles the local pitch DSP. Keep the WASM
+  // permission on the panel only, with the same policy for JavaScript.
+  const scriptSources = isPanel ? "'self' 'wasm-unsafe-eval'" : "'self'";
   res.set({
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'SAMEORIGIN',
     'Referrer-Policy': 'no-referrer',
     // Only the control panel may request a microphone, after a user gesture.
     // OBS and remote/read-only pages retain the explicit microphone denial.
-    'Permissions-Policy': ['/', '/panel', '/index.html'].includes(req.path.toLowerCase().replace(/\/+$/, '') || '/')
+    'Permissions-Policy': isPanel
       ? 'camera=(), microphone=(self), geolocation=()'
       : 'camera=(), microphone=(), geolocation=()',
     // style/font 放行 Google Fonts：display.html / setlist.html 從 fonts.googleapis.com 載入
     // Noto Sans / Fraunces 等網頁字體，不放行的話 OBS 歌詞/歌單畫面會掉回系統字體。
-    'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss:; worker-src 'self' blob:; frame-src 'self'",
+    'Content-Security-Policy': `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src ${scriptSources}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss:; worker-src 'self' blob:; frame-src 'self'`,
   });
   next();
 });

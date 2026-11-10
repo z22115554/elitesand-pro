@@ -101,6 +101,10 @@
     columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
     jizuraPlacement: 'sides',     // 文字PV 獨立歌詞位置：'left' 偏左 | 'right' 偏右 | 'sides' 兩側（保留中央）| 'full' 原構圖置中；畫布一律全畫面
     jizuraMotion: 'smooth',       // 文字PV：'smooth' 每幀更新 | 'koma' 2 コマ打ち（每秒 12 張的作畫感）
+    jizuraParts: 'base',          // 文字PV：'base' 標準部件 | 'extended' 擴充部件（JIZURA 追加分2 等新部件，稽核過的才會用）
+    jizuraHeavy: false,           // 文字PV 自選：加入高耗能部件（稽核耗時超標，可能掉幀）
+    jizuraLarge: false,           // 文字PV 自選：加入大面積部件（稽核覆蓋率超標，可能遮到角色）
+    jizuraHorror: false,          // 文字PV 自選：加入恐怖風部件（不含全畫面特效、背景、轉場、恐怖配色）
     columnflowMaxLines: 4, // 直書句流：同時保留 1–6 句
     columnflowSafeMargin: 11, // 直書句流：中央安全距離（%，5–25），兩側直行不會跨入
     columnflowShowSafeZoneOnObs: false, // 直書句流：安全距離引導線是否也疊在真正的 OBS 來源上（預設只有面板預覽看得到）
@@ -152,7 +156,7 @@
     typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
     // fontFamily 留空＝用內建 Sans/Serif 配對（Demo 黑明體外觀）；fontSize 64＝倍率 1.0；
     // shadow 非 'none' 讓 renderer 畫它內建的描邊陰影（與初版一致）。
-    jizura: { ...DEFAULT_SETTINGS, template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth' },
+    jizura: { ...DEFAULT_SETTINGS, template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth', jizuraParts: 'base', jizuraHeavy: false, jizuraLarge: false, jizuraHorror: false },
     particle: { ...DEFAULT_SETTINGS, template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', verticalPosition: 'center', lyricPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto', animationIntensity: 'normal' },
     spellbook: { ...DEFAULT_SETTINGS, template: 'spellbook', fontSize: 60, fontWeight: 900, color: '#f4ead6', activeColor: '#ff9a3c', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 2, animationIntensity: 'normal', spellbookEffect: 'rune', spellbookPosition: 'bottom' },
   };
@@ -172,6 +176,7 @@
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
   const JIZURA_PLACEMENTS = ['right', 'left', 'sides', 'full'];
   const JIZURA_MOTIONS = ['smooth', 'koma'];
+  const JIZURA_PARTS = ['base', 'extended'];
   const PARTICLE_ENTRANCES = ['auto', 'quaddrift'];
   const PAPERSTRIP_ORIENTS = ['horizontal', 'vertical'];
   // 排向切換時一併帶入的色彩預設：橫式＝白條黑字（原預設）、直式＝黑條白字
@@ -259,6 +264,8 @@
           if (id === 'particle' && !PARTICLE_ENTRANCES.includes(out[id].particleEntrance)) out[id].particleEntrance = 'auto';
           if (id === 'jizura' && !JIZURA_PLACEMENTS.includes(out[id].jizuraPlacement)) out[id].jizuraPlacement = 'sides';
           if (id === 'jizura' && !JIZURA_MOTIONS.includes(out[id].jizuraMotion)) out[id].jizuraMotion = 'smooth';
+          if (id === 'jizura' && !JIZURA_PARTS.includes(out[id].jizuraParts)) out[id].jizuraParts = 'base';
+          if (id === 'jizura') ['jizuraHeavy', 'jizuraLarge', 'jizuraHorror'].forEach((k) => { out[id][k] = out[id][k] === true; });
         }
       });
     }
@@ -430,6 +437,9 @@
     { id: 'ls-padding-y', key: 'paddingY', valId: 'ls-padding-y-val', fmt: v => v + 'px' },
     { id: 'ls-lightboard-font', key: 'lightboardFont' },
     { id: 'ls-lightboard-pan', key: 'lightboardPan' },
+    { id: 'ls-jizura-heavy', key: 'jizuraHeavy' },
+    { id: 'ls-jizura-large', key: 'jizuraLarge' },
+    { id: 'ls-jizura-horror', key: 'jizuraHorror' },
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
     { id: 'ls-lightboard-slide', key: 'lightboardSlideIn' },
     { id: 'ls-spellbook-position', key: 'spellbookPosition' },
@@ -1106,6 +1116,13 @@
     document.querySelectorAll('#jizura-motion-buttons .style-thumb').forEach((b) => {
       b.classList.toggle('active', b.dataset.jizuraMotion === (settings.jizuraMotion || 'smooth'));
     });
+    const jizuraPartsField = document.getElementById('jizura-parts-field');
+    if (jizuraPartsField) jizuraPartsField.hidden = settings.template !== 'jizura';
+    const jizuraOptinField = document.getElementById('jizura-optin-field');
+    if (jizuraOptinField) jizuraOptinField.hidden = settings.template !== 'jizura';
+    document.querySelectorAll('#jizura-parts-buttons .style-thumb').forEach((b) => {
+      b.classList.toggle('active', b.dataset.jizuraParts === (settings.jizuraParts || 'base'));
+    });
     if (columnflowMaxLinesField) columnflowMaxLinesField.hidden = !isColumnflow;
     if (columnflowSafeMarginField) columnflowSafeMarginField.hidden = !isColumnflow;
     document.querySelectorAll('#columnflow-variant-buttons .style-thumb').forEach((b) => {
@@ -1307,6 +1324,15 @@
         const motion = btn.dataset.jizuraMotion;
         if (settings.template !== 'jizura' || !JIZURA_MOTIONS.includes(motion)) return;
         settings.jizuraMotion = motion;
+        syncTemplateButtons();
+        pushSettings();
+      });
+    });
+    document.querySelectorAll('#jizura-parts-buttons .style-thumb').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const parts = btn.dataset.jizuraParts;
+        if (settings.template !== 'jizura' || !JIZURA_PARTS.includes(parts)) return;
+        settings.jizuraParts = parts;
         syncTemplateButtons();
         pushSettings();
       });

@@ -12,7 +12,7 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 
-function audioFixture({ module = Promise.resolve(), fetch, channels = 1 } = {}) {
+function audioFixture({ module = Promise.resolve(), fetch, channels = 1, prepare = () => Promise.resolve() } = {}) {
   const requests = [], nodes = [], warnings = [];
   let modules = 0, decodes = 0;
   const context = { sampleRate: 48000, currentTime: 0,
@@ -25,7 +25,7 @@ function audioFixture({ module = Promise.resolve(), fetch, channels = 1 } = {}) 
   };
   const scope = vm.createContext({ window: {}, AbortController, performance,
     console: { warn: (...args) => warnings.push(args) },
-    setInterval: () => 1, clearInterval() {},
+    setInterval: () => 1, clearInterval() {}, setTimeout, clearTimeout,
     fetch: (url, options) => {
       requests.push({ url, ...options });
       return fetch ? fetch(url, options) : Promise.resolve({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) });
@@ -33,13 +33,21 @@ function audioFixture({ module = Promise.resolve(), fetch, channels = 1 } = {}) 
     AudioWorkletNode: class {
       constructor() {
         this.port = { close() {}, postMessage: (message, transfer) => {
+          if (message.type === 'prepare') {
+            prepare(this).then(
+              () => this.port.onmessage?.({ data: { type: 'prepared', backend: 'signalsmith' } }),
+              () => this.onprocessorerror?.()
+            );
+            return;
+          }
           if (message.type !== 'load') return;
           this.bytes = transfer.reduce((sum, buffer) => sum + buffer.byteLength, 0);
           this.data = structuredClone(message, { transfer });
         } };
         nodes.push(this);
       }
-      connect() {} disconnect() {}
+      connect() { this.connected = true; }
+      disconnect() { this.connected = false; }
     },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../public/js/soundtouch-engine.js'), 'utf8'), scope);
@@ -85,6 +93,33 @@ test('disposal aborts an active request without a warning or fallback node', asy
   f.engine.dispose();
   assert.equal(await load, false); assert.equal(f.requests[0].signal.aborted, true);
   assert.equal(f.nodes.length, 0); assert.equal(f.warnings.length, 0);
+});
+
+test('a song superseded during WASM preparation cannot connect or transfer stale audio', async () => {
+  const pending = deferred();
+  let count = 0;
+  const f = audioFixture({ prepare: () => ++count === 1 ? pending.promise : Promise.resolve() });
+  const old = f.engine.load('/old');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(count, 1);
+  assert.equal(await f.engine.load('/latest'), true);
+  pending.resolve();
+  assert.equal(await old, false);
+  assert.equal(f.nodes[0].connected, false);
+  assert.equal(f.nodes[0].data, undefined);
+  assert.equal(f.nodes[1].connected, true);
+  f.engine.dispose();
+});
+
+test('processor initialization errors use the original backend without downloading or decoding again', async () => {
+  const f = audioFixture({ prepare: () => Promise.reject(new Error('WASM processor error')) });
+  assert.equal(await f.engine.load('/tone'), true);
+  assert.equal(f.nodes[0].connected, false);
+  assert.equal(f.nodes[1].connected, true);
+  assert.equal(f.nodes[1].data.type, 'load');
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.decodes, 1);
+  f.engine.dispose();
 });
 
 test('mono shares read-only PCM, stereo preserves separate channels and failed HTTP does not decode', async () => {

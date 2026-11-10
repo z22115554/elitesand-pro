@@ -116,6 +116,68 @@ function parseSrt(srtText) {
 }
 
 /**
+ * WebVTT 時間字串（HH:MM:SS.mmm 或 MM:SS.mmm）轉毫秒，失敗回傳 null
+ */
+function vttTimeToMs(str) {
+  const m = str.match(/^(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})$/);
+  if (!m) return null;
+  return ((parseInt(m[1] || '0', 10) * 3600) + parseInt(m[2], 10) * 60 + parseInt(m[3], 10)) * 1000 + parseInt(m[4], 10);
+}
+
+/**
+ * 解析 WebVTT (.vtt) 字幕
+ * 跳過 WEBVTT 標頭、NOTE / STYLE / REGION 區塊；忽略 cue identifier 與 cue settings；
+ * 移除 <v Singer>、<c.x>、<00:00:01.000> 等標籤並解碼常見 HTML 實體。
+ * @param {string} vttText - WebVTT 格式字幕
+ * @returns {{ lines: Array, offset: number }}
+ */
+function parseVtt(vttText) {
+  if (!vttText) return { lines: [], offset: 0 };
+
+  const normalized = vttText.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const blocks = normalized.split(/\n\s*\n/);
+  const parsed = [];
+  const timingRe = /^((?:\d+:)?\d{2}:\d{2}\.\d{3})\s*-->\s*((?:\d+:)?\d{2}:\d{2}\.\d{3})(?:\s.*)?$/;
+
+  for (const block of blocks) {
+    const blockLines = block.trim().split('\n');
+    if (!blockLines[0] || !blockLines[0].trim()) continue;
+
+    // 標頭、註解、樣式、區域區塊不含字幕
+    if (/^(WEBVTT|NOTE|STYLE|REGION)(\s|$)/.test(blockLines[0].trim())) continue;
+
+    // 找時間軸行（前一行可能是 cue identifier，略過即可）
+    const timingIdx = blockLines.findIndex(l => timingRe.test(l.trim()));
+    if (timingIdx === -1) continue;
+
+    const timeMatch = blockLines[timingIdx].trim().match(timingRe);
+    const startTime = vttTimeToMs(timeMatch[1]);
+    const endTime = vttTimeToMs(timeMatch[2]);
+    if (startTime === null || endTime === null) continue;
+
+    const text = blockLines.slice(timingIdx + 1).join(' ')
+      .replace(/<\/?[^>]+>/g, '') // 移除 <v Singer>、<c.x>、</c>、<00:00:01.000> 等標籤
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .trim();
+    if (!text) continue;
+
+    parsed.push({
+      time: startTime,
+      duration: endTime - startTime,
+      text,
+      phonetic: '',
+      words: [],
+    });
+  }
+
+  parsed.sort((a, b) => a.time - b.time);
+  return { lines: parsed, offset: 0 };
+}
+
+/**
  * 自動偵測格式並解析歌詞
  * @param {string} text - 歌詞文字
  * @returns {{ lines: Array, offset: number, type: string }}
@@ -124,6 +186,12 @@ function autoParseLyrics(text) {
   if (!text) return { lines: [], offset: 0, type: 'txt' };
 
   const trimmed = text.trim();
+
+  // 偵測 WebVTT 格式（需在 SRT 之前）
+  if (/^\uFEFF?WEBVTT/.test(trimmed)) {
+    const result = parseVtt(trimmed);
+    return { ...result, lines: cleanLyrics(result.lines), type: 'vtt' };
+  }
 
   // 偵測 SRT 格式
   if (/^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->/.test(trimmed)) {
@@ -160,6 +228,7 @@ function autoParseLyrics(text) {
 module.exports = {
   parseLrc,
   parseOffset,
+  parseVtt,
   autoParseLyrics,
   msToLrcTime,
   parseTimestampToMs,

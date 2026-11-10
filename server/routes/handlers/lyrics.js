@@ -90,6 +90,14 @@ function sanitizeLyricTemplateSettings(value) {
       if (id === 'jizura' && out[id].jizuraMotion && !['smooth', 'koma'].includes(out[id].jizuraMotion)) {
         delete out[id].jizuraMotion;
       }
+      if (id === 'jizura' && out[id].jizuraParts && !['base', 'extended'].includes(out[id].jizuraParts)) {
+        delete out[id].jizuraParts;
+      }
+      if (id === 'jizura') {
+        for (const key of ['jizuraHeavy', 'jizuraLarge', 'jizuraHorror']) {
+          if (out[id][key] !== undefined && typeof out[id][key] !== 'boolean') delete out[id][key];
+        }
+      }
       if (id === 'columnflow' && out[id].columnflowMaxLines !== undefined) {
         if (!Number.isInteger(out[id].columnflowMaxLines) || out[id].columnflowMaxLines < 1 || out[id].columnflowMaxLines > 6) {
           delete out[id].columnflowMaxLines;

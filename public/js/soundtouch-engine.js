@@ -1,32 +1,55 @@
 /**
- * SoundTouchEngine — 高品質變調/變速播放引擎（SoundTouch/WSOLA，AudioWorklet 即時版）
- *
- * 演進歷程（為什麼是現在這版）：
- *  1) 最初用 soundtouchjs `PitchShifter`(底層 ScriptProcessorNode)，跑在「主執行緒」即時拉取。
- *     主執行緒被 GSAP 歌詞動畫/粒子佔住時趕不上音訊 deadline → underrun → 偶發「啵啵」電流爆音；
- *     加大 buffer 反而更糟（單次運算量加倍、更易 underrun）。
- *  2) 改「離線預渲染」（整首先算成 AudioBuffer 再播）→ 爆音根治，但切移調要整首重算、主執行緒卡頓、
- *     且有等待。使用者要的是「即時 + 無爆音」。
- *  3) 本版＝AudioWorklet：把 SoundTouch 演算法搬到「音訊執行緒」即時跑（`/vendor/soundtouch-worklet.js`）。
- *     → 不受主執行緒卡頓影響＝無爆音；改 pitch/tempo 只是 postMessage＝即時生效、零重算等待。
- *
- * 對外介面與舊版相同（attach/load/play/pause/stop/seek/getTime/getDuration/isPlaying/isReady/
- * setPitch/setTempo/onTime/onEnded），時間一律以「原曲秒數」表示（worklet 回報 sourcePosition）。
- * 任一步驟失敗（worklet 不支援/decode 失敗）一律回傳 false，呼叫端降級回 <audio>+Tone。
- *
- * 2026-08-23：singleton → factory。AI 分離播放模式要讓人聲/伴奏各自獨立變調變速（兩軌各跑
- * 一份 WSOLA，共用同一個 AudioContext、各自的 AudioWorkletNode——worklet processor 本體
- * 完全不用改，AudioWorkletNode 本來就支援同一個 context 掛多個獨立 instance，只有這層 JS
- * wrapper 原本是模組級單例，需要能生第二份）。`window.SoundTouchEngine` 仍是預設那一份，
- * 一般（非分離）單軌播放的所有既有呼叫點完全不用改；分離播放模式再呼叫
- * `window.createSoundTouchEngine()` 額外生一份給人聲用。
+ * 即時變調與變速，沿用 SoundTouchEngine 的播放介面與原曲秒數時鐘。
+ * 音訊在 AudioWorklet 處理，避免主執行緒卡頓爆音與離線重算整首歌的等待。
+ * Signalsmith 初始化失敗時使用原 SoundTouch DSP，worklet 或解碼失敗時交給既有播放備援。
  */
-function createSoundTouchEngine() {
+const pitchWorkletModules = new WeakMap();
+
+function getPitchWorkletModule(context) {
+  if (!context?.audioWorklet) return Promise.resolve(null);
+  if (!pitchWorkletModules.has(context)) {
+    pitchWorkletModules.set(context, (async () => {
+      try {
+        await context.audioWorklet.addModule('/vendor/signalsmith-playback-worklet.js');
+        return 'signalsmith';
+      } catch (error) {
+        console.warn('[Pitch] Signalsmith worklet unavailable:', error.message);
+      }
+      try {
+        await context.audioWorklet.addModule('/vendor/soundtouch-worklet.js');
+        return 'soundtouch';
+      } catch (error) {
+        console.warn('[Pitch] AudioWorklet unavailable:', error.message);
+        return null;
+      }
+    })());
+  }
+  return pitchWorkletModules.get(context);
+}
+
+function preparePitchRenderer(target, signal) {
+  return new Promise(resolve => {
+    const finish = ready => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', fail);
+      target.onprocessorerror = null;
+      target.port.onmessage = null;
+      resolve(ready);
+    };
+    const fail = () => finish(false);
+    const timeout = setTimeout(fail, 1500);
+    signal.addEventListener('abort', fail, { once: true });
+    target.onprocessorerror = fail;
+    target.port.onmessage = event => {
+      if (event.data?.type === 'prepared') finish(true);
+    };
+    try { target.port.postMessage({ type: 'prepare' }); } catch (error) { fail(); }
+  });
+}
+
+function createSoundTouchEngine({ preserveFormants = false } = {}) {
   let ctx = null;
   let outNode = null;            // 呼叫端提供的接點（音量鏈入口）
-  let moduleAdded = false;
-  let moduleFailed = false;
-  let modulePending = null;
 
   let node = null;               // 當前的 AudioWorkletNode
   let durationSec = 0;
@@ -51,23 +74,15 @@ function createSoundTouchEngine() {
   let workletGeneration = null;
 
   async function ensureModule() {
-    if (moduleAdded) return true;
-    if (moduleFailed || !ctx || !ctx.audioWorklet) { moduleFailed = true; return false; }
-    if (modulePending) return modulePending;
-    modulePending = addModule();
-    return modulePending;
+    return Boolean(await getPitchWorkletModule(ctx));
   }
 
-  async function addModule() {
-    try {
-      await ctx.audioWorklet.addModule('/vendor/soundtouch-worklet.js');
-      moduleAdded = true;
-      return true;
-    } catch (e) {
-      console.warn('[SoundTouch] AudioWorklet 模組載入失敗，降級:', e.message);
-      moduleFailed = true;
-      return false;
-    }
+  function createNode() {
+    return new AudioWorkletNode(ctx, 'soundtouch-processor', {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+    });
   }
 
   /** 用呼叫端的 AudioContext 與輸出接點初始化 */
@@ -144,7 +159,8 @@ function createSoundTouchEngine() {
       effectivePlayback = null;
       workletGeneration = null;
 
-      if (!(await ensureModule()) || myToken !== loadToken) return false;
+      const backend = await getPitchWorkletModule(ctx);
+      if (!backend || myToken !== loadToken) return false;
       const res = await fetch(url, { signal: abort.signal });
       if (myToken !== loadToken) return false;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -158,29 +174,32 @@ function createSoundTouchEngine() {
       durationSec = audioBuf.duration;
       sampleRate = audioBuf.sampleRate;
 
+      node = createNode();
+      if (backend === 'signalsmith') {
+        // Both stems wait for initialization before they can share a start frame.
+        // Keep the AudioBuffer until then so fallback never downloads or decodes again.
+        const prepared = await preparePitchRenderer(node, abort.signal);
+        if (myToken !== loadToken) return false;
+        if (!prepared) {
+          console.warn('[Pitch] Worklet preparation failed, using SoundTouch');
+          _destroyNode();
+          node = createNode();
+        }
+      }
+      const newNode = node;
+
       // 複製出可 transfer 的 channel data（直接 transfer getChannelData 會破壞 AudioBuffer）。
       const left = audioBuf.getChannelData(0).slice();
       // Worklet 的 ArraySource 只讀來源；單聲道兩側可共用同一份 PCM，輸出仍維持雙聲道。
       const right = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1).slice() : left;
 
-      const newNode = new AudioWorkletNode(ctx, 'soundtouch-processor', {
-        numberOfInputs: 0,
-        numberOfOutputs: 1,
-        outputChannelCount: [2],
-      });
-      // 建立節點後再次確認仍是最新載入；否則銷毀剛建的節點、不要接上輸出
-      if (myToken !== loadToken) {
-        _releaseNode(newNode);
-        return false;
-      }
       newNode.port.onmessage = (e) => { if (node === newNode) _onNodeMessage(e.data); };
       newNode.connect(outNode);
       // 把整首資料一次送進去（transfer，零複製到 worklet）+ 帶上目前 pitch/tempo
       newNode.port.postMessage(
-        { type: 'load', left, right, sampleRate, duration: durationSec, pitchSemitones: pitchSemis, tempo: tempoRate },
+        { type: 'load', left, right, sampleRate, duration: durationSec, pitchSemitones: pitchSemis, tempo: tempoRate, preserveFormants },
         right === left ? [left.buffer] : [left.buffer, right.buffer]
       );
-      node = newNode;
       ready = true;
       playing = false;
       lastPositionSec = 0;

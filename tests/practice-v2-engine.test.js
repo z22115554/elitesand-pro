@@ -447,10 +447,11 @@ test('settings lists the practice overlay browser source', () => {
   assert.match(app, /\$\('copy-practice-url-general'\)/);
 });
 
-test('offline guide → real SoundTouch → mic worklet → clock → strict/folded score → OBS result', () => {
+test('offline guide → Signalsmith playback → mic worklet → clock → strict/folded score → OBS result', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
   const { spawnSync } = require('node:child_process');
   const { detector, signal } = require('./helpers/practice-worklet-harness');
+  const { loadSignalsmith, preparePlayback } = require('./helpers/playback-worklet-harness');
   const { Timeline } = require('../public/js/practice-clock');
   const python = process.env.ELITESAND_TEST_PYTHON || process.env.ELITESAND_AI_PYTHON
     || process.env.CODEX_PRIMARY_RUNTIME_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
@@ -492,7 +493,9 @@ print(json.dumps(make_guide(audio, 'yin', progress=False)))
           playing: m.playing, tempo: m.tempo, key: m.pitchSemitones, generation: m.generation });
       } }; } }, registerProcessor: (_, cls) => { Processor = cls; } });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/vendor/soundtouch-worklet.js'), 'utf8'), scope);
+    loadSignalsmith(scope);
     const playback = new Processor();
+    assert.equal(await preparePlayback(playback), 'signalsmith');
     playback.port.onmessage({ data: { type: 'load', left: source, right: source, sampleRate: rate, pitchSemitones: key, tempo } });
     playback.port.onmessage({ data: { type: 'play', position: 0 } });
     const mic = detector(rate);

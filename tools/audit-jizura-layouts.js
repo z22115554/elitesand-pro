@@ -71,6 +71,8 @@ const PAGE_SCRIPT = (opts) => `
       const info = { lang: fixture.lang, text: fixture.text, seed };
       const project = Object.assign(J.defaultProject(), {
         lyrics: lines.join('\\n'), seed, style: 'noir', extra: true, wa: true, lang: fixture.lang, aspect: '16:9',
+        // v0.8 起的部件組與 v0.12 追加分2 有自己的開關，不開的話那些版面永遠不會被規劃（舊引擎忽略這些欄位）
+        typo: true, kinetic: true, horror: true, extra2: true,
         centerFree: ${opts.centerFree ? 'true' : 'false'},
         colors: { enabled: true, bg: '#101014', fg: '#ffffff', accentOn: true, accent: '#ffd6a5' },
       });

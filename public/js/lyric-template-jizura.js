@@ -152,6 +152,343 @@
     },
   };
 
+  // ─── 擴充部件（jizuraParts: 'extended'，預設關）───
+  // 來源：JIZURA v0.13.0（4c8278c）比 8bd7abc 多出的部件（v0.8 文字PV系／キネティック、v0.12 追加分2、和風追加）。
+  // 2026-11-10 在離線 Electron（Chromium 軟體繪製、1920×1080、透明）用 tools/audit-jizura-parts.js 與
+  // tools/audit-jizura-layouts.js 稽核全畫面＋兩側兩種版位，結果存在 tests/fixtures/jizura-v0.13.0-audit.json（含每個落選原因）。
+  // 收錄條件（兩種版位都要過）：
+  //   - 不是ホラー、不是碎裂（pieces）、不是強烈鏡頭（strong）、名稱不是失焦／碎裂類；不收新的全畫面特效（fx）
+  //   - 有實際排進 cut、沒有繪製例外、停留中段有畫出東西
+  //   - 動作／文字處理覆蓋率 ≤20%、裝飾覆蓋率 ≤ 目前正式池裡最大的裝飾；兩側中央保留區 ≤2%
+  //   - 每幀 p95 ≤ 目前正式池同組「第二重」的部件（同一次量測，排除單一極端值）
+  //   - 版面：覆蓋率 ≤25%、12 組歌詞至少 8 組排得進去、p95 ≤ 現有白名單的中位數；吵的（busy）不收
+  // 分級：tag 有 calm 且沒有 glitch → 安靜段可用；有 glitch → 只給狂放；其他 → 標準＋狂放。
+  // 這是同機相對比較（沙盒無 GPU），不是 Windows／OBS 實機 FPS 保證；上實機前請照 PR 的驗證步驟複測。
+  const EXT_SAFE_LAYOUTS = [
+    'knSeesaw', 'knPathRide', 'knCollide', 'tyBaseline', 'tyScaleSteps', 'kzShove', 'kzHopSteps', 'kzFoldOut',
+    'kzSagLine', 'kzWedge', 'kzLineFeed', 'kzLob', 'xaSplitBaseline', 'xaFormCombs', 'xaErrata', 'xaTabStops',
+    'xaSpacers', 'xaCutLine', 'xaChecklist', 'xaLetterhead', 'xbDonut', 'xbShapeRow', 'xbCrosshair', 'xbPie',
+    'xcSignpost', 'xcIncoming', 'xcBunting', 'xdBrick', 'xdMirrorAxis', 'xdDrum', 'xdPointSym', 'xdWindSway',
+    'xdSunShadow', 'xdColumnEcho', 'xdSkyline', 'xdSpiralEcho', 'xdStitch', 'tzHook', 'tzAlignSpec',
+    'tzTrackClose', 'tzWideOne', 'tzMetric', 'tzPath', 'wzFurin',
+  ];
+  const EXT_CENTER_FREE_LAYOUTS = [
+    'knSeesaw', 'knPathRide', 'knCollide', 'tyBaseline', 'tyScaleSteps', 'kzShove', 'kzHopSteps', 'kzFoldOut',
+    'kzSagLine', 'kzWedge', 'xaSplitBaseline', 'xaFormCombs', 'xaErrata', 'xaTabStops', 'xaSpacers',
+    'xaCutLine', 'xaChecklist', 'xaLetterhead', 'xbDonut', 'xbShapeRow', 'xbCrosshair', 'xbPie', 'xcSignpost',
+    'xcIncoming', 'xcBunting', 'xdMirrorAxis', 'xdPointSym', 'xdWindSway', 'xdSunShadow', 'xdSkyline',
+    'xdStitch', 'tzHook', 'tzAlignSpec', 'tzTrackClose', 'tzWideOne', 'tzMetric', 'wzFurin',
+  ];
+  const EXT_QUIET_LAYOUTS = [
+    'tyBaseline', 'kzFoldOut', 'kzSagLine', 'xaFormCombs', 'xaChecklist', 'xaLetterhead', 'xdWindSway',
+    'xdStitch', 'tzHook', 'tzTrackClose', 'tzMetric',
+  ];
+  // 目視複核（2026-11-10 縮圖）：動態途中把字推出畫面邊緣，直播上看得到被切掉，手動排除：knQuarterTurn、knTumble。
+  // 同一句重複畫好幾份（跟 BUSY_LAYOUTS 同性質）：只在狂放使用。
+  const EXT_BUSY_LAYOUTS = ['xdDrum', 'xdMirrorAxis', 'xdPointSym', 'xdColumnEcho', 'xdSpiralEcho', 'tzAlignSpec'];
+  const EXTENDED_ADDITIONS = {
+    quiet: {
+      enter: [
+        'tyDotGrow', 'tyRubyDrop', 'xeKanjiFirst', 'xeOrbitIn', 'xeGlyphCurtain', 'xeCellSlide', 'xfSlantLouver',
+        'xfTriptych', 'xfClosingHole', 'xfUnderSweep', 'xfOutlineLead', 'xfTraceFlood', 'xgHangSign', 'tzCaretSet',
+        'tzCloseUp', 'tzWeightUp', 'tzIndexLead', 'wzKakejiku', 'wzChochin',
+      ],
+      exit: [
+        'tyToDot', 'tyLineFeed', 'tyUnderSink', 'xhCentreThin', 'xhKanaFirst', 'xhPageTurn', 'xhFullStop',
+        'xiFinder', 'xiCentreOut', 'xiPortholes', 'xiLattice', 'xiRings', 'xiEyelid', 'xiDotted', 'xjSlump',
+        'xjColourDrain', 'xjShadowStay', 'xjStepFade', 'tzCondense', 'tzRulesClose', 'tzToFootnote', 'wzHanaChiru',
+        'wzKasumi', 'wzOrizuru', 'wzToro',
+      ],
+      hold: [
+        'knCounterRock', 'knWordRide', 'knGapBreath', 'tyKeyPulse', 'tyReadCursor', 'xkDepthRock', 'xkParallax',
+        'xkTallBreath', 'xkBuoy', 'xkReflection', 'xkNod', 'xkPairUp', 'xkRippleOut', 'kzSquashWave',
+        'kzInertiaSway', 'kzSlinky', 'tzUnderGrow', 'tzIndexCount', 'tzCounterRules', 'wzShishiodoshi',
+        'wzTanzaku', 'wzNotan',
+      ],
+      cam: [
+        'xqArcSweep', 'xqBeatBreath', 'xqTripodNudge', 'xqDriftTurn', 'xqCraneUp', 'xqLeafFall', 'xqPushPull',
+        'kzWordNod', 'tzMeasureZoom', 'wzKakejikuView', 'wzByobuPan', 'wzOjigi',
+      ],
+      decor: [
+        'tyColophon', 'tyRunningHead', 'tyGlyphBody', 'xlHairpin', 'xlProtractor', 'xlLevel', 'xlPlumb',
+        'xlCompass', 'xlBezier', 'xmSettle', 'xmScatter', 'xnFootnote', 'xnSyllables', 'xnGlyphStats',
+        'xnSparkline', 'xnLegend', 'xnTyping', 'xnClock', 'kzBounceDot', 'kzMetronome', 'kzSpringCoils',
+        'kzWhooshCurls', 'tzNoteMark', 'tzProgRule', 'tzTrackMarks', 'tzSideCaption', 'tzHeadEnd', 'tzNumStrip',
+        'tzDotLeader', 'tzEmBox', 'wzRyusui', 'wzUme',
+      ],
+    },
+    normal: {
+      enter: [
+        'knTypeToSlam', 'knHingeDrop', 'knLoopIn', 'knPushIn', 'knInertia', 'knStretchOut', 'tyZoomOne',
+        'tyUnderLift', 'tyDotGrow', 'tyBracketOpen', 'tyRubyDrop', 'xeCenterDeal', 'xeEndsInward', 'xeFillGaps',
+        'xeKanjiFirst', 'xeMarch', 'xeArcToss', 'xeOrbitIn', 'xeLeapfrog', 'xeChainBump', 'xeVanishPoint',
+        'xeInchworm', 'xeSwingDoor', 'xeGlyphCurtain', 'xeCellSlide', 'xeCoinToss', 'xeBellows', 'xeUnevenScale',
+        'xeBlanks', 'xfCornerBloom', 'xfChevron', 'xfSlantLouver', 'xfTriptych', 'xfRovingWindow', 'xfStaircase',
+        'xfWiper', 'xfClosingHole', 'xfWeave', 'xfPassingWipes', 'xfStackStrips', 'xfUnderSweep', 'xfOutlineLead',
+        'xfTraceFlood', 'xgGate', 'xgSignSpin', 'xgNoseDive', 'xgQuarterTurn', 'xgCornerUnfurl', 'xgWiper',
+        'xgJelly', 'xgShearUp', 'xgNewsSpin', 'xgCoinSettle', 'xgPumpUp', 'xgHeavyDrop', 'xgHangSign', 'xgZipLine',
+        'xgColorPour', 'xgRoughCut', 'kzWordWheel', 'kzSkipStone', 'kzSeesaw', 'kzTrampoline', 'kzOverrun',
+        'kzBowSnap', 'tzCaretSet', 'tzRuleSlide', 'tzCloseUp', 'tzWeightUp', 'tzPointSize', 'tzIndexLead',
+        'tzTextFrame', 'wzKakejiku', 'wzChochin', 'wzKamifubuki', 'wzHanabi', 'wzOrigami',
+      ],
+      exit: [
+        'knWordKick', 'knPushOut', 'knLaunch', 'knCloseGap', 'knStackAway', 'tyStrike', 'tyToDot', 'tyLineFeed',
+        'tyBracketClose', 'tyKeyLast', 'tyUnderSink', 'tyFoldVert', 'xhCentreThin', 'xhKanaFirst', 'xhCombOut',
+        'xhEndsOut', 'xhCeiling', 'xhFlick', 'xhHopFar', 'xhGather', 'xhStairs', 'xhEatAlong', 'xhStomp',
+        'xhCoinSpin', 'xhPageTurn', 'xhTiltSlide', 'xhConcertina', 'xhFullStop', 'xiFinder', 'xiCounterWipe',
+        'xiCentreOut', 'xiDiagPinch', 'xiRadialBlinds', 'xiPortholes', 'xiLattice', 'xiRings', 'xiEyelid',
+        'xiDrawers', 'xiCounterScroll', 'xiFillDrop', 'xiDotted', 'xjGateSwing', 'xjQuarterTurn', 'xjBigWheel',
+        'xjWiper', 'xjYank', 'xjTrapdoor', 'xjEdgeTeeter', 'xjPuckHit', 'xjRubberSnap', 'xjCardToss',
+        'xjWallSplat', 'xjSlump', 'xjSpringHop', 'xjColourDrain', 'xjComet', 'xjShellChase', 'xjShadowStay',
+        'xjStepFade', 'kzSwingFling', 'kzCrouchDive', 'kzSlingAway', 'tzCondense', 'tzProofDelete', 'tzOverset',
+        'tzRulesClose', 'tzToFootnote', 'wzHanaChiru', 'wzKasumi', 'wzOrizuru', 'wzToro',
+      ],
+      hold: [
+        'knWordPulse', 'knCounterRock', 'knWordRide', 'knTickShift', 'knGapBreath', 'tyKeyPulse', 'tyReadCursor',
+        'tyTrackStep', 'xkDepthRock', 'xkParallax', 'xkTallBreath', 'xkBeatBump', 'xkMetronome', 'xkBuoy',
+        'xkReflection', 'xkLevelFill', 'xkLoudArch', 'xkMagnifier', 'xkNod', 'xkPairUp', 'xkRippleOut',
+        'xkZigzagFlip', 'xkSpinOne', 'xkBigSmall', 'kzSquashWave', 'kzInertiaSway', 'kzSlinky', 'kzBeatSquat',
+        'tzUnderGrow', 'tzIndexCount', 'tzCounterRules', 'wzShishiodoshi', 'wzTanzaku', 'wzNotan',
+      ],
+      cam: [
+        'knTiltKick', 'xqArcSweep', 'xqWindUp', 'xqBeatBreath', 'xqWalkCam', 'xqTripodNudge', 'xqLevelOut',
+        'xqSquashRelax', 'xqDriftTurn', 'xqCraneUp', 'xqTruckAround', 'xqLeafFall', 'xqPushPull', 'xqFindFrame',
+        'kzWordNod', 'tzTabStep', 'tzItalicSet', 'tzMeasureZoom', 'wzKakejikuView', 'wzByobuPan', 'wzOjigi',
+      ],
+      treat: [
+        'knWordScale', 'tyHollowKey', 'tyHeadBig', 'tyIndexSup', 'kzCrescendo', 'kzHopArc', 'xoRampAcross',
+        'xoBeltBand', 'xoFoldHalf', 'xoFadeHem', 'xoBorderBands', 'xoAltHollow', 'xoGroundDots', 'xoLeadBar',
+        'xoDimLine', 'xoSeparators', 'xoGlyphUnders', 'xoSwoosh', 'xoAccentTicks', 'xoTallWide', 'xoTrackRamp',
+        'tzLineNo', 'tzSuperNote', 'tzTypeGuides', 'tzTocLeader', 'tzKanaSmall', 'wzRakkan', 'wzKinpaku',
+        'wzKasure', 'wzObi', 'wzBinsen',
+      ],
+      decor: [
+        'knWordTicks', 'tyColophon', 'tyRunningHead', 'tyGlyphBody', 'tyTypeScale', 'xlDashTrack', 'xlCurlyBrace',
+        'xlRepeatBars', 'xlHairpin', 'xlWingLines', 'xlProtractor', 'xlAngleMark', 'xlLevel', 'xlPlumb',
+        'xlCompass', 'xlBezier', 'xlHandArrow', 'xlAccentTicks', 'xlPennant', 'xlCheckBox', 'xlCutLine',
+        'xmSettle', 'xmBounce', 'xmFountain', 'xmScatter', 'xmTruchet', 'xnFootnote', 'xnSyllables',
+        'xnGlyphStats', 'xnBreadcrumb', 'xnVersionTags', 'xnTooltip', 'xnSparkline', 'xnVowels', 'xnLegend',
+        'xnTrackList', 'xnStars', 'xnSliders', 'xnDropdown', 'xnPager', 'xnSearch', 'xnTyping', 'xnClock',
+        'kzImpactTicks', 'kzBounceDot', 'kzUnderRun', 'kzWobbleArcs', 'kzMetronome', 'kzSpringCoils',
+        'kzWhooshCurls', 'tzNoteMark', 'tzProgRule', 'tzTrackMarks', 'tzSideCaption', 'tzHeadEnd', 'tzNumStrip',
+        'tzDotLeader', 'tzEmBox', 'tzReadCaret', 'wzRyusui', 'wzUme',
+      ],
+    },
+    chaotic: {
+      enter: [
+        'knTypeToSlam', 'knHingeDrop', 'knLoopIn', 'knPushIn', 'knInertia', 'knStretchOut', 'tyZoomOne',
+        'tyUnderLift', 'tyDotGrow', 'tyBracketOpen', 'tyRetype', 'tyRubyDrop', 'xeCenterDeal', 'xeEndsInward',
+        'xeFillGaps', 'xeKanjiFirst', 'xeTripleBeat', 'xeMarch', 'xeBlockDrop', 'xeArcToss', 'xeOrbitIn',
+        'xeRicochet', 'xeLeapfrog', 'xeCeilingFall', 'xeChainBump', 'xeVanishPoint', 'xeInchworm', 'xeSwingDoor',
+        'xeSkewFlap', 'xeGlyphCurtain', 'xeCellSlide', 'xeGearTick', 'xeCoinToss', 'xeBellows', 'xeUnevenScale',
+        'xeRedact', 'xeBlanks', 'xeCloneMorph', 'xfCornerBloom', 'xfChevron', 'xfJaws', 'xfSlantLouver',
+        'xfTriptych', 'xfRovingWindow', 'xfStaircase', 'xfQuadRelay', 'xfWiper', 'xfClosingHole', 'xfWeave',
+        'xfPassingWipes', 'xfPrintHead', 'xfThreeTier', 'xfStackStrips', 'xfUnderSweep', 'xfScanner',
+        'xfOutlineLead', 'xfTraceFlood', 'xgGate', 'xgSignSpin', 'xgNoseDive', 'xgQuarterTurn', 'xgCornerUnfurl',
+        'xgWiper', 'xgJelly', 'xgShearUp', 'xgNewsSpin', 'xgCoinSettle', 'xgPumpUp', 'xgHeavyDrop', 'xgHangSign',
+        'xgRatchet', 'xgZipLine', 'xgStrobe', 'xgDoubleVision', 'xgColorPour', 'xgLensFringe', 'xgAfterimage',
+        'xgKeyPoses', 'xgRoughCut', 'kzSideVolley', 'kzWordWheel', 'kzSkipStone', 'kzSeesaw', 'kzTrampoline',
+        'kzOverrun', 'kzBowSnap', 'tzCaretSet', 'tzRuleSlide', 'tzCountSet', 'tzCloseUp', 'tzWeightUp',
+        'tzPointSize', 'tzIndexLead', 'tzTextFrame', 'wzKakejiku', 'wzChochin', 'wzKamifubuki', 'wzHanabi',
+        'wzOrigami',
+      ],
+      exit: [
+        'knWordKick', 'knPushOut', 'knLaunch', 'knWordBlink', 'knCloseGap', 'knJumpCutOut', 'knStackAway',
+        'tyStrike', 'tyToDot', 'tyLineFeed', 'tyBracketClose', 'tyToIndex', 'tyKeyLast', 'tyUnderSink',
+        'tyFoldVert', 'xhCentreThin', 'xhKanaFirst', 'xhCombOut', 'xhEndsOut', 'xhRollCall', 'xhCeiling',
+        'xhFlick', 'xhHopFar', 'xhConveyor', 'xhGather', 'xhStairs', 'xhEatAlong', 'xhShuffle', 'xhShutters',
+        'xhStomp', 'xhCoinSpin', 'xhPageTurn', 'xhTiltSlide', 'xhConcertina', 'xhBarcode', 'xhMorse', 'xhFullStop',
+        'xiCropTurns', 'xiFinder', 'xiCounterWipe', 'xiTwoPass', 'xiCentreOut', 'xiDiagPinch', 'xiSawBite',
+        'xiRadialBlinds', 'xiPortholes', 'xiLattice', 'xiRings', 'xiSpiralTiles', 'xiEyelid', 'xiPicket',
+        'xiFields', 'xiDrawers', 'xiCounterScroll', 'xiPistons', 'xiSliceWave', 'xiFillDrop', 'xiDotted',
+        'xjGateSwing', 'xjQuarterTurn', 'xjNeedle', 'xjBigWheel', 'xjWiper', 'xjRatchet', 'xjYank', 'xjTrapdoor',
+        'xjEdgeTeeter', 'xjPuckHit', 'xjRubberSnap', 'xjCardToss', 'xjWallSplat', 'xjSlump', 'xjSpringHop',
+        'xjTug', 'xjColourDrain', 'xjComet', 'xjShellChase', 'xjShadowStay', 'xjStepFade', 'xjOnionSkin',
+        'kzBatAway', 'kzYankOut', 'kzSwingFling', 'kzCrouchDive', 'kzSlingAway', 'kzHammerDown', 'kzCrashApart',
+        'kzPinchShoot', 'tzCondense', 'tzProofDelete', 'tzHalfCut', 'tzOverset', 'tzRulesClose', 'tzToFootnote',
+        'tzToTofu', 'wzHanaChiru', 'wzKasumi', 'wzOrizuru', 'wzToro',
+      ],
+      hold: [
+        'knWordPulse', 'knCounterRock', 'knWordRide', 'knTickShift', 'knGapBreath', 'tyKeyPulse', 'tyReadCursor',
+        'tyOutlineBlink', 'tyTrackStep', 'xkDepthRock', 'xkParallax', 'xkTallBreath', 'xkBeatBump', 'xkMetronome',
+        'xkBuoy', 'xkTiltSnap', 'xkStopMotion', 'xkDoubleVision', 'xkReflection', 'xkSplitShear', 'xkLevelFill',
+        'xkLoudArch', 'xkMagnifier', 'xkNod', 'xkPairUp', 'xkRippleOut', 'xkZigzagFlip', 'xkSpinOne', 'xkBlink',
+        'xkStairStep', 'xkBigSmall', 'kzSquashWave', 'kzInertiaSway', 'kzSlinky', 'kzBeatSquat', 'tzUnderGrow',
+        'tzIndexCount', 'tzCounterRules', 'wzShishiodoshi', 'wzTanzaku', 'wzNotan',
+      ],
+      cam: [
+        'knTiltKick', 'knShearKick', 'knJumpCut', 'xqArcSweep', 'xqWindUp', 'xqBeatBreath', 'xqWalkCam',
+        'xqTripodNudge', 'xqLongLens', 'xqStopMotion', 'xqLevelOut', 'xqSquashRelax', 'xqDriftTurn', 'xqCraneUp',
+        'xqTruckAround', 'xqHeartbeat', 'xqLeafFall', 'xqLoudZoom', 'xqPushPull', 'xqFindFrame', 'xqTickRoll',
+        'kzWordNod', 'tzTabStep', 'tzItalicSet', 'tzMeasureZoom', 'tzGridStep', 'wzKakejikuView', 'wzByobuPan',
+        'wzOjigi',
+      ],
+      treat: [
+        'knWordScale', 'knWordPlate', 'tyHollowKey', 'tyHeadBig', 'tyIndexSup', 'kzCrescendo', 'kzHopArc',
+        'xoRampAcross', 'xoBeltBand', 'xoFoldHalf', 'xoFadeHem', 'xoBorderBands', 'xoAltHollow', 'xoGroundDots',
+        'xoLeadBar', 'xoDimLine', 'xoCropMarks', 'xoSeparators', 'xoGlyphUnders', 'xoGlyphCorners', 'xoRuler',
+        'xoSwoosh', 'xoAccentTicks', 'xoTallWide', 'xoTrackRamp', 'xoDoublePrint', 'xoTopCrop', 'tzLineNo',
+        'tzSuperNote', 'tzTypeGuides', 'tzTocLeader', 'tzKanaSmall', 'wzRakkan', 'wzKinpaku', 'wzKasure', 'wzObi',
+        'wzBinsen',
+      ],
+      decor: [
+        'knSpeedTrail', 'knWordTicks', 'tyColophon', 'tyRunningHead', 'tyGlyphBody', 'tyTypeScale', 'xlHopCorners',
+        'xlDashTrack', 'xlTransformBox', 'xlCurlyBrace', 'xlNestBracket', 'xlRepeatBars', 'xlHairpin',
+        'xlWingLines', 'xlProtractor', 'xlAngleMark', 'xlLevel', 'xlPlumb', 'xlCompass', 'xlBezier',
+        'xlEdgeTether', 'xlHandArrow', 'xlAccentTicks', 'xlPennant', 'xlCheckBox', 'xlCutLine', 'xmSettle',
+        'xmSwarm', 'xmBounce', 'xmFuse', 'xmMagnet', 'xmFountain', 'xmScatter', 'xmBeatSteps', 'xmGauge',
+        'xmTruchet', 'xnPrompt', 'xnFootnote', 'xnDiff', 'xnSyllables', 'xnGlyphStats', 'xnBoxCoords', 'xnRemain',
+        'xnBreadcrumb', 'xnVersionTags', 'xnTooltip', 'xnSparkline', 'xnVowels', 'xnLegend', 'xnLevelMeter',
+        'xnTimeline', 'xnTrackList', 'xnStars', 'xnBattery', 'xnSliders', 'xnDropdown', 'xnPager', 'xnSearch',
+        'xnKeycaps', 'xnTyping', 'xnClock', 'kzImpactTicks', 'kzBounceDot', 'kzUnderRun', 'kzWobbleArcs',
+        'kzMarchFrame', 'kzMetronome', 'kzSpringCoils', 'kzChevronRun', 'kzWhooshCurls', 'kzPushRods',
+        'tzNoteMark', 'tzProgRule', 'tzTrackMarks', 'tzSideCaption', 'tzHeadEnd', 'tzNumStrip', 'tzDotLeader',
+        'tzEmBox', 'tzCornerNums', 'tzReadCaret', 'wzRyusui', 'wzUme',
+      ],
+    },
+  };
+  const EXTENDED_POOLS = Object.fromEntries(Object.entries(COMPONENT_POOLS).map(([tier, pool]) => [tier,
+    Object.fromEntries(Object.entries(pool).map(([g, keys]) => [g, keys.concat((EXTENDED_ADDITIONS[tier][g] || []).filter((k) => !keys.includes(k)))]))]));
+
+  // ─── 自選部件（面板「自選部件」三個開關，預設全關）───
+  // 只因「耗時」「覆蓋率」或「恐怖風」沒進白名單的部件；排不進去、繪製出錯、畫出空白的一律不收，
+  // 全畫面特效、背景、轉場、恐怖配色也不收（鐵則 #11）。
+  // 2026-11-11 在 i5-13500／RTX 3060／Windows 10 用 tools/audit-jizura-parts.js、audit-jizura-layouts.js
+  // 重測（全畫面＋兩側），每個部件的數值存在 tests/fixtures/jizura-optin-audit.json。
+  // needs 位元：1＝高耗能（p95 超過 PR #50 的門檻）、2＝大面積（覆蓋率超標，或兩側模式蓋到中央保留區）、4＝恐怖風；
+  // 要所有需要的開關都打開才會用。動作分級：q＝安靜段也可用、n＝標準＋狂放、c＝只給狂放（有 glitch tag）。
+  const OPTIN_HEAVY = 1;
+  const OPTIN_LARGE = 2;
+  const OPTIN_HORROR = 4;
+  // [key, needs, tier, sidesOk]
+  const OPTIN_PARTS = {
+    enter: [
+      ['hrBlinkCreep', 4, 'n', 1], ['hrJumpScare', 6, 'c', 1], ['hrUneasy', 4, 'n', 1], ['hrVhold', 4, 'c', 1],
+      ['hrMirrorSnap', 4, 'c', 1], ['hrManifest', 4, 'q', 1], ['hrClawReveal', 4, 'n', 1], ['knWordSlam', 2, 'c', 1],
+      ['knReplaceIn', 1, 'c', 1], ['knWordSpin', 1, 'n', 1], ['tyKeyFirst', 1, 'n', 1], ['tyLineWipe', 1, 'q', 1],
+      ['xfHolesMerge', 1, 'n', 1], ['xfSpiral', 1, 'n', 1], ['xfCrossOpen', 1, 'n', 1], ['xfTwoFields', 1, 'c', 1],
+      ['xfStripSort', 1, 'c', 1], ['xfEqualizer', 1, 'c', 1], ['xfDiagStrips', 1, 'n', 1], ['xfRingDial', 1, 'c', 1],
+      ['xgPushBar', 1, 'n', 1], ['xgWallHit', 2, 'c', 1], ['xgStampLift', 2, 'n', 1], ['xgPaperFall', 1, 'q', 1],
+      ['xgComet', 2, 'c', 1], ['xgFillDock', 1, 'n', 1], ['xgBlockSink', 2, 'n', 1], ['hzAlreadyThere', 4, 'q', 1],
+      ['hzUnwatched', 4, 'n', 1], ['hzShakyHand', 4, 'n', 1], ['hzFloorSeep', 4, 'n', 1], ['hzTooClose', 4, 'c', 1],
+      ['hzWrongGlyph', 4, 'c', 1], ['hzFromScratch', 4, 'c', 1], ['hzLateSnap', 4, 'n', 1], ['hzLampSweep', 4, 'n', 1],
+      ['kzPunchThrough', 1, 'c', 1], ['kzTowerUnstack', 1, 'n', 1], ['tzBaseAlign', 1, 'n', 1], ['wzMisu', 2, 'q', 1],
+      ['wzSeigaiha', 2, 'q', 1],
+    ],
+    exit: [
+      ['hrPulledDown', 4, 'c', 1], ['hrLookBack', 4, 'n', 1], ['hrTurnAway', 4, 'q', 1], ['hrShiver', 4, 'c', 1],
+      ['hrFlickerDie', 4, 'c', 1], ['hrDrain', 4, 'n', 1], ['xiMothHoles', 1, 'q', 1], ['xiRedact', 2, 'c', 1],
+      ['xjDoubleVision', 2, 'c', 1], ['hzOutOfLight', 4, 'q', 1], ['hzTaken', 4, 'c', 1], ['hzRetinal', 4, 'c', 1],
+      ['hzDragCorner', 4, 'n', 1], ['hzFlatline', 4, 'n', 1], ['hzShadowOff', 6, 'n', 1], ['hzBackAway', 4, 'q', 1],
+      ['tzSelectDelete', 2, 'c', 1], ['wzSumiNijimi', 2, 'q', 1],
+    ],
+    hold: [
+      ['hrTwitch', 4, 'c', 1], ['hrStare', 4, 'n', 1], ['hrLagOne', 4, 'q', 1], ['hrFlickerLight', 4, 'c', 1],
+      ['xkHeatHaze', 1, 'c', 1], ['xkLoudWeight', 1, 'n', 1], ['xkCradle', 1, 'q', 1], ['hzSlowBreath', 4, 'q', 1],
+      ['hzLoneTremor', 4, 'c', 1], ['hzPassing', 4, 'n', 1], ['hzPresence', 4, 'q', 1], ['hzLoom', 5, 'n', 1],
+    ],
+    cam: [
+      ['hrNervous', 4, 'c', 1], ['hzCreepFreeze', 4, 'q', 1], ['hzGlanceBack', 4, 'n', 1], ['hzHeldBreath', 4, 'q', 1],
+      ['hzColdShiver', 4, 'c', 1],
+    ],
+    treat: [
+      ['hrEroded', 4, 'n', 1], ['hrRedact', 6, 'n', 1], ['hrDoubleExp', 4, 'c', 1], ['tyHeadRules', 1, 'q', 1],
+      ['hzUneven', 4, 'n', 1], ['hzHairlines', 4, 'c', 1], ['hzColdRim', 4, 'n', 1], ['hzHusk', 4, 'n', 1],
+      ['hzDragMarks', 6, 'n', 1], ['kzSpeedShadow', 1, 'c', 1], ['kzOnionSkin', 1, 'n', 1], ['kzStepShear', 1, 'c', 1],
+      ['xoGraphFill', 1, 'n', 1], ['xoHalfScreen', 1, 'n', 1], ['xoContour', 2, 'c', 1], ['xoCutLine', 2, 'n', 1],
+      ['xoTwinOutline', 1, 'c', 1], ['xoBlobKnock', 2, 'n', 1], ['xoBandExtrude', 2, 'n', 1], ['xoFloorShadow', 1, 'q', 1],
+      ['xoHollowBlock', 1, 'n', 1], ['xoBlowUp', 2, 'c', 1], ['xoThread', 1, 'q', 1], ['xoHiliter', 2, 'n', 1],
+      ['xoAltWeight', 1, 'n', 1], ['xoMixedFills', 1, 'n', 1], ['xoHalfKnock', 2, 'n', 1], ['xoOverlapKern', 2, 'n', 1],
+    ],
+    decor: [
+      ['hrScratches', 6, 'c', 1], ['hrSigil', 6, 'n', 1], ['hrWatchEye', 4, 'n', 1], ['hrStaticPatch', 7, 'c', 1],
+      ['hrDustBeam', 4, 'q', 1], ['hrDrips', 6, 'n', 1], ['hrCracks', 4, 'c', 1], ['tyTextRule', 2, 'q', 1],
+      ['tyBigPunct', 2, 'n', 1], ['xlGapFrame', 2, 'q', 1], ['xlSketchBox', 2, 'n', 1], ['xlBubbleLine', 2, 'n', 1],
+      ['xlDoubleRule', 2, 'q', 1], ['xlArrowRules', 2, 'n', 1], ['xlSlur', 2, 'q', 1], ['xlLadder', 2, 'c', 1],
+      ['xlCaliper', 2, 'n', 1], ['xlSeam', 2, 'q', 1], ['xmPendulum', 2, 'q', 1], ['xmDominoes', 2, 'n', 1],
+      ['xmPong', 1, 'c', 1], ['xmConveyor', 2, 'n', 1], ['xmStairs', 2, 'n', 1], ['xmIsoCubes', 2, 'n', 1],
+      ['xmSlide', 2, 'c', 1], ['xmGears', 2, 'n', 1], ['xmSortBars', 2, 'c', 1], ['xmPie', 2, 'n', 1],
+      ['xmHatch', 3, 'n', 1], ['xmPolyGrow', 2, 'q', 1], ['xmTriLattice', 2, 'c', 1], ['xmDotWave', 2, 'c', 1],
+      ['xmContour', 2, 'q', 1], ['xmMoire', 2, 'c', 1], ['xmSpiro', 2, 'q', 1], ['xmIris', 2, 'n', 1],
+      ['xmWhirl', 2, 'c', 1], ['xmWaves', 2, 'q', 1], ['xnMicroPara', 2, 'q', 1], ['xnAsciiGauge', 1, 'c', 1],
+      ['xnTicker', 2, 'c', 1], ['hzPairEyes', 4, 'n', 1], ['hzPeeker', 4, 'n', 1], ['hzFootprints', 4, 'n', 1],
+      ['hzStrayGlyph', 4, 'c', 1], ['hzFingers', 4, 'n', 1], ['hzHandprints', 6, 'n', 1], ['hzBareBulb', 6, 'n', 1],
+      ['hzDoorAjar', 4, 'n', 1], ['hzCobweb', 4, 'q', 1], ['hzFilmDirt', 4, 'c', 1], ['wzShippo', 2, 'q', 1],
+      ['wzYagasuri', 2, 'n', 1], ['wzUroko', 2, 'c', 1], ['wzMizuhiki', 2, 'q', 1], ['wzYukiwa', 2, 'q', 1],
+      ['wzChidori', 2, 'q', 1], ['wzTake', 2, 'q', 1], ['wzKazaguruma', 2, 'q', 1],
+    ],
+  };
+  // [key, needs, where]：where 1＝全畫面可用、2＝兩側可用
+  const OPTIN_LAYOUTS = [
+    ['knSlamStack', 2, 3], ['knSwapCenter', 1, 3], ['knZoomDive', 2, 3], ['knFlowSnap', 1, 3],
+    ['knTypeSlam', 2, 3], ['knRhythmCuts', 2, 3], ['knGearWords', 2, 3], ['knReflow', 1, 3],
+    ['knPadGrid', 2, 3], ['tyKeySplit', 1, 3], ['tyCropGiant', 1, 3], ['tyCross', 1, 3],
+    ['tyBandHide', 2, 3], ['tyRuby', 1, 3], ['tyJustify', 1, 3], ['tyIndexTable', 1, 3],
+    ['tySplitType', 1, 3], ['tyErode', 1, 3], ['tyVRuler', 1, 3], ['tyFullTrack', 1, 3],
+    ['tyStatCount', 1, 3], ['tyMargin', 1, 3], ['tyRotBlock', 1, 3], ['tySquare', 1, 3],
+    ['kzConveyor', 1, 3], ['kzSwingKnock', 1, 3], ['kzReadLens', 1, 3], ['kzGateSwing', 1, 3],
+    ['kzSlingshot', 1, 3], ['kzTiltTray', 1, 3], ['kzRelay', 1, 3], ['kzInchworm', 1, 3],
+    ['xaPullQuote', 1, 3], ['xaReceipt', 3, 3], ['xaCatalogCard', 3, 3], ['xaTimetable', 2, 3],
+    ['xaThumbIndex', 1, 3], ['xaColumns', 2, 3], ['xaInitialPlate', 1, 3], ['xaHalfKnock', 3, 3],
+    ['xaWaybill', 2, 3], ['xaTriBand', 2, 3], ['xaAirmail', 3, 3], ['xaFigure', 2, 3],
+    ['xaLineNumbers', 2, 3], ['xaPunchCard', 2, 3], ['xaBlockquote', 1, 3], ['xaScreenplay', 1, 3],
+    ['xaTearTabs', 3, 3], ['xaBrace', 1, 3], ['xaNutrition', 2, 3], ['xaDogEar', 2, 3],
+    ['xaRuleSpecimen', 1, 3], ['xaSwatchFan', 3, 3], ['xbHalfDisc', 3, 3], ['xbDiagSplit', 3, 3],
+    ['xbChevronChain', 3, 3], ['xbTwistFrames', 3, 3], ['xbIsoStack', 3, 3], ['xbPolyTrack', 1, 3],
+    ['xbPrimitives', 3, 3], ['xbArcPoster', 1, 3], ['xbZiggurat', 3, 3], ['xbHoneycomb', 3, 3],
+    ['xbShear', 3, 3], ['xbPatternPanel', 2, 3], ['xbDiamond', 2, 3], ['xbShapeLens', 3, 3],
+    ['xbConstruct', 2, 3], ['xbGolden', 2, 3], ['xbVenn', 3, 3], ['xbSlitDisc', 2, 3],
+    ['xbDial', 1, 3], ['xbStripeDisc', 2, 3], ['xbWedge', 3, 3], ['xbGraph', 1, 3],
+    ['xbCircleFit', 3, 3], ['xbTriangleSet', 3, 3], ['xcBrowser', 3, 3], ['xcPlayer', 2, 3],
+    ['xcLoading', 3, 3], ['xcMapPin', 2, 3], ['xcVending', 3, 3], ['xcFolder', 2, 3],
+    ['xcScoreboard', 3, 3], ['xcWeather', 3, 3], ['xcBattery', 3, 3], ['xcPopups', 3, 3],
+    ['xcGauge', 1, 3], ['xcChipCard', 3, 3], ['xcPaperCup', 3, 3], ['xcTshirt', 3, 3],
+    ['xcHandheld', 3, 3], ['xcBlackboard', 3, 3], ['xcTruck', 3, 3], ['xcPlate', 3, 3],
+    ['xcDropdown', 3, 3], ['xcSelect', 3, 3], ['xcRadio', 2, 3], ['xcFloppy', 3, 3],
+    ['xcMegaphone', 1, 3], ['xcDrawers', 3, 3], ['xcPoll', 3, 3], ['xcAwning', 2, 3],
+    ['xdHelix', 1, 3], ['xdConstellation', 1, 3], ['xdUpSide', 1, 3], ['xdPivotFan', 3, 3],
+    ['xdSlowSpread', 1, 3], ['xdBentRoad', 1, 3], ['xdStaff', 1, 3], ['xdOverlap', 2, 3],
+    ['xdKaraoke', 1, 3], ['xdPassing', 1, 3], ['xdChecker', 2, 3], ['xdSquareWave', 1, 3],
+    ['xdAxisAlt', 1, 3], ['xdSkewSweep', 1, 3], ['xdStretchEcho', 3, 3], ['xdRipple', 1, 3],
+    ['xdTrace', 3, 3], ['xdTide', 3, 3], ['tzWarichu', 1, 3], ['tzDetail', 3, 3],
+    ['tzAxis', 1, 3], ['tzSlash', 1, 3], ['tzHorizon', 1, 3], ['tzFunnel', 1, 3],
+    ['tzZoomBox', 1, 3], ['tzPointSym', 1, 3], ['tzCanon', 1, 3], ['wzByobu', 2, 3],
+    ['wzNobori', 2, 3], ['wzSenjafuda', 2, 3], ['wzAndon', 2, 3], ['wzShikishi', 2, 3],
+    ['wzBanzuke', 2, 3], ['wzTenugui', 2, 3], ['wzChikkan', 2, 3], ['wzShogi', 2, 3],
+    ['wzNoshi', 2, 3], ['wzGenjiGumo', 2, 3], ['wzTorii', 2, 3], ['wzUchiwa', 3, 3],
+    ['wzSudare', 3, 3], ['hrFlashlight', 6, 3], ['hrDoorGap', 6, 3], ['hrWallScrawl', 5, 3],
+    ['hrCctv', 7, 3], ['hrOuija', 7, 3], ['hrMissing', 7, 3], ['hrWrongOne', 5, 3],
+    ['hrRisingDark', 6, 3], ['hrRedacted', 5, 3], ['hrStaticTv', 6, 3], ['hrSpiritPhoto', 6, 3],
+    ['hrWrongShadow', 7, 3], ['hzKeyhole', 6, 3], ['hzEmptyRoom', 4, 3], ['hzWrongCopy', 7, 3],
+    ['hzHangSign', 6, 3], ['hzElevator', 4, 3], ['hzReflection', 7, 3], ['hzFogWindow', 7, 3],
+    ['hzVoicemail', 6, 3], ['hzStreetLamp', 6, 3], ['hzTornNote', 6, 3], ['hzUnderDoor', 4, 3],
+    ['hzSlats', 6, 3], ['hzStoppedClock', 5, 3], ['hzCloser', 7, 3], ['hzStairs', 6, 3],
+  ];
+
+  function optinFlags() {
+    const d = document.body.dataset;
+    return (d.jizuraHeavy === '1' ? OPTIN_HEAVY : 0) | (d.jizuraLarge === '1' ? OPTIN_LARGE : 0) | (d.jizuraHorror === '1' ? OPTIN_HORROR : 0);
+  }
+
+  // 把自選部件依分級加進某一組強度的搭配池（不改原本的陣列）
+  function withOptin(components, composition, flags, sides) {
+    if (!flags) return components;
+    const tiers = composition === 'quiet' ? ['q'] : composition === 'normal' ? ['q', 'n'] : ['q', 'n', 'c'];
+    const out = {};
+    for (const [g, keys] of Object.entries(components)) {
+      const extra = (OPTIN_PARTS[g] || [])
+        .filter(([k, needs, tier, sidesOk]) => (needs & flags) === needs && tiers.includes(tier) && (!sides || sidesOk) && !keys.includes(k))
+        .map(([k]) => k);
+      out[g] = extra.length ? keys.concat(extra) : keys;
+    }
+    return out;
+  }
+
+  function optinLayouts(flags, sides) {
+    if (!flags) return [];
+    return OPTIN_LAYOUTS.filter(([, needs, where]) => (needs & flags) === needs && (where & (sides ? 2 : 1))).map(([k]) => k);
+  }
+
   let rootEl = null;
   let canvas = null;
   let ctx2d = null;
@@ -322,6 +659,12 @@
 
   // 動作節奏：流暢＝每個顯示幀都更新動作；作畫感＝引擎原本的 2 コマ打ち（每秒 12 張），
   // 日系文字 PV 刻意的頓挫。直播疊加預設流暢——實機回報「有點卡」就是這個頓挫。
+  // 部件範圍：標準＝升級前稽核過的清單（預設，結果與升級前一致）；擴充＝另外加入新版 JIZURA
+  // （v0.8 文字PV系／キネティック、v0.12 追加分2）通過 tools/audit-jizura-parts.js／audit-jizura-layouts.js 的部件。
+  function partsMode() {
+    return document.body.dataset.jizuraParts === 'extended' ? 'extended' : 'base';
+  }
+
   function motionMode() {
     return document.body.dataset.jizuraMotion === 'koma' ? 'koma' : 'smooth';
   }
@@ -374,10 +717,12 @@
 
   // 引擎的 style 決定書體、裝飾偏好與次要色；字色另外覆寫。只挑深底的 style，
   // 讓引擎的對比計算（貼紙底色、殘影色）都以「亮字疊在暗處」為前提。
+  // 只用基本 style：上游 v0.8 起有開關控制的 style 組（ホラー的 hrRuin／hrNightRec 等，帶 set 標記）
+  // 不進入候選——否則候選數改變會讓每首歌的 seed % 長度 換成另一個 style，直播也會抽到恐怖風。
   function pickStyle(seed) {
     const dark = J.STYLE_ORDER.filter((k) => {
       const s = J.STYLES[k];
-      return s && s.schemes && s.schemes[0] && J.lum(s.schemes[0].bg) < 0.3;
+      return s && !s.set && s.schemes && s.schemes[0] && J.lum(s.schemes[0].bg) < 0.3;
     });
     const pool = dark.length ? dark : J.STYLE_ORDER;
     return pool[seed % pool.length];
@@ -549,14 +894,32 @@
 
   // ─── 規劃 ───
 
+  // 清單裡的部件在目前載入的引擎找不到（引擎換版、改名或被刪）時：不讓它進 enabled（引擎會默默換成
+  // center／push 或略過），改成在這裡記下來、console 警告一次，debugLayouts().missingParts 可查。
+  const missingParts = new Set();
+  function noteMissing(components, layouts) {
+    const before = missingParts.size;
+    for (const [group, keys] of Object.entries(components)) {
+      const reg = J.registry(group) || {};
+      for (const k of keys) if (!reg[k]) missingParts.add(group + '.' + k);
+    }
+    for (const k of layouts) if (!J.LAYOUTS[k]) missingParts.add('layout.' + k);
+    if (missingParts.size > before) console.warn('[文字PV] 搭配清單裡有引擎沒有的部件，已略過：', [...missingParts].join(', '));
+  }
+
   function buildPlan(lines, meta) {
     const aspect = '16:9';
     const mode = intensityMode();
     const heavy = new Set(HEAVY_LAYOUTS);
-    const busy = new Set(BUSY_LAYOUTS);
+    const busy = new Set(BUSY_LAYOUTS.concat(EXT_BUSY_LAYOUTS));
     // 標準：排除太重與太吵的；狂放：只排除太重的；沉穩：只用安靜清單（見下面 quietOnly）
     const sides = placement() === 'sides';
-    const layoutCandidates = sides ? CENTER_FREE_LAYOUTS : SAFE_LAYOUTS_LANDSCAPE;
+    const extended = partsMode() === 'extended';
+    const optin = optinFlags();
+    const layoutCandidates = (sides
+      ? CENTER_FREE_LAYOUTS.concat(extended ? EXT_CENTER_FREE_LAYOUTS : [])
+      : SAFE_LAYOUTS_LANDSCAPE.concat(extended ? EXT_SAFE_LAYOUTS : [])).concat(optinLayouts(optin, sides));
+    const quietLayouts = QUIET_LAYOUTS.concat(extended ? EXT_QUIET_LAYOUTS : []);
     const safe = new Set(layoutCandidates.filter((k) => !heavy.has(k) && (mode === 'chaotic' || !busy.has(k))));
     const profiles = mode === 'calm' ? PROFILES_CALM : PROFILES;
     const koma = motionMode() === 'koma';
@@ -592,7 +955,7 @@
     for (const profileId of used) {
       const prof = profiles[profileId];
       const composition = prof.quietOnly ? 'quiet' : mode === 'chaotic' ? 'chaotic' : 'normal';
-      const components = COMPONENT_POOLS[composition];
+      const components = withOptin(extended ? EXTENDED_POOLS[composition] : COMPONENT_POOLS[composition], composition, optin, sides);
       const lrc = usable.map((line, i) => {
         // 高潮段落的第一句＝衝擊句（引擎會給大字、閃爍與震動）
         const impact = prof.impactFirst && lineProfile[i] === profileId && (i === 0 || lineProfile[i - 1] !== profileId);
@@ -615,6 +978,10 @@
         typeset: true,
         centerFree: sides,
         centerDir: 'lr',
+        // 上游的部件組開關：ホラー一律關（直播疊加不用恐怖風）；文字PV系／キネティック／追加分2 只在擴充時開。
+        // 標準模式下這些部件本來就不在 enabled 清單裡，明確關掉只是讓意圖清楚、不受上游預設值變動影響。
+        // 自選部件可能來自這些部件組，有開任何自選就打開對應組；實際用哪些仍只看下面的 enabled 清單。
+        typo: extended || !!optin, kinetic: extended || !!optin, horror: !!(optin & OPTIN_HORROR), extra2: extended || !!optin,
         colors: { enabled: true, lockSchemes: true, bg: '#101014', fg, accentOn: true, accent },
       });
       project.fx = Object.assign(J.defaultProject().fx, prof.fx, {
@@ -628,9 +995,10 @@
         bgSwitch: 0,      // 不切 scheme：見檔頭「文字色」
       });
       // 兩側模式下安靜清單跟輕量清單的交集只剩少數幾個，不夠時退回全部輕量版面（動作仍只用 calm 部品）
-      const quietPool = QUIET_LAYOUTS.filter((k) => safe.has(k));
+      const quietPool = quietLayouts.filter((k) => safe.has(k));
       const layoutPool = prof.quietOnly && quietPool.length >= 3 ? quietPool : [...safe];
       const componentPool = (group) => Object.fromEntries(J.order(group).map((k) => [k, components[group].includes(k)]));
+      noteMissing(components, layoutPool);
       project.enabled = {
         enter: componentPool('enter'), exit: componentPool('exit'), hold: componentPool('hold'),
         treat: componentPool('treat'), cam: componentPool('cam'), fx: componentPool('fx'), decor: componentPool('decor'),
@@ -684,7 +1052,7 @@
     const secs = meta && Array.isArray(meta.sections) ? meta.sections.length + ':' + (meta.sections[0] ? meta.sections[0].label : '') : '-';
     return [
       lines.length, lines[0] ? lines[0].time : 0, lines.length ? lines[lines.length - 1].time : 0,
-      meta ? meta.id : '', secs, placement(), motionMode(), document.body.dataset.lyricIntensity || '',
+      meta ? meta.id : '', secs, placement(), motionMode(), partsMode(), optinFlags(), document.body.dataset.lyricIntensity || '',
       cssVar('--lyric-color', ''), cssVar('--lyric-color-active', ''),
     ].join('|');
   }
@@ -780,6 +1148,10 @@
     settings: [
       { type: 'enum', key: 'jizuraPlacement', target: 'data:jizuraPlacement', values: ['right', 'left', 'sides', 'full'], default: 'sides' },
       { type: 'enum', key: 'jizuraMotion', target: 'data:jizuraMotion', values: ['smooth', 'koma'], default: 'smooth' },
+      { type: 'enum', key: 'jizuraParts', target: 'data:jizuraParts', values: ['base', 'extended'], default: 'base' },
+      { type: 'bool01', key: 'jizuraHeavy', target: 'data:jizuraHeavy', default: false },
+      { type: 'bool01', key: 'jizuraLarge', target: 'data:jizuraLarge', default: false },
+      { type: 'bool01', key: 'jizuraHorror', target: 'data:jizuraHorror', default: false },
     ],
 
     mount(container, tctx) {
@@ -832,7 +1204,8 @@
       if (!plan) return null;
       const offs = plan.cuts.filter((c) => c.__jzDx !== undefined).map((c) => Math.round((c.__jzDx / plan.W) * 100));
       return { placement: placement(), motion: motionMode(), W: plan.W, H: plan.H, lang: plan.lang, unify: !!plan.unify, typeset: !!plan.typeset,
-        centerFree: !!plan.centerFree, layouts: [...new Set(plan.cuts.map((c) => c.layout))], offsetPercents: offs };
+        centerFree: !!plan.centerFree, parts: partsMode(), layouts: [...new Set(plan.cuts.map((c) => c.layout))], offsetPercents: offs,
+        missingParts: [...missingParts] };
     },
 
     debugCutAt(tSec) {

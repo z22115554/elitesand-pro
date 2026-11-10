@@ -190,7 +190,7 @@
     const workspaceCard = (group) => document.querySelector(`#display-advanced-modal [data-settings-workspace-group="${group}"], .settings-workspace details[data-settings-workspace-group="${group}"][data-lyrics-search]`);
     const templateOnlyIds = [
       'columnflow-variant-field', 'columnflow-entrance-field', 'columnflow-placement-field', 'columnflow-max-lines-field',
-      'jizura-placement-field', 'jizura-motion-field', 'lightboard-scroll-field',
+      'jizura-placement-field', 'jizura-motion-field', 'jizura-parts-field', 'jizura-optin-field', 'lightboard-scroll-field',
       'particle-orient-field', 'particle-entrance-field', 'particle-effects-field',
       'paperstrip-orient-field', 'paperstrip-color-field', 'ktv-text-field',
       'typewriter-colors-field', 'tw-sticker-field',

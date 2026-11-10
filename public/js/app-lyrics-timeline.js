@@ -185,7 +185,7 @@
       dom.lyricsDropZone.classList.remove('dragover');
 
       const files = Array.from(e.dataTransfer.files).filter((f) =>
-        /\.(lrc|srt|txt)$/i.test(f.name)
+        /\.(lrc|srt|vtt|txt)$/i.test(f.name)
       );
       if (files.length > 0) {
         uploadLyricsFile(files[0]);

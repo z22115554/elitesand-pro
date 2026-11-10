@@ -609,8 +609,8 @@
                   <div class="lyric-preview-empty">尚無歌詞</div>
                 </div>
                 <div id="lyrics-drop-zone" class="dropzone dropzone--compact">
-                  <div class="sub m-0">拖放 .lrc / .srt 覆蓋目前歌詞</div>
-                  <input id="lyrics-file-input" type="file" accept=".lrc,.srt,.txt" hidden>
+                  <div class="sub m-0">拖放 .lrc / .srt / .vtt 覆蓋目前歌詞</div>
+                  <input id="lyrics-file-input" type="file" accept=".lrc,.srt,.vtt,.txt" hidden>
                 </div>
               </div>
             </details>
@@ -1194,6 +1194,29 @@
                   <button class="style-thumb" data-jizura-motion="koma" type="button" data-i18n-title="jizura.motionKomaTitle" title="作畫感：每秒 12 張的頓挫（日系文字 PV 常用的「一拍二」）"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">格</span></span><span class="style-thumb-label" data-i18n="jizura.motionKoma">作畫感</span></button>
                 </div>
                 <p class="field-hint" data-i18n="jizura.motionHint">作畫感是刻意的一格一格動（每秒 12 張），不是掉幀；想要滑順就選流暢。</p>
+              </div>
+              <div class="field" id="jizura-parts-field" hidden>
+                <label data-i18n="jizura.partsLabel" data-new-feature="jizura-parts" data-new-placement="after">部件範圍</label>
+                <div class="style-thumb-row" id="jizura-parts-buttons">
+                  <button class="style-thumb active" data-jizura-parts="base" type="button" data-i18n-title="jizura.partsBaseTitle" title="標準：只用原本稽核過的版面與動作，跟升級前一樣"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">標</span></span><span class="style-thumb-label" data-i18n="jizura.partsBase">標準</span></button>
+                  <button class="style-thumb" data-jizura-parts="extended" type="button" data-i18n-title="jizura.partsExtendedTitle" title="擴充：另外加入 JIZURA 新版（追加分2 等）稽核過的版面、動作與裝飾，變化更多"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">擴</span></span><span class="style-thumb-label" data-i18n="jizura.partsExtended">擴充</span></button>
+                </div>
+                <p class="field-hint" data-i18n="jizura.partsHint">擴充只會用通過覆蓋率與效能稽核的新部件，不含恐怖風與全畫面特效；直播前建議先預覽一次。</p>
+              </div>
+              <div class="field" id="jizura-optin-field" hidden>
+                <label data-i18n="jizura.optinLabel" data-new-feature="jizura-optin" data-new-placement="after">自選部件</label>
+                <div class="switch-row">
+                  <div><div class="label" data-i18n="jizura.heavyLabel">高耗能部件</div><div class="sub" data-i18n="jizura.heavyHint">效能稽核超標的版面與動作。畫面更豐富，但可能掉幀；請先用預覽確認你的電腦跑得動。</div></div>
+                  <label class="switch"><input id="ls-jizura-heavy" data-ls-control="jizuraHeavy" type="checkbox"><span class="track"></span></label>
+                </div>
+                <div class="switch-row">
+                  <div><div class="label" data-i18n="jizura.largeLabel">大面積部件</div><div class="sub" data-i18n="jizura.largeHint">會佔用較大畫面範圍的版面與裝飾，可能遮到角色或其他畫面元素。</div></div>
+                  <label class="switch"><input id="ls-jizura-large" data-ls-control="jizuraLarge" type="checkbox"><span class="track"></span></label>
+                </div>
+                <div class="switch-row">
+                  <div><div class="label" data-i18n="jizura.horrorLabel">恐怖風部件</div><div class="sub" data-i18n="jizura.horrorHint">J-horror 風格的動作與裝飾，包含跳嚇與快速閃爍。閃爍可能讓光敏感的觀眾不適，請斟酌使用。</div></div>
+                  <label class="switch"><input id="ls-jizura-horror" data-ls-control="jizuraHorror" type="checkbox"><span class="track"></span></label>
+                </div>
               </div>
               <div class="field" id="columnflow-max-lines-field" hidden>
                 <label><span data-i18n="columnflow.maxLinesLabel">同時保留句數</span> <span id="ls-columnflow-max-lines-val" class="val">4 句</span></label>

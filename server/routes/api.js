@@ -115,11 +115,11 @@ const lyricsUpload = multer({
   storage: lyricsStorage,
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = ['.lrc', '.srt', '.txt'];
+    const allowed = ['.lrc', '.srt', '.vtt', '.txt'];
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      const err = new Error(`不支援的歌詞格式: ${ext}，僅支援 .lrc / .srt / .txt`);
+      const err = new Error(`不支援的歌詞格式: ${ext}，僅支援 .lrc / .srt / .vtt / .txt`);
       err.status = 400;
       cb(err);
     }

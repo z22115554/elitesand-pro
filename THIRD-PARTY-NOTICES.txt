@@ -76,9 +76,13 @@ License: https://openfontlicense.org/
 JIZURA (lyric motion engine)
 ----------------------------
 Copyright (c) 2026 hakoniwa. Licensed under the MIT License.
-Used for the "Lyric PV" lyric template. The planner and renderer sources are
-vendored unmodified in public/vendor/jizura/jizura-engine.js; the full license
-text ships next to it as public/vendor/jizura/LICENSE.
+Used for the "Lyric PV" lyric template. The planner and renderer sources of
+release v0.13.0 (commit 4c8278c) are vendored in public/vendor/jizura/jizura-engine.js
+by tools/vendor-jizura.js; upstream code is unchanged except for performance
+patches and opt-in planner hooks marked "Elitesand Pro:". The upstream editor UI
+and MP4 export (and the mp4-muxer library it bundles) are not included. Fonts are
+loaded at runtime from Google Fonts and are not bundled. The full license text
+ships next to the engine as public/vendor/jizura/LICENSE.
 Source: https://github.com/852wa/JIZURA
 
 GSAP 3.12.5
@@ -97,6 +101,14 @@ Copyright Olli Parviainen, Ryan Berdeen, Jakub Fiala, Steve Blades and
 contributors. GNU Lesser General Public License v2.1 or later. The license
 header is retained in public/vendor/soundtouch-worklet.js.
 Source: https://github.com/cutterbl/SoundTouchJS
+
+Signalsmith Stretch 1.3.2
+------------------------
+Copyright (c) 2022 Geraint Luff / Signalsmith Audio Ltd. MIT License.
+Used for real-time pitch shifting and time stretching. Includes the Signalsmith
+Linear FFT library (Copyright (c) 2025 Signalsmith Audio, MIT).
+The license texts ship as public/vendor/signalsmith-stretch-LICENSE.txt.
+Source: https://github.com/Signalsmith-Audio/signalsmith-stretch/tree/88061fd4eda56a2353c5d65c74aa3f4ccf76f9da
 
 AI vocal separation models (not bundled; downloaded on demand)
 --------------------------------------------------------------

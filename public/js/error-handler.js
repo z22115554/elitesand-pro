@@ -318,7 +318,7 @@ const ErrorHandler = (() => {
     if (!file) {
       return { valid: false, message: t('validation.lyricsFileMissing') };
     }
-    const allowed = ['.lrc', '.srt', '.txt'];
+    const allowed = ['.lrc', '.srt', '.vtt', '.txt'];
     const ext = '.' + (file.name || '').split('.').pop().toLowerCase();
     if (!allowed.includes(ext)) {
       return { valid: false, message: t('validation.unsupportedFormat', { ext, formats: allowed.join(', ') }) };

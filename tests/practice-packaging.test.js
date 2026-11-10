@@ -13,11 +13,13 @@ const { PAGE_BUNDLES, TEMPLATE_IDS, assertLocalScriptReferencesExist } = require
 const repo = path.resolve(__dirname, '..');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const WORKLET = 'js/practice/pitch-detector-worklet.js';
-const PANEL_SCRIPTS = ['practice-clock.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'practice/practice-showcase.js', 'practice/practice-feedback-controller.js', 'app-practice.js'];
+const PLAYBACK_FILES = ['soundtouch-worklet.js', 'signalsmith-playback-worklet.js', 'signalsmith-stretch.js',
+  'signalsmith-stretch-LICENSE.txt'].map(name => `public/vendor/${name}`);
+const PANEL_SCRIPTS = ['soundtouch-engine.js', 'practice-clock.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'practice/practice-showcase.js', 'practice/practice-feedback-controller.js', 'app-practice.js'];
 const OVERLAY_SCRIPTS = ['practice/practice-scoring.js', 'practice/practice-fx.js', 'practice/practice-engine.js', 'practice/practice-showcase.js', 'practice-overlay.js'];
 const practiceFiles = [
   ...new Set([...PANEL_SCRIPTS, ...OVERLAY_SCRIPTS].map(name => `public/js/${name}`)),
-  `public/${WORKLET}`, 'public/vendor/soundtouch-worklet.js', 'server/services/practice-overlay.js',
+  `public/${WORKLET}`, ...PLAYBACK_FILES, 'server/services/practice-overlay.js',
   ...TEMPLATE_IDS.map(id => `public/js/lyric-template-${id}.js`),
 ];
 
@@ -77,11 +79,12 @@ test('release build keeps the worklet URL and the server-required fx module, bun
     const scripts = page.html === 'index.html' ? tags(PANEL_SCRIPTS) : page.html === 'practice-overlay.html' ? tags(OVERLAY_SCRIPTS) : '';
     fs.writeFileSync(path.join(publicDir, page.html), `<!doctype html><html><body>${scripts}</body></html>`);
   }
-  const vendorHash = hash(path.join(publicDir, 'vendor/soundtouch-worklet.js'));
   const result = spawnSync(process.execPath, [path.join(repo, 'tools/build-production-bundles.js'), staging], { cwd: repo, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   for (const [relative, digest] of before) assert.equal(hash(path.join(repo, relative)), digest, `release build must not mutate source ${relative}`);
-  assert.equal(hash(path.join(publicDir, 'vendor/soundtouch-worklet.js')), vendorHash, 'LGPL vendor remains byte-for-byte separate');
+  for (const relative of PLAYBACK_FILES) {
+    assert.equal(hash(path.join(staging, relative)), before.get(relative), `${relative} stays a separate asset`);
+  }
   assert.ok(fs.existsSync(path.join(publicDir, WORKLET)), 'the worklet is loaded by URL (addModule) and must survive bundling');
   assert.ok(fs.existsSync(path.join(publicDir, 'js/practice/practice-fx.js')), 'server/services/practice-overlay.js requires practice-fx.js');
   for (const name of ['practice-clock.js', 'app-practice.js', 'practice-overlay.js', 'practice/practice-engine.js', 'practice/practice-scoring.js', 'practice/practice-calibration.js', 'practice/practice-showcase.js', 'practice/practice-feedback-controller.js']) {
@@ -94,6 +97,7 @@ test('release build keeps the worklet URL and the server-required fx module, bun
   exerciseBundle(publicDir, 'practice-overlay.html');
   const panelBundle = pageScripts(publicDir, 'index.html').map(url => fs.readFileSync(path.join(publicDir, url.slice(1)), 'utf8')).join('\n');
   assert.ok(panelBundle.includes('/js/practice/pitch-detector-worklet.js'), 'the panel still points at the worklet URL');
+  assert.ok(panelBundle.includes('/vendor/signalsmith-playback-worklet.js'), 'the panel still points at the WASM worklet');
   exerciseWorklet(publicDir);
 });
 
@@ -103,7 +107,7 @@ if (process.env.ELITESAND_PRACTICE_STAGING_PATH) {
     const staging = path.resolve(process.env.ELITESAND_PRACTICE_STAGING_PATH), publicDir = path.join(staging, 'public');
     assertLocalScriptReferencesExist(publicDir, path.join(publicDir, 'js'));
     exerciseWorklet(publicDir);
-    for (const relative of ['ai/pitch_guide_worker.py', 'public/vendor/soundtouch-worklet.js']) {
+    for (const relative of ['ai/pitch_guide_worker.py', ...PLAYBACK_FILES]) {
       assert.equal(hash(path.join(staging, relative)), hash(path.join(repo, relative)), `${relative} remains present and unchanged`);
     }
   });

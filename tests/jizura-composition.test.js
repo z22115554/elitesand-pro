@@ -42,7 +42,9 @@ const signature = c => [c.layout, c.enter, c.exit, c.hold, c.cam, c.treat, (c.de
 test('projects without options retain the pinned legacy plan', () => {
   const { J } = load();
   const p = project(J);
-  assert.equal(fingerprint(J.plan(p, null)), '806b324ef70efc6e6e8c1be26a95131b7550a81b07aaa83440db0143f9ac6346');
+  // 2026-11-10 引擎 8bd7abc → v0.13.0（4c8278c）：上游 v0.8 起文字PV系／キネティック部件預設開啟、重複句沿用第一次的
+  // つなぎ（不再重抽），所以上游預設設定下的規劃換了；Elitesand 的修補仍不改上游的亂數順序（下一行的 {} 比對）。
+  assert.equal(fingerprint(J.plan(p, null)), '1329ad2cf78292ee83c621ad8d16f9dc2613488e4eb32a4ef103cd62f370fb3f');
   assert.equal(fingerprint(J.plan({ ...p, unifyOptions: {} }, null)), fingerprint(J.plan(p, null)));
 });
 

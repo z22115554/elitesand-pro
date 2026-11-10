@@ -137,6 +137,19 @@ const STICKY_AFTER = `  const sticky = (i, g, v, max, rng, fits = () => true, re
     return v;
   };`;
 
+// v0.12 起部件清單變成 1,715 個，pickLayout／pickEnter／pickExit 每抽一次都要掃完整個順序表再跳過沒開的；
+// 用 WeakMap 依 enabled 物件快取「有開的 key（保持原順序）」，抽選結果與亂數順序完全不變。
+const ENABLED_ORDER_DEF = `/* Elitesand Pro: the pickers walk the whole order list (364 layouts / 251 entrances / 221 exits since v0.12) and
+   skip disabled keys on every pick. Cache the enabled keys per enabled-map object, in the same order, so the
+   candidates, weights and RNG draws are identical. */
+const enabledOrders = new WeakMap();
+function enabledOrder(map, order) {
+  let hit = map && enabledOrders.get(map);
+  if (!hit || hit.n !== order.length) { hit = { n: order.length, keys: order.filter(k => map && map[k]) }; if (map) enabledOrders.set(map, hit); }
+  return hit.keys;
+}
+`;
+
 const PATCHES = [
   {
     file: '08_planner.js',
@@ -189,6 +202,16 @@ const PATCHES = [
   ].map(([find, replace]) => ({ file: '03_text.js', find, replace })),
 
   { file: '09_render.js', find: 'class Renderer {', replace: EVENT_WINDOW_DEF + '\nclass Renderer {' },
+  {
+    file: '08_planner.js',
+    find: 'function pickLayout(rng, st, en, n, dur, history, emph, recap, portrait) {\n  const cands = [];\n  for (const k of J.LAYOUT_ORDER) {',
+    replace: ENABLED_ORDER_DEF + 'function pickLayout(rng, st, en, n, dur, history, emph, recap, portrait) {\n  const cands = [];\n'
+      + '  for (const k of enabledOrder(en.layout, J.LAYOUT_ORDER)) {   // Elitesand Pro: enabled keys only, same order',
+  },
+  { file: '08_planner.js', find: '  for (const k of J.ENTER_ORDER) {\n    if (!en.enter[k]) continue;',
+    replace: '  for (const k of enabledOrder(en.enter, J.ENTER_ORDER)) {   // Elitesand Pro: enabled keys only, same order\n    if (!en.enter[k]) continue;' },
+  { file: '08_planner.js', find: '  for (const k of J.EXIT_ORDER) {\n    if (!en.exit[k]) continue;',
+    replace: '  for (const k of enabledOrder(en.exit, J.EXIT_ORDER)) {   // Elitesand Pro: enabled keys only, same order\n    if (!en.exit[k]) continue;' },
   {
     file: '09_render.js',
     find: '    for (let i = 0; i < events.length; i++) {\n      const ev = events[i]; if (ev.t > t) break; const dt = (t - ev.t) * 24;',

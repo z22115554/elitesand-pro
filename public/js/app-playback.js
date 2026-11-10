@@ -33,8 +33,8 @@
   let currentPlaybackRate = 1.0; // 播放速率，0.5 ~ 1.5
   let audioProcessorReady = false;
 
-  // ── 高品質變調（SoundTouch/WSOLA）：一律啟用。舊的 <audio>+Tone 預設變調實際上不堪用
-  // （使用者實測），所以不再提供開關；AudioWorklet 載入或 decode 失敗時仍會自動降級回 <audio>+Tone。──
+  // 即時變調由 AudioWorklet 處理，Signalsmith 初始化失敗時由 SoundTouch 接手。
+  // AudioWorklet 不可用或解碼失敗時，交給既有的 <audio>+Tone 備援。
   const useSoundTouch = true;
   // ── 連續播放：ON＝一首播完自動播下一首（player 模式）；OFF（預設）＝單曲，播完停 ──
   let continuousPlay = false;
@@ -49,11 +49,7 @@
   // 伴奏＝主 SoundTouchEngine（跟一般單軌播放共用同一份，只是把它載入的檔案換成伴奏檔）；
   // 人聲＝第二份獨立的 SoundTouchEngine（同一個
   // AudioContext、各自的 AudioWorkletNode），跟著伴奏同步 play/pause/seek/pitch/tempo。
-  // 2026-08-23 研究過 soundtouch-worklet.js 的實際演算法：WSOLA 的相關性搜尋只影響混音
-  // 品質，不影響每次迭代吃掉/吐出幾個 sample（那由 tempo/pitch 參數決定，跟音檔內容無關）；
-  // 兩份 instance 只要同一個 AudioContext、同樣起始位置、同樣 tempo/pitch，理論上不會飄。
-  // 這是這輪從「plain <audio> 影子軌、強制原速原調」升級成「雙引擎、支援變調變速」的取代
-  // 設計，變調/變速滑桿在分離雙軌播放下不再停用。──
+  // 兩軌共用輸出 frame，播放位置依已渲染的 sample 數推進。
   let separationActive = false; // 目前這首歌是否實際使用伴奏＋人聲雙 stem
   let vocalsSTEngine = null, vocalsGain = null, vocalsDelay = null;
   // 練唱「示範」用的分接點：人聲引擎 → vocalsTap（增益 1，聽感不變）→ vocalsGain。
@@ -88,7 +84,7 @@
     if (vocalsSTEngine) return;
     stInitChain(); // 確保 stCtx 存在（人聲共用同一個 AudioContext；idempotent，可安全重複呼叫）
     if (!stCtx || typeof window.createSoundTouchEngine !== 'function') return; // 極罕見：SoundTouch 完全不可用，人聲留空、伴奏正常播放
-    vocalsSTEngine = window.createSoundTouchEngine();
+    vocalsSTEngine = window.createSoundTouchEngine({ preserveFormants: true });
     vocalsGain = stCtx.createGain();
     vocalsGain.gain.value = vocalsVolume;
     // 人聲鏈：vocalsGain → vocalsDelay →（下游看雙路路由開了沒：直接到 destination
@@ -620,13 +616,13 @@
   // 少了這個回報，舊的 .then() 會拿「當下的 stReady」（還在 decode 新歌時是 false）誤判成
   // 「SoundTouch 解碼失敗」而降級去 audioPlayer.play()，於是 <audio> 與 SoundTouch 兩條鏈
   // 同時出聲、進度各走各的（實測：連點下一首會聽到兩個不同進度的音訊，且暫停後進度條照跑）。
-  async function stLoadCurrent(filename) {
+  async function stLoadCurrent(filename, myToken = ++stLoadToken) {
     stReady = false;
     if (!useSoundTouch || !filename) return 'skip';
     if (!stInitChain()) return 'skip';
     applyStLoudnessGain(); // 首次載歌才建鏈：建好後補套當前歌曲的響度校正
-    const myToken = ++stLoadToken;
     try { if (stCtx.state === 'suspended') await stCtx.resume(); } catch (e) { /* 靜默 */ }
+    if (myToken !== stLoadToken) return 'stale';
     const ok = await SoundTouchEngine.load('/audio/' + encodeURIComponent(filename));
     if (myToken !== stLoadToken) return 'stale'; // 已有更新的載入發生 → 丟棄這次結果
     stReady = ok;
@@ -694,7 +690,7 @@
       AudioProcessor.setPitch(currentPitchShift);
       AudioProcessor.setRate(currentPlaybackRate);
     }
-    // 高品質變調模式：同步到 SoundTouch 引擎（pitch 走 WSOLA、speed 走 tempo 時間伸縮）。
+    // 變調與變速同步到兩軌，使用同一個輸出 frame。
     // A2/A4：分離播放時伴奏與人聲兩個引擎用「同一個排程 frame」一起套用，兩軌才會在同一個
     // render quantum 生效、不因訊息時機差而走鐘。人聲引擎只要存在就無條件跟著套——不再用
     // separationActive 當條件（狀態轉換的縫隙曾讓兩邊 pitch/tempo 快取分岔，造成兩軌長期
@@ -783,6 +779,7 @@
       return false;
     }
 
+    const loadToken = ++stLoadToken;
     state.currentTrackIndex = index;
     loadedTrackEntryId = track.entryId || track.id || null;
     practiceSourceEntryId = null;
@@ -843,9 +840,9 @@
       // 切歌：先停掉並銷毀上一首的 SoundTouch 節點，避免舊節點變孤兒繼續播放、停不下來。
       // 注意：load 只在下方各分支「呼叫一次」——重複 stLoadCurrent 會讓兩個 load 競態、產生孤兒節點。
       if (useSoundTouch) { try { SoundTouchEngine.stop(); } catch (e) {} }
-      // 上一首的人聲引擎「無條件」停：從分離歌手動切到非分離歌時 wantSeparation 為 false，
-      // 若在這裡加 wantSeparation 判斷，舊人聲軌會變孤兒繼續唱、下一首又照播（實測事故）。
-      if (vocalsSTEngine) { try { vocalsSTEngine.stop(); } catch (e) {} }
+      // 換歌要作廢仍在下載／準備的人聲，也釋放上一首的 PCM。
+      if (vocalsSTEngine) { try { vocalsSTEngine.dispose(); } catch (e) {} }
+      vocalsLoadPromise = null;
       if (autoplay) {
         if (useSoundTouch) {
           // SoundTouch 路徑：等 buffer 好再播；<audio> 靜音待命當備援
@@ -853,10 +850,11 @@
           audioPlayer.pause(); // 走 SoundTouch 就不該有 <audio> 在跑：靜音的 <audio> 仍會發 timeupdate 搶進度條
           // 分離雙軌：伴奏＋人聲要平行載入（不能先播伴奏、等它 ready 才去載人聲，
           // 那樣人聲會晚個幾百 ms 才進來），載入完成才一起 play()，起頭才會對齊。
-          const masterLoadPromise = stLoadCurrent(masterFilename);
+          const masterLoadPromise = stLoadCurrent(masterFilename, loadToken);
           const vocalsPromise = wantSeparation ? loadVocalsFor(track) : Promise.resolve(false);
           Promise.all([masterLoadPromise, vocalsPromise, dualReadyPromise]).then(([result, vocalsOk]) => {
             if (result === 'stale') return; // 已被更新的切歌取代，交給那一次處理
+            if (loadToken !== stLoadToken) return; // 等較慢的人聲或輸出裝置時又切了歌
             if (stReady) {
               // A4：伴奏與人聲用同一個排程 frame 一起起播（wf；非分離時 undefined → 立即，行為不變）
               const wf = (wantSeparation && vocalsOk) ? sepSharedFrame(0.09) : undefined;
@@ -897,10 +895,10 @@
       } else {
         // 載入但不播放：暫停待命，由使用者按播放鍵開始
         if (useSoundTouch) {
-          const masterLoadPromise = stLoadCurrent(masterFilename);
+          const masterLoadPromise = stLoadCurrent(masterFilename, loadToken);
           const vocalsPromise = wantSeparation ? loadVocalsFor(track) : Promise.resolve(false);
           Promise.all([masterLoadPromise, vocalsPromise, dualReadyPromise]).then(([result]) => {
-            if (result === 'stale') return;
+            if (result === 'stale' || loadToken !== stLoadToken) return;
             seekLoadedTrack(startTime);
           });
         }
@@ -921,6 +919,7 @@
   }
 
   function stopPlayback() {
+    ++stLoadToken;
     audioPlayer.pause();
     suppressNextAudioError = true;
     audioPlayer.src = '';
@@ -1054,8 +1053,9 @@
       // 的 promise，好了才補播，並用伴奏「當下」位置對齊，不是從頭開始。
       const startVocalsWhenReady = (sharedWf, sharedPos) => {
         if (!separationActive || !vocalsSTEngine) return;
+        const loadToken = stLoadToken;
         const startVocals = () => {
-          if (!isPlaying || !vocalsSTEngine.isReady()) return; // 等待期間可能又被暫停或切了歌
+          if (!isPlaying || loadToken !== stLoadToken || !vocalsSTEngine?.isReady()) return;
           vocalsSTEngine.setPitch(currentPitchShift);
           vocalsSTEngine.setTempo(currentPlaybackRate);
           // A3/A4：人聲跟伴奏幾乎同時 ready → 沿用 startST 排的同一組 frame/位置，兩軌對齊起播。

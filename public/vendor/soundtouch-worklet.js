@@ -403,11 +403,28 @@ class ArraySource {
 
 const POSITION_REPORT_FRAMES = 1024; // 約 23ms@44.1k 回報一次播放位置
 
+class SoundTouchRenderer {
+  load(left, right) {
+    this.soundTouch = new SoundTouch();
+    this.filter = new SimpleFilter(new ArraySource(left, right), this.soundTouch);
+  }
+
+  reset(position, pitch, tempo) {
+    this.filter.sourcePosition = Math.round(position);
+    this.soundTouch.pitchSemitones = pitch;
+    this.soundTouch.tempo = tempo;
+  }
+
+  extract(target, frames) { return this.filter.extract(target, frames); }
+  get prefetchedPosition() { return this.filter.sourcePosition; }
+}
+
 class SoundTouchProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this._st = null;
-    this._filter = null;
+    this._renderer = null;
+    this._preparedRenderer = null;
+    this._disposed = false;
     this._ready = false;
     this._playing = false;
     this._ended = false;
@@ -432,7 +449,11 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
   }
 
   _onMessage(msg) {
-    if (!msg) return;
+    if (!msg || this._disposed) return;
+    if (msg.type === 'prepare') {
+      this._prepareRenderer();
+      return;
+    }
     const schedulable = msg.type === 'play' || msg.type === 'seek' || msg.type === 'pitch' || msg.type === 'tempo';
     if (schedulable && typeof msg.applyAtFrame === 'number' && msg.applyAtFrame > currentFrame) {
       // 同一種類只留最新一筆（快速拖曳進度條會連發 seek，不需要每一筆都排隊執行）
@@ -463,19 +484,58 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     }
   }
 
+  _preparePending(frames) {
+    if (!this._renderer?.prepare || !this._pending.length) return;
+    let firstFrame = Infinity;
+    for (const message of this._pending) firstFrame = Math.min(firstFrame, message.applyAtFrame);
+    const quanta = Math.ceil((firstFrame - currentFrame) / frames);
+    const targetFrame = currentFrame + quanta * frames;
+    // The cursor already includes the current quantum. Project the output
+    // position to the next scheduled quantum, then apply that batch in order.
+    let position = this._outputPosition;
+    if (this._playing) position = Math.min(this._sourceLength, position + (quanta - 1) * frames * this._tempo);
+    let pitch = this._pitch, tempo = this._tempo;
+    for (const message of this._pending) {
+      if (message.applyAtFrame > targetFrame) continue;
+      if (message.type === 'pitch') pitch = message.value;
+      if (message.type === 'tempo') tempo = message.value;
+      if ((message.type === 'play' || message.type === 'seek') && typeof message.position === 'number') {
+        position = Math.max(0, Math.min(this._sourceLength, message.position));
+      }
+    }
+    this._renderer.prepare(position, pitch, tempo, quanta);
+  }
+
+  async _prepareRenderer() {
+    let renderer = null;
+    try {
+      renderer = await globalThis.prepareElitesandStretch?.();
+    } catch (error) {
+      console.warn('[Pitch] Signalsmith WASM initialization failed:', error.message);
+    }
+    if (this._disposed) return;
+    this._preparedRenderer = renderer;
+    this.port.postMessage({ type: 'prepared', backend: renderer ? 'signalsmith' : 'soundtouch' });
+  }
+
+  _fadeFromLastSample() {
+    this._fadeRemaining = 64;
+    this._fadeFromL = this._lastSampleL;
+    this._fadeFromR = this._lastSampleR;
+  }
+
   _apply(msg) {
     switch (msg.type) {
       case 'load': {
         // 同一個節點若被重用，先卸載舊來源，避免其 channel data 被 filter 鏈保留。
         this._releaseSource();
-        const src = new ArraySource(msg.left, msg.right);
-        this._st = new SoundTouch();
+        this._renderer = this._preparedRenderer || new SoundTouchRenderer();
+        this._preparedRenderer = null;
         this._pitch = msg.pitchSemitones || 0;
         this._tempo = msg.tempo || 1;
-        this._st.pitchSemitones = this._pitch;
-        this._st.tempo = this._tempo;
-        this._filter = new SimpleFilter(src, this._st);
-        this._sourceLength = src.length;
+        this._renderer.load(msg.left, msg.right, msg.preserveFormants === true);
+        this._renderer.reset(0, this._pitch, this._tempo);
+        this._sourceLength = msg.left.length;
         this._outputPosition = 0;
         this._generation++;
         this._ready = true;
@@ -484,17 +544,21 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
         break;
       }
       case 'dispose':
-        // 主執行緒切歌或完整停止時呼叫。ArraySource 透過 _filter 持有整首 transferred PCM；
-        // 清掉這條鏈讓 worklet 可以在下一個 GC 週期回收，不必對數十 MB 的陣列做 fill。
+        // Release the transferred PCM and stop rendering this disconnected node.
         this._releaseSource();
+        this._preparedRenderer = null;
+        this._disposed = true;
         break;
       case 'play':
         if (!this._ready) break;
         if (typeof msg.position === 'number') {
           const target = Math.max(0, Math.min(this._sourceLength, msg.position));
-          if (Math.abs(target - this._outputPosition) > 1) this._generation++;
+          if (Math.abs(target - this._outputPosition) > 1) {
+            this._generation++;
+            if (this._playing) this._fadeFromLastSample();
+          }
           this._outputPosition = target;
-          this._filter.sourcePosition = Math.round(target);
+          this._renderer.reset(target, this._pitch, this._tempo);
         }
         this._ended = false;
         this._playing = true;
@@ -505,7 +569,8 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
       case 'seek':
         if (this._ready && typeof msg.position === 'number') {
           this._outputPosition = Math.max(0, Math.min(this._sourceLength, msg.position));
-          this._filter.sourcePosition = Math.round(this._outputPosition);
+          this._renderer.reset(this._outputPosition, this._pitch, this._tempo);
+          if (this._playing) this._fadeFromLastSample();
           this._generation++;
           this._ended = false;
         }
@@ -513,24 +578,20 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
       case 'pitch':
         if (msg.value === this._pitch) break;
         this._pitch = msg.value;
-        if (this._st) {
+        if (this._renderer) {
           // Buffered output was rendered with the previous key. Re-seed at the
           // audible cursor so the acknowledgement describes the samples emitted
           // from this render quantum, rather than a future prefetch position.
-          this._filter.sourcePosition = Math.round(this._outputPosition);
-          this._st.pitchSemitones = msg.value;
-          this._fadeRemaining = 64;
-          this._fadeFromL = this._lastSampleL; this._fadeFromR = this._lastSampleR;
+          this._renderer.reset(this._outputPosition, this._pitch, this._tempo);
+          this._fadeFromLastSample();
         }
         break;
       case 'tempo':
         if (msg.value === this._tempo) break;
         this._tempo = msg.value;
-        if (this._st) {
-          this._filter.sourcePosition = Math.round(this._outputPosition);
-          this._st.tempo = msg.value;
-          this._fadeRemaining = 64;
-          this._fadeFromL = this._lastSampleL; this._fadeFromR = this._lastSampleR;
+        if (this._renderer) {
+          this._renderer.reset(this._outputPosition, this._pitch, this._tempo);
+          this._fadeFromLastSample();
         }
         break;
     }
@@ -542,8 +603,7 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     this._playing = false;
     this._ready = false;
     this._ended = false;
-    this._filter = null;
-    this._st = null;
+    this._renderer = null;
     this._posCounter = 0;
     this._pending = [];
     this._outputPosition = 0;
@@ -555,7 +615,7 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     this.port.postMessage({
       type: 'position',
       position: this._outputPosition,
-      prefetchedPosition: this._filter ? this._filter.sourcePosition : 0,
+      prefetchedPosition: this._renderer?.prefetchedPosition ?? 0,
       contextFrame, contextTime: contextFrame / sampleRate,
       pitchSemitones: this._pitch, tempo: this._tempo,
       playing: this._playing, generation: this._generation,
@@ -564,6 +624,7 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs) {
+    if (this._disposed) return false;
     const output = outputs[0];
     const left = output[0];
     const right = output[1] || output[0];
@@ -578,11 +639,15 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
 
     if (!this._ready || !this._playing) {
       left.fill(0); if (output[1]) right.fill(0);
+      this._preparePending(frames);
       return true;
     }
 
     const remainingFrames = Math.max(0, Math.ceil((this._sourceLength - this._outputPosition) / this._tempo));
-    const extracted = this._filter.extract(this._interleaved, Math.min(frames, remainingFrames));
+    if (this._interleaved.length < frames * 2) this._interleaved = new Float32Array(frames * 2);
+    const extracted = remainingFrames > 0
+      ? this._renderer.extract(this._interleaved, Math.min(frames, remainingFrames), this._outputPosition)
+      : 0;
     let i = 0;
     for (; i < extracted; i++) {
       const gain = this._fadeRemaining > 0 ? (64 - this._fadeRemaining--) / 64 : 1;
@@ -606,6 +671,7 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
       this._postPosition(currentFrame + extracted);
       this.port.postMessage({ type: 'ended' });
     }
+    this._preparePending(frames);
     return true;
   }
 }
