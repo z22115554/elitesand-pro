@@ -2347,6 +2347,13 @@
     // 位置輪流出現，讀起來必須一致。五語沿用長尾表既有譯法（測試會檢查兩張表不得各自表述）。
     'setlist.sceneScaleLabel': ['整體大小倍率', 'Overall size multiplier', '全体のサイズ比率', '전체 크기 비율', '整体大小倍率'],
     'setlist.sceneScaleHint': ['把歌單內容整體放大或縮小，每個版型各自獨立保存；底片邊條放大時每一格變大，看得到的首數會自動變少。', 'Scales the whole setlist content up or down, saved independently per layout. On the Departure Board the film strip enlarges each frame, so fewer tracks stay visible.', 'セットリスト全体を拡大・縮小します（レイアウトごとに個別保存）。フィルムストリップでは 1 コマが大きくなるため、表示される曲数は自動的に少なくなります。', '세트리스트 전체를 확대/축소합니다(레이아웃마다 따로 저장). 필름 스트립은 한 칸이 커지므로 보이는 곡 수가 자동으로 줄어듭니다.', '把歌单内容整体放大或缩小，每个版型各自独立保存；胶片边条放大时每一格变大，看得到的首数会自动变少。'],
+    'setlist.minimalSkinLabel': ['外觀', 'Style', 'デザイン', '디자인', '外观'],
+    'setlist.minimalSkinEditorial': ['清透文字', 'Clean type', 'クリアテキスト', '깔끔한 글자', '清透文字'],
+    'setlist.minimalSkinFramed': ['細框星線', 'Thin frame', '細枠ライン', '얇은 테두리', '细框星线'],
+    'setlist.minimalSkinDreamy': ['星霧柔光', 'Starry glow', '星霧グロー', '별빛 안개', '星雾柔光'],
+    'setlist.minimalTickerLabel': ['已唱跑馬燈速度', 'Sung-list scroll speed', '歌唱済みの流れる速さ', '부른 곡 흐름 속도', '已唱跑马灯速度'],
+    'setlist.minimalNumberLabel': ['顯示曲序（#2）', 'Show song number (#2)', '曲順を表示（#2）', '곡 순서 표시 (#2)', '显示曲序（#2）'],
+    'setlist.minimalHint': ['背景固定透明；字型、顏色、字級沿用上方的通用設定。已唱歌名放得下就靜止，放不下才慢慢捲動。', 'The background is always transparent; font, colours and sizes follow the general settings above. Sung titles stay still when they fit and scroll slowly only when they do not.', '背景は常に透明です。フォント・色・文字サイズは上の共通設定を使います。歌唱済みの曲名は収まれば静止し、収まらないときだけゆっくり流れます。', '배경은 항상 투명합니다. 글꼴·색·글자 크기는 위의 공통 설정을 따릅니다. 부른 곡 제목은 다 들어가면 멈춰 있고, 넘칠 때만 천천히 흐릅니다.', '背景固定透明；字型、颜色、字级沿用上方的通用设置。已唱歌名放得下就静止，放不下才慢慢滚动。'],
     'setlist.noteNowColorLabel': ['正在唱', 'Now singing', '歌唱中', '부르는 중', '正在唱'],
     'setlist.noteNowColorNote': ['歌名與頁首標題', 'Song title and sheet heading', '曲名とページ見出し', '곡명과 페이지 제목', '歌名与页首标题'],
     'setlist.noteWaitColorLabel': ['未唱', 'Not sung yet', '未歌唱', '아직 안 부름', '未唱'],

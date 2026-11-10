@@ -25,7 +25,7 @@
   // OBS Browser Source 的實際寬高就是歌單的版面框：來源拉多大，歌單就排多大。
   // 沒有第二種輸出模式，也沒有 URL 參數——同一個 /setlist 網址在任何來源尺寸都成立。
   // 場景版（timeline / diagonal / constellation）不走這條，維持原本的全幅舞台行為。
-  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note']);
+  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'minimal-board']);
   // 長歌單只在有直向清單的模板循環捲動。卡片／索引／排行榜／終端機維持裁列；
   // simple 與 signal 是固定版位，只顯示現在與下一首，沒有可捲動的直向隊列。
   const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager', 'haunt']);
@@ -1073,7 +1073,85 @@
     },
   };
 
-  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index, flap, note, film, ...skinLayouts };
+  // ═══════════════════════════════════════════
+  // minimal-board：極簡歌單 —— 大字正在唱，底部一行已唱歌名（放不下才跑馬燈）
+  // 背景一律透明；三款外觀只換字體層級、細線／細框與少量星點（data-mb-skin）。
+  // 只有歌真的換了才重播進場動畫，其他同步（暫停、設定）不重播。
+  // ═══════════════════════════════════════════
+  const MB_STARS = [[8, 18, 0.9], [91, 12, 0.7], [84, 72, 1.1], [14, 80, 0.6], [62, 8, 0.8]];
+  let mbLastKey = null;
+  const minimalBoard = {
+    mount(root) {
+      mbLastKey = null;
+      root.innerHTML =
+        '<div class="lay-stage mb-stage"><div class="mb-board">' +
+          MB_STARS.map(([x, y, s], i) => `<span class="mb-star" style="left:${x}%;top:${y}%;--mb-star:${s};animation-delay:${i * 1.3}s"></span>`).join('') +
+          '<div class="mb-head"><span class="mb-eye" id="mb-eye"></span><span class="mb-num" id="mb-num"></span></div>' +
+          '<div class="mb-rule"></div>' +
+          '<div class="mb-now" id="mb-now"><div class="mb-title" id="mb-t"></div><div class="mb-artist" id="mb-a"></div></div>' +
+          '<div class="mb-foot" id="mb-foot"><span class="mb-foot-lbl" id="mb-foot-lbl"></span>' +
+            '<div class="mb-ticker" id="mb-ticker"><div class="mb-track" id="mb-track"></div></div></div>' +
+        '</div></div>';
+    },
+    render(root) {
+      const cur = model.current;
+      const next = !cur && model.upcoming.length ? model.upcoming[0] : null;
+      const shown = cur || next;
+      root.querySelector('#mb-eye').textContent = cur ? lastLabels.nowPlaying
+        : next ? t('setlist.upcoming') : (model.active ? t('setlist.startingSoon') : t('setlist.notStarted'));
+      root.querySelector('#mb-num').textContent = cur ? `#${model.past.length + 1}` : '';
+      const titleEl = root.querySelector('#mb-t');
+      titleEl.textContent = shown ? shown.title : '';
+      root.querySelector('#mb-a').textContent = shown && shown.artist ? shown.artist : '';
+      root.querySelector('#mb-now').classList.toggle('is-next', !cur && !!next);
+      const key = shown ? `${cur ? 'now' : 'next'}:${shown.title}:${shown.artist || ''}:${model.past.length}` : 'empty';
+      if (key !== mbLastKey) {
+        mbLastKey = key;
+        const board = root.querySelector('.mb-board');
+        board.classList.remove('is-enter');
+        void board.offsetWidth; // 重新觸發進場動畫
+        board.classList.add('is-enter');
+      }
+      // 底部已唱：只放真正唱過的歌（暫停中的這首仍算正在唱，不會跑進來）；一首都沒有就整條隱藏
+      const foot = root.querySelector('#mb-foot');
+      const past = model.past;
+      foot.hidden = past.length === 0;
+      root.querySelector('#mb-foot-lbl').textContent = lastLabels.done;
+      const track = root.querySelector('#mb-track');
+      const text = past.map((s) => s.title).join('　·　');
+      track.textContent = '';
+      const one = document.createElement('span');
+      one.className = 'mb-seg';
+      one.textContent = text;
+      track.appendChild(one);
+      track.classList.remove('is-moving');
+      track.style.removeProperty('--mb-dur');
+      if (!text) return;
+      // 來源被藏起來或剛載入時量到的寬度是 0：晚一點再量（最多約 10 秒），
+      // 不然會被當成「放得下」而永遠不捲（OBS 切場景、面板預覽換尺寸都會碰到）。
+      let tries = 0;
+      const measure = () => {
+        const ticker = root.querySelector('#mb-ticker');
+        if (!ticker || !one.isConnected) return;
+        if (ticker.clientWidth === 0) {
+          if (tries++ < 20) setTimeout(measure, 500);
+          return;
+        }
+        if (one.scrollWidth <= ticker.clientWidth + 2) return; // 放得下就靜止
+        // 放不下：複製一份接在後面，整條往左移一份的寬度，接縫不跳
+        const copy = one.cloneNode(true);
+        copy.setAttribute('aria-hidden', 'true');
+        track.appendChild(copy);
+        const speed = Math.max(8, Number(curStyle.minimalTickerSpeed) || 24) * fitFactor;
+        track.style.setProperty('--mb-dur', `${Math.max(6, one.offsetWidth / speed).toFixed(2)}s`);
+        track.classList.add('is-moving');
+      };
+      // 不用 requestAnimationFrame：來源在背景或被 OBS 節流時它不會觸發；讀寬度本身就會強制排版
+      setTimeout(measure, 30);
+    },
+  };
+
+  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index, flap, note, film, 'minimal-board': minimalBoard, ...skinLayouts };
 
   // ─── 版型掛載/切換 ───
   function setLayout(id) {
@@ -1134,7 +1212,7 @@
   } catch (e) { /* 退回下面的 resize 監聽 */ }
   window.addEventListener('resize', scheduleFit);
 
-  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film'];
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'minimal-board'];
   const effTarget = (l) => (SETLIST_LAYOUTS.includes(l) ? l : 'classic');
   // 取某版型生效的設定；舊 payload 仍可讀，避免 OBS 快取中的舊頁面在更新過渡時失去外觀。
   function effStyleFrom(data, layout) {

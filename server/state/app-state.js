@@ -70,7 +70,7 @@ function getDefaultLyricSettings() {
 // 顯示一個對它完全無效的「整體大小倍率」（--sl-scale 被 #setlist-root 的非 classic
 // 重置規則清空），使用者實測回報調了沒反應；真正能動它的「場景版設定」滑桿反而被藏起來。
 const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];
-const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film'];
+const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'minimal-board'];
 
 /**
  * 建立狀態容器

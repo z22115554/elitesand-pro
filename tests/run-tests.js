@@ -7096,7 +7096,7 @@ test('歌單亮色背景可讀性保護與模板有效設定守衛存在', () =>
   eq(schema.FIELD_BY_KEY.waitOpacity.default, 72, '新歌單預設不得把未唱文字淡到亮色背景看不見：');
   ok(indexHtml.includes('id="sls-readability-guard"'), '面板必須提供亮色背景可讀性保護開關');
   ok(indexHtml.includes('可讀性襯底色') && indexHtml.includes('可讀性襯底不透明度'), '主要文字與襯底色必須在快速調整可見');
-  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt"'), '正在播放字級必須在每個有 active 歌曲的模板顯示');
+  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt minimal-board"'), '正在播放字級必須在每個有 active 歌曲的模板顯示');
   ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager haunt"'), '歌曲編號設定不得在不支援的模板顯示');
   ok(setlistPanel.includes('設定只套用並保存於這個模板；切換模板不會影響其他歌單。'), '模板說明必須明示設定會各模板獨立保存');
   ok(setlistCss.includes(':root:not([data-sl-readable-off]) .now-singing') && setlistCss.includes(':root:not([data-sl-readable-off]) .tl-now'), '經典與場景模板都必須有非全螢幕的可讀性襯底');
@@ -7139,7 +7139,7 @@ test('歌單每個模板保存獨立外觀，正在播放字級也套到 active 
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const schema = require('../public/js/setlist-style-schema');
-  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt"'),
+  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt minimal-board"'),
     '所有有正在播放內容的模板都必須顯示正在播放字級設定');
   ['.term-item.active .t-line { font-size: var(--sl-sz-n)', '.bb-item.active .bb-name { font-size: var(--sl-sz-n)', '.card.active .card-title { font-size: var(--sl-sz-n)', '.index-item.active .index-title { font-size: var(--sl-sz-n)']
     .forEach((rule) => ok(setlistCss.includes(rule), `active row 必須吃正在播放字級：${rule}`));
@@ -7786,8 +7786,8 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   ok(setlistPanel.includes("const url = new URL('/setlist', window.location.origin);") && !setlistPanel.includes("set('mode'"),
     'OBS 網址必須固定，尺寸改由 OBS Browser Source 決定');
 
-  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note']);"),
-    '十四個清單型模板必須集中列在同一份填滿白名單');
+  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'minimal-board']);"),
+    '十五個清單型模板（含 2026-11-10 的極簡歌單）必須集中列在同一份填滿白名單');
   ok(setlistSource.includes('const FIT_REF_W = 460, FIT_REF_H = 320, FIT_MIN = 0.85, FIT_MAX = 3.2;') && setlistSource.includes('Math.min(w / FIT_REF_W, h / FIT_REF_H)'),
     '縮放係數必須同時依來源寬與高計算，且基準要維持實機校準過的可讀字級');
   ok(setlistSource.includes("dataset.slFit = isFillLayout() ? 'fill' : 'scene'"), 'CSS 必須能分辨填滿與場景兩種語意');
@@ -15021,6 +15021,36 @@ test('搜歌時播放清單不被擠出左欄：有結果時加歌區設上限�
   ok(rule.includes('overflow-y: auto'), '左欄太矮時加歌區自己捲，按鈕不被裁掉');
   ok(css.includes('.live-queue #youtube-search-panel > .youtube-search-results:not(:empty) { flex: 1 1 auto; min-height: 96px; max-height: none; }'));
   ok(css.includes('.live-queue #music-source-card { flex: none; }'), '沒有搜尋結果時維持原本的加歌區');
+});
+
+test('OBS 極簡歌單：伺服器／面板／顯示端三份版型清單同步，背景透明、只放已唱、放不下才捲、量不到寬度會重量', () => {
+  const appStateSource = fs.readFileSync(path.join(__dirname, '../server/state/app-state.js'), 'utf8');
+  const panel = fs.readFileSync(path.join(__dirname, '../public/js/app-setlist-panel.js'), 'utf8');
+  const setlist = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  for (const [name, src] of [['server', appStateSource], ['panel', panel], ['display', setlist]]) {
+    ok(/const SETLIST_LAYOUTS = \[[^\]]*'minimal-board'\]/.test(src), `${name} 的版型清單要有 minimal-board`);
+  }
+  const schema = require('../public/js/setlist-style-schema');
+  eq(schema.FIELD_BY_KEY.minimalSkin.default, 'editorial');
+  ok(schema.FIELD_BY_KEY.minimalSkin.values.join() === 'editorial,framed,dreamy', '一個版型、三款外觀');
+  const target = schema.getDefaultStyle();
+  schema.validateAndApply({ minimalSkin: 'evil', minimalTickerSpeed: 999 }, target);
+  eq(target.minimalSkin, 'editorial', '不認得的外觀不接受');
+  eq(target.minimalTickerSpeed, 60, '速度夾在範圍內');
+  const block = setlist.slice(setlist.indexOf('const minimalBoard = {'), setlist.indexOf("const LAYOUTS = {"));
+  ok(block.includes('const past = model.past;') && block.includes('foot.hidden = past.length === 0;'), '底部只放真正唱過的歌，一首都沒有就隱藏');
+  ok(block.includes('if (one.scrollWidth <= ticker.clientWidth + 2) return;'), '放得下就靜止');
+  ok(/if \(ticker\.clientWidth === 0\) \{\s*if \(tries\+\+ < 20\) setTimeout\(measure, 500\);/.test(block), '來源被藏起來時量到 0 要晚點重量');
+  ok(!block.replace(/\/\/.*$/gm, '').includes('requestAnimationFrame'), 'OBS 節流背景來源時 rAF 不會觸發，不能靠它量寬度');
+  ok(block.includes('textContent') && !/innerHTML\s*=\s*[^'"]*title/.test(block), '歌名一律純文字輸出');
+  const css = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
+  const mb = css.slice(css.indexOf('/* ══ 極簡歌單（minimal-board）══'));
+  ok(!/\.mb-(stage|board)\s*\{[^}]*background:\s*(?!linear)/.test(mb), '版型本身不鋪底色');
+  ok(mb.includes('@media (prefers-reduced-motion: reduce)'), '尊重減少動態效果');
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(html.includes('data-setlist-layout="minimal-board"') && html.includes('data-new-feature="setlist-minimal"'));
+  const slim = fs.readFileSync(path.join(__dirname, '../public/js/output-slim.js'), 'utf8');
+  ok(slim.includes("fieldOf('sls-minimal-skin')"), '改版後的設定面板要放得到這組設定，不然會被藏起來');
 });
 
 function finishTests(exitCode) {
