@@ -249,6 +249,24 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .live-queue .youtube-auto-separate input { margin-top: 0; }
 .live-queue .youtube-auto-separate small { display: none; }
 .live-queue .playlist-card { min-height: 220px; }
+/* 有搜尋結果時（2026-11-10 使用者回報「搜歌時下面歌單被壓縮、捲不動」，1280×720 實測歌單只剩 109px
+   而且被推出左欄外）：加歌區最多佔左欄六成、搜尋結果在框內自己捲，播放清單永遠留在看得到的地方。
+   只在真的有結果時才改排版，平常的加歌區跟改版後一模一樣。 */
+.live-queue #music-source-card:has(#youtube-search-panel:not([hidden]) > .youtube-search-results:not(:empty)) {
+  /* 不參與 flex 縮放（清單 2000 首時 flex 基準很大，會把加歌區擠到只剩 29px），改用上限：
+     最多左欄六成，而且至少留 200px 給播放清單。左欄矮到連加歌區都放不下時，加歌區自己捲，
+     不會有按鈕被裁掉看不到。 */
+  flex: 0 0 auto; min-height: 0; max-height: min(60%, calc(100% - 200px));
+  display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain;
+}
+.live-queue #music-source-card:has(#youtube-search-panel:not([hidden]) > .youtube-search-results:not(:empty)) > * { flex: none; }
+.live-queue #music-source-card:has(#youtube-search-panel:not([hidden]) > .youtube-search-results:not(:empty)) > #tab-youtube.active {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+}
+.live-queue #tab-youtube.active > * { flex: none; }
+.live-queue #tab-youtube.active > #youtube-search-panel:not([hidden]) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.live-queue #youtube-search-panel > * { flex: none; }
+.live-queue #youtube-search-panel > .youtube-search-results:not(:empty) { flex: 1 1 auto; min-height: 96px; max-height: none; }
 /* 下載與排隊中的歌排在播放清單尾端、跟清單一起捲（2026-09-28）：
    看起來像清單裡「還沒好的那幾列」，每列有進度條與取消；已完成的不列（已經在清單裡）。 */
 .live-queue .playlist-card .playlist-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }

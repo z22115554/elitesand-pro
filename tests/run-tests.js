@@ -15012,6 +15012,17 @@ test('跟唱視窗置頂：專用 preload 只開放置頂、IPC 只認主程序�
   ok(/if \(!state\) return;[\s\S]{0,60}button\.hidden = false;/.test(prompter), '主程序不認這個視窗時維持隱藏');
 });
 
+test('搜歌時播放清單不被擠出左欄：有結果時加歌區設上限、結果在框內捲，平常排版不變', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../public/css/panel.css'), 'utf8');
+  const sel = '.live-queue #music-source-card:has(#youtube-search-panel:not([hidden]) > .youtube-search-results:not(:empty))';
+  const rule = css.slice(css.indexOf(sel + ' {'), css.indexOf('}', css.indexOf(sel + ' {')));
+  ok(rule.includes('max-height: min(60%, calc(100% - 200px))'), '加歌區最多六成，且至少留 200px 給播放清單');
+  ok(rule.includes('flex: 0 0 auto'), '不可參與 flex 縮放（清單很長時會把加歌區擠扁）');
+  ok(rule.includes('overflow-y: auto'), '左欄太矮時加歌區自己捲，按鈕不被裁掉');
+  ok(css.includes('.live-queue #youtube-search-panel > .youtube-search-results:not(:empty) { flex: 1 1 auto; min-height: 96px; max-height: none; }'));
+  ok(css.includes('.live-queue #music-source-card { flex: none; }'), '沒有搜尋結果時維持原本的加歌區');
+});
+
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }
   process.exit(exitCode);
