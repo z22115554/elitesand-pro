@@ -1180,9 +1180,14 @@
   // 切換歌詞模板的唯一入口：模板畫廊、直播頁快捷模板、快捷鍵都走這裡。
   // 先存好離開模板的外觀快照，再還原目標模板的快照，經同一套 refreshControls／pushSettings 送出，
   // OBS 只收到既有的 lyric-settings:update，不重載來源、不碰播放。回傳 'ok'／'same'／'unknown'。
-  function selectTemplate(nextTemplate) {
+  // options.user=false：程式自動套用（例如切歌時套回這首記住的模板），不算使用者選的，不發 lyric-template:selected。
+  function selectTemplate(nextTemplate, options = {}) {
     if (!TEMPLATE_IDS.includes(nextTemplate)) return 'unknown';
-    if (nextTemplate === settings.template) return 'same';
+    const announce = () => {
+      if (options.user === false) return;
+      window.dispatchEvent(new CustomEvent('lyric-template:selected', { detail: { template: nextTemplate } }));
+    };
+    if (nextTemplate === settings.template) { announce(); return 'same'; }
     saveCurrentTemplateSnapshot();
     const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
     settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
@@ -1206,6 +1211,7 @@
     refreshControls();
     pushSettings();
     if (nextTemplate === 'spellbook') requestSpellbookDemo();
+    announce();
     return 'ok';
   }
 
@@ -1796,9 +1802,9 @@
     // 排版模板（v4）與自訂背景（Phase 4）
     initTemplatePicker();
     window.LyricTemplates = Object.freeze({
-      select(id) {
+      select(id, options) {
         if (!visibleTemplateIds().includes(id)) return 'unknown';
-        return selectTemplate(id);
+        return selectTemplate(id, options || {});
       },
       current: () => settings.template,
       available: visibleTemplateIds,

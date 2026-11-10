@@ -645,6 +645,14 @@
             <p class="sub section-intro" data-i18n="quickTemplates.hint">按一下就切換 OBS 歌詞模板，外觀沿用「畫面 → 歌詞畫面」裡調好的設定；也可以用快捷鍵。</p>
             <div id="quick-template-list" class="quick-template-list"></div>
             <button id="quick-template-settings" class="btn btn-sm btn-ghost mt-8" type="button" data-i18n="quickTemplates.edit">指定模板與快捷鍵</button>
+            <div class="switch-row switch-row--separated template-memory-row">
+              <div><div class="label"><span data-new-feature="template-memory"><span data-i18n="templateMemory.title">記住每首歌的模板</span></span></div><div class="sub" data-i18n="templateMemory.hint">在某首歌切過模板，下次播這首會自動切回去；沒記住的歌用預設模板。</div></div>
+              <label class="switch"><input id="template-memory-toggle" type="checkbox"><span class="track"></span></label>
+            </div>
+            <div id="template-memory-detail" class="template-memory-detail" hidden>
+              <label class="template-memory-base"><span data-i18n="templateMemory.base">沒記住的歌使用</span><select id="template-memory-base" class="input"></select></label>
+              <p id="template-memory-song" class="template-memory-song" hidden><span data-i18n="templateMemory.songPrefix">這首固定用</span><strong id="template-memory-song-name"></strong><button id="template-memory-clear" class="btn btn-sm btn-ghost" type="button" data-i18n="templateMemory.clear">清除</button></p>
+            </div>
           </section>
             </details>
             <details class="live-side-section" data-prep-panel="audio">

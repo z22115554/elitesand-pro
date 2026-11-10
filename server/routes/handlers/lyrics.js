@@ -681,3 +681,4 @@ function registerLyricsHandlers(io, socket, ctx) {
 }
 
 module.exports = registerLyricsHandlers;
+module.exports.LYRIC_TEMPLATES = Object.freeze([...LYRIC_TEMPLATES]);

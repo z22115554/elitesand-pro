@@ -816,6 +816,8 @@
     applyTrackLoudness(track);
     // 每首記憶的音量：調過的歌回到上次的音量，沒調過的回預設音量
     applyTrackVolume(track);
+    // 每首記憶的歌詞模板等其他「切歌時要跟著換」的功能，聽這個事件（quick-templates.js）
+    window.dispatchEvent(new CustomEvent('track:loaded', { detail: { track } }));
 
     // 已完成分離且兩個 stem 都存在時，自動使用伴奏＋人聲雙軌；其餘歌曲維持原始音軌。
     // 雙路路由（兩個裝置＋各自音量）是獨立功能：開關只決定輸出路由，不決定要不要用 stem。

@@ -48,13 +48,20 @@
     'restart-track': () => shared.seekBy && shared.seekBy(-1e9),
     'vocals-toggle': () => toggleVocals(),
     'metronome-toggle': () => click(dom.metronomeToggle),
-    'template-1': () => applyTemplateSlot(0),
-    'template-2': () => applyTemplateSlot(1),
-    'template-3': () => applyTemplateSlot(2),
-    'template-4': () => applyTemplateSlot(3),
-    'template-5': () => applyTemplateSlot(4),
     'show-help': () => openHelp(),
   };
+  for (let i = 0; i < 20; i += 1) RUN[`template-${i + 1}`] = () => applyTemplateSlot(i);
+
+  // 快捷模板 N：使用者只建了 count 個時，超過的號碼視同不存在（按鍵不攔、表格不顯示）
+  function templateSlotNumber(id) {
+    const match = /^template-(\d+)$/.exec(id);
+    return match ? Number(match[1]) : 0;
+  }
+  function templateSlotExists(id) {
+    const n = templateSlotNumber(id);
+    if (!n) return true;
+    return !!window.QuickTemplates && n <= window.QuickTemplates.count();
+  }
 
   // 原唱人聲開關：只有開了 AI 人聲分離的歌才有人聲音量滑桿；跟音量一樣走滑桿的 input，
   // 所以會照常記住音量。關掉前的音量記在這裡，再按一次還原。
@@ -97,7 +104,7 @@
 
   function findInApp(combo) {
     const id = H.ACTION_IDS.find((action) => config.inApp[action] === combo);
-    if (!id) return null;
+    if (!id || !templateSlotExists(id)) return null;
     // 同一個組合鍵也綁成全域快捷鍵時，按下去會由全域那邊執行一次，這裡不再重複。
     if (shellApi && results[id] === 'ok' && config.global[id] === combo) return null;
     return id;
@@ -122,7 +129,7 @@
 
   // ─── 全域：主程序送來的動作 ───
   if (shellApi && typeof shellApi.onTrigger === 'function') {
-    shellApi.onTrigger((id) => { if (H.ACTION_IDS.includes(id)) run(id); });
+    shellApi.onTrigger((id) => { if (H.ACTION_IDS.includes(id) && templateSlotExists(id)) run(id); });
   }
 
   // ─── 設定讀寫 ───
@@ -200,15 +207,52 @@
     if (!table) return;
     const body = table.tBodies[0] || table.createTBody();
     body.textContent = '';
+    const qt = window.QuickTemplates;
     for (const id of H.ACTION_IDS) {
+      const slotNumber = templateSlotNumber(id);
+      if (slotNumber && !templateSlotExists(id)) continue;
       const row = body.insertRow();
       const name = row.insertCell();
       name.textContent = t(`hotkeys.action.${id}`);
-      const slot = /^template-([1-5])$/.exec(id);
-      if (slot) name.appendChild(templateSelect(Number(slot[1]) - 1));
+      if (slotNumber) {
+        row.className = 'hotkey-template-row';
+        const tools = document.createElement('div');
+        tools.className = 'hotkey-template-tools';
+        tools.appendChild(templateSelect(slotNumber - 1));
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-sm btn-ghost hotkey-template-remove';
+        remove.dataset.slot = String(slotNumber - 1);
+        remove.textContent = t('quickTemplates.remove');
+        remove.setAttribute('aria-label', t('quickTemplates.removeLabel', { n: slotNumber }));
+        tools.appendChild(remove);
+        name.appendChild(tools);
+      }
       for (const scope of H.SCOPES) row.insertCell().appendChild(keyButton(id, scope));
+      // 最後一個快捷模板後面放「新增」
+      if (slotNumber && qt && slotNumber === qt.count()) body.appendChild(addTemplateRow(qt));
+    }
+    // 一個都沒有時，「新增」放在快捷模板原本的位置（快捷鍵一覽之前）
+    if (qt && qt.count() === 0) {
+      const helpRow = body.querySelector('.hotkey-key[data-action="show-help"]')?.closest('tr');
+      body.insertBefore(addTemplateRow(qt), helpRow || null);
     }
     if (globalNote) globalNote.hidden = globalAvailable;
+  }
+
+  function addTemplateRow(qt) {
+    const row = document.createElement('tr');
+    row.className = 'hotkey-template-add-row';
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-sm hotkey-template-add';
+    button.textContent = t('quickTemplates.add', { count: qt.count(), max: qt.MAX_SLOTS });
+    button.disabled = qt.count() >= qt.MAX_SLOTS;
+    cell.appendChild(button);
+    row.appendChild(cell);
+    return row;
   }
 
   function templateSelect(index) {
@@ -277,6 +321,22 @@
       window.QuickTemplates.setSlot(Number(select.dataset.slot), select.value);
     });
     table.addEventListener('click', (event) => {
+      if (event.target.closest('.hotkey-template-add')) {
+        if (window.QuickTemplates && window.QuickTemplates.addSlot()) {
+          // 新增後把焦點放到新那列的選單，直接挑模板
+          setTimeout(() => {
+            const selects = table.querySelectorAll('.hotkey-template-select');
+            const last = selects[selects.length - 1];
+            if (last) { last.closest('tr')?.scrollIntoView({ block: 'nearest' }); last.focus(); }
+          }, 0);
+        }
+        return;
+      }
+      const removeButton = event.target.closest('.hotkey-template-remove');
+      if (removeButton) {
+        if (window.QuickTemplates) window.QuickTemplates.removeSlot(Number(removeButton.dataset.slot));
+        return;
+      }
       const button = event.target.closest('.hotkey-key');
       if (!button || button.disabled) return;
       if (recording) stopRecording();
@@ -337,8 +397,8 @@
       if (!keys.length) continue;
       const dt = document.createElement('dt');
       dt.textContent = t(`hotkeys.action.${id}`);
-      const slot = /^template-([1-5])$/.exec(id);
-      const slotTemplate = slot && window.QuickTemplates ? window.QuickTemplates.slots()[Number(slot[1]) - 1] : '';
+      const slot = /^template-(\d+)$/.exec(id);
+      const slotTemplate = slot && window.QuickTemplates ? (window.QuickTemplates.slots()[Number(slot[1]) - 1] || '') : '';
       if (slot && !slotTemplate) continue;
       if (slotTemplate) dt.textContent = t('quickTemplates.helpEntry', { action: t(`hotkeys.action.${id}`), name: window.QuickTemplates.templateName(slotTemplate) });
       const dd = document.createElement('dd');
@@ -363,9 +423,18 @@
   window.addEventListener('i18n:change', () => { if (!recording) render(); if (help && !help.hidden) fillHelp(); });
   // 模板清單要等歌詞設定載入後才完整（季節模板可能被收起）；槽位在別處改了也要同步選單
   window.addEventListener('lyric-templates:ready', () => { if (!recording) render(); });
-  // 槽位改了只更新選單的值，不整張重畫（重畫會讓剛用鍵盤選完的選單失去焦點）
-  window.addEventListener('quick-templates:change', () => {
+  // 槽位改了只更新選單的值，不整張重畫（重畫會讓剛用鍵盤選完的選單失去焦點）；
+  // 新增／移除才整張重畫。移除時最後一個號碼消失，它的全域快捷鍵要放掉，不再佔著按鍵。
+  window.addEventListener('quick-templates:change', (event) => {
     if (!table || !window.QuickTemplates) return;
+    const detail = event.detail || {};
+    if (detail.removedNumber) {
+      const id = `template-${detail.removedNumber}`;
+      if (config.global[id]) { config.global[id] = ''; void save().then(render); }
+      else render();
+      return;
+    }
+    if (detail.added) { render(); return; }
     const current = window.QuickTemplates.slots();
     table.querySelectorAll('.hotkey-template-select').forEach((select) => {
       const value = current[Number(select.dataset.slot)] || '';

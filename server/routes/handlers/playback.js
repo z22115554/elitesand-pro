@@ -11,6 +11,7 @@ const libraryStore = require('../../services/library-store');
 const { addRomanization, needsRomanization, needsFurigana } = require('../../services/romanizer');
 const { sanitizeTrack, sanitizeJsonObject } = require('../../utils/track-schema');
 const usageTelemetry = require('../../services/usage-telemetry');
+const { LYRIC_TEMPLATES } = require('./lyrics');
 
 const log = createLogger('Socket');
 
@@ -21,7 +22,7 @@ const log = createLogger('Socket');
  */
 function registerPlaybackHandlers(io, socket, ctx) {
   const {
-    playState, trackOffsets, trackPitch, trackSpeed, trackVolume = new Map(), manualLyricsCache,
+    playState, trackOffsets, trackPitch, trackSpeed, trackVolume = new Map(), trackTemplate = new Map(), manualLyricsCache,
     persistState, emitSetlist, recordSessionSong, broadcastState, getEffectiveLyrics,
     markTrackPlayed, redactTrackForReadOnly = (track) => track,
   } = ctx;
@@ -90,8 +91,10 @@ function registerPlaybackHandlers(io, socket, ctx) {
     const savedPitch = trackPitch.has(trackId) ? trackPitch.get(trackId) : 0;
     const savedSpeed = trackSpeed.has(trackId) ? trackSpeed.get(trackId) : 1.0;
     const savedVolume = trackVolume.has(trackId) ? trackVolume.get(trackId) : null;
+    const savedTemplate = trackTemplate.has(trackId) ? trackTemplate.get(trackId) : null;
     track.pitchShift = savedPitch;
     track.volume = savedVolume;
+    track.lyricTemplate = savedTemplate;
     track.playbackRate = savedSpeed;
     playState.currentTrack = track;
     playState.isPlaying = autoplay;
@@ -118,6 +121,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
       pitchShift: savedPitch,
       playbackRate: savedSpeed,
       volume: savedVolume,
+      lyricTemplate: savedTemplate,
       manualLyrics: !!manualLyricsCache.has(trackId),
       // 面板據此判斷這是不是自己剛送出的回音（io.emit 會連寄件者自己也收到一份），
       // 不落地進 playState，純粹給面板的 play:track 監聽器做來源判斷用。
@@ -395,6 +399,31 @@ function registerPlaybackHandlers(io, socket, ctx) {
     emitToControlClients(io, 'track-volume:update', { trackId, volume });
     persistState();
     reply({ ok: true, trackId, volume });
+  });
+
+  // 每首記憶的歌詞模板：只記模板 ID，外觀仍以各模板自己的設定為準（不複製字型、顏色）。
+  // template=null 表示清除記憶。換模板本身仍走 lyric-settings:update，這裡不動 OBS。
+  socket.on('track-template:set', (data, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const trackId = data && typeof data.trackId === 'string' ? data.trackId.slice(0, 200) : '';
+    if (!trackId) return reply({ ok: false, error: 'INVALID_TRACK' });
+    const raw = data.template;
+    if (raw === null) {
+      trackTemplate.delete(trackId);
+    } else if (typeof raw === 'string' && LYRIC_TEMPLATES.includes(raw)) {
+      trackTemplate.set(trackId, raw);
+    } else {
+      return reply({ ok: false, error: 'INVALID_TEMPLATE' });
+    }
+    const lyricTemplate = trackTemplate.has(trackId) ? trackTemplate.get(trackId) : null;
+    if (playState.currentTrack && playState.currentTrack.id === trackId) playState.currentTrack.lyricTemplate = lyricTemplate;
+    // 鐵則 17：播放清單裡的同一首也要回寫
+    for (const entry of playState.playlist || []) {
+      if (entry && entry.id === trackId) entry.lyricTemplate = lyricTemplate;
+    }
+    emitToControlClients(io, 'track-template:update', { trackId, template: lyricTemplate });
+    persistState();
+    reply({ ok: true, trackId, template: lyricTemplate });
   });
 
   socket.on('speed:change', (rate) => {

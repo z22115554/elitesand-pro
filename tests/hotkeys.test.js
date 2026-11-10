@@ -125,7 +125,12 @@ test('every action has a five-language name, and the panel can run every action'
   }
   const panel = read('public/js/app-hotkeys.js');
   const runBlock = panel.slice(panel.indexOf('const RUN = {'), panel.indexOf('};', panel.indexOf('const RUN = {')));
-  for (const id of H.ACTION_IDS) assert.ok(runBlock.includes(`'${id}':`) || runBlock.includes(`${id}:`), `面板沒有實作 ${id}`);
+  // 快捷模板 1～20 由迴圈補進 RUN（每個號碼對應一個槽位）
+  const templateLoop = panel.includes('for (let i = 0; i < 20; i += 1) RUN[`template-${i + 1}`] = () => applyTemplateSlot(i);');
+  for (const id of H.ACTION_IDS) {
+    if (/^template-\d+$/.test(id)) { assert.ok(templateLoop && Number(id.slice(9)) <= 20, `面板沒有實作 ${id}`); continue; }
+    assert.ok(runBlock.includes(`'${id}':`) || runBlock.includes(`${id}:`), `面板沒有實作 ${id}`);
+  }
 });
 
 test('the panel loads the card and scripts in order, and the desktop bridge is fixed and sender-checked', () => {

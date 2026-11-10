@@ -10763,7 +10763,7 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
     '簡轉繁／底部進度條必須是獨立於 per-template settings 的全域狀態: ');
   {
     // 模板切換已抽成模組層級的單一入口（快捷模板、模板畫廊共用）
-    const selectTemplateStart = lyricExtras.indexOf('function selectTemplate(nextTemplate)');
+    const selectTemplateStart = lyricExtras.indexOf('function selectTemplate(nextTemplate');
     const selectTemplateEnd = lyricExtras.indexOf('function visibleTemplateIds()', selectTemplateStart);
     const selectTemplateSrc = selectTemplateStart >= 0 && selectTemplateEnd > selectTemplateStart
       ? lyricExtras.slice(selectTemplateStart, selectTemplateEnd) : '';
@@ -14893,15 +14893,17 @@ test('每首記憶的音量：面板調音量只記給這首、不改預設；�
   ok(!readOnly.includes('track-volume:set'), 'OBS／唯讀端不可改記憶音量');
 });
 
-test('快捷歌詞模板：5 個快捷鍵動作，面板內預設 Ctrl+Alt+1～5、全域不預綁，且不搶使用者既有的按鍵', () => {
+test('快捷歌詞模板：最多 20 個快捷鍵動作，1～9 面板內預設 Ctrl+Alt+數字、全域不預綁，且不搶使用者既有的按鍵', () => {
   const H = require('../public/js/hotkeys.js');
-  const ids = [1, 2, 3, 4, 5].map((n) => `template-${n}`);
-  ok(ids.every((id) => H.ACTION_IDS.includes(id)), '五個動作都要登記');
+  const ids = Array.from({ length: 20 }, (_, i) => `template-${i + 1}`);
+  ok(ids.every((id) => H.ACTION_IDS.includes(id)), '二十個動作都要登記');
+  ok(!H.ACTION_IDS.includes('template-21'), '上限 20');
   const fresh = H.defaults();
   eq(fresh.inApp['template-1'], 'Ctrl+Alt+Digit1');
-  eq(fresh.inApp['template-5'], 'Ctrl+Alt+Digit5');
+  eq(fresh.inApp['template-9'], 'Ctrl+Alt+Digit9');
+  eq(fresh.inApp['template-10'], '', '10 以上預設不綁');
   ok(ids.every((id) => fresh.global[id] === ''), '全域預設不綁，避免搶走 OBS／遊戲的按鍵');
-  // 舊版設定沒有這五個動作：補上預設，其他設定不動
+  // 舊版設定沒有這些動作：補上預設，其他設定不動
   const upgraded = H.normalize({ inApp: { 'play-toggle': 'KeyP' }, global: { 'lyrics-hide': 'Ctrl+Alt+KeyH' } });
   eq(upgraded.inApp['play-toggle'], 'KeyP');
   eq(upgraded.global['lyrics-hide'], 'Ctrl+Alt+KeyH');
@@ -14911,28 +14913,68 @@ test('快捷歌詞模板：5 個快捷鍵動作，面板內預設 Ctrl+Alt+1～5
   eq(taken.inApp['lyrics-hide'], 'Ctrl+Alt+Digit1');
   eq(taken.inApp['template-1'], '', '撞鍵時不可搶走既有綁定');
   const shell = require('../electron/global-hotkeys.js');
-  const shellSource = fs.readFileSync(path.join(__dirname, '../electron/global-hotkeys.js'), 'utf8');
-  ok(ids.every((id) => shellSource.includes(`'${id}'`)), '桌面版全域快捷鍵白名單要同步');
-  ok(typeof shell === 'object');
+  ok(ids.every((id) => shell.ACTION_IDS.includes(id)), '桌面版全域快捷鍵白名單要同步');
 });
 
-test('快捷歌詞模板：只走 LyricTemplates.select 這個單一入口，空槽位不自動挑模板，下架模板不能被叫出來', () => {
+test('快捷歌詞模板：只走 LyricTemplates.select 這個單一入口，空槽位不自動挑模板，下架模板不能被叫出來，可新增到 20 個、可移除', () => {
   const quick = fs.readFileSync(path.join(__dirname, '../public/js/quick-templates.js'), 'utf8');
-  ok(quick.includes('window.LyricTemplates.select(id)'), '切換要跟模板畫廊走同一條路');
-  ok(!/socket|SocketClient|lyric-settings:update/i.test(quick.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')), '不可自己送歌詞設定，避免繞過驗證與快照');
+  const code = quick.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  ok(code.includes('window.LyricTemplates.select(id)'), '切換要跟模板畫廊走同一條路');
+  ok(!code.includes('lyric-settings:update'), '不可自己送歌詞設定，避免繞過驗證與快照');
   ok(/if \(!id\) \{ toast\(t\('quickTemplates\.toast\.empty'/.test(quick), '空槽位只提示，不自動選');
   ok(quick.includes("const STORAGE_KEY = 'elitesand.quickTemplates.v1'") && quick.includes('version: 1'), '槽位設定要帶版本');
+  ok(quick.includes('const MAX_SLOTS = 20;') && /if \(slots\.length >= MAX_SLOTS\) return false;/.test(quick), '上限 20 個');
+  ok(/slots\.splice\(index, 1\);[\s\S]{0,80}changed\(\{ removedNumber \}\)/.test(quick), '移除要讓後面的往前補，並告知哪個號碼消失');
   const extras = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
   ok(extras.includes('window.LyricTemplates = Object.freeze({'));
-  ok(/select\(id\) \{\s*if \(!visibleTemplateIds\(\)\.includes\(id\)\) return 'unknown';/.test(extras), '看不到的模板（下架的季節模板）不能用快捷入口叫出來');
-  ok(/if \(nextTemplate === settings\.template\) return 'same';/.test(extras), '重複切到同一個模板不可有副作用');
+  ok(/select\(id, options\) \{\s*if \(!visibleTemplateIds\(\)\.includes\(id\)\) return 'unknown';/.test(extras), '看不到的模板（下架的季節模板）不能用快捷入口叫出來');
+  ok(/if \(nextTemplate === settings\.template\) \{ announce\(\); return 'same'; \}/.test(extras), '重複切到同一個模板不可重送設定');
   ok(extras.includes("new CustomEvent('lyric-template:change'"), '模板變了要通知直播頁更新選取狀態');
   const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   ok(panel.includes('data-prep-panel="templates"') && panel.includes('id="quick-template-list"'));
-  ok(panel.includes('data-new-feature="quick-templates"'));
+  ok(panel.includes('data-new-feature="quick-templates"') && panel.includes('data-new-feature="template-memory"'));
   ok(panel.indexOf('/js/quick-templates.js') < panel.indexOf('/js/app-hotkeys.js'), '快捷鍵設定表要讀得到槽位');
   const hotkeys = fs.readFileSync(path.join(__dirname, '../public/js/app-hotkeys.js'), 'utf8');
-  ok([0, 1, 2, 3, 4].every((i) => hotkeys.includes(`applyTemplateSlot(${i})`)));
+  ok(/if \(!id \|\| !templateSlotExists\(id\)\) return null;/.test(hotkeys), '不存在的槽位號碼不可攔下按鍵');
+  ok(/detail\.removedNumber[\s\S]{0,160}config\.global\[id\] = ''/.test(hotkeys), '移除後消失的號碼要放掉全域快捷鍵');
+});
+
+test('記住每首歌的模板：伺服器只存合法模板 ID、清單摘要帶 lyricTemplate、可清除；切歌自動套用不會被反過來記住', () => {
+  const { createAppState } = require('../server/state/app-state');
+  const registerPlaybackHandlers = require('../server/routes/handlers/playback');
+  const appState = createAppState({ emit() {} });
+  ok(appState.trackTemplate instanceof Map, 'app-state 要提供 trackTemplate');
+  appState.playState.playlist = [{ id: 'song-a', title: 'A', duration: 100 }, { id: 'song-b', title: 'B', duration: 100 }];
+  appState.playState.currentTrack = { id: 'song-a', title: 'A' };
+  const events = new Map();
+  const emitted = [];
+  const io = { emit() {}, to() { return { emit(event, data) { emitted.push({ event, data }); } }; } };
+  registerPlaybackHandlers(io, { on(event, handler) { events.set(event, handler); }, id: 'fixture', clientType: 'controller' }, {
+    ...appState, persistState() {}, emitSetlist() {}, recordSessionSong() {}, broadcastState() {}, getEffectiveLyrics() { return null; },
+  });
+  let reply = null;
+  events.get('track-template:set')({ trackId: 'song-a', template: 'not-a-template' }, (r) => { reply = r; });
+  eq(reply.ok, false, '不認得的模板不接受');
+  events.get('track-template:set')({ trackId: 'song-a', template: 'pulse' }, (r) => { reply = r; });
+  eq(reply.template, 'pulse');
+  eq(appState.playState.playlist[0].lyricTemplate, 'pulse', '鐵則 17：清單裡的同一首要回寫');
+  eq(appState.playState.currentTrack.lyricTemplate, 'pulse');
+  ok(emitted.some((e) => e.event === 'track-template:update' && e.data.template === 'pulse'));
+  const summary = appState.getPublicPlaylist(() => true);
+  eq(summary.find((t) => t.id === 'song-a').lyricTemplate, 'pulse');
+  eq(summary.find((t) => t.id === 'song-b').lyricTemplate, undefined, '沒記住的歌不帶欄位');
+  events.get('track-template:set')({ trackId: 'song-a', template: null }, (r) => { reply = r; });
+  eq(appState.trackTemplate.has('song-a'), false, 'null＝清除');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'state', 'app-state.js'), 'utf8');
+  ok(source.includes('trackTemplate: Object.fromEntries(trackTemplate)') && source.includes('saved.trackTemplate'), '重開後要讀回');
+  const quick = fs.readFileSync(path.join(__dirname, '../public/js/quick-templates.js'), 'utf8');
+  ok(/window\.LyricTemplates\.select\(id, \{ user: false \}\)/.test(quick), '切歌時自動套用要標成非使用者操作');
+  ok(/addEventListener\('lyric-template:selected'/.test(quick) && /if \(!memory\.enabled\) return;/.test(quick), '只有開啟記憶時，使用者自己切的模板才記給這首');
+  ok(/enabled: !!\(stored && stored\.enabled === true\)/.test(quick), '預設關閉，舊使用者升級後行為不變');
+  const extras = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
+  ok(/if \(options\.user === false\) return;/.test(extras), '自動套用不發 lyric-template:selected');
+  const playback = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
+  ok(playback.includes("new CustomEvent('track:loaded', { detail: { track } })"));
 });
 
 function finishTests(exitCode) {

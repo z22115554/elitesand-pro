@@ -12,7 +12,7 @@ const ACTION_IDS = Object.freeze([
   'play-toggle', 'next', 'prev', 'seek-forward', 'seek-back', 'volume-up', 'volume-down',
   'mute-toggle', 'pitch-up', 'pitch-down', 'pitch-reset', 'lyrics-hide', 'align-first',
   'offset-plus', 'offset-minus', 'offset-reset', 'restart-track', 'vocals-toggle', 'metronome-toggle',
-  'template-1', 'template-2', 'template-3', 'template-4', 'template-5',
+  ...Array.from({ length: 20 }, (_, i) => `template-${i + 1}`),
   'show-help',
 ]);
 // 只在面板內有意義的動作，主程序不幫它註冊全域快捷鍵。

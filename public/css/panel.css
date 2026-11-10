@@ -2353,7 +2353,20 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 .hotkey-key.is-recording { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .hotkey-key.is-taken { border-color: var(--warning); color: var(--warning); }
 .hotkey-key:disabled { opacity: 0.45; cursor: not-allowed; }
-.hotkey-template-select { display: block; width: 100%; max-width: 180px; margin-top: 4px; padding: 3px 6px; font-size: 12px; }
+.hotkey-template-tools { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.hotkey-template-select { width: 100%; max-width: 180px; padding: 3px 6px; font-size: 12px; }
+.hotkey-template-remove { flex-shrink: 0; padding: 2px 8px; font-size: 12px; }
+.hotkey-template-add-row td { padding: 8px 4px; }
+/* 記住每首歌的模板 */
+.template-memory-row { margin-top: 10px; }
+.template-memory-detail { display: grid; gap: 6px; padding-bottom: 4px; }
+.template-memory-detail[hidden] { display: none; }
+.template-memory-base { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
+.template-memory-base .input { flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px; }
+.template-memory-song { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--text-dim); }
+.template-memory-song[hidden] { display: none; }
+.template-memory-song strong { color: var(--text); font-weight: 600; }
+.template-memory-song .btn { margin-left: auto; padding: 2px 8px; font-size: 12px; }
 .hotkeys-error { color: var(--danger); }
 .hotkeys-help-card { width: min(560px, calc(100vw - 32px)); }
 .hotkeys-help-card .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
