@@ -134,6 +134,22 @@
       "showOnce": true,
       "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.2.1",
       "buttonText": "查看 1.2.1 更新內容",
+      "enabled": false,
+      "actions": {}
+    },
+    {
+      "id": "release-v1.2.2",
+      "level": "notice",
+      "title": "聲嶼 Elitesand Pro 1.2.2 已推出",
+      "message": "新增觀眾演出：點歌明信片可以在那首歌開唱時把觀眾留言顯示在 OBS 上，被揪團時也會自動跳出感謝卡。每首歌會記住你調過的音量。練唱多了嚴格評分模式，判定也更準。另外修正 Twitch 點數點歌卡住，以及電腦有兩張顯示卡時 Spout 接收端空白的問題。1.2.0、1.2.1 可以在程式內直接更新；更早的版本請下載完整安裝檔。使用條款有更新，更新後會請你重新確認一次。",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.2.1",
+      "publishedAt": "2026-11-09T16:54:41.036Z",
+      "expiresAt": "2027-05-31T23:59:59+08:00",
+      "dismissible": true,
+      "showOnce": true,
+      "url": "https://github.com/z22115554/elitesand-pro/releases/tag/v1.2.2",
+      "buttonText": "查看 1.2.2 更新內容",
       "enabled": true,
       "actions": {}
     }
