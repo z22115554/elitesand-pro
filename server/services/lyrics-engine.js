@@ -172,6 +172,19 @@ function msToLabel(ms) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
 
+// ─── Apple Music 歌詞中繼 ───
+// paxsenix 是第三方中繼，2026-11-10 起連續回 503「同時處理 500 個請求」，每次還要卡 2～35 秒。
+// 回 5xx 後 10 分鐘內直接跳過它，改問 LyricsPlus（同樣是 Apple Music 的逐字歌詞，回應裡 source=qApple）。
+// LyricsPlus 鏡像清單與端點格式對齊 metrolist（GPL-3.0）的 LyricsPlusProvider，只沿用 API 互通性事實，不抄程式碼。
+const PAXSENIX_COOLDOWN_MS = 10 * 60 * 1000;
+let paxsenixDownUntil = 0;
+const LYRICS_PLUS_SERVERS = Object.freeze([
+  'https://lyricsplus.binimum.org',
+  'https://lyricsplus.prjktla.my.id',
+  'https://lyricsplus.atomix.one',
+]);
+let lyricsPlusLastWorking = null;
+
 // ─── Apple Music Token 快取 ───
 let appleMusicToken = null;
 let appleMusicTokenExpiry = 0;
@@ -620,7 +633,15 @@ class LyricsEngine {
   // 來源 2: Paxsenix / Apple Music
   // ═══════════════════════════════════════════
 
+  /** Apple Music 歌詞：先走 paxsenix，拿不到（或它正在塞車）就改問 LyricsPlus。來源一律記成 paxsenix（同一格 Apple Music）。 */
   static async searchPaxsenix(artist, title, duration) {
+    const relay = Date.now() < paxsenixDownUntil ? null : await this.searchPaxsenixRelay(artist, title, duration);
+    if (relay) return relay;
+    return this.searchLyricsPlus(artist, title, duration);
+  }
+
+  static async searchPaxsenixRelay(artist, title, duration) {
+    let atRelay = false; // 只有「向 paxsenix 拿歌詞」這一步逾時才算它塞車；Apple 搜尋失敗不算
     try {
       const token = await this.getAppleMusicToken();
       if (!token) return null;
@@ -654,11 +675,18 @@ class LyricsEngine {
         : undefined;
 
       const lyricsUrl = `https://lyrics.paxsenix.org/apple-music/lyrics?id=${matchedSong.id}`;
+      atRelay = true;
       const lyricsRes = await fetchWithTimeout(lyricsUrl, {
         headers: { 'User-Agent': APP_USER_AGENT },
       }, 12000);
 
-      if (!lyricsRes.ok) return null;
+      if (!lyricsRes.ok) {
+        if (lyricsRes.status >= 500) {
+          paxsenixDownUntil = Date.now() + PAXSENIX_COOLDOWN_MS;
+          log.warn(`paxsenix 回 ${lyricsRes.status}，10 分鐘內改用 LyricsPlus`);
+        }
+        return null;
+      }
       const lyricsData = await lyricsRes.json();
 
       if (lyricsData.ttmlContent) {
@@ -678,7 +706,8 @@ class LyricsEngine {
 
       return null;
     } catch (e) {
-      log.warn('Paxsenix 搜尋失敗: ' + e.message);
+      if (atRelay) paxsenixDownUntil = Date.now() + PAXSENIX_COOLDOWN_MS;
+      log.warn('Paxsenix 搜尋失敗: ' + e.message + (atRelay ? '（10 分鐘內改用 LyricsPlus）' : ''));
       return null;
     }
   }
@@ -1141,6 +1170,64 @@ class LyricsEngine {
       log.warn('Apple Music Token 取得失敗 (' + tokenDuration + 'ms): ' + e.message);
       return null;
     }
+  }
+
+  /** LyricsPlus（/v2/lyrics/get）：依序試鏡像，上次成功的排第一。 */
+  static async searchLyricsPlus(artist, title, duration) {
+    const cleanTitle = cleanQuery(title);
+    const cleanArtist = cleanQuery(artist);
+    if (!cleanTitle || !cleanArtist) return null;
+    const servers = lyricsPlusLastWorking
+      ? [lyricsPlusLastWorking, ...LYRICS_PLUS_SERVERS.filter((x) => x !== lyricsPlusLastWorking)]
+      : [...LYRICS_PLUS_SERVERS];
+    for (const base of servers) {
+      try {
+        const params = new URLSearchParams({ title: cleanTitle, artist: cleanArtist });
+        if (duration > 0) params.set('duration', String(Math.round(duration)));
+        const res = await fetchWithTimeout(`${base}/v2/lyrics/get?${params}`, {
+          headers: { 'User-Agent': APP_USER_AGENT, Accept: 'application/json' },
+        }, 10000);
+        if (res.status === 404) return null; // 鏡像都查同一批來源，一台說沒有就是沒有
+        if (!res.ok) continue;
+        const data = await res.json();
+        const converted = this.lyricsPlusToLyrics(data && data.lyrics);
+        if (!converted) continue;
+        lyricsPlusLastWorking = base;
+        return { ...converted, source: 'paxsenix' };
+      } catch (e) {
+        log.warn(`LyricsPlus ${base} 失敗: ${e.message}`);
+      }
+    }
+    return null;
+  }
+
+  /** LyricsPlus 的 lyrics 陣列（毫秒、syllabus 逐字）→ 我們的 KRC；沒有逐字資料時退成一般 LRC。和聲（isBackground）不併進主行。 */
+  static lyricsPlusToLyrics(lines) {
+    if (!Array.isArray(lines) || lines.length === 0) return null;
+    const hasWords = lines.some((line) => Array.isArray(line.syllabus) && line.syllabus.some((w) => !w.isBackground && w.text));
+    const out = [];
+    for (const line of lines) {
+      const start = Number(line.time);
+      if (!Number.isFinite(start) || start < 0) continue;
+      if (hasWords) {
+        const words = (Array.isArray(line.syllabus) ? line.syllabus : [])
+          .filter((w) => w && !w.isBackground && typeof w.text === 'string' && w.text)
+          .map((w) => ({ text: w.text, start: Math.max(0, Math.round(Number(w.time) - start)), duration: Math.max(0, Math.round(Number(w.duration) || 0)) }));
+        const text = typeof line.text === 'string' ? line.text : '';
+        if (!words.length) {
+          if (!text.trim()) continue;
+          words.push({ text, start: 0, duration: Math.max(0, Math.round(Number(line.duration) || 0)) });
+        }
+        const last = words[words.length - 1];
+        const lineDuration = Math.max(Math.round(Number(line.duration) || 0), last.start + last.duration);
+        if (lineDuration <= 0) continue;
+        out.push(`[${msToLrcTime(start)}]<${lineDuration}>` + words.map((w) => `${w.text}<${w.start},${w.duration}>`).join(''));
+      } else if (typeof line.text === 'string' && line.text.trim()) {
+        out.push(`[${msToLrcTime(start)}]${line.text}`);
+      }
+    }
+    if (!out.length) return null;
+    return { lyrics: out.join('\n'), type: hasWords ? 'krc' : 'lrc' };
   }
 
   static paxsenixContentToKrc(content) {

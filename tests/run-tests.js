@@ -15061,6 +15061,36 @@ test('OBS 極簡歌單：伺服器／面板／顯示端三份版型清單同步�
   ok(slim.includes("fieldOf('sls-minimal-skin')"), '改版後的設定面板要放得到這組設定，不然會被藏起來');
 });
 
+test('Apple Music 歌詞：paxsenix 塞車時改用 LyricsPlus，逐字轉成 KRC、和聲不併進主行、來源仍記為 Apple Music 那一格', () => {
+  const engineModule = require('../server/services/lyrics-engine.js');
+  const L = engineModule.LyricsEngine || engineModule;
+  const lines = [
+    { time: 1440, duration: 1964, text: '満員電車触んなって', syllabus: [
+      { time: 1440, duration: 699, text: '満員電' }, { time: 2139, duration: 384, text: '車' },
+      { time: 2523, duration: 482, text: '触んなっ' }, { time: 3005, duration: 399, text: 'て' },
+      { time: 3100, duration: 300, text: '(oh)', isBackground: true },
+    ] },
+    { time: 5000, duration: 1000, text: '只有整行', syllabus: [] },
+  ];
+  const out = L.lyricsPlusToLyrics(lines);
+  eq(out.type, 'krc');
+  const krc = out.lyrics.split('\n');
+  eq(krc[0], '[00:01.44]<1964>満員電<0,699>車<699,384>触んなっ<1083,482>て<1565,399>', '逐字時間要換成相對行首');
+  ok(!out.lyrics.includes('(oh)'), '和聲不併進主行');
+  eq(krc[1], '[00:05.00]<1000>只有整行<0,1000>', '沒有逐字的行退成整行一個字');
+  const lineOnly = L.lyricsPlusToLyrics([{ time: 2000, duration: 1500, text: 'line only' }]);
+  eq(lineOnly.type, 'lrc');
+  eq(lineOnly.lyrics, '[00:02.00]line only');
+  eq(L.lyricsPlusToLyrics([]), null);
+  const source = fs.readFileSync(path.join(__dirname, '../server/services/lyrics-engine.js'), 'utf8');
+  ok(/const relay = Date\.now\(\) < paxsenixDownUntil \? null : await this\.searchPaxsenixRelay\(artist, title, duration\);\s*if \(relay\) return relay;\s*return this\.searchLyricsPlus\(artist, title, duration\);/.test(source), 'paxsenix 拿不到就改問 LyricsPlus');
+  ok(/if \(lyricsRes\.status >= 500\) \{\s*paxsenixDownUntil = Date\.now\(\) \+ PAXSENIX_COOLDOWN_MS;/.test(source), '5xx 後暫時略過 paxsenix');
+  ok(source.includes('if (atRelay) paxsenixDownUntil = Date.now() + PAXSENIX_COOLDOWN_MS;'), '向中繼拿歌詞逾時也要略過');
+  ok(source.includes("return { ...converted, source: 'paxsenix' };"), '來源記成同一格，偏移、統計欄位都不必改');
+  const telemetry = require('../server/services/telemetry-fields.js');
+  ok(telemetry.ALLOWED_KEYS.includes('lyrics.source.paxsenix.hit'), '沿用既有統計欄位，不需要新的白名單');
+});
+
 function finishTests(exitCode) {
   try { fs.rmSync(TEST_RUNTIME_ROOT, { recursive: true, force: true }); } catch (_) { /* best effort */ }
   process.exit(exitCode);
