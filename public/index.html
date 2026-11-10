@@ -638,6 +638,15 @@
             </div>
             <div id="public-request-pending-list" class="twitch-requests-list"></div>
           </section>
+            <!-- 快捷歌詞模板（quick-templates.js）：直播中一鍵切模板，外觀沿用「畫面 → 歌詞畫面」裡各模板自己的設定 -->
+            <details class="live-side-section" data-prep-panel="templates">
+              <summary><span data-new-feature="quick-templates"><span data-i18n="quickTemplates.title">歌詞模板</span></span><span id="quick-template-current" class="quick-template-current"></span></summary>
+          <section class="card">
+            <p class="sub section-intro" data-i18n="quickTemplates.hint">按一下就切換 OBS 歌詞模板，外觀沿用「畫面 → 歌詞畫面」裡調好的設定；也可以用快捷鍵。</p>
+            <div id="quick-template-list" class="quick-template-list"></div>
+            <button id="quick-template-settings" class="btn btn-sm btn-ghost mt-8" type="button" data-i18n="quickTemplates.edit">指定模板與快捷鍵</button>
+          </section>
+            </details>
             <details class="live-side-section" data-prep-panel="audio">
               <summary data-i18n="home.tab.audio">音訊</summary>
           <section class="card">
@@ -4100,6 +4109,7 @@
   <script src="/js/playlist-state.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/hotkeys.js"></script>
+  <script src="/js/quick-templates.js"></script>
   <script src="/js/app-hotkeys.js"></script>
   <script src="/js/app-spout-output.js"></script>
   <script src="/js/font-assets.js"></script>

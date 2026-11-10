@@ -383,6 +383,24 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
 .live-side-section[open] > summary { color: var(--text); border-bottom: 1px solid var(--border); }
 .live-side-section[open] > summary::after { content: '−'; }
 .live-side-section > .card:last-child { border-bottom: 0; }
+/* 快捷歌詞模板：收起時標題旁顯示目前模板；展開是 5 格編號按鈕 */
+.quick-template-current { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
+.live-side-section > summary .quick-template-current + * { margin-left: 0; }
+.live-side-section > summary:has(.quick-template-current:not(:empty))::after { margin-left: 4px; }
+.quick-template-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.quick-template-btn {
+  display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: transparent;
+  color: var(--text); font-size: 13px; text-align: left; cursor: pointer;
+}
+.quick-template-btn:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+.quick-template-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.quick-template-num { flex-shrink: 0; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.quick-template-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-template-btn.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.quick-template-btn.is-active .quick-template-num { color: inherit; }
+.quick-template-btn.is-empty { border-style: dashed; color: var(--text-faint); }
+.quick-template-btn.is-unavailable .quick-template-name { color: var(--text-faint); text-decoration: line-through; }
 
 /* 放不下一列時：歌名｜控制同一列，進度條整條放第二列（2026-10-09 使用者回報：1280 寬時
    進度條飄在右上、控制鈕擠在左下，右邊空一大塊） */
@@ -2335,6 +2353,7 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 .hotkey-key.is-recording { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .hotkey-key.is-taken { border-color: var(--warning); color: var(--warning); }
 .hotkey-key:disabled { opacity: 0.45; cursor: not-allowed; }
+.hotkey-template-select { display: block; width: 100%; max-width: 180px; margin-top: 4px; padding: 3px 6px; font-size: 12px; }
 .hotkeys-error { color: var(--danger); }
 .hotkeys-help-card { width: min(560px, calc(100vw - 32px)); }
 .hotkeys-help-card .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

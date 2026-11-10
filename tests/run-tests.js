@@ -10762,8 +10762,9 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
     && lyricExtras.includes("bindGlobalToggle('ls-traditional', 'convertTraditional')"),
     '簡轉繁／底部進度條必須是獨立於 per-template settings 的全域狀態: ');
   {
-    const selectTemplateStart = lyricExtras.indexOf('const selectTemplate = (nextTemplate)');
-    const selectTemplateEnd = lyricExtras.indexOf('templateButtons.forEach', selectTemplateStart);
+    // 模板切換已抽成模組層級的單一入口（快捷模板、模板畫廊共用）
+    const selectTemplateStart = lyricExtras.indexOf('function selectTemplate(nextTemplate)');
+    const selectTemplateEnd = lyricExtras.indexOf('function visibleTemplateIds()', selectTemplateStart);
     const selectTemplateSrc = selectTemplateStart >= 0 && selectTemplateEnd > selectTemplateStart
       ? lyricExtras.slice(selectTemplateStart, selectTemplateEnd) : '';
     ok(selectTemplateSrc.length > 0
@@ -14890,6 +14891,48 @@ test('每首記憶的音量：面板調音量只記給這首、不改預設；�
   const socketHandler = fs.readFileSync(path.join(__dirname, '../server/routes/socket-handler.js'), 'utf8');
   const readOnly = socketHandler.slice(socketHandler.indexOf('const READ_ONLY_EVENTS'), socketHandler.indexOf(']);', socketHandler.indexOf('const READ_ONLY_EVENTS')));
   ok(!readOnly.includes('track-volume:set'), 'OBS／唯讀端不可改記憶音量');
+});
+
+test('快捷歌詞模板：5 個快捷鍵動作，面板內預設 Ctrl+Alt+1～5、全域不預綁，且不搶使用者既有的按鍵', () => {
+  const H = require('../public/js/hotkeys.js');
+  const ids = [1, 2, 3, 4, 5].map((n) => `template-${n}`);
+  ok(ids.every((id) => H.ACTION_IDS.includes(id)), '五個動作都要登記');
+  const fresh = H.defaults();
+  eq(fresh.inApp['template-1'], 'Ctrl+Alt+Digit1');
+  eq(fresh.inApp['template-5'], 'Ctrl+Alt+Digit5');
+  ok(ids.every((id) => fresh.global[id] === ''), '全域預設不綁，避免搶走 OBS／遊戲的按鍵');
+  // 舊版設定沒有這五個動作：補上預設，其他設定不動
+  const upgraded = H.normalize({ inApp: { 'play-toggle': 'KeyP' }, global: { 'lyrics-hide': 'Ctrl+Alt+KeyH' } });
+  eq(upgraded.inApp['play-toggle'], 'KeyP');
+  eq(upgraded.global['lyrics-hide'], 'Ctrl+Alt+KeyH');
+  eq(upgraded.inApp['template-2'], 'Ctrl+Alt+Digit2');
+  // 使用者早就把 Ctrl+Alt+1 給了別的動作：保留使用者的，模板槽位留空
+  const taken = H.normalize({ inApp: { 'lyrics-hide': 'Ctrl+Alt+Digit1' }, global: {} });
+  eq(taken.inApp['lyrics-hide'], 'Ctrl+Alt+Digit1');
+  eq(taken.inApp['template-1'], '', '撞鍵時不可搶走既有綁定');
+  const shell = require('../electron/global-hotkeys.js');
+  const shellSource = fs.readFileSync(path.join(__dirname, '../electron/global-hotkeys.js'), 'utf8');
+  ok(ids.every((id) => shellSource.includes(`'${id}'`)), '桌面版全域快捷鍵白名單要同步');
+  ok(typeof shell === 'object');
+});
+
+test('快捷歌詞模板：只走 LyricTemplates.select 這個單一入口，空槽位不自動挑模板，下架模板不能被叫出來', () => {
+  const quick = fs.readFileSync(path.join(__dirname, '../public/js/quick-templates.js'), 'utf8');
+  ok(quick.includes('window.LyricTemplates.select(id)'), '切換要跟模板畫廊走同一條路');
+  ok(!/socket|SocketClient|lyric-settings:update/i.test(quick.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')), '不可自己送歌詞設定，避免繞過驗證與快照');
+  ok(/if \(!id\) \{ toast\(t\('quickTemplates\.toast\.empty'/.test(quick), '空槽位只提示，不自動選');
+  ok(quick.includes("const STORAGE_KEY = 'elitesand.quickTemplates.v1'") && quick.includes('version: 1'), '槽位設定要帶版本');
+  const extras = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
+  ok(extras.includes('window.LyricTemplates = Object.freeze({'));
+  ok(/select\(id\) \{\s*if \(!visibleTemplateIds\(\)\.includes\(id\)\) return 'unknown';/.test(extras), '看不到的模板（下架的季節模板）不能用快捷入口叫出來');
+  ok(/if \(nextTemplate === settings\.template\) return 'same';/.test(extras), '重複切到同一個模板不可有副作用');
+  ok(extras.includes("new CustomEvent('lyric-template:change'"), '模板變了要通知直播頁更新選取狀態');
+  const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(panel.includes('data-prep-panel="templates"') && panel.includes('id="quick-template-list"'));
+  ok(panel.includes('data-new-feature="quick-templates"'));
+  ok(panel.indexOf('/js/quick-templates.js') < panel.indexOf('/js/app-hotkeys.js'), '快捷鍵設定表要讀得到槽位');
+  const hotkeys = fs.readFileSync(path.join(__dirname, '../public/js/app-hotkeys.js'), 'utf8');
+  ok([0, 1, 2, 3, 4].every((i) => hotkeys.includes(`applyTemplateSlot(${i})`)));
 });
 
 function finishTests(exitCode) {

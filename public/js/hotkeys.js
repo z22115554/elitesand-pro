@@ -38,6 +38,12 @@
     { id: 'restart-track', inApp: '', global: '' },
     { id: 'vocals-toggle', inApp: '', global: '' },
     { id: 'metronome-toggle', inApp: '', global: '' },
+    // 快捷歌詞模板 1～5：要套哪個模板在快捷鍵設定裡選。全域預設不綁，避免搶走 OBS／遊戲的按鍵。
+    { id: 'template-1', inApp: 'Ctrl+Alt+Digit1', global: '' },
+    { id: 'template-2', inApp: 'Ctrl+Alt+Digit2', global: '' },
+    { id: 'template-3', inApp: 'Ctrl+Alt+Digit3', global: '' },
+    { id: 'template-4', inApp: 'Ctrl+Alt+Digit4', global: '' },
+    { id: 'template-5', inApp: 'Ctrl+Alt+Digit5', global: '' },
     // 快捷鍵一覽是面板上的對話框，切到別的視窗時按了也看不到，所以不能設成全域。
     { id: 'show-help', inApp: 'Shift+Slash', global: '', inAppOnly: true },
   ].map(Object.freeze));

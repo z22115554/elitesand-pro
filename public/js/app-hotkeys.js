@@ -48,6 +48,11 @@
     'restart-track': () => shared.seekBy && shared.seekBy(-1e9),
     'vocals-toggle': () => toggleVocals(),
     'metronome-toggle': () => click(dom.metronomeToggle),
+    'template-1': () => applyTemplateSlot(0),
+    'template-2': () => applyTemplateSlot(1),
+    'template-3': () => applyTemplateSlot(2),
+    'template-4': () => applyTemplateSlot(3),
+    'template-5': () => applyTemplateSlot(4),
     'show-help': () => openHelp(),
   };
 
@@ -64,6 +69,12 @@
     slider.value = String(next);
     slider.dispatchEvent(new Event('input', { bubbles: true }));
     toast(t(next > 0 ? 'hotkeys.toast.vocalsOn' : 'hotkeys.toast.vocalsOff'));
+  }
+
+  // 快捷模板在 quick-templates.js；它比這支晚初始化也沒關係，按下去的當下才去找。
+  function applyTemplateSlot(index) {
+    if (window.QuickTemplates) window.QuickTemplates.apply(index);
+    else toast(t('quickTemplates.toast.notReady'));
   }
 
   function showVolume(value) {
@@ -193,9 +204,36 @@
       const row = body.insertRow();
       const name = row.insertCell();
       name.textContent = t(`hotkeys.action.${id}`);
+      const slot = /^template-([1-5])$/.exec(id);
+      if (slot) name.appendChild(templateSelect(Number(slot[1]) - 1));
       for (const scope of H.SCOPES) row.insertCell().appendChild(keyButton(id, scope));
     }
     if (globalNote) globalNote.hidden = globalAvailable;
+  }
+
+  function templateSelect(index) {
+    const select = document.createElement('select');
+    select.className = 'input hotkey-template-select';
+    select.dataset.slot = String(index);
+    select.setAttribute('aria-label', t('quickTemplates.slotLabel', { n: index + 1 }));
+    const qt = window.QuickTemplates;
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = t('quickTemplates.choose');
+    select.appendChild(none);
+    if (!qt) { select.disabled = true; return select; }
+    const current = qt.slots()[index];
+    const ids = qt.availableIds();
+    // 已存但目前下架的模板仍列出來，避免一打開設定就看起來像被清掉
+    if (current && !ids.includes(current)) ids.push(current);
+    for (const id of ids) {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = qt.templateName(id);
+      select.appendChild(option);
+    }
+    select.value = current || '';
+    return select;
   }
 
   function stopRecording() {
@@ -233,6 +271,11 @@
   }
 
   if (table) {
+    table.addEventListener('change', (event) => {
+      const select = event.target.closest('.hotkey-template-select');
+      if (!select || !window.QuickTemplates) return;
+      window.QuickTemplates.setSlot(Number(select.dataset.slot), select.value);
+    });
     table.addEventListener('click', (event) => {
       const button = event.target.closest('.hotkey-key');
       if (!button || button.disabled) return;
@@ -294,6 +337,10 @@
       if (!keys.length) continue;
       const dt = document.createElement('dt');
       dt.textContent = t(`hotkeys.action.${id}`);
+      const slot = /^template-([1-5])$/.exec(id);
+      const slotTemplate = slot && window.QuickTemplates ? window.QuickTemplates.slots()[Number(slot[1]) - 1] : '';
+      if (slot && !slotTemplate) continue;
+      if (slotTemplate) dt.textContent = t('quickTemplates.helpEntry', { action: t(`hotkeys.action.${id}`), name: window.QuickTemplates.templateName(slotTemplate) });
       const dd = document.createElement('dd');
       for (const label of [...new Set(keys)]) {
         const kbd = document.createElement('kbd');
@@ -314,6 +361,17 @@
   }
 
   window.addEventListener('i18n:change', () => { if (!recording) render(); if (help && !help.hidden) fillHelp(); });
+  // 模板清單要等歌詞設定載入後才完整（季節模板可能被收起）；槽位在別處改了也要同步選單
+  window.addEventListener('lyric-templates:ready', () => { if (!recording) render(); });
+  // 槽位改了只更新選單的值，不整張重畫（重畫會讓剛用鍵盤選完的選單失去焦點）
+  window.addEventListener('quick-templates:change', () => {
+    if (!table || !window.QuickTemplates) return;
+    const current = window.QuickTemplates.slots();
+    table.querySelectorAll('.hotkey-template-select').forEach((select) => {
+      const value = current[Number(select.dataset.slot)] || '';
+      if (select.value !== value) select.value = value;
+    });
+  });
 
   window.AppHotkeys = Object.freeze({ run, getConfig: () => H.normalize(config) });
   void load();

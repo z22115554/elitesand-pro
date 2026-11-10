@@ -487,6 +487,14 @@
     if (typeof syncPosGrid === 'function') syncPosGrid();
     if (typeof syncTemplateButtons === 'function') syncTemplateButtons();
     if (typeof syncBackgroundUI === 'function') syncBackgroundUI();
+    notifyTemplateChange();
+  }
+
+  let lastNotifiedTemplate = null;
+  function notifyTemplateChange() {
+    if (settings.template === lastNotifiedTemplate) return;
+    lastNotifiedTemplate = settings.template;
+    window.dispatchEvent(new CustomEvent('lyric-template:change', { detail: { template: settings.template } }));
   }
 
   function applyServerSettings(srv) {
@@ -1169,35 +1177,48 @@
     document.getElementById('display-advanced-modal')?._settingsWorkspace?.sync();
   }
 
+  // 切換歌詞模板的唯一入口：模板畫廊、直播頁快捷模板、快捷鍵都走這裡。
+  // 先存好離開模板的外觀快照，再還原目標模板的快照，經同一套 refreshControls／pushSettings 送出，
+  // OBS 只收到既有的 lyric-settings:update，不重載來源、不碰播放。回傳 'ok'／'same'／'unknown'。
+  function selectTemplate(nextTemplate) {
+    if (!TEMPLATE_IDS.includes(nextTemplate)) return 'unknown';
+    if (nextTemplate === settings.template) return 'same';
+    saveCurrentTemplateSnapshot();
+    const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
+    settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
+    if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
+    if (settings.template === 'mirror') settings.lyricPosition = 'split';
+    if (settings.template === 'typewriter' && settings.lyricPosition === 'center') settings.lyricPosition = 'split';
+    if (settings.template === 'paperstrip' && !PAPERSTRIP_ORIENTS.includes(settings.paperstripOrient)) settings.paperstripOrient = 'horizontal';
+    if (settings.template === 'particle' && !PARTICLE_ENTRANCES.includes(settings.particleEntrance)) settings.particleEntrance = 'auto';
+    if (settings.template === 'columnflow') {
+      if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
+      if (!COLUMNFLOW_ENTRANCES.includes(settings.columnflowEntrance)) settings.columnflowEntrance = 'native';
+      if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
+      settings.columnflowMaxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
+      settings.columnflowSafeMargin = normalizeColumnflowSafeMargin(settings.columnflowSafeMargin);
+      settings.columnflowShowSafeZoneOnObs = !!settings.columnflowShowSafeZoneOnObs;
+    }
+    if (STAGE_POSITION_TEMPLATES.includes(settings.template)) {
+      settings.stageSafeMargin = normalizeStageSafeMargin(settings.stageSafeMargin);
+      settings.stageShowSafeZoneOnObs = !!settings.stageShowSafeZoneOnObs;
+    }
+    refreshControls();
+    pushSettings();
+    if (nextTemplate === 'spellbook') requestSpellbookDemo();
+    return 'ok';
+  }
+
+  function visibleTemplateIds() {
+    return Array.from(document.querySelectorAll('#template-buttons [data-template]'))
+      .filter((button) => !button.hidden)
+      .map((button) => button.dataset.template)
+      .filter((id) => TEMPLATE_IDS.includes(id));
+  }
+
   function initTemplatePicker() {
     const templateButtons = Array.from(document.querySelectorAll('#template-buttons [data-template]'))
       .filter((button) => !button.hidden);
-    const selectTemplate = (nextTemplate) => {
-      if (!TEMPLATE_IDS.includes(nextTemplate) || nextTemplate === settings.template) return;
-      saveCurrentTemplateSnapshot();
-      const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
-      settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
-      if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
-      if (settings.template === 'mirror') settings.lyricPosition = 'split';
-      if (settings.template === 'typewriter' && settings.lyricPosition === 'center') settings.lyricPosition = 'split';
-      if (settings.template === 'paperstrip' && !PAPERSTRIP_ORIENTS.includes(settings.paperstripOrient)) settings.paperstripOrient = 'horizontal';
-      if (settings.template === 'particle' && !PARTICLE_ENTRANCES.includes(settings.particleEntrance)) settings.particleEntrance = 'auto';
-      if (settings.template === 'columnflow') {
-        if (!COLUMNFLOW_VARIANTS.includes(settings.columnflowVariant)) settings.columnflowVariant = 'sen';
-        if (!COLUMNFLOW_ENTRANCES.includes(settings.columnflowEntrance)) settings.columnflowEntrance = 'native';
-        if (!COLUMNFLOW_PLACEMENTS.includes(settings.columnflowPlacement)) settings.columnflowPlacement = 'split';
-        settings.columnflowMaxLines = normalizeColumnflowMaxLines(settings.columnflowMaxLines);
-        settings.columnflowSafeMargin = normalizeColumnflowSafeMargin(settings.columnflowSafeMargin);
-        settings.columnflowShowSafeZoneOnObs = !!settings.columnflowShowSafeZoneOnObs;
-      }
-      if (STAGE_POSITION_TEMPLATES.includes(settings.template)) {
-        settings.stageSafeMargin = normalizeStageSafeMargin(settings.stageSafeMargin);
-        settings.stageShowSafeZoneOnObs = !!settings.stageShowSafeZoneOnObs;
-      }
-      refreshControls();
-      pushSettings();
-      if (nextTemplate === 'spellbook') requestSpellbookDemo();
-    };
     templateButtons.forEach((btn, index) => {
       btn.addEventListener('click', () => selectTemplate(btn.dataset.template));
       btn.addEventListener('keydown', (event) => {
@@ -1774,6 +1795,15 @@
 
     // 排版模板（v4）與自訂背景（Phase 4）
     initTemplatePicker();
+    window.LyricTemplates = Object.freeze({
+      select(id) {
+        if (!visibleTemplateIds().includes(id)) return 'unknown';
+        return selectTemplate(id);
+      },
+      current: () => settings.template,
+      available: visibleTemplateIds,
+    });
+    window.dispatchEvent(new CustomEvent('lyric-templates:ready'));
     initLyricPresetControls();
     initBackgroundControls();
     initTypewriterStickerControls();
