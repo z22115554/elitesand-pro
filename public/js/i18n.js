@@ -2351,6 +2351,7 @@
     'setlist.minimalSkinEditorial': ['清透文字', 'Clean type', 'クリアテキスト', '깔끔한 글자', '清透文字'],
     'setlist.minimalSkinFramed': ['細框星線', 'Thin frame', '細枠ライン', '얇은 테두리', '细框星线'],
     'setlist.minimalSkinDreamy': ['星霧柔光', 'Starry glow', '星霧グロー', '별빛 안개', '星雾柔光'],
+    'setlist.minimalSkinVinyl': ['唱片轉盤', 'Spinning record', 'レコード', '레코드', '唱片转盘'],
     'setlist.minimalTickerLabel': ['已唱跑馬燈速度', 'Sung-list scroll speed', '歌唱済みの流れる速さ', '부른 곡 흐름 속도', '已唱跑马灯速度'],
     'setlist.minimalNumberLabel': ['顯示曲序（#2）', 'Show song number (#2)', '曲順を表示（#2）', '곡 순서 표시 (#2)', '显示曲序（#2）'],
     'setlist.minimalHint': ['背景固定透明；字型、顏色、字級沿用上方的通用設定。已唱歌名放得下就靜止，放不下才慢慢捲動。', 'The background is always transparent; font, colours and sizes follow the general settings above. Sung titles stay still when they fit and scroll slowly only when they do not.', '背景は常に透明です。フォント・色・文字サイズは上の共通設定を使います。歌唱済みの曲名は収まれば静止し、収まらないときだけゆっくり流れます。', '배경은 항상 투명합니다. 글꼴·색·글자 크기는 위의 공통 설정을 따릅니다. 부른 곡 제목은 다 들어가면 멈춰 있고, 넘칠 때만 천천히 흐릅니다.', '背景固定透明；字型、颜色、字级沿用上方的通用设置。已唱歌名放得下就静止，放不下才慢慢滚动。'],

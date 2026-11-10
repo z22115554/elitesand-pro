@@ -15032,7 +15032,7 @@ test('OBS 極簡歌單：伺服器／面板／顯示端三份版型清單同步�
   }
   const schema = require('../public/js/setlist-style-schema');
   eq(schema.FIELD_BY_KEY.minimalSkin.default, 'editorial');
-  ok(schema.FIELD_BY_KEY.minimalSkin.values.join() === 'editorial,framed,dreamy', '一個版型、三款外觀');
+  ok(schema.FIELD_BY_KEY.minimalSkin.values.join() === 'editorial,framed,dreamy,vinyl', '一個版型、四款外觀');
   const target = schema.getDefaultStyle();
   schema.validateAndApply({ minimalSkin: 'evil', minimalTickerSpeed: 999 }, target);
   eq(target.minimalSkin, 'editorial', '不認得的外觀不接受');
@@ -15049,6 +15049,14 @@ test('OBS 極簡歌單：伺服器／面板／顯示端三份版型清單同步�
   ok(mb.includes('@media (prefers-reduced-motion: reduce)'), '尊重減少動態效果');
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   ok(html.includes('data-setlist-layout="minimal-board"') && html.includes('data-new-feature="setlist-minimal"'));
+  // 常駐小動畫與播放狀態：裝飾只在 mount 建一次，render 不重建（換歌、暫停都不會讓動畫重來）
+  ok(setlist.includes('playing: !!current && isPlayingFlag(data),'), '歌單要知道正在播放還是暫停（只給裝飾用，不參與分組）');
+  ok(setlist.includes("document.documentElement.dataset.slPlaying = model.current && model.playing ? '1' : '0';"));
+  const mount = block.slice(block.indexOf('mount(root)'), block.indexOf('render(root)'));
+  const render = block.slice(block.indexOf('render(root)'));
+  ok(['mb-star', 'mb-glint', 'mb-wave', 'mb-disc'].every((c) => mount.includes(c)) && !['mb-star', 'mb-glint', 'mb-wave', 'mb-disc'].some((c) => render.includes(c)), '裝飾元素只在 mount 建立');
+  ok(mb.includes(':root[data-sl-playing="1"] .mb-wave i { animation: mb-wave'), '音波只在播放時跳動');
+  ok(mb.includes(':root[data-mb-skin="vinyl"][data-sl-playing="1"] .mb-disc { animation-play-state: running; }'), '唱片播放時轉、暫停停在當下角度');
   const slim = fs.readFileSync(path.join(__dirname, '../public/js/output-slim.js'), 'utf8');
   ok(slim.includes("fieldOf('sls-minimal-skin')"), '改版後的設定面板要放得到這組設定，不然會被藏起來');
 });

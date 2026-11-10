@@ -237,7 +237,7 @@
     { key: 'noteDoneColor', type: 'color', default: '#9aa6b0', domId: 'sls-note-done-color', cssVar: '--sl-note-done' },
     // 極簡歌單（minimal-board）：同一份排版、三款外觀；背景一律透明，不蓋住角色或直播場景。
     // 跑馬燈速度在 render 當下換算成動畫秒數，所以標 needsRerender。
-    { key: 'minimalSkin', type: 'enum', default: 'editorial', values: ['editorial', 'framed', 'dreamy'], domId: 'sls-minimal-skin', dataAttr: 'data-mb-skin' },
+    { key: 'minimalSkin', type: 'enum', default: 'editorial', values: ['editorial', 'framed', 'dreamy', 'vinyl'], domId: 'sls-minimal-skin', dataAttr: 'data-mb-skin' },
     { key: 'minimalTickerSpeed', type: 'number', default: 24, min: 8, max: 60, domId: 'sls-minimal-ticker-speed', format: 'pxPerSec', needsRerender: true },
     { key: 'minimalShowNumber', type: 'boolean', default: false, domId: 'sls-minimal-number', dataAttr: 'data-mb-num', invert: false },
   ];

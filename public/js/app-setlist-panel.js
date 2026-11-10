@@ -549,7 +549,7 @@
         { id: 'demo-done-1', title: '示範已唱歌曲一', artist: '示範歌手 A', offset: 65000 },
         { id: 'demo-done-2', title: '示範已唱歌曲二：測試比較長的歌名看跑馬燈', artist: '示範歌手 B', offset: 400000 },
       ],
-      current: { id: 'demo-current', title: '示範正在播放的歌曲', artist: '示範歌手 C' },
+      current: { id: 'demo-current', title: '示範正在播放的歌曲', artist: '示範歌手 C', playing: true },
       upcoming: [
         { title: '示範未唱歌曲一', artist: '示範歌手 D' },
         { title: '示範未唱歌曲二', artist: '示範歌手 E' },

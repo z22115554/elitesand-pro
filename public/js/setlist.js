@@ -132,6 +132,9 @@
       showTime: pastMapped.some((s) => (s.offset || 0) > 0), // 時間全 0（未開台）就不顯示時間欄
       past: pastMapped,
       current: current ? { title: s2t(current.title || ''), artist: s2t(current.artist || ''), key: keyOf(current) } : null,
+      // 正在播放（不是暫停）：只給音波、唱片轉盤這類裝飾用。哪首是目前歌曲照上面的 id 判斷，
+      // 絕不可拿這個旗標來分組（暫停時歌還沒唱完，見「歌單暫停時仍將目前歌曲保留在正在播放」）。
+      playing: !!current && isPlayingFlag(data),
       upcoming: upcoming.map((s) => ({ title: s2t(s.title || ''), artist: s2t(s.artist || ''), key: keyOf(s) })),
     };
   }
@@ -1086,9 +1089,15 @@
       root.innerHTML =
         '<div class="lay-stage mb-stage"><div class="mb-board">' +
           MB_STARS.map(([x, y, s], i) => `<span class="mb-star" style="left:${x}%;top:${y}%;--mb-star:${s};animation-delay:${i * 1.3}s"></span>`).join('') +
-          '<div class="mb-head"><span class="mb-eye" id="mb-eye"></span><span class="mb-num" id="mb-num"></span></div>' +
+          // 以下裝飾只在 mount 建一次、render 不重建，所以星點閃爍、光點游走不會因為換歌或暫停而中斷；
+          // 音波與唱片只看 <html data-sl-playing>，播放就動、暫停就停。
+          '<span class="mb-glint" aria-hidden="true"></span>' +
+          '<div class="mb-head"><span class="mb-eye" id="mb-eye"></span><span class="mb-head-end">' +
+            '<span class="mb-num" id="mb-num"></span>' +
+            '<span class="mb-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span></div>' +
           '<div class="mb-rule"></div>' +
-          '<div class="mb-now" id="mb-now"><div class="mb-title" id="mb-t"></div><div class="mb-artist" id="mb-a"></div></div>' +
+          '<div class="mb-now" id="mb-now"><div class="mb-disc" aria-hidden="true"><span class="mb-disc-label"></span></div>' +
+            '<div class="mb-text"><div class="mb-title" id="mb-t"></div><div class="mb-artist" id="mb-a"></div></div></div>' +
           '<div class="mb-foot" id="mb-foot"><span class="mb-foot-lbl" id="mb-foot-lbl"></span>' +
             '<div class="mb-ticker" id="mb-ticker"><div class="mb-track" id="mb-track"></div></div></div>' +
         '</div></div>';
@@ -1165,7 +1174,14 @@
     applyFit({ force: true });
     renderActive();
   }
+  function isPlayingFlag(data) {
+    const cur = data ? data.current : null;
+    return !!cur && cur.playing === true;
+  }
+
   function renderActive() {
+    // 播放／暫停狀態掛在 <html>，任何版型的 CSS 都能直接用（音波、轉盤等跟著狀態動的裝飾）
+    document.documentElement.dataset.slPlaying = model.current && model.playing ? '1' : '0';
     // 每次重繪都先對齊目前來源尺寸：resize 事件依賴瀏覽器的 rendering lifecycle，
     // 場景被隱藏、視窗最小化等情況可能延後送達；換歌時順手重算就不會停在舊尺寸。
     applyFit();

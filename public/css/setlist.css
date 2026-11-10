@@ -1798,3 +1798,87 @@ html.art-setlist-bat[data-layout="haunt"] .sk-shell::after { clip-path: none; ba
 }
 :root[data-mb-skin="dreamy"] .mb-foot { justify-content: center; }
 :root[data-mb-skin="dreamy"] .mb-ticker { flex: 0 1 auto; text-align: center; }
+
+/* ── 極簡歌單：常駐小動畫與播放狀態 ──
+   常駐動畫掛在 mount 時建立、render 不會重建的元素上，換歌、暫停都不會讓它中斷或重來。
+   跟播放狀態有關的只看 <html data-sl-playing="1|0">：
+   音波＝播放時跳動、暫停時收成低矮的一排；唱片＝播放時轉、暫停時停在當下角度。
+   不是真的分析音訊（OBS 疊加頁沒有聲音），是跟著「有沒有在播」動的節奏裝飾。 */
+.mb-head-end { display: inline-flex; align-items: center; gap: calc(10px * var(--sl-fit, 1)); }
+.mb-text { position: relative; min-width: 0; isolation: isolate; }
+
+/* 音波：預設只在清透文字、細框星線、唱片轉盤顯示 */
+.mb-wave { display: none; align-items: flex-end; gap: calc(2px * var(--sl-fit, 1)); height: calc(12px * var(--sl-fit, 1)); }
+:root:not([data-mb-skin]) .mb-wave,
+:root[data-mb-skin="editorial"] .mb-wave,
+:root[data-mb-skin="framed"] .mb-wave,
+:root[data-mb-skin="vinyl"] .mb-wave { display: inline-flex; }
+.mb-wave i {
+  display: block; width: calc(2px * var(--sl-fit, 1)); height: 100%; border-radius: 1px;
+  background: var(--sl-acc-b); transform-origin: bottom center;
+  transform: scaleY(.18); transition: transform .5s ease;
+}
+:root[data-sl-playing="1"] .mb-wave i { animation: mb-wave 1.05s ease-in-out infinite; }
+.mb-wave i:nth-child(2) { animation-delay: -.42s !important; }
+.mb-wave i:nth-child(3) { animation-delay: -.18s !important; }
+.mb-wave i:nth-child(4) { animation-delay: -.66s !important; }
+.mb-wave i:nth-child(5) { animation-delay: -.3s !important; }
+@keyframes mb-wave { 0%, 100% { transform: scaleY(.22); } 30% { transform: scaleY(1); } 55% { transform: scaleY(.45); } 80% { transform: scaleY(.8); } }
+
+/* 清透文字：細線上一道很慢的光掃過（常駐） */
+.mb-rule { position: relative; overflow: hidden; }
+:root:not([data-mb-skin]) .mb-rule::after,
+:root[data-mb-skin="editorial"] .mb-rule::after {
+  content: ''; position: absolute; inset: 0; width: 30%;
+  background: linear-gradient(90deg, transparent, var(--sl-acc-b), transparent);
+  animation: mb-sweep 7s ease-in-out infinite;
+}
+@keyframes mb-sweep { 0% { transform: translateX(-120%); opacity: 0; } 15% { opacity: .9; } 55%, 100% { transform: translateX(380%); opacity: 0; } }
+
+/* 細框星線：側邊線上一顆光點慢慢往下走（常駐） */
+.mb-glint { display: none; }
+:root[data-mb-skin="framed"] .mb-glint {
+  display: block; position: absolute; left: calc(12.5px * var(--sl-fit, 1)); top: calc(18px * var(--sl-fit, 1));
+  width: calc(4px * var(--sl-fit, 1)); height: calc(4px * var(--sl-fit, 1)); border-radius: 50%;
+  background: var(--sl-acc-b); box-shadow: 0 0 calc(6px * var(--sl-fit, 1)) var(--sl-acc-g);
+  animation: mb-glint 9s ease-in-out infinite;
+}
+@keyframes mb-glint { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: 1; } 70% { opacity: .8; } 90%, 100% { transform: translateY(calc(140px * var(--sl-fit, 1))); opacity: 0; } }
+
+/* 星霧柔光：播放時標題後面一圈很淡的光慢慢呼吸；暫停時淡出 */
+:root[data-mb-skin="dreamy"] .mb-text::before {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 120%; height: 160%;
+  transform: translate(-50%, -50%); pointer-events: none; z-index: -1;
+  background: radial-gradient(ellipse at center, var(--sl-acc-g), transparent 65%);
+  opacity: 0; transition: opacity .8s ease;
+}
+:root[data-mb-skin="dreamy"][data-sl-playing="1"] .mb-text::before { opacity: .55; animation: mb-breath 4.5s ease-in-out infinite; }
+@keyframes mb-breath { 0%, 100% { opacity: .3; } 50% { opacity: .7; } }
+/* 星點在星霧柔光裡會緩緩漂浮（常駐） */
+:root[data-mb-skin="dreamy"] .mb-star { animation: mb-twinkle 6s ease-in-out infinite, mb-float 14s ease-in-out infinite; }
+@keyframes mb-float { 0%, 100% { translate: 0 0; } 50% { translate: calc(6px * var(--sl-fit, 1)) calc(-8px * var(--sl-fit, 1)); } }
+
+/* 唱片轉盤：標題左邊一張小唱片，播放時轉、暫停就停在當下角度 */
+.mb-disc { display: none; }
+:root[data-mb-skin="vinyl"] .mb-now { display: flex; align-items: center; gap: calc(14px * var(--sl-fit, 1)); }
+:root[data-mb-skin="vinyl"] .mb-disc {
+  display: block; flex-shrink: 0; position: relative;
+  width: calc(var(--sl-sz-n, 16px) * 3.4); height: calc(var(--sl-sz-n, 16px) * 3.4); border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle at center, rgba(255,255,255,.07) 0 1px, transparent 1px 4px),
+    conic-gradient(from 20deg, #1b1b1f, #2a2a30 12%, #141417 25%, #2a2a30 40%, #141417 55%, #26262b 70%, #141417 85%, #1b1b1f);
+  box-shadow: 0 0 0 max(1px, var(--sl-bw, 1px)) var(--sl-acc-bd), 0 calc(4px * var(--sl-fit, 1)) calc(14px * var(--sl-fit, 1)) rgba(0,0,0,.35);
+  animation: mb-spin 4.2s linear infinite; animation-play-state: paused;
+}
+:root[data-mb-skin="vinyl"][data-sl-playing="1"] .mb-disc { animation-play-state: running; }
+.mb-disc-label {
+  position: absolute; inset: 34%; border-radius: 50%;
+  background: radial-gradient(circle at center, #111 0 12%, var(--sl-acc) 13% 100%);
+}
+@keyframes mb-spin { to { transform: rotate(360deg); } }
+:root[data-mb-skin="vinyl"] .mb-text { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-wave i, :root[data-sl-playing="1"] .mb-wave i, .mb-rule::after, .mb-glint, .mb-disc,
+  :root[data-mb-skin="dreamy"] .mb-text::before, :root[data-mb-skin="dreamy"] .mb-star { animation: none !important; }
+}
