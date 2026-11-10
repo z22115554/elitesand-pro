@@ -44,6 +44,8 @@ body.prompter {
 }
 .pt-icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .pt-icon-btn svg { width: 16px; height: 16px; }
+.pt-pin-btn[hidden] { display: none; }
+.pt-pin-btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 
 .pt-body {
   flex: 1 1 auto;

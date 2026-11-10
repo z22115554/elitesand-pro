@@ -299,7 +299,10 @@ test('面板只載入目前可見的 OBS 預覽，避免隱藏 iframe 持續耗�
   const previewFrames = page.match(/<iframe[^>]+(?:obs-preview|setlist-preview)[^>]*>/g) || [];
   // 首頁重構後不再內嵌 OBS 預覽 iframe（改用 Live Bar 的目前句文字視圖）；剩下的預覽 iframe
   // 都在「歌詞設定」「直播歌單」頁。數量變動時請同步檢查 preview-scale.js 的生命週期管理。
-  eq(previewFrames.length, 4, '面板預覽數量基準已改變，請同步檢查生命週期管理: ');
+  // 2026-11-10 起直播頁多一份可收合的歌詞預覽：收起時不載入（details 沒開就不給 src）。
+  eq(previewFrames.length, 5, '面板預覽數量基準已改變，請同步檢查生命週期管理: ');
+  ok(lifecycle.includes("if (frame.closest('details:not([open])')) return false;"), '收起的預覽不可載入: ');
+  ok(lifecycle.includes("details.addEventListener('toggle', () => setTimeout(refresh, 0));"), '展開／收起要重新判斷載入: ');
   previewFrames.forEach((frame) => {
     ok(frame.includes('data-preview-src='), '預覽 iframe 必須保存延遲載入來源: ');
     ok(!/\ssrc=/.test(frame), '預覽 iframe 不可在 HTML 解析時直接載入: ');
@@ -14975,6 +14978,38 @@ test('記住每首歌的模板：伺服器只存合法模板 ID、清單摘要�
   ok(/if \(options\.user === false\) return;/.test(extras), '自動套用不發 lyric-template:selected');
   const playback = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
   ok(playback.includes("new CustomEvent('track:loaded', { detail: { track } })"));
+});
+
+test('跟唱視窗置頂：專用 preload 只開放置頂、IPC 只認主程序開的跟唱視窗、偏好記在 userData、瀏覽器開的不顯示按鈕', () => {
+  const electronShell = require('../electron/shell.js');
+  const files = new Map();
+  const memFs = {
+    readFileSync: (file) => { if (!files.has(file)) throw new Error('ENOENT'); return files.get(file); },
+    writeFileSync: (file, data) => files.set(file, data),
+    mkdirSync: () => {},
+  };
+  eq(electronShell.readPrompterPin('/ud', memFs), false, '沒記錄＝不置頂');
+  electronShell.writePrompterPin('/ud', true, memFs);
+  eq(electronShell.readPrompterPin('/ud', memFs), true, '置頂偏好要記住');
+  electronShell.writePrompterPin('/ud', false, memFs);
+  eq(electronShell.readPrompterPin('/ud', memFs), false);
+  const preload = fs.readFileSync(path.join(__dirname, '../electron/prompter-preload.js'), 'utf8');
+  ok(preload.includes("exposeInMainWorld('ElitesandPrompter'"), '跟唱視窗用自己的 API 名稱');
+  ok((preload.match(/ipcRenderer\.invoke\(/g) || []).length === 2, '只開放讀取與設定置頂兩件事');
+  ok(!/ipcRenderer\.(send|on)\(/.test(preload));
+  const shell = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
+  ok(shell.includes("preload: path.join(shellRoot, 'electron', 'prompter-preload.js')"), '跟唱視窗要掛專用 preload，不是主視窗那份');
+  for (const channel of ['elitesand:prompter-pin-get', 'elitesand:prompter-pin-set']) {
+    const handler = shell.slice(shell.indexOf(`ipcMain.handle('${channel}'`));
+    ok(/const child = prompterWindowOf\(event\);\s*if \(!child\) return null;/.test(handler.slice(0, 200)), `${channel} 必須確認呼叫的是跟唱視窗`);
+  }
+  ok(/if \(isPrompterUrl\(details\?\.url, port\)\) \{\s*prompterWindows\.add\(childWindow\);/.test(shell), '只有 /prompter 子視窗能登記成跟唱視窗');
+  ok(shell.includes("prompterWindows.delete(childWindow)"), '關閉後要移除，不留殘留狀態');
+  const html = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  ok(/id="pt-pin-btn"[^>]*hidden/.test(html), '預設隱藏，瀏覽器開的跟唱視圖不能假裝能置頂');
+  const prompter = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  ok(/const api = window\.ElitesandPrompter;[\s\S]{0,120}if \(!api \|\| !button\) return;/.test(prompter));
+  ok(/if \(!state\) return;[\s\S]{0,60}button\.hidden = false;/.test(prompter), '主程序不認這個視窗時維持隱藏');
 });
 
 function finishTests(exitCode) {

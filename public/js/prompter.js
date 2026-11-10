@@ -864,3 +864,28 @@ document.getElementById('pt-back-btn')?.addEventListener('click', () => {
   window.close();
   setTimeout(() => { if (!window.closed) window.location.href = '/'; }, 150);
 });
+
+// ─── 視窗置頂（桌面版跟唱視窗才有）───
+// 瀏覽器開的 /prompter 沒有 ElitesandPrompter，按鈕維持隱藏。
+(function initPrompterPin() {
+  const api = window.ElitesandPrompter;
+  const button = document.getElementById('pt-pin-btn');
+  if (!api || !button) return;
+  const t = (key) => (window.I18n && typeof window.I18n.t === 'function' ? window.I18n.t(key) : key);
+  const render = (pinned) => {
+    button.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+    const label = t(pinned ? 'prompter.unpin' : 'prompter.pin');
+    button.title = label;
+    button.setAttribute('aria-label', label);
+  };
+  api.getAlwaysOnTop().then((state) => {
+    if (!state) return; // 主程序不認這個視窗：維持隱藏
+    button.hidden = false;
+    render(state.pinned);
+  }).catch(() => {});
+  button.addEventListener('click', () => {
+    const next = button.getAttribute('aria-pressed') !== 'true';
+    api.setAlwaysOnTop(next).then((state) => { if (state) render(state.pinned); }).catch(() => {});
+  });
+  window.addEventListener('i18n:change', () => render(button.getAttribute('aria-pressed') === 'true'));
+})();

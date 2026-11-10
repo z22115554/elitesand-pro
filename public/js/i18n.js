@@ -1004,6 +1004,8 @@
     'prompter.open': ['跟唱視圖', 'Sing-Along View', '歌唱ビュー', '따라 부르기', '跟唱视图'],
     'prompter.openTitle': ['開啟跟唱視圖（整句歌詞，給主播自己看）', 'Open the sing-along view with full-line lyrics for the streamer', '配信者向けの一行歌詞を表示する歌唱ビューを開く', '스트리머용 전체 줄 가사가 표시되는 따라 부르기 화면 열기', '打开跟唱视图（整句歌词，供主播查看）'],
     'prompter.back': ['回控制面板', 'Back to panel', 'パネルに戻る', '패널로 돌아가기', '回控制面板'],
+    'prompter.pin': ['視窗置頂（蓋在其他視窗上面）', 'Keep window on top', 'ウィンドウを最前面に固定', '창을 항상 위에 표시', '窗口置顶（盖在其他窗口上面）'],
+    'prompter.unpin': ['取消置頂', 'Stop keeping on top', '最前面の固定を解除', '항상 위 해제', '取消置顶'],
     'prompter.appearance': ['歌詞外觀', 'Lyrics appearance', '歌詞の表示設定', '가사 모양', '歌词外观'],
     'prompter.progress': ['播放進度', 'Playback progress', '再生位置', '재생 진행률', '播放进度'],
     'prompter.playlistEmpty': ['尚無歌曲', 'No tracks yet', '曲がありません', '아직 곡이 없습니다', '暂无歌曲'],

@@ -27,6 +27,10 @@
         <span id="connection-text" data-i18n="status.connecting">連線中</span>
       </span>
       <button id="pt-back-btn" class="btn btn-ghost btn-sm" type="button" data-i18n="prompter.back">回控制面板</button>
+      <!-- 置頂：只有桌面版開的跟唱視窗才看得到（瀏覽器開的沒有這個能力，不假裝成功） -->
+      <button id="pt-pin-btn" class="pt-icon-btn pt-pin-btn" type="button" hidden aria-pressed="false" title="視窗置頂" aria-label="視窗置頂" data-i18n-title="prompter.pin" data-i18n-aria-label="prompter.pin">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></svg>
+      </button>
       <button id="pt-settings-btn" class="pt-icon-btn" type="button" title="歌詞外觀設定" aria-label="歌詞外觀設定" data-i18n-title="prompter.appearance" data-i18n-aria-label="prompter.appearance">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>

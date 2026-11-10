@@ -212,6 +212,23 @@ function isPrompterUrl(rawUrl, port) {
   }
 }
 
+// 跟唱視窗「置頂」偏好：只記在桌面版 userData，下次開跟唱視窗沿用。
+const PROMPTER_WINDOW_FILE = 'prompter-window.json';
+function readPrompterPin(userDataPath, fsImpl = fs) {
+  try {
+    const parsed = JSON.parse(fsImpl.readFileSync(path.join(userDataPath, PROMPTER_WINDOW_FILE), 'utf8'));
+    return parsed && parsed.alwaysOnTop === true;
+  } catch (_) {
+    return false;
+  }
+}
+function writePrompterPin(userDataPath, pinned, fsImpl = fs) {
+  try {
+    fsImpl.mkdirSync(userDataPath, { recursive: true });
+    fsImpl.writeFileSync(path.join(userDataPath, PROMPTER_WINDOW_FILE), JSON.stringify({ alwaysOnTop: pinned === true }), 'utf8');
+  } catch (_) { /* 存不了就只在這次有效 */ }
+}
+
 function probeHealth(port, { httpImpl = http, timeoutMs = 1000 } = {}) {
   return new Promise((resolve) => {
     const request = httpImpl.get({
@@ -483,6 +500,8 @@ function createElectronShell({
   const { format: formatUpdateText, getCatalog: getUpdateCatalog, resolveLocale: resolveUpdateLocale } = require('./startup-update-i18n');
   const serverEntry = path.join(projectRoot, 'server', 'index.js');
   const preload = path.join(shellRoot, 'electron', 'preload.js');
+  // 目前開著的跟唱視窗（只有這些視窗可以要求置頂）
+  const prompterWindows = new Set();
   const isSpoutExperiment = processObject.env.ELITESAND_SPOUT_EXPERIMENT === '1';
   const { createSpoutIssueDiagnostics } = require('./spout-issue-diagnostics');
   const { createGlobalHotkeys } = require('./global-hotkeys');
@@ -1309,6 +1328,20 @@ function createElectronShell({
       // 設定本身的持久化（server 端 JSON）由呼叫端另外打 /api/webgpu-separation/settings，
       // 這裡只負責「視窗要不要活著」這件事，跟 §13 架構決策一致：electron/ 完全不碰
       // server/ 的業務邏輯，只做「開一個隱藏視窗指到某個 URL」。
+      // 跟唱視窗置頂：只認主程序自己開出來的跟唱視窗，其他頁面（含主視窗）呼叫一律不理。
+      const prompterWindowOf = (event) => [...prompterWindows].find((child) => !child.isDestroyed?.() && child.webContents === event?.sender) || null;
+      ipcMain.handle('elitesand:prompter-pin-get', (event) => {
+        const child = prompterWindowOf(event);
+        if (!child) return null;
+        return { pinned: !!child.isAlwaysOnTop?.() };
+      });
+      ipcMain.handle('elitesand:prompter-pin-set', (event, pinned) => {
+        const child = prompterWindowOf(event);
+        if (!child) return null;
+        child.setAlwaysOnTop?.(pinned === true, 'floating');
+        writePrompterPin(app.getPath('userData'), pinned === true, fsImpl);
+        return { pinned: !!child.isAlwaysOnTop?.() };
+      });
       ipcMain.handle('elitesand:hotkeys-get', (event) => {
         if (event?.sender !== window.webContents) return null;
         return globalHotkeys ? globalHotkeys.get() : { config: null, results: {}, available: false };
@@ -1399,7 +1432,8 @@ function createElectronShell({
             title: 'Elitesand Pro 跟唱視圖',
             icon: path.join(shellRoot, 'assets', 'elitesand-pro.ico'),
             frame: true,
-            webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+            // 跟唱視窗專用的極小 preload：只開放「置頂」，主視窗那份 ElitesandShell 不給它
+            webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(shellRoot, 'electron', 'prompter-preload.js') },
           },
         };
       }
@@ -1410,8 +1444,13 @@ function createElectronShell({
     });
     // 跟唱視圖子視窗建立後，一樣把「拒絕未知彈窗／只信任本機網址」的防護補上，
     // 不能因為它是子視窗就少一層——防禦深度跟主視窗一致。
-    window.webContents.on('did-create-window', (childWindow) => {
+    window.webContents.on('did-create-window', (childWindow, details) => {
       childWindow.removeMenu?.();
+      if (isPrompterUrl(details?.url, port)) {
+        prompterWindows.add(childWindow);
+        if (readPrompterPin(app.getPath('userData'), fsImpl)) childWindow.setAlwaysOnTop?.(true, 'floating');
+        childWindow.on?.('closed', () => prompterWindows.delete(childWindow));
+      }
       childWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       childWindow.webContents.on('will-navigate', (event, url) => {
         if (!isTrustedLocalUrl(url, port)) event.preventDefault();
@@ -1795,6 +1834,8 @@ module.exports = {
   isRequiredInstallerHandoffPlan,
   isTwitchVerificationUrl,
   isPrompterUrl,
+  readPrompterPin,
+  writePrompterPin,
   probeHealth,
   waitForExit,
   verifyPackagedResourceIntegrity,
