@@ -216,3 +216,18 @@ test('譯文欄位一路送到跟唱視圖：存檔清理保留 translation，�
   assert.ok(html.includes('id="pt-set-translation"') && html.includes('data-new-feature="prompter-translation"'));
   assert.ok(html.includes('<script src="/js/new-badges.js"></script>'), '跟唱視圖要載入 NEW 標記');
 });
+
+test('偏移社群回饋的歌詞來源類別：EULA 2.3.0 揭露、Worker 只收白名單、兩端白名單一致', () => {
+  const eula = fs.readFileSync(path.join(__dirname, '../EULA.txt'), 'utf8').replace(/\r\n/g, '\n');
+  assert.ok(eula.includes('自本版（2.3.0）起，傳送偏移時另附當時所用歌詞來源的類別代號'));
+  assert.ok(eula.includes('From this version (2.3.0), each submission also includes a category code'));
+  const worker = fs.readFileSync(path.join(__dirname, '../cloudflare/lyric-offset-worker/src/index.ts'), 'utf8');
+  const workerSources = worker.match(/LYRICS_KEY_PATTERN = \/\^\(\?:([a-z|]+)\):/)[1].split('|').sort();
+  const client = fs.readFileSync(path.join(__dirname, '../server/services/lyric-offset-sync.js'), 'utf8');
+  const clientSources = JSON.parse(client.match(/LYRICS_KEY_SOURCES = new Set\((\[[^\]]+\])\)/)[1].replace(/'/g, '"')).sort();
+  assert.deepEqual(workerSources, clientSources);
+  const { LYRICS_SOURCE_PRIORITY } = require('../server/services/lyrics-engine');
+  assert.deepEqual(clientSources, [...LYRICS_SOURCE_PRIORITY].sort(), '新增歌詞來源時兩端白名單也要加');
+  const migration = fs.readFileSync(path.join(__dirname, '../cloudflare/lyric-offset-worker/migrations/0003_lyrics_key.sql'), 'utf8');
+  assert.ok(migration.includes("ADD COLUMN lyrics_key TEXT NOT NULL DEFAULT ''"), '舊資料一律視為來源不明');
+});

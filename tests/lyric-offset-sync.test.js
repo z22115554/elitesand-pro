@@ -15,7 +15,7 @@ Module._load = function mockProjectDependencies(request, parent, isMain) {
   if (request === '../utils/logger') return { createLogger: () => ({ warn() {} }) };
   return originalLoad(request, parent, isMain);
 };
-const { createLyricOffsetSync, deriveId, utcPeriods, isSyncableVideoId } = require('../server/services/lyric-offset-sync');
+const { createLyricOffsetSync, deriveId, utcPeriods, isSyncableVideoId, lyricsKeyFor, isValidLyricsKey } = require('../server/services/lyric-offset-sync');
 Module._load = originalLoad;
 
 async function run() {
@@ -55,7 +55,7 @@ async function run() {
     eulaAccepted: () => true,
     log: { warn() {}, info() {} },
     fetch: async (url, options) => {
-      requests.push({ url, method: (options && options.method) || 'GET' });
+      requests.push({ url, method: (options && options.method) || 'GET', body: options && options.body ? JSON.parse(options.body) : null });
       if (!options || options.method === 'GET') {
         return { ok: true, status: 200, json: async () => ({ videoId: 'dQw4w9WgXcQ', suggestedOffsetMs: 120, sampleCount: 3 }) };
       }
@@ -79,6 +79,23 @@ async function run() {
   assert.deepStrictEqual(suggestion, { suggestedOffsetMs: 120, sampleCount: 3 });
   assert.strictEqual(requests.length, 2);
   assert.strictEqual(requests[1].method, 'GET');
+
+  // 歌詞來源類別：只送白名單裡的「來源:krc|lrc」，手動歌詞與不明來源不送
+  assert.strictEqual(requests[0].body.lyricsKey, undefined, '沒給來源就不帶這個欄位（跟舊版一樣）');
+  assert.strictEqual(lyricsKeyFor({ lyricsSource: 'qqmusic', lyricsType: 'krc' }), 'qqmusic:krc');
+  assert.strictEqual(lyricsKeyFor({ lyricsSource: 'lrclib', lyricsType: 'txt' }), 'lrclib:lrc');
+  assert.strictEqual(lyricsKeyFor({ lyricsSource: 'manual', lyricsType: 'lrc' }), null, '自己貼上的歌詞不送來源');
+  assert.strictEqual(lyricsKeyFor({}), null);
+  assert.strictEqual(isValidLyricsKey('qqmusic:krc'), true);
+  assert.strictEqual(isValidLyricsKey('qqmusic:krc:x'), false);
+  assert.strictEqual(isValidLyricsKey('evil:krc'), false);
+  await sync.submitOffset({ videoId: 'dQw4w9WgXcQ', offsetMs: 160, lyricsKey: 'qqmusic:krc' });
+  assert.strictEqual(requests[2].body.lyricsKey, 'qqmusic:krc');
+  await sync.submitOffset({ videoId: 'dQw4w9WgXcQ', offsetMs: 170, lyricsKey: 'not-allowed' });
+  assert.strictEqual(requests[3].body.lyricsKey, undefined, '白名單外的值直接拿掉，不送出');
+  await sync.getSuggestedOffset('dQw4w9WgXcQ', 'netease:lrc');
+  assert.ok(requests[4].url.endsWith('?videoId=dQw4w9WgXcQ&lyricsKey=netease%3Alrc'));
+  requests.length = 2;
 
   const persisted = JSON.parse(fs.readFileSync(path.join(dir2, 'lyric-offset-sync.json'), 'utf8'));
   assert.ok(!JSON.stringify(persisted).includes('installId'), '不可含固定安裝 ID');

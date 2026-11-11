@@ -2,8 +2,8 @@ Elitesand Pro
 END-USER LICENSE AGREEMENT AND DISCLAIMER
 最終使用者授權暨免責聲明
 
-Version: 2.2.0
-Effective Date / 生效日期：2026-11-07
+Version: 2.3.0
+Effective Date / 生效日期：2026-11-11
 
 IMPORTANT INFORMATION / 重要資訊
 --------------------------------
@@ -261,6 +261,10 @@ v2.1 或其後版本（LGPL）授權；你可以自行替換相容的 SoundTouch
    統計功能使用的密鑰各自獨立，不會傳送）。啟用後，本軟體也會在你匯入尚無
    本機偏移記錄的影片時，查詢並可能自動套用其他使用者已回饋、且達最低票數
    門檻確認的建議偏移值。
+
+   自本版（2.3.0）起，傳送偏移時另附當時所用歌詞來源的類別代號（例如「QQ 音樂
+   逐字」、「LRCLIB 逐句」這類固定代號，不含歌詞內容；你自行貼上或上傳的歌詞
+   不附此項）。查詢建議值時也會一併送出該代號，以便優先取得同一歌詞來源的建議值。
 
    你同意本版 EULA 時，若本機已存有本功能上線前你所做的歌詞偏移調整記錄，
    本軟體會將這些既有記錄一次性傳送，傳送內容與用途比照前段；此後新產生的
@@ -714,6 +718,12 @@ While enabled, the Software also looks up, and may automatically apply, an
 offset suggestion already submitted by other users and confirmed past a
 minimum-vote threshold, when you import a video with no local offset
 recorded.
+
+From this version (2.3.0), each submission also includes a category code for the
+lyric source in use at the time (a fixed code such as "QQ Music word-timed" or
+"LRCLIB line-timed"; never the lyrics themselves, and nothing for lyrics you
+pasted or uploaded yourself). Lookups send the same code so a suggestion from the
+same lyric source can be preferred.
 
 When you accept this version of the EULA, if the device already holds lyric
 offset corrections you made before this feature existed, the Software sends

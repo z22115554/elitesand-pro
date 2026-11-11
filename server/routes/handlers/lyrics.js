@@ -31,13 +31,14 @@ const log = createLogger('Socket');
 // 使用者還在按 +/-0.1s 微調時不要每按一下就送一次；等 10 秒沒再變動才算「定案值」。
 const LYRIC_OFFSET_SYNC_DEBOUNCE_MS = 10000;
 
-function scheduleLyricOffsetSync(ctx, trackId, offsetMs) {
+// lyricsKey：調整當下這首用的歌詞來源類別（10 秒後才送，來源要在排程時就記下來）。
+function scheduleLyricOffsetSync(ctx, trackId, offsetMs, lyricsKey = null) {
   const timers = ctx.lyricOffsetSyncTimers;
   const existing = timers.get(trackId);
   if (existing) clearTimeout(existing);
   const timer = setTimeout(() => {
     timers.delete(trackId);
-    lyricOffsetSync.submitOffset({ videoId: trackId, offsetMs })
+    lyricOffsetSync.submitOffset({ videoId: trackId, offsetMs, lyricsKey })
       .catch((error) => log.warn(`歌詞偏移回饋送出失敗：${error.message}`));
   }, LYRIC_OFFSET_SYNC_DEBOUNCE_MS);
   if (typeof timer.unref === 'function') timer.unref();
@@ -194,7 +195,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     // offset:update 是所有即時端都已訂閱的細粒度事件；不再讓連按對齊鍵
     // 夾帶完整 state:sync，重連時仍會從已更新的 playState 取得正確初始值。
     persistState();
-    scheduleLyricOffsetSync(ctx, trackId, newOffset);
+    scheduleLyricOffsetSync(ctx, trackId, newOffset, lyricOffsetSync.lyricsKeyFor(tracksById(trackId)[0]));
   });
 
   socket.on('offset:set', (data) => {
@@ -217,7 +218,7 @@ function registerLyricsHandlers(io, socket, ctx) {
 
     const clampedOffset = setTrackOffset(trackId, offset);
     log.info(`Offset 設定: ${trackId}: ${clampedOffset}ms`);
-    scheduleLyricOffsetSync(ctx, trackId, clampedOffset);
+    scheduleLyricOffsetSync(ctx, trackId, clampedOffset, lyricOffsetSync.lyricsKeyFor(tracksById(trackId)[0]));
   });
 
   function setTrackOffset(trackId, offset) {

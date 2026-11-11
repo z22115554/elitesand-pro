@@ -21,7 +21,7 @@ const VALID_ROMANIZATION_MODES = ['original', 'romanized', 'both', 'xieyin', 'fu
  */
 async function applyCommunityOffsetSuggestion(ctx, io, track) {
   if (!track || !track.id || ctx.trackOffsets.has(track.id)) return;
-  const result = await lyricOffsetSync.getSuggestedOffset(track.id).catch(() => null);
+  const result = await lyricOffsetSync.getSuggestedOffset(track.id, lyricOffsetSync.lyricsKeyFor(track)).catch(() => null);
   if (!result || typeof result.suggestedOffsetMs !== 'number' || ctx.trackOffsets.has(track.id)) return;
   ctx.trackOffsets.set(track.id, result.suggestedOffsetMs);
   if (ctx.playState.currentTrack && ctx.playState.currentTrack.id === track.id) {

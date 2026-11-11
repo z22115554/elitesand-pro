@@ -32,6 +32,21 @@ const TIMEOUT_MS = 3500;
 // 標準 YouTube 影片 ID 形狀；同時也是「這個 trackId 值得送出去」的過濾條件——
 // 本機上傳的歌曲 track.id 是檔名，幾乎不可能剛好符合這個形狀。
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+// 歌詞來源類別：同一支影片，不同來源（尤其逐字 vs 逐句）的時間軸可能差一點，偏移要分開記票。
+// 只送「來源:krc|lrc」這種固定代號，不送任何歌詞內容；本機貼上的歌詞（manual）不送。
+const LYRICS_KEY_SOURCES = new Set(['betterlyrics', 'paxsenix', 'kugou', 'qqmusic', 'lrclib', 'netease']);
+
+/** 由 track 的 lyricsSource／lyricsType 算出要送的歌詞來源類別；不明或手動歌詞回 null。 */
+function lyricsKeyFor(track) {
+  if (!track || !LYRICS_KEY_SOURCES.has(track.lyricsSource)) return null;
+  return `${track.lyricsSource}:${track.lyricsType === 'krc' ? 'krc' : 'lrc'}`;
+}
+
+function isValidLyricsKey(value) {
+  if (typeof value !== 'string') return false;
+  const [source, type] = value.split(':');
+  return LYRICS_KEY_SOURCES.has(source) && (type === 'krc' || type === 'lrc') && value.split(':').length === 2;
+}
 
 function atomicWrite(fsImpl, filename, value) {
   fsImpl.mkdirSync(path.dirname(filename), { recursive: true });
@@ -176,21 +191,23 @@ function createLyricOffsetSync(options = {}) {
     return state.enabled && dependencies.eulaAccepted() && isAvailable();
   }
 
-  async function submitOffset({ videoId, offsetMs }) {
+  async function submitOffset({ videoId, offsetMs, lyricsKey }) {
     if (!isSyncableVideoId(videoId)) return { skipped: true };
     if (typeof offsetMs !== 'number' || !Number.isInteger(offsetMs)) return { skipped: true };
     if (!canUseNetwork()) return { skipped: true };
     const state = loadState();
     const secret = ensureSecret(state);
     const periods = utcPeriods(dependencies.now());
-    const body = JSON.stringify({
+    const payload = {
       schemaVersion: 1,
       videoId,
       offsetMs,
       appVersion: dependencies.appVersion,
       dailyId: deriveId(secret, 'day', periods.day),
       monthlyId: deriveId(secret, 'month', periods.month),
-    });
+    };
+    if (isValidLyricsKey(lyricsKey)) payload.lyricsKey = lyricsKey;
+    const body = JSON.stringify(payload);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
@@ -214,13 +231,14 @@ function createLyricOffsetSync(options = {}) {
   }
 
   /** @returns {Promise<{ suggestedOffsetMs: number|null, sampleCount: number }|null>} 失敗或未啟用時回 null，呼叫端不應把 null 當「建議值為 0」。 */
-  async function getSuggestedOffset(videoId) {
+  async function getSuggestedOffset(videoId, lyricsKey = null) {
     if (!isSyncableVideoId(videoId)) return null;
     if (!canUseNetwork()) return null;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
-      const response = await dependencies.fetch(`${endpoint()}?videoId=${encodeURIComponent(videoId)}`, {
+      const keyQuery = isValidLyricsKey(lyricsKey) ? `&lyricsKey=${encodeURIComponent(lyricsKey)}` : '';
+      const response = await dependencies.fetch(`${endpoint()}?videoId=${encodeURIComponent(videoId)}${keyQuery}`, {
         method: 'GET',
         headers: { 'User-Agent': dependencies.userAgent },
         signal: controller.signal,
@@ -274,5 +292,5 @@ function createLyricOffsetSync(options = {}) {
 
 const singleton = createLyricOffsetSync();
 module.exports = Object.assign(singleton, {
-  createLyricOffsetSync, utcPeriods, deriveId, validEndpoint, isSyncableVideoId,
+  createLyricOffsetSync, utcPeriods, deriveId, validEndpoint, isSyncableVideoId, lyricsKeyFor, isValidLyricsKey,
 });

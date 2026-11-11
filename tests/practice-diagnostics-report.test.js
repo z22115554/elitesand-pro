@@ -56,7 +56,8 @@ test('verdict and strict score keys need the 2.2.0 disclosure and match the EULA
   assert.equal(telemetry.isDailyBooleanKey('practice.verdict.relaxed.accurate'), false);
   // CI 的 Windows checkout 會把換行轉成 CRLF，先統一成 LF 再比對跨行字串
   const eula = fs.readFileSync(path.join(__dirname, '..', 'EULA.txt'), 'utf8').replace(/\r\n/g, '\n');
-  assert.match(eula, /^Version: 2\.2\.0/m);
+  // 2.2.0 起揭露的條款要留在之後的每一版（版號本身會繼續往上加）
+  assert.match(eula, /^Version: 2\.(?:[2-9]|\d{2,})\.\d+/m);
   assert.ok(eula.includes('(h) 自本版（2.2.0）起') && eula.includes('(h) From this version (2.2.0)'));
   assert.ok(eula.includes('練唱判定問題') && eula.includes('practice judging problem'));
   assert.ok(eula.includes('顯示卡的廠商與型號代碼') && eula.includes("graphics card's\nvendor and device ID"), 'Spout reports disclose the GPU IDs they carry');
