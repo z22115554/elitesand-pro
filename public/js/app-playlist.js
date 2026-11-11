@@ -257,48 +257,68 @@
   const trackEditTitleInput = document.getElementById('track-edit-title');
   const trackEditArtistInput = document.getElementById('track-edit-artist');
   const trackEditArtistCandidates = document.getElementById('track-edit-artist-candidates');
-  let trackEditIndex = -1;
+  // 同一個視窗播放清單和歌曲庫共用：誰開的就由誰的 onSave 決定怎麼存。
+  let trackEditSave = null;
 
-  function openTrackEditModal(index) {
-    const playlist = state.playlist;
-    if (!trackEditModal || index < 0 || index >= playlist.length) return;
-    trackEditIndex = index;
-    trackEditTitleInput.value = playlist[index].title || '';
-    trackEditArtistInput.value = playlist[index].artist || '';
+  function openTrackEditDialog({ title = '', artist = '', candidates = [], onSave }) {
+    if (!trackEditModal || typeof onSave !== 'function') return;
+    trackEditSave = onSave;
+    trackEditTitleInput.value = title;
+    trackEditArtistInput.value = artist;
     if (trackEditArtistCandidates) {
-      trackEditArtistCandidates.replaceChildren(...(playlist[index].artistCandidates || []).map((artist) => {
-        const option = document.createElement('option'); option.value = artist; return option;
+      trackEditArtistCandidates.replaceChildren(...(candidates || []).map((name) => {
+        const option = document.createElement('option'); option.value = name; return option;
       }));
     }
     trackEditModal.hidden = false;
     trackEditTitleInput.focus();
   }
-  function closeTrackEditModal() { if (trackEditModal) trackEditModal.hidden = true; trackEditIndex = -1; }
+  function closeTrackEditModal() { if (trackEditModal) trackEditModal.hidden = true; trackEditSave = null; }
+  window.TrackEditDialog = Object.freeze({ open: openTrackEditDialog, close: closeTrackEditModal });
+
+  function openTrackEditModal(index) {
+    const playlist = state.playlist;
+    if (index < 0 || index >= playlist.length) return;
+    const target = playlist[index];
+    openTrackEditDialog({
+      title: target.title || '',
+      artist: target.artist || '',
+      candidates: target.artistCandidates || [],
+      onSave: (newTitle, newArtist) => savePlaylistTrackName(target, newTitle, newArtist),
+    });
+  }
 
   if (trackEditModal) {
     document.getElementById('track-edit-cancel').addEventListener('click', closeTrackEditModal);
     trackEditModal.addEventListener('click', (e) => { if (e.target === trackEditModal) closeTrackEditModal(); });
     document.getElementById('track-edit-save').addEventListener('click', () => {
-      const playlist = state.playlist;
-      if (trackEditIndex < 0 || trackEditIndex >= playlist.length) { closeTrackEditModal(); return; }
+      if (!trackEditSave) { closeTrackEditModal(); return; }
       const newTitle = trackEditTitleInput.value.trim();
       if (!newTitle) { AppShared.showToast('歌名不能空白', 'warning'); return; }
-      const track = playlist[trackEditIndex];
-      track.title = newTitle;
-      track.artist = trackEditArtistInput.value.trim();
-      track.needsArtistConfirmation = !track.artist;
-      if (track.artist) track.artistConfidence = 1;
-      renderPlaylist();
-      if (trackEditIndex === state.currentTrackIndex) {
-        setMarqueeText(dom.trackTitle, track.title);
-        setMarqueeText(dom.trackArtist, track.artist || '');
-        AppShared.updateMiniPlayerInfo(track.title, track.artist || '', track.cover);
-      }
-      // 用整份清單同步，讓 OBS/歌單等其他端也拿到修正後的歌名/歌手
-      SocketClient.sendWithCallback('playlist:update', playlist, (result) => {
-        if (result && result.ok) { AppShared.showToast('已更新歌名/歌手', 'success'); closeTrackEditModal(); }
-        else AppShared.showToast(`更新失敗：${result?.error || '伺服器沒有確認'}`, 'error');
-      });
+      trackEditSave(newTitle, trackEditArtistInput.value.trim());
+    });
+  }
+
+  function savePlaylistTrackName(staleTrack, newTitle, newArtist) {
+    const playlist = state.playlist;
+    // 視窗開著時清單可能被伺服器同步換成新陣列：用 entryId 找回同一列
+    const trackIndex = playlist.findIndex((t) => t === staleTrack || (staleTrack.entryId && t && t.entryId === staleTrack.entryId));
+    if (trackIndex < 0) { AppShared.showToast('這首已不在播放清單裡', 'warning'); closeTrackEditModal(); return; }
+    const track = playlist[trackIndex];
+    track.title = newTitle;
+    track.artist = newArtist;
+    track.needsArtistConfirmation = !track.artist;
+    if (track.artist) track.artistConfidence = 1;
+    renderPlaylist();
+    if (trackIndex === state.currentTrackIndex) {
+      setMarqueeText(dom.trackTitle, track.title);
+      setMarqueeText(dom.trackArtist, track.artist || '');
+      AppShared.updateMiniPlayerInfo(track.title, track.artist || '', track.cover);
+    }
+    // 用整份清單同步，讓 OBS/歌單等其他端也拿到修正後的歌名/歌手
+    SocketClient.sendWithCallback('playlist:update', playlist, (result) => {
+      if (result && result.ok) { AppShared.showToast('已更新歌名/歌手', 'success'); closeTrackEditModal(); }
+      else AppShared.showToast(`更新失敗：${result?.error || '伺服器沒有確認'}`, 'error');
     });
   }
 

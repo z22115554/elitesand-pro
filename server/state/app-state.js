@@ -482,6 +482,7 @@ function createAppState(io) {
 
   // library.json 的 debounce 比 state.json 長；新匯入期間 state 會為了 crash safety 暫時
   // 保存完整歌詞 fallback。library 真正原子落盤後再排一次 state，才能自動收斂回精簡格式。
+  libraryStore.setLyricsLockedProvider((id) => manualLyricsCache.has(id));
   libraryStore.setProtectedEntryIdsProvider(() => {
     const ids = new Set();
     for (const track of playState.playlist) {

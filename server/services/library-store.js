@@ -332,6 +332,18 @@ function setProtectedEntryIdsProvider(fn) {
   _protectedEntryIdsProvider = typeof fn === 'function' ? fn : null;
 }
 
+// 「這首的歌詞是使用者手動選／貼的」除了 entry.lyricsSource，還有 app-state 的 manualLyricsCache；
+// 歌曲庫摘要要標出來（批次升級逐字會跳過它們），但這個模組看不到那份快取，由 app-state 注入。
+let _lyricsLockedProvider = null;
+function setLyricsLockedProvider(fn) {
+  _lyricsLockedProvider = typeof fn === 'function' ? fn : null;
+}
+function isLyricsLocked(entry) {
+  if (!entry) return false;
+  if (entry.lyricsSource === 'manual') return true;
+  try { return !!(_lyricsLockedProvider && _lyricsLockedProvider(String(entry.id))); } catch { return false; }
+}
+
 /** 記錄一次播放（被選為當前歌曲時呼叫）。連同歌詞/拼音/諧音/檔名/變調變速一起記住，
  *  之後從媒體庫拉回來可即時還原，不必重抓歌詞、重新羅馬化、重設 key。 */
 function recordPlay(track) {
@@ -362,6 +374,8 @@ function recordPlay(track) {
     lyricsType: pick(track.lyricsType, prev && prev.lyricsType) || 'lrc',
     // 歌詞來源（manual＝使用者自己貼上／上傳）：逐字升級要靠它跳過手動歌詞，重建時不能掉
     lyricsSource: pick(track.lyricsSource, prev && prev.lyricsSource) || null,
+    // 「歌詞待確認」只屬於當時那份歌詞：歌詞換掉了就不再成立
+    ...(prev && prev.lyricsSuspect === true && (!track.lyrics || track.lyrics === prev.lyrics) ? { lyricsSuspect: true } : {}),
     parsedLyrics: (Array.isArray(track.parsedLyrics) && track.parsedLyrics.length)
       ? track.parsedLyrics : (prev && prev.parsedLyrics) || null,
     // 統一音量：整曲響度（LUFS）跟著記錄走，重新從媒體庫拉回時不必重量測。
@@ -437,6 +451,8 @@ function rememberImport(track) {
       ? track.sections : prev.sections || null,
     sectionsStatus: (track.sectionsStatus && track.sectionsStatus !== 'none')
       ? track.sectionsStatus : (prev.sectionsStatus || 'none'),
+    // 重新匯入換了歌詞：舊歌詞的「待確認」標記不再成立
+    lyricsSuspect: prev.lyricsSuspect === true && (!track.lyrics || track.lyrics === prev.lyrics),
   };
   markLyricsTouched(track.id);
   markDirty(track.id);
@@ -598,6 +614,10 @@ function toLibrarySummary(entry) {
     // 導致沒讀進來的歌全被標成「無歌詞」）。lyricsType 不屬於歌詞分檔，一直留在 entry 上。
     hasLyrics: entryHasLyrics(entry.id, entry),
     lyricsType: entryHasLyrics(entry.id, entry) ? (entry.lyricsType || 'lrc') : null,
+    // 手動選／貼的歌詞：批次升級逐字不會動它，卡片上要讓使用者看得出來
+    lyricsLocked: isLyricsLocked(entry),
+    // 線上找到同一首、內容卻跟現在這份對不上：現在這份可能是之前比對錯拿到的
+    lyricsSuspect: entry.lyricsSuspect === true,
   };
 }
 
@@ -727,7 +747,7 @@ module.exports = {
   audioExists, audioStatus, getAudioExistsLookup, resetAudioStatusCache,
   getLibrary, getLibrarySummary, toLibrarySummary,
   collectMediaFilenames, getProcessingMediaFilenames,
-  isEntryDurable, setDurabilityListener, setBeforeRemovalListener, setProtectedEntryIdsProvider,
+  isEntryDurable, setDurabilityListener, setBeforeRemovalListener, setProtectedEntryIdsProvider, setLyricsLockedProvider,
   remove, clear, cleanupAudio, setErrorReporter, saveNow,
   MAX_ENTRIES,
 };

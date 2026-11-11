@@ -142,6 +142,41 @@ function registerLibraryHandlers(io, socket, ctx, {
     }
   });
 
+  // 歌曲庫直接改歌名／歌手（以前只能在播放清單改）。播放清單、目前歌曲裡同一首也一起改，
+  // 不然下一次 broadcastState 會用舊名字蓋回去（鐵則 17）。唯讀端不在 READ_ONLY_EVENTS，進不來。
+  socket.on('library:update-meta', (data, ack) => {
+    const reply = (result) => { if (typeof ack === 'function') ack(result); };
+    const id = data && (typeof data.id === 'string' || typeof data.id === 'number') ? String(data.id) : '';
+    const clip = (value) => (typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200) : '');
+    const title = clip(data && data.title);
+    const artist = clip(data && data.artist);
+    if (!id) { reply({ ok: false, error: 'invalid' }); return; }
+    if (!title) { reply({ ok: false, error: 'empty_title' }); return; }
+    if (!libraryStore.peekEntry(id)) { reply({ ok: false, error: 'not_found' }); return; }
+
+    const naming = { title, artist, needsArtistConfirmation: !artist, ...(artist ? { artistConfidence: 1 } : {}) };
+    libraryStore.updateMeta(id, naming);
+
+    let liveChanged = false;
+    const live = [...playState.playlist];
+    if (playState.currentTrack) live.push(playState.currentTrack);
+    for (const track of live) {
+      if (!track || String(track.id) !== id) continue;
+      if (track.title === title && (track.artist || '') === artist) continue;
+      Object.assign(track, naming);
+      liveChanged = true;
+    }
+    if (liveChanged) {
+      emitToAccessRooms(io, 'playlist:update', getPublicPlaylist(), getReadOnlyPlaylist());
+      emitSetlist();
+      broadcastState();
+      persistState();
+    }
+    emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
+    onLibraryChanged();
+    reply({ ok: true, title, artist });
+  });
+
   socket.on('library:cleanupAudio', (_data, ack) => {
     // 一首歌可能同時引用原檔／人聲／伴奏三個實體資產。播放清單、待命/播放中的
     // currentTrack，以及仍在分離中的來源都不可被 cleanup 刪掉。

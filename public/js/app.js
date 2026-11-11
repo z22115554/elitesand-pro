@@ -49,6 +49,8 @@
       ? PlaylistState.getEntryIdAtIndex(playlist, currentTrackIndex) === currentEntryId
       : PlaylistState.getTrackIdAtIndex(playlist, currentTrackIndex) === currentTrackId;
     const localCurrentTrack = localMatchesCurrent ? playlist[currentTrackIndex] : null;
+    const shownTitle = localCurrentTrack ? localCurrentTrack.title : null;
+    const shownArtist = localCurrentTrack ? (localCurrentTrack.artist || '') : null;
     const hydratedPlaylist = PlaylistState.mergeCurrentTrackDetails(
       nextPlaylist,
       currentTrack,
@@ -63,6 +65,17 @@
     // 明明整首都有逐字歌詞（OBS 那邊靠 currentTrack 直接播動畫，不受這個框影響）也還是顯示沒有。
     const nowCurrent = currentTrackIndex >= 0 ? playlist[currentTrackIndex] : null;
     if (nowCurrent) renderLyricsPreview(nowCurrent.lyrics);
+    // 別處（歌曲庫、另一台面板）改了目前這首的歌名／歌手：上方播放器與迷你播放器也要換。
+    // 只在畫面上正顯示這首的舊名字時才換，停止後的「尚未播放」不去動它。
+    if (nowCurrent && shownTitle !== null && (nowCurrent.title !== shownTitle || (nowCurrent.artist || '') !== shownArtist)) {
+      const titleEl = document.getElementById('track-title');
+      const onScreen = titleEl ? (titleEl.querySelector(':scope > span') || titleEl).textContent : null;
+      if (onScreen === shownTitle) {
+        AppShared.setMarqueeText(titleEl, nowCurrent.title);
+        AppShared.setMarqueeText(document.getElementById('track-artist'), nowCurrent.artist || '');
+        AppShared.updateMiniPlayerInfo(nowCurrent.title, nowCurrent.artist || '', nowCurrent.cover);
+      }
+    }
   }
 
   // 對外暴露當前歌曲，供歌詞選擇器（lyric-extras.js）使用

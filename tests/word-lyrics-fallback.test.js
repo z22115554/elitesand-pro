@@ -267,13 +267,15 @@ test('歌曲庫升級逐字：只在線上有同一首的逐字版時才換；�
       lyricOffsetSyncTimers: new Map(), persistState() {}, broadcastState() {},
     };
     register({ emit(event, payload) { emitted.push(event); } }, { on(event, handler) { events.set(event, handler); } }, ctx);
+    libraryStore.setLyricsLockedProvider((id) => ctx.manualLyricsCache.has(id)); // 正式程式由 app-state 注入
     const call = (id) => new Promise((resolve) => events.get('library:upgrade-word-lyrics')({ id }, resolve));
     (async () => {
       const out = {};
       for (const id of ['aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc', 'ddddddddddd', 'eeeeeeeeeee', 'fffffffffff']) out[id] = (await call(id)).status;
       const a = libraryStore.getEntry('aaaaaaaaaaa');
       process.stdout.write('__RESULT__' + JSON.stringify({ out, searches, aType: a.lyricsType, aSource: a.lyricsSource, liveType: current.lyricsType,
-        offset: ctx.trackOffsets.get('aaaaaaaaaaa'), emitted, fType: libraryStore.getEntry('fffffffffff').lyricsType }));
+        offset: ctx.trackOffsets.get('aaaaaaaaaaa'), emitted, fType: libraryStore.getEntry('fffffffffff').lyricsType,
+        summary: Object.fromEntries(libraryStore.getLibrarySummary().map((it) => [it.id, { locked: it.lyricsLocked, suspect: it.lyricsSuspect }])) }));
       process.exit(0);
     })();
   `;
@@ -296,6 +298,11 @@ test('歌曲庫升級逐字：只在線上有同一首的逐字版時才換；�
     assert.ok(r.emitted.includes('lyrics:updated') && r.emitted.includes('library:lyrics-updated'));
     assert.equal(r.offset, 1500, '偏移不動');
     assert.equal(r.fType, 'lrc', '內容對不上就保留原本的逐句');
+    assert.equal(r.summary.fffffffffff.suspect, true, '對不上的標「歌詞待確認」讓使用者自己看');
+    assert.equal(r.summary.aaaaaaaaaaa.suspect, false);
+    assert.equal(r.summary.ccccccccccc.locked, true, '歌詞選擇器手動選過的要標手動（篩選與批次都會略過）');
+    assert.equal(r.summary.ddddddddddd.locked, true, '自己貼上的也是手動');
+    assert.equal(r.summary.bbbbbbbbbbb.locked, false);
   } finally {
     fs.rmSync(tempData, { recursive: true });
   }

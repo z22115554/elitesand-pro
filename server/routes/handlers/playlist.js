@@ -3,7 +3,7 @@
  */
 
 const { createLogger } = require('../../utils/logger');
-const { emitToAccessRooms } = require('../../utils/socket-broadcast');
+const { emitToAccessRooms, emitToControlClients } = require('../../utils/socket-broadcast');
 const playlistExportStore = require('../../services/playlist-export-store');
 const libraryStore = require('../../services/library-store');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
@@ -36,6 +36,7 @@ async function applyCommunityOffsetSuggestion(ctx, io, track) {
  * updateMeta 只更新「已存在」的記錄，不會無中生有；只在名稱真的不同時才寫，避免無謂存檔。
  */
 function syncNamesToLibrary(tracks) {
+  let changed = false;
   for (const track of tracks) {
     if (!track || !track.id) continue;
     const entry = libraryStore.peekEntry(track.id); // 只比對名稱，不必讀歌詞檔
@@ -44,8 +45,10 @@ function syncNamesToLibrary(tracks) {
     if (entry.title !== track.title || (entry.artist || '') !== artist || entry.performer !== track.performer) {
       libraryStore.updateMeta(track.id, { title: track.title, artist, performer: track.performer || '',
         needsArtistConfirmation: !artist, artistConfidence: artist ? 1 : (track.artistConfidence || 0) });
+      changed = true;
     }
   }
+  return changed;
 }
 
 // playlist:update 是「排序＋面板允許的名稱編輯」契約，不是完整 Track PUT。
@@ -100,7 +103,8 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     const preserved = ensureEntryIds(mergePlaylistSummaryWithExisting(clean, playState.playlist));
     playState.playlist = preserved;
     if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
-    syncNamesToLibrary(preserved);
+    // 在播放清單改了名字：歌曲庫頁也要馬上看到新名字
+    if (syncNamesToLibrary(preserved)) emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     emitPlaylistUpdate();
     emitSetlist(); // 未唱清單跟著清單變動更新
     broadcastState();

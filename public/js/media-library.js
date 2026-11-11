@@ -153,11 +153,18 @@
 
   // 格狀卡片只有約 190px 寬：主要動作（加入、伴奏）留在底部平分，
   // 次要的「加到收藏歌單」「從媒體庫移除」收到封面右上角，滑過才出現（五語都不會被截字）。
+  // 改歌名／歌手（以前只能在播放清單改）。NEW 只掛在畫面上第一張卡，不要每張都一個。
+  function editButtonHtml(tagNew) {
+    const label = escapeHtml(tx('library.edit.button'));
+    const badge = tagNew ? ' data-new-feature="library-edit-meta" data-new-placement="after"' : '';
+    return `<button class="btn btn-sm btn-ghost lib-edit" type="button" title="${label}" aria-label="${label}"${badge}>✎</button>`;
+  }
+
   function removeButtonHtml() {
     return `<button class="btn btn-sm btn-ghost lib-remove" type="button" title="${tr('從媒體庫移除')}" aria-label="${tr('從媒體庫移除')}">✕</button>`;
   }
 
-  function renderLibraryRow(item) {
+  function renderLibraryRow(item, tagNew = false) {
     const row = document.createElement('div');
     row.className = 'lib-row';
     row.dataset.id = item.id;
@@ -174,16 +181,16 @@
     row.innerHTML = `
       <input class="lib-select" type="checkbox"${checked ? ' checked' : ''} aria-label="${escapeHtml(tx('library.batch.selectOne', { title: item.title || '' }))}">
       ${reorderable ? `<span class="lib-handle" title="${escapeHtml(tx('library.playlists.dragToReorder'))}" aria-hidden="true">⋮⋮</span>` : ''}
-      <div class="lib-cover">${coverUrl ? '' : '♪'}${compact && hasBacking(item) ? `<span class="lib-cover-badge">${escapeHtml(tx('library.grid.backingBadge'))}</span>` : ''}${compact ? coverProgressHtml(item) : ''}${compact ? `<div class="lib-cover-tools">${playlistButtonHtml()}${removeButtonHtml()}</div>` : ''}</div>
+      <div class="lib-cover">${coverUrl ? '' : '♪'}${compact && hasBacking(item) ? `<span class="lib-cover-badge">${escapeHtml(tx('library.grid.backingBadge'))}</span>` : ''}${compact ? coverProgressHtml(item) : ''}${compact ? `<div class="lib-cover-tools">${editButtonHtml(tagNew)}${playlistButtonHtml()}${removeButtonHtml()}</div>` : ''}</div>
       <div class="lib-meta">
         <div class="lib-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
         <div class="lib-sub">${escapeHtml(item.artist || tr('未知歌手'))}${item.duration ? ' · ' + fmtDuration(item.duration) : ''}</div>
-        <div class="lib-stats">▶ ${tr(`${item.playCount || 0} 次`)} · ${!compact && item.lastPlayed ? `${fmtDate(item.lastPlayed)} · ` : ''}<button type="button" class="lib-lyrics-state lib-lyrics-state--${level}" data-lib-lyrics title="${escapeHtml(tx('library.lyrics.change'))}">${escapeHtml(tx(`library.lyrics.${level}`))}</button></div>
+        <div class="lib-stats">▶ ${tr(`${item.playCount || 0} 次`)} · ${!compact && item.lastPlayed ? `${fmtDate(item.lastPlayed)} · ` : ''}<button type="button" class="lib-lyrics-state lib-lyrics-state--${level}" data-lib-lyrics title="${escapeHtml(tx(item.lyricsLocked ? 'library.lyrics.manualHint' : 'library.lyrics.change'))}">${escapeHtml(tx(`library.lyrics.${level}`))}${item.lyricsLocked && item.hasLyrics ? escapeHtml(tx('library.lyrics.manualSuffix')) : ''}</button>${item.lyricsSuspect ? ` <button type="button" class="lib-lyrics-flag" data-lib-lyrics title="${escapeHtml(tx('library.lyrics.suspectHint'))}">${escapeHtml(tx('library.lyrics.suspect'))}</button>` : ''}</div>
       </div>
       <div class="lib-actions">
         <button class="btn btn-sm lib-reimport" type="button"${restoreLabel ? ' disabled' : ''}>${restoreLabel || (compact ? tx('library.grid.add') : tr('加入清單'))}</button>
         ${separationButtonHtml(item, compact)}
-        ${compact ? '' : playlistButtonHtml() + removeButtonHtml()}
+        ${compact ? '' : editButtonHtml(tagNew) + playlistButtonHtml() + removeButtonHtml()}
       </div>`;
 
     // Do not interpolate external metadata into a style attribute. The URL
@@ -230,7 +237,7 @@
     const topSpacer = virtualSpacer(Math.ceil(virtualStart / metrics.cols), metrics);
     if (topSpacer) nodes.push(topSpacer);
     for (let i = virtualStart; i < virtualEnd; i += 1) {
-      nodes.push(renderLibraryRow(viewCache[i]));
+      nodes.push(renderLibraryRow(viewCache[i], i === virtualStart));
     }
     const bottomSpacer = virtualSpacer(Math.ceil(viewCache.length / metrics.cols) - Math.ceil(virtualEnd / metrics.cols), metrics);
     if (bottomSpacer) nodes.push(bottomSpacer);
@@ -241,6 +248,7 @@
       nodes.forEach((node) => listEl.appendChild(node));
     }
     if (scroller && scroller.scrollTop !== keepTop) scroller.scrollTop = keepTop;
+    if (window.NewBadges) window.NewBadges.scan(listEl);
   }
 
   // 歌曲庫實際捲動的是外層 .content（不是 listEl 本身）
@@ -273,7 +281,7 @@
     all: () => true,
     'no-lyrics': (it) => !it.hasLyrics || it.lyricsType === 'txt',
     // 有時間軸但只到整句：可以試著升級成逐字
-    'line-lyrics': (it) => it.hasLyrics && it.lyricsType === 'lrc',
+    'line-lyrics': (it) => it.hasLyrics && it.lyricsType === 'lrc' && !it.lyricsLocked,
     backing: hasBacking,
     'no-backing': (it) => !hasBacking(it),
   };
@@ -668,6 +676,10 @@
       if (window.LyricPicker) window.LyricPicker.open({ id: item.id, title: item.title, artist: item.artist, duration: item.duration });
       return;
     }
+    if (event.target.closest('.lib-edit')) {
+      openEditDialog(item);
+      return;
+    }
     if (event.target.closest('.lib-reimport')) {
       reimport(item, row);
       return;
@@ -699,6 +711,27 @@
   // 的多個 scroll 事件。resize 也只需重新算一次 window。
   document.addEventListener('scroll', () => scheduleVirtualRender(), true);
   window.addEventListener('resize', () => scheduleVirtualRender(true));
+
+  function openEditDialog(item) {
+    if (!window.TrackEditDialog) return;
+    window.TrackEditDialog.open({
+      title: item.title || '',
+      artist: item.artist || '',
+      onSave: (title, artist) => {
+        SocketClient.sendWithCallback('library:update-meta', { id: String(item.id), title, artist }, (res) => {
+          if (!res || !res.ok) {
+            toast(tx('library.edit.failed', { error: res?.error || tx('library.edit.noReply') }), 'error');
+            return;
+          }
+          item.title = res.title;
+          item.artist = res.artist;
+          window.TrackEditDialog.close();
+          toast(tx('library.edit.saved'), 'success');
+          applyView();
+        });
+      },
+    });
+  }
 
   function requestSocket(event, data) {
     return new Promise((resolve) => {
@@ -957,6 +990,8 @@
     if (!hit) return;
     hit.hasLyrics = !!data.hasLyrics;
     hit.lyricsType = data.lyricsType || null;
+    if ('lyricsLocked' in data) hit.lyricsLocked = !!data.lyricsLocked;
+    if ('lyricsSuspect' in data) hit.lyricsSuspect = !!data.lyricsSuspect;
     applyView();
   });
 
@@ -1058,24 +1093,27 @@
     const btn = event.currentTarget;
     const label = btn.querySelector('[data-i18n]') || btn;
     if (wordBatch) { wordBatch.stop = true; label.textContent = tx('library.batch.practiceStopping'); return; }
-    const items = selectedItems().filter((it) => it.hasLyrics && it.lyricsType !== 'krc');
+    const items = selectedItems().filter((it) => it.hasLyrics && it.lyricsType !== 'krc' && !it.lyricsLocked);
     if (!items.length) { toast(tx('library.batch.wordUpgradeNothing'), 'info'); return; }
     const run = wordBatch = { stop: false };
     clearSelection();
-    const counts = { upgraded: 0, skipped: 0, notFound: 0 };
+    const counts = { upgraded: 0, skipped: 0, notFound: 0, suspect: 0 };
     for (let i = 0; i < items.length && !run.stop; i++) {
       label.textContent = tx('library.batch.wordUpgradeRunning', { done: i, total: items.length });
       const res = await new Promise((resolve) => {
         SocketClient.sendWithCallback('library:upgrade-word-lyrics', { id: String(items[i].id) }, (r) => resolve(r || {}));
       });
       if (res.status === 'upgraded') counts.upgraded += 1;
-      else if (res.status === 'not-found' || res.status === 'mismatch' || res.status === 'error') counts.notFound += 1;
+      else if (res.status === 'mismatch') counts.suspect += 1;
+      else if (res.status === 'not-found' || res.status === 'error') counts.notFound += 1;
       else counts.skipped += 1;
     }
     wordBatch = null;
     label.textContent = tx('library.batch.wordUpgrade');
     renderBatchBar();
-    toast(tx(run.stop ? 'library.batch.wordUpgradeStopped' : 'library.batch.wordUpgradeDone', counts), counts.upgraded ? 'success' : 'info');
+    const summary = tx(run.stop ? 'library.batch.wordUpgradeStopped' : 'library.batch.wordUpgradeDone', counts)
+      + (counts.suspect ? tx('library.batch.wordUpgradeSuspect', counts) : '');
+    toast(summary, counts.suspect ? 'warning' : (counts.upgraded ? 'success' : 'info'));
     applyView();
   });
 

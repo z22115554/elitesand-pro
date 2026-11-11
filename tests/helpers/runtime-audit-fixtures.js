@@ -13,7 +13,7 @@ function loadState(source = fs.readFileSync(path.join(root, 'server/state/app-st
   const emitted = [];
   let audioCalls = 0;
   const library = {
-    setProtectedEntryIdsProvider: noop, setDurabilityListener: noop, setBeforeRemovalListener: noop,
+    setProtectedEntryIdsProvider: noop, setLyricsLockedProvider: noop, setDurabilityListener: noop, setBeforeRemovalListener: noop,
     getAudioExistsLookup: () => () => true,
     audioStatus: () => { audioCalls++; return { audioAvailable: true, audioMissing: false }; },
   };

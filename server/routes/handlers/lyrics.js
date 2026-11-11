@@ -610,8 +610,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 歌曲庫是下次重開／重新加入播放清單時的來源：選好的歌詞立刻寫回，不等下一次播放。
     // 也讓歌曲庫頁（不在播放清單裡的歌）可以直接換歌詞（2026-09-28 使用者需求）。
     try {
-      libraryStore.updateMeta(trackId, { lyrics, lyricsType: lyricsType || 'lrc', parsedLyrics: parsedLyrics || null, lyricsSource: newSource });
-      io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: lyricsType || 'lrc' });
+      libraryStore.updateMeta(trackId, { lyrics, lyricsType: lyricsType || 'lrc', parsedLyrics: parsedLyrics || null, lyricsSource: newSource, lyricsSuspect: false });
+      io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: lyricsType || 'lrc', lyricsLocked: true, lyricsSuspect: false });
     } catch (e) { log.warn(`手動歌詞寫回歌曲庫失敗（不影響顯示）: ${e.message}`); }
 
     // 手動歌詞也要羅馬化 + 諧音（非同步處理，不阻擋回應）
@@ -690,10 +690,11 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (entry.lyricsType === 'krc') return { status: 'already' };
 
     const result = await LyricsEngine.search(entry.artist || '', entry.title, Number(entry.duration) || 0, false);
-    if (!result || result.type !== 'krc' || !result.lyrics) return { status: 'not-found' };
+    if (!result || !result.lyrics) return { status: 'not-found' };
+    const isWord = result.type === 'krc';
     let parsed = Array.isArray(result.parsedLyrics) && result.parsedLyrics.length
       ? result.parsedLyrics.map((line) => ({ ...line }))
-      : LyricsEngine.parseKrc(result.lyrics);
+      : (isWord ? LyricsEngine.parseKrc(result.lyrics) : LyricsEngine.parseLrc(result.lyrics));
     if (!Array.isArray(parsed) || parsed.length === 0) return { status: 'not-found' };
 
     // 同一首的保險：新歌詞至少一半的行，在舊歌詞（含譯文）裡找得到相同的字。
@@ -701,7 +702,21 @@ function registerLyricsHandlers(io, socket, ctx) {
     const oldLines = Array.isArray(entry.parsedLyrics) && entry.parsedLyrics.length
       ? entry.parsedLyrics
       : (entry.lyrics ? LyricsEngine.parseLrc(entry.lyrics) : []);
-    if (lyricsOverlapRatio(oldLines, parsed) < WORD_UPGRADE_MIN_OVERLAP) return { status: 'mismatch' };
+    if (lyricsOverlapRatio(oldLines, parsed) < WORD_UPGRADE_MIN_OVERLAP) {
+      // 搜尋已經要求歌名／歌手／時長對得上，內容卻幾乎不一樣：比較可能是現在這份歌詞
+      // 當初比對錯拿到的（同名別首、翻唱）。不自動換（也可能是新的錯），只標出來讓使用者自己看。
+      if (manualLyricsCache.has(trackId)) return { status: 'manual' };
+      if (entry.lyricsSuspect !== true) {
+        libraryStore.updateMeta(trackId, { lyricsSuspect: true });
+        io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: entry.lyricsType || 'lrc', lyricsSuspect: true });
+      }
+      return { status: 'mismatch' };
+    }
+    if (entry.lyricsSuspect === true) {
+      libraryStore.updateMeta(trackId, { lyricsSuspect: false });
+      io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: entry.lyricsType || 'lrc', lyricsSuspect: false });
+    }
+    if (!isWord) return { status: 'not-found' };
 
     // 等上面這段網路查詢的時候，使用者可能剛好手動換了歌詞：再檢查一次，手動的優先。
     if (manualLyricsCache.has(trackId)) return { status: 'manual' };
@@ -710,7 +725,7 @@ function registerLyricsHandlers(io, socket, ctx) {
       parsed = await addRomanization(parsed).catch(() => parsed);
     }
     const lyricsSource = result.source || null;
-    libraryStore.updateMeta(trackId, { lyrics: result.lyrics, lyricsType: 'krc', parsedLyrics: parsed, lyricsSource });
+    libraryStore.updateMeta(trackId, { lyrics: result.lyrics, lyricsType: 'krc', parsedLyrics: parsed, lyricsSource, lyricsSuspect: false });
 
     // 剛好在播放清單（或正在播）的那首：記憶體裡的物件也要換，下一次 broadcastState 才不會用舊的蓋回去（鐵則 17）
     const live = tracksById(trackId);
@@ -727,7 +742,7 @@ function registerLyricsHandlers(io, socket, ctx) {
       broadcastState();
       persistState();
     }
-    io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: 'krc' });
+    io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: 'krc', lyricsSuspect: false });
     log.info(`歌曲庫逐字升級：${entry.artist || ''} - ${entry.title}（來源 ${lyricsSource}）`);
     return { status: 'upgraded', source: lyricsSource };
   }

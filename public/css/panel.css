@@ -1812,6 +1812,10 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .prep-picker.is-floating .prep-picker-body { max-height: none; flex: 1; min-height: 0; overflow-y: auto; }
 .lib-lyrics-state--word, .lib-lyrics-state--line { color: var(--ok); }
 .lib-lyrics-state--plain, .lib-lyrics-state--none { color: var(--warn); }
+.lib-lyrics-flag { font: inherit; font-weight: 600; padding: 0 2px; border: 0; background: transparent; color: var(--warn); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.lib-lyrics-flag:hover { text-decoration-style: solid; }
+.lib-actions .lib-edit { padding: 4px 9px; }
+.library-list.is-grid .lib-cover-tools:has(.new-badge) { opacity: 1; }
 .lib-manage { margin: 16px 20px 18px; border-top: 1px solid var(--border); }
 .lib-manage > summary { padding: 12px 0; list-style: none; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-dim); }
 .lib-manage > summary::-webkit-details-marker { display: none; }
