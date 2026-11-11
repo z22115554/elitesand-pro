@@ -53,6 +53,7 @@
   let filterMode = 'all';
   const selectedIds = new Set(); // 多選批次：媒體庫 id（字串）
   let practiceBatch = null;       // 批次建練唱音軌進行中：{ stop }
+  let wordBatch = null;           // 批次升級逐字歌詞進行中：{ stop }
   let viewCache = [];
 
   // 媒體庫最多可能有 10k 首；不能把每一列都常駐 DOM。一般列由 46px 封面 +
@@ -271,6 +272,8 @@
   const FILTERS = {
     all: () => true,
     'no-lyrics': (it) => !it.hasLyrics || it.lyricsType === 'txt',
+    // 有時間軸但只到整句：可以試著升級成逐字
+    'line-lyrics': (it) => it.hasLyrics && it.lyricsType === 'lrc',
     backing: hasBacking,
     'no-backing': (it) => !hasBacking(it),
   };
@@ -309,6 +312,8 @@
     // 練唱音軌批次跑的時候選取已清掉，按鈕要留著讓人按「停止」
     const practiceBtn = document.getElementById('lib-batch-practice');
     if (practiceBtn) practiceBtn.disabled = n === 0 && !practiceBatch;
+    const wordBtn = document.getElementById('lib-batch-word');
+    if (wordBtn) wordBtn.disabled = n === 0 && !wordBatch;
     bar.classList.toggle('has-selection', n > 0);
     const all = document.getElementById('lib-select-all');
     if (all) {
@@ -1044,6 +1049,33 @@
     }
     toast(tx(failed ? 'library.batch.backingPartial' : 'library.batch.backingStarted', { count: started, failed }), failed ? 'error' : 'success');
     clearSelection();
+    applyView();
+  });
+
+  // 升級成逐字歌詞：一次一首請伺服器重新搜尋，線上有同一首的逐字版才換（伺服器端會跳過手動歌詞、
+  // 本來就是逐字的歌、以及內容對不上的結果）。跑的時候再按一次＝做完這首就停。
+  document.getElementById('lib-batch-word')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    const label = btn.querySelector('[data-i18n]') || btn;
+    if (wordBatch) { wordBatch.stop = true; label.textContent = tx('library.batch.practiceStopping'); return; }
+    const items = selectedItems().filter((it) => it.hasLyrics && it.lyricsType !== 'krc');
+    if (!items.length) { toast(tx('library.batch.wordUpgradeNothing'), 'info'); return; }
+    const run = wordBatch = { stop: false };
+    clearSelection();
+    const counts = { upgraded: 0, skipped: 0, notFound: 0 };
+    for (let i = 0; i < items.length && !run.stop; i++) {
+      label.textContent = tx('library.batch.wordUpgradeRunning', { done: i, total: items.length });
+      const res = await new Promise((resolve) => {
+        SocketClient.sendWithCallback('library:upgrade-word-lyrics', { id: String(items[i].id) }, (r) => resolve(r || {}));
+      });
+      if (res.status === 'upgraded') counts.upgraded += 1;
+      else if (res.status === 'not-found' || res.status === 'mismatch' || res.status === 'error') counts.notFound += 1;
+      else counts.skipped += 1;
+    }
+    wordBatch = null;
+    label.textContent = tx('library.batch.wordUpgrade');
+    renderBatchBar();
+    toast(tx(run.stop ? 'library.batch.wordUpgradeStopped' : 'library.batch.wordUpgradeDone', counts), counts.upgraded ? 'success' : 'info');
     applyView();
   });
 

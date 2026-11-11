@@ -231,3 +231,72 @@ test('偏移社群回饋的歌詞來源類別：EULA 2.3.0 揭露、Worker 只�
   const migration = fs.readFileSync(path.join(__dirname, '../cloudflare/lyric-offset-worker/migrations/0003_lyrics_key.sql'), 'utf8');
   assert.ok(migration.includes("ADD COLUMN lyrics_key TEXT NOT NULL DEFAULT ''"), '舊資料一律視為來源不明');
 });
+
+test('歌曲庫升級逐字：只在線上有同一首的逐字版時才換；手動歌詞、已是逐字、內容對不上都不動', () => {
+  const os = require('os');
+  const { spawnSync } = require('child_process');
+  const tempData = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-word-upgrade-'));
+  const root = path.join(__dirname, '..');
+  const script = `
+    const path = require('path');
+    const root = process.argv[1];
+    const libraryStore = require(path.join(root, 'server/services/library-store'));
+    const { LyricsEngine } = require(path.join(root, 'server/services/lyrics-engine'));
+    const register = require(path.join(root, 'server/routes/handlers/lyrics'));
+    const NL = String.fromCharCode(10);
+    const lrc = ['[00:01.00]first line', '[00:03.00]second line', '[00:05.00]third line'].join(NL);
+    const add = (id, extra) => libraryStore.rememberImport({ id, title: 'Song ' + id, artist: 'Artist', duration: 120, lyrics: lrc, lyricsType: 'lrc', filename: id + '.m4a', ...extra });
+    add('aaaaaaaaaaa'); add('bbbbbbbbbbb'); add('ccccccccccc'); add('ddddddddddd', { lyricsSource: 'manual' });
+    add('eeeeeeeeeee', { lyricsType: 'krc', lyrics: '[00:01.00]<500>x<0,500>' }); add('fffffffffff');
+    const word = ['[00:01.00]<1000>first <0,400>line<400,600>', '[00:03.00]<1000>second <0,400>line<400,600>', '[00:05.00]<1000>third <0,400>line<400,600>'].join(NL);
+    const other = ['[00:01.00]<1000>totally <0,400>different<400,600>', '[00:03.00]<1000>other <0,400>song<400,600>'].join(NL);
+    let searches = 0;
+    LyricsEngine.search = async (artist, title) => {
+      searches += 1;
+      if (title === 'Song aaaaaaaaaaa') return { lyrics: word, type: 'krc', source: 'qqmusic', parsedLyrics: LyricsEngine.parseKrc(word) };
+      if (title === 'Song bbbbbbbbbbb') return { lyrics: lrc, type: 'lrc', source: 'lrclib' };
+      if (title === 'Song fffffffffff') return { lyrics: other, type: 'krc', source: 'kugou', parsedLyrics: LyricsEngine.parseKrc(other) };
+      return { lyrics: word, type: 'krc', source: 'qqmusic' };
+    };
+    const events = new Map(); const emitted = [];
+    const current = { id: 'aaaaaaaaaaa', lyrics: lrc, lyricsType: 'lrc' };
+    const ctx = {
+      playState: { currentTrack: current, playlist: [current], lyricSettings: {} },
+      trackOffsets: new Map([['aaaaaaaaaaa', 1500]]),
+      manualLyricsCache: new Map([['ccccccccccc', { lyrics: lrc, lyricsType: 'lrc', source: 'kugou' }]]),
+      lyricOffsetSyncTimers: new Map(), persistState() {}, broadcastState() {},
+    };
+    register({ emit(event, payload) { emitted.push(event); } }, { on(event, handler) { events.set(event, handler); } }, ctx);
+    const call = (id) => new Promise((resolve) => events.get('library:upgrade-word-lyrics')({ id }, resolve));
+    (async () => {
+      const out = {};
+      for (const id of ['aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc', 'ddddddddddd', 'eeeeeeeeeee', 'fffffffffff']) out[id] = (await call(id)).status;
+      const a = libraryStore.getEntry('aaaaaaaaaaa');
+      process.stdout.write('__RESULT__' + JSON.stringify({ out, searches, aType: a.lyricsType, aSource: a.lyricsSource, liveType: current.lyricsType,
+        offset: ctx.trackOffsets.get('aaaaaaaaaaa'), emitted, fType: libraryStore.getEntry('fffffffffff').lyricsType }));
+      process.exit(0);
+    })();
+  `;
+  try {
+    const result = spawnSync(process.execPath, ['-e', script, root], { encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: tempData, ELITESAND_DOWNLOADS_DIR: path.join(tempData, 'dl'), ELITESAND_LOGS_DIR: path.join(tempData, 'logs') }, timeout: 20000 });
+    assert.equal(result.status, 0, result.stderr);
+    const r = JSON.parse(result.stdout.split('__RESULT__')[1]);
+    assert.deepEqual(r.out, {
+      aaaaaaaaaaa: 'upgraded',
+      bbbbbbbbbbb: 'not-found', // 線上只有逐句
+      ccccccccccc: 'manual',    // 在歌詞選擇器手動選過
+      ddddddddddd: 'manual',    // 自己貼上的
+      eeeeeeeeeee: 'already',
+      fffffffffff: 'mismatch',  // 找到的是別首歌
+    });
+    assert.equal(r.searches, 3, '手動歌詞與已是逐字的歌不該連外查詢');
+    assert.equal(r.aType, 'krc');
+    assert.equal(r.aSource, 'qqmusic');
+    assert.equal(r.liveType, 'krc', '正在播的那首記憶體物件也要換（鐵則 17）');
+    assert.ok(r.emitted.includes('lyrics:updated') && r.emitted.includes('library:lyrics-updated'));
+    assert.equal(r.offset, 1500, '偏移不動');
+    assert.equal(r.fType, 'lrc', '內容對不上就保留原本的逐句');
+  } finally {
+    fs.rmSync(tempData, { recursive: true });
+  }
+});

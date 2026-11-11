@@ -360,6 +360,8 @@ function recordPlay(track) {
     filename: pick(track.filename, prev && prev.filename) || null,
     lyrics: pick(track.lyrics, prev && prev.lyrics) || null,
     lyricsType: pick(track.lyricsType, prev && prev.lyricsType) || 'lrc',
+    // 歌詞來源（manual＝使用者自己貼上／上傳）：逐字升級要靠它跳過手動歌詞，重建時不能掉
+    lyricsSource: pick(track.lyricsSource, prev && prev.lyricsSource) || null,
     parsedLyrics: (Array.isArray(track.parsedLyrics) && track.parsedLyrics.length)
       ? track.parsedLyrics : (prev && prev.parsedLyrics) || null,
     // 統一音量：整曲響度（LUFS）跟著記錄走，重新從媒體庫拉回時不必重量測。

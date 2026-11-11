@@ -31,6 +31,27 @@ const log = createLogger('Socket');
 // 使用者還在按 +/-0.1s 微調時不要每按一下就送一次；等 10 秒沒再變動才算「定案值」。
 const LYRIC_OFFSET_SYNC_DEBOUNCE_MS = 10000;
 
+// 歌曲庫逐字升級：同一首同時只跑一次；新舊歌詞至少要有這個比例的行相同才換。
+const wordUpgradeRunning = new Set();
+const WORD_UPGRADE_MIN_OVERLAP = 0.5;
+
+/** 新歌詞裡有多少比例的行，在舊歌詞（原文或譯文）裡找得到同樣的字（忽略空白、標點、大小寫）。 */
+function lyricsOverlapRatio(oldLines, newLines) {
+  const norm = (value) => String(value || '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  const known = new Set();
+  for (const line of oldLines || []) {
+    if (!line) continue;
+    for (const value of [line.text, line.translation]) {
+      const key = norm(value);
+      if (key) known.add(key);
+    }
+  }
+  if (known.size === 0) return 1; // 舊的沒有可比對的字（例如只有空殼）：不擋
+  const candidates = (newLines || []).map((line) => norm(line && line.text)).filter(Boolean);
+  if (candidates.length === 0) return 0;
+  return candidates.filter((key) => known.has(key)).length / candidates.length;
+}
+
 // lyricsKey：調整當下這首用的歌詞來源類別（10 秒後才送，來源要在排程時就記下來）。
 function scheduleLyricOffsetSync(ctx, trackId, offsetMs, lyricsKey = null) {
   const timers = ctx.lyricOffsetSyncTimers;
@@ -589,7 +610,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 歌曲庫是下次重開／重新加入播放清單時的來源：選好的歌詞立刻寫回，不等下一次播放。
     // 也讓歌曲庫頁（不在播放清單裡的歌）可以直接換歌詞（2026-09-28 使用者需求）。
     try {
-      libraryStore.updateMeta(trackId, { lyrics, lyricsType: lyricsType || 'lrc', parsedLyrics: parsedLyrics || null });
+      libraryStore.updateMeta(trackId, { lyrics, lyricsType: lyricsType || 'lrc', parsedLyrics: parsedLyrics || null, lyricsSource: newSource });
       io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: lyricsType || 'lrc' });
     } catch (e) { log.warn(`手動歌詞寫回歌曲庫失敗（不影響顯示）: ${e.message}`); }
 
@@ -639,6 +660,78 @@ function registerLyricsHandlers(io, socket, ctx) {
   // 失效策略：覆寫直接寫在該行的物件上，不是另外存一份用 time 索引的表——
   // 換歌詞來源會拿到全新的 parsedLyrics 陣列（不同物件、很可能時間戳也不同），
   // 舊的手動修正自然就不會被套到不相干的新行上，不需要額外的比對/清除邏輯。
+  // ─── 歌曲庫：把逐句歌詞升級成逐字（2026-11-11）───
+  //
+  // 歌詞有快取，以前抓到逐句的歌不會因為後來多了逐字來源就自己變成逐字。這裡一次處理一首
+  // （面板依序呼叫、可中途停止），只在「線上找到逐字版、而且內容跟現有歌詞是同一首」時才換掉。
+  // 一律不碰：使用者自己貼上／上傳或在歌詞選擇器手動選過的歌（manualLyricsCache 有紀錄，
+  // 或歌曲庫記成 manual）、本來就是逐字的歌。偏移不動：多半是影片開頭長度造成的，換來源照樣適用。
+  socket.on('library:upgrade-word-lyrics', async (data, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const trackId = data && typeof data.id === 'string' ? data.id : '';
+    if (!trackId) return reply({ ok: false, status: 'invalid' });
+    if (wordUpgradeRunning.has(trackId)) return reply({ ok: false, status: 'busy' });
+    wordUpgradeRunning.add(trackId);
+    try {
+      reply({ ok: true, ...(await upgradeToWordLyrics(trackId)) });
+    } catch (error) {
+      log.warn(`逐字歌詞升級失敗 ${trackId}: ${error.message}`);
+      reply({ ok: false, status: 'error' });
+    } finally {
+      wordUpgradeRunning.delete(trackId);
+    }
+  });
+
+  async function upgradeToWordLyrics(trackId) {
+    if (manualLyricsCache.has(trackId)) return { status: 'manual' };
+    const entry = libraryStore.getEntry(trackId);
+    if (!entry || !entry.title) return { status: 'missing' };
+    if (entry.lyricsSource === 'manual') return { status: 'manual' };
+    if (entry.lyricsType === 'krc') return { status: 'already' };
+
+    const result = await LyricsEngine.search(entry.artist || '', entry.title, Number(entry.duration) || 0, false);
+    if (!result || result.type !== 'krc' || !result.lyrics) return { status: 'not-found' };
+    let parsed = Array.isArray(result.parsedLyrics) && result.parsedLyrics.length
+      ? result.parsedLyrics.map((line) => ({ ...line }))
+      : LyricsEngine.parseKrc(result.lyrics);
+    if (!Array.isArray(parsed) || parsed.length === 0) return { status: 'not-found' };
+
+    // 同一首的保險：新歌詞至少一半的行，在舊歌詞（含譯文）裡找得到相同的字。
+    // 用歌名歌手搜尋偶爾會對到同名的另一首；對不上就不換，寧可留著逐句。
+    const oldLines = Array.isArray(entry.parsedLyrics) && entry.parsedLyrics.length
+      ? entry.parsedLyrics
+      : (entry.lyrics ? LyricsEngine.parseLrc(entry.lyrics) : []);
+    if (lyricsOverlapRatio(oldLines, parsed) < WORD_UPGRADE_MIN_OVERLAP) return { status: 'mismatch' };
+
+    // 等上面這段網路查詢的時候，使用者可能剛好手動換了歌詞：再檢查一次，手動的優先。
+    if (manualLyricsCache.has(trackId)) return { status: 'manual' };
+
+    if (needsRomanization(parsed)) {
+      parsed = await addRomanization(parsed).catch(() => parsed);
+    }
+    const lyricsSource = result.source || null;
+    libraryStore.updateMeta(trackId, { lyrics: result.lyrics, lyricsType: 'krc', parsedLyrics: parsed, lyricsSource });
+
+    // 剛好在播放清單（或正在播）的那首：記憶體裡的物件也要換，下一次 broadcastState 才不會用舊的蓋回去（鐵則 17）
+    const live = tracksById(trackId);
+    for (const t of live) {
+      t.lyrics = result.lyrics;
+      t.lyricsType = 'krc';
+      t.parsedLyrics = parsed;
+      t.lyricsSource = lyricsSource;
+    }
+    if (playState.currentTrack && playState.currentTrack.id === trackId) {
+      io.emit('lyrics:updated', { trackId, lyrics: result.lyrics, lyricsType: 'krc', parsedLyrics: parsed, source: lyricsSource });
+    }
+    if (live.length) {
+      broadcastState();
+      persistState();
+    }
+    io.emit('library:lyrics-updated', { trackId, hasLyrics: true, lyricsType: 'krc' });
+    log.info(`歌曲庫逐字升級：${entry.artist || ''} - ${entry.title}（來源 ${lyricsSource}）`);
+    return { status: 'upgraded', source: lyricsSource };
+  }
+
   socket.on('xieyin:override', (data) => {
     if (!data || typeof data !== 'object') return;
     const { trackId, lineTime, xieyin } = data;
@@ -691,3 +784,4 @@ function registerLyricsHandlers(io, socket, ctx) {
 
 module.exports = registerLyricsHandlers;
 module.exports.LYRIC_TEMPLATES = Object.freeze([...LYRIC_TEMPLATES]);
+module.exports.lyricsOverlapRatio = lyricsOverlapRatio;
