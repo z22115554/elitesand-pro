@@ -267,7 +267,7 @@ class LyricsEngine {
     const searchStart = Date.now();
     log.info(`開始搜尋: "${query}" (時長: ${duration}s)`);
 
-    // 使用者指定品質優先：BetterLyrics → Apple Music → 酷狗 → QQ → LRCLIB；網易最後備援。
+    // 使用者指定品質優先：BetterLyrics → Apple Music → 酷狗 → QQ → （網易雲／AMLL 逐字）→ LRCLIB；網易逐句最後備援。
     const titleVariants = lyricTitleVariants(title);
     const sourceFns = {
       betterlyrics: (queryTitle) => this.searchBetterLyrics(artist, queryTitle, duration),
@@ -277,11 +277,16 @@ class LyricsEngine {
       lrclib: (queryTitle) => this.searchLrclib(artist, queryTitle, duration),
       netease: (queryTitle) => this.searchNetease(artist, queryTitle, duration),
     };
-    const sources = titleVariants.flatMap((queryTitle) => LYRICS_SOURCE_PRIORITY.map((name) => ({
-      name,
-      queryTitle,
-      fn: () => sourceFns[name](queryTitle),
-    })));
+    // 逐句的 LRCLIB 之前，先問一次網易雲這一格的逐字版（YRC／AMLL）：前面的逐字來源都沒中時，
+    // 還有機會拿到逐字，而不是直接落到逐句。網易雲的逐句版不受影響，仍排在最後。
+    const sources = titleVariants.flatMap((queryTitle) => LYRICS_SOURCE_PRIORITY.flatMap((name) => {
+      const step = { name, queryTitle, fn: () => sourceFns[name](queryTitle) };
+      if (name !== 'lrclib') return [step];
+      return [
+        { name: 'netease', queryTitle, fn: () => this.searchNetease(artist, queryTitle, duration, { wordOnly: true }) },
+        step,
+      ];
+    }));
 
     const outcomes = [];
     // 每個來源在這次搜尋內只記一次最終結果，不逐個 title variant 重複記——
@@ -792,7 +797,11 @@ class LyricsEngine {
   // 來源 4: 網易雲音樂
   // ═══════════════════════════════════════════
 
-  static async searchNetease(artist, title, duration) {
+  /**
+   * @param {{wordOnly?: boolean}} [options] wordOnly：只要逐字版（網易雲 YRC 或 AMLL），沒有就回 null、不退回逐句。
+   *   自動抓取時用它在 LRCLIB 之前先試一次逐字，逐句版仍留在最後備援的位置。
+   */
+  static async searchNetease(artist, title, duration, options = {}) {
     const isCover = this.detectCover(artist, title);
     // 搜尋字串先正規化（去括號/feat/官方影片字樣），命中率更高
     const q = `${cleanQuery(artist)} ${cleanQuery(title)}`.trim() || `${artist} ${title}`.trim();
@@ -824,6 +833,7 @@ class LyricsEngine {
         // 最後一道逐字保險：AMLL 社群逐字歌詞庫（以網易雲歌曲編號為檔名）
         const amll = await this.fetchAmllTtml(matchedSong.id);
         if (amll) return { lyrics: amll, type: 'krc', source: 'netease', durationVerified };
+        if (options.wordOnly) return null;
 
         const lyricUrl = `https://music.163.com/api/song/lyric?id=${matchedSong.id}&lv=1&tv=1`;
         const lyricRes = await fetchWithTimeout(lyricUrl, {

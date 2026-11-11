@@ -118,7 +118,9 @@ test('找不到歌詞會命中 negative cache，不重打六個來源', () => {
       encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: tempData }, timeout: 10000,
     });
     eq(result.status, 0, result.stderr || 'negative cache 子程序失敗: ');
-    eq(Number((result.stdout.split('__RESULT__')[1] || '').trim()), 6);
+    // 第一次搜尋打 7 次：六個來源各一次，加上網易雲這一格在 LRCLIB 之前先問的那次逐字（YRC／AMLL）。
+    // 第二次搜尋命中 negative cache，一次都不該再打。
+    eq(Number((result.stdout.split('__RESULT__')[1] || '').trim()), 7);
   } finally { fs.rmSync(tempData, { recursive: true, force: true }); }
 });
 
@@ -140,7 +142,8 @@ test('歌詞搜尋遙測：每個來源同一次搜尋只記一次，不隨 titl
         // netease 故意在第一個 title variant 沒中，第二個才中——逼搜尋真的
         // 跨過第二輪 variant，這樣其餘 5 個來源才會被試兩次，才測得到「試了
         // 兩次但只記一次」這件事。若一輪就中，迴圈馬上 return，永遠測不到。
-        if (name === 'netease' && callCounts[name] >= 2) return { lyrics: '[00:00.00]hello', type: 'lrc' };
+        // 網易雲這一格每輪會被問兩次（LRCLIB 之前先問逐字、最後再問一次），所以第 4 次才是第二輪的最後一次。
+        if (name === 'netease' && callCounts[name] >= 4) return { lyrics: '[00:00.00]hello', type: 'lrc' };
         return null;
       };
     }
@@ -169,7 +172,7 @@ test('歌詞搜尋遙測：每個來源同一次搜尋只記一次，不隨 titl
     // 只跑了一輪就通過。
     const others0 = LYRICS_SOURCE_PRIORITY.filter((n) => n !== 'netease');
     ok(others0.every((n) => payload.callCounts[n] === 2), '測試前提不成立：其餘來源沒有真的被試兩輪: ');
-    eq(payload.callCounts.netease, 2, 'netease 應該恰好被試兩次（第一輪 miss、第二輪 hit）才 return: ');
+    eq(payload.callCounts.netease, 4, 'netease 每輪問兩次（先逐字、後逐句），第二輪最後一次才 hit: ');
 
     // 不論底層被試了幾次，每個來源在遙測裡只能出現一筆
     const sourceNames = payload.sourceCalls.map((entry) => entry[0]);

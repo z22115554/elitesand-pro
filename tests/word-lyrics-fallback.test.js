@@ -95,3 +95,44 @@ test('AMLL 逐字歌詞庫：排在網易雲逐字之後、逐句之前；翻譯
   assert.equal(parsed[0].text, '測試');
   assert.equal(parsed[0].words.length, 2);
 });
+
+test('自動抓取：LRCLIB 之前先問網易雲這一格的逐字版，逐句版仍排最後', async () => {
+  const os = require('os');
+  const { spawnSync } = require('child_process');
+  const tempData = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-lyrics-order-'));
+  const enginePath = path.join(__dirname, '..', 'server', 'services', 'lyrics-engine.js');
+  const script = `
+    const { LyricsEngine } = require(process.argv[1]);
+    const order = [];
+    const stub = (label, result) => async (...args) => { order.push(label + (args[3] && args[3].wordOnly ? ':word' : '')); return typeof result === 'function' ? result(args) : result; };
+    LyricsEngine.searchBetterLyrics = stub('betterlyrics', null);
+    LyricsEngine.searchPaxsenix = stub('paxsenix', null);
+    LyricsEngine.searchKugou = stub('kugou', null);
+    LyricsEngine.searchQQMusic = stub('qqmusic', null);
+    LyricsEngine.searchLrclib = stub('lrclib', { lyrics: '[00:01.00]line', type: 'lrc', source: 'lrclib' });
+    const mode = process.argv[2];
+    LyricsEngine.searchNetease = stub('netease', (args) => (mode === 'word' && args[3] && args[3].wordOnly
+      ? { lyrics: '[00:01.00]<1000>a<0,500>b<500,500>', type: 'krc', source: 'netease' } : null));
+    (async () => {
+      const result = await LyricsEngine.search('order-test-' + mode, 'song', 123, false);
+      process.stdout.write('__RESULT__' + JSON.stringify({ order, source: result && result.source, type: result && result.type }));
+      process.exit(0);
+    })();
+  `;
+  try {
+    const run = (mode) => {
+      const result = spawnSync(process.execPath, ['-e', script, enginePath, mode], { encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: tempData }, timeout: 15000 });
+      assert.equal(result.status, 0, result.stderr);
+      return JSON.parse(result.stdout.split('__RESULT__')[1]);
+    };
+    const word = run('word');
+    assert.deepEqual(word.order, ['betterlyrics', 'paxsenix', 'kugou', 'qqmusic', 'netease:word'], '有逐字就在 LRCLIB 之前停下');
+    assert.equal(word.source, 'netease');
+    assert.equal(word.type, 'krc');
+    const none = run('none');
+    assert.deepEqual(none.order, ['betterlyrics', 'paxsenix', 'kugou', 'qqmusic', 'netease:word', 'lrclib'], '沒有逐字才落到 LRCLIB 的逐句');
+    assert.equal(none.source, 'lrclib');
+  } finally {
+    fs.rmSync(tempData, { recursive: true });
+  }
+});
