@@ -9,6 +9,7 @@
 const he = require('he');
 const OpenCC = require('opencc-js');
 const { krcDecode } = require('./krc-decoder');
+const { decryptQrc } = require('./qrc-decoder');
 const { parseTTML, cleanQuery } = require('./ttml-parser');
 const { parseLrc, parseTimestampToMs, msToLrcTime } = require('./lrc-parser');
 const { cleanLyrics } = require('./lyrics-cleaner');
@@ -184,6 +185,26 @@ const LYRICS_PLUS_SERVERS = Object.freeze([
   'https://lyricsplus.atomix.one',
 ]);
 let lyricsPlusLastWorking = null;
+
+/**
+ * 把一行逐字資料（時間都是整首歌的絕對毫秒）組成我們的 KRC 行：[mm:ss.xx]<行長>字<相對起點,長度>…
+ * 字裡的 < [ ] 是 KRC 的語法字元，換成全形避免把後面的解析弄壞。
+ */
+function buildKrcLine(lineStart, lineDuration, words) {
+  if (!Number.isFinite(lineStart) || lineStart < 0) return null;
+  const clean = (words || [])
+    .map((w) => ({
+      text: String(w.text || '').replace(/</g, '＜').replace(/\[/g, '［').replace(/\]/g, '］'),
+      start: Math.max(0, Math.round(w.start - lineStart)),
+      duration: Math.max(0, Math.round(w.duration) || 0),
+    }))
+    .filter((w) => w.text && Number.isFinite(w.start));
+  if (!clean.some((w) => w.text.trim())) return null;
+  const last = clean[clean.length - 1];
+  const duration = Math.max(Math.round(lineDuration) || 0, last.start + last.duration);
+  if (duration <= 0) return null;
+  return `[${msToLrcTime(lineStart)}]<${duration}>` + clean.map((w) => `${w.text}<${w.start},${w.duration}>`).join('');
+}
 
 // ─── Apple Music Token 快取 ───
 let appleMusicToken = null;
@@ -794,6 +815,10 @@ class LyricsEngine {
           ? Math.abs(matchedDuration - duration) <= DURATION_TOLERANCE
           : undefined;
 
+        // 逐字版（YRC）優先；這首沒有逐字、或新端點失敗，才走下面原本的逐句 LRC
+        const yrc = await this.fetchNeteaseYrc(matchedSong.id);
+        if (yrc) return { lyrics: yrc, type: 'krc', source: 'netease', durationVerified };
+
         const lyricUrl = `https://music.163.com/api/song/lyric?id=${matchedSong.id}&lv=1&tv=1`;
         const lyricRes = await fetchWithTimeout(lyricUrl, {
           headers: { 'Referer': 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
@@ -952,6 +977,10 @@ class LyricsEngine {
       const durationVerified = duration > 0 && matchedDuration > 0
         ? Math.abs(matchedDuration - duration) <= DURATION_TOLERANCE
         : undefined;
+
+      // 逐字版（QRC）優先；沒有或解不開才退回下面的逐句 LRC（含翻譯合併）
+      const qrc = await this.fetchQqQrc(matchedSong.songid);
+      if (qrc) return { lyrics: qrc, type: 'krc', source: 'qqmusic', durationVerified };
 
       const lyricUrl = `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=${matchedSong.songmid}&g_tk=5381&format=json&inCharset=utf8&outCharset=utf-8&nobase64=1`;
       const lyricRes = await fetchWithTimeout(lyricUrl, {
@@ -1170,6 +1199,94 @@ class LyricsEngine {
       log.warn('Apple Music Token 取得失敗 (' + tokenDuration + 'ms): ' + e.message);
       return null;
     }
+  }
+
+  /** QQ 音樂逐字歌詞：拿加密的 QRC、解開、轉成我們的 KRC。任何一步失敗都回 null，呼叫端退回逐句。 */
+  static async fetchQqQrc(songId) {
+    const id = Number(songId);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    try {
+      const res = await fetchWithTimeout('https://u.y.qq.com/cgi-bin/musicu.fcg', {
+        method: 'POST',
+        headers: { Referer: 'https://y.qq.com/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comm: { ct: 11, cv: '1003006', v: '1003006' },
+          req: {
+            module: 'music.musichallSong.PlayLyricInfo',
+            method: 'GetPlayLyricInfo',
+            param: { songID: id, crypt: 1, qrc: 1, qrc_t: 0, roma: 0, roma_t: 0, trans: 0, trans_t: 0, type: 0, ct: 19, cv: 2111 },
+          },
+        }),
+      }, 10000);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const info = data && data.req && data.req.data;
+      // qrc_t 是 0 代表這首只有逐句，回來的內容不是 QRC
+      if (!info || !info.lyric || !info.qrc_t) return null;
+      return this.qrcToKrc(decryptQrc(info.lyric));
+    } catch (e) {
+      log.warn('QQ音樂逐字歌詞失敗: ' + e.message);
+      return null;
+    }
+  }
+
+  /** QRC（[行起點,行長]字(起點,長度)字(起點,長度)…，毫秒、絕對時間）→ 我們的 KRC。 */
+  static qrcToKrc(xml) {
+    if (typeof xml !== 'string') return null;
+    const content = xml.match(/LyricContent="([\s\S]*?)"\s*\/>/);
+    if (!content) return null;
+    const out = [];
+    for (const raw of content[1].split(/\r?\n/)) {
+      const head = raw.match(/^\[(\d+),(\d+)\]/);
+      if (!head) continue;
+      const words = [];
+      const wordRe = /([\s\S]*?)\((\d+),(\d+)\)/g;
+      const body = raw.slice(head[0].length);
+      let m;
+      while ((m = wordRe.exec(body)) !== null) {
+        words.push({ text: m[1], start: Number(m[2]), duration: Number(m[3]) });
+      }
+      const line = buildKrcLine(Number(head[1]), Number(head[2]), words);
+      if (line) out.push(line);
+    }
+    return out.length ? out.join('\n') : null;
+  }
+
+  /** 網易雲逐字歌詞（YRC）。這首沒有逐字時回 null。 */
+  static async fetchNeteaseYrc(songId) {
+    const id = Number(songId);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    try {
+      const res = await fetchWithTimeout(`https://music.163.com/api/song/lyric/v1?id=${id}&cp=false&lv=0&kv=0&tv=0&rv=0&yv=0&ytv=0&yrv=0`, {
+        headers: { Referer: 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      }, 10000);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return this.yrcToKrc(data && data.yrc && data.yrc.lyric);
+    } catch (e) {
+      log.warn('網易雲逐字歌詞失敗: ' + e.message);
+      return null;
+    }
+  }
+
+  /** YRC（[行起點,行長](起點,長度,0)字(起點,長度,0)字…，毫秒、絕對時間）→ 我們的 KRC。開頭的 JSON 製作名單行會被略過。 */
+  static yrcToKrc(yrc) {
+    if (typeof yrc !== 'string' || !yrc) return null;
+    const out = [];
+    for (const raw of yrc.split(/\r?\n/)) {
+      const head = raw.match(/^\[(\d+),(\d+)\]/);
+      if (!head) continue;
+      const words = [];
+      const wordRe = /\((\d+),(\d+),-?\d+\)((?:(?!\(\d+,\d+,-?\d+\))[\s\S])*)/g;
+      const body = raw.slice(head[0].length);
+      let m;
+      while ((m = wordRe.exec(body)) !== null) {
+        words.push({ text: m[3], start: Number(m[1]), duration: Number(m[2]) });
+      }
+      const line = buildKrcLine(Number(head[1]), Number(head[2]), words);
+      if (line) out.push(line);
+    }
+    return out.length ? out.join('\n') : null;
   }
 
   /** LyricsPlus（/v2/lyrics/get）：依序試鏡像，上次成功的排第一。 */
