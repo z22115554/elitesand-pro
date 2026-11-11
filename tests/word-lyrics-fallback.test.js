@@ -300,3 +300,25 @@ test('歌曲庫升級逐字：只在線上有同一首的逐字版時才換；�
     fs.rmSync(tempData, { recursive: true });
   }
 });
+
+test('搜尋結果比對：歌名歌手都對不上就不硬挑第一筆；簡繁不同也算同一個名字', () => {
+  const ok = (o) => L.isPlausibleMatch({ duration: 0, songDuration: 0, ...o });
+  // 實測踩過的錯配：QQ 搜「滅火器 島嶼天光」前幾筆全是歌名叫「灭火器」的別首歌
+  assert.equal(ok({ artist: '滅火器', title: '島嶼天光', duration: 261, songArtist: '6a会魔法', songTitle: '灭火器', songDuration: 110 }), false);
+  // 酷狗搜「Sam Lee Skip The Song」：同名但別的歌手、時長也差很多
+  assert.equal(ok({ artist: 'Sam Lee', title: 'Skip The Song', duration: 281, songArtist: 'Lov', songTitle: 'Skip the Song', songDuration: 135 }), false);
+  // 正確的：簡體歌手名對繁體
+  assert.equal(ok({ artist: '滅火器', title: '島嶼天光', songArtist: '灭火器', songTitle: '岛屿天光' }), true);
+  // 歌名寫法不同（英文標題 vs 日文目錄）但歌手與時長都對得上
+  assert.equal(ok({ artist: 'YOASOBI', title: 'Idol', duration: 213, songArtist: 'YOASOBI', songTitle: 'アイドル', songDuration: 213 }), true);
+  // 沒給歌手時，歌名對上就好
+  assert.equal(ok({ artist: '', title: 'アイドル', songArtist: 'YOASOBI', songTitle: 'アイドル (偶像)' }), true);
+});
+
+test('酷狗的佔位文字（只有一兩行）當成沒有歌詞', () => {
+  assert.equal(L.hasEnoughLyricLines(L.parseKrc('[00:00.92]<40000>酷<0,304>狗<304,252>音<556,253>乐<809,355>')), false);
+  assert.equal(L.hasEnoughLyricLines([{ text: 'a' }, { text: ' ' }, { text: 'b' }]), false);
+  assert.equal(L.hasEnoughLyricLines([{ text: 'a' }, { text: 'b' }, { text: 'c' }]), true);
+  const source = fs.readFileSync(path.join(__dirname, '../server/services/lyrics-engine.js'), 'utf8');
+  assert.ok(source.includes("if (decoded && this.hasEnoughLyricLines(this.parseKrc(decoded)))"), '酷狗逐字也要先檢查');
+});

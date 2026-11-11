@@ -587,10 +587,13 @@ class LyricsEngine {
 
   static scoreMatch({ artist, title, duration, songArtist, songTitle, songDuration, isCover = false }) {
     let score = 0;
-    const nArtist = (artist || '').toLowerCase().trim();
-    const nTitle = (title || '').toLowerCase().trim();
-    const nSongArtist = (songArtist || '').toLowerCase().trim();
-    const nSongTitle = (songTitle || '').toLowerCase().trim();
+    // 簡繁一律轉成繁體再比：QQ／酷狗的歌手名多半是簡體（灭火器），匯入的影片標題多半是繁體（滅火器），
+    // 不轉的話歌手永遠對不上，只好挑第一筆——常常是別人的翻唱或同名的另一首。
+    const norm = (value) => simplifiedToTraditional(String(value || '')).toLowerCase().trim();
+    const nArtist = norm(artist);
+    const nTitle = norm(title);
+    const nSongArtist = norm(songArtist);
+    const nSongTitle = norm(songTitle);
 
     if (nTitle && nSongTitle) {
       if (nSongTitle.includes(nTitle) || nTitle.includes(nSongTitle)) score += 10;
@@ -633,6 +636,32 @@ class LyricsEngine {
     }
 
     return score;
+  }
+
+  /**
+   * 這筆搜尋結果看起來是不是同一首歌。分數最高不代表對：歌名、歌手都對不上時，
+   * 原本會硬挑第一筆，結果常常是同名的另一首、別人的翻唱，甚至是歌名裡剛好有歌手名字的歌。
+   * 至少要有兩項證據：歌名＋歌手、歌名＋時長、或歌手＋時長（時長差 3 秒內）；沒給歌手時歌名對上就算。
+   */
+  static isPlausibleMatch({ artist, title, duration, songArtist, songTitle, songDuration }) {
+    const squash = (value) => simplifiedToTraditional(String(value || '')).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+    const t = squash(cleanQuery(title) || title);
+    const st = squash(songTitle);
+    const titleMatch = !!(t && st && (st.includes(t) || t.includes(st)));
+    const a = squash(artist);
+    const sa = squash(songArtist);
+    let artistMatch = false;
+    if (a && sa) {
+      artistMatch = sa.includes(a) || a.includes(sa);
+      if (!artistMatch) {
+        const ra = squash(romanize(a));
+        const rsa = squash(romanize(sa));
+        artistMatch = !!(ra && rsa && (rsa.includes(ra) || ra.includes(rsa)));
+      }
+    }
+    const durationClose = duration > 0 && songDuration > 0 && Math.abs(songDuration - duration) <= 3;
+    if (!a) return titleMatch;
+    return (titleMatch && artistMatch) || (titleMatch && durationClose) || (artistMatch && durationClose);
   }
 
   static detectCover(artist, title) {
@@ -885,14 +914,20 @@ class LyricsEngine {
       const mobileRes = await fetchWithTimeout(mobileUrl, {}, 10000);
       if (mobileRes.ok) {
         const mobileData = await mobileRes.json();
-        if (mobileData.data?.info?.length > 0) {
-          for (const song of mobileData.data.info) {
+        const plausible = (mobileData.data?.info || []).filter((song) => this.isPlausibleMatch({
+          artist, title, duration,
+          songArtist: song.singername || '',
+          songTitle: song.songname || '',
+          songDuration: song.duration || 0,
+        }));
+        if (plausible.length > 0) {
+          for (const song of plausible) {
             if (duration > 0 && song.duration && Math.abs(song.duration - duration) <= DURATION_TOLERANCE) {
               hash = song.hash;
               break;
             }
           }
-          if (!hash) hash = mobileData.data.info[0].hash;
+          if (!hash) hash = plausible[0].hash;
         }
       }
     } catch (e) {
@@ -920,7 +955,13 @@ class LyricsEngine {
         const searchRes = await fetchWithTimeout(searchUrl, {}, 10000);
         if (searchRes.ok) {
           const searchData = await searchRes.json();
-          if (searchData.candidates?.length > 0) candidates = searchData.candidates;
+          const plausible = (searchData.candidates || []).filter((c) => this.isPlausibleMatch({
+            artist, title, duration,
+            songArtist: c.singer || '',
+            songTitle: c.song || '',
+            songDuration: c.duration ? c.duration / 1000 : 0,
+          }));
+          if (plausible.length > 0) candidates = plausible;
         }
       } catch (e) {
         log.warn('Kugou lyrics search 失敗: ' + e.message);
@@ -950,13 +991,15 @@ class LyricsEngine {
     try {
       const krcContent = Buffer.from(lrcData.content, 'base64');
       const decoded = krcDecode(krcContent);
-      if (decoded) return { lyrics: decoded, type: 'krc', source: 'kugou', durationVerified };
+      // 酷狗對沒有歌詞的歌，有時回一行「酷狗音乐 就是歌多」之類的佔位文字；當成沒有歌詞，讓後面的來源接手
+      if (decoded && this.hasEnoughLyricLines(this.parseKrc(decoded))) return { lyrics: decoded, type: 'krc', source: 'kugou', durationVerified };
     } catch (e) {
       log.warn('KRC 解碼失敗，嘗試 LRC 降級: ' + e.message);
     }
 
     if (lrcData.lrccontent) {
-      return { lyrics: Buffer.from(lrcData.lrccontent, 'base64').toString('utf-8'), type: 'lrc', source: 'kugou', durationVerified };
+      const lrc = Buffer.from(lrcData.lrccontent, 'base64').toString('utf-8');
+      if (this.hasEnoughLyricLines(this.parseLrc(lrc))) return { lyrics: lrc, type: 'lrc', source: 'kugou', durationVerified };
     }
 
     return null;
@@ -980,8 +1023,13 @@ class LyricsEngine {
       if (!searchRes.ok) return null;
 
       const searchData = await searchRes.json();
-      const songs = searchData.data?.song?.list;
-      if (!songs?.length) return null;
+      const songs = (searchData.data?.song?.list || []).filter((song) => this.isPlausibleMatch({
+        artist, title, duration,
+        songArtist: (song.singer || []).map((x) => x.name).join(' '),
+        songTitle: song.songname || '',
+        songDuration: song.interval || 0,
+      }));
+      if (!songs.length) return null;
 
       let matchedSong = null;
       let bestScore = -1;
@@ -1044,6 +1092,13 @@ class LyricsEngine {
 
   static findBestMatch(songs, artist, title, duration, isCover = false) {
     if (!songs?.length) return null;
+    songs = songs.filter((song) => this.isPlausibleMatch({
+      artist, title, duration,
+      songArtist: song.artists?.[0]?.name || song.ar?.[0]?.name || song.artistName || '',
+      songTitle: song.name || song.title || '',
+      songDuration: (song.duration || song.dt || 0) / 1000,
+    }));
+    if (!songs.length) return null;
 
     let bestMatch = null;
     let bestScore = -1;
@@ -1482,6 +1537,12 @@ class LyricsEngine {
     }
     if (lines._lrcOffset !== undefined) out._lrcOffset = lines._lrcOffset;
     return out;
+  }
+
+  /** 真的歌詞至少要有幾行有字；只有一兩行的多半是來源的佔位文字（例如「酷狗音乐 就是歌多」「纯音乐，请欣赏」）。 */
+  static hasEnoughLyricLines(lines) {
+    if (!Array.isArray(lines)) return false;
+    return lines.filter((line) => line && typeof line.text === 'string' && line.text.trim()).length >= 3;
   }
 
   static mergeBilingualLrc(original, translation) {
