@@ -71,3 +71,27 @@ test('不合法的歌曲編號不發請求，直接回 null', async () => {
     assert.equal(await L.fetchNeteaseYrc(bad), null);
   }
 });
+
+test('AMLL 逐字歌詞庫：排在網易雲逐字之後、逐句之前；翻譯與和聲欄位不會混進主歌詞', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../server/services/lyrics-engine.js'), 'utf8');
+  const start = source.indexOf('static async searchNetease(');
+  const ncm = source.slice(start, start + 3500);
+  const yrcAt = ncm.indexOf('this.fetchNeteaseYrc(matchedSong.id)');
+  const amllAt = ncm.indexOf('this.fetchAmllTtml(matchedSong.id)');
+  const lrcAt = ncm.indexOf('api/song/lyric?id=');
+  assert.ok(yrcAt > 0 && amllAt > yrcAt && lrcAt > amllAt, '順序必須是 網易雲逐字 → AMLL → 逐句');
+  assert.ok(source.includes("raw.githubusercontent.com/Steve-xmh/amll-ttml-db/main'"), '只從固定的 GitHub 靜態位置讀取');
+  for (const bad of ['abc', -1, 0, 1.5, null]) assert.equal(await L.fetchAmllTtml(bad), null, '不合法的歌曲編號不發請求');
+
+  const { parseTTML } = require('../server/services/ttml-parser');
+  const ttml = '<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:amll="http://www.example.com/ns/amll">'
+    + '<head><metadata xmlns=""><ttm:agent type="person" xml:id="v1"/><amll:meta key="ncmMusicId" value="1"/></metadata></head>'
+    + '<body dur="00:05.000"><div xmlns="" begin="00:01.000" end="00:05.000">'
+    + '<p begin="00:01.000" end="00:03.000" ttm:agent="v1"><span begin="00:01.000" end="00:02.000">測</span><span begin="00:02.000" end="00:03.000">試</span>'
+    + '<span ttm:role="x-translation" xml:lang="en">translated line</span></p>'
+    + '</div></body></tt>';
+  const parsed = L.parseKrc(parseTTML(ttml));
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].text, '測試');
+  assert.equal(parsed[0].words.length, 2);
+});

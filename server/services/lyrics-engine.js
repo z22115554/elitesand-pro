@@ -185,6 +185,8 @@ const LYRICS_PLUS_SERVERS = Object.freeze([
   'https://lyricsplus.atomix.one',
 ]);
 let lyricsPlusLastWorking = null;
+const AMLL_TTML_BASE = 'https://raw.githubusercontent.com/Steve-xmh/amll-ttml-db/main';
+const AMLL_TTML_MAX_CHARS = 2 * 1024 * 1024;
 
 /**
  * 把一行逐字資料（時間都是整首歌的絕對毫秒）組成我們的 KRC 行：[mm:ss.xx]<行長>字<相對起點,長度>…
@@ -819,6 +821,10 @@ class LyricsEngine {
         const yrc = await this.fetchNeteaseYrc(matchedSong.id);
         if (yrc) return { lyrics: yrc, type: 'krc', source: 'netease', durationVerified };
 
+        // 最後一道逐字保險：AMLL 社群逐字歌詞庫（以網易雲歌曲編號為檔名）
+        const amll = await this.fetchAmllTtml(matchedSong.id);
+        if (amll) return { lyrics: amll, type: 'krc', source: 'netease', durationVerified };
+
         const lyricUrl = `https://music.163.com/api/song/lyric?id=${matchedSong.id}&lv=1&tv=1`;
         const lyricRes = await fetchWithTimeout(lyricUrl, {
           headers: { 'Referer': 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
@@ -1265,6 +1271,29 @@ class LyricsEngine {
       return this.yrcToKrc(data && data.yrc && data.yrc.lyric);
     } catch (e) {
       log.warn('網易雲逐字歌詞失敗: ' + e.message);
+      return null;
+    }
+  }
+
+  /**
+   * AMLL TTML DB：社群手工對時的逐字歌詞（CC0），放在 GitHub 上的靜態檔，檔名是網易雲歌曲編號。
+   * 收錄量不大（熱門歌為主），但不依賴任何第三方中繼服務，所以排在所有逐字來源的最後當保險。
+   * 格式跟 Apple Music 的 TTML 相同，直接用既有的 parseTTML；沒收錄（404）或任何失敗都回 null。
+   */
+  static async fetchAmllTtml(songId) {
+    const id = Number(songId);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    try {
+      const res = await fetchWithTimeout(`${AMLL_TTML_BASE}/ncm-lyrics/${id}.ttml`, {
+        headers: { 'User-Agent': APP_USER_AGENT, Accept: 'text/plain, application/xml' },
+      }, 8000);
+      if (!res.ok) return null;
+      const ttml = await res.text();
+      // 正常一首歌幾十 KB；異常大的回應不解析
+      if (!ttml || ttml.length > AMLL_TTML_MAX_CHARS) return null;
+      return parseTTML(ttml);
+    } catch (e) {
+      log.warn('AMLL 逐字歌詞失敗: ' + e.message);
       return null;
     }
   }
