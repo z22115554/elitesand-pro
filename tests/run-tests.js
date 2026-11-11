@@ -1236,9 +1236,9 @@ test('清理模組遮蔽憑證與個資，並保留除錯所需的一般內容',
     ['PIN: 123456', '123456'],
     ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NSJ9.dBjftJeZ4CVPmB92K27u', 'dBjftJeZ4CVPmB92K27u'],
     ['Twitch 已授權頻道：streamer_private', 'streamer_private'],
-    ['C:\\Users\\thad\\Desktop\\a.mp3', 'thad'],
+    ['C:\\Users\\kaito\\Desktop\\a.mp3', 'kaito'],
     ['C:\\Users\\陳小明\\Desktop\\a.mp3', '陳小明'],
-    ['D:/Users/thad/downloads/a.mp3', 'thad'],
+    ['D:/Users/kaito/downloads/a.mp3', 'kaito'],
     ['read C:\\MyPersonalFolder\\b.mp3 failed', 'MyPersonalFolder'],
   ];
   mustRedact.forEach(([input, secret]) => {
@@ -1255,7 +1255,7 @@ test('清理模組遮蔽憑證與個資，並保留除錯所需的一般內容',
     ['read C:\\MyPersonalFolder\\b.mp3 failed', 'failed'],
     ['ffmpeg at C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe ok', 'Program Files'],
     ['loaded C:\\Windows\\System32\\dwrite.dll', 'System32'],
-    ['C:\\Users\\thad\\AppData\\Roaming\\Elitesand Pro\\logs\\app.log', 'AppData'],
+    ['C:\\Users\\kaito\\AppData\\Roaming\\Elitesand Pro\\logs\\app.log', 'AppData'],
   ];
   mustKeep.forEach(([input, keep]) => {
     ok(redactDiagnosticText(input).includes(keep), `不可過度清理，必須保留 ${keep}: `);
@@ -1308,11 +1308,11 @@ test('問題回報 schema 拒絕不完整或超長的內容', () => {
   // 使用者可能直接把含 token 的錯誤訊息貼進說明欄，組報告時必須一併清理。
   const leaky = feedbackReport.buildReport({
     ...base,
-    description: '匯入失敗，訊息是 Authorization: Bearer ghp_USER_PASTED_SECRET 在 C:\\Users\\thad\\Music 底下',
+    description: '匯入失敗，訊息是 Authorization: Bearer ghp_USER_PASTED_SECRET 在 C:\\Users\\kaito\\Music 底下',
   });
   ok(leaky.ok);
   ok(!leaky.plainText.includes('ghp_USER_PASTED_SECRET'), '使用者貼上的憑證必須被遮蔽: ');
-  ok(!leaky.plainText.includes('thad'), '使用者名稱必須被遮蔽: ');
+  ok(!leaky.plainText.includes('kaito'), '使用者名稱必須被遮蔽: ');
 
   // 報告內文固定繁中，不跟著介面語言跑，否則維護者會收到看不懂的 issue。
   const japanese = feedbackReport.buildReport({ ...base, locale: 'ja' });

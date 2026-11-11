@@ -64,15 +64,6 @@ License guidance: https://ffmpeg.org/legal.html
 BtbN builds: https://github.com/BtbN/FFmpeg-Builds
 Gyan build information: https://www.gyan.dev/ffmpeg/builds/
 
-Nunito (font)
--------------
-Copyright 2014 The Nunito Project Authors
-(https://github.com/googlefonts/nunito). Licensed under the SIL Open Font
-License, Version 1.1. Full license text ships alongside the font at
-public/fonts/OFL.txt (and a copy in licenses/nunito/OFL.txt in packaged
-builds).
-License: https://openfontlicense.org/
-
 JIZURA (lyric motion engine)
 ----------------------------
 Copyright (c) 2026 hakoniwa. Licensed under the MIT License.

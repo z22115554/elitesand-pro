@@ -284,10 +284,4 @@ function isWordLevel(lines) {
   return list.length > 0 && word > list.length * 0.5;
 }
 
-async function analyzeVocals(vocalsPath, lines, options) {
-  const samples = await decodeMono(vocalsPath, options);
-  if (samples.length < SAMPLE_RATE * 10) return { accepted: false, reason: 'AUDIO_TOO_SHORT' };
-  return estimateOffset(samples, lines);
-}
-
-module.exports = { analyzeVocals, estimateOffset, decodeMono, isWordLevel, MIN_PEAK_Z, MIN_PEAK_RATIO, SAMPLE_RATE };
+module.exports = { estimateOffset, decodeMono, isWordLevel, MIN_PEAK_Z, MIN_PEAK_RATIO, SAMPLE_RATE };

@@ -149,10 +149,6 @@ function getFfmpegPath() {
   return resolveFfmpegPaths()?.ffmpeg || 'ffmpeg';
 }
 
-function getFfprobePath() {
-  return resolveFfmpegPaths()?.ffprobe || 'ffprobe';
-}
-
 /** 目前這份 ffmpeg 所在的目錄；來源是系統 PATH（已經找得到）或完全找不到時回傳 null。 */
 function getFfmpegDir() {
   const resolved = resolveFfmpegPaths();
@@ -848,7 +844,6 @@ module.exports = {
   getDownloadInfo,
   resolveFfmpegPaths,
   getFfmpegPath,
-  getFfprobePath,
   getFfmpegDir,
   withFfmpegOnPath,
   isAvailable,

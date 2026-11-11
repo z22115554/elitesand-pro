@@ -1,7 +1,6 @@
 /* ─── 自架字體（離線可用、直播零 CDN 依賴）───
    IBM Plex Sans（介面 Latin）＋ IBM Plex Mono（數字／時間／狀態／小標），SIL OFL 1.1，授權見 /fonts/OFL-IBM-Plex.txt。
-   只帶 latin 子集；中文字元自動逐字回退到 Noto Sans TC／系統字。
-   （Nunito 檔案暫留在 /fonts，改版 P9 確認沒有頁面引用後再移除。）*/
+   只帶 latin 子集；中文字元自動逐字回退到 Noto Sans TC／系統字。 */
 @font-face {
   font-family: 'IBM Plex Sans';
   font-style: normal;

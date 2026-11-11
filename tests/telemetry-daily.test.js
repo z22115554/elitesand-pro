@@ -70,7 +70,7 @@ function testRegistry() {
   }
 
   // 錯誤碼消毒：帶路徑／網址／指令的字串一律歸 other，絕不原樣回傳
-  const hostile = 'C:\\Users\\thad\\Music\\某首歌.mp3 https://youtu.be/abc $(rm -rf /)';
+  const hostile = 'C:\\Users\\kaito\\Music\\某首歌.mp3 https://youtu.be/abc $(rm -rf /)';
   assert.strictEqual(fields.mapError('import', hostile), 'other');
   assert.strictEqual(fields.mapError('import', 'YTDLP_HTTP_403'), 'ytdlp_http_403', '大小寫應正規化');
   assert.strictEqual(fields.mapError('不存在的族', 'x'), null);
@@ -206,7 +206,7 @@ async function testAggregation() {
   // 錯誤碼消毒的端到端驗證：夾帶路徑與網址的錯誤只會變成 other
   requests.length = 0;
   clock.value = new Date('2026-08-20T10:00:00.000Z');
-  telemetry.recordOutcome('import', false, 'C:\\Users\\thad\\歌.mp3 https://youtu.be/xyz');
+  telemetry.recordOutcome('import', false, 'C:\\Users\\kaito\\歌.mp3 https://youtu.be/xyz');
   await new Promise((resolve) => setImmediate(resolve));
   const serialised = JSON.stringify(requests);
   assert.ok(serialised.includes('import.fail.other'));

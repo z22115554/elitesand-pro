@@ -223,16 +223,6 @@ foreach ($required in @("LICENSE.txt", "SOURCE.txt", "NOTICE.txt")) {
   -LicenseOutput (Join-Path $LicensesDir "haqumei")
 if ($LASTEXITCODE -ne 0) { throw "Haqumei runtime staging failed; portable build stopped." }
 
-# Nunito 字體的 OFL.txt 已經跟著 public/fonts/ 一起被複製進 app-root（滿足 OFL 授權要求
-# 「授權文字要跟字體放在一起」），這裡在 licenses/ 底下再放一份方便集中查閱。
-$NunitoLicenseSource = Join-Path $Root "public\fonts\OFL.txt"
-if (-not (Test-Path -LiteralPath $NunitoLicenseSource)) {
-  throw "Missing public/fonts/OFL.txt; Nunito is bundled but its OFL license text is not."
-}
-$NunitoLicenseOut = Join-Path $LicensesDir "nunito"
-New-Item -ItemType Directory -Force -Path $NunitoLicenseOut | Out-Null
-Copy-Item -LiteralPath $NunitoLicenseSource -Destination (Join-Path $NunitoLicenseOut "OFL.txt") -Force
-
 # Machine-readable npm license inventory. Package-level license texts remain in app/node_modules.
 # 批次 D-2：不能只看 package.json 的 "license" 欄位就放棄——有些套件（如 busboy、
 # streamsearch）用的是舊式 "licenses": [{type: "MIT", ...}] 陣列格式，欄位對不上但
