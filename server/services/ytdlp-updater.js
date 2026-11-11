@@ -97,28 +97,6 @@ function writeApprovedRuntimeTrust(currentVersion) {
   });
 }
 
-function restoreTrustedSeedRuntime() {
-  const trust = packagedTrustEnvironment();
-  if (!trust) return false;
-  const actualSeedHash = hashFileSync(trust.seedPath);
-  if (actualSeedHash !== trust.seedHash) throw new Error('cannot restore yt-dlp because packaged seed integrity changed');
-  const target = path.resolve(YTDLP_COMMAND);
-  const temporary = `${target}.recovery.tmp`;
-  try { fs.unlinkSync(temporary); } catch (_) { /* stale app-owned staging */ }
-  fs.copyFileSync(trust.seedPath, temporary);
-  if (hashFileSync(temporary) !== trust.seedHash) throw new Error('yt-dlp seed recovery copy hash mismatch');
-  try { fs.unlinkSync(target); } catch (_) { /* updater may already have removed/replaced it */ }
-  fs.renameSync(temporary, target);
-  writeTrustStateAtomic(trust.statePath, {
-    runtimeHash: trust.seedHash,
-    runtimeVersion: trust.seedVersion,
-    seedHash: trust.seedHash,
-    seedVersion: trust.seedVersion,
-    provenance: 'seed',
-  });
-  return true;
-}
-
 function runtimeMatchesRecordedTrust() {
   const trust = packagedTrustEnvironment();
   if (!trust) return true;
@@ -268,6 +246,5 @@ module.exports = {
   parseVersion,
   packagedTrustEnvironment,
   writeApprovedRuntimeTrust,
-  restoreTrustedSeedRuntime,
   runtimeMatchesRecordedTrust,
 };
