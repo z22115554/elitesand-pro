@@ -136,6 +136,10 @@
           <div><div class="label" data-i18n="prompter.showFurigana">振假名</div><div class="sub" data-i18n="prompter.showFuriganaHint">日文漢字上方顯示平假名讀音，沒有資料的行不會顯示</div></div>
           <label class="switch"><input id="pt-set-furigana" type="checkbox"><span class="track"></span></label>
         </div>
+        <div class="switch-row" data-new-feature="prompter-translation">
+          <div><div class="label"><span data-i18n="prompter.showTranslation">翻譯</span><span data-new-badge-slot></span></div><div class="sub" data-i18n="prompter.showTranslationHint">歌詞來源有附翻譯時，在下方加一行譯文；沒有翻譯的行不會顯示</div></div>
+          <label class="switch"><input id="pt-set-translation" type="checkbox"><span class="track"></span></label>
+        </div>
         <button id="pt-set-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="prompter.resetAppearance">重置為預設</button>
       </div>
     </div>
@@ -166,5 +170,6 @@
   <script src="/js/playlist-state.js"></script>
   <script src="/js/font-assets.js"></script>
   <script src="/js/prompter.js"></script>
+  <script src="/js/new-badges.js"></script>
 </body>
 </html>

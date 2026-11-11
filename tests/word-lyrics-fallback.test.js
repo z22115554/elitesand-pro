@@ -203,3 +203,16 @@ test('網易雲同一次搜尋問兩次時，搜尋與逐字查詢不重打網�
     fs.rmSync(tempData, { recursive: true });
   }
 });
+
+test('譯文欄位一路送到跟唱視圖：存檔清理保留 translation，跟唱視圖有開關且預設顯示', () => {
+  const { sanitizeParsedLyrics } = require('../server/utils/track-schema');
+  const clean = sanitizeParsedLyrics([{ time: 1000, text: 'こんにちは', translation: '你好' }, { time: 2000, text: 'x' }]);
+  assert.equal(clean[0].translation, '你好');
+  assert.ok(!('translation' in clean[1]), '沒有譯文的行不多帶空欄位');
+  const prompter = fs.readFileSync(path.join(__dirname, '../public/js/prompter.js'), 'utf8');
+  assert.ok(prompter.includes('showTranslation: true'), '預設顯示：以前譯文本來就看得到');
+  assert.ok(prompter.includes('<div class="pt-line-translation">${escapeHtml(s2t(line.translation))}</div>'), '譯文要跳脫後才放進頁面');
+  const html = fs.readFileSync(path.join(__dirname, '../public/prompter.html'), 'utf8');
+  assert.ok(html.includes('id="pt-set-translation"') && html.includes('data-new-feature="prompter-translation"'));
+  assert.ok(html.includes('<script src="/js/new-badges.js"></script>'), '跟唱視圖要載入 NEW 標記');
+});

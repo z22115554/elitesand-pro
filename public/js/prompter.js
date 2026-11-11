@@ -65,6 +65,7 @@
     setRomaji: document.getElementById('pt-set-romaji'),
     setXieyin: document.getElementById('pt-set-xieyin'),
     setFurigana: document.getElementById('pt-set-furigana'),
+    setTranslation: document.getElementById('pt-set-translation'),
     setReset: document.getElementById('pt-set-reset'),
   };
 
@@ -85,6 +86,8 @@
     font: 'default', fontAssetId: '', size: 27, color: '#f2f3f5', strokeWidth: 0, strokeColor: '#000000',
     // 預設關閉：跟 OBS 顯示端的 romanizationMode 預設 'original' 一致，沒資料的歌不會顯示空行。
     showRomaji: false, showXieyin: false, showFurigana: false,
+    // 預設開：雙語歌詞的譯文以前會以獨立一行出現在這裡，改成附在原文下方後維持看得到的習慣。
+    showTranslation: true,
   };
 
   function localFontValue(family) { return `${LOCAL_FONT_PREFIX}${family}`; }
@@ -164,6 +167,7 @@
     dom.setRomaji.checked = appearance.showRomaji;
     dom.setXieyin.checked = appearance.showXieyin;
     dom.setFurigana.checked = appearance.showFurigana;
+    if (dom.setTranslation) dom.setTranslation.checked = appearance.showTranslation !== false;
   }
 
   function updateAppearance(patch) {
@@ -291,6 +295,7 @@
   dom.setRomaji.addEventListener('change', () => updateLyricsDisplayOptions({ showRomaji: dom.setRomaji.checked }));
   dom.setXieyin.addEventListener('change', () => updateLyricsDisplayOptions({ showXieyin: dom.setXieyin.checked }));
   dom.setFurigana.addEventListener('change', () => updateLyricsDisplayOptions({ showFurigana: dom.setFurigana.checked }));
+  if (dom.setTranslation) dom.setTranslation.addEventListener('change', () => updateLyricsDisplayOptions({ showTranslation: dom.setTranslation.checked }));
   dom.setReset.addEventListener('click', () => {
     appearance = { ...DEFAULT_APPEARANCE };
     saveAppearance(appearance);
@@ -433,9 +438,11 @@
         ? `<div class="pt-line-romaji">${escapeHtml(line.phonetic)}</div>` : '';
       const xieyin = appearance.showXieyin && line.xieyin
         ? `<div class="pt-line-xieyin" data-line-time="${line.time}" title="${escapeHtml(t('prompter.xieyinEditHint'))}">${escapeHtml(line.xieyin)}</div>` : '';
+      const translation = appearance.showTranslation !== false && line.translation
+        ? `<div class="pt-line-translation">${escapeHtml(s2t(line.translation))}</div>` : '';
       return `<div class="pt-line" data-index="${i}">
         <div class="pt-line-text">${appearance.showFurigana ? renderFurigana(line) : escapeHtml(s2t(line.text || ''))}</div>
-        ${romaji}${xieyin}
+        ${romaji}${xieyin}${translation}
       </div>`;
     }).join('');
     activeLineIndex = -1;

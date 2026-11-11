@@ -168,7 +168,7 @@ body.prompter {
   user-select: none;
 }
 /* 拼音/諧音：輔助發音用，字級跟著主字級走但明顯縮小，跟主字一樣是可選開關（見設定面板）。 */
-.pt-line-romaji, .pt-line-xieyin {
+.pt-line-romaji, .pt-line-xieyin, .pt-line-translation {
   font-size: calc(var(--pt-size) * .5);
   color: var(--text-faint);
   margin-top: 2px;
@@ -196,7 +196,8 @@ body.prompter {
   max-width: 24em;
 }
 .pt-line.pt-line--active .pt-line-romaji,
-.pt-line.pt-line--active .pt-line-xieyin {
+.pt-line.pt-line--active .pt-line-xieyin,
+.pt-line.pt-line--active .pt-line-translation {
   font-size: calc(var(--pt-size) * .62);
 }
 
@@ -334,8 +335,16 @@ body.prompter {
   /* 窄螢幕整體縮一點，但仍尊重使用者調過的字級（乘係數，不是寫死覆蓋）。 */
   .pt-line-text { font-size: calc(var(--pt-size) * .82); }
   .pt-line.pt-line--active .pt-line-text { font-size: calc(var(--pt-size) * 1.23 * .82); }
-  .pt-line-romaji, .pt-line-xieyin { font-size: calc(var(--pt-size) * .5 * .82); }
+  .pt-line-romaji, .pt-line-xieyin, .pt-line-translation { font-size: calc(var(--pt-size) * .5 * .82); }
   .pt-line.pt-line--active .pt-line-romaji,
-  .pt-line.pt-line--active .pt-line-xieyin { font-size: calc(var(--pt-size) * .62 * .82); }
+  .pt-line.pt-line--active .pt-line-xieyin,
+  .pt-line.pt-line--active .pt-line-translation { font-size: calc(var(--pt-size) * .62 * .82); }
   .pt-np { display: none; }
+}
+
+/* 新功能標記（new-badges.js）：跟控制面板同一個樣子 */
+.new-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  margin-left: 6px; padding: 2px 5px; border-radius: 3px; background: #b42318; color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 1.2; letter-spacing: 0.04em; vertical-align: middle;
 }

@@ -1029,6 +1029,8 @@
     'prompter.strokeWidth': ['描邊寬度', 'Outline width', '縁取り幅', '외곽선 너비', '描边宽度'],
     'prompter.showRomaji': ['羅馬拼音', 'Romanization', 'ローマ字', '로마자', '罗马拼音'],
     'prompter.showRomajiHint': ['歌詞下方加一行拼音，沒有資料的行不會顯示', 'Adds a romanization line under each lyric; lines without data are skipped.', '歌詞の下にローマ字を1行追加します。データがない行は表示されません。', '가사 아래에 로마자 한 줄을 추가합니다. 데이터가 없는 줄은 표시되지 않습니다.', '歌词下方加一行拼音，没有数据的行不会显示'],
+    'prompter.showTranslation': ['翻譯', 'Translation', '翻訳', '번역', '翻译'],
+    'prompter.showTranslationHint': ['歌詞來源有附翻譯時，在下方加一行譯文；沒有翻譯的行不會顯示', 'Adds the translation under each lyric when the lyric source provides one; lines without one are skipped.', '歌詞ソースに翻訳がある場合、歌詞の下に訳を1行追加します。翻訳のない行は表示されません。', '가사 출처에 번역이 있으면 가사 아래에 번역을 한 줄 추가합니다. 번역이 없는 줄은 표시되지 않습니다.', '歌词来源附有翻译时，在下方加一行译文；没有翻译的行不会显示'],
     'prompter.showXieyin': ['諧音', 'Phonetic guide', '発音ガイド', '발음 가이드', '谐音'],
     'prompter.showXieyinHint': ['歌詞下方加一行中文諧音，沒有資料的行不會顯示', 'Adds a Chinese phonetic-guide line under each lyric; lines without data are skipped.', '歌詞の下に中国語の発音ガイドを1行追加します。データがない行は表示されません。', '가사 아래에 중국어 발음 가이드 한 줄을 추가합니다. 데이터가 없는 줄은 표시되지 않습니다.', '歌词下方加一行中文谐音，没有数据的行不会显示'],
     'prompter.showFurigana': ['振假名', 'Furigana', 'ふりがな', '후리가나', '振假名'],

@@ -69,6 +69,9 @@ function sanitizeParsedLyrics(value) {
       phonetic: text(line.phonetic, 20000),
       xieyin: text(line.xieyin, 20000),
     };
+    // 雙語歌詞的譯文（QQ／網易雲）：只有有譯文的行才帶，不讓每一行都多一個空欄位
+    const translation = text(line.translation, 2000);
+    if (translation) out.translation = translation;
     const furigana = sanitizeFurigana(line.furigana);
     if (furigana.length > 0) out.furigana = furigana;
     if (Array.isArray(line.words)) {
