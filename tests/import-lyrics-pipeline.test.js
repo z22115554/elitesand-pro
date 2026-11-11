@@ -65,9 +65,10 @@ test('concurrent misses run the quality-first waterfall once and retain the nega
     engine[method] = async () => { order.push(label); return null; };
   }
   await Promise.all(Array.from({ length: 6 }, () => engine.search('Artist', 'Song', 120, false)));
-  assert.deepEqual(order, ['betterlyrics', 'paxsenix', 'kugou', 'qqmusic', 'lrclib', 'netease']);
+  // 網易雲這一格會被問兩次：LRCLIB 之前先問逐字版（YRC／AMLL），最後再問一次逐句版。
+  assert.deepEqual(order, ['betterlyrics', 'paxsenix', 'kugou', 'qqmusic', 'netease', 'lrclib', 'netease']);
   assert.equal(await engine.search('Artist', 'Song', 120, false), null);
-  assert.equal(order.length, 6);
+  assert.equal(order.length, 7);
 });
 
 test('duration and romanization options keep independent in-flight searches', async () => {
