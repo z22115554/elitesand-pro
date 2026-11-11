@@ -2,7 +2,7 @@
 
 // WebGPU 分離結果上傳端點（POST /api/webgpu-separation/result/:jobId）的回歸測試。
 // 涵蓋 2026-09 把 multer memoryStorage + fs.writeFileSync 改成 disk-backed 暫存 +
-// async 落地（見 server/routes/api.js ~1311 行起、server/services/webgpu-separation-jobs.js
+// async 落地（見 server/routes/api/separation.js、server/services/webgpu-separation-jobs.js
 // ~68-79、261 行起的改動）之後最容易破的幾件事：
 //   - requireLocalEngineJob 仍排在 multer 之前（LAN DoS 防線）
 //   - 所有結束路徑（成功／寫檔失敗／job 已被取消或逾時）都清得掉 downloads/.tmp 暫存檔
@@ -15,6 +15,7 @@
 'use strict';
 
 const assert = require('assert');
+const { readApiRoutesSource } = require('./api-routes-source');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -44,7 +45,11 @@ webgpuSeparationJobs.events.on('error', () => {});
 // 直接從 router 內部撈出這條路由的三個 middleware（跟 tests/pin-first-setup.test.js
 // 找 auth router handler 的手法一樣）：requireLocalEngineJob 必須在 multer 之前，
 // 若有人把順序調換，這裡撈出來的 layer 名稱/位置就會變，測試會直接告訴我們。
-const routeLayer = apiRouter.stack.find(
+// /api 路由依功能分檔後，這條路由掛在子路由（server/routes/api/separation.js）裡，
+// 所以要連同子路由的 layer 一起攤平來找。
+const allRouteLayers = (stack) => stack.flatMap((l) => (l.route ? [l] : (l.handle && l.handle.stack ? allRouteLayers(l.handle.stack) : [])));
+const apiRouteLayers = allRouteLayers(apiRouter.stack);
+const routeLayer = apiRouteLayers.find(
   (l) => l.route && l.route.path === '/webgpu-separation/result/:jobId' && l.route.methods.post
 );
 assert.ok(routeLayer, '找不到 POST /webgpu-separation/result/:jobId route');
@@ -196,7 +201,7 @@ async function main() {
   // 刻意跟 getDownloadStatus() 的 active（模型下載中）分開命名，且放在 spread 之後
   // 不被它蓋掉——這正是這條回歸測試要鎖住的兩件事。
   await test('GET /webgpu-separation/runtime-status 的 jobActive 反映目前有沒有 WebGPU 分離 job', async () => {
-    const statusLayer = apiRouter.stack.find(
+    const statusLayer = apiRouteLayers.find(
       (l) => l.route && l.route.path === '/webgpu-separation/runtime-status' && l.route.methods.get
     );
     assert.ok(statusLayer, '找不到 GET /webgpu-separation/runtime-status route');
@@ -358,7 +363,7 @@ async function main() {
   //        （跟 server/index.js 全域錯誤 middleware 對 LIMIT_FILE_SIZE 的處理一致）──
   //        不在測試裡真的搬 500MB+ 資料，避免拖垮測試時間與磁碟。
   await test('api.js 的 webgpuResultUpload 確實設了 500MB 檔案大小上限', () => {
-    const src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+    const src = readApiRoutesSource();
     assert.ok(
       /webgpuResultUpload\s*=\s*multer\(\{\s*storage:\s*webgpuResultStorage,\s*limits:\s*\{\s*fileSize:\s*500\s*\*\s*1024\s*\*\s*1024,\s*files:\s*2\s*\}/.test(src),
       '找不到預期的 webgpuResultUpload 500MB / 2 檔案上限設定'

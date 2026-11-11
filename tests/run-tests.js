@@ -7,6 +7,7 @@
  */
 
 const fs = require('fs');
+const { readApiRoutesSource } = require('./api-routes-source');
 const path = require('path');
 const os = require('os');
 const vm = require('vm');
@@ -946,7 +947,7 @@ testAsync('yt-dlp 相容性探針只讀 metadata，成功與失敗都提供可�
   ok(!unavailable.message.includes('secret/path'), 'UI 狀態不可洩漏本機命令列錯誤內容');
 
   const root = path.join(__dirname, '..');
-  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const index = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
   const frontend = fs.readFileSync(path.join(root, 'public/js/app-style-sync.js'), 'utf8');
   ok(api.includes("router.post('/ytdlp/compatibility', requirePin"));
@@ -966,7 +967,7 @@ test('應用版本集中於 package.json，lockfile、健康檢查與產品 User
   eq(githubHeaders.Accept, 'application/vnd.github+json');
   eq(githubHeaders['User-Agent'], appUserAgent('test'));
   const versionConsumers = [
-    'server/routes/api.js',
+    'server/routes/api/system.js',
     'server/services/app-updater.js',
     'server/services/announcement-service.js',
     'server/services/diagnostic-bundle.js',
@@ -1144,7 +1145,7 @@ testAsync('診斷包只含已遮蔽的健康資訊、直播連線證據與日誌
     }
 
     const root = path.join(__dirname, '..');
-    const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+    const api = readApiRoutesSource();
     const nav = fs.readFileSync(path.join(root, 'public/js/nav.js'), 'utf8');
     const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
     const frontend = fs.readFileSync(path.join(root, 'public/js/app-diagnostics.js'), 'utf8');
@@ -1468,7 +1469,7 @@ test('非正常結束偵測在 node --watch 下自動停用', () => {
 test('當機提示接在既有回報流程上，且絕不自動送出', () => {
   const root = path.join(__dirname, '..');
   const indexSource = fs.readFileSync(path.join(root, 'server/index.js'), 'utf8');
-  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const frontend = fs.readFileSync(path.join(root, 'public/js/app-feedback.js'), 'utf8');
   const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 
@@ -1492,7 +1493,7 @@ test('當機提示接在既有回報流程上，且絕不自動送出', () => {
 
 test('問題回報端點受 PIN 保護，且中繼未設定時安全停用', () => {
   const root = path.join(__dirname, '..');
-  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const frontend = fs.readFileSync(path.join(root, 'public/js/app-feedback.js'), 'utf8');
   const page = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   const client = fs.readFileSync(path.join(root, 'server/services/feedback-client.js'), 'utf8');
@@ -1927,7 +1928,7 @@ test('外部 updater 在獨立 Node 子程序可完成覆蓋與清理', () => {
 });
 
 test('更新 HTTP API 已移除，只有 private parentPort coordinator 可在冷啟動使用', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+  const source = readApiRoutesSource();
   const coordinator = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'startup-update-coordinator.js'), 'utf8');
   ok(!source.includes("'/app-update/plan'") && !source.includes("'/app-update/status'") && !source.includes("'/app-update/apply'"));
   ok(coordinator.includes('process.parentPort') && !coordinator.includes('router.') && !coordinator.includes('socket'));
@@ -2285,6 +2286,8 @@ test('all writable runtime path consumers use app-paths as their single authorit
   const consumers = [
     'server/index.js',
     'server/routes/api.js',
+    'server/routes/api/display-assets.js',
+    'server/routes/api/separation.js',
     'server/services/audio-processor.js',
     'server/services/library-store.js',
     'server/services/app-updater.js',
@@ -4484,7 +4487,7 @@ test('YouTube 匯入風險：正常長度音樂不誤報，未知時長不當成
 });
 
 test('播放清單只掃描條目，逐首下載仍由前端共用佇列執行', () => {
-  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const block = api.slice(api.indexOf("router.post('/youtube/playlist'"), api.indexOf("router.post('/lyrics/search'"));
   ok(block.includes('getPlaylistEntries'));
   ok(!block.includes('processYouTube('));
@@ -4539,7 +4542,7 @@ test('YouTube 搜尋：只回白名單欄位、去重並拒絕非官方縮圖', 
 });
 
 test('YouTube 搜尋 API 掛 PIN，且 server 端搜尋走既有 yt-dlp 共用佇列', () => {
-  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   ok(api.includes("router.post('/youtube/search', requirePin"));
   const audio = fs.readFileSync(path.join(__dirname, '../server/services/audio-processor.js'), 'utf8');
   const start = audio.indexOf('static async searchYouTube');
@@ -4645,7 +4648,7 @@ test('AI 伴奏首次啟用：下載跑完但元件仍不齊時，安裝視窗�
 
 test('AI 伴奏首次啟用：只呈現一個完整下載入口並清楚揭露空間', () => {
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
-  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const bundle = fs.readFileSync(path.join(__dirname, '../server/services/ai-separation-bundle.js'), 'utf8');
   ok(html.includes('id="ai-separation-install-modal"'));
   ok(html.includes('7.3 GB') && html.includes('至少 9 GB'));
@@ -4726,7 +4729,7 @@ test('AI 分離「是否重試過」欄位揭露與遙測 gate 一致', () => {
 test('AI 分離取消：進行中／排隊中都能停，狀態回 none 不算失敗', () => {
   const jobs = fs.readFileSync(path.join(__dirname, '../server/services/ai-separation-jobs.js'), 'utf8');
   const webgpu = fs.readFileSync(path.join(__dirname, '../server/services/webgpu-separation-jobs.js'), 'utf8');
-  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const client = fs.readFileSync(path.join(__dirname, '../public/js/ai-separation-client.js'), 'utf8');
   const library = fs.readFileSync(path.join(__dirname, '../public/js/media-library.js'), 'utf8');
   const youtube = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
@@ -4783,7 +4786,7 @@ test('AI 分離 hang watchdog：WebGPU 收不到進度心跳逾時 → 切 CPU',
 
 test('AI 分離：卡死／崩潰的隱藏引擎視窗會被重開', () => {
   const jobs = fs.readFileSync(path.join(__dirname, '../server/services/webgpu-separation-jobs.js'), 'utf8');
-  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const win = fs.readFileSync(path.join(__dirname, '../electron/webgpu-engine-window.js'), 'utf8');
   const shell = fs.readFileSync(path.join(__dirname, '../electron/shell.js'), 'utf8');
 
@@ -4901,7 +4904,7 @@ test('匯入錯誤 → 遙測碼對照：取消不計入，其餘各碼對得上
 });
 
 test('YouTube 匯入路由：成功與失敗都記遙測，取消不記、未知格式歸 other', () => {
-  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const block = api.slice(api.indexOf("router.post('/youtube',"), api.indexOf("router.post('/youtube/cancel',"));
   ok(block.includes("usageTelemetry.recordOutcome('import', true)"), '成功路徑要記 import.ok: ');
   ok(block.includes("usageTelemetry.recordOutcome('import', false, 'other')"), 'sanitizeTrack 失敗要記一次失敗（歸 other）: ');
@@ -5024,7 +5027,7 @@ test('電影宣傳型官方 MV 標題優先取書名號內歌名', () => {
 });
 
 test('本地音檔上傳：檔名先還原 UTF-8 再自動拆歌手/歌名，不吃 latin1 亂碼', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+  const src = readApiRoutesSource();
   // busboy 以 latin1 解碼 file.originalname，中日文檔名會亂碼；歌名 fallback 曾直接吃未解碼的
   // originalname（落盤檔名有還原、歌名卻沒有）。守住：不可再用未解碼的 originalname 當歌名。
   ok(!/title:\s*metadata\.common\.title\s*\|\|\s*path\.basename\(file\.originalname/.test(src),
@@ -5233,7 +5236,7 @@ test('落地前去重：批次匯入沿用既有版本，單首匯入交回去�
   ok(processor.includes("throw new Error('無法安全保存舊歌曲資料，因此已取消取代；請稍後重試')"),
     '取代前若無法安全保存既有播放清單 fallback，必須取消而不是冒險刪資料: ');
 
-  const route = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8').replace(/\r\n/g, '\n');
+  const route = readApiRoutesSource().replace(/\r\n/g, '\n');
   ok(route.includes("isBatch: req.body.isBatch === true,"), 'API 必須把批次旗標從請求體傳給 processYouTube: ');
   ok(route.includes("forceReplace: req.body.forceReplace === true,"), 'API 必須接受取代旗標: ');
   ok(/if \(result && result\.duplicate\) \{[\s\S]{0,200}code: 'DUPLICATE_SONG'/.test(route),
@@ -5542,7 +5545,7 @@ test('系統字體選單不把字體名稱拼進 HTML 或 style 字串', () => {
 test('受控本機字型資產以 FontFace 載入，且只允許 loopback 讀取', () => {
   const root = path.join(__dirname, '..');
   const scanner = fs.readFileSync(path.join(root, 'server/services/font-scanner.js'), 'utf8');
-  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const loader = fs.readFileSync(path.join(root, 'public/js/font-assets.js'), 'utf8');
   const display = fs.readFileSync(path.join(root, 'public/js/display.js'), 'utf8');
   const lyricExtras = fs.readFileSync(path.join(root, 'public/js/lyric-extras.js'), 'utf8');
@@ -7983,7 +7986,7 @@ test('直播準備區波形：峰值計算正確、路由掛 requirePin、走共
   acc.push(buf.subarray(5));
   eq(JSON.stringify(acc.finish()), JSON.stringify([77, 255, 2]), '峰值要取絕對值最大並以整首最大值正規化到 0–255：');
   ok(cachePathFor('C:/cache', 'D:/a/song.mp3') !== cachePathFor('C:/cache', 'D:/a/other.mp3'), '不同音檔要有不同快取檔：');
-  const api = fs.readFileSync(path.join(root, 'server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   ok(/router\.get\('\/library\/:id\/waveform', requirePin,/.test(api), '波形路由會跑 ffmpeg，必須掛 requirePin（鐵則 15）：');
   ok(api.includes('AudioProcessor.runFfmpegQueued(job)'), '波形解碼要排進共用 ffmpeg 佇列（鐵則 12）：');
   const livePrep = fs.readFileSync(path.join(root, 'public/js/live-prep.js'), 'utf8');
@@ -8433,7 +8436,7 @@ testAsync('AI 伴奏安裝取消：bundle 取消後狀態為 cancelled，並提�
 });
 
 test('AI 伴奏安裝取消：路由掛 requirePin、前端取消要按兩次且用 fetchWithPin', () => {
-  const api = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+  const api = readApiRoutesSource();
   ok(api.includes("router.post('/ai-separation/bundle/cancel', requirePin,"), '取消路由必須手動掛 requirePin（鐵則 15）: ');
   const client = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'ai-separation-client.js'), 'utf8');
   ok(client.includes("PinAuth.fetchWithPin('/api/ai-separation/bundle/cancel'"), '取消請求要用 fetchWithPin（鐵則 16）: ');
@@ -9090,7 +9093,7 @@ test('YouTube Cookie 最後手段只接受固定瀏覽器名稱，不接受任�
 });
 
 test('YouTube 登入救援：API 僅接收瀏覽器名稱，前端必須明確詢問且工作結束即清掉', () => {
-  const api = fs.readFileSync(path.join(__dirname, '../server/routes/api.js'), 'utf8');
+  const api = readApiRoutesSource();
   const frontend = fs.readFileSync(path.join(__dirname, '../public/js/app-youtube-import.js'), 'utf8');
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   ok(api.includes("AudioProcessor.normalizeCookieBrowser(requestedCookieBrowser)"), '後端要白名單驗證 cookieBrowser: ');
@@ -10794,7 +10797,7 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   ok(fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'typewriter-stickers', 'sticker-01.gif'))
     && fs.existsSync(path.join(__dirname, '..', 'public', 'assets', 'typewriter-stickers', 'sticker-03.gif')),
     '內建三張間奏貼圖必須隨程式打包: ');
-  const apiSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+  const apiSrc = readApiRoutesSource();
   ok(apiSrc.includes("router.post('/typewriter-stickers'") && apiSrc.includes("router.delete('/typewriter-stickers/:id'")
     && apiSrc.includes('stickerUpload') && /fileSize:\s*8\s*\*\s*1024\s*\*\s*1024/.test(apiSrc),
     'server 必須有貼圖上傳（8MB 上限、requirePin）與刪除端點: ');
@@ -11316,7 +11319,7 @@ test('統一音量：兩條播放鏈與匯入/上傳/媒體庫都接上響度資
   const serverAudio = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'audio-processor.js'), 'utf8');
   ok(serverAudio.includes('measureLoudnessQueued'), '匯入未量測響度');
   ok(serverAudio.includes('loudnessLufs,'), '匯入 track 未帶響度');
-  ok(fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8').includes('measureLoudnessQueued'),
+  ok(readApiRoutesSource().includes('measureLoudnessQueued'),
     '本地上傳未量測響度');
   ok(fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'library-store.js'), 'utf8').includes('loudnessLufs'),
     '媒體庫未保留響度');
@@ -12820,7 +12823,7 @@ console.log('\n📦 16. EULA 首次同意閘門 (eula-store)');
   });
 
   test('POST /api/eula/accept 必須掛 requireControlAccess，且副作用只在首次同意觸發', () => {
-    const api = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'api.js'), 'utf8');
+    const api = readApiRoutesSource();
     ok(api.includes("router.post('/eula/accept', requireControlAccess"),
       '同意端點必須擋掉未配對的區網裝置: ');
     ok(/const wasRequired = eulaStore\.getStatus\(\)\.required;/.test(api),

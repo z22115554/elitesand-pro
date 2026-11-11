@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('assert');
+const { readApiRoutesSource } = require('./api-routes-source');
 const fs = require('fs');
 const path = require('path');
 const test = require('node:test');
@@ -25,7 +26,7 @@ test('renderer keeps update checking manual and only exposes restart after a pos
   const index = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
   const toast = fs.readFileSync(path.join(root, 'public', 'js', 'app-toast-utils.js'), 'utf8');
   const panel = fs.readFileSync(path.join(root, 'public', 'js', 'app-restart-update-check.js'), 'utf8');
-  const api = fs.readFileSync(path.join(root, 'server', 'routes', 'api.js'), 'utf8');
+  const api = readApiRoutesSource();
   assert.ok(!fs.existsSync(path.join(root, 'public', 'js', 'app-update-check.js')));
   assert.ok(!index.includes('app-update-check.js'));
   assert.ok(index.includes('app-update-check-btn'));
