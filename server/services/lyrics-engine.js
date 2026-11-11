@@ -59,7 +59,8 @@ const LYRICS_SOURCE_PRIORITY = Object.freeze([
 // displayWord（逐字動畫完全失效、整句一起彈出）。改黏前一詞尾後升版強制重新查詢。
 // v7：新增合唱聲部（酷狗/網易雲 男：女：文字前綴、Apple TTML ttm:agent）解析，
 // parsedLyrics 每行可帶 singer / singerLabel。舊快取沒有這些欄位，升版強制重查。
-const LYRICS_CACHE_VERSION = 'v7-singer-parts';
+// v8：QQ／網易雲改抓逐字、多了 AMLL，雙語 LRC 的譯文改收進 translation 欄位（不再是獨立一行），升版強制重查。
+const LYRICS_CACHE_VERSION = 'v8-word-fallback';
 
 // ─── 歌詞快取（記憶體 + 磁碟持久化）───
 const path = require('path');
@@ -185,6 +186,21 @@ const LYRICS_PLUS_SERVERS = Object.freeze([
   'https://lyricsplus.atomix.one',
 ]);
 let lyricsPlusLastWorking = null;
+// 網易雲搜尋結果與逐字查詢結果的短期記憶（存 Promise，同時發生的相同請求也只打一次）。
+// 自動抓取時網易雲那一格先問逐字、最後再問逐句，兩次相隔不到一分鐘；兩分鐘足夠涵蓋一次搜尋。
+const BRIEF_MEMO_TTL_MS = 2 * 60 * 1000;
+const BRIEF_MEMO_MAX = 300;
+const briefMemo = new Map();
+function rememberBriefly(key, fn) {
+  const now = Date.now();
+  const hit = briefMemo.get(key);
+  if (hit && now - hit.at < BRIEF_MEMO_TTL_MS) return hit.promise;
+  const promise = Promise.resolve().then(fn);
+  briefMemo.set(key, { at: now, promise });
+  promise.catch(() => { if (briefMemo.get(key)?.promise === promise) briefMemo.delete(key); });
+  while (briefMemo.size > BRIEF_MEMO_MAX) briefMemo.delete(briefMemo.keys().next().value);
+  return promise;
+}
 const AMLL_TTML_BASE = 'https://raw.githubusercontent.com/Steve-xmh/amll-ttml-db/main';
 const AMLL_TTML_MAX_CHARS = 2 * 1024 * 1024;
 
@@ -811,13 +827,13 @@ class LyricsEngine {
       `https://music.163.com/api/cloudsearch/pc?s=${encodeURIComponent(q)}&type=1&offset=0&limit=10`,
     ]) {
       try {
-        const response = await fetchWithTimeout(endpoint, {
-          headers: { 'Referer': 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        }, 10000);
-        if (!response.ok) continue;
-
-        const data = await response.json();
-        if (!data.result?.songs?.length) continue;
+        const data = await rememberBriefly(`ncm-search:${endpoint}`, async () => {
+          const response = await fetchWithTimeout(endpoint, {
+            headers: { 'Referer': 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+          }, 10000);
+          return response.ok ? response.json() : null;
+        });
+        if (!data || !data.result?.songs?.length) continue;
 
         const matchedSong = this.findBestMatch(data.result.songs, artist, title, duration, isCover);
         if (!matchedSong) continue;
@@ -827,11 +843,11 @@ class LyricsEngine {
           : undefined;
 
         // 逐字版（YRC）優先；這首沒有逐字、或新端點失敗，才走下面原本的逐句 LRC
-        const yrc = await this.fetchNeteaseYrc(matchedSong.id);
+        const yrc = await rememberBriefly(`ncm-yrc:${matchedSong.id}`, () => this.fetchNeteaseYrc(matchedSong.id));
         if (yrc) return { lyrics: yrc, type: 'krc', source: 'netease', durationVerified };
 
         // 最後一道逐字保險：AMLL 社群逐字歌詞庫（以網易雲歌曲編號為檔名）
-        const amll = await this.fetchAmllTtml(matchedSong.id);
+        const amll = await rememberBriefly(`amll:${matchedSong.id}`, () => this.fetchAmllTtml(matchedSong.id));
         if (amll) return { lyrics: amll, type: 'krc', source: 'netease', durationVerified };
         if (options.wordOnly) return null;
 
@@ -1230,7 +1246,7 @@ class LyricsEngine {
           req: {
             module: 'music.musichallSong.PlayLyricInfo',
             method: 'GetPlayLyricInfo',
-            param: { songID: id, crypt: 1, qrc: 1, qrc_t: 0, roma: 0, roma_t: 0, trans: 0, trans_t: 0, type: 0, ct: 19, cv: 2111 },
+            param: { songID: id, crypt: 1, qrc: 1, qrc_t: 0, roma: 0, roma_t: 0, trans: 1, trans_t: 0, type: 0, ct: 19, cv: 2111 },
           },
         }),
       }, 10000);
@@ -1239,7 +1255,11 @@ class LyricsEngine {
       const info = data && data.req && data.req.data;
       // qrc_t 是 0 代表這首只有逐句，回來的內容不是 QRC
       if (!info || !info.lyric || !info.qrc_t) return null;
-      return this.qrcToKrc(decryptQrc(info.lyric));
+      const krc = this.qrcToKrc(decryptQrc(info.lyric));
+      if (!krc) return null;
+      // 翻譯解不開或沒有就算了，逐字歌詞本身照樣用
+      const translation = info.trans ? decryptQrc(info.trans) : null;
+      return translation ? this.appendTranslationLines(krc, translation) : krc;
     } catch (e) {
       log.warn('QQ音樂逐字歌詞失敗: ' + e.message);
       return null;
@@ -1425,6 +1445,45 @@ class LyricsEngine {
     return lines.length > 0 ? lines.join('\n') : null;
   }
 
+  /**
+   * 把一份 LRC 翻譯接在逐字 KRC 後面：每行翻譯寫成「[時間]譯文」的純文字行（沒有 <長度>，
+   * parseKrc 不會把它當成要唱的那一行），parseKrc 再依時間收進對應那一行的 translation 欄位。
+   * 「//」是來源用來表示「這行沒有翻譯」的佔位，跟空行一起略過。
+   */
+  static appendTranslationLines(krc, translationLrc) {
+    if (typeof krc !== 'string' || !krc || typeof translationLrc !== 'string') return krc;
+    const extra = [];
+    for (const raw of translationLrc.split(/\r?\n/)) {
+      const m = raw.match(/^\[(\d{2}:\d{2}\.\d{2,3})\](.*)$/);
+      if (!m) continue;
+      const text = m[2].trim();
+      if (!text || text === '//') continue;
+      extra.push(`[${m[1]}]${text.replace(/</g, '＜')}`);
+    }
+    return extra.length ? `${krc}\n${extra.join('\n')}` : krc;
+  }
+
+  /**
+   * 雙語 LRC 的慣例是「原文一行、同一個時間戳再一行譯文」。顯示端以時間決定目前唱到哪一行，
+   * 兩行同時間時第二行會立刻取代第一行——結果畫面上只看得到譯文、原文一閃而過。
+   * 這裡把同時間、緊接在後的那一行收進前一行的 translation 欄位，原文才是要唱的那一行。
+   */
+  static foldTranslationLines(lines) {
+    if (!Array.isArray(lines) || lines.length < 2) return lines;
+    const out = [];
+    for (const line of lines) {
+      const prev = out[out.length - 1];
+      if (prev && line && typeof line.time === 'number' && line.time === prev.time
+        && typeof line.text === 'string' && line.text.trim() && !prev.translation) {
+        prev.translation = line.text;
+        continue;
+      }
+      out.push(line);
+    }
+    if (lines._lrcOffset !== undefined) out._lrcOffset = lines._lrcOffset;
+    return out;
+  }
+
   static mergeBilingualLrc(original, translation) {
     const origLines = original.split('\n');
     const transMap = {};
@@ -1446,7 +1505,7 @@ class LyricsEngine {
   static parseLrc(lrcText) {
     const { lines, offset } = parseLrc(lrcText);
     let decoded = lines.map(p => ({ ...p, text: he.decode(p.text) }));
-    decoded = annotateSingerParts(stripCreditLines(decoded));
+    decoded = annotateSingerParts(stripCreditLines(this.foldTranslationLines(decoded)));
     // Store offset for this track (caller should check and apply)
     if (offset && offset !== 0 && decoded._lrcOffset === undefined) {
       decoded._lrcOffset = offset;
@@ -1459,10 +1518,16 @@ class LyricsEngine {
 
     const lines = krcText.split('\n');
     const parsed = [];
+    // appendTranslationLines 接在後面的「[時間]譯文」純文字行
+    const translations = [];
 
     for (const line of lines) {
       const lineMatch = line.match(/^\[(\d{2}:\d{2}\.\d{2,3})\]<(\d+)>/);
-      if (!lineMatch) continue;
+      if (!lineMatch) {
+        const plain = line.match(/^\[(\d{2}:\d{2}\.\d{2,3})\]([^<].*)$/);
+        if (plain && plain[2].trim()) translations.push({ time: parseTimestampToMs(plain[1]), text: he.decode(plain[2].trim()) });
+        continue;
+      }
 
       const lineTime = parseTimestampToMs(lineMatch[1]);
       const lineDuration = parseInt(lineMatch[2], 10);
@@ -1506,11 +1571,21 @@ class LyricsEngine {
     }
 
     parsed.sort((a, b) => a.time - b.time);
+    // 翻譯的時間戳只到百分之一秒，逐字行的起點是毫秒：取 20ms 內最近的一行
+    for (const tr of translations) {
+      let best = null;
+      for (const entry of parsed) {
+        const gap = Math.abs(entry.time - tr.time);
+        if (gap <= 20 && (!best || gap < best.gap)) best = { entry, gap };
+      }
+      if (best && !best.entry.translation) best.entry.translation = tr.text;
+    }
     return annotateSingerParts(stripCreditLines(parsed));
   }
 
   static clearCache() {
     lyricsCache.clear();
+    briefMemo.clear();
     pendingSearches.clear();
     cacheGeneration += 1;
   }

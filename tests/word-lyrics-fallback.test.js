@@ -136,3 +136,70 @@ test('自動抓取：LRCLIB 之前先問網易雲這一格的逐字版，逐句�
     fs.rmSync(tempData, { recursive: true });
   }
 });
+
+test('雙語 LRC：同時間的譯文收進前一行的 translation，原文仍是要唱的那一行', () => {
+  const lrc = L.mergeBilingualLrc('[00:01.00]こんにちは\n[00:03.00]さようなら\n[00:05.00]ありがとう', '[00:01.00]你好\n[00:03.00]再見');
+  const parsed = L.parseLrc(lrc);
+  assert.deepEqual(parsed.map((l) => [l.time, l.text, l.translation]), [
+    [1000, 'こんにちは', '你好'],
+    [3000, 'さようなら', '再見'],
+    [5000, 'ありがとう', ''],
+  ]);
+  const folded = L.foldTranslationLines([{ time: 0, text: 'a', translation: '' }, { time: 0, text: 'b' }, { time: 0, text: 'c' }]);
+  assert.deepEqual(folded.map((l) => l.text), ['a', 'c'], '每行只收一句譯文，第三行同時間的保留成獨立一行');
+});
+
+test('QQ 逐字補回翻譯：譯文接在 KRC 後面、依時間收進對應行；「//」佔位與空行略過', () => {
+  const krc = '[00:00.74]<2503>無<0,175>敵<175,316>\n[00:03.61]<2000>知<0,196>り<196,153>';
+  const withTrans = L.appendTranslationLines(krc, '[ti:x]\n[00:00.74]媒体<为>\n[00:03.61]//\n[00:05.00]');
+  assert.equal(withTrans, krc + '\n[00:00.74]媒体＜为>');
+  const parsed = L.parseKrc(withTrans);
+  assert.equal(parsed.length, 2, '譯文行不能變成要唱的行');
+  assert.equal(parsed[0].text, '無敵');
+  assert.equal(parsed[0].translation, '媒体＜为>');
+  assert.ok(!parsed[1].translation);
+  assert.equal(L.appendTranslationLines(krc, ''), krc);
+  assert.equal(L.appendTranslationLines(krc, null), krc);
+  const source = fs.readFileSync(path.join(__dirname, '../server/services/lyrics-engine.js'), 'utf8');
+  assert.ok(source.includes('trans: 1, trans_t: 0'), 'QQ 逐字請求要一起要翻譯');
+});
+
+test('網易雲同一次搜尋問兩次時，搜尋與逐字查詢不重打網路', () => {
+  // 伺服器端用 node-fetch，要在子程序裡先把它換成假的，才不會真的連外。
+  const os = require('os');
+  const { spawnSync } = require('child_process');
+  const tempData = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-ncm-memo-'));
+  const enginePath = path.join(__dirname, '..', 'server', 'services', 'lyrics-engine.js');
+  const script = `
+    const calls = [];
+    const fakeFetch = async (url) => {
+      url = String(url);
+      calls.push(url.replace(/\\?.*/, ''));
+      const json = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) });
+      if (url.includes('/api/search/get/web')) return json({ result: { songs: [{ id: 42, name: 'Song', artists: [{ name: 'Artist' }], duration: 120000 }] } });
+      if (url.includes('/api/song/lyric/v1')) return json({});
+      if (url.includes('/api/song/lyric?')) return json({ lrc: { lyric: '[00:01.00]line' } });
+      return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+    };
+    require.cache[require.resolve('node-fetch', { paths: [require('path').dirname(process.argv[1])] })] = { exports: fakeFetch, loaded: true };
+    const { LyricsEngine } = require(process.argv[1]);
+    (async () => {
+      const word = await LyricsEngine.searchNetease('Artist', 'Song', 120, { wordOnly: true });
+      const before = calls.length;
+      const full = await LyricsEngine.searchNetease('Artist', 'Song', 120);
+      process.stdout.write('__RESULT__' + JSON.stringify({ word, fullType: full && full.type, first: calls.slice(0, before), second: calls.slice(before) }));
+      process.exit(0);
+    })();
+  `;
+  try {
+    const result = spawnSync(process.execPath, ['-e', script, enginePath], { encoding: 'utf8', env: { ...process.env, ELITESAND_DATA_DIR: tempData }, timeout: 15000 });
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout.split('__RESULT__')[1]);
+    assert.equal(payload.word, null);
+    assert.equal(payload.fullType, 'lrc');
+    assert.ok(payload.first.some((u) => u.includes('/api/search/get/web')) && payload.first.some((u) => u.includes('amll-ttml-db')), '第一次要真的搜尋、問逐字與 AMLL');
+    assert.deepEqual(payload.second, ['https://music.163.com/api/song/lyric'], '第二次只該多打逐句歌詞那一個請求');
+  } finally {
+    fs.rmSync(tempData, { recursive: true });
+  }
+});
