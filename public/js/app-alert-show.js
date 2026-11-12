@@ -87,7 +87,8 @@
 
   function send(partial, done) {
     SocketClient.sendWithCallback('overlay-show:settings:update', partial, (result) => {
-      if (!result?.ok) { toast(result?.error || t('overlayShow.saveFailed'), 'error'); if (settings) render(settings); return; }
+      // 伺服器的 error 是中文（給 log 看），畫面上一律用翻譯過的說明
+      if (!result?.ok) { toast(t('overlayShow.saveFailed'), 'error'); if (settings) render(settings); return; }
       render(result.settings); // 伺服器夾過範圍後的值才是真值
       if (typeof done === 'function') done(result.settings);
     });
@@ -313,7 +314,7 @@
     SocketClient.sendWithCallback('overlay-show:test', {
       kind: 'alert', tier: selected.tier, variant: selected.variant, count: tierMin(selected.tier), name: previewName(),
     }, (result) => {
-      if (!result?.ok) toast(result?.error || t('overlayShow.testFailed'), 'error');
+      if (!result?.ok) toast(t('overlayShow.testFailed'), 'error');
       else toast(t('alertShow.obsTestSent'), 'success');
     });
   }
@@ -556,7 +557,10 @@
       form.append('image', prepared.blob, `${kind}.${prepared.blob.type === 'image/webp' ? 'webp' : 'png'}`);
       const response = await PinAuth.fetchWithPin(`/api/alert-show/character/${kind}`, { method: 'POST', body: form });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.success) throw new Error(result.error || t('alertShow.charUploadFailed'));
+      if (!response.ok || !result.success) {
+        const key = { 'bad-type': 'alertShow.charBadType', 'too-big': 'alertShow.charTooBig', 'too-large': 'alertShow.charTooLarge' }[result.code];
+        throw new Error(t(key || 'alertShow.charUploadFailed'));
+      }
       imageCache.clear();
       const patch = kind === 'girl'
         ? { girl: 'custom', rev: result.rev, face: guessFace(prepared.width, prepared.height) }
@@ -663,7 +667,7 @@
       return result.tier ? t('alertShow.simPlayed', { tier: tierName }) : t('alertShow.simCard');
     }
     const key = { disabled: 'alertShow.simDisabled', 'below-min': 'alertShow.simBelowMin', 'queue-full': 'alertShow.simQueueFull', ignored: 'alertShow.simIgnored' }[result.reason];
-    return key ? t(key) : (result.error || t('overlayShow.testFailed'));
+    return t(key || 'overlayShow.testFailed');
   }
 
   ui.simSend.addEventListener('click', () => {
@@ -744,6 +748,9 @@
   SocketClient.on('connection-change', (connected) => { if (connected) { load(); loadStatus(); } });
   window.addEventListener('i18n:change', () => {
     if (!nameTouched) ui.name.value = t('alertShow.sampleName');
+    // 這兩行是上一次操作留下的說明，換語言後不重畫就會留著舊語言：直接清掉
+    ui.now.textContent = '';
+    ui.simResult.textContent = '';
     if (!modal.hidden) renderTiers();
     renderWaiting();
   });

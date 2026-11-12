@@ -143,6 +143,9 @@ test('all advanced copy resolves in all five locales', () => {
     ...tour.HALLOWEEN_STEPS.flatMap((step) => [step.title, step.body, step.hint]),
     'halloween.tour.complete.kicker', 'halloween.tour.complete.title', 'halloween.tour.complete.body',
     'halloween.tour.replay',
+    ...tour.PUBLIC_REQUEST_STEPS.flatMap((step) => [step.title, step.body, step.hint]),
+    'publicRequest.tour.complete.kicker', 'publicRequest.tour.complete.title', 'publicRequest.tour.complete.body',
+    'publicRequest.tour.replay',
   ]);
   for (const locale of I18n.LOCALES) {
     I18n.setLocale(locale, { persist: false, updateQuery: false });
@@ -152,6 +155,20 @@ test('all advanced copy resolves in all five locales', () => {
       ok(!/\{(?:current|total)\}/.test(rendered), `${locale}:${key} left interpolation tokens behind`);
     });
   }
+});
+
+test('viewer requests page tour: first visit starts it, every target exists, replay button is on the page', () => {
+  const steps = tour.PUBLIC_REQUEST_STEPS;
+  ok(steps.length >= 8, 'Viewer requests tour should cover the request page and the viewer shows');
+  ok(steps.every((step) => step.view === 'public-request'), 'All steps belong to the request page');
+  ok(steps[0].id === 'public-request-intro' && steps[steps.length - 1].id === 'public-request-manage', 'Starts with the request page, ends with the shows window');
+  for (const step of steps) {
+    for (const selector of [step.target, step.fallbackTarget].filter(Boolean)) ok(page.includes(`id="${selector.slice(1)}"`), `Missing ${selector}`);
+  }
+  ok(steps.filter((step) => step.fallbackTarget).every((step) => step.fallbackTarget === '#public-request-status-card'), 'Hidden link area falls back to the whole card');
+  ok(/id="public-request-start-tour"[^>]*data-i18n="publicRequest.tour.replay"/.test(page), 'Replay button missing');
+  ok(/publicRequest: \{ view: 'public-request', replayButton: 'public-request-start-tour'/.test(source), 'Page tour not registered');
+  ok(source.includes("else if (tourKind === 'publicRequest') publicRequestState = state;"), 'Progress must be saved separately');
 });
 
 test('every spotlight selector exists in the panel HTML', () => {

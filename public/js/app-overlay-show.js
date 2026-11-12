@@ -66,7 +66,7 @@
 
   function save() {
     SocketClient.sendWithCallback('overlay-show:settings:update', collect(), (result) => {
-      if (!result?.ok) { toast(result?.error || t('overlayShow.saveFailed'), 'error'); return; }
+      if (!result?.ok) { toast(t('overlayShow.saveFailed'), 'error'); return; } // 伺服器的 error 是中文，畫面上用翻譯過的說明
       render(result.settings); // 伺服器夾過範圍後的值才是真值
     });
   }
@@ -82,7 +82,7 @@
 
   function test(kind) {
     SocketClient.sendWithCallback('overlay-show:test', { kind }, (result) => {
-      if (!result?.ok) toast(result?.error || t('overlayShow.testFailed'), 'error');
+      if (!result?.ok) toast(t('overlayShow.testFailed'), 'error');
     });
   }
   el('overlay-show-test-postcard')?.addEventListener('click', () => test('postcard'));

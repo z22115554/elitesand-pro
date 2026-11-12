@@ -2026,13 +2026,16 @@
 
         <!-- ═══ 視圖：公開點歌頁（觀眾從外網搜尋現有歌單並送出點歌請求）═══ -->
         <div class="view content-col" data-view="public-request">
-          <section class="card" aria-labelledby="public-request-status-title">
+          <section id="public-request-status-card" class="card" aria-labelledby="public-request-status-title">
             <div class="playlist-head">
               <div>
                 <p id="public-request-status-title" class="eyebrow m-0" data-i18n="publicRequest.statusTitle">公開點歌頁</p>
                 <p class="sub" data-i18n="publicRequest.statusHint">開啟後，觀眾可從外網打開分享連結，搜尋你目前公開的歌單並送出點歌；請求會先進下方待核准清單，你按下「加入」才會真的排進播放清單。</p>
               </div>
-              <label class="switch"><input id="public-request-enable-toggle" type="checkbox"><span class="track"></span></label>
+              <div class="public-request-head-actions">
+                <button id="public-request-start-tour" class="btn btn-ghost btn-sm" type="button" data-i18n="publicRequest.tour.replay" disabled>教學</button>
+                <label id="public-request-enable-switch" class="switch"><input id="public-request-enable-toggle" type="checkbox"><span class="track"></span></label>
+              </div>
             </div>
             <div class="twitch-status-chips" role="status" aria-live="polite">
               <span id="public-request-status-connection" class="twitch-status-chip" data-state="muted" data-i18n="publicRequest.statusUnconfigured">尚未啟用</span>
@@ -2053,7 +2056,7 @@
                     <button id="public-request-create-catalog" class="btn btn-sm" type="button" data-i18n="publicRequest.createCatalogFromQueue">用目前播放清單建立公開歌單</button>
                   </div>
                 </div>
-                <div class="field">
+                <div id="public-request-slug-field" class="field">
                   <label for="public-request-custom-slug" data-i18n="publicRequest.customSlugLabel">自訂網址（選填）</label>
                   <div class="public-request-share-input-row">
                     <input id="public-request-custom-slug" class="input" type="text" maxlength="64" data-i18n-placeholder="publicRequest.customSlugPlaceholder" placeholder="例如 my-channel-name" autocomplete="off">
@@ -2076,7 +2079,7 @@
               <button id="overlay-show-skip" class="btn btn-sm btn-ghost" type="button" data-i18n="overlayShow.skip">收掉目前演出</button>
             </div>
 
-            <div class="overlay-show-group">
+            <div id="overlay-show-postcard-group" class="overlay-show-group">
               <div class="overlay-show-group-head">
                 <div>
                   <div class="label" data-i18n="overlayShow.postcardTitle">點歌明信片</div>
@@ -2091,7 +2094,7 @@
               </div>
             </div>
 
-            <div class="overlay-show-group">
+            <div id="overlay-show-raid-group" class="overlay-show-group">
               <div class="overlay-show-group-head">
                 <div>
                   <div class="label" data-i18n="overlayShow.raidTitle">揪團感謝</div>

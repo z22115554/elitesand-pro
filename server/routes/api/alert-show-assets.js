@@ -7,6 +7,7 @@
  *   用檔頭判斷格式，不信任副檔名，也檢查長寬，避免巨圖讓 OBS 解碼卡住。
  * - 這支只負責存檔，回傳 rev（存檔時間）。要不要用自訂圖、臉的位置，由面板透過
  *   overlay-show:settings:update 存進設定（設定以伺服器為準，鐵則 4）。
+ * - 錯誤回應都帶 code，面板照 code 顯示各語言的說明（error 只是給 log 看的中文）。
  */
 'use strict';
 
@@ -70,17 +71,17 @@ function removeCharacter(kind) {
 
 router.post('/alert-show/character/:kind', requirePin, (req, res) => {
   const kind = String(req.params.kind || '');
-  if (!KINDS.includes(kind)) return res.status(400).json({ error: '不認得的圖片種類' });
+  if (!KINDS.includes(kind)) return res.status(400).json({ error: '不認得的圖片種類', code: 'bad-kind' });
   upload.single('image')(req, res, (uploadErr) => {
     if (uploadErr) {
       const tooBig = uploadErr.code === 'LIMIT_FILE_SIZE';
-      return res.status(tooBig ? 413 : 400).json({ error: tooBig ? '圖片太大（上限 12MB）' : '圖片上傳失敗' });
+      return res.status(tooBig ? 413 : 400).json({ error: tooBig ? '圖片太大（上限 12MB）' : '圖片上傳失敗', code: tooBig ? 'too-big' : 'upload-failed' });
     }
-    if (!req.file || !req.file.buffer) return res.status(400).json({ error: '未收到圖片檔案' });
+    if (!req.file || !req.file.buffer) return res.status(400).json({ error: '未收到圖片檔案', code: 'no-file' });
     const info = sniffImage(req.file.buffer);
-    if (!info) return res.status(400).json({ error: '只支援去背的 PNG 或 WebP 圖片' });
+    if (!info) return res.status(400).json({ error: '只支援去背的 PNG 或 WebP 圖片', code: 'bad-type' });
     if (!info.width || !info.height || info.width > MAX_SIDE || info.height > MAX_SIDE) {
-      return res.status(400).json({ error: `圖片長寬要在 ${MAX_SIDE} 像素以內` });
+      return res.status(400).json({ error: `圖片長寬要在 ${MAX_SIDE} 像素以內`, code: 'too-large' });
     }
     try {
       fs.mkdirSync(CHARACTER_DIR, { recursive: true });
@@ -94,14 +95,14 @@ router.post('/alert-show/character/:kind', requirePin, (req, res) => {
       res.json({ success: true, kind, rev: Date.now(), width: info.width, height: info.height });
     } catch (err) {
       log.error('角色圖存檔失敗', err);
-      res.status(500).json({ error: '角色圖存檔失敗' });
+      res.status(500).json({ error: '角色圖存檔失敗', code: 'save-failed' });
     }
   });
 });
 
 router.delete('/alert-show/character/:kind', requirePin, (req, res) => {
   const kind = String(req.params.kind || '');
-  if (!KINDS.includes(kind)) return res.status(400).json({ error: '不認得的圖片種類' });
+  if (!KINDS.includes(kind)) return res.status(400).json({ error: '不認得的圖片種類', code: 'bad-kind' });
   removeCharacter(kind);
   res.json({ success: true, kind });
 });

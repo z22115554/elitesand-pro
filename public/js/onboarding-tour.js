@@ -13,6 +13,7 @@
   const ADVANCED_LIVE_STORAGE_KEY = 'elite-advanced-live-tour-v1';
   const HALLOWEEN_STORAGE_KEY = 'elite-halloween-tour-2026-v1';
   const PRACTICE_STORAGE_KEY = 'elite-practice-tour-v1';
+  const PUBLIC_REQUEST_STORAGE_KEY = 'elite-public-request-tour-v1';
   // 舊版導覽的完成／延後紀錄：刻意不再讀取，留著是為了標明「這些 key 已經不會擋住新使用者」
   // （tests/onboarding-tour.test.js 會檢查它們仍列在這裡）。
   const LEGACY_COMPLETE_KEYS = ['elite-guide-completed-v2', 'elite-guide-completed-v1']; // eslint-disable-line no-unused-vars
@@ -306,6 +307,25 @@
     cardInside: id === 'stage',
     title: `practice.tour.${id}.title`, body: `practice.tour.${id}.body`, hint: 'practice.tour.hint',
   }));
+  // 觀眾點歌分頁：先介紹點歌頁（開關、連結、自訂網址），再介紹觀眾演出（明信片、揪團、訂閱與贈訂演出）。
+  // 連結那一區要開啟點歌頁後才會出現：還沒開的人退回整張點歌頁卡片，文字裡也有說明。
+  const PUBLIC_REQUEST_STEPS = [
+    ['intro', '#public-request-status-card'],
+    ['toggle', '#public-request-enable-switch'],
+    ['link', '#public-request-share-row', '#public-request-status-card'],
+    ['slug', '#public-request-slug-field', '#public-request-status-card'],
+    ['overlay', '#overlay-show-card'],
+    ['postcard', '#overlay-show-postcard-group'],
+    ['raid', '#overlay-show-raid-group'],
+    ['alerts', '#alert-show-group'],
+    ['manage', '#alert-show-open'],
+  ].map(([id, target, fallbackTarget]) => ({
+    id: `public-request-${id}`, view: 'public-request', target,
+    ...(fallbackTarget ? { fallbackTarget } : {}),
+    // 觀眾演出卡片很高，外面常放不下導覽卡：允許放進卡片裡
+    cardInside: id === 'overlay',
+    title: `publicRequest.tour.${id}.title`, body: `publicRequest.tour.${id}.body`, hint: 'publicRequest.tour.hint',
+  }));
   const ADVANCED_STEPS = [...ADVANCED_LYRICS_STEPS, ...ADVANCED_OBS_STEPS, ...ADVANCED_LIVE_STEPS];
 
   const dom = {};
@@ -315,6 +335,7 @@
   let advancedLiveState = loadAdvancedLiveState();
   let halloweenState = loadStoredState(HALLOWEEN_STORAGE_KEY, 1, HALLOWEEN_STEPS);
   let practiceState = loadStoredState(PRACTICE_STORAGE_KEY, 1, PRACTICE_STEPS);
+  let publicRequestState = loadStoredState(PUBLIC_REQUEST_STORAGE_KEY, 1, PUBLIC_REQUEST_STEPS);
   let state = basicState;
   let tourKind = 'basic';
   let activeTarget = null;
@@ -389,12 +410,14 @@
     live: { steps: ADVANCED_LIVE_STEPS, storageKey: ADVANCED_LIVE_STORAGE_KEY },
     halloween: { steps: HALLOWEEN_STEPS, storageKey: HALLOWEEN_STORAGE_KEY, version: 1 },
     practice: { steps: PRACTICE_STEPS, storageKey: PRACTICE_STORAGE_KEY, version: 1 },
+    publicRequest: { steps: PUBLIC_REQUEST_STEPS, storageKey: PUBLIC_REQUEST_STORAGE_KEY, version: 1 },
   };
   // 頁面教學：第一次點進那一頁才自動開始，頁上的「重新看教學」可以再看；完成畫面用 <kind>.tour.complete.*。
   // 之後別的頁面要加，只要在這裡加一筆、在 ADVANCED_KINDS 登記步驟、補翻譯即可。
   const PAGE_TOURS = {
     halloween: { view: 'halloween', replayButton: 'halloween-start-tour', getState: () => halloweenState },
     practice: { view: 'practice', replayButton: 'practice-start-tour', getState: () => practiceState },
+    publicRequest: { view: 'public-request', replayButton: 'public-request-start-tour', getState: () => publicRequestState },
   };
 
   function saveState() {
@@ -404,6 +427,7 @@
     else if (tourKind === 'live') advancedLiveState = state;
     else if (tourKind === 'halloween') halloweenState = state;
     else if (tourKind === 'practice') practiceState = state;
+    else if (tourKind === 'publicRequest') publicRequestState = state;
     else basicState = state;
     const key = ADVANCED_KINDS[tourKind]?.storageKey || STORAGE_KEY;
     try { root.localStorage.setItem(key, JSON.stringify(state)); } catch (_) { /* device-local best effort */ }
@@ -1505,6 +1529,7 @@
       ADVANCED_LIVE_STEPS: ADVANCED_LIVE_STEPS.map((step) => ({ ...step })),
       ADVANCED_STEPS: ADVANCED_STEPS.map((step) => ({ ...step })),
       HALLOWEEN_STEPS: HALLOWEEN_STEPS.map((step) => ({ ...step })),
+      PUBLIC_REQUEST_STEPS: PUBLIC_REQUEST_STEPS.map((step) => ({ ...step })),
       clamp,
       clampStep,
       isViewportSafe,

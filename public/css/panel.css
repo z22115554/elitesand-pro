@@ -1195,6 +1195,9 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .overlay-show-group .switch-row { margin-top: 8px; }
 .overlay-show-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 4px 12px; margin-top: 8px; }
 .overlay-show-grid .field { margin-bottom: 0; }
+#overlay-show-raid-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 560px) { #overlay-show-raid-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.public-request-head-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 /* 訂閱與贈訂演出：卡片上只放開關與音量；門檻和每一種演出收在「演出與門檻」視窗 */
 .alert-show-label { display: inline-flex; align-items: center; }
 .alert-show-volume { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
