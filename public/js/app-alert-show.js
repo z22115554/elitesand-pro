@@ -50,6 +50,24 @@
     mascotCanvas: el('alert-show-mascot-canvas'),
     mascotUpload: el('alert-show-mascot-upload'),
     file: el('alert-show-file'),
+    timing: el('alert-show-timing'),
+    singing: el('alert-show-singing'),
+    pauseDelay: el('alert-show-pause-delay'),
+    pauseDelayValue: el('alert-show-pause-delay-value'),
+    endDelay: el('alert-show-end-delay'),
+    endDelayValue: el('alert-show-end-delay-value'),
+    bgm: el('alert-show-bgm'),
+    bgmDuck: el('alert-show-bgm-duck'),
+    bgmDuckValue: el('alert-show-bgm-duck-value'),
+    simType: el('alert-show-sim-type'),
+    simCount: el('alert-show-sim-count'),
+    simUnit: el('alert-show-sim-unit'),
+    simSend: el('alert-show-sim-send'),
+    simResult: el('alert-show-sim-result'),
+    waiting: el('alert-show-waiting'),
+    waitingText: el('alert-show-waiting-text'),
+    release: el('alert-show-release'),
+    clearWaiting: el('alert-show-clear-waiting'),
   };
 
   let catalog = null;
@@ -144,12 +162,14 @@
       button.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     const isCharacter = activeGroup === 'character';
-    ui.tiers.hidden = isCharacter;
+    const isTiming = activeGroup === 'timing';
+    ui.tiers.hidden = isCharacter || isTiming;
     ui.character.hidden = !isCharacter;
-    if (isCharacter) {
+    ui.timing.hidden = !isTiming;
+    if (isCharacter || isTiming) {
       ui.presets.hidden = true;
       ui.note.hidden = true;
-      renderCharacter();
+      if (isCharacter) renderCharacter(); else renderTiming();
       return;
     }
     ui.presets.hidden = activeGroup === 'sub';
@@ -582,6 +602,115 @@
     else pickFile('mascot');
   });
 
+  // ─── 時機（唱歌時要不要等）、BGM、模擬 Twitch 事件 ───
+
+  function timing() {
+    return settings?.alerts?.timing || { singing: 'wait', pauseDelaySec: 3, endDelaySec: 5, bgm: 'duck', bgmDuck: 25 };
+  }
+
+  function setSegment(group, attr, value) {
+    group.querySelectorAll(`button[data-${attr}]`).forEach((button) => {
+      const on = button.dataset[attr] === value;
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+  }
+
+  function renderTiming() {
+    const tm = timing();
+    setSegment(ui.singing, 'singing', tm.singing);
+    setSegment(ui.bgm, 'bgm', tm.bgm);
+    ui.timing.querySelector('[data-singing-wait-only]').hidden = tm.singing !== 'wait';
+    ui.timing.querySelector('[data-bgm-duck-only]').hidden = tm.bgm !== 'duck';
+    if (document.activeElement !== ui.pauseDelay) ui.pauseDelay.value = String(tm.pauseDelaySec);
+    if (document.activeElement !== ui.endDelay) ui.endDelay.value = String(tm.endDelaySec);
+    if (document.activeElement !== ui.bgmDuck) ui.bgmDuck.value = String(tm.bgmDuck);
+    ui.pauseDelayValue.textContent = t('alertShow.delaySeconds', { n: ui.pauseDelay.value });
+    ui.endDelayValue.textContent = t('alertShow.delaySeconds', { n: ui.endDelay.value });
+    ui.bgmDuckValue.textContent = `${ui.bgmDuck.value}%`;
+    renderSimUnit();
+  }
+
+  function renderSimUnit() {
+    const type = ui.simType.value;
+    const counted = type === 'gift' || type === 'gift-anon' || type === 'raid';
+    ui.simCount.closest('[data-sim-count]').hidden = !counted;
+    ui.simUnit.textContent = t(type === 'raid' ? 'alertShow.unitRaid' : 'alertShow.unitGift');
+  }
+
+  ui.singing.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-singing]');
+    if (button) send({ alerts: { timing: { singing: button.dataset.singing } } });
+  });
+  ui.bgm.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-bgm]');
+    if (button) send({ alerts: { timing: { bgm: button.dataset.bgm } } });
+  });
+  [[ui.pauseDelay, 'pauseDelaySec'], [ui.endDelay, 'endDelaySec'], [ui.bgmDuck, 'bgmDuck']].forEach(([input, key]) => {
+    input.addEventListener('input', () => {
+      ui.pauseDelayValue.textContent = t('alertShow.delaySeconds', { n: ui.pauseDelay.value });
+      ui.endDelayValue.textContent = t('alertShow.delaySeconds', { n: ui.endDelay.value });
+      ui.bgmDuckValue.textContent = `${ui.bgmDuck.value}%`;
+    });
+    input.addEventListener('change', () => send({ alerts: { timing: { [key]: Number(input.value) } } }));
+  });
+  ui.simType.addEventListener('change', renderSimUnit);
+
+  function simMessage(result) {
+    const tierName = result.tier ? t(`alertShow.tier.${result.tier}`) : '';
+    if (result.ok) {
+      if (result.waiting) return t('alertShow.simWaiting', { tier: tierName || t('overlayShow.raidTitle') });
+      return result.tier ? t('alertShow.simPlayed', { tier: tierName }) : t('alertShow.simCard');
+    }
+    const key = { disabled: 'alertShow.simDisabled', 'below-min': 'alertShow.simBelowMin', 'queue-full': 'alertShow.simQueueFull', ignored: 'alertShow.simIgnored' }[result.reason];
+    return key ? t(key) : (result.error || t('overlayShow.testFailed'));
+  }
+
+  ui.simSend.addEventListener('click', () => {
+    const name = (ui.name.value || '').trim() || t('alertShow.sampleName');
+    ui.simSend.disabled = true;
+    SocketClient.sendWithCallback('overlay-show:simulate', { type: ui.simType.value, count: Number(ui.simCount.value) || 1, name }, (result) => {
+      ui.simSend.disabled = false;
+      ui.simResult.textContent = simMessage(result || {});
+    });
+  });
+
+  // ─── 卡片上的「等待中」：唱歌時進來的演出 ───
+  let waitStatus = { waiting: 0, releaseAt: null, songPlaying: false };
+  let waitTick = 0;
+  let statusOffset = 0; // 伺服器時鐘跟面板時鐘的差（倒數用）
+
+  function renderWaiting() {
+    const n = waitStatus.waiting || 0;
+    ui.waiting.hidden = n === 0;
+    clearInterval(waitTick);
+    if (!n) return;
+    const draw = () => {
+      const left = waitStatus.releaseAt ? Math.max(0, Math.ceil((waitStatus.releaseAt - (Date.now() + statusOffset)) / 1000)) : null;
+      ui.waitingText.textContent = waitStatus.songPlaying
+        ? t('alertShow.waitingSinging', { n })
+        : (left != null ? t('alertShow.waitingCountdown', { n, s: left }) : t('alertShow.waitingIdle', { n }));
+    };
+    draw();
+    if (waitStatus.releaseAt) waitTick = setInterval(draw, 500);
+  }
+
+  function applyStatus(next) {
+    if (!next || typeof next !== 'object') return;
+    if (typeof next.serverNow === 'number') statusOffset = next.serverNow - Date.now();
+    const grew = (next.waiting || 0) > (waitStatus.waiting || 0) && next.songPlaying;
+    waitStatus = { waiting: next.waiting || 0, releaseAt: next.releaseAt || null, songPlaying: !!next.songPlaying };
+    renderWaiting();
+    if (grew) toast(t('alertShow.waitingToast'));
+  }
+
+  ui.release.addEventListener('click', () => SocketClient.sendWithCallback('overlay-show:waiting:release', {}, () => {}));
+  ui.clearWaiting.addEventListener('click', () => SocketClient.sendWithCallback('overlay-show:waiting:clear', {}, () => {}));
+  SocketClient.on('overlay-show:status', (next) => applyStatus(next));
+  function loadStatus() {
+    SocketClient.sendWithCallback('overlay-show:status:get', {}, (result) => { if (result?.ok) applyStatus(result.status); });
+  }
+
   function close() {
     if (modal.hidden) return;
     modal.hidden = true;
@@ -612,10 +741,12 @@
   ui.obsTest.addEventListener('click', testOnObs);
 
   SocketClient.on('overlay-show:settings', render);
-  SocketClient.on('connection-change', (connected) => { if (connected) load(); });
+  SocketClient.on('connection-change', (connected) => { if (connected) { load(); loadStatus(); } });
   window.addEventListener('i18n:change', () => {
     if (!nameTouched) ui.name.value = t('alertShow.sampleName');
     if (!modal.hidden) renderTiers();
+    renderWaiting();
   });
   load();
+  loadStatus();
 })();

@@ -13,6 +13,9 @@
  * - 訂閱／贈訂／揪團的「全畫面演出」（kind: alert）走同一條佇列：伺服器只決定演哪一級、哪一種、
  *   演多久，畫面由 /display 內嵌的 /alert-show/stage.html 畫。演出清單與秒數讀
  *   public/alert-show/catalog.json（tools/alert-show/build.js 產生），不必載入引擎。
+ * - 唱歌時收到的演出（全畫面演出、揪團小卡）預設先排進「等待中」，歌曲暫停或唱完、
+ *   再等設定的秒數才演（跟 BGM 的兩個恢復延遲同一套概念）。點歌明信片跟著歌走，不受影響。
+ *   試播不等，模擬 Twitch 事件照真實規則等。
  */
 
 const path = require('path');
@@ -44,6 +47,7 @@ const DEFAULTS = Object.freeze({
     raidMin: Object.freeze({ r2: CATALOG.raidMin.r2, r3: CATALOG.raidMin.r3, r4: CATALOG.raidMin.r4 }),
     off: Object.freeze([]),
     character: Object.freeze({ girl: 'default', mascot: 'default', face: Object.freeze({ x: 0.49, y: 0.15, s: 0.12 }), rev: 0 }),
+    timing: Object.freeze({ singing: 'wait', pauseDelaySec: 3, endDelaySec: 5, bgm: 'duck', bgmDuck: 25 }),
   }),
   postcard: Object.freeze({ durationSec: 10, style: 'paper', anchor: 'top-right' }),
 });
@@ -61,6 +65,7 @@ const LIMITS = Object.freeze({
 });
 
 const MAX_QUEUE = 6;
+const MAX_WAITING = 30; // 唱歌時累積的演出上限（一首歌五分鐘內很難超過）
 const MAX_ARMED_POSTCARDS = 100;
 const MAX_SEEN_EVENTS = 200;
 const TEXT_LIMITS = Object.freeze({ title: 120, artist: 80, name: 40, message: 140, channel: 40 });
@@ -111,6 +116,22 @@ function normalizeOff(input, current) {
   return [...seen].sort();
 }
 
+const SINGING_MODES = Object.freeze(['wait', 'now']);
+const BGM_MODES = Object.freeze(['duck', 'pause', 'none']);
+
+/** 唱歌時的演出時機，以及演出時 BGM 怎麼讓路。 */
+function normalizeTiming(input, current) {
+  const src = input && typeof input === 'object' ? input : {};
+  const cur = current && typeof current === 'object' ? current : DEFAULTS.alerts.timing;
+  return {
+    singing: SINGING_MODES.includes(src.singing) ? src.singing : (SINGING_MODES.includes(cur.singing) ? cur.singing : 'wait'),
+    pauseDelaySec: clampInt(src.pauseDelaySec, cur.pauseDelaySec ?? 3, 0, 30),
+    endDelaySec: clampInt(src.endDelaySec, cur.endDelaySec ?? 5, 0, 60),
+    bgm: BGM_MODES.includes(src.bgm) ? src.bgm : (BGM_MODES.includes(cur.bgm) ? cur.bgm : 'duck'),
+    bgmDuck: clampInt(src.bgmDuck, cur.bgmDuck ?? 25, 0, 90),
+  };
+}
+
 const GIRL_MODES = Object.freeze(['default', 'custom']);
 const MASCOT_MODES = Object.freeze(['default', 'custom', 'none']);
 
@@ -151,6 +172,7 @@ function normalizeAlerts(input, current) {
     raidMin: normalizeSteps(src.raidMin, current.raidMin, RAID_STEPS, 2),
     off: normalizeOff(src.off, current.off),
     character: normalizeCharacter(src.character, current.character),
+    timing: normalizeTiming(src.timing, current.timing),
   };
 }
 
@@ -222,6 +244,10 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
   const shownEntries = new Set(); // 已演過的 entryId，避免暫停再播又演一次
   const seenEvents = [];
   const lastVariant = new Map(); // 等級 -> 上一次演的第幾種（同一級不連續重複）
+  const waiting = [];            // 唱歌中先擱著的演出（還沒進佇列）
+  let songPlaying = false;
+  let releaseTimer = null;
+  let releaseAt = 0;
 
   function nextId() { seq += 1; return `show-${now().toString(36)}-${seq}`; }
 
@@ -242,6 +268,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
         raidMin: { ...settings.alerts.raidMin },
         off: [...settings.alerts.off],
         character: { ...settings.alerts.character, face: { ...settings.alerts.character.face } },
+        timing: { ...settings.alerts.timing },
       },
     };
   }
@@ -249,7 +276,77 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
   function updateSettings(partial) {
     settings = normalizeSettings(partial, settings);
     persist();
+    if (settings.alerts.timing.singing === 'now' && waiting.length) releaseWaiting(); // 改成「馬上演」：等待中的也不用再等
     return getSettings();
+  }
+
+  // ─── 唱歌時先等一下 ───
+
+  /** 會被「唱歌中」擋住的種類：全畫面演出與揪團小卡。明信片跟著歌走，不擋。 */
+  function holdsForSong(show) {
+    return show.kind !== KIND_POSTCARD && !show.bypassWait;
+  }
+
+  function status() {
+    return { waiting: waiting.length, releaseAt: releaseAt || null, songPlaying, serverNow: now() };
+  }
+
+  function emitStatus() {
+    send('overlay-show:status', status());
+  }
+
+  function clearReleaseTimer() {
+    if (releaseTimer) { timers.clearTimeout(releaseTimer); releaseTimer = null; }
+    releaseAt = 0;
+  }
+
+  /** 等待中的全部移進佇列，一個接一個演。 */
+  function releaseWaiting() {
+    clearReleaseTimer();
+    if (waiting.length) {
+      queue.push(...waiting.splice(0));
+      playNext();
+    }
+    emitStatus();
+    return true;
+  }
+
+  function clearWaiting() {
+    clearReleaseTimer();
+    waiting.length = 0;
+    emitStatus();
+    return true;
+  }
+
+  /**
+   * 歌曲狀態（由播放 handler 呼叫）。playing=true：開始唱；false 時 reason 是 'pause'（暫停）或 'end'（唱完、停止、換歌待命）。
+   * 開始唱的那一刻，佇列裡還沒開演的全畫面演出也退回等待（正在演的那一個讓它演完）。
+   */
+  function setSongState(playing, reason = 'end') {
+    const next = !!playing;
+    if (next) {
+      clearReleaseTimer();
+      if (settings.alerts.timing.singing === 'wait') {
+        const held = [];
+        for (let i = queue.length - 1; i >= 0; i -= 1) {
+          if (holdsForSong(queue[i])) held.unshift(queue.splice(i, 1)[0]);
+        }
+        if (held.length) waiting.unshift(...held);
+      }
+      songPlaying = true;
+      emitStatus();
+      return;
+    }
+    const changed = songPlaying;
+    songPlaying = false;
+    if (waiting.length && (changed || !releaseTimer)) {
+      clearReleaseTimer();
+      const sec = reason === 'pause' ? settings.alerts.timing.pauseDelaySec : settings.alerts.timing.endDelaySec;
+      releaseAt = now() + sec * 1000;
+      releaseTimer = timers.setTimeout(() => { releaseTimer = null; releaseAt = 0; releaseWaiting(); }, sec * 1000);
+      if (releaseTimer && typeof releaseTimer.unref === 'function') releaseTimer.unref();
+    }
+    emitStatus();
   }
 
   function finishActive() {
@@ -277,11 +374,22 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
   }
 
   function enqueue(show) {
+    if (songPlaying && settings.alerts.timing.singing === 'wait' && holdsForSong(show)) {
+      if (waiting.length >= MAX_WAITING) return null;
+      const held = { id: nextId(), ...show };
+      waiting.push(held);
+      emitStatus();
+      return held.id;
+    }
     if (queue.length >= MAX_QUEUE) return null;
     const full = { id: nextId(), ...show };
     queue.push(full);
     playNext();
     return full.id;
+  }
+
+  function isWaiting(id) {
+    return waiting.some((show) => show.id === id);
   }
 
   function rememberEvent(eventId) {
@@ -306,12 +414,13 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     return pick;
   }
 
-  function enqueueAlert(tierId, { variant = null, count = 0, name = '' } = {}) {
+  function enqueueAlert(tierId, { variant = null, count = 0, name = '', bypassWait = false } = {}) {
     const tier = TIER_BY_ID.get(tierId);
     if (!tier) return null;
     const index = Number.isInteger(variant) && tier.variants[variant] ? variant : pickVariant(tierId);
     return enqueue({
       kind: KIND_ALERT,
+      bypassWait,
       durationMs: Math.round(tier.variants[index].dur * 1000),
       payload: {
         tier: tierId,
@@ -335,11 +444,11 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
       const total = Math.max(1, Math.floor(Number(count) || 1));
       const tierId = tierForCount(total, 'g1', GIFT_STEPS, settings.alerts.giftMin);
       const id = enqueueAlert(tierId, { count: total, name });
-      return id ? { ok: true, id, tier: tierId } : { ok: false, reason: 'queue-full' };
+      return id ? { ok: true, id, tier: tierId, waiting: isWaiting(id) } : { ok: false, reason: 'queue-full' };
     }
     if (!settings.alerts.subEnabled) return { ok: false, reason: 'disabled' };
     const id = enqueueAlert('sub', { name });
-    return id ? { ok: true, id, tier: 'sub' } : { ok: false, reason: 'queue-full' };
+    return id ? { ok: true, id, tier: 'sub', waiting: isWaiting(id) } : { ok: false, reason: 'queue-full' };
   }
 
   // ─── 揪團感謝 ───
@@ -354,14 +463,14 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     if (settings.raid.mode === 'show') {
       const tierId = tierForCount(count, 'r1', RAID_STEPS, settings.alerts.raidMin);
       const showId = enqueueAlert(tierId, { count: Math.max(1, count), name });
-      return showId ? { ok: true, id: showId, tier: tierId } : { ok: false, reason: 'queue-full' };
+      return showId ? { ok: true, id: showId, tier: tierId, waiting: isWaiting(showId) } : { ok: false, reason: 'queue-full' };
     }
     const id = enqueue({
       kind: KIND_RAID,
       durationMs: settings.raid.durationSec * 1000,
       payload: { name, viewers: count, style: settings.raid.style },
     });
-    return id ? { ok: true, id } : { ok: false, reason: 'queue-full' };
+    return id ? { ok: true, id, waiting: isWaiting(id) } : { ok: false, reason: 'queue-full' };
   }
 
   // ─── 點歌明信片 ───
@@ -428,7 +537,10 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
 
   function clearAll() {
     queue.length = 0;
+    waiting.length = 0;
+    clearReleaseTimer();
     finishActive();
+    emitStatus();
   }
 
   /** 測試演出：不看啟用開關、不看人數門檻，也不進去重表。 */
@@ -441,6 +553,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
         : (tier.group === 'raid' ? (tier.id === 'r1' ? Math.max(1, settings.raid.minViewers) : settings.alerts.raidMin[tier.id]) : 0);
       const variant = Number(options.variant);
       return enqueueAlert(tier.id, {
+        bypassWait: true, // 試播是主播自己按的，馬上演
         variant: Number.isInteger(variant) ? variant : null,
         count: clampInt(options.count, fallback, 1, LIMITS.alertCountMax),
         name: options.name == null || options.name === '' ? 'SampleViewer' : options.name,
@@ -449,9 +562,9 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     if (kind === KIND_RAID) {
       if (settings.raid.mode === 'show') {
         const tierId = tierForCount(23, 'r1', RAID_STEPS, settings.alerts.raidMin);
-        return enqueueAlert(tierId, { count: 23, name: 'SampleChannel' });
+        return enqueueAlert(tierId, { count: 23, name: 'SampleChannel', bypassWait: true });
       }
-      return enqueue({ kind: KIND_RAID, durationMs: settings.raid.durationSec * 1000, payload: { name: 'SampleChannel', viewers: 23, style: settings.raid.style } });
+      return enqueue({ kind: KIND_RAID, bypassWait: true, durationMs: settings.raid.durationSec * 1000, payload: { name: 'SampleChannel', viewers: 23, style: settings.raid.style } });
     }
     if (kind === KIND_POSTCARD) {
       return enqueue({
@@ -464,18 +577,19 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
   }
 
   function snapshot() {
-    return { active: active ? { id: active.id, kind: active.kind } : null, queued: queue.length, armed: armed.size };
+    return { active: active ? { id: active.id, kind: active.kind } : null, queued: queue.length, armed: armed.size, waiting: waiting.length, songPlaying };
   }
 
   return {
     getSettings, updateSettings,
     handleRaid, handleSupport, armPostcard, dropPostcard, onTrackChanged, onTrackPlaying,
     skip, clearAll, test, snapshot,
+    setSongState, releaseWaiting, clearWaiting, status,
   };
 }
 
 module.exports = {
   createOverlayShow, normalizeSettings, cleanText,
   DEFAULTS, LIMITS, ANCHORS, RAID_STYLES, RAID_MODES, POSTCARD_STYLES, KIND_POSTCARD, KIND_RAID, KIND_ALERT, MAX_QUEUE,
-  CATALOG, GIFT_STEPS, RAID_STEPS, tierForCount,
+  CATALOG, GIFT_STEPS, RAID_STEPS, tierForCount, MAX_WAITING,
 };

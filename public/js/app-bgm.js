@@ -34,6 +34,11 @@
   let volume = 70;               // 0-100
   let pauseResumeDelayMs = 3000;
   let endResumeDelayMs = 5000;
+  // 觀眾演出時 BGM 讓路（設定與狀態；邏輯在下面「觀眾演出」那一段）
+  let alertTiming = { bgm: 'duck', bgmDuck: 25 };
+  let alertActive = '';
+  let pausedForAlert = false;
+  let alertSafetyTimer = null;
 
   const audioEl = document.createElement('audio');
   audioEl.id = 'bgm-audio-player';
@@ -41,7 +46,7 @@
   audioEl.style.display = 'none';
   document.body.appendChild(audioEl);
 
-  let actx = null, sourceNode = null, trackGainNode = null, volumeGainNode = null, fadeGainNode = null;
+  let actx = null, sourceNode = null, trackGainNode = null, volumeGainNode = null, fadeGainNode = null, duckGainNode = null;
   function ensureAudioGraph() {
     if (actx) return;
     const Ctor = window.AudioContext || window.webkitAudioContext;
@@ -53,10 +58,13 @@
     volumeGainNode.gain.value = volume / 100;
     fadeGainNode = actx.createGain();   // 淡入/淡出的音量包絡
     fadeGainNode.gain.value = 0;
+    duckGainNode = actx.createGain();   // 觀眾演出時把 BGM 壓低（跟淡入淡出分開，兩者互不干擾）
+    duckGainNode.gain.value = 1;
     sourceNode.connect(trackGainNode);
     trackGainNode.connect(volumeGainNode);
     volumeGainNode.connect(fadeGainNode);
-    fadeGainNode.connect(actx.destination);
+    fadeGainNode.connect(duckGainNode);
+    duckGainNode.connect(actx.destination);
   }
 
   const FADE_SECONDS = 0.25; // 人耳可接受、不會喀一聲，也不會拖太久顯得反應遲鈍
@@ -108,6 +116,7 @@
   function startPlayback() {
     clearPendingResume();
     if (!enabled || !tracks.length || songIsPlaying) return;
+    if (alertActive && alertTiming.bgm === 'pause') { pausedForAlert = true; return; } // 演出結束後再接回來
     ensureAudioGraph();
     if (currentIndex === -1 || !audioEl.src) loadTrack(0, false);
     audioEl.play().then(() => {
@@ -135,6 +144,54 @@
     if (!tracks.length) return;
     const next = (currentIndex + 1) % tracks.length;
     loadTrack(next, true);
+  });
+
+  // ─── 觀眾演出（訂閱／贈訂／揪團）時 BGM 讓路 ───
+  // 設定在觀眾演出的「時機與測試」：duck＝壓低音量、pause＝暫停、none＝不動。演出結束（overlay-show:clear）
+  // 就恢復；保底計時器確保斷線收不到 clear 時也會恢復，不會讓 BGM 一直卡在小聲或暫停。
+
+  function rampDuck(target, seconds) {
+    if (!duckGainNode || !actx) return;
+    const now = actx.currentTime;
+    duckGainNode.gain.cancelScheduledValues(now);
+    duckGainNode.gain.setValueAtTime(duckGainNode.gain.value, now);
+    duckGainNode.gain.linearRampToValueAtTime(target, now + seconds);
+  }
+
+  function onAlertStart(message) {
+    if (!message || (message.kind !== 'alert' && message.kind !== 'raid')) return;
+    alertActive = String(message.id || 'alert');
+    clearTimeout(alertSafetyTimer);
+    alertSafetyTimer = setTimeout(() => onAlertEnd({ id: alertActive }), Math.max(3000, Number(message.durationMs) || 8000) + 3000);
+    if (alertTiming.bgm === 'duck') rampDuck(alertTiming.bgmDuck / 100, 0.3);
+    else if (alertTiming.bgm === 'pause' && localPlaying) { pausedForAlert = true; pausePlayback(); }
+  }
+
+  function onAlertEnd(message) {
+    if (!alertActive) return;
+    if (message && message.id && message.id !== alertActive) return; // 別的演出的收場，不是這一個
+    alertActive = '';
+    clearTimeout(alertSafetyTimer);
+    rampDuck(1, 0.8);
+    if (pausedForAlert) {
+      pausedForAlert = false;
+      // 下一個演出常常緊接著開始：稍等一下，真的沒有演出了才接回 BGM
+      setTimeout(() => { if (!alertActive && !manualPause && !songIsPlaying) startPlayback(); }, 700);
+    }
+  }
+
+  function applyAlertTiming(settings) {
+    const tm = settings && settings.alerts && settings.alerts.timing;
+    if (!tm) return;
+    alertTiming = { bgm: tm.bgm === 'pause' || tm.bgm === 'none' ? tm.bgm : 'duck', bgmDuck: Math.max(0, Math.min(90, Number(tm.bgmDuck) || 0)) };
+  }
+
+  SocketClient.on('overlay-show:play', onAlertStart);
+  SocketClient.on('overlay-show:clear', onAlertEnd);
+  SocketClient.on('overlay-show:settings', applyAlertTiming);
+  SocketClient.on('connection-change', (connected) => {
+    if (connected) SocketClient.sendWithCallback('overlay-show:settings:get', {}, (result) => { if (result?.ok) applyAlertTiming(result.settings); });
+    else if (alertActive) onAlertEnd({ id: alertActive });
   });
 
   /** 由 app-playback.js 呼叫：isSongPlaying=true 表示正在唱歌，BGM 該讓路；
@@ -376,5 +433,9 @@
   if (document.readyState !== 'loading') wireUi();
   window.addEventListener('i18n:change', () => { renderStatus(); renderTrackList(); renderSettingsUi(); });
 
-  window.AppBgm = { syncWithPlayback };
+  window.AppBgm = {
+    syncWithPlayback,
+    // 只讀：給自動化測試確認「演出時 BGM 讓路」有生效
+    alertDebug: () => ({ alertActive, pausedForAlert, localPlaying, duck: duckGainNode ? duckGainNode.gain.value : null, timing: { ...alertTiming } }),
+  };
 })();

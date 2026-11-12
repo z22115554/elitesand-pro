@@ -51,6 +51,7 @@
               <button type="button" role="tab" data-group="gift" data-i18n="alertShow.tabGift">贈送訂閱</button>
               <button type="button" role="tab" data-group="raid" data-i18n="alertShow.tabRaid">揪團</button>
               <button type="button" role="tab" data-group="character" data-i18n="alertShow.tabCharacter">角色</button>
+              <button type="button" role="tab" data-group="timing" data-i18n="alertShow.tabTiming">時機與測試</button>
             </div>
             <div id="alert-show-presets" class="alert-show-presets">
               <span class="alert-show-presets-label" data-i18n="alertShow.presets">門檻</span>
@@ -100,6 +101,54 @@
               </div>
             </section>
             <input id="alert-show-file" type="file" accept="image/png,image/webp" hidden>
+          </div>
+          <div id="alert-show-timing" class="alert-show-tiers alert-show-timing" hidden>
+            <section class="alert-tier">
+              <div class="alert-tier-head">
+                <div class="alert-tier-title"><span class="alert-tier-name" data-i18n="alertShow.singingTitle">唱歌時收到演出</span></div>
+                <div id="alert-show-singing" class="segmented" role="radiogroup" aria-label="唱歌時收到演出" data-i18n-aria-label="alertShow.singingTitle">
+                  <button type="button" role="radio" data-singing="wait" data-i18n="alertShow.singingWait">等歌停下來再演</button>
+                  <button type="button" role="radio" data-singing="now" data-i18n="alertShow.singingNow">馬上演</button>
+                </div>
+              </div>
+              <p class="field-hint alert-char-hint" data-i18n="alertShow.singingHint">等待中的演出會在歌曲暫停或唱完後，照下面的秒數依序開始；點歌明信片跟著歌曲走，不受影響。試播一律馬上演。</p>
+              <div class="alert-timing-rows" data-singing-wait-only>
+                <div class="alert-timing-row"><label for="alert-show-pause-delay" data-i18n="alertShow.pauseDelay">歌曲暫停後</label><input id="alert-show-pause-delay" type="range" min="0" max="30" step="1" value="3"><output id="alert-show-pause-delay-value" for="alert-show-pause-delay"></output></div>
+                <div class="alert-timing-row"><label for="alert-show-end-delay" data-i18n="alertShow.endDelay">歌曲唱完後</label><input id="alert-show-end-delay" type="range" min="0" max="60" step="1" value="5"><output id="alert-show-end-delay-value" for="alert-show-end-delay"></output></div>
+              </div>
+            </section>
+            <section class="alert-tier">
+              <div class="alert-tier-head">
+                <div class="alert-tier-title"><span class="alert-tier-name" data-i18n="alertShow.bgmTitle">演出時的 BGM</span></div>
+                <div id="alert-show-bgm" class="segmented" role="radiogroup" aria-label="演出時的 BGM" data-i18n-aria-label="alertShow.bgmTitle">
+                  <button type="button" role="radio" data-bgm="duck" data-i18n="alertShow.bgmDuck">降低音量</button>
+                  <button type="button" role="radio" data-bgm="pause" data-i18n="alertShow.bgmPause">暫停</button>
+                  <button type="button" role="radio" data-bgm="none" data-i18n="alertShow.bgmNone">不變</button>
+                </div>
+              </div>
+              <p class="field-hint alert-char-hint" data-i18n="alertShow.bgmHint">BGM 只在沒唱歌時播放；演出結束後自動恢復。演出音效的大小在卡片上的「演出音效音量」調，跟歌曲、BGM 的音量分開。</p>
+              <div class="alert-timing-rows" data-bgm-duck-only>
+                <div class="alert-timing-row"><label for="alert-show-bgm-duck" data-i18n="alertShow.bgmDuckTo">BGM 降到</label><input id="alert-show-bgm-duck" type="range" min="0" max="90" step="5" value="25"><output id="alert-show-bgm-duck-value" for="alert-show-bgm-duck"></output></div>
+              </div>
+            </section>
+            <section class="alert-tier">
+              <div class="alert-tier-head">
+                <div class="alert-tier-title"><span class="alert-tier-name" data-i18n="alertShow.simTitle">模擬 Twitch 事件</span></div>
+              </div>
+              <p class="field-hint alert-char-hint" data-i18n="alertShow.simHint">做一個跟 Twitch 送來的一模一樣的事件，走真實的規則：開關、門檻、唱歌時等待都會生效（試播不管這些）。名字用右邊「預覽用的名字」。</p>
+              <div class="alert-sim-row">
+                <select id="alert-show-sim-type" class="input" aria-label="事件種類" data-i18n-aria-label="alertShow.simType">
+                  <option value="sub" data-i18n="alertShow.simSub">新訂閱</option>
+                  <option value="resub" data-i18n="alertShow.simResub">續訂</option>
+                  <option value="gift" data-i18n="alertShow.simGift">贈送訂閱</option>
+                  <option value="gift-anon" data-i18n="alertShow.simGiftAnon">匿名贈送訂閱</option>
+                  <option value="raid" data-i18n="alertShow.simRaid">揪團</option>
+                </select>
+                <label class="alert-sim-count" data-sim-count><input id="alert-show-sim-count" class="input" type="number" min="1" max="100000" step="1" value="10" inputmode="numeric" aria-label="份數或人數" data-i18n-aria-label="alertShow.simCount"><span id="alert-show-sim-unit"></span></label>
+                <button id="alert-show-sim-send" class="btn btn-sm" type="button" data-i18n="alertShow.simSend">送出模擬事件</button>
+              </div>
+              <p id="alert-show-sim-result" class="alert-show-now alert-sim-result" role="status" aria-live="polite"></p>
+            </section>
           </div>
         </div>
         <aside class="alert-show-preview" aria-label="演出預覽" data-i18n-aria-label="alertShow.preview">
@@ -2069,6 +2118,11 @@
               </div>
               <div class="switch-row"><div class="label" data-i18n="alertShow.subEnabled">新訂閱、續訂時演出</div><label class="switch"><input id="alert-show-sub-enabled" type="checkbox"><span class="track"></span></label></div>
               <div class="switch-row"><div class="label" data-i18n="alertShow.giftEnabled">贈送訂閱時演出</div><label class="switch"><input id="alert-show-gift-enabled" type="checkbox"><span class="track"></span></label></div>
+              <div id="alert-show-waiting" class="alert-show-waiting" role="status" aria-live="polite" hidden>
+                <span id="alert-show-waiting-text" class="alert-show-waiting-text"></span>
+                <button id="alert-show-release" class="btn btn-sm" type="button" data-i18n="alertShow.releaseNow">現在演</button>
+                <button id="alert-show-clear-waiting" class="btn btn-sm btn-ghost" type="button" data-i18n="alertShow.clearWaiting">清掉</button>
+              </div>
               <div class="alert-show-volume">
                 <label for="alert-show-volume" data-i18n="alertShow.volume">演出音效音量</label>
                 <input id="alert-show-volume" type="range" min="0" max="100" step="5" value="70">

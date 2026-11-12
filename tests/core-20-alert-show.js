@@ -370,3 +370,134 @@ test('角色圖：舞台與顯示端——自訂圖讀不到就退回內建、�
   ok(panel.includes("if (!trimmed.transparent) throw new Error(t('alertShow.charNoAlpha'));"), '沒有透明背景的圖要擋下（直播畫面會出現方框）');
   ok(/accept="image\/png,image\/webp"/.test(read('public/index.html')));
 });
+
+function makeClockHarness() {
+  const events = [];
+  const pending = [];
+  let clock = 1000;
+  const timers = {
+    setTimeout: (fn, ms) => { const timer = { fn, at: clock + ms, cleared: false }; pending.push(timer); return timer; },
+    clearTimeout: (timer) => { if (timer) timer.cleared = true; },
+  };
+  const service = overlay.createOverlayShow({ emit: (event, payload) => events.push({ event, payload }), store: { load: () => null, save() {} }, timers, now: () => clock, random: () => 0 });
+  const advance = (ms) => {
+    clock += ms;
+    pending.filter((t) => !t.cleared && t.at <= clock).sort((a, b) => a.at - b.at).forEach((t) => { t.cleared = true; t.fn(); });
+  };
+  const plays = () => events.filter((item) => item.event === 'overlay-show:play').map((item) => item.payload);
+  return { service, events, advance, plays };
+}
+
+test('演出時機：預設「等歌停下來」，暫停 3 秒、唱完 5 秒；BGM 預設壓到 25%', () => {
+  const t = makeClockHarness().service.getSettings().alerts.timing;
+  eq(JSON.stringify(t), JSON.stringify({ singing: 'wait', pauseDelaySec: 3, endDelaySec: 5, bgm: 'duck', bgmDuck: 25 }));
+  const h = makeClockHarness();
+  const next = h.service.updateSettings({ alerts: { timing: { singing: 'later', pauseDelaySec: 99, endDelaySec: -4, bgm: 'mute', bgmDuck: 300 } } }).alerts.timing;
+  eq(next.singing, 'wait'); eq(next.pauseDelaySec, 30); eq(next.endDelaySec, 0); eq(next.bgm, 'duck'); eq(next.bgmDuck, 90);
+});
+
+test('演出時機：唱歌中進來的演出先等，暫停／唱完後照秒數依序演；暫停太短又繼續唱就繼續等', () => {
+  const h = makeClockHarness();
+  h.service.updateSettings({ alerts: { giftEnabled: true, subEnabled: true }, raid: { enabled: true } });
+  h.service.setSongState(true);
+  ok(h.service.handleSupport({ eventId: 'a', type: 'gift', name: 'A', count: 10 }).waiting);
+  ok(h.service.handleRaid({ eventId: 'b', fromName: 'R', viewers: 5 }).waiting, '揪團小卡也等');
+  eq(h.plays().length, 0, '唱歌中不演');
+  eq(h.service.status().waiting, 2);
+  h.service.setSongState(false, 'pause');
+  eq(h.service.status().releaseAt, 1000 + 3000, '暫停後 3 秒');
+  h.advance(2000);
+  h.service.setSongState(true);
+  h.advance(5000);
+  eq(h.plays().length, 0, '暫停 2 秒就繼續唱：繼續等');
+  h.service.setSongState(false, 'end');
+  h.advance(4999);
+  eq(h.plays().length, 0, '唱完 4.999 秒還沒演');
+  h.advance(1);
+  eq(h.plays().map((p) => p.kind).join(','), 'alert', '唱完 5 秒開始演第一個');
+  eq(h.service.status().waiting, 0);
+  ok(h.events.some((e) => e.event === 'overlay-show:status'), '狀態要通知面板');
+});
+
+test('演出時機：開始唱的那一刻，佇列裡還沒開演的退回等待；正在演的讓它演完', () => {
+  const h = makeClockHarness();
+  h.service.updateSettings({ alerts: { subEnabled: true } });
+  h.service.handleSupport({ eventId: '1', type: 'sub', name: 'A' });
+  h.service.handleSupport({ eventId: '2', type: 'sub', name: 'B' });
+  eq(h.plays().length, 1, '第一個開演、第二個在佇列');
+  h.service.setSongState(true);
+  eq(h.service.status().waiting, 1, '第二個退回等待');
+  eq(h.service.snapshot().active.kind, 'alert', '正在演的那一個不被打斷');
+});
+
+test('演出時機：明信片、試播不等；改成「馬上演」會放出等待中的；現在演、清掉', () => {
+  const h = makeClockHarness();
+  h.service.updateSettings({ alerts: { subEnabled: true } });
+  h.service.setSongState(true);
+  ok(h.service.test('alert', { tier: 'g5', variant: 1 }));
+  eq(h.plays().length, 1, '試播馬上演');
+  h.service.clearAll();
+  h.service.armPostcard('e1', { title: 'S', name: 'N', message: 'hi' });
+  h.service.setSongState(true);
+  h.service.onTrackPlaying({ entryId: 'e1', title: 'S' });
+  eq(h.plays().pop().kind, 'postcard', '明信片跟著歌，不等');
+  h.service.clearAll();
+  h.service.setSongState(true);
+  h.service.handleSupport({ eventId: 'x', type: 'sub', name: 'A' });
+  h.service.releaseWaiting();
+  eq(h.plays().pop().kind, 'alert', '現在演');
+  h.service.clearAll();
+  h.service.setSongState(true);
+  h.service.handleSupport({ eventId: 'y', type: 'sub', name: 'A' });
+  h.service.clearWaiting();
+  eq(h.service.status().waiting, 0, '清掉');
+  h.service.handleSupport({ eventId: 'z', type: 'sub', name: 'A' });
+  const before = h.plays().length;
+  h.service.updateSettings({ alerts: { timing: { singing: 'now' } } });
+  eq(h.plays().length, before + 1, '改成馬上演：等待中的立刻演');
+  ok(!h.service.handleSupport({ eventId: 'w', type: 'sub', name: 'A' }).waiting, '馬上演模式下不再等');
+});
+
+test('演出時機：等待上限 30 個，超過的不收（不會無限累積）', () => {
+  const h = makeClockHarness();
+  h.service.updateSettings({ alerts: { subEnabled: true } });
+  h.service.setSongState(true);
+  let accepted = 0;
+  for (let i = 0; i < 40; i += 1) if (h.service.handleSupport({ eventId: `m${i}`, type: 'sub', name: 'A' }).ok) accepted += 1;
+  eq(accepted, overlay.MAX_WAITING);
+});
+
+test('演出時機：播放 handler 會回報歌曲狀態（開始唱、暫停、唱完）', () => {
+  const playback = read('server/routes/handlers/playback.js');
+  ok(playback.includes("ctx.overlayShow?.setSongState?.(autoplay, 'end');"), '換歌：自動播＝開始唱，待命＝唱完');
+  ok(playback.includes("ctx.overlayShow?.setSongState?.(playState.isPlaying && !!playState.currentTrack, 'pause');"), '暫停／繼續');
+  ok(/播放清單播畢，清空目前歌曲[\s\S]{0,120}setSongState\?\.\(false, 'end'\)/.test(playback), '播完、停止＝唱完');
+});
+
+test('模擬 Twitch 事件：照 EventSub 欄位組出通知，走真實的轉換與規則', () => {
+  const { buildSimulatedEvent } = require('../server/routes/handlers/overlay-show');
+  const convert = (payload) => { const e = buildSimulatedEvent(payload); return e.raid ? e.raid : toSupportEvent(e.notification, 'sim'); };
+  eq(convert({ type: 'sub', name: 'A' }).type, 'sub');
+  eq(convert({ type: 'resub', name: 'A' }).type, 'resub');
+  const many = convert({ type: 'gift', count: 25, name: 'A' });
+  eq(many.type + many.count, 'gift25', '多份＝community_sub_gift');
+  eq(convert({ type: 'gift', count: 1, name: 'A' }).count, 1, '一份＝sub_gift（沒有 community_gift_id）');
+  eq(convert({ type: 'gift-anon', count: 5 }).name, '', '匿名贈送不顯示名字');
+  eq(convert({ type: 'raid', count: 80, name: 'R' }).viewers, 80);
+  eq(buildSimulatedEvent({ type: 'cheer' }), null);
+  eq(convert({ type: 'gift', count: 1e9, name: 'A' }).count, 100000, '份數夾上限');
+  const handler = read('server/routes/handlers/overlay-show.js');
+  ok(handler.indexOf("socket.on('overlay-show:simulate'") > handler.indexOf("if (socket.clientType !== 'controller') return;"), '只有桌面面板能送模擬事件');
+  ok(/overlay-show:simulate[\s\S]{0,900}service\.handleSupport\(support\)/.test(handler) && /overlay-show:simulate[\s\S]{0,700}service\.handleRaid\(/.test(handler), '模擬走真實的處理函式，不是試播');
+});
+
+test('演出時機：演出時 BGM 讓路（壓低／暫停／不變），斷線或收不到收場時也會恢復', () => {
+  const bgm = read('public/js/app-bgm.js');
+  ok(bgm.includes("SocketClient.on('overlay-show:play', onAlertStart);") && bgm.includes("SocketClient.on('overlay-show:clear', onAlertEnd);"));
+  ok(bgm.includes("message.kind !== 'alert' && message.kind !== 'raid'"), '只有全畫面演出與揪團讓路，明信片不用');
+  ok(bgm.includes('alertSafetyTimer = setTimeout(() => onAlertEnd('), '保底計時：收不到收場也要恢復');
+  ok(bgm.includes('else if (alertActive) onAlertEnd({ id: alertActive });'), '斷線時恢復');
+  ok(bgm.includes("if (alertActive && alertTiming.bgm === 'pause') { pausedForAlert = true; return; }"), '暫停模式下演出中不讓 BGM 自己接回來');
+  ok(bgm.indexOf('let alertActive') < bgm.indexOf('function startPlayback'), '狀態變數要在使用前宣告');
+  ok(bgm.includes('fadeGainNode.connect(duckGainNode);'), '壓低用獨立的音量節點，不跟淡入淡出互相蓋掉');
+});

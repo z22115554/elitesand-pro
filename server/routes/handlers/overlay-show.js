@@ -4,6 +4,8 @@
  */
 'use strict';
 
+const { toSupportEvent } = require('../../services/twitch-service');
+
 const DISPLAY_CLIENT_TYPES = new Set(['display', 'display-preview', 'display-spout']);
 
 /**
@@ -15,6 +17,29 @@ function sendSettingsToDisplay(socket, service) {
   if (!service || !DISPLAY_CLIENT_TYPES.has(socket.clientType)) return false;
   socket.emit('overlay-show:settings', service.getSettings());
   return true;
+}
+
+/**
+ * 模擬事件：照 Twitch EventSub 的欄位名稱組出通知內容。
+ * gift 一次送多份是 community_sub_gift；一份是沒有 community_gift_id 的 sub_gift（指定送給某人）。
+ */
+function buildSimulatedEvent(payload) {
+  const src = payload && typeof payload === 'object' ? payload : {};
+  const name = typeof src.name === 'string' && src.name.trim() ? src.name.slice(0, 60) : 'TestViewer';
+  const count = Math.max(1, Math.min(100000, Math.floor(Number(src.count) || 1)));
+  const base = { chatter_user_name: name, chatter_user_login: name.toLowerCase(), chatter_is_anonymous: false };
+  switch (src.type) {
+    case 'sub': return { notification: { ...base, notice_type: 'sub', sub: { sub_tier: '1000', is_prime: false } } };
+    case 'resub': return { notification: { ...base, notice_type: 'resub', resub: { cumulative_months: 6, sub_tier: '1000' } } };
+    case 'gift':
+    case 'gift-anon': {
+      const who = src.type === 'gift-anon' ? { chatter_user_name: 'AnAnonymousGifter', chatter_user_login: 'ananonymousgifter', chatter_is_anonymous: true } : base;
+      if (count === 1) return { notification: { ...who, notice_type: 'sub_gift', sub_gift: { recipient_user_name: 'Lucky', sub_tier: '1000', community_gift_id: null } } };
+      return { notification: { ...who, notice_type: 'community_sub_gift', community_sub_gift: { id: 'sim', total: count, sub_tier: '1000' } } };
+    }
+    case 'raid': return { raid: { from_broadcaster_user_name: name, viewers: count } };
+    default: return null;
+  }
 }
 
 function registerOverlayShowHandlers(io, socket, { getOverlayShow }) {
@@ -45,6 +70,40 @@ function registerOverlayShowHandlers(io, socket, { getOverlayShow }) {
     reply(ack, service.test(kind, options) ? { ok: true } : { ok: false, error: '演出佇列已滿，請稍後再試' });
   });
 
+  socket.on('overlay-show:status:get', (payload, ack) => {
+    const service = getOverlayShow();
+    reply(ack, service ? { ok: true, status: service.status() } : { ok: false });
+  });
+
+  socket.on('overlay-show:waiting:release', (payload, ack) => {
+    const service = getOverlayShow();
+    if (service) service.releaseWaiting();
+    reply(ack, { ok: !!service });
+  });
+
+  socket.on('overlay-show:waiting:clear', (payload, ack) => {
+    const service = getOverlayShow();
+    if (service) service.clearWaiting();
+    reply(ack, { ok: !!service });
+  });
+
+  // 模擬 Twitch 事件：做成跟 EventSub 一樣的通知內容，走同一個轉換（toSupportEvent）與同一套規則
+  // （開關、門檻、唱歌時等待、名字清洗）。跟「試播」不同：試播不管規則、一定馬上演。
+  socket.on('overlay-show:simulate', (payload, ack) => {
+    const service = getOverlayShow();
+    if (!service) { reply(ack, { ok: false, error: '互動演出服務尚未啟動' }); return; }
+    const event = buildSimulatedEvent(payload);
+    if (!event) { reply(ack, { ok: false, error: '不認得的模擬事件' }); return; }
+    const eventId = `sim-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    if (event.raid) {
+      reply(ack, { ...service.handleRaid({ eventId, fromName: event.raid.from_broadcaster_user_name, viewers: event.raid.viewers }), simulated: true });
+      return;
+    }
+    const support = toSupportEvent(event.notification, eventId);
+    if (!support) { reply(ack, { ok: false, reason: 'ignored', simulated: true }); return; }
+    reply(ack, { ...service.handleSupport(support), simulated: true });
+  });
+
   socket.on('overlay-show:skip', (payload, ack) => {
     const service = getOverlayShow();
     if (service) service.skip();
@@ -54,3 +113,4 @@ function registerOverlayShowHandlers(io, socket, { getOverlayShow }) {
 
 module.exports = registerOverlayShowHandlers;
 module.exports.sendSettingsToDisplay = sendSettingsToDisplay;
+module.exports.buildSimulatedEvent = buildSimulatedEvent;
