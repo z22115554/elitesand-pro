@@ -146,6 +146,8 @@
     const from = tierMin(tierId);
     const next = index >= 0 && index < steps.length - 1 ? tierMin(steps[index + 1]) : null;
     const unit = t(tierId[0] === 'g' ? 'alertShow.unitGift' : 'alertShow.unitRaid');
+    // 後面那一級的門檻跟這級一樣（或更低）：同時達到時用大的那級，這級永遠演不到
+    if (next != null && next <= from) return t('alertShow.rangeNone');
     if (next == null) return t('alertShow.rangeUp', { from, unit });
     if (next - 1 <= from) return t('alertShow.rangeOne', { from, unit });
     return t('alertShow.range', { from, to: next - 1, unit });
@@ -193,12 +195,21 @@
         const label = node('label', 'alert-tier-min');
         label.appendChild(node('span', '', t('alertShow.minLabel')));
         const input = node('input', 'input');
-        input.type = 'number'; input.min = '2'; input.max = '100000'; input.step = '1'; input.inputMode = 'numeric';
+        input.type = 'number'; input.min = '1'; input.max = '100000'; input.step = '1'; input.inputMode = 'numeric';
         input.value = String(tierMin(tier.id));
         input.dataset.focusKey = `min-${tier.id}`;
         input.addEventListener('change', () => {
           const key = tier.group === 'gift' ? 'giftMin' : 'raidMin';
-          send({ alerts: { [key]: { ...settings.alerts[key], [tier.id]: Number(input.value) } } });
+          const value = Math.max(1, Math.min(100000, Math.round(Number(input.value)) || 1));
+          // 門檻全自訂：改了這一級，前面比它高的壓下來、後面比它低的推上去，
+          // 這樣把「特大」設成 1 就是 1 份演特大（伺服器只會把填反的往上推）。
+          const nextMin = { ...settings.alerts[key], [tier.id]: value };
+          const at = steps.indexOf(tier.id);
+          steps.forEach((id, i) => {
+            if (i < at && nextMin[id] > value) nextMin[id] = value;
+            if (i > at && nextMin[id] < value) nextMin[id] = value;
+          });
+          send({ alerts: { [key]: nextMin } });
         });
         label.appendChild(input);
         label.appendChild(node('span', '', t(tier.group === 'gift' ? 'alertShow.unitGift' : 'alertShow.unitRaid')));

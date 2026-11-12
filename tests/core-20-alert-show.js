@@ -48,20 +48,29 @@ test('訂閱演出：預設全部關閉，舊版存檔（沒有 alerts）讀進�
   eq(legacy.alerts.off.length, 0);
 });
 
-test('訂閱演出：門檻填反會往上推成遞增，局部更新不影響其他欄位', () => {
+test('訂閱演出：門檻填反會往上推（可以相同），局部更新不影響其他欄位', () => {
   const h = makeHarness();
   const next = h.service.updateSettings({ alerts: { giftMin: { g5: 3, g10: 2 }, raidMin: { r2: 500 } } });
   eq(next.alerts.giftMin.g5, 3);
-  eq(next.alerts.giftMin.g10, 4, '大量的門檻不可低於或等於中量');
+  eq(next.alerts.giftMin.g10, 3, '後一級不可低於前一級，但可以一樣');
   eq(next.alerts.giftMin.g25, 25);
   eq(next.alerts.raidMin.r2, 500);
-  eq(next.alerts.raidMin.r3, 501);
-  eq(next.alerts.raidMin.r4, 502);
+  eq(next.alerts.raidMin.r3, 500);
+  eq(next.alerts.raidMin.r4, 500);
   const after = h.service.updateSettings({ alerts: { volume: 250 } });
   eq(after.alerts.volume, 100, '音量夾在 0～100');
   eq(after.alerts.giftMin.g5, 3, '只改音量時門檻不變');
   eq(h.service.updateSettings({ raid: { durationSec: 9 } }).alerts.volume, 100, '只改揪團設定時 alerts 不變');
   ok(h.getSaved() && h.getSaved().alerts, '設定要存檔');
+});
+
+test('訂閱演出：門檻全自訂——全部設成 1 時，1 份贈訂、1 人揪團就演最大的那一級', () => {
+  const h = makeHarness();
+  const next = h.service.updateSettings({ alerts: { giftEnabled: true, giftMin: { g5: 1, g10: 1, g25: 1, g50: 1, g100: 1 }, raidMin: { r2: 1, r3: 1, r4: 1 } }, raid: { enabled: true, mode: 'show', minViewers: 1 } });
+  eq(JSON.stringify(next.alerts.giftMin), JSON.stringify({ g5: 1, g10: 1, g25: 1, g50: 1, g100: 1 }), '最低可以到 1、可以全部一樣');
+  eq(h.service.handleSupport({ eventId: 'one', type: 'gift', name: 'a', count: 1 }).tier, 'g100', '送 1 份就演最大的');
+  eq(h.service.handleRaid({ eventId: 'r-one', fromName: 'Tiny', viewers: 1 }).tier, 'r4', '1 人揪團就演最大的');
+  eq(h.service.updateSettings({ alerts: { giftMin: { g5: 0, g10: -3 } } }).alerts.giftMin.g5, 1, '小於 1 夾回 1');
 });
 
 test('訂閱演出：停用清單只收目錄裡有的演出，而且每一級至少留一種', () => {

@@ -105,7 +105,7 @@
   z-index: 20000;
   background: rgba(4, 6, 11, .77);
   pointer-events: auto;
-  transition: left .18s ease, top .18s ease, width .18s ease, height .18s ease;
+  transition: left .18s ease, top .18s ease, width .18s ease, height .18s ease, clip-path .18s ease;
 }
 
 .tour-highlight {

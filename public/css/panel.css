@@ -2273,6 +2273,9 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 .oslim-panel #style-desc,
 .oslim-hidden { display: none !important; }
 .oslim-panel .field { margin-bottom: 0; }
+/* 恐怖風打開時直接顯示光敏提醒（瘦身面板把一般說明收成滑鼠提示，安全提醒不能藏） */
+.jizura-horror-warning { display: none; margin: 4px 0 0; padding: 8px 10px; border-left: 3px solid var(--warn); border-radius: var(--r-sm, 4px); background: color-mix(in srgb, var(--warn) 12%, transparent); font-size: 12px; line-height: 1.55; color: var(--text); }
+.switch-row:has(#ls-jizura-horror:checked) + .jizura-horror-warning { display: block; }
 .oslim-panel #lyric-pos-grid-wrap .pos-head { display: none; }
 .oslim-font-extra { display: flex; flex-direction: column; gap: 12px; }
 .oslim-font-extra[hidden] { display: none; }

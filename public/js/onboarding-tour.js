@@ -1139,17 +1139,26 @@
     hole.width = Math.max(1, hole.right - hole.left);
     hole.height = Math.max(1, hole.bottom - hole.top);
 
-    setMask(dom.masks.top, 0, 0, viewportWidth, hole.top);
-    setMask(dom.masks.bottom, 0, hole.bottom, viewportWidth, Math.max(0, viewportHeight - hole.bottom));
-    setMask(dom.masks.left, 0, hole.top, hole.left, hole.height);
-    setMask(dom.masks.right, hole.right, hole.top, Math.max(0, viewportWidth - hole.right), hole.height);
+    // 只用一片遮罩、用 clip-path 挖洞：四片相鄰的遮罩在 125% 這類非整數縮放下，
+    // 交界那一排實體像素會被兩片各蓋一半、疊成兩倍暗，畫面上多出一條細線。
+    setMask(dom.masks.top, 0, 0, viewportWidth, viewportHeight, hole);
+    setMask(dom.masks.bottom, 0, 0, 0, 0);
+    setMask(dom.masks.left, 0, 0, 0, 0);
+    setMask(dom.masks.right, 0, 0, 0, 0);
     setBox(dom.highlight, hole.left, hole.top, hole.width, hole.height);
     return placeCard(hole, viewportWidth, viewportHeight);
   }
 
-  function setMask(element, left, top, width, height) {
+  function setMask(element, left, top, width, height, hole) {
     if (!element) return;
     setBox(element, left, top, width, height);
+    if (!hole) { element.style.clipPath = ''; return; }
+    const l = Math.round(hole.left);
+    const t2 = Math.round(hole.top);
+    const r = Math.round(hole.right);
+    const b = Math.round(hole.bottom);
+    // evenodd：外框整個視窗、內框是要看的那塊；點擊也只有洞裡穿得過去
+    element.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t2}px, ${l}px ${b}px, ${r}px ${b}px, ${r}px ${t2}px, ${l}px ${t2}px)`;
   }
 
   function setBox(element, left, top, width, height) {

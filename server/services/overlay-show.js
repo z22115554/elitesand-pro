@@ -87,7 +87,11 @@ function cleanText(value, max) {
     .slice(0, max);
 }
 
-/** 門檻要一級比一級高：使用者填反了就往上推，不讓兩級搶同一個數字。 */
+/**
+ * 門檻由使用者全自訂：最低 1，後面一級不能比前一級低（填反了就往上推）。
+ * 可以跟前一級一樣——同時達到好幾級時用最大的那一級，所以把「特大」設成 1，
+ * 1 份就會演特大，前面幾級就用不到（面板會標「用不到」）。
+ */
 function normalizeSteps(input, current, steps, firstMin) {
   const src = input && typeof input === 'object' ? input : {};
   const out = {};
@@ -95,7 +99,7 @@ function normalizeSteps(input, current, steps, firstMin) {
   for (const id of steps) {
     const value = clampInt(src[id], current[id], floor, LIMITS.thresholdMax);
     out[id] = Math.max(floor, value);
-    floor = out[id] + 1;
+    floor = out[id];
   }
   return out;
 }
@@ -168,8 +172,8 @@ function normalizeAlerts(input, current) {
     subEnabled: typeof src.subEnabled === 'boolean' ? src.subEnabled : !!current.subEnabled,
     giftEnabled: typeof src.giftEnabled === 'boolean' ? src.giftEnabled : !!current.giftEnabled,
     volume: clampInt(src.volume, current.volume, 0, 100),
-    giftMin: normalizeSteps(src.giftMin, current.giftMin, GIFT_STEPS, 2),
-    raidMin: normalizeSteps(src.raidMin, current.raidMin, RAID_STEPS, 2),
+    giftMin: normalizeSteps(src.giftMin, current.giftMin, GIFT_STEPS, 1),
+    raidMin: normalizeSteps(src.raidMin, current.raidMin, RAID_STEPS, 1),
     off: normalizeOff(src.off, current.off),
     character: normalizeCharacter(src.character, current.character),
     timing: normalizeTiming(src.timing, current.timing),
