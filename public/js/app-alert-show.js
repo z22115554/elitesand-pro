@@ -217,7 +217,36 @@
       } else if (tier.id === 'r1') {
         head.appendChild(node('span', 'alert-tier-fixed', t('alertShow.raidMinFixed')));
       }
+      // 整級開關（贈訂、揪團）：關掉時這個範圍改演下一個比較小、還開著的等級；都關了就不演
+      const tierOff = tier.group !== 'sub' && (settings.alerts.tierOff || []).includes(tier.id);
+      if (tier.group !== 'sub') {
+        const sw = node('label', 'switch alert-tier-switch');
+        const box = node('input');
+        box.type = 'checkbox';
+        box.checked = !tierOff;
+        box.dataset.focusKey = `t-${tier.id}`;
+        box.setAttribute('aria-label', t('alertShow.tierSwitch', { name: t(`alertShow.tier.${tier.id}`) }));
+        box.addEventListener('change', () => {
+          const next = (settings.alerts.tierOff || []).filter((id) => id !== tier.id);
+          if (!box.checked) next.push(tier.id);
+          send({ alerts: { tierOff: next } });
+        });
+        sw.appendChild(box);
+        sw.appendChild(node('span', 'track'));
+        head.appendChild(sw);
+      }
       section.appendChild(head);
+      if (tierOff) {
+        section.classList.add('is-off');
+        const order = tier.group === 'gift' ? ['g1', ...GIFT_STEPS] : ['r1', ...RAID_STEPS];
+        let fallback = null;
+        for (let i = order.indexOf(tier.id) - 1; i >= 0; i -= 1) {
+          if (!(settings.alerts.tierOff || []).includes(order[i])) { fallback = order[i]; break; }
+        }
+        section.appendChild(node('p', 'alert-tier-offnote', fallback
+          ? t('alertShow.tierOffDown', { name: t(`alertShow.tier.${fallback}`) })
+          : t('alertShow.tierOffNone')));
+      }
 
       const list = node('ul', 'alert-variants');
       tier.variants.forEach((variant) => {
@@ -677,7 +706,7 @@
       if (result.waiting) return t('alertShow.simWaiting', { tier: tierName || t('overlayShow.raidTitle') });
       return result.tier ? t('alertShow.simPlayed', { tier: tierName }) : t('alertShow.simCard');
     }
-    const key = { disabled: 'alertShow.simDisabled', 'below-min': 'alertShow.simBelowMin', 'queue-full': 'alertShow.simQueueFull', ignored: 'alertShow.simIgnored' }[result.reason];
+    const key = { disabled: 'alertShow.simDisabled', 'below-min': 'alertShow.simBelowMin', 'queue-full': 'alertShow.simQueueFull', ignored: 'alertShow.simIgnored', 'tier-off': 'alertShow.simTierOff' }[result.reason];
     return t(key || 'overlayShow.testFailed');
   }
 

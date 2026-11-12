@@ -64,6 +64,22 @@ test('訂閱演出：門檻填反會往上推（可以相同），局部更新�
   ok(h.getSaved() && h.getSaved().alerts, '設定要存檔');
 });
 
+test('訂閱演出：整級開關——關掉的等級改演下一個比較小的，全部更小的都關了就不演（預設全開）', () => {
+  const h = makeHarness();
+  eq(JSON.stringify(h.service.getSettings().alerts.tierOff), '[]', '預設全開');
+  h.service.updateSettings({ alerts: { giftEnabled: true, tierOff: ['g25', 'g1', 'sub', 'nope', 'g25'] }, raid: { enabled: true, mode: 'show', minViewers: 1 } });
+  eq(JSON.stringify(h.service.getSettings().alerts.tierOff), JSON.stringify(['g25', 'g1']), '只收贈訂／揪團的等級、去重');
+  eq(h.service.handleSupport({ eventId: 'o1', type: 'gift', name: 'a', count: 30 }).tier, 'g10', '特大關掉：30 份改演大量');
+  eq(h.service.handleSupport({ eventId: 'o2', type: 'gift', name: 'a', count: 60 }).tier, 'g50', '超大照常');
+  eq(h.service.handleSupport({ eventId: 'o3', type: 'gift', name: 'a', count: 1 }).reason, 'tier-off', '最小一級關掉：1 份不演');
+  eq(h.service.handleSupport({ eventId: 'o4', type: 'gift', name: 'a', count: 5 }).tier, 'g5', '少量照常');
+  h.service.updateSettings({ alerts: { tierOff: ['r1', 'r2'] } });
+  eq(h.service.handleRaid({ eventId: 'or1', fromName: 'A', viewers: 20 }).reason, 'tier-off', '揪團小與中都關：20 人不演');
+  eq(h.service.handleRaid({ eventId: 'or2', fromName: 'B', viewers: 60 }).tier, 'r3', '大照常');
+  h.service.updateSettings({ raid: { mode: 'card' } });
+  ok(h.service.handleRaid({ eventId: 'or3', fromName: 'C', viewers: 20 }).ok, '角落小卡模式不受等級開關影響');
+});
+
 test('訂閱演出：門檻全自訂——全部設成 1 時，1 份贈訂、1 人揪團就演最大的那一級', () => {
   const h = makeHarness();
   const next = h.service.updateSettings({ alerts: { giftEnabled: true, giftMin: { g5: 1, g10: 1, g25: 1, g50: 1, g100: 1 }, raidMin: { r2: 1, r3: 1, r4: 1 } }, raid: { enabled: true, mode: 'show', minViewers: 1 } });

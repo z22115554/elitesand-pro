@@ -46,6 +46,8 @@ const DEFAULTS = Object.freeze({
     giftMin: Object.freeze({ g5: CATALOG.giftMin.g5, g10: CATALOG.giftMin.g10, g25: CATALOG.giftMin.g25, g50: CATALOG.giftMin.g50, g100: CATALOG.giftMin.g100 }),
     raidMin: Object.freeze({ r2: CATALOG.raidMin.r2, r3: CATALOG.raidMin.r3, r4: CATALOG.raidMin.r4 }),
     off: Object.freeze([]),
+    // 整級關掉的贈訂／揪團等級（預設全開）
+    tierOff: Object.freeze([]),
     character: Object.freeze({ girl: 'default', mascot: 'default', face: Object.freeze({ x: 0.49, y: 0.15, s: 0.12 }), rev: 0 }),
     timing: Object.freeze({ singing: 'wait', pauseDelaySec: 3, endDelaySec: 5, bgm: 'duck', bgmDuck: 25 }),
   }),
@@ -102,6 +104,13 @@ function normalizeSteps(input, current, steps, firstMin) {
     floor = out[id];
   }
   return out;
+}
+
+/** 整級關掉的等級：只收贈訂與揪團的等級 id（訂閱只有一級，用總開關就好）。 */
+function normalizeTierOff(input, current) {
+  const list = Array.isArray(input) ? input : (Array.isArray(current) ? current : []);
+  const valid = new Set(['g1', ...GIFT_STEPS, 'r1', ...RAID_STEPS]);
+  return [...new Set(list.map(String).filter((id) => valid.has(id)))];
 }
 
 /** 停用清單：只收目錄裡真的有的「等級:第幾種」，而且每一級至少留一種。 */
@@ -175,6 +184,7 @@ function normalizeAlerts(input, current) {
     giftMin: normalizeSteps(src.giftMin, current.giftMin, GIFT_STEPS, 1),
     raidMin: normalizeSteps(src.raidMin, current.raidMin, RAID_STEPS, 1),
     off: normalizeOff(src.off, current.off),
+    tierOff: normalizeTierOff(src.tierOff, current.tierOff),
     character: normalizeCharacter(src.character, current.character),
     timing: normalizeTiming(src.timing, current.timing),
   };
@@ -185,6 +195,16 @@ function tierForCount(count, firstId, steps, mins) {
   let best = firstId;
   for (const id of steps) if (count >= mins[id]) best = id;
   return best;
+}
+
+/**
+ * 這一級被關掉時，往下找最近一個開著的等級；全部更小的都關了就回 null（不演）。
+ * 例如關掉「特大」，落在特大範圍的份數改演「大量」；關掉最小一級，少量的就不演。
+ */
+function enabledTier(tierId, firstId, steps, tierOff) {
+  const order = [firstId, ...steps];
+  for (let i = order.indexOf(tierId); i >= 0; i -= 1) if (!tierOff.includes(order[i])) return order[i];
+  return null;
 }
 
 function normalizeSettings(input, current = DEFAULTS) {
@@ -271,6 +291,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
         giftMin: { ...settings.alerts.giftMin },
         raidMin: { ...settings.alerts.raidMin },
         off: [...settings.alerts.off],
+        tierOff: [...settings.alerts.tierOff],
         character: { ...settings.alerts.character, face: { ...settings.alerts.character.face } },
         timing: { ...settings.alerts.timing },
       },
@@ -446,7 +467,8 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     if (type === 'gift') {
       if (!settings.alerts.giftEnabled) return { ok: false, reason: 'disabled' };
       const total = Math.max(1, Math.floor(Number(count) || 1));
-      const tierId = tierForCount(total, 'g1', GIFT_STEPS, settings.alerts.giftMin);
+      const tierId = enabledTier(tierForCount(total, 'g1', GIFT_STEPS, settings.alerts.giftMin), 'g1', GIFT_STEPS, settings.alerts.tierOff);
+      if (!tierId) return { ok: false, reason: 'tier-off' };
       const id = enqueueAlert(tierId, { count: total, name });
       return id ? { ok: true, id, tier: tierId, waiting: isWaiting(id) } : { ok: false, reason: 'queue-full' };
     }
@@ -465,7 +487,8 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     const name = cleanText(fromName, TEXT_LIMITS.channel);
     if (!name) return { ok: false, reason: 'no-name' };
     if (settings.raid.mode === 'show') {
-      const tierId = tierForCount(count, 'r1', RAID_STEPS, settings.alerts.raidMin);
+      const tierId = enabledTier(tierForCount(count, 'r1', RAID_STEPS, settings.alerts.raidMin), 'r1', RAID_STEPS, settings.alerts.tierOff);
+      if (!tierId) return { ok: false, reason: 'tier-off' };
       const showId = enqueueAlert(tierId, { count: Math.max(1, count), name });
       return showId ? { ok: true, id: showId, tier: tierId, waiting: isWaiting(showId) } : { ok: false, reason: 'queue-full' };
     }
