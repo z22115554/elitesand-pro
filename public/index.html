@@ -2654,6 +2654,11 @@
                 <div><div class="label" data-i18n="aiInstall.featureName">AI 伴奏製作</div><div class="sub" id="ai-separation-status">尚未檢查</div></div>
                 <button id="ai-separation-download-btn" class="btn btn-sm" type="button" hidden data-i18n="aiInstall.downloadComponents">下載完整元件</button>
               </div>
+              <div class="switch-row mt-8" data-new-feature="precise-sync">
+                <div><div class="label" data-i18n="alignModel.featureName">精準對時（中文歌）</div><div class="sub" id="align-model-status">尚未安裝</div></div>
+                <button id="align-model-download-btn" class="btn btn-sm" type="button" hidden data-i18n="alignModel.download">下載元件</button>
+              </div>
+              <p class="val mt-8" data-i18n="alignModel.hint">自動對時對不上時，改用語音模型聽歌詞內容再對一次，並逐句校正版本不同的段落。只支援中文歌，要先有 AI 伴奏元件。下載約 150MB，用完會自動釋放記憶體。</p>
               <p class="val mt-10" data-i18n="aiInstall.featureHint">程式會自動依序使用 Python GPU、WebGPU、CPU，不需要手動選引擎。第三方模型作者的書面授權確認目前仍在等待中。</p>
             <p id="ytdlp-msg" class="val mt-10 pre-line" hidden></p>
             </div>
@@ -4185,6 +4190,7 @@
   <script src="/js/home-ai-separation-panel.js"></script>
   <script src="/js/live-prep.js"></script>
   <script src="/js/auto-sync.js"></script>
+  <script src="/js/align-model-client.js"></script>
   <script src="/js/output-slim.js"></script>
   <script src="/js/library-add.js"></script>
   <script src="/js/live-slim.js"></script>

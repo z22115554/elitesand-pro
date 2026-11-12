@@ -14,6 +14,9 @@ const fs = require('fs');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
 const libraryStore = require('../../services/library-store');
 const autoSync = require('../../services/auto-sync');
+const preciseSync = require('../../services/precise-sync');
+const alignModel = require('../../services/align-model-jobs');
+const alignRuntime = require('../../services/align-runtime-provider');
 const { emitToControlClients } = require('../../utils/socket-broadcast');
 const { downloadsDir } = require('../../utils/app-paths');
 const { isTemplateOff, resolveTemplateId } = require('../../utils/seasonal-templates');
@@ -257,6 +260,9 @@ function registerLyricsHandlers(io, socket, ctx) {
   // 自動對時：用 AI 分離出的人聲算整首偏移（services/auto-sync.js）。只有高信心才套用，
   // 低信心時不動任何東西。人聲檔是前提——沒有就回 NEEDS_SEPARATION，由面板走既有的分離流程。
   // 目前的歌詞對不上時，再搜其他歌詞來源（逐字歌詞優先），找到能可靠對上的才換過去。
+  // 裝了「精準對時」元件（中文歌）時多兩件事：上面兩步都只看人聲活動、都對不上時，改用模型
+  // 「聽得出唱什麼」的證據再判斷一次（目前的歌詞優先，再來其他來源）；整首對上之後，
+  // 版本不同（間奏長短不一）而差超過 0.3 秒的句子逐句校正。
   // 不送社群偏移回饋：這個值不是人聽過確認的。
   socket.on('offset:auto', async (data, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
@@ -283,40 +289,95 @@ function registerLyricsHandlers(io, socket, ctx) {
     try {
       // 鐵則 12：ffmpeg 一律排進共用佇列，不跟匯入轉碼同時跑（兩邊各解一首 15 分鐘的音檔很吃記憶體）。
       const samples = await AudioProcessor.runFfmpegQueued(() => autoSync.decodeMono(vocalsPath));
+      const stat = fs.statSync(vocalsPath);
+      const model = {
+        ready: alignRuntime.isAvailable(),
+        cacheKey: `${vocalsPath}|${stat.size}|${stat.mtimeMs}`,
+      };
       const hasTimestamps = lines.some((l) => l && l.time > 0);
-      const current = hasTimestamps ? autoSync.estimateOffset(samples, lines) : { accepted: false, reason: 'NO_TIMESTAMPS' };
       const previousOffsetMs = trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null;
+      const currentLyrics = manual?.lyrics || track.lyrics || '';
+      const currentSource = normLyricSource(manual?.source || lyricsSourceOf(trackId) || 'manual');
+      const snapshot = {
+        lyrics: currentLyrics,
+        lyricsType: manual?.lyricsType || track.lyricsType || 'lrc',
+        parsedLyrics: lines,
+        source: currentSource,
+      };
+      // 模型或搜尋其他來源都要花時間：這段期間使用者若自己換了歌詞或調了偏移，不可再拿舊的判斷蓋掉。
+      const changedMeanwhile = () => manualLyricsCache.get(trackId) !== manual
+        || (trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null) !== previousOffsetMs;
+      const chinese = (list) => model.ready && preciseSync.isChineseLyrics(list);
+
+      const current = hasTimestamps ? autoSync.estimateOffset(samples, lines) : { accepted: false, reason: 'NO_TIMESTAMPS' };
+      // 套用到目前這份歌詞（只改偏移，或連同逐句校正）
+      const applyToCurrent = async (plan) => {
+        const retimed = chinese(lines) ? await retimeWithModel(samples, model.cacheKey, lines, plan.offsetMs) : null;
+        if (changedMeanwhile()) {
+          log.info(`自動對時未套用: ${trackId}: 對時期間歌詞或偏移被改過`);
+          return reply({ ok: true, applied: false, reason: 'CHANGED' });
+        }
+        if (retimed) applyManualLyrics(trackId, currentLyrics, snapshot.lyricsType, retimed.lines, currentSource);
+        const offsetMs = setTrackOffset(trackId, plan.offsetMs);
+        autoSyncUndo.set(trackId, { offsetMs: previousOffsetMs, appliedOffsetMs: offsetMs, lyrics: retimed ? snapshot : null });
+        log.info(`自動對時: ${trackId}: ${previousOffsetMs ?? '無'} → ${offsetMs}ms (${plan.how})${retimed ? `，逐句校正 ${retimed.moved} 句` : ''}`);
+        return reply({ ok: true, applied: true, offsetMs, retimedLines: retimed ? retimed.moved : 0 });
+      };
       if (current.accepted) {
-        const offsetMs = setTrackOffset(trackId, current.offsetMs);
-        autoSyncUndo.set(trackId, { offsetMs: previousOffsetMs, appliedOffsetMs: offsetMs, lyrics: null });
-        log.info(`自動對時: ${trackId}: ${previousOffsetMs ?? '無'} → ${offsetMs}ms (z=${current.peakZ.toFixed(1)}, k=${current.peakRatio.toFixed(2)}, ${current.method})`);
-        return reply({ ok: true, applied: true, offsetMs });
+        return applyToCurrent({ offsetMs: current.offsetMs, how: `z=${current.peakZ.toFixed(1)}, k=${current.peakRatio.toFixed(2)}, ${current.method}` });
       }
 
       socket.emit('offset:auto-progress', { trackId, stage: 'sources' });
-      const currentLyrics = manual?.lyrics || track.lyrics || '';
-      const candidate = await findAlignedSource(samples, track, currentLyrics);
-      // 搜尋其他來源最多要 25 秒：這段時間使用者若自己換了歌詞或調了偏移，不可再拿舊的判斷蓋掉。
-      const offsetNow = trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null;
-      if (candidate && (manualLyricsCache.get(trackId) !== manual || offsetNow !== previousOffsetMs)) {
+      const found = await findAlignedSource(samples, track, currentLyrics, model);
+      let candidate = found.best;
+      if (!candidate && model.ready) {
+        const versions = [];
+        if (hasTimestamps && chinese(lines)) versions.push({ key: 'current', lines: preciseSync.toWorkerLines(lines) });
+        found.forModel.forEach((c, i) => versions.push({ key: String(i), lines: preciseSync.toWorkerLines(c.lines) }));
+        if (versions.length) {
+          socket.emit('offset:auto-progress', { trackId, stage: 'precise' });
+          const results = await alignModel.analyzeGlobal(samples, model.cacheKey, versions);
+          const r = results && results.current;
+          if (preciseSync.modelPasses(r)) {
+            return applyToCurrent({
+              offsetMs: autoSync.refineOffsetNear(samples, lines, preciseSync.modelCenterMs(r), preciseSync.REFINE_WINDOW_MS),
+              how: `精準對時 z=${r.peakZ.toFixed(1)}, k=${r.peakRatio.toFixed(2)}`,
+            });
+          }
+          const passing = [];
+          found.forModel.forEach((c, i) => {
+            const m = results && results[String(i)];
+            if (!preciseSync.modelPasses(m)) return;
+            const offsetMs = autoSync.refineOffsetNear(samples, c.lines, preciseSync.modelCenterMs(m), preciseSync.REFINE_WINDOW_MS);
+            passing.push({ ...c, result: { ...c.result, accepted: true, offsetMs, peakZ: m.peakZ }, how: `精準對時 z=${m.peakZ.toFixed(1)}` });
+          });
+          passing.sort((x, y) => Number(y.wordLevel) - Number(x.wordLevel) || y.result.peakZ - x.result.peakZ);
+          candidate = passing[0] || null;
+        }
+      }
+      if (candidate && changedMeanwhile()) {
         log.info(`自動對時未套用: ${trackId}: 對時期間歌詞或偏移被改過`);
         return reply({ ok: true, applied: false, reason: 'CHANGED' });
       }
       if (candidate) {
-        const snapshot = {
-          lyrics: currentLyrics || null,
-          lyricsType: manual?.lyricsType || track.lyricsType || 'lrc',
-          parsedLyrics: lines,
-          source: manual?.source || lyricsSourceOf(trackId) || 'manual',
-        };
-        applyManualLyrics(trackId, candidate.lyrics, candidate.type, candidate.lines, normLyricSource(candidate.source));
+        const retimed = chinese(candidate.lines) ? await retimeWithModel(samples, model.cacheKey, candidate.lines, candidate.result.offsetMs) : null;
+        if (changedMeanwhile()) {
+          log.info(`自動對時未套用: ${trackId}: 對時期間歌詞或偏移被改過`);
+          return reply({ ok: true, applied: false, reason: 'CHANGED' });
+        }
+        applyManualLyrics(trackId, candidate.lyrics, candidate.type, retimed ? retimed.lines : candidate.lines, normLyricSource(candidate.source));
         const offsetMs = setTrackOffset(trackId, candidate.result.offsetMs);
-        autoSyncUndo.set(trackId, { offsetMs: previousOffsetMs, appliedOffsetMs: offsetMs, lyrics: snapshot.lyrics ? snapshot : null });
-        log.info(`自動對時換歌詞來源: ${trackId}: ${candidate.source}${candidate.wordLevel ? '（逐字）' : ''} → ${offsetMs}ms (z=${candidate.result.peakZ.toFixed(1)})`);
-        return reply({ ok: true, applied: true, offsetMs, switchedSource: candidate.sourceLabel || candidate.source, wordLevel: candidate.wordLevel });
+        autoSyncUndo.set(trackId, { offsetMs: previousOffsetMs, appliedOffsetMs: offsetMs, lyrics: snapshot.lyrics || snapshot.parsedLyrics.length ? snapshot : null });
+        log.info(`自動對時換歌詞來源: ${trackId}: ${candidate.source}${candidate.wordLevel ? '（逐字）' : ''} → ${offsetMs}ms (${candidate.how})${retimed ? `，逐句校正 ${retimed.moved} 句` : ''}`);
+        return reply({
+          ok: true, applied: true, offsetMs, switchedSource: candidate.sourceLabel || candidate.source, wordLevel: candidate.wordLevel,
+          retimedLines: retimed ? retimed.moved : 0,
+        });
       }
       log.info(`自動對時未套用: ${trackId}: ${current.reason}`);
-      reply({ ok: true, applied: false, reason: current.reason, spreadMs: current.spreadMs ?? null });
+      // 中文歌、沒裝精準對時元件：提示裝了可能對得上（元件只支援 Windows）
+      const suggestPrecise = !model.ready && process.platform === 'win32' && preciseSync.isChineseLyrics(lines);
+      reply({ ok: true, applied: false, reason: current.reason, spreadMs: current.spreadMs ?? null, suggestPrecise });
     } catch (err) {
       log.warn(`自動對時失敗: ${trackId}: ${err.message}`);
       reply({ ok: false, code: 'ANALYSIS_FAILED' });
@@ -325,8 +386,18 @@ function registerLyricsHandlers(io, socket, ctx) {
     }
   });
 
+  // 整首偏移定了之後，逐句強制對齊；有把握的句子才改時間，都只是小修就回 null（只套偏移）。
+  async function retimeWithModel(samples, cacheKey, lines, offsetMs) {
+    const alignment = await alignModel.alignLines(samples, cacheKey, preciseSync.toWorkerLines(lines), offsetMs);
+    if (!alignment) return null;
+    const result = preciseSync.retimeLines(lines, offsetMs, alignment, { onsetNear: autoSync.vocalOnsetFinder(samples) });
+    if (result.vetoed) log.info('精準對時：逐句結果跟人聲起唱點多數不符，這首只套整首偏移');
+    return result.lines ? result : null;
+  }
+
   // 搜其他來源的歌詞，逐一用同一份人聲對時。可靠對上的候選裡逐字歌詞優先，其次看信心。
-  async function findAlignedSource(samples, track, currentLyrics) {
+  // 對不上的中文候選另外交回去，讓呼叫端在需要時一次交給精準對時模型判斷。
+  async function findAlignedSource(samples, track, currentLyrics, model) {
     let rows = [];
     try {
       rows = await Promise.race([
@@ -335,9 +406,10 @@ function registerLyricsHandlers(io, socket, ctx) {
       ]);
     } catch (err) {
       log.warn(`自動對時搜尋歌詞來源失敗: ${err.message}`);
-      return null;
+      return { best: null, forModel: [] };
     }
     const accepted = [];
+    const forModel = [];
     for (const c of rows || []) {
       // 每個候選都要跑一次 FFT 對時（4 分鐘的歌約 0.3 秒）：中間讓出事件迴圈，
       // 不然候選一多，直播中的歌詞同步、OBS、HTTP 會整個卡住好幾秒。
@@ -348,10 +420,12 @@ function registerLyricsHandlers(io, socket, ctx) {
       parsed = sanitizeParsedLyrics(parsed) || [];
       if (!parsed.some((l) => l.time > 0)) continue;
       const result = autoSync.estimateOffset(samples, parsed);
-      if (result.accepted) accepted.push({ ...c, lines: parsed, result, wordLevel: autoSync.isWordLevel(parsed) });
+      const entry = { ...c, lines: parsed, result, wordLevel: autoSync.isWordLevel(parsed) };
+      if (result.accepted) accepted.push({ ...entry, how: `z=${result.peakZ.toFixed(1)}` });
+      else if (model && model.ready && preciseSync.isChineseLyrics(parsed)) forModel.push(entry);
     }
     accepted.sort((x, y) => Number(y.wordLevel) - Number(x.wordLevel) || y.result.peakZ - x.result.peakZ);
-    return accepted[0] || null;
+    return { best: accepted[0] || null, forModel };
   }
 
   // 還原上一次自動對時：偏移，以及換過來源時的原本歌詞。偏移已被手動改過就不還原。

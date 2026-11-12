@@ -277,6 +277,52 @@ function estimateOffset(samples, lines) {
   return { ...base, accepted: false, reason: 'LOW_CONFIDENCE', segments };
 }
 
+/**
+ * 已經知道大概位置時（精準對時元件給的中心），只在中心 ±windowMs 內用句首互相關找最準的偏移。
+ * 模型抓得出「是哪裡」但位置較粗；句首互相關在對的範圍內很準，兩者搭配（2026-11-12 實驗）。
+ */
+function refineOffsetNear(samples, lines, centerMs, windowMs = 700) {
+  const db = energyDb(samples);
+  const lyric = lyricTracks(lines, db.length);
+  const maxLag = Math.round(MAX_LAG_SEC / HOP_SEC);
+  const onsetCorr = crossCorrelate(onsetStrength(db), lyric.starts, maxLag);
+  const center = Math.round(-centerMs / 1000 / HOP_SEC) + maxLag;
+  const win = Math.round(windowMs / 1000 / HOP_SEC);
+  let best = -1;
+  for (let i = Math.max(0, center - win); i <= Math.min(onsetCorr.length - 1, center + win); i++) {
+    if (best < 0 || onsetCorr[i] > onsetCorr[best]) best = i;
+  }
+  if (best < 0) return Math.round(centerMs);
+  return Math.round(-(best - maxLag) * HOP_SEC * 1000) || 0;
+}
+
+/**
+ * 人聲「從安靜到開口」的時間點查詢器：給一個時間，回傳附近 ±1.2 秒內最接近的起唱點（ms），找不到回 null。
+ * 精準對時逐句校正用它投票：同一首歌多數句子是「原本的時間比較接近起唱點」就整首不校正
+ * （2026-11-12：模型在少數歌上會整首系統性地晚約 0.3 秒，這樣擋得掉，實驗集幾乎不損失）。
+ */
+function vocalOnsetFinder(samples) {
+  const db = energyDb(samples);
+  const n = db.length;
+  const thr = Math.max(percentile(db, 95) - 25, percentile(db, 10) + 10);
+  const active = Uint8Array.from(db, (v) => (v > thr ? 1 : 0));
+  return (timeMs) => {
+    const c = Math.floor(timeMs / 10);
+    let best = -1;
+    for (let f = Math.max(15, c - 120); f < Math.min(n - 1, c + 120); f++) {
+      if (!active[f]) continue;
+      let quiet = true;
+      for (let k = f - 15; k < f; k++) if (active[k]) { quiet = false; break; }
+      if (!quiet) continue;
+      let on = 0;
+      for (let k = f; k < Math.min(n, f + 8); k++) on += active[k];
+      if (on / 8 <= 0.8) continue;
+      if (best < 0 || Math.abs(f - c) < Math.abs(best - c)) best = f;
+    }
+    return best < 0 ? null : best * 10;
+  };
+}
+
 /** 逐字歌詞：超過一半的行有兩個以上帶時長的字（整句一個 word 的假逐字 KRC 不算）。 */
 function isWordLevel(lines) {
   const list = (lines || []).filter((l) => l && String(l.text || '').trim());
@@ -284,4 +330,4 @@ function isWordLevel(lines) {
   return list.length > 0 && word > list.length * 0.5;
 }
 
-module.exports = { estimateOffset, decodeMono, isWordLevel, MIN_PEAK_Z, MIN_PEAK_RATIO, SAMPLE_RATE };
+module.exports = { estimateOffset, refineOffsetNear, vocalOnsetFinder, decodeMono, isWordLevel, MIN_PEAK_Z, MIN_PEAK_RATIO, SAMPLE_RATE };

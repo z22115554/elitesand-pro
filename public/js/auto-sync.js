@@ -46,7 +46,7 @@
       // 搜歌詞來源可能要十幾秒，逾時放寬
       SocketClient.sendWithCallback('offset:auto', { trackId, ...extra }, (result, error) => {
         resolve(result || { ok: false, code: error?.code || 'FAILED' });
-      }, { timeoutMs: 60000 });
+      }, { timeoutMs: 240000 }); // 精準對時元件第一次在顯示卡上跑要編譯約 1 分鐘，加上搜尋其他來源
     });
   }
 
@@ -77,17 +77,19 @@
   function resultMessage(result) {
     if (result.ok && result.applied) {
       const seconds = (result.offsetMs >= 0 ? '+' : '') + (result.offsetMs / 1000).toFixed(2);
+      const retimed = result.retimedLines > 0 ? T('autoSync.retimed', { count: result.retimedLines }) : '';
       if (result.switchedSource) {
         const key = result.wordLevel ? 'autoSync.appliedSwitchedWord' : 'autoSync.appliedSwitched';
-        return [T(key, { source: result.switchedSource, seconds }), 'success'];
+        return [T(key, { source: result.switchedSource, seconds }) + retimed, 'success'];
       }
-      return [T('autoSync.applied', { seconds }), 'success'];
+      return [T('autoSync.applied', { seconds }) + retimed, 'success'];
     }
     if (result.ok) {
-      if (result.reason === 'VERSION_MISMATCH') return [T('autoSync.versionMismatch', { seconds: (result.spreadMs / 1000).toFixed(1) }), 'info'];
       if (result.reason === 'NO_TIMESTAMPS') return [T('autoSync.noTimestamps'), 'info'];
       if (result.reason === 'CHANGED') return [T('autoSync.changedMeanwhile'), 'info'];
-      return [T('autoSync.uncertain'), 'info'];
+      const hint = result.suggestPrecise ? T('autoSync.suggestPrecise') : '';
+      if (result.reason === 'VERSION_MISMATCH') return [T('autoSync.versionMismatch', { seconds: (result.spreadMs / 1000).toFixed(1) }) + hint, 'info'];
+      return [T('autoSync.uncertain') + hint, 'info'];
     }
     const key = { NO_TIMESTAMPS: 'autoSync.noTimestamps', NEEDS_SEPARATION: 'autoSync.noVocals', BUSY: 'autoSync.busy' }[result.code];
     return [key ? T(key) : T('autoSync.failed', { code: result.code || '' }), 'error'];
@@ -146,6 +148,7 @@
 
   SocketClient.on('offset:auto-progress', (data) => {
     if (data && running.has(data.trackId) && data.stage === 'sources') setStep(data.trackId, T('autoSync.searchingSources'));
+    if (data && running.has(data.trackId) && data.stage === 'precise') setStep(data.trackId, T('autoSync.precise'));
   });
 
   // 偏移被別的方式改掉（手動微調、別台遙控器）就不再提供還原
