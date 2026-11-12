@@ -1,4 +1,4 @@
-window.__V2_TEXT = "—…→◀★、。「」぀あいうえかがぎくさしそぞたっでとなのほまもゅらりるれろんアイギクコゴサザシスゾチッツトドパピフブプミムャリルレロン・ーヿ㐀一七三上下不世丘中临主之乗乘也亂了二五些交亮人介他代以任份众伙伴位低住体佔何作你佬來例依便保信個倍倒候借值偏做停側偵偷備傳傾像元先光免入內全兩八六共其具再冒凍出函分切列別利到制券刺刻則前剪副創劃力加動勝化區十升半卡印即厚原去參反取口句另只叫召可台右号各合吉吊同名向含吸告员周和咻員哥哪唱喚喜單嘯器噴囊四回固圈國圍圓圖團在地址型城執堆報場塊塗塞填墜墨壁壓壞外多夜夥大天太央夾奇套好始子字宇完宙定容實寫寬寶寸射專對小少就尺尾局屑層屬山峙崩嶼工左巨差己已巴市布带席帶帷幕幣平幸幾序底度座廓建式弦弧張強彈当形彩影往很律後徑得從復微徽心快急意感態慢懂成戒或截戲戳戶所扇扉手才打扭批把抓投抖抽拆拉拍拖招括拱拿指按捲掃掉排探接推描插換揪揭搖撐撞撥播擊擔擠擬擲擴擺攏支收改放效散整數文料斜斬新斷方於旁旋旗日昇明星映是時晃普景暈暗暫曉書替最會有望朝期末本杆材束来板析果架柏柔查柱校核格桅框案桌條棒楚構樓標模樣機橫檔檢檻次止正歩死殘段殼殿母每比毛氣水決沒法泡波洞活派流浪海淡深清測港満準滑滴滾滿漏演漫漸激瀏火炸為然煙照熄熱燈爆爍爬片版牌物特狀獎獨率玉玻珠現球璃環瓶生用甩由甲界留畫當疊痕登發白的盒盤目直相看眼眾着睛瞬知矮砸碎確碼示神祥票禮秒移程稍稜種稱空突窗立站章端符第筆等算管箭箱範簡籤粉粒粗糊系約紅紋純紙級素終組結給統絲經綠網線緞緣緩縫縮繁繞缺置羅羽翅翻翼者而聚聲聴胃背胜能脈脹膀膠臂臉臨自至致與舊舞舰舷船艘艦色芒花英菊華菱落著蒙蓄蓋藍處號虹蛋螢螺血行街衝表被袭裁裂補裡製襲要覆見規視覽觀观角解觸言訂計訊記設話該誕誘語謝證警譯讀變讓订证谢負貨貼資賞贈赠起超越跑跟跡路跳身躲軌転軸較載輪輸轉近追退送逆透逐這通速連進遇遊運過道達遠避還邊那部郵都配重野量金釘針鈕鋪鋸鋼錄錨錯録鎖鏡鐘長門閃閉開間閱關阅队降限陣陰陽隊階隙際隧隨隻集雙雜離雨雲雷電需霓露霸青靜靠面韓音頂順預頭頸頻顆題顏類顯風飄飛餌馬驚驾骨骰體高麗黃黑點齊齐齒鿿가감강개격과구권께니님다대도독드량레리림명물사선손습승시신어외요원이자전집착청초큰함합했형호힯！（）＋，／：；＝～";
+window.__V2_TEXT = "—…→◀★、。「」぀あいうえかがぎくさしそぞたっでとなのほまもゅらりるれろんアイギクコゴサザシスゾチッツトドパピフブプミムャリルレロン・ーヿ㐀一七三上下不世丘中临主之乗乘也亂了二五些交亮人介他代以任份众伙伴位低住体佔何作你佬併來例依便保信個倍倒候借值偏做停側偵偷備傳傾像元先光免入內全兩八六共其具再冒凍出函分切列別利到制券刺刻則前剪副創劃力加動勝化區十升半卡印即厚原去參反取口句另只叫召可台右号各合吉吊同名向含吸告员周和咻員哥哪唱喚喜單嘯器噴囊四回固圈國圍圓圖團在地址型城執堆報場塊塗塞填墜墨壁壓壞外多夜夥大天太央夾奇套好始子字宇完宙定容實寫寬寶寸射專對小少就尺尾局屑層屬山峙崩嶼工左巨差己已巴市布带席帶帷幕幣平幸幾序底度座廓建式弦弧張強彈当形彩影往很律後徑得從復微徽心快急意感態慢懂成戒或截戲戳戶所扇扉手才打扭批把抓投抖抽拆拉拍拖招括拱拿指按捲掃掉排探接推描插換揪揭搖撐撞撥播擊擔擠擬擲擴擺攏支收改放效散整數文料斜斬新斷方於旁旋旗日昇明星映是時晃普景暈暗暫曉書替最會有望朝期末本杆材束来板析果架柏柔查柱校核根格桅框案桌條棒楚構樓標模樣機橫檔檢檻次止正歩死殘段殼殿母每比毛氣水決沒法泡波洞活派流浪海淡深清測港満準滑滴滾滿漏演漫漸激瀏火炸為然煙照熄熱燈爆爍爬片版牌物特狀獎獨率玉玻珠現球璃環瓶生用甩由甲界留畫當疊痕登發白的盒盤目直相看眼眾着睛瞬知矮砸碎確碼示神祥票禮秒移程稍稜種稱空突窗立站章端符第筆等算管箭箱範簡籤粉粒粗糊系約紅紋純紙級素終組結給統絲經綠網線緞緣緩縫縮繁繞缺置羅羽翅翻翼者而聚聲聴胃背胜能脈脹膀膠臂臉臨自至致與舊舞舰舷船艘艦色芒花英菊華菱落著蒙蓄蓋藍處號虹蛋螢螺血行街衝表被袭裁裂補裡製襲要覆見規視覽觀观角解觸言訂計訊記設話該誕誘語謝證警譯讀變讓订证谢負貨貼資賞贈赠起超越跑跟跡路跳身躲軌転軸較載輪輸轉近追退送逆透逐這通速連進遇遊運過道達遠避還邊那部郵都配重野量金釘針鈕鋪鋸鋼錄錨錯録鎖鏡鐘長門閃閉開間閱關阅队降限陣陰陽隊階隙際隧隨隻集雙雜離雨雲雷電需霓露霸青靜靠面韓音頂順預頭頸頻顆題顏類顯風飄飛餌餘馬驚驾骨骰體高麗黃黑點齊齐齒鿿가감강개격과구권께니님다대도독드량레리림명물사선손습승시신어외요원이자전집착청초큰함합했형호힯！（）＋，／：；＝～";
 // 抖內「大物降臨」激熱演出：draw(t) 純函式逐格算圖，1920x1080
 const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
 const cv = document.getElementById('c');
@@ -5165,6 +5165,74 @@ function wordV2(ctx, txt, x, y, k, o = {}) {   // 覆寫：演出中的大字與
   ctx.save(); ctx.beginPath(); ctx.rect(-2000, -95, 4000, 80); ctx.clip(); ctx.globalAlpha *= 0.3; ctx.fillStyle = '#fff'; ctx.fillText(txt, 0, 0); ctx.restore();
   if (k >= 1 && o.box !== false) { const w = tw + 50; dbgBox(ctx, 'text', 'word:' + txt, -w / 2, -95, w / 2, 95); }
   ctx.restore();
+}
+
+// 彩虹放射背景：原本 36 道光芒每一道各自套一次 blur(18px)，等於每格整張畫面模糊 36 次。
+// 改成光芒先畫在一張圖上，整張只模糊一次再疊上去（光芒之間有空隙，合併後再模糊，看起來一樣）。
+let _raysCanvas = null;
+function rainbowBG2(ctx, t, cx = 560, cy = 470) {
+  const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 1700);
+  bg.addColorStop(0, '#fffbe0'); bg.addColorStop(0.12, '#ffe14a'); bg.addColorStop(0.35, '#ff5aa5'); bg.addColorStop(0.62, '#7a3cff'); bg.addColorStop(1, '#10073a');
+  ctx.fillStyle = bg; ctx.fillRect(-80, -80, W + 160, H + 160);
+  const cw = ctx.canvas.width, ch = ctx.canvas.height;
+  if (!_raysCanvas || _raysCanvas.width !== cw || _raysCanvas.height !== ch) _raysCanvas = mk(cw, ch);
+  const x = _raysCanvas.getContext('2d');
+  x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cw, ch); x.setTransform(ctx.getTransform());
+  const n = 36, rot = t * 0.35;
+  for (let i = 0; i < n; i++) { x.fillStyle = `hsla(${(i * 360 / n + t * 120) % 360},100%,62%,${i % 2 ? 0.75 : 0.3})`; const a0 = rot + i / n * Math.PI * 2, a1 = a0 + Math.PI / n;
+    x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a0) * 3200, cy + Math.sin(a0) * 3200); x.lineTo(cx + Math.cos(a1) * 3200, cy + Math.sin(a1) * 3200); x.fill(); }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'overlay'; ctx.filter = 'blur(18px)'; ctx.drawImage(_raysCanvas, 0, 0); ctx.restore();
+  speedLines(ctx, cx, cy, 90, 520, 'rgba(255,255,255,0.55)', Math.floor(t * 30), 0, 0.7);
+}
+
+// 觀眾的螢光棒：原本每一根都套一次 blur(4px)（一排三十幾根），改成每種顏色先畫好一張模糊過的小圖再貼。
+const _stickSprites = new Map();
+function stickSprite(hue, sc) {
+  const key = hue + '|' + sc.toFixed(3);
+  const hit = _stickSprites.get(key); if (hit) return hit;
+  const pad = 12, sw = 16 * sc, sh = 150 * sc, c = mk(Math.ceil(sw) + pad * 2, Math.ceil(sh) + pad * 2), x = c.getContext('2d');
+  x.filter = 'blur(4px)'; x.fillStyle = `hsl(${hue},100%,65%)`; x.fillRect(pad, pad, sw, sh);
+  const sprite = { c, pad }; _stickSprites.set(key, sprite); return sprite;
+}
+function crowdV2(ctx, t, y0, sc = 1, rows = 1) {   // 覆寫：觀眾剪影＋螢光棒（畫法同原版，螢光棒改貼圖）
+  for (let rw = rows - 1; rw >= 0; rw--) { const n = Math.round(30 / sc) + rw * 3;
+    for (let i = 0; i < n; i++) { const x = (i + 0.5 + (rw % 2) * 0.5) * W / n + (R(i, 1 + rw) - 0.5) * 30, y = y0 - rw * 90 * sc + R(i, 2 + rw) * 50 * sc, hr = (42 + R(i, 3) * 10) * sc, wave = Math.sin(t * 7 + i * 0.6 + rw) * 0.5, hue = [330, 200, 50, 280][Math.floor(t * 1.5 + i + rw) % 4];
+      const sp = stickSprite(hue, sc);
+      ctx.save(); ctx.translate(x + 44 * sc, y + 10 * sc); ctx.rotate(wave); ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(sp.c, -8 * sc - sp.pad, -150 * sc - sp.pad); ctx.restore();
+      ctx.fillStyle = rw ? '#150826' : '#0a0414'; ctx.beginPath(); ctx.arc(x, y + hr, hr, 0, 7); ctx.fill(); ctx.fillRect(x - hr * 1.3, y + hr * 1.6, hr * 2.6, 400); } }
+}
+
+// 巨大化的近景大樓：四塊看板各畫一次彩虹背景。改成每格只在一張小圖上畫一次，四塊看板共用。
+let _boardTex = null, _boardTexT = -1;
+function boardTexture(t) {
+  const BW = 200, BH = 88, M = 40;
+  if (!_boardTex) _boardTex = mk(BW + M * 2, BH + M * 2);
+  if (_boardTexT !== t) {
+    const x = _boardTex.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, _boardTex.width, _boardTex.height);
+    x.translate(M, M);
+    rainbowBG2(x, t * 2.2, BW / 2, 44);
+    smallTitle(x, t, '×' + CFG.n, BW / 2, 46, 46, PAL.gold, 'center');
+    _boardTexT = t;
+  }
+  return { c: _boardTex, BW, M };
+}
+function cityNear(ctx, t, lit) {   // 覆寫：看板另外畫（共用同一張），其餘跟原版一樣
+  const o = { seed: 7, n: 16, lit, line: '#0a0620', cols: ['#1e1846', '#241c50', '#1a1440', '#2a2058'], win: ['#ffe28a', '#ffb0e0', '#1a1240'],
+    prof: (xc, i) => { const d = Math.min(1, Math.abs(xc - 960) / 760); return 120 + 40 * R(i, 9) + (300 + 240 * R(i, 10)) * Math.pow(d, 1.5); } };
+  skylineV2(ctx, t, o);
+  if (lit <= 0.5) return;
+  const bw = (W + 200) / o.n;
+  let tex = null;
+  for (const i of [1, 3, 12, 14]) {
+    const w = bw * (0.82 + R(i, o.seed + 1) * 0.3), x = -100 + i * bw + R(i, o.seed + 2) * 20, h = o.prof(x + w / 2, i), y = 1080 - h;
+    if (h <= 260) continue;
+    if (!tex) tex = boardTexture(t);
+    ctx.fillStyle = '#05030c'; ctx.fillRect(x + 8, y + 30, w - 16, 96);
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 12, y + 34, w - 24, 88); ctx.clip();
+    ctx.drawImage(tex.c, x + w / 2 - tex.BW / 2 - tex.M, y + 34 - tex.M);
+    ctx.restore();
+  }
 }
 
 // ======================= 時間軸與輸出 =======================

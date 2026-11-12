@@ -101,6 +101,7 @@ const lyricsUpload = multer({
 // ─── 依功能分檔的子路由（server/routes/api/）───
 router.use(require('./api/system'));
 router.use(require('./api/display-assets'));
+router.use(require('./api/alert-show-assets'));
 router.use(require('./api/fonts'));
 router.use(require('./api/separation'));
 

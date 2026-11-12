@@ -609,6 +609,9 @@ module.exports = function socketHandler(io, {
       emitToControlClients(io, 'font-probe:warning', { name, ts: now });
     });
 
+    // OBS 顯示端（唯讀）：連上就給觀眾演出的設定，有開全畫面演出時先把舞台載好。只送設定，不掛事件。
+    registerOverlayShowHandlers.sendSettingsToDisplay(socket, overlayShow);
+
     // ─── 各領域事件：只有通過控制權限的 controller/remote 才掛寫入 handler ───
     // 只看事件名稱，不讀取歌曲、歌詞或其他 payload；同一 UTC 日最多嘗試傳送一次。
     if (!socket.readOnly && typeof socket.onAny === 'function') {

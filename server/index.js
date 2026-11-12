@@ -458,6 +458,18 @@ app.get('/background/:filename', (req, res) => {
   });
 });
 
+// ─── 訂閱／贈訂／揪團演出：使用者上傳的角色圖（唯讀，不掛 PIN，同 /background 先例）───
+// 種類只收 girl／mascot，檔案路徑由伺服器自己組，不吃網址裡的檔名。
+app.get('/alert-show/custom/:kind', (req, res) => {
+  const { findCharacterFile } = require('./routes/api/alert-show-assets');
+  const file = findCharacterFile(String(req.params.kind || ''));
+  if (!file) return res.status(404).json({ error: '沒有自訂角色圖' });
+  res.set('Cache-Control', 'no-cache'); // 換圖時網址會帶新的 rev；同一張圖仍可用 ETag 省流量
+  res.sendFile(file, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: '沒有自訂角色圖' });
+  });
+});
+
 // ─── 對話氣泡模板：使用者自訂間奏貼圖（唯讀，不掛 PIN，同 /background 先例）───
 app.get('/typewriter-sticker/:filename', (req, res) => {
   const safeName = path.basename(req.params.filename);

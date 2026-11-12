@@ -76,7 +76,8 @@
     var mine = ++token;
     current = { id: String(message.id || '') };
 
-    window.ready.then(function () { return waitFonts(name); }).then(function () {
+    // 換角色圖是非同步的：等最近一次換圖完成再開演，不會演到一半才換臉。
+    window.ready.then(function () { return characterJob; }).then(function () { return waitFonts(name); }).then(function () {
       if (mine !== token) return;
       P.n = count;
       P.bg = "0";
@@ -135,6 +136,50 @@
     if (isFinite(s)) window.FACE.s = Math.max(0.05, Math.min(0.35, s));
   }
 
+  // ─── 角色圖（內建或使用者上傳）───
+  var DEFAULT_GIRL = 'assets/girl.webp';
+  var DEFAULT_MASCOT = 'assets/mascot.webp';
+  var characterKey = 'default|default|0';
+  var characterJob = Promise.resolve();
+
+  function loadImage(src) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { resolve(null); };
+      img.src = src;
+    });
+  }
+
+  function customUrl(kind, rev) { return '/alert-show/custom/' + kind + '?rev=' + rev; }
+
+  /** 照設定換角色圖。自訂圖讀不到（被刪掉、還沒上傳）就退回內建，不讓畫面少一個人。 */
+  function applyCharacter(character) {
+    if (!character || typeof character !== 'object') return characterJob;
+    applyFace(character.face);
+    var girl = character.girl === 'custom' ? 'custom' : 'default';
+    var mascot = character.mascot === 'custom' || character.mascot === 'none' ? character.mascot : 'default';
+    var rev = Math.max(0, Math.floor(Number(character.rev) || 0));
+    var key = girl + '|' + mascot + '|' + rev;
+    if (key === characterKey) return characterJob;
+    characterKey = key;
+    characterJob = window.ready.then(function () {
+      var girlJob = loadImage(girl === 'custom' ? customUrl('girl', rev) : DEFAULT_GIRL).then(function (img) {
+        return img || (girl === 'custom' ? loadImage(DEFAULT_GIRL) : null);
+      });
+      var mascotJob = mascot === 'none' ? Promise.resolve(null) : loadImage(mascot === 'custom' ? customUrl('mascot', rev) : DEFAULT_MASCOT).then(function (img) {
+        return img || (mascot === 'custom' ? loadImage(DEFAULT_MASCOT) : null);
+      });
+      return Promise.all([girlJob, mascotJob]);
+    }).then(function (images) {
+      if (key !== characterKey) return; // 載入期間又換了一次：以最新的為準
+      if (images[0]) window.setGirl(images[0]);
+      window.setMascot(images[1]);
+      post('character', { key: key });
+    }).catch(function () { /* 換圖失敗就維持原本的角色 */ });
+    return characterJob;
+  }
+
   window.addEventListener('message', function (event) {
     if (event.origin !== location.origin || event.source !== window.parent) return;
     var message = event.data;
@@ -142,10 +187,11 @@
     if (message.type === 'play') { applyFace(message.face); play(message); }
     else if (message.type === 'stop') stop('stopped');
     else if (message.type === 'face') applyFace(message.face);
+    else if (message.type === 'character') applyCharacter(message.character);
   });
 
   // 給效能量測與自動化測試用（同源頁面才碰得到）。
-  window.__alertStage = { play: play, stop: stop };
+  window.__alertStage = { play: play, stop: stop, applyCharacter: applyCharacter };
 
   // 引擎自己把畫面畫成「背景透明」之前，先確保畫布是空的。
   P.bg = "0";

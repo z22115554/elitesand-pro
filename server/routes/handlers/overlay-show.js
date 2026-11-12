@@ -4,14 +4,20 @@
  */
 'use strict';
 
+const DISPLAY_CLIENT_TYPES = new Set(['display', 'display-preview', 'display-spout']);
+
+/**
+ * OBS 顯示端一連上就給它目前的設定：有開全畫面演出的話，先把舞台與角色圖載好，第一次演出才不會慢半拍。
+ * 顯示端是唯讀連線，registerOverlayShowHandlers 不會為它註冊，所以這支由 socket-handler 在唯讀檢查之外呼叫。
+ * 只送出設定內容（開關、門檻、音量、角色圖），不給它任何修改或觸發的事件。
+ */
+function sendSettingsToDisplay(socket, service) {
+  if (!service || !DISPLAY_CLIENT_TYPES.has(socket.clientType)) return false;
+  socket.emit('overlay-show:settings', service.getSettings());
+  return true;
+}
+
 function registerOverlayShowHandlers(io, socket, { getOverlayShow }) {
-  // OBS 顯示端一連上就給它目前的設定：有開全畫面演出的話，先把舞台載好，第一次演出才不會慢半拍。
-  // 只送出設定內容（開關、門檻、音量），不給它任何修改或觸發的事件。
-  if (socket.clientType === 'display' || socket.clientType === 'display-preview' || socket.clientType === 'display-spout') {
-    const service = getOverlayShow();
-    if (service) socket.emit('overlay-show:settings', service.getSettings());
-    return;
-  }
   if (socket.clientType !== 'controller') return;
 
   const reply = (ack, body) => { if (typeof ack === 'function') ack(body); };
@@ -47,3 +53,4 @@ function registerOverlayShowHandlers(io, socket, { getOverlayShow }) {
 }
 
 module.exports = registerOverlayShowHandlers;
+module.exports.sendSettingsToDisplay = sendSettingsToDisplay;

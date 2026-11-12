@@ -39,6 +39,17 @@
     name: el('alert-show-name'),
     replay: el('alert-show-replay'),
     obsTest: el('alert-show-obs-test'),
+    character: el('alert-show-character'),
+    girlState: el('alert-show-girl-state'),
+    girlUpload: el('alert-show-girl-upload'),
+    girlReset: el('alert-show-girl-reset'),
+    faceCanvas: el('alert-show-face-canvas'),
+    faceSize: el('alert-show-face-size'),
+    charPreview: el('alert-show-char-preview'),
+    mascotMode: el('alert-show-mascot-mode'),
+    mascotCanvas: el('alert-show-mascot-canvas'),
+    mascotUpload: el('alert-show-mascot-upload'),
+    file: el('alert-show-file'),
   };
 
   let catalog = null;
@@ -71,6 +82,7 @@
   function render(next) {
     if (!next || !next.alerts) return;
     settings = next;
+    if (next.alerts.character && !faceDirty) syncCharacterToStage();
     if (fields.sub) fields.sub.checked = !!next.alerts.subEnabled;
     if (fields.gift) fields.gift.checked = !!next.alerts.giftEnabled;
     if (fields.volume && document.activeElement !== fields.volume) fields.volume.value = next.alerts.volume;
@@ -131,6 +143,15 @@
       button.classList.toggle('active', on);
       button.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    const isCharacter = activeGroup === 'character';
+    ui.tiers.hidden = isCharacter;
+    ui.character.hidden = !isCharacter;
+    if (isCharacter) {
+      ui.presets.hidden = true;
+      ui.note.hidden = true;
+      renderCharacter();
+      return;
+    }
     ui.presets.hidden = activeGroup === 'sub';
     const raidCard = activeGroup === 'raid' && settings.raid?.mode !== 'show';
     ui.note.hidden = !raidCard;
@@ -231,6 +252,8 @@
     if (!data || data.source !== 'alert-show-stage') return;
     if (data.type === 'ready') {
       stageReady = true;
+      lastStageCharacterKey = '';
+      syncCharacterToStage();
       if (pendingPlay) { postToStage(pendingPlay); pendingPlay = null; }
     }
   });
@@ -292,6 +315,272 @@
     loadCatalog().then(() => { load(); renderTiers(); }).catch(() => toast(t('alertShow.catalogFailed'), 'error'));
     window.setTimeout(() => el('alert-show-modal-title')?.focus(), 0);
   }
+
+  // ─── 角色圖（角色、吉祥物）───
+  //
+  // 上傳前在這裡先處理：裁掉透明邊（跟引擎的 trimmed() 同一套門檻，臉的位置才對得上）、
+  // 長邊縮到 GIRL_MAX／MASCOT_MAX、轉成 WebP。沒有透明背景的圖直接擋下，免得直播畫面出現一個方框。
+
+  const GIRL_MAX = 1600;
+  const MASCOT_MAX = 900;
+  const DEFAULT_FACE = { x: 0.49, y: 0.15, s: 0.12 };
+  const imageCache = new Map(); // url -> Promise<裁好透明邊的 canvas|null>
+  let faceDraft = null;          // 拖動／點擊中還沒存進伺服器的臉部位置
+  let faceDirty = false;
+  let faceTimer = 0;
+  let uploadKind = 'girl';
+  let busy = false;
+  let lastStageCharacterKey = '';
+
+  function character() {
+    const c = settings?.alerts?.character;
+    return c ? { ...c, face: faceDraft || c.face } : { girl: 'default', mascot: 'default', face: DEFAULT_FACE, rev: 0 };
+  }
+
+  function imageUrl(kind, c) {
+    const mode = c[kind];
+    if (mode === 'custom') return `/alert-show/custom/${kind}?rev=${c.rev || 0}`;
+    return `/alert-show/assets/${kind}.webp`;
+  }
+
+  function trimCanvas(source, width, height) {
+    const work = document.createElement('canvas');
+    work.width = width; work.height = height;
+    const ctx = work.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(source, 0, 0, width, height);
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let x0 = width, y0 = height, x1 = -1, y1 = -1, see = 0;
+    for (let y = 0; y < height; y += 2) {
+      for (let x = 0; x < width; x += 2) {
+        const a = data[(y * width + x) * 4 + 3];
+        if (a < 20) { see += 1; continue; }
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0) return { canvas: null, transparent: true, empty: true };
+    const out = document.createElement('canvas');
+    out.width = x1 - x0 + 2; out.height = y1 - y0 + 2;
+    out.getContext('2d').drawImage(work, -x0, -y0);
+    return { canvas: out, transparent: see > 0, empty: false };
+  }
+
+  function loadTrimmed(url) {
+    if (!imageCache.has(url)) {
+      imageCache.set(url, new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(trimCanvas(img, img.naturalWidth, img.naturalHeight).canvas);
+        img.onerror = () => resolve(null);
+        img.src = url;
+      }));
+    }
+    return imageCache.get(url);
+  }
+
+  function drawContain(canvas, img) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!img) return null;
+    const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+    const w = img.width * scale, h = img.height * scale, x = (canvas.width - w) / 2, y = (canvas.height - h) / 2;
+    ctx.drawImage(img, x, y, w, h);
+    return { x, y, w, h };
+  }
+
+  let faceBox = null; // 角色圖畫在縮圖上的位置，點擊換算用
+
+  function renderFace() {
+    const c = character();
+    loadTrimmed(imageUrl('girl', c)).then((img) => {
+      const canvas = ui.faceCanvas;
+      if (img) {
+        // 縮圖框跟著圖的比例走，圖小時不留大片空白
+        const ratio = img.height / img.width;
+        const height = Math.round(Math.min(560, Math.max(260, 360 * ratio)));
+        if (canvas.height !== height) canvas.height = height;
+      }
+      faceBox = drawContain(canvas, img);
+      if (!faceBox) return;
+      const f = character().face;
+      const ctx = canvas.getContext('2d');
+      const cx = faceBox.x + f.x * faceBox.w, cy = faceBox.y + f.y * faceBox.h, r = f.s * faceBox.h * 0.95;
+      ctx.save();
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.arc(cx, cy, r + 1.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 2; ctx.strokeStyle = '#E9B949'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#E9B949'; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  function renderMascot() {
+    const c = character();
+    ui.mascotMode.querySelectorAll('button[data-mascot]').forEach((button) => {
+      const on = button.dataset.mascot === c.mascot;
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    ui.mascotUpload.hidden = c.mascot !== 'custom';
+    if (c.mascot === 'none') { drawContain(ui.mascotCanvas, null); return; }
+    loadTrimmed(imageUrl('mascot', c)).then((img) => drawContain(ui.mascotCanvas, img));
+  }
+
+  function renderCharacter() {
+    const c = character();
+    ui.girlState.textContent = t(c.girl === 'custom' ? 'alertShow.charStateCustom' : 'alertShow.charStateDefault');
+    ui.girlReset.hidden = c.girl !== 'custom';
+    if (document.activeElement !== ui.faceSize) ui.faceSize.value = String(c.face.s);
+    [ui.girlUpload, ui.girlReset, ui.mascotUpload].forEach((button) => { button.disabled = busy; });
+    renderFace();
+    renderMascot();
+  }
+
+  /** 把角色設定送給預覽框（同一組設定只送一次）。 */
+  function syncCharacterToStage() {
+    if (!stageReady) return;
+    const c = character();
+    const key = JSON.stringify(c);
+    if (key === lastStageCharacterKey) return;
+    lastStageCharacterKey = key;
+    postToStage({ type: 'character', character: c });
+  }
+
+  function setFace(next) {
+    const cur = character().face;
+    faceDraft = {
+      x: Math.round(Math.max(0, Math.min(1, next.x ?? cur.x)) * 1000) / 1000,
+      y: Math.round(Math.max(0, Math.min(1, next.y ?? cur.y)) * 1000) / 1000,
+      s: Math.round(Math.max(0.05, Math.min(0.35, next.s ?? cur.s)) * 1000) / 1000,
+    };
+    faceDirty = true;
+    renderFace();
+    postToStage({ type: 'face', face: faceDraft });
+    clearTimeout(faceTimer);
+    faceTimer = setTimeout(() => {
+      const face = faceDraft;
+      send({ alerts: { character: { face } } }, () => { faceDirty = false; faceDraft = null; syncCharacterToStage(); });
+    }, 300);
+  }
+
+  ui.faceCanvas.addEventListener('click', (event) => {
+    if (!faceBox) return;
+    const rect = ui.faceCanvas.getBoundingClientRect();
+    const px = (event.clientX - rect.left) * (ui.faceCanvas.width / rect.width);
+    const py = (event.clientY - rect.top) * (ui.faceCanvas.height / rect.height);
+    setFace({ x: (px - faceBox.x) / faceBox.w, y: (py - faceBox.y) / faceBox.h });
+  });
+  ui.faceCanvas.addEventListener('keydown', (event) => {
+    const step = event.shiftKey ? 0.03 : 0.006;
+    const f = character().face;
+    const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    const move = moves[event.key];
+    if (!move) return;
+    event.preventDefault();
+    setFace({ x: f.x + move[0], y: f.y + move[1] });
+  });
+  ui.faceSize.addEventListener('input', () => setFace({ s: Number(ui.faceSize.value) }));
+  ui.charPreview.addEventListener('click', () => previewVariant('g10', 3)); // VS 對決：結尾有大張臉部特寫
+
+  function pickFile(kind) {
+    if (busy) return;
+    uploadKind = kind;
+    ui.file.value = '';
+    ui.file.click();
+  }
+
+  function encode(canvas) {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (blob && blob.type === 'image/webp') resolve(blob);
+        else canvas.toBlob(resolve, 'image/png'); // 少數環境不支援輸出 WebP
+      }, 'image/webp', 0.92);
+    });
+  }
+
+  async function prepareUpload(file, kind) {
+    if (!/^image\/(png|webp)$/.test(file.type)) throw new Error(t('alertShow.charBadType'));
+    const bitmap = await createImageBitmap(file).catch(() => null);
+    if (!bitmap) throw new Error(t('alertShow.charBadType'));
+    const limit = kind === 'girl' ? GIRL_MAX : MASCOT_MAX;
+    // 原圖太大時先縮到兩倍上限再裁，免得手機拍的超大圖把面板卡住
+    const pre = Math.min(1, (limit * 2) / Math.max(bitmap.width, bitmap.height));
+    const trimmed = trimCanvas(bitmap, Math.round(bitmap.width * pre), Math.round(bitmap.height * pre));
+    bitmap.close?.();
+    if (trimmed.empty) throw new Error(t('alertShow.charEmpty'));
+    if (!trimmed.transparent) throw new Error(t('alertShow.charNoAlpha'));
+    const src = trimmed.canvas;
+    const scale = Math.min(1, limit / Math.max(src.width, src.height));
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(src.width * scale));
+    out.height = Math.max(1, Math.round(src.height * scale));
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0, out.width, out.height);
+    return { blob: await encode(out), width: out.width, height: out.height };
+  }
+
+  /** 新圖的臉先猜一個位置：直長的全身圖臉在上面，接近正方形的半身圖臉在中上。 */
+  function guessFace(width, height) {
+    const tall = height / width;
+    return tall > 1.25 ? { x: 0.5, y: 0.13, s: 0.11 } : { x: 0.5, y: 0.3, s: 0.2 };
+  }
+
+  ui.file.addEventListener('change', async () => {
+    const file = ui.file.files && ui.file.files[0];
+    if (!file) return;
+    const kind = uploadKind;
+    busy = true;
+    renderCharacter();
+    toast(t('alertShow.charUploading'));
+    try {
+      const prepared = await prepareUpload(file, kind);
+      const form = new FormData();
+      form.append('image', prepared.blob, `${kind}.${prepared.blob.type === 'image/webp' ? 'webp' : 'png'}`);
+      const response = await PinAuth.fetchWithPin(`/api/alert-show/character/${kind}`, { method: 'POST', body: form });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) throw new Error(result.error || t('alertShow.charUploadFailed'));
+      imageCache.clear();
+      const patch = kind === 'girl'
+        ? { girl: 'custom', rev: result.rev, face: guessFace(prepared.width, prepared.height) }
+        : { mascot: 'custom', rev: result.rev };
+      faceDraft = null; faceDirty = false;
+      send({ alerts: { character: patch } }, () => {
+        toast(t(kind === 'girl' ? 'alertShow.charUploaded' : 'alertShow.charMascotUploaded'), 'success');
+        if (kind === 'girl') ui.faceCanvas.focus();
+        previewVariant(kind === 'girl' ? 'g10' : 'g25', kind === 'girl' ? 3 : 1);
+      });
+    } catch (err) {
+      toast((err && err.message) || t('alertShow.charUploadFailed'), 'error');
+    } finally {
+      busy = false;
+      ui.file.value = '';
+      renderCharacter();
+    }
+  });
+
+  ui.girlUpload.addEventListener('click', () => pickFile('girl'));
+  ui.mascotUpload.addEventListener('click', () => pickFile('mascot'));
+  ui.girlReset.addEventListener('click', async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      await PinAuth.fetchWithPin('/api/alert-show/character/girl', { method: 'DELETE' }).catch(() => null);
+      imageCache.clear();
+      faceDraft = null; faceDirty = false;
+      send({ alerts: { character: { girl: 'default', face: { ...DEFAULT_FACE } } } });
+    } finally {
+      busy = false;
+      renderCharacter();
+    }
+  });
+  ui.mascotMode.addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-mascot]');
+    if (!button || busy) return;
+    const mode = button.dataset.mascot;
+    if (mode !== 'custom') { send({ alerts: { character: { mascot: mode } } }); return; }
+    // 自訂：之前上傳過就直接用，沒有就請使用者選一張
+    const head = await fetch(`/alert-show/custom/mascot?rev=${Date.now()}`, { method: 'HEAD', cache: 'no-store' }).catch(() => null);
+    if (head && head.ok) send({ alerts: { character: { mascot: 'custom' } } });
+    else pickFile('mascot');
+  });
 
   function close() {
     if (modal.hidden) return;

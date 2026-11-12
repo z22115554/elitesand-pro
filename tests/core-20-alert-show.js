@@ -203,9 +203,19 @@ test('訂閱演出：Twitch 用聊天室通知（不需要新的授權範圍）�
 
 test('訂閱演出：只有桌面面板能改設定與試播；顯示端只收到設定內容', () => {
   const handler = read('server/routes/handlers/overlay-show.js');
-  const displayBlock = handler.slice(handler.indexOf("socket.clientType === 'display'"), handler.indexOf("if (socket.clientType !== 'controller') return;"));
-  ok(displayBlock.includes("socket.emit('overlay-show:settings'") && displayBlock.includes('return;'), '顯示端拿到設定後就結束，不註冊任何事件');
+  const displayBlock = handler.slice(handler.indexOf('function sendSettingsToDisplay'), handler.indexOf('function registerOverlayShowHandlers'));
+  ok(displayBlock.includes("socket.emit('overlay-show:settings'"), '顯示端連上就收到設定');
   ok(!displayBlock.includes('socket.on('), '顯示端不可註冊修改或觸發的事件');
+  const socketHandler = read('server/routes/socket-handler.js');
+  const call = socketHandler.indexOf('registerOverlayShowHandlers.sendSettingsToDisplay(socket, overlayShow)');
+  ok(call > 0 && call < socketHandler.indexOf('registerPlaybackHandlers(io, socket, ctx);'), '顯示端是唯讀連線：送設定要在唯讀檢查之外，不然永遠送不到');
+  ok(!/if \(!socket\.readOnly\) \{[^}]*sendSettingsToDisplay/.test(socketHandler), '不可放進 !socket.readOnly 區塊');
+  const { sendSettingsToDisplay } = require('../server/routes/handlers/overlay-show');
+  const sent = [];
+  const fake = (clientType) => ({ clientType, emit: (event, payload) => sent.push([clientType, event, !!payload]) });
+  const service = makeHarness().service;
+  ['display', 'display-preview', 'display-spout', 'setlist', 'remote', 'controller'].forEach((type) => sendSettingsToDisplay(fake(type), service));
+  eq(sent.map((item) => item[0]).join(','), 'display,display-preview,display-spout', '只送給歌詞顯示端');
   ok(handler.indexOf("if (socket.clientType !== 'controller') return;") < handler.indexOf("socket.on('overlay-show:test'"));
   ok(handler.includes("kind !== 'postcard' && kind !== 'raid' && kind !== 'alert'"));
 });
@@ -297,4 +307,66 @@ test('訂閱演出：面板入口標 NEW、設定不存 localStorage、每一種
   for (const match of script.matchAll(/t\('(alertShow\.[A-Za-z.]+)'/g)) ok(has(match[1]), `缺翻譯 ${match[1]}`);
   const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
   ok(!emoji.test(script) && !emoji.test(panel.slice(panel.indexOf('id="alert-show-modal"'), panel.indexOf('id="electron-close-modal"'))), '介面文字不加 emoji');
+});
+
+test('角色圖：上傳與刪除都掛 requirePin，讀圖路由只收 girl／mascot、不吃網址裡的檔名', () => {
+  const routes = read('server/routes/api/alert-show-assets.js');
+  ok(routes.includes("router.post('/alert-show/character/:kind', requirePin,"), '上傳要掛 requirePin（鐵則 15）');
+  ok(routes.includes("router.delete('/alert-show/character/:kind', requirePin,"), '刪除要掛 requirePin（鐵則 15）');
+  ok(read('server/routes/api.js').includes("router.use(require('./api/alert-show-assets'));"));
+  const index = read('server/index.js');
+  ok(index.includes("app.get('/alert-show/custom/:kind'"), 'OBS 讀圖是唯讀路由（同 /background 先例不掛 PIN）');
+  const { findCharacterFile, CHARACTER_KINDS } = require('../server/routes/api/alert-show-assets');
+  eq(CHARACTER_KINDS.join(','), 'girl,mascot');
+  for (const bad of ['../state', '..\state', 'state.json', 'girl/../../x', '', '__proto__']) eq(findCharacterFile(bad), null, `不可讀到 ${bad}`);
+  const panel = read('public/js/app-alert-show.js');
+  ok(panel.includes("PinAuth.fetchWithPin(`/api/alert-show/character/${kind}`, { method: 'POST', body: form })"), '面板上傳要用 fetchWithPin（鐵則 16）');
+  ok(panel.includes("PinAuth.fetchWithPin('/api/alert-show/character/girl', { method: 'DELETE' })"));
+});
+
+test('角色圖：用檔頭認格式與長寬，副檔名騙不過；只收 PNG／WebP', () => {
+  const { sniffImage } = require('../server/routes/api/alert-show-assets');
+  const png = Buffer.alloc(40);
+  png.writeUInt32BE(0x89504e47, 0); png.writeUInt32BE(0x0d0a1a0a, 4); png.write('IHDR', 12, 'ascii');
+  png.writeUInt32BE(933, 16); png.writeUInt32BE(1400, 20);
+  eq(JSON.stringify(sniffImage(png)), JSON.stringify({ ext: '.png', width: 933, height: 1400 }));
+  const vp8x = Buffer.alloc(40);
+  vp8x.write('RIFF', 0, 'ascii'); vp8x.write('WEBP', 8, 'ascii'); vp8x.write('VP8X', 12, 'ascii');
+  vp8x.writeUIntLE(1599, 24, 3); vp8x.writeUIntLE(2399, 27, 3);
+  eq(JSON.stringify(sniffImage(vp8x)), JSON.stringify({ ext: '.webp', width: 1600, height: 2400 }));
+  const real = fs.readFileSync(path.join(ROOT, 'public/alert-show/assets/girl.webp'));
+  const info = sniffImage(real);
+  ok(info && info.ext === '.webp' && info.width === 933 && info.height === 1400, `內建角色圖應讀得出 933x1400（實際 ${JSON.stringify(info)}）`);
+  eq(sniffImage(Buffer.from('GIF89a' + 'x'.repeat(40))), null, 'GIF 不收（可能沒有透明背景、也可能是動圖）');
+  eq(sniffImage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'.padEnd(64))), null, 'SVG 不收');
+  eq(sniffImage(Buffer.alloc(8)), null);
+  eq(sniffImage('not a buffer'), null);
+});
+
+test('角色圖：設定裡的角色欄位夾範圍；舊存檔沒有 character 時用內建', () => {
+  const h = makeHarness({ initial: { alerts: { giftEnabled: true } } });
+  const c = h.service.getSettings().alerts.character;
+  eq(JSON.stringify(c), JSON.stringify({ girl: 'default', mascot: 'default', face: { x: 0.49, y: 0.15, s: 0.12 }, rev: 0 }));
+  const next = h.service.updateSettings({ alerts: { character: { girl: 'http://evil', mascot: 'none', face: { x: 9, y: -3, s: 1 }, rev: -5 } } }).alerts.character;
+  eq(next.girl, 'default', '只收 default／custom');
+  eq(next.mascot, 'none');
+  eq(JSON.stringify(next.face), JSON.stringify({ x: 1, y: 0, s: 0.35 }));
+  eq(next.rev, 0);
+  const keep = h.service.updateSettings({ alerts: { character: { face: { x: 0.4 } } } }).alerts.character;
+  eq(keep.mascot, 'none', '只改臉的位置時其他欄位不變');
+  eq(keep.face.y, 0);
+  eq(h.service.updateSettings({ alerts: { volume: 50 } }).alerts.character.face.x, 0.4, '改別的設定不影響角色');
+});
+
+test('角色圖：舞台與顯示端——自訂圖讀不到就退回內建、開演前等換圖完成、只收同源路徑', () => {
+  const stage = read('public/alert-show/stage.js');
+  ok(stage.includes("return img || (girl === 'custom' ? loadImage(DEFAULT_GIRL) : null);"), '自訂角色圖不見了要退回內建，畫面不能少一個人');
+  ok(stage.includes("window.ready.then(function () { return characterJob; })"), '開演前要等換圖完成');
+  ok(stage.includes("'/alert-show/custom/' + kind + '?rev=' + rev"), '圖的網址由舞台自己組，不吃外層傳來的網址');
+  ok(stage.includes("if (key !== characterKey) return;"), '連續換兩次圖時以最後一次為準');
+  const display = read('public/js/overlay-show.js');
+  ok(/data\.type === 'ready'[\s\S]{0,120}type: 'character'/.test(display), '舞台每次載好都要再給一次角色設定');
+  const panel = read('public/js/app-alert-show.js');
+  ok(panel.includes("if (!trimmed.transparent) throw new Error(t('alertShow.charNoAlpha'));"), '沒有透明背景的圖要擋下（直播畫面會出現方框）');
+  ok(/accept="image\/png,image\/webp"/.test(read('public/index.html')));
 });

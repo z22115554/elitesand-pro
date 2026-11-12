@@ -43,6 +43,7 @@ const DEFAULTS = Object.freeze({
     giftMin: Object.freeze({ g5: CATALOG.giftMin.g5, g10: CATALOG.giftMin.g10, g25: CATALOG.giftMin.g25, g50: CATALOG.giftMin.g50, g100: CATALOG.giftMin.g100 }),
     raidMin: Object.freeze({ r2: CATALOG.raidMin.r2, r3: CATALOG.raidMin.r3, r4: CATALOG.raidMin.r4 }),
     off: Object.freeze([]),
+    character: Object.freeze({ girl: 'default', mascot: 'default', face: Object.freeze({ x: 0.49, y: 0.15, s: 0.12 }), rev: 0 }),
   }),
   postcard: Object.freeze({ durationSec: 10, style: 'paper', anchor: 'top-right' }),
 });
@@ -110,6 +111,36 @@ function normalizeOff(input, current) {
   return [...seen].sort();
 }
 
+const GIRL_MODES = Object.freeze(['default', 'custom']);
+const MASCOT_MODES = Object.freeze(['default', 'custom', 'none']);
+
+function clampNumber(value, fallback, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+/**
+ * 角色圖：girl／mascot 用內建或使用者上傳的（檔案在資料夾，見 server/routes/api/alert-show-assets.js），
+ * face 是臉在圖裡的位置（比例），rev 是上傳時間，換圖後 OBS 靠它重新抓圖、不吃快取。
+ */
+function normalizeCharacter(input, current) {
+  const src = input && typeof input === 'object' ? input : {};
+  const cur = current && typeof current === 'object' ? current : DEFAULTS.alerts.character;
+  const curFace = cur.face && typeof cur.face === 'object' ? cur.face : DEFAULTS.alerts.character.face;
+  const face = src.face && typeof src.face === 'object' ? src.face : {};
+  return {
+    girl: GIRL_MODES.includes(src.girl) ? src.girl : (GIRL_MODES.includes(cur.girl) ? cur.girl : 'default'),
+    mascot: MASCOT_MODES.includes(src.mascot) ? src.mascot : (MASCOT_MODES.includes(cur.mascot) ? cur.mascot : 'default'),
+    face: {
+      x: Math.round(clampNumber(face.x, curFace.x, 0, 1) * 1000) / 1000,
+      y: Math.round(clampNumber(face.y, curFace.y, 0, 1) * 1000) / 1000,
+      s: Math.round(clampNumber(face.s, curFace.s, 0.05, 0.35) * 1000) / 1000,
+    },
+    rev: Math.floor(clampNumber(src.rev, Number(cur.rev) || 0, 0, Number.MAX_SAFE_INTEGER)),
+  };
+}
+
 function normalizeAlerts(input, current) {
   const src = input && typeof input === 'object' ? input : {};
   return {
@@ -119,6 +150,7 @@ function normalizeAlerts(input, current) {
     giftMin: normalizeSteps(src.giftMin, current.giftMin, GIFT_STEPS, 2),
     raidMin: normalizeSteps(src.raidMin, current.raidMin, RAID_STEPS, 2),
     off: normalizeOff(src.off, current.off),
+    character: normalizeCharacter(src.character, current.character),
   };
 }
 
@@ -209,6 +241,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
         giftMin: { ...settings.alerts.giftMin },
         raidMin: { ...settings.alerts.raidMin },
         off: [...settings.alerts.off],
+        character: { ...settings.alerts.character, face: { ...settings.alerts.character.face } },
       },
     };
   }

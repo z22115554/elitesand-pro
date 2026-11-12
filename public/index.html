@@ -50,6 +50,7 @@
               <button type="button" role="tab" data-group="sub" data-i18n="alertShow.tabSub">訂閱</button>
               <button type="button" role="tab" data-group="gift" data-i18n="alertShow.tabGift">贈送訂閱</button>
               <button type="button" role="tab" data-group="raid" data-i18n="alertShow.tabRaid">揪團</button>
+              <button type="button" role="tab" data-group="character" data-i18n="alertShow.tabCharacter">角色</button>
             </div>
             <div id="alert-show-presets" class="alert-show-presets">
               <span class="alert-show-presets-label" data-i18n="alertShow.presets">門檻</span>
@@ -59,6 +60,47 @@
           </div>
           <p id="alert-show-note" class="field-hint alert-show-note" hidden></p>
           <div id="alert-show-tiers" class="alert-show-tiers"></div>
+          <div id="alert-show-character" class="alert-show-tiers alert-show-character" hidden>
+            <section class="alert-tier">
+              <div class="alert-tier-head">
+                <div class="alert-tier-title"><span class="alert-tier-name" data-i18n="alertShow.charGirl">角色圖</span><span id="alert-show-girl-state" class="alert-tier-range"></span></div>
+                <div class="alert-char-actions">
+                  <button id="alert-show-girl-upload" class="btn btn-sm" type="button" data-i18n="alertShow.charUpload">換成自己的圖</button>
+                  <button id="alert-show-girl-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="alertShow.charUseDefault">用內建角色</button>
+                </div>
+              </div>
+              <p class="field-hint alert-char-hint" data-i18n="alertShow.charGirlHint">去背的 PNG 或 WebP，全身或半身都可以。換圖後在圖上點一下臉的中心，特寫和頭像都以這裡為準。</p>
+              <div class="alert-char-editor">
+                <div class="alert-char-thumb">
+                  <canvas id="alert-show-face-canvas" width="360" height="480" tabindex="0" aria-label="點一下臉的中心，或用方向鍵微調" data-i18n-aria-label="alertShow.charFaceAria"></canvas>
+                </div>
+                <div class="alert-char-side">
+                  <label for="alert-show-face-size" data-i18n="alertShow.charFaceSize">臉的大小</label>
+                  <input id="alert-show-face-size" type="range" min="0.05" max="0.35" step="0.005" value="0.12">
+                  <p class="field-hint" data-i18n="alertShow.charFaceHint">點圖上臉的中心；圈圈要剛好框住整張臉。也可以用方向鍵微調。</p>
+                  <button id="alert-show-char-preview" class="btn btn-sm" type="button" data-i18n="alertShow.charPreview">預覽臉部特寫</button>
+                </div>
+              </div>
+            </section>
+            <section class="alert-tier">
+              <div class="alert-tier-head">
+                <div class="alert-tier-title"><span class="alert-tier-name" data-i18n="alertShow.charMascot">吉祥物</span></div>
+                <div id="alert-show-mascot-mode" class="segmented" role="radiogroup" aria-label="吉祥物" data-i18n-aria-label="alertShow.charMascot">
+                  <button type="button" role="radio" data-mascot="default" data-i18n="alertShow.charMascotDefault">內建</button>
+                  <button type="button" role="radio" data-mascot="custom" data-i18n="alertShow.charMascotCustom">自訂</button>
+                  <button type="button" role="radio" data-mascot="none" data-i18n="alertShow.charMascotNone">不使用</button>
+                </div>
+              </div>
+              <div class="alert-char-mascot">
+                <div class="alert-char-thumb alert-char-thumb--small"><canvas id="alert-show-mascot-canvas" width="160" height="160" aria-hidden="true"></canvas></div>
+                <div class="alert-char-side">
+                  <p class="field-hint" data-i18n="alertShow.charMascotHint">吉祥物會在高等級演出裡跳出來。選「自訂」可以換成自己的小角色（去背圖）。</p>
+                  <button id="alert-show-mascot-upload" class="btn btn-sm btn-ghost" type="button" data-i18n="alertShow.charMascotUpload">換一張吉祥物</button>
+                </div>
+              </div>
+            </section>
+            <input id="alert-show-file" type="file" accept="image/png,image/webp" hidden>
+          </div>
         </div>
         <aside class="alert-show-preview" aria-label="演出預覽" data-i18n-aria-label="alertShow.preview">
           <div class="alert-show-stage">

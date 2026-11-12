@@ -171,6 +171,7 @@
   const stageMuted = params.get('preview') === '1' || params.get('spout') === '1' || params.get('output') === 'spout';
   let stage = null;        // { frame, ready, pending }
   let stageShowId = '';
+  let stageCharacter = null; // 設定裡的角色圖；舞台每次載好都要再給一次
 
   function ensureStage() {
     if (stage && stage.frame.isConnected) return stage;
@@ -196,6 +197,7 @@
     if (!data || data.source !== 'alert-show-stage') return;
     if (data.type === 'ready') {
       stage.ready = true;
+      if (stageCharacter) postToStage({ type: 'character', character: stageCharacter });
       if (stage.pending) { postToStage(stage.pending); stage.pending = null; }
     } else if (data.type === 'ended' || data.type === 'error') {
       if (!data.id || data.id === stageShowId) stageShowId = '';
@@ -233,6 +235,10 @@
     if (!settings || typeof settings !== 'object') return;
     const alerts = settings.alerts || {};
     const raid = settings.raid || {};
+    if (alerts.character && typeof alerts.character === 'object') {
+      stageCharacter = alerts.character;
+      if (stage && stage.ready) postToStage({ type: 'character', character: stageCharacter });
+    }
     if (alerts.subEnabled || alerts.giftEnabled || (raid.enabled && raid.mode === 'show')) ensureStage();
   }
 

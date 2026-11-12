@@ -98,3 +98,71 @@ function wordV2(ctx, txt, x, y, k, o = {}) {   // 覆寫：演出中的大字與
   if (k >= 1 && o.box !== false) { const w = tw + 50; dbgBox(ctx, 'text', 'word:' + txt, -w / 2, -95, w / 2, 95); }
   ctx.restore();
 }
+
+// 彩虹放射背景：原本 36 道光芒每一道各自套一次 blur(18px)，等於每格整張畫面模糊 36 次。
+// 改成光芒先畫在一張圖上，整張只模糊一次再疊上去（光芒之間有空隙，合併後再模糊，看起來一樣）。
+let _raysCanvas = null;
+function rainbowBG2(ctx, t, cx = 560, cy = 470) {
+  const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 1700);
+  bg.addColorStop(0, '#fffbe0'); bg.addColorStop(0.12, '#ffe14a'); bg.addColorStop(0.35, '#ff5aa5'); bg.addColorStop(0.62, '#7a3cff'); bg.addColorStop(1, '#10073a');
+  ctx.fillStyle = bg; ctx.fillRect(-80, -80, W + 160, H + 160);
+  const cw = ctx.canvas.width, ch = ctx.canvas.height;
+  if (!_raysCanvas || _raysCanvas.width !== cw || _raysCanvas.height !== ch) _raysCanvas = mk(cw, ch);
+  const x = _raysCanvas.getContext('2d');
+  x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cw, ch); x.setTransform(ctx.getTransform());
+  const n = 36, rot = t * 0.35;
+  for (let i = 0; i < n; i++) { x.fillStyle = `hsla(${(i * 360 / n + t * 120) % 360},100%,62%,${i % 2 ? 0.75 : 0.3})`; const a0 = rot + i / n * Math.PI * 2, a1 = a0 + Math.PI / n;
+    x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a0) * 3200, cy + Math.sin(a0) * 3200); x.lineTo(cx + Math.cos(a1) * 3200, cy + Math.sin(a1) * 3200); x.fill(); }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'overlay'; ctx.filter = 'blur(18px)'; ctx.drawImage(_raysCanvas, 0, 0); ctx.restore();
+  speedLines(ctx, cx, cy, 90, 520, 'rgba(255,255,255,0.55)', Math.floor(t * 30), 0, 0.7);
+}
+
+// 觀眾的螢光棒：原本每一根都套一次 blur(4px)（一排三十幾根），改成每種顏色先畫好一張模糊過的小圖再貼。
+const _stickSprites = new Map();
+function stickSprite(hue, sc) {
+  const key = hue + '|' + sc.toFixed(3);
+  const hit = _stickSprites.get(key); if (hit) return hit;
+  const pad = 12, sw = 16 * sc, sh = 150 * sc, c = mk(Math.ceil(sw) + pad * 2, Math.ceil(sh) + pad * 2), x = c.getContext('2d');
+  x.filter = 'blur(4px)'; x.fillStyle = `hsl(${hue},100%,65%)`; x.fillRect(pad, pad, sw, sh);
+  const sprite = { c, pad }; _stickSprites.set(key, sprite); return sprite;
+}
+function crowdV2(ctx, t, y0, sc = 1, rows = 1) {   // 覆寫：觀眾剪影＋螢光棒（畫法同原版，螢光棒改貼圖）
+  for (let rw = rows - 1; rw >= 0; rw--) { const n = Math.round(30 / sc) + rw * 3;
+    for (let i = 0; i < n; i++) { const x = (i + 0.5 + (rw % 2) * 0.5) * W / n + (R(i, 1 + rw) - 0.5) * 30, y = y0 - rw * 90 * sc + R(i, 2 + rw) * 50 * sc, hr = (42 + R(i, 3) * 10) * sc, wave = Math.sin(t * 7 + i * 0.6 + rw) * 0.5, hue = [330, 200, 50, 280][Math.floor(t * 1.5 + i + rw) % 4];
+      const sp = stickSprite(hue, sc);
+      ctx.save(); ctx.translate(x + 44 * sc, y + 10 * sc); ctx.rotate(wave); ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(sp.c, -8 * sc - sp.pad, -150 * sc - sp.pad); ctx.restore();
+      ctx.fillStyle = rw ? '#150826' : '#0a0414'; ctx.beginPath(); ctx.arc(x, y + hr, hr, 0, 7); ctx.fill(); ctx.fillRect(x - hr * 1.3, y + hr * 1.6, hr * 2.6, 400); } }
+}
+
+// 巨大化的近景大樓：四塊看板各畫一次彩虹背景。改成每格只在一張小圖上畫一次，四塊看板共用。
+let _boardTex = null, _boardTexT = -1;
+function boardTexture(t) {
+  const BW = 200, BH = 88, M = 40;
+  if (!_boardTex) _boardTex = mk(BW + M * 2, BH + M * 2);
+  if (_boardTexT !== t) {
+    const x = _boardTex.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, _boardTex.width, _boardTex.height);
+    x.translate(M, M);
+    rainbowBG2(x, t * 2.2, BW / 2, 44);
+    smallTitle(x, t, '×' + CFG.n, BW / 2, 46, 46, PAL.gold, 'center');
+    _boardTexT = t;
+  }
+  return { c: _boardTex, BW, M };
+}
+function cityNear(ctx, t, lit) {   // 覆寫：看板另外畫（共用同一張），其餘跟原版一樣
+  const o = { seed: 7, n: 16, lit, line: '#0a0620', cols: ['#1e1846', '#241c50', '#1a1440', '#2a2058'], win: ['#ffe28a', '#ffb0e0', '#1a1240'],
+    prof: (xc, i) => { const d = Math.min(1, Math.abs(xc - 960) / 760); return 120 + 40 * R(i, 9) + (300 + 240 * R(i, 10)) * Math.pow(d, 1.5); } };
+  skylineV2(ctx, t, o);
+  if (lit <= 0.5) return;
+  const bw = (W + 200) / o.n;
+  let tex = null;
+  for (const i of [1, 3, 12, 14]) {
+    const w = bw * (0.82 + R(i, o.seed + 1) * 0.3), x = -100 + i * bw + R(i, o.seed + 2) * 20, h = o.prof(x + w / 2, i), y = 1080 - h;
+    if (h <= 260) continue;
+    if (!tex) tex = boardTexture(t);
+    ctx.fillStyle = '#05030c'; ctx.fillRect(x + 8, y + 30, w - 16, 96);
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 12, y + 34, w - 24, 88); ctx.clip();
+    ctx.drawImage(tex.c, x + w / 2 - tex.BW / 2 - tex.M, y + 34 - tex.M);
+    ctx.restore();
+  }
+}
