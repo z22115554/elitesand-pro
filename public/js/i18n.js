@@ -2819,6 +2819,8 @@
     'alertShow.charMascotDefault': ['內建', 'Built-in', '内蔵', '기본', '内置'],
     'alertShow.charMascotCustom': ['自訂', 'Custom', 'カスタム', '사용자 지정', '自定义'],
     'alertShow.charMascotNone': ['不使用', 'None', '使わない', '사용 안 함', '不使用'],
+    'alertShow.charPrivacyTitle': ['你的立繪只留在這台電腦', 'Your artwork stays on this computer', 'イラストはこのパソコンの中だけに保存されます', '이미지는 이 컴퓨터에만 저장됩니다', '你的立绘只留在这台电脑'],
+    'alertShow.charPrivacyBody': ['換上的圖片只存在這台電腦的聲嶼資料夾，只會用在你自己的面板和 OBS 畫面上；不會上傳到任何網路伺服器，也不會拿去做 AI 生成或訓練。按「用內建角色」就會把圖從這台電腦刪掉。', 'Images you add are saved only in the Elitesand Pro folder on this computer and are used only in your own panel and OBS scenes. They are never uploaded to any online server and never used for AI generation or training. Use built-in deletes your image from this computer.', '差し替えた画像はこのパソコンの Elitesand Pro フォルダにだけ保存され、自分のパネルと OBS の画面でのみ使われます。ネット上のサーバーにアップロードされることはなく、AI の生成や学習にも使われません。「内蔵キャラに戻す」を押すと、このパソコンから画像が削除されます。', '바꾼 이미지는 이 컴퓨터의 Elitesand Pro 폴더에만 저장되며, 내 패널과 OBS 화면에서만 쓰입니다. 온라인 서버에 업로드되지 않고, AI 생성이나 학습에도 쓰이지 않습니다. 「기본 캐릭터 사용」을 누르면 이 컴퓨터에서 이미지가 삭제됩니다.', '换上的图片只存在这台电脑的聲嶼文件夹，只会用在你自己的面板和 OBS 画面上；不会上传到任何网络服务器，也不会拿去做 AI 生成或训练。按「用内置角色」就会把图从这台电脑删掉。'],
     'alertShow.charMascotHint': ['吉祥物會在高等級演出裡跳出來。選「自訂」可以換成自己的小角色（去背圖）。', 'The mascot pops up in the bigger shows. Choose Custom to use your own small character (transparent image).', 'マスコットは上位の演出で登場します。「カスタム」で自分の小さなキャラ（背景透過）に変えられます。', '마스코트는 높은 단계 연출에서 등장합니다. 「사용자 지정」으로 내 작은 캐릭터(투명 배경)로 바꿀 수 있습니다.', '吉祥物会在高等级演出里跳出来。选「自定义」可以换成自己的小角色（去背图）。'],
     'alertShow.charMascotUpload': ['換一張吉祥物', 'Change mascot image', 'マスコット画像を変更', '마스코트 이미지 변경', '换一张吉祥物'],
     'alertShow.charUploading': ['正在處理圖片…', 'Processing the image…', '画像を処理しています…', '이미지를 처리하는 중…', '正在处理图片…'],

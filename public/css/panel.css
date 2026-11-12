@@ -1236,6 +1236,12 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .alert-show-tiers[hidden] { display: none; }
 .alert-char-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .alert-char-hint { margin: 6px 0 0; }
+/* 角色分頁開頭的隱私說明：圖只存在本機、不上傳、不做 AI 用途 */
+.alert-char-privacy { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-raised); }
+.alert-char-privacy-icon { flex: none; margin-top: 1px; color: var(--text-dim); }
+.alert-char-privacy-title { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.alert-char-privacy-body { margin: 3px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-dim); }
+.alert-char-privacy + .alert-tier { border-top: 0; padding-top: 4px; }
 .alert-char-editor { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 16px; margin-top: 10px; align-items: start; }
 .alert-char-mascot { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 16px; margin-top: 10px; align-items: center; }
 .alert-char-thumb { border: 1px solid var(--border-strong); border-radius: var(--r-md); overflow: hidden; background: #17171a repeating-conic-gradient(#1f1f23 0 25%, #17171a 0 50%) 0 0 / 16px 16px; }
