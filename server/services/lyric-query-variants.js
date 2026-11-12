@@ -69,8 +69,7 @@ function lyricTitleVariants(title) {
   if (split) {
     add(split.native);
     add(simplifiedToTraditional(split.native));
-    // 只剩英文名最容易撞到同名的別首歌，所以排最後，而且至少要 3 個字母。
-    if (latinLetterCount(split.latin) >= 3) add(split.latin);
+    // 不單獨用並列的英文名查：同名的別首歌太多，實測撞過「歌名＋時長」都吻合的錯配。
   }
   return variants;
 }
@@ -86,7 +85,7 @@ function nativeArtists(artist) {
 
 /**
  * 產生要依序嘗試的查詢組合（最多 MAX_VARIANTS 組），每組是 { artist, title }。
- * 順序：原樣 → 簡轉繁 → 歌手與歌名都只留原文 → 只留第一位歌手 → 只用英文歌名。
+ * 順序：原樣 → 簡轉繁 → 歌手與歌名都只留原文 → 只留第一位歌手。
  */
 function lyricQueryVariants(artist, title) {
   const originalArtist = String(artist || '').trim();
@@ -106,7 +105,6 @@ function lyricQueryVariants(artist, title) {
   add(artists.native, nativeTitle);
   add(artists.native, simplifiedToTraditional(nativeTitle));
   add(artists.primary, nativeTitle);
-  if (split && latinLetterCount(split.latin) >= 3) add(artists.native, split.latin);
   return variants;
 }
 

@@ -11,22 +11,22 @@ test('原標題永遠是第一個候選，單語標題不多產生候選', () =>
 });
 
 test('中文歌名後面帶英文名', () => {
-  assert.deepEqual(lyricTitleVariants('與浪之間 Waves'), ['與浪之間 Waves', '與浪之間', 'Waves']);
+  assert.deepEqual(lyricTitleVariants('與浪之間 Waves'), ['與浪之間 Waves', '與浪之間']);
 });
 
 test('日文、韓文歌名後面帶英文名', () => {
-  assert.deepEqual(lyricTitleVariants('アイドル Idol'), ['アイドル Idol', 'アイドル', 'Idol']);
-  assert.deepEqual(lyricTitleVariants('밤편지 Through the Night'), ['밤편지 Through the Night', '밤편지', 'Through the Night']);
+  assert.deepEqual(lyricTitleVariants('アイドル Idol'), ['アイドル Idol', 'アイドル']);
+  assert.deepEqual(lyricTitleVariants('밤편지 Through the Night'), ['밤편지 Through the Night', '밤편지']);
 });
 
 test('原文與英文之間沒有空白', () => {
-  assert.deepEqual(lyricTitleVariants('告白氣球Love Confession'), ['告白氣球Love Confession', '告白氣球', 'Love Confession']);
+  assert.deepEqual(lyricTitleVariants('告白氣球Love Confession'), ['告白氣球Love Confession', '告白氣球']);
 });
 
 test('用分隔符號隔開，英文在前或在後都行', () => {
-  assert.deepEqual(lyricTitleVariants('怪獣の花唄 - Kaiju no Hanauta'), ['怪獣の花唄 - Kaiju no Hanauta', '怪獣の花唄', 'Kaiju no Hanauta']);
-  assert.deepEqual(lyricTitleVariants('Lemon／檸檬'), ['Lemon／檸檬', '檸檬', 'Lemon']);
-  assert.deepEqual(lyricTitleVariants('Butterfly 蝴蝶'), ['Butterfly 蝴蝶', '蝴蝶', 'Butterfly']);
+  assert.deepEqual(lyricTitleVariants('怪獣の花唄 - Kaiju no Hanauta'), ['怪獣の花唄 - Kaiju no Hanauta', '怪獣の花唄']);
+  assert.deepEqual(lyricTitleVariants('Lemon／檸檬'), ['Lemon／檸檬', '檸檬']);
+  assert.deepEqual(lyricTitleVariants('Butterfly 蝴蝶'), ['Butterfly 蝴蝶', '蝴蝶']);
 });
 
 test('簡體標題多一個繁體候選，總數有上限', () => {
@@ -51,13 +51,13 @@ const pairs = (artist, title) => lyricQueryVariants(artist, title).map((item) =>
 test('日文歌名不做簡轉繁', () => {
   assert.deepEqual(lyricTitleVariants('踊り子'), ['踊り子']);
   assert.deepEqual(pairs('tuki.', '孤独の鯨 - The Lonely Whale'), [
-    'tuki. | 孤独の鯨 - The Lonely Whale', 'tuki. | 孤独の鯨', 'tuki. | The Lonely Whale',
+    'tuki. | 孤独の鯨 - The Lonely Whale', 'tuki. | 孤独の鯨',
   ]);
 });
 
 test('歌手欄並列的英文名也去掉，原樣那組永遠先試', () => {
   assert.deepEqual(pairs('蔡依林 Jolin Tsai', '愛的天使 Angel of Love'), [
-    '蔡依林 Jolin Tsai | 愛的天使 Angel of Love', '蔡依林 | 愛的天使', '蔡依林 | Angel of Love',
+    '蔡依林 Jolin Tsai | 愛的天使 Angel of Love', '蔡依林 | 愛的天使',
   ]);
   assert.deepEqual(pairs('鄭秀文Sammi Cheng', '值得'), ['鄭秀文Sammi Cheng | 值得', '鄭秀文 | 值得']);
 });
@@ -66,6 +66,11 @@ test('多位歌手：先試全部歌手的原文名，再試第一位', () => {
   assert.deepEqual(pairs('周華健 Wakin Chau & 齊豫 Chyi Yu', '天下有情人'), [
     '周華健 Wakin Chau & 齊豫 Chyi Yu | 天下有情人', '周華健 齊豫 | 天下有情人', '周華健 | 天下有情人',
   ]);
+});
+
+test('不單獨用並列的英文名查（同名別首歌太多）', () => {
+  assert.ok(!lyricTitleVariants('愛的天使 Angel of Love').includes('Angel of Love'));
+  assert.ok(!pairs('不存在的歌手 Nobody', '完全不存在的歌 Ghost Song').some((pair) => pair.endsWith('| Ghost Song')));
 });
 
 test('單語的歌手與歌名只有一組，候選總數不超過 4', () => {
