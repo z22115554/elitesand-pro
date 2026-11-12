@@ -334,6 +334,7 @@
     currentTrackId = track && track.id != null ? track.id : null;
     currentEntryId = track && track.entryId != null ? track.entryId : null;
     currentTrackIndex = PlaylistState.reconcilePlaylist(playlist, currentTrackId, currentEntryId).currentTrackIndex;
+    ensureNotesFor(currentTrackId);
     return currentTrackIndex;
   }
 
@@ -408,8 +409,236 @@
   // ═══════════════════════════════════════════
   // 歌詞（整句，不逐字）
   // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════
+  // 歌曲筆記（主播私用）：整首筆記在右側欄、逐句筆記直接顯示在那一句下面。
+  // 存在伺服器 data/song-notes.json，只經 control 房間的事件讀寫，OBS／唯讀端拿不到。
+  // ═══════════════════════════════════════════
+  const notesDom = {
+    btn: document.getElementById('pt-notes-btn'),
+    dot: document.getElementById('pt-notes-dot'),
+    panel: document.getElementById('pt-notes'),
+    close: document.getElementById('pt-notes-close'),
+    song: document.getElementById('pt-notes-song'),
+    status: document.getElementById('pt-notes-status'),
+    orphans: document.getElementById('pt-notes-orphans'),
+    orphanList: document.getElementById('pt-notes-orphan-list'),
+  };
+  let notes = { songNote: '', lines: [] };
+  let notesTrackId = null;
+  let notesRequestSeq = 0;
+  let songNoteTimer = null;
+  let songNoteDirty = false;
+
+  // 側欄開關：寬視窗記在這台裝置（預設開）；窄視窗（例如置頂縮小）預設收起，只在這次開著。
+  const NOTES_OPEN_KEY = 'elitesand.prompter.notesOpen';
+  const narrowQuery = window.matchMedia ? window.matchMedia('(max-width: 900px)') : null;
+  let notesOpenWide = true;
+  let notesOpenNarrow = false;
+  try { notesOpenWide = localStorage.getItem(NOTES_OPEN_KEY) !== '0'; } catch (_) { /* 用預設 */ }
+  const isNarrow = () => !!(narrowQuery && narrowQuery.matches);
+  function applyNotesOpen() {
+    const open = isNarrow() ? notesOpenNarrow : notesOpenWide;
+    document.body.classList.toggle('pt-notes-open', open);
+    if (notesDom.btn) notesDom.btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  }
+  function setNotesOpen(open) {
+    if (isNarrow()) notesOpenNarrow = open;
+    else {
+      notesOpenWide = open;
+      try { localStorage.setItem(NOTES_OPEN_KEY, open ? '1' : '0'); } catch (_) { /* 只在這次有效 */ }
+    }
+    applyNotesOpen();
+  }
+  notesDom.btn?.addEventListener('click', () => setNotesOpen(!document.body.classList.contains('pt-notes-open')));
+  notesDom.close?.addEventListener('click', () => setNotesOpen(false));
+  narrowQuery?.addEventListener?.('change', applyNotesOpen);
+  applyNotesOpen();
+
+  const normLine = (value) => String(value || '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  const LINE_NOTE_MAX_DRIFT_MS = 2000;
+
+  /** 逐句筆記對回目前歌詞：同樣的字、時間差 2 秒內、取最近的一句。對不上的列為「待核對」。 */
+  function matchLineNotes() {
+    const byIndex = new Map();
+    const orphans = [];
+    for (const item of notes.lines) {
+      const key = normLine(item.text);
+      let best = -1;
+      let bestGap = Infinity;
+      parsedLines.forEach((line, i) => {
+        if (byIndex.has(i) || normLine(line.text) !== key) return;
+        const gap = Math.abs(line.time - item.time);
+        if (gap <= LINE_NOTE_MAX_DRIFT_MS && gap < bestGap) { best = i; bestGap = gap; }
+      });
+      if (best >= 0) byIndex.set(best, item);
+      else orphans.push(item);
+    }
+    return { byIndex, orphans };
+  }
+
+  function lineNoteHtml(i, item) {
+    if (item) {
+      return `<div class="pt-line-note" data-note-index="${i}" title="${escapeHtml(t('prompter.notes.editTitle'))}">${escapeHtml(item.note)}</div>`;
+    }
+    if (currentTrackId == null) return '';
+    return `<button type="button" class="pt-line-note-add" data-note-index="${i}" title="${escapeHtml(t('prompter.notes.addTitle'))}">${escapeHtml(t('prompter.notes.add'))}</button>`;
+  }
+
+  function setNotesStatus(key) {
+    if (notesDom.status) notesDom.status.textContent = key ? t(key) : '';
+  }
+
+  function renderNotesPanel(orphans) {
+    const hasTrack = currentTrackId != null;
+    if (notesDom.song) {
+      notesDom.song.disabled = !hasTrack;
+      notesDom.song.placeholder = t(hasTrack ? 'prompter.notes.songPlaceholder' : 'prompter.notes.noTrack');
+      if (!songNoteDirty && document.activeElement !== notesDom.song) notesDom.song.value = notes.songNote || '';
+    }
+    const list = orphans || matchLineNotes().orphans;
+    if (notesDom.orphans) notesDom.orphans.hidden = list.length === 0;
+    if (notesDom.orphanList) {
+      notesDom.orphanList.innerHTML = list.map((item) => {
+        const at = notes.lines.indexOf(item);
+        return `<li class="pt-notes-orphan">
+          <div class="pt-notes-orphan-note">${escapeHtml(item.note)}</div>
+          <div class="pt-notes-orphan-line">${escapeHtml(t('prompter.notes.orphanLine', { text: item.text || '' }))}</div>
+          <button type="button" class="pt-notes-orphan-del" data-orphan="${at}" title="${escapeHtml(t('prompter.notes.delete'))}" aria-label="${escapeHtml(t('prompter.notes.delete'))}">×</button>
+        </li>`;
+      }).join('');
+    }
+    if (notesDom.dot) notesDom.dot.hidden = !(notes.songNote || notes.lines.length);
+  }
+
+  function sendNotes(partial) {
+    const trackId = notesTrackId;
+    if (trackId == null) return;
+    setNotesStatus('prompter.notes.saving');
+    SocketClient.sendWithCallback('song-notes:set', { trackId, ...partial }, (res) => {
+      if (!res || !res.ok) { setNotesStatus('prompter.notes.failed'); return; }
+      if (String(res.trackId) !== String(notesTrackId)) return;
+      notes.lines = Array.isArray(res.notes.lines) ? res.notes.lines : [];
+      if (!Object.prototype.hasOwnProperty.call(partial, 'songNote') || !songNoteDirty) notes.songNote = res.notes.songNote || '';
+      setNotesStatus('prompter.notes.saved');
+    });
+  }
+
+  function flushSongNote() {
+    if (songNoteTimer) { clearTimeout(songNoteTimer); songNoteTimer = null; }
+    if (!songNoteDirty || !notesDom.song) return;
+    songNoteDirty = false;
+    notes.songNote = notesDom.song.value;
+    sendNotes({ songNote: notes.songNote });
+    renderNotesPanel();
+  }
+  notesDom.song?.addEventListener('input', () => {
+    songNoteDirty = true;
+    setNotesStatus('prompter.notes.saving');
+    if (songNoteTimer) clearTimeout(songNoteTimer);
+    songNoteTimer = setTimeout(flushSongNote, 800);
+  });
+  notesDom.song?.addEventListener('blur', flushSongNote);
+
+  notesDom.orphanList?.addEventListener('click', (e) => {
+    const del = e.target.closest('.pt-notes-orphan-del');
+    if (!del) return;
+    const at = Number(del.dataset.orphan);
+    if (!Number.isInteger(at) || at < 0 || at >= notes.lines.length) return;
+    notes.lines = notes.lines.filter((_, i) => i !== at);
+    sendNotes({ lines: notes.lines });
+    renderLyricsSkeleton();
+    updateLyricsHighlight();
+  });
+
+  /** 換歌時載入那首的筆記。同一首不重抓（播放清單同步也會走到這裡）。 */
+  function ensureNotesFor(trackId) {
+    const next = trackId == null ? null : String(trackId);
+    if (next === notesTrackId) return;
+    flushSongNote();
+    notesTrackId = next;
+    notes = { songNote: '', lines: [] };
+    songNoteDirty = false;
+    setNotesStatus('');
+    if (notesDom.song) notesDom.song.value = '';
+    renderNotesPanel([]);
+    if (next == null) return;
+    const seq = ++notesRequestSeq;
+    SocketClient.sendWithCallback('song-notes:get', { trackId: next }, (res) => {
+      if (seq !== notesRequestSeq || !res || !res.ok) return;
+      notes = { songNote: res.notes.songNote || '', lines: Array.isArray(res.notes.lines) ? res.notes.lines : [] };
+      renderLyricsSkeleton();
+      updateLyricsHighlight();
+    });
+  }
+
+  // 斷線重連後重抓一次：斷線期間的請求可能沒回來，或別台裝置在這段時間改過筆記。
+  function refreshNotes() {
+    if (notesTrackId == null) return;
+    const trackId = notesTrackId;
+    const seq = ++notesRequestSeq;
+    SocketClient.sendWithCallback('song-notes:get', { trackId }, (res) => {
+      if (seq !== notesRequestSeq || trackId !== notesTrackId || !res || !res.ok) return;
+      notes.lines = Array.isArray(res.notes.lines) ? res.notes.lines : [];
+      if (!songNoteDirty && document.activeElement !== notesDom.song) notes.songNote = res.notes.songNote || '';
+      renderLyricsSkeleton();
+      updateLyricsHighlight();
+    });
+  }
+  SocketClient.on('connection-change', (connected) => { if (connected) refreshNotes(); });
+
+  // 別台裝置（或面板）改了同一首的筆記：直接換；正在打字的整首筆記不被蓋掉。
+  SocketClient.on('song-notes:updated', (data) => {
+    if (!data || String(data.trackId) !== notesTrackId || !data.notes) return;
+    notes.lines = Array.isArray(data.notes.lines) ? data.notes.lines : [];
+    if (!songNoteDirty && document.activeElement !== notesDom.song) notes.songNote = data.notes.songNote || '';
+    renderLyricsSkeleton();
+    updateLyricsHighlight();
+  });
+
+  // 點「＋ 筆記」或既有的逐句筆記：原地改，Enter 存、Esc 取消、清空＝刪除。
+  function beginLineNoteEdit(el) {
+    const idx = Number(el.dataset.noteIndex);
+    const line = parsedLines[idx];
+    if (!line || notesTrackId == null) return;
+    const existing = matchLineNotes().byIndex.get(idx) || null;
+    const holder = document.createElement('div');
+    holder.className = 'pt-line-note pt-line-note-editing';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'pt-line-note-input';
+    input.maxLength = 200;
+    input.value = existing ? existing.note : '';
+    input.placeholder = t('prompter.notes.editPlaceholder');
+    holder.appendChild(input);
+    el.replaceWith(holder);
+    input.focus();
+    input.select();
+    let settled = false;
+    const finish = (save) => {
+      if (settled) return;
+      settled = true;
+      if (save) {
+        const value = input.value.trim();
+        if (value !== (existing ? existing.note : '')) {
+          const rest = notes.lines.filter((item) => item !== existing);
+          notes.lines = value ? [...rest, { time: Math.round(line.time), text: String(line.text || ''), note: value }].sort((a, b) => a.time - b.time) : rest;
+          sendNotes({ lines: notes.lines });
+        }
+      }
+      renderLyricsSkeleton();
+      updateLyricsHighlight();
+    };
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', (ev) => ev.stopPropagation());
+  }
+
   function renderLyricsSkeleton() {
     if (!parsedLines.length) {
+      renderNotesPanel();
       const key = currentTrackId == null ? 'player.noTrack' : 'prompter.noLyrics';
       dom.lyrics.innerHTML = `<div class="pt-lyrics-empty">${escapeHtml(t(key))}</div>`;
       activeLineIndex = -1;
@@ -433,6 +662,7 @@
         return reading ? `<ruby>${text}<rt>${reading}</rt></ruby>` : text;
       }).join('');
     };
+    const noteMatch = matchLineNotes();
     dom.lyrics.innerHTML = parsedLines.map((line, i) => {
       const romaji = appearance.showRomaji && line.phonetic
         ? `<div class="pt-line-romaji">${escapeHtml(line.phonetic)}</div>` : '';
@@ -442,10 +672,11 @@
         ? `<div class="pt-line-translation">${escapeHtml(s2t(line.translation))}</div>` : '';
       return `<div class="pt-line" data-index="${i}">
         <div class="pt-line-text">${appearance.showFurigana ? renderFurigana(line) : escapeHtml(s2t(line.text || ''))}</div>
-        ${romaji}${xieyin}${translation}
+        ${romaji}${xieyin}${translation}${lineNoteHtml(i, noteMatch.byIndex.get(i))}
       </div>`;
     }).join('');
     activeLineIndex = -1;
+    renderNotesPanel(noteMatch.orphans);
   }
 
   function findLineIndex(t) {
@@ -526,6 +757,11 @@
   }
 
   dom.lyrics.addEventListener('click', (e) => {
+    const noteEl = e.target.closest('.pt-line-note-add, .pt-line-note');
+    if (noteEl) {
+      if (!noteEl.classList.contains('pt-line-note-editing')) beginLineNoteEdit(noteEl);
+      return;
+    }
     const xieyinEl = e.target.closest('.pt-line-xieyin');
     if (xieyinEl && !xieyinEl.classList.contains('pt-line-xieyin-editing')) {
       beginXieyinEdit(xieyinEl);
@@ -855,6 +1091,7 @@
   });
 
   window.addEventListener('i18n:change', () => {
+    setNotesStatus('');
     if (currentTrackId == null) dom.npTitle.textContent = t('player.noTrack');
     dom.connectionText.textContent = dom.connectionStatus.classList.contains('connected')
       ? t('status.connected')

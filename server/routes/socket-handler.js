@@ -27,6 +27,7 @@ const registerPlaybackHandlers = require('./handlers/playback');
 const registerLyricsHandlers = require('./handlers/lyrics');
 const registerPlaylistHandlers = require('./handlers/playlist');
 const registerLibraryHandlers = require('./handlers/library');
+const registerSongNotesHandlers = require('./handlers/song-notes');
 const registerSetlistHandlers = require('./handlers/setlist');
 const registerObsLocaleHandlers = require('./handlers/obs-locale');
 const obsLocaleUtil = require('../utils/obs-locale');
@@ -628,6 +629,7 @@ module.exports = function socketHandler(io, {
         onSavedPlaylistsChanged: () => songRequestRelayService?.notifyCatalogMayHaveChanged(),
         onLibraryChanged: () => songRequestRelayService?.notifyCatalogMayHaveChanged(),
       });
+      registerSongNotesHandlers(io, socket);
       registerSetlistHandlers(io, socket, ctx);
       registerObsLocaleHandlers(io, socket, ctx);
       registerTwitchHandlers(io, socket, ctx, { getTwitchService: () => twitchService });

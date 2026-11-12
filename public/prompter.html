@@ -31,6 +31,10 @@
       <button id="pt-pin-btn" class="pt-icon-btn pt-pin-btn" type="button" hidden aria-pressed="false" title="視窗置頂" aria-label="視窗置頂" data-i18n-title="prompter.pin" data-i18n-aria-label="prompter.pin">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></svg>
       </button>
+      <button id="pt-notes-btn" class="pt-icon-btn pt-notes-btn" type="button" aria-pressed="false" aria-controls="pt-notes" title="歌曲筆記" aria-label="歌曲筆記" data-i18n-title="prompter.notes.toggle" data-i18n-aria-label="prompter.notes.toggle" data-new-feature="song-notes" data-new-placement="after">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg>
+        <span id="pt-notes-dot" class="pt-notes-dot" hidden></span>
+      </button>
       <button id="pt-settings-btn" class="pt-icon-btn" type="button" title="歌詞外觀設定" aria-label="歌詞外觀設定" data-i18n-title="prompter.appearance" data-i18n-aria-label="prompter.appearance">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
@@ -53,6 +57,23 @@
         <div class="pt-lyrics-empty" data-i18n="player.noTrack">尚未播放</div>
       </div>
     </main>
+
+    <!-- 歌曲筆記：只有主播端看得到，存在伺服器 song-notes.json，不進 OBS／唯讀端 -->
+    <aside id="pt-notes" class="pt-notes" aria-labelledby="pt-notes-title">
+      <div class="pt-side-head pt-notes-head">
+        <span id="pt-notes-title" data-i18n="prompter.notes.title">歌曲筆記</span>
+        <span id="pt-notes-status" class="pt-notes-status" aria-live="polite"></span>
+        <button id="pt-notes-close" class="pt-notes-close" type="button" title="收起" aria-label="收起" data-i18n-title="prompter.notes.close" data-i18n-aria-label="prompter.notes.close">×</button>
+      </div>
+      <div class="pt-notes-body">
+        <textarea id="pt-notes-song" class="pt-notes-song" maxlength="2000" rows="8" aria-labelledby="pt-notes-title"></textarea>
+        <p class="pt-notes-hint" data-i18n="prompter.notes.lineHint">逐句筆記：滑到那一句歌詞，按右邊的「＋ 筆記」。只有你看得到，不會出現在 OBS。</p>
+        <div id="pt-notes-orphans" class="pt-notes-orphans" hidden>
+          <div class="pt-notes-sub" data-i18n="prompter.notes.orphansTitle">待核對：換了歌詞版本，找不到原本那一句</div>
+          <ul id="pt-notes-orphan-list" class="pt-notes-orphan-list"></ul>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <footer class="pt-transport">
