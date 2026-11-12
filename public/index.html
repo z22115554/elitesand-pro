@@ -60,6 +60,15 @@
             </div>
           </div>
           <p id="alert-show-note" class="field-hint alert-show-note" hidden></p>
+          <div id="alert-show-raid-settings" class="alert-show-raid-settings" hidden>
+            <div class="overlay-show-grid" id="overlay-show-raid-grid">
+              <div class="field"><label for="overlay-show-raid-mode" data-i18n="alertShow.raidMode">演出方式</label><select id="overlay-show-raid-mode" class="input"><option value="card" data-i18n="alertShow.raidModeCard">角落小卡</option><option value="show" data-i18n="alertShow.raidModeShow">全畫面演出</option></select></div>
+              <div class="field"><label for="overlay-show-raid-min" data-i18n="overlayShow.raidMin">最低人數</label><input id="overlay-show-raid-min" class="input" type="number" min="1" max="10000" step="1" value="1" inputmode="numeric"></div>
+              <div class="field" data-raid-card-only><label for="overlay-show-raid-style" data-i18n="overlayShow.style">外觀</label><select id="overlay-show-raid-style" class="input"><option value="gold" data-i18n="overlayShow.styleGold">金箔</option><option value="neon" data-i18n="overlayShow.styleNeon">霓虹</option><option value="sakura" data-i18n="overlayShow.styleSakura">櫻花</option><option value="stage" data-i18n="overlayShow.styleStage">舞台</option><option value="classic" data-i18n="overlayShow.styleClassic">簡潔</option></select></div>
+              <div class="field" data-raid-card-only><label for="overlay-show-raid-anchor" data-i18n="overlayShow.anchor">畫面位置</label><select id="overlay-show-raid-anchor" class="input"><option value="top-right" data-i18n="overlayShow.anchorTopRight">右上</option><option value="top-left" data-i18n="overlayShow.anchorTopLeft">左上</option><option value="bottom-right" data-i18n="overlayShow.anchorBottomRight">右下</option><option value="bottom-left" data-i18n="overlayShow.anchorBottomLeft">左下</option></select></div>
+              <div class="field" data-raid-card-only><label for="overlay-show-raid-seconds" data-i18n="overlayShow.seconds">顯示秒數</label><input id="overlay-show-raid-seconds" class="input" type="number" min="4" max="15" step="1" value="8" inputmode="numeric"></div>
+            </div>
+          </div>
           <div id="alert-show-tiers" class="alert-show-tiers"></div>
           <div id="alert-show-character" class="alert-show-tiers alert-show-character" hidden>
             <div class="alert-char-privacy" role="note">
@@ -2108,16 +2117,13 @@
                   <div class="label" data-i18n="overlayShow.raidTitle">揪團感謝</div>
                   <div class="sub" data-i18n="overlayShow.raidNeedsTwitch">需要先連接 Twitch 才收得到揪團。</div>
                 </div>
-                <button id="overlay-show-test-raid" class="btn btn-sm" type="button" data-i18n="overlayShow.test">試播</button>
+                <div class="overlay-show-head-actions">
+                  <button id="overlay-show-raid-settings" class="btn btn-sm btn-ghost" type="button" data-i18n="overlayShow.raidSettings">揪團設定</button>
+                  <button id="overlay-show-test-raid" class="btn btn-sm" type="button" data-i18n="overlayShow.test">試播</button>
+                </div>
               </div>
               <div class="switch-row"><div class="label" data-i18n="overlayShow.raidEnabled">收到揪團時自動演出</div><label class="switch"><input id="overlay-show-raid-enabled" type="checkbox"><span class="track"></span></label></div>
-              <div class="overlay-show-grid" id="overlay-show-raid-grid">
-                <div class="field"><label for="overlay-show-raid-mode" data-i18n="alertShow.raidMode">演出方式</label><select id="overlay-show-raid-mode" class="input"><option value="card" data-i18n="alertShow.raidModeCard">角落小卡</option><option value="show" data-i18n="alertShow.raidModeShow">全畫面演出</option></select></div>
-                <div class="field" data-raid-card-only><label for="overlay-show-raid-style" data-i18n="overlayShow.style">外觀</label><select id="overlay-show-raid-style" class="input"><option value="gold" data-i18n="overlayShow.styleGold">金箔</option><option value="neon" data-i18n="overlayShow.styleNeon">霓虹</option><option value="sakura" data-i18n="overlayShow.styleSakura">櫻花</option><option value="stage" data-i18n="overlayShow.styleStage">舞台</option><option value="classic" data-i18n="overlayShow.styleClassic">簡潔</option></select></div>
-                <div class="field" data-raid-card-only><label for="overlay-show-raid-anchor" data-i18n="overlayShow.anchor">畫面位置</label><select id="overlay-show-raid-anchor" class="input"><option value="top-right" data-i18n="overlayShow.anchorTopRight">右上</option><option value="top-left" data-i18n="overlayShow.anchorTopLeft">左上</option><option value="bottom-right" data-i18n="overlayShow.anchorBottomRight">右下</option><option value="bottom-left" data-i18n="overlayShow.anchorBottomLeft">左下</option></select></div>
-                <div class="field" data-raid-card-only><label for="overlay-show-raid-seconds" data-i18n="overlayShow.seconds">顯示秒數</label><input id="overlay-show-raid-seconds" class="input" type="number" min="4" max="15" step="1" value="8" inputmode="numeric"></div>
-                <div class="field"><label for="overlay-show-raid-min" data-i18n="overlayShow.raidMin">最低人數</label><input id="overlay-show-raid-min" class="input" type="number" min="1" max="10000" step="1" value="1" inputmode="numeric"></div>
-              </div>
+              <p id="overlay-show-raid-summary" class="overlay-show-raid-summary"></p>
             </div>
             <div class="overlay-show-group" id="alert-show-group" data-new-feature="alert-show">
               <div class="overlay-show-group-head">

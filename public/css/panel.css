@@ -1223,6 +1223,10 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .alert-tier-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 /* 等級標題吃掉剩餘空間，門檻欄與整級開關一起靠右 */
 .alert-tier-head > .alert-tier-title { margin-right: auto; }
+.alert-show-raid-settings { padding: 0 20px 12px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.alert-show-raid-settings[hidden] { display: none; }
+.overlay-show-head-actions { display: flex; gap: 8px; flex: none; }
+.overlay-show-raid-summary { margin: 0; font-size: 12px; color: var(--text-dim); }
 .alert-tier-switch { flex: none; }
 .alert-tier.is-off .alert-variants { opacity: .45; }
 .alert-tier.is-off .alert-tier-name { color: var(--text-dim); }

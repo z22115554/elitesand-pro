@@ -64,6 +64,7 @@
     simUnit: el('alert-show-sim-unit'),
     simSend: el('alert-show-sim-send'),
     simResult: el('alert-show-sim-result'),
+    raidSettings: el('alert-show-raid-settings'),
     waiting: el('alert-show-waiting'),
     waitingText: el('alert-show-waiting-text'),
     release: el('alert-show-release'),
@@ -167,6 +168,7 @@
     const isCharacter = activeGroup === 'character';
     const isTiming = activeGroup === 'timing';
     ui.tiers.hidden = isCharacter || isTiming;
+    if (ui.raidSettings) ui.raidSettings.hidden = true;
     ui.character.hidden = !isCharacter;
     ui.timing.hidden = !isTiming;
     if (isCharacter || isTiming) {
@@ -175,10 +177,13 @@
       if (isCharacter) renderCharacter(); else renderTiming();
       return;
     }
-    ui.presets.hidden = activeGroup === 'sub';
     const raidCard = activeGroup === 'raid' && settings.raid?.mode !== 'show';
+    // 揪團的設定全部在這個分頁：最低人數、演出方式，角落小卡的外觀／位置／秒數，或全畫面演出的分級
+    if (ui.raidSettings) ui.raidSettings.hidden = activeGroup !== 'raid';
+    ui.presets.hidden = activeGroup === 'sub' || raidCard;
     ui.note.hidden = !raidCard;
     ui.note.textContent = raidCard ? t('alertShow.raidCardNote') : '';
+    ui.tiers.hidden = raidCard;
 
     const keepFocus = document.activeElement && ui.tiers.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
     ui.tiers.textContent = '';
@@ -769,6 +774,8 @@
   }
 
   el('alert-show-open')?.addEventListener('click', open);
+  // 卡片上的「揪團設定」：直接打開到揪團分頁
+  el('overlay-show-raid-settings')?.addEventListener('click', () => { activeGroup = 'raid'; open(); });
   el('alert-show-close')?.addEventListener('click', close);
   modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
   modal.addEventListener('keydown', (event) => { if (event.key === 'Escape') { event.stopPropagation(); close(); } });

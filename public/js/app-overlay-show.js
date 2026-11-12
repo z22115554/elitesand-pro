@@ -43,7 +43,17 @@
   /** 全畫面演出不吃小卡的外觀、位置、秒數：選了就把那三欄收起來，免得以為調了有用。 */
   function syncRaidMode() {
     const show = fields.raidMode && fields.raidMode.value === 'show';
-    card.querySelectorAll('[data-raid-card-only]').forEach((node) => { node.hidden = !!show; });
+    document.querySelectorAll('[data-raid-card-only]').forEach((node) => { node.hidden = !!show; });
+    renderRaidSummary();
+  }
+
+  /** 卡片上只留開關、試播、「揪團設定」，現在的設定用一行字帶過（設定本身在「演出與門檻」的揪團分頁）。 */
+  function renderRaidSummary() {
+    const out = el('overlay-show-raid-summary');
+    if (!out || !fields.raidMode) return;
+    const pick = (select) => (select && select.selectedOptions[0] ? select.selectedOptions[0].textContent.trim() : '');
+    const vars = { mode: pick(fields.raidMode), style: pick(fields.raidStyle), anchor: pick(fields.raidAnchor), sec: fields.raidSeconds?.value || '', min: fields.raidMin?.value || 1 };
+    out.textContent = t(fields.raidMode.value === 'show' ? 'overlayShow.raidSummaryShow' : 'overlayShow.raidSummaryCard', vars);
   }
 
   function collect() {
@@ -90,6 +100,7 @@
   el('overlay-show-skip')?.addEventListener('click', () => SocketClient.sendWithCallback('overlay-show:skip', {}, () => {}));
 
   SocketClient.on('overlay-show:settings', render);
+  window.addEventListener('i18n:change', renderRaidSummary);
   SocketClient.on('connection-change', (connected) => { if (connected) load(); });
   load();
 })();
