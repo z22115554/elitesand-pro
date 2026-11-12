@@ -29,6 +29,30 @@ const OAUTH_REVOKE = 'https://id.twitch.tv/oauth2/revoke';
 const HELIX = 'https://api.twitch.tv/helix';
 const EVENTSUB_WS = 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30';
 const REQUIRED_SCOPES = Object.freeze(['user:read:chat', 'user:write:chat', 'channel:manage:redemptions']);
+
+/**
+ * 把 channel.chat.notification 轉成觀眾演出看得懂的事件；不是訂閱類的通知回 null。
+ * - sub：新訂閱。resub：續訂並分享。
+ * - community_sub_gift：一次送出多份（total）。這種每一位收禮者還會各來一則 sub_gift（帶 community_gift_id），
+ *   那些要略過，不然送 10 份會演 11 次。
+ * - sub_gift 沒有 community_gift_id：指定送給某一個人的單份贈訂。
+ * - shared_chat_*：聯合聊天室裡別台的事件，不是這一台的，不演。
+ */
+function toSupportEvent(event, messageId) {
+  if (!event || typeof event !== 'object') return null;
+  const eventId = String(messageId || event.message_id || '');
+  const anonymous = event.chatter_is_anonymous === true;
+  const name = anonymous ? '' : String(event.chatter_user_name || event.chatter_user_login || '');
+  switch (event.notice_type) {
+    case 'sub': return { eventId, type: 'sub', name, count: 1 };
+    case 'resub': return { eventId, type: 'resub', name, count: 1 };
+    case 'community_sub_gift': return { eventId, type: 'gift', name, count: Math.max(1, Math.floor(Number(event.community_sub_gift && event.community_sub_gift.total) || 1)) };
+    case 'sub_gift':
+      if (event.sub_gift && event.sub_gift.community_gift_id) return null;
+      return { eventId, type: 'gift', name, count: 1 };
+    default: return null;
+  }
+}
 const REDEMPTION_SCOPE = 'channel:manage:redemptions';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
 // A TCP/WebSocket handshake can stay open forever without the EventSub welcome.
@@ -117,11 +141,12 @@ function normalizeRequestSessionState(value) {
 }
 
 class TwitchService {
-  constructor({ config, onStreamOnline, onStreamOffline, onRaid, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onSongRequestClosedExternally, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, practiceHistoryService = null, getPracticeHistoryService = null, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store, timers = globalThis }) {
+  constructor({ config, onStreamOnline, onStreamOffline, onRaid, onSupport, onSongRequest, onSongRequestExpired, onSongRequestCanceled, onSongRequestClosedExternally, onStatusChange, onRequestSettingsChange, onPanelAction, onPendingRequestsChanged, onHistoryChanged, getPlaybackSnapshot, practiceHistoryService = null, getPracticeHistoryService = null, pendingStore = requestStore, sessionStore = requestSessionStore, historyStore = requestHistoryStore, authStore = store, timers = globalThis }) {
     this.config = config;
     this.onStreamOnline = onStreamOnline;
     this.onStreamOffline = onStreamOffline;
     this.onRaid = typeof onRaid === 'function' ? onRaid : null;
+    this.onSupport = typeof onSupport === 'function' ? onSupport : null;
     this.onSongRequest = onSongRequest;
     this.onSongRequestExpired = onSongRequestExpired;
     this.onSongRequestCanceled = onSongRequestCanceled;
@@ -1008,6 +1033,13 @@ class TwitchService {
         } catch (err) {
           log.warn(`Twitch 揪團事件訂閱未啟用：${err.message}`);
         }
+        try {
+          // 聊天室通知（訂閱、續訂、贈訂）：跟聊天訊息用同一個授權範圍 user:read:chat，不需要重新連接。
+          // 失敗只代表沒有訂閱演出，不影響點歌與開台判斷。
+          await this.createSubscription('channel.chat.notification', { broadcaster_user_id: this.auth.userId, user_id: this.auth.userId });
+        } catch (err) {
+          log.warn(`Twitch 訂閱通知未啟用：${err.message}`);
+        }
         if (this.hasScope(REDEMPTION_SCOPE)) {
           try {
             await this.createSubscription('channel.channel_points_custom_reward_redemption.add', { broadcaster_user_id: this.auth.userId });
@@ -1075,6 +1107,13 @@ class TwitchService {
         });
       } catch (err) {
         log.warn(`Twitch 揪團事件處理失敗：${err.message}`);
+      }
+    } else if (subscription.type === 'channel.chat.notification') {
+      try {
+        const support = toSupportEvent(event, message.metadata.message_id);
+        if (support) this.onSupport?.(support);
+      } catch (err) {
+        log.warn(`Twitch 訂閱通知處理失敗：${err.message}`);
       }
     } else if (subscription.type === 'channel.chat.message') {
       await this.handleChatMessage(event, message.metadata.message_id);
@@ -2306,4 +2345,4 @@ class TwitchService {
   }
 }
 
-module.exports = { TwitchService, reconnectDelay, CONNECT_WATCHDOG_MS };
+module.exports = { TwitchService, reconnectDelay, CONNECT_WATCHDOG_MS, toSupportEvent };

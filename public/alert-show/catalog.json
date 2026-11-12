@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "giftMin": {
+    "g1": 1,
+    "g5": 5,
+    "g10": 10,
+    "g25": 25,
+    "g50": 50,
+    "g100": 100
+  },
+  "raidMin": {
+    "r1": 1,
+    "r2": 10,
+    "r3": 50,
+    "r4": 200
+  },
+  "tiers": [
+    {
+      "id": "sub",
+      "group": "sub",
+      "variants": [
+        {
+          "index": 0,
+          "name": "滑入卡片",
+          "dur": 3.2
+        },
+        {
+          "index": 1,
+          "name": "和紙便條",
+          "dur": 3.4
+        },
+        {
+          "index": 2,
+          "name": "泡泡",
+          "dur": 3.4
+        },
+        {
+          "index": 3,
+          "name": "郵票蓋章",
+          "dur": 3.3
+        },
+        {
+          "index": 4,
+          "name": "對話框",
+          "dur": 3.6
+        }
+      ]
+    },
+    {
+      "id": "g1",
+      "group": "gift",
+      "variants": [
+        {
+          "index": 0,
+          "name": "卡片禮物",
+          "dur": 3.6
+        },
+        {
+          "index": 1,
+          "name": "禮盒開箱",
+          "dur": 3.8
+        },
+        {
+          "index": 2,
+          "name": "扭蛋機",
+          "dur": 4
+        },
+        {
+          "index": 3,
+          "name": "紙飛機",
+          "dur": 4
+        },
+        {
+          "index": 4,
+          "name": "霓虹招牌",
+          "dur": 3.6
+        }
+      ]
+    },
+    {
+      "id": "g5",
+      "group": "gift",
+      "variants": [
+        {
+          "index": 0,
+          "name": "斜橫帶",
+          "dur": 4
+        },
+        {
+          "index": 1,
+          "name": "抽卡翻牌",
+          "dur": 4.8
+        },
+        {
+          "index": 2,
+          "name": "小彈珠台",
+          "dur": 4.8
+        },
+        {
+          "index": 3,
+          "name": "衝線拍照",
+          "dur": 4.6
+        },
+        {
+          "index": 4,
+          "name": "單發煙火",
+          "dur": 4.6
+        }
+      ]
+    },
+    {
+      "id": "g10",
+      "group": "gift",
+      "variants": [
+        {
+          "index": 0,
+          "name": "PUSH 按鈕",
+          "dur": 5.3
+        },
+        {
+          "index": 1,
+          "name": "幸運大轉盤",
+          "dur": 6.1
+        },
+        {
+          "index": 2,
+          "name": "鎖定掃描",
+          "dur": 5.4
+        },
+        {
+          "index": 3,
+          "name": "VS 對決",
+          "dur": 5.6
+        },
+        {
+          "index": 4,
+          "name": "號外",
+          "dur": 5.8
+        }
+      ]
+    },
+    {
+      "id": "g25",
+      "group": "gift",
+      "variants": [
+        {
+          "index": 0,
+          "name": "金扉",
+          "dur": 5.6
+        },
+        {
+          "index": 1,
+          "name": "寶箱",
+          "dur": 6.6
+        },
+        {
+          "index": 2,
+          "name": "火箭",
+          "dur": 7
+        },
+        {
+          "index": 3,
+          "name": "舞台大幕",
+          "dur": 6.4
+        },
+        {
+          "index": 4,
+          "name": "十連抽",
+          "dur": 7.4
+        }
+      ]
+    },
+    {
+      "id": "g50",
+      "group": "gift",
+      "variants": [
+        {
+          "index": 0,
+          "name": "拉霸 777",
+          "dur": 9.25
+        },
+        {
+          "index": 1,
+          "name": "保留變化＋機關合體",
+          "dur": 7.6
+        },
+        {
+          "index": 2,
+          "name": "擲骰ゾロ目",
+          "dur": 7.6
+        },
+        {
+          "index": 3,
+          "name": "流星墜落",
+          "dur": 7.2
+        },
+        {
+          "index": 4,
+          "name": "演唱會轉播",
+          "dur": 7.4
+        }
+      ]
+    },
+    {
+      "id": "g100",
+      "group": "gift",
+      "variants": [
+        {
+          "index": 0,
+          "name": "神降臨",
+          "dur": 11.2
+        },
+        {
+          "index": 1,
+          "name": "時間逆轉",
+          "dur": 8.6
+        },
+        {
+          "index": 2,
+          "name": "宇宙創世",
+          "dur": 9
+        },
+        {
+          "index": 3,
+          "name": "巨大化",
+          "dur": 8.2
+        },
+        {
+          "index": 4,
+          "name": "全回轉",
+          "dur": 9.4
+        }
+      ]
+    },
+    {
+      "id": "r1",
+      "group": "raid",
+      "variants": [
+        {
+          "index": 0,
+          "name": "小船靠港",
+          "dur": 4.4
+        },
+        {
+          "index": 1,
+          "name": "登船證蓋章",
+          "dur": 4.2
+        }
+      ]
+    },
+    {
+      "id": "r2",
+      "group": "raid",
+      "variants": [
+        {
+          "index": 0,
+          "name": "船隊進港",
+          "dur": 5.6
+        },
+        {
+          "index": 1,
+          "name": "吉祥物遊行",
+          "dur": 5.6
+        }
+      ]
+    },
+    {
+      "id": "r3",
+      "group": "raid",
+      "variants": [
+        {
+          "index": 0,
+          "name": "警報・雷達・大浪",
+          "dur": 7.2
+        },
+        {
+          "index": 1,
+          "name": "擠爆滿員",
+          "dur": 7.4
+        }
+      ]
+    },
+    {
+      "id": "r4",
+      "group": "raid",
+      "variants": [
+        {
+          "index": 0,
+          "name": "大艦隊來襲",
+          "dur": 9.6
+        },
+        {
+          "index": 1,
+          "name": "傳送門艦隊",
+          "dur": 9.4
+        }
+      ]
+    }
+  ]
+}

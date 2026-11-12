@@ -9,6 +9,17 @@
   --os-paper: #fbf5e6;
   --os-accent: #c8553d;
 }
+/* 訂閱／贈訂／揪團的全畫面演出：透明的內嵌舞台，鋪滿整個來源、不吃滑鼠事件。 */
+#overlay-show-stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+  color-scheme: normal;
+}
 #overlay-show-root[data-anchor="top-left"] .os-card { position: absolute; top: var(--os-margin); left: var(--os-margin); }
 #overlay-show-root[data-anchor="top-right"] .os-card { position: absolute; top: var(--os-margin); right: var(--os-margin); }
 #overlay-show-root[data-anchor="bottom-left"] .os-card { position: absolute; bottom: var(--os-margin); left: var(--os-margin); }

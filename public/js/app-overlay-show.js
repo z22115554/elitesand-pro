@@ -15,6 +15,7 @@
     raidMin: el('overlay-show-raid-min'),
     raidSeconds: el('overlay-show-raid-seconds'),
     raidStyle: el('overlay-show-raid-style'),
+    raidMode: el('overlay-show-raid-mode'),
     postcardSeconds: el('overlay-show-postcard-seconds'),
     postcardStyle: el('overlay-show-postcard-style'),
     raidAnchor: el('overlay-show-raid-anchor'),
@@ -34,7 +35,15 @@
     if (fields.postcardStyle) fields.postcardStyle.value = settings.postcard?.style || 'paper';
     if (fields.raidStyle) fields.raidStyle.value = settings.raid?.style || 'gold';
     if (fields.raidAnchor) fields.raidAnchor.value = settings.raid?.anchor || 'top-right';
+    if (fields.raidMode) fields.raidMode.value = settings.raid?.mode === 'show' ? 'show' : 'card';
+    syncRaidMode();
     if (fields.postcardAnchor) fields.postcardAnchor.value = settings.postcard?.anchor || 'top-right';
+  }
+
+  /** 全畫面演出不吃小卡的外觀、位置、秒數：選了就把那三欄收起來，免得以為調了有用。 */
+  function syncRaidMode() {
+    const show = fields.raidMode && fields.raidMode.value === 'show';
+    card.querySelectorAll('[data-raid-card-only]').forEach((node) => { node.hidden = !!show; });
   }
 
   function collect() {
@@ -45,6 +54,7 @@
         durationSec: Number(fields.raidSeconds?.value),
         style: fields.raidStyle ? fields.raidStyle.value : undefined,
         anchor: fields.raidAnchor ? fields.raidAnchor.value : undefined,
+        mode: fields.raidMode ? fields.raidMode.value : undefined,
       },
       postcard: {
         durationSec: Number(fields.postcardSeconds?.value),
@@ -68,6 +78,7 @@
   }
 
   Object.values(fields).forEach((field) => field && field.addEventListener('change', save));
+  fields.raidMode?.addEventListener('change', syncRaidMode);
 
   function test(kind) {
     SocketClient.sendWithCallback('overlay-show:test', { kind }, (result) => {

@@ -406,7 +406,7 @@ test('觀眾演出：只有桌面面板能改設定／試播，OBS 只收轉播�
   ok(/id="overlay-show-title"[^>]*>[^\n]{0,120}data-new-badge-slot/.test(panel), '卡片的 NEW 要放在標題旁，不是卡片最底下');
   const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
   ok(badges.includes("'overlay-show':") && badges.includes("'overlay-show-nav':"));
-  ok(/data-nav="public-request"[^>]*data-new-feature="overlay-show-nav"/.test(panel), '入口導覽項目也要標 NEW，不然沒點進去看不到');
+  ok(/data-nav="public-request"[^>]*data-new-feature="alert-show-nav"/.test(panel), '入口導覽項目也要標 NEW，不然沒點進去看不到');
   ok(panel.includes('id="overlay-show-raid-anchor"') && panel.includes('id="overlay-show-postcard-anchor"'), '揪團與明信片位置各自設定');
   ok(badges.includes("addEventListener('change', seenNow)") && badges.includes(".closest('label')?.control"), '改了設定或用了 label 對應的選單，NEW 也要消失');
 });

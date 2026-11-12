@@ -493,6 +493,7 @@ const twitch = new TwitchService({
   onStreamOnline: (event) => socketApi.startTwitchSession(event),
   onStreamOffline: (event) => socketApi.stopTwitchSession(event),
   onRaid: (event) => overlayShow.handleRaid(event),
+  onSupport: (event) => overlayShow.handleSupport(event),
   onSongRequest: (request) => socketApi.dispatchTwitchSongRequest(request),
   onSongRequestExpired: (requestId) => socketApi.expireTwitchSongRequest(requestId),
   onSongRequestCanceled: (requestId) => socketApi.cancelTwitchSongRequest(requestId),

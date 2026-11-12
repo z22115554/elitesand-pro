@@ -156,6 +156,17 @@ OpenCC JS / OpenCC data
 OpenCC JS is MIT licensed. OpenCC conversion data has its own notices.
 Source: https://github.com/nk2028/opencc-js
 
+Subscription / gift / raid shows (public/alert-show)
+----------------------------------------------------
+Fonts: subsets of Dela Gothic One, Black Han Sans, Gaegu, Noto Sans TC,
+Noto Sans SC, Noto Sans JP, Noto Sans KR and LXGW WenKai TC are bundled in
+public/alert-show/fonts. Each is licensed under the SIL Open Font License 1.1;
+the full license texts and copyright notices are in
+public/alert-show/fonts/OFL.txt. Source: https://github.com/google/fonts
+Sound effects: mixed from recordings published on Freesound under
+Creative Commons 0 (public domain dedication) and from Kenney asset packs
+(CC0), plus synthesized layers. Source: https://freesound.org, https://kenney.nl
+
 npm dependencies
 ----------------
 The package contains npm dependencies under MIT, Apache-2.0, BSD, ISC and

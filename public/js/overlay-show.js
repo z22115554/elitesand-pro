@@ -1,9 +1,12 @@
 /**
- * OBS 互動演出（/display 疊加）：點歌明信片、Twitch 揪團感謝。
+ * OBS 互動演出（/display 疊加）：點歌明信片、Twitch 揪團感謝，以及訂閱／贈訂／揪團的全畫面演出。
  *
  * - 只動自己的元素（#overlay-show-root），不碰歌詞與 OBS 透明底色（鐵則 11）。
  * - 文字一律 textContent，伺服器已清洗；這裡再不吃任何 HTML。
  * - 純轉播：overlay-show:play 開演、overlay-show:clear 收場；來源重載後不會殘留。
+ * - 全畫面演出（kind: alert）畫在內嵌的 /alert-show/stage.html（透明、不吃滑鼠事件）：
+ *   引擎有四百多 KB、一堆全域函式，放在 iframe 裡才不會跟歌詞頁的程式互相影響，
+ *   也只有真的開了演出的人才會載入它。
  */
 (function () {
   'use strict';
@@ -161,11 +164,85 @@
     entry.killTimer = setTimeout(() => remove(entry), EXIT_MS);
   }
 
+  // ─── 全畫面演出的舞台（iframe）───
+  const STAGE_URL = '/alert-show/stage.html';
+  const params = (() => { try { return new URL(window.location.href).searchParams; } catch (_) { return new URLSearchParams(); } })();
+  // 面板裡的預覽框和 Spout 輸出不出聲：聲音只從 OBS 的瀏覽器來源出一份。
+  const stageMuted = params.get('preview') === '1' || params.get('spout') === '1' || params.get('output') === 'spout';
+  let stage = null;        // { frame, ready, pending }
+  let stageShowId = '';
+
+  function ensureStage() {
+    if (stage && stage.frame.isConnected) return stage;
+    const frame = document.createElement('iframe');
+    frame.id = 'overlay-show-stage';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.setAttribute('tabindex', '-1');
+    frame.setAttribute('allow', 'autoplay');
+    frame.src = STAGE_URL;
+    ensureRoot().appendChild(frame);
+    stage = { frame, ready: false, pending: null };
+    return stage;
+  }
+
+  function postToStage(message) {
+    if (!stage || !stage.frame.contentWindow) return;
+    stage.frame.contentWindow.postMessage({ target: 'alert-show-stage', ...message }, window.location.origin);
+  }
+
+  window.addEventListener('message', (event) => {
+    if (!stage || event.origin !== window.location.origin || event.source !== stage.frame.contentWindow) return;
+    const data = event.data;
+    if (!data || data.source !== 'alert-show-stage') return;
+    if (data.type === 'ready') {
+      stage.ready = true;
+      if (stage.pending) { postToStage(stage.pending); stage.pending = null; }
+    } else if (data.type === 'ended' || data.type === 'error') {
+      if (!data.id || data.id === stageShowId) stageShowId = '';
+    }
+  });
+
+  function playAlert(message, payload) {
+    if (current) remove(current); // 卡片跟全畫面演出不同時出現
+    const host = ensureStage();
+    stageShowId = String(message.id || '');
+    const command = {
+      type: 'play',
+      id: stageShowId,
+      tier: String(payload.tier || ''),
+      variant: Number(payload.variant) || 0,
+      n: Number(payload.n) || 0,
+      name: String(payload.name || ''),
+      lang: window.I18n && typeof window.I18n.current === 'function' ? window.I18n.current() : 'zh-TW',
+      volume: Math.max(0, Math.min(100, Number(payload.volume))) / 100,
+      muted: stageMuted,
+    };
+    if (host.ready) postToStage(command); else host.pending = command; // 還在載入：載好馬上演
+  }
+
+  function stopAlert(id) {
+    if (!stage) return;
+    if (id && stageShowId && id !== stageShowId) return;
+    stage.pending = null;
+    stageShowId = '';
+    postToStage({ type: 'stop' });
+  }
+
+  /** 設定裡有開全畫面演出就先把舞台載好（字型、道具圖），第一次演出才不會慢半拍。 */
+  function prepareStage(settings) {
+    if (!settings || typeof settings !== 'object') return;
+    const alerts = settings.alerts || {};
+    const raid = settings.raid || {};
+    if (alerts.subEnabled || alerts.giftEnabled || (raid.enabled && raid.mode === 'show')) ensureStage();
+  }
+
   function play(message) {
     if (!message || typeof message !== 'object') return;
     const kind = message.kind;
     const payload = message.payload && typeof message.payload === 'object' ? message.payload : {};
+    if (kind === 'alert') { playAlert(message, payload); return; }
     if (kind !== 'postcard' && kind !== 'raid') return;
+    stopAlert('');
     // 伺服器保證一次一個；萬一舊的沒收到 clear（斷線重連），先立即收掉，不疊兩張。
     if (current) remove(current);
     const host = ensureRoot();
@@ -191,6 +268,7 @@
   }
 
   function clear(message) {
+    if (message && message.kind === 'alert') { stopAlert(String(message.id || '')); return; }
     if (!current) return;
     if (message && message.id && String(message.id) !== current.id) return;
     leave(current);
@@ -199,5 +277,6 @@
   SocketClient.on('overlay-show:play', play);
   SocketClient.on('overlay-show:clear', clear);
   // 換歌、停止時伺服器會送 clear；斷線時直接收掉，避免畫面卡一張卡。
-  SocketClient.on('connection-change', (connected) => { if (!connected && current) remove(current); });
+  SocketClient.on('overlay-show:settings', prepareStage);
+  SocketClient.on('connection-change', (connected) => { if (!connected) { if (current) remove(current); stopAlert(''); } });
 })();

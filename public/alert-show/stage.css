@@ -1,0 +1,3 @@
+/* 演出舞台：整頁透明，只有一張 16:9 畫布；疊在 OBS 歌詞來源或面板預覽框裡。 */
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+#c { display: block; width: 100vw; height: 100vh; object-fit: contain; background: transparent; }

@@ -1237,7 +1237,10 @@ testAsync('Twitch EventSub 在新版授權下會訂閱忠誠點數兌換事件',
     metadata: { message_type: 'session_welcome' },
     payload: { session: { id: 'session-1' } },
   }));
-  eq(subscriptions.length, 6);
+  eq(subscriptions.length, 7);
+  const noticeSubscription = subscriptions.find((item) => item.type === 'channel.chat.notification');
+  ok(noticeSubscription, '要訂閱聊天室通知（訂閱、續訂、贈訂演出用）');
+  eq(noticeSubscription.condition.user_id, 'broadcaster-1', '聊天室通知跟聊天訊息一樣，用實況主自己的身分讀');
   const raidSubscription = subscriptions.find((item) => item.type === 'channel.raid');
   ok(raidSubscription, '要訂閱入站揪團');
   eq(raidSubscription.condition.to_broadcaster_user_id, 'broadcaster-1', '揪團是「到本頻道」的方向，不是 from');

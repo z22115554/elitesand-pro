@@ -10,12 +10,22 @@
  * - 明信片只在「主播核准時明確勾了允許上畫面」才會登記（armPostcard），預設不上畫面。
  *   登記只放記憶體、有上限；重啟後沒演的明信片不補演，寧可不演也不誤演。
  * - 揪團事件依 Twitch message id 去重（EventSub 重連／重送時同一筆不會演兩次）。
+ * - 訂閱／贈訂／揪團的「全畫面演出」（kind: alert）走同一條佇列：伺服器只決定演哪一級、哪一種、
+ *   演多久，畫面由 /display 內嵌的 /alert-show/stage.html 畫。演出清單與秒數讀
+ *   public/alert-show/catalog.json（tools/alert-show/build.js 產生），不必載入引擎。
  */
 
 const path = require('path');
 
 const KIND_POSTCARD = 'postcard';
 const KIND_RAID = 'raid';
+const KIND_ALERT = 'alert';
+
+const CATALOG = require('../../public/alert-show/catalog.json');
+const TIER_BY_ID = new Map(CATALOG.tiers.map((tier) => [tier.id, tier]));
+const GIFT_STEPS = Object.freeze(['g5', 'g10', 'g25', 'g50', 'g100']); // g1 固定是 1 份
+const RAID_STEPS = Object.freeze(['r2', 'r3', 'r4']);                    // r1 固定是 1 人
+const RAID_MODES = Object.freeze(['card', 'show']);
 
 const ANCHORS = Object.freeze(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
 // 揪團感謝的外觀：classic 簡潔漸層、gold 金箔舞台、neon 霓虹、sakura 櫻花、stage 舞台彩帶。
@@ -25,7 +35,15 @@ const RAID_STYLES = Object.freeze(['gold', 'neon', 'sakura', 'stage', 'classic']
 
 // 位置各自設定：揪團感謝通常想放在醒目的上方，明信片常放在不擋臉的下方角落。
 const DEFAULTS = Object.freeze({
-  raid: Object.freeze({ enabled: false, minViewers: 1, durationSec: 8, style: 'gold', anchor: 'top-right' }),
+  raid: Object.freeze({ enabled: false, minViewers: 1, durationSec: 8, style: 'gold', anchor: 'top-right', mode: 'card' }),
+  alerts: Object.freeze({
+    subEnabled: false,
+    giftEnabled: false,
+    volume: 70,
+    giftMin: Object.freeze({ g5: CATALOG.giftMin.g5, g10: CATALOG.giftMin.g10, g25: CATALOG.giftMin.g25, g50: CATALOG.giftMin.g50, g100: CATALOG.giftMin.g100 }),
+    raidMin: Object.freeze({ r2: CATALOG.raidMin.r2, r3: CATALOG.raidMin.r3, r4: CATALOG.raidMin.r4 }),
+    off: Object.freeze([]),
+  }),
   postcard: Object.freeze({ durationSec: 10, style: 'paper', anchor: 'top-right' }),
 });
 
@@ -37,12 +55,15 @@ const LIMITS = Object.freeze({
   raidMinViewersMin: 1, raidMinViewersMax: 10000,
   raidDurationMin: 4, raidDurationMax: 15,
   postcardDurationMin: 6, postcardDurationMax: 20,
+  thresholdMax: 100000,
+  alertCountMax: 9999999,
 });
 
 const MAX_QUEUE = 6;
 const MAX_ARMED_POSTCARDS = 100;
 const MAX_SEEN_EVENTS = 200;
 const TEXT_LIMITS = Object.freeze({ title: 120, artist: 80, name: 40, message: 140, channel: 40 });
+const ALERT_START_SLACK_MS = 1500; // 舞台第一次載入（字型、道具圖）要一點時間，多留一些再接下一個
 
 function clampInt(value, fallback, min, max) {
   const n = Number(value);
@@ -60,8 +81,57 @@ function cleanText(value, max) {
     .slice(0, max);
 }
 
+/** 門檻要一級比一級高：使用者填反了就往上推，不讓兩級搶同一個數字。 */
+function normalizeSteps(input, current, steps, firstMin) {
+  const src = input && typeof input === 'object' ? input : {};
+  const out = {};
+  let floor = firstMin;
+  for (const id of steps) {
+    const value = clampInt(src[id], current[id], floor, LIMITS.thresholdMax);
+    out[id] = Math.max(floor, value);
+    floor = out[id] + 1;
+  }
+  return out;
+}
+
+/** 停用清單：只收目錄裡真的有的「等級:第幾種」，而且每一級至少留一種。 */
+function normalizeOff(input, current) {
+  const list = Array.isArray(input) ? input : (Array.isArray(current) ? current : []);
+  const seen = new Set();
+  for (const item of list) {
+    const [tierId, indexText] = String(item).split(':');
+    const tier = TIER_BY_ID.get(tierId);
+    const index = Number(indexText);
+    if (tier && Number.isInteger(index) && index >= 0 && index < tier.variants.length) seen.add(`${tierId}:${index}`);
+  }
+  for (const tier of CATALOG.tiers) {
+    if (tier.variants.every((variant) => seen.has(`${tier.id}:${variant.index}`))) seen.delete(`${tier.id}:0`);
+  }
+  return [...seen].sort();
+}
+
+function normalizeAlerts(input, current) {
+  const src = input && typeof input === 'object' ? input : {};
+  return {
+    subEnabled: typeof src.subEnabled === 'boolean' ? src.subEnabled : !!current.subEnabled,
+    giftEnabled: typeof src.giftEnabled === 'boolean' ? src.giftEnabled : !!current.giftEnabled,
+    volume: clampInt(src.volume, current.volume, 0, 100),
+    giftMin: normalizeSteps(src.giftMin, current.giftMin, GIFT_STEPS, 2),
+    raidMin: normalizeSteps(src.raidMin, current.raidMin, RAID_STEPS, 2),
+    off: normalizeOff(src.off, current.off),
+  };
+}
+
+/** 份數／人數落在哪一級：取「門檻不超過這個數字」裡最高的那一級。 */
+function tierForCount(count, firstId, steps, mins) {
+  let best = firstId;
+  for (const id of steps) if (count >= mins[id]) best = id;
+  return best;
+}
+
 function normalizeSettings(input, current = DEFAULTS) {
   const src = input && typeof input === 'object' ? input : {};
+  const currentAlerts = current.alerts && typeof current.alerts === 'object' ? { ...DEFAULTS.alerts, ...current.alerts } : DEFAULTS.alerts;
   const raid = src.raid && typeof src.raid === 'object' ? src.raid : {};
   const postcard = src.postcard && typeof src.postcard === 'object' ? src.postcard : {};
   // 舊版只有一個共用的 src.anchor：沒有各自的值時兩邊都沿用它。
@@ -72,7 +142,9 @@ function normalizeSettings(input, current = DEFAULTS) {
       durationSec: clampInt(raid.durationSec, current.raid.durationSec, LIMITS.raidDurationMin, LIMITS.raidDurationMax),
       style: RAID_STYLES.includes(raid.style) ? raid.style : (RAID_STYLES.includes(current.raid.style) ? current.raid.style : DEFAULTS.raid.style),
       anchor: pickAnchor(raid.anchor, src.anchor, current.raid.anchor, current.anchor),
+      mode: RAID_MODES.includes(raid.mode) ? raid.mode : (RAID_MODES.includes(current.raid.mode) ? current.raid.mode : DEFAULTS.raid.mode),
     },
+    alerts: normalizeAlerts(src.alerts, currentAlerts),
     postcard: {
       durationSec: clampInt(postcard.durationSec, current.postcard.durationSec, LIMITS.postcardDurationMin, LIMITS.postcardDurationMax),
       style: POSTCARD_STYLES.includes(postcard.style) ? postcard.style : (POSTCARD_STYLES.includes(current.postcard.style) ? current.postcard.style : DEFAULTS.postcard.style),
@@ -104,7 +176,7 @@ function createDiskSettingsStore() {
  * @param {{load:Function,save:Function}} [deps.store]         設定存取；不給就用磁碟版
  * @param {{setTimeout:Function,clearTimeout:Function}} [deps.timers]
  */
-function createOverlayShow({ emit, store = null, timers = globalThis, now = Date.now, onSettingsChange = null } = {}) {
+function createOverlayShow({ emit, store = null, timers = globalThis, now = Date.now, onSettingsChange = null, random = Math.random } = {}) {
   const send = typeof emit === 'function' ? emit : () => {};
   const settingsStore = store || createDiskSettingsStore();
   let settings;
@@ -117,6 +189,7 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
   const armed = new Map();       // entryId -> postcard（尚未演出）
   const shownEntries = new Set(); // 已演過的 entryId，避免暫停再播又演一次
   const seenEvents = [];
+  const lastVariant = new Map(); // 等級 -> 上一次演的第幾種（同一級不連續重複）
 
   function nextId() { seq += 1; return `show-${now().toString(36)}-${seq}`; }
 
@@ -131,6 +204,12 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     return {
       raid: { ...settings.raid },
       postcard: { ...settings.postcard },
+      alerts: {
+        ...settings.alerts,
+        giftMin: { ...settings.alerts.giftMin },
+        raidMin: { ...settings.alerts.raidMin },
+        off: [...settings.alerts.off],
+      },
     };
   }
 
@@ -159,7 +238,8 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
       anchor: active.kind === KIND_RAID ? settings.raid.anchor : settings.postcard.anchor,
       payload: active.payload,
     });
-    activeTimer = timers.setTimeout(finishActive, active.durationMs + 600); // 多留一點讓退場動畫跑完
+    // 卡片多留一點讓退場動畫跑完；全畫面演出要等舞台載入，留更多。
+    activeTimer = timers.setTimeout(finishActive, active.durationMs + (active.kind === KIND_ALERT ? ALERT_START_SLACK_MS : 600));
     if (activeTimer && typeof activeTimer.unref === 'function') activeTimer.unref();
   }
 
@@ -179,6 +259,56 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     return false;
   }
 
+  // ─── 訂閱／贈訂／揪團的全畫面演出 ───
+
+  /** 從這一級「沒被停用」的演出裡挑一種；有兩種以上時不跟上一次重複。 */
+  function pickVariant(tierId) {
+    const tier = TIER_BY_ID.get(tierId);
+    let pool = tier.variants.map((variant) => variant.index).filter((index) => !settings.alerts.off.includes(`${tierId}:${index}`));
+    if (!pool.length) pool = [0];
+    const last = lastVariant.get(tierId);
+    if (pool.length > 1 && last != null) pool = pool.filter((index) => index !== last);
+    const pick = pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
+    lastVariant.set(tierId, pick);
+    return pick;
+  }
+
+  function enqueueAlert(tierId, { variant = null, count = 0, name = '' } = {}) {
+    const tier = TIER_BY_ID.get(tierId);
+    if (!tier) return null;
+    const index = Number.isInteger(variant) && tier.variants[variant] ? variant : pickVariant(tierId);
+    return enqueue({
+      kind: KIND_ALERT,
+      durationMs: Math.round(tier.variants[index].dur * 1000),
+      payload: {
+        tier: tierId,
+        variant: index,
+        n: tierId === 'sub' ? 0 : clampInt(count, 1, 1, LIMITS.alertCountMax),
+        name: cleanText(name, TEXT_LIMITS.name),
+        volume: settings.alerts.volume,
+      },
+    });
+  }
+
+  /**
+   * Twitch 的訂閱類通知。type：sub（新訂閱）／resub（續訂分享）／gift（贈訂，count＝這一次送出的份數）。
+   * 匿名贈訂 name 留空，畫面上顯示各語言的「觀眾」。
+   */
+  function handleSupport({ eventId = '', type = '', name = '', count = 1 } = {}) {
+    if (type !== 'sub' && type !== 'resub' && type !== 'gift') return { ok: false, reason: 'unknown-type' };
+    if (rememberEvent(String(eventId || ''))) return { ok: false, reason: 'duplicate' };
+    if (type === 'gift') {
+      if (!settings.alerts.giftEnabled) return { ok: false, reason: 'disabled' };
+      const total = Math.max(1, Math.floor(Number(count) || 1));
+      const tierId = tierForCount(total, 'g1', GIFT_STEPS, settings.alerts.giftMin);
+      const id = enqueueAlert(tierId, { count: total, name });
+      return id ? { ok: true, id, tier: tierId } : { ok: false, reason: 'queue-full' };
+    }
+    if (!settings.alerts.subEnabled) return { ok: false, reason: 'disabled' };
+    const id = enqueueAlert('sub', { name });
+    return id ? { ok: true, id, tier: 'sub' } : { ok: false, reason: 'queue-full' };
+  }
+
   // ─── 揪團感謝 ───
 
   function handleRaid({ eventId = '', fromName = '', viewers = 0 } = {}) {
@@ -188,6 +318,11 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
     if (count < settings.raid.minViewers) return { ok: false, reason: 'below-min' };
     const name = cleanText(fromName, TEXT_LIMITS.channel);
     if (!name) return { ok: false, reason: 'no-name' };
+    if (settings.raid.mode === 'show') {
+      const tierId = tierForCount(count, 'r1', RAID_STEPS, settings.alerts.raidMin);
+      const showId = enqueueAlert(tierId, { count: Math.max(1, count), name });
+      return showId ? { ok: true, id: showId, tier: tierId } : { ok: false, reason: 'queue-full' };
+    }
     const id = enqueue({
       kind: KIND_RAID,
       durationMs: settings.raid.durationSec * 1000,
@@ -264,8 +399,25 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
   }
 
   /** 測試演出：不看啟用開關、不看人數門檻，也不進去重表。 */
-  function test(kind) {
+  function test(kind, options = {}) {
+    if (kind === KIND_ALERT) {
+      const tier = TIER_BY_ID.get(String(options.tier || ''));
+      if (!tier) return null;
+      const fallback = tier.group === 'gift'
+        ? (tier.id === 'g1' ? 1 : settings.alerts.giftMin[tier.id])
+        : (tier.group === 'raid' ? (tier.id === 'r1' ? Math.max(1, settings.raid.minViewers) : settings.alerts.raidMin[tier.id]) : 0);
+      const variant = Number(options.variant);
+      return enqueueAlert(tier.id, {
+        variant: Number.isInteger(variant) ? variant : null,
+        count: clampInt(options.count, fallback, 1, LIMITS.alertCountMax),
+        name: options.name == null || options.name === '' ? 'SampleViewer' : options.name,
+      });
+    }
     if (kind === KIND_RAID) {
+      if (settings.raid.mode === 'show') {
+        const tierId = tierForCount(23, 'r1', RAID_STEPS, settings.alerts.raidMin);
+        return enqueueAlert(tierId, { count: 23, name: 'SampleChannel' });
+      }
       return enqueue({ kind: KIND_RAID, durationMs: settings.raid.durationSec * 1000, payload: { name: 'SampleChannel', viewers: 23, style: settings.raid.style } });
     }
     if (kind === KIND_POSTCARD) {
@@ -284,12 +436,13 @@ function createOverlayShow({ emit, store = null, timers = globalThis, now = Date
 
   return {
     getSettings, updateSettings,
-    handleRaid, armPostcard, dropPostcard, onTrackChanged, onTrackPlaying,
+    handleRaid, handleSupport, armPostcard, dropPostcard, onTrackChanged, onTrackPlaying,
     skip, clearAll, test, snapshot,
   };
 }
 
 module.exports = {
   createOverlayShow, normalizeSettings, cleanText,
-  DEFAULTS, LIMITS, ANCHORS, RAID_STYLES, POSTCARD_STYLES, KIND_POSTCARD, KIND_RAID, MAX_QUEUE,
+  DEFAULTS, LIMITS, ANCHORS, RAID_STYLES, RAID_MODES, POSTCARD_STYLES, KIND_POSTCARD, KIND_RAID, KIND_ALERT, MAX_QUEUE,
+  CATALOG, GIFT_STEPS, RAID_STEPS, tierForCount,
 };

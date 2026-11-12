@@ -26,5 +26,6 @@ require('./core-16-eula');
 require('./core-17-i18n');
 require('./core-18-packaging-templates');
 require('./core-19-templates-overlay');
+require('./core-20-alert-show');
 
 harness.finishAll();

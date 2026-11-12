@@ -34,6 +34,51 @@
       </button>
     </div>
   </header>
+  <div id="alert-show-modal" class="modal modal-wide alert-show-modal" role="dialog" aria-modal="true" aria-labelledby="alert-show-modal-title" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="alert-show-modal-title">
+          <h3 id="alert-show-modal-title" tabindex="-1" data-i18n="alertShow.modalTitle">演出與門檻</h3>
+          <p class="sub" data-i18n="alertShow.modalHint">勾選要用的演出。同一級每次隨機挑一種，不會連續重複。</p>
+        </div>
+        <button id="alert-show-close" class="btn btn-sm btn-ghost" type="button" data-i18n="common.close">關閉</button>
+      </div>
+      <div class="alert-show-layout">
+        <div class="alert-show-list">
+          <div class="alert-show-toolbar">
+            <div id="alert-show-tabs" class="segmented" role="tablist" aria-label="演出類型" data-i18n-aria-label="alertShow.tabsLabel">
+              <button type="button" role="tab" data-group="sub" data-i18n="alertShow.tabSub">訂閱</button>
+              <button type="button" role="tab" data-group="gift" data-i18n="alertShow.tabGift">贈送訂閱</button>
+              <button type="button" role="tab" data-group="raid" data-i18n="alertShow.tabRaid">揪團</button>
+            </div>
+            <div id="alert-show-presets" class="alert-show-presets">
+              <span class="alert-show-presets-label" data-i18n="alertShow.presets">門檻</span>
+              <button id="alert-show-preset-std" class="btn btn-sm btn-ghost" type="button" data-i18n="alertShow.presetStd">一般頻道</button>
+              <button id="alert-show-preset-small" class="btn btn-sm btn-ghost" type="button" data-i18n="alertShow.presetSmall">小型頻道</button>
+            </div>
+          </div>
+          <p id="alert-show-note" class="field-hint alert-show-note" hidden></p>
+          <div id="alert-show-tiers" class="alert-show-tiers"></div>
+        </div>
+        <aside class="alert-show-preview" aria-label="演出預覽" data-i18n-aria-label="alertShow.preview">
+          <div class="alert-show-stage">
+            <iframe id="alert-show-frame" title="演出預覽" data-i18n-title="alertShow.preview" tabindex="-1" allow="autoplay"></iframe>
+            <p id="alert-show-stage-empty" class="alert-show-stage-empty" data-i18n="alertShow.previewEmpty">按演出旁的「預覽」在這裡看效果</p>
+          </div>
+          <p id="alert-show-now" class="alert-show-now" role="status" aria-live="polite"></p>
+          <div class="field">
+            <label for="alert-show-name" data-i18n="alertShow.previewName">預覽用的名字</label>
+            <input id="alert-show-name" class="input" type="text" maxlength="40" autocomplete="off">
+          </div>
+          <div class="alert-show-preview-actions">
+            <button id="alert-show-replay" class="btn btn-sm" type="button" disabled data-i18n="alertShow.replay">再看一次</button>
+            <button id="alert-show-obs-test" class="btn btn-sm" type="button" disabled data-i18n="alertShow.obsTest">在 OBS 試播</button>
+          </div>
+          <p class="field-hint" data-i18n="alertShow.previewHint">預覽只在這個視窗播放；「在 OBS 試播」才會出現在直播畫面上。</p>
+        </aside>
+      </div>
+    </div>
+  </div>
   <div id="electron-close-modal" class="modal electron-close-modal" role="dialog" aria-modal="true" aria-labelledby="electron-close-title" aria-describedby="electron-close-description" hidden>
     <div class="modal-card modal-card--small" role="document">
       <div class="modal-head electron-close-modal-head">
@@ -174,7 +219,7 @@
           <span class="nav-label" data-i18n="nav.moon">中秋活動</span>
           <span class="nav-sub" data-i18n="nav.moonLimited">（限時開放）</span>
         </button>
-        <button class="nav-item nav-item--sub" data-nav="public-request" data-parent="twitch" type="button" data-new-feature="overlay-show-nav">
+        <button class="nav-item nav-item--sub" data-nav="public-request" data-parent="twitch" type="button" data-new-feature="alert-show-nav">
           <span class="nav-label" data-i18n="nav.publicRequest">公開點歌頁</span>
           <span id="public-request-nav-badge" class="pi-badge" hidden>0</span>
         </button>
@@ -1964,11 +2009,28 @@
                 <button id="overlay-show-test-raid" class="btn btn-sm" type="button" data-i18n="overlayShow.test">試播</button>
               </div>
               <div class="switch-row"><div class="label" data-i18n="overlayShow.raidEnabled">收到揪團時自動演出</div><label class="switch"><input id="overlay-show-raid-enabled" type="checkbox"><span class="track"></span></label></div>
-              <div class="overlay-show-grid">
-                <div class="field"><label for="overlay-show-raid-style" data-i18n="overlayShow.style">外觀</label><select id="overlay-show-raid-style" class="input"><option value="gold" data-i18n="overlayShow.styleGold">金箔</option><option value="neon" data-i18n="overlayShow.styleNeon">霓虹</option><option value="sakura" data-i18n="overlayShow.styleSakura">櫻花</option><option value="stage" data-i18n="overlayShow.styleStage">舞台</option><option value="classic" data-i18n="overlayShow.styleClassic">簡潔</option></select></div>
-                <div class="field"><label for="overlay-show-raid-anchor" data-i18n="overlayShow.anchor">畫面位置</label><select id="overlay-show-raid-anchor" class="input"><option value="top-right" data-i18n="overlayShow.anchorTopRight">右上</option><option value="top-left" data-i18n="overlayShow.anchorTopLeft">左上</option><option value="bottom-right" data-i18n="overlayShow.anchorBottomRight">右下</option><option value="bottom-left" data-i18n="overlayShow.anchorBottomLeft">左下</option></select></div>
-                <div class="field"><label for="overlay-show-raid-seconds" data-i18n="overlayShow.seconds">顯示秒數</label><input id="overlay-show-raid-seconds" class="input" type="number" min="4" max="15" step="1" value="8" inputmode="numeric"></div>
+              <div class="overlay-show-grid" id="overlay-show-raid-grid">
+                <div class="field"><label for="overlay-show-raid-mode" data-i18n="alertShow.raidMode">演出方式</label><select id="overlay-show-raid-mode" class="input"><option value="card" data-i18n="alertShow.raidModeCard">角落小卡</option><option value="show" data-i18n="alertShow.raidModeShow">全畫面演出</option></select></div>
+                <div class="field" data-raid-card-only><label for="overlay-show-raid-style" data-i18n="overlayShow.style">外觀</label><select id="overlay-show-raid-style" class="input"><option value="gold" data-i18n="overlayShow.styleGold">金箔</option><option value="neon" data-i18n="overlayShow.styleNeon">霓虹</option><option value="sakura" data-i18n="overlayShow.styleSakura">櫻花</option><option value="stage" data-i18n="overlayShow.styleStage">舞台</option><option value="classic" data-i18n="overlayShow.styleClassic">簡潔</option></select></div>
+                <div class="field" data-raid-card-only><label for="overlay-show-raid-anchor" data-i18n="overlayShow.anchor">畫面位置</label><select id="overlay-show-raid-anchor" class="input"><option value="top-right" data-i18n="overlayShow.anchorTopRight">右上</option><option value="top-left" data-i18n="overlayShow.anchorTopLeft">左上</option><option value="bottom-right" data-i18n="overlayShow.anchorBottomRight">右下</option><option value="bottom-left" data-i18n="overlayShow.anchorBottomLeft">左下</option></select></div>
+                <div class="field" data-raid-card-only><label for="overlay-show-raid-seconds" data-i18n="overlayShow.seconds">顯示秒數</label><input id="overlay-show-raid-seconds" class="input" type="number" min="4" max="15" step="1" value="8" inputmode="numeric"></div>
                 <div class="field"><label for="overlay-show-raid-min" data-i18n="overlayShow.raidMin">最低人數</label><input id="overlay-show-raid-min" class="input" type="number" min="1" max="10000" step="1" value="1" inputmode="numeric"></div>
+              </div>
+            </div>
+            <div class="overlay-show-group" id="alert-show-group" data-new-feature="alert-show">
+              <div class="overlay-show-group-head">
+                <div>
+                  <div class="label alert-show-label"><span data-i18n="alertShow.title">訂閱與贈訂演出</span><span data-new-badge-slot></span></div>
+                  <div class="sub" data-i18n="alertShow.hint">有人訂閱或贈送訂閱時，在 OBS 播一段演出；送得越多越華麗。需要先連接 Twitch。</div>
+                </div>
+                <button id="alert-show-open" class="btn btn-sm" type="button" data-i18n="alertShow.manage">演出與門檻</button>
+              </div>
+              <div class="switch-row"><div class="label" data-i18n="alertShow.subEnabled">新訂閱、續訂時演出</div><label class="switch"><input id="alert-show-sub-enabled" type="checkbox"><span class="track"></span></label></div>
+              <div class="switch-row"><div class="label" data-i18n="alertShow.giftEnabled">贈送訂閱時演出</div><label class="switch"><input id="alert-show-gift-enabled" type="checkbox"><span class="track"></span></label></div>
+              <div class="alert-show-volume">
+                <label for="alert-show-volume" data-i18n="alertShow.volume">演出音效音量</label>
+                <input id="alert-show-volume" type="range" min="0" max="100" step="5" value="70">
+                <output id="alert-show-volume-value" for="alert-show-volume">70</output>
               </div>
             </div>
           </section>
@@ -4153,6 +4215,7 @@
   <script src="/js/app-twitch.js"></script>
   <script src="/js/app-public-requests.js"></script>
   <script src="/js/app-overlay-show.js"></script>
+  <script src="/js/app-alert-show.js"></script>
   <script src="/js/app-playlist.js"></script>
   <script src="/js/playback-sequence.js"></script>
   <script src="/js/app-bgm.js"></script>
