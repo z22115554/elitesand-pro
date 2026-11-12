@@ -65,6 +65,8 @@
     refresh();
   });
 
+  // 狀態文字是程式填的，換語言時要重畫
+  window.addEventListener('i18n:change', () => refresh());
   document.addEventListener('view:change', (event) => {
     if (event.detail?.view === 'general') refresh();
   });
