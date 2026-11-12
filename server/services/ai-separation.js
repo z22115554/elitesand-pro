@@ -279,16 +279,15 @@ const supervisor = new AISeparationSupervisor(aiRuntimeProvider.PYTHON_EXE);
 // 硬體在同一次執行中不會變，重複探測只會白白多打幾次 supervisor 的 NDJSON 往返。
 // 真正 dispatch 一個 job 時仍然呼叫 supervisor.probe() 拿新鮮結果，不用這個快取
 // ——那邊要的是「這一刻」的真相，這裡要的只是「大概要不要預熱」的粗略提示。
-let cachedCudaAvailable = null;
-async function getCachedCudaAvailable() {
-  if (cachedCudaAvailable !== null) return cachedCudaAvailable;
-  try {
-    const probe = await supervisor.probe();
-    cachedCudaAvailable = probe?.cudaAvailable === true;
-  } catch (_) {
-    cachedCudaAvailable = false;
+let cudaAvailabilityProbe = null;
+function getCachedCudaAvailable() {
+  if (!cudaAvailabilityProbe) {
+    cudaAvailabilityProbe = supervisor.probe().then(
+      (probe) => probe?.cudaAvailable === true,
+      () => false,
+    );
   }
-  return cachedCudaAvailable;
+  return cudaAvailabilityProbe;
 }
 
 module.exports = { AISeparationSupervisor, supervisor, resolveAiScriptDir, getCachedCudaAvailable };

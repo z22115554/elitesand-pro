@@ -127,12 +127,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// 2mb 足夠涵蓋 1MB 歌詞貼上與 JSON 包裝；Socket.io 另限制單一事件為 1MB。
-// 伺服器綁 0.0.0.0 對區網開放，limit 開太大等於留一個記憶體轟炸面。
-// 音訊檔上傳不受此限制（multer 走 multipart，另有 200MB 上限）。
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 200 }));
-
 // 防跨站網站偷偷控制 localhost/LAN：瀏覽器跨站請求一律拒絕；OBS/CLI/Stream Deck
 // 沒有 Sec-Fetch-Site/Origin，仍維持相容。
 //
@@ -149,6 +143,8 @@ app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 200 }
 const SIDE_EFFECT_GET_PREFIXES = [
   '/api/deck/',            // Stream Deck 指令，GET 也是寫入操作
   '/api/system-check',     // ?force=1 繞過快取 → spawn yt-dlp/ffmpeg
+  '/api/ffmpeg/status',    // 查找／驗證本機執行檔
+  '/api/ai-separation/cuda-status', // 首次檢查可能啟動 Python supervisor
   '/api/fonts',            // ?refresh=1 重掃並解析全系統字體檔
   '/api/diagnostics/export', // 讀 log、redact、產 ZIP
   '/api/twitch/',          // status/authorize：authorize 會啟動 Device Code flow
@@ -189,6 +185,11 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Validate the browser's origin before reading or parsing any request body.
+// Multipart uploads have their own limits and authorization at the route.
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 200 }));
 
 // 上面的 Origin/Sec-Fetch-Site 防線只約束瀏覽器；同 LAN 的 raw HTTP client 可以不帶
 // 這些 header。對真的會 spawn、外連或掃描全系統字體的強制刷新再加 per-client cooldown，

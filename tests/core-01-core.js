@@ -249,6 +249,51 @@ test('顯示端暫停時不持續逐幀重算歌詞', () => {
   ok(source.includes('if (isControllerPlaying) {\n        const timeMs = getSmoothTimeMs();'), 'rAF 的高成本渲染必須只在播放時執行: ');
 });
 
+test('歌詞預覽只接受同源父視窗的訊息，正式 OBS 仍透過 socket 更新', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/display.js'), 'utf8');
+  const origin = 'http://127.0.0.1:3000';
+  const settings = { type: 'lyric-settings:preview', settings: { fontSize: 86 } };
+  const sample = { type: 'lyrics-preview:sample' };
+  for (const { preview, framed } of [
+    { preview: false, framed: false }, { preview: true, framed: false }, { preview: true, framed: true },
+  ]) {
+    const listeners = new Map();
+    const socketEvents = new Map();
+    const css = new Map();
+    const replies = [];
+    let samples = 0;
+    const location = { origin, search: preview ? '?preview=1' : '' };
+    const window = { location, postMessage: (...args) => replies.push(args), addEventListener: (...args) => listeners.set(...args) };
+    window.parent = framed ? { postMessage: window.postMessage } : window;
+    vm.runInNewContext(source, {
+      window, location, URLSearchParams, performance, requestAnimationFrame() {}, setTimeout() {}, clearTimeout() {},
+      document: { getElementById: () => null, body: { className: '', classList: { add() {} } },
+        documentElement: { dataset: {}, style: { setProperty: (...args) => css.set(...args), getPropertyValue: key => css.get(key) } } },
+      SocketClient: { init() {}, on: (...args) => socketEvents.set(...args) },
+      KaraokeEngine: { init() {}, loadLyrics() { samples += 1; }, update() {} },
+    });
+    const dispatch = (eventOrigin, sender, data) => listeners.get('message')?.({ origin: eventOrigin, source: sender, data });
+    for (const data of [settings, sample]) {
+      dispatch('https://other.example', window.parent, data);
+      dispatch(origin, {}, data);
+    }
+    eq(css.has('--display-font-size'), false);
+    eq(samples, 0);
+    eq(replies.length, 0);
+    dispatch(origin, window.parent, settings);
+    dispatch(origin, window.parent, sample);
+    eq(css.get('--display-font-size'), framed ? '86px' : undefined);
+    eq(samples, framed ? 1 : 0);
+    eq(replies.length, framed ? 1 : 0);
+    if (framed) {
+      eq(replies[0][0].type, 'lyrics-preview:sample-ready');
+      eq(replies[0][1], origin);
+    }
+    socketEvents.get('lyric-settings:update')({ fontSize: 62 });
+    eq(css.get('--display-font-size'), '62px');
+  }
+});
+
 test('對齊第一句維持純文字按鈕，不加入 emoji', () => {
   const page = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const autoRows = fs.readFileSync(path.join(__dirname, '../public/js/i18n-auto.js'), 'utf8');
@@ -369,4 +414,18 @@ test('靜態守衛：故意漏掛 requirePin 時會偵測失敗', () => {
   const sources = [{ file: 'server/routes/fixture.js', source: "router.post('/danger', async (req, res) => {});" }];
   const report = staticContracts.routeContractReport(sources, new Map());
   eq(report.unprotected[0].key, 'server/routes/fixture.js:POST:/danger');
+});
+
+test('會啟動外部程式的查詢只給本機或已配對裝置；先驗瀏覽器來源再讀請求內容', () => {
+  const system = fs.readFileSync(path.join(__dirname, '../server/routes/api/system.js'), 'utf8');
+  const separation = fs.readFileSync(path.join(__dirname, '../server/routes/api/separation.js'), 'utf8');
+  ok(system.includes("router.get('/system-check', requireControlAccess,"), 'system-check 要配對: ');
+  ok(system.includes("router.get('/ffmpeg/status', requireControlAccess,"), 'ffmpeg/status 要配對: ');
+  ok(separation.includes("router.get('/ai-separation/cuda-status', requireControlAccess,"), 'cuda-status 要配對: ');
+  ok(/router\.get\('\/obs-launcher'[\s\S]{0,200}isLoopbackAddress\(getClientAddress\(req\)\)/.test(system), 'obs-launcher 只給本機: ');
+  const index = fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8');
+  ok(index.indexOf("app.use(express.json(") > index.indexOf('const SIDE_EFFECT_GET_PREFIXES'), '解析 JSON 要在來源檢查之後: ');
+  for (const file of ['nav.js', 'audio-component-setup.js', 'ai-separation-client.js']) {
+    ok(fs.readFileSync(path.join(__dirname, '../public/js', file), 'utf8').includes('AccessAuth.headers()'), `${file} 要帶配對憑證: `);
+  }
 });

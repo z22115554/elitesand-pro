@@ -17,6 +17,7 @@
     // The server invalidates this cache after install or a downloaded pair is
     // removed. Normal checks also respect its forced-probe cooldown.
     const response = await fetch('/api/system-check', {
+      headers: typeof AccessAuth !== 'undefined' ? AccessAuth.headers() : {},
       cache: 'no-store', signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) throw new Error(t('audioSetup.checkFailed'));

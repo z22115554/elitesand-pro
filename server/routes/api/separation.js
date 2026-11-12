@@ -3,6 +3,7 @@
  * 由 server/routes/api.js 掛載在 /api 底下。
  */
 const express = require('express');
+const { requireControlAccess } = require('../../middleware/require-control-access');
 const router = express.Router();
 const { isDirectLoopback } = require('../../utils/direct-loopback');
 const multer = require('multer');
@@ -48,8 +49,8 @@ router.get('/ai-separation/bundle-status', (req, res) => {
 // 面板端「開啟 AI 分離」時打這支，決定要不要提早預熱 WebGPU 備援：探測到沒有 CUDA
 // 就馬上預熱（反正一定要用它，不預熱只是讓使用者乾等冷啟），探測到有 CUDA 就完全
 // 不預熱，等真的分離時 CUDA 用不動才臨時暖機（見 ai-separation-jobs.js 的
-// requestWebgpuEngineStart）。唯讀能力查詢，不改動任何狀態，不用 PIN。
-router.get('/ai-separation/cuda-status', async (req, res) => {
+// requestWebgpuEngineStart）。首次查詢可能啟動 Python，只接受本機或已配對的裝置。
+router.get('/ai-separation/cuda-status', requireControlAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     res.json({ cudaAvailable: await getCachedCudaAvailable() });

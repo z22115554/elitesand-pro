@@ -400,7 +400,10 @@
       setReadiness('guide-check-control', readiness.control, readiness.control ? '控制台已連線' : '控制台未連線');
       readiness.obsWebSocket = typeof ObsWs !== 'undefined' && ObsWs.isConnected();
       setReadiness('guide-check-websocket', readiness.obsWebSocket, readiness.obsWebSocket ? 'OBS WebSocket 已連線' : 'OBS WebSocket 未連線');
-      const systemCheckRequest = fetch(forceSystemCheck ? '/api/system-check?force=1' : '/api/system-check', { cache: 'no-store' }).then((res) => res.json()).then((data) => {
+      const systemCheckRequest = fetch(forceSystemCheck ? '/api/system-check?force=1' : '/api/system-check', {
+        cache: 'no-store',
+        headers: typeof AccessAuth !== 'undefined' ? AccessAuth.headers() : {},
+      }).then((res) => res.json()).then((data) => {
         readiness.ytdlp = !!data.ytdlp?.available;
         readiness.ffmpeg = !!data.ffmpeg?.available;
         setReadiness('guide-check-ytdlp', readiness.ytdlp, readiness.ytdlp ? `yt-dlp ${data.ytdlp.version}` : '找不到 yt-dlp');

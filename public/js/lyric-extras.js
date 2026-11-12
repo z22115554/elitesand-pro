@@ -547,7 +547,7 @@
       const merged = { ...s, ...globalDisplaySettings };
       document.querySelectorAll('iframe.obs-preview').forEach((frame) => {
         if (frame.contentWindow) {
-          frame.contentWindow.postMessage({ type: 'lyric-settings:preview', settings: merged }, '*');
+          frame.contentWindow.postMessage({ type: 'lyric-settings:preview', settings: merged }, window.location.origin);
         }
       });
     } catch (e) { /* 靜默：預覽失敗不影響正式推送 */ }
@@ -558,7 +558,7 @@
     try {
       document.querySelectorAll('iframe.obs-preview').forEach((frame) => {
         if (frame.getAttribute('src') && frame.contentWindow) {
-          frame.contentWindow.postMessage({ type: 'lyrics-preview:sample' }, '*');
+          frame.contentWindow.postMessage({ type: 'lyrics-preview:sample' }, window.location.origin);
           sent += 1;
         }
       });
@@ -572,7 +572,7 @@
     try {
       document.querySelectorAll('iframe.obs-preview').forEach((frame) => {
         if (frame.getAttribute('src') && frame.contentWindow) {
-          frame.contentWindow.postMessage({ type: 'lyrics-preview:sample', replay: true }, '*');
+          frame.contentWindow.postMessage({ type: 'lyrics-preview:sample', replay: true }, window.location.origin);
         }
       });
     } catch (e) { /* 靜默：示範預覽失敗不影響正式 OBS */ }

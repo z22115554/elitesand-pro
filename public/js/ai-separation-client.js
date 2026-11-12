@@ -15,7 +15,10 @@
   async function isCudaAvailable() {
     if (cudaAvailableCache !== null) return cudaAvailableCache;
     try {
-      const response = await fetch('/api/ai-separation/cuda-status', { cache: 'no-store' });
+      const response = await fetch('/api/ai-separation/cuda-status', {
+        cache: 'no-store',
+        headers: typeof AccessAuth !== 'undefined' ? AccessAuth.headers() : {},
+      });
       const data = await response.json();
       cudaAvailableCache = data?.cudaAvailable === true;
     } catch (_) {

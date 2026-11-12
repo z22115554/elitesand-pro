@@ -13,6 +13,7 @@ const TOOL_ENV = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
 const CACHE_MS = 60 * 1000;
 const YTDLP_COMMAND = getYtdlpCommand();
 let cache = null;
+let pendingProbe = null;
 
 async function toolStatus(command, args, options = {}) {
   const run = options.execFileImpl || execFileAsync;
@@ -44,7 +45,20 @@ async function getSystemCheck(options = {}) {
     return { ...cache.payload, ytdlpCompatibility: compatibility.getStatus() };
   }
   if (!cachedDownloadedPairStillExists) cache = null;
+  if (!pendingProbe) {
+    const probe = probeTools(options, nowMs).then((result) => {
+      if (pendingProbe === probe) cache = result;
+      return result;
+    }).finally(() => {
+      if (pendingProbe === probe) pendingProbe = null;
+    });
+    pendingProbe = probe;
+  }
+  const { payload } = await pendingProbe;
+  return { ...payload, ytdlpCompatibility: compatibility.getStatus() };
+}
 
+async function probeTools(options, nowMs) {
   const resolvedFfmpeg = ffmpegProvider.resolveFfmpegPaths();
   const [ytdlp, ffmpeg, ffprobe] = await Promise.all([
     toolStatus(YTDLP_COMMAND, ['--version'], options),
@@ -56,7 +70,6 @@ async function getSystemCheck(options = {}) {
     appVersion: APP_VERSION,
     updateRepo: 'z22115554/elitesand-pro',
     ytdlp,
-    ytdlpCompatibility: compatibility.getStatus(),
     ffmpeg: {
       ...ffmpeg, available: audioToolsAvailable, ffprobeAvailable: ffprobe.available,
       downloadable: !audioToolsAvailable, download: ffmpegProvider.getDownloadInfo(),
@@ -66,16 +79,19 @@ async function getSystemCheck(options = {}) {
   // 布林語意本身已經冪等，這裡只是不必要地少做幾次函式呼叫。
   usageTelemetry.recordDependency('ytdlp', ytdlp.available);
   usageTelemetry.recordDependency('ffmpeg', audioToolsAvailable);
-  cache = {
+  return {
     checkedAt: nowMs,
     payload,
     // 只記來源類型，不保存/回傳本機路徑。若下載版 pair 在程式執行期間被刪除，
     // 下一次讀 cache 就能用便宜的 existsSync 立即讓 60 秒快取失效。
     ffmpegSource: resolvedFfmpeg?.source || null,
   };
-  return payload;
 }
 
-function clearCache() { cache = null; }
+function clearCache() {
+  cache = null;
+  // After a tool install, a probe started with the old tool must not repopulate the cache.
+  pendingProbe = null;
+}
 
 module.exports = { getSystemCheck, toolStatus, clearCache, _resetForTests: clearCache };

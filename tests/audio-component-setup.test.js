@@ -40,6 +40,23 @@ test('both executable tools are required, with fresh readiness after repair', as
   assert.equal((await checks.getSystemCheck({ ...options, force: true })).ffmpeg.available, true);
 });
 
+test('simultaneous cold-cache and forced system checks share one tool probe', async (t) => {
+  t.mock.method(provider, 'resolveFfmpegPaths', () => ({ source: 'config', ffmpeg: 'test-ffmpeg', ffprobe: 'test-ffprobe' }));
+  let finishProbe;
+  const blocked = new Promise((resolve) => { finishProbe = resolve; });
+  const commands = [];
+  const options = { compatibility, execFileImpl: async (command) => {
+    commands.push(command);
+    await blocked;
+    return { stdout: 'version test' };
+  } };
+  const requests = Array.from({ length: 12 }, (_, index) => checks.getSystemCheck({ ...options, force: index % 2 === 0 }));
+  finishProbe();
+  const results = await Promise.all(requests);
+  assert.equal(commands.length, 3);
+  assert.ok(results.every((result) => result.ffmpeg.available));
+});
+
 test('startup setup exposes only fixed upstream URLs and the actual download cap', async () => {
   const info = provider.getDownloadInfo();
   assert.equal(info.maxBytes, 300 * 1024 * 1024);

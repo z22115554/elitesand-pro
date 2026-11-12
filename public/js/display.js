@@ -840,9 +840,9 @@
   SocketClient.on('lyric-settings:update', applyLyricSettings);
 
   // 面板即時預覽：控制面板內嵌的 /display?preview=1 iframe 會收到 postMessage，
-  // 不必等 socket 往返即可即時套用設定（拖滑桿所見即所得）。正式 OBS 來源是頂層視窗，
-  // 沒有人對它 postMessage，故此監聽對 OBS 無副作用。
+  // 即時預覽只信任同源控制面板的父視窗。正式 OBS 來源透過 socket 更新。
   window.addEventListener('message', (e) => {
+    if (!isPreview || window.parent === window || e.source !== window.parent || e.origin !== window.location.origin) return;
     const d = e.data;
     if (d && d.type === 'lyric-settings:preview' && d.settings) {
       applyLyricSettings(d.settings);
@@ -852,12 +852,7 @@
       renderPreviewSample();
       // The interactive tour must unlock only after the real preview handled the sample.
       // Reply to the exact source window; no playback or server state is changed.
-      if (e.source && typeof e.source.postMessage === 'function') {
-        e.source.postMessage(
-          { type: 'lyrics-preview:sample-ready' },
-          e.origin && e.origin !== 'null' ? e.origin : '*',
-        );
-      }
+      window.parent.postMessage({ type: 'lyrics-preview:sample-ready' }, window.location.origin);
     }
   });
 

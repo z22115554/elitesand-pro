@@ -20,6 +20,7 @@ const log = createLogger('API');
 const requirePin = require('../../middleware/require-pin');
 // EULA 同意閘門專用：只要「本機桌面或已配對的遙控器」，不要 PIN——首次同意先於 PIN 設定。
 const { requireControlAccess } = require('../../middleware/require-control-access');
+const { getClientAddress, isLoopbackAddress } = require('../../utils/pin-setup-policy');
 const ytdlpCompatibility = require('../../services/ytdlp-compatibility');
 const systemCheck = require('../../services/system-check');
 const ffmpegProvider = require('../../services/ffmpeg-provider');
@@ -51,10 +52,15 @@ router.get('/health', (req, res) => {
 // OBS 啟動頁的實體路徑：面板「拖到 OBS」與「複製路徑」用。只回路徑，不回內容。
 router.get('/obs-launcher', (req, res) => {
   res.set('Cache-Control', 'no-store');
+  // 回的是這台電腦的檔案路徑：只給本機桌面，區網裝置拿到也用不到，只會洩漏路徑。
+  if (!isLoopbackAddress(getClientAddress(req))) {
+    return res.status(403).json({ code: 'LOCAL_DESKTOP_REQUIRED' });
+  }
   res.json(obsLauncher.describe({ port: req.socket?.localPort }));
 });
 
-router.get('/system-check', async (req, res) => {
+// 強制刷新會啟動 yt-dlp／ffmpeg：只給本機或已配對的裝置。
+router.get('/system-check', requireControlAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   const force = req.query?.force === '1' || req.query?.force === 'true';
   res.json(await systemCheck.getSystemCheck({ force }));
@@ -107,7 +113,7 @@ router.post('/ffmpeg/download', requirePin, async (req, res) => {
   }
 });
 
-router.get('/ffmpeg/status', (req, res) => {
+router.get('/ffmpeg/status', requireControlAccess, (req, res) => {
   const resolved = ffmpegProvider.resolveFfmpegPaths();
   const available = ffmpegProvider.isAvailable();
   res.json({
