@@ -125,6 +125,23 @@ Both model families implement the architecture described in:
   Wang, Ju-Chiang; Lu, Wei-Tsung; Won, Minz. "Mel-Band RoFormer for Music
   Source Separation." arXiv:2310.01809 (2023).
 
+Precise sync component (not bundled; downloaded on demand)
+----------------------------------------------------------
+The optional "Precise sync" component for Chinese songs is downloaded only
+when the user installs it from Settings. Nothing is bundled with the installer.
+
+Speech model: sherpa-onnx Zipformer CTC small (Chinese), fp16 or int8 build —
+  Apache-2.0, k2-fsa project.
+  Source: https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models
+Python packages installed into its own private environment (pinned by SHA-256):
+  onnxruntime-directml (MIT, Microsoft), numpy (BSD-3-Clause),
+  sentencepiece (Apache-2.0, Google), kaldi-native-fbank (Apache-2.0),
+  and their dependencies flatbuffers (Apache-2.0), protobuf (BSD-3-Clause),
+  sympy (BSD-3-Clause), mpmath (BSD-3-Clause), packaging (Apache-2.0 or BSD-2-Clause).
+ai/align_worker.py reproduces the byte-to-character table of fairseq's
+  byte_utils (MIT, Copyright (c) Facebook, Inc. and its affiliates) so that its
+  input matches the model's byte-level BPE vocabulary.
+
 Online lyrics sources
 ---------------------
 Elitesand Pro queries third-party lyrics services at runtime (LRCLIB, the
