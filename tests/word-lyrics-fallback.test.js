@@ -329,3 +329,15 @@ test('酷狗的佔位文字（只有一兩行）當成沒有歌詞', () => {
   const source = fs.readFileSync(path.join(__dirname, '../server/services/lyrics-engine.js'), 'utf8');
   assert.ok(source.includes("if (decoded && this.hasEnoughLyricLines(this.parseKrc(decoded)))"), '酷狗逐字也要先檢查');
 });
+
+test('同一首的判斷：歌名／歌手判斷較準，但仍要兩項證據（同名不同人、時長差很多的不收）', () => {
+  const ok = (title, songTitle, artist = '', songArtist = '', duration = 0, songDuration = 0) =>
+    L.isPlausibleMatch({ artist, title, duration, songArtist, songTitle, songDuration });
+  assert.equal(ok('或許你是對的', '或许妳是对的'), true, '4 字以上差一個字');
+  assert.equal(ok('喘氣且悲傷', '喘气也悲伤 (原版伴奏)'), true);
+  assert.equal(ok("不該 Shouldn't Be", '不该 (with aMEI)', '周杰倫Jay Chou X aMEI', '周杰伦、张惠妹'), true, '合唱、並列英文名');
+  assert.equal(ok('愛,很簡單 I Love You', 'I Love You'), false, '只對上並列的英文名不算');
+  assert.equal(ok('愛', '愛情'), false, '單一個字不拿來包含比對');
+  assert.equal(ok('Skip The Song', 'Skip the Song', 'Sam Lee', 'Lov', 281, 135), false, '同名但歌手、時長都對不上');
+  assert.equal(ok('Idol', 'アイドル', 'YOASOBI', 'YOASOBI', 213, 213), true, '歌名寫法不同，靠歌手＋時長');
+});

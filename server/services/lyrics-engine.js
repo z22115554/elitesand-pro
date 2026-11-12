@@ -26,27 +26,8 @@ const log = createLogger('Lyrics');
 const APP_USER_AGENT = appUserAgent('lyrics');
 const simplifiedToTraditional = OpenCC.Converter({ from: 'cn', to: 'tw' });
 
-// 日系/華語官方標題常見「中文歌名 English Echo」雙語並列（如「與浪之間 Waves」），
-// 但歌詞資料庫多半只索引其中一種語言。這裡只是多一個查詢候選，不動原始 title 顯示。
-const TRAILING_LATIN_ECHO = /^(.*?)\s+([A-Za-z][A-Za-z0-9'&.,!?-]*(?:\s+[A-Za-z][A-Za-z0-9'&.,!?-]*)*)$/;
-
-function stripTrailingLatinEcho(title) {
-  const match = title.match(TRAILING_LATIN_ECHO);
-  if (!match) return null;
-  const head = match[1].trim();
-  if (head.length < 2 || !/\p{Script=Han}/u.test(head)) return null;
-  return head;
-}
-
-function lyricTitleVariants(title) {
-  const original = String(title || '').trim();
-  const variants = [original];
-  const traditional = simplifiedToTraditional(original);
-  if (traditional && traditional !== original) variants.push(traditional);
-  const withoutLatinEcho = stripTrailingLatinEcho(original);
-  if (withoutLatinEcho && !variants.includes(withoutLatinEcho)) variants.push(withoutLatinEcho);
-  return variants;
-}
+// 查詢候選（「原文＋英文」並列的歌名／歌手拆開再查、日文歌名不簡轉繁）與歌名／歌手比對都在這個模組。
+const { lyricQueryVariants, lyricTitleVariants, titleMatches, artistMatches } = require('./lyric-query-variants');
 
 // ─── 時長驗證閾值（±5 秒）───
 const DURATION_TOLERANCE = 5;
@@ -284,22 +265,22 @@ class LyricsEngine {
     log.info(`開始搜尋: "${query}" (時長: ${duration}s)`);
 
     // 使用者指定品質優先：BetterLyrics → Apple Music → 酷狗 → QQ → （網易雲／AMLL 逐字）→ LRCLIB；網易逐句最後備援。
-    const titleVariants = lyricTitleVariants(title);
+    const queryVariants = lyricQueryVariants(artist, title);
     const sourceFns = {
-      betterlyrics: (queryTitle) => this.searchBetterLyrics(artist, queryTitle, duration),
-      paxsenix: (queryTitle) => this.searchPaxsenix(artist, queryTitle, duration),
-      kugou: (queryTitle) => this.searchKugou(artist, queryTitle, duration),
-      qqmusic: (queryTitle) => this.searchQQMusic(artist, queryTitle, duration),
-      lrclib: (queryTitle) => this.searchLrclib(artist, queryTitle, duration),
-      netease: (queryTitle) => this.searchNetease(artist, queryTitle, duration),
+      betterlyrics: (variant) => this.searchBetterLyrics(variant.artist, variant.title, duration),
+      paxsenix: (variant) => this.searchPaxsenix(variant.artist, variant.title, duration),
+      kugou: (variant) => this.searchKugou(variant.artist, variant.title, duration),
+      qqmusic: (variant) => this.searchQQMusic(variant.artist, variant.title, duration),
+      lrclib: (variant) => this.searchLrclib(variant.artist, variant.title, duration),
+      netease: (variant) => this.searchNetease(variant.artist, variant.title, duration),
     };
     // 逐句的 LRCLIB 之前，先問一次網易雲這一格的逐字版（YRC／AMLL）：前面的逐字來源都沒中時，
     // 還有機會拿到逐字，而不是直接落到逐句。網易雲的逐句版不受影響，仍排在最後。
-    const sources = titleVariants.flatMap((queryTitle) => LYRICS_SOURCE_PRIORITY.flatMap((name) => {
-      const step = { name, queryTitle, fn: () => sourceFns[name](queryTitle) };
+    const sources = queryVariants.flatMap((variant) => LYRICS_SOURCE_PRIORITY.flatMap((name) => {
+      const step = { name, queryTitle: variant.title, fn: () => sourceFns[name](variant) };
       if (name !== 'lrclib') return [step];
       return [
-        { name: 'netease', queryTitle, fn: () => this.searchNetease(artist, queryTitle, duration, { wordOnly: true }) },
+        { name: 'netease', queryTitle: variant.title, fn: () => this.searchNetease(variant.artist, variant.title, duration, { wordOnly: true }) },
         step,
       ];
     }));
@@ -403,19 +384,19 @@ class LyricsEngine {
     };
 
     // 仍並行查詢全部來源，但顯示順序與自動抓取順位一致。
-    const titleVariants = lyricTitleVariants(title);
+    const queryVariants = lyricQueryVariants(artist, title);
     const sourceFns = {
-      betterlyrics: (queryTitle) => this.searchBetterLyrics(artist, queryTitle, duration),
-      paxsenix: (queryTitle) => this.searchPaxsenix(artist, queryTitle, duration),
-      kugou: (queryTitle) => this.searchKugou(artist, queryTitle, duration),
-      qqmusic: (queryTitle) => this.searchQQMusic(artist, queryTitle, duration),
-      lrclib: (queryTitle) => this.searchLrclib(artist, queryTitle, duration),
-      netease: (queryTitle) => this.searchNetease(artist, queryTitle, duration),
+      betterlyrics: (variant) => this.searchBetterLyrics(variant.artist, variant.title, duration),
+      paxsenix: (variant) => this.searchPaxsenix(variant.artist, variant.title, duration),
+      kugou: (variant) => this.searchKugou(variant.artist, variant.title, duration),
+      qqmusic: (variant) => this.searchQQMusic(variant.artist, variant.title, duration),
+      lrclib: (variant) => this.searchLrclib(variant.artist, variant.title, duration),
+      netease: (variant) => this.searchNetease(variant.artist, variant.title, duration),
     };
-    const sources = titleVariants.flatMap((queryTitle) => LYRICS_SOURCE_PRIORITY.map((name) => ({
+    const sources = queryVariants.flatMap((variant) => LYRICS_SOURCE_PRIORITY.map((name) => ({
       name,
-      queryTitle,
-      fn: () => sourceFns[name](queryTitle),
+      queryTitle: variant.title,
+      fn: () => sourceFns[name](variant),
     })));
 
     // 並行查詢所有來源（互不阻擋，全部跑完才回傳）
@@ -645,14 +626,16 @@ class LyricsEngine {
    */
   static isPlausibleMatch({ artist, title, duration, songArtist, songTitle, songDuration }) {
     const squash = (value) => simplifiedToTraditional(String(value || '')).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
-    const t = squash(cleanQuery(title) || title);
-    const st = squash(songTitle);
-    const titleMatch = !!(t && st && (st.includes(t) || t.includes(st)));
+    // 歌名：簡繁／括號／標點不影響；4 字以上差一個字（你／妳）也算；只對上並列的英文名不算；單一個字不拿來包含比對。
+    const cleanedTitle = cleanQuery(title) || '';
+    const titleMatch = !!(String(songTitle || '').trim() && String(title || '').trim()
+      && (titleMatches(title, songTitle) || (cleanedTitle && cleanedTitle !== title && titleMatches(cleanedTitle, songTitle))));
     const a = squash(artist);
     const sa = squash(songArtist);
     let artistMatch = false;
     if (a && sa) {
-      artistMatch = sa.includes(a) || a.includes(sa);
+      // 並列英文名（蔡依林 Jolin Tsai）、合唱（周杰倫 X aMEI 對 周杰伦、张惠妹）各自拆開比
+      artistMatch = sa.includes(a) || a.includes(sa) || artistMatches(artist, songArtist);
       if (!artistMatch) {
         const ra = squash(romanize(a));
         const rsa = squash(romanize(sa));
@@ -919,7 +902,7 @@ class LyricsEngine {
           songArtist: song.singername || '',
           songTitle: song.songname || '',
           songDuration: song.duration || 0,
-        }));
+        })).sort((x, y) => Number(artistMatches(artist, y.singername)) - Number(artistMatches(artist, x.singername)));
         if (plausible.length > 0) {
           for (const song of plausible) {
             if (duration > 0 && song.duration && Math.abs(song.duration - duration) <= DURATION_TOLERANCE) {
@@ -1660,4 +1643,4 @@ class LyricsEngine {
   }
 }
 
-module.exports = { LyricsEngine, setIo, LYRICS_SOURCE_PRIORITY, cacheEntryIsFresh, DURATION_TOLERANCE };
+module.exports = { LyricsEngine, setIo, LYRICS_SOURCE_PRIORITY, cacheEntryIsFresh, DURATION_TOLERANCE, lyricTitleVariants };
