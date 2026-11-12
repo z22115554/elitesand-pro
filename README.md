@@ -7,7 +7,7 @@
 **為 VTuber 歌回與直播演出打造的本機歌詞演出系統**
 *A local lyric-performance system for VTubers, singing streamers, and live performers*
 
-**最新版本 / Latest：`v1.2.2`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
+**最新版本 / Latest：`v1.3.0`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
 
 繁體中文 · [English](#english) · [日本語](#日本語) · [한국어](#한국어) · [简体中文](#简体中文)
 
@@ -51,11 +51,13 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 收藏歌單：媒體庫破萬首後把常用的歌分組保存，一首歌可以放進多個收藏歌單，手機遙控器也能直接載入整份。
 - 可選「統一音量」：兩條播放鏈一起做響度標準化，切歌不忽大忽小。
 - 記住每首歌的音量：某首歌調過音量，下次播放自動回到那個音量；沒調過的歌用預設音量。
+- 歌曲庫可直接修改歌名／歌手；手動選的歌詞與疑似對錯歌的歌詞會標出來，逐句歌詞可批次升級成逐字。
 
 #### 歌詞
 
 - 多來源並行搜尋：BetterLyrics、Apple Music、酷狗、QQ音樂、LRCLIB、網易雲等，自動挑最佳、也可手選。
-- 支援逐字、逐句、LRC、KRC、TTML、SRT 與純文字。
+- 支援逐字、逐句、LRC、KRC、TTML、SRT、WebVTT 與純文字。
+- 逐字歌詞備援更多：QQ 音樂與網易雲改抓逐字版，另加 AMLL 社群逐字歌詞庫；雙語歌詞的譯文另外保存，不再蓋掉原文。
 - 逐行時間軸編輯器，一鍵「對齊第一句」整體平移。
 - 合唱聲部解析，KTV 模板據此自動上色。
 - 每個歌詞來源各自記住時間偏移，換來源不用重新對時。
@@ -85,6 +87,9 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 緊急隱藏只藏 Elitesand Pro 自己的元素，不會用黑幕蓋掉整個直播畫面。
 - 本機字型可直接載入使用，支援 `.ttc` 集合字型。
 - 提詞機歌詞可加日文假名注音。
+- 快捷模板：5～20 個槽位，直播頁一鍵切換或用 Ctrl+Alt+數字；可記住每首歌用哪個模板。
+- 跟唱視圖可置頂、可顯示雙語譯文，並可寫只有主播看得到的歌曲筆記（整首與逐句）。
+- 文字PV 新增「自選部件」：高耗能、大面積、恐怖風三個開關（預設關），讓你自己評估要不要用。
 
 #### 直播歌單
 
@@ -93,6 +98,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 十餘種版型（經典資訊、發車看板、手帳頁、底片邊條、夜間霓虹…），依 OBS Browser Source 尺寸自動排版。
 - 長歌名與長歌手名自動分配空間，重要資訊不被擠掉。
 - 可建立、保存與切換不同直播場次。
+- 極簡歌單：大字顯示正在唱、底部跑馬燈列出已唱，四種外觀，附常駐小動畫與跟著播放狀態動的音波。
 
 #### Twitch 點歌
 
@@ -105,6 +111,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 自訂成功／失敗／等待／拒絕回覆。
 - 斷線重連、請求持久化、程式重啟後恢復。
 - 觀眾演出：點歌明信片（核准公開點歌時勾選，該首開始播放時在 OBS 顯示觀眾留言）與揪團感謝，各有五種外觀，位置可分別設定，一次只演一個。
+- 訂閱／贈訂／揪團全畫面演出：43 種，依份數分級，每一級的門檻、開關與演出都可自訂；可換成自己的角色與吉祥物（圖只存在本機）；唱歌中收到會等這首唱完再演，演出時背景音樂自動讓路；面板可模擬 Twitch 事件試播。
 
 #### AI 人聲分離（實驗性，預設關閉）
 
@@ -113,6 +120,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 首頁「AI 伴奏」分頁可一次把整份歌單做成純伴奏。
 - 雙路音訊：伴奏給 OBS、人聲留給自己監聽，或反過來。
 - 自動對時：用分離出的人聲比對歌詞，一鍵算出整首的時間偏移；可設定匯入後自動執行。
+- 精準對時（中文歌）：聽歌詞內容判斷整首偏移，並逐句校正版本不同的段落；跟 AI 伴奏元件一起安裝，已裝分離的人第一次對中文歌時會在背景補裝。
 - 練唱（測試版）：分析原唱音高，邊唱邊看自己的音準與逐句評等，支援升降 Key、A–B 循環與跳到下一段，評分有寬鬆／嚴格兩種模式；唱完列出最需要練的句子、跟上次與最佳成績比較，也能開放觀眾點歌挑戰（預設關閉）。另有 OBS 練唱疊加層 `/practice-overlay`。歌曲庫可以多選批次建立練唱音軌。
 
 > 實驗性功能，不建議在正式直播前才第一次啟用。
@@ -143,7 +151,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 請只從官方 GitHub Releases 下載，並核對隨附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ```
 
 ### OBS 設定
@@ -223,11 +231,13 @@ Everything runs on your own machine; OBS loads transparent lyrics and setlist ov
 - Saved collections: group frequently used songs once your media library grows large; a song can belong to multiple collections, and the mobile remote can load one directly.
 - Optional loudness normalization across both playback chains, so tracks don't jump in volume.
 - Per-song volume memory: adjust the volume during a song and it comes back the next time that song plays; other songs use the default volume.
+- Edit titles and artists right in the song library; manually picked lyrics and lyrics that may belong to another song are flagged, and line-synced lyrics can be batch-upgraded to word-synced.
 
 #### Lyrics
 
 - Parallel multi-source search: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase, and fallbacks — best match auto-selected or chosen manually.
-- Word-synced, line-synced, LRC, KRC, TTML, SRT, and plain text.
+- Word-synced, line-synced, LRC, KRC, TTML, SRT, WebVTT, and plain text.
+- More word-synced fallbacks: QQ Music and NetEase now fetch word-synced lyrics, plus the AMLL community word-synced library; translations in bilingual lyrics are kept separately instead of replacing the original line.
 - Timeline editor with one-click "align first line" global shift.
 - Choral-part parsing that drives KTV coloring.
 - Per-source timing offset memory — switching sources keeps your sync.
@@ -257,6 +267,9 @@ Ten performance templates, each with independent style settings (font, size, col
 - Emergency hide only hides Elitesand Pro's own elements — it never blacks out your whole scene.
 - Load local font files directly, including `.ttc` collections.
 - Optional furigana on prompter lyrics.
+- Quick templates: 5–20 slots, switch with one click on the Live page or with Ctrl+Alt+number; optionally remember the template per song.
+- The sing-along view can stay on top, show translations of bilingual lyrics, and hold song notes only you can see (whole song and per line).
+- Lyric PV gains optional parts: heavy, large-area, and horror switches (all off by default) so you can decide for yourself.
 
 #### Live setlist
 
@@ -265,6 +278,7 @@ Ten performance templates, each with independent style settings (font, size, col
 - A dozen-plus layouts (Classic Info, Departure Board, Notebook Page, Filmstrip, Night Neon, …) that lay themselves out to the OBS Browser Source size.
 - Long titles and artist names get their own space so key info isn't squeezed out.
 - Create, save, and switch between stream sessions.
+- Minimal setlist: big "now singing" text with a ticker of sung songs, four looks, a gentle idle animation, and a waveform that follows playback.
 
 #### Twitch song requests
 
@@ -277,6 +291,7 @@ Ten performance templates, each with independent style settings (font, size, col
 - Custom success / failure / waiting / rejection replies.
 - Reconnect, request persistence, and recovery across app restarts.
 - Viewer shows: request postcards (tick when approving a public request; the viewer's note appears on OBS when that song starts) and raid thank-yous, each with five styles and its own screen position, shown one at a time.
+- Full-screen sub / gift sub / raid shows: 43 shows tiered by count, with thresholds, on/off and the show chosen per tier; swap in your own character and mascot (images stay on your computer); shows wait until the current song ends and background music ducks while they play; simulate Twitch events from the panel to preview.
 
 #### AI vocal separation (experimental, off by default)
 
@@ -285,6 +300,7 @@ Ten performance templates, each with independent style settings (font, size, col
 - The home "AI instrumental" tab can process a whole setlist at once.
 - Dual audio routing: instrumental to OBS, vocals to your monitor, or the reverse.
 - Auto sync: matches the separated vocal against the lyrics to find the whole-song timing offset in one click; can run automatically after import.
+- Precise sync (Chinese songs): listens to the lyric content to find the whole-song offset and corrects individual lines where versions differ; installs together with the AI backing-track component, and is added in the background the first time you sync a Chinese song if separation is already installed.
 - Practice (beta): analyzes the original vocal pitch so you can see your own pitch and per-line ratings as you sing, with key shifting, A–B looping, skip-to-next-section, and relaxed or strict scoring. After a take it lists the lines to work on and compares with your previous and best scores; you can also open song challenges to viewers (off by default). Includes an OBS practice overlay at `/practice-overlay`, and practice tracks can be built in bulk from the library.
 
 > Experimental — don't enable it for the first time right before a live stream.
@@ -315,7 +331,7 @@ The build is **currently unsigned**, so Windows SmartScreen shows a blue warning
 Download only from the official GitHub Releases page and verify the bundled `.sha256`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ```
 
 ### OBS setup
@@ -395,11 +411,13 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - コレクション：曲が増えてもよく使う曲をグループ分けして保存。1 曲を複数のコレクションに入れられ、スマホリモコンからも直接読み込める。
 - 任意のラウドネス正規化（2 系統の再生チェーンを同時処理）。
 - 曲ごとの音量を記憶：再生中に音量を変えた曲は、次回も同じ音量で再生。変えていない曲は既定の音量。
+- 曲ライブラリで曲名／歌手名を直接編集。手動で選んだ歌詞や別の曲の可能性がある歌詞には印が付き、行同期の歌詞を単語同期へ一括アップグレードできます。
 
 #### 歌詞
 
 - 複数ソース並行検索：BetterLyrics、Apple Music、Kugou、QQ Music、LRCLIB、NetEase ほか。自動選択・手動選択に対応。
-- 単語同期・行同期・LRC・KRC・TTML・SRT・プレーンテキスト。
+- 単語同期・行同期・LRC・KRC・TTML・SRT・WebVTT・プレーンテキスト。
+- 単語同期の取得元を拡充：QQ Music と NetEase は単語同期版を取得し、AMLL コミュニティの単語同期ライブラリも追加。対訳付き歌詞の訳は別に保存し、原文の行を置き換えません。
 - タイムライン編集、「先頭行に合わせる」で全体シフト。
 - 合唱パート解析（KTV の色分けに反映）。
 - 歌詞ソースごとにタイミングを記憶。
@@ -428,6 +446,9 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - 緊急非表示は Elitesand Pro の要素だけを隠し、シーン全体を黒く覆いません。
 - ローカルフォントを直接読み込み（`.ttc` コレクション対応）。
 - プロンプター歌詞にふりがなを付与可能。
+- クイックテンプレート：5～20 スロット、ライブページでワンクリックまたは Ctrl+Alt+数字で切り替え。曲ごとのテンプレートを記憶することもできます。
+- 歌唱ビューは最前面表示、対訳表示、配信者だけが見られる曲メモ（曲全体と行ごと）に対応。
+- 文字PV に「任意パーツ」を追加：高負荷・広範囲・ホラーの 3 つのスイッチ（既定オフ）。使うかどうかはご自身で判断できます。
 
 #### セットリスト
 
@@ -436,6 +457,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - 十数種類のレイアウト（定番情報、発車看板、手帳ページ、フィルムストリップ、ナイトネオン…）が OBS Browser Source のサイズに合わせて自動整形。
 - 長い曲名・アーティスト名にも領域を確保。
 - セッションの作成・保存・切り替え。
+- ミニマルセットリスト：歌唱中の曲を大きく表示し、歌い終えた曲を下部のティッカーで流します。外観は 4 種類、常時の小さなアニメーションと再生に合わせて動く波形付き。
 
 #### Twitch リクエスト
 
@@ -448,6 +470,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - 成功／失敗／待機／拒否の返信をカスタム。
 - 再接続、リクエスト永続化、アプリ再起動後の復元。
 - 視聴者演出：リクエストはがき（公開リクエスト承認時に選ぶと、その曲の再生開始時に OBS へメッセージを表示）とレイド感謝。それぞれ 5 種類のデザインと個別の表示位置、1 つずつ表示。
+- サブスク／ギフトサブ／レイドの全画面演出：43 種類を数量で段階分け。段階ごとにしきい値・オンオフ・演出を設定でき、自分のキャラクターやマスコットに差し替え可能（画像は PC 内にのみ保存）。歌唱中に届いた演出はその曲が終わってから再生し、演出中は BGM が自動で下がります。パネルから Twitch イベントを模擬して試せます。
 
 #### AI ボーカル分離（試験的・既定オフ）
 
@@ -456,6 +479,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - ホームの「AI 伴奏」タブでセットリスト全体を一括処理。
 - デュアル音声：伴奏を OBS、ボーカルを自分のモニターへ（逆も可）。
 - 自動タイミング合わせ：分離したボーカルを歌詞と照合し、曲全体のずれをワンクリックで算出。インポート後に自動実行も可能。
+- 精密タイミング合わせ（中国語の曲）：歌詞の内容を聞き取って曲全体のずれを判定し、バージョン違いの行も 1 行ずつ補正します。AI 伴奏コンポーネントと一緒にインストールされ、分離をインストール済みの場合は初めて中国語の曲を合わせるときにバックグラウンドで追加されます。
 - 練習（ベータ版）：原曲ボーカルの音程を解析し、歌いながら自分の音程と 1 行ごとの評価を確認できます。キー変更、A–B ループ、次のパートへ移動、ゆるめ／厳しめの採点モードに対応。歌い終わると練習すべき行と前回・ベストとの比較を表示し、視聴者のリクエスト挑戦も受け付けられます（初期設定はオフ）。OBS 用の練習オーバーレイ `/practice-overlay` 付きで、ライブラリから練習トラックをまとめて作成できます。
 
 > 試験的機能です。本番配信の直前に初めて有効化しないでください。
@@ -486,7 +510,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 配布元は公式 GitHub Releases のみ。同梱の `.sha256` を照合してください：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ```
 
 ### OBS 設定
@@ -566,11 +590,13 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 컬렉션: 곡이 많아져도 자주 쓰는 곡을 그룹으로 저장. 한 곡을 여러 컬렉션에 넣을 수 있고, 모바일 리모컨에서도 바로 불러올 수 있음.
 - 선택형 라우드니스 정규화(두 재생 체인 동시 처리).
 - 곡별 음량 기억: 재생 중 음량을 바꾼 곡은 다음에도 같은 음량으로 재생, 바꾸지 않은 곡은 기본 음량.
+- 곡 라이브러리에서 곡명/가수명을 바로 수정. 직접 고른 가사와 다른 곡일 수 있는 가사는 표시되며, 문장 동기화 가사를 단어 동기화로 일괄 업그레이드할 수 있습니다.
 
 #### 가사
 
 - 다중 소스 병렬 검색: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase 등. 자동 선택·수동 선택 지원.
-- 단어 동기화, 문장 동기화, LRC, KRC, TTML, SRT, 일반 텍스트.
+- 단어 동기화, 문장 동기화, LRC, KRC, TTML, SRT, WebVTT, 일반 텍스트.
+- 단어 동기화 예비 소스 확대: QQ Music과 NetEase는 단어 동기화 버전을 가져오고, AMLL 커뮤니티 단어 동기화 라이브러리도 추가. 2개 언어 가사의 번역은 따로 저장해 원문 줄을 덮어쓰지 않습니다.
 - 타임라인 편집, "첫 줄 맞추기"로 전체 이동.
 - 합창 파트 분석(KTV 색상에 반영).
 - 가사 소스별 타이밍 기억.
@@ -599,6 +625,9 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 긴급 숨김은 Elitesand Pro 요소만 숨기며 장면 전체를 가리지 않습니다.
 - 로컬 글꼴 파일 직접 로드(`.ttc` 컬렉션 지원).
 - 프롬프터 가사에 후리가나 표시 가능.
+- 빠른 템플릿: 5~20개 슬롯, 라이브 페이지에서 한 번 클릭 또는 Ctrl+Alt+숫자로 전환. 곡마다 템플릿을 기억하게 할 수도 있습니다.
+- 따라 부르기 화면은 항상 위에 표시, 번역 표시, 방송인만 보는 곡 메모(곡 전체와 줄별)를 지원합니다.
+- 문자 PV에 「선택 부품」 추가: 고부하·넓은 면적·호러 스위치 3개(기본 꺼짐). 사용 여부는 직접 판단할 수 있습니다.
 
 #### 라이브 세트리스트
 
@@ -607,6 +636,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 십여 가지 레이아웃(클래식 정보, 출발 안내판, 다이어리 페이지, 필름 스트립, 나이트 네온…)이 OBS Browser Source 크기에 맞춰 자동 배치.
 - 긴 제목·아티스트명에도 공간 확보.
 - 세션 생성·저장·전환.
+- 미니멀 세트리스트: 지금 부르는 곡을 크게, 부른 곡은 아래 티커로 표시. 외관 4종, 상시 작은 애니메이션과 재생에 맞춰 움직이는 파형 포함.
 
 #### Twitch 신청곡
 
@@ -619,6 +649,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 성공/실패/대기/거절 응답 커스텀.
 - 재연결, 신청 영속화, 앱 재시작 후 복구.
 - 시청자 연출: 신청곡 엽서(공개 신청 승인 시 선택하면 그 곡이 시작될 때 OBS에 메시지 표시)와 레이드 감사. 각각 5가지 디자인과 개별 위치, 한 번에 하나씩 표시.
+- 구독/선물 구독/레이드 전체 화면 연출: 수량별 단계로 나뉜 43종. 단계마다 기준값·켜기/끄기·연출을 설정하고, 내 캐릭터와 마스코트로 바꿀 수 있습니다(이미지는 내 PC에만 저장). 노래 중에 받은 연출은 그 곡이 끝난 뒤 재생하며, 연출 중에는 BGM이 자동으로 줄어듭니다. 패널에서 Twitch 이벤트를 모의로 보내 미리 볼 수 있습니다.
 
 #### AI 보컬 분리(실험적, 기본 꺼짐)
 
@@ -627,6 +658,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 홈 "AI 반주" 탭에서 세트리스트 전체를 한 번에 처리.
 - 듀얼 오디오: 반주는 OBS로, 보컬은 내 모니터로(반대도 가능).
 - 자동 싱크: 분리된 보컬을 가사와 비교해 곡 전체의 시간 오차를 한 번에 계산합니다. 가져온 뒤 자동 실행도 가능합니다.
+- 정밀 싱크(중국어 곡): 가사 내용을 듣고 곡 전체의 오차를 판단하며, 버전이 다른 줄은 한 줄씩 보정합니다. AI 반주 구성 요소와 함께 설치되며, 분리를 이미 설치했다면 중국어 곡을 처음 맞출 때 백그라운드에서 추가 설치됩니다.
 - 연습(베타): 원곡 보컬의 음정을 분석해 부르면서 내 음정과 줄별 평가를 볼 수 있습니다. 키 변경, A–B 반복, 다음 구간 이동, 느슨함/엄격함 채점 모드를 지원합니다. 다 부르면 연습할 줄과 지난번·최고 기록 비교를 보여 주고, 시청자 신청곡 도전도 열 수 있습니다(기본 꺼짐). OBS 연습 오버레이 `/practice-overlay`를 제공하며 라이브러리에서 연습 트랙을 한꺼번에 만들 수 있습니다.
 
 > 실험적 기능입니다. 실제 방송 직전에 처음 켜지 마세요.
@@ -657,7 +689,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 공식 GitHub Releases에서만 내려받고 동봉된 `.sha256`을 확인하세요:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ```
 
 ### OBS 설정
@@ -737,11 +769,13 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 收藏歌单：媒体库破万首后把常用的歌分组保存，一首歌可以放进多个收藏歌单，手机遥控器也能直接加载整份。
 - 可选「统一音量」：两条播放链一起做响度标准化。
 - 记住每首歌的音量：某首歌调过音量，下次播放自动回到那个音量；没调过的歌用默认音量。
+- 歌曲库可直接修改歌名／歌手；手动选的歌词与疑似对错歌的歌词会标出来，逐句歌词可批量升级成逐字。
 
 #### 歌词
 
 - 多来源并行搜索：BetterLyrics、Apple Music、酷狗、QQ音乐、LRCLIB、网易云等，自动挑最佳、也可手选。
-- 支持逐字、逐句、LRC、KRC、TTML、SRT 与纯文本。
+- 支持逐字、逐句、LRC、KRC、TTML、SRT、WebVTT 与纯文本。
+- 逐字歌词备援更多：QQ 音乐与网易云改抓逐字版，另加 AMLL 社区逐字歌词库；双语歌词的译文另外保存，不再盖掉原文。
 - 逐行时间轴编辑器，一键「对齐第一句」整体平移。
 - 合唱声部解析，KTV 模板据此自动上色。
 - 每个歌词来源各自记住时间偏移，换来源不用重新对时。
@@ -770,6 +804,9 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 紧急隐藏只藏 Elitesand Pro 自己的元素，不会用黑幕盖掉整个直播画面。
 - 本地字体可直接加载使用，支持 `.ttc` 集合字体。
 - 提词机歌词可加日文假名注音。
+- 快捷模板：5～20 个槽位，直播页一键切换或用 Ctrl+Alt+数字；可记住每首歌用哪个模板。
+- 跟唱视图可置顶、可显示双语译文，并可写只有主播看得到的歌曲笔记（整首与逐句）。
+- 文字PV 新增「自选部件」：高耗能、大面积、恐怖风三个开关（默认关），让你自己评估要不要用。
 
 #### 直播歌单
 
@@ -778,6 +815,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 十余种版型（经典信息、发车看板、手账页、底片边条、夜间霓虹…），依 OBS Browser Source 尺寸自动排版。
 - 长歌名与长歌手名自动分配空间，重要信息不被挤掉。
 - 可创建、保存与切换不同直播场次。
+- 极简歌单：大字显示正在唱、底部跑马灯列出已唱，四种外观，附常驻小动画与跟着播放状态动的音波。
 
 #### Twitch 点歌
 
@@ -790,6 +828,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 自定义成功／失败／等待／拒绝回复。
 - 断线重连、请求持久化、程序重启后恢复。
 - 观众演出：点歌明信片（核准公开点歌时勾选，该首开始播放时在 OBS 显示观众留言）与揪团感谢，各有五种外观，位置可分别设置，一次只演一个。
+- 订阅／赠订／揪团全屏演出：43 种，依份数分级，每一级的门槛、开关与演出都可自定义；可换成自己的角色与吉祥物（图只存在本机）；唱歌中收到会等这首唱完再演，演出时背景音乐自动让路；面板可模拟 Twitch 事件试播。
 
 #### AI 人声分离（实验性，默认关闭）
 
@@ -798,6 +837,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 首页「AI 伴奏」分页可一次把整份歌单做成纯伴奏。
 - 双路音频：伴奏给 OBS、人声留给自己监听，或反过来。
 - 自动对时：用分离出的人声比对歌词，一键算出整首的时间偏移；可设置导入后自动执行。
+- 精准对时（中文歌）：听歌词内容判断整首偏移，并逐句校正版本不同的段落；跟 AI 伴奏组件一起安装，已装分离的人第一次对中文歌时会在后台补装。
 - 练唱（测试版）：分析原唱音高，边唱边看自己的音准与逐句评等，支持升降 Key、A–B 循环与跳到下一段，评分有宽松／严格两种模式；唱完列出最需要练的句子、跟上次与最佳成绩比较，也能开放观众点歌挑战（默认关闭）。另有 OBS 练唱叠加层 `/practice-overlay`。歌曲库可以多选批量建立练唱音轨。
 
 > 实验性功能，不建议在正式直播前才第一次启用。
@@ -828,7 +868,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 请只从官方 GitHub Releases 下载，并核对随附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.2.2.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ```
 
 ### OBS 设置
