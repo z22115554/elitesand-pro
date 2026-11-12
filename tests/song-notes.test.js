@@ -84,7 +84,8 @@ test('歌曲筆記：更新只推給主播端房間，絕不 io.emit 到 OBS', (
 });
 
 test('歌曲筆記：唯讀端不能讀寫、只在非唯讀 socket 註冊、不放進 track／播放清單、跟唱視圖已接上', () => {
-  const handler = fs.readFileSync(path.join(root, 'server/routes/socket-handler.js'), 'utf8');
+  // CI 的 Windows checkout 是 CRLF，下面比對含換行的字串前先統一成 LF
+  const handler = fs.readFileSync(path.join(root, 'server/routes/socket-handler.js'), 'utf8').replace(/\r\n/g, '\n');
   const start = handler.indexOf('const READ_ONLY_EVENTS');
   const readOnly = handler.slice(start, handler.indexOf(']);', start));
   assert.ok(!readOnly.includes('song-notes'), 'OBS／唯讀端不可讀寫筆記');
