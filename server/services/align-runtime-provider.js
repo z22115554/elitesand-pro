@@ -279,6 +279,27 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
   }
 }
 
+let autoInstallAttempted = false;
+
+function isInstalling() {
+  return !!downloadInFlight;
+}
+
+/**
+ * 不用使用者按的背景安裝：AI 伴奏元件裝完時、或已經裝好人聲分離的人第一次對中文歌自動對時時。
+ * 不在程式啟動時自動下載：最後一步要在顯示卡上編譯約 1 分鐘，直播中可能讓 OBS 掉幀。
+ * 每次啟動程式最多自動試一次，失敗就等使用者在設定頁按重試。回傳是否正在安裝。
+ */
+function autoInstall(reason, { platform = process.platform } = {}) {
+  if (platform !== 'win32' || isAvailable()) return false;
+  if (downloadInFlight) return true;
+  if (autoInstallAttempted) return false;
+  autoInstallAttempted = true;
+  log.info(`背景安裝精準對時元件（${reason}）`);
+  downloadRuntime({ platform }).catch((err) => log.warn(`精準對時元件背景安裝失敗：${String(err.message).split('\n')[0]}`));
+  return true;
+}
+
 /** 顯示卡版用到一半壞掉（例如換了顯示卡）時，改成 CPU 版：只換模型，Python 環境沿用。 */
 async function switchToCpu(opts = {}) {
   const marker = readMarker();
@@ -288,6 +309,7 @@ async function switchToCpu(opts = {}) {
 
 function resetForTests() {
   downloadInFlight = null;
+  autoInstallAttempted = false;
   downloadStatus = { active: false, stage: 'idle', percent: null, error: null, updatedAt: null };
 }
 
@@ -296,6 +318,8 @@ module.exports = {
   getInstalled,
   downloadRuntime,
   switchToCpu,
+  autoInstall,
+  isInstalling,
   getDownloadStatus,
   workerScript,
   workerEnv,

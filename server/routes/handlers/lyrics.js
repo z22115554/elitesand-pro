@@ -308,6 +308,8 @@ function registerLyricsHandlers(io, socket, ctx) {
       const changedMeanwhile = () => manualLyricsCache.get(trackId) !== manual
         || (trackOffsets.has(trackId) ? trackOffsets.get(trackId) : null) !== previousOffsetMs;
       const chinese = (list) => model.ready && preciseSync.isChineseLyrics(list);
+      // 已經有人聲分離（才走得到這裡）但還沒有精準對時元件的中文歌：背景補裝，這次照舊對時、下次就用得上
+      const preciseInstalling = !model.ready && preciseSync.isChineseLyrics(lines) && alignRuntime.autoInstall('第一次對中文歌自動對時');
 
       const current = hasTimestamps ? autoSync.estimateOffset(samples, lines) : { accepted: false, reason: 'NO_TIMESTAMPS' };
       // 套用到目前這份歌詞（只改偏移，或連同逐句校正）
@@ -375,9 +377,9 @@ function registerLyricsHandlers(io, socket, ctx) {
         });
       }
       log.info(`自動對時未套用: ${trackId}: ${current.reason}`);
-      // 中文歌、沒裝精準對時元件：提示裝了可能對得上（元件只支援 Windows）
-      const suggestPrecise = !model.ready && process.platform === 'win32' && preciseSync.isChineseLyrics(lines);
-      reply({ ok: true, applied: false, reason: current.reason, spreadMs: current.spreadMs ?? null, suggestPrecise });
+      // 中文歌、沒有精準對時元件：正在背景補裝就說裝好再試；自動補裝失敗過就提示去設定頁裝（元件只支援 Windows）
+      const suggestPrecise = !model.ready && !preciseInstalling && process.platform === 'win32' && preciseSync.isChineseLyrics(lines);
+      reply({ ok: true, applied: false, reason: current.reason, spreadMs: current.spreadMs ?? null, suggestPrecise, preciseInstalling });
     } catch (err) {
       log.warn(`自動對時失敗: ${trackId}: ${err.message}`);
       reply({ ok: false, code: 'ANALYSIS_FAILED' });

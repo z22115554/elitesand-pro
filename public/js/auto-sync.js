@@ -87,7 +87,7 @@
     if (result.ok) {
       if (result.reason === 'NO_TIMESTAMPS') return [T('autoSync.noTimestamps'), 'info'];
       if (result.reason === 'CHANGED') return [T('autoSync.changedMeanwhile'), 'info'];
-      const hint = result.suggestPrecise ? T('autoSync.suggestPrecise') : '';
+      const hint = result.preciseInstalling ? T('autoSync.preciseInstalling') : (result.suggestPrecise ? T('autoSync.suggestPrecise') : '');
       if (result.reason === 'VERSION_MISMATCH') return [T('autoSync.versionMismatch', { seconds: (result.spreadMs / 1000).toFixed(1) }) + hint, 'info'];
       return [T('autoSync.uncertain') + hint, 'info'];
     }

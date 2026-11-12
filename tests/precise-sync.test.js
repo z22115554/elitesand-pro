@@ -110,6 +110,19 @@ test('已知中心時只在附近找：句首脈衝對得上的位置', () => {
   assert.ok(Math.abs(got - trueOffset) <= 30, `got ${got}`);
 });
 
+test('背景自動安裝：只在 Windows、沒裝好時；每次啟動最多自動試一次', () => {
+  provider._resetForTests();
+  assert.equal(provider.autoInstall('test', { platform: 'linux' }), false);
+  assert.equal(provider.isInstalling(), false);
+});
+
+test('人聲分離元件裝完會接著裝精準對時元件', () => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'ai-separation-bundle.js'), 'utf8');
+  assert.ok(bundle.includes("require('./align-runtime-provider').autoInstall("));
+  const handler = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'handlers', 'lyrics.js'), 'utf8');
+  assert.ok(handler.includes('alignRuntime.autoInstall('), '已裝好人聲分離的人第一次對中文歌自動對時時補裝');
+});
+
 test('元件：套件全部釘版本＋雜湊、模型釘雜湊；worker 不自己跑 ffmpeg', () => {
   for (const r of provider.PIP_REQUIREMENTS) assert.match(r, /^[a-z0-9-]+==[\w.]+ --hash=sha256:[0-9a-f]{64}$/);
   for (const m of Object.values(provider.MODELS)) assert.match(m.sha256, /^[0-9a-f]{64}$/);

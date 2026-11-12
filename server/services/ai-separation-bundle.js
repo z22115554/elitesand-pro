@@ -240,10 +240,20 @@ async function downloadBundle() {
         webgpuUnavailable,
       });
       // 練唱的高精度原唱音高跟著裝（實測有人聲的時間裡有音符的比例 71%→81%）；失敗不影響分離，練唱照樣用 YIN
+      // 精準對時元件（中文歌，約 150MB）排在它後面跟著裝；失敗不影響分離，設定頁可以重試
+      const installAlignModel = () => {
+        try {
+          require('./align-runtime-provider').autoInstall('隨 AI 伴奏元件安裝');
+        } catch (error) { log.warn(`精準對時元件未能安裝：${error.message}`); }
+      };
       try {
         require('./ai-runtime-provider').installPracticePitchModel()
-          .catch((error) => log.warn(`練唱高精度音高元件未能安裝，練唱改用 YIN：${error.message}`));
-      } catch (error) { log.warn(`練唱高精度音高元件未能安裝：${error.message}`); }
+          .catch((error) => log.warn(`練唱高精度音高元件未能安裝，練唱改用 YIN：${error.message}`))
+          .finally(installAlignModel);
+      } catch (error) {
+        log.warn(`練唱高精度音高元件未能安裝：${error.message}`);
+        installAlignModel();
+      }
       return { ok: true, alreadyAvailable: false };
     } catch (error) {
       if (error.code === 'CANCELLED' || abortSignal.aborted) {
