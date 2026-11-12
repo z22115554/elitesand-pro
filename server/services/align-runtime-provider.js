@@ -124,6 +124,8 @@ function workerEnv(files) {
   return {
     PYTHONUTF8: '1',
     PYTHONIOENCODING: 'utf-8',
+    // 不在 ai/ 底下留 __pycache__（打包版那裡是安裝目錄）
+    PYTHONDONTWRITEBYTECODE: '1',
     ELITESAND_ALIGN_MODEL: files.model,
     ELITESAND_ALIGN_BPE: files.bpe,
     ELITESAND_ALIGN_DEVICE: files.device,
