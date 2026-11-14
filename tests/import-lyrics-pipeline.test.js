@@ -105,6 +105,34 @@ function tokenFixture(fetch) {
     './usage-telemetry': { recordLyricSource() {}, recordOutcome() {} },
   }).LyricsEngine;
 }
+
+test('ESP-020: LRCLIB ignores unrelated songs with matching durations', async () => {
+  const engine = tokenFixture(async () => ({ ok: true, status: 200, json: async () => [{ artistName: 'Wrong Artist', trackName: 'Unrelated Song', duration: 120, syncedLyrics: '[00:01.00]wrong' }] }));
+  assert.equal(await engine.searchLrclib('Correct Artist', 'Target Song', 120), null);
+});
+
+test('ESP-039: swallowed HTTP failures are retried rather than cached as no lyrics', async () => {
+  let calls = 0;
+  const engine = tokenFixture(async () => { calls++; return { ok: false, status: 503, json: async () => ({}) }; });
+  for (const method of ['searchBetterLyrics', 'searchPaxsenix', 'searchKugou', 'searchQQMusic', 'searchNetease']) engine[method] = async () => null;
+  await engine.search('Correct Artist', 'Target Song', 120, false);
+  const first = calls; assert.ok(first > 0);
+  await engine.search('Correct Artist', 'Target Song', 120, false);
+  assert.ok(calls > first);
+});
+
+test('ESP-021: background romanization does not broadcast to an unrelated current song', async () => {
+  const events = [];
+  const mod = loadModule('server/services/lyrics-engine.js', {
+    '../utils/logger': { createLogger: () => silentLog },
+    './json-store': { createJsonStore: () => ({ load: () => [], save() {} }) },
+    './romanizer': { addRomanization: async lines => lines.map(line => ({ ...line, phonetic: 'reading' })) },
+  });
+  mod.setIo({ emit: (...args) => events.push(args) });
+  const lines = [{ time: 1000, text: 'new import' }];
+  await mod.LyricsEngine._asyncRomanize(lines, 'lrc', 'other song');
+  assert.equal(lines[0].phonetic, 'reading'); assert.deepEqual(events, []);
+});
 const jwt = 'eyJheader.payload.signature';
 test('cold concurrent Apple token requests fetch one HTML/JS pair and reuse the token', async () => {
   let calls = 0; const gate = deferred();
@@ -135,7 +163,7 @@ test('LRCLIB avoids duplicate URLs while preserving fallback order and duration 
   assert.deepEqual(urls, ['https://lrclib.net/api/search?track_name=Song', 'https://lrclib.net/api/search?q=Song']);
   urls.length = 0;
   assert.equal(await engine.searchLrclib('Artist', 'Song', 120), null); assert.equal(urls.length, 4);
-  const matched = tokenFixture(async () => ({ ok: true, json: async () => [{ duration: 122, syncedLyrics: '[00:01.00]hello' }] }));
+  const matched = tokenFixture(async () => ({ ok: true, json: async () => [{ artistName: 'Artist', trackName: 'Song', duration: 122, syncedLyrics: '[00:01.00]hello' }] }));
   const result = await matched.searchLrclib('Artist', 'Song', 120);
   assert.equal(result.durationVerified, true); assert.equal(result.type, 'lrc');
 });

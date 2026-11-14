@@ -14,7 +14,17 @@ const { parseTTML, cleanQuery } = require('./ttml-parser');
 const { parseLrc, parseTimestampToMs, msToLrcTime } = require('./lrc-parser');
 const { cleanLyrics } = require('./lyrics-cleaner');
 const { annotateSingerParts } = require('./singer-parts');
-const { fetchWithTimeout } = require('../utils/helpers');
+const { fetchWithTimeout: transportFetch } = require('../utils/helpers');
+const { AsyncLocalStorage } = require('async_hooks');
+const providerTransport = new AsyncLocalStorage();
+async function fetchWithTimeout(...args) {
+  const context = providerTransport.getStore();
+  try {
+    const response = await transportFetch(...args);
+    if (context && !response.ok && response.status !== 404) context.failed = true;
+    return response;
+  } catch (error) { if (context) context.failed = true; throw error; }
+}
 const { romanize, addRomanization, needsRomanization } = require('./romanizer');
 const { createLogger } = require('../utils/logger');
 const { createJsonStore } = require('./json-store');
@@ -294,7 +304,11 @@ class LyricsEngine {
     const sourceVerdicts = new Map();
     for (const source of sources) {
       log.info(`嘗試來源: ${source.name}`);
-      const outcome = await providerHealth.execute(source.name, source.fn);
+      const outcome = await providerHealth.execute(source.name, () => providerTransport.run({ failed: false }, async () => {
+        const result = await source.fn();
+        if (!result && providerTransport.getStore().failed) throw new Error('歌詞來源暫時無法使用');
+        return result;
+      }));
       outcomes.push(outcome.status);
       if (outcome.status !== 'skipped') sourceVerdicts.set(source.name, outcome.status === 'success');
       try {
@@ -549,8 +563,9 @@ class LyricsEngine {
 
       // 透過 Socket 廣播羅馬化更新
       if (_io) {
-        _io.emit('lyrics:romanized', { parsedLyrics, type, query });
-        log.info(`✓ 羅馬化完成，已推播: "${query}" (${romanizeDuration}ms)`);
+        // Import/search has no playback identity. Playback/manual handlers
+        // already verify the current song before publishing its romanization.
+        log.info(`✓ 羅馬化完成: "${query}" (${romanizeDuration}ms)`);
         log.perf('lyrics-romanize', romanizeDuration, { query });
       }
 
@@ -802,10 +817,13 @@ class LyricsEngine {
         const results = await response.json();
         if (!Array.isArray(results) || results.length === 0) continue;
 
-        let filtered = results;
+        let filtered = results.filter((r) => this.isPlausibleMatch({
+          artist, title, duration, songArtist: r.artistName, songTitle: r.trackName, songDuration: r.duration,
+        }));
+        if (!filtered.length) continue;
         let durationVerified;
         if (duration > 0) {
-          const withDuration = results.filter(r => r.duration && Math.abs(r.duration - duration) <= DURATION_TOLERANCE);
+          const withDuration = filtered.filter(r => r.duration && Math.abs(r.duration - duration) <= DURATION_TOLERANCE);
           durationVerified = withDuration.length > 0;
           if (durationVerified) filtered = withDuration;
         }
