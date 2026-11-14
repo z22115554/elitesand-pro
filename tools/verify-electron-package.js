@@ -20,6 +20,29 @@ const EXPECTED_FUSES = {
   [FuseV1Options.GrantFileProtocolExtraPrivileges]: false,
 };
 
+const REQUIRED_NOTICE_FILES = [
+  'THIRD-PARTY-NOTICES.txt',
+  'public/vendor/soundtouch-LGPL-2.1.txt',
+  'public/vendor/licenses/Tone-MIT.txt',
+  'public/vendor/licenses/Spout2-BSD-2-Clause.txt',
+  'public/vendor/licenses/kuromoji-IPADIC-NOTICE.txt',
+  'public/vendor/licenses/OpenCC-data-NOTICES.txt',
+  'public/fonts/OFL-IBM-Plex.txt',
+  'public/assets/fonts/kongyuan/OFL-1.1.txt',
+  'public/assets/fonts/kongyuan/NOTICE.txt',
+  'public/assets/fonts/cubic11/OFL.txt',
+  'public/assets/fonts/cubic11/NOTICE.txt',
+  'public/assets/fonts/boutique9x9/OFL.txt',
+  'public/assets/fonts/boutique9x9/NOTICE.txt',
+];
+
+function verifyBundledNotices(files) {
+  const included = new Set(files);
+  for (const file of REQUIRED_NOTICE_FILES) {
+    if (!included.has(file)) throw new Error(`Required third-party notice is missing from app.asar: ${file}`);
+  }
+}
+
 function countFileIntegrity(node) {
   if (!node || typeof node !== 'object') return 0;
   if (node.files && typeof node.files === 'object') {
@@ -52,6 +75,7 @@ async function verify(unpackedRoot) {
   const protectedFiles = countFileIntegrity(header.header);
   if (protectedFiles === 0) throw new Error('app.asar has no per-file integrity hashes.');
   const files = listPackage(asarPath).map((file) => file.replace(/^[/\\]+/, '').replace(/\\/g, '/'));
+  verifyBundledNotices(files);
   if (!files.includes('electron/packaged-resource-integrity.generated.js')) {
     throw new Error('The packaged external-resource integrity manifest is missing.');
   }
@@ -71,11 +95,17 @@ async function verify(unpackedRoot) {
     'tools/g2p/python311.dll',
     'tools/g2p/python311.zip',
     'tools/g2p/python311._pth',
+    'tools/g2p/LICENSE.txt',
     'tools/g2p/Lib/site-packages/haqumei/haqumei.pyd',
   ]) {
     if (!fs.existsSync(path.join(resources, ...relative.split('/')))) {
       throw new Error(`${relative} is missing; bundled Japanese G2P cannot start.`);
     }
+  }
+  const haqumeiNotices = path.join(resources, 'licenses', 'haqumei');
+  if (!fs.existsSync(haqumeiNotices) || !fs.statSync(haqumeiNotices).isDirectory()
+    || fs.readdirSync(haqumeiNotices).filter(name => name !== 'PROVENANCE.txt').length === 0) {
+    throw new Error('Bundled Haqumei license material is missing.');
   }
   if (files.some((file) => file.endsWith('.py'))) {
     throw new Error('Python sidecar scripts must not live inside app.asar; python.exe cannot read them there.');
@@ -108,4 +138,4 @@ if (require.main === module) {
   main().catch((error) => { process.stderr.write(`${error.stack || error.message}\n`); process.exitCode = 1; });
 }
 
-module.exports = { EXPECTED_FUSES, countFileIntegrity, readWindowsAsarIntegrity, verify };
+module.exports = { EXPECTED_FUSES, REQUIRED_NOTICE_FILES, verifyBundledNotices, countFileIntegrity, readWindowsAsarIntegrity, verify };
