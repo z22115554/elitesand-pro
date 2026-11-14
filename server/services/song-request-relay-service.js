@@ -407,6 +407,7 @@ class SongRequestRelayService {
     this.ws = socket;
 
     this.connectWatchdog = this.timers.setTimeout(() => {
+      if (socket !== this.ws) return;
       log.warn('公開點歌頁連線逾時，改用退避重試');
       this._teardownSocket();
       this._scheduleReconnect();
@@ -414,6 +415,7 @@ class SongRequestRelayService {
     if (typeof this.connectWatchdog.unref === 'function') this.connectWatchdog.unref();
 
     socket.onopen = () => {
+      if (socket !== this.ws) { try { socket.close(); } catch (_) {} return; }
       try {
         socket.send(JSON.stringify({ type: 'auth', secret: this.state.secret }));
       } catch (err) {
@@ -424,6 +426,7 @@ class SongRequestRelayService {
     };
 
     socket.onmessage = (event) => {
+      if (socket !== this.ws) return;
       let payload;
       try { payload = JSON.parse(String(event?.data ?? '')); } catch (_) { return; }
       if (payload?.type === 'auth-ok') {
@@ -445,6 +448,7 @@ class SongRequestRelayService {
     socket.onerror = () => { /* onclose 會接著觸發，統一在那裡處理重連 */ };
 
     socket.onclose = (event) => {
+      if (socket !== this.ws) return;
       this._clearConnectWatchdog();
       const wasConnected = this.connected;
       this.connected = false;
@@ -468,8 +472,9 @@ class SongRequestRelayService {
 
   _teardownSocket() {
     if (this.ws) {
-      try { this.ws.close(); } catch (_) { /* best effort */ }
+      const socket = this.ws;
       this.ws = null;
+      try { socket.close(); } catch (_) { /* best effort */ }
     }
     this.connecting = false;
     this.connected = false;

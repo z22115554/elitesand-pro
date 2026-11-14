@@ -94,6 +94,24 @@ function makeService(overrides = {}) {
   });
 }
 
+test('ESP-015: delayed close/message/open events from an old relay cannot damage the replacement', async () => {
+  class Socket { constructor() { this.readyState = 1; } send() {} close() {} }
+  const service = makeService({ createWebSocket: () => Socket,
+    store: { load: () => ({ enabled: true, publicSlug: 'slug1', secret: 'sec1' }), save: () => true } });
+  service.start(); await service.enable();
+  const old = service.ws;
+  service._teardownSocket(); service._connect();
+  const current = service.ws;
+  current.onopen(); current.onmessage({ data: JSON.stringify({ type: 'auth-ok' }) });
+  old.onclose({ code: 4001, reason: 'late close' });
+  old.onmessage({ data: JSON.stringify({ type: 'error', code: 'auth' }) });
+  old.onopen();
+  assert.equal(service.ws, current);
+  assert.equal(service.getStatus().connected, true);
+  assert.equal(service.getStatus().reconnectSuppressed, false);
+  service.stop();
+});
+
 test('未啟用時 start() 完全不建立連線（零外連）', () => {
   let created = false;
   const service = makeService({
