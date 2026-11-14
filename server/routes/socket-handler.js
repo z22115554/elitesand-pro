@@ -179,7 +179,7 @@ module.exports = function socketHandler(io, {
       return next(new Error('SOURCE_TOKEN_REQUIRED'));
     }
     if (!loopback && !deviceAccess.verifyControllerToken(auth.controllerToken)) return next(new Error('CONTROLLER_PAIRING_REQUIRED'));
-    if (!authStore.hasPin()) return next();
+    if (!authStore.hasPinFor({ loopback })) return next();
     const key = `socket:${socket.handshake.address || 'unknown'}`;
     const limit = authRateLimiter.status(key);
     if (!limit.allowed) return next(new Error('PIN_RATE_LIMITED'));

@@ -617,7 +617,7 @@ test('媒體清理以歌曲資產群組處理：播放中三軌與分離中來�
       "const fs=require('fs'); const path=require('path'); const store=require(process.argv[1]);",
       "const downloads=process.env.ELITESAND_DOWNLOADS_DIR; fs.mkdirSync(downloads,{recursive:true});",
       "const active={id:'active',title:'Active',filename:'active.mp3',vocalsFile:'active.vocals.wav',instrumentalFile:'active.instrumental.wav',separationStatus:'done'};",
-      "const orphan={id:'orphan',title:'Orphan',filename:'orphan.mp3',vocalsFile:'orphan.vocals.wav',instrumentalFile:'orphan.instrumental.wav',separationStatus:'done',url:'https://example.test/orphan'};",
+      "const orphan={id:'orphan',title:'Orphan',filename:'orphan.mp3',vocalsFile:'orphan.vocals.wav',instrumentalFile:'orphan.instrumental.wav',separationStatus:'done',url:'https://youtu.be/orphanvideo'};",
       "const processing={id:'processing',title:'Processing',filename:'processing.mp3',separationStatus:'processing'};",
       "for(const t of [active,orphan,processing]){ store.rememberImport(t); for(const f of [t.filename,t.vocalsFile,t.instrumentalFile].filter(Boolean)) fs.writeFileSync(path.join(downloads,f),'x'); }",
       "store.saveNow();",

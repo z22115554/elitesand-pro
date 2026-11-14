@@ -13,10 +13,11 @@
 const authStore = require('../services/auth-store');
 const rateLimiter = require('../services/auth-rate-limiter');
 const { requireControlAccess } = require('./require-control-access');
+const { getClientAddress, isLoopbackAddress } = require('../utils/pin-setup-policy');
 
 function requirePin(req, res, next) {
   return requireControlAccess(req, res, () => {
-  if (!authStore.hasPin()) return next();
+  if (!authStore.hasPinFor({ loopback: isLoopbackAddress(getClientAddress(req)) })) return next();
   const key = `protected:${req.ip || req.socket?.remoteAddress || 'unknown'}`;
   const limit = rateLimiter.status(key);
   if (!limit.allowed) {

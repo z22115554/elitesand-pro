@@ -12,6 +12,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { createLogger } = require('../utils/logger');
 const { createJsonStore } = require('./json-store');
@@ -42,6 +43,7 @@ const authDiskStore = createJsonStore({
 
 let cached = null; // { hash: hex, salt: hex } | null（null＝尚未設定 PIN，也代表「載入過但沒有」）
 let loaded = false;
+let loadFailed = false;
 
 function loadFromDisk() {
   return authDiskStore.load();
@@ -49,7 +51,9 @@ function loadFromDisk() {
 
 function ensureLoaded() {
   if (!loaded) {
+    const existed = fs.existsSync(AUTH_FILE) || fs.existsSync(`${AUTH_FILE}.last-good`);
     cached = loadFromDisk();
+    loadFailed = !cached && (existed || authDiskStore.getStatus().writeBlocked);
     loaded = true;
   }
 }
@@ -61,7 +65,23 @@ function hashPin(pin, saltHex) {
 
 function hasPin() {
   ensureLoaded();
-  return !!cached;
+  return !!cached || loadFailed;
+}
+
+/** PIN 檔存在但讀不出來：遠端一律擋，只有桌面本機可以重設。 */
+function needsRecovery() {
+  ensureLoaded();
+  return loadFailed;
+}
+
+/**
+ * 依連線來源判斷要不要問 PIN。PIN 檔損壞時對遠端維持鎖住（fail closed），
+ * 但桌面本機視同尚未設定，讓主播能進面板重設，不會被自己的程式鎖在門外。
+ */
+function hasPinFor({ loopback = false } = {}) {
+  ensureLoaded();
+  if (loadFailed && loopback) return false;
+  return hasPin();
 }
 
 /**
@@ -69,6 +89,7 @@ function hasPin() {
  */
 function verifyPin(pin) {
   ensureLoaded();
+  if (loadFailed) return false;
   if (!cached) return true;
   if (typeof pin !== 'string' || !pin) return false;
   const candidate = hashPin(pin, cached.salt);
@@ -82,12 +103,13 @@ function verifyPin(pin) {
  * 設定或更改 PIN。若目前已有 PIN，呼叫端必須先驗證 currentPin 正確才能改。
  * @returns {{ok: boolean, message?: string}}
  */
-function setPin(newPin, currentPin) {
+function setPin(newPin, currentPin, { localRecovery = false } = {}) {
   ensureLoaded();
+  if (loadFailed && !localRecovery) return { ok: false, message: 'PIN 資料無法讀取，請在執行 Elitesand Pro 的電腦上重新設定 PIN。' };
   if (typeof newPin !== 'string' || newPin.length < 4 || newPin.length > 32) {
     return { ok: false, message: 'PIN 長度需為 4~32 字元' };
   }
-  if (cached && !verifyPin(currentPin)) {
+  if (cached && !loadFailed && !verifyPin(currentPin)) {
     return { ok: false, message: '目前的 PIN 不正確' };
   }
   const salt = crypto.randomBytes(SALT_BYTES).toString('hex');
@@ -97,6 +119,8 @@ function setPin(newPin, currentPin) {
   // 當前程序卻已接受新 PIN，重啟後又跳回舊 PIN，形成兩套互相矛盾的狀態。
   if (!authDiskStore.save(candidate)) return { ok: false, message: 'PIN 資料寫入失敗，請檢查資料夾權限或版本。' };
   cached = candidate;
+  if (loadFailed) log.warn('PIN 資料損壞，已在本機重新設定');
+  loadFailed = false;
   log.info('PIN 已設定/更新');
   return { ok: true };
 }
@@ -106,6 +130,7 @@ function setPin(newPin, currentPin) {
  */
 function clearPin(currentPin) {
   ensureLoaded();
+  if (loadFailed) return { ok: false, message: 'PIN 資料無法讀取，請先恢復授權資料。' };
   if (!cached) return { ok: true }; // 本來就沒設定
   if (!verifyPin(currentPin)) {
     return { ok: false, message: '目前的 PIN 不正確' };
@@ -116,4 +141,4 @@ function clearPin(currentPin) {
   return { ok: true };
 }
 
-module.exports = { hasPin, verifyPin, setPin, clearPin };
+module.exports = { hasPin, hasPinFor, needsRecovery, verifyPin, setPin, clearPin };

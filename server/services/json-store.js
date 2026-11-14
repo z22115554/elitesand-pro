@@ -63,6 +63,8 @@ function atomicWrite(file, value, { pretty = false, mode } = {}) {
   const raw = JSON.stringify(value, null, pretty ? 2 : 0);
   try {
     fs.writeFileSync(temporary, raw, { encoding: 'utf8', ...(mode ? { mode } : {}) });
+    const descriptor = fs.openSync(temporary, 'r+');
+    try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
     fs.renameSync(temporary, file);
     if (mode) {
       try { fs.chmodSync(file, mode); } catch (_) { /* Windows 可忽略 */ }
@@ -84,6 +86,7 @@ function createJsonStore(options) {
     defaultValue = null,
     pretty = false,
     mode,
+    retainPreviousBackup = true,
     logger,
     onError,
   } = options;
@@ -170,7 +173,11 @@ function createJsonStore(options) {
     if (!fs.existsSync(lastGoodFile)) return fallback();
     try {
       const document = readCandidate(lastGoodFile);
-      atomicWrite(file, document, { pretty, mode });
+      try { atomicWrite(file, document, { pretty, mode }); } catch (error) {
+        writeBlockReason = `${label} 備份可讀，但主檔無法恢復：${error.message}`;
+        report(`${writeBlockReason}；已保留備份並停止寫入。`, 'error');
+        return deserialize(document);
+      }
       report(`${reason}，已從最近可用備份恢復。`);
       return deserialize(document);
     } catch (error) {
@@ -181,6 +188,11 @@ function createJsonStore(options) {
       if (error instanceof JsonStoreMigrationPersistError) {
         writeBlockReason = error.message;
         report(`${writeBlockReason}; writes are disabled to preserve the original data.`, 'error');
+        return fallback();
+      }
+      if (!(error instanceof SyntaxError) && !(error instanceof JsonStoreSchemaError)) {
+        writeBlockReason = `${label} 備份暫時無法讀取：${error.message}`;
+        report(writeBlockReason, 'error');
         return fallback();
       }
       let preserved = null;
@@ -195,7 +207,13 @@ function createJsonStore(options) {
     if (!fs.existsSync(file)) return recoverFromLastGood(`${label} 主檔不存在`);
     try {
       const document = readCandidate(file);
-      atomicWrite(lastGoodFile, document, { pretty, mode });
+      // Loading is read-only when a backup already exists. Never replace the
+      // previous generation merely because the application restarted.
+      if (!fs.existsSync(lastGoodFile)) {
+        try { atomicWrite(lastGoodFile, document, { pretty, mode }); } catch (error) {
+          report(`${label} 備份暫時無法寫入：${error.message}`);
+        }
+      }
       return deserialize(document);
     } catch (error) {
       if (error instanceof JsonStoreFutureSchemaError) {
@@ -205,6 +223,11 @@ function createJsonStore(options) {
       if (error instanceof JsonStoreMigrationPersistError) {
         writeBlockReason = error.message;
         report(`${writeBlockReason}; writes are disabled to preserve the original data.`, 'error');
+        return fallback();
+      }
+      if (!(error instanceof SyntaxError) && !(error instanceof JsonStoreSchemaError)) {
+        writeBlockReason = `${label} 主檔暫時無法讀取：${error.message}`;
+        report(`${writeBlockReason}；已保留原檔並停止寫入。`, 'error');
         return fallback();
       }
       let preserved = null;
@@ -229,8 +252,15 @@ function createJsonStore(options) {
       }
       document = { ...document, schemaVersion };
       if (validate(document) !== true) throw new JsonStoreSchemaError('寫入資料結構驗證失敗');
+      if (retainPreviousBackup && fs.existsSync(file)) {
+        // 上一代直接改名成備份：主檔是本程序自己寫出、載入時驗過的，不必每次存檔都
+        // 重讀、解析、再寫一份（歌曲庫上萬首時那會讓每次存檔的磁碟量加倍）。
+        // 改名後、新主檔寫入前若中斷，載入時會從這份上一代備份恢復。
+        fs.renameSync(file, lastGoodFile);
+      } else {
+        atomicWrite(lastGoodFile, document, { pretty, mode });
+      }
       atomicWrite(file, document, { pretty, mode });
-      atomicWrite(lastGoodFile, document, { pretty, mode });
       return true;
     } catch (error) {
       report(`${label} 寫入失敗：${error.message}`, 'error');

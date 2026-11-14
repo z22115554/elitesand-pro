@@ -1161,10 +1161,12 @@
   if (storageChoose) storageChoose.addEventListener('click', () => migrateStorage());
 
   if (btnCleanup) btnCleanup.addEventListener('click', async () => {
+    const preview = await new Promise((resolve) => SocketClient.sendWithCallback('library:cleanupAudioPreview', null, resolve));
+    if (!preview?.ok) { toast(tr('音檔清理失敗：伺服器沒有確認'), 'error'); return; }
     const confirmed = await window.DangerConfirm?.request({
       title: '確認清理音檔',
-      summary: '即將刪除不在目前播放清單中的已下載音檔。',
-      impact: '媒體庫紀錄與目前播放清單會保留，但已刪除的音檔必須重新下載才能播放，且無法復原。',
+      summary: `即將清理 ${preview.deleted} 個可重新下載的音檔，釋放 ${(preview.freedBytes / 1048576).toFixed(1)}MB。`,
+      impact: '本機上傳、封面、BGM、收藏歌單與處理中的音檔會保留；清理的音檔需重新下載才能播放。',
       phrase: '清理音檔',
       confirmLabel: '清理音檔',
     });

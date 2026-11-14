@@ -177,17 +177,20 @@ function registerLibraryHandlers(io, socket, ctx, {
     reply({ ok: true, title, artist });
   });
 
-  socket.on('library:cleanupAudio', (_data, ack) => {
+  function cleanupAudio(data, ack, dryRun = false) {
     // 一首歌可能同時引用原檔／人聲／伴奏三個實體資產。播放清單、待命/播放中的
     // currentTrack，以及仍在分離中的來源都不可被 cleanup 刪掉。
     const keep = libraryStore.getProcessingMediaFilenames();
     for (const track of playState.playlist) libraryStore.collectMediaFilenames(track, keep);
     libraryStore.collectMediaFilenames(playState.currentTrack, keep);
-    const result = libraryStore.cleanupAudio(keep);
+    const result = libraryStore.cleanupAudio(keep, { dryRun });
+    if (dryRun) { if (typeof ack === 'function') ack({ ok: true, ...result }); return; }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     onLibraryChanged();
     if (typeof ack === 'function') ack({ ok: true, ...result });
-  });
+  }
+  socket.on('library:cleanupAudio', (data, ack) => cleanupAudio(data, ack));
+  socket.on('library:cleanupAudioPreview', (data, ack) => cleanupAudio(data, ack, true));
 
   // ─── 儲存歌單：媒體庫 id 的有序集合，一首歌可在多個歌單 ───
   // 只在這裡（非唯讀 socket）註冊；顯示端／唯讀端沒有任何歌單事件。

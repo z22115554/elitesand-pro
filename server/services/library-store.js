@@ -480,8 +480,14 @@ function updateMeta(id, partial) {
 /** 取得單筆記錄（含歌詞/檔名/變調），供從媒體庫即時還原。需要時會從磁碟讀回歌詞。 */
 function getEntry(id) {
   if (!id) return null;
+  id = String(id);
+  const alreadyHydrated = _hydrated.has(id);
   hydrate(id);
-  return library[String(id)] || null;
+  const entry = library[id] || null;
+  // Read-only hydration must not pin every song ever visited in memory.
+  // Dirty/write-owned entries keep their existing persistence lifecycle.
+  if (!alreadyHydrated && !_lyricsCheck.has(id)) dehydrate([id]);
+  return entry;
 }
 
 /**
@@ -688,22 +694,41 @@ function clear() {
  * @param {Set<string>} keepFilenames 目前播放清單正在用的檔名集合
  * @returns {{deleted:number, freedBytes:number}}
  */
-function cleanupAudio(keepFilenames = new Set()) {
+function cleanupAudio(keepFilenames = new Set(), { dryRun = false } = {}) {
+  keepFilenames = new Set(keepFilenames);
+  const eligible = new Set();
+  const { isYouTubeUrl } = require('../utils/youtube-url');
+  const protectedIds = new Set(require('./bgm-playlist').list());
+  for (const playlist of require('./saved-playlists').list()) {
+    for (const id of playlist.trackIds || []) protectedIds.add(id);
+  }
+  for (const entry of Object.values(library)) {
+    if (!entry) continue;
+    const media = collectMediaFilenames(entry, new Set());
+    if (!isYouTubeUrl(entry.url) || protectedIds.has(String(entry.id))) {
+      for (const name of media) keepFilenames.add(name);
+    } else {
+      for (const name of media) eligible.add(name);
+    }
+  }
+  const activeImports = Object.keys(require('./import-temp-registry').getEntries());
   let deleted = 0, freedBytes = 0;
   const deletedNames = new Set();
   let repairedEntries = 0;
   try {
     if (!fs.existsSync(DOWNLOADS_DIR)) return { deleted, freedBytes };
     for (const name of fs.readdirSync(DOWNLOADS_DIR)) {
-      if (keepFilenames.has(name)) continue;
+      if (keepFilenames.has(name) || !eligible.has(name) || name.startsWith('.')
+        || !/\.(?:mp3|m4a|wav|flac|ogg|opus|aac|webm)$/i.test(name)
+        || activeImports.some((id) => name.startsWith(`${id}.`))) continue;
       const fp = path.join(DOWNLOADS_DIR, name);
       try {
-        const st = fs.statSync(fp);
+        const st = fs.lstatSync(fp);
         if (st.isFile()) {
           freedBytes += st.size;
-          fs.unlinkSync(fp);
+          if (!dryRun) fs.unlinkSync(fp);
           deletedNames.add(name);
-          noteAudioSnapshot(name, false);
+          if (!dryRun) noteAudioSnapshot(name, false);
           deleted++;
         }
       } catch (e) { /* 略過單檔錯誤 */ }
@@ -712,7 +737,7 @@ function cleanupAudio(keepFilenames = new Set()) {
     // library-only 的分離 stem 可以依既有「清掉不在播放清單的音檔」語意被刪除，
     // 但 metadata 不能繼續假裝檔案還在。原始 filename 刻意保留：reimport 本來就會
     // 先 audioExists()，不存在時再用 URL 重抓；這份檔名仍有歷史／重新下載價值。
-    if (deletedNames.size) {
+    if (!dryRun && deletedNames.size) {
       for (const entry of Object.values(library)) {
         if (!entry) continue;
         let repaired = false;
