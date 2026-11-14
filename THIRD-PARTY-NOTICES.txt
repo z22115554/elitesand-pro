@@ -41,7 +41,9 @@ FFmpeg (not bundled by default; downloaded on demand)
 Elitesand Pro does not bundle ffmpeg.exe/ffprobe.exe by default. After the first-run terms are accepted, and before an FFmpeg-dependent
 import (e.g. YouTube-to-MP3), the app checks for both tools and offers
 to download a prebuilt Windows binary and verifies its SHA-256 against a
-checksum fetched from the same release before using it.
+SHA-256 pinned in the protected application before using it. Checksums or
+digests fetched alongside a new upstream archive are not accepted as a new
+runtime trust root; approving a different build requires a reviewed app update.
 
 The primary download source is the BtbN FFmpeg-Builds "win64-lgpl" build,
 which is configured without GPL-only components and is distributed under the

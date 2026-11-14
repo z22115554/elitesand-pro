@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const runtime = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-audio-setup-'));
 for (const [name, dir] of Object.entries({ ELITESAND_DATA_DIR: 'data', ELITESAND_DOWNLOADS_DIR: 'downloads', ELITESAND_LOGS_DIR: 'logs' })) {
   process.env[name] = path.join(runtime, dir);
@@ -18,6 +19,33 @@ const provider = require('../server/services/ffmpeg-provider');
 const checks = require('../server/services/system-check');
 const compatibility = { getStatus: () => ({ state: 'ok' }) };
 test.beforeEach(() => checks.clearCache());
+
+test('FFmpeg rejects changed bytes even when upstream metadata supplies their matching hash', async () => {
+  provider._resetForTests();
+  fs.mkdirSync(provider.BIN_DIR, { recursive: true });
+  fs.writeFileSync(provider.FFMPEG_EXE, 'trusted-ffmpeg');
+  fs.writeFileSync(provider.FFPROBE_EXE, 'trusted-ffprobe');
+  const zip = new (require('adm-zip'))();
+  zip.addFile('bin/ffmpeg.exe', Buffer.from('new-ffmpeg'));
+  zip.addFile('bin/ffprobe.exe', Buffer.from('new-ffprobe'));
+  const original = zip.toBuffer(), changed = Buffer.from(original);
+  changed[10] ^= 1;
+  const pinned = crypto.createHash('sha256').update(original).digest('hex');
+  const attackerHash = crypto.createHash('sha256').update(changed).digest('hex');
+  let metadata = 0, executions = 0;
+  try {
+    await assert.rejects(provider.downloadFfmpeg({
+      platform: 'win32',
+      sources: [{ id:'pinned', label:'pinned', url:'https://example.test/build.zip', sha256:pinned, size:original.length }],
+      fetchBufferImpl: async () => { metadata++; return Buffer.from(attackerHash); },
+      fetchFileImpl: async (_url,file) => { fs.writeFileSync(file,changed); return {sha256:attackerHash,downloadedBytes:changed.length}; },
+      spawnSyncImpl: () => { executions++; return {status:0}; },
+    }), /SHA-256/);
+    assert.equal(metadata,0);assert.equal(executions,0);
+    assert.equal(fs.readFileSync(provider.FFMPEG_EXE,'utf8'),'trusted-ffmpeg');
+    assert.equal(fs.readFileSync(provider.FFPROBE_EXE,'utf8'),'trusted-ffprobe');
+  } finally { provider._resetForTests(); }
+});
 
 test('system readiness rejects a working ffmpeg with a missing ffprobe', async (t) => {
   t.mock.method(provider, 'resolveFfmpegPaths', () => ({ source: 'config', ffmpeg: 'test-ffmpeg', ffprobe: 'test-ffprobe' }));
