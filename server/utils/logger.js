@@ -216,7 +216,7 @@ function shutdown() {
 // 只保留「logger 自身資源」的收尾（關閉檔案串流）。
 // uncaughtException / unhandledRejection 等 process 級 handler 屬於應用層決策，
 // 定義在 server/index.js 進入點，不藏在這個工具模組裡。
-process.on('exit', () => {
+require('./exit-hooks').onExit(() => {
   if (logStream) {
     try { logStream.end(); } catch (err) { /* ignore */ }
   }

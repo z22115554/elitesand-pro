@@ -430,7 +430,7 @@ function saveNow() {
 }
 
 // 程式結束前把待寫入的狀態落地
-process.on('exit', () => {
+require('../utils/exit-hooks').onExit(() => {
   if (_saveTimer) {
     clearTimeout(_saveTimer);
     try { saveNow(); } catch (e) { /* 靜默 */ }

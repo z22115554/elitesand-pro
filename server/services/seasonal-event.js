@@ -240,7 +240,7 @@ function createSeasonalEvent({ fileName, label, logTag, endsAt, styles, defaultT
     return { ok: true, state: snapshot() };
   }
 
-  process.on('exit', () => { if (saveTimer) { clearTimeout(saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
+  require('../utils/exit-hooks').onExit(() => { if (saveTimer) { clearTimeout(saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
   return {
     snapshot, setConfig, addDonation, updateDonation, removeDonation, clearDonations, saveNow, setDecorator,

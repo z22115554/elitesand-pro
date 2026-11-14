@@ -480,7 +480,7 @@ function createHalloweenInteractions({ isActive, emit, getDonations, file = path
     service.setRedemptionInterceptor?.((event, fallbackId) => handleRedemption(event, fallbackId));
   }
 
-  process.on('exit', () => { if (saveTimer) { clearTimeout(saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
+  require('../utils/exit-hooks').onExit(() => { if (saveTimer) { clearTimeout(saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
   return {
     snapshot, board, setSettings, resetBoard, drawRaffle, clearWinners, attachTwitch,

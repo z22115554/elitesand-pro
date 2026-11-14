@@ -544,7 +544,7 @@ app.use(require('./routes/twitch-auth')(twitch));
 twitch.start();
 // 活動已結束（啟動時判斷）：等 Twitch 連上後把大鍋的兌換項目暫停，觀眾不會再看到能兌換的項目。
 if (!halloweenEvent.isActive()) setTimeout(() => { halloweenCauldron.syncRewards().catch(() => {}); }, 20000).unref?.();
-process.on('exit', () => twitch.stop());
+require('./utils/exit-hooks').onExit(() => twitch.stop());
 
 // ─── 公開點歌頁：向外連到 Cloudflare 中繼（docs/PUBLIC-SONG-REQUEST-PLAN.md）───
 // 未在面板啟用，或 songRequestRelayUrl 空白／非 HTTPS 時保持閒置，零外連。
@@ -562,7 +562,7 @@ const songRequestRelay = new SongRequestRelayService({
 });
 socketApi.setSongRequestRelayService(songRequestRelay);
 songRequestRelay.start();
-process.on('exit', () => songRequestRelay.stop());
+require('./utils/exit-hooks').onExit(() => songRequestRelay.stop());
 
 // 公告抓取延後到伺服器啟動後背景執行；離線、逾時或格式錯誤都只記錄並沿用快取。
 require('./services/announcement-service').startBackgroundRefresh();

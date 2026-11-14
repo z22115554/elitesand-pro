@@ -134,7 +134,7 @@ function saveCacheToDisk() {
 }
 
 // 程式結束前盡量把快取落地
-process.on('exit', () => {
+require('../utils/exit-hooks').onExit(() => {
   if (_cacheSaveTimer) {
     clearTimeout(_cacheSaveTimer);
     try { saveCacheToDisk(); } catch (e) { /* 靜默 */ }

@@ -739,7 +739,7 @@ function cleanupAudio(keepFilenames = new Set()) {
   return { deleted, freedBytes, repairedEntries };
 }
 
-process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
+require('../utils/exit-hooks').onExit(() => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
 function setErrorReporter(fn) { _errorReporter = typeof fn === 'function' ? fn : null; }
 module.exports = {
