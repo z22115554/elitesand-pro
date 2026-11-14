@@ -113,3 +113,57 @@ test('ESP-011: saving rotates the previous file into the backup without re-readi
   assert.deepEqual(JSON.parse(fs.readFileSync(`${f.file}.last-good`)).tracks, ['first']);
   assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).tracks, ['second']);
 });
+
+for (const kind of ['json', 'state']) {
+  for (const fault of ['write', 'fsync', 'commit']) {
+    test(`shared storage: ${kind} survives ${fault} failure and a fresh reload`, t => {
+      const f = fixture(t);
+      const script = `
+        const fs = require('fs'), path = require('path');
+        const kind = ${JSON.stringify(kind)}, fault = ${JSON.stringify(fault)};
+        const root = process.env.ELITESAND_DATA_DIR;
+        const file = path.join(root, kind === 'state' ? 'state.json' : 'store.json');
+        let store, saved;
+        if (kind === 'state') {
+          store = require('./server/services/state-store');
+          saved = n => { let result; store.scheduleSave(() => ({ savedAt:n, playlist:[{id:String(n)}] }), r => result=r); store.saveNow(); return result.ok; };
+        } else {
+          store = require('./server/services/json-store').createJsonStore({file});
+          saved = n => store.save({entries:[String(n)]});
+        }
+        if (!saved(1) || !saved(2)) throw Error('fixture save failed');
+        const before = fs.readFileSync(file, 'utf8'), backup = fs.readFileSync(file+'.last-good','utf8');
+        const originals = {writeFileSync:fs.writeFileSync,fsyncSync:fs.fsyncSync,renameSync:fs.renameSync};
+        const full = () => {throw Object.assign(Error('injected full disk'),{code:'ENOSPC'});};
+        if (fault === 'write') fs.writeFileSync = full;
+        else if (fault === 'fsync') fs.fsyncSync = full;
+        else fs.renameSync = function(from,to) {
+          if (String(from).includes('.tmp-') && to === file) throw Object.assign(Error('locked destination'),{code:'EACCES'});
+          return originals.renameSync.apply(this,arguments);
+        };
+        let ok;
+        try {ok=saved(3);} finally {Object.assign(fs,originals);}
+        const primaryUnchanged = fs.existsSync(file) && fs.readFileSync(file,'utf8')===before;
+        const backupUnchanged = fs.readFileSync(file+'.last-good','utf8')===backup;
+        if (kind === 'state') { delete require.cache[require.resolve('./server/services/state-store')]; store=require('./server/services/state-store'); }
+        else store=require('./server/services/json-store').createJsonStore({file});
+        const recovered = kind === 'state' ? store.loadState() : store.load();
+        const value = kind === 'state' ? recovered.playlist[0].id : recovered.entries[0];
+        console.log('RESULT:'+JSON.stringify({ok,primaryUnchanged,backupUnchanged,value,temps:fs.readdirSync(root).filter(n=>n.includes('.tmp-'))}));
+        process.exit(0);
+      `;
+      const output = execFileSync(process.execPath, ['-e', script], {
+        cwd: path.join(__dirname, '..'), encoding: 'utf8',
+        env: { ...process.env, ELITESAND_DATA_DIR: f.root, ELITESAND_LOGS_DIR: path.join(f.root, 'logs') },
+      });
+      const result = JSON.parse(output.split('RESULT:')[1].split('\n')[0]);
+      assert.equal(result.ok, false);
+      assert.equal(result.value, '2', 'restart must recover the last successful save');
+      assert.deepEqual(result.temps, []);
+      if (fault !== 'commit') {
+        assert.equal(result.primaryUnchanged, true);
+        assert.equal(result.backupUnchanged, true);
+      }
+    });
+  }
+}

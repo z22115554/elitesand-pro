@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { atomicWriteRaw, saveWithBackup } = require('./atomic-store-file');
 
 class JsonStoreSchemaError extends Error {
   constructor(message, code = 'INVALID_JSON_STORE_SCHEMA') {
@@ -58,20 +59,8 @@ function uniquePath(base) {
 }
 
 function atomicWrite(file, value, { pretty = false, mode } = {}) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = `${file}.tmp-${process.pid}-${Date.now()}`;
   const raw = JSON.stringify(value, null, pretty ? 2 : 0);
-  try {
-    fs.writeFileSync(temporary, raw, { encoding: 'utf8', ...(mode ? { mode } : {}) });
-    const descriptor = fs.openSync(temporary, 'r+');
-    try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-    fs.renameSync(temporary, file);
-    if (mode) {
-      try { fs.chmodSync(file, mode); } catch (_) { /* Windows 可忽略 */ }
-    }
-  } finally {
-    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) { /* best effort */ }
-  }
+  atomicWriteRaw(file, raw, { mode });
 }
 
 function createJsonStore(options) {
@@ -252,15 +241,9 @@ function createJsonStore(options) {
       }
       document = { ...document, schemaVersion };
       if (validate(document) !== true) throw new JsonStoreSchemaError('寫入資料結構驗證失敗');
-      if (retainPreviousBackup && fs.existsSync(file)) {
-        // 上一代直接改名成備份：主檔是本程序自己寫出、載入時驗過的，不必每次存檔都
-        // 重讀、解析、再寫一份（歌曲庫上萬首時那會讓每次存檔的磁碟量加倍）。
-        // 改名後、新主檔寫入前若中斷，載入時會從這份上一代備份恢復。
-        fs.renameSync(file, lastGoodFile);
-      } else {
-        atomicWrite(lastGoodFile, document, { pretty, mode });
-      }
-      atomicWrite(file, document, { pretty, mode });
+      saveWithBackup(file, JSON.stringify(document, null, pretty ? 2 : 0), {
+        backupFile: lastGoodFile, retainPreviousBackup, mode,
+      });
       return true;
     } catch (error) {
       report(`${label} 寫入失敗：${error.message}`, 'error');
