@@ -259,6 +259,14 @@
 
   function placeColumn(el, plan) {
     if (!rootEl || rootEl.clientWidth <= 0 || rootEl.clientHeight <= 0) return;
+    // 太長的直行等比縮小到放得下（最小 8px）；字級沒寫在 inline 時改讀實際套用的大小。
+    const fit = Math.min(1,
+      availableColumnHeight() / Math.max(1, el.offsetHeight),
+      rootEl.clientWidth * 0.38 / Math.max(1, el.offsetWidth));
+    if (fit < 1) {
+      const size = parseFloat(el.style.fontSize) || parseFloat(getComputedStyle(el).fontSize);
+      if (Number.isFinite(size) && size > 0) el.style.fontSize = `${Math.max(8, size * fit)}px`;
+    }
     const rootRect = rootEl.getBoundingClientRect();
     const otherColumns = Array.from(rootEl.querySelectorAll('.cf-col')).filter((node) => node !== el);
     const safeMargin = currentSafeMargin();

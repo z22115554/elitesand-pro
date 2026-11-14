@@ -300,6 +300,7 @@ const KaraokeEngine = (() => {
       this._spawnParticles(charEl, params);
     },
     _spawnParticles(charEl, params) {
+      if (!charEl?.isConnected) return;
       // 上限保護：避免快歌/長時間直播粒子累積拖垮渲染（超量就不再生成）
       if (containerEl.querySelectorAll('.karaoke-particle').length > 120) return;
       const rect = charEl.getBoundingClientRect();
@@ -611,7 +612,7 @@ const KaraokeEngine = (() => {
     if (isWordMode() && line.words) {
       line.words.forEach((word, i) => {
         // \u7C21\u8F49\u7E41\u4EE5\u300C\u6574\u500B word \u5B57\u4E32\u300D\u8F49\u63DB\uFF08\u8A5E\u7D44\u7D1A\u8F03\u6E96\uFF09\uFF1B\u9010\u5B57\u9AD8\u4EAE\u4EE5 word \u70BA\u55AE\u4F4D\uFF0Cchar \u6578\u4E0D\u5F71\u97FF\u6642\u9593\u5C0D\u9F4A
-        s2t(word.text).split('').forEach((char, j) => {
+        Array.from(s2t(word.text)).forEach((char, j) => {
           const span = document.createElement('span');
           span.className = 'char';
           span.textContent = char === ' ' ? '\u00A0' : char;
@@ -624,7 +625,7 @@ const KaraokeEngine = (() => {
       });
     } else {
       // \u9010\u53E5\uFF1A\u6574\u884C\u8F49\u63DB\uFF08\u8A5E\u7D44\u7D1A\u6700\u6E96\uFF09\uFF0C\u518D\u5207\u5B57
-      s2t(line.text).split('').forEach((char, i) => {
+      Array.from(s2t(line.text)).forEach((char, i) => {
         const span = document.createElement('span');
         span.className = 'char';
         span.textContent = char === ' ' ? '\u00A0' : char;
@@ -678,7 +679,7 @@ const KaraokeEngine = (() => {
       line.words.forEach((word, i) => {
         const wordPhonetic = word[kind] || '';
         if (wordPhonetic) {
-          wordPhonetic.split('').forEach((char, j) => {
+          Array.from(wordPhonetic).forEach((char, j) => {
             const span = document.createElement('span');
             span.className = 'phonetic-char';
             span.textContent = char === ' ' ? '\u00A0' : char;
@@ -699,7 +700,7 @@ const KaraokeEngine = (() => {
       });
     } else {
       // LRC: 整行
-      (line[kind] || '').split('').forEach((char, i) => {
+      Array.from(line[kind] || '').forEach((char, i) => {
         const span = document.createElement('span');
         span.className = 'phonetic-char';
         span.textContent = char === ' ' ? '\u00A0' : char;
@@ -721,7 +722,7 @@ const KaraokeEngine = (() => {
       line.words.forEach((word, i) => {
         const wordPhonetic = word[kind] || '';
         if (wordPhonetic) {
-          wordPhonetic.split('').forEach((char, j) => {
+          Array.from(wordPhonetic).forEach((char, j) => {
             const span = document.createElement('span');
             span.className = 'phonetic-char';
             span.textContent = char === ' ' ? '\u00A0' : char;
@@ -738,7 +739,7 @@ const KaraokeEngine = (() => {
         }
       });
     } else {
-      (line[kind] || '').split('').forEach((char, i) => {
+      Array.from(line[kind] || '').forEach((char, i) => {
         const span = document.createElement('span');
         span.className = 'phonetic-char';
         span.textContent = char === ' ' ? '\u00A0' : char;

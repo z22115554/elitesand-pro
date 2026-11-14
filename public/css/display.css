@@ -515,10 +515,12 @@ body.style-ballad .lyrics-active-line.krc-mode .phonetic-line .phonetic-char.act
 
 #obs-progress-fill {
   height: 100%;
-  width: 0%;
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
   background: var(--active-color, #ff6b9d);
   opacity: 0.5;
-  transition: width 0.1s linear;
+  transition: transform 0.1s linear;
 }
 
 /* ═══ 預設 ═══ */

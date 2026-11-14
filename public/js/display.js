@@ -382,12 +382,12 @@
     }
 
     if (totalMs <= 0) {
-      obsProgressFill.style.width = '0%';
+      obsProgressFill.style.transform = 'scaleX(0)';
       return;
     }
 
     const progress = Math.min(100, Math.max(0, (timeMs / totalMs) * 100));
-    obsProgressFill.style.width = progress + '%';
+    obsProgressFill.style.transform = `scaleX(${Math.max(0, Math.min(1, progress / 100))})`;
   }
 
   // ─── Socket 事件處理 ───
