@@ -332,6 +332,26 @@ function readMarker(targetRoot) {
   return JSON.parse(fs.readFileSync(path.join(targetRoot, runner.UPDATE_RESULT_MARKER_NAME), 'utf8'));
 }
 
+testAsync('ESP-006: cleanup failure after commit preserves every new payload and a successful marker', async () => {
+  const { root, targetRoot, plan } = buildRunnerFixture();
+  const remove = fs.rmdirSync;
+  let pending;
+  try {
+    fs.rmdirSync = (file, options) => {
+      if (file === plan.stagingRoot) throw Object.assign(new Error('cleanup failed'), { code: 'EIO' });
+      return remove(file, options);
+    };
+    pending = runner.applyStagedUpdate(plan, { skipRestart: true });
+  } finally { fs.rmdirSync = remove; }
+  try {
+    assert.equal((await pending).ok, true);
+    assert.equal(fs.readFileSync(path.join(targetRoot, 'Elitesand Pro.exe'), 'utf8'), 'new-exe');
+    assert.equal(fs.readFileSync(path.join(targetRoot, 'resources', 'app.asar'), 'utf8'), 'new-asar');
+    assert.equal(readMarker(targetRoot).ok, true);
+    assert.match(fs.readFileSync(plan.logFile, 'utf8'), /cleanup deferred/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 testAsync('applyStagedUpdate 成功時寫下 ok:true 的更新結果標記檔，不影響既有安裝行為', async () => {
   const { root, targetRoot, plan } = buildRunnerFixture();
   try {
