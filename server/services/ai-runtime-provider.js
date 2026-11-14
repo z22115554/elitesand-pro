@@ -51,7 +51,7 @@ const PYTHON_EMBED_SHA256 = '009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37
 
 const PIP_PACKAGES = ['audio-separator[gpu]', 'torch==2.6.0', 'torchaudio==2.6.0'];
 const PIP_EXTRA_INDEX_URL = 'https://download.pytorch.org/whl/cu124';
-const GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py';
+const { GET_PIP_URL, verifyGetPip } = require('./python-bootstrap-trust');
 // 練唱的高精度原唱音高（torchcrepe tiny，約 90MB，內附權重）。--no-deps：它要的 librosa／scipy／torch
 // 都已由 audio-separator 裝好；讓 pip 自己解相依可能把 torch 換掉，弄壞人聲分離的 CUDA 版本。
 const PRACTICE_PITCH_PACKAGE = 'torchcrepe==0.0.24';
@@ -530,7 +530,7 @@ async function downloadRuntime({
 
       progress('bootstrap-pip');
       const getPipPath = path.join(tmpPythonDir, 'get-pip.py');
-      const getPipBuf = await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 });
+      const getPipBuf = verifyGetPip(await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 }));
       fs.writeFileSync(getPipPath, getPipBuf);
       const tmpPythonExe = path.join(tmpPythonDir, 'python.exe');
       await runPythonStepImpl(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe, abortSignal });

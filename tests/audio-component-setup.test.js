@@ -1,4 +1,10 @@
 'use strict';
+
+require('node:test')('ESP-010: untrusted get-pip bytes never reach execution', () => {
+  const assert = require('node:assert/strict'), trust = require('../server/services/python-bootstrap-trust');
+  assert.throws(() => trust.verifyGetPip(Buffer.from('tampered')), /SHA-256/);
+  assert.throws(() => trust.verifyGetPip('text'), /SHA-256/);
+});
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

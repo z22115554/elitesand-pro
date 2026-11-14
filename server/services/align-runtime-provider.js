@@ -42,7 +42,7 @@ const PYTHON_EXE = path.join(PYTHON_DIR, 'python.exe');
 const MODEL_ROOT = path.join(RUNTIME_DIR, 'model');
 const MARKER_FILE = path.join(RUNTIME_DIR, '.installed.json');
 const REQUIREMENTS_FILE = path.join(RUNTIME_DIR, 'requirements.txt');
-const GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py';
+const { GET_PIP_URL, verifyGetPip } = require('./python-bootstrap-trust');
 const PYTHON_EMBED_VERSION = '3.11.9';
 const MAX_ZIP_BYTES = 50 * 1024 * 1024;
 // python 30MB＋套件解開約 120MB＋模型 105MB，加上下載暫存，留寬一點
@@ -213,7 +213,7 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
         safeRemove(tmpZip);
 
         progress('bootstrap-pip');
-        fs.writeFileSync(path.join(tmpPythonDir, 'get-pip.py'), await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 }));
+        fs.writeFileSync(path.join(tmpPythonDir, 'get-pip.py'), verifyGetPip(await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 })));
         const tmpPythonExe = path.join(tmpPythonDir, 'python.exe');
         await runPythonStep(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe, abortSignal });
 

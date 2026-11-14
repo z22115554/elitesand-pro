@@ -92,7 +92,7 @@ const PIP_CONSTRAINTS = [
 const PACKAGES_REVISION = 2;
 const PIP_EXTRA_INDEX_URL = 'https://download.pytorch.org/whl/cu124';
 const CONSTRAINTS_FILE = path.join(RUNTIME_DIR, 'constraints.txt');
-const GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py';
+const { GET_PIP_URL, verifyGetPip } = require('./python-bootstrap-trust');
 
 // Python embeddable + 完整 torch cu124 環境，比照 ai-runtime-provider.js 估計。
 const REQUIRED_DISK_BYTES = 6 * 1024 * 1024 * 1024;
@@ -521,7 +521,7 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
 
       progress('bootstrap-pip');
       const { fetchToBuffer } = require('./ai-runtime-provider');
-      const getPipBuf = await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 });
+      const getPipBuf = verifyGetPip(await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 }));
       fs.writeFileSync(path.join(tmpPythonDir, 'get-pip.py'), getPipBuf);
       const tmpPythonExe = path.join(tmpPythonDir, 'python.exe');
       await runPythonStep(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe });
