@@ -126,6 +126,7 @@ function emitProgress(job, stage, progress = 0, extra = {}) {
 }
 
 function startPython(job, { forceCpu }) {
+  if (job.cancelled || activeJob !== job) return;
   job.mode = forceCpu ? 'cpu' : 'python-gpu';
   const backend = forceCpu ? 'cpu' : 'cuda';
   if (!job.attempts.includes(backend)) job.attempts.push(backend);
@@ -141,10 +142,17 @@ function startPython(job, { forceCpu }) {
 }
 
 function startCpu(job) {
+  if (job.cancelled || activeJob !== job) return;
   emitProgress(job, 'fallback-cpu', 0);
   try {
     startPython(job, { forceCpu: true });
   } catch (error) {
+    if (error.code === 'BUSY' && (job.cpuBusyRetries || 0) < 10) {
+      job.cpuBusyRetries = (job.cpuBusyRetries || 0) + 1;
+      job.retryTimer = setTimeout(() => { job.retryTimer = null; startCpu(job); }, 500);
+      job.retryTimer.unref?.();
+      return;
+    }
     // CPU 備援跟 Python GPU 是同一個 supervisor：它起不來的話這裡也起不來。
     finalizeError(job, { code: error.code || 'ENGINE_UNAVAILABLE', message: error.message });
   }
@@ -183,6 +191,7 @@ async function waitForWebgpuEngine(timeoutMs) {
 }
 
 async function tryStartWebgpu(job) {
+  if (job.cancelled || activeJob !== job) return false;
   if (!webgpuRuntimeProvider.isAvailable()) return false;
   if (!webgpuJobs.isEngineAvailable()) {
     requestWebgpuEngineStart();

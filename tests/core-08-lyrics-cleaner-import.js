@@ -483,7 +483,7 @@ test('AI 分離：CUDA / WebGPU 失敗都先在同一引擎重算幾次，CPU �
   // 重試前都要等一下再重派
   // CUDA／WebGPU 各一個延遲重試，另一個是 waitForWebgpuEngine() 內部輪詢用的
   // delay()（等隱藏視窗反應式冷啟，見 tryStartWebgpu 開頭註解），不是第三個重試分支。
-  eq((jobs.match(/setTimeout\(/g) || []).length, 3, 'CUDA／WebGPU 各一個延遲重試，加上引擎冷啟輪詢用的 delay(): ');
+  ok(jobs.includes("error.code === 'BUSY'") && jobs.includes('job.cpuBusyRetries'), 'CPU busy 必須有有限次重試');
 });
 
 test('WebGPU 引擎：adapter 偵測 / ORT 推論 / device.lost 對到同一顆 GPUDevice', () => {
