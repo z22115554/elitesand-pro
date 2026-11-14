@@ -109,7 +109,7 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     emitSetlist(); // 未唱清單跟著清單變動更新
     broadcastState();
     persistState();
-    if (typeof ack === 'function') ack({ ok: true, playlist: preserved });
+    if (typeof ack === 'function') ack({ ok: true, playlist: getPublicPlaylist() });
   });
 
   socket.on('playlist:add', (tracks, ack) => {
@@ -129,7 +129,7 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     emitSetlist();
     broadcastState();
     persistState();
-    if (typeof ack === 'function') ack({ ok: true, added: added.length, tracks: added });
+    if (typeof ack === 'function') ack({ ok: true, added: added.length, tracks: added.length ? getPublicPlaylist().slice(-added.length) : [] });
     added.forEach((track) => {
       applyCommunityOffsetSuggestion(ctx, io, track)
         .catch((error) => log.warn(`歌詞偏移建議值套用失敗：${error.message}`));
@@ -259,7 +259,7 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
   });
 
   // 匯入播放清單
-  socket.on('playlist:import', (data, ack) => {
+  function importPlaylist(data, ack) {
     if (!data || !Array.isArray(data.playlist)) {
       log.warn('playlist:import 收到無效的資料格式');
       if (typeof ack === 'function') ack({ ok: false, error: '無效的播放清單格式' }); return;
@@ -306,7 +306,12 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     broadcastState();
     persistState();
     log.info(`播放清單匯入完成: ${playState.playlist.length} 首`);
-    if (typeof ack === 'function') ack({ ok: true, playlist: playState.playlist });
+    if (typeof ack === 'function') ack({ ok: true, playlist: getPublicPlaylist(), currentTrackIndex: -1 });
+  }
+  socket.on('playlist:import', importPlaylist);
+  socket.on('playlist:import-saved', (filename, ack) => {
+    try { importPlaylist(playlistExportStore.load(filename), ack); }
+    catch (error) { if (typeof ack === 'function') ack({ ok: false, error: error.message }); }
   });
 }
 

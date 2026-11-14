@@ -781,8 +781,13 @@
     dom.playlistImportList.querySelectorAll('[data-import-filename]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const filename = btn.getAttribute('data-import-filename');
-        SocketClient.sendWithCallback('playlist:export-load', filename, (data) => {
-          applyImportedPlaylist(data, () => { dom.playlistImportModal.hidden = true; });
+        SocketClient.sendWithCallback('playlist:import-saved', filename, (result) => {
+          if (!result?.ok) return AppShared.showToast(`匯入失敗：${result?.error || '伺服器沒有確認'}`, 'error');
+          state.playlist = result.playlist;
+          state.currentTrackIndex = -1;
+          renderPlaylist();
+          dom.playlistImportModal.hidden = true;
+          AppShared.showToast(`已匯入 ${state.playlist.length} 首歌曲`, 'success');
         });
       });
     });
