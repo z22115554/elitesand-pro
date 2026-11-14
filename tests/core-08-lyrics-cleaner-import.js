@@ -880,9 +880,9 @@ test('落地前去重：批次匯入沿用既有版本，單首匯入交回去�
   const processor = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'audio-processor.js'), 'utf8').replace(/\r\n/g, '\n');
   ok(processor.includes('libraryStore.findByIdentity(track.artist, track.title, track.id)'),
     '落地前必須用歌手+歌名查重，不能只信 videoId: ');
-  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,200}if \(options\.isBatch\) \{[\s\S]{0,300}mergedFromDuplicate: true/.test(processor),
+  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,1500}if \(options\.isBatch\) \{[\s\S]{0,300}mergedFromDuplicate: true/.test(processor),
     '批次匯入命中重複時要直接沿用既有版本，不建確認流程: ');
-  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,600}return \{\s*duplicate: true,/.test(processor),
+  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,1800}return \{\s*duplicate: true,/.test(processor),
     '單首匯入命中重複時要回傳需要確認的訊號，交給呼叫端問使用者: ');
   ok(processor.includes("libraryStore.remove(duplicate.id)"), '使用者選了取代才可以動到既有記錄: ');
   ok(processor.includes("throw new Error('無法安全保存舊歌曲資料，因此已取消取代；請稍後重試')"),

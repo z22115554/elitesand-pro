@@ -16,7 +16,7 @@ const { fetchWithTimeout } = require('../utils/helpers');
 const { LyricsEngine, DURATION_TOLERANCE } = require('./lyrics-engine');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Audio');
-const { isYouTubeUrl, isPlaylistUrl, extractVideoId } = require('../utils/youtube-url');
+const { isYouTubeUrl, isPlaylistUrl, extractVideoId, parseYouTubeUrl } = require('../utils/youtube-url');
 const { assessYouTubeImport } = require('../utils/youtube-import-risk');
 const ffmpegProvider = require('./ffmpeg-provider');
 const importTempRegistry = require('./import-temp-registry');
@@ -96,6 +96,21 @@ const YTDLP_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
 const YTDLP_COOKIE_BROWSERS = new Set(['edge', 'chrome', 'firefox', 'brave', 'chromium', 'opera', 'vivaldi']);
 const YTDLP_BASE_OPTS = { encoding: 'utf8', env: YTDLP_ENV, windowsHide: true };
 const activeImports = new Map();
+// Keep the most recent duplicate confirmation without leaving an unreferenced
+// file on disk or downloading it again when the user chooses Replace.
+const duplicateImports = new Map();
+const DUPLICATE_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+function cacheDuplicateImport(videoId, track, bytes) {
+  const previous = duplicateImports.get(videoId);
+  if (previous) clearTimeout(previous.timer);
+  while (duplicateImports.size >= 2) {
+    const key = duplicateImports.keys().next().value;
+    clearTimeout(duplicateImports.get(key).timer); duplicateImports.delete(key);
+  }
+  const timer = setTimeout(() => duplicateImports.delete(videoId), 5 * 60 * 1000);
+  timer.unref?.();
+  duplicateImports.set(videoId, { track, bytes, timer });
+}
 const prefetchedInfo = new Map();
 const requestControllers = new Map();
 // 所有會呼叫 yt-dlp 的工作共用這個佇列：不只實際下載，也包含 Twitch／面板
@@ -396,7 +411,7 @@ function cleanupOwnedTemporaryDownload(videoId, outputDir) {
     for (const name of fs.readdirSync(outputDir)) {
       // mp3 也要清：取消若發生在 ffmpeg 轉碼中，會留下寫到一半的 videoId.mp3。
       // 只清「videoId.副檔名」形式的檔案；成功匯入後已改名為「歌手 - 歌名.mp3」，不受影響。
-      if (!name.startsWith(`${videoId}.`) || !/\.(?:part|webm|m4a|opus|temp|mp3)$/i.test(name)) continue;
+      if (!name.startsWith(`${videoId}.`) || !/\.(?:part(?:-Frag\d+)?|webm|m4a|mp4|opus|temp|mp3|ytdl)$/i.test(name)) continue;
       try { fs.unlinkSync(path.join(outputDir, name)); } catch (_) { /* best effort */ }
     }
   } catch (_) { /* outputDir may not exist yet */ }
@@ -501,6 +516,25 @@ class AudioProcessor {
     options = { ...options, signal: controller?.signal || options.signal };
     const videoId = extractVideoId(url);
     const libraryStore = require('./library-store');
+    const prepared = options.forceReplace && duplicateImports.get(videoId);
+    if (prepared) {
+      try {
+        throwIfCancelled(options.signal);
+        const duplicate = libraryStore.findByIdentity(prepared.track.artist, prepared.track.title, prepared.track.id);
+        const ext = path.extname(prepared.track.filename) || '.mp3';
+        const base = path.basename(prepared.track.filename, ext);
+        let filename = prepared.track.filename;
+        if (fs.existsSync(path.join(downloadsDir, filename))) filename = `${base} ${crypto.randomBytes(6).toString('hex')}${ext}`;
+        fs.writeFileSync(path.join(downloadsDir, filename), prepared.bytes, { flag: 'wx' });
+        try {
+          if (duplicate && !libraryStore.remove(duplicate.id)) throw new Error('無法安全保存舊歌曲資料，因此已取消取代');
+          const track = { ...prepared.track, filename };
+          libraryStore.rememberImport(track);
+          duplicateImports.delete(videoId); clearTimeout(prepared.timer);
+          return track;
+        } catch (error) { try { fs.unlinkSync(path.join(downloadsDir, filename)); } catch (_) {} throw error; }
+      } finally { clearRequestController(requestId, controller); }
+    }
     const cached = videoId && libraryStore.getEntry(videoId);
     if (cached?.filename && libraryStore.audioExists(cached.filename)) {
       log.info(`本機快取命中: ${videoId}`);
@@ -684,6 +718,14 @@ class AudioProcessor {
     const libraryStore = require('./library-store');
     const duplicate = libraryStore.findByIdentity(track.artist, track.title, track.id);
     if (duplicate && !options.forceReplace) {
+      const referenced = libraryStore.getLibrary().some((entry) => libraryStore.collectMediaFilenames(entry).has(filename));
+      if (!referenced && fs.existsSync(path.join(downloaded.outputDir, filename))) {
+        const file = path.join(downloaded.outputDir, filename);
+        if (!options.isBatch && fs.statSync(file).size <= DUPLICATE_CACHE_MAX_BYTES) {
+          cacheDuplicateImport(extractVideoId(url), track, fs.readFileSync(file));
+        }
+        fs.unlinkSync(file);
+      }
       if (options.isBatch) {
         log.info(`批次匯入命中重複（歌手+歌名相符，videoId 不同）：沿用既有版本 "${duplicate.artist} - ${duplicate.title}"，不重複落地`);
         return { ...duplicate, id: duplicate.id, cacheHit: true, mergedFromDuplicate: true };
@@ -1218,8 +1260,11 @@ class AudioProcessor {
    * @returns {Promise<Array<{id,title,url,duration}>>}
    */
   static async getPlaylistEntries(url, limit = 300) {
+    const parsed = parseYouTubeUrl(url);
+    if (!parsed?.playlistId) throw new Error('Invalid YouTube playlist URL');
+    url = parsed.url;
     await ytdlpCaps.ensure();
-    const args = [...ytdlpCaps.commonArgs(), '--flat-playlist', '--dump-json', '--no-warnings', '--playlist-end', String(limit), url];
+    const args = [...ytdlpCaps.commonArgs(), '--flat-playlist', '--dump-json', '--no-warnings', '--playlist-end', String(limit), '--', url];
     let stdout = '';
     try {
       ({ stdout } = await execFileAsync(YTDLP_COMMAND, args, { ...YTDLP_BASE_OPTS, timeout: YTDLP_INFO_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER }));
@@ -1249,6 +1294,9 @@ class AudioProcessor {
   }
 
   static async getVideoInfo(url, signal = null, options = {}) {
+    const parsed = parseYouTubeUrl(url);
+    if (!parsed?.videoId) throw new Error('Invalid YouTube video URL');
+    url = parsed.url;
     await ytdlpCaps.ensure();
     const cookieBrowser = normalizeCookieBrowser(options.cookieBrowser);
     const infoTail = ['--dump-json', '--no-download', '--no-playlist'];
@@ -1278,7 +1326,7 @@ class AudioProcessor {
       try {
         const { stdout } = await execFileAsync(
           YTDLP_COMMAND,
-          [...ytdlpCaps.commonArgs(), ...ytdlpCaps.stripUnsupported(extraArgs), ...cookieArgs, ...extractorArgs, ...infoTail, url],
+          [...ytdlpCaps.commonArgs(), ...ytdlpCaps.stripUnsupported(extraArgs), ...cookieArgs, ...extractorArgs, ...infoTail, '--', url],
           { ...YTDLP_BASE_OPTS, timeout: YTDLP_INFO_TIMEOUT, maxBuffer: YTDLP_MAX_BUFFER, signal },
         );
         const data = JSON.parse(stdout);
@@ -1407,6 +1455,9 @@ class AudioProcessor {
   }
 
   static downloadWithMetadata(url, onProgress, fallbackInfo = null, signal = null, options = {}) {
+    const parsed = parseYouTubeUrl(url);
+    if (!parsed?.videoId) throw new Error('Invalid YouTube video URL');
+    url = parsed.url;
     throwIfCancelled(signal);
     const outputDir = downloadsDir;
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -1437,7 +1488,7 @@ class AudioProcessor {
         '--concurrent-fragments', String(strategy.concurrentFragments), '--no-playlist',
         '-o', outputTemplate, '--print', YTDLP_METADATA_PRINT, '--print', 'after_move:__ES_FILE__%(filepath)s',
         '--print', YTDLP_SOURCE_FORMAT_PRINT,
-        '--progress', '--newline', '--progress-template', 'download:__ES_PROGRESS__%(progress._percent_str)s', url];
+        '--progress', '--newline', '--progress-template', 'download:__ES_PROGRESS__%(progress._percent_str)s', '--', url];
       const started = Date.now();
       const child = spawn(YTDLP_COMMAND, args, { env: YTDLP_ENV, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
       let stderr = '', rawPath = '', sourceFormat = '', timedOut = false;
@@ -1525,6 +1576,15 @@ class AudioProcessor {
             throw new ImportCancelledError();
           }
           lastError = err;
+          const classified = require('../utils/import-error').classifyImportError(err);
+          // 只有換下載策略也救不回來的錯誤才提早結束。「影片不可用」與「逾時」不在此列：
+          // YouTube 遇到機器人驗證、PO token、單一 client 塞車時也會回這兩種訊息，
+          // 換下一個策略常常就成功，提早放棄會讓匯入成功率下降。
+          if (['DISK_FULL', 'REGION_RESTRICTED'].includes(classified.code)) {
+            cleanupTempImport();
+            rejectMetadata(err.message);
+            throw err;
+          }
           if (isYouTubeAuthRequiredError(err)) sawAuthRequired = true;
           if (isYouTubeMusicPremiumError(err)) return false;
           log.warn(`yt-dlp ${strategy.id} 失敗，${message}: ${err.message}`);

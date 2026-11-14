@@ -4,9 +4,12 @@ const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'music.youtube.
 
 function parseYouTubeUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
+  value = value.trim();
+  if (value.startsWith('-') || /[\u0000-\u0020\u007f\\]/.test(value)) return null;
   let url;
   try { url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`); } catch (_) { return null; }
   if (!YOUTUBE_HOSTS.has(url.hostname.toLowerCase())) return null;
+  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.port) return null;
   let videoId = '';
   if (url.hostname.toLowerCase() === 'youtu.be') videoId = url.pathname.split('/').filter(Boolean)[0] || '';
   else if (url.pathname === '/watch') videoId = url.searchParams.get('v') || '';
