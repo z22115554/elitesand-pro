@@ -207,23 +207,11 @@ function denied(rel) {
 
 /** 收集 ALLOW 範圍內、且沒被 DENY 擋掉的所有檔案（相對路徑，POSIX 分隔）。 */
 function collect() {
-  const out = [];
-  const walk = (relDir) => {
-    const abs = path.join(ROOT, relDir);
-    if (!fs.existsSync(abs)) return;
-    for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
-      const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
-      if (denied(rel)) continue;
-      if (entry.isDirectory()) walk(rel);
-      else if (entry.isFile()) out.push(rel);
-    }
-  };
-  for (const d of ALLOW_DIRS) walk(d);
-  for (const f of ALLOW_FILES) {
-    if (denied(f)) continue;
-    if (fs.existsSync(path.join(ROOT, f))) out.push(f);
-  }
-  return out.sort();
+  return git(ROOT, ['ls-files', '-z']).split('\0').filter((rel) => {
+    if (!rel || denied(rel)) return false;
+    if (!ALLOW_FILES.includes(rel) && !ALLOW_DIRS.some((dir) => rel.startsWith(`${dir}/`))) return false;
+    try { return fs.lstatSync(path.join(ROOT, rel)).isFile(); } catch (_) { return false; }
+  }).sort();
 }
 
 /** 目標倉裡目前被 git 追蹤的檔案（用來算出這次要刪掉哪些）。 */
@@ -238,6 +226,9 @@ function targetTracked(target) {
 
 function main() {
   const args = parseArgs(process.argv);
+  if (!args.sync && !args.dryRun && git(ROOT, ['status', '--porcelain']).trim()) {
+    throw new Error('Snapshot requires a clean working tree; commit the intended public files first.');
+  }
   const target = path.resolve(args.target);
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
