@@ -592,7 +592,7 @@
         const sign = currentPitchShift >= 0 ? '+' : '';
         dom.pitchValue.textContent = sign + currentPitchShift;
       }
-      SocketClient.send('pitch:change', currentPitchShift);
+      SocketClient.send('pitch:change', { value: currentPitchShift, trackId: currentTrackId, entryId: currentEntryId });
     });
   }
 
@@ -601,7 +601,7 @@
       currentPitchShift = 0;
       if (dom.pitchSlider) dom.pitchSlider.value = 0;
       if (dom.pitchValue) dom.pitchValue.textContent = '0';
-      SocketClient.send('pitch:change', 0);
+      SocketClient.send('pitch:change', { value: 0, trackId: currentTrackId, entryId: currentEntryId });
     });
   }
 
@@ -615,7 +615,7 @@
       if (dom.speedValue) {
         dom.speedValue.textContent = currentPlaybackRate.toFixed(2) + 'x';
       }
-      SocketClient.send('speed:change', currentPlaybackRate);
+      SocketClient.send('speed:change', { value: currentPlaybackRate, trackId: currentTrackId, entryId: currentEntryId });
     });
   }
 
@@ -624,7 +624,7 @@
       currentPlaybackRate = 1.0;
       if (dom.speedSlider) dom.speedSlider.value = 1;
       if (dom.speedValue) dom.speedValue.textContent = '1.00x';
-      SocketClient.send('speed:change', 1.0);
+      SocketClient.send('speed:change', { value: 1.0, trackId: currentTrackId, entryId: currentEntryId });
     });
   }
 

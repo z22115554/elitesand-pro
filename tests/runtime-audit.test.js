@@ -1,5 +1,6 @@
 'use strict';
 require('./audit-storage.test');
+require('./track-scoped-controls.test');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

@@ -1695,13 +1695,30 @@
   // Phase 7: 變調控制
   // ═══════════════════════════════════════════
 
-  if (dom.pitchSlider) {
-    const debouncedPitch = typeof ErrorHandler !== 'undefined'
-      ? ErrorHandler.debounce((value) => {
-          SocketClient.send('pitch:change', value);
-        }, 50)
-      : null;
+  function createTrackScopedTransform(event) {
+    let revision = 0;
+    const dispatch = (command) => {
+      const track = state.playlist[state.currentTrackIndex];
+      if (command.revision !== revision || command.loadToken !== stLoadToken
+        || command.trackId !== (track?.id || null)
+        || command.entryId !== (track?.entryId || null)) return;
+      SocketClient.send(event, {
+        value: command.value, trackId: command.trackId, entryId: command.entryId,
+      });
+    };
+    const delayed = typeof ErrorHandler !== 'undefined'
+      ? ErrorHandler.debounce(dispatch, 50) : dispatch;
+    return (value, immediate = false) => {
+      const track = state.playlist[state.currentTrackIndex];
+      const command = { value, trackId: track?.id || null, entryId: track?.entryId || null,
+        loadToken: stLoadToken, revision: ++revision };
+      (immediate ? dispatch : delayed)(command);
+    };
+  }
+  const sendPitchChange = createTrackScopedTransform('pitch:change');
+  const sendSpeedChange = createTrackScopedTransform('speed:change');
 
+  if (dom.pitchSlider) {
     dom.pitchSlider.addEventListener('input', () => {
       currentPitchShift = parseInt(dom.pitchSlider.value, 10);
       if (dom.pitchValue) {
@@ -1709,11 +1726,7 @@
         dom.pitchValue.textContent = sign + currentPitchShift;
       }
       applyPitchAndSpeed();
-      if (debouncedPitch) {
-        debouncedPitch(currentPitchShift);
-      } else {
-        SocketClient.send('pitch:change', currentPitchShift);
-      }
+      sendPitchChange(currentPitchShift);
     });
   }
 
@@ -1723,7 +1736,7 @@
       if (dom.pitchSlider) dom.pitchSlider.value = 0;
       if (dom.pitchValue) dom.pitchValue.textContent = '0';
       applyPitchAndSpeed();
-      SocketClient.send('pitch:change', 0);
+      sendPitchChange(0, true);
       AppShared.showToast('變調已重置', 'info');
     });
   }
@@ -1733,23 +1746,13 @@
   // ═══════════════════════════════════════════
 
   if (dom.speedSlider) {
-    const debouncedSpeed = typeof ErrorHandler !== 'undefined'
-      ? ErrorHandler.debounce((value) => {
-          SocketClient.send('speed:change', value);
-        }, 50)
-      : null;
-
     dom.speedSlider.addEventListener('input', () => {
       currentPlaybackRate = parseFloat(dom.speedSlider.value);
       if (dom.speedValue) {
         dom.speedValue.textContent = currentPlaybackRate.toFixed(2) + 'x';
       }
       applyPitchAndSpeed();
-      if (debouncedSpeed) {
-        debouncedSpeed(currentPlaybackRate);
-      } else {
-        SocketClient.send('speed:change', currentPlaybackRate);
-      }
+      sendSpeedChange(currentPlaybackRate);
     });
   }
 
@@ -1759,7 +1762,7 @@
       if (dom.speedSlider) dom.speedSlider.value = 1;
       if (dom.speedValue) dom.speedValue.textContent = '1.00x';
       applyPitchAndSpeed();
-      SocketClient.send('speed:change', 1.0);
+      sendSpeedChange(1.0, true);
       AppShared.showToast('變速已重置', 'info');
     });
   }

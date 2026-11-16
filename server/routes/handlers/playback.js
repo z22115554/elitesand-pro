@@ -356,7 +356,19 @@ function registerPlaybackHandlers(io, socket, ctx) {
 
   // ─── 變調與變速 ───
 
-  socket.on('pitch:change', (semitones) => {
+  function transformValue(command) {
+    // Older cached controllers send a number. New clients bind the command to
+    // both the song and its playlist occurrence, so a late packet cannot edit
+    // whichever song happened to become current in the meantime.
+    if (typeof command === 'number') return command;
+    if (!command || Array.isArray(command) || typeof command !== 'object'
+      || command.trackId !== (playState.currentTrack?.id || null)
+      || command.entryId !== (playState.currentTrack?.entryId || null)) return null;
+    return command.value;
+  }
+
+  socket.on('pitch:change', (command) => {
+    const semitones = transformValue(command);
     // 驗證 semitones 為數字且在 -12 到 12 之間
     if (typeof semitones !== 'number' || !isFinite(semitones)) {
       log.warn(`pitch:change 收到無效的 semitones: ${semitones}`);
@@ -429,7 +441,8 @@ function registerPlaybackHandlers(io, socket, ctx) {
     reply({ ok: true, trackId, template: lyricTemplate });
   });
 
-  socket.on('speed:change', (rate) => {
+  socket.on('speed:change', (command) => {
+    const rate = transformValue(command);
     // 驗證 rate 為數字且在 0.5 到 1.5 之間
     if (typeof rate !== 'number' || !isFinite(rate)) {
       log.warn(`speed:change 收到無效的 rate: ${rate}`);
