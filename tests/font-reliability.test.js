@@ -77,6 +77,23 @@ function storage() { const values = new Map(); return { getItem: key => values.g
 const data = { success: true, fonts: ['Font A'], aliases: { 'Font A': ['English alias'] }, assets: { 'Font A': { id: 'abcdefghijklmnop' } } };
 const response = value => ({ ok: true, json: async () => value });
 
+test('nonblocking display font CSS activates from an external CSP-compatible listener', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../public/display.html'), 'utf8');
+  const link = html.match(/<link[^>]+id="display-google-fonts"[^>]*>/)?.[0];
+  assert.ok(link && link.includes('media="print"'));
+  assert.equal(/\son[a-z]+\s*=/i.test(link), false);
+  assert.match(html, /<script src="\/js\/display-fonts\.js" defer><\/script>/);
+  for (const cached of [false, true]) {
+    const events = new Map();
+    const stylesheet = { media: 'print', sheet: cached ? {} : null, addEventListener: (name, fn) => events.set(name, fn) };
+    vm.runInNewContext(read('display-fonts.js'), { document: { getElementById: () => stylesheet } });
+    assert.equal(stylesheet.media, cached ? 'all' : 'print');
+    events.get('load')();
+    assert.equal(stylesheet.media, 'all');
+  }
+  vm.runInNewContext(read('display-fonts.js'), { document: { getElementById: () => null } });
+});
+
 test('catalogue deduplicates requests, survives reload with aliases and IDs, and opens before refresh', async () => {
   const saved = storage(); const job = defer(); let calls = 0;
   const api = picker(saved, () => { calls++; return job.promise; });
