@@ -10,8 +10,8 @@
  *    SHA-256 文字檔可先抓。做法比照 npm lockfile 的邏輯：自己下載一次驗過 MD5 相符，
  *    算出 SHA-256 釘死在 PYTHON_EMBED_SHA256，之後每次下載驗證這個值，不再信任
  *    python.org 當下回應了什麼——這樣可以繼續沿用跟 FFmpeg 一樣的 SHA-256 驗證程式碼。
- * 2. PyTorch CUDA + audio-separator——透過 pip 從官方 PyPI / download.pytorch.org 安裝，
- *    雜湊驗證交給 pip 自己（pip 對每個 wheel 都有內建的 hash 比對，這裡不重造輪子）。
+ * 2. PyTorch CUDA + audio-separator——使用受保護的完整版本／雜湊 lock，pip
+ *    --require-hashes 驗證每個傳遞相依；不允許 build isolation 私下下載未鎖套件。
  *
  * Hermetic：全部裝在 dataDir/ai-runtime/，不動 machine-wide PATH／PYTHONPATH，
  * 不偵測或重用使用者既有的 Python/Conda/ComfyUI（AI-SEPARATION-PLAN.md §5-1）。
@@ -32,6 +32,7 @@ const { safeRemove } = require('../utils/safe-remove');
 const { inspectDiskSpace } = require('./disk-space');
 const { withFfmpegOnPath } = require('./ffmpeg-provider');
 const { MODEL: PRIMARY_MODEL, ensureSupportFiles, downloadPrimaryModelFile } = require('./primary-model-download');
+const packageTrust = require('./python-package-trust');
 
 const log = createLogger('AIRuntimeProvider');
 
@@ -49,8 +50,7 @@ const PYTHON_EMBED_URL = `https://www.python.org/ftp/python/${PYTHON_EMBED_VERSI
 // 2026-08-17 自己下載驗過：MD5 6d9aa08531d48fcc261ba667e2df17c4，跟 python.org 官網公布值相符。
 const PYTHON_EMBED_SHA256 = '009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b';
 
-const PIP_PACKAGES = ['audio-separator[gpu]', 'torch==2.6.0', 'torchaudio==2.6.0'];
-const PIP_EXTRA_INDEX_URL = 'https://download.pytorch.org/whl/cu124';
+// Complete versions and transitive artifact hashes live in python-locks/.
 const { GET_PIP_URL, verifyGetPip } = require('./python-bootstrap-trust');
 // 練唱的高精度原唱音高（torchcrepe tiny，約 90MB，內附權重）。--no-deps：它要的 librosa／scipy／torch
 // 都已由 audio-separator 裝好；讓 pip 自己解相依可能把 torch 換掉，弄壞人聲分離的 CUDA 版本。
@@ -533,11 +533,12 @@ async function downloadRuntime({
       const getPipBuf = verifyGetPip(await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 }));
       fs.writeFileSync(getPipPath, getPipBuf);
       const tmpPythonExe = path.join(tmpPythonDir, 'python.exe');
-      await runPythonStepImpl(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe, abortSignal });
+      await packageTrust.bootstrapPackages(tmpPythonDir, fetchToBuffer,
+        args => runPythonStepImpl(args, { cwd: tmpPythonDir, pythonExe: tmpPythonExe, abortSignal }), { abortSignal });
 
       progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
       await runPythonStepImpl(
-        ['-m', 'pip', 'install', '--progress-bar', 'on', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL, ...PIP_PACKAGES],
+        packageTrust.installArgs('ai', tmpPythonDir),
         {
           cwd: tmpPythonDir,
           pythonExe: tmpPythonExe,
@@ -555,7 +556,7 @@ async function downloadRuntime({
 
       try {
         await runPythonStepImpl(
-          ['-m', 'pip', 'install', '--no-deps', '--no-warn-script-location', '--disable-pip-version-check', PRACTICE_PITCH_PACKAGE],
+          packageTrust.installArgs('practice-pitch', tmpPythonDir, { noDeps: true }),
           { cwd: tmpPythonDir, pythonExe: tmpPythonExe, timeoutMs: 15 * 60 * 1000, abortSignal },
         );
       } catch (err) {
@@ -651,7 +652,7 @@ function installPracticePitchModel({ abortSignal, runPythonStepImpl = runPythonS
   if (isPracticePitchModelAvailable()) return Promise.resolve({ ok: true, alreadyAvailable: true });
   if (practiceInstallInFlight) return practiceInstallInFlight;
   practiceInstallInFlight = runPythonStepImpl(
-    ['-m', 'pip', 'install', '--no-deps', '--no-warn-script-location', '--disable-pip-version-check', PRACTICE_PITCH_PACKAGE],
+    packageTrust.installArgs('practice-pitch', RUNTIME_DIR, { noDeps: true }),
     { timeoutMs: 15 * 60 * 1000, abortSignal },
   ).then(() => {
     if (!isPracticePitchModelAvailable()) throw Object.assign(new Error('練唱音高元件安裝後仍找不到模型檔。'), { code: 'PRACTICE_MODEL_MISSING' });

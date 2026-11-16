@@ -1,4 +1,5 @@
 'use strict';
+require('./python-package-trust.test');
 
 require('node:test')('ESP-010: untrusted get-pip bytes never reach execution', () => {
   const assert = require('node:assert/strict'), trust = require('../server/services/python-bootstrap-trust');

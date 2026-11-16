@@ -33,6 +33,7 @@ const {
   PYTHON_EMBED_SHA256,
 } = require('./ai-runtime-provider');
 const { resolveAiScriptDir } = require('./ai-separation');
+const packageTrust = require('./python-package-trust');
 
 const log = createLogger('AlignRuntimeProvider');
 
@@ -215,7 +216,8 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
         progress('bootstrap-pip');
         fs.writeFileSync(path.join(tmpPythonDir, 'get-pip.py'), verifyGetPip(await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 })));
         const tmpPythonExe = path.join(tmpPythonDir, 'python.exe');
-        await runPythonStep(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe, abortSignal });
+        await packageTrust.bootstrapPackages(tmpPythonDir, fetchToBuffer,
+          args => runPythonStep(args, { cwd: tmpPythonDir, pythonExe: tmpPythonExe, abortSignal }), { abortSignal });
 
         progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
         fs.writeFileSync(REQUIREMENTS_FILE, `${PIP_REQUIREMENTS.join('\n')}\n`, 'utf8');

@@ -1,0 +1,4 @@
+audio-separator[gpu]==0.30.2
+torch==2.6.0+cu124
+torchaudio==2.6.0+cu124
+numpy==1.26.4

@@ -138,6 +138,10 @@ WebGPU engine:
 
 CUDA / CPU engine (via python-audio-separator):
   python-audio-separator — MIT.
+  Runtime package versions and artifact hashes are recorded in the packaged
+  server/services/python-locks directory. AI, section-analysis and bootstrap
+  installers use app-pinned package trust data, including transitive
+  dependencies; existing legacy environments are not retroactively verified.
   Source: https://github.com/nomadkaraoke/python-audio-separator
   Model "vocals_mel_band_roformer.ckpt" — Mel-Band RoFormer vocal weights by
   Kimberley Jensen, MIT.
