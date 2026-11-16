@@ -139,6 +139,49 @@ if (process.env.ELITESAND_SECURITY_FIXTURE_CHILD === '1') {
     await assertAlive();
   });
 
+  test('build glob preprocessing cannot exhaust a bounded child (GHSA-g3hv-75wg-m249)', () => {
+    const { spawnSync } = require('node:child_process');
+    const probe = `
+      const { Minimatch } = require('minimatch');
+      const matcher = new Minimatch('x/**/../'.repeat(20) + 'target', { optimizationLevel: 2 });
+      if (matcher.match('not-selected')) process.exit(2);
+      process.stdout.write('completed');
+    `;
+    const result = spawnSync(process.execPath, ['--max-old-space-size=128', '-e', probe], {
+      cwd: require('node:path').join(__dirname, '..'),
+      timeout: 5000, encoding: 'utf8', maxBuffer: 256 * 1024, windowsHide: true,
+    });
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 0, `Glob probe exited with ${result.signal}: ${result.stderr}`);
+    assert.equal(result.stdout, 'completed');
+  });
+
+  test('patched build globs preserve application inclusion and exclusions', () => {
+    const path = require('node:path');
+    const { createRequire } = require('node:module');
+    const { getMainFileMatchers } = require('app-builder-lib/out/fileMatcher');
+    const config = require('../package.json').build;
+    const root = path.resolve('包裝驗證');
+    const [matcher] = getMainFileMatchers(root, path.join(root, 'dist', 'app'), value => value, {}, {
+      info: { projectDir: root, config, buildResourcesDir: 'build', debugLogger: { isEnabled: false } },
+    }, path.join(root, 'dist'), false);
+    const filter = matcher.createFilter();
+    for (const [relative, directory, expected] of [
+      ['server/index.js', false, true], ['electron/main.js', false, true],
+      ['public/歌詞.png', false, true], ['assets/icon.png', false, true],
+      ['ai/private.py', false, false], ['dist/old-app/index.js', false, false],
+      ['.git', true, false], ['.DS_Store', false, false], ['src/._metadata', false, false],
+    ]) {
+      assert.equal(filter(path.join(root, relative), { isDirectory: () => directory }), expected, relative);
+    }
+    // The other affected consumer uses the named function and matchBase option.
+    const universalRequire = createRequire(require.resolve('@electron/universal'));
+    const { minimatch } = universalRequire('minimatch');
+    assert.equal(minimatch('Contents/MacOS/app', 'app', { matchBase: true }), true);
+    assert.equal(minimatch('Contents/Info.plist', '*.{plist,json}', { matchBase: true }), true);
+    assert.equal(minimatch('Contents/Info.plist', '*.node', { matchBase: true }), false);
+  });
+
   test('valid uploads still succeed after rejected uploads', async () => {
     const form = new FormData(); form.append('files', new Blob(['audio']), 'accepted.wav');
     const response = await fetch(`${base}/upload`, { method: 'POST', body: form, signal: AbortSignal.timeout(3000) });
@@ -146,3 +189,4 @@ if (process.env.ELITESAND_SECURITY_FIXTURE_CHILD === '1') {
     await assertAlive();
   });
 }
+
