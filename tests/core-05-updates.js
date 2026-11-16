@@ -1122,8 +1122,8 @@ test('showOnce、dismissed 與 critical 安全 action 只影響呈現/更新開�
   });
   const snapshot = announcementService.getSnapshot({ now: Date.parse('2026-07-14T00:00:00+08:00'), currentVersion: '0.7.3' });
   eq(snapshot.announcements[0].shouldPresent, false);
-  eq(snapshot.announcements[0].dismissible, false);
-  ok(snapshot.actions.disableIncrementalUpdate && snapshot.actions.showFullDownloadOnly);
+  eq(snapshot.announcements[0].dismissible, true);
+  eq(Object.keys(snapshot.actions).length, 0);
   ok(!('run' in snapshot.announcements[0].actions));
 });
 
@@ -1196,9 +1196,9 @@ test('正式公告會強制 0.9.9.5 與更舊版本改用完整 Installer', () =
   ok(legacy && electron && current);
   for (const notice of [legacy, electron, current]) {
     eq(notice.level, 'critical');
-    eq(notice.dismissible, false);
+    eq(notice.dismissible, true);
     eq(notice.showOnce, false);
-    ok(notice.actions.disableIncrementalUpdate && notice.actions.showFullDownloadOnly);
+    eq(Object.keys(notice.actions).length, 0);
     eq(notice.url, 'https://github.com/z22115554/elitesand-pro/releases/latest');
     ok(/Windows Installer/.test(notice.message));
     ok(!/portable/i.test(notice.message));

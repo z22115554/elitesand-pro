@@ -22,7 +22,7 @@ const ACTIONS = new Set(['disableIncrementalUpdate', 'showFullDownloadOnly']);
 // 哪些等級的「可不可以關閉」是被鎖死、不讓發布者自己決定的。目前只有 notice——它存在的
 // 理由就是「一定關得掉的強制彈窗」，不像 critical 可以鎖死不給關。之後要再加一個「一定
 // 可關閉」或「一定不可關閉」的等級，只需要在這裡多一筆，不用再改 sanitizeAnnouncement 本身。
-const LEVEL_DISMISSIBLE_LOCK = Object.freeze({ notice: true });
+const LEVEL_DISMISSIBLE_LOCK = Object.freeze({ notice: true, important: true, critical: true, update: true });
 // Development experiments can be intentionally isolated from production
 // update notices. This is opt-in only; normal and packaged launches retain
 // the official announcement service unchanged.
@@ -118,12 +118,8 @@ function sanitizeAnnouncement(input) {
   if (publishedAt && expiresAt && Date.parse(expiresAt) <= Date.parse(publishedAt)) return null;
 
   const actions = {};
-  if (input.actions && typeof input.actions === 'object' && !Array.isArray(input.actions)) {
-    for (const key of ACTIONS) {
-      if (input.actions[key] === true) actions[key] = true;
-      else if (input.actions[key] === false) actions[key] = false;
-    }
-  }
+  // Unsigned announcements are informational. Mandatory actions belong to the
+  // separate signed-update policy, never this remotely editable document.
 
   return {
     id,
@@ -246,7 +242,7 @@ function getSnapshot({ now = Date.now(), currentVersion = APP_VERSION, remoteEna
   const dismissed = new Set(state.dismissed);
   const shownOnce = new Set(state.shownOnce);
   const read = new Set(state.read);
-  const recent = cache.announcements
+  const recent = cache.announcements.map(sanitizeAnnouncement).filter(Boolean)
     .filter((announcement) => isCurrentlyActive(announcement, now, currentVersion))
     .sort((a, b) => Date.parse(b.publishedAt || 0) - Date.parse(a.publishedAt || 0))
     .map((announcement) => ({
