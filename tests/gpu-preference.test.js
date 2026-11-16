@@ -13,6 +13,18 @@ const RTX = { name: 'NVIDIA GeForce RTX 3060', vendorId: 4318, deviceId: 9476, s
 const IGPU = { name: 'Intel(R) UHD Graphics 770', vendorId: 32902, deviceId: 18048, subSysId: 2, dedicatedMemoryMb: 128, luid: '0:14fab' };
 const RTX_B = { ...RTX, luid: '0:2a000' };
 
+test('ESP-037: missing optional seed may degrade; changed bytes still block startup', () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'elitesand-optional-tool-'));
+  const verify=require('../electron/shell').verifyPackagedResourceIntegrity;
+  const manifest={files:{'tools/yt-dlp.exe':'a'.repeat(64)}};
+  try {
+    assert.throws(()=>verify(root,manifest),/Required packaged resource is missing/);
+    assert.deepEqual(verify(root,manifest,fs,{allowMissingOptionalTools:true}).missingOptionalTools,['tools/yt-dlp.exe']);
+    fs.mkdirSync(path.join(root,'tools'));fs.writeFileSync(path.join(root,'tools/yt-dlp.exe'),'tampered');
+    assert.throws(()=>verify(root,manifest,fs,{allowMissingOptionalTools:true}),/integrity check failed/);
+  }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('settings default to automatic and survive bad files', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-gpu-'));
   assert.deepEqual(gpu.load(dir), { mode: 'auto' });

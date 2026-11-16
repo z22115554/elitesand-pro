@@ -16,7 +16,7 @@ function loadSpoutAddon(projectRoot, addonPath = '', { isPackaged = false, resou
   // packaged build stages the compiled addon as an extraResource instead
   // (resources/tools/spout), same as yt-dlp.exe.
   let resolved;
-  if (addonPath) {
+  if (addonPath && !isPackaged) {
     resolved = path.resolve(addonPath);
   } else if (isPackaged) {
     resolved = path.join(resourcesPath, 'tools', 'spout', 'elitesand_spout_output.node');
@@ -77,6 +77,11 @@ function createSpoutDisplayOutput({
   let stopPromise = null;
   let pendingTextures = [];
   let releaseTimer = null;
+  let lastNativeSent = null;
+  let lastNativeProgressAt = 0;
+  // 上次有進展時的累計掉幀數。只看「之後新增的掉幀」，開播初期或過去偶發的掉幀
+  // 不能讓一段單純沒新畫面送達的時間被誤判成卡住、把直播中的輸出關掉。
+  let droppedAtProgress = 0;
 
   function status() {
     return Object.freeze({
@@ -150,6 +155,17 @@ function createSpoutDisplayOutput({
       const result = addon.send(textureInfo);
       if (result?.accepted !== true) throw createError('SPOUT_FRAME_REJECTED', 'Spout rejected an Electron shared texture frame.');
       sent += 1;
+      const nativeStatus = addon.getStatus?.();
+      if (Number.isFinite(nativeStatus?.framesSent)) {
+        const dropped = Number(nativeStatus.framesDropped) || 0;
+        if (lastNativeSent === null || nativeStatus.framesSent !== lastNativeSent) {
+          lastNativeSent = nativeStatus.framesSent;
+          lastNativeProgressAt = Date.now();
+          droppedAtProgress = dropped;
+        } else if (dropped > droppedAtProgress && Date.now() - lastNativeProgressAt > 5000) {
+          throw createError('SPOUT_OUTPUT_STALLED', 'Spout stopped delivering frames. Restart the output and check the selected GPU.');
+        }
+      }
       if (result.deferredRelease === true && Number.isSafeInteger(result.sourceSequence)) {
         pendingTextures.push({ texture, sequence: result.sourceSequence });
         schedulePendingRelease();
@@ -172,6 +188,9 @@ function createSpoutDisplayOutput({
     if (stopPromise) await stopPromise;
     state = 'starting';
     lastError = null;
+    lastNativeSent = null;
+    lastNativeProgressAt = 0;
+    droppedAtProgress = 0;
     startPromise = (async () => {
       try {
         const nextWindow = new BrowserWindow({
@@ -198,6 +217,15 @@ function createSpoutDisplayOutput({
         nextWindow.setContentSize?.(options.width, options.height);
         nextWindow.webContents.setFrameRate?.(options.fps);
         nextWindow.webContents.on('paint', handlePaint);
+        nextWindow.webContents.on('render-process-gone', (_event, details) => {
+          if (window !== nextWindow || stopping) return;
+          setFailure(createError('SPOUT_RENDERER_GONE', `Spout display renderer exited: ${details?.reason || 'unknown'}`));
+          window = null;
+          try { addon.stop(); } catch (_) { /* preserve renderer failure */ }
+          releasePendingTextures(true);
+          senderStarted = false;
+          if (!nextWindow.isDestroyed?.()) nextWindow.destroy?.();
+        });
         nextWindow.on?.('closed', () => {
           if (window === nextWindow) window = null;
           if (!stopping && senderStarted) {

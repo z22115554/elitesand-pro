@@ -617,10 +617,13 @@ bool submitSourceCopy(FrameTask task, size_t slotIndex) {
     releaseSourceSlotLocked(slot, true);
     return false;
   }
-  slot.sequence = task.sequence;
-  slot.probePoints = std::move(task.probePoints);
-  slot.sourceSubmittedAt = std::chrono::steady_clock::now();
-  slot.state = BridgeSlotState::awaitingSourceCopy;
+  {
+    std::lock_guard<std::mutex> lock(g_sender.mutex);
+    slot.sequence = task.sequence;
+    slot.probePoints = std::move(task.probePoints);
+    slot.sourceSubmittedAt = std::chrono::steady_clock::now();
+    slot.state = BridgeSlotState::awaitingSourceCopy;
+  }
   return true;
 }
 
@@ -658,6 +661,7 @@ void pumpBridgeSlots() {
         g_sender.framesDropped++;
         resetBridgeSlotLocked(slot);
       } else {
+        std::lock_guard<std::mutex> lock(g_sender.mutex);
         slot.sendSubmittedAt = std::chrono::steady_clock::now();
         slot.state = BridgeSlotState::awaitingSpoutSend;
       }

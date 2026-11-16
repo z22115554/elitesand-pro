@@ -345,7 +345,7 @@ function settleSessionMarkerSync(markerFile, {
   return 'server';
 }
 
-function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
+function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs, { allowMissingOptionalTools = false } = {}) {
   const files = manifest?.files;
   if (!files || typeof files !== 'object' || Array.isArray(files) || Object.keys(files).length === 0) {
     throw new Error('Packaged resource integrity manifest is missing or invalid.');
@@ -353,6 +353,7 @@ function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
 
   const root = path.resolve(resourcesPath);
   const rootPrefix = `${root}${path.sep}`;
+  const missingOptionalTools = [];
   for (const [relativePath, expectedHash] of Object.entries(files)) {
     if (typeof relativePath !== 'string' || !relativePath.startsWith('tools/') ||
       relativePath.includes('..') || !/^[a-f0-9]{64}$/i.test(String(expectedHash || ''))) {
@@ -363,13 +364,18 @@ function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
     let actualHash;
     try {
       actualHash = crypto.createHash('sha256').update(fsImpl.readFileSync(target)).digest('hex');
-    } catch (_) {
+    } catch (error) {
+      if (allowMissingOptionalTools && relativePath === 'tools/yt-dlp.exe' && error?.code === 'ENOENT') {
+        missingOptionalTools.push(relativePath);
+        continue;
+      }
       throw new Error(`Required packaged resource is missing: ${relativePath}`);
     }
     if (actualHash !== String(expectedHash).toLowerCase()) {
       throw new Error(`Packaged resource integrity check failed: ${relativePath}`);
     }
   }
+  return { missingOptionalTools };
 }
 
 /**
@@ -1793,12 +1799,17 @@ function createElectronShell({
             });
           }
         }
-        verifyPackagedResourceIntegrity(
+        const resourceHealth = verifyPackagedResourceIntegrity(
           processObject.resourcesPath || process.resourcesPath,
           packagedResourceIntegrity,
           fsImpl,
+          { allowMissingOptionalTools: true },
         );
-        packagedYtdlpRuntime = prepareMutableYtdlp(
+        packagedYtdlpRuntime = resourceHealth.missingOptionalTools.length ? {
+          command: path.join(processObject.resourcesPath || process.resourcesPath, 'tools', 'yt-dlp.exe'),
+          mutable: false, reason: 'Bundled YouTube tool is missing; repair using the official installer.',
+          statePath: '', seed: '', seedHash: '',
+        } : prepareMutableYtdlp(
           processObject.resourcesPath || process.resourcesPath,
           app.getPath('userData'),
           {
@@ -1808,6 +1819,11 @@ function createElectronShell({
         );
         if (!packagedYtdlpRuntime.mutable) {
           console.warn('[Elitesand Pro Electron] Writable yt-dlp runtime unavailable; self-update disabled:', packagedYtdlpRuntime.reason || 'unknown');
+        }
+        if (resourceHealth.missingOptionalTools.length && !headless) {
+          dialog.showMessageBoxSync({ type: 'warning', title: 'YouTube 匯入元件遺失',
+            message: 'Elitesand Pro 將繼續啟動，YouTube 匯入暫時無法使用。',
+            detail: '請檢查防毒隔離紀錄，並使用官方安裝程式修復下載元件。', buttons: ['繼續開啟'], noLink: true });
         }
       }
       // Snapshot before the server creates its state files. Checking after the
