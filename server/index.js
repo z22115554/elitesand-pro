@@ -177,7 +177,7 @@ app.use((req, res, next) => {
     && (req.method !== 'GET' || SIDE_EFFECT_GET_PREFIXES.some((prefix) => requestPath.startsWith(prefix)));
   if (!protectedRequest) return next();
   const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
-  if (fetchSite === 'cross-site') return res.status(403).json({ error: '已拒絕跨網站操作', code: 'CROSS_SITE_REQUEST' });
+  if (fetchSite === 'cross-site' || fetchSite === 'same-site') return res.status(403).json({ error: '已拒絕跨網站操作', code: 'CROSS_SITE_REQUEST' });
   const origin = req.headers.origin;
   if (origin) {
     try {
@@ -323,8 +323,13 @@ app.use((req, res, next) => {
     pathname = path.posix.normalize(decodeURIComponent(req.path).replace(/\\/g, '/'))
       .toLowerCase().replace(/\/+$/, '');
   } catch (_) { return next(); }
-  if (pathname !== '/practice-overlay' && pathname !== '/practice-overlay.html') return next();
-  return requireSourceAccess(req, res, () => sendNoCache(res, 'practice-overlay.html'));
+  const sourcePage = new Map([
+    ['/practice-overlay', 'practice-overlay.html'], ['/practice-overlay.html', 'practice-overlay.html'],
+    ['/display', 'display.html'], ['/display.html', 'display.html'],
+    ['/setlist', 'setlist.html'], ['/setlist.html', 'setlist.html'],
+  ]).get(pathname);
+  if (!sourcePage) return next();
+  return requireSourceAccess(req, res, () => sendNoCache(res, sourcePage));
 });
 app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
 
@@ -341,6 +346,8 @@ const practiceGuideService = createPracticeGuideService({ getLyrics: (trackId) =
 app.use('/api/practice', createPracticeRouter({ service: practiceGuideService }));
 
 const apiRoutes = require('./routes/api');
+app.use(['/audio', '/background', '/typewriter-sticker', '/alert-show/custom', '/api/cover'],
+  require('./middleware/require-media-access').requireMediaAccess);
 app.use('/api', apiRoutes);
 
 // ─── Page Routes ───

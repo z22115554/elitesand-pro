@@ -568,7 +568,7 @@ router.post('/lyrics/paste', requirePin, (req, res) => {
 });
 
 // ─── 封面圖片服務 ───
-router.get('/cover/:filename', (req, res) => {
+router.get('/cover/:filename', require('../middleware/require-media-access').requireMediaAccess, (req, res) => {
   // 安全修正：防止路徑穿越（例如 ..%2F..%2F 讀取 downloads 以外的檔案），同 /audio/:filename 的作法
   const safeName = path.basename(req.params.filename);
   const resolvedDownloadsDir = path.resolve(downloadsDir);

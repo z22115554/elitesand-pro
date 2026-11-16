@@ -1,5 +1,6 @@
 ﻿const fs = require('fs');
 const path = require('path');
+const { redactDiagnosticText, redactValue } = require('./redaction');
 const { logsDir: LOG_DIR } = require('./app-paths');
 
 const LOG_LEVELS = {
@@ -46,19 +47,19 @@ function getTimestamp() {
 }
 
 function formatMessage(level, moduleName, message, extra) {
-  let line = `[${getTimestamp()}] [${level}] [${moduleName}] ${message}`;
+  let line = `[${getTimestamp()}] [${level}] [${moduleName}] ${redactDiagnosticText(message)}`;
 
   if (extra !== undefined && extra !== null) {
     if (extra instanceof Error) {
-      line += `\n  Stack: ${extra.stack || extra.message}`;
+      line += `\n  Stack: ${redactDiagnosticText(extra.stack || extra.message)}`;
     } else if (typeof extra === 'object') {
       try {
-        line += `\n  Data: ${JSON.stringify(extra)}`;
+        line += `\n  Data: ${JSON.stringify(redactValue(extra))}`;
       } catch (err) {
         line += '\n  Data: [unserializable]';
       }
     } else {
-      line += `\n  Extra: ${extra}`;
+      line += `\n  Extra: ${redactDiagnosticText(extra)}`;
     }
   }
 

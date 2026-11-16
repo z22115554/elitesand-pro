@@ -11,6 +11,30 @@ process.env.ELITESAND_DATA_DIR = path.join(root, 'data');
 process.env.ELITESAND_DOWNLOADS_DIR = path.join(root, 'downloads');
 process.env.ELITESAND_LOGS_DIR = path.join(root, 'logs');
 const report = require('../server/services/feedback-report');
+const { redactDiagnosticText, redactValue } = require('../server/utils/redaction');
+test('W-20: redact credentials without destroying ordinary song metadata', () => {
+  const secret='AUDIT_CANARY_CREDENTIAL_294';
+  for(const text of [`sourceToken=${secret}`,`device_code="${secret}"`,`user_code='${secret}'`,`https://localhost/display?source=${secret}`,`https://user:${secret}@example.test/path`,`Cookie: session=${secret}`,`\\\\private-server\\private-share\\${secret}`,`/home/${secret}/data`]) assert.ok(!redactDiagnosticText(text).includes(secret));
+  assert.ok(!JSON.stringify(redactValue({device_code:secret,userCode:secret,nested:{source:secret,pair:secret,controller:secret}})).includes(secret));
+  const ordinary='Test Song https://youtu.be/dQw4w9WgXcQ?v=video&list=playlist ENOENT';assert.equal(redactDiagnosticText(ordinary),ordinary);
+});
+test('W-20: real logger redacts console output and on-disk text', () => {
+  const secret='AUDIT_CANARY_CREDENTIAL_294', logDir=path.join(root,'logger-canary');
+  const stdout=require('node:child_process').execFileSync(process.execPath,['-e',`const l=require('./server/utils/logger');l.createLogger('audit').warn('sourceToken=${secret}',{device_code:'${secret}'});l.shutdown().then(()=>{});`],{
+    cwd:path.join(__dirname,'..'),encoding:'utf8',env:{...process.env,ELITESAND_LOGS_DIR:logDir},
+  });
+  assert.ok(!stdout.includes(secret));
+  const files=fs.readdirSync(logDir).filter(f=>f.endsWith('.log'));assert.ok(files.length);
+  for(const file of files)assert.ok(!fs.readFileSync(path.join(logDir,file),'utf8').includes(secret));
+});
+test('W-20: diagnostic ZIP and feedback apply the same credential redaction', () => {
+  const secret='AUDIT_CANARY_CREDENTIAL_294',logDir=path.join(root,'zip-canary');fs.mkdirSync(logDir,{recursive:true});
+  fs.writeFileSync(path.join(logDir,'canary.log'),`[WARN] sourceToken=${secret}\n`);
+  const zip=new(require('adm-zip'))(require('../server/services/diagnostic-bundle').createDiagnosticBundle({logDir,systemCheck:{device_code:secret}}).buffer);
+  for(const entry of zip.getEntries())assert.ok(!entry.getData().toString().includes(secret));
+  const built=report.buildReport({schemaVersion:1,type:'other',title:'sourceToken='+secret,description:'device_code='+secret,steps:['open diagnostics'],actual:'test',expected:'',contact:'',includeDiagnostics:true,locale:'zh-TW'},{logDir});
+  assert.equal(built.ok,true);assert.ok(!built.report.issueBody.includes(secret));assert.ok(!built.report.issueTitle.includes(secret));
+});
 const telemetry = require('../server/services/telemetry-fields');
 
 const form = (extra) => ({ schemaVersion: 1, type: 'practice', title: '練唱判定不準', description: '副歌明明有唱，畫面卻一直沒有線',

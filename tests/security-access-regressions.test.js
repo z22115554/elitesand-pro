@@ -93,6 +93,33 @@ if (process.env.ELITESAND_ACCESS_FIXTURE === '1') {
     }
   });
 
+  test('S-09: same-site sibling pages cannot trigger protected GETs or writes', async () => {
+    for (const [method, route] of [['GET','/api/system-check?force=1'],['POST','/api/eula/accept']]) {
+      const result = await fetch(`${base}${route}`, { method, headers: { 'Sec-Fetch-Site': 'same-site' } });
+      assert.equal(result.status, 403); assert.equal((await result.json()).code, 'CROSS_SITE_REQUEST');
+    }
+  });
+  test('ESP-025: remote media cookies require a live credential and respect revocation', () => {
+    const mod = { exports: {} }; let revoked = false;
+    require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname,'../server/middleware/require-media-access.js'),'utf8'), {
+      module: mod, require: id => id.includes('device-access-store') ? {
+        verifySourceToken: token => !revoked && token === 'source', verifyControllerToken: token => !revoked && token === 'controller',
+      } : require('../server/utils/pin-setup-policy'),
+    });
+    const invoke = cookie => {
+      let status = 200, allowed = false;
+      mod.exports.requireMediaAccess({ socket: { remoteAddress:'192.168.1.20' },headers:{cookie},query:{} }, {set(){},status(code){status=code;return this;},json(){}},()=>{allowed=true;});
+      return {status,allowed};
+    };
+    assert.equal(invoke('').status,401);
+    assert.equal(invoke('elitesand-media-source=source').allowed,true);
+    assert.equal(invoke('elitesand-media-controller=controller').allowed,true);
+    let options;
+    mod.exports.rememberMediaCredential({headers:{},secure:false},{cookie(_name,_value,value){options=value;}},mod.exports.SOURCE_COOKIE,'source');
+    assert.equal(options.httpOnly,true);assert.equal(options.sameSite,'strict');
+    revoked=true;assert.equal(invoke('elitesand-media-source=source').status,401);
+  });
+
   test('HEAD and mixed-case expensive GET routes retain cross-site protection', async () => {
     for (const [method, route] of [['GET', '/API/system-check?force=1'], ['GET', '/api/SYSTEM-CHECK?force=1'], ['HEAD', '/api/system-check?force=1']]) {
       const res = await fetch(`${base}${route}`, { method, headers: { Origin: 'https://evil.example' } });
