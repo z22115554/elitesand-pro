@@ -188,11 +188,10 @@ function createCloudflareUpdateProvider({
       // 發版一週後所有人都會看到「已是最新版本」，直到下一次發版。
       if (verified.code === 'expired') return { kind: 'unavailable' };
       return { kind: 'none' };
-    } catch (_) {
-      // verifyUpdatePlan/replayGuard threw (e.g. a corrupt local replay
-      // store) — this is a fail-closed security rejection, same family as a
-      // bad signature or a blocked replay, so it must stay `none` and never
-      // relax into `unavailable`'s GitHub-fallback path.
+    } catch (error) {
+      // This allows only a release notification / official installer handoff.
+      // An unavailable replay floor never authorizes an incremental install.
+      if (error?.code === 'UPDATE_REPLAY_UNAVAILABLE') return { kind: 'unavailable', reason: error.message };
       return { kind: 'none' };
     }
   }

@@ -38,6 +38,25 @@ function response(bytes, { status = 200, contentLength = bytes.length } = {}) {
   };
 }
 
+test('ESP-009: active slow stream outlives the idle deadline', async () => {
+  const bytes = Buffer.from('slow!');
+  const artifact = await downloadSignedIncrementalArtifact(makePlan(bytes), {
+    timeoutMs: 100, totalTimeoutMs: 2000,
+    fetchImpl: async (_url, { signal }) => ({ status: 200, headers: { get: () => String(bytes.length) },
+      body: new ReadableStream({ async start(controller) {
+        signal.addEventListener('abort', () => controller.error(new Error('aborted')), { once: true });
+        for (const byte of bytes) {
+          await new Promise(resolve => setTimeout(resolve, 45));
+          if (signal.aborted) return;
+          controller.enqueue(Uint8Array.of(byte));
+        }
+        controller.close();
+      } }),
+    }),
+  });
+  assert.equal(artifact.buffer.toString(), 'slow!');
+});
+
 test('signed incremental artifact downloads exactly one policy-bound stream and verifies its bytes', async () => {
   const bytes = Buffer.from('zip payload from trusted signed policy');
   let call = null;

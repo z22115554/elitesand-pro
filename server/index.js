@@ -641,8 +641,9 @@ attachParentShutdown({
 // Electron's update gate talks to this server only through the utility-process
 // parentPort. This has no HTTP/Socket.io surface and the P4 provider is an
 // offline fake until the later, separately-gated Cloudflare wiring phase.
+const sharedUpdateProvider = createCloudflareUpdateProvider();
 attachStartupUpdateCoordinator({
-  provider: createCloudflareUpdateProvider(),
+  provider: sharedUpdateProvider,
   // Read-only: lets the Electron host poll a cold-start progress window while
   // 'accept-incremental' blocks on the download. Same snapshot the running
   // panel's manual update modal already reads.
@@ -653,7 +654,7 @@ attachStartupUpdateCoordinator({
 // button: safe to call repeatedly post-boot, and never touches the startup
 // defer-cooldown store (see manual-update-check-coordinator.js header).
 attachManualUpdateCheckCoordinator({
-  provider: createCloudflareUpdateProvider(),
+  provider: sharedUpdateProvider,
   onError: (err) => log.error(`Manual update check coordinator failed: ${err.message}`, err),
 });
 

@@ -54,6 +54,7 @@ function createStartupUpdateGate({
   request,
   promptOptional = async () => 'defer',
   promptRequired = async () => 'exit',
+  onRequiredFailure = async () => {},
   deferStore = null,
   now = () => Date.now(),
 } = {}) {
@@ -136,13 +137,18 @@ function createStartupUpdateGate({
     const action = plan.delivery === 'installer' ? ACTIONS.OPEN_REQUIRED_INSTALLER : ACTIONS.ACCEPT_INCREMENTAL;
     try {
       const response = await requestAction(action, PHASES.REQUIRED_GATE, plan.planId);
-      if (!response?.ok) return lock('required-action-rejected');
+      if (!response?.ok) throw new Error(response?.error || 'required update preparation failed');
       acceptedPlan = plan;
       session.phase = PHASES.EXIT_FOR_INSTALLER_OR_UPDATER;
       session.decision = plan.delivery === 'installer' ? 'required-installer-opened' : 'accepted-required';
       return snapshot();
-    } catch (_) {
-      return lock('required-action-failed');
+    } catch (error) {
+      // A verified mandatory plan cannot become optional because its download
+      // failed. Offer recovery, then exit without exposing the running panel.
+      try { await onRequiredFailure(plan, error); } catch (_) { /* still exit */ }
+      session.phase = PHASES.EXIT_FOR_INSTALLER_OR_UPDATER;
+      session.decision = 'required-action-failed';
+      return snapshot();
     }
   }
 

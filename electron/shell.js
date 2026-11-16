@@ -1180,6 +1180,15 @@ function createElectronShell({
       request: startupUpdateRequester.request,
       promptOptional: promptOptionalUpdate,
       promptRequired: promptRequiredUpdate,
+      onRequiredFailure: async () => {
+        closeStartupUpdateProgressWindow();
+        const text = getNativeUpdateCatalog();
+        const url = `https://github.com/${OFFICIAL_GITHUB_OWNER}/${OFFICIAL_GITHUB_REPOSITORY}/releases/latest`;
+        const result = await showNativeUpdateDialog({ type: 'error', title: text.title,
+          message: text.requiredDownloadFailed, detail: url,
+          buttons: [text.openInstaller, text.exit], defaultId: 0, cancelId: 1, noLink: true });
+        if (result?.response === 0) await shell.openExternal(url);
+      },
       deferStore: createStartupUpdateDeferStore(app.getPath('userData'), { fsImpl }),
     });
     try {

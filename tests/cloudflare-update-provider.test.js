@@ -7,6 +7,21 @@ const path = require('path');
 const test = require('node:test');
 const policy = require('../server/services/update-policy');
 const { createPersistentReplayGuard } = require('../server/services/update-policy-replay-store');
+
+test('ESP-008/034: redundant replay floors repair a truncated main and stale writers cannot lower the floor', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-replay-floor-'));
+  try {
+    const file = path.join(dir, 'replay.json'), key = 'stable/win32/x64';
+    const first = createPersistentReplayGuard({ file }), stale = createPersistentReplayGuard({ file });
+    first.set(key, { issuedAt: '2026-11-14T01:00:00Z', planId: 'newer-plan' });
+    assert.throws(() => stale.set(key, { issuedAt: '2026-11-13T01:00:00Z', planId: 'older-plan' }), /backwards/);
+    fs.writeFileSync(file, '{truncated');
+    const restored = createPersistentReplayGuard({ file });
+    assert.equal(restored.get(key).planId, 'newer-plan');
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).entries[key].planId, 'newer-plan');
+    assert.ok(fs.readdirSync(dir).some(name => name.includes('.corrupt-')));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 const {
   BETA_UPDATE_CONTROL_ORIGIN,
   UPDATE_CONTROL_ORIGIN,
@@ -310,7 +325,7 @@ test('corrupt persistent replay storage fails closed before accepting a plan', a
     fs.writeFileSync(file, '{not-json', 'utf8');
     const guard = createPersistentReplayGuard({ file });
     assert.strictEqual(guard.isAvailable(), false);
-    assert.strictEqual((await providerWith(signedPlan(), { replayGuard: guard }).check()).kind, 'none');
+    assert.strictEqual((await providerWith(signedPlan(), { replayGuard: guard }).check()).kind, 'unavailable');
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

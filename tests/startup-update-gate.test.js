@@ -11,6 +11,19 @@ const optionalPlan = Object.freeze({ planId: 'beta-win32-x64-1.0.0-1.0.1-2026082
 const requiredPlan = Object.freeze({ planId: 'required-plan-1', targetVersion: '2.0.0', urgency: 'required', delivery: 'installer' });
 const requiredIncrementalPlan = Object.freeze({ planId: 'required-incremental-plan-1', targetVersion: '1.0.1', urgency: 'required', delivery: 'incremental' });
 
+test('ESP-009: failed required update offers recovery and exits without unlocking the panel', async () => {
+  const failures = [];
+  const gate = createStartupUpdateGate({
+    request: async ({ action }) => action === 'check' ? { ok: true, kind: 'plan', plan: requiredIncrementalPlan } : { ok: false, error: 'network timeout' },
+    promptRequired: async () => 'open', onRequiredFailure: async (plan, error) => failures.push([plan.planId, error.message]),
+  });
+  const result = await gate.run();
+  assert.equal(result.phase, PHASES.EXIT_FOR_INSTALLER_OR_UPDATER);
+  assert.equal(result.decision, 'required-action-failed');
+  assert.equal(gate.getAcceptedPlan(), null);
+  assert.deepEqual(failures, [[requiredIncrementalPlan.planId, 'network timeout']]);
+});
+
 function makeClock() {
   let tick = Date.parse('2026-08-23T00:00:00Z');
   return () => (tick += 1000);
