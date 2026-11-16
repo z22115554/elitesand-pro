@@ -1,5 +1,6 @@
 'use strict';
 require('./audit-storage.test');
+require('./import-cleanup-race.test');
 require('./display-clock-skew.test');
 require('./track-scoped-controls.test');
 

@@ -676,10 +676,14 @@ class AudioProcessor {
     if (originalArtist?.artist) artist = originalArtist.artist;
     const filename = this.renameToReadableFilename(downloaded.filePath, downloaded.outputDir, artist, title);
 
-    this.requireDownloadedAudio(filename);
-    // Once the file has a readable library filename it is no longer temporary.
-    // Until then, a crash leaves a registry entry for the next startup to recover.
-    downloadTask.completeTempImport?.();
+    try {
+      this.requireDownloadedAudio(filename, downloaded.outputDir);
+    } finally {
+      // Validation ends this temporary import lease even when an external
+      // deletion made the completed output disappear. Never report success
+      // or commit a library entry merely because rename returned a filename.
+      downloadTask.completeTempImport?.();
+    }
 
     const totalDuration = Date.now() - processStart;
     log.info(`YouTube 處理完成: ${title} (${totalDuration}ms)`);
@@ -856,8 +860,15 @@ class AudioProcessor {
 
   // 這是播放器，不是純歌詞匯入器：沒有音檔不能回傳 success。
   // 否則前端會加入 filename=null 的項目，表面匯入成功卻永遠播不了。
-  static requireDownloadedAudio(filename) {
-    if (!filename) {
+  static requireDownloadedAudio(filename, outputDir = downloadsDir) {
+    let available = false;
+    if (typeof filename === 'string' && filename && path.basename(filename) === filename) {
+      try {
+        const info = fs.lstatSync(path.join(outputDir, filename));
+        available = info.isFile() && info.size > 0;
+      } catch (_) { /* missing/inaccessible output must never become success */ }
+    }
+    if (!available) {
       throw new Error('音訊下載失敗，歌曲未加入播放清單；請稍後重試或檢查 yt-dlp／cookies 設定。');
     }
     return filename;
