@@ -32,6 +32,7 @@ const { ProviderHealthRegistry } = require('./provider-health');
 const { dataDir } = require('../utils/app-paths');
 const usageTelemetry = require('./usage-telemetry');
 const { appUserAgent } = require('../utils/app-version');
+const { LRC_TIMESTAMP_SOURCE } = require('../utils/time-utils');
 const log = createLogger('Lyrics');
 const APP_USER_AGENT = appUserAgent('lyrics');
 const simplifiedToTraditional = OpenCC.Converter({ from: 'cn', to: 'tw' });
@@ -1584,9 +1585,9 @@ class LyricsEngine {
     const translations = [];
 
     for (const line of lines) {
-      const lineMatch = line.match(/^\[(\d{2}:\d{2}\.\d{2,3})\]<(\d+)>/);
+      const lineMatch = line.match(new RegExp(`^\\[(${LRC_TIMESTAMP_SOURCE})\\]<(\\d+)>`));
       if (!lineMatch) {
-        const plain = line.match(/^\[(\d{2}:\d{2}\.\d{2,3})\]([^<].*)$/);
+        const plain = line.match(new RegExp(`^\\[(${LRC_TIMESTAMP_SOURCE})\\]([^<].*)$`));
         if (plain && plain[2].trim()) translations.push({ time: parseTimestampToMs(plain[1]), text: he.decode(plain[2].trim()) });
         continue;
       }
@@ -1605,14 +1606,13 @@ class LyricsEngine {
       }
 
       const words = [];
-      const wordRegex = /([^<\[\]]+)(?:<(\d+),(\d+)>)/g;
+      const wordRegex = /([^<]+)(?:<(\d+),(\d+)>)/g;
       let wordMatch;
       let fullText = '';
 
       while ((wordMatch = wordRegex.exec(remaining)) !== null) {
         let wordText = he.decode(wordMatch[1]);
         // 清理混入文字的數字計時殘留（某些來源的 KRC 格式不規範）
-        wordText = wordText.replace(/\d+\.?\d*,\d+\.?\d*>?/g, '').replace(/>\s*$/g, '');
         if (!wordText.trim()) continue;
         fullText += wordText;
         words.push({

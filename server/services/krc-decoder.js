@@ -13,7 +13,7 @@
  * - 新版自定義: [startMs,durationMs]<wordStart,wordDuration,flag>word...
  */
 const zlib = require('zlib');
-const { msToKrcTime } = require('../utils/time-utils');
+const { msToKrcTime, escapeTimedWord } = require('../utils/time-utils');
 
 // KRC XOR 加密金鑰（酷狗固定金鑰）
 const KRC_KEY = [
@@ -31,6 +31,7 @@ function krcDecode(buffer) {
     if (!Buffer.isBuffer(buffer)) {
       buffer = Buffer.from(buffer);
     }
+    if (buffer.length > 4 * 1024 * 1024) return null;
 
     const header = buffer.toString('ascii', 0, 4);
     if (header !== 'krc1' && header !== 'krc2') {
@@ -46,7 +47,7 @@ function krcDecode(buffer) {
     }
 
     // zlib 解壓縮
-    const rawText = zlib.inflateSync(decrypted).toString('utf-8');
+    const rawText = zlib.inflateSync(decrypted, { maxOutputLength: 4 * 1024 * 1024 }).toString('utf-8');
 
     // 偵測格式並解析
     return rawText.trim().startsWith('<')
@@ -99,7 +100,7 @@ function parseKrcCustom(rawText) {
       const timeTag = msToKrcTime(lineStartMs);
       let krcLine = `[${timeTag}]<${lineDurationMs}>`;
       for (const word of words) {
-        krcLine += `${word.text}<${word.start},${word.duration}>`;
+        krcLine += `${escapeTimedWord(word.text)}<${word.start},${word.duration}>`;
       }
       output.push(krcLine);
     }
@@ -141,7 +142,7 @@ function parseKrcXml(xmlText) {
       const timeTag = msToKrcTime(lineStart);
       let krcLine = `[${timeTag}]<${lineDuration}>`;
       for (const word of words) {
-        krcLine += `${word.text}<${word.start},${word.duration}>`;
+        krcLine += `${escapeTimedWord(word.text)}<${word.start},${word.duration}>`;
       }
       lines.push(krcLine);
     }

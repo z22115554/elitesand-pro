@@ -8,7 +8,8 @@
  * [mm:ss.xx]<duration>word<start,duration>word<start,duration>...
  */
 
-const { msToKrcTime } = require('../utils/time-utils');
+const { msToKrcTime, escapeTimedWord } = require('../utils/time-utils');
+const he = require('he');
 
 /**
  * 解析 TTML 歌詞為 KRC 逐字格式
@@ -19,6 +20,9 @@ function parseTTML(ttmlText) {
   try {
     if (!ttmlText || typeof ttmlText !== 'string') return null;
     if (!ttmlText.includes('<tt') && !ttmlText.includes('xmlns')) return null;
+    for (const match of ttmlText.matchAll(/\b(?:begin|end|dur)\s*=\s*["']([^"']+)["']/g)) {
+      if (!Number.isFinite(parseTTMLTime(match[1]))) return null;
+    }
 
     const lines = [];
 
@@ -85,6 +89,8 @@ function parseTTML(ttmlText) {
       const endAttr = getAttr(attrs, 'end');
       let pBegin = beginAttr ? parseTTMLTime(beginAttr) : -1;
       let pEnd = endAttr ? parseTTMLTime(endAttr) : -1;
+      const durationAttr = getAttr(attrs, 'dur');
+      if (!endAttr && pBegin >= 0 && durationAttr) pEnd = pBegin + parseTTMLTime(durationAttr);
 
       // 先解析逐字 <span>（連同各自的 begin/end）
       // 注意：英文逐字 TTML（Apple/BetterLyrics）真正的詞間空白是 <span> 標籤「之間」的
@@ -161,7 +167,7 @@ function parseTTML(ttmlText) {
 
         let krcLine = `[${timeTag}]<${pDuration}>`;
         for (const word of words) {
-          krcLine += `${word.text}<${word.start},${word.duration}>`;
+          krcLine += `${escapeTimedWord(he.decode(word.text))}<${word.start},${word.duration}>`;
         }
         const agentId = getAttr(attrs, 'ttm:agent') || getAttr(attrs, 'agent') || divAgentAt(pMatch.index);
         lines.push({ krc: krcLine, singer: singerCodeForAgent(agentId) });
@@ -217,7 +223,7 @@ function parseTTMLTime(timeStr) {
   const bareMatch = timeStr.match(/^(\d+(?:\.\d+)?)$/);
   if (bareMatch) return parseFloat(bareMatch[1]) * 1000;
 
-  return 0;
+  return NaN;
 }
 
 function getAttr(attrStr, name) {

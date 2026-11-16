@@ -7,7 +7,7 @@
  * - offset 單位為毫秒，正數代表歌詞提前顯示，負數代表延後
  */
 
-const { parseTimestampToMs, msToLrcTime } = require('../utils/time-utils');
+const { parseTimestampToMs, msToLrcTime, LRC_TIMESTAMP_SOURCE } = require('../utils/time-utils');
 const { cleanLyrics } = require('./lyrics-cleaner');
 
 /**
@@ -35,7 +35,7 @@ function parseLrc(lrcText) {
       continue;
     }
 
-    const regex = /\[(\d{2}:\d{2}(?:\.\d{2,3})?)\]/g;
+    const regex = new RegExp(`\\[(${LRC_TIMESTAMP_SOURCE})\\]`, 'g');
     const timestamps = [];
     let match;
 
@@ -43,7 +43,7 @@ function parseLrc(lrcText) {
       timestamps.push(parseTimestampToMs(match[1]));
     }
 
-    const text = line.replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, '').trim();
+    const text = line.replace(new RegExp(`\\[${LRC_TIMESTAMP_SOURCE}\\]`, 'g'), '').trim();
 
     if (timestamps.length > 0 && text) {
       for (const time of timestamps) {
@@ -63,7 +63,7 @@ function parseLrc(lrcText) {
  */
 function parseOffset(lrcText) {
   if (!lrcText) return 0;
-  const match = lrcText.match(/^\[offset:(-?\d+)\]/mi);
+  const match = lrcText.match(/^\[offset:\s*([+-]?\d+)\s*\]/mi);
   return match ? parseInt(match[1], 10) : 0;
 }
 
@@ -75,12 +75,12 @@ function parseOffset(lrcText) {
 function parseSrt(srtText) {
   if (!srtText) return { lines: [], offset: 0 };
 
-  const blocks = srtText.trim().split(/\n\s*\n/);
+  const blocks = srtText.replace(/\r\n?/g, '\n').trim().split(/\n\s*\n/);
   const parsed = [];
 
   for (const block of blocks) {
     const blockLines = block.trim().split('\n');
-    if (blockLines.length < 3) continue;
+    if (blockLines.length < 2) continue;
 
     // 跳過序號行
     let lineIdx = 0;
@@ -185,7 +185,7 @@ function parseVtt(vttText) {
 function autoParseLyrics(text) {
   if (!text) return { lines: [], offset: 0, type: 'txt' };
 
-  const trimmed = text.trim();
+  const trimmed = text.replace(/\r\n?/g, '\n').trim();
 
   // 偵測 WebVTT 格式（需在 SRT 之前）
   if (/^\uFEFF?WEBVTT/.test(trimmed)) {
@@ -194,19 +194,19 @@ function autoParseLyrics(text) {
   }
 
   // 偵測 SRT 格式
-  if (/^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->/.test(trimmed)) {
+  if (/^(?:\d+\s*\n)?\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->/.test(trimmed)) {
     const result = parseSrt(trimmed);
     return { ...result, lines: cleanLyrics(result.lines), type: 'srt' };
   }
 
   // 偵測 KRC 格式
-  if (/^\[\d{2}:\d{2}\.\d{2,3}\]<\d+>/.test(trimmed)) {
+  if (new RegExp(`^\\[${LRC_TIMESTAMP_SOURCE}\\]<\\d+>`).test(trimmed)) {
     // KRC 由 LyricsEngine.parseKrc 處理
     return { lines: [], offset: 0, type: 'krc' };
   }
 
   // 偵測 LRC 格式（有時間標籤）
-  if (/\[\d{2}:\d{2}/.test(trimmed)) {
+  if (new RegExp(`\\[${LRC_TIMESTAMP_SOURCE}\\]`).test(trimmed)) {
     const result = parseLrc(trimmed);
     return { ...result, lines: cleanLyrics(result.lines), type: 'lrc' };
   }

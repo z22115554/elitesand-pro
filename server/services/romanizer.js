@@ -670,7 +670,8 @@ async function addRomanization(lyricsLines) {
   if (!lyricsLines || !Array.isArray(lyricsLines)) return [];
 
   // 整首一次判定語言，避免單一漢字詞被誤判（日文漢字 vs 中文）
-  const lang = detectSongLang(lyricsLines);
+  let lang = null;
+  const lineLanguages = new Set();
 
   const results = [];
   // A song repeats chorus lines and KRC words. Reuse exact-text readings only
@@ -678,15 +679,36 @@ async function addRomanization(lyricsLines) {
   const readings = new Map();
   const read = async (text) => {
     if (!lang) return text || '';
-    if (readings.has(text)) return readings.get(text);
+    const cacheKey = `${lang}:${text}`;
+    if (readings.has(cacheKey)) return readings.get(cacheKey);
     const reading = lang === 'ja'
       ? await japaneseReadingAnalysis(text)
       : await romanizeWithLang(text, lang);
-    readings.set(text, reading);
+    readings.set(cacheKey, reading);
     return reading;
   };
 
+  // 整首的預設語言：含漢字／假名的行裡，超過一半有假名才算日文歌（真實歌曲：日文歌 93% 以上、誤判過的中文歌 8% 以下）。只看「有沒有出現過
+  // 假名」會讓夾一個「の」的中文歌整首走日文；逐行各自判斷則會把日文歌裡只有漢字的行
+  // （「最低界隈」「日々日々困惑」）誤判成中文。所以：有假名／諺文的行照該行，只有漢字
+  // 或沒有中日韓文字的行跟著整首的判定。
+  const cjkLines = lyricsLines.filter((l) => /[぀-ヿ㐀-鿿々가-힯]/.test((l && l.text) || ''));
+  const kanaLines = cjkLines.filter((l) => hasKana(l.text)).length;
+  const hangulLines = cjkLines.filter((l) => /[가-힯]/.test(l.text)).length;
+  const songLang = !cjkLines.length ? detectSongLang(lyricsLines)
+    : kanaLines * 2 > cjkLines.length ? 'ja'
+      : hangulLines * 2 > cjkLines.length ? 'ko'
+        : cjkLines.some((l) => /[㐀-鿿]/.test(l.text)) ? 'zh' : detectSongLang(lyricsLines);
+  const lineLang = (line) => {
+    const text = (line && line.text) || '';
+    if (hasKana(text)) return 'ja';
+    if (/[가-힯]/.test(text)) return 'ko';
+    return songLang;
+  };
+
   for (const line of lyricsLines) {
+    lang = lineLang(line);
+    lineLanguages.add(lang);
     const reading = await read(line.text);
 
     const result = {
@@ -700,8 +722,18 @@ async function addRomanization(lyricsLines) {
     // KRC 逐字模式：為每個 word 也加上 phonetic
     if (line.words && Array.isArray(line.words)) {
       result.words = [];
+      let contextualPinyin = null;
+      if (lang === 'zh' && pinyinPro && line.words.map(word => word.text).join('') === line.text) {
+        try {
+          const value = pinyinPro.pinyin(line.text, { toneType: 'symbol', type: 'array', nonZh: 'spaced' });
+          if (Array.isArray(value) && value.length === Array.from(line.text).length) contextualPinyin = value;
+        } catch (_) { /* keep the per-word fallback */ }
+      }
+      let pinyinIndex = 0;
       for (const word of line.words) {
-        const wordReading = await read(word.text);
+        const wordReading = contextualPinyin
+          ? contextualPinyin.slice(pinyinIndex, pinyinIndex += Array.from(word.text).length).join(' ')
+          : await read(word.text);
         result.words.push({
           ...word,
           phonetic: lang === 'ja' ? wordReading.phonetic : wordReading,
@@ -714,8 +746,8 @@ async function addRomanization(lyricsLines) {
 
   // 諧音只對日文/韓文做（中文用拼音、不需諧音）——先跑舊版，保證每一行
   // 都有一個能用的 xieyin 當底線，再讓 v2 有機會的話去蓋掉日文行。
-  if (lang === 'ja' || lang === 'ko') addXieyin(results);
-  if (lang === 'ja') await upgradeJapaneseXieyinWithV2(results);
+  if (lineLanguages.has('ja') || lineLanguages.has('ko')) addXieyin(results);
+  if (lineLanguages.has('ja')) await upgradeJapaneseXieyinWithV2(results);
 
   return results;
 }

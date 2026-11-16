@@ -620,6 +620,11 @@ function registerLyricsHandlers(io, socket, ctx) {
     }
 
     applyManualLyrics(trackId, lyrics, lyricsType, parsedLyrics, newSource);
+    if (Number.isFinite(data.lrcOffset)) {
+      const offset = setTrackOffset(trackId, data.lrcOffset);
+      for (const track of tracksById(trackId)) track.lrcOffset = offset;
+      persistState();
+    }
   });
 
   // 套用一份歌詞到某首歌（手動貼上／歌詞選擇器／自動對時換來源共用）。

@@ -487,6 +487,7 @@ router.post('/lyrics/upload', requirePin, lyricsUpload.single('lyrics'), (req, r
 
     // 自動解析
     const parsed = autoParseLyrics(content);
+    if (parsed.type === 'lrc') parsed.lines = LyricsEngine.parseLrc(content);
 
     if (parsed.lines.length === 0) {
       try { fs.unlinkSync(filePath); } catch (_) {}
@@ -542,6 +543,7 @@ router.post('/lyrics/paste', requirePin, (req, res) => {
 
     log.info(`處理歌詞貼上: ${content.length} 字元`);
     const parsed = autoParseLyrics(content);
+    if (parsed.type === 'lrc') parsed.lines = LyricsEngine.parseLrc(content);
 
     if (parsed.lines.length === 0) {
       log.warn('歌詞貼上解析無結果');

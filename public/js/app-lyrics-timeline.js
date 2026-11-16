@@ -336,6 +336,7 @@
       lyrics,
       lyricsType,
       parsedLyrics,
+      lrcOffset: Number(lrcOffset) || 0,
       source: source || (track && track.lyricsSource) || 'manual',
     });
 

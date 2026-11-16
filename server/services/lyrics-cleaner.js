@@ -34,7 +34,7 @@ const RIGHTS_NOTICE_RE = /^[【\[［(（]?.{0,70}(未經(?:著作權人|版權�
 const COPYRIGHT_LINE_RE = /^(?:©|℗|\(c\)|\(p\)|copyright\b|all\s+rights\s+reserved\b).{0,120}$/i;
 
 // 整行就是「純演奏 / 無歌詞」之類的提示（非歌詞）
-const NO_LYRICS_RE = /^(此歌曲(為|为)?(沒|没)有填(詞|词)的(純|纯)音(樂|乐)|(純|纯)音(樂|乐)|未提供歌詞|未提供歌词|暂无歌词|暫無歌詞|no\s*lyrics|instrumental)[，,]?\s*(請欣賞|请欣赏)?\.?。?$/i;
+const NO_LYRICS_RE = /^(此歌曲(為|为)?(沒|没)有填(詞|词)的(純|纯)音(樂|乐)|(純|纯)音(樂|乐)|未提供歌詞|未提供歌词|暂无歌词|暫無歌詞|no\s*lyrics|instrumental)[，,]?\s*(請您?欣賞|请您?欣赏)?\.?。?$/i;
 
 // 整行只是純演奏 / 間奏標記（可選擇移除）
 const INSTRUMENTAL_MARK_RE = /^[\(（\[【]?\s*(間奏|间奏|前奏|間奏中|间奏中|尾奏|過門|过门|интро|intro|outro|interlude|instrumental|music|solo|♪+|♫+|…+|\.{3,}|—+|-{2,})\s*[\)）\]】]?$/i;
@@ -46,7 +46,7 @@ const stripTags = (s) => String(s == null ? '' : s);
  */
 function normalizeText(text) {
   return stripTags(text)
-    .replace(/[​-‍﻿]/g, '') // 零寬字元
+    .replace(/[​﻿]/g, '') // 零寬字元
     .replace(/　/g, ' ')                // 全形空白
     .replace(/[ \t]+/g, ' ')                // 連續空白
     .trim();

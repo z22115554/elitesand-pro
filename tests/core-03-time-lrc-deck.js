@@ -24,6 +24,13 @@ test('毫秒 → LRC 時間', () => {
 
 const lrcParser = require('../server/services/lrc-parser');
 
+test('ESP-019：七種 LRC 時間格式不遺失行或時間', () => {
+  for (const [stamp, expected] of [['01:23',83000],['00:12.3',12300],['1:23.45',83450],['1:02:03.50',3723500],['100:00.00',6000000],['00:12:345',12345],['00:12.345',12345]]) {
+    const parsed = lrcParser.parseLrc(`[${stamp}]word`);
+    eq(parsed.lines.length, 1, stamp); eq(parsed.lines[0].time, expected, stamp);
+  }
+});
+
 test('LRC 歌詞解析', () => {
   const parsed = lrcParser.parseLrc('[00:10.00]第一句\n[00:20.50]第二句');
   eq(parsed.lines.length, 2);
