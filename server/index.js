@@ -9,6 +9,8 @@
  * /display     → OBS 歌詞疊加（透明底）
  * /setlist     → OBS 直播歌單疊加（透明底）
  */
+const { consumeShellHealthKey, createShellHealthProof } = require('./utils/shell-health-proof');
+const shellHealthKey = consumeShellHealthKey();
 const express = require('express');
 const fs = require('fs');
 const http = require('http');
@@ -68,6 +70,7 @@ process.on('unhandledRejection', (reason) => {
 require('./services/session-marker').markStarted({ version: require('./utils/app-version').APP_VERSION });
 
 const app = express();
+app.locals.shellHealthProof = (challenge, port) => createShellHealthProof(shellHealthKey, challenge, port);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {

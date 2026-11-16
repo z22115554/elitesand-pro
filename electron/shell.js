@@ -6,6 +6,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const { SHELL_HEALTH_KEY_ENV, verifyShellHealthProof } = require('../server/utils/shell-health-proof');
 const { execFileSync } = require('child_process');
 const { validateUpdatePlanShape, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPOSITORY } = require('../server/services/update-policy');
 const { preparePackagedMediaStorage } = require('./packaged-media-storage');
@@ -229,32 +230,79 @@ function writePrompterPin(userDataPath, pinned, fsImpl = fs) {
   } catch (_) { /* 存不了就只在這次有效 */ }
 }
 
-function probeHealth(port, { httpImpl = http, timeoutMs = 1000 } = {}) {
+// 沒帶 identityKey 時用來判斷「已在跑的伺服器是不是 Elitesand Pro」：新版回 app 欄位；
+// 舊版（1.0.0 起都回 status／version／timestamp）以「版本號格式＋數字時間戳」辨認，
+// 讓上次沒關乾淨的舊版伺服器、npm start 開的伺服器照舊被重用，不會另開一個 port。
+// 這只防「別的程式剛好也回 status:ok」，不是防惡意本機程式。
+function looksLikeElitesandHealth(payload) {
+  if (!payload || payload.status !== 'ok') return false;
+  if (payload.app !== undefined) return payload.app === 'elitesand-pro';
+  return typeof payload.version === 'string' && /^\d+\.\d+\.\d+/.test(payload.version)
+    && Number.isFinite(payload.timestamp);
+}
+
+// identityKey：只用在「本殼剛啟動的伺服器」，要求它用這次啟動的金鑰回應挑戰。
+// 既有伺服器（npm start、上次沒關乾淨留下的）不會知道新金鑰，必須走上面的身分判斷才能被重用。
+function probeHealth(port, { httpImpl = http, timeoutMs = 1000, identityKey = null } = {}) {
   return new Promise((resolve) => {
-    const request = httpImpl.get({
-      hostname: '127.0.0.1',
-      port,
-      path: '/api/health',
-      timeout: timeoutMs,
-      headers: { 'User-Agent': 'ElitesandProElectronShell/1.0' },
-    }, (response) => {
-      const chunks = [];
-      response.on('data', (chunk) => chunks.push(chunk));
-      response.on('end', () => {
-        try {
-          const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-          if (response.statusCode === 200 && payload?.status === 'ok') {
-            resolve({ state: 'healthy', payload });
-            return;
-          }
-        } catch (_) { /* A listener is using this port, but not Elitesand Pro. */ }
-        resolve({ state: 'occupied' });
+    let settled = false;
+    let request;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      resolve(result);
+    };
+    const rejectListener = () => {
+      if (settled) return;
+      finish({ state: 'occupied' });
+      request?.destroy();
+    };
+    // A socket inactivity timeout alone can be extended forever by a listener
+    // trickling bytes. Bound the complete request, including its response body.
+    const deadline = setTimeout(rejectListener, timeoutMs);
+    deadline.unref?.();
+    const challenge = identityKey !== null ? crypto.randomBytes(32).toString('hex') : null;
+    try {
+      request = httpImpl.get({
+        hostname: '127.0.0.1',
+        port,
+        path: '/api/health',
+        timeout: timeoutMs,
+        headers: {
+          'User-Agent': 'ElitesandProElectronShell/1.0',
+          ...(challenge ? { 'X-Elitesand-Health-Challenge': challenge } : {}),
+        },
+      }, (response) => {
+        const chunks = [];
+        let bytes = 0;
+        response.on('error', rejectListener);
+        response.on('aborted', rejectListener);
+        response.on('data', (chunk) => {
+          if (settled) return;
+          bytes += chunk.length;
+          if (bytes > 64 * 1024) { rejectListener(); return; }
+          chunks.push(Buffer.from(chunk));
+        });
+        response.on('end', () => {
+          if (settled) return;
+          try {
+            const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            if (response.statusCode === 200 && (identityKey === null
+              ? looksLikeElitesandHealth(payload)
+              : payload?.status === 'ok' && verifyShellHealthProof(identityKey, challenge, port, payload.shellProof))) {
+              finish({ state: 'healthy', payload });
+              return;
+            }
+          } catch (_) { /* A listener is using this port, but not Elitesand Pro. */ }
+          finish({ state: 'occupied' });
+        });
       });
-    });
-    request.once('timeout', () => request.destroy(new Error('health request timed out')));
-    request.once('error', (error) => {
-      resolve(error?.code === 'ECONNREFUSED' ? { state: 'free' } : { state: 'occupied' });
-    });
+      request.once('timeout', rejectListener);
+      request.once('error', (error) => {
+        finish(error?.code === 'ECONNREFUSED' ? { state: 'free' } : { state: 'occupied' });
+      });
+    } catch (_) { rejectListener(); }
   });
 }
 
@@ -515,6 +563,7 @@ function createElectronShell({
   let ownsServer = false;
   let isQuitting = false;
   let serverReady = false;
+  let serverHealthKey = crypto.randomBytes(32).toString('hex');
   let startupExitCode = null;
   let hasShownTrayBalloon = false;
   let isCloseDecisionPending = false;
@@ -927,6 +976,7 @@ function createElectronShell({
       ...(portFallback ? { ELITESAND_PORT_FALLBACK_FROM: String(portFallback.from) } : {}),
       OPEN_BROWSER: '0',
       ELITESAND_SHELL: '1',
+      [SHELL_HEALTH_KEY_ENV]: serverHealthKey,
       // Production-only remote announcements must never lock the source-tree
       // Electron shell. The packaged installer deliberately receives `0`.
       ELITESAND_SHELL_DEVELOPMENT: app.isPackaged ? '0' : '1',
@@ -1467,7 +1517,7 @@ function createElectronShell({
     let lastState = 'free';
     while (Date.now() < deadline) {
       if (startupExitCode !== null) throw new Error(`Elitesand Pro server exited during startup (code ${startupExitCode})`);
-      const result = await probeHealthImpl(port);
+      const result = await probeHealthImpl(port, { identityKey: serverHealthKey });
       lastState = result?.state || 'occupied';
       if (lastState === 'healthy') return result.payload;
       if (lastState === 'occupied') throw new Error(`Port ${port} is already occupied by another application`);
@@ -1530,6 +1580,9 @@ function createElectronShell({
   }
 
   function startServer() {
+    // Rotate on every fork so neither a previous launch nor a crashed child can
+    // authenticate a listener for this startup or restart.
+    serverHealthKey = crypto.randomBytes(32).toString('hex');
     // Server diagnostics persist to its isolated log file. Do not create
     // utility-process stdout/stderr pipes: on Windows their finite buffers
     // can block the server event loop during a long live session.
@@ -1837,6 +1890,7 @@ module.exports = {
   readPrompterPin,
   writePrompterPin,
   probeHealth,
+  looksLikeElitesandHealth,
   waitForExit,
   verifyPackagedResourceIntegrity,
   prepareMutableYtdlp,

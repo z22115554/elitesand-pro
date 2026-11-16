@@ -39,8 +39,14 @@ router.get('/health', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Cache-Control', 'no-store');
   const fallbackFrom = Number.parseInt(process.env.ELITESAND_PORT_FALLBACK_FROM || '', 10);
+  const shellProof = isLoopbackAddress(getClientAddress(req))
+    ? req.app.locals.shellHealthProof?.(req.get('X-Elitesand-Health-Challenge'), req.socket?.localPort)
+    : null;
   res.json({
     status: 'ok',
+    // 給桌面殼判斷「這是不是 Elitesand Pro」用；不是機密。
+    app: 'elitesand-pro',
+    ...(shellProof ? { shellProof } : {}),
     version: APP_VERSION,
     timestamp: Date.now(),
     port: req.socket?.localPort || null,
