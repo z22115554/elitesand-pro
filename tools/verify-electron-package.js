@@ -23,6 +23,8 @@ const EXPECTED_FUSES = {
 const REQUIRED_NOTICE_FILES = [
   'THIRD-PARTY-NOTICES.txt',
   'public/vendor/soundtouch-LGPL-2.1.txt',
+  'public/vendor/licenses/OpenPGP-LGPL-3.0.txt',
+  'public/vendor/licenses/OpenPGP-GPL-3.0.txt',
   'public/vendor/licenses/Tone-MIT.txt',
   'public/vendor/licenses/Spout2-BSD-2-Clause.txt',
   'public/vendor/licenses/kuromoji-IPADIC-NOTICE.txt',

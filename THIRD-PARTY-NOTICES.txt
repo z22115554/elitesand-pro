@@ -19,6 +19,17 @@ its SHA-256, and copies of LICENSE.txt and THIRD_PARTY_LICENSES.txt fetched
 from the matching upstream release tag at build time.
 Source and license: https://github.com/yt-dlp/yt-dlp
 
+OpenPGP.js 6.3.2
+----------------
+Copyright OpenPGP.js contributors. GNU LGPL v3 or later.
+Used unchanged to verify yt-dlp's detached checksum signatures against the
+app-pinned official public key. The package's LGPL text remains in
+app/node_modules/openpgp/LICENSE; copies of LGPL v3 and GPL v3 also ship as
+public/vendor/licenses/OpenPGP-LGPL-3.0.txt and OpenPGP-GPL-3.0.txt.
+Source: https://github.com/openpgpjs/openpgpjs/tree/5f33328a3b601fb9c9dce310d1ecc137db0dbc75
+Modifying the packaged library requires rebuilding matching ASAR integrity
+data, as described in the EULA; no exception bypasses application integrity.
+
 bgutil-ytdlp-pot-provider 2.0.0 (preselected; not yet bundled)
 ----------------------------------------------------------------
 Elitesand Pro has preselected bgutil-ytdlp-pot-provider 2.0.0 as its preferred
@@ -255,8 +266,8 @@ Creative Commons 0 (public domain dedication) and from Kenney asset packs
 
 npm dependencies
 ----------------
-The package contains npm dependencies under MIT, Apache-2.0, BSD, ISC and
-other open-source licenses. Their package-level LICENSE/COPYING files remain
+The package contains npm dependencies under MIT, Apache-2.0, BSD, ISC, and
+LGPL-3.0-or-later (OpenPGP.js). Their package-level LICENSE/COPYING files remain
 inside app/node_modules. The portable builder also writes
 licenses/npm-license-inventory.json with package names, versions and declared
 license identifiers.
