@@ -6,7 +6,7 @@
  * 2. 音訊串流
  * 3. 智慧標題解析（Phase 3 增強：過濾更多干擾詞）
  */
-const { execFile, spawn } = require('child_process');
+const { execFile, spawn, terminate, waitForTermination, shutdown: shutdownProcesses } = require('../utils/owned-process');
 const { StringDecoder } = require('string_decoder');
 const crypto = require('crypto');
 const path = require('path');
@@ -499,6 +499,12 @@ class AudioProcessor {
     if (!controller) return { ok: false, code: 'NOT_FOUND', message: '找不到可取消的匯入工作，可能已經完成。' };
     if (!controller.signal.aborted) controller.abort();
     return { ok: true, code: 'CANCEL_REQUESTED', message: '已要求取消匯入。' };
+  }
+  static async shutdownImports() {
+    for (const controller of requestControllers.values()) controller.abort();
+    requestControllers.clear();
+    const results = await shutdownProcesses();
+    if (results.some(result => !result.ok)) log.warn('部分匯入子行程未能確認整棵停止');
   }
   // 不再只在信心低時才查：影片夠長就一律查一次 Apple Music 官方目錄，拿官方時長當「事前」
   // 驗證基準（唱片公司頻道歌名抓得再準，影片本身還是可能剪進額外片段）。是否要拿查詢結果
@@ -1492,7 +1498,7 @@ class AudioProcessor {
       const started = Date.now();
       const child = spawn(YTDLP_COMMAND, args, { env: YTDLP_ENV, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
       let stderr = '', rawPath = '', sourceFormat = '', timedOut = false;
-      const onAbort = () => child.kill();
+      const onAbort = () => { void terminate(child); };
       signal?.addEventListener('abort', onAbort, { once: true });
       const metadataTimer = metaDone ? null : setTimeout(() => {
         metadataTimedOut = true;
@@ -1530,14 +1536,15 @@ class AudioProcessor {
         }
       };
       child.stdout.on('data', c => consume(c, false)); child.stderr.on('data', c => consume(c, true));
-      const timer = setTimeout(() => { timedOut = true; child.kill(); }, YTDLP_DOWNLOAD_TIMEOUT);
+      const timer = setTimeout(() => { timedOut = true; void terminate(child); }, YTDLP_DOWNLOAD_TIMEOUT);
       child.on('error', err => {
         clearTimeout(timer); if (metadataTimer) clearTimeout(metadataTimer);
         signal?.removeEventListener('abort', onAbort);
         reject(signal?.aborted ? new ImportCancelledError() : err);
       });
-      child.on('close', code => {
+      child.on('close', async code => {
         clearTimeout(timer);
+        await waitForTermination(child);
         if (metadataTimer) clearTimeout(metadataTimer);
         signal?.removeEventListener('abort', onAbort);
         if (signal?.aborted) return reject(new ImportCancelledError());
@@ -1699,13 +1706,14 @@ class AudioProcessor {
     return new Promise((resolve, reject) => {
       const child = spawn(ffmpegProvider.getFfmpegPath(), ['-hide_banner', '-nostats', '-i', filePath, '-vn', '-af', 'ebur128', '-f', 'null', '-'],
         { env: process.env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
-      const onAbort = () => child.kill();
+      const onAbort = () => { void terminate(child); };
       signal?.addEventListener('abort', onAbort, { once: true });
-      let stderr = ''; const timer = setTimeout(() => child.kill(), YTDLP_DOWNLOAD_TIMEOUT);
+      let stderr = ''; const timer = setTimeout(() => { void terminate(child); }, YTDLP_DOWNLOAD_TIMEOUT);
       child.stderr.on('data', c => { stderr = (stderr + c.toString()).slice(-YTDLP_MAX_BUFFER); });
       child.on('error', () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); signal?.aborted ? reject(new ImportCancelledError()) : resolve(null); });
-      child.on('close', code => {
+      child.on('close', async code => {
         clearTimeout(timer);
+        await waitForTermination(child);
         signal?.removeEventListener('abort', onAbort);
         if (signal?.aborted) return reject(new ImportCancelledError());
         const lufs = code === 0 ? this.parseEbur128Loudness(stderr) : null;
@@ -1734,9 +1742,9 @@ class AudioProcessor {
     return new Promise((resolve, reject) => {
       const child = spawn(ffmpegProvider.getFfmpegPath(), ['-y', '-i', inputPath, '-vn', '-codec:a', 'libmp3lame', '-b:a', '192k', outputPath],
         { env: process.env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
-      const onAbort = () => child.kill();
+      const onAbort = () => { void terminate(child); };
       signal?.addEventListener('abort', onAbort, { once: true });
-      let stderr = ''; const timer = setTimeout(() => child.kill(), YTDLP_DOWNLOAD_TIMEOUT);
+      let stderr = ''; const timer = setTimeout(() => { void terminate(child); }, YTDLP_DOWNLOAD_TIMEOUT);
       child.stderr.on('data', c => { stderr = (stderr + c.toString()).slice(-YTDLP_MAX_BUFFER); });
       child.on('error', (error) => {
         signal?.removeEventListener('abort', onAbort);
@@ -1746,8 +1754,9 @@ class AudioProcessor {
         }
         reject(error);
       });
-      child.on('close', code => {
+      child.on('close', async code => {
         clearTimeout(timer);
+        await waitForTermination(child);
         signal?.removeEventListener('abort', onAbort);
         if (signal?.aborted) return reject(new ImportCancelledError());
         if (code !== 0 || !fs.existsSync(outputPath)) {

@@ -1,5 +1,6 @@
 'use strict';
 require('./audit-imports.test');
+require('./import-process-tree.test');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

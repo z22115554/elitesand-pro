@@ -576,6 +576,7 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
     // 必須是第一件事：下面有 8 秒硬退保底，放後面的話「優雅關閉自己卡住」會被
     // 下次啟動誤判成當機。標記只寫一個小檔案，不會拖慢關閉。
     try { require('./services/session-marker').markClean(reason); } catch (err) { log.warn(`關閉標記失敗：${err.message}`); }
+    try { await require('./services/audio-processor').shutdownImports(); } catch (err) { log.warn(`匯入關閉失敗：${err.message}`); }
     try { require('./services/state-store').saveNow(); } catch (err) { log.warn(`狀態 flush 失敗：${err.message}`); }
     try { require('./services/library-store').saveNow(); } catch (err) { log.warn(`媒體庫 flush 失敗：${err.message}`); }
     try { require('./services/saved-playlists').saveNow(); } catch (err) { log.warn(`歌單 flush 失敗：${err.message}`); }
