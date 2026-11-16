@@ -671,7 +671,6 @@ async function addRomanization(lyricsLines) {
 
   // 整首一次判定語言，避免單一漢字詞被誤判（日文漢字 vs 中文）
   let lang = null;
-  const lineLanguages = new Set();
 
   const results = [];
   // A song repeats chorus lines and KRC words. Reuse exact-text readings only
@@ -706,9 +705,9 @@ async function addRomanization(lyricsLines) {
     return songLang;
   };
 
+  const resultLang = new Map();
   for (const line of lyricsLines) {
     lang = lineLang(line);
-    lineLanguages.add(lang);
     const reading = await read(line.text);
 
     const result = {
@@ -741,13 +740,18 @@ async function addRomanization(lyricsLines) {
       }
     }
 
+    resultLang.set(result, lang);
     results.push(result);
   }
 
   // 諧音只對日文/韓文做（中文用拼音、不需諧音）——先跑舊版，保證每一行
   // 都有一個能用的 xieyin 當底線，再讓 v2 有機會的話去蓋掉日文行。
-  if (lineLanguages.has('ja') || lineLanguages.has('ko')) addXieyin(results);
-  if (lineLanguages.has('ja')) await upgradeJapaneseXieyinWithV2(results);
+  // 只處理語言是日文／韓文的那幾行：中文歌夾一行假名時，其他中文行不可拿拼音當羅馬字
+  // 去轉諧音（會出現「wǒ 咩恩」「nǐ 爹」）。兩個函式都是就地改行物件，傳子集即可。
+  const xieyinLines = results.filter((line) => ['ja', 'ko'].includes(resultLang.get(line)));
+  if (xieyinLines.length) addXieyin(xieyinLines);
+  const japaneseLines = results.filter((line) => resultLang.get(line) === 'ja');
+  if (japaneseLines.length) await upgradeJapaneseXieyinWithV2(japaneseLines);
 
   return results;
 }

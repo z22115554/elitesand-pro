@@ -164,6 +164,7 @@ test('羅馬化語言：日文歌裡只有漢字的行仍走日文；夾一個�
   ]);
   ok(tone.test(zh[0].phonetic || ''), '中文歌不可因為一行假名整首走日文: ' + zh[0].phonetic);
   ok(tone.test(zh[1].phonetic || ''), '中文歌不可因為一行假名整首走日文: ' + zh[1].phonetic);
+  ok(!zh[0].xieyin && !zh[1].xieyin, '中文行不可拿拼音當羅馬字轉諧音: ' + zh[0].xieyin);
 });
 
 test('kuromoji 不可用時 addRomanization 不崩潰（async 降級）', async () => {
