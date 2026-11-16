@@ -35,10 +35,7 @@ const registerTwitchHandlers = require('./handlers/twitch');
 const registerPublicRequestHandlers = require('./handlers/public-request');
 const registerBgmHandlers = require('./handlers/bgm');
 const registerOverlayShowHandlers = require('./handlers/overlay-show');
-const registerMoonEventHandlers = require('./handlers/moon-event');
-const registerHalloweenEventHandlers = require('./handlers/halloween-event');
-const moonEvent = require('../services/moon-event');
-const halloweenEvent = require('../services/halloween-event');
+const { registerMoonEventHandlers, registerHalloweenEventHandlers, moonEvent, halloweenEvent } = require('../services/retired-seasonal-events');
 // 限時節慶活動疊加層：clientType 同時是 socket 事件前綴（moon:update、halloween:update…）。
 const SEASONAL_OVERLAYS = new Map([['moon', moonEvent], ['halloween', halloweenEvent]]);
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');

@@ -1,4 +1,5 @@
 'use strict';
+require('./retired-events.test');
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -274,14 +275,13 @@ test('votes, voters and the brewing result survive a restart; the live overlay s
   assert.equal(snap.cauldron.amounts.ghost, 1);
 });
 
-test('server wiring: the cauldron gets the single redemption slot first, then the prank reward, then song requests', () => {
+test('retired server wiring keeps cleanup while the campaign modules and UI stay unloaded', () => {
   const index = read('server/index.js');
-  assert.match(index, /halloweenCauldron\.handleRedemption\(event, fallbackId\)\) \|\| halloweenInteractions\.handleRedemption\(event, fallbackId\)/);
-  assert.ok(index.indexOf('halloweenInteractions.attachTwitch(twitch)') < index.indexOf('twitch.setRedemptionInterceptor('),
-    '大鍋的串接必須在搗蛋幽靈註冊之後，否則會被蓋掉');
+  assert.match(index, /setRedemptionInterceptor\(retiredEventCleanup\.handleRedemption\)/);
+  assert.doesNotMatch(index, /require\('\.\/services\/halloween-(?:interactions|cauldron)'\)/);
   const handler = read('server/routes/handlers/halloween-event.js');
   assert.match(handler, /if \(socket\.clientType !== 'controller'\) return;[\s\S]*CAULDRON_EVENTS/, '大鍋寫入只限桌面面板');
   const page = read('public/halloween.html');
   assert.match(page, /id="cauldron-liquid"/);
-  assert.ok(read('public/index.html').includes('/js/app-halloween-cauldron.js'));
+  assert.ok(!read('public/index.html').includes('/js/app-halloween-cauldron.js'));
 });
