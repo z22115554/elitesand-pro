@@ -20,7 +20,7 @@ const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const bgmSettingsSchema = require('../services/bgm-settings');
 const obsLocale = require('../utils/obs-locale');
 const { createLogger } = require('../utils/logger');
-const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
+const { sanitizeTrack, sanitizeParsedLyrics, MAX_PLAYLIST_SIZE, sanitizeJsonObject } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
 const { emitToAccessRooms } = require('../utils/socket-broadcast');
 const { isTemplateOff, resolveTemplateId } = require('../utils/seasonal-templates');
@@ -30,6 +30,38 @@ const STATE_SYNC_WARN_BYTES = 512 * 1024;
 const STATE_SYNC_LOG_EVERY = 100;
 const STATE_SYNC_WARN_INTERVAL_MS = 60 * 1000;
 const READ_ONLY_TRACK_FIELDS = ['filename', 'url', 'cover', 'originalName', 'audioAvailable', 'audioMissing'];
+const LYRIC_FIELDS = new Set(['lyrics', 'parsedLyrics', 'manualLyrics']);
+const deferredParsedLyricsGetters = new WeakSet();
+
+function trackMetadata(track) {
+  const metadata = {};
+  for (const key of Object.keys(track)) {
+    if (!LYRIC_FIELDS.has(key)) Object.defineProperty(metadata, key, {
+      value: track[key], enumerable: true, configurable: true, writable: true,
+    });
+  }
+  return metadata;
+}
+
+function hasDeferredParsedLyrics(track) {
+  const getter = Object.getOwnPropertyDescriptor(track, 'parsedLyrics')?.get;
+  return !!getter && deferredParsedLyricsGetters.has(getter);
+}
+
+function deferParsedLyrics(track, id) {
+  function materialize(value) {
+    Object.defineProperty(this, 'parsedLyrics', { value, enumerable: true, configurable: true, writable: true });
+    return value;
+  }
+  function getParsedLyrics() {
+    const value = sanitizeParsedLyrics(libraryStore.getEntry(id)?.parsedLyrics);
+    return materialize.call(this, value);
+  }
+  deferredParsedLyricsGetters.add(getParsedLyrics);
+  Object.defineProperty(track, 'parsedLyrics', {
+    enumerable: true, configurable: true, get: getParsedLyrics, set: materialize,
+  });
+}
 
 // OBS / setlist renderers need song identity and lyrics, but never the media
 // file location or its original remote source. Keep this as a narrow,
@@ -225,12 +257,20 @@ function createAppState(io) {
    */
   function restorePersistedPlaylist(savedPlaylist) {
     if (!Array.isArray(savedPlaylist)) return [];
-    const hydrated = savedPlaylist.map((savedTrack) => {
-      if (!savedTrack || typeof savedTrack !== 'object' || !savedTrack.id) return savedTrack;
-      const libraryEntry = libraryStore.getEntry(savedTrack.id);
-      return libraryEntry ? { ...libraryEntry, ...savedTrack } : savedTrack;
-    });
-    return sanitizePlaylist(hydrated) || [];
+    const restored = [];
+    for (const savedTrack of savedPlaylist.slice(0, MAX_PLAYLIST_SIZE)) {
+      const libraryEntry = savedTrack && typeof savedTrack === 'object' && savedTrack.id
+        ? libraryStore.getEntry(savedTrack.id) : null;
+      const merged = libraryEntry ? { ...libraryEntry, ...savedTrack } : savedTrack;
+      const deferWords = libraryEntry && libraryStore.isEntryDurable?.(savedTrack.id)
+        && !Object.hasOwn(savedTrack, 'parsedLyrics')
+        && Array.isArray(libraryEntry.parsedLyrics) && libraryEntry.parsedLyrics.length > 0;
+      const clean = sanitizeTrack(deferWords ? { ...merged, parsedLyrics: null } : merged);
+      if (!clean) continue;
+      if (deferWords) deferParsedLyrics(clean, String(savedTrack.id));
+      restored.push(clean);
+    }
+    return restored;
   }
 
   /**
@@ -241,13 +281,7 @@ function createAppState(io) {
   function persistedPlaylistSnapshot() {
     return playState.playlist.map((track) => {
       if (!track || !libraryStore.isEntryDurable(track.id)) return track;
-      const {
-        lyrics: _lyrics,
-        parsedLyrics: _parsedLyrics,
-        manualLyrics: _manualLyrics,
-        ...compact
-      } = track;
-      return compact;
+      return trackMetadata(track);
     });
   }
 
@@ -648,23 +682,22 @@ function createAppState(io) {
   function getTrackPayload(track, { includeLyrics = false, offset, exists } = {}) {
     if (!track) return null;
     const manual = manualLyricsCache.get(track.id);
-    const { lyrics, parsedLyrics } = track;
     // A playlist summary uses an explicit whitelist below. Copying every other
     // field first only creates a discarded object for each of up to 2000 tracks.
     let summary;
     if (includeLyrics) {
-      const { lyrics: _lyrics, parsedLyrics: _parsedLyrics, manualLyrics: _storedManualLyrics, ...metadata } = track;
-      summary = metadata;
+      summary = trackMetadata(track);
     }
-    const effectiveLyrics = manual ? manual.lyrics : lyrics;
+    const effectiveLyrics = manual ? manual.lyrics : track.lyrics;
     const effectiveLyricsType = manual ? manual.lyricsType : track.lyricsType;
-    const effectiveParsedLyrics = manual ? manual.parsedLyrics : parsedLyrics;
+    const deferred = !manual && !includeLyrics && hasDeferredParsedLyrics(track);
+    const effectiveParsedLyrics = manual ? manual.parsedLyrics : (deferred ? null : track.parsedLyrics);
     const effectiveOffset = typeof offset === 'number' ? offset : (trackOffsets.get(track.id) || 0);
     const effectivePitch = trackPitch.has(track.id) ? trackPitch.get(track.id) : 0;
     const effectiveRate = trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0;
     const effectiveVolume = trackVolume.has(track.id) ? trackVolume.get(track.id) : null;
     const effectiveTemplate = trackTemplate.has(track.id) ? trackTemplate.get(track.id) : null;
-    const hasLyrics = !!effectiveLyrics || (Array.isArray(effectiveParsedLyrics) && effectiveParsedLyrics.length > 0);
+    const hasLyrics = !!effectiveLyrics || deferred || (Array.isArray(effectiveParsedLyrics) && effectiveParsedLyrics.length > 0);
     const audio = libraryStore.audioStatus(track, exists);
 
     // currentTrack 只有一首，可以保留完整 metadata 供歌詞編輯／播放；playlist 最多 2000 列，

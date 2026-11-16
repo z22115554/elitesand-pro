@@ -1,5 +1,6 @@
 'use strict';
 require('./audit-storage.test');
+require('./library-restore-memory.test');
 require('./webgpu-audio-budget.test');
 require('./import-cleanup-race.test');
 require('./display-clock-skew.test');

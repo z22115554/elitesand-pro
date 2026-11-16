@@ -7,21 +7,30 @@ const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '../..');
 const noop = () => {};
 
-function loadState(source = fs.readFileSync(path.join(root, 'server/state/app-state.js'), 'utf8')) {
+function loadState(source = fs.readFileSync(path.join(root, 'server/state/app-state.js'), 'utf8'), {
+  savedState = null, libraryEntries = {}, durable = true,
+} = {}) {
   const filename = path.join(root, 'server/state/app-state.js');
   const realRequire = createRequire(filename);
   const emitted = [];
   let audioCalls = 0;
+  let libraryReads = 0;
+  let snapshot;
   const library = {
     setProtectedEntryIdsProvider: noop, setLyricsLockedProvider: noop, setDurabilityListener: noop, setBeforeRemovalListener: noop,
     getAudioExistsLookup: () => () => true,
     audioStatus: () => { audioCalls++; return { audioAvailable: true, audioMissing: false }; },
+    getEntry(id) { libraryReads++; return libraryEntries[id] || null; },
+    isEntryDurable: id => durable && !!libraryEntries[id],
   };
   const sandbox = {
     module: { exports: {} }, Buffer, console, setTimeout, clearTimeout,
     Date: class extends Date { static now() { return 100000; } },
     require(name) {
-      if (name === '../services/state-store') return { loadState: () => null };
+      if (name === '../services/state-store') return {
+        loadState: () => savedState,
+        scheduleSave: fn => { snapshot = fn; }, CURRENT_STATE_SCHEMA_VERSION: 3,
+      };
       if (name === '../services/library-store') return library;
       if (name === '../utils/logger') return { createLogger: () => ({ info: noop, warn: noop }) };
       return realRequire(name);
@@ -29,9 +38,13 @@ function loadState(source = fs.readFileSync(path.join(root, 'server/state/app-st
   };
   vm.runInNewContext(source, sandbox, { filename });
   const state = sandbox.module.exports.createAppState({
+    emit: (event, payload) => emitted.push({ room: null, event, payload }),
     to: room => ({ emit: (event, payload) => emitted.push({ room, event, payload }) }),
   });
-  return { state, emitted, audioCalls: () => audioCalls, resetAudioCalls: () => { audioCalls = 0; } };
+  return {
+    state, emitted, audioCalls: () => audioCalls, resetAudioCalls: () => { audioCalls = 0; },
+    libraryReads: () => libraryReads, persistedSnapshot: () => snapshot?.(),
+  };
 }
 
 function makeNode() {

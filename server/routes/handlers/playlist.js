@@ -66,8 +66,10 @@ function mergePlaylistSummaryWithExisting(cleanPlaylist, previousPlaylist) {
     const previous = (track.entryId && previousByEntryId.get(track.entryId)) || previousById.get(track.id);
     if (!previous) return track;
     const artistChanged = (track.artist || '') !== (previous.artist || '');
-    return {
-      ...previous,
+    // Preserve deferred word lyrics while reordering summaries. Spreading the
+    // track would invoke its getter for every song in a large restored playlist.
+    const merged = Object.defineProperties({}, Object.getOwnPropertyDescriptors(previous));
+    return Object.assign(merged, {
       // 這些是目前 UI 明確允許透過 playlist:update 改動的欄位。
       entryId: track.entryId || previous.entryId,
       title: track.title,
@@ -77,7 +79,7 @@ function mergePlaylistSummaryWithExisting(cleanPlaylist, previousPlaylist) {
       // 把既有歌手判定的信心值洗回 0。只有使用者真的改了 artist 才重算這兩欄。
       needsArtistConfirmation: artistChanged ? !track.artist : previous.needsArtistConfirmation,
       artistConfidence: artistChanged ? (track.artist ? 1 : 0) : previous.artistConfidence,
-    };
+    });
   });
 }
 
