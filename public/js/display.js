@@ -966,6 +966,16 @@
     applyRecoveryState(state);
   });
 
+  function restorePlaybackClock(state) {
+    if (!Number.isFinite(state.currentTime * 1000) || typeof state.currentTime !== 'number' || state.currentTime < 0) return;
+    // The server measures age using its own clock. Never compare its absolute
+    // timestamp with this machine's Date.now(). Old servers safely omit age.
+    const age = Number.isFinite(state.playbackAgeMs)
+      && state.playbackAgeMs >= 0 && state.playbackAgeMs <= 30000 ? state.playbackAgeMs : 0;
+    syncTimeMs = state.currentTime * 1000 + (state.isPlaying ? age * currentPlaybackRate : 0);
+    lastSyncTimestamp = performance.now();
+  }
+
   SocketClient.on('state:sync', (state) => {
     // 基本狀態同步（不含歌詞恢復）
     if (state.style) StylePresets.setStyle(state.style);
@@ -984,8 +994,8 @@
     }
 
     // Phase 7: 套用 speed（pitch 在純視覺端沒有效果，不還原）
-    if (typeof state.playbackRate === 'number') {
-      currentPlaybackRate = state.playbackRate;
+    if (Number.isFinite(state.playbackRate)) {
+      currentPlaybackRate = Math.max(0.5, Math.min(1.5, state.playbackRate));
     }
     if (typeof state.metronomeEnabled === 'boolean') {
       metronomeEnabled = state.metronomeEnabled;
@@ -1015,18 +1025,7 @@
       isControllerPlaying = state.isPlaying;
     }
 
-    // Phase 5: 恢復 currentTime（考慮頁面重載延遲）
-    if (typeof state.currentTime === 'number' && state.serverTimestamp) {
-      const elapsedSinceUpdate = (Date.now() - state.serverTimestamp) / 1000;
-      // Phase 7: 補償需考慮 playbackRate
-      const compensatedTime = state.isPlaying
-        ? state.currentTime + (elapsedSinceUpdate * currentPlaybackRate)
-        : state.currentTime;
-      syncTimeMs = compensatedTime * 1000;
-      lastSyncTimestamp = performance.now();
-
-      console.log(`[Display] 狀態恢復: currentTime=${compensatedTime.toFixed(1)}s, offset=${currentOffsetMs}ms, speed=${currentPlaybackRate}x`);
-    }
+    restorePlaybackClock(state);
   });
 
   /**
@@ -1054,8 +1053,8 @@
     }
 
     // Phase 7: 恢復 speed（pitch 在純視覺端沒有效果，不還原）
-    if (typeof state.playbackRate === 'number') {
-      currentPlaybackRate = state.playbackRate;
+    if (Number.isFinite(state.playbackRate)) {
+      currentPlaybackRate = Math.max(0.5, Math.min(1.5, state.playbackRate));
     }
     if (typeof state.metronomeEnabled === 'boolean') {
       metronomeEnabled = state.metronomeEnabled;
@@ -1093,19 +1092,7 @@
       isControllerPlaying = state.isPlaying;
     }
 
-    if (typeof state.currentTime === 'number' && state.serverTimestamp) {
-      // 計算補償後的 currentTime
-      const pageLoadDelay = (Date.now() - state.serverTimestamp) / 1000;
-      // Phase 7: 補償需考慮 playbackRate
-      const compensatedTime = state.isPlaying
-        ? state.currentTime + (pageLoadDelay * currentPlaybackRate)
-        : state.currentTime;
-
-      syncTimeMs = compensatedTime * 1000;
-      lastSyncTimestamp = performance.now();
-
-      console.log(`[Display] 完整狀態恢復: time=${compensatedTime.toFixed(1)}s, playing=${state.isPlaying}, offset=${currentOffsetMs}ms, speed=${currentPlaybackRate}x`);
-    }
+    restorePlaybackClock(state);
   }
 
   // ─── 啟動動畫迴圈 ───

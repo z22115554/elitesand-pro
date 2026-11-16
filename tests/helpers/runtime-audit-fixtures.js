@@ -47,13 +47,14 @@ function makeNode() {
     removeChild(child) { this.children.splice(this.children.indexOf(child), 1); },
     get lastChild() { return this.children.at(-1); },
     focus: noop,
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 1920, bottom: 1080, width: 1920, height: 1080 }),
   };
   Object.defineProperty(node, 'innerHTML', { get() { return this._html || ''; },
     set(value) { this._html = value; this.children = []; } });
   return node;
 }
 
-function loadDisplay(source = fs.readFileSync(path.join(root, 'public/js/display.js'), 'utf8')) {
+function loadDisplay(source = fs.readFileSync(path.join(root, 'public/js/display.js'), 'utf8'), { wallTime = 100000 } = {}) {
   let now = 0;
   const handlers = {};
   const nodes = new Map();
@@ -67,19 +68,21 @@ function loadDisplay(source = fs.readFileSync(path.join(root, 'public/js/display
     querySelector: () => null, querySelectorAll: () => [], createElement: makeNode,
   };
   const sandbox = {
-    document, location: { search: '' }, URLSearchParams, performance: { now: () => now },
-    Date: class extends Date { static now() { return 100000; } },
+    document, location: { search: '' }, innerWidth: 1920, innerHeight: 1080,
+    URLSearchParams, performance: { now: () => now },
+    Date: class extends Date { static now() { return wallTime; } },
     console: { log: noop, warn: noop },
     SocketClient: { init: noop, on(event, callback) { (handlers[event] ||= []).push(callback); },
       connected: () => false, send: noop },
     KaraokeEngine: new Proxy({}, { get: () => noop }),
+    StylePresets: new Proxy({}, { get: () => noop }),
     setTimeout: noop, clearTimeout: noop, requestAnimationFrame: () => 1, cancelAnimationFrame: noop,
     addEventListener: noop,
   };
   sandbox.window = sandbox;
   const instrumented = source.replace(/\}\)\(\);\s*$/, 'globalThis.__clock = getCurrentTimeMs;\n})();');
   vm.runInNewContext(instrumented, sandbox, { filename: 'display.js' });
-  return { advance: ms => { now += ms; }, clock: () => sandbox.__clock(),
+  return { advance: ms => { now += ms; }, setWallTime: ms => { wallTime = ms; }, clock: () => sandbox.__clock(),
     emit: (event, payload) => handlers[event].forEach(callback => callback(payload)) };
 }
 

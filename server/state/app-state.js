@@ -758,6 +758,12 @@ function createAppState(io) {
   }
 
   function buildStateSnapshot(enrichedPlaylist, exists) {
+    // Both timestamps belong to this server. A remote OBS clock may differ by
+    // hours; it must never be subtracted from lastStateUpdateTimestamp.
+    // An old/invalid anchor cannot safely predict indefinitely into the future.
+    const age = Number.isFinite(playState.lastStateUpdateTimestamp)
+      ? Date.now() - playState.lastStateUpdateTimestamp : NaN;
+    const playbackAgeMs = Number.isFinite(age) && age >= 0 && age <= 30000 ? age : 0;
     return {
       currentTrack: playState.currentTrack
         ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset, exists })
@@ -780,6 +786,7 @@ function createAppState(io) {
       lyricSettings: playState.lyricSettings,
       // 附帶伺服器時間戳，讓 OBS 重連時計算補償
       serverTimestamp: playState.lastStateUpdateTimestamp,
+      playbackAgeMs,
       // Setlist（含現在/未唱，初次同步即完整）
       session: setlistPayload({ includeStyles: false }),
     };
