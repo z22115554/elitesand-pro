@@ -10,6 +10,7 @@
 // separateVocals.ts（MIT，可合法參考）。
 import * as ort from '/vendor/onnxruntime-web/ort.webgpu.bundle.min.mjs';
 import FFT from '/vendor/fft-browser.mjs';
+import { AUDIO_SAMPLE_RATE, assertAudioSeconds, readBoundedAudio, normalizePeakInPlace, subtractInPlace, finalizeStereoOverlapInPlace } from '/js/webgpu-audio-utils.mjs';
 
 ort.env.wasm.wasmPaths = '/vendor/onnxruntime-web/';
 ort.env.logLevel = 'warning';
@@ -140,25 +141,6 @@ function applyMasks(stftPacked, masksPacked) {
   return out;
 }
 
-function normalizePeak(input, maxPeak = 0.9, minPeak) {
-  let peak = 0;
-  for (let i = 0; i < input.length; i++) peak = Math.max(peak, Math.abs(input[i]));
-  const output = new Float32Array(input.length);
-  if (peak === 0) { output.set(input); return output; }
-  let scale = 1;
-  if (peak > maxPeak) scale = maxPeak / peak;
-  else if (minPeak !== undefined && peak < minPeak) scale = minPeak / peak;
-  if (scale === 1) { output.set(input); return output; }
-  for (let i = 0; i < input.length; i++) output[i] = input[i] * scale;
-  return output;
-}
-
-function subtractPlanarStereo(a, b) {
-  const out = new Float32Array(a.length);
-  for (let i = 0; i < out.length; i++) out[i] = a[i] - b[i];
-  return out;
-}
-
 function createHammingWindow(length) {
   const out = new Float32Array(length);
   for (let i = 0; i < length; i++) out[i] = 0.54 - 0.46 * Math.cos((2 * Math.PI * i) / length);
@@ -182,16 +164,10 @@ function overlapAddChunk(target, counter, chunk, samples, start, length, window)
     for (let i = 0; i < length; i++) {
       const w = window[i];
       target[outOff + i] += chunk[chunkOff + i] * w;
-      counter[outOff + i] += w;
+      if (channel === 0) counter[start + i] += w;
     }
   }
 }
-function finalizeOverlap(target, counter) {
-  const out = new Float32Array(target.length);
-  for (let i = 0; i < target.length; i++) out[i] = target[i] / Math.max(counter[i], 1e-10);
-  return out;
-}
-
 function encodeWav({ sampleRate, samples, channels, data }) {
   const bytesPerSample = 2, dataSize = samples * channels * bytesPerSample;
   const buf = new ArrayBuffer(44 + dataSize);
@@ -215,21 +191,21 @@ function encodeWav({ sampleRate, samples, channels, data }) {
 }
 
 async function decodeToStereo44100(arrayBuffer) {
-  const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const decoded = await tempCtx.decodeAudioData(arrayBuffer);
-  await tempCtx.close();
-  const targetLen = Math.ceil(decoded.duration * 44100);
-  const offline = new OfflineAudioContext(2, targetLen, 44100);
-  const src = offline.createBufferSource();
-  src.buffer = decoded;
-  src.connect(offline.destination);
-  src.start();
-  const rendered = await offline.startRendering();
-  const samples = rendered.length;
+  // decodeAudioData already resamples to this rate. Avoid a second full-song
+  // OfflineAudioContext render, and close the temporary context on failure.
+  const tempCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: AUDIO_SAMPLE_RATE });
+  let decoded;
+  try { decoded = await tempCtx.decodeAudioData(arrayBuffer); }
+  finally { await tempCtx.close(); }
+  assertAudioSeconds(decoded.length / AUDIO_SAMPLE_RATE);
+  if (decoded.sampleRate !== AUDIO_SAMPLE_RATE || decoded.numberOfChannels < 1 || decoded.numberOfChannels > 2) {
+    throw Object.assign(new Error('音檔格式不適合 WebGPU，改用 CPU 處理'), { code: 'invalid_audio' });
+  }
+  const samples = decoded.length;
   const data = new Float32Array(samples * 2);
-  data.set(rendered.numberOfChannels > 0 ? rendered.getChannelData(0) : new Float32Array(samples), 0);
-  data.set(rendered.numberOfChannels > 1 ? rendered.getChannelData(1) : rendered.getChannelData(0), samples);
-  return { sampleRate: 44100, samples, channels: 2, data };
+  data.set(decoded.getChannelData(0), 0);
+  data.set(decoded.getChannelData(decoded.numberOfChannels > 1 ? 1 : 0), samples);
+  return { sampleRate: AUDIO_SAMPLE_RATE, samples, channels: 2, data };
 }
 
 // ─── WebGPU buffer 峰值追蹤（跟這次規劃階段驗證 windowed-roformer 用的同一招）───
@@ -391,13 +367,15 @@ function reportError(job, err) {
   currentJob = null;
 }
 
-async function runJob({ jobId, trackId, audioUrl }) {
+async function runJob({ jobId, trackId, audioUrl, audioSeconds }) {
   const job = { jobId, trackId };
   currentJob = job;
   deviceLostReported = false;
   cancelRequested = false;
   const t0 = performance.now();
   try {
+    // Before canary/model allocation, download or browser decoding.
+    assertAudioSeconds(audioSeconds);
     const adapterInfo = await getAdapterInfo();
     job.gpuVendor = adapterInfo.ok ? adapterInfo.vendor : 'unknown';
     if (!adapterInfo.ok) throw Object.assign(new Error('這台機器沒有可用的 WebGPU adapter'), { code: 'unsupported_gpu' });
@@ -415,19 +393,19 @@ async function runJob({ jobId, trackId, audioUrl }) {
     reportProgress(job, 'download-audio', 0);
     const audioRes = await fetch(audioUrl);
     if (!audioRes.ok) throw Object.assign(new Error(`音檔下載失敗 HTTP ${audioRes.status}`), { code: 'audio_fetch_failed' });
-    const audioBuf = await audioRes.arrayBuffer();
+    const audioBuf = await readBoundedAudio(audioRes);
 
     reportProgress(job, 'decode', 0);
     const source = await decodeToStereo44100(audioBuf);
     job.audioSeconds = source.samples / source.sampleRate;
 
     const s = await ensureSession();
-    const mixture = normalizePeak(source.data, 0.9, 0);
+    const mixture = normalizePeakInPlace(source.data, 0.9, 0);
     const stepSize = Math.min(8 * source.sampleRate, CHUNK_SAMPLES);
     const hammingWindow = createHammingWindow(CHUNK_SAMPLES);
     const chunk = new Float32Array(2 * CHUNK_SAMPLES);
     const target = new Float32Array(mixture.length);
-    const counter = new Float32Array(mixture.length);
+    const counter = new Float32Array(source.samples);
     const totalSteps = Math.ceil(source.samples / stepSize);
 
     let stepIndex = 0;
@@ -460,9 +438,10 @@ async function runJob({ jobId, trackId, audioUrl }) {
       reportProgress(job, 'run', (stepIndex + 1) / totalSteps);
     }
 
-    const rawVocals = finalizeOverlap(target, counter);
-    const vocals = normalizePeak(rawVocals, 0.9, 0);
-    const instrumental = normalizePeak(subtractPlanarStereo(mixture, rawVocals), 0.9, 0);
+    const rawVocals = finalizeStereoOverlapInPlace(target, counter);
+    // Calculate residual before normalizing the raw vocal buffer in place.
+    const instrumental = normalizePeakInPlace(subtractInPlace(mixture, rawVocals), 0.9, 0);
+    const vocals = normalizePeakInPlace(rawVocals, 0.9, 0);
     // 最終成品全掃一次（各只有一趟，成本可忽略）——確保沒有任何一個 chunk 的
     // 非有限值漏過跨步取樣、混進了 overlap-add 的結果。
     assertFinite(vocals, '人聲輸出');

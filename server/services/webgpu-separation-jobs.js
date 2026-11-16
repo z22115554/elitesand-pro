@@ -269,6 +269,7 @@ function startJobForTrack(trackId, params, { deferFailure = false, publicJobId =
   engineSocket.emit('webgpu:job:start', {
     jobId, trackId,
     audioUrl: `/audio/${encodeURIComponent(params.sourceFilename)}`,
+    audioSeconds: params.audioSeconds,
   });
   armWatchdog();
   return jobId;

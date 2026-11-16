@@ -18,6 +18,7 @@ const webgpuJobs = require('./webgpu-separation-jobs');
 const webgpuRuntimeProvider = require('./webgpu-runtime-provider');
 const libraryStore = require('./library-store');
 const usageTelemetry = require('./usage-telemetry');
+const { inspectWebgpuAudio } = require('./webgpu-audio-admission');
 const { emitToControlClients } = require('../utils/socket-broadcast');
 
 const log = createLogger('AISeparationJobs');
@@ -46,7 +47,7 @@ const WEBGPU_MAX_ATTEMPTS = Number(process.env.ELITESAND_WEBGPU_MAX_ATTEMPTS) ||
 const WEBGPU_RETRY_DELAY_MS = Number(process.env.ELITESAND_WEBGPU_RETRY_DELAY_MS) || 5000;
 // 這兩種重試沒意義、只會白等：硬體/前提不符（不會變），或引擎整個 wedge 住（短時間
 // 不會自己解開，而且它還卡著上一輪的 s.run，重派只會被回「忙碌中」）。
-const WEBGPU_NO_RETRY_CODES = new Set(['unsupported_gpu', 'timeout']);
+const WEBGPU_NO_RETRY_CODES = new Set(['unsupported_gpu', 'timeout', 'input_too_large', 'invalid_audio']);
 
 /**
  * 分離工作的唯一遙測入口：三條引擎（Python CUDA／WebGPU／Python CPU）的終態都在
@@ -193,6 +194,13 @@ async function waitForWebgpuEngine(timeoutMs) {
 async function tryStartWebgpu(job) {
   if (job.cancelled || activeJob !== job) return false;
   if (!webgpuRuntimeProvider.isAvailable()) return false;
+  const audio = await inspectWebgpuAudio(job.params.inputPath);
+  if (job.cancelled || activeJob !== job) return false;
+  if (!audio.ok) {
+    job.webgpuError = audio.code;
+    log.warn(`音檔不適合 WebGPU（${audio.code}）track=${job.trackId}，改用 CPU`);
+    return false;
+  }
   if (!webgpuJobs.isEngineAvailable()) {
     requestWebgpuEngineStart();
     const ready = await waitForWebgpuEngine(WEBGPU_ENGINE_COLD_START_TIMEOUT_MS);
@@ -205,6 +213,7 @@ async function tryStartWebgpu(job) {
     emitProgress(job, 'fallback-webgpu', 0);
     webgpuJobs.startJobForTrack(job.trackId, {
       sourceFilename: job.params.sourceFilename || path.basename(job.params.inputPath || ''),
+      audioSeconds: audio.audioSeconds,
     }, { deferFailure: true, publicJobId: job.publicJobId });
     job.mode = 'webgpu';
     job.webgpuAttempts = (job.webgpuAttempts || 0) + 1;
