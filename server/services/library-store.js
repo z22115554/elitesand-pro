@@ -35,7 +35,8 @@ const MAX_ENTRIES = 10000; // 高安全上限；實際容量主要受媒體磁�
 // fs.existsSync，可把 2000 首歌的同步 I/O 壓成短暫快取期內至多一次 readdirSync。
 const AUDIO_SNAPSHOT_TTL_MS = 1000;
 
-let library = {}; // { [id]: { id, url, title, artist, cover, duration, source, playCount, lastPlayed } }
+// 沒有 prototype：id 是外部傳進來的字串，library['constructor'] 不能拿到 Object 本身。
+let library = Object.create(null); // { [id]: { id, url, title, artist, cover, duration, source, playCount, lastPlayed } }
 let _entryCount = 0;
 let _saveTimer = null;
 let _errorReporter = null;
@@ -211,7 +212,7 @@ const libraryDiskStore = createJsonStore({
 });
 
 (function load() {
-  library = libraryDiskStore.load() || {};
+  library = Object.assign(Object.create(null), libraryDiskStore.load() || {});
   _entryCount = Object.keys(library).length;
   // 舊版（v1）媒體庫的歌詞內嵌在 entry 裡：這些值就是權威值，標成已 hydrate 並排進
   // 下一次存檔搬到分檔。搬完之前 library.json 仍保有內嵌歌詞，所以一直都是 durable。
@@ -280,7 +281,7 @@ function saveNow() {
         newlyDirty.forEach((id) => _dirtyEntryIds.delete(id));
         throw new Error('媒體庫淘汰前無法安全保存播放清單 fallback，已取消本次媒體庫寫入');
       }
-      const keep = {};
+      const keep = Object.create(null);
       for (const id of keepIds) keep[id] = library[id];
       library = keep;
       _entryCount = keepIds.length;
@@ -703,7 +704,7 @@ function clear() {
     previouslyDirty.forEach((id) => _dirtyEntryIds.add(id));
     return false;
   }
-  library = {};
+  library = Object.create(null);
   ids.forEach(forgetLyricsState);
   _entryCount = 0;
   _dirtyEntryIds.clear();

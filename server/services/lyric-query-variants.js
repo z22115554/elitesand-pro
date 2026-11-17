@@ -18,7 +18,8 @@ const LATIN_ONLY = /^[A-Za-z][A-Za-z0-9 '’&.,!?-]*$/;
 // 半形分隔符要兩側有空白才算（避免切開 "Re-born" 這類字內連字號）；全形的不需要。
 const TITLE_SEPARATOR = /\s+[-–—/|~:]\s+|\s*[／｜〜：]\s*/;
 // 合唱／合作的歌手分隔：& ＆ × + 、 ， , / ／ feat. ft.，以及兩側有空白的 x／X。
-const ARTIST_SEPARATOR = /\s*(?:[&＆×+、，,/／]|\bfeat\.?|\bft\.?)\s*|\s+[xX]\s+/i;
+// feat／ft 要是完整單字：FTISLAND、Featherweight 不可被拆開（取自 #51 的 #10）
+const ARTIST_SEPARATOR = /\s*(?:[&＆×+、，,/／]|\bfeat\b\.?|\bft\b\.?)\s*|\s+[xX]\s+/i;
 // 每多一組候選，全部來源落空時就多一輪查詢，所以設上限。
 const MAX_VARIANTS = 4;
 

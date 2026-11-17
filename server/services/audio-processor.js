@@ -528,6 +528,8 @@ class AudioProcessor {
    */
   static async processYouTube(url, options = {}) {
     if (!isYouTubeUrl(url)) throw new Error('無效的 YouTube URL 格式，請提供有效的 YouTube 連結');
+    // 交給 yt-dlp 的是清過的網址（剝掉黏在後面的標點），不然「…v=xxxx。」驗證過了卻下載失敗。
+    url = parseYouTubeUrl(url).url;
     const requestId = options.requestId ? String(options.requestId) : '';
     const controller = registerRequestController(requestId);
     options = { ...options, signal: controller?.signal || options.signal };

@@ -403,8 +403,8 @@
 
     for (const line of lines) {
       const text = line
-        .replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, '')
-        .replace(/\[offset:-?\d+\]/gi, '')
+        .replace(/\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/g, '')
+        .replace(/\[offset:\s*[+-]?\d+\s*\]/gi, '')
         .replace(/<\d+(?:,\d+)?>/g, '')
         .trim();
       if (text) {

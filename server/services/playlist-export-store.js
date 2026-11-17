@@ -21,12 +21,16 @@ function ensureDir() {
 
 // 檔名清理：只留使用者輸入的可讀名稱，過濾路徑穿越與檔名系統保留字元。
 function sanitizeName(name) {
-  return String(name || '')
-    .replace(/[\\/:*?"<>|]/g, ' ')
+  const clean = String(name || '')
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, ' ')
     .replace(/\.\.+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, MAX_NAME_LENGTH);
+    .slice(0, MAX_NAME_LENGTH)
+    // Windows 檔名不能以句點或空白結尾（會被系統默默拿掉，存檔後找不到同名檔）
+    .replace(/[.\s]+$/, '');
+  // Windows 保留裝置名（CON、NUL、COM1…，加副檔名也一樣）：取這種名字存檔會失敗或寫到裝置上。
+  return /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(clean) ? `_${clean}` : clean;
 }
 
 /** 列出所有已匯出的播放清單（新到舊），供匯入時的選擇清單使用。 */
@@ -78,4 +82,4 @@ function load(filename) {
   }
 }
 
-module.exports = { list, save, load, EXPORT_DIR };
+module.exports = { list, save, load, sanitizeName, EXPORT_DIR };

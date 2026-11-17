@@ -24,7 +24,9 @@ const MAX_LINE_NOTES = 300;
 const MAX_LINE_NOTE = 200;
 const MAX_LINE_TEXT = 300;
 
-let notes = {}; // trackId -> { songNote, lines, updatedAt }
+// 沒有 prototype：trackId 是外部傳進來的字串，「constructor」「__proto__」不能撞到 Object.prototype
+// （舊版 get('constructor') 直接丟例外，set('__proto__') 會把整個筆記表的 prototype 換掉）。
+let notes = Object.create(null); // trackId -> { songNote, lines, updatedAt }
 let _saveTimer = null;
 let _errorReporter = null;
 
@@ -81,7 +83,7 @@ function sanitize(entry) {
 
 (function load() {
   const loaded = diskStore.load();
-  notes = {};
+  notes = Object.create(null);
   let count = 0;
   for (const [rawId, entry] of Object.entries(loaded && typeof loaded === 'object' ? loaded : {})) {
     const id = cleanId(rawId);

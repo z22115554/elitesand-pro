@@ -992,7 +992,8 @@ const KaraokeEngine = (() => {
     const parsed = [];
 
     for (const line of lines) {
-      const regex = /\[(\d{2}:\d{2}(?:\.\d{2,3})?)\]/g;
+      // 與 server/services/lrc-parser.js 同一套時間標籤規則（含 [mm:ss]、一位小數、冒號小數）。
+      const regex = /\[(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)\]/g;
       const timestamps = [];
       let match;
       while ((match = regex.exec(line)) !== null) timestamps.push(parseLrcTimestamp(match[1]));
@@ -1056,10 +1057,12 @@ const KaraokeEngine = (() => {
   }
 
   function parseLrcTimestamp(tag) {
-    const match = String(tag).match(/(\d+):(\d+)\.(\d+)/);
+    // 與 server/utils/time-utils.js parseTimestampToMs 相同：小數可省略、可用冒號，
+    // 小數部分當十進位小數（.4 → 400ms），不再把 [01:23] 解析成 0 秒。
+    const match = String(tag).match(/(\d+):(\d+)(?:[.:](\d+))?/);
     if (!match) return 0;
-    const padThird = match[3].length === 2 ? match[3] + '0' : match[3];
-    return (parseInt(match[1], 10) * 60 + parseInt(match[2], 10)) * 1000 + parseInt(padThird, 10);
+    const fractionMs = match[3] ? Math.round(Number(`0.${match[3]}`) * 1000) : 0;
+    return (parseInt(match[1], 10) * 60 + parseInt(match[2], 10)) * 1000 + fractionMs;
   }
 
   // ═══════════════════════════════════════════

@@ -133,7 +133,9 @@ const ObsWs = (() => {
         if (op === OBS_OP.HELLO) {
           const identify = { rpcVersion: 1, eventSubscriptions: (1 << 6) }; // Outputs 事件（推流狀態）
           if (d.authentication) {
-            if (!password) { clearTimeout(failTimer); settled = true; try { ws.close(); } catch (e) {} reject(new Error('這個 OBS 有設密碼，請填入 WebSocket 密碼')); return; }
+            // 密碼問題重試也不會好：停掉自動重連，不然每 15 秒用同一組錯的密碼敲一次 OBS，
+            // 面板還一直顯示「會持續自動重試」。
+            if (!password) { clearTimeout(failTimer); settled = true; shouldReconnect = false; try { ws.close(); } catch (e) {} reject(Object.assign(new Error('這個 OBS 有設密碼，請填入 WebSocket 密碼'), { authFailed: true })); emit('status', { connected: false, authFailed: true }); return; }
             identify.authentication = await buildAuth(password, d.authentication.salt, d.authentication.challenge);
           }
           ws.send(JSON.stringify({ op: OBS_OP.IDENTIFY, d: identify }));
@@ -176,10 +178,12 @@ const ObsWs = (() => {
         pending.forEach((p) => p.reject(new Error('連線已關閉')));
         pending.clear();
         // 握手還沒完成就被關 → OBS 主動拒絕，最常見是密碼錯（v5 用 close code 4009）
+        const authFailed = !settled && ev && ev.code === 4009;
+        if (authFailed) shouldReconnect = false;
         if (!settled) {
-          rejectAttempt(new Error(ev && ev.code === 4009 ? 'WebSocket 密碼不正確' : '連線被 OBS 關閉（密碼錯誤或版本不相容）'));
+          rejectAttempt(Object.assign(new Error(authFailed ? 'WebSocket 密碼不正確' : '連線被 OBS 關閉（密碼錯誤或版本不相容）'), { authFailed }));
         }
-        emit('status', { connected: false });
+        emit('status', { connected: false, authFailed });
         scheduleReconnect();
       };
     });
@@ -232,6 +236,15 @@ const ObsWs = (() => {
       // 601 = ResourceAlreadyExists：改用更新既有來源的設定
       if (e.code === 601 || /already/i.test(e.message)) {
         await request('SetInputSettings', { inputName, inputSettings, overlay: true });
+        // 來源是在別的場景建的（換了場景再按一次）：只更新設定的話，目前這個場景裡還是沒有它，
+        // 按了像沒反應。不在目前場景時把同一個來源加進來（共用同一個來源，不另外複製一份）。
+        try {
+          await request('GetSceneItemId', { sceneName, sourceName: inputName });
+        } catch (lookupError) {
+          if (lookupError.code !== 600 && !/not\s*found/i.test(lookupError.message || '')) throw lookupError;
+          await request('CreateSceneItem', { sceneName, sourceName: inputName, sceneItemEnabled: true });
+          return 'added';
+        }
         return 'updated';
       }
       throw e;
@@ -356,15 +369,19 @@ const ObsWs = (() => {
       try { localStorage.setItem('vk-obs-ws', JSON.stringify(opts)); } catch (e) { /* 靜默 */ }
       AppShared.showToast('已連上 OBS', 'success');
     }).catch((err) => {
-      showMsg(`${err.message || '連線失敗'}；會持續自動重試，按「停止重連」可取消。`);
+      showMsg(err && err.authFailed
+        ? `${err.message}；已停止自動重試，改好密碼後再按「連線」。`
+        : `${err.message || '連線失敗'}；會持續自動重試，按「停止重連」可取消。`);
     }).finally(() => { if (!ObsWs.isReconnecting()) connectBtn.disabled = false; });
   });
 
   // 重新整理面板、或 OBS 本身重啟後都恢復上次成功設定，持續維持連線。
   if (savedOptions) {
     setTimeout(() => {
-      ObsWs.connect(savedOptions).catch(() => {
-        showMsg('正在恢復 OBS 連線；會持續自動重試。');
+      ObsWs.connect(savedOptions).catch((err) => {
+        showMsg(err && err.authFailed
+          ? `${err.message}（OBS 的 WebSocket 密碼可能改過了）；已停止自動重試。`
+          : '正在恢復 OBS 連線；會持續自動重試。');
       });
     }, 100);
   }
@@ -377,7 +394,7 @@ const ObsWs = (() => {
     createBtn.disabled = true;
     showMsg('建立中…');
     ObsWs.createBrowserSources(urls).then((r) => {
-      const verb = (v) => (v === 'created' ? '已建立' : '已更新');
+      const verb = (v) => (v === 'created' ? '已建立' : (v === 'added' ? '已加入這個場景' : '已更新'));
       showMsg(`場景「${r.scene}」（${r.width}×${r.height}）：\n歌詞來源${verb(r.display)}、歌單來源${verb(r.setlist)}。\n若沒看到，檢查該來源是否被其他來源蓋住。`);
       AppShared.showToast('OBS 來源已就緒', 'success');
     }).catch((err) => {

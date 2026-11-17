@@ -135,7 +135,7 @@ const TwitchRequestSettings = (() => {
     const input = String(value || '').trim();
     if (type === 'user') return input.replace(/^@/u, '').toLocaleLowerCase();
     if (type === 'video') {
-      const match = input.match(/(?:youtu\.be\/|[?&]v=|shorts\/|music\.youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/i);
+      const match = input.match(/(?:youtu\.be\/|[?&]v=|\/(?:shorts|live|embed|v)\/|music\.youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/i);
       return (match?.[1] || input).trim();
     }
     return input.toLocaleLowerCase();
@@ -431,11 +431,17 @@ const TwitchRequestSettings = (() => {
       });
     });
     candidates.sort((a, b) => b.command.length - a.command.length);
+    // 中文輸入法打出來的常是全形「！點歌」、全形空白「！點歌　網址」：先做 NFKC（全形→半形）
+    // 並把任何空白當成分隔，否則觀眾怎麼點都沒反應、也收不到任何回覆。
+    const fold = (value) => String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+    const folded = fold(input);
+    const lowered = folded.toLocaleLowerCase();
     for (const candidate of candidates) {
-      if (input.toLocaleLowerCase() === candidate.command.toLocaleLowerCase()) return { ...candidate, argument: '' };
-      const prefix = `${candidate.command} `;
-      if (input.toLocaleLowerCase().startsWith(prefix.toLocaleLowerCase())) {
-        return { ...candidate, argument: input.slice(prefix.length).trim() };
+      const command = fold(candidate.command).toLocaleLowerCase();
+      if (!command) continue;
+      if (lowered === command) return { ...candidate, argument: '' };
+      if (lowered.startsWith(`${command} `)) {
+        return { ...candidate, argument: folded.slice(command.length + 1).trim() };
       }
     }
     return null;

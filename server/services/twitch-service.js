@@ -7,7 +7,7 @@
  * 並轉交控制面板的既有單一下載佇列；面板回報真正成功後才送出 Twitch 成功訊息。
  */
 const crypto = require('crypto');
-const { parseYouTubeUrl } = require('../utils/youtube-url');
+const { parseYouTubeUrl, isSingleVideoInMix } = require('../utils/youtube-url');
 const AudioProcessor = require('./audio-processor');
 const fetch = require('node-fetch');
 const store = require('./twitch-store');
@@ -724,9 +724,9 @@ class TwitchService {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
     });
     try {
-      const response = await fetch(OAUTH_TOKEN, {
+      const response = await fetchWithTimeout(OAUTH_TOKEN, {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
-      });
+      }, HELIX_TIMEOUT_MS);
       const data = await response.json();
       if (response.ok && data.access_token) {
         this.deviceAuthorization = null;
@@ -747,23 +747,36 @@ class TwitchService {
     setTimeout(() => this.pollDeviceAuthorization(), pending.intervalMs);
   }
 
-  async refreshToken() {
+  // 同時有好幾個呼叫要更新 token（排程的 ensureToken、聊天回覆 401 重試、獎勵 API…）時只送一次：
+  // Device Code（public client）的 refresh token 是一次性的，第二個請求拿同一顆舊 token 一定失敗，
+  // 失敗的那條路徑會回報「Twitch 授權更新失敗」、那次回覆／退款也跟著失敗。
+  refreshToken() {
+    if (this._refreshInFlight) return this._refreshInFlight;
+    const pending = this._refreshTokenOnce();
+    this._refreshInFlight = pending;
+    const clear = () => { if (this._refreshInFlight === pending) this._refreshInFlight = null; };
+    pending.then(clear, clear);
+    return pending;
+  }
+
+  async _refreshTokenOnce() {
     if (!this.auth || !this.auth.refreshToken) throw new Error('沒有可更新的 Twitch 授權，請重新連線');
     const body = new URLSearchParams({
       client_id: this.config.twitchClientId,
       grant_type: 'refresh_token',
       refresh_token: this.auth.refreshToken,
     });
-    const response = await fetch(OAUTH_TOKEN, {
+    // 一定要有逾時：refreshToken() 會合併同時的呼叫，這個請求卡住就所有 Twitch 功能一起卡住。
+    const response = await fetchWithTimeout(OAUTH_TOKEN, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
-    });
+    }, HELIX_TIMEOUT_MS);
     const data = await response.json();
     if (!response.ok || !data.access_token) throw new Error(`Twitch 授權更新失敗：${data.message || response.status}`);
     await this.saveValidatedToken(data);
   }
 
   async saveValidatedToken(token) {
-    const response = await fetch(OAUTH_VALIDATE, { headers: { Authorization: `OAuth ${token.access_token}` } });
+    const response = await fetchWithTimeout(OAUTH_VALIDATE, { headers: { Authorization: `OAuth ${token.access_token}` } }, HELIX_TIMEOUT_MS);
     const user = await response.json();
     if (!response.ok || !user.user_id) throw new Error('Twitch 授權驗證失敗');
     this.auth = {
@@ -1618,9 +1631,11 @@ class TwitchService {
     if (!permission) return withReply(reject('permissionDenied', '使用者資格不符'));
     check('點歌總開關', rules.enabled, rules.enabled ? '目前開放' : '目前暫停');
     if (!rules.enabled) return withReply(reject('requestDisabled', '目前暫停接受點歌'));
-    check('YouTube 單曲網址', !!parsedUrl?.videoId && !parsedUrl?.playlistId, parsedUrl?.playlistId ? '偵測到播放清單網址' : (parsedUrl?.videoId ? '影片 ID 有效' : '網址無效'));
+    // 從 YouTube 自動合輯（list=RD…）點進來的單曲網址仍是單曲，不算播放清單。
+    const playlistLink = !!parsedUrl?.playlistId && !isSingleVideoInMix(parsedUrl);
+    check('YouTube 單曲網址', !!parsedUrl?.videoId && !playlistLink, playlistLink ? '偵測到播放清單網址' : (parsedUrl?.videoId ? '影片 ID 有效' : '網址無效'));
     if (!parsedUrl?.videoId) return withReply(reject('invalidLink', '沒有提供有效的 YouTube 單曲連結'));
-    if (parsedUrl.playlistId) return withReply(reject('playlistNotAllowed', '播放清單連結不屬於單曲點歌'));
+    if (playlistLink) return withReply(reject('playlistNotAllowed', '播放清單連結不屬於單曲點歌'));
     const preBlock = TwitchRequestSettings.findBlacklistMatch(rules, { event, videoId: parsedUrl.videoId, phase: 'pre' });
     check('前置黑名單', !preBlock, preBlock?.reason || (preBlock ? '命中黑名單' : '未命中'));
     if (preBlock) return withReply(reject('blockedRequest', preBlock.reason || '這位使用者或影片已被點歌規則封鎖'));
@@ -1661,7 +1676,8 @@ class TwitchService {
     if (await this.runInterceptor(this.chatInterceptor, '聊天', event)) return;
     const text = String(event.message && event.message.text || '').trim();
     const rules = this.requestSettings || TwitchRequestSettings.getDefaults();
-    const challengeCommand = text.match(/^!(?:挑戰|challenge)(?:\s+([\s\S]*))?$/iu);
+    // 全形「！挑戰」同樣要認得（指令比對在 matchCommand 裡做 NFKC，這裡也一致）
+    const challengeCommand = text.normalize('NFKC').match(/^!(?:挑戰|challenge)(?:\s+([\s\S]*))?$/iu);
     let input = text;
     if (challengeCommand) {
       try {
@@ -1866,10 +1882,13 @@ class TwitchService {
       await this.rejectSongRequest({ event, key: 'invalidLink', values: { command }, redemption, reason: '沒有提供有效的 YouTube 單曲連結', history });
       return false;
     }
-    if (parsedUrl.playlistId) {
+    if (parsedUrl.playlistId && !isSingleVideoInMix(parsedUrl)) {
       await this.rejectSongRequest({ event, key: 'playlistNotAllowed', values: { url }, redemption, reason: '播放清單連結不屬於單曲點歌', history });
       return false;
     }
+    // 觀眾從 YouTube 自動合輯（list=RD…&start_radio=1）複製的單曲網址：只留影片本身，
+    // 後面查資料、記錄、匯入都不帶那串合輯參數。
+    if (parsedUrl.playlistId) url = `https://www.youtube.com/watch?v=${parsedUrl.videoId}`;
     const preMetadataBlock = TwitchRequestSettings.findBlacklistMatch(rules, {
       event, videoId: parsedUrl.videoId, phase: 'pre',
     });

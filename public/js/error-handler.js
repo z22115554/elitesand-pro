@@ -267,6 +267,28 @@ const ErrorHandler = (() => {
   // 輸入驗證工具（防呆）
   // ═══════════════════════════════════════════
 
+  // 與 server/utils/youtube-url.js 的 parseYouTubeUrl 同一套規則。面板若比伺服器嚴格，
+  // 使用者貼上 m.youtube.com、v= 不在第一個參數（?si=…&v=）、/live/ 歌枠存檔或沒打 https://
+  // 的連結時，會在送出前就被擋下，而伺服器其實接受這些連結。
+  const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'music.youtube.com', 'm.youtube.com', 'youtu.be'];
+  // 同伺服器：網址後面直接接的標點（「…youtu.be/xxxx。」）先剝掉。
+  const YOUTUBE_TRAILING_JUNK = /[\s\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65\u2026\u2027\u00b7.,!?;:)\]}'"]+$/u;
+  function youtubeVideoIdFromUrl(value) {
+    value = String(value || '').trim().replace(YOUTUBE_TRAILING_JUNK, '');
+    let url;
+    try { url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`); } catch (_) { return ''; }
+    const host = url.hostname.toLowerCase();
+    if (!YOUTUBE_HOSTS.includes(host)) return '';
+    let videoId = '';
+    if (host === 'youtu.be') videoId = url.pathname.split('/').filter(Boolean)[0] || '';
+    else if (url.pathname === '/watch') videoId = url.searchParams.get('v') || '';
+    else {
+      const match = url.pathname.match(/^\/(?:embed|shorts|live|v)\/([A-Za-z0-9_-]{6,18})/);
+      videoId = match ? match[1] : '';
+    }
+    return /^[A-Za-z0-9_-]{6,18}$/.test(videoId) ? videoId : '';
+  }
+
   /**
    * 驗證 YouTube URL 格式
    */
@@ -274,19 +296,11 @@ const ErrorHandler = (() => {
     if (!url || typeof url !== 'string') {
       return { valid: false, message: t('validation.youtubeRequired') };
     }
-    const trimmed = url.trim();
+    const trimmed = url.trim().replace(YOUTUBE_TRAILING_JUNK, '');
     if (!trimmed) {
       return { valid: false, message: t('validation.youtubeRequired') };
     }
-    const patterns = [
-      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[\w-]+/,
-      /^https?:\/\/youtu\.be\/[\w-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/shorts\/[\w-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/embed\/[\w-]+/,
-      /^https?:\/\/music\.youtube\.com\/watch\?v=[\w-]+/,
-    ];
-    const isValid = patterns.some(p => p.test(trimmed));
-    if (!isValid) {
+    if (!youtubeVideoIdFromUrl(trimmed)) {
       return { valid: false, message: t('validation.youtubeInvalid') };
     }
     return { valid: true, url: trimmed };

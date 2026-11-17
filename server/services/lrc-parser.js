@@ -98,11 +98,13 @@ function parseOffset(lrcText) {
 function parseSrt(srtText) {
   if (!srtText) return { lines: [], offset: 0 };
 
-  const blocks = srtText.replace(/\r\n?/g, '\n').trim().split(/\n\s*\n/);
+  // Windows 工具輸出的 SRT 多半是 CRLF：不先正規化的話，多行字幕會帶著 \r 接起來。
+  const blocks = srtText.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim().split(/\n\s*\n/);
   const parsed = [];
 
   for (const block of blocks) {
     const blockLines = block.trim().split('\n');
+    // 序號行可省略（下面有處理），所以最少只需要「時間軸＋一行文字」兩行。
     if (blockLines.length < 2) continue;
 
     // 跳過序號行

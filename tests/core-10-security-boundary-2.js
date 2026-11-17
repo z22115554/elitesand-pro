@@ -439,7 +439,8 @@ test('歌單固定預覽、直書句流縮圖與直播狀態重新整理入口�
   ok(obsWebsocket.includes('refreshStreamStatus: publishStreamStatus'));
 });
 
-testAsync('OBS WebSocket 密碼錯誤進入重連後，可立即停止並解除握手狀態', async () => {
+// 密碼錯（4009）自 2026-11-13 稽核 #107 起不再自動重連；這裡改用一般連線中斷（1006）進入重連等待。
+testAsync('OBS WebSocket 連線中斷進入重連後，可立即停止並解除握手狀態', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../public/js/obs-websocket.js'), 'utf8');
   const timers = [];
   class FakeWebSocket {
@@ -447,7 +448,7 @@ testAsync('OBS WebSocket 密碼錯誤進入重連後，可立即停止並解除�
     close() {
       if (this.closed) return;
       this.closed = true;
-      if (this.onclose) this.onclose({ code: 4009 });
+      if (this.onclose) this.onclose({ code: 1006 });
     }
   }
   FakeWebSocket.instances = [];
@@ -464,7 +465,7 @@ testAsync('OBS WebSocket 密碼錯誤進入重連後，可立即停止並解除�
   const socket = FakeWebSocket.instances[0];
   socket.close();
   await attempt.catch(() => {});
-  ok(client.isReconnecting(), '密碼錯誤後應進入可取消的重連等待：');
+  ok(client.isReconnecting(), '連線中斷後應進入可取消的重連等待：');
   client.disconnect();
   eq(client.isReconnecting(), false, '停止重連後不可殘留 connecting 或重試計時器：');
   ok(timers.some((timer) => timer.cleared), '停止重連必須清除已排定的重試計時器：');
