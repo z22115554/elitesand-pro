@@ -1,5 +1,6 @@
 'use strict';
 require('./audit-storage.test');
+require('./spout-output-lifecycle.test');
 require('./jizura-word-wrap.test');
 require('./shell-health-identity.test');
 require('./library-restore-memory.test');
