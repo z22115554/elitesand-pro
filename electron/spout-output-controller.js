@@ -88,6 +88,7 @@ function createSpoutOutputController({ loadAddon, onStatus = () => {} } = {}) {
 
   function start(nextOptions = {}) {
     const validated = validateOptions(nextOptions);
+    if (stopPromise) return stopPromise.then(() => start(validated));
     if (startPromise) return startPromise;
     if (state === 'running') {
       if (JSON.stringify(validated) !== JSON.stringify(options)) {
@@ -95,14 +96,17 @@ function createSpoutOutputController({ loadAddon, onStatus = () => {} } = {}) {
       }
       return snapshot();
     }
-    if (stopPromise) return stopPromise.then(() => start(validated));
+    // A partially initialized sender must be stopped before another create.
+    if (state === 'error' && addon) return stop().then(() => start(validated));
 
     state = 'starting';
     lastError = null;
     options = validated;
-    publish();
-    startPromise = (async () => {
+    // Publish and call native code only after the shared promise is installed.
+    // Synchronous failures must not cache an already-rejected operation.
+    const operation = Promise.resolve().then(async () => {
       try {
+        publish();
         await Promise.resolve(getAddon().create(validated));
         state = 'running';
         return publish();
@@ -112,23 +116,27 @@ function createSpoutOutputController({ loadAddon, onStatus = () => {} } = {}) {
         options = null;
         publish();
         throw lastError;
-      } finally {
-        startPromise = null;
       }
-    })();
-    return startPromise;
+    });
+    const pending = operation.finally(() => {
+      if (startPromise === pending) startPromise = null;
+    });
+    startPromise = pending;
+    return pending;
   }
 
-  async function stop() {
+  function stop() {
     if (stopPromise) return stopPromise;
-    stopPromise = (async () => {
-      if (startPromise) {
-        try { await startPromise; } catch (_) { /* The failed start is already reflected in status. */ }
+    // Capture only the start that preceded this stop. Future starts wait on us.
+    const pendingStart = startPromise;
+    const operation = Promise.resolve().then(async () => {
+      if (pendingStart) {
+        try { await pendingStart; } catch (_) { /* The failed start is already reflected in status. */ }
       }
       if (state === 'idle' || (state === 'error' && !addon)) return snapshot();
       state = 'stopping';
-      publish();
       try {
+        publish();
         if (addon) await Promise.resolve(addon.stop());
         state = 'idle';
         options = null;
@@ -139,11 +147,14 @@ function createSpoutOutputController({ loadAddon, onStatus = () => {} } = {}) {
         lastError = error instanceof Error ? error : new Error(String(error));
         publish();
         throw lastError;
-      } finally {
-        stopPromise = null;
       }
-    })();
-    return stopPromise;
+    });
+    // This finalizer also covers the idle/error early return above.
+    const pending = operation.finally(() => {
+      if (stopPromise === pending) stopPromise = null;
+    });
+    stopPromise = pending;
+    return pending;
   }
 
   return Object.freeze({
