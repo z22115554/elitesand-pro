@@ -17,7 +17,10 @@
 // 真實的製作人員名單常把兩個角色用「/」合寫在冒號前（例如「混音/母带：」「吉他编写/吉他：」），
 // 不是單一關鍵字後面緊接冒號，所以不能用「^關鍵字\s*[:：]」硬性錨定——改成「冒號前的短標籤
 // 內含任一關鍵字」（見 isCreditLine），這裡只需要關鍵字本身的清單，不含冒號錨點。
-const CREDIT_KEYWORDS_RE = /(作詞|作词|作曲|編曲|编曲|製作人|制作人|製作|制作|出品|出品人|發行|发行|企劃|企划|企宣|策劃|策划|推廣|推广|統籌|统筹|監製|监制|監修|监修|混音|母帶|母带|和聲|和声|和音|合聲|合声|合音|人聲|人声|配唱|配器|配樂|配乐|吉他|guitar|貝斯|贝斯|bass|鼓|drums?|打擊樂|打击乐|percussion|program(?:ming)?|鍵盤|键盘|piano|鋼琴|钢琴|弦樂|弦乐|strings|producer|produced\s*by|composer|composed\s*by|lyricist|lyrics\s*by|written\s*by|arrang(?:ed|er|ement)|arranged\s*by|vocals?|演唱|原唱|主唱|歌手|original\s*artist|錄音|录音|recording|mix(?:ing|ed\s*by)?|master(?:ing|ed\s*by)?|錄音室|录音室|studio|label|唱片公司|聯合出品|联合出品|改編製作|改编制作|音樂營銷|音乐营销|營銷|营销|總監|总监|設計|设计|詞|词|曲|編|编|chorus|backing\s*vocals?|A\s*&\s*R|artwork|design|director|video|攝影|摄影|視覺|视觉|美術|美术|鳴謝|鸣谢|特別感謝|特别感谢|OP|SP|ISRC)/i;
+// 英文關鍵字必須從詞首開始比對（允許 -er/-ist/-ing 等字尾）：舊版整條 regex 沒有詞邊界，
+// 「Stop:」「Hope:」「Oops:」含 op、「Spring:」「Desperado:」含 sp，首尾的正文都會被當成
+// 製作資訊砍掉。OP/SP/ISRC/A&R 這類縮寫必須是完整單字。中文關鍵字沒有詞邊界概念，維持原樣。
+const CREDIT_KEYWORDS_RE = /(作詞|作词|作曲|編曲|编曲|製作人|制作人|製作|制作|出品|出品人|發行|发行|企劃|企划|企宣|策劃|策划|推廣|推广|統籌|统筹|監製|监制|監修|监修|混音|母帶|母带|和聲|和声|和音|合聲|合声|合音|人聲|人声|配唱|配器|配樂|配乐|吉他|貝斯|贝斯|鼓|打擊樂|打击乐|鍵盤|键盘|鋼琴|钢琴|弦樂|弦乐|演唱|原唱|主唱|歌手|錄音|录音|錄音室|录音室|唱片公司|聯合出品|联合出品|改編製作|改编制作|音樂營銷|音乐营销|營銷|营销|總監|总监|設計|设计|詞|词|曲|編|编|攝影|摄影|視覺|视觉|美術|美术|鳴謝|鸣谢|特別感謝|特别感谢|\b(?:guitar|bass|drum|percussion|program|keyboard|pian[oi]|strings|produc(?:er|ed\s*by|tion)|compos(?:er|ed\s*by)|lyricist|lyrics\s*by|written\s*by|arrang(?:ed|er|ement)|vocal|original\s*artist|record(?:ing|ed\s*by)|mix(?:ing|ed\s*by|er)?\b|master(?:ing|ed\s*by)?\b|studio|label|chorus|backing\s*vocal|artwork|design|director|video)|\b(?:OP|SP|ISRC|A\s*&\s*R)\b)/i;
 // 冒號前標籤太長就不算（避免把「今天的天氣：真好」這種一般語句誤判成製作資訊）
 // 中英雙語角色名會很長，例如「數位發行 Digital Release」「錄音師 Recording Engineer」。
 // 只在首尾 credit block 使用此上限，放寬到 36 仍不會掃描正文中段。
@@ -178,7 +181,18 @@ function cleanLyrics(lines, opts = {}) {
 
   // 6) 空白行
   if (o.removeEmpty) {
-    const noEmpty = out.filter((l) => !(l && typeof l.text === 'string' && l.text.trim() === ''));
+    // LRC 用「只有時間、沒有字」的空行標出上一句在哪裡結束（間奏前最常見）。直接刪掉的話上一句
+    // 會一路掛到下一句才換（間奏 30 秒都停在畫面上）；先把它換算成上一句的 duration 再刪。
+    const isEmpty = (l) => l && typeof l.text === 'string' && l.text.trim() === '';
+    const noEmpty = [];
+    for (const l of out) {
+      if (!isEmpty(l)) { noEmpty.push(l); continue; }
+      const prev = noEmpty[noEmpty.length - 1];
+      if (prev && typeof l.time === 'number' && typeof prev.time === 'number' && l.time > prev.time
+        && !(Number(prev.duration) > 0)) {
+        noEmpty[noEmpty.length - 1] = { ...prev, duration: l.time - prev.time };
+      }
+    }
     if (noEmpty.length > 0) out = noEmpty;
   }
 

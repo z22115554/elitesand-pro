@@ -11,9 +11,9 @@ const OpenCC = require('opencc-js');
 const { krcDecode } = require('./krc-decoder');
 const { decryptQrc } = require('./qrc-decoder');
 const { parseTTML, cleanQuery } = require('./ttml-parser');
-const { parseLrc, parseTimestampToMs, msToLrcTime } = require('./lrc-parser');
-const { cleanLyrics } = require('./lyrics-cleaner');
-const { annotateSingerParts } = require('./singer-parts');
+const { parseLrc, parseTimestampToMs, msToLrcTime, autoParseLyrics } = require('./lrc-parser');
+const { cleanLyrics, isCreditLine } = require('./lyrics-cleaner');
+const { annotateSingerParts, parsePrefix: parseSingerPrefix } = require('./singer-parts');
 const { fetchWithTimeout: transportFetch } = require('../utils/helpers');
 const { AsyncLocalStorage } = require('async_hooks');
 const providerTransport = new AsyncLocalStorage();
@@ -52,7 +52,11 @@ const LYRICS_SOURCE_PRIORITY = Object.freeze([
 // v7：新增合唱聲部（酷狗/網易雲 男：女：文字前綴、Apple TTML ttm:agent）解析，
 // parsedLyrics 每行可帶 singer / singerLabel。舊快取沒有這些欄位，升版強制重查。
 // v8：QQ／網易雲改抓逐字、多了 AMLL，雙語 LRC 的譯文改收進 translation 欄位（不再是獨立一行），升版強制重查。
-const LYRICS_CACHE_VERSION = 'v8-word-fallback';
+// v9（2026-11-13 稽核）：快取裡的 parsedLyrics 帶著羅馬化結果；繁體破音字拼音、日文二人／一人、
+// 中文歌夾日文整首被當日文拼、n' 撥音都修了，「男：」獨占行與增強 LRC 的整理規則也變了，升版強制重查。
+// v10（同一輪稽核後段）：酷狗 KRC／網易雲 YRC／TTML 的翻譯、增強 LRC 逐字、LRC 空行結束時間、
+// 對白不當聲部、各來源的候選比對規則都改了；v9 之後才查過的歌快取裡還是舊結果，再升一次。
+const LYRICS_CACHE_VERSION = 'v10-translations';
 
 // ─── 歌詞快取（記憶體 + 磁碟持久化）───
 const path = require('path');
@@ -303,6 +307,35 @@ class LyricsEngine {
     // Map 的 last-write-wins 在這裡剛好正確：一旦某來源命中，迴圈立刻 return，
     // 不會再有更晚的嘗試把它覆寫掉。
     const sourceVerdicts = new Map();
+    // 只有純文字（沒有時間軸）的結果先記著、繼續往下問：LRCLIB 只有 plainLyrics 時，排在後面的
+    // 網易雲逐句版常常有時間軸。全部問完都沒有才用這份純文字。
+    let plainFallback = null;
+    const finish = (result) => {
+      // 依類型解析：純文字走 parseLrc 會整份變成 0 行（舊版就是這樣，找到了卻什麼都不顯示）。
+      const parsedLyrics = this.parseByType(result.lyrics, result.type);
+
+      // Phase 5: 提取 LRC offset（如果有）
+      if (parsedLyrics._lrcOffset !== undefined) {
+        result.lrcOffset = parsedLyrics._lrcOffset;
+        delete parsedLyrics._lrcOffset;
+      }
+
+      // 先回傳原文歌詞（不等待羅馬化）
+      result.parsedLyrics = parsedLyrics;
+
+      // 非同步羅馬化（不阻擋回傳）
+      if (autoRomanize && needsRomanization(parsedLyrics)) {
+        this._asyncRomanize(parsedLyrics, result.type, query);
+      }
+
+      if (generation === cacheGeneration) {
+        lyricsCache.set(cacheKey, { result, timestamp: Date.now() });
+        scheduleCacheSave();
+      }
+      for (const [name, hit] of sourceVerdicts) usageTelemetry.recordLyricSource(name, hit, true);
+      usageTelemetry.recordOutcome('lyrics', true);
+      return result;
+    };
     for (const source of sources) {
       log.info(`嘗試來源: ${source.name}`);
       const outcome = await providerHealth.execute(source.name, () => providerTransport.run({ failed: false }, async () => {
@@ -320,33 +353,12 @@ class LyricsEngine {
           log.info(`✓ 找到歌詞 (來源: ${source.name}, 類型: ${result.type})`);
           log.perf(`lyrics-${source.name}`, sourceDuration, { query });
           log.perf('lyrics-total', totalDuration, { query, source: source.name });
-
-          // 解析歌詞為結構化資料
-          const parsedLyrics = result.type === 'krc'
-            ? this.parseKrc(result.lyrics)
-            : this.parseLrc(result.lyrics);
-
-          // Phase 5: 提取 LRC offset（如果有）
-          if (parsedLyrics._lrcOffset !== undefined) {
-            result.lrcOffset = parsedLyrics._lrcOffset;
-            delete parsedLyrics._lrcOffset;
+          if (result.type === 'txt') {
+            if (!plainFallback) plainFallback = result;
+            log.info(`來源 ${source.name} 只有純文字歌詞，先記著、繼續找有時間軸的`);
+            continue;
           }
-
-          // 先回傳原文歌詞（不等待羅馬化）
-          result.parsedLyrics = parsedLyrics;
-
-          // 非同步羅馬化（不阻擋回傳）
-          if (autoRomanize && needsRomanization(parsedLyrics)) {
-            this._asyncRomanize(parsedLyrics, result.type, query);
-          }
-
-          if (generation === cacheGeneration) {
-            lyricsCache.set(cacheKey, { result, timestamp: Date.now() });
-            scheduleCacheSave();
-          }
-          for (const [name, hit] of sourceVerdicts) usageTelemetry.recordLyricSource(name, hit, true);
-          usageTelemetry.recordOutcome('lyrics', true);
-          return result;
+          return finish(result);
         } else if (outcome.status === 'miss') {
           log.info(`來源 ${source.name} 未找到結果 (${sourceDuration}ms)`);
         } else if (outcome.status === 'skipped') {
@@ -358,6 +370,8 @@ class LyricsEngine {
         log.warn(`處理來源 ${source.name} 結果失敗: ${err.message}`);
       }
     }
+
+    if (plainFallback) return finish(plainFallback);
 
     const totalDuration = Date.now() - searchStart;
     log.info(`✗ 所有來源均未找到歌詞 (${totalDuration}ms)`);
@@ -628,6 +642,11 @@ class LyricsEngine {
 
     // cover 要是完整單字（Discovery、Recover 不算），而且歌名本身就含 cover 的歌（Cover Me）
     // 不能因為候選歌名裡也有 cover 就被扣分——那正是要找的那首。
+    // 同一首的其他版本（Live、DJ 版、伴奏、Remix、鈴聲片段…）：影片標題沒寫的話扣分，
+    // 酷狗／QQ／網易雲同名的版本一大堆，時長又常差不多，不扣分就容易挑到 DJ 版的歌詞時間軸。
+    const versionWord = /\blive\b|\bremix\b|\bdj\b|dj版|現場|现场|伴奏|純音樂|纯音乐|instrumental|片段|鈴聲|铃声|加速版|降調|降调|0\.8x|1\.2x/i;
+    if (versionWord.test(nSongTitle) && !versionWord.test(nTitle)) score -= 6;
+
     const coverWord = /\bcovers?\b|翻唱/;
     if (isCover) {
       if (coverWord.test(nSongTitle) || coverWord.test(nSongArtist)) {
@@ -773,8 +792,13 @@ class LyricsEngine {
         if (krcText) return { lyrics: krcText, type: 'krc', source: 'paxsenix', durationVerified };
       }
 
-      if (lyricsData.elrc) return { lyrics: lyricsData.elrc, type: 'lrc', source: 'paxsenix', durationVerified };
-      if (lyricsData.elrcMultiPerson) return { lyrics: lyricsData.elrcMultiPerson, type: 'lrc', source: 'paxsenix', durationVerified };
+      // elrc 是增強 LRC（每個字前面有 <mm:ss.xx>）：當一般 LRC 交出去的話逐字時間全丟，只剩逐句。
+      for (const elrc of [lyricsData.elrc, lyricsData.elrcMultiPerson]) {
+        if (!elrc) continue;
+        const krcText = this.enhancedLrcToKrc(elrc);
+        if (krcText) return { lyrics: krcText, type: 'krc', source: 'paxsenix', durationVerified };
+        return { lyrics: elrc, type: 'lrc', source: 'paxsenix', durationVerified };
+      }
 
       if (lyricsData.content && Array.isArray(lyricsData.content) && lyricsData.content.length > 0) {
         const krcText = this.paxsenixContentToKrc(lyricsData.content);
@@ -822,13 +846,24 @@ class LyricsEngine {
         }, 12000);
         if (!response.ok) continue;
 
-        const results = await response.json();
-        if (!Array.isArray(results) || results.length === 0) continue;
+        const raw = await response.json();
+        if (!Array.isArray(raw) || raw.length === 0) continue;
+        // 跟其他來源一樣先過「看起來是同一首」：最後兩種查法（整串關鍵字、只用歌名）會回一堆同名的別首歌，
+        // 舊版沒過濾，時長也對不上時就直接拿第一筆有時間軸的，常常是別的歌手的同名歌。
+        // 同樣合格的再依分數排（歌手、歌名、時長、Live／DJ 版扣分）。
+        const results = raw
+          // 沒有歌名欄位的結果沒辦法判斷，照舊保留（實際的 LRCLIB 回應都有 trackName／artistName）。
+          .filter((r) => r && (!(r.trackName || r.name) || this.isPlausibleMatch({
+            artist, title, duration,
+            songArtist: r.artistName || '', songTitle: r.trackName || r.name || '', songDuration: r.duration || 0,
+          })))
+          .map((r) => ({ r, score: this.scoreMatch({ artist, title, duration, songArtist: r.artistName || '', songTitle: r.trackName || r.name || '', songDuration: r.duration || 0 }) }))
+          .sort((x, y) => y.score - x.score)
+          .map((entry) => entry.r);
+        if (results.length === 0) continue;
 
-        let filtered = results.filter((r) => this.isPlausibleMatch({
-          artist, title, duration, songArtist: r.artistName, songTitle: r.trackName, songDuration: r.duration,
-        }));
-        if (!filtered.length) continue;
+        // 上面已經過濾並依分數排好（main 的 #64 原本在這裡再過濾一次，合併後重複）。
+        let filtered = results;
         let durationVerified;
         if (duration > 0) {
           const withDuration = filtered.filter(r => r.duration && Math.abs(r.duration - duration) <= DURATION_TOLERANCE);
@@ -928,7 +963,13 @@ class LyricsEngine {
           songArtist: song.singername || '',
           songTitle: song.songname || '',
           songDuration: song.duration || 0,
-        })).sort((x, y) => Number(artistMatches(artist, y.singername)) - Number(artistMatches(artist, x.singername)));
+        // 先比歌手對不對，再比整體分數（歌名、時長、Live／DJ 版扣分）：只按歌手排序時，同歌手的 DJ 版
+        // 排在前面又剛好在時長容差內，就會拿到 DJ 版的歌詞時間軸。
+        })).map((song) => ({
+          song,
+          artistHit: Number(artistMatches(artist, song.singername)),
+          score: this.scoreMatch({ artist, title, duration, songArtist: song.singername || '', songTitle: song.songname || '', songDuration: song.duration || 0 }),
+        })).sort((x, y) => (y.artistHit - x.artistHit) || (y.score - x.score)).map((entry) => entry.song);
         if (plausible.length > 0) {
           for (const song of plausible) {
             if (duration > 0 && song.duration && Math.abs(song.duration - duration) <= DURATION_TOLERANCE) {
@@ -1113,7 +1154,9 @@ class LyricsEngine {
     let bestScore = -1;
 
     for (const song of songs) {
-      const songArtist = (song.artists?.[0]?.name || song.artistName || '').toLowerCase().trim();
+      // 網易雲 cloudsearch 的歌手欄位叫 ar（上面的 isPlausibleMatch 有認，這裡原本漏了）：
+      // 漏掉就完全沒有歌手分數，同名的翻唱只要時長比較近就會被選中。
+      const songArtist = (song.artists?.[0]?.name || song.ar?.[0]?.name || song.artistName || '').toLowerCase().trim();
       const songTitle = (song.name || song.title || '').toLowerCase().trim();
       const songDuration = (song.duration || song.dt || 0) / 1000;
 
@@ -1148,13 +1191,15 @@ class LyricsEngine {
       if (!songResource) continue;
 
       const attrs = songResource.attributes || {};
-      const score = this.scoreMatch({
-        artist, title, duration,
+      const candidate = {
         songArtist: (attrs.artistName || '').toLowerCase().trim(),
         songTitle: (attrs.name || '').toLowerCase().trim(),
         songDuration: attrs.durationInMillis ? attrs.durationInMillis / 1000 : 0,
-        isCover,
-      });
+      };
+      // 跟網易雲／QQ／酷狗一樣先確認「看起來是同一首」：Apple 目錄搜不到時會回一堆不相干的熱門歌，
+      // 舊版照樣挑分數最高的那首（分數 0 也收），冷門歌就拿到別首歌的逐字歌詞。
+      if (!this.isPlausibleMatch({ artist, title, duration, ...candidate })) continue;
+      const score = this.scoreMatch({ artist, title, duration, ...candidate, isCover });
 
       if (score > bestScore) {
         bestScore = score;
@@ -1362,7 +1407,12 @@ class LyricsEngine {
       }, 10000);
       if (!res.ok) return null;
       const data = await res.json();
-      return this.yrcToKrc(data && data.yrc && data.yrc.lyric);
+      const krc = this.yrcToKrc(data && data.yrc && data.yrc.lyric);
+      if (!krc) return null;
+      // 同一個回應裡就有翻譯（ytlrc 對齊逐字時間、tlyric 對齊逐句時間）：跟 QQ 逐字一樣接上，
+      // 不然網易雲逐字的日文／英文歌沒有中文翻譯，逐句版反而有。
+      const translation = (data.ytlrc && data.ytlrc.lyric) || (data.tlyric && data.tlyric.lyric) || '';
+      return translation ? this.appendTranslationLines(krc, translation) : krc;
     } catch (e) {
       log.warn('網易雲逐字歌詞失敗: ' + e.message);
       return null;
@@ -1470,6 +1520,58 @@ class LyricsEngine {
     return { lyrics: out.join('\n'), type: hasWords ? 'krc' : 'lrc' };
   }
 
+  /**
+   * 增強 LRC（A2：「[00:01.00]<00:01.00>Hel<00:01.50>lo <00:02.00>」）→ KRC 逐字。
+   * 最後一個字沒有結尾時間時，用下一行開頭（再不然給 500ms）。沒有任何一行帶逐字時間就回 null。
+   */
+  static enhancedLrcToKrc(text) {
+    const TAG = /<(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)>/g;
+    const rows = [];
+    let hasWords = false;
+    for (const raw of String(text || '').split(/\r?\n/)) {
+      const head = raw.match(/^\s*\[(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)\]/);
+      if (!head) continue;
+      const lineStart = parseTimestampToMs(head[1]);
+      // 多人版行首的「v1:」「v2:」聲部標記不是歌詞
+      const body = raw.slice(head[0].length).replace(/^\s*v\d+:\s*/i, '');
+      const marks = [];
+      let m;
+      TAG.lastIndex = 0;
+      while ((m = TAG.exec(body)) !== null) marks.push({ at: m.index, end: TAG.lastIndex, ms: parseTimestampToMs(m[1]) });
+      const words = [];
+      if (marks.length) {
+        const lead = body.slice(0, marks[0].at);
+        if (lead.trim()) words.push({ text: lead, ms: lineStart });
+        marks.forEach((mark, i) => {
+          const wordText = body.slice(mark.end, i + 1 < marks.length ? marks[i + 1].at : body.length);
+          if (wordText.trim()) words.push({ text: wordText, ms: mark.ms, endMs: i + 1 < marks.length ? marks[i + 1].ms : null });
+        });
+      } else if (body.trim()) {
+        words.push({ text: body.trim(), ms: lineStart });
+      }
+      if (words.length > 1 || marks.length > 1) hasWords = true;
+      rows.push({ lineStart, words });
+    }
+    if (!hasWords) return null;
+    const out = [];
+    rows.forEach((row, index) => {
+      if (!row.words.length) return;
+      const nextStart = rows[index + 1] ? rows[index + 1].lineStart : null;
+      const words = row.words.map((w, i) => {
+        const next = row.words[i + 1];
+        let end = w.endMs != null ? w.endMs : (next ? next.ms : null);
+        if (end == null || end < w.ms) end = nextStart != null && nextStart > w.ms ? nextStart : w.ms + 500;
+        return { text: w.text, start: w.ms, duration: Math.max(0, end - w.ms) };
+      });
+      // 字與字之間的空白黏在前一個字的結尾（跟 ttml-parser 同一套約定），行尾空白拿掉
+      words[words.length - 1].text = words[words.length - 1].text.replace(/\s+$/, '');
+      words.forEach((w) => { w.text = w.text.replace(/^\s+/, ''); });
+      const krcLine = buildKrcLine(row.lineStart, 0, words.filter((w) => w.text));
+      if (krcLine) out.push(krcLine);
+    });
+    return out.length ? out.join('\n') : null;
+  }
+
   static paxsenixContentToKrc(content) {
     if (!Array.isArray(content) || content.length === 0) return null;
 
@@ -1534,13 +1636,36 @@ class LyricsEngine {
    */
   static foldTranslationLines(lines) {
     if (!Array.isArray(lines) || lines.length < 2) return lines;
+    // 同一時間戳的兩行不一定是「原文＋翻譯」：合唱歌詞常是「男：」獨占一行、下一行才是歌詞
+    // （兩行同一個時間）。併成翻譯的話，真正的歌詞會變成看不到的翻譯、畫面只剩「男：」，
+    // 聲部標記也認不出來。（男女同一秒各唱一句的情況維持併行：顯示端一個時間點只能顯示一行，
+    // 拆成兩行反而會讓第一句永遠被跳過。）
+    const isSingerPair = (prevText) => {
+      const prevTag = parseSingerPrefix(prevText);
+      return !!(prevTag && prevTag.rest === '');
+    };
+    const squash = (value) => String(value || '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+    const latinOnly = (value) => /\p{L}/u.test(value) && !/[^\p{Script=Latin}\p{N}\p{P}\p{S}\s]/u.test(value);
     const out = [];
     for (const line of lines) {
       const prev = out[out.length - 1];
-      if (prev && line && typeof line.time === 'number' && line.time === prev.time
-        && typeof line.text === 'string' && line.text.trim() && !prev.translation) {
-        prev.translation = line.text;
+      const sameTime = prev && line && typeof line.time === 'number' && line.time === prev.time
+        && typeof line.text === 'string' && line.text.trim() && !isSingerPair(prev.text);
+      if (sameTime && !prev.translation) {
+        // 同一句重複貼兩次（社群 LRC 常見）：不是翻譯，丟掉，不然跟唱視圖會把同一句顯示兩遍。
+        if (squash(line.text) !== squash(prev.text)) prev.translation = line.text;
         continue;
+      }
+      if (sameTime) {
+        // 「原文／羅馬拼音／翻譯」三行同一時間：第二行是羅馬拼音（原文不是拉丁字母）時，改用
+        // 第三行當翻譯（拼音本程式會自己產生）。不能把翻譯推成獨立一行——顯示端一個時間點只
+        // 顯示一行，原文會被翻譯擠掉。其餘第三行維持原本「保留成獨立一行」的行為。
+        if (latinOnly(prev.translation) && !latinOnly(prev.text) && !latinOnly(line.text)
+          && squash(line.text) !== squash(prev.text)) {
+          prev.translation = line.text;
+          continue;
+        }
+        if (squash(line.text) === squash(prev.text) || squash(line.text) === squash(prev.translation)) continue;
       }
       out.push(line);
     }
@@ -1556,20 +1681,36 @@ class LyricsEngine {
 
   static mergeBilingualLrc(original, translation) {
     const origLines = original.split('\n');
-    const transMap = {};
+    const transMap = new Map();
+    // 用毫秒對，不用時間字串對：網易雲／QQ 的原文跟譯文常一個寫 [00:12.34]、一個寫 [00:12.340]，
+    // 字串比對整首都對不上，譯文全部消失。
+    const key = (stamp) => Math.round(parseTimestampToMs(stamp) / 10);
 
     translation.split('\n').forEach((line) => {
       const match = line.match(/^\[(\d{2}:\d{2}\.\d{2,3})\](.*)/);
-      if (match) transMap[match[1]] = match[2].trim();
+      if (match && match[2].trim() && match[2].trim() !== '//') transMap.set(key(match[1]), match[2].trim());
     });
 
     return origLines.map((line) => {
       const match = line.match(/^\[(\d{2}:\d{2}\.\d{2,3})\](.*)/);
-      if (match && transMap[match[1]]) {
-        return `${line}\n[${match[1]}]${transMap[match[1]]}`;
+      const text = match && transMap.get(key(match[1]));
+      if (text && match[2].trim()) {
+        return `${line}\n[${match[1]}]${text}`;
       }
       return line;
     }).join('\n');
+  }
+
+  /**
+   * 依歌詞格式把原始文字解析成行：krc 走逐字、srt／vtt／txt 走自動偵測（它們沒有 [mm:ss] 標籤，
+   * 交給 parseLrc 只會得到空陣列），其餘當 LRC。給「手上只有原始歌詞、沒有 parsedLyrics」的補救路徑用。
+   */
+  static parseByType(raw, type) {
+    if (!raw) return [];
+    if (type === 'krc') return this.parseKrc(raw);
+    // 字幕格式一樣要解 HTML entity（SRT 的 &amp; 原樣顯示），跟 LRC／KRC 路徑一致。
+    if (type === 'srt' || type === 'vtt' || type === 'txt') return autoParseLyrics(raw).lines.map((line) => ({ ...line, text: he.decode(String(line.text || '')) }));
+    return this.parseLrc(raw);
   }
 
   static parseLrc(lrcText) {
@@ -1647,7 +1788,25 @@ class LyricsEngine {
         const gap = Math.abs(entry.time - tr.time);
         if (gap <= 20 && (!best || gap < best.gap)) best = { entry, gap };
       }
-      if (best && !best.entry.translation) best.entry.translation = tr.text;
+      if (best && !best.entry.translation) { best.entry.translation = tr.text; tr.used = true; }
+    }
+    // 第二輪：譯文是對著「逐句版」的時間做的（網易雲只有 tlyric、沒有 ytlrc 時），跟逐字行起點常差
+    // 一兩百毫秒，20ms 對不上整首就沒有翻譯。剩下的譯文接到「離它最近的那一行」，最多差 700ms，
+    // 而且那一行還沒有譯文。
+    // 譯文裡的製作資訊（「作詞：x」）不參加；同一行有好幾句候選時，最近的那句先拿。
+    const pairs = [];
+    for (const tr of translations) {
+      if (tr.used || isCreditLine({ text: tr.text }, 0)) continue;
+      let nearest = null;
+      for (const entry of parsed) {
+        const gap = Math.abs(entry.time - tr.time);
+        if (!nearest || gap < nearest.gap) nearest = { entry, gap };
+      }
+      if (nearest && nearest.gap <= 700 && nearest.entry.text !== tr.text) pairs.push({ tr, ...nearest });
+    }
+    pairs.sort((a, b) => a.gap - b.gap);
+    for (const pair of pairs) {
+      if (!pair.entry.translation) pair.entry.translation = pair.tr.text;
     }
     return annotateSingerParts(stripCreditLines(parsed));
   }

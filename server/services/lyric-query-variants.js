@@ -31,7 +31,7 @@ function isLatinPart(text) {
 }
 
 // 把「原文＋英文」並列的字串拆成兩半；不是這種形狀就回 null。
-function splitBilingual(text) {
+function splitBilingual(text, { name = false } = {}) {
   const parts = text.split(TITLE_SEPARATOR).map((part) => part.trim()).filter(Boolean);
   if (parts.length >= 2) {
     const native = parts.find((part) => CJK_CHAR.test(part));
@@ -47,12 +47,22 @@ function splitBilingual(text) {
     last = index;
   });
   if (first < 0) return null;
-  // 原文在前、英文在後（中間有沒有空白都算）
-  const tail = chars.slice(last + 1).join('').trim();
-  if (isLatinPart(tail)) return { native: chars.slice(0, last + 1).join('').trim(), latin: tail };
+  // 原文在前、英文在後（中間有沒有空白都算）。原文結尾的標點（「你，好不好？ How Have You Been?」
+  // 的「？」）算原文的，不能讓它卡在英文前面、整組認不出來。
+  const tail = chars.slice(last + 1).join('');
+  const tailParts = tail.match(/^([\p{P}\s]*)([\s\S]*)$/u);
+  // 英文直接黏在原文上、而原文那段自己也夾著英文：這是一個混寫的名字（Official髭男dism），
+  // 不是「原文＋英文」並列；舊版拆成「Official髭男」＋「dism」拿去查。
+  const glued = (gap, nativePart) => gap === '' && /[A-Za-z]/.test(nativePart);
+  if (isLatinPart(tailParts[2].trim()) && !glued(tailParts[1], chars.slice(0, last + 1).join(''))) {
+    return { native: `${chars.slice(0, last + 1).join('')}${tailParts[1]}`.trim(), latin: tailParts[2].trim() };
+  }
   // 英文在前、原文在後
-  const head = chars.slice(0, first).join('').trim();
-  if (isLatinPart(head)) return { native: chars.slice(first).join('').trim(), latin: head };
+  const rawHead = chars.slice(0, first).join('');
+  const head = rawHead.trim();
+  // 歌名的英文在前時一定要有空白隔開：「Love你」「Baby不要再哭泣」的英文是歌名的一部分，舊版會拆成只查「你」。
+  // 歌手名照舊可以黏著（「Eric周興哲」是台灣歌手常見的藝名寫法）。
+  if (isLatinPart(head) && (/\s$/.test(rawHead) || (name && !glued('', chars.slice(first).join(''))))) return { native: chars.slice(first).join('').trim(), latin: head };
   return null;
 }
 
@@ -78,7 +88,7 @@ function lyricTitleVariants(title) {
 function nativeArtists(artist) {
   const original = String(artist || '').trim();
   const names = original.split(ARTIST_SEPARATOR).map((name) => name.trim()).filter(Boolean)
-    .map((name) => { const split = splitBilingual(name); return split ? split.native : name; });
+    .map((name) => { const split = splitBilingual(name, { name: true }); return split ? split.native : name; });
   if (names.length === 0) return { native: original, primary: original };
   return { native: names.join(' '), primary: names[0] };
 }
@@ -162,7 +172,7 @@ function artistMatches(expectedArtist, candidateArtist) {
   if (!candidate) return false;
   const names = String(expectedArtist || '').split(ARTIST_SEPARATOR).map((name) => name.trim()).filter(Boolean);
   return names.some((name) => {
-    const split = splitBilingual(name);
+    const split = splitBilingual(name, { name: true });
     return [name, split && split.native, split && split.latin].map(compareKey)
       .some((key) => key.length >= 2 && (candidate.includes(key) || key.includes(candidate)));
   });

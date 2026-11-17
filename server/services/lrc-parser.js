@@ -10,6 +10,10 @@
 const { parseTimestampToMs, msToLrcTime, LRC_TIMESTAMP_SOURCE } = require('../utils/time-utils');
 const { cleanLyrics } = require('./lyrics-cleaner');
 
+// 增強 LRC（A2 extension）的逐字時間 <mm:ss.xx>：目前逐字顯示只吃 KRC，這裡至少要從文字裡拿掉，
+// 不然畫面上會直接出現「<00:01.00>Hel<00:01.50>lo」。
+const ENHANCED_WORD_TAG_RE = /<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>/g;
+
 /**
  * 解析 LRC 歌詞文字為結構化行
  * @param {string} lrcText - LRC 格式歌詞
@@ -20,6 +24,7 @@ function parseLrc(lrcText) {
 
   const lines = lrcText.split('\n');
   const parsed = [];
+  const endMarkers = [];
   let offset = 0;
 
   for (const line of lines) {
@@ -43,16 +48,34 @@ function parseLrc(lrcText) {
       timestamps.push(parseTimestampToMs(match[1]));
     }
 
-    const text = line.replace(new RegExp(`\\[${LRC_TIMESTAMP_SOURCE}\\]`, 'g'), '').trim();
+    let text = line.replace(new RegExp(`\\[${LRC_TIMESTAMP_SOURCE}\\]`, 'g'), '');
+    if (ENHANCED_WORD_TAG_RE.test(text)) {
+      ENHANCED_WORD_TAG_RE.lastIndex = 0;
+      text = text.replace(ENHANCED_WORD_TAG_RE, '').replace(/[ \t]{2,}/g, ' ');
+    }
+    ENHANCED_WORD_TAG_RE.lastIndex = 0;
+    text = text.trim();
 
     if (timestamps.length > 0 && text) {
       for (const time of timestamps) {
         parsed.push({ time, text, translation: '', phonetic: '' });
       }
+    } else if (timestamps.length > 0) {
+      endMarkers.push(...timestamps);
     }
   }
 
   parsed.sort((a, b) => a.time - b.time);
+  // 只有時間、沒有字的空行＝上一句在這裡結束（間奏前最常見）。舊版直接丟掉，上一句就一路掛到
+  // 下一句才換，間奏 30 秒都停在畫面上。換算成上一句的 duration（模板都認 line.duration）。
+  for (const end of endMarkers) {
+    let prev = null;
+    for (const line of parsed) { if (line.time < end) prev = line; else break; }
+    if (prev && !(prev.duration > 0)) {
+      // 雙語 LRC 同一時間有原文＋譯文兩行（之後會併成一行）：同一時間的每一行都要帶上。
+      for (const line of parsed) if (line.time === prev.time) line.duration = end - prev.time;
+    }
+  }
   return { lines: parsed, offset };
 }
 
@@ -105,7 +128,8 @@ function parseSrt(srtText) {
     parsed.push({
       time: startTime,
       duration: endTime - startTime,
-      text: text.replace(/<[^>]+>/g, ''), // 移除 HTML 標籤
+      // 移除 HTML 標籤與 ASS/SSA 的定位覆寫碼（字幕軟體輸出的 {\an8}、{\i1} 會原樣顯示在歌詞上）
+      text: text.replace(/<[^>]+>/g, '').replace(/\{\\[^}]*\}/g, '').replace(/\s{2,}/g, ' ').trim(),
       phonetic: '',
       words: [],
     });
@@ -215,7 +239,10 @@ function autoParseLyrics(text) {
   // 聲明等雜訊（歌曲清洗的主要來源），這裡跟其他來源一樣統一走 cleanLyrics。
   // 清洗後才依最終行數重新編排 5 秒間隔的佔位時間戳，避免砍掉開頭幾行後，
   // 第一句正文的時間戳留著原本的空隙（例如砍了 5 行製作資訊，第一句卻還是從 25 秒開始）。
-  const rawLines = trimmed.split('\n').filter(l => l.trim()).map((text, i) => ({
+  // Genius 等歌詞網站貼過來的段落標題（[Verse 1]、[Chorus: 某某]、[副歌]）不是要唱的句子；
+  // 純文字沒有時間軸，留著會被當成一句排進 5 秒一格的佔位時間、顯示在畫面上。
+  const SECTION_HEADER_RE = /^\[(?:verse|chorus|pre-?chorus|post-?chorus|bridge|intro|outro|hook|refrain|interlude|instrumental|break|drop|rap|主歌|副歌|間奏|间奏|前奏|尾奏|橋段|桥段|導歌|导歌)(?![A-Za-z])[^\]]{0,40}\]$/i;
+  const rawLines = trimmed.split('\n').filter(l => l.trim() && !SECTION_HEADER_RE.test(l.trim())).map((text, i) => ({
     time: i * 5000,
     text: text.trim(),
     phonetic: '',

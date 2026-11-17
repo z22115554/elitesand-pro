@@ -341,7 +341,8 @@
     if (hasLyrics && track.lyricsType === 'krc') {
       return { level: 'word', text: '逐字', label: '已有逐字同步歌詞，點擊可更換來源' };
     }
-    if (hasLyrics && track.lyricsType === 'lrc') {
+    // srt／vtt 也是每句有時間軸的格式，不能被標成「純文字（沒有時間軸）」。
+    if (hasLyrics && ['lrc', 'srt', 'vtt'].includes(track.lyricsType)) {
       return { level: 'line', text: '逐句', label: '已有逐句同步歌詞，點擊可更換來源' };
     }
     if (hasLyrics) {

@@ -282,7 +282,7 @@
     all: () => true,
     'no-lyrics': (it) => !it.hasLyrics || it.lyricsType === 'txt',
     // 有時間軸但只到整句：可以試著升級成逐字
-    'line-lyrics': (it) => it.hasLyrics && it.lyricsType === 'lrc' && !it.lyricsLocked,
+    'line-lyrics': (it) => lyricsLevel(it) === 'line' && !it.lyricsLocked,
     backing: hasBacking,
     'no-backing': (it) => !hasBacking(it),
   };

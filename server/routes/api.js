@@ -464,6 +464,20 @@ router.post('/lyrics/candidates', requirePin, async (req, res) => {
 // Phase 5: 歌詞檔案上傳（.lrc / .srt）
 // ═══════════════════════════════════════════
 
+// 上傳／貼上的歌詞要跟線上搜尋到的歌詞走同一套整理（LyricsEngine.parseByType）：
+// 同一時間戳的翻譯行併進 line.translation、HTML 實體解碼、合唱聲部標記、首尾製作資訊。
+// 只用 autoParseLyrics 的話，雙語 LRC（網易雲下載的原文＋中文翻譯）會變成同一秒兩行，
+// 顯示端換行時翻譯直接蓋掉原文；「Rock &amp; Roll」也會原樣顯示。
+function engineParsedLines(content, type, fallbackLines) {
+  try {
+    const lines = LyricsEngine.parseByType(content, type);
+    if (Array.isArray(lines) && lines.length) return lines.map((line) => ({ ...line }));
+  } catch (err) {
+    log.warn(`歌詞整理失敗，改用原始解析: ${err.message}`);
+  }
+  return fallbackLines;
+}
+
 router.post('/lyrics/upload', requirePin, lyricsUpload.single('lyrics'), (req, res) => {
   const start = Date.now();
   try {
@@ -498,17 +512,18 @@ router.post('/lyrics/upload', requirePin, lyricsUpload.single('lyrics'), (req, r
     // 清理上傳的檔案（不需要保留）
     try { fs.unlinkSync(filePath); } catch (_) {}
 
+    const parsedLyrics = engineParsedLines(content, parsed.type, parsed.lines);
     const duration = Date.now() - start;
-    log.info(`歌詞上傳解析完成: ${parsed.lines.length} 行, 類型: ${parsed.type} (${duration}ms)`);
-    log.perf('lyrics-upload', duration, { lineCount: parsed.lines.length, type: parsed.type });
+    log.info(`歌詞上傳解析完成: ${parsedLyrics.length} 行, 類型: ${parsed.type} (${duration}ms)`);
+    log.perf('lyrics-upload', duration, { lineCount: parsedLyrics.length, type: parsed.type });
 
     res.json({
       success: true,
       lyrics: content,
       lyricsType: parsed.type,
       offset: parsed.offset,
-      lineCount: parsed.lines.length,
-      parsedLyrics: parsed.lines,
+      lineCount: parsedLyrics.length,
+      parsedLyrics,
     });
   } catch (err) {
     log.error('歌詞上傳解析失敗', err);
@@ -550,16 +565,17 @@ router.post('/lyrics/paste', requirePin, (req, res) => {
       return res.status(400).json({ error: '無法解析歌詞內容，請確認格式正確（支援 LRC / SRT / 純文字）' });
     }
 
+    const parsedLyrics = engineParsedLines(content, parsed.type, parsed.lines);
     const duration = Date.now() - start;
-    log.info(`歌詞貼上解析完成: ${parsed.lines.length} 行, 類型: ${parsed.type} (${duration}ms)`);
+    log.info(`歌詞貼上解析完成: ${parsedLyrics.length} 行, 類型: ${parsed.type} (${duration}ms)`);
 
     res.json({
       success: true,
       lyrics: content,
       lyricsType: parsed.type,
       offset: parsed.offset,
-      lineCount: parsed.lines.length,
-      parsedLyrics: parsed.lines,
+      lineCount: parsedLyrics.length,
+      parsedLyrics,
     });
   } catch (err) {
     log.error('歌詞貼上解析失敗', err);

@@ -11,6 +11,9 @@ const MAX_LYRICS_LENGTH = 1024 * 1024;
 // 只是防呆用的上限，不是「合理的歌曲偏移」上限，所以放寬到 ±5 分鐘。offset:adjust／offset:set
 // （server/routes/handlers/lyrics.js）與 deck-commands.js 都要 import 同一個值，不要各自硬寫常數。
 const MAX_OFFSET_MS = 300000;
+// 歌詞格式白名單。vtt 是 WebVTT 匯入（PR #50）新增的格式：沒列進來時，存檔重開後
+// 播放清單上的 lyricsType 被清成 null、手動歌詞被改標成 lrc。
+const LYRICS_TYPES = ['lrc', 'krc', 'srt', 'vtt', 'txt'];
 
 function text(value, max = 500, fallback = '') {
   if (value === undefined || value === null) return fallback;
@@ -105,7 +108,7 @@ function sanitizeManualLyrics(value) {
   if (!lyrics) return null;
   return {
     lyrics,
-    lyricsType: ['lrc', 'krc', 'srt', 'txt'].includes(value.lyricsType) ? value.lyricsType : 'lrc',
+    lyricsType: LYRICS_TYPES.includes(value.lyricsType) ? value.lyricsType : 'lrc',
     parsedLyrics: sanitizeParsedLyrics(value.parsedLyrics),
     source: text(value.source, 40, 'manual'),
     timestamp: finite(value.timestamp, Date.now(), 0, Number.MAX_SAFE_INTEGER),
@@ -146,7 +149,7 @@ function sanitizeTrack(value) {
   const title = text(value.title, 500).trim();
   if (!id || !title) return null;
   const filename = value.filename ? safeMediaBasename(value.filename) : null;
-  const lyricsType = ['lrc', 'krc', 'srt', 'txt'].includes(value.lyricsType) ? value.lyricsType : null;
+  const lyricsType = LYRICS_TYPES.includes(value.lyricsType) ? value.lyricsType : null;
   const out = {
     id,
     // 清單裡「這一列」的專屬識別碼，跟歌曲 id 分開：同一首歌重複加入會拿到不同的 entryId。

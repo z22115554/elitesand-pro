@@ -284,7 +284,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (!Array.isArray(lines) || !lines.length) {
       const raw = manual?.lyrics || track.lyrics || '';
       const type = manual?.lyricsType || track.lyricsType;
-      lines = raw ? (type === 'krc' ? LyricsEngine.parseKrc(raw) : LyricsEngine.parseLrc(raw)) : [];
+      lines = LyricsEngine.parseByType(raw, type);
     }
     const vocalsFile = track.vocalsFile || libraryStore.getEntry(trackId)?.vocalsFile;
     // 只接受 downloadsDir 底下的單純檔名（跟 /audio/:filename 同一條規則）
@@ -619,9 +619,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 伺服器自行解析，否則後面的羅馬化 / 諧音判斷拿到 null 會直接跳過 → 拼音諧音永遠不出現。
     if (!Array.isArray(parsedLyrics) || parsedLyrics.length === 0) {
       try {
-        parsedLyrics = (lyricsType === 'krc')
-          ? LyricsEngine.parseKrc(lyrics)
-          : LyricsEngine.parseLrc(lyrics);
+        parsedLyrics = LyricsEngine.parseByType(lyrics, lyricsType);
       } catch (e) {
         log.warn(`lyrics:manual 伺服器端解析失敗: ${e.message}`);
         parsedLyrics = null;
@@ -801,7 +799,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (entry.lyricsType === 'krc') return { status: 'already' };
 
     const result = await LyricsEngine.search(entry.artist || '', entry.title, Number(entry.duration) || 0, false);
-    if (!result || !result.lyrics) return { status: 'not-found' };
+    // 只找到純文字（沒有時間軸）跟逐字升級無關，也不拿它來判斷現有歌詞是不是對錯歌。
+    if (!result || !result.lyrics || result.type === 'txt') return { status: 'not-found' };
     const isWord = result.type === 'krc';
     let parsed = Array.isArray(result.parsedLyrics) && result.parsedLyrics.length
       ? result.parsedLyrics.map((line) => ({ ...line }))

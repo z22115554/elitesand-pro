@@ -56,7 +56,7 @@
   function lyricsLevel(track) {
     const has = !!(track.hasLyrics || track.lyrics);
     if (has && track.lyricsType === 'krc') return 'word';
-    if (has && track.lyricsType === 'lrc') return 'line';
+    if (has && ['lrc', 'srt', 'vtt'].includes(track.lyricsType)) return 'line';
     return has ? 'plain' : 'none';
   }
 

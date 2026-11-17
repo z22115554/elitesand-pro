@@ -997,7 +997,9 @@ const KaraokeEngine = (() => {
       let match;
       while ((match = regex.exec(line)) !== null) timestamps.push(parseLrcTimestamp(match[1]));
 
-      const text = line.replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, '').trim();
+      // 增強 LRC 的逐字時間 <mm:ss.xx> 一併拿掉（同 server/services/lrc-parser.js）
+      const text = line.replace(/\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/g, '')
+        .replace(/<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>/g, '').replace(/[ \t]{2,}/g, ' ').trim();
       if (timestamps.length > 0 && text) {
         for (const time of timestamps) parsed.push({ time, text, phonetic: '', words: [] });
       }

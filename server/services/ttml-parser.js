@@ -71,6 +71,10 @@ function parseTTML(ttmlText) {
       return d ? d.agent : '';
     };
 
+    // Apple 的 TTML 把翻譯放在 <head> 的 <iTunesMetadata><translations>，用 <text for="L1"> 對到
+    // <p itunes:key="L1">。有多種語言時優先繁中、再來其他中文、最後第一個。
+    const headTranslations = readHeadTranslations(ttmlText);
+
     // 找出所有 <p> 段落
     const pRegex = /<p\s+([^>]*)>([\s\S]*?)<\/p>/g;
     let pMatch;
@@ -80,6 +84,10 @@ function parseTTML(ttmlText) {
       // 背景和聲 / 翻譯 / 羅馬拼音的整行 <p>：跳過，不混進主歌詞。
       if (/\bttm:role="x-(?:bg|translation|roman|anti)"/i.test(attrs)) continue;
       // span 級的背景和聲 / 翻譯 / 羅馬拼音：整段剝掉再解析（含一層巢狀逐字 <span>）。
+      // 行內的翻譯（AMLL／Apple 的 <span ttm:role="x-translation">）：剝掉前先記下來當這一行的譯文。
+      const itunesKey = getAttr(attrs, 'itunes:key');
+      const translationText = extractRoleText(pMatch[2], 'x-translation')
+        || (itunesKey && headTranslations[itunesKey]) || '';
       const content = stripRoleSpans(pMatch[2], 'x-bg|x-translation|x-roman|x-anti');
 
       // 注意：Apple/boidu 的 TTML 有些 <p> 只在子 <span> 上有 begin/end、行級不帶時間。
@@ -170,7 +178,9 @@ function parseTTML(ttmlText) {
           krcLine += `${escapeTimedWord(he.decode(word.text))}<${word.start},${word.duration}>`;
         }
         const agentId = getAttr(attrs, 'ttm:agent') || getAttr(attrs, 'agent') || divAgentAt(pMatch.index);
-        lines.push({ krc: krcLine, singer: singerCodeForAgent(agentId) });
+        lines.push({ krc: krcLine, singer: singerCodeForAgent(agentId), time: timeTag,
+          // 譯文跟原文一樣（中文歌常見）就不收，免得同一句顯示兩次。
+          translation: translationText && translationText !== fullText.trim() ? translationText : '' });
       }
     }
 
@@ -178,11 +188,15 @@ function parseTTML(ttmlText) {
     // 只有整首出現 ≥2 種聲部代號時才輸出標記（solo 歌每行都掛同一個 agent，不算對唱）。
     const distinctSingers = new Set(lines.map((l) => l.singer).filter(Boolean));
     const emitSingers = distinctSingers.size >= 2;
-    return lines
+    const body = lines
       .map((l) => (emitSingers && l.singer
         ? l.krc.replace(/^(\[[^\]]+\]<\d+>)/, `$1${l.singer}`)
-        : l.krc))
-      .join('\n');
+        : l.krc));
+    // 譯文用「[時間]文字」純文字行接在後面（同 appendTranslationLines），parseKrc 依時間收進對應那一行。
+    const translations = lines
+      .filter((l) => l.translation)
+      .map((l) => `[${l.time}]${l.translation.replace(/</g, '＜')}`);
+    return body.concat(translations).join('\n');
   } catch (err) {
     console.error('[TTML] 解析失敗:', err.message);
     return null;
@@ -232,6 +246,41 @@ function getAttr(attrStr, name) {
   return match ? match[1] : '';
 }
 
+/** <head> 裡 <translations> 的譯文 → { 行 key: 文字 }；沒有回 {}。 */
+function readHeadTranslations(ttmlText) {
+  const blocks = [];
+  const blockRe = /<translation\b([^>]*)>([\s\S]*?)<\/translation>/gi;
+  let m;
+  while ((m = blockRe.exec(ttmlText)) !== null) {
+    const lang = (getAttr(m[1], 'xml:lang') || '').toLowerCase();
+    const map = {};
+    const textRe = /<text\b([^>]*)>([\s\S]*?)<\/text>/gi;
+    let t;
+    while ((t = textRe.exec(m[2])) !== null) {
+      const key = getAttr(t[1], 'for');
+      const text = stripTags(t[2]).replace(/\s+/g, ' ').trim();
+      if (key && text) map[key] = text;
+    }
+    if (Object.keys(map).length) blocks.push({ lang, map });
+  }
+  if (!blocks.length) return {};
+  const rank = (lang) => (/^zh-(?:hant|tw|hk|mo)/.test(lang) ? 0 : (/^zh/.test(lang) ? 1 : 2));
+  blocks.sort((x, y) => rank(x.lang) - rank(y.lang));
+  return blocks[0].map;
+}
+
+/** 取出某個 ttm:role 的 span 純文字（多個就接起來）；沒有回空字串。 */
+function extractRoleText(html, role) {
+  const re = new RegExp(`<span\\b[^>]*\\bttm:role="${role}"[^>]*>([\\s\\S]*?)<\\/span>`, 'gi');
+  const parts = [];
+  let m;
+  while ((m = re.exec(String(html || ''))) !== null) {
+    const text = stripTags(m[1]).replace(/\s+/g, ' ').trim();
+    if (text) parts.push(text);
+  }
+  return parts.join(' ');
+}
+
 function stripTags(html) {
   return html.replace(/<[^>]*>/g, '');
 }
@@ -270,15 +319,45 @@ function stripRoleSpans(html, rolePattern) {
  * 移除：關鍵字括號（Official／Remastered／Music Video…）、feat./ft. 之後的整段、
  * 年份後綴、全形括號與書名號內容、"|" 之後的尾段，最後壓縮空白。
  */
+// 括號一層一層由內往外剝（「(여자)아이들((G)I-DLE)」這種巢狀括號，舊的單層正則會從第一個「(」
+// 一路吃到第一個「)」，剩下「아이들I-DLE)」）。名字自帶的單字母括號（f(x)、(G)I-DLE）保留。
+function stripBracketGroups(text) {
+  let out = text;
+  for (let guard = 0; guard < 5; guard += 1) {
+    const next = out.replace(/[（(【\[][^（(【\[）)}】\]]*[）)}】\]]/g, (group, offset, whole) => {
+      const glued = /^[([][A-Za-z0-9][)\]]$/.test(group)
+        && (/[A-Za-z0-9]$/.test(whole.slice(0, offset)) || /^[A-Za-z0-9]/.test(whole.slice(offset + group.length)));
+      return glued ? group : '';
+    });
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
 function cleanQuery(text) {
   if (!text) return '';
-  return text
+  // 括號要先剝：「Song (feat. X)」若先跑 feat 規則，會連右括號一起吃掉，留下「Song (」。
+  // feat／ft／featuring 前後都必須是空白：舊版前面用 \s*（可為零個），「Left Behind」的
+  // 「ft」、「Defeat」的「feat」都會被當成客串標記，整句砍成「Le」「De」。
+  // 也不再把「with」當客串標記：「Stay With Me」會變「Stay」、「With or Without You」整句變空字串；
+  // 「(with X)」這種真正的客串寫法本來就會被括號規則移除。
+  const withoutNotes = String(text)
     .replace(/\((?:Official|Remastered|Deluxe|Explicit|Clean|Radio|Edit|Version|Extended|Mix|Original|Music\s*Video|HD|4K|Audio|Lyric|Lyrics|Visualizer|Animation)[^)]*\)/gi, '')
-    .replace(/\s*(?:feat\.?|ft\.?|featuring|with)\s+.+/gi, '')
-    .replace(/\s*\(\d{4}\)\s*$/g, '')
-    .replace(/[（(【\[][^）)}】\]]*[）)}】\]]/g, '')
+    .replace(/\s*\(\d{4}\)\s*$/g, '');
+  // 名字本身就帶括號的（f(x)、(G)I-DLE、(K)NoW_NAME）：括號裡只有 1 個英數字、且直接黏著英數字，
+  // 是名字的一部分，不是「(Live)」這種附註；舊版剝成「f」「I-DLE」，拿去搜歌詞對不到。
+  const cleaned = stripBracketGroups(withoutNotes)
     .replace(/[「『《〈＜][^」』》〉＞]*[」』》〉＞]/g, '')
+    .replace(/\s+(?:feat\.?|ft\.?|featuring)\s+.+/gi, '')
     .replace(/\s*\|.*$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned) return cleaned;
+  // 整個名字都包在括號／書名號裡（[Alexandros]、「夜に駆ける」、『ドラえもん』）：照上面規則會整段剝光，
+  // 歌名變空字串、搜尋只剩歌手（或什麼都沒有）。這時只拿掉括號符號、保留裡面的字。
+  return String(text)
+    .replace(/[（(【\[）)}】\]「『《〈＜」』》〉＞]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
