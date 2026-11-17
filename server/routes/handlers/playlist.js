@@ -31,6 +31,23 @@ async function applyCommunityOffsetSuggestion(ctx, io, track) {
   ctx.persistState();
 }
 
+/** 已唱歌單存的是唱當下的歌名副本：清單裡改了名字，同一首（同 id）已唱過的那幾筆也換成新名字。 */
+function syncNamesToSession(session, tracks) {
+  if (!session || !Array.isArray(session.songs) || !session.songs.length) return false;
+  const names = new Map();
+  for (const track of tracks || []) {
+    if (track && track.id && track.title) names.set(String(track.id), { title: track.title, artist: track.artist || '' });
+  }
+  let changed = false;
+  session.songs = session.songs.map((song) => {
+    const next = song && names.get(String(song.id));
+    if (!next || (song.title === next.title && (song.artist || '') === next.artist)) return song;
+    changed = true;
+    return { ...song, ...next };
+  });
+  return changed;
+}
+
 /**
  * 播放清單改名（或任何 title/artist 變動）同步回媒體庫，讓兩邊名稱一致。
  * updateMeta 只更新「已存在」的記錄，不會無中生有；只在名稱真的不同時才寫，避免無謂存檔。
@@ -107,6 +124,8 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
     // 在播放清單改了名字：歌曲庫頁也要馬上看到新名字
     if (syncNamesToLibrary(preserved)) emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
+    // 這場已唱的那幾筆也跟著改（同歌曲庫改名）；下面的 emitSetlist／persistState 會一起送出、存檔。
+    syncNamesToSession(ctx.session, preserved);
     emitPlaylistUpdate();
     emitSetlist(); // 未唱清單跟著清單變動更新
     broadcastState();

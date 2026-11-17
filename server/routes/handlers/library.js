@@ -48,6 +48,17 @@ function buildTrackFromEntry(entry) {
     vocalsFile: entry.vocalsFile || null,
     instrumentalFile: entry.instrumentalFile || null,
     separationStatus: entry.separationStatus || 'none',
+    // 同一個坑又漏了這幾個（2026-11-13 稽核）：從歌曲庫加入清單／BGM／核准公開點歌的歌
+    // 原本都會掉——統一音量失效（BGM 永遠沒有響度值）、段落搭配與自動直書抓不到段落、
+    // 歌詞來源（社群偏移的分類、換來源的偏移記憶）、LRC 內建 offset、時長不符的提示。
+    album: entry.album || '',
+    originalName: entry.originalName || '',
+    lyricsSource: entry.lyricsSource || null,
+    lyricsDurationVerified: typeof entry.lyricsDurationVerified === 'boolean' ? entry.lyricsDurationVerified : null,
+    lrcOffset: Number.isFinite(entry.lrcOffset) ? entry.lrcOffset : 0,
+    loudnessLufs: typeof entry.loudnessLufs === 'number' && Number.isFinite(entry.loudnessLufs) ? entry.loudnessLufs : null,
+    sections: Array.isArray(entry.sections) && entry.sections.length ? entry.sections : null,
+    sectionsStatus: entry.sectionsStatus || 'none',
   };
 }
 
@@ -166,10 +177,23 @@ function registerLibraryHandlers(io, socket, ctx, {
       Object.assign(track, naming);
       liveChanged = true;
     }
+    // 這場已唱過的那幾筆也跟著改：已唱歌單存的是唱當下的歌名副本，不改的話 OBS 歌單、
+    // 複製 YouTube 章節都還是舊名字（主播常常就是看到歌單上名字錯了才來改）。
+    let sungChanged = false;
+    const session = ctx.session;
+    if (session && Array.isArray(session.songs)) {
+      session.songs = session.songs.map((song) => {
+        if (!song || String(song.id) !== id || (song.title === title && (song.artist || '') === artist)) return song;
+        sungChanged = true;
+        return { ...song, title, artist };
+      });
+    }
     if (liveChanged) {
       emitToAccessRooms(io, 'playlist:update', getPublicPlaylist(), getReadOnlyPlaylist());
-      emitSetlist();
       broadcastState();
+    }
+    if (liveChanged || sungChanged) {
+      emitSetlist();
       persistState();
     }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());

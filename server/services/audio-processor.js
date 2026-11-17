@@ -716,6 +716,10 @@ class AudioProcessor {
       // 否則顯示端只拿到原始歌詞字串、自己重解析→沒有拼音/諧音；逐字(KRC)尤其明顯。
       // play:track 也會用這份在播放當下補做羅馬化並廣播。
       parsedLyrics: lyricsResult ? (lyricsResult.parsedLyrics || null) : null,
+      // 歌詞來源（betterlyrics／kugou／lrclib…）：上傳路徑一直有帶，YouTube 匯入（大多數歌）卻漏了。
+      // 少了它，社群偏移回饋不分來源記票、換歌詞來源時「各來源記住的偏移」第一次切換就失效。
+      lyricsSource: (lyricsResult && lyricsResult.source) || null,
+      ...(lyricsResult && Number.isFinite(lyricsResult.lrcOffset) && lyricsResult.lrcOffset !== 0 ? { lrcOffset: lyricsResult.lrcOffset } : {}),
       loudnessLufs,
       source: 'youtube',
       url,
@@ -726,6 +730,29 @@ class AudioProcessor {
     // 當第二層 key。批次匯入（播放清單）沒有人一直盯著，直接沿用既有那份、不重複落地；
     // 單首手動匯入交給呼叫端問使用者要「取代」還是「略過」，見 forceReplace。
     const libraryStore = require('./library-store');
+    // 重新下載（「清理音檔」後再加入清單、或按「重新下載」）：媒體庫已經有這支影片的記錄。
+    // rememberImport 是 {...舊, ...新}，不處理的話使用者整理過的歌名／歌手、手動選或貼的歌詞
+    // （連同改過的諧音，都在 parsedLyrics 裡）全被這次重新解析、重新搜尋的結果蓋掉。
+    const previous = typeof libraryStore.getEntry === 'function' ? libraryStore.getEntry(track.id) : null;
+    if (previous && previous.title) {
+      Object.assign(track, {
+        title: previous.title,
+        artist: previous.artist || '',
+        performer: previous.performer || track.performer || '',
+        isCover: previous.isCover === true,
+        needsArtistConfirmation: !previous.artist,
+        artistConfidence: Number.isFinite(previous.artistConfidence) ? previous.artistConfidence : track.artistConfidence,
+      });
+    }
+    if (previous && previous.lyrics) {
+      Object.assign(track, {
+        lyrics: previous.lyrics,
+        lyricsType: previous.lyricsType || track.lyricsType,
+        parsedLyrics: previous.parsedLyrics || null,
+        lyricsSource: previous.lyricsSource || null,
+        lrcOffset: Number.isFinite(previous.lrcOffset) ? previous.lrcOffset : 0,
+      });
+    }
     const duplicate = libraryStore.findByIdentity(track.artist, track.title, track.id);
     if (duplicate && !options.forceReplace) {
       const referenced = libraryStore.getLibrary().some((entry) => libraryStore.collectMediaFilenames(entry).has(filename));

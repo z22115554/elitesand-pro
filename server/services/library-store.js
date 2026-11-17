@@ -400,6 +400,19 @@ function recordPlay(track) {
       ? track.sections : (prev && prev.sections) || null,
     sectionsStatus: (track.sectionsStatus && track.sectionsStatus !== 'none')
       ? track.sectionsStatus : (prev && prev.sectionsStatus) || 'none',
+    // 匯入時（rememberImport）存進來、播放時的 payload 常常沒帶的欄位：重建時同樣要保留，
+    // 否則播一次專輯名、原始檔名就不見。LRC 內建 offset 與「時長不符」只屬於那份歌詞，
+    // 歌詞換掉了才跟著新歌詞走。
+    album: pick(track.album, prev && prev.album) || '',
+    originalName: pick(track.originalName, prev && prev.originalName) || '',
+    ...(() => {
+      const sameLyrics = !!prev && (!track.lyrics || track.lyrics === prev.lyrics);
+      return {
+        lrcOffset: track.lrcOffset || (sameLyrics && Number.isFinite(prev.lrcOffset) ? prev.lrcOffset : 0),
+        lyricsDurationVerified: typeof track.lyricsDurationVerified === 'boolean' ? track.lyricsDurationVerified
+          : (sameLyrics && typeof prev.lyricsDurationVerified === 'boolean' ? prev.lyricsDurationVerified : null),
+      };
+    })(),
     playCount: (prev ? prev.playCount : 0) + 1,
     lastPlayed: Date.now(),
   };
