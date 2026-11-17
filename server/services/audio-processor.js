@@ -421,17 +421,27 @@ function cleanupOwnedTemporaryDownload(videoId, outputDir) {
 // Windows 保留字元 \/:*?"<>| 與控制字元都會讓寫檔失敗，一律代換成空白後收攏；
 // 長度裁切避免加上聲音品質等長標題時超過路徑長度限制。
 function sanitizeForFilename(name) {
-  return String(name || '')
-    .replace(/[\\/:*?"<>|]/g, ' ')
+  // 用 code point 截長度：.slice(0, 80) 會把剛好跨在第 80 個字的 emoji 切成半個代理字元，
+  // 檔名變成不合法的 UTF-16，面板 encodeURIComponent('/audio/…') 直接丟 URIError、整首放不出來。
+  // 控制字元在 Windows 檔名裡不合法，一併換掉。
+  return Array.from(String(name || '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 80);
+    .trim())
+    .slice(0, 80)
+    .join('')
+    .trim();
 }
+
+// Windows 保留裝置名稱（CON、NUL、COM1…）不能當檔名，連「CON.m4a」都不行。
+const WINDOWS_RESERVED_BASENAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
 function buildTrackFilename(artist, title, ext) {
   const cleanTitle = sanitizeForFilename(title) || '未知歌曲';
   const cleanArtist = sanitizeForFilename(artist);
-  const base = cleanArtist ? `${cleanArtist} - ${cleanTitle}` : cleanTitle;
+  let base = cleanArtist ? `${cleanArtist} - ${cleanTitle}` : cleanTitle;
+  if (WINDOWS_RESERVED_BASENAME.test(base)) base = `${base}_`;
   return `${base}${ext}`;
 }
 
@@ -440,6 +450,7 @@ const {
   stripNoiseBracketGroups,
   repairBrackets,
   PROMO_TAIL,
+  PROMO_PAREN,
   PUBLISHER_TAIL,
   PUBLISHER_HEAD,
   isLabelArtist,
@@ -662,7 +673,7 @@ class AudioProcessor {
     const performer = cover ? (identity.artist || info.channel || info.uploader || '') : '';
     if (cover) identity = { ...identity, artist: '', confidence: 0, reason: 'cover-original-unknown' };
     let artist = identity.artist;
-    const title = identity.title;
+    let title = identity.title;
 
     log.info(`影片標題解析: "${info.title}" → 歌手: "${artist}", 歌名: "${title}"`);
 
@@ -671,8 +682,18 @@ class AudioProcessor {
       ? LyricsEngine.resolveOriginalArtist(title, info.duration || 0).catch(() => null)
       : Promise.resolve(null);
     if (!lyricsPromise) lyricsPromise = startLyrics(artist, title);
-    const [lyricsResult, { downloaded, loudnessLufs }, originalArtist] = await Promise.all([lyricsPromise, audioReady, artistLookup]);
+    let [lyricsResult, { downloaded, loudnessLufs }, originalArtist] = await Promise.all([lyricsPromise, audioReady, artistLookup]);
     throwIfCancelled(options.signal);
+    // 動態歌詞頻道的「A - B【動態歌詞】」兩種順序都很常見（歌名 - 歌手、歌手 - 歌名），標題規則只能猜一邊。
+    // 猜的那邊查不到歌詞時，對調再查一次；查到了就以對調後的為準（歌詞來源確認過歌名＋歌手）。
+    if (!lyricsResult && !cover && artist && title && identity.reason === 'lyric-repost-title-artist') {
+      const swapped = await startLyrics(title, artist);
+      throwIfCancelled(options.signal);
+      if (swapped) {
+        lyricsResult = swapped;
+        [artist, title] = [title, artist];
+      }
+    }
     if (originalArtist?.artist) artist = originalArtist.artist;
     const filename = this.renameToReadableFilename(downloaded.filePath, downloaded.outputDir, artist, title);
 
@@ -792,8 +813,10 @@ class AudioProcessor {
     const haystack = `${title}\n${info.description || ''}`;
     const strong = /歌ってみた|弾き語り|翻唱|カバー曲|cover(?:ed)?\s+by|[（(\[【]\s*cover\s*[)）\]】]|(?:vocal|acoustic|piano|guitar|band|live|female|male|english|acappella|a[\s.]*cappella)\s+covers?\b/i;
     if (strong.test(haystack)) return true;
-    // 標題中單獨出現的 "cover"（如「Song (Cover)」被打成「Song Cover」）
-    const bareCover = /\bcovers?\b/i.test(title);
+    // 標題中單獨出現的 "cover"（如「Song (Cover)」被打成「Song Cover」）：只認出現在標題結尾、
+    // 或後面直接接分隔符／括號的用法。舊版只要有 cover 這個字就算，Cover Me、Under Cover of
+    // Darkness 這類歌名會被當成翻唱，原唱被清空改標「原唱待確認」。
+    const bareCover = /\bcovers?\b(?=\s*(?:$|[|｜/／【\[(（\-–—~～]))/i.test(title);
     const nonPerformance = /\balbum\s+covers?\b|\bcovers?\s+(?:art|artwork|photo|image|images|design|reveal|page)\b/i.test(title);
     return bareCover && !nonPerformance;
   }
@@ -844,7 +867,9 @@ class AudioProcessor {
   static cleanTrackTitle(title) {
     if (!title || typeof title !== 'string') return '';
     let cleaned = stripNoiseBracketGroups(normalizeVideoText(title));
-    for (const pattern of NOISE_PATTERNS) cleaned = cleaned.replace(pattern, '');
+    // 換成空白而不是直接刪掉：噪音字夾在中間時（「晴天 伴奏 周杰倫」），規則連兩側空白一起吃，
+    // 刪掉會把前後黏成「晴天周杰倫」、認不出後面的歌手。多出來的空白下面會壓回一個。
+    for (const pattern of NOISE_PATTERNS) cleaned = cleaned.replace(pattern, ' ');
     return cleanIdentityPart(repairBrackets(cleaned).replace(/\s+/g, ' ').trim(), 'title');
   }
 
@@ -859,6 +884,20 @@ class AudioProcessor {
     let artist = metadataArtist || parsed.artist || '';
     let title = metadataTitle || parsed.title || this.cleanTrackTitle(info.title) || info.title || '';
 
+    let topicArtist = false;
+    if (!metadataArtist && !metadataTitle) {
+      // YouTube 自動產生的「歌手 - Topic」頻道（Art Track）：頻道名去掉 - Topic 就是歌手本人，
+      // 標題通常只有歌名（〈Lemon〉），沒有這條就整首沒有歌手。「Various Artists - Topic」這種合輯例外。
+      // Topic 頻道只放 Art Track，標題一定只有歌名：「Blinding Lights - Radio Edit」「Stay (with Justin Bieber)」
+      // 不能再拿去跑「歌手 - 歌名」規則（舊版拆成歌手「Radio」、或歌手歌名對調）。
+      const topic = String(info.channel || info.uploader || '').match(/^\s*(.+?)\s*-\s*Topic\s*$/i);
+      const name = topic ? topic[1].trim() : '';
+      if (name && !/^(?:various\s+artists?|群星|v\.?\s*a\.?)$/i.test(name) && !isLabelArtist(name)) {
+        artist = name;
+        title = this.cleanTrackTitle(info.title) || info.title || title;
+        topicArtist = true;
+      }
+    }
     if (!artist) {
       const channel = this.cleanArtistName(info.channel || info.uploader || '');
       const normalizedRaw = normalizeVideoText(info.title).toLowerCase().replace(/\s+/g, '');
@@ -873,14 +912,15 @@ class AudioProcessor {
     // 廠牌／搬運頻道則是相反：它不是原唱，寧可留空讓面板顯示「原唱待確認」，也不要塞一個
     // 錯的名字——錯的歌手名會一路污染歌詞搜尋的 query。
     if (isLabelArtist(artist)) artist = '';
-    if (artist && title && isKnownArtist(title) && !isKnownArtist(artist)) {
+    // Topic 頻道的歌手就是頻道本人，不對調（「Stay (with Justin Bieber)」裡有已知歌手也不是歌手欄）。
+    if (!topicArtist && artist && title && isKnownArtist(title) && !isKnownArtist(artist)) {
       const swap = artist; artist = title; title = swap;
     }
 
     return {
       artist: cleanIdentityPart(artist, 'artist'),
       title: cleanIdentityPart(title, 'title'),
-      confidence: metadataTitle || metadataArtist ? 1 : parsed.confidence,
+      confidence: metadataTitle || metadataArtist ? 1 : (topicArtist ? Math.max(parsed.confidence, 0.85) : parsed.confidence),
       reason: metadataTitle || metadataArtist ? 'structured-metadata' : parsed.reason,
     };
   }
@@ -1879,15 +1919,21 @@ class AudioProcessor {
 
     const isLyricRepost = /動態歌詞|动态歌词|歌詞Lyrics|歌词Lyrics|歌詞拼音|歌词拼音|歌回剪輯|歌回剪辑/i.test(rawTitle);
     let cleaned = stripNoiseBracketGroups(stripLeadingNoiseTags(normalizeVideoText(rawTitle)));
-    for (const pattern of NOISE_PATTERNS) cleaned = cleaned.replace(pattern, '');
+    // 換成空白而不是直接刪掉（同 cleanTrackTitle）：「晴天 伴奏 周杰倫」才不會黏成「晴天周杰倫」。
+    for (const pattern of NOISE_PATTERNS) cleaned = cleaned.replace(pattern, ' ');
     cleaned = compactSpaces(repairBrackets(cleaned).replace(PUBLISHER_TAIL, '').replace(PROMO_TAIL, ''));
     // 廠牌那段剝掉之後如果什麼都不剩，代表整串就是廠牌名，那就別剝——寧可讓後面的規則
     // 照常處理，也不要把標題清成空字串。
     const withoutPublisherHead = compactSpaces(cleaned.replace(PUBLISHER_HEAD, ''));
     if (withoutPublisherHead) cleaned = withoutPublisherHead;
+    // 「(電影「我的少女時代」插曲)」這類影視宣傳括號同理：剝掉後還有東西才剝。
+    const withoutPromoParen = compactSpaces(cleaned.replace(PROMO_PAREN, ' '));
+    if (withoutPromoParen) cleaned = withoutPromoParen;
     cleaned = cleaned
       .replace(/(?:【\s*】|《\s*》|〈\s*〉|「\s*」|『\s*』)/g, '')
-      .replace(/^\s*[+#-]?\s*\d+\s*\b/i, '')
+      // 開頭的曲序（01. 晴天、1) 晴天、#3 晴天、01 晴天）才剝；舊版只要開頭是數字就剝，
+      // 5566、19、10-FEET、4 Non Blondes 這類歌手名，22、2002、7 rings 這類歌名都被砍掉一截。
+      .replace(/^\s*(?:#\s*\d+\s*|\d+\s*[.、．)]\s*|0\d+\s+|[+-]\d+\s+)/i, '')
       .replace(/[（(]\s*[,、+\s-]*[）)]/g, '')
       .replace(/\s*[-+]+\s*(?:歌詞|歌词)?\s*$/i, '')
       .trim();
@@ -1902,7 +1948,8 @@ class AudioProcessor {
         pipeTitle = head
           .replace(/^【[^】]+】\s*(?=.)/, '')
           .replace(/^[《〈「『【]\s*|\s*[》〉」』】]$/g, '');
-        pipeArtist = parts[1].replace(/^原唱\s*[:：]\s*/i, '');
+        // 「晴天｜周杰倫 cover by 某某」：by 後面是翻唱者，不是歌手名的一部分。
+        pipeArtist = parts[1].replace(/^原唱\s*[:：]\s*/i, '').replace(/\s+cover(?:ed)?\s+by\b.*$/i, '').trim() || parts[1];
       }
       if (head.length >= 2) cleaned = head;
     }
@@ -1929,7 +1976,8 @@ class AudioProcessor {
     }
 
     // 頻道 tag 後才是「歌名 / 原唱」：例如【煦Hiyori】雨愛 / 楊丞琳【中文字幕】。
-    const channelSlash = !title && cleaned.match(/^【[^】]+】\s*([^/]+?)\s*\/\s*([^【]+?)(?=\s*【|$)/);
+    // 兩段都不能跨進下一組【】：「【歌枠】初見さん歓迎！【ホロライブ/星街すいせい】」舊版拆成歌手「星街すいせい】」。
+    const channelSlash = !title && cleaned.match(/^【[^】]+】\s*([^/【】]+?)\s*\/\s*([^【】]+?)(?=\s*【|$)/);
     if (channelSlash) {
       title = channelSlash[1].trim();
       artist = channelSlash[2].trim();
@@ -1943,6 +1991,8 @@ class AudioProcessor {
       if (lyricDash) {
         title = lyricDash[1].trim();
         artist = lyricDash[2].trim();
+        // 也有不少歌詞頻道照官方順序寫「歌手 - 歌名「歌詞」」：左邊是已知歌手、右邊不是時就對調。
+        if (isKnownArtist(title) && !isKnownArtist(artist)) [title, artist] = [artist, title];
         confidence = 0.9;
         reason = 'lyric-repost-title-artist';
       }
@@ -1965,7 +2015,8 @@ class AudioProcessor {
 
     // 官方 MV：「歌手《歌名》」或「歌手【歌名】」。第一個裝飾框比後面的影視作品框可信。
     if (!title) {
-      const promoDash = cleaned.match(/^(.+?)\s*-\s*(.+?)\s+(?:電視劇|电视剧|電影|电影|華劇|华剧)\s*[《【]/i);
+      // 連字號後面要有空白（跟下面的 dashMatch 一致）：A-Lin、G-Dragon 這種名字本身的連字號不是分隔。
+      const promoDash = cleaned.match(/^(.+?)\s*-\s+(.+?)\s+(?:電視劇|电视剧|電影|电影|華劇|华剧)\s*[《【]/i);
       if (promoDash) {
         artist = promoDash[1].trim();
         title = promoDash[2].trim();
@@ -1974,9 +2025,21 @@ class AudioProcessor {
       }
     }
 
+    // 歌ってみた／翻唱的慣例「歌名 / 原唱【翻唱者】」：結尾的【】是翻唱者或頻道署名，不是歌名。
+    // 讓下面的斜線規則處理「歌名 / 原唱」，不要被『歌手【歌名】』規則抓成歌手「歌名 / 原唱」。
+    if (!title) {
+      const slashTail = cleaned.match(/^([^【]+?)\s*【[^】]+】\s*$/);
+      if (slashTail && /\s\/|\/\s|[^\x00-\x7F]\/|\/[^\x00-\x7F]/.test(slashTail[1])) cleaned = slashTail[1].trim();
+    }
+
     if (!title) {
       const decorated = cleaned.match(/^(.+?)\s*[《〈【「『]\s*([^》〉】」』]+?)\s*[》〉】」』]/);
-      if (decorated) {
+      if (decorated && /\s-\s/.test(decorated[1])) {
+        // 框前面已經是「歌名 - 歌手」／「歌手 - 歌名」：後面的框是歌詞摘錄或作品名
+        // （「晴天 - 周杰倫『從前從前 有個人愛你很久』」「Aimer - 残響散歌『鬼滅の刃』」），不是歌名。
+        // 交給下面的連字號規則判斷方向；舊版歌手變成「晴天 - 周杰倫」、歌名變成歌詞摘錄。
+        cleaned = decorated[1].trim();
+      } else if (decorated) {
         artist = decorated[1].trim();
         title = decorated[2].trim();
         confidence = 0.96;
@@ -1984,14 +2047,54 @@ class AudioProcessor {
       }
     }
 
+    // 「歌手 [歌名]」：五月天、林宥嘉等官方頻道用方括號框歌名（「Mayday五月天 [ 派對動物 Party Animal ]」）。
+    // 方括號也常是版本／字幕註記，所以只在：方括號在最後、左邊沒有「 - 」、左邊看起來像歌手、
+    // 括號內不是版本或字幕字樣時才採用。
+    if (!title) {
+      const squareTitle = cleaned.match(/^(.+?)\s*[[［]\s*([^\][［］]+?)\s*[\]］]\s*$/);
+      if (squareTitle
+        && !/\s-\s/.test(squareTitle[1])
+        && (looksLikeArtist(squareTitle[1].trim()) || /^[A-Za-z][A-Za-z .'-]+\s*\p{Script=Han}{2,}$/u.test(squareTitle[1].trim()))
+        && !/\b(?:ver(?:sion)?|remix|live|acoustic|cover|inst(?:rumental)?|karaoke|feat|ft|prod|edit|mix|explicit|clean|lyrics?|sub(?:title)?s?|audio|video|mv|pv|full|short|hd|hq|4k|\d{3,4}p|\d+fps)\b|版|現場|现场|伴奏|翻唱|カバー|ライブ|字幕|中字|歌詞|歌词|拼音/i.test(squareTitle[2])) {
+        artist = squareTitle[1].trim();
+        title = squareTitle[2].trim();
+        confidence = 0.86;
+        reason = 'artist-square-bracket-title';
+      }
+    }
+
     // 「【歌手】歌名」；功能／頻道 tag 已在前面先移除。
     if (!title) {
       const bracketMatch = cleaned.match(/^【([^】]+)】\s*(.+)$/);
-      if (bracketMatch) {
+      if (bracketMatch && /\s-\s/.test(bracketMatch[2]) && !isKnownArtist(bracketMatch[1].trim())) {
+        // 後面已經是「歌手 - 歌名」時，開頭的【】是頻道／分類標籤（【抖音】【熱門】【Hi-Res】【原唱】），
+        // 不是歌手：剝掉交給下面的連字號規則。舊版會變成歌手＝抖音、歌名＝「周杰倫 - 晴天」。
+        cleaned = bracketMatch[2].trim();
+      } else if (bracketMatch) {
         artist = bracketMatch[1].trim();
         title = bracketMatch[2].trim();
         confidence = 0.86;
         reason = 'bracket-artist-title';
+      }
+    }
+
+    // 「歌名 (cover by 翻唱者)」「歌名 / 原唱 covered by 翻唱者」：by 後面是翻唱者（翻唱流程會把它當 performer、
+    // 另外查原唱），前面是歌名——帶「／原唱」或「- 原唱」時只取歌名那段。
+    if (!title) {
+      const coverBy = cleaned.match(/^(.+?)\s*[(（]?\s*\bcover(?:ed)?\s+by\s+(.+?)\s*[)）]?\s*$/i);
+      if (coverBy) {
+        // 「残響散歌 - Aimer // covered by …」：by 前面殘留的 // | - 分隔符先拿掉，不然被當成「歌名 / 原唱」的斜線。
+        let left = coverBy[1].replace(/[\s/／|｜\-–—]+$/, '').trim();
+        const slash = left.match(/^(.+?)\s*\/\s*.+$/);
+        const dash = left.match(/^(.+?)\s+-\s+(.+)$/);
+        if (slash) left = slash[1].trim();
+        else if (dash) left = isKnownArtist(dash[1].trim()) && !isKnownArtist(dash[2].trim()) ? dash[2].trim() : dash[1].trim();
+        if (left) {
+          title = left;
+          artist = coverBy[2].trim();
+          confidence = 0.8;
+          reason = 'title-cover-by-performer';
+        }
       }
     }
 
@@ -2010,9 +2113,17 @@ class AudioProcessor {
     }
 
     // 斜線在日系官方 MV 中多為「歌名 / 歌手」。
+    // 但左半段已經是「歌手 - 歌名」時（THE FIRST TAKE：「LiSA - 紅蓮華 / THE FIRST TAKE」、
+    // 「Eve - 廻廻奇譚 / Kaikai Kitan」），斜線後面是節目名或羅馬字歌名，不是歌手：
+    // 只留左半段交給下面的連字號規則，否則歌手會變成 THE FIRST TAKE、歌名變成「LiSA - 紅蓮華」。
     if (!title) {
-      const slashMatch = cleaned.match(/^(.+?)\s*\/\s*(.+)$/);
-      if (slashMatch) {
+      // 前後都是 1～2 個英數字、直接黏著的斜線是名字的一部分（AC/DC、Tani Yuuki〈W/X/Y〉），不是分隔。
+      const slashMatch = cleaned.replace(/(?<![A-Za-z0-9])([A-Za-z0-9]{1,2})\/(?=[A-Za-z0-9]{1,2}(?![A-Za-z0-9]))/g, '$1\u0000')
+        .match(/^(.+?)\s*\/\s*(.+)$/)
+        ?.map((part) => (typeof part === 'string' ? part.replace(/\u0000/g, '/') : part));
+      if (slashMatch && /\S\s+-\s+\S/.test(slashMatch[1])) {
+        cleaned = slashMatch[1].trim();
+      } else if (slashMatch) {
         title = slashMatch[1].trim();
         artist = slashMatch[2].replace(/\s*:\s*.*$/, '').trim();
         confidence = 0.78;
@@ -2040,6 +2151,23 @@ class AudioProcessor {
       }
     }
 
+    // 其他分隔寫法：1theK 等 K-pop 頻道的「歌手 _ 歌名」、Vaundy 等用全形冒號的「歌手：歌名」。
+    // 底線只在前後都有空白、而且沒有連字號時才當分隔；冒號歧義大（Re:Zero、副標），
+    // 只有冒號左邊整段就是已知歌手時才拆。
+    if (!title && !/\s-\s/.test(cleaned)) {
+      if (/\S\s+_\s+\S/.test(cleaned)) {
+        cleaned = cleaned.replace(/\s+_\s+/, ' - ');
+      } else {
+        const colon = cleaned.match(/^([^:：]+?)\s*[:：]\s*(.+)$/);
+        if (colon && KNOWN_ARTISTS.has(artistKey(colon[1].trim()))) {
+          artist = colon[1].trim();
+          title = colon[2].trim();
+          confidence = 0.86;
+          reason = 'known-artist-colon-title';
+        }
+      }
+    }
+
     // 連字號方向有歧義：中英並列藝名、feat./with 與已知歌手可提高判斷可信度。
     if (!title) {
       const dashMatch = cleaned.match(/^(.+?)\s*-\s+(.+)$/);
@@ -2050,16 +2178,33 @@ class AudioProcessor {
           title = right;
           artist = '';
           reason = 'stream-label-title';
-        } else if (isLyricRepost || (looksLikeArtist(right) && !looksLikeArtist(left))) {
+        } else if (isLyricRepost || (looksLikeArtist(right, { strict: true }) && !looksLikeArtist(left))) {
           title = left;
           artist = right;
           reason = 'title-artist-dash';
+        } else if (/[(（\[【]\s*cover\s*[)）\]】]/i.test(left) && !/\bcover\b/i.test(right)) {
+          // 「夜に駆ける (Cover) - 翻唱者」：標著 (Cover) 的那邊是歌名，另一邊是翻唱者（同 covered by 的處理）。
+          title = left.replace(/\s*[(（\[【]\s*cover\s*[)）\]】]\s*/gi, ' ').trim();
+          artist = right;
+          reason = 'title-cover-performer-dash';
         } else {
           artist = left;
           title = right;
           reason = 'artist-title-dash';
         }
         confidence = looksLikeArtist(artist) ? 0.86 : 0.68;
+      }
+    }
+
+    // K-pop 官方 MV 常見「歌手 (韓文名) '歌名' Official MV」：沒有連字號，歌名用引號包住。
+    // 只認前面有空白、裡面至少兩個字、後面是空白／括號／結尾的那一組，避免 Rock 'n' Roll、Guns N' Roses。
+    if (!title) {
+      const quotedTitle = cleaned.match(/^(.+?)\s+(?:‘([^‘’]{2,})’|“([^“”]{2,})”|'([^'\s][^']*[^'\s])'|"([^"\s][^"]*[^"\s])")(?=\s|$|[(\[（【])/);
+      if (quotedTitle) {
+        artist = quotedTitle[1].trim();
+        title = (quotedTitle[2] || quotedTitle[3] || quotedTitle[4] || quotedTitle[5] || '').trim();
+        confidence = 0.82;
+        reason = 'artist-quoted-title';
       }
     }
 
@@ -2085,20 +2230,58 @@ class AudioProcessor {
           artists.push(remainder.slice(0, next.length).trim());
           remainder = remainder.slice(next.length).replace(CONNECTOR_RE, '');
         }
+        // K-pop 慣例「BTS (방탄소년단) Dynamite」：緊接在歌手後面、括號裡是韓／日／中文的別名，
+        // 屬於歌手而不是歌名（舊版歌名變成「(방탄소년단) Dynamite」，歌詞也搜不到）。
+        const alias = remainder.match(/^[(（]([^()（）]*[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af][^()（）]*)[)）]\s+(?=\S)/);
+        if (alias) {
+          artists[artists.length - 1] += ` (${alias[1].trim()})`;
+          remainder = remainder.slice(alias[0].length);
+        }
         artist = artists.join(' & ');
         title = remainder;
         confidence = 0.84;
         reason = 'known-artist-prefix';
       } else {
-        title = cleaned;
+        // 反過來「歌名 歌手」（伴奏、翻唱上傳常見：「晴天 伴奏 周杰倫」剝掉伴奏後剩「晴天 周杰倫」）：
+        // 空白後面整段剛好是已知歌手才拆。不拆的話後面的空白清理會把它黏成歌名「晴天周杰倫」。
+        const words = cleaned.split(/\s+/).filter(Boolean);
+        let split = -1;
+        for (let i = 1; i < words.length && split < 0; i += 1) {
+          if (KNOWN_ARTISTS.has(artistKey(words.slice(i).join(' ')))) split = i;
+        }
+        // 中英並列的歌手（「周杰倫 Jay Chou」）：前一段也是已知歌手就一起算進歌手。
+        while (split > 1 && KNOWN_ARTISTS.has(artistKey(words[split - 1]))) split -= 1;
+        if (split > 0) {
+          // 「千本桜 feat. 初音ミク」：客串標記屬於歌手那一段，不留在歌名尾巴。
+          title = words.slice(0, split).join(' ').replace(/\s+(?:feat\.?|ft\.?|featuring|with|by|×|x)$/i, '');
+          artist = words.slice(split).join(' ');
+          confidence = 0.8;
+          reason = 'known-artist-suffix';
+        } else {
+          // 沒空白的「晴天-周杰倫」：連字號後面整段剛好是已知歌手才拆（「周杰倫-晴天」上面的前綴規則已經會拆）。
+          let hyphenSplit = null;
+          for (let i = cleaned.indexOf('-'); i > 0 && !hyphenSplit; i = cleaned.indexOf('-', i + 1)) {
+            const right = cleaned.slice(i + 1).trim();
+            if (right && KNOWN_ARTISTS.has(artistKey(right))) hyphenSplit = [cleaned.slice(0, i).trim(), right];
+          }
+          if (hyphenSplit && hyphenSplit[0]) {
+            [title, artist] = hyphenSplit;
+            confidence = 0.8;
+            reason = 'title-known-artist-hyphen';
+          } else {
+            title = cleaned;
+          }
+        }
       }
     }
 
     title = cleanIdentityPart(title.replace(/\[.*?\]/g, '').replace(/【.*?】/g, ''), 'title');
     artist = cleanIdentityPart(artist.replace(/\[.*?\]/g, '').replace(/【.*?】/g, ''), 'artist');
 
+    // 「歌名 with 合作歌手」：只在 with 後面接的是中文名字、或是已知歌手時才拆。
+    // 舊版只要歌名裡有 with 就拆，Stay With Me 變成歌名 Stay、歌手 Sam Smith with Me。
     const collaborator = title.match(/^(.+?)\s+with(?:\s+|(?=\p{Script=Han}))(.+)$/iu);
-    if (collaborator && artist) {
+    if (collaborator && artist && (/^\p{Script=Han}/u.test(collaborator[2].trim()) || isKnownArtist(collaborator[2].trim()))) {
       title = collaborator[1].trim();
       artist = `${artist} with ${collaborator[2].trim()}`;
     }

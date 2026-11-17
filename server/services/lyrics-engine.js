@@ -626,14 +626,15 @@ class LyricsEngine {
       else if (diff <= 10) score += 3;
     }
 
+    // cover 要是完整單字（Discovery、Recover 不算），而且歌名本身就含 cover 的歌（Cover Me）
+    // 不能因為候選歌名裡也有 cover 就被扣分——那正是要找的那首。
+    const coverWord = /\bcovers?\b|翻唱/;
     if (isCover) {
-      if (nSongTitle.includes('cover') || nSongTitle.includes('翻唱') || nSongArtist.includes('cover')) {
+      if (coverWord.test(nSongTitle) || coverWord.test(nSongArtist)) {
         score += 5;
       }
-    } else {
-      if (nSongTitle.includes('cover') || nSongTitle.includes('翻唱')) {
-        score -= 8;
-      }
+    } else if (coverWord.test(nSongTitle) && !coverWord.test(nTitle)) {
+      score -= 8;
     }
 
     return score;
@@ -669,7 +670,9 @@ class LyricsEngine {
 
   static detectCover(artist, title) {
     const combined = `${artist} ${title}`.toLowerCase();
-    return /cover|翻唱|covered by|arrangement|arr\./i.test(combined);
+    // 舊版沒有詞邊界：Discovery、Recover、Undercover 都被當成翻唱；歌名就叫 Cover Me 的歌也會。
+    // 單獨的 cover 只認標題結尾或後面接分隔符／括號（與 audio-processor.detectCover 同規則）。
+    return /\bcovered\s+by\b|[（(\[【]\s*cover\s*[)）\]】]|\bcovers?\b(?=\s*(?:$|[|｜/／【\[(（\-–—~～]))|翻唱|\barrangement\b|\barr\./i.test(combined);
   }
 
   // ═══════════════════════════════════════════
