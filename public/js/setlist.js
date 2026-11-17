@@ -106,6 +106,8 @@
   }
   function s2t(str) {
     if (!s2tEnabled || !str) return str;
+    // 日文歌名不轉（有假名）：opencc 會把日文漢字換成中文繁體字形（会いたくて→會いたくて）。
+    if (/[\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\uFF66-\uFF9F]/.test(str)) return str;
     const conv = getS2T();
     if (!conv) return str;
     try { return conv(str); } catch (e) { return str; }

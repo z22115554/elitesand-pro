@@ -48,6 +48,7 @@
   }
 
   let searchQuery = '';
+  const foldedSearchText = new WeakMap();
   let sortBy = 'plays';
   // 歌曲庫篩選（2026-09-27 改版 P4）：all／no-lyrics／backing／no-backing
   let filterMode = 'all';
@@ -334,9 +335,27 @@
 
   // 套用搜尋過濾 + 排序 → 渲染
   function applyView() {
-    const q = searchQuery.trim().toLowerCase();
+    // 全形／半形、簡體／繁體都當成一樣（「告白气球」找得到「告白氣球」）。簡繁字典第一次需要時才載入，
+    // 載好後重排一次；載入前先用全半形＋大小寫比。
+    const s2t = window.AppShared && AppShared.lyricS2T;
+    const fold = (value) => {
+      const text = String(value || '').normalize('NFKC').toLowerCase();
+      return s2t && s2t.ready() ? s2t.fold(text) : text;
+    };
+    const q = fold(searchQuery.trim());
+    if (q && s2t && !s2t.ready() && /\p{Script=Han}/u.test(q)) s2t.ensure().then((conv) => { if (conv) applyView(); });
+    // 每打一個字都要掃整個歌曲庫：轉好的字串記在項目上（同一個物件只轉一次）。
+    const folded = (it) => {
+      const tag = s2t && s2t.ready() ? 't' : 'n';
+      let entry = foldedSearchText.get(it);
+      if (!entry || entry.tag !== tag) {
+        entry = { tag, title: fold(it.title), artist: fold(it.artist) };
+        foldedSearchText.set(it, entry);
+      }
+      return entry;
+    };
     let view = q
-      ? cache.filter((it) => (it.title || '').toLowerCase().includes(q) || (it.artist || '').toLowerCase().includes(q))
+      ? cache.filter((it) => { const f = folded(it); return f.title.includes(q) || f.artist.includes(q); })
       : cache.slice();
     renderFilterCounts(view);
     view = view.filter(FILTERS[filterMode] || FILTERS.all);

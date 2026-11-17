@@ -519,12 +519,16 @@ class LyricsEngine {
     const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); });
     const values = await Promise.race([Promise.all(tasks), timeout]).finally(() => clearTimeout(timer));
     if (!values) return null;
-    const normalize = v => String(v || "").normalize("NFKC").toLowerCase().replace(/[\s._-]+/g, "");
+    // 投票前把繁簡當成同一個名字：LRCLIB 常回繁體（周杰倫）、網易雲／QQ 回簡體（周杰伦），
+    // 不合併的話三個來源明明都說是同一個人，也湊不到兩票。名字有繁體寫法就用繁體那個。
+    const normalize = v => simplifiedToTraditional(String(v || "").normalize("NFKC")).toLowerCase().replace(/[\s._-]+/g, "");
     const groups = new Map();
     for (const value of values) {
       const label = String(value || '').trim(); const key = normalize(label);
       if (!key) continue;
-      const group = groups.get(key) || { artist: label, count: 0 }; group.count++; groups.set(key, group);
+      const group = groups.get(key) || { artist: label, count: 0 }; group.count++;
+      if (group.artist !== label && simplifiedToTraditional(group.artist) !== group.artist && simplifiedToTraditional(label) === label) group.artist = label;
+      groups.set(key, group);
     }
     const candidates = [...groups.values()].sort((a, b) => b.count - a.count);
     if (candidates[0]?.count >= 2) return { artist: candidates[0].artist, confidence: candidates[0].count === 3 ? 0.95 : 0.82, candidates: candidates.map(x => x.artist) };

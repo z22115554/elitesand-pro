@@ -38,8 +38,18 @@
   }
 
   function normalizeFilterText(value) {
-    return String(value || '').normalize('NFKC').toLocaleLowerCase('zh-TW');
+    const text = String(value || '').normalize('NFKC').toLocaleLowerCase('zh-TW');
+    // 同歌曲庫搜尋：簡繁也當成一樣（只用來比對）。字典還沒載入時，搜尋字有漢字就先載、載好重畫一次。
+    const s2t = AppShared.lyricS2T;
+    if (!s2t) return text;
+    if (s2t.ready()) return s2t.fold(text);
+    if (/\p{Script=Han}/u.test(text) && !s2tFoldRequested) {
+      s2tFoldRequested = true;
+      s2t.ensure().then((conv) => { if (conv) AppShared.renderPlaylist(); });
+    }
+    return text;
   }
+  let s2tFoldRequested = false;
 
   function isTrackPlayed(track, index, currentTrackIndex = state.currentTrackIndex) {
     if (track && track.entryId && state.playedEntryIds instanceof Set

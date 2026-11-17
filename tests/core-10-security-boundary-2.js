@@ -784,8 +784,10 @@ test('跟唱視圖歌詞套用簡轉繁設定，跟歌詞顯示頁／歌單頁�
   ok(promptSource.includes("OpenCC.Converter({ from: 'cn', to: 'tw' })"), '轉換方向必須是簡轉繁（cn→tw），跟 karaoke.js／setlist.js 一致：');
   ok(promptSource.includes('function s2t(str) {') && promptSource.includes('if (!s2tEnabled || !str) return str;'),
     's2t() 必須尊重 s2tEnabled 開關：關閉時原樣輸出，不能永遠轉換：');
-  ok(promptSource.includes('const converted = s2t(source);') && promptSource.includes('return escapeHtml(converted);')
-    && promptSource.includes('escapeHtml(s2t(line.text || \'\'))'),
+  // 日文（整首以假名為主或這句有假名）不轉：s2tText 包住 s2t，其餘行照樣先過 s2t() 再 escapeHtml。
+  ok(promptSource.includes('const s2tText = (text) => (japaneseSong || KANA_RE.test(String(text || \'\')) ? text : s2t(text));')
+    && promptSource.includes('const converted = s2tText(source);') && promptSource.includes('return escapeHtml(converted);')
+    && promptSource.includes('escapeHtml(s2tText(line.text || \'\'))'),
   '歌詞逐句渲染必須先過 s2t() 再 escapeHtml；振假名資料不匹配時也必須安全回退原文：');
 
   // 面板的簡轉繁開關就是同一個 lyricSettings.convertTraditional：勾選＝轉繁體，取消勾選＝維持原文。

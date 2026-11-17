@@ -506,9 +506,19 @@ function hasEntry(id) {
 // 同一首歌被不同 YouTube 上傳各匯入一次時，videoId 不同、rememberImport() 的 dedupe
 // 完全不會發現——2026-09-08 實測撞到（「北極雪」兩個上傳各收一份）。這裡改用「歌手+歌名」
 // 當第二層 key；NFKC 正規化＋去空白/標點，才擋得住全形/半形、有無空白這類差異。
+// 繁簡也要當成同一首：同一首歌常有繁體（台灣官方）與簡體（對岸搬運）兩種上傳，
+// 「周杰倫 - 告白氣球」跟「周杰伦 - 告白气球」原本被當成兩首各收一份。繁→簡是多對一，比對較穩。
+let toSimplifiedForIdentity = null;
+function simplifyForIdentity(text) {
+  if (toSimplifiedForIdentity === null) {
+    try { toSimplifiedForIdentity = require('opencc-js').Converter({ from: 'tw', to: 'cn' }); } catch (_) { toSimplifiedForIdentity = false; }
+  }
+  if (!toSimplifiedForIdentity) return text;
+  try { return toSimplifiedForIdentity(text); } catch (_) { return text; }
+}
+
 function normalizeIdentityPart(value) {
-  return String(value || '')
-    .normalize('NFKC')
+  return simplifyForIdentity(String(value || '').normalize('NFKC'))
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, '');
 }

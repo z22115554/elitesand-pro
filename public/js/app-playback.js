@@ -1569,7 +1569,7 @@
     const rawWords = (tr && tr.lyricsType === 'krc' && Array.isArray(line.words))
       ? line.words.filter((w) => w && typeof w.start === 'number' && String(w.text || '').trim())
       : [];
-    const words = rawWords.map((w) => ({ ...w, text: AppShared.lyricS2T.convert(String(w.text || '')) }));
+    const words = rawWords.map((w) => ({ ...w, text: AppShared.lyricS2T.convert(String(w.text || ''), line.text) }));
     if (!words.length || !text) {
       host.classList.remove('has-word-marks');
       host.textContent = prefix + text;

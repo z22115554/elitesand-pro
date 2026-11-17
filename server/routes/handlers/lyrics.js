@@ -4,6 +4,7 @@
  * 涵蓋：每首歌的時間偏移（offset）、歌詞外觀/位置設定、手動歌詞覆蓋（貼上/上傳）。
  */
 
+const OpenCC = require('opencc-js');
 const { createLogger } = require('../../utils/logger');
 const { LyricsEngine } = require('../../services/lyrics-engine');
 const AudioProcessor = require('../../services/audio-processor');
@@ -38,9 +39,13 @@ const LYRIC_OFFSET_SYNC_DEBOUNCE_MS = 10000;
 const wordUpgradeRunning = new Set();
 const WORD_UPGRADE_MIN_OVERLAP = 0.5;
 
-/** 新歌詞裡有多少比例的行，在舊歌詞（原文或譯文）裡找得到同樣的字（忽略空白、標點、大小寫）。 */
+// 比對前一律轉成簡體：酷狗／QQ 的逐字歌詞是簡體，舊的逐句歌詞（Apple、LRCLIB）常是繁體。
+// 不轉的話同一首歌一行都對不上，被標成「歌詞可能不對」。繁→簡是多對一，比簡→繁穩定（刮／颳、后／後）。
+const toSimplified = OpenCC.Converter({ from: 'tw', to: 'cn' });
+
+/** 新歌詞裡有多少比例的行，在舊歌詞（原文或譯文）裡找得到同樣的字（忽略空白、標點、大小寫、簡繁）。 */
 function lyricsOverlapRatio(oldLines, newLines) {
-  const norm = (value) => String(value || '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  const norm = (value) => toSimplified(String(value || '')).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
   const known = new Set();
   for (const line of oldLines || []) {
     if (!line) continue;

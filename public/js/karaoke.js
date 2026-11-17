@@ -54,6 +54,33 @@ const KaraokeEngine = (() => {
     if (!conv) return str;
     try { return conv(str); } catch (e) { return str; }
   }
+  // 日文歌詞不做簡轉繁：opencc 會把日文漢字換成中文繁體字形（会→會、学校→學校、恋愛→戀愛、
+  // 声→聲、残響→殘響），預設開著的「簡轉繁」讓 OBS 上的日文歌詞字形全錯。整首以假名為主
+  // 就整首不轉（含沒有假名、只有漢字的句子）；中文歌裡夾的日文句（有假名）也不轉。
+  const KANA_RE = /[\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\uFF66-\uFF9F]/;
+  const japaneseSongCache = new WeakMap();
+  function isJapaneseSong(lines) {
+    if (!Array.isArray(lines)) return false;
+    if (japaneseSongCache.has(lines)) return japaneseSongCache.get(lines);
+    let total = 0;
+    let kana = 0;
+    for (const l of lines) {
+      const text = l && typeof l.text === 'string' ? l.text : '';
+      // 只算有漢字或假名的句子：J-pop 常有整段英文副歌，算進分母會讓日文歌被當成中文歌。
+      if (!/[\u3040-\u30FF\u3400-\u9FFF]/.test(text)) continue;
+      total += 1;
+      if (KANA_RE.test(text)) kana += 1;
+    }
+    const result = kana > 0 && kana * 3 >= total;
+    japaneseSongCache.set(lines, result);
+    return result;
+  }
+  /** 只轉中文：這一句（或整首）是日文就原樣回傳。str 可以是整句或句中的一個 word。 */
+  function s2tLine(str, lineText) {
+    if (!s2tEnabled || !str) return str;
+    if (KANA_RE.test(String(lineText || str)) || isJapaneseSong(parsedLyrics)) return str;
+    return s2t(str);
+  }
   // 切換簡轉繁：重渲染當前行立即生效（歷史行下次推移時自然更新）
   function setTraditional(b) {
     const nb = !!b;
@@ -612,7 +639,7 @@ const KaraokeEngine = (() => {
     if (isWordMode() && line.words) {
       line.words.forEach((word, i) => {
         // \u7C21\u8F49\u7E41\u4EE5\u300C\u6574\u500B word \u5B57\u4E32\u300D\u8F49\u63DB\uFF08\u8A5E\u7D44\u7D1A\u8F03\u6E96\uFF09\uFF1B\u9010\u5B57\u9AD8\u4EAE\u4EE5 word \u70BA\u55AE\u4F4D\uFF0Cchar \u6578\u4E0D\u5F71\u97FF\u6642\u9593\u5C0D\u9F4A
-        Array.from(s2t(word.text)).forEach((char, j) => {
+        Array.from(s2tLine(word.text, line.text)).forEach((char, j) => {
           const span = document.createElement('span');
           span.className = 'char';
           span.textContent = char === ' ' ? '\u00A0' : char;
@@ -625,7 +652,7 @@ const KaraokeEngine = (() => {
       });
     } else {
       // \u9010\u53E5\uFF1A\u6574\u884C\u8F49\u63DB\uFF08\u8A5E\u7D44\u7D1A\u6700\u6E96\uFF09\uFF0C\u518D\u5207\u5B57
-      Array.from(s2t(line.text)).forEach((char, i) => {
+      Array.from(s2tLine(line.text, line.text)).forEach((char, i) => {
         const span = document.createElement('span');
         span.className = 'char';
         span.textContent = char === ' ' ? '\u00A0' : char;
@@ -1136,6 +1163,7 @@ const KaraokeEngine = (() => {
       return convertedLyricsCache;
     }
     convertedLyricsCache = !s2tEnabled ? parsedLyrics : parsedLyrics.map((line) => {
+      if (KANA_RE.test(String(line.text || '')) || isJapaneseSong(parsedLyrics)) return line;
       const converted = { ...line, text: s2t(line.text) };
       if (Array.isArray(line.words) && line.words.length > 0) {
         converted.words = line.words.map((w) => ({ ...w, text: s2t(w.text) }));
