@@ -618,8 +618,9 @@ class LyricsEngine {
       if (nSongArtist.includes(nArtist) || nArtist.includes(nSongArtist)) {
         score += 8;
       } else {
-        const romanizedArtist = romanize(nArtist).toLowerCase();
-        const romanizedSongArtist = romanize(nSongArtist).toLowerCase();
+        // n' 只是羅馬字的撥音分隔（ken'ichi），比對歌手名時不該因為它對不上 Kenichi
+        const romanizedArtist = romanize(nArtist).toLowerCase().replace(/'/g, '');
+        const romanizedSongArtist = romanize(nSongArtist).toLowerCase().replace(/'/g, '');
         if (romanizedArtist !== nArtist || romanizedSongArtist !== nSongArtist) {
           if (romanizedSongArtist.includes(romanizedArtist) || romanizedArtist.includes(romanizedSongArtist)) {
             score += 6;
