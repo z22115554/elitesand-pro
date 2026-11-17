@@ -5,6 +5,7 @@ require('./jizura-word-wrap.test');
 require('./shell-health-identity.test');
 require('./library-restore-memory.test');
 require('./webgpu-audio-budget.test');
+require('./webgpu-engine-window-lifecycle.test');
 require('./import-cleanup-race.test');
 require('./display-clock-skew.test');
 require('./track-scoped-controls.test');

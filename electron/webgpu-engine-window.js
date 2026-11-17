@@ -16,11 +16,15 @@ function createWebgpuEngineWindow({ BrowserWindow, port, logger = console } = {}
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('port must be a valid TCP port.');
 
   let window = null;
+  let retiringWindow = null;
   let startPromise = null;
   let stopPromise = null;
   let restartPromise = null;
-  let disposed = false;            // stop() 被呼叫過＝有意關閉，之後不再自我修復
-  let selfHealTimestamps = [];     // 最近幾次自我修復的時間，用來判斷是否崩太頻繁
+  let restartIntent = -1;
+  let disposed = true; // An explicit stop cancels pending starts and self-heal.
+  let intentVersion = 0;
+  let generation = 0;
+  let selfHealTimestamps = [];
 
   function getStatus() {
     return Object.freeze({ hasWindow: !!window && !window.isDestroyed?.() });
@@ -28,43 +32,71 @@ function createWebgpuEngineWindow({ BrowserWindow, port, logger = console } = {}
 
   function selfHealBudgetLeft() {
     const now = Date.now();
-    selfHealTimestamps = selfHealTimestamps.filter((t) => now - t < SELF_HEAL_WINDOW_MS);
+    selfHealTimestamps = selfHealTimestamps.filter(t => now - t < SELF_HEAL_WINDOW_MS);
     return SELF_HEAL_MAX_IN_WINDOW - selfHealTimestamps.length;
   }
 
   function scheduleSelfHeal(reason) {
-    if (disposed || stopPromise) return; // 有意關閉中，不要跟它搶
+    if (disposed || stopPromise || restartPromise) return;
     if (selfHealBudgetLeft() <= 0) {
       logger.error?.(`[WebGPU Engine] ${reason}，但 ${SELF_HEAL_WINDOW_MS / 60000} 分鐘內已自我修復 ${SELF_HEAL_MAX_IN_WINDOW} 次，停手`);
       return;
     }
     selfHealTimestamps.push(Date.now());
-    logger.warn?.(`[WebGPU Engine] ${reason}，自動重開隱藏視窗`);
-    restart().catch((error) => logger.error?.('[WebGPU Engine] 自我修復重開失敗:', error.message));
+    logger.warn?.('[WebGPU Engine] ' + reason + '，自動重開隱藏視窗');
+    restart().catch(error => logger.error?.('[WebGPU Engine] 自我修復重開失敗:', error.message));
   }
 
   function attachCrashHandlers(nextWindow) {
-    // render process 沒了（崩潰／被 OOM killer 收掉）——這就是 §13 一直擔心的
-    // 「隱藏視窗當掉後不會自己回來」。
     nextWindow.webContents?.on?.('render-process-gone', (_event, details) => {
       if (window !== nextWindow) return;
-      scheduleSelfHeal(`render process 結束（${details?.reason || 'unknown'}）`);
+      scheduleSelfHeal('render process 結束（' + (details?.reason || 'unknown') + '）');
     });
-    // 卡死到不回應——多半是 WebGPU s.run wedge 住整條 renderer。
     nextWindow.on?.('unresponsive', () => {
       if (window !== nextWindow) return;
       scheduleSelfHeal('視窗沒有回應');
     });
   }
 
-  async function start() {
+  // Do not await loadURL here: a wedged load is one reason to replace a renderer.
+  // A failed destroy keeps its owner reachable and blocks another renderer.
+  function retireCurrentWindow() {
+    if (stopPromise) return stopPromise;
+    generation += 1;
+    startPromise = null;
+    if (window) {
+      retiringWindow = window;
+      window = null;
+    }
+    const activeWindow = retiringWindow;
+    const operation = Promise.resolve().then(() => {
+      if (activeWindow && !activeWindow.isDestroyed?.()) activeWindow.destroy?.();
+      if (activeWindow && !activeWindow.isDestroyed?.()) throw new Error('WebGPU engine window did not close.');
+      if (retiringWindow === activeWindow) retiringWindow = null;
+      return getStatus();
+    });
+    const pending = operation.finally(() => {
+      if (stopPromise === pending) stopPromise = null;
+    });
+    stopPromise = pending;
+    return pending;
+  }
+
+  function ensureStarted(intent) {
+    if (disposed || intent !== intentVersion) return Promise.resolve(getStatus());
+    if (stopPromise) return stopPromise.then(() => ensureStarted(intent));
+    if (retiringWindow) return retireCurrentWindow().then(() => ensureStarted(intent));
     if (startPromise) return startPromise;
-    if (window && !window.isDestroyed?.()) return getStatus();
-    if (stopPromise) await stopPromise;
-    disposed = false;
-    startPromise = (async () => {
+    if (window && !window.isDestroyed?.()) return Promise.resolve(getStatus());
+
+    const ownerGeneration = ++generation;
+    let nextWindow = null;
+    const current = () => !disposed && intent === intentVersion && ownerGeneration === generation;
+    // Install the shared promise before constructors, loadURL or log hooks run.
+    const operation = Promise.resolve().then(async () => {
+      if (!current()) return getStatus();
       try {
-        const nextWindow = new BrowserWindow({
+        nextWindow = new BrowserWindow({
           width: 480,
           height: 320,
           show: false,
@@ -75,53 +107,72 @@ function createWebgpuEngineWindow({ BrowserWindow, port, logger = console } = {}
             backgroundThrottling: false,
           },
         });
+        if (!current()) {
+          nextWindow.destroy?.();
+          return getStatus();
+        }
         window = nextWindow;
-        nextWindow.on?.('closed', () => { if (window === nextWindow) window = null; });
+        nextWindow.on?.('closed', () => {
+          if (retiringWindow === nextWindow) retiringWindow = null;
+          if (window === nextWindow) {
+            window = null;
+            generation += 1;
+            startPromise = null;
+          }
+        });
         attachCrashHandlers(nextWindow);
-        await nextWindow.loadURL(`http://127.0.0.1:${port}/webgpu-separation-worker.html`);
-        logger.info?.('[WebGPU Engine] 隱藏視窗已載入，等待 job 派發');
+        await nextWindow.loadURL('http://127.0.0.1:' + port + '/webgpu-separation-worker.html');
+        if (current() && window === nextWindow) logger.info?.('[WebGPU Engine] 隱藏視窗已載入，等待 job 派發');
         return getStatus();
       } catch (error) {
-        if (window && !window.isDestroyed?.()) window.destroy?.();
-        window = null;
+        // A cancelled load belongs to the old generation, never its replacement.
+        if (!current()) return getStatus();
+        if (window === nextWindow) window = null;
+        if (nextWindow && !nextWindow.isDestroyed?.()) {
+          retiringWindow = nextWindow;
+          try {
+            await retireCurrentWindow();
+          } catch (cleanupError) {
+            logger.error?.('[WebGPU Engine] 失敗視窗尚未清理:', cleanupError.message);
+          }
+        }
         logger.error?.('[WebGPU Engine] 隱藏視窗啟動失敗:', error.message);
         throw error;
-      } finally {
-        startPromise = null;
       }
-    })();
-    return startPromise;
+    });
+    const pending = operation.finally(() => {
+      if (startPromise === pending) startPromise = null;
+    });
+    startPromise = pending;
+    return pending;
   }
 
-  async function stop() {
-    if (stopPromise) return stopPromise;
-    disposed = true; // 有意關閉：撤銷任何自我修復意圖
-    stopPromise = (async () => {
-      try {
-        const activeWindow = window;
-        window = null;
-        if (activeWindow && !activeWindow.isDestroyed?.()) activeWindow.destroy?.();
-        return getStatus();
-      } finally {
-        stopPromise = null;
-      }
-    })();
-    return stopPromise;
+  function start() {
+    if (disposed) {
+      disposed = false;
+      intentVersion += 1;
+    }
+    if (restartPromise && restartIntent === intentVersion) return restartPromise;
+    return ensureStarted(intentVersion);
   }
 
-  // 卡死／崩潰後把視窗整個換一個新的。stop()+start() 都是冪等的，這裡只多做一件事：
-  // 併發保護（server 的重開請求 + 視窗自己的崩潰事件可能同時打進來）。
-  async function restart() {
-    if (restartPromise) return restartPromise;
-    restartPromise = (async () => {
-      try {
-        await stop();
-        return await start();
-      } finally {
-        restartPromise = null;
-      }
-    })();
-    return restartPromise;
+  function stop() {
+    disposed = true;
+    intentVersion += 1;
+    return retireCurrentWindow();
+  }
+
+  function restart() {
+    if (restartPromise && restartIntent === intentVersion && !disposed) return restartPromise;
+    disposed = false;
+    const intent = ++intentVersion;
+    const operation = retireCurrentWindow().then(() => ensureStarted(intent));
+    const pending = operation.finally(() => {
+      if (restartPromise === pending) restartPromise = null;
+    });
+    restartIntent = intent;
+    restartPromise = pending;
+    return pending;
   }
 
   return Object.freeze({ start, stop, restart, getStatus });
