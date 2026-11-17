@@ -254,7 +254,8 @@ function registerLibraryHandlers(io, socket, ctx, {
     const trackIds = (Array.isArray(data?.trackIds) ? data.trackIds : [])
       .filter((id) => libraryStore.hasEntry(id));
     const result = savedPlaylists.addTracks(data?.id, trackIds);
-    if (result.ok && result.added) broadcastSavedPlaylists();
+    // 歌單滿了但前面幾首已加入（ok:false、added>0）也要廣播，面板才不會跟伺服器不一致
+    if (result.added) broadcastSavedPlaylists();
     reply(ack, result);
   });
 

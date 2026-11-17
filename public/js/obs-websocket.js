@@ -155,8 +155,10 @@ const ObsWs = (() => {
           }
         } else if (op === OBS_OP.EVENT) {
           if (d.eventType === 'StreamStateChanged') {
-            publishStreamStatus().catch(() => {
-              emit('stream', { active: !!(d.eventData && d.eventData.outputActive), timecode: null });
+            const eventActive = d.eventData && typeof d.eventData.outputActive === 'boolean' ? d.eventData.outputActive : null;
+            getStreamStatus().then((stream) => {
+              // 查詢失敗時退回事件本身帶的狀態（事件是 OBS 主動告知的，比「查不到」可信）
+              emit('stream', stream.active === null ? { active: eventActive, timecode: null } : stream);
             });
           }
         }
@@ -252,11 +254,13 @@ const ObsWs = (() => {
     return { scene: sceneName, width, height, display, setlist };
   }
 
+  // 查不到（OBS 忙到逾時、剛重連）不等於「沒在推流」：回傳 active:null 讓呼叫端維持現狀。
+  // 以前當成 false，會送 session:stop 把直播中的 Session 收掉，之後的歌都記成 0 秒。
   async function getStreamStatus() {
     try {
       const s = await request('GetStreamStatus');
       return { active: !!s.outputActive, timecode: s.outputTimecode || null };
-    } catch (e) { return { active: false, timecode: null }; }
+    } catch (e) { return { active: null, timecode: null }; }
   }
 
   return {
@@ -322,6 +326,8 @@ const ObsWs = (() => {
 
   let observedStreamActive = false;
   function syncSessionWithStream(stream = {}) {
+    // 推流狀態不明（查詢逾時）：不開台也不收台，保留目前的直播 Session。
+    if (stream.active !== true && stream.active !== false) return;
     if (stream.active) {
       const elapsed = parseTimecodeMs(stream.timecode);
       SocketClient.send('session:start', {

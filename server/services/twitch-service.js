@@ -1306,9 +1306,15 @@ class TwitchService {
     const snapshot = this.getPlaybackSnapshot() || {};
     const playlist = Array.isArray(snapshot.playlist) ? snapshot.playlist.filter(Boolean) : [];
     const current = snapshot.currentTrack || null;
-    const currentIndex = current?.id ? playlist.findIndex((track) => track?.id === current.id) : -1;
-    const next = currentIndex >= 0 ? (playlist[currentIndex + 1] || null) : (playlist[0] || null);
-    const queuedCount = currentIndex >= 0 ? Math.max(0, playlist.length - currentIndex - 1) : playlist.length;
+    // 用清單那一列的 entryId 找位置：同一首歌在清單裡出現兩次（觀眾重複點）時，用歌曲 id 只會
+    // 找到第一次出現的那列，「下一首」就回錯。單曲模式唱完後目前歌曲會清空，這時面板按「下一首」
+    // 是從剛唱完的那列往後（lastPlayedEntryId），不是清單第一首（那首多半早就唱過了）。
+    const indexOfEntry = (entryId) => (entryId ? playlist.findIndex((track) => track?.entryId === entryId) : -1);
+    let currentIndex = current ? indexOfEntry(current.entryId) : -1;
+    if (currentIndex < 0 && current?.id) currentIndex = playlist.findIndex((track) => track?.id === current.id);
+    const cursor = currentIndex >= 0 ? currentIndex : (current ? -1 : indexOfEntry(snapshot.lastPlayedEntryId));
+    const next = cursor >= 0 ? (playlist[cursor + 1] || null) : (playlist[0] || null);
+    const queuedCount = cursor >= 0 ? Math.max(0, playlist.length - cursor - 1) : playlist.length;
     return { current, next, playlist, queuedCount };
   }
 

@@ -194,13 +194,32 @@
     }
   }
 
+  // YouTube 只在章節符合規則時才認：第一個是 00:00、時間遞增、每段至少 10 秒。
+  // 一條不合格整份都不算章節，所以這裡要先整理：
+  // - 開台前就在播的歌會被記成 0 秒，跟「00:00 開台」撞在一起 → 第一首離開台不到 10 秒就讓它當 00:00
+  // - 點錯歌、馬上換下一首（不到 10 秒）→ 留後面那首
+  // - 收台後又播的歌 offset 是 0、排在後面 → 時間倒退，丟掉
+  const MIN_CHAPTER_MS = 10000;
+  function buildYoutubeChapterLines(songs, openingLine) {
+    const ascending = [];
+    for (const s of songs || []) {
+      const ms = Number(s && s.offset);
+      if (!Number.isFinite(ms) || ms < 0) continue;
+      if (ascending.length && ms <= ascending[ascending.length - 1].ms) continue;
+      ascending.push({ ms, label: `${s.title || ''}${s.artist ? ' - ' + s.artist : ''}` });
+    }
+    const kept = ascending.filter((entry, i) => !ascending[i + 1] || ascending[i + 1].ms - entry.ms >= MIN_CHAPTER_MS);
+    const lines = [];
+    if (kept.length && kept[0].ms < MIN_CHAPTER_MS) kept[0].ms = 0;
+    else lines.push(openingLine);
+    for (const entry of kept) lines.push(`${fmtSessionOffset(entry.ms)} ${entry.label}`);
+    return lines;
+  }
+
   function copyYoutubeChapters() {
     const songs = sessionState.songs || [];
     if (songs.length === 0) return;
-    const lines = [workspaceText('home.session.chapterOpening', '00:00 開台')];
-    for (const s of songs) {
-      lines.push(`${fmtSessionOffset(s.offset)} ${s.title}${s.artist ? ' - ' + s.artist : ''}`);
-    }
+    const lines = buildYoutubeChapterLines(songs, workspaceText('home.session.chapterOpening', '00:00 開台'));
     if (dom.btnCopyChapters) copyText(lines.join('\n'), dom.btnCopyChapters, workspaceText('home.session.copySuccess', '✓ 已複製章節'));
   }
 

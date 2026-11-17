@@ -12,6 +12,9 @@ const setlistStyleSchema = require('../../../public/js/setlist-style-schema');
 
 const log = createLogger('Socket');
 
+// 同一場直播的開台時間容差（OBS 推流計時與 Twitch started_at 會差幾秒），跟 startTwitchSession 一致。
+const SAME_STREAM_TOLERANCE_MS = 60000;
+
 /**
  * @param {import('socket.io').Server} io
  * @param {import('socket.io').Socket} socket
@@ -53,8 +56,38 @@ function registerSetlistHandlers(io, socket, ctx) {
 
     // OBS 健康檢查／斷線重連時會再次回報目前正在推流；同一場直播只能初始化一次，
     // 否則重連會把已唱歌單清空。保留既有歌曲與已取得的精確起點。
-    if (fromObs && session.active && session.source === 'obs' && session.startedAt
-      && Math.abs(session.startedAt - effectiveStartedAt) < 15000) {
+    // 「同一場直播」看開台時間，不看是誰開的：同時連了 OBS 與 Twitch 時，Twitch 開台事件會把
+    // source 改成 twitch，之後 OBS WebSocket 一重連就回報推流中——只比 source 的話會被當成新的一場，
+    // 已唱歌單整個清空（Twitch 那邊重連時又反過來清一次）。兩邊回報的開台時間差幾秒，給 60 秒容差。
+    const sameStream = fromObs && session.startedAt
+      && Math.abs(session.startedAt - effectiveStartedAt) < SAME_STREAM_TOLERANCE_MS;
+    if (sameStream && session.active) {
+      return;
+    }
+    // 直播開到一半才手動按開台（或 Twitch 先開），之後才連上 OBS：OBS 說推流比目前這場 Session
+    // 更早就開始了，代表目前這場就是這次直播的一部分——改用 OBS 的開台時間、把已唱歌曲的時間點
+    // 一起往後挪，不清空。（比 Session 晚開始的推流才是真正的新一場，照舊重來。）
+    if (fromObs && session.active && session.startedAt && effectiveStartedAt < session.startedAt) {
+      const shift = session.startedAt - effectiveStartedAt;
+      session.songs = session.songs.map((song) => (song && Number.isFinite(song.offset) ? { ...song, offset: song.offset + shift } : song));
+      session.startedAt = effectiveStartedAt;
+      session.source = sessionSource;
+      log.info('OBS 推流比目前的直播 Session 更早開始：沿用同一場、改用 OBS 的開台時間');
+      emitSetlist();
+      broadcastState();
+      persistState();
+      return;
+    }
+    // 同一場直播被誤收台後又回報推流中（OBS 查詢逾時、WebSocket 重連、斷線重推）：
+    // 開台時間對得上就是同一場，接回原本的 Session，不可把已唱歌單清空。
+    if (sameStream && !session.active) {
+      session.active = true;
+      session.source = sessionSource;
+      log.info('OBS 推流：同一場直播的 Session 已接回（保留已唱歌單）');
+      if (playState.isPlaying && playState.currentTrack) recordSessionSong();
+      emitSetlist();
+      broadcastState();
+      persistState();
       return;
     }
     session.active = true;
@@ -112,8 +145,15 @@ function registerSetlistHandlers(io, socket, ctx) {
     const idx = session.songs.findIndex((s) => s && s.entryId === entryId);
     if (idx === -1) return;
     const [removed] = session.songs.splice(idx, 1);
+    // 「點錯歌被誤記進已唱」刪掉之後，這首應該回到接下來／未唱；只刪 session.songs 的話，
+    // playedEntryIds 仍把它當成唱過，OBS 歌單的「接下來」跟面板清單的已唱標記都不會回來。
+    // 同一列在這場被唱過不只一次（還有別筆紀錄指向它）時，保留已唱。
+    const rowEntryId = typeof removed.playlistEntryId === 'string' ? removed.playlistEntryId : '';
+    const stillRecorded = rowEntryId && session.songs.some((s) => s && s.playlistEntryId === rowEntryId);
+    const progressChanged = !!rowEntryId && !stillRecorded && playState.playedEntryIds.delete(rowEntryId);
     log.info(`已唱歌單移除單筆：${removed.title || removed.id}`);
     emitSetlist();
+    if (progressChanged) broadcastState();
     persistState();
   });
 

@@ -612,11 +612,16 @@ function createAppState(io) {
     const t = playState.currentTrack;
     if (!t || !t.id) return;
     const last = session.songs[session.songs.length - 1];
-    if (last && last.id === t.id) return;
+    // 同一列重新播放（從頭再唱、暫停後繼續）不重複記；但清單裡排了兩次同一首（安可、觀眾點了已唱過的歌）
+    // 是真的唱了兩次——舊版只比歌曲 id，連續兩列同一首時第二次不會出現在已唱歌單與 YouTube 章節。
+    if (last && last.id === t.id && (last.playlistEntryId || null) === (playlistEntryId(t) || null)) return;
     const counting = session.active && session.startedAt != null;
     session.songs.push({
       id: t.id,
       entryId: crypto.randomUUID(), // 同一首歌可能唱兩次（id 重複），單獨刪除要認這個才唯一
+      // 播放清單那一列的 entryId：從已唱歌單刪掉這筆時，要連「已唱進度」一起還原，
+      // 不然這首會同時從已唱跟接下來兩邊消失（見 handlers/setlist.js 的 session:remove-song）。
+      playlistEntryId: playlistEntryId(t) || null,
       title: t.title || '',
       artist: t.artist || '',
       startedAt: Date.now(),

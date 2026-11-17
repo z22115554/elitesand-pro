@@ -276,12 +276,38 @@ module.exports = function socketHandler(io, {
     // 已經在「同一場」Twitch session 裡就不要重設——否則 EventSub 每次重連、
     // 或 refreshLiveState() 的權威對帳（都會走到這裡，且沒有 message id）都會把
     // 已唱歌單清空。Twitch 的 started_at 對同一場直播是固定值，給 60 秒容差即可。
-    if (ctx.session.active && ctx.session.source === 'twitch' && ctx.session.startedAt
-      && Math.abs(ctx.session.startedAt - resolvedStartedAt) < 60000) {
+    // 不限 source：同時連 OBS 時，Session 可能是 OBS 先開的（source='obs'），同一場直播的
+    // Twitch 開台事件不可把它當成新的一場清空已唱歌單（OBS 那邊的對應判斷見 handlers/setlist.js）。
+    const sameStream = ctx.session.startedAt && Math.abs(ctx.session.startedAt - resolvedStartedAt) < 60000;
+    if (ctx.session.active && sameStream) {
       if (eventId) lastTwitchStreamEventId = eventId;
       return;
     }
     lastTwitchStreamEventId = eventId || null;
+    // 目前這場 Session 比 Twitch 的開台時間還晚開始（直播中途才手動開台）：是同一場直播，
+    // 改用 Twitch 的開台時間、已唱歌曲的時間點一起挪，不清空（同 handlers/setlist.js 的 OBS 判斷）。
+    if (ctx.session.active && ctx.session.startedAt && resolvedStartedAt < ctx.session.startedAt) {
+      const shift = ctx.session.startedAt - resolvedStartedAt;
+      ctx.session.songs = ctx.session.songs.map((song) => (song && Number.isFinite(song.offset) ? { ...song, offset: song.offset + shift } : song));
+      ctx.session.startedAt = resolvedStartedAt;
+      ctx.session.source = 'twitch';
+      ctx.emitSetlist();
+      ctx.broadcastState();
+      ctx.persistState();
+      log.info('Twitch 開台時間比目前的 session 更早：沿用同一場、改用 Twitch 的開台時間');
+      return;
+    }
+    // 同一場直播先被收台（漏收、短暫斷線）又回報開台：接回原本的 Session，不清空已唱歌單。
+    if (sameStream) {
+      ctx.session.active = true;
+      ctx.session.source = 'twitch';
+      if (ctx.playState.isPlaying && ctx.playState.currentTrack) ctx.recordSessionSong();
+      ctx.emitSetlist();
+      ctx.broadcastState();
+      ctx.persistState();
+      log.info('Twitch 開台事件：同一場直播的 session 已接回（保留已唱歌單）');
+      return;
+    }
     ctx.session.active = true;
     ctx.session.startedAt = resolvedStartedAt;
     ctx.session.source = 'twitch';

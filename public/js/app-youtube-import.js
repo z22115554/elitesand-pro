@@ -1249,9 +1249,10 @@
           AppShared.renderPlaylist();
           if (state.currentTrackIndex === -1 && job.placement !== 'next') {
             AppShared.playTrack(state.playlist.length - 1, false); // 匯入後載入待命，不自動播放
-          } else if (state.currentTrackIndex === -1 && placement?.placement === 'end') {
+          } else if (state.currentTrackIndex === -1 && placement?.ok && Number.isInteger(placement.insertAt)) {
             // playlist:update is emitted before the server acknowledgement, so by
             // this point the authoritative appended track is already in state.
+            // 沒在播時一樣載入待命；唱完一首（清單有游標）時伺服器會插在剛唱完那首後面（placement=next）。
             AppShared.playTrack(placement.insertAt, false);
           }
           const placementKey = job.placement === 'next'

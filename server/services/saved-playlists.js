@@ -158,7 +158,12 @@ function addTracks(id, trackIds) {
   let added = 0;
   for (const trackId of incoming) {
     if (existing.has(trackId)) continue;
-    if (item.trackIds.length >= MAX_TRACKS_PER_PLAYLIST) return { ok: false, error: 'playlist_full', added };
+    if (item.trackIds.length >= MAX_TRACKS_PER_PLAYLIST) {
+      // 加到一半滿了：已經放進去的那幾首仍要存檔並回報，否則記憶體裡多了、磁碟上沒有，
+      // 面板也以為一首都沒加（重開程式後那幾首又憑空消失）。
+      if (added) touch(item);
+      return { ok: false, error: 'playlist_full', added, playlist: clone(item) };
+    }
     item.trackIds.push(trackId);
     existing.add(trackId);
     added++;

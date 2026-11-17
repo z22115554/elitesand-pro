@@ -173,9 +173,17 @@
   let sectionAwareBaseTemplateId = null;
   let sectionAwareLastApplied = null;
 
+  // 段落之間有空隙（太短的段落被 sanitizeSections 丟掉）或第一段不是從 0 秒開始時，
+  // 不可退回「最後一段」（通常是 outro）——那會讓主歌中間或前奏閃一下尾奏模板。
+  // 跟 jizura 的 profileAt 一致：還沒到第一段用第一段，空隙沿用最近開始的那一段。
   function findSectionLabel(sections, tSec) {
-    for (const s of sections) if (tSec >= s.start && tSec < s.end) return s.label;
-    return sections.length ? sections[sections.length - 1].label : null;
+    let label = sections.length ? sections[0].label : null;
+    let latestStart = -Infinity;
+    for (const s of sections) {
+      if (tSec >= s.start && tSec < s.end) return s.label;
+      if (tSec >= s.start && s.start >= latestStart) { latestStart = s.start; label = s.label; }
+    }
+    return label;
   }
 
   function applySectionAwareTemplate(timeMs) {

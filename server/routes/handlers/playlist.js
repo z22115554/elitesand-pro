@@ -58,6 +58,16 @@ function syncNamesToSession(session, tracks) {
 }
 
 /**
+ * 單曲模式唱完一首、目前歌曲已清空時，「插到下一首」要插在剛唱完那列的後面——面板按「下一首」
+ * 也是從那裡往後（lastPlayedEntryId）。舊版找不到目前歌曲就一律加到清單最後，主播核准時選了
+ * 「下一首」，按下一首卻輪不到它。只在完全沒有目前歌曲時用；單獨載入、不在清單裡的歌照舊。
+ */
+function lastPlayedCursor(playState) {
+  if (playState.currentTrack || !playState.lastPlayedEntryId) return -1;
+  return playState.playlist.findIndex((item) => item && item.entryId === playState.lastPlayedEntryId);
+}
+
+/**
  * 播放清單改名（或任何 title/artist 變動）同步回媒體庫，讓兩邊名稱一致。
  * updateMeta 只更新「已存在」的記錄，不會無中生有；只在名稱真的不同時才寫，避免無謂存檔。
  */
@@ -187,6 +197,7 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
       // 沒有 entryId 的舊資料才退回用歌曲 id 找（重複歌曲時可能找到錯的那一列，僅供相容）。
       currentIndex = playState.playlist.findIndex((item) => item.id === playState.currentTrack.id);
     }
+    if (currentIndex < 0) currentIndex = lastPlayedCursor(playState);
     const insertAt = currentIndex >= 0 ? currentIndex + 1 : playState.playlist.length;
     const [insertedTrack] = assignFreshEntryIds(clean);
     playState.playlist.splice(insertAt, 0, insertedTrack);
@@ -379,6 +390,7 @@ function insertTracksIntoPlaylist(ctx, io, tracks, { mode = 'add' } = {}) {
     if (currentIndex < 0 && playState.currentTrack?.id) {
       currentIndex = playState.playlist.findIndex((item) => item.id === playState.currentTrack.id);
     }
+    if (currentIndex < 0) currentIndex = lastPlayedCursor(playState);
     const insertAt = currentIndex >= 0 ? currentIndex + 1 : playState.playlist.length;
     const [insertedTrack] = assignFreshEntryIds(clean.slice(0, 1));
     playState.playlist.splice(insertAt, 0, insertedTrack);
