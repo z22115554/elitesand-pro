@@ -6,7 +6,7 @@
  */
 
 const { createLogger } = require('../utils/logger');
-const { MAX_OFFSET_MS } = require('../utils/track-schema');
+const { MAX_OFFSET_MS, lrcDefaultOffset } = require('../utils/track-schema');
 
 const log = createLogger('Deck');
 
@@ -98,8 +98,10 @@ function createDeckCommands(io, ctx) {
         }
         const trackId = playState.currentTrack.id;
         trackOffsets.delete(trackId);
-        playState.currentOffset = 0;
-        io.emit('offset:update', { trackId, offset: 0 });
+        const fileOffset = lrcDefaultOffset(playState.currentTrack);
+        if (fileOffset) trackOffsets.set(trackId, fileOffset);
+        playState.currentOffset = fileOffset;
+        io.emit('offset:update', { trackId, offset: fileOffset });
         broadcastState();
         persistState();
         log.info('Offset 重置');

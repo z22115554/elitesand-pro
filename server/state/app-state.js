@@ -20,7 +20,7 @@ const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const bgmSettingsSchema = require('../services/bgm-settings');
 const obsLocale = require('../utils/obs-locale');
 const { createLogger } = require('../utils/logger');
-const { sanitizeTrack, sanitizeParsedLyrics, MAX_PLAYLIST_SIZE, sanitizeJsonObject } = require('../utils/track-schema');
+const { sanitizeTrack, sanitizeParsedLyrics, MAX_PLAYLIST_SIZE, sanitizeJsonObject, lrcDefaultOffset } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
 const { emitToAccessRooms } = require('../utils/socket-broadcast');
 const { isTemplateOff, resolveTemplateId } = require('../utils/seasonal-templates');
@@ -438,7 +438,7 @@ function createAppState(io) {
         playState.currentTime = 0;
         // 重開後只恢復待命／暫停狀態，不可自行出聲；使用者按播放後從頭開始。
         playState.isPlaying = false;
-        playState.currentOffset = trackOffsets.get(restoredTrack.id) || 0;
+        playState.currentOffset = trackOffsets.has(restoredTrack.id) ? trackOffsets.get(restoredTrack.id) : lrcDefaultOffset(restoredTrack);
         playState.pitchShift = trackPitch.has(restoredTrack.id) ? trackPitch.get(restoredTrack.id) : 0;
         playState.playbackRate = trackSpeed.has(restoredTrack.id) ? trackSpeed.get(restoredTrack.id) : 1.0;
         if (playState.currentTrackStarted) markTrackPlayed(restoredTrack);

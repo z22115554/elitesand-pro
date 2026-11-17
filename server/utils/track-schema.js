@@ -244,7 +244,18 @@ function sanitizeJsonObject(value, depth = 0) {
   return out;
 }
 
+/**
+ * 歌詞檔自帶的 [offset:±ms]（track.lrcOffset）＝使用者還沒調過時的預設偏移。
+ * 伺服器的 trackOffsets 才是 OBS／面板共用的權威值，所以由呼叫端在「還沒有記錄」時把它種進去；
+ * 舊版只有面板在載入時套用 lrcOffset，OBS 歌詞照 0 播，兩邊差了一個 offset。
+ */
+function lrcDefaultOffset(track) {
+  const value = track && Number(track.lrcOffset);
+  return Number.isFinite(value) && value !== 0 ? Math.max(-MAX_OFFSET_MS, Math.min(MAX_OFFSET_MS, Math.round(value))) : 0;
+}
+
 module.exports = {
+  lrcDefaultOffset,
   sanitizeTrack,
   sanitizePlaylist,
   sanitizeParsedLyrics,

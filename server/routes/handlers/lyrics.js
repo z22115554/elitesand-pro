@@ -7,9 +7,10 @@
 const OpenCC = require('opencc-js');
 const { createLogger } = require('../../utils/logger');
 const { LyricsEngine } = require('../../services/lyrics-engine');
+const { parseOffset } = require('../../services/lrc-parser');
 const AudioProcessor = require('../../services/audio-processor');
 const { addRomanization, needsRomanization } = require('../../services/romanizer');
-const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS } = require('../../utils/track-schema');
+const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS, lrcDefaultOffset } = require('../../utils/track-schema');
 const path = require('path');
 const fs = require('fs');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
@@ -476,13 +477,16 @@ function registerLyricsHandlers(io, socket, ctx) {
     trackOffsets.delete(trackId);
     cancelLyricOffsetSync(ctx, trackId);
     rememberOffsetForSource(trackId, lyricsSourceOf(trackId), 0);
+    // 重置＝回到歌詞檔自帶的 [offset:]（沒有就是 0）；不然下次播放又會種回去，跟這裡顯示的 0 對不上。
+    const fileOffset = lrcDefaultOffset(tracksById(trackId)[0]);
+    if (fileOffset) trackOffsets.set(trackId, fileOffset);
 
     if (playState.currentTrack && playState.currentTrack.id === trackId) {
-      playState.currentOffset = 0;
+      playState.currentOffset = fileOffset;
     }
 
     log.info(`Offset 重置: ${trackId}`);
-    io.emit('offset:update', { trackId, offset: 0 });
+    io.emit('offset:update', { trackId, offset: fileOffset });
     persistState();
   });
 
@@ -625,11 +629,25 @@ function registerLyricsHandlers(io, socket, ctx) {
     }
 
     applyManualLyrics(trackId, lyrics, lyricsType, parsedLyrics, newSource);
-    if (Number.isFinite(data.lrcOffset)) {
-      const offset = setTrackOffset(trackId, data.lrcOffset);
-      for (const track of tracksById(trackId)) track.lrcOffset = offset;
-      persistState();
+
+    // 貼上／上傳的 LRC 自帶 [offset:]：面板會立刻套用，伺服器（OBS 歌詞）也要一起套，
+    // 不然兩邊差一個 offset，下一次狀態同步面板還會被拉回舊值。也記成這首的預設（重置回到它）。
+    // 面板（時間軸編輯器）有送解析好的 lrcOffset 就用它；沒送（舊面板、手機）就從歌詞自己解析。
+    // 換了一份沒有 [offset:] 的歌詞時，舊歌詞留下的 lrcOffset 也要清掉：不然重置偏移、下次加入清單
+    // 都會套回上一份歌詞的偏移。
+    const fileOffset = Number.isFinite(data.lrcOffset) ? data.lrcOffset : (lyricsType === 'krc' ? 0 : parseOffset(lyrics));
+    const previousFileOffset = lrcDefaultOffset(tracksById(trackId)[0]);
+    for (const t of tracksById(trackId)) {
+      if (fileOffset) t.lrcOffset = fileOffset;
+      else delete t.lrcOffset;
     }
+    try {
+      libraryStore.updateMeta(trackId, { lrcOffset: fileOffset });
+    } catch (e) { log.warn(`歌詞偏移寫回歌曲庫失敗: ${e.message}`); }
+    if (fileOffset) setTrackOffset(trackId, fileOffset);
+    // 現在的偏移剛好就是舊歌詞自帶的那個值＝當初是自動套上的、使用者沒調過：新歌詞不沿用。
+    else if (previousFileOffset && trackOffsets.get(trackId) === previousFileOffset) setTrackOffset(trackId, 0);
+    persistState();
   });
 
   // 套用一份歌詞到某首歌（手動貼上／歌詞選擇器／自動對時換來源共用）。
@@ -818,13 +836,17 @@ function registerLyricsHandlers(io, socket, ctx) {
       parsed = await addRomanization(parsed).catch(() => parsed);
     }
     const lyricsSource = result.source || null;
-    libraryStore.updateMeta(trackId, { lyrics: result.lyrics, lyricsType: 'krc', parsedLyrics: parsed, lyricsSource, lyricsSuspect: false });
+    // 逐字 KRC 沒有 [offset:]：舊逐句歌詞留下的 lrcOffset 不再適用（同 lyrics:manual）。
+    libraryStore.updateMeta(trackId, { lyrics: result.lyrics, lyricsType: 'krc', parsedLyrics: parsed, lyricsSource, lyricsSuspect: false, lrcOffset: 0 });
 
     // 剛好在播放清單（或正在播）的那首：記憶體裡的物件也要換，下一次 broadcastState 才不會用舊的蓋回去（鐵則 17）
     const live = tracksById(trackId);
+    const previousFileOffset = lrcDefaultOffset(live[0] || entry);
+    if (previousFileOffset && trackOffsets.get(trackId) === previousFileOffset) setTrackOffset(trackId, 0);
     for (const t of live) {
       t.lyrics = result.lyrics;
       t.lyricsType = 'krc';
+      delete t.lrcOffset;
       t.parsedLyrics = parsed;
       t.lyricsSource = lyricsSource;
     }

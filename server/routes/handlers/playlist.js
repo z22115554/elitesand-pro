@@ -7,7 +7,7 @@ const { emitToAccessRooms, emitToControlClients } = require('../../utils/socket-
 const playlistExportStore = require('../../services/playlist-export-store');
 const libraryStore = require('../../services/library-store');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
-const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds, ensureEntryIds } = require('../../utils/track-schema');
+const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds, ensureEntryIds, lrcDefaultOffset } = require('../../utils/track-schema');
 
 const log = createLogger('Socket');
 
@@ -21,6 +21,15 @@ const VALID_ROMANIZATION_MODES = ['original', 'romanized', 'both', 'xieyin', 'fu
  */
 async function applyCommunityOffsetSuggestion(ctx, io, track) {
   if (!track || !track.id || ctx.trackOffsets.has(track.id)) return;
+  // 歌詞檔自帶 [offset:] 的先用它（同一份歌詞的社群建議也是以它為基準算出來的）。
+  const fileOffset = lrcDefaultOffset(track);
+  if (fileOffset) {
+    ctx.trackOffsets.set(track.id, fileOffset);
+    if (ctx.playState.currentTrack && ctx.playState.currentTrack.id === track.id) ctx.playState.currentOffset = fileOffset;
+    io.emit('offset:update', { trackId: track.id, offset: fileOffset });
+    ctx.persistState();
+    return;
+  }
   const result = await lyricOffsetSync.getSuggestedOffset(track.id, lyricOffsetSync.lyricsKeyFor(track)).catch(() => null);
   if (!result || typeof result.suggestedOffsetMs !== 'number' || ctx.trackOffsets.has(track.id)) return;
   ctx.trackOffsets.set(track.id, result.suggestedOffsetMs);

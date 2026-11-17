@@ -9,7 +9,7 @@ const { createLogger } = require('../../utils/logger');
 const { emitToAccessRooms, emitToControlClients } = require('../../utils/socket-broadcast');
 const libraryStore = require('../../services/library-store');
 const { addRomanization, needsRomanization, needsFurigana } = require('../../services/romanizer');
-const { sanitizeTrack, sanitizeJsonObject } = require('../../utils/track-schema');
+const { sanitizeTrack, sanitizeJsonObject, lrcDefaultOffset } = require('../../utils/track-schema');
 const usageTelemetry = require('../../services/usage-telemetry');
 const { LYRIC_TEMPLATES } = require('./lyrics');
 
@@ -87,6 +87,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     }
 
     // 套用該首記憶的 offset / 變調 / 變速（每首獨立，切歌自動回該首的設定）
+    if (!trackOffsets.has(trackId) && lrcDefaultOffset(track)) trackOffsets.set(trackId, lrcDefaultOffset(track));
     const offset = trackOffsets.get(trackId) || 0;
     const savedPitch = trackPitch.has(trackId) ? trackPitch.get(trackId) : 0;
     const savedSpeed = trackSpeed.has(trackId) ? trackSpeed.get(trackId) : 1.0;
