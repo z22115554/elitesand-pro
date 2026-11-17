@@ -13,7 +13,7 @@ const { requireControlAccess } = require('../middleware/require-control-access')
 const log = createLogger('Auth');
 
 function clientKey(req) {
-  return `http:${req.ip || (req.socket && req.socket.remoteAddress) || 'unknown'}`;
+  return rateLimiter.keyForAddress(getClientAddress(req));
 }
 
 function rejectIfLimited(req, res) {

@@ -18,7 +18,7 @@ const { getClientAddress, isLoopbackAddress } = require('../utils/pin-setup-poli
 function requirePin(req, res, next) {
   return requireControlAccess(req, res, () => {
   if (!authStore.hasPinFor({ loopback: isLoopbackAddress(getClientAddress(req)) })) return next();
-  const key = `protected:${req.ip || req.socket?.remoteAddress || 'unknown'}`;
+  const key = rateLimiter.keyForAddress(req.socket?.remoteAddress || req.ip);
   const limit = rateLimiter.status(key);
   if (!limit.allowed) {
     res.set('Retry-After', String(Math.max(1, Math.ceil(limit.retryAfterMs / 1000))));

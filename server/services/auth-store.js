@@ -41,6 +41,7 @@ const authDiskStore = createJsonStore({
   logger: log,
 });
 
+const pinChangeListeners = new Set();
 let cached = null; // { hash: hex, salt: hex } | null（null＝尚未設定 PIN，也代表「載入過但沒有」）
 let loaded = false;
 let loadFailed = false;
@@ -122,6 +123,7 @@ function setPin(newPin, currentPin, { localRecovery = false } = {}) {
   if (loadFailed) log.warn('PIN 資料損壞，已在本機重新設定');
   loadFailed = false;
   log.info('PIN 已設定/更新');
+  notifyPinChanged('set');
   return { ok: true };
 }
 
@@ -138,7 +140,24 @@ function clearPin(currentPin) {
   if (!authDiskStore.remove()) return { ok: false, message: 'PIN 檔案刪除失敗，請檢查資料夾權限或版本。' };
   cached = null;
   log.info('PIN 保護已關閉');
+  notifyPinChanged('clear');
   return { ok: true };
 }
 
-module.exports = { hasPin, hasPinFor, needsRecovery, verifyPin, setPin, clearPin };
+/**
+ * PIN 設定／更改／關閉後通知（socket-handler 用來踢掉用舊 PIN 連進來的遠端控制端）。
+ * @returns {() => void} 取消訂閱
+ */
+function onPinChanged(listener) {
+  if (typeof listener !== 'function') return () => {};
+  pinChangeListeners.add(listener);
+  return () => pinChangeListeners.delete(listener);
+}
+
+function notifyPinChanged(kind) {
+  for (const listener of pinChangeListeners) {
+    try { listener(kind); } catch (err) { log.warn(`PIN 變更通知失敗：${err.message}`); }
+  }
+}
+
+module.exports = { hasPin, hasPinFor, needsRecovery, verifyPin, setPin, clearPin, onPinChanged };

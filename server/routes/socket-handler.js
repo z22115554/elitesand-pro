@@ -177,7 +177,7 @@ module.exports = function socketHandler(io, {
     }
     if (!loopback && !deviceAccess.verifyControllerToken(auth.controllerToken)) return next(new Error('CONTROLLER_PAIRING_REQUIRED'));
     if (!authStore.hasPinFor({ loopback })) return next();
-    const key = `socket:${socket.handshake.address || 'unknown'}`;
+    const key = authRateLimiter.keyForAddress(socket.handshake.address);
     const limit = authRateLimiter.status(key);
     if (!limit.allowed) return next(new Error('PIN_RATE_LIMITED'));
     if (authStore.verifyPin(auth.pin)) {
@@ -188,6 +188,21 @@ module.exports = function socketHandler(io, {
     const err = new Error('PIN_REQUIRED');
     next(err);
   });
+
+  // 改了 PIN（或第一次設定）之後，用舊 PIN（或沒 PIN 時）連進來的遠端控制端不能繼續留著：
+  // 改 PIN 多半就是發現不該連進來的人在亂操作。踢掉後它們會用記住的舊 PIN 重連而被擋下。
+  // 本機（loopback）的面板與唯讀的 OBS 顯示來源不受影響。
+  if (typeof authStore.onPinChanged === 'function') {
+    authStore.onPinChanged((kind) => {
+      if (kind !== 'set') return;
+      const sockets = io.sockets && io.sockets.sockets;
+      if (!sockets || typeof sockets.values !== 'function') return;
+      for (const socket of sockets.values()) {
+        if (socket.readOnly || isLoopbackAddress(socket.handshake && socket.handshake.address)) continue;
+        try { socket.disconnect(true); } catch (_) { /* 已斷線 */ }
+      }
+    });
+  }
 
   // ─── 連線狀態追蹤 ───
   const clients = {
