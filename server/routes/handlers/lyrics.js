@@ -709,10 +709,17 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 本身沒有進去。先印出判斷式吃到的實際值，不要再靠讀程式碼猜。
     log.info(`lyrics:manual 羅馬化判斷：trackId=${trackId} isArray=${Array.isArray(parsedLyrics)} length=${Array.isArray(parsedLyrics) ? parsedLyrics.length : 'n/a'} needsRomanization=${Array.isArray(parsedLyrics) ? needsRomanization(parsedLyrics) : 'n/a'}`);
     if (parsedLyrics && Array.isArray(parsedLyrics) && needsRomanization(parsedLyrics)) {
+      const appliedEntry = manualLyricsCache.get(trackId);
       addRomanization(parsedLyrics)
         .then((romanized) => {
-          // 更新快取中的 parsedLyrics
-          const cached = manualLyricsCache.get(trackId);
+          // 羅馬化要一點時間（第一次還要載入日文字典）；在歌詞選擇器連續試好幾個來源時，
+          // 舊來源的結果會比新來源晚到。過期的結果不可寫回：否則快取、歌曲庫與顯示端
+          // 會拿到「新來源的歌詞文字＋舊來源的逐行內容」，OBS 上直接顯示成上一個來源的歌詞。
+          if (manualLyricsCache.get(trackId) !== appliedEntry) {
+            log.info(`手動歌詞羅馬化結果已過期（期間又換了歌詞），略過: ${trackId}`);
+            return;
+          }
+          const cached = appliedEntry;
           if (cached) cached.parsedLyrics = romanized;
           try { libraryStore.updateMeta(trackId, { parsedLyrics: romanized }); } catch (_) { /* 靜默 */ }
 

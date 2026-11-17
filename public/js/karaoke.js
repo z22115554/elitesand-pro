@@ -449,15 +449,18 @@ const KaraokeEngine = (() => {
   function updateRomanization(romanizedLines) {
     if (!romanizedLines || !Array.isArray(romanizedLines)) return;
 
-    // 以「時間」對齊，而非索引：伺服器過濾製作資訊行後行數可能與本地不同，
+    // 以「時間＋原文」對齊，而非索引：伺服器過濾製作資訊行後行數可能與本地不同，
     // 用索引會錯位導致逐句歌詞拼音/諧音貼到錯誤的行（或不顯示）。
-    const byTime = new Map();
+    // 只看時間不夠：lyrics:romanized 是全體廣播，匯入別首歌、或歌詞選擇器換來源時，
+    // 另一份歌詞的羅馬化結果也會送到這裡，剛好同一個時間戳的行就被貼上別首的拼音／諧音。
+    const romanizationKey = (time, text) => time + '|' + String(text == null ? '' : text).replace(/\s+/g, '');
+    const byKey = new Map();
     for (const rl of romanizedLines) {
-      if (rl && typeof rl.time === 'number') byTime.set(rl.time, rl);
+      if (rl && typeof rl.time === 'number') byKey.set(romanizationKey(rl.time, rl.text), rl);
     }
 
     for (const line of parsedLyrics) {
-      const rl = byTime.get(line.time);
+      const rl = byKey.get(romanizationKey(line.time, line.text));
       if (!rl) continue;
       if (rl.phonetic) line.phonetic = rl.phonetic;
       if (rl.xieyin) line.xieyin = rl.xieyin;

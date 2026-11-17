@@ -925,14 +925,17 @@
       query: data && data.query,
     });
     if (!data || !Array.isArray(data.parsedLyrics) || !parsedLines.length) return;
+    // 時間＋原文一起對：這是全體廣播，別首歌（匯入中）或剛被換掉的歌詞來源的結果也會送來，
+    // 只比時間會把別首的拼音／諧音貼到剛好同一個時間戳的行上。
+    const romanizationKey = (time, text) => time + '|' + String(text == null ? '' : text).replace(/\s+/g, '');
     const byTime = new Map();
     for (const rl of data.parsedLyrics) {
-      if (rl && typeof rl.time === 'number') byTime.set(rl.time, rl);
+      if (rl && typeof rl.time === 'number') byTime.set(romanizationKey(rl.time, rl.text), rl);
     }
     let changed = false;
     let matched = 0;
     for (const line of parsedLines) {
-      const rl = byTime.get(line.time);
+      const rl = byTime.get(romanizationKey(line.time, line.text));
       if (!rl) continue;
       matched += 1;
       if (rl.phonetic && rl.phonetic !== line.phonetic) { line.phonetic = rl.phonetic; changed = true; }

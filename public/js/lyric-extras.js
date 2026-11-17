@@ -1872,6 +1872,10 @@
 
   let pickerCurrentTrack = null;
   const pickerSearchCache = new Map();
+  // 目前畫面上應該顯示哪一次搜尋的結果。各來源查詢可能要好幾秒：這段時間使用者換了一首歌
+  // 再打開選擇器（或改了搜尋字），舊的回應晚到時不能蓋掉畫面——否則點下去的候選歌詞
+  // 是上一首歌的，卻會被套用到現在這首。
+  let pickerActiveSearchKey = null;
 
   function pickerSearchKey(track, artist, title) {
     return `${track?.id || ''}\u0000${artist.trim()}\u0000${title.trim()}`;
@@ -1942,6 +1946,7 @@
     const cacheKey = pickerSearchKey(track, artistEl?.value || '', titleEl?.value || '');
     const cached = pickerSearchCache.get(cacheKey);
     if (cached) {
+      pickerActiveSearchKey = cacheKey;
       const body = document.getElementById('lyrics-picker-body');
       if (body) renderCandidates(body, cached.candidates, cached.providerHealth);
     } else {
@@ -1956,6 +1961,7 @@
     const artist = (document.getElementById('picker-artist') || {}).value || '';
     const title = (document.getElementById('picker-title') || {}).value || '';
     if (!title.trim()) {
+      pickerActiveSearchKey = null;
       body.innerHTML = '<div class="picker-empty">請輸入歌名再搜尋</div>';
       return;
     }
@@ -1967,6 +1973,7 @@
       duration: Math.round((pickerCurrentTrack && pickerCurrentTrack.duration) || 0),
     };
     const cacheKey = pickerSearchKey(pickerCurrentTrack, payload.artist, payload.title);
+    pickerActiveSearchKey = cacheKey;
     const cached = pickerSearchCache.get(cacheKey);
     if (cached) {
       renderCandidates(body, cached.candidates, cached.providerHealth);
@@ -1980,15 +1987,19 @@
     })
       .then(r => r.json())
       .then(data => {
-        if (!data.success || !Array.isArray(data.candidates) || data.candidates.length === 0) {
+        const hasCandidates = data && data.success && Array.isArray(data.candidates) && data.candidates.length > 0;
+        if (hasCandidates) pickerSearchCache.set(cacheKey, { candidates: data.candidates, providerHealth: data.providerHealth });
+        // 已經換成別首歌／別的搜尋字：結果只留在快取，不畫到現在的選擇器上
+        if (pickerActiveSearchKey !== cacheKey) return;
+        if (!hasCandidates) {
           body.innerHTML = '<div class="picker-empty">沒有找到任何來源的歌詞<br>試試只填歌名、或改用「貼上歌詞」手動輸入</div>';
-          renderProviderHealth(body, data.providerHealth);
+          renderProviderHealth(body, data && data.providerHealth);
           return;
         }
-        pickerSearchCache.set(cacheKey, { candidates: data.candidates, providerHealth: data.providerHealth });
         renderCandidates(body, data.candidates, data.providerHealth);
       })
       .catch(err => {
+        if (pickerActiveSearchKey !== cacheKey) return;
         body.innerHTML = `<div class="picker-empty">查詢失敗：${escapeHtml(err.message)}</div>`;
       });
   }

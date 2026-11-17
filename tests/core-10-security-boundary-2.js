@@ -710,8 +710,8 @@ test('跟唱視圖新增羅馬拼音／諧音開關，各自獨立、預設關�
   // 若沒接這個監聽，使用者開了開關卻要等下一次切歌才看得到拼音/諧音（見 memory
   // lyrics-romanization-pipeline 的「非同步」根因）。
   ok(promptSource.includes("SocketClient.on('lyrics:romanized', (data) => {"), '必須監聽 lyrics:romanized，補推的羅馬化結果才進得來：');
-  ok(promptSource.includes('const byTime = new Map();') && promptSource.includes('byTime.set(rl.time, rl)'),
-    '合併羅馬化結果必須用時間對齊，不能用索引（伺服器過濾製作資訊行後行數可能跟本地不同，索引對齊會貼到錯的句子）：');
+  ok(promptSource.includes('const byTime = new Map();') && promptSource.includes('byTime.set(romanizationKey(rl.time, rl.text), rl)'),
+    '合併羅馬化結果必須用時間（＋原文）對齊，不能用索引（伺服器過濾製作資訊行後行數可能跟本地不同，索引對齊會貼到錯的句子）：');
 
   // CSS 結構：拼音/諧音是獨立於主歌詞文字的子區塊，字級/顏色狀態要能跟著 active/past/next 走。
   ok(promptCss.includes('.pt-line-romaji') && promptCss.includes('.pt-line-xieyin'), '必須有拼音跟諧音各自的樣式：');

@@ -155,7 +155,18 @@ function registerPlaybackHandlers(io, socket, ctx) {
       if (Array.isArray(pl) && pl.length > 0 && needsRomanization(pl)) {
         const missingRomanization = !pl.some(l => l && (l.phonetic || l.xieyin));
         if (missingRomanization || needsFurigana(pl)) {
+          // 羅馬化期間使用者可能換了歌詞（歌詞選擇器／手動貼上／歌曲庫逐字升級）。
+          // 那時這份 pl 已經不是這首的歌詞：不可推播給顯示端，更不可把舊歌詞寫回歌曲庫
+          // （會蓋掉剛選好的新歌詞）。用「歌詞的擁有者是否仍握著同一份 pl」判斷。
+          const manualAtStart = getEffectiveLyrics(trackId);
+          const lyricsOwner = manualAtStart || storedTrack || null;
+          const isStale = () => getEffectiveLyrics(trackId) !== manualAtStart
+            || (lyricsOwner && lyricsOwner.parsedLyrics !== pl);
           addRomanization(pl).then((romanized) => {
+            if (isStale()) {
+              log.info(`播放時補羅馬化結果已過期（期間換了歌詞），略過: ${track.title}`);
+              return;
+            }
             for (let i = 0; i < pl.length; i++) {
               if (!romanized[i]) continue;
               pl[i].phonetic = romanized[i].phonetic;
