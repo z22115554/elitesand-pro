@@ -1,5 +1,6 @@
 'use strict';
 require('./audit-storage.test');
+require('./jizura-word-wrap.test');
 require('./shell-health-identity.test');
 require('./library-restore-memory.test');
 require('./webgpu-audio-budget.test');
