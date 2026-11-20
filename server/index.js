@@ -744,6 +744,20 @@ server.listen(PORT, '0.0.0.0', () => {
   usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
   log.info('╚══════════════════════════════════════════╝');
 
+  // 清洗規則改進後，背景把歌曲庫已存的歌詞照新規則重洗一次（做過就有標記檔，不會重跑）。
+  setTimeout(() => {
+    const { LyricsEngine } = require('./services/lyrics-engine');
+    require('./services/lyrics-reclean').recleanLibrary({
+      libraryStore: require('./services/library-store'),
+      parse: (raw, type) => LyricsEngine.parseByType(raw, type),
+      onUpdated: (id, lines) => socketApi.replaceTrackParsedLyrics(id, lines),
+      log,
+      markerFile: path.join(dataDir, 'lyrics-reclean.json'),
+    }).then((changed) => {
+      if (changed.length) log.info(`歌詞重洗完成：${changed.length} 首`);
+    }).catch((error) => log.warn(`歌詞重洗失敗：${error.message}`));
+  }, 5000).unref?.();
+
   // 可攜版啟動器會設 OPEN_BROWSER=1：伺服器就緒後自動以預設瀏覽器開啟控制面板。
   // 由 Node 端開啟（而非啟動器用 PowerShell 輪詢）有兩個好處：
   //   1. 時機精準——此處保證伺服器已在聽，瀏覽器一開就連得上，不會出現「無法連線」。

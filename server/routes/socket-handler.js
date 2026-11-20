@@ -736,6 +736,21 @@ module.exports = function socketHandler(io, {
   return {
     command: createDeckCommands(io, ctx),
     getState: ctx.getPublicState,
+    // 歌曲庫背景重洗歌詞後，播放清單／目前歌曲裡同一首的副本一起換掉（鐵則 17：
+    // 不同步的話下次存檔或廣播會用舊快照蓋回去）。不廣播：避免 OBS 重跑入場動畫，
+    // 下一次正常同步就會帶到。手動指定歌詞的歌不會走到這裡。
+    replaceTrackParsedLyrics(trackId, parsedLyrics) {
+      const { playState } = ctx;
+      let touched = 0;
+      const tracks = [playState.currentTrack, ...(Array.isArray(playState.playlist) ? playState.playlist : [])];
+      for (const t of new Set(tracks)) {
+        if (!t || t.id !== trackId || !Array.isArray(t.parsedLyrics)) continue;
+        t.parsedLyrics = parsedLyrics.map((line) => ({ ...line }));
+        touched++;
+      }
+      if (touched) ctx.persistState();
+      return touched;
+    },
     // 練唱音高分析用：畫面上顯示的那份歌詞（手動覆蓋優先）＋這首歌的歌詞偏移。
     getPracticeLyrics(trackId) {
       const manual = ctx.getEffectiveLyrics(trackId);
