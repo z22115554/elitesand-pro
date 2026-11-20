@@ -20,6 +20,13 @@ function text(value, max = 500, fallback = '') {
   return String(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, max);
 }
 
+// 原始歌詞要保留 \x01：TTML 對唱歌詞把聲部代號夾成「\x01a\x01」寫在行首（ttml-parser），
+// 被 text() 一起洗掉後，重解析存檔的歌詞會把代號當成正文（「a好啊好啊」）。
+function lyricsText(value, max) {
+  if (value === undefined || value === null) return '';
+  return String(value).replace(/[\u0000\u0002-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, max);
+}
+
 function finite(value, fallback = 0, min = -Infinity, max = Infinity) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -104,7 +111,7 @@ function sanitizeOffsetsBySource(value) {
 
 function sanitizeManualLyrics(value) {
   if (!value || typeof value !== 'object') return null;
-  const lyrics = text(value.lyrics, MAX_LYRICS_LENGTH);
+  const lyrics = lyricsText(value.lyrics, MAX_LYRICS_LENGTH);
   if (!lyrics) return null;
   return {
     lyrics,
@@ -174,7 +181,7 @@ function sanitizeTrack(value) {
     originalName: text(value.originalName, 500),
     url: safeUrl(value.url),
     source: text(value.source, 40),
-    lyrics: typeof value.lyrics === 'string' ? text(value.lyrics, MAX_LYRICS_LENGTH) : null,
+    lyrics: typeof value.lyrics === 'string' ? lyricsText(value.lyrics, MAX_LYRICS_LENGTH) : null,
     lyricsType,
     // 目前套用的歌詞來源（betterlyrics/paxsenix/kugou/qqmusic/lrclib/netease/manual）＋
     // 每個來源各自記住的時間偏移，換來源時自動切換，不用重調。

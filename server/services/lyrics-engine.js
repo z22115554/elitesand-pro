@@ -204,6 +204,24 @@ const AMLL_TTML_MAX_CHARS = 2 * 1024 * 1024;
  * 把一行逐字資料（時間都是整首歌的絕對毫秒）組成我們的 KRC 行：[mm:ss.xx]<行長>字<相對起點,長度>…
  * 字裡的 < [ ] 是 KRC 的語法字元，換成全形避免把後面的解析弄壞。
  */
+// 舊版存檔把 TTML 聲部代號外面的 \x01 洗掉了，只剩「a好啊」「both有空」。只有整首看起來就是
+// 這種格式時才剝：至少兩種代號、九成以上的逐字行都以代號開頭（實測 75 首都是 100%，
+// 其餘歌曲連 50% 都沒有）。代號後面緊接小寫英文字母的不算（dance、about、better）。
+const BARE_SINGER_CODE_RE = /^(both|[a-d])(?=[^a-z])/;
+function hasBareSingerCodes(lines) {
+  let total = 0;
+  const codes = [];
+  for (const line of lines) {
+    const m = line.match(/^\[[^\]]+\]<\d+>(.*)$/);
+    if (!m) continue;
+    total++;
+    if (m[1].startsWith('\x01')) return false;
+    const code = m[1].match(BARE_SINGER_CODE_RE);
+    if (code) codes.push(code[1]);
+  }
+  return total > 0 && codes.length >= total * 0.9 && new Set(codes).size >= 2;
+}
+
 function buildKrcLine(lineStart, lineDuration, words) {
   if (!Number.isFinite(lineStart) || lineStart < 0) return null;
   const clean = (words || [])
@@ -1730,6 +1748,7 @@ class LyricsEngine {
 
     const lines = krcText.split('\n');
     const parsed = [];
+    const bareSingerCodes = hasBareSingerCodes(lines);
     // appendTranslationLines 接在後面的「[時間]譯文」純文字行
     const translations = [];
 
@@ -1752,6 +1771,12 @@ class LyricsEngine {
       if (singerMark) {
         lineSinger = singerMark[1];
         remaining = remaining.slice(singerMark[0].length);
+      } else if (bareSingerCodes) {
+        const bare = remaining.match(BARE_SINGER_CODE_RE);
+        if (bare) {
+          lineSinger = bare[1];
+          remaining = remaining.slice(bare[1].length);
+        }
       }
 
       const words = [];
