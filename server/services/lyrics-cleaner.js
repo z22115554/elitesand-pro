@@ -20,7 +20,10 @@
 // 英文關鍵字必須從詞首開始比對（允許 -er/-ist/-ing 等字尾）：舊版整條 regex 沒有詞邊界，
 // 「Stop:」「Hope:」「Oops:」含 op、「Spring:」「Desperado:」含 sp，首尾的正文都會被當成
 // 製作資訊砍掉。OP/SP/ISRC/A&R 這類縮寫必須是完整單字。中文關鍵字沒有詞邊界概念，維持原樣。
-const CREDIT_KEYWORDS_RE = /(作詞|作词|作曲|編曲|编曲|製作人|制作人|製作|制作|出品|出品人|發行|发行|企劃|企划|企宣|策劃|策划|推廣|推广|統籌|统筹|監製|监制|監修|监修|混音|母帶|母带|和聲|和声|和音|合聲|合声|合音|人聲|人声|配唱|配器|配樂|配乐|吉他|貝斯|贝斯|鼓|打擊樂|打击乐|鍵盤|键盘|鋼琴|钢琴|弦樂|弦乐|演唱|原唱|主唱|歌手|錄音|录音|錄音室|录音室|唱片公司|聯合出品|联合出品|改編製作|改编制作|音樂營銷|音乐营销|營銷|营销|總監|总监|設計|设计|詞|词|曲|編|编|攝影|摄影|視覺|视觉|美術|美术|鳴謝|鸣谢|特別感謝|特别感谢|\b(?:guitar|bass|drum|percussion|program|keyboard|pian[oi]|strings|produc(?:er|ed\s*by|tion)|compos(?:er|ed\s*by)|lyricist|lyrics\s*by|written\s*by|arrang(?:ed|er|ement)|vocal|original\s*artist|record(?:ing|ed\s*by)|mix(?:ing|ed\s*by|er)?\b|master(?:ing|ed\s*by)?\b|studio|label|chorus|backing\s*vocal|artwork|design|director|video)|\b(?:OP|SP|ISRC|A\s*&\s*R)\b)/i;
+// 韓系／國際發行的英文名單還有「Digital Edited by」「Mixed in Dolby Atmos by」「(Sub-)Publishers」：
+// 舊版只認「Mixed by」，中間夾一行沒認出來就整段停手，後面的「Bass：」「Piano：」又被合唱聲部
+// 當成演唱者標籤，連正文都掛上 Piano 聲部（還痛吗 Gone (Chinese ver.)）。
+const CREDIT_KEYWORDS_RE = /(作詞|作词|作曲|編曲|编曲|製作人|制作人|製作|制作|出品|出品人|發行|发行|企劃|企划|企宣|策劃|策划|推廣|推广|統籌|统筹|監製|监制|監修|监修|混音|母帶|母带|和聲|和声|和音|合聲|合声|合音|人聲|人声|配唱|配器|配樂|配乐|吉他|貝斯|贝斯|鼓|打擊樂|打击乐|鍵盤|键盘|鋼琴|钢琴|弦樂|弦乐|演唱|原唱|主唱|歌手|錄音|录音|錄音室|录音室|唱片公司|聯合出品|联合出品|改編製作|改编制作|音樂營銷|音乐营销|營銷|营销|總監|总监|設計|设计|詞|词|曲|編|编|攝影|摄影|視覺|视觉|美術|美术|鳴謝|鸣谢|特別感謝|特别感谢|琴|演奏|樂團|乐团|樂隊|乐队|指導|指导|專輯|专辑|表演|白話字|白话字|助理|工程|剪輯|剪辑|修音|後期|后期|笛|簫|箫|二胡|琵琶|古箏|古筝|烏克麗麗|乌克丽丽|\b(?:guitar|cello|violin|viola|ukulele|synth|harmonica|sax|trumpet|trombone|horn|flute|accordion|album|assistant|executive|supervis|coordinat|photograph|management|bass|drum|percussion|program|keyboard|pian[oi]|strings|produc(?:er|ed\s*by|tion)|compos(?:er|ed\s*by)|lyricist|lyrics\s*by|written\s*by|arrang(?:ed|er|ement)|vocal|original\s*artist|record(?:ing|ed\s*by)|mix(?:ing|ed|er)?\b|master(?:ing|ed)?\b|edit(?:ed|ing|or)?\b|publish(?:er|ers|ing)?\b|engineer|atmos\b|studio|label|chorus|backing\s*vocal|artwork|design|director|video)|\b(?:OP|SP|ISRC|A\s*&\s*R)\b)/i;
 // 冒號前標籤太長就不算（避免把「今天的天氣：真好」這種一般語句誤判成製作資訊）
 // 中英雙語角色名會很長，例如「數位發行 Digital Release」「錄音師 Recording Engineer」。
 // 只在首尾 credit block 使用此上限，放寬到 36 仍不會掃描正文中段。
@@ -62,7 +65,8 @@ function isCreditLine(line, index) {
   if (!line || typeof line.text !== 'string') return false;
   const t = line.text.trim();
   if (!t) return false;
-  const colonIdx = t.search(/[:：]/);
+  // 「∶」(U+2236) 是老歌詞檔常見的假冒號（作词∶梁弘志），一併當冒號看。
+  const colonIdx = t.search(/[:：∶]/);
   if (colonIdx > -1 && colonIdx <= CREDIT_LABEL_MAX_LEN) {
     const label = t.slice(0, colonIdx).trim();
     // 「我寫的曲：...」較可能是正文；只排除以人稱開頭的句子，不能排除內含「他」的「吉他」。
@@ -73,7 +77,36 @@ function isCreditLine(line, index) {
   // 有些來源把 credit 整行包在括號內而不寫冒號，例如「【錄音室：XX Studio】」。
   const bracketed = t.match(/^[【\[［(（]\s*(.{1,80}?)\s*[】\]］)）]$/);
   if (bracketed && CREDIT_KEYWORDS_RE.test(bracketed[1])) return true;
+  // 多人角色常拆成「和声：」下面一人一行「王禹茨@维伴音乐」——人名@工作室，沒有冒號。
+  if (CREDIT_HANDLE_RE.test(t)) return true;
+  // 名單最後常掛一行 ISRC／唱片編號（G00302102、CN-A01-23-00001）。
+  if (CATALOG_CODE_RE.test(t)) return true;
   return false;
+}
+
+// 「人名@工作室」或「任何短角色：人名@工作室」（PGM：王禹茨@维伴音乐——角色是沒見過的縮寫，
+// 但值是名單專用寫法）。
+const CREDIT_HANDLE_RE = /^(?:[^:：∶@]{1,20}[:：∶]\s*)?[^\s:：∶@]{1,20}@\S{1,40}$/;
+const CATALOG_CODE_RE = /^(?=(?:.*\d){5})[A-Z0-9][A-Z0-9-]{6,22}$/;
+
+// 開頭的「歌名」「------歌手」這類標題行有時不在第 0 行、沒有破折號或時間晚於 2.5 秒，
+// isHeaderLine 認不出來，名單就被擋在後面整段留下（默契、複寫、Power Station）。
+// 只有緊接著一段確定的名單時才跳過：最多 2 行、每行夠短，且後面至少兩行名單，
+// 或這幾行本身長得像標題（含破折號）——正文不會出現在名單前面。
+function leadingTitleSkip(out, isCredit) {
+  for (let k = 1; k <= 2 && k < out.length; k++) {
+    if (!isCredit(out[k], k)) continue;
+    const lead = out.slice(0, k);
+    if (lead.some((l) => !l || typeof l.text !== 'string' || l.text.trim().length > 40 || isCredit(l))) return 0;
+    const twoCredits = k + 1 < out.length && isCredit(out[k + 1], k + 1);
+    const titleLike = lead.some((l) => /[-–—－]/.test(l.text));
+    // 名單後面要接著正文（至少 3 行）。整份只有「兩句＋結尾名單」時，前兩句是正文不是標題。
+    let r = k;
+    while (r < out.length && (isCredit(out[r], r) || !String(out[r]?.text || '').trim())) r++;
+    if (out.length - r < 3) return 0;
+    return twoCredits || titleLike ? k : 0;
+  }
+  return 0;
 }
 
 function isHeaderLine(line, index) {
@@ -139,6 +172,7 @@ function cleanLyrics(lines, opts = {}) {
     let start = 0;
     // 酷狗常先放「歌名-歌手」，下一行才開始 credit。只有兩者連續出現才把標題一起清掉。
     if (isHeaderLine(out[0], 0) && isCreditLine(out[1], 1)) start = 1;
+    else start = leadingTitleSkip(out, isCreditLine);
     // 真實名單常用空白行分隔每個角色（「作曲：X」空一行「編曲：Y」），空白行本身
     // 不算 credit，但不該讓它中止「連續符合」——否則名單稍長、夾了空行就會在
     // 半途停手，漏砍後段（見踩坑：弦樂/和聲/混音/母帶/製作團隊被擋在空行後面）。
