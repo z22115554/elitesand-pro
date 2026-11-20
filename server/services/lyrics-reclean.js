@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const RECLEAN_VERSION = 'credits-2026-11-20';
+const RECLEAN_VERSION = 'credits-2026-11-21';
 const SUPPORTED_TYPES = new Set(['krc', 'lrc']);
 
 const lineKey = (line) => `${line && line.time}|${line && line.text}`;

@@ -83,6 +83,65 @@ test('結尾名單後面的 ISRC 編號一起清掉', () => {
   assert.deepEqual(cleanLyrics(texts.map((text, i) => ({ time: 200000 + i * 800, text }))).map((l) => l.text), ['最后一句']);
 });
 
+// ─── 2026-11-21：50 首中國熱門歌 × 6 個來源實測補上的規則 ───
+const timed = (rows) => rows.map(([time, duration, text]) => ({ time, duration, text }));
+const sung = (from, n = 4) => Array.from({ length: n }, (_, i) => [from + i * 5000, 4000, `第${i + 1}句正文歌词`]);
+
+test('Apple Music 系：角色名被拿掉、只剩人名的名單，靠前奏裡的短時長認出來', () => {
+  // 光年之外：標題＋三行人名（每行不到 1 秒）＋正文
+  const a = timed([[0, 5791, '光年之外 (《太空旅客》电影中国区主题曲) - G.E.M.邓紫棋'], [8590, 381, 'Lupo Groinig'],
+    [9140, 717, '蜂鸟音乐'], [10050, 869, '百纳娱乐'], ...sung(12540)]);
+  assert.deepEqual(cleanLyrics(a).map((l) => l.text), sung(12540).map((r) => r[2]));
+  // 善变：只有歌名、接著人名與夾雜的確定名單
+  const b = timed([[0, 928, '善变'], [2160, 462, '米嘉郁'], [3550, 462, '孙大雄'], [6960, 1251, '和声Backing Vocals: 王韩一淋'],
+    [9140, 396, '老田'], [9740, 1260, '配唱制作人Vocal Producer: 杨沛'], ...sung(18000)]);
+  assert.deepEqual(cleanLyrics(b).map((l) => l.text), sung(18000).map((r) => r[2]));
+  // 我曾：0 秒的緊湊標題後面全是人名（沒有角色名）
+  const c = timed([[0, 130, '我曾-隔壁老樊'], [710, 63, '祁大为'], [850, 52, '韩阳'], [1470, 90, '北京好听音乐录音棚'], ...sung(1820)]);
+  assert.deepEqual(cleanLyrics(c).map((l) => l.text), sung(1820).map((r) => r[2]));
+});
+
+test('時長規則不吃正文：饒舌快句、口白、名單後第一句唱得快的歌詞都留著', () => {
+  const rap = timed([[25030, 1373, "The dance floor's tempo's hot as sauna"], [26420, 1156, "So I'm gonna freak up on ya"],
+    [27610, 879, 'Do it how we did it'], ...sung(30000)]);
+  assert.equal(cleanLyrics(rap).length, rap.length, '沒有標題／名單佐證的快句不動');
+  const talk = timed([[10, 120, '那个'], [130, 710, '一一一一一个'], [1130, 560, '大家好'], ...sung(5000)]);
+  assert.equal(cleanLyrics(talk).length, talk.length);
+  const afterCredits = timed([[100, 100, '复刻回忆 - 薛凯琪/方大同'], [200, 100, '词：易家扬'], [300, 100, '曲：桑田佳佑'],
+    [28640, 1120, '女：你还好吗'], [30640, 1180, '好久不见'], ...sung(33000)]);
+  assert.equal(cleanLyrics(afterCredits)[0].text, '女：你还好吗');
+  const fastFirst = timed([[0, 5580, '扛坝子 - 草屯囝仔'], [5580, 5590, '词：陈枢育'], [11170, 5590, '曲：陈枢育'],
+    [27940, 1398, '是啥时有咚咚猜'], ...sung(29340)]);
+  assert.equal(cleanLyrics(fastFirst)[0].text, '是啥时有咚咚猜');
+});
+
+test('夾在兩行名單中間的陌生角色、超長名單、各種標題行與聲明', () => {
+  const run = (texts, step = 1000) => cleanLyrics(texts.map((text, i) => ({ time: 300 + i * step, text }))).map((l) => l.text);
+  const body = ['还记得 妈妈说', '青春来做赌注', '我要听着亲戚们的闲话'];
+  assert.deepEqual(run(['从前说', '词：刘通', '和声：赫拉Hera', '合唱：一寸光年团队', '艺人统筹：YY 音乐@云云、君君',
+    '【未经著作权人许可不得翻唱翻录或使用】', ...body]), body);
+  // 名單超過 50 行（紀錄片主題曲）
+  const long = Array.from({ length: 60 }, (_, i) => `制作人：某人${i}`);
+  assert.deepEqual(run([...long, ...body]), body);
+  // 網易雲：詞曲、標題、再一次詞曲
+  assert.deepEqual(run([' 作词 : 樊冲', ' 作曲 : 樊冲', '我要你 - 任素汐', '词：樊冲', '曲：樊冲', ...body]), body);
+  // 長篇 AI 訓練條款聲明、以「出品」收尾的結尾行、多角色合寫的長標籤
+  assert.equal(isCreditLine({ text: '【未经著作权人许可，不得翻唱翻录重制或任何形式的使用，禁止用于任何人工智能(AI)的训练、模仿、学习、生成等相关活动】' }), true);
+  assert.equal(isCreditLine({ text: '网易云音乐特别企划“回声不息”出品' }), true);
+  assert.equal(isCreditLine({ text: 'Programing / Guitars / Keyboards &Sythn : 朴树' }), true);
+  assert.equal(isCreditLine({ text: '汝文博@SBMS Beijing' }), true);
+  assert.equal(isCreditLine({ text: '这首歌我们一起出品' }), true, '以出品收尾的短句當名單（已知取捨）');
+  assert.equal(isCreditLine({ text: '我们出品，你来唱' }), false, '有標點的句子不算');
+});
+
+test('0 秒的標題行：有空白的破折號、或緊湊寫法帶括號', () => {
+  const run = (head) => cleanLyrics([{ time: 0, text: head }, ...['一', '二', '三', '四'].map((t, i) => ({ time: 19000 + i * 4000, text: `第${t}句` }))])
+    .map((l) => l.text)[0];
+  assert.equal(run('岁月神偷(Demo)-金玟岐(Vanessa)'), '第一句');
+  assert.equal(run('那些年 - 胡夏'), '第一句');
+  assert.equal(run('Oh-oh'), 'Oh-oh', '沒括號的緊湊連字號不算標題');
+});
+
 test('正文開頭碰巧有冒號的句子不受影響', () => {
   const lines = ['Edited out of the picture', 'line two', 'line three'].map((text, i) => ({ time: 5000 + i * 3000, text }));
   assert.deepEqual(cleanLyrics(lines).map((l) => l.text), ['Edited out of the picture', 'line two', 'line three']);
