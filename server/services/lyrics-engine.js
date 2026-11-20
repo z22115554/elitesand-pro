@@ -354,13 +354,24 @@ class LyricsEngine {
       usageTelemetry.recordOutcome('lyrics', true);
       return result;
     };
-    for (const source of sources) {
+    const runSource = (source) => providerHealth.execute(source.name, () => providerTransport.run({ failed: false }, async () => {
+      const result = await source.fn();
+      if (!result && providerTransport.getStore().failed) throw new Error('歌詞來源暫時無法使用');
+      return result;
+    })).catch((error) => ({ status: 'failure', error, durationMs: 0 }));
+    // BetterLyrics 只回它已快取的歌，其他一律要 API key（官方已停發），實測華語／日文歌幾乎全是
+    // 「沒有」，每次白等約 0.8 秒。所以問它的同時先把下一格 Apple Music 也問下去：順位不變
+    // （BetterLyrics 有結果照樣先用），只是不再排隊等它回「沒有」。
+    const prefetched = new Map();
+    for (let index = 0; index < sources.length; index++) {
+      const source = sources[index];
+      const next = sources[index + 1];
       log.info(`嘗試來源: ${source.name}`);
-      const outcome = await providerHealth.execute(source.name, () => providerTransport.run({ failed: false }, async () => {
-        const result = await source.fn();
-        if (!result && providerTransport.getStore().failed) throw new Error('歌詞來源暫時無法使用');
-        return result;
-      }));
+      const current = prefetched.get(index) || runSource(source);
+      if (source.name === 'betterlyrics' && next && next.name === 'paxsenix' && next.queryTitle === source.queryTitle && !prefetched.has(index + 1)) {
+        prefetched.set(index + 1, runSource(next));
+      }
+      const outcome = await current;
       outcomes.push(outcome.status);
       if (outcome.status !== 'skipped') sourceVerdicts.set(source.name, outcome.status === 'success');
       try {
