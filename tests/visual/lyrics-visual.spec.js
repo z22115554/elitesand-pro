@@ -8,7 +8,7 @@ const { visualLyrics, visualFrames } = require('../fixtures/visual-lyrics.fixtur
 // 單一來源：從 public/js/ 底下的 lyric-template-*.js 檔名推導模板 id 清單，
 // 不再手寫第二份清單。排除 registry/settings 這類非模板檔。
 const TEMPLATE_DIR = path.join(__dirname, '..', '..', 'public', 'js');
-const NON_TEMPLATE_FILES = new Set(['lyric-template-registry.js', 'lyric-template-settings.js']);
+const NON_TEMPLATE_FILES = new Set(['lyric-template-registry.js', 'lyric-template-settings.js', 'lyric-template-defaults.js']);
 
 const CUSTOM_TEMPLATE_IDS = fs.readdirSync(TEMPLATE_DIR)
   .filter((name) => name.startsWith('lyric-template-') && name.endsWith('.js'))

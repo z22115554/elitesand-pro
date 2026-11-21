@@ -716,6 +716,7 @@ body.template-lightboard #lyrics-container {
   right: 0;
   top: 0;
   bottom: 25%;                 /* 最新一句大約落在畫面下方 1/4 處 */
+  transform: translateY(var(--typewriter-offset-y, 0px));
   display: flex;
   flex-direction: column;
   justify-content: flex-end;   /* 新句貼底、舊句往上頂 */

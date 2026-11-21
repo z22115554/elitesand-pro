@@ -107,7 +107,7 @@
     return currentTrackIndex;
   }
 
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'spellbook'];
+  const { TEMPLATE_IDS, templateDefaults, normalizeAnchor } = LyricTemplateDefaults;
   const COLUMNFLOW_VARIANTS = ['sen', 'fuda'];
   const COLUMNFLOW_ENTRANCES = ['native', 'drift'];
   const COLUMNFLOW_PLACEMENTS = ['left', 'right', 'split'];
@@ -116,40 +116,6 @@
   const COLUMNFLOW_MAX_LINES = 6;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
-  const PAPERSTRIP_DEFAULTS = {
-    fontWeight: 600,
-    fontSize: 56,
-    color: '#111111',
-    activeColor: '#111111',
-    shadow: 'none',
-    verticalPosition: 'center',
-    lyricPosition: 'center',
-    letterSpacing: 1,
-  };
-  const MIRROR_DEFAULTS = {
-    fontWeight: 900,
-    fontSize: 60,
-    color: '#ffffff',
-    activeColor: '#ffffff',
-    shadow: 'none',
-    verticalPosition: 'center',
-    lyricPosition: 'split',
-    stageSafeMargin: 13,
-    letterSpacing: 1,
-    animationIntensity: 'normal',
-  };
-  const SPELLBOOK_DEFAULTS = {
-    fontWeight: 900,
-    fontSize: 60,
-    color: '#f4ead6',
-    activeColor: '#ff9a3c',
-    shadow: 'none',
-    lyricPosition: 'center',
-    letterSpacing: 2,
-    animationIntensity: 'normal',
-    spellbookEffect: 'rune',
-    spellbookPosition: 'bottom',
-  };
   function templateSupportsIntensity(template) {
     return ['pulse', 'facet', 'drift', 'aura', 'mirror', 'columnflow', 'particle', 'spellbook'].includes(template);
   }
@@ -164,6 +130,10 @@
     const out = { ...(value || {}) };
     delete out[TEMPLATE_SETTING_KEY];
     delete out[PRESET_KEY];
+    delete out.convertTraditional;
+    delete out.showProgressBar;
+    delete out.sectionAwareEnabled;
+    delete out.sectionTemplateMap;
     return out;
   }
 
@@ -240,16 +210,12 @@
       const currentTemplate = TEMPLATE_IDS.includes(lyricSettings.template) ? lyricSettings.template : 'classic';
       const stores = { ...(lyricSettings[TEMPLATE_SETTING_KEY] || {}) };
       stores[currentTemplate] = { ...settingSnapshot(lyricSettings), template: currentTemplate };
-      const next = stores[nextTemplate]
-        ? { ...settingSnapshot(stores[nextTemplate]), template: nextTemplate }
-        : {
-          ...settingSnapshot(lyricSettings),
-          ...(nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS : {}),
-          ...(nextTemplate === 'mirror' ? MIRROR_DEFAULTS : {}),
-          ...(nextTemplate === 'spellbook' ? SPELLBOOK_DEFAULTS : {}),
-          ...(nextTemplate === 'particle' ? { particleOrient: 'vertical', particleEntrance: 'auto', stageSafeMargin: 13, animationIntensity: 'normal' } : {}),
-          template: nextTemplate,
-        };
+      if (nextTemplate === currentTemplate) return;
+      const next = normalizeAnchor({
+        ...templateDefaults(nextTemplate),
+        ...settingSnapshot(stores[nextTemplate]),
+        template: nextTemplate,
+      }, nextTemplate);
       if ((nextTemplate === 'classic' || nextTemplate === 'ktv') && next.lyricPosition === 'split') next.lyricPosition = 'center';
       if (nextTemplate === 'mirror') next.lyricPosition = 'split';
       if (nextTemplate === 'particle' && !PARTICLE_ENTRANCES.includes(next.particleEntrance)) next.particleEntrance = 'auto';

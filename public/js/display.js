@@ -751,8 +751,11 @@
         root.setProperty(cssVar, fmt(s[key]));
       }
     }
-    if (typeof s.offsetX === 'number') lyricOffsetTargetX = s.offsetX;
-    if (typeof s.offsetY === 'number') lyricOffsetTargetY = s.offsetY;
+    const offsetX = Number.isFinite(s.offsetX) ? s.offsetX : 0;
+    const offsetY = Number.isFinite(s.offsetY) ? s.offsetY : 0;
+    lyricOffsetTargetX = offsetX;
+    lyricOffsetTargetY = offsetY;
+    root.setProperty('--typewriter-offset-y', `${lyricOffsetTargetY}px`);
     // 底部極細進度條開關（預設開；OBS 不想要可在面板「歌詞顯示模式」關掉）
     if (obsProgressBar) obsProgressBar.style.display = (s.showProgressBar === false) ? 'none' : '';
     ensureLyricOffsetObserver();

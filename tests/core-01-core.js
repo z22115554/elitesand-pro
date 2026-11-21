@@ -189,6 +189,7 @@ test('P0：貼上歌詞可實際開啟，controller 重連後可對目前歌曲�
   const controllerContext = {
     SharedUtils: { formatTime: (value) => String(value), escapeHtml: (value) => String(value || ''), safeHttpUrl: () => null },
     PlaylistState: playlistState,
+    LyricTemplateDefaults: require('../public/js/lyric-template-defaults'),
     SocketClient: { init() {}, on(event, handler) { controllerEvents.set(event, handler); }, send() {} },
     ErrorHandler: { init() {}, showToast(message) { controllerToasts.push(message); } },
     PinAuth: { fetchWithPin() {} },

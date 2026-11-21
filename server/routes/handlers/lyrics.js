@@ -83,7 +83,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'spellbook'];
+const { TEMPLATE_IDS: LYRIC_TEMPLATES, sanitizeLyricPosition } = require('../../../public/js/lyric-template-defaults');
 
 function sanitizeParticleSettings(settings) {
   if (settings.particleOrient !== undefined && !['horizontal', 'vertical'].includes(settings.particleOrient)) delete settings.particleOrient;
@@ -104,6 +104,7 @@ function sanitizeLyricTemplateSettings(value) {
     if (value[id] && typeof value[id] === 'object') {
       out[id] = { ...value[id], template: id };
       sanitizeParticleSettings(out[id]);
+      sanitizeLyricPosition(out[id], id);
       delete out[id].lyricTemplateSettings;
       delete out[id].lyricPresets;
       if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda'].includes(out[id].columnflowVariant)) {
@@ -147,7 +148,7 @@ function sanitizeLyricPresets(value) {
     .map((p, i) => ({
       id: String(p.id || Date.now() + '-' + i),
       name: p.name.slice(0, 40),
-      settings: { ...p.settings },
+      settings: sanitizeLyricPosition({ ...p.settings }, p.settings.template),
     }));
 }
 
@@ -506,6 +507,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (isTemplateOff(settings.template)) settings.template = resolveTemplateId(settings.template);
     const templateSettings = sanitizeLyricTemplateSettings(settings.lyricTemplateSettings);
     sanitizeParticleSettings(settings);
+    sanitizeLyricPosition(settings, settings.template || playState.lyricSettings.template);
     if (templateSettings) settings.lyricTemplateSettings = templateSettings;
     else delete settings.lyricTemplateSettings;
     const lyricPresets = sanitizeLyricPresets(settings.lyricPresets);

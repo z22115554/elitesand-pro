@@ -20,6 +20,7 @@ const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const bgmSettingsSchema = require('../services/bgm-settings');
 const obsLocale = require('../utils/obs-locale');
 const { createLogger } = require('../utils/logger');
+const { TEMPLATE_IDS, templateOverrides, sanitizeLyricPosition } = require('../../public/js/lyric-template-defaults');
 const { sanitizeTrack, sanitizeParsedLyrics, MAX_PLAYLIST_SIZE, sanitizeJsonObject, lrcDefaultOffset } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
 const { emitToAccessRooms } = require('../utils/socket-broadcast');
@@ -76,22 +77,7 @@ function redactTrackForReadOnly(track) {
 function getDefaultLyricSettings() {
   return {
     template: 'classic',
-    lyricTemplateSettings: {
-      classic: { template: 'classic', fontSize: 56, color: '#8f8f8f', activeColor: '#febc6c', verticalPosition: 'flex-end' },
-      pulse: { template: 'pulse', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
-      facet: { template: 'facet', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
-      drift: { template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
-      aura: { template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
-      ktv: { template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center', ktvInterludeText: '', ktvEndingText: '' },
-      columnflow: { template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowEntrance: 'native', columnflowPlacement: 'split', columnflowMaxLines: 4, animationIntensity: 'normal' },
-      paperstrip: { template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
-      mirror: { template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
-      particle: { template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', animationIntensity: 'normal', lyricPosition: 'center', verticalPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto' },
-      jizura: { template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth', jizuraParts: 'base', jizuraHeavy: false, jizuraLarge: false, jizuraHorror: false },
-      lightboard: { template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
-      spellbook: { template: 'spellbook', fontSize: 60, fontWeight: 900, color: '#f4ead6', activeColor: '#ff9a3c', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 2, animationIntensity: 'normal', spellbookEffect: 'rune', spellbookPosition: 'bottom' },
-      typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
-    },
+    lyricTemplateSettings: Object.fromEntries(TEMPLATE_IDS.map(id => [id, templateOverrides(id)])),
   };
 }
 
@@ -312,7 +298,19 @@ function createAppState(io) {
     if (typeof saved.showRomanization === 'boolean') playState.showRomanization = saved.showRomanization;
     if (typeof saved.metronomeEnabled === 'boolean') playState.metronomeEnabled = saved.metronomeEnabled;
     if (saved.lyricSettings && typeof saved.lyricSettings === 'object') {
-      playState.lyricSettings = sanitizeJsonObject(saved.lyricSettings) || {};
+      const settings = sanitizeJsonObject(saved.lyricSettings) || {};
+      sanitizeLyricPosition(settings, settings.template);
+      for (const [id, snapshot] of Object.entries(settings.lyricTemplateSettings || {})) {
+        if (snapshot && typeof snapshot === 'object') sanitizeLyricPosition(snapshot, id);
+      }
+      if (Array.isArray(settings.lyricPresets)) {
+        for (const preset of settings.lyricPresets) {
+          if (preset?.settings && typeof preset.settings === 'object') {
+            sanitizeLyricPosition(preset.settings, preset.settings.template);
+          }
+        }
+      }
+      playState.lyricSettings = settings;
       // 季節限定模板下架期間，舊存檔選到它就換回預設模板（模板自己的設定保留）
       if (isTemplateOff(playState.lyricSettings.template)) {
         playState.lyricSettings.template = resolveTemplateId(playState.lyricSettings.template);

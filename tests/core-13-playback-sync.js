@@ -1,5 +1,7 @@
 'use strict';
 
+const { TEMPLATE_IDS, templateDefaults } = require('../public/js/lyric-template-defaults');
+
 // 核心回歸測試（playback-sync）。由 tests/run-tests.js 依序載入，不要單獨執行。
 const {
   fs,
@@ -1076,9 +1078,9 @@ test('文字PV（JIZURA）：統一感／文字整列吃真實段落，兩側模
 
   // 預設兩側：新安裝、壞值、display 還沒收到設定時都落在 sides，面板按鈕也預設亮兩側
   ok(/\? v : 'sides';/.test(tpl) && tpl.includes("default: 'sides' }"), '模板預設（含未知值）要落在兩側: ');
-  ok(extras.includes("jizuraPlacement: 'sides', jizuraMotion") && extras.includes("out[id].jizuraPlacement = 'sides';"), '面板預設與壞值回退要是兩側: ');
+  ok(templateDefaults('jizura').jizuraPlacement === 'sides' && extras.includes("out[id].jizuraPlacement = 'sides';"), '面板預設與壞值回退要是兩側: ');
   const appStateSrc = fs.readFileSync(path.join(root, 'server', 'state', 'app-state.js'), 'utf8');
-  ok(appStateSrc.includes("jizuraPlacement: 'sides', jizuraMotion"), '伺服器預設要是兩側: ');
+  ok(require('../server/state/app-state').createAppState({ emit() {} }).playState.lyricSettings.lyricTemplateSettings.jizura.jizuraPlacement === 'sides', '伺服器預設要是兩側: ');
   ok(panel.includes('class="style-thumb active" data-jizura-placement="sides"'), '面板預設要亮「兩側」按鈕: ');
   const i18n = require('../public/js/i18n');
   for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
@@ -1160,11 +1162,7 @@ test('歌詞模板名稱：程式、i18n 與 README 必須是同一套', () => {
   const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const i18nCatalogs = require('../public/js/i18n').catalogs;
 
-  const ids = /const TEMPLATE_IDS = \[([^\]]*)\]/.exec(lyricExtras)[1]
-    .split(',').map((v) => v.trim().replace(/'/g, '')).filter(Boolean);
-  // 面板卡片掛 hidden 的是「暫停提供、只為舊設定保留」的模板，不該出現在 README
-  // 不用正則跳脫（樣板字串裡的 \s 會被吃掉變成字母 s，實際踩過）：直接取出那顆按鈕的
-  // 開頭標籤，看有沒有獨立的 hidden 屬性。
+  const ids = TEMPLATE_IDS;
   const cardTag = (id) => {
     const at = indexHtml.indexOf(`data-template="${id}"`);
     return at < 0 ? '' : indexHtml.slice(at, indexHtml.indexOf('>', at));
@@ -1204,14 +1202,10 @@ test('桌面與手機遙控器同步模板能力，斜拍告白維持隱藏', ()
   const controllerDrift = /<button[^>]*data-template="drift"[^>]*>/.exec(controllerHtml)?.[0] || '';
   ok(panelDrift.includes('hidden') && controllerDrift.includes('hidden'), '斜拍告白必須從桌面與手機模板選擇器隱藏: ');
   ok(!controllerHtml.includes('ctrl-template-legacy-notice'), '手機不應保留舊模板的相容性介面: ');
-  const ctrlIds = (controllerJs.match(/const TEMPLATE_IDS = \[([^\]]*)\]/) || [])[1] || '';
-  ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle']
-    .forEach((id) => ok(ctrlIds.includes(`'${id}'`), `遙控器的 TEMPLATE_IDS 必須包含 ${id}: `));
-  ok(!ctrlIds.includes("'stanza'") && !ctrlIds.includes("'wordscape'"),
-    '逐字詩箋／字界巡航已移除，遙控器 TEMPLATE_IDS 不可再有它們: ');
   ok(controllerJs.includes('if (!TEMPLATE_IDS.includes(nextTemplate)) return;'), '模板切換必須接受所有現行模板: ');
-  ok(controllerJs.includes("nextTemplate === 'paperstrip' ? PAPERSTRIP_DEFAULTS"), '舊 state 從手機首次切到 paperstrip 時必須套用黑字預設，避免白底白字: ');
-  ok(controllerJs.includes("nextTemplate === 'mirror' ? MIRROR_DEFAULTS") && controllerJs.includes("if (nextTemplate === 'mirror') next.lyricPosition = 'split';"), '手機首次切到 mirror 必須套用雙側預設並鎖定 split: ');
+  ok(controllerJs.includes('...templateDefaults(nextTemplate)'), '首次切換必須取目標模板預設: ');
+  eq(templateDefaults('paperstrip').color, '#111111');
+  eq(templateDefaults('mirror').lyricPosition, 'split');
   ok(controllerHtml.includes('id="ctrl-intensity-group"') && controllerJs.includes('intensityGroup.hidden = !templateSupportsIntensity(template) || columnflowHidesIntensity;'), '手機動態強度必須與桌面模板能力同步: ');
   ok(controllerHtml.includes('id="ctrl-classic-style-group"') && controllerJs.includes('classicStyleGroup.hidden = !isClassic;'), '配色風格必須只在經典疊層顯示: ');
   ok(controllerCss.includes('#ctrl-intensity-group[hidden]') && controllerCss.includes('#ctrl-classic-style-group[hidden]'), '手機模板設定的 hidden 狀態不得被 CSS 蓋掉: ');
@@ -1271,7 +1265,7 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
     && lyricExtras.includes('PAPERSTRIP_ORIENT_PRESET')
     && lyricsHandler.includes("['horizontal', 'vertical'].includes(settings.paperstripOrient)"),
     '紙帶排向必須有分段按鈕、切換帶色彩預設、server 白名單: ');
-  ok(appState.includes("paperstripOrient: 'horizontal', paperstripColor: '#ffffff'"),
+  ok(templateDefaults('paperstrip').paperstripOrient === 'horizontal' && templateDefaults('paperstrip').paperstripColor === '#ffffff',
     '紙帶預設橫式仍是原本的白條: ');
   // 動畫強度是直書句流「漂字」進場在用，紙帶不吃
   ok(/paperstrip:[^}]*supportsIntensity: false/.test(lyricExtras)
@@ -1279,9 +1273,9 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
     && !/\.ps-vertical\.ps-int-/.test(displayCss)
     && !/paperstrip:[^}]*animationIntensity/.test(appState),
     '紙帶不再有動畫強度（已移到直書句流的漂字 variant）: ');
-  ok(lyricExtras.includes("paperstrip: { label: '紙帶逐字'") && lyricExtras.includes("template: 'paperstrip'"), '桌面設定必須提供紙帶逐字能力與獨立預設: ');
-  ok(lyricsHandler.includes("'columnflow', 'paperstrip'"), 'server 模板白名單必須接受 paperstrip: ');
-  ok(appState.includes("paperstrip: { template: 'paperstrip'"), 'server 預設 lyricTemplateSettings 必須包含 paperstrip: ');
+  ok(lyricExtras.includes("paperstrip: { label: '紙帶逐字'") && TEMPLATE_IDS.includes('paperstrip'), '桌面設定必須提供紙帶逐字能力與獨立預設: ');
+  ok(TEMPLATE_IDS.includes('paperstrip'), 'server 模板白名單必須接受 paperstrip: ');
+  ok(templateDefaults('paperstrip').template === 'paperstrip', 'server 預設 lyricTemplateSettings 必須包含 paperstrip: ');
   ok(i18n.includes("'template.paperstrip':"), '紙帶逐字模板名稱必須有五語 i18n key: ');
 });
 
@@ -1320,19 +1314,19 @@ test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic g
   ok(templateJs.includes('function easeOutBack') && templateJs.includes('rotationProgress') && templateJs.includes('const idleStartMs') && templateJs.includes('motion.idle.periodMs') && displayCss.includes('--mirror-idle-rotation') && displayCss.includes('--mirror-idle-scale'), 'Mirror P1-C 必須讓逐字旋轉入場、落點回彈，並在就位後保持 deterministic 微動: ');
   ok(templateJs.includes('if (japanese && isHanGlyph(char)) scale *= 1.56') && templateJs.includes('scale *= 1.19') && templateJs.includes("entry.line.style.setProperty('--mirror-fit-scale', next.toFixed(3))") && displayCss.includes('font-size: clamp(8px, calc(var(--display-font-size, 60px) * var(--mirror-line-scale) * var(--mirror-fit-scale))') && displayCss.includes('scale(var(--mirror-glyph-scale, 1))'), 'Mirror P1 漢字主副層級必須有明顯比例；安全縮放只能等比縮整行，不能覆寫 glyph emphasis: ');
   const mirrorControllerSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'controller.js'), 'utf8');
-  ok(templateJs.includes('const MIRROR_MOTION_PROFILES') && templateJs.includes('function syncMotionIntensity') && templateJs.includes("normal: {") && templateJs.includes('moveOvershoot: 1.32') && templateJs.includes('rotationOvershoot: 1.86') && templateJs.includes('scaleOvershoot: 1.52') && templateJs.includes('pulse: 0.62') && templateJs.includes('pulse: 1.28') && templateJs.includes('pulse: 2.35') && templateJs.includes('amplitude: (side === \'echo\' ? 0.14 : 0.17) * profile.pulse') && lyricExtras.includes("mirror: { label: '虛實鏡書'") && lyricExtras.includes("supportsIntensity: true") && /function templateSupportsIntensity[\s\S]{0,200}'mirror'/.test(mirrorControllerSource) && mirrorControllerSource.includes("animationIntensity: 'normal'"), 'Mirror P1-F 必須接上既有沉穩／標準／狂放控制；唱詞逐字彈跳在不動其他動態層的前提下分級加強: ');
+  ok(templateJs.includes('const MIRROR_MOTION_PROFILES') && templateJs.includes('function syncMotionIntensity') && templateJs.includes("normal: {") && templateJs.includes('moveOvershoot: 1.32') && templateJs.includes('rotationOvershoot: 1.86') && templateJs.includes('scaleOvershoot: 1.52') && templateJs.includes('pulse: 0.62') && templateJs.includes('pulse: 1.28') && templateJs.includes('pulse: 2.35') && templateJs.includes('amplitude: (side === \'echo\' ? 0.14 : 0.17) * profile.pulse') && lyricExtras.includes("mirror: { label: '虛實鏡書'") && lyricExtras.includes("supportsIntensity: true") && /function templateSupportsIntensity[\s\S]{0,200}'mirror'/.test(mirrorControllerSource) && templateDefaults('mirror').animationIntensity === 'normal', 'Mirror P1-F 必須接上既有沉穩／標準／狂放控制；唱詞逐字彈跳在不動其他動態層的前提下分級加強: ');
   ok(templateJs.includes('LyricMotion.ensureWordTimings(line, lines, index)') && templateJs.includes('LyricMotion.buildGraphemeTimings(word)') && templateJs.includes('glyphTimings: timingMatchesText ? sourceGlyphs : fallbackGlyphs') && templateJs.includes("timingSource: hasNativeWordTimings && timingMatchesText ? 'source' : 'fallback'") && templateJs.includes('function glyphSingingPulsePlan') && templateJs.includes('const singingStartMs') && !templateJs.includes('lineLandedOffset') && displayCss.includes('--mirror-sung-scale'), 'Mirror P1-D 必須優先讀取來源逐字時間，讓每個非標點 glyph 在自己的時間點放大後回到原尺寸；普通 LRC 才可等分降級: ');
   const mirrorRenderBatch = templateJs.slice(templateJs.indexOf('function renderBatch'), templateJs.indexOf('function syncLayout'));
   const mirrorConstrainIdx = mirrorRenderBatch.indexOf('renderedEntries.forEach(constrainLine);');
   const mirrorUpdateAssemblyIdx = mirrorRenderBatch.indexOf('updateAssembly(timeMs);');
   ok(mirrorConstrainIdx >= 0 && mirrorUpdateAssemblyIdx >= 0 && mirrorConstrainIdx < mirrorUpdateAssemblyIdx, 'Mirror P1 先以最散布狀態限縮，倒退 seek 不會把 glyph 推出安全側: ');
-  ok(lyricExtras.includes("mirror: { label: '虛實鏡書'") && lyricExtras.includes("template: 'mirror'") && lyricExtras.includes("lyricPosition: 'split'") && lyricExtras.includes('stageSafeMargin: 13'), '桌面設定必須提供 Mirror P0 獨立預設並鎖定 split: ');
+  ok(lyricExtras.includes("mirror: { label: '虛實鏡書'") && TEMPLATE_IDS.includes('mirror') && templateDefaults('mirror').lyricPosition === 'split' && templateDefaults('mirror').stageSafeMargin === 13, '桌面設定必須提供 Mirror P0 獨立預設並鎖定 split: ');
   ok(panelHtml.includes('data-template="mirror"') && panelHtml.includes('style-thumb-mirror'), '桌面模板選擇器必須有 Mirror P0 卡片: ');
   ok(!/data-template="mirror"[^>]*\bhidden\b/.test(panelHtml), 'Mirror 模板已正式公開，桌面模板卡片不可再帶 hidden: ');
-  ok(lyricsHandler.includes("'paperstrip', 'mirror'"), 'server 模板白名單必須接受 mirror: ');
-  ok(appState.includes("mirror: { template: 'mirror'"), 'server 預設 lyricTemplateSettings 必須包含 mirror: ');
+  ok(TEMPLATE_IDS.includes('mirror'), 'server 模板白名單必須接受 mirror: ');
+  ok(templateDefaults('mirror').template === 'mirror', 'server 預設 lyricTemplateSettings 必須包含 mirror: ');
   ok(i18n.includes("'template.mirror':"), 'Mirror 模板名稱必須有五語 i18n key: ');
   ok(displayCss.includes('#mirror-root {') && displayCss.slice(displayCss.indexOf('#mirror-root {'), displayCss.indexOf('}', displayCss.indexOf('#mirror-root {'))).includes('transform: translateY(var(--lyric-offset-y, 0px));'), '鏡像必須直接在 #mirror-root 消費全域 --lyric-offset-y 位移，不能透過 #lyrics-container（position:fixed 的 containing block 限制）: ');
   ok(displayCss.includes('#paperstrip-root {') && displayCss.slice(displayCss.indexOf('#paperstrip-root {'), displayCss.indexOf('}', displayCss.indexOf('#paperstrip-root {'))).includes('transform: translateY(var(--lyric-offset-y, 0px));'), '紙帶逐字必須在 #paperstrip-root 消費全域 --lyric-offset-y 位移: ');
-  ok(lyricExtras.includes('const isPaperstrip = ') && lyricExtras.includes('const isYOnlyOffset = isKtv || isPaperstrip || isMirror') && lyricExtras.includes("(settings.lyricPosition !== 'split' || isMirror || isPaperstrip)"), '紙帶逐字／鏡像的位置微調必須只開放 Y，且鏡像固定 split 時仍要能調整 Y: ');
+  ok(lyricExtras.includes('const isPaperstrip = ') && lyricExtras.includes('const isYOnlyOffset = isKtv || isPaperstrip || isMirror') && lyricExtras.includes("(settings.lyricPosition !== 'split' || isMirror || isPaperstrip || isTypewriter)"), '紙帶逐字／鏡像的位置微調必須只開放 Y，且鏡像固定 split 時仍要能調整 Y: ');
 });

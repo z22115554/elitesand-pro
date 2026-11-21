@@ -1570,3 +1570,24 @@ testAsync('Twitch 聊天回覆遇到 5xx 會退避重試', async () => {
   eq(attempts, 3);
   service.stop();
 });
+
+test('歌詞位置數值在即時更新、模板快照及預設套用皆使用相同驗證', () => {
+  const register = require('../server/routes/handlers/lyrics');
+  const handlers = new Map();
+  const playState = { lyricSettings: { template: 'classic', offsetY: 27 } };
+  register({ emit() {} }, { on(name, handler) { handlers.set(name, handler); } }, {
+    playState, persistState(callback) { callback({ ok: true }); },
+  });
+  handlers.get('lyric-settings:update')({
+    offsetX: 1e10, offsetY: '120',
+    lyricTemplateSettings: { typewriter: { offsetX: null, offsetY: -1e10, verticalPosition: 'flex-end' } },
+    lyricPresets: [{ name: '舞台', settings: { template: 'pulse', offsetY: 150 } }],
+  }, result => eq(result.ok, true));
+  eq(playState.lyricSettings.offsetX, 4096);
+  eq(playState.lyricSettings.offsetY, 27);
+  const snapshot = playState.lyricSettings.lyricTemplateSettings.typewriter;
+  eq(snapshot.offsetX, undefined);
+  eq(snapshot.offsetY, -4096);
+  eq(snapshot.verticalPosition, 'center');
+  eq(playState.lyricSettings.lyricPresets[0].settings.offsetY, 150);
+});

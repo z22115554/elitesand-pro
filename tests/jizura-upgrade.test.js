@@ -170,9 +170,9 @@ test('jizuraParts is a validated, persisted template setting defaulting to stand
   const tpl = fs.readFileSync(path.join(ROOT, 'public/js/lyric-template-jizura.js'), 'utf8');
   assert(tpl.includes("{ type: 'enum', key: 'jizuraParts', target: 'data:jizuraParts', values: ['base', 'extended'], default: 'base' }"));
   const extras = fs.readFileSync(path.join(ROOT, 'public/js/lyric-extras.js'), 'utf8');
-  assert(extras.includes("const JIZURA_PARTS = ['base', 'extended'];") && extras.includes("jizuraParts: 'base'"));
+  assert(extras.includes("const JIZURA_PARTS = ['base', 'extended'];") && require('../public/js/lyric-template-defaults').templateDefaults('jizura').jizuraParts === 'base');
   assert(fs.readFileSync(path.join(ROOT, 'server/routes/handlers/lyrics.js'), 'utf8').includes("['base', 'extended'].includes(out[id].jizuraParts)"));
-  assert(fs.readFileSync(path.join(ROOT, 'server/state/app-state.js'), 'utf8').includes("jizuraMotion: 'smooth', jizuraParts: 'base'"));
+  assert.equal(require('../server/state/app-state').createAppState({ emit() {} }).playState.lyricSettings.lyricTemplateSettings.jizura.jizuraMotion, 'smooth');
   const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
   assert(html.includes('class="style-thumb active" data-jizura-parts="base"') && html.includes('data-jizura-parts="extended"'));
   const i18n = require('../public/js/i18n');
@@ -278,8 +278,8 @@ test('optional parts switches are validated, persisted, default off and labelled
   const tpl = fs.readFileSync(path.join(ROOT, 'public/js/lyric-template-jizura.js'), 'utf8');
   for (const k of ['jizuraHeavy', 'jizuraLarge', 'jizuraHorror']) {
     assert(tpl.includes(`{ type: 'bool01', key: '${k}', target: 'data:${k}', default: false }`), k);
-    assert(fs.readFileSync(path.join(ROOT, 'public/js/lyric-extras.js'), 'utf8').includes(`${k}: false`), 'panel default ' + k);
-    assert(fs.readFileSync(path.join(ROOT, 'server/state/app-state.js'), 'utf8').includes(`${k}: false`), 'server default ' + k);
+    assert(fs.readFileSync(path.join(ROOT, 'public/js/lyric-template-defaults.js'), 'utf8').includes(`${k}: false`), 'panel default ' + k);
+    assert.equal(require('../server/state/app-state.js').createAppState({ emit() {} }).playState.lyricSettings.lyricTemplateSettings.jizura[k], false, 'server default ' + k);
   }
   assert(fs.readFileSync(path.join(ROOT, 'server/routes/handlers/lyrics.js'), 'utf8').includes("for (const key of ['jizuraHeavy', 'jizuraLarge', 'jizuraHorror'])"));
   const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
