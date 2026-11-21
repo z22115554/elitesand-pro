@@ -13,10 +13,10 @@
   'use strict';
 
   const el = (id) => document.getElementById(id);
-  const speed = el('st-speed'), scale = el('st-scale'), yfrom = el('st-yfrom'), blur = el('st-blur'), stagger = el('st-stagger');
+  const speed = el('st-speed'), yfrom = el('st-yfrom'), blur = el('st-blur'), stagger = el('st-stagger');
   if (!speed || typeof StylePresets === 'undefined') return;
 
-  const valSpeed = el('st-speed-val'), valScale = el('st-scale-val'), valY = el('st-yfrom-val'), valBlur = el('st-blur-val'), valStagger = el('st-stagger-val');
+  const valSpeed = el('st-speed-val'), valY = el('st-yfrom-val'), valBlur = el('st-blur-val'), valStagger = el('st-stagger-val');
 
   const particles = el('st-particles');
   function basePreset() {
@@ -35,7 +35,6 @@
 
   function updateLabels() {
     valSpeed.textContent = parseFloat(speed.value).toFixed(1) + 'x';
-    valScale.textContent = parseFloat(scale.value).toFixed(2) + 'x';
     valY.textContent = parseInt(yfrom.value, 10) + 'px';
     valBlur.textContent = parseInt(blur.value, 10) + 'px';
     valStagger.textContent = Math.round(parseFloat(stagger.value) * 1000) + 'ms';
@@ -54,7 +53,6 @@
         },
         wordActive: {
           duration: +(b.wordActive.duration / m).toFixed(3),
-          scale: parseFloat(scale.value),
         },
       },
       ...effectsOverride(),
@@ -69,14 +67,13 @@
     updateLabels();
   }
 
-  [speed, scale, yfrom, blur, stagger].forEach((s) => s.addEventListener('input', onInput));
+  [speed, yfrom, blur, stagger].forEach((s) => s.addEventListener('input', onInput));
   if (particles) particles.addEventListener('change', onInput);
 
   // 把滑桿重置為「當前 preset 的 base」並清空覆蓋
   function syncToPreset(broadcast) {
     const b = baseAnim();
     speed.value = 1;
-    scale.value = b.wordActive.scale;
     yfrom.value = b.lineEnter.yFrom;
     blur.value = b.lineEnter.blurFrom;
     stagger.value = b.lineEnter.stagger;
@@ -102,7 +99,6 @@
     if (typeof le.duration === 'number' && le.duration > 0) {
       speed.value = Math.max(0.5, Math.min(2, b.lineEnter.duration / le.duration));
     }
-    if (typeof wa.scale === 'number') scale.value = wa.scale;
     if (typeof le.yFrom === 'number') yfrom.value = le.yFrom;
     if (typeof le.blurFrom === 'number') blur.value = le.blurFrom;
     if (typeof le.stagger === 'number') stagger.value = le.stagger;

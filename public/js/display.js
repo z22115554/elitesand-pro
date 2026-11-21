@@ -676,7 +676,7 @@
       paperstripColor: ['--ps-strip-color', v => v],
       strokeWidth: ['--lyric-stroke-width', v => `${v}px`],
       strokeColor: ['--lyric-stroke-color', v => v],
-      shadow: ['--lyric-shadow', v => v],
+      shadow: ['--lyric-shadow', v => v === 'none' ? '0 0 0 transparent' : v],
       historyOpacity: ['--lyric-history-opacity', v => String(v)],
       // 歷史歌詞字級：0 = 自動（CSS 內以主字級 58% 計算），>0 = 固定像素。
       // 回傳空字串時 setProperty 會移除該變數 → CSS 的 calc() fallback 生效。

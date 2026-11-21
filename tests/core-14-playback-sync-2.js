@@ -309,7 +309,7 @@ test('燈牌：以 registry 時間驅動並完整接入設定與伺服器白名�
     '燈箱寬度必須是 em（框跟著字級走）: ');
   ok(templateDefaults('lightboard').lightboardFont === 'cubic11' && panelHtml.includes('id="lightboard-font-field"'),
     '燈牌必須有自己的字型二選一設定: ');
-  ok(lyricExtras.includes('if (fontFamilyFields) fontFamilyFields.hidden = isLightboard;')
+  ok(lyricExtras.includes('if (fontFamilyFields) fontFamilyFields.hidden = isLightboard || automaticTypography;')
     && panelHtml.includes('id="font-family-fields"'),
     '選燈牌時一般字體選單必須整塊收起（不支援其他字體）: ');
   ok(lyricsHandler.includes("['cubic11', 'boutique9x9'].includes(settings.lightboardFont)"),

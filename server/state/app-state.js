@@ -20,7 +20,7 @@ const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const bgmSettingsSchema = require('../services/bgm-settings');
 const obsLocale = require('../utils/obs-locale');
 const { createLogger } = require('../utils/logger');
-const { TEMPLATE_IDS, templateOverrides, sanitizeLyricPosition } = require('../../public/js/lyric-template-defaults');
+const { TEMPLATE_IDS, templateOverrides, sanitizeLyricPosition, APPEARANCE_VERSION } = require('../../public/js/lyric-template-defaults');
 const { sanitizeTrack, sanitizeParsedLyrics, MAX_PLAYLIST_SIZE, sanitizeJsonObject, lrcDefaultOffset } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
 const { emitToAccessRooms } = require('../utils/socket-broadcast');
@@ -77,7 +77,8 @@ function redactTrackForReadOnly(track) {
 function getDefaultLyricSettings() {
   return {
     template: 'classic',
-    lyricTemplateSettings: Object.fromEntries(TEMPLATE_IDS.map(id => [id, templateOverrides(id)])),
+    appearanceVersion: APPEARANCE_VERSION,
+    lyricTemplateSettings: Object.fromEntries(TEMPLATE_IDS.map(id => [id, { ...templateOverrides(id), appearanceVersion: APPEARANCE_VERSION }])),
   };
 }
 

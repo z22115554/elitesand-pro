@@ -211,6 +211,8 @@
       if (t >= e.charStartMs[i]) n = i + 1; else break;
     }
     if (n === e.shown) return;
+    e.charEls[e.shown - 1]?.classList.remove('tw-current');
+    e.charEls[n - 1]?.classList.add('tw-current');
     const from = Math.min(e.shown < 0 ? 0 : e.shown, n);
     const to = Math.max(e.shown < 0 ? e.charEls.length : e.shown, n);
     for (let i = from; i < to && i < e.charEls.length; i += 1) {
@@ -221,6 +223,7 @@
   }
 
   function finishEntry(e) {
+    e.charEls[e.shown - 1]?.classList.remove('tw-current');
     for (let i = 0; i < e.charEls.length; i += 1) e.charEls[i].classList.add('on');
     e.bubble.classList.add('tw-done');
     e.shown = e.charEls.length;

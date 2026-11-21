@@ -183,7 +183,7 @@
   function buildLayout(line, displayWords, vw) {
     const seed = line.time | 0;
     const fontPx = fontPxFor(line, vw);
-    const fontSpec = `700 ${fontPx}px ${getCssVar('--display-font-family', 'sans-serif')}`;
+    const fontSpec = `${getCssVar('--display-font-weight', '700')} ${fontPx}px ${getCssVar('--display-font-family', 'sans-serif')}`;
     const isCjkLine = CJK_TEST.test(line.text || '');
     const lineHeight = Math.round(fontPx * (isCjkLine ? 1.28 : 1.16));
     const interlude = isInterludeText(line.text);
@@ -378,9 +378,9 @@
     const lineEl = document.createElement('div');
     lineEl.className = 'aura-line';
     if (vp.sideClass) lineEl.classList.add(vp.sideClass);
-    // 只設字重/字級，字體名稱刻意不寫進 inline style——讓它繼承 #aura-root 的
+    // 只設定量測後的字級，字體和字重由 CSS 變數提供。
+    // 讓它繼承 #aura-root 的
     // `font-family: var(--display-font-family)`，CSS 變數改變時立刻生效（換字體即時反映）。
-    lineEl.style.fontWeight = '700';
     lineEl.style.fontSize = `${layout.fontPx}px`;
 
     const tideRings = document.createElement('div');

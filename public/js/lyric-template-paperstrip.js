@@ -697,7 +697,8 @@
       clearPageViews();
     },
 
-    onSettings() {
+    onSettings(_settings, ctx) {
+      if (ctx && isVertical() !== lastOrient) computeAndRender(ctx.getCurrentTimeMs?.() ?? 0, ctx.getLyrics());
       syncStageLayout();
     },
 

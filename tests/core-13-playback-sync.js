@@ -1247,7 +1247,7 @@ test('紙帶逐字模板以獨立時間驅動管線載入，並完整接入設�
   const stagePosIds = (lyricExtras.match(/const STAGE_POSITION_TEMPLATES = \[([^\]]*)\]/) || [])[1] || '';
   ok(["'paperstrip'", "'mirror'", "'pulse'"].every((id) => stagePosIds.includes(id)) && panelHtml.includes('id="stage-safe-margin-field"'), 'Paper Strip 必須接入舞台安全距離設定 UI: ');
   ok(templateJs.includes('...LyricTemplateSettings.STAGE_SAFE') && templateSettings.includes("targets: ['data:stageSafeMargin', 'cssvar:--stage-safe-margin']") && templateSettings.includes("body.style.setProperty(name, value)"), 'Paper Strip 的安全距離必須經共用 STAGE_SAFE schema 同步成 dataset + CSS 變數: ');
-  ok(templateJs.includes('LyricMotion.mountStageSafeZoneGuide(rootEl)') && templateJs.includes('onSettings()') && displayCss.includes('.stage-safe-zone-band'), 'Paper Strip 必須掛共用安全框並在設定變更時即時同步: ');
+  ok(templateJs.includes('LyricMotion.mountStageSafeZoneGuide(rootEl)') && templateJs.includes('onSettings(_settings, ctx)') && displayCss.includes('.stage-safe-zone-band'), 'Paper Strip 必須掛共用安全框並在設定變更時即時同步: ');
   ok(displayCss.includes('width: min(calc(48% - var(--stage-safe-margin, 2) * 1%), 760px);') && displayCss.includes('overflow: visible;') && templateJs.includes('entry.groupEl.clientHeight : entry.groupEl.clientWidth) - indent - 2') && templateJs.includes('Math.max(0.22'), 'Paper Strip 安全框必須作為排版寬度而不是裁切遮罩；超長句要先計入縮排並縮到完整可見: ');
   // 直式紙帶：出場／逐字／分頁邏輯不變，只換軸；紙條顏色可調；排向與色彩預設接上
   ok(templateJs.includes('function isVertical') && templateJs.includes("classList.toggle('ps-vertical'")

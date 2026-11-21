@@ -886,7 +886,6 @@ const KaraokeEngine = (() => {
     }
 
     const style = StylePresets.getParams();
-    const exitAnim = style.animation.lineExit;
     const removeAnim = style.animation.lineRemove;
 
     // 先記錄「舊 active 行」的螢幕位置與字級 → 新歷史行從這個大小/位置平滑縮小上移，
@@ -916,7 +915,6 @@ const KaraokeEngine = (() => {
     if (fastMode) {
       // 快速模式（拖曳/跳轉）：不做位移與縮放動畫，直接設成歷史樣式
       historyEl.appendChild(historyLine);
-      historyLine.style.opacity = String(exitAnim.opacityTo != null ? exitAnim.opacityTo : 0.3);
     } else {
       // FLIP：記錄既有歷史行 append 前的位置，稍後補償位移 → 平滑上移而非瞬間跳動
       const existing = Array.from(historyEl.querySelectorAll('.lyrics-history-line'));
@@ -945,9 +943,9 @@ const KaraokeEngine = (() => {
       const dy = oldRect.top - newRect.top;              // 從舊 active 位置滑來
       const startScale = Math.max(1, oldFont / newFont); // 從舊 active 大小縮來（約 1.5~1.8）
       gsap.fromTo(historyLine,
-        { y: dy, scale: startScale, opacity: 1, transformOrigin: 'center top' },
+        { y: dy, scale: startScale, '--lyric-history-progress': 0, transformOrigin: 'center top' },
         {
-          y: 0, scale: 1, opacity: exitAnim.opacityTo, duration: 0.5, ease: 'power3.out',
+          y: 0, scale: 1, '--lyric-history-progress': 1, duration: 0.5, ease: 'power3.out',
         }
       );
     }

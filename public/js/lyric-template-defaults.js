@@ -76,6 +76,7 @@
     columnflowVariant: 'sen', // 直書句流外觀：'sen' 素筆 | 'fuda' 字札
     columnflowEntrance: 'native', // 直書句流逐字進場：'native' 原樣 | 'drift' 四相漂字（吃動畫強度）；可疊在任一外觀上
     columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
+    jizuraTypography: false,
     jizuraPlacement: 'sides',     // 文字PV 獨立歌詞位置：'left' 偏左 | 'right' 偏右 | 'sides' 兩側（保留中央）| 'full' 原構圖置中；畫布一律全畫面
     jizuraMotion: 'smooth',       // 文字PV：'smooth' 每幀更新 | 'koma' 2 コマ打ち（每秒 12 張的作畫感）
     jizuraParts: 'base',          // 文字PV：'base' 標準部件 | 'extended' 擴充部件（JIZURA 追加分2 等新部件，稽核過的才會用）
@@ -89,6 +90,7 @@
     stageShowSafeZoneOnObs: false, // 同上：安全距離引導線是否也疊在真正的 OBS 來源上
     particleVerticalPosition: 'middle',
     lightboardOffsetVersion: 1,
+    appearanceVersion: 1, // 見 migrateLegacyAppearance：沒有這個標記的快照是改版前存的
     particleOrient: 'vertical', // 風息成字：'vertical' 直書（1–2 直欄，預設）| 'horizontal' 橫排
     particleEntrance: 'auto', // 風息成字：'auto' 風/雨/渦流/雙束四種逐句輪替（預設）| 'quaddrift' 全部改用四相漂字進場（退場仍是粒子散開）
     // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
@@ -100,18 +102,18 @@
   // 每個模板都有自己的預設外觀與獨立的設定快照。
   const TEMPLATE_DEFAULTS = {
     classic: { template: 'classic', fontSize: DEFAULT_SETTINGS.fontSize, color: DEFAULT_SETTINGS.color, activeColor: DEFAULT_SETTINGS.activeColor, verticalPosition: DEFAULT_SETTINGS.verticalPosition },
-    pulse: { template: 'pulse', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
-    facet: { template: 'facet', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
-    drift: { template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
-    aura: { template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
+    pulse: { template: 'pulse', fontWeight: 700, fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
+    facet: { template: 'facet', fontWeight: 700, fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
+    drift: { template: 'drift', fontWeight: 400, fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
+    aura: { template: 'aura', fontWeight: 700, fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
     ktv: { template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center', ktvInterludeText: '', ktvEndingText: '' },
-    columnflow: { template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowEntrance: 'native', columnflowPlacement: 'split', columnflowMaxLines: 4, columnflowSafeMargin: 11, columnflowShowSafeZoneOnObs: false, animationIntensity: 'normal' },
+    columnflow: { template: 'columnflow', maxWidth: 100, fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowEntrance: 'native', columnflowPlacement: 'split', columnflowMaxLines: 4, columnflowSafeMargin: 11, columnflowShowSafeZoneOnObs: false, animationIntensity: 'normal' },
     paperstrip: { template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
-    mirror: { template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
-    lightboard: { template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
+    mirror: { template: 'mirror', paddingX: 0, paddingY: 0, maxWidth: 100, fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
+    lightboard: { template: 'lightboard', paddingX: 0, maxWidth: 94, fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
     typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
     // 文字 PV 目前由引擎選字體與字級。
-    jizura: { template: 'jizura', verticalPosition: 'center', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth', jizuraParts: 'base', jizuraHeavy: false, jizuraLarge: false, jizuraHorror: false },
+    jizura: { template: 'jizura', verticalPosition: 'center', paddingX: 0, paddingY: 0, maxWidth: 100, color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth', jizuraParts: 'base', jizuraHeavy: false, jizuraLarge: false, jizuraHorror: false },
     particle: { template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', verticalPosition: 'center', lyricPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto', animationIntensity: 'normal' },
     spellbook: { template: 'spellbook', fontSize: 60, fontWeight: 900, color: '#f4ead6', activeColor: '#ff9a3c', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 2, animationIntensity: 'normal', spellbookEffect: 'rune', spellbookPosition: 'bottom' },
   };
@@ -134,7 +136,38 @@
     return settings;
   }
 
-  function sanitizeLyricPosition(settings, template, migrateLegacyLightboard = false) {
+  // 改版前這些模板不讀下列欄位（寫死字重、固定滿版或固定位置），但面板仍把共用預設
+  // （字重 900、邊距 60／48、最大寬度 90%）整包存進快照。開始讀取後，舊快照會突然變粗或縮小。
+  // 首次載入沒有 appearanceVersion 的舊快照時，改回當時畫面實際呈現的值，外觀維持不變；
+  // 之後使用者在面板調整才會生效。
+  const APPEARANCE_VERSION = 1;
+  const LEGACY_RENDERED_APPEARANCE = Object.freeze({
+    pulse: { fontWeight: 700 },
+    facet: { fontWeight: 700 },
+    aura: { fontWeight: 700 },
+    drift: { fontWeight: 400 },
+    ktv: { fontWeight: 900 },
+    lightboard: { fontWeight: 400, paddingX: 0, paddingY: 48, maxWidth: 94 },
+    typewriter: { fontWeight: 600, paddingY: 48, maxWidth: 100 },
+    mirror: { paddingX: 0, paddingY: 0, maxWidth: 100 },
+    jizura: { paddingX: 0, paddingY: 0, maxWidth: 100 },
+    columnflow: { maxWidth: 100 },
+    particle: { maxWidth: 100 },
+  });
+
+  function migrateLegacyAppearance(settings, template) {
+    if (!settings || typeof settings !== 'object' || settings.appearanceVersion === APPEARANCE_VERSION) return settings;
+    const legacy = LEGACY_RENDERED_APPEARANCE[template];
+    if (legacy) {
+      for (const [key, value] of Object.entries(legacy)) {
+        if (settings[key] !== undefined) settings[key] = value;
+      }
+    }
+    settings.appearanceVersion = APPEARANCE_VERSION;
+    return settings;
+  }
+
+  function sanitizeLyricPosition(settings, template, migrateLegacy = false) {
     for (const key of ['offsetX', 'offsetY']) {
       if (settings[key] === undefined) continue;
       const value = normalizeOffset(settings[key]);
@@ -144,13 +177,16 @@
     if (settings.verticalPosition !== undefined) normalizeAnchor(settings, template);
     // 舊燈牌的正 Y 方向與新滑桿相反，首次載入舊快照時清除這個隱藏位移。
     if (template === 'lightboard' && settings.offsetY !== undefined) {
-      if (migrateLegacyLightboard && settings.lightboardOffsetVersion !== 1) settings.offsetY = 0;
+      if (migrateLegacy && settings.lightboardOffsetVersion !== 1) settings.offsetY = 0;
       settings.lightboardOffsetVersion = 1;
     }
+    // 即時更新來自新版面板／遙控器，直接標記為新版；只有讀取舊存檔時才遷移外觀。
+    if (migrateLegacy) migrateLegacyAppearance(settings, template);
+    else settings.appearanceVersion = APPEARANCE_VERSION;
     return settings;
   }
 
-  const api = { DEFAULT_SETTINGS: Object.freeze(DEFAULT_SETTINGS), TEMPLATE_IDS, MAX_OFFSET, templateDefaults, templateOverrides, normalizeOffset, normalizeAnchor, sanitizeLyricPosition };
+  const api = { DEFAULT_SETTINGS: Object.freeze(DEFAULT_SETTINGS), TEMPLATE_IDS, MAX_OFFSET, templateDefaults, templateOverrides, normalizeOffset, normalizeAnchor, sanitizeLyricPosition, migrateLegacyAppearance, APPEARANCE_VERSION };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.LyricTemplateDefaults = api;
 })(typeof window === 'undefined' ? globalThis : window);

@@ -125,7 +125,7 @@
     const fontStack = getCssVar('--display-font-family', 'sans-serif');
     const available = Math.max(320, vp.width) * 0.85;
     const measureSeg = (text) => {
-      const offs = LyricMotion.measureCharOffsets(text, `400 ${fontPx}px ${fontStack}`);
+      const offs = LyricMotion.measureCharOffsets(text, `${getCssVar('--display-font-weight', '400')} ${fontPx}px ${fontStack}`);
       return (offs[offs.length - 1] || 0) * 1.1; // 字距補償
     };
 

@@ -3031,6 +3031,8 @@
     'lyricStyle.posBottomRight': ["下 右","Bottom right","右下","오른쪽 아래","下 右"],
     'lyricStyle.posHint': ["方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。","Useful for VTubers and streamers who keep their character in a fixed screen position. \"Split left/right\" alternates lyric lines between the two sides.","VTuber や配信者がキャラクターを画面上の固定位置に置くのに便利です。「左右分散」は、左の行と右の行を交互に表示します。","VTuber와 스트리머가 캐릭터를 화면의 고정된 위치에 둘 때 유용합니다. \"좌우 분산\"은 가사 줄을 왼쪽과 오른쪽에 번갈아 표시합니다.","方便 VTuber／主播把人物放在画面固定位置；“左右分散”是一句左、一句右交替。"],
     'lyricStyle.resetFineTune': ["重置微調","Reset fine-tuning","微調整をリセット","트림 재설정","重置微调"],
+    'font.weightSemibold': ["半粗體","Semibold","セミボールド","세미볼드","半粗体"],
+    'jizura.typographyOverride': ["自訂字體、字級與字重","Customize font, size, and weight","フォント・サイズ・太さを指定","글꼴, 크기, 굵기 지정","自定义字体、字号与字重"],
     'lyricStyle.fineTuneHint': ["位移可超出畫面，可用「重置微調」回到原位。","Lyrics can move off screen. Use Reset fine-tuning to restore the position.","歌詞は画面外へ移動できます。微調整をリセットすると元の位置に戻ります。","가사를 화면 밖으로 이동할 수 있습니다. 미세 조정을 초기화하면 원래 위치로 돌아갑니다.","位移可超出画面，可用「重置微调」回到原位。"],
     'lyricStyle.horizontalX': ["水平 X","Horizontal X","レベルX","레벨 X","水平 X"],
     'lyricStyle.verticalY': ["垂直 Y","Vertical Y","垂直Y","수직 Y","垂直 Y"],

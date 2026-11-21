@@ -1329,6 +1329,10 @@
                 </div>
                 <p class="field-hint" data-i18n="columnflow.placementHint">預設左右分散；新句補上時，最舊的一句才會淡出。</p>
               </div>
+              <div class="field switch-row" id="jizura-typography-field" hidden>
+                <label for="ls-jizura-typography" data-i18n="jizura.typographyOverride">自訂字體、字級與字重</label>
+                <label class="switch"><input id="ls-jizura-typography" data-ls-control="jizuraTypography" type="checkbox"><span class="track"></span></label>
+              </div>
               <div class="field" id="jizura-placement-field" hidden>
                 <label data-i18n="jizura.placementLabel">歌詞位置</label>
                 <div class="style-thumb-row" id="jizura-placement-buttons">
@@ -1571,7 +1575,6 @@
               <summary data-i18n="lyricStyle.styleTuneSummary">風格微調</summary>
               <div class="collapse-body">
                 <div class="field"><label title="整體動畫快慢：小於 1 變慢、大於 1 變快" data-i18n-title="lyricStyle.animSpeedTitle"><span data-i18n="lyricStyle.animSpeedLabel">動畫速度</span> <span id="st-speed-val" class="val">1.0x</span></label><input id="st-speed" type="range" min="0.5" max="2" step="0.1" value="1"></div>
-                <div class="field"><label title="唱到的字被放大的倍率" data-i18n-title="lyricStyle.highlightScaleTitle"><span data-i18n="lyricStyle.highlightScaleLabel">高亮放大（唱到的字）</span><span id="st-scale-val" class="val">—</span></label><input id="st-scale" type="range" min="1" max="1.4" step="0.01" value="1.15"></div>
                 <div class="field"><label title="新的一行從多遠的下方進場，0＝原地淡入" data-i18n-title="lyricStyle.entryOffsetTitle"><span data-i18n="lyricStyle.entryOffsetLabel">入場位移（進場距離）</span><span id="st-yfrom-val" class="val">—</span></label><input id="st-yfrom" type="range" min="0" max="60" step="2" value="30"></div>
                 <div class="field"><label title="進場瞬間的模糊量，越大越夢幻" data-i18n-title="lyricStyle.entryBlurTitle"><span data-i18n="lyricStyle.entryBlurLabel">入場模糊</span> <span id="st-blur-val" class="val">—</span></label><input id="st-blur" type="range" min="0" max="12" step="1" value="4"></div>
                 <div class="field"><label title="一行裡每個字進場的時間差，0＝整行同時出現" data-i18n-title="lyricStyle.staggerTitle"><span data-i18n="lyricStyle.staggerLabel">字間錯落（逐字時間差）</span><span id="st-stagger-val" class="val">—</span></label><input id="st-stagger" type="range" min="0" max="0.12" step="0.005" value="0.03"></div>
@@ -1664,6 +1667,7 @@
               <label for="ls-fontweight" data-i18n="font.weightLabel">字重</label>
               <select id="ls-fontweight" data-ls-control="fontWeight" class="input">
                 <option value="400" data-i18n="font.weightNormal">一般</option>
+                <option value="600" data-i18n="font.weightSemibold">半粗體</option>
                 <option value="700" data-i18n="font.weightBold">粗體</option>
                 <option value="900" selected data-i18n="font.weightBlack">極粗</option>
               </select>
@@ -1744,17 +1748,17 @@
               <label><span data-i18n="display.lineHeightLabel">行高</span> <span id="ls-line-height-val" class="val">1.30</span></label>
               <input id="ls-line-height" data-ls-control="lineHeight" type="range" min="1" max="2.4" step="0.05" value="1.3">
             </div>
-            <div class="field">
+            </div>
+            <div class="field" id="letter-spacing-field">
               <label><span data-i18n="display.letterSpacingLabel">字距</span> <span id="ls-letter-spacing-val" class="val">0px</span></label>
               <input id="ls-letter-spacing" data-ls-control="letterSpacing" type="range" min="-2" max="12" step="0.5" value="0">
-            </div>
             </div>
             <details class="collapse">
               <summary data-i18n="display.marginMaxWidthSummary">邊距 · 最大寬度</summary>
               <div class="collapse-body">
                 <div class="field" id="padding-x-field"><label><span data-i18n="display.paddingXLabel">左右邊距</span> <span id="ls-padding-x-val" class="val">60px</span></label><input id="ls-padding-x" data-ls-control="paddingX" type="range" min="0" max="300" step="10" value="60"></div>
                 <div class="field" id="padding-y-field"><label><span data-i18n="display.paddingYLabel">上下邊距</span> <span id="ls-padding-y-val" class="val">48px</span></label><input id="ls-padding-y" data-ls-control="paddingY" type="range" min="0" max="300" step="10" value="48"></div>
-                <div class="field" id="max-width-field"><label><span data-i18n="display.maxWidthLabel">歌詞區最大寬度</span> <span id="ls-max-width-val" class="val">90%</span></label><input id="ls-max-width" data-ls-control="maxWidth" type="range" min="40" max="100" step="5" value="90"></div>
+                <div class="field" id="max-width-field"><label><span data-i18n="display.maxWidthLabel">歌詞區最大寬度</span> <span id="ls-max-width-val" class="val">90%</span></label><input id="ls-max-width" data-ls-control="maxWidth" type="range" min="20" max="100" step="5" value="90"></div>
               </div>
             </details>
             </div>
@@ -1764,6 +1768,19 @@
           <details id="classic-only-advanced-effect-card" class="card card-collapse" data-settings-workspace-group="readability advanced" data-lyrics-search="效果 描邊 陰影 發光 背景框 歷史行">
             <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span data-i18n="display.advancedEffectsTitle">進階效果</span></summary>
             <div class="card-collapse-body">
+                <div class="field field-row field-row--spacious" id="shared-lyric-shadow-field">
+                  <div class="flex-grow">
+                    <label for="ls-shadow" data-i18n="display.shadowLabel">文字陰影（所有歌詞行）</label>
+                    <select id="ls-shadow" class="input">
+                      <option value="none" data-i18n="shadow.none">無</option>
+                      <option value="soft" selected data-i18n="shadow.soft">柔和</option>
+                      <option value="hard" data-i18n="shadow.hard">硬陰影</option>
+                      <option value="glow" data-i18n="shadow.glow">發光</option>
+                      <option value="outline" data-i18n="shadow.outline">外框</option>
+                    </select>
+                  </div>
+                  <div><label data-i18n="display.shadowColorLabel">陰影顏色</label><input id="ls-shadow-color" type="color" value="#000000"></div>
+                </div>
             <div id="classic-only-advanced-effects">
             <div class="field">
               <label><span data-i18n="display.activeScaleLabel">當前行放大</span> <span id="ls-active-scale-val" class="val">1.00×</span></label>
@@ -1791,19 +1808,6 @@
                   <input id="ls-stroke-width" data-ls-control="strokeWidth" type="range" min="0" max="6" step="0.5" value="0">
                 </div>
                 <div class="field"><label data-i18n="display.strokeColorLabel">描邊顏色</label><input id="ls-stroke-color" data-ls-control="strokeColor" type="color" value="#000000"></div>
-                <div class="field field-row field-row--spacious">
-                  <div class="flex-grow">
-                    <label for="ls-shadow" data-i18n="display.shadowLabel">文字陰影（所有歌詞行）</label>
-                    <select id="ls-shadow" class="input">
-                      <option value="none" data-i18n="shadow.none">無</option>
-                      <option value="soft" selected data-i18n="shadow.soft">柔和</option>
-                      <option value="hard" data-i18n="shadow.hard">硬陰影</option>
-                      <option value="glow" data-i18n="shadow.glow">發光</option>
-                      <option value="outline" data-i18n="shadow.outline">外框</option>
-                    </select>
-                  </div>
-                  <div><label data-i18n="display.shadowColorLabel">陰影顏色</label><input id="ls-shadow-color" type="color" value="#000000"></div>
-                </div>
                 <div class="field field-row field-row--spacious">
                   <div class="flex-grow">
                     <label><span data-i18n="display.glowStrengthLabel">「正在唱那一行」的額外發光</span> <span id="ls-glow-strength-val" class="val" data-i18n="common.off">關</span></label>
