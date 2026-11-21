@@ -430,15 +430,15 @@ function settings(){
  typo.shadow={on:shOn,color:shCol?shCol[0]:'rgba(8,5,13,0.94)',blur:shNums[1]||6,dy:shNums[0]||1.3};
  // ── Composition ──
  typo.hpos=['left','right','split'].includes(data.lyricPos)?data.lyricPos:'center';
- const vj=cv('--lyric-justify');typo.vjustify=/^(flex-start|start)$/.test(vj)?'start':/^(flex-end|end)$/.test(vj)?'end':'center';
+ typo.vjustify=data.particleVerticalPosition==='top'?'start':data.particleVerticalPosition==='bottom'?'end':'center';
  typo.orient=data.particleOrient==='vertical'?'vertical':'horizontal';
  const px=parseFloat(cv('--lyric-padding-x')),py=parseFloat(cv('--lyric-padding-y'));
  typo.padX=Number.isFinite(px)?px:60;typo.padY=Number.isFinite(py)?py:48;
  const sm=parseFloat(data.stageSafeMargin);typo.safeMargin=Number.isFinite(sm)?clamp(sm,0,25):2;
  // 水平／垂直微調：跟星沙／流光等舞台模板同一組 offsetX/offsetY，這裡自己夾在邊距框內。
  const ox=parseFloat(data.particleOffsetX),oy=parseFloat(data.particleOffsetY);
- typo.offX=Number.isFinite(ox)?clamp(ox,-W*.4,W*.4):0;
- typo.offY=Number.isFinite(oy)?clamp(oy,-H*.4,H*.4):0;
+ typo.offX=Number.isFinite(ox)?ox:0;
+ typo.offY=Number.isFinite(oy)?oy:0;
  // 進場二選一（2026-09-12 加回這顆旋鈕，語意跟舊版不同，見 server sanitizeParticleSettings
  // 的說明）：'auto' 預設，逐句在 stream/rain/vortex/twin 四種聚散風格輪替；'quaddrift' 時
  // 全部改用四相漂字整字進場（entryKind 對非 auto 值本來就會原樣回傳給每個字，不需要另外改）。
@@ -498,9 +498,10 @@ LyricTemplates.register({
  settings:[
   {key:'particleOrient',type:'enum',values:['horizontal','vertical'],default:'vertical',target:'data:particleOrient'},
   {key:'particleEntrance',type:'enum',values:['auto','quaddrift'],default:'auto',target:'data:particleEntrance'},
-  // 水平／垂直微調：沿用共用的 offsetX/offsetY，寫進 body.dataset 讓 canvas 自己讀（reclamp 對滿版容器無效）。
-  {key:'offsetX',type:'int',min:-960,max:960,default:0,target:'data:particleOffsetX'},
-  {key:'offsetY',type:'int',min:-540,max:540,default:0,target:'data:particleOffsetY'},
+  {key:'particleVerticalPosition',type:'enum',values:['top','middle','bottom'],default:'middle',target:'data:particleVerticalPosition'},
+  // Canvas 使用共用設定值直接平移。
+  {key:'offsetX',type:'int',min:-4096,max:4096,default:0,target:'data:particleOffsetX'},
+  {key:'offsetY',type:'int',min:-4096,max:4096,default:0,target:'data:particleOffsetY'},
   // 中央安全距離＋引導線：跟鏡像／紙帶完全共用同一套（stageSafeMargin / stage-show-safe-zone / mountStageSafeZoneGuide）。
   ...LyricTemplateSettings.STAGE_SAFE
  ],

@@ -1415,12 +1415,9 @@
                   <button class="style-thumb" data-lyric-pos="split" type="button" data-i18n-title="lyricStyle.posSplitTitle" title="左右分散：一句左、一句右交替出現，中間留給人物（經典疊層不支援）"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">分</span></span><span class="style-thumb-label" data-i18n="controller.split">左右分散</span></button>
                 </div>
                 <p class="field-hint" id="lyric-pos-hint" data-i18n="lyricStyle.posHint">方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。</p>
-                <!-- 位置微調：置中/偏左/偏右都可再做小範圍位移；範圍會依目前內容自動收緊，
-                     不會把歌詞推出畫面（見 display.js reclampLyricOffset）。左右分散不適用
-                     （每行交替左右，微調沒有單一位置的意義；那個模式改調「中央安全距離」）。-->
                 <div id="lyric-pos-fine-wrap" hidden>
                   <div class="pos-head">
-                    <span class="sub sub--fine-hint" data-i18n="lyricStyle.fineTuneHint">小範圍微調，超出安全範圍會自動收回</span>
+                    <span class="sub sub--fine-hint" data-i18n="lyricStyle.fineTuneHint">位移可超出畫面，可用「重置微調」回到原位。</span>
                     <button id="ls-offset-reset" class="btn btn-sm btn-ghost" type="button" data-i18n="lyricStyle.resetFineTune">重置微調</button>
                   </div>
                   <div class="pos-fine">
@@ -1480,6 +1477,12 @@
                   <button class="style-thumb" data-particle-orient="horizontal" type="button" data-i18n-title="particle.orientHorizontalTitle" title="橫排：一行行的字幕式排版"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">橫</span></span><span class="style-thumb-label" data-i18n="particle.orientHorizontal">橫排</span></button>
                   <button class="style-thumb active" data-particle-orient="vertical" type="button" data-i18n-title="particle.orientVerticalTitle" title="直書：直欄由右往左"><span class="style-thumb-preview" aria-hidden="true"><span class="style-thumb-char">直</span></span><span class="style-thumb-label" data-i18n="particle.orientVertical">直書</span></button>
                 </div>
+                <label for="ls-particle-vertical-position" data-i18n="spellbook.positionLabel">上下位置</label>
+                <select id="ls-particle-vertical-position" class="input" data-ls-control="particleVerticalPosition">
+                  <option value="top" data-i18n="spellbook.positionTop">上方</option>
+                  <option value="middle" data-i18n="spellbook.positionMiddle">中央</option>
+                  <option value="bottom" data-i18n="spellbook.positionBottom">下方</option>
+                </select>
               </div>
               <div class="field" id="particle-entrance-field" hidden>
                 <label data-i18n="particle.entranceLabel">逐字進場</label>

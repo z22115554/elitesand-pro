@@ -697,10 +697,7 @@ body.template-lightboard #lyrics-container {
   align-items: center;
 }
 
-/* 直書句流／紙帶逐字／鏡像是固定構圖模板（無置中/偏左/偏右概念），offset 對它們沒有意義，維持不吃。
-   Pulse/Facet/Drift/Aura 是「舞台位置」模板，置中/偏左/偏右下開放 X/Y 微調；
-   KTV 雙行構圖固定，只開放 Y 微調（X 維持 0，UI 也不給調）——
-   見設定面板「位置微調」與 display.js 的 reclampLyricOffset 自動夾限。 */
+/* 這些模板由自己的根節點移動，保持內部固定定位及排版座標。 */
 body.template-columnflow #lyrics-container,
 body.template-paperstrip #lyrics-container,
 body.template-mirror #lyrics-container,
@@ -716,7 +713,7 @@ body.template-lightboard #lyrics-container {
   right: 0;
   top: 0;
   bottom: 25%;                 /* 最新一句大約落在畫面下方 1/4 處 */
-  transform: translateY(var(--typewriter-offset-y, 0px));
+  transform: translate(var(--lyric-offset-x), var(--lyric-offset-y));
   display: flex;
   flex-direction: column;
   justify-content: flex-end;   /* 新句貼底、舊句往上頂 */
@@ -812,10 +809,7 @@ body.template-lightboard #lyrics-container {
   pointer-events: none;
   font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
   font-weight: var(--display-font-weight, 900);
-  /* 位置微調（Y）：#mirror-root 是 position:fixed（見上）——若改讓 #lyrics-container 本身
-     套用 --lyric-offset-x/y 的 transform，會讓 fixed 改以該容器的 box 為基準定位，
-     反而把鏡像的滿版佈局縮回容器大小。因此直接在這裡消費同一個全域變數，只動 Y。 */
-  transform: translateY(var(--lyric-offset-y, 0px));
+  transform: translate(var(--lyric-offset-x), var(--lyric-offset-y));
 }
 
 .mirror-panel {
@@ -961,9 +955,7 @@ body.template-lightboard #lyrics-container {
   font-family: var(--display-font-family, 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif);
   font-weight: var(--display-font-weight, 600);
   color: var(--lyric-color, #111111);
-  /* 位置微調（Y）：跟鏡像一樣直接消費全域 --lyric-offset-y，不透過 #lyrics-container
-     的 transform（該容器對這個模板固定 transform:none，見下方 v5 模板共用規則）。 */
-  transform: translateY(var(--lyric-offset-y, 0px));
+  transform: translate(var(--lyric-offset-x), var(--lyric-offset-y));
 }
 
 .ps-group {
@@ -1158,6 +1150,7 @@ body.template-columnflow #lyrics-container {
 }
 
 #columnflow-root {
+  transform: translate(var(--lyric-offset-x), var(--lyric-offset-y));
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -1721,7 +1714,8 @@ body.template-ktv #lyrics-container {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(9% + var(--lyric-offset-y, 0px));
+  bottom: 9%;
+  transform: translate(var(--lyric-offset-x), var(--lyric-offset-y));
   display: flex;
   justify-content: center;
   pointer-events: none;
@@ -1919,7 +1913,7 @@ body.template-jizura #lyrics-container {
   min-height: 0; padding: 0; transform: none;
 }
 #jizura-root { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
-#jizura-root .jizura-canvas { position: absolute; display: block; }
+#jizura-root .jizura-canvas { position: absolute; display: block; transform: translate(var(--lyric-offset-x), var(--lyric-offset-y)); }
 
 /* ─── 萬聖咒字：整個畫面一張 canvas，位置／微調／邊距由模板自己依設定計算 ─── */
 body.template-spellbook #lyrics-container {

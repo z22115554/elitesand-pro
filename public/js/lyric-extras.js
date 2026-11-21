@@ -80,14 +80,6 @@
   const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror', 'particle'];
   const STAGE_MIN_SAFE_MARGIN = 2;
   const STAGE_MAX_SAFE_MARGIN = 25;
-  // 位置微調（X/Y）滑桿刻度：實際套用時 display.js 還會依當下內容再收緊一次（reclampLyricOffset），
-  // 這裡只是配合「調得到的範圍」給合理刻度，避免滑桿大半段拖了沒效果。
-  // 舞台模板貼著畫面邊界：往外（更靠近該側邊緣）能調的範圍很小，往內（回中央）空間大很多。
-  const STAGE_OFFSET_X_OUTWARD = 50;
-  const STAGE_OFFSET_X_OUTWARD_AURA = 70; // 潮汐心景版面比其他三款鬆，往外多留 20px（見 display.css）
-  const STAGE_OFFSET_X_INWARD = 700; // 往中央（向內）可調範圍：所有舞台模板一起放寬（2026-08-31）
-  const STAGE_OFFSET_Y_RANGE = 150;
-  const CLASSIC_OFFSET_RANGE = 400;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
   let templateSettings = {};
@@ -327,6 +319,7 @@
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
     { id: 'ls-lightboard-slide', key: 'lightboardSlideIn' },
     { id: 'ls-spellbook-position', key: 'spellbookPosition' },
+    { id: 'ls-particle-vertical-position', key: 'particleVerticalPosition' },
     { id: 'ls-paperstrip-color', key: 'paperstripColor' },
     { id: 'ls-ktv-interlude', key: 'ktvInterludeText' },
     { id: 'ls-ktv-ending', key: 'ktvEndingText' },
@@ -933,53 +926,16 @@
     if (modalPaddingXField) modalPaddingXField.hidden = isTypewriter;
     if (isTypewriter && settings.lyricPosition === 'center') { settings.lyricPosition = 'split'; }
     const isMirror = settings.template === 'mirror';
-    // 位置微調（X/Y）：經典疊層一律可調；舞台模板（Pulse/Facet/Drift/Aura）在「置中/偏左/偏右」
-    // 也開放微調，但「左右分散」不適用——那個模式每行交替左右，沒有單一位置可微調，
-    // 邊界靠「中央安全距離」控制。KTV 雙行構圖固定、沒有左右可調，只開放 Y；
-    // 紙帶逐字／鏡像跟 KTV 一樣是固定構圖（鏡像永遠 split），也只開放 Y——
-    // 兩者的 Y 直接由各自 #paperstrip-root／#mirror-root 消費同一個全域變數（見 display.css），
-    // 不吃 #lyrics-container 本身的 transform，所以不受「左右分散不給微調」限制。
-    // 實際套用時 display.js 會依當下內容自動收緊範圍，使用者調到極端值也不會把歌詞推出畫面；
-    // 這裡的滑桿 min/max 只是配合「調得到的範圍」給合理刻度，避免大半段滑桿沒有效果。
     const isKtv = settings.template === 'ktv';
-    const isPaperstrip = settings.template === 'paperstrip';
-    const isYOnlyOffset = isKtv || isPaperstrip || isMirror || isTypewriter;
-    const supportsOffsetFineTune = (isClassic || ui.positionMode === 'stage' || isYOnlyOffset || isParticle)
-      && (settings.lyricPosition !== 'split' || isMirror || isPaperstrip || isTypewriter);
-    if (fineWrap) fineWrap.hidden = !supportsOffsetFineTune;
-    if (offsetXRow) offsetXRow.hidden = !supportsOffsetFineTune || isYOnlyOffset;
-    if (offsetYRow) offsetYRow.hidden = !supportsOffsetFineTune;
-    if (offsetXInput && supportsOffsetFineTune && !isYOnlyOffset) {
-      // 舞台模板貼著畫面邊界：往「外」（更靠近該側邊緣）能調的範圍很小，往「內」（回中央）
-      // 空間大很多；偏左/偏右方向相反，置中兩邊都寬裕，維持跟經典疊層一樣的大範圍。
-      // 潮汐心景版面比其他三款鬆，往外可以多留 20px（見 STAGE_OFFSET_X_OUTWARD_AURA）。
-      const outward = settings.template === 'aura' ? STAGE_OFFSET_X_OUTWARD_AURA : STAGE_OFFSET_X_OUTWARD;
-      if (!isClassic && settings.lyricPosition === 'left') {
-        offsetXInput.min = String(-outward);
-        offsetXInput.max = String(STAGE_OFFSET_X_INWARD);
-      } else if (!isClassic && settings.lyricPosition === 'right') {
-        offsetXInput.min = String(-STAGE_OFFSET_X_INWARD);
-        offsetXInput.max = String(outward);
-      } else {
-        offsetXInput.min = String(-CLASSIC_OFFSET_RANGE);
-        offsetXInput.max = String(CLASSIC_OFFSET_RANGE);
-      }
-      const clampedX = Math.min(Math.max(settings.offsetX || 0, Number(offsetXInput.min)), Number(offsetXInput.max));
-      if (clampedX !== settings.offsetX) { settings.offsetX = clampedX; pushSettings(); }
-      offsetXInput.value = String(settings.offsetX || 0);
-      const offsetXVal = document.getElementById('ls-offset-x-val');
-      if (offsetXVal) offsetXVal.textContent = `${settings.offsetX || 0}px`;
-    }
-    if (offsetYInput && supportsOffsetFineTune) {
-      const yRange = isTypewriter ? MAX_OFFSET : isClassic ? CLASSIC_OFFSET_RANGE : STAGE_OFFSET_Y_RANGE;
-      offsetYInput.step = isTypewriter ? '1' : '5';
-      offsetYInput.min = String(-yRange);
-      offsetYInput.max = String(yRange);
-      const clampedY = Math.min(Math.max(settings.offsetY || 0, -yRange), yRange);
-      if (clampedY !== settings.offsetY) { settings.offsetY = clampedY; pushSettings(); }
-      offsetYInput.value = String(settings.offsetY || 0);
-      const offsetYVal = document.getElementById('ls-offset-y-val');
-      if (offsetYVal) offsetYVal.textContent = `${settings.offsetY || 0}px`;
+    if (fineWrap) fineWrap.hidden = false;
+    if (offsetXRow) offsetXRow.hidden = false;
+    if (offsetYRow) offsetYRow.hidden = false;
+    for (const [key, input] of [['offsetX', offsetXInput], ['offsetY', offsetYInput]]) {
+      if (!input) continue;
+      input.min = String(-MAX_OFFSET);
+      input.max = String(MAX_OFFSET);
+      input.step = '1';
+      input.value = String(settings[key] ?? 0);
     }
     // KTV／燈牌 是固定構圖、沒有「歌詞位置」概念——整欄收起，不要留一個只有標題和說明的空欄
     if (lyricPosField) lyricPosField.hidden = isColumnflow || isMirror || isKtv || isLightboard;
@@ -1056,7 +1012,7 @@
           : trAuto('方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。'));
     }
     if (fineHint) {
-      fineHint.textContent = trAuto('拖曳選格子，或用下面細調微調');
+      fineHint.textContent = workspaceText('lyricStyle.fineTuneHint', '位移可超出畫面，可用「重置微調」回到原位。');
     }
     if (posHint && isTypewriter) {
       posHint.textContent = trAuto('打字機的靠邊方式：全左／全右＝所有對話泡泡固定一側；左右分散＝以 1–5 句為一段隨機交替。合唱歌曲一律改成「一邊代表一個聲部」，不受此設定影響。');

@@ -1326,7 +1326,9 @@ test('鏡像模板 P0 固定雙側構圖、語言安全轉換與 deterministic g
   ok(TEMPLATE_IDS.includes('mirror'), 'server 模板白名單必須接受 mirror: ');
   ok(templateDefaults('mirror').template === 'mirror', 'server 預設 lyricTemplateSettings 必須包含 mirror: ');
   ok(i18n.includes("'template.mirror':"), 'Mirror 模板名稱必須有五語 i18n key: ');
-  ok(displayCss.includes('#mirror-root {') && displayCss.slice(displayCss.indexOf('#mirror-root {'), displayCss.indexOf('}', displayCss.indexOf('#mirror-root {'))).includes('transform: translateY(var(--lyric-offset-y, 0px));'), '鏡像必須直接在 #mirror-root 消費全域 --lyric-offset-y 位移，不能透過 #lyrics-container（position:fixed 的 containing block 限制）: ');
-  ok(displayCss.includes('#paperstrip-root {') && displayCss.slice(displayCss.indexOf('#paperstrip-root {'), displayCss.indexOf('}', displayCss.indexOf('#paperstrip-root {'))).includes('transform: translateY(var(--lyric-offset-y, 0px));'), '紙帶逐字必須在 #paperstrip-root 消費全域 --lyric-offset-y 位移: ');
-  ok(lyricExtras.includes('const isPaperstrip = ') && lyricExtras.includes('const isYOnlyOffset = isKtv || isPaperstrip || isMirror') && lyricExtras.includes("(settings.lyricPosition !== 'split' || isMirror || isPaperstrip || isTypewriter)"), '紙帶逐字／鏡像的位置微調必須只開放 Y，且鏡像固定 split 時仍要能調整 Y: ');
+  ok(displayCss.includes('#mirror-root {') && displayCss.slice(displayCss.indexOf('#mirror-root {'), displayCss.indexOf('}', displayCss.indexOf('#mirror-root {'))).includes('transform: translate(var(--lyric-offset-x), var(--lyric-offset-y));'), '鏡像必須直接在 #mirror-root 消費全域 --lyric-offset-y 位移，不能透過 #lyrics-container（position:fixed 的 containing block 限制）: ');
+  ok(displayCss.includes('#paperstrip-root {') && displayCss.slice(displayCss.indexOf('#paperstrip-root {'), displayCss.indexOf('}', displayCss.indexOf('#paperstrip-root {'))).includes('transform: translate(var(--lyric-offset-x), var(--lyric-offset-y));'), '紙帶逐字必須在 #paperstrip-root 消費全域 --lyric-offset-y 位移: ');
+  ok(lyricExtras.includes('if (offsetXRow) offsetXRow.hidden = false;')
+    && lyricExtras.includes('if (offsetYRow) offsetYRow.hidden = false;')
+    && !lyricExtras.includes('clampedY'), '固定雙側模式應能調整 X/Y，切換模板時保留原本的位移');
 });

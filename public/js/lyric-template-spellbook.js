@@ -226,8 +226,8 @@
     const vpos = flag('spellbookPosition', 'bottom');
     let y = vpos === 'top' ? cssH * 0.2 : vpos === 'middle' ? cssH * 0.5 : cssH * 0.82;
     // 位置微調：使用者調的是意圖，實際收緊在畫面內
-    const ox = clamp(Number(cfg.offsetX) || 0, -blockX + 8, cssW - 8 - (blockX + m.blockW));
-    const oy = clamp(Number(cfg.offsetY) || 0, -y + S * 1.2, cssH - y - S * 0.9);
+    const ox = cfg.offsetX;
+    const oy = cfg.offsetY;
     blockX += ox; y += oy;
     const x0 = blockX + S * ex.pre;
     m.chars.forEach((c) => { c.cx = x0 + c.x + c.w / 2; });
@@ -657,8 +657,8 @@
       if (settings && typeof settings === 'object') {
         cfg = {
           lyricPosition: ['left', 'right', 'center', 'split'].includes(settings.lyricPosition) ? settings.lyricPosition : 'center',
-          offsetX: Number(settings.offsetX) || 0,
-          offsetY: Number(settings.offsetY) || 0,
+          offsetX: Number.isFinite(settings.offsetX) ? settings.offsetX : 0,
+          offsetY: Number.isFinite(settings.offsetY) ? settings.offsetY : 0,
           paddingX: Number.isFinite(Number(settings.paddingX)) ? Number(settings.paddingX) : 60,
           animationIntensity: settings.animationIntensity || 'normal',
         };

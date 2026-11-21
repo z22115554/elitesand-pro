@@ -299,14 +299,14 @@ function createAppState(io) {
     if (typeof saved.metronomeEnabled === 'boolean') playState.metronomeEnabled = saved.metronomeEnabled;
     if (saved.lyricSettings && typeof saved.lyricSettings === 'object') {
       const settings = sanitizeJsonObject(saved.lyricSettings) || {};
-      sanitizeLyricPosition(settings, settings.template);
+      sanitizeLyricPosition(settings, settings.template, true);
       for (const [id, snapshot] of Object.entries(settings.lyricTemplateSettings || {})) {
-        if (snapshot && typeof snapshot === 'object') sanitizeLyricPosition(snapshot, id);
+        if (snapshot && typeof snapshot === 'object') sanitizeLyricPosition(snapshot, id, true);
       }
       if (Array.isArray(settings.lyricPresets)) {
         for (const preset of settings.lyricPresets) {
           if (preset?.settings && typeof preset.settings === 'object') {
-            sanitizeLyricPosition(preset.settings, preset.settings.template);
+            sanitizeLyricPosition(preset.settings, preset.settings.template, true);
           }
         }
       }

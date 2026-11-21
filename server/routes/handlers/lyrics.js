@@ -86,6 +86,7 @@ function cancelLyricOffsetSync(ctx, trackId) {
 const { TEMPLATE_IDS: LYRIC_TEMPLATES, sanitizeLyricPosition } = require('../../../public/js/lyric-template-defaults');
 
 function sanitizeParticleSettings(settings) {
+  if (settings.particleVerticalPosition !== undefined && !['top', 'middle', 'bottom'].includes(settings.particleVerticalPosition)) delete settings.particleVerticalPosition;
   if (settings.particleOrient !== undefined && !['horizontal', 'vertical'].includes(settings.particleOrient)) delete settings.particleOrient;
   // 2026-09-12：particleEntrance 重新開放——不是原本 demo 那個「逐一挑聚散風格」的旋鈕，
   // 是新的二選一：'auto'（風／雨／渦流／雙束四種逐句輪替，預設）｜'quaddrift'（全部改用

@@ -74,8 +74,8 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   ok(panelHtml.includes('id="padding-x-field"') && lyricExtras.includes("getElementById('padding-x-field')") && lyricExtras.includes('modalPaddingXField.hidden = isTypewriter'), '打字機時詳細設定裡的左右邊距必須收起（挪走不是複製）: ');
   ok(lyricExtras.includes('data-lyric-pos="center"]') && lyricExtras.includes('posCenterBtn.hidden = isTypewriter'), '打字機的靠邊選擇不可有「置中」: ');
   ok(lyricExtras.includes("out.typewriter.lyricPosition === 'center'") && lyricExtras.includes("settings.template === 'typewriter' && settings.lyricPosition === 'center'"), '舊快照存了 center 必須被歸成 split: ');
-  // 向內（往中央）可調範圍放寬 — 所有舞台模板一起
-  ok(lyricExtras.includes('STAGE_OFFSET_X_INWARD = 700'), '舞台模板向內位移範圍必須放寬到 700: ');
+  ok(lyricExtras.includes('input.min = String(-MAX_OFFSET)') && lyricExtras.includes('input.max = String(MAX_OFFSET)'),
+    '各模板採用同一組雙向輸入範圍: ');
   // 底部進度條開關（放在「歌詞顯示模式」）
   ok(lyricExtras.includes('showProgressBar: true') && lyricExtras.includes("bindGlobalToggle('ls-progress-bar', 'showProgressBar')"), '底部進度條必須有設定鍵與控制項: ');
   ok(panelHtml.includes('id="ls-progress-bar"') && panelHtml.includes('底部進度條'), 'index.html「歌詞顯示模式」必須有底部進度條開關: ');

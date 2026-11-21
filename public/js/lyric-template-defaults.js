@@ -87,6 +87,8 @@
     columnflowShowSafeZoneOnObs: false, // 直書句流：安全距離引導線是否也疊在真正的 OBS 來源上（預設只有面板預覽看得到）
     stageSafeMargin: 2, // Pulse/Facet/Drift/Aura/紙帶逐字/鏡像：左右分散時的中央安全距離（%，2–25），預設對應原本寫死的 48/52%
     stageShowSafeZoneOnObs: false, // 同上：安全距離引導線是否也疊在真正的 OBS 來源上
+    particleVerticalPosition: 'middle',
+    lightboardOffsetVersion: 1,
     particleOrient: 'vertical', // 風息成字：'vertical' 直書（1–2 直欄，預設）| 'horizontal' 橫排
     particleEntrance: 'auto', // 風息成字：'auto' 風/雨/渦流/雙束四種逐句輪替（預設）| 'quaddrift' 全部改用四相漂字進場（退場仍是粒子散開）
     // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
@@ -132,7 +134,7 @@
     return settings;
   }
 
-  function sanitizeLyricPosition(settings, template) {
+  function sanitizeLyricPosition(settings, template, migrateLegacyLightboard = false) {
     for (const key of ['offsetX', 'offsetY']) {
       if (settings[key] === undefined) continue;
       const value = normalizeOffset(settings[key]);
@@ -140,6 +142,11 @@
       else settings[key] = value;
     }
     if (settings.verticalPosition !== undefined) normalizeAnchor(settings, template);
+    // 舊燈牌的正 Y 方向與新滑桿相反，首次載入舊快照時清除這個隱藏位移。
+    if (template === 'lightboard' && settings.offsetY !== undefined) {
+      if (migrateLegacyLightboard && settings.lightboardOffsetVersion !== 1) settings.offsetY = 0;
+      settings.lightboardOffsetVersion = 1;
+    }
     return settings;
   }
 

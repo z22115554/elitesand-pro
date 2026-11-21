@@ -30,7 +30,6 @@
   let runCache = [];          // 左右分散模式：第 i 句的側（含 _side/_left 進度）
   let sideMode = 'split';     // 'split' | 'left' | 'right' | 'duet'
   let duetMap = null;         // duet 模式：{ 聲部碼 -> 'left'|'right' }
-  let dirty = false;
   let lastT = 0;
 
   // ── 長間奏貼圖：像聊天室在冷場時發張貼圖 ──
@@ -43,14 +42,21 @@
     const v = parseInt(document.body.dataset.twStickerGapMs, 10);
     return Number.isFinite(v) ? Math.max(3000, v) : 6000;
   }
-  function refreshStickerPool() {
+  let stickerRequest = 0;
+  let lastStickerSettings = '';
+  function refreshStickerPool(ctx) {
+    const request = ++stickerRequest;
+    const root = rootEl;
     try {
       fetch('/api/typewriter-stickers').then((r) => (r.ok ? r.json() : null)).then((d) => {
-        if (!d) return;
+        if (!d || root !== rootEl || request !== stickerRequest) return;
         // builtin 從「URL 字串陣列」改成「{id,url} 陣列」（內建貼圖現在可個別隱藏／reset）
         const builtinUrls = (d.builtin || []).map((b) => (typeof b === 'string' ? b : (b && b.url)));
-        stickerPool = [].concat(builtinUrls, (d.custom || []).map((c) => c && c.url))
+        const urls = [].concat(builtinUrls, (d.custom || []).map((c) => c && c.url))
           .filter((u) => typeof u === 'string' && u);
+        if (urls.length === stickerPool.length && urls.every((url, i) => url === stickerPool[i])) return;
+        stickerPool = urls;
+        if (ctx && stickerEnabled()) render(ctx, lastT, true);
       }).catch(() => {});
     } catch (_) { /* 沒有伺服器就沒有貼圖，靜默 */ }
   }
@@ -351,7 +357,6 @@
 
     const mode = computeLayout(lines);
     if (mode !== sideMode) { sideMode = mode; runCache = []; force = true; }
-    if (dirty) { dirty = false; force = true; }
     if (!force && entries.length) {
       const match = entries.find((e) => !e.isSticker && e.idx === idx);
       if (match && lines[idx] && match.text !== lines[idx].text) force = true;
@@ -413,7 +418,7 @@
       { key: 'twStickerGapMs', type: 'int', min: 3000, max: 20000, default: 6000, target: 'data:twStickerGapMs' },
     ],
 
-    mount(container) {
+    mount(container, ctx) {
       rootEl = document.createElement('div');
       rootEl.id = 'typewriter-root';
       container.appendChild(rootEl);
@@ -421,8 +426,8 @@
       runCache = [];
       sideMode = 'split';
       duetMap = null;
-      dirty = false;
-      refreshStickerPool();
+      lastStickerSettings = `${stickerEnabled()}|${stickerGapMs()}`;
+      refreshStickerPool(ctx);
     },
 
     destroy() {
@@ -431,7 +436,6 @@
       entries = [];
       runCache = [];
       duetMap = null;
-      dirty = false;
       stickerPool = [];
       stickerPlaced = new Set();
     },
@@ -441,13 +445,15 @@
       runCache = [];
       sideMode = 'split';
       duetMap = null;
-      dirty = false;
     },
 
     onSettings(_settings, ctx) {
-      dirty = true;
-      refreshStickerPool(); // 使用者可能剛上傳／刪貼圖
-      if (ctx) render(ctx, lastT, true); // 暫停時也讓「換靠邊 / 換色」立即反映
+      const stickerSettings = `${stickerEnabled()}|${stickerGapMs()}`;
+      const stickerSettingsChanged = stickerSettings !== lastStickerSettings;
+      lastStickerSettings = stickerSettings;
+      refreshStickerPool(ctx); // 圖庫的上傳／刪除沿用相同的設定事件。
+      // CSS 外觀與位移會直接套到現有泡泡。render 會自行處理靠邊方式的變更。
+      if (ctx) render(ctx, lastT, stickerSettingsChanged);
     },
     onSeek(timeMs, ctx) { render(ctx, timeMs, true); },
     onFrame(timeMs, ctx) { render(ctx, timeMs, false); },

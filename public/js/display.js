@@ -541,61 +541,6 @@
     StylePresets.setOverrides(overrides || {});
   });
 
-  // ─── 位置微調自動夾限（v5.2）───
-  // 使用者滑桿調的是「意圖位移」；實際寫進 --lyric-offset-x/y 的是收緊後的值。
-  // 每次內容改變（換行、切換模板、字級變動）容器的實際邊界都可能不同，靠 ResizeObserver
-  // 監看 #lyrics-container 的版面框大小變化，一有變動就用同一個「意圖位移」重新收緊一次，
-  // 使用者永遠調不出畫面外，也不需要每個模板各自處理。
-  let lyricOffsetTargetX = 0;
-  let lyricOffsetTargetY = 0;
-  let lyricOffsetAppliedX = 0;
-  let lyricOffsetAppliedY = 0;
-  const LYRIC_OFFSET_EDGE_PAD = 12; // 留給邊界的最小可視安全距離（px）
-  let lyricOffsetResizeObserver = null;
-
-  function reclampLyricOffset() {
-    const container = document.getElementById('lyrics-container');
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return; // 尚未 layout，之後 resize 會再觸發
-    // 減掉「目前已套用的位移」還原出容器在零位移時的自然邊界，才能算出這次能再位移多少
-    const baseLeft = rect.left - lyricOffsetAppliedX;
-    const baseRight = rect.right - lyricOffsetAppliedX;
-    const baseTop = rect.top - lyricOffsetAppliedY;
-    const baseBottom = rect.bottom - lyricOffsetAppliedY;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const pad = LYRIC_OFFSET_EDGE_PAD;
-
-    let minX = pad - baseLeft;
-    let maxX = vw - pad - baseRight;
-    if (minX > maxX) { const mid = (minX + maxX) / 2; minX = mid; maxX = mid; } // 內容比畫面寬，兩難時取中間值
-    let minY = pad - baseTop;
-    let maxY = vh - pad - baseBottom;
-    if (minY > maxY) { const mid = (minY + maxY) / 2; minY = mid; maxY = mid; }
-
-    const effX = Math.min(Math.max(lyricOffsetTargetX, minX), maxX);
-    const effY = Math.min(Math.max(lyricOffsetTargetY, minY), maxY);
-
-    if (effX !== lyricOffsetAppliedX) {
-      lyricOffsetAppliedX = effX;
-      document.documentElement.style.setProperty('--lyric-offset-x', `${effX}px`);
-    }
-    if (effY !== lyricOffsetAppliedY) {
-      lyricOffsetAppliedY = effY;
-      document.documentElement.style.setProperty('--lyric-offset-y', `${effY}px`);
-    }
-  }
-
-  function ensureLyricOffsetObserver() {
-    if (lyricOffsetResizeObserver || typeof ResizeObserver === 'undefined') return;
-    const container = document.getElementById('lyrics-container');
-    if (!container) return;
-    lyricOffsetResizeObserver = new ResizeObserver(() => reclampLyricOffset());
-    lyricOffsetResizeObserver.observe(container);
-    window.addEventListener('resize', reclampLyricOffset);
-  }
-
   let fontAssetApplyVersion = 0;
   let appliedFontAssets = null;
 
@@ -703,8 +648,21 @@
   // ─── 歌詞外觀/位置設定（從控制面板即時推送，寫入 CSS 變數）───
   function applyLyricSettings(s) {
     if (!s || typeof s !== 'object') return;
-    lastLyricSettings = s; // 段落搭配（applySectionAwareTemplate）要讀這份的 sectionAwareEnabled/sectionTemplateMap
+    const previous = lastLyricSettings;
+    lastLyricSettings = s; // 段落搭配需要最新的 sectionAwareEnabled / sectionTemplateMap。
     const root = document.documentElement.style;
+    root.setProperty('--lyric-offset-x', `${Number.isFinite(s.offsetX) ? s.offsetX : 0}px`);
+    root.setProperty('--lyric-offset-y', `${Number.isFinite(s.offsetY) ? s.offsetY : 0}px`);
+
+    // DOM 模板僅移動 CSS 圖層，拖曳微調不必重建當前歌詞或重新播放進場。
+    if (previous && (previous.offsetX !== s.offsetX || previous.offsetY !== s.offsetY)
+        && !s.sectionAwareEnabled && s.template !== 'particle' && s.template !== 'spellbook') {
+      const keys = new Set([...Object.keys(previous), ...Object.keys(s)]);
+      const skip = ['offsetX', 'offsetY', 'lyricTemplateSettings', 'lyricPresets'];
+      const positionOnly = [...keys].every(key => skip.includes(key) || previous[key] === s[key]
+        || (key === 'sectionTemplateMap' && JSON.stringify(previous[key]) === JSON.stringify(s[key])));
+      if (positionOnly) return;
+    }
     const map = {
       fontSize: ['--display-font-size', v => `${v}px`],
       fontFamily: ['--display-font-family', v => v],
@@ -729,8 +687,6 @@
       paddingX: ['--lyric-padding-x', v => `${v}px`],
       paddingY: ['--lyric-padding-y', v => `${v}px`],
       maxWidth: ['--lyric-max-width', v => `${v}%`],
-      // offsetX/offsetY 不走這裡直接寫 CSS 變數——見下方 reclampLyricOffset，
-      // 使用者調的是「意圖位移」，實際套用值會依當下內容自動收緊，不會把歌詞推出畫面。
       // 文字排版細項
       lineHeight: ['--lyric-line-height', v => String(v)],
       letterSpacing: ['--lyric-letter-spacing', v => `${v}px`],
@@ -751,15 +707,8 @@
         root.setProperty(cssVar, fmt(s[key]));
       }
     }
-    const offsetX = Number.isFinite(s.offsetX) ? s.offsetX : 0;
-    const offsetY = Number.isFinite(s.offsetY) ? s.offsetY : 0;
-    lyricOffsetTargetX = offsetX;
-    lyricOffsetTargetY = offsetY;
-    root.setProperty('--typewriter-offset-y', `${lyricOffsetTargetY}px`);
     // 底部極細進度條開關（預設開；OBS 不想要可在面板「歌詞顯示模式」關掉）
     if (obsProgressBar) obsProgressBar.style.display = (s.showProgressBar === false) ? 'none' : '';
-    ensureLyricOffsetObserver();
-    reclampLyricOffset();
     // KTV 伴唱是底部雙行絕對定位，原本 paddingY 的 0..300px 幅度對「上下位置」
     // 太小；把同一個「上下邊距」控制轉成較大的 KTV 專用位移，避免主設定區再多一條 Y 控制。
     if (typeof s.paddingY === 'number') {
