@@ -1583,13 +1583,32 @@ test('歌詞位置數值在即時更新、模板快照及預設套用皆使用�
     lyricTemplateSettings: { typewriter: { offsetX: null, offsetY: -1e10, verticalPosition: 'flex-end' } },
     lyricPresets: [{ name: '舞台', settings: { template: 'pulse', offsetY: 150 } }],
   }, result => eq(result.ok, true));
-  eq(playState.lyricSettings.offsetX, 4096);
+  eq(playState.lyricSettings.offsetX, 1080);
   eq(playState.lyricSettings.offsetY, 27);
   const snapshot = playState.lyricSettings.lyricTemplateSettings.typewriter;
   eq(snapshot.offsetX, undefined);
-  eq(snapshot.offsetY, -4096);
+  eq(snapshot.offsetY, -1080);
   eq(snapshot.verticalPosition, 'center');
   eq(playState.lyricSettings.lyricPresets[0].settings.offsetY, 150);
+});
+
+test('置中構圖模板與紙帶逐字的邊距鎖回預設，位置只用 X/Y 微調', () => {
+  const defaults = require('../public/js/lyric-template-defaults');
+  for (const tpl of ['pulse', 'facet', 'aura', 'paperstrip', 'mirror']) {
+    const s = defaults.sanitizeLyricPosition({ template: tpl, paddingX: 300, paddingY: 0, offsetY: 40 }, tpl);
+    eq(s.paddingX, defaults.templateDefaults(tpl).paddingX, `${tpl} paddingX`);
+    eq(s.paddingY, defaults.templateDefaults(tpl).paddingY, `${tpl} paddingY`);
+    eq(s.offsetY, 40, `${tpl} offsetY 不受影響`);
+  }
+  // 邊距仍有意義的模板不鎖
+  for (const tpl of ['classic', 'ktv', 'typewriter', 'columnflow', 'particle', 'lightboard']) {
+    const s = defaults.sanitizeLyricPosition({ template: tpl, paddingX: 300, paddingY: 0 }, tpl);
+    eq(s.paddingX, 300, `${tpl} paddingX`);
+    eq(s.paddingY, 0, `${tpl} paddingY`);
+  }
+  const panel = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
+  ok(panel.includes("modalPaddingXField.hidden = isTypewriter || paddingLocked")
+    && panel.includes('modalPaddingYField.hidden = paddingLocked'), '面板對鎖定模板隱藏上下左右邊距');
 });
 
 test('改版前的模板快照讀檔時保留當時實際呈現的字重、邊距與寬度', () => {

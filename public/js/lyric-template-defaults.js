@@ -118,8 +118,9 @@
     spellbook: { template: 'spellbook', fontSize: 60, fontWeight: 900, color: '#f4ead6', activeColor: '#ff9a3c', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 2, animationIntensity: 'normal', spellbookEffect: 'rune', spellbookPosition: 'bottom' },
   };
   const TEMPLATE_IDS = Object.freeze(Object.keys(TEMPLATE_DEFAULTS));
-  // 固定輸入上限，與畫面尺寸無關。
-  const MAX_OFFSET = 4096;
+  // 固定輸入上限，與畫面尺寸無關。±1080 足以從任一錨點移到 1080p 畫面另一側，
+  // 又不會讓滑桿每拖 1px 就跳幾十 px（±4096 時微調幾乎不可能，也容易把歌詞推出畫面）。
+  const MAX_OFFSET = 1080;
   function templateOverrides(id) {
     return { ...TEMPLATE_DEFAULTS[TEMPLATE_IDS.includes(id) ? id : 'classic'] };
   }
@@ -129,11 +130,21 @@
   function normalizeOffset(value) {
     return Number.isFinite(value) ? Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, value)) : undefined;
   }
+  // 置中構圖的模板（含紙帶逐字）位置一律用 X/Y 微調：上下左右邊距在這些模板只會對稱內縮
+  // 或完全不讀，面板也不給調。因此鎖回模板預設值，避免舊快照裡看不到、也改不掉的邊距繼續作用。
+  const PADDING_LOCKED_TEMPLATES = Object.freeze(['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror']);
+  function lockPadding(settings, template) {
+    if (!PADDING_LOCKED_TEMPLATES.includes(template)) return settings;
+    const defaults = templateDefaults(template);
+    if (settings.paddingX !== undefined) settings.paddingX = defaults.paddingX;
+    if (settings.paddingY !== undefined) settings.paddingY = defaults.paddingY;
+    return settings;
+  }
   function normalizeAnchor(settings, template) {
     if (TEMPLATE_IDS.includes(template) && template !== 'classic') {
       settings.verticalPosition = TEMPLATE_DEFAULTS[template].verticalPosition;
     }
-    return settings;
+    return lockPadding(settings, template);
   }
 
   // 改版前這些模板不讀下列欄位（寫死字重、固定滿版或固定位置），但面板仍把共用預設
@@ -175,6 +186,7 @@
       else settings[key] = value;
     }
     if (settings.verticalPosition !== undefined) normalizeAnchor(settings, template);
+    else lockPadding(settings, template);
     // 舊燈牌的正 Y 方向與新滑桿相反，首次載入舊快照時清除這個隱藏位移。
     if (template === 'lightboard' && settings.offsetY !== undefined) {
       if (migrateLegacy && settings.lightboardOffsetVersion !== 1) settings.offsetY = 0;
@@ -186,7 +198,7 @@
     return settings;
   }
 
-  const api = { DEFAULT_SETTINGS: Object.freeze(DEFAULT_SETTINGS), TEMPLATE_IDS, MAX_OFFSET, templateDefaults, templateOverrides, normalizeOffset, normalizeAnchor, sanitizeLyricPosition, migrateLegacyAppearance, APPEARANCE_VERSION };
+  const api = { DEFAULT_SETTINGS: Object.freeze(DEFAULT_SETTINGS), TEMPLATE_IDS, MAX_OFFSET, PADDING_LOCKED_TEMPLATES, templateDefaults, templateOverrides, normalizeOffset, normalizeAnchor, lockPadding, sanitizeLyricPosition, migrateLegacyAppearance, APPEARANCE_VERSION };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.LyricTemplateDefaults = api;
 })(typeof window === 'undefined' ? globalThis : window);

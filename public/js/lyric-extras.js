@@ -24,7 +24,7 @@
   // 歌詞外觀/位置設定
   // ═══════════════════════════════════════════
 
-  const { DEFAULT_SETTINGS, TEMPLATE_IDS, templateDefaults, normalizeAnchor, MAX_OFFSET } = LyricTemplateDefaults;
+  const { DEFAULT_SETTINGS, TEMPLATE_IDS, templateDefaults, normalizeAnchor, MAX_OFFSET, PADDING_LOCKED_TEMPLATES } = LyricTemplateDefaults;
 
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
@@ -927,8 +927,12 @@
     if (posCenterBtn) posCenterBtn.hidden = isTypewriter;
     const twPaddingField = document.getElementById('typewriter-padding-field');
     if (twPaddingField) twPaddingField.hidden = !isTypewriter;
+    // 置中構圖模板（含紙帶逐字）的位置改用 X/Y 微調，上下左右邊距不給調（顯示端也鎖回預設，見 lockPadding）
+    const paddingLocked = PADDING_LOCKED_TEMPLATES.includes(settings.template);
     const modalPaddingXField = document.getElementById('padding-x-field');
-    if (modalPaddingXField) modalPaddingXField.hidden = isTypewriter;
+    if (modalPaddingXField) modalPaddingXField.hidden = isTypewriter || paddingLocked;
+    const modalPaddingYField = document.getElementById('padding-y-field');
+    if (modalPaddingYField) modalPaddingYField.hidden = paddingLocked;
     if (isTypewriter && settings.lyricPosition === 'center') { settings.lyricPosition = 'split'; }
     const isMirror = settings.template === 'mirror';
     const isKtv = settings.template === 'ktv';

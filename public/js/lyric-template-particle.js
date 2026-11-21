@@ -501,8 +501,8 @@ LyricTemplates.register({
   {key:'particleEntrance',type:'enum',values:['auto','quaddrift'],default:'auto',target:'data:particleEntrance'},
   {key:'particleVerticalPosition',type:'enum',values:['top','middle','bottom'],default:'middle',target:'data:particleVerticalPosition'},
   // Canvas 使用共用設定值直接平移。
-  {key:'offsetX',type:'int',min:-4096,max:4096,default:0,target:'data:particleOffsetX'},
-  {key:'offsetY',type:'int',min:-4096,max:4096,default:0,target:'data:particleOffsetY'},
+  {key:'offsetX',type:'int',min:-1080,max:1080,default:0,target:'data:particleOffsetX'},
+  {key:'offsetY',type:'int',min:-1080,max:1080,default:0,target:'data:particleOffsetY'},
   // 中央安全距離＋引導線：跟鏡像／紙帶完全共用同一套（stageSafeMargin / stage-show-safe-zone / mountStageSafeZoneGuide）。
   ...LyricTemplateSettings.STAGE_SAFE
  ],
