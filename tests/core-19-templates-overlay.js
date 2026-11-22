@@ -383,7 +383,7 @@ test('觀眾演出：設定夾在合法範圍、存檔，測試演出不看開�
 });
 
 test('觀眾演出：Twitch 訂閱 channel.raid、事件交給 onRaid，且失敗不影響點歌訂閱', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../server/services/twitch-service.js'), 'utf8');
+  const source = require('./helpers/twitch-service-source')();
   ok(source.includes("createSubscription('channel.raid', { to_broadcaster_user_id: this.auth.userId })"));
   ok(/subscription\.type === 'channel\.raid'[\s\S]{0,400}this\.onRaid\?\.\(/.test(source));
   ok(/channel\.raid[\s\S]{0,300}catch \(err\)[\s\S]{0,200}揪團事件訂閱未啟用/.test(source), '揪團訂閱失敗要被吞掉並記錄');

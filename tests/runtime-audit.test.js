@@ -10,6 +10,7 @@ require('./import-cleanup-race.test');
 require('./display-clock-skew.test');
 require('./track-scoped-controls.test');
 require('./spout-controller-lifecycle.test');
+require('./twitch-eventsub-handoff.test');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

@@ -533,7 +533,7 @@ test('T6 管理視窗包含安全自訂指令、規則模擬、歷史與控制�
   const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(root, 'public', 'js', 'app-twitch.js'), 'utf8');
   const handler = fs.readFileSync(path.join(root, 'server', 'routes', 'handlers', 'twitch.js'), 'utf8');
-  const service = fs.readFileSync(path.join(root, 'server', 'services', 'twitch-service.js'), 'utf8');
+  const service = require('./helpers/twitch-service-source')();
   for (const token of ['twitch-custom-list', 'twitch-custom-duplicate', 'twitch-sim-run', 'twitch-history-list', 'twitch-custom-public-test']) {
     ok(html.includes(token), '缺少 T6 管理介面：' + token);
   }
