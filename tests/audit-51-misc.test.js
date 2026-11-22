@@ -192,7 +192,8 @@ test('#41 Twitch 聊天室指令：全形「！點歌」、全形空白、多個
   assert.equal(match('!點歌晴天'), null, '指令後面沒有分隔不算');
   const fs = require('fs');
   const path = require('path');
-  const service = fs.readFileSync(path.join(__dirname, '../server/services/twitch-service.js'), 'utf8');
+  // 聊天指令在 Twitch 服務拆檔後住在 twitch-service/requests.js
+  const service = fs.readFileSync(path.join(__dirname, '../server/services/twitch-service/requests.js'), 'utf8');
   assert.ok(service.includes("text.normalize('NFKC').match(/^!(?:挑戰|challenge)"), '全形！挑戰也要認得');
 });
 
@@ -335,7 +336,7 @@ test('#106 Twitch：同時好幾個地方要更新 token 時只送一次（publi
   });
   let calls = 0;
   let release;
-  service._refreshTokenOnce = () => { calls += 1; return new Promise((resolve) => { release = resolve; }); };
+  service._refreshToken = () => { calls += 1; return new Promise((resolve) => { release = resolve; }); };
   const a = service.refreshToken();
   const b = service.refreshToken();
   release();
