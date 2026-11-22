@@ -88,7 +88,8 @@
     vocalsGain = stCtx.createGain();
     vocalsGain.gain.value = vocalsVolume;
     vocalsMasterGain = stCtx.createGain();
-    vocalsMasterGain.gain.value = stGain?.gain.value ?? 0.7;
+    // 人聲不跟「音量」拉桿（那條只管伴奏，使用者 2026-11-23 確認），只跟靜音：靜音時一起關。
+    vocalsMasterGain.gain.value = isVolumeMuted() ? 0 : 1;
     // 人聲鏈：vocalsGain → vocalsDelay →（下游看雙路路由開了沒：直接到 destination
     // 或接雙路耳機節點）。vocalsDelay 補的是「伴奏鏈那顆 limiter 的前視延遲」，人聲仍
     // 不經過 stTrackGain/limiter（不套響度標準化，維持既有決定）。
@@ -1960,12 +1961,19 @@
       }
       // 高品質變調的獨立輸出鏈也要跟著調音量
       if (stGain) { try { stGain.gain.value = vol; } catch (e) { /* 靜默 */ } }
-      if (vocalsMasterGain) { try { vocalsMasterGain.gain.value = vol; } catch (e) { /* 靜默 */ } }
+      // 手動拖拉桿＝自己在調伴奏，不再是靜音狀態（拉到 0 是「關伴奏、留人聲」，不是靜音）
+      if (!transientVolumeChange) volumeBeforeMute = null;
+      // 人聲大小只看「人聲」拉桿；這條拉桿只決定靜音時人聲要不要一起關
+      if (vocalsMasterGain) { try { vocalsMasterGain.gain.value = isVolumeMuted() ? 0 : 1; } catch (e) { /* 靜默 */ } }
     });
   }
 
   // 快捷鍵用的音量調整：改滑桿再觸發 input，跟手動拖滑桿完全同一條路（含記住音量）。
   let volumeBeforeMute = null;
+  // 靜音＝按了靜音（記著靜音前的音量）且拉桿在 0。換歌還原音量時也維持靜音（見 1909 行附近）。
+  function isVolumeMuted() {
+    return volumeBeforeMute !== null && !!dom.volumeSlider && parseInt(dom.volumeSlider.value, 10) === 0;
+  }
   function setVolumePercent(pct) {
     if (!dom.volumeSlider) return null;
     const value = Math.max(0, Math.min(100, Math.round(pct)));
