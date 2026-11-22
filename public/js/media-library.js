@@ -55,6 +55,7 @@
   const selectedIds = new Set(); // 多選批次：媒體庫 id（字串）
   let practiceBatch = null;       // 批次建練唱音軌進行中：{ stop }
   let wordBatch = null;           // 批次升級逐字歌詞進行中：{ stop }
+  const WORD_UPGRADE_TIMEOUT_MS = 120000; // 每首的等待上限（一輪來源查詢＋羅馬化）
   let viewCache = [];
 
   // 媒體庫最多可能有 10k 首；不能把每一列都常駐 DOM。一般列由 46px 封面 +
@@ -1119,8 +1120,11 @@
     const counts = { upgraded: 0, skipped: 0, notFound: 0, suspect: 0 };
     for (let i = 0; i < items.length && !run.stop; i++) {
       label.textContent = tx('library.batch.wordUpgradeRunning', { done: i, total: items.length });
+      // 伺服器要把所有歌詞來源問一輪（找不到的歌最久，實測 8～12 秒，偶爾更久）再羅馬化。
+      // 用預設 8 秒會每首都跳「伺服器回應逾時」，而且上一首還在查就送出下一首、結果全算成略過。
       const res = await new Promise((resolve) => {
-        SocketClient.sendWithCallback('library:upgrade-word-lyrics', { id: String(items[i].id) }, (r) => resolve(r || {}));
+        SocketClient.sendWithCallback('library:upgrade-word-lyrics', { id: String(items[i].id) },
+          (r) => resolve(r || {}), { timeoutMs: WORD_UPGRADE_TIMEOUT_MS });
       });
       if (res.status === 'upgraded') counts.upgraded += 1;
       else if (res.status === 'mismatch') counts.suspect += 1;
