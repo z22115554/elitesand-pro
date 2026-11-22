@@ -129,6 +129,10 @@ function migrateToParent(parentDir, sourceOverride = null) {
     throw new Error('No media files were found in the recorded media locations. The storage setting was not changed.');
   }
   const destinationDir = resolveDestinationMediaDir(parentDir);
+  const installRoot = process.env.ELITESAND_INSTALL_ROOT;
+  if (installRoot && isSubpath(path.resolve(installRoot), destinationDir)) {
+    throw new Error('Media storage must be outside the application installation folder.');
+  }
   if (samePath(sourceDir, destinationDir)) {
     throw new Error('The selected folder is already the current media folder.');
   }

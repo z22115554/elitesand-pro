@@ -198,7 +198,9 @@ function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs
 
   // User-selected custom storage is authoritative. Never silently redirect it,
   // even if it is unavailable right now.
-  if (!samePath(configuredMediaDir, vulnerableMediaDir)) {
+  const installRelative = path.relative(getInstallRoot(executablePath), configuredMediaDir);
+  const insideInstall = installRelative === '' || (!installRelative.startsWith(`..${path.sep}`) && installRelative !== '..' && !path.isAbsolute(installRelative));
+  if (!insideInstall) {
     return { mediaDir: configuredMediaDir, action: 'kept-configured' };
   }
 

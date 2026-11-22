@@ -73,10 +73,15 @@ LangString EsMediaPreserveFailed 2052 "为保护已下载歌曲，安装已停�
     ${EndIf}
 
     IfFileExists "$0\.elitesand-pro-media-root" 0 EsPreserveDone
-    ${GetFileName} "$0" $1
-    StrCmp $1 "Elitesand Pro Media" 0 EsPreserveDone
     ${GetParent} "$0" $2
-    IfFileExists "$2\Elitesand Pro.exe" 0 EsPreserveDone
+  EsFindMediaInstallAncestor:
+    IfFileExists "$2\Elitesand Pro.exe" EsMediaInstallAncestorFound
+    ${GetParent} "$2" $1
+    StrCmp $1 "" EsPreserveDone
+    StrCmp $1 $2 EsPreserveDone
+    StrCpy $2 $1
+    Goto EsFindMediaInstallAncestor
+  EsMediaInstallAncestorFound:
 
     ${GetParent} "$2" $6
     StrCpy $3 "$6\Elitesand Pro Media"
