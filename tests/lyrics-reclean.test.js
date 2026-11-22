@@ -81,4 +81,32 @@ test('啟動流程有接上重洗，播放清單副本也會同步', () => {
   assert.match(index, /onUpdated: \(id, lines\) => socketApi\.replaceTrackParsedLyrics\(id, lines\)/);
   const socket = fs.readFileSync(path.join(__dirname, '../server/routes/socket-handler.js'), 'utf8');
   assert.match(socket, /replaceTrackParsedLyrics\(trackId, parsedLyrics\)/);
+  // 歌詞選擇器選定的那份也要交給重洗（还痛吗：只洗歌曲庫，第一次播放就被選定的舊歌詞蓋回去）
+  assert.match(index, /list: \(\) => socketApi\.listManualLyrics\(\)/);
+  assert.match(index, /replace: \(id, lines\) => socketApi\.replaceManualParsedLyrics\(id, lines\)/);
+  assert.match(socket, /listManualLyrics\(\)/);
+  assert.match(socket, /replaceManualParsedLyrics\(trackId, parsedLyrics\)/);
+});
+
+test('歌詞選擇器選定的歌詞也重洗；使用者自己貼上的、手動諧音的不碰', async () => {
+  const krc = raw('作曲：x', '第一句', '第二句', '第三句');
+  const stale = () => [line(0, '作曲：x'), line(1000, '第一句', { phonetic: 'p1' }), line(2000, '第二句'), line(3000, '第三句')];
+  const cache = new Map([
+    ['picked', { lyrics: krc, lyricsType: 'krc', source: 'kugou', parsedLyrics: stale() }],
+    ['pasted', { lyrics: krc, lyricsType: 'krc', source: 'manual', parsedLyrics: stale() }],
+    ['xieyin', { lyrics: krc, lyricsType: 'krc', source: 'qqmusic', parsedLyrics: stale().map((l) => ({ ...l, xieyinManual: true })) }],
+  ]);
+  const manual = {
+    list: () => [...cache].map(([id, entry]) => ({ id, ...entry })),
+    replace: (id, lines) => { cache.set(id, { ...cache.get(id), parsedLyrics: lines }); return true; },
+  };
+  const libraryStore = { getLibrary: () => [], getEntry: () => null, updateMeta() {} };
+  const synced = [];
+  const changed = await recleanLibrary({ libraryStore, parse, manual, onUpdated: (id) => synced.push(id) });
+  assert.deepEqual(changed, ['picked']);
+  assert.deepEqual(synced, ['picked'], '播放清單裡的副本也要一起換');
+  assert.deepEqual(cache.get('picked').parsedLyrics.map((l) => l.text), ['第一句', '第二句', '第三句']);
+  assert.equal(cache.get('picked').parsedLyrics[0].phonetic, 'p1', '留下的行沿用原本物件');
+  assert.equal(cache.get('pasted').parsedLyrics.length, 4, '自己貼上的歌詞不碰');
+  assert.equal(cache.get('xieyin').parsedLyrics.length, 4, '有手動諧音的不碰');
 });

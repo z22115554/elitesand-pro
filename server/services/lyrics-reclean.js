@@ -8,15 +8,19 @@
  *
  * 不可弄丟的東西：
  *  - 只接受「純粹刪掉幾行」：留下的每一行都沿用原本的物件（拼音、諧音、振假名、逐字原封不動）。
- *  - 有手動諧音（xieyinManual）的歌、手動指定歌詞的歌，整首不碰。
+ *  - 有手動諧音（xieyinManual）的歌、使用者自己貼上／上傳的歌詞（source 'manual'），整首不碰。
  *  - 新結果比原本多行、砍掉超過七成、或任何一行對不上，視為異常不套用。
+ *
+ * 兩份都要洗：歌曲庫的 parsedLyrics，以及 state 裡「歌詞選擇器／換來源」選定的那份（manualLyricsCache）。
+ * 後者播放時優先、還會寫回歌曲庫——只洗歌曲庫的話，第一次播放就被舊的蓋回去（还痛吗 實測）。
  *
  * 做完寫標記檔；清洗規則再有大改時把 RECLEAN_VERSION 換掉就會再跑一次。
  */
 const fs = require('fs');
 const path = require('path');
 
-const RECLEAN_VERSION = 'credits-2026-11-21';
+// 11-23：加洗 manualLyricsCache；版本換掉讓 11-21 已跑過的人再跑一次
+const RECLEAN_VERSION = 'credits-2026-11-23';
 const SUPPORTED_TYPES = new Set(['krc', 'lrc']);
 
 const lineKey = (line) => `${line && line.time}|${line && line.text}`;
@@ -65,7 +69,7 @@ const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve));
  * 掃整個歌曲庫。每 10 首讓出一次事件迴圈，不卡住啟動中的直播。
  * @returns {Promise<string[]>} 實際改寫的歌曲 id
  */
-async function recleanLibrary({ libraryStore, parse, onUpdated, log, markerFile }) {
+async function recleanLibrary({ libraryStore, parse, onUpdated, log, markerFile, manual = null }) {
   if (markerFile) {
     try {
       if (JSON.parse(fs.readFileSync(markerFile, 'utf8')).version === RECLEAN_VERSION) return [];
@@ -87,6 +91,22 @@ async function recleanLibrary({ libraryStore, parse, onUpdated, log, markerFile 
       try { onUpdated?.(id, lines); } catch (e) { log?.warn?.(`重洗同步播放清單失敗：${e.message}`); }
     } catch (e) {
       log?.warn?.(`歌詞重洗跳過 ${id}：${e.message}`);
+    }
+  }
+  // 歌詞選擇器／換來源選定的那份。使用者自己貼上／上傳的（source 'manual'）不碰。
+  const manualEntries = manual && typeof manual.list === 'function' ? manual.list() : [];
+  for (let n = 0; n < manualEntries.length; n++) {
+    if (n % 10 === 9) await yieldToEventLoop();
+    const entry = manualEntries[n];
+    try {
+      if (!entry || !entry.id || entry.source === 'manual') continue;
+      const lines = planReclean(entry.parsedLyrics, entry.lyrics, entry.lyricsType, parse);
+      if (!lines || !manual.replace(entry.id, lines)) continue;
+      if (!changed.includes(entry.id)) changed.push(entry.id);
+      log?.info?.(`歌詞重洗（選定的歌詞）：${entry.id}（${entry.parsedLyrics.length} → ${lines.length} 行）`);
+      try { onUpdated?.(entry.id, lines); } catch (e) { log?.warn?.(`重洗同步播放清單失敗：${e.message}`); }
+    } catch (e) {
+      log?.warn?.(`歌詞重洗跳過選定歌詞 ${entry && entry.id}：${e.message}`);
     }
   }
   if (markerFile) {

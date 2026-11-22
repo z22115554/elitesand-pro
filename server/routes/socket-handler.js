@@ -751,6 +751,18 @@ module.exports = function socketHandler(io, {
       if (touched) ctx.persistState();
       return touched;
     },
+    // 歌詞選擇器／換來源選的歌詞另存在 state 的 manualLyricsCache，播放時優先於歌曲庫，
+    // 還會在播放時寫回歌曲庫。重洗只洗歌曲庫的話，第一次播放就被這份舊的蓋回去。
+    listManualLyrics() {
+      return [...ctx.manualLyricsCache].map(([id, entry]) => ({ id, ...entry }));
+    },
+    replaceManualParsedLyrics(trackId, parsedLyrics) {
+      const entry = ctx.manualLyricsCache.get(trackId);
+      if (!entry) return false;
+      ctx.manualLyricsCache.set(trackId, { ...entry, parsedLyrics: parsedLyrics.map((line) => ({ ...line })) });
+      ctx.persistState();
+      return true;
+    },
     // 練唱音高分析用：畫面上顯示的那份歌詞（手動覆蓋優先）＋這首歌的歌詞偏移。
     getPracticeLyrics(trackId) {
       const manual = ctx.getEffectiveLyrics(trackId);

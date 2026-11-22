@@ -751,6 +751,10 @@ server.listen(PORT, '0.0.0.0', () => {
       libraryStore: require('./services/library-store'),
       parse: (raw, type) => LyricsEngine.parseByType(raw, type),
       onUpdated: (id, lines) => socketApi.replaceTrackParsedLyrics(id, lines),
+      manual: {
+        list: () => socketApi.listManualLyrics(),
+        replace: (id, lines) => socketApi.replaceManualParsedLyrics(id, lines),
+      },
       log,
       markerFile: path.join(dataDir, 'lyrics-reclean.json'),
     }).then((changed) => {
