@@ -817,7 +817,8 @@ test('Live session records live on the home view and no longer occupy setlist se
 
 test('Setlist style save stays immediate, sends once, and ignores stale acknowledgements', () => {
   const setlistPanel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-setlist-panel.js'), 'utf8');
-  ok(setlistPanel.includes("SocketClient.sendWithCallback('setlist:style', collectStyle()"));
+  ok(setlistPanel.includes("SocketClient.sendWithCallback('setlist:style', { ...patch, target: setlistTarget() }"));
+  ok(setlistPanel.includes('sendStyle({ [f.key]: readVal(f, el) })'), '單欄更新不能重寫其他滑桿的數值');
   ok(!setlistPanel.includes("SocketClient.send('setlist:style', collectStyle())"), '不可在 ACK 儲存前再額外送一次：');
   ok(!setlistPanel.includes('styleSaveTimer'), '歌單預覽不可再因前端 debounce 延遲：');
   ok(setlistPanel.includes('const requestId = ++latestStyleSaveRequest;'));
@@ -1335,4 +1336,52 @@ test('yt-dlp packaged updater 成功後直接寫入 runtime trust hash，且重�
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test('歌單載入舊設定與模板快照時套用同一份範圍驗證', () => {
+  const store = require('../server/services/state-store');
+  const { ONE_TIME_FIX_NAMES } = require('../server/services/state-migrations');
+  const { createAppState } = require('../server/state/app-state');
+  const originalLoad = store.loadState;
+  try {
+    store.loadState = () => ({
+      oneTimeFixes: Object.fromEntries(ONE_TIME_FIX_NAMES.map((name) => [name, true])),
+      setlistStyle: { sizeNow: 80, textColor: '#123456' },
+      setlistSceneStyles: { film: { sizeNow: '35' } },
+      setlistTemplateStyles: {
+        classic: { shadowStrength: 35, sizeNow: ' ', textColor: '#abcdef' },
+        film: { sizeNow: Infinity, borderRadius: -10, bogus: 'ignored' },
+      },
+    });
+    const { classic, film } = createAppState({ emit() {} }).playState.setlistTemplateStyles;
+    eq(classic.sizeNow, 60);
+    eq(classic.shadowStrength, 35);
+    eq(classic.textColor, '#abcdef');
+    eq(film.sizeNow, 35);
+    eq(film.borderRadius, 0);
+    eq(film.bogus, undefined);
+  } finally {
+    store.loadState = originalLoad;
+  }
+});
+
+test('歌單面板只藏真的沒作用的設定，有效設定不能被誤藏', () => {
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-setlist-panel.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const block = panel.match(/const OMITTED_LAYOUT_FIELDS = (\{[\s\S]*?\n  \});/);
+  ok(block, '找不到 OMITTED_LAYOUT_FIELDS');
+  const omitted = Function(`return (${block[1]});`)();
+  const has = (layout, key) => (omitted[layout] || '').split(/\s+/).includes(key);
+  // 舞台訊號的外框發光三項都有實際效果（開關需搭配強度 > 0 才看得出來）。
+  for (const key of ['shadowEnabled', 'shadowBlur', 'shadowOpacity']) ok(!has('signal', key), `舞台訊號不可隱藏 ${key}`);
+  // 底片邊條讀主要文字色，但不讀主色。
+  ok(!has('film', 'textPrimary'), '底片邊條不可隱藏主要文字色');
+  ok(has('film', 'accent'), '底片邊條的主色沒有作用，應隱藏');
+  // 經典資訊的主框、正在播放卡與列都固定直角，卡片圓角沒有作用。
+  ok(has('classic', 'borderRadius'), '經典資訊應隱藏卡片圓角');
+  // 極簡歌單會畫整體背板，必須能調；夜間霓虹的整體背板完全被模板背景蓋住。
+  ok(html.includes('<div class="field field-row field-row--spacious field-row--top" data-sl-layout-not="glow">'), '整體背板只對夜間霓虹隱藏');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'setlist.css'), 'utf8');
+  const classicRoot = css.match(/\{[^{}]*padding: 13px 14px 12px;[^{}]*\}/);
+  ok(classicRoot && !classicRoot[0].includes('border-radius'), '經典資訊主框維持直角，升級後預設外觀不變');
 });

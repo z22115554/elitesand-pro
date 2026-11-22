@@ -483,7 +483,7 @@ test('歌單亮色背景可讀性保護與模板有效設定守衛存在', () =>
   eq(schema.FIELD_BY_KEY.waitOpacity.default, 72, '新歌單預設不得把未唱文字淡到亮色背景看不見：');
   ok(indexHtml.includes('id="sls-readability-guard"'), '面板必須提供亮色背景可讀性保護開關');
   ok(indexHtml.includes('可讀性襯底色') && indexHtml.includes('可讀性襯底不透明度'), '主要文字與襯底色必須在快速調整可見');
-  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt minimal-board"'), '正在播放字級必須在每個有 active 歌曲的模板顯示');
+  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt minimal-board now-playing"'), '正在播放字級必須在每個有 active 歌曲的模板顯示');
   ok(indexHtml.includes('data-sl-layout="timeline diagonal constellation terminal billboard cards signal index label glow round pager haunt"'), '歌曲編號設定不得在不支援的模板顯示');
   ok(setlistPanel.includes('設定只套用並保存於這個模板；切換模板不會影響其他歌單。'), '模板說明必須明示設定會各模板獨立保存');
   ok(setlistCss.includes(':root:not([data-sl-readable-off]) .now-singing') && setlistCss.includes(':root:not([data-sl-readable-off]) .tl-now'), '經典與場景模板都必須有非全螢幕的可讀性襯底');
@@ -526,7 +526,7 @@ test('歌單每個模板保存獨立外觀，正在播放字級也套到 active 
   const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   const setlistCss = fs.readFileSync(path.join(__dirname, '../public/css/setlist.css'), 'utf8');
   const schema = require('../public/js/setlist-style-schema');
-  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt minimal-board"'),
+  ok(indexHtml.includes('data-sl-layout="classic cards simple timeline diagonal constellation terminal billboard signal index label glow round pager haunt minimal-board now-playing"'),
     '所有有正在播放內容的模板都必須顯示正在播放字級設定');
   ['.term-item.active .t-line { font-size: var(--sl-sz-n)', '.bb-item.active .bb-name { font-size: var(--sl-sz-n)', '.card.active .card-title { font-size: var(--sl-sz-n)', '.index-item.active .index-title { font-size: var(--sl-sz-n)']
     .forEach((rule) => ok(setlistCss.includes(rule), `active row 必須吃正在播放字級：${rule}`));
@@ -1061,10 +1061,12 @@ test('手帳頁有自己的三顆狀態顏色，通用顏色欄位不再對它�
   // 對手帳頁沒有作用的通用欄位要藏起來，留著只會讓人以為改了會動
   ['data-sl-scope="classic list scene" data-sl-layout-not="note"',
     'data-sl-scope="classic list scene skin" data-sl-layout-not="note"',
-    'data-sl-scope="classic list" data-sl-layout-not="note"',
-    'class="field" data-sl-layout-not="note"'].forEach((marker) => {
+    // 已唱／未唱淡化對單曲看板也沒作用，同一個欄位一併排除
+    'class="field" data-sl-layout-not="note now-playing"'].forEach((marker) => {
     ok(indexHtml.includes(marker), `面板必須用 ${marker} 對手帳頁隱藏無效控制項：`);
   });
+  const guardLayouts = /class="switch-row" data-sl-layout="([^"]+)"[^>]*>\s*[^\n]+\n\s*<label class="switch"><input id="sls-readability-guard"/.exec(indexHtml)?.[1]?.split(' ') || [];
+  ok(guardLayouts.includes('classic') && !guardLayouts.includes('note'), '可讀性保護只在支援的模板顯示：');
 
   // 可見性必須一次算完：分成好幾輪互相覆蓋的話，只有 data-sl-layout-not 的元素被藏起來
   // 之後沒有任何一輪會把它放回來（實際踩過：切到手帳頁藏掉「淡化程度」，切回經典版
@@ -1072,7 +1074,7 @@ test('手帳頁有自己的三顆狀態顏色，通用顏色欄位不再對它�
   const syncFn = /function syncSetlistControlsForLayout\(\) \{([\s\S]*?)\n  \}/.exec(setlistPanel)?.[1] || '';
   ok(syncFn.includes("querySelectorAll('[data-sl-scope],[data-sl-layout],[data-sl-layout-not]')"),
     '三個屬性必須在同一輪算出最終可見性：');
-  ok((syncFn.match(/querySelectorAll/g) || []).length === 1, '不可再拆成多輪互相覆蓋：');
+  ok((syncFn.match(/\.hidden\s*=/g) || []).length === 1, '三個屬性只更新一次 hidden，避免後續規則覆蓋：');
   ok(/if \(not && not\.split\(\/\\s\+\/\)\.includes\(layout\)\) visible = false;/.test(syncFn),
     'data-sl-layout-not 只做排除：');
 });
@@ -1175,8 +1177,8 @@ test('清單型歌單模板以 OBS 來源尺寸排版，場景版維持原本行
   ok(setlistPanel.includes("const url = new URL('/setlist', window.location.origin);") && !setlistPanel.includes("set('mode'"),
     'OBS 網址必須固定，尺寸改由 OBS Browser Source 決定');
 
-  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'minimal-board']);"),
-    '十五個清單型模板（含 2026-11-10 的極簡歌單）必須集中列在同一份填滿白名單');
+  ok(setlistSource.includes("const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'now-playing', 'minimal-board']);"),
+    '十六個清單型模板（含 2026-11-10 的極簡歌單、2026-11-22 的單曲看板）必須集中列在同一份填滿白名單');
   ok(setlistSource.includes('const FIT_REF_W = 460, FIT_REF_H = 320, FIT_MIN = 0.85, FIT_MAX = 3.2;') && setlistSource.includes('Math.min(w / FIT_REF_W, h / FIT_REF_H)'),
     '縮放係數必須同時依來源寬與高計算，且基準要維持實機校準過的可讀字級');
   ok(setlistSource.includes("dataset.slFit = isFillLayout() ? 'fill' : 'scene'"), 'CSS 必須能分辨填滿與場景兩種語意');

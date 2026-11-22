@@ -25,7 +25,7 @@
   // OBS Browser Source 的實際寬高就是歌單的版面框：來源拉多大，歌單就排多大。
   // 沒有第二種輸出模式，也沒有 URL 參數——同一個 /setlist 網址在任何來源尺寸都成立。
   // 場景版（timeline / diagonal / constellation）不走這條，維持原本的全幅舞台行為。
-  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'minimal-board']);
+  const FILL_LAYOUTS = new Set(['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'now-playing', 'minimal-board']);
   // 長歌單只在有直向清單的模板循環捲動。卡片／索引／排行榜／終端機維持裁列；
   // simple 與 signal 是固定版位，只顯示現在與下一首，沒有可捲動的直向隊列。
   const AUTO_SCROLL_QUEUE_LAYOUTS = new Set(['classic', 'label', 'glow', 'round', 'pager', 'haunt']);
@@ -300,7 +300,7 @@
 
     // 可讀性保護不蓋整個 OBS 畫面，只替歌單本身建立足夠深（或淺）的襯底與文字層次。
     // 以使用者選的卡片色為主；因此開啟保護仍能看出自己的配色，而非把設定硬改成單一黑色。
-    const primaryLuminance = relativeLuminance(primary);
+    const primaryLuminance = relativeLuminance(s.textColor || primary);
     const cardLuminance = relativeLuminance(cardColor);
     // Guard 開啟時，若使用者剛好選到「亮字＋亮卡」或「暗字＋暗卡」，
     // 讓襯底自動換成另一側的安全色；關閉 Guard 才完全照原始色彩演出。
@@ -355,9 +355,15 @@
       const sop = num('shadowOpacity', 0) / 100;
       const sbl = num('shadowBlur', 20);
       r.setProperty('--sl-box-shd', sop > 0
-        ? `0 0 ${sbl}px ${hexToRgba(s.accent || '#d9a25c', sop)}, inset 0 1px 0 rgba(255,255,255,0.04)`
-        : 'none');
-    } else r.setProperty('--sl-box-shd', 'none');
+        ? `0 0 ${sbl}px ${hexToRgba(s.accent || '#d9a25c', sop)}, inset 0 0 ${sbl}px ${hexToRgba(s.accent || '#d9a25c', sop * 0.45)}`
+        : '0 0 0 transparent');
+    } else r.setProperty('--sl-box-shd', '0 0 0 transparent');
+
+    // ── 文字標籤（更新已掛載的 DOM；render 也會用到最新值）──
+    if (typeof s.labelNowPlaying === 'string') lastLabelSource.nowPlaying = s.labelNowPlaying;
+    if (typeof s.labelDone === 'string') lastLabelSource.done = s.labelDone;
+    if (typeof s.labelWait === 'string') lastLabelSource.wait = s.labelWait;
+    localizeDefaultLabels();
 
     // cnSpread / timeFormat 沒有對應的 CSS 變數，只在 render() 當下讀取（見 schema
     // needsRerender 註記）。改動後若不重繪，畫面會停留在舊值直到下一次自然更新（換歌）
@@ -366,11 +372,6 @@
     const needsRerender = schema && schema.FIELDS.some((f) => f.needsRerender && has(f.key));
     if (needsRerender) renderActive();
 
-    // ── 文字標籤（更新已掛載的 DOM；render 也會用到最新值）──
-    if (typeof s.labelNowPlaying === 'string') lastLabelSource.nowPlaying = s.labelNowPlaying;
-    if (typeof s.labelDone === 'string') lastLabelSource.done = s.labelDone;
-    if (typeof s.labelWait === 'string') lastLabelSource.wait = s.labelWait;
-    localizeDefaultLabels();
     applyLabels();
   }
 
@@ -385,13 +386,21 @@
   }
   localizeDefaultLabels();
   function applyLabels() {
-    const nowEls = document.querySelectorAll('.ns-label, #sm-eye, #tl-eye, #dg-eye, #sg-eye, .ix-state');
+    const nowEls = document.querySelectorAll('.ns-label, #sm-eye, #tl-eye, #dg-eye, #sg-eye, #fp-tag, #mb-eye, .ix-state');
     nowEls.forEach((e) => { if (model.current) e.textContent = lastLabels.nowPlaying; });
     document.querySelectorAll('.sm-row:first-child .sm-row-lbl').forEach((e) => { e.textContent = lastLabels.done; });
     document.querySelectorAll('.sm-row:last-child .sm-row-lbl').forEach((e) => { e.textContent = lastLabels.wait; });
     document.querySelectorAll('.cl-lbl-up').forEach((e) => { e.textContent = lastLabels.wait; });
     document.querySelectorAll('.cl-lbl-done').forEach((e) => { e.textContent = lastLabels.done; });
     document.querySelectorAll('#sg-next-label').forEach((e) => { e.textContent = lastLabels.wait; });
+    document.querySelectorAll('#mb-foot-lbl').forEach((e) => { e.textContent = lastLabels.done; });
+    document.querySelectorAll('.note-stamp').forEach((e) => {
+      e.textContent = lastLabels.done;
+      e.classList.toggle('note-stamp--wide', lastLabels.done.length > 2);
+    });
+    if (!model.current && model.upcoming.length) {
+      document.querySelectorAll('#mb-eye').forEach((e) => { e.textContent = lastLabels.wait; });
+    }
     // 清單型模板的已唱／未唱區塊標籤（終端機沿用註解行的 "# " 前綴）
     document.querySelectorAll('[data-group-label]').forEach((e) => {
       const text = e.dataset.group === 'done' ? lastLabels.done : lastLabels.wait;
@@ -1109,7 +1118,7 @@
       const next = !cur && model.upcoming.length ? model.upcoming[0] : null;
       const shown = cur || next;
       root.querySelector('#mb-eye').textContent = cur ? lastLabels.nowPlaying
-        : next ? t('setlist.upcoming') : (model.active ? t('setlist.startingSoon') : t('setlist.notStarted'));
+        : next ? lastLabels.wait : (model.active ? t('setlist.startingSoon') : t('setlist.notStarted'));
       root.querySelector('#mb-num').textContent = cur ? `#${model.past.length + 1}` : '';
       const titleEl = root.querySelector('#mb-t');
       titleEl.textContent = shown ? shown.title : '';
@@ -1162,7 +1171,106 @@
     },
   };
 
-  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index, flap, note, film, 'minimal-board': minimalBoard, ...skinLayouts };
+  // ═══════════════════════════════════════════
+  // now-playing：單曲看板 —— 畫面上只有「現在這首」（歌名＋可選歌手），沒有已唱／未唱清單。
+  // 沒歌時顯示待機文字（可自訂；留空依顯示語言帶預設）。四款外觀在 setlist.css 用
+  // data-np-skin 換整個造型；舞台與 root 永遠不鋪底色。
+  // 換歌（或歌↔待機）才走進出場：舊卡片標 is-leaving、計時器到期才拔掉，新卡片標 is-enter；
+  // 兩張疊在同一格裡交叉淡換，版面不跳。暫停／續播、改設定、改待機文字都只就地更新文字。
+  // 計時器用 setTimeout 而不是 animationend／rAF：OBS 節流背景來源時兩者都可能不觸發，
+  // 減少動態效果時 animationend 也根本不會來，舊卡片會永遠留在畫面上。
+  // ═══════════════════════════════════════════
+  const NP_LEAVE_MS = 520;
+  const NP_MARQUEE_PX_PER_SEC = 45;
+  let npShownKey = null;
+  let npLeaveTimers = [];
+  function npIdleText() {
+    const custom = typeof curStyle.nowIdleText === 'string' ? curStyle.nowIdleText.trim() : '';
+    return custom || t('setlist.idleDefault');
+  }
+  function npBuildCard(cur) {
+    const card = document.createElement('div');
+    card.className = cur ? 'np-card' : 'np-card is-idle';
+    if (cur) {
+      const eye = document.createElement('div');
+      eye.className = 'np-eye';
+      const dot = document.createElement('span');
+      dot.className = 'np-dot';
+      dot.setAttribute('aria-hidden', 'true');
+      const eyeText = document.createElement('span');
+      eyeText.className = 'np-eye-text';
+      eye.append(dot, eyeText);
+      // np-strip 承載底色／內距（紙膠帶），裡面的 np-title 是跑馬燈的裁切框、不帶內距：
+      // 跑馬燈用 clientWidth 算位移，裁切框有內距的話尾巴會被切掉一段內距寬。
+      const strip = document.createElement('div');
+      strip.className = 'np-strip';
+      const title = document.createElement('div');
+      title.className = 'np-title';
+      title.textContent = cur.title;
+      // 長歌名跑馬燈：通用速度 18px/s 對單曲大字太慢（實測要 70 多秒才捲完一趟、換歌前根本看不出在動），
+      // 這裡指定較快的速度並跟著來源尺寸放大。
+      title.dataset.mqSpeed = String(Math.round(NP_MARQUEE_PX_PER_SEC * (fitFactor || 1)));
+      strip.appendChild(title);
+      const artist = document.createElement('div');
+      artist.className = 'np-artist';
+      artist.textContent = cur.artist || '';
+      artist.hidden = !cur.artist;
+      // 裝飾元素（預設隱藏）：卡帶的捲軸、迷你播放器的音量條、復古視窗的按鈕都用這五個 <i>，
+      // 由 setlist.css 依 data-np-skin 決定要不要顯示、顯示幾個。純裝飾，不帶任何文字。
+      const deco = document.createElement('span');
+      deco.className = 'np-deco';
+      deco.setAttribute('aria-hidden', 'true');
+      for (let k = 0; k < 5; k += 1) deco.appendChild(document.createElement('i'));
+      card.append(eye, strip, artist, deco);
+    } else {
+      const idle = document.createElement('div');
+      idle.className = 'np-idle';
+      card.appendChild(idle);
+    }
+    return card;
+  }
+  const nowPlaying = {
+    mount(root) {
+      npLeaveTimers.forEach(clearTimeout);
+      npLeaveTimers = [];
+      npShownKey = null;
+      root.innerHTML = '<div class="lay-stage np-stage"><div class="np-slot" id="np-slot"></div></div>';
+    },
+    render(root) {
+      const slot = root.querySelector('#np-slot');
+      if (!slot) return;
+      const cur = model.current;
+      const showIdle = curStyle.nowIdleShow !== false;
+      const key = cur ? `song:${cur.key}` : (showIdle ? 'idle' : 'none');
+      if (key !== npShownKey) {
+        npShownKey = key;
+        slot.querySelectorAll('.np-card:not(.is-leaving)').forEach((old) => {
+          old.classList.remove('is-enter');
+          old.classList.add('is-leaving');
+          const timer = setTimeout(() => {
+            npLeaveTimers = npLeaveTimers.filter((x) => x !== timer);
+            old.remove();
+          }, NP_LEAVE_MS);
+          npLeaveTimers.push(timer);
+        });
+        if (key !== 'none') {
+          const card = npBuildCard(cur);
+          card.classList.add('is-enter');
+          slot.appendChild(card);
+        }
+      }
+      // 就地更新（不重播動畫）：標籤與待機文字可能因為改設定或切語言而變
+      const live = slot.querySelector('.np-card:not(.is-leaving)');
+      if (!live) return;
+      const eyeText = live.querySelector('.np-eye-text');
+      // 預設標籤自帶「▶ 」；這款前面已有狀態燈，去掉箭頭免得兩個符號疊在一起
+      if (eyeText) eyeText.textContent = lastLabels.nowPlaying.replace(/^[▶►]\s*/, '');
+      const idle = live.querySelector('.np-idle');
+      if (idle) idle.textContent = npIdleText();
+    },
+  };
+
+  const LAYOUTS = { classic, simple, timeline, diagonal, constellation, terminal, billboard, cards, signal, index, flap, note, film, 'now-playing': nowPlaying, 'minimal-board': minimalBoard, ...skinLayouts };
 
   // ─── 版型掛載/切換 ───
   function setLayout(id) {
@@ -1198,7 +1306,7 @@
   }
 
   // ── 長歌名跑馬燈：文字超出容器時來回滾動（不超出就維持靜態，不加動畫）──
-  const MARQUEE_SEL = '.ns-title, .setlist-title, .bb-name, .card-title, .t-line, .sk-title, .flap-lb';
+  const MARQUEE_SEL = '.ns-title, .setlist-title, .bb-name, .card-title, .t-line, .sk-title, .flap-lb, .np-title';
   function applyMarquees() {
     rootEl.querySelectorAll(MARQUEE_SEL).forEach((el) => {
       let span = el.querySelector(':scope > .sl-mq');
@@ -1214,7 +1322,9 @@
       if (overflow > 4) {
         el.classList.add('sl-marquee');
         el.style.setProperty('--sl-mq-dist', `${-overflow}px`);
-        el.style.setProperty('--sl-mq-dur', `${Math.max(6, Math.round(overflow / 18))}s`);
+        // data-mq-speed（px/s）讓個別版型指定捲動速度；沒指定就維持原本的 18px/s
+        const speed = Number(el.dataset.mqSpeed) > 0 ? Number(el.dataset.mqSpeed) : 18;
+        el.style.setProperty('--sl-mq-dur', `${Math.max(6, Math.round(overflow / speed))}s`);
       }
     });
   }
@@ -1230,7 +1340,7 @@
   } catch (e) { /* 退回下面的 resize 監聽 */ }
   window.addEventListener('resize', scheduleFit);
 
-  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'minimal-board'];
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'now-playing', 'minimal-board'];
   const effTarget = (l) => (SETLIST_LAYOUTS.includes(l) ? l : 'classic');
   // 取某版型生效的設定；舊 payload 仍可讀，避免 OBS 快取中的舊頁面在更新過渡時失去外觀。
   function effStyleFrom(data, layout) {

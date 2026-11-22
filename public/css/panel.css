@@ -1821,6 +1821,11 @@ details.card.card-collapse > .card-collapse-body { padding: 14px 17px 15px; }
 .slider-row .sl-label { font-size: 12px; color: var(--text-dim); width: 48px; flex-shrink: 0; }
 .slider-row input[type="range"] { flex: 1; min-width: 0; }
 .slider-row .val { width: 44px; text-align: right; flex-shrink: 0; }
+/* 「尾奏暫停自動收尾」：收在播放清單 ⋯ 選單裡，標題在上、拉桿整列 */
+.outro-finish-slider { width: 190px; flex-shrink: 0; }
+.outro-finish-slider .val { width: 48px; }
+.lslim-menu .outro-finish-row { flex-direction: column; align-items: stretch; gap: 6px; min-width: 240px; }
+.lslim-menu .outro-finish-row .outro-finish-slider { width: auto; }
 
 /* ─── 媒體庫 ─── */
 .library-list { display: flex; flex-direction: column; gap: 8px; }
@@ -2296,7 +2301,8 @@ select.seasonal-preview-mode { width: auto; height: 32px; flex: none; }
 .oslim-panel .setlist-layout-field { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; position: relative; }
 .oslim-panel .setlist-layout-picker { display: contents; }
 .oslim-panel .setlist-layout-card { min-height: 44px; }
-.oslim-panel .setlist-layout-card > span { display: none; }
+/* 收掉卡片說明，但 NEW 標記也是 <span>，要留著（否則新模板的 NEW 永遠看不到） */
+.oslim-panel .setlist-layout-card > span:not(.new-badge) { display: none; }
 .oslim-panel .setlist-quick-presets > summary .field-group-desc { display: none; }
 .oslim-more { padding: 0; height: auto; color: var(--accent-ink); }
 .oslim-presets { flex: 1; margin: 0; border-top: 0; }

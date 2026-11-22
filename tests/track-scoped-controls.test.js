@@ -78,6 +78,7 @@ function server(current = { id: 'b', entryId: 'entry-b' }) {
       if (id === '../../utils/track-schema') return {};
       if (id === '../../services/usage-telemetry') return {};
       if (id === './lyrics') return { LYRIC_TEMPLATES: [] };
+      if (id === '../../../public/js/playback-sequence') return require('../public/js/playback-sequence');
       throw new Error('Unexpected import: '+id);
     },
   }, { filename: 'playback.js' });

@@ -814,6 +814,7 @@
   function playTrack(index, autoplay = true, options = {}) {
     const playlist = state.playlist;
     if (index < 0 || index >= playlist.length) return;
+    cancelOutroPauseFinish();
 
     const notifyServer = options.notifyServer !== false;
     const startTime = Number.isFinite(Number(options.startTime)) ? Math.max(0, Number(options.startTime)) : 0;
@@ -968,6 +969,7 @@
   }
 
   function stopPlayback() {
+    cancelOutroPauseFinish();
     ++stLoadToken;
     audioPlayer.pause();
     suppressNextAudioError = true;
@@ -1075,6 +1077,7 @@
     // 若又收到一次回音/重複指令，上面的提早 return 擋不住（isPlaying 當下還是舊值），
     // 會讓 SoundTouch 被啟動兩次、雪崩式狂送 play:toggle（實測會看到播放/暫停瞬間狂跳）。
     isPlaying = shouldPlay;
+    cancelOutroPauseFinish();
     if (window.AppBgm) window.AppBgm.syncWithPlayback(shouldPlay, 'pause');
     if (shouldPlay) markLocalTrackPlayed(state.playlist[state.currentTrackIndex]);
     if (!shouldPlay) {
@@ -1085,6 +1088,7 @@
       audioPlayer.pause();
       updatePlayButton();
       SocketClient.send('play:toggle', isPlaying);
+      scheduleOutroPauseFinish();
       return;
     }
     if (useSoundTouch) {
@@ -1276,13 +1280,18 @@
     audioPlayer.currentTime = Math.max(0, Math.min(audioPlayer.duration, time));
   });
 
-  function handlePlaybackEnded() {
-    if (practicePlaybackBoundaries.size) {
-      const snapshot = { ...getPracticePlaybackSnapshot(), boundary: 'ended', wasPlaying: isPlaying };
-      for (const callback of practicePlaybackBoundaries) {
-        try { if (callback(snapshot) === true) return; } catch (e) {}
-      }
+  // 歌曲「唱完」的邊界先給練唱：它可能要結算分數或接手（回傳 true＝練唱接手，不收尾）。
+  function practiceTakesOverEnd(wasPlaying) {
+    if (!practicePlaybackBoundaries.size) return false;
+    const snapshot = { ...getPracticePlaybackSnapshot(), boundary: 'ended', wasPlaying };
+    for (const callback of practicePlaybackBoundaries) {
+      try { if (callback(snapshot) === true) return true; } catch (e) {}
     }
+    return false;
+  }
+
+  function handlePlaybackEnded() {
+    if (practiceTakesOverEnd(isPlaying)) return;
     const playlist = state.playlist;
     const endedTrack = playlist[state.currentTrackIndex] || null;
     const next = PlaybackSequence.nextAfterEnded(
@@ -1297,15 +1306,60 @@
     // 單曲模式不論後面還有沒有歌，都要清空「正在播放」與歌詞，等待使用者主動按下一首。
     // 連續模式只有播到最後一首時會走到這裡。SoundTouch 與原生 audio 共用同一段，
     // 避免高品質變調路徑播完後漏送 play:stop，讓最後一句歌詞留在畫面上。
+    finishCurrentTrack('ended');
+  }
+
+  // 收掉目前這首：記為已唱、清空「正在播放」與 OBS 歌詞。自然播完與「尾奏中暫停」共用。
+  function finishCurrentTrack(reason) {
+    cancelOutroPauseFinish();
+    const endedTrack = state.playlist[state.currentTrackIndex] || null;
     markLocalTrackPlayed(endedTrack);
     stopPlayback();
     if (window.AppBgm) window.AppBgm.syncWithPlayback(false, 'end');
     state.currentTrackIndex = -1;
     AppShared.renderPlaylist();
     SocketClient.send('play:stop', {
-      reason: 'ended',
+      reason,
       endedEntryId: endedTrack && endedTrack.entryId ? endedTrack.entryId : null,
     });
+    return endedTrack;
+  }
+
+  // ── 尾奏中暫停＝唱完（規則見 playback-sequence.js isPastLyrics）──
+  // 最後一句唱完後按暫停、停滿幾秒沒續播，就照自然播完收尾；中途暫停聊天不受影響。
+  let outroPauseTimer = null;
+  // 秒數由伺服器保存（state:sync／playback:outro-finish 帶下來）；0＝關閉
+  let outroPauseFinishSec = PlaybackSequence.OUTRO_PAUSE_FINISH_SEC_DEFAULT;
+  function cancelOutroPauseFinish() {
+    if (outroPauseTimer) { clearTimeout(outroPauseTimer); outroPauseTimer = null; }
+  }
+  function loadedDurationMs() {
+    const seconds = stActive() ? SoundTouchEngine.getDuration() : audioPlayer.duration;
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+  }
+  function pausedPastLyrics(track) {
+    return PlaybackSequence.isPastLyrics({
+      lines: track && track.parsedLyrics,
+      positionMs: lastPlayTimeMs,
+      offsetMs: currentOffsetMs,
+      durationMs: loadedDurationMs(),
+    });
+  }
+  function scheduleOutroPauseFinish() {
+    cancelOutroPauseFinish();
+    if (!outroPauseFinishSec) return; // 主播關掉了
+    const track = state.playlist[state.currentTrackIndex];
+    if (!track || !pausedPastLyrics(track)) return;
+    const entryId = track.entryId;
+    outroPauseTimer = setTimeout(() => {
+      outroPauseTimer = null;
+      const current = state.playlist[state.currentTrackIndex];
+      // 期間續播、切歌、或拖回歌詞段都不收尾
+      if (isPlaying || !current || current.entryId !== entryId || !pausedPastLyrics(current)) return;
+      if (practiceTakesOverEnd(false)) return; // 跟自然播完一樣先讓練唱結算／接手
+      finishCurrentTrack('outro-paused');
+      AppShared.showToast(t('playback.outroPauseFinished', { title: current.title || '' }), 'info');
+    }, outroPauseFinishSec * 1000);
   }
 
   audioPlayer.addEventListener('ended', handlePlaybackEnded);
@@ -2010,6 +2064,35 @@
       reapplyTrackLoudness();
     });
   }
+
+  // 尾奏暫停後自動收尾的秒數（直播頁清單下方）
+  // 拉桿 0～30：0＝關閉，1～2 吸到 3（最短 3 秒），拖曳中只更新數字，放開才存
+  const outroFinishSlider = document.getElementById('outro-finish-slider');
+  const outroFinishVal = document.getElementById('outro-finish-val');
+  function renderOutroFinishSlider() {
+    if (outroFinishSlider) outroFinishSlider.value = String(outroPauseFinishSec);
+    if (outroFinishVal) {
+      outroFinishVal.textContent = outroPauseFinishSec
+        ? t('playlist.outroFinishSeconds', { n: outroPauseFinishSec })
+        : t('playlist.outroFinishOff');
+    }
+  }
+  function applyOutroFinishSec(value) {
+    outroPauseFinishSec = PlaybackSequence.normalizeOutroPauseFinishSec(value);
+    if (!outroPauseFinishSec) cancelOutroPauseFinish();
+    renderOutroFinishSlider();
+  }
+  if (outroFinishSlider) {
+    renderOutroFinishSlider();
+    window.addEventListener('i18n:change', renderOutroFinishSlider);
+    outroFinishSlider.addEventListener('input', () => applyOutroFinishSec(outroFinishSlider.value));
+    outroFinishSlider.addEventListener('change', () => {
+      applyOutroFinishSec(outroFinishSlider.value);
+      SocketClient.send('playback:outro-finish', outroPauseFinishSec);
+    });
+  }
+  SocketClient.on('playback:outro-finish', applyOutroFinishSec);
+  SocketClient.on('state:sync', (s) => { if (s && s.outroPauseFinishSec !== undefined) applyOutroFinishSec(s.outroPauseFinishSec); });
 
   // 連續播放開關（player 模式）
   const continuousToggle = document.getElementById('continuous-toggle');

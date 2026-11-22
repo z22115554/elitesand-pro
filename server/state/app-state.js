@@ -21,6 +21,7 @@ const bgmSettingsSchema = require('../services/bgm-settings');
 const obsLocale = require('../utils/obs-locale');
 const { createLogger } = require('../utils/logger');
 const { TEMPLATE_IDS, templateOverrides, sanitizeLyricPosition, APPEARANCE_VERSION } = require('../../public/js/lyric-template-defaults');
+const PlaybackSequence = require('../../public/js/playback-sequence');
 const { sanitizeTrack, sanitizeParsedLyrics, MAX_PLAYLIST_SIZE, sanitizeJsonObject, lrcDefaultOffset } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
 const { emitToAccessRooms } = require('../utils/socket-broadcast');
@@ -89,7 +90,7 @@ function getDefaultLyricSettings() {
 // 顯示一個對它完全無效的「整體大小倍率」（--sl-scale 被 #setlist-root 的非 classic
 // 重置規則清空），使用者實測回報調了沒反應；真正能動它的「場景版設定」滑桿反而被藏起來。
 const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];
-const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'minimal-board'];
+const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'now-playing', 'minimal-board'];
 
 /**
  * 建立狀態容器
@@ -131,6 +132,7 @@ function createAppState(io) {
     pitchShift: 0,      // 半音偏移，-12 ~ +12
     playbackRate: 1.0,   // 播放速率，0.5 ~ 1.5
     metronomeEnabled: true, // 前奏倒數提示開關
+    outroPauseFinishSec: PlaybackSequence.OUTRO_PAUSE_FINISH_SEC_DEFAULT, // 尾奏暫停後幾秒自動收尾（0＝關閉）
     lyricSettings: getDefaultLyricSettings(), // 歌詞外觀/位置設定（由控制面板推送）
     styleOverrides: {},     // 動畫風格微調（速度/放大/光暈等，覆蓋當前 preset）
     // OBS 疊加層（/display、/setlist）用哪個語言顯示。'follow' = 跟著面板當下的語言，
@@ -298,6 +300,7 @@ function createAppState(io) {
     }
     if (typeof saved.showRomanization === 'boolean') playState.showRomanization = saved.showRomanization;
     if (typeof saved.metronomeEnabled === 'boolean') playState.metronomeEnabled = saved.metronomeEnabled;
+    if (saved.outroPauseFinishSec !== undefined) playState.outroPauseFinishSec = PlaybackSequence.normalizeOutroPauseFinishSec(saved.outroPauseFinishSec);
     if (saved.lyricSettings && typeof saved.lyricSettings === 'object') {
       const settings = sanitizeJsonObject(saved.lyricSettings) || {};
       sanitizeLyricPosition(settings, settings.template, true);
@@ -377,13 +380,13 @@ function createAppState(io) {
     // v1 相容：舊 shared 樣式先複製給每個模板，三個場景的獨立值再覆蓋。
     if (saved.setlistStyle && typeof saved.setlistStyle === 'object') {
       SETLIST_LAYOUTS.forEach((layout) => {
-        playState.setlistTemplateStyles[layout] = { ...playState.setlistTemplateStyles[layout], ...saved.setlistStyle };
+        setlistStyleSchema.validateAndApply(saved.setlistStyle, playState.setlistTemplateStyles[layout]);
       });
     }
     if (saved.setlistSceneStyles && typeof saved.setlistSceneStyles === 'object') {
       SETLIST_SCENE.forEach((k) => {
         if (saved.setlistSceneStyles[k] && typeof saved.setlistSceneStyles[k] === 'object') {
-          playState.setlistTemplateStyles[k] = { ...playState.setlistTemplateStyles[k], ...saved.setlistSceneStyles[k] };
+          setlistStyleSchema.validateAndApply(saved.setlistSceneStyles[k], playState.setlistTemplateStyles[k]);
         }
       });
     }
@@ -391,7 +394,7 @@ function createAppState(io) {
     if (saved.setlistTemplateStyles && typeof saved.setlistTemplateStyles === 'object') {
       SETLIST_LAYOUTS.forEach((layout) => {
         if (saved.setlistTemplateStyles[layout] && typeof saved.setlistTemplateStyles[layout] === 'object') {
-          playState.setlistTemplateStyles[layout] = { ...playState.setlistTemplateStyles[layout], ...saved.setlistTemplateStyles[layout] };
+          setlistStyleSchema.validateAndApply(saved.setlistTemplateStyles[layout], playState.setlistTemplateStyles[layout]);
         }
       });
     }
@@ -483,6 +486,7 @@ function createAppState(io) {
       romanizationMode: playState.romanizationMode,
       showRomanization: playState.showRomanization,
       metronomeEnabled: playState.metronomeEnabled,
+      outroPauseFinishSec: playState.outroPauseFinishSec,
       lyricSettings: playState.lyricSettings,
       trackOffsets: Object.fromEntries(trackOffsets),
       trackSyncConfirmed: [...trackSyncConfirmed],
@@ -820,6 +824,7 @@ function createAppState(io) {
       pitchShift: playState.pitchShift,
       playbackRate: playState.playbackRate,
       metronomeEnabled: playState.metronomeEnabled,
+      outroPauseFinishSec: playState.outroPauseFinishSec,
       lyricSettings: playState.lyricSettings,
       // 附帶伺服器時間戳，讓 OBS 重連時計算補償
       serverTimestamp: playState.lastStateUpdateTimestamp,

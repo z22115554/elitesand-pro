@@ -287,6 +287,9 @@
     pop.appendChild(actions);
     const cont = byId('continuous-toggle')?.closest('.switch-row');
     if (cont) { cont.classList.add('lslim-menu-switch', 'lslim-keep-open'); pop.appendChild(cont); }
+    // 尾奏暫停後自動收尾：跟連續播放同屬播放行為，收在同一個選單（說明改成滑鼠提示）
+    const outro = byId('outro-finish-slider')?.closest('.switch-row');
+    if (outro) { outro.classList.add('lslim-menu-switch', 'lslim-keep-open'); pop.appendChild(outro); }
     const { wrap } = popover(more, pop);
     wrap.classList.add('lslim-pop-wrap--end');
     tools.appendChild(wrap);

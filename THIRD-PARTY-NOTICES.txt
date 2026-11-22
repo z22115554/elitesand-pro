@@ -248,6 +248,9 @@ Additional bundled fonts
 ------------------------
 IBM Plex Sans and IBM Plex Mono: Copyright 2019 IBM Corp.; SIL OFL 1.1.
 Full notice: public/fonts/OFL-IBM-Plex.txt.
+Fraunces, Manrope, and JetBrains Mono (Latin subsets from Fontsource): SIL OFL 1.1.
+Full notices: public/fonts/OFL-fraunces.txt, public/fonts/OFL-manrope.txt,
+and public/fonts/OFL-jetbrains-mono.txt.
 Kongyuan Sans L: SIL OFL 1.1; public/assets/fonts/kongyuan/OFL-1.1.txt
 and NOTICE.txt identify its source.
 Cubic 11 v1.500 (ACh-K) and BoutiqueBitmap9x9 1.93 (Cen-cyun Liu / Luke Liu):

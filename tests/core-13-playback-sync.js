@@ -35,6 +35,68 @@ test('連續模式會自動播放下一首，但最後一首仍自然停止', ()
   eq(sequence.nextAfterEnded(1, 2, true), null);
 });
 
+test('尾奏中暫停才視為唱完：最後一句唱完或接近音訊結尾，中途暫停不算', () => {
+  const sequence = require('../public/js/playback-sequence');
+  const lines = [
+    { time: 10000, text: '第一句', duration: 3000 },
+    { time: 60000, text: '最後一句', words: [{ text: '最', start: 0, duration: 400 }, { text: '後', start: 1500, duration: 500 }] },
+    { time: 70000, text: '' }, // 空白行不算歌詞
+  ];
+  eq(sequence.lyricsEndMs(lines), 62000, '最後一句以逐字時間（相對句首）算結束：');
+  eq(sequence.lyricsEndMs([{ time: 5000, text: '只有句首' }]), 10000, '沒有長度資訊估 5 秒：');
+  eq(sequence.lyricsEndMs([]), null);
+  // 中途暫停（還在唱）
+  eq(sequence.isPastLyrics({ lines, positionMs: 30000, durationMs: 240000 }), false);
+  // 最後一句唱完後的尾奏
+  eq(sequence.isPastLyrics({ lines, positionMs: 90000, durationMs: 240000 }), true);
+  // 歌詞偏移：顯示端 adjusted = 音訊時間 + offset
+  eq(sequence.isPastLyrics({ lines, positionMs: 61000, offsetMs: 2000, durationMs: 240000 }), true);
+  eq(sequence.isPastLyrics({ lines, positionMs: 61000, offsetMs: -2000, durationMs: 240000 }), false);
+  // 沒有歌詞時只看是否接近音訊結尾
+  eq(sequence.isPastLyrics({ lines: null, positionMs: 236000, durationMs: 240000 }), true);
+  eq(sequence.isPastLyrics({ lines: null, positionMs: 120000, durationMs: 240000 }), false);
+  eq(sequence.isPastLyrics({ lines, positionMs: 0, durationMs: 240000 }), false, '還沒開始播不算：');
+  ok(sequence.OUTRO_PAUSE_FINISH_MS >= 5000, '要給主播續播的緩衝：');
+
+  const panel = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
+  ok(panel.includes("finishCurrentTrack('outro-paused')"), '尾奏暫停要走與自然播完相同的收尾：');
+  ok(panel.includes("finishCurrentTrack('ended')"), '自然播完改用共用收尾：');
+  const pauseBranch = panel.slice(panel.indexOf('function requestPlayback('), panel.indexOf("dom.btnPlay.addEventListener('click'"));
+  ok(pauseBranch.includes('cancelOutroPauseFinish()') && pauseBranch.includes('scheduleOutroPauseFinish()'),
+    '暫停時排程收尾、續播時取消：');
+});
+
+test('尾奏收尾秒數可調：0＝關閉、3～30 秒、預設 8 秒，存伺服器並廣播', () => {
+  const sequence = require('../public/js/playback-sequence');
+  eq(sequence.OUTRO_PAUSE_FINISH_SEC_DEFAULT, 8);
+  const cases = [[0, 0], [-5, 0], [2, 3], [8.4, 8], [31, 30], ['15', 15], ['', 8], [null, 8], [true, 8], ['abc', 8]];
+  for (const [input, expected] of cases) eq(sequence.normalizeOutroPauseFinishSec(input), expected, `輸入 ${JSON.stringify(input)}：`);
+  ok(sequence.OUTRO_PAUSE_FINISH_SEC_CHOICES.every((v) => sequence.normalizeOutroPauseFinishSec(v) === v), '面板選項都要是合法值：');
+
+  const register = require('../server/routes/handlers/playback');
+  const handlers = new Map();
+  const emitted = [];
+  let persisted = 0;
+  const playState = { outroPauseFinishSec: 8 };
+  register({ emit(name, value) { emitted.push([name, value]); }, to() { return { emit() {} }; } },
+    { id: 's1', on(name, handler) { handlers.set(name, handler); } },
+    { playState, persistState() { persisted += 1; } });
+  handlers.get('playback:outro-finish')(15);
+  eq(playState.outroPauseFinishSec, 15);
+  handlers.get('playback:outro-finish')(999);
+  eq(playState.outroPauseFinishSec, 30, '超過上限夾到 30：');
+  handlers.get('playback:outro-finish')(0);
+  eq(playState.outroPauseFinishSec, 0, '0＝關閉：');
+  ok(emitted.some(([name, value]) => name === 'playback:outro-finish' && value === 0), '要廣播給其他面板：');
+  ok(persisted >= 3, '每次調整都要存檔：');
+
+  const { createAppState } = require('../server/state/app-state');
+  const appState = createAppState({ emit() {} });
+  eq(appState.playState.outroPauseFinishSec, 8, '新安裝預設 8 秒：');
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(html.includes('id="outro-finish-slider" type="range"') && html.includes('data-new-feature="outro-pause-finish"'), '直播頁要有設定欄位並標 NEW：');
+});
+
 test('沒有目前歌曲時，已唱 entryId 仍會從未唱清單排除', () => {
   const { createAppState } = require('../server/state/app-state');
   const appState = createAppState({ emit() {} });

@@ -298,6 +298,8 @@
       fieldOf('sls-accent'), fieldOf('sls-note-now-color'),
       // 極簡歌單的外觀／跑馬燈速度／曲序（只在選到這個版型時顯示）
       fieldOf('sls-minimal-skin'),
+      // 單曲看板的外觀／對齊／待機文字
+      fieldOf('sls-now-skin'),
       fieldOf('sls-show-artist'),
       fieldOf('sls-done-opacity'), fieldOf('sls-strikethrough'),
     ].filter(Boolean).forEach((node) => s2.sec.appendChild(node));

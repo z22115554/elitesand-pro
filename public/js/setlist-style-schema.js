@@ -240,6 +240,15 @@
     { key: 'minimalSkin', type: 'enum', default: 'editorial', values: ['editorial', 'framed', 'dreamy', 'vinyl'], domId: 'sls-minimal-skin', dataAttr: 'data-mb-skin' },
     { key: 'minimalTickerSpeed', type: 'number', default: 24, min: 8, max: 60, domId: 'sls-minimal-ticker-speed', format: 'pxPerSec', needsRerender: true },
     { key: 'minimalShowNumber', type: 'boolean', default: false, domId: 'sls-minimal-number', dataAttr: 'data-mb-num', invert: false },
+    // 單曲看板（now-playing）：畫面上只有「現在這首」，沒有已唱／未唱清單。
+    // 十款外觀換的是整個造型（名牌／霓虹招牌／紙膠帶／字幕條／票根／卡帶／電子看板／迷你播放器／
+    // 復古視窗／貼紙），不只是配色；背景一律透明。nowAlign 'auto' 交給外觀決定（霓虹、貼紙置中，其餘靠左）。
+    { key: 'nowSkin', type: 'enum', default: 'plate', values: ['plate', 'neon', 'tape', 'bar', 'ticket', 'cassette', 'led', 'player', 'window', 'sticker'], domId: 'sls-now-skin', dataAttr: 'data-np-skin' },
+    { key: 'nowAlign', type: 'enum', default: 'auto', values: ['auto', 'left', 'center', 'right'], domId: 'sls-now-align', dataAttr: 'data-np-align' },
+    // 沒在播歌時的待機文字：留空＝依顯示語言帶預設字樣（在 render 當下解析，切語言會跟著換）。
+    // 關掉 nowIdleShow＝沒歌時整個畫面完全清空。兩者都在 render 讀取，所以標 needsRerender。
+    { key: 'nowIdleText', type: 'string', default: '', maxLength: 40, domId: 'sls-now-idle-text', needsRerender: true },
+    { key: 'nowIdleShow', type: 'boolean', default: true, domId: 'sls-now-idle-show', needsRerender: true },
   ];
 
   const FIELD_BY_KEY = {};
@@ -266,8 +275,9 @@
       if (v == null) return;
       switch (f.type) {
         case 'number': {
+          if (typeof v !== 'number' && (typeof v !== 'string' || !v.trim())) return;
           const n = Number(v);
-          if (Number.isNaN(n)) return;
+          if (!Number.isFinite(n)) return;
           target[f.key] = Math.min(f.max, Math.max(f.min, n));
           break;
         }
@@ -279,7 +289,8 @@
           break;
         case 'color':
         case 'string':
-          if (typeof v === 'string') target[f.key] = v;
+          // maxLength：使用者可自由輸入的文字（如待機字樣）限制長度，避免塞爆 state.json／畫面
+          if (typeof v === 'string') target[f.key] = f.maxLength ? v.slice(0, f.maxLength) : v;
           break;
         default:
           break;

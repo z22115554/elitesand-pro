@@ -12,6 +12,7 @@ const { addRomanization, needsRomanization, needsFurigana } = require('../../ser
 const { sanitizeTrack, sanitizeJsonObject, lrcDefaultOffset } = require('../../utils/track-schema');
 const usageTelemetry = require('../../services/usage-telemetry');
 const { LYRIC_TEMPLATES } = require('./lyrics');
+const PlaybackSequence = require('../../../public/js/playback-sequence');
 
 const log = createLogger('Socket');
 
@@ -474,6 +475,14 @@ function registerPlaybackHandlers(io, socket, ctx) {
       try { libraryStore.updateMeta(id, { playbackRate: playState.playbackRate }); } catch (e) { /* 靜默 */ }
     }
     io.emit('speed:update', playState.playbackRate);
+    persistState();
+  });
+
+  // 尾奏暫停後自動收尾的秒數（0＝關閉）：面板設定，存伺服器讓重開、換電腦都保留
+  socket.on('playback:outro-finish', (seconds) => {
+    playState.outroPauseFinishSec = PlaybackSequence.normalizeOutroPauseFinishSec(seconds);
+    log.info(`尾奏暫停自動收尾: ${playState.outroPauseFinishSec ? `${playState.outroPauseFinishSec} 秒` : '關閉'}`);
+    io.emit('playback:outro-finish', playState.outroPauseFinishSec);
     persistState();
   });
 

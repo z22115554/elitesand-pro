@@ -29,6 +29,7 @@ const esbuild = require('esbuild');
 const SERVER_REQUIRED_PUBLIC_JS = [
   'practice/practice-fx.js', // server/services/practice-overlay.js 共用演出風格與 OBS 外觀預設
   'lyric-template-defaults.js',
+  'playback-sequence.js', // server/state/app-state.js、handlers/playback.js 共用尾奏收尾秒數驗證
   'setlist-style-schema.js',
   'twitch-reply-settings.js',
   'twitch-request-settings.js',

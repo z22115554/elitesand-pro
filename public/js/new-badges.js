@@ -14,10 +14,12 @@
   'use strict';
 
   const FEATURES = {
+    'outro-pause-finish': '2026-11-23', // 直播頁清單下方「尾奏暫停後自動收尾」秒數
     'precise-sync': '2026-11-12',  // 精準對時元件（設定 › 下載工具卡，中文歌逐句校正）
     'auto-sync': '2026-10-28',     // 自動對時（對齊第一句旁、匯入後自動對時）
     'import-prefs': '2026-10-28',  // 加歌框下方「匯入後：…」設定
     'setlist-minimal': '2026-11-10',  // OBS 極簡歌單版型
+    'setlist-now-playing': '2026-11-22',  // OBS 單曲看板版型（只顯示正在唱＋待機文字）
     'prompter-translation': '2026-11-11', // 跟唱視圖顯示雙語歌詞的譯文
     'library-word-upgrade': '2026-11-11', // 歌曲庫「逐句歌詞」篩選與批次升級成逐字
     'library-edit-meta': '2026-11-11',    // 歌曲庫直接改歌名／歌手

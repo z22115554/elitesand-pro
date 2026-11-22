@@ -43,7 +43,7 @@
   --sl-bg-card: rgba(11, 9, 7, 0.93);   /* 卡片底（simple/cards/billboard 類）*/
   --sl-bc: rgba(240, 234, 216, 0.09);   /* 邊框色 */
   --sl-bw: 1px;               /* 邊框粗細 */
-  --sl-box-shd: none;         /* 外框陰影 */
+  --sl-box-shd: 0 0 0 transparent;         /* 外框陰影 */
   --sl-fd: 'Fraunces', 'Noto Serif TC', Georgia, serif;      /* 標題字體（場景大標）*/
   --sl-fb: 'Manrope', 'Noto Sans TC', 'Noto Sans SC', sans-serif; /* 內文字體 */
   --sl-fm: 'JetBrains Mono', ui-monospace, monospace;        /* 等寬（標籤/編號）*/
@@ -312,6 +312,7 @@ html, body {
 [data-layout="diagonal"] #setlist-root,
 [data-layout="constellation"] #setlist-root,
 [data-layout="film"] #setlist-root { position: fixed; inset: 0; }
+:root[data-layout="film"] #setlist-root { background: var(--sl-stage-bg, transparent); }
 [data-layout="timeline"] .lay-stage,
 [data-layout="diagonal"] .lay-stage,
 [data-layout="constellation"] .lay-stage,
@@ -367,11 +368,11 @@ html, body {
 .sm-chip { flex-shrink: 0; display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: var(--sl-acc-dim); border: var(--sl-bw) solid var(--sl-bc); white-space: nowrap; }
 .sm-chip.done { opacity: .38; }
 .sm-chip.wait { opacity: .7; }
-.sm-chip-t { font-size: calc(var(--sl-sz-l, 13px) * 0.81); color: var(--es-text); }
+.sm-chip-t { font-size: calc(var(--sl-sz-l, 13px) * 0.81); color: var(--sl-txt-ov, var(--es-text)); }
 .sm-empty { font-size: 10px; color: var(--sl-readable-txt3, var(--sl-txt3)); padding: 0 4px; font-style: italic; }
 .sm-now { padding: 18px 16px 16px; text-align: center; }
 .sm-now-eye { font-family: var(--es-mono); font-size: 8.5px; letter-spacing: .18em; color: var(--es-sand); text-transform: uppercase; margin-bottom: 6px; }
-.sm-now-t { font-family: var(--es-serif); font-size: calc(clamp(20px, 5.5cqw, 32px) * var(--sl-szn-mult, 1)); font-weight: 600; color: var(--es-text); line-height: 1; }
+.sm-now-t { font-family: var(--es-serif); font-size: calc(clamp(20px, 5.5cqw, 32px) * var(--sl-szn-mult, 1)); font-weight: 600; color: var(--sl-txt-ov, var(--es-text)); line-height: 1; }
 .sm-now-a { font-size: calc(var(--sl-sz-a, 11px) * 0.95); color: var(--sl-readable-txt2, var(--sl-txt2)); margin-top: 5px; letter-spacing: .06em; }
 .sm-bars { display: flex; align-items: flex-end; gap: 3px; justify-content: center; margin-top: 10px; height: 14px; }
 .sm-bars span { display: block; width: 3px; border-radius: 2px; background: var(--es-sand); }
@@ -461,16 +462,17 @@ html, body {
 .term-filename { margin-left: auto; font-size: 10px; color: var(--sl-readable-txt4, var(--sl-txt4)); letter-spacing: .05em; }
 .term-list { padding: 12px 0; }
 .term-item { display: flex; align-items: center; padding: 5px 14px; font-size: calc(var(--sl-sz-l, 13px) * 0.885); line-height: var(--sl-lh, 1.4); color: var(--sl-readable-txt2, var(--sl-txt2)); }
-.term-item.done .t-line { color: var(--sl-readable-txt3, var(--sl-txt3)); text-decoration: line-through; text-decoration-color: var(--sl-bc); }
+.term-item.done .t-line { color: var(--sl-txt-ov, var(--sl-readable-txt3, var(--sl-txt3))); text-decoration: line-through; text-decoration-color: var(--sl-bc); }
 .term-item.done .t-prompt { color: var(--sl-readable-txt4, var(--sl-txt4)); }
 .term-item.active { background: var(--sl-acc-dim); }
 .term-item.active .t-line { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); }
-.term-item.active .t-line, .term-item.active .t-prompt { color: var(--sl-acc-b); }
+.term-item.active .t-line { color: var(--sl-txt-ov, var(--sl-acc-b)); }
+.term-item.active .t-prompt { color: var(--sl-acc-b); }
 .term-item.active .t-num { color: var(--sl-acc); }
 .t-prompt { color: var(--sl-readable-txt4, var(--sl-txt4)); margin-right: 8px; flex-shrink: 0; font-size: 11px; }
 .term-item.active .t-prompt-active::after { content: '▋'; animation: es-blink 1s step-end infinite; }
 .t-num { color: var(--sl-readable-txt4, var(--sl-txt4)); min-width: 22px; flex-shrink: 0; font-size: var(--sl-sz-m, 10px); }
-.t-line { flex: 1; color: var(--sl-txt); }
+.t-line { flex: 1; color: var(--sl-txt-ov, var(--sl-txt)); }
 .term-reserve { padding: 8px 14px; font-size: 9px; color: var(--sl-readable-txt4, var(--sl-txt4)); letter-spacing: .12em; }
 
 /* ══════════ billboard ══════════ */
@@ -489,9 +491,9 @@ html, body {
 .bb-vline { width: 1px; height: 28px; background: var(--sl-bc); flex-shrink: 0; }
 .bb-item.active .bb-vline { background: var(--es-sand); opacity: .4; }
 .bb-info { flex: 1; min-width: 0; }
-.bb-name { font-size: calc(var(--sl-sz-l, 13px) * 0.96); font-weight: 600; color: var(--sl-txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bb-item.done .bb-name { color: var(--sl-readable-txt3, var(--sl-txt3)); }
-.bb-item.active .bb-name { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); color: var(--es-sand-b); }
+.bb-name { font-size: calc(var(--sl-sz-l, 13px) * 0.96); font-weight: 600; color: var(--sl-txt-ov, var(--sl-txt)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bb-item.done .bb-name { color: var(--sl-txt-ov, var(--sl-readable-txt3, var(--sl-txt3))); }
+.bb-item.active .bb-name { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); color: var(--sl-txt-ov, var(--es-sand-b)); }
 .bb-artist { font-size: calc(var(--sl-sz-a, 11px) * 0.91); color: var(--sl-readable-txt2, var(--sl-txt2)); margin-top: 2px; }
 .bb-now { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0; }
 .bb-bar { display: flex; align-items: flex-end; gap: 2px; height: 16px; }
@@ -505,13 +507,13 @@ html, body {
 .cards { width: 300px; display: flex; flex-direction: column; gap: 6px; }
 .card { background: var(--sl-bg-card); border: var(--sl-bw) solid var(--sl-bc); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 .card.done { opacity: .25; background: var(--sl-bg-card); border-color: var(--sl-bc); }
-.card.active { background: var(--sl-acc-dim); border-color: var(--sl-acc-bd); box-shadow: 0 0 20px var(--sl-acc-dim), inset 0 1px 0 var(--sl-bc); }
+.card.active { background: var(--sl-acc-dim); border-color: var(--sl-acc-bd); box-shadow: 0 0 20px var(--sl-acc-dim), inset 0 1px 0 var(--sl-bc), var(--sl-box-shd, 0 0 0 transparent); }
 .card-num { font-family: var(--es-mono); font-size: var(--sl-sz-m, 10px); color: var(--sl-readable-txt4, var(--sl-txt4)); min-width: 18px; }
 .card.active .card-num { color: var(--es-sand); }
 .card-info { flex: 1; min-width: 0; }
-.card-title { font-size: calc(var(--sl-sz-l, 13px) * 0.96); font-weight: 600; color: var(--sl-txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card.done .card-title { color: var(--sl-readable-txt3, var(--sl-txt3)); }
-.card.active .card-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); color: var(--es-sand-b); }
+.card-title { font-size: calc(var(--sl-sz-l, 13px) * 0.96); font-weight: 600; color: var(--sl-txt-ov, var(--sl-txt)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.done .card-title { color: var(--sl-txt-ov, var(--sl-readable-txt3, var(--sl-txt3))); }
+.card.active .card-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); color: var(--sl-txt-ov, var(--es-sand-b)); }
 .card-artist { font-size: calc(var(--sl-sz-a, 11px) * 0.91); color: var(--sl-readable-txt2, var(--sl-txt2)); margin-top: 2px; }
 .card-status { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--sl-readable-txt4, var(--sl-txt4)); }
 .card.done .card-status { background: var(--sl-readable-txt3, var(--sl-txt3)); }
@@ -580,8 +582,8 @@ html, body {
 :root[data-cl-hide-up] .cl-col-up { display: none; }
 :root[data-cl-hide-done] .cl-col-done { display: none; }
 /* 只剩一側時仍保留使用者指定寬度；先前 0.62 倍上限會讓「整體寬度」滑桿失真。 */
-:root[data-cl-hide-up] [data-layout="classic"] #setlist-root,
-:root[data-cl-hide-done] [data-layout="classic"] #setlist-root { max-width: var(--sl-w); }
+:root[data-cl-hide-up][data-layout="classic"] #setlist-root,
+:root[data-cl-hide-done][data-layout="classic"] #setlist-root { max-width: var(--sl-w); }
 
 /* ── classic：字級 / 字重 / 字體（四款皮膚的英雄區 sk-now-title/artist 沿用同一組）── */
 .ns-title, .sk-now-title { font-size: var(--sl-sz-n); font-weight: var(--sl-fw-n); font-family: var(--sl-fd); }
@@ -700,7 +702,7 @@ html, body {
 [data-layout="billboard"] .bb-title { text-transform: uppercase; letter-spacing: .08em; }
 [data-layout="billboard"] .bb-item { padding: 10px 20px; }
 [data-layout="cards"] .cards { width: calc(var(--sl-w) * 1.02); gap: 9px; }
-[data-layout="cards"] .card { border-radius: 16px 6px 16px 6px; background: var(--sl-bg-card); transform: translateX(0); }
+[data-layout="cards"] .card { border-radius: calc(var(--sl-r-new) * 4 / 3) calc(var(--sl-r-new) / 2); background: var(--sl-bg-card); transform: translateX(0); }
 [data-layout="cards"] .card:nth-child(even) { transform: translateX(12px); }
 [data-layout="cards"] .card.active { transform: translateX(22px) scale(1.015); }
 
@@ -739,7 +741,7 @@ html, body {
 :root:not([data-sl-readable-off]) .card-title,
 :root:not([data-sl-readable-off]) .t-line {
   /* 四款皮膚的字色/底色寫死、對比已保證，不套用可讀性文字陰影（設計是淺底深字時陰影反而難看）。 */
-  text-shadow: var(--sl-readable-text-shadow);
+  text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent), var(--sl-readable-text-shadow);
 }
 :root:not([data-sl-readable-off]) .tl-now,
 :root:not([data-sl-readable-off]) .dg-now,
@@ -776,7 +778,7 @@ html, body {
 :root:not([data-sl-readable-off]) .card.active {
   background: var(--sl-readable-surface);
   border-color: var(--sl-acc-bd);
-  box-shadow: 0 0 20px var(--sl-acc-dim), inset 0 1px 0 var(--sl-bc);
+  box-shadow: 0 0 20px var(--sl-acc-dim), inset 0 1px 0 var(--sl-bc), var(--sl-box-shd, 0 0 0 transparent);
 }
 
 /* ══ classic refresh ══
@@ -847,7 +849,7 @@ html[data-layout="classic"] #setlist-root {
 [data-layout="classic"] .cl-col { gap: 7px; }
 [data-layout="classic"] .cl-col .setlist-section-label { padding: 0; }
 [data-layout="classic"] .cl-col .setlist-upcoming,
-[data-layout="classic"] .cl-col .setlist-past { gap: 4px; }
+[data-layout="classic"] .cl-col .setlist-past { gap: calc(2px + var(--sl-gap-new)); }
 [data-layout="classic"] .setlist-row,
 [data-layout="classic"] .setlist-upcoming-row {
   min-width: 0;
@@ -1128,7 +1130,7 @@ html[data-sl-fit="fill"][data-layout="cards"] .cards {
   min-height: 0;
   max-width: none;
   overflow: hidden;
-  gap: calc(9px * var(--sl-fit));
+  gap: calc(7px * var(--sl-fit) + var(--sl-gap-new));
 }
 html[data-sl-fit="fill"][data-layout="cards"] .card { padding: var(--sl-pv) var(--sl-ph); gap: calc(12px * var(--sl-fit)); }
 html[data-sl-fit="fill"][data-layout="cards"] .card-num { min-width: calc(18px * var(--sl-fit)); }
@@ -1460,7 +1462,7 @@ html[data-sl-fit="fill"][data-layout="flap"] .flap-stage { align-items: flex-end
 }
 .flap-dest {
   min-width: 0; max-width: 100%; font-family: var(--es-mono); font-weight: 700;
-  font-size: calc(24px * var(--sl-fit)); color: var(--sl-acc, #ffb638); letter-spacing: .04em;
+  font-size: calc(24px * var(--sl-fit)); color: var(--sl-txt-ov, var(--sl-acc, #ffb638)); letter-spacing: .04em;
   text-shadow: 0 0 calc(12px * var(--sl-fit)) color-mix(in srgb, var(--sl-acc, #ffb638) 45%, transparent);
 }
 .flap-by { margin-left: auto; font-size: calc(11px * var(--sl-fit)); color: #8a938d; letter-spacing: .08em; white-space: nowrap; }
@@ -1470,9 +1472,9 @@ html[data-sl-fit="fill"][data-layout="flap"] .flap-stage { align-items: flex-end
 .flap-dot { width: calc(9px * var(--sl-fit)); height: calc(9px * var(--sl-fit)); border-radius: 50%; background: #3b433f; border: 2px solid #11201a; z-index: 1; }
 .flap-stop--passed .flap-dot { background: #5b6560; }
 .flap-stop--here .flap-dot { background: var(--sl-acc, #ffb638); box-shadow: 0 0 calc(10px * var(--sl-fit)) var(--sl-acc, #ffb638); }
-.flap-lb { font-size: calc(10px * var(--sl-fit)); color: #7b847f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.flap-stop--passed .flap-lb { color: #4d5551; }
-.flap-stop--here .flap-lb { color: var(--sl-acc, #ffb638); }
+.flap-lb { font-size: calc(10px * var(--sl-fit)); color: var(--sl-txt-ov, #7b847f); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.flap-stop--passed .flap-lb { color: var(--sl-txt-ov, #4d5551); }
+.flap-stop--here .flap-lb { color: var(--sl-txt-ov, var(--sl-acc, #ffb638)); }
 
 /* ═══════════════════════════════════════════════════════════════════
    note：手帳頁（橫線筆記本側欄）
@@ -1588,7 +1590,7 @@ html[data-sl-fit="fill"][data-layout="note"] .lay-stage { align-items: stretch; 
   background: #2a2a22; filter: brightness(.8) contrast(.9);
 }
 .film-num { font-size: calc(9px * var(--film-s, 1)); color: #b9a06a; letter-spacing: .14em; }
-.film-t { font-size: calc(12.5px * var(--film-s, 1)); font-weight: 700; color: #e8e4d6; line-height: 1.18; overflow: hidden; }
+.film-t { font-size: calc(12.5px * var(--film-s, 1)); font-weight: 700; color: var(--sl-txt-ov, #e8e4d6); line-height: 1.18; overflow: hidden; }
 .film-a { font-size: calc(9px * var(--film-s, 1)); color: #8f8a78; margin-top: auto; }
 .film-frame--done { filter: sepia(.4) brightness(.42); }
 .film-frame--now { filter: none; background: #3a3a2d; box-shadow: 0 0 0 2px #fff inset; animation: film-weave .2s steps(2) infinite; }
@@ -1723,7 +1725,7 @@ html.art-setlist-bat[data-layout="haunt"] .sk-shell::after { clip-path: none; ba
 .mb-now { min-width: 0; }
 .mb-title {
   font-family: var(--sl-fd); font-weight: var(--sl-fw-n, 700); line-height: 1.12;
-  font-size: calc(var(--sl-sz-n, 16px) * 2.2); color: var(--sl-txt);
+  font-size: calc(var(--sl-sz-n, 16px) * 2.2); color: var(--sl-txt-ov, var(--sl-txt));
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
   text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent);
 }
@@ -1738,7 +1740,7 @@ html.art-setlist-bat[data-layout="haunt"] .sk-shell::after { clip-path: none; ba
 }
 .mb-ticker { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
 .mb-track { display: inline-flex; white-space: nowrap; }
-.mb-seg { font-size: var(--sl-sz-l, 13px); color: var(--sl-readable-txt3, var(--sl-txt3)); padding-right: 3em; }
+.mb-seg { font-size: var(--sl-sz-l, 13px); color: var(--sl-txt-ov, var(--sl-readable-txt3, var(--sl-txt3))); padding-right: 3em; }
 .mb-track.is-moving { animation: mb-ticker var(--mb-dur, 20s) linear infinite; }
 @keyframes mb-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .mb-star { display: none; }
@@ -1790,7 +1792,7 @@ html.art-setlist-bat[data-layout="haunt"] .sk-shell::after { clip-path: none; ba
 :root:not([data-sl-readable-off]) .mb-artist,
 :root:not([data-sl-readable-off]) .mb-seg,
 :root:not([data-sl-readable-off]) .mb-eye { text-shadow: var(--sl-readable-text-shadow); }
-:root:not([data-sl-readable-off])[data-mb-skin="dreamy"] .mb-title { text-shadow: 0 0 calc(14px * var(--sl-fit, 1)) var(--sl-acc-g), var(--sl-readable-text-shadow); }
+:root:not([data-sl-readable-off])[data-mb-skin="dreamy"] .mb-title { text-shadow: 0 0 calc(14px * var(--sl-fit, 1)) var(--sl-acc-g), var(--sl-user-text-shadow, 0 0 0 transparent), var(--sl-readable-text-shadow); }
 
 @media (prefers-reduced-motion: reduce) {
   .mb-board.is-enter .mb-title, .mb-board.is-enter .mb-artist, .mb-board.is-enter .mb-rule, .mb-star { animation: none; }
@@ -1881,4 +1883,458 @@ html.art-setlist-bat[data-layout="haunt"] .sk-shell::after { clip-path: none; ba
 @media (prefers-reduced-motion: reduce) {
   .mb-wave i, :root[data-sl-playing="1"] .mb-wave i, .mb-rule::after, .mb-glint, .mb-disc,
   :root[data-mb-skin="dreamy"] .mb-text::before, :root[data-mb-skin="dreamy"] .mb-star { animation: none !important; }
+}
+
+/* These renderers use their own song-name nodes. */
+.signal-title, .signal-next-title, .ix-title, .flap-dest, .flap-lb, .note-nm, .film-t {
+  -webkit-text-stroke: var(--sl-stroke-w, 0px) var(--sl-stroke-c, transparent);
+  paint-order: stroke fill;
+}
+
+/* ══ 單曲看板（now-playing）══
+   畫面上只有「現在這首」：歌名＋可選歌手，沒有已唱／未唱清單。舞台與 root 永遠不鋪底色；
+   名牌、紙膠帶的底只貼著文字本身。沒歌時只剩一行待機文字，不帶任何底、不跑常駐動畫。
+   四款外觀（data-np-skin）換的是整個造型：
+     plate   名牌     ── 貼文字的小牌子，左側主色條，靠左
+     neon    霓虹招牌 ── 發光燈管字＋膠囊框標籤，開燈閃爍進場，置中
+     tape    紙膠帶   ── 歌名貼在斜放的膠帶上、標籤是主色小膠帶，貼上去的進場，靠左
+     bar     字幕條   ── 導播字幕：左邊主色標籤＋右邊深色條，由左往右展開，靠左
+     ticket／cassette／led／player／window／sticker：票根、卡帶、電子看板、迷你播放器、復古視窗、貼紙（各自段落有說明）
+   進出場：新卡片 is-enter、舊卡片 is-leaving，兩張疊在同一格（grid-area 1/1）交叉淡換；
+   舊卡片由 setlist.js 的計時器（520ms）拔掉，所以出場動畫都要在 0.5 秒內跑完。
+   字級跟著通用設定：歌名吃 --sl-sz-n、標籤吃 --sl-sz-m、歌手吃 --sl-sz-a（都已乘上來源尺寸）。 */
+html[data-sl-fit="fill"][data-layout="now-playing"] .lay-stage { align-items: center; }
+.np-stage {
+  display: flex; align-items: center; width: 100%; height: 100%; min-width: 0;
+  padding: calc(10px * var(--sl-fit, 1)) calc(14px * var(--sl-fit, 1));
+  font-family: var(--sl-fb);
+}
+.np-slot {
+  flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr);
+  align-items: center; justify-items: start; text-align: left;
+}
+.np-slot > .np-card { grid-area: 1 / 1; }
+.np-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; max-width: 100%; color: var(--sl-txt); }
+:root[data-np-skin="neon"] .np-card, :root[data-np-align="center"] .np-card { align-items: center; }
+:root[data-np-align="left"] .np-card { align-items: flex-start; }
+:root[data-np-align="right"] .np-card { align-items: flex-end; }
+.np-eye {
+  display: inline-flex; align-items: center; gap: calc(7px * var(--sl-fit, 1)); max-width: 100%;
+  font-family: var(--sl-fm); font-size: var(--sl-sz-m, 10px); letter-spacing: .2em; text-transform: uppercase;
+  color: var(--sl-acc-b); white-space: nowrap;
+}
+.np-dot {
+  flex-shrink: 0; width: calc(6px * var(--sl-fit, 1)); height: calc(6px * var(--sl-fit, 1)); border-radius: 50%;
+  background: var(--sl-acc-b); opacity: .45; transition: opacity .4s ease;
+}
+:root[data-sl-playing="1"] .np-dot { opacity: 1; animation: np-pulse 1.8s ease-in-out infinite; }
+@keyframes np-pulse { 0%, 100% { box-shadow: 0 0 0 0 var(--sl-acc-g); } 50% { box-shadow: 0 0 0 calc(4px * var(--sl-fit, 1)) transparent; } }
+/* np-strip 是歌名外層（紙膠帶的底與內距放這裡），np-title 是跑馬燈的裁切框、不可帶左右內距 */
+.np-strip { max-width: 100%; min-width: 0; }
+.np-title {
+  max-width: 100%; overflow: hidden; white-space: nowrap;
+  font-family: var(--sl-fd); font-weight: var(--sl-fw-n, 700); line-height: 1.18;
+  font-size: calc(var(--sl-sz-n, 16px) * 2.4);
+  margin-top: calc(4px * var(--sl-fit, 1));
+}
+.np-artist {
+  max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  margin-top: calc(4px * var(--sl-fit, 1));
+  font-size: var(--sl-sz-a, 11px); letter-spacing: .06em; color: var(--sl-readable-txt2, var(--sl-txt2));
+}
+.np-artist[hidden], :root[data-hide-artist] .np-artist { display: none; }
+.np-idle {
+  max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-family: var(--sl-fd); font-size: calc(var(--sl-sz-n, 16px) * 1.4); letter-spacing: .08em;
+  color: var(--sl-readable-txt2, var(--sl-txt2));
+}
+:root:not([data-sl-readable-off]) .np-idle { text-shadow: var(--sl-readable-text-shadow); }
+
+/* 共用進出場（各外觀下面再換成自己的動作） */
+.np-card.is-enter { animation: np-in .5s cubic-bezier(.2, .7, .2, 1) .14s both; }
+.np-card.is-leaving { animation: np-out .36s ease-in both; pointer-events: none; }
+@keyframes np-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes np-out { to { opacity: 0; transform: translateY(-8px); } }
+
+/* ── 名牌（plate，預設）── */
+:root:not([data-np-skin]) .np-card:not(.is-idle),
+:root[data-np-skin="plate"] .np-card:not(.is-idle) {
+  /* 內距吃「正在播放」上下／左右內距（--sl-pv/--sl-ph 已乘上來源尺寸），左邊多留主色條的位置 */
+  padding: var(--sl-pv, 10px) var(--sl-ph, 14px) var(--sl-pv, 10px) calc(var(--sl-ph, 14px) + 6px * var(--sl-fit, 1));
+  background: var(--sl-readable-surface, var(--sl-bg-card));
+  border: var(--sl-bw, 1px) solid var(--sl-readable-border, var(--sl-bc));
+  border-radius: calc(var(--sl-r-new, 12px) * .5);
+  box-shadow: var(--sl-box-shd, none);
+}
+:root:not([data-np-skin]) .np-card:not(.is-idle)::before,
+:root[data-np-skin="plate"] .np-card:not(.is-idle)::before {
+  content: ''; position: absolute; left: calc(7px * var(--sl-fit, 1)); top: calc(10px * var(--sl-fit, 1)); bottom: calc(10px * var(--sl-fit, 1));
+  width: calc(3px * var(--sl-fit, 1)); border-radius: 2px; background: var(--sl-acc); transform-origin: top center;
+}
+:root:not([data-np-skin]) .np-title, :root[data-np-skin="plate"] .np-title { text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent); }
+:root:not([data-np-skin]) .np-card.is-enter::before,
+:root[data-np-skin="plate"] .np-card.is-enter::before { animation: np-bar .5s cubic-bezier(.2, .7, .2, 1) .26s both; }
+@keyframes np-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+:root:not([data-np-skin]) .np-card.is-enter:not(.is-idle),
+:root[data-np-skin="plate"] .np-card.is-enter:not(.is-idle) { animation-name: np-plate-in; }
+@keyframes np-plate-in {
+  from { opacity: 0; transform: translateX(calc(-14px * var(--sl-fit, 1))); clip-path: inset(0 100% 0 0); }
+  to { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+}
+
+/* ── 霓虹招牌（neon）── */
+:root[data-np-skin="neon"] .np-slot { justify-items: center; text-align: center; }
+/* 光暈刻意收斂（使用者 2026-11-23：太亮）：不加白色燈芯、外圈只用 40% 透明的主色 */
+:root[data-np-skin="neon"] .np-eye {
+  padding: calc(3px * var(--sl-fit, 1)) calc(12px * var(--sl-fit, 1));
+  border: calc(1.5px * var(--sl-fit, 1)) solid var(--sl-acc-b); border-radius: 999px;
+  box-shadow: 0 0 calc(4px * var(--sl-fit, 1)) var(--sl-acc-g), inset 0 0 calc(3px * var(--sl-fit, 1)) var(--sl-acc-g);
+  text-shadow: 0 0 calc(3px * var(--sl-fit, 1)) var(--sl-acc-g);
+}
+:root[data-np-skin="neon"] .np-title {
+  /* 跑馬燈要裁切，但 overflow:hidden 會把光暈切成方框；改用 clip＋外擴邊界讓光散得開（不用內距，內距會讓跑馬燈尾巴被切） */
+  margin: calc(10px * var(--sl-fit, 1)) 0 calc(6px * var(--sl-fit, 1));
+  overflow: clip; overflow-clip-margin: .6em;
+  font-size: calc(var(--sl-sz-n, 16px) * 2.7);
+  color: var(--sl-txt);
+  text-shadow:
+    0 0 calc(3px * var(--sl-fit, 1)) var(--sl-acc-b),
+    0 0 calc(10px * var(--sl-fit, 1)) var(--sl-acc-g),
+    0 0 calc(20px * var(--sl-fit, 1)) var(--sl-acc-g);
+}
+:root[data-np-skin="neon"] .np-artist { margin-top: 0; color: var(--sl-acc-b); text-shadow: 0 0 calc(4px * var(--sl-fit, 1)) var(--sl-acc-g); }
+:root[data-np-skin="neon"] .np-dot { box-shadow: 0 0 calc(4px * var(--sl-fit, 1)) var(--sl-acc-g); }
+/* 播放時燈管微微呼吸、暫停時調暗；待機只剩一行暗燈字 */
+:root[data-np-skin="neon"] .np-card:not(.is-idle) .np-title { transition: opacity .5s ease; opacity: .8; }
+:root[data-np-skin="neon"][data-sl-playing="1"] .np-card:not(.is-idle) .np-title { opacity: 1; animation: np-hum 3.6s ease-in-out infinite; }
+@keyframes np-hum { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.06); } }
+:root[data-np-skin="neon"] .np-idle { color: var(--sl-acc-b); opacity: .7; text-shadow: 0 0 calc(6px * var(--sl-fit, 1)) var(--sl-acc-g); }
+/* 可讀性保護（預設開）：亮背景上光暈會被吃掉，在光暈最底層墊一層深色陰影 */
+:root[data-np-skin="neon"]:not([data-sl-readable-off]) .np-title {
+  text-shadow:
+    0 0 calc(3px * var(--sl-fit, 1)) var(--sl-acc-b),
+    0 0 calc(10px * var(--sl-fit, 1)) var(--sl-acc-g),
+    0 0 calc(20px * var(--sl-fit, 1)) var(--sl-acc-g),
+    var(--sl-readable-text-shadow);
+}
+:root[data-np-skin="neon"]:not([data-sl-readable-off]) .np-eye,
+:root[data-np-skin="neon"]:not([data-sl-readable-off]) .np-artist,
+:root[data-np-skin="neon"]:not([data-sl-readable-off]) .np-idle { text-shadow: 0 0 calc(4px * var(--sl-fit, 1)) var(--sl-acc-g), 0 1px 2px rgba(0, 0, 0, .8), 0 0 calc(6px * var(--sl-fit, 1)) rgba(0, 0, 0, .45); }
+:root[data-np-skin="neon"]:not([data-sl-readable-off]) .np-eye { box-shadow: 0 0 calc(4px * var(--sl-fit, 1)) var(--sl-acc-g), inset 0 0 calc(3px * var(--sl-fit, 1)) var(--sl-acc-g), 0 2px 10px rgba(0, 0, 0, .35); }
+:root[data-np-skin="neon"] .np-card.is-enter { animation: np-neon-on .7s linear .14s both; }
+:root[data-np-skin="neon"] .np-card.is-leaving { animation: np-neon-off .34s linear both; }
+@keyframes np-neon-on { 0% { opacity: 0; } 12% { opacity: .9; } 18% { opacity: .1; } 30% { opacity: 1; } 36% { opacity: .35; } 48%, 100% { opacity: 1; } }
+@keyframes np-neon-off { 0% { opacity: 1; } 30% { opacity: .2; } 45% { opacity: .7; } 100% { opacity: 0; } }
+
+/* ── 紙膠帶（tape）── */
+:root[data-np-skin="tape"] .np-eye {
+  padding: calc(3px * var(--sl-fit, 1)) calc(12px * var(--sl-fit, 1));
+  background: var(--sl-acc); color: var(--sl-accent-ink, #17110a);
+  transform: rotate(-3deg); transform-origin: left center;
+  clip-path: polygon(0 8%, 4% 0, 96% 6%, 100% 0, 98% 100%, 94% 92%, 3% 100%, 0 90%);
+}
+:root[data-np-skin="tape"] .np-dot { background: currentColor; opacity: .8; }
+:root[data-np-skin="tape"][data-sl-playing="1"] .np-dot { opacity: 1; animation: none; }
+:root[data-np-skin="tape"] .np-title { margin-top: 0; text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent); }
+:root[data-np-skin="tape"] .np-strip {
+  margin-top: calc(6px * var(--sl-fit, 1));
+  padding: calc(var(--sl-pv, 10px) * .6) calc(var(--sl-ph, 14px) * 1.3);
+  background: var(--sl-readable-surface, var(--sl-bg-card));
+  transform: rotate(-1.2deg); transform-origin: left center;
+  clip-path: polygon(0 4%, 2% 0, 6% 5%, 50% 1%, 94% 4%, 98% 0, 100% 6%, 99% 50%, 100% 95%, 97% 100%, 93% 96%, 50% 100%, 5% 97%, 1% 100%, 0 94%, 1% 50%);
+}
+:root[data-np-skin="tape"] .np-artist {
+  margin-left: calc(18px * var(--sl-fit, 1)); margin-top: calc(2px * var(--sl-fit, 1));
+  padding: calc(2px * var(--sl-fit, 1)) calc(10px * var(--sl-fit, 1));
+  background: var(--sl-readable-surface-soft, var(--sl-bg-card)); transform: rotate(.8deg);
+}
+:root[data-np-skin="tape"] .np-idle { font-family: var(--sl-fm); font-size: calc(var(--sl-sz-n, 16px) * 1.15); letter-spacing: .18em; }
+:root[data-np-skin="tape"] .np-card.is-enter { animation-name: np-tape-in; animation-duration: .55s; }
+:root[data-np-skin="tape"] .np-card.is-leaving { animation-name: np-tape-out; }
+@keyframes np-tape-in {
+  from { opacity: 0; transform: translateX(calc(-28px * var(--sl-fit, 1))) rotate(-5deg) scale(.96); }
+  70% { opacity: 1; transform: translateX(calc(3px * var(--sl-fit, 1))) rotate(.6deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes np-tape-out { to { opacity: 0; transform: translateX(calc(24px * var(--sl-fit, 1))) rotate(4deg); } }
+
+/* ── 字幕條（bar）──
+   直播導播字幕的樣子：左邊一塊主色標籤（滿高），右邊深色條放歌名與歌手，底邊一道主色細線。
+   進場整條由左往右展開、歌名稍晚滑進；出場由左往右收掉。卡片有底，所以吃卡片色、圓角、內距、外框陰影。 */
+:root[data-np-skin="bar"] .np-card:not(.is-idle) {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center;
+  padding: calc(var(--sl-pv, 10px) * .6) var(--sl-ph, 14px) calc(var(--sl-pv, 10px) * .6) 0;
+  background: var(--sl-readable-surface, var(--sl-bg-card));
+  border-radius: calc(var(--sl-r-new, 12px) * .25);
+  box-shadow: var(--sl-box-shd, none);
+  overflow: hidden;
+}
+:root[data-np-skin="bar"] .np-card:not(.is-idle)::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: max(2px, calc(2px * var(--sl-fit, 1)));
+  background: var(--sl-acc); transform-origin: left center;
+}
+:root[data-np-skin="bar"] .np-eye {
+  grid-row: 1 / span 2; align-self: stretch;
+  /* 滿高：把卡片的上下內距吃回來 */
+  margin: calc(var(--sl-pv, 10px) * -.6) 0;
+  padding: 0 calc(var(--sl-ph, 14px) * 1.4) 0 var(--sl-ph, 14px);
+  background: var(--sl-acc); color: var(--sl-accent-ink, #17110a); letter-spacing: .16em;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 10px * var(--sl-fit, 1)) 100%, 0 100%);
+}
+:root[data-np-skin="bar"] .np-dot { background: currentColor; }
+:root[data-np-skin="bar"][data-sl-playing="1"] .np-dot { animation: none; }
+:root[data-np-skin="bar"] .np-strip, :root[data-np-skin="bar"] .np-artist { grid-column: 2; padding-left: calc(var(--sl-ph, 14px) * .9); }
+:root[data-np-skin="bar"] .np-title {
+  margin-top: 0; font-size: calc(var(--sl-sz-n, 16px) * 2.1);
+  text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent);
+}
+:root[data-np-skin="bar"] .np-artist { margin-top: 0; }
+:root[data-np-skin="bar"] .np-idle { font-family: var(--sl-fm); font-size: calc(var(--sl-sz-n, 16px) * 1.15); letter-spacing: .18em; }
+:root[data-np-skin="bar"] .np-card.is-enter:not(.is-idle) { animation: np-bar-in .5s cubic-bezier(.65, 0, .25, 1) .14s both; }
+:root[data-np-skin="bar"] .np-card.is-enter:not(.is-idle) .np-strip,
+:root[data-np-skin="bar"] .np-card.is-enter:not(.is-idle) .np-artist { animation: np-bar-text .45s cubic-bezier(.2, .7, .2, 1) .36s both; }
+:root[data-np-skin="bar"] .np-card.is-enter:not(.is-idle)::after { animation: np-bar-line .6s cubic-bezier(.65, 0, .25, 1) .3s both; }
+:root[data-np-skin="bar"] .np-card.is-leaving { animation: np-bar-out .36s cubic-bezier(.65, 0, .35, 1) both; }
+@keyframes np-bar-in { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes np-bar-out { from { clip-path: inset(0 0 0 0); opacity: 1; } to { clip-path: inset(0 0 0 100%); opacity: .6; } }
+@keyframes np-bar-text { from { opacity: 0; transform: translateX(calc(-10px * var(--sl-fit, 1))); } to { opacity: 1; transform: none; } }
+@keyframes np-bar-line { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* 裝飾元素（.np-deco 的五個 <i>）預設不顯示，只有卡帶／迷你播放器／復古視窗會打開 */
+.np-deco { display: none; }
+.np-deco i { display: none; }
+
+/* ── 票根（ticket）──
+   左邊直書標籤當存根，中間一道虛線，上下各咬一個半圓缺口（mask 挖洞，不鋪任何額外底色）。
+   存根寬度固定（--np-stub），缺口與虛線才對得準。 */
+:root[data-np-skin="ticket"] .np-card:not(.is-idle) {
+  --np-stub: calc(var(--sl-sz-m, 10px) * 1.7 + var(--sl-ph, 14px) * 1.2);
+  --np-notch: calc(7px * var(--sl-fit, 1));
+  display: grid; grid-template-columns: var(--np-stub) minmax(0, 1fr); align-items: center;
+  padding: calc(var(--sl-pv, 10px) * .8) calc(var(--sl-ph, 14px) * 1.3) calc(var(--sl-pv, 10px) * .8) 0;
+  background: var(--sl-readable-surface, var(--sl-bg-card));
+  border-radius: calc(var(--sl-r-new, 12px) * .4);
+  -webkit-mask:
+    radial-gradient(circle at var(--np-stub) 0, transparent var(--np-notch), #000 calc(var(--np-notch) + .5px)) top / 100% 51% no-repeat,
+    radial-gradient(circle at var(--np-stub) 100%, transparent var(--np-notch), #000 calc(var(--np-notch) + .5px)) bottom / 100% 51% no-repeat;
+  mask:
+    radial-gradient(circle at var(--np-stub) 0, transparent var(--np-notch), #000 calc(var(--np-notch) + .5px)) top / 100% 51% no-repeat,
+    radial-gradient(circle at var(--np-stub) 100%, transparent var(--np-notch), #000 calc(var(--np-notch) + .5px)) bottom / 100% 51% no-repeat;
+}
+:root[data-np-skin="ticket"] .np-card:not(.is-idle)::before {
+  content: ''; position: absolute; left: var(--np-stub); top: calc(var(--np-notch) + 3px); bottom: calc(var(--np-notch) + 3px);
+  border-left: max(1px, calc(1.5px * var(--sl-fit, 1))) dashed var(--sl-acc-bd);
+}
+:root[data-np-skin="ticket"] .np-eye {
+  grid-row: 1 / span 2; justify-self: center;
+  writing-mode: vertical-rl; letter-spacing: .28em; color: var(--sl-acc-b);
+}
+:root[data-np-skin="ticket"] .np-strip, :root[data-np-skin="ticket"] .np-artist { grid-column: 2; padding-left: calc(var(--sl-ph, 14px) * 1.1); }
+:root[data-np-skin="ticket"] .np-title { margin-top: 0; text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent); }
+:root[data-np-skin="ticket"] .np-artist { letter-spacing: .14em; }
+:root[data-np-skin="ticket"] .np-card.is-enter:not(.is-idle) { animation-name: np-ticket-in; animation-duration: .55s; }
+:root[data-np-skin="ticket"] .np-card.is-leaving { animation-name: np-ticket-out; }
+@keyframes np-ticket-in { from { opacity: 0; transform: translateY(calc(16px * var(--sl-fit, 1))) rotate(-2deg); } to { opacity: 1; transform: none; } }
+@keyframes np-ticket-out { to { opacity: 0; transform: translateX(calc(28px * var(--sl-fit, 1))) rotate(3deg); } }
+
+/* ── 卡帶（cassette）──
+   卡帶殼：上緣一條主色標籤帶，下方一個小窗放兩個捲軸；捲軸只在播放時轉，暫停停在當下角度。 */
+:root[data-np-skin="cassette"] .np-card:not(.is-idle) {
+  min-width: min(100%, calc(var(--sl-sz-n, 16px) * 13));
+  padding: calc(var(--sl-pv, 10px) * 1.1) calc(var(--sl-ph, 14px) * 1.3) calc(var(--sl-pv, 10px) * .8);
+  background: var(--sl-readable-surface, var(--sl-bg-card));
+  border: max(1px, var(--sl-bw, 1px)) solid var(--sl-readable-border, var(--sl-bc));
+  border-radius: calc(var(--sl-r-new, 12px) * .7);
+  box-shadow: var(--sl-box-shd, none);
+}
+:root[data-np-skin="cassette"] .np-card:not(.is-idle)::before {
+  content: ''; position: absolute; left: calc(var(--sl-ph, 14px) * .6); right: calc(var(--sl-ph, 14px) * .6); top: calc(5px * var(--sl-fit, 1));
+  height: calc(4px * var(--sl-fit, 1)); border-radius: 2px;
+  background: linear-gradient(90deg, var(--sl-acc) 0 70%, var(--sl-acc-b) 70% 85%, var(--sl-acc) 85%);
+}
+:root[data-np-skin="cassette"] .np-eye { margin-top: calc(4px * var(--sl-fit, 1)); }
+:root[data-np-skin="cassette"] .np-title { margin-top: calc(2px * var(--sl-fit, 1)); text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent); }
+:root[data-np-skin="cassette"] .np-deco {
+  display: flex; align-self: center; align-items: center; justify-content: space-between;
+  width: min(100%, calc(var(--sl-sz-n, 16px) * 7)); margin-top: calc(8px * var(--sl-fit, 1));
+  padding: calc(4px * var(--sl-fit, 1)) calc(10px * var(--sl-fit, 1));
+  border-radius: 999px; background: rgba(0, 0, 0, .35);
+  box-shadow: inset 0 0 0 max(1px, calc(1px * var(--sl-fit, 1))) var(--sl-acc-bd);
+}
+:root[data-np-skin="cassette"] .np-deco::before {
+  content: ''; position: absolute; left: 30%; right: 30%; height: max(1px, calc(2px * var(--sl-fit, 1)));
+  background: var(--sl-txt4, rgba(240, 234, 216, .35));
+}
+:root[data-np-skin="cassette"] .np-deco { position: relative; }
+:root[data-np-skin="cassette"] .np-deco i:nth-child(-n+2) {
+  display: block; position: relative; z-index: 1;
+  width: calc(var(--sl-sz-n, 16px) * 1.2); height: calc(var(--sl-sz-n, 16px) * 1.2); border-radius: 50%;
+  border: max(1px, calc(1.5px * var(--sl-fit, 1))) solid var(--sl-acc-b);
+  background:
+    radial-gradient(circle, var(--sl-acc-b) 0 16%, transparent 17%),
+    repeating-conic-gradient(from 0deg, var(--sl-acc-b) 0 10deg, transparent 10deg 60deg);
+  -webkit-mask: radial-gradient(circle, #000 0 18%, transparent 19% 32%, #000 33%);
+  mask: radial-gradient(circle, #000 0 18%, transparent 19% 32%, #000 33%);
+  animation: np-reel 2.4s linear infinite; animation-play-state: paused;
+}
+:root[data-np-skin="cassette"][data-sl-playing="1"] .np-deco i { animation-play-state: running; }
+@keyframes np-reel { to { transform: rotate(360deg); } }
+:root[data-np-skin="cassette"] .np-idle { font-family: var(--sl-fm); font-size: calc(var(--sl-sz-n, 16px) * 1.15); letter-spacing: .18em; }
+:root[data-np-skin="cassette"] .np-card.is-enter:not(.is-idle) { animation-name: np-cas-in; animation-duration: .55s; }
+:root[data-np-skin="cassette"] .np-card.is-leaving { animation-name: np-cas-out; }
+@keyframes np-cas-in { from { opacity: 0; transform: translateY(calc(22px * var(--sl-fit, 1))); } 70% { opacity: 1; transform: translateY(calc(-3px * var(--sl-fit, 1))); } to { opacity: 1; transform: none; } }
+@keyframes np-cas-out { to { opacity: 0; transform: translateY(calc(-18px * var(--sl-fit, 1))); } }
+
+/* ── 電子看板（led）──
+   LED 點陣：歌名用 mask 切成一顆顆亮點，底板也鋪一層沒亮的暗點；跑馬燈捲動時點陣固定、字在點陣上移動。 */
+:root[data-np-skin="led"] .np-card:not(.is-idle) {
+  padding: calc(var(--sl-pv, 10px) * .8) calc(var(--sl-ph, 14px) * 1.2);
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, .06) 38%, transparent 44%) 0 0 / calc(3px * var(--sl-fit, 1)) calc(3px * var(--sl-fit, 1)),
+    var(--sl-readable-surface, var(--sl-bg-card));
+  border: calc(3px * var(--sl-fit, 1)) solid #1d1d1f; border-radius: calc(5px * var(--sl-fit, 1));
+  box-shadow: inset 0 0 calc(12px * var(--sl-fit, 1)) rgba(0, 0, 0, .8), var(--sl-box-shd, 0 0 0 transparent);
+}
+:root[data-np-skin="led"] .np-eye { color: var(--sl-acc); }
+:root[data-np-skin="led"] .np-dot { border-radius: 1px; }
+:root[data-np-skin="led"] .np-title {
+  font-family: var(--sl-fm); font-weight: 700; letter-spacing: .06em; color: var(--sl-acc-b);
+  text-shadow: 0 0 calc(4px * var(--sl-fit, 1)) var(--sl-acc-g);
+  -webkit-mask: radial-gradient(circle, #000 50%, transparent 62%) 0 0 / calc(3px * var(--sl-fit, 1)) calc(3px * var(--sl-fit, 1));
+  mask: radial-gradient(circle, #000 50%, transparent 62%) 0 0 / calc(3px * var(--sl-fit, 1)) calc(3px * var(--sl-fit, 1));
+}
+:root[data-np-skin="led"] .np-artist { font-family: var(--sl-fm); color: var(--sl-acc); letter-spacing: .12em; }
+:root[data-np-skin="led"] .np-idle { font-family: var(--sl-fm); color: var(--sl-acc-b); letter-spacing: .2em; font-size: calc(var(--sl-sz-n, 16px) * 1.15); }
+:root[data-np-skin="led"] .np-card.is-enter:not(.is-idle) { animation: np-led-in .5s steps(6, end) .14s both; }
+:root[data-np-skin="led"] .np-card.is-leaving { animation: np-led-out .3s steps(3, end) both; }
+@keyframes np-led-in { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes np-led-out { to { opacity: 0; } }
+
+/* ── 迷你播放器（player）──
+   膠囊形：左邊圓形「封面」裡是音量條（播放時跳、暫停時壓低），右邊三行文字。 */
+:root[data-np-skin="player"] .np-card:not(.is-idle) {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: calc(var(--sl-ph, 14px) * .8);
+  padding: calc(var(--sl-pv, 10px) * .6) calc(var(--sl-ph, 14px) * 1.8) calc(var(--sl-pv, 10px) * .6) calc(var(--sl-pv, 10px) * .6);
+  background: var(--sl-readable-surface, var(--sl-bg-card));
+  border: max(1px, var(--sl-bw, 1px)) solid var(--sl-readable-border, var(--sl-bc));
+  border-radius: 999px; box-shadow: var(--sl-box-shd, none);
+}
+:root[data-np-skin="player"] .np-eye, :root[data-np-skin="player"] .np-strip, :root[data-np-skin="player"] .np-artist { grid-column: 2; }
+:root[data-np-skin="player"] .np-title { margin-top: 0; font-size: calc(var(--sl-sz-n, 16px) * 2); text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent); }
+:root[data-np-skin="player"] .np-artist { margin-top: 0; }
+:root[data-np-skin="player"] .np-dot { display: none; }
+:root[data-np-skin="player"] .np-deco {
+  display: flex; grid-column: 1; grid-row: 1 / span 3; align-items: flex-end; justify-content: center; gap: calc(3px * var(--sl-fit, 1));
+  box-sizing: border-box; width: calc(var(--sl-sz-n, 16px) * 3.4); height: calc(var(--sl-sz-n, 16px) * 3.4);
+  padding: calc(var(--sl-sz-n, 16px) * .95) 0; border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, var(--sl-acc-b), var(--sl-acc) 72%);
+}
+:root[data-np-skin="player"] .np-deco i {
+  display: block; width: calc(3px * var(--sl-fit, 1)); height: 100%; border-radius: 2px;
+  background: var(--sl-accent-ink, #17110a); transform-origin: bottom center; transform: scaleY(.22); transition: transform .4s ease;
+}
+:root[data-np-skin="player"][data-sl-playing="1"] .np-deco i { animation: np-eq 1.05s ease-in-out infinite; }
+:root[data-np-skin="player"] .np-deco i:nth-child(2) { animation-delay: -.42s; }
+:root[data-np-skin="player"] .np-deco i:nth-child(3) { animation-delay: -.18s; }
+:root[data-np-skin="player"] .np-deco i:nth-child(4) { animation-delay: -.66s; }
+:root[data-np-skin="player"] .np-deco i:nth-child(5) { animation-delay: -.3s; }
+@keyframes np-eq { 0%, 100% { transform: scaleY(.25); } 30% { transform: scaleY(1); } 55% { transform: scaleY(.45); } 80% { transform: scaleY(.8); } }
+:root[data-np-skin="player"] .np-card.is-enter:not(.is-idle) { animation-name: np-pill-in; animation-duration: .55s; }
+:root[data-np-skin="player"] .np-card.is-leaving { animation-name: np-pill-out; }
+@keyframes np-pill-in { from { opacity: .3; clip-path: inset(0 75% 0 0 round 999px); } to { opacity: 1; clip-path: inset(0 0 0 0 round 999px); } }
+@keyframes np-pill-out { to { opacity: 0; transform: scale(.92); } }
+
+/* ── 復古視窗（window）──
+   老式視窗：凸起的立體邊框、主色漸層標題列（放「正在播放」）、右上角三顆按鈕，內文放歌名與歌手。
+   開窗／關窗用 steps 做出一格一格的舊電腦感。 */
+:root[data-np-skin="window"] .np-card:not(.is-idle) {
+  align-items: stretch;
+  padding: 0 0 calc(var(--sl-pv, 10px) * .8);
+  background: var(--sl-readable-surface, var(--sl-bg-card));
+  border: calc(2px * var(--sl-fit, 1)) solid;
+  border-color: rgba(255, 255, 255, .55) rgba(0, 0, 0, .65) rgba(0, 0, 0, .65) rgba(255, 255, 255, .55);
+  box-shadow: calc(4px * var(--sl-fit, 1)) calc(4px * var(--sl-fit, 1)) 0 rgba(0, 0, 0, .35);
+}
+:root[data-np-skin="window"] .np-eye {
+  display: flex;
+  padding: calc(3px * var(--sl-fit, 1)) calc(var(--sl-sz-m, 10px) * 5.2) calc(3px * var(--sl-fit, 1)) calc(8px * var(--sl-fit, 1));
+  background: linear-gradient(90deg, var(--sl-acc), var(--sl-acc-b));
+  color: var(--sl-accent-ink, #17110a); font-weight: 700; letter-spacing: .1em;
+}
+:root[data-np-skin="window"] .np-dot { background: currentColor; }
+:root[data-np-skin="window"][data-sl-playing="1"] .np-dot { animation: none; }
+:root[data-np-skin="window"] .np-strip, :root[data-np-skin="window"] .np-artist { padding: 0 calc(var(--sl-ph, 14px) * 1.1); }
+:root[data-np-skin="window"] .np-strip { padding-top: calc(var(--sl-pv, 10px) * .6); }
+:root[data-np-skin="window"] .np-title { margin-top: 0; text-shadow: var(--sl-user-text-shadow, 0 0 0 transparent); }
+:root[data-np-skin="window"] .np-deco {
+  display: flex; position: absolute; top: calc(3px * var(--sl-fit, 1)); right: calc(5px * var(--sl-fit, 1)); gap: calc(3px * var(--sl-fit, 1));
+}
+:root[data-np-skin="window"] .np-deco i:nth-child(-n+3) {
+  display: block; width: calc(var(--sl-sz-m, 10px) * 1.25); height: calc(var(--sl-sz-m, 10px) * 1.25);
+  background: #d6d3cc; border: max(1px, calc(1px * var(--sl-fit, 1))) solid; border-color: #fff #3a3a3a #3a3a3a #fff;
+}
+:root[data-np-skin="window"] .np-deco i:nth-child(3) { background: linear-gradient(45deg, transparent 44%, #3a3a3a 44% 56%, transparent 56%), linear-gradient(-45deg, transparent 44%, #3a3a3a 44% 56%, transparent 56%), #d6d3cc; }
+:root[data-np-skin="window"] .np-deco i:nth-child(1) { background: linear-gradient(#3a3a3a, #3a3a3a) center 72% / 55% max(1px, calc(1.5px * var(--sl-fit, 1))) no-repeat, #d6d3cc; }
+:root[data-np-skin="window"] .np-deco i:nth-child(2) { box-shadow: inset 0 0 0 calc(2px * var(--sl-fit, 1)) #d6d3cc, inset 0 0 0 calc(3px * var(--sl-fit, 1)) #3a3a3a; }
+:root[data-np-skin="window"] .np-idle { font-family: var(--sl-fm); font-size: calc(var(--sl-sz-n, 16px) * 1.15); letter-spacing: .12em; }
+:root[data-np-skin="window"] .np-card.is-enter:not(.is-idle) { animation: np-win-in .4s steps(4, end) .14s both; }
+:root[data-np-skin="window"] .np-card.is-leaving { animation: np-win-out .3s steps(3, end) both; }
+@keyframes np-win-in { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: none; } }
+@keyframes np-win-out { to { opacity: 0; transform: scale(.55); } }
+
+/* ── 貼紙（sticker）──
+   粗白邊貼紙字（多層 text-shadow 疊出外框）＋落地陰影，歌名稍微歪貼；彈跳進場、縮小消失。
+   白邊在任何背景上都看得清楚，所以不需要另外的可讀性襯底。 */
+:root[data-np-skin="sticker"] .np-slot { justify-items: center; text-align: center; }
+:root[data-np-skin="sticker"] .np-card { align-items: center; }
+:root[data-np-skin="sticker"] .np-eye {
+  padding: calc(3px * var(--sl-fit, 1)) calc(11px * var(--sl-fit, 1));
+  background: #fff; color: var(--sl-acc); font-weight: 700; border-radius: 999px;
+  transform: rotate(3deg); box-shadow: 0 calc(2px * var(--sl-fit, 1)) 0 rgba(0, 0, 0, .25);
+}
+:root[data-np-skin="sticker"] .np-dot { background: currentColor; }
+:root[data-np-skin="sticker"] .np-strip { transform: rotate(-3deg); }
+:root[data-np-skin="sticker"] .np-title {
+  --np-st: max(2px, .07em);
+  margin: calc(6px * var(--sl-fit, 1)) 0 calc(4px * var(--sl-fit, 1));
+  overflow: clip; overflow-clip-margin: .25em;
+  /* 貼紙要粗黑體才像貼紙：用內文字體（黑體系）而不是標題襯線體 */
+  font-family: var(--sl-fb); font-size: calc(var(--sl-sz-n, 16px) * 2.8); font-weight: 900; color: var(--sl-acc);
+  text-shadow:
+    var(--np-st) 0 #fff, calc(var(--np-st) * -1) 0 #fff, 0 var(--np-st) #fff, 0 calc(var(--np-st) * -1) #fff,
+    calc(var(--np-st) * .7) calc(var(--np-st) * .7) #fff, calc(var(--np-st) * -.7) calc(var(--np-st) * .7) #fff,
+    calc(var(--np-st) * .7) calc(var(--np-st) * -.7) #fff, calc(var(--np-st) * -.7) calc(var(--np-st) * -.7) #fff,
+    0 calc(var(--np-st) * 2.4) 0 rgba(0, 0, 0, .28);
+}
+:root[data-np-skin="sticker"] .np-artist {
+  color: #fff; font-weight: 700; letter-spacing: .08em;
+  text-shadow: 1px 0 rgba(0, 0, 0, .55), -1px 0 rgba(0, 0, 0, .55), 0 1px rgba(0, 0, 0, .55), 0 -1px rgba(0, 0, 0, .55);
+}
+:root[data-np-skin="sticker"] .np-idle {
+  --np-st: max(1.5px, .07em);
+  font-weight: 900; color: var(--sl-acc);
+  text-shadow: var(--np-st) 0 #fff, calc(var(--np-st) * -1) 0 #fff, 0 var(--np-st) #fff, 0 calc(var(--np-st) * -1) #fff, 0 calc(var(--np-st) * 2) 0 rgba(0, 0, 0, .25);
+}
+:root[data-np-skin="sticker"] .np-card.is-enter { animation: np-pop .55s cubic-bezier(.34, 1.56, .64, 1) .14s both; }
+:root[data-np-skin="sticker"] .np-card.is-leaving { animation: np-unpop .3s ease-in both; }
+@keyframes np-pop { from { opacity: 0; transform: scale(.3) rotate(-8deg); } 60% { opacity: 1; transform: scale(1.06) rotate(1.5deg); } to { opacity: 1; transform: none; } }
+@keyframes np-unpop { to { opacity: 0; transform: scale(.4) rotate(6deg); } }
+
+/* 對齊：auto＝交給外觀（上面），手動選了就蓋過外觀的預設 */
+:root[data-np-align="left"] .np-slot { justify-items: start; text-align: left; }
+:root[data-np-align="center"] .np-slot { justify-items: center; text-align: center; }
+:root[data-np-align="right"] .np-slot { justify-items: end; text-align: right; }
+/* 名牌靠右時主色條換到右側 */
+:root[data-np-align="right"]:not([data-np-skin]) .np-card:not(.is-idle),
+:root[data-np-align="right"][data-np-skin="plate"] .np-card:not(.is-idle) { padding-left: var(--sl-ph, 14px); padding-right: calc(var(--sl-ph, 14px) + 6px * var(--sl-fit, 1)); }
+:root[data-np-align="right"]:not([data-np-skin]) .np-card:not(.is-idle)::before,
+:root[data-np-align="right"][data-np-skin="plate"] .np-card:not(.is-idle)::before { left: auto; right: calc(7px * var(--sl-fit, 1)); }
+:root[data-np-align="right"][data-np-skin="tape"] .np-artist { margin-left: 0; margin-right: calc(18px * var(--sl-fit, 1)); }
+:root[data-np-align="center"][data-np-skin="tape"] .np-artist { margin-left: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .np-card.is-enter, .np-card.is-enter::before, .np-card.is-enter::after, .np-card.is-enter .np-strip, .np-card.is-enter .np-artist, :root[data-sl-playing="1"] .np-dot,
+  :root[data-np-skin] .np-card.is-enter, :root[data-np-skin="neon"][data-sl-playing="1"] .np-card:not(.is-idle) .np-title { animation: none !important; }
+  .np-card.is-leaving, :root[data-np-skin] .np-card.is-leaving { animation: none !important; opacity: 0; }
+  .np-deco i { animation: none !important; }
 }
