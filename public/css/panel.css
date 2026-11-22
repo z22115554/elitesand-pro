@@ -67,6 +67,30 @@ html.electron-shell .toast-container { top: calc(var(--desktop-windowbar-height)
   font-family: var(--font-mono); font-size: 10px; font-weight: 700; line-height: 1.2; letter-spacing: 0.04em;
 }
 .new-badge { align-self: center; margin-left: 6px; }
+/* 更新後跳出的「這版更新了什麼」（whats-new.js） */
+.whats-new-modal .modal-card { width: min(560px, calc(100vw - 32px)); }
+.whats-new-body { display: flex; flex-direction: column; gap: 16px; max-height: min(70vh, 640px); overflow-y: auto; }
+.whats-new-version { margin: 0 0 6px; }
+.whats-new-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.whats-new-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.whats-new-item:first-child { border-top: 0; }
+.whats-new-item > div { flex: 1; min-width: 0; }
+.whats-new-item strong { display: block; font-size: 14px; }
+.whats-new-item p { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
+.whats-new-go { flex-shrink: 0; }
+.whats-new-flash { outline: 2px solid var(--accent); outline-offset: 4px; transition: outline-color 0.4s; }
+.whats-new-item.is-visited strong { color: var(--text-dim); }
+/* 「帶我去看」之後留在右下角、可回到清單看下一項（避開右下角的「回報問題」） */
+.whats-new-chip {
+  position: fixed; right: 20px; bottom: 76px; z-index: 900; display: inline-flex; align-items: center; gap: 2px;
+  padding: 4px; background: var(--bg-elevated, var(--bg-surface)); border: 1px solid var(--accent);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+.whats-new-chip-close { min-width: 28px; }
+.help-whats-new { margin-left: auto; margin-right: 8px; }
+
+/* 新功能藏在裡面的入口（收合區、⋯ 選單、分頁、設定分類、頁面），new-badges.js 補上的 NEW */
+.new-badge--door { vertical-align: middle; }
 .nav-group--primary { display: flex; align-items: stretch; }
 .nav-spacer { flex: 1; }
 .nav-item {

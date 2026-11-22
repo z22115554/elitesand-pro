@@ -411,6 +411,55 @@ test('觀眾演出：只有桌面面板能改設定／試播，OBS 只收轉播�
   ok(badges.includes("addEventListener('change', seenNow)") && badges.includes(".closest('label')?.control"), '改了設定或用了 label 對應的選單，NEW 也要消失');
 });
 
+test('藏在收合區／選單／分頁／設定分類／其他頁面裡的新功能，入口也要冒出 NEW', () => {
+  // 2026-11-23 使用者回報：「記住每首歌的音量」的 NEW 在收合的「音訊」裡，不打開根本不知道
+  const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
+  for (const door of ["tagName === 'DETAILS'", "'lslim-pop'", "'tabpanel'", 'settingsWorkspaceGroup', 'sslimCategory', ".nav-item[data-nav="]) {
+    ok(badges.includes(door), `doorsFor 要處理：${door}`);
+  }
+  ok(badges.includes("addEventListener('i18n:change'") && badges.includes('setTimeout(refreshDoors, 0)'),
+    '換語言、版面整理後都要重新補入口的 NEW');
+  ok(badges.includes('markSeen: markSeenAndRefresh'), '看過功能後入口的 NEW 也要跟著收掉');
+  const slim = fs.readFileSync(path.join(__dirname, '../public/js/settings-slim.js'), 'utf8');
+  ok(slim.includes('btn.dataset.sslimCat = cat.key') && slim.includes('card.dataset.sslimCategory = cat.key'), '設定分類按鈕要認得自己的卡片');
+});
+
+test('更新後跳出這版新功能：版本挑選、五語內容、已讀紀錄存伺服器、POST 要 PIN', () => {
+  const data = require('../public/js/whats-new-data');
+  const appVersion = require('../package.json').version;
+  ok(data.RELEASES.some((r) => r.version === appVersion), `package.json 版本 ${appVersion} 要在 whats-new-data.js 有對應內容（發版時把 UNRELEASED 搬過去）`);
+  // 挑版本
+  eq(data.releasesToShow('1.3.0', '1.3.0').length, 0, '看過目前版本不再跳');
+  eq(data.releasesToShow('9.9.9', '1.3.0').length, 0, '紀錄比目前新（降版）也不跳');
+  eq(data.releasesToShow(null, '1.3.0').map((r) => r.version).join(), '1.3.0', '老使用者第一次遇到：只給目前這版');
+  eq(data.releasesToShow('1.2.0', '1.3.0').map((r) => r.version).join(), '1.3.0', '只給比上次看過新、且不超過目前版本的');
+  eq(data.compareVersions('1.10.0', '1.9.3'), 1);
+  // 內容：五語、功能代號都在 NEW 清單登記過
+  const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
+  for (const item of [...data.RELEASES.flatMap((r) => r.items), ...data.UNRELEASED]) {
+    ok(Array.isArray(item.title) && item.title.length === 5 && item.title.every(Boolean), `標題要五語：${item.title}`);
+    ok(Array.isArray(item.desc) && item.desc.length === 5 && item.desc.every(Boolean), `說明要五語：${item.title[0]}`);
+    if (item.feature) ok(badges.includes(`'${item.feature}':`), `功能代號要在 new-badges.js 登記：${item.feature}`);
+  }
+  eq(data.text(['繁', 'en', 'ja', 'ko', '简'], 'ja'), 'ja');
+  eq(data.text(['繁', 'en', 'ja', 'ko', '简'], 'fr'), 'en', '沒有的語言退回英文');
+  // 伺服器紀錄
+  const store = require('../server/services/whats-new-store');
+  try { fs.unlinkSync(store.STORE_FILE); } catch (_) { /* 沒有就算了 */ }
+  eq(store.getStatus({ existingUser: true }).lastSeenVersion, null, '老使用者沒紀錄：回 null 讓面板跳目前這版');
+  eq(store.getStatus({ existingUser: false }).lastSeenVersion, appVersion, '全新安裝：直接記成目前版本、不跳');
+  eq(store.markSeen('../../evil').ok, false, '版本字串要驗證');
+  eq(store.markSeen('1.4.0').ok, true);
+  eq(store.getStatus().lastSeenVersion, '1.4.0');
+  try { fs.unlinkSync(store.STORE_FILE); } catch (_) { /* 清乾淨 */ }
+  const system = fs.readFileSync(path.join(__dirname, '../server/routes/api/system.js'), 'utf8');
+  ok(/router\.post\('\/whats-new\/seen', requirePin/.test(system), '寫入已讀紀錄要過 PIN（鐵則 15）');
+  const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(panel.indexOf('/js/whats-new.js') > panel.indexOf('/js/new-badges.js'), '要在 NEW 冒泡之後載入，「帶我去看」才找得到入口');
+  const ui = fs.readFileSync(path.join(__dirname, '../public/js/whats-new.js'), 'utf8');
+  ok(ui.includes('EulaGate.whenCleared') && ui.includes('PinAuth.fetchWithPin'), '等 EULA 處理完才出場，請求走 PIN（鐵則 16）');
+});
+
 test('每首記憶的音量：存進 state、清單摘要帶 volume、清除後回預設', () => {
   const { createAppState } = require('../server/state/app-state');
   const registerPlaybackHandlers = require('../server/routes/handlers/playback');
