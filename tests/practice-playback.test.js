@@ -25,15 +25,18 @@ function fixture({ signalsmith = true, audio: source, sampleRate = 48000 } = {})
   };
   class Node {
     constructor() {
+      this.connected = false;
+      this.disconnected = false;
       this.processor = new Processor(); this.messages = [];
       this.port = {
         postMessage: data => this.processor.port.onmessage({ data }),
-        close() {}, onmessage: null,
+        closed: false, close() { this.closed = true; }, onmessage: null,
       };
       this.processor.port.postMessage = data => { this.messages.push(data); this.port.onmessage?.({ data }); };
       nodes.push(this);
     }
-    connect() {} disconnect() {}
+    connect() { this.connected = true; }
+    disconnect() { this.connected = false; this.disconnected = true; }
   }
   const main = vm.createContext({ window: {}, AudioWorkletNode: Node, console, performance, AbortController,
     fetch: async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) }),
@@ -47,7 +50,8 @@ function fixture({ signalsmith = true, audio: source, sampleRate = 48000 } = {})
       scope.currentFrame = Math.round(context.currentTime * sampleRate);
       for (const node of nodes) {
         const left = new Float32Array(128), right = new Float32Array(128);
-        node.processor.process([], [[left, right]]); audio.get(node).push(...left);
+        if (node.connected) node.processor.process([], [[left, right]]);
+        audio.get(node).push(...left);
       }
       context.currentTime = (scope.currentFrame + 128) / sampleRate;
     }
@@ -221,5 +225,132 @@ test('original key and tempo render the source samples unchanged', async () => {
   const f = fixture({ audio }), engine = f.create();
   assert.equal(await engine.load('/dry'), true);
   engine.play(0);
-  assert.deepEqual(f.render(32)[0], audio);
+  const output=f.render(32)[0];
+  assert.deepEqual(output.subarray(64), audio.subarray(64));
+  assert.equal(output[0],0);
+});
+
+test('ESP-033: backend reporting reflects fallback and explicit shared SoundTouch selection',async()=>{
+  const fallback=fixture({signalsmith:false}), first=fallback.create();
+  assert.equal(await first.load('/fallback'),true);assert.equal(first.getBackend(),'soundtouch');
+  const main=fixture(),a=main.create(),b=main.create({preserveFormants:true});
+  await Promise.all([a.load('/a',{backend:'soundtouch'}),b.load('/b',{backend:'soundtouch'})]);
+  assert.equal(a.getBackend(),'soundtouch');assert.equal(a.getBackend(),b.getBackend());
+});
+test('ESP-031: pause fades without advancing the source clock and resume fades back in',async()=>{
+  const f=fixture({audio:new Float32Array(4096).fill(1)}),engine=f.create();
+  await engine.load('/constant');engine.play(0);f.render();const before=f.nodes[0].processor._outputPosition;
+  engine.pause();const output=f.render()[0];assert.equal(f.nodes[0].processor._outputPosition,before);
+  assert.equal(output[0],63/64);assert.equal(output[63],0);assert.ok(output.subarray(64).every(x=>x===0));
+  engine.play();const resumed=f.render()[0];assert.equal(resumed[0],0);assert.equal(resumed[64],1);
+});
+
+test('stop rewinds once, cancels scheduled playback and fades while retaining reusable PCM', async () => {
+  const f = fixture({ audio: new Float32Array(4096).fill(1) }), engine = f.create();
+  await engine.load('/constant'); engine.play(0); f.render();
+  engine.play(1, engine.scheduleFrame(.1));
+  engine.stop();
+  assert.equal(engine.isPlaying(), false);
+  assert.equal(engine.getTime(), 0);
+  const audio = f.render()[0], processor = f.nodes[0].processor;
+  assert.equal(audio[0], 63 / 64); assert.equal(audio[63], 0);
+  assert.equal(processor._outputPosition, 0);
+  assert.equal(processor._pending.length, 0);
+  assert.ok(processor._renderer);
+  assert.equal(engine.isReady(), true);
+  f.render(50); assert.equal(engine.isPlaying(), false);
+  engine.play(); assert.equal(f.render()[0][0], 0);
+});
+
+test('dispose releases PCM immediately and disconnects only after its audible tail acknowledges', async () => {
+  const f = fixture({ audio: new Float32Array(4096).fill(1) }), engine = f.create();
+  await engine.load('/constant'); engine.play(0); f.render();
+  const node = f.nodes[0], released = engine.dispose();
+  assert.equal(engine.getPlaybackSnapshot().valid, false);
+  assert.equal(node.processor._renderer, null);
+  assert.equal(node.processor._preparedRenderer, null);
+  assert.equal(node.connected, true);
+  assert.equal(node.port.closed, false);
+  const tail = f.render()[0];
+  assert.equal(tail[0], 63 / 64); assert.equal(tail[63], 0);
+  await released;
+  assert.equal(node.disconnected, true); assert.equal(node.port.closed, true);
+  assert.equal(node.messages.filter(message => message.type === 'disposed').length, 1);
+  assert.equal(node.processor.process([], [[new Float32Array(128)]]), false);
+});
+
+test('replacement engines wait for the old context tail before connecting a new song', async () => {
+  const f = fixture({ audio: new Float32Array(4096).fill(1) }), old = f.create(), next = f.create();
+  await old.load('/old'); old.play(0); f.render();
+  const released = old.dispose(), loading = next.load('/new');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.nodes.length, 1, 'shared context barrier also applies across engine instances');
+  assert.equal(next.isReady(), false);
+  const tail = f.render()[0];
+  assert.equal(tail[63], 0);
+  await released; assert.equal(await loading, true);
+  next.play(0); const head = f.render()[1];
+  assert.equal(head[0], 0); assert.equal(head[64], 1);
+  assert.equal(f.nodes[0].disconnected, true);
+});
+
+test('suspended contexts and missing acknowledgements release ports within a bounded time', async () => {
+  const f = fixture(), engine = f.create();
+  await engine.load('/tone'); engine.play(0); f.render();
+  f.context.state = 'suspended'; await engine.dispose();
+  assert.equal(f.nodes[0].disconnected, true);
+  f.context.state = 'running'; await engine.load('/tone'); engine.play(0); f.render();
+  const started = performance.now(); await engine.dispose(); // Deliberately never render another quantum.
+  assert.ok(performance.now() - started < 1000);
+  assert.equal(f.nodes[1].disconnected, true);
+});
+
+test('retired vocal graph drains its compensation delay and cannot disconnect the next song', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/app-playback.js'), 'utf8');
+  const start = source.indexOf('  function retireVocalsChain()');
+  const end = source.indexOf('  /** 練唱示範', start);
+  assert.ok(start > 0 && end > start);
+  const retired = Array.from({ length: 4 }, () => ({ disconnected: false, disconnect() { this.disconnected = true; } }));
+  let release;
+  const released = new Promise(resolve => { release = resolve; });
+  const timers = [];
+  const scope = vm.createContext({
+    vocalsTap: retired[0], vocalsGain: retired[1], vocalsMasterGain: retired[2], vocalsDelay: retired[3],
+    vocalsSTEngine: { dispose: () => released }, vocalsLoadPromise: Promise.resolve(true),
+    separationCompLatencySec: .006, stCtx: { sampleRate: 48000 },
+    setTimeout: (callback, ms) => timers.push({ callback, ms }),
+  });
+  vm.runInContext(source.slice(start, end) + '\nretireVocalsChain();', scope);
+  assert.equal(scope.vocalsSTEngine, null);
+  assert.equal(retired.some(node => node.disconnected), false);
+  const next = { disconnected: false, disconnect() { this.disconnected = true; } };
+  scope.vocalsDelay = next;
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(timers.length, 1);
+  assert.ok(timers[0].ms >= 9 && timers[0].ms < 20);
+  assert.equal(retired.some(node => node.disconnected), false);
+  timers[0].callback();
+  assert.equal(retired.every(node => node.disconnected), true);
+  assert.equal(next.disconnected, false);
+});
+
+test('stop and dispose bound sample discontinuities at eight phases on both real DSP backends', async () => {
+  const sampleRate = 48000;
+  for (const signalsmith of [false, true]) for (const key of [0, 3]) for (let phase = 0; phase < 8; phase++) {
+    const audio = Float32Array.from({ length: sampleRate }, (_, i) => .15 * Math.sin(2 * Math.PI * (110 * i / sampleRate + phase / 8)));
+    for (const action of ['stop', 'dispose']) {
+      const f = fixture({ signalsmith, audio, sampleRate }), engine = f.create();
+      engine.setPitch(key); await engine.load('/phase'); engine.play(0);
+      const before = f.render(100)[0];
+      const finished = engine[action]();
+      const tail = f.render()[0];
+      const samples = [before.at(-1), ...tail];
+      let jump = 0;
+      for (let i = 1; i < samples.length; i++) jump = Math.max(jump, Math.abs(samples[i] - samples[i - 1]));
+      assert.ok(jump < .15 / 32, `${signalsmith ? 'signalsmith' : 'soundtouch'} key=${key} phase=${phase} ${action}: ${jump}`);
+      assert.ok(tail.subarray(64).every(value => value === 0));
+      if (action === 'dispose') await finished;
+    }
+  }
 });

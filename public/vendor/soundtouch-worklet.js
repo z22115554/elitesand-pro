@@ -425,6 +425,8 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     this._renderer = null;
     this._preparedRenderer = null;
     this._disposed = false;
+    this._disposing = false;
+    this._pauseFadeFromL = 0; this._pauseFadeFromR = 0;
     this._ready = false;
     this._playing = false;
     this._ended = false;
@@ -449,7 +451,7 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
   }
 
   _onMessage(msg) {
-    if (!msg || this._disposed) return;
+    if (!msg || this._disposed || this._disposing) return;
     if (msg.type === 'prepare') {
       this._prepareRenderer();
       return;
@@ -463,7 +465,7 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     }
     // 立即套用的 play/seek/pause 是使用者當下的明確動作，作廢任何還沒到點的排程 play/seek
     // （否則：排了一個未來的 play，使用者馬上按暫停，那個 play 到點又會把播放打開）
-    if (msg.type === 'play' || msg.type === 'seek' || msg.type === 'pause') {
+    if (msg.type === 'play' || msg.type === 'seek' || msg.type === 'pause' || msg.type === 'stop') {
       this._pending = this._pending.filter((p) => p.type !== 'play' && p.type !== 'seek');
     }
     if (msg.type === 'pitch' || msg.type === 'tempo') {
@@ -524,6 +526,21 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
     this._fadeFromR = this._lastSampleR;
   }
 
+  _fadeToSilence() {
+    if (this._playing) {
+      this._pauseFadeRemaining = 64;
+      this._pauseFadeFromL = this._lastSampleL;
+      this._pauseFadeFromR = this._lastSampleR;
+    }
+    this._playing = false;
+  }
+
+  _finishDispose() {
+    this._disposed = true;
+    this._disposing = false;
+    this.port.postMessage({ type: 'disposed' });
+  }
+
   _apply(msg) {
     switch (msg.type) {
       case 'load': {
@@ -543,14 +560,22 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
         this._playing = false;
         break;
       }
-      case 'dispose':
-        // Release the transferred PCM and stop rendering this disconnected node.
+      case 'dispose': {
+        // Release song-sized PCM immediately; only two scalar tail samples
+        // survive until the output reaches zero and the main thread disconnects.
+        const fromL = this._lastSampleL, fromR = this._lastSampleR;
         this._releaseSource();
         this._preparedRenderer = null;
-        this._disposed = true;
+        this._disposing = true;
+        this._pauseFadeFromL = fromL; this._pauseFadeFromR = fromR;
+        this._pauseFadeRemaining = fromL !== 0 || fromR !== 0 ? 64 : 0;
+        if (!this._pauseFadeRemaining) this._finishDispose();
         break;
+      }
       case 'play':
         if (!this._ready) break;
+        if (!this._playing) this._fadeFromLastSample();
+        this._pauseFadeRemaining = 0;
         if (typeof msg.position === 'number') {
           const target = Math.max(0, Math.min(this._sourceLength, msg.position));
           if (Math.abs(target - this._outputPosition) > 1) {
@@ -564,7 +589,15 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
         this._playing = true;
         break;
       case 'pause':
-        this._playing = false;
+        this._fadeToSilence();
+        break;
+      case 'stop':
+        this._fadeToSilence();
+        this._pending = [];
+        this._outputPosition = 0;
+        this._renderer?.reset(0, this._pitch, this._tempo);
+        this._generation++;
+        this._ended = false;
         break;
       case 'seek':
         if (this._ready && typeof msg.position === 'number') {
@@ -600,6 +633,7 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
   }
 
   _releaseSource() {
+    this._pauseFadeRemaining = 0;
     this._playing = false;
     this._ready = false;
     this._ended = false;
@@ -639,6 +673,16 @@ class SoundTouchProcessor extends AudioWorkletProcessor {
 
     if (!this._ready || !this._playing) {
       left.fill(0); if (output[1]) right.fill(0);
+      if (this._pauseFadeRemaining > 0) {
+        const fromL = this._pauseFadeFromL, fromR = this._pauseFadeFromR;
+        const count = Math.min(frames, this._pauseFadeRemaining);
+        for (let i = 0; i < count; i++) {
+          const gain = Math.max(0, --this._pauseFadeRemaining) / 64;
+          left[i] = fromL * gain; right[i] = fromR * gain;
+        }
+        this._lastSampleL = left[count - 1]; this._lastSampleR = right[count - 1];
+      }
+      if (this._disposing && this._pauseFadeRemaining === 0) { this._finishDispose(); return false; }
       this._preparePending(frames);
       return true;
     }

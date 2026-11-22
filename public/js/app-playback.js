@@ -51,7 +51,7 @@
   // AudioContext、各自的 AudioWorkletNode），跟著伴奏同步 play/pause/seek/pitch/tempo。
   // 兩軌共用輸出 frame，播放位置依已渲染的 sample 數推進。
   let separationActive = false; // 目前這首歌是否實際使用伴奏＋人聲雙 stem
-  let vocalsSTEngine = null, vocalsGain = null, vocalsDelay = null;
+  let vocalsSTEngine = null, vocalsGain = null, vocalsDelay = null, vocalsMasterGain = null;
   // 練唱「示範」用的分接點：人聲引擎 → vocalsTap（增益 1，聽感不變）→ vocalsGain。
   // 練唱頁從這裡接出原唱人聲做音高偵測，不受人聲音量（可能調到 0）影響。
   let vocalsTap = null;
@@ -87,12 +87,15 @@
     vocalsSTEngine = window.createSoundTouchEngine({ preserveFormants: true });
     vocalsGain = stCtx.createGain();
     vocalsGain.gain.value = vocalsVolume;
+    vocalsMasterGain = stCtx.createGain();
+    vocalsMasterGain.gain.value = stGain?.gain.value ?? 0.7;
     // 人聲鏈：vocalsGain → vocalsDelay →（下游看雙路路由開了沒：直接到 destination
     // 或接雙路耳機節點）。vocalsDelay 補的是「伴奏鏈那顆 limiter 的前視延遲」，人聲仍
     // 不經過 stTrackGain/limiter（不套響度標準化，維持既有決定）。
     vocalsDelay = stCtx.createDelay(1);
     vocalsDelay.delayTime.value = separationCompLatencySec;
-    vocalsGain.connect(vocalsDelay);
+    vocalsGain.connect(vocalsMasterGain);
+    vocalsMasterGain.connect(vocalsDelay);
     // 這裡必須自己判斷下游，不能一律接 destination 等 wireDualRouting() 來改：雙路路由
     // 已經接上時（前一首沒分離、人聲鏈那時還不存在），playTrack() 之後呼叫的
     // wireDualRouting(true) 會因為「狀態沒變」直接 return，這條新的人聲鏈就永遠留在
@@ -104,6 +107,22 @@
     vocalsTap.connect(vocalsGain);
     for (const node of practiceVocalTaps) { try { vocalsTap.connect(node); } catch (e) {} }
     vocalsSTEngine.attach(stCtx, vocalsTap);
+  }
+
+  function retireVocalsChain() {
+    // Capture this generation's graph before the next song creates its own.
+    // Preserve the 6ms compensation delay long enough to emit the worklet tail.
+    const retired = [vocalsTap, vocalsGain, vocalsMasterGain, vocalsDelay].filter(Boolean);
+    const delayMs = Math.ceil((separationCompLatencySec + 128 / (stCtx?.sampleRate || 48000)) * 1000);
+    let released;
+    try { released = vocalsSTEngine?.dispose(); } catch (_) {}
+    Promise.resolve(released).catch(() => {}).then(() => {
+      setTimeout(() => {
+        for (const node of retired) { try { node.disconnect(); } catch (_) {} }
+      }, delayMs);
+    });
+    vocalsSTEngine = null; vocalsGain = null; vocalsMasterGain = null;
+    vocalsDelay = null; vocalsTap = null; vocalsLoadPromise = null;
   }
 
   /** 練唱示範：把原唱人聲（升降 Key 後、音量前）接到 node；回傳解除函式。換歌重建人聲鏈時會自動接回。 */
@@ -119,10 +138,27 @@
 
   /** 載入這首歌的人聲，並把 promise 記在模組層——requestPlayback 按播放鍵時若伴奏已經
    * ready、人聲卻還沒解完，要能拿到這個 promise 等它，而不是直接放棄人聲。 */
-  function loadVocalsFor(track) {
-    vocalsLoadPromise = vocalsSTEngine
+  function loadVocalsFor(track, masterPromise) {
+    const token = stLoadToken;
+    const initial = vocalsSTEngine
       ? vocalsSTEngine.load('/audio/' + encodeURIComponent(track.vocalsFile))
       : Promise.resolve(false);
+    vocalsLoadPromise = (async () => {
+      const [ok] = await Promise.all([initial, masterPromise]);
+      if (!ok || token !== stLoadToken || !stReady) return false;
+      const masterBackend = SoundTouchEngine.getBackend?.(), vocalBackend = vocalsSTEngine.getBackend?.();
+      if (masterBackend && vocalBackend && masterBackend !== vocalBackend) {
+        stReady = false;
+        const [masterOk, vocalOk] = await Promise.all([
+          SoundTouchEngine.load('/audio/' + encodeURIComponent(track.instrumentalFile), { backend: 'soundtouch' }),
+          vocalsSTEngine.load('/audio/' + encodeURIComponent(track.vocalsFile), { backend: 'soundtouch' }),
+        ]);
+        if (token !== stLoadToken) return false;
+        stReady = masterOk;
+        return masterOk && vocalOk;
+      }
+      return true;
+    })();
     return vocalsLoadPromise;
   }
 
@@ -612,11 +648,21 @@
   }
   function stActive() { return useSoundTouch && stReady; }
   let stLoadToken = 0; // 防止快速切歌時，較舊的載入結果覆蓋較新的 stReady
+  let stPendingLoad = null, stPendingFilename = null, stPendingToken = null;
+  let stDesiredStartTime = 0;
   // 回傳 'stale' 代表這次載入已被更新的載入取代——呼叫端必須直接放棄，什麼都不做。
   // 少了這個回報，舊的 .then() 會拿「當下的 stReady」（還在 decode 新歌時是 false）誤判成
   // 「SoundTouch 解碼失敗」而降級去 audioPlayer.play()，於是 <audio> 與 SoundTouch 兩條鏈
   // 同時出聲、進度各走各的（實測：連點下一首會聽到兩個不同進度的音訊，且暫停後進度條照跑）。
-  async function stLoadCurrent(filename, myToken = ++stLoadToken) {
+  async function stLoadCurrent(filename, myToken) {
+    if (stPendingLoad && stPendingFilename === filename && stPendingToken === stLoadToken
+      && (myToken === undefined || myToken === stPendingToken)) return stPendingLoad;
+    if (myToken === undefined) myToken = ++stLoadToken;
+    stPendingFilename = filename; stPendingToken = myToken;
+    const pending = stLoadFresh(filename, myToken); stPendingLoad = pending;
+    try { return await pending; } finally { if (stPendingLoad === pending) stPendingLoad = null; }
+  }
+  async function stLoadFresh(filename, myToken) {
     stReady = false;
     if (!useSoundTouch || !filename) return 'skip';
     if (!stInitChain()) return 'skip';
@@ -625,6 +671,7 @@
     if (myToken !== stLoadToken) return 'stale';
     const ok = await SoundTouchEngine.load('/audio/' + encodeURIComponent(filename));
     if (myToken !== stLoadToken) return 'stale'; // 已有更新的載入發生 → 丟棄這次結果
+    if (ok && stDesiredStartTime > 0) SoundTouchEngine.seek(stDesiredStartTime);
     stReady = ok;
     practiceSourceEntryId = ok ? loadedTrackEntryId : null;
     notifyPracticePlayback();
@@ -769,6 +816,7 @@
 
     const notifyServer = options.notifyServer !== false;
     const startTime = Number.isFinite(Number(options.startTime)) ? Math.max(0, Number(options.startTime)) : 0;
+    stDesiredStartTime = startTime;
 
     const track = playlist[index];
     if (track.audioMissing) {
@@ -851,7 +899,7 @@
           // 分離雙軌：伴奏＋人聲要平行載入（不能先播伴奏、等它 ready 才去載人聲，
           // 那樣人聲會晚個幾百 ms 才進來），載入完成才一起 play()，起頭才會對齊。
           const masterLoadPromise = stLoadCurrent(masterFilename, loadToken);
-          const vocalsPromise = wantSeparation ? loadVocalsFor(track) : Promise.resolve(false);
+          const vocalsPromise = wantSeparation ? loadVocalsFor(track, masterLoadPromise) : Promise.resolve(false);
           Promise.all([masterLoadPromise, vocalsPromise, dualReadyPromise]).then(([result, vocalsOk]) => {
             if (result === 'stale') return; // 已被更新的切歌取代，交給那一次處理
             if (loadToken !== stLoadToken) return; // 等較慢的人聲或輸出裝置時又切了歌
@@ -896,7 +944,7 @@
         // 載入但不播放：暫停待命，由使用者按播放鍵開始
         if (useSoundTouch) {
           const masterLoadPromise = stLoadCurrent(masterFilename, loadToken);
-          const vocalsPromise = wantSeparation ? loadVocalsFor(track) : Promise.resolve(false);
+          const vocalsPromise = wantSeparation ? loadVocalsFor(track, masterLoadPromise) : Promise.resolve(false);
           Promise.all([masterLoadPromise, vocalsPromise, dualReadyPromise]).then(([result]) => {
             if (result === 'stale' || loadToken !== stLoadToken) return;
             seekLoadedTrack(startTime);
@@ -932,10 +980,7 @@
       try { SoundTouchEngine.dispose(); } catch (e) {}
       stReady = false;
     }
-    if (vocalsSTEngine) { try { vocalsSTEngine.dispose(); } catch (e) {} }
-    if (vocalsDelay) { try { vocalsDelay.disconnect(); } catch (e) {} }
-    if (vocalsTap) { try { vocalsTap.disconnect(); } catch (e) {} }
-    vocalsSTEngine = null; vocalsGain = null; vocalsDelay = null; vocalsTap = null; vocalsLoadPromise = null; // 銷毀後要歸零，否則 ensureVocalsChain() 會早退、下一首分離歌拿到死引擎
+    retireVocalsChain();
     stopDualAudioClickTest();
     // 歌曲結束只釋放歌曲 buffer；雙路模式仍開著時保留 routing/sink，避免下一首重新 cold-start。
     if (!dualAudioModeEnabled) wireDualRouting(false);
@@ -1915,6 +1960,7 @@
       }
       // 高品質變調的獨立輸出鏈也要跟著調音量
       if (stGain) { try { stGain.gain.value = vol; } catch (e) { /* 靜默 */ } }
+      if (vocalsMasterGain) { try { vocalsMasterGain.gain.value = vol; } catch (e) { /* 靜默 */ } }
     });
   }
 
