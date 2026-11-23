@@ -2224,13 +2224,15 @@ html[data-sl-fit="fill"][data-layout="now-playing"] .lay-stage { align-items: ce
 :root[data-np-skin="player"] .np-artist { margin-top: 0; }
 :root[data-np-skin="player"] .np-dot { display: none; }
 :root[data-np-skin="player"] .np-deco {
-  display: flex; grid-column: 1; grid-row: 1 / span 3; align-items: flex-end; justify-content: center; gap: calc(3px * var(--sl-fit, 1));
+  /* 音量條的粗細與間距跟著字級（圓圈也是跟字級）；之前跟著來源尺寸縮放，OBS 來源開到 1920×1080 時
+     五根音量條會撐滿整個圓、最外側兩根超出圓邊。 */
+  display: flex; grid-column: 1; grid-row: 1 / span 3; align-items: flex-end; justify-content: center; gap: calc(var(--sl-sz-n, 16px) * .2);
   box-sizing: border-box; width: calc(var(--sl-sz-n, 16px) * 3.4); height: calc(var(--sl-sz-n, 16px) * 3.4);
   padding: calc(var(--sl-sz-n, 16px) * .95) 0; border-radius: 50%;
   background: radial-gradient(circle at 30% 25%, var(--sl-acc-b), var(--sl-acc) 72%);
 }
 :root[data-np-skin="player"] .np-deco i {
-  display: block; width: calc(3px * var(--sl-fit, 1)); height: 100%; border-radius: 2px;
+  display: block; width: calc(var(--sl-sz-n, 16px) * .2); height: 100%; border-radius: 2px;
   background: var(--sl-accent-ink, #17110a); transform-origin: bottom center; transform: scaleY(.22); transition: transform .4s ease;
 }
 :root[data-np-skin="player"][data-sl-playing="1"] .np-deco i { animation: np-eq 1.05s ease-in-out infinite; }
