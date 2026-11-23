@@ -368,7 +368,9 @@ const LyricMotion = (() => {
       }
     } else {
       const next = lines[i + 1];
-      const lineEndMs = next ? next.time : line.time + 5000;
+      // 有 duration（SRT/VTT、或 LRC 用空行標出結束）就用它：不然間奏前那一句的偽逐字會慢慢攤到
+      // 間奏結束，跟 lineTempo 判斷的「這句已經結束」對不上。
+      const lineEndMs = Number(line.duration) > 0 ? line.time + Number(line.duration) : (next ? next.time : line.time + 5000);
       const totalMs = Math.max(lineEndMs - line.time, 300);
       words = distributeTokens(tokenizeLineText(line.text), line.time, line.time + totalMs);
     }

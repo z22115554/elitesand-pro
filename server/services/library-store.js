@@ -35,7 +35,8 @@ const MAX_ENTRIES = 10000; // 高安全上限；實際容量主要受媒體磁�
 // fs.existsSync，可把 2000 首歌的同步 I/O 壓成短暫快取期內至多一次 readdirSync。
 const AUDIO_SNAPSHOT_TTL_MS = 1000;
 
-let library = {}; // { [id]: { id, url, title, artist, cover, duration, source, playCount, lastPlayed } }
+// 沒有 prototype：id 是外部傳進來的字串，library['constructor'] 不能拿到 Object 本身。
+let library = Object.create(null); // { [id]: { id, url, title, artist, cover, duration, source, playCount, lastPlayed } }
 let _entryCount = 0;
 let _saveTimer = null;
 let _errorReporter = null;
@@ -211,7 +212,7 @@ const libraryDiskStore = createJsonStore({
 });
 
 (function load() {
-  library = libraryDiskStore.load() || {};
+  library = Object.assign(Object.create(null), libraryDiskStore.load() || {});
   _entryCount = Object.keys(library).length;
   // 舊版（v1）媒體庫的歌詞內嵌在 entry 裡：這些值就是權威值，標成已 hydrate 並排進
   // 下一次存檔搬到分檔。搬完之前 library.json 仍保有內嵌歌詞，所以一直都是 durable。
@@ -280,7 +281,7 @@ function saveNow() {
         newlyDirty.forEach((id) => _dirtyEntryIds.delete(id));
         throw new Error('媒體庫淘汰前無法安全保存播放清單 fallback，已取消本次媒體庫寫入');
       }
-      const keep = {};
+      const keep = Object.create(null);
       for (const id of keepIds) keep[id] = library[id];
       library = keep;
       _entryCount = keepIds.length;
@@ -400,6 +401,19 @@ function recordPlay(track) {
       ? track.sections : (prev && prev.sections) || null,
     sectionsStatus: (track.sectionsStatus && track.sectionsStatus !== 'none')
       ? track.sectionsStatus : (prev && prev.sectionsStatus) || 'none',
+    // 匯入時（rememberImport）存進來、播放時的 payload 常常沒帶的欄位：重建時同樣要保留，
+    // 否則播一次專輯名、原始檔名就不見。LRC 內建 offset 與「時長不符」只屬於那份歌詞，
+    // 歌詞換掉了才跟著新歌詞走。
+    album: pick(track.album, prev && prev.album) || '',
+    originalName: pick(track.originalName, prev && prev.originalName) || '',
+    ...(() => {
+      const sameLyrics = !!prev && (!track.lyrics || track.lyrics === prev.lyrics);
+      return {
+        lrcOffset: track.lrcOffset || (sameLyrics && Number.isFinite(prev.lrcOffset) ? prev.lrcOffset : 0),
+        lyricsDurationVerified: typeof track.lyricsDurationVerified === 'boolean' ? track.lyricsDurationVerified
+          : (sameLyrics && typeof prev.lyricsDurationVerified === 'boolean' ? prev.lyricsDurationVerified : null),
+      };
+    })(),
     playCount: (prev ? prev.playCount : 0) + 1,
     lastPlayed: Date.now(),
   };
@@ -480,8 +494,14 @@ function updateMeta(id, partial) {
 /** 取得單筆記錄（含歌詞/檔名/變調），供從媒體庫即時還原。需要時會從磁碟讀回歌詞。 */
 function getEntry(id) {
   if (!id) return null;
+  id = String(id);
+  const alreadyHydrated = _hydrated.has(id);
   hydrate(id);
-  return library[String(id)] || null;
+  const entry = library[id] || null;
+  // Read-only hydration must not pin every song ever visited in memory.
+  // Dirty/write-owned entries keep their existing persistence lifecycle.
+  if (!alreadyHydrated && !_lyricsCheck.has(id)) dehydrate([id]);
+  return entry;
 }
 
 /**
@@ -500,9 +520,19 @@ function hasEntry(id) {
 // 同一首歌被不同 YouTube 上傳各匯入一次時，videoId 不同、rememberImport() 的 dedupe
 // 完全不會發現——2026-09-08 實測撞到（「北極雪」兩個上傳各收一份）。這裡改用「歌手+歌名」
 // 當第二層 key；NFKC 正規化＋去空白/標點，才擋得住全形/半形、有無空白這類差異。
+// 繁簡也要當成同一首：同一首歌常有繁體（台灣官方）與簡體（對岸搬運）兩種上傳，
+// 「周杰倫 - 告白氣球」跟「周杰伦 - 告白气球」原本被當成兩首各收一份。繁→簡是多對一，比對較穩。
+let toSimplifiedForIdentity = null;
+function simplifyForIdentity(text) {
+  if (toSimplifiedForIdentity === null) {
+    try { toSimplifiedForIdentity = require('opencc-js').Converter({ from: 'tw', to: 'cn' }); } catch (_) { toSimplifiedForIdentity = false; }
+  }
+  if (!toSimplifiedForIdentity) return text;
+  try { return toSimplifiedForIdentity(text); } catch (_) { return text; }
+}
+
 function normalizeIdentityPart(value) {
-  return String(value || '')
-    .normalize('NFKC')
+  return simplifyForIdentity(String(value || '').normalize('NFKC'))
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, '');
 }
@@ -674,7 +704,7 @@ function clear() {
     previouslyDirty.forEach((id) => _dirtyEntryIds.add(id));
     return false;
   }
-  library = {};
+  library = Object.create(null);
   ids.forEach(forgetLyricsState);
   _entryCount = 0;
   _dirtyEntryIds.clear();
@@ -688,22 +718,41 @@ function clear() {
  * @param {Set<string>} keepFilenames 目前播放清單正在用的檔名集合
  * @returns {{deleted:number, freedBytes:number}}
  */
-function cleanupAudio(keepFilenames = new Set()) {
+function cleanupAudio(keepFilenames = new Set(), { dryRun = false } = {}) {
+  keepFilenames = new Set(keepFilenames);
+  const eligible = new Set();
+  const { isYouTubeUrl } = require('../utils/youtube-url');
+  const protectedIds = new Set(require('./bgm-playlist').list());
+  for (const playlist of require('./saved-playlists').list()) {
+    for (const id of playlist.trackIds || []) protectedIds.add(id);
+  }
+  for (const entry of Object.values(library)) {
+    if (!entry) continue;
+    const media = collectMediaFilenames(entry, new Set());
+    if (!isYouTubeUrl(entry.url) || protectedIds.has(String(entry.id))) {
+      for (const name of media) keepFilenames.add(name);
+    } else {
+      for (const name of media) eligible.add(name);
+    }
+  }
+  const activeImports = Object.keys(require('./import-temp-registry').getEntries());
   let deleted = 0, freedBytes = 0;
   const deletedNames = new Set();
   let repairedEntries = 0;
   try {
     if (!fs.existsSync(DOWNLOADS_DIR)) return { deleted, freedBytes };
     for (const name of fs.readdirSync(DOWNLOADS_DIR)) {
-      if (keepFilenames.has(name)) continue;
+      if (keepFilenames.has(name) || !eligible.has(name) || name.startsWith('.')
+        || !/\.(?:mp3|m4a|wav|flac|ogg|opus|aac|webm)$/i.test(name)
+        || activeImports.some((id) => name.startsWith(`${id}.`))) continue;
       const fp = path.join(DOWNLOADS_DIR, name);
       try {
-        const st = fs.statSync(fp);
+        const st = fs.lstatSync(fp);
         if (st.isFile()) {
           freedBytes += st.size;
-          fs.unlinkSync(fp);
+          if (!dryRun) fs.unlinkSync(fp);
           deletedNames.add(name);
-          noteAudioSnapshot(name, false);
+          if (!dryRun) noteAudioSnapshot(name, false);
           deleted++;
         }
       } catch (e) { /* 略過單檔錯誤 */ }
@@ -712,7 +761,7 @@ function cleanupAudio(keepFilenames = new Set()) {
     // library-only 的分離 stem 可以依既有「清掉不在播放清單的音檔」語意被刪除，
     // 但 metadata 不能繼續假裝檔案還在。原始 filename 刻意保留：reimport 本來就會
     // 先 audioExists()，不存在時再用 URL 重抓；這份檔名仍有歷史／重新下載價值。
-    if (deletedNames.size) {
+    if (!dryRun && deletedNames.size) {
       for (const entry of Object.values(library)) {
         if (!entry) continue;
         let repaired = false;
@@ -739,7 +788,7 @@ function cleanupAudio(keepFilenames = new Set()) {
   return { deleted, freedBytes, repairedEntries };
 }
 
-process.on('exit', () => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
+require('../utils/exit-hooks').onExit(() => { if (_saveTimer) { clearTimeout(_saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
 function setErrorReporter(fn) { _errorReporter = typeof fn === 'function' ? fn : null; }
 module.exports = {

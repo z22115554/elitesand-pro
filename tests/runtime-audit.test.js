@@ -1,8 +1,29 @@
 'use strict';
+require('./audit-storage.test');
+require('./spout-output-lifecycle.test');
+require('./jizura-word-wrap.test');
+require('./shell-health-identity.test');
+require('./library-restore-memory.test');
+require('./webgpu-audio-budget.test');
+require('./webgpu-engine-window-lifecycle.test');
+require('./import-cleanup-race.test');
+require('./display-clock-skew.test');
+require('./track-scoped-controls.test');
+require('./spout-controller-lifecycle.test');
+require('./twitch-eventsub-handoff.test');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadState, loadDisplay, loadPlaylist } = require('./helpers/runtime-audit-fixtures');
+
+test('ESP-050: all stores share one exit listener and a failed flush does not stop the rest', () => {
+  const callbacks = [], calls = [], mod = { exports: {} };
+  require('node:vm').runInNewContext(require('node:fs').readFileSync(require('node:path').join(__dirname, '../server/utils/exit-hooks.js'), 'utf8'), {
+    module: mod, process: { once(_event, fn) { callbacks.push(fn); } },
+  });
+  for (let i = 0; i < 15; i++) mod.exports.onExit(() => { calls.push(i); if (i === 3) throw new Error('write failed'); });
+  assert.equal(callbacks.length, 1); callbacks[0](); assert.equal(calls.length, 15);
+});
 
 test('speed changes preserve the clock at the old rate and use the new slope afterward', () => {
   const display = loadDisplay();

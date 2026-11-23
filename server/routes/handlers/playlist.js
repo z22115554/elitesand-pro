@@ -7,7 +7,7 @@ const { emitToAccessRooms, emitToControlClients } = require('../../utils/socket-
 const playlistExportStore = require('../../services/playlist-export-store');
 const libraryStore = require('../../services/library-store');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
-const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds, ensureEntryIds } = require('../../utils/track-schema');
+const { sanitizePlaylist, MAX_PLAYLIST_SIZE, assignFreshEntryIds, ensureEntryIds, lrcDefaultOffset } = require('../../utils/track-schema');
 
 const log = createLogger('Socket');
 
@@ -21,6 +21,15 @@ const VALID_ROMANIZATION_MODES = ['original', 'romanized', 'both', 'xieyin', 'fu
  */
 async function applyCommunityOffsetSuggestion(ctx, io, track) {
   if (!track || !track.id || ctx.trackOffsets.has(track.id)) return;
+  // 歌詞檔自帶 [offset:] 的先用它（同一份歌詞的社群建議也是以它為基準算出來的）。
+  const fileOffset = lrcDefaultOffset(track);
+  if (fileOffset) {
+    ctx.trackOffsets.set(track.id, fileOffset);
+    if (ctx.playState.currentTrack && ctx.playState.currentTrack.id === track.id) ctx.playState.currentOffset = fileOffset;
+    io.emit('offset:update', { trackId: track.id, offset: fileOffset });
+    ctx.persistState();
+    return;
+  }
   const result = await lyricOffsetSync.getSuggestedOffset(track.id, lyricOffsetSync.lyricsKeyFor(track)).catch(() => null);
   if (!result || typeof result.suggestedOffsetMs !== 'number' || ctx.trackOffsets.has(track.id)) return;
   ctx.trackOffsets.set(track.id, result.suggestedOffsetMs);
@@ -29,6 +38,33 @@ async function applyCommunityOffsetSuggestion(ctx, io, track) {
   }
   io.emit('offset:update', { trackId: track.id, offset: result.suggestedOffsetMs });
   ctx.persistState();
+}
+
+/** 已唱歌單存的是唱當下的歌名副本：清單裡改了名字，同一首（同 id）已唱過的那幾筆也換成新名字。 */
+function syncNamesToSession(session, tracks) {
+  if (!session || !Array.isArray(session.songs) || !session.songs.length) return false;
+  const names = new Map();
+  for (const track of tracks || []) {
+    if (track && track.id && track.title) names.set(String(track.id), { title: track.title, artist: track.artist || '' });
+  }
+  let changed = false;
+  session.songs = session.songs.map((song) => {
+    const next = song && names.get(String(song.id));
+    if (!next || (song.title === next.title && (song.artist || '') === next.artist)) return song;
+    changed = true;
+    return { ...song, ...next };
+  });
+  return changed;
+}
+
+/**
+ * 單曲模式唱完一首、目前歌曲已清空時，「插到下一首」要插在剛唱完那列的後面——面板按「下一首」
+ * 也是從那裡往後（lastPlayedEntryId）。舊版找不到目前歌曲就一律加到清單最後，主播核准時選了
+ * 「下一首」，按下一首卻輪不到它。只在完全沒有目前歌曲時用；單獨載入、不在清單裡的歌照舊。
+ */
+function lastPlayedCursor(playState) {
+  if (playState.currentTrack || !playState.lastPlayedEntryId) return -1;
+  return playState.playlist.findIndex((item) => item && item.entryId === playState.lastPlayedEntryId);
 }
 
 /**
@@ -66,8 +102,10 @@ function mergePlaylistSummaryWithExisting(cleanPlaylist, previousPlaylist) {
     const previous = (track.entryId && previousByEntryId.get(track.entryId)) || previousById.get(track.id);
     if (!previous) return track;
     const artistChanged = (track.artist || '') !== (previous.artist || '');
-    return {
-      ...previous,
+    // Preserve deferred word lyrics while reordering summaries. Spreading the
+    // track would invoke its getter for every song in a large restored playlist.
+    const merged = Object.defineProperties({}, Object.getOwnPropertyDescriptors(previous));
+    return Object.assign(merged, {
       // 這些是目前 UI 明確允許透過 playlist:update 改動的欄位。
       entryId: track.entryId || previous.entryId,
       title: track.title,
@@ -77,7 +115,7 @@ function mergePlaylistSummaryWithExisting(cleanPlaylist, previousPlaylist) {
       // 把既有歌手判定的信心值洗回 0。只有使用者真的改了 artist 才重算這兩欄。
       needsArtistConfirmation: artistChanged ? !track.artist : previous.needsArtistConfirmation,
       artistConfidence: artistChanged ? (track.artist ? 1 : 0) : previous.artistConfidence,
-    };
+    });
   });
 }
 
@@ -105,11 +143,13 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     if (typeof reconcilePlaybackProgress === 'function') reconcilePlaybackProgress();
     // 在播放清單改了名字：歌曲庫頁也要馬上看到新名字
     if (syncNamesToLibrary(preserved)) emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
+    // 這場已唱的那幾筆也跟著改（同歌曲庫改名）；下面的 emitSetlist／persistState 會一起送出、存檔。
+    syncNamesToSession(ctx.session, preserved);
     emitPlaylistUpdate();
     emitSetlist(); // 未唱清單跟著清單變動更新
     broadcastState();
     persistState();
-    if (typeof ack === 'function') ack({ ok: true, playlist: preserved });
+    if (typeof ack === 'function') ack({ ok: true, playlist: getPublicPlaylist() });
   });
 
   socket.on('playlist:add', (tracks, ack) => {
@@ -129,7 +169,7 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     emitSetlist();
     broadcastState();
     persistState();
-    if (typeof ack === 'function') ack({ ok: true, added: added.length, tracks: added });
+    if (typeof ack === 'function') ack({ ok: true, added: added.length, tracks: added.length ? getPublicPlaylist().slice(-added.length) : [] });
     added.forEach((track) => {
       applyCommunityOffsetSuggestion(ctx, io, track)
         .catch((error) => log.warn(`歌詞偏移建議值套用失敗：${error.message}`));
@@ -157,6 +197,7 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
       // 沒有 entryId 的舊資料才退回用歌曲 id 找（重複歌曲時可能找到錯的那一列，僅供相容）。
       currentIndex = playState.playlist.findIndex((item) => item.id === playState.currentTrack.id);
     }
+    if (currentIndex < 0) currentIndex = lastPlayedCursor(playState);
     const insertAt = currentIndex >= 0 ? currentIndex + 1 : playState.playlist.length;
     const [insertedTrack] = assignFreshEntryIds(clean);
     playState.playlist.splice(insertAt, 0, insertedTrack);
@@ -259,7 +300,7 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
   });
 
   // 匯入播放清單
-  socket.on('playlist:import', (data, ack) => {
+  function importPlaylist(data, ack) {
     if (!data || !Array.isArray(data.playlist)) {
       log.warn('playlist:import 收到無效的資料格式');
       if (typeof ack === 'function') ack({ ok: false, error: '無效的播放清單格式' }); return;
@@ -306,7 +347,12 @@ function registerPlaylistHandlers(io, socket, ctx, { onPlaylistChanged = () => {
     broadcastState();
     persistState();
     log.info(`播放清單匯入完成: ${playState.playlist.length} 首`);
-    if (typeof ack === 'function') ack({ ok: true, playlist: playState.playlist });
+    if (typeof ack === 'function') ack({ ok: true, playlist: getPublicPlaylist(), currentTrackIndex: -1 });
+  }
+  socket.on('playlist:import', importPlaylist);
+  socket.on('playlist:import-saved', (filename, ack) => {
+    try { importPlaylist(playlistExportStore.load(filename), ack); }
+    catch (error) { if (typeof ack === 'function') ack({ ok: false, error: error.message }); }
   });
 }
 
@@ -344,6 +390,7 @@ function insertTracksIntoPlaylist(ctx, io, tracks, { mode = 'add' } = {}) {
     if (currentIndex < 0 && playState.currentTrack?.id) {
       currentIndex = playState.playlist.findIndex((item) => item.id === playState.currentTrack.id);
     }
+    if (currentIndex < 0) currentIndex = lastPlayedCursor(playState);
     const insertAt = currentIndex >= 0 ? currentIndex + 1 : playState.playlist.length;
     const [insertedTrack] = assignFreshEntryIds(clean.slice(0, 1));
     playState.playlist.splice(insertAt, 0, insertedTrack);

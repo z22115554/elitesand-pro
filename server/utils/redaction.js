@@ -26,13 +26,15 @@ const SYSTEM_PATH_PREFIXES = [
 const SYSTEM_PATH_PLACEHOLDER = '\u0000SYSPATH';
 
 // query string 中會帶憑證的參數名。刻意不含 v/list/t/index 等 YouTube 一般參數。
-const SENSITIVE_QUERY_KEYS = 'access_token|refresh_token|id_token|token|api_?key|apikey|client_secret|secret|password|passwd|pwd|pin|auth|session|signature|sig|code';
+const SENSITIVE_QUERY_KEYS = 'access_token|refresh_token|id_token|source_?token|device_?(?:token|code)|user_code|source|pair|controller|token|api_?key|apikey|client_secret|secret|password|passwd|pwd|pin|auth|session|signature|sig|code';
 
 function redactDiagnosticText(value) {
   let text = String(value == null ? '' : value);
 
   // ─── 憑證 ───
   text = text
+    .replace(/(["']?(?:source[_-]?token|device[_-]?token|device[_-]?code|user[_-]?code|client[_-]?secret|password|passwd|pwd|pin|secret|token)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,};&]+)/gi, '$1[redacted]')
+    .replace(/(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, '$1[redacted]@')
     .replace(/\b(Bearer|OAuth)\s+[A-Za-z0-9._~+/-]+=*/gi, '$1 [redacted]')
     // 值的字元集刻意排除 &，否則 "access_token=x&page=2" 會連後面的參數一起吃掉。
     .replace(/((?:access|refresh|id)_?token["']?\s*[:=]\s*["']?)[^\s,"'}&]+/gi, '$1[redacted]')
@@ -69,6 +71,8 @@ function redactDiagnosticText(value) {
   text = text.replace(/[A-Za-z]:[\\/]Users[\\/][^\\/\r\n]+/gi, '%USERPROFILE%');
   // 其餘磁碟路徑：使用者可能用個人化名稱命名資料夾，整段換掉，但只吃到空白為止。
   text = text.replace(/\b[A-Za-z]:[\\/][^\s"'<>|]*/g, '[local-path]');
+  text = text.replace(/\\\\[^\s\\/]+[\\/][^\r\n"'<>|]+/g, '[local-path]')
+    .replace(/\/(?:home|Users)\/[^\s/"'<>]+/g, '%USERPROFILE%');
   text = text.replace(
     new RegExp(`${SYSTEM_PATH_PLACEHOLDER}(\\d+)\\u0000`, 'g'),
     (_match, index) => systemPaths[Number(index)]
@@ -84,7 +88,7 @@ function redactValue(value, depth = 0) {
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [
       key,
-      /(?:token|secret|authorization|password|passwd|pwd|pin|cookie|api[_-]?key)/i.test(key)
+      /(?:token|secret|authorization|password|passwd|pwd|pin|cookie|api[_-]?key|device[_-]?code|user[_-]?code)|^(?:source|pair|controller)$/i.test(key)
         ? '[redacted]'
         : redactValue(item, depth + 1),
     ]));

@@ -654,3 +654,5 @@ label.btn.btn--label { cursor: pointer; }
   font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px;
 }
 .toast-close:hover { color: var(--text); }
+
+.sl-field-unsupported { display: none !important; }

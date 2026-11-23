@@ -1868,28 +1868,66 @@ J.drawFx = (env, it) => {
 const unionBB = (a, b) => !a ? b : !b ? a : { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1), boxes: [], cx: (Math.min(a.x0, b.x0) + Math.max(a.x1, b.x1)) / 2, cy: (Math.min(a.y0, b.y0) + Math.max(a.y1, b.y1)) / 2 };
 
 /* Latin text: break between words only, into as few balanced lines as fit (never more lines than words) */
-const splitWords = (text, maxPer) => {
-  const ws = text.trim().split(/\s+/), n = ws.length;
-  const total = ws.reduce((a, w) => a + [...w].length, 0) + n - 1;
-  const nLines = Math.min(n, Math.ceil(total / maxPer));
+/* Elitesand Pro: prefix lengths keep ordinary balanced splits exact. Restrict the recursive optimiser
+   to 64 words (at most 64 stack frames); larger inputs use one forward pass and never split or discard a word. */
+const splitWordsUncached = (text, maxPer) => {
+  const ws = text.trim().split(/\s+/), n = ws.length, prefix = [0];
+  for (const w of ws) prefix.push(prefix[prefix.length - 1] + [...w].length + 1);
+  const total = prefix[n] - 1, nLines = Math.min(n, Math.ceil(total / maxPer));
   if (nLines <= 1) return ws.join(' ');
-  // balanced split: minimise the squared difference to the ideal line length
-  const len = (a, b) => ws.slice(a, b).reduce((s, w) => s + [...w].length, 0) + (b - a - 1);
-  const ideal = total / nLines, memo = new Map();
-  const best = (i, l) => {
-    if (l === 1) { const d = len(i, n) - ideal; return { c: d * d, cuts: [] }; }
-    const key = i + "," + l; if (memo.has(key)) return memo.get(key);
-    let r = { c: Infinity, cuts: [] };
-    for (let j = i + 1; j <= n - l + 1; j++) { const d = len(i, j) - ideal, sub = best(j, l - 1), c = d * d + sub.c; if (c < r.c) r = { c, cuts: [j, ...sub.cuts] }; }
-    memo.set(key, r); return r;
-  };
-  const cuts = [0, ...best(0, nLines).cuts, n], out = [];
+  if (nLines === n) return ws.join('\n');
+  const len = (a, b) => prefix[b] - prefix[a] - 1;
+  const ideal = total / nLines;
+  let cuts;
+  if (n <= 64) {
+    const memo = new Map();
+    const best = (i, l) => {
+      if (l === 1) { const d = len(i, n) - ideal; return { c: d * d, cuts: [] }; }
+      const key = i + "," + l; if (memo.has(key)) return memo.get(key);
+      let r = { c: Infinity, cuts: [] };
+      for (let j = i + 1; j <= n - l + 1; j++) { const d = len(i, j) - ideal, sub = best(j, l - 1), c = d * d + sub.c; if (c < r.c) r = { c, cuts: [j, ...sub.cuts] }; }
+      memo.set(key, r); return r;
+    };
+    cuts = [0, ...best(0, nLines).cuts, n];
+  } else {
+    cuts = [0]; let start = 0;
+    for (let l = 1; l < nLines; l++) {
+      const limit = n - (nLines - l);
+      let end = start + 1;
+      while (end < limit && Math.abs(len(start, end + 1) - ideal) < Math.abs(len(start, end) - ideal)) end++;
+      cuts.push(end); start = end;
+    }
+    cuts.push(n);
+  }
+  const out = [];
   for (let k = 0; k < cuts.length - 1; k++) out.push(ws.slice(cuts[k], cuts[k + 1]).join(' '));
   return out.join('\n');
+};
+/* Elitesand Pro: layouts ask again every frame. Cache immutable strings only, bounded by entries,
+   input length and total UTF-16 code units of keys plus results; huge lyrics are never retained. */
+const wordSplits = new Map();
+let wordSplitChars = 0;
+const splitWords = (text, maxPer) => {
+  const key = text.length <= 2048 ? maxPer + '\0' + text : null;
+  if (key !== null && wordSplits.has(key)) {
+    const hit = wordSplits.get(key); wordSplits.delete(key); wordSplits.set(key, hit); return hit;
+  }
+  const value = splitWordsUncached(text, maxPer);
+  if (key !== null) {
+    const cost = key.length + value.length;
+    while (wordSplits.size && (wordSplits.size >= 128 || wordSplitChars + cost > 32768)) {
+      const oldest = wordSplits.keys().next().value;
+      wordSplitChars -= oldest.length + wordSplits.get(oldest).length; wordSplits.delete(oldest);
+    }
+    wordSplits.set(key, value); wordSplitChars += cost;
+  }
+  return value;
 };
 const LATINCH = /[A-Za-zÀ-ɏ0-9가-힯]/;
 /* split long text into balanced lines, preferring script boundaries */
 J.splitLines = (text, maxPer) => {
+  if (!Number.isFinite(maxPer) || maxPer <= 0) return text; // Elitesand Pro: invalid widths must not loop forever
+  maxPer = Math.max(1, maxPer);
   const arr = [...text];
   if (arr.length <= maxPer) return text;
   if (J.isLatinText && J.isLatinText(text)) return /\s/.test(text.trim()) ? splitWords(text, maxPer) : text;   // one word stays whole

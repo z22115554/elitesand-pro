@@ -6,7 +6,7 @@
  */
 
 const { createLogger } = require('../utils/logger');
-const { MAX_OFFSET_MS } = require('../utils/track-schema');
+const { MAX_OFFSET_MS, lrcDefaultOffset } = require('../utils/track-schema');
 
 const log = createLogger('Deck');
 
@@ -35,6 +35,11 @@ function createDeckCommands(io, ctx) {
         // payload 形狀需與 socket 端 play:toggle 一致（見 handlers/playback.js）；
         // 這裡沒有觸發用的 socket，origin 留空即可，面板的來源過濾本來就只擋「另一個面板」。
         io.emit('play:toggle', { playing: playState.isPlaying, _originSocketId: null, _originClientType: null });
+        // 跟 socket 的 play:toggle 一樣通知互動演出：點歌明信片要在歌曲開始時觸發，
+        // 「唱歌時暫緩」的演出要在暫停時放行。舊版漏了這兩行，用 Stream Deck 播放／暫停時，
+        // 明信片不會出現、被暫緩的演出也一直卡著。
+        if (playState.isPlaying && playState.currentTrack) ctx.overlayShow?.onTrackPlaying?.(playState.currentTrack);
+        ctx.overlayShow?.setSongState?.(playState.isPlaying && !!playState.currentTrack, 'pause');
         if (typeof emitSetlist === 'function') emitSetlist();
         broadcastState();
         persistState();
@@ -98,8 +103,10 @@ function createDeckCommands(io, ctx) {
         }
         const trackId = playState.currentTrack.id;
         trackOffsets.delete(trackId);
-        playState.currentOffset = 0;
-        io.emit('offset:update', { trackId, offset: 0 });
+        const fileOffset = lrcDefaultOffset(playState.currentTrack);
+        if (fileOffset) trackOffsets.set(trackId, fileOffset);
+        playState.currentOffset = fileOffset;
+        io.emit('offset:update', { trackId, offset: fileOffset });
         broadcastState();
         persistState();
         log.info('Offset 重置');
@@ -119,7 +126,11 @@ function createDeckCommands(io, ctx) {
         const style = typeof params.name === 'string' ? params.name.slice(0, 50) : '';
         if (!style) return { ok: false, message: 'missing style name' };
         playState.style = style;
+        // 跟 socket 的 style:change 一致：切換 preset 時清掉上一個風格的微調，
+        // 否則上一個風格的覆蓋值會殘留在新風格上。
+        playState.styleOverrides = {};
         io.emit('style:change', style);
+        io.emit('style:override', playState.styleOverrides);
         broadcastState();
         persistState();
         log.info(`切換風格: ${style}`);

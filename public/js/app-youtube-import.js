@@ -1249,9 +1249,10 @@
           AppShared.renderPlaylist();
           if (state.currentTrackIndex === -1 && job.placement !== 'next') {
             AppShared.playTrack(state.playlist.length - 1, false); // 匯入後載入待命，不自動播放
-          } else if (state.currentTrackIndex === -1 && placement?.placement === 'end') {
+          } else if (state.currentTrackIndex === -1 && placement?.ok && Number.isInteger(placement.insertAt)) {
             // playlist:update is emitted before the server acknowledgement, so by
             // this point the authoritative appended track is already in state.
+            // 沒在播時一樣載入待命；唱完一首（清單有游標）時伺服器會插在剛唱完那首後面（placement=next）。
             AppShared.playTrack(placement.insertAt, false);
           }
           const placementKey = job.placement === 'next'
@@ -1343,14 +1344,24 @@
   }
 
   function fetchYouTube() {
-    const url = dom.ytUrl.value.trim();
+    let url = dom.ytUrl.value.trim();
     if (!url) {
       AppShared.showToast(t('import.enterYouTubeLink'), 'warning');
       return;
     }
-    // 播放清單連結（含 list=）→ 走分批匯入（伺服器端已逐首處理）
-    if (/[?&]list=[A-Za-z0-9_-]+/.test(url)) {
+    // 播放清單連結（含 list=）→ 走分批匯入（伺服器端已逐首處理）。
+    // 例外：YouTube 自動合輯（list=RD…）。點任何一首推薦歌，網址列就會變成
+    // watch?v=…&list=RD…&start_radio=1——使用者要的是那一首，不是幾十首隨機電台。
+    const listId = (url.match(/[?&]list=([A-Za-z0-9_-]+)/) || [])[1] || '';
+    const singleInMix = /^RD/.test(listId)
+      && /[?&]v=[A-Za-z0-9_-]{6,}|youtu\.be\/[A-Za-z0-9_-]{6,}/i.test(url);
+    if (listId && !singleInMix) {
       return fetchYouTubePlaylist(url);
+    }
+    if (singleInMix) {
+      // 只留影片本身：媒體庫記下的來源網址不帶那串合輯參數（之後重新下載、比對同一首都用它）。
+      const videoId = (url.match(/[?&]v=([A-Za-z0-9_-]{6,})|youtu\.be\/([A-Za-z0-9_-]{6,})/i) || []).slice(1).find(Boolean);
+      if (videoId) url = `https://www.youtube.com/watch?v=${videoId}`;
     }
     // 驗證 URL 格式
     if (typeof ErrorHandler !== 'undefined') {
@@ -1359,6 +1370,7 @@
         AppShared.showToast(validation.message, 'warning');
         return;
       }
+      if (validation.url) url = validation.url; // 剝掉網址後面黏著的標點
     }
 
     // 驗證通過＝知道要抓什麼了 → 立即清空欄位讓使用者能接著貼下一首；下載交給佇列。

@@ -53,6 +53,9 @@ function parsePrefix(text) {
   if (/\d/.test(tag)) return null; // 帶數字（時間碼、軌號）不是聲部
   const lower = tag.toLowerCase();
   if (SECTION_WORDS.has(lower)) return null;
+  // 「我說：」「媽媽问：」「他道：」是歌詞裡的對白，不是演唱者：當成聲部的話「我說」會被剝掉，
+  // 歌詞少一截，後面每一行還被掛上同一個假聲部。
+  if (/[說说講讲問问道曰喊叫想]$/.test(tag) && !KNOWN_TAGS.has(tag)) return null;
   const isCjk = /^[㐀-鿿぀-ヿｦ-ﾟ]+$/.test(tag);
   const isLatin = /^[A-Za-z][A-Za-z.'-]*$/.test(tag);
   if (!isCjk && !isLatin) return null;

@@ -11,10 +11,20 @@ const MAX_LYRICS_LENGTH = 1024 * 1024;
 // 只是防呆用的上限，不是「合理的歌曲偏移」上限，所以放寬到 ±5 分鐘。offset:adjust／offset:set
 // （server/routes/handlers/lyrics.js）與 deck-commands.js 都要 import 同一個值，不要各自硬寫常數。
 const MAX_OFFSET_MS = 300000;
+// 歌詞格式白名單。vtt 是 WebVTT 匯入（PR #50）新增的格式：沒列進來時，存檔重開後
+// 播放清單上的 lyricsType 被清成 null、手動歌詞被改標成 lrc。
+const LYRICS_TYPES = ['lrc', 'krc', 'srt', 'vtt', 'txt'];
 
 function text(value, max = 500, fallback = '') {
   if (value === undefined || value === null) return fallback;
   return String(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, max);
+}
+
+// 原始歌詞要保留 \x01：TTML 對唱歌詞把聲部代號夾成「\x01a\x01」寫在行首（ttml-parser），
+// 被 text() 一起洗掉後，重解析存檔的歌詞會把代號當成正文（「a好啊好啊」）。
+function lyricsText(value, max) {
+  if (value === undefined || value === null) return '';
+  return String(value).replace(/[\u0000\u0002-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, max);
 }
 
 function finite(value, fallback = 0, min = -Infinity, max = Infinity) {
@@ -101,11 +111,11 @@ function sanitizeOffsetsBySource(value) {
 
 function sanitizeManualLyrics(value) {
   if (!value || typeof value !== 'object') return null;
-  const lyrics = text(value.lyrics, MAX_LYRICS_LENGTH);
+  const lyrics = lyricsText(value.lyrics, MAX_LYRICS_LENGTH);
   if (!lyrics) return null;
   return {
     lyrics,
-    lyricsType: ['lrc', 'krc', 'srt', 'txt'].includes(value.lyricsType) ? value.lyricsType : 'lrc',
+    lyricsType: LYRICS_TYPES.includes(value.lyricsType) ? value.lyricsType : 'lrc',
     parsedLyrics: sanitizeParsedLyrics(value.parsedLyrics),
     source: text(value.source, 40, 'manual'),
     timestamp: finite(value.timestamp, Date.now(), 0, Number.MAX_SAFE_INTEGER),
@@ -146,7 +156,7 @@ function sanitizeTrack(value) {
   const title = text(value.title, 500).trim();
   if (!id || !title) return null;
   const filename = value.filename ? safeMediaBasename(value.filename) : null;
-  const lyricsType = ['lrc', 'krc', 'srt', 'txt'].includes(value.lyricsType) ? value.lyricsType : null;
+  const lyricsType = LYRICS_TYPES.includes(value.lyricsType) ? value.lyricsType : null;
   const out = {
     id,
     // 清單裡「這一列」的專屬識別碼，跟歌曲 id 分開：同一首歌重複加入會拿到不同的 entryId。
@@ -171,7 +181,7 @@ function sanitizeTrack(value) {
     originalName: text(value.originalName, 500),
     url: safeUrl(value.url),
     source: text(value.source, 40),
-    lyrics: typeof value.lyrics === 'string' ? text(value.lyrics, MAX_LYRICS_LENGTH) : null,
+    lyrics: typeof value.lyrics === 'string' ? lyricsText(value.lyrics, MAX_LYRICS_LENGTH) : null,
     lyricsType,
     // 目前套用的歌詞來源（betterlyrics/paxsenix/kugou/qqmusic/lrclib/netease/manual）＋
     // 每個來源各自記住的時間偏移，換來源時自動切換，不用重調。
@@ -244,7 +254,18 @@ function sanitizeJsonObject(value, depth = 0) {
   return out;
 }
 
+/**
+ * 歌詞檔自帶的 [offset:±ms]（track.lrcOffset）＝使用者還沒調過時的預設偏移。
+ * 伺服器的 trackOffsets 才是 OBS／面板共用的權威值，所以由呼叫端在「還沒有記錄」時把它種進去；
+ * 舊版只有面板在載入時套用 lrcOffset，OBS 歌詞照 0 播，兩邊差了一個 offset。
+ */
+function lrcDefaultOffset(track) {
+  const value = track && Number(track.lrcOffset);
+  return Number.isFinite(value) && value !== 0 ? Math.max(-MAX_OFFSET_MS, Math.min(MAX_OFFSET_MS, Math.round(value))) : 0;
+}
+
 module.exports = {
+  lrcDefaultOffset,
   sanitizeTrack,
   sanitizePlaylist,
   sanitizeParsedLyrics,

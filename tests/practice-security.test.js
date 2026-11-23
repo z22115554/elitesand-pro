@@ -30,8 +30,8 @@ function authorities() {
   const source = middleware('server/middleware/require-source-access.js', { '../services/device-access-store': credentials });
   const pin = middleware('server/middleware/require-pin.js', {
     './require-control-access': control,
-    '../services/auth-store': { hasPin: () => true, verifyPin: pin => pin === '2468' },
-    '../services/auth-rate-limiter': { status: () => ({ allowed: true }), reset() {}, recordFailure() {} },
+    '../services/auth-store': { hasPin: () => true, hasPinFor: () => true, verifyPin: pin => pin === '2468' },
+    '../services/auth-rate-limiter': { status: () => ({ allowed: true }), reset() {}, recordFailure() {}, keyForAddress: (address) => `pin:${address}` },
   });
   // HTTP connects to loopback for portability, while the application sees the
   // same TCP identity as a LAN request. Forwarded headers remain untrusted.

@@ -33,6 +33,21 @@
     if (!conv) return str;
     try { return conv(str); } catch (e) { return str; }
   }
+  // 日文歌詞不做簡轉繁（同 karaoke.js）：opencc 會把日文漢字換成中文繁體字形（会→會、学校→學校），
+  // 還會讓振假名因為「轉換後跟原文不一樣」而整句不顯示。整首以假名為主或這句有假名就不轉。
+  const KANA_RE = /[\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\uFF66-\uFF9F]/;
+  function isJapaneseSong(lines) {
+    let total = 0;
+    let kana = 0;
+    for (const l of lines || []) {
+      const text = l && typeof l.text === 'string' ? l.text : '';
+      // 只算有漢字或假名的句子（J-pop 的英文副歌不算進分母）。
+      if (!/[\u3040-\u30FF\u3400-\u9FFF]/.test(text)) continue;
+      total += 1;
+      if (KANA_RE.test(text)) kana += 1;
+    }
+    return kana > 0 && kana * 3 >= total;
+  }
 
   const dom = {
     connectionStatus: document.getElementById('connection-status'),
@@ -454,7 +469,14 @@
   narrowQuery?.addEventListener?.('change', applyNotesOpen);
   applyNotesOpen();
 
-  const normLine = (value) => String(value || '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  // 比對前兩邊都過同一個 cn→tw：換了歌詞來源（繁體逐句 → 酷狗／QQ 的簡體逐字）時，筆記才對得回同一句，
+  // 不會整批掉到「待核對」。只用來比對，不改顯示。
+  const normLine = (value) => {
+    let text = String(value || '');
+    const conv = getS2T();
+    if (conv) { try { text = conv(text); } catch (e) { /* 字典還沒載好：用原文比 */ } }
+    return text.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  };
   const LINE_NOTE_MAX_DRIFT_MS = 2000;
 
   /** 逐句筆記對回目前歌詞：同樣的字、時間差 2 秒內、取最近的一句。對不上的列為「待核對」。 */
@@ -646,10 +668,12 @@
     }
     // 拼音/諧音不經過 s2t()：跟 karaoke.js 同一套規則，簡轉繁只轉「原文 Han 字」，
     // 拼音/諧音是輔助發音用的獨立資料，不是原文的一部分，轉了反而可能跟實際讀音對不上。
+    const japaneseSong = isJapaneseSong(parsedLines);
+    const s2tText = (text) => (japaneseSong || KANA_RE.test(String(text || '')) ? text : s2t(text));
     const renderFurigana = (line) => {
       const segments = Array.isArray(line.furigana) ? line.furigana : [];
       const source = String(line.text || '');
-      const converted = s2t(source);
+      const converted = s2tText(source);
       // Ruby data belongs to the exact original characters. If a conversion or
       // stale async payload no longer matches, show plain text rather than put
       // a potentially wrong reading above a different character.
@@ -671,7 +695,7 @@
       const translation = appearance.showTranslation !== false && line.translation
         ? `<div class="pt-line-translation">${escapeHtml(s2t(line.translation))}</div>` : '';
       return `<div class="pt-line" data-index="${i}">
-        <div class="pt-line-text">${appearance.showFurigana ? renderFurigana(line) : escapeHtml(s2t(line.text || ''))}</div>
+        <div class="pt-line-text">${appearance.showFurigana ? renderFurigana(line) : escapeHtml(s2tText(line.text || ''))}</div>
         ${romaji}${xieyin}${translation}${lineNoteHtml(i, noteMatch.byIndex.get(i))}
       </div>`;
     }).join('');
@@ -901,14 +925,17 @@
       query: data && data.query,
     });
     if (!data || !Array.isArray(data.parsedLyrics) || !parsedLines.length) return;
+    // 時間＋原文一起對：這是全體廣播，別首歌（匯入中）或剛被換掉的歌詞來源的結果也會送來，
+    // 只比時間會把別首的拼音／諧音貼到剛好同一個時間戳的行上。
+    const romanizationKey = (time, text) => time + '|' + String(text == null ? '' : text).replace(/\s+/g, '');
     const byTime = new Map();
     for (const rl of data.parsedLyrics) {
-      if (rl && typeof rl.time === 'number') byTime.set(rl.time, rl);
+      if (rl && typeof rl.time === 'number') byTime.set(romanizationKey(rl.time, rl.text), rl);
     }
     let changed = false;
     let matched = 0;
     for (const line of parsedLines) {
-      const rl = byTime.get(line.time);
+      const rl = byTime.get(romanizationKey(line.time, line.text));
       if (!rl) continue;
       matched += 1;
       if (rl.phonetic && rl.phonetic !== line.phonetic) { line.phonetic = rl.phonetic; changed = true; }

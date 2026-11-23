@@ -10,6 +10,33 @@ const { decryptQrc, decryptQrcBytes } = require('../server/services/qrc-decoder'
 const engineModule = require('../server/services/lyrics-engine.js');
 const L = engineModule.LyricsEngine || engineModule;
 
+test('ESP-040/044: timed words preserve punctuation and milliseconds', () => {
+  const { escapeTimedWord, msToKrcTime } = require('../server/utils/time-utils');
+  const text = '[10,000] <&>';
+  const parsed = L.parseKrc(`[${msToKrcTime(12345)}]<1000>${escapeTimedWord(text)}<0,1000>`);
+  assert.equal(parsed[0].time, 12345); assert.equal(parsed[0].text, text);
+});
+test('ESP-042: compressed KRC cannot inflate to an unbounded lyric document', () => {
+  const compressed = require('zlib').deflateSync('[1000,2000]<0,2000,0>' + 'a'.repeat(4 * 1024 * 1024));
+  const key = [0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69];
+  const bytes = Buffer.from(compressed.map((b,i) => b ^ key[i % key.length]));
+  assert.equal(require('../server/services/krc-decoder').krcDecode(Buffer.concat([Buffer.from('krc1'), bytes])), null);
+});
+test('ESP-044: TTML dur and SRT CRLF preserve time; unsupported frame units fail', () => {
+  const { parseTTML } = require('../server/services/ttml-parser');
+  const parsed = L.parseKrc(parseTTML('<tt><body><p begin="1.234s" dur="2s">word</p></body></tt>'));
+  assert.equal(parsed[0].time, 1234); assert.equal(parsed[0].duration, 2000);
+  assert.equal(parseTTML('<tt><body><p begin="75f" dur="25f">word</p></body></tt>'), null);
+  const srt = require('../server/services/lrc-parser').autoParseLyrics('00:00:01,234 --> 00:00:02,500\r\nword\r\n');
+  assert.equal(srt.lines[0].time, 1234); assert.equal(srt.lines[0].text, 'word');
+});
+test('ESP-041/045: mixed languages preserve Chinese pronunciation and emoji joiners', async () => {
+  const emoji = '👨‍👩‍👧';
+  assert.equal(require('../server/services/lyrics-cleaner').cleanLyrics([{ time: 0, text: emoji }])[0].text, emoji);
+  const lines = await require('../server/services/romanizer').addRomanization([{ time: 0, text: '重庆', words: [{ text: '重', start: 0, duration: 100 },{ text: '庆', start: 100, duration: 100 }] },{time: 200,text:'かな'}]);
+  assert.match(lines[0].words[0].phonetic, /^ch/);
+});
+
 test('QRC 解密：對真實服務回應的開頭兩個區塊解出 zlib 標頭（已知答案）', () => {
   const plain = decryptQrcBytes(Buffer.from('172519F79CD153B1F9BB8F74B1B961A7', 'hex'));
   assert.equal(plain.toString('hex'), '789c655b5baf56d7757df7af403ced23');

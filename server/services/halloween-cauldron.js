@@ -509,7 +509,7 @@ function createHalloweenCauldron({ event, emit, file = path.join(DATA_DIR, 'hall
     twitch = service || null;
   }
 
-  process.on('exit', () => { if (saveTimer) { clearTimeout(saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
+  require('../utils/exit-hooks').onExit(() => { if (saveTimer) { clearTimeout(saveTimer); try { saveNow(); } catch (e) { /* 靜默 */ } } });
 
   return {
     snapshot, setSettings, brew: brewNow, resetBrew, setPotionHidden, clearVotes, syncRewards, removeRewards,

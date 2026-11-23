@@ -6,10 +6,12 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const { SHELL_HEALTH_KEY_ENV, verifyShellHealthProof } = require('../server/utils/shell-health-proof');
 const { execFileSync } = require('child_process');
 const { validateUpdatePlanShape, OFFICIAL_GITHUB_OWNER, OFFICIAL_GITHUB_REPOSITORY } = require('../server/services/update-policy');
 const { preparePackagedMediaStorage } = require('./packaged-media-storage');
 const { fallbackPortsFor } = require('../server/utils/port-candidates');
+const { packagedYtdlpName, bundledNodeName } = require('../server/utils/platform-binaries');
 const {
   normalizeHash,
   normalizeVersion,
@@ -93,7 +95,7 @@ function readConfiguredMediaDir(userDataPath, fsImpl = fs) {
   }
 }
 
-function resolveMediaRuntime(userDataPath, { isPackaged = false, executablePath = '', fsImpl = fs } = {}) {
+function resolveMediaRuntime(userDataPath, { isPackaged = false, executablePath = '', fsImpl = fs, platform = process.platform } = {}) {
   const legacyDir = path.join(path.resolve(userDataPath), 'downloads');
   const configuredDir = readConfiguredMediaDir(userDataPath, fsImpl);
   // A migration writes this setting for both the development shell and the
@@ -106,6 +108,8 @@ function resolveMediaRuntime(userDataPath, { isPackaged = false, executablePath 
   // The server will automatically search the legacy locations during a
   // migration, without asking the user to locate them manually.
   if (configuredDir) return { downloadsDir: configuredDir, mode: 'configured-missing' };
+  // macOS 的執行檔在 .app/Contents/MacOS 裡，旁邊寫檔會破壞簽章（從 DMG 直接開還是唯讀）。
+  if (platform === 'darwin') return { downloadsDir: path.join(path.resolve(userDataPath), MEDIA_FOLDER_NAME), mode: 'install-default' };
   const installRoot = path.dirname(path.resolve(executablePath || process.execPath));
   return { downloadsDir: path.join(installRoot, MEDIA_FOLDER_NAME), mode: 'install-default' };
 }
@@ -229,32 +233,79 @@ function writePrompterPin(userDataPath, pinned, fsImpl = fs) {
   } catch (_) { /* 存不了就只在這次有效 */ }
 }
 
-function probeHealth(port, { httpImpl = http, timeoutMs = 1000 } = {}) {
+// 沒帶 identityKey 時用來判斷「已在跑的伺服器是不是 Elitesand Pro」：新版回 app 欄位；
+// 舊版（1.0.0 起都回 status／version／timestamp）以「版本號格式＋數字時間戳」辨認，
+// 讓上次沒關乾淨的舊版伺服器、npm start 開的伺服器照舊被重用，不會另開一個 port。
+// 這只防「別的程式剛好也回 status:ok」，不是防惡意本機程式。
+function looksLikeElitesandHealth(payload) {
+  if (!payload || payload.status !== 'ok') return false;
+  if (payload.app !== undefined) return payload.app === 'elitesand-pro';
+  return typeof payload.version === 'string' && /^\d+\.\d+\.\d+/.test(payload.version)
+    && Number.isFinite(payload.timestamp);
+}
+
+// identityKey：只用在「本殼剛啟動的伺服器」，要求它用這次啟動的金鑰回應挑戰。
+// 既有伺服器（npm start、上次沒關乾淨留下的）不會知道新金鑰，必須走上面的身分判斷才能被重用。
+function probeHealth(port, { httpImpl = http, timeoutMs = 1000, identityKey = null } = {}) {
   return new Promise((resolve) => {
-    const request = httpImpl.get({
-      hostname: '127.0.0.1',
-      port,
-      path: '/api/health',
-      timeout: timeoutMs,
-      headers: { 'User-Agent': 'ElitesandProElectronShell/1.0' },
-    }, (response) => {
-      const chunks = [];
-      response.on('data', (chunk) => chunks.push(chunk));
-      response.on('end', () => {
-        try {
-          const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-          if (response.statusCode === 200 && payload?.status === 'ok') {
-            resolve({ state: 'healthy', payload });
-            return;
-          }
-        } catch (_) { /* A listener is using this port, but not Elitesand Pro. */ }
-        resolve({ state: 'occupied' });
+    let settled = false;
+    let request;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      resolve(result);
+    };
+    const rejectListener = () => {
+      if (settled) return;
+      finish({ state: 'occupied' });
+      request?.destroy();
+    };
+    // A socket inactivity timeout alone can be extended forever by a listener
+    // trickling bytes. Bound the complete request, including its response body.
+    const deadline = setTimeout(rejectListener, timeoutMs);
+    deadline.unref?.();
+    const challenge = identityKey !== null ? crypto.randomBytes(32).toString('hex') : null;
+    try {
+      request = httpImpl.get({
+        hostname: '127.0.0.1',
+        port,
+        path: '/api/health',
+        timeout: timeoutMs,
+        headers: {
+          'User-Agent': 'ElitesandProElectronShell/1.0',
+          ...(challenge ? { 'X-Elitesand-Health-Challenge': challenge } : {}),
+        },
+      }, (response) => {
+        const chunks = [];
+        let bytes = 0;
+        response.on('error', rejectListener);
+        response.on('aborted', rejectListener);
+        response.on('data', (chunk) => {
+          if (settled) return;
+          bytes += chunk.length;
+          if (bytes > 64 * 1024) { rejectListener(); return; }
+          chunks.push(Buffer.from(chunk));
+        });
+        response.on('end', () => {
+          if (settled) return;
+          try {
+            const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            if (response.statusCode === 200 && (identityKey === null
+              ? looksLikeElitesandHealth(payload)
+              : payload?.status === 'ok' && verifyShellHealthProof(identityKey, challenge, port, payload.shellProof))) {
+              finish({ state: 'healthy', payload });
+              return;
+            }
+          } catch (_) { /* A listener is using this port, but not Elitesand Pro. */ }
+          finish({ state: 'occupied' });
+        });
       });
-    });
-    request.once('timeout', () => request.destroy(new Error('health request timed out')));
-    request.once('error', (error) => {
-      resolve(error?.code === 'ECONNREFUSED' ? { state: 'free' } : { state: 'occupied' });
-    });
+      request.once('timeout', rejectListener);
+      request.once('error', (error) => {
+        finish(error?.code === 'ECONNREFUSED' ? { state: 'free' } : { state: 'occupied' });
+      });
+    } catch (_) { rejectListener(); }
   });
 }
 
@@ -297,7 +348,7 @@ function settleSessionMarkerSync(markerFile, {
   return 'server';
 }
 
-function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
+function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs, { allowMissingOptionalTools = false } = {}) {
   const files = manifest?.files;
   if (!files || typeof files !== 'object' || Array.isArray(files) || Object.keys(files).length === 0) {
     throw new Error('Packaged resource integrity manifest is missing or invalid.');
@@ -305,6 +356,7 @@ function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
 
   const root = path.resolve(resourcesPath);
   const rootPrefix = `${root}${path.sep}`;
+  const missingOptionalTools = [];
   for (const [relativePath, expectedHash] of Object.entries(files)) {
     if (typeof relativePath !== 'string' || !relativePath.startsWith('tools/') ||
       relativePath.includes('..') || !/^[a-f0-9]{64}$/i.test(String(expectedHash || ''))) {
@@ -315,13 +367,18 @@ function verifyPackagedResourceIntegrity(resourcesPath, manifest, fsImpl = fs) {
     let actualHash;
     try {
       actualHash = crypto.createHash('sha256').update(fsImpl.readFileSync(target)).digest('hex');
-    } catch (_) {
+    } catch (error) {
+      if (allowMissingOptionalTools && relativePath === `tools/${packagedYtdlpName()}` && error?.code === 'ENOENT') {
+        missingOptionalTools.push(relativePath);
+        continue;
+      }
       throw new Error(`Required packaged resource is missing: ${relativePath}`);
     }
     if (actualHash !== String(expectedHash).toLowerCase()) {
       throw new Error(`Packaged resource integrity check failed: ${relativePath}`);
     }
   }
+  return { missingOptionalTools };
 }
 
 /**
@@ -344,17 +401,25 @@ function readYtdlpVersionSync(command) {
   }
 }
 
+function stripQuarantine(file, execImpl = execFileSync) {
+  try {
+    execImpl('/usr/bin/xattr', ['-d', 'com.apple.quarantine', file], { stdio: 'ignore', timeout: 5000 });
+  } catch (_) { /* 沒有這個屬性時 xattr 會回錯誤，屬正常情況 */ }
+}
+
 function prepareMutableYtdlp(resourcesPath, userDataPath, options = fs) {
-  const isOptions = options && (options.fsImpl || options.expectedSeedHash || options.versionResolver);
+  const isOptions = options && (options.fsImpl || options.expectedSeedHash || options.versionResolver || options.platform);
   const fsImpl = isOptions ? (options.fsImpl || fs) : options;
   const expectedSeedHash = normalizeHash(isOptions ? options.expectedSeedHash : null);
   const versionResolver = isOptions && typeof options.versionResolver === 'function'
     ? options.versionResolver
     : readYtdlpVersionSync;
   const packagedToolsDir = path.join(path.resolve(resourcesPath), 'tools');
-  const seed = path.join(packagedToolsDir, 'yt-dlp.exe');
+  const binaryPlatform = isOptions && options.platform ? options.platform : process.platform;
+  const binaryName = packagedYtdlpName(binaryPlatform);
+  const seed = path.join(packagedToolsDir, binaryName);
   const runtimeDir = path.join(path.resolve(userDataPath), 'tools', MUTABLE_YTDLP_DIR_NAME);
-  const target = path.join(runtimeDir, 'yt-dlp.exe');
+  const target = path.join(runtimeDir, binaryName);
   const temporary = `${target}.seed.tmp`;
   const statePath = path.join(runtimeDir, MUTABLE_YTDLP_STATE_NAME);
 
@@ -375,6 +440,13 @@ function prepareMutableYtdlp(resourcesPath, userDataPath, options = fs) {
     const copied = fsImpl.statSync(temporary);
     if (!copied.isFile() || copied.size === 0) throw new Error('yt-dlp seed copy is empty');
     fsImpl.renameSync(temporary, target);
+    // macOS／Linux：複製後要確定仍可執行（copyFile 一般會保留權限，這裡明確補上）。
+    if (path.sep === '/' && typeof fsImpl.chmodSync === 'function') {
+      try { fsImpl.chmodSync(target, 0o755); } catch (_) { /* 權限不足時交給後續 --version 驗證失敗 */ }
+    }
+    // macOS：從網路下載的 DMG 裡的檔案帶 com.apple.quarantine，copyFile 會連同擴充屬性
+    // 一起複製，導致 Gatekeeper 擋下這份已驗過 SHA-256 的 yt-dlp。只對這一份副本移除。
+    if (binaryPlatform === 'darwin') stripQuarantine(target);
     const runtimeHash = hashFileSync(target, fsImpl);
     if (runtimeHash !== seedHash) throw new Error('yt-dlp seeded runtime hash mismatch');
     writeTrustStateAtomic(statePath, {
@@ -515,6 +587,7 @@ function createElectronShell({
   let ownsServer = false;
   let isQuitting = false;
   let serverReady = false;
+  let serverHealthKey = crypto.randomBytes(32).toString('hex');
   let startupExitCode = null;
   let hasShownTrayBalloon = false;
   let isCloseDecisionPending = false;
@@ -810,7 +883,13 @@ function createElectronShell({
   function createTray() {
     if (headless) return null;
     try {
-      const icon = nativeImage.createFromPath(path.join(projectRoot, 'public', 'img', 'logo-icon.png'));
+      let icon = nativeImage.createFromPath(path.join(projectRoot, 'public', 'img', 'logo-icon.png'));
+      // macOS 選單列圖示以點為單位直接顯示原圖尺寸；不縮的話大圖會撐滿整條選單列。
+      if (processObject.platform === 'darwin' && typeof icon?.resize === 'function') {
+        icon = icon.resize({ width: 18, height: 18 });
+        // 黑色透明底的 logo 當 template image：系統會依淺色／深色選單列自動反白。
+        icon.setTemplateImage?.(true);
+      }
       tray = new Tray(icon);
       tray.setToolTip?.('Elitesand Pro');
       tray.setContextMenu(Menu.buildFromTemplate([
@@ -890,6 +969,7 @@ function createElectronShell({
   function runtimeEnvironment() {
     const mediaRuntime = resolveMediaRuntime(app.getPath('userData'), {
       isPackaged: app.isPackaged,
+      platform: processObject.platform,
       executablePath: app.getPath?.('exe') || processObject.execPath,
       fsImpl,
     });
@@ -920,13 +1000,14 @@ function createElectronShell({
         // 關掉 runAsNode fuse，不能拿 Elitesand Pro.exe 冒充 node；Installer 已經
         // 隨附完整、完整性保護的 updater-node.exe，直接把同一份 runtime 路徑交給
         // server，後端會以 --js-runtimes node:<absolute-path> 顯式指定。
-        ELITESAND_YTDLP_NODE_PATH: path.join(packagedTools, 'updater-node.exe'),
+        ELITESAND_YTDLP_NODE_PATH: path.join(packagedTools, bundledNodeName(processObject.platform)),
         ...(packagedYtdlpRuntime.seedVersion ? { ELITESAND_YTDLP_SEED_VERSION: packagedYtdlpRuntime.seedVersion } : {}),
       } : {}),
       PORT: String(port),
       ...(portFallback ? { ELITESAND_PORT_FALLBACK_FROM: String(portFallback.from) } : {}),
       OPEN_BROWSER: '0',
       ELITESAND_SHELL: '1',
+      [SHELL_HEALTH_KEY_ENV]: serverHealthKey,
       // Production-only remote announcements must never lock the source-tree
       // Electron shell. The packaged installer deliberately receives `0`.
       ELITESAND_SHELL_DEVELOPMENT: app.isPackaged ? '0' : '1',
@@ -940,7 +1021,8 @@ function createElectronShell({
       ...(packagedTools ? { ELITESAND_AI_SCRIPT_DIR: path.join(packagedTools, 'ai') } : {}),
       // 日文諧音 v2 的 Haqumei 是 installer 隨附的獨立 Python runtime；打包版不可
       // 回退到使用者 PATH 上的 Python，否則不同機器會出現「有 sidecar、沒套件」的假可用。
-      ...(packagedTools ? { ELITESAND_G2P_PYTHON: path.join(packagedTools, 'g2p', 'python.exe') } : {}),
+      // macOS 版沒有隨附這個 Windows Python runtime：不設定，讓 provider 走既有的 fallback（舊版諧音）。
+      ...(packagedTools && processObject.platform === 'win32' ? { ELITESAND_G2P_PYTHON: path.join(packagedTools, 'g2p', 'python.exe') } : {}),
     };
   }
 
@@ -1114,9 +1196,13 @@ function createElectronShell({
   }
 
   async function runStartupUpdateGate() {
-    const eligible = app.isPackaged && ownsServer && !isSpoutExperiment;
+    // 增量更新／安裝檔交接都是 Windows 專用（替換 .exe、cmd.exe 重啟）。macOS 版
+    // 不跑啟動更新流程，新版由面板的「檢查更新」導向 Release 頁手動下載。
+    const supportedPlatform = processObject.platform === 'win32';
+    const eligible = app.isPackaged && ownsServer && !isSpoutExperiment && supportedPlatform;
     if (!eligible) {
       startupUpdateGate = createStartupUpdateGate({ request: async () => ({ ok: false }) });
+      if (!supportedPlatform && app.isPackaged && ownsServer) return startupUpdateGate.lock('unsupported-platform');
       return startupUpdateGate.lock(ownsServer ? 'non-production-shell' : 'reused-server');
     }
     startupUpdateRequester = createStartupUpdateRequester({ child: serverProcess });
@@ -1124,6 +1210,15 @@ function createElectronShell({
       request: startupUpdateRequester.request,
       promptOptional: promptOptionalUpdate,
       promptRequired: promptRequiredUpdate,
+      onRequiredFailure: async () => {
+        closeStartupUpdateProgressWindow();
+        const text = getNativeUpdateCatalog();
+        const url = `https://github.com/${OFFICIAL_GITHUB_OWNER}/${OFFICIAL_GITHUB_REPOSITORY}/releases/latest`;
+        const result = await showNativeUpdateDialog({ type: 'error', title: text.title,
+          message: text.requiredDownloadFailed, detail: url,
+          buttons: [text.openInstaller, text.exit], defaultId: 0, cancelId: 1, noLink: true });
+        if (result?.response === 0) await shell.openExternal(url);
+      },
       deferStore: createStartupUpdateDeferStore(app.getPath('userData'), { fsImpl }),
     });
     try {
@@ -1467,7 +1562,7 @@ function createElectronShell({
     let lastState = 'free';
     while (Date.now() < deadline) {
       if (startupExitCode !== null) throw new Error(`Elitesand Pro server exited during startup (code ${startupExitCode})`);
-      const result = await probeHealthImpl(port);
+      const result = await probeHealthImpl(port, { identityKey: serverHealthKey });
       lastState = result?.state || 'occupied';
       if (lastState === 'healthy') return result.payload;
       if (lastState === 'occupied') throw new Error(`Port ${port} is already occupied by another application`);
@@ -1530,6 +1625,9 @@ function createElectronShell({
   }
 
   function startServer() {
+    // Rotate on every fork so neither a previous launch nor a crashed child can
+    // authenticate a listener for this startup or restart.
+    serverHealthKey = crypto.randomBytes(32).toString('hex');
     // Server diagnostics persist to its isolated log file. Do not create
     // utility-process stdout/stderr pipes: on Windows their finite buffers
     // can block the server event loop during a long live session.
@@ -1670,6 +1768,8 @@ function createElectronShell({
       return { started: false, reason: 'second-instance' };
     }
     app.on('second-instance', focusWindow);
+    // macOS：視窗收進選單列後，點 Dock 圖示要把面板叫回來。
+    if (processObject.platform === 'darwin') app.on('activate', focusWindow);
     app.on('before-quit', (event) => {
       stopPowerSaveBlocker();
       globalHotkeys?.stop();
@@ -1710,6 +1810,7 @@ function createElectronShell({
         const mediaPreparation = preparePackagedMediaStorage({
           userDataPath: app.getPath('userData'),
           executablePath: app.getPath('exe'),
+          platform: processObject.platform,
           fsImpl,
           onBeforeCopy: ({ entries }) => {
             if (headless) return;
@@ -1740,21 +1841,32 @@ function createElectronShell({
             });
           }
         }
-        verifyPackagedResourceIntegrity(
+        const resourceHealth = verifyPackagedResourceIntegrity(
           processObject.resourcesPath || process.resourcesPath,
           packagedResourceIntegrity,
           fsImpl,
+          { allowMissingOptionalTools: true },
         );
-        packagedYtdlpRuntime = prepareMutableYtdlp(
+        packagedYtdlpRuntime = resourceHealth.missingOptionalTools.length ? {
+          command: path.join(processObject.resourcesPath || process.resourcesPath, 'tools', packagedYtdlpName(processObject.platform)),
+          mutable: false, reason: 'Bundled YouTube tool is missing; repair using the official installer.',
+          statePath: '', seed: '', seedHash: '',
+        } : prepareMutableYtdlp(
           processObject.resourcesPath || process.resourcesPath,
           app.getPath('userData'),
           {
             fsImpl,
-            expectedSeedHash: packagedResourceIntegrity?.files?.['tools/yt-dlp.exe'],
+            expectedSeedHash: packagedResourceIntegrity?.files?.[`tools/${packagedYtdlpName(processObject.platform)}`],
+            platform: processObject.platform,
           },
         );
         if (!packagedYtdlpRuntime.mutable) {
           console.warn('[Elitesand Pro Electron] Writable yt-dlp runtime unavailable; self-update disabled:', packagedYtdlpRuntime.reason || 'unknown');
+        }
+        if (resourceHealth.missingOptionalTools.length && !headless) {
+          dialog.showMessageBoxSync({ type: 'warning', title: 'YouTube 匯入元件遺失',
+            message: 'Elitesand Pro 將繼續啟動，YouTube 匯入暫時無法使用。',
+            detail: '請檢查防毒隔離紀錄，並使用官方安裝程式修復下載元件。', buttons: ['繼續開啟'], noLink: true });
         }
       }
       // Snapshot before the server creates its state files. Checking after the
@@ -1837,6 +1949,7 @@ module.exports = {
   readPrompterPin,
   writePrompterPin,
   probeHealth,
+  looksLikeElitesandHealth,
   waitForExit,
   verifyPackagedResourceIntegrity,
   prepareMutableYtdlp,

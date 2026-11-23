@@ -107,7 +107,8 @@ async function checkForUpdate({ force = false } = {}) {
       base.releaseUrl = data.html_url || null;
       // release notes 截斷，避免面板顯示過長內容
       base.releaseNotes = typeof data.body === 'string' ? data.body.slice(0, 500) : null;
-      const installer = findInstallerAsset(data);
+      // Release 上的安裝檔目前只有 Windows 版；macOS 不能把 .exe 當下載目標，改開 Release 頁。
+      const installer = process.platform === 'win32' ? findInstallerAsset(data) : null;
       base.downloadUrl = installer ? installer.browser_download_url : base.releaseUrl;
       base.hasUpdate = latestVersion ? isNewerVersion(latestVersion, currentVersion) : false;
 

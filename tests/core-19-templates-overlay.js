@@ -383,7 +383,7 @@ test('觀眾演出：設定夾在合法範圍、存檔，測試演出不看開�
 });
 
 test('觀眾演出：Twitch 訂閱 channel.raid、事件交給 onRaid，且失敗不影響點歌訂閱', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../server/services/twitch-service.js'), 'utf8');
+  const source = require('./helpers/twitch-service-source')();
   ok(source.includes("createSubscription('channel.raid', { to_broadcaster_user_id: this.auth.userId })"));
   ok(/subscription\.type === 'channel\.raid'[\s\S]{0,400}this\.onRaid\?\.\(/.test(source));
   ok(/channel\.raid[\s\S]{0,300}catch \(err\)[\s\S]{0,200}揪團事件訂閱未啟用/.test(source), '揪團訂閱失敗要被吞掉並記錄');
@@ -409,6 +409,55 @@ test('觀眾演出：只有桌面面板能改設定／試播，OBS 只收轉播�
   ok(/data-nav="public-request"[^>]*data-new-feature="alert-show-nav"/.test(panel), '入口導覽項目也要標 NEW，不然沒點進去看不到');
   ok(panel.includes('id="overlay-show-raid-anchor"') && panel.includes('id="overlay-show-postcard-anchor"'), '揪團與明信片位置各自設定');
   ok(badges.includes("addEventListener('change', seenNow)") && badges.includes(".closest('label')?.control"), '改了設定或用了 label 對應的選單，NEW 也要消失');
+});
+
+test('藏在收合區／選單／分頁／設定分類／其他頁面裡的新功能，入口也要冒出 NEW', () => {
+  // 2026-11-23 使用者回報：「記住每首歌的音量」的 NEW 在收合的「音訊」裡，不打開根本不知道
+  const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
+  for (const door of ["tagName === 'DETAILS'", "'lslim-pop'", "'tabpanel'", 'settingsWorkspaceGroup', 'sslimCategory', ".nav-item[data-nav="]) {
+    ok(badges.includes(door), `doorsFor 要處理：${door}`);
+  }
+  ok(badges.includes("addEventListener('i18n:change'") && badges.includes('setTimeout(refreshDoors, 0)'),
+    '換語言、版面整理後都要重新補入口的 NEW');
+  ok(badges.includes('markSeen: markSeenAndRefresh'), '看過功能後入口的 NEW 也要跟著收掉');
+  const slim = fs.readFileSync(path.join(__dirname, '../public/js/settings-slim.js'), 'utf8');
+  ok(slim.includes('btn.dataset.sslimCat = cat.key') && slim.includes('card.dataset.sslimCategory = cat.key'), '設定分類按鈕要認得自己的卡片');
+});
+
+test('更新後跳出這版新功能：版本挑選、五語內容、已讀紀錄存伺服器、POST 要 PIN', () => {
+  const data = require('../public/js/whats-new-data');
+  const appVersion = require('../package.json').version;
+  ok(data.RELEASES.some((r) => r.version === appVersion), `package.json 版本 ${appVersion} 要在 whats-new-data.js 有對應內容（發版時把 UNRELEASED 搬過去）`);
+  // 挑版本
+  eq(data.releasesToShow('1.3.0', '1.3.0').length, 0, '看過目前版本不再跳');
+  eq(data.releasesToShow('9.9.9', '1.3.0').length, 0, '紀錄比目前新（降版）也不跳');
+  eq(data.releasesToShow(null, '1.3.0').map((r) => r.version).join(), '1.3.0', '老使用者第一次遇到：只給目前這版');
+  eq(data.releasesToShow('1.2.0', '1.3.0').map((r) => r.version).join(), '1.3.0', '只給比上次看過新、且不超過目前版本的');
+  eq(data.compareVersions('1.10.0', '1.9.3'), 1);
+  // 內容：五語、功能代號都在 NEW 清單登記過
+  const badges = fs.readFileSync(path.join(__dirname, '../public/js/new-badges.js'), 'utf8');
+  for (const item of [...data.RELEASES.flatMap((r) => r.items), ...data.UNRELEASED]) {
+    ok(Array.isArray(item.title) && item.title.length === 5 && item.title.every(Boolean), `標題要五語：${item.title}`);
+    ok(Array.isArray(item.desc) && item.desc.length === 5 && item.desc.every(Boolean), `說明要五語：${item.title[0]}`);
+    if (item.feature) ok(badges.includes(`'${item.feature}':`), `功能代號要在 new-badges.js 登記：${item.feature}`);
+  }
+  eq(data.text(['繁', 'en', 'ja', 'ko', '简'], 'ja'), 'ja');
+  eq(data.text(['繁', 'en', 'ja', 'ko', '简'], 'fr'), 'en', '沒有的語言退回英文');
+  // 伺服器紀錄
+  const store = require('../server/services/whats-new-store');
+  try { fs.unlinkSync(store.STORE_FILE); } catch (_) { /* 沒有就算了 */ }
+  eq(store.getStatus({ existingUser: true }).lastSeenVersion, null, '老使用者沒紀錄：回 null 讓面板跳目前這版');
+  eq(store.getStatus({ existingUser: false }).lastSeenVersion, appVersion, '全新安裝：直接記成目前版本、不跳');
+  eq(store.markSeen('../../evil').ok, false, '版本字串要驗證');
+  eq(store.markSeen('1.4.0').ok, true);
+  eq(store.getStatus().lastSeenVersion, '1.4.0');
+  try { fs.unlinkSync(store.STORE_FILE); } catch (_) { /* 清乾淨 */ }
+  const system = fs.readFileSync(path.join(__dirname, '../server/routes/api/system.js'), 'utf8');
+  ok(/router\.post\('\/whats-new\/seen', requirePin/.test(system), '寫入已讀紀錄要過 PIN（鐵則 15）');
+  const panel = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  ok(panel.indexOf('/js/whats-new.js') > panel.indexOf('/js/new-badges.js'), '要在 NEW 冒泡之後載入，「帶我去看」才找得到入口');
+  const ui = fs.readFileSync(path.join(__dirname, '../public/js/whats-new.js'), 'utf8');
+  ok(ui.includes('EulaGate.whenCleared') && ui.includes('PinAuth.fetchWithPin'), '等 EULA 處理完才出場，請求走 PIN（鐵則 16）');
 });
 
 test('每首記憶的音量：存進 state、清單摘要帶 volume、清除後回預設', () => {
@@ -655,4 +704,201 @@ test('Apple Music 歌詞：paxsenix 塞車時改用 LyricsPlus，逐字轉成 KR
   ok(source.includes("return { ...converted, source: 'paxsenix' };"), '來源記成同一格，偏移、統計欄位都不必改');
   const telemetry = require('../server/services/telemetry-fields.js');
   ok(telemetry.ALLOWED_KEYS.includes('lyrics.source.paxsenix.hit'), '沿用既有統計欄位，不需要新的白名單');
+});
+
+// ── 單曲看板（now-playing）──
+// 沒有 jsdom：用最小的假 DOM 在 vm 裡實際跑 render，驗證進出場與待機文字的行為。
+function makeNowPlayingHarness() {
+  class FakeEl {
+    constructor(tag) { this.tagName = tag; this.className = ''; this.children = []; this.parent = null; this.hidden = false; this._text = ''; this.attrs = {}; this.dataset = {}; }
+    get classList() {
+      const el = this;
+      const list = () => el.className.split(/\s+/).filter(Boolean);
+      return {
+        add: (c) => { if (!list().includes(c)) el.className = [...list(), c].join(' '); },
+        remove: (c) => { el.className = list().filter((x) => x !== c).join(' '); },
+        contains: (c) => list().includes(c),
+      };
+    }
+    set textContent(v) { this._text = String(v); this.children = []; }
+    get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); }
+    setAttribute(k, v) { this.attrs[k] = v; }
+    appendChild(c) { c.parent = this; this.children.push(c); return c; }
+    append(...cs) { cs.forEach((c) => this.appendChild(c)); }
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; }
+    matches(sel) {
+      const m = /^\.([\w-]+)(?::not\(\.([\w-]+)\))?$/.exec(sel);
+      if (!m) throw new Error(`fake DOM 不支援的選擇器：${sel}`);
+      return this.classList.contains(m[1]) && !(m[2] && this.classList.contains(m[2]));
+    }
+    all() { return this.children.flatMap((c) => [c, ...c.all()]); }
+    querySelectorAll(sel) { return this.all().filter((e) => e.matches(sel)); }
+    querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+  }
+  const setlist = fs.readFileSync(path.join(__dirname, '../public/js/setlist.js'), 'utf8');
+  const block = setlist.slice(setlist.indexOf('const NP_LEAVE_MS'), setlist.indexOf('const LAYOUTS = {'));
+  const timers = [];
+  const ctx = {
+    model: { current: null, past: [], upcoming: [] },
+    curStyle: {},
+    fitFactor: 2,
+    lastLabels: { nowPlaying: '▶ NOW' },
+    t: (k) => (k === 'setlist.idleDefault' ? 'DEFAULT-IDLE' : k),
+    document: { createElement: (tag) => new FakeEl(tag) },
+    setTimeout: (fn) => { timers.push(fn); return timers.length; },
+    clearTimeout: () => {},
+  };
+  vm.createContext(ctx);
+  vm.runInContext(`${block}\nglobalThis.__np = nowPlaying;`, ctx);
+  const slot = new FakeEl('div');
+  const root = { querySelector: (sel) => (sel === '#np-slot' ? slot : null) };
+  const flush = () => { while (timers.length) timers.shift()(); };
+  const cards = () => slot.children;
+  const live = () => slot.querySelector('.np-card:not(.is-leaving)');
+  return { ctx, slot, root, flush, cards, live, render: () => ctx.__np.render(root) };
+}
+
+test('OBS 單曲看板：沒歌顯示待機（留空帶語言預設）、改待機文字就地更新、換歌才進出場、暫停不重播、快速連換不殘留', () => {
+  const h = makeNowPlayingHarness();
+  const song = (title, artist) => ({ title, artist, key: `${title}|${artist}` });
+
+  h.render();
+  eq(h.cards().length, 1, '沒歌時只有一張待機卡');
+  ok(h.live().classList.contains('is-idle') && h.live().classList.contains('is-enter'));
+  eq(h.live().querySelector('.np-idle').textContent, 'DEFAULT-IDLE', '待機文字留空時用語系預設');
+
+  h.ctx.curStyle = { nowIdleText: '  下一首馬上來  ' };
+  h.render();
+  eq(h.cards().length, 1, '改待機文字不換卡、不重播進場');
+  eq(h.live().querySelector('.np-idle').textContent, '下一首馬上來', '自訂待機文字去頭尾空白');
+  h.ctx.curStyle = { nowIdleText: '   ' };
+  h.render();
+  eq(h.live().querySelector('.np-idle').textContent, 'DEFAULT-IDLE', '只有空白也算留空');
+
+  h.ctx.model = { current: song('<img src=x onerror=alert(1)>', 'Singer'), past: [], upcoming: [] };
+  h.render();
+  eq(h.cards().length, 2, '換歌時舊卡留著跑出場動畫');
+  ok(h.cards()[0].classList.contains('is-leaving') && !h.cards()[0].classList.contains('is-enter'), '舊卡改成出場');
+  ok(h.live().classList.contains('is-enter') && !h.live().classList.contains('is-idle'));
+  eq(h.live().querySelector('.np-title').textContent, '<img src=x onerror=alert(1)>', '歌名以純文字輸出');
+  eq(h.live().querySelector('.np-eye-text').textContent, 'NOW', '有狀態燈就去掉標籤前的箭頭');
+  eq(h.live().querySelector('.np-title').dataset.mqSpeed, '90', '長歌名跑馬燈用較快的速度並跟著來源尺寸放大（45px/s × fit 2）');
+  h.flush();
+  eq(h.live().querySelectorAll('.np-deco').length, 1, '歌曲卡帶一組裝飾元素');
+  eq(h.live().querySelector('.np-deco').textContent, '', '裝飾元素不帶文字');
+  eq(h.cards().length, 1, '出場計時到就拔掉舊卡');
+
+  const before = h.live();
+  h.ctx.model = { ...h.ctx.model, playing: false };
+  h.render();
+  ok(h.live() === before && h.cards().length === 1, '暫停／續播只是同一首，不重播進場');
+
+  h.ctx.model = { current: song('B', ''), past: [], upcoming: [] };
+  h.render();
+  ok(h.live().querySelector('.np-artist').hidden, '沒有歌手就把歌手那行藏起來');
+  h.ctx.model = { current: song('C', 'x'), past: [], upcoming: [] };
+  h.render();
+  eq(h.cards().filter((c) => !c.classList.contains('is-leaving')).length, 1, '快速連換也只留一張現役卡');
+  h.flush();
+  eq(h.cards().length, 1, '連換的舊卡全部清掉');
+  eq(h.live().querySelector('.np-title').textContent, 'C');
+
+  h.ctx.model = { current: null, past: [], upcoming: [] };
+  h.ctx.curStyle = { nowIdleShow: false };
+  h.render();
+  h.flush();
+  eq(h.cards().length, 0, '關掉待機文字＝沒歌時畫面完全清空');
+});
+
+test('OBS 單曲看板：三份版型清單、填滿白名單、設定 schema、面板入口、NEW、i18n、透明背景與減少動態', () => {
+  const read = (p) => fs.readFileSync(path.join(__dirname, p), 'utf8');
+  const appStateSource = read('../server/state/app-state.js');
+  const panel = read('../public/js/app-setlist-panel.js');
+  const setlist = read('../public/js/setlist.js');
+  for (const [name, src] of [['server', appStateSource], ['panel', panel], ['display', setlist]]) {
+    ok(/const SETLIST_LAYOUTS = \[[^\]]*'now-playing'[^\]]*\]/.test(src), `${name} 的版型清單要有 now-playing`);
+  }
+  ok(require('../server/state/app-state.js').SETLIST_LAYOUTS.includes('now-playing'), '伺服器白名單要收這個版型');
+  ok(/const FILL_LAYOUTS = new Set\(\[[^\]]*'now-playing'/.test(setlist) && /const SETLIST_FILL_LAYOUTS = \[[^\]]*'now-playing'/.test(panel), '來源即畫布');
+  ok(!/const SECTIONED_LAYOUTS = new Set\(\[[^\]]*'now-playing'/.test(setlist), '沒有已唱／未唱區塊');
+  ok(setlist.includes("'now-playing': nowPlaying"), '顯示端要掛上 renderer');
+
+  const schema = require('../public/js/setlist-style-schema');
+  eq(schema.FIELD_BY_KEY.nowSkin.values.join(), ['plate', 'neon', 'tape', 'bar', 'ticket', 'cassette', 'led', 'player', 'window', 'sticker'].join(), '十款外觀');
+  eq(schema.FIELD_BY_KEY.nowSkin.dataAttr, 'data-np-skin');
+  const target = schema.getDefaultStyle();
+  eq(target.nowIdleText, '', '待機文字預設留空（依語言帶預設）');
+  eq(target.nowIdleShow, true);
+  schema.validateAndApply({ nowSkin: 'evil', nowAlign: 'diagonal', nowIdleText: 'x'.repeat(200), nowIdleShow: 0 }, target);
+  eq(target.nowSkin, 'plate', '不認得的外觀不接受');
+  eq(target.nowAlign, 'auto', '不認得的對齊不接受');
+  eq(target.nowIdleText.length, 40, '待機文字截在 40 字');
+  eq(target.nowIdleShow, false);
+  ok(schema.FIELD_BY_KEY.nowIdleText.needsRerender && schema.FIELD_BY_KEY.nowIdleShow.needsRerender, '改待機設定要立刻重繪');
+
+  const html = read('../public/index.html');
+  ok(html.includes('data-setlist-layout="now-playing"') && html.includes('data-new-feature="setlist-now-playing"'), '模板入口要標 NEW');
+  ok(html.includes('<option value="now-playing">單曲看板</option>'), '隱藏的 select 也要有這個值');
+  ['sls-now-skin', 'sls-now-align', 'sls-now-idle-show', 'sls-now-idle-text']
+    .forEach((id) => ok(html.includes(`id="${id}"`), `面板要有 ${id}`));
+  ok(/'setlist-now-playing': '\d{4}-\d{2}-\d{2}'/.test(read('../public/js/new-badges.js')), 'NEW 要登記上線日期');
+  ok(read('../public/js/output-slim.js').includes("fieldOf('sls-now-skin')"), '改版後的設定面板要放得到這組設定');
+  // 精簡模板清單收掉卡片說明 <span>，NEW 標記也是 <span>：不排除的話所有模板的 NEW 都看不到
+  const panelCss = read('../public/css/panel.css');
+  ok(panelCss.includes('.oslim-panel .setlist-layout-card > span:not(.new-badge) { display: none; }')
+    && !panelCss.includes('.oslim-panel .setlist-layout-card > span { display: none; }'), '模板卡片的 NEW 標記不可被收掉');
+  ok(/'now-playing': \{ name: '單曲看板'/.test(panel), '面板要有名稱與說明');
+  // 沒有清單的版型：清單相關的通用欄位要藏起來，留著只會讓人以為改了會動
+  ['doneNameOpacityLabel', 'metaOpacityLabel', 'listFontSizeLabel', 'listWeightLabel', 'itemGapLabel', 'blurLabel', 'lineHeightLabel']
+    .forEach((key) => {
+      const at = html.indexOf(`data-i18n="setlist.${key}"`);
+      const before = html.slice(Math.max(0, at - 160), at);
+      ok(at > 0 && /data-sl-layout-not="now-playing">\s*<label(?: [^>]*)?(?:><span )?$/.test(before), `setlist.${key} 不可在單曲看板顯示`);
+    });
+  ok(html.includes('data-sl-layout-not="note now-playing"'), '已唱／未唱淡化不可在單曲看板顯示');
+  // 白名單式的欄位：單曲看板有用到的要列進去（卡片色、可讀性保護、「正在播放」標籤），沒用到的要排除（已唱／未唱標籤）
+  const fieldAttrOf = (id) => {
+    const at = html.indexOf(`id="${id}"`);
+    // 外層 field／switch-row（不含內層 field-row）
+    const opens = [...html.slice(0, at).matchAll(/<div class="(?:field|switch-row)["\s]/g)];
+    const start = opens.length ? opens[opens.length - 1].index : 0;
+    return html.slice(start, html.indexOf('>', start) + 1);
+  };
+  ok(/data-sl-layout="[^"]*\bnow-playing\b/.test(fieldAttrOf('sls-card-color')), '卡片顏色對名牌／字幕條等有底的外觀有作用，要顯示');
+  ok(/data-sl-layout="[^"]*\bnow-playing\b/.test(fieldAttrOf('sls-readability-guard')), '可讀性保護對單曲看板有作用，要顯示');
+  ok(/data-sl-layout="[^"]*\bnow-playing\b/.test(fieldAttrOf('sls-label-now')), '「正在播放」標籤文字用在單曲看板，要顯示');
+  ok(html.includes('<div class="field row-gap-10" data-sl-layout-not="timeline diagonal constellation film now-playing">'), '已唱／未唱標籤對單曲看板沒作用，要藏');
+  // 自訂文字標籤區塊（含「正在播放」標籤文字）用排除式顯示：單曲看板有用到，不可被排除
+  const labelsBlock = /<details[^>]*>\s*<summary data-i18n="setlist.customLabelsTitle"/.exec(html)?.[0] || '';
+  ok(labelsBlock && !/data-sl-layout="/.test(labelsBlock) && !/data-sl-layout-not="[^"]*now-playing/.test(labelsBlock), '「正在播放」標籤文字有用在單曲看板，要顯示');
+
+  const i18n = read('../public/js/i18n.js');
+  ['idleDefault', 'nowSkinLabel', 'nowSkinPlate', 'nowSkinNeon', 'nowSkinTape', 'nowSkinBar', 'nowSkinTicket', 'nowSkinCassette', 'nowSkinLed', 'nowSkinPlayer', 'nowSkinWindow', 'nowSkinSticker', 'nowAlignLabel', 'nowAlignAuto',
+    'nowAlignLeft', 'nowAlignCenter', 'nowAlignRight', 'nowIdleShowLabel', 'nowIdleTextLabel', 'nowIdlePlaceholder', 'nowHint']
+    .forEach((k) => ok(new RegExp(`'setlist\\.${k}': \\[('(?:[^'\\\\]|\\\\.)*', ){4}'(?:[^'\\\\]|\\\\.)*'\\],`).test(i18n), `setlist.${k} 要有五種語言`));
+  const auto = require('../public/js/i18n-auto');
+  ['單曲看板', '只顯示正在唱的歌，沒歌時顯示待機文字'].forEach((k) => ok(Array.isArray(auto[k]) && auto[k].length === 5, `${k} 要有五種語言`));
+
+  const css = read('../public/css/setlist.css');
+  const np = css.slice(css.indexOf('/* ══ 單曲看板（now-playing）══'));
+  ok(np.length > 100, '單曲看板 CSS 區塊');
+  ok(!/\.np-(stage|slot)\s*\{[^}]*background/.test(np), '舞台本身不鋪底色');
+  ok(!/\.np-card\.is-idle[^{]*\{[^}]*background/.test(np), '待機卡不帶底');
+  ['plate', 'neon', 'tape', 'bar', 'ticket', 'cassette', 'led', 'player', 'window', 'sticker'].forEach((skin) => {
+    ok(np.includes(`[data-np-skin="${skin}"]`), `${skin} 外觀要有樣式`);
+    ok(html.includes(`<option value="${skin}" data-i18n="setlist.nowSkin${skin[0].toUpperCase()}${skin.slice(1)}">`), `${skin} 要在面板外觀下拉裡`);
+  });
+  ok(/.np-deco { display: none; }/.test(np), '裝飾元素預設隱藏，只有需要的外觀才打開');
+  ok(np.includes('.np-deco i { animation: none !important; }'), '減少動態效果時捲軸、音量條也要停');
+  ok(np.includes('@media (prefers-reduced-motion: reduce)'), '尊重減少動態效果');
+  ok(!np.includes('data-np-skin="outline"'), '空心大字已移除（2026-11-23 使用者嫌醜）');
+  ok(setlist.includes('const speed = Number(el.dataset.mqSpeed) > 0 ? Number(el.dataset.mqSpeed) : 18;'), '跑馬燈可由版型指定速度，沒指定維持 18px/s');
+  // 跑馬燈用裁切框的 clientWidth 算位移：裁切框帶內距，長歌名尾巴會被切掉一段內距寬（霓虹實測曾切掉 77px）
+  ok(!/\.np-title\s*\{[^}]*padding/.test(np), '.np-title 是跑馬燈裁切框，不可帶內距；底色與內距放外層 .np-strip');
+  ok(/class(Name)? = 'np-strip'/.test(setlist) || setlist.includes("strip.className = 'np-strip'"), '歌名外層要有 np-strip');
+  ok(np.includes(':root[data-np-skin="neon"]:not([data-sl-readable-off]) .np-title'), '霓虹在可讀性保護開啟時要墊深色陰影（亮背景）');
+  // 出場動畫都要在 setlist.js 拔卡（NP_LEAVE_MS）之前跑完
+  const leaveMs = Number(/const NP_LEAVE_MS = (\d+);/.exec(setlist)[1]);
+  const leaving = [...np.matchAll(/\.is-leaving \{[^}]*animation[^:]*:\s*[\w-]+ ([\d.]+)s/g)].map((m) => Number(m[1]) * 1000);
+  ok(leaving.length >= 3 && leaving.every((ms) => ms < leaveMs), `出場動畫要短於拔卡時間：${leaving.join(',')} vs ${leaveMs}`);
 });

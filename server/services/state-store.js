@@ -15,14 +15,14 @@
  * - 先寫暫存檔再改名（原子寫入），中途斷電不會損毀狀態檔
  * - 任何讀寫錯誤都不打斷直播，但會通知控制台，避免使用者誤以為已保存
  *
- * 為什麼不用 services/json-store.js 基座：state.json 多了三件其他 store 沒有的事——
+ * state.json 保留三件其他 store 沒有的事——
  * debounce 快照、多伺服器 savedAt 衝突偵測（含靜默期接管）、啟動警示延遲投遞。
- * 硬塞進基座會讓兩邊都變複雜，所以原子寫入/corrupt/pre-migration 邏輯刻意在此獨立一份；
- * 若改動備份/保全策略，記得 json-store.js 與本檔要一起看。
+ * 原子寫入與備份輪替則和 json-store 共用 atomic-store-file，避免磁碟策略分岔。
  */
 
 const fs = require('fs');
 const path = require('path');
+const { atomicWriteRaw: atomicWrite, saveWithBackup } = require('./atomic-store-file');
 const { createLogger } = require('../utils/logger');
 const {
   CURRENT_STATE_SCHEMA_VERSION,
@@ -80,25 +80,6 @@ function readStateFile(filename) {
 
 function readMigratedStateFile(filename) {
   return migrateState(readStateFile(filename));
-}
-
-function atomicWrite(filename, raw) {
-  fs.mkdirSync(path.dirname(filename), { recursive: true });
-  const temporary = `${filename}.tmp-${process.pid}-${Date.now()}`;
-  try {
-    fs.writeFileSync(temporary, raw, 'utf8');
-    // Flush file contents before atomically replacing the live state file.
-    const fd = fs.openSync(temporary, 'r+');
-    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-    fs.renameSync(temporary, filename);
-    // Directory metadata flush is best effort because Windows may reject it.
-    try {
-      const dirFd = fs.openSync(path.dirname(filename), 'r');
-      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
-    } catch (_) { /* best effort */ }
-  } finally {
-    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) { /* best effort */ }
-  }
 }
 
 function corruptPathFor(filename, now = new Date()) {
@@ -338,7 +319,6 @@ function saveNow() {
     const rawSnapshot = _lastSnapshotFn();
     if (!rawSnapshot) throw new Error('無法取得要保存的狀態快照');
     const snapshot = { ...rawSnapshot, schemaVersion: CURRENT_STATE_SCHEMA_VERSION };
-    let previousSerialized = null;
     if (fs.existsSync(STATE_FILE)) {
       try {
         const diskResult = readMigratedStateFile(STATE_FILE);
@@ -350,7 +330,6 @@ function saveNow() {
           }
         }
         const disk = diskResult.state;
-        previousSerialized = fs.readFileSync(STATE_FILE, 'utf8');
         const diskSavedAt = Number(disk.savedAt) || 0;
         if (diskSavedAt > _lastKnownSavedAt) {
           const now = Date.now();
@@ -406,14 +385,7 @@ function saveNow() {
     }
 
     const serialized = JSON.stringify(snapshot);
-    // Create the recovery point before replacing the primary file. This is the
-    // previous valid on-disk state, not a second copy of the new state.
-    if (previousSerialized !== null) {
-      atomicWrite(STATE_BACKUP_FILE, previousSerialized);
-    } else if (!fs.existsSync(STATE_BACKUP_FILE)) {
-      atomicWrite(STATE_BACKUP_FILE, serialized);
-    }
-    atomicWrite(STATE_FILE, serialized);
+    saveWithBackup(STATE_FILE, serialized, { backupFile: STATE_BACKUP_FILE });
     _lastKnownSavedAt = Number(snapshot.savedAt) || Date.now();
     try {
       if (!fs.existsSync(STATE_BACKUP_FILE)) atomicWrite(STATE_BACKUP_FILE, serialized);
@@ -430,7 +402,7 @@ function saveNow() {
 }
 
 // 程式結束前把待寫入的狀態落地
-process.on('exit', () => {
+require('../utils/exit-hooks').onExit(() => {
   if (_saveTimer) {
     clearTimeout(_saveTimer);
     try { saveNow(); } catch (e) { /* 靜默 */ }

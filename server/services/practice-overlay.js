@@ -147,7 +147,7 @@ function sanitizeFrame(input) {
 
 // 全部實例共用一個 exit 掛鉤（測試會建很多個實例，每個各掛一個會觸發 MaxListeners 警告）。
 const PENDING_ON_EXIT = new Set();
-process.on('exit', () => { for (const flush of PENDING_ON_EXIT) flush(); });
+require('../utils/exit-hooks').onExit(() => { for (const flush of PENDING_ON_EXIT) flush(); });
 
 function createPracticeOverlay({ file = path.join(DATA_DIR, 'practice-overlay.json') } = {}) {
   const store = createJsonStore({

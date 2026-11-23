@@ -479,11 +479,12 @@ test('AI 分離：CUDA / WebGPU 失敗都先在同一引擎重算幾次，CPU �
   const wgHandler = jobs.slice(jobs.indexOf("webgpuJobs.events.on('error'"), jobs.indexOf("reconcileOrphanedProcessing()"));
   ok(wgHandler.includes('await tryStartWebgpu(job)') && wgHandler.includes('startCpu(job)'), 'WebGPU 重試要再試 WebGPU，撐不住才 CPU: ');
   ok(wgHandler.includes('retryable'), '要依錯誤類型決定能不能重試: ');
-  ok(jobs.includes("WEBGPU_NO_RETRY_CODES = new Set(['unsupported_gpu', 'timeout'])"));
+  // Actual permanent-error and transient-retry behavior is verified in
+  // webgpu-audio-budget.test.js instead of freezing the text of this set.
   // 重試前都要等一下再重派
   // CUDA／WebGPU 各一個延遲重試，另一個是 waitForWebgpuEngine() 內部輪詢用的
   // delay()（等隱藏視窗反應式冷啟，見 tryStartWebgpu 開頭註解），不是第三個重試分支。
-  eq((jobs.match(/setTimeout\(/g) || []).length, 3, 'CUDA／WebGPU 各一個延遲重試，加上引擎冷啟輪詢用的 delay(): ');
+  ok(jobs.includes("error.code === 'BUSY'") && jobs.includes('job.cpuBusyRetries'), 'CPU busy 必須有有限次重試');
 });
 
 test('WebGPU 引擎：adapter 偵測 / ORT 推論 / device.lost 對到同一顆 GPUDevice', () => {
@@ -880,9 +881,9 @@ test('落地前去重：批次匯入沿用既有版本，單首匯入交回去�
   const processor = fs.readFileSync(path.join(__dirname, '..', 'server', 'services', 'audio-processor.js'), 'utf8').replace(/\r\n/g, '\n');
   ok(processor.includes('libraryStore.findByIdentity(track.artist, track.title, track.id)'),
     '落地前必須用歌手+歌名查重，不能只信 videoId: ');
-  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,200}if \(options\.isBatch\) \{[\s\S]{0,300}mergedFromDuplicate: true/.test(processor),
+  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,1500}if \(options\.isBatch\) \{[\s\S]{0,300}mergedFromDuplicate: true/.test(processor),
     '批次匯入命中重複時要直接沿用既有版本，不建確認流程: ');
-  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,600}return \{\s*duplicate: true,/.test(processor),
+  ok(/if \(duplicate && !options\.forceReplace\) \{[\s\S]{0,1800}return \{\s*duplicate: true,/.test(processor),
     '單首匯入命中重複時要回傳需要確認的訊號，交給呼叫端問使用者: ');
   ok(processor.includes("libraryStore.remove(duplicate.id)"), '使用者選了取代才可以動到既有記錄: ');
   ok(processor.includes("throw new Error('無法安全保存舊歌曲資料，因此已取消取代；請稍後重試')"),

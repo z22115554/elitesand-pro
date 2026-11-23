@@ -173,9 +173,17 @@
   let sectionAwareBaseTemplateId = null;
   let sectionAwareLastApplied = null;
 
+  // 段落之間有空隙（太短的段落被 sanitizeSections 丟掉）或第一段不是從 0 秒開始時，
+  // 不可退回「最後一段」（通常是 outro）——那會讓主歌中間或前奏閃一下尾奏模板。
+  // 跟 jizura 的 profileAt 一致：還沒到第一段用第一段，空隙沿用最近開始的那一段。
   function findSectionLabel(sections, tSec) {
-    for (const s of sections) if (tSec >= s.start && tSec < s.end) return s.label;
-    return sections.length ? sections[sections.length - 1].label : null;
+    let label = sections.length ? sections[0].label : null;
+    let latestStart = -Infinity;
+    for (const s of sections) {
+      if (tSec >= s.start && tSec < s.end) return s.label;
+      if (tSec >= s.start && s.start >= latestStart) { latestStart = s.start; label = s.label; }
+    }
+    return label;
   }
 
   function applySectionAwareTemplate(timeMs) {
@@ -382,12 +390,12 @@
     }
 
     if (totalMs <= 0) {
-      obsProgressFill.style.width = '0%';
+      obsProgressFill.style.transform = 'scaleX(0)';
       return;
     }
 
     const progress = Math.min(100, Math.max(0, (timeMs / totalMs) * 100));
-    obsProgressFill.style.width = progress + '%';
+    obsProgressFill.style.transform = `scaleX(${Math.max(0, Math.min(1, progress / 100))})`;
   }
 
   // ─── Socket 事件處理 ───
@@ -533,61 +541,6 @@
     StylePresets.setOverrides(overrides || {});
   });
 
-  // ─── 位置微調自動夾限（v5.2）───
-  // 使用者滑桿調的是「意圖位移」；實際寫進 --lyric-offset-x/y 的是收緊後的值。
-  // 每次內容改變（換行、切換模板、字級變動）容器的實際邊界都可能不同，靠 ResizeObserver
-  // 監看 #lyrics-container 的版面框大小變化，一有變動就用同一個「意圖位移」重新收緊一次，
-  // 使用者永遠調不出畫面外，也不需要每個模板各自處理。
-  let lyricOffsetTargetX = 0;
-  let lyricOffsetTargetY = 0;
-  let lyricOffsetAppliedX = 0;
-  let lyricOffsetAppliedY = 0;
-  const LYRIC_OFFSET_EDGE_PAD = 12; // 留給邊界的最小可視安全距離（px）
-  let lyricOffsetResizeObserver = null;
-
-  function reclampLyricOffset() {
-    const container = document.getElementById('lyrics-container');
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return; // 尚未 layout，之後 resize 會再觸發
-    // 減掉「目前已套用的位移」還原出容器在零位移時的自然邊界，才能算出這次能再位移多少
-    const baseLeft = rect.left - lyricOffsetAppliedX;
-    const baseRight = rect.right - lyricOffsetAppliedX;
-    const baseTop = rect.top - lyricOffsetAppliedY;
-    const baseBottom = rect.bottom - lyricOffsetAppliedY;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const pad = LYRIC_OFFSET_EDGE_PAD;
-
-    let minX = pad - baseLeft;
-    let maxX = vw - pad - baseRight;
-    if (minX > maxX) { const mid = (minX + maxX) / 2; minX = mid; maxX = mid; } // 內容比畫面寬，兩難時取中間值
-    let minY = pad - baseTop;
-    let maxY = vh - pad - baseBottom;
-    if (minY > maxY) { const mid = (minY + maxY) / 2; minY = mid; maxY = mid; }
-
-    const effX = Math.min(Math.max(lyricOffsetTargetX, minX), maxX);
-    const effY = Math.min(Math.max(lyricOffsetTargetY, minY), maxY);
-
-    if (effX !== lyricOffsetAppliedX) {
-      lyricOffsetAppliedX = effX;
-      document.documentElement.style.setProperty('--lyric-offset-x', `${effX}px`);
-    }
-    if (effY !== lyricOffsetAppliedY) {
-      lyricOffsetAppliedY = effY;
-      document.documentElement.style.setProperty('--lyric-offset-y', `${effY}px`);
-    }
-  }
-
-  function ensureLyricOffsetObserver() {
-    if (lyricOffsetResizeObserver || typeof ResizeObserver === 'undefined') return;
-    const container = document.getElementById('lyrics-container');
-    if (!container) return;
-    lyricOffsetResizeObserver = new ResizeObserver(() => reclampLyricOffset());
-    lyricOffsetResizeObserver.observe(container);
-    window.addEventListener('resize', reclampLyricOffset);
-  }
-
   let fontAssetApplyVersion = 0;
   let appliedFontAssets = null;
 
@@ -695,8 +648,21 @@
   // ─── 歌詞外觀/位置設定（從控制面板即時推送，寫入 CSS 變數）───
   function applyLyricSettings(s) {
     if (!s || typeof s !== 'object') return;
-    lastLyricSettings = s; // 段落搭配（applySectionAwareTemplate）要讀這份的 sectionAwareEnabled/sectionTemplateMap
+    const previous = lastLyricSettings;
+    lastLyricSettings = s; // 段落搭配需要最新的 sectionAwareEnabled / sectionTemplateMap。
     const root = document.documentElement.style;
+    root.setProperty('--lyric-offset-x', `${Number.isFinite(s.offsetX) ? s.offsetX : 0}px`);
+    root.setProperty('--lyric-offset-y', `${Number.isFinite(s.offsetY) ? s.offsetY : 0}px`);
+
+    // DOM 模板僅移動 CSS 圖層，拖曳微調不必重建當前歌詞或重新播放進場。
+    if (previous && (previous.offsetX !== s.offsetX || previous.offsetY !== s.offsetY)
+        && !s.sectionAwareEnabled && s.template !== 'particle' && s.template !== 'spellbook') {
+      const keys = new Set([...Object.keys(previous), ...Object.keys(s)]);
+      const skip = ['offsetX', 'offsetY', 'lyricTemplateSettings', 'lyricPresets'];
+      const positionOnly = [...keys].every(key => skip.includes(key) || previous[key] === s[key]
+        || (key === 'sectionTemplateMap' && JSON.stringify(previous[key]) === JSON.stringify(s[key])));
+      if (positionOnly) return;
+    }
     const map = {
       fontSize: ['--display-font-size', v => `${v}px`],
       fontFamily: ['--display-font-family', v => v],
@@ -710,7 +676,7 @@
       paperstripColor: ['--ps-strip-color', v => v],
       strokeWidth: ['--lyric-stroke-width', v => `${v}px`],
       strokeColor: ['--lyric-stroke-color', v => v],
-      shadow: ['--lyric-shadow', v => v],
+      shadow: ['--lyric-shadow', v => v === 'none' ? '0 0 0 transparent' : v],
       historyOpacity: ['--lyric-history-opacity', v => String(v)],
       // 歷史歌詞字級：0 = 自動（CSS 內以主字級 58% 計算），>0 = 固定像素。
       // 回傳空字串時 setProperty 會移除該變數 → CSS 的 calc() fallback 生效。
@@ -721,8 +687,6 @@
       paddingX: ['--lyric-padding-x', v => `${v}px`],
       paddingY: ['--lyric-padding-y', v => `${v}px`],
       maxWidth: ['--lyric-max-width', v => `${v}%`],
-      // offsetX/offsetY 不走這裡直接寫 CSS 變數——見下方 reclampLyricOffset，
-      // 使用者調的是「意圖位移」，實際套用值會依當下內容自動收緊，不會把歌詞推出畫面。
       // 文字排版細項
       lineHeight: ['--lyric-line-height', v => String(v)],
       letterSpacing: ['--lyric-letter-spacing', v => `${v}px`],
@@ -743,12 +707,8 @@
         root.setProperty(cssVar, fmt(s[key]));
       }
     }
-    if (typeof s.offsetX === 'number') lyricOffsetTargetX = s.offsetX;
-    if (typeof s.offsetY === 'number') lyricOffsetTargetY = s.offsetY;
     // 底部極細進度條開關（預設開；OBS 不想要可在面板「歌詞顯示模式」關掉）
     if (obsProgressBar) obsProgressBar.style.display = (s.showProgressBar === false) ? 'none' : '';
-    ensureLyricOffsetObserver();
-    reclampLyricOffset();
     // KTV 伴唱是底部雙行絕對定位，原本 paddingY 的 0..300px 幅度對「上下位置」
     // 太小；把同一個「上下邊距」控制轉成較大的 KTV 專用位移，避免主設定區再多一條 Y 控制。
     if (typeof s.paddingY === 'number') {
@@ -966,6 +926,16 @@
     applyRecoveryState(state);
   });
 
+  function restorePlaybackClock(state) {
+    if (!Number.isFinite(state.currentTime * 1000) || typeof state.currentTime !== 'number' || state.currentTime < 0) return;
+    // The server measures age using its own clock. Never compare its absolute
+    // timestamp with this machine's Date.now(). Old servers safely omit age.
+    const age = Number.isFinite(state.playbackAgeMs)
+      && state.playbackAgeMs >= 0 && state.playbackAgeMs <= 30000 ? state.playbackAgeMs : 0;
+    syncTimeMs = state.currentTime * 1000 + (state.isPlaying ? age * currentPlaybackRate : 0);
+    lastSyncTimestamp = performance.now();
+  }
+
   SocketClient.on('state:sync', (state) => {
     // 基本狀態同步（不含歌詞恢復）
     if (state.style) StylePresets.setStyle(state.style);
@@ -984,8 +954,8 @@
     }
 
     // Phase 7: 套用 speed（pitch 在純視覺端沒有效果，不還原）
-    if (typeof state.playbackRate === 'number') {
-      currentPlaybackRate = state.playbackRate;
+    if (Number.isFinite(state.playbackRate)) {
+      currentPlaybackRate = Math.max(0.5, Math.min(1.5, state.playbackRate));
     }
     if (typeof state.metronomeEnabled === 'boolean') {
       metronomeEnabled = state.metronomeEnabled;
@@ -1015,18 +985,7 @@
       isControllerPlaying = state.isPlaying;
     }
 
-    // Phase 5: 恢復 currentTime（考慮頁面重載延遲）
-    if (typeof state.currentTime === 'number' && state.serverTimestamp) {
-      const elapsedSinceUpdate = (Date.now() - state.serverTimestamp) / 1000;
-      // Phase 7: 補償需考慮 playbackRate
-      const compensatedTime = state.isPlaying
-        ? state.currentTime + (elapsedSinceUpdate * currentPlaybackRate)
-        : state.currentTime;
-      syncTimeMs = compensatedTime * 1000;
-      lastSyncTimestamp = performance.now();
-
-      console.log(`[Display] 狀態恢復: currentTime=${compensatedTime.toFixed(1)}s, offset=${currentOffsetMs}ms, speed=${currentPlaybackRate}x`);
-    }
+    restorePlaybackClock(state);
   });
 
   /**
@@ -1054,8 +1013,8 @@
     }
 
     // Phase 7: 恢復 speed（pitch 在純視覺端沒有效果，不還原）
-    if (typeof state.playbackRate === 'number') {
-      currentPlaybackRate = state.playbackRate;
+    if (Number.isFinite(state.playbackRate)) {
+      currentPlaybackRate = Math.max(0.5, Math.min(1.5, state.playbackRate));
     }
     if (typeof state.metronomeEnabled === 'boolean') {
       metronomeEnabled = state.metronomeEnabled;
@@ -1093,19 +1052,7 @@
       isControllerPlaying = state.isPlaying;
     }
 
-    if (typeof state.currentTime === 'number' && state.serverTimestamp) {
-      // 計算補償後的 currentTime
-      const pageLoadDelay = (Date.now() - state.serverTimestamp) / 1000;
-      // Phase 7: 補償需考慮 playbackRate
-      const compensatedTime = state.isPlaying
-        ? state.currentTime + (pageLoadDelay * currentPlaybackRate)
-        : state.currentTime;
-
-      syncTimeMs = compensatedTime * 1000;
-      lastSyncTimestamp = performance.now();
-
-      console.log(`[Display] 完整狀態恢復: time=${compensatedTime.toFixed(1)}s, playing=${state.isPlaying}, offset=${currentOffsetMs}ms, speed=${currentPlaybackRate}x`);
-    }
+    restorePlaybackClock(state);
   }
 
   // ─── 啟動動畫迴圈 ───

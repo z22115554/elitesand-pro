@@ -148,9 +148,10 @@ LICENSE（MPL-2.0）為準，本節不予縮減，也不另外附加條件。本
 本條所定限制僅拘束依本 EULA 取得本軟體的使用者，不意圖縮減任何第三方開放
 原始碼授權或法律強制授予的權利。本軟體隨附的 SoundTouch
 （public/vendor/soundtouch-worklet.js）依 GNU Lesser General Public License
-v2.1 或其後版本（LGPL）授權；你可以自行替換相容的 SoundTouch 元件，本軟體
-不會以簽章、雜湊或其他機制阻止替換後的版本啟動。第三方元件的授權全文與
-對應原始碼位置見 THIRD-PARTY-NOTICES.txt。
+v2.1 或其後版本（LGPL）授權，對該元件的權利依 LGPL 條文適用。安裝版會驗證
+app.asar 的完整性，直接修改封裝可能使程式無法啟動；修改元件後須重新建置含
+正確完整性資料的套件。LGPL 全文隨附於 public/vendor/soundtouch-LGPL-2.1.txt，
+對應原始碼及上游位置見 THIRD-PARTY-NOTICES.txt。
 
 五、音訊、歌詞與使用者內容
 

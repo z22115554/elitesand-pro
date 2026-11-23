@@ -17,7 +17,7 @@ let entrance='auto';
 // Typography + composition knobs, pulled from the shared lyric settings in settings().
 // stroke/shadow come from the shared classic 描邊·陰影 controls (--lyric-stroke-*/--lyric-shadow).
 const FONT_DEFAULT=font,SANS_DEFAULT=sans;
-let typo={family:'',weight:0,sizeScale:1,letterSpacing:0,hpos:'center',vjustify:'center',orient:'horizontal',padX:60,padY:48,safeMargin:2,offX:0,offY:0,
+let typo={family:'',weight:0,sizeScale:1,letterSpacing:0,hpos:'center',vjustify:'center',orient:'horizontal',padX:60,padY:48,maxWidth:90,safeMargin:2,offX:0,offY:0,
   shadow:{on:true,color:'rgba(8,5,13,0.94)',blur:7,dy:1.3}};
 let palette={ink:'#f6f0e5',a:'#e97855',inkOpacity:1,aOpacity:1};
 const roleFont=isLead=>typo.family||(isLead?SANS_DEFAULT:FONT_DEFAULT);
@@ -103,7 +103,7 @@ function makeLayout(line,number){
  // ── Vertical (直書) composition: stack glyphs top→bottom in 1–2 right-to-left columns. ──
  // Particle assembly is orientation-agnostic (mask coords are local), so only the glyph
  // targets change; the fly-in choreography is identical to horizontal.
- const mX=clamp(typo.padX,W*.03,W*.34),mY=clamp(typo.padY,H*.03,H*.32);
+ const mX=Math.max(clamp(typo.padX,0,W*.45),W*(1-typo.maxWidth/100)/2),mY=clamp(typo.padY,0,H*.45);
  if(typo.orient==='vertical'){
   const band0=mY,band1=H-mY,bandH=band1-band0;
   const ranges=[];{const parts=gs.length>14?breakPhrase(gs):[gs];let s=0;for(const p of parts){ranges.push([s,s+p.length]);s+=p.length}}
@@ -415,7 +415,7 @@ function settings(){
  const data=document.body.dataset;
  const css=getComputedStyle(document.documentElement),cv=n=>css.getPropertyValue(n).trim();
  // Snapshot the geometry-affecting knobs so we only rebuild cached layouts when one changed.
- const prev=JSON.stringify([typo.family,typo.weight,typo.sizeScale,typo.letterSpacing,typo.hpos,typo.vjustify,typo.orient,typo.padX,typo.padY,typo.safeMargin]);
+ const prev=JSON.stringify([typo.family,typo.weight,typo.sizeScale,typo.letterSpacing,typo.hpos,typo.vjustify,typo.orient,typo.padX,typo.padY,typo.maxWidth,typo.safeMargin]);
  // ── Typography (all optional; unset → the shipped Sans/Serif pairing) ──
  const famRaw=(cv('--display-font-family')||'').trim();
  typo.family=famRaw&&!/^(serif|sans-serif|monospace|inherit|initial|unset|)$/i.test(famRaw)?famRaw:'';
@@ -430,15 +430,16 @@ function settings(){
  typo.shadow={on:shOn,color:shCol?shCol[0]:'rgba(8,5,13,0.94)',blur:shNums[1]||6,dy:shNums[0]||1.3};
  // ── Composition ──
  typo.hpos=['left','right','split'].includes(data.lyricPos)?data.lyricPos:'center';
- const vj=cv('--lyric-justify');typo.vjustify=/^(flex-start|start)$/.test(vj)?'start':/^(flex-end|end)$/.test(vj)?'end':'center';
+ typo.vjustify=data.particleVerticalPosition==='top'?'start':data.particleVerticalPosition==='bottom'?'end':'center';
  typo.orient=data.particleOrient==='vertical'?'vertical':'horizontal';
  const px=parseFloat(cv('--lyric-padding-x')),py=parseFloat(cv('--lyric-padding-y'));
  typo.padX=Number.isFinite(px)?px:60;typo.padY=Number.isFinite(py)?py:48;
+ const mw=parseFloat(cv('--lyric-max-width'));typo.maxWidth=Number.isFinite(mw)?clamp(mw,1,100):90;
  const sm=parseFloat(data.stageSafeMargin);typo.safeMargin=Number.isFinite(sm)?clamp(sm,0,25):2;
  // 水平／垂直微調：跟星沙／流光等舞台模板同一組 offsetX/offsetY，這裡自己夾在邊距框內。
  const ox=parseFloat(data.particleOffsetX),oy=parseFloat(data.particleOffsetY);
- typo.offX=Number.isFinite(ox)?clamp(ox,-W*.4,W*.4):0;
- typo.offY=Number.isFinite(oy)?clamp(oy,-H*.4,H*.4):0;
+ typo.offX=Number.isFinite(ox)?ox:0;
+ typo.offY=Number.isFinite(oy)?oy:0;
  // 進場二選一（2026-09-12 加回這顆旋鈕，語意跟舊版不同，見 server sanitizeParticleSettings
  // 的說明）：'auto' 預設，逐句在 stream/rain/vortex/twin 四種聚散風格輪替；'quaddrift' 時
  // 全部改用四相漂字整字進場（entryKind 對非 auto 值本來就會原樣回傳給每個字，不需要另外改）。
@@ -449,7 +450,7 @@ function settings(){
  reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
  const ink=color(cv('--lyric-color'),'#f6f0e5'),accent=color(cv('--lyric-color-active'),'#e97855');
  palette={ink:ink.hex,a:accent.hex,inkOpacity:ink.alpha,aOpacity:accent.alpha};
- if(prev!==JSON.stringify([typo.family,typo.weight,typo.sizeScale,typo.letterSpacing,typo.hpos,typo.vjustify,typo.orient,typo.padX,typo.padY,typo.safeMargin])){maskCache.clear();build()}
+ if(prev!==JSON.stringify([typo.family,typo.weight,typo.sizeScale,typo.letterSpacing,typo.hpos,typo.vjustify,typo.orient,typo.padX,typo.padY,typo.maxWidth,typo.safeMargin])){maskCache.clear();build()}
  draw(t);
 }
 return {
@@ -498,9 +499,10 @@ LyricTemplates.register({
  settings:[
   {key:'particleOrient',type:'enum',values:['horizontal','vertical'],default:'vertical',target:'data:particleOrient'},
   {key:'particleEntrance',type:'enum',values:['auto','quaddrift'],default:'auto',target:'data:particleEntrance'},
-  // 水平／垂直微調：沿用共用的 offsetX/offsetY，寫進 body.dataset 讓 canvas 自己讀（reclamp 對滿版容器無效）。
-  {key:'offsetX',type:'int',min:-960,max:960,default:0,target:'data:particleOffsetX'},
-  {key:'offsetY',type:'int',min:-540,max:540,default:0,target:'data:particleOffsetY'},
+  {key:'particleVerticalPosition',type:'enum',values:['top','middle','bottom'],default:'middle',target:'data:particleVerticalPosition'},
+  // Canvas 使用共用設定值直接平移。
+  {key:'offsetX',type:'int',min:-1080,max:1080,default:0,target:'data:particleOffsetX'},
+  {key:'offsetY',type:'int',min:-1080,max:1080,default:0,target:'data:particleOffsetY'},
   // 中央安全距離＋引導線：跟鏡像／紙帶完全共用同一套（stageSafeMargin / stage-show-safe-zone / mountStageSafeZoneGuide）。
   ...LyricTemplateSettings.STAGE_SAFE
  ],

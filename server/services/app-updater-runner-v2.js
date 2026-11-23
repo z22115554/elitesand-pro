@@ -292,7 +292,10 @@ function backupFiles(plan) {
 
 function installFiles(plan, options = {}) {
   let count = 0;
-  for (const item of plan.files) {
+  // Keep the previous executable available until all of its new resources are
+  // in place. Each destination replacement is a single rename, without a gap.
+  const orderedFiles = [...plan.files].sort((a, b) => Number(a.path === 'Elitesand Pro.exe') - Number(b.path === 'Elitesand Pro.exe'));
+  for (const item of orderedFiles) {
     if (options.failAfter === count) throw new Error('Injected update-v2 install failure.');
     const rel = item.path;
     const source = path.join(plan.stagingRoot, ...rel.split('/'));
@@ -304,7 +307,6 @@ function installFiles(plan, options = {}) {
       unlinkIfExists(temporary);
       throw new Error(`Temporary copy failed integrity verification: ${rel}`);
     }
-    unlinkIfExists(destination);
     renameFileWithRetry(temporary, destination);
     count++;
   }
@@ -356,19 +358,12 @@ function spawnRestart(restart) {
 async function applyStagedUpdate(plan, options = {}) {
   validatePlan(plan);
   let records = [];
+  let count = 0;
   try {
     appendLog(plan.logFile, `Applying secure desktop update ${plan.fromVersion || '?'} -> ${plan.toVersion || '?'}`);
     records = backupFiles(plan);
-    const count = installFiles(plan, options);
+    count = installFiles(plan, options);
     appendLog(plan.logFile, `Replaced ${count} integrity-verified desktop payload file(s).`);
-    if (!options.skipRestart) {
-      await spawnRestart(plan.restart);
-      appendLog(plan.logFile, 'Restarted the updated Electron application.');
-    }
-    removeTreeInside(plan.stagingRoot, plan.workRoot);
-    removeTreeInside(plan.backupRoot, plan.workRoot);
-    writeUpdateResultMarker(plan.targetRoot, true);
-    return { ok: true, updatedCount: count };
   } catch (error) {
     appendLog(plan.logFile, `Install failed: ${error.message}; starting rollback.`);
     if (records.length) {
@@ -382,6 +377,20 @@ async function applyStagedUpdate(plan, options = {}) {
     writeUpdateResultMarker(plan.targetRoot, false);
     return { ok: false, error: error.message };
   }
+  // Replacement has committed. Restart/cleanup must never roll back a running
+  // new version, especially after a partial deletion of its rollback sources.
+  if (!options.skipRestart) {
+    try { await spawnRestart(plan.restart); } catch (error) {
+      appendLog(plan.logFile, `Update committed; restart failed: ${error.message}`);
+    }
+  }
+  for (const directory of [plan.stagingRoot, plan.backupRoot]) {
+    try { removeTreeInside(directory, plan.workRoot); } catch (error) {
+      appendLog(plan.logFile, `Update committed; cleanup deferred: ${error.message}`);
+    }
+  }
+  writeUpdateResultMarker(plan.targetRoot, true);
+  return { ok: true, updatedCount: count };
 }
 
 async function runFromPlanFile(planPath, options = {}) {

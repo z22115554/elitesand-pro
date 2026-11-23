@@ -510,6 +510,43 @@
     } catch (_) { return fallback; }
   }
 
+  let typography = null;
+  let restoreTypography = null;
+  function syncTypography() {
+    const next = document.body.dataset.jizuraTypography === '1' ? {
+      family: cssVar('--display-font-family', 'sans-serif'),
+      weight: Math.max(100, Math.min(900, Number(cssVar('--display-font-weight', '400')) || 400)),
+      scale: Math.max(20, Math.min(96, parseFloat(cssVar('--display-font-size', '56')) || 56)) / 56,
+    } : null;
+    if (JSON.stringify(next) === JSON.stringify(typography)) return;
+    typography = next;
+    J.metrics.clear();
+    J.glyphs.clear();
+  }
+
+  function installTypographyOverrides() {
+    const faceOf = J.faceOf;
+    const drawItem = J.drawItem;
+    const scaledItem = Symbol('jizura-scaled-item');
+    J.faceOf = key => {
+      const face = faceOf(key);
+      return typography ? { ...face, family: typography.family, weight: typography.weight, gf: null } : face;
+    };
+    J.drawItem = (env, item) => {
+      if (!typography || typography.scale === 1 || item[scaledItem]) return drawItem(env, item);
+      return drawItem(env, { ...item, size: item.size * typography.scale, _m: null, _lay: null, [scaledItem]: true });
+    };
+    return () => {
+      J.faceOf = faceOf;
+      J.drawItem = drawItem;
+      if (typography) {
+        typography = null;
+        J.metrics.clear();
+        J.glyphs.clear();
+      }
+    };
+  }
+
   // 面板的顏色可能是 #rgb／rgba()／色名；引擎的對比計算只吃 #rrggbb
   const colorProbe = document.createElement('canvas').getContext('2d');
   function toHex(color, fallback) {
@@ -1027,6 +1064,7 @@
           c.outDur = Math.min(c.outDur || 0, c.dur * 0.35);
         }
         c.fx = fx;
+        if (typography) c.weightGrow = false;
         // 色偏殘影會把整組文字再畫兩次；只留給非安靜段落的狂放全畫面模式。
         c.__jzNoGhost = sides || prof.quietOnly || mode !== 'chaotic';
         cuts.push(c);
@@ -1053,7 +1091,7 @@
     return [
       lines.length, lines[0] ? lines[0].time : 0, lines.length ? lines[lines.length - 1].time : 0,
       meta ? meta.id : '', secs, placement(), motionMode(), partsMode(), optinFlags(), document.body.dataset.lyricIntensity || '',
-      cssVar('--lyric-color', ''), cssVar('--lyric-color-active', ''),
+      cssVar('--lyric-color', ''), cssVar('--lyric-color-active', ''), JSON.stringify(typography),
     ].join('|');
   }
 
@@ -1068,6 +1106,7 @@
     const meta = tctx && tctx.getTrackMeta ? tctx.getTrackMeta() : null;
     if (lines === lastLinesRef && meta === lastMetaRef && !settingsDirty) return plan;
     lastLinesRef = lines; lastMetaRef = meta; settingsDirty = false;
+    syncTypography();
     const key = currentPlanKey(lines, meta) + '|' + (lines.length ? hashString(lines.map((l) => l.text).join('\n')) : 0);
     if (key === planKey) return plan;
     planKey = key;
@@ -1102,7 +1141,10 @@
     const vh = rootEl.clientHeight || window.innerHeight || 1080;
     const mode = placement();
     // 畫布一律全畫面 16:9（偏左／偏右靠 cutOffset 移動內容，不縮畫布）
-    const w = Math.min(vw, vh * 16 / 9);
+    const padX = Math.max(0, parseFloat(cssVar('--lyric-padding-x', '0')) || 0);
+    const padY = Math.max(0, parseFloat(cssVar('--lyric-padding-y', '0')) || 0);
+    const maxWidth = Math.max(1, Math.min(100, parseFloat(cssVar('--lyric-max-width', '100')) || 100));
+    const w = Math.max(2, Math.min(vw - 2 * padX, vw * maxWidth / 100, (vh - 2 * padY) * 16 / 9));
     const h = w * 9 / 16;
     const x = (vw - w) / 2;
     const y = (vh - h) / 2;
@@ -1146,6 +1188,7 @@
     id: 'jizura',
     label: '文字PV',
     settings: [
+      { type: 'bool01', key: 'jizuraTypography', target: 'data:jizuraTypography', default: false },
       { type: 'enum', key: 'jizuraPlacement', target: 'data:jizuraPlacement', values: ['right', 'left', 'sides', 'full'], default: 'sides' },
       { type: 'enum', key: 'jizuraMotion', target: 'data:jizuraMotion', values: ['smooth', 'koma'], default: 'smooth' },
       { type: 'enum', key: 'jizuraParts', target: 'data:jizuraParts', values: ['base', 'extended'], default: 'base' },
@@ -1155,6 +1198,7 @@
     ],
 
     mount(container, tctx) {
+      restoreTypography = installTypographyOverrides();
       rootEl = document.createElement('div');
       rootEl.id = 'jizura-root';
       canvas = document.createElement('canvas');
@@ -1171,6 +1215,8 @@
     },
 
     destroy() {
+      restoreTypography?.();
+      restoreTypography = null;
       if (resizeHandler) window.removeEventListener('resize', resizeHandler);
       resizeHandler = null;
       if (rootEl && rootEl.parentNode) rootEl.parentNode.removeChild(rootEl);

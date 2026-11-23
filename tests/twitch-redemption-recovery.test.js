@@ -31,6 +31,7 @@ function response(status, body = {}) {
 
 function fixture() {
   let saved = [];
+  let refunds = [];
   const calls = [], replies = [], closed = [];
   const pendingStore = {
     load: () => structuredClone(saved),
@@ -39,6 +40,7 @@ function fixture() {
   const options = {
     config: {},
     pendingStore,
+    refundStore: { load: () => structuredClone(refunds), save: value => { refunds = structuredClone(value); return true; } },
     sessionStore: { load: () => null, save: () => true },
     historyStore: { load: () => [], save: () => true },
     authStore: { load: () => ({ userId: 'broadcaster', accessToken: 'fake-token' }) },
@@ -71,6 +73,65 @@ function fixture() {
   service.scheduleRequestExpiry(id);
   return { service, make, id, calls, replies, closed, saved: () => structuredClone(saved) };
 }
+
+test('ESP-012: failed chat delivery cannot leave an imported chat request pending', async () => {
+  const f = fixture(), request = f.service.pendingRequests.get(f.id);
+  request.source = 'chat'; request.rewardRedemption = null;
+  f.service.sendConfiguredReply = async () => { throw new Error('chat outage'); };
+  await f.service.completeSongRequest({ requestId: f.id, success: true, title: 'Saved Song' });
+  assert.equal(f.service.pendingRequests.size, 0);
+  assert.equal(f.service.getRequestHistory(1)[0].result, 'imported');
+});
+
+test('ESP-013: rule-rejected refunds survive restart and retry without a pending request', async () => {
+  const f = fixture(); f.service.pendingRequests.clear();
+  f.service.updateRewardRedemptionStatus = async () => { throw new Error('temporary outage'); };
+  await assert.rejects(f.service.rejectSongRequest({ event: {}, key: 'blockedRequest',
+    redemption: { id: 'retry-redemption', rewardId: 'test-reward' } }), /temporary outage/);
+  assert.equal(f.service.refundRetries.size, 1);
+  assert.ok(f.service.refundRetryTimer);
+  const restarted = f.make();
+  assert.equal(restarted.refundRetries.size, 1);
+  restarted.updateRewardRedemptionStatus = async () => ({ status: 'CANCELED', confirmed: true });
+  await restarted.retryRejectedRefunds();
+  assert.equal(restarted.refundRetries.size, 0);
+});
+
+test('ESP-022: simultaneous expired-token checks share one refresh', async () => {
+  const f = fixture(); let calls = 0;
+  f.service.config.twitchClientId = 'fixture-client';
+  f.service.auth.expiresAt = 0;
+  f.service.refreshToken = async () => { calls++; await new Promise(resolve => setImmediate(resolve)); };
+  await Promise.all(Array.from({ length: 8 }, () => f.service.ensureToken()));
+  assert.equal(calls, 1);
+});
+
+test('ESP-023: EventSub replay delivers a support event once', async () => {
+  const f = fixture(); let count = 0;
+  f.service.onSupport = () => { count++; };
+  const message = JSON.stringify({ metadata: { message_type: 'notification', message_id: 'unique-event' },
+    payload: { subscription: { type: 'channel.chat.notification' }, event: { notice_type: 'sub', chatter_user_name: 'Viewer' } } });
+  await f.service.handleWebSocketMessage(message);
+  await f.service.handleWebSocketMessage(message);
+  assert.equal(count, 1);
+});
+
+test('ESP-014: reconciliation paginates unfulfilled redemptions and skips local requests', async () => {
+  const f = fixture(), seen = [];
+  f.service.auth.scopes = ['channel:manage:redemptions'];
+  f.service.rewardSettings = { enabled: true, rewardId: 'test-reward' };
+  f.service.handleRewardRedemption = async event => seen.push(event.id);
+  let page = 0;
+  f.service.helix = async endpoint => {
+    assert.match(endpoint, /status=UNFULFILLED/);
+    if (page++ === 0) return response(200, { data: [{ id: 'test-redemption' }, { id: 'offline-1', redeemed_at: new Date().toISOString() }], pagination: { cursor: 'next' } });
+    assert.match(endpoint, /after=next/);
+    return response(200, { data: [{ id: 'offline-2', redeemed_at: new Date().toISOString() }], pagination: {} });
+  };
+  await f.service.reconcileRewardRedemptions();
+  assert.deepEqual(seen, ['offline-1', 'offline-2']);
+  assert.equal(page, 2);
+});
 
 test('404 PATCH + GET CANCELED settles rejected request without refund retry', async () => {
   const f = fixture();

@@ -142,6 +142,9 @@
     let query = '';
     const catButtons = CATEGORIES.map((cat) => {
       const btn = el('button', 'sslim-cat', { type: 'button' });
+      // NEW 標記往外冒泡用：分類按鈕＋它管的卡片互相認得（new-badges.js 的 doorsFor）
+      btn.dataset.sslimCat = cat.key;
+      (cat.cards || []).forEach((id) => { const card = byId(id); if (card) card.dataset.sslimCategory = cat.key; });
       const label = i18nText(el('span', 'sslim-cat-name'), `settingsSlim.cat.${cat.key}`);
       const badge = el('span', 'sslim-badge');
       btn.append(label, badge);

@@ -218,7 +218,7 @@ test('訂閱演出：Twitch 聊天室通知的對應——一次送多份只算�
 });
 
 test('訂閱演出：Twitch 用聊天室通知（不需要新的授權範圍），訂閱失敗不影響點歌', () => {
-  const source = read('server/services/twitch-service.js');
+  const source = require('./helpers/twitch-service-source')();
   ok(source.includes("createSubscription('channel.chat.notification', { broadcaster_user_id: this.auth.userId, user_id: this.auth.userId })"));
   ok(/channel\.chat\.notification[\s\S]{0,200}catch \(err\)[\s\S]{0,120}訂閱通知未啟用/.test(source), '訂閱通知建立失敗要被吞掉並記錄');
   ok(source.includes("const REQUIRED_SCOPES = Object.freeze(['user:read:chat', 'user:write:chat', 'channel:manage:redemptions']);"), '不可為了訂閱演出多要授權範圍（舊使用者會被要求重新連接）');

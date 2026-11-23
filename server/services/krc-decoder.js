@@ -13,7 +13,7 @@
  * - 新版自定義: [startMs,durationMs]<wordStart,wordDuration,flag>word...
  */
 const zlib = require('zlib');
-const { msToKrcTime } = require('../utils/time-utils');
+const { msToKrcTime, escapeTimedWord } = require('../utils/time-utils');
 
 // KRC XOR 加密金鑰（酷狗固定金鑰）
 const KRC_KEY = [
@@ -31,6 +31,7 @@ function krcDecode(buffer) {
     if (!Buffer.isBuffer(buffer)) {
       buffer = Buffer.from(buffer);
     }
+    if (buffer.length > 4 * 1024 * 1024) return null;
 
     const header = buffer.toString('ascii', 0, 4);
     if (header !== 'krc1' && header !== 'krc2') {
@@ -46,7 +47,7 @@ function krcDecode(buffer) {
     }
 
     // zlib 解壓縮
-    const rawText = zlib.inflateSync(decrypted).toString('utf-8');
+    const rawText = zlib.inflateSync(decrypted, { maxOutputLength: 4 * 1024 * 1024 }).toString('utf-8');
 
     // 偵測格式並解析
     return rawText.trim().startsWith('<')
@@ -62,9 +63,26 @@ function krcDecode(buffer) {
  * 解析新版 KRC 自定義格式
  * 格式：[startMs,durationMs]<wordStart,wordDuration,flag>word...
  */
+// 酷狗 KRC 把翻譯（type 1）與羅馬音（type 0）放在 [language:base64(JSON)] 這一行，
+// lyricContent 依序對應每一個有時間的歌詞行。舊版連這行一起丟掉，酷狗逐字歌詞永遠沒有翻譯。
+function krcTranslations(rawText) {
+  const m = rawText.match(/^\[language:([A-Za-z0-9+/=\s]+)\]\s*$/m);
+  if (!m) return null;
+  try {
+    const data = JSON.parse(Buffer.from(m[1].replace(/\s+/g, ''), 'base64').toString('utf-8'));
+    const entry = Array.isArray(data && data.content) ? data.content.find((c) => c && c.type === 1 && Array.isArray(c.lyricContent)) : null;
+    return entry ? entry.lyricContent.map((row) => (Array.isArray(row) ? row.join('') : String(row || '')).trim()) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function parseKrcCustom(rawText) {
   const lines = rawText.split('\n');
   const output = [];
+  const translationRows = krcTranslations(rawText);
+  const translationLines = [];
+  let timedIndex = -1;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -72,6 +90,7 @@ function parseKrcCustom(rawText) {
 
     const lineMatch = trimmed.match(/^\[(\d+),(\d+)\](.*)/);
     if (!lineMatch) continue;
+    timedIndex += 1;
 
     const lineStartMs = parseInt(lineMatch[1], 10);
     const lineDurationMs = parseInt(lineMatch[2], 10);
@@ -99,13 +118,18 @@ function parseKrcCustom(rawText) {
       const timeTag = msToKrcTime(lineStartMs);
       let krcLine = `[${timeTag}]<${lineDurationMs}>`;
       for (const word of words) {
-        krcLine += `${word.text}<${word.start},${word.duration}>`;
+        krcLine += `${escapeTimedWord(word.text)}<${word.start},${word.duration}>`;
       }
       output.push(krcLine);
+      const translation = translationRows && translationRows[timedIndex];
+      if (translation && translation !== '//' && translation !== fullText.trim()) {
+        translationLines.push(`[${timeTag}]${translation.replace(/</g, '＜')}`);
+      }
     }
   }
 
-  return output.join('\n');
+  // 譯文用「[時間]文字」純文字行接在後面（同 appendTranslationLines），parseKrc 會依時間收進對應那一行。
+  return output.concat(translationLines).join('\n');
 }
 
 /**
@@ -141,7 +165,7 @@ function parseKrcXml(xmlText) {
       const timeTag = msToKrcTime(lineStart);
       let krcLine = `[${timeTag}]<${lineDuration}>`;
       for (const word of words) {
-        krcLine += `${word.text}<${word.start},${word.duration}>`;
+        krcLine += `${escapeTimedWord(word.text)}<${word.start},${word.duration}>`;
       }
       lines.push(krcLine);
     }

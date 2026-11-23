@@ -113,13 +113,26 @@
     return true;
   }
 
+  // 淡出後才真正 pause 的計時器：淡出那 0.25 秒內又要播（手動連按、恢復延遲設 0 秒時暫停歌曲
+  // 又馬上繼續），舊計時器會在新的播放開始後把它暫停，畫面顯示播放中、其實沒有聲音。
+  let pauseAfterFadeTimer = null;
+
   function startPlayback() {
     clearPendingResume();
+    clearTimeout(pauseAfterFadeTimer);
+    pauseAfterFadeTimer = null;
     if (!enabled || !tracks.length || songIsPlaying) return;
     if (alertActive && alertTiming.bgm === 'pause') { pausedForAlert = true; return; } // 演出結束後再接回來
     ensureAudioGraph();
     if (currentIndex === -1 || !audioEl.src) loadTrack(0, false);
     audioEl.play().then(() => {
+      // play() 要等音檔載入才 resolve（幾百毫秒）。這段時間內開始唱歌、關掉 BGM、手動暫停或演出要求暫停時，
+      // pausePlayback() 看到 localPlaying 還是 false 就直接略過——舊版這裡照樣淡入，BGM 疊在歌上一起播。
+      if (songIsPlaying || !enabled || manualPause || (alertActive && alertTiming.bgm === 'pause')) {
+        try { audioEl.pause(); } catch (e) { /* 靜默 */ }
+        if (alertActive && alertTiming.bgm === 'pause') pausedForAlert = true;
+        return;
+      }
       fadeTo(1);
       reportStatus(true);
     }).catch(() => { /* 需要使用者互動過才能自動播放；下次手動操作時會再重試 */ });
@@ -128,7 +141,11 @@
   function pausePlayback() {
     if (!localPlaying) return;
     fadeTo(0);
-    setTimeout(() => { try { audioEl.pause(); } catch (e) { /* 靜默 */ } }, FADE_SECONDS * 1000 + 30);
+    clearTimeout(pauseAfterFadeTimer);
+    pauseAfterFadeTimer = setTimeout(() => {
+      pauseAfterFadeTimer = null;
+      try { audioEl.pause(); } catch (e) { /* 靜默 */ }
+    }, FADE_SECONDS * 1000 + 30);
     reportStatus(false);
   }
 
@@ -288,7 +305,10 @@
     const previousId = tracks[currentIndex]?.id || null;
     tracks = Array.isArray(payload?.tracks) ? payload.tracks : [];
     currentIndex = previousId ? tracks.findIndex((track) => track.id === previousId) : -1;
-    if (currentIndex === -1 && tracks.length && localPlaying) loadTrack(0, false);
+    // 正在播的那首被移出 BGM 清單（或音檔被清掉）：換 src 會讓音樂停掉，要接著播下一首，
+    // 不然畫面還顯示播放中、其實已經沒有聲音（'ended' 也不會再觸發）。
+    if (currentIndex === -1 && tracks.length && localPlaying) loadTrack(0, true);
+    else if (!tracks.length && localPlaying) pausePlayback();
     renderTrackList();
     renderTransportState();
   }

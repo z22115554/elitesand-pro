@@ -9,9 +9,10 @@ const { createLogger } = require('../../utils/logger');
 const { emitToAccessRooms, emitToControlClients } = require('../../utils/socket-broadcast');
 const libraryStore = require('../../services/library-store');
 const { addRomanization, needsRomanization, needsFurigana } = require('../../services/romanizer');
-const { sanitizeTrack, sanitizeJsonObject } = require('../../utils/track-schema');
+const { sanitizeTrack, sanitizeJsonObject, lrcDefaultOffset } = require('../../utils/track-schema');
 const usageTelemetry = require('../../services/usage-telemetry');
 const { LYRIC_TEMPLATES } = require('./lyrics');
+const PlaybackSequence = require('../../../public/js/playback-sequence');
 
 const log = createLogger('Socket');
 
@@ -87,6 +88,7 @@ function registerPlaybackHandlers(io, socket, ctx) {
     }
 
     // 套用該首記憶的 offset / 變調 / 變速（每首獨立，切歌自動回該首的設定）
+    if (!trackOffsets.has(trackId) && lrcDefaultOffset(track)) trackOffsets.set(trackId, lrcDefaultOffset(track));
     const offset = trackOffsets.get(trackId) || 0;
     const savedPitch = trackPitch.has(trackId) ? trackPitch.get(trackId) : 0;
     const savedSpeed = trackSpeed.has(trackId) ? trackSpeed.get(trackId) : 1.0;
@@ -155,7 +157,18 @@ function registerPlaybackHandlers(io, socket, ctx) {
       if (Array.isArray(pl) && pl.length > 0 && needsRomanization(pl)) {
         const missingRomanization = !pl.some(l => l && (l.phonetic || l.xieyin));
         if (missingRomanization || needsFurigana(pl)) {
+          // 羅馬化期間使用者可能換了歌詞（歌詞選擇器／手動貼上／歌曲庫逐字升級）。
+          // 那時這份 pl 已經不是這首的歌詞：不可推播給顯示端，更不可把舊歌詞寫回歌曲庫
+          // （會蓋掉剛選好的新歌詞）。用「歌詞的擁有者是否仍握著同一份 pl」判斷。
+          const manualAtStart = getEffectiveLyrics(trackId);
+          const lyricsOwner = manualAtStart || storedTrack || null;
+          const isStale = () => getEffectiveLyrics(trackId) !== manualAtStart
+            || (lyricsOwner && lyricsOwner.parsedLyrics !== pl);
           addRomanization(pl).then((romanized) => {
+            if (isStale()) {
+              log.info(`播放時補羅馬化結果已過期（期間換了歌詞），略過: ${track.title}`);
+              return;
+            }
             for (let i = 0; i < pl.length; i++) {
               if (!romanized[i]) continue;
               pl[i].phonetic = romanized[i].phonetic;
@@ -356,7 +369,19 @@ function registerPlaybackHandlers(io, socket, ctx) {
 
   // ─── 變調與變速 ───
 
-  socket.on('pitch:change', (semitones) => {
+  function transformValue(command) {
+    // Older cached controllers send a number. New clients bind the command to
+    // both the song and its playlist occurrence, so a late packet cannot edit
+    // whichever song happened to become current in the meantime.
+    if (typeof command === 'number') return command;
+    if (!command || Array.isArray(command) || typeof command !== 'object'
+      || command.trackId !== (playState.currentTrack?.id || null)
+      || command.entryId !== (playState.currentTrack?.entryId || null)) return null;
+    return command.value;
+  }
+
+  socket.on('pitch:change', (command) => {
+    const semitones = transformValue(command);
     // 驗證 semitones 為數字且在 -12 到 12 之間
     if (typeof semitones !== 'number' || !isFinite(semitones)) {
       log.warn(`pitch:change 收到無效的 semitones: ${semitones}`);
@@ -429,7 +454,8 @@ function registerPlaybackHandlers(io, socket, ctx) {
     reply({ ok: true, trackId, template: lyricTemplate });
   });
 
-  socket.on('speed:change', (rate) => {
+  socket.on('speed:change', (command) => {
+    const rate = transformValue(command);
     // 驗證 rate 為數字且在 0.5 到 1.5 之間
     if (typeof rate !== 'number' || !isFinite(rate)) {
       log.warn(`speed:change 收到無效的 rate: ${rate}`);
@@ -449,6 +475,14 @@ function registerPlaybackHandlers(io, socket, ctx) {
       try { libraryStore.updateMeta(id, { playbackRate: playState.playbackRate }); } catch (e) { /* 靜默 */ }
     }
     io.emit('speed:update', playState.playbackRate);
+    persistState();
+  });
+
+  // 尾奏暫停後自動收尾的秒數（0＝關閉）：面板設定，存伺服器讓重開、換電腦都保留
+  socket.on('playback:outro-finish', (seconds) => {
+    playState.outroPauseFinishSec = PlaybackSequence.normalizeOutroPauseFinishSec(seconds);
+    log.info(`尾奏暫停自動收尾: ${playState.outroPauseFinishSec ? `${playState.outroPauseFinishSec} 秒` : '關閉'}`);
+    io.emit('playback:outro-finish', playState.outroPauseFinishSec);
     persistState();
   });
 

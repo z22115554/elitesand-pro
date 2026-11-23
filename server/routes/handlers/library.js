@@ -48,6 +48,17 @@ function buildTrackFromEntry(entry) {
     vocalsFile: entry.vocalsFile || null,
     instrumentalFile: entry.instrumentalFile || null,
     separationStatus: entry.separationStatus || 'none',
+    // 同一個坑又漏了這幾個（2026-11-13 稽核）：從歌曲庫加入清單／BGM／核准公開點歌的歌
+    // 原本都會掉——統一音量失效（BGM 永遠沒有響度值）、段落搭配與自動直書抓不到段落、
+    // 歌詞來源（社群偏移的分類、換來源的偏移記憶）、LRC 內建 offset、時長不符的提示。
+    album: entry.album || '',
+    originalName: entry.originalName || '',
+    lyricsSource: entry.lyricsSource || null,
+    lyricsDurationVerified: typeof entry.lyricsDurationVerified === 'boolean' ? entry.lyricsDurationVerified : null,
+    lrcOffset: Number.isFinite(entry.lrcOffset) ? entry.lrcOffset : 0,
+    loudnessLufs: typeof entry.loudnessLufs === 'number' && Number.isFinite(entry.loudnessLufs) ? entry.loudnessLufs : null,
+    sections: Array.isArray(entry.sections) && entry.sections.length ? entry.sections : null,
+    sectionsStatus: entry.sectionsStatus || 'none',
   };
 }
 
@@ -166,10 +177,23 @@ function registerLibraryHandlers(io, socket, ctx, {
       Object.assign(track, naming);
       liveChanged = true;
     }
+    // 這場已唱過的那幾筆也跟著改：已唱歌單存的是唱當下的歌名副本，不改的話 OBS 歌單、
+    // 複製 YouTube 章節都還是舊名字（主播常常就是看到歌單上名字錯了才來改）。
+    let sungChanged = false;
+    const session = ctx.session;
+    if (session && Array.isArray(session.songs)) {
+      session.songs = session.songs.map((song) => {
+        if (!song || String(song.id) !== id || (song.title === title && (song.artist || '') === artist)) return song;
+        sungChanged = true;
+        return { ...song, title, artist };
+      });
+    }
     if (liveChanged) {
       emitToAccessRooms(io, 'playlist:update', getPublicPlaylist(), getReadOnlyPlaylist());
-      emitSetlist();
       broadcastState();
+    }
+    if (liveChanged || sungChanged) {
+      emitSetlist();
       persistState();
     }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
@@ -177,17 +201,20 @@ function registerLibraryHandlers(io, socket, ctx, {
     reply({ ok: true, title, artist });
   });
 
-  socket.on('library:cleanupAudio', (_data, ack) => {
+  function cleanupAudio(data, ack, dryRun = false) {
     // 一首歌可能同時引用原檔／人聲／伴奏三個實體資產。播放清單、待命/播放中的
     // currentTrack，以及仍在分離中的來源都不可被 cleanup 刪掉。
     const keep = libraryStore.getProcessingMediaFilenames();
     for (const track of playState.playlist) libraryStore.collectMediaFilenames(track, keep);
     libraryStore.collectMediaFilenames(playState.currentTrack, keep);
-    const result = libraryStore.cleanupAudio(keep);
+    const result = libraryStore.cleanupAudio(keep, { dryRun });
+    if (dryRun) { if (typeof ack === 'function') ack({ ok: true, ...result }); return; }
     emitToControlClients(io, 'library:list', libraryStore.getLibrarySummary());
     onLibraryChanged();
     if (typeof ack === 'function') ack({ ok: true, ...result });
-  });
+  }
+  socket.on('library:cleanupAudio', (data, ack) => cleanupAudio(data, ack));
+  socket.on('library:cleanupAudioPreview', (data, ack) => cleanupAudio(data, ack, true));
 
   // ─── 儲存歌單：媒體庫 id 的有序集合，一首歌可在多個歌單 ───
   // 只在這裡（非唯讀 socket）註冊；顯示端／唯讀端沒有任何歌單事件。
@@ -227,7 +254,8 @@ function registerLibraryHandlers(io, socket, ctx, {
     const trackIds = (Array.isArray(data?.trackIds) ? data.trackIds : [])
       .filter((id) => libraryStore.hasEntry(id));
     const result = savedPlaylists.addTracks(data?.id, trackIds);
-    if (result.ok && result.added) broadcastSavedPlaylists();
+    // 歌單滿了但前面幾首已加入（ok:false、added>0）也要廣播，面板才不會跟伺服器不一致
+    if (result.added) broadcastSavedPlaylists();
     reply(ack, result);
   });
 

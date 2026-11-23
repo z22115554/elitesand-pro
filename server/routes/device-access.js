@@ -9,6 +9,10 @@ const { getLanIp } = require('../utils/lan-info');
 const { getClientAddress, isLoopbackAddress } = require('../utils/pin-setup-policy');
 
 const router = express.Router();
+router.post('/media-session', require('../middleware/require-control-access').requireControlAccess, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true });
+});
 
 function localDesktopOnly(req, res, next) {
   if (isLoopbackAddress(getClientAddress(req))) return next();

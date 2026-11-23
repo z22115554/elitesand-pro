@@ -35,10 +35,7 @@ const registerTwitchHandlers = require('./handlers/twitch');
 const registerPublicRequestHandlers = require('./handlers/public-request');
 const registerBgmHandlers = require('./handlers/bgm');
 const registerOverlayShowHandlers = require('./handlers/overlay-show');
-const registerMoonEventHandlers = require('./handlers/moon-event');
-const registerHalloweenEventHandlers = require('./handlers/halloween-event');
-const moonEvent = require('../services/moon-event');
-const halloweenEvent = require('../services/halloween-event');
+const { registerMoonEventHandlers, registerHalloweenEventHandlers, moonEvent, halloweenEvent } = require('../services/retired-seasonal-events');
 // 限時節慶活動疊加層：clientType 同時是 socket 事件前綴（moon:update、halloween:update…）。
 const SEASONAL_OVERLAYS = new Map([['moon', moonEvent], ['halloween', halloweenEvent]]);
 const TwitchRequestSettings = require('../../public/js/twitch-request-settings');
@@ -179,8 +176,8 @@ module.exports = function socketHandler(io, {
       return next(new Error('SOURCE_TOKEN_REQUIRED'));
     }
     if (!loopback && !deviceAccess.verifyControllerToken(auth.controllerToken)) return next(new Error('CONTROLLER_PAIRING_REQUIRED'));
-    if (!authStore.hasPin()) return next();
-    const key = `socket:${socket.handshake.address || 'unknown'}`;
+    if (!authStore.hasPinFor({ loopback })) return next();
+    const key = authRateLimiter.keyForAddress(socket.handshake.address);
     const limit = authRateLimiter.status(key);
     if (!limit.allowed) return next(new Error('PIN_RATE_LIMITED'));
     if (authStore.verifyPin(auth.pin)) {
@@ -191,6 +188,21 @@ module.exports = function socketHandler(io, {
     const err = new Error('PIN_REQUIRED');
     next(err);
   });
+
+  // 改了 PIN（或第一次設定）之後，用舊 PIN（或沒 PIN 時）連進來的遠端控制端不能繼續留著：
+  // 改 PIN 多半就是發現不該連進來的人在亂操作。踢掉後它們會用記住的舊 PIN 重連而被擋下。
+  // 本機（loopback）的面板與唯讀的 OBS 顯示來源不受影響。
+  if (typeof authStore.onPinChanged === 'function') {
+    authStore.onPinChanged((kind) => {
+      if (kind !== 'set') return;
+      const sockets = io.sockets && io.sockets.sockets;
+      if (!sockets || typeof sockets.values !== 'function') return;
+      for (const socket of sockets.values()) {
+        if (socket.readOnly || isLoopbackAddress(socket.handshake && socket.handshake.address)) continue;
+        try { socket.disconnect(true); } catch (_) { /* 已斷線 */ }
+      }
+    });
+  }
 
   // ─── 連線狀態追蹤 ───
   const clients = {
@@ -279,12 +291,38 @@ module.exports = function socketHandler(io, {
     // 已經在「同一場」Twitch session 裡就不要重設——否則 EventSub 每次重連、
     // 或 refreshLiveState() 的權威對帳（都會走到這裡，且沒有 message id）都會把
     // 已唱歌單清空。Twitch 的 started_at 對同一場直播是固定值，給 60 秒容差即可。
-    if (ctx.session.active && ctx.session.source === 'twitch' && ctx.session.startedAt
-      && Math.abs(ctx.session.startedAt - resolvedStartedAt) < 60000) {
+    // 不限 source：同時連 OBS 時，Session 可能是 OBS 先開的（source='obs'），同一場直播的
+    // Twitch 開台事件不可把它當成新的一場清空已唱歌單（OBS 那邊的對應判斷見 handlers/setlist.js）。
+    const sameStream = ctx.session.startedAt && Math.abs(ctx.session.startedAt - resolvedStartedAt) < 60000;
+    if (ctx.session.active && sameStream) {
       if (eventId) lastTwitchStreamEventId = eventId;
       return;
     }
     lastTwitchStreamEventId = eventId || null;
+    // 目前這場 Session 比 Twitch 的開台時間還晚開始（直播中途才手動開台）：是同一場直播，
+    // 改用 Twitch 的開台時間、已唱歌曲的時間點一起挪，不清空（同 handlers/setlist.js 的 OBS 判斷）。
+    if (ctx.session.active && ctx.session.startedAt && resolvedStartedAt < ctx.session.startedAt) {
+      const shift = ctx.session.startedAt - resolvedStartedAt;
+      ctx.session.songs = ctx.session.songs.map((song) => (song && Number.isFinite(song.offset) ? { ...song, offset: song.offset + shift } : song));
+      ctx.session.startedAt = resolvedStartedAt;
+      ctx.session.source = 'twitch';
+      ctx.emitSetlist();
+      ctx.broadcastState();
+      ctx.persistState();
+      log.info('Twitch 開台時間比目前的 session 更早：沿用同一場、改用 Twitch 的開台時間');
+      return;
+    }
+    // 同一場直播先被收台（漏收、短暫斷線）又回報開台：接回原本的 Session，不清空已唱歌單。
+    if (sameStream) {
+      ctx.session.active = true;
+      ctx.session.source = 'twitch';
+      if (ctx.playState.isPlaying && ctx.playState.currentTrack) ctx.recordSessionSong();
+      ctx.emitSetlist();
+      ctx.broadcastState();
+      ctx.persistState();
+      log.info('Twitch 開台事件：同一場直播的 session 已接回（保留已唱歌單）');
+      return;
+    }
     ctx.session.active = true;
     ctx.session.startedAt = resolvedStartedAt;
     ctx.session.source = 'twitch';
@@ -698,6 +736,33 @@ module.exports = function socketHandler(io, {
   return {
     command: createDeckCommands(io, ctx),
     getState: ctx.getPublicState,
+    // 歌曲庫背景重洗歌詞後，播放清單／目前歌曲裡同一首的副本一起換掉（鐵則 17：
+    // 不同步的話下次存檔或廣播會用舊快照蓋回去）。不廣播：避免 OBS 重跑入場動畫，
+    // 下一次正常同步就會帶到。手動指定歌詞的歌不會走到這裡。
+    replaceTrackParsedLyrics(trackId, parsedLyrics) {
+      const { playState } = ctx;
+      let touched = 0;
+      const tracks = [playState.currentTrack, ...(Array.isArray(playState.playlist) ? playState.playlist : [])];
+      for (const t of new Set(tracks)) {
+        if (!t || t.id !== trackId || !Array.isArray(t.parsedLyrics)) continue;
+        t.parsedLyrics = parsedLyrics.map((line) => ({ ...line }));
+        touched++;
+      }
+      if (touched) ctx.persistState();
+      return touched;
+    },
+    // 歌詞選擇器／換來源選的歌詞另存在 state 的 manualLyricsCache，播放時優先於歌曲庫，
+    // 還會在播放時寫回歌曲庫。重洗只洗歌曲庫的話，第一次播放就被這份舊的蓋回去。
+    listManualLyrics() {
+      return [...ctx.manualLyricsCache].map(([id, entry]) => ({ id, ...entry }));
+    },
+    replaceManualParsedLyrics(trackId, parsedLyrics) {
+      const entry = ctx.manualLyricsCache.get(trackId);
+      if (!entry) return false;
+      ctx.manualLyricsCache.set(trackId, { ...entry, parsedLyrics: parsedLyrics.map((line) => ({ ...line })) });
+      ctx.persistState();
+      return true;
+    },
     // 練唱音高分析用：畫面上顯示的那份歌詞（手動覆蓋優先）＋這首歌的歌詞偏移。
     getPracticeLyrics(trackId) {
       const manual = ctx.getEffectiveLyrics(trackId);

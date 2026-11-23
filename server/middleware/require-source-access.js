@@ -14,7 +14,13 @@ function isLocalPreview(request) {
 }
 
 function requireSourceAccess(req, res, next) {
-  if (isLocalPreview(req) || accessStore.verifySourceToken(sourceTokenFrom(req))) return next();
+  if (isLocalPreview(req)) return next();
+  const token = sourceTokenFrom(req);
+  if (accessStore.verifySourceToken(token)) {
+    const { rememberMediaCredential, SOURCE_COOKIE } = require('./require-media-access');
+    rememberMediaCredential(req, res, SOURCE_COOKIE, token);
+    return next();
+  }
   res.set('Cache-Control', 'no-store');
   return res.status(401).json({
     error: 'An OBS Source Token is required for this output.',

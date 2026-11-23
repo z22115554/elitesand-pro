@@ -54,7 +54,10 @@ test('所有 yt-dlp 執行入口共用明確工作副本路徑', () => {
   ok(shellSource.includes('ELITESAND_YTDLP_PATH: packagedYtdlpRuntime.command'));
   ok(shellSource.includes("ELITESAND_YTDLP_MUTABLE: packagedYtdlpRuntime.mutable ? '1' : '0'"));
   ok(shellSource.includes('ELITESAND_YTDLP_STATE_PATH: packagedYtdlpRuntime.statePath'));
-  ok(shellSource.includes("expectedSeedHash: packagedResourceIntegrity?.files?.['tools/yt-dlp.exe']"));
+  ok(shellSource.includes('expectedSeedHash: packagedResourceIntegrity?.files?.[`tools/${packagedYtdlpName(processObject.platform)}`]'));
+  const { packagedYtdlpName } = require('../server/utils/platform-binaries');
+  eq(packagedYtdlpName('win32'), 'yt-dlp.exe', 'Windows 的完整性 manifest 鍵必須維持 tools/yt-dlp.exe: ');
+  eq(packagedYtdlpName('darwin'), 'yt-dlp');
   ok(shellSource.includes('prepareMutableYtdlp('));
   const updaterSource = fs.readFileSync(path.join(__dirname, '../server/services/ytdlp-updater.js'), 'utf8');
   ok(updaterSource.includes('writeApprovedRuntimeTrust(release.version)'), '官方 Nightly 驗證後必須刷新 runtime trusted hash: ');

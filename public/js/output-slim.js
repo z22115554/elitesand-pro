@@ -190,7 +190,7 @@
     const workspaceCard = (group) => document.querySelector(`#display-advanced-modal [data-settings-workspace-group="${group}"], .settings-workspace details[data-settings-workspace-group="${group}"][data-lyrics-search]`);
     const templateOnlyIds = [
       'columnflow-variant-field', 'columnflow-entrance-field', 'columnflow-placement-field', 'columnflow-max-lines-field',
-      'jizura-placement-field', 'jizura-motion-field', 'jizura-parts-field', 'jizura-optin-field', 'lightboard-scroll-field',
+      'jizura-typography-field', 'jizura-placement-field', 'jizura-motion-field', 'jizura-parts-field', 'jizura-optin-field', 'lightboard-scroll-field',
       'particle-orient-field', 'particle-entrance-field', 'particle-effects-field',
       'paperstrip-orient-field', 'paperstrip-color-field', 'ktv-text-field',
       'typewriter-colors-field', 'tw-sticker-field',
@@ -298,6 +298,8 @@
       fieldOf('sls-accent'), fieldOf('sls-note-now-color'),
       // 極簡歌單的外觀／跑馬燈速度／曲序（只在選到這個版型時顯示）
       fieldOf('sls-minimal-skin'),
+      // 單曲看板的外觀／對齊／待機文字
+      fieldOf('sls-now-skin'),
       fieldOf('sls-show-artist'),
       fieldOf('sls-done-opacity'), fieldOf('sls-strikethrough'),
     ].filter(Boolean).forEach((node) => s2.sec.appendChild(node));

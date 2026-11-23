@@ -194,13 +194,32 @@
     }
   }
 
+  // YouTube 只在章節符合規則時才認：第一個是 00:00、時間遞增、每段至少 10 秒。
+  // 一條不合格整份都不算章節，所以這裡要先整理：
+  // - 開台前就在播的歌會被記成 0 秒，跟「00:00 開台」撞在一起 → 第一首離開台不到 10 秒就讓它當 00:00
+  // - 點錯歌、馬上換下一首（不到 10 秒）→ 留後面那首
+  // - 收台後又播的歌 offset 是 0、排在後面 → 時間倒退，丟掉
+  const MIN_CHAPTER_MS = 10000;
+  function buildYoutubeChapterLines(songs, openingLine) {
+    const ascending = [];
+    for (const s of songs || []) {
+      const ms = Number(s && s.offset);
+      if (!Number.isFinite(ms) || ms < 0) continue;
+      if (ascending.length && ms <= ascending[ascending.length - 1].ms) continue;
+      ascending.push({ ms, label: `${s.title || ''}${s.artist ? ' - ' + s.artist : ''}` });
+    }
+    const kept = ascending.filter((entry, i) => !ascending[i + 1] || ascending[i + 1].ms - entry.ms >= MIN_CHAPTER_MS);
+    const lines = [];
+    if (kept.length && kept[0].ms < MIN_CHAPTER_MS) kept[0].ms = 0;
+    else lines.push(openingLine);
+    for (const entry of kept) lines.push(`${fmtSessionOffset(entry.ms)} ${entry.label}`);
+    return lines;
+  }
+
   function copyYoutubeChapters() {
     const songs = sessionState.songs || [];
     if (songs.length === 0) return;
-    const lines = [workspaceText('home.session.chapterOpening', '00:00 開台')];
-    for (const s of songs) {
-      lines.push(`${fmtSessionOffset(s.offset)} ${s.title}${s.artist ? ' - ' + s.artist : ''}`);
-    }
+    const lines = buildYoutubeChapterLines(songs, workspaceText('home.session.chapterOpening', '00:00 開台'));
     if (dom.btnCopyChapters) copyText(lines.join('\n'), dom.btnCopyChapters, workspaceText('home.session.copySuccess', '✓ 已複製章節'));
   }
 
@@ -367,7 +386,7 @@
   // --sl-scene-scale/--sl-stage-x/y），漏列會讓它被歸成 list 類、顯示對它無效的
   // 「整體大小倍率」，真正管用的「場景版設定」滑桿反而被藏起來（與 server 端同步）。
   const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];
-  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'minimal-board'];
+  const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'now-playing', 'minimal-board'];
   const SETLIST_LAYOUT_UI = {
     classic: { name: '經典資訊', hint: '現在、未唱、已唱一次看懂，最完整的常駐歌單。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     cards: { name: '卡片清單', hint: '緊湊的卡片清單，已唱／未唱各自分群，可勾選要保留哪一段。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
@@ -387,6 +406,7 @@
     note: { name: '手帳頁', hint: '橫線筆記本側欄，單一清單，已唱蓋章；適合聊天型歌回。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     flap: { name: '發車看板', hint: '貼齊來源底部的發車標橫帶，正在播放置中、以它為中心捲動路線。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     film: { name: '底片邊條', hint: '全幅場景；貼邊 35mm 底片，正在播放的那格框在片門裡。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
+    'now-playing': { name: '單曲看板', hint: '只顯示正在唱的這首（歌名與歌手），沒有已唱／未唱清單；沒歌時顯示可自訂的待機文字。十款外觀，背景全透明。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
     'minimal-board': { name: '極簡歌單', hint: '透明底，大字顯示正在唱，底部一行已唱歌名；適合字幕已經很大的直播畫面。', scope: '設定只套用並保存於這個模板；切換模板不會影響其他歌單。' },
   };
   // 暫停提供的場景模板仍留在 renderer／server 驗證清單，讓已保存的 OBS 畫面不會被自動改版。
@@ -395,7 +415,7 @@
   const setlistLayoutButtons = Array.from(document.querySelectorAll('[data-setlist-layout]'));
   // 清單型模板＝來源即畫布；場景型維持原本的全幅舞台語意。
   const SETLIST_SKIN_LAYOUTS = ['label', 'glow', 'round', 'pager', 'haunt'];
-  const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'flap', 'note', 'minimal-board', ...SETLIST_SKIN_LAYOUTS];
+  const SETLIST_FILL_LAYOUTS = ['classic', 'cards', 'simple', 'terminal', 'billboard', 'signal', 'index', 'flap', 'note', 'now-playing', 'minimal-board', ...SETLIST_SKIN_LAYOUTS];
   // flap／note 走填滿；film 是全幅場景。四者暫歸 'list' 類，共用既有清單型調整項。
 
   // 清單型：填滿來源、有已唱／未唱區塊。單點式：填滿來源但版位固定、只呈現現在播放。
@@ -497,6 +517,40 @@
     const l = setlistLayoutSel ? setlistLayoutSel.value : 'classic';
     return SETLIST_LAYOUTS.includes(l) ? l : 'classic';
   }
+  // 版型共用版面區塊；欄位支援度以各渲染模板為準。
+  const OMITTED_LAYOUT_FIELDS = {
+    classic: 'accentBright textDone borderRadius blurAmount',
+    simple: 'accentBright itemGap blurAmount shadowEnabled shadowBlur shadowOpacity lineHeight',
+    terminal: 'textSec fontDisplay fontBody sizeArtist itemGap blurAmount shadowEnabled shadowBlur shadowOpacity waitOpacity',
+    billboard: 'borderRadius itemGap blurAmount shadowEnabled shadowBlur shadowOpacity waitOpacity lineHeight',
+    cards: 'fontDisplay blurAmount waitOpacity lineHeight',
+    signal: 'accentBright fontDisplay borderRadius itemGap blurAmount doneOpacity waitOpacity lineHeight',
+    index: 'accentBright fontDisplay borderRadius itemGap blurAmount lineHeight',
+    label: 'textSec textDone textMeta fontBody paddingV paddingH',
+    glow: 'textDone fontBody paddingH',
+    round: 'textSec textDone textMeta paddingV paddingH',
+    pager: 'textSec textDone textMeta fontBody paddingV paddingH',
+    haunt: 'textSec textDone textMeta paddingV paddingH',
+    flap: 'accentBright textSec textDone textMeta cardColor cardOpacity borderColor borderOpacity borderWidth fontDisplay sizeList sizeArtist sizeMeta borderRadius paddingV paddingH itemGap blurAmount shadowEnabled shadowBlur shadowOpacity doneOpacity waitOpacity lineHeight',
+    note: 'textSec textDone textMeta borderColor borderOpacity borderWidth fontMono sizeArtist sizeMeta borderRadius paddingV paddingH itemGap blurAmount shadowEnabled shadowBlur shadowOpacity lineHeight',
+    'minimal-board': 'cardColor cardOpacity borderColor borderOpacity fwList borderRadius paddingV paddingH itemGap blurAmount shadowEnabled shadowBlur shadowOpacity doneOpacity waitOpacity lineHeight',
+    film: 'accent accentBright textSec textDone textMeta fontDisplay fontMono doneOpacity waitOpacity',
+  };
+  const sharedStyles = window.SetlistStyleSchema;
+  const fieldRows = new Map();
+  const fieldSelector = '.color-item, .flex-grow, .field, .switch-row';
+  for (const field of sharedStyles.FIELDS) {
+    const control = document.getElementById(field.domId || (field.key === 'textColor' ? 'sls-text-color' : ''));
+    if (!control) continue;
+    let row = control.closest(fieldSelector);
+    // A color picker can share a row with another setting but be wrapped in a plain div.
+    if (row?.querySelectorAll('input,select').length > 1 && control.parentElement.querySelectorAll('input,select').length === 1
+        && control.parentElement.tagName === 'DIV' && field.key !== 'textColor') row = control.parentElement;
+    if (!row) continue;
+    if (!fieldRows.has(row)) fieldRows.set(row, []);
+    fieldRows.get(row).push(field.key);
+  }
+  const settingsCards = [...document.querySelectorAll('#setlist-advanced-modal .mw-settings > details.card-collapse')];
   // 依目前版型「能動什麼顯示什麼」：data-sl-scope 列出適用類別
   function syncSetlistControlsForLayout() {
     const cat = setlistCategory();
@@ -508,6 +562,10 @@
     //   data-sl-layout      ：只在指定的幾個版型顯示；有指定就蓋過上面的類別判斷
     //   data-sl-layout-not  ：指定的版型不顯示。用排除而不是把其餘版型列成白名單，
     //                         白名單漏列新版型會靜默藏錯東西。
+    const omitted = new Set((OMITTED_LAYOUT_FIELDS[layout] || '').split(' '));
+    for (const [row, keys] of fieldRows) {
+      row.classList.toggle('sl-field-unsupported', keys.every((key) => omitted.has(key)));
+    }
     document.querySelectorAll('[data-sl-scope],[data-sl-layout],[data-sl-layout-not]').forEach((el) => {
       const scope = el.getAttribute('data-sl-scope');
       const only = el.getAttribute('data-sl-layout');
@@ -518,6 +576,11 @@
       if (not && not.split(/\s+/).includes(layout)) visible = false;
       el.hidden = !visible;
     });
+    for (const card of settingsCards) {
+      card.classList.toggle('sl-field-unsupported', ![...card.querySelectorAll('input,select')].some(
+        (control) => !card.contains(control.closest('[hidden]')) && !control.closest('.sl-field-unsupported:not(details)')
+      ));
+    }
   }
 
   if (dom.copySetlistUrl) {
@@ -600,18 +663,29 @@
     const FORMATS = schema.FORMATS;
     // 有 domId 且非特例的欄位 → 通用 collect / adopt / 事件綁定
     const genericFields = FIELDS.filter((f) => f.domId && !f.special);
+    for (const field of genericFields) {
+      const control = g(field.domId);
+      if (control?.type !== 'range') continue;
+      control.min = field.min;
+      control.max = field.max;
+      control.value = field.default;
+      const label = g(field.domId + '-val');
+      if (label && FORMATS[field.format]) label.textContent = FORMATS[field.format].toLabel(field.default);
+    }
     const fmtOf = (f) => (f.format && FORMATS[f.format]) || null;
     const readVal = (f, el) => (f.type === 'boolean' ? el.checked : f.type === 'number' ? parseFloat(el.value) : el.value);
     const writeVal = (f, el, v) => { if (f.type === 'boolean') el.checked = !!v; else el.value = v; };
 
     function collectStyle() {
       const out = {};
-      genericFields.forEach((f) => { const el = g(f.domId); if (el) out[f.key] = readVal(f, el); });
+      genericFields.forEach((f) => {
+        const el = g(f.domId);
+        if (el) out[f.key] = slStores[setlistTarget()]?.[f.key] ?? readVal(f, el);
+      });
       // ── 特例：textColor（「用主題」checkbox + 色票，合成一個可為空字串的欄位）──
       out.textColor = g('sls-text-theme').checked ? '' : g('sls-text-color').value;
       // ── 特例：字體（預設下拉 + 自訂／系統字體）──
       Object.keys(FONT_FIELD_IDS).forEach((key) => { out[key] = readFontValue(key); });
-      out.target = setlistTarget();
       return out;
     }
 
@@ -687,11 +761,11 @@
           if (wrap) wrap.hidden = false;
           if (!(custom?.value || '').trim()) return; // 自訂欄位還空著就先不送，避免用預設字體覆蓋掉
         } else if (wrap) wrap.hidden = true;
-        sendStyle();
+        sendStyle({ [key]: readFontValue(key) });
       });
-      if (custom) custom.addEventListener('input', () => sendStyle());
+      if (custom) custom.addEventListener('input', () => sendStyle({ [key]: readFontValue(key) }));
       if (sysSel) sysSel.addEventListener('change', () => {
-        if (sysSel.value) { if (custom) custom.value = sysSel.value; sendStyle(); }
+        if (sysSel.value) { if (custom) custom.value = sysSel.value; sendStyle({ [key]: readFontValue(key) }); }
       });
       if (loadBtn) loadBtn.addEventListener('click', async () => {
         try {
@@ -739,13 +813,13 @@
       styleSaveStatus = { state, key, fallback, vars: vars || null, savedAt: savedAt || null };
       renderStyleSaveStatus();
     }
-    function confirmStyleSaved() {
+    function confirmStyleSaved(patch) {
       const requestId = ++latestStyleSaveRequest;
       setStyleSaveStatus('saving', 'settings.workspace.saving', '儲存中…');
       // 伺服器端的 state-store 已有 800ms 磁碟 debounce；前端不應再等待，
       // 否則面板與真實 OBS 來源都會延遲。每次操作只送一個帶 ACK 的事件，
       // 並以 requestId 忽略較舊回應，避免舊狀態覆蓋最新儲存結果。
-      SocketClient.sendWithCallback('setlist:style', collectStyle(), (result, transportError) => {
+      SocketClient.sendWithCallback('setlist:style', { ...patch, target: setlistTarget() }, (result, transportError) => {
         if (requestId !== latestStyleSaveRequest) return;
         if (result?.ok) {
           setStyleSaveStatus('saved', 'settings.workspace.savedAt', '已儲存', null, result.savedAt || Date.now());
@@ -755,8 +829,8 @@
         }
       });
     }
-    function sendStyle() {
-      confirmStyleSaved();
+    function sendStyle(patch) {
+      confirmStyleSaved(patch);
     }
     renderStyleSaveStatus();
     window.addEventListener('i18n:change', renderStyleSaveStatus);
@@ -783,13 +857,16 @@
       const ev = (el.tagName === 'SELECT' || f.type === 'boolean') ? 'change' : 'input';
       el.addEventListener(ev, () => {
         const fmt = fmtOf(f); if (fmt) setVal(f.domId + '-val', fmt.toLabel(readVal(f, el)));
-        sendStyle();
+        sendStyle({ [f.key]: readVal(f, el) });
       });
     });
     // 特例欄位事件
     const tt = g('sls-text-theme'), tc = g('sls-text-color');
-    if (tt) tt.addEventListener('change', () => { if (tc) tc.disabled = tt.checked; sendStyle(); });
-    if (tc) tc.addEventListener('input', sendStyle);
+    const sendTextColor = () => sendStyle({ textColor: tt.checked ? '' : tc.value });
+    if (tt && tc) {
+      tt.addEventListener('change', () => { tc.disabled = tt.checked; sendTextColor(); });
+      tc.addEventListener('input', sendTextColor);
+    }
 
     // 風格預設（一鍵套一組值，再廣播）
     const PRESETS = {
@@ -816,12 +893,12 @@
         document.querySelectorAll('.preset-thumb').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         if (!p) return;
-        adoptStyleUI(p); sendStyle();
+        adoptStyleUI(p); sendStyle(p);
       });
     });
     // 重置只影響目前模板，不會覆寫其他模板已調好的外觀。
     const resetBtn = g('sls-reset');
-    if (resetBtn) resetBtn.addEventListener('click', () => { adoptStyleUI(DEFAULT_STYLE); sendStyle(); });
+    if (resetBtn) resetBtn.addEventListener('click', () => { adoptStyleUI(DEFAULT_STYLE); sendStyle(DEFAULT_STYLE); });
 
     // 自訂風格：存目前設定到 localStorage、可載入/刪除（與版型無關，跨版型通用）
     const CUSTOM_KEY = 'sls-custom-styles';
@@ -838,7 +915,7 @@
         chip.className = 'sls-custom-chip';
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'btn btn-sm btn-ghost sls-custom-chip__apply'; b.dataset.i18nSkip = '1'; b.textContent = name;
-        b.addEventListener('click', () => { const o = loadCustom(); if (o[name]) { adoptStyleUI(o[name]); sendStyle(); } });
+        b.addEventListener('click', () => { const o = loadCustom(); if (o[name]) { adoptStyleUI(o[name]); sendStyle(o[name]); } });
         const del = document.createElement('button');
         del.type = 'button'; del.className = 'btn btn-sm btn-ghost sls-custom-chip__delete'; del.textContent = '×'; del.title = '刪除';
         del.addEventListener('click', () => { const o = loadCustom(); delete o[name]; saveCustom(o); renderCustomList(); });
@@ -851,7 +928,7 @@
         const name = (saveName.value || '').trim();
         if (!name) { AppShared.showToast('請先輸入風格名稱', 'error'); return; }
         const obj = loadCustom();
-        const st = collectStyle(); delete st.target; // target 不存（載入時套到目前版型）
+        const st = collectStyle(); // 載入時套到目前版型。
         obj[name] = st; saveCustom(obj); saveName.value = ''; renderCustomList();
         AppShared.showToast(`已儲存風格「${name}」`);
       });

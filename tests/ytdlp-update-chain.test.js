@@ -1,4 +1,5 @@
 'use strict';
+require('./ytdlp-signatures.test');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -13,14 +14,17 @@ const version = '2026.10.26.220202';
 const url = `https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/${version}/yt-dlp.exe`;
 const binary = Buffer.from('unit-test-approved-executable');
 const digest = crypto.createHash('sha256').update(binary).digest('hex');
-const release = { version, digest, size: binary.length, url };
+const publishedAt = Date.parse('2026-10-26T22:02:02Z');
+const release = { version, digest, size: binary.length, url, publishedAt };
 
 test('Nightly release only accepts official URL, valid tag and SHA-256 metadata', () => {
-  const valid = { tag_name: version, assets: [{ name: 'yt-dlp.exe', browser_download_url: url, digest: `sha256:${digest}`, size: 200000 }] };
+  const valid = { tag_name: version, published_at: new Date(publishedAt).toISOString(), assets: [{ name: 'yt-dlp.exe', browser_download_url: url, digest: `sha256:${digest}`, size: 200000 }] };
   assert.equal(parseRelease(valid).digest, digest);
   assert.throws(() => parseRelease({ ...valid, tag_name: '2026.10.26' }), /invalid/i);
   assert.throws(() => parseRelease({ ...valid, assets: [{ ...valid.assets[0], browser_download_url: 'https://evil.example/download.exe' }] }), /invalid/i);
   assert.throws(() => parseRelease({ ...valid, assets: [{ ...valid.assets[0], digest: null }] }), /invalid/i);
+  assert.throws(() => parseRelease(valid, {now:publishedAt+60*60*1000}), /adoption delay/);
+  assert.throws(() => parseRelease({...valid,published_at:'invalid'}), /adoption delay/);
 });
 
 test('A tampered download never stages or replaces the existing trusted binary', async () => {
@@ -29,6 +33,7 @@ test('A tampered download never stages or replaces the existing trusted binary',
     const target = path.join(root, 'yt-dlp.exe');
     fs.writeFileSync(target, 'trusted-old');
     await assert.rejects(stageVerifiedRelease(target, release, {
+      verifyChecksumsImpl: async () => digest,
       fetchImpl: async () => ({ ok: true, buffer: async () => Buffer.from('tampered-content-with-same-size') }),
       execImpl: async () => ({ stdout: version }),
     }), /size mismatch|SHA-256 mismatch/i);
@@ -43,6 +48,7 @@ test('A verified staged binary is installed only after its embedded version is c
     const target = path.join(root, 'yt-dlp.exe');
     fs.writeFileSync(target, 'trusted-old');
     const stage = await stageVerifiedRelease(target, release, {
+      verifyChecksumsImpl: async () => digest,
       fetchImpl: async () => ({ ok: true, buffer: async () => binary }),
       execImpl: async () => ({ stdout: `${version}\n` }),
     });

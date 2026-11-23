@@ -172,12 +172,30 @@ function isUsableRecoveryDir(directory, fsImpl = fs) {
   return !!directory && fsImpl.existsSync(directory) && hasMarker(directory, fsImpl);
 }
 
-function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs, onBeforeCopy = null } = {}) {
+// macOS：.app 內不可寫（會破壞程式碼簽章；從 DMG 直接開時整個磁碟區是唯讀），
+// 也沒有「安裝資料夾旁邊」可用。歌曲固定放在 userData（~/Library/Application Support/
+// Elitesand Pro）底下，換新版 .app 不受影響，也不會觸發「文件」「下載」資料夾的隱私權詢問。
+function getMacDefaultMediaDir(userDataPath) {
+  return path.join(path.resolve(userDataPath), MEDIA_FOLDER_NAME);
+}
+
+function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs, onBeforeCopy = null, platform = process.platform } = {}) {
   if (typeof userDataPath !== 'string' || !path.isAbsolute(userDataPath)) {
     throw new TypeError('preparePackagedMediaStorage requires an absolute userDataPath');
   }
   if (typeof executablePath !== 'string' || !path.isAbsolute(executablePath)) {
     throw new TypeError('preparePackagedMediaStorage requires an absolute executablePath');
+  }
+
+  if (platform === 'darwin') {
+    const configured = readConfiguredMediaDir(userDataPath, fsImpl);
+    // 使用者在面板自選的位置永遠優先；macOS 從來沒有「放在安裝資料夾內」的舊版本，
+    // 不需要 Windows 那套搬移流程。
+    if (configured) return { mediaDir: configured, action: 'kept-configured' };
+    const mediaDir = getMacDefaultMediaDir(userDataPath);
+    ensureMarker(mediaDir, fsImpl);
+    writeReferences(userDataPath, mediaDir, fsImpl);
+    return { mediaDir, action: 'initialized-mac-default' };
   }
 
   const vulnerableMediaDir = getVulnerableInstallMediaDir(executablePath);
@@ -198,7 +216,9 @@ function preparePackagedMediaStorage({ userDataPath, executablePath, fsImpl = fs
 
   // User-selected custom storage is authoritative. Never silently redirect it,
   // even if it is unavailable right now.
-  if (!samePath(configuredMediaDir, vulnerableMediaDir)) {
+  const installRelative = path.relative(getInstallRoot(executablePath), configuredMediaDir);
+  const insideInstall = installRelative === '' || (!installRelative.startsWith(`..${path.sep}`) && installRelative !== '..' && !path.isAbsolute(installRelative));
+  if (!insideInstall) {
     return { mediaDir: configuredMediaDir, action: 'kept-configured' };
   }
 
@@ -265,6 +285,7 @@ module.exports = {
   readRecoveryMediaDir,
   getPreferredSiblingMediaDir,
   getVulnerableInstallMediaDir,
+  getMacDefaultMediaDir,
   chooseDefaultSiblingMediaDir,
   chooseEmptyMigrationDestination,
   copyVulnerableMedia,

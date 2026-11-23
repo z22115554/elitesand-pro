@@ -43,6 +43,7 @@ const { dataDir } = require('../utils/app-paths');
 const { createLogger } = require('../utils/logger');
 const { inspectDiskSpace } = require('./disk-space');
 const { safeRemove } = require('../utils/safe-remove');
+const packageTrust = require('./python-package-trust');
 const {
   fetchToFile,
   safeExtractAll,
@@ -74,9 +75,9 @@ const PIP_PACKAGES = [
   'loguru', 'win32-setctime', 'huggingface-hub', 'safetensors', 'librosa', 'jams', 'numpy', 'scipy',
   'requests', 'tqdm',
 ];
-// 所有套件（含相依拉進來的）一律鎖成 POC 驗證過 18 首歌的版本
-// （E:/music-section-poc-20260908/candidate-results/requirements-lock.txt），以 pip constraints 套用，
-// 之後上游出新版也不會再悄悄換掉。只列推論鏈會碰到的，其他候選模型用的（madmom、dgl…）不列。
+// POC 驗證過 18 首歌的核心版本，供診斷與 import 驗證。
+// 安裝改用 python-locks/section-win-py311.lock 的完整傳遞相依與雜湊，
+// 不再只靠 constraints 讓 pip 即時選擇其餘套件。
 const PIP_CONSTRAINTS = [
   'torch==2.6.0', 'torchaudio==2.6.0', 'transformers==4.51.1', 'tokenizers==0.21.4', 'huggingface-hub==0.36.2',
   'safetensors==0.8.0', 'numpy==1.26.4', 'scipy==1.15.2', 'librosa==0.11.0', 'numba==0.67.0', 'llvmlite==0.49.0',
@@ -87,12 +88,10 @@ const PIP_CONSTRAINTS = [
   'pyyaml==6.0.3', 'tqdm==4.70.0', 'requests==2.34.2', 'sympy==1.13.1', 'networkx==3.6.1', 'filelock==3.32.3',
   'fsspec==2026.7.0', 'jinja2==3.1.6', 'typing-extensions==4.16.0',
 ];
-// 套件組合的版本：改了 PIP_PACKAGES／PIP_CONSTRAINTS 就 +1。已安裝但版本號舊的，只重跑套件那一步
+// 套件組合的版本：改了 lock 或核心版本就 +1。已安裝但版本號舊的，只重跑套件那一步
 // （幾分鐘），不重下 Python／原始碼／2.7GB 權重。
-const PACKAGES_REVISION = 2;
-const PIP_EXTRA_INDEX_URL = 'https://download.pytorch.org/whl/cu124';
-const CONSTRAINTS_FILE = path.join(RUNTIME_DIR, 'constraints.txt');
-const GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py';
+const PACKAGES_REVISION = 3;
+const { GET_PIP_URL, verifyGetPip } = require('./python-bootstrap-trust');
 
 // Python embeddable + 完整 torch cu124 環境，比照 ai-runtime-provider.js 估計。
 const REQUIRED_DISK_BYTES = 6 * 1024 * 1024 * 1024;
@@ -378,11 +377,6 @@ function mergeMissing(fromDir, intoDir) {
   }
 }
 
-function writeConstraints() {
-  fs.mkdirSync(RUNTIME_DIR, { recursive: true });
-  fs.writeFileSync(CONSTRAINTS_FILE, `${PIP_CONSTRAINTS.join('\n')}\n`, 'utf8');
-}
-
 function pipProgressHandler(stage, onProgress) {
   return (text) => {
     const p = parseToolProgress(text);
@@ -394,10 +388,14 @@ function pipProgressHandler(stage, onProgress) {
 }
 
 // PIP_PACKAGES，鎖在 PIP_CONSTRAINTS 的版本
-function installPipPackages({ pythonExe, cwd, stage, onProgress, abortSignal }) {
+async function installPipPackages({ pythonExe, cwd, stage, onProgress, abortSignal }) {
+  if (stage === 'repair-packages') {
+    await runPythonStep(packageTrust.installArgs('bootstrap', cwd, { forceReinstall: true }), {
+      cwd, pythonExe, abortSignal, onOutput: pipProgressHandler(stage, onProgress),
+    });
+  }
   return runPythonStep(
-    ['-m', 'pip', 'install', '--progress-bar', 'on', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL,
-      '-c', CONSTRAINTS_FILE, ...PIP_PACKAGES],
+    packageTrust.installArgs('section', cwd),
     { cwd, pythonExe, timeoutMs: 30 * 60 * 1000, abortSignal, onOutput: pipProgressHandler(stage, onProgress) },
   );
 }
@@ -405,12 +403,11 @@ function installPipPackages({ pythonExe, cwd, stage, onProgress, abortSignal }) 
 // 2026-09-22 實機踩到的坑：`muq` 不是像 musicfm 那樣單純加 third_party 到 PYTHONPATH
 // 就能 import 的扁平模組——它自己有 setup.py（package_dir 指到 src/muq），必須真的
 // pip install 這個本機路徑才會出現在 site-packages。musicfm 沒有 setup.py，維持用
-// section_worker.py 的 PYTHONPATH 插入即可。這一步會順便裝 muq 自己宣告的相依
-// （x_clip 等），一樣套 constraints，不然它會把 transformers 之類升到最新版。
+// section_worker.py 的 PYTHONPATH 插入即可。相依已由完整雜湊 lock 安裝；本步驟
+// 關閉 index、dependency resolution 及 build isolation，避免旁路下載新套件。
 function installMuqPackage({ stage, onProgress, abortSignal }) {
   return runPythonStep(
-    ['-m', 'pip', 'install', '--no-warn-script-location', '--extra-index-url', PIP_EXTRA_INDEX_URL,
-      '-c', CONSTRAINTS_FILE, path.join(SONGFORMER_DIR, 'src', 'third_party', 'MuQ')],
+    packageTrust.installLocalArgs(path.join(SONGFORMER_DIR, 'src', 'third_party', 'MuQ')),
     { cwd: RUNTIME_DIR, pythonExe: PYTHON_EXE, timeoutMs: 15 * 60 * 1000, abortSignal, onOutput: pipProgressHandler(stage, onProgress) },
   );
 }
@@ -459,7 +456,6 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
         setDownloadStatus({ active: true, stage: 'repair-packages', error: null, step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
         log.info('歌曲段落分析 runtime：套件組合是舊版，只補裝套件');
         onProgress?.(getDownloadStatus());
-        writeConstraints();
         await installPipPackages({ pythonExe: PYTHON_EXE, cwd: RUNTIME_DIR, stage: 'repair-packages', onProgress, abortSignal });
         await installMuqPackage({ stage: 'repair-packages', onProgress, abortSignal });
         setDownloadStatus({ active: true, stage: 'verify-packages', error: null });
@@ -521,13 +517,13 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
 
       progress('bootstrap-pip');
       const { fetchToBuffer } = require('./ai-runtime-provider');
-      const getPipBuf = await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 });
+      const getPipBuf = verifyGetPip(await fetchToBuffer(GET_PIP_URL, { maxBytes: 5 * 1024 * 1024 }));
       fs.writeFileSync(path.join(tmpPythonDir, 'get-pip.py'), getPipBuf);
       const tmpPythonExe = path.join(tmpPythonDir, 'python.exe');
-      await runPythonStep(['get-pip.py', '--no-warn-script-location'], { cwd: tmpPythonDir, pythonExe: tmpPythonExe });
+      await packageTrust.bootstrapPackages(tmpPythonDir, fetchToBuffer,
+        args => runPythonStep(args, { cwd: tmpPythonDir, pythonExe: tmpPythonExe, abortSignal }), { abortSignal });
 
       progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
-      writeConstraints();
       await installPipPackages({ pythonExe: tmpPythonExe, cwd: tmpPythonDir, stage: 'install-packages', onProgress, abortSignal });
 
       progress('download-source', { detail: null, downloadedBytes: 0, totalBytes: null, percent: null });

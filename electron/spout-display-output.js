@@ -16,7 +16,7 @@ function loadSpoutAddon(projectRoot, addonPath = '', { isPackaged = false, resou
   // packaged build stages the compiled addon as an extraResource instead
   // (resources/tools/spout), same as yt-dlp.exe.
   let resolved;
-  if (addonPath) {
+  if (addonPath && !isPackaged) {
     resolved = path.resolve(addonPath);
   } else if (isPackaged) {
     resolved = path.join(resourcesPath, 'tools', 'spout', 'elitesand_spout_output.node');
@@ -75,8 +75,14 @@ function createSpoutDisplayOutput({
   let stopping = false;
   let startPromise = null;
   let stopPromise = null;
+  let generation = 0;
   let pendingTextures = [];
   let releaseTimer = null;
+  let lastNativeSent = null;
+  let lastNativeProgressAt = 0;
+  // 上次有進展時的累計掉幀數。只看「之後新增的掉幀」，開播初期或過去偶發的掉幀
+  // 不能讓一段單純沒新畫面送達的時間被誤判成卡住、把直播中的輸出關掉。
+  let droppedAtProgress = 0;
 
   function status() {
     return Object.freeze({
@@ -122,18 +128,28 @@ function createSpoutDisplayOutput({
     // Keep the original Electron texture alive only until the native worker
     // has completed its first owned copy. This removes the GPU fence from the
     // paint callback without allowing Electron to recycle the source early.
-    releaseTimer = setInterval(() => releasePendingTextures(), 8);
+    releaseTimer = setInterval(() => {
+      try {
+        releasePendingTextures();
+      } catch (error) {
+        clearInterval(releaseTimer);
+        releaseTimer = null;
+        // A failed status read is not evidence that the GPU finished its copy.
+        // Retain the source textures until a later successful native stop.
+        setFailure(error);
+      }
+    }, 8);
     releaseTimer.unref?.();
   }
 
-  function handlePaint(event) {
+  function handlePaint(event, owner, ownerGeneration) {
     const texture = event?.texture;
     if (!texture) return;
     received += 1;
     let deferRelease = false;
     try {
+      if (owner !== window || ownerGeneration !== generation || stopping || state === 'error') return;
       releasePendingTextures();
-      if (stopping || state === 'error') return;
       const textureInfo = texture.textureInfo;
       const codedSize = textureInfo?.codedSize;
       if (!senderStarted) {
@@ -150,31 +166,64 @@ function createSpoutDisplayOutput({
       const result = addon.send(textureInfo);
       if (result?.accepted !== true) throw createError('SPOUT_FRAME_REJECTED', 'Spout rejected an Electron shared texture frame.');
       sent += 1;
-      if (result.deferredRelease === true && Number.isSafeInteger(result.sourceSequence)) {
-        pendingTextures.push({ texture, sequence: result.sourceSequence });
-        schedulePendingRelease();
+      // Ownership transfers as soon as send() accepts the frame, before status
+      // reads or observers can throw. Never release a texture the GPU still uses.
+      if (result.deferredRelease === true) {
+        const validSequence = Number.isSafeInteger(result.sourceSequence) && result.sourceSequence > 0;
+        pendingTextures.push({ texture, sequence: validSequence ? result.sourceSequence : Infinity });
         deferRelease = true;
+        schedulePendingRelease();
+        if (!validSequence) throw createError('INVALID_SPOUT_SOURCE_SEQUENCE', 'Spout did not provide a valid source-copy sequence.');
+      }
+      const nativeStatus = addon.getStatus?.();
+      if (Number.isFinite(nativeStatus?.framesSent)) {
+        const dropped = Number(nativeStatus.framesDropped) || 0;
+        if (lastNativeSent === null || nativeStatus.framesSent !== lastNativeSent) {
+          lastNativeSent = nativeStatus.framesSent;
+          lastNativeProgressAt = Date.now();
+          droppedAtProgress = dropped;
+        } else if (dropped > droppedAtProgress && Date.now() - lastNativeProgressAt > 5000) {
+          throw createError('SPOUT_OUTPUT_STALLED', 'Spout stopped delivering frames. Restart the output and check the selected GPU.');
+        }
       }
       onFrame?.(status(), result);
     } catch (error) {
       setFailure(error);
-      try { addon.stop(); } catch (_) { /* Preserve the original output error. */ }
-      releasePendingTextures(true);
-      senderStarted = false;
+      try {
+        addon.stop();
+        releasePendingTextures(true);
+        senderStarted = false;
+      } catch (_) { /* Preserve the output error and retain unacknowledged textures. */ }
     } finally {
       if (!deferRelease) releaseTexture(texture);
     }
   }
 
   async function start() {
+    // Re-enter after stop: two callers waiting for the same stop must still
+    // share one new renderer, and must not reuse a cancelled startup promise.
+    if (stopPromise) {
+      await stopPromise;
+      return start();
+    }
+    // Error recovery must confirm native cleanup and retire the old renderer
+    // before a new generation can use the sender or accept more textures.
+    if (state === 'error') {
+      await stop();
+      return start();
+    }
     if (startPromise) return startPromise;
     if (state === 'running' || state === 'starting') return status();
-    if (stopPromise) await stopPromise;
+    const currentGeneration = ++generation;
     state = 'starting';
     lastError = null;
-    startPromise = (async () => {
+    lastNativeSent = null;
+    lastNativeProgressAt = 0;
+    droppedAtProgress = 0;
+    let nextWindow = null;
+    const pending = (async () => {
       try {
-        const nextWindow = new BrowserWindow({
+        nextWindow = new BrowserWindow({
           width: options.width,
           height: options.height,
           useContentSize: true,
@@ -197,37 +246,71 @@ function createSpoutDisplayOutput({
         nextWindow.setPosition?.(0, -40);
         nextWindow.setContentSize?.(options.width, options.height);
         nextWindow.webContents.setFrameRate?.(options.fps);
-        nextWindow.webContents.on('paint', handlePaint);
-        nextWindow.on?.('closed', () => {
-          if (window === nextWindow) window = null;
-          if (!stopping && senderStarted) {
-            try { addon.stop(); } catch (_) { /* Window teardown must not crash Electron. */ }
+        nextWindow.webContents.on('paint', event => handlePaint(event, nextWindow, currentGeneration));
+        nextWindow.webContents.on('render-process-gone', (_event, details) => {
+          if (window !== nextWindow || generation !== currentGeneration || stopping) return;
+          setFailure(createError('SPOUT_RENDERER_GONE', 'Spout display renderer exited: ' + (details?.reason || 'unknown')));
+          window = null;
+          generation += 1;
+          startPromise = null;
+          try {
+            addon.stop();
             releasePendingTextures(true);
             senderStarted = false;
+          } catch (_) { /* Preserve renderer failure and retain unacknowledged textures. */ }
+          if (!nextWindow.isDestroyed?.()) nextWindow.destroy?.();
+        });
+        nextWindow.on?.('closed', () => {
+          // Old windows can deliver queued events after a replacement starts.
+          if (window !== nextWindow || generation !== currentGeneration) return;
+          window = null;
+          generation += 1;
+          startPromise = null;
+          if (!stopping) {
+            if (senderStarted) {
+              try {
+                addon.stop();
+                releasePendingTextures(true);
+                senderStarted = false;
+              } catch (error) {
+                setFailure(error);
+                return;
+              }
+            }
             state = 'idle';
           }
         });
-        await nextWindow.loadURL(`http://127.0.0.1:${port}${displayPath}`);
+        if (generation !== currentGeneration || window !== nextWindow) return status();
+        await nextWindow.loadURL('http://127.0.0.1:' + port + displayPath);
         return status();
       } catch (error) {
+        // A cancelled load may reject after a replacement is already running.
+        if (generation !== currentGeneration) return status();
         setFailure(error);
-        if (window && !window.isDestroyed?.()) window.destroy?.();
-        window = null;
-        try { addon.stop(); } catch (_) { /* Preserve startup error. */ }
-        releasePendingTextures(true);
-        senderStarted = false;
+        if (window === nextWindow) window = null;
+        if (nextWindow && !nextWindow.isDestroyed?.()) nextWindow.destroy?.();
+        try {
+          addon.stop();
+          releasePendingTextures(true);
+          senderStarted = false;
+        } catch (_) { /* Preserve startup error and retain unacknowledged textures. */ }
         throw lastError;
-      } finally {
-        startPromise = null;
       }
     })();
-    return startPromise;
+    // Construction hooks can synchronously cancel this generation.
+    if (generation === currentGeneration) startPromise = pending;
+    const clear = () => { if (startPromise === pending) startPromise = null; };
+    pending.then(clear, clear);
+    return pending;
   }
 
-  async function stop() {
+  function stop() {
     if (stopPromise) return stopPromise;
-    stopPromise = (async () => {
-      stopping = true;
+    stopping = true;
+    generation += 1;
+    startPromise = null;
+    // Register the operation before any window/native cleanup can re-enter.
+    const operation = Promise.resolve().then(() => {
       try {
         const activeWindow = window;
         window = null;
@@ -238,12 +321,19 @@ function createSpoutDisplayOutput({
         state = 'idle';
         lastError = null;
         return status();
-      } finally {
+      } catch (error) {
+        setFailure(error);
+        throw error;
+      }
+    });
+    const pending = operation.finally(() => {
+      if (stopPromise === pending) {
         stopping = false;
         stopPromise = null;
       }
-    })();
-    return stopPromise;
+    });
+    stopPromise = pending;
+    return pending;
   }
 
   return Object.freeze({ start, stop, getStatus: status, options });

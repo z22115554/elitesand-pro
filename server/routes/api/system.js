@@ -31,6 +31,7 @@ const feedbackClient = require('../../services/feedback-client');
 const sessionMarker = require('../../services/session-marker');
 const usageTelemetry = require('../../services/usage-telemetry');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
+const whatsNewStore = require('../../services/whats-new-store');
 
 // ─── 健康檢查 ───
 router.get('/health', (req, res) => {
@@ -39,14 +40,36 @@ router.get('/health', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Cache-Control', 'no-store');
   const fallbackFrom = Number.parseInt(process.env.ELITESAND_PORT_FALLBACK_FROM || '', 10);
+  const shellProof = isLoopbackAddress(getClientAddress(req))
+    ? req.app.locals.shellHealthProof?.(req.get('X-Elitesand-Health-Challenge'), req.socket?.localPort)
+    : null;
   res.json({
     status: 'ok',
+    // 給桌面殼判斷「這是不是 Elitesand Pro」用；不是機密。
+    app: 'elitesand-pro',
+    ...(shellProof ? { shellProof } : {}),
     version: APP_VERSION,
     timestamp: Date.now(),
     port: req.socket?.localPort || null,
     // 桌面殼因預設 port 被占而改用備援時才有值；面板據此提示一次。
     portFallbackFrom: Number.isInteger(fallbackFrom) && fallbackFrom > 0 ? fallbackFrom : null,
   });
+});
+
+// ─── 這版更新了什麼（更新後第一次開面板跳一次；已讀紀錄存伺服器） ───
+router.get('/whats-new', requireControlAccess, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(whatsNewStore.getStatus());
+});
+router.post('/whats-new/seen', requirePin, (req, res) => {
+  const version = req.body && req.body.version;
+  try {
+    const result = whatsNewStore.markSeen(version);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    log.warn(`更新內容已讀紀錄寫入失敗：${err.message}`);
+    res.status(500).json({ ok: false, error: 'WRITE_FAILED' });
+  }
 });
 
 // OBS 啟動頁的實體路徑：面板「拖到 OBS」與「複製路徑」用。只回路徑，不回內容。

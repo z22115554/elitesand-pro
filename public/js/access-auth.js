@@ -40,6 +40,13 @@ const AccessAuth = (() => {
       return false;
     }
   }
-  const ready = completePairingFromUrl();
+  const ready = (async () => {
+    const paired = await completePairingFromUrl();
+    if (getControllerToken()) {
+      try { await fetch('/api/access/media-session', { method: 'POST', headers: headers(), cache: 'no-store' }); }
+      catch (_) { /* Retry on the next connection/page load. */ }
+    }
+    return paired;
+  })();
   return { getControllerToken, setControllerToken, headers, sourceToken, setSourceToken, sourceUrl, ready: () => ready, pairingError: () => pairingError };
 })();

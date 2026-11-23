@@ -7,21 +7,30 @@ const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '../..');
 const noop = () => {};
 
-function loadState(source = fs.readFileSync(path.join(root, 'server/state/app-state.js'), 'utf8')) {
+function loadState(source = fs.readFileSync(path.join(root, 'server/state/app-state.js'), 'utf8'), {
+  savedState = null, libraryEntries = {}, durable = true,
+} = {}) {
   const filename = path.join(root, 'server/state/app-state.js');
   const realRequire = createRequire(filename);
   const emitted = [];
   let audioCalls = 0;
+  let libraryReads = 0;
+  let snapshot;
   const library = {
     setProtectedEntryIdsProvider: noop, setLyricsLockedProvider: noop, setDurabilityListener: noop, setBeforeRemovalListener: noop,
     getAudioExistsLookup: () => () => true,
     audioStatus: () => { audioCalls++; return { audioAvailable: true, audioMissing: false }; },
+    getEntry(id) { libraryReads++; return libraryEntries[id] || null; },
+    isEntryDurable: id => durable && !!libraryEntries[id],
   };
   const sandbox = {
     module: { exports: {} }, Buffer, console, setTimeout, clearTimeout,
     Date: class extends Date { static now() { return 100000; } },
     require(name) {
-      if (name === '../services/state-store') return { loadState: () => null };
+      if (name === '../services/state-store') return {
+        loadState: () => savedState,
+        scheduleSave: fn => { snapshot = fn; }, CURRENT_STATE_SCHEMA_VERSION: 3,
+      };
       if (name === '../services/library-store') return library;
       if (name === '../utils/logger') return { createLogger: () => ({ info: noop, warn: noop }) };
       return realRequire(name);
@@ -29,9 +38,13 @@ function loadState(source = fs.readFileSync(path.join(root, 'server/state/app-st
   };
   vm.runInNewContext(source, sandbox, { filename });
   const state = sandbox.module.exports.createAppState({
+    emit: (event, payload) => emitted.push({ room: null, event, payload }),
     to: room => ({ emit: (event, payload) => emitted.push({ room, event, payload }) }),
   });
-  return { state, emitted, audioCalls: () => audioCalls, resetAudioCalls: () => { audioCalls = 0; } };
+  return {
+    state, emitted, audioCalls: () => audioCalls, resetAudioCalls: () => { audioCalls = 0; },
+    libraryReads: () => libraryReads, persistedSnapshot: () => snapshot?.(),
+  };
 }
 
 function makeNode() {
@@ -47,13 +60,14 @@ function makeNode() {
     removeChild(child) { this.children.splice(this.children.indexOf(child), 1); },
     get lastChild() { return this.children.at(-1); },
     focus: noop,
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 1920, bottom: 1080, width: 1920, height: 1080 }),
   };
   Object.defineProperty(node, 'innerHTML', { get() { return this._html || ''; },
     set(value) { this._html = value; this.children = []; } });
   return node;
 }
 
-function loadDisplay(source = fs.readFileSync(path.join(root, 'public/js/display.js'), 'utf8')) {
+function loadDisplay(source = fs.readFileSync(path.join(root, 'public/js/display.js'), 'utf8'), { wallTime = 100000 } = {}) {
   let now = 0;
   const handlers = {};
   const nodes = new Map();
@@ -67,19 +81,21 @@ function loadDisplay(source = fs.readFileSync(path.join(root, 'public/js/display
     querySelector: () => null, querySelectorAll: () => [], createElement: makeNode,
   };
   const sandbox = {
-    document, location: { search: '' }, URLSearchParams, performance: { now: () => now },
-    Date: class extends Date { static now() { return 100000; } },
+    document, location: { search: '' }, innerWidth: 1920, innerHeight: 1080,
+    URLSearchParams, performance: { now: () => now },
+    Date: class extends Date { static now() { return wallTime; } },
     console: { log: noop, warn: noop },
     SocketClient: { init: noop, on(event, callback) { (handlers[event] ||= []).push(callback); },
       connected: () => false, send: noop },
     KaraokeEngine: new Proxy({}, { get: () => noop }),
+    StylePresets: new Proxy({}, { get: () => noop }),
     setTimeout: noop, clearTimeout: noop, requestAnimationFrame: () => 1, cancelAnimationFrame: noop,
     addEventListener: noop,
   };
   sandbox.window = sandbox;
   const instrumented = source.replace(/\}\)\(\);\s*$/, 'globalThis.__clock = getCurrentTimeMs;\n})();');
   vm.runInNewContext(instrumented, sandbox, { filename: 'display.js' });
-  return { advance: ms => { now += ms; }, clock: () => sandbox.__clock(),
+  return { advance: ms => { now += ms; }, setWallTime: ms => { wallTime = ms; }, clock: () => sandbox.__clock(),
     emit: (event, payload) => handlers[event].forEach(callback => callback(payload)) };
 }
 

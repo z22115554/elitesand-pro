@@ -1,0 +1,66 @@
+# macOS 測試版打包流程。放在公開倉（elitesand-pro）的 .github/workflows/mac-build.yml：
+# 公開倉的 GitHub Actions 不計算私人額度，macOS runner 免費。
+# 這份檔案在私人倉只是範本（tools/ 不會觸發 Actions），發布時複製到公開倉的 mac-beta 分支。
+#
+# 產物只上傳成 Actions artifact，刻意「不」建立 GitHub Release：App 的更新檢查會把
+# 公開倉的 prerelease 也當成候選版本，發 Mac 測試版 Release 會讓 Windows 使用者跳更新。
+name: macOS beta build
+
+on:
+  push:
+    branches: [mac-beta]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-beta-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: macOS unit tests
+        run: node --test tests/macos-support.test.js
+      - name: Build, verify and boot-check the app
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ELITESAND_BUILD_LABEL: beta.${{ github.run_number }}
+        run: node tools/build-mac.js --arch ${{ matrix.arch }}
+      - name: Runtime smoke (bundled yt-dlp/node, in-app FFmpeg download, transcode)
+        run: |
+          APP=$(ls -d dist/releases/v*/mac-${{ matrix.arch }}/builder/*/"Elitesand Pro.app" | head -1)
+          node tools/mac/smoke-runtime.js "$APP"
+      - name: Upload DMG
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Elitesand-Pro-mac-${{ matrix.arch }}-beta.${{ github.run_number }}
+          path: |
+            dist/releases/v*/mac-${{ matrix.arch }}/*.dmg
+            dist/releases/v*/mac-${{ matrix.arch }}/*.dmg.sha256
+            dist/releases/v*/mac-${{ matrix.arch }}/BUILD-INFO.txt
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0

@@ -533,6 +533,7 @@
 
       const singingPulse = motion.singingPulse;
       if (!singingPulse) {
+        glyph.classList.remove('is-singing');
         glyph.style.setProperty('--mirror-sung-scale', '1');
         return;
       }
@@ -541,6 +542,7 @@
       // the authority for which character is currently being sung.
       const singingStartMs = entry.lineStartMs + singingPulse.startOffset;
       const singingProgress = (timeMs - singingStartMs) / singingPulse.duration;
+      glyph.classList.toggle('is-singing', singingProgress >= 0 && singingProgress < 1);
       const singingScale = 1 + easeSingingPulse(singingProgress) * singingPulse.amplitude;
       glyph.style.setProperty('--mirror-sung-scale', singingScale.toFixed(3));
     });

@@ -51,6 +51,31 @@ function sharedTexture(width = 1920, height = 1080) {
 }
 
 function register({ test, testAsync, eq, ok }) {
+  testAsync('ESP-048: renderer crash stops the sender and preserves its error',async()=>{
+    const BrowserWindow=createFakeBrowserWindowFactory();let stops=0;
+    const addon={create(){},send(){return{accepted:true};},stop(){stops++;}};
+    const output=createSpoutDisplayOutput({BrowserWindow,addon,port:3017});await output.start();
+    const window=BrowserWindow.instances[0];window.webContents.emit('paint',{texture:sharedTexture()});
+    window.webContents.emit('render-process-gone',{}, {reason:'crashed'});
+    eq(output.getStatus().state,'error');eq(output.getStatus().lastError.code,'SPOUT_RENDERER_GONE');eq(stops,1);eq(window.destroyed,true);
+  });
+  testAsync('ESP-048: accepted frames without native progress fail visibly and release textures',async()=>{
+    const BrowserWindow=createFakeBrowserWindowFactory();
+    let dropped=0;
+    const addon={create(){},send(){return{accepted:true};},stop(){},getStatus(){return{framesSent:0,framesDropped:dropped++};}};
+    const output=createSpoutDisplayOutput({BrowserWindow,addon,port:3017});await output.start();
+    const window=BrowserWindow.instances[0],now=Date.now,first=sharedTexture(),second=sharedTexture();
+    try{Date.now=()=>1000;window.webContents.emit('paint',{texture:first});Date.now=()=>7001;window.webContents.emit('paint',{texture:second});}finally{Date.now=now;}
+    eq(output.getStatus().state,'error');eq(output.getStatus().lastError.code,'SPOUT_OUTPUT_STALLED');eq(first.releases,1);eq(second.releases,1);await output.stop();
+  });
+  testAsync('ESP-048: earlier drops alone never stop a live output when no new frame is lost',async()=>{
+    const BrowserWindow=createFakeBrowserWindowFactory();
+    const addon={create(){},send(){return{accepted:true};},stop(){},getStatus(){return{framesSent:0,framesDropped:5};}};
+    const output=createSpoutDisplayOutput({BrowserWindow,addon,port:3017});await output.start();
+    const window=BrowserWindow.instances[0],now=Date.now;
+    try{Date.now=()=>1000;window.webContents.emit('paint',{texture:sharedTexture()});Date.now=()=>9000;window.webContents.emit('paint',{texture:sharedTexture()});}finally{Date.now=now;}
+    eq(output.getStatus().state,'running');await output.stop();
+  });
   testAsync('Spout CP04 uses one offscreen /display renderer and releases every sent texture', async () => {
     const BrowserWindow = createFakeBrowserWindowFactory();
     const created = [];

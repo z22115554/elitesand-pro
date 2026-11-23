@@ -34,6 +34,16 @@ function recordFailure(key, now = Date.now()) {
   return status(id, now);
 }
 
+/**
+ * 同一台裝置不管從哪個入口猜 PIN（/api/auth、受保護的 HTTP 路由、Socket.io 握手）都算同一組次數。
+ * 舊版三個入口各用各的 key，等於每 5 分鐘可以猜 30 次而不是 10 次。
+ * IPv4-mapped IPv6（::ffff:192.168.1.5）跟純 IPv4 視為同一個位址。
+ */
+function keyForAddress(address) {
+  const value = String(address || 'unknown').trim().toLowerCase();
+  return `pin:${value.startsWith('::ffff:') ? value.slice(7) : value}`;
+}
+
 function reset(key) {
   attempts.delete(String(key || 'unknown'));
 }
@@ -42,4 +52,4 @@ function resetAll() {
   attempts.clear();
 }
 
-module.exports = { status, recordFailure, reset, resetAll, WINDOW_MS, MAX_FAILURES };
+module.exports = { status, recordFailure, reset, resetAll, keyForAddress, WINDOW_MS, MAX_FAILURES };

@@ -102,7 +102,7 @@ function plan({ env = {}, saved = { mode: 'auto' }, adapters = null } = {}) {
 function listAdapters({ isPackaged, projectRoot, resourcesPath, manifest, addonPath = '' }, fsImpl = fs) {
   try {
     let file;
-    if (addonPath) file = path.resolve(addonPath);
+    if (addonPath && !isPackaged) file = path.resolve(addonPath);
     else if (isPackaged) {
       file = path.join(resourcesPath, 'tools', 'spout', 'elitesand_spout_output.node');
       const expected = manifest && manifest.files && manifest.files['tools/spout/elitesand_spout_output.node'];

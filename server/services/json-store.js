@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { atomicWriteRaw, saveWithBackup } = require('./atomic-store-file');
 
 class JsonStoreSchemaError extends Error {
   constructor(message, code = 'INVALID_JSON_STORE_SCHEMA') {
@@ -58,18 +59,8 @@ function uniquePath(base) {
 }
 
 function atomicWrite(file, value, { pretty = false, mode } = {}) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = `${file}.tmp-${process.pid}-${Date.now()}`;
   const raw = JSON.stringify(value, null, pretty ? 2 : 0);
-  try {
-    fs.writeFileSync(temporary, raw, { encoding: 'utf8', ...(mode ? { mode } : {}) });
-    fs.renameSync(temporary, file);
-    if (mode) {
-      try { fs.chmodSync(file, mode); } catch (_) { /* Windows 可忽略 */ }
-    }
-  } finally {
-    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) { /* best effort */ }
-  }
+  atomicWriteRaw(file, raw, { mode });
 }
 
 function createJsonStore(options) {
@@ -84,6 +75,7 @@ function createJsonStore(options) {
     defaultValue = null,
     pretty = false,
     mode,
+    retainPreviousBackup = true,
     logger,
     onError,
   } = options;
@@ -170,7 +162,11 @@ function createJsonStore(options) {
     if (!fs.existsSync(lastGoodFile)) return fallback();
     try {
       const document = readCandidate(lastGoodFile);
-      atomicWrite(file, document, { pretty, mode });
+      try { atomicWrite(file, document, { pretty, mode }); } catch (error) {
+        writeBlockReason = `${label} 備份可讀，但主檔無法恢復：${error.message}`;
+        report(`${writeBlockReason}；已保留備份並停止寫入。`, 'error');
+        return deserialize(document);
+      }
       report(`${reason}，已從最近可用備份恢復。`);
       return deserialize(document);
     } catch (error) {
@@ -181,6 +177,11 @@ function createJsonStore(options) {
       if (error instanceof JsonStoreMigrationPersistError) {
         writeBlockReason = error.message;
         report(`${writeBlockReason}; writes are disabled to preserve the original data.`, 'error');
+        return fallback();
+      }
+      if (!(error instanceof SyntaxError) && !(error instanceof JsonStoreSchemaError)) {
+        writeBlockReason = `${label} 備份暫時無法讀取：${error.message}`;
+        report(writeBlockReason, 'error');
         return fallback();
       }
       let preserved = null;
@@ -195,7 +196,13 @@ function createJsonStore(options) {
     if (!fs.existsSync(file)) return recoverFromLastGood(`${label} 主檔不存在`);
     try {
       const document = readCandidate(file);
-      atomicWrite(lastGoodFile, document, { pretty, mode });
+      // Loading is read-only when a backup already exists. Never replace the
+      // previous generation merely because the application restarted.
+      if (!fs.existsSync(lastGoodFile)) {
+        try { atomicWrite(lastGoodFile, document, { pretty, mode }); } catch (error) {
+          report(`${label} 備份暫時無法寫入：${error.message}`);
+        }
+      }
       return deserialize(document);
     } catch (error) {
       if (error instanceof JsonStoreFutureSchemaError) {
@@ -205,6 +212,11 @@ function createJsonStore(options) {
       if (error instanceof JsonStoreMigrationPersistError) {
         writeBlockReason = error.message;
         report(`${writeBlockReason}; writes are disabled to preserve the original data.`, 'error');
+        return fallback();
+      }
+      if (!(error instanceof SyntaxError) && !(error instanceof JsonStoreSchemaError)) {
+        writeBlockReason = `${label} 主檔暫時無法讀取：${error.message}`;
+        report(`${writeBlockReason}；已保留原檔並停止寫入。`, 'error');
         return fallback();
       }
       let preserved = null;
@@ -229,8 +241,9 @@ function createJsonStore(options) {
       }
       document = { ...document, schemaVersion };
       if (validate(document) !== true) throw new JsonStoreSchemaError('寫入資料結構驗證失敗');
-      atomicWrite(file, document, { pretty, mode });
-      atomicWrite(lastGoodFile, document, { pretty, mode });
+      saveWithBackup(file, JSON.stringify(document, null, pretty ? 2 : 0), {
+        backupFile: lastGoodFile, retainPreviousBackup, mode,
+      });
       return true;
     } catch (error) {
       report(`${label} 寫入失敗：${error.message}`, 'error');

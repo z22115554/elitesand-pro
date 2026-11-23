@@ -3,7 +3,7 @@
 function classifyImportError(error) {
   const technical = String(error?.message || error || '').trim();
   const code = String(error?.code || '').toUpperCase();
-  const text = `${code} ${technical}`.toLowerCase();
+  const text = `${code} ${technical} ${error?.stderr || ''} ${error?.ffmpegStderr || ''}`.toLowerCase();
   if (code === 'IMPORT_CANCELLED' || /cancelled|canceled|已取消/.test(text)) {
     return { code: 'IMPORT_CANCELLED', status: 409, message: '匯入已取消，沒有加入播放清單。', recovery: '需要時可重新加入佇列。', retryable: true, technical };
   }

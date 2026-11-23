@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "target": "CPython 3.11 / Windows x64 / CUDA 12.4",
+  "locks": {
+    "bootstrap": {
+      "file": "bootstrap-win-py311.lock",
+      "sha256": "564c4fcd3f22bfb27c8f36df8cf6c54fa8de82a4b34b2b53512e9d3046caabf9"
+    },
+    "ai": {
+      "file": "ai-win-py311.lock",
+      "sha256": "f7dc9e6467cb4ce6c35cd14c63005c3ab49b5f6f7d37fc1d7b3af7c6e0199ca1"
+    },
+    "section": {
+      "file": "section-win-py311.lock",
+      "sha256": "288cf0e0073eef46295879bd842886b0841e3d9fe7bb99a27c3b5c7927f895e1"
+    },
+    "practice-pitch": {
+      "file": "practice-pitch-win-py311.lock",
+      "sha256": "670826b778e1c01383dc3166ff28496b4a22bc18ec36e6501a85c338c0eb5dc5"
+    }
+  },
+  "inputs": {
+    "ai.in": "3d50bf17db4b28e2bb160cda07e6ffef8b31ef84203c2adc835077ff29d940c1",
+    "bootstrap.in": "ca7fe72f1a420c617965566752d22045789c88799ed3ba576ec771f93e6ef4ed",
+    "practice-pitch.in": "324df6dae4c9700eda956a05da66dc93a5763375f7736c13db0c8c66c57263cc",
+    "section-constraints.in": "d7cc4aa55fc5ca4e716bf595d4e927abe48ce586e0681663dda6fae51dd05aa9",
+    "section.in": "60cdd79afa5295da4f809d85e77d6de077b548880d3cb0c012e634d96e41ca48"
+  }
+}

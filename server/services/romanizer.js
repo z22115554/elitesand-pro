@@ -21,6 +21,7 @@ const path = require('path');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Romanizer');
 const { addXieyin } = require('./xieyin');
+const { koreanPronunciation, pronouncedWordTexts } = require('../utils/korean-pronunciation');
 const { JapaneseG2PProvider } = require('./japanese-g2p-provider');
 const { phonemesToXieyinV2 } = require('./xieyin-v2-mapper');
 
@@ -35,8 +36,51 @@ try {
 if (!kuromoji) {
   log.warn('kuromoji 套件不可用，漢字讀音將使用內建詞表降級');
 }
+// pinyin-pro 會把歌詞裡最常見的「慢慢地／輕輕地／靜靜地／默默地…」的「地」唸成 dì（地上的地），
+// 這種「疊字＋地」一律是副詞語尾 de。另外補幾個歌詞常見、詞庫讀錯的詞（「還給」huán、「有空」kòng）。
+// customPinyin 是 pinyin-pro 的全域詞典，查拼音前會先比對；key 是簡體（查詢前已轉簡體）。
+if (pinyinPro && typeof pinyinPro.customPinyin === 'function') {
+  try {
+    const REDUPLICATED_ADVERBS = '慢轻静悄默深狠紧远好偷傻渐淡暗牢久呆痴缓微重高大早冷浅甜满乖怯死真细长常快稳甜痛狠暖柔匆急乱'.split('');
+    // 「重重地」是 zhòng（重重地摔），詞庫預設的 chóng chóng 是「層層疊疊」。
+    // 「睡不著／找不著」的著是 zháo（詞庫給 zhe）；「幹嘛」是 gàn má（簡體成「干嘛」後被唸成 gān）。
+    const dict = { 还给: 'huán gěi', 有空: 'yǒu kòng', 重重地: 'zhòng zhòng de', 不着: 'bù zháo', 干嘛: 'gàn má', 幹嘛: 'gàn má' };
+    for (const ch of REDUPLICATED_ADVERBS) {
+      const base = pinyinPro.pinyin(`${ch}${ch}`, { toneType: 'symbol' });
+      if (base && !dict[`${ch}${ch}地`]) dict[`${ch}${ch}地`] = `${base} de`;
+    }
+    pinyinPro.customPinyin(dict);
+  } catch (e) {
+    log.warn(`拼音自訂詞典載入失敗：${e.message}`);
+  }
+}
+
 if (!pinyinPro) {
   log.warn('pinyin-pro 套件不可用，中文歌詞將不產生漢語拼音');
+}
+
+// pinyin-pro 的破音字（多音字）詞庫是簡體：直接丟繁體進去，「還是」唸 huán shì、「音樂」唸 yīn lè、
+// 「長大」唸 cháng dà、「睡覺」唸 shuì jué、「為了」唸 wéi le——台灣歌詞幾乎都是繁體，最常見的詞全錯。
+// 先逐字轉簡體再查拼音（OpenCC 的 tw→cn 是逐字對應，不會把詞換成大陸用語，字數也不變）。
+let traditionalToSimplified = (text) => text;
+try {
+  const OpenCC = require('opencc-js');
+  traditionalToSimplified = OpenCC.Converter({ from: 'tw', to: 'cn' });
+} catch (e) {
+  log.warn('opencc-js 不可用，繁體歌詞的破音字拼音可能不準');
+}
+// 有些簡體字是好幾個繁體字合併來的，讀音不同（捨→舍、髮→发、幹／乾→干、隻→只、鬥→斗、
+// 捲→卷、瞭→了、儘→尽、彆→别）：轉成簡體後 pinyin-pro 會套另一個字的讀音（捨不得變 shè bù dé），
+// 這些字留原樣讓 pinyin-pro 直接讀。
+const KEEP_TRADITIONAL_FOR_PINYIN = new Set(Array.from('捨髮幹乾隻鬥捲瞭儘彆'));
+function simplifyForPinyin(text) {
+  const chars = Array.from(text);
+  let simplified;
+  try { simplified = traditionalToSimplified(text); } catch (_) { return text; }
+  const out = typeof simplified === 'string' ? Array.from(simplified) : null;
+  // 只在逐字對應（字數不變）時採用，確保拼音跟原文每個字對得上
+  if (!out || out.length !== chars.length) return text;
+  return out.map((char, i) => (KEEP_TRADITIONAL_FOR_PINYIN.has(chars[i]) ? chars[i] : char)).join('');
 }
 
 // ═══════════════════════════════════════════
@@ -117,7 +161,8 @@ const HIRAGANA_ROMAJI = {
   'ぎゃ': 'gya', 'ぎゅ': 'gyu', 'ぎょ': 'gyo',
   'じゃ': 'ja', 'じゅ': 'ju', 'じょ': 'jo',
   'びゃ': 'bya', 'びゅ': 'byu', 'びょ': 'byo',
-  'ぱゃ': 'pya', 'ぴゅ': 'pyu', 'ぴょ': 'pyo',
+  // 舊版這裡打成「ぱゃ」，ぴゃ（六百 ろっぴゃく、八百 はっぴゃく）被拆成 pi+ya → roppiyaku。
+  'ぴゃ': 'pya', 'ぴゅ': 'pyu', 'ぴょ': 'pyo',
   // 小假名
   'ぁ': 'a', 'ぃ': 'i', 'ぅ': 'u', 'ぇ': 'e', 'ぉ': 'o',
   'ゃ': 'ya', 'ゅ': 'yu', 'ょ': 'yo',
@@ -148,6 +193,18 @@ for (const hira of hiraKeys) {
 KATAKANA_ROMAJI['ー'] = '-';
 KATAKANA_ROMAJI['・'] = ' ';
 KATAKANA_ROMAJI['ヴ'] = 'vu';
+// 外來語用的「假名＋小母音」組合（歌詞裡的英文外來語幾乎都是這些）：沒有這張表時
+// ファ 變 fua、ティ 變 tei、シェ 變 shie，諧音也跟著錯（パーティー → 趴 貼伊，而不是 趴 提）。
+// xieyin.js 的 XIEYIN_TABLE 早就有 fa／ti／she… 這些音節，只是羅馬拼音從來不會產生它們。
+Object.assign(KATAKANA_ROMAJI, {
+  'ファ': 'fa', 'フィ': 'fi', 'フェ': 'fe', 'フォ': 'fo', 'フュ': 'fyu',
+  'ヴァ': 'va', 'ヴィ': 'vi', 'ヴェ': 've', 'ヴォ': 'vo', 'ヴュ': 'vyu',
+  'ティ': 'ti', 'ディ': 'di', 'トゥ': 'tu', 'ドゥ': 'du', 'テュ': 'tyu', 'デュ': 'dyu',
+  'ウィ': 'wi', 'ウェ': 'we', 'ウォ': 'wo', 'イェ': 'ye',
+  'シェ': 'she', 'チェ': 'che', 'ジェ': 'je',
+  'ツァ': 'tsa', 'ツィ': 'tsi', 'ツェ': 'tse', 'ツォ': 'tso',
+  'クァ': 'kwa', 'クィ': 'kwi', 'クェ': 'kwe', 'クォ': 'kwo', 'グァ': 'gwa',
+});
 
 // ═══════════════════════════════════════════
 // 日文漢字讀音對照表（歌詞常見詞彙，降級用）
@@ -283,9 +340,28 @@ function chineseToPinyin(text) {
   if (!text) return '';
   if (!pinyinPro || typeof pinyinPro.pinyin !== 'function') return text;
   try {
-    return pinyinPro.pinyin(text, { toneType: 'symbol', nonZh: 'consecutive' }).trim();
+    const source = simplifyForPinyin(text);
+    return pinyinPro.pinyin(source, { toneType: 'symbol', nonZh: 'consecutive' }).replace(/\s+/g, ' ').trim();
   } catch (e) {
     return text;
+  }
+}
+
+/**
+ * 整句一起查、再按字切開的逐字拼音（KRC 一字一 word）。單獨查一個字沒有上下文，
+ * 破音字永遠用預設讀音：「音樂」的樂唸 lè、「覺得」的得唸 dé。回傳每個字元的拼音（非中文為空字串）；
+ * 拿不到時回 null，呼叫端退回逐字查。
+ */
+function chinesePinyinPerChar(text) {
+  if (!text || !pinyinPro || typeof pinyinPro.pinyin !== 'function') return null;
+  try {
+    const chars = Array.from(text);
+    const source = simplifyForPinyin(text);
+    const syllables = pinyinPro.pinyin(source, { type: 'array', toneType: 'symbol', nonZh: 'spaced' });
+    if (!Array.isArray(syllables) || syllables.length !== chars.length) return null;
+    return chars.map((char, i) => (/[\u3400-\u9FFF]/u.test(char) ? String(syllables[i] || '').trim() : ''));
+  } catch (_) {
+    return null;
   }
 }
 
@@ -396,30 +472,108 @@ function furiganaSegmentsForToken(surface, reading) {
   return readingIndex === hiraganaReading.length ? segments : [{ text }];
 }
 
+// kuromoji（IPADIC）把「一人／二人」切成「數字＋助數詞人」，讀成 イチ・ニン／ニ・ニン：
+// 歌詞裡最常見的「二人（ふたり）」「一人（ひとり）」拼音變成 ni nin、諧音也跟著錯。
+// 前面還有數字時（十一人、十二人）才是一般的「いちにん／ににん」，不合併。
+const COUNTER_WORD_READINGS = [
+  { surfaces: ['一', '人'], reading: 'ヒトリ' },
+  { surfaces: ['二', '人'], reading: 'フタリ' },
+  { surfaces: ['二', '十', '歳'], reading: 'ハタチ' },
+];
+function mergeCounterWordTokens(tokens) {
+  const out = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const prev = out[out.length - 1];
+    const afterNumber = prev && prev.pos_detail_1 === '数';
+    const rule = !afterNumber && COUNTER_WORD_READINGS.find(({ surfaces }) => surfaces.every((surface, k) => {
+      const token = tokens[i + k];
+      return token && token.surface_form === surface && (k === 0 || surface !== '人' || token.pos_detail_1 === '接尾');
+    }));
+    if (rule) {
+      out.push({ ...tokens[i], surface_form: rule.surfaces.join(''), reading: rule.reading, pronunciation: rule.reading, pos: '名詞', pos_detail_1: '一般' });
+      i += rule.surfaces.length - 1;
+      continue;
+    }
+    out.push(tokens[i]);
+  }
+  return out;
+}
+
+// kuromoji 遇到沒看過的擬聲詞（ひゅるひゅる）會把「ひ」切成一個詞、「ゅる…」切成下一個，
+// 拗音被拆開就變成 hi + yuru。小假名開頭的詞一律併回前一個詞再轉。
+const SMALL_KANA_START = /^[ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ]/u;
+function toKatakana(text) {
+  return String(text || '').replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
+}
+function mergeSmallKanaTokens(tokens) {
+  const merged = [];
+  for (const token of tokens) {
+    const prev = merged[merged.length - 1];
+    if (prev && SMALL_KANA_START.test(token.surface_form || '')) {
+      merged[merged.length - 1] = {
+        ...prev,
+        surface_form: (prev.surface_form || '') + (token.surface_form || ''),
+        reading: (prev.reading || toKatakana(prev.surface_form)) + (token.reading || toKatakana(token.surface_form)),
+        pronunciation: undefined,
+      };
+      continue;
+    }
+    merged.push(token);
+  }
+  return merged;
+}
+
 async function japaneseReadingAnalysis(text) {
-  if (!hasKanji(text)) return { phonetic: japaneseToRomaji(text), furigana: [] };
+  // 純假名的句子也要交給 kuromoji 分詞：舊版沒有漢字就直接走 japaneseToRomaji()，
+  // 那條降級路徑把每個 は／が／な／か 都當助詞切開，「ありがとう」變 ari ga tou、
+  // 「はなび」變 ha nabi、「あなたへ」變 a nata he。
+  if (!text || !/[\u3040-\u30FF\u4E00-\u9FFF]/u.test(text)) return { phonetic: japaneseToRomaji(text || ''), furigana: [] };
   try {
     const tokenizer = await getKuromojiTokenizer();
-    const tokens = tokenizer.tokenize(text);
+    const tokens = mergeSmallKanaTokens(mergeCounterWordTokens(tokenizer.tokenize(text)));
     let phonetic = '';
     let prevPos = 1;
     const furigana = [];
+    // 促音「っ」落在詞尾（待っ／て、降っ／て、言っ／た、ホッ／と）：kuromoji 把て形切成兩個詞，
+    // 單獨轉「マッ」時後面沒有子音可以重複，っ 就整個消失——「待って」變 mate、「行ってきます」
+    // 變 ite kimasu。把詞尾的 ッ 帶到下一個詞的開頭再轉。
+    let carrySokuon = false;
 
     for (const token of tokens) {
       const surface = token.surface_form || '';
       const reading = token.reading || '';
       if (reading && /[\u30A0-\u30FF]/u.test(reading)) {
         if (phonetic.length > 0 && shouldAddSpace(prevPos, token.pos)) phonetic += ' ';
-        phonetic += katakanaToRomaji(reading);
+        // 助詞「は」唸 wa、「へ」唸 e：reading 是字面讀音（ハ／ヘ），唱的時候要看 pronunciation。
+        // 舊版每句「君は」「僕は」的拼音都顯示成 ha，諧音也跟著變成「哈」。
+        let spoken = token.pos === '助詞' && (surface === 'は' || surface === 'へ') && token.pronunciation
+          ? token.pronunciation
+          : reading;
+        // 詞尾含助詞的固定用語（こんにちは、こんばんは、では、それでは）同理：最後那個は／へ
+        // 唸 wa／e。只換最後一個字，不整個改用 pronunciation（那會把長音寫成 ー：arigato-）。
+        const pron = token.pronunciation || '';
+        if (spoken === reading && reading.length > 1 && /[はへ]$/u.test(surface)) {
+          if (reading.endsWith('ハ') && pron.endsWith('ワ')) spoken = `${reading.slice(0, -1)}ワ`;
+          else if (reading.endsWith('ヘ') && pron.endsWith('エ')) spoken = `${reading.slice(0, -1)}エ`;
+        }
+        if (carrySokuon) spoken = `ッ${spoken}`;
+        carrySokuon = spoken.length > 1 && spoken.endsWith('ッ');
+        if (carrySokuon) spoken = spoken.slice(0, -1);
+        phonetic += katakanaToRomaji(spoken);
         furigana.push(...furiganaSegmentsForToken(surface, reading));
       } else {
+        carrySokuon = false;
         const fallback = japaneseToRomaji(surface);
         if (fallback && fallback.trim()) phonetic += fallback;
         furigana.push({ text: surface });
       }
       prevPos = token.pos;
     }
-    return { phonetic: phonetic.replace(/\s+/g, ' ').trim(), furigana };
+    // 振假名只對漢字有意義；純假名句子維持舊行為（不帶 furigana 欄位）。
+    const result = { phonetic: phonetic.replace(/\s+/g, ' ').trim(), furigana: hasKanji(text) ? furigana : [] };
+    // 逐字歌詞的字塊常切在促音後面（「触んなっ」／「て」）：交給呼叫端用下一個字塊的子音補上。
+    if (carrySokuon) result.trailingSokuon = true;
+    return result;
   } catch (e) {
     log.warn('kuromoji 處理失敗，振假名將安全停用: ' + e.message);
     return { phonetic: japaneseToRomaji(text), furigana: [] };
@@ -442,6 +596,13 @@ async function japaneseToRomajiWithKuromoji(text) {
 /**
  * 片假名轉羅馬拼音
  */
+// 撥音「ん／ン」後面接母音或 や／ゆ／よ 時要寫成 n'（Hepburn 慣例）：否則 こんや 會變 konya，
+// 被讀成 ko-nya（諧音「摳妮呀」），恋愛 れんあい 變 renai（勒拿伊）、原因 げんいん 變 genin。
+const N_APOSTROPHE_NEXT = new Set([...'あいうえおやゆよアイウエオヤユヨ']);
+function syllabicN(char, next) {
+  return (char === 'ん' || char === 'ン') && N_APOSTROPHE_NEXT.has(next) ? "n'" : null;
+}
+
 function katakanaToRomaji(text) {
   let result = '';
   let i = 0;
@@ -449,6 +610,13 @@ function katakanaToRomaji(text) {
   while (i < text.length) {
     const char = text[i];
     const next = text[i + 1] || '';
+
+    const nApostrophe = syllabicN(char, next);
+    if (nApostrophe) {
+      result += nApostrophe;
+      i++;
+      continue;
+    }
 
     // 促音
     if (char === 'ッ') {
@@ -523,17 +691,22 @@ function japaneseToRomaji(text) {
     const char = text[i];
     const next = text[i + 1] || '';
 
-    // 助詞前加空格
+    // 助詞前加空格。沒有分詞器時無從得知平假名串裡哪個字是助詞：只在「前一個字不是平假名」
+    // （漢字、片假名、標點之後）才當助詞處理。舊版每個 は／が／な／か 都切開，
+    // 「ありがとう」變 ari ga tou、「はなび」變 ha nabi。
+    const prevChar = i > 0 ? text[i - 1] : '';
+    const particleBoundary = !!prevChar && !/[\u3040-\u309F]/u.test(prevChar);
     const twoCharParticle = char + next;
-    if (particles.has(twoCharParticle)) {
+    if (particleBoundary && next && particles.has(twoCharParticle)) {
       addSpace();
       result += HIRAGANA_ROMAJI[twoCharParticle] || (HIRAGANA_ROMAJI[char] + HIRAGANA_ROMAJI[next]);
       i += 2;
       continue;
     }
-    if (particles.has(char) && HIRAGANA_ROMAJI[char]) {
+    if (particleBoundary && particles.has(char) && HIRAGANA_ROMAJI[char]) {
       addSpace();
-      result += HIRAGANA_ROMAJI[char];
+      // 助詞「は」唸 wa、「へ」唸 e
+      result += char === 'は' ? 'wa' : char === 'へ' ? 'e' : HIRAGANA_ROMAJI[char];
       i++;
       continue;
     }
@@ -551,6 +724,13 @@ function japaneseToRomaji(text) {
       }
     }
     if (kanjiMatched) continue;
+
+    const nApostrophe = syllabicN(char, next);
+    if (nApostrophe) {
+      result += nApostrophe;
+      i++;
+      continue;
+    }
 
     // 促音
     if (char === 'っ' || char === 'ッ') {
@@ -606,25 +786,31 @@ function japaneseToRomaji(text) {
 // 韓文諺文 → 羅馬拼音
 // ═══════════════════════════════════════════
 
-function koreanToRomaja(text) {
+function koreanToRomaja(text, { pronounced = false } = {}) {
   let result = '';
+  // 先轉成實際唸法（連音、鼻音化、ㅎ 脫落…）再逐字查表，見 utils/korean-pronunciation.js。
+  const source = pronounced ? String(text || '') : koreanPronunciation(text);
+  let previousFinal = -1;
 
-  for (const char of text) {
+  for (const char of source) {
     const code = char.charCodeAt(0);
 
-    if (code >= 0xAC00 && code <= 0xD7AF) {
+    if (code >= 0xAC00 && code <= 0xD7A3) {
       const syllableIndex = code - 0xAC00;
       const initialIndex = Math.floor(syllableIndex / 588);
       const vowelIndex = Math.floor((syllableIndex % 588) / 28);
       const finalIndex = syllableIndex % 28;
 
-      const initial = KOR_INITIALS[initialIndex] || '';
+      // 收音 ㄹ 後面接初聲 ㄹ 寫成 ll（몰라 → molla，不是 molra）
+      const initial = previousFinal === 8 && initialIndex === 5 ? 'l' : (KOR_INITIALS[initialIndex] || '');
       const vowel = KOR_VOWELS[vowelIndex] || '';
       const final_ = KOR_FINALS[finalIndex] || '';
 
       result += initial + vowel + final_;
+      previousFinal = finalIndex;
     } else {
       result += char;
+      previousFinal = -1;
     }
   }
 
@@ -670,7 +856,7 @@ async function addRomanization(lyricsLines) {
   if (!lyricsLines || !Array.isArray(lyricsLines)) return [];
 
   // 整首一次判定語言，避免單一漢字詞被誤判（日文漢字 vs 中文）
-  const lang = detectSongLang(lyricsLines);
+  let lang = null;
 
   const results = [];
   // A song repeats chorus lines and KRC words. Reuse exact-text readings only
@@ -678,15 +864,36 @@ async function addRomanization(lyricsLines) {
   const readings = new Map();
   const read = async (text) => {
     if (!lang) return text || '';
-    if (readings.has(text)) return readings.get(text);
+    const cacheKey = `${lang}:${text}`;
+    if (readings.has(cacheKey)) return readings.get(cacheKey);
     const reading = lang === 'ja'
       ? await japaneseReadingAnalysis(text)
       : await romanizeWithLang(text, lang);
-    readings.set(text, reading);
+    readings.set(cacheKey, reading);
     return reading;
   };
 
+  // 整首的預設語言：含漢字／假名的行裡，超過一半有假名才算日文歌（真實歌曲：日文歌 93% 以上、誤判過的中文歌 8% 以下）。只看「有沒有出現過
+  // 假名」會讓夾一個「の」的中文歌整首走日文；逐行各自判斷則會把日文歌裡只有漢字的行
+  // （「最低界隈」「日々日々困惑」）誤判成中文。所以：有假名／諺文的行照該行，只有漢字
+  // 或沒有中日韓文字的行跟著整首的判定。
+  const cjkLines = lyricsLines.filter((l) => /[぀-ヿ㐀-鿿々가-힯]/.test((l && l.text) || ''));
+  const kanaLines = cjkLines.filter((l) => hasKana(l.text)).length;
+  const hangulLines = cjkLines.filter((l) => /[가-힯]/.test(l.text)).length;
+  const songLang = !cjkLines.length ? detectSongLang(lyricsLines)
+    : kanaLines * 2 > cjkLines.length ? 'ja'
+      : hangulLines * 2 > cjkLines.length ? 'ko'
+        : cjkLines.some((l) => /[㐀-鿿]/.test(l.text)) ? 'zh' : detectSongLang(lyricsLines);
+  const lineLang = (line) => {
+    const text = (line && line.text) || '';
+    if (hasKana(text)) return 'ja';
+    if (/[가-힯]/.test(text)) return 'ko';
+    return songLang;
+  };
+
+  const resultLang = new Map();
   for (const line of lyricsLines) {
+    lang = lineLang(line);
     const reading = await read(line.text);
 
     const result = {
@@ -700,22 +907,55 @@ async function addRomanization(lyricsLines) {
     // KRC 逐字模式：為每個 word 也加上 phonetic
     if (line.words && Array.isArray(line.words)) {
       result.words = [];
-      for (const word of line.words) {
+      // 韓文：整句一起算音變再切回每個 word，否則一字一 word 的逐字歌詞永遠不會連音。
+      const koreanWords = lang === 'ko' ? pronouncedWordTexts(line.words.map((word) => word && word.text)) : null;
+      // 中文：同理，整句查拼音再切回每個 word，破音字才有上下文（音樂的樂、覺得的得）。
+      const wordTexts = line.words.map((word) => String((word && word.text) || ''));
+      const linePinyin = lang === 'zh' && wordTexts.join('') === String(line.text || '') ? chinesePinyinPerChar(line.text) : null;
+      const sokuonWordIndexes = [];
+      let charCursor = 0;
+      for (let index = 0; index < line.words.length; index += 1) {
+        const word = line.words[index];
+        if (koreanWords) {
+          result.words.push({ ...word, phonetic: koreanToRomaja(koreanWords[index], { pronounced: true }) });
+          continue;
+        }
+        if (linePinyin) {
+          const length = Array.from(wordTexts[index]).length;
+          const syllables = linePinyin.slice(charCursor, charCursor + length).filter(Boolean);
+          charCursor += length;
+          if (syllables.length) {
+            result.words.push({ ...word, phonetic: syllables.join(' ') });
+            continue;
+          }
+        }
         const wordReading = await read(word.text);
         result.words.push({
           ...word,
           phonetic: lang === 'ja' ? wordReading.phonetic : wordReading,
         });
+        if (lang === 'ja' && wordReading.trailingSokuon) sokuonWordIndexes.push(result.words.length - 1);
+      }
+      // 字塊結尾是促音（「待っ」／「て」）：補上下一個字塊開頭的子音（matte），不然っ會不見。
+      for (const index of sokuonWordIndexes) {
+        const next = result.words[index + 1];
+        const consonant = (String(next?.phonetic || '').match(/^[bcdfghjkmpqrstvwxyz]/i) || [])[0];
+        if (consonant) result.words[index] = { ...result.words[index], phonetic: `${result.words[index].phonetic}${consonant.toLowerCase()}` };
       }
     }
 
+    resultLang.set(result, lang);
     results.push(result);
   }
 
   // 諧音只對日文/韓文做（中文用拼音、不需諧音）——先跑舊版，保證每一行
   // 都有一個能用的 xieyin 當底線，再讓 v2 有機會的話去蓋掉日文行。
-  if (lang === 'ja' || lang === 'ko') addXieyin(results);
-  if (lang === 'ja') await upgradeJapaneseXieyinWithV2(results);
+  // 只處理語言是日文／韓文的那幾行：中文歌夾一行假名時，其他中文行不可拿拼音當羅馬字
+  // 去轉諧音（會出現「wǒ 咩恩」「nǐ 爹」）。兩個函式都是就地改行物件，傳子集即可。
+  const xieyinLines = results.filter((line) => ['ja', 'ko'].includes(resultLang.get(line)));
+  if (xieyinLines.length) addXieyin(xieyinLines);
+  const japaneseLines = results.filter((line) => resultLang.get(line) === 'ja');
+  if (japaneseLines.length) await upgradeJapaneseXieyinWithV2(japaneseLines);
 
   return results;
 }
@@ -816,9 +1056,10 @@ function addRomanizationSync(lyricsLines) {
     };
 
     if (line.words && Array.isArray(line.words)) {
-      result.words = line.words.map(word => ({
+      const koreanWords = lang === 'ko' ? pronouncedWordTexts(line.words.map((word) => word && word.text)) : null;
+      result.words = line.words.map((word, index) => ({
         ...word,
-        phonetic: romanizeSync(word.text),
+        phonetic: koreanWords ? koreanToRomaja(koreanWords[index], { pronounced: true }) : romanizeSync(word.text),
       }));
     }
 

@@ -241,7 +241,7 @@
       }
 
       const text = chars.map((c) => c.char).join('');
-      const offsets = LyricMotion.measureCharOffsets(text, `900 ${fontPx}px ${family}`);
+      const offsets = LyricMotion.measureCharOffsets(text, `${getCssVar('--display-font-weight', '900')} ${fontPx}px ${family}`);
       const fullWidth = offsets[offsets.length - 1] || 0;
 
       let segments;
@@ -333,7 +333,7 @@
     const fontPx = fontPxFromSettings();
     const avail = Math.round(slotAvailableWidth() / 10) * 10;
     const family = getCssVar('--display-font-family', 'sans-serif');
-    const key = `${fontPx.toFixed(1)}|${avail}|${family}`;
+    const key = `${fontPx.toFixed(1)}|${avail}|${family}|${getCssVar('--display-font-weight', '900')}`;
     if (unitsBuiltForLines === lines && unitsBuiltForKey === key) return allUnits;
     allUnits = buildAllUnits(lines, fontPx, avail);
     unitsBuiltForLines = lines;
@@ -461,19 +461,19 @@
   function buildStaticPrep(text) {
     const fontPx = fontPxFromSettings();
     const family = getCssVar('--display-font-family', 'sans-serif');
-    const offsets = LyricMotion.measureCharOffsets(text, `900 ${fontPx}px ${family}`);
+    const offsets = LyricMotion.measureCharOffsets(text, `${getCssVar('--display-font-weight', '900')} ${fontPx}px ${family}`);
     return { text, offsets, width: offsets[offsets.length - 1] || 0, fontPx };
   }
 
   /** 倒數圖案：★/● 隨機挑（同一次出現固定組合，不逐幀重擲），字級跟歌詞一致。 */
   function getCountdownPrep(unit) {
     const fontPx = fontPxFromSettings();
-    const key = `${unit.globalIndex}|${fontPx.toFixed(1)}`;
+    const key = `${unit.globalIndex}|${fontPx.toFixed(1)}|${getCssVar('--display-font-weight', '900')}|${getCssVar('--display-font-family', 'sans-serif')}`;
     if (cachedCountdown && cachedCountdown.key === key) return cachedCountdown.prep;
     const family = getCssVar('--display-font-family', 'sans-serif');
     const glyph = COUNTDOWN_GLYPHS[Math.abs(unit.globalIndex) % COUNTDOWN_GLYPHS.length];
     const text = Array.from({ length: COUNTDOWN_ICON_COUNT }, () => glyph).join(' ');
-    const offsets = LyricMotion.measureCharOffsets(text, `900 ${fontPx}px ${family}`);
+    const offsets = LyricMotion.measureCharOffsets(text, `${getCssVar('--display-font-weight', '900')} ${fontPx}px ${family}`);
     const prep = { text, offsets, width: offsets[offsets.length - 1] || 0, fontPx };
     cachedCountdown = { key, prep };
     return prep;

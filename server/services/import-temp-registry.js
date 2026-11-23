@@ -8,7 +8,9 @@ const { createJsonStore } = require('./json-store');
 const { dataDir: defaultDataDir } = require('../utils/app-paths');
 
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{6,20}$/;
-const ORPHAN_TEMP_EXTENSIONS = new Set(['.part', '.webm', '.m4a', '.opus', '.temp']);
+// 不含 .mp3：「videoId.mp3」也可能是已完成、仍被歌曲庫引用的正式音檔，啟動清理不能憑登錄就刪。
+// 取消中途留下的半成品 mp3 由 cleanupOwnedTemporaryDownload 在同一次匯入內處理。
+const ORPHAN_TEMP_EXTENSIONS = new Set(['.part', '.webm', '.m4a', '.mp4', '.opus', '.temp', '.ytdl']);
 
 function isValidVideoId(value) {
   return typeof value === 'string' && VIDEO_ID_RE.test(value);
@@ -104,7 +106,7 @@ function createImportTempRegistry({
 
       const prefix = `${videoId}.`;
       for (const name of fileNames) {
-        if (!name.startsWith(prefix) || !ORPHAN_TEMP_EXTENSIONS.has(path.extname(name).toLowerCase())) continue;
+        if (!name.startsWith(prefix) || !(ORPHAN_TEMP_EXTENSIONS.has(path.extname(name).toLowerCase()) || /\.part-Frag\d+$/i.test(name))) continue;
         const candidate = path.join(downloadsDir, name);
         try {
           // Do not follow symlinks or remove a directory that happens to match.

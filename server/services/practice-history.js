@@ -103,7 +103,9 @@ function createPracticeHistoryService(options = {}) {
     ? options.file.replace(/(\.json)?$/, '.challenges.json')
     : path.join(dataDir(), 'practice-challenges.json'));
   const now = options.now || (() => new Date().toISOString());
-  const store = createJsonStore({ file, schemaVersion: 1, mode: 0o600, logger: options.logger,
+  // History deletion is privacy-sensitive: its redundant copy must carry the
+  // same tombstones rather than resurrect a deleted take during recovery.
+  const store = createJsonStore({ file, schemaVersion: 1, mode: 0o600, logger: options.logger, retainPreviousBackup: false,
     defaultValue: () => ({ schemaVersion: 1, takes: [], receipts: [] }),
     deserialize: doc => ({ ...doc, takes: doc.takes.map(take => ({ ...sanitizeTake(take), id: take.id, createdAt: take.createdAt })) }),
     validate: doc => {
@@ -113,7 +115,7 @@ function createPracticeHistoryService(options = {}) {
         return true;
       } catch (_) { return false; }
     } });
-  const challengeStore = createJsonStore({ file: challengeFile, schemaVersion: 1, mode: 0o600, logger: options.logger,
+  const challengeStore = createJsonStore({ file: challengeFile, schemaVersion: 1, mode: 0o600, logger: options.logger, retainPreviousBackup: false,
     defaultValue: () => ({ schemaVersion: 1, challenge: null, challenges: [], settings: { viewerRequestsEnabled: false }, challengeRequestIds: [] }),
     validate: doc => {
       try {

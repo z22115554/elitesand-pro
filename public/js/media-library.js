@@ -48,12 +48,14 @@
   }
 
   let searchQuery = '';
+  const foldedSearchText = new WeakMap();
   let sortBy = 'plays';
   // 歌曲庫篩選（2026-09-27 改版 P4）：all／no-lyrics／backing／no-backing
   let filterMode = 'all';
   const selectedIds = new Set(); // 多選批次：媒體庫 id（字串）
   let practiceBatch = null;       // 批次建練唱音軌進行中：{ stop }
   let wordBatch = null;           // 批次升級逐字歌詞進行中：{ stop }
+  const WORD_UPGRADE_TIMEOUT_MS = 120000; // 每首的等待上限（一輪來源查詢＋羅馬化）
   let viewCache = [];
 
   // 媒體庫最多可能有 10k 首；不能把每一列都常駐 DOM。一般列由 46px 封面 +
@@ -281,7 +283,7 @@
     all: () => true,
     'no-lyrics': (it) => !it.hasLyrics || it.lyricsType === 'txt',
     // 有時間軸但只到整句：可以試著升級成逐字
-    'line-lyrics': (it) => it.hasLyrics && it.lyricsType === 'lrc' && !it.lyricsLocked,
+    'line-lyrics': (it) => lyricsLevel(it) === 'line' && !it.lyricsLocked,
     backing: hasBacking,
     'no-backing': (it) => !hasBacking(it),
   };
@@ -334,9 +336,27 @@
 
   // 套用搜尋過濾 + 排序 → 渲染
   function applyView() {
-    const q = searchQuery.trim().toLowerCase();
+    // 全形／半形、簡體／繁體都當成一樣（「告白气球」找得到「告白氣球」）。簡繁字典第一次需要時才載入，
+    // 載好後重排一次；載入前先用全半形＋大小寫比。
+    const s2t = window.AppShared && AppShared.lyricS2T;
+    const fold = (value) => {
+      const text = String(value || '').normalize('NFKC').toLowerCase();
+      return s2t && s2t.ready() ? s2t.fold(text) : text;
+    };
+    const q = fold(searchQuery.trim());
+    if (q && s2t && !s2t.ready() && /\p{Script=Han}/u.test(q)) s2t.ensure().then((conv) => { if (conv) applyView(); });
+    // 每打一個字都要掃整個歌曲庫：轉好的字串記在項目上（同一個物件只轉一次）。
+    const folded = (it) => {
+      const tag = s2t && s2t.ready() ? 't' : 'n';
+      let entry = foldedSearchText.get(it);
+      if (!entry || entry.tag !== tag) {
+        entry = { tag, title: fold(it.title), artist: fold(it.artist) };
+        foldedSearchText.set(it, entry);
+      }
+      return entry;
+    };
     let view = q
-      ? cache.filter((it) => (it.title || '').toLowerCase().includes(q) || (it.artist || '').toLowerCase().includes(q))
+      ? cache.filter((it) => { const f = folded(it); return f.title.includes(q) || f.artist.includes(q); })
       : cache.slice();
     renderFilterCounts(view);
     view = view.filter(FILTERS[filterMode] || FILTERS.all);
@@ -1100,8 +1120,11 @@
     const counts = { upgraded: 0, skipped: 0, notFound: 0, suspect: 0 };
     for (let i = 0; i < items.length && !run.stop; i++) {
       label.textContent = tx('library.batch.wordUpgradeRunning', { done: i, total: items.length });
+      // 伺服器要把所有歌詞來源問一輪（找不到的歌最久，實測 8～12 秒，偶爾更久）再羅馬化。
+      // 用預設 8 秒會每首都跳「伺服器回應逾時」，而且上一首還在查就送出下一首、結果全算成略過。
       const res = await new Promise((resolve) => {
-        SocketClient.sendWithCallback('library:upgrade-word-lyrics', { id: String(items[i].id) }, (r) => resolve(r || {}));
+        SocketClient.sendWithCallback('library:upgrade-word-lyrics', { id: String(items[i].id) },
+          (r) => resolve(r || {}), { timeoutMs: WORD_UPGRADE_TIMEOUT_MS });
       });
       if (res.status === 'upgraded') counts.upgraded += 1;
       else if (res.status === 'mismatch') counts.suspect += 1;
@@ -1161,10 +1184,12 @@
   if (storageChoose) storageChoose.addEventListener('click', () => migrateStorage());
 
   if (btnCleanup) btnCleanup.addEventListener('click', async () => {
+    const preview = await new Promise((resolve) => SocketClient.sendWithCallback('library:cleanupAudioPreview', null, resolve));
+    if (!preview?.ok) { toast(tr('音檔清理失敗：伺服器沒有確認'), 'error'); return; }
     const confirmed = await window.DangerConfirm?.request({
       title: '確認清理音檔',
-      summary: '即將刪除不在目前播放清單中的已下載音檔。',
-      impact: '媒體庫紀錄與目前播放清單會保留，但已刪除的音檔必須重新下載才能播放，且無法復原。',
+      summary: `即將清理 ${preview.deleted} 個可重新下載的音檔，釋放 ${(preview.freedBytes / 1048576).toFixed(1)}MB。`,
+      impact: '本機上傳、封面、BGM、收藏歌單與處理中的音檔會保留；清理的音檔需重新下載才能播放。',
       phrase: '清理音檔',
       confirmLabel: '清理音檔',
     });

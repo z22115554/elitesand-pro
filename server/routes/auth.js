@@ -7,13 +7,13 @@ const router = express.Router();
 const authStore = require('../services/auth-store');
 const rateLimiter = require('../services/auth-rate-limiter');
 const { createLogger } = require('../utils/logger');
-const { canSetFirstPin, getClientAddress } = require('../utils/pin-setup-policy');
+const { canSetFirstPin, getClientAddress, isLoopbackAddress } = require('../utils/pin-setup-policy');
 const { requireControlAccess } = require('../middleware/require-control-access');
 
 const log = createLogger('Auth');
 
 function clientKey(req) {
-  return `http:${req.ip || (req.socket && req.socket.remoteAddress) || 'unknown'}`;
+  return rateLimiter.keyForAddress(getClientAddress(req));
 }
 
 function rejectIfLimited(req, res) {
@@ -31,7 +31,8 @@ function recordAuthResult(req, ok) {
 
 // 讓前端知道要不要顯示 PIN 輸入框
 router.get('/status', (req, res) => {
-  res.json({ hasPin: authStore.hasPin() });
+  const loopback = isLoopbackAddress(getClientAddress(req));
+  res.json({ hasPin: authStore.hasPinFor({ loopback }), recoveryRequired: loopback && authStore.needsRecovery() });
 });
 
 // 驗證 PIN（用於：面板/遙控器連線前的登入 modal）
@@ -63,7 +64,8 @@ router.post('/set', requireControlAccess, (req, res) => {
   }
 
   const { newPin, currentPin } = req.body || {};
-  const result = authStore.setPin(newPin, currentPin);
+  const localRecovery = authStore.needsRecovery() && isLoopbackAddress(getClientAddress(req));
+  const result = authStore.setPin(newPin, currentPin, { localRecovery });
   if (result.ok) {
     recordAuthResult(req, true);
     log.info('PIN 設定/更新成功');

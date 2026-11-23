@@ -38,8 +38,18 @@
   }
 
   function normalizeFilterText(value) {
-    return String(value || '').normalize('NFKC').toLocaleLowerCase('zh-TW');
+    const text = String(value || '').normalize('NFKC').toLocaleLowerCase('zh-TW');
+    // 同歌曲庫搜尋：簡繁也當成一樣（只用來比對）。字典還沒載入時，搜尋字有漢字就先載、載好重畫一次。
+    const s2t = AppShared.lyricS2T;
+    if (!s2t) return text;
+    if (s2t.ready()) return s2t.fold(text);
+    if (/\p{Script=Han}/u.test(text) && !s2tFoldRequested) {
+      s2tFoldRequested = true;
+      s2t.ensure().then((conv) => { if (conv) AppShared.renderPlaylist(); });
+    }
+    return text;
   }
+  let s2tFoldRequested = false;
 
   function isTrackPlayed(track, index, currentTrackIndex = state.currentTrackIndex) {
     if (track && track.entryId && state.playedEntryIds instanceof Set
@@ -331,7 +341,8 @@
     if (hasLyrics && track.lyricsType === 'krc') {
       return { level: 'word', text: '逐字', label: '已有逐字同步歌詞，點擊可更換來源' };
     }
-    if (hasLyrics && track.lyricsType === 'lrc') {
+    // srt／vtt 也是每句有時間軸的格式，不能被標成「純文字（沒有時間軸）」。
+    if (hasLyrics && ['lrc', 'srt', 'vtt'].includes(track.lyricsType)) {
       return { level: 'line', text: '逐句', label: '已有逐句同步歌詞，點擊可更換來源' };
     }
     if (hasLyrics) {
@@ -554,18 +565,23 @@
   }
 
   async function removeTrack(index) {
-    const playlist = state.playlist;
-    const track = playlist[index];
-    if (!track) return;
+    const staleTrack = state.playlist[index];
+    if (!staleTrack) return;
     // 刪除前先確認（避免直播中誤觸把歌刪掉）
     const confirmed = await window.PanelConfirm?.request({
-      title: `從播放清單移除「${track.title || '這首歌'}」？`,
+      title: `從播放清單移除「${staleTrack.title || '這首歌'}」？`,
       summary: '這首歌會從本次播放清單移除。',
       impact: '手動歌詞修正與歌詞同步微調會保留；日後重新加入同一首歌時會自動恢復。',
       tone: 'danger',
       confirmLabel: '移除歌曲',
     });
     if (!confirmed) return;
+    // 確認視窗開著的這幾秒，清單可能已被伺服器同步換成新陣列（點歌插播、手機加歌、自動換下一首）。
+    // 一律以「現在」的清單為準、用 entryId 找回同一列：拿開窗前的舊陣列刪完再整份送出，
+    // 會把這段時間別人加進來的歌整個蓋掉，索引也可能已經指到別首。
+    const playlist = state.playlist;
+    index = playlist.findIndex((t) => t === staleTrack || (staleTrack.entryId && t && t.entryId === staleTrack.entryId));
+    if (index < 0) { AppShared.showToast('這首已不在播放清單裡', 'warning'); return; }
     const previousPlaylist = playlist.slice();
     const previousIndex = state.currentTrackIndex;
     playlist.splice(index, 1);
@@ -632,8 +648,15 @@
     const previousPlaylist = state.playlist.slice();
     const previousIndex = state.currentTrackIndex;
     const keysToRemove = new Set(selected.map(({ key }) => key));
-    const removedBeforeCurrent = selected.filter(({ index }) => index < previousIndex).length;
-    state.playlist = state.playlist.filter((track) => !keysToRemove.has(getSelectionKey(track)));
+    const entryIdsToRemove = new Set(selected.map(({ track }) => track && track.entryId).filter(Boolean));
+    // 用確認後「現在」的清單判斷：確認視窗開著時清單可能被同步換成新陣列（物件不同、索引也變了），
+    // 所以除了選取當下的物件，也用 entryId 認同一列；這期間剛好換成目前歌曲的那一列不刪（批次不碰正在播的歌）。
+    const shouldRemove = (track, index) => index !== previousIndex && !!track
+      && (keysToRemove.has(getSelectionKey(track)) || (!!track.entryId && entryIdsToRemove.has(track.entryId)));
+    const removedBeforeCurrent = previousIndex >= 0
+      ? state.playlist.filter((track, index) => index < previousIndex && shouldRemove(track, index)).length
+      : 0;
+    state.playlist = state.playlist.filter((track, index) => !shouldRemove(track, index));
     if (previousIndex >= 0) state.currentTrackIndex = previousIndex - removedBeforeCurrent;
     selectedTrackKeys.clear();
     selectionMode = false;
@@ -781,8 +804,13 @@
     dom.playlistImportList.querySelectorAll('[data-import-filename]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const filename = btn.getAttribute('data-import-filename');
-        SocketClient.sendWithCallback('playlist:export-load', filename, (data) => {
-          applyImportedPlaylist(data, () => { dom.playlistImportModal.hidden = true; });
+        SocketClient.sendWithCallback('playlist:import-saved', filename, (result) => {
+          if (!result?.ok) return AppShared.showToast(`匯入失敗：${result?.error || '伺服器沒有確認'}`, 'error');
+          state.playlist = result.playlist;
+          state.currentTrackIndex = -1;
+          renderPlaylist();
+          dom.playlistImportModal.hidden = true;
+          AppShared.showToast(`已匯入 ${state.playlist.length} 首歌曲`, 'success');
         });
       });
     });

@@ -50,6 +50,18 @@ function writeLegacyLibrary(fixture) {
   return legacy;
 }
 
+(function nestedInstallMediaIsPreserved() {
+  const fixture = makeFixture();
+  const nested = path.join(fixture.installRoot, 'assets', 'private-media');
+  fs.mkdirSync(nested, { recursive: true });
+  fs.writeFileSync(path.join(nested, 'local.wav'), 'irreplaceable audio');
+  writeConfig(fixture.userData, nested);
+  const result = preparePackagedMediaStorage({ userDataPath: fixture.userData, executablePath: fixture.executablePath });
+  assert.equal(result.action, 'copied-from-install-dir');
+  assert.equal(fs.readFileSync(path.join(result.mediaDir, 'local.wav'), 'utf8'), 'irreplaceable audio');
+  assert.ok(fs.existsSync(path.join(nested, 'local.wav')), 'migration keeps the original until verified references are committed');
+})();
+
 function runRound(round) {
   const fresh = makeFixture();
   const freshResult = preparePackagedMediaStorage({ userDataPath: fresh.userData, executablePath: fresh.executablePath });

@@ -9,6 +9,9 @@ const { appUserAgent } = require('../utils/app-version');
 const { MAX_UPDATE_ZIP_BYTES, isExactIncrementalArtifactUrl } = require('./update-policy');
 
 const ARTIFACT_TIMEOUT_MS = 120000;
+// Leave staging/verification time inside the Electron requester's 10-minute
+// accept deadline; a slow but active stream still gets longer than 120 seconds.
+const ARTIFACT_TOTAL_TIMEOUT_MS = 8 * 60 * 1000;
 
 function assertIncrementalArtifactPlan(plan) {
   if (!plan || typeof plan !== 'object' || plan.delivery !== 'incremental') {
@@ -43,7 +46,7 @@ function throttledProgress(onProgress, minIntervalMs = 200) {
   };
 }
 
-async function readExactBytes(response, expectedSize, onProgress) {
+async function readExactBytes(response, expectedSize, onProgress, onChunk = () => {}) {
   const declared = response.headers?.get?.('content-length');
   if (declared != null && declared !== '') {
     const size = Number.parseInt(declared, 10);
@@ -63,6 +66,7 @@ async function readExactBytes(response, expectedSize, onProgress) {
       total += chunk.length;
       if (total > expectedSize) throw new Error('update artifact exceeds signed size');
       chunks.push(chunk);
+      if (chunk.length) onChunk();
       reportProgress(total, expectedSize);
     }
   } finally {
@@ -78,14 +82,22 @@ async function readExactBytes(response, expectedSize, onProgress) {
 async function downloadSignedIncrementalArtifact(plan, {
   fetchImpl = globalThis.fetch,
   timeoutMs = ARTIFACT_TIMEOUT_MS,
+  totalTimeoutMs = ARTIFACT_TOTAL_TIMEOUT_MS,
   onProgress,
 } = {}) {
   const artifact = assertIncrementalArtifactPlan(plan);
   if (typeof fetchImpl !== 'function') throw new Error('fetch is unavailable');
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 180000) throw new TypeError('invalid update artifact timeout');
+  if (!Number.isInteger(totalTimeoutMs) || totalTimeoutMs < timeoutMs || totalTimeoutMs > ARTIFACT_TOTAL_TIMEOUT_MS) throw new TypeError('invalid update artifact total timeout');
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('update artifact timeout')), timeoutMs);
+  let timer;
+  const resetIdle = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(new Error('update artifact timeout')), timeoutMs);
+  };
+  resetIdle();
+  const totalTimer = setTimeout(() => controller.abort(new Error('update artifact total timeout')), totalTimeoutMs);
   try {
     const response = await fetchImpl(artifact.url, {
       method: 'GET',
@@ -94,15 +106,17 @@ async function downloadSignedIncrementalArtifact(plan, {
       headers: { Accept: 'application/zip', 'User-Agent': appUserAgent('signed-update-artifact') },
     });
     if (!response || response.status !== 200) throw new Error(`update artifact HTTP ${response?.status || 'failure'}`);
-    const buffer = await readExactBytes(response, artifact.size, onProgress);
+    resetIdle();
+    const buffer = await readExactBytes(response, artifact.size, onProgress, resetIdle);
     const actual = crypto.createHash('sha256').update(buffer).digest('hex');
     if (actual !== artifact.sha256) throw new Error('update artifact SHA-256 does not match signed policy');
     return Object.freeze({ buffer, sha256: actual, size: buffer.length, url: artifact.url });
   } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('update artifact download timed out');
+    if (controller.signal.aborted || error?.name === 'AbortError') throw new Error('update artifact download timed out');
     throw error;
   } finally {
     clearTimeout(timer);
+    clearTimeout(totalTimer);
   }
 }
 

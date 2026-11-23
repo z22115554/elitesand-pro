@@ -21,6 +21,8 @@
 // 值為中文字；國語沒有的音保留羅馬字（如 ki、gi）
 // ═══════════════════════════════════════════
 
+const { koreanPronunciation, pronouncedWordTexts } = require('../utils/korean-pronunciation');
+
 const XIEYIN_TABLE = {
   // ─── 母音 ───
   'a': '阿', 'i': '伊', 'u': '烏', 'e': '欸', 'o': '歐',
@@ -128,10 +130,12 @@ function isKoreanText(text) {
  * @param {string} text - 含諺文的原文
  * @returns {string}
  */
-function koreanToXieyin(text) {
+function koreanToXieyin(text, { pronounced = false } = {}) {
   if (!text) return '';
+  // 先轉成實際唸法再查表：좋아 唸 조아（不是 左特阿）、감사합니다 唸 감사함니다。
+  const source = pronounced ? String(text) : koreanPronunciation(text);
   let out = '';
-  for (const ch of text) {
+  for (const ch of source) {
     const code = ch.codePointAt(0);
     if (code >= HANGUL_BASE && code <= HANGUL_LAST) {
       const s = code - HANGUL_BASE;
@@ -238,10 +242,18 @@ function isValidRomaji(tokens) {
 function wordToXieyin(word) {
   if (!word) return '';
 
+  // n' 是撥音後接母音／y 的分隔（kon'ya、ren'ai）：分段各自轉換，n 才會被當成「恩」，
+  // 而不是跟後面的 ya／a 黏成 nya／na。
+  if (word.includes("'") && /^[a-z'-]+$/i.test(word)) {
+    const parts = word.split("'");
+    if (parts.every(Boolean)) return parts.map((part) => wordToXieyin(part)).join('');
+  }
+
   let w = word.toLowerCase();
 
-  // 促音（雙子音）簡化：katte → kate、ippai → ipai
-  w = w.replace(/([kgsztdnhbpmrwfjv])\1/g, '$1');
+  // 促音（雙子音）簡化：katte → kate、ippai → ipai、bocchi → bochi（っち 的羅馬字是 cchi，
+  // 舊版字元集少了 c，ぼっち／一人ぼっち 整個轉不出諧音、原樣顯示羅馬字）
+  w = w.replace(/([kgsztdnhbpmrwfjvc])\1/g, '$1');
   // tch 促音特例：matcha → macha
   w = w.replace(/tch/g, 'ch');
   // 長音符號（katakanaToRomaji 將 ー 轉為 '-'）：直接移除，併入前音節
@@ -324,14 +336,19 @@ function addXieyin(lyricsLines) {
     }
     // KRC 逐字模式：每個 word 也加上 xieyin
     if (line.words && Array.isArray(line.words)) {
-      for (const word of line.words) {
-        if (word.xieyinManual) continue; // \u540C\u4E0A\uFF0C\u4F7F\u7528\u8005\u6539\u904E\u7684\u55AE\u5B57\u8AE7\u97F3\u4E0D\u53EF\u88AB\u84CB\u6389
+      // 韓文逐字常常一個字一個 word：整句一起算音變再切回去，連音／鼻音化才會出現在逐字諧音上。
+      const koreanWords = line.words.some((word) => word && isKoreanText(word.text))
+        ? pronouncedWordTexts(line.words.map((word) => word && word.text))
+        : null;
+      line.words.forEach((word, index) => {
+        if (word.xieyinManual) return; // \u540C\u4E0A\uFF0C\u4F7F\u7528\u8005\u6539\u904E\u7684\u55AE\u5B57\u8AE7\u97F3\u4E0D\u53EF\u88AB\u84CB\u6389
         if (word.text && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(word.text)) {
           word.xieyin = isKoreanText(word.text)
-            ? koreanToXieyin(word.text)
-            : (word.phonetic ? romajiToXieyin(word.phonetic) : '');
+            ? koreanToXieyin(koreanWords ? koreanWords[index] : word.text, { pronounced: !!koreanWords })
+            // 字塊結尾是促音（「待っ」→ mat）：羅馬字補了下一拍的子音，但諧音的促音是停頓、不發音。
+            : (word.phonetic ? romajiToXieyin(/[っッ]$/u.test(word.text) ? word.phonetic.replace(/[bcdfghjkmpqrstvwxyz]$/i, '') : word.phonetic) : '');
         }
-      }
+      });
     }
   }
   return lyricsLines;

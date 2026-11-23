@@ -8,6 +8,13 @@
 
 // ─── 標題解析干擾詞過濾表 ───
 const NOISE_PATTERNS = [
+  // 結尾的 hashtag（「晴天 - 周杰倫 #shorts #jaychou」）：要帶字母才算，「We Are #1」的 #1 不動。
+  // 前面一定要有一個不是 hashtag 的字，整串都是 hashtag（「#周杰倫 #晴天」）時不剝。
+  /(?<=(?:^|\s)[^#\s]\S*)(?:\s+#[^\s#]*\p{L}[^\s#]*)+\s*$/gu,
+  // 一小時循環版：括號包住的「(1小時版)」「【一小時循環】」「[1 hour]」，或沒括號但帶著 loop／版／循環的
+  // 「Loop 1 hour」「1 hour loop」。光是「一小時」不剝——那可能就是歌名。
+  /[（(【\[]\s*(?<!\d)[1一]\s*(?:小時|小时|hours?|hr)\s*(?:版|循環|循环|loop|ver(?:sion)?\.?)?\s*[）)】\]]/gi,
+  /\s*(?:(?<!\d)[1一]\s*(?:小時|小时|hours?|hr)\s*(?:版|循環|循环|loop)|\bloop\s*[1一]\s*(?:hours?|hr|小時|小时))/gi,
   // 括號內混雜多個宣傳詞（例如「(官方完整版MV)」＝官方＋完整版＋MV 疊在一起）時，
   // 下面逐一比對的規則只咬得到其中一個詞，另一個詞跟落單的括號會殘留變成尾綴垃圾
   // （見踩坑：「月亮惹的禍 Troubled By The Moon )」多出一個沒配對的右括號）。
@@ -17,15 +24,17 @@ const NOISE_PATTERNS = [
   /\(?\s*Official\s*(Music\s*)?Video\s*\)?/gi,
   /\(?\s*Official\s*(Audio|Lyric|Visualizer)\s*Video?\s*\)?/gi,
   /\(?\s*官方(?:MV|音樂錄影帶|Music\s*Video)?\s*\)?/gi,
-  /\(?\s*Official\s*\)?/gi,
+  // 後面直接接文字（中日文不會有 \b）就是名字的一部分：Official髭男dism 不能被砍成「髭男dism」。
+  /\(?\s*\bOfficial(?![\p{L}\p{N}])\s*\)?/giu,
   /\bMV\b/gi,
   // 'M/V'（含上傳者用來繞過 YouTube 檔名限制的 ⧸ ∕ ⁄，正規化後都是 '/'）。要在這裡吃掉，
   // 否則後面的 '/' 分隔規則會把 'Aimer - 花の唄 M/V' 切成歌手『…M』、歌名『V』。
   /\(?\s*M\s*[/.]\s*V\s*\)?/gi,
   /\bPV\b/gi,
   // 畫質相關
-  /\(?\s*(HD|4K|8K|UHD|HDR)\s*\)?/gi,
-  /\(?\s*(?:\d+K\s*)?(?:re)?master(?:ed)?(?:\s+\d{4})?\s*\)?/gi,
+  /\(?\s*\b(HD|4K|8K|UHD|HDR)\b\s*\)?/gi,
+  // 只認 Remaster(ed)／Mastered：舊版連單獨的 master 都吃，Mastermind 變 mind、Master of Puppets 被拆爛。
+  /\(?\s*(?:\d{4}\s+)?(?:\d+K\s*)?\b(?:re-?master(?:ed)?|mastered)\b(?:\s+\d{4})?\s*\)?/gi,
   /\(?\s*\d{3,4}p\s*(?:HD)?\s*\)?/gi,
   // 版本相關
   /\(?\s*Full\s*Ver(?:sion)?\s*\)?/gi,
@@ -33,9 +42,10 @@ const NOISE_PATTERNS = [
   /\(?\s*Lyric\s*Video\s*\)?/gi,
   /\(?\s*Music\s*Video\s*\)?/gi,
   // 語言/字幕相關
-  /\(?\s*(中文字幕|中文歌詞|日文字幕|英文字幕|繁體中文|简体中文|CC|Subtitle)\s*\)?/gi,
+  // CC／Subtitle 必須是完整單字：舊版 Accept 會被砍成 Aept、Success 變 Suess。
+  /\(?\s*(中文字幕|中文歌詞|日文字幕|英文字幕|繁體中文|简体中文|\bCC\b|\bSubtitles?\b)\s*\)?/gi,
   // 發行相關
-  /\(?\s*(新曲|New\s*Release|Latest)\s*\)?/gi,
+  /\(?\s*(新曲|\bNew\s*Release\b|\bLatest\b)\s*\)?/gi,
   // 音質/格式行銷字樣：轉貼/合輯頻道常見（例：「張宇 傘下 無損音樂FLAC 純享」），不屬於正式
   // 歌名，混進去會同時污染顯示的歌名跟歌詞搜尋 query（見 issue #9：歌詞比對成另一首歌）。
   /\(?\s*(?:無損|无损)(?:音樂|音乐|音質|音质)?\s*\)?/gi,
@@ -43,22 +53,34 @@ const NOISE_PATTERNS = [
   /\(?\s*(?:純享|纯享|精享|臻享)(?:版)?\s*\)?/gi,
   /\(?\s*(?:高音質|高音质|極致音質|极致音质|母帶|母带)\s*\)?/gi,
   // 特殊標記
-  /\(?\s*(Promo|Teaser|Preview|Clip|Edit)\s*\)?/gi,
-  /[【「『《〈][^】」』》〉]*(?:伴奏|動態|动态|字幕|歌詞|歌词)[^】」』》〉]*[】」』》〉]/gi,
+  // 必須是完整單字：舊版 Eclipse 會被砍成 Ese（含 clip）、Credit 變 Cr（含 edit）。
+  // 「Radio Edit」整組拿掉（電台剪輯版歌詞相同）；只拿掉 Edit 會留下一個「Radio」被當成歌手。
+  /\s*[-–—]?\s*\(?\s*\bRadio\s+Edit\b\s*\)?/gi,
+  /\(?\s*\b(Promo|Teaser|Preview|Clip|Edit)\b\s*\)?/gi,
+  /[【「『《〈][^】」』》〉]*(?:伴奏|動態|动态|字幕|歌詞|歌词|中[日英韓韩]?字|[日英韓韩]中字|雙語|双语)[^】」』》〉]*[】」』》〉]/gi,
   // 歌詞影片／頻道常見標記
-  /\(?\s*(?:動態歌詞|动态歌词|歌詞Lyrics|歌词Lyrics|歌詞字幕|歌词字幕|歌詞拼音|歌词拼音|歌詞|歌词|Lyrics?|歌回剪輯|歌回剪辑|歌雜剪輯|歌杂剪辑)\s*\)?/gi,
+  /\(?\s*(?:動態歌詞|动态歌词|歌詞Lyrics|歌词Lyrics|歌詞字幕|歌词字幕|歌詞拼音|歌词拼音|歌詞|歌词|\bLyrics?\b|歌回剪輯|歌回剪辑|歌雜剪輯|歌杂剪辑)\s*\)?/gi,
   // 伴奏版本不屬於正式歌名；原字串仍保留在 originalName
-  /\(?\s*(?:(?:原版|女版|男版|純|纯)?伴奏(?:歌詞|歌词)?(?:版)?|KTV(?:伴奏)?(?:歌詞|歌词)?(?:版)?|卡拉\s*OK|卡拉OK|純音樂|纯音乐|去人聲|去人声|無人聲|无人声|消音(?:版)?|導唱(?:版)?|导唱(?:版)?|吉他伴奏|鋼琴(?:和弦)?|钢琴(?:和弦)?|Live\s*Band原創伴奏改編|Karaoke(?:\s*Version)?|Instrumental(?:\s*Version)?|Off\s*Vocal|Backing\s*Track|with\s*backing\s*vocals)\s*\)?/gi,
+  /\(?\s*(?:(?:原版|女版|男版|純|纯)?伴奏(?:歌詞|歌词)?(?:版)?|KTV(?:伴奏)?(?:歌詞|歌词)?(?:版)?|卡拉\s*OK|卡拉OK|純音樂|纯音乐|去人聲|去人声|無人聲|无人声|消音(?:版)?|導唱(?:版)?|导唱(?:版)?|吉他伴奏(?:版)?|[鋼钢]琴(?:和弦|伴奏)?版|[鋼钢]琴(?:和弦|伴奏)|(?<![^\s(（【\[])[鋼钢]琴(?![^\s)）】\]])|Live\s*Band原創伴奏改編|Karaoke(?:\s*Version)?|Instrumental(?:\s*Version)?|Off\s*Vocal|Backing\s*Track|with\s*backing\s*vocals)\s*\)?/gi,
   /\(?\s*(?:原調|原调)(?:伴奏)?\s*\)?/gi,
-  /\(?\s*(?:(?:男|女|升|降)\s*Key|Key)\s*(?:[+#-]?\s*\d+|[A-G](?:b|#)?)?\s*\)?/gi,
+  // 單獨的 Key 必須後面接調號（Key+2、Key C、(Key)）才算噪音：舊版沒有詞邊界，
+  // Arctic Monkeys 變 Arctic Mons、Alicia Keys 變 Alicias、Whiskey 變 Whis。
+  /\(?\s*(?:男|女|升|降)\s*Key\s*(?:[+#-]?\s*\d+|[A-G](?:b|#)?(?![A-Za-z]))?\s*\)?/gi,
+  /\(?\s*\bKey\s*(?:[+#-]?\s*\d+|[A-G](?:b|#)?(?![A-Za-z]))\s*\)?/gi,
+  /\(\s*Key\s*\)/gi,
+  // 調號寫在 Key 前面（KTV 伴奏常見：「-2Key」「+1key」「降2Key」「升3key」）。
+  /\(?\s*(?:[+-]|升|降)\s*\d+\s*key\b\s*\)?/gi,
   /\(?\s*(?:男調|女調|男调|女调)\s*\)?/gi,
   /\(?\s*[+#-]?\s*[A-G](?:b|#)?\s*調\s*\)?/gi,
   /\(?\s*(?:女版|男版|女生版|男生版)\s*\)?/gi,
   /\(?\s*(?:Female|Male)\s*Version\s*\)?/gi,
   // 翻唱/版本標記（放在標題末尾的）
   /\s+(Cover|翻唱|covered\s+by|arrangement|arr\.)\s*$/gi,
-  // 翻唱在詞中（不限末尾）
-  /\s+(?:Cover|翻唱)\s*/gi,
+  // 翻唱在詞中（不限末尾）。Cover 要是完整單字：舊版連 covered 的 cover 都吃掉，
+  // 「ヒバナ / DECO*27 covered by 星街すいせい」的歌手變成「DECO*27ed by 星街すいせい」。
+  // 兩邊都是英文單字時是歌名的一部分（Under Cover of Darkness），不動；cover by 留給後面的規則拆翻唱者。
+  // 只吃掉字本身、留一個空白，「晴天 Cover 某某」才不會黏成「晴天某某」。
+  /\s+(?:(?<=[^\sA-Za-z]\s+)Cover|Cover(?=\s+[^\sA-Za-z]|\s*$))(?![A-Za-z])(?!\s+by\b)|\s+翻唱(?=\s|$|[^\p{L}\p{N}])/giu,
   // 高頻出現的括號後綴
   /\(\d{4}\)/g,
   // 清理殘留的空括號
@@ -105,18 +127,26 @@ function repairBrackets(value) {
 }
 
 const LEADING_NOISE_TAG = /^\s*(?:【\s*([^】]+)\s*】|\[\s*([^\]]+)\s*\]|「\s*([^」]+)\s*」|『\s*([^』]+)\s*』|《\s*([^》]+)\s*》|〈\s*([^〉]+)\s*〉)\s*/;
-const NOISE_TAG_TEXT = /(?:^|\b)(?:mv|pv|official|lyrics?|audio|video|ktv|karaoke)(?:\b|$)|動態歌詞|动态歌词|歌回剪輯|歌回剪辑|歌雜剪輯|歌杂剪辑|伴奏|純音樂|纯音乐|女版|男版|完整版|官方版|原版|\bch\.?\s*[-–—]/i;
+// 翻唱類標籤（【翻唱】【Cover】【歌ってみた】【歌回精華】）也是噪音：留著的話「【翻唱】周杰倫 - 晴天」
+// 的歌手會變成「翻唱」、「ロキ / みきとP【歌ってみた】」的歌名會變成「歌ってみた」。
+const NOISE_TAG_TEXT = /(?:^|\b)(?:mv|pv|official|lyrics?|audio|video|ktv|karaoke|cover(?:ed)?|vtuber|vsinger)(?:\b|$)|動態歌詞|动态歌词|歌回剪輯|歌回剪辑|歌雜剪輯|歌杂剪辑|伴奏|純音樂|纯音乐|女版|男版|完整版|官方版|原版|翻唱|歌ってみた|歌回精華|歌回精华|直播精華|直播精华|字幕|中[日英韓韩]?字|[日英韓韩]中字|雙語|双语|\bch\.?\s*[-–—]/i;
 const PROMO_TAIL = /(?:全球網路大首播|全球网络大首播|網路大首播|网络大首播|首播|完整版|完整版本|官方版)+/gi;
-const PUBLISHER_TAIL = /\s*[-–—]\s*(?:華納|华纳|索尼|Sony|滾石|滚石|相信音樂|相信音乐|環球|环球|ForwardMusic|avex)[^\n]*$/i;
+// 括號裡的影視宣傳註記：「(電影「我的少女時代」插曲)」「（電視劇《夢華錄》片尾曲）」「(OST)」。
+// 裡面常帶著「」《》，若留著，「歌手 [歌名] (電影「劇名」插曲)」會被『歌手「歌名」』規則
+// 誤抓成歌手＝「歌手 (電影」、歌名＝劇名。
+const PROMO_PAREN = /\s*[（(][^（()）]*?(?:電影|电影|電視劇|电视剧|劇集|剧集|網劇|网剧|動畫|动画|主題曲|主题曲|片頭曲|片头曲|片尾曲|插曲|推廣曲|推广曲|宣傳曲|宣传曲|廣告曲|广告曲|\bOST\b)[^（()）]*[）)]/gi;
+const PUBLISHER_TAIL = /\s*[-–—]\s*(?:華納|华纳|索尼|Sony\b|滾石|滚石|相信音樂|相信音乐|環球|环球|ForwardMusic\b|avex\b)[^\n]*$/i;
 
 // ─── 廠牌／搬運頻道 ───
 // 2026-08-30 清庫的第 1 類指紋：唱片公司與搬運頻道被當成歌手寫進歌庫（`ForwardMusic 添翼`、
 // `滾石唱片 ROCK RECORDS`）。它們不是原唱，寧可讓歌手留空、面板顯示「原唱待確認」，
 // 也不要塞一個錯的名字進去——錯的名字還會污染歌詞搜尋的 query。
-const LABEL_NAME = /(?:華納|华纳|索尼|Sony\s*Music|滾石|滚石|相信音樂|相信音乐|環球|环球|ForwardMusic|添翼|福茂|種子音樂|种子音乐|杰威爾|杰威尔|avex|EMI|BMG|VEVO|Universal\s*Music|Warner\s*Music|唱片(?:公司)?|Records\b|Recordings\b|Entertainment\s*(?:Group|Inc)?\b)/i;
+// 英文廠牌名要有詞邊界：舊版 EMI 沒有邊界，Eminem、Demi Lovato、Remi Wolf、Emily…
+// 全被當成唱片公司、歌手欄被清空。VEVO 刻意只要求右邊界——官方頻道名常黏在歌手後面（AdeleVEVO）。
+const LABEL_NAME = /(?:華納|华纳|索尼|\bSony\s*Music\b|滾石|滚石|相信音樂|相信音乐|環球|环球|\bForwardMusic\b|添翼|福茂|種子音樂|种子音乐|杰威爾|杰威尔|\bavex\b|\bEMI\b|\bBMG\b|VEVO\b|\bUniversal\s*Music\b|\bWarner\s*Music\b|唱片(?:公司)?|\bRecords\b|\bRecordings\b|\bEntertainment\s*(?:Group|Inc)?\b)/i;
 // 標題開頭的「廠牌 - 」：`滾石唱片 ROCK RECORDS - 五月天 - 志明與春嬌` 這種三段式，
 // 不先把廠牌那段剝掉，切割器就會把廠牌當歌手、把「五月天 - 志明與春嬌」整串當歌名。
-const PUBLISHER_HEAD = /^\s*[^-–—|｜]{0,40}?(?:華納|华纳|索尼|Sony\s*Music|滾石|滚石|相信音樂|相信音乐|環球|环球|ForwardMusic|添翼|福茂|種子音樂|种子音乐|avex|VEVO|Universal\s*Music|Warner\s*Music|唱片|RECORDS\b)[^-–—]{0,40}?\s*[-–—]\s*/i;
+const PUBLISHER_HEAD = /^\s*[^-–—|｜]{0,40}?(?:華納|华纳|索尼|\bSony\s*Music\b|滾石|滚石|相信音樂|相信音乐|環球|环球|\bForwardMusic\b|添翼|福茂|種子音樂|种子音乐|\bavex\b|VEVO\b|\bUniversal\s*Music\b|\bWarner\s*Music\b|唱片|\bRECORDS\b)[^-–—]{0,40}?\s*[-–—]\s*/i;
 
 /** 這個名字是唱片公司／搬運頻道，不是原唱。 */
 function isLabelArtist(value) {
@@ -141,6 +171,21 @@ function normalizeVideoText(value) {
     .replace(/[–—−]/g, '-'));
 }
 
+const TRAILING_NOISE_TAG = /\s*(?:【\s*([^】]+)\s*】|\[\s*([^\]]+)\s*\])\s*$/;
+
+// 夾在標題中間、整組只有翻唱標記的括號（「祝福 / YOASOBI【歌ってみた】ver.某某」）：頭尾規則碰不到，
+// 留著會被『歌手【歌名】』規則抓成歌名「歌ってみた」。只認整組就是這幾個字，不碰其他括號。
+const MID_COVER_TAG = /\s*(?:【\s*|\[\s*)(?:歌ってみた|翻唱|cover(?:ed)?|歌回精華|歌回精华|弾き語り)(?:\s*】|\s*\])\s*/gi;
+
+const NOISE_TAG_TEXT_ALL = new RegExp(NOISE_TAG_TEXT.source, 'gi');
+function isPureNoiseTag(content) {
+  const text = String(content || '');
+  if (!NOISE_TAG_TEXT.test(text)) return false;
+  return !text.replace(NOISE_TAG_TEXT_ALL, ' ')
+    .replace(/\b(?:music|full|short|ver\.?|version|hd|4k|m\/v)\b/gi, ' ')
+    .replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
 function stripLeadingNoiseTags(value) {
   let text = value;
   let match = text.match(LEADING_NOISE_TAG);
@@ -148,22 +193,44 @@ function stripLeadingNoiseTags(value) {
     text = text.slice(match[0].length).trim();
     match = text.match(LEADING_NOISE_TAG);
   }
-  return text;
+  // 結尾的同類標籤（「ロキ / みきとP【歌ってみた】」）也拿掉；整串只剩標籤時保留原樣。
+  // 結尾那組要「整組都是噪音字」才剝：「The Buggles【Video Killed the Radio Star】」的 Video 是歌名的一部分。
+  match = text.match(TRAILING_NOISE_TAG);
+  while (match && match.index > 0 && isPureNoiseTag(match.slice(1).find(Boolean) || '')) {
+    text = text.slice(0, match.index).trim();
+    match = text.match(TRAILING_NOISE_TAG);
+  }
+  const withoutMidTags = text.replace(MID_COVER_TAG, ' ').replace(/\s+/g, ' ').trim();
+  return withoutMidTags || text;
 }
 
 function cleanIdentityPart(value, kind = 'title') {
   let text = compactSpaces(value)
     .replace(PROMO_TAIL, '')
+    // 噪音字被剝掉後留下的空括號（「⌜高音質⌟」→「⌜ ⌟」）與頭尾的音符裝飾（「晴天 ♪」）。
+    .replace(/(?:⌜\s*⌟|﹁\s*﹂|〔\s*〕|［\s*］|\[\s*\]|〖\s*〗|｢\s*｣|【\s*】|「\s*」|『\s*』|《\s*》|〈\s*〉|[（(]\s*[）)])/g, ' ')
+    .replace(/^[\s♪♫♬🎵🎶]+|[\s♪♫♬🎵🎶]+$/gu, '')
+    // 頭尾的表情符號裝飾（「晴天 🔥🔥」）
+    .replace(/^[\s\p{Extended_Pictographic}\uFE0F\u200D]+|[\s\p{Extended_Pictographic}\uFE0F\u200D]+$/gu, '')
     .replace(/^[\s:：|/\-]+|[\s:：|/\-]+$/g, '')
     .replace(/\s*-\s*(?:版|歌詞版|歌词版)\s*$/i, '')
     .trim();
   if (kind === 'title') {
+    // 整個歌名被引號包住（K-pop 官方常見 ‘뚜두뚜두’、'Ditto'，也有 "死ぬのがいいわ"）：引號不是歌名的一部分，
+    // 留著會跟著存進歌曲庫、也讓歌詞搜尋多一層雜訊。只拆「成對且整段包住」的那一層。
+    const quoted = text.match(/^(?:‘([^‘’]+)’|“([^“”]+)”|'([^']+)'|"([^"]+)"|＂([^＂]+)＂)$/);
+    if (quoted) {
+      const inner = (quoted[1] || quoted[2] || quoted[3] || quoted[4] || quoted[5] || '').trim();
+      if (inner.length >= 1) text = inner;
+    }
     text = text
       .replace(/\s*[（(](?:電影|电影|電視劇|电视剧|戲劇|戏剧|動畫|动画|日劇|日剧|韓劇|韩剧)[^）)]*[）)]\s*$/i, '')
       .replace(/\s*(?:電影|电影|電視劇|电视剧|戲劇|戏剧|動畫|动画)[「『《【].*$/i, '')
       .replace(/\s*(?:主題曲|主题曲|片頭曲|片头曲|片尾曲|插曲)\s*$/i, '')
       .trim();
   } else {
+    // 「Ado (cover)」：翻唱標記不是歌手名的一部分。
+    text = text.replace(/\s*[(（\[【]\s*cover(?:ed)?\s*[)）\]】]\s*$/i, '').trim();
     const knownPrefix = matchLeadingKnownArtist(text);
     if (knownPrefix && /^[、,，]/.test(text.slice(knownPrefix.length))) text = knownPrefix;
   }
@@ -327,11 +394,16 @@ function matchLeadingKnownArtist(text) {
   return best ? text.slice(0, best.length) : null;
 }
 
-function looksLikeArtist(value) {
+function looksLikeArtist(value, { strict = false } = {}) {
   const text = compactSpaces(value);
   if (!text) return false;
   if (isKnownArtist(text)) return true;
-  if (/\b(?:feat\.?|ft\.?|with|and|x|vs\.?)\b|[&×]|樂團|乐团|合唱團|合唱团| orchestra\b/i.test(text)) return true;
+  // with／and／x／vs 也常出現在一般英文歌名裡（Stay With Me、Me and You、Dancing With Your Ghost）。
+  // strict 模式只認比較明確的合作標記，給「要不要把連字號左右對調」這種會整個顛倒結果的判斷用。
+  const collaboration = strict
+    ? /\b(?:feat\.?|ft\.?)(?=\s|$)|[&×]|樂團|乐团|合唱團|合唱团| orchestra\b/i
+    : /\b(?:feat\.?|ft\.?|with|and|x|vs\.?)\b|[&×]|樂團|乐团|合唱團|合唱团| orchestra\b/i;
+  if (collaboration.test(text)) return true;
   // 中英並列藝名（例如「林俊傑 JJ Lin」）比一般歌名更像歌手欄位。
   if (/\p{Script=Han}.*\b[A-Za-z][A-Za-z .'-]{2,}\b/u.test(text)) return true;
   return false;
@@ -342,6 +414,7 @@ module.exports = {
   stripNoiseBracketGroups,
   repairBrackets,
   PROMO_TAIL,
+  PROMO_PAREN,
   PUBLISHER_TAIL,
   PUBLISHER_HEAD,
   isLabelArtist,

@@ -20,7 +20,9 @@ const twitchRewardSettings = require('../../public/js/twitch-reward-settings');
 const bgmSettingsSchema = require('../services/bgm-settings');
 const obsLocale = require('../utils/obs-locale');
 const { createLogger } = require('../utils/logger');
-const { sanitizePlaylist, sanitizeJsonObject } = require('../utils/track-schema');
+const { TEMPLATE_IDS, templateOverrides, sanitizeLyricPosition, APPEARANCE_VERSION } = require('../../public/js/lyric-template-defaults');
+const PlaybackSequence = require('../../public/js/playback-sequence');
+const { sanitizeTrack, sanitizeParsedLyrics, MAX_PLAYLIST_SIZE, sanitizeJsonObject, lrcDefaultOffset } = require('../utils/track-schema');
 const libraryStore = require('../services/library-store');
 const { emitToAccessRooms } = require('../utils/socket-broadcast');
 const { isTemplateOff, resolveTemplateId } = require('../utils/seasonal-templates');
@@ -30,6 +32,38 @@ const STATE_SYNC_WARN_BYTES = 512 * 1024;
 const STATE_SYNC_LOG_EVERY = 100;
 const STATE_SYNC_WARN_INTERVAL_MS = 60 * 1000;
 const READ_ONLY_TRACK_FIELDS = ['filename', 'url', 'cover', 'originalName', 'audioAvailable', 'audioMissing'];
+const LYRIC_FIELDS = new Set(['lyrics', 'parsedLyrics', 'manualLyrics']);
+const deferredParsedLyricsGetters = new WeakSet();
+
+function trackMetadata(track) {
+  const metadata = {};
+  for (const key of Object.keys(track)) {
+    if (!LYRIC_FIELDS.has(key)) Object.defineProperty(metadata, key, {
+      value: track[key], enumerable: true, configurable: true, writable: true,
+    });
+  }
+  return metadata;
+}
+
+function hasDeferredParsedLyrics(track) {
+  const getter = Object.getOwnPropertyDescriptor(track, 'parsedLyrics')?.get;
+  return !!getter && deferredParsedLyricsGetters.has(getter);
+}
+
+function deferParsedLyrics(track, id) {
+  function materialize(value) {
+    Object.defineProperty(this, 'parsedLyrics', { value, enumerable: true, configurable: true, writable: true });
+    return value;
+  }
+  function getParsedLyrics() {
+    const value = sanitizeParsedLyrics(libraryStore.getEntry(id)?.parsedLyrics);
+    return materialize.call(this, value);
+  }
+  deferredParsedLyricsGetters.add(getParsedLyrics);
+  Object.defineProperty(track, 'parsedLyrics', {
+    enumerable: true, configurable: true, get: getParsedLyrics, set: materialize,
+  });
+}
 
 // OBS / setlist renderers need song identity and lyrics, but never the media
 // file location or its original remote source. Keep this as a narrow,
@@ -44,22 +78,8 @@ function redactTrackForReadOnly(track) {
 function getDefaultLyricSettings() {
   return {
     template: 'classic',
-    lyricTemplateSettings: {
-      classic: { template: 'classic', fontSize: 56, color: '#8f8f8f', activeColor: '#febc6c', verticalPosition: 'flex-end' },
-      pulse: { template: 'pulse', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
-      facet: { template: 'facet', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
-      drift: { template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
-      aura: { template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
-      ktv: { template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center', ktvInterludeText: '', ktvEndingText: '' },
-      columnflow: { template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowEntrance: 'native', columnflowPlacement: 'split', columnflowMaxLines: 4, animationIntensity: 'normal' },
-      paperstrip: { template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
-      mirror: { template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
-      particle: { template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', animationIntensity: 'normal', lyricPosition: 'center', verticalPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto' },
-      jizura: { template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth', jizuraParts: 'base', jizuraHeavy: false, jizuraLarge: false, jizuraHorror: false },
-      lightboard: { template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
-      spellbook: { template: 'spellbook', fontSize: 60, fontWeight: 900, color: '#f4ead6', activeColor: '#ff9a3c', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 2, animationIntensity: 'normal', spellbookEffect: 'rune', spellbookPosition: 'bottom' },
-      typewriter: { template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
-    },
+    appearanceVersion: APPEARANCE_VERSION,
+    lyricTemplateSettings: Object.fromEntries(TEMPLATE_IDS.map(id => [id, { ...templateOverrides(id), appearanceVersion: APPEARANCE_VERSION }])),
   };
 }
 
@@ -70,7 +90,7 @@ function getDefaultLyricSettings() {
 // 顯示一個對它完全無效的「整體大小倍率」（--sl-scale 被 #setlist-root 的非 classic
 // 重置規則清空），使用者實測回報調了沒反應；真正能動它的「場景版設定」滑桿反而被藏起來。
 const SETLIST_SCENE = ['timeline', 'diagonal', 'constellation', 'film'];
-const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'minimal-board'];
+const SETLIST_LAYOUTS = ['classic', 'simple', 'timeline', 'diagonal', 'constellation', 'terminal', 'billboard', 'cards', 'signal', 'index', 'label', 'glow', 'round', 'pager', 'haunt', 'flap', 'note', 'film', 'now-playing', 'minimal-board'];
 
 /**
  * 建立狀態容器
@@ -112,6 +132,7 @@ function createAppState(io) {
     pitchShift: 0,      // 半音偏移，-12 ~ +12
     playbackRate: 1.0,   // 播放速率，0.5 ~ 1.5
     metronomeEnabled: true, // 前奏倒數提示開關
+    outroPauseFinishSec: PlaybackSequence.OUTRO_PAUSE_FINISH_SEC_DEFAULT, // 尾奏暫停後幾秒自動收尾（0＝關閉）
     lyricSettings: getDefaultLyricSettings(), // 歌詞外觀/位置設定（由控制面板推送）
     styleOverrides: {},     // 動畫風格微調（速度/放大/光暈等，覆蓋當前 preset）
     // OBS 疊加層（/display、/setlist）用哪個語言顯示。'follow' = 跟著面板當下的語言，
@@ -225,12 +246,20 @@ function createAppState(io) {
    */
   function restorePersistedPlaylist(savedPlaylist) {
     if (!Array.isArray(savedPlaylist)) return [];
-    const hydrated = savedPlaylist.map((savedTrack) => {
-      if (!savedTrack || typeof savedTrack !== 'object' || !savedTrack.id) return savedTrack;
-      const libraryEntry = libraryStore.getEntry(savedTrack.id);
-      return libraryEntry ? { ...libraryEntry, ...savedTrack } : savedTrack;
-    });
-    return sanitizePlaylist(hydrated) || [];
+    const restored = [];
+    for (const savedTrack of savedPlaylist.slice(0, MAX_PLAYLIST_SIZE)) {
+      const libraryEntry = savedTrack && typeof savedTrack === 'object' && savedTrack.id
+        ? libraryStore.getEntry(savedTrack.id) : null;
+      const merged = libraryEntry ? { ...libraryEntry, ...savedTrack } : savedTrack;
+      const deferWords = libraryEntry && libraryStore.isEntryDurable?.(savedTrack.id)
+        && !Object.hasOwn(savedTrack, 'parsedLyrics')
+        && Array.isArray(libraryEntry.parsedLyrics) && libraryEntry.parsedLyrics.length > 0;
+      const clean = sanitizeTrack(deferWords ? { ...merged, parsedLyrics: null } : merged);
+      if (!clean) continue;
+      if (deferWords) deferParsedLyrics(clean, String(savedTrack.id));
+      restored.push(clean);
+    }
+    return restored;
   }
 
   /**
@@ -241,13 +270,7 @@ function createAppState(io) {
   function persistedPlaylistSnapshot() {
     return playState.playlist.map((track) => {
       if (!track || !libraryStore.isEntryDurable(track.id)) return track;
-      const {
-        lyrics: _lyrics,
-        parsedLyrics: _parsedLyrics,
-        manualLyrics: _manualLyrics,
-        ...compact
-      } = track;
-      return compact;
+      return trackMetadata(track);
     });
   }
 
@@ -277,8 +300,21 @@ function createAppState(io) {
     }
     if (typeof saved.showRomanization === 'boolean') playState.showRomanization = saved.showRomanization;
     if (typeof saved.metronomeEnabled === 'boolean') playState.metronomeEnabled = saved.metronomeEnabled;
+    if (saved.outroPauseFinishSec !== undefined) playState.outroPauseFinishSec = PlaybackSequence.normalizeOutroPauseFinishSec(saved.outroPauseFinishSec);
     if (saved.lyricSettings && typeof saved.lyricSettings === 'object') {
-      playState.lyricSettings = sanitizeJsonObject(saved.lyricSettings) || {};
+      const settings = sanitizeJsonObject(saved.lyricSettings) || {};
+      sanitizeLyricPosition(settings, settings.template, true);
+      for (const [id, snapshot] of Object.entries(settings.lyricTemplateSettings || {})) {
+        if (snapshot && typeof snapshot === 'object') sanitizeLyricPosition(snapshot, id, true);
+      }
+      if (Array.isArray(settings.lyricPresets)) {
+        for (const preset of settings.lyricPresets) {
+          if (preset?.settings && typeof preset.settings === 'object') {
+            sanitizeLyricPosition(preset.settings, preset.settings.template, true);
+          }
+        }
+      }
+      playState.lyricSettings = settings;
       // 季節限定模板下架期間，舊存檔選到它就換回預設模板（模板自己的設定保留）
       if (isTemplateOff(playState.lyricSettings.template)) {
         playState.lyricSettings.template = resolveTemplateId(playState.lyricSettings.template);
@@ -344,13 +380,13 @@ function createAppState(io) {
     // v1 相容：舊 shared 樣式先複製給每個模板，三個場景的獨立值再覆蓋。
     if (saved.setlistStyle && typeof saved.setlistStyle === 'object') {
       SETLIST_LAYOUTS.forEach((layout) => {
-        playState.setlistTemplateStyles[layout] = { ...playState.setlistTemplateStyles[layout], ...saved.setlistStyle };
+        setlistStyleSchema.validateAndApply(saved.setlistStyle, playState.setlistTemplateStyles[layout]);
       });
     }
     if (saved.setlistSceneStyles && typeof saved.setlistSceneStyles === 'object') {
       SETLIST_SCENE.forEach((k) => {
         if (saved.setlistSceneStyles[k] && typeof saved.setlistSceneStyles[k] === 'object') {
-          playState.setlistTemplateStyles[k] = { ...playState.setlistTemplateStyles[k], ...saved.setlistSceneStyles[k] };
+          setlistStyleSchema.validateAndApply(saved.setlistSceneStyles[k], playState.setlistTemplateStyles[k]);
         }
       });
     }
@@ -358,7 +394,7 @@ function createAppState(io) {
     if (saved.setlistTemplateStyles && typeof saved.setlistTemplateStyles === 'object') {
       SETLIST_LAYOUTS.forEach((layout) => {
         if (saved.setlistTemplateStyles[layout] && typeof saved.setlistTemplateStyles[layout] === 'object') {
-          playState.setlistTemplateStyles[layout] = { ...playState.setlistTemplateStyles[layout], ...saved.setlistTemplateStyles[layout] };
+          setlistStyleSchema.validateAndApply(saved.setlistTemplateStyles[layout], playState.setlistTemplateStyles[layout]);
         }
       });
     }
@@ -404,7 +440,7 @@ function createAppState(io) {
         playState.currentTime = 0;
         // 重開後只恢復待命／暫停狀態，不可自行出聲；使用者按播放後從頭開始。
         playState.isPlaying = false;
-        playState.currentOffset = trackOffsets.get(restoredTrack.id) || 0;
+        playState.currentOffset = trackOffsets.has(restoredTrack.id) ? trackOffsets.get(restoredTrack.id) : lrcDefaultOffset(restoredTrack);
         playState.pitchShift = trackPitch.has(restoredTrack.id) ? trackPitch.get(restoredTrack.id) : 0;
         playState.playbackRate = trackSpeed.has(restoredTrack.id) ? trackSpeed.get(restoredTrack.id) : 1.0;
         if (playState.currentTrackStarted) markTrackPlayed(restoredTrack);
@@ -450,6 +486,7 @@ function createAppState(io) {
       romanizationMode: playState.romanizationMode,
       showRomanization: playState.showRomanization,
       metronomeEnabled: playState.metronomeEnabled,
+      outroPauseFinishSec: playState.outroPauseFinishSec,
       lyricSettings: playState.lyricSettings,
       trackOffsets: Object.fromEntries(trackOffsets),
       trackSyncConfirmed: [...trackSyncConfirmed],
@@ -578,11 +615,16 @@ function createAppState(io) {
     const t = playState.currentTrack;
     if (!t || !t.id) return;
     const last = session.songs[session.songs.length - 1];
-    if (last && last.id === t.id) return;
+    // 同一列重新播放（從頭再唱、暫停後繼續）不重複記；但清單裡排了兩次同一首（安可、觀眾點了已唱過的歌）
+    // 是真的唱了兩次——舊版只比歌曲 id，連續兩列同一首時第二次不會出現在已唱歌單與 YouTube 章節。
+    if (last && last.id === t.id && (last.playlistEntryId || null) === (playlistEntryId(t) || null)) return;
     const counting = session.active && session.startedAt != null;
     session.songs.push({
       id: t.id,
       entryId: crypto.randomUUID(), // 同一首歌可能唱兩次（id 重複），單獨刪除要認這個才唯一
+      // 播放清單那一列的 entryId：從已唱歌單刪掉這筆時，要連「已唱進度」一起還原，
+      // 不然這首會同時從已唱跟接下來兩邊消失（見 handlers/setlist.js 的 session:remove-song）。
+      playlistEntryId: playlistEntryId(t) || null,
       title: t.title || '',
       artist: t.artist || '',
       startedAt: Date.now(),
@@ -648,23 +690,22 @@ function createAppState(io) {
   function getTrackPayload(track, { includeLyrics = false, offset, exists } = {}) {
     if (!track) return null;
     const manual = manualLyricsCache.get(track.id);
-    const { lyrics, parsedLyrics } = track;
     // A playlist summary uses an explicit whitelist below. Copying every other
     // field first only creates a discarded object for each of up to 2000 tracks.
     let summary;
     if (includeLyrics) {
-      const { lyrics: _lyrics, parsedLyrics: _parsedLyrics, manualLyrics: _storedManualLyrics, ...metadata } = track;
-      summary = metadata;
+      summary = trackMetadata(track);
     }
-    const effectiveLyrics = manual ? manual.lyrics : lyrics;
+    const effectiveLyrics = manual ? manual.lyrics : track.lyrics;
     const effectiveLyricsType = manual ? manual.lyricsType : track.lyricsType;
-    const effectiveParsedLyrics = manual ? manual.parsedLyrics : parsedLyrics;
+    const deferred = !manual && !includeLyrics && hasDeferredParsedLyrics(track);
+    const effectiveParsedLyrics = manual ? manual.parsedLyrics : (deferred ? null : track.parsedLyrics);
     const effectiveOffset = typeof offset === 'number' ? offset : (trackOffsets.get(track.id) || 0);
     const effectivePitch = trackPitch.has(track.id) ? trackPitch.get(track.id) : 0;
     const effectiveRate = trackSpeed.has(track.id) ? trackSpeed.get(track.id) : 1.0;
     const effectiveVolume = trackVolume.has(track.id) ? trackVolume.get(track.id) : null;
     const effectiveTemplate = trackTemplate.has(track.id) ? trackTemplate.get(track.id) : null;
-    const hasLyrics = !!effectiveLyrics || (Array.isArray(effectiveParsedLyrics) && effectiveParsedLyrics.length > 0);
+    const hasLyrics = !!effectiveLyrics || deferred || (Array.isArray(effectiveParsedLyrics) && effectiveParsedLyrics.length > 0);
     const audio = libraryStore.audioStatus(track, exists);
 
     // currentTrack 只有一首，可以保留完整 metadata 供歌詞編輯／播放；playlist 最多 2000 列，
@@ -758,6 +799,12 @@ function createAppState(io) {
   }
 
   function buildStateSnapshot(enrichedPlaylist, exists) {
+    // Both timestamps belong to this server. A remote OBS clock may differ by
+    // hours; it must never be subtracted from lastStateUpdateTimestamp.
+    // An old/invalid anchor cannot safely predict indefinitely into the future.
+    const age = Number.isFinite(playState.lastStateUpdateTimestamp)
+      ? Date.now() - playState.lastStateUpdateTimestamp : NaN;
+    const playbackAgeMs = Number.isFinite(age) && age >= 0 && age <= 30000 ? age : 0;
     return {
       currentTrack: playState.currentTrack
         ? getTrackPayload(playState.currentTrack, { includeLyrics: true, offset: playState.currentOffset, exists })
@@ -777,9 +824,11 @@ function createAppState(io) {
       pitchShift: playState.pitchShift,
       playbackRate: playState.playbackRate,
       metronomeEnabled: playState.metronomeEnabled,
+      outroPauseFinishSec: playState.outroPauseFinishSec,
       lyricSettings: playState.lyricSettings,
       // 附帶伺服器時間戳，讓 OBS 重連時計算補償
       serverTimestamp: playState.lastStateUpdateTimestamp,
+      playbackAgeMs,
       // Setlist（含現在/未唱，初次同步即完整）
       session: setlistPayload({ includeStyles: false }),
     };

@@ -19,6 +19,17 @@ its SHA-256, and copies of LICENSE.txt and THIRD_PARTY_LICENSES.txt fetched
 from the matching upstream release tag at build time.
 Source and license: https://github.com/yt-dlp/yt-dlp
 
+OpenPGP.js 6.3.2
+----------------
+Copyright OpenPGP.js contributors. GNU LGPL v3 or later.
+Used unchanged to verify yt-dlp's detached checksum signatures against the
+app-pinned official public key. The package's LGPL text remains in
+app/node_modules/openpgp/LICENSE; copies of LGPL v3 and GPL v3 also ship as
+public/vendor/licenses/OpenPGP-LGPL-3.0.txt and OpenPGP-GPL-3.0.txt.
+Source: https://github.com/openpgpjs/openpgpjs/tree/5f33328a3b601fb9c9dce310d1ecc137db0dbc75
+Modifying the packaged library requires rebuilding matching ASAR integrity
+data, as described in the EULA; no exception bypasses application integrity.
+
 bgutil-ytdlp-pot-provider 2.0.0 (preselected; not yet bundled)
 ----------------------------------------------------------------
 Elitesand Pro has preselected bgutil-ytdlp-pot-provider 2.0.0 as its preferred
@@ -41,7 +52,9 @@ FFmpeg (not bundled by default; downloaded on demand)
 Elitesand Pro does not bundle ffmpeg.exe/ffprobe.exe by default. After the first-run terms are accepted, and before an FFmpeg-dependent
 import (e.g. YouTube-to-MP3), the app checks for both tools and offers
 to download a prebuilt Windows binary and verifies its SHA-256 against a
-checksum fetched from the same release before using it.
+SHA-256 pinned in the protected application before using it. Checksums or
+digests fetched alongside a new upstream archive are not accepted as a new
+runtime trust root; approving a different build requires a reviewed app update.
 
 The primary download source is the BtbN FFmpeg-Builds "win64-lgpl" build,
 which is configured without GPL-only components and is distributed under the
@@ -80,10 +93,16 @@ GSAP 3.12.5
 -----------
 Copyright GreenSock / Webflow. Used under the GSAP Standard No Charge License.
 License: https://gsap.com/community/standard-license/
+The current upstream terms were checked on 2026-11-14. They cover commercial
+usage but restrict certain competing visual animation builders. This notice
+does not determine which historical terms apply to the vendored 3.12.5 copy
+or obtain the licensor's consent for a restricted use.
 
 Tone.js 14.7.77
 ---------------
 Copyright Yotam Mann and contributors. MIT License.
+The complete MIT license from the tone@14.7.77 package ships as
+public/vendor/licenses/Tone-MIT.txt.
 Source: https://github.com/Tonejs/Tone.js
 
 SoundTouch JS 0.3.0
@@ -91,6 +110,11 @@ SoundTouch JS 0.3.0
 Copyright Olli Parviainen, Ryan Berdeen, Jakub Fiala, Steve Blades and
 contributors. GNU Lesser General Public License v2.1 or later. The license
 header is retained in public/vendor/soundtouch-worklet.js.
+The complete LGPL 2.1 text ships as public/vendor/soundtouch-LGPL-2.1.txt.
+The distributed JavaScript source, including the application's transport
+changes, is public/vendor/soundtouch-worklet.js. Installed app.asar integrity
+checks require a modified package to be rebuilt with matching integrity data;
+the EULA does not promise that editing the existing archive will bypass them.
 Source: https://github.com/cutterbl/SoundTouchJS
 
 Signalsmith Stretch 1.3.2
@@ -114,6 +138,10 @@ WebGPU engine:
 
 CUDA / CPU engine (via python-audio-separator):
   python-audio-separator — MIT.
+  Runtime package versions and artifact hashes are recorded in the packaged
+  server/services/python-locks directory. AI, section-analysis and bootstrap
+  installers use app-pinned package trust data, including transitive
+  dependencies; existing legacy environments are not retroactively verified.
   Source: https://github.com/nomadkaraoke/python-audio-separator
   Model "vocals_mel_band_roformer.ckpt" — Mel-Band RoFormer vocal weights by
   Kimberley Jensen, MIT.
@@ -124,6 +152,33 @@ CUDA / CPU engine (via python-audio-separator):
 Both model families implement the architecture described in:
   Wang, Ju-Chiang; Lu, Wei-Tsung; Won, Minz. "Mel-Band RoFormer for Music
   Source Separation." arXiv:2310.01809 (2023).
+
+Song-section analysis (not bundled; downloaded on demand)
+----------------------------------------------------------
+This optional feature downloads SongFormer, MuQ and MusicFM separately from
+the vocal-separation models above. Their source and checkpoint licenses
+must not be treated as interchangeable.
+
+SongFormer source at 139b2aa3b14bd1c6d961d0994e9fc975f1ef7fd5 declares
+CC BY 4.0; retain upstream attribution and identify application-side changes.
+Source/license: https://github.com/ASLP-lab/SongFormer/blob/139b2aa3b14bd1c6d961d0994e9fc975f1ef7fd5/LICENSE
+
+MuQ source at 28847ea50cd31ac4b8b6a7dacc051ad7d1c7606a is MIT licensed
+(Copyright Tencent). Its OpenMuQ/MuQ-large-msd-iter MODEL WEIGHTS are
+CC BY-NC 4.0 (non-commercial), as stated in LICENSE_weights and the official
+model card checked on 2026-11-14. The source-code MIT license does not grant
+commercial rights to those weights. Any needed additional permission must
+come from the rights holder before commercial deployment of this feature.
+Source/license: https://github.com/tencent-ailab/MuQ/tree/28847ea50cd31ac4b8b6a7dacc051ad7d1c7606a
+Weights: https://huggingface.co/OpenMuQ/MuQ-large-msd-iter
+
+MusicFM source at b83ebedb401bcef639b26b05c0c8bee1dc2dfe71 uses MIT
+(Copyright 2023 ByteDance Inc.), except modules/flash_conformer.py under
+Apache-2.0. Its official checkpoint repository currently labels itself MIT;
+that metadata alone does not resolve all terms for checkpoints rehosted by
+SongFormer, training datasets or other third-party material.
+Source/license: https://github.com/minzwon/musicfm/blob/b83ebedb401bcef639b26b05c0c8bee1dc2dfe71/LICENSE
+Weights: https://huggingface.co/minzwon/MusicFM
 
 Precise sync component (not bundled; downloaded on demand)
 ----------------------------------------------------------
@@ -153,8 +208,57 @@ conveys any right to that content — see the closing paragraph below.
 
 OpenCC JS / OpenCC data
 -----------------------
-OpenCC JS is MIT licensed. OpenCC conversion data has its own notices.
+OpenCC JS is MIT licensed (Copyright 2020-2021 The nk2028 Project).
+The generated conversion dictionaries derive from opencc-data (Apache-2.0).
+Its complete license and notices ship as
+public/vendor/licenses/OpenCC-data-NOTICES.txt; package-level licenses also
+remain in app/node_modules/opencc-js.
 Source: https://github.com/nk2028/opencc-js
+
+kuromoji 0.1.2 and IPADIC dictionary
+-----------------------------------
+Copyright Takuya Asano and contributors. kuromoji.js is Apache-2.0 licensed;
+the complete license remains in app/node_modules/kuromoji/LICENSE-2.0.txt.
+The embedded mecab-ipadic-2.7.0-20070801 dictionary has separate NAIST and
+ICOT notices, reproduced verbatim in
+public/vendor/licenses/kuromoji-IPADIC-NOTICE.txt.
+Source: https://github.com/takuyaa/kuromoji.js
+
+Haqumei 0.12.0 and Python 3.11.9 embeddable
+------------------------------------------
+The bundled Japanese G2P runtime includes Haqumei's dictionary and the
+Windows Python embeddable runtime. The build verifies both archive hashes.
+Complete license and NOTICE files from the Haqumei wheel are copied to
+licenses/haqumei (resources/licenses/haqumei in the installer), together with
+PROVENANCE.txt identifying the exact wheel and Python archive. Python's
+PSF license and historical notices remain in tools/g2p/LICENSE.txt
+(resources/tools/g2p/LICENSE.txt in the installer).
+Sources: https://pypi.org/project/haqumei/0.12.0/
+         https://www.python.org/downloads/release/python-3119/
+
+Spout2 SDK
+-----------
+Copyright (c) 2020-2024, Lynn Jarvis. BSD 2-Clause License.
+The native Spout addon is built against commit
+f49e2f469f8cb25f559a6eaa61a3f5b8173fc100. The complete license from that
+commit ships as public/vendor/licenses/Spout2-BSD-2-Clause.txt.
+Source: https://github.com/leadedge/Spout2
+
+Additional bundled fonts
+------------------------
+IBM Plex Sans and IBM Plex Mono: Copyright 2019 IBM Corp.; SIL OFL 1.1.
+Full notice: public/fonts/OFL-IBM-Plex.txt.
+Fraunces, Manrope, and JetBrains Mono (Latin subsets from Fontsource): SIL OFL 1.1.
+Full notices: public/fonts/OFL-fraunces.txt, public/fonts/OFL-manrope.txt,
+and public/fonts/OFL-jetbrains-mono.txt.
+Kongyuan Sans L: SIL OFL 1.1; public/assets/fonts/kongyuan/OFL-1.1.txt
+and NOTICE.txt identify its source.
+Cubic 11 v1.500 (ACh-K) and BoutiqueBitmap9x9 1.93 (Cen-cyun Liu / Luke Liu):
+the complete upstream permission, derivative-font and attribution terms
+are preserved in each directory's OFL.txt and NOTICE.txt under
+public/assets/fonts/cubic11 and public/assets/fonts/boutique9x9.
+Those filenames do not by themselves identify the license: retain the
+actual text, including notices for their M+ and other bitmap font sources.
 
 Subscription / gift / raid shows (public/alert-show)
 ----------------------------------------------------
@@ -169,8 +273,8 @@ Creative Commons 0 (public domain dedication) and from Kenney asset packs
 
 npm dependencies
 ----------------
-The package contains npm dependencies under MIT, Apache-2.0, BSD, ISC and
-other open-source licenses. Their package-level LICENSE/COPYING files remain
+The package contains npm dependencies under MIT, Apache-2.0, BSD, ISC, and
+LGPL-3.0-or-later (OpenPGP.js). Their package-level LICENSE/COPYING files remain
 inside app/node_modules. The portable builder also writes
 licenses/npm-license-inventory.json with package names, versions and declared
 license identifiers.

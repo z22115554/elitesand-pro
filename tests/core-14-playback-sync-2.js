@@ -1,5 +1,7 @@
 'use strict';
 
+const { TEMPLATE_IDS, templateDefaults } = require('../public/js/lyric-template-defaults');
+
 // 核心回歸測試（playback-sync-2）。由 tests/run-tests.js 依序載入，不要單獨執行。
 const {
   fs,
@@ -38,9 +40,9 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   const transformNoneGroup = (displayCss.match(/([^}]*)\{\s*transform:\s*none;\s*\}/) || [])[1] || '';
   ok(transformNoneGroup.includes('body.template-typewriter #lyrics-container'),
     '打字機是固定構圖模板，#lyrics-container 必須列入 transform: none: ');
-  ok(lyricExtras.includes("typewriter: { label: '對話氣泡'") && lyricExtras.includes("template: 'typewriter'"), '桌面設定必須提供打字機能力與獨立預設: ');
-  ok(lyricsHandler.includes("'mirror', 'typewriter'"), 'server 模板白名單必須接受 typewriter: ');
-  ok(appState.includes("typewriter: { template: 'typewriter'"), 'server 預設 lyricTemplateSettings 必須包含 typewriter: ');
+  ok(lyricExtras.includes("typewriter: { label: '對話氣泡'") && TEMPLATE_IDS.includes('typewriter'), '桌面設定必須提供打字機能力與獨立預設: ');
+  ok(TEMPLATE_IDS.includes('typewriter'), 'server 模板白名單必須接受 typewriter: ');
+  ok(templateDefaults('typewriter').template === 'typewriter', 'server 預設 lyricTemplateSettings 必須包含 typewriter: ');
   ok(i18n.includes("'template.typewriter':"), '打字機模板名稱必須有五語 i18n key: ');
   ok(panelHtml.includes('data-template="typewriter"') && controllerHtml.includes('class="ctrl-template-btn" data-template="typewriter"'), '桌面與手機模板選擇器都要有打字機卡片: ');
   // 聊天室：已唱不消失、往上疊（不再逐顆淡出移除）
@@ -63,17 +65,17 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
     && /\.tw-bubble\.tw-right\s*\{[^}]*text-align:\s*right/.test(displayCss),
     '打字機泡泡換行時必須左側置左、右側置右，不可置中: ');
   ok(displayJsSrc.includes("'--tw-bubble-right'") && displayJsSrc.includes("'--tw-bubble-left'"), 'display.js 必須把泡泡底色寫成 CSS 變數: ');
-  ok(lyricExtras.includes("key: 'twBubbleRight'") && lyricExtras.includes("key: 'twBubbleLeft'") && lyricExtras.includes("twBubbleRight: '#0b93f6'"), '桌面設定必須提供左右泡泡底色控制與預設: ');
+  ok(lyricExtras.includes("key: 'twBubbleRight'") && lyricExtras.includes("key: 'twBubbleLeft'") && templateDefaults('typewriter').twBubbleRight === '#0b93f6', '桌面設定必須提供左右泡泡底色控制與預設: ');
   ok(lyricExtras.includes('typewriter-colors-field') && lyricExtras.includes('!isTypewriter'), '泡泡底色欄位必須只在打字機時顯示: ');
   ok(panelHtml.includes('id="typewriter-colors-field"') && panelHtml.includes('id="ls-tw-bubble-right"') && panelHtml.includes('id="ls-tw-bubble-left"'), 'index.html 必須有打字機泡泡底色欄位: ');
-  ok(appState.includes("lyricPosition: 'split'") && /typewriter: \{ template: 'typewriter'[^}]*twBubbleRight/.test(appState), 'server 預設必須含打字機靠邊與泡泡底色: ');
+  ok(templateDefaults('typewriter').lyricPosition === 'split' && !!templateDefaults('typewriter').twBubbleRight, 'server 預設必須含打字機靠邊與泡泡底色: ');
   // 左右邊距挪到「歌詞位置」下面、且打字機沒有「置中」靠邊
   ok(panelHtml.includes('id="typewriter-padding-field"') && panelHtml.includes('id="ls-tw-padding-x"'), '打字機的左右邊距必須拉到主設定頁「歌詞位置」下面: ');
   ok(panelHtml.includes('id="padding-x-field"') && lyricExtras.includes("getElementById('padding-x-field')") && lyricExtras.includes('modalPaddingXField.hidden = isTypewriter'), '打字機時詳細設定裡的左右邊距必須收起（挪走不是複製）: ');
   ok(lyricExtras.includes('data-lyric-pos="center"]') && lyricExtras.includes('posCenterBtn.hidden = isTypewriter'), '打字機的靠邊選擇不可有「置中」: ');
   ok(lyricExtras.includes("out.typewriter.lyricPosition === 'center'") && lyricExtras.includes("settings.template === 'typewriter' && settings.lyricPosition === 'center'"), '舊快照存了 center 必須被歸成 split: ');
-  // 向內（往中央）可調範圍放寬 — 所有舞台模板一起
-  ok(lyricExtras.includes('STAGE_OFFSET_X_INWARD = 700'), '舞台模板向內位移範圍必須放寬到 700: ');
+  ok(lyricExtras.includes('input.min = String(-MAX_OFFSET)') && lyricExtras.includes('input.max = String(MAX_OFFSET)'),
+    '各模板採用同一組雙向輸入範圍: ');
   // 底部進度條開關（放在「歌詞顯示模式」）
   ok(lyricExtras.includes('showProgressBar: true') && lyricExtras.includes("bindGlobalToggle('ls-progress-bar', 'showProgressBar')"), '底部進度條必須有設定鍵與控制項: ');
   ok(panelHtml.includes('id="ls-progress-bar"') && panelHtml.includes('底部進度條'), 'index.html「歌詞顯示模式」必須有底部進度條開關: ');
@@ -137,7 +139,7 @@ test('打字機模板：registry 時間驅動、完整接入設定／伺服器�
   const indexSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8');
   ok(indexSrc.includes("app.get('/typewriter-sticker/:filename'") && indexSrc.includes('startsWith(stickersDir + path.sep)'),
     'server 必須靜態送出自訂貼圖並擋路徑穿越: ');
-  ok(lyricExtras.includes("twStickerEnabled: true") && lyricExtras.includes("twStickerGapMs: 6000")
+  ok(templateDefaults('typewriter').twStickerEnabled === true && templateDefaults('typewriter').twStickerGapMs === 6000
     && lyricExtras.includes("key: 'twStickerEnabled'") && lyricExtras.includes('function initTypewriterStickerControls'),
     '桌面設定必須有貼圖開關／門檻／圖庫管理: ');
   ok(panelHtml.includes('id="tw-sticker-field"') && panelHtml.includes('id="tw-sticker-gallery"')
@@ -200,9 +202,9 @@ test('萬聖咒字：七種逐字效果一個模板、時間驅動、吃通用�
   const controllerHtml = read('public/controller.html');
   const controllerJs = read('public/js/controller.js');
   ok(read('public/display.html').includes('/js/lyric-template-spellbook.js'), 'display 必須載入萬聖咒字: ');
-  ok(lyricsHandler.includes("'spellbook'") && lyricsHandler.includes("['rune', 'ouija', 'bats', 'drip', 'talisman', 'moon', 'thread', 'cycle'].includes(settings.spellbookEffect)"),
+  ok(TEMPLATE_IDS.includes('spellbook') && lyricsHandler.includes("['rune', 'ouija', 'bats', 'drip', 'talisman', 'moon', 'thread', 'cycle'].includes(settings.spellbookEffect)"),
     '伺服器白名單必須接受 spellbook 並驗證逐字效果: ');
-  ok(appState.includes("spellbook: { template: 'spellbook'") && lyricExtras.includes("spellbook: { ...DEFAULT_SETTINGS, template: 'spellbook'"),
+  ok(templateDefaults('spellbook').spellbookEffect === 'rune',
     '伺服器與面板都要有 spellbook 預設值: ');
   ok(/spellbook: \{ label: '萬聖咒字'[^\n]*positionMode: 'stage', supportsIntensity: true/.test(lyricExtras),
     '面板必須把萬聖咒字當成舞台位置模板（置中／偏左／偏右／左右分散＋位置微調）並開放動畫強度: ');
@@ -219,7 +221,8 @@ test('萬聖咒字：七種逐字效果一個模板、時間驅動、吃通用�
   ok(displayJs.includes("document.getElementById('spellbook-root')") && displayJs.includes('if (d.replay && isControllerPlaying && !previewSampleActive) return;'),
     '預覽端要真的播示範（不是停在一格），且真的有歌在播時不可被示範蓋掉: ');
   ok(panelHtml.includes('data-template="spellbook"') && controllerHtml.includes('data-template="spellbook"'), '桌面與手機都要能選萬聖咒字: ');
-  ok(controllerJs.includes("'particle', 'spellbook'].includes(template)") && controllerJs.includes("nextTemplate === 'spellbook' ? SPELLBOOK_DEFAULTS"),
+  ok(controllerJs.includes("'particle', 'spellbook'].includes(template)") && controllerJs.includes('...templateDefaults(nextTemplate)') &&
+    require('../public/js/lyric-template-defaults').templateDefaults('spellbook').spellbookEffect === 'rune',
     '手機首次切到萬聖咒字要套預設、並顯示動畫強度: ');
   const i18n = require('../public/js/i18n');
   const keys = ['template.spellbook', 'template.spellbookTitle', 'template.spellbookDesc', 'spellbook.effectLabel', 'spellbook.positionLabel',
@@ -272,8 +275,8 @@ test('燈牌：以 registry 時間驅動並完整接入設定與伺服器白名�
     '燈牌必須沿用逐字時間核心（缺時退回整句線性）: ');
   ok(!/setInterval\(/.test(lightboard),
     '燈牌不可自己開 setInterval 迴圈，時間一律由 onFrame 帶進來: ');
-  ok(lyricsHandler.includes("'lightboard'"), 'server 模板白名單必須接受 lightboard: ');
-  ok(appState.includes("lightboard: { template: 'lightboard'"), 'server 預設 lyricTemplateSettings 必須包含 lightboard: ');
+  ok(TEMPLATE_IDS.includes('lightboard'), 'server 模板白名單必須接受 lightboard: ');
+  ok(templateDefaults('lightboard').template === 'lightboard', 'server 預設 lyricTemplateSettings 必須包含 lightboard: ');
   ok(panelHtml.includes('data-template="lightboard"') && controllerHtml.includes('data-template="lightboard"'),
     '桌面與手機模板選擇器都要有 lightboard: ');
   for (const locale of ['zh-TW', 'en', 'ja', 'ko', 'zh-CN']) {
@@ -304,15 +307,15 @@ test('燈牌：以 registry 時間驅動並完整接入設定與伺服器白名�
     '字級要掛在機殼上，整台機器才會跟著字級等比縮放: ');
   ok(/\.lb-box\s*\{[^}]*width:\s*[\d.]+em/.test(displayCss),
     '燈箱寬度必須是 em（框跟著字級走）: ');
-  ok(lyricExtras.includes("lightboardFont: 'cubic11'") && panelHtml.includes('id="lightboard-font-field"'),
+  ok(templateDefaults('lightboard').lightboardFont === 'cubic11' && panelHtml.includes('id="lightboard-font-field"'),
     '燈牌必須有自己的字型二選一設定: ');
-  ok(lyricExtras.includes('if (fontFamilyFields) fontFamilyFields.hidden = isLightboard;')
+  ok(lyricExtras.includes('if (fontFamilyFields) fontFamilyFields.hidden = isLightboard || automaticTypography;')
     && panelHtml.includes('id="font-family-fields"'),
     '選燈牌時一般字體選單必須整塊收起（不支援其他字體）: ');
   ok(lyricsHandler.includes("['cubic11', 'boutique9x9'].includes(settings.lightboardFont)"),
     'server 必須把燈牌字型限制在兩款點陣字型: ');
-  ok(lyricExtras.includes('lightboardPan: true') && lyricExtras.includes('lightboardIdleMarquee: true')
-    && lyricExtras.includes('lightboardSlideIn: false'),
+  ok(templateDefaults('lightboard').lightboardPan === true && templateDefaults('lightboard').lightboardIdleMarquee === true
+    && templateDefaults('lightboard').lightboardSlideIn === false,
     '燈牌捲動預設：長句平移開、間奏跑馬開、進場滑入關: ');
   ok(lightboard.includes('HEAD_RATIO') && lightboard.includes('state.textW - boxW'),
     '長句平移必須夾在兩端之間，且讓正在唱的字留在燈箱內: ');
@@ -321,10 +324,10 @@ test('燈牌：以 registry 時間驅動並完整接入設定與伺服器白名�
     '間奏跑馬只在夠長的空檔跑（門檻可由面板調），並切換讀數: ');
   // 長間奏門檻可調（比照對話氣泡）：schema 宣告 int 1.5–20s、面板滑桿、server 夾限、預設 2500
   ok(lightboard.includes("key: 'lightboardIdleGapMs'") && lightboard.includes("target: 'data:lightboardIdleGapMs'")
-    && lyricExtras.includes("lightboardIdleGapMs: 2500") && lyricExtras.includes("key: 'lightboardIdleGapMs'")
+    && templateDefaults('lightboard').lightboardIdleGapMs === 2500 && lyricExtras.includes("key: 'lightboardIdleGapMs'")
     && panelHtml.includes('id="ls-lightboard-idle-gap"')
     && lyricsHandler.includes('settings.lightboardIdleGapMs = Number.isFinite(g)')
-    && appState.includes('lightboardIdleGapMs: 2500'),
+    && templateDefaults('lightboard').lightboardIdleGapMs === 2500,
     '燈牌長間奏門檻必須可調（schema／面板滑桿／server 夾 1.5–20s／app-state 預設）: ');
   // 間奏跑馬位移必須用真實時鐘(performance.now)自行累加、不吃會抖的歌詞時間軸，否則會「跑一下停一下」
   ok(lightboard.includes('idlePhasePx') && lightboard.includes('performance.now()')
@@ -394,7 +397,7 @@ test('直書句流「漂字」進場：四相漂入 + 動畫強度（取代原�
   ok(/columnflow:[^}]*supportsIntensity: true/.test(lyricExtras)
     && lyricExtras.includes("settings.template === 'columnflow' && settings.columnflowEntrance !== 'drift'"),
     '直書句流必須支援動畫強度，且只在「四相漂字」逐字進場顯示強度選項: ');
-  ok(appState.includes("columnflowEntrance: 'native'") && appState.includes("columnflowMaxLines: 4, animationIntensity: 'normal'"),
+  ok(templateDefaults('columnflow').columnflowEntrance === 'native' && templateDefaults('columnflow').animationIntensity === 'normal' && templateDefaults('columnflow').columnflowMaxLines === 4,
     'columnflow server 預設必須帶 columnflowEntrance 與 animationIntensity: ');
   ok(lyricsHandler.includes("['sen', 'fuda'].includes(settings.columnflowVariant)")
     && lyricsHandler.includes("['native', 'drift'].includes(settings.columnflowEntrance)"),
@@ -814,7 +817,8 @@ test('Live session records live on the home view and no longer occupy setlist se
 
 test('Setlist style save stays immediate, sends once, and ignores stale acknowledgements', () => {
   const setlistPanel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-setlist-panel.js'), 'utf8');
-  ok(setlistPanel.includes("SocketClient.sendWithCallback('setlist:style', collectStyle()"));
+  ok(setlistPanel.includes("SocketClient.sendWithCallback('setlist:style', { ...patch, target: setlistTarget() }"));
+  ok(setlistPanel.includes('sendStyle({ [f.key]: readVal(f, el) })'), '單欄更新不能重寫其他滑桿的數值');
   ok(!setlistPanel.includes("SocketClient.send('setlist:style', collectStyle())"), '不可在 ACK 儲存前再額外送一次：');
   ok(!setlistPanel.includes('styleSaveTimer'), '歌單預覽不可再因前端 debounce 延遲：');
   ok(setlistPanel.includes('const requestId = ++latestStyleSaveRequest;'));
@@ -1332,4 +1336,52 @@ test('yt-dlp packaged updater 成功後直接寫入 runtime trust hash，且重�
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test('歌單載入舊設定與模板快照時套用同一份範圍驗證', () => {
+  const store = require('../server/services/state-store');
+  const { ONE_TIME_FIX_NAMES } = require('../server/services/state-migrations');
+  const { createAppState } = require('../server/state/app-state');
+  const originalLoad = store.loadState;
+  try {
+    store.loadState = () => ({
+      oneTimeFixes: Object.fromEntries(ONE_TIME_FIX_NAMES.map((name) => [name, true])),
+      setlistStyle: { sizeNow: 80, textColor: '#123456' },
+      setlistSceneStyles: { film: { sizeNow: '35' } },
+      setlistTemplateStyles: {
+        classic: { shadowStrength: 35, sizeNow: ' ', textColor: '#abcdef' },
+        film: { sizeNow: Infinity, borderRadius: -10, bogus: 'ignored' },
+      },
+    });
+    const { classic, film } = createAppState({ emit() {} }).playState.setlistTemplateStyles;
+    eq(classic.sizeNow, 60);
+    eq(classic.shadowStrength, 35);
+    eq(classic.textColor, '#abcdef');
+    eq(film.sizeNow, 35);
+    eq(film.borderRadius, 0);
+    eq(film.bogus, undefined);
+  } finally {
+    store.loadState = originalLoad;
+  }
+});
+
+test('歌單面板只藏真的沒作用的設定，有效設定不能被誤藏', () => {
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app-setlist-panel.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const block = panel.match(/const OMITTED_LAYOUT_FIELDS = (\{[\s\S]*?\n  \});/);
+  ok(block, '找不到 OMITTED_LAYOUT_FIELDS');
+  const omitted = Function(`return (${block[1]});`)();
+  const has = (layout, key) => (omitted[layout] || '').split(/\s+/).includes(key);
+  // 舞台訊號的外框發光三項都有實際效果（開關需搭配強度 > 0 才看得出來）。
+  for (const key of ['shadowEnabled', 'shadowBlur', 'shadowOpacity']) ok(!has('signal', key), `舞台訊號不可隱藏 ${key}`);
+  // 底片邊條讀主要文字色，但不讀主色。
+  ok(!has('film', 'textPrimary'), '底片邊條不可隱藏主要文字色');
+  ok(has('film', 'accent'), '底片邊條的主色沒有作用，應隱藏');
+  // 經典資訊的主框、正在播放卡與列都固定直角，卡片圓角沒有作用。
+  ok(has('classic', 'borderRadius'), '經典資訊應隱藏卡片圓角');
+  // 極簡歌單會畫整體背板，必須能調；夜間霓虹的整體背板完全被模板背景蓋住。
+  ok(html.includes('<div class="field field-row field-row--spacious field-row--top" data-sl-layout-not="glow">'), '整體背板只對夜間霓虹隱藏');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'setlist.css'), 'utf8');
+  const classicRoot = css.match(/\{[^{}]*padding: 13px 14px 12px;[^{}]*\}/);
+  ok(classicRoot && !classicRoot[0].includes('border-radius'), '經典資訊主框維持直角，升級後預設外觀不變');
 });

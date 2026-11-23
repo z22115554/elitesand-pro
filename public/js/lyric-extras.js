@@ -24,101 +24,8 @@
   // 歌詞外觀/位置設定
   // ═══════════════════════════════════════════
 
-  // 預設值（與 display.css 的 :root 對齊）
-  const DEFAULT_SETTINGS = {
-    fontSize: 56,
-    fontFamily: "'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', sans-serif",
-    fontFamilyLatin: '', // 英文（拉丁字母/數字）專用字體；空＝跟主字體。display 端會組成「英文字體, 主字體」
-    // 由 /api/fonts 回傳的 opaque ID；只有輸出端成功以 FontFace 載入字型檔才會使用。
-    fontAssetId: '',
-    fontFamilyLatinAssetId: '',
-    fontWeight: 900,
-    color: '#8f8f8f',
-    activeColor: '#febc6c',
-    // 打字機模板：左右對話泡泡底色（其他模板忽略）
-    twBubbleRight: '#0b93f6',
-    twBubbleLeft: '#3b3b3d',
-    twStickerEnabled: true,   // 對話氣泡：長間奏跳貼圖（清單管理在面板，不進 state）
-    twStickerGapMs: 6000,     // 多長的空檔算「長間奏」
-    strokeWidth: 0,
-    strokeColor: '#000000',
-    shadow: '0 2px 3px rgba(0,0,0,1), 0 4px 14px rgba(0,0,0,0.85)',
-    shadowPreset: 'soft',
-    shadowColor: '#000000',
-    historyOpacity: 0.3,
-    historyLines: 2,
-    historyFontSize: 0, // 0 = 自動（主字級的 58%）；>0 = 固定像素，獨立於主字級
+  const { DEFAULT_SETTINGS, TEMPLATE_IDS, templateDefaults, normalizeAnchor, MAX_OFFSET, PADDING_LOCKED_TEMPLATES } = LyricTemplateDefaults;
 
-    verticalPosition: 'flex-end',
-    horizontalAlign: 'center',
-    textAlign: 'center',
-    paddingX: 60,
-    paddingY: 48,
-    maxWidth: 90,
-    offsetX: 0,
-    offsetY: 0,
-    // 逐字 KTV 模式已移除（經典疊層一律逐句；逐字改用獨立的 KTV 伴唱模板）
-    // 注意：convertTraditional／showProgressBar 不放在這裡——它們是「歌詞顯示模式」的通用設定，
-    // 不屬於任何一個模板的外觀，見下方 globalDisplaySettings（切模板不可連動跑掉，2026-09-18 回報）。
-    // ── 燈牌：只吃兩款真點陣字型；三段捲動各自獨立 ──
-    lightboardFont: 'cubic11',       // 'cubic11'（11×11）｜'boutique9x9'（9×9）；兩款都隨程式打包（SIL OFL）
-    lightboardPan: true,             // 長句平移：功能不是裝飾，關掉會讓整首歌遷就最長句而縮小字級
-    lightboardIdleMarquee: true,     // 間奏跑馬：只在沒人唱時跑，零成本
-    lightboardIdleGapMs: 2500,       // 間奏跑馬門檻：間奏要長過這個秒數才開始跑（1.5–20s）
-    lightboardSlideIn: false,        // 進場滑入：每句都動會累積成吵，預設關
-    spellbookEffect: 'rune',         // 萬聖咒字逐字效果：rune｜ouija｜bats｜drip｜talisman｜moon｜thread｜cycle
-    spellbookPosition: 'bottom',     // 萬聖咒字上下位置：'bottom'｜'middle'｜'top'
-    // ── 紙帶逐字：排向（橫式白條／直式黑條）＋紙條顏色 ──
-    paperstripOrient: 'horizontal',
-    paperstripColor: '#ffffff',
-    // ── KTV：長間奏／全曲結尾的畫面字樣；留空＝依顯示語言帶預設（繁中維持模板內三則輪播）──
-    ktvInterludeText: '',
-    ktvEndingText: '',
-    // ── 文字排版細項 ──
-    lineHeight: 1.3,      // 行高（active 與 history 共用）
-    letterSpacing: 0,     // 字距 px
-    activeScale: 1.0,     // 當前行相對基準字級的放大倍率（1.0=不放大）
-    // ── 高亮發光（獨立於陰影預設）──
-    glowColor: '#ffd6a5',
-    glowStrength: 0,      // 0 = 關閉；>0 = 發光半徑 px
-    glow: 'none',         // 合成字串（buildGlow 產生，推送給顯示端，不直接 UI 綁）
-    // ── 歌詞半透明背景框 ──
-    bgColor: '#000000',
-    bgOpacity: 0,         // 0 = 關閉（透明）
-    textBg: 'transparent', // 合成（buildTextBg 產生）
-    textBgPad: '0',        // 合成：背景開啟時才有內距，避免關閉時推移位置
-    // ── 羅馬字（拼音）與諧音的獨立外觀 ──
-    romajiColor: '#ffffff',
-    romajiSize: 0.5,      // 相對主字級的倍率（em）
-    xieyinColor: '#ffd6a5',
-    xieyinSize: 0.92,     // 相對主字級的倍率（em）
-    // ── 排版模板（v4/v5）──
-    template: 'classic',  // 'classic' | 'pulse' | 'facet' | 'drift' | 'aura' | 'ktv' | 'columnflow' | 'paperstrip' | 'mirror' | 'particle'
-    animationIntensity: 'normal', // folia 系模板的散射強度：'calm' | 'normal' | 'chaotic'
-    lyricPosition: 'center', // 歌詞水平位置：'center' | 'left' | 'right' | 'split'（左右分散＝逐行交替）
-    columnflowVariant: 'sen', // 直書句流外觀：'sen' 素筆 | 'fuda' 字札
-    columnflowEntrance: 'native', // 直書句流逐字進場：'native' 原樣 | 'drift' 四相漂字（吃動畫強度）；可疊在任一外觀上
-    columnflowPlacement: 'split', // 直書句流：'left' | 'right' | 'split'
-    jizuraPlacement: 'sides',     // 文字PV 獨立歌詞位置：'left' 偏左 | 'right' 偏右 | 'sides' 兩側（保留中央）| 'full' 原構圖置中；畫布一律全畫面
-    jizuraMotion: 'smooth',       // 文字PV：'smooth' 每幀更新 | 'koma' 2 コマ打ち（每秒 12 張的作畫感）
-    jizuraParts: 'base',          // 文字PV：'base' 標準部件 | 'extended' 擴充部件（JIZURA 追加分2 等新部件，稽核過的才會用）
-    jizuraHeavy: false,           // 文字PV 自選：加入高耗能部件（稽核耗時超標，可能掉幀）
-    jizuraLarge: false,           // 文字PV 自選：加入大面積部件（稽核覆蓋率超標，可能遮到角色）
-    jizuraHorror: false,          // 文字PV 自選：加入恐怖風部件（不含全畫面特效、背景、轉場、恐怖配色）
-    columnflowMaxLines: 4, // 直書句流：同時保留 1–6 句
-    columnflowSafeMargin: 11, // 直書句流：中央安全距離（%，5–25），兩側直行不會跨入
-    columnflowShowSafeZoneOnObs: false, // 直書句流：安全距離引導線是否也疊在真正的 OBS 來源上（預設只有面板預覽看得到）
-    stageSafeMargin: 2, // Pulse/Facet/Drift/Aura/紙帶逐字/鏡像：左右分散時的中央安全距離（%，2–25），預設對應原本寫死的 48/52%
-    stageShowSafeZoneOnObs: false, // 同上：安全距離引導線是否也疊在真正的 OBS 來源上
-    particleOrient: 'vertical', // 風息成字：'vertical' 直書（1–2 直欄，預設）| 'horizontal' 橫排
-    particleEntrance: 'auto', // 風息成字：'auto' 風/雨/渦流/雙束四種逐句輪替（預設）| 'quaddrift' 全部改用四相漂字進場（退場仍是粒子散開）
-    // ── 自訂背景（Phase 4）：鍵名加 display 前綴避免與上面歌詞文字背景框(bgColor/bgOpacity)撞名 ──
-    displayBgImage: '',   // 檔名（'' = 無背景，維持透明）
-    displayBgOpacity: 1,
-    displayBgFit: 'cover', // 'cover' | 'contain' | 'fill'
-  };
-
-  const TEMPLATE_IDS = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'spellbook'];
   // 將模板的「設定頁能力」集中在這裡。新增模板時，只需補上預設值、這份描述，
   // 以及一張 data-template 對應的卡片；設定頁不需要再散落模板名稱判斷。
   const TEMPLATE_UI = {
@@ -133,7 +40,7 @@
     mirror: { label: '虛實鏡書', description: '固定左右雙側構圖：每句左側實心原文逐字落位，右側空心鏡像字輕微跟上，中央完整保留人物空間。', scope: '可調：沉穩／標準／狂放動畫強度。標準保留目前的逐字飛入、旋轉、落位與唱詞彈跳；強度不改變時間軸或中央安全區。日文鏡像只把平假名轉成片假名；中文／韓文／英文原樣保留。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     lightboard: { label: '跑馬燈牌', description: '一塊會發光的 LED 點陣燈牌：唱過的燈亮、沒唱到的是熄滅的暗點，所以整句一直都看得見，不需要另外做進場。機殼（螺絲、指示燈、走時讀數、壓克力反光、下緣銘牌）全是靜態結構，沒有任何一個會動的元素。', scope: '可調：字級（整台機器等比縮放）、燈色、燈牌字型（Cubic 11／精品點陣體 9×9）、三段捲動。不吃一般字體——被圓點網切開後筆畫會糊成一團。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
     typewriter: { label: '對話氣泡', description: '仿 iMessage 聊天室：每句歌詞在對話泡泡裡逐字打出、游標貼著剛打出的字閃爍。已唱不消失、往上疊。合唱歌曲一邊固定代表一個聲部；非合唱時可選全左／全右／左右分散（分散＝1–5 句一段隨機交替）。長間奏會像聊天室冷場一樣跳一張貼圖（可上傳自己的，支援透明 PNG／GIF）。', scope: '可調：字型、文字色、左右對話泡泡底色、左右邊距、靠邊方式（全左／全右／左右分散）、長間奏貼圖（開關／門檻／自訂圖庫）。上下位置與堆疊構圖固定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: false, supportsClassicControls: false },
-    jizura: { label: '文字PV', description: '日系文字 PV 風格：每句自動挑版面、進場、退場與小裝飾，整首歌預先規劃好。分析過段落的歌會依段落調整：主歌安靜、蓄力段加強、副歌最熱鬧（沒分析過的歌整首用中等強度）。為了不擋到主播，只用不會大面積蓋住畫面的版面，預設偏右（裝飾仍鋪滿全畫面，只把歌詞盡量往右推、不超出畫面）。演出引擎：JIZURA（hakoniwa，MIT 授權）。實驗性。', scope: '可調：歌詞位置（偏左／偏右／兩側／置中）、動作節奏（流暢／作畫感）、文字色、強調色、動畫強度（沉穩＝整首只用安靜的版面與動作；標準＝依段落變化、不用滿版飛字；狂放＝連滿版飛字的版面都用）。字型與字級由引擎依版面決定，不吃一般字型設定。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
+    jizura: { label: '文字PV', description: '日系文字 PV 風格：每句自動挑版面、進場、退場與小裝飾，整首歌預先規劃好。分析過段落的歌會依段落調整：主歌安靜、蓄力段加強、副歌最熱鬧（沒分析過的歌整首用中等強度）。為了不擋到主播，只用不會大面積蓋住畫面的版面，預設偏右（裝飾仍鋪滿全畫面，只把歌詞盡量往右推、不超出畫面）。演出引擎：JIZURA（hakoniwa，MIT 授權）。實驗性。', scope: '可調：歌詞位置（偏左／偏右／兩側／置中）、動作節奏（流暢／作畫感）、文字色、強調色、動畫強度（沉穩＝整首只用安靜的版面與動作；標準＝依段落變化、不用滿版飛字；狂放＝連滿版飛字的版面都用）。字型與字級預設由引擎依版面決定，可開啟自訂字體覆寫。此模板不支援拼音／諧音／翻譯；需要雙語請選「經典疊層」。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     particle: { label: '風息成字', description: '粒子隨風散開，再聚成正在唱的文字。字級走一般字幕尺度、留安全邊距，進出場是粒子聚散。', scope: '可調：動畫強度、字型／字級／字重、陰影、左右位置（左右分散＝整句交替左右）、上下位置、水平／垂直微調、直書、左右／上下邊距、左右分散時的中央安全距離。粒子進場方向固定為自動。不支援拼音／諧音／翻譯。', positionMode: 'fixed', supportsIntensity: true, supportsClassicControls: false },
     spellbook: { label: '萬聖咒字', description: '七種萬聖節逐字效果任選：魔法陣、通靈板、蝙蝠聚字、滴落、符札、月影、蛛絲，或每句輪流。每個字都比唱出來早一點開始進場、在唱的那一格到位；裝飾全部綁在字上，字走它就走。', scope: '可調：逐字效果、上下位置、左右位置（置中／偏左／偏右／左右分散）、位置微調、左右邊距、字型／字級／字重／字距、文字色、唱中色、動畫強度。此模板不支援拼音／諧音；需要雙語請選「經典疊層」。', positionMode: 'stage', supportsIntensity: true, supportsClassicControls: false },
   };
@@ -141,25 +48,6 @@
   function getTemplateUI(template) {
     return TEMPLATE_UI[template] || TEMPLATE_UI.classic;
   }
-  // 每個模板都有自己的預設外觀與獨立的設定快照。
-  const TEMPLATE_DEFAULTS = {
-    classic: { ...DEFAULT_SETTINGS, template: 'classic' },
-    pulse: { ...DEFAULT_SETTINGS, template: 'pulse', fontSize: 50, color: '#ddfe9f', activeColor: '#38ff45', verticalPosition: 'center' },
-    facet: { ...DEFAULT_SETTINGS, template: 'facet', fontSize: 45, color: '#9181bb', activeColor: '#5d0a94', verticalPosition: 'center' },
-    drift: { ...DEFAULT_SETTINGS, template: 'drift', fontSize: 45, color: '#c0ff38', activeColor: '#ffc800', verticalPosition: 'center', animationIntensity: 'calm' },
-    aura: { ...DEFAULT_SETTINGS, template: 'aura', fontSize: 72, color: '#ffffff', activeColor: '#14a5ff', verticalPosition: 'center' },
-    ktv: { ...DEFAULT_SETTINGS, template: 'ktv', fontSize: 40, color: '#ffffff', activeColor: '#0400ff', verticalPosition: 'center', ktvInterludeText: '', ktvEndingText: '' },
-    columnflow: { ...DEFAULT_SETTINGS, template: 'columnflow', fontFamily: "'Noto Serif TC', 'PMingLiU', serif", fontWeight: 600, fontSize: 48, color: '#f4efe5', activeColor: '#f0c978', shadow: '0 1px 7px rgba(0,0,0,.72)', verticalPosition: 'center', columnflowVariant: 'sen', columnflowEntrance: 'native', columnflowPlacement: 'split', columnflowMaxLines: 4, columnflowSafeMargin: 11, columnflowShowSafeZoneOnObs: false, animationIntensity: 'normal' },
-    paperstrip: { ...DEFAULT_SETTINGS, template: 'paperstrip', fontWeight: 600, fontSize: 56, color: '#111111', activeColor: '#111111', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 1, paperstripOrient: 'horizontal', paperstripColor: '#ffffff' },
-    mirror: { ...DEFAULT_SETTINGS, template: 'mirror', fontWeight: 900, fontSize: 60, color: '#ffffff', activeColor: '#ffffff', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', stageSafeMargin: 13, letterSpacing: 1, animationIntensity: 'normal' },
-    lightboard: { ...DEFAULT_SETTINGS, template: 'lightboard', fontSize: 44, fontWeight: 400, color: 'rgba(255,176,60,0.5)', activeColor: '#ffce8a', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', lightboardFont: 'cubic11', lightboardPan: true, lightboardIdleMarquee: true, lightboardIdleGapMs: 2500, lightboardSlideIn: false },
-    typewriter: { ...DEFAULT_SETTINGS, template: 'typewriter', fontWeight: 700, fontSize: 36, color: '#f4f7fa', activeColor: '#a9cfe5', shadow: 'none', verticalPosition: 'center', lyricPosition: 'split', paddingX: 96, twBubbleRight: '#0b93f6', twBubbleLeft: '#3b3b3d', twStickerEnabled: true, twStickerGapMs: 6000 },
-    // fontFamily 留空＝用內建 Sans/Serif 配對（Demo 黑明體外觀）；fontSize 64＝倍率 1.0；
-    // shadow 非 'none' 讓 renderer 畫它內建的描邊陰影（與初版一致）。
-    jizura: { ...DEFAULT_SETTINGS, template: 'jizura', color: '#ffffff', activeColor: '#ffd166', animationIntensity: 'normal', jizuraPlacement: 'sides', jizuraMotion: 'smooth', jizuraParts: 'base', jizuraHeavy: false, jizuraLarge: false, jizuraHorror: false },
-    particle: { ...DEFAULT_SETTINGS, template: 'particle', fontFamily: '', fontWeight: 400, fontSize: 64, color: '#f6f0e5', activeColor: '#e97855', verticalPosition: 'center', lyricPosition: 'center', paddingX: 96, paddingY: 90, stageSafeMargin: 13, particleOrient: 'vertical', particleEntrance: 'auto', animationIntensity: 'normal' },
-    spellbook: { ...DEFAULT_SETTINGS, template: 'spellbook', fontSize: 60, fontWeight: 900, color: '#f4ead6', activeColor: '#ff9a3c', shadow: 'none', verticalPosition: 'center', lyricPosition: 'center', letterSpacing: 2, animationIntensity: 'normal', spellbookEffect: 'rune', spellbookPosition: 'bottom' },
-  };
   const SPELLBOOK_EFFECTS = ['rune', 'ouija', 'bats', 'drip', 'talisman', 'moon', 'thread', 'cycle'];
   const SPELLBOOK_HINTS = {
     rune: '每個字唱之前先展開一個小魔法陣，字在唱的那一格從陣中彈出；之後魔法陣縮小、變淡，但一直慢慢轉。',
@@ -192,14 +80,6 @@
   const STAGE_POSITION_TEMPLATES = ['pulse', 'facet', 'drift', 'aura', 'paperstrip', 'mirror', 'particle'];
   const STAGE_MIN_SAFE_MARGIN = 2;
   const STAGE_MAX_SAFE_MARGIN = 25;
-  // 位置微調（X/Y）滑桿刻度：實際套用時 display.js 還會依當下內容再收緊一次（reclampLyricOffset），
-  // 這裡只是配合「調得到的範圍」給合理刻度，避免滑桿大半段拖了沒效果。
-  // 舞台模板貼著畫面邊界：往外（更靠近該側邊緣）能調的範圍很小，往內（回中央）空間大很多。
-  const STAGE_OFFSET_X_OUTWARD = 50;
-  const STAGE_OFFSET_X_OUTWARD_AURA = 70; // 潮汐心景版面比其他三款鬆，往外多留 20px（見 display.css）
-  const STAGE_OFFSET_X_INWARD = 700; // 往中央（向內）可調範圍：所有舞台模板一起放寬（2026-08-31）
-  const STAGE_OFFSET_Y_RANGE = 150;
-  const CLASSIC_OFFSET_RANGE = 400;
   const TEMPLATE_SETTING_KEY = 'lyricTemplateSettings';
   const PRESET_KEY = 'lyricPresets';
   let templateSettings = {};
@@ -208,10 +88,6 @@
   // 是全域偏好，不隨模板切換而變——不可放進 settings（per-template），也不可放進
   // templateSettings[tpl]，否則 selectTemplate() 整包替換 settings 時會連帶跑掉。
   let globalDisplaySettings = { convertTraditional: true, showProgressBar: true };
-
-  function templateDefaults(template) {
-    return { ...(TEMPLATE_DEFAULTS[template] || TEMPLATE_DEFAULTS.classic) };
-  }
 
   function normalizeColumnflowMaxLines(value) {
     const parsed = Math.round(Number(value));
@@ -244,7 +120,7 @@
     if (src && typeof src === 'object') {
       TEMPLATE_IDS.forEach((id) => {
         if (src[id] && typeof src[id] === 'object') {
-          out[id] = { ...templateDefaults(id), ...cleanSettingSnapshot(src[id]), template: id };
+          out[id] = normalizeAnchor({ ...templateDefaults(id), ...cleanSettingSnapshot(src[id]), template: id }, id);
           if (id === 'columnflow') {
             if (!COLUMNFLOW_VARIANTS.includes(out[id].columnflowVariant)) out[id].columnflowVariant = 'sen';
             if (!COLUMNFLOW_ENTRANCES.includes(out[id].columnflowEntrance)) out[id].columnflowEntrance = 'native';
@@ -271,7 +147,7 @@
     }
     const base = cleanSettingSnapshot(fallback || {});
     const tpl = TEMPLATE_IDS.includes(base.template) ? base.template : 'classic';
-    if (!out[tpl]) out[tpl] = { ...templateDefaults(tpl), ...base, template: tpl };
+    if (!out[tpl]) out[tpl] = normalizeAnchor({ ...templateDefaults(tpl), ...base, template: tpl }, tpl);
     if (out.mirror) out.mirror.lyricPosition = 'split';
     if (out.typewriter && out.typewriter.lyricPosition === 'center') out.typewriter.lyricPosition = 'split';
     return out;
@@ -437,12 +313,14 @@
     { id: 'ls-padding-y', key: 'paddingY', valId: 'ls-padding-y-val', fmt: v => v + 'px' },
     { id: 'ls-lightboard-font', key: 'lightboardFont' },
     { id: 'ls-lightboard-pan', key: 'lightboardPan' },
+    { id: 'ls-jizura-typography', key: 'jizuraTypography' },
     { id: 'ls-jizura-heavy', key: 'jizuraHeavy' },
     { id: 'ls-jizura-large', key: 'jizuraLarge' },
     { id: 'ls-jizura-horror', key: 'jizuraHorror' },
     { id: 'ls-lightboard-idle', key: 'lightboardIdleMarquee' },
     { id: 'ls-lightboard-slide', key: 'lightboardSlideIn' },
     { id: 'ls-spellbook-position', key: 'spellbookPosition' },
+    { id: 'ls-particle-vertical-position', key: 'particleVerticalPosition' },
     { id: 'ls-paperstrip-color', key: 'paperstripColor' },
     { id: 'ls-ktv-interlude', key: 'ktvInterludeText' },
     { id: 'ls-ktv-ending', key: 'ktvEndingText' },
@@ -515,7 +393,7 @@
     templateSettings = normalizeTemplateSettings(srv[TEMPLATE_SETTING_KEY], clean);
     lyricPresets = normalizePresets(srv[PRESET_KEY]);
     const tpl = TEMPLATE_IDS.includes(clean.template) ? clean.template : 'classic';
-    settings = { ...templateDefaults(tpl), ...(templateSettings[tpl] || {}), ...clean, template: tpl };
+    settings = normalizeAnchor({ ...templateDefaults(tpl), ...(templateSettings[tpl] || {}), ...clean, template: tpl }, tpl);
     saveSettings();
     refreshControls();
     renderLyricPresetUI();
@@ -926,7 +804,7 @@
   // 完全不讀這些——顯示出來也是「按了沒反應」，所以切模板時整批隱藏/還原。
   const CLASSIC_ONLY_FIELD_IDS = [
     'style-preset-field', 'style-tune-field',
-    'classic-only-typography', 'classic-only-advanced-effects', 'classic-only-advanced-effect-card',
+    'classic-only-typography', 'classic-only-advanced-effects',
     'romaji-xieyin-card', 'classic-only-display-mode',
   ];
 
@@ -944,14 +822,18 @@
     const isTypewriter = settings.template === 'typewriter';
     const isLightboard = settings.template === 'lightboard';
     const isParticle = settings.template === 'particle';
-    // 燈牌只吃真點陣字型：一般字體選單整塊收起來，換成自己的兩選一
+    const isJizura = settings.template === 'jizura';
+    const automaticTypography = isJizura && !settings.jizuraTypography;
+    const jizuraTypographyField = document.getElementById('jizura-typography-field');
+    if (jizuraTypographyField) jizuraTypographyField.hidden = !isJizura;
+    // 燈牌只吃真點陣字型；文字 PV 可以沿用引擎或開啟覆寫。
     const fontFamilyFields = document.getElementById('font-family-fields');
-    if (fontFamilyFields) fontFamilyFields.hidden = isLightboard;
+    if (fontFamilyFields) fontFamilyFields.hidden = isLightboard || automaticTypography;
     // 風息成字：字體家族／字級／字重都開放（字級當「倍率」疊在自動排版上，見 renderer settings()）。
     const particleFontSize = document.getElementById('particle-fontsize-field');
     const particleFontWeight = document.getElementById('particle-fontweight-field');
-    if (particleFontSize) particleFontSize.hidden = false;
-    if (particleFontWeight) particleFontWeight.hidden = false;
+    if (particleFontSize) particleFontSize.hidden = automaticTypography;
+    if (particleFontWeight) particleFontWeight.hidden = automaticTypography;
     // 風息成字已移除 hero 放大變色字效，「正在唱那一行的顏色」對這個模板不再有任何
     // 視覺效果（2026-09-12）；隱藏掉避免使用者調了卻沒反應。
     const activeColorField = document.getElementById('ls-active-color-field');
@@ -1045,56 +927,24 @@
     if (posCenterBtn) posCenterBtn.hidden = isTypewriter;
     const twPaddingField = document.getElementById('typewriter-padding-field');
     if (twPaddingField) twPaddingField.hidden = !isTypewriter;
+    // 置中構圖模板（含紙帶逐字）的位置改用 X/Y 微調，上下左右邊距不給調（顯示端也鎖回預設，見 lockPadding）
+    const paddingLocked = PADDING_LOCKED_TEMPLATES.includes(settings.template);
     const modalPaddingXField = document.getElementById('padding-x-field');
-    if (modalPaddingXField) modalPaddingXField.hidden = isTypewriter;
+    if (modalPaddingXField) modalPaddingXField.hidden = isTypewriter || paddingLocked;
+    const modalPaddingYField = document.getElementById('padding-y-field');
+    if (modalPaddingYField) modalPaddingYField.hidden = paddingLocked;
     if (isTypewriter && settings.lyricPosition === 'center') { settings.lyricPosition = 'split'; }
     const isMirror = settings.template === 'mirror';
-    // 位置微調（X/Y）：經典疊層一律可調；舞台模板（Pulse/Facet/Drift/Aura）在「置中/偏左/偏右」
-    // 也開放微調，但「左右分散」不適用——那個模式每行交替左右，沒有單一位置可微調，
-    // 邊界靠「中央安全距離」控制。KTV 雙行構圖固定、沒有左右可調，只開放 Y；
-    // 紙帶逐字／鏡像跟 KTV 一樣是固定構圖（鏡像永遠 split），也只開放 Y——
-    // 兩者的 Y 直接由各自 #paperstrip-root／#mirror-root 消費同一個全域變數（見 display.css），
-    // 不吃 #lyrics-container 本身的 transform，所以不受「左右分散不給微調」限制。
-    // 實際套用時 display.js 會依當下內容自動收緊範圍，使用者調到極端值也不會把歌詞推出畫面；
-    // 這裡的滑桿 min/max 只是配合「調得到的範圍」給合理刻度，避免大半段滑桿沒有效果。
     const isKtv = settings.template === 'ktv';
-    const isPaperstrip = settings.template === 'paperstrip';
-    const isYOnlyOffset = isKtv || isPaperstrip || isMirror;
-    const supportsOffsetFineTune = (isClassic || ui.positionMode === 'stage' || isYOnlyOffset || isParticle)
-      && (settings.lyricPosition !== 'split' || isMirror || isPaperstrip);
-    if (fineWrap) fineWrap.hidden = !supportsOffsetFineTune;
-    if (offsetXRow) offsetXRow.hidden = !supportsOffsetFineTune || isYOnlyOffset;
-    if (offsetYRow) offsetYRow.hidden = !supportsOffsetFineTune;
-    if (offsetXInput && supportsOffsetFineTune && !isYOnlyOffset) {
-      // 舞台模板貼著畫面邊界：往「外」（更靠近該側邊緣）能調的範圍很小，往「內」（回中央）
-      // 空間大很多；偏左/偏右方向相反，置中兩邊都寬裕，維持跟經典疊層一樣的大範圍。
-      // 潮汐心景版面比其他三款鬆，往外可以多留 20px（見 STAGE_OFFSET_X_OUTWARD_AURA）。
-      const outward = settings.template === 'aura' ? STAGE_OFFSET_X_OUTWARD_AURA : STAGE_OFFSET_X_OUTWARD;
-      if (!isClassic && settings.lyricPosition === 'left') {
-        offsetXInput.min = String(-outward);
-        offsetXInput.max = String(STAGE_OFFSET_X_INWARD);
-      } else if (!isClassic && settings.lyricPosition === 'right') {
-        offsetXInput.min = String(-STAGE_OFFSET_X_INWARD);
-        offsetXInput.max = String(outward);
-      } else {
-        offsetXInput.min = String(-CLASSIC_OFFSET_RANGE);
-        offsetXInput.max = String(CLASSIC_OFFSET_RANGE);
-      }
-      const clampedX = Math.min(Math.max(settings.offsetX || 0, Number(offsetXInput.min)), Number(offsetXInput.max));
-      if (clampedX !== settings.offsetX) { settings.offsetX = clampedX; pushSettings(); }
-      offsetXInput.value = String(settings.offsetX || 0);
-      const offsetXVal = document.getElementById('ls-offset-x-val');
-      if (offsetXVal) offsetXVal.textContent = `${settings.offsetX || 0}px`;
-    }
-    if (offsetYInput && supportsOffsetFineTune) {
-      const yRange = isClassic ? CLASSIC_OFFSET_RANGE : STAGE_OFFSET_Y_RANGE;
-      offsetYInput.min = String(-yRange);
-      offsetYInput.max = String(yRange);
-      const clampedY = Math.min(Math.max(settings.offsetY || 0, -yRange), yRange);
-      if (clampedY !== settings.offsetY) { settings.offsetY = clampedY; pushSettings(); }
-      offsetYInput.value = String(settings.offsetY || 0);
-      const offsetYVal = document.getElementById('ls-offset-y-val');
-      if (offsetYVal) offsetYVal.textContent = `${settings.offsetY || 0}px`;
+    if (fineWrap) fineWrap.hidden = false;
+    if (offsetXRow) offsetXRow.hidden = false;
+    if (offsetYRow) offsetYRow.hidden = false;
+    for (const [key, input] of [['offsetX', offsetXInput], ['offsetY', offsetYInput]]) {
+      if (!input) continue;
+      input.min = String(-MAX_OFFSET);
+      input.max = String(MAX_OFFSET);
+      input.step = '1';
+      input.value = String(settings[key] ?? 0);
     }
     // KTV／燈牌 是固定構圖、沒有「歌詞位置」概念——整欄收起，不要留一個只有標題和說明的空欄
     if (lyricPosField) lyricPosField.hidden = isColumnflow || isMirror || isKtv || isLightboard;
@@ -1171,7 +1021,7 @@
           : trAuto('方便 VTuber／實況主把人物放在畫面固定位置；「左右分散」是一句左、一句右交替。'));
     }
     if (fineHint) {
-      fineHint.textContent = trAuto('拖曳選格子，或用下面細調微調');
+      fineHint.textContent = workspaceText('lyricStyle.fineTuneHint', '位移可超出畫面，可用「重置微調」回到原位。');
     }
     if (posHint && isTypewriter) {
       posHint.textContent = trAuto('打字機的靠邊方式：全左／全右＝所有對話泡泡固定一側；左右分散＝以 1–5 句為一段隨機交替。合唱歌曲一律改成「一邊代表一個聲部」，不受此設定影響。');
@@ -1186,11 +1036,19 @@
     const splitBtn = document.querySelector('#lyric-pos-buttons .style-thumb[data-lyric-pos="split"]');
     if (splitBtn) splitBtn.disabled = isClassic || (ui.positionMode === 'fixed' && !isTypewriter && !isParticle) || isColumnflow;
 
+    const letterSpacingField = document.getElementById('letter-spacing-field');
+    if (letterSpacingField) letterSpacingField.hidden = !['classic', 'mirror', 'paperstrip', 'typewriter', 'particle', 'spellbook'].includes(settings.template);
+    const shadowField = document.getElementById('shared-lyric-shadow-field');
+    // 風息成字的 Canvas 會讀 --lyric-shadow（見 lyric-template-particle.js settings()）。
+    const supportsShadow = ['classic', 'pulse', 'facet', 'drift', 'columnflow', 'particle'].includes(settings.template);
+    if (shadowField) shadowField.hidden = !supportsShadow;
     // 經典疊層專用設定區塊：整批顯示/隱藏
     CLASSIC_ONLY_FIELD_IDS.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !isClassic;
     });
+    const effectsCard = document.getElementById('classic-only-advanced-effect-card');
+    if (effectsCard) effectsCard.hidden = !supportsShadow;
     document.getElementById('display-advanced-modal')?._settingsWorkspace?.sync();
   }
 
@@ -1207,7 +1065,7 @@
     if (nextTemplate === settings.template) { announce(); return 'same'; }
     saveCurrentTemplateSnapshot();
     const nextSettings = templateSettings[nextTemplate] || templateDefaults(nextTemplate);
-    settings = { ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate };
+    settings = normalizeAnchor({ ...templateDefaults(nextTemplate), ...cleanSettingSnapshot(nextSettings), template: nextTemplate }, nextTemplate);
     if ((settings.template === 'classic' || settings.template === 'ktv') && settings.lyricPosition === 'split') settings.lyricPosition = 'center';
     if (settings.template === 'mirror') settings.lyricPosition = 'split';
     if (settings.template === 'typewriter' && settings.lyricPosition === 'center') settings.lyricPosition = 'split';
@@ -1872,6 +1730,10 @@
 
   let pickerCurrentTrack = null;
   const pickerSearchCache = new Map();
+  // 目前畫面上應該顯示哪一次搜尋的結果。各來源查詢可能要好幾秒：這段時間使用者換了一首歌
+  // 再打開選擇器（或改了搜尋字），舊的回應晚到時不能蓋掉畫面——否則點下去的候選歌詞
+  // 是上一首歌的，卻會被套用到現在這首。
+  let pickerActiveSearchKey = null;
 
   function pickerSearchKey(track, artist, title) {
     return `${track?.id || ''}\u0000${artist.trim()}\u0000${title.trim()}`;
@@ -1942,6 +1804,7 @@
     const cacheKey = pickerSearchKey(track, artistEl?.value || '', titleEl?.value || '');
     const cached = pickerSearchCache.get(cacheKey);
     if (cached) {
+      pickerActiveSearchKey = cacheKey;
       const body = document.getElementById('lyrics-picker-body');
       if (body) renderCandidates(body, cached.candidates, cached.providerHealth);
     } else {
@@ -1956,6 +1819,7 @@
     const artist = (document.getElementById('picker-artist') || {}).value || '';
     const title = (document.getElementById('picker-title') || {}).value || '';
     if (!title.trim()) {
+      pickerActiveSearchKey = null;
       body.innerHTML = '<div class="picker-empty">請輸入歌名再搜尋</div>';
       return;
     }
@@ -1967,6 +1831,7 @@
       duration: Math.round((pickerCurrentTrack && pickerCurrentTrack.duration) || 0),
     };
     const cacheKey = pickerSearchKey(pickerCurrentTrack, payload.artist, payload.title);
+    pickerActiveSearchKey = cacheKey;
     const cached = pickerSearchCache.get(cacheKey);
     if (cached) {
       renderCandidates(body, cached.candidates, cached.providerHealth);
@@ -1980,15 +1845,19 @@
     })
       .then(r => r.json())
       .then(data => {
-        if (!data.success || !Array.isArray(data.candidates) || data.candidates.length === 0) {
+        const hasCandidates = data && data.success && Array.isArray(data.candidates) && data.candidates.length > 0;
+        if (hasCandidates) pickerSearchCache.set(cacheKey, { candidates: data.candidates, providerHealth: data.providerHealth });
+        // 已經換成別首歌／別的搜尋字：結果只留在快取，不畫到現在的選擇器上
+        if (pickerActiveSearchKey !== cacheKey) return;
+        if (!hasCandidates) {
           body.innerHTML = '<div class="picker-empty">沒有找到任何來源的歌詞<br>試試只填歌名、或改用「貼上歌詞」手動輸入</div>';
-          renderProviderHealth(body, data.providerHealth);
+          renderProviderHealth(body, data && data.providerHealth);
           return;
         }
-        pickerSearchCache.set(cacheKey, { candidates: data.candidates, providerHealth: data.providerHealth });
         renderCandidates(body, data.candidates, data.providerHealth);
       })
       .catch(err => {
+        if (pickerActiveSearchKey !== cacheKey) return;
         body.innerHTML = `<div class="picker-empty">查詢失敗：${escapeHtml(err.message)}</div>`;
       });
   }

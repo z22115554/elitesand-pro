@@ -11,13 +11,19 @@
  * @param {string|number} tag - LRC 時間戳字串
  * @returns {number} 毫秒數
  */
+const LRC_TIMESTAMP_SOURCE = '(?:\\d+:)?\\d{1,3}:\\d{2}(?:[.:]\\d{1,3})?';
+function escapeTimedWord(text) {
+  return String(text).replace(/[&<>\[\]]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '[': '&#91;', ']': '&#93;' }[char]));
+}
 function parseTimestampToMs(tag) {
   if (typeof tag === 'number') return tag;
-  const match = String(tag).match(/(\d+):(\d+)\.(\d+)/);
+  const value = String(tag).replace(/^\[|\]$/g, '');
+  const normalized = /^(\d+):(\d{2}):(\d{1,3})$/.test(value) ? value.replace(/:(\d{1,3})$/, '.$1') : value;
+  const match = normalized.match(/^(?:(\d+):)?(\d+):(\d{2})(?:[.:](\d{1,3}))?$/);
   if (!match) return 0;
-  // 補齊到 3 位毫秒：[mm:ss.xx] → xx0, [mm:ss.xxx] → xxx
-  const padThird = match[3].length === 2 ? match[3] + '0' : match[3];
-  return (parseInt(match[1], 10) * 60 + parseInt(match[2], 10)) * 1000 + parseInt(padThird, 10);
+  const hours = Number(match[1] || 0), minutes = Number(match[2]), seconds = Number(match[3]);
+  if (seconds > 59 || (match[1] && minutes > 59)) return 0;
+  return (hours * 3600 + minutes * 60 + seconds) * 1000 + Number((match[4] || '').padEnd(3, '0'));
 }
 
 /**
@@ -40,10 +46,13 @@ function msToLrcTime(ms) {
  * @returns {string}
  */
 function msToKrcTime(ms) {
-  return msToLrcTime(ms);
+  const rounded = Math.max(0, Math.round(ms));
+  return `${msToLrcTime(rounded).split('.')[0]}.${String(rounded % 1000).padStart(3, '0')}`;
 }
 
 module.exports = {
+  LRC_TIMESTAMP_SOURCE,
+  escapeTimedWord,
   parseTimestampToMs,
   msToLrcTime,
   msToKrcTime,

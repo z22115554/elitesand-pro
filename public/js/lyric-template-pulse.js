@@ -83,7 +83,7 @@
     const phase = hashNoise(seed, 11) * Math.PI * 2;
     const waveStep = (Math.PI * 2) / (1.6 + hashNoise(seed, 12) * 1.0 + Math.max(displayWords.length * 0.18, 0));
 
-    const fontSpec = `700 ${fontPx}px ${getCssVar('--display-font-family', 'sans-serif')}`;
+    const fontSpec = `${getCssVar('--display-font-weight', '700')} ${fontPx}px ${getCssVar('--display-font-family', 'sans-serif')}`;
     const widths = displayWords.map((w) => {
       const offs = LyricMotion.measureCharOffsets(w.text, fontSpec);
       return offs[offs.length - 1] || 0;

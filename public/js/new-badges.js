@@ -14,10 +14,12 @@
   'use strict';
 
   const FEATURES = {
+    'outro-pause-finish': '2026-11-23', // 直播頁清單下方「尾奏暫停後自動收尾」秒數
     'precise-sync': '2026-11-12',  // 精準對時元件（設定 › 下載工具卡，中文歌逐句校正）
     'auto-sync': '2026-10-28',     // 自動對時（對齊第一句旁、匯入後自動對時）
     'import-prefs': '2026-10-28',  // 加歌框下方「匯入後：…」設定
     'setlist-minimal': '2026-11-10',  // OBS 極簡歌單版型
+    'setlist-now-playing': '2026-11-22',  // OBS 單曲看板版型（只顯示正在唱＋待機文字）
     'prompter-translation': '2026-11-11', // 跟唱視圖顯示雙語歌詞的譯文
     'library-word-upgrade': '2026-11-11', // 歌曲庫「逐句歌詞」篩選與批次升級成逐字
     'library-edit-meta': '2026-11-11',    // 歌曲庫直接改歌名／歌手
@@ -90,6 +92,81 @@
     });
   }
 
+  // ── 往外冒泡：功能藏在收合區、選單、分頁、設定分類或另一個頁面裡時，沿路每一道「門」也標 NEW ──
+  // （2026-11-23 使用者回報：「記住每首歌的音量」的 NEW 在收合的「音訊」裡，不打開根本不知道有新功能）
+  // 門上插的是 .new-badge--door；有些按鈕的文字會被 i18n 整段改寫，所以換語言後重新補一次。
+  function doorsFor(el) {
+    const doors = [];
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+      // 收合區塊 <details>：摘要列
+      if (node.tagName === 'DETAILS') {
+        const summary = node.querySelector(':scope > summary');
+        if (summary && !summary.contains(el)) doors.push(summary);
+      }
+      // live-slim 的 ⋯ 彈出選單：觸發按鈕
+      if (node.classList.contains('lslim-pop')) {
+        const trigger = node.parentElement && node.parentElement.querySelector(':scope > button');
+        if (trigger) doors.push(trigger);
+      }
+      // aria 分頁面板：對應的分頁按鈕
+      if (node.id && node.getAttribute('role') === 'tabpanel') {
+        document.querySelectorAll(`[aria-controls="${node.id}"]`).forEach((tab) => doors.push(tab));
+      }
+      // 設定工作區的分組：同一個工作區裡的分組按鈕（一張卡可同屬多組）
+      if (node.dataset.settingsWorkspaceGroup) {
+        const root = node.closest('.settings-workspace') || document;
+        node.dataset.settingsWorkspaceGroup.split(/\s+/).forEach((group) => {
+          root.querySelectorAll(`[data-settings-workspace-tab="${group}"]`).forEach((tab) => doors.push(tab));
+        });
+      }
+      // 系統設定的分類（settings-slim.js 標的）
+      if (node.dataset.sslimCategory) {
+        document.querySelectorAll(`.sslim-cat[data-sslim-cat="${node.dataset.sslimCategory}"]`).forEach((btn) => doors.push(btn));
+      }
+      // 整個頁面：頂部分頁，次級分頁再加上它的上層分頁
+      if (node.classList.contains('view') && node.dataset.view) {
+        const item = document.querySelector(`.nav-item[data-nav="${node.dataset.view}"]`);
+        if (item) {
+          doors.push(item);
+          const parent = item.dataset.parent && document.querySelector(`.nav-item[data-nav="${item.dataset.parent}"]`);
+          if (parent) doors.push(parent);
+        }
+      }
+    }
+    return doors;
+  }
+
+  const visibleBadge = (node) => [...node.querySelectorAll('.new-badge:not(.new-badge--door), .nav-new-badge')]
+    .some((badge) => !badge.hidden && badge.getClientRects().length > 0);
+
+  function refreshDoors() {
+    document.querySelectorAll('.new-badge--door').forEach((badge) => badge.remove());
+    const marked = new Set();
+    document.querySelectorAll('[data-new-feature]').forEach((el) => {
+      if (!active(el.dataset.newFeature)) return;
+      doorsFor(el).forEach((door) => {
+        if (marked.has(door)) return;
+        // 門本身已經看得到自己的 NEW（例如摘要列就是另一個新功能）就不再疊一個
+        if (door.matches('[data-new-feature]') || visibleBadge(door)) return;
+        marked.add(door);
+        const badge = document.createElement('span');
+        badge.className = 'new-badge new-badge--door';
+        badge.textContent = 'NEW';
+        badge.setAttribute('aria-hidden', 'true');
+        door.append(badge);
+      });
+    });
+  }
+
+  const markSeenAndRefresh = (id) => { markSeen(id); refreshDoors(); };
+
   scan();
-  window.NewBadges = Object.freeze({ scan, markSeen });
+  // 各頁的版面整理（*-slim.js）在這支之後才把元素搬進選單／分類；等同步腳本跑完再算一次，載入完成後再補一次
+  setTimeout(refreshDoors, 0);
+  window.addEventListener('load', refreshDoors);
+  window.addEventListener('i18n:change', () => setTimeout(refreshDoors, 0));
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('[data-new-feature]')) setTimeout(refreshDoors, 0);
+  });
+  window.NewBadges = Object.freeze({ scan, markSeen: markSeenAndRefresh, refreshDoors, doorsFor });
 })();

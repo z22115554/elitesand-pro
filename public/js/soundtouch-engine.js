@@ -36,16 +36,19 @@ function preparePitchRenderer(target, signal) {
       target.port.onmessage = null;
       resolve(ready);
     };
-    const fail = () => finish(false);
+    const fail = () => finish(null);
     const timeout = setTimeout(fail, 1500);
     signal.addEventListener('abort', fail, { once: true });
     target.onprocessorerror = fail;
     target.port.onmessage = event => {
-      if (event.data?.type === 'prepared') finish(true);
+      if (event.data?.type === 'prepared') finish(event.data.backend || 'signalsmith');
     };
     try { target.port.postMessage({ type: 'prepare' }); } catch (error) { fail(); }
   });
 }
+
+const pitchNodeReleases = new WeakMap();
+const pitchReleasingNodes = new WeakMap();
 
 function createSoundTouchEngine({ preserveFormants = false } = {}) {
   let ctx = null;
@@ -60,6 +63,7 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
 
   let playing = false;
   let ready = false;             // 當前歌的 buffer 是否已送進 worklet
+  let activeBackend = null;
   let lastPositionSec = 0;       // worklet 最近回報的原曲秒數
   let lastPositionWallMs = 0;    // 上一次收到 position 回報時的 wall clock（給 getProjectedTime 推算用）
 
@@ -102,17 +106,41 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
   // 釋放它；切歌與完全停止時都必須明確通知、關閉舊 MessagePort，避免長時間播放把每首歌
   // 的 raw audio 留在 renderer/worklet 記憶體裡。
   function _releaseNode(target) {
-    if (!target) return;
-    try { target.port.postMessage({ type: 'dispose' }); } catch (e) {}
-    try { target.port.onmessage = null; } catch (e) {}
-    try { target.port.close(); } catch (e) {}
-    try { target.disconnect(); } catch (e) {}
+    if (!target) return Promise.resolve();
+    if (pitchReleasingNodes.has(target)) return pitchReleasingNodes.get(target);
+    const release = new Promise((resolve) => {
+      let finished = false;
+      let timer;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        try { target.port.onmessage = null; } catch (e) {}
+        try { target.port.close(); } catch (e) {}
+        try { target.disconnect(); } catch (e) {}
+        resolve();
+      };
+      target.port.onmessage = (event) => { if (event.data?.type === 'disposed') finish(); };
+      // A live render thread acknowledges after its 64-sample tail. Suspended,
+      // closed or stalled contexts must still release transferred PCM/ports.
+      timer = setTimeout(finish, 250);
+      try { target.port.postMessage({ type: 'dispose' }); } catch (e) { finish(); }
+      if (ctx?.state !== 'running') finish();
+    });
+    pitchReleasingNodes.set(target, release);
+    if (ctx) {
+      const barrier = Promise.all([pitchNodeReleases.get(ctx), release]);
+      pitchNodeReleases.set(ctx, barrier);
+      barrier.then(() => { if (pitchNodeReleases.get(ctx) === barrier) pitchNodeReleases.delete(ctx); });
+    }
+    return release;
   }
 
   function _destroyNode() {
-    if (!node) return;
-    _releaseNode(node);
+    if (!node) return Promise.resolve();
+    const release = _releaseNode(node);
     node = null;
+    return release;
   }
 
   function _nowMs() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
@@ -145,17 +173,20 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
   /**
    * 載入並 decode 音檔，把整首 channel data transfer 進 worklet。回傳是否成功。
    */
-  async function load(url) {
+  async function load(url, { backend: preferredBackend } = {}) {
     if (!ctx || !outNode) return false;
     const myToken = ++loadToken; // 作廢任何更早、尚未完成的載入
     if (loadAbort) loadAbort.abort();
     const abort = new AbortController();
     loadAbort = abort;
     try {
-      // 立刻停掉並銷毀現有節點，確保切歌時舊聲音馬上停、不會變孤兒繼續播放
-      stop();
+      // Stop the old transport immediately, then let its bounded output tail
+      // reach silence before the new node can connect (also across engines).
+      playing = false;
+      _stopTimer();
       _destroyNode();
       ready = false;
+      activeBackend = null;
       effectivePlayback = null;
       workletGeneration = null;
 
@@ -174,12 +205,16 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
       durationSec = audioBuf.duration;
       sampleRate = audioBuf.sampleRate;
 
+      await pitchNodeReleases.get(ctx);
+      if (myToken !== loadToken) return false;
       node = createNode();
-      if (backend === 'signalsmith') {
+      let selectedBackend = 'soundtouch';
+      if (backend === 'signalsmith' && preferredBackend !== 'soundtouch') {
         // Both stems wait for initialization before they can share a start frame.
         // Keep the AudioBuffer until then so fallback never downloads or decodes again.
         const prepared = await preparePitchRenderer(node, abort.signal);
         if (myToken !== loadToken) return false;
+        selectedBackend = prepared || 'soundtouch';
         if (!prepared) {
           console.warn('[Pitch] Worklet preparation failed, using SoundTouch');
           _destroyNode();
@@ -201,6 +236,7 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
         right === left ? [left.buffer] : [left.buffer, right.buffer]
       );
       ready = true;
+      activeBackend = selectedBackend;
       playing = false;
       lastPositionSec = 0;
       return true;
@@ -263,8 +299,7 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
   }
 
   function stop() {
-    _post({ type: 'pause' });
-    _post({ type: 'seek', position: 0 });
+    _post({ type: 'stop' });
     playing = false;
     lastPositionSec = 0;
     _stopTimer();
@@ -276,7 +311,7 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
     ++loadToken;
     if (loadAbort) { loadAbort.abort(); loadAbort = null; }
     _stopTimer();
-    _destroyNode();
+    const release = _destroyNode();
     ready = false;
     playing = false;
     durationSec = 0;
@@ -285,6 +320,7 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
     workletGeneration = null;
     playbackGeneration++;
     _notifyPlayback();
+    return release;
   }
 
   function seek(sec, atFrame) {
@@ -347,6 +383,7 @@ function createSoundTouchEngine({ preserveFormants = false } = {}) {
     getTime, getDuration, isPlaying, isReady, setPitch, setTempo, onTime, onEnded,
     scheduleFrame, frameNow, getProjectedTime, projectedTimeAt,
     getPlaybackSnapshot, subscribePlayback,
+    getBackend: () => activeBackend,
   };
   return api;
 }

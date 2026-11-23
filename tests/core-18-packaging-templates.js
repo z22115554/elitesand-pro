@@ -777,8 +777,7 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
 
 
   test('FFmpeg 供應：BtbN checksums.sha256 會精確挑出目標 Windows LGPL zip 的雜湊', () => {
-    const source = ffmpegProvider.DOWNLOAD_SOURCES.find((item) => item.id === 'btbn');
-    ok(source && source.checksumFile, 'BtbN 來源必須指定 checksum 檔名：');
+    const source = { checksumFile: 'ffmpeg-test-win64-lgpl.zip' };
     const wanted = 'a'.repeat(64);
     const other = 'b'.repeat(64);
     const checksum = Buffer.from(`${other}  some-other-build.zip\n${wanted}  ${source.checksumFile}\n`, 'utf8');
@@ -789,11 +788,15 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
     const ids = ffmpegProvider.DOWNLOAD_SOURCES.map((item) => item.id);
     eq(ids.join(','), 'btbn,gyan-github,gyan', '三個來源的優先序不可被打亂：');
     const mirror = ffmpegProvider.DOWNLOAD_SOURCES.find((item) => item.id === 'gyan-github');
-    ok(mirror?.resolveApiUrl, 'GitHub 鏡像來源需要 Releases API 網址（沒有獨立雜湊檔可抓）：');
-    ok(mirror?.assetNamePattern instanceof RegExp, 'GitHub 鏡像來源需要用來挑出正確 asset 的檔名規則：');
+    ok(mirror.url.includes('/download/9.0.2/'), '鏡像必須使用釘選版本 URL：');
+    for (const source of ffmpegProvider.DOWNLOAD_SOURCES) {
+      ok(/^[a-f0-9]{64}$/.test(source.sha256), '每個來源都需內建 SHA-256：');
+      ok(source.size > 1000000, '每個來源都需內建大小：');
+      ok(!source.resolveApiUrl && !source.checksumUrl, '安裝時不能以同源動態資料建立信任根：');
+    }
   });
 
-  testAsync('FFmpeg 供應：主要來源失敗會自動切備援；GitHub 鏡像來源改打 Releases API 挑對 essentials zip', async () => {
+  testAsync('FFmpeg 供應：釘選下載可備援，安裝時不信任可變的 release digest', async () => {
     // 兩個情境共用 downloadFfmpeg 內部固定的暫存檔路徑與 downloadInFlight 鎖，
     // 測試框架的 testAsync 會讓所有非同步測試同時起跑，若拆成兩個獨立 testAsync
     // 會互相搶同一份暫存檔而讓另一邊誤判成功/污染結果，因此在同一個測試裡循序執行。
@@ -816,14 +819,14 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
       const zipBuffer = zip.toBuffer();
       const zipHash = require('crypto').createHash('sha256').update(zipBuffer).digest('hex');
       const sources = [
-        { id: 'primary-test', label: 'primary-test', url: 'https://primary.test/ffmpeg.zip', checksumUrl: 'https://primary.test/hash', checksumFile: null },
-        { id: 'backup-test', label: 'backup-test', url: 'https://backup.test/ffmpeg.zip', checksumUrl: 'https://backup.test/hash', checksumFile: null },
+        { id: 'primary-test', label: 'primary-test', url: 'https://primary.test/ffmpeg.zip', sha256: zipHash, size: zipBuffer.length },
+        { id: 'backup-test', label: 'backup-test', url: 'https://backup.test/ffmpeg.zip', sha256: zipHash, size: zipBuffer.length },
       ];
       const stages = [];
       const result = await ffmpegProvider.downloadFfmpeg({
         platform: 'win32',
         sources,
-        fetchBufferImpl: async () => Buffer.from(`${zipHash}\n`, 'utf8'),
+        fetchBufferImpl: async () => { throw new Error('不應下載動態校驗碼'); },
         fetchFileImpl: async (url, filePath, options) => {
           if (url.includes('primary.test')) throw new Error('simulated source timeout');
           fs.writeFileSync(filePath, zipBuffer);
@@ -869,16 +872,16 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
       const sources = [{
         id: 'mirror-test',
         label: 'mirror-test',
-        resolveApiUrl: 'https://api.test/releases/latest',
-        assetNamePattern: /^ffmpeg-.+-essentials_build\.zip$/i,
+        url: 'https://mirror.test/ffmpeg-9.9-essentials_build.zip',
+        sha256: zipHash,
+        size: zipBuffer.length,
       }];
       let requestedUrl = null;
       const result = await ffmpegProvider.downloadFfmpeg({
         platform: 'win32',
         sources,
         fetchBufferImpl: async (url) => {
-          eq(url, 'https://api.test/releases/latest', '應該打 Releases API，不是純文字雜湊檔：');
-          return Buffer.from(releaseJson, 'utf8');
+          throw new Error('不可在安裝時信任 release API：' + releaseJson);
         },
         fetchFileImpl: async (url, filePath, options) => {
           requestedUrl = url;

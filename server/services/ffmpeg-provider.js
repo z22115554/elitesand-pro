@@ -10,14 +10,19 @@
  * 2. gyan 的 essentials build，但走它同步發布在 GitHub 的鏡像（GyanD/codexffmpeg）
  *    ——內容跟官網那份相同，只是換成 GitHub 主機，實測比 gyan.dev 直連快 20 倍以上
  * 3. gyan.dev 官網直連，當最後手段（前兩個 GitHub 來源都失敗，例如 GitHub 本身出問題時）
- * 全部先取得上游提供的 SHA-256 才下載到暫存 zip；不把 100MB+ 壓縮檔整包留在 RAM。
- * 雜湊不符一律拒絕使用。BtbN／gyan.dev 兩個是「先抓純文字雜湊檔」；GitHub 鏡像沒有
- * 獨立雜湊檔，改成打 Releases API，用回應裡每個 asset 自帶的 sha256 digest。
+ * 版本與 SHA-256 釘在受保護的 ffmpeg-trust.js；不接受下載當下可變的校驗碼。
+ * ZIP 串流寫入暫存檔，確認雜湊與大小後才解壓及執行。更新信任根需經專案發版。
  *
  * 找 ffmpeg 的優先序：
  * 1. 使用者在 server/config.js 指定的 ffmpegPath
  * 2. 先前透過這支模組下載、快取在 dataDir/bin/ 的副本
  * 3. 系統 PATH（含 tools/ 目錄——portable 啟動器會把它加進 PATH）
+ * 4. （macOS）Homebrew 的固定安裝位置。從 Finder／Dock 開啟的 app 不會繼承終端機的
+ *    PATH，`/opt/homebrew/bin`、`/usr/local/bin` 都不在裡面，只靠 which 會把「已經用
+ *    brew 裝好」的使用者誤判成沒有 FFmpeg。
+ *
+ * macOS 的按需下載來源另見 ffmpeg-trust.js 的 FFMPEG_MAC_SOURCES（ffmpeg、ffprobe
+ * 各一個 zip，依 CPU 架構挑選），同樣先驗 SHA-256 與大小才解壓、執行。
  */
 'use strict';
 
@@ -33,50 +38,53 @@ const { dataDir } = require('../utils/app-paths');
 const config = require('../utils/load-config');
 const { createLogger } = require('../utils/logger');
 const { safeRemove } = require('../utils/safe-remove');
+const { FFMPEG_SOURCES, FFMPEG_MAC_SOURCES } = require('./ffmpeg-trust');
 
 const log = createLogger('FFmpegProvider');
 
 const BIN_DIR = path.join(dataDir, 'bin');
-const FFMPEG_EXE = path.join(BIN_DIR, 'ffmpeg.exe');
-const FFPROBE_EXE = path.join(BIN_DIR, 'ffprobe.exe');
+// 只有 Windows 的執行檔帶 .exe；macOS／Linux 下載下來的檔名就是 ffmpeg、ffprobe。
+const EXE_SUFFIX = process.platform === 'win32' ? '.exe' : '';
+const FFMPEG_EXE = path.join(BIN_DIR, `ffmpeg${EXE_SUFFIX}`);
+const FFPROBE_EXE = path.join(BIN_DIR, `ffprobe${EXE_SUFFIX}`);
+const MAC_SYSTEM_BIN_DIRS = Object.freeze(['/opt/homebrew/bin', '/usr/local/bin']);
 
-const DOWNLOAD_SOURCES = [
-  {
-    id: 'btbn',
-    label: 'BtbN / GitHub',
-    url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip',
-    checksumUrl: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256',
-    checksumFile: 'ffmpeg-master-latest-win64-lgpl.zip',
-  },
-  {
-    id: 'gyan-github',
-    label: 'gyan（GitHub 鏡像）',
-    resolveApiUrl: 'https://api.github.com/repos/GyanD/codexffmpeg/releases/latest',
-    assetNamePattern: /^ffmpeg-.+-essentials_build\.zip$/i,
-  },
-  {
-    id: 'gyan',
-    label: 'gyan.dev',
-    url: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip',
-    checksumUrl: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.sha256',
-    checksumFile: null,
-  },
-];
+const DOWNLOAD_SOURCES = FFMPEG_SOURCES;
 const DOWNLOAD_URL = DOWNLOAD_SOURCES[0].url;
 const MAX_ZIP_BYTES = 300 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 const DOWNLOAD_TOTAL_TIMEOUT_MS = 10 * 60 * 1000;
 const DOWNLOAD_IDLE_TIMEOUT_MS = 30 * 1000;
 
-function getDownloadInfo() {
+function macSourcesFor(arch = process.arch) {
+  return FFMPEG_MAC_SOURCES[arch === 'arm64' ? 'arm64' : 'x64'] || [];
+}
+
+function getDownloadInfo({ platform = process.platform, arch = process.arch } = {}) {
+  if (platform === 'darwin') {
+    return {
+      maxBytes: MAX_ZIP_BYTES,
+      sources: macSourcesFor(arch).map(({ label, version, ffmpeg }) => ({ label, url: ffmpeg.url, version })),
+    };
+  }
   return {
     maxBytes: MAX_ZIP_BYTES,
-    sources: [
-      { label: 'BtbN / GitHub', url: 'https://github.com/BtbN/FFmpeg-Builds/releases' },
-      { label: 'Gyan / GitHub', url: 'https://github.com/GyanD/codexffmpeg/releases' },
-      { label: 'gyan.dev', url: 'https://www.gyan.dev/ffmpeg/builds/' },
-    ],
+    sources: DOWNLOAD_SOURCES.map(({ label, url, version }) => ({ label, url, version })),
   };
+}
+
+/**
+ * macOS：Homebrew 裝的 FFmpeg 在固定目錄，但 GUI app 的 PATH 不含它們。
+ * 兩個檔案都要存在才算一組；回傳絕對路徑，讓後續呼叫不再依賴 PATH。
+ */
+function findMacSystemPair({ platform = process.platform, existsSync = fs.existsSync, dirs = MAC_SYSTEM_BIN_DIRS } = {}) {
+  if (platform !== 'darwin') return null;
+  for (const dir of dirs) {
+    const ffmpeg = path.join(dir, 'ffmpeg');
+    const ffprobe = path.join(dir, 'ffprobe');
+    if (existsSync(ffmpeg) && existsSync(ffprobe)) return { source: 'system-dir', ffmpeg, ffprobe };
+  }
+  return null;
 }
 
 function isWindows() {
@@ -141,7 +149,7 @@ function resolveFfmpegPaths() {
   if (commandExistsOnPath('ffmpeg') && commandExistsOnPath('ffprobe')) {
     return { source: 'system', ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' };
   }
-  return null;
+  return findMacSystemPair();
 }
 
 /** 給 spawn() 用的 ffmpeg 路徑；找不到時回傳裸指令 'ffmpeg'，讓呼叫端維持既有的失敗處理。 */
@@ -237,30 +245,6 @@ function parseExpectedHash(source, checksumBuf) {
     if (match[2].trim() === source.checksumFile) return match[1].toLowerCase();
   }
   return null;
-}
-
-/**
- * gyan 的 GitHub 鏡像（GyanD/codexffmpeg）沒有獨立雜湊檔，改打 Releases API：
- * 用回應裡對應 asset 自帶的 sha256 digest 當預期雜湊，網址也從這裡取得
- * （這個來源的 zip 網址含版本號，無法寫死，只能查完最新版才知道）。
- */
-async function resolveGithubReleaseAsset(source, fetchBufferImpl) {
-  const buf = await fetchBufferImpl(source.resolveApiUrl, { maxBytes: 512 * 1024 });
-  let release;
-  try {
-    release = JSON.parse(buf.toString('utf8'));
-  } catch (_) {
-    throw new Error(`解析 ${source.label} release 資訊失敗`);
-  }
-  const asset = (release.assets || []).find((item) => source.assetNamePattern.test(item?.name || ''));
-  if (!asset?.browser_download_url) {
-    throw new Error(`${source.label} release 找不到符合的下載檔案`);
-  }
-  const match = /^sha256:([a-f0-9]{64})$/i.exec(String(asset.digest || ''));
-  if (!match) {
-    throw new Error(`${source.label} release 的 asset 缺少 SHA-256 digest`);
-  }
-  return { url: asset.browser_download_url, expectedHash: match[1].toLowerCase() };
 }
 
 function fetchToFile(url, filePath, {
@@ -368,6 +352,12 @@ function findFfmpegEntries(entries) {
     ffmpegEntry: entries.find((e) => /(^|\/)bin\/ffmpeg\.exe$/i.test(e.entryName)),
     ffprobeEntry: entries.find((e) => /(^|\/)bin\/ffprobe\.exe$/i.test(e.entryName)),
   };
+}
+
+// macOS 的 Martin Riedl zip 只裝一個執行檔、放在根目錄（ffmpeg.zip → ffmpeg）。
+// 只認根目錄的同名一般檔案；任何子目錄或路徑跳脫都不接受。
+function findMacBinaryEntry(entries, name) {
+  return entries.find((e) => !e.isDirectory && e.entryName === name) || null;
 }
 
 let downloadInFlight = null;
@@ -489,26 +479,85 @@ async function beginPairInstall(tmpFfmpeg, tmpFfprobe) {
 }
 
 /**
+ * macOS：ffmpeg、ffprobe 各下載一個 zip，兩個都通過釘死的 SHA-256 與大小才算這個
+ * 來源成功；任一個失敗就換下一個來源（不混用不同來源的兩半）。解出來的檔案設成
+ * 0755。從 Node 寫出的檔案不帶 com.apple.quarantine，Gatekeeper 不會另外擋；
+ * Apple Silicon 要求的程式碼簽章由上游 build 自帶。
+ */
+async function downloadMacPair({ sources, fetchFileImpl, progress, onProgress, tmpZip, tmpProbeZip, tmpFfmpeg, tmpFfprobe }) {
+  let sourceError = null;
+  for (let index = 0; index < sources.length; index++) {
+    const source = sources[index];
+    try {
+      const parts = [['ffmpeg', source.ffmpeg, tmpZip, tmpFfmpeg], ['ffprobe', source.ffprobe, tmpProbeZip, tmpFfprobe]];
+      const hashes = {};
+      for (const [name, artifact, zipPath] of parts) {
+        const expectedHash = String(artifact?.sha256 || '').toLowerCase();
+        if (!/^[a-f0-9]{64}$/.test(expectedHash) || !/^https:\/\//.test(String(artifact?.url || ''))) {
+          throw new Error(`缺少程式內建的下載信任根（${source.label} ${name}）`);
+        }
+        progress('download', { source: source.id, part: name, downloadedBytes: 0, totalBytes: null, percent: 0, speedBytesPerSec: 0 });
+        const result = await fetchFileImpl(artifact.url, zipPath, {
+          maxBytes: MAX_ZIP_BYTES,
+          onProgress: (downloadProgress) => {
+            setDownloadStatus({ active: true, stage: 'download', source: source.id, part: name, ...downloadProgress, error: null });
+            onProgress?.(getDownloadStatus());
+          },
+        });
+        progress('verify', { source: source.id, part: name, downloadedBytes: result.downloadedBytes, totalBytes: result.totalBytes, percent: 100, speedBytesPerSec: null });
+        if (result.sha256 !== expectedHash || (artifact.size && result.downloadedBytes !== artifact.size)) {
+          throw new Error(`SHA-256 驗證失敗（${name}：預期 ${expectedHash.slice(0, 12)}…，實際 ${String(result.sha256 || '').slice(0, 12)}…）`);
+        }
+        hashes[name] = result.sha256;
+      }
+      progress('extract', { source: source.id });
+      for (const [name, , zipPath, outPath] of parts) {
+        const entry = findMacBinaryEntry(new AdmZip(zipPath).getEntries(), name);
+        if (!entry) throw new Error(`下載的壓縮檔內找不到 ${name}，上游打包結構可能變了`);
+        fs.writeFileSync(outPath, entry.getData(), { mode: 0o755 });
+        fs.chmodSync(outPath, 0o755);
+      }
+      return { selectedSource: source, actualHash: hashes.ffmpeg };
+    } catch (error) {
+      sourceError = error;
+      safeRemove(tmpZip);
+      safeRemove(tmpProbeZip);
+      safeRemove(tmpFfmpeg);
+      safeRemove(tmpFfprobe);
+      log.warn(`FFmpeg 來源 ${source.label} 失敗：${error.message}`);
+      if (index + 1 < sources.length) {
+        progress('source-fallback', { source: source.id, downloadedBytes: 0, totalBytes: null, percent: null, speedBytesPerSec: null });
+      }
+    }
+  }
+  throw sourceError || new Error('所有 FFmpeg 下載來源都失敗');
+}
+
+/**
  * 下載並驗證 FFmpeg（會拋出例外，呼叫端負責轉成使用者看得懂的錯誤訊息）。
  * 多次呼叫共用同一個進行中的下載，不會並發抓兩份。
  */
 async function downloadFfmpeg({
   onProgress,
-  fetchBufferImpl = fetchToBuffer,
   fetchFileImpl = fetchToFile,
   spawnSyncImpl = spawnSync,
   platform = process.platform,
-  sources = DOWNLOAD_SOURCES,
+  arch = process.arch,
+  sources = null,
 } = {}) {
-  if (platform !== 'win32') {
-    throw new Error('目前只支援 Windows 的自動下載；其他平台請自行安裝 FFmpeg 並在 config.js 指定 ffmpegPath。');
+  const isMac = platform === 'darwin';
+  if (platform !== 'win32' && !isMac) {
+    throw new Error('目前只支援 Windows 與 macOS 的自動下載；其他平台請自行安裝 FFmpeg 並在 config.js 指定 ffmpegPath。');
   }
+  const sourceList = sources || (isMac ? macSourcesFor(arch) : DOWNLOAD_SOURCES);
   if (downloadInFlight) return downloadInFlight;
 
   downloadInFlight = (async () => {
     const tmpZip = path.join(BIN_DIR, 'ffmpeg.download.zip');
-    const tmpFfmpeg = path.join(BIN_DIR, 'ffmpeg.download.exe');
-    const tmpFfprobe = path.join(BIN_DIR, 'ffprobe.download.exe');
+    const tmpProbeZip = path.join(BIN_DIR, 'ffprobe.download.zip');
+    const tmpSuffix = platform === 'win32' ? '.exe' : '';
+    const tmpFfmpeg = path.join(BIN_DIR, `ffmpeg.download${tmpSuffix}`);
+    const tmpFfprobe = path.join(BIN_DIR, `ffprobe.download${tmpSuffix}`);
     let stage = 'start';
     let transaction = null;
     let actualHash = null;
@@ -523,6 +572,7 @@ async function downloadFfmpeg({
     try {
       fs.mkdirSync(BIN_DIR, { recursive: true });
       safeRemove(tmpZip);
+      safeRemove(tmpProbeZip);
       safeRemove(tmpFfmpeg);
       safeRemove(tmpFfprobe);
 
@@ -538,103 +588,86 @@ async function downloadFfmpeg({
         error: null,
       });
 
-      let sourceError = null;
-      for (let index = 0; index < sources.length; index++) {
-        const source = sources[index];
-        try {
-          let downloadUrl = source.url;
-          let expectedHash;
+      if (isMac) {
+        ({ selectedSource, actualHash } = await downloadMacPair({
+          sources: sourceList, fetchFileImpl, progress, onProgress, tmpZip, tmpProbeZip, tmpFfmpeg, tmpFfprobe,
+        }));
+      } else {
+        let sourceError = null;
+        for (let index = 0; index < sourceList.length; index++) {
+          const source = sourceList[index];
+          try {
+            const downloadUrl = source.url;
+            const expectedHash = String(source.sha256 || '').toLowerCase();
+            if (!/^[a-f0-9]{64}$/.test(expectedHash) || !/^https:\/\//.test(String(downloadUrl || ''))) {
+              throw new Error(`缺少程式內建的下載信任根（${source.label}）`);
+            }
 
-          if (source.resolveApiUrl) {
-            progress('resolve', {
+            progress('download', {
               source: source.id,
               downloadedBytes: 0,
               totalBytes: null,
-              percent: null,
-              speedBytesPerSec: null,
+              percent: 0,
+              speedBytesPerSec: 0,
             });
-            const resolved = await resolveGithubReleaseAsset(source, fetchBufferImpl);
-            downloadUrl = resolved.url;
-            expectedHash = resolved.expectedHash;
-          } else {
-            progress('checksum', {
+            const result = await fetchFileImpl(downloadUrl, tmpZip, {
+              maxBytes: MAX_ZIP_BYTES,
+              onProgress: (downloadProgress) => {
+                setDownloadStatus({
+                  active: true,
+                  stage: 'download',
+                  source: source.id,
+                  ...downloadProgress,
+                  error: null,
+                });
+                onProgress?.(getDownloadStatus());
+              },
+            });
+
+            progress('verify', {
               source: source.id,
-              downloadedBytes: 0,
-              totalBytes: null,
-              percent: null,
+              downloadedBytes: result.downloadedBytes,
+              totalBytes: result.totalBytes,
+              percent: 100,
               speedBytesPerSec: null,
             });
-            const checksumBuf = await fetchBufferImpl(source.checksumUrl, { maxBytes: 64 * 1024 });
-            expectedHash = parseExpectedHash(source, checksumBuf);
-            if (!expectedHash) {
-              throw new Error(`取得的雜湊格式不正確（${source.label}）`);
+            actualHash = result.sha256;
+            if (actualHash !== expectedHash || (source.size && result.downloadedBytes !== source.size)) {
+              throw new Error(`SHA-256 驗證失敗（預期 ${expectedHash.slice(0, 12)}…，實際 ${actualHash.slice(0, 12)}…）`);
+            }
+            selectedSource = source;
+            sourceError = null;
+            break;
+          } catch (error) {
+            sourceError = error;
+            safeRemove(tmpZip);
+            log.warn(`FFmpeg 來源 ${source.label} 失敗：${error.message}`);
+            if (index + 1 < sourceList.length) {
+              progress('source-fallback', {
+                source: source.id,
+                downloadedBytes: 0,
+                totalBytes: null,
+                percent: null,
+                speedBytesPerSec: null,
+              });
             }
           }
-
-          progress('download', {
-            source: source.id,
-            downloadedBytes: 0,
-            totalBytes: null,
-            percent: 0,
-            speedBytesPerSec: 0,
-          });
-          const result = await fetchFileImpl(downloadUrl, tmpZip, {
-            maxBytes: MAX_ZIP_BYTES,
-            onProgress: (downloadProgress) => {
-              setDownloadStatus({
-                active: true,
-                stage: 'download',
-                source: source.id,
-                ...downloadProgress,
-                error: null,
-              });
-              onProgress?.(getDownloadStatus());
-            },
-          });
-
-          progress('verify', {
-            source: source.id,
-            downloadedBytes: result.downloadedBytes,
-            totalBytes: result.totalBytes,
-            percent: 100,
-            speedBytesPerSec: null,
-          });
-          actualHash = result.sha256;
-          if (actualHash !== expectedHash) {
-            throw new Error(`SHA-256 驗證失敗（預期 ${expectedHash.slice(0, 12)}…，實際 ${actualHash.slice(0, 12)}…）`);
-          }
-          selectedSource = source;
-          sourceError = null;
-          break;
-        } catch (error) {
-          sourceError = error;
-          safeRemove(tmpZip);
-          log.warn(`FFmpeg 來源 ${source.label} 失敗：${error.message}`);
-          if (index + 1 < sources.length) {
-            progress('source-fallback', {
-              source: source.id,
-              downloadedBytes: 0,
-              totalBytes: null,
-              percent: null,
-              speedBytesPerSec: null,
-            });
-          }
         }
-      }
 
-      if (!selectedSource) {
-        throw sourceError || new Error('所有 FFmpeg 下載來源都失敗');
-      }
+        if (!selectedSource) {
+          throw sourceError || new Error('所有 FFmpeg 下載來源都失敗');
+        }
 
-      progress('extract', { source: selectedSource.id });
-      const zip = new AdmZip(tmpZip);
-      const { ffmpegEntry, ffprobeEntry } = findFfmpegEntries(zip.getEntries());
-      if (!ffmpegEntry || !ffprobeEntry) {
-        throw new Error('下載的壓縮檔內找不到 ffmpeg.exe / ffprobe.exe，上游打包結構可能變了');
-      }
+        progress('extract', { source: selectedSource.id });
+        const zip = new AdmZip(tmpZip);
+        const { ffmpegEntry, ffprobeEntry } = findFfmpegEntries(zip.getEntries());
+        if (!ffmpegEntry || !ffprobeEntry) {
+          throw new Error('下載的壓縮檔內找不到 ffmpeg.exe / ffprobe.exe，上游打包結構可能變了');
+        }
 
-      fs.writeFileSync(tmpFfmpeg, ffmpegEntry.getData());
-      fs.writeFileSync(tmpFfprobe, ffprobeEntry.getData());
+        fs.writeFileSync(tmpFfmpeg, ffmpegEntry.getData());
+        fs.writeFileSync(tmpFfprobe, ffprobeEntry.getData());
+      }
 
       progress('validate-temp');
       const tempValidation = validateFfmpegPair(
@@ -687,6 +720,7 @@ async function downloadFfmpeg({
         }
       }
       safeRemove(tmpZip);
+      safeRemove(tmpProbeZip);
       safeRemove(tmpFfmpeg);
       safeRemove(tmpFfprobe);
     }
@@ -853,12 +887,15 @@ module.exports = {
   commandRuns,
   validateFfmpegPair,
   findFfmpegEntries,
+  findMacBinaryEntry,
+  findMacSystemPair,
   getDownloadStatus,
   parseExpectedHash,
   isIllegalByteSequenceError,
   transcodeMp3ThroughPipes,
   installAudioProcessorUnicodePathFallback,
   DOWNLOAD_SOURCES,
+  FFMPEG_MAC_SOURCES,
   DOWNLOAD_URL,
   BIN_DIR,
   FFMPEG_EXE,

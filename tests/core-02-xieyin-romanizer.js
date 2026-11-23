@@ -148,6 +148,25 @@ test('needsRomanization 偵測', () => {
   ok(!romanizer.needsRomanization([{ text: 'Hello' }]));
 });
 
+test('羅馬化語言：日文歌裡只有漢字的行仍走日文；夾一個假名的中文歌仍走中文拼音', async () => {
+  const tone = /[āáǎàēéěèīíǐìōóǒòūúǔù]/;
+  const ja = await romanizer.addRomanization([
+    { time: 0, text: 'きみのこえが聞こえる' }, { time: 1, text: '最低界隈最低界隈' },
+    { time: 2, text: 'ねえ、どうして' }, { time: 3, text: '日々日々困惑' },
+    { time: 4, text: '今日も笑ってる' }, { time: 5, text: '夜に駆けだして' },
+  ]);
+  ok(!tone.test(ja[1].phonetic || ''), '日文歌的純漢字行不可變成中文拼音: ' + ja[1].phonetic);
+  ok(!tone.test(ja[3].phonetic || ''), '日文歌的純漢字行不可變成中文拼音: ' + ja[3].phonetic);
+  const zh = await romanizer.addRomanization([
+    { time: 0, text: '一拐二拐三拐在夏天的夜晚' }, { time: 1, text: '我把真心交给你' },
+    { time: 2, text: '转弯你眼睛勾走心跳的路牌' }, { time: 3, text: '突然抓不住在眼前' },
+    { time: 4, text: '今夜の月' },
+  ]);
+  ok(tone.test(zh[0].phonetic || ''), '中文歌不可因為一行假名整首走日文: ' + zh[0].phonetic);
+  ok(tone.test(zh[1].phonetic || ''), '中文歌不可因為一行假名整首走日文: ' + zh[1].phonetic);
+  ok(!zh[0].xieyin && !zh[1].xieyin, '中文行不可拿拼音當羅馬字轉諧音: ' + zh[0].xieyin);
+});
+
 test('kuromoji 不可用時 addRomanization 不崩潰（async 降級）', async () => {
   // 在本測試環境 kuromoji 未安裝，addRomanization 應降級而不丟例外
   const p = romanizer.addRomanization([{ time: 0, text: 'きみ' }]);

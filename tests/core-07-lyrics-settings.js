@@ -533,7 +533,7 @@ test('T6 管理視窗包含安全自訂指令、規則模擬、歷史與控制�
   const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(root, 'public', 'js', 'app-twitch.js'), 'utf8');
   const handler = fs.readFileSync(path.join(root, 'server', 'routes', 'handlers', 'twitch.js'), 'utf8');
-  const service = fs.readFileSync(path.join(root, 'server', 'services', 'twitch-service.js'), 'utf8');
+  const service = require('./helpers/twitch-service-source')();
   for (const token of ['twitch-custom-list', 'twitch-custom-duplicate', 'twitch-sim-run', 'twitch-history-list', 'twitch-custom-public-test']) {
     ok(html.includes(token), '缺少 T6 管理介面：' + token);
   }
@@ -1569,4 +1569,125 @@ testAsync('Twitch 聊天回覆遇到 5xx 會退避重試', async () => {
   await service.sendChatReply({ chatter_user_name: 'viewer' }, 'ok');
   eq(attempts, 3);
   service.stop();
+});
+
+test('歌詞位置數值在即時更新、模板快照及預設套用皆使用相同驗證', () => {
+  const register = require('../server/routes/handlers/lyrics');
+  const handlers = new Map();
+  const playState = { lyricSettings: { template: 'classic', offsetY: 27 } };
+  register({ emit() {} }, { on(name, handler) { handlers.set(name, handler); } }, {
+    playState, persistState(callback) { callback({ ok: true }); },
+  });
+  handlers.get('lyric-settings:update')({
+    offsetX: 1e10, offsetY: '120',
+    lyricTemplateSettings: { typewriter: { offsetX: null, offsetY: -1e10, verticalPosition: 'flex-end' } },
+    lyricPresets: [{ name: '舞台', settings: { template: 'pulse', offsetY: 150 } }],
+  }, result => eq(result.ok, true));
+  eq(playState.lyricSettings.offsetX, 1080);
+  eq(playState.lyricSettings.offsetY, 27);
+  const snapshot = playState.lyricSettings.lyricTemplateSettings.typewriter;
+  eq(snapshot.offsetX, undefined);
+  eq(snapshot.offsetY, -1080);
+  eq(snapshot.verticalPosition, 'center');
+  eq(playState.lyricSettings.lyricPresets[0].settings.offsetY, 150);
+});
+
+test('置中構圖模板與紙帶逐字的邊距鎖回預設，位置只用 X/Y 微調', () => {
+  const defaults = require('../public/js/lyric-template-defaults');
+  for (const tpl of ['pulse', 'facet', 'aura', 'paperstrip', 'mirror']) {
+    const s = defaults.sanitizeLyricPosition({ template: tpl, paddingX: 300, paddingY: 0, offsetY: 40 }, tpl);
+    eq(s.paddingX, defaults.templateDefaults(tpl).paddingX, `${tpl} paddingX`);
+    eq(s.paddingY, defaults.templateDefaults(tpl).paddingY, `${tpl} paddingY`);
+    eq(s.offsetY, 40, `${tpl} offsetY 不受影響`);
+  }
+  // 邊距仍有意義的模板不鎖
+  for (const tpl of ['classic', 'ktv', 'typewriter', 'columnflow', 'particle', 'lightboard']) {
+    const s = defaults.sanitizeLyricPosition({ template: tpl, paddingX: 300, paddingY: 0 }, tpl);
+    eq(s.paddingX, 300, `${tpl} paddingX`);
+    eq(s.paddingY, 0, `${tpl} paddingY`);
+  }
+  const panel = fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8');
+  ok(panel.includes("modalPaddingXField.hidden = isTypewriter || paddingLocked")
+    && panel.includes('modalPaddingYField.hidden = paddingLocked'), '面板對鎖定模板隱藏上下左右邊距');
+});
+
+test('改版前的模板快照讀檔時保留當時實際呈現的字重、邊距與寬度', () => {
+  const { DEFAULT_SETTINGS, migrateLegacyAppearance, sanitizeLyricPosition, APPEARANCE_VERSION } = require('../public/js/lyric-template-defaults');
+  // 舊面板把共用預設整包存進每個模板：字重 900、邊距 60／48、最大寬度 90%。
+  const legacy = (template) => ({ ...DEFAULT_SETTINGS, appearanceVersion: undefined, template });
+  const pulse = migrateLegacyAppearance(legacy('pulse'), 'pulse');
+  eq(pulse.fontWeight, 700);
+  eq(pulse.appearanceVersion, APPEARANCE_VERSION);
+  eq(migrateLegacyAppearance(legacy('drift'), 'drift').fontWeight, 400);
+  eq(migrateLegacyAppearance(legacy('typewriter'), 'typewriter').fontWeight, 600);
+  const mirror = migrateLegacyAppearance(legacy('mirror'), 'mirror');
+  eq([mirror.paddingX, mirror.paddingY, mirror.maxWidth, mirror.fontWeight].join(','), '0,0,100,900');
+  const jizura = migrateLegacyAppearance(legacy('jizura'), 'jizura');
+  eq([jizura.paddingX, jizura.paddingY, jizura.maxWidth].join(','), '0,0,100');
+  const lightboard = migrateLegacyAppearance(legacy('lightboard'), 'lightboard');
+  eq([lightboard.paddingX, lightboard.paddingY, lightboard.maxWidth, lightboard.fontWeight].join(','), '0,48,94,400');
+  // 經典疊層本來就讀這些欄位，不動。
+  const classic = migrateLegacyAppearance(legacy('classic'), 'classic');
+  eq([classic.fontWeight, classic.paddingX, classic.maxWidth].join(','), '900,60,90');
+  // 稀疏快照缺欄位時不補值（之後由模板預設補）。
+  eq(migrateLegacyAppearance({ template: 'pulse' }, 'pulse').fontWeight, undefined);
+  // 新版快照（含標記）裡使用者自己選的值不可被改寫。
+  eq(migrateLegacyAppearance({ template: 'pulse', fontWeight: 900, appearanceVersion: APPEARANCE_VERSION }, 'pulse').fontWeight, 900);
+  // 即時更新路徑只蓋標記，不改外觀值。
+  const live = sanitizeLyricPosition({ fontWeight: 900 }, 'pulse');
+  eq(live.fontWeight, 900);
+  eq(live.appearanceVersion, APPEARANCE_VERSION);
+  // 風息成字的 Canvas 會讀陰影，面板必須給它陰影控制。
+  ok(fs.readFileSync(path.join(__dirname, '../public/js/lyric-extras.js'), 'utf8')
+    .includes("const supportsShadow = ['classic', 'pulse', 'facet', 'drift', 'columnflow', 'particle']"), '風息成字要顯示陰影設定: ');
+});
+
+test('伺服器讀檔時遷移舊外觀與舊燈牌 Y，新安裝預設已帶版本標記', () => {
+  const stateStore = require('../server/services/state-store');
+  const original = { loadState: stateStore.loadState, scheduleSave: stateStore.scheduleSave, saveNow: stateStore.saveNow };
+  const appStatePath = require.resolve('../server/state/app-state.js');
+  const { DEFAULT_SETTINGS } = require('../public/js/lyric-template-defaults');
+  const legacy = (template, extra) => {
+    const out = { ...DEFAULT_SETTINGS, template, ...extra };
+    delete out.appearanceVersion;
+    delete out.lightboardOffsetVersion;
+    return out;
+  };
+  try {
+    stateStore.scheduleSave = () => {};
+    stateStore.saveNow = () => {};
+    stateStore.loadState = () => ({
+      schemaVersion: stateStore.CURRENT_STATE_SCHEMA_VERSION,
+      // 一次性修正全標成已做，避免讀檔後排程寫回真正的 state 檔。
+      oneTimeFixes: Object.fromEntries(require('../server/services/state-migrations').ONE_TIME_FIX_NAMES.map(name => [name, true])),
+      playlist: [],
+      lyricSettings: {
+        ...legacy('drift'),
+        lyricTemplateSettings: {
+          drift: legacy('drift'),
+          mirror: legacy('mirror'),
+          lightboard: legacy('lightboard', { offsetY: 120 }),
+        },
+        lyricPresets: [{ name: '舊預設', settings: legacy('pulse') }],
+      },
+    });
+    delete require.cache[appStatePath];
+    const { playState } = require(appStatePath).createAppState({ emit() {} });
+    const s = playState.lyricSettings;
+    eq(s.fontWeight, 400);
+    eq(s.lyricTemplateSettings.drift.fontWeight, 400);
+    eq(s.lyricTemplateSettings.mirror.paddingY, 0);
+    eq(s.lyricTemplateSettings.mirror.maxWidth, 100);
+    eq(s.lyricTemplateSettings.lightboard.offsetY, 0);
+    eq(s.lyricTemplateSettings.lightboard.maxWidth, 94);
+    eq(s.lyricPresets[0].settings.fontWeight, 700);
+
+    stateStore.loadState = () => null;
+    delete require.cache[appStatePath];
+    const fresh = require(appStatePath).createAppState({ emit() {} }).playState.lyricSettings;
+    ok(Object.values(fresh.lyricTemplateSettings).every(snapshot => snapshot.appearanceVersion === 1), '新安裝的模板預設必須帶外觀版本標記: ');
+  } finally {
+    Object.assign(stateStore, original);
+    delete require.cache[appStatePath];
+  }
 });

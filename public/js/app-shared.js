@@ -212,8 +212,16 @@ window.AppShared = (function () {
         });
         return promise;
       },
-      convert(str) {
+      // lineText：str 是句中的一個字塊時傳整句。日文（有假名的句子）不轉：opencc 會把日文漢字換成
+      // 中文繁體字形（会→會、学校→學校、恋愛→戀愛），跟 OBS 顯示端（karaoke.js）同一條規則。
+      /** 搜尋比對用：不看「簡轉繁」開關（兩邊都轉，只拿來比，不顯示）。字典還沒載好就原樣回傳。 */
+      fold(str) {
+        if (!str || !conv) return str;
+        try { return conv(str); } catch (_) { return str; }
+      },
+      convert(str, lineText) {
         if (!str || !conv || !this.enabled()) return str;
+        if (/[\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\uFF66-\uFF9F]/.test(String(lineText || str))) return str;
         try { return conv(str); } catch (_) { return str; }
       },
     };

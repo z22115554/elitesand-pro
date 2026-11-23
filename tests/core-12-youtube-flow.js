@@ -159,7 +159,10 @@ test('YouTube nightly fallback 只允許 Installer 的可信可寫 yt-dlp 工作
   ok(updater.includes("process.env.ELITESAND_YTDLP_MUTABLE !== '1'"), '唯讀 seed 不可被 nightly fallback 修改: ');
   ok(updater.includes("nightlyRelease.stageVerifiedRelease"), '相容性救援必須驗證官方 Nightly binary: ');
   ok(updater.includes('writeApprovedRuntimeTrust(currentVersion)'), 'nightly 成功後必須重新寫可信 runtime hash: ');
-  ok(shell.includes("ELITESAND_YTDLP_NODE_PATH: path.join(packagedTools, 'updater-node.exe')"), 'Installer 應把隨附 Node runtime 明確交給 yt-dlp EJS: ');
+  ok(shell.includes('ELITESAND_YTDLP_NODE_PATH: path.join(packagedTools, bundledNodeName(processObject.platform))'), 'Installer 應把隨附 Node runtime 明確交給 yt-dlp EJS: ');
+  const { bundledNodeName } = require('../server/utils/platform-binaries');
+  eq(bundledNodeName('win32'), 'updater-node.exe', 'Windows 隨附的 Node runtime 檔名不可改變: ');
+  eq(bundledNodeName('darwin'), 'node', 'macOS 隨附的 Node runtime 檔名: ');
   const portableBuild = fs.readFileSync(path.join(__dirname, '../tools/build-portable.ps1'), 'utf8');
   ok(portableBuild.includes('Node.js 22 or newer is required for packaged yt-dlp EJS support'), '打包時必須拒絕 Node 21 以下，避免產出無法解 EJS 的 runtime: ');
   const audio = fs.readFileSync(path.join(__dirname, '../server/services/audio-processor.js'), 'utf8');

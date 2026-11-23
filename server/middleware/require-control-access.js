@@ -17,7 +17,14 @@ function hasControlAccess(request) {
 }
 
 function requireControlAccess(req, res, next) {
-  if (hasControlAccess(req)) return next();
+  if (hasControlAccess(req)) {
+    const token = controllerTokenFrom(req);
+    if (accessStore.verifyControllerToken(token)) {
+      const { rememberMediaCredential, CONTROL_COOKIE } = require('./require-media-access');
+      rememberMediaCredential(req, res, CONTROL_COOKIE, token);
+    }
+    return next();
+  }
   return res.status(401).json({
     error: 'This controller has not been paired with the desktop app.',
     code: 'CONTROLLER_PAIRING_REQUIRED',

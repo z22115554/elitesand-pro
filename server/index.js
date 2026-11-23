@@ -9,6 +9,8 @@
  * /display     → OBS 歌詞疊加（透明底）
  * /setlist     → OBS 直播歌單疊加（透明底）
  */
+const { consumeShellHealthKey, createShellHealthProof } = require('./utils/shell-health-proof');
+const shellHealthKey = consumeShellHealthKey();
 const express = require('express');
 const fs = require('fs');
 const http = require('http');
@@ -28,8 +30,7 @@ const { requireSourceAccess } = require('./middleware/require-source-access');
 const deviceAccess = require('./services/device-access-store');
 const { renderDisplayRuntimePage } = require('./services/display-runtime-build');
 const templateDelivery = require('./services/template-delivery');
-const moonEvent = require('./services/moon-event');
-const halloweenEvent = require('./services/halloween-event');
+const { moonEvent, halloweenEvent } = require('./services/retired-seasonal-events');
 const ytdlpCompatibility = require('./services/ytdlp-compatibility');
 const PORT = process.env.PORT || config.port || 3000;
 deviceAccess.initialize();
@@ -68,6 +69,7 @@ process.on('unhandledRejection', (reason) => {
 require('./services/session-marker').markStarted({ version: require('./utils/app-version').APP_VERSION });
 
 const app = express();
+app.locals.shellHealthProof = (challenge, port) => createShellHealthProof(shellHealthKey, challenge, port);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -175,7 +177,7 @@ app.use((req, res, next) => {
     && (req.method !== 'GET' || SIDE_EFFECT_GET_PREFIXES.some((prefix) => requestPath.startsWith(prefix)));
   if (!protectedRequest) return next();
   const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
-  if (fetchSite === 'cross-site') return res.status(403).json({ error: '已拒絕跨網站操作', code: 'CROSS_SITE_REQUEST' });
+  if (fetchSite === 'cross-site' || fetchSite === 'same-site') return res.status(403).json({ error: '已拒絕跨網站操作', code: 'CROSS_SITE_REQUEST' });
   const origin = req.headers.origin;
   if (origin) {
     try {
@@ -321,8 +323,13 @@ app.use((req, res, next) => {
     pathname = path.posix.normalize(decodeURIComponent(req.path).replace(/\\/g, '/'))
       .toLowerCase().replace(/\/+$/, '');
   } catch (_) { return next(); }
-  if (pathname !== '/practice-overlay' && pathname !== '/practice-overlay.html') return next();
-  return requireSourceAccess(req, res, () => sendNoCache(res, 'practice-overlay.html'));
+  const sourcePage = new Map([
+    ['/practice-overlay', 'practice-overlay.html'], ['/practice-overlay.html', 'practice-overlay.html'],
+    ['/display', 'display.html'], ['/display.html', 'display.html'],
+    ['/setlist', 'setlist.html'], ['/setlist.html', 'setlist.html'],
+  ]).get(pathname);
+  if (!sourcePage) return next();
+  return requireSourceAccess(req, res, () => sendNoCache(res, sourcePage));
 });
 app.use(express.static(path.join(projectRoot, 'public'), { index: false }));
 
@@ -339,6 +346,8 @@ const practiceGuideService = createPracticeGuideService({ getLyrics: (trackId) =
 app.use('/api/practice', createPracticeRouter({ service: practiceGuideService }));
 
 const apiRoutes = require('./routes/api');
+app.use(['/audio', '/background', '/typewriter-sticker', '/alert-show/custom', '/api/cover'],
+  require('./middleware/require-media-access').requireMediaAccess);
 app.use('/api', apiRoutes);
 
 // ─── Page Routes ───
@@ -500,6 +509,7 @@ const overlayShow = require('./services/overlay-show').createOverlayShow({
   onSettingsChange: (settings) => io.emit('overlay-show:settings', settings),
 });
 socketApi.setOverlayShow(overlayShow);
+let retiredEventCleanup = null;
 const twitch = new TwitchService({
   config,
   onStreamOnline: (event) => socketApi.startTwitchSession(event),
@@ -514,37 +524,23 @@ const twitch = new TwitchService({
   onPanelAction: (action) => socketApi.dispatchTwitchAdminAction(action),
   onPendingRequestsChanged: () => socketApi.broadcastTwitchRequests(),
   onHistoryChanged: (entries) => socketApi.broadcastTwitchHistory(entries),
-  onStatusChange: (status) => socketApi.recordTwitchStatus(status),
+  onStatusChange: (status) => {
+    socketApi.recordTwitchStatus(status);
+    if (status.authorized && status.connected) retiredEventCleanup?.run();
+  },
   getPlaybackSnapshot: () => socketApi.getState(),
 });
 socketApi.setTwitchService(twitch);
 
-// ─── 萬聖節觀眾互動：掛在 Twitch 的聊天／兌換攔截點上，活動結束後自動不作用 ───
-const { createHalloweenInteractions } = require('./services/halloween-interactions');
-const halloweenInteractions = createHalloweenInteractions({
-  isActive: () => halloweenEvent.isActive(),
-  emit: (event, payload) => io.emit(event, payload),
-  getDonations: () => halloweenEvent.snapshot().donations,
-});
-halloweenInteractions.attachTwitch(twitch);
-socketApi.setHalloweenInteractions(halloweenInteractions);
-
-// 魔女的大鍋：材料比例經 halloween-event 的快照裝飾進 halloween:update；頻道點數模式的五個兌換項目。
-const { createHalloweenCauldron } = require('./services/halloween-cauldron');
-const halloweenCauldron = createHalloweenCauldron({
-  event: halloweenEvent,
-  emit: (event, payload) => io.emit(event, payload),
-});
-halloweenCauldron.attachTwitch(twitch);
-socketApi.setHalloweenCauldron(halloweenCauldron);
-// 兌換攔截點只有一個：先問大鍋，不是大鍋的兌換項目才交給搗蛋幽靈，兩者都不是再回點歌流程。
-twitch.setRedemptionInterceptor(async (event, fallbackId) =>
-  (await halloweenCauldron.handleRedemption(event, fallbackId)) || halloweenInteractions.handleRedemption(event, fallbackId));
+// Campaign modules stay archived. Only pause/refund rewards that this app
+// previously created; never recreate a missing expired reward or touch records.
+retiredEventCleanup = require('./services/retired-event-cleanup').createRetiredEventCleanup({ twitch });
+twitch.setRedemptionInterceptor(retiredEventCleanup.handleRedemption);
 app.use(require('./routes/twitch-auth')(twitch));
 twitch.start();
 // 活動已結束（啟動時判斷）：等 Twitch 連上後把大鍋的兌換項目暫停，觀眾不會再看到能兌換的項目。
-if (!halloweenEvent.isActive()) setTimeout(() => { halloweenCauldron.syncRewards().catch(() => {}); }, 20000).unref?.();
-process.on('exit', () => twitch.stop());
+retiredEventCleanup.start();
+require('./utils/exit-hooks').onExit(() => { retiredEventCleanup.stop(); twitch.stop(); });
 
 // ─── 公開點歌頁：向外連到 Cloudflare 中繼（docs/PUBLIC-SONG-REQUEST-PLAN.md）───
 // 未在面板啟用，或 songRequestRelayUrl 空白／非 HTTPS 時保持閒置，零外連。
@@ -562,7 +558,7 @@ const songRequestRelay = new SongRequestRelayService({
 });
 socketApi.setSongRequestRelayService(songRequestRelay);
 songRequestRelay.start();
-process.on('exit', () => songRequestRelay.stop());
+require('./utils/exit-hooks').onExit(() => songRequestRelay.stop());
 
 // 公告抓取延後到伺服器啟動後背景執行；離線、逾時或格式錯誤都只記錄並沿用快取。
 require('./services/announcement-service').startBackgroundRefresh();
@@ -576,6 +572,7 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
     // 必須是第一件事：下面有 8 秒硬退保底，放後面的話「優雅關閉自己卡住」會被
     // 下次啟動誤判成當機。標記只寫一個小檔案，不會拖慢關閉。
     try { require('./services/session-marker').markClean(reason); } catch (err) { log.warn(`關閉標記失敗：${err.message}`); }
+    try { await require('./services/audio-processor').shutdownImports(); } catch (err) { log.warn(`匯入關閉失敗：${err.message}`); }
     try { require('./services/state-store').saveNow(); } catch (err) { log.warn(`狀態 flush 失敗：${err.message}`); }
     try { require('./services/library-store').saveNow(); } catch (err) { log.warn(`媒體庫 flush 失敗：${err.message}`); }
     try { require('./services/saved-playlists').saveNow(); } catch (err) { log.warn(`歌單 flush 失敗：${err.message}`); }
@@ -584,7 +581,7 @@ async function gracefulShutdown({ reason = 'signal', exitCode = 0 } = {}) {
     // library 落盤後 durable entry 會讓 state 從 crash-safe full fallback 收斂成 compact reference；
     // 關閉流程不可等 800ms debounce，這裡立即做第二次 state flush。
     try { require('./services/state-store').saveNow(); } catch (err) { log.warn(`狀態二次 flush 失敗：${err.message}`); }
-    try { twitch.stop(); } catch (err) { log.warn(`Twitch 關閉失敗：${err.message}`); }
+    try { await twitch.shutdown(); } catch (err) { log.warn(`Twitch 關閉失敗：${err.message}`); }
     try { songRequestRelay.stop(); } catch (err) { log.warn(`公開點歌頁中繼關閉失敗：${err.message}`); }
     try { practiceGuideService.dispose(); } catch (err) { log.warn(`練唱分析關閉失敗：${err.message}`); }
 
@@ -637,8 +634,9 @@ attachParentShutdown({
 // Electron's update gate talks to this server only through the utility-process
 // parentPort. This has no HTTP/Socket.io surface and the P4 provider is an
 // offline fake until the later, separately-gated Cloudflare wiring phase.
+const sharedUpdateProvider = createCloudflareUpdateProvider();
 attachStartupUpdateCoordinator({
-  provider: createCloudflareUpdateProvider(),
+  provider: sharedUpdateProvider,
   // Read-only: lets the Electron host poll a cold-start progress window while
   // 'accept-incremental' blocks on the download. Same snapshot the running
   // panel's manual update modal already reads.
@@ -649,7 +647,7 @@ attachStartupUpdateCoordinator({
 // button: safe to call repeatedly post-boot, and never touches the startup
 // defer-cooldown store (see manual-update-check-coordinator.js header).
 attachManualUpdateCheckCoordinator({
-  provider: createCloudflareUpdateProvider(),
+  provider: sharedUpdateProvider,
   onError: (err) => log.error(`Manual update check coordinator failed: ${err.message}`, err),
 });
 
@@ -745,6 +743,24 @@ server.listen(PORT, '0.0.0.0', () => {
   try { consumeUpdateResultMarker(); } catch (error) { log.warn(`更新結果標記讀取失敗：${error.message}`); }
   usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
   log.info('╚══════════════════════════════════════════╝');
+
+  // 清洗規則改進後，背景把歌曲庫已存的歌詞照新規則重洗一次（做過就有標記檔，不會重跑）。
+  setTimeout(() => {
+    const { LyricsEngine } = require('./services/lyrics-engine');
+    require('./services/lyrics-reclean').recleanLibrary({
+      libraryStore: require('./services/library-store'),
+      parse: (raw, type) => LyricsEngine.parseByType(raw, type),
+      onUpdated: (id, lines) => socketApi.replaceTrackParsedLyrics(id, lines),
+      manual: {
+        list: () => socketApi.listManualLyrics(),
+        replace: (id, lines) => socketApi.replaceManualParsedLyrics(id, lines),
+      },
+      log,
+      markerFile: path.join(dataDir, 'lyrics-reclean.json'),
+    }).then((changed) => {
+      if (changed.length) log.info(`歌詞重洗完成：${changed.length} 首`);
+    }).catch((error) => log.warn(`歌詞重洗失敗：${error.message}`));
+  }, 5000).unref?.();
 
   // 可攜版啟動器會設 OPEN_BROWSER=1：伺服器就緒後自動以預設瀏覽器開啟控制面板。
   // 由 Node 端開啟（而非啟動器用 PowerShell 輪詢）有兩個好處：

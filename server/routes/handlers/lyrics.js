@@ -4,11 +4,13 @@
  * 涵蓋：每首歌的時間偏移（offset）、歌詞外觀/位置設定、手動歌詞覆蓋（貼上/上傳）。
  */
 
+const OpenCC = require('opencc-js');
 const { createLogger } = require('../../utils/logger');
 const { LyricsEngine } = require('../../services/lyrics-engine');
+const { parseOffset } = require('../../services/lrc-parser');
 const AudioProcessor = require('../../services/audio-processor');
 const { addRomanization, needsRomanization } = require('../../services/romanizer');
-const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS } = require('../../utils/track-schema');
+const { sanitizeParsedLyrics, sanitizeJsonObject, MAX_LYRICS_LENGTH, MAX_OFFSET_MS, lrcDefaultOffset } = require('../../utils/track-schema');
 const path = require('path');
 const fs = require('fs');
 const lyricOffsetSync = require('../../services/lyric-offset-sync');
@@ -38,9 +40,13 @@ const LYRIC_OFFSET_SYNC_DEBOUNCE_MS = 10000;
 const wordUpgradeRunning = new Set();
 const WORD_UPGRADE_MIN_OVERLAP = 0.5;
 
-/** 新歌詞裡有多少比例的行，在舊歌詞（原文或譯文）裡找得到同樣的字（忽略空白、標點、大小寫）。 */
+// 比對前一律轉成簡體：酷狗／QQ 的逐字歌詞是簡體，舊的逐句歌詞（Apple、LRCLIB）常是繁體。
+// 不轉的話同一首歌一行都對不上，被標成「歌詞可能不對」。繁→簡是多對一，比簡→繁穩定（刮／颳、后／後）。
+const toSimplified = OpenCC.Converter({ from: 'tw', to: 'cn' });
+
+/** 新歌詞裡有多少比例的行，在舊歌詞（原文或譯文）裡找得到同樣的字（忽略空白、標點、大小寫、簡繁）。 */
 function lyricsOverlapRatio(oldLines, newLines) {
-  const norm = (value) => String(value || '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  const norm = (value) => toSimplified(String(value || '')).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
   const known = new Set();
   for (const line of oldLines || []) {
     if (!line) continue;
@@ -77,9 +83,10 @@ function cancelLyricOffsetSync(ctx, trackId) {
   }
 }
 
-const LYRIC_TEMPLATES = ['classic', 'pulse', 'facet', 'drift', 'aura', 'ktv', 'columnflow', 'paperstrip', 'mirror', 'typewriter', 'lightboard', 'particle', 'jizura', 'spellbook'];
+const { TEMPLATE_IDS: LYRIC_TEMPLATES, sanitizeLyricPosition } = require('../../../public/js/lyric-template-defaults');
 
 function sanitizeParticleSettings(settings) {
+  if (settings.particleVerticalPosition !== undefined && !['top', 'middle', 'bottom'].includes(settings.particleVerticalPosition)) delete settings.particleVerticalPosition;
   if (settings.particleOrient !== undefined && !['horizontal', 'vertical'].includes(settings.particleOrient)) delete settings.particleOrient;
   // 2026-09-12：particleEntrance 重新開放——不是原本 demo 那個「逐一挑聚散風格」的旋鈕，
   // 是新的二選一：'auto'（風／雨／渦流／雙束四種逐句輪替，預設）｜'quaddrift'（全部改用
@@ -98,6 +105,7 @@ function sanitizeLyricTemplateSettings(value) {
     if (value[id] && typeof value[id] === 'object') {
       out[id] = { ...value[id], template: id };
       sanitizeParticleSettings(out[id]);
+      sanitizeLyricPosition(out[id], id);
       delete out[id].lyricTemplateSettings;
       delete out[id].lyricPresets;
       if (id === 'columnflow' && out[id].columnflowVariant && !['sen', 'fuda'].includes(out[id].columnflowVariant)) {
@@ -141,7 +149,7 @@ function sanitizeLyricPresets(value) {
     .map((p, i) => ({
       id: String(p.id || Date.now() + '-' + i),
       name: p.name.slice(0, 40),
-      settings: { ...p.settings },
+      settings: sanitizeLyricPosition({ ...p.settings }, p.settings.template),
     }));
 }
 
@@ -278,7 +286,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (!Array.isArray(lines) || !lines.length) {
       const raw = manual?.lyrics || track.lyrics || '';
       const type = manual?.lyricsType || track.lyricsType;
-      lines = raw ? (type === 'krc' ? LyricsEngine.parseKrc(raw) : LyricsEngine.parseLrc(raw)) : [];
+      lines = LyricsEngine.parseByType(raw, type);
     }
     const vocalsFile = track.vocalsFile || libraryStore.getEntry(trackId)?.vocalsFile;
     // 只接受 downloadsDir 底下的單純檔名（跟 /audio/:filename 同一條規則）
@@ -471,13 +479,16 @@ function registerLyricsHandlers(io, socket, ctx) {
     trackOffsets.delete(trackId);
     cancelLyricOffsetSync(ctx, trackId);
     rememberOffsetForSource(trackId, lyricsSourceOf(trackId), 0);
+    // 重置＝回到歌詞檔自帶的 [offset:]（沒有就是 0）；不然下次播放又會種回去，跟這裡顯示的 0 對不上。
+    const fileOffset = lrcDefaultOffset(tracksById(trackId)[0]);
+    if (fileOffset) trackOffsets.set(trackId, fileOffset);
 
     if (playState.currentTrack && playState.currentTrack.id === trackId) {
-      playState.currentOffset = 0;
+      playState.currentOffset = fileOffset;
     }
 
     log.info(`Offset 重置: ${trackId}`);
-    io.emit('offset:update', { trackId, offset: 0 });
+    io.emit('offset:update', { trackId, offset: fileOffset });
     persistState();
   });
 
@@ -497,6 +508,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (isTemplateOff(settings.template)) settings.template = resolveTemplateId(settings.template);
     const templateSettings = sanitizeLyricTemplateSettings(settings.lyricTemplateSettings);
     sanitizeParticleSettings(settings);
+    sanitizeLyricPosition(settings, settings.template || playState.lyricSettings.template);
     if (templateSettings) settings.lyricTemplateSettings = templateSettings;
     else delete settings.lyricTemplateSettings;
     const lyricPresets = sanitizeLyricPresets(settings.lyricPresets);
@@ -610,9 +622,7 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 伺服器自行解析，否則後面的羅馬化 / 諧音判斷拿到 null 會直接跳過 → 拼音諧音永遠不出現。
     if (!Array.isArray(parsedLyrics) || parsedLyrics.length === 0) {
       try {
-        parsedLyrics = (lyricsType === 'krc')
-          ? LyricsEngine.parseKrc(lyrics)
-          : LyricsEngine.parseLrc(lyrics);
+        parsedLyrics = LyricsEngine.parseByType(lyrics, lyricsType);
       } catch (e) {
         log.warn(`lyrics:manual 伺服器端解析失敗: ${e.message}`);
         parsedLyrics = null;
@@ -620,6 +630,25 @@ function registerLyricsHandlers(io, socket, ctx) {
     }
 
     applyManualLyrics(trackId, lyrics, lyricsType, parsedLyrics, newSource);
+
+    // 貼上／上傳的 LRC 自帶 [offset:]：面板會立刻套用，伺服器（OBS 歌詞）也要一起套，
+    // 不然兩邊差一個 offset，下一次狀態同步面板還會被拉回舊值。也記成這首的預設（重置回到它）。
+    // 面板（時間軸編輯器）有送解析好的 lrcOffset 就用它；沒送（舊面板、手機）就從歌詞自己解析。
+    // 換了一份沒有 [offset:] 的歌詞時，舊歌詞留下的 lrcOffset 也要清掉：不然重置偏移、下次加入清單
+    // 都會套回上一份歌詞的偏移。
+    const fileOffset = Number.isFinite(data.lrcOffset) ? data.lrcOffset : (lyricsType === 'krc' ? 0 : parseOffset(lyrics));
+    const previousFileOffset = lrcDefaultOffset(tracksById(trackId)[0]);
+    for (const t of tracksById(trackId)) {
+      if (fileOffset) t.lrcOffset = fileOffset;
+      else delete t.lrcOffset;
+    }
+    try {
+      libraryStore.updateMeta(trackId, { lrcOffset: fileOffset });
+    } catch (e) { log.warn(`歌詞偏移寫回歌曲庫失敗: ${e.message}`); }
+    if (fileOffset) setTrackOffset(trackId, fileOffset);
+    // 現在的偏移剛好就是舊歌詞自帶的那個值＝當初是自動套上的、使用者沒調過：新歌詞不沿用。
+    else if (previousFileOffset && trackOffsets.get(trackId) === previousFileOffset) setTrackOffset(trackId, 0);
+    persistState();
   });
 
   // 套用一份歌詞到某首歌（手動貼上／歌詞選擇器／自動對時換來源共用）。
@@ -699,10 +728,17 @@ function registerLyricsHandlers(io, socket, ctx) {
     // 本身沒有進去。先印出判斷式吃到的實際值，不要再靠讀程式碼猜。
     log.info(`lyrics:manual 羅馬化判斷：trackId=${trackId} isArray=${Array.isArray(parsedLyrics)} length=${Array.isArray(parsedLyrics) ? parsedLyrics.length : 'n/a'} needsRomanization=${Array.isArray(parsedLyrics) ? needsRomanization(parsedLyrics) : 'n/a'}`);
     if (parsedLyrics && Array.isArray(parsedLyrics) && needsRomanization(parsedLyrics)) {
+      const appliedEntry = manualLyricsCache.get(trackId);
       addRomanization(parsedLyrics)
         .then((romanized) => {
-          // 更新快取中的 parsedLyrics
-          const cached = manualLyricsCache.get(trackId);
+          // 羅馬化要一點時間（第一次還要載入日文字典）；在歌詞選擇器連續試好幾個來源時，
+          // 舊來源的結果會比新來源晚到。過期的結果不可寫回：否則快取、歌曲庫與顯示端
+          // 會拿到「新來源的歌詞文字＋舊來源的逐行內容」，OBS 上直接顯示成上一個來源的歌詞。
+          if (manualLyricsCache.get(trackId) !== appliedEntry) {
+            log.info(`手動歌詞羅馬化結果已過期（期間又換了歌詞），略過: ${trackId}`);
+            return;
+          }
+          const cached = appliedEntry;
           if (cached) cached.parsedLyrics = romanized;
           try { libraryStore.updateMeta(trackId, { parsedLyrics: romanized }); } catch (_) { /* 靜默 */ }
 
@@ -766,7 +802,8 @@ function registerLyricsHandlers(io, socket, ctx) {
     if (entry.lyricsType === 'krc') return { status: 'already' };
 
     const result = await LyricsEngine.search(entry.artist || '', entry.title, Number(entry.duration) || 0, false);
-    if (!result || !result.lyrics) return { status: 'not-found' };
+    // 只找到純文字（沒有時間軸）跟逐字升級無關，也不拿它來判斷現有歌詞是不是對錯歌。
+    if (!result || !result.lyrics || result.type === 'txt') return { status: 'not-found' };
     const isWord = result.type === 'krc';
     let parsed = Array.isArray(result.parsedLyrics) && result.parsedLyrics.length
       ? result.parsedLyrics.map((line) => ({ ...line }))
@@ -801,13 +838,17 @@ function registerLyricsHandlers(io, socket, ctx) {
       parsed = await addRomanization(parsed).catch(() => parsed);
     }
     const lyricsSource = result.source || null;
-    libraryStore.updateMeta(trackId, { lyrics: result.lyrics, lyricsType: 'krc', parsedLyrics: parsed, lyricsSource, lyricsSuspect: false });
+    // 逐字 KRC 沒有 [offset:]：舊逐句歌詞留下的 lrcOffset 不再適用（同 lyrics:manual）。
+    libraryStore.updateMeta(trackId, { lyrics: result.lyrics, lyricsType: 'krc', parsedLyrics: parsed, lyricsSource, lyricsSuspect: false, lrcOffset: 0 });
 
     // 剛好在播放清單（或正在播）的那首：記憶體裡的物件也要換，下一次 broadcastState 才不會用舊的蓋回去（鐵則 17）
     const live = tracksById(trackId);
+    const previousFileOffset = lrcDefaultOffset(live[0] || entry);
+    if (previousFileOffset && trackOffsets.get(trackId) === previousFileOffset) setTrackOffset(trackId, 0);
     for (const t of live) {
       t.lyrics = result.lyrics;
       t.lyricsType = 'krc';
+      delete t.lrcOffset;
       t.parsedLyrics = parsed;
       t.lyricsSource = lyricsSource;
     }

@@ -54,6 +54,33 @@ const KaraokeEngine = (() => {
     if (!conv) return str;
     try { return conv(str); } catch (e) { return str; }
   }
+  // 日文歌詞不做簡轉繁：opencc 會把日文漢字換成中文繁體字形（会→會、学校→學校、恋愛→戀愛、
+  // 声→聲、残響→殘響），預設開著的「簡轉繁」讓 OBS 上的日文歌詞字形全錯。整首以假名為主
+  // 就整首不轉（含沒有假名、只有漢字的句子）；中文歌裡夾的日文句（有假名）也不轉。
+  const KANA_RE = /[\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\uFF66-\uFF9F]/;
+  const japaneseSongCache = new WeakMap();
+  function isJapaneseSong(lines) {
+    if (!Array.isArray(lines)) return false;
+    if (japaneseSongCache.has(lines)) return japaneseSongCache.get(lines);
+    let total = 0;
+    let kana = 0;
+    for (const l of lines) {
+      const text = l && typeof l.text === 'string' ? l.text : '';
+      // 只算有漢字或假名的句子：J-pop 常有整段英文副歌，算進分母會讓日文歌被當成中文歌。
+      if (!/[\u3040-\u30FF\u3400-\u9FFF]/.test(text)) continue;
+      total += 1;
+      if (KANA_RE.test(text)) kana += 1;
+    }
+    const result = kana > 0 && kana * 3 >= total;
+    japaneseSongCache.set(lines, result);
+    return result;
+  }
+  /** 只轉中文：這一句（或整首）是日文就原樣回傳。str 可以是整句或句中的一個 word。 */
+  function s2tLine(str, lineText) {
+    if (!s2tEnabled || !str) return str;
+    if (KANA_RE.test(String(lineText || str)) || isJapaneseSong(parsedLyrics)) return str;
+    return s2t(str);
+  }
   // 切換簡轉繁：重渲染當前行立即生效（歷史行下次推移時自然更新）
   function setTraditional(b) {
     const nb = !!b;
@@ -300,6 +327,7 @@ const KaraokeEngine = (() => {
       this._spawnParticles(charEl, params);
     },
     _spawnParticles(charEl, params) {
+      if (!charEl?.isConnected) return;
       // 上限保護：避免快歌/長時間直播粒子累積拖垮渲染（超量就不再生成）
       if (containerEl.querySelectorAll('.karaoke-particle').length > 120) return;
       const rect = charEl.getBoundingClientRect();
@@ -421,15 +449,18 @@ const KaraokeEngine = (() => {
   function updateRomanization(romanizedLines) {
     if (!romanizedLines || !Array.isArray(romanizedLines)) return;
 
-    // 以「時間」對齊，而非索引：伺服器過濾製作資訊行後行數可能與本地不同，
+    // 以「時間＋原文」對齊，而非索引：伺服器過濾製作資訊行後行數可能與本地不同，
     // 用索引會錯位導致逐句歌詞拼音/諧音貼到錯誤的行（或不顯示）。
-    const byTime = new Map();
+    // 只看時間不夠：lyrics:romanized 是全體廣播，匯入別首歌、或歌詞選擇器換來源時，
+    // 另一份歌詞的羅馬化結果也會送到這裡，剛好同一個時間戳的行就被貼上別首的拼音／諧音。
+    const romanizationKey = (time, text) => time + '|' + String(text == null ? '' : text).replace(/\s+/g, '');
+    const byKey = new Map();
     for (const rl of romanizedLines) {
-      if (rl && typeof rl.time === 'number') byTime.set(rl.time, rl);
+      if (rl && typeof rl.time === 'number') byKey.set(romanizationKey(rl.time, rl.text), rl);
     }
 
     for (const line of parsedLyrics) {
-      const rl = byTime.get(line.time);
+      const rl = byKey.get(romanizationKey(line.time, line.text));
       if (!rl) continue;
       if (rl.phonetic) line.phonetic = rl.phonetic;
       if (rl.xieyin) line.xieyin = rl.xieyin;
@@ -611,7 +642,7 @@ const KaraokeEngine = (() => {
     if (isWordMode() && line.words) {
       line.words.forEach((word, i) => {
         // \u7C21\u8F49\u7E41\u4EE5\u300C\u6574\u500B word \u5B57\u4E32\u300D\u8F49\u63DB\uFF08\u8A5E\u7D44\u7D1A\u8F03\u6E96\uFF09\uFF1B\u9010\u5B57\u9AD8\u4EAE\u4EE5 word \u70BA\u55AE\u4F4D\uFF0Cchar \u6578\u4E0D\u5F71\u97FF\u6642\u9593\u5C0D\u9F4A
-        s2t(word.text).split('').forEach((char, j) => {
+        Array.from(s2tLine(word.text, line.text)).forEach((char, j) => {
           const span = document.createElement('span');
           span.className = 'char';
           span.textContent = char === ' ' ? '\u00A0' : char;
@@ -624,7 +655,7 @@ const KaraokeEngine = (() => {
       });
     } else {
       // \u9010\u53E5\uFF1A\u6574\u884C\u8F49\u63DB\uFF08\u8A5E\u7D44\u7D1A\u6700\u6E96\uFF09\uFF0C\u518D\u5207\u5B57
-      s2t(line.text).split('').forEach((char, i) => {
+      Array.from(s2tLine(line.text, line.text)).forEach((char, i) => {
         const span = document.createElement('span');
         span.className = 'char';
         span.textContent = char === ' ' ? '\u00A0' : char;
@@ -678,7 +709,7 @@ const KaraokeEngine = (() => {
       line.words.forEach((word, i) => {
         const wordPhonetic = word[kind] || '';
         if (wordPhonetic) {
-          wordPhonetic.split('').forEach((char, j) => {
+          Array.from(wordPhonetic).forEach((char, j) => {
             const span = document.createElement('span');
             span.className = 'phonetic-char';
             span.textContent = char === ' ' ? '\u00A0' : char;
@@ -699,7 +730,7 @@ const KaraokeEngine = (() => {
       });
     } else {
       // LRC: 整行
-      (line[kind] || '').split('').forEach((char, i) => {
+      Array.from(line[kind] || '').forEach((char, i) => {
         const span = document.createElement('span');
         span.className = 'phonetic-char';
         span.textContent = char === ' ' ? '\u00A0' : char;
@@ -721,7 +752,7 @@ const KaraokeEngine = (() => {
       line.words.forEach((word, i) => {
         const wordPhonetic = word[kind] || '';
         if (wordPhonetic) {
-          wordPhonetic.split('').forEach((char, j) => {
+          Array.from(wordPhonetic).forEach((char, j) => {
             const span = document.createElement('span');
             span.className = 'phonetic-char';
             span.textContent = char === ' ' ? '\u00A0' : char;
@@ -738,7 +769,7 @@ const KaraokeEngine = (() => {
         }
       });
     } else {
-      (line[kind] || '').split('').forEach((char, i) => {
+      Array.from(line[kind] || '').forEach((char, i) => {
         const span = document.createElement('span');
         span.className = 'phonetic-char';
         span.textContent = char === ' ' ? '\u00A0' : char;
@@ -855,7 +886,6 @@ const KaraokeEngine = (() => {
     }
 
     const style = StylePresets.getParams();
-    const exitAnim = style.animation.lineExit;
     const removeAnim = style.animation.lineRemove;
 
     // 先記錄「舊 active 行」的螢幕位置與字級 → 新歷史行從這個大小/位置平滑縮小上移，
@@ -885,7 +915,6 @@ const KaraokeEngine = (() => {
     if (fastMode) {
       // 快速模式（拖曳/跳轉）：不做位移與縮放動畫，直接設成歷史樣式
       historyEl.appendChild(historyLine);
-      historyLine.style.opacity = String(exitAnim.opacityTo != null ? exitAnim.opacityTo : 0.3);
     } else {
       // FLIP：記錄既有歷史行 append 前的位置，稍後補償位移 → 平滑上移而非瞬間跳動
       const existing = Array.from(historyEl.querySelectorAll('.lyrics-history-line'));
@@ -914,9 +943,9 @@ const KaraokeEngine = (() => {
       const dy = oldRect.top - newRect.top;              // 從舊 active 位置滑來
       const startScale = Math.max(1, oldFont / newFont); // 從舊 active 大小縮來（約 1.5~1.8）
       gsap.fromTo(historyLine,
-        { y: dy, scale: startScale, opacity: 1, transformOrigin: 'center top' },
+        { y: dy, scale: startScale, '--lyric-history-progress': 0, transformOrigin: 'center top' },
         {
-          y: 0, scale: 1, opacity: exitAnim.opacityTo, duration: 0.5, ease: 'power3.out',
+          y: 0, scale: 1, '--lyric-history-progress': 1, duration: 0.5, ease: 'power3.out',
         }
       );
     }
@@ -961,12 +990,15 @@ const KaraokeEngine = (() => {
     const parsed = [];
 
     for (const line of lines) {
-      const regex = /\[(\d{2}:\d{2}(?:\.\d{2,3})?)\]/g;
+      // 與 server/services/lrc-parser.js 同一套時間標籤規則（含 [mm:ss]、一位小數、冒號小數）。
+      const regex = /\[(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)\]/g;
       const timestamps = [];
       let match;
       while ((match = regex.exec(line)) !== null) timestamps.push(parseLrcTimestamp(match[1]));
 
-      const text = line.replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, '').trim();
+      // 增強 LRC 的逐字時間 <mm:ss.xx> 一併拿掉（同 server/services/lrc-parser.js）
+      const text = line.replace(/\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/g, '')
+        .replace(/<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>/g, '').replace(/[ \t]{2,}/g, ' ').trim();
       if (timestamps.length > 0 && text) {
         for (const time of timestamps) parsed.push({ time, text, phonetic: '', words: [] });
       }
@@ -1023,10 +1055,12 @@ const KaraokeEngine = (() => {
   }
 
   function parseLrcTimestamp(tag) {
-    const match = String(tag).match(/(\d+):(\d+)\.(\d+)/);
+    // 與 server/utils/time-utils.js parseTimestampToMs 相同：小數可省略、可用冒號，
+    // 小數部分當十進位小數（.4 → 400ms），不再把 [01:23] 解析成 0 秒。
+    const match = String(tag).match(/(\d+):(\d+)(?:[.:](\d+))?/);
     if (!match) return 0;
-    const padThird = match[3].length === 2 ? match[3] + '0' : match[3];
-    return (parseInt(match[1], 10) * 60 + parseInt(match[2], 10)) * 1000 + parseInt(padThird, 10);
+    const fractionMs = match[3] ? Math.round(Number(`0.${match[3]}`) * 1000) : 0;
+    return (parseInt(match[1], 10) * 60 + parseInt(match[2], 10)) * 1000 + fractionMs;
   }
 
   // ═══════════════════════════════════════════
@@ -1135,6 +1169,7 @@ const KaraokeEngine = (() => {
       return convertedLyricsCache;
     }
     convertedLyricsCache = !s2tEnabled ? parsedLyrics : parsedLyrics.map((line) => {
+      if (KANA_RE.test(String(line.text || '')) || isJapaneseSong(parsedLyrics)) return line;
       const converted = { ...line, text: s2t(line.text) };
       if (Array.isArray(line.words) && line.words.length > 0) {
         converted.words = line.words.map((w) => ({ ...w, text: s2t(w.text) }));
