@@ -453,8 +453,19 @@ function makeDmg(appDir, dmgPath) {
   try {
     run('ditto', [appDir, path.join(staging, 'Elitesand Pro.app')]);
     fs.symlinkSync('/Applications', path.join(staging, 'Applications'));
-    fs.rmSync(dmgPath, { force: true });
-    run('hdiutil', ['create', '-volname', 'Elitesand Pro', '-srcfolder', staging, '-ov', '-format', 'UDZO', dmgPath]);
+    // GitHub 的 macOS runner 偶爾回「hdiutil: create failed - Resource busy」（背景掃描
+    // 還抓著剛複製的檔案）。這是暫時性的，等幾秒重試即可；連續失敗才真的中止。
+    for (let attempt = 1; ; attempt += 1) {
+      fs.rmSync(dmgPath, { force: true });
+      try {
+        run('hdiutil', ['create', '-volname', 'Elitesand Pro', '-srcfolder', staging, '-ov', '-format', 'UDZO', dmgPath]);
+        break;
+      } catch (error) {
+        if (attempt >= 5) throw error;
+        log(`hdiutil failed (attempt ${attempt}/5); retrying in ${attempt * 10}s...`);
+        execFileSync('sleep', [String(attempt * 10)]);
+      }
+    }
   } finally {
     fs.rmSync(staging, { recursive: true, force: true });
   }
