@@ -53,14 +53,24 @@ jobs:
         run: |
           APP=$(ls -d dist/releases/v*/mac-${{ matrix.arch }}/builder/*/"Elitesand Pro.app" | head -1)
           node tools/mac/smoke-runtime.js "$APP"
-      - name: Upload DMG
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - name: Locate DMG
+        id: dmg
+        run: echo "path=$(ls dist/releases/v*/mac-${{ matrix.arch }}/*.dmg | head -1)" >> "$GITHUB_OUTPUT"
+      # archive: false → 測試人員下載到的就是 .dmg 本身，不會再包一層 zip。
+      # 這個模式一次只能傳一個檔案，所以雜湊與建置資訊另外傳一個小的 artifact。
+      - name: Upload DMG (not zipped)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Elitesand-Pro-mac-${{ matrix.arch }}-beta.${{ github.run_number }}
+          path: ${{ steps.dmg.outputs.path }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload checksum and build info
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-info-mac-${{ matrix.arch }}-beta.${{ github.run_number }}
           path: |
-            dist/releases/v*/mac-${{ matrix.arch }}/*.dmg
             dist/releases/v*/mac-${{ matrix.arch }}/*.dmg.sha256
             dist/releases/v*/mac-${{ matrix.arch }}/BUILD-INFO.txt
           if-no-files-found: error
           retention-days: 90
-          compression-level: 0
