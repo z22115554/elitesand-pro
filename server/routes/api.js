@@ -86,11 +86,11 @@ const lyricsUpload = multer({
   storage: lyricsStorage,
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = ['.lrc', '.srt', '.vtt', '.txt'];
+    const allowed = ['.lrc', '.srt', '.vtt', '.txt', '.krc'];
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      const err = new Error(`不支援的歌詞格式: ${ext}，僅支援 .lrc / .srt / .vtt / .txt`);
+      const err = new Error(`不支援的歌詞格式: ${ext}，僅支援 .lrc / .srt / .vtt / .txt / .krc`);
       err.status = 400;
       cb(err);
     }
@@ -490,7 +490,8 @@ router.post('/lyrics/upload', requirePin, lyricsUpload.single('lyrics'), (req, r
     const filePath = req.file.path;
 
     // 猜編碼讀取；UI locale 只用於無 BOM 純 CJK UTF-16 的保守 fallback，不影響 legacy 編碼判定。
-    const content = decodeUploadedText(fs.readFileSync(filePath), req.body?.locale);
+    const fileBuffer = fs.readFileSync(filePath);
+    const content = decodeUploadedText(fileBuffer, req.body?.locale);
 
     if (!content.trim()) {
       // 清理上傳的檔案
@@ -499,8 +500,16 @@ router.post('/lyrics/upload', requirePin, lyricsUpload.single('lyrics'), (req, r
       return res.status(400).json({ error: '歌詞檔案為空' });
     }
 
-    // 自動解析
-    const parsed = autoParseLyrics(content);
+    // 逐字歌詞（酷狗 .krc、解密後的 KRC 文字、內部 KRC、增強 LRC）先轉成內部 KRC，保留逐字時間；
+    // 其他格式照舊自動判斷。
+    const wordLevel = LyricsEngine.normalizeImportedLyrics(content, fileBuffer);
+    if (wordLevel && wordLevel.error) {
+      try { fs.unlinkSync(filePath); } catch (_) {}
+      log.warn(`KRC 歌詞檔解密失敗: ${req.file.originalname}`);
+      return res.status(400).json({ error: '這個 .krc 檔無法解密，可能已損壞，或不是酷狗的歌詞檔' });
+    }
+    const lyricsText = wordLevel ? wordLevel.content : content;
+    const parsed = wordLevel ? { type: 'krc', lines: wordLevel.lines, offset: wordLevel.offset } : autoParseLyrics(content);
     if (parsed.type === 'lrc') parsed.lines = LyricsEngine.parseLrc(content);
 
     if (parsed.lines.length === 0) {
@@ -512,14 +521,14 @@ router.post('/lyrics/upload', requirePin, lyricsUpload.single('lyrics'), (req, r
     // 清理上傳的檔案（不需要保留）
     try { fs.unlinkSync(filePath); } catch (_) {}
 
-    const parsedLyrics = engineParsedLines(content, parsed.type, parsed.lines);
+    const parsedLyrics = engineParsedLines(lyricsText, parsed.type, parsed.lines);
     const duration = Date.now() - start;
     log.info(`歌詞上傳解析完成: ${parsedLyrics.length} 行, 類型: ${parsed.type} (${duration}ms)`);
     log.perf('lyrics-upload', duration, { lineCount: parsedLyrics.length, type: parsed.type });
 
     res.json({
       success: true,
-      lyrics: content,
+      lyrics: lyricsText,
       lyricsType: parsed.type,
       offset: parsed.offset,
       lineCount: parsedLyrics.length,
@@ -557,21 +566,24 @@ router.post('/lyrics/paste', requirePin, (req, res) => {
     }
 
     log.info(`處理歌詞貼上: ${content.length} 字元`);
-    const parsed = autoParseLyrics(content);
+    // 貼上的逐字歌詞（解密後的 KRC 文字、內部 KRC、增強 LRC）一樣轉成內部 KRC，保留逐字時間。
+    const wordLevel = LyricsEngine.normalizeImportedLyrics(content);
+    const lyricsText = wordLevel && !wordLevel.error ? wordLevel.content : content;
+    const parsed = wordLevel && !wordLevel.error ? { type: 'krc', lines: wordLevel.lines, offset: wordLevel.offset } : autoParseLyrics(content);
     if (parsed.type === 'lrc') parsed.lines = LyricsEngine.parseLrc(content);
 
     if (parsed.lines.length === 0) {
       log.warn('歌詞貼上解析無結果');
-      return res.status(400).json({ error: '無法解析歌詞內容，請確認格式正確（支援 LRC / SRT / 純文字）' });
+      return res.status(400).json({ error: '無法解析歌詞內容，請確認格式正確（支援 LRC / 逐字 KRC / SRT / 純文字）' });
     }
 
-    const parsedLyrics = engineParsedLines(content, parsed.type, parsed.lines);
+    const parsedLyrics = engineParsedLines(lyricsText, parsed.type, parsed.lines);
     const duration = Date.now() - start;
     log.info(`歌詞貼上解析完成: ${parsedLyrics.length} 行, 類型: ${parsed.type} (${duration}ms)`);
 
     res.json({
       success: true,
-      lyrics: content,
+      lyrics: lyricsText,
       lyricsType: parsed.type,
       offset: parsed.offset,
       lineCount: parsedLyrics.length,

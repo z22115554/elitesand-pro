@@ -188,4 +188,15 @@ function decodeKrcEntities(text) {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
 }
 
-module.exports = { krcDecode };
+/**
+ * 已解密的酷狗 KRC 文字（使用者自己用工具解出來的 .krc 文字檔）轉成內部 KRC 格式。
+ * 支援新版 [startMs,durationMs]<wordStart,wordDuration,flag>word 與舊版 XML。
+ * @param {string} rawText
+ * @returns {string} 轉不出任何一行時回傳空字串
+ */
+function krcTextToKrc(rawText) {
+  const text = String(rawText || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  return text.trim().startsWith('<') ? parseKrcXml(text) : parseKrcCustom(text);
+}
+
+module.exports = { krcDecode, krcTextToKrc };

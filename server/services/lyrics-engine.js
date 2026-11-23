@@ -8,7 +8,7 @@
  */
 const he = require('he');
 const OpenCC = require('opencc-js');
-const { krcDecode } = require('./krc-decoder');
+const { krcDecode, krcTextToKrc } = require('./krc-decoder');
 const { decryptQrc } = require('./qrc-decoder');
 const { parseTTML, cleanQuery } = require('./ttml-parser');
 const { parseLrc, parseTimestampToMs, msToLrcTime, autoParseLyrics } = require('./lrc-parser');
@@ -1742,6 +1742,37 @@ class LyricsEngine {
    * 依歌詞格式把原始文字解析成行：krc 走逐字、srt／vtt／txt 走自動偵測（它們沒有 [mm:ss] 標籤，
    * 交給 parseLrc 只會得到空陣列），其餘當 LRC。給「手上只有原始歌詞、沒有 parsedLyrics」的補救路徑用。
    */
+  /**
+   * 匯入（上傳檔案／貼上）的逐字歌詞統一轉成內部 KRC 格式，讓它保留逐字時間，而不是被當成 LRC：
+   * - 酷狗原始 .krc 檔（krc1/krc2 加密）
+   * - 已解密的酷狗 KRC 文字（[1200,3000]<0,300,0>字 或舊版 XML）
+   * - 內部 KRC 格式（[00:01.20]<1800>字<0,300>…，前面有沒有 [ti:] 這類資訊都可以）
+   * - 增強 LRC（每個字前面有 <mm:ss.xx>）
+   * 都不是逐字格式時回傳 null，交給 autoParseLyrics 照舊處理 LRC／SRT／VTT／純文字。
+   * @param {string} text 已解碼的文字
+   * @param {Buffer} [buffer] 上傳檔案的原始位元組（判斷加密 .krc 用）
+   * @returns {{ content: string, type: 'krc', offset: number, lines: Array } | { error: string } | null}
+   */
+  static normalizeImportedLyrics(text, buffer) {
+    const asKrc = (content, offset = 0) => {
+      const lines = content ? this.parseKrc(content) : [];
+      return lines.length ? { content, type: 'krc', offset, lines } : null;
+    };
+    if (Buffer.isBuffer(buffer) && buffer.length >= 4) {
+      const header = buffer.toString('ascii', 0, 4);
+      if (header === 'krc1' || header === 'krc2') return asKrc(krcDecode(buffer)) || { error: 'KRC_DECODE_FAILED' };
+    }
+    const source = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+    if (!source.trim()) return null;
+    if (new RegExp(`^\\s*\\[${LRC_TIMESTAMP_SOURCE}\\]<\\d+>`, 'm').test(source)) return asKrc(source);
+    if (/^\s*\[\d+,\d+\]/m.test(source) || /<line\s+start="\d+"\s+duration="\d+">/.test(source)) return asKrc(krcTextToKrc(source));
+    if (new RegExp(`^\\s*\\[${LRC_TIMESTAMP_SOURCE}\\][^\\n]*<\\d{1,3}:\\d{2}(?:[.:]\\d{1,3})?>`, 'm').test(source)) {
+      const offsetMatch = source.match(/^\[offset:\s*([+-]?\d+)\s*\]/mi);
+      return asKrc(this.enhancedLrcToKrc(source), offsetMatch ? parseInt(offsetMatch[1], 10) : 0);
+    }
+    return null;
+  }
+
   static parseByType(raw, type) {
     if (!raw) return [];
     if (type === 'krc') return this.parseKrc(raw);
