@@ -416,6 +416,18 @@ test('#86 Paxsenix 的 elrc（增強 LRC）要轉成逐字 KRC，不能當一般
   assert.equal(LyricsEngine.enhancedLrcToKrc('[00:01.00]plain\n[00:02.00]lines'), null);
 });
 
+test('#86b elrc 轉不成逐字（每句只有一個時間標記）退回一般 LRC 時，時間標記和多人版的 v1:／v2: 都不能顯示出來', () => {
+  const { LyricsEngine } = require('../server/services/lyrics-engine');
+  const elrc = '[00:01.00]v1: <00:01.00>Hello\n[00:03.00]v2:<00:03.00>World\n[00:05.00]V12: <00:05.00>Again\n[00:08.00]<00:08.00>Plain v1: stays';
+  assert.equal(LyricsEngine.enhancedLrcToKrc(elrc), null, '這份沒有逐字時間，應該走退回 LRC 的路');
+  const cleaned = LyricsEngine.stripElrcVoiceTags(elrc);
+  assert.deepEqual(LyricsEngine.parseLrc(cleaned).map((l) => [l.time, l.text]), [
+    [1000, 'Hello'], [3000, 'World'], [5000, 'Again'], [8000, 'Plain v1: stays'],
+  ], '行首的聲部標記要拿掉，句子中間的字不能動');
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'server', 'services', 'lyrics-engine.js'), 'utf8');
+  assert.match(src, /return \{ lyrics: this\.stripElrcVoiceTags\(elrc\), type: 'lrc', source: 'paxsenix'/, 'paxsenix 退回 LRC 時要先清掉聲部標記');
+});
+
 test('#87 歌詞裡的對白「我說：」「你說：」不是合唱聲部，不能被剝掉', () => {
   const { annotateSingerParts } = require('../server/services/singer-parts');
   const lines = ['我說：別走', '你說：再見', '他說：沒關係', '我們都哭了', '最後一句', '還有一句'].map((text, i) => ({ time: i * 1000, text }));

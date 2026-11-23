@@ -827,7 +827,9 @@ class LyricsEngine {
         if (!elrc) continue;
         const krcText = this.enhancedLrcToKrc(elrc);
         if (krcText) return { lyrics: krcText, type: 'krc', source: 'paxsenix', durationVerified };
-        return { lyrics: elrc, type: 'lrc', source: 'paxsenix', durationVerified };
+        // 每句只有一個時間標記時轉不成逐字，退回一般 LRC：逐字標記由 parseLrc 剝掉，
+        // 多人版行首的「v1:」「v2:」聲部標記要在這裡拿掉，否則會直接顯示在歌詞上。
+        return { lyrics: this.stripElrcVoiceTags(elrc), type: 'lrc', source: 'paxsenix', durationVerified };
       }
 
       if (lyricsData.content && Array.isArray(lyricsData.content) && lyricsData.content.length > 0) {
@@ -1554,6 +1556,11 @@ class LyricsEngine {
    * 增強 LRC（A2：「[00:01.00]<00:01.00>Hel<00:01.50>lo <00:02.00>」）→ KRC 逐字。
    * 最後一個字沒有結尾時間時，用下一行開頭（再不然給 500ms）。沒有任何一行帶逐字時間就回 null。
    */
+  /** 拿掉 elrc 多人版行首的聲部標記（[00:01.00]v1: 歌詞 → [00:01.00]歌詞），其餘原樣保留。 */
+  static stripElrcVoiceTags(text) {
+    return String(text || '').replace(/^(\s*(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\])+)\s*v\d+:\s*/gim, '$1');
+  }
+
   static enhancedLrcToKrc(text) {
     const TAG = /<(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)>/g;
     const rows = [];
