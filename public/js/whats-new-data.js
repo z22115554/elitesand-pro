@@ -15,6 +15,30 @@
 
   const RELEASES = [
     {
+      version: '1.3.1',
+      date: '2026-11-24',
+      items: [
+        {
+          feature: 'outro-pause-finish',
+          title: ['尾奏暫停自動收尾', 'Auto-finish on outro pause', 'アウトロ停止で自動終了', '아웃트로 정지 시 자동 종료', '尾奏暂停自动收尾'],
+          desc: ['最後一句唱完後按暫停，停滿設定的秒數就當作唱完：OBS 歌詞清除、歌單不再顯示正在播放。秒數在播放清單的 ⋯ 選單調整。', 'Pause after the last lyric line and the song counts as finished after the set time: OBS lyrics clear and the setlist stops showing it as playing. Adjust it in the playlist ⋯ menu.', '最後の歌詞のあとで一時停止し、設定秒数が経つと歌い終えたとみなし、OBS の歌詞とセットリストの再生中表示を消します。秒数はプレイリストの ⋯ メニューで調整します。', '마지막 가사 이후 일시정지한 채 설정한 시간이 지나면 다 부른 것으로 보고 OBS 가사와 세트리스트의 재생 중 표시를 지웁니다. 시간은 재생 목록의 ⋯ 메뉴에서 조절합니다.', '最后一句唱完后按暂停，停满设定的秒数就当作唱完：OBS 歌词清除、歌单不再显示正在播放。秒数在播放列表的 ⋯ 菜单调整。'],
+        },
+        {
+          feature: 'setlist-now-playing',
+          title: ['單曲看板歌單', 'Now-playing setlist', '単曲ボードのセットリスト', '단일 곡 보드 세트리스트', '单曲看板歌单'],
+          desc: ['OBS 歌單新版型：只顯示正在唱的歌，沒在唱時顯示自訂的待機文字，有十種外觀可選。', 'A new OBS setlist layout that shows only the current song, with your own idle text and ten looks to choose from.', 'OBS セットリストの新レイアウト：歌唱中の曲だけを表示し、待機中は自分で決めた文字を表示します。外観は 10 種類から選べます。', '새 OBS 세트리스트 레이아웃: 지금 부르는 곡만 보여 주고, 대기 중에는 직접 정한 문구를 표시합니다. 외형은 10종 중에서 고를 수 있습니다.', 'OBS 歌单新版式：只显示正在唱的歌，没在唱时显示自定义的待机文字，有十种外观可选。'],
+        },
+        {
+          title: ['匯入逐字歌詞檔', 'Import word-timed lyric files', '単語単位の歌詞ファイルを取り込み', '단어 단위 가사 파일 가져오기', '导入逐字歌词文件'],
+          desc: ['上傳或貼上酷狗的 .krc、KRC 文字與逐字 LRC，會保留每個字的時間。', 'Upload or paste Kugou .krc files, KRC text, or word-timed LRC and the per-word timing is kept.', '酷狗（Kugou）の .krc、KRC テキスト、単語単位の LRC をアップロード・貼り付けすると、単語ごとのタイミングが保たれます。', '쿠거우(Kugou) .krc, KRC 텍스트, 단어 단위 LRC를 업로드하거나 붙여 넣으면 단어별 타이밍이 유지됩니다.', '上传或粘贴酷狗的 .krc、KRC 文本与逐字 LRC，会保留每个字的时间。'],
+        },
+        {
+          title: ['韓文拼音照實際唸法', 'Korean romanization follows pronunciation', '韓国語ローマ字を実際の発音どおりに', '한국어 로마자를 실제 발음대로', '韩文拼音按实际读法'],
+          desc: ['韓文歌的羅馬拼音與諧音改用實際唸法（連音、鼻音化等），不再一個字一個字照拼。', 'Korean romanization and phonetic hints now follow how words are actually pronounced (liaison, nasalization and more) instead of spelling each syllable on its own.', '韓国語の曲のローマ字と発音ヒントが、一文字ずつではなく実際の発音（連音化・鼻音化など）どおりになりました。', '한국어 노래의 로마자와 발음 힌트가 한 글자씩이 아니라 실제 발음(연음, 비음화 등)대로 표시됩니다.', '韩文歌的罗马音与谐音改用实际读法（连音、鼻音化等），不再逐字照拼。'],
+        },
+      ],
+    },
+    {
       version: '1.3.0',
       date: '2026-11-13',
       items: [
@@ -48,18 +72,7 @@
   ];
 
   // 下一版要發布的內容：發版時搬進 RELEASES（帶上版本號與日期）
-  const UNRELEASED = [
-    {
-      feature: 'outro-pause-finish',
-      title: ['尾奏暫停自動收尾', 'Auto-finish on outro pause', 'アウトロ停止で自動終了', '아웃트로 정지 시 자동 종료', '尾奏暂停自动收尾'],
-      desc: ['最後一句唱完後按暫停，停滿設定的秒數就當作唱完：OBS 歌詞清除、歌單不再顯示正在播放。秒數在播放清單的 ⋯ 選單調整。', 'Pause after the last lyric line and the song counts as finished after the set time: OBS lyrics clear and the setlist stops showing it as playing. Adjust it in the playlist ⋯ menu.', '最後の歌詞のあとで一時停止し、設定秒数が経つと歌い終えたとみなし、OBS の歌詞とセットリストの再生中表示を消します。秒数はプレイリストの ⋯ メニューで調整します。', '마지막 가사 이후 일시정지한 채 설정한 시간이 지나면 다 부른 것으로 보고 OBS 가사와 세트리스트의 재생 중 표시를 지웁니다. 시간은 재생 목록의 ⋯ 메뉴에서 조절합니다.', '最后一句唱完后按暂停，停满设定的秒数就当作唱完：OBS 歌词清除、歌单不再显示正在播放。秒数在播放列表的 ⋯ 菜单调整。'],
-    },
-    {
-      feature: 'setlist-now-playing',
-      title: ['單曲看板歌單', 'Now-playing setlist', '単曲ボードのセットリスト', '단일 곡 보드 세트리스트', '单曲看板歌单'],
-      desc: ['OBS 歌單新版型：只顯示正在唱的歌，沒在唱時顯示自訂的待機文字，有多種外觀可選。', 'A new OBS setlist layout that shows only the current song, with your own idle text and several looks.', 'OBS セットリストの新レイアウト：歌唱中の曲だけを表示し、待機中は自分で決めた文字を表示します。外観は複数から選べます。', '새 OBS 세트리스트 레이아웃: 지금 부르는 곡만 보여 주고, 대기 중에는 직접 정한 문구를 표시합니다. 여러 외형 중에서 고를 수 있습니다.', 'OBS 歌单新版式：只显示正在唱的歌，没在唱时显示自定义的待机文字，有多种外观可选。'],
-    },
-  ];
+  const UNRELEASED = [];
 
   const LANG_INDEX = { 'zh-TW': 0, en: 1, ja: 2, ko: 3, 'zh-CN': 4 };
 

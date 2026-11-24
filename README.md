@@ -7,7 +7,7 @@
 **為 VTuber 歌回與直播演出打造的本機歌詞演出系統**
 *A local lyric-performance system for VTubers, singing streamers, and live performers*
 
-**最新版本 / Latest：`v1.3.0`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
+**最新版本 / Latest：`v1.3.1`**  ·  Windows 專用 / Windows only  ·  [下載 / Download →](../../releases/latest)
 
 繁體中文 · [English](#english) · [日本語](#日本語) · [한국어](#한국어) · [简体中文](#简体中文)
 
@@ -51,17 +51,18 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 收藏歌單：媒體庫破萬首後把常用的歌分組保存，一首歌可以放進多個收藏歌單，手機遙控器也能直接載入整份。
 - 可選「統一音量」：兩條播放鏈一起做響度標準化，切歌不忽大忽小。
 - 記住每首歌的音量：某首歌調過音量，下次播放自動回到那個音量；沒調過的歌用預設音量。
+- 尾奏暫停自動收尾：最後一句唱完後按暫停，停滿設定的秒數（關閉或 3～30 秒，預設 8 秒）就當作唱完，OBS 歌詞清除、歌單不再顯示正在播放。
 - 歌曲庫可直接修改歌名／歌手；手動選的歌詞與疑似對錯歌的歌詞會標出來，逐句歌詞可批次升級成逐字。
 
 #### 歌詞
 
 - 多來源並行搜尋：BetterLyrics、Apple Music、酷狗、QQ音樂、LRCLIB、網易雲等，自動挑最佳、也可手選。
-- 支援逐字、逐句、LRC、KRC、TTML、SRT、WebVTT 與純文字。
+- 支援逐字、逐句、LRC、KRC、TTML、SRT、WebVTT 與純文字；上傳或貼上酷狗 .krc 與逐字 LRC 也會保留逐字時間。
 - 逐字歌詞備援更多：QQ 音樂與網易雲改抓逐字版，另加 AMLL 社群逐字歌詞庫；雙語歌詞的譯文另外保存，不再蓋掉原文。
 - 逐行時間軸編輯器，一鍵「對齊第一句」整體平移。
 - 合唱聲部解析，KTV 模板據此自動上色。
 - 每個歌詞來源各自記住時間偏移，換來源不用重新對時。
-- 日文／韓文羅馬拼音、中文漢語拼音與部分諧音顯示。
+- 日文／韓文羅馬拼音、中文漢語拼音與部分諧音顯示；韓文照實際唸法（連音、鼻音化等）標音。
 - 對時歌詞自動簡轉繁，不破壞拼音與原始時間資料。
 - 自動清洗來源裡的製作名單、工作室名稱、版本註記與錯置標題。
 
@@ -99,6 +100,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 - 長歌名與長歌手名自動分配空間，重要資訊不被擠掉。
 - 可建立、保存與切換不同直播場次。
 - 極簡歌單：大字顯示正在唱、底部跑馬燈列出已唱，四種外觀，附常駐小動畫與跟著播放狀態動的音波。
+- 單曲看板：只顯示正在唱的歌，沒在唱時顯示自訂待機文字，十種外觀。
 
 #### Twitch 點歌
 
@@ -151,7 +153,7 @@ Elitesand Pro 把**歌曲匯入、歌詞搜尋、同步播放、OBS 動態歌詞
 請只從官方 GitHub Releases 下載，並核對隨附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.1.exe"
 ```
 
 ### OBS 設定
@@ -171,6 +173,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ### 更新
 
 Elitesand Pro 會在**啟動時檢查更新**，也可在「連線與系統 → 檢查更新」手動檢查。相容時可直接在程式內套用增量更新（會顯示下載與安裝進度）；不相容時引導你到 GitHub Releases 下載完整 Installer。安裝完整版前請關閉 Elitesand Pro。
+
+更新後第一次打開面板會列出這版新增的功能，可以一鍵帶你到設定位置；之後也能在說明視窗重看。
 
 **升級會保留你的歌曲庫、歌詞修改與設定**；不過升級前仍建議先備份重要資料。
 
@@ -231,17 +235,18 @@ Everything runs on your own machine; OBS loads transparent lyrics and setlist ov
 - Saved collections: group frequently used songs once your media library grows large; a song can belong to multiple collections, and the mobile remote can load one directly.
 - Optional loudness normalization across both playback chains, so tracks don't jump in volume.
 - Per-song volume memory: adjust the volume during a song and it comes back the next time that song plays; other songs use the default volume.
+- Auto-finish on outro pause: pause after the last lyric line and, once the set time passes (off or 3–30 s, default 8 s), the song counts as finished: OBS lyrics clear and the setlist stops showing it as playing.
 - Edit titles and artists right in the song library; manually picked lyrics and lyrics that may belong to another song are flagged, and line-synced lyrics can be batch-upgraded to word-synced.
 
 #### Lyrics
 
 - Parallel multi-source search: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase, and fallbacks — best match auto-selected or chosen manually.
-- Word-synced, line-synced, LRC, KRC, TTML, SRT, WebVTT, and plain text.
+- Word-synced, line-synced, LRC, KRC, TTML, SRT, WebVTT, and plain text; uploaded or pasted Kugou .krc and word-timed LRC keep their per-word timing.
 - More word-synced fallbacks: QQ Music and NetEase now fetch word-synced lyrics, plus the AMLL community word-synced library; translations in bilingual lyrics are kept separately instead of replacing the original line.
 - Timeline editor with one-click "align first line" global shift.
 - Choral-part parsing that drives KTV coloring.
 - Per-source timing offset memory — switching sources keeps your sync.
-- Japanese/Korean romanization, Mandarin pinyin, and partial phonetic hints.
+- Japanese/Korean romanization, Mandarin pinyin, and partial phonetic hints; Korean follows actual pronunciation (liaison, nasalization and more).
 - Simplified-to-Traditional display conversion that preserves pinyin and original timing.
 - Automatic cleanup of credits, studio names, version tags, and swapped titles from source data.
 
@@ -279,6 +284,7 @@ Ten performance templates, each with independent style settings (font, size, col
 - Long titles and artist names get their own space so key info isn't squeezed out.
 - Create, save, and switch between stream sessions.
 - Minimal setlist: big "now singing" text with a ticker of sung songs, four looks, a gentle idle animation, and a waveform that follows playback.
+- Now-playing board: shows only the current song, with your own idle text between songs, in ten looks.
 
 #### Twitch song requests
 
@@ -331,7 +337,7 @@ The build is **currently unsigned**, so Windows SmartScreen shows a blue warning
 Download only from the official GitHub Releases page and verify the bundled `.sha256`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.1.exe"
 ```
 
 ### OBS setup
@@ -351,6 +357,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ### Updates
 
 Elitesand Pro **checks for updates on startup** and on demand from **Connection & System → Check for updates**. When compatible it applies an incremental update in-app (with download and install progress); otherwise it points you to the full Installer on GitHub Releases. Close Elitesand Pro before running a full installer.
+
+The first time you open the panel after an update, it lists what is new in that version and can take you straight to each setting; you can reopen the list from the help window.
 
 **Upgrading keeps your song library, lyric edits, and settings.** Backing up important data before an upgrade is still recommended.
 
@@ -411,17 +419,18 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - コレクション：曲が増えてもよく使う曲をグループ分けして保存。1 曲を複数のコレクションに入れられ、スマホリモコンからも直接読み込める。
 - 任意のラウドネス正規化（2 系統の再生チェーンを同時処理）。
 - 曲ごとの音量を記憶：再生中に音量を変えた曲は、次回も同じ音量で再生。変えていない曲は既定の音量。
+- アウトロ停止で自動終了：最後の歌詞のあとで一時停止し、設定した秒数（オフまたは 3～30 秒、既定 8 秒）が経つと歌い終えたとみなし、OBS の歌詞とセットリストの再生中表示を消します。
 - 曲ライブラリで曲名／歌手名を直接編集。手動で選んだ歌詞や別の曲の可能性がある歌詞には印が付き、行同期の歌詞を単語同期へ一括アップグレードできます。
 
 #### 歌詞
 
 - 複数ソース並行検索：BetterLyrics、Apple Music、Kugou、QQ Music、LRCLIB、NetEase ほか。自動選択・手動選択に対応。
-- 単語同期・行同期・LRC・KRC・TTML・SRT・WebVTT・プレーンテキスト。
+- 単語同期・行同期・LRC・KRC・TTML・SRT・WebVTT・プレーンテキスト。酷狗（Kugou）の .krc や単語単位の LRC をアップロード・貼り付けしても単語ごとのタイミングを保持。
 - 単語同期の取得元を拡充：QQ Music と NetEase は単語同期版を取得し、AMLL コミュニティの単語同期ライブラリも追加。対訳付き歌詞の訳は別に保存し、原文の行を置き換えません。
 - タイムライン編集、「先頭行に合わせる」で全体シフト。
 - 合唱パート解析（KTV の色分けに反映）。
 - 歌詞ソースごとにタイミングを記憶。
-- 日本語・韓国語のローマ字、中国語ピンイン、一部発音ヒント。
+- 日本語・韓国語のローマ字、中国語ピンイン、一部発音ヒント。韓国語は実際の発音（連音化・鼻音化など）で表記。
 - 簡体字→繁体字の表示変換（ピンイン・元のタイミングは保持）。
 - 制作クレジット・スタジオ名・版表記・入れ替わったタイトルの自動クリーニング。
 
@@ -458,6 +467,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 - 長い曲名・アーティスト名にも領域を確保。
 - セッションの作成・保存・切り替え。
 - ミニマルセットリスト：歌唱中の曲を大きく表示し、歌い終えた曲を下部のティッカーで流します。外観は 4 種類、常時の小さなアニメーションと再生に合わせて動く波形付き。
+- 単曲ボード：歌唱中の曲だけを表示し、歌っていない間は自分で決めた待機文字を表示。外観は 10 種類。
 
 #### Twitch リクエスト
 
@@ -510,7 +520,7 @@ Elitesand Pro は、**楽曲の取り込み・歌詞検索・同期再生・OBS 
 配布元は公式 GitHub Releases のみ。同梱の `.sha256` を照合してください：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.1.exe"
 ```
 
 ### OBS 設定
@@ -530,6 +540,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ### アップデート
 
 Elitesand Pro は**起動時にアップデートを確認**し、「接続とシステム → アップデートを確認」から手動でも確認できます。互換がある場合はアプリ内で差分アップデートを適用（ダウンロードとインストールの進行状況を表示）、互換が無い場合は GitHub Releases の完全版 Installer へ案内します。完全版を実行する前に Elitesand Pro を終了してください。
+
+アップデート後に初めてパネルを開くと、そのバージョンの新機能が一覧表示され、ワンクリックで各設定へ移動できます。ヘルプ画面からいつでも見直せます。
 
 **アップグレードしても曲ライブラリ・歌詞の編集・設定は保持されます。** ただしアップグレード前に重要なデータをバックアップすることをおすすめします。
 
@@ -590,17 +602,18 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 컬렉션: 곡이 많아져도 자주 쓰는 곡을 그룹으로 저장. 한 곡을 여러 컬렉션에 넣을 수 있고, 모바일 리모컨에서도 바로 불러올 수 있음.
 - 선택형 라우드니스 정규화(두 재생 체인 동시 처리).
 - 곡별 음량 기억: 재생 중 음량을 바꾼 곡은 다음에도 같은 음량으로 재생, 바꾸지 않은 곡은 기본 음량.
+- 아웃트로 정지 시 자동 종료: 마지막 가사 이후 일시정지한 채 설정한 시간(끄기 또는 3~30초, 기본 8초)이 지나면 다 부른 것으로 보고 OBS 가사와 세트리스트의 재생 중 표시를 지웁니다.
 - 곡 라이브러리에서 곡명/가수명을 바로 수정. 직접 고른 가사와 다른 곡일 수 있는 가사는 표시되며, 문장 동기화 가사를 단어 동기화로 일괄 업그레이드할 수 있습니다.
 
 #### 가사
 
 - 다중 소스 병렬 검색: BetterLyrics, Apple Music, Kugou, QQ Music, LRCLIB, NetEase 등. 자동 선택·수동 선택 지원.
-- 단어 동기화, 문장 동기화, LRC, KRC, TTML, SRT, WebVTT, 일반 텍스트.
+- 단어 동기화, 문장 동기화, LRC, KRC, TTML, SRT, WebVTT, 일반 텍스트. 쿠거우(Kugou) .krc와 단어 단위 LRC를 업로드하거나 붙여 넣어도 단어별 타이밍 유지.
 - 단어 동기화 예비 소스 확대: QQ Music과 NetEase는 단어 동기화 버전을 가져오고, AMLL 커뮤니티 단어 동기화 라이브러리도 추가. 2개 언어 가사의 번역은 따로 저장해 원문 줄을 덮어쓰지 않습니다.
 - 타임라인 편집, "첫 줄 맞추기"로 전체 이동.
 - 합창 파트 분석(KTV 색상에 반영).
 - 가사 소스별 타이밍 기억.
-- 일본어·한국어 로마자, 중국어 병음, 일부 발음 힌트.
+- 일본어·한국어 로마자, 중국어 병음, 일부 발음 힌트. 한국어는 실제 발음(연음, 비음화 등)대로 표기.
 - 간체→번체 표시 변환(병음·원본 타이밍 보존).
 - 소스의 제작 크레딧, 스튜디오명, 버전 표기, 뒤바뀐 제목 자동 정리.
 
@@ -637,6 +650,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 - 긴 제목·아티스트명에도 공간 확보.
 - 세션 생성·저장·전환.
 - 미니멀 세트리스트: 지금 부르는 곡을 크게, 부른 곡은 아래 티커로 표시. 외관 4종, 상시 작은 애니메이션과 재생에 맞춰 움직이는 파형 포함.
+- 단일 곡 보드: 지금 부르는 곡만 표시하고, 부르지 않을 때는 직접 정한 대기 문구를 표시. 외관 10종.
 
 #### Twitch 신청곡
 
@@ -689,7 +703,7 @@ Elitesand Pro는 **곡 가져오기, 가사 검색, 동기화 재생, OBS 동적
 공식 GitHub Releases에서만 내려받고 동봉된 `.sha256`을 확인하세요:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.1.exe"
 ```
 
 ### OBS 설정
@@ -709,6 +723,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ### 업데이트
 
 Elitesand Pro는 **시작할 때 업데이트를 확인**하며 "연결 및 시스템 → 업데이트 확인"에서 수동으로도 확인할 수 있습니다. 호환되면 앱 내에서 증분 업데이트를 적용하고(다운로드·설치 진행률 표시), 호환되지 않으면 GitHub Releases의 전체 Installer로 안내합니다. 전체 버전을 실행하기 전에 Elitesand Pro를 종료하세요.
+
+업데이트 후 처음 패널을 열면 그 버전의 새 기능 목록이 표시되고, 클릭 한 번으로 각 설정 위치로 이동할 수 있습니다. 도움말 창에서 언제든 다시 볼 수 있습니다.
 
 **업그레이드해도 곡 라이브러리, 가사 편집, 설정은 그대로 유지됩니다.** 다만 업그레이드 전에 중요한 데이터를 백업하는 것을 권장합니다.
 
@@ -769,17 +785,18 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 收藏歌单：媒体库破万首后把常用的歌分组保存，一首歌可以放进多个收藏歌单，手机遥控器也能直接加载整份。
 - 可选「统一音量」：两条播放链一起做响度标准化。
 - 记住每首歌的音量：某首歌调过音量，下次播放自动回到那个音量；没调过的歌用默认音量。
+- 尾奏暂停自动收尾：最后一句唱完后按暂停，停满设定的秒数（关闭或 3～30 秒，默认 8 秒）就当作唱完，OBS 歌词清除、歌单不再显示正在播放。
 - 歌曲库可直接修改歌名／歌手；手动选的歌词与疑似对错歌的歌词会标出来，逐句歌词可批量升级成逐字。
 
 #### 歌词
 
 - 多来源并行搜索：BetterLyrics、Apple Music、酷狗、QQ音乐、LRCLIB、网易云等，自动挑最佳、也可手选。
-- 支持逐字、逐句、LRC、KRC、TTML、SRT、WebVTT 与纯文本。
+- 支持逐字、逐句、LRC、KRC、TTML、SRT、WebVTT 与纯文本；上传或粘贴酷狗 .krc 与逐字 LRC 也会保留逐字时间。
 - 逐字歌词备援更多：QQ 音乐与网易云改抓逐字版，另加 AMLL 社区逐字歌词库；双语歌词的译文另外保存，不再盖掉原文。
 - 逐行时间轴编辑器，一键「对齐第一句」整体平移。
 - 合唱声部解析，KTV 模板据此自动上色。
 - 每个歌词来源各自记住时间偏移，换来源不用重新对时。
-- 日文／韩文罗马音、中文拼音与部分谐音显示。
+- 日文／韩文罗马音、中文拼音与部分谐音显示；韩文按实际读法（连音、鼻音化等）标音。
 - 对时歌词自动简转繁，不破坏拼音与原始时间数据。
 - 自动清洗来源里的制作名单、工作室名称、版本注记与错置标题。
 
@@ -816,6 +833,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 - 长歌名与长歌手名自动分配空间，重要信息不被挤掉。
 - 可创建、保存与切换不同直播场次。
 - 极简歌单：大字显示正在唱、底部跑马灯列出已唱，四种外观，附常驻小动画与跟着播放状态动的音波。
+- 单曲看板：只显示正在唱的歌，没在唱时显示自定义待机文字，十种外观。
 
 #### Twitch 点歌
 
@@ -868,7 +886,7 @@ Elitesand Pro 把**歌曲导入、歌词搜索、同步播放、OBS 动态歌词
 请只从官方 GitHub Releases 下载，并核对随附的 `.sha256`：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
+Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.1.exe"
 ```
 
 ### OBS 设置
@@ -888,6 +906,8 @@ Get-FileHash -Algorithm SHA256 "Elitesand.Pro.Setup.1.3.0.exe"
 ### 更新
 
 Elitesand Pro 会在**启动时检查更新**，也可在「连接与系统 → 检查更新」手动检查。兼容时可直接在程序内应用增量更新（会显示下载与安装进度）；不兼容时引导你到 GitHub Releases 下载完整 Installer。安装完整版前请关闭 Elitesand Pro。
+
+更新后第一次打开面板会列出这版新增的功能，可以一键带你到设置位置；之后也能在说明窗口重看。
 
 **升级会保留你的歌曲库、歌词修改与设置**；不过升级前仍建议先备份重要数据。
 
