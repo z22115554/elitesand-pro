@@ -85,10 +85,10 @@ async function renderVisualFrame(page, templateId, frame) {
 
 test.describe('OBS lyric template visual regression', () => {
   test.beforeEach(async ({ page }, testInfo) => {
-    if (testInfo.title.startsWith('jizura ')) {
-      // JIZURA 的組合會換書體；像素基準固定使用已隨程式附帶、涵蓋中日韓的字型，避免遠端字型與 OS fallback 漂移。
-      await page.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\//, route => route.fulfill({ contentType: 'text/css', body: '' }));
-    }
+    // 遠端 Google Fonts 一律擋掉：display 的字型表是非阻塞載入（display-fonts.js 載完才切 media），
+    // 什麼時候套上看網路，同一幀會在「後備字型」與「Noto」之間跳。像素基準固定用本機字型。
+    // JIZURA 另外換成隨程式附帶、涵蓋中日韓的字型（見下方）。
+    await page.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\//, route => route.fulfill({ contentType: 'text/css', body: '' }));
     await page.route('**/socket.io/socket.io.js', (route) => route.fulfill({
       contentType: 'application/javascript',
       body: `window.io = () => ({

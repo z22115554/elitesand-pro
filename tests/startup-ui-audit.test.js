@@ -129,10 +129,20 @@ function romanizerHarness() {
   return { romanizer, builds: () => builds, complete: (err) => complete(err, tokenizer), tokenizer };
 }
 
-test('loading romanizer and reading kana do not decompress the dictionary', async () => {
+test('loading romanizer and non-Japanese text do not decompress the dictionary', async () => {
   const h = romanizerHarness(); assert.equal(h.builds(), 0);
-  assert.equal((await h.romanizer.japaneseReadingAnalysis('ねこ')).phonetic, 'neko');
+  assert.equal((await h.romanizer.japaneseReadingAnalysis('neko')).phonetic, 'neko');
   assert.equal(h.builds(), 0);
+});
+
+// 純假名句子也要走分詞（助詞は／へ、っ 跨詞），所以第一句假名才載入字典，且只載一次
+test('first kana reading lazily builds the dictionary once', async () => {
+  const h = romanizerHarness(); assert.equal(h.builds(), 0);
+  const reading = h.romanizer.japaneseReadingAnalysis('ねこ');
+  assert.equal(h.builds(), 1); h.complete(null);
+  assert.equal((await reading).phonetic, 'neko');
+  assert.equal((await h.romanizer.japaneseReadingAnalysis('ねこ')).phonetic, 'neko');
+  assert.equal(h.builds(), 1);
 });
 
 test('concurrent first kanji readings share initialization and preserve readings', async () => {

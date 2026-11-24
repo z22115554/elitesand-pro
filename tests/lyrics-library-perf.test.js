@@ -69,16 +69,17 @@ test('large unchanged libraries normalize just the query on repeated lookups, wh
   assert.equal(store.findByIdentity('missing', 'missing'), null); assert.equal(normalizations.count, 4);
 });
 
-const repeatedChinese = () => [0, 1, 2].map(i => ({ time: i * 1000, text: '我愛你', singer: `s${i}`, words: [{ text: '我', time: i * 1000, duration: 100 }, { text: '愛', time: i * 1000 + 100, duration: 200 }, { text: '你', time: i * 1000 + 300, duration: 300 }, { text: '我', time: i * 1000 + 600, duration: 100 }] }));
+// 用繁簡同形的字：拼音查詢會先轉簡體（破音字修正），這組測試只管快取行為
+const repeatedChinese = () => [0, 1, 2].map(i => ({ time: i * 1000, text: '我想你', singer: `s${i}`, words: [{ text: '我', time: i * 1000, duration: 100 }, { text: '想', time: i * 1000 + 100, duration: 200 }, { text: '你', time: i * 1000 + 300, duration: 300 }, { text: '我', time: i * 1000 + 600, duration: 100 }] }));
 
 test('async Chinese readings reuse exact line/word text, preserve timing and leave input untouched', async () => {
   const calls = []; const romanizer = romanizerFixture({ pinyin: text => { calls.push(text); return `pin:${text}`; } });
   const input = repeatedChinese(), original = structuredClone(input);
   const results = await romanizer.addRomanization(input);
-  assert.deepEqual(calls, ['我愛你', '我', '愛', '你']);
+  assert.deepEqual(calls, ['我想你', '我', '想', '你']);
   assert.deepEqual(input, original);
-  assert.equal(results[2].time, 2000); assert.equal(results[2].singer, 's2'); assert.equal(results[2].phonetic, 'pin:我愛你');
-  assert.deepEqual(Array.from(results[2].words, word => [word.time, word.duration, word.phonetic]), [[2000,100,'pin:我'],[2100,200,'pin:愛'],[2300,300,'pin:你'],[2600,100,'pin:我']]);
+  assert.equal(results[2].time, 2000); assert.equal(results[2].singer, 's2'); assert.equal(results[2].phonetic, 'pin:我想你');
+  assert.deepEqual(Array.from(results[2].words, word => [word.time, word.duration, word.phonetic]), [[2000,100,'pin:我'],[2100,200,'pin:想'],[2300,300,'pin:你'],[2600,100,'pin:我']]);
   assert.notEqual(results[0].words, results[1].words); assert.notEqual(results[0].words[0], results[1].words[0]);
 });
 
@@ -91,8 +92,8 @@ test('sync readings also reuse exact text and discard cache between invocations'
 
 test('async reading cache is limited to one song and does not normalize distinct text spellings together', async () => {
   const calls = []; const romanizer = romanizerFixture({ pinyin: text => { calls.push(text); return `pin:${text}`; } });
-  const lines = [{ text: '我愛你' }, { text: '我 愛你' }, { text: '我愛你' }];
-  await romanizer.addRomanization(lines); assert.deepEqual(calls, ['我愛你', '我 愛你']);
+  const lines = [{ text: '我想你' }, { text: '我 想你' }, { text: '我想你' }];
+  await romanizer.addRomanization(lines); assert.deepEqual(calls, ['我想你', '我 想你']);
   await romanizer.addRomanization(lines); assert.equal(calls.length, 4);
 });
 
@@ -100,10 +101,10 @@ test('a failed pinyin conversion is retried on the next invocation instead of st
   let available = false;
   const romanizer = romanizerFixture({ pinyin: text => { if (!available) throw new Error('temporarily unavailable'); return `pin:${text}`; } });
   const first = await romanizer.addRomanization(repeatedChinese());
-  assert.equal(first[0].phonetic, '我愛你'); assert.equal(first[2].words[0].phonetic, '我');
+  assert.equal(first[0].phonetic, '我想你'); assert.equal(first[2].words[0].phonetic, '我');
   available = true;
   const second = await romanizer.addRomanization(repeatedChinese());
-  assert.equal(second[0].phonetic, 'pin:我愛你'); assert.equal(second[2].words[0].phonetic, 'pin:我');
+  assert.equal(second[0].phonetic, 'pin:我想你'); assert.equal(second[2].words[0].phonetic, 'pin:我');
 });
 
 function japaneseFixture(options = {}) {
@@ -111,6 +112,7 @@ function japaneseFixture(options = {}) {
   const tokens = {
     '君に会いたい': [{ surface_form: '君', reading: 'キミ', pos: '名詞' }, { surface_form: 'に', reading: 'ニ', pos: '助詞' }, { surface_form: '会いたい', reading: 'アイタイ', pos: '動詞' }],
     '君': [{ surface_form: '君', reading: 'キミ', pos: '名詞' }],
+    'に': [{ surface_form: 'に', reading: 'ニ', pos: '助詞' }],
     '会いたい': [{ surface_form: '会いたい', reading: 'アイタイ', pos: '動詞' }],
   };
   const tokenizer = { tokenize: text => { calls.push(text); return tokens[text] || [{ surface_form: text }]; } };
@@ -121,7 +123,8 @@ const japaneseLines = () => [0, 1].map(i => ({ time: i * 1000, text: '君に会�
 test('Japanese repeated line/word readings share tokenization but each line owns its ruby segments', async () => {
   const { romanizer, calls } = japaneseFixture(); const input = japaneseLines();
   const result = await romanizer.addRomanization(input);
-  assert.deepEqual(calls, ['君に会いたい', '君', '会いたい']);
+  // 純假名的字（に）也走分詞（助詞は／へ、っ 跨詞要靠它），所以也會進 tokenizer 一次
+  assert.deepEqual(calls, ['君に会いたい', '君', 'に', '会いたい']);
   assert.equal(result[0].words[0].phonetic, 'kimi');
   assert.deepEqual(plain(result[0].furigana), [{ text: '君', reading: 'きみ' }, { text: 'に' }, { text: '会', reading: 'あ' }, { text: 'いたい' }]);
   assert.deepEqual(plain(result[0].furigana), plain(result[1].furigana));
@@ -155,7 +158,7 @@ test('missing Japanese engines retain fallback output and retry G2P on the next 
 test('concurrent song invocations keep separate reading results and mutable output objects', async () => {
   const { romanizer, calls } = japaneseFixture();
   const [a, b] = await Promise.all([romanizer.addRomanization(japaneseLines()), romanizer.addRomanization(japaneseLines())]);
-  assert.equal(calls.length, 6); assert.deepEqual(plain(a), plain(b));
+  assert.equal(calls.length, 8); assert.deepEqual(plain(a), plain(b));
   a[0].words[0].phonetic = 'changed'; assert.equal(b[0].words[0].phonetic, 'kimi');
 });
 
