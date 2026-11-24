@@ -1,34 +1,106 @@
 {
   "index.html": {
-    "size": 66007,
-    "sha256": "d613ffbc760365694bcd600f7d0a303039acd2af051427db7476405f97491dfd"
+    "size": 69294,
+    "sha256": "fa3f8c5fdb732ff92fd56fd4ea858c3f7ab8682efdc340836631f0b3792a7d5a"
   },
   ".nojekyll": {
     "size": 0,
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
-  "assets/panel-home.webp": {
-    "size": 322460,
-    "sha256": "5b689c02f3ec0ddd235f8a6689d0770602667da73073162050850fc83899cf3c"
+  "assets/apple-touch-icon.png": {
+    "size": 6016,
+    "sha256": "8bfa23ae1875735da01091c014bd4adb688944c62c9539238de72037549cd890"
   },
-  "assets/lyrics-settings.webp": {
-    "size": 301492,
-    "sha256": "2743ce0984eb8e93fc55e69020a14bbb9ab15f94e122f2dfcabb2f02e56ef315"
+  "assets/favicon-32.png": {
+    "size": 1198,
+    "sha256": "c350c29f70120ef04e1b89a2b1b6c6edf0ecd5427455c48cae63409ca0826200"
   },
-  "assets/setlist-panel.webp": {
-    "size": 286560,
-    "sha256": "c65986518d1935a0b6574d147f92568f16f48a57800b11e25baef5a2045d7e0e"
+  "assets/mark-symbol.png": {
+    "size": 9930,
+    "sha256": "b03486ae8bc8644e19699792f0cc31724d6d97a12d29613bb675a059d720378a"
   },
-  "assets/twitch-requests.webp": {
-    "size": 262278,
-    "sha256": "0e5d80ade7726058a830485f960e289873c61204e45aeeae9759d51478a7de1a"
+  "assets/og-image-20261124.png": {
+    "size": 124550,
+    "sha256": "3c69262418f403fda4d52ec06e812e323c973936a1327196424681218327747d"
   },
-  "assets/twitch-settings.webp": {
-    "size": 164146,
-    "sha256": "96ddb7d9f197e0c46fef8142651385c96dbdf1286cef15ae73fcb88132de952d"
+  "assets/shots/library.webp": {
+    "size": 64828,
+    "sha256": "77ea5fb19a318e7cac0bed8b0c058a100c90130d736a5944f5b4672377a2b40e"
   },
-  "assets/phone-controller.webp": {
-    "size": 137396,
-    "sha256": "74c21604f1bcc3b35751f1dadbe9688169217826dc3f7d7054ffecb08d86a8b2"
+  "assets/shots/live.webp": {
+    "size": 59920,
+    "sha256": "c5091c9c304e46a4ea6f4881833388e99ec6cfe55d92239db9b279d969bf7f20"
+  },
+  "assets/shots/output.webp": {
+    "size": 38874,
+    "sha256": "472c83633e0bd96d6647e76c2f10290bf9f56665f14de5db7dec449a662e4c1a"
+  },
+  "assets/shots/phone.webp": {
+    "size": 25382,
+    "sha256": "581acd8f20acd9eef95eb5e5172451be9abdeffd122da566ddb68ca0140857c3"
+  },
+  "assets/shots/setlist.webp": {
+    "size": 14750,
+    "sha256": "d3b1c7c746929aba2afd62ec75fdab203ebf313f820547d11335ca8baab50027"
+  },
+  "assets/shots/show-g10.webp": {
+    "size": 42884,
+    "sha256": "d6d6db9695a182512ff5e0bff689bea88cb638587037eecc131bd47832d05da5"
+  },
+  "assets/shots/show-g25.webp": {
+    "size": 68700,
+    "sha256": "83c3df8b36453fc68275760e1848ca3256bf770874ef4b049cc56c5016b2d53f"
+  },
+  "assets/shots/show-g50.webp": {
+    "size": 93808,
+    "sha256": "bc6f14f3c335e2401b8420f51f420058f3e8576314f5fe709826be0c67573c50"
+  },
+  "assets/shots/show-r2.webp": {
+    "size": 73780,
+    "sha256": "c79b1d8b2118831e477736be44978919f37791b001e6cbd7c122fb742ddd7c35"
+  },
+  "assets/tpl/aura.webp": {
+    "size": 20398,
+    "sha256": "4c1ce877873e5c580c29dac18f083fc045e28eddcd461484419380545088c50c"
+  },
+  "assets/tpl/classic.webp": {
+    "size": 16534,
+    "sha256": "725b7cafb67c7aade88b301ca8c4aca0502871f0139edcc4c7edc69b63290b45"
+  },
+  "assets/tpl/columnflow.webp": {
+    "size": 12082,
+    "sha256": "cdfc2d5e95882c4b7e8973f5bf3b8ed2cb6bc6f6e35a910edb94603611a20388"
+  },
+  "assets/tpl/drift.webp": {
+    "size": 23350,
+    "sha256": "381708d50170ed6ba279d3e604d470dfe2f75f353045421f06daf4fda0677917"
+  },
+  "assets/tpl/facet.webp": {
+    "size": 17544,
+    "sha256": "6e7b096cb745918c89f789fe3b2f09bb8e247eae5f4545a09d0f02cbedd5ec4e"
+  },
+  "assets/tpl/jizura.webp": {
+    "size": 25480,
+    "sha256": "fbbdabfcd88641ecda706d7ba09729a925dc8400192175599275acd870d8622c"
+  },
+  "assets/tpl/ktv.webp": {
+    "size": 35264,
+    "sha256": "57d208ce0e2f2d1fb3348ec5cbe1a684a0a5d2c0795e23b5cbee2a8b7e5c00bc"
+  },
+  "assets/tpl/lightboard.webp": {
+    "size": 26660,
+    "sha256": "66c1a695907e2f0af7bee0399e2264f9bf5135f57e5c6ac4ae6f9940715a9a7f"
+  },
+  "assets/tpl/particle.webp": {
+    "size": 14432,
+    "sha256": "1044b3719d3f1e9181c47e3de800d19128f5d96c21c0b832137705ed37beb4f8"
+  },
+  "assets/tpl/pulse.webp": {
+    "size": 15996,
+    "sha256": "8a216b7d59053cc55030cd02d2e433cfd641f410a2029772363c9741301c0044"
+  },
+  "assets/tpl/typewriter.webp": {
+    "size": 13236,
+    "sha256": "65eea9a89137023bb2f7d64e9aa1115aef1492af9c2155742463831b0570a02c"
   }
 }

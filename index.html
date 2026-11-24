@@ -1,778 +1,525 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title data-i18n="meta.title">Elitesand Pro｜直播歌回控制台</title>
-<meta name="description" content="Elitesand Pro 官網：整合歌曲匯入、歌詞搜尋、OBS 動態歌詞、直播歌單、Twitch 點歌與手機控制。" data-i18n-content="meta.description" />
-<link rel="icon" type="image/png" href="assets/favicon-32.png" />
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://z22115554.github.io/elitesand-pro/" />
-<link rel="canonical" href="https://z22115554.github.io/elitesand-pro/" />
-<link rel="alternate" hreflang="zh-Hant" href="https://z22115554.github.io/elitesand-pro/?lang=zh-Hant" />
-<link rel="alternate" hreflang="en" href="https://z22115554.github.io/elitesand-pro/?lang=en" />
-<link rel="alternate" hreflang="ja" href="https://z22115554.github.io/elitesand-pro/?lang=ja" />
-<link rel="alternate" hreflang="ko" href="https://z22115554.github.io/elitesand-pro/?lang=ko" />
-<link rel="alternate" hreflang="zh-Hans" href="https://z22115554.github.io/elitesand-pro/?lang=zh-Hans" />
-<link rel="alternate" hreflang="x-default" href="https://z22115554.github.io/elitesand-pro/?lang=en" />
-<meta property="og:title" content="Elitesand Pro｜VTuber 歌回直播控制台" data-i18n-content="meta.ogTitle" />
-<meta property="og:description" content="整合歌曲匯入、歌詞搜尋、OBS 動態歌詞、直播歌單與 Twitch 點歌。支援五種語言的 Windows 本機工具。" data-i18n-content="meta.ogDescription" />
-<meta property="og:image" content="https://z22115554.github.io/elitesand-pro/assets/og-image-20260914.png" />
-<meta property="og:image:width" content="1731" />
-<meta property="og:image:height" content="909" />
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Elitesand Pro｜VTuber 歌回直播控制台" data-i18n-content="meta.ogTitle" />
-<meta name="twitter:description" content="整合歌曲匯入、歌詞搜尋、OBS 動態歌詞、直播歌單與 Twitch 點歌。支援五種語言的 Windows 本機工具。" data-i18n-content="meta.ogDescription" />
-<meta name="twitter:image" content="https://z22115554.github.io/elitesand-pro/assets/og-image-20260914.png" />
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title data-i18n="meta.title">聲嶼 Elitesand Pro｜歌回直播的歌詞與畫面工具</title>
+<meta name="description" data-i18n-content="meta.description" content="給 VTuber 與歌回實況主的免費工具。在自己的電腦上執行，OBS 直接載入逐字歌詞、直播歌單與訂閱演出。">
+<meta name="theme-color" content="#0d141c">
+<link rel="icon" type="image/png" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="canonical" href="https://z22115554.github.io/elitesand-pro/">
+<link rel="alternate" hreflang="zh-Hant" href="https://z22115554.github.io/elitesand-pro/?lang=zh-Hant">
+<link rel="alternate" hreflang="en" href="https://z22115554.github.io/elitesand-pro/?lang=en">
+<link rel="alternate" hreflang="ja" href="https://z22115554.github.io/elitesand-pro/?lang=ja">
+<link rel="alternate" hreflang="ko" href="https://z22115554.github.io/elitesand-pro/?lang=ko">
+<link rel="alternate" hreflang="zh-Hans" href="https://z22115554.github.io/elitesand-pro/?lang=zh-Hans">
+<link rel="alternate" hreflang="x-default" href="https://z22115554.github.io/elitesand-pro/?lang=en">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://z22115554.github.io/elitesand-pro/">
+<meta property="og:site_name" content="Elitesand Pro">
+<meta property="og:title" data-i18n-content="meta.ogTitle" content="聲嶼 Elitesand Pro｜歌回直播的歌詞與畫面工具">
+<meta property="og:description" data-i18n-content="meta.description" content="給 VTuber 與歌回實況主的免費工具。在自己的電腦上執行，OBS 直接載入逐字歌詞、直播歌單與訂閱演出。">
+<meta property="og:image" content="https://z22115554.github.io/elitesand-pro/assets/og-image-20261124.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://z22115554.github.io/elitesand-pro/assets/og-image-20261124.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+TC:wght@300;400;500&family=Noto+Serif+JP:wght@600;900&family=Noto+Serif+TC:wght@600;900&display=swap" rel="stylesheet">
-
+<link id="font-css" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chiron+GoRound+TC:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="preload" as="image" href="assets/tpl/aura.webp">
 <style>
-/* ═══════════════════════════════════════════════════════════════
-   Elitesand Pro — 官網
-   設計概念：整個頁面是一場歌回演出，捲動＝播放頭。
-   ・標題用產品自己的逐字掃描（karaoke sweep）點亮
-   ・章節用 LRC 時間碼標記，經過時由「未唱」轉為「已唱」
-   ・日系 PV 語言：明朝體大標、時間碼等寬、克制的動態
-   ═══════════════════════════════════════════════════════════════ */
-
 :root{
-  /* 舞台：近黑，帶一點暖度，不是純黑 */
-  --stage:#0a0a0d;
-  --stage-2:#111116;
-
-  /* 歌詞的兩種狀態＝整頁的明暗語言 */
-  --sung:#f5f1e8;                    /* 已唱：暖白（紙感）*/
-  --unsung:rgba(245,241,232,.26);    /* 未唱：暗下去 */
-  --dim:rgba(245,241,232,.55);       /* 內文 */
-  --faint:rgba(245,241,232,.34);
-
-  /* 播放頭：品牌紫 */
-  --accent:#9b8cff;
-  --accent-deep:#6a55f0;
-  --hair:rgba(245,241,232,.10);
-  --hair-strong:rgba(245,241,232,.20);
-
-  --serif:"Noto Serif TC","Noto Serif JP",Georgia,"Times New Roman",serif;
-  --sans:"Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,monospace;
-
-  --max:1240px;
-  --rail:112px;   /* 左側時間碼軌道寬 */
+  --sea:#0d141c;          /* 頁面底：夜裡的海 */
+  --sea-2:#142030;        /* 舞台、面板 */
+  --sea-3:#1b2a3d;        /* 按鈕底、選中 */
+  --line:#24364a;
+  --line-2:#33495f;
+  --moon:#ecebe4;         /* 主文字 */
+  --mist:#a3b0bc;         /* 次要文字 */
+  --amber:#e9b949;        /* 只用在「正在唱／可以按」 */
+  --amber-hi:#f3c95f;
+  --amber-ink:#1a1405;
+  --display:"Chiron GoRound TC","Noto Sans TC",system-ui,sans-serif;
+  --body:"Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --wrap:1180px;
+  --gut:clamp(16px,4vw,40px);
 }
+:root[lang="ja"]{--display:"Zen Maru Gothic","Noto Sans JP",system-ui,sans-serif;--body:"Noto Sans JP",system-ui,sans-serif}
+:root[lang="ko"] body{word-break:keep-all}
+:root[lang="ko"]{--display:"Gothic A1","Noto Sans KR",system-ui,sans-serif;--body:"Noto Sans KR",system-ui,sans-serif}
+:root[lang="zh-Hans"]{--display:"Noto Sans SC",system-ui,sans-serif;--body:"Noto Sans SC",system-ui,sans-serif}
+:root[lang="en"]{--display:"Chiron GoRound TC",system-ui,sans-serif;--body:"Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif}
 
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{
-  margin:0;
-  background:var(--stage);
-  color:var(--sung);
-  font-family:var(--sans);
-  font-weight:300;
-  line-height:1.75;
-  -webkit-font-smoothing:antialiased;
-  /* clip（非 hidden）：不建立捲動容器，sticky 導覽才不會失效 */
-  overflow-x:clip;
-}
-/* 舞台氛圍：頂部一道極淡的光暈，像打在背板上的燈 */
-body::before{
-  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
-  background:
-    radial-gradient(120% 70% at 50% -20%, rgba(155,140,255,.10) 0%, transparent 55%),
-    radial-gradient(90% 60% at 90% 105%, rgba(106,85,240,.07) 0%, transparent 60%);
-}
-/* 底噪顆粒：PV 質地，非常淡 */
-body::after{
-  content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.030;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-main,header,footer{position:relative;z-index:2}
-/* 主視覺往右出血（50vw 含捲軸寬，會比容器的 50% 多出幾 px）。
-   用 clip 在 main 上實際裁掉：clip 不會建立捲動容器，垂直方向仍 visible，
-   sticky 導覽也不受影響。 */
-main{overflow-x:clip}
-
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--sea);color:var(--moon);font:400 16px/1.75 var(--body);font-feature-settings:"palt" 0}
+img{display:block;max-width:100%;height:auto}
 a{color:inherit}
-img{display:block;max-width:100%}
-button{font:inherit;cursor:pointer}
-:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-
-.wrap{width:min(var(--max),calc(100% - 56px));margin:auto}
-
-/* ── 捲動進度＝播放進度條 ── */
-.scrub{position:fixed;top:0;left:0;height:2px;width:0;z-index:60;
-  background:linear-gradient(90deg,var(--accent-deep),var(--accent));
-  box-shadow:0 0 14px rgba(155,140,255,.55)}
-/* 進度條前端的播放頭 */
-.scrub::after{content:"";position:absolute;right:-1px;top:50%;width:6px;height:6px;
-  margin-top:-3px;border-radius:50%;background:var(--accent);
-  box-shadow:0 0 10px 2px rgba(155,140,255,.9)}
+:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:6px}
+.wrap{width:min(var(--wrap),100% - 2*var(--gut));margin-inline:auto}
+.skip{position:absolute;left:-999px;top:8px;background:var(--amber);color:var(--amber-ink);padding:8px 14px;border-radius:8px;z-index:20}
+.skip:focus{left:8px}
 
 /* ── 導覽 ── */
-.nav{position:sticky;top:0;z-index:50;border-bottom:1px solid var(--hair);
-  background:rgba(10,10,13,.72);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
-.navin{height:74px;display:flex;align-items:center;gap:30px}
-.brand{display:flex;align-items:center;gap:12px;text-decoration:none;
-  font-family:var(--serif);font-weight:600;font-size:17px;letter-spacing:.02em}
-.brand img{width:22px;height:22px;object-fit:contain;opacity:.92}
-.links{display:flex;gap:30px;margin-left:auto}
-.links a{text-decoration:none;color:var(--faint);font-family:var(--mono);font-size:12px;
-  letter-spacing:.06em;transition:color .18s}
-.links a:hover{color:var(--sung)}
+.nav{position:sticky;top:0;z-index:10;background:rgba(13,20,28,.86);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;align-items:center;gap:20px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font:700 17px/1 var(--display);letter-spacing:.01em;white-space:nowrap}
+.brand img{width:28px;height:28px}
+.brand small{font:500 13px/1 var(--body);color:var(--mist)}
+:root[lang="en"] .brand small,:root[lang="ko"] .brand small,:root[lang="ja"] .brand small{display:none}
+.nav ul{display:flex;gap:4px;list-style:none;margin:0 0 0 12px;padding:0}
+.nav ul a{display:block;padding:8px 12px;border-radius:8px;text-decoration:none;color:var(--mist);font-size:15px}
+.nav ul a:hover{color:var(--moon);background:var(--sea-2)}
+.nav .end{margin-left:auto;display:flex;align-items:center;gap:10px}
+.lang{appearance:none;background:var(--sea-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a3b0bc' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;color:var(--moon);border:1px solid var(--line-2);border-radius:8px;padding:7px 28px 7px 10px;font:inherit;font-size:14px;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 20px;border-radius:10px;font:700 16px/1 var(--body);text-decoration:none;border:1px solid transparent;cursor:pointer;white-space:nowrap}
+.btn-primary{background:var(--amber);color:var(--amber-ink)}
+.btn-primary:hover{background:var(--amber-hi)}
+.btn-ghost{border-color:var(--line-2);color:var(--moon)}
+.btn-ghost:hover{background:var(--sea-2)}
+.nav .btn{min-height:38px;padding:0 14px;font-size:14px}
 
-.navbtn{display:inline-flex;align-items:center;height:36px;padding:0 17px;
-  border:1px solid var(--hair-strong);border-radius:2px;text-decoration:none;
-  font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--sung);
-  transition:background .18s,border-color .18s}
-.navbtn:hover{background:rgba(155,140,255,.14);border-color:var(--accent)}
-.navbtnShort{display:none}
+/* ── 主視覺：OBS 畫面＋模板切換 ── */
+.hero{padding:clamp(40px,7vw,88px) 0 clamp(56px,8vw,104px)}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(28px,4vw,56px);align-items:start}
+.hero h1{font:800 clamp(34px,4.2vw,56px)/1.2 var(--display);letter-spacing:.01em;margin:8px 0 22px;white-space:pre-line}
+.lede{font-size:clamp(16px,1.5vw,18px);color:var(--mist);max-width:30em;margin:0 0 30px}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.release{font-size:14px;color:var(--mist);margin:0}
+.release b{color:var(--moon);font-weight:500}
 
-.language-picker{position:relative;display:inline-flex;align-items:center}
-.language-select{height:36px;min-width:104px;padding:0 12px;border:1px solid var(--hair);
-  border-radius:2px;background:transparent;color:var(--dim);
-  font-family:var(--mono);font-size:12px;letter-spacing:.04em;cursor:pointer;
-  -webkit-appearance:none;appearance:none;transition:color .18s,border-color .18s}
-.language-select:hover{color:var(--sung);border-color:var(--hair-strong)}
-.language-select option{background:#16161c;color:#f5f1e8}
+.stage{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#121a24;border:1px solid var(--line-2);box-shadow:0 30px 80px -40px rgba(0,0,0,.8)}
+.stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .35s ease}
+.stage img.out{opacity:0}
+.stage .tag{position:absolute;left:12px;top:12px;font-size:12px;line-height:1;padding:6px 9px;border-radius:6px;background:rgba(13,20,28,.72);color:var(--mist)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0;padding:0;list-style:none}
+.chip{position:relative;overflow:hidden;white-space:nowrap;border:1px solid var(--line-2);background:var(--sea-2);color:var(--mist);border-radius:999px;padding:7px 14px;font:500 14px/1.2 var(--body);cursor:pointer}
+.chip:hover{color:var(--moon)}
+.chip[aria-pressed="true"]{color:var(--amber-ink);border-color:var(--amber);background:var(--amber)}
+/* 自動輪播時，選中的那顆像歌詞一樣由左到右「唱過去」 */
+.chip .fill{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--amber);transform-origin:left;transform:scaleX(0);z-index:0}
+.chip span{position:relative;z-index:1}
+.chips.auto .chip[aria-pressed="true"]{background:var(--sea-3);color:var(--moon);border-color:var(--amber)}
+.chips.auto .chip[aria-pressed="true"] .fill{animation:sing var(--dur,4.2s) linear forwards}
+@keyframes sing{to{transform:scaleX(1)}}
+.stage-note{font-size:13px;color:var(--mist);margin:12px 0 0}
 
-/* ═══ 逐字掃描：產品自己的歌詞效果，用在所有大標上 ═══
-   預設 paused：播放頭還沒到的段落，標題就維持「未唱」的暗色。
-   容器拿到 .is-playing 才開始逐字點亮。 */
-.sw{
-  background:linear-gradient(90deg,var(--sung) 50%,var(--unsung) 50%);
-  background-size:200% 100%;
-  background-position:100% 0;
-  -webkit-background-clip:text;background-clip:text;
-  color:transparent;
-  animation:sweep .42s cubic-bezier(.4,0,.2,1) forwards;
-  animation-play-state:paused;
+/* ── 段落共用 ── */
+section{scroll-margin-top:72px}
+.band{padding:clamp(64px,9vw,120px) 0;border-top:1px solid var(--line)}
+.head{max-width:44rem;margin-bottom:clamp(32px,4vw,52px)}
+.head h2{font:800 clamp(28px,3.2vw,42px)/1.25 var(--display);margin:0 0 14px;white-space:pre-line}
+.head p{color:var(--mist);margin:0;max-width:34em}
+h3{font:700 clamp(19px,1.8vw,22px)/1.4 var(--display);margin:0 0 8px}
+p{margin:0 0 1em}
+.shot{border-radius:10px;border:1px solid var(--line-2);background:var(--sea-2);overflow:hidden}
+
+/* 一場歌回：真的有先後順序，所以用編號 */
+.flow{display:grid;gap:clamp(48px,7vw,96px);counter-reset:step;list-style:none;margin:0;padding:0}
+.flow>li{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:clamp(24px,4vw,56px);align-items:start}
+.flow>li:nth-child(even){grid-template-columns:minmax(0,8fr) minmax(0,4fr)}
+.flow>li:nth-child(even) .txt{order:2}
+.flow .txt{padding-top:6px}
+.step{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--amber);color:var(--amber);font:700 15px/1 var(--display);margin-bottom:14px}
+.flow .txt p{color:var(--mist)}
+.ticks{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:8px;font-size:15px}
+.ticks li{padding-left:18px;position:relative;color:var(--moon)}
+.ticks li::before{content:"";position:absolute;left:0;top:.72em;width:7px;height:7px;border-radius:2px;background:var(--line-2)}
+.pair{display:grid;grid-template-columns:3fr 2fr;gap:14px;align-items:end}
+.pair figcaption,.cap{font-size:13px;color:var(--mist);margin-top:8px}
+
+/* 訂閱演出 */
+.shows{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.shows figure{margin:0}
+.shows figure:nth-child(1){grid-column:span 7}
+.shows figure:nth-child(2){grid-column:span 5;align-self:end}
+.shows figure:nth-child(3){grid-column:span 5}
+.shows figure:nth-child(4){grid-column:span 7}
+.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(20px,3vw,36px);margin-top:clamp(36px,5vw,56px);list-style:none;padding:0}
+.facts h3{font-size:18px}
+.facts p{color:var(--mist);font-size:15px;margin:0}
+
+/* 其他功能：清單，不切卡片 */
+.list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(32px,6vw,80px);margin:0;padding:0;list-style:none}
+.list li{padding:22px 0;border-top:1px solid var(--line)}
+.list li p{color:var(--mist);margin:0;font-size:15px}
+.badge{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;border:1px solid var(--line-2);color:var(--mist);font:500 12px/1.6 var(--body);vertical-align:3px}
+
+/* 觀眾那一側 */
+.audience{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,4fr);gap:clamp(32px,5vw,72px);align-items:center}
+.audience .phone{max-width:300px;justify-self:center;border-radius:28px;border:1px solid var(--line-2);overflow:hidden}
+.audience .list{grid-template-columns:1fr}
+
+/* 下載 */
+.get{display:grid;grid-template-columns:minmax(0,6fr) minmax(0,5fr);gap:clamp(32px,5vw,72px)}
+.get h2{font:800 clamp(30px,3.6vw,48px)/1.2 var(--display);margin:0 0 16px;white-space:pre-line}
+.get .lede{margin-bottom:28px}
+.install{list-style:none;margin:0;padding:0;counter-reset:i}
+.install li{counter-increment:i;display:grid;grid-template-columns:34px 1fr;gap:14px;padding:16px 0;border-top:1px solid var(--line)}
+.install li::before{content:counter(i);display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1px solid var(--line-2);color:var(--mist);font:700 14px/1 var(--display)}
+.install p{margin:0;color:var(--mist);font-size:15px}
+.install b{display:block;color:var(--moon);font-weight:700;margin-bottom:2px}
+
+footer{border-top:1px solid var(--line);padding:36px 0 48px;color:var(--mist);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px 28px;justify-content:space-between}
+footer nav{display:flex;flex-wrap:wrap;gap:6px 22px}
+footer a{text-decoration:none}
+footer a:hover{color:var(--moon);text-decoration:underline}
+
+@media (max-width:980px){
+  .nav ul{display:none}
+  .hero .wrap,.get,.audience{grid-template-columns:minmax(0,1fr)}
+  .flow>li,.flow>li:nth-child(even){grid-template-columns:minmax(0,1fr)}
+  .flow>li:nth-child(even) .txt{order:0}
+  .facts{grid-template-columns:repeat(2,1fr)}
 }
-.is-playing .sw{animation-play-state:running}
-@keyframes sweep{to{background-position:0 0}}
-/* 第二行用強調色點亮，像 highlight 的當前句 */
-.sweepAccent .sw{background-image:linear-gradient(90deg,var(--accent) 50%,var(--unsung) 50%)}
-
-/* ═══ 開場編排：hero 各元素依序進場 ═══ */
-.motion .enter{opacity:0;transform:translateY(20px);
-  animation:enterUp .95s cubic-bezier(.2,.7,.2,1) forwards}
-@keyframes enterUp{to{opacity:1;transform:none}}
-.motion .e1{animation-delay:.05s}
-.motion .e2{animation-delay:.62s}
-.motion .e3{animation-delay:.74s}
-.motion .e4{animation-delay:.86s}
-.motion .e5{animation-delay:.42s}
-
-/* 主視覺從右側滑入，像推軌鏡頭 */
-.motion .enterArt{opacity:0;transform:translateX(46px);
-  animation:enterSlide 1.25s cubic-bezier(.16,.8,.24,1) .30s forwards}
-@keyframes enterSlide{to{opacity:1;transform:none}}
-/* 手機浮層最後落下 */
-.motion .enterPhone{opacity:0;transform:translateY(30px) scale(.94);
-  animation:enterDrop .9s cubic-bezier(.2,.8,.25,1) 1.05s forwards}
-@keyframes enterDrop{to{opacity:1;transform:none}}
-
-/* ═══ 章節：LRC 時間碼軌道 ═══ */
-.mv{position:relative;padding:118px 0}
-.mvin{display:grid;grid-template-columns:var(--rail) 1fr;gap:0}
-.stamp{font-family:var(--mono);font-size:12px;letter-spacing:.04em;
-  color:var(--unsung);padding-top:8px;transition:color .5s ease;position:relative}
-/* 垂直軌道線 */
-.stamp::before{content:"";position:absolute;left:0;top:-118px;bottom:-118px;
-  width:1px;background:var(--hair)}
-.stamp span{position:relative;display:inline-block;padding-left:22px;background:var(--stage)}
-.stamp span::before{content:"";position:absolute;left:-4px;top:50%;width:9px;height:9px;
-  margin-top:-4px;border-radius:50%;border:1px solid var(--hair-strong);
-  background:var(--stage);transition:background .5s ease,border-color .5s ease,box-shadow .5s}
-/* 播放頭經過 → 這一段「唱到了」 */
-.mv.is-live .stamp{color:var(--accent)}
-.mv.is-live .stamp span::before{background:var(--accent);border-color:var(--accent);
-  box-shadow:0 0 12px rgba(155,140,255,.7)}
-/* 觸發瞬間打一圈擴散的光暈，像播放頭跳到這個時間點 */
-.stamp span::after{content:"";position:absolute;left:-4px;top:50%;width:9px;height:9px;
-  margin-top:-4px;border-radius:50%;border:1px solid var(--accent);
-  opacity:0;pointer-events:none}
-.mv.is-live .stamp span::after{animation:ping 1.15s cubic-bezier(.2,.7,.3,1) .1s}
-@keyframes ping{
-  0%{opacity:.85;transform:scale(1)}
-  100%{opacity:0;transform:scale(3.4)}
+@media (max-width:640px){
+  .brand small{display:none}
+  .nav .btn .long{display:none}
+  .chips{flex-wrap:nowrap;overflow-x:auto;margin-inline:calc(-1*var(--gut));padding-inline:var(--gut);scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chips li{flex:none}
+  .list{grid-template-columns:1fr}
+  .shows{grid-template-columns:1fr}
+  .shows figure:nth-child(n){grid-column:auto}
+  .facts{grid-template-columns:1fr}
+  .pair{grid-template-columns:1fr}
 }
-
-/* 章節進場
-   只在 html.motion（＝JS 有跑）時才先隱藏；沒有 JS 就直接看得到內容，
-   絕不會因為 IntersectionObserver 失效就整頁空白。*/
-.motion .rise{opacity:0;transform:translateY(22px);
-  transition:opacity .8s cubic-bezier(.2,.6,.2,1),transform .8s cubic-bezier(.2,.6,.2,1)}
-.motion .mv.is-live .rise{opacity:1;transform:none}
-.motion .mv.is-live .rise.d1{transition-delay:.10s}
-.motion .mv.is-live .rise.d2{transition-delay:.18s}
-
-h1,h2,h3{font-family:var(--serif);font-weight:900;letter-spacing:-.01em;margin:0}
-
-/* ═══ HERO ═══ */
-.hero{padding:104px 0 96px;position:relative}
-.heroin{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:0;align-items:start}
-.heroCopy{max-width:640px}
-.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.16em;color:var(--faint);
-  text-transform:uppercase;margin:0 0 34px}
-.hero h1{font-size:clamp(44px,7.2vw,104px);line-height:1.12;margin:0 0 34px}
-.hero h1 .l2{display:block}
-.lead{font-size:16.5px;color:var(--dim);max-width:520px;margin:0;line-height:1.95}
-
-.actions{display:flex;gap:14px;margin-top:44px;flex-wrap:wrap}
-/* hover 時底色由左掃到右——用的是跟歌詞逐字點亮同一招 background-position，
-   不疊 ::before 遮罩，才不會蓋掉 data-i18n 直接寫進去的按鈕文字。 */
-.btn{display:inline-flex;align-items:center;justify-content:center;height:54px;padding:0 30px;
-  border-radius:2px;text-decoration:none;font-family:var(--mono);font-size:13px;
-  letter-spacing:.05em;background-size:200% 100%;background-position:100% 0;
-  transition:background-position .55s cubic-bezier(.3,.7,.2,1),
-             border-color .25s,color .25s,box-shadow .35s,transform .18s}
-.btn:hover{background-position:0 0}
-.btn:active{transform:translateY(1px)}
-.btn-fill{color:#0c0a1a;font-weight:500;
-  background-image:linear-gradient(90deg,#cdc3ff 50%,var(--accent) 50%);
-  box-shadow:0 0 0 rgba(155,140,255,0)}
-.btn-fill:hover{box-shadow:0 10px 44px rgba(155,140,255,.36)}
-.btn-line{border:1px solid var(--hair-strong);color:var(--sung);
-  background-image:linear-gradient(90deg,rgba(155,140,255,.16) 50%,rgba(155,140,255,0) 50%)}
-.btn-line:hover{border-color:var(--accent);color:var(--accent)}
-
-/* 規格列：等寬、細線分隔 */
-.facts{display:flex;flex-wrap:wrap;gap:0;margin-top:64px;border-top:1px solid var(--hair)}
-.facts div{padding:20px 30px 0 0;margin-right:30px;border-right:1px solid var(--hair);
-  font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:.03em}
-.facts div:last-child{border-right:0}
-.facts b{display:block;font-family:var(--serif);font-weight:600;font-size:26px;
-  color:var(--sung);letter-spacing:0;line-height:1.3;margin-bottom:2px}
-
-/* 主視覺：畫面往右出血，像舞台監看牆 */
-.heroArt{position:relative;margin-top:78px;margin-right:calc(50% - 50vw);padding-right:0}
-.monitor{border:1px solid var(--hair-strong);border-left-width:1px;border-right:0;
-  border-radius:3px 0 0 3px;background:var(--stage-2);overflow:hidden;
-  box-shadow:0 40px 120px rgba(0,0,0,.7);
-  transition:translate .4s cubic-bezier(.2,.7,.2,1)}
-.mbar{height:32px;border-bottom:1px solid var(--hair);display:flex;align-items:center;
-  gap:14px;padding:0 16px}
-.mbar i{width:6px;height:6px;border-radius:50%;background:var(--hair-strong)}
-.mbar em{font-family:var(--mono);font-style:normal;font-size:11px;color:var(--faint);
-  letter-spacing:.08em;margin-left:6px}
-.monitor img{width:100%;height:auto}
-.phoneFloat{position:absolute;right:clamp(24px,7vw,120px);bottom:-46px;
-  width:clamp(124px,13vw,168px);aspect-ratio:771/1523;padding:6px;
-  border:1px solid var(--hair-strong);border-radius:22px;background:#08080b;
-  box-shadow:0 30px 80px rgba(0,0,0,.8);overflow:hidden;
-  transition:translate .5s cubic-bezier(.2,.7,.2,1)}
-.phoneFloat img{width:100%;height:100%;object-fit:cover;border-radius:17px}
-
-/* ═══ 大標區塊 ═══ */
-.mv h2{font-size:clamp(30px,4vw,52px);line-height:1.32;max-width:19ch}
-.mvSub{color:var(--dim);max-width:50ch;margin:26px 0 0;font-size:16px;line-height:1.95}
-
-/* ═══ 功能：交錯排列 ═══ */
-.tracks{margin-top:76px;display:grid;gap:0}
-.track{display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);
-  gap:60px;align-items:center;padding:58px 0;border-top:1px solid var(--hair)}
-.track:nth-child(even){grid-template-columns:minmax(0,1.18fr) minmax(0,.82fr)}
-.track:nth-child(even) .tCopy{order:2}
-.tNo{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.12em}
-.tCopy h3{font-size:clamp(23px,2.5vw,32px);font-weight:600;line-height:1.45;margin:18px 0 16px}
-.tCopy p{color:var(--dim);margin:0;font-size:15.5px;line-height:1.95}
-.frame{border:1px solid var(--hair);border-radius:3px;overflow:hidden;background:var(--stage-2);
-  box-shadow:0 24px 70px rgba(0,0,0,.5);
-  transition:border-color .4s,transform .5s cubic-bezier(.2,.6,.2,1),box-shadow .5s}
-.frame:hover{border-color:var(--hair-strong);transform:translateY(-6px);
-  box-shadow:0 34px 90px rgba(0,0,0,.62)}
-.frame img{width:100%;height:auto;transition:transform .75s cubic-bezier(.2,.6,.2,1)}
-.frame:hover img{transform:scale(1.025)}
-
-/* 交錯段落各自從自己那一側滑入 */
-.motion .track .tCopy,.motion .track .frame{opacity:0;
-  transition:opacity .85s cubic-bezier(.2,.7,.2,1),transform .85s cubic-bezier(.2,.7,.2,1)}
-.motion .track .tCopy{transform:translateX(-26px)}
-.motion .track .frame{transform:translateX(26px)}
-.motion .track:nth-child(even) .tCopy{transform:translateX(26px)}
-.motion .track:nth-child(even) .frame{transform:translateX(-26px)}
-.motion .track.is-in .tCopy,.motion .track.is-in .frame{opacity:1;transform:none}
-.motion .track.is-in .frame{transition-delay:.12s}
-
-/* ═══ 三步驟：像一條音軌 ═══ */
-.steps{margin-top:72px;display:grid;grid-template-columns:repeat(3,1fr);
-  border-top:1px solid var(--hair-strong)}
-.step{padding:34px 34px 0 0;border-right:1px solid var(--hair);position:relative}
-.step:last-child{border-right:0}
-.step::before{content:"";position:absolute;top:-1px;left:0;width:0;height:1px;
-  background:var(--accent);transition:width .9s cubic-bezier(.3,.7,.2,1)}
-.mv.is-live .step::before{width:100%}
-.mv.is-live .step:nth-child(2)::before{transition-delay:.22s}
-.mv.is-live .step:nth-child(3)::before{transition-delay:.44s}
-.step b{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.12em;
-  font-weight:400}
-.step h3{font-size:21px;font-weight:600;margin:16px 0 10px}
-.step p{color:var(--dim);margin:0;font-size:15px;line-height:1.9}
-
-/* ═══ 影片 ═══ */
-.videoBox{margin-top:60px;border:1px solid var(--hair);border-radius:3px;overflow:hidden;
-  background:#050507;box-shadow:0 40px 110px rgba(0,0,0,.6)}
-.videoBox iframe{display:block;width:100%;aspect-ratio:16/9;border:0}
-.videoMeta{display:flex;justify-content:space-between;align-items:baseline;gap:24px;
-  padding:20px 26px;border-top:1px solid var(--hair);flex-wrap:wrap}
-.videoMeta strong{font-family:var(--serif);font-weight:600;font-size:16px}
-.videoMeta span{font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:.04em}
-
-/* ═══ 畫面展示：曲目清單式 ═══ */
-.gallery{margin-top:64px;display:grid;grid-template-columns:290px minmax(0,1fr);gap:0;
-  border-top:1px solid var(--hair)}
-.tracklist{display:grid;align-content:start;border-right:1px solid var(--hair);position:relative}
-/* 在清單左緣滑動的選取指示器：換曲時滑過去，不是直接跳 */
-.tlIndicator{position:absolute;left:0;width:2px;background:var(--accent);
-  box-shadow:0 0 12px rgba(155,140,255,.8);top:0;height:0;
-  transition:transform .42s cubic-bezier(.3,.75,.2,1),height .42s cubic-bezier(.3,.75,.2,1);
-  pointer-events:none}
-.tab{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:12px;
-  padding:19px 24px 19px 2px;border:0;border-bottom:1px solid var(--hair);
-  background:transparent;color:var(--unsung);text-align:left;
-  font-family:var(--sans);font-size:14.5px;font-weight:300;
-  transition:color .3s,padding-left .35s cubic-bezier(.3,.7,.2,1);position:relative}
-.tab u{font-family:var(--mono);font-size:11px;text-decoration:none;letter-spacing:.06em;
-  color:inherit;opacity:.7;transition:color .3s,opacity .3s}
-.tab:hover{color:var(--dim);padding-left:8px}
-.tab.on{color:var(--sung);padding-left:12px}
-.tab.on u{color:var(--accent);opacity:1}
-.stage-panel{display:flex;flex-direction:column}
-.stageMedia{flex:1;min-height:380px;display:grid;place-items:center;padding:26px;
-  background:radial-gradient(70% 70% at 50% 40%,rgba(155,140,255,.055),transparent 70%)}
-.stageMedia img{width:100%;height:auto;max-height:66vh;object-fit:contain;cursor:zoom-in;
-  border:1px solid var(--hair);border-radius:2px;box-shadow:0 24px 64px rgba(0,0,0,.55);
-  transition:opacity .26s ease,transform .5s cubic-bezier(.2,.7,.2,1)}
-/* 換圖時淡出→換上→淡入，不要硬切 */
-.stageMedia img.swapping{opacity:0;transform:scale(.985)}
-.stageMedia img.phone{width:auto;max-width:min(320px,86%);max-height:640px}
-.caption{padding:20px 26px;border-top:1px solid var(--hair);
-  display:flex;gap:20px;align-items:baseline;flex-wrap:wrap}
-.caption strong{font-family:var(--serif);font-weight:600;font-size:16px}
-.caption span{color:var(--faint);font-size:14px}
-
-/* ═══ CTA ═══ */
-.cta{padding:130px 0 150px;border-top:1px solid var(--hair);text-align:center}
-.cta h2{font-size:clamp(30px,4.6vw,60px);line-height:1.28;margin:0 auto 26px;max-width:16ch}
-.cta p{font-family:var(--mono);font-size:13px;color:var(--faint);max-width:56ch;
-  margin:0 auto 44px;line-height:2;letter-spacing:.02em}
-
-footer{border-top:1px solid var(--hair);padding:34px 0}
-.foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;
-  font-family:var(--mono);font-size:11.5px;color:var(--faint);letter-spacing:.06em}
-
-/* ═══ 燈箱 ═══ */
-dialog{width:min(96vw,1700px);max-width:none;padding:0;border:1px solid var(--hair-strong);
-  border-radius:3px;background:#08080b;box-shadow:0 40px 140px rgba(0,0,0,.9)}
-dialog::backdrop{background:rgba(4,4,6,.9);backdrop-filter:blur(6px)}
-dialog img{max-width:96vw;max-height:92vh;margin:auto}
-dialog button{position:absolute;right:14px;top:14px;width:40px;height:40px;
-  border:1px solid var(--hair-strong);border-radius:50%;background:rgba(10,10,13,.85);
-  color:var(--sung);font-size:20px;line-height:1}
-dialog button:hover{border-color:var(--accent);color:var(--accent)}
-
-/* ═══ 響應式 ═══ */
-@media(max-width:1000px){
-  :root{--rail:64px}
-  .heroArt{margin-right:calc(50% - 50vw)}
-  .track,.track:nth-child(even){grid-template-columns:1fr;gap:34px}
-  .track:nth-child(even) .tCopy{order:0}
-  .gallery{grid-template-columns:1fr}
-  .tracklist{border-right:0;border-bottom:1px solid var(--hair)}
-  .steps{grid-template-columns:1fr;border-top:0}
-  .step{border-right:0;border-top:1px solid var(--hair);padding:30px 0 0}
-  .step::before{display:none}
-  .links{display:none}
-  .mv{padding:88px 0}
-}
-@media(max-width:680px){
-  :root{--rail:0px}
-  .wrap{width:calc(100% - 32px)}
-  .mvin,.heroin{grid-template-columns:1fr}
-  .stamp{padding:0 0 26px}
-  .stamp::before{display:none}
-  .stamp span{padding-left:0}
-  .stamp span::before{display:none}
-  .hero{padding:66px 0 70px}
-  .hero h1{font-size:clamp(38px,10vw,54px)}
-  .navbtnLong{display:none}
-  .navbtnShort{display:inline}
-  .language-select{min-width:88px;padding:0 8px}
-  .navin{height:64px;gap:12px}
-  .actions{display:grid}
-  .btn{width:100%}
-  .facts{gap:0}
-  .facts div{padding:18px 20px 0 0;margin-right:20px}
-  .phoneFloat{display:none}
-  .heroArt{margin-top:52px}
-  .stageMedia{min-height:220px;padding:14px}
-  .cta{padding:88px 0 100px}
-}
-
-@media(prefers-reduced-motion:reduce){
+@media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
-  *{transition:none !important;animation:none !important}
-  .sw{background-position:0 0}
-  /* animation 被關掉後，任何「初始隱藏」的狀態都必須強制還原成可見 */
-  .motion .rise,
-  .motion .enter,
-  .motion .enterArt,
-  .motion .enterPhone,
-  .motion .track .tCopy,
-  .motion .track .frame{opacity:1;transform:none}
-  .stageMedia img.swapping{opacity:1;transform:none}
-  .mv .stamp{color:var(--accent)}
+  .stage img{transition:none}
+  .chips.auto .chip[aria-pressed="true"] .fill{animation:none}
 }
 </style>
 </head>
 <body>
-<script>document.documentElement.classList.add("motion")</script>
-
-<div class="scrub" id="scrub"></div>
+<a class="skip" href="#main" data-i18n="nav.skip">跳到主要內容</a>
 
 <header class="nav">
-  <div class="navin wrap">
-    <a class="brand" href="#"><img src="assets/mark-symbol.png" alt="">Elitesand Pro</a>
-    <nav class="links">
-      <a href="#features" data-i18n="nav.features">功能</a>
-      <a href="#demo" data-i18n="nav.demo">歌詞樣式</a>
-      <a href="#screens" data-i18n="nav.screens">實際畫面</a>
-    </nav>
-    <div class="language-picker">
-      <select id="languageSelect" class="language-select" aria-label="選擇網站語言" data-i18n-aria-label="nav.language">
-        <option value="zh-Hant">繁中</option>
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Elitesand Pro">
+      <img src="assets/mark-symbol.png" alt="" width="28" height="28">
+      <span data-i18n="brand.name">聲嶼</span><small>Elitesand Pro</small>
+    </a>
+    <ul>
+      <li><a href="#templates" data-i18n="nav.templates">歌詞模板</a></li>
+      <li><a href="#flow" data-i18n="nav.flow">使用流程</a></li>
+      <li><a href="#shows" data-i18n="nav.shows">訂閱演出</a></li>
+      <li><a href="#download" data-i18n="nav.download">下載</a></li>
+    </ul>
+    <div class="end">
+      <label class="sr" for="lang" hidden>Language</label>
+      <select id="lang" class="lang" aria-label="Language">
+        <option value="zh-Hant">繁體中文</option>
         <option value="en">English</option>
         <option value="ja">日本語</option>
         <option value="ko">한국어</option>
-        <option value="zh-Hans">简中</option>
+        <option value="zh-Hans">简体中文</option>
       </select>
+      <a class="btn btn-primary dl" href="https://github.com/z22115554/elitesand-pro/releases/latest"><span class="long" data-i18n="nav.cta">下載</span><span class="ver" data-ver>1.3.0</span></a>
     </div>
-    <a class="navbtn" href="https://github.com/z22115554/elitesand-pro/releases">
-      <span class="navbtnLong" data-i18n="nav.download">下載最新版</span>
-      <span class="navbtnShort" data-i18n="nav.downloadShort">下載</span>
-    </a>
   </div>
 </header>
 
-<main>
+<main id="main">
+<section class="hero" id="top">
+  <div class="wrap">
+    <div>
+      <h1 data-i18n="hero.title">你只管唱歌，
+畫面交給聲嶼。</h1>
+      <p class="lede" data-i18n="hero.lede">給 VTuber 與歌回實況主的免費工具。在自己的電腦上執行，OBS 直接載入逐字歌詞、直播歌單和訂閱演出，換歌時歌詞自動跟上。</p>
+      <div class="cta">
+        <a class="btn btn-primary dl" href="https://github.com/z22115554/elitesand-pro/releases/latest" data-i18n="hero.cta">下載 Windows 版</a>
+        <a class="btn btn-ghost notes" href="https://github.com/z22115554/elitesand-pro/releases/latest" data-i18n="hero.notes">看這版更新了什麼</a>
+      </div>
+      <p class="release" data-release><span data-i18n="hero.release">目前版本</span> <b data-ver>1.3.0</b></p>
+    </div>
+    <div id="templates">
+      <div class="stage">
+        <img id="stage-a" src="assets/tpl/aura.webp" width="1920" height="1080" alt="">
+        <img id="stage-b" class="out" src="assets/tpl/aura.webp" width="1920" height="1080" alt="" aria-hidden="true">
+        <span class="tag" data-i18n="stage.tag">OBS 畫面</span>
+      </div>
+      <ul class="chips auto" id="chips" aria-label="歌詞模板"></ul>
+      <p class="stage-note" data-i18n="stage.note">用原創示範歌詞實際拍下的 OBS 輸出。程式裡共有 12 種歌詞模板，字型、顏色、大小與位置都能調。</p>
+    </div>
+  </div>
+</section>
 
-  <!-- ═══ HERO ═══ -->
-  <section class="hero">
-    <div class="heroin wrap">
-      <div class="stamp"><span>[00:00.00]</span></div>
-      <div>
-        <div class="heroCopy">
-          <p class="kicker enter e1">Elitesand Pro / Windows</p>
-          <h1>
-            <span class="l1" data-sweep="hero.line1">把整場歌回，</span>
-            <span class="l2 sweepAccent" data-sweep="hero.line2">收進一個控制台。</span>
-          </h1>
-          <p class="lead enter e2" data-i18n="hero.lead">整合歌曲匯入、歌詞搜尋、OBS 動態歌詞、直播歌單與 Twitch 點歌。為 VTuber 與歌回實況主設計，介面支援繁中、英文、日文、韓文與簡中。</p>
-          <div class="actions enter e3">
-            <a class="btn btn-fill" href="https://github.com/z22115554/elitesand-pro/releases" data-i18n="hero.download">下載 Windows 版本</a>
-            <a class="btn btn-line" href="#demo" data-i18n="hero.viewDemo">觀看歌詞樣式</a>
-          </div>
-          <div class="facts enter e4">
-            <div><b>11</b><span data-i18n="fact.templates">種歌詞模板</span></div>
-            <div><b>5</b><span data-i18n="fact.languages">語言介面</span></div>
-            <div><b>OBS</b><span data-i18n="fact.obsSync">即時同步</span></div>
-            <div><b>Twitch</b><span data-i18n="fact.twitch">點歌整合</span></div>
-          </div>
+<section class="band" id="flow">
+  <div class="wrap">
+    <div class="head">
+      <h2 data-i18n="flow.title">一場歌回，從準備到下播</h2>
+      <p data-i18n="flow.lede">不用改變你原本的 OBS 場景，只是多加幾個瀏覽器來源。</p>
+    </div>
+    <ol class="flow">
+      <li>
+        <div class="txt">
+          <span class="step">1</span>
+          <h3 data-i18n="flow.s1.title">開台前，把歌放進歌曲庫</h3>
+          <p data-i18n="flow.s1.body">貼 YouTube 連結、輸入歌名搜尋，或直接拖進本機音檔。歌詞會從多個來源自動找，逐句歌詞可以批次升級成逐字。</p>
+          <ul class="ticks">
+            <li data-i18n="flow.s1.t1">找不到也能自己貼上，或上傳 LRC、SRT、VTT、TXT</li>
+            <li data-i18n="flow.s1.t2">可能對錯歌的歌詞會標出來，不會默默換掉</li>
+            <li data-i18n="flow.s1.t3">外語歌可以顯示拼音或諧音，跟著唱更容易</li>
+          </ul>
         </div>
+        <img class="shot" src="assets/shots/library.webp" width="2000" height="1194" loading="lazy" decoding="async" data-i18n-alt="flow.s1.alt" alt="歌曲庫畫面：五首示範歌曲，每首都標示逐字歌詞">
+      </li>
+      <li>
+        <div class="txt">
+          <span class="step">2</span>
+          <h3 data-i18n="flow.s2.title">直播中，一個頁面顧全部</h3>
+          <p data-i18n="flow.s2.body">播放、切歌、變調、調音量，歌詞時間差一點就直接拉。遇到狀況，一鍵把 OBS 上的歌詞藏起來。</p>
+          <ul class="ticks">
+            <li data-i18n="flow.s2.t1">升降 Key 時伴奏和人聲兩軌保持同步</li>
+            <li data-i18n="flow.s2.t2">快捷模板：Ctrl+Alt+數字，一鍵換整套畫面</li>
+            <li data-i18n="flow.s2.t3">BGM 待機音樂：沒在唱歌的空檔自動播放</li>
+          </ul>
+        </div>
+        <img class="shot" src="assets/shots/live.webp" width="2000" height="1194" loading="lazy" decoding="async" data-i18n-alt="flow.s2.alt" alt="直播頁：播放清單、正在播放的歌與逐字歌詞時間軸">
+      </li>
+      <li>
+        <div class="txt">
+          <span class="step">3</span>
+          <h3 data-i18n="flow.s3.title">在 OBS 加上瀏覽器來源</h3>
+          <p data-i18n="flow.s3.body">歌詞、歌單、演出各有一個網址，背景透明，直接疊在你的畫面上。在面板裡改設定，OBS 立刻跟著變。</p>
+          <ul class="ticks">
+            <li data-i18n="flow.s3.t1">直播歌單：已唱、正在唱、接下來，跟著播放自動更新</li>
+            <li data-i18n="flow.s3.t2">極簡歌單：大字顯示現在這首，跑馬燈列出已唱</li>
+            <li data-i18n="flow.s3.t3">下播後，歌單可以直接變成 YouTube 章節時間</li>
+          </ul>
+        </div>
+        <figure class="pair" style="margin:0">
+          <img class="shot" src="assets/shots/output.webp" width="2000" height="1194" loading="lazy" decoding="async" data-i18n-alt="flow.s3.alt1" alt="畫面設定頁：左邊是 OBS 即時預覽，右邊選模板與調整字型">
+          <div>
+            <img class="shot" src="assets/shots/setlist.webp" width="1280" height="720" loading="lazy" decoding="async" data-i18n-alt="flow.s3.alt2" alt="OBS 直播歌單：正在播放與未唱歌曲">
+            <figcaption data-i18n="flow.s3.cap">OBS 上的直播歌單</figcaption>
+          </div>
+        </figure>
+      </li>
+    </ol>
+  </div>
+</section>
 
-        <div class="heroArt">
-          <div class="monitor enterArt">
-            <div class="mbar"><i></i><i></i><i></i><em>CONTROL PANEL</em></div>
-            <img src="assets/panel-home.webp" alt="Elitesand Pro 首頁控制台" data-i18n-alt="hero.panelAlt" width="1920" height="1040">
-          </div>
-          <div class="phoneFloat enterPhone"><img src="assets/phone-controller.webp" alt="手機遙控畫面" data-i18n-alt="hero.phoneAlt" width="771" height="1523"></div>
-        </div>
+<section class="band" id="shows">
+  <div class="wrap">
+    <div class="head">
+      <h2 data-i18n="shows.title">有人訂閱、贈訂、揪團，
+整個畫面一起慶祝</h2>
+      <p data-i18n="shows.lede">43 種全畫面演出，依份數分級。每一級的門檻、開關和要播哪一種，都由你決定。</p>
+    </div>
+    <div class="shows">
+      <figure><img class="shot" src="assets/shots/show-g50.webp" width="1280" height="720" loading="lazy" decoding="async" data-i18n-alt="shows.alt1" alt="贈訂 50 份的演出：演唱會轉播畫面"></figure>
+      <figure><img class="shot" src="assets/shots/show-g10.webp" width="1280" height="720" loading="lazy" decoding="async" data-i18n-alt="shows.alt2" alt="贈訂 10 份的演出：幸運大轉盤"></figure>
+      <figure><img class="shot" src="assets/shots/show-g25.webp" width="1280" height="720" loading="lazy" decoding="async" data-i18n-alt="shows.alt3" alt="贈訂 25 份的演出：舞台大幕拉開"></figure>
+      <figure><img class="shot" src="assets/shots/show-r2.webp" width="1280" height="720" loading="lazy" decoding="async" data-i18n-alt="shows.alt4" alt="揪團的演出：吉祥物遊行"></figure>
+    </div>
+    <ul class="facts">
+      <li><h3 data-i18n="shows.f1.title">不打斷唱歌</h3><p data-i18n="shows.f1.body">唱歌中收到的演出會等這首唱完再播，演出時背景音樂自動調小。</p></li>
+      <li><h3 data-i18n="shows.f2.title">換成你的角色</h3><p data-i18n="shows.f2.body">演出裡的角色和吉祥物可以換成自己的圖，圖只存在你的電腦裡。</p></li>
+      <li><h3 data-i18n="shows.f3.title">先試播再上場</h3><p data-i18n="shows.f3.body">面板可以模擬 Twitch 事件，不用等真的有人訂閱就能看效果。</p></li>
+      <li><h3 data-i18n="shows.f4.title">關掉的等級會遞補</h3><p data-i18n="shows.f4.body">某一級關掉時，會改演下一個比較小、還開著的等級。</p></li>
+    </ul>
+  </div>
+</section>
+
+<section class="band" id="more">
+  <div class="wrap">
+    <div class="head">
+      <h2 data-i18n="more.title">還有這些</h2>
+    </div>
+    <ul class="list">
+      <li><h3 data-i18n="more.m1.title">文字PV</h3><p data-i18n="more.m1.body">把歌詞排成會動的文字影像，部件範圍和風格開關都能自己選。</p></li>
+      <li><h3 data-i18n="more.m2.title">跟唱視圖</h3><p data-i18n="more.m2.body">給自己看的大字歌詞，可以置頂在其他視窗上，雙語歌會一起顯示譯文。</p></li>
+      <li><h3 data-i18n="more.m3.title">歌曲筆記</h3><p data-i18n="more.m3.body">整首或逐句寫下換氣、提醒，只有你看得到，不會出現在 OBS 上。</p></li>
+      <li><h3><span data-i18n="more.m4.title">精準對時</span><span class="badge" data-i18n="badge.exp">實驗性</span></h3><p data-i18n="more.m4.body">中文歌可以聽歌詞內容自動對時，版本不同的段落也會逐句校正。</p></li>
+      <li><h3><span data-i18n="more.m5.title">AI 伴奏</span><span class="badge" data-i18n="badge.exp">實驗性</span></h3><p data-i18n="more.m5.body">在自己的電腦上把歌分離成伴奏。需要另外安裝 AI 伴奏元件。</p></li>
+      <li><h3><span data-i18n="more.m6.title">練唱</span><span class="badge" data-i18n="badge.beta">測試版</span></h3><p data-i18n="more.m6.body">看著音高線練歌，有 A–B 循環、弱句回饋，也能開觀眾挑戰。</p></li>
+    </ul>
+  </div>
+</section>
+
+<section class="band" id="audience">
+  <div class="wrap audience">
+    <div>
+      <div class="head">
+        <h2 data-i18n="aud.title">觀眾點歌，你確認了才算數</h2>
+        <p data-i18n="aud.lede">聊天室指令和忠誠點數的點歌都先進收件匣，你按下確認才會排進歌單。</p>
+      </div>
+      <ul class="list">
+        <li><h3 data-i18n="aud.a1.title">Twitch 點歌</h3><p data-i18n="aud.a1.body">支援聊天室指令與忠誠點數，有冷卻和次數限制，避免被洗版。</p></li>
+        <li><h3 data-i18n="aud.a2.title">觀眾點歌頁</h3><p data-i18n="aud.a2.body">觀眾打開網頁就能點歌，頁面附使用教學。</p></li>
+        <li><h3 data-i18n="aud.a3.title">手機遙控</h3><p data-i18n="aud.a3.body">掃一次 QR Code 配對，手機就能切歌、對時、換模板、緊急隱藏歌詞。</p></li>
+      </ul>
+    </div>
+    <img class="phone" src="assets/shots/phone.webp" width="780" height="1420" loading="lazy" decoding="async" data-i18n-alt="aud.alt" alt="手機遙控畫面：正在播放、播放控制、緊急隱藏歌詞與時間偏移">
+  </div>
+</section>
+
+<section class="band" id="download">
+  <div class="wrap get">
+    <div>
+      <h2 data-i18n="get.title">下一場歌回，
+先裝起來試試</h2>
+      <p class="lede" data-i18n="get.lede">免費用於個人與商業直播。目前提供 Windows 安裝檔，升級會保留你的歌曲庫和設定。</p>
+      <div class="cta">
+        <a class="btn btn-primary dl" href="https://github.com/z22115554/elitesand-pro/releases/latest"><span data-i18n="get.cta">下載 Windows 版</span> <span data-ver>1.3.0</span></a>
+        <a class="btn btn-ghost notes" href="https://github.com/z22115554/elitesand-pro/releases/latest" data-i18n="get.notes">更新內容與 SHA-256</a>
       </div>
     </div>
-  </section>
-
-  <!-- ═══ 功能 ═══ -->
-  <section class="mv" id="features">
-    <div class="mvin wrap">
-      <div class="stamp"><span>[00:47.20]</span></div>
-      <div>
-        <h2 class="rise" data-sweep="features.title">不是另一個歌詞播放器，而是直播流程的中樞。</h2>
-        <p class="mvSub rise d1" data-i18n="features.subtitle">從開台前整理歌曲，到直播中控制播放、歌詞與點歌，再到 OBS 畫面輸出，都在同一套介面內完成。</p>
-
-        <div class="tracks rise d2">
-          <article class="track">
-            <div class="tCopy">
-              <span class="tNo">01</span>
-              <h3 data-i18n="feature.lyrics.title">歌詞樣式與畫面同步</h3>
-              <p data-i18n="feature.lyrics.desc">管理字體、顏色、位置與動畫模板，所有設定可直接同步到 OBS Browser Source。</p>
-            </div>
-            <div class="frame"><img src="assets/lyrics-settings.webp" alt="歌詞設定" data-i18n-alt="feature.lyrics.alt" width="1920" height="1040" loading="lazy"></div>
-          </article>
-          <article class="track">
-            <div class="tCopy">
-              <span class="tNo">02</span>
-              <h3 data-i18n="feature.setlist.title">直播歌單，清楚但不搶戲</h3>
-              <p data-i18n="feature.setlist.desc">把已唱、正在唱與接下來的歌曲排成適合直播的視覺層級，並依輸出尺寸自動調整。</p>
-            </div>
-            <div class="frame"><img src="assets/setlist-panel.webp" alt="直播歌單設定" data-i18n-alt="feature.setlist.alt" width="1920" height="1040" loading="lazy"></div>
-          </article>
-          <article class="track">
-            <div class="tCopy">
-              <span class="tNo">03</span>
-              <h3 data-i18n="feature.twitch.title">Twitch 點歌先審核，再進正式歌單</h3>
-              <p data-i18n="feature.twitch.desc">聊天室指令與忠誠點數請求集中進待確認區，避免觀眾提交內容直接污染正式歌單。</p>
-            </div>
-            <div class="frame"><img src="assets/twitch-requests.webp" alt="Twitch 點歌中心" data-i18n-alt="feature.twitch.alt" width="1920" height="1040" loading="lazy"></div>
-          </article>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══ 三步驟 ═══ -->
-  <section class="mv" id="workflow">
-    <div class="mvin wrap">
-      <div class="stamp"><span>[02:12.60]</span></div>
-      <div>
-        <h2 class="rise" data-sweep="workflow.title">三步開始下一場歌回。</h2>
-        <p class="mvSub rise d1" data-i18n="workflow.subtitle">保持你原本的 OBS 工作方式，只把歌曲與歌詞控制集中到 Elitesand Pro。</p>
-        <div class="steps rise d2">
-          <div class="step"><b>STEP 01</b><h3 data-i18n="workflow.import.title">匯入歌曲</h3><p data-i18n="workflow.import.desc">貼上 YouTube 連結、播放清單，或使用本機音檔。</p></div>
-          <div class="step"><b>STEP 02</b><h3 data-i18n="workflow.lyrics.title">確認歌詞</h3><p data-i18n="workflow.lyrics.desc">搜尋多來源歌詞，必要時校時與調整顯示。</p></div>
-          <div class="step"><b>STEP 03</b><h3 data-i18n="workflow.obs.title">接進 OBS</h3><p data-i18n="workflow.obs.desc">加入固定 Browser Source，即時同步動畫與歌單。</p></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══ 影片 ═══ -->
-  <section class="mv" id="demo">
-    <div class="mvin wrap">
-      <div class="stamp"><span>[03:05.80]</span></div>
-      <div>
-        <h2 class="rise" data-sweep="demo.title">歌詞樣式展示。</h2>
-        <p class="mvSub rise d1" data-i18n="demo.subtitle">看看不同模板、字體與動態效果在直播畫面中的呈現。</p>
-        <div class="videoBox rise d2">
-          <iframe src="https://drive.google.com/file/d/1Pzdtr1q9t7G7siYx0f2nUA8xWEay30Vu/preview" title="Elitesand Pro 歌詞樣式展示" data-i18n-title="demo.frameTitle" allow="autoplay; fullscreen" allowfullscreen></iframe>
-          <div class="videoMeta">
-            <strong data-i18n="demo.videoTitle">Elitesand Pro 歌詞樣式展示</strong>
-            <span data-i18n="demo.videoDesc">不同歌詞模板與動畫效果示範</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══ 實際畫面 ═══ -->
-  <section class="mv" id="screens">
-    <div class="mvin wrap">
-      <div class="stamp"><span>[03:58.40]</span></div>
-      <div>
-        <h2 class="rise" data-sweep="screens.title">實際畫面。</h2>
-        <div class="gallery rise d1">
-          <div class="tracklist"><span class="tlIndicator" id="tlIndicator" aria-hidden="true"></span>
-            <button class="tab on" data-img="panel-home.webp" data-type="desktop" data-title="首頁控制台" data-desc="歌曲、播放器與 OBS 預覽集中管理。" data-i18n-data-title="tabs.panel.title" data-i18n-data-desc="tabs.panel.desc"><u>01</u><span data-i18n="tabs.panel.label">控制台</span></button>
-            <button class="tab" data-img="lyrics-settings.webp" data-type="desktop" data-title="歌詞設定" data-desc="模板、字體、位置與畫面輸出直接預覽。" data-i18n-data-title="tabs.lyrics.title" data-i18n-data-desc="tabs.lyrics.desc"><u>02</u><span data-i18n="tabs.lyrics.label">歌詞設定</span></button>
-            <button class="tab" data-img="setlist-panel.webp" data-type="desktop" data-title="直播歌單" data-desc="歌單版型與 OBS 輸出外觀整合設定。" data-i18n-data-title="tabs.setlist.title" data-i18n-data-desc="tabs.setlist.desc"><u>03</u><span data-i18n="tabs.setlist.label">直播歌單</span></button>
-            <button class="tab" data-img="twitch-requests.webp" data-type="desktop" data-title="Twitch 點歌" data-desc="集中管理待確認請求與點歌流程。" data-i18n-data-title="tabs.twitchRequests.title" data-i18n-data-desc="tabs.twitchRequests.desc"><u>04</u><span data-i18n="tabs.twitchRequests.label">Twitch 點歌</span></button>
-            <button class="tab" data-img="twitch-settings.webp" data-type="desktop" data-title="Twitch 設定" data-desc="授權、指令與點歌規則集中管理。" data-i18n-data-title="tabs.twitchSettings.title" data-i18n-data-desc="tabs.twitchSettings.desc"><u>05</u><span data-i18n="tabs.twitchSettings.label">Twitch 設定</span></button>
-            <button class="tab" data-img="phone-controller.webp" data-type="phone" data-title="手機控制" data-desc="同一網路內遙控播放、切歌與歌詞校時。" data-i18n-data-title="tabs.phone.title" data-i18n-data-desc="tabs.phone.desc"><u>06</u><span data-i18n="tabs.phone.label">手機控制</span></button>
-          </div>
-          <div class="stage-panel">
-            <div class="stageMedia"><img id="stageImg" src="assets/panel-home.webp" alt="首頁控制台" data-i18n-alt="tabs.panel.title" width="1920" height="1040"></div>
-            <div class="caption">
-              <strong id="stageTitle" data-i18n="tabs.panel.title">首頁控制台</strong>
-              <span id="stageDesc" data-i18n="tabs.panel.desc">歌曲、播放器與 OBS 預覽集中管理。</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══ CTA ═══ -->
-  <section class="mv cta">
-    <div class="wrap">
-      <h2 data-sweep="cta.title">下一場歌回，少開幾個視窗。</h2>
-      <p data-i18n="cta.desc">最新版本 v1.0.0，僅提供 Windows Installer。升級會保留你的歌曲庫與設定。</p>
-      <a class="btn btn-fill" href="https://github.com/z22115554/elitesand-pro/releases" data-i18n="cta.link">前往 GitHub Releases</a>
-    </div>
-  </section>
-
+    <ol class="install">
+      <li><div><b data-i18n="get.i1.title">下載安裝檔</b><p data-i18n="get.i1.body">只從 GitHub Releases 下載。可以用 Release 頁上的 SHA-256 核對檔案。</p></div></li>
+      <li><div><b data-i18n="get.i2.title">Windows 跳出提醒時</b><p data-i18n="get.i2.body">安裝檔目前沒有程式碼簽章，可能出現 SmartScreen。確認是官方檔案後，按「其他資訊」→「仍要執行」。</p></div></li>
+      <li><div><b data-i18n="get.i3.title">第一次開啟</b><p data-i18n="get.i3.body">跟著 3～5 分鐘的導覽，加一首歌、確認歌詞，再把網址放進 OBS。</p></div></li>
+      <li><div><b data-i18n="get.i4.title">之後的更新</b><p data-i18n="get.i4.body">有新版時程式內會提示，照畫面更新即可。跨太多版本時，Release 說明會告訴你要不要下載完整安裝檔。</p></div></li>
+    </ol>
+  </div>
+</section>
 </main>
 
 <footer>
-  <div class="foot wrap">
-    <span>ELITESAND PRO</span>
-    <span data-i18n="footer.tagline">給 VTuber 與歌回實況主的本機直播控制台</span>
+  <div class="wrap">
+    <span>© 2026 Elitesand Pro</span>
+    <nav aria-label="footer">
+      <a href="https://github.com/z22115554/elitesand-pro/releases" data-i18n="foot.releases">所有版本</a>
+      <a href="https://github.com/z22115554/elitesand-pro/blob/main/EULA.txt" data-i18n="foot.eula">使用條款</a>
+      <a href="https://github.com/z22115554/elitesand-pro/blob/main/THIRD-PARTY-NOTICES.txt" data-i18n="foot.notices">第三方授權</a>
+      <a href="mailto:Elitesand.pro@gmail.com" data-i18n="foot.contact">聯絡</a>
+    </nav>
   </div>
 </footer>
 
-<dialog id="lightbox">
-  <button id="close" aria-label="關閉" data-i18n-aria-label="lightbox.close">×</button>
-  <img id="largeImg" alt="放大畫面">
-</dialog>
-
 <script>
-const translations={"zh-Hant":{"meta.title":"Elitesand Pro｜直播歌回控制台","meta.description":"Elitesand Pro 官網：整合歌曲匯入、歌詞搜尋、OBS 動態歌詞、直播歌單、Twitch 點歌與手機控制。","meta.ogTitle":"Elitesand Pro｜VTuber 歌回直播控制台","meta.ogDescription":"整合歌曲匯入、歌詞搜尋、OBS 動態歌詞、直播歌單與 Twitch 點歌。支援五種語言的 Windows 本機工具。","nav.features":"功能","nav.demo":"歌詞樣式","nav.screens":"實際畫面","nav.download":"下載最新版","nav.downloadShort":"下載","nav.language":"選擇網站語言","hero.line1":"把整場歌回，","hero.line2":"收進一個控制台。","hero.lead":"整合歌曲匯入、歌詞搜尋、OBS 動態歌詞、直播歌單與 Twitch 點歌。為 VTuber 與歌回實況主設計，介面支援繁中、英文、日文、韓文與簡中。","hero.download":"下載 Windows 版本","hero.viewDemo":"觀看歌詞樣式","hero.panelAlt":"Elitesand Pro 首頁控制台","hero.phoneAlt":"手機遙控畫面","fact.templates":"種歌詞模板","fact.languages":"語言介面","fact.obsSync":"即時同步","fact.twitch":"點歌整合","features.title":"不是另一個歌詞播放器，而是直播流程的中樞。","features.subtitle":"從開台前整理歌曲，到直播中控制播放、歌詞與點歌，再到 OBS 畫面輸出，都在同一套介面內完成。","feature.lyrics.title":"歌詞樣式與畫面同步","feature.lyrics.desc":"管理字體、顏色、位置與動畫模板，所有設定可直接同步到 OBS Browser Source。","feature.lyrics.alt":"歌詞設定","feature.setlist.title":"直播歌單，清楚但不搶戲","feature.setlist.desc":"把已唱、正在唱與接下來的歌曲排成適合直播的視覺層級，並依輸出尺寸自動調整。","feature.setlist.alt":"直播歌單設定","feature.twitch.title":"Twitch 點歌先審核，再進正式歌單","feature.twitch.desc":"聊天室指令與忠誠點數請求集中進待確認區，避免觀眾提交內容直接污染正式歌單。","feature.twitch.alt":"Twitch 點歌中心","workflow.title":"三步開始下一場歌回。","workflow.subtitle":"保持你原本的 OBS 工作方式，只把歌曲與歌詞控制集中到 Elitesand Pro。","workflow.import.title":"匯入歌曲","workflow.import.desc":"貼上 YouTube 連結、播放清單，或使用本機音檔。","workflow.lyrics.title":"確認歌詞","workflow.lyrics.desc":"搜尋多來源歌詞，必要時校時與調整顯示。","workflow.obs.title":"接進 OBS","workflow.obs.desc":"加入固定 Browser Source，即時同步動畫與歌單。","demo.title":"歌詞樣式展示。","demo.subtitle":"看看不同模板、字體與動態效果在直播畫面中的呈現。","demo.frameTitle":"Elitesand Pro 歌詞樣式展示","demo.videoTitle":"Elitesand Pro 歌詞樣式展示","demo.videoDesc":"不同歌詞模板與動畫效果示範","screens.title":"實際畫面。","tabs.panel.label":"控制台","tabs.panel.title":"首頁控制台","tabs.panel.desc":"歌曲、播放器與 OBS 預覽集中管理。","tabs.lyrics.label":"歌詞設定","tabs.lyrics.title":"歌詞設定","tabs.lyrics.desc":"模板、字體、位置與畫面輸出直接預覽。","tabs.setlist.label":"直播歌單","tabs.setlist.title":"直播歌單","tabs.setlist.desc":"歌單版型與 OBS 輸出外觀整合設定。","tabs.twitchRequests.label":"Twitch 點歌","tabs.twitchRequests.title":"Twitch 點歌","tabs.twitchRequests.desc":"集中管理待確認請求與點歌流程。","tabs.twitchSettings.label":"Twitch 設定","tabs.twitchSettings.title":"Twitch 設定","tabs.twitchSettings.desc":"授權、指令與點歌規則集中管理。","tabs.phone.label":"手機控制","tabs.phone.title":"手機控制","tabs.phone.desc":"同一網路內遙控播放、切歌與歌詞校時。","cta.title":"下一場歌回，少開幾個視窗。","cta.desc":"最新版本 v1.0.0，僅提供 Windows Installer。升級會保留你的歌曲庫與設定。","cta.link":"前往 GitHub Releases","footer.tagline":"給 VTuber 與歌回實況主的本機直播控制台","lightbox.close":"關閉"},"en":{"meta.title":"Elitesand Pro | Singing Stream Control Center","meta.description":"Elitesand Pro brings song imports, lyric search, animated OBS lyrics, setlists, Twitch requests, and mobile control into one Windows app.","meta.ogTitle":"Elitesand Pro | Control Center for VTuber Singing Streams","meta.ogDescription":"Import songs, find lyrics, display animated OBS lyrics, manage setlists, and handle Twitch requests in one five-language Windows app.","nav.features":"Features","nav.demo":"Lyric styles","nav.screens":"Screenshots","nav.download":"Download latest","nav.downloadShort":"Download","nav.language":"Choose website language","hero.line1":"Your entire singing stream,","hero.line2":"in one control center.","hero.lead":"Import songs, search lyrics, display animated lyrics in OBS, manage live setlists, and handle Twitch requests. Built for VTubers and singing streamers, with Traditional Chinese, English, Japanese, Korean, and Simplified Chinese interfaces.","hero.download":"Download for Windows","hero.viewDemo":"View lyric styles","hero.panelAlt":"Elitesand Pro main control panel","hero.phoneAlt":"Mobile remote control screen","fact.templates":"lyric templates","fact.languages":"interface languages","fact.obsSync":"live sync","fact.twitch":"request integration","features.title":"More than a lyric player. The center of your live workflow.","features.subtitle":"Prepare songs before the stream, control playback, lyrics, and requests live, then send everything to OBS—all from one interface.","feature.lyrics.title":"Lyric styles that stay in sync","feature.lyrics.desc":"Manage fonts, colors, positions, and animation templates, then sync every setting directly to an OBS Browser Source.","feature.lyrics.alt":"Lyric settings","feature.setlist.title":"A setlist that stays clear and out of the way","feature.setlist.desc":"Arrange performed, current, and upcoming songs in a stream-friendly hierarchy that adapts to the output size.","feature.setlist.alt":"Live setlist settings","feature.twitch.title":"Review Twitch requests before adding them","feature.twitch.desc":"Collect chat commands and channel-point requests in a review queue so viewer submissions never alter the live setlist automatically.","feature.twitch.alt":"Twitch song request center","workflow.title":"Start your next singing stream in three steps.","workflow.subtitle":"Keep your existing OBS workflow and centralize only the song and lyric controls in Elitesand Pro.","workflow.import.title":"Import songs","workflow.import.desc":"Paste a YouTube link or playlist, or use audio files from your computer.","workflow.lyrics.title":"Confirm lyrics","workflow.lyrics.desc":"Search multiple lyric sources, then adjust timing and display when needed.","workflow.obs.title":"Connect to OBS","workflow.obs.desc":"Add permanent Browser Sources and sync animations and setlists in real time.","demo.title":"Lyric style showcase.","demo.subtitle":"See how different templates, fonts, and motion effects look on a live stream.","demo.frameTitle":"Elitesand Pro lyric style showcase","demo.videoTitle":"Elitesand Pro lyric style showcase","demo.videoDesc":"A demonstration of lyric templates and animation effects","screens.title":"Real interface.","tabs.panel.label":"Control panel","tabs.panel.title":"Main control panel","tabs.panel.desc":"Manage songs, playback, and OBS previews in one place.","tabs.lyrics.label":"Lyrics","tabs.lyrics.title":"Lyric settings","tabs.lyrics.desc":"Preview templates, fonts, positions, and the live output directly.","tabs.setlist.label":"Setlist","tabs.setlist.title":"Live setlist","tabs.setlist.desc":"Configure setlist layouts and the appearance of the OBS output together.","tabs.twitchRequests.label":"Twitch requests","tabs.twitchRequests.title":"Twitch song requests","tabs.twitchRequests.desc":"Manage pending submissions and the request workflow in one place.","tabs.twitchSettings.label":"Twitch settings","tabs.twitchSettings.title":"Twitch settings","tabs.twitchSettings.desc":"Manage authorization, commands, and song-request rules.","tabs.phone.label":"Mobile control","tabs.phone.title":"Mobile control","tabs.phone.desc":"Control playback, skip songs, and adjust lyric timing on the same network.","cta.title":"Open fewer windows on your next singing stream.","cta.desc":"The latest release is v1.0.0, available as a Windows Installer. Upgrading keeps your song library and settings.","cta.link":"Go to GitHub Releases","footer.tagline":"A local streaming control center for VTubers and singing streamers","lightbox.close":"Close"},"ja":{"meta.title":"Elitesand Pro｜歌枠配信コントロールツール","meta.description":"曲の取り込み、歌詞検索、OBS向け動く歌詞、セットリスト、Twitchリクエスト、スマホ操作を一つにまとめたWindowsアプリです。","meta.ogTitle":"Elitesand Pro｜VTuber歌枠配信コントロールツール","meta.ogDescription":"曲の取り込み、歌詞検索、OBS向け動く歌詞、セットリスト、Twitchリクエストを一つに。5言語対応のWindowsアプリです。","nav.features":"機能","nav.demo":"歌詞スタイル","nav.screens":"実際の画面","nav.download":"最新版をダウンロード","nav.downloadShort":"ダウンロード","nav.language":"サイトの言語を選択","hero.line1":"歌枠配信のすべてを、","hero.line2":"一つの操作画面に。","hero.lead":"曲の取り込み、歌詞検索、OBS向け動く歌詞、配信用セットリスト、Twitchリクエストを一つにまとめました。VTuberと歌枠配信者向けに設計され、繁体字中国語・英語・日本語・韓国語・簡体字中国語に対応しています。","hero.download":"Windows版をダウンロード","hero.viewDemo":"歌詞スタイルを見る","hero.panelAlt":"Elitesand Pro メイン操作画面","hero.phoneAlt":"スマホリモコン画面","fact.templates":"種類の歌詞テンプレート","fact.languages":"言語対応","fact.obsSync":"リアルタイム同期","fact.twitch":"リクエスト連携","features.title":"ただの歌詞プレイヤーではなく、配信フローの中心に。","features.subtitle":"配信前の曲整理から、本番中の再生・歌詞・リクエスト操作、OBSへの画面出力まで、一つの画面で完結します。","feature.lyrics.title":"歌詞スタイルと画面をリアルタイム同期","feature.lyrics.desc":"フォント、色、位置、アニメーションテンプレートを管理し、すべての設定をOBSのブラウザソースへ直接反映できます。","feature.lyrics.alt":"歌詞設定","feature.setlist.title":"見やすく、主張しすぎないセットリスト","feature.setlist.desc":"歌唱済み・歌唱中・次の曲を配信向けの見やすい階層に整理し、出力サイズに合わせて自動調整します。","feature.setlist.alt":"配信用セットリスト設定","feature.twitch.title":"Twitchリクエストを確認してから追加","feature.twitch.desc":"チャットコマンドとチャンネルポイントのリクエストを確認待ちに集約し、視聴者の投稿がセットリストへ自動追加されるのを防ぎます。","feature.twitch.alt":"Twitch曲リクエスト管理","workflow.title":"3ステップで次の歌枠を開始。","workflow.subtitle":"これまでのOBS運用はそのままに、曲と歌詞の操作だけをElitesand Proへまとめられます。","workflow.import.title":"曲を取り込む","workflow.import.desc":"YouTubeの動画・プレイリストURLを貼り付けるか、PC内の音声ファイルを使用します。","workflow.lyrics.title":"歌詞を確認する","workflow.lyrics.desc":"複数の歌詞ソースから検索し、必要に応じてタイミングや表示を調整します。","workflow.obs.title":"OBSに接続する","workflow.obs.desc":"固定のブラウザソースを追加し、アニメーションとセットリストをリアルタイム同期します。","demo.title":"歌詞スタイル紹介。","demo.subtitle":"テンプレート、フォント、アニメーションによる配信画面の違いをご覧ください。","demo.frameTitle":"Elitesand Pro 歌詞スタイル紹介","demo.videoTitle":"Elitesand Pro 歌詞スタイル紹介","demo.videoDesc":"歌詞テンプレートとアニメーション効果のデモ","screens.title":"実際の画面。","tabs.panel.label":"操作画面","tabs.panel.title":"メイン操作画面","tabs.panel.desc":"曲、再生操作、OBSプレビューを一か所で管理します。","tabs.lyrics.label":"歌詞設定","tabs.lyrics.title":"歌詞設定","tabs.lyrics.desc":"テンプレート、フォント、位置、出力画面をその場で確認できます。","tabs.setlist.label":"セットリスト","tabs.setlist.title":"配信用セットリスト","tabs.setlist.desc":"セットリストのレイアウトとOBS出力の見た目をまとめて設定します。","tabs.twitchRequests.label":"Twitchリクエスト","tabs.twitchRequests.title":"Twitch曲リクエスト","tabs.twitchRequests.desc":"確認待ちの投稿とリクエスト処理を一か所で管理します。","tabs.twitchSettings.label":"Twitch設定","tabs.twitchSettings.title":"Twitch設定","tabs.twitchSettings.desc":"認証、コマンド、曲リクエストのルールを管理します。","tabs.phone.label":"スマホ操作","tabs.phone.title":"スマホ操作","tabs.phone.desc":"同じネットワーク上で再生、曲送り、歌詞タイミングを操作できます。","cta.title":"次の歌枠は、開く画面をもっと少なく。","cta.desc":"最新版は v1.0.0、Windows Installer のみの提供です。アップグレードしても曲ライブラリと設定は保持されます。","cta.link":"GitHub Releasesへ","footer.tagline":"VTuberと歌枠配信者のためのローカル配信コントロールツール","lightbox.close":"閉じる"},"ko":{"meta.title":"Elitesand Pro | 노래 방송 컨트롤 센터","meta.description":"곡 가져오기, 가사 검색, OBS 애니메이션 가사, 셋리스트, Twitch 신청곡, 모바일 제어를 하나로 통합한 Windows 앱입니다.","meta.ogTitle":"Elitesand Pro | VTuber 노래 방송 컨트롤 센터","meta.ogDescription":"곡 가져오기, 가사 검색, OBS 애니메이션 가사, 셋리스트와 Twitch 신청곡을 하나로. 5개 언어를 지원하는 Windows 앱입니다.","nav.features":"기능","nav.demo":"가사 스타일","nav.screens":"실제 화면","nav.download":"최신 버전 다운로드","nav.downloadShort":"다운로드","nav.language":"웹사이트 언어 선택","hero.line1":"노래 방송의 모든 것을,","hero.line2":"하나의 컨트롤 센터에.","hero.lead":"곡 가져오기, 가사 검색, OBS 애니메이션 가사, 방송용 셋리스트와 Twitch 신청곡을 하나로 통합했습니다. VTuber와 노래 방송 스트리머를 위해 설계되었으며 번체 중국어, 영어, 일본어, 한국어, 간체 중국어를 지원합니다.","hero.download":"Windows 버전 다운로드","hero.viewDemo":"가사 스타일 보기","hero.panelAlt":"Elitesand Pro 메인 컨트롤 패널","hero.phoneAlt":"모바일 리모컨 화면","fact.templates":"가지 가사 템플릿","fact.languages":"개 언어 지원","fact.obsSync":"실시간 동기화","fact.twitch":"신청곡 연동","features.title":"단순한 가사 플레이어가 아닌, 방송 워크플로의 중심.","features.subtitle":"방송 전 곡 정리부터 방송 중 재생·가사·신청곡 제어와 OBS 화면 출력까지 하나의 인터페이스에서 처리합니다.","feature.lyrics.title":"가사 스타일과 화면 실시간 동기화","feature.lyrics.desc":"글꼴, 색상, 위치, 애니메이션 템플릿을 관리하고 모든 설정을 OBS 브라우저 소스에 바로 반영할 수 있습니다.","feature.lyrics.alt":"가사 설정","feature.setlist.title":"선명하지만 방송을 방해하지 않는 셋리스트","feature.setlist.desc":"부른 곡, 현재 곡, 다음 곡을 방송에 맞는 시각적 계층으로 정리하고 출력 크기에 맞춰 자동 조정합니다.","feature.setlist.alt":"방송 셋리스트 설정","feature.twitch.title":"Twitch 신청곡을 검토한 뒤 추가","feature.twitch.desc":"채팅 명령어와 채널 포인트 신청을 검토 대기열에 모아 시청자 요청이 셋리스트에 자동으로 추가되지 않도록 합니다.","feature.twitch.alt":"Twitch 신청곡 센터","workflow.title":"세 단계로 다음 노래 방송을 시작하세요.","workflow.subtitle":"기존 OBS 사용 방식은 유지하고 곡과 가사 제어만 Elitesand Pro에 모을 수 있습니다.","workflow.import.title":"곡 가져오기","workflow.import.desc":"YouTube 링크나 재생목록을 붙여넣거나 컴퓨터의 오디오 파일을 사용합니다.","workflow.lyrics.title":"가사 확인","workflow.lyrics.desc":"여러 가사 소스에서 검색하고 필요하면 타이밍과 표시를 조정합니다.","workflow.obs.title":"OBS에 연결","workflow.obs.desc":"고정 브라우저 소스를 추가해 애니메이션과 셋리스트를 실시간으로 동기화합니다.","demo.title":"가사 스타일 소개.","demo.subtitle":"템플릿, 글꼴, 애니메이션 효과가 방송 화면에서 어떻게 보이는지 확인하세요.","demo.frameTitle":"Elitesand Pro 가사 스타일 소개","demo.videoTitle":"Elitesand Pro 가사 스타일 소개","demo.videoDesc":"가사 템플릿과 애니메이션 효과 데모","screens.title":"실제 화면.","tabs.panel.label":"컨트롤 패널","tabs.panel.title":"메인 컨트롤 패널","tabs.panel.desc":"곡, 재생, OBS 미리보기를 한곳에서 관리합니다.","tabs.lyrics.label":"가사 설정","tabs.lyrics.title":"가사 설정","tabs.lyrics.desc":"템플릿, 글꼴, 위치와 출력 화면을 바로 미리 봅니다.","tabs.setlist.label":"셋리스트","tabs.setlist.title":"방송 셋리스트","tabs.setlist.desc":"셋리스트 레이아웃과 OBS 출력 외형을 함께 설정합니다.","tabs.twitchRequests.label":"Twitch 신청곡","tabs.twitchRequests.title":"Twitch 신청곡","tabs.twitchRequests.desc":"검토 대기 요청과 신청곡 흐름을 한곳에서 관리합니다.","tabs.twitchSettings.label":"Twitch 설정","tabs.twitchSettings.title":"Twitch 설정","tabs.twitchSettings.desc":"인증, 명령어와 신청곡 규칙을 관리합니다.","tabs.phone.label":"모바일 제어","tabs.phone.title":"모바일 제어","tabs.phone.desc":"같은 네트워크에서 재생, 곡 넘기기와 가사 타이밍을 조작합니다.","cta.title":"다음 노래 방송에서는 창을 더 적게 여세요.","cta.desc":"최신 버전은 v1.0.0이며 Windows Installer로만 제공됩니다. 업그레이드해도 곡 라이브러리와 설정은 유지됩니다.","cta.link":"GitHub Releases로 이동","footer.tagline":"VTuber와 노래 방송 스트리머를 위한 로컬 방송 컨트롤 센터","lightbox.close":"닫기"},"zh-Hans":{"meta.title":"Elitesand Pro｜直播歌回控制台","meta.description":"Elitesand Pro 官网：整合歌曲导入、歌词搜索、OBS 动态歌词、直播歌单、Twitch 点歌与手机控制。","meta.ogTitle":"Elitesand Pro｜VTuber 歌回直播控制台","meta.ogDescription":"整合歌曲导入、歌词搜索、OBS 动态歌词、直播歌单与 Twitch 点歌。支持五种语言的 Windows 本地工具。","nav.features":"功能","nav.demo":"歌词样式","nav.screens":"实际画面","nav.download":"下载最新版","nav.downloadShort":"下载","nav.language":"选择网站语言","hero.line1":"把整场歌回，","hero.line2":"收进一个控制台。","hero.lead":"整合歌曲导入、歌词搜索、OBS 动态歌词、直播歌单与 Twitch 点歌。为 VTuber 与歌回主播设计，界面支持繁中、英文、日文、韩文与简中。","hero.download":"下载 Windows 版本","hero.viewDemo":"查看歌词样式","hero.panelAlt":"Elitesand Pro 首页控制台","hero.phoneAlt":"手机遥控画面","fact.templates":"种歌词模板","fact.languages":"语言界面","fact.obsSync":"实时同步","fact.twitch":"点歌整合","features.title":"不只是另一个歌词播放器，更是直播流程的中枢。","features.subtitle":"从开播前整理歌曲，到直播中控制播放、歌词与点歌，再到 OBS 画面输出，都在同一套界面内完成。","feature.lyrics.title":"歌词样式与画面同步","feature.lyrics.desc":"管理字体、颜色、位置与动画模板，所有设置都可直接同步到 OBS 浏览器源。","feature.lyrics.alt":"歌词设置","feature.setlist.title":"直播歌单，清楚但不抢戏","feature.setlist.desc":"把已唱、正在唱与接下来的歌曲排成适合直播的视觉层级，并依输出尺寸自动调整。","feature.setlist.alt":"直播歌单设置","feature.twitch.title":"Twitch 点歌先审核，再进正式歌单","feature.twitch.desc":"聊天室指令与频道点数请求集中进入待确认区，避免观众提交的内容直接进入正式歌单。","feature.twitch.alt":"Twitch 点歌中心","workflow.title":"三步开始下一场歌回。","workflow.subtitle":"保持你原本的 OBS 工作方式，只把歌曲与歌词控制集中到 Elitesand Pro。","workflow.import.title":"导入歌曲","workflow.import.desc":"粘贴 YouTube 链接、播放列表，或使用本地音频文件。","workflow.lyrics.title":"确认歌词","workflow.lyrics.desc":"搜索多个来源的歌词，必要时校时与调整显示。","workflow.obs.title":"接入 OBS","workflow.obs.desc":"加入固定浏览器源，实时同步动画与歌单。","demo.title":"歌词样式展示。","demo.subtitle":"看看不同模板、字体与动态效果在直播画面中的呈现。","demo.frameTitle":"Elitesand Pro 歌词样式展示","demo.videoTitle":"Elitesand Pro 歌词样式展示","demo.videoDesc":"不同歌词模板与动画效果演示","screens.title":"实际画面。","tabs.panel.label":"控制台","tabs.panel.title":"首页控制台","tabs.panel.desc":"歌曲、播放器与 OBS 预览集中管理。","tabs.lyrics.label":"歌词设置","tabs.lyrics.title":"歌词设置","tabs.lyrics.desc":"模板、字体、位置与画面输出直接预览。","tabs.setlist.label":"直播歌单","tabs.setlist.title":"直播歌单","tabs.setlist.desc":"歌单版型与 OBS 输出外观整合设置。","tabs.twitchRequests.label":"Twitch 点歌","tabs.twitchRequests.title":"Twitch 点歌","tabs.twitchRequests.desc":"集中管理待确认请求与点歌流程。","tabs.twitchSettings.label":"Twitch 设置","tabs.twitchSettings.title":"Twitch 设置","tabs.twitchSettings.desc":"授权、指令与点歌规则集中管理。","tabs.phone.label":"手机控制","tabs.phone.title":"手机控制","tabs.phone.desc":"在同一网络内遥控播放、切歌与歌词校时。","cta.title":"下一场歌回，少开几个窗口。","cta.desc":"最新版本 v1.0.0，仅提供 Windows Installer。升级会保留你的歌曲库与设置。","cta.link":"前往 GitHub Releases","footer.tagline":"给 VTuber 与歌回主播的本地直播控制台","lightbox.close":"关闭"}};
+(function () {
+  'use strict';
+  var REPO = 'z22115554/elitesand-pro';
+  var TEMPLATES = ['aura', 'classic', 'pulse', 'facet', 'drift', 'ktv', 'columnflow', 'typewriter', 'lightboard', 'particle', 'jizura'];
+  var NAMES = {
+    'zh-Hant': ['潮汐心景', '經典疊層', '星砂流光', '折光階梯', '斜拍告白', '霓彩伴唱', '直書句流', '對話氣泡', '跑馬燈牌', '風息成字', '文字PV'],
+    en: ['Tidal Mindscape', 'Classic Overlay', 'Stardust Pulse', 'Prism Steps', 'Offbeat Confession', 'Neon KTV', 'Vertical Verse Flow', 'Typewriter', 'Light Board', 'Windborne Particles', 'Lyric PV'],
+    ja: ['潮汐の心景', 'クラシックオーバーレイ', '星砂の流光', '屈折の階段', 'オフビートの告白', 'ネオン KTV', '縦書きフロー', 'タイプライター', 'ライトボード', '風が文字を結ぶ', '文字PV'],
+    ko: ['조수 심상', '클래식 오버레이', '스타더스트 펄스', '굴절 계단', '엇박 고백', '네온 KTV', '세로쓰기 문장 흐름', '타자기', '라이트보드', '바람 입자 글자', '텍스트 PV'],
+    'zh-Hans': ['潮汐心景', '经典叠层', '星砂流光', '折光阶梯', '斜拍告白', '霓彩伴唱', '竖排句流', '对话气泡', '跑马灯牌', '风息成字', '文字PV']
+  };
+  var FONTS = {
+    'zh-Hant': 'family=Chiron+GoRound+TC:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700',
+    en: 'family=Chiron+GoRound+TC:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700',
+    ja: 'family=Zen+Maru+Gothic:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700',
+    ko: 'family=Gothic+A1:wght@500;700;800&family=Noto+Sans+KR:wght@400;500;700',
+    'zh-Hans': 'family=Noto+Sans+SC:wght@400;500;700;800'
+  };
 
-/* ── i18n ── */
-function normalizeLanguage(value){if(!value)return null;const lang=String(value).toLowerCase();if(lang==="zh-hans"||lang.startsWith("zh-cn")||lang.startsWith("zh-sg"))return"zh-Hans";if(lang==="zh-hant"||lang==="zh"||lang.startsWith("zh-tw")||lang.startsWith("zh-hk")||lang.startsWith("zh-mo"))return"zh-Hant";if(lang.startsWith("ja"))return"ja";if(lang.startsWith("ko"))return"ko";if(lang.startsWith("en"))return"en";return null}
-function savedLanguage(){try{return normalizeLanguage(localStorage.getItem("elitesand-language"))}catch{return null}}
-function initialLanguage(){const u=normalizeLanguage(new URLSearchParams(location.search).get("lang"));if(u)return u;const s=savedLanguage();if(s)return s;for(const l of navigator.languages||[navigator.language]){const n=normalizeLanguage(l);if(n)return n}return"en"}
-let activeLanguage=initialLanguage();
-function translate(key){return translations[activeLanguage]?.[key]??translations.en[key]??translations["zh-Hant"][key]??key}
+  var I18N = /*I18N*/{"zh-Hant":{"meta.title":"聲嶼 Elitesand Pro｜歌回直播的歌詞與畫面工具","nav.skip":"跳到主要內容","brand.name":"聲嶼","nav.templates":"歌詞模板","nav.flow":"使用流程","nav.shows":"訂閱演出","nav.download":"下載","nav.cta":"下載","hero.title":"你只管唱歌，\n畫面交給聲嶼。","hero.lede":"給 VTuber 與歌回實況主的免費工具。在自己的電腦上執行，OBS 直接載入逐字歌詞、直播歌單和訂閱演出，換歌時歌詞自動跟上。","hero.cta":"下載 Windows 版","hero.notes":"看這版更新了什麼","hero.release":"目前版本","stage.tag":"OBS 畫面","stage.note":"用原創示範歌詞實際拍下的 OBS 輸出。程式裡共有 12 種歌詞模板，字型、顏色、大小與位置都能調。","flow.title":"一場歌回，從準備到下播","flow.lede":"不用改變你原本的 OBS 場景，只是多加幾個瀏覽器來源。","flow.s1.title":"開台前，把歌放進歌曲庫","flow.s1.body":"貼 YouTube 連結、輸入歌名搜尋，或直接拖進本機音檔。歌詞會從多個來源自動找，逐句歌詞可以批次升級成逐字。","flow.s1.t1":"找不到也能自己貼上，或上傳 LRC、SRT、VTT、TXT","flow.s1.t2":"可能對錯歌的歌詞會標出來，不會默默換掉","flow.s1.t3":"外語歌可以顯示拼音或諧音，跟著唱更容易","flow.s2.title":"直播中，一個頁面顧全部","flow.s2.body":"播放、切歌、變調、調音量，歌詞時間差一點就直接拉。遇到狀況，一鍵把 OBS 上的歌詞藏起來。","flow.s2.t1":"升降 Key 時伴奏和人聲兩軌保持同步","flow.s2.t2":"快捷模板：Ctrl+Alt+數字，一鍵換整套畫面","flow.s2.t3":"BGM 待機音樂：沒在唱歌的空檔自動播放","flow.s3.title":"在 OBS 加上瀏覽器來源","flow.s3.body":"歌詞、歌單、演出各有一個網址，背景透明，直接疊在你的畫面上。在面板裡改設定，OBS 立刻跟著變。","flow.s3.t1":"直播歌單：已唱、正在唱、接下來，跟著播放自動更新","flow.s3.t2":"極簡歌單：大字顯示現在這首，跑馬燈列出已唱","flow.s3.t3":"下播後，歌單可以直接變成 YouTube 章節時間","flow.s3.cap":"OBS 上的直播歌單","shows.title":"有人訂閱、贈訂、揪團，\n整個畫面一起慶祝","shows.lede":"43 種全畫面演出，依份數分級。每一級的門檻、開關和要播哪一種，都由你決定。","shows.f1.title":"不打斷唱歌","shows.f1.body":"唱歌中收到的演出會等這首唱完再播，演出時背景音樂自動調小。","shows.f2.title":"換成你的角色","shows.f2.body":"演出裡的角色和吉祥物可以換成自己的圖，圖只存在你的電腦裡。","shows.f3.title":"先試播再上場","shows.f3.body":"面板可以模擬 Twitch 事件，不用等真的有人訂閱就能看效果。","shows.f4.title":"關掉的等級會遞補","shows.f4.body":"某一級關掉時，會改演下一個比較小、還開著的等級。","more.title":"還有這些","more.m1.title":"文字PV","more.m1.body":"把歌詞排成會動的文字影像，部件範圍和風格開關都能自己選。","more.m2.title":"跟唱視圖","more.m2.body":"給自己看的大字歌詞，可以置頂在其他視窗上，雙語歌會一起顯示譯文。","more.m3.title":"歌曲筆記","more.m3.body":"整首或逐句寫下換氣、提醒，只有你看得到，不會出現在 OBS 上。","more.m4.title":"精準對時","badge.exp":"實驗性","more.m4.body":"中文歌可以聽歌詞內容自動對時，版本不同的段落也會逐句校正。","more.m5.title":"AI 伴奏","more.m5.body":"在自己的電腦上把歌分離成伴奏。需要另外安裝 AI 伴奏元件。","more.m6.title":"練唱","badge.beta":"測試版","more.m6.body":"看著音高線練歌，有 A–B 循環、弱句回饋，也能開觀眾挑戰。","aud.title":"觀眾點歌，你確認了才算數","aud.lede":"聊天室指令和忠誠點數的點歌都先進收件匣，你按下確認才會排進歌單。","aud.a1.title":"Twitch 點歌","aud.a1.body":"支援聊天室指令與忠誠點數，有冷卻和次數限制，避免被洗版。","aud.a2.title":"觀眾點歌頁","aud.a2.body":"觀眾打開網頁就能點歌，頁面附使用教學。","aud.a3.title":"手機遙控","aud.a3.body":"掃一次 QR Code 配對，手機就能切歌、對時、換模板、緊急隱藏歌詞。","get.title":"下一場歌回，\n先裝起來試試","get.lede":"免費用於個人與商業直播。目前提供 Windows 安裝檔，升級會保留你的歌曲庫和設定。","get.cta":"下載 Windows 版","get.notes":"更新內容與 SHA-256","get.i1.title":"下載安裝檔","get.i1.body":"只從 GitHub Releases 下載。可以用 Release 頁上的 SHA-256 核對檔案。","get.i2.title":"Windows 跳出提醒時","get.i2.body":"安裝檔目前沒有程式碼簽章，可能出現 SmartScreen。確認是官方檔案後，按「其他資訊」→「仍要執行」。","get.i3.title":"第一次開啟","get.i3.body":"跟著 3～5 分鐘的導覽，加一首歌、確認歌詞，再把網址放進 OBS。","get.i4.title":"之後的更新","get.i4.body":"有新版時程式內會提示，照畫面更新即可。跨太多版本時，Release 說明會告訴你要不要下載完整安裝檔。","foot.releases":"所有版本","foot.eula":"使用條款","foot.notices":"第三方授權","foot.contact":"聯絡","meta.description":"給 VTuber 與歌回實況主的免費工具。在自己的電腦上執行，OBS 直接載入逐字歌詞、直播歌單與訂閱演出。","meta.ogTitle":"聲嶼 Elitesand Pro｜歌回直播的歌詞與畫面工具","flow.s1.alt":"歌曲庫畫面：五首示範歌曲，每首都標示逐字歌詞","flow.s2.alt":"直播頁：播放清單、正在播放的歌與逐字歌詞時間軸","flow.s3.alt1":"畫面設定頁：左邊是 OBS 即時預覽，右邊選模板與調整字型","flow.s3.alt2":"OBS 直播歌單：正在播放與未唱歌曲","shows.alt1":"贈訂 50 份的演出：演唱會轉播畫面","shows.alt2":"贈訂 10 份的演出：幸運大轉盤","shows.alt3":"贈訂 25 份的演出：舞台大幕拉開","shows.alt4":"揪團的演出：吉祥物遊行","aud.alt":"手機遙控畫面：正在播放、播放控制、緊急隱藏歌詞與時間偏移","stage.chips":"歌詞模板","stage.alt":"OBS 歌詞畫面，使用「{name}」模板"},"en":{"meta.title":"Elitesand Pro | Lyrics and on-screen tools for singing streams","meta.description":"A free tool for VTubers and singing streamers. Runs on your own PC and feeds word-by-word lyrics, a live setlist and sub alerts straight into OBS.","meta.ogTitle":"Elitesand Pro | Lyrics and on-screen tools for singing streams","nav.skip":"Skip to main content","brand.name":"Elitesand Pro","nav.templates":"Lyric templates","nav.flow":"How it works","nav.shows":"Sub alerts","nav.download":"Download","nav.cta":"Download","hero.title":"You sing.\nElitesand handles the screen.","hero.lede":"A free tool for VTubers and singing streamers. It runs on your own PC and feeds word-by-word lyrics, a live setlist and sub alerts straight into OBS. Change songs and the lyrics follow.","hero.cta":"Download for Windows","hero.notes":"See what's new","hero.release":"Current version","stage.tag":"OBS output","stage.note":"Real OBS output, captured with original demo lyrics. The app has 12 lyric templates, and you can change the font, colors, size and position.","stage.chips":"Lyric templates","stage.alt":"OBS lyrics using the “{name}” template","flow.title":"One singing stream, from prep to sign-off","flow.lede":"Keep your OBS scenes as they are. You only add a few browser sources.","flow.s1.title":"Before you go live, build your library","flow.s1.body":"Paste a YouTube link, search by song name, or drop in audio files. Lyrics are found automatically from several sources, and line-by-line lyrics can be upgraded to word-by-word in bulk.","flow.s1.t1":"No match? Paste them yourself, or upload LRC, SRT, VTT or TXT","flow.s1.t2":"Lyrics that may belong to a different song are flagged, never swapped silently","flow.s1.t3":"Show romanization or a phonetic guide for songs in other languages","flow.s1.alt":"Song library with five demo songs, each marked as having word-by-word lyrics","flow.s2.title":"While you're live, one page runs everything","flow.s2.body":"Play, skip, change key and adjust volume. If the lyrics are a little off, nudge them. If something goes wrong, hide the lyrics on OBS with one click.","flow.s2.t1":"Backing and vocal tracks stay in sync when you change key","flow.s2.t2":"Quick templates: switch the whole look with Ctrl+Alt+number","flow.s2.t3":"BGM plays automatically whenever you are not singing","flow.s2.alt":"Live page with the playlist, the song now playing and its word-by-word timeline","flow.s3.title":"Add browser sources in OBS","flow.s3.body":"Lyrics, setlist and alerts each get their own URL with a transparent background, layered over your scene. Change a setting in the panel and OBS updates right away.","flow.s3.t1":"Live setlist: sung, singing now and up next, updated as you play","flow.s3.t2":"Minimal setlist: the current song in large type, with past songs in a ticker","flow.s3.t3":"After the stream, turn the setlist into YouTube chapter timestamps","flow.s3.cap":"The live setlist in OBS","flow.s3.alt1":"Output page: live OBS preview on the left, style and font settings on the right","flow.s3.alt2":"OBS live setlist showing the current song and songs not yet sung","shows.title":"When someone subs, gifts or raids, the whole screen celebrates","shows.lede":"43 full-screen performances, tiered by count. You decide each tier's threshold, whether it's on, and which performance plays.","shows.alt1":"50-gift performance: a concert broadcast","shows.alt2":"10-gift performance: a prize wheel","shows.alt3":"25-gift performance: the stage curtain opens","shows.alt4":"Raid performance: a mascot parade","shows.f1.title":"Never cuts into a song","shows.f1.body":"Alerts that arrive mid-song wait until the song ends, and background music ducks while they play.","shows.f2.title":"Use your own character","shows.f2.body":"Swap the characters and mascot for your own art. Your images stay on your PC.","shows.f3.title":"Preview before going live","shows.f3.body":"Simulate Twitch events from the panel and see the result without waiting for a real sub.","shows.f4.title":"Disabled tiers fall back","shows.f4.body":"If a tier is turned off, the next smaller tier that's still on plays instead.","more.title":"And also","more.m1.title":"Lyric PV","more.m1.body":"Turn lyrics into moving kinetic type, with your choice of parts and style switches.","more.m2.title":"Sing-Along View","more.m2.body":"Big lyrics just for you. Keep it on top of other windows, with translations for bilingual songs.","more.m3.title":"Song notes","more.m3.body":"Jot down breaths and reminders for a whole song or a single line. Only you see them; they never appear in OBS.","more.m4.title":"Precise sync","more.m4.body":"For Chinese songs, the app listens to the lyrics to line them up, and re-times sections that differ between versions.","more.m5.title":"AI instrumental","more.m5.body":"Separate vocals on your own PC to make an instrumental. Requires the AI instrumental component.","more.m6.title":"Practice","more.m6.body":"Practice against a pitch line, with A–B loops, feedback on weak lines and viewer challenges.","badge.exp":"Experimental","badge.beta":"Beta","aud.title":"Viewer requests count only when you approve them","aud.lede":"Chat-command and channel-point requests land in an inbox first. Nothing joins the setlist until you confirm it.","aud.a1.title":"Twitch requests","aud.a1.body":"Chat commands and channel points, with cooldowns and limits to stop spam.","aud.a2.title":"Request page","aud.a2.body":"Viewers can request from a web page, which includes a short how-to.","aud.a3.title":"Phone remote","aud.a3.body":"Pair once with a QR code, then skip songs, adjust timing, switch styles and hide lyrics from your phone.","aud.alt":"Phone remote: now playing, playback controls, hide lyrics and timing offset","get.title":"Try it before your next singing stream","get.lede":"Free for personal and commercial streams. A Windows installer is available now, and upgrades keep your library and settings.","get.cta":"Download for Windows","get.notes":"Release notes and SHA-256","get.i1.title":"Download the installer","get.i1.body":"Only download from GitHub Releases. Check the file against the SHA-256 on the release page.","get.i2.title":"If Windows shows a warning","get.i2.body":"The installer isn't code-signed yet, so SmartScreen may appear. Once you've confirmed it's the official file, choose “More info” → “Run anyway”.","get.i3.title":"First launch","get.i3.body":"Follow the 3–5 minute tour: add a song, check its lyrics, then put the URL into OBS.","get.i4.title":"Future updates","get.i4.body":"The app tells you when a new version is ready. If you skip too many versions, the release notes say whether you need the full installer.","foot.releases":"All releases","foot.eula":"License terms","foot.notices":"Third-party licenses","foot.contact":"Contact"},"ja":{"meta.title":"Elitesand Pro｜歌枠配信の歌詞と画面のツール","meta.description":"VTuber と歌枠配信者のための無料ツール。自分の PC で動き、一文字ずつ光る歌詞、セットリスト、サブスク演出を OBS にそのまま表示します。","meta.ogTitle":"Elitesand Pro｜歌枠配信の歌詞と画面のツール","nav.skip":"本文へスキップ","brand.name":"Elitesand Pro","nav.templates":"歌詞テンプレート","nav.flow":"使い方","nav.shows":"サブスク演出","nav.download":"ダウンロード","nav.cta":"ダウンロード","hero.title":"歌うのはあなた。\n画面はおまかせ。","hero.lede":"VTuber と歌枠配信者のための無料ツールです。自分の PC で動き、一文字ずつ光る歌詞、セットリスト、サブスク演出を OBS にそのまま表示。曲を変えれば歌詞も自動で切り替わります。","hero.cta":"Windows 版をダウンロード","hero.notes":"今回の更新内容","hero.release":"最新バージョン","stage.tag":"OBS 出力","stage.note":"オリジナルのデモ歌詞で撮影した実際の OBS 出力です。歌詞テンプレートは全 12 種類で、フォント・色・サイズ・位置を調整できます。","stage.chips":"歌詞テンプレート","stage.alt":"「{name}」テンプレートの OBS 歌詞表示","flow.title":"歌枠の準備から配信終了まで","flow.lede":"今の OBS シーンはそのまま。ブラウザソースをいくつか足すだけです。","flow.s1.title":"配信前に、曲をライブラリへ","flow.s1.body":"YouTube のリンクを貼る、曲名で検索する、音声ファイルをドロップする。歌詞は複数のソースから自動で探し、行ごとの歌詞はまとめて一文字ずつの歌詞にアップグレードできます。","flow.s1.t1":"見つからなければ自分で貼るか、LRC・SRT・VTT・TXT をアップロード","flow.s1.t2":"別の曲かもしれない歌詞は印が付き、勝手に差し替えません","flow.s1.t3":"外国語の曲にはローマ字や発音ガイドを表示できます","flow.s1.alt":"5 曲のデモ曲が並ぶライブラリ画面。すべて一文字ずつの歌詞付き","flow.s2.title":"配信中は、ひとつの画面ですべて操作","flow.s2.body":"再生、曲送り、キー変更、音量。歌詞が少しずれたらその場で調整。何かあれば、OBS の歌詞をワンクリックで隠せます。","flow.s2.t1":"キーを変えても伴奏とボーカルの 2 トラックは同期したまま","flow.s2.t2":"クイックテンプレート：Ctrl+Alt+数字で見た目を一括切り替え","flow.s2.t3":"BGM：歌っていない間は自動で流れます","flow.s2.alt":"ライブ画面：プレイリスト、再生中の曲、一文字ずつの歌詞タイムライン","flow.s3.title":"OBS にブラウザソースを追加","flow.s3.body":"歌詞・セットリスト・演出にそれぞれ URL があり、背景は透明。設定を変えると OBS にもすぐ反映されます。","flow.s3.t1":"配信セットリスト：歌った曲・今の曲・次の曲が再生に合わせて更新","flow.s3.t2":"ミニマルセットリスト：今の曲を大きく、歌った曲はティッカーで","flow.s3.t3":"配信後、セットリストを YouTube のチャプターに変換","flow.s3.cap":"OBS 上の配信セットリスト","flow.s3.alt1":"画面設定ページ：左に OBS のライブプレビュー、右にテンプレートとフォント設定","flow.s3.alt2":"OBS のセットリスト：再生中の曲とまだ歌っていない曲","shows.title":"サブスク・ギフト・レイドで、\n画面全体がお祝いに","shows.lede":"数に応じた 43 種類の全画面演出。各段階のしきい値、オン・オフ、どの演出を流すかは自分で決められます。","shows.alt1":"ギフト 50 の演出：ライブ中継","shows.alt2":"ギフト 10 の演出：ルーレット","shows.alt3":"ギフト 25 の演出：ステージの幕が開く","shows.alt4":"レイドの演出：マスコットのパレード","shows.f1.title":"歌を止めない","shows.f1.body":"歌っている間に届いた演出は曲が終わってから流れ、演出中は BGM が自動で小さくなります。","shows.f2.title":"自分のキャラクターに","shows.f2.body":"演出のキャラクターやマスコットを自分の画像に差し替えられます。画像は PC の中だけに保存されます。","shows.f3.title":"本番前に試し再生","shows.f3.body":"パネルから Twitch のイベントを再現でき、本物のサブスクを待たずに確認できます。","shows.f4.title":"オフの段階は繰り下げ","shows.f4.body":"オフにした段階は、オンになっている一つ下の段階の演出が流れます。","more.title":"ほかにも","more.m1.title":"文字PV","more.m1.body":"歌詞を動くタイポグラフィ映像に。パーツの範囲やスタイルのスイッチを選べます。","more.m2.title":"歌唱ビュー","more.m2.body":"自分用の大きな歌詞。ほかのウィンドウより前面に固定でき、2 言語の曲は訳も表示します。","more.m3.title":"曲メモ","more.m3.body":"曲全体や一行ごとにブレスや注意を書き込めます。自分にだけ見え、OBS には出ません。","more.m4.title":"精密タイミング合わせ","more.m4.body":"中国語の曲は歌詞の内容を聞き取って自動でタイミングを合わせ、バージョン違いの部分も一行ずつ補正します。","more.m5.title":"AI 伴奏","more.m5.body":"自分の PC でボーカルを分離して伴奏を作ります。AI 伴奏コンポーネントのインストールが必要です。","more.m6.title":"歌練習","more.m6.body":"音程ラインを見ながら練習。A–B ループ、苦手な行のフィードバック、視聴者チャレンジもあります。","badge.exp":"実験的","badge.beta":"ベータ","aud.title":"リクエストは、\nあなたの確認後に","aud.lede":"チャットコマンドやチャンネルポイントのリクエストはまず受信箱へ。確認するまでセットリストには入りません。","aud.a1.title":"Twitch リクエスト","aud.a1.body":"チャットコマンドとチャンネルポイントに対応。クールダウンと回数制限で荒らしを防ぎます。","aud.a2.title":"リクエストページ","aud.a2.body":"視聴者は Web ページから曲をリクエストでき、使い方の説明も付いています。","aud.a3.title":"スマホリモコン","aud.a3.body":"QR コードで一度ペアリングすれば、スマホから曲送り、タイミング調整、テンプレート切り替え、歌詞の非表示ができます。","aud.alt":"スマホリモコン：再生中の曲、再生操作、歌詞の緊急非表示、タイミング調整","get.title":"次の歌枠の前に、\n試してみよう","get.lede":"個人・商用の配信で無料で使えます。現在は Windows のインストーラーを提供しており、アップデートしてもライブラリと設定はそのままです。","get.cta":"Windows 版をダウンロード","get.notes":"更新内容と SHA-256","get.i1.title":"インストーラーをダウンロード","get.i1.body":"ダウンロードは GitHub Releases からのみ。リリースページの SHA-256 でファイルを確認できます。","get.i2.title":"Windows の警告が出たら","get.i2.body":"インストーラーにはまだコード署名がないため、SmartScreen が出ることがあります。公式のファイルだと確認したら「詳細情報」→「実行」を選んでください。","get.i3.title":"はじめて起動したら","get.i3.body":"3～5 分のガイドに沿って、曲を追加し、歌詞を確認して、URL を OBS に入れます。","get.i4.title":"これからの更新","get.i4.body":"新しいバージョンはアプリ内でお知らせします。いくつも飛ばした場合は、完全版のインストーラーが必要かどうかリリースノートに書いてあります。","foot.releases":"すべてのリリース","foot.eula":"利用規約","foot.notices":"サードパーティライセンス","foot.contact":"お問い合わせ"},"ko":{"meta.title":"Elitesand Pro | 노래 방송을 위한 가사·화면 도구","meta.description":"VTuber와 노래 방송 스트리머를 위한 무료 도구. 내 PC에서 실행되고, 글자 단위 가사와 세트리스트, 구독 연출을 OBS에 바로 띄웁니다.","meta.ogTitle":"Elitesand Pro | 노래 방송을 위한 가사·화면 도구","nav.skip":"본문으로 건너뛰기","brand.name":"Elitesand Pro","nav.templates":"가사 템플릿","nav.flow":"사용 흐름","nav.shows":"구독 연출","nav.download":"다운로드","nav.cta":"다운로드","hero.title":"노래는 당신이,\n화면은 Elitesand가.","hero.lede":"VTuber와 노래 방송 스트리머를 위한 무료 도구입니다. 내 PC에서 실행되고, 글자 단위 가사와 세트리스트, 구독 연출을 OBS에 바로 띄웁니다. 곡을 바꾸면 가사도 따라 바뀝니다.","hero.cta":"Windows용 다운로드","hero.notes":"이번 업데이트 보기","hero.release":"현재 버전","stage.tag":"OBS 출력","stage.note":"오리지널 데모 가사로 실제 촬영한 OBS 출력입니다. 가사 템플릿은 모두 12종이며 글꼴, 색, 크기, 위치를 조정할 수 있습니다.","stage.chips":"가사 템플릿","stage.alt":"‘{name}’ 템플릿을 쓴 OBS 가사 화면","flow.title":"노래 방송 한 번, 준비부터 종료까지","flow.lede":"지금 쓰는 OBS 장면은 그대로. 브라우저 소스 몇 개만 추가하면 됩니다.","flow.s1.title":"방송 전에 곡을 라이브러리에","flow.s1.body":"YouTube 링크를 붙여넣거나, 곡명으로 검색하거나, 음악 파일을 끌어다 놓으세요. 가사는 여러 소스에서 자동으로 찾고, 줄 단위 가사는 한 번에 글자 단위로 업그레이드할 수 있습니다.","flow.s1.t1":"찾지 못하면 직접 붙여넣거나 LRC, SRT, VTT, TXT 업로드","flow.s1.t2":"다른 곡일 수도 있는 가사는 표시되고, 몰래 바뀌지 않습니다","flow.s1.t3":"외국어 곡에는 로마자나 발음 가이드를 표시할 수 있습니다","flow.s1.alt":"데모 곡 다섯 개가 있는 라이브러리 화면, 모두 글자 단위 가사 표시","flow.s2.title":"방송 중에는 한 화면으로 전부","flow.s2.body":"재생, 다음 곡, 키 변경, 볼륨까지. 가사가 조금 어긋나면 바로 맞추고, 문제가 생기면 OBS 가사를 클릭 한 번으로 숨깁니다.","flow.s2.t1":"키를 바꿔도 반주와 보컬 두 트랙이 맞춰집니다","flow.s2.t2":"빠른 템플릿: Ctrl+Alt+숫자로 화면 전체를 전환","flow.s2.t3":"BGM: 노래하지 않는 동안 자동으로 재생","flow.s2.alt":"라이브 화면: 재생 목록, 재생 중인 곡과 글자 단위 가사 타임라인","flow.s3.title":"OBS에 브라우저 소스 추가","flow.s3.body":"가사, 세트리스트, 연출마다 배경이 투명한 URL이 있어 장면 위에 바로 겹칩니다. 패널에서 설정을 바꾸면 OBS에도 바로 반영됩니다.","flow.s3.t1":"방송 세트리스트: 부른 곡, 지금 곡, 다음 곡이 재생에 맞춰 자동 갱신","flow.s3.t2":"미니멀 세트리스트: 지금 곡은 크게, 부른 곡은 티커로","flow.s3.t3":"방송이 끝나면 세트리스트를 YouTube 챕터 타임스탬프로","flow.s3.cap":"OBS의 방송 세트리스트","flow.s3.alt1":"화면 설정 페이지: 왼쪽은 OBS 실시간 미리보기, 오른쪽은 템플릿과 글꼴 설정","flow.s3.alt2":"OBS 세트리스트: 재생 중인 곡과 아직 부르지 않은 곡","shows.title":"구독, 선물 구독, 레이드가 오면 화면 전체가 축하합니다","shows.lede":"개수에 따라 나뉜 43가지 전체 화면 연출. 단계마다 기준, 켜기·끄기, 어떤 연출을 틀지 직접 정합니다.","shows.alt1":"선물 구독 50개 연출: 콘서트 중계","shows.alt2":"선물 구독 10개 연출: 행운의 룰렛","shows.alt3":"선물 구독 25개 연출: 무대 막이 열림","shows.alt4":"레이드 연출: 마스코트 퍼레이드","shows.f1.title":"노래를 끊지 않아요","shows.f1.body":"노래 중에 들어온 연출은 곡이 끝난 뒤에 나오고, 연출 중에는 배경 음악이 자동으로 작아집니다.","shows.f2.title":"내 캐릭터로 교체","shows.f2.body":"연출 속 캐릭터와 마스코트를 내 그림으로 바꿀 수 있습니다. 그림은 내 PC에만 저장됩니다.","shows.f3.title":"방송 전에 미리 재생","shows.f3.body":"패널에서 Twitch 이벤트를 흉내 내 실제 구독을 기다리지 않고 확인할 수 있습니다.","shows.f4.title":"꺼진 단계는 아래 단계로","shows.f4.body":"어떤 단계를 끄면, 켜져 있는 바로 아래 단계의 연출이 대신 나옵니다.","more.title":"그리고 이런 것도","more.m1.title":"텍스트 PV","more.m1.body":"가사를 움직이는 타이포그래피 영상으로. 파츠 범위와 스타일 스위치를 고를 수 있습니다.","more.m2.title":"따라 부르기 화면","more.m2.body":"나만 보는 큰 가사. 다른 창 위에 고정할 수 있고, 2개 언어 곡은 번역도 함께 보여 줍니다.","more.m3.title":"곡 메모","more.m3.body":"곡 전체나 줄마다 호흡, 주의할 점을 적어 두세요. 나만 보이고 OBS에는 나오지 않습니다.","more.m4.title":"정밀 싱크","more.m4.body":"중국어 곡은 가사 내용을 듣고 자동으로 맞추며, 버전이 다른 구간도 줄마다 보정합니다.","more.m5.title":"AI 반주","more.m5.body":"내 PC에서 보컬을 분리해 반주를 만듭니다. AI 반주 구성 요소를 설치해야 합니다.","more.m6.title":"노래 연습","more.m6.body":"음정선을 보며 연습하고, A–B 반복, 약한 줄 피드백, 시청자 챌린지도 쓸 수 있습니다.","badge.exp":"실험적","badge.beta":"베타","aud.title":"시청자 신청곡은 당신이 확인해야 들어갑니다","aud.lede":"채팅 명령어와 채널 포인트 신청은 먼저 받은 편지함으로 가고, 확인해야 세트리스트에 들어갑니다.","aud.a1.title":"Twitch 신청곡","aud.a1.body":"채팅 명령어와 채널 포인트를 지원하며, 쿨다운과 횟수 제한으로 도배를 막습니다.","aud.a2.title":"신청곡 페이지","aud.a2.body":"시청자는 웹페이지에서 곡을 신청할 수 있고, 사용 안내도 들어 있습니다.","aud.a3.title":"휴대폰 리모컨","aud.a3.body":"QR 코드로 한 번 페어링하면 휴대폰으로 곡 넘기기, 싱크 조정, 템플릿 변경, 가사 숨기기를 할 수 있습니다.","aud.alt":"휴대폰 리모컨: 재생 중인 곡, 재생 조작, 가사 긴급 숨기기, 싱크 조정","get.title":"다음 노래 방송 전에 설치해 보세요","get.lede":"개인 및 상업 방송에서 무료로 쓸 수 있습니다. 지금은 Windows 설치 파일을 제공하며, 업데이트해도 라이브러리와 설정은 그대로입니다.","get.cta":"Windows용 다운로드","get.notes":"업데이트 내용과 SHA-256","get.i1.title":"설치 파일 다운로드","get.i1.body":"GitHub Releases에서만 받으세요. 릴리스 페이지의 SHA-256으로 파일을 확인할 수 있습니다.","get.i2.title":"Windows 경고가 뜨면","get.i2.body":"설치 파일에 아직 코드 서명이 없어 SmartScreen이 뜰 수 있습니다. 공식 파일임을 확인한 뒤 ‘추가 정보’ → ‘실행’을 누르세요.","get.i3.title":"처음 실행할 때","get.i3.body":"3~5분 안내를 따라 곡을 추가하고, 가사를 확인하고, URL을 OBS에 넣으세요.","get.i4.title":"이후 업데이트","get.i4.body":"새 버전이 나오면 앱에서 알려 줍니다. 여러 버전을 건너뛰었다면 전체 설치 파일이 필요한지 릴리스 노트에 적혀 있습니다.","foot.releases":"모든 버전","foot.eula":"이용 약관","foot.notices":"서드파티 라이선스","foot.contact":"문의"},"zh-Hans":{"meta.title":"聲嶼 Elitesand Pro｜歌回直播的歌词与画面工具","meta.description":"给 VTuber 与歌回主播的免费工具。在自己的电脑上运行，OBS 直接加载逐字歌词、直播歌单与订阅演出。","meta.ogTitle":"聲嶼 Elitesand Pro｜歌回直播的歌词与画面工具","nav.skip":"跳到主要内容","brand.name":"聲嶼","nav.templates":"歌词模板","nav.flow":"使用流程","nav.shows":"订阅演出","nav.download":"下载","nav.cta":"下载","hero.title":"你只管唱歌，\n画面交给聲嶼。","hero.lede":"给 VTuber 与歌回主播的免费工具。在自己的电脑上运行，OBS 直接加载逐字歌词、直播歌单和订阅演出，换歌时歌词自动跟上。","hero.cta":"下载 Windows 版","hero.notes":"看这版更新了什么","hero.release":"当前版本","stage.tag":"OBS 画面","stage.note":"用原创示范歌词实际拍下的 OBS 输出。程序里共有 12 种歌词模板，字体、颜色、大小与位置都能调。","stage.chips":"歌词模板","stage.alt":"OBS 歌词画面，使用「{name}」模板","flow.title":"一场歌回，从准备到下播","flow.lede":"不用改变你原本的 OBS 场景，只是多加几个浏览器源。","flow.s1.title":"开播前，把歌放进歌曲库","flow.s1.body":"粘贴 YouTube 链接、输入歌名搜索，或直接拖入本地音频。歌词会从多个来源自动查找，逐句歌词可以批量升级成逐字。","flow.s1.t1":"找不到也能自己粘贴，或上传 LRC、SRT、VTT、TXT","flow.s1.t2":"可能对错歌的歌词会标出来，不会悄悄替换","flow.s1.t3":"外语歌可以显示拼音或谐音，跟着唱更容易","flow.s1.alt":"歌曲库画面：五首示范歌曲，每首都标示逐字歌词","flow.s2.title":"直播中，一个页面管全部","flow.s2.body":"播放、切歌、变调、调音量，歌词时间差一点就直接拉。遇到状况，一键把 OBS 上的歌词藏起来。","flow.s2.t1":"升降 Key 时伴奏和人声两轨保持同步","flow.s2.t2":"快捷模板：Ctrl+Alt+数字，一键换整套画面","flow.s2.t3":"BGM 待机音乐：没在唱歌的空档自动播放","flow.s2.alt":"直播页：播放列表、正在播放的歌与逐字歌词时间轴","flow.s3.title":"在 OBS 加上浏览器源","flow.s3.body":"歌词、歌单、演出各有一个网址，背景透明，直接叠在你的画面上。在面板里改设置，OBS 立刻跟着变。","flow.s3.t1":"直播歌单：已唱、正在唱、接下来，跟着播放自动更新","flow.s3.t2":"极简歌单：大字显示现在这首，跑马灯列出已唱","flow.s3.t3":"下播后，歌单可以直接变成 YouTube 章节时间","flow.s3.cap":"OBS 上的直播歌单","flow.s3.alt1":"画面设置页：左边是 OBS 实时预览，右边选模板与调整字体","flow.s3.alt2":"OBS 直播歌单：正在播放与未唱歌曲","shows.title":"有人订阅、赠订、揪团，\n整个画面一起庆祝","shows.lede":"43 种全屏演出，按份数分级。每一级的门槛、开关和要播哪一种，都由你决定。","shows.alt1":"赠订 50 份的演出：演唱会转播画面","shows.alt2":"赠订 10 份的演出：幸运大转盘","shows.alt3":"赠订 25 份的演出：舞台大幕拉开","shows.alt4":"揪团的演出：吉祥物游行","shows.f1.title":"不打断唱歌","shows.f1.body":"唱歌中收到的演出会等这首唱完再播，演出时背景音乐自动调小。","shows.f2.title":"换成你的角色","shows.f2.body":"演出里的角色和吉祥物可以换成自己的图，图只存在你的电脑里。","shows.f3.title":"先试播再上场","shows.f3.body":"面板可以模拟 Twitch 事件，不用等真的有人订阅就能看效果。","shows.f4.title":"关掉的等级会递补","shows.f4.body":"某一级关掉时，会改演下一个比较小、还开着的等级。","more.title":"还有这些","more.m1.title":"文字PV","more.m1.body":"把歌词排成会动的文字影像，部件范围和风格开关都能自己选。","more.m2.title":"跟唱视图","more.m2.body":"给自己看的大字歌词，可以置顶在其他窗口上，双语歌会一起显示译文。","more.m3.title":"歌曲笔记","more.m3.body":"整首或逐句写下换气、提醒，只有你看得到，不会出现在 OBS 上。","more.m4.title":"精准对时","more.m4.body":"中文歌可以听歌词内容自动对时，版本不同的段落也会逐句校正。","more.m5.title":"AI 伴奏","more.m5.body":"在自己的电脑上把歌分离成伴奏。需要另外安装 AI 伴奏组件。","more.m6.title":"练唱","more.m6.body":"看着音高线练歌，有 A–B 循环、弱句反馈，也能开观众挑战。","badge.exp":"实验性","badge.beta":"测试版","aud.title":"观众点歌，你确认了才算数","aud.lede":"聊天室指令和忠诚点数的点歌都先进收件箱，你按下确认才会排进歌单。","aud.a1.title":"Twitch 点歌","aud.a1.body":"支持聊天室指令与忠诚点数，有冷却和次数限制，避免刷屏。","aud.a2.title":"观众点歌页","aud.a2.body":"观众打开网页就能点歌，页面附使用教程。","aud.a3.title":"手机遥控","aud.a3.body":"扫一次二维码配对，手机就能切歌、对时、换模板、紧急隐藏歌词。","aud.alt":"手机遥控画面：正在播放、播放控制、紧急隐藏歌词与时间偏移","get.title":"下一场歌回前，\n先装上试试","get.lede":"免费用于个人与商业直播。目前提供 Windows 安装包，升级会保留你的歌曲库和设置。","get.cta":"下载 Windows 版","get.notes":"更新内容与 SHA-256","get.i1.title":"下载安装包","get.i1.body":"只从 GitHub Releases 下载。可以用 Release 页面上的 SHA-256 核对文件。","get.i2.title":"Windows 弹出提醒时","get.i2.body":"安装包目前没有代码签名，可能出现 SmartScreen。确认是官方文件后，点「更多信息」→「仍要运行」。","get.i3.title":"第一次打开","get.i3.body":"跟着 3～5 分钟的引导，加一首歌、确认歌词，再把网址放进 OBS。","get.i4.title":"之后的更新","get.i4.body":"有新版时程序内会提示，照画面更新即可。跨太多版本时，Release 说明会告诉你要不要下载完整安装包。","foot.releases":"所有版本","foot.eula":"使用条款","foot.notices":"第三方许可","foot.contact":"联系"}};
 
-/* ── 逐字掃描：CJK 逐字、拉丁逐詞，交錯延遲點亮 ── */
-const TOKEN=/[⺀-鿿豈-﫿぀-ヿ가-힯　-〿＀-￯]|[A-Za-z0-9'’\-]+|\s+|[^\s]/g;
-function renderSweep(el,text,baseDelay){
-  el.textContent="";
-  let i=0;
-  for(const tok of text.match(TOKEN)||[]){
-    if(/^\s+$/.test(tok)){el.appendChild(document.createTextNode(tok));continue}
-    const s=document.createElement("span");
-    s.className="sw";
-    s.textContent=tok;
-    s.style.animationDelay=(baseDelay+i*0.055).toFixed(3)+"s";
-    el.appendChild(s);
-    i++;
+  var LANGS = ['zh-Hant', 'en', 'ja', 'ko', 'zh-Hans'];
+  function pickLang() {
+    var q = new URLSearchParams(location.search).get('lang');
+    if (q && LANGS.indexOf(q) >= 0) return q;
+    try { var s = localStorage.getItem('es-site-lang'); if (s && LANGS.indexOf(s) >= 0) return s; } catch (_) {}
+    var nav = (navigator.languages || [navigator.language || '']).map(function (l) { return String(l).toLowerCase(); });
+    for (var i = 0; i < nav.length; i++) {
+      var l = nav[i];
+      if (/^zh-(cn|sg|hans)/.test(l)) return 'zh-Hans';
+      if (/^zh/.test(l)) return 'zh-Hant';
+      if (/^ja/.test(l)) return 'ja';
+      if (/^ko/.test(l)) return 'ko';
+      if (/^en/.test(l)) return 'en';
+    }
+    return 'en';
   }
-  return i;
-}
-function paintSweeps(){
-  const l1=document.querySelector('[data-sweep="hero.line1"]');
-  const l2=document.querySelector('[data-sweep="hero.line2"]');
-  if(l1&&l2){
-    const n=renderSweep(l1,translate("hero.line1"),0.30);
-    renderSweep(l2,translate("hero.line2"),0.30+n*0.055+0.14);
+
+  var lang = pickLang();
+  var dict = I18N[lang] || I18N['zh-Hant'];
+  var current = 0, timer = null, auto = true;
+  var chipsEl = document.getElementById('chips');
+  var imgA = document.getElementById('stage-a'), imgB = document.getElementById('stage-b');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function t(key) { return dict[key] != null ? dict[key] : (I18N['zh-Hant'][key] || ''); }
+
+  function apply(next) {
+    lang = next; dict = I18N[lang] || I18N['zh-Hant'];
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = t(el.getAttribute('data-i18n')); });
+    document.querySelectorAll('[data-i18n-content]').forEach(function (el) { el.setAttribute('content', t(el.getAttribute('data-i18n-content'))); });
+    document.querySelectorAll('[data-i18n-alt]').forEach(function (el) { el.setAttribute('alt', t(el.getAttribute('data-i18n-alt'))); });
+    document.title = t('meta.title');
+    chipsEl.setAttribute('aria-label', t('stage.chips'));
+    document.getElementById('lang').value = lang;
+    document.getElementById('font-css').href = 'https://fonts.googleapis.com/css2?' + FONTS[lang] + '&display=swap';
+    renderChips();
   }
-  /* 其餘章節大標：播放頭到了才會 unpause，所以延遲從頭算起 */
-  document.querySelectorAll("[data-sweep]").forEach(el=>{
-    if(el===l1||el===l2)return;
-    renderSweep(el,translate(el.dataset.sweep),0.05);
+
+  function renderChips() {
+    var names = NAMES[lang] || NAMES['zh-Hant'];
+    chipsEl.innerHTML = '';
+    TEMPLATES.forEach(function (id, i) {
+      var li = document.createElement('li');
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip';
+      b.setAttribute('aria-pressed', i === current ? 'true' : 'false');
+      b.innerHTML = '<i class="fill" aria-hidden="true"></i><span></span>';
+      b.querySelector('span').textContent = names[i];
+      b.addEventListener('click', function () { stopAuto(); show(i); });
+      li.appendChild(b); chipsEl.appendChild(li);
+    });
+    imgA.alt = t('stage.alt').replace('{name}', names[current]);
+  }
+
+  function show(i) {
+    if (i === current && imgA.getAttribute('src').indexOf(TEMPLATES[i]) >= 0) return;
+    current = i;
+    var src = 'assets/tpl/' + TEMPLATES[i] + '.webp';
+    var names = NAMES[lang] || NAMES['zh-Hant'];
+    var pre = new Image();
+    pre.onload = function () {
+      imgB.src = imgA.src; imgB.classList.remove('out');
+      imgA.classList.add('out'); imgA.src = src;
+      imgA.alt = t('stage.alt').replace('{name}', names[i]);
+      requestAnimationFrame(function () { imgA.classList.remove('out'); imgB.classList.add('out'); });
+    };
+    pre.src = src;
+    chipsEl.querySelectorAll('.chip').forEach(function (c, k) { c.setAttribute('aria-pressed', k === i ? 'true' : 'false'); });
+  }
+
+  // 自動輪播：像歌單一樣一首接一首；使用者一點就停，偏好減少動態時不輪播
+  function startAuto() {
+    if (!auto || reduce.matches) { chipsEl.classList.remove('auto'); return; }
+    chipsEl.classList.add('auto');
+    clearTimeout(timer);
+    timer = setTimeout(function () { show((current + 1) % TEMPLATES.length); startAuto(); }, 4200);
+  }
+  function stopAuto() { auto = false; clearTimeout(timer); chipsEl.classList.remove('auto'); }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) clearTimeout(timer); else startAuto(); });
+
+  document.getElementById('lang').addEventListener('change', function (e) {
+    var v = e.target.value;
+    try { localStorage.setItem('es-site-lang', v); } catch (_) {}
+    var u = new URL(location.href); u.searchParams.set('lang', v); history.replaceState(null, '', u);
+    apply(v); startAuto();
   });
-}
 
-function applyLanguage(language,{persist=false,updateUrl=false}={}){
-  activeLanguage=normalizeLanguage(language)||"en";
-  document.documentElement.lang=activeLanguage;
-  document.documentElement.dir="ltr";
-  document.querySelectorAll("[data-i18n]").forEach(el=>{el.textContent=translate(el.dataset.i18n)});
-  const bindings={i18nAlt:"alt",i18nContent:"content",i18nAriaLabel:"aria-label",i18nDataTitle:"data-title",i18nDataDesc:"data-desc",i18nTitle:"title"};
-  document.querySelectorAll("[data-i18n-alt],[data-i18n-content],[data-i18n-aria-label],[data-i18n-data-title],[data-i18n-data-desc],[data-i18n-title]").forEach(el=>{
-    for(const[k,attr]of Object.entries(bindings)){const key=el.dataset[k];if(key)el.setAttribute(attr,translate(key))}
-  });
-  document.title=translate("meta.title");
-  paintSweeps();
-  const sel=document.querySelector("#languageSelect");if(sel)sel.value=activeLanguage;
-  const activeTab=document.querySelector(".tab.on");
-  const si=document.querySelector("#stageImg"),st=document.querySelector("#stageTitle"),sd=document.querySelector("#stageDesc");
-  if(activeTab&&si&&st&&sd){si.alt=activeTab.dataset.title;st.textContent=activeTab.dataset.title;sd.textContent=activeTab.dataset.desc}
-  if(persist){try{localStorage.setItem("elitesand-language",activeLanguage)}catch{}}
-  if(updateUrl){const url=new URL(location.href);url.searchParams.set("lang",activeLanguage);history.replaceState(null,"",url)}
-}
-applyLanguage(activeLanguage);
-document.querySelector("#languageSelect").addEventListener("change",e=>applyLanguage(e.target.value,{persist:true,updateUrl:true}));
+  apply(lang);
+  startAuto();
+  // 預先載入其他模板畫面，切換時不閃
+  setTimeout(function () { TEMPLATES.forEach(function (id) { var im = new Image(); im.src = 'assets/tpl/' + id + '.webp'; }); }, 1500);
 
-/* hero 一載入就開唱 */
-document.querySelector(".hero").classList.add("is-playing");
-
-/* ── 捲動＝播放頭：進度條 ── */
-const scrub=document.querySelector("#scrub");
-let ticking=false;
-function updateScrub(){
-  const h=document.documentElement.scrollHeight-window.innerHeight;
-  scrub.style.width=(h>0?Math.min(100,(window.scrollY/h)*100):0)+"%";
-  ticking=false;
-}
-addEventListener("scroll",()=>{if(!ticking){ticking=true;requestAnimationFrame(updateScrub)}},{passive:true});
-updateScrub();
-
-/* ── 章節唱到了就點亮 ── */
-const goLive=el=>el.classList.add("is-live","is-playing");
-const revealAll=()=>{
-  document.querySelectorAll(".mv").forEach(goLive);
-  document.querySelectorAll(".track").forEach(el=>el.classList.add("is-in"));
-};
-if("IntersectionObserver"in window){
-  let ioFired=false;
-  const io=new IntersectionObserver(entries=>{
-    entries.forEach(en=>{if(en.isIntersecting){ioFired=true;goLive(en.target);io.unobserve(en.target)}});
-  },{rootMargin:"0px 0px -22% 0px",threshold:0.12});
-  document.querySelectorAll(".mv").forEach(el=>io.observe(el));
-
-  /* 功能段落各自進場，方向跟它在版面上的那一側一致 */
-  const ioTrack=new IntersectionObserver(entries=>{
-    entries.forEach(en=>{if(en.isIntersecting){ioFired=true;en.target.classList.add("is-in");ioTrack.unobserve(en.target)}});
-  },{rootMargin:"0px 0px -16% 0px",threshold:0.15});
-  document.querySelectorAll(".track").forEach(el=>ioTrack.observe(el));
-
-  /* 失效保險：IO 若因任何原因沒有作動，2.5 秒後直接全部顯示。
-     寧可少了進場動畫，也絕不能讓內容永遠停在 opacity:0。*/
-  setTimeout(()=>{if(!ioFired)revealAll()},2500);
-}else{
-  revealAll();
-}
-
-/* ── 曲目清單切換 ── */
-const tabs=[...document.querySelectorAll(".tab")],
-      img=document.querySelector("#stageImg"),
-      title=document.querySelector("#stageTitle"),
-      desc=document.querySelector("#stageDesc"),
-      lightbox=document.querySelector("#lightbox"),
-      largeImg=document.querySelector("#largeImg");
-const indicator=document.querySelector("#tlIndicator");
-function moveIndicator(t){
-  if(!indicator||!t)return;
-  indicator.style.height=t.offsetHeight+"px";
-  indicator.style.transform=`translateY(${t.offsetTop}px)`;
-}
-/* 先把六張圖預熱，換頁籤時才不會淡入到一半還在載 */
-tabs.forEach(t=>{const pre=new Image();pre.src=`assets/${t.dataset.img}`});
-
-let swapTimer=null;
-function selectTab(t){
-  tabs.forEach(x=>x.classList.toggle("on",x===t));
-  moveIndicator(t);
-  title.textContent=t.dataset.title;
-  desc.textContent=t.dataset.desc;
-  img.classList.add("swapping");
-  clearTimeout(swapTimer);
-  swapTimer=setTimeout(()=>{
-    img.src=`assets/${t.dataset.img}`;
-    img.alt=t.dataset.title;
-    img.classList.toggle("phone",t.dataset.type==="phone");
-    img.classList.remove("swapping");
-  },240);
-}
-tabs.forEach(t=>t.addEventListener("click",()=>selectTab(t)));
-moveIndicator(document.querySelector(".tab.on"));
-addEventListener("resize",()=>moveIndicator(document.querySelector(".tab.on")));
-addEventListener("load",()=>moveIndicator(document.querySelector(".tab.on")));
-
-/* ── hero 輕微視差：滑鼠移動時主視覺與手機浮層反向位移，做出景深 ──
-   用獨立的 translate 屬性，才不會跟進場動畫的 transform 打架。 */
-if(matchMedia("(pointer:fine)").matches&&!matchMedia("(prefers-reduced-motion:reduce)").matches){
-  const hero=document.querySelector(".hero"),
-        mon=document.querySelector(".monitor"),
-        ph=document.querySelector(".phoneFloat");
-  hero.addEventListener("pointermove",e=>{
-    const r=hero.getBoundingClientRect();
-    const x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5;
-    if(mon)mon.style.translate=`${(x*9).toFixed(1)}px ${(y*6).toFixed(1)}px`;
-    if(ph)ph.style.translate=`${(x*-16).toFixed(1)}px ${(y*-10).toFixed(1)}px`;
-  });
-  hero.addEventListener("pointerleave",()=>{
-    if(mon)mon.style.translate="0px 0px";
-    if(ph)ph.style.translate="0px 0px";
-  });
-}
-img.addEventListener("click",()=>{largeImg.src=img.src;largeImg.alt=img.alt;lightbox.showModal()});
-document.querySelector("#close").addEventListener("click",()=>lightbox.close());
-lightbox.addEventListener("click",e=>{if(e.target===lightbox)lightbox.close()});
+  // 版本與下載連結跟著 GitHub 最新正式版走；拿不到就維持頁面上寫的版本與 releases/latest
+  fetch('https://api.github.com/repos/' + REPO + '/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (rel) {
+      if (!rel || !rel.tag_name) return;
+      var ver = String(rel.tag_name).replace(/^v/, '');
+      document.querySelectorAll('[data-ver]').forEach(function (el) { el.textContent = ver; });
+      var exe = (rel.assets || []).filter(function (a) { return /setup.*\.exe$/i.test(a.name); })[0];
+      if (exe) document.querySelectorAll('a.dl').forEach(function (a) { a.href = exe.browser_download_url; });
+      if (rel.html_url) document.querySelectorAll('a.notes').forEach(function (a) { a.href = rel.html_url; });
+    })
+    .catch(function () {});
+})();
 </script>
 </body>
 </html>
