@@ -653,6 +653,15 @@ test('server 端 require 的 public/js 檔案，必須全部在打包白名單�
     }
   });
 
+  test('打包驗證：擋明文模板，但 server 端 require 的同構模組（lyric-template-defaults.js）要放行', () => {
+    // 2026-11-24 打包 1.3.1：lyric-template-defaults.js 進了 SERVER_REQUIRED_PUBLIC_JS，驗證卻把它當明文模板擋下
+    const { SERVER_REQUIRED_PUBLIC_JS } = require('../tools/build-production-bundles');
+    const verify = fs.readFileSync(path.join(__dirname, '..', 'tools', 'verify-electron-package.js'), 'utf8');
+    ok(SERVER_REQUIRED_PUBLIC_JS.includes('lyric-template-defaults.js'), 'lyric-template-defaults.js 是 server 端 require 的同構模組');
+    ok(/SERVER_REQUIRED_PUBLIC_JS/.test(verify), '打包驗證要放行 SERVER_REQUIRED_PUBLIC_JS 裡的檔案');
+    ok(/Plain lyric template source was included in app\.asar/.test(verify), '其他明文模板仍要擋');
+  });
+
   test('打包：ai/ 必須以真實檔案進 installer，且不可只留在 app.asar 裡', () => {
     const portable = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-portable.ps1'), 'utf8');
     const installer = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-installer.ps1'), 'utf8');

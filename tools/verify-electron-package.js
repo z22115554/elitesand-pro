@@ -8,6 +8,7 @@ const { getRawHeader, listPackage } = require('@electron/asar');
 const { getCurrentFuseWire, FuseV1Options } = require('@electron/fuses');
 const { FuseState } = require('@electron/fuses/dist/constants');
 const { NtExecutable, NtExecutableResource } = require('resedit');
+const { SERVER_REQUIRED_PUBLIC_JS } = require('./build-production-bundles');
 
 const EXPECTED_FUSES = {
   [FuseV1Options.RunAsNode]: false,
@@ -84,8 +85,11 @@ async function verify(unpackedRoot) {
   if (!files.includes('electron/packaged-resource-integrity.generated.js')) {
     throw new Error('The packaged external-resource integrity manifest is missing.');
   }
-  if (files.some((file) => /^public\/js\/lyric-template-[^/]+\.js$/i.test(file))) {
-    throw new Error('Plain lyric template source was included in app.asar.');
+  // 同構模組（例如 lyric-template-defaults.js：server 端 require 的共用預設值）本來就要留在原路徑，不算模板原始碼
+  const serverRequired = new Set(SERVER_REQUIRED_PUBLIC_JS.map((name) => `public/js/${name}`));
+  const plainTemplates = files.filter((file) => /^public\/js\/lyric-template-[^/]+\.js$/i.test(file) && !serverRequired.has(file));
+  if (plainTemplates.length) {
+    throw new Error(`Plain lyric template source was included in app.asar: ${plainTemplates.join(', ')}`);
   }
   // The AI separation sidecar is launched by python.exe, which cannot read anything
   // inside app.asar. It ships as a real file under resources/tools/ (integrity-hashed
