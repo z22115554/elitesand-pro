@@ -78,11 +78,11 @@ const PACKAGES_REVISION = 1;
 // ─── macOS（Apple Silicon）───
 // 套件在 python-locks/align-mac-arm64-py312.lock；改鎖定清單時把 MAC_ALIGN_RUNTIME_ID 的 r 加一。
 const MAC_PACKAGES_REVISION = 1;
-// 2026-11-26 以實際檔案估：Python 25.4MB＋9 個 wheel 31.9MB＋int8 模型 50.5MB；
-// 解開後 Python 67MB＋套件 122MB＋模型 63MB（pip 另外會編 .pyc）。CI 實測後更新。
+// 2026-11-26 GitHub Actions macos-15 arm64 實測（beta.10）：下載 Python 25.4MB＋9 個 wheel 31.8MB
+// ＋int8 模型 50.5MB＝107.7MB；安裝後 align-runtime 共 341MB（Python＋套件 277MB、模型 63MB）。
 const MAC_EXPECTED_DOWNLOAD_BYTES = 108 * 1000 * 1000;
-const MAC_EXPECTED_INSTALLED_BYTES = 290 * 1000 * 1000;
-const MAC_REQUIRED_DISK_BYTES = 600 * 1000 * 1000; // 安裝後約 290MB＋下載暫存約 110MB，留寬一點
+const MAC_EXPECTED_INSTALLED_BYTES = 341 * 1000 * 1000;
+const MAC_REQUIRED_DISK_BYTES = 600 * 1000 * 1000; // 安裝後約 341MB＋下載暫存約 110MB，留寬一點
 
 const MODEL_RELEASE = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models';
 const MODELS = {
