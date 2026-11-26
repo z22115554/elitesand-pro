@@ -42,7 +42,10 @@ test('Windows 不變：套件清單、版本號、marker、Python 路徑與 Dire
   assert.ok(provider.PIP_REQUIREMENTS.some((r) => r.startsWith('onnxruntime-directml==1.24.4 ')));
   assert.equal(provider.PACKAGES_REVISION, 1);
   assert.equal(provider.PYTHON_EMBED_VERSION, '3.11.9');
-  assert.equal(path.basename(provider.PYTHON_EXE), 'python.exe', '非 darwin 一律是 embeddable 的 python.exe');
+  // Windows（以及其他非 darwin）是 embeddable 的 python.exe；在 Mac 上跑這支測試時是 bin/python3
+  assert.equal(provider.PYTHON_EXE, process.platform === 'darwin'
+    ? path.join(provider.RUNTIME_DIR, 'python', 'bin', 'python3')
+    : path.join(provider.RUNTIME_DIR, 'python', 'python.exe'));
   const win = provider.getStatusInfo({ platform: 'win32' });
   assert.equal(win.supported, true);
   assert.equal(win.expectedDownloadBytes, undefined, 'Windows 的 runtime-status 不多帶 Mac 的大小');
