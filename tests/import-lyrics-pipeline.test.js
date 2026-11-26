@@ -280,7 +280,7 @@ function uploadHandler(dependencies) {
   const end = source.indexOf('\n// ─── YouTube 連結處理', start);
   const handler = source.slice(start, end).match(/async \(req, res\) => ([\s\S]*)\);\s*$/);
   assert.ok(handler, 'upload route handler is available');
-  return vm.runInNewContext(`(async (req, res) => ${handler[1]})`, { ...dependencies, Buffer, path, mapConcurrent, log: silentLog }, { filename });
+  return vm.runInNewContext(`(async (req, res) => ${handler[1]})`, { macBetaDiagnostics: { milestone() { return false; } }, ...dependencies, Buffer, path, mapConcurrent, log: silentLog }, { filename });
 }
 function responseFixture() {
   return { code: 200, body: null, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };

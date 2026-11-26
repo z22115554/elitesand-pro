@@ -49,6 +49,10 @@ const DEFAULTS = {
   // 預設留空字串，讓既有的「usageEndpoint + /daily」推導行為完全不變。
   usageDailyEndpoint: '',
   anonymousUsageEnabled: true,
+  // Mac 內測版的自動診斷回報（server/services/mac-beta-diagnostics.js）。只有 tools/build-mac.js
+  // 打出來的 Mac 內測版會用到；Windows 與正式版完全不讀這個鍵。跟上面的匿名統計共用同一個開關，
+  // 另外還要使用者在面板看過一次性告知。空字串＝停用。
+  macBetaDiagEndpoint: 'https://elitesand-pro-mac-beta-diag.elitesand.workers.dev/api/v1/diag',
   // 歌詞偏移社群回饋：跟上面的匿名活躍統計是兩個獨立的東西，這裡會送出 YouTube 影片 ID
   // 與使用者調整過的時間偏移。端點預設指向官方 Worker，跟 usageEndpoint 同一套邏輯：
   // 就算使用者的 config.js 是舊版、沒帶這個鍵，仍要能用到這個功能。enabled 預設開啟

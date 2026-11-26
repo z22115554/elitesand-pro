@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { getLanIp } = require('../../utils/lan-info');
 const ytdlpUpdater = require('../../services/ytdlp-updater');
+const macBetaDiagnostics = require('../../services/mac-beta-diagnostics');
 const obsLauncher = require('../../services/obs-launcher');
 const announcements = require('../../services/announcement-service');
 const eulaStore = require('../../services/eula-store');
@@ -103,6 +104,7 @@ router.post('/ffmpeg/download', requirePin, async (req, res) => {
     systemCheck.clearCache();
     const refreshed = await systemCheck.getSystemCheck({ force: true });
     if (refreshed.ffmpeg?.available) {
+      macBetaDiagnostics.component('ffmpeg_download', 'already');
       return res.json({
         ok: true,
         alreadyAvailable: true,
@@ -121,6 +123,7 @@ router.post('/ffmpeg/download', requirePin, async (req, res) => {
       err.ffmpegStage = 'system-check';
       throw err;
     }
+    macBetaDiagnostics.component('ffmpeg_download', 'ok');
     res.json({
       ok: true,
       alreadyAvailable: false,
@@ -132,6 +135,7 @@ router.post('/ffmpeg/download', requirePin, async (req, res) => {
     const stage = err.ffmpegStage || 'unknown';
     systemCheck.clearCache();
     log.error(`FFmpeg 下載失敗（stage=${stage}）`, err);
+    macBetaDiagnostics.component('ffmpeg_download', macBetaDiagnostics.classifyFfmpegDownloadError(err));
     res.status(502).json({ ok: false, stage, reason: err.message });
   }
 });

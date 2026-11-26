@@ -51,6 +51,8 @@ async function main() {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 
+  await macBetaDiagSmoke(appDir);
+
   try {
     const title = execFileSync(ytdlp, ['--js-runtimes', `node:${node}`, '--no-warnings', '--skip-download', '--print', 'title',
       'https://www.youtube.com/watch?v=jNQXAC9IVRw'], { encoding: 'utf8', timeout: 180000 }).trim();
@@ -59,6 +61,48 @@ async function main() {
     log(`WARNING: YouTube metadata check failed on this CI machine (often blocked for datacenter IPs): ${String(error.stderr || error.message).split('\n').slice(-3).join(' | ')}`);
   }
   log('runtime smoke passed');
+}
+
+/**
+ * Mac 內測版診斷回報：打包出來的 app 帶著內測版旗標，且在真的 macOS 上偵測到的
+ * 晶片／系統版本／記憶體級距會組成一份能通過白名單的 payload（送到本機的假端點，不連外）。
+ */
+async function macBetaDiagSmoke(appDir) {
+  const asar = fs.readFileSync(path.join(appDir, 'Contents', 'Resources', 'app.asar'));
+  if (!asar.includes(Buffer.from('"elitesandMacBeta"'))) throw new Error('Packaged package.json is missing the elitesandMacBeta flag.');
+  const http = require('http');
+  const received = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => { received.push(body); res.writeHead(202).end('{}'); });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-mac-diag-'));
+  try {
+    const fields = require('../../server/services/mac-beta-diag-fields');
+    const { createMacBetaDiagnostics } = require('../../server/services/mac-beta-diagnostics');
+    const diag = createMacBetaDiagnostics({
+      packageJson: { elitesandMacBeta: { build: 'smoke' } },
+      config: { macBetaDiagEndpoint: `http://127.0.0.1:${server.address().port}/api/v1/diag` },
+      dataDir,
+      usageSettings: () => ({ enabled: true, eulaAccepted: true }),
+      env: { ELITESAND_YTDLP_NODE_PATH: path.join(appDir, 'Contents', 'Resources', 'tools', 'node') },
+    });
+    diag.acknowledgeNotice();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await diag.flush();
+    if (received.length !== 1) throw new Error(`Expected one diagnostics batch, got ${received.length}`);
+    const payload = JSON.parse(received[0]);
+    if (!fields.validPayload(payload)) throw new Error(`Diagnostics payload failed the whitelist: ${received[0]}`);
+    const launch = payload.events.find((event) => event.type === 'launch');
+    const node = payload.events.find((event) => event.name === 'bundled_node');
+    if (!launch || !node || node.code !== 'ok') throw new Error(`Unexpected diagnostics events: ${received[0]}`);
+    log(`mac beta diagnostics OK: ${JSON.stringify(payload.events)}`);
+  } finally {
+    server.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 }
 
 main().catch((error) => { process.stderr.write(`${error.stack || error.message}\n`); process.exitCode = 1; });

@@ -7,6 +7,11 @@ function createPracticeRouter(options = {}) {
   const router = express.Router();
   const service = options.service || createPracticeGuideService(options);
   const requirePin = options.requirePin || require('../middleware/require-pin');
+  // Mac 內測版診斷：只回報「被擋下的原因代碼」，其他平台這兩個呼叫直接回 false。
+  const macBetaDiag = options.macBetaDiag || require('../services/mac-beta-diagnostics');
+  const reportBlocked = (code) => {
+    try { macBetaDiag.milestone('practice_blocked', require('../services/mac-beta-diagnostics').classifyPracticeBlock(code)); } catch (_) { /* 不影響回應 */ }
+  };
   router.use((_req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
   // A guide is private source-derived data. Even GET requires controller+PIN;
   // OBS/read-only output must use a separate, sanitized score-only channel.
@@ -14,10 +19,12 @@ function createPracticeRouter(options = {}) {
     try {
       const result = await operation(req);
       const status = result.status;
+      if (status === 'failed' && result.job && result.job.code && result.job.code !== 'GUIDE_CANCELLED') reportBlocked(result.job.code);
       if (status === 'missing') return res.status(404).json({ ok: false, code: 'GUIDE_NOT_FOUND', error: '尚未建立這首歌的練唱音高。' });
       return res.status(['queued', 'processing', 'cancelling'].includes(status) ? 202 : 200).json({ ok: true, ...result });
     } catch (error) {
       const known = error instanceof PracticeGuideError;
+      if (known && error.code !== 'GUIDE_CANCELLED') reportBlocked(error.code);
       return res.status(known ? error.status : 500).json({ ok: false,
         code: known ? error.code : 'PRACTICE_REQUEST_FAILED',
         error: known ? error.message : '練唱處理失敗，請稍後再試。' });

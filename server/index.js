@@ -57,11 +57,17 @@ function logFatalSafely(prefix, err) {
     handlingFatalError = false;
   }
 }
+// Mac 內測版：只回報錯誤代碼與模組主檔名（不含訊息、堆疊、路徑）。其他平台 reportError 直接回 false。
+function reportFatalToMacBetaDiag(kind, error) {
+  try { require('./services/mac-beta-diagnostics').reportError(kind, error); } catch (_) { /* 絕不能在這裡再丟例外 */ }
+}
 process.on('uncaughtException', (err) => {
   logFatalSafely('Uncaught exception（伺服器繼續運行，請檢查日誌）', err);
+  reportFatalToMacBetaDiag('uncaught', err);
 });
 process.on('unhandledRejection', (reason) => {
   logFatalSafely('Unhandled promise rejection', reason);
+  reportFatalToMacBetaDiag('unhandled_rejection', reason);
 });
 
 // 非正常結束偵測：寫下本輪啟動標記，同時把「上一輪是否乾淨關閉」定案在記憶體。
@@ -497,6 +503,9 @@ app.get('/typewriter-sticker/:filename', (req, res) => {
 // ─── Socket.io 即時通訊 ───
 const socketHandler = require('./routes/socket-handler');
 const usageTelemetry = require('./services/usage-telemetry');
+// Mac 內測版的自動診斷回報：非 Mac 內測版時 attach 直接回 false，什麼都不包。
+const macBetaDiagnostics = require('./services/mac-beta-diagnostics');
+macBetaDiagnostics.attachToUsageTelemetry(usageTelemetry);
 const { consumeUpdateResultMarker, getProgress: getUpdateProgress } = require('./services/app-updater-v2');
 const socketApi = socketHandler(io);
 
@@ -742,6 +751,7 @@ server.listen(PORT, '0.0.0.0', () => {
   // 開發環境沒有 ELITESAND_INSTALL_ROOT 會直接跳過，不影響一般啟動。
   try { consumeUpdateResultMarker(); } catch (error) { log.warn(`更新結果標記讀取失敗：${error.message}`); }
   usageTelemetry.start().catch((error) => log.warn(`匿名使用統計啟動失敗：${error.message}`));
+  macBetaDiagnostics.start().catch(() => { /* 診斷回報失敗不影響啟動 */ });
   log.info('╚══════════════════════════════════════════╝');
 
   // 清洗規則改進後，背景把歌曲庫已存的歌詞照新規則重洗一次（做過就有標記檔，不會重跑）。

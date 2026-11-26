@@ -28,6 +28,7 @@ const { getCachedCudaAvailable } = require('../../services/ai-separation');
 const webgpuRuntimeProvider = require('../../services/webgpu-runtime-provider');
 const webgpuSeparationJobs = require('../../services/webgpu-separation-jobs');
 const webgpuSeparationSettings = require('../../services/webgpu-separation-settings');
+const macBetaDiagnostics = require('../../services/mac-beta-diagnostics');
 const libraryStore = require('../../services/library-store');
 const waveformPeaks = require('../../services/waveform-peaks');
 
@@ -63,8 +64,10 @@ router.get('/ai-separation/cuda-status', requireControlAccess, async (req, res) 
 router.post('/ai-separation/bundle/download', requirePin, async (req, res) => {
   try {
     const result = await aiSeparationBundle.downloadBundle();
+    macBetaDiagnostics.milestone('separation_click', 'install_ok');
     res.json(result);
   } catch (err) {
+    macBetaDiagnostics.milestone('separation_click', macBetaDiagnostics.classifySeparationInstallError(err));
     // 使用者自己按取消不是錯誤，不記 error log、也不回 5xx。
     if (err.code === 'CANCELLED') return res.json({ ok: false, cancelled: true });
     log.error('AI 伴奏完整元件下載失敗', err);
@@ -276,6 +279,7 @@ router.post('/library/:id/separate', requirePin, async (req, res) => {
   }
 
   if (!aiSeparationBundle.isAvailable()) {
+    macBetaDiagnostics.milestone('separation_click', 'runtime_not_ready');
     return res.status(409).json({ ok: false, error: 'AI_RUNTIME_NOT_READY' });
   }
   try {
@@ -291,6 +295,7 @@ router.post('/library/:id/separate', requirePin, async (req, res) => {
     // （playState + libraryStore 兩邊，鐵則 #17）；這裡不再單寫 libraryStore，避免重開後不一致。
     // jobId 為 null 代表已經有另一首在跑，這首排進佇列了（見 ai-separation-jobs.js 的
     // startJobForTrack）——不是失敗，前端靠 separation:progress 的 stage:'queued' 顯示排隊中。
+    macBetaDiagnostics.milestone('separation_click', jobId === null ? 'queued' : 'started');
     res.json({ ok: true, jobId, queued: jobId === null });
   } catch (err) {
     log.error(`啟動 AI 分離失敗 track=${trackId}`, err);

@@ -183,7 +183,14 @@ async function performVerifiedUpdate() {
 
 function runUpdate() {
   if (_inflightUpdate) return _inflightUpdate;
-  _inflightUpdate = performVerifiedUpdate().finally(() => { _inflightUpdate = null; });
+  _inflightUpdate = performVerifiedUpdate().then((result) => {
+    // Mac 內測版診斷：只送分類後的結果代碼（不送訊息）；其他平台 component() 直接回 false。
+    try {
+      const macBetaDiag = require('./mac-beta-diagnostics');
+      macBetaDiag.component('ytdlp_update', macBetaDiag.classifyYtdlpUpdate(result));
+    } catch (_) { /* 不影響更新流程 */ }
+    return result;
+  }).finally(() => { _inflightUpdate = null; });
   return _inflightUpdate;
 }
 

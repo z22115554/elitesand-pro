@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: macOS unit tests
-        run: node --test tests/macos-support.test.js
+        run: node --test tests/macos-support.test.js tests/mac-beta-diagnostics.test.js
       - name: Build, verify and boot-check the app
         env:
           GITHUB_TOKEN: ${{ github.token }}

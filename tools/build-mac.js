@@ -149,6 +149,10 @@ function stageApp(pkg) {
   const staged = JSON.parse(fs.readFileSync(stagedPackagePath, 'utf8'));
   delete staged.build;
   staged.elitesandPublicVersion = pkg.version;
+  // Mac 內測版旗標：server/services/mac-beta-diagnostics.js 只認這個欄位（Windows 打包流程不會寫入）。
+  // build 是 CI 的 ELITESAND_BUILD_LABEL（例如 beta.12），本機打包時記成 local。
+  const betaLabel = process.env.ELITESAND_BUILD_LABEL || '';
+  staged.elitesandMacBeta = { build: /^[A-Za-z0-9.]{1,32}$/.test(betaLabel) ? betaLabel : 'local' };
   fs.writeFileSync(stagedPackagePath, `${JSON.stringify(staged, null, 2)}\n`);
   run(process.execPath, [path.join(ROOT, 'tools', 'build-production-bundles.js'), APP_STAGE, '--electron-only', '--sourcemap-out', sourceMaps]);
 }

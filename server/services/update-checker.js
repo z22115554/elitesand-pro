@@ -117,10 +117,12 @@ async function checkForUpdate({ force = false } = {}) {
       }
 
       _cache = { result: base, timestamp: Date.now() };
+      try { require('./mac-beta-diagnostics').milestone('update_check', 'ok'); } catch (_) { /* Mac 內測版診斷，不影響更新檢查 */ }
       return base;
     } catch (err) {
       // 離線、DNS 失敗、timeout 等：靜默記錄，不拋出
       base.error = err.message;
+      try { require('./mac-beta-diagnostics').milestone('update_check', 'failed'); } catch (_) { /* Mac 內測版診斷，不影響更新檢查 */ }
       log.warn(`更新檢查失敗（不影響程式運作）: ${err.message}`);
       // 失敗結果也快取，但縮短有效期為 5 分鐘，避免離線時持續重試拖慢面板載入
       _cache = { result: base, timestamp: Date.now() - interval + 5 * 60 * 1000 };

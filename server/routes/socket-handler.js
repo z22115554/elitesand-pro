@@ -46,6 +46,7 @@ const { isLoopbackAddress } = require('../utils/pin-setup-policy');
 const stateStore = require('../services/state-store');
 const defaultRuntimeEvidence = require('../services/runtime-evidence');
 const defaultUsageTelemetry = require('../services/usage-telemetry');
+const macBetaDiagnostics = require('../services/mac-beta-diagnostics');
 const { CONTROL_ROOM, READ_ONLY_ROOM, emitToControlClients } = require('../utils/socket-broadcast');
 const { createPracticeOverlay } = require('../services/practice-overlay');
 
@@ -655,6 +656,7 @@ module.exports = function socketHandler(io, {
     if (!socket.readOnly && typeof socket.onAny === 'function') {
       socket.onAny((event) => {
         if (!CORE_USAGE_EVENTS.has(event)) return;
+        if (event === 'play:track') macBetaDiagnostics.milestone('playback_start');
         usageTelemetry.markCoreUsed().catch((error) => log.warn(`匿名使用統計標記失敗：${error.message}`));
         const feature = CORE_USAGE_FEATURE_BY_EVENT[event];
         if (feature) usageTelemetry.recordFeature(feature);

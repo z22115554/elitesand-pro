@@ -37,6 +37,7 @@ const { classifyImportError, toImportTelemetryCode } = require('../utils/import-
 const { decodeUploadedText } = require('../utils/decode-text');
 const libraryStore = require('../services/library-store');
 const usageTelemetry = require('../services/usage-telemetry');
+const macBetaDiagnostics = require('../services/mac-beta-diagnostics');
 
 // ─── Multer 設定（本地檔案上傳）───
 const storage = multer.diskStorage({
@@ -104,6 +105,7 @@ router.use(require('./api/display-assets'));
 router.use(require('./api/alert-show-assets'));
 router.use(require('./api/fonts'));
 router.use(require('./api/separation'));
+router.use(require('./api/mac-beta-diag'));
 
 // ─── 本地檔案上傳 ───
 router.post('/upload', requirePin, upload.array('files', 50), async (req, res) => {
@@ -202,10 +204,12 @@ router.post('/upload', requirePin, upload.array('files', 50), async (req, res) =
     const duration = Date.now() - start;
     log.info(`上傳處理完成: ${results.length} 首歌曲 (${duration}ms)`);
     log.perf('upload', duration, { trackCount: results.length });
+    macBetaDiagnostics.milestone('local_import', results.length ? 'ok' : 'failed');
     res.json({ success: true, tracks: results, warnings });
   } catch (err) {
     const duration = Date.now() - start;
     log.error(`上傳處理失敗 (${duration}ms)`, err);
+    macBetaDiagnostics.milestone('local_import', 'failed');
     res.status(500).json({ error: '檔案處理失敗', details: err.message });
   }
 });

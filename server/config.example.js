@@ -77,6 +77,8 @@ module.exports = {
   // 不送固定安裝 ID、歌名、歌詞、歌單、帳號、硬體或裝置資訊；可在程式設定內關閉。
   usageEndpoint: 'https://elitesand-pro-usage.elitesand.workers.dev/api/v1/usage',
   anonymousUsageEnabled: true,
+  // Mac 內測版專用的自動診斷回報（只在 Mac 內測版、上面的開關開著、看過告知後才送）。
+  macBetaDiagEndpoint: 'https://elitesand-pro-mac-beta-diag.elitesand.workers.dev/api/v1/diag',
 
   // ─── 歌詞偏移社群回饋 ───
   // 跟上面的「匿名活躍統計」是兩個獨立功能，不要混為一談：這裡會送出 YouTube 影片 ID
