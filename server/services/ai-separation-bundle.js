@@ -34,13 +34,13 @@ const BANDS = {
 };
 
 // macOS（Apple Silicon）：Python（python-build-standalone 25MB ＋ 套件 wheel 約 290MB）＋ Kim 主模型
-// （約 870MB），不含 CUDA、也不裝 WebGPU 模型。依下載量切相位帶；安裝後約 2.2GB（套件解開約 1.2GB）。
+// （約 870MB），不含 CUDA、也不裝 WebGPU 模型。依下載量切相位帶；安裝後約 2.4GB（CI 實測 runtime 1.51GB＋模型約 0.87GB）。
 const MAC_BANDS = {
   python: [0, 27],
   'primary-model': [27, 100],
 };
 const MAC_EXPECTED_DOWNLOAD_BYTES = 1_190_000_000;
-const MAC_EXPECTED_INSTALLED_BYTES = 2_200_000_000;
+const MAC_EXPECTED_INSTALLED_BYTES = 2_400_000_000;
 const MAC_REQUIRED_FREE_BYTES = 5 * 1024 * 1024 * 1024;
 
 let platform = process.platform;
