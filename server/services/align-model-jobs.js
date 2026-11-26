@@ -18,6 +18,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { createLogger } = require('../utils/logger');
 const provider = require('./align-runtime-provider');
+const preciseSync = require('./precise-sync');
 
 const log = createLogger('AlignModel');
 
@@ -92,7 +93,7 @@ function ensureProcess(files) {
       pending.delete(msg.id);
       clearTimeout(entry.timer);
       if (msg.ok) entry.resolve(msg);
-      else entry.reject(new Error(msg.error || 'WORKER_ERROR'));
+      else entry.reject(Object.assign(new Error(msg.error || 'WORKER_ERROR'), { code: 'WORKER_ERROR' }));
     }
   });
   child.stderr.setEncoding('utf8');
@@ -144,17 +145,46 @@ function enqueue(fn) {
   return run;
 }
 
+/** 回應的粗分類（給 Mac 內測診斷）：只有類別，不含任何歌詞或時間值 */
+function verdictOf(op, res) {
+  if (!res) return 'none';
+  if (op === 'lines') return Object.keys(res.onsets || {}).length ? 'aligned' : 'none';
+  const results = Object.values(res.results || {});
+  if (results.some((r) => preciseSync.modelPasses(r))) return 'confident';
+  if (results.some((r) => r && Number.isFinite(r.peakZ))) return 'low_confidence';
+  return 'too_few_units';
+}
+
+function reportDiag(op, files, samples, startedAt, res, err) {
+  try {
+    const message = err ? String(err.message || '') : '';
+    require('./mac-beta-diagnostics').preciseSync({
+      op,
+      ok: !err,
+      code: err ? (err.code || (/^WORKER_[A-Z0-9_]+$/.test(message) ? message : null)) : null,
+      verdict: verdictOf(op, res),
+      device: files.device,
+      audioSeconds: samples && samples.length ? samples.length / 16000 : 0,
+      elapsedMs: Date.now() - startedAt,
+    });
+  } catch (_) { /* 診斷不影響對時 */ }
+}
+
 async function request(op, payload, samples, cacheKey) {
   const files = provider.getInstalled();
   if (!files) return null;
   return enqueue(async () => {
     clearIdle();
+    const startedAt = Date.now();
     try {
       ensureProcess(files);
       const pcm = writePcm(samples, cacheKey);
-      return await send({ op, pcm, cacheKey, ...payload });
+      const res = await send({ op, pcm, cacheKey, ...payload });
+      reportDiag(op, files, samples, startedAt, res, null);
+      return res;
     } catch (err) {
       log.warn(`精準對時 ${op} 失敗：${err.message}`);
+      reportDiag(op, files, samples, startedAt, null, err);
       return null;
     } finally {
       if (proc) armIdle();
@@ -178,4 +208,4 @@ function isRunning() {
   return !!proc;
 }
 
-module.exports = { analyzeGlobal, alignLines, stop, isRunning, IDLE_MS };
+module.exports = { analyzeGlobal, alignLines, stop, isRunning, IDLE_MS, _verdictOf: verdictOf };

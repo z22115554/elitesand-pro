@@ -27,3 +27,12 @@ they are not retroactively proven by a new lock. Section revision 3 performs
 package repair without downloading all models again. Real Windows/GPU
 installation and inference validation is still required. Dependency locks
 do not grant extra rights to research model weights.
+
+macOS arm64 / CPython 3.12 (python-build-standalone, pinned in
+python-mac-runtime-trust.js): ai-mac-arm64-py312.lock (AI separation) and
+align-mac-arm64-py312.lock (precise sync: CPU onnxruntime with the same
+versions as the Windows list in align-runtime-provider.js). Both are installed
+with --require-hashes --no-deps --only-binary=:all: from PyPI only. Bump the
+r-number in MAC_RUNTIME_ID / MAC_ALIGN_RUNTIME_ID when changing either lock.
+Intel Macs are not covered: torch, onnxruntime >= 1.24 and sentencepiece
+0.2.3 publish no macOS x86_64 wheels.

@@ -102,3 +102,7 @@ test-results/
 # 更新控制平面的本機產物：發版時用 tools/update-publisher 產生／上傳到 R2，
 # repo 裡留著只會跟線上狀態不同步（現況是空計畫）。
 cloudflare/update-worker/control/
+
+# Python 執行時自動產生的位元組碼（不進版控）
+__pycache__/
+*.pyc

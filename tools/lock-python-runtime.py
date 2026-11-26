@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintainer-only Windows CPython 3.11 locks plus the macOS arm64 AI lock. --check is offline."""
+"""Maintainer-only Windows CPython 3.11 locks plus the macOS arm64 locks. --check is offline."""
 import argparse
 import hashlib
 import json
@@ -12,8 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCKS = ROOT / 'server/services/python-locks'
 GROUPS = ('bootstrap', 'ai', 'section', 'practice-pitch')
 # macOS arm64 / CPython 3.12 (python-build-standalone). diffq is Demucs-only and has no
-# cp312 macOS wheel, so it is excluded; the app installs this lock with --no-deps --only-binary.
-MAC_GROUPS = {'ai-mac': 'ai-mac-arm64-py312.lock'}
+# cp312 macOS wheel, so it is excluded; the app installs these locks with --no-deps --only-binary.
+# align-mac is the precise-sync runtime (CPU onnxruntime); it does not need the AI separation lock.
+MAC_GROUPS = {'ai-mac': 'ai-mac-arm64-py312.lock', 'align-mac': 'align-mac-arm64-py312.lock'}
 
 def digest(file):
     return hashlib.sha256(file.read_bytes()).hexdigest()

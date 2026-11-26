@@ -32,6 +32,8 @@ const COMPONENTS = Object.freeze({
   runtime_install: Object.freeze(['ok', 'unsupported', 'disk_full', 'download_failed', 'hash_mismatch', 'extract_failed', 'pip_failed', 'cancelled', 'other']),
   primary_model: Object.freeze(['ok', 'download_failed', 'verify_failed', 'cancelled', 'other']),
   python_exec: Object.freeze(['ok', 'failed', 'missing']),
+  // 精準對時元件（Mac，CPU）的安裝結果
+  align_install: Object.freeze(['ok', 'unsupported', 'disk_full', 'download_failed', 'hash_mismatch', 'extract_failed', 'pip_failed', 'model_failed', 'warmup_failed', 'cancelled', 'other']),
 });
 
 const IMPORT_CODES = Object.freeze([
@@ -65,6 +67,12 @@ const SPEED_TIERS = Object.freeze(['lt0.25', '0.25-0.5', '0.5-1', '1-2', '2-4', 
 const PITCH_RESULTS = Object.freeze(['ok', 'vocals_required', 'python_missing', 'analysis_failed', 'timeout', 'invalid_output', 'other']);
 const PITCH_ALGORITHMS = Object.freeze(['yin', 'torchcrepe', 'none']);
 const TIME_TIERS = Object.freeze(['lt10s', '10-30s', '30-60s', '1-3m', '3m+']);
+// 精準對時一次請求（整首偏移 global／逐句對齊 lines）
+const PRECISE_OPS = Object.freeze(['global', 'lines']);
+const PRECISE_RESULTS = Object.freeze(['ok', 'timeout', 'worker_exit', 'worker_error', 'python_missing', 'other']);
+// global：模型給的偏移是否過了信心門檻；lines：有沒有對到任何一句
+const PRECISE_VERDICTS = Object.freeze(['confident', 'low_confidence', 'too_few_units', 'aligned', 'none']);
+const PRECISE_DEVICES = Object.freeze(['cpu', 'dml', 'none']);
 
 const ERROR_KINDS = Object.freeze(['uncaught', 'unhandled_rejection', 'incident']);
 const ERROR_CODE_RE = /^[A-Za-z0-9_]{1,40}$/;
@@ -81,6 +89,7 @@ const EVENT_KEYS = Object.freeze({
   error: Object.freeze(['type', 'kind', 'code', 'module']),
   separation: Object.freeze(['type', 'result', 'device', 'cpuFallback', 'lengthTier', 'speedTier', 'deviceLost']),
   pitch_guide: Object.freeze(['type', 'result', 'algorithm', 'timeTier']),
+  precise_sync: Object.freeze(['type', 'op', 'result', 'verdict', 'device', 'lengthTier', 'speedTier']),
 });
 
 function isInt(value, min, max) {
@@ -114,6 +123,9 @@ function validEvent(event) {
         && SPEED_TIERS.includes(event.speedTier) && typeof event.deviceLost === 'boolean';
     case 'pitch_guide':
       return PITCH_RESULTS.includes(event.result) && PITCH_ALGORITHMS.includes(event.algorithm) && TIME_TIERS.includes(event.timeTier);
+    case 'precise_sync':
+      return PRECISE_OPS.includes(event.op) && PRECISE_RESULTS.includes(event.result) && PRECISE_VERDICTS.includes(event.verdict)
+        && PRECISE_DEVICES.includes(event.device) && LENGTH_TIERS.includes(event.lengthTier) && SPEED_TIERS.includes(event.speedTier);
     case 'error':
       return ERROR_KINDS.includes(event.kind) && typeof event.code === 'string' && ERROR_CODE_RE.test(event.code)
         && typeof event.module === 'string' && MODULE_RE.test(event.module);
@@ -205,5 +217,6 @@ module.exports = {
   SCHEMA_VERSION, MAX_EVENTS_PER_BATCH, MAX_BODY_BYTES, MAX_COUNT,
   ARCHES, CHIPS, MEM_TIERS, GPU_VENDORS, COMPONENTS, MILESTONES, ERROR_KINDS, EVENT_KEYS,
   SEPARATION_RESULTS, SEPARATION_DEVICES, LENGTH_TIERS, SPEED_TIERS, PITCH_RESULTS, PITCH_ALGORITHMS, TIME_TIERS,
+  PRECISE_OPS, PRECISE_RESULTS, PRECISE_VERDICTS, PRECISE_DEVICES,
   validEvent, validPayload, memTier, gpuVendor, errorCode, errorModule, lengthTier, speedTier, timeTier,
 };

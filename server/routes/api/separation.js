@@ -324,16 +324,20 @@ router.get('/align-model/runtime-status', (req, res) => {
   res.json({
     available: !!installed,
     device: installed ? installed.device : null,
-    supported: process.platform === 'win32',
+    // supported／unsupportedReason／platform；Mac 另外帶照實的下載與安裝後大小
+    ...alignRuntimeProvider.getStatusInfo(),
     ...alignRuntimeProvider.getDownloadStatus(),
   });
 });
 
-// 觸發網路下載（Python＋套件約 45MB、模型 51–90MB）＋寫入本機檔案，依鐵則 15 手動掛 requirePin。
-// 立刻回應，進度由前端輪詢 runtime-status。
+// 觸發網路下載（Windows：Python＋套件約 45MB、模型 51–90MB；Mac：Python＋套件約 57MB、int8 模型 51MB）
+// ＋寫入本機檔案，依鐵則 15 手動掛 requirePin。立刻回應，進度由前端輪詢 runtime-status。
 router.post('/align-model/runtime/download', requirePin, (req, res) => {
   if (alignRuntimeProvider.isAvailable()) return res.json({ ok: true, alreadyAvailable: true });
-  if (process.platform !== 'win32') return res.status(400).json({ ok: false, reason: 'UNSUPPORTED_PLATFORM' });
+  const support = alignRuntimeProvider.platformSupport();
+  if (!support.supported) {
+    return res.status(400).json({ ok: false, reason: process.platform === 'darwin' ? 'MAC_UNSUPPORTED' : 'UNSUPPORTED_PLATFORM', unsupportedReason: support.reason });
+  }
   alignRuntimeProvider.downloadRuntime({}).catch((err) => log.error('精準對時元件下載失敗', err));
   res.json({ ok: true, started: true });
 });

@@ -25,8 +25,9 @@ const { execFile } = require('child_process');
 const fields = require('./mac-beta-diag-fields');
 
 const STATE_SCHEMA_VERSION = 1;
-// 告知內容改版（多了分離與練唱音高線的結果與耗時級距）就加一：之前按過舊版的人要再看一次
-const NOTICE_VERSION = 2;
+// 告知內容改版就加一：之前按過舊版的人要再看一次
+// （2：多了分離與練唱音高線的結果與耗時級距；3：多了精準對時元件的安裝結果與每次精準對時的結果）
+const NOTICE_VERSION = 3;
 const TIMEOUT_MS = 3500;
 const FLUSH_DELAY_MS = 5000;
 const MAX_QUEUE = 40;
@@ -325,6 +326,32 @@ function createMacBetaDiagnostics(options = {}) {
     return enqueue({ type: 'pitch_guide', result, algorithm, timeTier: fields.timeTier(data.elapsedMs) });
   }
 
+  /**
+   * 精準對時一次請求的結果。info：{ op, ok, code, verdict, device, audioSeconds, elapsedMs }
+   * 只轉成類別與級距；不送歌名、歌詞或路徑（呼叫端也只傳這幾個欄位）。
+   */
+  function preciseSync(info) {
+    if (!collecting()) return false;
+    const data = info && typeof info === 'object' ? info : {};
+    if (!fields.PRECISE_OPS.includes(data.op)) return false;
+    const code = String(data.code || '');
+    const result = data.ok ? 'ok'
+      : code === 'WORKER_TIMEOUT' ? 'timeout'
+      : code === 'WORKER_STOPPED' || /^WORKER_EXIT_/.test(code) ? 'worker_exit'
+      : code === 'ENOENT' ? 'python_missing'
+      : code === 'WORKER_ERROR' ? 'worker_error'
+      : 'other';
+    return enqueue({
+      type: 'precise_sync',
+      op: data.op,
+      result,
+      verdict: data.ok && fields.PRECISE_VERDICTS.includes(data.verdict) ? data.verdict : 'none',
+      device: fields.PRECISE_DEVICES.includes(data.device) ? data.device : 'none',
+      lengthTier: fields.lengthTier(data.audioSeconds),
+      speedTier: data.ok ? fields.speedTier(data.elapsedMs, data.audioSeconds) : 'unknown',
+    });
+  }
+
   async function pythonExecCode() {
     let runtime;
     try { runtime = require('./ai-runtime-provider'); } catch (_) { return null; }
@@ -453,7 +480,7 @@ function createMacBetaDiagnostics(options = {}) {
 
   return {
     isMacBeta, available, collecting, getStatus, acknowledgeNotice, start, flush,
-    component, milestone, reportError, gpu, separation, pitchGuide, attachToUsageTelemetry,
+    component, milestone, reportError, gpu, separation, pitchGuide, preciseSync, attachToUsageTelemetry,
     _queue: () => queue.slice(), _resetForTests: resetForTests,
   };
 }

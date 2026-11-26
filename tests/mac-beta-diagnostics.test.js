@@ -244,7 +244,9 @@ test('用戶端白名單與 Worker 的驗證一致（Worker 原始碼只在私�
   assert.equal(worker.SCHEMA_VERSION, fields.SCHEMA_VERSION);
   assert.equal(worker.MAX_EVENTS_PER_BATCH, fields.MAX_EVENTS_PER_BATCH);
   assert.equal(worker.MAX_BODY_BYTES, fields.MAX_BODY_BYTES);
-  for (const name of ['ARCHES', 'CHIPS', 'MEM_TIERS', 'GPU_VENDORS', 'ERROR_KINDS']) assert.deepEqual([...worker[name]], [...fields[name]], name);
+  for (const name of ['ARCHES', 'CHIPS', 'MEM_TIERS', 'GPU_VENDORS', 'ERROR_KINDS',
+    'SEPARATION_RESULTS', 'SEPARATION_DEVICES', 'LENGTH_TIERS', 'SPEED_TIERS', 'PITCH_RESULTS', 'PITCH_ALGORITHMS', 'TIME_TIERS',
+    'PRECISE_OPS', 'PRECISE_RESULTS', 'PRECISE_VERDICTS', 'PRECISE_DEVICES']) assert.deepEqual([...worker[name]], [...fields[name]], name);
   for (const name of ['COMPONENTS', 'MILESTONES', 'EVENT_KEYS']) {
     assert.deepEqual(JSON.parse(JSON.stringify(worker[name])), JSON.parse(JSON.stringify(fields[name])), name);
   }
@@ -286,4 +288,59 @@ test('告知改版後，按過舊版的人要再看一次', () => {
   const h = harness();
   fs.writeFileSync(path.join(h.dataDir, 'mac-beta-diag.json'), JSON.stringify({ schemaVersion: 1, installId: 'a'.repeat(32), noticeAckAt: '2026-11-01T00:00:00Z', counts: {} }));
   assert.equal(h.diag.getStatus().noticeRequired, true);
+});
+
+test('精準對時的診斷：安裝結果與每次請求只送類別與級距，並通過白名單', async () => {
+  const h = harness();
+  await ackAndFlush(h);
+  h.diag.component('align_install', 'ok');
+  assert.equal(h.diag.component('align_install', 'ValueError: /Users/a'), false);
+  h.diag.preciseSync({ op: 'global', ok: true, verdict: 'confident', device: 'cpu', audioSeconds: 200, elapsedMs: 20000 });
+  h.diag.preciseSync({ op: 'lines', ok: false, code: 'WORKER_TIMEOUT', verdict: 'aligned', device: 'cpu', audioSeconds: 400, elapsedMs: 240000 });
+  h.diag.preciseSync({ op: 'lines', ok: false, code: 'WORKER_EXIT_1', device: 'cpu', audioSeconds: 30, elapsedMs: 10 });
+  h.diag.preciseSync({ op: 'global', ok: false, code: 'WORKER_ERROR', device: 'Apple M2', audioSeconds: NaN, elapsedMs: 10 });
+  assert.equal(h.diag.preciseSync({ op: 'warmup', ok: true }), false, '只回報 global／lines');
+  await h.diag.flush();
+  const events = h.calls.flatMap((c) => c.body.events);
+  for (const call of h.calls) { assert.equal(fields.validPayload(call.body), true); assertNoFreeText(call.body); }
+  assert.deepEqual(events.filter((e) => e.type === 'precise_sync'), [
+    { type: 'precise_sync', op: 'global', result: 'ok', verdict: 'confident', device: 'cpu', lengthTier: '3-5m', speedTier: 'lt0.25' },
+    { type: 'precise_sync', op: 'lines', result: 'timeout', verdict: 'none', device: 'cpu', lengthTier: '5-8m', speedTier: 'unknown' },
+    { type: 'precise_sync', op: 'lines', result: 'worker_exit', verdict: 'none', device: 'cpu', lengthTier: 'lt1m', speedTier: 'unknown' },
+    { type: 'precise_sync', op: 'global', result: 'worker_error', verdict: 'none', device: 'none', lengthTier: 'unknown', speedTier: 'unknown' },
+  ]);
+  assert.ok(events.some((e) => e.type === 'component' && e.name === 'align_install' && e.code === 'ok'));
+});
+
+test('Windows／非內測版：精準對時的診斷完全不動作', async () => {
+  const h = harness({ platform: 'win32' });
+  await ackAndFlush(h);
+  assert.equal(h.diag.preciseSync({ op: 'global', ok: true, verdict: 'confident', device: 'dml', audioSeconds: 200, elapsedMs: 2000 }), false);
+  assert.equal(h.diag.component('align_install', 'ok'), false);
+  await h.diag.flush();
+  assert.equal(h.calls.length, 0);
+});
+
+test('按過第 2 版告知（還沒有精準對時那一項）的人要再看一次', () => {
+  const h = harness();
+  fs.writeFileSync(path.join(h.dataDir, 'mac-beta-diag.json'), JSON.stringify({ schemaVersion: 1, installId: 'a'.repeat(32), noticeAckAt: '2026-11-20T00:00:00Z', noticeVersion: 2, counts: {} }));
+  assert.equal(h.diag.getStatus().noticeRequired, true);
+  const notice = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8').split('\n').find((l) => l.includes("'macBetaDiag.collects':"));
+  const texts = JSON.parse(notice.slice(notice.indexOf('['), notice.lastIndexOf(']') + 1));
+  assert.equal(texts.length, 5);
+  for (const [i, word] of ['精準對時', 'precise sync', '精密同期', '정밀 싱크', '精准对时'].entries()) assert.ok(texts[i].includes(word), word);
+});
+
+test('Worker 的資料表：最新 migration 允許的事件類型跟白名單一致，初始那支沒被改', (t) => {
+  const dir = path.join(__dirname, '..', 'cloudflare', 'mac-beta-diag-worker', 'migrations');
+  if (!fs.existsSync(dir)) { t.skip('公開倉沒有 cloudflare/'); return; }
+  const files = fs.readdirSync(dir).filter((f) => /^\d{4}_.+\.sql$/.test(f)).sort();
+  const allowed = (file) => {
+    const m = /event_type IN \(([^)]*)\)/.exec(fs.readFileSync(path.join(dir, file), 'utf8'));
+    return m ? m[1].split(',').map((x) => x.trim().replace(/'/g, '')).sort() : null;
+  };
+  const latest = [...files].reverse().find((f) => allowed(f));
+  assert.deepEqual(allowed(latest), Object.keys(fields.EVENT_KEYS).sort());
+  assert.deepEqual(allowed(files[0]), ['component', 'error', 'gpu', 'launch', 'milestone', 'pitch_guide', 'separation'],
+    '已部署的 Worker 已經套用過 0001，新的事件類型要用新的 migration');
 });

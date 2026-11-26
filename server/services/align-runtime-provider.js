@@ -13,6 +13,12 @@
  * 對時不用再等那一分鐘）；顯示卡跑不起來才改下載 int8。
  *
  * 獨立環境 dataDir/align-runtime/，不跟 AI 分離或段落分析共用（理由同 section-runtime-provider.js）。
+ *
+ * macOS（Apple Silicon＋macOS 14 以上）：Python 用跟 AI 分離同一個釘死的 python-build-standalone
+ * （python-mac-runtime-trust.js），但裝在 align-runtime 自己的資料夾——沒裝 1.2GB 人聲分離元件包的人
+ * 也能單獨裝。套件是 python-locks/align-mac-arm64-py312.lock（CPU 版 onnxruntime，--require-hashes
+ * --no-deps --only-binary）。只用 int8 模型＋CPUExecutionProvider：fp16 只給 DirectML，Mac 不試 CoreML。
+ * Intel Mac 不支援：onnxruntime 1.24 起與 sentencepiece 0.2.3 都沒有 macOS x86_64 wheel。
  */
 'use strict';
 
@@ -31,7 +37,11 @@ const {
   parseToolProgress,
   PYTHON_EMBED_URL,
   PYTHON_EMBED_SHA256,
+  fetchMacPython,
+  macSupport,
+  pythonExeFor,
 } = require('./ai-runtime-provider');
+const { MAC_ALIGN_RUNTIME_ID } = require('./python-mac-runtime-trust');
 const { resolveAiScriptDir } = require('./ai-separation');
 const packageTrust = require('./python-package-trust');
 
@@ -39,7 +49,8 @@ const log = createLogger('AlignRuntimeProvider');
 
 const RUNTIME_DIR = path.join(dataDir, 'align-runtime');
 const PYTHON_DIR = path.join(RUNTIME_DIR, 'python');
-const PYTHON_EXE = path.join(PYTHON_DIR, 'python.exe');
+// Windows：embeddable 的 python.exe；Mac：python-build-standalone 的 bin/python3
+const PYTHON_EXE = pythonExeFor(process.platform, PYTHON_DIR);
 const MODEL_ROOT = path.join(RUNTIME_DIR, 'model');
 const MARKER_FILE = path.join(RUNTIME_DIR, '.installed.json');
 const REQUIREMENTS_FILE = path.join(RUNTIME_DIR, 'requirements.txt');
@@ -63,6 +74,15 @@ const PIP_REQUIREMENTS = [
   'sympy==1.14.0 --hash=sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5',
 ];
 const PACKAGES_REVISION = 1;
+
+// ─── macOS（Apple Silicon）───
+// 套件在 python-locks/align-mac-arm64-py312.lock；改鎖定清單時把 MAC_ALIGN_RUNTIME_ID 的 r 加一。
+const MAC_PACKAGES_REVISION = 1;
+// 2026-11-26 以實際檔案估：Python 25.4MB＋9 個 wheel 31.9MB＋int8 模型 50.5MB；
+// 解開後 Python 67MB＋套件 122MB＋模型 63MB（pip 另外會編 .pyc）。CI 實測後更新。
+const MAC_EXPECTED_DOWNLOAD_BYTES = 108 * 1000 * 1000;
+const MAC_EXPECTED_INSTALLED_BYTES = 290 * 1000 * 1000;
+const MAC_REQUIRED_DISK_BYTES = 600 * 1000 * 1000; // 安裝後約 290MB＋下載暫存約 110MB，留寬一點
 
 const MODEL_RELEASE = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models';
 const MODELS = {
@@ -105,9 +125,30 @@ function modelFiles(device) {
 }
 
 /** 裝好、而且是目前這版套件組合。回傳要用哪一份模型（device／檔案路徑）；沒裝好回 null。 */
+function expectedMarker(platform = process.platform) {
+  return platform === 'darwin'
+    ? { pythonEmbedVersion: MAC_ALIGN_RUNTIME_ID, packagesRevision: MAC_PACKAGES_REVISION }
+    : { pythonEmbedVersion: PYTHON_EMBED_VERSION, packagesRevision: PACKAGES_REVISION };
+}
+
+function markerMatches(marker, platform = process.platform) {
+  const expected = expectedMarker(platform);
+  return !!marker && marker.pythonEmbedVersion === expected.pythonEmbedVersion && marker.packagesRevision === expected.packagesRevision;
+}
+
+/**
+ * 這台電腦能不能裝精準對時：Windows 一律可以（既有行為）；Mac 只有 Apple Silicon＋macOS 14 以上
+ * （條件跟 AI 分離相同，onnxruntime 1.24.4 的 wheel 是 macosx_14_0_arm64）。回傳 { supported, reason }。
+ */
+function platformSupport({ platform = process.platform, arch = process.arch, release } = {}) {
+  if (platform === 'win32') return { supported: true, reason: null };
+  if (platform !== 'darwin') return { supported: false, reason: 'not_mac' };
+  return macSupport({ platform, arch, ...(release === undefined ? {} : { release }) });
+}
+
 function getInstalled() {
   const marker = readMarker();
-  if (!marker || marker.pythonEmbedVersion !== PYTHON_EMBED_VERSION || marker.packagesRevision !== PACKAGES_REVISION) return null;
+  if (!markerMatches(marker)) return null;
   const files = modelFiles(marker.device);
   if (!files || !fs.existsSync(PYTHON_EXE) || !fs.existsSync(files.model) || !fs.existsSync(files.bpe)) return null;
   return files;
@@ -133,11 +174,11 @@ function workerEnv(files) {
   };
 }
 
-async function downloadModel(device, { onProgress, abortSignal }) {
+async function downloadModel(device, { onProgress, abortSignal, fetchFileImpl = fetchToFile, runPythonStepImpl = runPythonStep }) {
   const m = MODELS[device];
   const tmp = path.join(RUNTIME_DIR, `${m.archive}.download`);
   safeRemove(tmp);
-  const result = await fetchToFile(`${MODEL_RELEASE}/${m.archive}`, tmp, {
+  const result = await fetchFileImpl(`${MODEL_RELEASE}/${m.archive}`, tmp, {
     maxBytes: m.maxBytes,
     abortSignal,
     onProgress: (p) => { setDownloadStatus({ active: true, stage: 'download-model', ...p, error: null }); onProgress?.(getDownloadStatus()); },
@@ -152,7 +193,7 @@ async function downloadModel(device, { onProgress, abortSignal }) {
   fs.mkdirSync(MODEL_ROOT, { recursive: true });
   // tar.bz2：Node 沒有內建 bzip2，交給剛裝好的 Python（tarfile 的 'data' 過濾器擋掉
   // 絕對路徑、跳出目標資料夾、裝置檔與連結）。
-  await runPythonStep(['-c', 'import sys, tarfile\nwith tarfile.open(sys.argv[1], "r:bz2") as t:\n    t.extractall(sys.argv[2], filter="data")',
+  await runPythonStepImpl(['-c', 'import sys, tarfile\nwith tarfile.open(sys.argv[1], "r:bz2") as t:\n    t.extractall(sys.argv[2], filter="data")',
     tmp, MODEL_ROOT], { cwd: RUNTIME_DIR, pythonExe: PYTHON_EXE, timeoutMs: 5 * 60 * 1000, abortSignal });
   safeRemove(tmp);
   const files = modelFiles(device);
@@ -161,15 +202,16 @@ async function downloadModel(device, { onProgress, abortSignal }) {
 }
 
 // 在指定裝置上把模型載入並空跑一次。顯示卡這一步第一次要編譯（約 1 分鐘），之後驅動有快取。
-function warmup(files, { abortSignal } = {}) {
+function warmup(files, { abortSignal, runPythonStepImpl = runPythonStep } = {}) {
   const script = workerScript();
   const code = 'import json, sys\nsys.path.insert(0, sys.argv[1])\nimport align_worker as w\nprint(json.dumps(w.handle({"op": "warmup"})))';
-  return runPythonStep(['-c', code, path.dirname(script)], {
+  return runPythonStepImpl(['-c', code, path.dirname(script)], {
     cwd: RUNTIME_DIR, pythonExe: PYTHON_EXE, timeoutMs: 5 * 60 * 1000, abortSignal, env: workerEnv(files),
   });
 }
 
-async function downloadRuntime({ onProgress, abortSignal, platform = process.platform, forceCpu = false } = {}) {
+async function downloadRuntime({ onProgress, abortSignal, platform = process.platform, forceCpu = false, ...macOptions } = {}) {
+  if (platform === 'darwin') return downloadMacRuntime({ onProgress, abortSignal, ...macOptions });
   if (platform !== 'win32') throw new Error('目前只支援 Windows 的自動下載。');
   if (downloadInFlight) return downloadInFlight;
   downloadInFlight = (async () => {
@@ -283,6 +325,142 @@ async function downloadRuntime({ onProgress, abortSignal, platform = process.pla
   }
 }
 
+function cancelledError() {
+  return Object.assign(new Error('安裝已取消'), { code: 'CANCELLED' });
+}
+
+/** Mac 內測版診斷（只有類別）；Windows 與非內測版在 mac-beta-diagnostics 裡就不動作 */
+function reportMacInstall(code) {
+  try { require('./mac-beta-diagnostics').component('align_install', code); } catch (_) { /* 診斷不影響安裝 */ }
+}
+
+/** 安裝失敗 → 診斷白名單代碼（只看錯誤代碼與失敗的階段，不看訊息內容） */
+function classifyMacInstallError(err) {
+  const code = err && err.code;
+  if (code === 'CANCELLED') return 'cancelled';
+  if (code === 'MAC_UNSUPPORTED') return 'unsupported';
+  if (code === 'DISK_FULL') return 'disk_full';
+  if (code === 'HASH_MISMATCH') return 'hash_mismatch';
+  if (code === 'EXTRACT_FAILED') return 'extract_failed';
+  switch (err && err.stage) {
+    case 'download-python': return 'download_failed';
+    case 'verify-python': return 'hash_mismatch';
+    case 'extract': return 'extract_failed';
+    case 'install-packages': return 'pip_failed';
+    case 'download-model': case 'extract-model': return 'model_failed';
+    case 'warmup': return 'warmup_failed';
+    default: return 'other';
+  }
+}
+
+/**
+ * macOS（Apple Silicon）：python-build-standalone＋align-mac 鎖定清單＋int8 模型，只走 CPU。
+ * 跟 Windows 同一套原則：Python 與套件先裝在 python.download，全部成功才 rename 進正式路徑；
+ * 模型驗 SHA-256；最後在 CPU 上空跑一次才寫入 device。任何一步失敗或取消都清掉半成品
+ * （已經完整裝好的 Python 保留，下次重試只補模型）。
+ */
+async function downloadMacRuntime({
+  onProgress, abortSignal, fetchFileImpl = fetchToFile, runPythonStepImpl = runPythonStep,
+  inspectDiskSpaceImpl = inspectDiskSpace, extractImpl, stripQuarantineImpl, supportImpl = platformSupport, warmupImpl = warmup,
+} = {}) {
+  const support = supportImpl({ platform: 'darwin' });
+  if (!support.supported) {
+    const err = Object.assign(new Error(support.reason === 'intel'
+      ? '這台 Mac 不支援精準對時：需要 Apple Silicon（M 系列）晶片。'
+      : '這台 Mac 不支援精準對時：需要 macOS 14 以上。'), { code: 'MAC_UNSUPPORTED', reason: support.reason });
+    setDownloadStatus({ active: false, stage: 'error', error: err.message, errorCode: err.code });
+    reportMacInstall('unsupported');
+    throw err;
+  }
+  if (downloadInFlight) return downloadInFlight;
+  downloadInFlight = (async () => {
+    if (isAvailable()) {
+      setDownloadStatus({ active: false, stage: 'done', percent: 100, error: null, errorCode: null });
+      return { ok: true, ...getInstalled() };
+    }
+    const tmpTar = path.join(RUNTIME_DIR, 'python-mac.download.tar.gz');
+    const tmpRoot = path.join(RUNTIME_DIR, 'python.download');
+    const model = MODELS.cpu;
+    let stage = 'start';
+    const progress = (nextStage, extra = {}) => {
+      if (abortSignal?.aborted && nextStage !== 'done') throw cancelledError();
+      stage = nextStage;
+      setDownloadStatus({ active: nextStage !== 'done', stage: nextStage, error: null, errorCode: null, ...extra });
+      log.info(`精準對時元件（Mac）安裝階段：${nextStage}`);
+      onProgress?.(getDownloadStatus());
+    };
+    try {
+      fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+      safeRemove(tmpTar);
+      safeRemove(tmpRoot);
+      progress('disk-space-check');
+      const disk = inspectDiskSpaceImpl(RUNTIME_DIR, { thresholdBytes: MAC_REQUIRED_DISK_BYTES });
+      if (disk.known && disk.low) {
+        throw Object.assign(new Error(`磁碟空間不足：需要約 ${Math.round(MAC_REQUIRED_DISK_BYTES / 1e6)}MB，目前可用約 ${Math.round(disk.freeBytes / 1024 / 1024)}MB。`), { code: 'DISK_FULL' });
+      }
+
+      const pythonReady = markerMatches(readMarker(), 'darwin') && fs.existsSync(PYTHON_EXE);
+      if (!pythonReady) {
+        const { tmpPythonDir, tmpPythonExe } = await fetchMacPython({
+          tmpTar, tmpRoot, progress, fetchFileImpl, extractImpl, stripQuarantineImpl, abortSignal,
+          onDownloadProgress: (p) => { setDownloadStatus({ active: true, stage: 'download-python', ...p, error: null }); onProgress?.(getDownloadStatus()); },
+        });
+        progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
+        await runPythonStepImpl(packageTrust.macInstallArgs('align-mac', tmpRoot), {
+          cwd: tmpRoot,
+          pythonExe: tmpPythonExe,
+          timeoutMs: 15 * 60 * 1000,
+          abortSignal,
+          onOutput: (text) => {
+            const p = parseToolProgress(text);
+            if (Object.keys(p).length) { setDownloadStatus({ active: true, stage: 'install-packages', error: null, ...p }); onProgress?.(getDownloadStatus()); }
+          },
+        });
+        progress('install-python');
+        safeRemove(PYTHON_DIR);
+        fs.renameSync(tmpPythonDir, PYTHON_DIR);
+        fs.writeFileSync(MARKER_FILE, JSON.stringify(expectedMarker('darwin'), null, 2), 'utf8');
+      }
+
+      progress('download-model', { detail: 'cpu', downloadedBytes: 0, totalBytes: null, percent: 0 });
+      const files = await downloadModel('cpu', { onProgress, abortSignal, fetchFileImpl, runPythonStepImpl });
+      progress('warmup', { detail: 'cpu' });
+      await warmupImpl(files, { abortSignal, runPythonStepImpl });
+
+      fs.writeFileSync(MARKER_FILE, JSON.stringify({
+        ...expectedMarker('darwin'),
+        device: files.device,
+        installedAt: new Date().toISOString(),
+      }, null, 2), 'utf8');
+      progress('done', { active: false, percent: 100, detail: files.device });
+      log.info(`精準對時元件（Mac，CPU）安裝完成：${RUNTIME_DIR}`);
+      reportMacInstall('ok');
+      return { ok: true, ...files };
+    } catch (err) {
+      err.stage = err.stage || stage;
+      // 模型或空跑沒完成：模型資料夾與下載暫存都不留（Python 若已完整裝好就保留）
+      safeRemove(path.join(RUNTIME_DIR, `${model.archive}.download`));
+      safeRemove(path.join(MODEL_ROOT, model.dir));
+      if (err.code === 'CANCELLED') {
+        setDownloadStatus({ active: false, stage: 'cancelled', error: null, errorCode: 'CANCELLED' });
+      } else {
+        setDownloadStatus({ active: false, stage: 'error', error: err.message.split('\n')[0], errorCode: err.code || null });
+        log.error(`精準對時元件（Mac）安裝失敗（stage=${err.stage}）`, err);
+      }
+      reportMacInstall(classifyMacInstallError(err));
+      throw err;
+    } finally {
+      safeRemove(tmpTar);
+      safeRemove(tmpRoot);
+    }
+  })();
+  try {
+    return await downloadInFlight;
+  } finally {
+    downloadInFlight = null;
+  }
+}
+
 let autoInstallAttempted = false;
 
 function isInstalling() {
@@ -291,16 +469,19 @@ function isInstalling() {
 
 /**
  * 不用使用者按的背景安裝：AI 伴奏元件裝完時、或已經裝好人聲分離的人第一次對中文歌自動對時時。
+ * Mac 跟 Windows 同一套時機（都是使用者已經裝了人聲分離之後），只是裝的是 CPU 版。
  * 不在程式啟動時自動下載：最後一步要在顯示卡上編譯約 1 分鐘，直播中可能讓 OBS 掉幀。
  * 每次啟動程式最多自動試一次，失敗就等使用者在設定頁按重試。回傳是否正在安裝。
  */
-function autoInstall(reason, { platform = process.platform } = {}) {
-  if (platform !== 'win32' || isAvailable()) return false;
+function autoInstall(reason, { platform = process.platform, supportImpl = platformSupport, downloadImpl = downloadRuntime } = {}) {
+  // Windows 照舊；Mac 只在 Apple Silicon＋macOS 14 以上才試（Intel、舊版 macOS 一律不下載）
+  if (platform !== 'win32' && !(platform === 'darwin' && supportImpl({ platform }).supported)) return false;
+  if (isAvailable()) return false;
   if (downloadInFlight) return true;
   if (autoInstallAttempted) return false;
   autoInstallAttempted = true;
   log.info(`背景安裝精準對時元件（${reason}）`);
-  downloadRuntime({ platform }).catch((err) => log.warn(`精準對時元件背景安裝失敗：${String(err.message).split('\n')[0]}`));
+  downloadImpl({ platform }).catch((err) => log.warn(`精準對時元件背景安裝失敗：${String(err.message).split('\n')[0]}`));
   return true;
 }
 
@@ -309,6 +490,23 @@ async function switchToCpu(opts = {}) {
   const marker = readMarker();
   if (marker) fs.writeFileSync(MARKER_FILE, JSON.stringify({ ...marker, device: null }, null, 2), 'utf8');
   return downloadRuntime({ ...opts, forceCpu: true });
+}
+
+/**
+ * 設定頁與 runtime-status 用：是否支援、原因、平台與（Mac 上）照實的大小。
+ * Windows 回傳的欄位跟以前一樣是 supported:true，前端顯示不變。
+ */
+function getStatusInfo({ platform = process.platform, supportImpl = platformSupport } = {}) {
+  const support = supportImpl({ platform });
+  const info = { platform, supported: support.supported, unsupportedReason: support.reason };
+  if (platform === 'darwin') {
+    Object.assign(info, {
+      expectedDownloadBytes: MAC_EXPECTED_DOWNLOAD_BYTES,
+      expectedInstalledBytes: MAC_EXPECTED_INSTALLED_BYTES,
+      requiredFreeBytes: MAC_REQUIRED_DISK_BYTES,
+    });
+  }
+  return info;
 }
 
 function resetForTests() {
@@ -325,6 +523,9 @@ module.exports = {
   autoInstall,
   isInstalling,
   getDownloadStatus,
+  getStatusInfo,
+  platformSupport,
+  classifyMacInstallError,
   workerScript,
   workerEnv,
   RUNTIME_DIR,
@@ -334,5 +535,9 @@ module.exports = {
   PIP_REQUIREMENTS,
   PACKAGES_REVISION,
   PYTHON_EMBED_VERSION,
+  MAC_PACKAGES_REVISION,
+  MAC_EXPECTED_DOWNLOAD_BYTES,
+  MAC_EXPECTED_INSTALLED_BYTES,
+  MAC_REQUIRED_DISK_BYTES,
   _resetForTests: resetForTests,
 };

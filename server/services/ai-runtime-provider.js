@@ -690,6 +690,42 @@ function runTool(command, args, { execFileImpl = execFile, timeoutMs = 5 * 60 * 
 }
 
 /**
+ * 下載釘死的 python-build-standalone、驗 SHA-256、用系統 tar 解到 tmpRoot/python。
+ * AI 分離（ai-runtime）與精準對時（align-runtime）各自呼叫，裝在各自的資料夾。
+ * progress(stage, extra) 由呼叫端提供（各自的狀態與取消檢查）；回傳暫存目錄裡的 Python。
+ */
+async function fetchMacPython({
+  tmpTar, tmpRoot, progress, fetchFileImpl = fetchToFile, extractImpl, stripQuarantineImpl, abortSignal, onDownloadProgress,
+}) {
+  progress('download-python', { downloadedBytes: 0, totalBytes: MAC_PYTHON.size, percent: 0 });
+  const result = await fetchFileImpl(MAC_PYTHON.url, tmpTar, {
+    maxBytes: MAX_MAC_PYTHON_BYTES,
+    abortSignal,
+    onProgress: onDownloadProgress,
+  });
+
+  progress('verify-python');
+  if (result.sha256 !== MAC_PYTHON.sha256) {
+    throw Object.assign(new Error(`SHA-256 驗證失敗（預期 ${MAC_PYTHON.sha256.slice(0, 12)}…，實際 ${String(result.sha256).slice(0, 12)}…），已拒絕使用此檔案`), { code: 'HASH_MISMATCH' });
+  }
+
+  progress('extract');
+  fs.mkdirSync(tmpRoot, { recursive: true });
+  // 檔案已通過釘死的 SHA-256，內容就是官方 release；用系統內建的 tar 解開（macOS 一定有）。
+  await (extractImpl || ((file, dir) => runTool('/usr/bin/tar', ['-xzf', file, '-C', dir])))(tmpTar, tmpRoot);
+  safeRemove(tmpTar);
+  const tmpPythonDir = path.join(tmpRoot, 'python');
+  const tmpPythonExe = pythonExeFor('darwin', tmpPythonDir);
+  if (!fs.existsSync(tmpPythonExe)) throw Object.assign(new Error('Python 解壓後找不到 bin/python3'), { code: 'EXTRACT_FAILED' });
+  // Node 下載的檔案本來就不會被加上隔離屬性；保險起見照 Mac 版 yt-dlp seed 的做法移除一次。
+  try {
+    await (stripQuarantineImpl || ((dir) => runTool('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', dir])))(tmpPythonDir);
+  } catch (_) { /* 沒有這個屬性時 xattr 會回錯誤，忽略 */ }
+  try { fs.accessSync(tmpPythonExe, fs.constants.X_OK); } catch (_) { fs.chmodSync(tmpPythonExe, 0o755); }
+  return { tmpPythonDir, tmpPythonExe };
+}
+
+/**
  * macOS（Apple Silicon）：python-build-standalone ＋ ai-mac 鎖定清單。
  * 跟 Windows 同一套原則：先驗 SHA-256、裝到 .download 暫存目錄、全部成功才 rename 進正式路徑，
  * 任何一步失敗或取消都清掉半成品。
@@ -727,30 +763,10 @@ async function downloadMacRuntime({
         throw Object.assign(new Error(`磁碟空間不足：需要約 ${Math.round(MAC_REQUIRED_DISK_BYTES / 1024 / 1024 / 1024)}GB，目前可用約 ${Math.round(disk.freeBytes / 1024 / 1024)}MB。請清出空間後再試一次。`), { code: 'DISK_FULL' });
       }
 
-      progress('download-python', { downloadedBytes: 0, totalBytes: MAC_PYTHON.size, percent: 0 });
-      const result = await fetchFileImpl(MAC_PYTHON.url, tmpTar, {
-        maxBytes: MAX_MAC_PYTHON_BYTES,
-        abortSignal,
-        onProgress: (p) => { setDownloadStatus({ active: true, stage: 'download-python', ...p, error: null }); onProgress?.(getDownloadStatus()); },
+      const { tmpPythonDir, tmpPythonExe } = await fetchMacPython({
+        tmpTar, tmpRoot, progress, fetchFileImpl, extractImpl, stripQuarantineImpl, abortSignal,
+        onDownloadProgress: (p) => { setDownloadStatus({ active: true, stage: 'download-python', ...p, error: null }); onProgress?.(getDownloadStatus()); },
       });
-
-      progress('verify-python');
-      if (result.sha256 !== MAC_PYTHON.sha256) {
-        throw Object.assign(new Error(`SHA-256 驗證失敗（預期 ${MAC_PYTHON.sha256.slice(0, 12)}…，實際 ${String(result.sha256).slice(0, 12)}…），已拒絕使用此檔案`), { code: 'HASH_MISMATCH' });
-      }
-
-      progress('extract');
-      fs.mkdirSync(tmpRoot, { recursive: true });
-      // 檔案已通過釘死的 SHA-256，內容就是官方 release；用系統內建的 tar 解開（macOS 一定有）。
-      await (extractImpl || ((file, dir) => runTool('/usr/bin/tar', ['-xzf', file, '-C', dir])))(tmpTar, tmpRoot);
-      const tmpPythonDir = path.join(tmpRoot, 'python');
-      const tmpPythonExe = pythonExeFor('darwin', tmpPythonDir);
-      if (!fs.existsSync(tmpPythonExe)) throw Object.assign(new Error('Python 解壓後找不到 bin/python3'), { code: 'EXTRACT_FAILED' });
-      // Node 下載的檔案本來就不會被加上隔離屬性；保險起見照 Mac 版 yt-dlp seed 的做法移除一次。
-      try {
-        await (stripQuarantineImpl || ((dir) => runTool('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', dir])))(tmpPythonDir);
-      } catch (_) { /* 沒有這個屬性時 xattr 會回錯誤，忽略 */ }
-      try { fs.accessSync(tmpPythonExe, fs.constants.X_OK); } catch (_) { fs.chmodSync(tmpPythonExe, 0o755); }
 
       progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
       await runPythonStepImpl(packageTrust.macInstallArgs('ai-mac', tmpRoot), {
@@ -838,6 +854,7 @@ module.exports = {
   PRACTICE_PITCH_PACKAGE,
   downloadRuntime,
   downloadMacRuntime,
+  fetchMacPython, // align-runtime-provider.js（精準對時）在 Mac 上用同一個釘死的 Python
   macSupport,
   pythonExeFor,
   sitePackagesFor,

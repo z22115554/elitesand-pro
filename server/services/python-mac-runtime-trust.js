@@ -7,8 +7,10 @@
  * 不依賴系統 Python）。版本與 SHA-256 取自該 release 的 SHA256SUMS（2026-11-26 下載核對，
  * 並用實際下載的檔案再算一次確認相符），之後每次安裝都驗這個值，不信任下載當下的回應。
  *
- * 只提供 aarch64：PyTorch 已不出 macOS x86_64 版本，Intel Mac 不支援人聲分離（見 macSupport）。
- * 套件清單在 python-locks/ai-mac-arm64-py312.lock（--require-hashes）。
+ * 只提供 aarch64：PyTorch 已不出 macOS x86_64 版本，Intel Mac 不支援人聲分離（見 macSupport）；
+ * 精準對時用的 onnxruntime 1.24 起、sentencepiece 0.2.3 也只出 arm64 的 macOS wheel。
+ * 套件清單在 python-locks/ai-mac-arm64-py312.lock 與 align-mac-arm64-py312.lock（--require-hashes）。
+ * AI 分離（dataDir/ai-runtime）與精準對時（dataDir/align-runtime）各裝一份同版本的 Python。
  */
 const MAC_PYTHON = Object.freeze({
   version: '3.12.16',
@@ -24,8 +26,10 @@ const MAC_PYTHON = Object.freeze({
 
 // 本機 marker 用的版本字串：換 Python 或換鎖定清單時改這裡，舊安裝就會被視為需要重裝。
 const MAC_RUNTIME_ID = `pbs-${MAC_PYTHON.version}+${MAC_PYTHON.release}/ai-mac-r2`;
+// 精準對時元件（align-runtime）的 marker 版本字串：換 Python 或改 align-mac 鎖定清單時把 r1 加一。
+const MAC_ALIGN_RUNTIME_ID = `pbs-${MAC_PYTHON.version}+${MAC_PYTHON.release}/align-mac-r1`;
 
-// Apple Silicon 必要條件：macOS 14（Darwin 23）以上——torch 2.15 的 wheel 是 macosx_14_0_arm64。
+// Apple Silicon 必要條件：macOS 14（Darwin 23）以上——torch 2.15 與 onnxruntime 1.24.4 的 wheel 都是 macosx_14_0_arm64。
 const MIN_DARWIN_MAJOR = 23;
 
-module.exports = { MAC_PYTHON, MAC_RUNTIME_ID, MIN_DARWIN_MAJOR };
+module.exports = { MAC_PYTHON, MAC_RUNTIME_ID, MAC_ALIGN_RUNTIME_ID, MIN_DARWIN_MAJOR };

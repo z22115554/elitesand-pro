@@ -1,0 +1,7 @@
+# macOS arm64（Apple Silicon，macOS 14+）/ CPython 3.12：精準對時（ai/align_worker.py），只走 CPU（int8 模型）。
+# 版本跟 Windows 的 PIP_REQUIREMENTS（align-runtime-provider.js）相同，只是 onnxruntime-directml 換成 CPU 版 onnxruntime。
+# onnxruntime 1.24 起只出 macosx_14_0_arm64、sentencepiece 0.2.3 只出 arm64：Intel Mac 沒有現成 wheel，不支援。
+onnxruntime==1.24.4
+numpy==2.4.6
+sentencepiece==0.2.3
+kaldi-native-fbank==1.23.0

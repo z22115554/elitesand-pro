@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: macOS unit tests
-        run: node --test tests/macos-support.test.js tests/mac-beta-diagnostics.test.js tests/mac-ai-separation.test.js
+        run: node --test tests/macos-support.test.js tests/mac-beta-diagnostics.test.js tests/mac-ai-separation.test.js tests/mac-precise-sync.test.js
       - name: Build, verify and boot-check the app
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -53,6 +53,22 @@ jobs:
         run: |
           APP=$(ls -d dist/releases/v*/mac-${{ matrix.arch }}/builder/*/"Elitesand Pro.app" | head -1)
           node tools/mac/smoke-runtime.js "$APP"
+      # 精準對時（中文歌，CPU／int8）：arm64 用 app 自己的安裝流程在全新資料夾單獨裝元件（不先裝人聲分離），
+      # ping／warmup 後對 say 唸的自編中文歌詞跑一次 global 與 lines，檢查回傳結構、worker 沒當掉。
+      # Intel 確認 app 判定不支援、不會開始下載。兩邊都必須通過。
+      - name: Precise sync smoke (install + ping/warmup + global/lines)
+        timeout-minutes: 20
+        run: node tools/mac/smoke-align.js "${{ runner.temp }}/align-smoke" "${{ runner.temp }}/align-smoke.json"
+      - name: Record precise sync smoke result in build info
+        if: always()
+        run: |
+          INFO=$(ls dist/releases/v*/mac-${{ matrix.arch }}/BUILD-INFO.txt 2>/dev/null | head -1 || true)
+          if [ -f "${{ runner.temp }}/align-smoke.json" ]; then
+            RESULT=$(cat "${{ runner.temp }}/align-smoke.json")
+          else
+            RESULT='Precise sync smoke did not produce a report'
+          fi
+          printf '\nPrecise sync smoke (%s):\n%s\n' "${{ matrix.arch }}" "$RESULT" | tee -a "${INFO:-/dev/null}" >> "$GITHUB_STEP_SUMMARY"
       # Apple Silicon 才有 AI 人聲分離：用 app 自己的安裝流程裝元件包（驗雜湊），對 15 秒的合成
       # 音訊真的分離一次，再對分離出的人聲跑練唱音高線。arm64 上必須通過；Intel 版不支援、不跑。
       # Kim 主模型（約 870MB）用 cache，Python 與套件每次都照 app 的流程重新下載與驗證。
