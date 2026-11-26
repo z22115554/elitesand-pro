@@ -17,9 +17,14 @@
     "practice-pitch": {
       "file": "practice-pitch-win-py311.lock",
       "sha256": "670826b778e1c01383dc3166ff28496b4a22bc18ec36e6501a85c338c0eb5dc5"
+    },
+    "ai-mac": {
+      "file": "ai-mac-arm64-py312.lock",
+      "sha256": "00deb581eb6b7d982e942da9ea87f3ae7562e81c8075c3fb7fd96e79fdae8cf0"
     }
   },
   "inputs": {
+    "ai-mac.in": "18b9e366baacbd37c9dcccbe7c3e476428086d4baae0525e61bd41581053617b",
     "ai.in": "3d50bf17db4b28e2bb160cda07e6ffef8b31ef84203c2adc835077ff29d940c1",
     "bootstrap.in": "ca7fe72f1a420c617965566752d22045789c88799ed3ba576ec771f93e6ef4ed",
     "practice-pitch.in": "324df6dae4c9700eda956a05da66dc93a5763375f7736c13db0c8c66c57263cc",

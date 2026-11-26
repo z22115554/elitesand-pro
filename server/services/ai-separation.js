@@ -283,7 +283,8 @@ let cudaAvailabilityProbe = null;
 function getCachedCudaAvailable() {
   if (!cudaAvailabilityProbe) {
     cudaAvailabilityProbe = supervisor.probe().then(
-      (probe) => probe?.cudaAvailable === true,
+      // Mac 的 MPS 也算「Python GPU 可用」：可用時面板就不會去預熱 WebGPU 備援
+      (probe) => probe?.cudaAvailable === true || probe?.mpsAvailable === true,
       () => false,
     );
   }

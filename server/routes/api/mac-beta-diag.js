@@ -40,4 +40,12 @@ router.post('/mac-beta-diag/client', requirePin, (req, res) => {
   res.json({ ok: true });
 });
 
+// 「製作伴奏」的 Mac 預檢沒過（面板在打開安裝視窗前就擋下）：只收這幾個代碼
+const PRECHECK_RESULTS = new Set(['intel', 'macos_old', 'disk_low']);
+router.post('/mac-beta-diag/precheck', requirePin, (req, res) => {
+  const result = req.body && typeof req.body.result === 'string' ? req.body.result : '';
+  if (PRECHECK_RESULTS.has(result)) macBetaDiagnostics.milestone('separation_precheck', result);
+  res.json({ ok: true });
+});
+
 module.exports = router;

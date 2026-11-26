@@ -38,7 +38,18 @@ const log = createLogger('AIRuntimeProvider');
 
 const RUNTIME_DIR = path.join(dataDir, 'ai-runtime');
 const PYTHON_DIR = path.join(RUNTIME_DIR, 'python');
-const PYTHON_EXE = path.join(PYTHON_DIR, 'python.exe');
+const { MAC_PYTHON, MAC_RUNTIME_ID, MIN_DARWIN_MAJOR } = require('./python-mac-runtime-trust');
+const os = require('os');
+const { execFile } = require('child_process');
+
+/** 依平台回傳 runtime 的 Python 執行檔：Windows 是 embeddable 的 python.exe，Mac 是 python-build-standalone 的 bin/python3 */
+function pythonExeFor(platform = process.platform, pythonDir = PYTHON_DIR) {
+  return platform === 'darwin' ? path.join(pythonDir, ...MAC_PYTHON.executable) : path.join(pythonDir, 'python.exe');
+}
+function sitePackagesFor(platform = process.platform, pythonDir = PYTHON_DIR) {
+  return platform === 'darwin' ? path.join(pythonDir, ...MAC_PYTHON.sitePackages) : path.join(pythonDir, 'Lib', 'site-packages');
+}
+const PYTHON_EXE = pythonExeFor();
 const MARKER_FILE = path.join(RUNTIME_DIR, '.installed.json');
 const MODEL_DIR = path.join(dataDir, 'ai-models');
 const MODEL_FILENAME = 'vocals_mel_band_roformer.ckpt';
@@ -65,8 +76,26 @@ const MAX_REDIRECTS = 5;
 const DOWNLOAD_TOTAL_TIMEOUT_MS = 10 * 60 * 1000;
 const DOWNLOAD_IDLE_TIMEOUT_MS = 30 * 1000;
 
-function practicePitchModelFile(pythonDir = PYTHON_DIR) {
-  return path.join(pythonDir, 'Lib', 'site-packages', 'torchcrepe', 'assets', 'tiny.pth');
+function practicePitchModelFile(pythonDir = PYTHON_DIR, platform = process.platform) {
+  return path.join(sitePackagesFor(platform, pythonDir), 'torchcrepe', 'assets', 'tiny.pth');
+}
+
+/**
+ * Mac 能不能裝 AI 分離：只支援 Apple Silicon＋macOS 14 以上（PyTorch 不出 Intel Mac 版本）。
+ * 回傳 { supported, reason }，reason：'intel'｜'macos_old'｜'not_mac'｜null。
+ * Windows 一律 { supported: true }（既有行為）。
+ */
+function macSupport({ platform = process.platform, arch = process.arch, release = os.release() } = {}) {
+  if (platform === 'win32') return { supported: true, reason: null };
+  if (platform !== 'darwin') return { supported: false, reason: 'not_mac' };
+  if (arch !== 'arm64') return { supported: false, reason: 'intel' };
+  const darwinMajor = Number.parseInt(String(release).split('.')[0], 10);
+  if (!Number.isInteger(darwinMajor) || darwinMajor < MIN_DARWIN_MAJOR) return { supported: false, reason: 'macos_old' };
+  return { supported: true, reason: null };
+}
+
+function expectedRuntimeId(platform = process.platform) {
+  return platform === 'darwin' ? MAC_RUNTIME_ID : PYTHON_EMBED_VERSION;
 }
 
 /** 練唱的高精度音高元件是否可用（沒有時練唱仍可用，改走 YIN）。 */
@@ -78,7 +107,7 @@ function isAvailable() {
   try {
     if (!fs.existsSync(PYTHON_EXE) || !fs.existsSync(MARKER_FILE)) return false;
     const marker = JSON.parse(fs.readFileSync(MARKER_FILE, 'utf8'));
-    return marker.pythonEmbedVersion === PYTHON_EMBED_VERSION && marker.pipInstallDone === true;
+    return marker.pythonEmbedVersion === expectedRuntimeId() && marker.pipInstallDone === true;
   } catch (_) {
     return false;
   }
@@ -480,6 +509,9 @@ async function downloadRuntime({
   abortSignal,
   platform = process.platform,
 } = {}) {
+  if (platform === 'darwin') {
+    return downloadMacRuntime({ onProgress, fetchFileImpl, runPythonStepImpl, inspectDiskSpaceImpl, abortSignal });
+  }
   if (platform !== 'win32') {
     throw new Error('目前只支援 Windows 的自動下載。');
   }
@@ -645,6 +677,133 @@ async function downloadPrimaryModel({ downloadImpl = downloadPrimaryModelFile, o
   return { ok: true, alreadyAvailable: false, modelFile: MODEL_FILE };
 }
 
+const MAC_REQUIRED_DISK_BYTES = 4 * 1024 * 1024 * 1024; // 套件約 290MB 下載、解開後約 1.2GB，留足暫存
+const MAX_MAC_PYTHON_BYTES = 80 * 1024 * 1024;
+
+function runTool(command, args, { execFileImpl = execFile, timeoutMs = 5 * 60 * 1000 } = {}) {
+  return new Promise((resolve, reject) => {
+    execFileImpl(command, args, { timeout: timeoutMs, windowsHide: true }, (error, stdout, stderr) => {
+      if (error) reject(Object.assign(new Error(`${path.basename(command)} 失敗：${String(stderr || error.message).trim().slice(0, 300)}`), { cause: error }));
+      else resolve(String(stdout || ''));
+    });
+  });
+}
+
+/**
+ * macOS（Apple Silicon）：python-build-standalone ＋ ai-mac 鎖定清單。
+ * 跟 Windows 同一套原則：先驗 SHA-256、裝到 .download 暫存目錄、全部成功才 rename 進正式路徑，
+ * 任何一步失敗或取消都清掉半成品。
+ */
+async function downloadMacRuntime({
+  onProgress, fetchFileImpl = fetchToFile, runPythonStepImpl = runPythonStep,
+  inspectDiskSpaceImpl = inspectDiskSpace, abortSignal, extractImpl, stripQuarantineImpl, supportImpl = macSupport,
+} = {}) {
+  const support = supportImpl();
+  if (!support.supported) {
+    throw Object.assign(new Error(support.reason === 'intel'
+      ? '這台 Mac 不支援 AI 人聲分離：需要 Apple Silicon（M 系列）晶片。'
+      : '這台 Mac 不支援 AI 人聲分離：需要 macOS 14 以上。'), { code: 'MAC_UNSUPPORTED', reason: support.reason });
+  }
+  if (downloadInFlight) return downloadInFlight;
+  downloadInFlight = (async () => {
+    const tmpTar = path.join(RUNTIME_DIR, 'python-mac.download.tar.gz');
+    const tmpRoot = path.join(RUNTIME_DIR, 'python.download');
+    let stage = 'start';
+    const progress = (nextStage, extra = {}) => {
+      if (abortSignal?.aborted && nextStage !== 'done') throw cancelledError();
+      stage = nextStage;
+      setDownloadStatus({ active: nextStage !== 'done', stage: nextStage, error: null, ...extra });
+      log.info(`AI runtime（Mac）安裝階段：${nextStage}`);
+      onProgress?.(getDownloadStatus());
+    };
+    try {
+      fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+      safeRemove(tmpTar);
+      safeRemove(tmpRoot);
+
+      progress('disk-space-check');
+      const disk = inspectDiskSpaceImpl(RUNTIME_DIR, { thresholdBytes: MAC_REQUIRED_DISK_BYTES });
+      if (disk.known && disk.low) {
+        throw Object.assign(new Error(`磁碟空間不足：需要約 ${Math.round(MAC_REQUIRED_DISK_BYTES / 1024 / 1024 / 1024)}GB，目前可用約 ${Math.round(disk.freeBytes / 1024 / 1024)}MB。請清出空間後再試一次。`), { code: 'DISK_FULL' });
+      }
+
+      progress('download-python', { downloadedBytes: 0, totalBytes: MAC_PYTHON.size, percent: 0 });
+      const result = await fetchFileImpl(MAC_PYTHON.url, tmpTar, {
+        maxBytes: MAX_MAC_PYTHON_BYTES,
+        abortSignal,
+        onProgress: (p) => { setDownloadStatus({ active: true, stage: 'download-python', ...p, error: null }); onProgress?.(getDownloadStatus()); },
+      });
+
+      progress('verify-python');
+      if (result.sha256 !== MAC_PYTHON.sha256) {
+        throw Object.assign(new Error(`SHA-256 驗證失敗（預期 ${MAC_PYTHON.sha256.slice(0, 12)}…，實際 ${String(result.sha256).slice(0, 12)}…），已拒絕使用此檔案`), { code: 'HASH_MISMATCH' });
+      }
+
+      progress('extract');
+      fs.mkdirSync(tmpRoot, { recursive: true });
+      // 檔案已通過釘死的 SHA-256，內容就是官方 release；用系統內建的 tar 解開（macOS 一定有）。
+      await (extractImpl || ((file, dir) => runTool('/usr/bin/tar', ['-xzf', file, '-C', dir])))(tmpTar, tmpRoot);
+      const tmpPythonDir = path.join(tmpRoot, 'python');
+      const tmpPythonExe = pythonExeFor('darwin', tmpPythonDir);
+      if (!fs.existsSync(tmpPythonExe)) throw Object.assign(new Error('Python 解壓後找不到 bin/python3'), { code: 'EXTRACT_FAILED' });
+      // Node 下載的檔案本來就不會被加上隔離屬性；保險起見照 Mac 版 yt-dlp seed 的做法移除一次。
+      try {
+        await (stripQuarantineImpl || ((dir) => runTool('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', dir])))(tmpPythonDir);
+      } catch (_) { /* 沒有這個屬性時 xattr 會回錯誤，忽略 */ }
+      try { fs.accessSync(tmpPythonExe, fs.constants.X_OK); } catch (_) { fs.chmodSync(tmpPythonExe, 0o755); }
+
+      progress('install-packages', { step: 'pip-resolve', detail: null, downloadedBytes: 0, totalBytes: null, percent: null });
+      await runPythonStepImpl(packageTrust.macInstallArgs('ai-mac', tmpRoot), {
+        cwd: tmpRoot, pythonExe: tmpPythonExe, timeoutMs: 30 * 60 * 1000, abortSignal,
+        onOutput: (text) => {
+          const p = parseToolProgress(text);
+          if (Object.keys(p).length) {
+            setDownloadStatus({ active: true, stage: 'install-packages', error: null, ...p });
+            onProgress?.(getDownloadStatus());
+          }
+        },
+      });
+      // 練唱的高精度音高（torchcrepe，純 Python wheel，相依都已在上面裝好）；失敗就只用 YIN
+      try {
+        await runPythonStepImpl(packageTrust.macInstallArgs('practice-pitch', tmpRoot),
+          { cwd: tmpRoot, pythonExe: tmpPythonExe, timeoutMs: 15 * 60 * 1000, abortSignal });
+      } catch (err) {
+        if (abortSignal?.aborted) throw err;
+        log.warn(`練唱音高元件安裝失敗（不影響人聲分離，練唱改用 YIN）：${err.message}`);
+      }
+
+      progress('install');
+      safeRemove(PYTHON_DIR);
+      fs.renameSync(tmpPythonDir, PYTHON_DIR);
+      fs.writeFileSync(MARKER_FILE, JSON.stringify({
+        pythonEmbedVersion: MAC_RUNTIME_ID,
+        pipInstallDone: true,
+        installedAt: new Date().toISOString(),
+      }, null, 2), 'utf8');
+      progress('done', { active: false, percent: 100 });
+      log.info(`AI runtime（Mac）安裝完成：${PYTHON_DIR}`);
+      return { ok: true, pythonExe: PYTHON_EXE };
+    } catch (err) {
+      err.stage = err.stage || stage;
+      if (err.code === 'CANCELLED') {
+        setDownloadStatus({ active: false, stage: 'cancelled', error: null });
+      } else {
+        setDownloadStatus({ active: false, stage: 'error', error: err.message });
+        log.error(`AI runtime（Mac）安裝失敗（stage=${err.stage}）`, err);
+      }
+      throw err;
+    } finally {
+      safeRemove(tmpTar);
+      safeRemove(tmpRoot);
+    }
+  })();
+  try {
+    return await downloadInFlight;
+  } finally {
+    downloadInFlight = null;
+  }
+}
+
 let practiceInstallInFlight = null;
 /** 已經裝好 AI 元件的使用者補裝練唱音高元件；同時間只跑一份。 */
 function installPracticePitchModel({ abortSignal, runPythonStepImpl = runPythonStep } = {}) {
@@ -652,7 +811,9 @@ function installPracticePitchModel({ abortSignal, runPythonStepImpl = runPythonS
   if (isPracticePitchModelAvailable()) return Promise.resolve({ ok: true, alreadyAvailable: true });
   if (practiceInstallInFlight) return practiceInstallInFlight;
   practiceInstallInFlight = runPythonStepImpl(
-    packageTrust.installArgs('practice-pitch', RUNTIME_DIR, { noDeps: true }),
+    process.platform === 'darwin'
+      ? packageTrust.macInstallArgs('practice-pitch', RUNTIME_DIR)
+      : packageTrust.installArgs('practice-pitch', RUNTIME_DIR, { noDeps: true }),
     { timeoutMs: 15 * 60 * 1000, abortSignal },
   ).then(() => {
     if (!isPracticePitchModelAvailable()) throw Object.assign(new Error('練唱音高元件安裝後仍找不到模型檔。'), { code: 'PRACTICE_MODEL_MISSING' });
@@ -676,6 +837,12 @@ module.exports = {
   practicePitchModelFile,
   PRACTICE_PITCH_PACKAGE,
   downloadRuntime,
+  downloadMacRuntime,
+  macSupport,
+  pythonExeFor,
+  sitePackagesFor,
+  expectedRuntimeId,
+  MAC_REQUIRED_DISK_BYTES,
   downloadPrimaryModel,
   cleanupInvalidPrimaryModel,
   getDownloadStatus,

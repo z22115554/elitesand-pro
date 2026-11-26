@@ -269,6 +269,11 @@
       const res = await PinAuth.fetchWithPin(`/api/library/${encodeURIComponent(track.id)}/analyze-sections`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.ok) {
+        if (body.error === 'UNSUPPORTED_PLATFORM') {
+          dom.result.textContent = t('sections.unsupportedMac');
+          renderIdle(true);
+          return;
+        }
         if (body.error === 'RUNTIME_NOT_READY') {
           downloading = true;
           renderDownload({ stage: 'disk-space-check', overallPercent: 0 });

@@ -25,6 +25,8 @@ const { execFile } = require('child_process');
 const fields = require('./mac-beta-diag-fields');
 
 const STATE_SCHEMA_VERSION = 1;
+// 告知內容改版（多了分離與練唱音高線的結果與耗時級距）就加一：之前按過舊版的人要再看一次
+const NOTICE_VERSION = 2;
 const TIMEOUT_MS = 3500;
 const FLUSH_DELAY_MS = 5000;
 const MAX_QUEUE = 40;
@@ -117,11 +119,12 @@ function createMacBetaDiagnostics(options = {}) {
       stateCache = {
         schemaVersion: STATE_SCHEMA_VERSION,
         installId: /^[a-f0-9]{32}$/.test(parsed.installId || '') ? parsed.installId : null,
-        noticeAckAt: typeof parsed.noticeAckAt === 'string' ? parsed.noticeAckAt : null,
+        noticeAckAt: typeof parsed.noticeAckAt === 'string' && parsed.noticeVersion === NOTICE_VERSION ? parsed.noticeAckAt : null,
+        noticeVersion: parsed.noticeVersion === NOTICE_VERSION ? NOTICE_VERSION : null,
         counts,
       };
     } catch (_) {
-      stateCache = { schemaVersion: STATE_SCHEMA_VERSION, installId: null, noticeAckAt: null, counts: {} };
+      stateCache = { schemaVersion: STATE_SCHEMA_VERSION, installId: null, noticeAckAt: null, noticeVersion: null, counts: {} };
     }
     return stateCache;
   }
@@ -278,6 +281,58 @@ function createMacBetaDiagnostics(options = {}) {
     return enqueue(event);
   }
 
+  /**
+   * 一次分離的結果。info：{ ok, code, finalBackend, attempts, startedAt, audioSeconds, deviceLost }
+   * 只轉成類別與級距；歌曲長度用 audioSeconds（呼叫端從音檔標頭讀到的），不送檔名。
+   * 每首都回報（不做每次啟動一次的去重），但仍受每次啟動的總量上限保護。
+   */
+  function separation(info) {
+    if (!collecting()) return false;
+    const data = info && typeof info === 'object' ? info : {};
+    const attempts = Array.isArray(data.attempts) ? data.attempts : [];
+    const device = fields.SEPARATION_DEVICES.includes(data.finalBackend) ? data.finalBackend : 'none';
+    const code = String(data.code || '').toLowerCase();
+    const result = data.ok ? 'ok'
+      : code === 'oom' || code === 'gpu_oom' ? 'oom'
+      : fields.SEPARATION_RESULTS.includes(code) ? code
+      : code === 'engine_unavailable' ? 'engine_unavailable'
+      : 'other';
+    const elapsed = Number.isFinite(data.startedAt) ? Date.now() - data.startedAt : NaN;
+    return enqueue({
+      type: 'separation',
+      result,
+      device,
+      cpuFallback: device === 'cpu' && attempts.some((b) => b && b !== 'cpu'),
+      lengthTier: fields.lengthTier(data.audioSeconds),
+      speedTier: data.ok ? fields.speedTier(elapsed, data.audioSeconds) : 'unknown',
+      deviceLost: data.deviceLost === true || code === 'device_lost',
+    });
+  }
+
+  /** 練唱音高線一次分析的結果。info：{ ok, code, algorithm, elapsedMs } */
+  function pitchGuide(info) {
+    if (!collecting()) return false;
+    const data = info && typeof info === 'object' ? info : {};
+    const code = String(data.code || '');
+    const result = data.ok ? 'ok'
+      : code === 'PRACTICE_VOCALS_REQUIRED' ? 'vocals_required'
+      : code === 'PRACTICE_RUNTIME_MISSING' || code === 'ENOENT' ? 'python_missing'
+      : code === 'GUIDE_TIMEOUT' ? 'timeout'
+      : code === 'GUIDE_INVALID_OUTPUT' ? 'invalid_output'
+      : code === 'GUIDE_ANALYSIS_FAILED' ? 'analysis_failed'
+      : 'other';
+    const algorithm = /^torchcrepe/.test(String(data.algorithm || '')) ? 'torchcrepe' : /^yin/.test(String(data.algorithm || '')) ? 'yin' : 'none';
+    return enqueue({ type: 'pitch_guide', result, algorithm, timeTier: fields.timeTier(data.elapsedMs) });
+  }
+
+  async function pythonExecCode() {
+    let runtime;
+    try { runtime = require('./ai-runtime-provider'); } catch (_) { return null; }
+    if (!runtime.isAvailable()) return null; // 還沒裝元件包：不回報
+    const version = await execText(deps.execFile, runtime.PYTHON_EXE, ['--version']);
+    return version && /^Python 3\./.test(version) ? 'ok' : 'failed';
+  }
+
   async function launchInfo() {
     const translated = deps.arch === 'x64'
       ? (await execText(deps.execFile, 'sysctl', ['-in', 'sysctl.proc_translated'])) === '1'
@@ -329,6 +384,12 @@ function createMacBetaDiagnostics(options = {}) {
     try { enqueue(await launchInfo()); } catch (_) { /* 取不到就不送這筆 */ }
     component('ffmpeg_source', ffmpegSourceCode());
     try { component('bundled_node', await bundledNodeCode()); } catch (_) { /* 同上 */ }
+    try {
+      const support = require('./ai-runtime-provider').macSupport({ platform: deps.platform, arch: deps.arch });
+      component('mac_support', support.supported ? 'ok' : (support.reason === 'intel' ? 'intel' : 'macos_old'));
+      const python = await pythonExecCode();
+      if (python) component('python_exec', python);
+    } catch (_) { /* 同上 */ }
     return { started: true };
   }
 
@@ -337,6 +398,7 @@ function createMacBetaDiagnostics(options = {}) {
     const state = loadState();
     if (!state.noticeAckAt) {
       state.noticeAckAt = now.toISOString();
+      state.noticeVersion = NOTICE_VERSION;
       saveState();
     }
     start().catch(() => { /* 不影響回應 */ });
@@ -391,7 +453,7 @@ function createMacBetaDiagnostics(options = {}) {
 
   return {
     isMacBeta, available, collecting, getStatus, acknowledgeNotice, start, flush,
-    component, milestone, reportError, gpu, attachToUsageTelemetry,
+    component, milestone, reportError, gpu, separation, pitchGuide, attachToUsageTelemetry,
     _queue: () => queue.slice(), _resetForTests: resetForTests,
   };
 }
@@ -427,6 +489,25 @@ function classifySeparationInstallError(error) {
   return 'other';
 }
 
+/** 元件包安裝失敗 → 白名單代碼（phase：python／primary-model） */
+function classifyBundleError(phase, error) {
+  const code = error && error.code;
+  if (code === 'CANCELLED') return 'cancelled';
+  if (phase === 'primary-model') {
+    if (/SHA-256|雜湊|有效檔案/.test(String(error && error.message))) return 'verify_failed';
+    return error ? 'download_failed' : 'other';
+  }
+  if (code === 'MAC_UNSUPPORTED') return 'unsupported';
+  if (code === 'DISK_FULL') return 'disk_full';
+  if (code === 'HASH_MISMATCH') return 'hash_mismatch';
+  if (code === 'EXTRACT_FAILED') return 'extract_failed';
+  const stage = error && error.stage;
+  if (stage === 'download-python') return 'download_failed';
+  if (stage === 'extract') return 'extract_failed';
+  if (stage === 'install-packages') return 'pip_failed';
+  return 'other';
+}
+
 const PRACTICE_BLOCK_CODES = Object.freeze({
   PRACTICE_VOCALS_REQUIRED: 'vocals_required',
   VOCALS_MISSING: 'vocals_missing',
@@ -441,6 +522,6 @@ function classifyPracticeBlock(code) {
 
 const singleton = createMacBetaDiagnostics();
 module.exports = Object.assign(singleton, {
-  createMacBetaDiagnostics, validEndpoint,
+  createMacBetaDiagnostics, validEndpoint, classifyBundleError,
   classifyFfmpegDownloadError, classifyYtdlpUpdate, classifySeparationInstallError, classifyPracticeBlock,
 });

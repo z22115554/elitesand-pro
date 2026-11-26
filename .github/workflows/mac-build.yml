@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: macOS unit tests
-        run: node --test tests/macos-support.test.js tests/mac-beta-diagnostics.test.js
+        run: node --test tests/macos-support.test.js tests/mac-beta-diagnostics.test.js tests/mac-ai-separation.test.js
       - name: Build, verify and boot-check the app
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -53,6 +53,31 @@ jobs:
         run: |
           APP=$(ls -d dist/releases/v*/mac-${{ matrix.arch }}/builder/*/"Elitesand Pro.app" | head -1)
           node tools/mac/smoke-runtime.js "$APP"
+      # Apple Silicon 才有 AI 人聲分離：用 app 自己的安裝流程裝元件包（驗雜湊），對 15 秒的合成
+      # 音訊真的分離一次，再對分離出的人聲跑練唱音高線。arm64 上必須通過；Intel 版不支援、不跑。
+      # Kim 主模型（約 870MB）用 cache，Python 與套件每次都照 app 的流程重新下載與驗證。
+      - name: Cache AI separation model (arm64)
+        if: matrix.arch == 'arm64'
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/ai-smoke/ai-models
+          key: mac-ai-model-${{ hashFiles('server/services/primary-model-download.js') }}
+      - name: AI separation + practice pitch smoke (arm64)
+        if: matrix.arch == 'arm64'
+        timeout-minutes: 40
+        run: node tools/mac/smoke-ai.js "${{ runner.temp }}/ai-smoke" "${{ runner.temp }}/ai-smoke.json"
+      - name: Record AI smoke result in build info
+        if: always()
+        run: |
+          INFO=$(ls dist/releases/v*/mac-${{ matrix.arch }}/BUILD-INFO.txt 2>/dev/null | head -1 || true)
+          if [ "${{ matrix.arch }}" = "arm64" ] && [ -f "${{ runner.temp }}/ai-smoke.json" ]; then
+            RESULT=$(cat "${{ runner.temp }}/ai-smoke.json")
+          elif [ "${{ matrix.arch }}" = "arm64" ]; then
+            RESULT='AI smoke did not produce a report'
+          else
+            RESULT='Not run: AI vocal separation and the practice pitch line are Apple Silicon only (the app shows "not supported" on Intel Macs).'
+          fi
+          printf '\nAI separation smoke (%s):\n%s\n' "${{ matrix.arch }}" "$RESULT" | tee -a "${INFO:-/dev/null}" >> "$GITHUB_STEP_SUMMARY"
       - name: Locate DMG
         id: dmg
         run: echo "path=$(ls dist/releases/v*/mac-${{ matrix.arch }}/*.dmg | head -1)" >> "$GITHUB_OUTPUT"

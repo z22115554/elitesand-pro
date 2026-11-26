@@ -43,6 +43,8 @@ const CUDA_RETRY_DELAY_MS = Number(process.env.ELITESAND_CUDA_RETRY_DELAY_MS) ||
 // 不能用、顯存不足（同設定重跑一樣爆）。（CANCELLED / INPUT_UNREADABLE 更早就 return 了。）
 const CUDA_NO_RETRY_CODES = new Set(['RUNTIME_MISSING', 'MODEL_MISSING', 'PROVIDER_UNAVAILABLE', 'GPU_OOM']);
 
+// macOS（Apple Silicon）的「Python GPU」是 MPS 不是 CUDA；遙測與狀態用這個名字區分。
+const GPU_BACKEND = process.platform === 'darwin' ? 'mps' : 'cuda';
 const WEBGPU_MAX_ATTEMPTS = Number(process.env.ELITESAND_WEBGPU_MAX_ATTEMPTS) || 3; // 初次 + 最多 2 次重試
 const WEBGPU_RETRY_DELAY_MS = Number(process.env.ELITESAND_WEBGPU_RETRY_DELAY_MS) || 5000;
 // 這兩種重試沒意義、只會白等：硬體/前提不符（不會變），或引擎整個 wedge 住（短時間
@@ -55,7 +57,23 @@ const WEBGPU_NO_RETRY_CODES = new Set(['unsupported_gpu', 'timeout', 'input_too_
  * 以前只有 WebGPU 那條路在送，Python 兩條路完全沒記，於是 `fellBackToCpu` 永遠是
  * false、CPU 成功會把 WebGPU 失敗蓋掉。欄位全部對齊 EULA §7.9 已揭露清單、一律分桶。
  */
+async function recordMacSeparation(job, { ok, code, finalBackend }) {
+  const diag = require('./mac-beta-diagnostics');
+  if (!diag.collecting()) return;
+  let audioSeconds = job && job.webgpuInfo && job.webgpuInfo.audioSeconds;
+  if (!Number.isFinite(audioSeconds) && job && job.params && job.params.inputPath) {
+    const audio = await inspectWebgpuAudio(job.params.inputPath).catch(() => null);
+    if (audio && audio.ok) audioSeconds = audio.audioSeconds;
+  }
+  diag.separation({
+    ok, code, finalBackend, attempts: job && job.attempts, startedAt: job && job.startedAt, audioSeconds,
+    deviceLost: !!(job && job.webgpuError === 'device_lost'),
+  });
+}
+
 function recordJobTelemetry(job, { ok, code, finalBackend }) {
+  // Mac 內測版診斷：只在 Mac 內測版且使用者同意後才會真的送；其他平台 collecting() 直接是 false
+  recordMacSeparation(job, { ok, code, finalBackend }).catch(() => {});
   try {
     const attempts = Array.from(new Set(job && Array.isArray(job.attempts) ? job.attempts : []));
     const info = (job && job.webgpuInfo) || {};
@@ -73,7 +91,7 @@ function recordJobTelemetry(job, { ok, code, finalBackend }) {
       attemptedBackends: attempts.length ? attempts : (finalBackend ? [finalBackend] : []),
       backend: finalBackend,
       gpuVendor: finalBackend === 'webgpu' ? (info.gpuVendor || 'unknown')
-        : finalBackend === 'cuda' ? 'nvidia'
+        : finalBackend === 'cuda' ? 'nvidia' : finalBackend === 'mps' ? 'apple'
         : 'unknown',
       vramMb: finalBackend === 'webgpu' && info.peakBufferMb !== undefined ? info.peakBufferMb : undefined,
       realtimeFactor: finalBackend === 'webgpu' ? info.realtimeFactor : undefined,
@@ -129,7 +147,7 @@ function emitProgress(job, stage, progress = 0, extra = {}) {
 function startPython(job, { forceCpu }) {
   if (job.cancelled || activeJob !== job) return;
   job.mode = forceCpu ? 'cpu' : 'python-gpu';
-  const backend = forceCpu ? 'cpu' : 'cuda';
+  const backend = forceCpu ? 'cpu' : GPU_BACKEND;
   if (!job.attempts.includes(backend)) job.attempts.push(backend);
   if (!forceCpu) job.cudaAttempts = (job.cudaAttempts || 0) + 1;
   const attemptId = supervisor.separate({ ...job.params, forceCpu });
@@ -237,6 +255,8 @@ async function dispatch(trackId, params, publicJobId = null) {
     webgpuAttempts: 0, // WebGPU 已經試了幾次（含重試），到 WEBGPU_MAX_ATTEMPTS 才退 CPU
   };
   activeJob = job;
+  job.startedAt = Date.now();
+  try { require('./mac-beta-diagnostics').milestone('separation_start'); } catch (_) { /* 診斷不影響分離 */ }
   emitProgress(job, 'preparing', 0);
 
   // 反向的 GPU 互斥檢查（另一半在 section-analysis-jobs.js 的 dispatch()）：兩個功能
@@ -257,7 +277,8 @@ async function dispatch(trackId, params, publicJobId = null) {
   let engineError = null;
   try {
     const probe = await supervisor.probe();
-    cudaAvailable = probe?.cudaAvailable === true;
+    // Mac：MPS 可用就跟 Windows 的 CUDA 一樣走 Python GPU 那條
+    cudaAvailable = probe?.cudaAvailable === true || probe?.mpsAvailable === true;
     // python 端探測不到 CUDA 時回的是 {cudaAvailable:false, error}，不是丟例外。那個
     // error 字串以前被整包吞掉，畫面上「這台沒有 GPU」與「torch 裝壞了」長得一模一樣。
     if (cudaAvailable) log.info(`Python GPU 可用：${probe?.deviceName || 'unknown device'}`);
@@ -300,7 +321,7 @@ function finalizeError(job, error = {}) {
   log.warn(`分離失敗 track=${job.trackId} job=${job.publicJobId}: ${error.message || error.code || 'unknown'}`);
   // 使用者主動取消不計入失敗率（會灌水分母），其餘終態失敗都記一次。
   if (error.code !== 'CANCELLED') {
-    const finalBackend = job.mode === 'python-gpu' ? 'cuda'
+    const finalBackend = job.mode === 'python-gpu' ? GPU_BACKEND
       : job.mode === 'webgpu' ? 'webgpu'
       : job.mode === 'cpu' ? 'cpu'
       : 'unknown';
@@ -406,7 +427,7 @@ function wireDependencies({ io, playState, persistState, broadcastState, updateL
     });
     recordJobTelemetry(activeJob, {
       ok: true, code: null,
-      finalBackend: attempt.mode === 'cpu' ? 'cpu' : 'cuda',
+      finalBackend: attempt.mode === 'cpu' ? 'cpu' : GPU_BACKEND,
     });
     emitProgress(activeJob, 'done', 100);
     finishAndAdvance();

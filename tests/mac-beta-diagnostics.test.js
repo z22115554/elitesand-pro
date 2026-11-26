@@ -184,7 +184,7 @@ test('送出失敗安靜丟棄，不重試、不寫進磁碟', async () => {
   assert.equal(attempts, 1);
   assert.deepEqual(h.diag._queue(), []);
   const saved = JSON.parse(fs.readFileSync(path.join(h.dataDir, 'mac-beta-diag.json'), 'utf8'));
-  assert.deepEqual(Object.keys(saved).sort(), ['counts', 'installId', 'noticeAckAt', 'schemaVersion']);
+  assert.deepEqual(Object.keys(saved).sort(), ['counts', 'installId', 'noticeAckAt', 'noticeVersion', 'schemaVersion']);
 });
 
 test('Intel／Rosetta 與記憶體級距', async () => {
@@ -255,4 +255,35 @@ test('用戶端白名單與 Worker 的驗證一致（Worker 原始碼只在私�
   for (let i = 0; i < 8; i += 1) await h.diag.flush();
   assert.ok(h.calls.length >= 2);
   for (const call of h.calls) assert.equal(worker.validatePayload(call.body).ok, true);
+});
+
+test('分離與練唱音高線的診斷：只送類別與級距，並通過白名單', async () => {
+  const h = harness();
+  await ackAndFlush(h);
+  h.diag.milestone('separation_precheck', 'ok');
+  h.diag.milestone('separation_start');
+  h.diag.component('runtime_install', 'hash_mismatch');
+  h.diag.component('python_exec', 'ok');
+  h.diag.separation({ ok: true, finalBackend: 'cpu', attempts: ['mps', 'cpu'], startedAt: Date.now() - 90000, audioSeconds: 200 });
+  h.diag.separation({ ok: false, code: 'GPU_OOM', finalBackend: 'mps', attempts: ['mps'], startedAt: Date.now(), audioSeconds: 30 });
+  h.diag.pitchGuide({ ok: true, algorithm: 'yin-cpu', elapsedMs: 12000 });
+  h.diag.pitchGuide({ ok: false, code: 'PRACTICE_RUNTIME_MISSING', elapsedMs: 100 });
+  await h.diag.flush();
+  const events = h.calls.flatMap((c) => c.body.events);
+  for (const call of h.calls) { assert.equal(fields.validPayload(call.body), true); assertNoFreeText(call.body); }
+  assert.deepEqual(events.filter((e) => e.type === 'separation'), [
+    { type: 'separation', result: 'ok', device: 'cpu', cpuFallback: true, lengthTier: '3-5m', speedTier: '0.25-0.5', deviceLost: false },
+    { type: 'separation', result: 'oom', device: 'mps', cpuFallback: false, lengthTier: 'lt1m', speedTier: 'unknown', deviceLost: false },
+  ]);
+  assert.deepEqual(events.filter((e) => e.type === 'pitch_guide'), [
+    { type: 'pitch_guide', result: 'ok', algorithm: 'yin', timeTier: '10-30s' },
+    { type: 'pitch_guide', result: 'python_missing', algorithm: 'none', timeTier: 'lt10s' },
+  ]);
+  assert.ok(events.some((e) => e.name === 'runtime_install' && e.code === 'hash_mismatch'));
+});
+
+test('告知改版後，按過舊版的人要再看一次', () => {
+  const h = harness();
+  fs.writeFileSync(path.join(h.dataDir, 'mac-beta-diag.json'), JSON.stringify({ schemaVersion: 1, installId: 'a'.repeat(32), noticeAckAt: '2026-11-01T00:00:00Z', counts: {} }));
+  assert.equal(h.diag.getStatus().noticeRequired, true);
 });

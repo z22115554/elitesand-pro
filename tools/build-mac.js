@@ -121,6 +121,23 @@ function download(url, { headers = {}, maxBytes = 300 * 1024 * 1024, redirects =
 
 // ─── 1. App staging ─────────────────────────────────────────────────────────
 
+/**
+ * Python sidecar（AI 分離、練唱音高）必須是磁碟上的真實檔案：外部的 python3 讀不到 app.asar
+ * 裡面的東西（Windows 版 2026-08-30 實機踩過）。跟 Windows 一樣放在 Resources/tools/ai，
+ * 由 write-packaged-resource-integrity.js 的雜湊清單涵蓋；shell.js 用 ELITESAND_AI_SCRIPT_DIR 指過去。
+ */
+const AI_SIDECAR_SCRIPTS = ['supervisor.py', 'worker.py', 'pitch_guide_worker.py', 'haqumei_sidecar.py', 'align_worker.py', 'section_supervisor.py', 'section_worker.py'];
+function stageAiSidecar() {
+  const target = path.join(TOOLS_STAGE, 'ai');
+  fs.mkdirSync(target, { recursive: true });
+  for (const script of AI_SIDECAR_SCRIPTS) {
+    const source = path.join(ROOT, 'ai', script);
+    if (!fs.existsSync(source)) throw new Error(`Missing AI sidecar script: ${source}`);
+    fs.copyFileSync(source, path.join(target, script));
+  }
+  log(`AI sidecar staged (${AI_SIDECAR_SCRIPTS.length} scripts)`);
+}
+
 function stageApp(pkg) {
   for (const dir of ['server', 'public']) copyDir(path.join(ROOT, dir), path.join(APP_STAGE, dir));
   for (const file of ['package.json', 'package-lock.json', 'LICENSE', 'EULA.txt', 'THIRD-PARTY-NOTICES.txt']) {
@@ -364,6 +381,10 @@ async function verifyApp(appDir, arch) {
     const file = path.join(resources, 'tools', tool);
     if (!fs.existsSync(file) || (fs.statSync(file).mode & 0o111) === 0) throw new Error(`Contents/Resources/tools/${tool} is missing or not executable.`);
   }
+  for (const script of AI_SIDECAR_SCRIPTS) {
+    if (!fs.existsSync(path.join(resources, 'tools', 'ai', script))) throw new Error(`Contents/Resources/tools/ai/${script} is missing; AI separation cannot start.`);
+  }
+  if (files.some((file) => /^ai\//.test(file))) throw new Error('Python sidecar scripts must not also be inside app.asar.');
 
   const plist = JSON.parse(capture('plutil', ['-convert', 'json', '-o', '-', path.join(appDir, 'Contents', 'Info.plist')]));
   const integrity = plist.ElectronAsarIntegrity?.['Resources/app.asar'];
@@ -494,6 +515,7 @@ async function main() {
     writeNpmLicenseInventory();
     const ytdlp = await stageYtdlp();
     const node = await stageNode(args.arch);
+    stageAiSidecar();
     run(process.execPath, [path.join(ROOT, 'tools', 'write-packaged-resource-integrity.js'), APP_STAGE, TOOLS_STAGE]);
 
     const builderOut = path.join(outputDir, 'builder');

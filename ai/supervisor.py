@@ -112,11 +112,20 @@ def handle_probe(request):
     # 只回答主 Python 引擎能不能使用 CUDA；產品層不把這個能力做成使用者選項，
     # 但協調器需要它來維持 Python GPU → WebGPU → CPU 的固定順序。探測失敗時
     # 保守回 false，讓工作走 WebGPU/CPU，不因驅動資訊查詢本身卡死。
+    # macOS（Apple Silicon）沒有 CUDA，「GPU 那條」是 MPS：mpsAvailable 讓協調器照同一個順序走
+    # Python GPU（MPS）→ CPU。Windows 這裡永遠回 mpsAvailable: False，行為不變。
     try:
         import torch
         available = bool(torch.cuda.is_available())
         name = torch.cuda.get_device_name(0) if available else None
-        _emit({"id": request.get("id"), "result": {"implemented": True, "cudaAvailable": available, "deviceName": name}})
+        mps = False
+        if sys.platform == "darwin":
+            try:
+                mps = bool(torch.backends.mps.is_available())
+            except Exception:  # noqa: BLE001
+                mps = False
+        _emit({"id": request.get("id"), "result": {"implemented": True, "cudaAvailable": available, "mpsAvailable": mps,
+                                                   "deviceName": name or ("mps" if mps else None)}})
     except Exception as exc:  # noqa: BLE001
         _emit({"id": request.get("id"), "result": {"implemented": True, "cudaAvailable": False, "error": str(exc)}})
 

@@ -1,0 +1,5 @@
+# macOS arm64（Apple Silicon，macOS 14+）/ CPython 3.12：audio-separator 0.48 起在 Apple Silicon 要求 torch>=2.13（MPS）。
+# diffq 只給 Demucs 用、沒有 cp312 macOS wheel（要編譯），鎖定時排除；安裝一律 --no-deps --only-binary。
+audio-separator[cpu]==0.48.0
+torch==2.15.0
+numpy==2.5.5

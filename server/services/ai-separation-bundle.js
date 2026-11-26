@@ -33,6 +33,22 @@ const BANDS = {
   'webgpu-model': [90, 100],
 };
 
+// macOS（Apple Silicon）：Python（python-build-standalone 25MB ＋ 套件 wheel 約 290MB）＋ Kim 主模型
+// （約 870MB），不含 CUDA、也不裝 WebGPU 模型。依下載量切相位帶；安裝後約 2.2GB（套件解開約 1.2GB）。
+const MAC_BANDS = {
+  python: [0, 27],
+  'primary-model': [27, 100],
+};
+const MAC_EXPECTED_DOWNLOAD_BYTES = 1_190_000_000;
+const MAC_EXPECTED_INSTALLED_BYTES = 2_200_000_000;
+const MAC_REQUIRED_FREE_BYTES = 5 * 1024 * 1024 * 1024;
+
+let platform = process.platform;
+let arch = process.arch;
+let release; // 只給測試覆寫；undefined 時 macSupport 讀 os.release()
+const isMac = () => platform === 'darwin';
+const bandsFor = () => (isMac() ? MAC_BANDS : BANDS);
+
 let installInFlight = null;
 let installAbort = null; // 目前這輪安裝的 AbortController；cancelBundle() 用它中止
 let installStatus = {
@@ -63,7 +79,8 @@ function components() {
     ffmpeg: !!ffmpegProvider.resolveFfmpegPaths(),
     python: aiRuntimeProvider.isAvailable(),
     primaryModel: aiRuntimeProvider.isModelAvailable(),
-    webgpu: webgpuRuntimeProvider.isAvailable(),
+    // Mac 不裝 WebGPU 備援模型（主引擎是 Python＋MPS，退路是 CPU）
+    webgpu: isMac() ? false : webgpuRuntimeProvider.isAvailable(),
     cpu: aiRuntimeProvider.isAvailable() && aiRuntimeProvider.isModelAvailable(),
   };
 }
@@ -77,6 +94,20 @@ function isAvailable() {
   // 這個條件讓「Python 引擎與 870MB 主模型都已就緒」的機器一首歌都不能分離——
   // 少一條備援路不該等於整個功能停擺。
   return value.ffmpeg && value.python && value.primaryModel;
+}
+
+// Mac 內測版診斷（其他平台這些呼叫直接回 false）
+function macDiag(fn) {
+  try { fn(require('./mac-beta-diagnostics')); } catch (_) { /* 診斷不影響安裝 */ }
+}
+
+function macDiskLow() {
+  try {
+    const disk = inspectDiskSpace(dataDir, { thresholdBytes: aiRuntimeProvider.isAvailable() ? 2 * 1024 * 1024 * 1024 : MAC_REQUIRED_FREE_BYTES });
+    return !!(disk.known && disk.low);
+  } catch (_) {
+    return false;
+  }
 }
 
 function lerp(band, fraction) {
@@ -132,7 +163,7 @@ function setStatus(patch) {
 // provider 每次 onProgress 回來就重算一次面向前端的狀態
 function ingestProviderStatus(phase, s) {
   const frac = phaseFraction(phase, s);
-  const overall = lerp(BANDS[phase] || [0, 100], frac);
+  const overall = lerp(bandsFor()[phase] || [0, 100], frac);
   setStatus({
     active: s.stage !== 'done',
     phase,
@@ -150,11 +181,19 @@ function ingestProviderStatus(phase, s) {
 }
 
 function getStatus() {
+  const support = aiRuntimeProvider.macSupport({ platform, arch, ...(release ? { release } : {}) });
   return {
     available: isAvailable(),
     components: components(),
-    expectedInstalledBytes: EXPECTED_INSTALLED_BYTES,
-    requiredFreeBytes: REQUIRED_FREE_BYTES,
+    platform,
+    // Windows 一律 true；Mac 只有 Apple Silicon＋macOS 14 以上才是 true（reason：intel／macos_old）
+    supported: support.supported,
+    unsupportedReason: support.reason,
+    expectedInstalledBytes: isMac() ? MAC_EXPECTED_INSTALLED_BYTES : EXPECTED_INSTALLED_BYTES,
+    expectedDownloadBytes: isMac() ? MAC_EXPECTED_DOWNLOAD_BYTES : null,
+    // Mac 的預檢在按「製作伴奏」時、下載前就要知道空間夠不夠（Windows 維持在安裝流程裡檢查）
+    diskLow: isMac() && !isAvailable() ? macDiskLow() : false,
+    requiredFreeBytes: isMac() ? MAC_REQUIRED_FREE_BYTES : REQUIRED_FREE_BYTES,
     ...installStatus,
     // 前端用伺服器自己的時鐘算經過時間，不受瀏覽器（例如手機）時鐘誤差影響。
     serverNow: Date.now(),
@@ -184,19 +223,30 @@ async function downloadBundle() {
       // FFmpeg 先擋在門口：Python 引擎的 audio-separator 在 Separator() 建構子就會檢查
       // ffmpeg，沒有的話連「只下載模型」都會失敗。與其讓使用者跑完 5GB 下載才吃一段
       // Python traceback，不如一秒內講清楚要先做什麼。
+      // Mac：先確認是 Apple Silicon＋macOS 14 以上，不符合就不下載任何東西
+      if (isMac()) {
+        const support = aiRuntimeProvider.macSupport({ platform, arch, ...(release ? { release } : {}) });
+        if (!support.supported) {
+          throw Object.assign(new Error(support.reason === 'intel'
+            ? '這台 Mac 不支援 AI 人聲分離：需要 Apple Silicon（M 系列）晶片。'
+            : '這台 Mac 不支援 AI 人聲分離：需要 macOS 14 以上。'), { code: 'MAC_UNSUPPORTED', reason: support.reason });
+        }
+      }
       if (!ffmpegProvider.isAvailable()) {
-        throw new Error('AI 伴奏製作需要 FFmpeg。請先到設定裡下載 FFmpeg，再回來啟用這個功能。');
+        throw Object.assign(new Error('AI 伴奏製作需要 FFmpeg。請先到設定裡下載 FFmpeg，再回來啟用這個功能。'), { code: 'FFMPEG_MISSING' });
       }
 
       setStatus({ webgpuUnavailable: null });
       const before = components();
-      const requiredNow = !before.python
+      const requiredNow = isMac()
+        ? (!before.python ? MAC_REQUIRED_FREE_BYTES : 2 * 1024 * 1024 * 1024)
+        : !before.python
         ? REQUIRED_FREE_BYTES
         : (!before.primaryModel && !before.webgpu ? 3 * 1024 * 1024 * 1024
           : (!before.primaryModel ? 2 * 1024 * 1024 * 1024 : 1.5 * 1024 * 1024 * 1024));
       const disk = inspectDiskSpace(dataDir, { thresholdBytes: requiredNow });
       if (disk.known && disk.low) {
-        throw new Error(`磁碟空間不足：目前安裝階段需要至少 ${Math.ceil(requiredNow / 1024 / 1024 / 1024)} GB 可用空間。`);
+        throw Object.assign(new Error(`磁碟空間不足：目前安裝階段需要至少 ${Math.ceil(requiredNow / 1024 / 1024 / 1024)} GB 可用空間。`), { code: 'DISK_FULL' });
       }
 
       if (!aiRuntimeProvider.isAvailable()) {
@@ -205,18 +255,20 @@ async function downloadBundle() {
           abortSignal,
           onProgress: (s) => ingestProviderStatus('python', s),
         });
+        macDiag((d) => d.component('runtime_install', 'ok'));
       }
 
       if (!aiRuntimeProvider.isModelAvailable()) {
-        markPhase('primary-model', 'model-download', BANDS['primary-model'][0]);
+        markPhase('primary-model', 'model-download', bandsFor()['primary-model'][0]);
         await aiRuntimeProvider.downloadPrimaryModel({
           abortSignal,
           onProgress: (s) => ingestProviderStatus('primary-model', s),
         });
+        macDiag((d) => d.component('primary_model', 'ok'));
       }
 
       let webgpuUnavailable = null;
-      if (!webgpuRuntimeProvider.isAvailable()) {
+      if (!isMac() && !webgpuRuntimeProvider.isAvailable()) {
         markPhase('webgpu-model', 'model-download', BANDS['webgpu-model'][0]);
         try {
           await webgpuRuntimeProvider.downloadModel({
@@ -256,6 +308,11 @@ async function downloadBundle() {
       }
       return { ok: true, alreadyAvailable: false };
     } catch (error) {
+      const failedPhase = installStatus.phase;
+      if (failedPhase === 'python' || failedPhase === 'primary-model' || error.code === 'MAC_UNSUPPORTED' || error.code === 'DISK_FULL') {
+        macDiag((d) => d.component(failedPhase === 'primary-model' ? 'primary_model' : 'runtime_install',
+          d.classifyBundleError(failedPhase, abortSignal.aborted ? { code: 'CANCELLED' } : error)));
+      }
       if (error.code === 'CANCELLED' || abortSignal.aborted) {
         // 已完成的元件（例如 Python 已裝好、只有模型被取消）會保留，下次從缺的那一段繼續；
         // 被中斷的那一段由各 provider 自己清掉半成品。
@@ -304,6 +361,10 @@ function resetForTests() {
 }
 
 module.exports = {
+  _setPlatformForTests: (value, archValue, releaseValue) => { platform = value || process.platform; arch = archValue || process.arch; release = releaseValue; },
+  MAC_EXPECTED_INSTALLED_BYTES,
+  MAC_EXPECTED_DOWNLOAD_BYTES,
+  MAC_REQUIRED_FREE_BYTES,
   isAvailable,
   getStatus,
   downloadBundle,

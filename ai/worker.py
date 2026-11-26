@@ -29,6 +29,14 @@ _INITIAL_REQUEST_LINE = sys.stdin.readline()
 _INITIAL_REQUEST = json.loads(_INITIAL_REQUEST_LINE) if _INITIAL_REQUEST_LINE.strip() else None
 if _INITIAL_REQUEST and _INITIAL_REQUEST.get("params", {}).get("forceCpu"):
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+_IS_MAC = sys.platform == "darwin"
+
+
+def _disable_mps_for_cpu_run():
+    """macOS 的 CPU 備援：audio_separator 只看 torch.backends.mps.is_available() 決定用不用 MPS，
+    沒有環境變數可以關，所以在建立 Separator 之前把它換成永遠 False（只影響這個子行程）。"""
+    import torch
+    torch.backends.mps.is_available = lambda: False  # type: ignore[assignment]
 
 import threading
 import time
@@ -137,6 +145,9 @@ def _run_real_job(job_id, params):
     model_filename = params.get("model", "vocals_mel_band_roformer.ckpt")
     model_file_dir = params.get("modelFileDir")
     use_autocast = params.get("useAutocast", True)
+    if _IS_MAC:
+        # MPS 先用最保守、官方標示支援的 fp32，不開 autocast
+        use_autocast = False
 
     if not input_path or not os.path.isfile(input_path):
         _emit({"id": job_id, "error": {"code": "INPUT_UNREADABLE", "retryable": False, "message": f"input file not found: {input_path}"}})
@@ -161,7 +172,8 @@ def _run_real_job(job_id, params):
         saw_oom = False
 
         def emit(self, record):
-            if "CUDA out of memory" in record.getMessage():
+            message = record.getMessage()
+            if "CUDA out of memory" in message or "MPS backend out of memory" in message:
                 self.saw_oom = True
 
     oom_sniffer = _OomSniffer()
@@ -191,6 +203,8 @@ def _run_real_job(job_id, params):
             total = torch.cuda.get_device_properties(0).total_memory
             torch.cuda.set_per_process_memory_fraction((simulate_vram_limit_gb * 1024**3) / total, device=0)
 
+        if _IS_MAC and params.get("forceCpu"):
+            _disable_mps_for_cpu_run()
         sep = Separator(
             model_file_dir=model_file_dir,
             output_dir=output_dir,
@@ -219,12 +233,14 @@ def _run_real_job(job_id, params):
         output_paths = [os.path.join(output_dir, name) for name in outputs]
         vocal = next((p for p in output_paths if "(vocals)" in p), None)
         instrumental = next((p for p in output_paths if "(other)" in p or "(instrumental)" in p), None)
-        _emit({"id": job_id, "result": {"vocal": vocal, "instrumental": instrumental, "files": output_paths}})
+        device = getattr(getattr(sep, "torch_device", None), "type", None)
+        _emit({"id": job_id, "result": {"vocal": vocal, "instrumental": instrumental, "files": output_paths,
+                                        "device": device if device in ("cuda", "mps", "cpu") else None}})
     except _CancelledDuringInference:
         _emit({"id": job_id, "error": {"code": "CANCELLED", "retryable": False}})
     except Exception as exc:  # noqa: BLE001 — 使用者永遠不該看到 PyTorch stack trace，這裡就是那道最後防線
         message = str(exc)
-        code = "GPU_OOM" if "CUDA out of memory" in message else "INTERNAL"
+        code = "GPU_OOM" if ("CUDA out of memory" in message or "MPS backend out of memory" in message) else "INTERNAL"
         _emit({"id": job_id, "error": {"code": code, "retryable": True, "message": message}})
     finally:
         restore_tqdm()

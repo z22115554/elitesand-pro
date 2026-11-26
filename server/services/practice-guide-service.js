@@ -357,6 +357,7 @@ function createPracticeGuideService(options = {}) {
       const stat = await fs.promises.stat(outputPath);
       if (stat.size <= 0 || stat.size > MAX_GUIDE_BYTES) throw new PracticeGuideError('GUIDE_INVALID_OUTPUT', '音高資料超過大小限制。', 422);
       const guide = JSON.parse(await fs.promises.readFile(outputPath, 'utf8'));
+      job.resultAlgorithm = typeof guide.algorithm === 'string' ? guide.algorithm : null;
       guide.trackId = job.trackId; guide.sourceFingerprint = sourceFingerprint; guide.requestedAlgorithm = job.algorithm;
       guide.createdAt = new Date().toISOString(); guide.lyricsKey = lyrics.key;
       guide.guideId = crypto.createHash('sha256').update([sourceFingerprint, job.algorithm, ALGORITHM_VERSION, lyrics.key].join('|')).digest('hex');
@@ -385,6 +386,16 @@ function createPracticeGuideService(options = {}) {
       if (stageDir) await fs.promises.rm(stageDir, { recursive: true, force: true }).catch(() => {});
       Object.assign(job, outcome);
       job.finishedAt = new Date().toISOString();
+      if (outcome.status !== 'cancelled') {
+        // Mac 內測版診斷：只送結果代碼、演算法類別與耗時級距；其他平台 pitchGuide() 直接回 false
+        try {
+          (options.macBetaDiag || require('./mac-beta-diagnostics')).pitchGuide({
+            ok: outcome.status === 'completed', code: outcome.code,
+            algorithm: job.resultAlgorithm || (outcome.status === 'completed' ? job.algorithm : null),
+            elapsedMs: Date.now() - Date.parse(job.startedAt),
+          });
+        } catch (_) { /* 診斷不影響練唱 */ }
+      }
       emitJob(job);
     }
   }

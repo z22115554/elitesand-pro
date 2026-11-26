@@ -195,6 +195,47 @@
     return t('aiInstall.stagePreparing');
   }
 
+  // 伺服器回的錯誤代碼 → 目前語言的訊息；沒有對應的代碼才退回伺服器的原文
+  function installErrorText(result) {
+    const r = result || {};
+    if (r.code === 'MAC_UNSUPPORTED') return t(r.unsupportedReason === 'intel' ? 'aiInstall.macUnsupportedIntel' : 'aiInstall.macUnsupportedOs');
+    if (r.code === 'DISK_FULL') return t('aiInstall.diskFull');
+    if (r.code === 'FFMPEG_MISSING') return t('aiInstall.ffmpegFailed');
+    return r.reason || '';
+  }
+
+  // Mac（Apple Silicon）的安裝視窗：照實寫大小，主引擎是 Python＋MPS、退路是 CPU，沒有 WebGPU 那一層
+  function applyMacInstallCopy(modal, status) {
+    if (!status || status.platform !== 'darwin') return;
+    const summary = modal.querySelector('#ai-separation-install-summary');
+    if (summary) {
+      summary.removeAttribute('data-i18n');
+      summary.textContent = t('aiInstall.summaryMac', {
+        download: fmtBytes(status.expectedDownloadBytes),
+        installed: fmtBytes(status.expectedInstalledBytes),
+        required: fmtBytes(status.requiredFreeBytes),
+      });
+    }
+    const rows = modal.querySelectorAll('.ai-install-stack > div');
+    rows.forEach((row) => {
+      const label = row.querySelector('strong');
+      const key = label && label.getAttribute('data-i18n');
+      if (key === 'aiInstall.webgpu') row.hidden = true;
+      if (key === 'aiInstall.python') { label.removeAttribute('data-i18n'); label.textContent = t('aiInstall.pythonMac'); }
+      if (key === 'aiInstall.cpu') { const n = row.querySelector('span'); if (n) n.textContent = '2'; }
+    });
+    const shared = modal.querySelector('[data-i18n="aiInstall.shared"]');
+    if (shared) { shared.removeAttribute('data-i18n'); shared.textContent = t('aiInstall.sharedMac'); }
+  }
+
+  // Mac 的預檢：不支援的機器或空間不夠時直接說明，不打開安裝視窗、不開始下載
+  function macPrecheckMessage(status) {
+    if (!status || status.platform !== 'darwin') return '';
+    if (status.supported === false) return t(status.unsupportedReason === 'intel' ? 'aiInstall.macUnsupportedIntel' : 'aiInstall.macUnsupportedOs');
+    if (status.diskLow) return t('aiInstall.diskFullMac', { required: fmtBytes(status.requiredFreeBytes) });
+    return '';
+  }
+
   function openInstallModal(initialStatus) {
     const modal = document.getElementById('ai-separation-install-modal');
     const cancel = document.getElementById('ai-separation-install-cancel');
@@ -204,6 +245,7 @@
     const percentEl = document.getElementById('ai-separation-install-percent');
     const fill = progress?.querySelector('.ai-install-progress-track span');
     if (!modal || !cancel || !confirm || !progress || !stageEl || !percentEl || !fill) return Promise.resolve(false);
+    applyMacInstallCopy(modal, initialStatus);
 
     return new Promise((resolve) => {
       let polling = null;
@@ -388,7 +430,7 @@
           runSettled = true;
           bundleRunning = false;
           if (result.cancelled) { showCancelled(); return; }
-          if (!response.ok || !result.ok) throw new Error(result.reason || t('aiInstall.failed'));
+          if (!response.ok || !result.ok) throw new Error(installErrorText(result) || t('aiInstall.failed'));
           setCancelMode('close');
           await poll();
         } catch (error) {
@@ -439,7 +481,15 @@
     if (ensurePromise) return ensurePromise;
     ensurePromise = (async () => {
       const status = await getBundleStatus();
+      const blocked = macPrecheckMessage(status);
+      if (blocked && !status.available) {
+        window.AppShared?.showToast?.(blocked, 'error');
+        try { PinAuth.fetchWithPin('/api/mac-beta-diag/precheck', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ result: status.supported === false ? status.unsupportedReason : 'disk_low' }) }).catch(() => {}); } catch (_) { /* 只是診斷 */ }
+        return false;
+      }
       if (status.available) {
+        // Mac 不使用 WebGPU 備援（主引擎 MPS、退路 CPU）；預熱會把 741MB 的 WebGPU 模型下載下來
+        if (status.platform === 'darwin') return true;
         // WebGPU 引擎預熱「不擋」主流程：以前這裡 await，會讓「製作伴奏」按下後乾等
         // 5–10 秒（冷啟隱藏視窗要跑最多 20 次輪詢）才送出分離請求，使用者看到的是
         // 「點了沒反應」。改成背景預熱即可——就算第一首在引擎連上前就需要備援，

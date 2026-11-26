@@ -27,6 +27,11 @@ const COMPONENTS = Object.freeze({
   ytdlp_available: Object.freeze(['ok', 'missing']),
   ytdlp_update: Object.freeze(['ok', 'up_to_date', 'signature_failed', 'hash_mismatch', 'network', 'not_writable', 'other']),
   bundled_node: Object.freeze(['ok', 'missing', 'failed']),
+  // AI 分離元件包（Mac）
+  mac_support: Object.freeze(['ok', 'intel', 'macos_old']),
+  runtime_install: Object.freeze(['ok', 'unsupported', 'disk_full', 'download_failed', 'hash_mismatch', 'extract_failed', 'pip_failed', 'cancelled', 'other']),
+  primary_model: Object.freeze(['ok', 'download_failed', 'verify_failed', 'cancelled', 'other']),
+  python_exec: Object.freeze(['ok', 'failed', 'missing']),
 });
 
 const IMPORT_CODES = Object.freeze([
@@ -46,7 +51,20 @@ const MILESTONES = Object.freeze({
   practice_blocked: Object.freeze(['vocals_required', 'vocals_missing', 'runtime_missing', 'analysis_failed', 'timeout', 'invalid_output', 'other']),
   separation_click: Object.freeze(['started', 'queued', 'install_ok', 'runtime_not_ready', 'unsupported_platform', 'ffmpeg_missing', 'disk_full', 'cancelled', 'other']),
   update_check: Object.freeze(['ok', 'failed']),
+  separation_precheck: Object.freeze(['ok', 'intel', 'macos_old', 'disk_low']),
+  separation_start: Object.freeze(['ok']),
 });
+
+// 每次分離的結果（只有類別與級距）
+const SEPARATION_RESULTS = Object.freeze(['ok', 'oom', 'timeout', 'device_lost', 'engine_unavailable', 'input_unreadable', 'no_output', 'runtime_missing', 'model_missing', 'other']);
+const SEPARATION_DEVICES = Object.freeze(['mps', 'cpu', 'webgpu', 'cuda', 'none']);
+const LENGTH_TIERS = Object.freeze(['lt1m', '1-3m', '3-5m', '5-8m', '8m+', 'unknown']);
+// 耗時 ÷ 歌曲長度
+const SPEED_TIERS = Object.freeze(['lt0.25', '0.25-0.5', '0.5-1', '1-2', '2-4', '4+', 'unknown']);
+// 練唱音高線
+const PITCH_RESULTS = Object.freeze(['ok', 'vocals_required', 'python_missing', 'analysis_failed', 'timeout', 'invalid_output', 'other']);
+const PITCH_ALGORITHMS = Object.freeze(['yin', 'torchcrepe', 'none']);
+const TIME_TIERS = Object.freeze(['lt10s', '10-30s', '30-60s', '1-3m', '3m+']);
 
 const ERROR_KINDS = Object.freeze(['uncaught', 'unhandled_rejection', 'incident']);
 const ERROR_CODE_RE = /^[A-Za-z0-9_]{1,40}$/;
@@ -61,6 +79,8 @@ const EVENT_KEYS = Object.freeze({
   component: Object.freeze(['type', 'name', 'code']),
   milestone: Object.freeze(['type', 'name', 'code', 'count']),
   error: Object.freeze(['type', 'kind', 'code', 'module']),
+  separation: Object.freeze(['type', 'result', 'device', 'cpuFallback', 'lengthTier', 'speedTier', 'deviceLost']),
+  pitch_guide: Object.freeze(['type', 'result', 'algorithm', 'timeTier']),
 });
 
 function isInt(value, min, max) {
@@ -88,6 +108,12 @@ function validEvent(event) {
     case 'milestone':
       return Object.prototype.hasOwnProperty.call(MILESTONES, event.name) && MILESTONES[event.name].includes(event.code)
         && isInt(event.count, 1, MAX_COUNT);
+    case 'separation':
+      return SEPARATION_RESULTS.includes(event.result) && SEPARATION_DEVICES.includes(event.device)
+        && typeof event.cpuFallback === 'boolean' && LENGTH_TIERS.includes(event.lengthTier)
+        && SPEED_TIERS.includes(event.speedTier) && typeof event.deviceLost === 'boolean';
+    case 'pitch_guide':
+      return PITCH_RESULTS.includes(event.result) && PITCH_ALGORITHMS.includes(event.algorithm) && TIME_TIERS.includes(event.timeTier);
     case 'error':
       return ERROR_KINDS.includes(event.kind) && typeof event.code === 'string' && ERROR_CODE_RE.test(event.code)
         && typeof event.module === 'string' && MODULE_RE.test(event.module);
@@ -116,6 +142,36 @@ function memTier(totalBytes) {
   if (gb <= 32.5) return '32';
   if (gb <= 48.5) return '48';
   return '64+';
+}
+
+function lengthTier(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return 'unknown';
+  if (s < 60) return 'lt1m';
+  if (s < 180) return '1-3m';
+  if (s < 300) return '3-5m';
+  if (s < 480) return '5-8m';
+  return '8m+';
+}
+
+function speedTier(elapsedMs, audioSeconds) {
+  const ratio = Number(elapsedMs) / 1000 / Number(audioSeconds);
+  if (!Number.isFinite(ratio) || ratio <= 0) return 'unknown';
+  if (ratio < 0.25) return 'lt0.25';
+  if (ratio < 0.5) return '0.25-0.5';
+  if (ratio < 1) return '0.5-1';
+  if (ratio < 2) return '1-2';
+  if (ratio < 4) return '2-4';
+  return '4+';
+}
+
+function timeTier(elapsedMs) {
+  const s = Number(elapsedMs) / 1000;
+  if (!Number.isFinite(s) || s < 10) return 'lt10s';
+  if (s < 30) return '10-30s';
+  if (s < 60) return '30-60s';
+  if (s < 180) return '1-3m';
+  return '3m+';
 }
 
 function gpuVendor(raw) {
@@ -148,5 +204,6 @@ function errorModule(error) {
 module.exports = {
   SCHEMA_VERSION, MAX_EVENTS_PER_BATCH, MAX_BODY_BYTES, MAX_COUNT,
   ARCHES, CHIPS, MEM_TIERS, GPU_VENDORS, COMPONENTS, MILESTONES, ERROR_KINDS, EVENT_KEYS,
-  validEvent, validPayload, memTier, gpuVendor, errorCode, errorModule,
+  SEPARATION_RESULTS, SEPARATION_DEVICES, LENGTH_TIERS, SPEED_TIERS, PITCH_RESULTS, PITCH_ALGORITHMS, TIME_TIERS,
+  validEvent, validPayload, memTier, gpuVendor, errorCode, errorModule, lengthTier, speedTier, timeTier,
 };

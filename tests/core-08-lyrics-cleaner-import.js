@@ -338,7 +338,9 @@ test('AI 分離遙測：三條引擎的終態統一由協調器記一次，帶 f
   ok(jobs.includes("job.attempts.includes(backend)") && jobs.includes("job.attempts.includes('webgpu')"), '每個引擎記進 attempts（重試不重複記）: ');
   // 三個終態都要記：Python 成功、WebGPU 成功、統一失敗漏斗 finalizeError
   eq((jobs.match(/recordJobTelemetry\(/g) || []).length, 4, 'helper 定義 + Python成功 + WebGPU成功 + finalizeError 共 4 處: ');
-  ok(jobs.includes("finalBackend: attempt.mode === 'cpu' ? 'cpu' : 'cuda'"), 'Python 成功要分辨 CUDA/CPU: ');
+  ok(jobs.includes("finalBackend: attempt.mode === 'cpu' ? 'cpu' : GPU_BACKEND"), 'Python 成功要分辨 GPU/CPU: ');
+  // Windows 的 GPU 後端名稱維持 'cuda'，只有 macOS 是 'mps'
+  ok(jobs.includes("const GPU_BACKEND = process.platform === 'darwin' ? 'mps' : 'cuda';"), 'Windows 的 GPU 後端仍記成 cuda: ');
   ok(jobs.includes("finalBackend: 'webgpu'"), 'WebGPU 成功要記 webgpu: ');
   ok(jobs.includes('recordJobTelemetry(job, { ok: false, code, finalBackend })'), 'finalizeError 是統一失敗漏斗: ');
   // 使用者主動取消不計入失敗率

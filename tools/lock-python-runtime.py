@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Maintainer-only Windows CPython 3.11 locks. --check is offline."""
+"""Maintainer-only Windows CPython 3.11 locks plus the macOS arm64 AI lock. --check is offline."""
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import urllib.request
@@ -10,13 +11,16 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 LOCKS = ROOT / 'server/services/python-locks'
 GROUPS = ('bootstrap', 'ai', 'section', 'practice-pitch')
+# macOS arm64 / CPython 3.12 (python-build-standalone). diffq is Demucs-only and has no
+# cp312 macOS wheel, so it is excluded; the app installs this lock with --no-deps --only-binary.
+MAC_GROUPS = {'ai-mac': 'ai-mac-arm64-py312.lock'}
 
 def digest(file):
     return hashlib.sha256(file.read_bytes()).hexdigest()
 
 def check():
     manifest = json.loads((LOCKS / 'manifest.json').read_text())
-    for group in GROUPS:
+    for group in (*GROUPS, *MAC_GROUPS):
         entry = manifest['locks'][group]
         if digest(LOCKS / entry['file']) != entry['sha256']:
             raise ValueError(f'{group}: packaged lock hash differs')
@@ -41,6 +45,14 @@ def generate(uv):
         if group == 'practice-pitch':
             command += ['--no-deps']
         subprocess.run(command, cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    for group, output in MAC_GROUPS.items():
+        subprocess.run([uv, 'pip', 'compile', str(LOCKS / f'{group}.in'),
+                        '--python-version', '3.12', '--python-platform', 'aarch64-apple-darwin',
+                        '--default-index', 'https://pypi.org/simple', '--generate-hashes',
+                        '--no-header', '--no-annotate', '--no-emit-package', 'diffq',
+                        '--output-file', str(LOCKS / output)],
+                       cwd=ROOT, check=True, stdout=subprocess.DEVNULL,
+                       env={**os.environ, 'MACOSX_DEPLOYMENT_TARGET': '14.0'})
     wheels = []
     for requirement in (LOCKS / 'bootstrap.in').read_text().splitlines():
         if not requirement or requirement.startswith('#'):
@@ -54,7 +66,8 @@ def generate(uv):
     (LOCKS / 'bootstrap-wheels.json').write_text(json.dumps(wheels, indent=2) + '\n', encoding='utf8')
     manifest = {'schemaVersion': 1, 'target': 'CPython 3.11 / Windows x64 / CUDA 12.4',
         'locks': {group: {'file': f'{group}-win-py311.lock',
-                           'sha256': digest(LOCKS / f'{group}-win-py311.lock')} for group in GROUPS},
+                           'sha256': digest(LOCKS / f'{group}-win-py311.lock')} for group in GROUPS}
+                 | {group: {'file': output, 'sha256': digest(LOCKS / output)} for group, output in MAC_GROUPS.items()},
         'inputs': {file.name: digest(file) for file in sorted(LOCKS.glob('*.in'))}}
     (LOCKS / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf8')
     check()

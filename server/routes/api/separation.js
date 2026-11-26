@@ -63,6 +63,7 @@ router.get('/ai-separation/cuda-status', requireControlAccess, async (req, res) 
 
 router.post('/ai-separation/bundle/download', requirePin, async (req, res) => {
   try {
+    if (process.platform === 'darwin' && aiSeparationBundle.getStatus().supported) macBetaDiagnostics.milestone('separation_precheck', 'ok');
     const result = await aiSeparationBundle.downloadBundle();
     macBetaDiagnostics.milestone('separation_click', 'install_ok');
     res.json(result);
@@ -71,7 +72,8 @@ router.post('/ai-separation/bundle/download', requirePin, async (req, res) => {
     // 使用者自己按取消不是錯誤，不記 error log、也不回 5xx。
     if (err.code === 'CANCELLED') return res.json({ ok: false, cancelled: true });
     log.error('AI 伴奏完整元件下載失敗', err);
-    res.status(502).json({ ok: false, reason: err.message });
+    // code 讓前端顯示對應語言的訊息（例如 MAC_UNSUPPORTED／DISK_FULL）；reason 保留給舊前端
+    res.status(err.code === 'MAC_UNSUPPORTED' ? 409 : 502).json({ ok: false, code: err.code || null, unsupportedReason: err.reason || null, reason: err.message });
   }
 });
 
@@ -345,6 +347,7 @@ router.get('/section-analysis/runtime-status', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({
     available: sectionRuntimeProvider.isAvailable() && sectionRuntimeProvider.isWeightsAvailable(),
+    supported: process.platform === 'win32',
     ...sectionRuntimeProvider.getDownloadStatus(),
   });
 });
@@ -368,6 +371,9 @@ router.post('/section-analysis/runtime/download', requirePin, async (req, res) =
 // 啟動一次段落分析 job。會觸發真正的 GPU 運算，依鐵則 15 必須手動掛 requirePin。
 // 只回傳 jobId；實際進度/完成走 Socket.io 的 sections:progress 事件。
 router.post('/library/:id/analyze-sections', requirePin, async (req, res) => {
+  // 段落分析的 runtime（SongFormer＋CUDA torch）只有 Windows 版；Mac 先明確說暫不支援，
+  // 不要讓人按下去才看到「目前只支援 Windows 的自動下載」。
+  if (process.platform !== 'win32') return res.status(409).json({ ok: false, error: 'UNSUPPORTED_PLATFORM' });
   const trackId = req.params.id;
   const entry = libraryStore.getEntry(trackId);
   if (!entry || !entry.filename) {
