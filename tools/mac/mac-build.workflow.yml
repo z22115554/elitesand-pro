@@ -81,6 +81,14 @@ jobs:
       - name: Locate DMG
         id: dmg
         run: echo "path=$(ls dist/releases/v*/mac-${{ matrix.arch }}/*.dmg | head -1)" >> "$GITHUB_OUTPUT"
+      # 第一次開啟小工具：模擬從網路下載（加上 quarantine）後掛載 DMG，記錄 Gatekeeper 對 app 與
+      # 小工具的評估，並對拖進「應用程式」的那份 app 實際執行小工具，確認隔離屬性被移除。
+      - name: First-launch helper check (quarantined DMG)
+        run: |
+          bash tools/mac/smoke-first-launch.sh "${{ steps.dmg.outputs.path }}" "${{ runner.temp }}/first-launch.txt"
+          INFO=$(ls dist/releases/v*/mac-${{ matrix.arch }}/BUILD-INFO.txt | head -1)
+          printf '\nFirst-launch helper (%s):\n' "${{ matrix.arch }}" | tee -a "$INFO" >> "$GITHUB_STEP_SUMMARY"
+          tee -a "$INFO" < "${{ runner.temp }}/first-launch.txt" >> "$GITHUB_STEP_SUMMARY"
       # archive: false → 測試人員下載到的就是 .dmg 本身，不會再包一層 zip。
       # 這個模式一次只能傳一個檔案，所以雜湊與建置資訊另外傳一個小的 artifact。
       - name: Upload DMG (not zipped)

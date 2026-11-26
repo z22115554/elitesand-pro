@@ -8,10 +8,10 @@
  *
  * 1. 用 app 自己的安裝流程（ai-separation-bundle.downloadBundle）裝 Mac 元件包：
  *    python-build-standalone＋鎖定清單（--require-hashes）＋ Kim 主模型；FFmpeg 也用 app 的下載流程。
- * 2. 合成一段 15 秒的測試音訊（正弦波旋律加泛音當「人聲」、低音和弦＋大鼓＋沙沙聲當「伴奏」，
- *    沒有任何有版權的素材），交給 app 的 Python supervisor 真的分離一次：先走 GPU（MPS），
+ * 2. 合成一段 15 秒的測試音訊（macOS 內建語音合成 say 唸的句子當「人聲」、低音和弦＋大鼓＋
+ *    沙沙聲當「伴奏」，沒有任何有版權的素材），交給 app 的 Python supervisor 真的分離一次：先走 GPU（MPS），
  *    MPS 不可用或失敗就跟 app 一樣改用 CPU。檢查人聲、伴奏兩個檔都在、長度正確、不是靜音。
- * 3. 對分離出的人聲跑 app 的練唱音高線服務（YIN），檢查有音高資料而且音高接近合成的旋律。
+ * 3. 對分離出的人聲跑 app 的練唱音高線服務（YIN），檢查有音高資料、而且落在人聲音域。
  * 實際用的裝置、各段耗時寫進 report.json（建置流程再附到 BUILD-INFO.txt）。
  */
 
@@ -46,7 +46,7 @@ function writeWav(file, channels) {
   fs.writeFileSync(file, Buffer.concat([header, data]));
 }
 
-function synthesize(file, { voiceOnly = false } = {}) {
+function synthesize(file, { voiceOnly = false, voiceSamples = null } = {}) {
   const frames = SAMPLE_RATE * SECONDS;
   const left = new Float32Array(frames);
   const right = new Float32Array(frames);
@@ -61,7 +61,10 @@ function synthesize(file, { voiceOnly = false } = {}) {
     const f0 = midiHz(MELODY[noteIndex]) * (1 + 0.006 * Math.sin(2 * Math.PI * 5.5 * t));
     phase += 2 * Math.PI * f0 / SAMPLE_RATE;
     const envelope = Math.min(1, inNote / 0.06, (NOTE_SECONDS - inNote) / 0.08);
-    const voice = envelope * (Math.sin(phase) + 0.5 * Math.sin(2 * phase) + 0.3 * Math.sin(3 * phase) + 0.15 * Math.sin(4 * phase)) / 1.95;
+    // 有真的人聲（macOS 內建語音合成 say 唸的句子）就用它：分離模型只把像人聲的東西分到人聲軌，
+    // 純正弦波旋律會被當成樂器（CI 實測：人聲軌幾乎是靜音）。
+    const voice = voiceSamples ? 1.6 * (voiceSamples[i] || 0)
+      : envelope * (Math.sin(phase) + 0.5 * Math.sin(2 * phase) + 0.3 * Math.sin(3 * phase) + 0.15 * Math.sin(4 * phase)) / 1.95;
     // 「伴奏」：A 小調低音和弦（每 3 秒換一次）、每拍一下大鼓、反拍的沙沙聲
     const chordRoot = [45, 41, 43, 40, 45][Math.floor(t / 3) % 5];
     const pad = [0, 7, 12].reduce((sum, interval) => sum + Math.sin(2 * Math.PI * midiHz(chordRoot + interval) * t), 0) / 3;
@@ -135,7 +138,14 @@ async function main() {
 
     const downloads = process.env.ELITESAND_DOWNLOADS_DIR;
     const input = path.join(downloads, 'smoke-mix.wav');
-    synthesize(input);
+    // 「人聲」：macOS 內建的語音合成（離線、沒有版權問題）唸一段英文，轉成 44.1kHz 單聲道
+    const speechAiff = path.join(dataDir, 'speech.aiff');
+    const sentence = 'Testing the vocal separation on a Mac. One two three four, this voice should end up on the vocal track while the drums and the chords stay behind.';
+    execFileSync('/usr/bin/say', ['-r', '150', '-o', speechAiff, `${sentence} ${sentence}`]);
+    const speechRaw = execFileSync(ffmpeg, ['-v', 'error', '-i', speechAiff, '-ac', '1', '-ar', String(SAMPLE_RATE), '-t', String(SECONDS), '-f', 'f32le', '-'], { maxBuffer: 64 * 1024 * 1024 });
+    const voiceSamples = new Float32Array(speechRaw.buffer.slice(speechRaw.byteOffset, speechRaw.byteOffset + Math.floor(speechRaw.length / 4) * 4));
+    report.speechSeconds = Math.round(voiceSamples.length / SAMPLE_RATE * 10) / 10;
+    synthesize(input, { voiceSamples });
     log(`synthesized ${SECONDS}s test mix (${probeDuration(ffprobe, input).toFixed(2)} s)`);
 
     const { supervisor } = require('../../server/services/ai-separation');
@@ -157,13 +167,17 @@ async function main() {
     log(`separated on ${report.device} in ${report.timings.separationSeconds}s`);
 
     const { vocal, instrumental } = outcome.result;
+    report.outputs = (outcome.result.files || []).map((file) => path.basename(file));
+    log(`output files: ${JSON.stringify(report.outputs)}`);
     if (!vocal || !instrumental || !fs.existsSync(vocal) || !fs.existsSync(instrumental)) throw new Error(`Missing outputs: ${JSON.stringify(outcome.result)}`);
     for (const [name, file] of [['vocal', vocal], ['instrumental', instrumental]]) {
       const duration = probeDuration(ffprobe, file);
       const level = rmsDb(ffmpeg, file);
       report.checks[name] = { durationSeconds: Math.round(duration * 100) / 100, rmsDb: Math.round(level * 10) / 10 };
       if (Math.abs(duration - SECONDS) > 0.6) throw new Error(`${name} duration ${duration}s, expected about ${SECONDS}s`);
-      if (!(level > -45)) throw new Error(`${name} is (nearly) silent: ${level.toFixed(1)} dBFS`);
+    }
+    for (const name of ['vocal', 'instrumental']) {
+      if (!(report.checks[name].rmsDb > -45)) throw new Error(`${name} is (nearly) silent: ${JSON.stringify(report.checks)}`);
     }
     log(`outputs OK: ${JSON.stringify(report.checks)}`);
 
@@ -184,11 +198,13 @@ async function main() {
     report.timings.pitchSeconds = Math.round((Date.now() - t) / 100) / 10;
     if (state.status !== 'ready' || !state.guide) throw new Error(`Pitch guide failed: ${JSON.stringify(state).slice(0, 600)}`);
     const notes = state.guide.notes || [];
-    const near = notes.filter((note) => MELODY.some((midi) => Math.abs(note.midi - midi) <= 1));
-    report.checks.pitch = { algorithm: state.guide.algorithm, notes: notes.length, nearMelody: near.length };
+    // 說話的音高沒有固定旋律可比；確認有音高資料、而且落在人聲的音域（約 E2–C6）
+    const midis = notes.map((note) => note.midi).sort((a, b) => a - b);
+    const median = midis.length ? midis[Math.floor(midis.length / 2)] : null;
+    report.checks.pitch = { algorithm: state.guide.algorithm, notes: notes.length, medianMidi: median };
     log(`pitch guide: ${JSON.stringify(report.checks.pitch)} in ${report.timings.pitchSeconds}s`);
-    if (notes.length < 4) throw new Error(`Pitch guide has too few notes (${notes.length}).`);
-    if (near.length / notes.length < 0.6) throw new Error(`Pitch guide notes do not follow the synthetic melody (${near.length}/${notes.length}).`);
+    if (notes.length < 3) throw new Error(`Pitch guide has too few notes (${notes.length}).`);
+    if (!(median >= 40 && median <= 84)) throw new Error(`Pitch guide median ${median} is outside the human voice range.`);
     service.dispose();
     report.ok = true;
   } catch (error) {

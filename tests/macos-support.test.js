@@ -246,3 +246,27 @@ test('macOS electron-builder config: no Windows sections, ad-hoc build, micropho
   assert.deepEqual(config.electronFuses, pkg.build.electronFuses, 'macOS must keep the same Electron fuses as Windows');
   assert.equal(config.asar?.smartUnpack, false);
 });
+
+test('第一次開啟小工具：放進 DMG、保有執行權限、只動這一個 app、不用 sudo 或密碼', () => {
+  const fsMod = require('fs');
+  const pathMod = require('path');
+  const root = pathMod.join(__dirname, '..');
+  const helper = pathMod.join(root, 'tools', 'mac', 'first-launch.command');
+  const text = fsMod.readFileSync(helper, 'utf8');
+  assert.ok((fsMod.statSync(helper).mode & 0o111) !== 0, 'repo 裡的小工具要有執行權限');
+  assert.match(text, /^#!\/bin\/bash\n/);
+  const code = text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+  assert.doesNotMatch(code, /\bsudo\b|with administrator privileges/);
+  assert.match(text, /APP="\$\{ELITESAND_APP_PATH:-\/Applications\/Elitesand Pro\.app\}"/);
+  assert.match(text, /\/usr\/bin\/xattr -dr com\.apple\.quarantine "\$APP"/);
+  assert.equal((text.match(/xattr -dr/g) || []).length, 1, '只對這一個 app 移除隔離屬性');
+  assert.match(text, /仍要打開/);
+  assert.match(text, /Open Anyway/);
+  const readme = fsMod.readFileSync(pathMod.join(root, 'tools', 'mac', 'read-me-first.txt'), 'utf8');
+  assert.match(readme, /免費軟體，沒有付費給 Apple/);
+  assert.match(readme, /也是從網路下載的/, '要老實說小工具本身第一次也可能被擋');
+  const build = fsMod.readFileSync(pathMod.join(root, 'tools', 'build-mac.js'), 'utf8');
+  assert.match(build, /DMG_EXPECTED_ENTRIES = \['Applications', 'Elitesand Pro\.app', DMG_HELPER_NAME, DMG_README_NAME\]/);
+  assert.match(build, /fs\.chmodSync\(helper, 0o755\)/);
+  assert.match(build, /verifyDmg\(dmgPath\);/);
+});

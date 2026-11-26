@@ -22,7 +22,8 @@
  *
  * 這一版沒有 Apple Developer ID：整個 .app 只做 ad-hoc 簽章（Apple Silicon 必須
  * 至少有 ad-hoc 簽章才能執行）。使用者第一次開啟需要在「隱私權與安全性」按
- * 「強制打開」，或移除隔離屬性；之後有開發者帳號再改成正式簽章＋公證。
+ * 「仍要打開」，或用 DMG 裡的「第一次開啟請點我」小工具移除隔離屬性（小工具本身第一次
+ * 也可能要先放行，見 DMG 裡的「請先讀我」）；之後有開發者帳號再改成正式簽章＋公證。
  *
  * 不含的 Windows 專用元件：Spout（DirectX）、AI 分離／精準對時／段落分析／日文
  * 諧音 v2 的 Python runtime、增量更新器。這些功能在 macOS 會顯示「只支援 Windows」
@@ -473,11 +474,38 @@ async function bootCheck(appDir) {
 
 // ─── 5. DMG ─────────────────────────────────────────────────────────────────
 
+const DMG_HELPER_NAME = '第一次開啟請點我 First Launch.command';
+const DMG_README_NAME = '請先讀我 Read Me First.txt';
+const DMG_EXPECTED_ENTRIES = ['Applications', 'Elitesand Pro.app', DMG_HELPER_NAME, DMG_README_NAME];
+
+/** 掛載剛做好的 DMG（唯讀），確認內容清單正確、小工具保有執行權限，再卸載 */
+function verifyDmg(dmgPath) {
+  const mount = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-dmg-verify-'));
+  run('hdiutil', ['attach', '-readonly', '-nobrowse', '-noautoopen', '-mountpoint', mount, dmgPath]);
+  try {
+    const entries = fs.readdirSync(mount).filter((name) => !name.startsWith('.')).sort();
+    if (JSON.stringify(entries) !== JSON.stringify([...DMG_EXPECTED_ENTRIES].sort())) {
+      throw new Error(`Unexpected DMG contents: ${JSON.stringify(entries)}`);
+    }
+    if (fs.readlinkSync(path.join(mount, 'Applications')) !== '/Applications') throw new Error('DMG Applications link is wrong.');
+    if ((fs.statSync(path.join(mount, DMG_HELPER_NAME)).mode & 0o111) === 0) throw new Error('First-launch helper lost its execute permission in the DMG.');
+    log(`DMG contents OK: ${entries.join(' | ')}`);
+  } finally {
+    run('hdiutil', ['detach', mount, '-force']);
+    fs.rmSync(mount, { recursive: true, force: true });
+  }
+}
+
 function makeDmg(appDir, dmgPath) {
   const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'elitesand-dmg-'));
   try {
     run('ditto', [appDir, path.join(staging, 'Elitesand Pro.app')]);
     fs.symlinkSync('/Applications', path.join(staging, 'Applications'));
+    // 第一次開啟的小工具與說明（沒有 Apple 簽章，第一次會被 Gatekeeper 擋；見 tools/mac/first-launch.command）
+    const helper = path.join(staging, DMG_HELPER_NAME);
+    fs.copyFileSync(path.join(ROOT, 'tools', 'mac', 'first-launch.command'), helper);
+    fs.chmodSync(helper, 0o755);
+    fs.copyFileSync(path.join(ROOT, 'tools', 'mac', 'read-me-first.txt'), path.join(staging, DMG_README_NAME));
     // GitHub 的 macOS runner 偶爾回「hdiutil: create failed - Resource busy」（背景掃描
     // 還抓著剛複製的檔案）。這是暫時性的，等幾秒重試即可；連續失敗才真的中止。
     for (let attempt = 1; ; attempt += 1) {
@@ -494,6 +522,7 @@ function makeDmg(appDir, dmgPath) {
   } finally {
     fs.rmSync(staging, { recursive: true, force: true });
   }
+  verifyDmg(dmgPath);
   const hash = sha256File(dmgPath);
   fs.writeFileSync(`${dmgPath}.sha256`, hash);
   return hash;

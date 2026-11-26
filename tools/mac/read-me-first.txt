@@ -1,0 +1,32 @@
+Elitesand Pro（Mac 測試版）— 請先讀我
+======================================
+
+Elitesand Pro 是免費軟體，沒有付費給 Apple 做開發者簽章，所以 macOS 第一次開啟時
+會擋下它。只有第一次需要多做下面這幾步，之後就跟一般 app 一樣。
+
+1. 把「Elitesand Pro」拖到旁邊的「Applications（應用程式）」資料夾。
+2. 雙擊「第一次開啟請點我 First Launch.command」。
+   - 如果 macOS 說它無法確認這個檔案、不讓你打開（因為它也是從網路下載的）：
+     打開「系統設定 → 隱私權與安全性」，往下捲到「安全性」，按「仍要打開」，
+     輸入電腦密碼，再雙擊一次。
+   - 它會解除 Elitesand Pro 的封鎖並直接開啟，完成後會跳出說明。
+3. 之後從「應用程式」或 Launchpad 開啟即可。
+
+不想用小工具也可以：先雙擊「應用程式」裡的 Elitesand Pro（會被擋下），再到
+「系統設定 → 隱私權與安全性」對 Elitesand Pro 按「仍要打開」並輸入密碼。
+
+Read me first (English)
+-----------------------
+Elitesand Pro is free software without a paid Apple developer signature, so macOS
+blocks it the first time. You only need these extra steps once.
+
+1. Drag "Elitesand Pro" onto the "Applications" folder next to it.
+2. Double-click "第一次開啟請點我 First Launch.command".
+   - If macOS says it cannot verify the file and will not open it (it was downloaded
+     too): open System Settings → Privacy & Security, scroll to Security, click
+     "Open Anyway", enter your password, and double-click it again.
+   - It unblocks Elitesand Pro, opens it, and shows a confirmation.
+3. From then on, open it from Applications or Launchpad.
+
+Without the helper: double-click Elitesand Pro in Applications (it will be blocked),
+then in System Settings → Privacy & Security click "Open Anyway" for Elitesand Pro.
