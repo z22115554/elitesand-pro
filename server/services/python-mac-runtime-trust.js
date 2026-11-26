@@ -23,7 +23,7 @@ const MAC_PYTHON = Object.freeze({
 });
 
 // 本機 marker 用的版本字串：換 Python 或換鎖定清單時改這裡，舊安裝就會被視為需要重裝。
-const MAC_RUNTIME_ID = `pbs-${MAC_PYTHON.version}+${MAC_PYTHON.release}/ai-mac-r1`;
+const MAC_RUNTIME_ID = `pbs-${MAC_PYTHON.version}+${MAC_PYTHON.release}/ai-mac-r2`;
 
 // Apple Silicon 必要條件：macOS 14（Darwin 23）以上——torch 2.15 的 wheel 是 macosx_14_0_arm64。
 const MIN_DARWIN_MAJOR = 23;

@@ -61,6 +61,8 @@ test('Mac 鎖定清單：受 manifest 雜湊保護、每個套件都有雜湊、
   }
   assert.match(lock, /^audio-separator==0\.48\.0 /m);
   assert.match(lock, /^torch==2\.15\.0 /m);
+  // audio-separator 0.48 直接 import audioread，但 librosa 1.0 不再帶它（CI 實測缺它會在分離時失敗）
+  assert.match(lock, /^audioread==/m);
   assert.doesNotMatch(lock, /^diffq/m, 'diffq 沒有 cp312 macOS wheel，鎖進來會在 Mac 上要求編譯');
   assert.doesNotMatch(lock, /cu12|nvidia|onnxruntime-gpu/i);
 });

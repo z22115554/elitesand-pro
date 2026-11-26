@@ -20,11 +20,11 @@
     },
     "ai-mac": {
       "file": "ai-mac-arm64-py312.lock",
-      "sha256": "00deb581eb6b7d982e942da9ea87f3ae7562e81c8075c3fb7fd96e79fdae8cf0"
+      "sha256": "38e3614c4bfe7dddc4b589c503c6aaf6945be1618bcba39bb69e1268363047a0"
     }
   },
   "inputs": {
-    "ai-mac.in": "18b9e366baacbd37c9dcccbe7c3e476428086d4baae0525e61bd41581053617b",
+    "ai-mac.in": "c147cc09ae0a177f8679d2ac32d982aad608cb2e5b1335a951663780c12d800f",
     "ai.in": "3d50bf17db4b28e2bb160cda07e6ffef8b31ef84203c2adc835077ff29d940c1",
     "bootstrap.in": "ca7fe72f1a420c617965566752d22045789c88799ed3ba576ec771f93e6ef4ed",
     "practice-pitch.in": "324df6dae4c9700eda956a05da66dc93a5763375f7736c13db0c8c66c57263cc",

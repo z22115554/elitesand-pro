@@ -4,6 +4,9 @@ absl-py==2.5.1 \
 audio-separator==0.48.0 \
     --hash=sha256:5f80f4032aa844d5e8b5c958a440c3d702bf03e8a2c163bf199e023e999ea695 \
     --hash=sha256:c97b3bedcd54b401c22df7d518284a9ed143f66071496347e9f8da9d32ca7aec
+audioread==3.1.0 \
+    --hash=sha256:1c4ab2f2972764c896a8ac61ac53e261c8d29f0c6ccd652f84e18f08a4cab190 \
+    --hash=sha256:b30d1df6c5d3de5dcef0fb0e256f6ea17bdcf5f979408df0297d8a408e2971b4
 beartype==0.18.5 \
     --hash=sha256:264ddc2f1da9ec94ff639141fbe33d22e12a9f75aa863b83b7046ffff1381927 \
     --hash=sha256:5301a14f2a9a5540fe47ec6d34d758e9cd8331d36c4760fc7a5499ab86310089
